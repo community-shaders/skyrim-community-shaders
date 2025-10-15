@@ -152,98 +152,135 @@ struct VS_OUTPUT
 #	endif  // VR
 };
 
-// Basic Gerstner Wave System for Enhanced Water Rendering
-// 
-// This system adds realistic directional waves to water surfaces using Gerstner wave mathematics.
-// The system is always active and provides visible wave displacement and normal perturbation.
-//
-// Uses NormalsScroll0.x as timer for world-space independent wave animation.
-// This ensures waves don't follow the player and remain anchored to world coordinates.
-//
-// Features:
-// - Multiple wave sets with different directions, frequencies, and speeds
-// - Realistic wave steepness and amplitude control
-// - Compatible with existing water effects (flowmaps, caustics, parallax)
-// - Always active for consistent water enhancement
+#if defined(UNIFIED_WATER)
 
-struct GerstnerWave
+// Unified Gerstner Wave System for Enhanced Water Rendering
+//
+// This system anchors wave motion to both world position and in-game time to prevent spatial
+// discontinuities while still allowing smooth temporal animation.
+
+static const float UW_PI = 3.14159265f;
+static const float UW_TWO_PI = 6.28318530f;
+
+float WrapUnifiedPhase(float phase)
+{
+	float wrapped = fmod(phase, UW_TWO_PI);
+	return wrapped < 0.0f ? wrapped + UW_TWO_PI : wrapped;
+}
+
+float ComputeWaveTimeSeconds(float gameTimeHours, float realTimeSeconds)
+{
+	float dayFraction = frac(gameTimeHours / 24.0f);
+	float gameSeconds = dayFraction * 86400.0f;
+	return frac((gameSeconds + realTimeSeconds) / 65536.0f) * 65536.0f;
+}
+
+float ComputeWaveDayPhase(float gameTimeHours)
+{
+	float dayFraction = frac(gameTimeHours / 24.0f);
+	return dayFraction * UW_TWO_PI;
+}
+
+struct UnifiedWave
 {
 	float2 direction;
 	float amplitude;
-	float frequency;
-	float speed;
+	float waveNumber;
+	float angularVelocity;
 	float steepness;
+	float phaseOffset;
 };
 
-// Calculate Gerstner wave displacement and normal perturbation
-float3 CalculateGerstnerWave(GerstnerWave wave, float2 position, float spatialPhase)
+float3 EvaluateUnifiedWave(UnifiedWave wave, float2 position, float timeSeconds)
 {
-	float phase = spatialPhase;
-	float cosPhase = cos(phase);
-	float sinPhase = sin(phase);
-	
-	// Displacement
-	float3 displacement;
-	displacement.x = wave.steepness * wave.amplitude * wave.direction.x * cosPhase;
-	displacement.y = wave.steepness * wave.amplitude * wave.direction.y * cosPhase;
-	displacement.z = wave.amplitude * sinPhase;
-	
-	return displacement;
+	float spatialPhase = dot(wave.direction, position) * wave.waveNumber + wave.phaseOffset;
+	float phase = WrapUnifiedPhase(spatialPhase + wave.angularVelocity * timeSeconds);
+	float sineValue;
+	float cosineValue;
+	sincos(phase, sineValue, cosineValue);
+	float horizontal = wave.steepness * wave.amplitude;
+	return float3(horizontal * wave.direction.x * cosineValue,
+		          horizontal * wave.direction.y * cosineValue,
+		          wave.amplitude * sineValue);
 }
 
-// Calculate combined Gerstner wave displacement for water surface
-float3 CalculateWaterDisplacement(float2 worldPos, float waveIntensity, float amplitudeMult, float speedMult, float steepnessMult)
+float3 CalculateWaterDisplacement(float2 worldPos, float waveIntensity, float amplitudeMult, float speedMult, float steepnessMult, float timeSeconds, float dayPhase)
 {
-	if (waveIntensity <= 0.0) return float3(0, 0, 0);
-	
-	GerstnerWave waves[3];
-	
-	waves[0].direction = normalize(float2(1.0, 0.0));
-	waves[0].amplitude = 8.0 * waveIntensity * amplitudeMult;
-	waves[0].frequency = 0.01;
-	waves[0].speed = 1.2 * speedMult;
-	waves[0].steepness = 0.4 * steepnessMult;
-	
-	waves[1].direction = normalize(float2(0.0, 1.0));
-	waves[1].amplitude = 6.0 * waveIntensity * amplitudeMult;
-	waves[1].frequency = 0.015;
-	waves[1].speed = 1.5 * speedMult;
-	waves[1].steepness = 0.35 * steepnessMult;
-	
-	waves[2].direction = normalize(float2(0.707, 0.707));
-	waves[2].amplitude = 4.0 * waveIntensity * amplitudeMult;
-	waves[2].frequency = 0.02;
-	waves[2].speed = 0.8 * speedMult;
-	waves[2].steepness = 0.3 * steepnessMult;
-	
-	float3 totalDisplacement = float3(0, 0, 0);
-	
-	for (int i = 0; i < 3; i++) {
-		float spatialPhase = dot(waves[i].direction, worldPos) * waves[i].frequency;
-		spatialPhase += float(i) * 1.57;
-		totalDisplacement += CalculateGerstnerWave(waves[i], worldPos, spatialPhase);
+	if (waveIntensity <= 0.0f)
+		return float3(0.0f, 0.0f, 0.0f);
+
+	UnifiedWave waves[3];
+
+	waves[0].direction = normalize(float2(1.0f, 0.35f));
+	waves[0].amplitude = 18.0f * waveIntensity * amplitudeMult;
+	waves[0].waveNumber = UW_TWO_PI / 1800.0f;
+	waves[0].angularVelocity = UW_TWO_PI / 18.0f * speedMult;
+	waves[0].steepness = saturate(0.32f * steepnessMult);
+	waves[0].phaseOffset = dayPhase * 1.0f;
+
+	waves[1].direction = normalize(float2(-0.6f, 1.0f));
+	waves[1].amplitude = 11.5f * waveIntensity * amplitudeMult;
+	waves[1].waveNumber = UW_TWO_PI / 1100.0f;
+	waves[1].angularVelocity = UW_TWO_PI / 11.0f * speedMult;
+	waves[1].steepness = saturate(0.26f * steepnessMult);
+	waves[1].phaseOffset = dayPhase * 1.45f + 2.0943951f;
+
+	waves[2].direction = normalize(float2(0.85f, -0.4f));
+	waves[2].amplitude = 7.0f * waveIntensity * amplitudeMult;
+	waves[2].waveNumber = UW_TWO_PI / 620.0f;
+	waves[2].angularVelocity = UW_TWO_PI / 7.0f * speedMult;
+	waves[2].steepness = saturate(0.21f * steepnessMult);
+	waves[2].phaseOffset = dayPhase * 2.2f + 4.1887903f;
+
+	float3 totalDisplacement = float3(0.0f, 0.0f, 0.0f);
+
+	[unroll] for (int i = 0; i < 3; ++i) {
+		totalDisplacement += EvaluateUnifiedWave(waves[i], worldPos, timeSeconds);
 	}
-	
+
 	return totalDisplacement;
 }
 
-// Calculate normal perturbation from Gerstner waves
-float3 CalculateGerstnerNormals(float2 worldPos, float waveIntensity, float amplitudeMult, float speedMult, float steepnessMult)
+float3 CalculateGerstnerNormals(float2 worldPos, float waveIntensity, float amplitudeMult, float speedMult, float steepnessMult, float timeSeconds, float dayPhase)
 {
-	if (waveIntensity <= 0.0) return float3(0, 0, 1);
-	
-	const float epsilon = 1.0;
-	
-	float3 center = CalculateWaterDisplacement(worldPos, waveIntensity, amplitudeMult, speedMult, steepnessMult);
-	float3 right = CalculateWaterDisplacement(worldPos + float2(epsilon, 0), waveIntensity, amplitudeMult, speedMult, steepnessMult);
-	float3 forward = CalculateWaterDisplacement(worldPos + float2(0, epsilon), waveIntensity, amplitudeMult, speedMult, steepnessMult);
-	
-	float3 tangentX = float3(epsilon, 0, right.z - center.z);
-	float3 tangentY = float3(0, epsilon, forward.z - center.z);
-	
-	float3 normal = normalize(cross(tangentY, tangentX));
-	return normal;
+	if (waveIntensity <= 0.0f)
+		return float3(0.0f, 0.0f, 1.0f);
+
+	#if defined(UNIFIED_WATER_HAS_PER_FRAME_CBUFFER)
+	const float cellWorldSize = max(CellWorldSize, 1.0f);
+	#else
+	const float cellWorldSize = 4096.0f;
+	#endif
+	const float epsilon = max(cellWorldSize * 0.003f, 6.0f);
+
+	float3 center = CalculateWaterDisplacement(worldPos, waveIntensity, amplitudeMult, speedMult, steepnessMult, timeSeconds, dayPhase);
+	float3 offsetX = CalculateWaterDisplacement(worldPos + float2(epsilon, 0.0f), waveIntensity, amplitudeMult, speedMult, steepnessMult, timeSeconds, dayPhase);
+	float3 offsetY = CalculateWaterDisplacement(worldPos + float2(0.0f, epsilon), waveIntensity, amplitudeMult, speedMult, steepnessMult, timeSeconds, dayPhase);
+
+	float3 tangentX = float3(epsilon, 0.0f, offsetX.z - center.z);
+	float3 tangentY = float3(0.0f, epsilon, offsetY.z - center.z);
+
+	return normalize(cross(tangentY, tangentX));
 }
+
+#define UNIFIED_WATER_HAS_PER_FRAME_CBUFFER 1
+cbuffer UnifiedWaterPerFrame : register(b7)
+{
+	float WaveIntensity : packoffset(c0.x);
+	float WaveAmplitude : packoffset(c0.y);
+	float WaveSpeed : packoffset(c0.z);
+	float WaveSteepness : packoffset(c0.w);
+	float GameTimeHours : packoffset(c1.x);
+	float RealTimeSeconds : packoffset(c1.y);
+	float TimeScale : packoffset(c1.z);
+	float CellWorldSize : packoffset(c1.w);
+	float PrevGameTimeHours : packoffset(c2.x);
+	float PrevRealTimeSeconds : packoffset(c2.y);
+	float PrevTimeScale : packoffset(c2.z);
+	float UnifiedWaterPadding : packoffset(c2.w);
+}
+
+#endif // UNIFIED_WATER
 
 #	ifdef VSHADER
 
@@ -283,16 +320,6 @@ cbuffer PerGeometry : register(b2)
 #		endif  // VR
 };
 
-#if defined(UNIFIED_WATER)
-cbuffer UnifiedWaterPerFrame : register(b7)
-{
-	float WaveIntensity : packoffset(c0.x);
-	float WaveAmplitude : packoffset(c0.y);
-	float WaveSpeed : packoffset(c0.z);
-	float WaveSteepness : packoffset(c0.w);
-}
-#endif
-
 VS_OUTPUT main(VS_INPUT input)
 {
 	VS_OUTPUT vsout;
@@ -305,19 +332,32 @@ VS_OUTPUT main(VS_INPUT input)
 	vsout.NormalsScale = NormalsScale;
 
 	float4 inputPosition = float4(input.Position.xyz, 1.0);
-	
-	float4 worldPos = mul(World[eyeIndex], inputPosition);
-	
-#if defined(UNIFIED_WATER)
-	float2 absoluteWorldPos = worldPos.xy + FrameBuffer::CameraPosAdjust[eyeIndex].xy;
-	float3 waveDisplacement = CalculateWaterDisplacement(absoluteWorldPos, WaveIntensity, WaveAmplitude, WaveSpeed, WaveSteepness);
-	
-	float4 displacedPosition = inputPosition;
-	displacedPosition.xyz += waveDisplacement;
+	float4 worldPos;
+	float4 worldViewPos;
 
-	float4 worldViewPos = mul(WorldViewProj[eyeIndex], displacedPosition);
+#if defined(UNIFIED_WATER)
+	float4 currentPosition = inputPosition;
+	float4 previousPosition = inputPosition;
+	float4 worldPosBase = mul(World[eyeIndex], inputPosition);
+	float2 waveWorldPos = worldPosBase.xy + FrameBuffer::CameraPosAdjust[eyeIndex].xy;
+	float realtimeContribution = RealTimeSeconds * step(0.0001f, TimeScale);
+	float waveTimeSeconds = ComputeWaveTimeSeconds(GameTimeHours, realtimeContribution);
+	float waveDayPhase = ComputeWaveDayPhase(GameTimeHours);
+	float3 waveDisplacement = CalculateWaterDisplacement(waveWorldPos, WaveIntensity, WaveAmplitude, WaveSpeed, WaveSteepness, waveTimeSeconds, waveDayPhase);
+	currentPosition.xyz += waveDisplacement;
+
+	float prevRealtimeContribution = PrevRealTimeSeconds * step(0.0001f, PrevTimeScale);
+	float waveTimeSecondsPrev = ComputeWaveTimeSeconds(PrevGameTimeHours, prevRealtimeContribution);
+	float waveDayPhasePrev = ComputeWaveDayPhase(PrevGameTimeHours);
+	float3 prevWaveDisplacement = CalculateWaterDisplacement(waveWorldPos, WaveIntensity, WaveAmplitude, WaveSpeed, WaveSteepness, waveTimeSecondsPrev, waveDayPhasePrev);
+	previousPosition.xyz += prevWaveDisplacement;
+
+	inputPosition = currentPosition;
+	worldPos = mul(World[eyeIndex], currentPosition);
+	worldViewPos = mul(WorldViewProj[eyeIndex], currentPosition);
 #else
-	float4 worldViewPos = mul(WorldViewProj[eyeIndex], inputPosition);
+	worldPos = mul(World[eyeIndex], inputPosition);
+	worldViewPos = mul(WorldViewProj[eyeIndex], inputPosition);
 #endif
 
 	float heightMult = min((1.0 / 10000.0) * max(worldViewPos.z - 70000, 0), 1);
@@ -328,7 +368,11 @@ VS_OUTPUT main(VS_INPUT input)
 
 #		if defined(STENCIL)
 	vsout.WorldPosition = worldPos;
+	#if defined(UNIFIED_WATER)
+	vsout.PreviousWorldPosition = mul(PreviousWorld[eyeIndex], previousPosition);
+	#else
 	vsout.PreviousWorldPosition = mul(PreviousWorld[eyeIndex], inputPosition);
+	#endif
 #		else
 
 #		if !defined(UNIFIED_WATER)
@@ -338,10 +382,8 @@ VS_OUTPUT main(VS_INPUT input)
 		#endif
 	
 #if defined(UNIFIED_WATER)
-	float4 displacedWorldPos = worldPos;
-	displacedWorldPos.xyz += waveDisplacement;
-	vsout.WPosition.xyz = displacedWorldPos.xyz;
-	vsout.WPosition.w = length(displacedWorldPos.xyz);
+	vsout.WPosition.xyz = worldPos.xyz;
+	vsout.WPosition.w = length(worldPos.xyz);
 #else
 	vsout.WPosition.xyz = worldPos.xyz;
 	vsout.WPosition.w = length(worldPos.xyz);

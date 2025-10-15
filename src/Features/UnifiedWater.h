@@ -46,10 +46,22 @@ struct UnifiedWater : OverlayFeature
 		float WaveAmplitude;
 		float WaveSpeed;
 		float WaveSteepness;
+		float GameTimeHours;
+		float RealTimeSeconds;
+		float TimeScale;
+		float CellWorldSize;
+		float PrevGameTimeHours;
+		float PrevRealTimeSeconds;
+		float PrevTimeScale;
+		float pad0;
 	};
 
 	Settings settings;
 	ConstantBuffer* perFrame = nullptr;
+	float lastGameTimeHours = 0.0f;
+	float lastRealTimeSeconds = 0.0f;
+	float lastTimeScale = 1.0f;
+	bool hasLastTimingSample = false;
 	
 	virtual void SetupResources() override;
 	virtual void Reset() override;

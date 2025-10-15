@@ -3,7 +3,9 @@
 #include "Menu.h"
 #include "Menu/ThemeManager.h"
 #include "PCH.h"
+#include "State.h"
 #include "ShaderCache.h"
+#include "RE/C/Calendar.h"
 
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	UnifiedWater::Settings,
@@ -279,6 +281,7 @@ void UnifiedWater::SetupResources()
 void UnifiedWater::Reset()
 {
 	// Update the constant buffer when settings change
+	hasLastTimingSample = false;
 }
 
 void UnifiedWater::PostPostLoad()
@@ -414,7 +417,7 @@ void UnifiedWater::BGSTerrainBlock_Attach::thunk(RE::BGSTerrainBlock* block)
 		return;
 	}
 
-	const auto& singleton = globals::features::unifiedWater;
+	auto& singleton = globals::features::unifiedWater;
 
 	std::vector<std::pair<RE::BSTriShape*, const WaterCache::Instruction*>> built;
 	bool attaching = false;
@@ -518,7 +521,7 @@ void UnifiedWater::BGSTerrainBlock_Detach::thunk(RE::BGSTerrainBlock* block)
 
 void UnifiedWater::BSWaterShader_SetupGeometry::thunk(RE::BSShader* waterShader, RE::BSRenderPass* pass)
 {
-	const auto& singleton = globals::features::unifiedWater;
+	auto& singleton = globals::features::unifiedWater;
 	
 	// Update and bind the per-frame constant buffer for vertex shader access
 	if (singleton.perFrame) {
@@ -527,12 +530,39 @@ void UnifiedWater::BSWaterShader_SetupGeometry::thunk(RE::BSShader* waterShader,
 		perFrameData.WaveAmplitude = singleton.settings.WaveAmplitude;
 		perFrameData.WaveSpeed = singleton.settings.WaveSpeed;
 		perFrameData.WaveSteepness = singleton.settings.WaveSteepness;
+
+		float gameTimeHours = 0.0f;
+		float realTimeSeconds = 0.0f;
+		float timeScale = 1.0f;
+
+		if (const auto calendar = RE::Calendar::GetSingleton()) {
+			gameTimeHours = calendar->GetHoursPassed();
+			timeScale = calendar->GetTimescale();
+		}
+
+		if (globals::state) {
+			realTimeSeconds = globals::state->timer;
+		}
+
+		perFrameData.GameTimeHours = gameTimeHours;
+		perFrameData.RealTimeSeconds = realTimeSeconds;
+		perFrameData.TimeScale = timeScale;
+		perFrameData.CellWorldSize = 4096.0f;
+		perFrameData.PrevGameTimeHours = singleton.hasLastTimingSample ? singleton.lastGameTimeHours : gameTimeHours;
+		perFrameData.PrevRealTimeSeconds = singleton.hasLastTimingSample ? singleton.lastRealTimeSeconds : realTimeSeconds;
+		perFrameData.PrevTimeScale = singleton.hasLastTimingSample ? singleton.lastTimeScale : timeScale;
+		perFrameData.pad0 = 0.0f;
 		
 		singleton.perFrame->Update(perFrameData);
 		
 		auto context = globals::d3d::context;
 		ID3D11Buffer* buffers[1] = { singleton.perFrame->CB() };
 		context->VSSetConstantBuffers(7, 1, buffers);
+
+		singleton.lastGameTimeHours = gameTimeHours;
+		singleton.lastRealTimeSeconds = realTimeSeconds;
+		singleton.lastTimeScale = timeScale;
+		singleton.hasLastTimingSample = true;
 	}
 	
 	if (singleton.flowmap) {
