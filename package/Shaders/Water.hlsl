@@ -965,10 +965,23 @@ FoamData ComputePhysicalFoam(float3 worldPos, float waterDepth, float timer, flo
 	// worldPos is already in world-space, use it directly for noise sampling
 	float2 absoluteWorldPos = worldPos.xz;
 	
-	// Lower frequency Perlin noise for stable foam patterns (reduced frequencies for temporal stability)
-	float2 uv1 = absoluteWorldPos * 0.08f + timer * float2(0.006f, 0.009f);
-	float2 uv2 = absoluteWorldPos * 0.18f - timer * float2(0.005f, 0.007f);
-	float2 uv3 = absoluteWorldPos * 0.35f + timer * float2(0.004f, -0.006f);
+	// Add wave-driven distortion to break up regular patterns
+	float2 distortion1 = float2(
+		Random::perlinNoise(float3(absoluteWorldPos * 0.05f, timer * 0.03f), 0x1Fu),
+		Random::perlinNoise(float3(absoluteWorldPos * 0.05f + 100.0f, timer * 0.03f), 0x2Fu)
+	) * 8.0f; // Distortion strength
+	
+	float2 distortion2 = float2(
+		Random::perlinNoise(float3(absoluteWorldPos * 0.12f, timer * 0.05f), 0x4Fu),
+		Random::perlinNoise(float3(absoluteWorldPos * 0.12f + 200.0f, timer * 0.05f), 0x5Fu)
+	) * 4.0f;
+	
+	float2 distortedPos = absoluteWorldPos + distortion1 + distortion2;
+	
+	// Lower frequency Perlin noise for stable foam patterns with distortion
+	float2 uv1 = distortedPos * 0.08f + timer * float2(0.006f, 0.009f);
+	float2 uv2 = distortedPos * 0.18f - timer * float2(0.005f, 0.007f);
+	float2 uv3 = distortedPos * 0.35f + timer * float2(0.004f, -0.006f);
 	
 	float noise1 = Random::perlinNoise(float3(uv1, timer * 0.06f), 0x3Fu) * 0.5f + 0.5f;
 	float noise2 = Random::perlinNoise(float3(uv2, timer * 0.09f), 0x7Fu) * 0.5f + 0.5f;
@@ -985,21 +998,27 @@ FoamData ComputePhysicalFoam(float3 worldPos, float waterDepth, float timer, flo
 	foamPattern = smoothstep(0.35f, 0.65f, foamPattern);
 	foamPattern = smoothstep(0.25f, 0.75f, foamPattern);
 	
-	// Use wave height (worldPos.y) to detect wave crests - MUCH more selective
+	// Use wave height (worldPos.y) to detect wave crests - VERY selective
 	float waveHeight = worldPos.y;
-	float baseHeight = 0.0f; // Adjust this if waves have an offset
+	float baseHeight = 0.0f;
 	float relativeHeight = waveHeight - baseHeight;
 	
-	// Only foam on significant wave peaks (top 10% of wave height)
-	float heightThreshold = lerp(15.0f, 5.0f, saturate(foamIntensityMult)); // Higher = less foam
-	float crestFoam = smoothstep(heightThreshold, heightThreshold + 5.0f, relativeHeight) * foamPattern;
+	// Much higher threshold - only foam on the very top of waves
+	float heightThreshold = lerp(25.0f, 15.0f, saturate(foamIntensityMult)); // Was 15->5, now 25->15
+	float crestFoam = smoothstep(heightThreshold, heightThreshold + 3.0f, relativeHeight) * foamPattern;
 	
-	// Surface slope foam - only on steep breaking waves
-	float normalAngle = 1.0f - saturate(normal.z); // 0 = flat, 1 = vertical
-	float slopeFoam = smoothstep(0.25f, 0.5f, normalAngle) * foamPattern * 0.3f; // Reduced contribution
+	// Add noise-based masking to make foam appear sporadically, not uniformly
+	float foamMask = Random::perlinNoise(float3(absoluteWorldPos * 0.03f, timer * 0.08f), 0x9Fu) * 0.5f + 0.5f;
+	foamMask = smoothstep(0.45f, 0.65f, foamMask); // Only 20% of areas get foam
+	
+	crestFoam *= foamMask; // Apply sparsity mask
+	
+	// Surface slope foam - only on very steep breaking waves
+	float normalAngle = 1.0f - saturate(normal.z);
+	float slopeFoam = smoothstep(0.35f, 0.6f, normalAngle) * foamPattern * 0.25f; // Reduced from 0.3
 	
 	// Combine foam sources - use max to avoid over-brightening
-	foam.density = saturate(max(crestFoam, slopeFoam) * 0.7f) * saturate(foamIntensityMult);
+	foam.density = saturate(max(crestFoam, slopeFoam) * 0.5f) * saturate(foamIntensityMult); // Reduced from 0.7 to 0.5
 	
 	// GGX BRDF for specular highlights (using functions from SSGI)
 	float3 H = normalize(lightDir + viewDir);
