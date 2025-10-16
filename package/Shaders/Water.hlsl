@@ -146,6 +146,9 @@ struct VS_OUTPUT
 #	endif
 
 	float4 NormalsScale : TEXCOORD8;
+#	if defined(UNIFIED_WATER)
+	float2 UnifiedWaveInfo : TEXCOORD9;
+#	endif
 #	if defined(VR)
 	float ClipDistance : SV_ClipDistance0;  // o11
 	float CullDistance : SV_CullDistance0;  // p11
@@ -183,20 +186,6 @@ float ComputeWaveDayPhase(float gameTimeHours)
 
 // Generate per-cell spatial phase offset for wave variation
 // Uses world position to create deterministic but varied phases between cells
-float ComputeSpatialPhaseOffset(float2 worldPos)
-{
-	// Quantize to cell-sized chunks (4096 units per cell)
-	float2 cellCoord = floor(worldPos / 4096.0f);
-	
-	// Hash the cell coordinates for pseudo-random phase
-	// Using a simple hash that creates good distribution
-	float hash = frac(sin(dot(cellCoord, float2(12.9898f, 78.233f))) * 43758.5453f);
-	
-	// Map to reasonable phase range (0 to 2π)
-	// Scale down to keep variation subtle but noticeable
-	return hash * UW_TWO_PI * 0.3f; // 30% of full cycle variation
-}
-
 struct UnifiedWave
 {
 	float2 direction;
@@ -209,17 +198,32 @@ struct UnifiedWave
 
 float3 EvaluateUnifiedWave(UnifiedWave wave, float2 position, float timeSeconds)
 {
+	// Proper Gerstner wave implementation based on GPU Gems Chapter 1
+	// w = 2π / wavelength (which is wave.waveNumber)
+	// phase = w * dot(D, position) + speed * time + offset
 	float spatialPhase = dot(wave.direction, position) * wave.waveNumber + wave.phaseOffset;
 	float phase = WrapUnifiedPhase(spatialPhase + wave.angularVelocity * timeSeconds);
+	
 	float sineValue;
 	float cosineValue;
 	sincos(phase, sineValue, cosineValue);
-	float crestFactor = max(sineValue, 0.0f);
-	float crestAmplitude = wave.amplitude * crestFactor;
-	float horizontal = wave.steepness * crestAmplitude;
-	return float3(horizontal * wave.direction.x * cosineValue,
-	          horizontal * wave.direction.y * cosineValue,
-	          crestAmplitude);
+	
+	// Clamp sine to positive values only to prevent waves going below baseline
+	// This prevents underwater terrain clipping
+	sineValue = max(sineValue, 0.0f);
+	
+	// Gerstner wave displacement:
+	// Horizontal: Q * A * cos(phase) * direction
+	// Vertical: A * sin(phase) - clamped to stay above baseline
+	// Q is steepness (controls how peaked the waves are)
+	float QA = wave.steepness * wave.amplitude;
+	float QAC = QA * cosineValue;
+	
+	return float3(
+		QAC * wave.direction.x,  // Horizontal X displacement
+		QAC * wave.direction.y,  // Horizontal Y displacement
+		wave.amplitude * sineValue  // Vertical displacement (clamped positive)
+	);
 }
 
 float3 CalculateWaterDisplacement(float2 worldPos, float waveIntensity, float amplitudeMult, float speedMult, float steepnessMult, float timeSeconds, float dayPhase)
@@ -227,36 +231,56 @@ float3 CalculateWaterDisplacement(float2 worldPos, float waveIntensity, float am
 	if (waveIntensity <= 0.0f)
 		return float3(0.0f, 0.0f, 0.0f);
 
-	// Compute spatial phase offset for this cell to add variation
-	float spatialOffset = ComputeSpatialPhaseOffset(worldPos);
-
 	UnifiedWave waves[3];
 
-	waves[0].direction = normalize(float2(1.0f, 0.35f));
-	waves[0].amplitude = 18.0f * waveIntensity * amplitudeMult;
-	waves[0].waveNumber = UW_TWO_PI / 1800.0f;
-	waves[0].angularVelocity = UW_TWO_PI / 18.0f * speedMult;
-	waves[0].steepness = saturate(0.32f * steepnessMult);
-	waves[0].phaseOffset = dayPhase * 1.0f + spatialOffset;
+	float2 baseDirections[3] = {
+		float2(0.943918f, 0.330371f),
+		float2(-0.514496f, 0.857493f),
+		float2(0.905960f, -0.425691f)
+	};
+	float baseAmplitudes[3] = { 18.0f, 11.5f, 7.0f };
+	// Increased wavelengths for much wider waves
+	float baseWaveLengths[3] = { 2800.0f, 1800.0f, 1000.0f }; // Was 1800, 1100, 620
+	float basePeriods[3] = { 22.0f, 14.0f, 9.0f }; // Adjusted for wider waves
+	float baseSteepness[3] = { 0.28f, 0.22f, 0.18f }; // Reduced steepness for smoother waves
+	float dayScale[3] = { 1.0f, 1.45f, 2.2f };
+	float dayBias[3] = { 0.0f, 2.0943951f, 4.1887903f };
 
-	waves[1].direction = normalize(float2(-0.6f, 1.0f));
-	waves[1].amplitude = 11.5f * waveIntensity * amplitudeMult;
-	waves[1].waveNumber = UW_TWO_PI / 1100.0f;
-	waves[1].angularVelocity = UW_TWO_PI / 11.0f * speedMult;
-	waves[1].steepness = saturate(0.26f * steepnessMult);
-	waves[1].phaseOffset = dayPhase * 1.45f + 2.0943951f + spatialOffset * 1.3f;
+	[unroll] for (int i = 0; i < 3; ++i) {
+		// Gentler noise variation to avoid angular/jagged waves
+		float amplitudeNoise = Random::perlinNoise(float3(worldPos * 0.00015f, 17.0f * (i + 1)), 0x45u + i);
+		float directionNoise = Random::perlinNoise(float3(worldPos * 0.00025f, 31.0f * (i + 1)), 0x8Bu + i);
+		float frequencyNoise = Random::perlinNoise(float3(worldPos * 0.00012f, 53.0f * (i + 1)), 0xC3u + i);
+		float phaseNoise = Random::perlinNoise(float3(worldPos * 0.00035f, 71.0f * (i + 1)), 0xE1u + i);
+		float steepnessNoise = Random::perlinNoise(float3(worldPos * 0.00070f, 113.0f * (i + 1)), 0x3Bu + i);
 
-	waves[2].direction = normalize(float2(0.85f, -0.4f));
-	waves[2].amplitude = 7.0f * waveIntensity * amplitudeMult;
-	waves[2].waveNumber = UW_TWO_PI / 620.0f;
-	waves[2].angularVelocity = UW_TWO_PI / 7.0f * speedMult;
-	waves[2].steepness = saturate(0.21f * steepnessMult);
-	waves[2].phaseOffset = dayPhase * 2.2f + 4.1887903f + spatialOffset * 0.7f;
+		// Reduce variation ranges for smoother transitions
+		float amplitudeMul = lerp(0.88f, 1.12f, saturate(amplitudeNoise * 0.5f + 0.5f));
+		float directionAngle = directionNoise * 0.15f; // Reduced from 0.28 for less angular deviation
+		float frequencyMul = lerp(0.96f, 1.04f, saturate(frequencyNoise * 0.5f + 0.5f));
+		float phaseOffset = phaseNoise * (UW_TWO_PI * 0.35f); // Reduced from 0.45
+		float steepnessMul = lerp(0.92f, 1.08f, saturate(steepnessNoise * 0.5f + 0.5f));
+
+		float sinTheta, cosTheta;
+		sincos(directionAngle, sinTheta, cosTheta);
+		float2 rotatedDir = float2(
+			baseDirections[i].x * cosTheta - baseDirections[i].y * sinTheta,
+			baseDirections[i].x * sinTheta + baseDirections[i].y * cosTheta);
+
+		waves[i].direction = normalize(rotatedDir);
+		waves[i].amplitude = baseAmplitudes[i] * waveIntensity * amplitudeMult * amplitudeMul;
+		float waveNumberBase = UW_TWO_PI / baseWaveLengths[i];
+		waves[i].waveNumber = waveNumberBase * frequencyMul;
+		float angularBase = UW_TWO_PI / basePeriods[i];
+		waves[i].angularVelocity = angularBase * speedMult * sqrt(frequencyMul);
+		waves[i].steepness = saturate(baseSteepness[i] * steepnessMult * steepnessMul);
+		waves[i].phaseOffset = dayPhase * dayScale[i] + dayBias[i] + phaseOffset;
+	}
 
 	float3 totalDisplacement = float3(0.0f, 0.0f, 0.0f);
 
-	[unroll] for (int i = 0; i < 3; ++i) {
-		totalDisplacement += EvaluateUnifiedWave(waves[i], worldPos, timeSeconds);
+	[unroll] for (int j = 0; j < 3; ++j) {
+		totalDisplacement += EvaluateUnifiedWave(waves[j], worldPos, timeSeconds);
 	}
 
 	return totalDisplacement;
@@ -298,7 +322,7 @@ cbuffer UnifiedWaterPerFrame : register(b7)
 	float PrevGameTimeHours : packoffset(c2.x);
 	float PrevRealTimeSeconds : packoffset(c2.y);
 	float PrevTimeScale : packoffset(c2.z);
-	float UnifiedWaterPadding : packoffset(c2.w);
+	float FoamIntensity : packoffset(c2.w);
 }
 
 #endif // UNIFIED_WATER
@@ -351,6 +375,9 @@ VS_OUTPUT main(VS_INPUT input)
 #		endif
 	);
 	vsout.NormalsScale = NormalsScale;
+#	if defined(UNIFIED_WATER)
+	vsout.UnifiedWaveInfo = 0.0.xx;
+#	endif
 
 	float4 inputPosition = float4(input.Position.xyz, 1.0);
 	float4 worldPos;
@@ -364,6 +391,8 @@ VS_OUTPUT main(VS_INPUT input)
 	float waveTimeSeconds = ComputeWaveTimeSeconds(GameTimeHours, RealTimeSeconds);
 	float waveDayPhase = ComputeWaveDayPhase(GameTimeHours);
 	float3 waveDisplacement = CalculateWaterDisplacement(waveWorldPos, WaveIntensity, WaveAmplitude, WaveSpeed, WaveSteepness, waveTimeSeconds, waveDayPhase);
+	float horizontalDisplacement = length(waveDisplacement.xy);
+	vsout.UnifiedWaveInfo = float2(waveDisplacement.z, horizontalDisplacement);
 	currentPosition.xyz += waveDisplacement;
 
 	float waveTimeSecondsPrev = ComputeWaveTimeSeconds(PrevGameTimeHours, PrevRealTimeSeconds);
@@ -885,39 +914,6 @@ float3 ComputeEnhancedWaveNormal(float3 worldPos, float3 baseNormal, float timer
 	return combinedNormal;
 }
 
-/**
- * Enhanced Foam System - Depth-based foam generation
- * Based on tuxalin water shader foam calculations
- * Provides more realistic foam patterns near shorelines
- */
-
-/**
- * Calculate foam intensity based on water depth and wave action
- * @param worldPos World position
- * @param waterDepth Distance to sea floor (if available)
- * @param waveStrength Current wave intensity
- * @param timer Time for animation
- * @param foamIntensityMult Global foam intensity multiplier
- * @return Foam intensity multiplier
- */
-float ComputeEnhancedFoam(float3 worldPos, float waterDepth, float waveStrength, float timer, float foamIntensityMult)
-{
-	if (foamIntensityMult <= 0.0) return 0.0;
-	
-	float2 foamPos = worldPos.xz * 0.05;
-	float foamNoise1 = sin(foamPos.x * 4.0 + timer * 2.0) * cos(foamPos.y * 3.0 + timer * 1.5);
-	float foamNoise2 = sin(foamPos.x * 8.0 - timer * 3.0) * cos(foamPos.y * 6.0 - timer * 2.5);
-	
-	float foamPattern = (foamNoise1 * 0.6 + foamNoise2 * 0.4) * 0.5 + 0.5;
-	
-	float depthFactor = saturate(1.0 - waterDepth * 0.1);
-	
-	float waveFactor = saturate(waveStrength * 2.0);
-	
-	float foamIntensity = foamPattern * depthFactor * waveFactor * foamIntensityMult;
-	
-	return saturate(foamIntensity);
-}
 #			endif
 
 #			endif
@@ -939,6 +935,116 @@ float ComputeEnhancedFoam(float3 worldPos, float waterDepth, float waveStrength,
 #			if defined(WETNESS_EFFECTS)
 #				include "WetnessEffects/WetnessEffects.hlsli"
 #			endif
+
+// Foam data structure for unified water
+struct FoamData
+{
+	float density;      // Foam coverage (0-1)
+	float3 color;       // Foam color with lighting
+	float roughness;    // Surface roughness for BRDF
+	float thickness;    // For SSS calculation
+};
+
+#			if defined(UNIFIED_WATER)
+/**
+ * Physically-Based Foam System with BRDF and SSS
+ * High-resolution procedural foam using Perlin noise independent of wave crests
+ * Includes specular highlights (GGX BRDF), subsurface scattering, and light blue coloration
+ */
+FoamData ComputePhysicalFoam(float3 worldPos, float waterDepth, float timer, float foamIntensityMult, float2 screenPos, float3 normal, float3 viewDir, float3 lightDir)
+{
+	FoamData foam;
+	foam.density = 0.0f;
+	foam.color = float3(0.85f, 0.95f, 1.0f); // Light blue base color
+	foam.roughness = 0.35f;
+	foam.thickness = 0.08f;
+	
+	if (foamIntensityMult <= 0.001f)
+		return foam;
+
+	float2 absoluteWorldPos = worldPos.xz + FrameBuffer::CameraPosAdjust[0].xy;
+	
+	// High-resolution multi-scale Perlin noise with better frequency distribution
+	float2 uv1 = absoluteWorldPos * 0.15f + timer * float2(0.006f, 0.009f);
+	float2 uv2 = absoluteWorldPos * 0.35f - timer * float2(0.005f, 0.007f);
+	float2 uv3 = absoluteWorldPos * 0.70f + timer * float2(0.004f, -0.006f);
+	
+	float noise1 = Random::perlinNoise(float3(uv1, timer * 0.06f), 0x3Fu) * 0.5f + 0.5f;
+	float noise2 = Random::perlinNoise(float3(uv2, timer * 0.09f), 0x7Fu) * 0.5f + 0.5f;
+	float noise3 = Random::perlinNoise(float3(uv3, timer * 0.12f), 0xAFu) * 0.5f + 0.5f;
+	
+	// Weighted octave combination
+	float foamPattern = noise1 * 0.50f + noise2 * 0.35f + noise3 * 0.15f;
+	
+	// Light dithering for smooth edges
+	float dither = Random::InterleavedGradientNoise(screenPos, SharedData::FrameCount);
+	foamPattern = lerp(foamPattern, dither, 0.12f);
+	
+	// Two-stage smoothstep for very smooth transitions
+	foamPattern = smoothstep(0.35f, 0.65f, foamPattern);
+	foamPattern = smoothstep(0.25f, 0.75f, foamPattern);
+	
+	// Use wave height (worldPos.y) to detect wave crests - MUCH more selective
+	float waveHeight = worldPos.y;
+	float baseHeight = 0.0f; // Adjust this if waves have an offset
+	float relativeHeight = waveHeight - baseHeight;
+	
+	// Only foam on significant wave peaks (top 10% of wave height)
+	float heightThreshold = lerp(15.0f, 5.0f, saturate(foamIntensityMult)); // Higher = less foam
+	float crestFoam = smoothstep(heightThreshold, heightThreshold + 5.0f, relativeHeight) * foamPattern;
+	
+	// Surface slope foam - only on steep breaking waves
+	float normalAngle = 1.0f - saturate(normal.z); // 0 = flat, 1 = vertical
+	float slopeFoam = smoothstep(0.25f, 0.5f, normalAngle) * foamPattern * 0.3f; // Reduced contribution
+	
+	// Combine foam sources - use max to avoid over-brightening
+	foam.density = saturate(max(crestFoam, slopeFoam) * 0.7f) * saturate(foamIntensityMult);
+	
+	// GGX BRDF for specular highlights (using functions from SSGI)
+	float3 H = normalize(lightDir + viewDir);
+	float NdotH = saturate(dot(normal, H));
+	float NdotV = saturate(dot(normal, viewDir));
+	float NdotL = saturate(dot(normal, lightDir));
+	float VdotH = saturate(dot(viewDir, H));
+	
+	float a = foam.roughness * foam.roughness;
+	float a2 = a * a;
+	float ggxDenom = max((NdotH * a2 - NdotH) * NdotH + 1, 1e-5);
+	float D_GGX = a2 / (Math::PI * ggxDenom * ggxDenom);
+	
+	// Smith visibility term
+	float visSmithV = NdotL * (NdotV * (1 - a) + a);
+	float visSmithL = NdotV * (NdotL * (1 - a) + a);
+	float visDenom = visSmithV + visSmithL;
+	float Vis_Smith = (visDenom > 0) ? (0.5 / visDenom) : 0;
+	
+	// Schlick Fresnel
+	float Fc = pow(1 - VdotH, 5);
+	float F0 = 0.04f; // Water-foam interface
+	float fresnel = Fc + (1 - Fc) * F0;
+	
+	float specular = D_GGX * Vis_Smith * fresnel;
+	
+	// Burley-inspired SSS approximation
+	float3 sssScaling = float3(1.0f, 1.0f, 1.0f) / 3.5f; // Scaling factor
+	float3 meanFreePath = float3(0.12f, 0.15f, 0.18f); // Mean free path (light blue tint)
+	float sssRadius = foam.thickness;
+	float3 sssR = sssRadius / meanFreePath;
+	float3 negRbyD = -sssR / sssScaling;
+	float3 sss = max((exp(negRbyD) + exp(negRbyD / 3.0f)) / (sssScaling * meanFreePath * 8.0f * Math::PI), 1e-12f);
+	
+	// Combine lighting contributions with much brighter base
+	float3 diffuse = foam.color * max(NdotL, 0.4f); // Ensure minimum brightness
+	float3 scattering = sss * foam.color * 0.3f;
+	float3 specularColor = specular * 0.5f;
+	foam.color = saturate(diffuse + scattering + specularColor);
+	
+	return foam;
+}
+#			endif
+
+// Forward declaration to ensure availability across permutations
+FoamData ComputePhysicalFoam(float3 worldPos, float waterDepth, float timer, float foamIntensityMult, float2 screenPos, float3 normal, float3 viewDir, float3 lightDir);
 
 // Structure to return both normal and ripple/splash color information
 struct WaterNormalData
@@ -1433,6 +1539,31 @@ PS_OUTPUT main(PS_INPUT input)
 	WaterNormalData waterData = GetWaterNormal(input, distanceBlendFactor, depthControl.z, viewDirection, depth, eyeIndex);
 	float3 normal = waterData.normal;
 
+#		if defined(UNIFIED_WATER)
+	FoamData foamData;
+	foamData.density = 0.0f;
+	foamData.color = float3(0.85f, 0.95f, 1.0f);
+	float waterDepth = 1e5f; // Declare outside block so it's available later
+	{
+#		if defined(DEPTH)
+		float surfaceDepth = -viewPosition.z;
+		if (depth > 0.0f)
+			waterDepth = max(0.0f, depth - surfaceDepth);
+#		endif
+		float waveTimeSeconds = ComputeWaveTimeSeconds(GameTimeHours, RealTimeSeconds);
+		
+		// Compute physically-based foam with BRDF and SSS
+		float3 lightDir = normalize(-SunDir.xyz); // Sun direction
+		foamData = ComputePhysicalFoam(input.WPosition.xyz, waterDepth, waveTimeSeconds, FoamIntensity, input.HPosition.xy, normal, viewDirection, lightDir);
+		
+		if (Permutation::PixelShaderDescriptor & Permutation::WaterFlags::Interior)
+			foamData.density *= 0.35f;
+	}
+#		if defined(UNDERWATER)
+	foamData.density = 0.0f;
+#		endif
+#		endif
+
 	float fresnel = GetFresnelValue(normal, viewDirection);
 
 #			if defined(SPECULAR) && (NUM_SPECULAR_LIGHTS != 0)
@@ -1596,6 +1727,10 @@ PS_OUTPUT main(PS_INPUT input)
 
 #				endif
 #			endif
+#		if defined(UNIFIED_WATER)
+	// Apply physically-based foam with light blue color and lighting
+	finalColor = lerp(finalColor, foamData.color, foamData.density);
+#		endif
 	psout.Lighting = float4(finalColor, isSpecular);
 #		endif
 

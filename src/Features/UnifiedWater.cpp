@@ -70,12 +70,12 @@ void UnifiedWater::DrawSettings()
 		ImGui::Spacing();
 		
 		ImGui::Text("Advanced Foam System");
-		ImGui::SliderFloat("Foam Enhancement", &settings.FoamIntensity, 0.0f, 1.0f, "%.2f");
+		ImGui::SliderFloat("Foam Intensity", &settings.FoamIntensity, 0.0f, 2.0f, "%.2f");
 		if (auto _tt = Util::HoverTooltipWrapper()) {
 			ImGui::Text(
-				"Controls depth-based foam generation strength.\n"
-				"Provides more realistic foam patterns near shorelines.\n"
-				"Set to 0 to disable enhanced foam.");
+				"Controls overall foam visibility and coverage.\n"
+				"Higher values = more foam, appears on lower wave peaks\n"
+				"Lower values = less foam, only on highest wave peaks");
 		}
 
 		ImGui::TreePop();
@@ -530,6 +530,7 @@ void UnifiedWater::BSWaterShader_SetupGeometry::thunk(RE::BSShader* waterShader,
 		perFrameData.WaveAmplitude = singleton.settings.WaveAmplitude;
 		perFrameData.WaveSpeed = singleton.settings.WaveSpeed;
 		perFrameData.WaveSteepness = singleton.settings.WaveSteepness;
+		perFrameData.FoamIntensity = singleton.settings.FoamIntensity;
 
 		float gameTimeHours = 0.0f;
 		float realTimeSeconds = 0.0f;
@@ -551,13 +552,13 @@ void UnifiedWater::BSWaterShader_SetupGeometry::thunk(RE::BSShader* waterShader,
 		perFrameData.PrevGameTimeHours = singleton.hasLastTimingSample ? singleton.lastGameTimeHours : gameTimeHours;
 		perFrameData.PrevRealTimeSeconds = singleton.hasLastTimingSample ? singleton.lastRealTimeSeconds : realTimeSeconds;
 		perFrameData.PrevTimeScale = singleton.hasLastTimingSample ? singleton.lastTimeScale : timeScale;
-		perFrameData.pad0 = 0.0f;
 		
 		singleton.perFrame->Update(perFrameData);
 		
 		auto context = globals::d3d::context;
 		ID3D11Buffer* buffers[1] = { singleton.perFrame->CB() };
 		context->VSSetConstantBuffers(7, 1, buffers);
+		context->PSSetConstantBuffers(7, 1, buffers); // Bind to pixel shader too for foam
 
 		singleton.lastGameTimeHours = gameTimeHours;
 		singleton.lastRealTimeSeconds = realTimeSeconds;

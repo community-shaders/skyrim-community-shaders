@@ -29,14 +29,14 @@ struct UnifiedWater : OverlayFeature
 
 	struct Settings
 	{
-		bool UseOptimisedMeshes = true;
+		bool UseOptimisedMeshes = false;
 		
 		float WaveIntensity = 0.3f;
 		float WaveAmplitude = 1.0f;
 		float WaveSpeed = 1.0f;
 		
 		float WaveSteepness = 1.0f;
-		float FoamIntensity = 0.5f;
+		float FoamIntensity = 1.0f;
 		float pad0[3];
 	};
 
@@ -53,7 +53,7 @@ struct UnifiedWater : OverlayFeature
 		float PrevGameTimeHours;
 		float PrevRealTimeSeconds;
 		float PrevTimeScale;
-		float pad0;
+		float FoamIntensity;
 	};
 
 	Settings settings;
