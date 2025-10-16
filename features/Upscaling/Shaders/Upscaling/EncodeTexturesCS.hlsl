@@ -63,6 +63,8 @@ RWTexture2D<float2> MotionVectorOutput : register(u2);
 #endif
 
 	float reactiveMask = taaMask.x * 0.1 + taaMask.y;
+	reactiveMask = max(reactiveMask, NormalsWaterMask[dispatchID.xy].w);
+ 	reactiveMask = max(reactiveMask, transparencyCompositionMask); 
 	ReactiveMask[dispatchID.xy] = reactiveMask;
 
 	TransparencyCompositionMask[dispatchID.xy] = transparencyCompositionMask;
