@@ -772,35 +772,31 @@ void State::UpdateSharedData([[maybe_unused]] bool a_inWorld, [[maybe_unused]] b
 			data.MipBias = 0;
 		}
 
-		
-		if (auto sky = globals::game::sky) {
-			if (auto sun = sky->sun){
-				float3 sunDirection = { sun->root->local.translate.x, sun->root->local.translate.y, sun->root->local.translate.z };
-				sunDirection.Normalize();
-				data.SunDirection = { sunDirection.x, sunDirection.y, sunDirection.z, 0.0f };
+		auto ProcessMoon = [](RE::Moon* moon, const float4& baseColor, const float4& moonGlareColor) -> std::pair<float4, float4> {
+			static constexpr std::array<std::pair<std::string_view, RE::Moon::Phases::Phase>, 8> PhaseLookup{
+				{ { "full", RE::Moon::Phases::Phase::kFull },
+					{ "three_wan", RE::Moon::Phases::Phase::kWaningGibbous },
+					{ "half_wan", RE::Moon::Phases::Phase::kWaningQuarter },
+					{ "one_wan", RE::Moon::Phases::Phase::kWaningCrescent },
+					{ "new", RE::Moon::Phases::Phase::kNewMoon },
+					{ "one_wax", RE::Moon::Phases::Phase::kWaxingCrescent },
+					{ "half_wax", RE::Moon::Phases::Phase::kWaxingQuarter },
+					{ "three_wax", RE::Moon::Phases::Phase::kWaxingGibbous } }
+			};
 
-				auto& sunColor = sky->skyColor[(uint)RE::TESWeather::ColorTypes::kSun];
-				data.SunColor = { sunColor.red, sunColor.green, sunColor.blue, 0.0f };
-			}
-			if (auto masser = sky->masser) {
-				const auto dir = masser->root->local.rotate.GetVectorY();
+			static constexpr float NewMoonIntensityFactor = 0.05f;
+			static constexpr float CrescentMoonIntensityFactor = 0.25f;
+			static constexpr float FullMoonIntensityFactor = 1.0f;
 
-				float3 masserDirection = { dir.x, dir.y, dir.z };
-				masserDirection.Normalize();
-				data.MasserDirection = { masserDirection.x, masserDirection.y, masserDirection.z, 0.0f };
+			const auto dir = moon->root->local.rotate.GetVectorY();
+			float3 direction = { dir.x, dir.y, dir.z };
+			direction.Normalize();
 
-				auto& moonColor = sky->skyColor[(uint)RE::TESWeather::ColorTypes::kMoonGlare];
+			float4 color = { moonGlareColor.x, moonGlareColor.y, moonGlareColor.z, 0.0f };
+			color *= baseColor;
 
-				data.MasserColor = { moonColor.red, moonColor.green, moonColor.blue, 0.0f };
-				
-				float4 masserBaseColor = { 142, 96, 90, 255 };
-				masserBaseColor /= 255.0f;
-
-				data.MasserColor *= masserBaseColor;
-
-				if (masser->moonMesh && masser->moonMesh.get()) {
-					const auto moonShaderProperty = skyrim_cast<RE::BSSkyShaderProperty*>(masser->moonMesh->GetGeometryRuntimeData().properties[1].get());
-
+			if (moon->moonMesh && moon->moonMesh.get()) {
+				if (const auto moonShaderProperty = skyrim_cast<RE::BSSkyShaderProperty*>(moon->moonMesh->GetGeometryRuntimeData().properties[1].get())) {
 					if (auto texture = moonShaderProperty->GetBaseTexture()) {
 						const auto name = texture->name.c_str();
 						const size_t len = std::strlen(name);
@@ -810,96 +806,51 @@ void State::UpdateSharedData([[maybe_unused]] bool a_inWorld, [[maybe_unused]] b
 							lower.push_back(static_cast<char>(std::tolower(name[i])));
 						}
 
-						static constexpr std::array<std::pair<std::string_view, RE::Moon::Phases::Phase>, 8> Lookup{
-							{ { "full", RE::Moon::Phases::Phase::kFull },
-								{ "three_wan", RE::Moon::Phases::Phase::kWaningGibbous },
-								{ "half_wan", RE::Moon::Phases::Phase::kWaningQuarter },
-								{ "one_wan", RE::Moon::Phases::Phase::kWaningCrescent },
-								{ "new", RE::Moon::Phases::Phase::kNewMoon },
-								{ "one_wax", RE::Moon::Phases::Phase::kWaxingCrescent },
-								{ "half_wax", RE::Moon::Phases::Phase::kWaxingQuarter },
-								{ "three_wax", RE::Moon::Phases::Phase::kWaxingGibbous } }
-						};
-
 						RE::Moon::Phases::Phase phase = RE::Moon::Phases::Phase::kFull;
-						for (auto& [suffix, id] : Lookup) {
+						for (auto& [suffix, id] : PhaseLookup) {
 							if (lower.find(suffix) != std::string::npos) {
 								phase = id;
 								break;
 							}
 						}
 
-						static constexpr float NewMoonIntensityFactor = 0.05f;
-						static constexpr float CrescentMoonIntensityFactor = 0.25f;
-						static constexpr float FullMoonIntensityFactor = 1.0f;
-
 						if (phase == RE::Moon::Phases::Phase::kNewMoon) {
-							data.MasserColor *= NewMoonIntensityFactor;
+							color *= NewMoonIntensityFactor;
 						} else {
 							const float t = (abs(static_cast<float>(phase) - static_cast<float>(RE::Moon::Phases::Phase::kNewMoon)) - 1.0f) / 3.0f;
-							data.MasserColor *= std::lerp(CrescentMoonIntensityFactor, FullMoonIntensityFactor, t);
+							color *= std::lerp(CrescentMoonIntensityFactor, FullMoonIntensityFactor, t);
 						}
 					}
 				}
 			}
+
+			return { { direction.x, direction.y, direction.z, 0.0f }, color };
+		};
+
+		if (auto sky = globals::game::sky) {
+			if (auto sun = sky->sun) {
+				float3 sunDirection = { sun->root->local.translate.x, sun->root->local.translate.y, sun->root->local.translate.z };
+				sunDirection.Normalize();
+				data.SunDirection = { sunDirection.x, sunDirection.y, sunDirection.z, 0.0f };
+
+				auto& sunColor = sky->skyColor[(uint)RE::TESWeather::ColorTypes::kSun];
+				data.SunColor = { sunColor.red, sunColor.green, sunColor.blue, 0.0f };
+			}
+
+			auto& moonGlareColor = sky->skyColor[(uint)RE::TESWeather::ColorTypes::kMoonGlare];
+
+			if (auto masser = sky->masser) {
+				float4 masserBaseColor = { 142.0f / 255.0f, 96.0f / 255.0f, 90.0f / 255.0f, 1.0f };
+				auto [dir, color] = ProcessMoon(masser, masserBaseColor, { moonGlareColor.red, moonGlareColor.green, moonGlareColor.blue, 0.0f });
+				data.MasserDirection = dir;
+				data.MasserColor = color;
+			}
+
 			if (auto secunda = sky->secunda) {
-				const auto dir = secunda->root->local.rotate.GetVectorY();
-
-				float3 secundaDirection = { dir.x, dir.y, dir.z };
-				secundaDirection.Normalize();
-				data.SecundaDirection = { secundaDirection.x, secundaDirection.y, secundaDirection.z, 0.0f };
-
-				auto& moonColor = sky->skyColor[(uint)RE::TESWeather::ColorTypes::kMoonGlare];
-				data.SecundaColor = { moonColor.red, moonColor.green, moonColor.blue, 0.0f };
-
-				float4 secundaBaseColor = { 117, 115, 109, 255 };
-				secundaBaseColor /= 255.0f;
-
-				data.SecundaColor *= secundaBaseColor;
-
-				if (secunda->moonMesh && secunda->moonMesh.get()) {
-					const auto moonShaderProperty = skyrim_cast<RE::BSSkyShaderProperty*>(secunda->moonMesh->GetGeometryRuntimeData().properties[1].get());
-
-					if (auto texture = moonShaderProperty->GetBaseTexture()) {
-						const auto name = moonShaderProperty->GetBaseTexture()->name.c_str();
-						const size_t len = std::strlen(name);
-						std::string lower;
-						lower.reserve(len);
-						for (size_t i = 0; i < len; ++i) {
-							lower.push_back(static_cast<char>(std::tolower(name[i])));
-						}
-
-						static constexpr std::array<std::pair<std::string_view, RE::Moon::Phases::Phase>, 8> Lookup{
-							{ { "full", RE::Moon::Phases::Phase::kFull },
-								{ "three_wan", RE::Moon::Phases::Phase::kWaningGibbous },
-								{ "half_wan", RE::Moon::Phases::Phase::kWaningQuarter },
-								{ "one_wan", RE::Moon::Phases::Phase::kWaningCrescent },
-								{ "new", RE::Moon::Phases::Phase::kNewMoon },
-								{ "one_wax", RE::Moon::Phases::Phase::kWaxingCrescent },
-								{ "half_wax", RE::Moon::Phases::Phase::kWaxingQuarter },
-								{ "three_wax", RE::Moon::Phases::Phase::kWaxingGibbous } }
-						};
-
-						RE::Moon::Phases::Phase phase = RE::Moon::Phases::Phase::kFull;
-						for (auto& [suffix, id] : Lookup) {
-							if (lower.find(suffix) != std::string::npos) {
-								phase = id;
-								break;
-							}
-						}
-
-						static constexpr float NewMoonIntensityFactor = 0.05f;
-						static constexpr float CrescentMoonIntensityFactor = 0.25f;
-						static constexpr float FullMoonIntensityFactor = 1.0f;
-
-						if (phase == RE::Moon::Phases::Phase::kNewMoon) {
-							data.SecundaColor *= NewMoonIntensityFactor;
-						} else {
-							const float t = (abs(static_cast<float>(phase) - static_cast<float>(RE::Moon::Phases::Phase::kNewMoon)) - 1.0f) / 3.0f;
-							data.SecundaColor *= std::lerp(CrescentMoonIntensityFactor, FullMoonIntensityFactor, t);
-						}
-					}
-				}
+				float4 secundaBaseColor = { 117.0f / 255.0f, 115.0f / 255.0f, 109.0f / 255.0f, 1.0f };
+				auto [dir, color] = ProcessMoon(secunda, secundaBaseColor, { moonGlareColor.red, moonGlareColor.green, moonGlareColor.blue, 0.0f });
+				data.SecundaDirection = dir;
+				data.SecundaColor = color;
 			}
 		}
 		
