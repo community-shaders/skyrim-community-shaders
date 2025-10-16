@@ -323,10 +323,11 @@ PS_OUTPUT main(PS_INPUT input)
 		psout.Color.xyz *= SharedData::enbSettings.CloudsIntensity;
 
 		float cloudsEdgeAlpha = saturate(1.0 - (baseColor.w + SharedData::enbSettings.CloudsEdgeClamp));
-		float sunPhase = pow(saturate(dot(normalize(input.WorldPosition.xyz), SharedData::SunDirection.xyz)), 10.0);
+		float3 sunPhase = pow(saturate(dot(normalize(input.WorldPosition.xyz), SharedData::SunDirection.xyz)), 20.0) * SharedData::SunColor.xyz;
+		float3 masserPhase = pow(saturate(dot(normalize(input.WorldPosition.xyz), SharedData::MasserDirection.xyz)), 20.0) * SharedData::MasserColor.xyz * SharedData::enbSettings.CloudsEdgeMoonMultiplier;
+		float3 secundaPhase = pow(saturate(dot(normalize(input.WorldPosition.xyz), SharedData::SecundaDirection.xyz)), 20.0) * SharedData::SecundaColor.xyz * SharedData::enbSettings.CloudsEdgeMoonMultiplier;
 
-		float cloudsScatterPower = cloudsEdgeAlpha * sunPhase * SharedData::enbSettings.CloudsEdgeIntensity;
-		float3 cloudsScatter = cloudsScatterPower * SharedData::SunColor.xyz;
+		float3 cloudsScatter = (sunPhase + masserPhase + secundaPhase) * cloudsEdgeAlpha * SharedData::enbSettings.CloudsEdgeIntensity * 5.0;
 
 		psout.Color.xyz = psout.Color.xyz + psout.Color.xyz * cloudsScatter;
 	}

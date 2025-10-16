@@ -782,6 +782,125 @@ void State::UpdateSharedData([[maybe_unused]] bool a_inWorld, [[maybe_unused]] b
 				auto& sunColor = sky->skyColor[(uint)RE::TESWeather::ColorTypes::kSun];
 				data.SunColor = { sunColor.red, sunColor.green, sunColor.blue, 0.0f };
 			}
+			if (auto masser = sky->masser) {
+				const auto dir = masser->root->local.rotate.GetVectorY();
+
+				float3 masserDirection = { dir.x, dir.y, dir.z };
+				masserDirection.Normalize();
+				data.MasserDirection = { masserDirection.x, masserDirection.y, masserDirection.z, 0.0f };
+
+				auto& moonColor = sky->skyColor[(uint)RE::TESWeather::ColorTypes::kMoonGlare];
+
+				data.MasserColor = { moonColor.red, moonColor.green, moonColor.blue, 0.0f };
+				
+				float4 masserBaseColor = { 142, 96, 90, 255 };
+				masserBaseColor /= 255.0f;
+
+				data.MasserColor *= masserBaseColor;
+
+				if (masser->moonMesh && masser->moonMesh.get()) {
+					const auto moonShaderProperty = skyrim_cast<RE::BSSkyShaderProperty*>(masser->moonMesh->GetGeometryRuntimeData().properties[1].get());
+
+					if (auto texture = moonShaderProperty->GetBaseTexture()) {
+						const auto name = texture->name.c_str();
+						const size_t len = std::strlen(name);
+						std::string lower;
+						lower.reserve(len);
+						for (size_t i = 0; i < len; ++i) {
+							lower.push_back(static_cast<char>(std::tolower(name[i])));
+						}
+
+						static constexpr std::array<std::pair<std::string_view, RE::Moon::Phases::Phase>, 8> Lookup{
+							{ { "full", RE::Moon::Phases::Phase::kFull },
+								{ "three_wan", RE::Moon::Phases::Phase::kWaningGibbous },
+								{ "half_wan", RE::Moon::Phases::Phase::kWaningQuarter },
+								{ "one_wan", RE::Moon::Phases::Phase::kWaningCrescent },
+								{ "new", RE::Moon::Phases::Phase::kNewMoon },
+								{ "one_wax", RE::Moon::Phases::Phase::kWaxingCrescent },
+								{ "half_wax", RE::Moon::Phases::Phase::kWaxingQuarter },
+								{ "three_wax", RE::Moon::Phases::Phase::kWaxingGibbous } }
+						};
+
+						RE::Moon::Phases::Phase phase = RE::Moon::Phases::Phase::kFull;
+						for (auto& [suffix, id] : Lookup) {
+							if (lower.find(suffix) != std::string::npos) {
+								phase = id;
+								break;
+							}
+						}
+
+						static constexpr float NewMoonIntensityFactor = 0.05f;
+						static constexpr float CrescentMoonIntensityFactor = 0.25f;
+						static constexpr float FullMoonIntensityFactor = 1.0f;
+
+						if (phase == RE::Moon::Phases::Phase::kNewMoon) {
+							data.MasserColor *= NewMoonIntensityFactor;
+						} else {
+							const float t = (abs(static_cast<float>(phase) - static_cast<float>(RE::Moon::Phases::Phase::kNewMoon)) - 1.0f) / 3.0f;
+							data.MasserColor *= std::lerp(CrescentMoonIntensityFactor, FullMoonIntensityFactor, t);
+						}
+					}
+				}
+			}
+			if (auto secunda = sky->secunda) {
+				const auto dir = secunda->root->local.rotate.GetVectorY();
+
+				float3 secundaDirection = { dir.x, dir.y, dir.z };
+				secundaDirection.Normalize();
+				data.SecundaDirection = { secundaDirection.x, secundaDirection.y, secundaDirection.z, 0.0f };
+
+				auto& moonColor = sky->skyColor[(uint)RE::TESWeather::ColorTypes::kMoonGlare];
+				data.SecundaColor = { moonColor.red, moonColor.green, moonColor.blue, 0.0f };
+
+				float4 secundaBaseColor = { 117, 115, 109, 255 };
+				secundaBaseColor /= 255.0f;
+
+				data.SecundaColor *= secundaBaseColor;
+
+				if (secunda->moonMesh && secunda->moonMesh.get()) {
+					const auto moonShaderProperty = skyrim_cast<RE::BSSkyShaderProperty*>(secunda->moonMesh->GetGeometryRuntimeData().properties[1].get());
+
+					if (auto texture = moonShaderProperty->GetBaseTexture()) {
+						const auto name = moonShaderProperty->GetBaseTexture()->name.c_str();
+						const size_t len = std::strlen(name);
+						std::string lower;
+						lower.reserve(len);
+						for (size_t i = 0; i < len; ++i) {
+							lower.push_back(static_cast<char>(std::tolower(name[i])));
+						}
+
+						static constexpr std::array<std::pair<std::string_view, RE::Moon::Phases::Phase>, 8> Lookup{
+							{ { "full", RE::Moon::Phases::Phase::kFull },
+								{ "three_wan", RE::Moon::Phases::Phase::kWaningGibbous },
+								{ "half_wan", RE::Moon::Phases::Phase::kWaningQuarter },
+								{ "one_wan", RE::Moon::Phases::Phase::kWaningCrescent },
+								{ "new", RE::Moon::Phases::Phase::kNewMoon },
+								{ "one_wax", RE::Moon::Phases::Phase::kWaxingCrescent },
+								{ "half_wax", RE::Moon::Phases::Phase::kWaxingQuarter },
+								{ "three_wax", RE::Moon::Phases::Phase::kWaxingGibbous } }
+						};
+
+						RE::Moon::Phases::Phase phase = RE::Moon::Phases::Phase::kFull;
+						for (auto& [suffix, id] : Lookup) {
+							if (lower.find(suffix) != std::string::npos) {
+								phase = id;
+								break;
+							}
+						}
+
+						static constexpr float NewMoonIntensityFactor = 0.05f;
+						static constexpr float CrescentMoonIntensityFactor = 0.25f;
+						static constexpr float FullMoonIntensityFactor = 1.0f;
+
+						if (phase == RE::Moon::Phases::Phase::kNewMoon) {
+							data.SecundaColor *= NewMoonIntensityFactor;
+						} else {
+							const float t = (abs(static_cast<float>(phase) - static_cast<float>(RE::Moon::Phases::Phase::kNewMoon)) - 1.0f) / 3.0f;
+							data.SecundaColor *= std::lerp(CrescentMoonIntensityFactor, FullMoonIntensityFactor, t);
+						}
+					}
+				}
+			}
 		}
 		
 		sharedDataCB->Update(data);

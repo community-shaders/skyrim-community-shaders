@@ -226,6 +226,8 @@ void ENBPostProcessing::OverrideWeather(RE::Sky* a_sky)
 
 		float3 moonColorF3 = NiToF3(moonColor);
 
+		moonColorF3 = Desaturation(moonColorF3, settingManager.GetInterpolatedTimeOfDayValue("MoonDesaturation", "SKY"));
+		moonColorF3 = ColorFilter(moonColorF3, settingManager.GetInterpolatedColorTimeOfDayValue("MoonColorFilter", "SKY"), 0.0f);
 		moonColorF3 = Intensity(moonColorF3, settingManager.GetInterpolatedTimeOfDayValue("MoonIntensity", "SKY"));
 
 		moonColor = F3ToNi(moonColorF3);
