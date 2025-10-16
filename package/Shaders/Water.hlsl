@@ -247,12 +247,12 @@ float3 CalculateWaterDisplacement(float2 worldPos, float waveIntensity, float am
 	float dayBias[3] = { 0.0f, 2.0943951f, 4.1887903f };
 
 	[unroll] for (int i = 0; i < 3; ++i) {
-		// Gentler noise variation to avoid angular/jagged waves
-		float amplitudeNoise = Random::perlinNoise(float3(worldPos * 0.00015f, 17.0f * (i + 1)), 0x45u + i);
-		float directionNoise = Random::perlinNoise(float3(worldPos * 0.00025f, 31.0f * (i + 1)), 0x8Bu + i);
-		float frequencyNoise = Random::perlinNoise(float3(worldPos * 0.00012f, 53.0f * (i + 1)), 0xC3u + i);
-		float phaseNoise = Random::perlinNoise(float3(worldPos * 0.00035f, 71.0f * (i + 1)), 0xE1u + i);
-		float steepnessNoise = Random::perlinNoise(float3(worldPos * 0.00070f, 113.0f * (i + 1)), 0x3Bu + i);
+		// Much lower frequency noise for stable variation (reduced from 0.00015-0.00070 to 0.00008-0.00035)
+		float amplitudeNoise = Random::perlinNoise(float3(worldPos * 0.00008f, 17.0f * (i + 1)), 0x45u + i);
+		float directionNoise = Random::perlinNoise(float3(worldPos * 0.00012f, 31.0f * (i + 1)), 0x8Bu + i);
+		float frequencyNoise = Random::perlinNoise(float3(worldPos * 0.00006f, 53.0f * (i + 1)), 0xC3u + i);
+		float phaseNoise = Random::perlinNoise(float3(worldPos * 0.00018f, 71.0f * (i + 1)), 0xE1u + i);
+		float steepnessNoise = Random::perlinNoise(float3(worldPos * 0.00035f, 113.0f * (i + 1)), 0x3Bu + i);
 
 		// Reduce variation ranges for smoother transitions
 		float amplitudeMul = lerp(0.88f, 1.12f, saturate(amplitudeNoise * 0.5f + 0.5f));
@@ -962,12 +962,13 @@ FoamData ComputePhysicalFoam(float3 worldPos, float waterDepth, float timer, flo
 	if (foamIntensityMult <= 0.001f)
 		return foam;
 
-	float2 absoluteWorldPos = worldPos.xz + FrameBuffer::CameraPosAdjust[0].xy;
+	// worldPos is already in world-space, use it directly for noise sampling
+	float2 absoluteWorldPos = worldPos.xz;
 	
-	// High-resolution multi-scale Perlin noise with better frequency distribution
-	float2 uv1 = absoluteWorldPos * 0.15f + timer * float2(0.006f, 0.009f);
-	float2 uv2 = absoluteWorldPos * 0.35f - timer * float2(0.005f, 0.007f);
-	float2 uv3 = absoluteWorldPos * 0.70f + timer * float2(0.004f, -0.006f);
+	// Lower frequency Perlin noise for stable foam patterns (reduced frequencies for temporal stability)
+	float2 uv1 = absoluteWorldPos * 0.08f + timer * float2(0.006f, 0.009f);
+	float2 uv2 = absoluteWorldPos * 0.18f - timer * float2(0.005f, 0.007f);
+	float2 uv3 = absoluteWorldPos * 0.35f + timer * float2(0.004f, -0.006f);
 	
 	float noise1 = Random::perlinNoise(float3(uv1, timer * 0.06f), 0x3Fu) * 0.5f + 0.5f;
 	float noise2 = Random::perlinNoise(float3(uv2, timer * 0.09f), 0x7Fu) * 0.5f + 0.5f;
@@ -1553,8 +1554,10 @@ PS_OUTPUT main(PS_INPUT input)
 		float waveTimeSeconds = ComputeWaveTimeSeconds(GameTimeHours, RealTimeSeconds);
 		
 		// Compute physically-based foam with BRDF and SSS
+		// World position = camera offset + view-space position (same as used for lights)
+		float3 worldPosForFoam = PosAdjust[eyeIndex].xyz + input.WPosition.xyz;
 		float3 lightDir = normalize(-SunDir.xyz); // Sun direction
-		foamData = ComputePhysicalFoam(input.WPosition.xyz, waterDepth, waveTimeSeconds, FoamIntensity, input.HPosition.xy, normal, viewDirection, lightDir);
+		foamData = ComputePhysicalFoam(worldPosForFoam, waterDepth, waveTimeSeconds, FoamIntensity, input.HPosition.xy, normal, viewDirection, lightDir);
 		
 		if (Permutation::PixelShaderDescriptor & Permutation::WaterFlags::Interior)
 			foamData.density *= 0.35f;
