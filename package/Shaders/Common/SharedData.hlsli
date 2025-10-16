@@ -249,6 +249,11 @@ namespace SharedData
 
 		float3 VolumetricRaysColorFilter;
 		float pad13;
+
+		float ProceduralSunSize;
+		float ProceduralSunEdgeSoftness;
+		float ProceduralSunGlowIntensity;
+		float ProceduralSunGlowCurve;
 	};
 
 	cbuffer FeatureData : register(b6)

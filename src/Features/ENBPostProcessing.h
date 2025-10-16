@@ -83,6 +83,11 @@ public:
 
 		float3 VolumetricRaysColorFilter;
 		float pad13;
+
+		float ProceduralSunSize;
+		float ProceduralSunEdgeSoftness;
+		float ProceduralSunGlowIntensity;
+		float ProceduralSunGlowCurve;
 	};
 
 	bool enableEffect = false;
@@ -102,5 +107,6 @@ public:
 		RE::NiColor directionalAmbientColors[3][2];
 	};
 	void OverrideAmbientLighting(DirectionalAmbientColors& DirectionalAmbientColors);
+	void ModifySky(RE::BSRenderPass* Pass);
 	virtual void PostPostLoad() override;
 };

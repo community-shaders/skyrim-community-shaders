@@ -2,6 +2,7 @@
 #include "Common/VR.hlsli"
 #include "Common/Math.hlsli"
 #include "Common/SharedData.hlsli"
+#include "Common/Permutation.hlsli"
 
 struct VS_INPUT
 {
@@ -253,10 +254,33 @@ PS_OUTPUT main(PS_INPUT input)
 	baseColor = PParams.xxxx * (-baseColor + blendColor) + baseColor;
 #		endif
 
+	if ((Permutation::ExtraShaderDescriptor & Permutation::ExtraFlags::IsSun)) {
+		float distanceFromCenter = length(input.TexCoord0.xy * 2.0 - 1.0); 
+
+		float sun = smoothstep(SharedData::enbSettings.ProceduralSunSize, 
+                               SharedData::enbSettings.ProceduralSunSize - SharedData::enbSettings.ProceduralSunEdgeSoftness * SharedData::enbSettings.ProceduralSunSize * 0.5, 
+                               distanceFromCenter * 25.0);
+		
+		float sunGlow = SharedData::enbSettings.ProceduralSunGlowCurve > 0.0 ? pow(pow(saturate(1.0 - distanceFromCenter), rcp(SharedData::enbSettings.ProceduralSunGlowCurve)), 3.0) * SharedData::enbSettings.ProceduralSunGlowIntensity : 0.0;
+
+		baseColor = sun + sunGlow;
+		baseColor.w = 1;
+
+#	ifndef OCCLUSION
+#		ifndef TEXLERP
+#			ifdef TEXFADE
+	baseColor.w *= PParams.x;
+#			endif
+#		else
+	baseColor *= PParams.x;
+#		endif
+#		endif
+	}
+
 #		if defined(DITHER)
 	float2 noiseGradUv = float2(0.125, 0.125) * input.Position.xy;
-	float noiseGrad =
-		TexNoiseGradSampler.Sample(SampNoiseGradSampler, noiseGradUv).x * 0.03125 + -0.0078125;
+	float noiseGrad = TexNoiseGradSampler.Sample(SampNoiseGradSampler, noiseGradUv).x * 2.0 - 1.0;
+	noiseGrad *= 0.05;
 
 #			ifdef TEX
 	psout.Color.xyz = (input.Color.xyz * baseColor.xyz) + noiseGrad;
