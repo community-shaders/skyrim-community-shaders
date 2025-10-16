@@ -2225,7 +2225,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	float minWetnessValue = SharedData::wetnessEffectsSettings.MinRainWetness;
 	float minWetnessAngle = saturate(max(minWetnessValue, worldNormal.z));
 #		if defined(SKYLIGHTING)
-	float wetnessOcclusion = inWorld ? pow(saturate(SphericalHarmonics::Unproject(skylightingSH, float3(0, 0, 1))), 2) : 0.0;
+	float wetnessOcclusion = inWorld ? saturate(SphericalHarmonics::Unproject(skylightingSH, float3(0, 0, 1))) : 0.0;
 #		else
 	float wetnessOcclusion = inWorld;
 #		endif
@@ -2273,7 +2273,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #		endif
 
 	// Apply occlusion and distance factors
-	puddle *= wetnessOcclusion * nearFactor;
+	puddle *= saturate(wetnessOcclusion * 2.0) * nearFactor;
 
 	// Calculate wetness glossiness factors
 	float wetnessGlossinessAlbedo = max(puddle, shoreFactorAlbedo * SharedData::wetnessEffectsSettings.MaxShoreWetness);
@@ -2287,8 +2287,11 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	// Update flatness and normal calculations
 	flatnessAmount *= smoothstep(SharedData::wetnessEffectsSettings.PuddleMinWetness, 1.0, wetnessGlossinessSpecular);
 
+	// Puddles
+	wetnessNormal = normalize(lerp(wetnessNormal, float3(0, 0, 1), flatnessAmount));
+
 	// Apply ripple normal effects
-	float3 rippleNormal = normalize(lerp(float3(0, 0, 1), raindropInfo.xyz, lerp(flatnessAmount, 1.0, 0.5)));
+	float3 rippleNormal = normalize(lerp(float3(0, 0, 1), raindropInfo.xyz, flatnessAmount));
 	wetnessNormal = WetnessEffects::ReorientNormal(rippleNormal, wetnessNormal);
 
 	waterRoughnessSpecular = 1.0 - wetnessGlossinessSpecular;
@@ -2873,8 +2876,8 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #			elif defined(ENVMAP) || defined(MULTI_LAYER_PARALLAX)
 	porosity = lerp(porosity, 0.0, saturate(sqrt(envMask)));
 #			endif
-	float wetnessDarkeningAmount = porosity * wetnessGlossinessAlbedo;
-	baseColor.xyz = lerp(baseColor.xyz, pow(abs(baseColor.xyz), 1.0 + wetnessDarkeningAmount), 0.5);
+	float wetnessDarkeningAmount = 1.0 + (porosity * wetnessGlossinessAlbedo);
+	baseColor.xyz = lerp(baseColor.xyz, pow(baseColor.xyz, wetnessDarkeningAmount), 0.5);
 #		endif
 
 #		if defined(DYNAMIC_CUBEMAPS)
@@ -3071,7 +3074,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #	endif
 
 #	if defined(WETNESS_EFFECTS) && !defined(TRUE_PBR)
-	specularColor += wetnessSpecular * wetnessGlossinessSpecular;
+	specularColor += wetnessSpecular * sqrt(wetnessGlossinessSpecular);
 #	endif
 
 #	if defined(LOD_LAND_BLEND) && defined(TRUE_PBR)
@@ -3277,6 +3280,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 
 #		if defined(WETNESS_EFFECTS)
 	screenSpaceNormal = normalize(FrameBuffer::WorldToView(wetnessNormal, false, eyeIndex));
+	wetnessReflectance *= sqrt(wetnessGlossinessSpecular);
 #		endif
 
 #		if defined(TRUE_PBR)

@@ -5,6 +5,7 @@
 #include "Utils/Format.h"
 #include "Utils/Game.h"
 #include "Utils/GameSetting.h"
+#include "Utils/Moon.h"
 #include "Utils/Serialize.h"
 #include "Utils/UI.h"
 #include "Utils/WinApi.h"

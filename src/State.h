@@ -226,6 +226,9 @@ public:
 
 	TracyD3D11Ctx tracyCtx = nullptr;  // Tracy context
 
+	// Moon and Stars mod detection
+	inline static bool moonAndStarsLoaded = false;
+
 	void ClearDisabledFeatures();
 	bool SetFeatureDisabled(const std::string& featureName, bool isDisabled);
 	bool IsFeatureDisabled(const std::string& featureName);
