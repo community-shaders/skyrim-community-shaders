@@ -85,7 +85,7 @@ void UnifiedWater::DrawSettings()
 
 	if (ImGui::TreeNodeEx("Debug", ImGuiTreeNodeFlags_DefaultOpen)) {
 		if (ImGui::Button("Regenerate Flowmap") && flowmap) {
-			if (flowmap->RegenerateAndLoadFlowmap())
+			if (flowmap->RegenerateAndLoadFlowmap(waterCache))
 				SetFlowmapTex();
 		}
 
@@ -194,12 +194,12 @@ void UnifiedWater::DataLoaded()
 	if (LoadOrderChanged()) {
 		logger::info("[Unified Water] Load order changed, regenerating flowmap and caches");
 
-		if (flowmap->RegenerateAndLoadFlowmap())
+		if (flowmap->RegenerateAndLoadFlowmap(waterCache))
 			SetFlowmapTex();
 
 		waterCache->RegenerateCaches();
 	} else {
-		if (flowmap->LoadOrGenerateFlowmap())
+		if (flowmap->LoadOrGenerateFlowmap(waterCache))
 			SetFlowmapTex();
 
 		waterCache->LoadOrGenerateCaches();
@@ -276,6 +276,7 @@ void UnifiedWater::SetFlowmapTex() const
 void UnifiedWater::SetupResources()
 {
 	perFrame = new ConstantBuffer(ConstantBufferDesc<PerFrame>());
+	perTile = new ConstantBuffer(ConstantBufferDesc<PerTile>());
 }
 
 void UnifiedWater::Reset()
@@ -463,6 +464,12 @@ void UnifiedWater::BGSTerrainBlock_Attach::thunk(RE::BGSTerrainBlock* block)
 			const auto posY = (instruction.y - node->y) * 4096.0f + instruction.size * 2048.0f;
 			shape->local.scale = static_cast<float>(instruction.size);
 			shape->local.translate = { posX, posY, instruction.waterHeight };
+			
+			// Store LOD level in the shape name for later retrieval during rendering
+			// Format: "WaterLOD_<level>" (e.g., "WaterLOD_8")
+			char nameBuf[32];
+			sprintf_s(nameBuf, "WaterLOD_%d", lodLevel);
+			shape->name = nameBuf;
 
 			water->AttachChild(shape, true);
 			built.emplace_back(shape, &instruction);
@@ -566,6 +573,113 @@ void UnifiedWater::BSWaterShader_SetupGeometry::thunk(RE::BSShader* waterShader,
 		singleton.hasLastTimingSample = true;
 	}
 	
+	// Get water tile position and LOD level for per-tile data
+	int32_t x, y;
+	Util::WorldToCell(pass->geometry->world.translate, x, y);
+	
+	// Determine LOD level from the shape name if available
+	// LOD water shapes created by BGSTerrainBlock_Attach are named "WaterLOD_<level>"
+	// Regular water cells managed by TESWaterSystem have no special name - use LOD1 for single-cell precision
+	int32_t lodLevel = 1; // Default to LOD1 for regular water cells (single-cell resolution)
+	bool isLODWater = false;
+	
+	if (pass->geometry->name.c_str()) {
+		const char* name = pass->geometry->name.c_str();
+		if (strncmp(name, "WaterLOD_", 9) == 0) {
+			lodLevel = atoi(name + 9);
+			isLODWater = true;
+			// Validate it's a power of 2 in the expected range
+			if (lodLevel != 1 && lodLevel != 4 && lodLevel != 8 && lodLevel != 16 && lodLevel != 32) {
+				logger::warn("[Unified Water] Invalid LOD level {} parsed from name '{}', using LOD1", lodLevel, name);
+				lodLevel = 1; // Fallback to LOD1 if invalid
+			}
+		}
+	}
+	
+	// Update per-tile shoreline data - ALWAYS update to prevent uninitialized data
+	if (singleton.perTile) {
+		PerTile perTileData{};
+		perTileData.ShoreNormalX = 0.0f;
+		perTileData.ShoreNormalY = 0.0f;
+		perTileData.DistanceToShore = 10000.0f;
+		
+		// Initialize neighbor data to defaults
+		perTileData.ShoreNormalX_North = 0.0f;
+		perTileData.ShoreNormalY_North = 0.0f;
+		perTileData.DistanceToShore_North = 10000.0f;
+		perTileData.ShoreNormalX_South = 0.0f;
+		perTileData.ShoreNormalY_South = 0.0f;
+		perTileData.DistanceToShore_South = 10000.0f;
+		perTileData.ShoreNormalX_East = 0.0f;
+		perTileData.ShoreNormalY_East = 0.0f;
+		perTileData.DistanceToShore_East = 10000.0f;
+		perTileData.ShoreNormalX_West = 0.0f;
+		perTileData.ShoreNormalY_West = 0.0f;
+		perTileData.DistanceToShore_West = 10000.0f;
+		
+		// Previous frame data for TAA consistency
+		perTileData.PrevShoreNormalX = singleton.hasLastShorelineData ? singleton.lastShoreNormalX : 0.0f;
+		perTileData.PrevShoreNormalY = singleton.hasLastShorelineData ? singleton.lastShoreNormalY : 0.0f;
+		perTileData.PrevDistanceToShore = singleton.hasLastShorelineData ? singleton.lastDistanceToShore : 10000.0f;
+		
+		// Store tile's cell coordinates for proper neighbor blending in shader
+		perTileData.TileCellX = static_cast<float>(x);
+		perTileData.TileCellY = static_cast<float>(y);
+		
+		// Helper lambda to fetch shoreline data for a specific cell
+		auto fetchCellData = [&](int32_t cellX, int32_t cellY, float& outNormalX, float& outNormalY, float& outDistance) -> bool {
+			if (const auto tes = RE::TES::GetSingleton()) {
+				if (const auto worldSpace = tes->GetRuntimeData2().worldSpace) {
+					const auto instructions = singleton.waterCache->GetInstructions(worldSpace, lodLevel, cellX, cellY);
+					
+					if (instructions && !instructions->empty()) {
+						// Find instruction matching this tile position
+						for (const auto& instruction : *instructions) {
+							if (instruction.x == cellX && instruction.y == cellY) {
+								outNormalX = instruction.shoreNormalX;
+								outNormalY = instruction.shoreNormalY;
+								outDistance = instruction.distanceToShore;
+								return true;
+							}
+						}
+						
+						// Fallback to first instruction in chunk
+						if (instructions->size() > 0) {
+							const auto& fallback = (*instructions)[0];
+							outNormalX = fallback.shoreNormalX;
+							outNormalY = fallback.shoreNormalY;
+							outDistance = fallback.distanceToShore;
+							return true;
+						}
+					}
+				}
+			}
+			return false;
+		};
+		
+		// Fetch current cell data
+		fetchCellData(x, y, perTileData.ShoreNormalX, perTileData.ShoreNormalY, perTileData.DistanceToShore);
+		
+		// Fetch neighboring cells data
+		fetchCellData(x, y + 1, perTileData.ShoreNormalX_North, perTileData.ShoreNormalY_North, perTileData.DistanceToShore_North);  // North
+		fetchCellData(x, y - 1, perTileData.ShoreNormalX_South, perTileData.ShoreNormalY_South, perTileData.DistanceToShore_South);  // South
+		fetchCellData(x + 1, y, perTileData.ShoreNormalX_East, perTileData.ShoreNormalY_East, perTileData.DistanceToShore_East);      // East
+		fetchCellData(x - 1, y, perTileData.ShoreNormalX_West, perTileData.ShoreNormalY_West, perTileData.DistanceToShore_West);      // West
+		
+		// Store current frame data for next frame's "previous" data
+		singleton.lastShoreNormalX = perTileData.ShoreNormalX;
+		singleton.lastShoreNormalY = perTileData.ShoreNormalY;
+		singleton.lastDistanceToShore = perTileData.DistanceToShore;
+		singleton.hasLastShorelineData = true;
+		
+		singleton.perTile->Update(perTileData);
+		
+		auto context = globals::d3d::context;
+		ID3D11Buffer* buffers[1] = { singleton.perTile->CB() };
+		context->VSSetConstantBuffers(8, 1, buffers);
+		context->PSSetConstantBuffers(8, 1, buffers); // Also bind to pixel shader for foam/normals
+	}
+	
 	if (singleton.flowmap) {
 		// ObjectUV.xyz below, xy contains width and height, z contains mesh scale
 		// Previously flowmap size was in x, yz contained flowmap offset for water displacement mesh
@@ -575,8 +689,7 @@ void UnifiedWater::BSWaterShader_SetupGeometry::thunk(RE::BSShader* waterShader,
 
 		if (const auto prop = pass->geometry->GetGeometryRuntimeData().properties[1].get(); prop && prop->GetRTTI() == globals::rtti::BSWaterShaderPropertyRTTI.get()) {
 			const auto waterShaderProp = static_cast<RE::BSWaterShaderProperty*>(prop);
-			int32_t x, y;
-			Util::WorldToCell(pass->geometry->world.translate, x, y);
+			
 			// CellTexCoordOffset.xyzw below - applies to non-displacement water only
 			// xy is world cell flowmap based (0,0 is corner of flow map), zw is world cell
 			// Funky maths here to counter what's being done in SetupGeometry

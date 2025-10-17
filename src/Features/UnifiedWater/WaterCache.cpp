@@ -7,8 +7,19 @@ bool WaterCache::SetCurrentWorldSpace(const RE::TESWorldSpace* worldSpace)
 	if (!worldSpace)
 		return false;
 
-	while (worldSpace->parentWorld && worldSpace->parentUseFlags.all(RE::TESWorldSpace::ParentUseFlag::kUseWaterData))
-		worldSpace = worldSpace->parentWorld;
+	// Traverse to root parent world that has water data
+	while (worldSpace->parentWorld && worldSpace->parentUseFlags.all(RE::TESWorldSpace::ParentUseFlag::kUseWaterData)) {
+		auto parent = worldSpace->parentWorld;
+		if (!parent || reinterpret_cast<uintptr_t>(parent) < 0x10000) {
+			break;  // Invalid parent pointer, stop traversal
+		}
+		worldSpace = parent;
+	}
+	
+	// Validate final worldspace pointer before accessing members
+	if (!worldSpace || reinterpret_cast<uintptr_t>(worldSpace) < 0x10000) {
+		return false;
+	}
 
 	const auto newWorldSpace = worldSpace->GetFormEditorID();
 	if (currentWorldSpace == newWorldSpace) {
@@ -54,7 +65,17 @@ std::vector<WaterCache::Instruction>* WaterCache::RuntimeCache::GetInstructions(
 	if (lodLevel <= 0)
 		return nullptr;
 
-	const auto lodIndex = std::countr_zero(static_cast<uint32_t>(lodLevel)) - 2;
+	// Map LOD level to array index
+	// LOD 1 → index 0, LOD 4 → index 1, LOD 8 → index 2, LOD 16 → index 3, LOD 32 → index 4
+	int32_t lodIndex;
+	if (lodLevel == 1) {
+		lodIndex = 0;
+	} else {
+		// For powers of 2 >= 4: countr_zero gives us: 4→2, 8→3, 16→4, 32→5
+		// Subtract 1 to get: 4→1, 8→2, 16→3, 32→4
+		lodIndex = std::countr_zero(static_cast<uint32_t>(lodLevel)) - 1;
+	}
+	
 	if (lodIndex < 0 || lodIndex >= instructions.size())
 		return nullptr;
 
@@ -289,6 +310,66 @@ void WaterCache::BuildPreCache(RE::TESWorldSpace* worldSpace, PreCache& cache)
 	}
 }
 
+// Compute shoreline normal and distance for a water cell using Sobel edge detection
+								void WaterCache::ComputeShorelineData(const std::vector<CellData>& cellData, int32_t width, int32_t height,
+	int32_t cellX, int32_t cellY, uint32_t tileSize, float& outNormalX, float& outNormalY, float& outDistance)
+{
+	// Initialize with defaults for open water
+	outNormalX = 0.0f;
+	outNormalY = 0.0f;
+	outDistance = 100.0f;
+
+	// Sobel kernel for edge detection
+	const int32_t sobelRadius = std::max(2, static_cast<int32_t>(tileSize));
+	float gradX = 0.0f;
+	float gradY = 0.0f;
+	float minDist = outDistance;
+	bool foundShore = false;
+
+	// Sample surrounding cells to detect land/water boundaries
+	for (int32_t dy = -sobelRadius; dy <= sobelRadius; ++dy) {
+		for (int32_t dx = -sobelRadius; dx <= sobelRadius; ++dx) {
+			const int32_t nx = cellX + dx;
+			const int32_t ny = cellY + dy;
+
+			// Skip out of bounds
+			if (nx < 0 || nx >= width || ny < 0 || ny >= height)
+				continue;
+
+			const int32_t idx = ny * width + nx;
+			const auto& [heights, formID, form] = cellData[idx];
+			
+			// Determine if this cell is land
+			bool isLand = !form || heights.water <= heights.land;
+
+			if (isLand) {
+				foundShore = true;
+				float dist = std::sqrt(static_cast<float>(dx * dx + dy * dy));
+				
+				// Track minimum distance to any land cell
+				if (dist < minDist)
+					minDist = dist;
+
+				// Sobel-style gradient accumulation (weight by inverse distance)
+				float weight = dist > 0.0f ? 1.0f / dist : 1.0f;
+				gradX += dx * weight;
+				gradY += dy * weight;
+			}
+		}
+	}
+
+	if (foundShore) {
+		outDistance = minDist;
+		
+		// Normalize gradient to get shore normal (points from water toward land)
+		float gradLen = std::sqrt(gradX * gradX + gradY * gradY);
+		if (gradLen > 0.001f) {
+			outNormalX = gradX / gradLen;
+			outNormalY = gradY / gradLen;
+		}
+	}
+}
+
 bool WaterCache::BuildDiskCache(RE::TESWorldSpace* worldSpace, DiskCache& diskCache)
 {
 	const auto t0 = std::chrono::steady_clock::now();
@@ -374,18 +455,23 @@ bool WaterCache::BuildDiskCache(RE::TESWorldSpace* worldSpace, DiskCache& diskCa
 
 	logger::debug("[Unified Water] [Cache] {}: Generating instructions for {} water cells...", editorID.c_str(), waterCellCount);
 
+	// Generate instructions for all LOD levels: 1, 4, 8, 16, 32
+	// Array indices: 0=LOD1, 1=LOD4, 2=LOD8, 3=LOD16, 4=LOD32
 	int32_t instructionCount;
+	GenerateInstructions(1, diskCache, cellData, instructionCount);
+	logger::info("[Unified Water] [Cache] {}: LOD1 - {} instructions generated", editorID.c_str(), instructionCount);
+	
 	GenerateInstructions(4, diskCache, cellData, instructionCount);
-	logger::debug("[Unified Water] [Cache] {}: LOD4 - {} instructions generated", editorID.c_str(), instructionCount);
+	logger::info("[Unified Water] [Cache] {}: LOD4 - {} instructions generated", editorID.c_str(), instructionCount);
 
 	GenerateInstructions(8, diskCache, cellData, instructionCount);
-	logger::debug("[Unified Water] [Cache] {}: LOD8 - {} instructions generated", editorID.c_str(), instructionCount);
+	logger::info("[Unified Water] [Cache] {}: LOD8 - {} instructions generated", editorID.c_str(), instructionCount);
 
 	GenerateInstructions(16, diskCache, cellData, instructionCount);
-	logger::debug("[Unified Water] [Cache] {}: LOD16 - {} instructions generated", editorID.c_str(), instructionCount);
+	logger::info("[Unified Water] [Cache] {}: LOD16 - {} instructions generated", editorID.c_str(), instructionCount);
 
 	GenerateInstructions(32, diskCache, cellData, instructionCount);
-	logger::debug("[Unified Water] [Cache] {}: LOD32 - {} instructions generated", editorID.c_str(), instructionCount);
+	logger::info("[Unified Water] [Cache] {}: LOD32 - {} instructions generated", editorID.c_str(), instructionCount);
 
 	diskCache.header.dataCount = static_cast<int32_t>(diskCache.instructions.size());
 
@@ -521,6 +607,13 @@ void WaterCache::GenerateInstructions(const int32_t lodLevel, DiskCache& diskCac
 					instruction.y = cellY + minY;
 					instruction.size = size;
 					instruction.waterHeight = targetHeight;
+					
+					// Compute shoreline data for this water tile
+					// Use center of tile for shoreline detection
+					const int32_t centerX = cellX + size / 2;
+					const int32_t centerY = cellY + size / 2;
+					WaterCache::ComputeShorelineData(cellData, hdr.width, hdr.height, centerX, centerY, size,
+						instruction.shoreNormalX, instruction.shoreNormalY, instruction.distanceToShore);
 
 					// Add new instruction to list
 					instructions.push_back(instruction);
@@ -538,8 +631,8 @@ void WaterCache::GenerateInstructions(const int32_t lodLevel, DiskCache& diskCac
 
 bool WaterCache::TryBuildRuntimeCache(const DiskCache& diskCache, RuntimeCache& cache)
 {
-	// For LOD4, 8, 16 and 32
-	cache.instructions = std::vector<std::vector<std::vector<Instruction>>>(4);
+	// For LOD1, 4, 8, 16 and 32
+	cache.instructions = std::vector<std::vector<std::vector<Instruction>>>(5);
 
 	const auto& hdr = diskCache.header;
 	const auto& [minX, minY, maxX, maxY] = hdr.bounds;
@@ -548,10 +641,10 @@ bool WaterCache::TryBuildRuntimeCache(const DiskCache& diskCache, RuntimeCache& 
 
 	int32_t diskReadIndex = 0;
 
-	for (int32_t lodLevelIdx = 0; lodLevelIdx < 4; ++lodLevelIdx) {
+	for (int32_t lodLevelIdx = 0; lodLevelIdx < 5; ++lodLevelIdx) {
 		auto& lodInstructions = cache.instructions[lodLevelIdx];
 
-		const int32_t lodLevel = 1 << (lodLevelIdx + 2);
+		const int32_t lodLevel = (lodLevelIdx == 0) ? 1 : (1 << (lodLevelIdx + 1));
 		int32_t lodMinX, lodMinY, lodMaxX, lodMaxY;
 		GetLODCoords(lodLevel, minX, minY, lodMinX, lodMinY);
 		GetLODCoords(lodLevel, maxX, maxY, lodMaxX, lodMaxY);

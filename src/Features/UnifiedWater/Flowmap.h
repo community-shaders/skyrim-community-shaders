@@ -1,5 +1,7 @@
 ﻿#pragma once
 
+class WaterCache;
+
 class Flowmap
 {
 public:
@@ -12,8 +14,8 @@ public:
 	int32_t GetOffsetY() const { return offsetY; }
 	void Reset();
 
-	bool LoadOrGenerateFlowmap(bool useMips = true);
-	bool RegenerateAndLoadFlowmap(bool useMips = true);
+	bool LoadOrGenerateFlowmap(WaterCache* waterCache, bool useMips = true);
+	bool RegenerateAndLoadFlowmap(WaterCache* waterCache, bool useMips = true);
 
 private:
 	RE::NiPointer<RE::NiSourceTexture> flowmapTex = nullptr;
@@ -25,5 +27,5 @@ private:
 	int32_t offsetY = 0;
 
 	bool LoadFlowmap();
-	static bool GenerateFlowmap(bool useMips);
+	static bool GenerateFlowmap(WaterCache* waterCache, bool useMips);
 };

@@ -56,12 +56,56 @@ struct UnifiedWater : OverlayFeature
 		float FoamIntensity;
 	};
 
+	struct PerTile
+	{
+		// Current cell data
+		float ShoreNormalX;
+		float ShoreNormalY;
+		float DistanceToShore;
+		float PrevShoreNormalX;
+		float PrevShoreNormalY;
+		float PrevDistanceToShore;
+		
+		// Neighboring cell data for smooth blending
+		// North (+Y)
+		float ShoreNormalX_North;
+		float ShoreNormalY_North;
+		float DistanceToShore_North;
+		
+		// South (-Y)
+		float ShoreNormalX_South;
+		float ShoreNormalY_South;
+		float DistanceToShore_South;
+		
+		// East (+X)
+		float ShoreNormalX_East;
+		float ShoreNormalY_East;
+		float DistanceToShore_East;
+		
+		// West (-X)
+		float ShoreNormalX_West;
+		float ShoreNormalY_West;
+		float DistanceToShore_West;
+		
+		// Tile's base cell coordinates for proper neighbor blending
+		float TileCellX;
+		float TileCellY;
+		float pad0;
+	};
+
 	Settings settings;
 	ConstantBuffer* perFrame = nullptr;
+	ConstantBuffer* perTile = nullptr;
 	float lastGameTimeHours = 0.0f;
 	float lastRealTimeSeconds = 0.0f;
 	float lastTimeScale = 1.0f;
 	bool hasLastTimingSample = false;
+	
+	// Previous frame shoreline data for TAA consistency
+	float lastShoreNormalX = 0.0f;
+	float lastShoreNormalY = 0.0f;
+	float lastDistanceToShore = 10000.0f;
+	bool hasLastShorelineData = false;
 	
 	virtual void SetupResources() override;
 	virtual void Reset() override;

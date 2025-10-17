@@ -19,6 +19,11 @@ public:
 		int32_t y{};
 		uint32_t size{};
 		float waterHeight{};
+		
+		// Shoreline-aware wave system
+		float shoreNormalX{};      // X component of normalized vector pointing from water to land
+		float shoreNormalY{};      // Y component of normalized vector pointing from water to land
+		float distanceToShore{};   // Distance in cells to nearest shoreline (0 = at shore, large = open water)
 	};
 
 	struct BuildProgressSnapshot
@@ -93,7 +98,7 @@ private:
 	struct RuntimeCache
 	{
 		WorldSpaceHeader header;
-		// LODLevel -> LODChunk -> Instructions
+		// LODLevel -> LODChunk -> Instructions (5 levels: LOD1, LOD4, LOD8, LOD16, LOD32)
 		std::vector<std::vector<std::vector<Instruction>>> instructions;
 
 		std::vector<Instruction>* GetInstructions(int32_t lodLevel, int32_t x, int32_t y);
@@ -175,6 +180,9 @@ private:
 	static bool TryBuildRuntimeCache(const DiskCache& diskCache, RuntimeCache& cache);
 	static std::vector<RE::TESWorldSpace*> GetValidWorldSpaces();
 	static void GetLODCoords(int32_t lodLevel, int32_t x, int32_t y, int32_t& outX, int32_t& outY);
+	
+	static void ComputeShorelineData(const std::vector<CellData>& cellData, int32_t width, int32_t height, 
+		int32_t cellX, int32_t cellY, uint32_t tileSize, float& outNormalX, float& outNormalY, float& outDistance);
 
 	static bool TryGetCellData(RE::TESWorldSpace* worldSpace, RE::TESFileArray* files, int32_t x, int32_t y, RE::FormID& outFormID, float& outWaterHeight, float& outLandHeight, bool resolveFormID);
 	static void ReadWaterData(RE::TESFile* file, float& waterHeight, RE::FormID& formID);

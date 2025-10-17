@@ -3,6 +3,9 @@
 #include <DDSTextureLoader.h>
 #include <DirectXTex.h>
 
+#include "WaterCache.h"
+#include "Globals.h"
+
 bool Flowmap::TryGetFlowmap(RE::NiPointer<RE::NiSourceTexture>& outFlowmapTex) const
 {
 	if (!flowmapTex || !flowmapTex->rendererTexture || !flowmapTex->rendererTexture->texture || !flowmapTex->rendererTexture->resourceView)
@@ -23,19 +26,19 @@ void Flowmap::Reset()
 	offsetY = 0;
 }
 
-bool Flowmap::LoadOrGenerateFlowmap(bool useMips)
+bool Flowmap::LoadOrGenerateFlowmap(WaterCache* waterCache, bool useMips)
 {
 	Reset();
 
 	if (!LoadFlowmap()) {
 		logger::info("[Unified Water] [Flowmap] Could not load flowmap - regenerating...");
-		return RegenerateAndLoadFlowmap(useMips);
+		return RegenerateAndLoadFlowmap(waterCache, useMips);
 	}
 
 	return true;
 }
 
-bool Flowmap::RegenerateAndLoadFlowmap(bool useMips)
+bool Flowmap::RegenerateAndLoadFlowmap(WaterCache* waterCache, bool useMips)
 {
 	Reset();
 
@@ -64,7 +67,7 @@ bool Flowmap::RegenerateAndLoadFlowmap(bool useMips)
 			logger::warn("[Unified Water] [Flowmap] Failed to remove '{}': {}", path.string(), rec.message());
 	}
 
-	if (!GenerateFlowmap(useMips)) {
+	if (!GenerateFlowmap(waterCache, useMips)) {
 		logger::error("[Unified Water] [Flowmap] Failed to generate flowmap");
 		return false;
 	}
@@ -148,7 +151,7 @@ bool Flowmap::LoadFlowmap()
 	return true;
 }
 
-bool Flowmap::GenerateFlowmap(bool useMips)
+bool Flowmap::GenerateFlowmap(WaterCache* waterCache, bool useMips)
 {
 	const auto t0 = std::chrono::steady_clock::now();
 
@@ -198,62 +201,92 @@ bool Flowmap::GenerateFlowmap(bool useMips)
 	auto cells = std::vector<FlowCell>();
 	cells.reserve(1024);
 
+	if (!waterCache) {
+		logger::error("[Unified Water] [Flowmap] Water cache not available");
+		return false;
+	}
+
+	logger::info("[Unified Water] [Flowmap] Generating shoreline-based flowmap...");
+
 	{
 		for (auto y = worldMinY; y < worldMaxY; ++y) {
 			for (auto x = worldMinX; x < worldMaxX; ++x) {
-				auto path = std::format(R"(Textures\Water\skyrim.esm\flow.{}.{}.dds)", x, y);
-				auto stream = RE::BSResourceNiBinaryStream(path);
-
-				if (!stream.good())
+				// Check if this cell has water via cache instructions
+				std::vector<WaterCache::Instruction>* instructions = waterCache->GetInstructions(tamriel, 1, x, y);
+				if (!instructions || instructions->empty())
 					continue;
 
-				const auto size = stream.stream->totalSize;
-				std::vector<uint8_t> buffer(size);
-				stream.read(buffer.data(), size);
+				// Get shoreline data
+				float shoreNormalX = (*instructions)[0].shoreNormalX;
+				float shoreNormalY = (*instructions)[0].shoreNormalY;
+				float distanceToShore = (*instructions)[0].distanceToShore;
 
-				DirectX::TexMetadata meta{};
-				DirectX::ScratchImage src;
-				auto hr = DirectX::LoadFromDDSMemory(buffer.data(), size, DirectX::DDS_FLAGS_NONE, &meta, src);
+				float normalLen = std::sqrt(shoreNormalX * shoreNormalX + shoreNormalY * shoreNormalY);
+				bool hasShorelineData = (normalLen > 0.001f && distanceToShore < 0.95f);
+
+				// Generate 64x64 flowmap texture for this cell
+				DirectX::ScratchImage image;
+				auto hr = image.Initialize2D(DXGI_FORMAT_B8G8R8A8_UNORM, 64, 64, 1, 6);
 				if (FAILED(hr)) {
-					logger::warn("[Unified Water] [Flowmap] Flow texture at {},{} failed to load", x, y);
+					logger::warn("[Unified Water] [Flowmap] Failed to initialize image for {},{}", x, y);
 					continue;
 				}
 
-				DirectX::ScratchImage conv;
-				if (DirectX::IsCompressed(meta.format)) {
-					hr = DirectX::Decompress(src.GetImages(), src.GetImageCount(), src.GetMetadata(), DXGI_FORMAT_B8G8R8A8_UNORM, conv);
-					if (FAILED(hr)) {
-						logger::warn("[Unified Water] [Flowmap] Flow texture at {},{} failed to decompress", x, y);
-						continue;
+				// Fill mip level 0
+				auto* pixels = reinterpret_cast<uint8_t*>(image.GetImage(0, 0, 0)->pixels);
+				const size_t rowPitch = image.GetImage(0, 0, 0)->rowPitch;
+
+				for (int pixelY = 0; pixelY < 64; ++pixelY) {
+					for (int pixelX = 0; pixelX < 64; ++pixelX) {
+						uint8_t* pixel = pixels + pixelY * rowPitch + pixelX * 4;
+
+						if (hasShorelineData) {
+							// Flow perpendicular to shore normal (toward shore)
+							float flowX = -shoreNormalY;
+							float flowY = shoreNormalX;
+
+							// Add spatial variation
+							float cellFracX = pixelX / 64.0f;
+							float cellFracY = pixelY / 64.0f;
+							float variation = std::sin(cellFracX * 3.14159f * 4.0f) * std::cos(cellFracY * 3.14159f * 4.0f) * 0.15f;
+
+							float angle = std::atan2(flowY, flowX) + variation;
+							flowX = std::cos(angle);
+							flowY = std::sin(angle);
+
+							// BGRA format
+							pixel[2] = static_cast<uint8_t>((flowX * 0.5f + 0.5f) * 255.0f);  // R: flow X
+							pixel[1] = static_cast<uint8_t>((flowY * 0.5f + 0.5f) * 255.0f);  // G: flow Y
+							pixel[0] = static_cast<uint8_t>((1.0f - distanceToShore) * 255.0f);  // B: strength
+							pixel[3] = 255;  // A: mask
+						} else {
+							// Default northeast flow for open water
+							pixel[2] = static_cast<uint8_t>(0.8535f * 255.0f);  // R: 0.7071 * 0.5 + 0.5
+							pixel[1] = static_cast<uint8_t>(0.8535f * 255.0f);  // G: 0.7071 * 0.5 + 0.5
+							pixel[0] = 128;  // B: medium strength
+							pixel[3] = 255;  // A
+						}
 					}
-				} else if (meta.format != DXGI_FORMAT_B8G8R8A8_UNORM) {
-					hr = DirectX::Convert(src.GetImages(), src.GetImageCount(), src.GetMetadata(), DXGI_FORMAT_B8G8R8A8_UNORM, DirectX::TEX_FILTER_DEFAULT, 0.0f, conv);
-					if (FAILED(hr)) {
-						logger::warn("[Unified Water] [Flowmap] Flow texture at {},{} failed to convert to the correct format", x, y);
-						continue;
-					}
-				} else {
-					conv = std::move(src);
 				}
 
+				// Generate mip chain
+				if (FAILED(DirectX::GenerateMipMaps(*image.GetImage(0, 0, 0), DirectX::TEX_FILTER_DEFAULT, 6, image, false))) {
+					logger::warn("[Unified Water] [Flowmap] Failed to generate mipmaps for {},{}", x, y);
+					continue;
+				}
+
+				// Create texture from image
 				winrt::com_ptr<ID3D11Resource> res;
-				hr = DirectX::CreateTexture(dvc, conv.GetImages(), conv.GetImageCount(), conv.GetMetadata(), res.put());
+				hr = DirectX::CreateTexture(dvc, image.GetImages(), image.GetImageCount(), image.GetMetadata(), res.put());
 				if (FAILED(hr) || !res) {
-					logger::warn("[Unified Water] [Flowmap] Flow texture at {},{} creation failed", x, y);
+					logger::warn("[Unified Water] [Flowmap] Failed to create texture for {},{}", x, y);
 					continue;
 				}
 
 				winrt::com_ptr<ID3D11Texture2D> tex;
 				hr = res->QueryInterface(IID_PPV_ARGS(tex.put()));
 				if (FAILED(hr)) {
-					logger::warn("[Unified Water] [Flowmap] Flow texture at {},{} is not a Texture2D", x, y);
-					continue;
-				}
-
-				D3D11_TEXTURE2D_DESC d{};
-				tex->GetDesc(&d);
-				if (d.Width != 64 || d.Height != 64 || d.Format != DXGI_FORMAT_B8G8R8A8_UNORM || d.MipLevels < 6) {
-					logger::warn("[Unified Water] [Flowmap] Flow texture at {},{} is invalid", x, y);
+					logger::warn("[Unified Water] [Flowmap] Texture for {},{} is not a Texture2D", x, y);
 					continue;
 				}
 
