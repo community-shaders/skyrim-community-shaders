@@ -18,7 +18,7 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	SG_Scale, SG_Intensity, SG_OuterInt, SG_OuterFade,
 	GH_Intensity, GH_Scale, GH_Saturation, LI_Intensity,
 	GH_EnableClampOffset, GH_ClampOffset,
-	GL_Intensity, GL_Scale, GL_XAxisOffset, GL_YAxisOffset,
+	GL_Intensity, GL_Scale, GL_DynPosition, GL_XAxisOffset, GL_YAxisOffset,
 	GL_MaxRotation, GL_CutDepth, GL_Radius, GL_TipFade,
 	HL_Scale, HL_Intensity, HL_EnableExp,
 	HL_FlipExpOffset, HL_ExpMinSize, HL_ExpMaxSize,
@@ -30,7 +30,7 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	LensEffects::ColdSettings,
 	GH_Params, GH_Params_2, GH_Color, GH_Atlas,
 	GH_InInt, SB_Color, HL_Color, LI_Color,
-	LI_FadeIn, LI_FadeOut, LI_FadeDuration, useOldSchoolCA)
+	LI_FadeIn, LI_FadeOut, LI_FadeDuration, CA_RChannelOnly)
 
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	LensEffects::Settings,
@@ -363,7 +363,7 @@ void LensEffects::SetupCAEffect()
 	auto context = globals::d3d::context;
 	auto renderer = globals::game::renderer;
 
-	if (settings->coldsettings.useOldSchoolCA) {
+	if (settings->coldsettings.CA_RChannelOnly) {
 		context->OMSetBlendState(BlendState[1], nullptr, 0xFFFFFFFF);
 	} else
 		context->OMSetBlendState(BlendState[0], nullptr, 0xFFFFFFFF);
@@ -546,13 +546,19 @@ void LensEffects::UpdateWeatherBasedDisable()
 
 DirectX::XMFLOAT4A LensEffects::GetSunPosition()
 {
+	static float sunRadius = 0.0f;
+	float2 screenSize = Util::ConvertToDynamic(globals::state->screenSize);
 	auto sunWSPos = *skyrim_SunPosition;
-	float4 sunPosition = { sunWSPos.x, sunWSPos.y, sunWSPos.z, 1.0f };
-	Matrix viewMatrix = Util::GetCameraData(0).viewMat;
-	float4 sunPosVS = float4::Transform(sunPosition, viewMatrix);
-	sunPosVS.w = *skyrim_SunGlareScale * SunScale;
+	float4 sunWorldPos = { sunWSPos.x, sunWSPos.y, sunWSPos.z, 1.0f };
 
-	return VectorToXMFloat(sunPosVS);
+	Matrix viewMatrix = Util::GetCameraData(0).viewMat;
+	Matrix projMatrix = Util::GetCameraData(0).projMat;
+
+	float4 sunViewPos = float4::Transform(sunWorldPos, viewMatrix);
+	float SunSSRad = (*skyrim_SunGlareScale * SunScale) * (projMatrix._22 / sunViewPos.z) * (screenSize.y * 0.5f) * 0.5f;
+	sunViewPos.w = sunRadius = (SunSSRad > 1.0f) ? SunSSRad : sunRadius;
+
+	return VectorToXMFloat(sunViewPos);
 }
 
 DirectX::XMFLOAT4A LensEffects::GetSunColor()
@@ -687,6 +693,23 @@ void LensEffects::DrawSettings()
 
 	if (ImGui::BeginTabBar("Effects")) {
 		if (ImGui::BeginTabItem("General")) {
+			ImGui::SeparatorText("Quick Enables");
+			if (ImGui::Checkbox("Enable Sun Glare", &settings->EnableSunGlare))
+				renderdata->GetEffect(Shaders::LensSunGlare).Toggle(settings->EnableSunGlare);
+			if (ImGui::Checkbox("Enable Starburst", &settings->EnableStarburst))
+				renderdata->GetEffect(Shaders::LensBurst).Toggle(settings->EnableStarburst);
+			if (ImGui::Checkbox("Enable Ghosts", &settings->EnableGhosts))
+				renderdata->GetEffect(Shaders::LensGhosts).Toggle(settings->EnableGhosts);
+			if (ImGui::Checkbox("Enable Lens Glare", &settings->EnableLensGlare))
+				renderdata->GetEffect(Shaders::LensGlare).Toggle(settings->EnableLensGlare);
+			if (ImGui::Checkbox("Enable Sun Halo", &settings->EnableHalo))
+				renderdata->GetEffect(Shaders::LensHalo).Toggle(settings->EnableHalo);
+			if (ImGui::Checkbox("Enable Chromatic Aberration", &settings->EnableCA))
+				renderdata->GetEffect(Shaders::LensCA).Toggle(settings->EnableCA);
+			if (ImGui::Checkbox("Enable Lens Ice", &settings->EnableIce))
+				renderdata->GetEffect(Shaders::LensIce).Toggle(settings->EnableIce);
+			ImGui::Spacing();
+
 			ImGui::SeparatorText("Presets");
 			if (PresetFileExists() && presetLoaded) {
 				ImGui::TextColored(ImVec4(0.0f, 1.0f, 0.0f, 1.0f), "Lens preset loaded");
@@ -714,82 +737,15 @@ void LensEffects::DrawSettings()
 					ImGui::Text("This is meant for modders who want to package a custom lens preset with their mod");
 				}
 			}
-			ImGui::Spacing();
-
-			ImGui::SeparatorText("Quick Enables");
-			if (ImGui::Checkbox("Enable Sun Glare", &settings->EnableSunGlare))
-				renderdata->GetEffect(Shaders::LensSunGlare).Toggle(settings->EnableSunGlare);
-			if (ImGui::Checkbox("Enable Starburst", &settings->EnableStarburst))
-				renderdata->GetEffect(Shaders::LensBurst).Toggle(settings->EnableStarburst);
-			if (ImGui::Checkbox("Enable Ghosts", &settings->EnableGhosts))
-				renderdata->GetEffect(Shaders::LensGhosts).Toggle(settings->EnableGhosts);
-			if (ImGui::Checkbox("Enable Lens Glare", &settings->EnableLensGlare))
-				renderdata->GetEffect(Shaders::LensGlare).Toggle(settings->EnableLensGlare);
-			if (ImGui::Checkbox("Enable Sun Halo", &settings->EnableHalo))
-				renderdata->GetEffect(Shaders::LensHalo).Toggle(settings->EnableHalo);
-			if (ImGui::Checkbox("Enable Chromatic Aberration", &settings->EnableCA))
-				renderdata->GetEffect(Shaders::LensCA).Toggle(settings->EnableCA);
-			if (ImGui::Checkbox("Enable Lens Ice", &settings->EnableIce))
-				renderdata->GetEffect(Shaders::LensIce).Toggle(settings->EnableIce);
-
-			ImGui::SeparatorText("Reload");  ///////////////
-			ImGui::Button("Reload Flare");
-			if (ImGui::IsItemClicked()) {
-				SunOcclusionMaskPixelShader = nullptr;
-				ChromaticAberrationPixelShader = nullptr;
-				BurstPixelShader = nullptr;
-				BurstVertexShader = nullptr;
-				IcePixelShader = nullptr;
-				IceVertexShader = nullptr;
-				LensGlareVertexShader = nullptr;
-				LensGlarePixelShader = nullptr;
-				SunGlareVertexShader = nullptr;
-				SunGlarePixelShader = nullptr;
-				HaloVertexShader = nullptr;
-				HaloPixelShader = nullptr;
-				CompileShaders();
-			}
-			ImGui::EndTabItem();
-		}
-
-		//// Sun Glare ////
-		if (ImGui::BeginTabItem("Sun Glare")) {
-			ImGui::Spacing();
-			if (ImGui::CollapsingHeader("Description")) {
-				ImGui::Text("Allows for modification of the suns glow");
-				ImGui::Text("Note: This shader is strongly effected by weather settings such as bloom, tonemapping and color grading and is therefor disabled by default");
-			}
-			ImGui::SeparatorText("General");
-			if (ImGui::Checkbox("Enable Sun Glare", &settings->EnableSunGlare))
-				renderdata->GetEffect(Shaders::LensSunGlare).Toggle(settings->EnableSunGlare);
-
-			ImGui::SliderFloat("Glare Scale ##sun", &mainSettings.SG_Scale, 0.25f, 1.0f);
-			ImGui::SliderFloat("Glare Intensity ##sun", &mainSettings.SG_Intensity, 0.0f, 2.0f);
-			ImGui::SliderFloat("Glare Outer Fade ##sun", &mainSettings.SG_OuterFade, 0.0f, 1.0f);
-			ImGui::Spacing();
-			ImGui::Spacing();
-
-			ImGui::Text("Color ");
-			ImGui::SameLine();
-			float4& SGColor = coldSettings.SG_Color;
-			if (ImGui::ColorButton("Pick", ImVec4(SGColor.x, SGColor.y, SGColor.z, SGColor.w)))
-				ImGui::OpenPopup("ColorPopup_");
-
-			if (ImGui::BeginPopup("ColorPopup_", ImGuiWindowFlags_NoMove)) {
-				ImGui::SameLine(ImGui::GetContentRegionAvail().x - ImGui::GetFontSize() + ImGui::GetStyle().ItemInnerSpacing.x * 2);
-				if (ImGui::SmallButton("X"))
-					ImGui::CloseCurrentPopup();
-				ImGui::ColorPicker4("RGBA", &SGColor.x, ImGuiColorEditFlags_AlphaBar);
-				ImGui::EndPopup();
-			}
 			ImGui::EndTabItem();
 		}
 
 		//// Lens Starburst ////
-		if (ImGui::BeginTabItem("Starburst")) {
+		if (ImGui::BeginTabItem("Starburst Flare")) {
 			ImGui::Spacing();
 			if (ImGui::CollapsingHeader("Description")) {
 				ImGui::Text("Creates diffraction spikes radiating from the sun, mimicking light scattering off the lens aperture.");
+				ImGui::Text("Starburst has two adjustable styles: blades and rays. You can use either or both. By default blades are disabled.");
 			}
 			ImGui::SeparatorText("General");
 			ImGui::Spacing();
@@ -817,11 +773,13 @@ void LensEffects::DrawSettings()
 			ImGui::Spacing();
 			ImGui::Spacing();
 
-			ImGui::Checkbox("Enable Random Rays", (bool*)&mainSettings.SB_EnableRays);
-			ImGui::SliderFloat("Random Rays Intensity", &mainSettings.SB_RandomRaysInt, 0.0f, 10.0f);
-			ImGui::SliderFloat("Random Rays Volume", &mainSettings.SB_RandomRaysVolume, 0.0f, 0.6f);
-			ImGui::SliderFloat("Random Rays Length", &mainSettings.SB_RandomRaysLength, 0.2f, 1.0f);
-			ImGui::SliderFloat("Random Rays Width", &mainSettings.SB_RandomRaysWidth, 0.0f, 1.0f);
+			ImGui::Checkbox("Enable Rays", (bool*)&mainSettings.SB_EnableRays);
+			ImGui::SliderFloat("Rays Intensity", &mainSettings.SB_RandomRaysInt, 0.0f, 10.0f);
+			ImGui::SliderFloat("Rays Volume", &mainSettings.SB_RandomRaysVolume, 0.0f, 0.6f);
+			ImGui::SliderFloat("Rays Length", &mainSettings.SB_RandomRaysLength, 0.2f, 1.0f);
+			ImGui::SliderFloat("Rays Width", &mainSettings.SB_RandomRaysWidth, 0.0f, 1.0f);
+			if (auto _tt = Util::HoverTooltipWrapper())
+				ImGui::Text("Changing this also changes the shape of the effect");
 			ImGui::Spacing();
 			ImGui::Spacing();
 
@@ -845,7 +803,8 @@ void LensEffects::DrawSettings()
 		if (ImGui::BeginTabItem("Lens Ghosting")) {
 			ImGui::Spacing();
 			if (ImGui::CollapsingHeader("Description")) {
-				ImGui::Text("Adds a procession of faint flares that move with camera angle, simulating reflections bouncing inside the lens stack");
+				ImGui::Text("Adds a procession of faint flares that move with the camera, simulating reflections bouncing inside the lens stack.");
+				ImGui::Text("By default only the first 10 flares are actively used.");
 			}
 			ImGui::SeparatorText("General");
 			ImGui::Spacing();
@@ -862,8 +821,8 @@ void LensEffects::DrawSettings()
 			ImGui::Checkbox("Ghost Enable Clamp", (bool*)&mainSettings.GH_EnableClampOffset);
 			ImGui::SliderFloat("Ghost Clamp Offset", &mainSettings.GH_ClampOffset, -1.0f, 1.0f);
 
-			for (int i = ghostpasses - 1; i >= 0; --i) {
-				if (ImGui::TreeNodeEx(("------------------------ Ghost #" + std::to_string(ghostpasses - (i)) + " ------------------------").c_str())) {
+			for (int i = 0; i < ghostpasses; i++) {
+				if (ImGui::TreeNodeEx(("------------------------ Ghost #" + std::to_string(i + 1) + " ------------------------").c_str())) {
 					float4& params = coldSettings.GH_Params[i];
 					float4& params_2 = coldSettings.GH_Params_2[i];
 					float4& color = coldSettings.GH_Color[i];
@@ -872,16 +831,18 @@ void LensEffects::DrawSettings()
 					ImGui::PushID(i);
 
 					ImGui::Text("General");
+					ImGui::SliderFloat("Position", &params.y, -1.0f, 1.0f);
 					ImGui::SliderFloat("Size", &params.x, 0.02f, 1.0f);
-					ImGui::SliderFloat("Intensity", &color.w, 0.1f, 2.0f);
-					ImGui::SliderFloat("Inner Intensity", &inint, 0.0f, 1.0f);
-					ImGui::SliderFloat("Offset", &params.y, -1.0f, 1.0f);
 					ImGui::SliderFloat("Shape", &params.z, 3.0f, 9.0f, "%.0f");
 					ImGui::SliderFloat("Roundness", &params.w, 0.0f, 1.0f);
 					ImGui::SliderFloat("Rotation", &params_2.x, 0.0f, 360.0f, "%.0f");
-					ImGui::SliderFloat("Edge Feather", &params_2.y, 0.03f, 1.0f);
+					ImGui::SliderFloat("Intensity", &color.w, 0.1f, 2.0f);
+					ImGui::SliderFloat("Inner Intensity", &inint, 0.0f, 1.0f);
+					ImGui::SliderFloat("Edge Feather", &params_2.y, 0.0f, 1.0f);
 					ImGui::SliderFloat("CA Scale", &params_2.z, 1.0f, 2.0f);
 					ImGui::SliderFloat("Movement Curve", &params_2.w, 0.1f, 10.0f, "%.0f");
+					if (auto _tt = Util::HoverTooltipWrapper())
+						ImGui::Text("(Has no effect when clamp is enabled)");
 					ImGui::Spacing();
 					ImGui::Spacing();
 
@@ -916,7 +877,8 @@ void LensEffects::DrawSettings()
 		if (ImGui::BeginTabItem("Lens Glare")) {
 			ImGui::Spacing();
 			if (ImGui::CollapsingHeader("Description")) {
-				ImGui::Text("A Hazy crescent of light that lowers contrast giving a washed look near the lower edge of the lens.");
+				ImGui::Text("A crescent shaped light leak that forms near the lower edge of the lens, decreasing contrast and giving a washed out look.");
+				ImGui::Text("By default glare position is static, when 'dynamic x' is enabled the horizontal position will track with the sun, and 'x axis offset' becomes a base offset.");
 			}
 			ImGui::SeparatorText("General");
 			if (ImGui::Checkbox("Enable Lens Glare", &settings->EnableLensGlare))
@@ -927,6 +889,7 @@ void LensEffects::DrawSettings()
 			ImGui::Spacing();
 			ImGui::Spacing();
 			ImGui::SeparatorText("Advanced");
+			ImGui::Checkbox("Dynamic X", (bool*)&mainSettings.GL_DynPosition);
 			ImGui::SliderFloat("X Axis Offset", &mainSettings.GL_XAxisOffset, 0.0f, 1.0f);
 			ImGui::SliderFloat("Y Axis Offset", &mainSettings.GL_YAxisOffset, 0.0f, 1.0f);
 			ImGui::SliderFloat("Max Rotation", &mainSettings.GL_MaxRotation, 0.0f, 180.0f, "%.0f");
@@ -940,7 +903,7 @@ void LensEffects::DrawSettings()
 		if (ImGui::BeginTabItem("Lens Halo")) {
 			ImGui::Spacing();
 			if (ImGui::CollapsingHeader("Description")) {
-				ImGui::Text("Creates a faint segmented halo pattern around the radius of the sun which expands and contracts depending on the angle it's viewed from");
+				ImGui::Text("Creates a faint segmented halo around the radius of the sun, which expands and contracts depending on the angle it's viewed from.");
 			}
 			ImGui::SeparatorText("General");
 			if (ImGui::Checkbox("Enable Sun Halo", &settings->EnableHalo))
@@ -984,7 +947,7 @@ void LensEffects::DrawSettings()
 		if (ImGui::BeginTabItem("Lens Frost")) {
 			ImGui::Spacing();
 			if (ImGui::CollapsingHeader("Description")) {
-				ImGui::Text("A vignette that slowly forms around the edge of the camera lens during snowy weathers.");
+				ImGui::Text("A vignette that slowly forms around the edge of the camera lens during snow based weathers.");
 			}
 			ImGui::SeparatorText("General");
 			if (ImGui::Checkbox("Enable Lens Frost", &settings->EnableIce))
@@ -1017,18 +980,53 @@ void LensEffects::DrawSettings()
 		if (ImGui::BeginTabItem("Chromatic Aberration")) {
 			ImGui::Spacing();
 			if (ImGui::CollapsingHeader("Description")) {
-				ImGui::Text("Chromatic Aberration splits the red, green and blue image channels slightly apart which creates colored fringes on high-contrast edges and mild image blur.");
-				ImGui::Text("By default the amount of chromatic aberration is dependant on camera/object motion. The motion clamp limits the maximum amount of color shift when under motion");
+				ImGui::Text("Chromatic Aberration splits the red, green and blue colour channels slightly apart which creates colored fringes on edges and mild image blur.");
+				ImGui::Text("By default the amount of chromatic aberration is dependant on camera motion. The motion clamp limits the maximum color offset under motion.");
+				ImGui::Text("Note: Setting low motion thresholds without also decreasing intensity/clamp will cause image warping/skipping.");
 			}
 			ImGui::SeparatorText("General");
 			if (ImGui::Checkbox("Enable Chromatic Aberration", &settings->EnableCA))
 				renderdata->GetEffect(Shaders::LensCA).Toggle(settings->EnableCA);
 
-			ImGui::SliderFloat("CA Intensity", &mainSettings.CA_Intensity, 0.0f, 3.0f);
+			ImGui::SliderFloat("CA Intensity", &mainSettings.CA_Intensity, 0.0f, 2.0f);
 			ImGui::SliderFloat("CA Motion Threshold", &mainSettings.CA_Threshold, 0.0f, 0.1f);
+			if (auto _tt = Util::HoverTooltipWrapper())
+				ImGui::Text("Set to 0 for constant CA offset");
 			ImGui::SliderFloat("CA Motion Clamp", &mainSettings.CA_MaxOffset, 0.001f, 0.015f);
-			ImGui::Checkbox("Offset Red Only", &coldSettings.useOldSchoolCA);
+			ImGui::Checkbox("Offset Red Channel Only", &coldSettings.CA_RChannelOnly);
+			ImGui::EndTabItem();
+		}
 
+		//// Sun Glare ////
+		if (ImGui::BeginTabItem("Sun Glare")) {
+			ImGui::Spacing();
+			if (ImGui::CollapsingHeader("Description")) {
+				ImGui::Text("Allows modification of sun glare.");
+				ImGui::Text("Note: This shader is strongly effected by weather mod settings for bloom, tonemapping and color grading and is therefore disabled by default.");
+			}
+			ImGui::SeparatorText("General");
+			if (ImGui::Checkbox("Enable Sun Glare", &settings->EnableSunGlare))
+				renderdata->GetEffect(Shaders::LensSunGlare).Toggle(settings->EnableSunGlare);
+
+			ImGui::SliderFloat("Glare Scale ##sun", &mainSettings.SG_Scale, 0.25f, 1.0f);
+			ImGui::SliderFloat("Glare Intensity ##sun", &mainSettings.SG_Intensity, 0.0f, 2.0f);
+			ImGui::SliderFloat("Glare Outer Fade ##sun", &mainSettings.SG_OuterFade, 0.0f, 1.0f);
+			ImGui::Spacing();
+			ImGui::Spacing();
+
+			ImGui::Text("Color ");
+			ImGui::SameLine();
+			float4& SGColor = coldSettings.SG_Color;
+			if (ImGui::ColorButton("Pick", ImVec4(SGColor.x, SGColor.y, SGColor.z, SGColor.w)))
+				ImGui::OpenPopup("ColorPopup_");
+
+			if (ImGui::BeginPopup("ColorPopup_", ImGuiWindowFlags_NoMove)) {
+				ImGui::SameLine(ImGui::GetContentRegionAvail().x - ImGui::GetFontSize() + ImGui::GetStyle().ItemInnerSpacing.x * 2);
+				if (ImGui::SmallButton("X"))
+					ImGui::CloseCurrentPopup();
+				ImGui::ColorPicker4("RGBA", &SGColor.x, ImGuiColorEditFlags_AlphaBar);
+				ImGui::EndPopup();
+			}
 			ImGui::EndTabItem();
 		}
 

@@ -1,6 +1,5 @@
 #pragma once
 #include "Feature.h"
-#include "Upscaling.h"
 
 struct LensEffects : Feature
 {
@@ -16,25 +15,38 @@ struct LensEffects : Feature
 	virtual inline std::string_view GetShaderDefineName() override { return "LENS_EFFECTS"; }
 	virtual std::string_view GetCategory() const override { return "Post-Processing"; }
 	virtual inline bool SupportsVR() override { return false; };  //
+	virtual std::pair<std::string, std::vector<std::string>> GetFeatureSummary() override
+	{
+		return {
+			"Lens effects mimic how camera lenses respond to different levels of light and environmental factors. Artists can tune intensity, color, shape, and placement to fit their intended style.",
+			{ "Motion based chromatic aberration",
+				"Starburst lens flare",
+				"Lens ghosting",
+				"Lens halo effect",
+				"Lens glare",
+				"Adjustable sun glare",
+				"Weather based frost vignette" }
+		};
+	}
 
 	virtual inline void DataLoaded() override { RE::GetINISetting("bLensFlare:Imagespace")->data.b = true; }
 	virtual inline void PostPostLoad() override { Hooks::Install(); }
 	virtual void SetupResources() override;
-	virtual void CompileShaders();
+	void CompileShaders();
 
 	virtual void CheckOverride();
-	virtual void LookupShader(int desc);
+	void LookupShader(int desc);
 
-	virtual void AppendOcclusionLUT();
-	virtual void SetupOcclusionMask();
-	virtual void SetupBurstEffect();
-	virtual void SetupSunGlareEffect();
-	virtual void SetupLensGlareEffect();
-	virtual void SetupHaloEffect();
-	virtual void SetupGhostEffect();
-	virtual void SetupIceEffect();
-	virtual void BypassShader();
-	virtual void SetupCAEffect();
+	void AppendOcclusionLUT();
+	void SetupOcclusionMask();
+	void SetupBurstEffect();
+	void SetupSunGlareEffect();
+	void SetupLensGlareEffect();
+	void SetupHaloEffect();
+	void SetupGhostEffect();
+	void SetupIceEffect();
+	void BypassShader();
+	void SetupCAEffect();
 
 	ConstantBuffer* SettingsCB = nullptr;
 	ID3D11BlendState* BlendState[3] = {};
@@ -88,19 +100,19 @@ struct LensEffects : Feature
 	void(__fastcall* gFlareApplyFunc)(RE::NiCamera*, void*, uint64_t) = nullptr;
 	void* gFlareShader = nullptr;
 
-	static constexpr int ghostpasses = 10;
+	static constexpr int ghostpasses = 20;
 
 	bool overrideShader = false;
 	bool useCloudLUT = false;
 	bool upscalingActive = false;
 	uint frameIdx = 5;
 
-	virtual DirectX::XMFLOAT4A GetSunPosition();
-	virtual DirectX::XMFLOAT4A GetSunColor();
-	virtual void GetWeatherShader();
-	virtual float GetWeatherPrecip();
-	virtual bool CheckWeatherChange();
-	virtual void UpdateWeatherBasedDisable();
+	DirectX::XMFLOAT4A GetSunPosition();
+	DirectX::XMFLOAT4A GetSunColor();
+	void GetWeatherShader();
+	float GetWeatherPrecip();
+	bool CheckWeatherChange();
+	void UpdateWeatherBasedDisable();
 
 	bool disableSunFX = false;
 	float weatherFadeout = 0.0f;
@@ -119,42 +131,42 @@ struct LensEffects : Feature
 	bool presetLoaded = false;
 	bool settingsLoaded = false;
 
-	virtual void RefreshToggles();
+	void RefreshToggles();
 	virtual void RestoreDefaultSettings() override;
 	virtual void DrawSettings() override;
 	virtual void LoadSettings(json& o_json) override;
 	virtual void SaveSettings(json& o_json) override;
 
-	virtual bool PresetFileExists();
-	virtual bool LoadFromPreset();
-	virtual void ExportAsPreset();
-	virtual void DeletePresetFile();
+	bool PresetFileExists();
+	bool LoadFromPreset();
+	void ExportAsPreset();
+	void DeletePresetFile();
 
 	struct MainSettings
 	{
 		//Starburst
-		float SB_Scale = 0.30f;
-		float SB_Intensity = 1.3f;
+		float SB_Scale = 0.25f;
+		float SB_Intensity = 0.5f;
 
 		uint SB_EnableBlades = false;
-		float SB_BladeInt = 0.75f;
+		float SB_BladeInt = 0.3f;
 		float SB_BladeVertices = 6.0f;
-		float SB_BladeSplay = 0.11f;
+		float SB_BladeSplay = 0.0f;
 		float SB_BladeRotation = 180.0f;
-		float SB_BladeLength = 0.9f;
-		float SB_BladeBaseWidth = 1.23f;
-		float SB_BladeWidth = 1.0f;
+		float SB_BladeLength = 0.8f;
+		float SB_BladeBaseWidth = 1.5f;
+		float SB_BladeWidth = 1.1f;
 		float SB_BladeTaper = 1.0f;
-		float SB_BladeFeather = 10.0f;
-		float SB_BladeFadePow = 0.7f;
-		float SB_BladeFadeDist = 8.5f;
+		float SB_BladeFeather = 35.0f;
+		float SB_BladeFadePow = 0.5f;
+		float SB_BladeFadeDist = 3.0f;
 		float SBEX_BladeSplayLen = 0.0f;
 
 		uint SB_EnableRays = true;
-		float SB_RandomRaysInt = 0.55f;
-		float SB_RandomRaysVolume = 0.162f;
-		float SB_RandomRaysLength = 0.72f;
-		float SB_RandomRaysWidth = 0.485f;
+		float SB_RandomRaysInt = 1.2f;
+		float SB_RandomRaysVolume = 0.3f;
+		float SB_RandomRaysLength = 1.0f;
+		float SB_RandomRaysWidth = 0.073f;
 
 		//Ghosts
 		float GH_Scale = 0.40f;
@@ -176,6 +188,7 @@ struct LensEffects : Feature
 		//Lens Glare
 		float GL_Scale = 0.35f;
 		float GL_Intensity = 0.3f;
+		uint GL_DynPosition = false;
 		float GL_XAxisOffset = 0.5f;
 		float GL_YAxisOffset = 0.1f;
 		float GL_MaxRotation = 50.0f;
@@ -184,7 +197,7 @@ struct LensEffects : Feature
 		float GL_TipFade = 1.0f;
 
 		//Halo
-		float HL_Scale = 0.5f;
+		float HL_Scale = 0.45f;
 		float HL_Intensity = 0.16f;
 		uint HL_EnableExp = true;
 		uint HL_FlipExpOffset = false;
@@ -198,15 +211,14 @@ struct LensEffects : Feature
 		float HL_ColorShift = 0.52f;
 
 		//Sun Glare
-		float SG_Enable = 0.0f;
 		float SG_Scale = 0.5f;
 		float SG_Intensity = 1.0f;
 		float SG_OuterInt = 1.0f;
 		float SG_OuterFade = 0.8f;
 
 		//LensCA
-		float CA_Intensity = 0.30f;
-		float CA_Threshold = 0.028f;
+		float CA_Intensity = 0.25f;
+		float CA_Threshold = 0.015f;
 		float CA_MaxOffset = 0.003f;
 
 		//LensIce
@@ -225,63 +237,108 @@ struct LensEffects : Feature
 	struct ColdSettings
 	{
 		//Size, Offset, Shape, Roundness
-		std::array<float4, 10> GH_Params = {
-			float4(0.13f, 0.20f, 6.00f, 0.60f),
-			float4(0.14f, 0.30f, 9.00f, 0.25f),
-			float4(0.22f, 0.43f, 6.00f, 0.30f),
-			float4(0.20f, 0.43f, 7.00f, 1.00f),
-			float4(0.13f, 0.43f, 5.00f, 0.42f),
-			float4(0.12f, 0.54f, 6.00f, 0.35f),
-			float4(0.14f, 0.64f, 6.00f, 0.50f),
-			float4(0.42f, 0.78f, 6.00f, 0.05f),
+		std::array<float4, 20> GH_Params = {
+			float4(0.19f, 1.00f, 7.00f, 0.15f),
 			float4(0.08f, 0.91f, 6.00f, 0.67f),
-			float4(0.19f, 1.00f, 7.00f, 0.15f)
+			float4(0.42f, 0.78f, 6.00f, 0.05f),
+			float4(0.14f, 0.64f, 6.00f, 0.50f),
+			float4(0.12f, 0.54f, 6.00f, 0.35f),
+			float4(0.13f, 0.43f, 5.00f, 0.42f),
+			float4(0.20f, 0.43f, 7.00f, 1.00f),
+			float4(0.22f, 0.43f, 6.00f, 0.30f),
+			float4(0.14f, 0.30f, 9.00f, 0.25f),
+			float4(0.13f, 0.20f, 6.00f, 0.60f),
+			float4(0.1f, 1.0f, 6.0f, 0.0f),
+			float4(0.1f, 1.0f, 6.0f, 0.0f),
+			float4(0.1f, 1.0f, 6.0f, 0.0f),
+			float4(0.1f, 1.0f, 6.0f, 0.0f),
+			float4(0.1f, 1.0f, 6.0f, 0.0f),
+			float4(0.1f, 1.0f, 6.0f, 0.0f),
+			float4(0.1f, 1.0f, 6.0f, 0.0f),
+			float4(0.1f, 1.0f, 6.0f, 0.0f),
+			float4(0.1f, 1.0f, 6.0f, 0.0f),
+			float4(0.1f, 1.0f, 6.0f, 0.0f)
 		};
 		//Rotation, Feather, CA Scale, Motion
-		std::array<float4, 10> GH_Params_2 = {
-			float4(75.0f, 0.73f, 1.00f, 1.00f),
-			float4(90.0f, 0.10f, 1.00f, 1.00f),
-			float4(60.0f, 0.16f, 1.00f, 1.00f),
-			float4(31.0f, 0.32f, 1.00f, 1.00f),
-			float4(0.00f, 1.00f, 1.00f, 1.00f),
-			float4(63.0f, 0.34f, 1.00f, 1.00f),
-			float4(40.0f, 0.13f, 1.27f, 1.00f),
-			float4(45.0f, 0.16f, 1.00f, 1.00f),
+		std::array<float4, 20> GH_Params_2 = {
+			float4(0.00f, 0.03f, 1.11f, 1.00f),
 			float4(215.0f, 0.39f, 2.00f, 1.00f),
-			float4(0.00f, 0.03f, 1.11f, 1.00f)
+			float4(45.0f, 0.16f, 1.00f, 1.00f),
+			float4(40.0f, 0.13f, 1.27f, 1.00f),
+			float4(63.0f, 0.34f, 1.00f, 1.00f),
+			float4(0.00f, 1.00f, 1.00f, 1.00f),
+			float4(31.0f, 0.32f, 1.00f, 1.00f),
+			float4(60.0f, 0.16f, 1.00f, 1.00f),
+			float4(90.0f, 0.10f, 1.00f, 1.00f),
+			float4(75.0f, 0.73f, 1.00f, 1.00f),
+			float4(0.0f, 0.0f, 1.0f, 1.00f),
+			float4(0.0f, 0.0f, 1.0f, 1.00f),
+			float4(0.0f, 0.0f, 1.0f, 1.00f),
+			float4(0.0f, 0.0f, 1.0f, 1.00f),
+			float4(0.0f, 0.0f, 1.0f, 1.00f),
+			float4(0.0f, 0.0f, 1.0f, 1.00f),
+			float4(0.0f, 0.0f, 1.0f, 1.00f),
+			float4(0.0f, 0.0f, 1.0f, 1.00f),
+			float4(0.0f, 0.0f, 1.0f, 1.00f),
+			float4(0.0f, 0.0f, 1.0f, 1.00f)
 		};
 		//Guess
-		std::array<float4, 10> GH_Color = {
-			float4(0.99f, 0.98f, 0.42f, 0.35f),
-			float4(1.00f, 0.00f, 0.00f, 0.38f),
-			float4(0.00f, 0.46f, 0.82f, 0.30f),
-			float4(1.00f, 0.00f, 0.00f, 0.25f),
-			float4(0.85f, 0.77f, 0.37f, 0.67f),
-			float4(0.17f, 0.24f, 0.86f, 0.59f),
-			float4(1.00f, 0.80f, 0.80f, 0.41f),
-			float4(0.20f, 0.00f, 0.25f, 0.98f),
+		std::array<float4, 20> GH_Color = {
+			float4(0.48f, 0.00f, 0.58f, 0.60f),
 			float4(1.00f, 1.00f, 1.00f, 0.55f),
-			float4(0.48f, 0.00f, 0.58f, 0.60f)
+			float4(0.20f, 0.00f, 0.25f, 0.98f),
+			float4(1.00f, 0.80f, 0.80f, 0.41f),
+			float4(0.17f, 0.24f, 0.86f, 0.59f),
+			float4(0.85f, 0.77f, 0.37f, 0.67f),
+			float4(1.00f, 0.00f, 0.00f, 0.25f),
+			float4(0.00f, 0.46f, 0.82f, 0.30f),
+			float4(1.00f, 0.00f, 0.00f, 0.38f),
+			float4(0.99f, 0.98f, 0.42f, 0.35f),
+			float4(1.0f, 1.0f, 1.0f, 0.0f),
+			float4(1.0f, 1.0f, 1.0f, 0.0f),
+			float4(1.0f, 1.0f, 1.0f, 0.0f),
+			float4(1.0f, 1.0f, 1.0f, 0.0f),
+			float4(1.0f, 1.0f, 1.0f, 0.0f),
+			float4(1.0f, 1.0f, 1.0f, 0.0f),
+			float4(1.0f, 1.0f, 1.0f, 0.0f),
+			float4(1.0f, 1.0f, 1.0f, 0.0f),
+			float4(1.0f, 1.0f, 1.0f, 0.0f),
+			float4(1.0f, 1.0f, 1.0f, 0.0f)
 		};
 		//Tex, Vis, Scale, NA
-		std::array<float4, 10> GH_Atlas = {
-			float4(2.00f, 1.00f, 1.00f, 0.00f),
-			float4(4.00f, 0.61f, 1.00f, 0.00f),
-			float4(4.00f, 0.00f, 1.00f, 0.00f),
-			float4(3.00f, 0.24f, 0.50f, 0.00f),
+		std::array<float4, 20> GH_Atlas = {
+			float4(1.00f, 0.42f, 0.50f, 0.00f),
 			float4(1.00f, 0.00f, 1.00f, 0.00f),
-			float4(1.00f, 0.14f, 0.55f, 0.00f),
-			float4(1.00f, 0.28f, 1.00f, 0.00f),
 			float4(2.00f, 0.11f, 0.77f, 0.00f),
+			float4(1.00f, 0.28f, 1.00f, 0.00f),
+			float4(1.00f, 0.14f, 0.55f, 0.00f),
 			float4(1.00f, 0.00f, 1.00f, 0.00f),
-			float4(1.00f, 0.42f, 0.50f, 0.00f)
+			float4(3.00f, 0.24f, 0.50f, 0.00f),
+			float4(4.00f, 0.00f, 1.00f, 0.00f),
+			float4(4.00f, 0.61f, 1.00f, 0.00f),
+			float4(2.00f, 1.00f, 1.00f, 0.00f),
+			float4(1.0f, 0.0f, 0.0f, 0.0f),
+			float4(1.0f, 0.0f, 0.0f, 0.0f),
+			float4(1.0f, 0.0f, 0.0f, 0.0f),
+			float4(1.0f, 0.0f, 0.0f, 0.0f),
+			float4(1.0f, 0.0f, 0.0f, 0.0f),
+			float4(1.0f, 0.0f, 0.0f, 0.0f),
+			float4(1.0f, 0.0f, 0.0f, 0.0f),
+			float4(1.0f, 0.0f, 0.0f, 0.0f),
+			float4(1.0f, 0.0f, 0.0f, 0.0f),
+			float4(1.0f, 0.0f, 0.0f, 0.0f)
 		};
-		std::array<float, 10> GH_InInt = {
-			float(0.67f), float(0.11f),
-			float(0.15f), float(0.40f),
-			float(0.74f), float(0.26f),
-			float(0.34f), float(0.20f),
-			float(0.64f), float(0.11f)
+		std::array<float, 20> GH_InInt = {
+			float(0.11f), float(0.64f),
+			float(0.20f), float(0.34f),
+			float(0.26f), float(0.74f),
+			float(0.40f), float(0.15f),
+			float(0.11f), float(0.67f),
+			float(1.0f), float(1.0f),
+			float(1.0f), float(1.0f),
+			float(1.0f), float(1.0f),
+			float(1.0f), float(1.0f),
+			float(1.0f), float(1.0f)
 		};
 
 		float4 SB_Color = float4(1.0f, 1.0f, 1.0f, 1.0f);
@@ -292,7 +349,7 @@ struct LensEffects : Feature
 		float LI_FadeDuration = 1.0f;
 		float LI_FadeIn = 0.35f;
 		float LI_FadeOut = 0.01f;
-		bool useOldSchoolCA = true;
+		bool CA_RChannelOnly = false;
 	};
 
 	struct Settings
@@ -324,12 +381,12 @@ struct LensEffects : Feature
 		DirectX::XMFLOAT4A suncolor;
 		MainSettings shadersettings;
 	};
-	virtual ConstBuffer UpdateBufferValues();
+	ConstBuffer UpdateBufferValues();
 
-	virtual inline DirectX::XMFLOAT4A VectorToXMFloat(float4& value) { return DirectX::XMFLOAT4A(value.x, value.y, value.z, value.w); }
-	virtual inline float LinearStep(float edge0, float edge1, float x) { return std::clamp((x - edge0) / (edge1 - edge0), 0.0f, 1.0f); }
+	inline DirectX::XMFLOAT4A VectorToXMFloat(float4& value) { return DirectX::XMFLOAT4A(value.x, value.y, value.z, value.w); }
+	inline float LinearStep(float edge0, float edge1, float x) { return std::clamp((x - edge0) / (edge1 - edge0), 0.0f, 1.0f); }
 
-	virtual inline MainSettings UpdateSettings()
+	inline MainSettings UpdateSettings()
 	{
 		auto mSettings = settings->mainsettings;
 		auto& cSettings = settings->coldsettings;
@@ -338,7 +395,6 @@ struct LensEffects : Feature
 		mSettings.SB_BladeBaseWidth = 1.0f + (mSettings.SB_BladeBaseWidth - 1.0f) * 0.25f;
 		mSettings.SB_RandomRaysWidth = std::lerp(11.0f, 7.0f, mSettings.SB_RandomRaysWidth);
 		mSettings.SBEX_BladeSplayLen = (1 / mSettings.SB_BladeLength - 0.95f) * (mSettings.SB_BladeSplay > 0.01f);
-		mSettings.SG_Enable = (float)settings->EnableSunGlare;
 		mSettings.SG_Scale = mSettings.SG_Scale * 0.75f;
 		mSettings.GH_Scale = mSettings.GH_Scale * 0.5f;
 		mSettings.HL_LineWidth = mSettings.HL_LineWidth * 0.1f;

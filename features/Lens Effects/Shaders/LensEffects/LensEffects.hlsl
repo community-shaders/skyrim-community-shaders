@@ -88,7 +88,7 @@ cbuffer Settings : register(b1){
     uint  Frame;
     float Precip;
     float WeatherBasedFadeout;
-    float4 SunData;
+    float4 SunPosition;
     float4 SunBlendColor;
 
     float UIBurstScale;
@@ -132,6 +132,7 @@ cbuffer Settings : register(b1){
 
     float UIGlareScale;
     float UIGlareInt;
+    uint UIGlareDynXPos;
     float UIGlareXOffset;
     float UIGlareYOffset;
     float UIGlareMaxRot;
@@ -152,7 +153,6 @@ cbuffer Settings : register(b1){
     float UIHaloTaper;
     float UIHaloCrShift;
 
-    float UISunGlareEnable;
     float UISunGlareScale;
     float UISunGlareInt;
     float UISunGlareOuterInt;
@@ -168,7 +168,7 @@ cbuffer Settings : register(b1){
     float4 UIBurstColor;
     float4 UISunGlareColor;
     float4 UIHaloColor;
-    float4 UIColor;
+    float4 UIGhostColor;
     float4 UIGhostAtlas;
     float4 UIFrostColor;
 };
@@ -242,78 +242,58 @@ float GetTemporalAverage(float Value, uint idx){
 float UpdateDepthFactor(float2 SunCoords, float SunRadius){
     float DepthFactor = 0.00001;
     [loop] for(int i=0; i<OCCLSAMPLES; ++i){
-        float2 Offset = Math::sincos2(Random::RandomSH(i) * Math::TAU) * sqrt(Random::RandomSH(i+1)) * SunRadius;
-        float2 Coords = SunCoords + Offset;
-        DepthFactor += DepthTexture.SampleCmpLevelZero(Depth_Sampler, Coords, 1).x;
+        float2 Offset = Math::sincos2(Random::RandomSH(i) * Math::TAU);
+        Offset *= sqrt(Random::RandomSH(i+1)) * SunRadius;
+        DepthFactor += DepthTexture.SampleCmpLevelZero(Depth_Sampler, SunCoords + Offset, 1).x;
     }
     DepthFactor = LinearStep(0.0, 0.9, DepthFactor / OCCLSAMPLES);
 
     return GetTemporalAverage(DepthFactor, Frame);
 }
 
-float UpdateCloudFactor(float2 SunSSCoords, uint CloudFactor, uint OldCloudFactor){
-    bool InsideSSBoundry = CoordMath::InsideRect(SunSSCoords, float2(200,200), ScreenSize.xy-200);
-    float Motion = Math::max2(MotionVector.Sample(Point_Sampler, SunSSCoords).xy);
+float UpdateCloudFactor(float2 SunSSCoords, float SunSSRadius, uint CloudCover){
+    float EdgeDist = min(Math::min2(SunSSCoords), Math::min2(ScreenSize.xy - SunSSCoords)) + SunSSRadius;
+    if(EdgeDist <= 0) return 0;
 
-    if(InsideSSBoundry && Motion < 0.04){
-        SunLUT_AT[int2(0,0)] = 0;
-        SunLUT_AT[int2(1,0)] = CloudFactor;
-    } else{
-        CloudFactor = OldCloudFactor; }
-
-    return float(GetTemporalAverage(CloudFactor, Frame));
+    float Segment = 0;
+    float SunR2 = SunSSRadius * SunSSRadius;
+    [branch] if(EdgeDist < SunSSRadius * 2.0){
+        Segment = SunR2 * acos(EdgeDist / SunSSRadius - 1.0);
+        Segment -= (EdgeDist - SunSSRadius) * sqrt(EdgeDist * (SunSSRadius * 2 - EdgeDist));
+    }
+    return saturate(inv(GetTemporalAverage(CloudCover, Frame) / delta(Math::PI * SunR2 - Segment)));
 }
 
-float GetWeatherFactor(float4 SunColor, float CloudFactor, float SunRadius){
+float GetWeatherFactor(float4 SunColor, float CloudFactor){
     float PrecipFactor = 1.0 - LinearStep(0.2, 0.6, Precip);
     float WeatherFade = inv(WeatherBasedFadeout);
-
-    CloudFactor = saturate(inv(CloudFactor / delta((Math::PI * (SunRadius * SunRadius)))));
     CloudFactor = LinearStep(0.0, 0.8, CloudFactor);
 
     return PrecipFactor * CloudFactor * WeatherFade;
 }
-
-float GetSunRadius(float SunDepth, float SunScale, out float SunUVRadius){
-    float FocalScale = FrameBuffer::CameraProj[0][1][1];
-
-    float SunSSRadius = SunScale * (FocalScale / SunDepth) * (ScreenSize.y * 0.5) * 0.5;
-    SunUVRadius = SunSSRadius * rcp(ScreenSize.x);
-
-    return SunSSRadius;
-}
-
 
 void main(MaskVSOutput input)
 {
     float index = (int)input.Position.x;
     float2 SunCoords = buffer[0].xy;
     float2 SunSSCoords = SunCoords * ScreenSize.xy;
+    clip(min(Math::min2(SunCoords+0.2), inv(Math::max2(SunCoords-0.2))));
 
-    [branch] if(index < 1 && min(SunCoords.x, SunCoords.y) > -0.4)
-    {
+    [branch] if(!index){
         uint Clouds = SunLUT_AT.Load(int2(0,0));
-        uint OldClouds = SunLUT_AT.Load(int2(1,0));
+        float SunSSRadius = SunPosition.w, SunUVRadius = SunPosition.w * rcp(ScreenSize.x);
 
-        float SunUVRadius;
-        float SunSSRadius = GetSunRadius(SunData.z, SunData.w, SunUVRadius);
-        if(SunUVRadius < 0.0 || SunSSRadius < 0.0){
-            SunSSRadius = SunLUT.Load(int2(3,0)).z;
-            SunUVRadius = SunSSRadius * rcp(ScreenSize.x);
-        }
-
-        float CloudFactor = UpdateCloudFactor(SunSSCoords, Clouds, OldClouds);
+        float CloudFactor = UpdateCloudFactor(SunSSCoords, SunSSRadius, Clouds);
         float DepthFactor = UpdateDepthFactor(FrameBuffer::GetDynamicResolutionAdjustedScreenPosition(SunCoords), SunUVRadius);
+        float WeatherFactor = GetWeatherFactor(SunBlendColor, CloudFactor);
 
-        float WeatherFactor = GetWeatherFactor(SunBlendColor, CloudFactor, SunSSRadius);
-
-        float DistFactor = CoordMath::ChebyDistance(float2(SunCoords.x, 1.0 - SunCoords.y) * 2.0 - 1.0);
+        float DistFactor = CoordMath::ChebyshevDistance(SunCoords * float2(2.0, -2.0) - 1.0);
               DistFactor = LinearStep(0.0, 0.65, inv(saturate(DistFactor-0.4)));
 
-
-        SunLUT[int2(0,0)] = float4(DepthFactor, WeatherFactor, DistFactor, DepthFactor * WeatherFactor * DistFactor);
+        SunLUT[int2(0,0)] = float4(DepthFactor, CloudFactor, DistFactor, DepthFactor * WeatherFactor * DistFactor);
         SunLUT[int2(1,0)] = float4(saturate(SunBlendColor.xyz + 0.3), SunUVRadius * 2);
         SunLUT[int2(3,0)] = float4(SunSSCoords, SunSSRadius, SunSSRadius * 1.2);
+        SunLUT_AT[int2(0,0)] = 0;
     }
 }
 #endif
@@ -422,20 +402,17 @@ float4 main(StarburstVSOutput input) : SV_Target
                                          float2(0.5,-0.5),float2(-0.5,-0.5)};
         [unroll] for(int i=0; i<4; ++i){
             float2 Coords = normalize(input.TexCoord.xy + BFCoord[i] * PixelSize);
-            RandomRays += sqrt(Random::RandomSH(floor(Coords * RayWidth))) + 0.1;
+            RandomRays += sqrt(Random::RandomSH(floor(Coords * RayWidth)));
         }
         RandomRays /= 4;
 
         float RayLength = lerp(0.1, UIRaysLength, input.SunInt.x);
 
-        float CentreDist = min(0.0, -0.2 + round(input.SunInt.x - 0.2));
-              CentreDist *= LinearStep(0.0, 0.1, Dist-0.05);
-
-        float Rays = smoothstep(CentreDist, 1.0 - UIRaysVolume, CoronaDist);
-              Rays = pow(saturate(InvDist), RandomRays * (7 / delta(Rays)));
+        float Rays = smoothstep(-0.1 * (CoronaDist > 0), 1.0 - UIRaysVolume, CoronaDist);
+              Rays = pow(saturate(InvDist), RandomRays * (6 / delta(Rays)));
 
         RayMask = smoothstep(RayLength, 0.1, CoronaDist);
-        RayMask *= Rays * UIRaysInt * 1.8;
+        RayMask = RayMask * Rays * UIRaysInt;
     }
 
 
@@ -468,12 +445,7 @@ GhostVSOutput main(VertexShaderInput input)
 {
 	GhostVSOutput output;
     output.Position = float4(input.Position.xy, 0.0, 1.0);
-    output.TexCoord.xy = input.TexCoord.xy * 2.0 - 1.0;
-    output.TexCoord.xy *= UIGhostCAFactor;
-
-    output.CADispacement = float2(0,0);
-    output.AtlasCoords = output.Color = float4(0,0,0,0);
-    output.Vertices = (float2[10])0;
+    output.TexCoord.xy = (input.TexCoord.xy * 2.0 - 1.0) * UIGhostCAFactor;
 
     output.SunInt = OcclusionLUT.Load(0);
     output.SunInt.x = LinearStep(0.4, 0.8, output.SunInt.w);
@@ -482,40 +454,41 @@ GhostVSOutput main(VertexShaderInput input)
     float Scale = Math::MapRange(SunParams.w, 0.02, 0.04, UIGhostScale * 0.8, UIGhostScale);
     output.Color.w = Math::MapRange(SunParams.w, 0.02, 0.04, 0.8, 1.0);
 
-    [branch] if(output.SunInt.w > SUNCLIP){
-
+    [branch] if(output.SunInt.w > SUNCLIP && UIGhostColor.w > 0.0)
+    {
         float2 SunPosition = SunPositionUV.xy * 2.0 - 1.0;
         float SunDist = length(SunPosition);
 
+        float GhostScale = UIGhostSize * Scale * UIGhostCAFactor;
         float2x2 GhostRotation = DegreesToVector(UIGhostRotation).xyyx * float2(1.0, -1.0).xyxx;
-
-        float GhostScale =  UIGhostSize * Scale * UIGhostCAFactor;
-        float RadialDelta = mad(SunDist, -0.25, 1.0);
+        float RDelta = mad(SunDist, -0.25, 1.0);
 
         float2 ClampPosition = lerp(float2(UIGhostClampOffset, -1.0), -SunPosition, SunDist);
-               ClampPosition *= rsqrt(delta(dot(ClampPosition, ClampPosition))) * RadialDelta;
+               ClampPosition *= rsqrt(delta(dot(ClampPosition, ClampPosition))) * RDelta;
 
-        float2 Bind = normalize(-SunPosition) * Math::nRoot(SunDist*2, UIGhostMoveCurve);
+        float2 MotionOffset = Math::nRoot(SunDist*2, UIGhostMoveCurve) * normalize(-SunPosition);
 
-        float2 GhostPosition = lerp(Bind, ClampPosition, UIGhostClampEnable);
+        float2 GhostPosition = (UIGhostClampEnable) ? ClampPosition : MotionOffset;
                GhostPosition = mad(GhostPosition - SunPosition, UIGhostOffset, SunPosition);
 
-
-        output.Position.xy = mul(GhostRotation, input.Position.xy);
-        output.Position.y *= ScreenSize.z;
+        output.Position.xy = mul(GhostRotation, input.Position.xy) * float2(1.0, ScreenSize.z);
         output.Position.xy = mad(output.Position.xy, GhostScale, GhostPosition);
 
         [unroll] for(int i=0; i<9; ++i)
             output.Vertices[i] = DegreesToVector(360.0 / UIGhostShape * i);
         output.Vertices[9] = output.Vertices[0];
 
-        float2 AtlasCoords = (Random::RandomSH(UIGhostOffset * 10.0) * 0.5 + 0.5) * UIGhostAtlas.z * output.TexCoord.xy * 0.5 + 0.5;
-        output.AtlasCoords = float4(CoordMath::AtlasFetch4x4(AtlasCoords, UIGhostAtlas.x), UIGhostAtlas.y, 0);
+        float2 AtlasCoords = (Random::RandomSH(UIGhostOffset * 10.0) * 0.5 + 0.5) * UIGhostAtlas.z * output.TexCoord.xy;
+        output.AtlasCoords = float4(CoordMath::AtlasFetch2x2(AtlasCoords * 0.5 + 0.5, UIGhostAtlas.x), UIGhostAtlas.y, 0);
 
         float2 CADispacement = normalize(SunPosition - GhostPosition) * float2(1.0, -1.0);
         output.CADispacement = mul(GhostRotation, CADispacement * (UIGhostCAFactor - 1.0) * 0.5);
 
-        output.Color.xyz = lerp(SunParams.xyz, UIColor.xyz, UIGhostSat);
+        output.Color.xyz = lerp(SunParams.xyz, UIGhostColor.xyz, UIGhostSat);
+    } else{
+        output.CADispacement = float2(0,0);
+        output.AtlasCoords = output.Color = float4(0,0,0,0);
+        output.Vertices = (float2[10])0;
     }
 
 	output.Position = float4(output.Position.xy, 0.0, 1.0);
@@ -536,7 +509,7 @@ Texture2D AtlasTexture : register(t1);
 
 float4 main(GhostVSOutput input) : SV_Target
 {
-    clip(input.SunInt.w - SUNCLIP);
+    clip(min(input.SunInt.w - SUNCLIP, UIGhostColor.w - 0.001));
 
     float2 GhostOffset[3];
     float3 Ghost;
@@ -547,12 +520,10 @@ float4 main(GhostVSOutput input) : SV_Target
     }
     clip(Math::min3(Ghost));
 
-
 	[loop] for(int i = 0; i < UIGhostShape; ++i){
-        float2 Edge = (input.Vertices[i+1] - input.Vertices[i]) * float2(-1.0, 1.0);
-
+        float2 Edge = ((input.Vertices[i+1] - input.Vertices[i]) * float2(-1.0, 1.0)).yx;
         [unroll] for(int j=0; j<3; ++j){
-            float Local = dot(Edge.yx, input.Vertices[i] - GhostOffset[j]);
+            float Local = dot(Edge, input.Vertices[i] - GhostOffset[j]);
             float EdgeDist = lerp(Local, Ghost[j], inv(Local * Local) * UIGhostRoundness);
 
             Ghost[j] = min(Ghost[j], EdgeDist);
@@ -560,9 +531,9 @@ float4 main(GhostVSOutput input) : SV_Target
     }
     clip(Math::max3(Ghost));
 
-    float NSGhost = abs(Math::max3(Ghost));
-
     Ghost = smoothstep(-0.05, UIGhostFeather, Ghost);
+
+    float NSGhost = abs(Math::max3(Ghost));
 
     float EdgeEffect = mad(0.5, exp(-5 * NSGhost), exp(-100 * NSGhost)) * 0.5;
           EdgeEffect = LinearStep(0.0, 0.6, EdgeEffect);
@@ -573,7 +544,7 @@ float4 main(GhostVSOutput input) : SV_Target
     float3 Atlas = AtlasTexture.Sample(Linear_Sampler, input.AtlasCoords.xy).xyz;
     Color += Atlas * input.AtlasCoords.z * inv(EdgeEffect) * 0.5;
 
-    Color *= UIGhostInt * UIColor.w * input.Color.w * input.SunInt.x;
+    Color *= UIGhostInt * UIGhostColor.w * input.Color.w * input.SunInt.x;
 
     return float4(Color, 1.0);
 
@@ -610,6 +581,7 @@ SunGlareVertexOutput main(VertexShaderInput input)
     output.Scale = lerp(output.Scale*0.5, output.Scale, LinearStep(0.025, 0.055, SunRadius));
 
     output.Position.xy = mad(input.Position.xy * float2(1.0, ScreenSize.z), GlareScale, SunPositionUV.xy * 2.0 - 1.0);
+
     output.Position = float4(output.Position.xy, 0.0, 1.0);
 
     output.SunInt = OcclusionLUT.Load(0);
@@ -775,7 +747,15 @@ LensGlareVertexOutput main(VertexShaderInput input)
     float2x2 GlareRotMat = DegreesToVector(angle).xyyx * float2(1.0, -1.0).xyxx;
 
     float2 GlarePos = float2(UIGlareXOffset, UIGlareYOffset) * 2.0 - 1.0;
-           GlarePos = lerp(GlarePos + UIGlareScale, GlarePos - UIGlareScale, GlarePos * 0.5 + 0.5);
+
+    [branch] if(UIGlareDynXPos) {
+        float SunDist = length(SunPosition);
+        float RadialDelta = mad(SunDist, -0.25, 1.0);
+        float2 ClampPosition = lerp(float2(GlarePos.x, -1.0), -SunPosition, SunDist);
+        GlarePos.x = ClampPosition.x * rsqrt(delta(dot(ClampPosition, ClampPosition))) * RadialDelta * ScreenSize.z;
+    }
+
+    GlarePos = lerp(GlarePos + UIGlareScale, GlarePos - UIGlareScale, GlarePos * 0.5 + 0.5);
 
     output.Position.xy = mul(GlareRotMat, input.Position.xy);
     output.Position.xy = mad(output.Position.xy, UIGlareScale * float2(1.0, ScreenSize.z), GlarePos);
@@ -829,22 +809,18 @@ float4 main(VertexShaderOutput input) : SV_Target
 {
     float4 Aberration;
 
-    float BaseOffset = 0.001;
-
-    float2 MotionVec = MotionVector.Load(int3(input.Position.xy, 0)).xy * (UICAThreshold > 0.0);
-           MotionVec += BaseOffset;
-
-    float Curve = saturate(length(MotionVec) - UICAThreshold);
-          Curve *= UICAIntensity;
-
-    float2 Offset = Curve * normalize(MotionVec);
-           Offset = min(UICAMaxOffset, Offset) * ScreenSize.xy;
+    float2 Offset = UICAIntensity * (1.0 + 5 * (UICAThreshold == 0.0));
+    if(UICAThreshold > 0.0){
+        float2 Motion = MotionVector.Load(int3(input.Position.xy, 0)).xy - 1e-6;
+        Offset *= saturate(length(Motion) - UICAThreshold);
+        Offset = min(UICAMaxOffset.xx, Offset) * ScreenSize.xy * normalize(Motion);
+    }
 
     [unroll] for(int i=0; i<3; ++i){
         int2 Coords = int2(input.Position.xy) + int2(Offset * (i-1));
         Aberration[i] = Main.Load(int3(clamp(Coords, int2(0,0), int2(ScreenSize.xy - 1)), 0))[i];
     }
-    Aberration.w = Main.Load(int3(clamp(int2(input.Position.xy), int2(0,0), int2(ScreenSize.xy - 1)), 0)).w;
+    Aberration.w = Main.Load(int3(input.Position.xy, 0)).w;
 
     return Aberration;
 }
