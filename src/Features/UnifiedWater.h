@@ -56,41 +56,19 @@ struct UnifiedWater : OverlayFeature
 		float FoamIntensity;
 	};
 
-	struct PerTile
+	struct alignas(16) PerTile
 	{
-		// Current cell data
-		float ShoreNormalX;
-		float ShoreNormalY;
-		float DistanceToShore;
-		float PrevShoreNormalX;
-		float PrevShoreNormalY;
-		float PrevDistanceToShore;
-		
-		// Neighboring cell data for smooth blending
-		// North (+Y)
-		float ShoreNormalX_North;
-		float ShoreNormalY_North;
-		float DistanceToShore_North;
-		
-		// South (-Y)
-		float ShoreNormalX_South;
-		float ShoreNormalY_South;
-		float DistanceToShore_South;
-		
-		// East (+X)
-		float ShoreNormalX_East;
-		float ShoreNormalY_East;
-		float DistanceToShore_East;
-		
-		// West (-X)
-		float ShoreNormalX_West;
-		float ShoreNormalY_West;
-		float DistanceToShore_West;
-		
-		// Tile's base cell coordinates for proper neighbor blending
-		float TileCellX;
-		float TileCellY;
-		float pad0;
+		struct alignas(16) ShorelineSample
+		{
+			float NormalX;
+			float NormalY;
+			float DistanceToShore;
+			float ValidMask;
+		};
+
+		ShorelineSample ShoreSamples[9];
+		float PrevData[4];   // x/y = prev normal, z = prev distance
+		float TileData[4];   // x/y = tile cell coords, z = LOD level, w = tile span (cells)
 	};
 
 	Settings settings;

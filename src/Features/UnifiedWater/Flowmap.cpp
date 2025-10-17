@@ -216,10 +216,10 @@ bool Flowmap::GenerateFlowmap(WaterCache* waterCache, bool useMips)
 				if (!instructions || instructions->empty())
 					continue;
 
-				// Get shoreline data
-				float shoreNormalX = (*instructions)[0].shoreNormalX;
-				float shoreNormalY = (*instructions)[0].shoreNormalY;
-				float distanceToShore = (*instructions)[0].distanceToShore;
+				// Get shoreline data - use center sample (index 4) for flowmap generation
+				float shoreNormalX = (*instructions)[0].shoreNormalX[4];
+				float shoreNormalY = (*instructions)[0].shoreNormalY[4];
+				float distanceToShore = (*instructions)[0].distanceToShore[4];
 
 				float normalLen = std::sqrt(shoreNormalX * shoreNormalX + shoreNormalY * shoreNormalY);
 				bool hasShorelineData = (normalLen > 0.001f && distanceToShore < 0.95f);

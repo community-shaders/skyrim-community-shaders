@@ -599,78 +599,64 @@ void UnifiedWater::BSWaterShader_SetupGeometry::thunk(RE::BSShader* waterShader,
 	// Update per-tile shoreline data - ALWAYS update to prevent uninitialized data
 	if (singleton.perTile) {
 		PerTile perTileData{};
-		perTileData.ShoreNormalX = 0.0f;
-		perTileData.ShoreNormalY = 0.0f;
-		perTileData.DistanceToShore = 10000.0f;
-		
-		// Initialize neighbor data to defaults
-		perTileData.ShoreNormalX_North = 0.0f;
-		perTileData.ShoreNormalY_North = 0.0f;
-		perTileData.DistanceToShore_North = 10000.0f;
-		perTileData.ShoreNormalX_South = 0.0f;
-		perTileData.ShoreNormalY_South = 0.0f;
-		perTileData.DistanceToShore_South = 10000.0f;
-		perTileData.ShoreNormalX_East = 0.0f;
-		perTileData.ShoreNormalY_East = 0.0f;
-		perTileData.DistanceToShore_East = 10000.0f;
-		perTileData.ShoreNormalX_West = 0.0f;
-		perTileData.ShoreNormalY_West = 0.0f;
-		perTileData.DistanceToShore_West = 10000.0f;
-		
-		// Previous frame data for TAA consistency
-		perTileData.PrevShoreNormalX = singleton.hasLastShorelineData ? singleton.lastShoreNormalX : 0.0f;
-		perTileData.PrevShoreNormalY = singleton.hasLastShorelineData ? singleton.lastShoreNormalY : 0.0f;
-		perTileData.PrevDistanceToShore = singleton.hasLastShorelineData ? singleton.lastDistanceToShore : 10000.0f;
-		
-		// Store tile's cell coordinates for proper neighbor blending in shader
-		perTileData.TileCellX = static_cast<float>(x);
-		perTileData.TileCellY = static_cast<float>(y);
-		
-		// Helper lambda to fetch shoreline data for a specific cell
-		auto fetchCellData = [&](int32_t cellX, int32_t cellY, float& outNormalX, float& outNormalY, float& outDistance) -> bool {
-			if (const auto tes = RE::TES::GetSingleton()) {
-				if (const auto worldSpace = tes->GetRuntimeData2().worldSpace) {
-					const auto instructions = singleton.waterCache->GetInstructions(worldSpace, lodLevel, cellX, cellY);
-					
-					if (instructions && !instructions->empty()) {
-						// Find instruction matching this tile position
-						for (const auto& instruction : *instructions) {
-							if (instruction.x == cellX && instruction.y == cellY) {
-								outNormalX = instruction.shoreNormalX;
-								outNormalY = instruction.shoreNormalY;
-								outDistance = instruction.distanceToShore;
-								return true;
-							}
-						}
-						
-						// Fallback to first instruction in chunk
-						if (instructions->size() > 0) {
-							const auto& fallback = (*instructions)[0];
-							outNormalX = fallback.shoreNormalX;
-							outNormalY = fallback.shoreNormalY;
-							outDistance = fallback.distanceToShore;
-							return true;
-						}
-					}
+		for (auto& sample : perTileData.ShoreSamples) {
+			sample.NormalX = 0.0f;
+			sample.NormalY = 0.0f;
+			sample.DistanceToShore = 10000.0f;
+			sample.ValidMask = 0.0f;
+		}
+
+		perTileData.PrevData[0] = singleton.hasLastShorelineData ? singleton.lastShoreNormalX : 0.0f;
+		perTileData.PrevData[1] = singleton.hasLastShorelineData ? singleton.lastShoreNormalY : 0.0f;
+		perTileData.PrevData[2] = singleton.hasLastShorelineData ? singleton.lastDistanceToShore : 10000.0f;
+		perTileData.PrevData[3] = 0.0f;
+
+		perTileData.TileData[0] = static_cast<float>(x);
+		perTileData.TileData[1] = static_cast<float>(y);
+		perTileData.TileData[2] = static_cast<float>(lodLevel);
+		perTileData.TileData[3] = 1.0f;
+
+		const WaterCache::Instruction* tileInstruction = nullptr;
+		std::vector<WaterCache::Instruction>* instructionList = nullptr;
+
+		if (const auto tes = RE::TES::GetSingleton()) {
+			if (const auto worldSpace = tes->GetRuntimeData2().worldSpace) {
+				instructionList = singleton.waterCache->GetInstructions(worldSpace, lodLevel, x, y);
+			}
+		}
+
+		if (instructionList && !instructionList->empty()) {
+			for (const auto& instruction : *instructionList) {
+				if (instruction.x == x && instruction.y == y) {
+					tileInstruction = &instruction;
+					break;
 				}
 			}
-			return false;
-		};
-		
-		// Fetch current cell data
-		fetchCellData(x, y, perTileData.ShoreNormalX, perTileData.ShoreNormalY, perTileData.DistanceToShore);
-		
-		// Fetch neighboring cells data
-		fetchCellData(x, y + 1, perTileData.ShoreNormalX_North, perTileData.ShoreNormalY_North, perTileData.DistanceToShore_North);  // North
-		fetchCellData(x, y - 1, perTileData.ShoreNormalX_South, perTileData.ShoreNormalY_South, perTileData.DistanceToShore_South);  // South
-		fetchCellData(x + 1, y, perTileData.ShoreNormalX_East, perTileData.ShoreNormalY_East, perTileData.DistanceToShore_East);      // East
-		fetchCellData(x - 1, y, perTileData.ShoreNormalX_West, perTileData.ShoreNormalY_West, perTileData.DistanceToShore_West);      // West
-		
-		// Store current frame data for next frame's "previous" data
-		singleton.lastShoreNormalX = perTileData.ShoreNormalX;
-		singleton.lastShoreNormalY = perTileData.ShoreNormalY;
-		singleton.lastDistanceToShore = perTileData.DistanceToShore;
-		singleton.hasLastShorelineData = true;
+
+			if (!tileInstruction) {
+				tileInstruction = &(*instructionList)[0];
+			}
+		}
+
+		if (tileInstruction) {
+			perTileData.TileData[3] = static_cast<float>(tileInstruction->size > 0 ? tileInstruction->size : 1);
+			for (int sampleIdx = 0; sampleIdx < 9; ++sampleIdx) {
+				auto& sample = perTileData.ShoreSamples[sampleIdx];
+				sample.NormalX = tileInstruction->shoreNormalX[sampleIdx];
+				sample.NormalY = tileInstruction->shoreNormalY[sampleIdx];
+				sample.DistanceToShore = tileInstruction->distanceToShore[sampleIdx];
+				const float lenSq = sample.NormalX * sample.NormalX + sample.NormalY * sample.NormalY;
+				sample.ValidMask = (lenSq > 1e-6f && sample.DistanceToShore < 9999.0f) ? 1.0f : 0.0f;
+			}
+
+			const auto& centerSample = perTileData.ShoreSamples[4];
+			if (centerSample.ValidMask > 0.5f) {
+				singleton.lastShoreNormalX = centerSample.NormalX;
+				singleton.lastShoreNormalY = centerSample.NormalY;
+				singleton.lastDistanceToShore = centerSample.DistanceToShore;
+				singleton.hasLastShorelineData = true;
+			}
+		}
 		
 		singleton.perTile->Update(perTileData);
 		

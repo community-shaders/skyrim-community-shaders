@@ -20,10 +20,13 @@ public:
 		uint32_t size{};
 		float waterHeight{};
 		
-		// Shoreline-aware wave system
-		float shoreNormalX{};      // X component of normalized vector pointing from water to land
-		float shoreNormalY{};      // Y component of normalized vector pointing from water to land
-		float distanceToShore{};   // Distance in cells to nearest shoreline (0 = at shore, large = open water)
+		// Shoreline-aware wave system - 9 sample points per cell (3x3 grid)
+		// Layout: [0-2] = south row (SW, S, SE)
+		//         [3-5] = middle row (W, Center, E)  
+		//         [6-8] = north row (NW, N, NE)
+		float shoreNormalX[9]{};      // X component of normalized vector pointing from water to land
+		float shoreNormalY[9]{};      // Y component of normalized vector pointing from water to land
+		float distanceToShore[9]{};   // Distance in cells to nearest shoreline (0 = at shore, large = open water)
 	};
 
 	struct BuildProgressSnapshot
@@ -182,7 +185,8 @@ private:
 	static void GetLODCoords(int32_t lodLevel, int32_t x, int32_t y, int32_t& outX, int32_t& outY);
 	
 	static void ComputeShorelineData(const std::vector<CellData>& cellData, int32_t width, int32_t height, 
-		int32_t cellX, int32_t cellY, uint32_t tileSize, float& outNormalX, float& outNormalY, float& outDistance);
+		int32_t cellX, int32_t cellY, uint32_t tileSize, 
+		float outNormalX[9], float outNormalY[9], float outDistance[9]);
 
 	static bool TryGetCellData(RE::TESWorldSpace* worldSpace, RE::TESFileArray* files, int32_t x, int32_t y, RE::FormID& outFormID, float& outWaterHeight, float& outLandHeight, bool resolveFormID);
 	static void ReadWaterData(RE::TESFile* file, float& waterHeight, RE::FormID& formID);

@@ -311,61 +311,79 @@ void WaterCache::BuildPreCache(RE::TESWorldSpace* worldSpace, PreCache& cache)
 }
 
 // Compute shoreline normal and distance for a water cell using Sobel edge detection
-								void WaterCache::ComputeShorelineData(const std::vector<CellData>& cellData, int32_t width, int32_t height,
-	int32_t cellX, int32_t cellY, uint32_t tileSize, float& outNormalX, float& outNormalY, float& outDistance)
+void WaterCache::ComputeShorelineData(const std::vector<CellData>& cellData, int32_t width, int32_t height,
+	int32_t cellX, int32_t cellY, uint32_t tileSize, 
+	float outNormalX[9], float outNormalY[9], float outDistance[9])
 {
-	// Initialize with defaults for open water
-	outNormalX = 0.0f;
-	outNormalY = 0.0f;
-	outDistance = 100.0f;
+	// Sample 9 points in a 3x3 grid across the cell
+	// This creates within-cell variation for realistic flow
+	const int32_t sampleOffsets[9][2] = {
+		{ -1, -1 }, { 0, -1 }, { 1, -1 },  // South row: SW, S, SE
+		{ -1, 0 },  { 0, 0 },  { 1, 0 },   // Middle row: W, Center, E
+		{ -1, 1 },  { 0, 1 },  { 1, 1 }    // North row: NW, N, NE
+	};
+	
+	// Scale offsets based on tile size for appropriate spacing
+	const int32_t spacing = std::max(1, static_cast<int32_t>(tileSize) / 3);
+	
+	for (int i = 0; i < 9; ++i) {
+		// Calculate sample position
+		const int32_t sampleX = cellX + sampleOffsets[i][0] * spacing;
+		const int32_t sampleY = cellY + sampleOffsets[i][1] * spacing;
+		
+		// Initialize with defaults for open water
+		outNormalX[i] = 0.0f;
+		outNormalY[i] = 0.0f;
+		outDistance[i] = 100.0f;
 
-	// Sobel kernel for edge detection
-	const int32_t sobelRadius = std::max(2, static_cast<int32_t>(tileSize));
-	float gradX = 0.0f;
-	float gradY = 0.0f;
-	float minDist = outDistance;
-	bool foundShore = false;
+		// Sobel kernel for edge detection
+		const int32_t sobelRadius = std::max(2, static_cast<int32_t>(tileSize));
+		float gradX = 0.0f;
+		float gradY = 0.0f;
+		float minDist = outDistance[i];
+		bool foundShore = false;
 
-	// Sample surrounding cells to detect land/water boundaries
-	for (int32_t dy = -sobelRadius; dy <= sobelRadius; ++dy) {
-		for (int32_t dx = -sobelRadius; dx <= sobelRadius; ++dx) {
-			const int32_t nx = cellX + dx;
-			const int32_t ny = cellY + dy;
+		// Sample surrounding cells to detect land/water boundaries
+		for (int32_t dy = -sobelRadius; dy <= sobelRadius; ++dy) {
+			for (int32_t dx = -sobelRadius; dx <= sobelRadius; ++dx) {
+				const int32_t nx = sampleX + dx;
+				const int32_t ny = sampleY + dy;
 
-			// Skip out of bounds
-			if (nx < 0 || nx >= width || ny < 0 || ny >= height)
-				continue;
+				// Skip out of bounds
+				if (nx < 0 || nx >= width || ny < 0 || ny >= height)
+					continue;
 
-			const int32_t idx = ny * width + nx;
-			const auto& [heights, formID, form] = cellData[idx];
-			
-			// Determine if this cell is land
-			bool isLand = !form || heights.water <= heights.land;
-
-			if (isLand) {
-				foundShore = true;
-				float dist = std::sqrt(static_cast<float>(dx * dx + dy * dy));
+				const int32_t idx = ny * width + nx;
+				const auto& [heights, formID, form] = cellData[idx];
 				
-				// Track minimum distance to any land cell
-				if (dist < minDist)
-					minDist = dist;
+				// Determine if this cell is land
+				bool isLand = !form || heights.water <= heights.land;
 
-				// Sobel-style gradient accumulation (weight by inverse distance)
-				float weight = dist > 0.0f ? 1.0f / dist : 1.0f;
-				gradX += dx * weight;
-				gradY += dy * weight;
+				if (isLand) {
+					foundShore = true;
+					float dist = std::sqrt(static_cast<float>(dx * dx + dy * dy));
+					
+					// Track minimum distance to any land cell
+					if (dist < minDist)
+						minDist = dist;
+
+					// Sobel-style gradient accumulation (weight by inverse distance)
+					float weight = dist > 0.0f ? 1.0f / dist : 1.0f;
+					gradX += dx * weight;
+					gradY += dy * weight;
+				}
 			}
 		}
-	}
 
-	if (foundShore) {
-		outDistance = minDist;
-		
-		// Normalize gradient to get shore normal (points from water toward land)
-		float gradLen = std::sqrt(gradX * gradX + gradY * gradY);
-		if (gradLen > 0.001f) {
-			outNormalX = gradX / gradLen;
-			outNormalY = gradY / gradLen;
+		if (foundShore) {
+			outDistance[i] = minDist;
+			
+			// Normalize gradient to get shore normal (points from water toward land)
+			float gradLen = std::sqrt(gradX * gradX + gradY * gradY);
+			if (gradLen > 0.001f) {
+				outNormalX[i] = gradX / gradLen;
+				outNormalY[i] = gradY / gradLen;
+			}
 		}
 	}
 }
@@ -608,7 +626,7 @@ void WaterCache::GenerateInstructions(const int32_t lodLevel, DiskCache& diskCac
 					instruction.size = size;
 					instruction.waterHeight = targetHeight;
 					
-					// Compute shoreline data for this water tile
+					// Compute shoreline data for this water tile - 9 sample points per cell
 					// Use center of tile for shoreline detection
 					const int32_t centerX = cellX + size / 2;
 					const int32_t centerY = cellY + size / 2;
