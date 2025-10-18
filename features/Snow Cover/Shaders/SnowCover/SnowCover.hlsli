@@ -24,42 +24,9 @@ namespace SnowCover
 		return n1 * dot(n1, n2) / n1.z - n2;
 	}
 
-	// http://chilliant.blogspot.com/2010/11/rgbhsv-in-hlsl.html
-	float3 Hue(float H)
-	{
-		float R = abs(H * 6 - 3) - 1;
-		float G = 2 - abs(H * 6 - 2);
-		float B = 2 - abs(H * 6 - 4);
-		return saturate(float3(R, G, B));
-	}
+	
 
-	float3 HSVtoRGB(in float3 HSV)
-	{
-		return ((Hue(HSV.x) - 1) * HSV.y + 1) * HSV.z;
-	}
-
-	float3 RGBtoHSV(in float3 RGB)
-	{
-		float3 HSV = 0;
-		HSV.z = max(RGB.r, max(RGB.g, RGB.b));
-		float M = min(RGB.r, min(RGB.g, RGB.b));
-		float C = HSV.z - M;
-
-		if (C != 0) {
-			HSV.y = C / HSV.z;
-			float3 Delta = (HSV.z - RGB) / C;
-			Delta.rgb -= Delta.brg;
-			Delta.rg += float2(2, 4);
-			if (RGB.r >= HSV.z)
-				HSV.x = Delta.b;
-			else if (RGB.g >= HSV.z)
-				HSV.x = Delta.r;
-			else
-				HSV.x = Delta.g;
-			HSV.x = frac(HSV.x / 6);
-		}
-		return HSV;
-	}
+	
 
 	float GetHeightMult(float3 p)
 	{
@@ -78,13 +45,13 @@ namespace SnowCover
 	void ApplyFoliageColor(inout float3 color, float env_mult)
 	{
 		float gmult = saturate(env_mult - SharedData::snowCoverSettings.FoliageHeightOffset / 5000);
-		float3 hsv = RGBtoHSV(color);
+		float3 hsv = Color::RGBtoHSV(color);
 		if (hsv.x > 0.55)
 			hsv.x = frac(lerp(hsv.x, 1.1, gmult) * 2);
 		else
 			hsv.x = lerp(hsv.x, 0.1, gmult);
 		hsv.y *= lerp(1, 0.25, 4.0 * gmult * (1.0 - gmult));
-		color = HSVtoRGB(hsv);
+		color = Color::HSVtoRGB(hsv);
 	}
 
 	void ApplySnowFoliage(inout float3 color, float3 worldNormal, float3 p, float skylight, float viewDist)
@@ -118,7 +85,7 @@ namespace SnowCover
 		float weatherRange = 1 - smoothstep(20000, 40000 + 1000 * sin(p.z * 0.001 + cos(p.x * p.y * 0.001)), viewDist);
 		// the amount of snow based on weather, TimeSnowing transitions smoothly between -1 in rain and 1 when snowing
 		float weatherMult = weatherRange * pow(SharedData::snowCoverSettings.TimeSnowing, 3) * max(500, SharedData::snowCoverSettings.SnowingDensity) / 500;
-		weatherMult = clamp(-1, 1, (weatherMult + disp * 0.1) * max(SharedData::snowCoverSettings.minAngle, worldNormal.z));
+		weatherMult = clamp((weatherMult + disp * 0.1) * max(SharedData::snowCoverSettings.minAngle, worldNormal.z), -1, 1);
 		// the amount of snow based on season and weather
 		float env_mult = saturate(max(saturate(GetEnvironmentalMultiplier(p) + disp), weatherMult)) - waterDist;
 #		if !defined(LANDSCAPE) && !defined(LOD)

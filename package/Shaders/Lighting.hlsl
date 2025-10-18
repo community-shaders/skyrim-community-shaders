@@ -1863,17 +1863,17 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 
 #	if defined(MODELSPACENORMALS)
 #		if defined(LODLANDNOISE)
-		normal.xyz = normal.xzy - 0.5.xxx;
-		float lodLandNoiseParameter = GetLodLandBlendParameter(baseColor.xyz);
-		float noise = TexLandLodNoiseSampler.Sample(SampLandLodNoiseSampler, uv * 3.0.xx).x;
-		float lodLandNoiseMultiplier = GetLodLandBlendMultiplier(lodLandNoiseParameter, noise);
+	normal.xyz = normal.xzy - 0.5.xxx;
+	float lodLandNoiseParameter = GetLodLandBlendParameter(baseColor.xyz);
+	float noise = TexLandLodNoiseSampler.Sample(SampLandLodNoiseSampler, uv * 3.0.xx).x;
+	float lodLandNoiseMultiplier = GetLodLandBlendMultiplier(lodLandNoiseParameter, noise);
 #			if defined(SNOW_COVER)
-		if (!SharedData::snowCoverSettings.EnableSnowCover)
+	if (!SharedData::snowCoverSettings.EnableSnowCover)
 #			endif
-			baseColor.xyz *= lodLandNoiseMultiplier;
-		normal.xyz *= 2;
-		normal.w = 1;
-		glossiness = 0;
+		baseColor.xyz *= lodLandNoiseMultiplier;
+	normal.xyz *= 2;
+	normal.w = 1;
+	glossiness = 0;
 #		elif defined(LODLANDSCAPE)
 	normal.xyz = 2.0.xxx * (-0.5.xxx + normal.xzy);
 	normal.w = 1;
