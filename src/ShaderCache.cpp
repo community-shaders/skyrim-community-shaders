@@ -14,6 +14,26 @@ namespace SIE
 		static void GetShaderDefines(const RE::BSShader&, uint32_t, D3D_SHADER_MACRO*);
 		static std::string GetShaderString(ShaderClass, const RE::BSShader&, uint32_t, bool = false);
 		/**
+		 * @brief Resolve image-space shader descriptor when applicable.
+		 *
+		 * If @p shader is an image-space shader, attempts to map it to a
+		 * runtime image-space descriptor via GetImagespaceShaderDescriptor and
+		 * returns true on success. If the shader is not image-space the
+		 * function returns true and leaves @p descriptor unchanged. Returns
+		 * false only when the shader is image-space and no valid descriptor
+		 * could be resolved.
+		 *
+		 * This helper is used by the shader loading and caching code paths to
+		 * determine whether an image-space shader can be loaded or cached. If
+		 * this function returns false the caller should skip loading/compiling
+		 * and caching that shader.
+		 *
+		 * @param shader The shader to resolve (may be an image-space shader).
+		 * @param[out] descriptor Resolved descriptor for image-space shaders.
+		 * @return True if descriptor is valid or not applicable, false on failure.
+		 */
+		static bool ResolveImageSpaceDescriptor(const RE::BSShader& shader, uint32_t& descriptor);
+		/**
 		@brief Get the BSShader::Type from the ShaderString
 		@param a_key The key generated from GetShaderString
 		@return A string with a valid BSShader::Type
@@ -1254,6 +1274,10 @@ namespace SIE
 
 		static ID3DBlob* CompileShader(ShaderClass shaderClass, const RE::BSShader& shader, uint32_t descriptor, bool useDiskCache)
 		{
+			if (!SShaderCache::ResolveImageSpaceDescriptor(shader, descriptor)) {
+				return nullptr;
+			}
+
 			// check hashmap
 			auto& cache = ShaderCache::Instance();
 			ID3DBlob* shaderBlob = cache.GetCompletedShader(shaderClass, shader, descriptor);
@@ -1647,8 +1671,11 @@ namespace SIE
 				{ "BSImagespaceShaderVolumetricLightingBlurVCS", RE::ImageSpaceManager::GetCurrentIndex(ISVolumetricLightingBlurVCS) },
 
 				// VR only shaders
-				{ "BSImagespaceShaderCopyDepthBuffer", RE::ImageSpaceManager::GetCurrentIndex(ISCopyDepthBuffer) },
-				{ "BSImagespaceShaderTargetSize", RE::ImageSpaceManager::GetCurrentIndex(ISTargetSize) },
+				// Disable BSImagespaceShaderCopyDepthBuffer since we don't have it REed and it causes issues with cache and upscaling
+				// https://github.com/doodlum/skyrim-community-shaders/issues/1552
+				// { "BSImagespaceShaderCopyDepthBuffer", RE::ImageSpaceManager::GetCurrentIndex(ISCopyDepthBuffer) },
+				// { "BSImagespaceShaderCopyDepthBuffer_DR", RE::ImageSpaceManager::GetCurrentIndex(ISCopyDepthBuffer_DR) },
+				// { "BSImagespaceShaderCopyDepthBufferTargetSize", RE::ImageSpaceManager::GetCurrentIndex(ISCopyDepthBufferTargetSize) },
 				{ "BSImagespaceShaderGraphicsTextureFilterMode", RE::ImageSpaceManager::GetCurrentIndex(ISGraphicsTextureFilterMode) },
 				{ "BSImagespaceShaderISDownsampleHierarchicalDepthBufferCS", RE::ImageSpaceManager::GetCurrentIndex(ISDownsampleHierarchicalDepthBufferCS) },
 				{ "BSImagespaceShaderISDiffScaleDownsampleDepthBufferCS", RE::ImageSpaceManager::GetCurrentIndex(ISDiffScaleDownsampleDepthBufferCS) },
@@ -1671,16 +1698,22 @@ namespace SIE
 			descriptor = it->second;
 			return true;
 		}
+
+		static bool ResolveImageSpaceDescriptor(const RE::BSShader& shader, uint32_t& descriptor)
+		{
+			if (shader.shaderType == RE::BSShader::Type::ImageSpace) {
+				const auto& isShader = static_cast<const RE::BSImagespaceShader&>(shader);
+				return GetImagespaceShaderDescriptor(isShader, descriptor);
+			}
+			return true;
+		}
 	}
 
 	RE::BSGraphics::VertexShader* ShaderCache::GetVertexShader(const RE::BSShader& shader,
 		uint32_t descriptor)
 	{
-		if (shader.shaderType == RE::BSShader::Type::ImageSpace) {
-			const auto& isShader = static_cast<const RE::BSImagespaceShader&>(shader);
-			if (!SShaderCache::GetImagespaceShaderDescriptor(isShader, descriptor)) {
-				return nullptr;
-			}
+		if (!SShaderCache::ResolveImageSpaceDescriptor(shader, descriptor)) {
+			return nullptr;
 		}
 
 		auto state = globals::state;
@@ -1733,11 +1766,8 @@ namespace SIE
 			return nullptr;
 		}
 
-		if (shader.shaderType == RE::BSShader::Type::ImageSpace) {
-			const auto& isShader = static_cast<const RE::BSImagespaceShader&>(shader);
-			if (!SShaderCache::GetImagespaceShaderDescriptor(isShader, descriptor)) {
-				return nullptr;
-			}
+		if (!SShaderCache::ResolveImageSpaceDescriptor(shader, descriptor)) {
+			return nullptr;
 		}
 
 		if (state->IsDeveloperMode()) {
@@ -1777,11 +1807,8 @@ namespace SIE
 			return nullptr;
 		}
 
-		if (shader.shaderType == RE::BSShader::Type::ImageSpace) {
-			const auto& isShader = static_cast<const RE::BSImagespaceShader&>(shader);
-			if (!SShaderCache::GetImagespaceShaderDescriptor(isShader, descriptor)) {
-				return nullptr;
-			}
+		if (!SShaderCache::ResolveImageSpaceDescriptor(shader, descriptor)) {
+			return nullptr;
 		}
 
 		if (state->IsDeveloperMode()) {

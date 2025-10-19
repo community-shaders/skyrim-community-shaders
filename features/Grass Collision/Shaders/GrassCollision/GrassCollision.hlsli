@@ -96,7 +96,10 @@ namespace GrassCollision
 	{
 		float3 tangentX = float3(delta, 0, hX - h0);
 		float3 tangentY = float3(0, delta, hY - h0);
-		return -normalize(cross(tangentX, tangentY) * float3(1.0, 1.0, 0.1));
+		float3 crossProd = cross(tangentX, tangentY) * float3(1.0, 1.0, 0.1);
+
+		float lenSq = dot(crossProd, crossProd);
+		return lenSq > 1e-12 ? -crossProd * rsqrt(lenSq) : float3(0, 0, -1);
 	}
 
 	void ComputeCollision(float3 worldPosition, float maximumDepth, float distanceFromCenter, float delta, out float3 collision, out float3 previousCollision)
@@ -136,8 +139,9 @@ namespace GrassCollision
 	void GetDisplacedPosition(VS_INPUT input, float3 position, out float3 displacement, out float3 previousDisplacement)
 	{
 		float3 worldPosition = mul(World[0], float4(position.xyz, 1.0)).xyz;
+		float nearFactor = smoothstep(2048.0, 0.0, length(worldPosition));
 
-		if (input.Color.w > 0.0 && length(worldPosition) < 2048.0) {
+		if (input.Color.w > 0.0 && nearFactor > 0.0) {
 			float3 worldPositionCentre = mul(World[0], float4(input.InstanceData1.xyz, 1.0)).xyz;
 
 			// Limit stretching
@@ -150,11 +154,15 @@ namespace GrassCollision
 			float3 collision, previousCollision;
 			ComputeCollision(remappedWorldPosition, maximumDepth, distanceFromCenter, CELL_SIZE, collision, previousCollision);
 
+			// Do not let collision move upwards
+			collision.z = -abs(collision.z);
+			previousCollision.z = -abs(previousCollision.z);
+
 			// Scale grass by wind amount (detect rocks and bottom of some grass)
 			float alpha = saturate(input.Color.w * 10.0);
 
-			displacement = collision * alpha * 0.75;
-			previousDisplacement  = previousCollision * alpha * 0.75;
+			displacement = collision * alpha * nearFactor * 0.75;
+			previousDisplacement  = previousCollision * alpha * nearFactor * 0.75;
 		} else {
 			displacement = 0.0;
 			previousDisplacement = 0.0;

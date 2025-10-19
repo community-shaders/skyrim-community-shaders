@@ -33,6 +33,7 @@ struct Upscaling;
 class State;
 class Deferred;
 struct TruePBR;
+class RenderDoc;
 class Menu;
 
 namespace SIE
@@ -80,6 +81,7 @@ namespace globals
 		extern WetnessEffects wetnessEffects;
 		extern ExtendedTranslucency extendedTranslucency;
 		extern Upscaling upscaling;
+		extern RenderDoc renderDoc;
 
 		namespace llf
 		{

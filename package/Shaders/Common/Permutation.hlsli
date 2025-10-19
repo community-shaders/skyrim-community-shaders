@@ -72,7 +72,7 @@ namespace Permutation
 		static const int THLand3HasDisplacement = (1 << 3);
 		static const int THLand4HasDisplacement = (1 << 4);
 		static const int THLand5HasDisplacement = (1 << 5);
-		static const int THLandHasDisplacement = (1 << 6);
+		static const int THLandHasDisplacement = (1 << 9);
 	}
 
 	cbuffer PerShader : register(b4)

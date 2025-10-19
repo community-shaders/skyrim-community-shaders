@@ -6,6 +6,8 @@
 #include <vector>
 #include <windows.h>  // For WPARAM and virtual key constants
 
+#include "../Menu/Fonts.h"
+
 // Forward declarations
 struct ID3D11Device;
 struct ID3D11ShaderResourceView;
@@ -110,6 +112,24 @@ namespace Util
 	};
 
 	/**
+	 * Button with simple flash feedback (matches action icon hover effect style)
+	 * @param label Button text
+	 * @param size Button size (optional)
+	 * @param flashDurationMs How long to show flash effect in milliseconds (default 200ms)
+	 * @return True if the button was clicked
+	 */
+	bool ButtonWithFlash(const char* label, const ImVec2& size = ImVec2(0, 0), int flashDurationMs = 200);
+
+	/**
+	 * Clean, minimalist toggle switch for feature enable/disable state
+	 * @param label Label text to display next to the toggle
+	 * @param enabled Reference to the boolean state to toggle
+	 * @param size Toggle size (optional, defaults to automatic sizing)
+	 * @return True if the toggle state was changed
+	 */
+	bool FeatureToggle(const char* label, bool* enabled, const ImVec2& size = ImVec2(0, 0));
+
+	/**
 	 * RAII wrapper for creating collapsible UI sections.
 	 * Automatically handles the TreeNode creation, styling, and cleanup.
 	 */
@@ -146,6 +166,79 @@ namespace Util
 		bool m_shouldDraw;
 		bool m_treeNodeOpened;
 	};
+
+	/**
+	 * Color utilities for contrast and readability
+	 */
+	namespace ColorUtils
+	{
+		/**
+		 * Calculates the relative luminance of a color according to WCAG guidelines
+		 * @param color ImVec4 color to calculate luminance for
+		 * @return Luminance value between 0.0 (darkest) and 1.0 (brightest)
+		 */
+		float CalculateLuminance(const ImVec4& color);
+
+		/**
+		 * Determines the appropriate text color (black or white) for maximum contrast
+		 * against the given background color
+		 * @param backgroundColor Background color to test against
+		 * @param threshold Luminance threshold for switching (default 0.5)
+		 * @return Black color for light backgrounds, white color for dark backgrounds
+		 */
+		ImVec4 GetContrastingTextColor(const ImVec4& backgroundColor, float threshold = 0.5f);
+
+		/**
+		 * Calculates contrast ratio between two colors according to WCAG guidelines
+		 * @param color1 First color
+		 * @param color2 Second color
+		 * @return Contrast ratio (1.0 = no contrast, 21.0 = maximum contrast)
+		 */
+		float CalculateContrastRatio(const ImVec4& color1, const ImVec4& color2);
+
+		/**
+		 * Adjusts a background color to ensure contrast with text
+		 * Darkens light backgrounds or lightens dark backgrounds to prevent same-color-on-same-color issues
+		 * @param backgroundColor Background color to adjust (modified in place)
+		 * @param textLuminance Luminance of the text color
+		 * @param luminanceThreshold Threshold for determining light vs dark (default 0.5)
+		 * @param darkenFactor Multiplier for darkening light backgrounds (default 0.4 = 60% darker)
+		 * @param lightenOffset Additive offset for lightening dark backgrounds (default 0.3 = 30% brighter)
+		 */
+		void AdjustBackgroundForTextContrast(ImVec4& backgroundColor, float textLuminance,
+			float luminanceThreshold = 0.5f, float darkenFactor = 0.4f, float lightenOffset = 0.3f);
+
+		/**
+		 * Adjusts a text color to ensure sufficient contrast against a background
+		 * @param textColor The desired text color (semantic color)
+		 * @param backgroundColor The background color to contrast against
+		 * @param minimumRatio Minimum acceptable contrast ratio (default 3.0)
+		 * @return Adjusted text color with sufficient contrast
+		 */
+		ImVec4 AdjustColorForContrast(const ImVec4& textColor, const ImVec4& backgroundColor, float minimumRatio = 3.0f);
+
+		/**
+		 * Creates a selectable item with automatic contrast-aware text coloring
+		 * @param label Text to display
+		 * @param selected Whether the item is currently selected
+		 * @param flags Selectable flags (optional)
+		 * @param size Size of the selectable area (optional)
+		 * @return True if the selectable was clicked
+		 */
+		bool ContrastSelectable(const char* label, bool selected, ImGuiSelectableFlags flags = 0, const ImVec2& size = ImVec2(0, 0));
+
+		/**
+		 * Creates a selectable item with contrast-adjusted semantic text coloring
+		 * Preserves the intent of semantic colors while ensuring adequate contrast
+		 * @param label Text to display
+		 * @param selected Whether the item is currently selected
+		 * @param semanticTextColor The desired semantic color (will be adjusted for contrast)
+		 * @param flags Selectable flags (optional)
+		 * @param size Size of the selectable area (optional)
+		 * @return True if the selectable was clicked
+		 */
+		bool ContrastSelectableWithColor(const char* label, bool selected, const ImVec4& semanticTextColor, ImGuiSelectableFlags flags = 0, const ImVec2& size = ImVec2(0, 0));
+	}
 
 	bool PercentageSlider(const char* label, float* data, float lb = 0.f, float ub = 100.f, const char* format = "%.1f %%");
 	ImVec2 GetNativeViewportSizeScaled(float scale);

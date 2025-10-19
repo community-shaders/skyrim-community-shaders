@@ -10,8 +10,53 @@
 #include "ThemeManager.h"
 #include "Util.h"
 
+namespace
+{
+	class RoleFontGuard
+	{
+	public:
+		explicit RoleFontGuard(Menu::FontRole role)
+		{
+			Menu* menuInstance = globals::menu;
+			if (!menuInstance) {
+				logger::error("RoleFontGuard: globals::menu is null, cannot retrieve font for role");
+				return;
+			}
+
+			font_ = menuInstance->GetFont(role);
+			if (font_) {
+				ImGui::PushFont(font_);
+				fontPushed_ = true;
+			} else {
+				logger::warn("RoleFontGuard: Failed to retrieve font for role {}", static_cast<int>(role));
+			}
+		}
+
+		~RoleFontGuard()
+		{
+			if (fontPushed_) {
+				ImGui::PopFont();
+			}
+		}
+
+		RoleFontGuard(const RoleFontGuard&) = delete;
+		RoleFontGuard& operator=(const RoleFontGuard&) = delete;
+
+		[[nodiscard]] ImFont* Get() const { return font_; }
+
+	private:
+		ImFont* font_ = nullptr;
+		bool fontPushed_ = false;
+	};
+}
+
 void MenuHeaderRenderer::RenderHeader(bool isDocked, bool showLogo, bool canShowIcons, float uiScale, const Menu::UIIcons& uiIcons)
 {
+	if (!globals::menu) {
+		logger::error("MenuHeaderRenderer::RenderHeader: globals::menu is null, cannot render header");
+		return;
+	}
+
 	auto title = std::format("Community Shaders {}", Util::GetFormattedVersion(Plugin::VERSION));
 	auto actionIcons = BuildActionIcons(canShowIcons, uiIcons);
 
@@ -48,16 +93,22 @@ void MenuHeaderRenderer::RenderHeader(bool isDocked, bool showLogo, bool canShow
 				ImGui::SetCursorPosX(ImGui::GetCursorPosX() + ThemeManager::Constants::CURSOR_POSITION_PADDING);
 
 				// Use our helper to render aligned logo and text with perfect vertical alignment
-				Util::DrawAlignedTextWithLogo(
-					uiIcons.logo.texture,
-					logoSizeVec,
-					title.c_str(),
-					textScaleFactor);
+				{
+					RoleFontGuard headingFont(Menu::FontRole::Heading);
+					Util::DrawAlignedTextWithLogo(
+						uiIcons.logo.texture,
+						logoSizeVec,
+						title.c_str(),
+						textScaleFactor);
+				}
 			} else {
 				// No logo, just render the text with proper alignment
 				ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(0, 0));
 				ImGui::SetCursorPosX(ImGui::GetCursorPosX() + ThemeManager::Constants::CURSOR_POSITION_PADDING);
-				Util::DrawSharpText(title.c_str(), true, textScaleFactor);
+				{
+					RoleFontGuard headingFont(Menu::FontRole::Heading);
+					Util::DrawSharpText(title.c_str(), true, textScaleFactor);
+				}
 				ImGui::PopStyleVar();
 			}
 
@@ -72,7 +123,10 @@ void MenuHeaderRenderer::RenderHeader(bool isDocked, bool showLogo, bool canShow
 			const float textScaleFactor = baseTextScale * uiScale;  // Apply UI scale
 
 			ImGui::SetWindowFontScale(textScaleFactor);
-			ImGui::TextUnformatted(title.c_str());
+			{
+				RoleFontGuard headingFont(Menu::FontRole::Heading);
+				ImGui::TextUnformatted(title.c_str());
+			}
 			ImGui::SetWindowFontScale(1.0f);
 		}
 	}
@@ -90,8 +144,9 @@ void MenuHeaderRenderer::RenderHeader(bool isDocked, bool showLogo, bool canShow
 		if (ImGui::BeginTable("##ActionButtons", 4, ImGuiTableFlags_SizingStretchSame)) {
 			// Save Settings Button
 			ImGui::TableNextColumn();
-			if (ImGui::Button("Save Settings", { -1, 0 })) {
+			if (Util::ButtonWithFlash("Save Settings", { -1, 0 })) {
 				globals::state->Save();
+				globals::state->SaveTheme();
 			}
 
 			// Restore Saved Settings Button
@@ -174,7 +229,10 @@ std::vector<MenuHeaderRenderer::ActionIcon> MenuHeaderRenderer::BuildActionIcons
 	if (uiIcons.saveSettings.texture) {
 		actionIcons.push_back({ uiIcons.saveSettings.texture,
 			"Save Settings",
-			[]() { globals::state->Save(); } });
+			[]() {
+				globals::state->Save();
+				globals::state->SaveTheme();
+			} });
 	}
 	if (uiIcons.loadSettings.texture) {
 		actionIcons.push_back({ uiIcons.loadSettings.texture,

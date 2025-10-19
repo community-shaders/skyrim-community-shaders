@@ -30,8 +30,13 @@ namespace FrameAnnotations
 		static void thunk(RE::BSShader* shader, RE::BSRenderPass* pass, uint32_t renderFlags)
 		{
 			if (globals::state->frameAnnotations) {
-				const std::string passName = std::format("[{}:{:X}] <{}> {}", magic_enum::enum_name(ShaderType), pass->passEnum,
-					pass->accumulationHint, pass->geometry->name.c_str());
+				uint32_t descriptor = 0;
+				if (globals::game::currentPixelShader && *globals::game::currentPixelShader) {
+					descriptor = (*globals::game::currentPixelShader)->id;
+				}
+				std::string diskPath = std::format("Data/ShaderCache/{}/{:X}.pso", shader->fxpFilename, descriptor);
+				const std::string passName = std::format("[{}:{:X}] ({:X}) <{}> {} -> {}", magic_enum::enum_name(ShaderType), descriptor, pass->passEnum,
+					pass->accumulationHint, pass->geometry->name.c_str(), diskPath);
 				globals::state->BeginPerfEvent(passName);
 			}
 
@@ -916,6 +921,66 @@ namespace FrameAnnotations
 			RE::VTABLE_BSImagespaceShaderISUnderwaterMask[0]);
 		stl::write_vfunc<0xC, BSImagespaceShader_Dispatch<RE::ImageSpaceManager::ISWaterFlow>>(
 			RE::VTABLE_BSImagespaceShaderWaterFlow[0]);
+		// VR-only shaders
+		if (globals::game::isVR) {
+			stl::write_vfunc<0x1, BSImagespaceShader_Render<RE::ImageSpaceManager::ISCopyDepthBuffer>>(
+				RE::VTABLE_BSImagespaceShaderCopyDepthBuffer[3]);
+			stl::write_vfunc<0x1, BSImagespaceShader_Render<RE::ImageSpaceManager::ISCopyDepthBuffer_DR>>(
+				RE::VTABLE_BSImagespaceShaderCopyDepthBuffer_DR[3]);
+			stl::write_vfunc<0x1, BSImagespaceShader_Render<RE::ImageSpaceManager::ISDownsampleHierarchicalDepthBufferCS>>(
+				RE::VTABLE_BSImagespaceShaderISDownsampleHierarchicalDepthBufferCS[3]);
+			stl::write_vfunc<0x1, BSImagespaceShader_Render<RE::ImageSpaceManager::ISDiffScaleDownsampleDepthBufferCS>>(
+				RE::VTABLE_BSImagespaceShaderISDiffScaleDownsampleDepthBufferCS[3]);
+			stl::write_vfunc<0x1, BSImagespaceShader_Render<RE::ImageSpaceManager::ISFullScreenVR>>(
+				RE::VTABLE_BSImagespaceShaderISFullScreenVR[3]);
+			stl::write_vfunc<0x1, BSImagespaceShader_Render<RE::ImageSpaceManager::ISTransformLvl7PreTest>>(
+				RE::VTABLE_BSImagespaceShaderTransformLvl7PreTest[3]);
+			stl::write_vfunc<0x1, BSImagespaceShader_Render<RE::ImageSpaceManager::ISLvl6PreTest>>(
+				RE::VTABLE_BSImagespaceShaderLvl6PreTest[3]);
+			stl::write_vfunc<0x1, BSImagespaceShader_Render<RE::ImageSpaceManager::ISLvl5PreTest>>(
+				RE::VTABLE_BSImagespaceShaderLvl5PreTest[3]);
+			stl::write_vfunc<0x1, BSImagespaceShader_Render<RE::ImageSpaceManager::ISLvl4PreTest>>(
+				RE::VTABLE_BSImagespaceShaderLvl4PreTest[3]);
+			stl::write_vfunc<0x1, BSImagespaceShader_Render<RE::ImageSpaceManager::ISLvl3PreTest>>(
+				RE::VTABLE_BSImagespaceShaderLvl3PreTest[3]);
+			stl::write_vfunc<0x1, BSImagespaceShader_Render<RE::ImageSpaceManager::ISLvl2PreTest>>(
+				RE::VTABLE_BSImagespaceShaderLvl2PreTest[3]);
+			stl::write_vfunc<0x1, BSImagespaceShader_Render<RE::ImageSpaceManager::ISLvl1PreTest>>(
+				RE::VTABLE_BSImagespaceShaderLvl1PreTest[3]);
+			stl::write_vfunc<0x1, BSImagespaceShader_Render<RE::ImageSpaceManager::ISLvl0PreTest>>(
+				RE::VTABLE_BSImagespaceShaderLvl0PreTest[3]);
+			stl::write_vfunc<0x1, BSImagespaceShader_Render<RE::ImageSpaceManager::ISSetupPreTest>>(
+				RE::VTABLE_BSImagespaceShaderSetupPreTest[3]);
+
+			stl::write_vfunc<0xC, BSImagespaceShader_Dispatch<RE::ImageSpaceManager::ISCopyDepthBuffer>>(
+				RE::VTABLE_BSImagespaceShaderCopyDepthBuffer[0]);
+			stl::write_vfunc<0xC, BSImagespaceShader_Dispatch<RE::ImageSpaceManager::ISCopyDepthBuffer_DR>>(
+				RE::VTABLE_BSImagespaceShaderCopyDepthBuffer_DR[0]);
+			stl::write_vfunc<0xC, BSImagespaceShader_Dispatch<RE::ImageSpaceManager::ISDownsampleHierarchicalDepthBufferCS>>(
+				RE::VTABLE_BSImagespaceShaderISDownsampleHierarchicalDepthBufferCS[0]);
+			stl::write_vfunc<0xC, BSImagespaceShader_Dispatch<RE::ImageSpaceManager::ISDiffScaleDownsampleDepthBufferCS>>(
+				RE::VTABLE_BSImagespaceShaderISDiffScaleDownsampleDepthBufferCS[0]);
+			stl::write_vfunc<0xC, BSImagespaceShader_Dispatch<RE::ImageSpaceManager::ISFullScreenVR>>(
+				RE::VTABLE_BSImagespaceShaderISFullScreenVR[0]);
+			stl::write_vfunc<0xC, BSImagespaceShader_Dispatch<RE::ImageSpaceManager::ISTransformLvl7PreTest>>(
+				RE::VTABLE_BSImagespaceShaderTransformLvl7PreTest[0]);
+			stl::write_vfunc<0xC, BSImagespaceShader_Dispatch<RE::ImageSpaceManager::ISLvl6PreTest>>(
+				RE::VTABLE_BSImagespaceShaderLvl6PreTest[0]);
+			stl::write_vfunc<0xC, BSImagespaceShader_Dispatch<RE::ImageSpaceManager::ISLvl5PreTest>>(
+				RE::VTABLE_BSImagespaceShaderLvl5PreTest[0]);
+			stl::write_vfunc<0xC, BSImagespaceShader_Dispatch<RE::ImageSpaceManager::ISLvl4PreTest>>(
+				RE::VTABLE_BSImagespaceShaderLvl4PreTest[0]);
+			stl::write_vfunc<0xC, BSImagespaceShader_Dispatch<RE::ImageSpaceManager::ISLvl3PreTest>>(
+				RE::VTABLE_BSImagespaceShaderLvl3PreTest[0]);
+			stl::write_vfunc<0xC, BSImagespaceShader_Dispatch<RE::ImageSpaceManager::ISLvl2PreTest>>(
+				RE::VTABLE_BSImagespaceShaderLvl2PreTest[0]);
+			stl::write_vfunc<0xC, BSImagespaceShader_Dispatch<RE::ImageSpaceManager::ISLvl1PreTest>>(
+				RE::VTABLE_BSImagespaceShaderLvl1PreTest[0]);
+			stl::write_vfunc<0xC, BSImagespaceShader_Dispatch<RE::ImageSpaceManager::ISLvl0PreTest>>(
+				RE::VTABLE_BSImagespaceShaderLvl0PreTest[0]);
+			stl::write_vfunc<0xC, BSImagespaceShader_Dispatch<RE::ImageSpaceManager::ISSetupPreTest>>(
+				RE::VTABLE_BSImagespaceShaderSetupPreTest[0]);
+		}
 
 		stl::write_vfunc<0x2A, BSShaderAccumulator_FinishAccumulatingDispatch>(
 			RE::VTABLE_BSShaderAccumulator[0]);

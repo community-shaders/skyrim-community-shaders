@@ -1,6 +1,7 @@
 #include "SettingsOverrideManager.h"
 
 #include "FeatureIssues.h"
+#include "Util.h"
 
 #include <algorithm>
 #include <ctime>
@@ -279,7 +280,7 @@ void SettingsOverrideManager::RefreshOverrides()
 
 std::filesystem::path SettingsOverrideManager::GetOverridesDirectory() const
 {
-	return std::filesystem::path(OVERRIDES_DIR);
+	return Util::PathHelpers::GetOverridesPath();
 }
 
 json SettingsOverrideManager::LoadAppliedOverridesTracking() const
@@ -403,7 +404,7 @@ void SettingsOverrideManager::SaveAppliedOverridesTracking(const json& appliedOv
 
 std::filesystem::path SettingsOverrideManager::GetAppliedOverridesTrackingPath() const
 {
-	return std::filesystem::path(APPLIED_OVERRIDES_TRACKING_FILE);
+	return Util::PathHelpers::GetAppliedOverridesPath();
 }
 
 size_t SettingsOverrideManager::ApplyNewOverrides(json& baseSettings, json& appliedOverrides)
