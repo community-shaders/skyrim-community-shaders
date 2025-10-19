@@ -255,12 +255,12 @@ PS_OUTPUT main(PS_INPUT input)
 #		endif
 
 	if ((Permutation::ExtraShaderDescriptor & Permutation::ExtraFlags::IsSun)) {
-		float distanceFromCenter = length(input.TexCoord0.xy * 2.0 - 1.0); 
+		float distanceFromCenter = length(input.TexCoord0.xy * 2.0 - 1.0);
 
-		float sun = smoothstep(SharedData::enbSettings.ProceduralSunSize, 
-                               SharedData::enbSettings.ProceduralSunSize - SharedData::enbSettings.ProceduralSunEdgeSoftness * SharedData::enbSettings.ProceduralSunSize * 0.5, 
+		float sun = smoothstep(SharedData::enbSettings.ProceduralSunSize,
+                               SharedData::enbSettings.ProceduralSunSize - SharedData::enbSettings.ProceduralSunEdgeSoftness * SharedData::enbSettings.ProceduralSunSize * 0.5,
                                distanceFromCenter * 25.0);
-		
+
 		float sunGlow = SharedData::enbSettings.ProceduralSunGlowCurve > 0.0 ? pow(pow(saturate(1.0 - distanceFromCenter), rcp(SharedData::enbSettings.ProceduralSunGlowCurve)), 3.0) * SharedData::enbSettings.ProceduralSunGlowIntensity : 0.0;
 
 		baseColor = sun + sunGlow;

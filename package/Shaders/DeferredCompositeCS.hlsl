@@ -119,7 +119,7 @@ void SampleSSGISpecular(uint2 pixCoord, sh2 lobe, out float ao, out float3 il, i
 #		endif
 
 	sh2 skylighting = Skylighting::sample(SharedData::skylightingSettings, SkylightingProbeArray, stbn_vec3_2Dx1D_128x128x64, dispatchID.xy, positionMS.xyz, normalWS);
-	
+
 	float3 V = normalize(positionWS.xyz);
 	float3 R = reflect(V, normalWS);
 
@@ -131,12 +131,12 @@ void SampleSSGISpecular(uint2 pixCoord, sh2 lobe, out float ao, out float3 il, i
 	SampleSSGI(dispatchID.xy, normalWS, ssgiAo, ssgiIl);
 
 	float3 directionalAmbientColor = max(0, mul(SharedData::DirectionalAmbient, float4(normalWS, 1.0)));
-	
-	if (SharedData::enbSettings.Enable){		
+
+	if (SharedData::enbSettings.Enable){
 		sh2 shR = ImageBasedLighting::DiffuseSkyIBLTexture.Load(int3(0, 0, 0));
 		sh2 shG = ImageBasedLighting::DiffuseSkyIBLTexture.Load(int3(1, 0, 0));
 		sh2 shB = ImageBasedLighting::DiffuseSkyIBLTexture.Load(int3(2, 0, 0));
-  
+
 		float colorR = SphericalHarmonics::SHHallucinateZH3Irradiance(shR, -normalWS);
 		float colorG = SphericalHarmonics::SHHallucinateZH3Irradiance(shG, -normalWS);
 		float colorB = SphericalHarmonics::SHHallucinateZH3Irradiance(shB, -normalWS);

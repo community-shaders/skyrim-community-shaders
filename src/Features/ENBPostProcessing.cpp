@@ -70,7 +70,7 @@ ENBPostProcessing::PerFrame ENBPostProcessing::GetCommonBufferData()
 	data.VolumetricRaysColorFilter = settingManager.GetInterpolatedColorTimeOfDayValue("ColorFilter", "GAMEVOLUMETRICRAYS");
 
 	data.ProceduralSunSize = settingManager.GetValue<float>("Size", "PROCEDURALSUN");
-	data.ProceduralSunEdgeSoftness =settingManager.GetValue<float>("EdgeSoftness", "PROCEDURALSUN");
+	data.ProceduralSunEdgeSoftness = settingManager.GetValue<float>("EdgeSoftness", "PROCEDURALSUN");
 	data.ProceduralSunGlowIntensity = settingManager.GetInterpolatedTimeOfDayValue("GlowIntensity", "PROCEDURALSUN");
 	data.ProceduralSunGlowCurve = settingManager.GetInterpolatedTimeOfDayValue("GlowCurve", "PROCEDURALSUN");
 
@@ -110,7 +110,7 @@ float3 Curve(float3 color, float power)
 
 	return color;
 }
-	
+
 float3 Desaturation(float3 color, float desaturation)
 {
 	float luminance = color.Dot({ 1.0f / 3.0f, 1.0f / 3.0f, 1.0f / 3.0f });
@@ -164,7 +164,7 @@ void ENBPostProcessing::OverrideWeather(RE::Sky* a_sky)
 		dirLightColorF3 = Desaturation(dirLightColorF3, settingManager.GetInterpolatedTimeOfDayValue("DirectLightingDesaturation", "ENVIRONMENT"));
 		dirLightColorF3 = ColorFilter(dirLightColorF3, settingManager.GetInterpolatedColorTimeOfDayValue("DirectLightingColorFilter", "ENVIRONMENT"), settingManager.GetInterpolatedTimeOfDayValue("DirectLightingColorFilterAmount", "ENVIRONMENT"));
 		dirLightColorF3 = Intensity(dirLightColorF3, settingManager.GetInterpolatedTimeOfDayValue("DirectLightingIntensity", "ENVIRONMENT"));
-		
+
 		dirLightColorF3 /= !globals::game::isVR ? imageSpaceManager->GetRuntimeData().data.baseData.hdr.sunlightScale : imageSpaceManager->GetVRRuntimeData().data.baseData.hdr.sunlightScale;
 
 		dirLightColor = F3ToNi(dirLightColorF3);
@@ -204,7 +204,7 @@ void ENBPostProcessing::OverrideWeather(RE::Sky* a_sky)
 
 	{
 		auto fogAmountMultiplier = settingManager.GetInterpolatedTimeOfDayValue("FogAmountMultiplier", "ENVIRONMENT");
-		
+
 		a_sky->fogNear /= fogAmountMultiplier;
 		a_sky->fogFar /= fogAmountMultiplier;
 	}
@@ -237,7 +237,7 @@ void ENBPostProcessing::OverrideWeather(RE::Sky* a_sky)
 		auto& starsColor = colors[(uint)RE::TESWeather::ColorTypes::kStars];
 
 		float3 starsColorF3 = NiToF3(starsColor);
-		
+
 		starsColorF3 = Curve(starsColorF3, settingManager.GetInterpolatedTimeOfDayValue("StarsCurve", "SKY"));
 		starsColorF3 = Intensity(starsColorF3, settingManager.GetInterpolatedTimeOfDayValue("StarsIntensity", "SKY"));
 
@@ -312,7 +312,7 @@ struct Sky_UpdateColors
 {
 	static void thunk(RE::Sky* This, float a_delta)
 	{
-		func(This, a_delta);	
+		func(This, a_delta);
 		globals::features::enbPostProcessing.CheckCommonData();
 		if (globals::features::enbPostProcessing.enableEffect)
 			globals::features::enbPostProcessing.OverrideWeather(This);

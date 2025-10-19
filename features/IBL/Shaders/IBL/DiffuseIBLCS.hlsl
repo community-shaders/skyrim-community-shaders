@@ -36,7 +36,7 @@ void main(uint3 dispatchID : SV_DispatchThreadID, uint groupIndex : SV_GroupInde
 
 	// ENB compat
 	rayDir.z = -abs(rayDir.z);
-	
+
 	// Sample cubemap with optimized direction
 	float3 color = EnvTexture.SampleLevel(LinearSampler, -rayDir, 0).xyz;
 
