@@ -125,6 +125,7 @@ void SampleSSGISpecular(uint2 pixCoord, sh2 lobe, out float ao, out float3 il, i
 
 #if defined(SSGI)
 
+	if (depth < 1.0f) {
 	float ssgiAo;
 	float3 ssgiIl;
 	SampleSSGI(dispatchID.xy, normalWS, ssgiAo, ssgiIl);
