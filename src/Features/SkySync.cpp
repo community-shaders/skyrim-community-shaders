@@ -463,21 +463,21 @@ void SkySync::Moon_Update::thunk(RE::Moon* moon, RE::Sky* sky)
 	if (auto& singleton = globals::features::skySync; singleton.settings.Enabled) {
 		float* target = moon == sky->masser ? &singleton.masserPhaseIntensityFactor : &singleton.secundaPhaseIntensityFactor;
 		if (updateMoonTexture != moon->updateMoonTexture || *target <= 0.0f) {
-		// Gets the texture name of the current moon phase when it changes rather than reading direct global variables
-		// Allows for compatibility with other mods that don't directly update the in-game phase values
-		const auto moonShaderProperty = skyrim_cast<RE::BSSkyShaderProperty*>(moon->moonMesh->GetGeometryRuntimeData().properties[1].get());
-		if (!moonShaderProperty)
-			return;
+			// Gets the texture name of the current moon phase when it changes rather than reading direct global variables
+			// Allows for compatibility with other mods that don't directly update the in-game phase values
+			const auto moonShaderProperty = skyrim_cast<RE::BSSkyShaderProperty*>(moon->moonMesh->GetGeometryRuntimeData().properties[1].get());
+			if (!moonShaderProperty)
+				return;
 
-		const auto texture = moonShaderProperty->GetBaseTexture();
-		if (!texture)
-			return;
+			const auto texture = moonShaderProperty->GetBaseTexture();
+			if (!texture)
+				return;
 
-		const auto phase = Util::Moon::GetPhaseFromTexture(texture->name.c_str());
-		const float intensityFactor = Util::Moon::GetPhaseIntensityFactor(phase);
+			const auto phase = Util::Moon::GetPhaseFromTexture(texture->name.c_str());
+			const float intensityFactor = Util::Moon::GetPhaseIntensityFactor(phase);
 
-		*target = intensityFactor;
-	}
+			*target = intensityFactor;
+		}
 	}
 }
 
