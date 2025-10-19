@@ -202,7 +202,7 @@ namespace SharedData
 	{
 		bool Enable;
 		float3 pad;
-		
+
 		float GradientIntensity;
 		float GradientDesaturation;
 		float GradientTopIntensity;
@@ -229,7 +229,7 @@ namespace SharedData
 		float CloudsCurve;
 		float CloudsDesaturation;
 		float CloudsOpacity;
-		
+
 		float3 CloudsColorFilter;
 		float CloudsVertexAlphaBoost;
 
