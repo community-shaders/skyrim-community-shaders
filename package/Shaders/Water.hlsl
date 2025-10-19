@@ -48,7 +48,6 @@ VS_OUTPUT main(VS_INPUT input)
 	return vsout;
 }
 #	endif
-
 typedef VS_OUTPUT PS_INPUT;
 
 struct PS_OUTPUT
@@ -66,7 +65,6 @@ PS_OUTPUT main(PS_INPUT input)
 	return psout;
 }
 #	endif
-
 #else
 
 #	include "Common/FrameBuffer.hlsli"
@@ -95,7 +93,6 @@ struct VS_INPUT
 	float4 Color : COLOR0;
 #		endif
 #	endif
-
 #	if defined(LOD)
 	float4 Position : POSITION0;
 #		if defined(VC)
@@ -152,7 +149,8 @@ struct VS_OUTPUT
 
 	float4 NormalsScale : TEXCOORD8;
 #	if defined(UNIFIED_WATER)
-	float2 UnifiedWaveInfo : TEXCOORD9;
+	float4 UnifiedWaveInfo : TEXCOORD9;
+	float4 UnifiedWaveNormal : TEXCOORD10;
 #	endif
 #	if defined(VR)
 	float ClipDistance : SV_ClipDistance0;  // o11
@@ -203,31 +201,22 @@ struct UnifiedWave
 
 float3 EvaluateUnifiedWave(UnifiedWave wave, float2 position, float timeSeconds)
 {
-	// Proper Gerstner wave implementation based on GPU Gems Chapter 1
-	// w = 2π / wavelength (which is wave.waveNumber)
-	// phase = w * dot(D, position) + speed * time + offset
 	float spatialPhase = dot(wave.direction, position) * wave.waveNumber + wave.phaseOffset;
 	float phase = WrapUnifiedPhase(spatialPhase + wave.angularVelocity * timeSeconds);
-	
+
 	float sineValue;
 	float cosineValue;
 	sincos(phase, sineValue, cosineValue);
-	
-	// Clamp sine to positive values only to prevent waves going below baseline
-	// This prevents underwater terrain clipping
+
 	sineValue = max(sineValue, 0.0f);
-	
-	// Gerstner wave displacement:
-	// Horizontal: Q * A * cos(phase) * direction
-	// Vertical: A * sin(phase) - clamped to stay above baseline
-	// Q is steepness (controls how peaked the waves are)
+
 	float QA = wave.steepness * wave.amplitude;
 	float QAC = QA * cosineValue;
-	
+
 	return float3(
-		QAC * wave.direction.x,  // Horizontal X displacement
-		QAC * wave.direction.y,  // Horizontal Y displacement
-		wave.amplitude * sineValue  // Vertical displacement (clamped positive)
+		QAC * wave.direction.x,
+		QAC * wave.direction.y,
+		wave.amplitude * sineValue
 	);
 }
 
@@ -267,17 +256,14 @@ float noise2D(float2 p)
 {
 	float2 i = floor(p);
 	float2 f = frac(p);
-	
-	// Smooth interpolation
+
 	float2 u = f * f * (3.0 - 2.0 * f);
-	
-	// Sample 4 corners
+
 	float a = hash(i);
 	float b = hash(i + float2(1.0, 0.0));
 	float c = hash(i + float2(0.0, 1.0));
 	float d = hash(i + float2(1.0, 1.0));
-	
-	// Bilinear interpolation
+
 	return lerp(lerp(a, b, u.x), lerp(c, d, u.x), u.y);
 }
 
@@ -360,10 +346,10 @@ void GetBlendedShorelineData(float2 worldPos, out float2 shoreNormal, out float 
 	float totalWeight = 0.0f;
 
 	[unroll]
-	for (int row = 0; row < 3; ++row) {
-		float weight = basisY[row] * rowWeight[row];
-		blendedNormal += weight * rowNormal[row];
-		blendedDistance += weight * rowDistance[row];
+	for (int rowIdx = 0; rowIdx < 3; ++rowIdx) {
+		float weight = basisY[rowIdx] * rowWeight[rowIdx];
+		blendedNormal += weight * rowNormal[rowIdx];
+		blendedDistance += weight * rowDistance[rowIdx];
 		totalWeight += weight;
 	}
 
@@ -424,6 +410,8 @@ void GetBlendedShorelineData(float2 worldPos, out float2 shoreNormal, out float 
 	shoreNormal = variedNormal;
 	distanceToShore = baseDistanceCells;
 }
+
+float CalculateCellEdgeBlend(float2 worldPos, float blendDistance);
 
 float2 DetectShorelineDirection(float2 worldPos, out float shoreInfluence)
 {
@@ -521,10 +509,22 @@ float CalculateCellEdgeBlend(float2 worldPos, float blendDistance)
 	return smoothstep(0.0, blendZone, distToEdge);
 }
 
-float3 CalculateWaterDisplacement(float2 worldPos, float waveIntensity, float amplitudeMult, float speedMult, float steepnessMult, float timeSeconds, float dayPhase, float2 flowBiasDir, float flowBiasWeight, bool usePreviousFrame = false)
+struct WaveSample
 {
-	if (waveIntensity <= 0.0f)
-		return float3(0.0f, 0.0f, 0.0f);
+	float3 displacement;
+	float2 primaryDirection;
+	float shoreInfluence;
+};
+
+WaveSample CalculateWaterDisplacement(float2 worldPos, float waveIntensity, float amplitudeMult, float speedMult, float steepnessMult, float timeSeconds, float dayPhase, float2 flowBiasDir, float flowBiasWeight, bool usePreviousFrame = false)
+{
+	if (waveIntensity <= 0.0f) {
+		WaveSample zeroSample;
+		zeroSample.displacement = float3(0.0f, 0.0f, 0.0f);
+		zeroSample.primaryDirection = float2(0.0f, 1.0f);
+		zeroSample.shoreInfluence = 0.0f;
+		return zeroSample;
+	}
 
 	UnifiedWave waves[3];
 
@@ -643,10 +643,14 @@ float3 CalculateWaterDisplacement(float2 worldPos, float waveIntensity, float am
 		totalDisplacement += EvaluateUnifiedWave(waves[j], worldPos, timeSeconds);
 	}
 
-	return totalDisplacement;
+	WaveSample sample;
+	sample.displacement = totalDisplacement;
+	sample.primaryDirection = primaryDir;
+	sample.shoreInfluence = shoreInfluence;
+	return sample;
 }
 
-float3 CalculateGerstnerNormals(float2 worldPos, float waveIntensity, float amplitudeMult, float speedMult, float steepnessMult, float timeSeconds, float dayPhase)
+float3 CalculateGerstnerNormals(float2 worldPos, float waveIntensity, float amplitudeMult, float speedMult, float steepnessMult, float2 flowBiasDir, float flowBiasWeight, float timeSeconds, float dayPhase)
 {
 	if (waveIntensity <= 0.0f)
 		return float3(0.0f, 0.0f, 1.0f);
@@ -660,14 +664,12 @@ float3 CalculateGerstnerNormals(float2 worldPos, float waveIntensity, float ampl
 	// Larger sampling distance = smoother normals = less blurred appearance
 	const float epsilon = max(cellWorldSize * 0.008f, 20.0f);  // Increased from 0.003 / 6.0
 
-	const float2 zeroFlowDir = float2(0.0f, 0.0f);
-	const float zeroFlowWeight = 0.0f;
-	float3 center = CalculateWaterDisplacement(worldPos, waveIntensity, amplitudeMult, speedMult, steepnessMult, timeSeconds, dayPhase, zeroFlowDir, zeroFlowWeight);
-	float3 offsetX = CalculateWaterDisplacement(worldPos + float2(epsilon, 0.0f), waveIntensity, amplitudeMult, speedMult, steepnessMult, timeSeconds, dayPhase, zeroFlowDir, zeroFlowWeight);
-	float3 offsetY = CalculateWaterDisplacement(worldPos + float2(0.0f, epsilon), waveIntensity, amplitudeMult, speedMult, steepnessMult, timeSeconds, dayPhase, zeroFlowDir, zeroFlowWeight);
+	WaveSample centerSample = CalculateWaterDisplacement(worldPos, waveIntensity, amplitudeMult, speedMult, steepnessMult, timeSeconds, dayPhase, flowBiasDir, flowBiasWeight, false);
+	WaveSample offsetXSample = CalculateWaterDisplacement(worldPos + float2(epsilon, 0.0f), waveIntensity, amplitudeMult, speedMult, steepnessMult, timeSeconds, dayPhase, flowBiasDir, flowBiasWeight, false);
+	WaveSample offsetYSample = CalculateWaterDisplacement(worldPos + float2(0.0f, epsilon), waveIntensity, amplitudeMult, speedMult, steepnessMult, timeSeconds, dayPhase, flowBiasDir, flowBiasWeight, false);
 
-	float3 tangentX = float3(epsilon, 0.0f, offsetX.z - center.z);
-	float3 tangentY = float3(0.0f, epsilon, offsetY.z - center.z);
+	float3 tangentX = float3(epsilon, 0.0f, offsetXSample.displacement.z - centerSample.displacement.z);
+	float3 tangentY = float3(0.0f, epsilon, offsetYSample.displacement.z - centerSample.displacement.z);
 
 	return normalize(cross(tangentY, tangentX));
 }
@@ -723,7 +725,8 @@ VS_OUTPUT main(VS_INPUT input)
 	);
 	vsout.NormalsScale = NormalsScale;
 #	if defined(UNIFIED_WATER)
-	vsout.UnifiedWaveInfo = 0.0.xx;
+	vsout.UnifiedWaveInfo = 0.0.xxxx;
+	vsout.UnifiedWaveNormal = float4(0.0f, 0.0f, 1.0f, 0.0f);
 #	endif
 
 	float4 inputPosition = float4(input.Position.xyz, 1.0);
@@ -756,15 +759,21 @@ VS_OUTPUT main(VS_INPUT input)
 	float waveTimeSeconds = ComputeWaveTimeSeconds(GameTimeHours, RealTimeSeconds);
 	float waveDayPhase = ComputeWaveDayPhase(GameTimeHours);
 	// Current frame uses current shoreline data
-	float3 waveDisplacement = CalculateWaterDisplacement(waveWorldPos, WaveIntensity, WaveAmplitude, WaveSpeed, WaveSteepness, waveTimeSeconds, waveDayPhase, flowBiasDirVS, flowBiasWeightVS, false);
+	WaveSample currentWave = CalculateWaterDisplacement(waveWorldPos, WaveIntensity, WaveAmplitude, WaveSpeed, WaveSteepness, waveTimeSeconds, waveDayPhase, flowBiasDirVS, flowBiasWeightVS, false);
+	float3 waveDisplacement = currentWave.displacement;
 	float horizontalDisplacement = length(waveDisplacement.xy);
-	vsout.UnifiedWaveInfo = float2(waveDisplacement.z, horizontalDisplacement);
+	// xy = wave direction, z = crest height, w = shoreline influence strength
+	vsout.UnifiedWaveInfo = float4(currentWave.primaryDirection, waveDisplacement.z, currentWave.shoreInfluence);
+	float3 gerstnerNormalVS = CalculateGerstnerNormals(waveWorldPos, WaveIntensity, WaveAmplitude, WaveSpeed, WaveSteepness, flowBiasDirVS, flowBiasWeightVS, waveTimeSeconds, waveDayPhase);
+	// xyz = Gerstner normal, w = lateral displacement magnitude used for weighting
+	vsout.UnifiedWaveNormal = float4(gerstnerNormalVS, horizontalDisplacement);
 	currentPosition.xyz += waveDisplacement;
 
 	// Previous frame uses previous shoreline data for TAA consistency
 	float waveTimeSecondsPrev = ComputeWaveTimeSeconds(PrevGameTimeHours, PrevRealTimeSeconds);
 	float waveDayPhasePrev = ComputeWaveDayPhase(PrevGameTimeHours);
-	float3 prevWaveDisplacement = CalculateWaterDisplacement(waveWorldPos, WaveIntensity, WaveAmplitude, WaveSpeed, WaveSteepness, waveTimeSecondsPrev, waveDayPhasePrev, flowBiasDirVS, flowBiasWeightVS, true);
+	WaveSample prevWave = CalculateWaterDisplacement(waveWorldPos, WaveIntensity, WaveAmplitude, WaveSpeed, WaveSteepness, waveTimeSecondsPrev, waveDayPhasePrev, flowBiasDirVS, flowBiasWeightVS, true);
+	float3 prevWaveDisplacement = prevWave.displacement;
 	previousPosition.xyz += prevWaveDisplacement;
 
 	inputPosition = currentPosition;
@@ -774,7 +783,7 @@ VS_OUTPUT main(VS_INPUT input)
 	worldPos = mul(World[eyeIndex], inputPosition);
 	worldViewPos = mul(WorldViewProj[eyeIndex], inputPosition);
 #endif
-
+// #endif
 #if defined(UNIFIED_WATER) && !defined(STENCIL)
 	float2 shorelineWorldPos = waveWorldPos;
 #endif
@@ -1263,7 +1272,7 @@ FlowmapData GetFlowmapDataTextureSpace(PS_INPUT input, float2 uvShift)
  * @details This function:
  *          - Samples the flowmap texture at the specified UV coordinates
  *          - Decodes flow direction from RG channels (remapped from [0,1] to [-1,1])
- *          - Applies shoreline influence to bend flow toward shores
+ *          - Aligns decoded flow direction with the Gerstner wave heading exported by the VS
  *          - Calculates flow strength using the blue channel with sqrt falloff
  *          - Applies transpose rotation matrix to transform flow direction to UV space
  *          - Scales flow vector by world position and strength factors
@@ -1285,22 +1294,15 @@ FlowmapData GetFlowmapDataUV(PS_INPUT input, float2 uvShift)
 	float2 finalFlowDir = normalizedFlowDir;
 
 #if defined(UNIFIED_WATER)
-	// Apply shoreline influence to bend flow direction toward shores
-	float shoreInfluence = 0.0f;
-	uint eyeIndex = Stereo::GetEyeIndexPS(input.HPosition, VPOSOffset);
-	float2 worldPos = input.WPosition.xz + (FrameBuffer::CameraPosAdjust[eyeIndex].xz - FrameBuffer::CameraPosAdjust[0].xz);
-	float2 shoreNormal = DetectShorelineDirection(worldPos, shoreInfluence);
-
-	if (shoreInfluence > 0.001f) {
-		// Shore perpendicular = direction toward shore
-		float2 shorePerp = float2(-shoreNormal.y, shoreNormal.x);
-
-		// Smoothly blend flowmap direction toward shore based on proximity
-		// Use stronger influence (0.85) to make shore-directed flow more visible
-		float blendFactor = shoreInfluence * 0.85f;
-		float2 blendedDir = lerp(finalFlowDir, shorePerp, blendFactor);
-		float blendedLenSq = dot(blendedDir, blendedDir);
-		finalFlowDir = (blendedLenSq > 1e-5f) ? blendedDir * rsqrt(blendedLenSq) : shorePerp;
+	float2 waveDir = input.UnifiedWaveInfo.xy;
+	float waveDirLenSq = dot(waveDir, waveDir);
+	if (waveDirLenSq > 1e-5f) {
+		float2 normalizedWaveDir = waveDir * rsqrt(waveDirLenSq);
+		float waveMotion = saturate(input.UnifiedWaveNormal.w * 0.1f);
+		float alignStrength = saturate(input.UnifiedWaveInfo.w + waveMotion);
+		float2 alignedDir = lerp(finalFlowDir, normalizedWaveDir, alignStrength);
+		float alignedLenSq = dot(alignedDir, alignedDir);
+		finalFlowDir = (alignedLenSq > 1e-5f) ? alignedDir * rsqrt(alignedLenSq) : normalizedWaveDir;
 	}
 #endif
 
@@ -1343,7 +1345,7 @@ float3 GetFlowmapNormal(PS_INPUT input, float2 uvShift, float multiplier, float 
  * @details This function:
  *          - Samples raw flowmap data (before UV-space transformations)
  *          - Decodes flow direction from flowmap RG channels
- *          - Applies shoreline influence to bend flow toward shores
+ *          - Aligns decoded flow direction with the Gerstner wave heading exported by the VS
  *          - Applies component-wise directional transformation
  *          - Returns complete flowmap data with world-space flow vector
  *
@@ -1359,65 +1361,18 @@ FlowmapData GetFlowmapDataWorldSpace(PS_INPUT input, float2 uvShift)
 	float2 finalFlowDir = normalizedFlowDir;
 
 #if defined(UNIFIED_WATER)
-	// Apply shoreline influence to bend flow direction toward shores
-	float shoreInfluence = 0.0f;
-	uint eyeIndex = Stereo::GetEyeIndexPS(input.HPosition, VPOSOffset);
-	float2 worldPos = input.WPosition.xz + (FrameBuffer::CameraPosAdjust[eyeIndex].xz - FrameBuffer::CameraPosAdjust[0].xz);
-	float2 shoreNormal = DetectShorelineDirection(worldPos, shoreInfluence);
-
-	if (shoreInfluence > 0.001f) {
-		// Shore perpendicular = direction toward shore
-		float2 shorePerp = float2(-shoreNormal.y, shoreNormal.x);
-		float shorePerpLenSq = dot(shorePerp, shorePerp);
-		shorePerp = (shorePerpLenSq > 1e-5f) ? shorePerp * rsqrt(shorePerpLenSq) : float2(0.0f, 1.0f);
-
-		// Blend flowmap direction toward shore based on proximity
-		float blendFactor = shoreInfluence * 0.75f;
-		float2 blendedDir = lerp(finalFlowDir, shorePerp, blendFactor);
-		float blendedLenSq = dot(blendedDir, blendedDir);
-		finalFlowDir = (blendedLenSq > 1e-5f) ? blendedDir * rsqrt(blendedLenSq) : shorePerp;
+	float2 waveDir = input.UnifiedWaveInfo.xy;
+	float waveDirLenSq = dot(waveDir, waveDir);
+	if (waveDirLenSq > 1e-5f) {
+		float2 normalizedWaveDir = waveDir * rsqrt(waveDirLenSq);
+		float waveMotion = saturate(input.UnifiedWaveNormal.w * 0.1f);
+		float alignStrength = saturate(input.UnifiedWaveInfo.w + waveMotion);
+		float2 alignedDir = lerp(finalFlowDir, normalizedWaveDir, alignStrength);
+		float alignedLenSq = dot(alignedDir, alignedDir);
+		finalFlowDir = (alignedLenSq > 1e-5f) ? alignedDir * rsqrt(alignedLenSq) : normalizedWaveDir;
 	}
 #endif
 
-	data.flowVector = data.flowVector * finalFlowDir;  // Transform to world space
-	return data;
-}
-
-/**
- * Converts existing texture-space flowmap data to world-space (avoids duplicate sampling)
- *
- * @param textureSpaceData FlowmapData from GetFlowmapDataTextureSpace()
- * @param worldPos World position for shoreline influence calculation
- * @return FlowmapData Complete flowmap data with world-space flow vector
- *
- * @note Use this overload when you already have texture-space flowmap data to avoid duplicate texture sampling
- */
-FlowmapData GetFlowmapDataWorldSpace(FlowmapData textureSpaceData, float2 worldPos)
-{
-	FlowmapData data = textureSpaceData;
-	float2 rawFlowDir = -(data.color.xy * 2 - 1);    // Decode direction with 180° correction
-	float rawDirLenSq = dot(rawFlowDir, rawFlowDir);
-	float2 normalizedFlowDir = (rawDirLenSq > 1e-5f) ? rawFlowDir * rsqrt(rawDirLenSq) : float2(0.0f, 1.0f);
-	float2 finalFlowDir = normalizedFlowDir;
-
-#if defined(UNIFIED_WATER)
-	// Apply shoreline influence to bend flow direction toward shores
-	float shoreInfluence = 0.0f;
-	float2 shoreNormal = DetectShorelineDirection(worldPos, shoreInfluence);
-
-	if (shoreInfluence > 0.001f) {
-		// Shore perpendicular = direction toward shore
-		float2 shorePerp = float2(-shoreNormal.y, shoreNormal.x);
-		float shorePerpLenSq = dot(shorePerp, shorePerp);
-		shorePerp = (shorePerpLenSq > 1e-5f) ? shorePerp * rsqrt(shorePerpLenSq) : float2(0.0f, 1.0f);
-
-		// Blend flowmap direction toward shore based on proximity
-		float blendFactor = shoreInfluence * 0.75f;
-		float2 blendedDir = lerp(finalFlowDir, shorePerp, blendFactor);
-		float blendedLenSq = dot(blendedDir, blendedDir);
-		finalFlowDir = (blendedLenSq > 1e-5f) ? blendedDir * rsqrt(blendedLenSq) : shorePerp;
-	}
-#endif
 	data.flowVector = data.flowVector * finalFlowDir;  // Transform to world space
 	return data;
 }
@@ -1439,6 +1394,7 @@ FlowmapData GetFlowmapDataWorldSpace(FlowmapData textureSpaceData, float2 worldP
  * @param timer Time value for animation
  * @return float3 (cos(phase), sin(phase), frequency)
  */
+
 float3 GerstnerWaveValues(float2 position, float2 direction, float amplitude, float wavelength, float steepness, float timer)
 {
 	float w = 2.0 * 3.14159265 / wavelength;
@@ -1455,6 +1411,7 @@ float3 GerstnerWaveValues(float2 position, float2 direction, float amplitude, fl
  * @param vals Wave values from GerstnerWaveValues
  * @return Normal contribution
  */
+
 float3 GerstnerWaveNormal(float2 direction, float amplitude, float steepness, float3 vals)
 {
 	float C = vals.x;
@@ -1474,6 +1431,7 @@ float3 GerstnerWaveNormal(float2 direction, float amplitude, float steepness, fl
  * @param vals Wave values from GerstnerWaveValues
  * @return 3D displacement vector
  */
+
 float3 GerstnerWaveDisplacement(float2 direction, float amplitude, float steepness, float3 vals)
 {
 	float C = vals.x;
@@ -1490,6 +1448,7 @@ float3 GerstnerWaveDisplacement(float2 direction, float amplitude, float steepne
  * @param waveIntensity Overall wave intensity multiplier
  * @return Enhanced normal with wave displacement
  */
+
 float3 ComputeEnhancedWaveNormal(float3 worldPos, float3 baseNormal, float timer, float waveIntensity)
 {
 	if (waveIntensity < 0.01) return baseNormal;
@@ -1513,7 +1472,7 @@ float3 ComputeEnhancedWaveNormal(float3 worldPos, float3 baseNormal, float timer
 	
 	// Blend wave normals with base normal
 	combinedNormal = normalize(baseNormal + waveIntensity * (normal1 * 0.5 + normal2 * 0.3 + normal3 * 0.2));
-	
+
 	return combinedNormal;
 }
 
@@ -1813,6 +1772,17 @@ WaterNormalData GetWaterNormal(PS_INPUT input, float distanceFactor, float norma
 		0.04));
 	finalNormal = lerp(displacement, finalNormal, displacement.z);
 #			endif
+
+#	if defined(UNIFIED_WATER)
+	float3 waveNormalPS = input.UnifiedWaveNormal.xyz;
+	float waveNormalLenSq = dot(waveNormalPS, waveNormalPS);
+	if (waveNormalLenSq > 1e-5f) {
+		waveNormalPS *= rsqrt(waveNormalLenSq);
+		float waveMotion = saturate(input.UnifiedWaveNormal.w * 0.12f);
+		float waveInfluence = saturate(input.UnifiedWaveInfo.w + waveMotion);
+		finalNormal = normalize(lerp(finalNormal, waveNormalPS, waveInfluence));
+	}
+#	endif
 
 #			if defined(WETNESS_EFFECTS)
 	// Wetness Effects Debug System:
