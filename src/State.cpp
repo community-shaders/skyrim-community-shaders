@@ -804,7 +804,7 @@ void State::UpdateSharedData([[maybe_unused]] bool a_inWorld, [[maybe_unused]] b
 				data.SecundaColor = color;
 			}
 		}
-		
+
 		sharedDataCB->Update(data);
 	}
 

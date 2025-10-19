@@ -12,7 +12,23 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 
 void SkySync::DrawSettings()
 {
-	ImGui::Checkbox("Enabled", &settings.Enabled);
+	if (ImGui::Checkbox("Enabled", &settings.Enabled)) {
+		shadowFader.Reset();
+
+		if (!settings.Enabled) {
+			auto sky = RE::Sky::GetSingleton();
+			if (sky && sky->sun && sky->sun->light) {
+				auto dir = sky->sun->light->local.rotate.GetVectorX();
+				if (dir.Unitize() < FLT_EPSILON)
+					dir = { 0.0f, 0.0f, 1.0f };
+
+				ShadowFader::SetLighting(sky->sun, dir, 1.0f);
+				SetSunBaseVisibility(sky->sun, 1.0f);
+			}
+
+			volumetricLightingIntensityFactor = 1.0f;
+		}
+	}
 
 	ImGui::Checkbox("Use alternate sun path", &settings.UseAlternateSunPath);
 
@@ -209,10 +225,13 @@ void SkySync::ProcessMoon(const RE::Moon* moon, const float time, const Caster t
 	const float moonRadius = type == Caster::Masser ? static_cast<float>(*gMasserSize) : static_cast<float>(*gSecundaSize);
 	float intensity = CalculateVisibility(dir, moon->moonMesh->local.translate.y, moonRadius);
 
-	if (type == Caster::Masser)
-		intensity *= masserPhaseIntensityFactor;
-	else if (type == Caster::Secunda)
-		intensity *= secundaPhaseIntensityFactor * Util::Moon::SecundaIntensityFactor;
+	if (type == Caster::Masser) {
+		const float factor = masserPhaseIntensityFactor > 0.0f ? masserPhaseIntensityFactor : 1.0f;
+		intensity *= factor;
+	} else if (type == Caster::Secunda) {
+		const float factor = secundaPhaseIntensityFactor > 0.0f ? secundaPhaseIntensityFactor : 1.0f;
+		intensity *= factor * Util::Moon::SecundaIntensityFactor;
+	}
 
 	if (time >= timings.sunriseFadeOutMoonStart && time <= timings.sunriseFadeOutMoonEnd)
 		intensity *= SmoothStep(timings.sunriseFadeOutMoonEnd, timings.sunriseFadeOutMoonStart, time);
@@ -441,22 +460,24 @@ void SkySync::Moon_Update::thunk(RE::Moon* moon, RE::Sky* sky)
 
 	func(moon, sky);
 
-	if (auto& singleton = globals::features::skySync; singleton.settings.Enabled && updateMoonTexture != moon->updateMoonTexture) {
-		// Gets the texture name of the current moon phase when it changes rather than reading direct global variables
-		// Allows for compatibility with other mods that don't directly update the in-game phase values
-		const auto moonShaderProperty = skyrim_cast<RE::BSSkyShaderProperty*>(moon->moonMesh->GetGeometryRuntimeData().properties[1].get());
-		if (!moonShaderProperty)
-			return;
-
-		const auto texture = moonShaderProperty->GetBaseTexture();
-		if (!texture)
-			return;
-
-		const auto phase = Util::Moon::GetPhaseFromTexture(texture->name.c_str());
-		const float intensityFactor = Util::Moon::GetPhaseIntensityFactor(phase);
-
+	if (auto& singleton = globals::features::skySync; singleton.settings.Enabled) {
 		float* target = moon == sky->masser ? &singleton.masserPhaseIntensityFactor : &singleton.secundaPhaseIntensityFactor;
-		*target = intensityFactor;
+		if (updateMoonTexture != moon->updateMoonTexture || *target <= 0.0f) {
+			// Gets the texture name of the current moon phase when it changes rather than reading direct global variables
+			// Allows for compatibility with other mods that don't directly update the in-game phase values
+			const auto moonShaderProperty = skyrim_cast<RE::BSSkyShaderProperty*>(moon->moonMesh->GetGeometryRuntimeData().properties[1].get());
+			if (!moonShaderProperty)
+				return;
+
+			const auto texture = moonShaderProperty->GetBaseTexture();
+			if (!texture)
+				return;
+
+			const auto phase = Util::Moon::GetPhaseFromTexture(texture->name.c_str());
+			const float intensityFactor = Util::Moon::GetPhaseIntensityFactor(phase);
+
+			*target = intensityFactor;
+		}
 	}
 }
 

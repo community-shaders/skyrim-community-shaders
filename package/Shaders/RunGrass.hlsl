@@ -747,10 +747,10 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #				endif  // SKYLIGHTING
 
 #				if defined(IBL)
-	if (SharedData::iblSettings.EnableDiffuseIBL) {	
+	if (SharedData::iblSettings.EnableDiffuseIBL) {
 		float3 iblColor = ImageBasedLighting::GetIBLColor(-normal);
-		directionalAmbientColor += iblColor * SharedData::enbSettings.IBLMultiplicativeAmount;		
-		directionalAmbientColorAdditive += iblColor * SharedData::enbSettings.IBLAdditiveAmount;		
+		directionalAmbientColor += iblColor * SharedData::enbSettings.IBLMultiplicativeAmount;
+		directionalAmbientColorAdditive += iblColor * SharedData::enbSettings.IBLAdditiveAmount;
 	}
 #				endif
 
@@ -938,8 +938,8 @@ PS_OUTPUT main(PS_INPUT input)
 #			if defined(IBL)
 	if (SharedData::iblSettings.EnableDiffuseIBL) {
 		float3 iblColor = ImageBasedLighting::GetIBLColor(-normal);
-		directionalAmbientColor += iblColor * SharedData::enbSettings.IBLMultiplicativeAmount;				
-		directionalAmbientColorAdditive += iblColor * SharedData::enbSettings.IBLAdditiveAmount;				
+		directionalAmbientColor += iblColor * SharedData::enbSettings.IBLMultiplicativeAmount;
+		directionalAmbientColorAdditive += iblColor * SharedData::enbSettings.IBLAdditiveAmount;
 	}
 #			endif
 

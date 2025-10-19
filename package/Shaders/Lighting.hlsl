@@ -2744,7 +2744,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #	if defined(IBL)
 	if (SharedData::iblSettings.EnableDiffuseIBL && inWorld) {
 		float3 iblColor = ImageBasedLighting::GetIBLColor(-ambientNormal);
-		directionalAmbientColor += iblColor * SharedData::enbSettings.IBLMultiplicativeAmount;		
+		directionalAmbientColor += iblColor * SharedData::enbSettings.IBLMultiplicativeAmount;
 		directionalAmbientColorAdditive += iblColor * SharedData::enbSettings.IBLAdditiveAmount;
 	}
 #	endif
