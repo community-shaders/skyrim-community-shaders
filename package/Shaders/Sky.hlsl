@@ -279,8 +279,7 @@ PS_OUTPUT main(PS_INPUT input)
 
 #		if defined(DITHER)
 	float2 noiseGradUv = float2(0.125, 0.125) * input.Position.xy;
-	float noiseGrad = TexNoiseGradSampler.Sample(SampNoiseGradSampler, noiseGradUv).x * 2.0 - 1.0;
-	noiseGrad *= 0.05;
+	float noiseGrad = TexNoiseGradSampler.Sample(SampNoiseGradSampler, noiseGradUv).x * 0.03125 + -0.0078125;
 
 #			ifdef TEX
 	psout.Color.xyz = (input.Color.xyz * baseColor.xyz) + noiseGrad;
@@ -327,7 +326,7 @@ PS_OUTPUT main(PS_INPUT input)
 		float3 masserPhase = pow(saturate(dot(normalize(input.WorldPosition.xyz), SharedData::MasserDirection.xyz)), 20.0) * SharedData::MasserColor.xyz * SharedData::enbSettings.CloudsEdgeMoonMultiplier;
 		float3 secundaPhase = pow(saturate(dot(normalize(input.WorldPosition.xyz), SharedData::SecundaDirection.xyz)), 20.0) * SharedData::SecundaColor.xyz * SharedData::enbSettings.CloudsEdgeMoonMultiplier;
 
-		float3 cloudsScatter = (sunPhase + masserPhase + secundaPhase) * cloudsEdgeAlpha * SharedData::enbSettings.CloudsEdgeIntensity * 5.0;
+		float3 cloudsScatter = (sunPhase + masserPhase + secundaPhase) * cloudsEdgeAlpha * SharedData::enbSettings.CloudsEdgeIntensity;
 
 		psout.Color.xyz = psout.Color.xyz + psout.Color.xyz * cloudsScatter;
 	}

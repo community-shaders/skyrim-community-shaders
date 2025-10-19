@@ -964,10 +964,6 @@ float3 GetSunColor(float3 normal, float3 viewDirection)
 #			include "InverseSquareLighting/InverseSquareLighting.hlsli"
 #		endif
 
-#		if defined(IBL)
-#			include "IBL/IBL.hlsli"
-#		endif
-
 PS_OUTPUT main(PS_INPUT input)
 {
 	PS_OUTPUT psout;
@@ -1125,11 +1121,6 @@ PS_OUTPUT main(PS_INPUT input)
 	float specularFraction = lerp(1, fresnel * diffuseOutput.refractionMul, distanceFactor);
 	float3 finalColorPreFog = lerp(diffuseColor, specularColor, specularFraction) + sunColor * depthControl.w;
 	float3 fogColor = input.FogParam.xyz;
-#						if defined(IBL)
-	if (SharedData::iblSettings.EnableDiffuseIBL && !SharedData::InInterior) {
-		fogColor = ImageBasedLighting::GetFogIBLColor(fogColor);
-	}
-#						endif
 	float3 finalColor = lerp(finalColorPreFog, fogColor * PosAdjust[eyeIndex].w, input.FogParam.w);
 #						if defined(WETNESS_EFFECTS) && defined(DEBUG_WETNESS_EFFECTS)
 	// DEBUG MODE: Override water color with debug visualization
@@ -1143,22 +1134,12 @@ PS_OUTPUT main(PS_INPUT input)
 	float specularFraction = lerp(1, fresnel, distanceFactor);
 	float3 finalColorPreFog = lerp(diffuseOutput.refractionDiffuseColor, specularColor, specularFraction) + sunColor * depthControl.w;
 	float3 preFogColor = input.FogParam.xyz;
-#						if defined(IBL)
-	if (SharedData::iblSettings.EnableDiffuseIBL && !SharedData::InInterior) {
-		preFogColor = ImageBasedLighting::GetFogIBLColor(preFogColor);
-	}
-#						endif
 	finalColorPreFog = lerp(finalColorPreFog, preFogColor * PosAdjust[eyeIndex].w, input.FogParam.w);
 
 	float3 refractionColor = diffuseOutput.refractionColor;
 
 	float fogFactor = min(FogParam.w, pow(saturate(-diffuseOutput.depth * FogParam.y - FogParam.x), FogParam.z));
 	float3 fogColor = lerp(FogNearColor.xyz, FogFarColor.xyz, fogFactor);
-#						if defined(IBL)
-	if (SharedData::iblSettings.EnableDiffuseIBL && !SharedData::InInterior) {
-		fogColor = ImageBasedLighting::GetFogIBLColor(fogColor);
-	}
-#						endif
 	refractionColor = lerp(refractionColor, fogColor, fogFactor);
 
 	float3 finalColor = lerp(refractionColor, finalColorPreFog, diffuseOutput.refractionMul);
