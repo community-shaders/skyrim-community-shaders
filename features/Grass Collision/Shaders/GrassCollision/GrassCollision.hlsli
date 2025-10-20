@@ -68,12 +68,10 @@ namespace GrassCollision
 			collisionSample = lerp(ZRANGE.x, ZRANGE.y, collisionSample);
 
 			collisionHeights += collisionSample.x * w;
-			collisionAmount += max(0, worldPosition.z - collisionSample.x) * ProceduralAnimation(collisionSample.y - collisionSample.x, distanceFromCenter) * w;
-			collisionAmount = min(collisionAmount, maximumDepth);
+			collisionAmount += max(0, min(maximumDepth, worldPosition.z - collisionSample.x)) * ProceduralAnimation(collisionSample.y - collisionSample.x, distanceFromCenter) * w;
 
 			previousCollisionHeights += collisionSample.z * w;
-			previousCollisionAmount += max(0, worldPosition.z - collisionSample.z) * ProceduralAnimation(collisionSample.w - collisionSample.z, distanceFromCenter) * w;
-			previousCollisionAmount = min(previousCollisionAmount, maximumDepth);
+			previousCollisionAmount += max(0, min(maximumDepth, worldPosition.z - collisionSample.z)) * ProceduralAnimation(collisionSample.w - collisionSample.z, distanceFromCenter) * w;
 
 			wsum += w;
 		}
@@ -148,7 +146,7 @@ namespace GrassCollision
 			float3 remappedWorldPosition = lerp(worldPosition, worldPositionCentre, float3(0.95, 0.95, 0.0));
 
 			float distanceFromCenter = length(worldPosition - worldPositionCentre) + 0.01;
-			float maximumDepth = max(0.0, worldPosition.z - worldPositionCentre.z);
+			float maximumDepth = worldPosition.z - worldPositionCentre.z;
 
 			// Return base collision
 			float3 collision, previousCollision;
