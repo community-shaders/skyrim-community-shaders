@@ -104,8 +104,10 @@ void SampleSSGISpecular(uint2 pixCoord, sh2 lobe, out float ao, out float3 il, i
 	positionWS = mul(FrameBuffer::CameraViewProjInverse[eyeIndex], positionWS);
 	positionWS.xyz = positionWS.xyz / positionWS.w;
 
-	if (depth == 1.0)
+	if (depth == 1.0){
 		MotionVectorsRW[dispatchID.xy] = MotionBlur::GetSSMotionVector(positionWS, positionWS, eyeIndex);  // Apply sky motion vectors
+		return;
+	}
 
 	float glossiness = normalGlossiness.z;
 
@@ -124,8 +126,6 @@ void SampleSSGISpecular(uint2 pixCoord, sh2 lobe, out float ao, out float3 il, i
 	float3 R = reflect(V, normalWS);
 
 #if defined(SSGI)
-
-	if (depth < 1.0f) {
 	float ssgiAo;
 	float3 ssgiIl;
 	SampleSSGI(dispatchID.xy, normalWS, ssgiAo, ssgiIl);
