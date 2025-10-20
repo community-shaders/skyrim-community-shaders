@@ -80,6 +80,7 @@ private:
 		Heights heights{};
 		RE::FormID formID{};
 		RE::TESWaterForm* form = nullptr;
+		bool hasValidHeights = false;
 	};
 
 	// Precache contains height data generated with sheson's extended Tamriel data set

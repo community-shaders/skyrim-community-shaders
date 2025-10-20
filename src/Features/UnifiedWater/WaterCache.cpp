@@ -408,10 +408,11 @@ void WaterCache::BuildShorelineField(const std::vector<CellData>& cellData, cons
 				const int32_t nx = x + offset[0];
 				const int32_t ny = y + offset[1];
 				if (nx < 0 || ny < 0 || nx >= width || ny >= height) {
-					touchesLand = true;
-					break;
+					continue;
 				}
-				if (!cellData[index(nx, ny)].form) {
+				const std::size_t nIdx = index(nx, ny);
+				const auto& neighbor = cellData[nIdx];
+				if (!neighbor.form && neighbor.hasValidHeights) {
 					touchesLand = true;
 					break;
 				}
@@ -648,11 +649,13 @@ bool WaterCache::BuildDiskCache(RE::TESWorldSpace* worldSpace, DiskCache& diskCa
 
 			RE::FormID formID;
 			float landHeight, waterHeight;
+			bool hasCellData = TryGetCellData(worldSpace, files, x, y, formID, waterHeight, landHeight, true);
 
-			if (!TryGetCellData(worldSpace, files, x, y, formID, waterHeight, landHeight, true) && hasPrecache) {
+			if (!hasCellData && hasPrecache) {
 				auto [land, water] = preCache.heights[idx];
 				landHeight = land;
 				waterHeight = water;
+				hasCellData = true;
 			}
 
 			if (waterHeight > landHeight && fabs(waterHeight) < 50000.0f) {
@@ -670,7 +673,12 @@ bool WaterCache::BuildDiskCache(RE::TESWorldSpace* worldSpace, DiskCache& diskCa
 			if (form)
 				waterCellCount++;
 
-			cellData[idx] = { landHeight, waterHeight, formID, form };
+			auto& cell = cellData[idx];
+			cell.heights.land = landHeight;
+			cell.heights.water = waterHeight;
+			cell.formID = formID;
+			cell.form = form;
+			cell.hasValidHeights = hasCellData;
 		}
 	}
 
@@ -756,7 +764,10 @@ void WaterCache::GenerateInstructions(const int32_t lodLevel, DiskCache& diskCac
 					}
 
 					const int32_t cellIndex = cellY * hdr.width + cellX;
-					const auto& [heights, formID, form] = cellData[cellIndex];
+					const auto& cell = cellData[cellIndex];
+					const auto& heights = cell.heights;
+					const auto targetFormID = cell.formID;
+					RE::TESWaterForm* form = cell.form;
 
 					// Skip any cells without water
 					if (!form) {
@@ -767,7 +778,7 @@ void WaterCache::GenerateInstructions(const int32_t lodLevel, DiskCache& diskCac
 
 					// Neighbouring cells must match target values to merge
 					const float targetHeight = heights.water;
-					const auto targetType = formID;
+					const auto targetType = targetFormID;
 					const uint8_t targetFlags = form->flags.underlying();
 
 					int32_t size = 1;
@@ -791,8 +802,9 @@ void WaterCache::GenerateInstructions(const int32_t lodLevel, DiskCache& diskCac
 							const int32_t ry = baseY + newRowY;
 							const int32_t idx = ry * hdr.width + rx;
 							const int32_t cLocalIdx = newRowY * lodLevel + localX + dx;
-							const auto& [cHeights, cFormID, cForm] = cellData[idx];
-							if (processed[cLocalIdx] || !cForm || cHeights.water != targetHeight || cFormID != targetType || cForm->flags.underlying() != targetFlags) {
+							const auto& neighbor = cellData[idx];
+							const auto& neighborHeights = neighbor.heights;
+							if (processed[cLocalIdx] || !neighbor.form || neighborHeights.water != targetHeight || neighbor.formID != targetType || neighbor.form->flags.underlying() != targetFlags) {
 								failed = true;
 								break;
 							}
@@ -808,8 +820,9 @@ void WaterCache::GenerateInstructions(const int32_t lodLevel, DiskCache& diskCac
 							const int32_t ry = baseY + (localY + dy);
 							const int32_t idx = ry * hdr.width + rx;
 							const int32_t cLocalIdx = (localY + dy) * lodLevel + newColX;
-							const auto& [cHeights, cFormID, cForm] = cellData[idx];
-							if (processed[cLocalIdx] || !cForm || cHeights.water != targetHeight || cFormID != targetType || cForm->flags.underlying() != targetFlags) {
+							const auto& neighbor = cellData[idx];
+							const auto& neighborHeights = neighbor.heights;
+							if (processed[cLocalIdx] || !neighbor.form || neighborHeights.water != targetHeight || neighbor.formID != targetType || neighbor.form->flags.underlying() != targetFlags) {
 								failed = true;
 								break;
 							}
@@ -833,7 +846,7 @@ void WaterCache::GenerateInstructions(const int32_t lodLevel, DiskCache& diskCac
 
 					Instruction instruction;
 					instruction.lodLevel = lodLevel;
-					instruction.form.id = formID;
+					instruction.form.id = targetFormID;
 					// Convert back to game cell coords
 					instruction.x = cellX + minX;
 					instruction.y = cellY + minY;

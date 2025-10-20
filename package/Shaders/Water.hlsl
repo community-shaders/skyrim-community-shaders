@@ -317,11 +317,12 @@ void GetBlendedShorelineData(float2 worldPos, out float2 shoreNormal, out float 
 	float2 localCoord = normalizedCell * 2.0f - 1.0f;
 	localCoord = clamp(localCoord, float2(-1.0f, -1.0f), float2(1.0f, 1.0f));
 
+	// Calculate edge blend based on water TILE boundaries, not arbitrary cell edges
+	// This prevents fadeout at cell edges in open water where there's no actual terrain transition
 	float blendBand = max(ShorelineEdgeBlend, 1e-3f);
-	float cellFrac = frac(worldPos.x / cellWorldSize + 0.5f);
-	float edgeBlend = smoothstep(0.0f, blendBand, min(cellFrac, 1.0f - cellFrac));
-	cellFrac = frac(worldPos.y / cellWorldSize + 0.5f);
-	edgeBlend *= smoothstep(0.0f, blendBand, min(cellFrac, 1.0f - cellFrac));
+	float2 tileLocalFrac = abs(localCoord);
+	float edgeBlend = smoothstep(1.0f - blendBand, 1.0f, max(tileLocalFrac.x, tileLocalFrac.y));
+	edgeBlend = 1.0f - edgeBlend;
 
 	float basisX[3] = {
 		0.5f * localCoord.x * (localCoord.x - 1.0f),

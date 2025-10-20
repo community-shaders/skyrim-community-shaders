@@ -34,7 +34,7 @@ struct UnifiedWater : OverlayFeature
 	struct Settings
 	{
 		bool UseOptimisedMeshes = false;
-		float MeshSubdivisionMultiplier = 1.0f;
+		bool EnableMeshSubdivision = true;
 		bool ShowSubdivisionVisualizer = false;
 
 		float WaveIntensity = 0.3f;
@@ -227,7 +227,7 @@ struct UnifiedWater : OverlayFeature
 private:
 	RE::NiPointer<RE::BSTriShape> waterMesh;
 	RE::NiPointer<RE::BSTriShape> optimisedWaterMesh;
-	std::array<RE::NiPointer<RE::BSTriShape>, 5> subdividedWaterMeshVariants{};
+	std::array<RE::NiPointer<RE::BSTriShape>, 3> subdividedWaterMeshVariants{};
 	Flowmap* flowmap = nullptr;
 	WaterCache* waterCache = nullptr;
 

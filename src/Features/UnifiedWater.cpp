@@ -361,22 +361,10 @@ static bool ApplyLoopSubdivision(RE::BSTriShape* shape, std::uint32_t iterations
 		for (std::size_t i = 0; i < vertexCount; ++i) {
 			const auto& current = previousPositions[i];
 			if (isBoundary[i]) {
-				if (boundaryNeighbors[i].size() >= 2) {
-					const auto& v0 = previousPositions[boundaryNeighbors[i][0]];
-					const auto& v1 = previousPositions[boundaryNeighbors[i][1]];
-					updatedPositions[i] = current * 0.75f + (v0 + v1) * 0.125f;
-					if (hasPrimaryUV) {
-						const auto& uvSelf = previousUVs[i];
-						const auto& uv0 = previousUVs[boundaryNeighbors[i][0]];
-						const auto& uv1 = previousUVs[boundaryNeighbors[i][1]];
-						updatedUVs[i][0] = uvSelf[0] * 0.75f + 0.125f * (uv0[0] + uv1[0]);
-						updatedUVs[i][1] = uvSelf[1] * 0.75f + 0.125f * (uv0[1] + uv1[1]);
-					}
-				} else {
-					updatedPositions[i] = current;
-					if (hasPrimaryUV)
-						updatedUVs[i] = previousUVs[i];
-				}
+				// Keep boundary vertices fixed to preserve straight cell edges
+				updatedPositions[i] = current;
+				if (hasPrimaryUV)
+					updatedUVs[i] = previousUVs[i];
 			} else {
 				const auto& neighbors = neighborLists[i];
 				if (neighbors.size() >= 3) {
@@ -665,7 +653,7 @@ static bool ApplyLoopSubdivision(RE::BSTriShape* shape, std::uint32_t iterations
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	UnifiedWater::Settings,
 	UseOptimisedMeshes,
-	MeshSubdivisionMultiplier,
+	EnableMeshSubdivision,
 	ShowSubdivisionVisualizer,
 	WaveIntensity,
 	WaveAmplitude,
@@ -721,11 +709,12 @@ void UnifiedWater::DrawSettings()
 			"Will only affect newly created water - requires a change of location or game restart to take effect.");
 	}
 
-	ImGui::SliderFloat("Mesh Subdivision Multiplier", &settings.MeshSubdivisionMultiplier, 0.0f, 2.5f, "%.2f");
+	ImGui::Checkbox("Enable Mesh Subdivision", &settings.EnableMeshSubdivision);
 	if (auto _tt = Util::HoverTooltipWrapper()) {
 		ImGui::Text(
-			"Scales the water mesh subdivision level used for wave displacement.\n"
-			"Higher values increase detail near the camera; lower values reduce triangle counts.");
+			"Enables 2x mesh subdivision for wave displacement near the camera.\n"
+			"Increases detail and wave fidelity at the cost of performance.\n"
+			"Requires a change of location or game restart to take effect.");
 	}
 
 	ImGui::Spacing();
@@ -1058,7 +1047,7 @@ void UnifiedWater::DataLoaded()
 			return clone;
 		};
 
-		for (std::uint32_t iteration = 1; iteration < subdividedWaterMeshVariants.size(); ++iteration) {
+		for (std::uint32_t iteration = 1; iteration <= 2; ++iteration) {
 			auto variant = buildVariant(iteration);
 			if (variant)
 				subdividedWaterMeshVariants[iteration] = variant;
@@ -1365,37 +1354,27 @@ void UnifiedWater::BGSTerrainBlock_Attach::thunk(RE::BGSTerrainBlock* block)
 			RE::NiCloningProcess cloningProcess;
 
 			const bool farLOD = lodLevel > 4;
-			const bool multiplierRequested = singleton.settings.MeshSubdivisionMultiplier > 0.0f;
-			const bool forceSubdivision = multiplierRequested && !farLOD;
+			const bool subdivisionEnabled = singleton.settings.EnableMeshSubdivision;
+			const bool forceSubdivision = subdivisionEnabled && !farLOD;
 			const bool useOptimised = (singleton.settings.UseOptimisedMeshes && !forceSubdivision) || farLOD;
 			if (singleton.settings.UseOptimisedMeshes && !useOptimised) {
-				logger::debug("[Unified Water] Subdivision multiplier overriding optimised mesh usage for LOD {}", lodLevel);
+				logger::debug("[Unified Water] Subdivision enabled, overriding optimised mesh usage for LOD {}", lodLevel);
 			}
 			int desiredSubdivision = 0;
-			if (!useOptimised) {
+			if (!useOptimised && subdivisionEnabled) {
 				if (instruction.size <= 1)
 					desiredSubdivision = 2;
 				else if (instruction.size <= 4)
 					desiredSubdivision = 1;
 			}
 
-			const int baseSubdivision = desiredSubdivision;
-			float subdivisionScale = std::clamp(singleton.settings.MeshSubdivisionMultiplier, 0.0f, 4.0f);
-			if (subdivisionScale <= 0.0f) {
-				desiredSubdivision = 0;
-			} else {
-				float scaled = ((static_cast<float>(desiredSubdivision) + 1.0f) * subdivisionScale) - 1.0f;
-				desiredSubdivision = static_cast<int>(std::round(std::max(scaled, 0.0f)));
-			}
-
 			desiredSubdivision = std::clamp(desiredSubdivision, 0, static_cast<int>(singleton.subdividedWaterMeshVariants.size()) - 1);
 			logger::debug(
-				"[Unified Water] Mesh subdivision request: base = {}, scale = {:.2f}, final level = {} (LOD {}, optimised = {})",
-				baseSubdivision,
-				subdivisionScale,
+				"[Unified Water] Mesh subdivision: level = {}, LOD {}, optimised = {}, enabled = {}",
 				desiredSubdivision,
 				lodLevel,
-				useOptimised);
+				useOptimised,
+				subdivisionEnabled);
 			RE::BSTriShape* templateShape = nullptr;
 			if (useOptimised) {
 				templateShape = singleton.optimisedWaterMesh.get();
