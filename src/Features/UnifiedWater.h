@@ -1,6 +1,7 @@
 ﻿#pragma once
 #include "OverlayFeature.h"
 #include "UnifiedWater/Flowmap.h"
+#include "UnifiedWater/ShorelineMap.h"
 #include "UnifiedWater/WaterCache.h"
 #include <array>
 #include <cstdint>
@@ -116,16 +117,7 @@ struct UnifiedWater : OverlayFeature
 
 	struct alignas(16) PerTile
 	{
-		struct alignas(16) ShorelineSample
-		{
-			float NormalX;
-			float NormalY;
-			float DistanceToShore;
-			float ValidMask;
-		};
-
-		ShorelineSample ShoreSamples[9];
-		float PrevData[4];   // x/y = prev normal, z = prev distance
+		float PrevData[4];   // x/y = prev normal, z = prev distance, w = prev segments per axis
 		float TileData[4];   // x/y = tile cell coords, z = LOD level, w = tile span (cells)
 	};
 
@@ -229,6 +221,7 @@ private:
 	RE::NiPointer<RE::BSTriShape> optimisedWaterMesh;
 	std::array<RE::NiPointer<RE::BSTriShape>, 3> subdividedWaterMeshVariants{};
 	Flowmap* flowmap = nullptr;
+	ShorelineMap* shorelineMap = nullptr;
 	WaterCache* waterCache = nullptr;
 
 	RE::NiNode** gWaterLOD = nullptr;
@@ -237,7 +230,9 @@ private:
 	float4* gDisplacementCellTexCoordOffset = nullptr;
 	RE::NiPoint2* gDisplacementMeshPos = nullptr;
 	RE::NiPoint2* gDisplacementMeshFlowCellOffset = nullptr;
+	RE::NiPointer<RE::NiSourceTexture> gShorelineMapTex = nullptr;
 	
 	void SetFlowmapTex() const;
+	void SetShorelineMapTex() const;
 	static bool LoadOrderChanged();
 };

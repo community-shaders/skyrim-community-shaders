@@ -77,9 +77,18 @@ PS_OUTPUT main(PS_INPUT input)
 
 #	include "Common/SharedData.hlsli"
 
+// Shoreline distance field texture system
+// Based on Jump Flooding Algorithm for computing distance fields
+// Reference: https://www.comp.nus.edu.sg/%7Etants/jfa/i3d06.pdf
+#if defined(UNIFIED_WATER)
+Texture2D<float4> ShorelineMapTex : register(t9);
+#endif
+
 #if defined(FLOWMAP)
 SamplerState FlowMapSampler : register(s8);
 Texture2D<float4> FlowMapTex : register(t8);
+#else
+SamplerState FlowMapSampler : register(s8);
 #endif
 
 struct VS_INPUT
@@ -262,9 +271,8 @@ cbuffer UnifiedWaterPerFrame : register(b7)
 
 cbuffer UnifiedWaterPerTile : register(b8)
 {
-	float4 ShoreSamples[9] : packoffset(c0);
-	float4 PrevData : packoffset(c9);
-	float4 TileData : packoffset(c10);
+	float4 PrevData : packoffset(c0);
+	float4 TileData : packoffset(c1);
 }
 
 // Simple hash function for procedural noise
@@ -306,95 +314,77 @@ float fractalNoise(float2 p, int octaves)
 	return value;
 }
 
-// Blend shoreline data from cached 3x3 sample grid and add procedural variation
-void GetBlendedShorelineData(float2 worldPos, out float2 shoreNormal, out float distanceToShore)
+// Sample high-resolution shoreline distance field from texture
+// Based on Jump Flooding Algorithm for computing distance fields
+// Reference: https://www.comp.nus.edu.sg/%7Etants/jfa/i3d06.pdf
+void GetBlendedShorelineData(float2 worldPos, float2 textureDims, float2 texCoordOffset, out float2 shoreNormal, out float distanceToShore)
 {
+#if defined(UNIFIED_WATER)
+	// Calculate UV coordinates for shoreline texture sampling
+	// Similar to flowmap UV calculation but using shoreline map dimensions
 	const float cellWorldSize = 4096.0f;
 	float2 worldCell = worldPos / cellWorldSize;
-	float tileSpanCells = max(max(TileData.z, TileData.w), 1.0f);
-	float2 tileBaseCell = TileData.xy;
-	float2 normalizedCell = (worldCell - tileBaseCell) / tileSpanCells;
-	float2 localCoord = normalizedCell * 2.0f - 1.0f;
-	localCoord = clamp(localCoord, float2(-1.0f, -1.0f), float2(1.0f, 1.0f));
-
-	// Use bilinear interpolation for smoother tile transitions
-	// Map from [-1, 1] to [0, 1] for easier bilinear math
-	float2 uv = localCoord * 0.5f + 0.5f;
 	
-	// Sample indices for 3x3 grid (we'll use center 2x2 for bilinear)
-	// Grid layout:
-	// 0 1 2
-	// 3 4 5
-	// 6 7 8
-	
-	// Determine which quadrant we're in and interpolate within it
-	float2 quadUV = uv * 2.0f;
-	int baseX = (uv.x < 0.5f) ? 0 : 1;
-	int baseY = (uv.y < 0.5f) ? 0 : 1;
-	float2 localUV = frac(quadUV);
-	
-	// Get the 4 corner samples for bilinear interpolation
-	int idx00 = baseY * 3 + baseX;
-	int idx10 = baseY * 3 + (baseX + 1);
-	int idx01 = (baseY + 1) * 3 + baseX;
-	int idx11 = (baseY + 1) * 3 + (baseX + 1);
-	
-	float4 sample00 = ShoreSamples[idx00];
-	float4 sample10 = ShoreSamples[idx10];
-	float4 sample01 = ShoreSamples[idx01];
-	float4 sample11 = ShoreSamples[idx11];
-	
-	// Bilinear interpolation
-	float4 top = lerp(sample00, sample10, localUV.x);
-	float4 bottom = lerp(sample01, sample11, localUV.x);
-	float4 blendedSample = lerp(top, bottom, localUV.y);
-	
-	float2 blendedNormal = blendedSample.xy;
-	float blendedDistance = blendedSample.z;
-	float blendedWeight = blendedSample.w;
-	
-	if (blendedWeight <= 1e-4f) {
-		shoreNormal = float2(0.0f, 0.0f);
-		distanceToShore = 10000.0f;
-		return;
+	// Convert world cell coordinates to texture UV
+	// The shoreline map uses the same coordinate system as flowmap
+	// textureDims.x = width, textureDims.y = height
+	if ((textureDims.x > 0.0f) && (textureDims.y > 0.0f)) {
+		float2 dims = max(textureDims, float2(1.0f, 1.0f));
+		
+		// Calculate UV based on world cell position
+		// texCoordOffset contains the flowmap offset which we can reuse
+		float2 shorelineUV = (worldCell + float2(texCoordOffset.x, texCoordOffset.y - textureDims.y)) / dims;
+		
+		// Sample shoreline texture: RGB = (normalX, normalY, distance), A = mask
+		float4 shorelineSample = ShorelineMapTex.SampleLevel(FlowMapSampler, shorelineUV, 0.0f);
+		
+		// Unpack data from texture
+		// R,G channels: shore normal XY (stored as [0,1], unpack to [-1,1])
+		float2 baseNormal = shorelineSample.rg * 2.0f - 1.0f;
+		// B channel: normalized distance (stored as [0,1], unpack to [0, maxDistance])
+		const float maxDistance = 10.0f;  // Must match ShorelineMap.cpp encoding
+		float baseDistanceCells = shorelineSample.b * maxDistance;
+		// A channel: water mask
+		float waterMask = shorelineSample.a;
+		
+		// Validate sample
+		float normalLen = length(baseNormal);
+		if (waterMask > 0.5f && normalLen > 1e-4f) {
+			// Normalize the shore normal
+			baseNormal /= normalLen;
+			
+			// Add procedural noise variation near shoreline
+			float2 variedNormal = baseNormal;
+			if (baseDistanceCells < ShorelineNoiseDistance) {
+				float noiseScale = max(ShorelineNoiseScale, 1e-7f);
+				float noiseStrength = ShorelineNoiseStrength;
+				float2 noisePos = worldPos * noiseScale;
+				float noise1 = fractalNoise(noisePos, 2);
+				float noise2 = fractalNoise(noisePos + float2(100.0f, 50.0f), 2);
+				float2 noiseOffset = float2(noise1 - 0.5f, noise2 - 0.5f) * 2.0f;
+				float distanceFactor = saturate(baseDistanceCells / max(ShorelineNoiseDistance, 1e-3f));
+				variedNormal = normalize(baseNormal + noiseOffset * noiseStrength * distanceFactor);
+			}
+			
+			shoreNormal = variedNormal;
+			distanceToShore = baseDistanceCells;
+			return;
+		}
 	}
+#endif
 	
-	float2 baseNormal = blendedNormal;
-	float len = length(baseNormal);
-	if (len > 1e-4f) {
-		baseNormal /= len;
-	} else {
-		shoreNormal = float2(0.0f, 0.0f);
-		distanceToShore = 10000.0f;
-		return;
-	}
-
-	float baseDistanceCells = max(blendedDistance, 0.0f);
-	float2 finalNormal = baseNormal;
-	float2 variedNormal = finalNormal;
-
-	if (baseDistanceCells < ShorelineNoiseDistance) {
-		float noiseScale = max(ShorelineNoiseScale, 1e-7f);
-		float noiseStrength = ShorelineNoiseStrength;
-		float2 noisePos = worldPos * noiseScale;
-		float noise1 = fractalNoise(noisePos, 2);
-		float noise2 = fractalNoise(noisePos + float2(100.0f, 50.0f), 2);
-		float2 noiseOffset = float2(noise1 - 0.5f, noise2 - 0.5f) * 2.0f;
-		float distanceFactor = saturate(baseDistanceCells / max(ShorelineNoiseDistance, 1e-3f));
-		variedNormal = normalize(finalNormal + noiseOffset * noiseStrength * distanceFactor);
-	}
-	
-	shoreNormal = variedNormal;
-	distanceToShore = baseDistanceCells;
+	// Fallback: no shoreline data available (open water or texture not bound)
+	shoreNormal = float2(0.0f, 0.0f);
+	distanceToShore = 10000.0f;
 }
 
 float CalculateCellEdgeBlend(float2 worldPos, float blendDistance);
 
-float2 DetectShorelineDirection(float2 worldPos, out float shoreInfluence, out float shoreDistance)
+float2 DetectShorelineDirection(float2 worldPos, float2 textureDims, float2 texCoordOffset, out float shoreInfluence, out float shoreDistance)
 {
 	float2 shoreNormal;
 	float distanceToShore;
-	GetBlendedShorelineData(worldPos, shoreNormal, distanceToShore);
+	GetBlendedShorelineData(worldPos, textureDims, texCoordOffset, shoreNormal, distanceToShore);
 	
 	float len = length(shoreNormal);
 	if (len > 0.001f) {
@@ -449,11 +439,11 @@ float2 DetectShorelineDirectionPrev(float2 worldPos, out float shoreInfluence, o
 
 // Apply shoreline rotation to a flow direction
 // This bends water flow toward the shore (waves rolling toward beach)
-float2 ApplyShorelineInfluence(float2 baseDirection, float2 worldPos, float influenceStrength)
+float2 ApplyShorelineInfluence(float2 baseDirection, float2 worldPos, float2 textureDims, float2 texCoordOffset, float influenceStrength)
 {
 	float shoreInfluence = 0.0f;
 	float dummyDistance;
-	float2 shoreNormal = DetectShorelineDirection(worldPos, shoreInfluence, dummyDistance);
+	float2 shoreNormal = DetectShorelineDirection(worldPos, textureDims, texCoordOffset, shoreInfluence, dummyDistance);
 	
 	if (shoreInfluence > 0.001f) {
 		// Shore normal points FROM water TO land - this is the direction waves should travel
@@ -491,7 +481,7 @@ struct WaveSample
 	float shoreDistance;
 };
 
-WaveSample CalculateWaterDisplacement(float2 worldPos, float waveIntensity, float amplitudeMult, float speedMult, float steepnessMult, float timeSeconds, float dayPhase, float2 flowBiasDir, float flowBiasWeight, bool usePreviousFrame = false)
+WaveSample CalculateWaterDisplacement(float2 worldPos, float2 textureDims, float2 texCoordOffset, float waveIntensity, float amplitudeMult, float speedMult, float steepnessMult, float timeSeconds, float dayPhase, float2 flowBiasDir, float flowBiasWeight, bool usePreviousFrame = false)
 {
 	if (waveIntensity <= 0.0f) {
 		WaveSample zeroSample;
@@ -513,7 +503,7 @@ WaveSample CalculateWaterDisplacement(float2 worldPos, float waveIntensity, floa
 	if (usePreviousFrame) {
 		shoreNormal = DetectShorelineDirectionPrev(worldPos, shoreInfluence, shoreDistance);
 	} else {
-		shoreNormal = DetectShorelineDirection(worldPos, shoreInfluence, shoreDistance);
+		shoreNormal = DetectShorelineDirection(worldPos, textureDims, texCoordOffset, shoreInfluence, shoreDistance);
 	}
 	
 	const float2 defaultWaveDir = float2(-0.70710678f, 0.70710678f);
@@ -650,7 +640,7 @@ WaveSample CalculateWaterDisplacement(float2 worldPos, float waveIntensity, floa
 	return sample;
 }
 
-float3 CalculateGerstnerNormals(float2 worldPos, float waveIntensity, float amplitudeMult, float speedMult, float steepnessMult, float2 flowBiasDir, float flowBiasWeight, float timeSeconds, float dayPhase)
+float3 CalculateGerstnerNormals(float2 worldPos, float2 textureDims, float2 texCoordOffset, float waveIntensity, float amplitudeMult, float speedMult, float steepnessMult, float2 flowBiasDir, float flowBiasWeight, float timeSeconds, float dayPhase)
 {
 	if (waveIntensity <= 0.0f)
 		return float3(0.0f, 0.0f, 1.0f);
@@ -662,13 +652,13 @@ float3 CalculateGerstnerNormals(float2 worldPos, float waveIntensity, float ampl
 	#endif
 	const float epsilon = max(cellWorldSize * 0.003f, 6.0f);
 
-	WaveSample centerSample = CalculateWaterDisplacement(worldPos, waveIntensity, amplitudeMult, speedMult, steepnessMult, timeSeconds, dayPhase, flowBiasDir, flowBiasWeight, false);
-	WaveSample offsetXSample = CalculateWaterDisplacement(worldPos + float2(epsilon, 0.0f), waveIntensity, amplitudeMult, speedMult, steepnessMult, timeSeconds, dayPhase, flowBiasDir, flowBiasWeight, false);
-	WaveSample offsetYSample = CalculateWaterDisplacement(worldPos + float2(0.0f, epsilon), waveIntensity, amplitudeMult, speedMult, steepnessMult, timeSeconds, dayPhase, flowBiasDir, flowBiasWeight, false);
+	WaveSample centerSample = CalculateWaterDisplacement(worldPos, textureDims, texCoordOffset, waveIntensity, amplitudeMult, speedMult, steepnessMult, timeSeconds, dayPhase, flowBiasDir, flowBiasWeight, false);
+	WaveSample offsetXSample = CalculateWaterDisplacement(worldPos + float2(epsilon, 0.0f), textureDims, texCoordOffset, waveIntensity, amplitudeMult, speedMult, steepnessMult, timeSeconds, dayPhase, flowBiasDir, flowBiasWeight, false);
+	WaveSample offsetYSample = CalculateWaterDisplacement(worldPos + float2(0.0f, epsilon), textureDims, texCoordOffset, waveIntensity, amplitudeMult, speedMult, steepnessMult, timeSeconds, dayPhase, flowBiasDir, flowBiasWeight, false);
 
-	float fadeCenter = 1.0f - smoothstep(0.0f, 3.0f, centerSample.shoreDistance);
-	float fadeX = 1.0f - smoothstep(0.0f, 3.0f, offsetXSample.shoreDistance);
-	float fadeY = 1.0f - smoothstep(0.0f, 3.0f, offsetYSample.shoreDistance);
+	float fadeCenter = centerSample.shoreDistance >= 9999.0f ? 1.0f : (1.0f - smoothstep(0.0f, 3.0f, centerSample.shoreDistance));
+	float fadeX = offsetXSample.shoreDistance >= 9999.0f ? 1.0f : (1.0f - smoothstep(0.0f, 3.0f, offsetXSample.shoreDistance));
+	float fadeY = offsetYSample.shoreDistance >= 9999.0f ? 1.0f : (1.0f - smoothstep(0.0f, 3.0f, offsetYSample.shoreDistance));
 
 	float3 centerPos = float3(worldPos, 0.0f) + centerSample.displacement * fadeCenter;
 	float3 offsetXPos = float3(worldPos + float2(epsilon, 0.0f), 0.0f) + offsetXSample.displacement * fadeX;
@@ -752,6 +742,8 @@ VS_OUTPUT main(VS_INPUT input)
 	float2 waveWorldPosPrev = worldPosBase.xy + FrameBuffer::CameraPreviousPosAdjust[eyeIndex].xy;
 	float2 flowBiasDirVS = float2(0.0f, 0.0f);
 	float flowBiasWeightVS = 0.0f;
+	float2 shorelineTextureDims = float2(ObjectUV.x, ObjectUV.y);
+	float2 shorelineTexCoordOffset = CellTexCoordOffset.xy;
 #	if defined(FLOWMAP)
 	if ((ObjectUV.x > 0.0f) && (ObjectUV.y > 0.0f) && (ObjectUV.z > 0.0f)) {
 		float2 dims = max(float2(ObjectUV.x, ObjectUV.y), float2(1.0f, 1.0f));
@@ -771,12 +763,12 @@ VS_OUTPUT main(VS_INPUT input)
 	float waveTimeSeconds = ComputeWaveTimeSeconds(GameTimeHours, RealTimeSeconds);
 	float waveDayPhase = ComputeWaveDayPhase(GameTimeHours);
 	// Current frame uses current shoreline data
-	WaveSample currentWave = CalculateWaterDisplacement(waveWorldPos, WaveIntensity, WaveAmplitude, WaveSpeed, WaveSteepness, waveTimeSeconds, waveDayPhase, flowBiasDirVS, flowBiasWeightVS, false);
+	WaveSample currentWave = CalculateWaterDisplacement(waveWorldPos, shorelineTextureDims, shorelineTexCoordOffset, WaveIntensity, WaveAmplitude, WaveSpeed, WaveSteepness, waveTimeSeconds, waveDayPhase, flowBiasDirVS, flowBiasWeightVS, false);
 	float3 waveDisplacement = currentWave.displacement;
 	float horizontalDisplacement = length(waveDisplacement.xy);
 	// xy = wave direction, z = crest height, w = shoreline influence strength
 	vsout.UnifiedWaveInfo = float4(currentWave.primaryDirection, waveDisplacement.z, currentWave.shoreInfluence);
-	float3 gerstnerNormalVS = CalculateGerstnerNormals(waveWorldPos, WaveIntensity, WaveAmplitude, WaveSpeed, WaveSteepness, flowBiasDirVS, flowBiasWeightVS, waveTimeSeconds, waveDayPhase);
+	float3 gerstnerNormalVS = CalculateGerstnerNormals(waveWorldPos, shorelineTextureDims, shorelineTexCoordOffset, WaveIntensity, WaveAmplitude, WaveSpeed, WaveSteepness, flowBiasDirVS, flowBiasWeightVS, waveTimeSeconds, waveDayPhase);
 	// xyz = Gerstner normal, w = lateral displacement magnitude used for weighting
 	vsout.UnifiedWaveNormal = float4(gerstnerNormalVS, horizontalDisplacement);
 	const float2 fallbackWaveDirVS = float2(-0.70710678f, 0.70710678f);
@@ -797,15 +789,15 @@ VS_OUTPUT main(VS_INPUT input)
 	float2 waveDirBackwardVS = float2(
 		normalizedWaveDirVS.x * cosSpreadVSNeg - normalizedWaveDirVS.y * sinSpreadVSNeg,
 		normalizedWaveDirVS.x * sinSpreadVSNeg + normalizedWaveDirVS.y * cosSpreadVSNeg);
-	float displacementFade = 1.0f - smoothstep(0.0f, 3.0f, currentWave.shoreDistance);
+	float displacementFade = currentWave.shoreDistance >= 9999.0f ? 1.0f : (1.0f - smoothstep(0.0f, 3.0f, currentWave.shoreDistance));
 	currentPosition.xyz += waveDisplacement * displacementFade;
 
 	// Previous frame uses previous shoreline data for TAA consistency
 	float waveTimeSecondsPrev = ComputeWaveTimeSeconds(PrevGameTimeHours, PrevRealTimeSeconds);
 	float waveDayPhasePrev = ComputeWaveDayPhase(PrevGameTimeHours);
-	WaveSample prevWave = CalculateWaterDisplacement(waveWorldPosPrev, WaveIntensity, WaveAmplitude, WaveSpeed, WaveSteepness, waveTimeSecondsPrev, waveDayPhasePrev, flowBiasDirVS, flowBiasWeightVS, true);
+	WaveSample prevWave = CalculateWaterDisplacement(waveWorldPosPrev, shorelineTextureDims, shorelineTexCoordOffset, WaveIntensity, WaveAmplitude, WaveSpeed, WaveSteepness, waveTimeSecondsPrev, waveDayPhasePrev, flowBiasDirVS, flowBiasWeightVS, true);
 	float3 prevWaveDisplacement = prevWave.displacement;
-	float displacementFadePrev = 1.0f - smoothstep(0.0f, 3.0f, prevWave.shoreDistance);
+	float displacementFadePrev = prevWave.shoreDistance >= 9999.0f ? 1.0f : (1.0f - smoothstep(0.0f, 3.0f, prevWave.shoreDistance));
 	previousPosition.xyz += prevWaveDisplacement * displacementFadePrev;
 
 	inputPosition = currentPosition;
@@ -2320,7 +2312,6 @@ PS_OUTPUT main(PS_INPUT input)
 		finalColor = lerp(finalColor, majorColor, majorHighlight * 0.5f);
 		finalColor = lerp(finalColor, fineColor, fineHighlight);
 	}
-	
 	
 #		endif
 	psout.Lighting = float4(finalColor, isSpecular);

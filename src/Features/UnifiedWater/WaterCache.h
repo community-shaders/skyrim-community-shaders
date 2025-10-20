@@ -39,19 +39,20 @@ public:
 		int64_t elapsedMs{};
 	};
 
-	bool SetCurrentWorldSpace(const RE::TESWorldSpace* worldSpace);
-	std::vector<Instruction>* GetInstructions(const RE::TESWorldSpace* worldSpace, uint32_t lodLevel, uint32_t x, uint32_t y);
+	struct Heights
+	{
+		float land = FLT_MAX;
+		float water = FLT_MAX;
+	};
 
-	static void GenerateTamrielPrecache();
-	bool LoadOrGenerateCaches();
-	bool RegenerateCaches();
-	bool GenerateCaches();
+	struct CellData
+	{
+		Heights heights{};
+		RE::FormID formID{};
+		RE::TESWaterForm* form = nullptr;
+		bool hasValidHeights = false;
+	};
 
-	bool IsBuildRunning() const { return async.running.load(); }
-	bool HasBuildFailed() const { return async.failed.load(); }
-	BuildProgressSnapshot GetBuildProgressSnapshot() const { return buildProgress.Snapshot(); }
-
-private:
 	struct WorldSpaceHeader
 	{
 		struct MinMax
@@ -69,33 +70,42 @@ private:
 		int32_t dataCount{};
 	};
 
-	struct Heights
+	// Per WorldSpace DiskCache that contains a list of instructions for water placement for all LOD levels in series
+	struct DiskCache
 	{
-		float land = FLT_MAX;
-		float water = FLT_MAX;
+		WorldSpaceHeader header;
+		std::vector<Instruction> instructions;
+		// High-resolution shoreline field data (per-cell)
+		std::vector<float> shorelineDistance;
+		std::vector<float> shorelineNormalX;
+		std::vector<float> shorelineNormalY;
+		std::vector<float> shorelineMask;
 	};
 
-	struct CellData
-	{
-		Heights heights{};
-		RE::FormID formID{};
-		RE::TESWaterForm* form = nullptr;
-		bool hasValidHeights = false;
-	};
+	bool SetCurrentWorldSpace(const RE::TESWorldSpace* worldSpace);
+	std::vector<Instruction>* GetInstructions(const RE::TESWorldSpace* worldSpace, uint32_t lodLevel, uint32_t x, uint32_t y);
+	std::shared_ptr<DiskCache> GetDiskCache(const RE::TESWorldSpace* worldSpace);
 
+	static void GenerateTamrielPrecache();
+	bool LoadOrGenerateCaches();
+	bool RegenerateCaches();
+	bool GenerateCaches();
+
+	bool IsBuildRunning() const { return async.running.load(); }
+	bool HasBuildFailed() const { return async.failed.load(); }
+	BuildProgressSnapshot GetBuildProgressSnapshot() const { return buildProgress.Snapshot(); }
+	
+	// Public for use by ShorelineMap generation
+	static void BuildShorelineField(const std::vector<CellData>& cellData, int32_t width, int32_t height,
+		std::vector<float>& outDistance, std::vector<float>& outNormalX, std::vector<float>& outNormalY, std::vector<float>& outMask);
+
+private:
 	// Precache contains height data generated with sheson's extended Tamriel data set
 	struct PreCache
 	{
 		WorldSpaceHeader header;
 		// Cell XY map
 		std::vector<Heights> heights;
-	};
-
-	// Per WorldSpace DiskCache that contains a list of instructions for water placement for all LOD levels in series
-	struct DiskCache
-	{
-		WorldSpaceHeader header;
-		std::vector<Instruction> instructions;
 	};
 
 	// Per WorldSpace RuntimeCache that is the disk cache processed into a runtime optimised format with fast lookups
@@ -170,10 +180,13 @@ private:
 	AsyncBuild async;
 
 	using CacheMap = std::unordered_map<std::string, std::shared_ptr<RuntimeCache>>;
+	using DiskCacheMap = std::unordered_map<std::string, std::shared_ptr<DiskCache>>;
 
 	std::atomic<std::shared_ptr<const CacheMap>> cacheMap{ std::make_shared<CacheMap>() };
+	std::atomic<std::shared_ptr<const DiskCacheMap>> diskCacheMap{ std::make_shared<DiskCacheMap>() };
 	
 	std::shared_ptr<RuntimeCache> currentCache;
+	std::shared_ptr<DiskCache> currentDiskCache;
 	std::string currentWorldSpace;
 	std::string lastMissingCacheWorldSpace;
 
@@ -191,8 +204,6 @@ private:
 	static std::vector<RE::TESWorldSpace*> GetValidWorldSpaces();
 	static void GetLODCoords(int32_t lodLevel, int32_t x, int32_t y, int32_t& outX, int32_t& outY);
 	
-	static void BuildShorelineField(const std::vector<CellData>& cellData, int32_t width, int32_t height,
-		std::vector<float>& outDistance, std::vector<float>& outNormalX, std::vector<float>& outNormalY, std::vector<float>& outMask);
 	static void ComputeShorelineData(int32_t width, int32_t height,
 		const std::vector<float>& distanceField,
 		const std::vector<float>& normalXField,

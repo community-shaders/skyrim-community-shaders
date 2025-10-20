@@ -1062,25 +1062,32 @@ void UnifiedWater::DataLoaded()
 	}
 
 	flowmap = new Flowmap();
+	shorelineMap = new ShorelineMap();
 	waterCache = new WaterCache();
 
-	if (LoadOrderChanged()) {
-		logger::info("[Unified Water] Load order changed, regenerating flowmap and caches");
-
-		if (flowmap->RegenerateAndLoadFlowmap(waterCache))
-			SetFlowmapTex();
-
+	const bool rebuildAssets = LoadOrderChanged();
+	if (rebuildAssets) {
+		logger::info("[Unified Water] Load order changed, regenerating caches and dependent textures");
 		waterCache->RegenerateCaches();
 	} else {
-		if (flowmap->LoadOrGenerateFlowmap(waterCache))
-			SetFlowmapTex();
-
 		waterCache->LoadOrGenerateCaches();
 	}
 
 	while (waterCache->IsBuildRunning()) {
 		std::this_thread::sleep_for(100ms);
 	}
+
+	if (waterCache->HasBuildFailed()) {
+		logger::error("[Unified Water] Water cache build failed - shoreline systems will be degraded");
+	}
+
+	const bool flowmapReady = rebuildAssets ? flowmap->RegenerateAndLoadFlowmap(waterCache) : flowmap->LoadOrGenerateFlowmap(waterCache);
+	if (flowmapReady)
+		SetFlowmapTex();
+
+	const bool shorelineReady = rebuildAssets ? shorelineMap->RegenerateAndLoadShorelineMap(waterCache) : shorelineMap->LoadOrGenerateShorelineMap(waterCache);
+	if (shorelineReady)
+		SetShorelineMapTex();
 }
 
 bool UnifiedWater::LoadOrderChanged()
@@ -1144,6 +1151,17 @@ void UnifiedWater::SetFlowmapTex() const
 	*gFlowMapSize = flowmap->GetWidth();
 
 	logger::debug("[Unified Water] [Flowmap] Texture set");
+}
+
+void UnifiedWater::SetShorelineMapTex() const
+{
+	RE::NiPointer<RE::NiSourceTexture> tex;
+	if (!shorelineMap->TryGetShorelineMap(tex))
+		return;
+
+	const_cast<UnifiedWater*>(this)->gShorelineMapTex = tex;
+
+	logger::debug("[Unified Water] [ShorelineMap] Texture set");
 }
 
 void UnifiedWater::SetupResources()
@@ -1569,15 +1587,9 @@ void UnifiedWater::BSWaterShader_SetupGeometry::thunk(RE::BSShader* waterShader,
 		}
 	}
 	
-	// Update per-tile shoreline data - ALWAYS update to prevent uninitialized data
+	// Update per-tile data for temporal blending
 	if (singleton.perTile) {
 		PerTile perTileData{};
-		for (auto& sample : perTileData.ShoreSamples) {
-			sample.NormalX = 0.0f;
-			sample.NormalY = 0.0f;
-			sample.DistanceToShore = 10000.0f;
-			sample.ValidMask = 0.0f;
-		}
 
 		RE::TESWorldSpace* activeWorldSpace = nullptr;
 		std::uint32_t worldSpaceId = 0;
@@ -1632,52 +1644,19 @@ void UnifiedWater::BSWaterShader_SetupGeometry::thunk(RE::BSShader* waterShader,
 		}
 		perTileData.PrevData[3] = currentSegmentsPerAxis;
 
-		const WaterCache::Instruction* tileInstruction = nullptr;
-		std::vector<WaterCache::Instruction>* instructionList = nullptr;
-		if (activeWorldSpace) {
-			instructionList = singleton.waterCache->GetInstructions(activeWorldSpace, lodLevel, x, y);
-		}
-
-		if (instructionList && !instructionList->empty()) {
-			for (const auto& instruction : *instructionList) {
-				if (instruction.x == x && instruction.y == y) {
-					tileInstruction = &instruction;
-					break;
-				}
-			}
-
-			if (!tileInstruction) {
-				tileInstruction = &(*instructionList)[0];
-			}
-		}
-
-		float storedNormalX = prevNormalX;
-		float storedNormalY = prevNormalY;
-		float storedDistance = prevDistance;
-		bool storedValid = prevTileIt != singleton.prevTileData.end();
-
-		if (tileInstruction) {
-			perTileData.TileData[3] = static_cast<float>(tileInstruction->size > 0 ? tileInstruction->size : 1);
-			for (int sampleIdx = 0; sampleIdx < 9; ++sampleIdx) {
-				auto& sample = perTileData.ShoreSamples[sampleIdx];
-				sample.NormalX = tileInstruction->shoreNormalX[sampleIdx];
-				sample.NormalY = tileInstruction->shoreNormalY[sampleIdx];
-				sample.DistanceToShore = tileInstruction->distanceToShore[sampleIdx];
-				const float lenSq = sample.NormalX * sample.NormalX + sample.NormalY * sample.NormalY;
-				sample.ValidMask = (lenSq > 1e-6f && sample.DistanceToShore < 9999.0f) ? 1.0f : 0.0f;
-			}
-
-			const auto& centerSample = perTileData.ShoreSamples[4];
-			if (centerSample.ValidMask > 0.5f) {
-				storedNormalX = centerSample.NormalX;
-				storedNormalY = centerSample.NormalY;
-				storedDistance = centerSample.DistanceToShore;
-				storedValid = true;
-			} else if (!storedValid) {
-				storedNormalX = 0.0f;
-				storedNormalY = 0.0f;
-				storedDistance = 10000.0f;
-			}
+		// Get current tile data from shoreline texture (sampled in shader)
+		float storedNormalX = 0.0f;
+		float storedNormalY = 0.0f;
+		float storedDistance = 10000.0f;
+		
+		// Shoreline data now comes from texture, not constant buffer
+		// For prevTileData storage, use texture center sample if available
+		if (singleton.shorelineMap && activeWorldSpace) {
+			// Note: Could sample texture CPU-side here if needed, but shader handles sampling
+			// For now, just store previous frame's data for temporal blending
+			storedNormalX = prevNormalX;
+			storedNormalY = prevNormalY;
+			storedDistance = prevDistance;
 		}
 
 		singleton.prevTileData[tileKey] = UnifiedWater::PrevTileData{ storedNormalX, storedNormalY, storedDistance, currentSegmentsPerAxis };
@@ -1688,6 +1667,14 @@ void UnifiedWater::BSWaterShader_SetupGeometry::thunk(RE::BSShader* waterShader,
 		ID3D11Buffer* buffers[1] = { singleton.perTile->CB() };
 		context->VSSetConstantBuffers(8, 1, buffers);
 		context->PSSetConstantBuffers(8, 1, buffers); // Also bind to pixel shader for foam/normals
+		
+		// Bind shoreline distance field texture (register t9)
+		ID3D11ShaderResourceView* shorelineSRV = nullptr;
+		if (singleton.gShorelineMapTex && singleton.gShorelineMapTex->rendererTexture && singleton.gShorelineMapTex->rendererTexture->resourceView) {
+			shorelineSRV = singleton.gShorelineMapTex->rendererTexture->resourceView;
+		}
+		context->VSSetShaderResources(9, 1, &shorelineSRV);
+		context->PSSetShaderResources(9, 1, &shorelineSRV);
 	}
 	
 	if (singleton.flowmap) {

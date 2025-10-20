@@ -2,7 +2,10 @@
 
 #include <BS_thread_pool.hpp>
 #include <algorithm>
+#include <chrono>
 #include <cmath>
+#include <filesystem>
+#include <fstream>
 #include <limits>
 #include <queue>
 
@@ -75,6 +78,24 @@ std::vector<WaterCache::Instruction>* WaterCache::GetInstructions(const RE::TESW
 	}
 
 	return currentCache->GetInstructions(lodLevel, x, y);
+}
+
+std::shared_ptr<WaterCache::DiskCache> WaterCache::GetDiskCache(const RE::TESWorldSpace* worldSpace)
+{
+	if (!worldSpace || !worldSpace->GetFormEditorID())
+		return nullptr;
+
+	std::string worldSpaceName{ worldSpace->GetFormEditorID() };
+	
+	const auto snap = std::atomic_load_explicit(&diskCacheMap, std::memory_order_acquire);
+	if (!snap)
+		return nullptr;
+
+	const auto it = snap->find(worldSpaceName);
+	if (it == snap->end())
+		return nullptr;
+
+	return it->second;
 }
 
 std::vector<WaterCache::Instruction>* WaterCache::RuntimeCache::GetInstructions(const int32_t lodLevel, const int32_t x, const int32_t y)
@@ -166,7 +187,8 @@ bool WaterCache::RegenerateCaches()
 			continue;
 
 		const auto& path = entry.path();
-		if (path.extension() != ".wc")
+		const auto ext = path.extension();
+		if (ext != ".wc" && ext != ".wsf")
 			continue;
 		std::error_code rec;
 		fs::remove(path, rec);
@@ -185,6 +207,7 @@ bool WaterCache::LoadCaches()
 	auto worldSpaces = GetValidWorldSpaces();
 
 	auto newCacheMap = std::make_shared<CacheMap>();
+	auto newDiskCacheMap = std::make_shared<DiskCacheMap>();
 
 	for (auto& worldSpace : worldSpaces) {
 		const auto editorID = worldSpace ? worldSpace->GetFormEditorID() : nullptr;
@@ -198,30 +221,82 @@ bool WaterCache::LoadCaches()
 		if (newCacheMap->contains(key))
 			continue;
 
-		DiskCache diskCache;
+		auto diskCache = std::make_shared<DiskCache>();
 		const auto fileName = std::format("{}_cache.wc", key);
-		if (!TryReadCacheFromFile(fileName, diskCache.header, diskCache.instructions)) {
+		if (!TryReadCacheFromFile(fileName, diskCache->header, diskCache->instructions)) {
 			logger::info("[Unified Water] [Cache] Could not locate disk cache for {}", key);
 			return false;
 		}
 
-		logger::debug("[Unified Water] [Cache] Loaded cache for {} - Bounds {},{}  {},{} - Instructions {}", editorID, diskCache.header.bounds.minX, diskCache.header.bounds.minY, diskCache.header.bounds.maxX, diskCache.header.bounds.maxY, diskCache.header.dataCount);
+		{
+			namespace fs = std::filesystem;
+			const auto shorelineFileName = std::format("{}_shoreline.wsf", key);
+			const auto shorelinePath = Util::PathHelpers::GetDataPath() / "UnifiedWaterCache" / shorelineFileName;
+			if (!fs::exists(shorelinePath)) {
+				logger::info("[Unified Water] [Cache] Missing shoreline data for {} - forcing regeneration", key);
+				return false;
+			}
+
+			std::ifstream shorelineStream(shorelinePath, std::ios::binary);
+			if (!shorelineStream) {
+				logger::error("[Unified Water] [Cache] Failed to open '{}' for shoreline data", shorelinePath.string());
+				return false;
+			}
+
+			WorldSpaceHeader shorelineHeader{};
+			shorelineStream.read(reinterpret_cast<char*>(&shorelineHeader), sizeof(shorelineHeader));
+			if (!shorelineStream || shorelineHeader.label != Util::FCC("WTCH")) {
+				logger::error("[Unified Water] [Cache] Invalid shoreline header for {}", key);
+				return false;
+			}
+
+			const int32_t expectedCellCount = diskCache->header.width * diskCache->header.height;
+			if (shorelineHeader.dataCount != expectedCellCount) {
+				logger::warn("[Unified Water] [Cache] Shoreline data count mismatch for {} (expected {}, got {})", key, expectedCellCount, shorelineHeader.dataCount);
+			}
+
+			const std::size_t cellCount = static_cast<std::size_t>(std::max(shorelineHeader.dataCount, 0));
+			diskCache->shorelineDistance.resize(cellCount);
+			diskCache->shorelineNormalX.resize(cellCount);
+			diskCache->shorelineNormalY.resize(cellCount);
+			diskCache->shorelineMask.resize(cellCount);
+
+			if (cellCount > 0) {
+				shorelineStream.read(reinterpret_cast<char*>(diskCache->shorelineDistance.data()), cellCount * sizeof(float));
+				shorelineStream.read(reinterpret_cast<char*>(diskCache->shorelineNormalX.data()), cellCount * sizeof(float));
+				shorelineStream.read(reinterpret_cast<char*>(diskCache->shorelineNormalY.data()), cellCount * sizeof(float));
+				shorelineStream.read(reinterpret_cast<char*>(diskCache->shorelineMask.data()), cellCount * sizeof(float));
+				if (!shorelineStream.good()) {
+					logger::error("[Unified Water] [Cache] Failed to read shoreline data for {}", key);
+					return false;
+				}
+			}
+		}
+
+		logger::debug("[Unified Water] [Cache] Loaded cache for {} - Bounds {},{}  {},{} - Instructions {}", editorID, diskCache->header.bounds.minX, diskCache->header.bounds.minY, diskCache->header.bounds.maxX, diskCache->header.bounds.maxY, diskCache->header.dataCount);
 
 		auto newCache = std::make_unique<RuntimeCache>();
-		if (!TryBuildRuntimeCache(diskCache, *newCache)) {
+		if (!TryBuildRuntimeCache(*diskCache, *newCache)) {
 			logger::warn("[Unified Water] [Cache] Failed to build runtime cache for {}", key);
 			return false;
 		}
 
-		newCacheMap->emplace(std::move(key), std::move(newCache));
+		newCacheMap->emplace(key, std::move(newCache));
+		newDiskCacheMap->emplace(key, diskCache);
 	}
 
 	std::atomic_store_explicit(&cacheMap, std::const_pointer_cast<const CacheMap>(newCacheMap), std::memory_order_release);
+	std::atomic_store_explicit(&diskCacheMap, std::const_pointer_cast<const DiskCacheMap>(newDiskCacheMap), std::memory_order_release);
 
 	if (!currentWorldSpace.empty()) {
 		if (const auto snap = std::atomic_load_explicit(&cacheMap, std::memory_order_acquire)) {
 			if (const auto it = snap->find(currentWorldSpace); it != snap->end()) {
 				currentCache = it->second;
+			}
+		}
+		if (const auto snap = std::atomic_load_explicit(&diskCacheMap, std::memory_order_acquire)) {
+			if (const auto it = snap->find(currentWorldSpace); it != snap->end()) {
+				currentDiskCache = it->second;
 			}
 		}
 	}
@@ -275,8 +350,51 @@ bool WaterCache::GenerateCaches()
 
 		async.pool->push_task([this, worldSpace, editorID] {
 			DiskCache cache = {};
-			const auto name = std::format("{}_cache.wc", editorID);
-			const auto success = BuildDiskCache(worldSpace, cache) && TryWriteCacheToFile(name, cache.header, cache.instructions);
+			bool success = BuildDiskCache(worldSpace, cache);
+
+			if (success) {
+				const auto cacheFileName = std::format("{}_cache.wc", editorID);
+				success = TryWriteCacheToFile(cacheFileName, cache.header, cache.instructions);
+				if (!success) {
+					logger::error("[Unified Water] [Cache] {}: failed to write instruction cache", editorID);
+				}
+			}
+
+			if (success) {
+				namespace fs = std::filesystem;
+				const auto shorelineFileName = std::format("{}_shoreline.wsf", editorID);
+				const auto shorelinePath = Util::PathHelpers::GetDataPath() / "UnifiedWaterCache" / shorelineFileName;
+				const std::size_t cellCount = cache.shorelineDistance.size();
+				if (cache.shorelineNormalX.size() != cellCount || cache.shorelineNormalY.size() != cellCount || cache.shorelineMask.size() != cellCount) {
+					logger::error("[Unified Water] [Cache] {}: shoreline field sizes are inconsistent", editorID);
+					success = false;
+				} else {
+					std::ofstream shorelineStream(shorelinePath, std::ios::binary | std::ios::trunc);
+					if (!shorelineStream) {
+						logger::error("[Unified Water] [Cache] {}: failed to open '{}' for shoreline data", editorID, shorelinePath.string());
+						success = false;
+					} else {
+						WaterCache::WorldSpaceHeader shorelineHeader = cache.header;
+						shorelineHeader.dataCount = static_cast<int32_t>(cellCount);
+						shorelineStream.write(reinterpret_cast<const char*>(&shorelineHeader), sizeof(shorelineHeader));
+						if (cellCount > 0) {
+							shorelineStream.write(reinterpret_cast<const char*>(cache.shorelineDistance.data()), cellCount * sizeof(float));
+							shorelineStream.write(reinterpret_cast<const char*>(cache.shorelineNormalX.data()), cellCount * sizeof(float));
+							shorelineStream.write(reinterpret_cast<const char*>(cache.shorelineNormalY.data()), cellCount * sizeof(float));
+							shorelineStream.write(reinterpret_cast<const char*>(cache.shorelineMask.data()), cellCount * sizeof(float));
+						}
+
+						if (!shorelineStream.good()) {
+							logger::error("[Unified Water] [Cache] {}: failed while writing shoreline data to '{}'", editorID, shorelinePath.string());
+							shorelineStream.close();
+							std::error_code removeEc;
+							fs::remove(shorelinePath, removeEc);
+							success = false;
+						}
+					}
+				}
+			}
+
 			if (success) {
 				logger::debug("[Unified Water] [Cache] {} generation complete", editorID);
 			} else {
@@ -689,6 +807,12 @@ bool WaterCache::BuildDiskCache(RE::TESWorldSpace* worldSpace, DiskCache& diskCa
 	std::vector<float> shorelineNormalY;
 	std::vector<float> shorelineMask;
 	BuildShorelineField(cellData, hdr.width, hdr.height, shorelineDistance, shorelineNormalX, shorelineNormalY, shorelineMask);
+
+	// Store shoreline field data in disk cache for later use by ShorelineMap
+	diskCache.shorelineDistance = shorelineDistance;
+	diskCache.shorelineNormalX = shorelineNormalX;
+	diskCache.shorelineNormalY = shorelineNormalY;
+	diskCache.shorelineMask = shorelineMask;
 
 	// Generate instructions for all LOD levels: 1, 4, 8, 16, 32
 	// Array indices: 0=LOD1, 1=LOD4, 2=LOD8, 3=LOD16, 4=LOD32
