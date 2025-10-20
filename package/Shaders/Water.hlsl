@@ -317,104 +317,63 @@ void GetBlendedShorelineData(float2 worldPos, out float2 shoreNormal, out float 
 	float2 localCoord = normalizedCell * 2.0f - 1.0f;
 	localCoord = clamp(localCoord, float2(-1.0f, -1.0f), float2(1.0f, 1.0f));
 
-	// Calculate edge blend based on water TILE boundaries, not arbitrary cell edges
-	// This prevents fadeout at cell edges in open water where there's no actual terrain transition
-	float blendBand = max(ShorelineEdgeBlend, 1e-3f);
-	float2 tileLocalFrac = abs(localCoord);
-	float edgeBlend = smoothstep(1.0f - blendBand, 1.0f, max(tileLocalFrac.x, tileLocalFrac.y));
-	edgeBlend = 1.0f - edgeBlend;
-
-	float basisX[3] = {
-		0.5f * localCoord.x * (localCoord.x - 1.0f),
-		1.0f - localCoord.x * localCoord.x,
-		0.5f * localCoord.x * (localCoord.x + 1.0f)
-	};
-	float basisY[3] = {
-		0.5f * localCoord.y * (localCoord.y - 1.0f),
-		1.0f - localCoord.y * localCoord.y,
-		0.5f * localCoord.y * (localCoord.y + 1.0f)
-	};
-
-	float2 rowNormal[3];
-	float rowDistance[3];
-	float rowWeight[3];
-
-	[unroll]
-	for (int row = 0; row < 3; ++row) {
-		float2 accumNormal = 0.0f;
-		float accumDistance = 0.0f;
-		float accumWeight = 0.0f;
-
-		[unroll]
-		for (int col = 0; col < 3; ++col) {
-			int sampleIdx = row * 3 + col;
-			float4 sample = ShoreSamples[sampleIdx];
-			float weight = basisX[col] * sample.w;
-			accumNormal += weight * sample.xy;
-			accumDistance += weight * sample.z;
-			accumWeight += weight;
-		}
-
-		if (accumWeight > 1e-4f) {
-			rowNormal[row] = accumNormal / accumWeight;
-			rowDistance[row] = accumDistance / accumWeight;
-			rowWeight[row] = accumWeight;
-		} else {
-			rowNormal[row] = float2(0.0f, 0.0f);
-			rowDistance[row] = 10000.0f;
-			rowWeight[row] = 0.0f;
-		}
+	// Use bilinear interpolation for smoother tile transitions
+	// Map from [-1, 1] to [0, 1] for easier bilinear math
+	float2 uv = localCoord * 0.5f + 0.5f;
+	
+	// Sample indices for 3x3 grid (we'll use center 2x2 for bilinear)
+	// Grid layout:
+	// 0 1 2
+	// 3 4 5
+	// 6 7 8
+	
+	// Determine which quadrant we're in and interpolate within it
+	float2 quadUV = uv * 2.0f;
+	int baseX = (uv.x < 0.5f) ? 0 : 1;
+	int baseY = (uv.y < 0.5f) ? 0 : 1;
+	float2 localUV = frac(quadUV);
+	
+	// Get the 4 corner samples for bilinear interpolation
+	int idx00 = baseY * 3 + baseX;
+	int idx10 = baseY * 3 + (baseX + 1);
+	int idx01 = (baseY + 1) * 3 + baseX;
+	int idx11 = (baseY + 1) * 3 + (baseX + 1);
+	
+	float4 sample00 = ShoreSamples[idx00];
+	float4 sample10 = ShoreSamples[idx10];
+	float4 sample01 = ShoreSamples[idx01];
+	float4 sample11 = ShoreSamples[idx11];
+	
+	// Bilinear interpolation
+	float4 top = lerp(sample00, sample10, localUV.x);
+	float4 bottom = lerp(sample01, sample11, localUV.x);
+	float4 blendedSample = lerp(top, bottom, localUV.y);
+	
+	float2 blendedNormal = blendedSample.xy;
+	float blendedDistance = blendedSample.z;
+	float blendedWeight = blendedSample.w;
+	
+	if (blendedWeight <= 1e-4f) {
+		shoreNormal = float2(0.0f, 0.0f);
+		distanceToShore = 10000.0f;
+		return;
 	}
-
-	float2 blendedNormal = float2(0.0f, 0.0f);
-	float blendedDistance = 0.0f;
-	float totalWeight = 0.0f;
-
-	[unroll]
-	for (int rowIdx = 0; rowIdx < 3; ++rowIdx) {
-		float weight = basisY[rowIdx] * rowWeight[rowIdx];
-		blendedNormal += weight * rowNormal[rowIdx];
-		blendedDistance += weight * rowDistance[rowIdx];
-		totalWeight += weight;
-	}
-
-	float2 baseNormal = float2(0.0f, 0.0f);
-	float baseDistance = 10000.0f;
-	float baseWeight = totalWeight;
-	if (totalWeight > 1e-4f) {
-		float len = length(blendedNormal);
-		if (len > 1e-4f) {
-			baseNormal = blendedNormal / len;
-			baseDistance = max(blendedDistance / totalWeight, 0.0f);
-		} else {
-			baseDistance = 10000.0f;
-		}
-	}
-
-	if (baseWeight <= 1e-4f) {
+	
+	float2 baseNormal = blendedNormal;
+	float len = length(baseNormal);
+	if (len > 1e-4f) {
+		baseNormal /= len;
+	} else {
 		shoreNormal = float2(0.0f, 0.0f);
 		distanceToShore = 10000.0f;
 		return;
 	}
 
-	float2 shoreNormalBase = baseNormal;
-	float baseNormalLen = length(shoreNormalBase);
-	if (baseNormalLen > 1e-4f) {
-		shoreNormalBase /= baseNormalLen;
-	}
-
-	float baseDistanceCells = max(baseDistance, 0.0f);
-	
-	float2 centerSample = ShoreSamples[4].xy;
-	float centerLen = length(centerSample);
-	float2 centerNormal = centerLen > 1e-4f ? centerSample / centerLen : shoreNormalBase;
-	
-	float2 finalNormal = normalize(lerp(centerNormal, shoreNormalBase, edgeBlend));
-	
+	float baseDistanceCells = max(blendedDistance, 0.0f);
+	float2 finalNormal = baseNormal;
 	float2 variedNormal = finalNormal;
-	float normalLenCheck = length(finalNormal);
 
-	if (normalLenCheck > 0.001f && baseDistanceCells < ShorelineNoiseDistance) {
+	if (baseDistanceCells < ShorelineNoiseDistance) {
 		float noiseScale = max(ShorelineNoiseScale, 1e-7f);
 		float noiseStrength = ShorelineNoiseStrength;
 		float2 noisePos = worldPos * noiseScale;
@@ -422,10 +381,10 @@ void GetBlendedShorelineData(float2 worldPos, out float2 shoreNormal, out float 
 		float noise2 = fractalNoise(noisePos + float2(100.0f, 50.0f), 2);
 		float2 noiseOffset = float2(noise1 - 0.5f, noise2 - 0.5f) * 2.0f;
 		float distanceFactor = saturate(baseDistanceCells / max(ShorelineNoiseDistance, 1e-3f));
-		variedNormal = normalize(finalNormal + noiseOffset * noiseStrength * distanceFactor * (1.0f - edgeBlend));
+		variedNormal = normalize(finalNormal + noiseOffset * noiseStrength * distanceFactor);
 	}
 	
-	shoreNormal = normalLenCheck > 1e-4f ? variedNormal : float2(0.0f, 0.0f);
+	shoreNormal = variedNormal;
 	distanceToShore = baseDistanceCells;
 }
 
@@ -489,7 +448,7 @@ float2 DetectShorelineDirectionPrev(float2 worldPos, out float shoreInfluence, o
 }
 
 // Apply shoreline rotation to a flow direction
-// This bends water flow toward perpendicular-to-shore (waves rolling toward beach)
+// This bends water flow toward the shore (waves rolling toward beach)
 float2 ApplyShorelineInfluence(float2 baseDirection, float2 worldPos, float influenceStrength)
 {
 	float shoreInfluence = 0.0f;
@@ -497,12 +456,10 @@ float2 ApplyShorelineInfluence(float2 baseDirection, float2 worldPos, float infl
 	float2 shoreNormal = DetectShorelineDirection(worldPos, shoreInfluence, dummyDistance);
 	
 	if (shoreInfluence > 0.001f) {
-		// Perpendicular to shore normal = direction waves should travel (toward shore)
-		float2 shorePerp = float2(-shoreNormal.y, shoreNormal.x);
-		
-		// Blend base direction toward shore-perpendicular based on proximity
+		// Shore normal points FROM water TO land - this is the direction waves should travel
+		// Blend base direction toward the shore normal based on proximity
 		float blendFactor = shoreInfluence * influenceStrength;
-		return normalize(lerp(baseDirection, shorePerp, blendFactor));
+		return normalize(lerp(baseDirection, shoreNormal, blendFactor));
 	}
 	
 	return baseDirection;
@@ -565,11 +522,18 @@ WaveSample CalculateWaterDisplacement(float2 worldPos, float waveIntensity, floa
 	float2 primaryDir = defaultWaveDir;
 
 	if (shorelineDirectionWeight > 0.001f) {
-		float2 shorelineDir = float2(-shoreNormal.y, shoreNormal.x);
+		// Shore normal points FROM water TO land
+		// We want waves to travel TOWARD shore (in direction of normal)
+		// NOT perpendicular - that causes ambiguous 90° flip issues
+		float2 shorelineDir = shoreNormal;
 		float shorelineLenSq = dot(shorelineDir, shorelineDir);
 		if (shorelineLenSq > 1e-5f) {
 			shorelineDir *= rsqrt(shorelineLenSq);
-			float2 blendedDir = lerp(defaultWaveDir, shorelineDir, shorelineDirectionWeight);
+			
+			// Blend toward shore direction, with smooth falloff based on distance
+			// Closer to shore = stronger alignment toward shore
+			float distanceBlend = saturate(shorelineStrength);
+			float2 blendedDir = lerp(defaultWaveDir, shorelineDir, shorelineDirectionWeight * distanceBlend);
 			float blendedLenSq = dot(blendedDir, blendedDir);
 			if (blendedLenSq > 1e-5f) {
 				primaryDir = blendedDir * rsqrt(blendedLenSq);
@@ -2357,29 +2321,7 @@ PS_OUTPUT main(PS_INPUT input)
 		finalColor = lerp(finalColor, fineColor, fineHighlight);
 	}
 	
-	// DEBUG: Visualize shoreline influence (DISABLED - uncomment to debug)
-	/*
-	float debugShoreInfluence = 0.0f;
-	float debugShoreDistance;
-	float2 debugShoreNormal = DetectShorelineDirection(input.WPosition.xz, debugShoreInfluence, debugShoreDistance);
 	
-	// Show cbuffer data as colored overlay
-	// Red = ShoreNormalX, Green = ShoreNormalY, Blue = distance from shore, White = high influence
-	float3 debugColor = float3(
-		abs(ShoreNormalX) * 3.0,           // Amplify to make visible
-		abs(ShoreNormalY) * 3.0,           // Amplify to make visible  
-		saturate(1.0 - DistanceToShore / 20.0)  // Blue = closer to shore
-	);
-	
-	// Also show computed influence as brightness
-	debugColor *= (1.0 + debugShoreInfluence * 2.0);
-	
-	// Blend debug visualization over water
-	if (any(debugColor > 0.01)) {
-		finalColor = lerp(finalColor, debugColor, 0.5);
-	}
-	finalColor.b += (DistanceToShore < 5000.0) ? 0.3 : 0.0;
-	*/
 #		endif
 	psout.Lighting = float4(finalColor, isSpecular);
 #		endif

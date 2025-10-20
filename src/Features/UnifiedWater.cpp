@@ -930,7 +930,7 @@ void UnifiedWater::DataLoaded()
 	logger::debug("[Unified Water] Optimised water mesh loaded");
 
 	subdividedWaterMeshVariants.fill(nullptr);
-	subdividedWaterMeshVariants[0] = waterMesh;
+	subdividedWaterMeshVariants[2] = waterMesh;  // Index 2 = base mesh (lowest detail for distance)
 
 	if (waterMesh) {
 		auto ensureRendererData = [&](RE::BSTriShape* target) -> bool {
@@ -1047,12 +1047,17 @@ void UnifiedWater::DataLoaded()
 			return clone;
 		};
 
+		// Build variants in reverse order:
+		// subdividedWaterMeshVariants[0] = 2x subdivision (highest detail - close water)
+		// subdividedWaterMeshVariants[1] = 1x subdivision (medium detail - mid distance)
+		// subdividedWaterMeshVariants[2] = base mesh (lowest detail - far LOD)
 		for (std::uint32_t iteration = 1; iteration <= 2; ++iteration) {
 			auto variant = buildVariant(iteration);
+			int targetIndex = 2 - iteration;  // Reverse: iteration 1 -> index 1, iteration 2 -> index 0
 			if (variant)
-				subdividedWaterMeshVariants[iteration] = variant;
-			else if (iteration > 0)
-				subdividedWaterMeshVariants[iteration] = subdividedWaterMeshVariants[iteration - 1];
+				subdividedWaterMeshVariants[targetIndex] = variant;
+			else if (targetIndex < 2)
+				subdividedWaterMeshVariants[targetIndex] = subdividedWaterMeshVariants[targetIndex + 1];
 		}
 	}
 
@@ -1360,12 +1365,18 @@ void UnifiedWater::BGSTerrainBlock_Attach::thunk(RE::BGSTerrainBlock* block)
 			if (singleton.settings.UseOptimisedMeshes && !useOptimised) {
 				logger::debug("[Unified Water] Subdivision enabled, overriding optimised mesh usage for LOD {}", lodLevel);
 			}
-			int desiredSubdivision = 0;
+			
+			// Mesh variant indices (reversed for proper LOD):
+			// [0] = 2x subdivision (highest detail - close water)
+			// [1] = 1x subdivision (medium detail - mid distance)  
+			// [2] = base mesh (lowest detail - far LOD)
+			int desiredSubdivision = 2;  // Default to base mesh
 			if (!useOptimised && subdivisionEnabled) {
 				if (instruction.size <= 1)
-					desiredSubdivision = 2;
+					desiredSubdivision = 0;  // Small tiles (close) = highest subdivision
 				else if (instruction.size <= 4)
-					desiredSubdivision = 1;
+					desiredSubdivision = 1;  // Medium tiles = medium subdivision
+				// else: large tiles use desiredSubdivision = 2 (base mesh)
 			}
 
 			desiredSubdivision = std::clamp(desiredSubdivision, 0, static_cast<int>(singleton.subdividedWaterMeshVariants.size()) - 1);
