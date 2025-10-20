@@ -1,6 +1,10 @@
 ﻿#include "WaterCache.h"
 
 #include <BS_thread_pool.hpp>
+#include <algorithm>
+#include <cmath>
+#include <limits>
+#include <queue>
 
 bool WaterCache::SetCurrentWorldSpace(const RE::TESWorldSpace* worldSpace)
 {
@@ -21,13 +25,17 @@ bool WaterCache::SetCurrentWorldSpace(const RE::TESWorldSpace* worldSpace)
 		return false;
 	}
 
-	const auto newWorldSpace = worldSpace->GetFormEditorID();
-	if (currentWorldSpace == newWorldSpace) {
+	const char* editorID = worldSpace->GetFormEditorID();
+	if (!editorID || *editorID == '\0') {
+		logger::warn("[Unified Water] [Cache] WorldSpace has no EditorID - cannot activate cache");
+		return false;
+	}
+
+	std::string newWorldSpace(editorID);
+	if (!currentWorldSpace.empty() && currentWorldSpace == newWorldSpace && currentCache) {
 		logger::debug("[Unified Water] [Cache] Runtime cache for {} already active", currentWorldSpace);
 		return true;
 	}
-
-	currentWorldSpace = newWorldSpace;
 
 	const auto snap = std::atomic_load_explicit(&cacheMap, std::memory_order_acquire);
 	if (!snap) {
@@ -37,7 +45,15 @@ bool WaterCache::SetCurrentWorldSpace(const RE::TESWorldSpace* worldSpace)
 
 	const auto it = snap->find(newWorldSpace);
 	if (it == snap->end()) {
-		logger::error("[Unified Water] [Cache] Failed to get runtime cache for {}", newWorldSpace);
+		if (async.running.load(std::memory_order_acquire)) {
+			if (lastMissingCacheWorldSpace != newWorldSpace) {
+				logger::info("[Unified Water] [Cache] Runtime cache for {} not ready (build in progress)", newWorldSpace);
+				lastMissingCacheWorldSpace = newWorldSpace;
+			}
+		} else if (lastMissingCacheWorldSpace != newWorldSpace) {
+			logger::error("[Unified Water] [Cache] Failed to get runtime cache for {}", newWorldSpace);
+			lastMissingCacheWorldSpace = newWorldSpace;
+		}
 		currentCache.reset();
 		currentWorldSpace.clear();
 		return false;
@@ -45,6 +61,7 @@ bool WaterCache::SetCurrentWorldSpace(const RE::TESWorldSpace* worldSpace)
 
 	currentCache = it->second;
 	currentWorldSpace = std::move(newWorldSpace);
+	lastMissingCacheWorldSpace.clear();
 	logger::debug("[Unified Water] [Cache] Runtime cache for {} activated", currentWorldSpace);
 
 	return true;
@@ -212,6 +229,7 @@ bool WaterCache::LoadCaches()
 	const auto t1 = std::chrono::steady_clock::now();
 	const auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(t1 - t0).count();
 	logger::info("[Unified Water] [Cache] Caches loaded in {} ms", ms);
+	lastMissingCacheWorldSpace.clear();
 
 	return true;
 }
@@ -222,6 +240,8 @@ bool WaterCache::GenerateCaches()
 		logger::warn("[Unified Water] [Cache] Build already running");
 		return false;
 	}
+
+	lastMissingCacheWorldSpace.clear();
 
 	const auto worldSpaces = GetValidWorldSpaces();
 
@@ -310,81 +330,262 @@ void WaterCache::BuildPreCache(RE::TESWorldSpace* worldSpace, PreCache& cache)
 	}
 }
 
-// Compute shoreline normal and distance for a water cell using Sobel edge detection
-void WaterCache::ComputeShorelineData(const std::vector<CellData>& cellData, int32_t width, int32_t height,
-	int32_t cellX, int32_t cellY, uint32_t tileSize, 
-	float outNormalX[9], float outNormalY[9], float outDistance[9])
+namespace
 {
-	// Sample 9 points in a 3x3 grid across the cell
-	// This creates within-cell variation for realistic flow
-	const int32_t sampleOffsets[9][2] = {
-		{ -1, -1 }, { 0, -1 }, { 1, -1 },  // South row: SW, S, SE
-		{ -1, 0 },  { 0, 0 },  { 1, 0 },   // Middle row: W, Center, E
-		{ -1, 1 },  { 0, 1 },  { 1, 1 }    // North row: NW, N, NE
+struct ShorelineNode
+{
+	int index;
+	float distance;
+};
+
+constexpr float kMaxShoreDistance = 96.0f;
+
+constexpr int kNeighborOffsets8[8][2] = {
+	{ 1, 0 }, { -1, 0 }, { 0, 1 }, { 0, -1 },
+	{ 1, 1 }, { -1, 1 }, { 1, -1 }, { -1, -1 }
+};
+
+constexpr float kNeighborCost8[8] = {
+	1.0f, 1.0f, 1.0f, 1.0f,
+	1.41421356f, 1.41421356f, 1.41421356f, 1.41421356f
+};
+
+template <class TValue>
+[[nodiscard]] float BilinearSample(const std::vector<TValue>& field, int32_t width, int32_t height, float x, float y)
+{
+	x = std::clamp(x, 0.0f, static_cast<float>(width - 1));
+	y = std::clamp(y, 0.0f, static_cast<float>(height - 1));
+	const int32_t x0 = static_cast<int32_t>(std::floor(x));
+	const int32_t y0 = static_cast<int32_t>(std::floor(y));
+	const int32_t x1 = std::min(x0 + 1, width - 1);
+	const int32_t y1 = std::min(y0 + 1, height - 1);
+	const float tx = x - static_cast<float>(x0);
+	const float ty = y - static_cast<float>(y0);
+
+	const float v00 = static_cast<float>(field[y0 * width + x0]);
+	const float v10 = static_cast<float>(field[y0 * width + x1]);
+	const float v01 = static_cast<float>(field[y1 * width + x0]);
+	const float v11 = static_cast<float>(field[y1 * width + x1]);
+
+	const float vx0 = std::lerp(v00, v10, tx);
+	const float vx1 = std::lerp(v01, v11, tx);
+	return std::lerp(vx0, vx1, ty);
+}
+
+}  // namespace
+
+void WaterCache::BuildShorelineField(const std::vector<CellData>& cellData, const int32_t width, const int32_t height,
+	std::vector<float>& outDistance, std::vector<float>& outNormalX, std::vector<float>& outNormalY, std::vector<float>& outMask)
+{
+	const std::size_t cellCount = cellData.size();
+	outDistance.assign(cellCount, std::numeric_limits<float>::max());
+	outNormalX.assign(cellCount, 0.0f);
+	outNormalY.assign(cellCount, 0.0f);
+	outMask.assign(cellCount, 0.0f);
+
+	std::vector<uint8_t> isWater(cellCount, 0);
+	std::vector<uint8_t> isShore(cellCount, 0);
+
+	auto index = [width](int32_t x, int32_t y) noexcept {
+		return static_cast<std::size_t>(y) * static_cast<std::size_t>(width) + static_cast<std::size_t>(x);
 	};
-	
-	// Scale offsets based on tile size for appropriate spacing
-	const int32_t spacing = std::max(1, static_cast<int32_t>(tileSize) / 3);
-	
-	for (int i = 0; i < 9; ++i) {
-		// Calculate sample position
-		const int32_t sampleX = cellX + sampleOffsets[i][0] * spacing;
-		const int32_t sampleY = cellY + sampleOffsets[i][1] * spacing;
-		
-		// Initialize with defaults for open water
-		outNormalX[i] = 0.0f;
-		outNormalY[i] = 0.0f;
-		outDistance[i] = 100.0f;
 
-		// Sobel kernel for edge detection
-		const int32_t sobelRadius = std::max(2, static_cast<int32_t>(tileSize));
-		float gradX = 0.0f;
-		float gradY = 0.0f;
-		float minDist = outDistance[i];
-		bool foundShore = false;
+	for (int32_t y = 0; y < height; ++y) {
+		for (int32_t x = 0; x < width; ++x) {
+			const std::size_t idx = index(x, y);
+			const bool water = cellData[idx].form != nullptr;
+			isWater[idx] = water ? 1u : 0u;
+			if (water)
+				outMask[idx] = 1.0f;
 
-		// Sample surrounding cells to detect land/water boundaries
-		for (int32_t dy = -sobelRadius; dy <= sobelRadius; ++dy) {
-			for (int32_t dx = -sobelRadius; dx <= sobelRadius; ++dx) {
-				const int32_t nx = sampleX + dx;
-				const int32_t ny = sampleY + dy;
+			if (!water) {
+				outDistance[idx] = 0.0f;
+				continue;
+			}
 
-				// Skip out of bounds
-				if (nx < 0 || nx >= width || ny < 0 || ny >= height)
+			bool touchesLand = false;
+			for (const auto& offset : kNeighborOffsets8) {
+				const int32_t nx = x + offset[0];
+				const int32_t ny = y + offset[1];
+				if (nx < 0 || ny < 0 || nx >= width || ny >= height) {
+					touchesLand = true;
+					break;
+				}
+				if (!cellData[index(nx, ny)].form) {
+					touchesLand = true;
+					break;
+				}
+			}
+
+			if (touchesLand) {
+				isShore[idx] = 1u;
+				outDistance[idx] = 0.0f;
+			}
+		}
+	}
+
+	struct ShorelineNodeCompare
+	{
+		bool operator()(const ShorelineNode& lhs, const ShorelineNode& rhs) const noexcept
+		{
+			return lhs.distance > rhs.distance;
+		}
+	};
+
+	std::priority_queue<ShorelineNode, std::vector<ShorelineNode>, ShorelineNodeCompare> frontier;
+	for (std::size_t i = 0; i < cellCount; ++i) {
+		if (isShore[i]) {
+			frontier.push({ static_cast<int>(i), 0.0f });
+		}
+	}
+
+	if (!frontier.empty()) {
+		while (!frontier.empty()) {
+			const ShorelineNode node = frontier.top();
+			frontier.pop();
+
+			if (node.distance > outDistance[node.index] + 1e-4f)
+				continue;
+
+			const int32_t x = node.index % width;
+			const int32_t y = node.index / width;
+
+			for (int n = 0; n < 8; ++n) {
+				const int32_t nx = x + kNeighborOffsets8[n][0];
+				const int32_t ny = y + kNeighborOffsets8[n][1];
+				if (nx < 0 || ny < 0 || nx >= width || ny >= height)
 					continue;
 
-				const int32_t idx = ny * width + nx;
-				const auto& [heights, formID, form] = cellData[idx];
-				
-				// Determine if this cell is land
-				bool isLand = !form || heights.water <= heights.land;
+				const std::size_t nIdx = index(nx, ny);
+				if (!isWater[nIdx])
+					continue;
 
-				if (isLand) {
-					foundShore = true;
-					float dist = std::sqrt(static_cast<float>(dx * dx + dy * dy));
-					
-					// Track minimum distance to any land cell
-					if (dist < minDist)
-						minDist = dist;
-
-					// Sobel-style gradient accumulation (weight by inverse distance)
-					float weight = dist > 0.0f ? 1.0f / dist : 1.0f;
-					gradX += dx * weight;
-					gradY += dy * weight;
+				const float newDistance = node.distance + kNeighborCost8[n];
+				if (newDistance + 1e-4f < outDistance[nIdx]) {
+					outDistance[nIdx] = newDistance;
+					frontier.push({ static_cast<int>(nIdx), newDistance });
 				}
 			}
 		}
+	}
 
-		if (foundShore) {
-			outDistance[i] = minDist;
-			
-			// Normalize gradient to get shore normal (points from water toward land)
-			float gradLen = std::sqrt(gradX * gradX + gradY * gradY);
-			if (gradLen > 0.001f) {
-				outNormalX[i] = gradX / gradLen;
-				outNormalY[i] = gradY / gradLen;
+	for (std::size_t i = 0; i < cellCount; ++i) {
+		if (!isWater[i]) {
+			outDistance[i] = 0.0f;
+			continue;
+		}
+		if (!std::isfinite(outDistance[i]))
+			outDistance[i] = kMaxShoreDistance;
+		else
+			outDistance[i] = std::min(outDistance[i], kMaxShoreDistance);
+	}
+
+	std::vector<float> smoothed(outDistance);
+	for (int iteration = 0; iteration < 2; ++iteration) {
+		for (int32_t y = 0; y < height; ++y) {
+			for (int32_t x = 0; x < width; ++x) {
+				const std::size_t idx = index(x, y);
+				if (!isWater[idx] || isShore[idx]) {
+					smoothed[idx] = outDistance[idx];
+					continue;
+				}
+
+				float accum = outDistance[idx];
+				float weight = 1.0f;
+				for (const auto& offset : kNeighborOffsets8) {
+					const int32_t nx = x + offset[0];
+					const int32_t ny = y + offset[1];
+					if (nx < 0 || ny < 0 || nx >= width || ny >= height)
+						continue;
+					const std::size_t nIdx = index(nx, ny);
+					if (!isWater[nIdx])
+						continue;
+					accum += outDistance[nIdx];
+					weight += 1.0f;
+				}
+				smoothed[idx] = accum / weight;
 			}
 		}
+		outDistance.swap(smoothed);
+	}
+
+	auto sampleDistance = [&](int32_t sx, int32_t sy) noexcept -> float {
+		if (sx < 0 || sy < 0 || sx >= width || sy >= height)
+			return 0.0f;
+		return outDistance[index(sx, sy)];
+	};
+
+	for (int32_t y = 0; y < height; ++y) {
+		for (int32_t x = 0; x < width; ++x) {
+			const std::size_t idx = index(x, y);
+			if (!isWater[idx])
+				continue;
+
+			const float dx = sampleDistance(x + 1, y) - sampleDistance(x - 1, y);
+			const float dy = sampleDistance(x, y + 1) - sampleDistance(x, y - 1);
+			const float lenSq = dx * dx + dy * dy;
+			if (lenSq > 1e-6f) {
+				const float invLen = 1.0f / std::sqrt(lenSq);
+				outNormalX[idx] = -dx * invLen;
+				outNormalY[idx] = -dy * invLen;
+			} else {
+				outNormalX[idx] = 0.0f;
+				outNormalY[idx] = 0.0f;
+			}
+		}
+	}
+}
+
+void WaterCache::ComputeShorelineData(const int32_t width, const int32_t height,
+	const std::vector<float>& distanceField,
+	const std::vector<float>& normalXField,
+	const std::vector<float>& normalYField,
+	const std::vector<float>& waterMask,
+	const float centerCellX, const float centerCellY, const uint32_t tileSize,
+	float outNormalX[9], float outNormalY[9], float outDistance[9])
+{
+	constexpr int sampleOffsets[9][2] = {
+		{ -1, -1 }, { 0, -1 }, { 1, -1 },
+		{ -1, 0 },  { 0, 0 },  { 1, 0 },
+		{ -1, 1 },  { 0, 1 },  { 1, 1 }
+	};
+
+	const float spacing = std::max(tileSize / 3.0f, 0.75f);
+	const float centerX = centerCellX;
+	const float centerY = centerCellY;
+
+	for (int i = 0; i < 9; ++i) {
+		const float sampleX = centerX + static_cast<float>(sampleOffsets[i][0]) * spacing;
+		const float sampleY = centerY + static_cast<float>(sampleOffsets[i][1]) * spacing;
+
+		const float mask = BilinearSample(waterMask, width, height, sampleX, sampleY);
+		if (mask < 0.05f) {
+			outNormalX[i] = 0.0f;
+			outNormalY[i] = 0.0f;
+			outDistance[i] = kMaxShoreDistance;
+			continue;
+		}
+
+		float dist = BilinearSample(distanceField, width, height, sampleX, sampleY);
+		float nx = BilinearSample(normalXField, width, height, sampleX, sampleY);
+		float ny = BilinearSample(normalYField, width, height, sampleX, sampleY);
+		float lenSq = nx * nx + ny * ny;
+		if (lenSq > 1e-6f) {
+			const float invLen = 1.0f / std::sqrt(lenSq);
+			nx *= invLen;
+			ny *= invLen;
+		} else {
+			nx = 0.0f;
+			ny = 0.0f;
+		}
+
+		// Bias distance by projected offset to reduce shockwaves when sampling away from the tile center
+		const float offsetAlongNormal = (sampleX - centerX) * nx + (sampleY - centerY) * ny;
+		dist = std::max(dist - offsetAlongNormal, 0.0f);
+
+		outNormalX[i] = nx;
+		outNormalY[i] = ny;
+		outDistance[i] = std::min(dist, kMaxShoreDistance);
 	}
 }
 
@@ -406,13 +607,15 @@ bool WaterCache::BuildDiskCache(RE::TESWorldSpace* worldSpace, DiskCache& diskCa
 	const auto wsMax = worldSpace->maximumCoords;
 
 	if (editorID == "Tamriel") {
-		if (!TryReadCacheFromFile("Tamriel_precache.wpc", preCache.header, preCache.heights)) {
-			logger::error("[Unified Water] [Cache] Tamriel: Failed to load precache");
-			return false;
+		if (TryReadCacheFromFile("Tamriel_precache.wpc", preCache.header, preCache.heights)) {
+			diskCache.header = preCache.header;
+			hasPrecache = true;
+		} else {
+			logger::warn("[Unified Water] [Cache] Tamriel: Precache not found, falling back to runtime bounds");
 		}
-		diskCache.header = preCache.header;
-		hasPrecache = true;
-	} else {
+	}
+
+	if (!hasPrecache) {
 		Util::WorldToCell(wsMin, minX, minY);
 		Util::WorldToCell(wsMax, maxX, maxY);
 		maxX -= 1;
@@ -473,22 +676,28 @@ bool WaterCache::BuildDiskCache(RE::TESWorldSpace* worldSpace, DiskCache& diskCa
 
 	logger::debug("[Unified Water] [Cache] {}: Generating instructions for {} water cells...", editorID.c_str(), waterCellCount);
 
+	std::vector<float> shorelineDistance;
+	std::vector<float> shorelineNormalX;
+	std::vector<float> shorelineNormalY;
+	std::vector<float> shorelineMask;
+	BuildShorelineField(cellData, hdr.width, hdr.height, shorelineDistance, shorelineNormalX, shorelineNormalY, shorelineMask);
+
 	// Generate instructions for all LOD levels: 1, 4, 8, 16, 32
 	// Array indices: 0=LOD1, 1=LOD4, 2=LOD8, 3=LOD16, 4=LOD32
 	int32_t instructionCount;
-	GenerateInstructions(1, diskCache, cellData, instructionCount);
+	GenerateInstructions(1, diskCache, cellData, shorelineDistance, shorelineNormalX, shorelineNormalY, shorelineMask, instructionCount);
 	logger::info("[Unified Water] [Cache] {}: LOD1 - {} instructions generated", editorID.c_str(), instructionCount);
 	
-	GenerateInstructions(4, diskCache, cellData, instructionCount);
+	GenerateInstructions(4, diskCache, cellData, shorelineDistance, shorelineNormalX, shorelineNormalY, shorelineMask, instructionCount);
 	logger::info("[Unified Water] [Cache] {}: LOD4 - {} instructions generated", editorID.c_str(), instructionCount);
 
-	GenerateInstructions(8, diskCache, cellData, instructionCount);
+	GenerateInstructions(8, diskCache, cellData, shorelineDistance, shorelineNormalX, shorelineNormalY, shorelineMask, instructionCount);
 	logger::info("[Unified Water] [Cache] {}: LOD8 - {} instructions generated", editorID.c_str(), instructionCount);
 
-	GenerateInstructions(16, diskCache, cellData, instructionCount);
+	GenerateInstructions(16, diskCache, cellData, shorelineDistance, shorelineNormalX, shorelineNormalY, shorelineMask, instructionCount);
 	logger::info("[Unified Water] [Cache] {}: LOD16 - {} instructions generated", editorID.c_str(), instructionCount);
 
-	GenerateInstructions(32, diskCache, cellData, instructionCount);
+	GenerateInstructions(32, diskCache, cellData, shorelineDistance, shorelineNormalX, shorelineNormalY, shorelineMask, instructionCount);
 	logger::info("[Unified Water] [Cache] {}: LOD32 - {} instructions generated", editorID.c_str(), instructionCount);
 
 	diskCache.header.dataCount = static_cast<int32_t>(diskCache.instructions.size());
@@ -499,7 +708,12 @@ bool WaterCache::BuildDiskCache(RE::TESWorldSpace* worldSpace, DiskCache& diskCa
 	return true;
 }
 
-void WaterCache::GenerateInstructions(const int32_t lodLevel, DiskCache& diskCache, const std::vector<CellData>& cellData, int32_t& instructionCount)
+void WaterCache::GenerateInstructions(const int32_t lodLevel, DiskCache& diskCache, const std::vector<CellData>& cellData,
+	const std::vector<float>& shorelineDistance,
+	const std::vector<float>& shorelineNormalX,
+	const std::vector<float>& shorelineNormalY,
+	const std::vector<float>& shorelineMask,
+	int32_t& instructionCount)
 {
 	instructionCount = 0;
 	const auto& hdr = diskCache.header;
@@ -628,9 +842,11 @@ void WaterCache::GenerateInstructions(const int32_t lodLevel, DiskCache& diskCac
 					
 					// Compute shoreline data for this water tile - 9 sample points per cell
 					// Use center of tile for shoreline detection
-					const int32_t centerX = cellX + size / 2;
-					const int32_t centerY = cellY + size / 2;
-					WaterCache::ComputeShorelineData(cellData, hdr.width, hdr.height, centerX, centerY, size,
+					const float centerX = static_cast<float>(cellX) + (static_cast<float>(size) - 1.0f) * 0.5f;
+					const float centerY = static_cast<float>(cellY) + (static_cast<float>(size) - 1.0f) * 0.5f;
+					WaterCache::ComputeShorelineData(hdr.width, hdr.height,
+						shorelineDistance, shorelineNormalX, shorelineNormalY, shorelineMask,
+						centerX, centerY, static_cast<uint32_t>(size),
 						instruction.shoreNormalX, instruction.shoreNormalY, instruction.distanceToShore);
 
 					// Add new instruction to list

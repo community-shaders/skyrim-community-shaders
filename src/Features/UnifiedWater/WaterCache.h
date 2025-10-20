@@ -174,18 +174,30 @@ private:
 	
 	std::shared_ptr<RuntimeCache> currentCache;
 	std::string currentWorldSpace;
+	std::string lastMissingCacheWorldSpace;
 
 	bool LoadCaches();
 
 	static void BuildPreCache(RE::TESWorldSpace* worldSpace, PreCache& cache);
 	static bool BuildDiskCache(RE::TESWorldSpace* worldSpace, DiskCache& diskCache);
-	static void GenerateInstructions(int32_t lodLevel, DiskCache& diskCache, const std::vector<CellData>& cellData, int32_t& instructionCount);
+	static void GenerateInstructions(int32_t lodLevel, DiskCache& diskCache, const std::vector<CellData>& cellData,
+		const std::vector<float>& shorelineDistance,
+		const std::vector<float>& shorelineNormalX,
+		const std::vector<float>& shorelineNormalY,
+		const std::vector<float>& shorelineMask,
+		int32_t& instructionCount);
 	static bool TryBuildRuntimeCache(const DiskCache& diskCache, RuntimeCache& cache);
 	static std::vector<RE::TESWorldSpace*> GetValidWorldSpaces();
 	static void GetLODCoords(int32_t lodLevel, int32_t x, int32_t y, int32_t& outX, int32_t& outY);
 	
-	static void ComputeShorelineData(const std::vector<CellData>& cellData, int32_t width, int32_t height, 
-		int32_t cellX, int32_t cellY, uint32_t tileSize, 
+	static void BuildShorelineField(const std::vector<CellData>& cellData, int32_t width, int32_t height,
+		std::vector<float>& outDistance, std::vector<float>& outNormalX, std::vector<float>& outNormalY, std::vector<float>& outMask);
+	static void ComputeShorelineData(int32_t width, int32_t height,
+		const std::vector<float>& distanceField,
+		const std::vector<float>& normalXField,
+		const std::vector<float>& normalYField,
+		const std::vector<float>& waterMask,
+		float centerCellX, float centerCellY, uint32_t tileSize,
 		float outNormalX[9], float outNormalY[9], float outDistance[9]);
 
 	static bool TryGetCellData(RE::TESWorldSpace* worldSpace, RE::TESFileArray* files, int32_t x, int32_t y, RE::FormID& outFormID, float& outWaterHeight, float& outLandHeight, bool resolveFormID);
