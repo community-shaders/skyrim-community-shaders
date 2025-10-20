@@ -662,11 +662,12 @@ if(AIO_ZIP_TO_DIST)
 
     set(TARGET_AIO_ZIP "${PROJECT_NAME}_AIO-${UTC_NOW}.7z")
     message("Zipping ${AIO_DIR} to ${CMAKE_SOURCE_DIR}/dist/${TARGET_AIO_ZIP}")
-	add_custom_target(
+    add_custom_target(
         AIO_ZIP_PACKAGE
-		ALL
-        COMMAND ${CMAKE_COMMAND} -E tar cf
-                ${CMAKE_SOURCE_DIR}/dist/${TARGET_AIO_ZIP} --format=7zip -- .
+        ALL
+        COMMAND
+            ${CMAKE_COMMAND} -E tar cf
+            ${CMAKE_SOURCE_DIR}/dist/${TARGET_AIO_ZIP} --format=7zip -- .
         WORKING_DIRECTORY ${AIO_DIR}
         DEPENDS PREPARE_AIO
     )
