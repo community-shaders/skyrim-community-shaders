@@ -148,7 +148,7 @@ namespace GrassCollision
 			float3 remappedWorldPosition = lerp(worldPosition, worldPositionCentre, float3(0.95, 0.95, 0.0));
 
 			float distanceFromCenter = length(worldPosition - worldPositionCentre) + 0.01;
-			float maximumDepth = worldPosition.z - worldPositionCentre.z;
+			float maximumDepth = max(0.0, worldPosition.z - worldPositionCentre.z);
 
 			// Return base collision
 			float3 collision, previousCollision;
