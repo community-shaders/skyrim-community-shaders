@@ -6,14 +6,37 @@
 
 namespace FrameAnnotations
 {
+	namespace
+	{
+		static std::string BuildEventName(RE::ImageSpaceManager::ImageSpaceEffectEnum EffectType)
+		{
+			auto enumName = RE::ImageSpaceManager::GetImageSpaceEffectName(EffectType);
+
+			if (globals::state && globals::state->IsDeveloperMode()) {
+				uint16_t packed = static_cast<uint16_t>(EffectType);
+				uint16_t se = RE::ImageSpaceManager::GetSEIndex(EffectType);
+				uint16_t vr = RE::ImageSpaceManager::GetVRIndex(EffectType);
+				std::string packedString = std::format(" (packed: 0x{:X}, SE: {}, VR: {})", packed, se, vr);
+				return enumName + packedString;
+			} else {
+				return enumName;
+			}
+		}
+	}
+
 	template <RE::BSShader::Type ShaderType>
 	struct BSShader_SetupGeometry
 	{
 		static void thunk(RE::BSShader* shader, RE::BSRenderPass* pass, uint32_t renderFlags)
 		{
 			if (globals::state->frameAnnotations) {
-				const std::string passName = std::format("[{}:{:X}] <{}> {}", magic_enum::enum_name(ShaderType), pass->passEnum,
-					pass->accumulationHint, pass->geometry->name.c_str());
+				uint32_t descriptor = 0;
+				if (globals::game::currentPixelShader && *globals::game::currentPixelShader) {
+					descriptor = (*globals::game::currentPixelShader)->id;
+				}
+				std::string diskPath = std::format("Data/ShaderCache/{}/{:X}.pso", shader->fxpFilename, descriptor);
+				const std::string passName = std::format("[{}:{:X}] ({:X}) <{}> {} -> {}", magic_enum::enum_name(ShaderType), descriptor, pass->passEnum,
+					pass->accumulationHint, pass->geometry->name.c_str(), diskPath);
 				globals::state->BeginPerfEvent(passName);
 			}
 
@@ -43,7 +66,8 @@ namespace FrameAnnotations
 	{
 		static void thunk(void* imageSpaceShader, RE::BSTriShape* shape, RE::ImageSpaceEffectParam* param)
 		{
-			globals::state->BeginPerfEvent(std::format("{} Draw", magic_enum::enum_name(EffectType)));
+			std::string eventName = BuildEventName(EffectType) + " Draw";
+			globals::state->BeginPerfEvent(eventName);
 
 			func(imageSpaceShader, shape, param);
 
@@ -58,7 +82,8 @@ namespace FrameAnnotations
 	{
 		static void thunk(void* imageSpaceShader, uint32_t a1, uint32_t a2, uint32_t a3)
 		{
-			globals::state->BeginPerfEvent(std::format("{} Dispatch", magic_enum::enum_name(EffectType)));
+			std::string eventName = BuildEventName(EffectType) + " Dispatch";
+			globals::state->BeginPerfEvent(eventName);
 
 			func(imageSpaceShader, a1, a2, a3);
 
@@ -896,6 +921,66 @@ namespace FrameAnnotations
 			RE::VTABLE_BSImagespaceShaderISUnderwaterMask[0]);
 		stl::write_vfunc<0xC, BSImagespaceShader_Dispatch<RE::ImageSpaceManager::ISWaterFlow>>(
 			RE::VTABLE_BSImagespaceShaderWaterFlow[0]);
+		// VR-only shaders
+		if (globals::game::isVR) {
+			stl::write_vfunc<0x1, BSImagespaceShader_Render<RE::ImageSpaceManager::ISCopyDepthBuffer>>(
+				RE::VTABLE_BSImagespaceShaderCopyDepthBuffer[3]);
+			stl::write_vfunc<0x1, BSImagespaceShader_Render<RE::ImageSpaceManager::ISCopyDepthBuffer_DR>>(
+				RE::VTABLE_BSImagespaceShaderCopyDepthBuffer_DR[3]);
+			stl::write_vfunc<0x1, BSImagespaceShader_Render<RE::ImageSpaceManager::ISDownsampleHierarchicalDepthBufferCS>>(
+				RE::VTABLE_BSImagespaceShaderISDownsampleHierarchicalDepthBufferCS[3]);
+			stl::write_vfunc<0x1, BSImagespaceShader_Render<RE::ImageSpaceManager::ISDiffScaleDownsampleDepthBufferCS>>(
+				RE::VTABLE_BSImagespaceShaderISDiffScaleDownsampleDepthBufferCS[3]);
+			stl::write_vfunc<0x1, BSImagespaceShader_Render<RE::ImageSpaceManager::ISFullScreenVR>>(
+				RE::VTABLE_BSImagespaceShaderISFullScreenVR[3]);
+			stl::write_vfunc<0x1, BSImagespaceShader_Render<RE::ImageSpaceManager::ISTransformLvl7PreTest>>(
+				RE::VTABLE_BSImagespaceShaderTransformLvl7PreTest[3]);
+			stl::write_vfunc<0x1, BSImagespaceShader_Render<RE::ImageSpaceManager::ISLvl6PreTest>>(
+				RE::VTABLE_BSImagespaceShaderLvl6PreTest[3]);
+			stl::write_vfunc<0x1, BSImagespaceShader_Render<RE::ImageSpaceManager::ISLvl5PreTest>>(
+				RE::VTABLE_BSImagespaceShaderLvl5PreTest[3]);
+			stl::write_vfunc<0x1, BSImagespaceShader_Render<RE::ImageSpaceManager::ISLvl4PreTest>>(
+				RE::VTABLE_BSImagespaceShaderLvl4PreTest[3]);
+			stl::write_vfunc<0x1, BSImagespaceShader_Render<RE::ImageSpaceManager::ISLvl3PreTest>>(
+				RE::VTABLE_BSImagespaceShaderLvl3PreTest[3]);
+			stl::write_vfunc<0x1, BSImagespaceShader_Render<RE::ImageSpaceManager::ISLvl2PreTest>>(
+				RE::VTABLE_BSImagespaceShaderLvl2PreTest[3]);
+			stl::write_vfunc<0x1, BSImagespaceShader_Render<RE::ImageSpaceManager::ISLvl1PreTest>>(
+				RE::VTABLE_BSImagespaceShaderLvl1PreTest[3]);
+			stl::write_vfunc<0x1, BSImagespaceShader_Render<RE::ImageSpaceManager::ISLvl0PreTest>>(
+				RE::VTABLE_BSImagespaceShaderLvl0PreTest[3]);
+			stl::write_vfunc<0x1, BSImagespaceShader_Render<RE::ImageSpaceManager::ISSetupPreTest>>(
+				RE::VTABLE_BSImagespaceShaderSetupPreTest[3]);
+
+			stl::write_vfunc<0xC, BSImagespaceShader_Dispatch<RE::ImageSpaceManager::ISCopyDepthBuffer>>(
+				RE::VTABLE_BSImagespaceShaderCopyDepthBuffer[0]);
+			stl::write_vfunc<0xC, BSImagespaceShader_Dispatch<RE::ImageSpaceManager::ISCopyDepthBuffer_DR>>(
+				RE::VTABLE_BSImagespaceShaderCopyDepthBuffer_DR[0]);
+			stl::write_vfunc<0xC, BSImagespaceShader_Dispatch<RE::ImageSpaceManager::ISDownsampleHierarchicalDepthBufferCS>>(
+				RE::VTABLE_BSImagespaceShaderISDownsampleHierarchicalDepthBufferCS[0]);
+			stl::write_vfunc<0xC, BSImagespaceShader_Dispatch<RE::ImageSpaceManager::ISDiffScaleDownsampleDepthBufferCS>>(
+				RE::VTABLE_BSImagespaceShaderISDiffScaleDownsampleDepthBufferCS[0]);
+			stl::write_vfunc<0xC, BSImagespaceShader_Dispatch<RE::ImageSpaceManager::ISFullScreenVR>>(
+				RE::VTABLE_BSImagespaceShaderISFullScreenVR[0]);
+			stl::write_vfunc<0xC, BSImagespaceShader_Dispatch<RE::ImageSpaceManager::ISTransformLvl7PreTest>>(
+				RE::VTABLE_BSImagespaceShaderTransformLvl7PreTest[0]);
+			stl::write_vfunc<0xC, BSImagespaceShader_Dispatch<RE::ImageSpaceManager::ISLvl6PreTest>>(
+				RE::VTABLE_BSImagespaceShaderLvl6PreTest[0]);
+			stl::write_vfunc<0xC, BSImagespaceShader_Dispatch<RE::ImageSpaceManager::ISLvl5PreTest>>(
+				RE::VTABLE_BSImagespaceShaderLvl5PreTest[0]);
+			stl::write_vfunc<0xC, BSImagespaceShader_Dispatch<RE::ImageSpaceManager::ISLvl4PreTest>>(
+				RE::VTABLE_BSImagespaceShaderLvl4PreTest[0]);
+			stl::write_vfunc<0xC, BSImagespaceShader_Dispatch<RE::ImageSpaceManager::ISLvl3PreTest>>(
+				RE::VTABLE_BSImagespaceShaderLvl3PreTest[0]);
+			stl::write_vfunc<0xC, BSImagespaceShader_Dispatch<RE::ImageSpaceManager::ISLvl2PreTest>>(
+				RE::VTABLE_BSImagespaceShaderLvl2PreTest[0]);
+			stl::write_vfunc<0xC, BSImagespaceShader_Dispatch<RE::ImageSpaceManager::ISLvl1PreTest>>(
+				RE::VTABLE_BSImagespaceShaderLvl1PreTest[0]);
+			stl::write_vfunc<0xC, BSImagespaceShader_Dispatch<RE::ImageSpaceManager::ISLvl0PreTest>>(
+				RE::VTABLE_BSImagespaceShaderLvl0PreTest[0]);
+			stl::write_vfunc<0xC, BSImagespaceShader_Dispatch<RE::ImageSpaceManager::ISSetupPreTest>>(
+				RE::VTABLE_BSImagespaceShaderSetupPreTest[0]);
+		}
 
 		stl::write_vfunc<0x2A, BSShaderAccumulator_FinishAccumulatingDispatch>(
 			RE::VTABLE_BSShaderAccumulator[0]);
@@ -919,7 +1004,6 @@ namespace FrameAnnotations
 		stl::detour_thunk<BSShaderAccumulator_RenderBatches>(REL::RelocationID(99963, 106609));
 		stl::detour_thunk<BSShaderAccumulator_RenderPersistentPassList>(REL::RelocationID(100840, 107630));
 		stl::detour_thunk<BSShaderAccumulator_RenderEffects>(REL::RelocationID(99940, 106585));
-		stl::detour_thunk<VolumetricLightingDescriptor_Render>(REL::RelocationID(100306, 107023));
 	}
 
 	void OnDataLoaded()
@@ -930,7 +1014,7 @@ namespace FrameAnnotations
 		auto renderer = globals::game::renderer;
 
 		for (size_t renderTargetIndex = 0;
-			renderTargetIndex < (!REL::Module::IsVR() ? RE::RENDER_TARGETS::kTOTAL : RE::RENDER_TARGETS::kVRTOTAL); ++renderTargetIndex) {
+			renderTargetIndex < Util::GetRenderTargetCount(); ++renderTargetIndex) {
 			const auto renderTargetName = magic_enum::enum_name(
 				static_cast<RE::RENDER_TARGETS::RENDER_TARGET>(renderTargetIndex));
 			if (auto texture = renderer->GetRuntimeData().renderTargets[renderTargetIndex].texture) {
@@ -951,7 +1035,7 @@ namespace FrameAnnotations
 		}
 
 		for (size_t renderTargetIndex = 0;
-			renderTargetIndex < (!REL::Module::IsVR() ? RE::RENDER_TARGETS_DEPTHSTENCIL::kTOTAL : RE::RENDER_TARGETS_DEPTHSTENCIL::kVRTOTAL);
+			renderTargetIndex < Util::GetDepthStencilCount();
 			++renderTargetIndex) {
 			const auto renderTargetName = magic_enum::enum_name(
 				static_cast<RE::RENDER_TARGETS_DEPTHSTENCIL::RENDER_TARGET_DEPTHSTENCIL>(

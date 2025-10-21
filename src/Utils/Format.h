@@ -37,6 +37,12 @@ namespace Util
 	 */
 	std::string FormatPercent(float percent);
 	/**
+	 * Formats a file size in bytes to a human-readable string (KB/MB).
+	 * @param bytes The file size in bytes
+	 * @return Formatted string like "1.2 MB" or "512 KB"
+	 */
+	std::string FormatFileSize(uint64_t bytes);
+	/**
 	 * Returns a human-readable string for the time elapsed since the given time point (e.g., '5s', '2m', '1h').
 	 */
 	std::string TimeAgoString(std::chrono::steady_clock::time_point last);
@@ -50,6 +56,13 @@ namespace Util
 	 * @return Formatted string showing time elapsed (e.g., "5s", "2m", "1h")
 	 */
 	std::string TimeAgoStringQPC(const LARGE_INTEGER& lastTime, const LARGE_INTEGER& frequency);
+
+	/**
+	 * Returns a human-readable string for the time elapsed since the given filesystem time point (e.g., '5s ago', '2m ago', '1h ago').
+	 * @param fileTime The filesystem time point to calculate time ago from
+	 * @return Formatted string showing time elapsed (e.g., "5s ago", "2m ago", "1h ago", or "Unknown" on error)
+	 */
+	std::string FormatTimeAgo(std::filesystem::file_time_type fileTime);
 
 	/**
 	 * Formats a delta value with percentage difference for A/B test comparisons.
