@@ -559,6 +559,7 @@ void ScreenSpaceReflections::DrawSSRTDiffuse()
     auto depth = renderer->GetDepthStencilData().depthStencils[RE::RENDER_TARGETS_DEPTHSTENCIL::kPOST_ZPREPASS_COPY];
     auto specular = renderer->GetRuntimeData().renderTargets[SPECULAR];
     auto normal = renderer->GetRuntimeData().renderTargets[NORMALROUGHNESS];
+    auto albedo = renderer->GetRuntimeData().renderTargets[ALBEDO];
     auto motion = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMOTION_VECTOR];
 
     auto& dynamicCubemaps = globals::features::dynamicCubemaps;
@@ -584,7 +585,7 @@ void ScreenSpaceReflections::DrawSSRTDiffuse()
     auto buffer = ssrCB->CB();
     context->CSSetConstantBuffers(1, 1, &buffer);
 
-    std::array<ID3D11ShaderResourceView*, 12> srvs = { nullptr };
+    std::array<ID3D11ShaderResourceView*, 13> srvs = { nullptr };
 	std::array<ID3D11UnorderedAccessView*, 6> uavs = { nullptr };
 
     auto resetViews = [&]() {
@@ -633,6 +634,7 @@ void ScreenSpaceReflections::DrawSSRTDiffuse()
     srvs.at(9) = ssgi_ao;
     srvs.at(10) = dynamicCubemaps.loaded && skylighting.loaded ? skylighting.texProbeArray->srv.get() : nullptr;
     srvs.at(11) = dynamicCubemaps.loaded && skylighting.loaded ? skylighting.stbn_vec3_2Dx1D_128x128x64.get() : nullptr;
+    srvs.at(12) = albedo.SRV;
 
     context->CSSetShaderResources(0, (uint)srvs.size(), srvs.data());
     context->CSSetUnorderedAccessViews(0, (uint)uavs.size(), uavs.data(), nullptr);
@@ -669,7 +671,6 @@ void ScreenSpaceReflections::DrawSSRTDiffuse()
 
     // composite
     {
-        auto albedo = renderer->GetRuntimeData().renderTargets[ALBEDO];
         uavs.at(0) = main.UAV;
         srvs.at(0) = texSSRTDiffuseColor->srv.get();
         srvs.at(1) = albedo.SRV;

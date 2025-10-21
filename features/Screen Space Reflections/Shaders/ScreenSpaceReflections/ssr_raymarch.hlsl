@@ -45,6 +45,7 @@ Texture3D<sh2> SkylightingProbeArray : register(t10);
 Texture2DArray<float3> stbn_vec3_2Dx1D_128x128x64 : register(t11);
 #   endif
 #endif
+Texture2D<float3> AlbedoTexture : register(t12);
 
 RWTexture2D<float4> SSRColorOutput : register(u0);
 RWTexture2D<float4> SSRPDFOutput : register(u1);
@@ -464,6 +465,10 @@ bool ShouldProcessPixel(uint2 GroupThreadID, uint FrameCount)
     GetNormalRoughness(coords.xy, normalVS, roughness);
     roughness = clamp(roughness, 0.02f, 1.0f);
 
+#if !defined(SSSR_SPECULAR)
+    float3 albedo = AlbedoTexture[coords.xy].xyz;
+#endif
+
     bool is_mirror = IsMirrorReflection(roughness);
     int most_detailed_mip = HIZ_MIN_MIP;
     float2 mip_resolution = FFX_SSSR_GetMipResolution(screen_size, most_detailed_mip);
@@ -608,8 +613,11 @@ bool ShouldProcessPixel(uint2 GroupThreadID, uint FrameCount)
             float ao = 1 - saturate(SsgiAoTexture[coords.xy].x);
 #       if defined(SSSR_SPECULAR)
             ao = GetSpecularOcclusionFromAmbientOcclusion(NdotV, ao, roughness);
-#       endif
             envColor *= ao;
+#       else
+            float3 multiBounceAO = Color::MultiBounceAO(albedo, ao);
+            envColor *= multiBounceAO;
+#       endif
 #   endif
             sampleColor.xyz = lerp(envColor, sampleColor.xyz, confidence);
             confidence = 1;
@@ -618,7 +626,12 @@ bool ShouldProcessPixel(uint2 GroupThreadID, uint FrameCount)
         occlusion = GetSpecularOcclusionFromAmbientOcclusion(NdotV, occlusion, roughness);
 #       endif
 #endif
-        sampleColor *= lerp(1.0f, occlusion, OcclusionStrength);
+#       if defined(SSSR_SPECULAR)
+        float ssrOcclusion = occlusion;
+#       else
+        float3 ssrOcclusion = Color::MultiBounceAO(albedo, occlusion);
+#       endif
+        sampleColor *= lerp(1.0f, ssrOcclusion, OcclusionStrength);
         samples[groupThreadID.x * 8 + groupThreadID.y][sample_id] = float4(sampleColor, confidence);
 #if SHARC_UPDATE
         if (confidence > 0.99f)
