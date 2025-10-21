@@ -144,13 +144,9 @@ void SampleSSGISpecular(uint2 pixCoord, sh2 lobe, out float ao, out float3 il, i
 		float3 iblColor = ImageBasedLighting::GetIBLColor(-normalWS);
 
 		directionalAmbientColor += iblColor * SharedData::enbSettings.IBLMultiplicativeAmount;
-		directionalAmbientColor *= albedo;
-		directionalAmbientColor += iblColor * SharedData::enbSettings.IBLAdditiveAmount;
-
-
-	} else {
-		directionalAmbientColor *= albedo;
 	}
+	
+	directionalAmbientColor *= albedo;
 
 	directionalAmbientColor = Color::RGBToYCoCg(directionalAmbientColor);
 	directionalAmbientColor.x = MasksTexture[dispatchID.xy].z;

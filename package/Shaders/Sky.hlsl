@@ -127,53 +127,11 @@ VS_OUTPUT main(VS_INPUT input)
 	vsout.TexCoord1.xy = TexCoordOff + input.TexCoord;
 #		endif  // TEXLERP
 
-#		if defined(CLOUDS)
 	float3 skyColor = BlendColor[0].xyz * input.Color.xxx + BlendColor[1].xyz * input.Color.yyy +
 	                  BlendColor[2].xyz * input.Color.zzz;
 
 	vsout.Color.xyz = VParams * skyColor;
 	vsout.Color.w = BlendColor[0].w * input.Color.w;
-
-	if (SharedData::enbSettings.Enable){
-		vsout.Color.w = saturate(vsout.Color.w + vsout.Color.w * SharedData::enbSettings.CloudsVertexAlphaBoost);
-	}
-#		elif defined(TEX)
-	float3 skyColor = BlendColor[0].xyz * input.Color.xxx + BlendColor[1].xyz * input.Color.yyy +
-	                  BlendColor[2].xyz * input.Color.zzz;
-
-	vsout.Color.xyz = VParams * skyColor;
-	vsout.Color.w = BlendColor[0].w * input.Color.w;
-#		else
-	float3 horizonColor = BlendColor[0].xyz;
-	float3 lowerColor = BlendColor[1].xyz;
-	float3 upperColor = BlendColor[2].xyz;
-
-	if (SharedData::enbSettings.Enable){
-		horizonColor = pow(horizonColor, SharedData::enbSettings.GradientHorizonCurve);
-		horizonColor *= SharedData::enbSettings.GradientHorizonColorFilter;
-		horizonColor *= SharedData::enbSettings.GradientHorizonIntensity;
-
-		lowerColor = pow(lowerColor, SharedData::enbSettings.GradientMiddleCurve);
-		lowerColor *= SharedData::enbSettings.GradientMiddleColorFilter;
-		lowerColor *= SharedData::enbSettings.GradientMiddleIntensity;
-
-		upperColor = pow(upperColor, SharedData::enbSettings.GradientTopCurve);
-		upperColor *= SharedData::enbSettings.GradientTopColorFilter;
-		upperColor *= SharedData::enbSettings.GradientTopIntensity;
-	}
-
-	float3 skyColor = horizonColor * input.Color.x + lowerColor * input.Color.y + upperColor * input.Color.z;
-
-	vsout.Color.xyz = VParams * skyColor;
-
-	if (SharedData::enbSettings.Enable){
-		vsout.Color.xyz = lerp(vsout.Color.xyz, dot(vsout.Color.xyz, 1.0 / 3.0), SharedData::enbSettings.GradientDesaturation);
-		vsout.Color.xyz *= SharedData::enbSettings.GradientIntensity;
-	}
-
-	vsout.Color.w = BlendColor[0].w * input.Color.w;
-#		endif
-
 #	endif  // OCCLUSION MOONMASK HORIZFADE
 
 	vsout.Position = mul(WorldViewProj[eyeIndex], inputPosition).xyww;
@@ -315,12 +273,6 @@ PS_OUTPUT main(PS_INPUT input)
 
 #	if defined(CLOUDS)
 	if (SharedData::enbSettings.Enable){
-		psout.Color.w = saturate(psout.Color.w * SharedData::enbSettings.CloudsOpacity);
-		psout.Color.xyz = pow(psout.Color.xyz, SharedData::enbSettings.CloudsCurve);
-		psout.Color.xyz = lerp(psout.Color.xyz, dot(psout.Color.xyz, 1.0 / 3.0), SharedData::enbSettings.CloudsDesaturation);
-		psout.Color.xyz *= SharedData::enbSettings.CloudsColorFilter;
-		psout.Color.xyz *= SharedData::enbSettings.CloudsIntensity;
-
 		float cloudsEdgeAlpha = saturate(1.0 - (baseColor.w + SharedData::enbSettings.CloudsEdgeClamp));
 		float3 sunPhase = pow(saturate(dot(normalize(input.WorldPosition.xyz), SharedData::SunDirection.xyz)), 20.0) * SharedData::SunColor.xyz;
 		float3 masserPhase = pow(saturate(dot(normalize(input.WorldPosition.xyz), SharedData::MasserDirection.xyz)), 20.0) * SharedData::MasserColor.xyz * SharedData::enbSettings.CloudsEdgeMoonMultiplier;

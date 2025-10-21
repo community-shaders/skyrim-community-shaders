@@ -203,36 +203,6 @@ namespace SharedData
 		bool Enable;
 		float3 pad;
 
-		float GradientIntensity;
-		float GradientDesaturation;
-		float GradientTopIntensity;
-		float GradientTopCurve;
-
-		float3 GradientTopColorFilter;
-		float pad0;
-
-		float GradientMiddleIntensity;
-		float GradientMiddleCurve;
-		float2 pad1;
-
-		float3 GradientMiddleColorFilter;
-		float pad2;
-
-		float GradientHorizonIntensity;
-		float GradientHorizonCurve;
-		float2 pad3;
-
-		float3 GradientHorizonColorFilter;
-		float pad4;
-
-		float CloudsIntensity;
-		float CloudsCurve;
-		float CloudsDesaturation;
-		float CloudsOpacity;
-
-		float3 CloudsColorFilter;
-		float CloudsVertexAlphaBoost;
-
 		float CloudsEdgeClamp;
 		float CloudsEdgeIntensity;
 		float CloudsEdgeFadeRange;
@@ -241,10 +211,8 @@ namespace SharedData
 		float ColorPow;
 		float3 pad8;
 
-		float IBLAdditiveAmount;
 		float IBLMultiplicativeAmount;
-		float IBLReflectiveAmount;
-		float pad9;
+		float3 pad9;
 
 		float VolumetricRaysIntensity;
 		float VolumetricRaysRangeFactor;

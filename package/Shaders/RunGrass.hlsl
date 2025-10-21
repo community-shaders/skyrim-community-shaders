@@ -728,7 +728,6 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #			else
 
 	float3 directionalAmbientColor = max(0, mul(SharedData::DirectionalAmbient, float4(normal, 1.0)));
-	float3 directionalAmbientColorAdditive = 0.0;
 
 #				if defined(SKYLIGHTING)
 	float skylightingDiffuse = 1.0;
@@ -750,7 +749,6 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	if (SharedData::iblSettings.EnableDiffuseIBL) {
 		float3 iblColor = ImageBasedLighting::GetIBLColor(-normal);
 		directionalAmbientColor += iblColor * SharedData::enbSettings.IBLMultiplicativeAmount;
-		directionalAmbientColorAdditive += iblColor * SharedData::enbSettings.IBLAdditiveAmount;
 	}
 #				endif
 
@@ -760,7 +758,6 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	diffuseColor += max(0, sss * subsurfaceColor * SharedData::grassLightingSettings.SubsurfaceScatteringAmount);
 
 	directionalAmbientColor *= albedo;
-	directionalAmbientColor += directionalAmbientColorAdditive;
 
 #				if defined(SKYLIGHTING)
 	Skylighting::applySkylighting(diffuseColor, directionalAmbientColor, albedo, skylightingDiffuse);
@@ -917,7 +914,6 @@ PS_OUTPUT main(PS_INPUT input)
 #			endif
 
 	float3 directionalAmbientColor = max(0, mul(SharedData::DirectionalAmbient, float4(normal, 1.0)));
-	float3 directionalAmbientColorAdditive = 0.0;
 
 #			if defined(SKYLIGHTING)
 	float skylightingDiffuse = 1.0;
@@ -939,7 +935,6 @@ PS_OUTPUT main(PS_INPUT input)
 	if (SharedData::iblSettings.EnableDiffuseIBL) {
 		float3 iblColor = ImageBasedLighting::GetIBLColor(-normal);
 		directionalAmbientColor += iblColor * SharedData::enbSettings.IBLMultiplicativeAmount;
-		directionalAmbientColorAdditive += iblColor * SharedData::enbSettings.IBLAdditiveAmount;
 	}
 #			endif
 
@@ -949,7 +944,6 @@ PS_OUTPUT main(PS_INPUT input)
 
 	diffuseColor *= albedo;
 	directionalAmbientColor *= albedo;
-	directionalAmbientColor += directionalAmbientColorAdditive;
 
 #			if defined(SKYLIGHTING)
 	Skylighting::applySkylighting(diffuseColor, directionalAmbientColor, albedo, skylightingDiffuse);

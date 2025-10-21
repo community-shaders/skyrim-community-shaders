@@ -2727,7 +2727,6 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #	endif
 
 	float3 directionalAmbientColor = max(0, mul(DirectionalAmbient, float4(ambientNormal, 1.0)));
-	float3 directionalAmbientColorAdditive = 0.0;
 
 #	if defined(SKYLIGHTING)
 	float skylightingDiffuse = 1;
@@ -2745,7 +2744,6 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	if (SharedData::iblSettings.EnableDiffuseIBL && inWorld) {
 		float3 iblColor = ImageBasedLighting::GetIBLColor(-ambientNormal);
 		directionalAmbientColor += iblColor * SharedData::enbSettings.IBLMultiplicativeAmount;
-		directionalAmbientColorAdditive += iblColor * SharedData::enbSettings.IBLAdditiveAmount;
 	}
 #	endif
 
@@ -2997,8 +2995,6 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	color.xyz += diffuseColor * baseColor.xyz;
 #	endif
 
-	color.xyz += directionalAmbientColorAdditive;
-
 #	if defined(HAIR) && defined(CS_HAIR)
 #		if !defined(DEFERRED)
 #			if defined(DYNAMIC_CUBEMAPS)
@@ -3108,7 +3104,6 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #		endif
 
 	directionalAmbientColor *= outputAlbedo;
-	directionalAmbientColor += directionalAmbientColorAdditive;
 
 #	if defined(SKYLIGHTING)
 	Skylighting::applySkylighting(color.xyz, directionalAmbientColor, outputAlbedo, skylightingDiffuse);
