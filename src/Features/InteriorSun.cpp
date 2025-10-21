@@ -18,7 +18,8 @@ void InteriorSun::DrawSettings()
 	}
 	if (ImGui::SliderFloat("Interior Shadow Distance", &settings.InteriorShadowDistance, 1000.0f, 8000.0f)) {
 		*gInteriorShadowDistance = settings.InteriorShadowDistance;
-		SetShadowDistance(globals::game::tes && globals::game::tes->interiorCell);
+		auto tes = RE::TES::GetSingleton();
+		SetShadowDistance(tes && tes->interiorCell);
 	}
 	if (auto _tt = Util::HoverTooltipWrapper()) {
 		ImGui::Text(
@@ -44,6 +45,8 @@ void InteriorSun::RestoreDefaultSettings()
 
 void InteriorSun::PostPostLoad()
 {
+	stl::write_thunk_call<BSBatchRenderer_RenderPassImmediately>(REL::RelocationID(100852, 107642).address() + REL::Relocate(0x29E, 0x28F));
+
 	// Hooks and patch to enable directional lighting for interiors
 	stl::write_thunk_call<GetWorldSpace>(REL::RelocationID(35562, 36561).address() + REL::Relocate(0x399, 0x37D, 0x639));
 	stl::write_thunk_call<GetWorldSpace>(REL::RelocationID(35562, 36561).address() + REL::Relocate(0x3AE, 0x392, 0x64E));
@@ -72,7 +75,7 @@ void InteriorSun::PostPostLoad()
 
 void InteriorSun::EarlyPrepass()
 {
-	isInteriorWithSun = IsInteriorWithSun(globals::game::tes->interiorCell);
+	isInteriorWithSun = IsInteriorWithSun(RE::TES::GetSingleton()->interiorCell);
 }
 
 inline bool InteriorSun::IsInteriorWithSun(const RE::TESObjectCELL* cell)
@@ -102,7 +105,7 @@ RE::TESWorldSpace* InteriorSun::disableInteriorSun = [] {
 void InteriorSun::DirShadowLightCulling::thunk(RE::BSShadowDirectionalLight* dirLight, RE::BSTArray<RE::BSTArray<RE::NiPointer<RE::NiAVObject>>>& jobArrays, RE::BSTArray<RE::NiPointer<RE::NiAVObject>>& nodes)
 {
 	auto& singleton = globals::features::interiorSun;
-	const auto cell = globals::game::tes->interiorCell;
+	const auto cell = RE::TES::GetSingleton()->interiorCell;
 	auto* passedJobArrays = &jobArrays;
 
 	if (cell && singleton.isInteriorWithSun) {
@@ -120,6 +123,12 @@ void InteriorSun::DirShadowLightCulling::thunk(RE::BSShadowDirectionalLight* dir
 	}
 
 	func(dirLight, *passedJobArrays, nodes);
+}
+
+void InteriorSun::BSBatchRenderer_RenderPassImmediately::thunk(RE::BSRenderPass* a_pass, uint32_t a_technique, bool a_alphaTest, uint32_t a_renderFlags)
+{
+	globals::features::interiorSun.UpdateRasterStateCullMode(a_pass, a_technique);
+	func(a_pass, a_technique, a_alphaTest, a_renderFlags);
 }
 
 void InteriorSun::ClearArrays()

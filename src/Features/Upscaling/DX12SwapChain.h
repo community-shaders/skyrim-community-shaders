@@ -61,7 +61,8 @@ public:
 class DX12SwapChain
 {
 public:
-	// D3D12 resources for swap chain (uses shared device from Upscaling)
+	winrt::com_ptr<ID3D12Device> d3d12Device;
+	winrt::com_ptr<ID3D12CommandQueue> commandQueue;
 	winrt::com_ptr<ID3D12CommandAllocator> commandAllocators[2];
 	winrt::com_ptr<ID3D12GraphicsCommandList4> commandLists[2];
 
@@ -71,6 +72,10 @@ public:
 
 	WrappedResource* swapChainBufferWrapped;
 	WrappedResource* uiBufferWrapped;
+
+	// D3D12 interop resources for frame generation
+	WrappedResource* depthBufferShared12 = nullptr;
+	WrappedResource* motionVectorBufferShared12 = nullptr;
 
 	winrt::com_ptr<ID3D11Device5> d3d11Device;
 	winrt::com_ptr<ID3D11DeviceContext4> d3d11Context;
@@ -92,7 +97,7 @@ public:
 	// Returns the current frame time (in seconds) for accurate FPS calculation when frame generation is active
 	float GetFrameTime() const;
 
-	void InitializeD3D12Resources();
+	void CreateD3D12Device(IDXGIAdapter* a_adapter);
 	void CreateSwapChain(IDXGIAdapter* adapter, DXGI_SWAP_CHAIN_DESC swapChainDesc);
 
 	void CreateInterop();
@@ -107,4 +112,7 @@ public:
 	HANDLE GetFrameLatencyWaitableObject();
 
 	void SetUIBuffer();
+
+	// D3D12 interop resource management
+	void CreateSharedResources();
 };

@@ -8,6 +8,7 @@
 
 #include "Feature.h"
 #include "FeatureIssues.h"
+#include "Features/RenderDoc.h"
 #include "Menu.h"
 #include "ShaderCache.h"
 #include "State.h"
@@ -21,7 +22,7 @@ void OverlayRenderer::RenderOverlay(
 	const std::function<void()>& processInputEventQueue,
 	const std::function<void()>& drawSettings,
 	const std::function<const char*(uint32_t)>& keyIdToString,
-	float cachedFontSize,
+	float& cachedFontSize,
 	float currentFontSize)
 {
 	HandleVRSetup();
@@ -71,19 +72,26 @@ bool OverlayRenderer::ShouldSkipRendering()
 	auto failed = shaderCache->GetFailedTasks();
 	auto hide = shaderCache->IsHideErrors();
 	auto* abTestingManager = ABTestingManager::GetSingleton();
+	auto* renderDoc = RenderDoc::GetSingleton();
 
 	return !(shaderCache->IsCompiling() ||
 			 Menu::GetSingleton()->IsEnabled ||
 			 abTestingManager->IsEnabled() ||
 			 (failed && !hide) ||
-			 globals::features::performanceOverlay.settings.ShowInOverlay);
+			 globals::features::performanceOverlay.settings.ShowInOverlay ||
+			 renderDoc->IsAvailable());
 }
 
 void OverlayRenderer::HandleFontReload(Menu& menu, float& cachedFontSize, float currentFontSize)
 {
-	// Reload font if user changed something
-	if (std::abs(cachedFontSize - currentFontSize) > ThemeManager::Constants::FONT_CACHE_EPSILON) {
-		ThemeManager::ReloadFont(menu, cachedFontSize);
+	bool fontSizeChanged = std::abs(cachedFontSize - currentFontSize) > ThemeManager::Constants::FONT_CACHE_EPSILON;
+	std::string desiredSignature = menu.BuildFontSignature(currentFontSize);
+	bool signatureChanged = desiredSignature != menu.cachedFontSignature;
+
+	if (fontSizeChanged || signatureChanged) {
+		if (!ThemeManager::ReloadFont(menu, cachedFontSize)) {
+			logger::warn("OverlayRenderer::HandleFontReload() - Font reload failed");
+		}
 	}
 }
 
@@ -108,6 +116,9 @@ void OverlayRenderer::RenderShaderCompilationStatus(const std::function<const ch
 
 	auto state = globals::state;
 	auto& themeSettings = Menu::GetSingleton()->GetTheme();
+	auto* renderDoc = RenderDoc::GetSingleton();
+	bool renderDocAvailable = renderDoc->IsAvailable();
+	const auto renderDocInformation = renderDoc->GetOverlayWarningMessage();
 
 	auto progressTitle = fmt::format("{}Compiling Shaders: {}",
 		shaderCache->backgroundCompilation ? "Background " : "",
@@ -131,6 +142,9 @@ void OverlayRenderer::RenderShaderCompilationStatus(const std::function<const ch
 			ImGui::TextUnformatted("WARNING: Uncompiled shaders will have visual errors or cause stuttering when loading.");
 		}
 
+		if (renderDocAvailable)
+			ImGui::TextColored(themeSettings.StatusPalette.Warning, renderDocInformation.c_str());
+
 		ImGui::End();
 	} else if (failed) {
 		if (!hide) {
@@ -147,8 +161,19 @@ void OverlayRenderer::RenderShaderCompilationStatus(const std::function<const ch
 				ImGui::TextColored(themeSettings.StatusPalette.Error, "Features that may have modified shaders detected. Check Feature Issues in the Menu.");
 			}
 
+			if (renderDocAvailable)
+				ImGui::TextColored(themeSettings.StatusPalette.Warning, renderDocInformation.c_str());
+
 			ImGui::End();
 		}
+	} else if (renderDocAvailable) {
+		ImGui::SetNextWindowPos(ImVec2(ThemeManager::Constants::OVERLAY_WINDOW_POSITION, ThemeManager::Constants::OVERLAY_WINDOW_POSITION));
+		if (!ImGui::Begin("ShaderCompilationInfo", nullptr, ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoSavedSettings)) {
+			ImGui::End();
+			return;
+		}
+		ImGui::TextColored(themeSettings.StatusPalette.Warning, renderDocInformation.c_str());
+		ImGui::End();
 	}
 }
 
@@ -191,6 +216,7 @@ void OverlayRenderer::HandleABTesting()
 void OverlayRenderer::FinalizeImGuiFrame()
 {
 	ImGui::Render();
+
 	ImGui_ImplDX11_RenderDrawData(ImGui::GetDrawData());
 
 	if (globals::features::vr.IsOpenVRCompatible()) {

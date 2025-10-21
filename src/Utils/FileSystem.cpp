@@ -1,4 +1,6 @@
 #include "FileSystem.h"
+#include <Windows.h>
+#include <filesystem>
 #include <fstream>
 #include <psapi.h>
 
@@ -38,11 +40,6 @@ namespace Util
 			return GetDataPath() / "SKSE" / "Plugins" / "CommunityShaders_ImGui.ini";
 		}
 
-		std::filesystem::path GetUserSettingsPath()
-		{
-			return GetCommunityShaderPath() / "UserSettings.json";
-		}
-
 		std::filesystem::path GetInterfacePath()
 		{
 			return GetDataPath() / "Interface" / "CommunityShaders";
@@ -73,6 +70,16 @@ namespace Util
 			return GetCommunityShaderPath() / "SettingsDefault.json";
 		}
 
+		std::filesystem::path GetSettingsThemePath()
+		{
+			return GetCommunityShaderPath() / "SettingsTheme.json";
+		}
+
+		std::filesystem::path GetThemesPath()
+		{
+			return GetCommunityShaderPath() / "Themes";
+		}
+
 		std::filesystem::path GetOverridesPath()
 		{
 			return GetCommunityShaderPath() / "Overrides";
@@ -91,16 +98,6 @@ namespace Util
 		std::filesystem::path GetFeaturesPath()
 		{
 			return GetShadersPath() / "Features";
-		}
-
-		std::filesystem::path GetFeatureIniPath(const std::string& featureName)
-		{
-			return GetFeaturesPath() / (featureName + ".ini");
-		}
-
-		std::filesystem::path GetFeatureShaderPath(const std::string& featureName)
-		{
-			return GetShadersPath() / featureName;
 		}
 
 		std::filesystem::path GetCurrentModuleRealPath()
@@ -141,9 +138,24 @@ namespace Util
 			return GetRootRealPath() / "Shaders";
 		}
 
+		std::filesystem::path GetThemesRealPath()
+		{
+			return GetRootRealPath() / "SKSE" / "Plugins" / "CommunityShaders" / "Themes";
+		}
+
 		std::filesystem::path GetFeaturesRealPath()
 		{
 			return GetShadersRealPath() / "Features";
+		}
+
+		std::filesystem::path GetFeatureIniPath(const std::string& featureName)
+		{
+			return GetFeaturesPath() / (featureName + ".ini");
+		}
+
+		std::filesystem::path GetFeatureShaderPath(const std::string& featureName)
+		{
+			return GetFeaturesPath() / featureName;
 		}
 	}
 
@@ -175,6 +187,15 @@ namespace Util
 			}
 
 			return result;
+		}
+
+		void EnsureDirectoryExists(const std::filesystem::path& path)
+		{
+			std::error_code ec;
+			std::filesystem::create_directories(path, ec);
+			if (ec) {
+				logger::warn("Failed to create directory '{}': {}", path.string(), ec.message());
+			}
 		}
 	}
 }

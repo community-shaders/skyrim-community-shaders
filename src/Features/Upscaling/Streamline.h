@@ -14,6 +14,7 @@
 #include <sl_consts.h>
 #include <sl_dlss.h>
 #include <sl_matrix_helpers.h>
+#include <sl_nis.h>
 #include <sl_version.h>
 #pragma warning(pop)
 
@@ -31,6 +32,7 @@ public:
 	bool triedInitialization = false;
 
 	bool featureDLSS = false;
+	bool featureNIS = false;
 
 	sl::ViewportHandle viewport{ 0 };
 
@@ -60,6 +62,10 @@ public:
 	PFun_slDLSSGetState* slDLSSGetState{};
 	PFun_slDLSSSetOptions* slDLSSSetOptions{};
 
+	// NIS specific functions
+	PFun_slNISSetOptions* slNISSetOptions{};
+	PFun_slNISGetState* slNISGetState{};
+
 	Util::FrameChecker frameChecker;
 	sl::FrameToken* frameToken = nullptr;
 
@@ -74,9 +80,13 @@ public:
 
 	void CheckFrameConstants();
 
-	void Upscale(ID3D11Resource* a_upscalingTexture, ID3D11Resource* a_reactiveMask, ID3D11Resource* a_transparencyCompositionMask, ID3D11Resource* a_motionVectors, sl::DLSSPreset a_preset);
+	void SetDLSSOptions();
 
-	float GetInputResolutionScale(uint32_t outputWidth, uint32_t outputHeight, uint32_t qualityPreset);
+	void Upscale(ID3D11Resource* a_upscalingTexture, ID3D11Resource* a_reactiveMask, ID3D11Resource* a_transparencyCompositionMask, ID3D11Resource* a_motionVectors);
+
+	float2 GetInputResolutionScale(uint32_t outputWidth, uint32_t outputHeight, uint32_t qualityPreset);
 
 	void DestroyDLSSResources();
+
+	void ApplyNISSharpening(ID3D11Resource* a_texture, float sharpness);
 };

@@ -1,6 +1,5 @@
 #pragma once
 
-#include <functional>
 #include <string>
 
 class HomePageRenderer
@@ -9,8 +8,15 @@ public:
 	// Constants
 	static constexpr const char* DISCORD_URL = "https://discord.com/invite/nkrQybAsyy";
 	static constexpr float TITLE_FONT_SCALE = 2.0f;
+	static constexpr float SETUP_DIALOG_FONT_SCALE = 0.75f;
 	static constexpr float QUICK_LINKS_BUTTON_WIDTH = 180.0f;
 	static constexpr float LOGO_WATERMARK_HEIGHT = 260.0f;
+
+	// Discord banner scaling constants
+	static constexpr float DISCORD_BANNER_TARGET_WIDTH_RATIO = 0.85f;  // 25% of window width
+	static constexpr float DISCORD_BANNER_MIN_WIDTH = 150.0f;
+	static constexpr float DISCORD_BANNER_MAX_WIDTH = 1200.0f;
+	static constexpr float DISCORD_BANNER_PADDING_MARGIN = 40.0f;
 
 	static void RenderHomePage();
 

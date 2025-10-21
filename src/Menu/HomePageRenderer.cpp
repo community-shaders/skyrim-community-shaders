@@ -1,24 +1,13 @@
 #include "HomePageRenderer.h"
 #include "PCH.h"
 
-#include <filesystem>
-#include <format>
-#include <fstream>
 #include <imgui.h>
-#include <nlohmann/json.hpp>
-#include <ranges>
-#include <sstream>
 
-#include "Feature.h"
 #include "Globals.h"
 #include "Menu.h"
-#include "Menu/ThemeManager.h"
 #include "Plugin.h"
-#include "SettingsOverrideManager.h"
 #include "State.h"
 #include "Util.h"
-
-using json = nlohmann::json;
 
 // Static member definitions
 bool HomePageRenderer::isFirstTimeSetupShown = false;
@@ -97,7 +86,18 @@ void HomePageRenderer::RenderWelcomeSection()
 	}
 
 	if (discordIconAvailable) {
-		ImVec2 iconSize = ImVec2(menu->uiIcons.discord.size.x, menu->uiIcons.discord.size.y);
+		// Calculate scaled icon size based on window width, with min/max constraints
+		ImVec2 originalSize = ImVec2(menu->uiIcons.discord.size.x, menu->uiIcons.discord.size.y);
+
+		// Compute width based on window size with constraints and padding (handles very small windows)
+		float ratioWidth = windowSize.x * DISCORD_BANNER_TARGET_WIDTH_RATIO;
+		float aspectRatio = originalSize.y / originalSize.x;
+		float maxAllowed = std::max(1.0f, windowSize.x - DISCORD_BANNER_PADDING_MARGIN);
+		float upperBound = std::min(DISCORD_BANNER_MAX_WIDTH, maxAllowed);
+		float lowerBound = std::min(DISCORD_BANNER_MIN_WIDTH, upperBound);
+		float targetWidth = std::clamp(ratioWidth, lowerBound, upperBound);
+
+		ImVec2 iconSize = ImVec2(targetWidth, targetWidth * aspectRatio);
 		ImGui::SetCursorPosX((windowSize.x - iconSize.x) * 0.5f);
 
 		// Push style to remove border
@@ -242,7 +242,6 @@ void HomePageRenderer::RenderFAQSection()
 			"Yes! Community Shaders is completely open source and available on GitHub. You can view "
 			"the source code, report issues, suggest features, and contribute to the project. "
 			"The project is licensed under GPL, ensuring it remains free and open for everyone."
-			"The project is licensed under GPL, ensuring it remains free and open for everyone."
 			" Branding materials and assets (icons, nexus branding, typography, etc) are not covered by the GPL Licence."
 			" Any included assets may not be used without explicit permission.");
 	}
@@ -259,7 +258,8 @@ void HomePageRenderer::RenderFirstTimeSetupDialog()
 	// Center the window properly with rounded corners and thin border
 	ImVec2 center = ImVec2(io.DisplaySize.x * 0.5f, io.DisplaySize.y * 0.5f);
 	ImGui::SetNextWindowPos(center, ImGuiCond_Always, ImVec2(0.5f, 0.5f));
-	ImGui::SetNextWindowSize(ImVec2(500, 400), ImGuiCond_Always);
+	// Set a minimum width for better layout, but allow auto-sizing for height
+	ImGui::SetNextWindowSizeConstraints(ImVec2(500, 0), ImVec2(600, FLT_MAX));
 
 	// Style for rounded window with thin border
 	ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 8.0f);
@@ -267,13 +267,17 @@ void HomePageRenderer::RenderFirstTimeSetupDialog()
 
 	ImGuiWindowFlags flags = ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove |
 	                         ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoSavedSettings |
-	                         ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoTitleBar;  // Prevent scrolling and remove title
+	                         ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoTitleBar |
+	                         ImGuiWindowFlags_AlwaysAutoResize;  // Prevent scrolling, remove title, auto-resize
 
 	if (!ImGui::Begin("##FirstTimeSetup", nullptr, flags)) {
 		ImGui::PopStyleVar(2);
 		ImGui::End();
 		return;
 	}
+
+	// Set font scale for better readability in this welcome dialog
+	ImGui::SetWindowFontScale(SETUP_DIALOG_FONT_SCALE);
 
 	auto menu = Menu::GetSingleton();
 
@@ -419,25 +423,22 @@ void HomePageRenderer::RenderFirstTimeSetupDialog()
 
 	ImGui::Spacing();
 
-	// Center the continue button
-	float continueButtonWidth = 140.0f;
-	ImGui::SetCursorPosX((windowWidth - continueButtonWidth) * 0.5f);
+	// Check for Enter or Escape key to close, but only if not capturing a hotkey
+	bool shouldClose = (ImGui::IsKeyPressed(ImGuiKey_Enter) || ImGui::IsKeyPressed(ImGuiKey_Escape)) && !menu->settingToggleKey;
 
-	// Check for Enter or Escape key first
-	bool shouldClose = ImGui::IsKeyPressed(ImGuiKey_Enter) || ImGui::IsKeyPressed(ImGuiKey_Escape);
-
-	if (ImGui::Button("Continue", ImVec2(continueButtonWidth, 30)) || shouldClose) {
-		// No need to apply any hotkey - user has already set it or it defaults to VK_END
+	if (shouldClose) {
 		MarkFirstTimeSetupComplete();
+		// Note: Settings are automatically saved to ensure welcome screen won't show again
 	}
 
 	// Center the help text
-	const char* helpText = "(Press Enter or Escape to continue)";
+	const char* helpText = "Press Escape or Enter to continue";
 	float helpWidth = ImGui::CalcTextSize(helpText).x;
 	ImGui::SetCursorPosX((windowWidth - helpWidth) * 0.5f);
 	ImGui::TextDisabled("%s", helpText);
 
-	ImGui::PopStyleVar(2);  // Pop WindowRounding and WindowBorderSize
+	ImGui::SetWindowFontScale(1.0f);  // Reset font scale
+	ImGui::PopStyleVar(2);            // Pop WindowRounding and WindowBorderSize
 	ImGui::End();
 }
 
@@ -453,70 +454,20 @@ bool HomePageRenderer::ShouldShowFirstTimeSetup()
 		return false;
 	}
 
-	// Check if first-time setup has been completed by looking at UserSettings.json
-	std::filesystem::path userSettingsPath = Util::PathHelpers::GetUserSettingsPath();
-
-	// If UserSettings.json doesn't exist at all, this is definitely a first-time launch
-	if (!std::filesystem::exists(userSettingsPath)) {
-		return true;
-	}
-
-	// If UserSettings.json exists, check if FirstTimeSetupCompleted flag is set
-	try {
-		std::ifstream file(userSettingsPath);
-		if (!file.is_open()) {
-			return true;  // If we can't read the file, assume first time
-		}
-
-		nlohmann::json settings;
-		file >> settings;
-		file.close();
-
-		// Check if FirstTimeSetupCompleted exists and is true
-		if (settings.contains("FirstTimeSetupCompleted") &&
-			settings["FirstTimeSetupCompleted"].is_boolean() &&
-			settings["FirstTimeSetupCompleted"] == true) {
-			return false;  // Setup already completed
-		}
-
-		return true;  // Field doesn't exist or is false, show setup
-
-	} catch (const std::exception&) {
-		// If there's any error reading the file, assume first time
-		return true;
-	}
+	// Check if first-time setup has been completed using the Menu settings
+	auto menu = Menu::GetSingleton();
+	return !menu->GetSettings().FirstTimeSetupCompleted;
 }
 
 void HomePageRenderer::MarkFirstTimeSetupComplete()
 {
-	std::filesystem::path userSettingsPath = Util::PathHelpers::GetUserSettingsPath();
+	// Set the flag in the Menu settings
+	auto menu = Menu::GetSingleton();
+	menu->GetSettings().FirstTimeSetupCompleted = true;
 
-	try {
-		nlohmann::json settings;
-
-		// Read existing settings if file exists
-		if (std::filesystem::exists(userSettingsPath)) {
-			std::ifstream file(userSettingsPath);
-			if (file.is_open()) {
-				file >> settings;
-				file.close();
-			}
-		}
-
-		// Set the FirstTimeSetupCompleted flag
-		settings["FirstTimeSetupCompleted"] = true;
-
-		// Write back to file
-		std::filesystem::create_directories(userSettingsPath.parent_path());
-		std::ofstream outFile(userSettingsPath);
-		if (outFile.is_open()) {
-			outFile << settings.dump(2);
-			outFile.close();
-		}
-
-	} catch (const std::exception&) {
-		// If we can't write the file, just mark as shown this session to avoid repeated popups
-	}
+	// Immediately save settings to ensure the flag is persisted
+	// This prevents the welcome screen from showing again even if user doesn't manually save
+	globals::state->Save();
 
 	isFirstTimeSetupShown = true;  // Mark as shown this session
 }

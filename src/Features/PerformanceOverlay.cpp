@@ -39,7 +39,7 @@
 #include <imgui.h>
 #include <imgui_internal.h>
 #include <imgui_stdlib.h>
-#include <magic_enum.hpp>
+#include <magic_enum/magic_enum.hpp>
 #include <map>
 #include <numeric>
 
@@ -204,11 +204,54 @@ void PerformanceOverlay::DrawSettings()
 			if (ImGui::Button("Reset Position")) {
 				this->settings.PositionSet = false;
 			}
+			ImGui::SameLine();
+			if (ImGui::Button("Restore Defaults")) {
+				RestoreDefaultSettings();
+			}
+			if (auto _tt = Util::HoverTooltipWrapper()) {
+				ImGui::TextUnformatted("Restores Performance Overlay settings to defaults, including graphs, appearance, and update intervals.");
+			}
 
 			ImGui::Unindent();
 		}
 		ImGui::Unindent();
 	}
+}
+
+void PerformanceOverlay::SaveSettings(json& j)
+{
+	// Persist all overlay settings to JSON
+	j = this->settings;  // uses NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT
+}
+
+void PerformanceOverlay::LoadSettings(json& j)
+{
+	try {
+		// Load all settings from JSON (missing fields use defaults)
+		this->settings = j.get<PerformanceOverlay::Settings>();
+	} catch (...) {
+		// Fallback to defaults if JSON is invalid
+		this->settings = PerformanceOverlay::Settings{};
+	}
+	// Ensure history buffers match loaded size
+	this->state.frameTimeHistory.Resize(this->settings.FrameHistorySize);
+	this->state.postFGFrameTimeHistory.Resize(this->settings.FrameHistorySize);
+}
+
+void PerformanceOverlay::RestoreDefaultSettings()
+{
+	this->settings = PerformanceOverlay::Settings{};
+	// Reset runtime buffers/state to match defaults
+	this->state.frameTimeHistory.Resize(this->settings.FrameHistorySize);
+	this->state.postFGFrameTimeHistory.Resize(this->settings.FrameHistorySize);
+	this->state.smoothFps = 0.0f;
+	this->state.smoothFrameTimeMs = 0.0f;
+	this->state.postFGSmoothFps = 0.0f;
+	this->state.postFGSmoothFrameTimeMs = 0.0f;
+	this->state.minFrameTime = 1000.0f;
+	this->state.maxFrameTime = 0.0f;
+	this->state.smoothedMinFrameTime = 0.0f;
+	this->state.smoothedMaxFrameTime = 50.0f;
 }
 
 void PerformanceOverlay::DataLoaded()

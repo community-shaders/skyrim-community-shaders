@@ -147,21 +147,6 @@ namespace PBR
 		return result;
 	}
 
-	// [Jimenez et al. 2016, "Practical Realtime Strategies for Accurate Indirect Occlusion"]
-	float3 MultiBounceAO(float3 baseColor, float ao)
-	{
-		float3 a = 2.0404 * baseColor - 0.3324;
-		float3 b = -4.7951 * baseColor + 0.6417;
-		float3 c = 2.7552 * baseColor + 0.6903;
-		return max(ao, ((ao * a + b) * ao + c) * ao);
-	}
-
-	// [Lagarde et al. 2014, "Moving Frostbite to Physically Based Rendering 3.0"]
-	float SpecularAOLagarde(float NdotV, float ao, float roughness)
-	{
-		return saturate(pow(abs(NdotV + ao), exp2(-16.0 * roughness - 1.0)) - 1.0 + ao);
-	}
-
 #if defined(GLINT)
 	float3 GetSpecularDirectLightMultiplierMicrofacetWithGlint(float noise, float roughness, float3 specularColor, float NdotL, float NdotV, float NdotH, float VdotH, float glintH,
 		float logDensity, float microfacetRoughness, float densityRandomization, Glints::GlintCachedVars glintCache,
@@ -227,7 +212,7 @@ namespace PBR
 		float cosThetaD = sqrt((1 + cosThetaL * cosThetaV + NdotV * NdotL) / 2.0);
 
 		const float3 Lp = L - NdotL * N;
-		const float3 Vp = V - NdotL * N;
+		const float3 Vp = V - NdotV * N;
 		const float cosPhi = dot(Lp, Vp) * rsqrt(dot(Lp, Lp) * dot(Vp, Vp) + EPSILON_DIVISION);
 		const float cosHalfPhi = sqrt(saturate(0.5 + 0.5 * cosPhi));
 
@@ -481,12 +466,12 @@ namespace PBR
 		specularLobeWeight *= horizon;
 
 		float3 diffuseAO = surfaceProperties.AO;
-		float3 specularAO = SpecularAOLagarde(NdotV, surfaceProperties.AO, surfaceProperties.Roughness);
+		float3 specularAO = Color::SpecularAOLagarde(NdotV, surfaceProperties.AO, surfaceProperties.Roughness);
 
-		diffuseAO = MultiBounceAO(diffuseColor, diffuseAO.x).y;
-		specularAO = MultiBounceAO(surfaceProperties.F0, specularAO.x).y;
+		diffuseAO = Color::MultiBounceAO(diffuseColor, diffuseAO.x).y;
+		specularAO = Color::MultiBounceAO(surfaceProperties.F0, specularAO.x).y;
 
-		diffuseLobeWeight *= diffuseAO * Color::PBRLightingScale;
+		diffuseLobeWeight *= diffuseAO;
 		specularLobeWeight *= specularAO;
 	}
 

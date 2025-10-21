@@ -5,10 +5,15 @@
 #include "Common/MotionBlur.hlsli"
 #include "Common/Random.hlsli"
 #include "Common/SharedData.hlsli"
+#include "Common/Permutation.hlsli"
 
 #ifdef GRASS_LIGHTING
 #	define GRASS
 #endif  // GRASS_LIGHTING
+
+#if !defined(DYNAMIC_CUBEMAPS) && defined(IBL)
+#	undef IBL
+#endif
 
 struct VS_INPUT
 {
@@ -135,11 +140,8 @@ cbuffer cb8 : register(b8)
 	float4 cb8[240];
 }
 
-#	ifdef GRASS_LIGHTING
-float4 GetMSPosition(VS_INPUT input, float windTimer, float3x3 world3x3)
-#	else
-float4 GetMSPosition(VS_INPUT input, float windTimer)
-#	endif
+// Calculate wind displacement for a grass vertex
+float3 CalculateWindDisplacement(VS_INPUT input, float windTimer)
 {
 	float windAngle = 0.4 * ((input.InstanceData1.x + input.InstanceData1.y) * -0.0078125 + windTimer);
 	float windAngleSin, windAngleCos;
@@ -151,14 +153,22 @@ float4 GetMSPosition(VS_INPUT input, float windTimer)
 	float windPower = WindVector.z * (((windTmp1 + windTmp2) * 0.3 + windTmp3) *
 										 (0.5 * (input.Color.w * input.Color.w)));
 
-	float3 inputPosition = input.Position.xyz * (input.InstanceData4.yyy * ScaleMask.xyz + float3(1, 1, 1));
-	float3 windVector = float3(WindVector.xy, 0);
+	return float3(WindVector.xy, 0) * windPower;
+}
 
-#	ifdef GRASS_LIGHTING
-	float3 InstanceData4 = mul(world3x3, inputPosition);
+#ifdef GRASS_LIGHTING
+float4 GetMSPosition(VS_INPUT input, float3x3 world3x3)
+#else
+float4 GetMSPosition(VS_INPUT input)
+#endif
+{
+	float3 inputPosition = input.Position.xyz * (input.InstanceData4.yyy * ScaleMask.xyz + float3(1, 1, 1));
+
+#ifdef GRASS_LIGHTING
+	float3 transformedPosition = mul(world3x3, inputPosition);
 	float4 msPosition;
-	msPosition.xyz = input.InstanceData1.xyz + (windVector * windPower + InstanceData4);
-#	else
+	msPosition.xyz = input.InstanceData1.xyz + transformedPosition;
+#else
 	float3 instancePosition;
 	instancePosition.z = dot(
 		float3(input.InstanceData4.x, input.InstanceData2.w, input.InstanceData3.w), inputPosition);
@@ -166,8 +176,8 @@ float4 GetMSPosition(VS_INPUT input, float windTimer)
 	instancePosition.y = dot(input.InstanceData3.xyz, inputPosition);
 
 	float4 msPosition;
-	msPosition.xyz = input.InstanceData1.xyz + (windVector * windPower + instancePosition);
-#	endif
+	msPosition.xyz = input.InstanceData1.xyz + instancePosition;
+#endif
 	msPosition.w = 1;
 
 	return msPosition;
@@ -185,12 +195,18 @@ VS_OUTPUT main(VS_INPUT input)
 	);
 	float3x3 world3x3 = float3x3(input.InstanceData2.xyz, input.InstanceData3.xyz, float3(input.InstanceData4.x, input.InstanceData2.w, input.InstanceData3.w));
 
-	float4 msPosition = GetMSPosition(input, WindTimer, world3x3);
+	float4 msPosition = GetMSPosition(input, world3x3);
+
+	float3 windDisplacement = CalculateWindDisplacement(input, WindTimer);
+	float3 previousWindDisplacement = CalculateWindDisplacement(input, PreviousWindTimer);
 
 #		ifdef GRASS_COLLISION
-	float3 displacement = GrassCollision::GetDisplacedPosition(input, msPosition.xyz, eyeIndex);
+	float3 displacement, previousDisplacement;
+	GrassCollision::GetDisplacedPosition(input, msPosition.xyz, displacement, previousDisplacement);
 	msPosition.xyz += displacement;
 #		endif  // GRASS_COLLISION
+
+	msPosition.xyz += windDisplacement;
 
 	float4 projSpacePosition = mul(WorldViewProj[eyeIndex], msPosition);
 #		if !defined(VR)
@@ -220,11 +236,13 @@ VS_OUTPUT main(VS_INPUT input)
 	vsout.ViewSpacePosition = mul(WorldView[eyeIndex], msPosition).xyz;
 	vsout.WorldPosition = mul(World[eyeIndex], msPosition);
 
-	float4 previousMsPosition = GetMSPosition(input, PreviousWindTimer, world3x3);
+	float4 previousMsPosition = GetMSPosition(input, world3x3);
 
 #		ifdef GRASS_COLLISION
-	previousMsPosition.xyz += displacement;
+	previousMsPosition.xyz += previousDisplacement;
 #		endif  // GRASS_COLLISION
+
+	previousMsPosition.xyz += previousWindDisplacement;
 
 	vsout.PreviousWorldPosition = mul(PreviousWorld[eyeIndex], previousMsPosition);
 #		if defined(VR)
@@ -251,12 +269,18 @@ VS_OUTPUT main(VS_INPUT input)
 #		endif  // VR
 	);
 
-	float4 msPosition = GetMSPosition(input, WindTimer);
+	float4 msPosition = GetMSPosition(input);
+
+	float3 windDisplacement = CalculateWindDisplacement(input, WindTimer);
+	float3 previousWindDisplacement = CalculateWindDisplacement(input, PreviousWindTimer);
 
 #		ifdef GRASS_COLLISION
-	float3 displacement = GrassCollision::GetDisplacedPosition(input, msPosition.xyz, eyeIndex);
+	float3 displacement, previousDisplacement;
+	GrassCollision::GetDisplacedPosition(input, msPosition.xyz, displacement, previousDisplacement);
 	msPosition.xyz += displacement;
 #		endif  // GRASS_COLLISION
+
+	msPosition.xyz += windDisplacement;
 
 	float4 projSpacePosition = mul(WorldViewProj[eyeIndex], msPosition);
 #		if !defined(VR)
@@ -292,7 +316,7 @@ VS_OUTPUT main(VS_INPUT input)
 	vsout.ViewSpacePosition = mul(WorldView[eyeIndex], msPosition).xyz;
 	vsout.WorldPosition = mul(World[eyeIndex], msPosition);
 
-	float4 previousMsPosition = GetMSPosition(input, PreviousWindTimer);
+	float4 previousMsPosition = GetMSPosition(input);
 #		if defined(VR)
 	Stereo::VR_OUTPUT VRout = Stereo::GetVRVSOutput(projSpacePosition, eyeIndex);
 	vsout.HPosition = VRout.VRPosition;
@@ -301,8 +325,10 @@ VS_OUTPUT main(VS_INPUT input)
 #		endif  // !VR
 
 #		ifdef GRASS_COLLISION
-	previousMsPosition.xyz += displacement;
+	previousMsPosition.xyz += previousDisplacement;
 #		endif  // GRASS_COLLISION
+
+	previousMsPosition.xyz += previousWindDisplacement;
 
 	vsout.PreviousWorldPosition = mul(PreviousWorld[eyeIndex], previousMsPosition);
 
@@ -457,7 +483,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 
 	float3 complexTest = TexBaseSampler.Load(int3(0, int(y) - 1, 0)).xyz * 2.0 - 1.0;
 	float complexLength = length(complexTest);
-	bool complex = complexLength > 0.99 && complexLength < 1.01;
+	bool complex = abs(complexLength - 1.0) < 0.03;
 #		endif  // !TRUE_PBR
 
 	float4 baseColor;
@@ -499,11 +525,13 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	float screenNoise = Random::InterleavedGradientNoise(input.HPosition.xy, SharedData::FrameCount);
 
 	// Swaps direction of the backfaces otherwise they seem to get lit from the wrong direction.
-	if (!frontFace)
-		normal = -normal;
+	if (!(Permutation::ExtraShaderDescriptor & Permutation::ExtraFlags::GrassSphereNormal)) {
+		if (!frontFace)
+			normal = -normal;
 
-	normal.z = max(0.0, normal.z);
-	normal = normalize(float3(normal.xy, max(0, normal.z)));
+		normal.z = max(0.0, normal.z);
+		normal = normalize(float3(normal.xy, max(0, normal.z)));
+	}
 
 	float3x3 tbn = 0;
 
@@ -702,41 +730,60 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	float3 directionalAmbientColor = max(0, mul(SharedData::DirectionalAmbient, float4(normal, 1.0)));
 
 #				if defined(IBL)
-	if (SharedData::iblSettings.EnableDiffuseIBL && !SharedData::InInterior) {
+	if (SharedData::iblSettings.EnableDiffuseIBL && (!SharedData::InInterior || SharedData::iblSettings.EnableInterior)) {
 		directionalAmbientColor *= SharedData::iblSettings.DALCAmount;
-		directionalAmbientColor += Color::Saturation(ImageBasedLighting::GetDiffuseIBL(-normal), SharedData::iblSettings.IBLSaturation) * SharedData::iblSettings.DiffuseIBLScale;
 	}
 #				endif  // IBL
 
 #				if defined(SKYLIGHTING)
+	float skylightingDiffuse = 1.0;
 	if (!SharedData::InInterior) {
-		float3 skylightingNormal = normal;
-
 #					if defined(VR)
 		float3 positionMSSkylight = input.WorldPosition.xyz + FrameBuffer::CameraPosAdjust[eyeIndex].xyz - FrameBuffer::CameraPosAdjust[0].xyz;
 #					else
 		float3 positionMSSkylight = input.WorldPosition.xyz;
 #					endif
-
 		sh2 skylightingSH = Skylighting::sample(SharedData::skylightingSettings, Skylighting::SkylightingProbeArray, Skylighting::stbn_vec3_2Dx1D_128x128x64, input.HPosition.xy, positionMSSkylight, normal);
-		float skylightingDiffuse = SphericalHarmonics::FuncProductIntegral(skylightingSH, SphericalHarmonics::EvaluateCosineLobe(skylightingNormal)) / Math::PI;
+		skylightingDiffuse = SphericalHarmonics::FuncProductIntegral(skylightingSH, SphericalHarmonics::EvaluateCosineLobe(normal)) / Math::PI;
 		skylightingDiffuse = saturate(skylightingDiffuse);
-
 		skylightingDiffuse = lerp(1.0, skylightingDiffuse, skylightingFadeOutFactor);
 		skylightingDiffuse = Skylighting::mixDiffuse(SharedData::skylightingSettings, skylightingDiffuse);
-
-		directionalAmbientColor = Color::GammaToLinear(directionalAmbientColor);
-		directionalAmbientColor *= skylightingDiffuse;
-		directionalAmbientColor = Color::LinearToGamma(directionalAmbientColor);
 	}
 #				endif  // SKYLIGHTING
 
-#				if !defined(SSGI)
-	diffuseColor += directionalAmbientColor;
+#				if defined(IBL)
+	float3 iblColor = 0;
+	if (SharedData::iblSettings.EnableDiffuseIBL) {
+		if (!SharedData::InInterior || SharedData::iblSettings.EnableInterior)
+		{
+#					if defined(SKYLIGHTING)
+			iblColor += Color::Saturation(ImageBasedLighting::GetIBLColor(-normal, skylightingDiffuse), SharedData::iblSettings.IBLSaturation) * SharedData::iblSettings.DiffuseIBLScale;
+#					else
+			iblColor += Color::Saturation(ImageBasedLighting::GetIBLColor(-normal), SharedData::iblSettings.IBLSaturation) * SharedData::iblSettings.DiffuseIBLScale;
+#					endif
+			iblColor = Color::LinearToGamma(iblColor);
+			directionalAmbientColor += iblColor;
+		}
+	}
 #				endif
 
+	diffuseColor += directionalAmbientColor;
+
+#				if defined(IBL) && defined(SKYLIGHTING)
+	directionalAmbientColor -= iblColor;
+#				endif
 	diffuseColor *= albedo;
 	diffuseColor += max(0, sss * subsurfaceColor * SharedData::grassLightingSettings.SubsurfaceScatteringAmount);
+
+	directionalAmbientColor *= albedo;
+
+#				if defined(SKYLIGHTING)
+	Skylighting::applySkylighting(diffuseColor, directionalAmbientColor, albedo, skylightingDiffuse);
+#				endif
+
+#				if defined(IBL) && defined(SKYLIGHTING)
+	directionalAmbientColor += iblColor * albedo;
+#				endif
 
 	specularColor += lightsSpecularColor;
 	specularColor *= specColor.w * SharedData::grassLightingSettings.SpecularStrength;
@@ -771,7 +818,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #			endif
 
 	psout.Specular = float4(specularColor, 1);
-	psout.Masks = float4(0, 0, 0, 0);
+	psout.Masks = float4(0, 0, Color::RGBToYCoCg(directionalAmbientColor).x, 0);
 #		endif
 	return psout;
 }
@@ -891,41 +938,62 @@ PS_OUTPUT main(PS_INPUT input)
 	float3 directionalAmbientColor = max(0, mul(SharedData::DirectionalAmbient, float4(normal, 1.0)));
 
 #			if defined(IBL)
-	if (SharedData::iblSettings.EnableDiffuseIBL && !SharedData::InInterior) {
+	if (SharedData::iblSettings.EnableDiffuseIBL && (!SharedData::InInterior || SharedData::iblSettings.EnableInterior)) {
 		directionalAmbientColor *= SharedData::iblSettings.DALCAmount;
-		directionalAmbientColor += Color::Saturation(ImageBasedLighting::GetDiffuseIBL(-normal), SharedData::iblSettings.IBLSaturation) * SharedData::iblSettings.DiffuseIBLScale;
 	}
 #			endif  // IBL
 
 #			if defined(SKYLIGHTING)
+	float skylightingDiffuse = 1.0;
 	if (!SharedData::InInterior) {
-		float3 skylightingNormal = normal;
-
 #				if defined(VR)
 		float3 positionMSSkylight = input.WorldPosition.xyz + FrameBuffer::CameraPosAdjust[eyeIndex].xyz - FrameBuffer::CameraPosAdjust[0].xyz;
 #				else
 		float3 positionMSSkylight = input.WorldPosition.xyz;
 #				endif
-
 		sh2 skylightingSH = Skylighting::sample(SharedData::skylightingSettings, Skylighting::SkylightingProbeArray, Skylighting::stbn_vec3_2Dx1D_128x128x64, input.HPosition.xy, positionMSSkylight, normal);
-		float skylightingDiffuse = SphericalHarmonics::FuncProductIntegral(skylightingSH, SphericalHarmonics::EvaluateCosineLobe(skylightingNormal)) / Math::PI;
+		skylightingDiffuse = SphericalHarmonics::FuncProductIntegral(skylightingSH, SphericalHarmonics::EvaluateCosineLobe(normal)) / Math::PI;
 		skylightingDiffuse = saturate(skylightingDiffuse);
-
 		skylightingDiffuse = lerp(1.0, skylightingDiffuse, skylightingFadeOutFactor);
 		skylightingDiffuse = Skylighting::mixDiffuse(SharedData::skylightingSettings, skylightingDiffuse);
-
-		directionalAmbientColor = Color::GammaToLinear(directionalAmbientColor);
-		directionalAmbientColor *= skylightingDiffuse;
-		directionalAmbientColor = Color::LinearToGamma(directionalAmbientColor);
 	}
 #			endif  // SKYLIGHTING
 
-#			if !defined(SSGI)
-	diffuseColor += directionalAmbientColor;
+#			if defined(IBL)
+	float3 iblColor = 0;
+	if (SharedData::iblSettings.EnableDiffuseIBL) {
+		if (!SharedData::InInterior || SharedData::iblSettings.EnableInterior)
+		{
+#					if defined(SKYLIGHTING)
+			iblColor += Color::Saturation(ImageBasedLighting::GetIBLColor(-normal, skylightingDiffuse), SharedData::iblSettings.IBLSaturation) * SharedData::iblSettings.DiffuseIBLScale;
+#					else
+			iblColor += Color::Saturation(ImageBasedLighting::GetIBLColor(-normal), SharedData::iblSettings.IBLSaturation) * SharedData::iblSettings.DiffuseIBLScale;
+#					endif
+			iblColor = Color::LinearToGamma(iblColor);
+			directionalAmbientColor += iblColor;
+		}
+	}
 #			endif
 
+	diffuseColor += directionalAmbientColor;
+
 	float3 albedo = baseColor.xyz * vertexColor;
-	psout.Diffuse.xyz = diffuseColor * albedo;
+
+	diffuseColor *= albedo;
+#			if defined(IBL) && defined(SKYLIGHTING)
+	directionalAmbientColor -= iblColor;
+#			endif
+	directionalAmbientColor *= albedo;
+
+#			if defined(SKYLIGHTING)
+	Skylighting::applySkylighting(diffuseColor, directionalAmbientColor, albedo, skylightingDiffuse);
+#			endif
+
+#			if defined(IBL) && defined(SKYLIGHTING)
+	directionalAmbientColor += iblColor * albedo;
+#			endif
+
+	psout.Diffuse.xyz = diffuseColor;
 
 	psout.Diffuse.w = 1;
 
@@ -934,7 +1002,7 @@ PS_OUTPUT main(PS_INPUT input)
 	psout.Normal.zw = 0;
 
 	psout.Albedo = float4(albedo, 1);
-	psout.Masks = float4(0, 0, 0, 0);
+	psout.Masks = float4(0, 0, Color::RGBToYCoCg(directionalAmbientColor).x, 0);
 #		endif
 
 	return psout;
