@@ -41,7 +41,7 @@ struct VS_OUTPUT
 	float CullDistance : SV_CullDistance0;  // p11
 	uint EyeIndex : EYEIDX0;
 #endif  // VR
-	float3 ViewPosition : POSITION0;
+	float3 ViewPositionVS : TEXCOORD2;
 };
 
 #ifdef VSHADER
