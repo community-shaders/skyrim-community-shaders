@@ -329,7 +329,7 @@ PS_OUTPUT main(PS_INPUT input)
 	}
 #	endif
 
-	psout.Color.xyz = propertyColor * baseColor;
+	psout.Color.xyz = propertyColor * baseColor.xyz;
 	psout.Color.w = baseColor.w;
 	psout.Normal.w = baseColor.w;
 	psout.Normal.xyz = float3(0, 1, 0);
