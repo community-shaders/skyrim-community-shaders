@@ -242,6 +242,12 @@ PS_OUTPUT main(PS_INPUT input)
 	uint eyeIndex = input.EyeIndex;
 #	endif  // !VR
 
+	float skyBoost = PParams.y;
+
+	if (SharedData::enbSettings.Enable){
+		skyBoost *= SharedData::enbSettings.GradientIntensity;
+	}
+
 #	ifndef OCCLUSION
 #		ifndef TEXLERP
 	float4 baseColor = TexBaseSampler.Sample(SampBaseSampler, input.TexCoord0.xy);
@@ -258,13 +264,14 @@ PS_OUTPUT main(PS_INPUT input)
 		float distanceFromCenter = length(input.TexCoord0.xy * 2.0 - 1.0);
 
 		float sun = smoothstep(SharedData::enbSettings.ProceduralSunSize,
-                               SharedData::enbSettings.ProceduralSunSize - SharedData::enbSettings.ProceduralSunEdgeSoftness * SharedData::enbSettings.ProceduralSunSize * 0.5,
+                               SharedData::enbSettings.ProceduralSunSize - SharedData::enbSettings.ProceduralSunEdgeSoftness * SharedData::enbSettings.ProceduralSunSize,
                                distanceFromCenter * 25.0);
 
 		float sunGlow = SharedData::enbSettings.ProceduralSunGlowCurve > 0.0 ? pow(pow(saturate(1.0 - distanceFromCenter), rcp(SharedData::enbSettings.ProceduralSunGlowCurve)), 3.0) * SharedData::enbSettings.ProceduralSunGlowIntensity : 0.0;
 
 		baseColor = sun + sunGlow;
-		baseColor.w = 1;
+		baseColor.w = 1.0;
+		skyBoost *= 0.0;
 
 #	ifndef OCCLUSION
 #		ifndef TEXLERP
@@ -279,13 +286,14 @@ PS_OUTPUT main(PS_INPUT input)
 
 #		if defined(DITHER)
 	float2 noiseGradUv = float2(0.125, 0.125) * input.Position.xy;
-	float noiseGrad = TexNoiseGradSampler.Sample(SampNoiseGradSampler, noiseGradUv).x * 0.03125 + -0.0078125;
+	float noiseGrad =
+		TexNoiseGradSampler.Sample(SampNoiseGradSampler, noiseGradUv).x * 0.03125 + -0.0078125;
 
 #			ifdef TEX
-	psout.Color.xyz = (input.Color.xyz * baseColor.xyz) + noiseGrad;
+	psout.Color.xyz = (input.Color.xyz * baseColor.xyz + skyBoost) + noiseGrad;
 	psout.Color.w = baseColor.w * input.Color.w;
 #			else
-	psout.Color.xyz = input.Color.xyz + noiseGrad;
+	psout.Color.xyz = (skyBoost + input.Color.xyz) + noiseGrad;
 	psout.Color.w = input.Color.w;
 #			endif  // TEX
 
@@ -297,11 +305,11 @@ PS_OUTPUT main(PS_INPUT input)
 	}
 
 #		elif defined(HORIZFADE)
-	psout.Color.xyz = float3(1.5, 1.5, 1.5) * (input.Color.xyz * baseColor.xyz);
+	psout.Color.xyz = float3(1.5, 1.5, 1.5) * (input.Color.xyz * baseColor.xyz + skyBoost);
 	psout.Color.w = input.TexCoord2.x * (baseColor.w * input.Color.w);
 #		else
 	psout.Color.w = input.Color.w * baseColor.w;
-	psout.Color.xyz = input.Color.xyz * baseColor.xyz;
+	psout.Color.xyz = input.Color.xyz * baseColor.xyz + skyBoost;
 #		endif
 
 #	else
@@ -331,9 +339,6 @@ PS_OUTPUT main(PS_INPUT input)
 		psout.Color.xyz = psout.Color.xyz + psout.Color.xyz * cloudsScatter;
 	}
 #	endif
-
-	if (!SharedData::enbSettings.Enable)
-		psout.Color.xyz += PParams.y;
 
 #	if defined(CLOUD_SHADOWS) && defined(CLOUDS) && !defined(DEFERRED)
 	psout.CloudShadows = float4(1, 1, 1, psout.Color.w);
