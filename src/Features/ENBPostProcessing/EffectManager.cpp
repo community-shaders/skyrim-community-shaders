@@ -75,28 +75,37 @@ void EffectManager::RegisterSettings()
 	settingManager.RegisterBoolSetting("EnableAdaptation", "EFFECT", true, false);
 	settingManager.RegisterBoolSetting("EnableBloom", "EFFECT", true, false);
 	settingManager.RegisterBoolSetting("EnableLens", "EFFECT", false, false);
-	settingManager.RegisterBoolSetting("EnableDepthOfField", "EFFECT", true, false);
+	settingManager.RegisterBoolSetting("EnableDepthOfField", "EFFECT", false, false);
 
-	settingManager.RegisterBoolSetting("EnableProceduralSun", "EFFECT", false, false);
-	settingManager.RegisterBoolSetting("EnableCloudShadows", "EFFECT", false, false);
-	settingManager.RegisterBoolSetting("EnableImageBasedLighting", "EFFECT", false, false);
+	settingManager.RegisterBoolSetting("EnableProceduralSun", "EFFECT", true, false);
+	settingManager.RegisterBoolSetting("EnableCloudShadows", "EFFECT", true, false);
+	settingManager.RegisterBoolSetting("EnableImageBasedLighting", "EFFECT", true, false);
+	settingManager.RegisterBoolSetting("EnableWater", "EFFECT", true, false);
 
+	// COLORCORRECTION
 	settingManager.RegisterFloatSetting("Brightness", "COLORCORRECTION", 1.0f, 0.0f, 3.0f, false);
 	settingManager.RegisterFloatSetting("GammaCurve", "COLORCORRECTION", 1.0f, 0.1f, 3.0f, false);
 
+	// ADAPTATION
 	settingManager.RegisterFloatSetting("AdaptationSensitivity", "ADAPTATION", 1.0f, 0.0f, 5.0f, false);
 	settingManager.RegisterBoolSetting("ForceMinMaxValues", "ADAPTATION", false, false);
 	settingManager.RegisterFloatSetting("AdaptationMin", "ADAPTATION", 0.0f, 0.0f, 1.0f, false);
 	settingManager.RegisterFloatSetting("AdaptationMax", "ADAPTATION", 1.0f, 0.0f, 2.0f, false);
 	settingManager.RegisterFloatSetting("AdaptationTime", "ADAPTATION", 1.0f, 0.1f, 10.0f, false);
 
+	// DEPTHOFFIELD
 	settingManager.RegisterFloatSetting("FocusingTime", "DEPTHOFFIELD", 1.0f, 0.1f, 10.0f, false);
 	settingManager.RegisterFloatSetting("ApertureTime", "DEPTHOFFIELD", 1.0f, 0.1f, 10.0f, false);
 
+	// BLOOM
 	settingManager.RegisterTimeOfDaySetting("Amount", "BLOOM", 1, true);
+
+	// LENS
 	settingManager.RegisterTimeOfDaySetting("Amount", "LENS", 1, true);
 
 	// SKY
+	settingManager.RegisterBoolSetting("Enable", "SKY", true, false);
+
 	settingManager.RegisterTimeOfDaySetting("GradientIntensity", "SKY", 1, true);
 	settingManager.RegisterTimeOfDaySetting("GradientDesaturation", "SKY", 0, true);
 
@@ -182,6 +191,20 @@ void EffectManager::RegisterSettings()
 	settingManager.RegisterFloatSetting("EdgeSoftness", "PROCEDURALSUN", 0, 10);
 	settingManager.RegisterTimeOfDaySetting("GlowIntensity", "PROCEDURALSUN", 1, true);
 	settingManager.RegisterTimeOfDaySetting("GlowCurve", "PROCEDURALSUN", 1, true);
+
+	// WATER
+	settingManager.RegisterTimeOfDaySetting("Brightness", "WATER", 1, true);
+	settingManager.RegisterTimeOfDaySetting("WavesAmplitude", "WATER", 1, true);
+
+	settingManager.RegisterFloatSetting("Muddiness", "WATER", 1.0f, 0.0f, 1.0f, false);
+	settingManager.RegisterFloatSetting("SunLightingMultiplier", "WATER", 1.0f, 0.0f, 1.0f, false);
+	settingManager.RegisterFloatSetting("SunSpecularMultiplier", "WATER", 1.0f, 0.0f, 1.0f, false);
+
+	settingManager.RegisterFloatSetting("FresnelMin", "WATER", 1.0f, 0.0f, 1.0f, false);
+	settingManager.RegisterFloatSetting("FresnelMax", "WATER", 1.0f, 0.0f, 1.0f, false);
+	settingManager.RegisterFloatSetting("FresnelMultiplier", "WATER", 1.0f, 0.0f, 4.0f, false);
+
+	settingManager.RegisterFloatSetting("ReflectionAmount", "WATER", 1.0f, 0.0f, 1.0f, false);
 }
 
 void EffectManager::ExecuteEffects()

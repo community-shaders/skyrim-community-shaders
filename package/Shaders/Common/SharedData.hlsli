@@ -200,8 +200,13 @@ namespace SharedData
 
 	struct ENBSettings
 	{
-		bool Enable;
-		float3 pad;
+		uint Enable;
+		uint EnableProceduralSun;
+		uint EnableImageBasedLighting;
+		uint EnableWater;
+
+		uint EnableSky;
+		float3 pad00;
 
 		float GradientIntensity;
 		float GradientDesaturation;
@@ -258,6 +263,16 @@ namespace SharedData
 		float ProceduralSunEdgeSoftness;
 		float ProceduralSunGlowIntensity;
 		float ProceduralSunGlowCurve;
+		
+		float WaterWavesAmplitude;
+		float WaterMuddiness;
+		float WaterSunLightingMultiplier;
+		float WaterSunSpecularMultiplier;
+
+		float WaterFresnelMin;
+		float WaterFresnelMax;
+		float WaterFresnelMultiplier;
+		float WaterReflectionAmount;
 	};
 
 	cbuffer FeatureData : register(b6)

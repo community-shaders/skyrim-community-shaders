@@ -31,7 +31,12 @@ public:
 	struct alignas(16) PerFrame
 	{
 		uint Enable;
-		float3 pad;
+		uint EnableProceduralSun;
+		uint EnableImageBasedLighting;
+		uint EnableWater;
+
+		uint EnableSky;
+		float3 pad00;
 
 		float GradientIntensity;
 		float GradientDesaturation;
@@ -88,6 +93,16 @@ public:
 		float ProceduralSunEdgeSoftness;
 		float ProceduralSunGlowIntensity;
 		float ProceduralSunGlowCurve;
+
+		float WaterWavesAmplitude;
+		float WaterMuddiness;
+		float WaterSunLightingMultiplier;
+		float WaterSunSpecularMultiplier;
+
+		float WaterFresnelMin;
+		float WaterFresnelMax;
+		float WaterFresnelMultiplier;
+		float WaterReflectionAmount;
 	};
 
 	bool enableEffect = false;
