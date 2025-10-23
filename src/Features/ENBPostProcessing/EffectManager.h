@@ -7,6 +7,33 @@
 #include "Effects/ENBEffectPostPass.h"
 #include "Effects/ENBLens.h"
 
+enum class TimeOfDay1Index : int
+{
+	Dawn,
+	Sunrise,
+	Day,
+	Sunset
+};
+
+enum class TimeOfDay2Index : int
+{
+	Dusk,
+	Night,
+	InteriorDay,
+	InteriorNight
+};
+
+enum class TimeOfDayFactorIndex : int
+{
+	Dawn,
+	Sunrise,
+	Day,
+	Sunset,
+	Dusk,
+	Night,
+	Count
+};
+
 class EffectManager
 {
 public:

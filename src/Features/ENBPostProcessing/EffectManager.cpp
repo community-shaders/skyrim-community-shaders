@@ -580,20 +580,20 @@ void EffectManager::UpdateCommonData()
 		commonData.eInteriorFactor = Util::IsInterior();
 
 		// Initialize and set factors
-		float factors[6] = { 0.0f };  // dawn, sunrise, day, sunset, dusk, night
+		float factors[static_cast<int>(TimeOfDayFactorIndex::Count)] = { 0.0f };
 
 		if (!commonData.eInteriorFactor) {
 			// Calculate transition points
 			const float dawnStart = sunriseTime - dawnDuration;
 			const float dawnMid = sunriseTime - (dawnDuration * 0.5f);
-			const float sunsetMid = sunsetTime + (duskDuration * 0.5f);
+			const float duskMid = sunsetTime + (duskDuration * 0.5f);
 			const float duskEnd = sunsetTime + duskDuration;
 
 			// Time points array with 24h wraparound
 			const float timePoints[] = {
-				nightTime, dawnStart, dawnMid, sunriseTime, dayTime, sunsetTime, sunsetMid, duskEnd,
+				nightTime, dawnStart, dawnMid, sunriseTime, dayTime, sunsetTime, duskMid, duskEnd,
 				nightTime + 24.0f, dawnStart + 24.0f, dawnMid + 24.0f, sunriseTime + 24.0f,
-				dayTime + 24.0f, sunsetTime + 24.0f, sunsetMid + 24.0f, duskEnd + 24.0f
+				dayTime + 24.0f, sunsetTime + 24.0f, duskMid + 24.0f, duskEnd + 24.0f
 			};
 
 			// Find current and next time periods
@@ -613,7 +613,16 @@ void EffectManager::UpdateCommonData()
 			}
 
 			// Map time point indices to time of day factors
-			constexpr int factorMapping[] = { 5, 0, 0, 1, 2, 3, 4, 5 };  // night, dawn, dawn, sunrise, day, sunset, dusk, night
+			constexpr int factorMapping[] = {
+				static_cast<int>(TimeOfDayFactorIndex::Night),
+				static_cast<int>(TimeOfDayFactorIndex::Night),
+				static_cast<int>(TimeOfDayFactorIndex::Dawn),
+				static_cast<int>(TimeOfDayFactorIndex::Sunrise),
+				static_cast<int>(TimeOfDayFactorIndex::Day),
+				static_cast<int>(TimeOfDayFactorIndex::Sunset),
+				static_cast<int>(TimeOfDayFactorIndex::Dusk),
+				static_cast<int>(TimeOfDayFactorIndex::Night)
+			};
 			const int currentFactor = factorMapping[currentIdx % 8];
 			const int nextFactor = factorMapping[nextIdx % 8];
 
@@ -631,13 +640,31 @@ void EffectManager::UpdateCommonData()
 				factors[nextFactor] = std::clamp(blend, 0.0f, 1.0f);
 			}
 
+			constexpr float dayPowerCurve = 0.6f;
+			float powDay = std::pow(factors[static_cast<int>(TimeOfDayFactorIndex::Day)], dayPowerCurve);
+			powDay = std::clamp(powDay, 0.0f, 1.0f);
+
+			if (powDay > FLT_MIN) {
+				const float complement = 1.0f - powDay;
+
+				if (factors[static_cast<int>(TimeOfDayFactorIndex::Sunrise)] > FLT_MIN) {
+					factors[static_cast<int>(TimeOfDayFactorIndex::Sunrise)] = std::clamp(complement, 0.0f, 1.0f);
+				}
+
+				if (factors[static_cast<int>(TimeOfDayFactorIndex::Sunset)] > FLT_MIN) {
+					factors[static_cast<int>(TimeOfDayFactorIndex::Sunset)] = std::clamp(complement, 0.0f, 1.0f);
+				}
+			}
+
+			factors[static_cast<int>(TimeOfDayFactorIndex::Day)] = powDay;
+
 			// Assign to output arrays
-			commonData.timeOfDay1[0] = factors[0];  // dawn
-			commonData.timeOfDay1[1] = factors[1];  // sunrise
-			commonData.timeOfDay1[2] = factors[2];  // day
-			commonData.timeOfDay1[3] = factors[3];  // sunset
-			commonData.timeOfDay2[0] = factors[4];  // dusk
-			commonData.timeOfDay2[1] = factors[5];  // night
+			commonData.timeOfDay1[static_cast<int>(TimeOfDay1Index::Dawn)] = factors[static_cast<int>(TimeOfDayFactorIndex::Dawn)];
+			commonData.timeOfDay1[static_cast<int>(TimeOfDay1Index::Sunrise)] = factors[static_cast<int>(TimeOfDayFactorIndex::Sunrise)];
+			commonData.timeOfDay1[static_cast<int>(TimeOfDay1Index::Day)] = factors[static_cast<int>(TimeOfDayFactorIndex::Day)];
+			commonData.timeOfDay1[static_cast<int>(TimeOfDay1Index::Sunset)] = factors[static_cast<int>(TimeOfDayFactorIndex::Sunset)];
+			commonData.timeOfDay2[static_cast<int>(TimeOfDay2Index::Dusk)] = factors[static_cast<int>(TimeOfDayFactorIndex::Dusk)];
+			commonData.timeOfDay2[static_cast<int>(TimeOfDay2Index::Night)] = factors[static_cast<int>(TimeOfDayFactorIndex::Night)];
 		}
 
 		// Calculate distance to night time (handling 24h wraparound)
@@ -660,8 +687,8 @@ void EffectManager::UpdateCommonData()
 			commonData.eNightDayFactor = 0.5f;  // Fallback if both distances are 0
 		}
 
-		commonData.timeOfDay2[2] = commonData.eInteriorFactor * commonData.eNightDayFactor;           // interior day
-		commonData.timeOfDay2[3] = commonData.eInteriorFactor * (1.0f - commonData.eNightDayFactor);  // interior night
+		commonData.timeOfDay2[static_cast<int>(TimeOfDay2Index::InteriorDay)] = commonData.eInteriorFactor * commonData.eNightDayFactor;
+		commonData.timeOfDay2[static_cast<int>(TimeOfDay2Index::InteriorNight)] = commonData.eInteriorFactor * (1.0f - commonData.eNightDayFactor);
 	}
 }
 
