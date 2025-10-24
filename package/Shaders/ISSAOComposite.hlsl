@@ -129,6 +129,10 @@ float SimplexNoise(float3 v)
 #		include "IBL/IBL.hlsli"
 #	endif
 
+#	if defined(EXP_HEIGHT_FOG)
+#		include "ExponentialHeightFog/ExponentialHeightFog.hlsli"
+#	endif
+
 PS_OUTPUT main(PS_INPUT input)
 {
 	PS_OUTPUT psout;
@@ -173,15 +177,30 @@ PS_OUTPUT main(PS_INPUT input)
 #	if defined(APPLY_FOG)
 	float fogDistanceFactor = (2 * CameraNearFar.x * CameraNearFar.y) / ((CameraNearFar.y + CameraNearFar.x) - (2 * (1.01 * depth - 0.01) - 1) * (CameraNearFar.y - CameraNearFar.x));
 	float fogFactor = min(FogParam.w, pow(saturate(fogDistanceFactor * FogParam.y - FogParam.x), FogParam.z));
+#		if defined(EXP_HEIGHT_FOG)
+	if (SharedData::exponentialHeightFogSettings.enabled) {
+		uint eyeIndex = Stereo::GetEyeIndexFromTexCoord(input.TexCoord.xy);
+		float4 positionWS = float4(2 * float2(input.TexCoord.x, -input.TexCoord.y + 1) - 1, depth, 1);
+		positionWS = mul(FrameBuffer::CameraViewProjInverse[eyeIndex], positionWS);
+		positionWS.xyz = positionWS.xyz / positionWS.w;
+		fogFactor = ExponentialHeightFog::GetFogFactor(positionWS.xyz, FrameBuffer::CameraPosAdjust[eyeIndex].xyz, FogParam);
+	}
+#		endif
 	float3 fogColor = lerp(FogNearColor.xyz, FogFarColor.xyz, fogFactor);
 #		if defined(IBL)
 	if (SharedData::iblSettings.EnableDiffuseIBL && !SharedData::InInterior) {
 		fogColor = ImageBasedLighting::GetFogIBLColor(fogColor);
 	}
 #		endif
+#		if defined(EXP_HEIGHT_FOG)
+	if (depth < 0.999999 || SharedData::exponentialHeightFogSettings.enabled) {
+		composedColor.xyz = (SharedData::exponentialHeightFogSettings.enabled ? 1.0 : FogNearColor.w) * lerp(composedColor.xyz, fogColor, fogFactor);
+	}
+#		else
 	if (depth < 0.999999) {
 		composedColor.xyz = FogNearColor.w * lerp(composedColor.xyz, fogColor, fogFactor);
 	}
+#		endif
 #	endif
 
 #	if !defined(VR)
