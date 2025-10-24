@@ -127,7 +127,7 @@ struct LensEffects : Feature
 		0x00106635, 0x0010A242, 0x00105945, 0x00105944, 0x00105943, 0x00105942,
 		0x000c8221 } };
 
-	static const inline std::string customSettingsPath = "Data\\Shaders\\LensEffects\\Lens Settings.json";
+	static const inline std::string customSettingsPath = "Data\\SKSE\\Plugins\\CommunityShaders\\Overrides\\DEFAULT_LensEffects.json";
 	bool presetLoaded = false;
 	bool settingsLoaded = false;
 
@@ -138,9 +138,7 @@ struct LensEffects : Feature
 	virtual void SaveSettings(json& o_json) override;
 
 	bool PresetFileExists();
-	bool LoadFromPreset();
 	void ExportAsPreset();
-	void DeletePresetFile();
 
 	struct MainSettings
 	{
@@ -366,9 +364,7 @@ struct LensEffects : Feature
 
 		bool useCustomPreset = true;
 	};
-	Settings* settings;
-	Settings customSettings;
-	Settings stdSettings;
+	Settings settings;
 
 	struct alignas(16) ConstBuffer
 	{

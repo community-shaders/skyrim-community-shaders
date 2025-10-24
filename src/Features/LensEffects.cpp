@@ -36,7 +36,7 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	LensEffects::Settings,
 	mainsettings, coldsettings, EnableStarburst,
 	EnableLensGlare, EnableHalo, EnableGhosts,
-	EnableIce, EnableSunGlare, EnableCA, useCustomPreset)
+	EnableIce, EnableSunGlare, EnableCA)
 
 void LensEffects::CompileShaders()
 {
@@ -154,13 +154,13 @@ void LensEffects::SetupResources()
 
 	renderdata = new Setup::LF_RenderData;
 
-	renderdata->AddEffect(Shaders::LensCA, settings->EnableCA, 1, { .uncond = true });
-	renderdata->AddEffect(Shaders::LensIce, settings->EnableIce, 1, { .weather = true, .deferred = true });
-	renderdata->AddEffect(Shaders::LensBurst, settings->EnableStarburst, 1);
-	renderdata->AddEffect(Shaders::LensSunGlare, settings->EnableSunGlare, 1);
-	renderdata->AddEffect(Shaders::LensGlare, settings->EnableLensGlare, 1);
-	renderdata->AddEffect(Shaders::LensHalo, settings->EnableHalo, 1);
-	renderdata->AddEffect(Shaders::LensGhosts, settings->EnableGhosts, ghostpasses);
+	renderdata->AddEffect(Shaders::LensCA, settings.EnableCA, 1, { .uncond = true });
+	renderdata->AddEffect(Shaders::LensIce, settings.EnableIce, 1, { .weather = true, .deferred = true });
+	renderdata->AddEffect(Shaders::LensBurst, settings.EnableStarburst, 1);
+	renderdata->AddEffect(Shaders::LensSunGlare, settings.EnableSunGlare, 1);
+	renderdata->AddEffect(Shaders::LensGlare, settings.EnableLensGlare, 1);
+	renderdata->AddEffect(Shaders::LensHalo, settings.EnableHalo, 1);
+	renderdata->AddEffect(Shaders::LensGhosts, settings.EnableGhosts, ghostpasses);
 
 	renderdata->SetRenderData();
 
@@ -446,18 +446,18 @@ void LensEffects::GetWeatherShader()
 			static float epochDelta = 0;
 			static int weatherRole = 0;
 			static float fade;
-			static float* uifade;
+			static float uifade;
 
 			if (CheckWeatherChange()) {
 				transEpoch = lastUpdate;
 				if (auto currWeather = sky->currentWeather; currWeather && currWeather->data.flags.any(RE::TESWeather::WeatherDataFlag::kSnow)) {
 					fade = std::max(sky->currentWeather->data.precipitationBeginFadeIn / 255.0f / 24.0f / 7.0f, 0.0018f);
-					uifade = &settings->coldsettings.LI_FadeIn;
+					uifade = settings.coldsettings.LI_FadeIn;
 					weatherRole = 1;
 					epochDelta = 0;
 				} else if (auto prevWeather = sky->lastWeather; prevWeather && prevWeather->data.flags.any(RE::TESWeather::WeatherDataFlag::kSnow)) {
 					fade = std::max(sky->lastWeather->data.precipitationEndFadeOut / 255.0f / 24.0f / 7.0f, 0.00025f);
-					uifade = &settings->coldsettings.LI_FadeOut;
+					uifade = settings.coldsettings.LI_FadeOut;
 					weatherRole = 2;
 					epochDelta = snowPrecipValue;
 				} else {
@@ -474,13 +474,13 @@ void LensEffects::GetWeatherShader()
 					lastIsInside = IsInside;
 					epochDelta = snowPrecipValue;
 					transEpoch = time;
-					uifade = (IsInside) ? &settings->coldsettings.LI_FadeOut : &settings->coldsettings.LI_FadeIn;
+					uifade = (IsInside) ? &settings.coldsettings.LI_FadeOut : &settings.coldsettings.LI_FadeIn;
 					fade = 0;
 				}
-				float duration = settings->coldsettings.LI_FadeDuration / 24.0f / 4.0f;
+				float duration = settings.coldsettings.LI_FadeDuration / 24.0f / 4.0f;
 				duration = (IsInside) ? duration * 0.5f : duration;
 
-				float fademod = *uifade / 24.0f / 4.0f;
+				float fademod = uifade / 24.0f / 4.0f;
 				float fadeValue = std::clamp((time - (transEpoch + (fade + fademod))) / duration, 0.0f, 1.0f);
 
 				if (!IsInside && weatherRole == 1)
@@ -688,55 +688,37 @@ void LensEffects::Hooks::Main_PostProcessing::thunk(RE::ImageSpaceManager* a1, u
 
 void LensEffects::DrawSettings()
 {
-	auto& mainSettings = settings->mainsettings;
-	auto& coldSettings = settings->coldsettings;
+	auto& mainSettings = settings.mainsettings;
+	auto& coldSettings = settings.coldsettings;
 
 	if (ImGui::BeginTabBar("Effects")) {
 		if (ImGui::BeginTabItem("General")) {
 			ImGui::SeparatorText("Quick Enables");
-			if (ImGui::Checkbox("Enable Sun Glare", &settings->EnableSunGlare))
-				renderdata->GetEffect(Shaders::LensSunGlare).Toggle(settings->EnableSunGlare);
-			if (ImGui::Checkbox("Enable Starburst", &settings->EnableStarburst))
-				renderdata->GetEffect(Shaders::LensBurst).Toggle(settings->EnableStarburst);
-			if (ImGui::Checkbox("Enable Ghosts", &settings->EnableGhosts))
-				renderdata->GetEffect(Shaders::LensGhosts).Toggle(settings->EnableGhosts);
-			if (ImGui::Checkbox("Enable Lens Glare", &settings->EnableLensGlare))
-				renderdata->GetEffect(Shaders::LensGlare).Toggle(settings->EnableLensGlare);
-			if (ImGui::Checkbox("Enable Sun Halo", &settings->EnableHalo))
-				renderdata->GetEffect(Shaders::LensHalo).Toggle(settings->EnableHalo);
-			if (ImGui::Checkbox("Enable Chromatic Aberration", &settings->EnableCA))
-				renderdata->GetEffect(Shaders::LensCA).Toggle(settings->EnableCA);
-			if (ImGui::Checkbox("Enable Lens Ice", &settings->EnableIce))
-				renderdata->GetEffect(Shaders::LensIce).Toggle(settings->EnableIce);
+			if (ImGui::Checkbox("Enable Sun Glare", &settings.EnableSunGlare))
+				renderdata->GetEffect(Shaders::LensSunGlare).Toggle(settings.EnableSunGlare);
+			if (ImGui::Checkbox("Enable Starburst", &settings.EnableStarburst))
+				renderdata->GetEffect(Shaders::LensBurst).Toggle(settings.EnableStarburst);
+			if (ImGui::Checkbox("Enable Ghosts", &settings.EnableGhosts))
+				renderdata->GetEffect(Shaders::LensGhosts).Toggle(settings.EnableGhosts);
+			if (ImGui::Checkbox("Enable Lens Glare", &settings.EnableLensGlare))
+				renderdata->GetEffect(Shaders::LensGlare).Toggle(settings.EnableLensGlare);
+			if (ImGui::Checkbox("Enable Sun Halo", &settings.EnableHalo))
+				renderdata->GetEffect(Shaders::LensHalo).Toggle(settings.EnableHalo);
+			if (ImGui::Checkbox("Enable Chromatic Aberration", &settings.EnableCA))
+				renderdata->GetEffect(Shaders::LensCA).Toggle(settings.EnableCA);
+			if (ImGui::Checkbox("Enable Lens Ice", &settings.EnableIce))
+				renderdata->GetEffect(Shaders::LensIce).Toggle(settings.EnableIce);
+
 			ImGui::Spacing();
 
-			ImGui::SeparatorText("Presets");
-			if (PresetFileExists() && presetLoaded) {
-				ImGui::TextColored(ImVec4(0.0f, 1.0f, 0.0f, 1.0f), "Lens preset loaded");
-				if (ImGui::Checkbox("Enable  ", &stdSettings.useCustomPreset))
-					settings = (stdSettings.useCustomPreset) ? &customSettings : &stdSettings;
-				if (auto _tt = Util::HoverTooltipWrapper())
-					ImGui::Text("When enabled any changes made to settings are applied to the preset");
-
-				ImGui::SameLine();
-				if (ImGui::Button("Delete Preset")) {
-					DeletePresetFile();
-					presetLoaded = false;
-					settings = &stdSettings;
-				}
-			} else {
-				if (ImGui::Button("Export As Preset")) {
-					customSettings = *settings;
-					ExportAsPreset();
-					presetLoaded = true;
-					if (stdSettings.useCustomPreset)
-						settings = &customSettings;
-				}
-				if (auto _tt = Util::HoverTooltipWrapper()) {
-					ImGui::Text("Saves the current settings to Data/Shaders/LensEffects/Lens Settings.json");
-					ImGui::Text("This is meant for modders who want to package a custom lens preset with their mod");
-				}
+			if (ImGui::Button("Export As Preset")) {
+				ExportAsPreset();
 			}
+			if (auto _tt = Util::HoverTooltipWrapper()) {
+				ImGui::Text("Saves the current settings to: Data/SKSE/Plugins/CommunityShaders/Overrides/DEFAULT_LensEffects.json");
+				ImGui::Text("This is designed for modders who want to package a custom lens preset with their mod");
+			}
+
 			ImGui::EndTabItem();
 		}
 
@@ -749,8 +731,8 @@ void LensEffects::DrawSettings()
 			}
 			ImGui::SeparatorText("General");
 			ImGui::Spacing();
-			if (ImGui::Checkbox("Enable Starburst", &settings->EnableStarburst))
-				renderdata->GetEffect(Shaders::LensBurst).Toggle(settings->EnableStarburst);
+			if (ImGui::Checkbox("Enable Starburst", &settings.EnableStarburst))
+				renderdata->GetEffect(Shaders::LensBurst).Toggle(settings.EnableStarburst);
 
 			ImGui::SliderFloat("Burst Size", &mainSettings.SB_Scale, 0.1f, 1.0f);
 			ImGui::SliderFloat("Burst Intensity", &mainSettings.SB_Intensity, 0.01f, 3.0f);
@@ -808,8 +790,8 @@ void LensEffects::DrawSettings()
 			}
 			ImGui::SeparatorText("General");
 			ImGui::Spacing();
-			if (ImGui::Checkbox("Enable Ghosts", &settings->EnableGhosts))
-				renderdata->GetEffect(Shaders::LensGhosts).Toggle(settings->EnableGhosts);
+			if (ImGui::Checkbox("Enable Ghosts", &settings.EnableGhosts))
+				renderdata->GetEffect(Shaders::LensGhosts).Toggle(settings.EnableGhosts);
 
 			ImGui::SliderFloat("Ghost Size", &mainSettings.GH_Scale, 0.1f, 1.5f);
 			ImGui::SliderFloat("Ghost Intensity", &mainSettings.GH_Intensity, 0.0f, 2.0f);
@@ -881,8 +863,8 @@ void LensEffects::DrawSettings()
 				ImGui::Text("By default glare position is static, when 'dynamic x' is enabled the horizontal position will track with the sun, and 'x axis offset' becomes a base offset.");
 			}
 			ImGui::SeparatorText("General");
-			if (ImGui::Checkbox("Enable Lens Glare", &settings->EnableLensGlare))
-				renderdata->GetEffect(Shaders::LensGlare).Toggle(settings->EnableLensGlare);
+			if (ImGui::Checkbox("Enable Lens Glare", &settings.EnableLensGlare))
+				renderdata->GetEffect(Shaders::LensGlare).Toggle(settings.EnableLensGlare);
 
 			ImGui::SliderFloat("Glare Scale", &mainSettings.GL_Scale, 0.1f, 1.0f);
 			ImGui::SliderFloat("Glare Intensity", &mainSettings.GL_Intensity, 0.1f, 2.0f);
@@ -906,8 +888,8 @@ void LensEffects::DrawSettings()
 				ImGui::Text("Creates a faint segmented halo around the radius of the sun, which expands and contracts depending on the angle it's viewed from.");
 			}
 			ImGui::SeparatorText("General");
-			if (ImGui::Checkbox("Enable Sun Halo", &settings->EnableHalo))
-				renderdata->GetEffect(Shaders::LensHalo).Toggle(settings->EnableHalo);
+			if (ImGui::Checkbox("Enable Sun Halo", &settings.EnableHalo))
+				renderdata->GetEffect(Shaders::LensHalo).Toggle(settings.EnableHalo);
 
 			ImGui::SliderFloat("Halo Scale", &mainSettings.HL_Scale, 0.1f, 1.0f);
 			ImGui::SliderFloat("Halo Intensity", &mainSettings.HL_Intensity, 0.01f, 1.0f);
@@ -950,8 +932,8 @@ void LensEffects::DrawSettings()
 				ImGui::Text("A vignette that slowly forms around the edge of the camera lens during snow based weathers.");
 			}
 			ImGui::SeparatorText("General");
-			if (ImGui::Checkbox("Enable Lens Frost", &settings->EnableIce))
-				renderdata->GetEffect(Shaders::LensIce).Toggle(settings->EnableIce);
+			if (ImGui::Checkbox("Enable Lens Frost", &settings.EnableIce))
+				renderdata->GetEffect(Shaders::LensIce).Toggle(settings.EnableIce);
 
 			ImGui::SliderFloat("Frost Intensity", &mainSettings.LI_Intensity, 0.01f, 2.0f);
 			ImGui::SliderFloat("Fade Duration", &coldSettings.LI_FadeDuration, 0.01f, 2.0f);
@@ -985,8 +967,8 @@ void LensEffects::DrawSettings()
 				ImGui::Text("Note: Setting low motion thresholds without also decreasing intensity/clamp will cause image warping/skipping.");
 			}
 			ImGui::SeparatorText("General");
-			if (ImGui::Checkbox("Enable Chromatic Aberration", &settings->EnableCA))
-				renderdata->GetEffect(Shaders::LensCA).Toggle(settings->EnableCA);
+			if (ImGui::Checkbox("Enable Chromatic Aberration", &settings.EnableCA))
+				renderdata->GetEffect(Shaders::LensCA).Toggle(settings.EnableCA);
 
 			ImGui::SliderFloat("CA Intensity", &mainSettings.CA_Intensity, 0.0f, 2.0f);
 			ImGui::SliderFloat("CA Motion Threshold", &mainSettings.CA_Threshold, 0.0f, 0.1f);
@@ -1005,8 +987,8 @@ void LensEffects::DrawSettings()
 				ImGui::Text("Note: This shader is strongly effected by weather mod settings for bloom, tonemapping and color grading and is therefore disabled by default.");
 			}
 			ImGui::SeparatorText("General");
-			if (ImGui::Checkbox("Enable Sun Glare", &settings->EnableSunGlare))
-				renderdata->GetEffect(Shaders::LensSunGlare).Toggle(settings->EnableSunGlare);
+			if (ImGui::Checkbox("Enable Sun Glare", &settings.EnableSunGlare))
+				renderdata->GetEffect(Shaders::LensSunGlare).Toggle(settings.EnableSunGlare);
 
 			ImGui::SliderFloat("Glare Scale ##sun", &mainSettings.SG_Scale, 0.25f, 1.0f);
 			ImGui::SliderFloat("Glare Intensity ##sun", &mainSettings.SG_Intensity, 0.0f, 2.0f);
@@ -1037,13 +1019,13 @@ void LensEffects::DrawSettings()
 void LensEffects::RefreshToggles()
 {
 	if (renderdata) {
-		renderdata->GetEffect(Shaders::LensIce).Toggle(settings->EnableIce);
-		renderdata->GetEffect(Shaders::LensCA).Toggle(settings->EnableCA);
-		renderdata->GetEffect(Shaders::LensBurst).Toggle(settings->EnableStarburst);
-		renderdata->GetEffect(Shaders::LensSunGlare).Toggle(settings->EnableSunGlare);
-		renderdata->GetEffect(Shaders::LensGlare).Toggle(settings->EnableLensGlare);
-		renderdata->GetEffect(Shaders::LensHalo).Toggle(settings->EnableHalo);
-		renderdata->GetEffect(Shaders::LensGhosts).Toggle(settings->EnableGhosts);
+		renderdata->GetEffect(Shaders::LensIce).Toggle(settings.EnableIce);
+		renderdata->GetEffect(Shaders::LensCA).Toggle(settings.EnableCA);
+		renderdata->GetEffect(Shaders::LensBurst).Toggle(settings.EnableStarburst);
+		renderdata->GetEffect(Shaders::LensSunGlare).Toggle(settings.EnableSunGlare);
+		renderdata->GetEffect(Shaders::LensGlare).Toggle(settings.EnableLensGlare);
+		renderdata->GetEffect(Shaders::LensHalo).Toggle(settings.EnableHalo);
+		renderdata->GetEffect(Shaders::LensGhosts).Toggle(settings.EnableGhosts);
 	}
 }
 
@@ -1072,90 +1054,47 @@ void LensEffects::ExportAsPreset()
 		}
 	}
 
-	json to_write;
-	to_write["Lens Effects"] = (presetLoaded) ? customSettings : *settings;
+	//json to_write;
+	//to_write["TestField"] = (presetLoaded) ? customSettings : *settings;
+	json obj = settings;
 	std::ofstream outfile(customSettingsPath);
 
 	if (outfile) {
-		outfile << to_write.dump(1);
+		outfile << obj.dump(1);
 		logger::info("[Lens Effects] Saved preset to {}", customSettingsPath);
 	} else {
 		logger::error("[Lens Effects] Failed to save {}", customSettingsPath);
 	}
 }
 
-bool LensEffects::LoadFromPreset()
-{
-	std::ifstream file(customSettingsPath);
-	json custom;
-
-	try {
-		file >> custom;
-	} catch (const nlohmann::json::parse_error& e) {
-		logger::error("[Lens Effects] Failed to parse {}: {}", customSettingsPath, e.what());
-		return false;
-	}
-
-	auto it = custom.find("Lens Effects");
-	if (it != custom.end() && it->is_object()) {
-		try {
-			logger::info("[Lens Effects] Loading preset from {}", customSettingsPath);
-			customSettings = custom["Lens Effects"].get<Settings>();
-			return true;
-		} catch (const nlohmann::json::type_error& e) {
-			logger::error("[Lens Effects] Type error converting settings from {}: {}", customSettingsPath, e.what());
-		}
-	} else {
-		logger::error("[Lens Effects] Failed to load preset from {}", customSettingsPath);
-	}
-
-	return false;
-}
-
-void LensEffects::DeletePresetFile()
-{
-	if (PresetFileExists()) {
-		std::filesystem::path path(customSettingsPath);
-		try {
-			if (!std::filesystem::remove(path)) {
-				logger::error("[Lens Effects] Failed to delete lens preset file");
-			}
-		} catch (const std::filesystem::filesystem_error& e) {
-			logger::error("[Lens Effects] Filesystem error when deleting {} : {}", customSettingsPath, e.what());
-		} catch (const std::exception& e) {
-			logger::error("[Lens Effects] Unexpected error when deleting {} : {}", customSettingsPath, e.what());
-		}
-	}
-}
-
 void LensEffects::LoadSettings(json& o_json)
 {
-	stdSettings = o_json;
+	settings = o_json;
 
-	if (PresetFileExists())
-		presetLoaded = LoadFromPreset();
+	//if (PresetFileExists())
+	//	presetLoaded = LoadFromPreset();
 
-	settings = (presetLoaded && stdSettings.useCustomPreset) ? &customSettings : &stdSettings;
+	//settings = (presetLoaded && stdSettings.useCustomPreset) ? &customSettings : &stdSettings;
 
 	RefreshToggles();
 
-	settingsLoaded = true;
+	//settingsLoaded = true;
 }
 
 void LensEffects::SaveSettings(json& o_json)
 {
-	o_json = stdSettings;
+	o_json = settings;
 
-	if (presetLoaded)
-		ExportAsPreset();
+	//if (presetLoaded)
+	//ExportAsPreset();
 }
 
 void LensEffects::RestoreDefaultSettings()
 {
-	stdSettings = {};
+	settings = {};
 
-	if (PresetFileExists())
-		presetLoaded = LoadFromPreset();
+	//if (PresetFileExists())
+	//	presetLoaded = LoadFromPreset();
 
 	RefreshToggles();
 }
