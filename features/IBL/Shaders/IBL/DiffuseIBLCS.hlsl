@@ -34,11 +34,10 @@ void main(uint3 dispatchID : SV_DispatchThreadID, uint groupIndex : SV_GroupInde
 	float2 sampleCoord = (float2(az, ze) + 0.5) * rcpAxisSampleCount;
 	float3 rayDir = SphericalHarmonics::GetUniformSphereSample(sampleCoord.x, sampleCoord.y);
 
-	// ENB compat
-	rayDir.z = -abs(rayDir.z);
-
 	// Sample cubemap with optimized direction
 	float3 color = EnvTexture.SampleLevel(LinearSampler, -rayDir, 0).xyz;
+
+	color = Color::Saturation(color, 2.0);
 
 	// Compute spherical harmonics basis for this direction
 	sh2 sh = SphericalHarmonics::Evaluate(rayDir);
