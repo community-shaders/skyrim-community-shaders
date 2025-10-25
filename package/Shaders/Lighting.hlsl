@@ -975,6 +975,10 @@ float GetSnowParameterY(float texProjTmp, float alpha)
 #		include "IBL/IBL.hlsli"
 #	endif
 
+#	if defined(EXP_HEIGHT_FOG)
+#		include "ExponentialHeightFog/ExponentialHeightFog.hlsli"
+#	endif
+
 PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 {
 	PS_OUTPUT psout;
@@ -3136,13 +3140,25 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #	if !defined(DEFERRED)
 	color.xyz = Color::LinearToGamma(Color::GammaToLinear(color.xyz) + specularColor);
 	float3 fogColor = input.FogParam.xyz;
+	float fogFactor = input.FogParam.w;
+#		if defined(EXP_HEIGHT_FOG)
+	float3 directionalInscattering = 0;
+	if (SharedData::exponentialHeightFogSettings.enabled) {
+		fogFactor = ExponentialHeightFog::GetFogFactor(input.WorldPosition.xyz, FrameBuffer::CameraPosAdjust[eyeIndex].xyz, directionalInscattering);
+	}
+#		endif
 #		if defined(IBL)
 	if (SharedData::iblSettings.EnableDiffuseIBL && !SharedData::InInterior) {
 		fogColor = ImageBasedLighting::GetFogIBLColor(fogColor);
 	}
 #		endif
+#		if defined(EXP_HEIGHT_FOG)
+	if (SharedData::exponentialHeightFogSettings.enabled) {
+		fogColor += directionalInscattering;
+	}
+#		endif
 	if (FrameBuffer::FrameParams.y && FrameBuffer::FrameParams.z)
-		color.xyz = lerp(color.xyz, fogColor, input.FogParam.w);
+		color.xyz = lerp(color.xyz, fogColor, fogFactor);
 #	endif
 
 #	if defined(TESTCUBEMAP) && defined(ENVMAP) && defined(DYNAMIC_CUBEMAPS)

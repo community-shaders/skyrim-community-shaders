@@ -5,10 +5,10 @@
 
 namespace ExponentialHeightFog
 {
-    float GetFogFactor(float3 positionWS, float3 cameraWS, float4 fogParam)
+    float GetFogFactor(float3 positionWS, float3 cameraWS, out float3 directionalInscattering)
     {
         float fogHeightFalloff = SharedData::exponentialHeightFogSettings.fogHeightFalloff * 0.001f;
-        float fogDensity = SharedData::exponentialHeightFogSettings.fogDensityMultiplier * 0.001;
+        float fogDensity = SharedData::exponentialHeightFogSettings.fogDensity * 0.001f;
         if (fogDensity <= 0.0f)
         {
             return 0.0f;
@@ -21,9 +21,9 @@ namespace ExponentialHeightFog
         float rayLength = viewToPosLength;
         float rayDirectionZ = viewToPos.z;
 
-        if (fogParam.x > 0)
+        if (SharedData::exponentialHeightFogSettings.startDistance > 0)
         {
-            float excludeIntersectionTime = fogParam.x * viewToPosLengthInv;
+            float excludeIntersectionTime = SharedData::exponentialHeightFogSettings.startDistance * viewToPosLengthInv;
             float cameraToExclusionIntersectionZ = excludeIntersectionTime * viewToPos.z;
             float exclusionIntersectionZ = cameraWS.z + cameraToExclusionIntersectionZ;
             rayLength = (1.0f - excludeIntersectionTime) * viewToPosLength;
@@ -35,11 +35,18 @@ namespace ExponentialHeightFog
         float falloff = fogHeightFalloff * rayDirectionZ;
         float lineIntegral = (1.0f - exp2(-falloff)) / falloff;
         float lineIntegralTaylor = 0.69314718056f - 0.24022650695f * falloff;  // log(2) - (0.5 * (log(2)^2)) * falloff
-        float exponentialHeightLineIntegral = rayOriginTerms * (abs(falloff) > 0.01f ? lineIntegral : lineIntegralTaylor) * rayLength;
+        float exponentialHeightLineIntegralCalc = rayOriginTerms * (abs(falloff) > 0.01f ? lineIntegral : lineIntegralTaylor);
+        float exponentialHeightLineIntegral = exponentialHeightLineIntegralCalc * rayLength;
 
         float expFogFactor = saturate(exp2(-exponentialHeightLineIntegral));
 
-        return min(1 - expFogFactor, fogParam.w);
+        // Calculate directional light inscattering
+        float3 directionalLightInscattering = SharedData::DirLightColor.xyz * pow(saturate(dot(normalize(positionWS), SharedData::DirLightDirection.xyz)), SharedData::exponentialHeightFogSettings.directionalInscatteringExponent);
+        float dirExponentialHeightLineIntegral = exponentialHeightLineIntegralCalc * max(rayLength - SharedData::exponentialHeightFogSettings.startDistance, 0);
+        float dirExpFogFactor = saturate(exp2(-dirExponentialHeightLineIntegral));
+        directionalInscattering = directionalLightInscattering * (1 - dirExpFogFactor) * SharedData::exponentialHeightFogSettings.directionalInscatteringMultiplier;
+
+        return 1 - expFogFactor;
     }
 }
 #endif

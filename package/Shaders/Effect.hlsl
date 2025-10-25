@@ -530,6 +530,10 @@ cbuffer PerGeometry : register(b2)
 #		include "IBL/IBL.hlsli"
 #	endif
 
+#	if defined(EXP_HEIGHT_FOG)
+#		include "ExponentialHeightFog/ExponentialHeightFog.hlsli"
+#	endif
+
 #	include "Common/ShadowSampling.hlsli"
 
 float ComputeShadowVariance(float shadow)
@@ -822,10 +826,18 @@ PS_OUTPUT main(PS_INPUT input)
 #	endif
 
 #	if !defined(MOTIONVECTORS_NORMALS)
+	float fogFactor = input.FogParam.w;
+#		if defined(EXP_HEIGHT_FOG)
+	float3 directionalInscattering = 0;
+	if (SharedData::exponentialHeightFogSettings.enabled) {
+		fogFactor = ExponentialHeightFog::GetFogFactor(input.WorldPosition.xyz, FrameBuffer::CameraPosAdjust[eyeIndex].xyz, directionalInscattering);
+		fogMul = 1;
+	}
+#		endif
 #		if defined(ADDBLEND)
-	float3 blendedColor = lightColor * (1 - input.FogParam.www);
+	float3 blendedColor = lightColor * (1 - fogFactor);
 #		elif defined(MULTBLEND) || defined(MULTBLEND_DECAL)
-	float3 blendedColor = lerp(lightColor, 1.0.xxx, saturate(1.5 * input.FogParam.w).xxx);
+	float3 blendedColor = lerp(lightColor, 1.0.xxx, saturate(1.5 * fogFactor).xxx);
 #		else
 	float3 fogColor = input.FogParam.xyz;
 #			if defined(IBL)
@@ -833,7 +845,12 @@ PS_OUTPUT main(PS_INPUT input)
 		fogColor = ImageBasedLighting::GetFogIBLColor(fogColor);
 	}
 #			endif
-	float3 blendedColor = lerp(lightColor, fogColor, input.FogParam.www);
+#			if defined(EXP_HEIGHT_FOG)
+	if (SharedData::exponentialHeightFogSettings.enabled) {
+		fogColor += directionalInscattering;
+	}
+#			endif
+	float3 blendedColor = lerp(lightColor, fogColor, fogFactor.xxx);
 #		endif
 #	else
 	float3 blendedColor = lightColor.xyz;

@@ -32,8 +32,12 @@ struct ExponentialHeightFog : Feature
 	struct alignas(16) Settings
 	{
 		uint enabled = 1;
+		float startDistance = 0.0f;
 		float fogHeight = 0.0f;
 		float fogHeightFalloff = 0.2f;
-		float fogDensityMultiplier = 1.0f;
+		float fogDensity = 0.02f;
+		float directionalInscatteringMultiplier = 1.0f;
+		float directionalInscatteringExponent = 20.0f;
+		float pad0;
 	} settings;
 };
