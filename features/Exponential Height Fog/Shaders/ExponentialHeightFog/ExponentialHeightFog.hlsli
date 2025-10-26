@@ -48,7 +48,7 @@ namespace ExponentialHeightFog
         if (SharedData::exponentialHeightFogSettings.useDynamicCubemaps > 0)
         {
             float3 tintColor = lerp(fogColor, SharedData::exponentialHeightFogSettings.inscatteringTint.xyz, SharedData::exponentialHeightFogSettings.inscatteringTint.w);
-            float3 cubemapColor = DynamicCubemaps::EnvReflectionsTexture.SampleLevel(SampColorSampler, normalize(positionWS), 7).xyz;
+            float3 cubemapColor = DynamicCubemaps::EnvReflectionsTexture.SampleLevel(SampColorSampler, normalize(positionWS), SharedData::exponentialHeightFogSettings.cubemapMipLevel).xyz;
             fogColor = tintColor * cubemapColor * (1.0f - expFogFactor);
         }
 #   endif
@@ -58,7 +58,7 @@ namespace ExponentialHeightFog
         // Calculate directional light inscattering
         if (SharedData::exponentialHeightFogSettings.directionalInscatteringMultiplier > 0)
         {
-            float3 directionalLightInscattering = SharedData::DirLightColor.xyz * pow(saturate(dot(normalize(positionWS), SharedData::DirLightDirection.xyz)), SharedData::exponentialHeightFogSettings.directionalInscatteringExponent);
+            float3 directionalLightInscattering = SharedData::DirLightColor.xyz * pow(saturate((dot(normalize(positionWS), SharedData::DirLightDirection.xyz) + 1) / 2), SharedData::exponentialHeightFogSettings.directionalInscatteringExponent) / Math::TAU;
             float dirExponentialHeightLineIntegral = exponentialHeightLineIntegralCalc * max(rayLength - SharedData::exponentialHeightFogSettings.startDistance, 0);
             float dirExpFogFactor = saturate(exp2(-dirExponentialHeightLineIntegral));
             directionalInscattering = directionalLightInscattering * (1 - dirExpFogFactor) * SharedData::exponentialHeightFogSettings.directionalInscatteringMultiplier;

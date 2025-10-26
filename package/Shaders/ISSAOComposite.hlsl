@@ -129,8 +129,8 @@ float SimplexNoise(float3 v)
 #		include "IBL/IBL.hlsli"
 #	endif
 
-#	if defined(EXP_HEIGHT_FOG)
-#		define SampColorSampler sourceSampler
+#	if defined(EXP_HEIGHT_FOG) && defined(APPLY_FOG)
+SamplerState SampColorSampler : register(s9);
 #		include "ExponentialHeightFog/ExponentialHeightFog.hlsli"
 #	endif
 

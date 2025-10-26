@@ -1168,7 +1168,7 @@ PS_OUTPUT main(PS_INPUT input)
 #						if defined(EXP_HEIGHT_FOG)
 	if (SharedData::exponentialHeightFogSettings.enabled)
 	{
-		float4 exponentialHeightFog = ExponentialHeightFog::GetExponentialHeightFog(input.WPosition.xyz, FrameBuffer::CameraPosAdjust[eyeIndex].xyz, fogColor);
+		float4 exponentialHeightFog = ExponentialHeightFog::GetExponentialHeightFog(input.WPosition.xyz, FrameBuffer::CameraPosAdjust[eyeIndex].xyz, preFogColor);
 		preFogColor = exponentialHeightFog.xyz;
 		preFogFactor = exponentialHeightFog.w;
 	}

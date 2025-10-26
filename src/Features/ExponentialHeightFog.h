@@ -38,7 +38,9 @@ struct ExponentialHeightFog : Feature
 		float fogHeightFalloff = 0.2f;
 		float fogDensity = 0.02f;
 		float directionalInscatteringMultiplier = 1.0f;
-		float directionalInscatteringExponent = 8.0f;
+		float directionalInscatteringExponent = 2.0f;
 		float4 inscatteringTint = { 1.0f, 1.0f, 1.0f, 1.0f };
+		float cubemapMipLevel = 2.0f;
+		float pad[3];
 	} settings;
 };

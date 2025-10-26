@@ -1,3 +1,6 @@
+#ifndef DYNAMICCUBEMAPS_HLSLI
+#define DYNAMICCUBEMAPS_HLSLI
+
 #include "Common/BRDF.hlsli"
 
 #if defined(SKYLIGHTING)
@@ -206,3 +209,4 @@ namespace DynamicCubemaps
 	}
 #endif  // !WATER
 }
+#endif  // DYNAMICCUBEMAPS_HLSLI

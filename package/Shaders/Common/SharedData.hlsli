@@ -205,6 +205,8 @@ namespace SharedData
 		float directionalInscatteringMultiplier;
 		float directionalInscatteringExponent;
 		float4 inscatteringTint;
+		float cubemapMipLevel;
+		float3 pad;
 	};
 
 	cbuffer FeatureData : register(b6)

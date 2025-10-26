@@ -3148,7 +3148,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #		endif
 #		if defined(EXP_HEIGHT_FOG)
 	if (SharedData::exponentialHeightFogSettings.enabled) {
-		float4 exponentialHeightFog = ExponentialHeightFog::GetExponentialHeightFog(input.WorldPosition.xyz, FrameBuffer::CameraPosAdjust[eyeIndex].xyz, directionalInscattering);
+		float4 exponentialHeightFog = ExponentialHeightFog::GetExponentialHeightFog(input.WorldPosition.xyz, FrameBuffer::CameraPosAdjust[eyeIndex].xyz, fogColor);
 		fogColor = exponentialHeightFog.xyz;
 		fogFactor = exponentialHeightFog.w;
 	}
