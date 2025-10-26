@@ -197,13 +197,14 @@ namespace SharedData
 	struct ExponentialHeightFogSettings
 	{
 		uint enabled;
+		uint useDynamicCubemaps;
 		float startDistance;
 		float fogHeight;
 		float fogHeightFalloff;
 		float fogDensity;
 		float directionalInscatteringMultiplier;
 		float directionalInscatteringExponent;
-		float pad0;
+		float4 inscatteringTint;
 	};
 
 	cbuffer FeatureData : register(b6)

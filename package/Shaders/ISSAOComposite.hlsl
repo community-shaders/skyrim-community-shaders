@@ -130,6 +130,7 @@ float SimplexNoise(float3 v)
 #	endif
 
 #	if defined(EXP_HEIGHT_FOG)
+#		define SampColorSampler sourceSampler
 #		include "ExponentialHeightFog/ExponentialHeightFog.hlsli"
 #	endif
 
@@ -177,16 +178,6 @@ PS_OUTPUT main(PS_INPUT input)
 #	if defined(APPLY_FOG)
 	float fogDistanceFactor = (2 * CameraNearFar.x * CameraNearFar.y) / ((CameraNearFar.y + CameraNearFar.x) - (2 * (1.01 * depth - 0.01) - 1) * (CameraNearFar.y - CameraNearFar.x));
 	float fogFactor = min(FogParam.w, pow(saturate(fogDistanceFactor * FogParam.y - FogParam.x), FogParam.z));
-#		if defined(EXP_HEIGHT_FOG)
-	uint eyeIndex = Stereo::GetEyeIndexFromTexCoord(input.TexCoord.xy);
-	float4 positionWS = float4(2 * float2(input.TexCoord.x, -input.TexCoord.y + 1) - 1, depth, 1);
-	positionWS = mul(FrameBuffer::CameraViewProjInverse[eyeIndex], positionWS);
-	positionWS.xyz = positionWS.xyz / positionWS.w;
-	float3 directionalInscattering = 0;
-	if (SharedData::exponentialHeightFogSettings.enabled) {
-		fogFactor = ExponentialHeightFog::GetFogFactor(positionWS.xyz, FrameBuffer::CameraPosAdjust[eyeIndex].xyz, directionalInscattering);
-	}
-#		endif
 	float3 fogColor = lerp(FogNearColor.xyz, FogFarColor.xyz, fogFactor);
 #		if defined(IBL)
 	if (SharedData::iblSettings.EnableDiffuseIBL && !SharedData::InInterior) {
@@ -194,8 +185,16 @@ PS_OUTPUT main(PS_INPUT input)
 	}
 #		endif
 #		if defined(EXP_HEIGHT_FOG)
+	uint eyeIndex = Stereo::GetEyeIndexFromTexCoord(input.TexCoord.xy);
+	float4 positionWS = float4(2 * float2(input.TexCoord.x, -input.TexCoord.y + 1) - 1, depth, 1);
+	positionWS = mul(FrameBuffer::CameraViewProjInverse[eyeIndex], positionWS);
+	positionWS.xyz = positionWS.xyz / positionWS.w;
+	if (SharedData::exponentialHeightFogSettings.enabled) {
+		float4 exponentialHeightFog = ExponentialHeightFog::GetExponentialHeightFog(positionWS.xyz, FrameBuffer::CameraPosAdjust[eyeIndex].xyz, fogColor);
+		fogColor = exponentialHeightFog.xyz;
+		fogFactor = exponentialHeightFog.w;
+	}
 	if (depth < 0.999999 || SharedData::exponentialHeightFogSettings.enabled) {
-		fogColor += directionalInscattering;
 		composedColor.xyz = (SharedData::exponentialHeightFogSettings.enabled ? 1.0 : FogNearColor.w) * lerp(composedColor.xyz, fogColor, fogFactor);
 	}
 #		else
