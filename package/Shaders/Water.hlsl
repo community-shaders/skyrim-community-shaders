@@ -23,6 +23,7 @@
 // // #define REFLECTIONS
 // #define NORMAL_TEXCOORD
 // #endif
+#define DEBUG_SHORELINE_INFLUENCE
 
 #if defined(UNDERWATERMASK)
 
