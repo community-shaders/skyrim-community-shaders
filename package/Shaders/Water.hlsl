@@ -271,8 +271,9 @@ cbuffer UnifiedWaterPerFrame : register(b7)
 
 cbuffer UnifiedWaterPerTile : register(b8)
 {
-	float4 PrevData : packoffset(c0);
-	float4 TileData : packoffset(c1);
+	float4 PrevData : packoffset(c0);      // x/y = prev normal, z = prev distance, w = prev segments per axis
+	float4 TileData : packoffset(c1);      // x/y = tile cell coords, z = LOD level, w = tile span
+	float4 ShorelineData : packoffset(c2); // x/y = shoreline map width/height, z/w = offsetX/offsetY
 }
 
 // Simple hash function for procedural noise
@@ -314,71 +315,84 @@ float fractalNoise(float2 p, int octaves)
 	return value;
 }
 
-// Sample high-resolution shoreline distance field from texture
-// Based on Jump Flooding Algorithm for computing distance fields
-// Reference: https://www.comp.nus.edu.sg/%7Etants/jfa/i3d06.pdf
 void GetBlendedShorelineData(float2 worldPos, float2 textureDims, float2 texCoordOffset, out float2 shoreNormal, out float distanceToShore)
 {
 #if defined(UNIFIED_WATER)
-	// Calculate UV coordinates for shoreline texture sampling
-	// Similar to flowmap UV calculation but using shoreline map dimensions
-	const float cellWorldSize = 4096.0f;
-	float2 worldCell = worldPos / cellWorldSize;
+	float shoreMapWidth = ShorelineData.x;
+	float shoreMapHeight = ShorelineData.y;
+	float shoreMapOffsetX = ShorelineData.z;
+	float shoreMapOffsetY = ShorelineData.w;
 	
-	// Convert world cell coordinates to texture UV
-	// The shoreline map uses the same coordinate system as flowmap
-	// textureDims.x = width, textureDims.y = height
-	if ((textureDims.x > 0.0f) && (textureDims.y > 0.0f)) {
-		float2 dims = max(textureDims, float2(1.0f, 1.0f));
-		
-		// Calculate UV based on world cell position
-		// texCoordOffset contains the flowmap offset which we can reuse
-		float2 shorelineUV = (worldCell + float2(texCoordOffset.x, texCoordOffset.y - textureDims.y)) / dims;
-		
-		// Sample shoreline texture: RGB = (normalX, normalY, distance), A = mask
-		float4 shorelineSample = ShorelineMapTex.SampleLevel(FlowMapSampler, shorelineUV, 0.0f);
-		
-		// Unpack data from texture
-		// R,G channels: shore normal XY (stored as [0,1], unpack to [-1,1])
-		float2 baseNormal = shorelineSample.rg * 2.0f - 1.0f;
-		// B channel: normalized distance (stored as [0,1], unpack to [0, maxDistance])
-		const float maxDistance = 10.0f;  // Must match ShorelineMap.cpp encoding
-		float baseDistanceCells = shorelineSample.b * maxDistance;
-		// A channel: water mask
-		float waterMask = shorelineSample.a;
-		
-		// Validate sample
-		float normalLen = length(baseNormal);
-		if (waterMask > 0.5f && normalLen > 1e-4f) {
-			// Normalize the shore normal
-			baseNormal /= normalLen;
-			
-			// Add procedural noise variation near shoreline
-			float2 variedNormal = baseNormal;
-			if (baseDistanceCells < ShorelineNoiseDistance) {
-				float noiseScale = max(ShorelineNoiseScale, 1e-7f);
-				float noiseStrength = ShorelineNoiseStrength;
-				float2 noisePos = worldPos * noiseScale;
-				float noise1 = fractalNoise(noisePos, 2);
-				float noise2 = fractalNoise(noisePos + float2(100.0f, 50.0f), 2);
-				float2 noiseOffset = float2(noise1 - 0.5f, noise2 - 0.5f) * 2.0f;
-				float distanceFactor = saturate(baseDistanceCells / max(ShorelineNoiseDistance, 1e-3f));
-				variedNormal = normalize(baseNormal + noiseOffset * noiseStrength * distanceFactor);
-			}
-			
-			shoreNormal = variedNormal;
-			distanceToShore = baseDistanceCells;
-			return;
+	if (shoreMapWidth < 1.0f || shoreMapHeight < 1.0f) {
+		shoreNormal = float2(0.0f, 0.0f);
+		distanceToShore = 10000.0f;
+		return;
+	}
+	
+	const float cellWorldSize = 4096.0f;
+	const float pixelsPerCell = 64.0f;
+	
+	// Convert world position to cell index (integer part) and position within cell (fractional part)
+	float2 worldCellIndex = floor(worldPos / cellWorldSize);
+	float2 posWithinCell = (worldPos - worldCellIndex * cellWorldSize) / cellWorldSize;  // 0.0 to 1.0
+	
+	// Convert to atlas coordinates (add offset to cell index)
+	float2 atlasCellIndex = worldCellIndex + float2(shoreMapOffsetX, shoreMapOffsetY);
+	
+	// Convert to pixel coordinates in the texture
+	float2 atlasPixel = atlasCellIndex * pixelsPerCell + posWithinCell * pixelsPerCell;
+	
+	// Convert to UV coordinates (no Y flip - texture is already stored flipped)
+	float2 shorelineUV = float2(
+		atlasPixel.x / shoreMapWidth,
+		atlasPixel.y / shoreMapHeight
+	);
+	
+	float4 shorelineSample = ShorelineMapTex.SampleLevel(FlowMapSampler, shorelineUV, 0.0f);
+
+	const float maxDistance = 50.0f;
+	float centerDistanceNorm = shorelineSample.b;
+	// Decode sqrt compression
+	centerDistanceNorm = centerDistanceNorm * centerDistanceNorm;
+	float baseDistanceCells = centerDistanceNorm * maxDistance;
+	float waterMask = shorelineSample.a;
+
+	if (waterMask > 0.5f) {
+		float2 texelSizeInCells = 1.0f / (float2(shoreMapWidth, shoreMapHeight) * pixelsPerCell);
+		float4 sampleLeft = ShorelineMapTex.SampleLevel(FlowMapSampler, shorelineUV - float2(texelSizeInCells.x, 0.0f), 0.0f);
+		float4 sampleRight = ShorelineMapTex.SampleLevel(FlowMapSampler, shorelineUV + float2(texelSizeInCells.x, 0.0f), 0.0f);
+		float4 sampleUp = ShorelineMapTex.SampleLevel(FlowMapSampler, shorelineUV - float2(0.0f, texelSizeInCells.y), 0.0f);
+		float4 sampleDown = ShorelineMapTex.SampleLevel(FlowMapSampler, shorelineUV + float2(0.0f, texelSizeInCells.y), 0.0f);
+
+		float leftDistNorm = sampleLeft.a > 0.5f ? sampleLeft.b : centerDistanceNorm;
+		float rightDistNorm = sampleRight.a > 0.5f ? sampleRight.b : centerDistanceNorm;
+		float upDistNorm = sampleUp.a > 0.5f ? sampleUp.b : centerDistanceNorm;
+		float downDistNorm = sampleDown.a > 0.5f ? sampleDown.b : centerDistanceNorm;
+
+		float gradientX = (rightDistNorm - leftDistNorm) / (2.0f * texelSizeInCells.x);
+		float gradientY = (downDistNorm - upDistNorm) / (2.0f * texelSizeInCells.y);
+		float2 baseNormal = -normalize(float2(gradientX, gradientY));
+
+		if (baseDistanceCells > ShorelineNoiseDistance) {
+			float noiseScale = max(ShorelineNoiseScale, 1e-7f);
+			float noiseStrength = ShorelineNoiseStrength;
+			float2 noisePos = worldPos * noiseScale;
+			float noise1 = fractalNoise(noisePos, 2);
+			float noise2 = fractalNoise(noisePos + float2(100.0f, 50.0f), 2);
+			float2 noiseOffset = float2(noise1 - 0.5f, noise2 - 0.5f) * 2.0f;
+			float distanceFactor = saturate((baseDistanceCells - ShorelineNoiseDistance) / max(ShorelineNoiseDistance, 1e-3f));
+			baseNormal = normalize(baseNormal + noiseOffset * noiseStrength * distanceFactor);
 		}
+
+		shoreNormal = baseNormal;
+		distanceToShore = baseDistanceCells;
+		return;
 	}
 #endif
 	
-	// Fallback: no shoreline data available (open water or texture not bound)
 	shoreNormal = float2(0.0f, 0.0f);
 	distanceToShore = 10000.0f;
 }
-
-float CalculateCellEdgeBlend(float2 worldPos, float blendDistance);
 
 float2 DetectShorelineDirection(float2 worldPos, float2 textureDims, float2 texCoordOffset, out float shoreInfluence, out float shoreDistance)
 {
@@ -395,8 +409,7 @@ float2 DetectShorelineDirection(float2 worldPos, float2 textureDims, float2 texC
 		float exponent = max(ShorelineBlendExponent, 1e-3f);
 		distanceFactor = pow(saturate(distanceFactor), exponent);
 
-		float edgeInfluence = CalculateCellEdgeBlend(worldPos, ShorelineEdgeRange);
-		shoreInfluence = distanceFactor * edgeInfluence;
+		shoreInfluence = distanceFactor;
 		shoreDistance = distanceToShore;
 		return shoreNormal;
 	}
@@ -406,71 +419,29 @@ float2 DetectShorelineDirection(float2 worldPos, float2 textureDims, float2 texC
 	return float2(0, 0);
 }
 
-// Previous frame version using PrevShoreNormal data for TAA consistency
 float2 DetectShorelineDirectionPrev(float2 worldPos, out float shoreInfluence, out float shoreDistance)
 {
-	// For previous frame, we can't blend neighbors (they're not stored for prev frame)
-	// Just use the previous frame's center cell data with simple smoothing
 	float2 shoreNormal = float2(PrevData.x, PrevData.y);
 	float len = length(shoreNormal);
 	
 	if (len > 0.001f) {
 		shoreNormal /= len;
 		
-		// Shore influence based on distance (closer = stronger)
 		float distanceCells = max(PrevData.z, 0.0f);
 		float falloffCellsPrev = max(ShorelinePrevFalloff, 1e-3f);
 		float distanceFactor = saturate(1.0f - (distanceCells / falloffCellsPrev));
 		float exponent = max(ShorelineBlendExponent, 1e-3f);
 		distanceFactor = pow(saturate(distanceFactor), exponent);
 
-		float edgeInfluence = CalculateCellEdgeBlend(worldPos, ShorelineEdgeRange);
-		shoreInfluence = distanceFactor * edgeInfluence;
+		shoreInfluence = distanceFactor;
 		shoreDistance = distanceCells;
 		
 		return shoreNormal;
 	}
 	
-	// No cached data - return zero influence
 	shoreInfluence = 0.0f;
 	shoreDistance = 10000.0f;
 	return float2(0, 0);
-}
-
-// Apply shoreline rotation to a flow direction
-// This bends water flow toward the shore (waves rolling toward beach)
-float2 ApplyShorelineInfluence(float2 baseDirection, float2 worldPos, float2 textureDims, float2 texCoordOffset, float influenceStrength)
-{
-	float shoreInfluence = 0.0f;
-	float dummyDistance;
-	float2 shoreNormal = DetectShorelineDirection(worldPos, textureDims, texCoordOffset, shoreInfluence, dummyDistance);
-	
-	if (shoreInfluence > 0.001f) {
-		// Shore normal points FROM water TO land - this is the direction waves should travel
-		// Blend base direction toward the shore normal based on proximity
-		float blendFactor = shoreInfluence * influenceStrength;
-		return normalize(lerp(baseDirection, shoreNormal, blendFactor));
-	}
-	
-	return baseDirection;
-}
-
-// Calculate cell edge blending factor for smooth cross-cell transitions
-// Returns 0 at cell edges, 1 at center (with configurable blend zone)
-float CalculateCellEdgeBlend(float2 worldPos, float blendDistance)
-{
-	// Calculate distance to nearest cell edge (0 at edge, 0.5 at center)
-	float2 cellFraction = frac(worldPos / 4096.0); // 0 to 1 within cell
-	float distToEdgeX = min(cellFraction.x, 1.0 - cellFraction.x); // 0 at edges, 0.5 at center
-	float distToEdgeY = min(cellFraction.y, 1.0 - cellFraction.y);
-	float distToEdge = min(distToEdgeX, distToEdgeY); // Distance to nearest edge (in cell fraction)
-	
-	// Blend distance is provided as normalized cell fraction (0-0.5 range)
-	float blendZone = clamp(blendDistance, 1e-4f, 0.5f);
-	
-	// Use smoothstep for much smoother transitions
-	// 0 at edge, 1 at blendZone distance from edge
-	return smoothstep(0.0, blendZone, distToEdge);
 }
 
 struct WaveSample
@@ -507,46 +478,23 @@ WaveSample CalculateWaterDisplacement(float2 worldPos, float2 textureDims, float
 	}
 	
 	const float2 defaultWaveDir = float2(-0.70710678f, 0.70710678f);
-	float shorelineStrength = saturate(shoreInfluence * ShorelineInfluence);
-	float shorelineDirectionWeight = saturate(shorelineStrength * WaveDirectionBlend);
+	
+	float masterShorelineInfluence = saturate(shoreInfluence * ShorelineInfluence);
+	float shorelineDirectionWeight = saturate(masterShorelineInfluence * WaveDirectionBlend);
+	
 	float2 primaryDir = defaultWaveDir;
-
+	
 	if (shorelineDirectionWeight > 0.001f) {
-		// Shore normal points FROM water TO land
-		// We want waves to travel TOWARD shore (in direction of normal)
-		// NOT perpendicular - that causes ambiguous 90° flip issues
 		float2 shorelineDir = shoreNormal;
 		float shorelineLenSq = dot(shorelineDir, shorelineDir);
 		if (shorelineLenSq > 1e-5f) {
 			shorelineDir *= rsqrt(shorelineLenSq);
 			
-			// Blend toward shore direction, with smooth falloff based on distance
-			// Closer to shore = stronger alignment toward shore
-			float distanceBlend = saturate(shorelineStrength);
-			float2 blendedDir = lerp(defaultWaveDir, shorelineDir, shorelineDirectionWeight * distanceBlend);
+			float distanceBlend = saturate(masterShorelineInfluence);
+			float2 blendedDir = lerp(primaryDir, shorelineDir, shorelineDirectionWeight * distanceBlend);
 			float blendedLenSq = dot(blendedDir, blendedDir);
 			if (blendedLenSq > 1e-5f) {
 				primaryDir = blendedDir * rsqrt(blendedLenSq);
-			}
-		}
-	} else {
-		float windNoise = Random::perlinNoise(float3(worldPos * 0.00002f, 42.0f), 0x7Fu);
-		float angleOffset = windNoise * 0.2f;
-		float sinOffset, cosOffset;
-		sincos(angleOffset, sinOffset, cosOffset);
-		primaryDir = float2(
-			defaultWaveDir.x * cosOffset - defaultWaveDir.y * sinOffset,
-			defaultWaveDir.x * sinOffset + defaultWaveDir.y * cosOffset);
-	}
-
-	if (flowBiasWeight > 0.001f) {
-		float shoreSuppression = 1.0f - shorelineDirectionWeight;
-		float blendAmount = saturate(flowBiasWeight * shoreSuppression);
-		if (blendAmount > 0.001f) {
-			float2 biasedDir = lerp(primaryDir, flowBiasDir, blendAmount);
-			float biasedLenSq = dot(biasedDir, biasedDir);
-			if (biasedLenSq > 1e-5f) {
-				primaryDir = biasedDir * rsqrt(biasedLenSq);
 			}
 		}
 	}
@@ -564,7 +512,7 @@ WaveSample CalculateWaterDisplacement(float2 worldPos, float2 textureDims, float
 	baseDirections[1] = float2(
 		primaryDir.x * cos2 - primaryDir.y * sin2,
 		primaryDir.x * sin2 + primaryDir.y * cos2);
-	
+
 	// Tertiary wave at -50° angle (100° spread)
 	float angle3 = -0.872665f;
 	float cos3, sin3;
@@ -592,38 +540,14 @@ WaveSample CalculateWaterDisplacement(float2 worldPos, float2 textureDims, float
 	float dayBias[3] = { 0.0f, 2.0943951f, 4.1887903f };
 
 	[unroll] for (int i = 0; i < 3; ++i) {
-		// Spatial variation creates natural-looking directional diversity across worldspace
-		// Using large-scale noise to ensure smooth transitions between regions
-		float amplitudeNoise = Random::perlinNoise(float3(worldPos * 0.00005f, 17.0f * (i + 1)), 0x45u + i);
-		float directionNoise = Random::perlinNoise(float3(worldPos * 0.00008f, 31.0f * (i + 1)), 0x8Bu + i);
-		float frequencyNoise = Random::perlinNoise(float3(worldPos * 0.00004f, 53.0f * (i + 1)), 0xC3u + i);
-		float phaseNoise = Random::perlinNoise(float3(worldPos * 0.00012f, 71.0f * (i + 1)), 0xE1u + i);
-		float steepnessNoise = Random::perlinNoise(float3(worldPos * 0.00025f, 113.0f * (i + 1)), 0x3Bu + i);
-
-		float amplitudeMul = lerp(0.85f, 1.15f, saturate(amplitudeNoise * 0.5f + 0.5f));
-		// Moderate directional variation to break up uniform patterns while maintaining coherence
-		// Reduced from 0.05 to allow more natural directional diversity
-		float directionAngle = directionNoise * 0.15f; // Moderate variation for natural look
-		directionAngle *= lerp(1.0f, 0.35f, shorelineStrength);
-		float frequencyMul = lerp(0.92f, 1.08f, saturate(frequencyNoise * 0.5f + 0.5f));
-		float phaseOffset = phaseNoise * (UW_TWO_PI * 0.4f);
-		float steepnessMul = lerp(0.88f, 1.12f, saturate(steepnessNoise * 0.5f + 0.5f));
-
-		// Apply small directional variation while keeping alignment
-		float sinTheta, cosTheta;
-		sincos(directionAngle, sinTheta, cosTheta);
-		float2 finalDir = normalize(float2(
-			baseDirections[i].x * cosTheta - baseDirections[i].y * sinTheta,
-			baseDirections[i].x * sinTheta + baseDirections[i].y * cosTheta));
-
-		waves[i].direction = finalDir;
-		waves[i].amplitude = baseAmplitudes[i] * waveIntensity * amplitudeMult * amplitudeMul * contributions[i];
+		waves[i].direction = baseDirections[i];
+		waves[i].amplitude = baseAmplitudes[i] * waveIntensity * amplitudeMult * contributions[i];
 		float waveNumberBase = UW_TWO_PI / baseWaveLengths[i];
-		waves[i].waveNumber = waveNumberBase * frequencyMul;
+		waves[i].waveNumber = waveNumberBase;
 		float angularBase = UW_TWO_PI / basePeriods[i];
-		waves[i].angularVelocity = angularBase * speedMult * speedScale[i] * sqrt(frequencyMul);
-		waves[i].steepness = saturate(baseSteepness[i] * steepnessMult * steepnessMul * contributions[i]);
-		waves[i].phaseOffset = dayPhase * dayScale[i] + dayBias[i] + phaseOffset;
+		waves[i].angularVelocity = angularBase * speedMult * speedScale[i];
+		waves[i].steepness = saturate(baseSteepness[i] * steepnessMult * contributions[i]);
+		waves[i].phaseOffset = dayPhase * dayScale[i] + dayBias[i];
 	}
 
 	float3 totalDisplacement = float3(0.0f, 0.0f, 0.0f);
@@ -635,7 +559,7 @@ WaveSample CalculateWaterDisplacement(float2 worldPos, float2 textureDims, float
 	WaveSample sample;
 	sample.displacement = totalDisplacement;
 	sample.primaryDirection = primaryDir;
-	sample.shoreInfluence = shorelineStrength;
+	sample.shoreInfluence = masterShorelineInfluence;  // Return master influence (includes UI slider)
 	sample.shoreDistance = shoreDistance;
 	return sample;
 }
@@ -742,8 +666,8 @@ VS_OUTPUT main(VS_INPUT input)
 	float2 waveWorldPosPrev = worldPosBase.xy + FrameBuffer::CameraPreviousPosAdjust[eyeIndex].xy;
 	float2 flowBiasDirVS = float2(0.0f, 0.0f);
 	float flowBiasWeightVS = 0.0f;
-	float2 shorelineTextureDims = float2(ObjectUV.x, ObjectUV.y);
-	float2 shorelineTexCoordOffset = CellTexCoordOffset.xy;
+	float2 shorelineTextureDims = float2(0.0f, 0.0f);
+	float2 shorelineTexCoordOffset = float2(0.0f, 0.0f);
 #	if defined(FLOWMAP)
 	if ((ObjectUV.x > 0.0f) && (ObjectUV.y > 0.0f) && (ObjectUV.z > 0.0f)) {
 		float2 dims = max(float2(ObjectUV.x, ObjectUV.y), float2(1.0f, 1.0f));
@@ -2312,6 +2236,61 @@ PS_OUTPUT main(PS_INPUT input)
 		finalColor = lerp(finalColor, majorColor, majorHighlight * 0.5f);
 		finalColor = lerp(finalColor, fineColor, fineHighlight);
 	}
+	
+#		if defined(DEBUG_SHORELINE_INFLUENCE)
+	// DEBUG: Visualize shoreline texture data directly
+	// RED = No shoreline map (ShorelineData invalid)
+	// MAGENTA = Water mask = 0 (not in water according to texture)
+	// Shows raw distance field data as grayscale if valid
+	
+	if (ShorelineData.x < 1.0f || ShorelineData.y < 1.0f) {
+		finalColor = float3(1.0f, 0.0f, 0.0f);  // RED = no data
+	} else {
+		// Direct texture sample to see raw data
+		const float cellWorldSize = 4096.0f;
+		const float pixelsPerCell = 64.0f;
+		float2 worldPos = input.WPosition.xz;
+		
+		// Convert world position to cell index and position within cell
+		float2 worldCellIndex = floor(worldPos / cellWorldSize);
+		float2 posWithinCell = (worldPos - worldCellIndex * cellWorldSize) / cellWorldSize;
+		
+		// Convert to atlas coordinates
+		float2 atlasCellIndex = worldCellIndex + float2(ShorelineData.z, ShorelineData.w);
+		
+		// Convert to pixel coordinates in the texture
+		float2 atlasPixel = atlasCellIndex * pixelsPerCell + posWithinCell * pixelsPerCell;
+		
+		// Convert to UV coordinates (no Y flip - texture is already stored flipped)
+		float2 shorelineUV = float2(
+			atlasPixel.x / ShorelineData.x,
+			atlasPixel.y / ShorelineData.y
+		);
+		
+		if (shorelineUV.x < 0.0f || shorelineUV.x > 1.0f || shorelineUV.y < 0.0f || shorelineUV.y > 1.0f) {
+			finalColor = float3(1.0f, 0.5f, 0.0f);  // ORANGE = UV out of bounds
+		} else {
+			float4 texSample = ShorelineMapTex.SampleLevel(FlowMapSampler, shorelineUV, 0.0f);
+			
+			// Visualize each channel separately based on world position
+			float worldX = input.WPosition.x;
+			
+			if (frac(worldX / 16384.0f) < 0.25f) {
+				// Show R channel (normalX)
+				finalColor = float3(texSample.r, 0.0f, 0.0f);
+			} else if (frac(worldX / 16384.0f) < 0.5f) {
+				// Show G channel (normalY)
+				finalColor = float3(0.0f, texSample.g, 0.0f);
+			} else if (frac(worldX / 16384.0f) < 0.75f) {
+				// Show B channel (distance)
+				finalColor = float3(0.0f, 0.0f, texSample.b);
+			} else {
+				// Show A channel (mask) - if it's 0, you'll see BLACK
+				finalColor = float3(texSample.a, texSample.a, texSample.a);
+			}
+		}
+	}
+#		endif
 	
 #		endif
 	psout.Lighting = float4(finalColor, isSpecular);

@@ -1,4 +1,4 @@
-﻿#include "UnifiedWater.h"
+#include "UnifiedWater.h"
 
 #include "Menu.h"
 #include "Menu/ThemeManager.h"
@@ -179,15 +179,119 @@ static void ReleaseBuffer(RE::ID3D11Buffer*& buffer) noexcept
 		buffer = nullptr;
 	}
 }
+
+static bool EnsureRendererData(RE::BSTriShape* target, const RE::BSTriShape* source) noexcept
+{
+	if (!target)
+		return false;
+
+	const RE::BSGraphics::TriShape* sourceRendererData = nullptr;
+	if (source) {
+		sourceRendererData = source->GetGeometryRuntimeData().rendererData;
+	}
+
+	auto& targetRuntime = target->GetGeometryRuntimeData();
+	auto* targetRendererData = targetRuntime.rendererData;
+	if (!sourceRendererData || !sourceRendererData->rawVertexData || !sourceRendererData->rawIndexData) {
+		sourceRendererData = targetRendererData;
+	}
+
+	if (!sourceRendererData || !sourceRendererData->rawVertexData || !sourceRendererData->rawIndexData) {
+		logger::warn("[Unified Water] Missing renderer buffers while preparing mesh instance");
+		return false;
+	}
+
+	const auto& runtime = target->GetTrishapeRuntimeData();
+	const auto vertexCount = runtime.vertexCount;
+	const auto triangleCount = runtime.triangleCount;
+	if (vertexCount == 0 || triangleCount == 0) {
+		logger::warn("[Unified Water] Mesh has no geometry to initialise renderer data");
+		return false;
+	}
+
+	const std::size_t vertexStride = const_cast<RE::BSGraphics::VertexDesc&>(sourceRendererData->vertexDesc).GetSize();
+	if (vertexStride == 0) {
+		logger::warn("[Unified Water] Water mesh has an unexpected vertex stride");
+		return false;
+	}
+
+	const std::size_t vertexBytes = static_cast<std::size_t>(vertexCount) * vertexStride;
+	const std::size_t indexCount = static_cast<std::size_t>(triangleCount) * 3;
+	const std::size_t indexBytes = indexCount * sizeof(std::uint16_t);
+	if (vertexBytes == 0 || indexBytes == 0) {
+		logger::warn("[Unified Water] Calculated buffer sizes are zero for mesh instance");
+		return false;
+	}
+
+	auto* newVertexData = static_cast<std::uint8_t*>(RE::malloc(vertexBytes));
+	if (!newVertexData) {
+		logger::warn("[Unified Water] Failed to allocate CPU vertex data for mesh instance");
+		return false;
+	}
+	std::memcpy(newVertexData, sourceRendererData->rawVertexData, vertexBytes);
+
+	auto* newIndexData = static_cast<std::uint16_t*>(RE::malloc(indexBytes));
+	if (!newIndexData) {
+		logger::warn("[Unified Water] Failed to allocate CPU index data for mesh instance");
+		RE::free(newVertexData);
+		return false;
+	}
+	std::memcpy(newIndexData, sourceRendererData->rawIndexData, indexBytes);
+
+	const bool allocateStruct = !targetRendererData || targetRendererData == sourceRendererData;
+	if (allocateStruct) {
+		auto* replacement = static_cast<RE::BSGraphics::TriShape*>(RE::malloc(sizeof(RE::BSGraphics::TriShape)));
+		if (!replacement) {
+			logger::warn("[Unified Water] Failed to allocate renderer data for mesh instance");
+			RE::free(newIndexData);
+			RE::free(newVertexData);
+			return false;
+		}
+
+		std::memcpy(replacement, sourceRendererData, sizeof(RE::BSGraphics::TriShape));
+		replacement->vertexBuffer = nullptr;
+		replacement->indexBuffer = nullptr;
+		replacement->rawVertexData = nullptr;
+		replacement->rawIndexData = nullptr;
+		replacement->refCount = 1;
+		targetRuntime.rendererData = replacement;
+		targetRendererData = replacement;
+	} else {
+		targetRendererData->vertexDesc = sourceRendererData->vertexDesc;
+	}
+
+	if (targetRendererData->rawVertexData)
+		RE::free(targetRendererData->rawVertexData);
+	if (targetRendererData->rawIndexData)
+		RE::free(targetRendererData->rawIndexData);
+
+	if (targetRendererData->vertexBuffer && targetRendererData->vertexBuffer != sourceRendererData->vertexBuffer)
+		ReleaseBuffer(targetRendererData->vertexBuffer);
+	else
+		targetRendererData->vertexBuffer = nullptr;
+
+	if (targetRendererData->indexBuffer && targetRendererData->indexBuffer != sourceRendererData->indexBuffer)
+		ReleaseBuffer(targetRendererData->indexBuffer);
+	else
+		targetRendererData->indexBuffer = nullptr;
+
+	targetRendererData->rawVertexData = newVertexData;
+	targetRendererData->rawIndexData = newIndexData;
+	targetRendererData->refCount = 1;
+
+	return true;
+}
 }
 
-static bool ApplyLoopSubdivision(RE::BSTriShape* shape, std::uint32_t iterations)
+static bool ApplyLoopSubdivision(RE::BSTriShape* shape, std::uint32_t iterations, bool verbose = true)
 {
 	if (!shape || iterations == 0) {
-		logger::info(
-			"[Unified Water] Subdivision skipped (shape = {}, iterations = {})",
-			static_cast<const void*>(shape),
-			iterations);
+		if (verbose) {
+			logger::info(
+				"[Unified Water] Subdivision skipped (shape = {}, iterations = {})",
+				static_cast<const void*>(shape),
+				iterations);
+		}
 		return true;
 	}
 
@@ -282,11 +386,13 @@ static bool ApplyLoopSubdivision(RE::BSTriShape* shape, std::uint32_t iterations
 		logger::warn("[Unified Water] Skipped {} triangle(s) with invalid indices during subdivision", invalidTriangles);
 	}
 
-	logger::info(
-		"[Unified Water] Starting subdivision: iterations = {}, initial verts = {}, initial tris = {}",
-		iterations,
-		originalVertexCount,
-		originalTriangleCount);
+	if (verbose) {
+		logger::info(
+			"[Unified Water] Starting subdivision: iterations = {}, initial verts = {}, initial tris = {}",
+			iterations,
+			originalVertexCount,
+			originalTriangleCount);
+	}
 
 	for (std::uint32_t iteration = 0; iteration < iterations; ++iteration) {
 		const std::size_t vertexCount = positions.size();
@@ -505,10 +611,12 @@ static bool ApplyLoopSubdivision(RE::BSTriShape* shape, std::uint32_t iterations
 		return false;
 	}
 
-	logger::info(
-		"[Unified Water] Subdivision finished: final verts = {}, final tris = {}",
-		finalVertexCount,
-		finalIndexCount / 3);
+	if (verbose) {
+		logger::info(
+			"[Unified Water] Subdivision finished: final verts = {}, final tris = {}",
+			finalVertexCount,
+			finalIndexCount / 3);
+	}
 
 	std::vector<std::uint16_t> indexBufferData(finalIndexCount);
 	for (std::size_t i = 0; i < finalIndexCount; ++i)
@@ -919,6 +1027,11 @@ void UnifiedWater::DataLoaded()
 	const auto waterShape = nif->GetChildren().front()->AsNode()->GetChildren().front()->AsTriShape();
 	waterMesh = RE::NiPointer(waterShape);
 	logger::debug("[Unified Water] Water mesh loaded");
+	if (waterMesh) {
+		auto& baseRuntime = waterMesh->GetTrishapeRuntimeData();
+		baseVertexCount = baseRuntime.vertexCount;
+		baseTriangleCount = baseRuntime.triangleCount;
+	}
 
 	if (const auto error = RE::BSModelDB::Demand("meshes\\water\\optimisedwatermesh.nif", nif, args); error != RE::BSResource::ErrorCode::kNone) {
 		logger::error("[Unified Water] Failed to load optimised water mesh");
@@ -928,105 +1041,16 @@ void UnifiedWater::DataLoaded()
 	const auto optimisedWaterShape = nif->GetChildren().front()->AsNode()->GetChildren().front()->AsTriShape();
 	optimisedWaterMesh = RE::NiPointer(optimisedWaterShape);
 	logger::debug("[Unified Water] Optimised water mesh loaded");
+	if (optimisedWaterMesh) {
+		auto& optRuntime = optimisedWaterMesh->GetTrishapeRuntimeData();
+		optimisedVertexCount = optRuntime.vertexCount;
+		optimisedTriangleCount = optRuntime.triangleCount;
+	}
 
 	subdividedWaterMeshVariants.fill(nullptr);
 	subdividedWaterMeshVariants[2] = waterMesh;  // Index 2 = base mesh (lowest detail for distance)
 
 	if (waterMesh) {
-		auto ensureRendererData = [&](RE::BSTriShape* target) -> bool {
-			if (!target)
-				return false;
-
-			auto* const sourceRendererData = waterMesh->GetGeometryRuntimeData().rendererData;
-			if (!sourceRendererData || !sourceRendererData->rawVertexData || !sourceRendererData->rawIndexData) {
-				logger::warn("[Unified Water] Source water mesh is missing renderer buffers");
-				return false;
-			}
-
-			const auto& runtime = target->GetTrishapeRuntimeData();
-			const auto vertexCount = runtime.vertexCount;
-			const auto triangleCount = runtime.triangleCount;
-			if (vertexCount == 0 || triangleCount == 0) {
-				logger::warn("[Unified Water] Clone has no geometry to initialise renderer data");
-				return false;
-			}
-
-			const std::size_t vertexStride = sourceRendererData->vertexDesc.GetSize();
-			if (vertexStride == 0) {
-				logger::warn("[Unified Water] Water mesh has an unexpected vertex stride");
-				return false;
-			}
-
-			const std::size_t vertexBytes = static_cast<std::size_t>(vertexCount) * vertexStride;
-			const std::size_t indexCount = static_cast<std::size_t>(triangleCount) * 3;
-			const std::size_t indexBytes = indexCount * sizeof(std::uint16_t);
-			if (vertexBytes == 0 || indexBytes == 0) {
-				logger::warn("[Unified Water] Calculated buffer sizes are zero for subdivided mesh clone");
-				return false;
-			}
-
-			auto* newVertexData = static_cast<std::uint8_t*>(RE::malloc(vertexBytes));
-			if (!newVertexData) {
-				logger::warn("[Unified Water] Failed to allocate CPU vertex data for subdivided mesh clone");
-				return false;
-			}
-			std::memcpy(newVertexData, sourceRendererData->rawVertexData, vertexBytes);
-
-			auto* newIndexData = static_cast<std::uint16_t*>(RE::malloc(indexBytes));
-			if (!newIndexData) {
-				logger::warn("[Unified Water] Failed to allocate CPU index data for subdivided mesh clone");
-				RE::free(newVertexData);
-				return false;
-			}
-			std::memcpy(newIndexData, sourceRendererData->rawIndexData, indexBytes);
-
-			auto& targetRuntime = target->GetGeometryRuntimeData();
-			auto* targetRendererData = targetRuntime.rendererData;
-			const bool allocateStruct = !targetRendererData || targetRendererData == sourceRendererData;
-
-			if (allocateStruct) {
-				auto* replacement = static_cast<RE::BSGraphics::TriShape*>(RE::malloc(sizeof(RE::BSGraphics::TriShape)));
-				if (!replacement) {
-					logger::warn("[Unified Water] Failed to allocate renderer data for subdivided mesh clone");
-					RE::free(newIndexData);
-					RE::free(newVertexData);
-					return false;
-				}
-
-				std::memcpy(replacement, sourceRendererData, sizeof(RE::BSGraphics::TriShape));
-				replacement->vertexBuffer = nullptr;
-				replacement->indexBuffer = nullptr;
-				replacement->rawVertexData = nullptr;
-				replacement->rawIndexData = nullptr;
-				replacement->refCount = 1;
-				targetRuntime.rendererData = replacement;
-				targetRendererData = replacement;
-			} else {
-				targetRendererData->vertexDesc = sourceRendererData->vertexDesc;
-			}
-
-			if (targetRendererData->rawVertexData)
-				RE::free(targetRendererData->rawVertexData);
-			if (targetRendererData->rawIndexData)
-				RE::free(targetRendererData->rawIndexData);
-
-			if (targetRendererData->vertexBuffer && targetRendererData->vertexBuffer != sourceRendererData->vertexBuffer)
-				ReleaseBuffer(targetRendererData->vertexBuffer);
-			else
-				targetRendererData->vertexBuffer = nullptr;
-
-			if (targetRendererData->indexBuffer && targetRendererData->indexBuffer != sourceRendererData->indexBuffer)
-				ReleaseBuffer(targetRendererData->indexBuffer);
-			else
-				targetRendererData->indexBuffer = nullptr;
-
-			targetRendererData->rawVertexData = newVertexData;
-			targetRendererData->rawIndexData = newIndexData;
-			targetRendererData->refCount = 1;
-
-			return true;
-		};
-
 		auto buildVariant = [&](std::uint32_t iterations) -> RE::NiPointer<RE::BSTriShape> {
 			if (!iterations)
 				return nullptr;
@@ -1034,12 +1058,12 @@ void UnifiedWater::DataLoaded()
 			auto clone = RE::NiPointer(waterMesh->CreateClone(process)->AsTriShape());
 			if (!clone)
 				return nullptr;
-			if (!ensureRendererData(clone.get())) {
+			if (!EnsureRendererData(clone.get(), waterMesh.get())) {
 				logger::warn("[Unified Water] Failed to prepare renderer data for subdivided mesh clone");
 				return nullptr;
 			}
 			logger::info("[Unified Water] Building subdivided mesh variant with {} iteration(s)", iterations);
-			if (!ApplyLoopSubdivision(clone.get(), iterations)) {
+			if (!ApplyLoopSubdivision(clone.get(), iterations, true)) {
 				logger::warn("[Unified Water] Failed to build subdivided mesh variant {}", iterations);
 				return nullptr;
 			}
@@ -1047,17 +1071,12 @@ void UnifiedWater::DataLoaded()
 			return clone;
 		};
 
-		// Build variants in reverse order:
-		// subdividedWaterMeshVariants[0] = 2x subdivision (highest detail - close water)
-		// subdividedWaterMeshVariants[1] = 1x subdivision (medium detail - mid distance)
-		// subdividedWaterMeshVariants[2] = base mesh (lowest detail - far LOD)
-		for (std::uint32_t iteration = 1; iteration <= 2; ++iteration) {
-			auto variant = buildVariant(iteration);
-			int targetIndex = 2 - iteration;  // Reverse: iteration 1 -> index 1, iteration 2 -> index 0
-			if (variant)
-				subdividedWaterMeshVariants[targetIndex] = variant;
-			else if (targetIndex < 2)
-				subdividedWaterMeshVariants[targetIndex] = subdividedWaterMeshVariants[targetIndex + 1];
+		// Build LOD variants for distance-based selection
+		if (auto variant = buildVariant(2); variant) {
+			subdividedWaterMeshVariants[0] = variant;  // Highest detail (2x subdivision) - close water
+		}
+		if (auto variant = buildVariant(1); variant) {
+			subdividedWaterMeshVariants[1] = variant;  // Medium detail (1x subdivision) - medium distance
 		}
 	}
 
@@ -1156,12 +1175,14 @@ void UnifiedWater::SetFlowmapTex() const
 void UnifiedWater::SetShorelineMapTex() const
 {
 	RE::NiPointer<RE::NiSourceTexture> tex;
-	if (!shorelineMap->TryGetShorelineMap(tex))
+	if (!shorelineMap->TryGetShorelineMap(tex)) {
+		logger::warn("[Unified Water] [ShorelineMap] TryGetShorelineMap() returned false - texture not available");
 		return;
+	}
 
 	const_cast<UnifiedWater*>(this)->gShorelineMapTex = tex;
 
-	logger::debug("[Unified Water] [ShorelineMap] Texture set");
+	logger::info("[Unified Water] [ShorelineMap] Texture successfully set for runtime use");
 }
 
 void UnifiedWater::SetupResources()
@@ -1189,6 +1210,7 @@ void UnifiedWater::PostPostLoad()
 	stl::detour_thunk<TES_SetWorldSpace>(REL::RelocationID(13170, 13315));
 	stl::detour_thunk<TES_DestroySkyCell>(REL::RelocationID(20029, 20463));
 
+	stl::detour_thunk<TESWaterSystem_InitializeWater>(REL::RelocationID(31388, 32179));
 	stl::write_thunk_call<TESWaterSystem_InitializeWater_SetWaterShaderMaterialParams>(REL::RelocationID(31388, 32179).address() + REL::Relocate(0x360, 0x3BC, 0x35B));
 	stl::write_vfunc<0x4, BSWaterShaderMaterial_ComputeCRC32>(RE::VTABLE_BSWaterShaderMaterial[0]);
 
@@ -1248,6 +1270,140 @@ void UnifiedWater::TESWaterSystem_InitializeWater_SetWaterShaderMaterialParams::
 	addStrToHash(form->noiseTextures[3].textureName.c_str());
 	uintptr_t bits = hash;
 	std::memcpy(&material->normalTexture1, &bits, sizeof(uintptr_t));
+}
+
+void UnifiedWater::TESWaterSystem_InitializeWater::thunk(RE::TESWaterSystem* waterSystem, RE::BSTriShape* waterTri, RE::TESWaterForm* form, float waterHeight, void* unk4, bool noDisplacement, bool isProcedural)
+{
+	func(waterSystem, waterTri, form, waterHeight, unk4, noDisplacement, isProcedural);
+
+	auto& singleton = globals::features::unifiedWater;
+	
+	// Log every water mesh initialization
+	if (waterTri) {
+		const char* name = waterTri->name.c_str();
+		logger::info("[Unified Water] InitializeWater called: name='{}', noDisplacement={}, isProcedural={}", 
+			name ? name : "NULL", noDisplacement, isProcedural);
+	}
+	
+	if (!singleton.settings.EnableMeshSubdivision || noDisplacement || isProcedural) {
+		logger::info("[Unified Water] Skipping mesh replacement: EnableMeshSubdivision={}, noDisplacement={}, isProcedural={}", 
+			singleton.settings.EnableMeshSubdivision, noDisplacement, isProcedural);
+		return;
+	}
+
+	if (!waterTri || !singleton.waterMesh || singleton.baseTriangleCount == 0) {
+		logger::info("[Unified Water] Skipping: waterTri={}, waterMesh={}, baseTriangleCount={}", 
+			(void*)waterTri, (void*)singleton.waterMesh.get(), singleton.baseTriangleCount);
+		return;
+	}
+
+	// Skip if this is LOD water (handled by BGSTerrainBlock_Attach)
+	const char* name = waterTri->name.c_str();
+	if (name && std::strncmp(name, "WaterLOD_", 9) == 0) {
+		logger::info("[Unified Water] Skipping LOD water: {}", name);
+		return;
+	}
+
+	auto& runtime = waterTri->GetTrishapeRuntimeData();
+	if (runtime.triangleCount == 0 || runtime.vertexCount == 0) {
+		logger::info("[Unified Water] Skipping: zero geometry (tris={}, verts={})", runtime.triangleCount, runtime.vertexCount);
+		return;
+	}
+
+	// Skip if already subdivided
+	if (runtime.triangleCount > singleton.baseTriangleCount) {
+		logger::info("[Unified Water] Already subdivided: tris={} > base={}", runtime.triangleCount, singleton.baseTriangleCount);
+		return;
+	}
+
+	const float scale = waterTri->local.scale;
+	if (!std::isfinite(scale) || scale > 1.5f) {
+		logger::info("[Unified Water] Invalid scale: {}", scale);
+		return;
+	}
+
+	// Calculate distance to camera for LOD selection
+	float distanceToCamera = FLT_MAX;
+	if (auto player = RE::PlayerCharacter::GetSingleton()) {
+		RE::NiPoint3 playerPos = player->GetPosition();
+		RE::NiPoint3 waterPos = waterTri->world.translate;
+		
+		float dx = playerPos.x - waterPos.x;
+		float dy = playerPos.y - waterPos.y;
+		distanceToCamera = std::sqrt(dx * dx + dy * dy);
+	}
+	
+	logger::info("[Unified Water] Close water distance: {:.1f} units from player", distanceToCamera);
+
+	// Determine LOD level based on distance
+	std::uint32_t meshLODIndex = 2;  // Default to base mesh
+	constexpr float LOD0_DISTANCE = 8192.0f;   // ~2 cells - highest detail
+	constexpr float LOD1_DISTANCE = 16384.0f;  // ~4 cells - medium detail
+	
+	if (distanceToCamera < LOD0_DISTANCE) {
+		meshLODIndex = 0;  // 2x subdivision
+	} else if (distanceToCamera < LOD1_DISTANCE) {
+		meshLODIndex = 1;  // 1x subdivision
+	} else {
+		// Too far for subdivision, use base mesh
+		return;
+	}
+
+	// Use pre-subdivided mesh variant
+	auto& variant = singleton.subdividedWaterMeshVariants[meshLODIndex];
+	if (!variant) {
+		logger::info("[Unified Water] Subdivided mesh variant {} not available", meshLODIndex);
+		return;
+	}
+
+	// Get source geometry data from variant
+	RE::NiGeometryData* variantGeomData = nullptr;
+	if (auto& variantGeomRuntime = variant->GetGeometryRuntimeData(); variantGeomRuntime.unk20) {
+		auto* geometryHandle = reinterpret_cast<RE::NiPointer<RE::NiGeometryData>*>(&variantGeomRuntime.unk20);
+		variantGeomData = geometryHandle ? geometryHandle->get() : nullptr;
+	}
+
+	if (!variantGeomData) {
+		logger::info("[Unified Water] Failed to get geometry data from variant mesh");
+		return;
+	}
+
+	// Get target geometry data
+	RE::NiGeometryData* targetGeomData = nullptr;
+	if (auto& targetGeomRuntime = waterTri->GetGeometryRuntimeData(); targetGeomRuntime.unk20) {
+		auto* geometryHandle = reinterpret_cast<RE::NiPointer<RE::NiGeometryData>*>(&targetGeomRuntime.unk20);
+		targetGeomData = geometryHandle ? geometryHandle->get() : nullptr;
+	}
+
+	if (!targetGeomData) {
+		logger::info("[Unified Water] Failed to get geometry data from water mesh");
+		return;
+	}
+
+	// Copy the subdivided geometry data pointers (shares the data, doesn't deep copy)
+	targetGeomData->vertices = variantGeomData->vertices;
+	targetGeomData->vertex = variantGeomData->vertex;
+	targetGeomData->normal = variantGeomData->normal;
+	targetGeomData->texture = variantGeomData->texture;
+	targetGeomData->bound = variantGeomData->bound;
+	
+	// Update runtime counts
+	auto& variantRuntime = variant->GetTrishapeRuntimeData();
+	runtime.vertexCount = variantRuntime.vertexCount;
+	runtime.triangleCount = variantRuntime.triangleCount;
+	
+	// Mark renderer data as needing update
+	if (!EnsureRendererData(waterTri, variant.get())) {
+		logger::info("[Unified Water] Failed to update renderer data for close water");
+		return;
+	}
+	
+	logger::info(
+		"[Unified Water] Applied pre-subdivided mesh LOD {} (distance: {:.0f}) to close water: {} verts, {} tris",
+		meshLODIndex,
+		distanceToCamera,
+		runtime.vertexCount,
+		runtime.triangleCount);
 }
 
 int32_t UnifiedWater::BSWaterShaderMaterial_ComputeCRC32::thunk(RE::BSWaterShaderMaterial* material, uint32_t srcHash)
@@ -1370,6 +1526,20 @@ void UnifiedWater::BGSTerrainBlock_Attach::thunk(RE::BGSTerrainBlock* block)
 			return;
 		}
 
+		// Calculate distance to camera for LOD selection
+		float distanceToCamera = FLT_MAX;
+		if (auto player = RE::PlayerCharacter::GetSingleton()) {
+			RE::NiPoint3 playerPos = player->GetPosition();
+			// Calculate block center position in world space
+			float blockCenterX = (node->x * 4096.0f) + 2048.0f;
+			float blockCenterY = (node->y * 4096.0f) + 2048.0f;
+			RE::NiPoint3 blockCenter(blockCenterX, blockCenterY, 0.0f);
+			
+			float dx = playerPos.x - blockCenter.x;
+			float dy = playerPos.y - blockCenter.y;
+			distanceToCamera = std::sqrt(dx * dx + dy * dy);
+		}
+
 		for (auto& instruction : *instructions) {
 			if (!instruction.form.ptr)
 				continue;
@@ -1379,38 +1549,55 @@ void UnifiedWater::BGSTerrainBlock_Attach::thunk(RE::BGSTerrainBlock* block)
 			const bool farLOD = lodLevel > 4;
 			const bool subdivisionEnabled = singleton.settings.EnableMeshSubdivision;
 			const bool forceSubdivision = subdivisionEnabled && !farLOD;
-			const bool useOptimised = (singleton.settings.UseOptimisedMeshes && !forceSubdivision) || farLOD;
+			bool useOptimised = singleton.settings.UseOptimisedMeshes && !forceSubdivision;
+			if (farLOD)
+				useOptimised = false;  // Always keep far LOD water at normal vertex counts
 			if (singleton.settings.UseOptimisedMeshes && !useOptimised) {
-				logger::debug("[Unified Water] Subdivision enabled, overriding optimised mesh usage for LOD {}", lodLevel);
-			}
-			
-			// Mesh variant indices (reversed for proper LOD):
-			// [0] = 2x subdivision (highest detail - close water)
-			// [1] = 1x subdivision (medium detail - mid distance)  
-			// [2] = base mesh (lowest detail - far LOD)
-			int desiredSubdivision = 2;  // Default to base mesh
-			if (!useOptimised && subdivisionEnabled) {
-				if (instruction.size <= 1)
-					desiredSubdivision = 0;  // Small tiles (close) = highest subdivision
-				else if (instruction.size <= 4)
-					desiredSubdivision = 1;  // Medium tiles = medium subdivision
-				// else: large tiles use desiredSubdivision = 2 (base mesh)
+				logger::debug("[Unified Water] Subdivision or LOD requirements overriding optimised mesh usage for LOD {}", lodLevel);
 			}
 
-			desiredSubdivision = std::clamp(desiredSubdivision, 0, static_cast<int>(singleton.subdividedWaterMeshVariants.size()) - 1);
-			logger::debug(
-				"[Unified Water] Mesh subdivision: level = {}, LOD {}, optimised = {}, enabled = {}",
-				desiredSubdivision,
-				lodLevel,
-				useOptimised,
-				subdivisionEnabled);
+			// LOD selection based on camera distance (only for small tiles and when subdivision enabled)
+			std::uint32_t meshLODIndex = 2;  // Default to base mesh (lowest detail)
+			bool useSubdividedMesh = false;
+			
+			if (subdivisionEnabled && !farLOD && instruction.size <= 1) {
+				// Distance thresholds in game units (1 cell = 4096 units)
+				constexpr float LOD0_DISTANCE = 8192.0f;   // ~2 cells - highest detail (2x subdivision)
+				constexpr float LOD1_DISTANCE = 16384.0f;  // ~4 cells - medium detail (1x subdivision)
+				// Beyond LOD1_DISTANCE uses base mesh
+				
+				if (distanceToCamera < LOD0_DISTANCE) {
+					meshLODIndex = 0;  // Highest detail (2x subdivision)
+					useSubdividedMesh = true;
+				} else if (distanceToCamera < LOD1_DISTANCE) {
+					meshLODIndex = 1;  // Medium detail (1x subdivision)
+					useSubdividedMesh = true;
+				}
+				// else meshLODIndex = 2 (base mesh)
+			}
+
 			RE::BSTriShape* templateShape = nullptr;
 			if (useOptimised) {
 				templateShape = singleton.optimisedWaterMesh.get();
-			} else {
-				auto& variant = singleton.subdividedWaterMeshVariants[desiredSubdivision];
-				templateShape = variant ? variant.get() : singleton.waterMesh.get();
+			} else if (useSubdividedMesh) {
+				auto& variant = singleton.subdividedWaterMeshVariants[meshLODIndex];
+				if (variant) {
+					templateShape = variant.get();
+				}
 			}
+
+			if (!templateShape) {
+				templateShape = singleton.waterMesh.get();
+			}
+
+			logger::info(
+				"[Unified Water] Mesh selection: LOD index = {}, distance = {:.0f}, terrain LOD = {}, optimised = {}, subdivided = {}, tileSize = {}",
+				meshLODIndex,
+				distanceToCamera,
+				lodLevel,
+				useOptimised,
+				useSubdividedMesh,
+				instruction.size);
 
 			if (!templateShape)
 				continue;
@@ -1421,6 +1608,16 @@ void UnifiedWater::BGSTerrainBlock_Attach::thunk(RE::BGSTerrainBlock* block)
 			const auto posY = (instruction.y - node->y) * 4096.0f + instruction.size * 2048.0f;
 			shape->local.scale = static_cast<float>(instruction.size);
 			shape->local.translate = { posX, posY, instruction.waterHeight };
+			
+			// Log actual mesh geometry counts
+			auto& runtime = shape->GetTrishapeRuntimeData();
+			logger::info(
+				"[Unified Water] Created water tile: {} verts, {} tris, distance={:.0f}, LOD={}, subdivided={}",
+				runtime.vertexCount,
+				runtime.triangleCount,
+				distanceToCamera,
+				meshLODIndex,
+				useSubdividedMesh);
 			
 			// Store LOD level in the shape name for later retrieval during rendering
 			// Format: "WaterLOD_<level>" (e.g., "WaterLOD_8")
@@ -1441,7 +1638,7 @@ void UnifiedWater::BGSTerrainBlock_Attach::thunk(RE::BGSTerrainBlock* block)
 		return;
 
 	for (auto& [shape, instruction] : built) {
-		waterSystem->InitializeWater(shape, instruction->form.ptr, instruction->waterHeight, nullptr, true, false);
+		waterSystem->InitializeWater(shape, instruction->form.ptr, instruction->waterHeight, nullptr, false, false);
 
 		if (const auto prop = shape->GetGeometryRuntimeData().properties[1].get(); prop && prop->GetRTTI() == globals::rtti::BSWaterShaderPropertyRTTI.get()) {
 			const auto waterShaderProp = static_cast<RE::BSWaterShaderProperty*>(prop);
@@ -1486,6 +1683,8 @@ void UnifiedWater::BGSTerrainBlock_Detach::thunk(RE::BGSTerrainBlock* block)
 void UnifiedWater::BSWaterShader_SetupGeometry::thunk(RE::BSShader* waterShader, RE::BSRenderPass* pass)
 {
 	auto& singleton = globals::features::unifiedWater;
+
+	func(waterShader, pass);
 	
 	// Update and bind the per-frame constant buffer for vertex shader access
 	if (singleton.perFrame) {
@@ -1500,6 +1699,16 @@ void UnifiedWater::BSWaterShader_SetupGeometry::thunk(RE::BSShader* waterShader,
 		perFrameData.FoamTurbulenceStrength = singleton.settings.FoamTurbulenceStrength;
 		perFrameData.ShorelineInfluence = singleton.settings.ShorelineInfluence;
 		perFrameData.ShorelineFalloff = singleton.settings.ShorelineFalloff;
+		
+		static bool loggedOnce = false;
+		if (!loggedOnce) {
+			logger::info("[Unified Water] Shader values: ShorelineInfluence={}, ShorelineFalloff={}, WaveDirectionBlend={}",
+				singleton.settings.ShorelineInfluence,
+				singleton.settings.ShorelineFalloff,
+				singleton.settings.WaveDirectionBlend);
+			loggedOnce = true;
+		}
+		
 		perFrameData.ShorelinePrevFalloff = singleton.settings.ShorelinePrevFalloff;
 		perFrameData.ShorelineBlendExponent = singleton.settings.ShorelineBlendExponent;
 		perFrameData.ShorelineNoiseStrength = singleton.settings.ShorelineNoiseStrength;
@@ -1565,16 +1774,16 @@ void UnifiedWater::BSWaterShader_SetupGeometry::thunk(RE::BSShader* waterShader,
 		singleton.currentTimeScale = timeScale;
 		singleton.hasLastTimingSample = true;
 	}
-	
+
 	// Get water tile position and LOD level for per-tile data
 	int32_t x, y;
 	Util::WorldToCell(pass->geometry->world.translate, x, y);
-	
+
 	// Determine LOD level from the shape name if available
 	// LOD water shapes created by BGSTerrainBlock_Attach are named "WaterLOD_<level>"
 	// Regular water cells managed by TESWaterSystem have no special name - use LOD1 for single-cell precision
 	int32_t lodLevel = 1; // Default to LOD1 for regular water cells (single-cell resolution)
-	
+
 	if (pass->geometry->name.c_str()) {
 		const char* name = pass->geometry->name.c_str();
 		if (strncmp(name, "WaterLOD_", 9) == 0) {
@@ -1586,7 +1795,7 @@ void UnifiedWater::BSWaterShader_SetupGeometry::thunk(RE::BSShader* waterShader,
 			}
 		}
 	}
-	
+
 	// Update per-tile data for temporal blending
 	if (singleton.perTile) {
 		PerTile perTileData{};
@@ -1634,6 +1843,34 @@ void UnifiedWater::BSWaterShader_SetupGeometry::thunk(RE::BSShader* waterShader,
 		perTileData.TileData[2] = static_cast<float>(lodLevel);
 		perTileData.TileData[3] = 1.0f;
 
+		// Populate shoreline map dimensions and offsets for correct UV calculation
+		if (singleton.shorelineMap) {
+			perTileData.ShorelineData[0] = static_cast<float>(singleton.shorelineMap->GetWidth() * 64);
+			perTileData.ShorelineData[1] = static_cast<float>(singleton.shorelineMap->GetHeight() * 64);
+			perTileData.ShorelineData[2] = static_cast<float>(singleton.shorelineMap->GetOffsetX());
+			perTileData.ShorelineData[3] = static_cast<float>(singleton.shorelineMap->GetOffsetY());
+			
+			static bool loggedOnce = false;
+			if (!loggedOnce) {
+				logger::info("[Unified Water] ShorelineData: w={}, h={}, offX={}, offY={} (texture bound={})",
+					perTileData.ShorelineData[0], perTileData.ShorelineData[1], 
+					perTileData.ShorelineData[2], perTileData.ShorelineData[3],
+					singleton.gShorelineMapTex != nullptr);
+				loggedOnce = true;
+			}
+		} else {
+			perTileData.ShorelineData[0] = 0.0f;
+			perTileData.ShorelineData[1] = 0.0f;
+			perTileData.ShorelineData[2] = 0.0f;
+			perTileData.ShorelineData[3] = 0.0f;
+			
+			static bool warnedOnce = false;
+			if (!warnedOnce) {
+				logger::info("[Unified Water] WARNING: shorelineMap is NULL");
+				warnedOnce = true;
+			}
+		}
+
 		float currentSegmentsPerAxis = prevSegments;
 		if (const auto triShape = pass->geometry->AsTriShape()) {
 			auto& runtimeData = triShape->GetTrishapeRuntimeData();
@@ -1648,7 +1885,7 @@ void UnifiedWater::BSWaterShader_SetupGeometry::thunk(RE::BSShader* waterShader,
 		float storedNormalX = 0.0f;
 		float storedNormalY = 0.0f;
 		float storedDistance = 10000.0f;
-		
+
 		// Shoreline data now comes from texture, not constant buffer
 		// For prevTileData storage, use texture center sample if available
 		if (singleton.shorelineMap && activeWorldSpace) {
@@ -1660,23 +1897,34 @@ void UnifiedWater::BSWaterShader_SetupGeometry::thunk(RE::BSShader* waterShader,
 		}
 
 		singleton.prevTileData[tileKey] = UnifiedWater::PrevTileData{ storedNormalX, storedNormalY, storedDistance, currentSegmentsPerAxis };
-		
+
 		singleton.perTile->Update(perTileData);
-		
+
 		auto context = globals::d3d::context;
 		ID3D11Buffer* buffers[1] = { singleton.perTile->CB() };
 		context->VSSetConstantBuffers(8, 1, buffers);
 		context->PSSetConstantBuffers(8, 1, buffers); // Also bind to pixel shader for foam/normals
-		
+
 		// Bind shoreline distance field texture (register t9)
 		ID3D11ShaderResourceView* shorelineSRV = nullptr;
 		if (singleton.gShorelineMapTex && singleton.gShorelineMapTex->rendererTexture && singleton.gShorelineMapTex->rendererTexture->resourceView) {
 			shorelineSRV = singleton.gShorelineMapTex->rendererTexture->resourceView;
+			static bool loggedOnce = false;
+			if (!loggedOnce) {
+				logger::info("[Unified Water] Shoreline texture bound at t9: SRV={}", (void*)shorelineSRV);
+				loggedOnce = true;
+			}
+		} else {
+			static bool warnedOnce = false;
+			if (!warnedOnce) {
+				logger::info("[Unified Water] WARNING: Shoreline texture NOT bound");
+				warnedOnce = true;
+			}
 		}
 		context->VSSetShaderResources(9, 1, &shorelineSRV);
 		context->PSSetShaderResources(9, 1, &shorelineSRV);
 	}
-	
+
 	if (singleton.flowmap) {
 		// ObjectUV.xyz below, xy contains width and height, z contains mesh scale
 		// Previously flowmap size was in x, yz contained flowmap offset for water displacement mesh
@@ -1686,7 +1934,7 @@ void UnifiedWater::BSWaterShader_SetupGeometry::thunk(RE::BSShader* waterShader,
 
 		if (const auto prop = pass->geometry->GetGeometryRuntimeData().properties[1].get(); prop && prop->GetRTTI() == globals::rtti::BSWaterShaderPropertyRTTI.get()) {
 			const auto waterShaderProp = static_cast<RE::BSWaterShaderProperty*>(prop);
-			
+
 			// CellTexCoordOffset.xyzw below - applies to non-displacement water only
 			// xy is world cell flowmap based (0,0 is corner of flow map), zw is world cell
 			// Funky maths here to counter what's being done in SetupGeometry
@@ -1697,8 +1945,6 @@ void UnifiedWater::BSWaterShader_SetupGeometry::thunk(RE::BSShader* waterShader,
 			waterShaderProp->cellY = y;                                                                                                     // CellTexCoordOffset.w
 		}
 	}
-
-	func(waterShader, pass);
 }
 
 void UnifiedWater::TESWaterSystem_UpdateDisplacementMeshPosition::thunk(RE::TESWaterSystem* waterSystem)

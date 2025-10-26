@@ -117,8 +117,9 @@ struct UnifiedWater : OverlayFeature
 
 	struct alignas(16) PerTile
 	{
-		float PrevData[4];   // x/y = prev normal, z = prev distance, w = prev segments per axis
-		float TileData[4];   // x/y = tile cell coords, z = LOD level, w = tile span (cells)
+		float PrevData[4];       // x/y = prev normal, z = prev distance, w = prev segments per axis
+		float TileData[4];       // x/y = tile cell coords, z = LOD level, w = tile span (cells)
+		float ShorelineData[4];  // x/y = shoreline map width/height, z/w = shoreline map offsetX/offsetY
 	};
 
 	Settings settings;
@@ -149,6 +150,12 @@ struct UnifiedWater : OverlayFeature
 	struct TESWaterSystem_InitializeWater_SetWaterShaderMaterialParams
 	{
 		static void thunk(RE::TESWaterForm* form, RE::BSWaterShaderMaterial* material);
+		static inline REL::Relocation<decltype(thunk)> func;
+	};
+
+	struct TESWaterSystem_InitializeWater
+	{
+		static void thunk(RE::TESWaterSystem* waterSystem, RE::BSTriShape* waterTri, RE::TESWaterForm* form, float waterHeight, void* unk4, bool noDisplacement, bool isProcedural);
 		static inline REL::Relocation<decltype(thunk)> func;
 	};
 
@@ -218,6 +225,10 @@ struct UnifiedWater : OverlayFeature
 
 private:
 	RE::NiPointer<RE::BSTriShape> waterMesh;
+	std::uint16_t baseVertexCount = 0;
+	std::uint16_t baseTriangleCount = 0;
+	std::uint16_t optimisedVertexCount = 0;
+	std::uint16_t optimisedTriangleCount = 0;
 	RE::NiPointer<RE::BSTriShape> optimisedWaterMesh;
 	std::array<RE::NiPointer<RE::BSTriShape>, 3> subdividedWaterMeshVariants{};
 	Flowmap* flowmap = nullptr;

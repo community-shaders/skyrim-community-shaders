@@ -270,6 +270,18 @@ bool WaterCache::LoadCaches()
 					logger::error("[Unified Water] [Cache] Failed to read shoreline data for {}", key);
 					return false;
 				}
+
+				// Debug: log shoreline mask stats after reading from disk to verify cache contents
+				{
+					size_t nonZero = 0;
+					double sum = 0.0;
+					for (size_t i = 0; i < cellCount; ++i) {
+						sum += static_cast<double>(diskCache->shorelineMask[i]);
+						if (diskCache->shorelineMask[i] > 0.001f)
+							++nonZero;
+					}
+					logger::info("[Unified Water] [Cache] {}: Loaded shoreline mask - cells={}, nonZero={}, sum={}", key, cellCount, nonZero, sum);
+				}
 			}
 		}
 
@@ -419,10 +431,13 @@ bool WaterCache::GenerateCaches()
 			async.pool->wait_for_tasks();
 
 		buildProgress.Stop();
-		async.running.store(false);
 
 		logger::info("[Unified Water] [Cache] Disk caches generated in {} ms  ({} / {} complete - {} failed)", buildProgress.ElapsedMs(), buildProgress.completed.load(), buildProgress.total.load(), buildProgress.failed.load());
 		LoadCaches();
+		
+		// Set running=false AFTER LoadCaches() completes to prevent race condition
+		// where main thread proceeds to texture generation before caches are in memory
+		async.running.store(false);
 	});
 
 	return true;
@@ -814,6 +829,29 @@ bool WaterCache::BuildDiskCache(RE::TESWorldSpace* worldSpace, DiskCache& diskCa
 	diskCache.shorelineNormalY = shorelineNormalY;
 	diskCache.shorelineMask = shorelineMask;
 
+	// Debug: log shoreline mask statistics to help diagnose missing masks
+	{
+		size_t cellCount = shorelineMask.size();
+		size_t nonZero = 0;
+		double sum = 0.0;
+		for (size_t i = 0; i < cellCount; ++i) {
+			sum += static_cast<double>(shorelineMask[i]);
+			if (shorelineMask[i] > 0.001f)
+				++nonZero;
+		}
+		logger::info("[Unified Water] [Cache] {}: Shoreline mask stats - cells={}, nonZero={}, sum={}", editorID.c_str(), cellCount, nonZero, sum);
+		if (cellCount > 0 && nonZero > 0) {
+			// log a few sample mask values for quick inspection
+			std::string samples;
+			const size_t sampleCount = std::min<size_t>(8, cellCount);
+			for (size_t i = 0; i < sampleCount; ++i) {
+				samples += std::format("{:.3f}", shorelineMask[i]);
+				if (i + 1 < sampleCount) samples += ",";
+			}
+			logger::info("[Unified Water] [Cache] {}: Shoreline mask samples: {}", editorID.c_str(), samples);
+		}
+	}
+
 	// Generate instructions for all LOD levels: 1, 4, 8, 16, 32
 	// Array indices: 0=LOD1, 1=LOD4, 2=LOD8, 3=LOD16, 4=LOD32
 	int32_t instructionCount;
@@ -1120,7 +1158,7 @@ bool WaterCache::TryGetCellData(RE::TESWorldSpace* worldSpace, RE::TESFileArray*
 
 	if (!foundWaterData || !foundLandData) {
 		outFormID = 0;
-		outWaterHeight = FLT_MIN;
+		outWaterHeight = FLT_MAX;
 		outLandHeight = 0;
 		return false;
 	}

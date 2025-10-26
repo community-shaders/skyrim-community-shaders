@@ -42,10 +42,25 @@
 
 bool ShorelineMap::TryGetShorelineMap(RE::NiPointer<RE::NiSourceTexture>& outShorelineMapTex) const
 {
-	if (!shorelineMapTex || !shorelineMapTex->rendererTexture || !shorelineMapTex->rendererTexture->texture || !shorelineMapTex->rendererTexture->resourceView)
+	if (!shorelineMapTex) {
+		logger::warn("[Unified Water] [ShorelineMap] TryGetShorelineMap failed: shorelineMapTex is nullptr");
 		return false;
+	}
+	if (!shorelineMapTex->rendererTexture) {
+		logger::warn("[Unified Water] [ShorelineMap] TryGetShorelineMap failed: rendererTexture is nullptr");
+		return false;
+	}
+	if (!shorelineMapTex->rendererTexture->texture) {
+		logger::warn("[Unified Water] [ShorelineMap] TryGetShorelineMap failed: texture is nullptr");
+		return false;
+	}
+	if (!shorelineMapTex->rendererTexture->resourceView) {
+		logger::warn("[Unified Water] [ShorelineMap] TryGetShorelineMap failed: resourceView is nullptr");
+		return false;
+	}
 
 	outShorelineMapTex = this->shorelineMapTex;
+	logger::info("[Unified Water] [ShorelineMap] TryGetShorelineMap succeeded!");
 	return true;
 }
 
@@ -165,6 +180,8 @@ bool ShorelineMap::LoadShorelineMap()
 		return false;
 	}
 
+	logger::info("[Unified Water] [ShorelineMap] Successfully loaded texture from: {}", path);
+
 	const auto sourceTex = static_cast<RE::NiSourceTexture*>(tex.get());
 
 	shorelineMapTex = RE::NiPointer(sourceTex);
@@ -176,12 +193,15 @@ bool ShorelineMap::LoadShorelineMap()
 	invWidth = 1.0f / static_cast<float>(width);
 	invHeight = 1.0f / static_cast<float>(height);
 
-	logger::debug("[Unified Water] [ShorelineMap] Shoreline map loaded");
+	logger::info("[Unified Water] [ShorelineMap] Shoreline map loaded - dimensions {}x{}, offset ({},{})", width, height, offsetX, offsetY);
 	return true;
 }
 
 bool ShorelineMap::GenerateShorelineMap(WaterCache* waterCache, bool useMips)
 {
+	// TEMPORARY: Force mipmaps OFF to test if they're causing alpha channel corruption
+	useMips = false;
+	
 	const auto t0 = std::chrono::steady_clock::now();
 
 	auto dvc = globals::d3d::device;
@@ -289,7 +309,27 @@ bool ShorelineMap::GenerateShorelineMap(WaterCache* waterCache, bool useMips)
 		return false;
 	}
 
+	// Debug: Log mask statistics at texture generation time
+	{
+		size_t nonZero = 0;
+		double sum = 0.0;
+		for (size_t i = 0; i < shorelineMask.size(); ++i) {
+			sum += static_cast<double>(shorelineMask[i]);
+			if (shorelineMask[i] > 0.001f)
+				++nonZero;
+		}
+		logger::info("[Unified Water] [ShorelineMap] Tamriel mask at texture gen - cells={}, nonZero={}, sum={}", shorelineMask.size(), nonZero, sum);
+		// Sample first 8 values
+		if (shorelineMask.size() >= 8) {
+			logger::info("[Unified Water] [ShorelineMap] First 8 mask values: {:.3f},{:.3f},{:.3f},{:.3f},{:.3f},{:.3f},{:.3f},{:.3f}",
+				shorelineMask[0], shorelineMask[1], shorelineMask[2], shorelineMask[3],
+				shorelineMask[4], shorelineMask[5], shorelineMask[6], shorelineMask[7]);
+		}
+	}
+
 	// Generate 64x64 texture per cell from the high-resolution cache data
+	int32_t texturesGenerated = 0;
+	int32_t cellsSkipped = 0;
 	for (int32_t cellY = 0; cellY < cacheHeight; ++cellY) {
 		for (int32_t cellX = 0; cellX < cacheWidth; ++cellX) {
 			const int32_t cacheIdx = cellY * cacheWidth + cellX;
@@ -301,15 +341,17 @@ bool ShorelineMap::GenerateShorelineMap(WaterCache* waterCache, bool useMips)
 			const float mask = shorelineMask[cacheIdx];
 
 			// Skip cells without water
-			if (mask < 0.5f)
+			if (mask < 0.5f) {
+				cellsSkipped++;
 				continue;
+			}
 
 			const int32_t worldCellX = cellX - cacheOffsetX;
 			const int32_t worldCellY = cellY - cacheOffsetY;
 
 			// Generate 64x64 shoreline texture for this cell
 			DirectX::ScratchImage image;
-			auto hr = image.Initialize2D(DXGI_FORMAT_R8G8B8A8_UNORM, 64, 64, 1, useMips ? 6 : 1);
+			auto hr = image.Initialize2D(DXGI_FORMAT_B8G8R8A8_UNORM, 64, 64, 1, useMips ? 6 : 1);
 			if (FAILED(hr)) {
 				logger::warn("[Unified Water] [ShorelineMap] Failed to initialize image for {},{}", worldCellX, worldCellY);
 				continue;
@@ -318,6 +360,14 @@ bool ShorelineMap::GenerateShorelineMap(WaterCache* waterCache, bool useMips)
 			// Fill mip level 0
 			auto* pixels = reinterpret_cast<uint8_t*>(image.GetImage(0, 0, 0)->pixels);
 			const size_t rowPitch = image.GetImage(0, 0, 0)->rowPitch;
+
+			// Debug: Log first pixel values for first few cells
+			static int debugCellCount = 0;
+			bool logThisCell = (debugCellCount < 3);
+			if (logThisCell) {
+				logger::info("[Unified Water] [ShorelineMap] Cell ({},{}) - mask={:.3f}, distance={:.3f}, normal=({:.3f},{:.3f})",
+					worldCellX, worldCellY, mask, distance, normalX, normalY);
+			}
 
 			for (int pixelY = 0; pixelY < 64; ++pixelY) {
 				for (int pixelX = 0; pixelX < 64; ++pixelX) {
@@ -331,23 +381,33 @@ bool ShorelineMap::GenerateShorelineMap(WaterCache* waterCache, bool useMips)
 					float normX = len > 0.001f ? normalX / len : 0.0f;
 					float normY = len > 0.001f ? normalY / len : 0.0f;
 
-					// Pack into RGBA8:
-					// R: shore normal X ([-1, 1] -> [0, 255])
-					// G: shore normal Y ([-1, 1] -> [0, 255])
-					// B: distance to shore (normalize to reasonable range)
-					// A: mask (water presence)
+					// Pack into BGRA8 (to match DXGI_FORMAT_B8G8R8A8_UNORM):
+					// B (pixel[0]): distance to shore
+					// G (pixel[1]): shore normal Y ([-1, 1] -> [0, 255])
+					// R (pixel[2]): shore normal X ([-1, 1] -> [0, 255])
+					// A (pixel[3]): mask (water presence)
 					
-					pixel[0] = static_cast<uint8_t>((normX * 0.5f + 0.5f) * 255.0f);
-					pixel[1] = static_cast<uint8_t>((normY * 0.5f + 0.5f) * 255.0f);
+					pixel[2] = static_cast<uint8_t>((normX * 0.5f + 0.5f) * 255.0f);  // R
+					pixel[1] = static_cast<uint8_t>((normY * 0.5f + 0.5f) * 255.0f);  // G
 					
-					// Normalize distance: assume max useful distance is 10 cells (40960 units)
-					const float maxDistance = 10.0f;
+					// Normalize distance: assume max useful distance is 50 cells (larger range for better gradients)
+					// Use sqrt to compress distant values while preserving detail near shore
+					const float maxDistance = 50.0f;
 					float normalizedDistance = std::min(distance / maxDistance, 1.0f);
-					pixel[2] = static_cast<uint8_t>(normalizedDistance * 255.0f);
+					normalizedDistance = std::sqrt(normalizedDistance);  // Square root gives more detail near shore
+					pixel[0] = static_cast<uint8_t>(normalizedDistance * 255.0f);  // B
 					
-					pixel[3] = static_cast<uint8_t>(mask * 255.0f);
+					pixel[3] = static_cast<uint8_t>(mask * 255.0f);  // A
+					
+					// Debug: Log first pixel of first few cells
+					if (logThisCell && pixelX == 0 && pixelY == 0) {
+						logger::info("[Unified Water] [ShorelineMap]   First pixel RGBA: ({},{},{},{})",
+							pixel[0], pixel[1], pixel[2], pixel[3]);
+					}
 				}
 			}
+			
+			if (logThisCell) debugCellCount++;
 
 			// Generate mip chain if requested
 			if (useMips) {
@@ -377,8 +437,11 @@ bool ShorelineMap::GenerateShorelineMap(WaterCache* waterCache, bool useMips)
 			mapMaxY = std::max(mapMaxY, worldCellY);
 
 			cells.emplace_back(ShorelineCell{ worldCellX, worldCellY, tex });
+			texturesGenerated++;
 		}
 	}
+
+	logger::info("[Unified Water] [ShorelineMap] Texture generation complete: {} textures generated, {} cells skipped (mask<0.5)", texturesGenerated, cellsSkipped);
 
 	if (cells.empty()) {
 		logger::warn("[Unified Water] [ShorelineMap] No shoreline tiles found - skipping texture generation");
@@ -397,7 +460,7 @@ bool ShorelineMap::GenerateShorelineMap(WaterCache* waterCache, bool useMips)
 	desc.Height = height * 64;
 	desc.MipLevels = useMips ? 6 : 1;
 	desc.ArraySize = 1;
-	desc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+	desc.Format = DXGI_FORMAT_B8G8R8A8_UNORM;  // Match flowmap format
 	desc.SampleDesc = { 1, 0 };
 	desc.Usage = D3D11_USAGE_DEFAULT;
 	desc.BindFlags = D3D11_BIND_SHADER_RESOURCE;

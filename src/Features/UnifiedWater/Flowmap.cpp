@@ -206,7 +206,7 @@ bool Flowmap::GenerateFlowmap(WaterCache* waterCache, bool useMips)
 		return false;
 	}
 
-	logger::info("[Unified Water] [Flowmap] Generating shoreline-based flowmap...");
+	logger::info("[Unified Water] [Flowmap] Generating flowmap...");
 
 	{
 		for (auto y = worldMinY; y < worldMaxY; ++y) {
