@@ -16,12 +16,6 @@
 // - G channel: Shore normal Y component (normalized, packed to [0,1])  
 // - B channel: Distance to shore (normalized to max range, packed to [0,1])
 // - A channel: Water presence mask
-//
-// This approach provides:
-// 1. Per-pixel accuracy instead of per-tile interpolation
-// 2. Smooth transitions across arbitrary boundaries via GPU texture filtering
-// 3. Minimal runtime overhead (single texture sample vs complex interpolation)
-// 4. Consistent with flowmap architecture for unified water texture management
 
 #include "ShorelineMap.h"
 
@@ -42,25 +36,10 @@
 
 bool ShorelineMap::TryGetShorelineMap(RE::NiPointer<RE::NiSourceTexture>& outShorelineMapTex) const
 {
-	if (!shorelineMapTex) {
-		logger::warn("[Unified Water] [ShorelineMap] TryGetShorelineMap failed: shorelineMapTex is nullptr");
+	if (!shorelineMapTex || !shorelineMapTex->rendererTexture || !shorelineMapTex->rendererTexture->texture || !shorelineMapTex->rendererTexture->resourceView)
 		return false;
-	}
-	if (!shorelineMapTex->rendererTexture) {
-		logger::warn("[Unified Water] [ShorelineMap] TryGetShorelineMap failed: rendererTexture is nullptr");
-		return false;
-	}
-	if (!shorelineMapTex->rendererTexture->texture) {
-		logger::warn("[Unified Water] [ShorelineMap] TryGetShorelineMap failed: texture is nullptr");
-		return false;
-	}
-	if (!shorelineMapTex->rendererTexture->resourceView) {
-		logger::warn("[Unified Water] [ShorelineMap] TryGetShorelineMap failed: resourceView is nullptr");
-		return false;
-	}
 
 	outShorelineMapTex = this->shorelineMapTex;
-	logger::info("[Unified Water] [ShorelineMap] TryGetShorelineMap succeeded!");
 	return true;
 }
 
@@ -180,9 +159,12 @@ bool ShorelineMap::LoadShorelineMap()
 		return false;
 	}
 
-	logger::info("[Unified Water] [ShorelineMap] Successfully loaded texture from: {}", path);
-
 	const auto sourceTex = static_cast<RE::NiSourceTexture*>(tex.get());
+
+	if (!sourceTex || !sourceTex->rendererTexture || !sourceTex->rendererTexture->texture) {
+		logger::error("[Unified Water] [ShorelineMap] Shoreline map invalid", path);
+		return false;
+	}
 
 	shorelineMapTex = RE::NiPointer(sourceTex);
 
@@ -214,33 +196,12 @@ bool ShorelineMap::GenerateShorelineMap(WaterCache* waterCache, bool useMips)
 	}
 
 	static winrt::com_ptr<REX::W32::ID3D11Multithread> multithread;
-	if (FAILED(ctx->QueryInterface(multithread.put()))) {
+	if (SUCCEEDED(ctx->QueryInterface(multithread.put()))) {
+		multithread->SetMultithreadProtected(TRUE);
+	} else {
 		logger::error("[Unified Water] [ShorelineMap] ID3D11Multithread not available");
 		return false;
 	}
-
-	struct MultithreadScopeGuard
-	{
-		REX::W32::ID3D11Multithread* multithread{ nullptr };
-
-		explicit MultithreadScopeGuard(REX::W32::ID3D11Multithread* inMultithread) : multithread(inMultithread)
-		{
-			if (multithread) {
-				multithread->SetMultithreadProtected(TRUE);
-				multithread->Enter();
-			}
-		}
-
-		~MultithreadScopeGuard()
-		{
-			if (multithread) {
-				multithread->Leave();
-				multithread->SetMultithreadProtected(FALSE);
-			}
-		}
-	};
-
-	MultithreadScopeGuard multithreadGuard(multithread.get());
 
 	const auto tamriel = RE::TESForm::LookupByEditorID<RE::TESWorldSpace>("Tamriel");
 	if (!tamriel) {
@@ -500,18 +461,21 @@ bool ShorelineMap::GenerateShorelineMap(WaterCache* waterCache, bool useMips)
 	}
 
 	{
-		ctx->ExecuteCommandList(commandList.get(), TRUE);
+		multithread->Enter();
+		ctx->ExecuteCommandList(commandList.get(), FALSE);
 
 		const auto filename = std::format(L"Tamriel-ShorelineMap.{}.{}.{}.{}.dds", width, height, offsetX, offsetY);
 		const auto path = Util::PathHelpers::GetDataPath() / "textures" / "water" / "shorelinemaps" / filename;
 		const auto hr = Util::SaveTextureToFile(dvc, ctx, path, shorelineMap.get());
-		
+		multithread->Leave();
 		if (FAILED(hr)) {
 			logger::error("[Unified Water] [ShorelineMap] Failed to save shoreline map to {}: hr={:08X}", path.string().c_str(), static_cast<uint32_t>(hr));
 			return false;
 		}
 	}
-	
+
+	multithread->SetMultithreadProtected(FALSE);
+
 	const auto t1 = std::chrono::steady_clock::now();
 	const auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(t1 - t0).count();
 	logger::info("[Unified Water] [ShorelineMap] Generated in {} ms", ms);

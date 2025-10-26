@@ -1684,8 +1684,6 @@ void UnifiedWater::BSWaterShader_SetupGeometry::thunk(RE::BSShader* waterShader,
 {
 	auto& singleton = globals::features::unifiedWater;
 
-	func(waterShader, pass);
-	
 	// Update and bind the per-frame constant buffer for vertex shader access
 	if (singleton.perFrame) {
 		PerFrame perFrameData{};
@@ -1945,6 +1943,7 @@ void UnifiedWater::BSWaterShader_SetupGeometry::thunk(RE::BSShader* waterShader,
 			waterShaderProp->cellY = y;                                                                                                     // CellTexCoordOffset.w
 		}
 	}
+	func(waterShader, pass);
 }
 
 void UnifiedWater::TESWaterSystem_UpdateDisplacementMeshPosition::thunk(RE::TESWaterSystem* waterSystem)
