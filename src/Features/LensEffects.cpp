@@ -24,13 +24,13 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	HL_FlipExpOffset, HL_ExpMinSize, HL_ExpMaxSize,
 	HL_RotationSpeed, HL_LineVolume, HL_LineLength,
 	HL_LineWidth, HL_LineTaper, HL_ColorShift,
-	CA_Intensity, CA_Threshold, CA_MaxOffset)
+	CA_Intensity, CA_Threshold, CA_MaxOffset, CA_RChannelOnly)
 
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	LensEffects::ColdSettings,
 	GH_Params, GH_Params_2, GH_Color, GH_Atlas,
-	GH_InInt, SB_Color, HL_Color, LI_Color,
-	LI_FadeIn, LI_FadeOut, LI_FadeDuration, CA_RChannelOnly)
+	SB_Color, HL_Color, LI_Color, LI_FadeIn,
+	LI_FadeOut, LI_FadeDuration)
 
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	LensEffects::Settings,
@@ -76,12 +76,6 @@ void LensEffects::SetupResources()
 	linearSamplerDesc.MinLOD = 0;
 	linearSamplerDesc.MaxLOD = D3D11_FLOAT32_MAX;
 
-	D3D11_SAMPLER_DESC pointMirSamplerDesc{ linearSamplerDesc };
-	pointMirSamplerDesc.Filter = D3D11_FILTER_MIN_MAG_MIP_POINT;
-	pointMirSamplerDesc.AddressU = D3D11_TEXTURE_ADDRESS_MIRROR;
-	pointMirSamplerDesc.AddressV = D3D11_TEXTURE_ADDRESS_MIRROR;
-	pointMirSamplerDesc.AddressW = D3D11_TEXTURE_ADDRESS_MIRROR;
-
 	D3D11_SAMPLER_DESC pointSamplerDesc{ linearSamplerDesc };
 	pointSamplerDesc.Filter = D3D11_FILTER_MIN_MAG_MIP_POINT;
 
@@ -91,8 +85,15 @@ void LensEffects::SetupResources()
 
 	DX::ThrowIfFailed(device->CreateSamplerState(&linearSamplerDesc, &LinearSampler));
 	DX::ThrowIfFailed(device->CreateSamplerState(&pointSamplerDesc, &PointSampler));
-	DX::ThrowIfFailed(device->CreateSamplerState(&pointMirSamplerDesc, &PointMirrorSampler));
 	DX::ThrowIfFailed(device->CreateSamplerState(&depthSamplerDesc, &DepthSampler));
+
+	CD3D11_BLEND_DESC blendDesc(D3D11_DEFAULT);
+	blendDesc.RenderTarget[0].BlendEnable = TRUE;
+
+	DX::ThrowIfFailed(device->CreateBlendState(&blendDesc, &BlendState[0]));
+	blendDesc.RenderTarget[0].DestBlend = D3D11_BLEND_ONE;
+	blendDesc.RenderTarget[0].DestBlendAlpha = D3D11_BLEND_ONE;
+	DX::ThrowIfFailed(device->CreateBlendState(&blendDesc, &BlendState[1]));
 
 	viewport.TopLeftX = 0.0f;
 	viewport.TopLeftY = 0.0f;
@@ -137,7 +138,8 @@ void LensEffects::SetupResources()
 
 	SettingsCB = new ConstantBuffer(ConstantBufferDesc<ConstBuffer>());
 
-	std::sort(weatherDisables.begin(), weatherDisables.end());
+	std::sort(weatherDisablesSun.begin(), weatherDisablesSun.end());
+	std::sort(weatherDisablesSnow.begin(), weatherDisablesSnow.end());
 
 	skyrim_FlareData = reinterpret_cast<uintptr_t*>(REL::RelocationID(527915, 414867).address());
 	skyrim_RunFlarePtr = reinterpret_cast<uint32_t*>(REL::RelocationID(527916, 414862).address());
@@ -146,11 +148,6 @@ void LensEffects::SetupResources()
 	skyrim_SunGlareScale = reinterpret_cast<float*>(REL::RelocationID(502611, 370235).address());
 
 	gFlareApplyFunc = reinterpret_cast<decltype(gFlareApplyFunc)>(REL::RelocationID(100281, 106995).address());
-
-	if (!settingsLoaded || !settings) {
-		stdSettings = {};
-		settings = &stdSettings;
-	}
 
 	renderdata = new Setup::LF_RenderData;
 
@@ -244,23 +241,7 @@ void LensEffects::SetupOcclusionMask()
 
 	context->PSSetSamplers(10, 1, &LinearSampler);
 	context->PSSetSamplers(11, 1, &PointSampler);
-	context->PSSetSamplers(12, 1, &PointMirrorSampler);
 	context->PSSetSamplers(13, 1, &DepthSampler);
-
-	if (!BlendState[1]) {
-		context->OMGetBlendState(&BlendState[1], nullptr, nullptr);
-		if (BlendState[1]) {
-			D3D11_BLEND_DESC SrcBlendDesc = {};
-			BlendState[1]->GetDesc(&SrcBlendDesc);
-			auto& blendState = SrcBlendDesc.RenderTarget[0];
-			blendState.BlendEnable = TRUE;
-			blendState.RenderTargetWriteMask = D3D11_COLOR_WRITE_ENABLE_ALL;
-			DX::ThrowIfFailed(globals::d3d::device->CreateBlendState(&SrcBlendDesc, &BlendState[0]));
-			blendState.DestBlend = D3D11_BLEND_ONE;
-			blendState.DestBlendAlpha = D3D11_BLEND_ONE;
-			DX::ThrowIfFailed(globals::d3d::device->CreateBlendState(&SrcBlendDesc, &BlendState[2]));
-		}
-	}
 
 	if (!Raster) {
 		context->RSGetState(&Raster);
@@ -331,8 +312,8 @@ void LensEffects::SetupGhostEffect()
 
 	auto it = renderdata->GetEffect(Shaders::LensGhosts).passesdone - 1;
 
-	float4& params = settings->coldsettings.GH_Params[it];
-	float4& params_2 = settings->coldsettings.GH_Params_2[it];
+	float4& params = settings.coldsettings.GH_Params[it];
+	float4& params_2 = settings.coldsettings.GH_Params_2[it];
 
 	ConstBuffer data = UpdateBufferValues();
 	data.shadersettings.GH_Size = params.x;
@@ -342,10 +323,9 @@ void LensEffects::SetupGhostEffect()
 	data.shadersettings.GH_Rotation = params_2.x;
 	data.shadersettings.GH_Feather = params_2.y;
 	data.shadersettings.GH_CAScale = params_2.z;
-	data.shadersettings.GH_MoveCurve = params_2.w;
-	data.shadersettings.GH_InnerInt = settings->coldsettings.GH_InInt[it];
-	data.shadersettings.GH_Color = VectorToXMFloat(settings->coldsettings.GH_Color[it]);
-	data.shadersettings.GH_Atlas = VectorToXMFloat(settings->coldsettings.GH_Atlas[it]);
+	data.shadersettings.GH_InnerInt = params_2.w;
+	data.shadersettings.GH_Color = VectorToXMFloat(settings.coldsettings.GH_Color[it]);
+	data.shadersettings.GH_Atlas = VectorToXMFloat(settings.coldsettings.GH_Atlas[it]);
 
 	SettingsCB->Update(data);
 
@@ -363,10 +343,7 @@ void LensEffects::SetupCAEffect()
 	auto context = globals::d3d::context;
 	auto renderer = globals::game::renderer;
 
-	if (settings->coldsettings.CA_RChannelOnly) {
-		context->OMSetBlendState(BlendState[1], nullptr, 0xFFFFFFFF);
-	} else
-		context->OMSetBlendState(BlendState[0], nullptr, 0xFFFFFFFF);
+	context->OMSetBlendState(BlendState[0], nullptr, 0xFFFFFFFF);
 
 	context->VSSetShader(BypassVertexShader, NULL, NULL);
 	context->PSSetShader(ChromaticAberrationPixelShader, NULL, NULL);
@@ -389,7 +366,7 @@ void LensEffects::SetupIceEffect()
 	}
 
 	context->RSSetState(Raster);
-	context->OMSetBlendState(BlendState[2], nullptr, 0xFFFFFFFF);
+	context->OMSetBlendState(BlendState[1], nullptr, 0xFFFFFFFF);
 
 	auto& mainCopy = globals::game::renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMAIN].SRVCopy;
 
@@ -406,23 +383,33 @@ void LensEffects::AppendOcclusionLUT()
 {
 	auto context = globals::d3d::context;
 
-	REX::W32::ComPtr<ID3D11RenderTargetView> oldRTVs[8];
-	REX::W32::ComPtr<ID3D11DepthStencilView> oldDSV;
+	ID3D11RenderTargetView* rtvs[8] = {};
+	ID3D11DepthStencilView* dsv = nullptr;
+
+	context->OMGetRenderTargets(8, rtvs, &dsv);
+
 	UINT numRTs = 0;
-
-	context->OMGetRenderTargets(8, oldRTVs[0].GetAddressOf(), oldDSV.GetAddressOf());
-
-	for (UINT i = 0; i < 8; ++i)
-		if (oldRTVs[i].Get())
+	for (int i = 0; i < 8; ++i)
+		if (rtvs[i])
 			numRTs++;
 
-	if (!useCloudLUT) {
-		context->OMSetRenderTargetsAndUnorderedAccessViews(numRTs, reinterpret_cast<ID3D11RenderTargetView* const*>(oldRTVs), oldDSV.Get(), numRTs, 1, &SunOcclusionUAV, nullptr);
+	if (numRTs < 8) {
+		if (!useCloudLUT) {
+			context->OMSetRenderTargetsAndUnorderedAccessViews(numRTs, rtvs, dsv, 7, 1, &SunOcclusionUAV, nullptr);
+		} else {
+			context->OMSetRenderTargetsAndUnorderedAccessViews(numRTs, rtvs, dsv, 7, 1, &SunOcclusionUAV_AT, nullptr);
+			context->PSSetShaderResources(30, 1, &SunOcclusionSRV);
+			useCloudLUT = false;
+		}
 	} else {
-		context->OMSetRenderTargetsAndUnorderedAccessViews(numRTs, reinterpret_cast<ID3D11RenderTargetView* const*>(oldRTVs), oldDSV.Get(), numRTs, 1, &SunOcclusionUAV_AT, nullptr);
-		context->PSSetShaderResources(30, 1, &SunOcclusionSRV);
-		useCloudLUT = false;
+		logger::error("[Lens Effects] failed to bind UAV");
 	}
+
+	for (int i = 0; i < 8; ++i)
+		if (rtvs[i])
+			rtvs[i]->Release();
+	if (dsv)
+		dsv->Release();
 
 	overrideShader = false;
 }
@@ -446,23 +433,25 @@ void LensEffects::GetWeatherShader()
 			static float epochDelta = 0;
 			static int weatherRole = 0;
 			static float fade;
-			static float uifade;
+			static float* UIFadeSetting = nullptr;
 
 			if (CheckWeatherChange()) {
 				transEpoch = lastUpdate;
+				weatherRole = false;
 				if (auto currWeather = sky->currentWeather; currWeather && currWeather->data.flags.any(RE::TESWeather::WeatherDataFlag::kSnow)) {
-					fade = std::max(sky->currentWeather->data.precipitationBeginFadeIn / 255.0f / 24.0f / 7.0f, 0.0018f);
-					uifade = settings.coldsettings.LI_FadeIn;
-					weatherRole = 1;
-					epochDelta = 0;
+					if (!std::binary_search(weatherDisablesSnow.begin(), weatherDisablesSnow.end(), WeatherID)) {
+						fade = std::max(sky->currentWeather->data.precipitationBeginFadeIn / 255.0f / 24.0f / 7.0f, 0.0018f);
+						UIFadeSetting = &settings.coldsettings.LI_FadeIn;
+						weatherRole = 1;
+						epochDelta = 0;
+					}
 				} else if (auto prevWeather = sky->lastWeather; prevWeather && prevWeather->data.flags.any(RE::TESWeather::WeatherDataFlag::kSnow)) {
-					fade = std::max(sky->lastWeather->data.precipitationEndFadeOut / 255.0f / 24.0f / 7.0f, 0.00025f);
-					uifade = settings.coldsettings.LI_FadeOut;
-					weatherRole = 2;
-					epochDelta = snowPrecipValue;
-				} else {
-					weatherRole = false;
-					return;
+					if (!std::binary_search(weatherDisablesSnow.begin(), weatherDisablesSnow.end(), PrevWeatherID)) {
+						fade = std::max(sky->lastWeather->data.precipitationEndFadeOut / 255.0f / 24.0f / 7.0f, 0.00025f);
+						UIFadeSetting = &settings.coldsettings.LI_FadeOut;
+						weatherRole = 2;
+						epochDelta = snowPrecipValue;
+					}
 				}
 			}
 
@@ -474,14 +463,14 @@ void LensEffects::GetWeatherShader()
 					lastIsInside = IsInside;
 					epochDelta = snowPrecipValue;
 					transEpoch = time;
-					uifade = (IsInside) ? &settings.coldsettings.LI_FadeOut : &settings.coldsettings.LI_FadeIn;
+					UIFadeSetting = (IsInside) ? &settings.coldsettings.LI_FadeOut : &settings.coldsettings.LI_FadeIn;
 					fade = 0;
 				}
 				float duration = settings.coldsettings.LI_FadeDuration / 24.0f / 4.0f;
 				duration = (IsInside) ? duration * 0.5f : duration;
 
-				float fademod = uifade / 24.0f / 4.0f;
-				float fadeValue = std::clamp((time - (transEpoch + (fade + fademod))) / duration, 0.0f, 1.0f);
+				float UIFadeFactor = *UIFadeSetting / 24.0f / 4.0f;
+				float fadeValue = std::clamp((time - (transEpoch + (fade + UIFadeFactor))) / duration, 0.0f, 1.0f);
 
 				if (!IsInside && weatherRole == 1)
 					snowPrecipValue = std::clamp(epochDelta + fadeValue, 0.0f, 1.0f);
@@ -512,12 +501,9 @@ float LensEffects::GetWeatherPrecip()
 bool LensEffects::CheckWeatherChange()
 {
 	if (auto sky = globals::game::sky) {
-		auto update = [&]() {
-			WeatherID = (sky->currentWeather) ? sky->currentWeather->formID : 0;
-			PrevWeatherID = (sky->lastWeather) ? sky->lastWeather->formID : 0; };
-
 		if (!WeatherID || std::floor(sky->lastWeatherUpdate * 60) == std::floor(sky->currentGameHour * 60)) {
-			update();
+			WeatherID = (sky->currentWeather) ? sky->currentWeather->formID : 0;
+			PrevWeatherID = (sky->lastWeather) ? sky->lastWeather->formID : 0;
 			return true;
 		}
 	}
@@ -532,12 +518,12 @@ void LensEffects::UpdateWeatherBasedDisable()
 	if (CheckWeatherChange()) {
 		disableSunFX = false;
 		weatherFadeout = 0.0f;
-		currWeatherRole = std::binary_search(weatherDisables.begin(), weatherDisables.end(), WeatherID);
-		prevWeatherRole = std::binary_search(weatherDisables.begin(), weatherDisables.end(), PrevWeatherID);
+		currWeatherRole = std::binary_search(weatherDisablesSun.begin(), weatherDisablesSun.end(), WeatherID);
+		prevWeatherRole = std::binary_search(weatherDisablesSun.begin(), weatherDisablesSun.end(), PrevWeatherID);
 	}
 
 	if (auto sky = globals::game::sky; sky && (currWeatherRole || prevWeatherRole)) {
-		auto weatherTransition = LinearStep(0.5, 1.0, sky->currentWeatherPct);
+		auto weatherTransition = LinearStep(0.3, 1.0, sky->currentWeatherPct);
 		if ((weatherTransition == 1.0f && currWeatherRole) || (currWeatherRole && prevWeatherRole))
 			disableSunFX = true;
 		weatherFadeout = (currWeatherRole) ? weatherTransition : 1.0f - weatherTransition;
@@ -555,8 +541,8 @@ DirectX::XMFLOAT4A LensEffects::GetSunPosition()
 	Matrix projMatrix = Util::GetCameraData(0).projMat;
 
 	float4 sunViewPos = float4::Transform(sunWorldPos, viewMatrix);
-	float SunSSRad = (*skyrim_SunGlareScale * SunScale) * (projMatrix._22 / sunViewPos.z) * (screenSize.y * 0.5f) * 0.5f;
-	sunViewPos.w = sunRadius = (SunSSRad > 1.0f) ? SunSSRad : sunRadius;
+	float SunSSRad = (*skyrim_SunGlareScale * SunScale) * (projMatrix._22 / sunViewPos.z) * (screenSize.y * 0.5f);
+	sunViewPos.w = sunRadius = (SunSSRad > 10.0f && SunSSRad < 100.0f) ? SunSSRad : sunRadius;
 
 	return VectorToXMFloat(sunViewPos);
 }
@@ -623,13 +609,13 @@ void LensEffects::Hooks::LensFlareVisibility_CheckRenderCondition::thunk(RE::NiC
 
 	func(camera, shader);  //set skyrim_RunFlarePtr
 
-	lens.sunVisble = static_cast<bool>(*lens.skyrim_RunFlarePtr);
+	lens.skyrim_SunVisble = static_cast<bool>(*lens.skyrim_RunFlarePtr);
 
 	if (lens.disableSunFX)
-		lens.sunVisble = false;
+		lens.skyrim_SunVisble = false;
 
 	if (*lens.skyrim_FlareData && !globals::game::ui->GameIsPaused()) {
-		lens.renderdata->CreateRenderList(lens.sunVisble);
+		lens.renderdata->CreateRenderList(lens.skyrim_SunVisble);
 		*lens.skyrim_RunFlarePtr = 1;
 	} else
 		*lens.skyrim_RunFlarePtr = 0;
@@ -667,8 +653,9 @@ void LensEffects::Hooks::BSImagespaceShader_Render<RE::ImageSpaceManager::ISLens
 	lens.overrideShader = true;
 	lens.shaderdesc = lens.renderdata->UpdateCurrentEffect();
 
-	if (lens.renderdata->GetEffect(lens.shaderdesc).IsWeatherShader())
+	if (lens.renderdata->GetEffect(lens.shaderdesc).IsWeatherShader()) {
 		lens.GetWeatherShader();
+	}
 
 	func(shader, shape, param);
 }
@@ -678,8 +665,7 @@ void LensEffects::Hooks::Main_PostProcessing::thunk(RE::ImageSpaceManager* a1, u
 	auto& lens = globals::features::lensEffects;
 
 	if (*lens.skyrim_FlareData && lens.gFlareShader && !globals::game::ui->GameIsPaused()) {
-		lens.renderdata->CreateRenderList(lens.sunVisble, true);
-		lens.SettingsCB->Update(lens.UpdateBufferValues());
+		lens.renderdata->CreateRenderList(lens.skyrim_SunVisble, true);
 		lens.gFlareApplyFunc(RE::Main::WorldRootCamera(), lens.gFlareShader, 0);
 	}
 
@@ -693,7 +679,7 @@ void LensEffects::DrawSettings()
 
 	if (ImGui::BeginTabBar("Effects")) {
 		if (ImGui::BeginTabItem("General")) {
-			ImGui::SeparatorText("Quick Enables");
+			ImGui::SeparatorText("Quick Enable");
 			if (ImGui::Checkbox("Enable Sun Glare", &settings.EnableSunGlare))
 				renderdata->GetEffect(Shaders::LensSunGlare).Toggle(settings.EnableSunGlare);
 			if (ImGui::Checkbox("Enable Starburst", &settings.EnableStarburst))
@@ -708,16 +694,6 @@ void LensEffects::DrawSettings()
 				renderdata->GetEffect(Shaders::LensCA).Toggle(settings.EnableCA);
 			if (ImGui::Checkbox("Enable Lens Ice", &settings.EnableIce))
 				renderdata->GetEffect(Shaders::LensIce).Toggle(settings.EnableIce);
-
-			ImGui::Spacing();
-
-			if (ImGui::Button("Export As Preset")) {
-				ExportAsPreset();
-			}
-			if (auto _tt = Util::HoverTooltipWrapper()) {
-				ImGui::Text("Saves the current settings to: Data/SKSE/Plugins/CommunityShaders/Overrides/DEFAULT_LensEffects.json");
-				ImGui::Text("This is designed for modders who want to package a custom lens preset with their mod");
-			}
 
 			ImGui::EndTabItem();
 		}
@@ -735,7 +711,7 @@ void LensEffects::DrawSettings()
 				renderdata->GetEffect(Shaders::LensBurst).Toggle(settings.EnableStarburst);
 
 			ImGui::SliderFloat("Burst Size", &mainSettings.SB_Scale, 0.1f, 1.0f);
-			ImGui::SliderFloat("Burst Intensity", &mainSettings.SB_Intensity, 0.01f, 3.0f);
+			ImGui::SliderFloat("Burst Intensity", &mainSettings.SB_Intensity, 0.01f, 2.0f);
 			ImGui::Spacing();
 			ImGui::Spacing();
 			ImGui::SeparatorText("Advanced");
@@ -756,7 +732,7 @@ void LensEffects::DrawSettings()
 			ImGui::Spacing();
 
 			ImGui::Checkbox("Enable Rays", (bool*)&mainSettings.SB_EnableRays);
-			ImGui::SliderFloat("Rays Intensity", &mainSettings.SB_RandomRaysInt, 0.0f, 10.0f);
+			ImGui::SliderFloat("Rays Intensity", &mainSettings.SB_RandomRaysInt, 0.0f, 5.0f);
 			ImGui::SliderFloat("Rays Volume", &mainSettings.SB_RandomRaysVolume, 0.0f, 0.6f);
 			ImGui::SliderFloat("Rays Length", &mainSettings.SB_RandomRaysLength, 0.2f, 1.0f);
 			ImGui::SliderFloat("Rays Width", &mainSettings.SB_RandomRaysWidth, 0.0f, 1.0f);
@@ -802,14 +778,14 @@ void LensEffects::DrawSettings()
 			ImGui::Spacing();
 			ImGui::Checkbox("Ghost Enable Clamp", (bool*)&mainSettings.GH_EnableClampOffset);
 			ImGui::SliderFloat("Ghost Clamp Offset", &mainSettings.GH_ClampOffset, -1.0f, 1.0f);
-
+			ImGui::Spacing();
+			ImGui::Spacing();
 			for (int i = 0; i < ghostpasses; i++) {
 				if (ImGui::TreeNodeEx(("------------------------ Ghost #" + std::to_string(i + 1) + " ------------------------").c_str())) {
 					float4& params = coldSettings.GH_Params[i];
 					float4& params_2 = coldSettings.GH_Params_2[i];
 					float4& color = coldSettings.GH_Color[i];
 					float4& atlas = coldSettings.GH_Atlas[i];
-					float& inint = coldSettings.GH_InInt[i];
 					ImGui::PushID(i);
 
 					ImGui::Text("General");
@@ -819,12 +795,9 @@ void LensEffects::DrawSettings()
 					ImGui::SliderFloat("Roundness", &params.w, 0.0f, 1.0f);
 					ImGui::SliderFloat("Rotation", &params_2.x, 0.0f, 360.0f, "%.0f");
 					ImGui::SliderFloat("Intensity", &color.w, 0.1f, 2.0f);
-					ImGui::SliderFloat("Inner Intensity", &inint, 0.0f, 1.0f);
+					ImGui::SliderFloat("Inner Intensity", &params_2.w, 0.0f, 1.0f);
 					ImGui::SliderFloat("Edge Feather", &params_2.y, 0.0f, 1.0f);
 					ImGui::SliderFloat("CA Scale", &params_2.z, 1.0f, 2.0f);
-					ImGui::SliderFloat("Movement Curve", &params_2.w, 0.1f, 10.0f, "%.0f");
-					if (auto _tt = Util::HoverTooltipWrapper())
-						ImGui::Text("(Has no effect when clamp is enabled)");
 					ImGui::Spacing();
 					ImGui::Spacing();
 
@@ -878,6 +851,7 @@ void LensEffects::DrawSettings()
 			ImGui::SliderFloat("Shape", &mainSettings.GL_CutDepth, 0.5f, 1.0f);
 			ImGui::SliderFloat("Radius", &mainSettings.GL_Radius, 0.5f, 1.0f);
 			ImGui::SliderFloat("Tip Fade", &mainSettings.GL_TipFade, 0.0f, 1.5f);
+
 			ImGui::EndTabItem();
 		}
 
@@ -935,7 +909,7 @@ void LensEffects::DrawSettings()
 			if (ImGui::Checkbox("Enable Lens Frost", &settings.EnableIce))
 				renderdata->GetEffect(Shaders::LensIce).Toggle(settings.EnableIce);
 
-			ImGui::SliderFloat("Frost Intensity", &mainSettings.LI_Intensity, 0.01f, 2.0f);
+			ImGui::SliderFloat("Frost Intensity", &mainSettings.LI_Intensity, 0.01f, 1.0f);
 			ImGui::SliderFloat("Fade Duration", &coldSettings.LI_FadeDuration, 0.01f, 2.0f);
 			ImGui::SliderFloat("Fade In Delay", &coldSettings.LI_FadeIn, 0.01f, 1.0f);
 			ImGui::SliderFloat("Fade Out Delay", &coldSettings.LI_FadeOut, 0.01f, 1.0f);
@@ -975,7 +949,10 @@ void LensEffects::DrawSettings()
 			if (auto _tt = Util::HoverTooltipWrapper())
 				ImGui::Text("Set to 0 for constant CA offset");
 			ImGui::SliderFloat("CA Motion Clamp", &mainSettings.CA_MaxOffset, 0.001f, 0.015f);
-			ImGui::Checkbox("Offset Red Channel Only", &coldSettings.CA_RChannelOnly);
+			ImGui::Checkbox("Offset Red Channel Only", (bool*)&mainSettings.CA_RChannelOnly);
+			if (auto _tt = Util::HoverTooltipWrapper())
+				ImGui::Text("This will yield better performance");
+
 			ImGui::EndTabItem();
 		}
 
@@ -991,7 +968,7 @@ void LensEffects::DrawSettings()
 				renderdata->GetEffect(Shaders::LensSunGlare).Toggle(settings.EnableSunGlare);
 
 			ImGui::SliderFloat("Glare Scale ##sun", &mainSettings.SG_Scale, 0.25f, 1.0f);
-			ImGui::SliderFloat("Glare Intensity ##sun", &mainSettings.SG_Intensity, 0.0f, 2.0f);
+			ImGui::SliderFloat("Glare Intensity ##sun", &mainSettings.SG_Intensity, 0.0f, 1.0f);
 			ImGui::SliderFloat("Glare Outer Fade ##sun", &mainSettings.SG_OuterFade, 0.0f, 1.0f);
 			ImGui::Spacing();
 			ImGui::Spacing();
@@ -1029,72 +1006,19 @@ void LensEffects::RefreshToggles()
 	}
 }
 
-bool LensEffects::PresetFileExists()
-{
-	return std::filesystem::exists(customSettingsPath) && std::filesystem::is_regular_file(customSettingsPath);
-}
-
-void LensEffects::ExportAsPreset()
-{
-	if (!PresetFileExists()) {
-		try {
-			std::filesystem::path path(customSettingsPath);
-			if (path.has_parent_path())
-				std::filesystem::create_directories(path.parent_path());
-			else {
-				logger::error("[Lens Effects] Failed to create file {}", customSettingsPath);
-				return;
-			}
-		} catch (const std::filesystem::filesystem_error& e) {
-			logger::error("[Lens Effects] Filesystem error when creating {} : {}", customSettingsPath, e.what());
-			return;
-		} catch (const std::exception& e) {
-			logger::error("[Lens Effects] Unexpected error when creating {} : {}", customSettingsPath, e.what());
-			return;
-		}
-	}
-
-	//json to_write;
-	//to_write["TestField"] = (presetLoaded) ? customSettings : *settings;
-	json obj = settings;
-	std::ofstream outfile(customSettingsPath);
-
-	if (outfile) {
-		outfile << obj.dump(1);
-		logger::info("[Lens Effects] Saved preset to {}", customSettingsPath);
-	} else {
-		logger::error("[Lens Effects] Failed to save {}", customSettingsPath);
-	}
-}
-
 void LensEffects::LoadSettings(json& o_json)
 {
 	settings = o_json;
-
-	//if (PresetFileExists())
-	//	presetLoaded = LoadFromPreset();
-
-	//settings = (presetLoaded && stdSettings.useCustomPreset) ? &customSettings : &stdSettings;
-
 	RefreshToggles();
-
-	//settingsLoaded = true;
 }
 
 void LensEffects::SaveSettings(json& o_json)
 {
 	o_json = settings;
-
-	//if (presetLoaded)
-	//ExportAsPreset();
 }
 
 void LensEffects::RestoreDefaultSettings()
 {
 	settings = {};
-
-	//if (PresetFileExists())
-	//	presetLoaded = LoadFromPreset();
-
 	RefreshToggles();
 }

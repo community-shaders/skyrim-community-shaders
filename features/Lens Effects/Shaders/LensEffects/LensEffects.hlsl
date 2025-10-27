@@ -45,16 +45,6 @@ struct GhostVSOutput
     nointerpolation float2 Vertices[10] : DATA6;
 };
 
-struct SunGlareVertexOutput
-{
-    float4 Position : SV_POSITION;
-    float4 TexCoord : TEXCOORD0;
-    nointerpolation float4 SunInt : DATA0;
-    nointerpolation float3 Color : DATA1;
-    nointerpolation float4 SkyColor : DATA2;
-    nointerpolation float Scale : DATA3;
-};
-
 struct HaloVertexOutput
 {
     float4 Position : SV_POSITION;
@@ -69,6 +59,13 @@ struct LensGlareVertexOutput
     float4 TexCoord : TEXCOORD0;
     nointerpolation float3 SunColor : DATA0;
     nointerpolation float4 SunInt : DATA1;
+};
+
+struct SunGlareVertexOutput
+{
+    float4 Position : SV_POSITION;
+    float4 TexCoord : TEXCOORD0;
+    nointerpolation float4 SunInt : DATA0;
 };
 
 struct IceVertexOutput
@@ -127,7 +124,6 @@ cbuffer Settings : register(b1){
     float UIGhostRotation;
 	float UIGhostFeather;
 	float UIGhostCAFactor;
-	float UIGhostMoveCurve;
     float UIGhostInsideInt;
 
     float UIGlareScale;
@@ -161,6 +157,7 @@ cbuffer Settings : register(b1){
     float UICAIntensity;
     float UICAThreshold;
     float UICAMaxOffset;
+    uint UICAOnlyOffsetRed;
 
     float UIFrostInt;
     float SnowPrecipValue;
@@ -171,6 +168,12 @@ cbuffer Settings : register(b1){
     float4 UIGhostColor;
     float4 UIGhostAtlas;
     float4 UIFrostColor;
+};
+
+cbuffer SunFlare : register(b2) {
+    float4 Unused;
+    float4 Unused2;
+    float4 SunPositionUV;
 };
 
 SamplerState Linear_Sampler : register(s10);
@@ -189,12 +192,9 @@ static const int OCCLSAMPLES = 20;
 
 inline float  inv(float x) {return 1.0 - x;}
 inline float2 inv(float2 x) {return 1.0 - x;}
-inline float3 inv(float3 x) {return 1.0 - x;}
 inline float  delta(float x) {return max(x, EPSILON_DIVISION);}
 inline float2 delta(float2 x) {return max(x, EPSILON_DIVISION);}
 inline float  LinearStep(float x, float y, float z) {return Math::LinearStep(x, y, z);}
-inline float2 LinearStep(float2 x, float2 y, float2 z) {return Math::LinearStep(x, y, z);}
-inline float3 LinearStep(float3 x, float3 y, float3 z) {return Math::LinearStep(x, y, z);}
 inline float2 DegreesToVector(float x) {return CoordMath::DegreesToVector(x);}
 inline float  Luma(float3 x) {return Color::RGBToLuminance(x);}
 inline float  Chroma(float3 x) {return Color::RGBToChrominance(x);}
@@ -219,19 +219,8 @@ Texture2D MotionVector : register(t2);
 
 static const int nFrames = 10;
 
-uint GetTemporalAverage(uint Value, uint idx){
-    SunLUT_AT[int2(idx-1, 0)] = Value;
-
-    uint Sum = 0.0;
-    [unroll] for(int i=0; i < nFrames; ++i)
-        Sum += SunLUT_AT.Load(int2(5+i, 0));
-
-    return Sum / nFrames;
-}
-
 float GetTemporalAverage(float Value, uint idx){
-    SunLUT[int2(idx-1, 0)] = Value.xxxx;
-
+    SunLUT[int2(idx, 0)] = Value.xxxx;
     float Sum = 0.0;
     [unroll] for(int i=0; i < nFrames; ++i)
         Sum += SunLUT.Load(int2(5+i, 0)).x;
@@ -251,7 +240,26 @@ float UpdateDepthFactor(float2 SunCoords, float SunRadius){
     return GetTemporalAverage(DepthFactor, Frame);
 }
 
-float UpdateCloudFactor(float2 SunSSCoords, float SunSSRadius, uint CloudCover){
+float UpdateCloudFactor(uint CloudCover, float SunVisibility){
+    if(SunVisibility < 100) return 0;
+
+    float History = SunLUT.Load(int2(4,0)).x;
+    float CloudFactor = inv(saturate(CloudCover / SunVisibility));
+          CloudFactor = lerp(CloudFactor, History, 0.90);
+    SunLUT[int2(4, 0)] = CloudFactor.xxxx;
+
+    return CloudFactor;
+}
+
+float GetWeatherFactor(float CloudFactor){
+    float PrecipFactor = inv(LinearStep(0.2, 0.8, Precip));
+    float WeatherFade = inv(WeatherBasedFadeout);
+    CloudFactor = LinearStep(0.4, 0.9, CloudFactor);
+
+    return PrecipFactor * CloudFactor * WeatherFade;
+}
+
+float GetVisibleArea(float2 SunSSCoords, float SunSSRadius){
     float EdgeDist = min(Math::min2(SunSSCoords), Math::min2(ScreenSize.xy - SunSSCoords)) + SunSSRadius;
     if(EdgeDist <= 0) return 0;
 
@@ -261,38 +269,33 @@ float UpdateCloudFactor(float2 SunSSCoords, float SunSSRadius, uint CloudCover){
         Segment = SunR2 * acos(EdgeDist / SunSSRadius - 1.0);
         Segment -= (EdgeDist - SunSSRadius) * sqrt(EdgeDist * (SunSSRadius * 2 - EdgeDist));
     }
-    return saturate(inv(GetTemporalAverage(CloudCover, Frame) / delta(Math::PI * SunR2 - Segment)));
+    return Math::PI * SunR2 - Segment;
 }
 
-float GetWeatherFactor(float4 SunColor, float CloudFactor){
-    float PrecipFactor = 1.0 - LinearStep(0.2, 0.6, Precip);
-    float WeatherFade = inv(WeatherBasedFadeout);
-    CloudFactor = LinearStep(0.0, 0.8, CloudFactor);
-
-    return PrecipFactor * CloudFactor * WeatherFade;
-}
 
 void main(MaskVSOutput input)
 {
-    float index = (int)input.Position.x;
-    float2 SunCoords = buffer[0].xy;
-    float2 SunSSCoords = SunCoords * ScreenSize.xy;
-    clip(min(Math::min2(SunCoords+0.2), inv(Math::max2(SunCoords-0.2))));
+    [branch] if(!(int)input.Position.x)
+    {
+        float2 SunCoords = buffer[0].xy;
+        if(CoordMath::ChebyshevDistance(SunCoords * 2.0 - 1.0) < 1.15)
+        {
+            float2 SunSSCoords = SunCoords * ScreenSize.xy;
+            float SunSSRadius = SunPosition.w, SunUVRadius = SunSSRadius * rcp(ScreenSize.y);
 
-    [branch] if(!index){
-        uint Clouds = SunLUT_AT.Load(int2(0,0));
-        float SunSSRadius = SunPosition.w, SunUVRadius = SunPosition.w * rcp(ScreenSize.x);
+            float CloudCover = float(SunLUT_AT.Load(int2(0,0)));
+            float SunVisibility = GetVisibleArea(SunSSCoords, SunSSRadius);
 
-        float CloudFactor = UpdateCloudFactor(SunSSCoords, SunSSRadius, Clouds);
-        float DepthFactor = UpdateDepthFactor(FrameBuffer::GetDynamicResolutionAdjustedScreenPosition(SunCoords), SunUVRadius);
-        float WeatherFactor = GetWeatherFactor(SunBlendColor, CloudFactor);
+            float CloudFactor = UpdateCloudFactor(CloudCover, SunVisibility);
+            float DepthFactor = UpdateDepthFactor(FrameBuffer::GetDynamicResolutionAdjustedScreenPosition(SunCoords), SunUVRadius);
+            float WeatherFactor = GetWeatherFactor(CloudFactor);
+            float DistFactor = SunVisibility / (Math::PI * (SunSSRadius * SunSSRadius));
 
-        float DistFactor = CoordMath::ChebyshevDistance(SunCoords * float2(2.0, -2.0) - 1.0);
-              DistFactor = LinearStep(0.0, 0.65, inv(saturate(DistFactor-0.4)));
-
-        SunLUT[int2(0,0)] = float4(DepthFactor, CloudFactor, DistFactor, DepthFactor * WeatherFactor * DistFactor);
-        SunLUT[int2(1,0)] = float4(saturate(SunBlendColor.xyz + 0.3), SunUVRadius * 2);
-        SunLUT[int2(3,0)] = float4(SunSSCoords, SunSSRadius, SunSSRadius * 1.2);
+            SunLUT[int2(0,0)] = float4(DepthFactor, WeatherFactor, DistFactor, DepthFactor * WeatherFactor * DistFactor);
+            SunLUT[int2(1,0)] = float4(saturate(SunBlendColor.xyz + 0.3), SunUVRadius);
+            SunLUT[int2(3,0)] = float4(SunSSCoords, SunSSRadius, SunSSRadius);
+        }
+        else{ SunLUT[int2(0,0)] = float4(0,0,0,0); }
         SunLUT_AT[int2(0,0)] = 0;
     }
 }
@@ -305,11 +308,6 @@ void main(MaskVSOutput input)
 
 #ifdef STARBURST_VERTEX_SHADER
 
-cbuffer SunFlare : register(b2) {
-    float4 Unused;
-    float4 Unused2;
-    float4 SunPositionUV;
-};
 Texture2D OcclusionLUT : register(t0);
 
 
@@ -325,22 +323,14 @@ StarburstVSOutput main(VertexShaderInput input)
     float BurstScale = Math::MapRange(SunRadius, 0.02, 0.05, UIBurstScale * 0.75, UIBurstScale);
     output.Scale = SunRadius * rcp(BurstScale);
 
-    output.Position.y *= ScreenSize.z;
-    output.Position.xy = mad(output.Position.xy, BurstScale, SunPositionUV.xy * 2.0 - 1.0);
+    output.Position.xy = mad(output.Position.xy * float2(1.0, ScreenSize.z), BurstScale, SunPositionUV.xy * 2.0 - 1.0);
 
     [unroll] for(int i=0; i<16; ++i)
 		output.ApertureBlades[i] = DegreesToVector(360.0 / UIBladeVerts * (i + 0.5) + UIBladeRotation);
 	output.ApertureBlades[15] = output.ApertureBlades[0];
 
     output.SunInt = OcclusionLUT.Load(0);
-    output.SunInt.y = smoothstep(0.15, 0.35, output.SunInt.z) * LinearStep(0.6, 0.8, output.SunInt.y);
-
-    float4 SkyColor = OcclusionLUT.Load(int3(2,0,0));
-    float ColorScale = lerp(0.8, 2.0, LinearStep(0.2, 0.4, Chroma(SkyColor.xyz)));
-
-    output.Color.xyz = UIBurstColor.xyz;
-    output.Color.w = Math::MapRange(SunRadius, 0.02, 0.05, 0.5, 1.0) * ColorScale;
-
+    output.SunInt.y = LinearStep(0.4, 0.8, output.SunInt.y);
 
     return output;
 }
@@ -371,7 +361,7 @@ float4 main(StarburstVSOutput input) : SV_Target
         float InvCoronaDist = 1.0 - CoronaDist;
         float AngularDist = 1.0;
 
-        [loop] for(int i=0; i<UIBladeVerts; ++i)
+        [unroll] for(int i=0; i<UIBladeVerts; ++i)
             AngularDist = min(AngularDist, distance(Normal, input.ApertureBlades[i]));
         AngularDist = 1.0 - AngularDist;
 
@@ -420,9 +410,9 @@ float4 main(StarburstVSOutput input) : SV_Target
 
     Starburst *= LinearStep(0.2, 0.6, pow(input.SunInt.x, 2));
     Starburst += RayMask * LinearStep(0.3, 1.0, input.SunInt.x);
-    Starburst *= input.SunInt.y;
+    Starburst *= input.SunInt.y * input.SunInt.z;
 
-	return float4(Starburst * input.Color.xyz * UIBurstInt * input.Color.w, 0.0);
+	return float4(Starburst * UIBurstColor.xyz * UIBurstInt, 0.0);
 }
 #endif
 /////////////////////////////////////////////////////////////////////////////////////////
@@ -433,42 +423,38 @@ float4 main(StarburstVSOutput input) : SV_Target
 
 #ifdef GHOST_VERTEX_SHADER
 
-cbuffer SunFlare : register(b2) {
-    float4 Unused;
-    float4 Unused2;
-    float4 SunPositionUV;
-};
 Texture2D OcclusionLUT : register(t0);
 
 
 GhostVSOutput main(VertexShaderInput input)
 {
 	GhostVSOutput output;
-    output.Position = float4(input.Position.xy, 0.0, 1.0);
+    output.CADispacement = float2(0,0);
+    output.AtlasCoords = float4(0,0,0,0);
+    output.Color = float4(0,0,0,0);
+    output.Vertices = (float2[10])0;
+    output.Position.xy = float2(0,0);
+
     output.TexCoord.xy = (input.TexCoord.xy * 2.0 - 1.0) * UIGhostCAFactor;
-
     output.SunInt = OcclusionLUT.Load(0);
-    output.SunInt.x = LinearStep(0.4, 0.8, output.SunInt.w);
-
-    float4 SunParams = OcclusionLUT.Load(int3(1,0,0));
-    float Scale = Math::MapRange(SunParams.w, 0.02, 0.04, UIGhostScale * 0.8, UIGhostScale);
-    output.Color.w = Math::MapRange(SunParams.w, 0.02, 0.04, 0.8, 1.0);
+    output.SunInt.x = LinearStep(0.4, 0.8, output.SunInt.y * output.SunInt.x) * output.SunInt.z;
 
     [branch] if(output.SunInt.w > SUNCLIP && UIGhostColor.w > 0.0)
     {
         float2 SunPosition = SunPositionUV.xy * 2.0 - 1.0;
         float SunDist = length(SunPosition);
+        float4 SunColor_Radius = OcclusionLUT.Load(int3(1,0,0));
 
-        float GhostScale = UIGhostSize * Scale * UIGhostCAFactor;
+        float GhostScale = Math::MapRange(SunColor_Radius.w, 0.02, 0.04, UIGhostScale * 0.8, UIGhostScale);
+              GhostScale *= UIGhostSize * UIGhostCAFactor;
+
         float2x2 GhostRotation = DegreesToVector(UIGhostRotation).xyyx * float2(1.0, -1.0).xyxx;
         float RDelta = mad(SunDist, -0.25, 1.0);
 
         float2 ClampPosition = lerp(float2(UIGhostClampOffset, -1.0), -SunPosition, SunDist);
                ClampPosition *= rsqrt(delta(dot(ClampPosition, ClampPosition))) * RDelta;
 
-        float2 MotionOffset = Math::nRoot(SunDist*2, UIGhostMoveCurve) * normalize(-SunPosition);
-
-        float2 GhostPosition = (UIGhostClampEnable) ? ClampPosition : MotionOffset;
+        float2 GhostPosition = (UIGhostClampEnable) ? ClampPosition : SunDist * normalize(-SunPosition);
                GhostPosition = mad(GhostPosition - SunPosition, UIGhostOffset, SunPosition);
 
         output.Position.xy = mul(GhostRotation, input.Position.xy) * float2(1.0, ScreenSize.z);
@@ -484,11 +470,7 @@ GhostVSOutput main(VertexShaderInput input)
         float2 CADispacement = normalize(SunPosition - GhostPosition) * float2(1.0, -1.0);
         output.CADispacement = mul(GhostRotation, CADispacement * (UIGhostCAFactor - 1.0) * 0.5);
 
-        output.Color.xyz = lerp(SunParams.xyz, UIGhostColor.xyz, UIGhostSat);
-    } else{
-        output.CADispacement = float2(0,0);
-        output.AtlasCoords = output.Color = float4(0,0,0,0);
-        output.Vertices = (float2[10])0;
+        output.Color.xyz = lerp(SunColor_Radius.xyz, UIGhostColor.xyz, UIGhostSat);
     }
 
 	output.Position = float4(output.Position.xy, 0.0, 1.0);
@@ -509,7 +491,7 @@ Texture2D AtlasTexture : register(t1);
 
 float4 main(GhostVSOutput input) : SV_Target
 {
-    clip(min(input.SunInt.w - SUNCLIP, UIGhostColor.w - 0.001));
+    clip(min(input.SunInt.w - SUNCLIP, UIGhostColor.w - 0.01));
 
     float2 GhostOffset[3];
     float3 Ghost;
@@ -531,12 +513,12 @@ float4 main(GhostVSOutput input) : SV_Target
     }
     clip(Math::max3(Ghost));
 
-    Ghost = smoothstep(-0.05, UIGhostFeather, Ghost);
-
     float NSGhost = abs(Math::max3(Ghost));
 
     float EdgeEffect = mad(0.5, exp(-5 * NSGhost), exp(-100 * NSGhost)) * 0.5;
           EdgeEffect = LinearStep(0.0, 0.6, EdgeEffect);
+
+    Ghost = smoothstep(-0.05, UIGhostFeather, Ghost);
 
     float3 Color = Ghost * input.Color.xyz;
            Color *= lerp(UIGhostInsideInt, 1.5, EdgeEffect);
@@ -544,89 +526,10 @@ float4 main(GhostVSOutput input) : SV_Target
     float3 Atlas = AtlasTexture.Sample(Linear_Sampler, input.AtlasCoords.xy).xyz;
     Color += Atlas * input.AtlasCoords.z * inv(EdgeEffect) * 0.5;
 
-    Color *= UIGhostInt * UIGhostColor.w * input.Color.w * input.SunInt.x;
+    Color *= UIGhostInt * UIGhostColor.w * input.SunInt.x;
 
     return float4(Color, 1.0);
 
-}
-
-#endif
-/////////////////////////////////////////////////////////////////////////////////////////
-
-
-
-//// Sun Glare Vertex Shader ////////////////////////////////////////////////////////////
-
-#ifdef SUNGLARE_VERTEX_SHADER
-
-cbuffer SunFlare : register(b2) {
-    float4 Unused;
-    float4 Unused2;
-    float4 SunPositionUV;
-};
-Texture2D OcclusionLUT : register(t0);
-
-
-SunGlareVertexOutput main(VertexShaderInput input)
-{
-    SunGlareVertexOutput output;
-    output.TexCoord = input.TexCoord.xyxy;
-    output.TexCoord.zw = output.TexCoord.xy * 2.0 - 1.0;
-
-    float SunRadius = OcclusionLUT.Load(int3(1,0,0)).w;
-
-    float GlareScale = Math::MapRange(SunRadius, 0.02, 0.055, UISunGlareScale * 0.99, UISunGlareScale);
-
-    output.Scale = GlareScale / UISunGlareScale;
-    output.Scale = lerp(output.Scale*0.5, output.Scale, LinearStep(0.025, 0.055, SunRadius));
-
-    output.Position.xy = mad(input.Position.xy * float2(1.0, ScreenSize.z), GlareScale, SunPositionUV.xy * 2.0 - 1.0);
-
-    output.Position = float4(output.Position.xy, 0.0, 1.0);
-
-    output.SunInt = OcclusionLUT.Load(0);
-    output.SkyColor = OcclusionLUT.Load(int3(2,0,0));
-    output.Color = UISunGlareColor.xyz;
-
-
-    return output;
-}
-#endif
-/////////////////////////////////////////////////////////////////////////////////////////
-
-
-
-//// Sun Glare Pixel Shader /////////////////////////////////////////////////////////////
-
-#ifdef SUNGLARE_PIXEL_SHADER
-
-Texture2D DepthTexture : register(t0);
-Texture2D SceneTexture : register(t1);
-
-
-float4 main(SunGlareVertexOutput input) : SV_Target
-{
-    float Dist = length(input.TexCoord.zw);
-    float InvDist = inv(Dist);
-    clip(InvDist);
-
-    float Intensity = UISunGlareInt;
-          Intensity *= input.Scale * 0.8;
-
-    float sigma = max(0.01, Intensity);
-    float Glow = exp(-(Dist * Dist) / (2.0 * sigma * sigma));
-          Glow *= pow(saturate(InvDist), Intensity) * Intensity * 3.0;
-
-    float2 SampleCoords = FrameBuffer::GetDynamicResolutionAdjustedScreenPosition(input.Position.xy / ScreenSize.xy);
-
-    float Depth = DepthTexture.SampleCmpLevelZero(Depth_Sampler, SampleCoords, 1).x;
-          Depth = saturate(Depth + input.SunInt.x);
-
-    float Mask = Glow * smoothstep(0.0, UISunGlareFade, InvDist);
-
-    float3 Color = input.Color.xyz * Mask * Depth * input.SunInt.y;
-
-    return float4(Color, 1.0);
 }
 #endif
 /////////////////////////////////////////////////////////////////////////////////////////
@@ -637,11 +540,6 @@ float4 main(SunGlareVertexOutput input) : SV_Target
 
 #ifdef HALO_VERTEX_SHADER
 
-cbuffer SunFlare : register(b2) {
-    float4 Unused;
-    float4 Unused2;
-    float4 SunPositionUV;
-};
 Texture2D OcclusionLUT : register(t0);
 
 
@@ -654,6 +552,7 @@ HaloVertexOutput main(VertexShaderInput input)
     float4 SunParams = OcclusionLUT.Load(int3(1,0,0));
     output.SunColor = SunParams.xyz;
     output.SunInt = OcclusionLUT.Load(0);
+    output.SunInt.x *= output.SunInt.y;
 
     float Scale = Math::MapRange(SunParams.w, 0.02, 0.05, UIHaloScale * 0.8, UIHaloScale);
     output.SunInt.z *= Math::MapRange(SunParams.w, 0.02, 0.05, 0.8, 1.0);
@@ -699,7 +598,7 @@ float4 main(HaloVertexOutput input) : SV_Target
 
     clip(-Ring);
 
-    float3 ColorShift = saturate(inv(abs(LinearStep(IDist, ODist, Radial) * 2 - float3(0, 1, 2))));
+    float3 ColorShift = saturate(1.0 - abs(LinearStep(IDist, ODist, Radial) * 2 - float3(0, 1, 2)));
 
     float3 Color = lerp(UIHaloColor.xyz, ColorShift, UIHaloCrShift);
 
@@ -707,7 +606,7 @@ float4 main(HaloVertexOutput input) : SV_Target
     float DeltaStep = radians(UIHaloIncr);
     float HalfDelta = DeltaStep * 0.5;
 
-    float DeltaMap = Math::ufmod(Polar.y + HalfDelta, DeltaStep) - HalfDelta; //+- Delta/2
+    float DeltaMap = Math::ufmod(Polar.y + HalfDelta, DeltaStep) - HalfDelta;
 
     float Taper = min(Radial - IDist, ODist - Radial);
           Taper = saturate(Taper / delta(UIHaloTaper * UIHaloLength * 2.0));
@@ -715,7 +614,7 @@ float4 main(HaloVertexOutput input) : SV_Target
     float RectifyMask = abs(Polar.x * sin(DeltaMap));
 
     RectifyMask = inv(smoothstep(0.0, UIHaloWidth * Taper, RectifyMask)) * UIHaloInt;
-    RectifyMask *= LinearStep(0.4, 0.8, input.SunInt.w) * input.SunInt.z;
+    RectifyMask *= LinearStep(0.4, 0.8, input.SunInt.x) * input.SunInt.z;
 
     return float4(Color * RectifyMask, 0.0);
 }
@@ -728,11 +627,6 @@ float4 main(HaloVertexOutput input) : SV_Target
 
 #ifdef LENSGLARE_VERTEX_SHADER
 
-cbuffer SunFlare : register(b2) {
-    float4 Unused;
-    float4 Unused2;
-    float4 SunPositionUV;
-};
 Texture2D OcclusionLUT : register(t0);
 
 
@@ -807,7 +701,7 @@ Texture2D MotionVector : register(t2);
 
 float4 main(VertexShaderOutput input) : SV_Target
 {
-    float4 Aberration;
+    float4 Aberration = Main.Load(int3(input.Position.xy, 0));
 
     float2 Offset = UICAIntensity * (1.0 + 5 * (UICAThreshold == 0.0));
     if(UICAThreshold > 0.0){
@@ -816,15 +710,78 @@ float4 main(VertexShaderOutput input) : SV_Target
         Offset = min(UICAMaxOffset.xx, Offset) * ScreenSize.xy * normalize(Motion);
     }
 
-    [unroll] for(int i=0; i<3; ++i){
-        int2 Coords = int2(input.Position.xy) + int2(Offset * (i-1));
-        Aberration[i] = Main.Load(int3(clamp(Coords, int2(0,0), int2(ScreenSize.xy - 1)), 0))[i];
+    [branch] if(UICAOnlyOffsetRed){
+        Aberration.x = Main.Load(int3(clamp(int2(input.Position.xy) + int2(-Offset), int2(0,0), int2(ScreenSize.xy - 1)), 0)).x;
+    }else{
+        [unroll] for(int i=0; i<3; ++i){
+            int2 Coords = int2(input.Position.xy) + int2(Offset * (i-1));
+            Aberration[i] = Main.Load(int3(clamp(Coords, int2(0,0), int2(ScreenSize.xy - 1)), 0))[i];
+        }
     }
-    Aberration.w = Main.Load(int3(input.Position.xy, 0)).w;
 
     return Aberration;
 }
+#endif
+/////////////////////////////////////////////////////////////////////////////////////////
 
+
+
+//// Sun Glare Vertex Shader ////////////////////////////////////////////////////////////
+
+#ifdef SUNGLARE_VERTEX_SHADER
+
+Texture2D OcclusionLUT : register(t0);
+
+
+SunGlareVertexOutput main(VertexShaderInput input)
+{
+    SunGlareVertexOutput output;
+    output.TexCoord = input.TexCoord.xyxy;
+    output.TexCoord.zw = output.TexCoord.xy * 2.0 - 1.0;
+
+    output.Position.xy = mad(input.Position.xy * float2(1.0, ScreenSize.z), UISunGlareScale, SunPositionUV.xy * 2.0 - 1.0);
+    output.Position = float4(output.Position.xy, 0.0, 1.0);
+
+    output.SunInt = OcclusionLUT.Load(0);
+
+    return output;
+}
+#endif
+/////////////////////////////////////////////////////////////////////////////////////////
+
+
+
+//// Sun Glare Pixel Shader /////////////////////////////////////////////////////////////
+
+#ifdef SUNGLARE_PIXEL_SHADER
+
+Texture2D DepthTexture : register(t0);
+Texture2D SceneTexture : register(t1);
+
+
+float4 main(SunGlareVertexOutput input) : SV_Target
+{
+    float Dist = length(input.TexCoord.zw);
+    float InvDist = inv(Dist);
+    clip(InvDist);
+
+    float Intensity = UISunGlareInt;
+
+    float sigma = max(0.01, Intensity);
+    float Glow = exp(-(Dist * Dist) / (2.0 * sigma * sigma));
+          Glow *= pow(saturate(InvDist), Intensity) * Intensity * 3.0;
+
+    float2 SampleCoords = FrameBuffer::GetDynamicResolutionAdjustedScreenPosition(input.Position.xy / ScreenSize.xy);
+
+    float Depth = DepthTexture.SampleCmpLevelZero(Depth_Sampler, SampleCoords, 1).x;
+          Depth = saturate(Depth + input.SunInt.x);
+
+    float Mask = Glow * smoothstep(0.0, UISunGlareFade, InvDist);
+
+    float3 Color = UISunGlareColor.xyz * Mask * Depth * input.SunInt.y;
+
+    return float4(Color, 1.0);
+}
 #endif
 /////////////////////////////////////////////////////////////////////////////////////////
 
@@ -867,7 +824,10 @@ float4 main(IceVertexOutput input) : SV_Target
     float Dist = length(input.TexCoord.zw);
 
     float3 Texture = IceTexture.Sample(Point_Sampler, input.TexCoord.xy).xyz;
+
     float FadeFactor = LinearStep(inv(SnowPrecipValue), 1.0, saturate(Dist-0.35));
+          FadeFactor *= LinearStep(0.0, 0.1, SnowPrecipValue);
+
     float3 Color = Texture * input.Color * FadeFactor;
 
     return float4(Color, 0.0);

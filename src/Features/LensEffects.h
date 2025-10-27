@@ -18,7 +18,7 @@ struct LensEffects : Feature
 	virtual std::pair<std::string, std::vector<std::string>> GetFeatureSummary() override
 	{
 		return {
-			"Lens effects mimic how camera lenses respond to different levels of light and environmental factors. Artists can tune intensity, color, shape, and placement to fit their intended style.",
+			"Lens effects mimic how camera lenses respond to different levels of light and environmental factors. The result is stronger highlights and clearer visual cues that help guide attention.",
 			{ "Motion based chromatic aberration",
 				"Starburst lens flare",
 				"Lens ghosting",
@@ -49,14 +49,13 @@ struct LensEffects : Feature
 	void SetupCAEffect();
 
 	ConstantBuffer* SettingsCB = nullptr;
-	ID3D11BlendState* BlendState[3] = {};
+	ID3D11BlendState* BlendState[2] = {};
 	ID3D11RasterizerState* Raster = nullptr;
 	D3D11_VIEWPORT viewport{};
 
 	ID3D11SamplerState* LinearSampler = nullptr;
 	ID3D11SamplerState* PointSampler = nullptr;
 	ID3D11SamplerState* DepthSampler = nullptr;
-	ID3D11SamplerState* PointMirrorSampler = nullptr;
 
 	ID3D11ShaderResourceView* AtlasTexSRV = nullptr;
 	ID3D11ShaderResourceView* IceTexSRV = nullptr;
@@ -95,7 +94,7 @@ struct LensEffects : Feature
 
 	RE::NiPoint3* skyrim_SunPosition = nullptr;
 	float* skyrim_SunGlareScale = nullptr;
-	bool sunVisble;
+	bool skyrim_SunVisble;
 
 	void(__fastcall* gFlareApplyFunc)(RE::NiCamera*, void*, uint64_t) = nullptr;
 	void* gFlareShader = nullptr;
@@ -104,7 +103,6 @@ struct LensEffects : Feature
 
 	bool overrideShader = false;
 	bool useCloudLUT = false;
-	bool upscalingActive = false;
 	uint frameIdx = 5;
 
 	DirectX::XMFLOAT4A GetSunPosition();
@@ -120,16 +118,15 @@ struct LensEffects : Feature
 	uint32_t PrevWeatherID = 0;
 	uint32_t WeatherID = 0;
 	float SunScale;
-	static inline std::array<uint32_t, 31> weatherDisables = { { 0x00D299E, 0x02006AEC, 0x02001407, 0x02018DBB, 0x02018DBC, 0x02018DBD,
+	static inline std::array<uint32_t, 37> weatherDisablesSun = { { 0x00D299E, 0x02006AEC, 0x02001407, 0x02018DBB, 0x02018DBC, 0x02018DBD,
 		0x02001407, 0x000D9329, 0x0200959F, 0x00105941, 0x000923FD, 0x00048C14,
 		0x0010FEF8, 0x0010D9EC, 0x000923FD, 0x00105941, 0x0010199F, 0x000C821E,
 		0x0010FE7E, 0x0010A7A7, 0x0010A23E, 0x0010A239, 0x0010A235, 0x0010A232,
 		0x00106635, 0x0010A242, 0x00105945, 0x00105944, 0x00105943, 0x00105942,
-		0x000c8221 } };
+		0x000c8221, 0x0401DFF5, 0x04034CFB, 0x0401DFF5, 0x04034CFB, 0x0010d9ec, 0x0010fef8 } };  //Fog weathers, Sovngarde, soul cairn, Apocrypha etc.
 
-	static const inline std::string customSettingsPath = "Data\\SKSE\\Plugins\\CommunityShaders\\Overrides\\DEFAULT_LensEffects.json";
-	bool presetLoaded = false;
-	bool settingsLoaded = false;
+	static inline std::array<uint32_t, 10> weatherDisablesSnow = { { 0x00048C14, 0x04018471, 0x040374B8, 0x04031AC0, 0x040374B9,
+		0x04032336, 0x0401D760, 0x040374BA, 0x0401DFF5, 0x04034CFB } };  //Ash is flaged as snow
 
 	void RefreshToggles();
 	virtual void RestoreDefaultSettings() override;
@@ -137,14 +134,11 @@ struct LensEffects : Feature
 	virtual void LoadSettings(json& o_json) override;
 	virtual void SaveSettings(json& o_json) override;
 
-	bool PresetFileExists();
-	void ExportAsPreset();
-
 	struct MainSettings
 	{
 		//Starburst
-		float SB_Scale = 0.25f;
-		float SB_Intensity = 0.5f;
+		float SB_Scale = 0.23f;
+		float SB_Intensity = 0.25f;
 
 		uint SB_EnableBlades = false;
 		float SB_BladeInt = 0.3f;
@@ -180,7 +174,6 @@ struct LensEffects : Feature
 		float GH_Rotation = 0.0f;
 		float GH_Feather = 0.0f;
 		float GH_CAScale = 0.0f;
-		float GH_MoveCurve = 0.0f;
 		float GH_InnerInt = 0.0f;
 
 		//Lens Glare
@@ -196,10 +189,10 @@ struct LensEffects : Feature
 
 		//Halo
 		float HL_Scale = 0.45f;
-		float HL_Intensity = 0.16f;
+		float HL_Intensity = 0.14f;
 		uint HL_EnableExp = true;
 		uint HL_FlipExpOffset = false;
-		float HL_ExpMinSize = 0.46f;
+		float HL_ExpMinSize = 0.5f;
 		float HL_ExpMaxSize = 0.4f;
 		float HL_RotationSpeed = 0.22f;
 		float HL_LineVolume = 5.0f;
@@ -218,11 +211,12 @@ struct LensEffects : Feature
 		float CA_Intensity = 0.25f;
 		float CA_Threshold = 0.015f;
 		float CA_MaxOffset = 0.003f;
+		uint CA_RChannelOnly = false;
 
 		//LensIce
-		float LI_Intensity = 0.50f;
+		float LI_Intensity = 0.5f;
 		float LIEX_FadeFactor = 0.0f;
-		//64  256
+		//64 256
 
 		DirectX::XMFLOAT4A SB_Color = DirectX::XMFLOAT4A(0.0f, 0.0f, 0.0f, 0.0f);
 		DirectX::XMFLOAT4A SG_Color = DirectX::XMFLOAT4A(0.0f, 0.0f, 0.0f, 0.0f);
@@ -259,16 +253,16 @@ struct LensEffects : Feature
 		};
 		//Rotation, Feather, CA Scale, Motion
 		std::array<float4, 20> GH_Params_2 = {
-			float4(0.00f, 0.03f, 1.11f, 1.00f),
-			float4(215.0f, 0.39f, 2.00f, 1.00f),
-			float4(45.0f, 0.16f, 1.00f, 1.00f),
-			float4(40.0f, 0.13f, 1.27f, 1.00f),
-			float4(63.0f, 0.34f, 1.00f, 1.00f),
-			float4(0.00f, 1.00f, 1.00f, 1.00f),
-			float4(31.0f, 0.32f, 1.00f, 1.00f),
-			float4(60.0f, 0.16f, 1.00f, 1.00f),
-			float4(90.0f, 0.10f, 1.00f, 1.00f),
-			float4(75.0f, 0.73f, 1.00f, 1.00f),
+			float4(0.00f, 0.03f, 1.11f, 0.11f),
+			float4(215.0f, 0.39f, 2.00f, 0.64f),
+			float4(45.0f, 0.16f, 1.00f, 0.20f),
+			float4(40.0f, 0.13f, 1.27f, 0.34f),
+			float4(63.0f, 0.34f, 1.00f, 0.26f),
+			float4(0.00f, 1.00f, 1.00f, 0.74f),
+			float4(31.0f, 0.32f, 1.00f, 0.40f),
+			float4(60.0f, 0.16f, 1.00f, 0.15f),
+			float4(90.0f, 0.10f, 1.00f, 0.11f),
+			float4(75.0f, 0.73f, 1.00f, 0.67f),
 			float4(0.0f, 0.0f, 1.0f, 1.00f),
 			float4(0.0f, 0.0f, 1.0f, 1.00f),
 			float4(0.0f, 0.0f, 1.0f, 1.00f),
@@ -326,18 +320,6 @@ struct LensEffects : Feature
 			float4(1.0f, 0.0f, 0.0f, 0.0f),
 			float4(1.0f, 0.0f, 0.0f, 0.0f)
 		};
-		std::array<float, 20> GH_InInt = {
-			float(0.11f), float(0.64f),
-			float(0.20f), float(0.34f),
-			float(0.26f), float(0.74f),
-			float(0.40f), float(0.15f),
-			float(0.11f), float(0.67f),
-			float(1.0f), float(1.0f),
-			float(1.0f), float(1.0f),
-			float(1.0f), float(1.0f),
-			float(1.0f), float(1.0f),
-			float(1.0f), float(1.0f)
-		};
 
 		float4 SB_Color = float4(1.0f, 1.0f, 1.0f, 1.0f);
 		float4 SG_Color = float4(1.0f, 0.9f, 0.7f, 1.0f);
@@ -347,7 +329,6 @@ struct LensEffects : Feature
 		float LI_FadeDuration = 1.0f;
 		float LI_FadeIn = 0.35f;
 		float LI_FadeOut = 0.01f;
-		bool CA_RChannelOnly = false;
 	};
 
 	struct Settings
@@ -384,8 +365,8 @@ struct LensEffects : Feature
 
 	inline MainSettings UpdateSettings()
 	{
-		auto mSettings = settings->mainsettings;
-		auto& cSettings = settings->coldsettings;
+		auto mSettings = settings.mainsettings;
+		auto& cSettings = settings.coldsettings;
 		mSettings.SB_BladeTaper = mSettings.SB_BladeTaper + ((mSettings.SB_BladeSplay > 0.01f) * 80);
 		mSettings.SB_BladeWidth = (1.0f + (mSettings.SB_BladeWidth - 1.0f) * 0.25f) + mSettings.SB_BladeSplay;
 		mSettings.SB_BladeBaseWidth = 1.0f + (mSettings.SB_BladeBaseWidth - 1.0f) * 0.25f;
@@ -534,7 +515,7 @@ struct LensEffects : Feature
 
 			Shaders::Enum UpdateCurrentEffect()
 			{
-				auto desc = RenderPassList[0]->GetDesc();
+				auto desc = Shaders::Bypass;
 				if (currentPass < RenderPassList.size()) {
 					desc = RenderPassList[currentPass]->GetDesc();
 					GetEffect(desc).passesdone++;
