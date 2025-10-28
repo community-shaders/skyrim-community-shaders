@@ -1,7 +1,6 @@
 ﻿#pragma once
 #include "OverlayFeature.h"
 #include "UnifiedWater/Flowmap.h"
-#include "UnifiedWater/ShorelineMap.h"
 #include "UnifiedWater/WaterCache.h"
 #include <array>
 #include <cstdint>
@@ -48,16 +47,6 @@ struct UnifiedWater : OverlayFeature
 		float FoamCrestStrength = 1.0f;
 		float FoamTurbulenceStrength = 1.0f;
 
-		float ShorelineInfluence = 0.85f;
-		float ShorelineFalloff = 0.65f;
-		float ShorelinePrevFalloff = 0.7f;
-		float ShorelineBlendExponent = 2.0f;
-		float ShorelineNoiseStrength = 0.15f;
-		float ShorelineNoiseDistance = 8.0f;
-		float ShorelineNoiseScale = 0.0005f;
-		float ShorelineEdgeBlend = 0.2f;
-		float ShorelineEdgeRange = 0.25f;
-
 		float FoamFlowSpeedBase = 0.06f;
 		float FoamFlowSpeedRange = 0.11f;
 		float FoamShoreBoost = 0.03f;
@@ -73,6 +62,8 @@ struct UnifiedWater : OverlayFeature
 		float WaveDirectionBlend = 1.0f;
 	};
 
+#pragma warning(push)
+#pragma warning(disable: 4324)
 	struct alignas(16) PerFrame
 	{
 		float WaveIntensity;
@@ -90,15 +81,6 @@ struct UnifiedWater : OverlayFeature
 		float FoamShoreStrength;
 		float FoamCrestStrength;
 		float FoamTurbulenceStrength;
-		float ShorelineInfluence;
-		float ShorelineFalloff;
-		float ShorelinePrevFalloff;
-		float ShorelineBlendExponent;
-		float ShorelineNoiseStrength;
-		float ShorelineNoiseDistance;
-		float ShorelineNoiseScale;
-		float ShorelineEdgeBlend;
-		float ShorelineEdgeRange;
 		float FoamFlowSpeedBase;
 		float FoamFlowSpeedRange;
 		float FoamShoreBoost;
@@ -112,14 +94,14 @@ struct UnifiedWater : OverlayFeature
 		float WaveDetailSpeed;
 		float WaveDirectionBlend;
 		float TriVisualizerEnabled;
-		float _paddingPerFrame[3]{};
+		float _paddingPerFrame[3];
 	};
+#pragma warning(pop)
 
 	struct alignas(16) PerTile
 	{
-		float PrevData[4];       // x/y = prev normal, z = prev distance, w = prev segments per axis
-		float TileData[4];       // x/y = tile cell coords, z = LOD level, w = tile span (cells)
-		float ShorelineData[4];  // x/y = shoreline map width/height, z/w = shoreline map offsetX/offsetY
+		float PrevData[4];  // x/y = prev normal, z = prev distance, w = prev segments per axis
+		float TileData[4];  // x/y = tile cell coords, z = LOD level, w = tile span (cells)
 	};
 
 	Settings settings;
@@ -232,7 +214,6 @@ private:
 	RE::NiPointer<RE::BSTriShape> optimisedWaterMesh;
 	std::array<RE::NiPointer<RE::BSTriShape>, 3> subdividedWaterMeshVariants{};
 	Flowmap* flowmap = nullptr;
-	ShorelineMap* shorelineMap = nullptr;
 	WaterCache* waterCache = nullptr;
 
 	RE::NiNode** gWaterLOD = nullptr;
@@ -241,9 +222,7 @@ private:
 	float4* gDisplacementCellTexCoordOffset = nullptr;
 	RE::NiPoint2* gDisplacementMeshPos = nullptr;
 	RE::NiPoint2* gDisplacementMeshFlowCellOffset = nullptr;
-	RE::NiPointer<RE::NiSourceTexture> gShorelineMapTex = nullptr;
 	
 	void SetFlowmapTex() const;
-	void SetShorelineMapTex() const;
 	static bool LoadOrderChanged();
 };

@@ -13,23 +13,13 @@ public:
 			RE::TESWaterForm* ptr = nullptr;
 		};
 
-		uint32_t lodLevel{};
-		Form form{};
-		int32_t x{};
-		int32_t y{};
-		uint32_t size{};
-		float waterHeight{};
-		
-		// Shoreline-aware wave system - 9 sample points per cell (3x3 grid)
-		// Layout: [0-2] = south row (SW, S, SE)
-		//         [3-5] = middle row (W, Center, E)  
-		//         [6-8] = north row (NW, N, NE)
-		float shoreNormalX[9]{};      // X component of normalized vector pointing from water to land
-		float shoreNormalY[9]{};      // Y component of normalized vector pointing from water to land
-		float distanceToShore[9]{};   // Distance in cells to nearest shoreline (0 = at shore, large = open water)
-	};
-
-	struct BuildProgressSnapshot
+	uint32_t lodLevel{};
+	Form form{};
+	int32_t x{};
+	int32_t y{};
+	uint32_t size{};
+	float waterHeight{};
+};	struct BuildProgressSnapshot
 	{
 		uint32_t total{};
 		uint32_t completed{};
@@ -75,11 +65,6 @@ public:
 	{
 		WorldSpaceHeader header;
 		std::vector<Instruction> instructions;
-		// High-resolution shoreline field data (per-cell)
-		std::vector<float> shorelineDistance;
-		std::vector<float> shorelineNormalX;
-		std::vector<float> shorelineNormalY;
-		std::vector<float> shorelineMask;
 	};
 
 	bool SetCurrentWorldSpace(const RE::TESWorldSpace* worldSpace);
@@ -94,10 +79,6 @@ public:
 	bool IsBuildRunning() const { return async.running.load(); }
 	bool HasBuildFailed() const { return async.failed.load(); }
 	BuildProgressSnapshot GetBuildProgressSnapshot() const { return buildProgress.Snapshot(); }
-	
-	// Public for use by ShorelineMap generation
-	static void BuildShorelineField(const std::vector<CellData>& cellData, int32_t width, int32_t height,
-		std::vector<float>& outDistance, std::vector<float>& outNormalX, std::vector<float>& outNormalY, std::vector<float>& outMask);
 
 private:
 	// Precache contains height data generated with sheson's extended Tamriel data set
@@ -194,23 +175,10 @@ private:
 
 	static void BuildPreCache(RE::TESWorldSpace* worldSpace, PreCache& cache);
 	static bool BuildDiskCache(RE::TESWorldSpace* worldSpace, DiskCache& diskCache);
-	static void GenerateInstructions(int32_t lodLevel, DiskCache& diskCache, const std::vector<CellData>& cellData,
-		const std::vector<float>& shorelineDistance,
-		const std::vector<float>& shorelineNormalX,
-		const std::vector<float>& shorelineNormalY,
-		const std::vector<float>& shorelineMask,
-		int32_t& instructionCount);
+	static void GenerateInstructions(int32_t lodLevel, DiskCache& diskCache, const std::vector<CellData>& cellData, int32_t& instructionCount);
 	static bool TryBuildRuntimeCache(const DiskCache& diskCache, RuntimeCache& cache);
 	static std::vector<RE::TESWorldSpace*> GetValidWorldSpaces();
 	static void GetLODCoords(int32_t lodLevel, int32_t x, int32_t y, int32_t& outX, int32_t& outY);
-	
-	static void ComputeShorelineData(int32_t width, int32_t height,
-		const std::vector<float>& distanceField,
-		const std::vector<float>& normalXField,
-		const std::vector<float>& normalYField,
-		const std::vector<float>& waterMask,
-		float centerCellX, float centerCellY, uint32_t tileSize,
-		float outNormalX[9], float outNormalY[9], float outDistance[9]);
 
 	static bool TryGetCellData(RE::TESWorldSpace* worldSpace, RE::TESFileArray* files, int32_t x, int32_t y, RE::FormID& outFormID, float& outWaterHeight, float& outLandHeight, bool resolveFormID);
 	static void ReadWaterData(RE::TESFile* file, float& waterHeight, RE::FormID& formID);

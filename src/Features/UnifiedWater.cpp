@@ -771,15 +771,6 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	FoamShoreStrength,
 	FoamCrestStrength,
 	FoamTurbulenceStrength,
-	ShorelineInfluence,
-	ShorelineFalloff,
-	ShorelinePrevFalloff,
-	ShorelineBlendExponent,
-	ShorelineNoiseStrength,
-	ShorelineNoiseDistance,
-	ShorelineNoiseScale,
-	ShorelineEdgeBlend,
-	ShorelineEdgeRange,
 	FoamFlowSpeedBase,
 	FoamFlowSpeedRange,
 	FoamShoreBoost,
@@ -864,9 +855,9 @@ void UnifiedWater::DrawSettings()
 		ImGui::SliderFloat("Primary Wave Speed Mult", &settings.WavePrimarySpeed, 0.0f, 2.0f, "%.2f");
 		ImGui::SliderFloat("Secondary Wave Speed Mult", &settings.WaveSecondarySpeed, 0.0f, 2.0f, "%.2f");
 		ImGui::SliderFloat("Detail Wave Speed Mult", &settings.WaveDetailSpeed, 0.0f, 3.0f, "%.2f");
-		ImGui::SliderFloat("Shoreline Direction Blend", &settings.WaveDirectionBlend, 0.0f, 3.0f, "%.2f");
+		ImGui::SliderFloat("Wave Direction Blend", &settings.WaveDirectionBlend, 0.0f, 3.0f, "%.2f");
 		if (auto _tt = Util::HoverTooltipWrapper()) {
-			ImGui::Text("Adjust temporal speeds and shoreline alignment strength for the wave sets.");
+			ImGui::Text("Adjust temporal speeds and wave alignment strength for the wave sets.");
 		}
 
 		ImGui::Spacing();
@@ -890,7 +881,7 @@ void UnifiedWater::DrawSettings()
 		ImGui::SliderFloat("Foam Shore Strength", &settings.FoamShoreStrength, 0.0f, 2.0f, "%.2f");
 		if (auto _tt = Util::HoverTooltipWrapper()) {
 			ImGui::Text(
-				"Controls shoreline and shallow-water foam.\n"
+				"Controls shallow-water foam.\n"
 				"Increase for more beach/river edge foam, decrease for calmer banks.");
 		}
 
@@ -909,18 +900,6 @@ void UnifiedWater::DrawSettings()
 		if (auto _tt = Util::HoverTooltipWrapper()) {
 			ImGui::Text("Tune foam advection speed and swirl strength to taste.");
 		}
-
-		ImGui::Spacing();
-		ImGui::Text("Shoreline Interaction");
-		ImGui::SliderFloat("Shoreline Influence", &settings.ShorelineInfluence, 0.0f, 3.0f, "%.2f");
-		ImGui::SliderFloat("Shoreline Falloff", &settings.ShorelineFalloff, 0.05f, 3.0f, "%.2f");
-		ImGui::SliderFloat("Shoreline Falloff (Prev)", &settings.ShorelinePrevFalloff, 0.05f, 3.0f, "%.2f");
-		ImGui::SliderFloat("Shoreline Blend Exponent", &settings.ShorelineBlendExponent, 0.5f, 4.0f, "%.2f");
-		ImGui::SliderFloat("Shoreline Noise Strength", &settings.ShorelineNoiseStrength, 0.0f, 0.5f, "%.3f");
-		ImGui::SliderFloat("Shoreline Noise Distance", &settings.ShorelineNoiseDistance, 0.5f, 32.0f, "%.2f");
-		ImGui::SliderFloat("Shoreline Noise Scale", &settings.ShorelineNoiseScale, 0.00005f, 0.0025f, "%.5f");
-		ImGui::SliderFloat("Shoreline Edge Blend", &settings.ShorelineEdgeBlend, 0.01f, 0.5f, "%.3f");
-		ImGui::SliderFloat("Shoreline Edge Range", &settings.ShorelineEdgeRange, 0.05f, 0.5f, "%.3f");
 
 		ImGui::TreePop();
 	}
@@ -1081,7 +1060,6 @@ void UnifiedWater::DataLoaded()
 	}
 
 	flowmap = new Flowmap();
-	shorelineMap = new ShorelineMap();
 	waterCache = new WaterCache();
 
 	const bool rebuildAssets = LoadOrderChanged();
@@ -1097,16 +1075,12 @@ void UnifiedWater::DataLoaded()
 	}
 
 	if (waterCache->HasBuildFailed()) {
-		logger::error("[Unified Water] Water cache build failed - shoreline systems will be degraded");
+		logger::error("[Unified Water] Water cache build failed - systems will be degraded");
 	}
 
 	const bool flowmapReady = rebuildAssets ? flowmap->RegenerateAndLoadFlowmap(waterCache) : flowmap->LoadOrGenerateFlowmap(waterCache);
 	if (flowmapReady)
 		SetFlowmapTex();
-
-	const bool shorelineReady = rebuildAssets ? shorelineMap->RegenerateAndLoadShorelineMap(waterCache) : shorelineMap->LoadOrGenerateShorelineMap(waterCache);
-	if (shorelineReady)
-		SetShorelineMapTex();
 }
 
 bool UnifiedWater::LoadOrderChanged()
@@ -1170,19 +1144,6 @@ void UnifiedWater::SetFlowmapTex() const
 	*gFlowMapSize = flowmap->GetWidth();
 
 	logger::debug("[Unified Water] [Flowmap] Texture set");
-}
-
-void UnifiedWater::SetShorelineMapTex() const
-{
-	RE::NiPointer<RE::NiSourceTexture> tex;
-	if (!shorelineMap->TryGetShorelineMap(tex)) {
-		logger::warn("[Unified Water] [ShorelineMap] TryGetShorelineMap() returned false - texture not available");
-		return;
-	}
-
-	const_cast<UnifiedWater*>(this)->gShorelineMapTex = tex;
-
-	logger::info("[Unified Water] [ShorelineMap] Texture successfully set for runtime use");
 }
 
 void UnifiedWater::SetupResources()
@@ -1695,25 +1656,6 @@ void UnifiedWater::BSWaterShader_SetupGeometry::thunk(RE::BSShader* waterShader,
 		perFrameData.FoamShoreStrength = singleton.settings.FoamShoreStrength;
 		perFrameData.FoamCrestStrength = singleton.settings.FoamCrestStrength;
 		perFrameData.FoamTurbulenceStrength = singleton.settings.FoamTurbulenceStrength;
-		perFrameData.ShorelineInfluence = singleton.settings.ShorelineInfluence;
-		perFrameData.ShorelineFalloff = singleton.settings.ShorelineFalloff;
-		
-		static bool loggedOnce = false;
-		if (!loggedOnce) {
-			logger::info("[Unified Water] Shader values: ShorelineInfluence={}, ShorelineFalloff={}, WaveDirectionBlend={}",
-				singleton.settings.ShorelineInfluence,
-				singleton.settings.ShorelineFalloff,
-				singleton.settings.WaveDirectionBlend);
-			loggedOnce = true;
-		}
-		
-		perFrameData.ShorelinePrevFalloff = singleton.settings.ShorelinePrevFalloff;
-		perFrameData.ShorelineBlendExponent = singleton.settings.ShorelineBlendExponent;
-		perFrameData.ShorelineNoiseStrength = singleton.settings.ShorelineNoiseStrength;
-		perFrameData.ShorelineNoiseDistance = singleton.settings.ShorelineNoiseDistance;
-		perFrameData.ShorelineNoiseScale = singleton.settings.ShorelineNoiseScale;
-		perFrameData.ShorelineEdgeBlend = singleton.settings.ShorelineEdgeBlend;
-		perFrameData.ShorelineEdgeRange = singleton.settings.ShorelineEdgeRange;
 		perFrameData.FoamFlowSpeedBase = singleton.settings.FoamFlowSpeedBase;
 		perFrameData.FoamFlowSpeedRange = singleton.settings.FoamFlowSpeedRange;
 		perFrameData.FoamShoreBoost = singleton.settings.FoamShoreBoost;
@@ -1841,34 +1783,6 @@ void UnifiedWater::BSWaterShader_SetupGeometry::thunk(RE::BSShader* waterShader,
 		perTileData.TileData[2] = static_cast<float>(lodLevel);
 		perTileData.TileData[3] = 1.0f;
 
-		// Populate shoreline map dimensions and offsets for correct UV calculation
-		if (singleton.shorelineMap) {
-			perTileData.ShorelineData[0] = static_cast<float>(singleton.shorelineMap->GetWidth() * 64);
-			perTileData.ShorelineData[1] = static_cast<float>(singleton.shorelineMap->GetHeight() * 64);
-			perTileData.ShorelineData[2] = static_cast<float>(singleton.shorelineMap->GetOffsetX());
-			perTileData.ShorelineData[3] = static_cast<float>(singleton.shorelineMap->GetOffsetY());
-			
-			static bool loggedOnce = false;
-			if (!loggedOnce) {
-				logger::info("[Unified Water] ShorelineData: w={}, h={}, offX={}, offY={} (texture bound={})",
-					perTileData.ShorelineData[0], perTileData.ShorelineData[1], 
-					perTileData.ShorelineData[2], perTileData.ShorelineData[3],
-					singleton.gShorelineMapTex != nullptr);
-				loggedOnce = true;
-			}
-		} else {
-			perTileData.ShorelineData[0] = 0.0f;
-			perTileData.ShorelineData[1] = 0.0f;
-			perTileData.ShorelineData[2] = 0.0f;
-			perTileData.ShorelineData[3] = 0.0f;
-			
-			static bool warnedOnce = false;
-			if (!warnedOnce) {
-				logger::info("[Unified Water] WARNING: shorelineMap is NULL");
-				warnedOnce = true;
-			}
-		}
-
 		float currentSegmentsPerAxis = prevSegments;
 		if (const auto triShape = pass->geometry->AsTriShape()) {
 			auto& runtimeData = triShape->GetTrishapeRuntimeData();
@@ -1879,20 +1793,9 @@ void UnifiedWater::BSWaterShader_SetupGeometry::thunk(RE::BSShader* waterShader,
 		}
 		perTileData.PrevData[3] = currentSegmentsPerAxis;
 
-		// Get current tile data from shoreline texture (sampled in shader)
-		float storedNormalX = 0.0f;
-		float storedNormalY = 0.0f;
-		float storedDistance = 10000.0f;
-
-		// Shoreline data now comes from texture, not constant buffer
-		// For prevTileData storage, use texture center sample if available
-		if (singleton.shorelineMap && activeWorldSpace) {
-			// Note: Could sample texture CPU-side here if needed, but shader handles sampling
-			// For now, just store previous frame's data for temporal blending
-			storedNormalX = prevNormalX;
-			storedNormalY = prevNormalY;
-			storedDistance = prevDistance;
-		}
+		float storedNormalX = prevNormalX;
+		float storedNormalY = prevNormalY;
+		float storedDistance = prevDistance;
 
 		singleton.prevTileData[tileKey] = UnifiedWater::PrevTileData{ storedNormalX, storedNormalY, storedDistance, currentSegmentsPerAxis };
 
@@ -1902,25 +1805,6 @@ void UnifiedWater::BSWaterShader_SetupGeometry::thunk(RE::BSShader* waterShader,
 		ID3D11Buffer* buffers[1] = { singleton.perTile->CB() };
 		context->VSSetConstantBuffers(8, 1, buffers);
 		context->PSSetConstantBuffers(8, 1, buffers); // Also bind to pixel shader for foam/normals
-
-		// Bind shoreline distance field texture (register t9)
-		ID3D11ShaderResourceView* shorelineSRV = nullptr;
-		if (singleton.gShorelineMapTex && singleton.gShorelineMapTex->rendererTexture && singleton.gShorelineMapTex->rendererTexture->resourceView) {
-			shorelineSRV = singleton.gShorelineMapTex->rendererTexture->resourceView;
-			static bool loggedOnce = false;
-			if (!loggedOnce) {
-				logger::info("[Unified Water] Shoreline texture bound at t9: SRV={}", (void*)shorelineSRV);
-				loggedOnce = true;
-			}
-		} else {
-			static bool warnedOnce = false;
-			if (!warnedOnce) {
-				logger::info("[Unified Water] WARNING: Shoreline texture NOT bound");
-				warnedOnce = true;
-			}
-		}
-		context->VSSetShaderResources(9, 1, &shorelineSRV);
-		context->PSSetShaderResources(9, 1, &shorelineSRV);
 	}
 
 	if (singleton.flowmap) {
