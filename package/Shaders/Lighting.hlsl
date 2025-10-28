@@ -2311,7 +2311,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #	endif
 
 	float llDirLightMult = SharedData::linearLightingSettings.enableLinearLighting && !SharedData::linearLightingSettings.isDirLightLinear && (inWorld || inReflection) && !SharedData::InInterior ? SharedData::linearLightingSettings.dirLightMult : 1.0f;
-	float3 dirLightColor = Color::Light(DirLightColor.xyz / max(llDirLightMult, 1e-5), SharedData::linearLightingSettings.isDirLightLinear) * llDirLightMult;
+	float3 dirLightColor = Color::DirectionalLight(DirLightColor.xyz / max(llDirLightMult, 1e-5), SharedData::linearLightingSettings.isDirLightLinear) * llDirLightMult;
 	float3 dirLightColorMultiplier = 1;
 
 #	if defined(WATER_EFFECTS)
@@ -2479,7 +2479,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 			continue;
 
 		float intensityMultiplier = 1 - intensityFactor * intensityFactor;
-		float3 lightColor = Color::Light(PointLightColor[lightIndex].xyz) * intensityMultiplier;
+		float3 lightColor = Color::PointLight(PointLightColor[lightIndex].xyz) * intensityMultiplier;
 		float lightShadow = 1.f;
 		if (Permutation::PixelShaderDescriptor & Permutation::LightingFlags::DefShadow) {
 			if (lightIndex < numShadowLights) {
@@ -2583,7 +2583,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 		float intensityMultiplier = 1 - intensityFactor * intensityFactor;
 #			endif
 
-		float3 lightColor = Color::Light(light.color.xyz) * intensityMultiplier * light.fade;
+		float3 lightColor = Color::PointLight(light.color.xyz) * intensityMultiplier * light.fade;
 		float lightShadow = 1.0;
 
 		float shadowComponent = 1.0;
@@ -2715,7 +2715,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	worldNormal.xyz = input.EyeNormal;
 #	endif  // EYE
 
-	float3 emitColor = Color::GammaToLinearLuminancePreserving(EmitColor);
+	float3 emitColor = Color::EmitColor(EmitColor);
 #	if !defined(LANDSCAPE) && !defined(LODLANDSCAPE)
 	bool hasEmissive = (0x3F & (Permutation::PixelShaderDescriptor >> 24)) == Permutation::LightingTechnique::Glowmap;
 #		if defined(TRUE_PBR)
@@ -2723,7 +2723,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #		endif
 	[branch] if (hasEmissive)
 	{
-		float3 glowColor = Color::ColorToLinear(TexGlowSampler.Sample(SampGlowSampler, uv).xyz);
+		float3 glowColor = Color::Glowmap(TexGlowSampler.Sample(SampGlowSampler, uv).xyz);
 		emitColor *= glowColor;
 	}
 #	endif

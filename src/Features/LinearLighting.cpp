@@ -6,6 +6,8 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	enableGammaCorrection,
 	lightGamma,
 	colorGamma,
+	emitColorGamma,
+	glowmapGamma,
 	ambientGamma,
 	fogGamma,
 	fogAlphaGamma,
@@ -20,6 +22,10 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	grassSpecularMult,
 	vanillaDiffuseColorMult,
 	lightMult,
+	directionalLightMult,
+	pointLightMult,
+	emitColorMult,
+	glowmapMult,
 	effectLightingMult,
 	membraneEffectMult,
 	bloodEffectMult,
@@ -34,6 +40,8 @@ void LinearLighting::DrawSettings()
 	ImGui::Text("Gamma Settings");
 	ImGui::SliderFloat("Light Gamma", &settings.lightGamma, 0.1f, 3.0f, "%.2f");
 	ImGui::SliderFloat("Color Gamma", &settings.colorGamma, 0.1f, 3.0f, "%.2f");
+	ImGui::SliderFloat("Emissive Color Gamma", &settings.emitColorGamma, 0.1f, 3.0f, "%.2f");
+	ImGui::SliderFloat("Glowmap Gamma", &settings.glowmapGamma, 0.1f, 3.0f, "%.2f");
 	ImGui::SliderFloat("Ambient Gamma", &settings.ambientGamma, 0.1f, 3.0f, "%.2f");
 	ImGui::SliderFloat("Fog Gamma", &settings.fogGamma, 0.1f, 3.0f, "%.2f");
 	ImGui::SliderFloat("Fog Transparency Gamma", &settings.fogAlphaGamma, 0.1f, 3.0f, "%.2f");
@@ -50,6 +58,10 @@ void LinearLighting::DrawSettings()
 	ImGui::SliderFloat("Grass Specular Multiplier", &settings.grassSpecularMult, 0.0f, 10.0f, "%.2f");
 	ImGui::SliderFloat("Vanilla Diffuse Color Multiplier", &settings.vanillaDiffuseColorMult, 0.0f, 10.0f, "%.2f");
 	ImGui::SliderFloat("Light Multiplier", &settings.lightMult, 0.0f, 10.0f, "%.2f");
+	ImGui::SliderFloat("Directional Light Multiplier", &settings.directionalLightMult, 0.0f, 10.0f, "%.2f");
+	ImGui::SliderFloat("Point Light Multiplier", &settings.pointLightMult, 0.0f, 10.0f, "%.2f");
+	ImGui::SliderFloat("Emissive Color Multiplier", &settings.emitColorMult, 0.0f, 10.0f, "%.2f");
+	ImGui::SliderFloat("Glowmap Multiplier", &settings.glowmapMult, 0.0f, 10.0f, "%.2f");
 	if (ImGui::TreeNodeEx("Effects", ImGuiTreeNodeFlags_DefaultOpen)) {
 		ImGui::SliderFloat("Effect Lighting Multiplier", &settings.effectLightingMult, 0.0f, 10.0f, "%.2f");
 		ImGui::SliderFloat("Membrane Effects Multiplier", &settings.membraneEffectMult, 0.0f, 10.0f, "%.2f");
@@ -100,6 +112,8 @@ LinearLighting::PerFrameData LinearLighting::GetCommonBufferData()
 	data.dirLightMult = dirLightMult;
 	data.lightGamma = settings.lightGamma;
 	data.colorGamma = settings.colorGamma;
+	data.emitColorGamma = settings.emitColorGamma;
+	data.glowmapGamma = settings.glowmapGamma;
 	data.ambientGamma = settings.ambientGamma;
 	data.fogGamma = settings.fogGamma;
 	data.fogAlphaGamma = settings.fogAlphaGamma;
@@ -114,6 +128,10 @@ LinearLighting::PerFrameData LinearLighting::GetCommonBufferData()
 	data.grassSpecularMult = settings.grassSpecularMult;
 	data.vanillaDiffuseColorMult = settings.vanillaDiffuseColorMult;
 	data.lightMult = settings.lightMult;
+	data.directionalLightMult = settings.directionalLightMult;
+	data.pointLightMult = settings.pointLightMult;
+	data.emitColorMult = settings.emitColorMult;
+	data.glowmapMult = settings.glowmapMult;
 	data.effectLightingMult = settings.effectLightingMult;
 	data.membraneEffectMult = settings.membraneEffectMult;
 	data.bloodEffectMult = settings.bloodEffectMult;

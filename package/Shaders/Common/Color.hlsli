@@ -159,6 +159,30 @@ namespace Color
 #	endif
 	}
 
+	float3 DirectionalLight(float3 color, bool isLinear = false)
+	{
+		return Light(color, isLinear) * (ENABLE_LL ? SharedData::linearLightingSettings.directionalLightMult : 1.0f);
+	}
+
+	float3 PointLight(float3 color, bool isLinear = false)
+	{
+		return Light(color, isLinear) * (ENABLE_LL ? SharedData::linearLightingSettings.pointLightMult : 1.0f);
+	}
+
+	float3 EmitColor(float3 color)
+	{
+		return ENABLE_LL ? pow(abs(color), SharedData::linearLightingSettings.emitColorGamma) * SharedData::linearLightingSettings.emitColorMult : color;
+	}
+
+	float3 Glowmap(float3 color)
+	{
+#	if defined(TRUE_PBR)
+		return ENABLE_LL ? color * SharedData::linearLightingSettings.glowmapMult : TrueLinearToGamma(color);
+#	else
+		return ENABLE_LL ? pow(abs(color), SharedData::linearLightingSettings.glowmapGamma) * SharedData::linearLightingSettings.glowmapMult : color;
+#	endif
+	}
+
 	float3 Ambient(float3 color)
 	{
 		return ENABLE_LL ? pow(abs(color), SharedData::linearLightingSettings.ambientGamma) : color;

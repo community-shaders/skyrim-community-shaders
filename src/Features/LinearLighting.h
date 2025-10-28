@@ -30,6 +30,8 @@ struct LinearLighting : Feature
 		uint enableGammaCorrection = true;
 		float lightGamma = 1.8f;
 		float colorGamma = 2.2f;
+		float emitColorGamma = 2.2f;
+		float glowmapGamma = 2.2f;
 		float ambientGamma = 1.8f;
 		float fogGamma = 2.2f;
 		float fogAlphaGamma = 1.0f;
@@ -46,6 +48,10 @@ struct LinearLighting : Feature
 		float grassSpecularMult = 0.32f;
 		float vanillaDiffuseColorMult = 1.5f;
 		float lightMult = 1.0f;
+		float directionalLightMult = 1.0f;
+		float pointLightMult = 1.0f;
+		float emitColorMult = 1.0f;
+		float glowmapMult = 1.0f;
 
 		// Effect multipliers
 		float effectLightingMult = 0.32f;
@@ -64,6 +70,8 @@ struct LinearLighting : Feature
 		float dirLightMult;
 		float lightGamma;
 		float colorGamma;
+		float emitColorGamma;
+		float glowmapGamma;
 		float ambientGamma;
 		float fogGamma;
 		float fogAlphaGamma;
@@ -78,13 +86,16 @@ struct LinearLighting : Feature
 		float grassSpecularMult;
 		float vanillaDiffuseColorMult;
 		float lightMult;
+		float directionalLightMult;
+		float pointLightMult;
+		float emitColorMult;
+		float glowmapMult;
 		float effectLightingMult;
 		float membraneEffectMult;
 		float bloodEffectMult;
 		float projectedEffectMult;
 		float deferredEffectMult;
 		float otherEffectMult;
-		float pad[2];
 	};
 
 	uint isDirLightLinear = false;

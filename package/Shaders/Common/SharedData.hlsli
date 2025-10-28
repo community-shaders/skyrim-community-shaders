@@ -202,6 +202,8 @@ namespace SharedData
 		float dirLightMult;
 		float lightGamma;
 		float colorGamma;
+		float emitColorGamma;
+		float glowmapGamma;
 		float ambientGamma;
 		float fogGamma;
 		float fogAlphaGamma;
@@ -216,13 +218,16 @@ namespace SharedData
 		float grassSpecularMult;
 		float vanillaDiffuseColorMult;
 		float lightMult;
+		float directionalLightMult;
+		float pointLightMult;
+		float emitColorMult;
+		float glowmapMult;
 		float effectLightingMult;
 		float membraneEffectMult;
 		float bloodEffectMult;
 		float projectedEffectMult;
 		float deferredEffectMult;
 		float otherEffectMult;
-		float2 pad;
 	};
 
 	cbuffer FeatureData : register(b6)
