@@ -13,6 +13,7 @@
         "bshoshany-thread-pool",
         "clib-util",
         "cppwinrt",
+        "directx-dxc",
         "directx-headers",
         "directxtex",
         "eastl",

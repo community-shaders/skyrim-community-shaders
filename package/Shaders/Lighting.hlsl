@@ -2295,7 +2295,12 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #	endif
 
 	float3 dirLightColor = Color::Light(DirLightColor.xyz);
+	
+#	if defined(RTGI)	
+	float3 dirLightColorMultiplier = 1 - (int)SharedData::InInterior;
+# 	else
 	float3 dirLightColorMultiplier = 1;
+#	endif
 
 #	if defined(WATER_EFFECTS)
 	dirLightColorMultiplier *= WaterEffects::ComputeCaustics(waterData, input.WorldPosition.xyz, eyeIndex);
@@ -2723,8 +2728,12 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 		ambientNormal = normalize(viewDirection - hairT * dot(viewDirection, hairT));
 #	endif
 
+#	if defined(RTGI)
+	float3 directionalAmbientColor = 0;
+#	else
 	float3 directionalAmbientColor = max(0, mul(DirectionalAmbient, float4(ambientNormal, 1.0)));
-
+#	endif
+	
 #	if defined(IBL)
 	if (SharedData::iblSettings.EnableDiffuseIBL) {
 		if (SharedData::iblSettings.UseStaticIBL && !inWorld && !inReflection) {

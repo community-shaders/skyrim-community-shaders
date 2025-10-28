@@ -8,6 +8,7 @@
 
 #include "Features/DynamicCubemaps.h"
 #include "Features/IBL.h"
+#include "Features/RaytracedGI.h"
 #include "Features/ScreenSpaceGI.h"
 #include "Features/Skylighting.h"
 #include "Features/SubsurfaceScattering.h"
@@ -420,6 +421,10 @@ void Deferred::DeferredPasses()
 		ssgi.DrawSSGI();
 	auto [ssgi_ao, ssgi_y, ssgi_cocg, ssgi_gi_spec] = ssgi.GetOutputTextures();
 	bool ssgi_hq_spec = ssgi.settings.EnableExperimentalSpecularGI;
+
+	auto& rtgi = globals::features::raytracedGI;
+	if (rtgi.loaded)
+		rtgi.DrawRTGI();
 
 	auto dispatchCount = Util::GetScreenDispatchCount(true);
 
