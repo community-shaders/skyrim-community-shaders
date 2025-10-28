@@ -244,6 +244,7 @@ namespace SIE
 	public:
 		LARGE_INTEGER lastReset;
 		LARGE_INTEGER lastCalculation;
+		LARGE_INTEGER completionTime;  // When compilation completed
 		LARGE_INTEGER frequency;
 		LARGE_INTEGER totalTime = { 0 };
 
@@ -252,6 +253,7 @@ namespace SIE
 			QueryPerformanceFrequency(&frequency);
 			QueryPerformanceCounter(&lastReset);
 			QueryPerformanceCounter(&lastCalculation);
+			completionTime = { 0 };  // Initialize to zero (not completed)
 		}
 
 		std::optional<ShaderCompilationTask> WaitTake(std::stop_token stoken);
