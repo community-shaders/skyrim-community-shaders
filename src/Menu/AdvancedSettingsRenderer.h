@@ -15,5 +15,6 @@ public:
 private:
 	static void RenderAdvancedSection();
 	static void RenderShaderReplacementSection();
+	static void RenderShaderDebugSection();
 	static void RenderDeveloperSection();
 };
