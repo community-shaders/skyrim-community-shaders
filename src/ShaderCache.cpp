@@ -2725,15 +2725,28 @@ namespace SIE
 		totalTime.QuadPart += now.QuadPart - lastCalculation.QuadPart;
 		lastCalculation = now;
 		
-		// Check if compilation is complete and set completion time if needed
+		// Check if compilation is complete and set completion time if needed (thread-safe)
+		bool shouldLogCompletion = false;
 		if (completionTime.QuadPart == 0 && completedTasks + failedTasks >= totalTasks) {
-			QueryPerformanceCounter(&completionTime);
+			std::scoped_lock lock(compilationMutex);
+			// Double-check with lock held to prevent race condition
+			if (completionTime.QuadPart == 0 && completedTasks + failedTasks >= totalTasks) {
+				QueryPerformanceCounter(&completionTime);
+				shouldLogCompletion = true;
+			}
+		}
+		
+		// Log completion outside the lock to avoid holding it during logging
+		if (shouldLogCompletion) {
 			logger::debug("Compilation completed in {} ms", GetHumanTime(static_cast<double>(completionTime.QuadPart - lastReset.QuadPart) * 1000.0 / frequency.QuadPart));
 		}
 		
-		std::scoped_lock lock(compilationMutex);
-		processedTasks.insert(task);
-		tasksInProgress.erase(task);
+		// Handle task completion tracking
+		{
+			std::scoped_lock lock(compilationMutex);
+			processedTasks.insert(task);
+			tasksInProgress.erase(task);
+		}
 		conditionVariable.notify_one();
 	}
 
