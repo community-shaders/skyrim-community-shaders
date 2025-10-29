@@ -11,9 +11,11 @@
 #include "Globals.h"
 #include "State.h"
 #include "RaytracedGI/ShaderUtils.h"
+#include "ShaderCache.h"
 
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	RaytracedGI::Settings,
+	Enabled,
 	ColorA,
 	IdA,
 	UvA)
@@ -110,12 +112,13 @@ void RaytracedGI::SetupResources()
 
 	logger::info("[RTGI] Initializing meshes");
 	{
-		auto makeAndCopy = [&](auto& data, winrt::com_ptr<ID3D12Resource>& res) {
+		auto makeAndCopy = [&](auto& data, winrt::com_ptr<ID3D12Resource>& res)
+		{
 			auto desc = BASIC_BUFFER_DESC;
 			desc.Width = sizeof(data);
 
 			DX::ThrowIfFailed(d3d12Device->CreateCommittedResource(&UPLOAD_HEAP, D3D12_HEAP_FLAG_NONE, &desc, D3D12_RESOURCE_STATE_GENERIC_READ, nullptr, IID_PPV_ARGS(&res)));
-				
+
 			void* ptr;
 			DX::ThrowIfFailed(res->Map(0, nullptr, &ptr));
 			memcpy(ptr, data, sizeof(data));
@@ -163,6 +166,339 @@ void RaytracedGI::SetupResources()
 	}
 
 	CompileShaders();
+}
+
+void RaytracedGI::Main_RenderWorld(bool a1)
+{
+	if (Active()) {
+		renderingWorld = true;
+		CreateBuffers();			
+	}
+
+	Hooks::Main_RenderWorld::func(a1);
+
+	if (Active()) {
+		renderingWorld = false;
+	}
+}
+
+template <typename T>
+auto GetFlags(uint32_t value) {
+	const auto& entries = magic_enum::enum_entries<T>();
+
+	std::string flags;
+
+	for (const auto& [flag, name] : entries) {
+		if ((value & static_cast<uint32_t>(flag)) != 0) {
+			flags += fmt::format("{} ", name);
+		}
+	}
+
+	return flags;
+};
+
+void RaytracedGI::RegisterInputLayout(ID3D11InputLayout* pInputLayout, D3D11_INPUT_ELEMENT_DESC* pInputElementDescs, UINT NumElements)
+{
+	auto& firstDesc = pInputElementDescs[0];
+	if (strcmp(firstDesc.SemanticName, "POSITION") == 0) {
+		auto format = firstDesc.Format;
+
+		if (format == DXGI_FORMAT_R32G32B32A32_FLOAT || format == DXGI_FORMAT_R32G32B32_FLOAT || format == DXGI_FORMAT_R16G16B16A16_FLOAT) {
+			eastl::vector<InputLayout> layouts;
+			layouts.reserve(NumElements);
+
+			for (UINT i = 0; i < NumElements; ++i) {
+				const auto& src = pInputElementDescs[i];
+
+				InputLayout dst = {
+					src.SemanticName ? eastl::string(src.SemanticName) : eastl::string(),
+					src.SemanticIndex,
+					src.Format,
+					src.InputSlot,
+					src.AlignedByteOffset,
+					src.InputSlotClass,
+					src.InstanceDataStepRate
+				};
+
+				layouts.push_back(eastl::move(dst));
+			}
+
+			inputLayouts.emplace(pInputLayout, eastl::move(layouts));
+		}
+	}
+
+	logger::info("RegisterInputLayout - [0x{:x}]", reinterpret_cast<uintptr_t>(pInputLayout));
+
+	for (UINT i = 0; i < NumElements; i++) {
+		auto& inputElementDesc = pInputElementDescs[i];
+		logger::info(
+			"Name: {}, Index: {}, Format: {}, Slot: {}, ByteOffset: {}, Class: {}, StepRate: {}",
+			inputElementDesc.SemanticName,
+			inputElementDesc.SemanticIndex,
+			magic_enum::enum_name(inputElementDesc.Format),
+			inputElementDesc.InputSlot,
+			inputElementDesc.AlignedByteOffset,
+			magic_enum::enum_name(inputElementDesc.InputSlotClass),
+			inputElementDesc.InstanceDataStepRate);
+	}
+}
+
+RE::BSFadeNode* FindBSFadeNode(RE::NiNode* a_niNode)
+{
+	if (auto fadeNode = a_niNode->AsFadeNode()) {
+		return fadeNode;
+	}
+	return a_niNode->parent ? FindBSFadeNode(a_niNode->parent) : nullptr;
+}
+
+template <typename T>
+void RaytracedGI::MakeAndCopy(const eastl::vector<T>& data, winrt::com_ptr<ID3D12Resource>& res)
+ {
+	auto desc = BASIC_BUFFER_DESC;
+	desc.Width = (UINT64)data.size();
+
+	DX::ThrowIfFailed(d3d12Device->CreateCommittedResource(&UPLOAD_HEAP, D3D12_HEAP_FLAG_NONE, &desc, D3D12_RESOURCE_STATE_GENERIC_READ, nullptr, IID_PPV_ARGS(&res)));
+
+	void* ptr;
+	DX::ThrowIfFailed(res->Map(0, nullptr, &ptr));
+	memcpy(ptr, data.data(), desc.Width);
+	res->Unmap(0, nullptr);
+}
+
+void RaytracedGI::CreateBuffers()
+{
+	if (buffersCreated)
+		return;
+
+	vertexBuffers.clear();
+	indexBuffers.clear();
+
+	static auto shadowSceneNode = RE::BSShaderManager::State::GetSingleton().shadowSceneNode[0];
+
+	RE::BSVisit::TraverseScenegraphGeometries(shadowSceneNode, [&](RE::BSGeometry* geometry) -> RE::BSVisit::BSVisitControl {
+		//NiAVObject::HasShaderType(BSShaderMaterial::Feature a_type)
+		if (RE::BSTriShape* triShape = geometry->AsTriShape()) {
+
+			if (!triShape->lightingShaderProp_cast())
+				return RE::BSVisit::BSVisitControl::kContinue;
+
+			auto& flags = triShape->GetFlags();
+			uint32_t bsxFlagsValue = 0;
+
+			//if (flags.none(RE::NiAVObject::Flag::kHidden) && flags.all(RE::NiAVObject::Flag::kRenderUse)) {
+			if (flags.all(RE::NiAVObject::Flag::kRenderUse)) {
+				if (auto fadeNode = FindBSFadeNode((RE::NiNode*)triShape)) {
+					if (auto extraData = fadeNode->GetExtraData("BSX")) {
+						auto bsxFlags = (RE::BSXFlags*)extraData;
+						/*auto value = static_cast<int32_t>(bsxFlags->value);
+
+						if (value & (int32_t)RE::BSXFlags::Flag::kEditorMarker)
+							return RE::BSVisit::BSVisitControl::kContinue;*/
+
+						bsxFlagsValue = static_cast<uint32_t>(bsxFlags->value);
+
+						if (bsxFlagsValue & (uint32_t)RE::BSXFlags::Flag::kEditorMarker)
+							return RE::BSVisit::BSVisitControl::kContinue;
+					}
+				} else { // Else it crashes on Block stuff when reading indexes
+					return RE::BSVisit::BSVisitControl::kContinue;
+				}
+
+				const auto bsxFlagsStr = GetFlags<RE::BSXFlags::Flag>(bsxFlagsValue);
+				logger::info(fmt::runtime("BSXFlags: {}"), bsxFlagsStr);
+
+				const auto& geometryType = geometry->GetType().get();
+				const auto geometryTypeName = magic_enum::enum_name(geometryType);
+
+				logger::info(fmt::runtime("Geometry [0x{:x}]: {}, Type: {}"), reinterpret_cast<uintptr_t>(geometry), geometry->name.c_str(), geometryTypeName);
+
+				const auto flagsStr = GetFlags<RE::NiAVObject::Flag>(flags.underlying());
+
+				logger::info(fmt::runtime("Flags: {}"), flagsStr);
+
+				/*{
+
+					const auto& flagsUnd = geometry->GetFlags().underlying();
+					const auto flagsStr = GetFlags<RE::NiAVObject::Flag>(flagsUnd);
+				}*/
+
+				const auto triShapeRuntime = triShape->GetTrishapeRuntimeData();
+
+				uint vertexCount = triShapeRuntime.vertexCount;
+				uint indexCount = triShapeRuntime.triangleCount * 3;
+
+				logger::info(fmt::runtime("Vertex Count: {}, Index Count: {}"), vertexCount, indexCount);
+
+				RE::BSGraphics::TriShape* rendererData = triShape->GetGeometryRuntimeData().rendererData;
+				//RE::BSGraphics::TriShape* rendererData = geometry->GetGeometryRuntimeData().rendererData;
+
+				if (!rendererData)
+					return RE::BSVisit::BSVisitControl::kContinue;
+
+				{
+					auto vertexDesc = rendererData->vertexDesc;
+
+					auto vertexFlags = vertexDesc.GetFlags();
+					uint32_t stride = vertexDesc.GetSize();
+
+					uint32_t posOffset = vertexDesc.GetAttributeOffset(RE::BSGraphics::Vertex::VA_POSITION);
+					uint32_t uvOffset = vertexDesc.GetAttributeOffset(RE::BSGraphics::Vertex::VA_TEXCOORD0);
+					uint32_t normOffset = vertexDesc.GetAttributeOffset(RE::BSGraphics::Vertex::VA_NORMAL);
+					uint32_t colorOffset = vertexDesc.GetAttributeOffset(RE::BSGraphics::Vertex::VA_COLOR);
+
+					eastl::vector<VertexData> vertices;
+					vertices.reserve(vertexCount);
+
+					for (uint32_t i = 0; i < vertexCount; i++) {
+						uint8_t* vtx = rendererData->rawVertexData + i * stride;
+
+						VertexData vertexData{};
+
+						if (vertexFlags & RE::BSGraphics::Vertex::VF_VERTEX) {
+							const float* pos = reinterpret_cast<const float*>(vtx + posOffset);
+							vertexData.Position.x = pos[0];
+							vertexData.Position.y = pos[1];
+							vertexData.Position.z = pos[2];
+							vertexData.Position.w = pos[3];
+						}
+
+						if (vertexFlags & RE::BSGraphics::Vertex::VF_UV) {
+							const uint16_t* texcoord = reinterpret_cast<const uint16_t*>(vtx + uvOffset);
+							vertexData.Texcoord[0] = texcoord[0];
+							vertexData.Texcoord[1] = texcoord[1];
+						}
+
+						if (vertexFlags & RE::BSGraphics::Vertex::VF_NORMAL) {
+							const uint8_t* norm = reinterpret_cast<const uint8_t*>(vtx + normOffset);
+							vertexData.Normal[0] = norm[0];
+							vertexData.Normal[1] = norm[1];
+							vertexData.Normal[2] = norm[2];
+							vertexData.Normal[3] = norm[3];
+						}
+
+						if (vertexFlags & RE::BSGraphics::Vertex::VF_COLORS) {
+							const uint8_t* col = reinterpret_cast<const uint8_t*>(vtx + colorOffset);
+							vertexData.Color[0] = col[0];
+							vertexData.Color[1] = col[1];
+							vertexData.Color[2] = col[2];
+							vertexData.Color[3] = col[3];
+						}
+
+						vertices.push_back(vertexData);
+					}
+
+					winrt::com_ptr<ID3D12Resource> vertexBuffer = nullptr;
+					MakeAndCopy(vertices, vertexBuffer);
+				}
+
+
+				{
+					eastl::vector<uint16_t> indexes(rendererData->rawIndexData, rendererData->rawIndexData + indexCount);
+
+					winrt::com_ptr<ID3D12Resource> indexBuffer = nullptr;
+					MakeAndCopy(indexes, indexBuffer);
+				}
+
+				//const RE::BSGraphics::TriShape& rendererData = triShape->rendererData;
+
+			}
+
+
+		}
+
+		return RE::BSVisit::BSVisitControl::kContinue;
+	});
+
+	vertexData.clear();
+	indexData.clear();
+
+	buffersCreated = true;
+}
+
+void RaytracedGI::UnregisterBuffer(ID3D11Buffer* ppBuffer)
+{
+	vertexBuffers.erase(ppBuffer);
+	indexBuffers.erase(ppBuffer);
+}
+
+void RaytracedGI::BSBatchRenderer_RenderPassImmediately(RE::BSRenderPass* pass, uint32_t technique, bool alphaTest, uint32_t renderFlags)
+{
+	const auto shader = pass->shader;
+	const auto shaderType = shader->shaderType.get();
+
+	if (shaderType != RE::BSShader::Type::Lighting)
+		return;
+
+	const auto geometry = pass->geometry;
+
+	const auto triShape = geometry->AsTriShape();
+
+	if (triShape == nullptr)
+		return;
+
+	const auto& type = geometry->GetType().get();
+	const auto typeName = magic_enum::enum_name(type);
+
+	const auto& flagsUnd = geometry->GetFlags().underlying();
+	const auto flagsStr = GetFlags<RE::NiAVObject::Flag>(flagsUnd);
+
+	// NiAVObject::Flag
+	logger::info(fmt::runtime("Geometry [0x{:x}]: {}"), reinterpret_cast<uintptr_t>(geometry), geometry->name.c_str());
+	logger::info(fmt::runtime("Flags: {}"), flagsStr);
+
+	logger::info(
+		fmt::runtime("Pass: [0x{:x}], Alpha Test: {}, Render Flags: [0x{:x}], TriShape: [0x{:x}], Type: {}"),
+		reinterpret_cast<uintptr_t>(pass),
+		alphaTest,
+		renderFlags,
+		reinterpret_cast<uintptr_t>(triShape),
+		typeName);
+
+	if (technique)
+		return;
+
+	//int32_t technique = 0x3F & (vertexDescriptor >> 24);
+	//logger::info(fmt::runtime("LightingShaderTechniques: {}"), GetFlags<SIE::ShaderCache::LightingShaderTechniques>(technique));
+}
+
+void RaytracedGI::BSShader_SetupGeometry(RE::BSShader* This, RE::BSRenderPass* Pass, uint32_t RenderFlags)
+{
+	const auto shaderType = This->shaderType.get();
+
+	if (!loaded || !settings.Enabled)
+		return;
+
+	if (!renderingWorld)
+		return;
+
+	const auto geometry = Pass->geometry;
+	const auto triShape = geometry->AsTriShape();
+
+	if (triShape == nullptr)
+		return;
+
+	auto& type = geometry->GetType();
+	auto typeName = magic_enum::enum_name(type.get());
+
+	auto vertexDescriptor = globals::state->modifiedVertexDescriptor;
+	auto pixelDescriptor = globals::state->currentPixelDescriptor;
+	//auto modifiedPixelDescriptor = globals::state->modifiedPixelDescriptor;
+
+	logger::info(
+		"BSShader_SetupGeometry - Pass: [0x{:x}], Flags: [0x{:x}] Shader [0x{:x}]: {}, Geometry [0x{:x}]: {}, TriShape: [0x{:x}], Type: {}",
+		reinterpret_cast<uintptr_t>(Pass),
+		RenderFlags,
+		reinterpret_cast<uintptr_t>(This),
+		magic_enum::enum_name(shaderType),
+		reinterpret_cast<uintptr_t>(geometry),
+		geometry->name.c_str(),
+		reinterpret_cast<uintptr_t>(triShape),
+		typeName);
+
+	uint32_t technique = 0x3F & (vertexDescriptor >> 24);
+
+	logger::info(fmt::runtime("LightingShaderTechniques: {}"), GetFlags<SIE::ShaderCache::LightingShaderTechniques>(technique));
+	logger::info(fmt::runtime("LightingShaderFlags: {}"), GetFlags<SIE::ShaderCache::LightingShaderFlags>(pixelDescriptor));
 }
 
 void RaytracedGI::DrawRTGI()
@@ -408,10 +744,14 @@ void RaytracedGI::PostPostLoad()
 {
 	Hooks::Install();
 	Initialize();
+
+	MenuOpenCloseEventHandler::Register();
 }
 
 void RaytracedGI::InitD3D12(ID3D11Device* ppDevice, ID3D11DeviceContext* ppImmediateContext, IDXGIAdapter* a_adapter)
 {
+	Hooks::InstallD3D11Hooks(ppDevice);
+
 	logger::info("[RTGI] Creating D3D12 device");
 
 	// Set Device
@@ -647,4 +987,15 @@ void RaytracedGI::CompileComputeShaders()
 {
 	if (auto rawPtr = reinterpret_cast<ID3D11ComputeShader*>(Util::CompileShader(L"Data\\Shaders\\RaytracedGI\\nonexistent.cs.hlsl", { { "SOME_MACRO", "0" } }, "cs_5_0")); rawPtr)
 		cheeseCs.attach(rawPtr);
+}
+
+RE::BSEventNotifyControl RaytracedGI::MenuOpenCloseEventHandler::ProcessEvent(const RE::MenuOpenCloseEvent* a_event, RE::BSTEventSource<RE::MenuOpenCloseEvent>*)
+{
+	// When entering a new cell through a loadscreen, update every frame until completion
+	if (a_event->menuName == RE::LoadingMenu::MENU_NAME) {
+		if (!a_event->opening)
+			globals::features::raytracedGI.buffersCreated = false;
+	}
+
+	return RE::BSEventNotifyControl::kContinue;
 }
