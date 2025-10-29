@@ -295,6 +295,11 @@ namespace Color
 	{
 		return ENABLE_LL ? SharedData::linearLightingSettings.grassSpecularMult : 1.0f;
 	}
+
+	float VanillaDiffuseColorMult()
+	{
+		return ENABLE_LL ? SharedData::linearLightingSettings.vanillaDiffuseColorMult : 1.0f;
+	}
 #endif
 }
 

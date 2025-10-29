@@ -1955,7 +1955,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	lodLandColor = TexLandLodBlend1Sampler.Sample(SampLandLodBlend1Sampler, input.TexCoord0.zw);
 #		endif
 
-	lodLandColor.xyz = Color::ColorToLinear(lodLandColor.xyz);
+	lodLandColor.xyz = Color::ColorToLinear(lodLandColor.xyz) * Color::VanillaDiffuseColorMult();
 #		if defined(LOD_BLENDING)
 	lodLandColor.xyz *= SharedData::lodBlendingSettings.LODTerrainBrightness;
 #		endif  // LOD_BLENDING
