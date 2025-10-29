@@ -51,10 +51,8 @@ struct ScreenSpaceReflections : Feature
         float SpecularMult = 1.0f;
         float DiffuseMult = 1.0f;
         float AmbientMult = 1.0f;
-        float HistoryWeight = 1.0f;
         float OcclusionStrength = 1.0f;
-        bool ReuseRayDiffuse = true;
-        bool ReuseRaySpecular = false;
+        bool EnableSSPTDiffuse = false;
 #ifdef ENABLE_SHARC
         bool EnableSharc = false;
 #endif

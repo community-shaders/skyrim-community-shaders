@@ -26,10 +26,8 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
     SpecularMult,
     DiffuseMult,
     AmbientMult,
-    HistoryWeight,
     OcclusionStrength,
-    ReuseRayDiffuse,
-    ReuseRaySpecular,
+    EnableSSPTDiffuse,
     EnableSharc
 )
 #else
@@ -47,10 +45,8 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
     SpecularMult,
     DiffuseMult,
     AmbientMult,
-    HistoryWeight,
     OcclusionStrength,
-    ReuseRayDiffuse,
-    ReuseRaySpecular
+    EnableSSPTDiffuse
 )
 #endif
 
@@ -70,11 +66,6 @@ void ScreenSpaceReflections::DrawSettings()
     ImGui::SliderFloat("Ambient Multiplier", &settings.AmbientMult, 0.0f, 1.0f, "%.2f");
     if (auto _tt = Util::HoverTooltipWrapper())
         ImGui::Text("Set this to 0 and use Dynamic Cubemaps as fallback if you want full dynamic ambient lighting.");
-    ImGui::SliderFloat("Last Frame History Weight", &settings.HistoryWeight, 0.0f, 1.0f, "%.2f");
-    ImGui::Checkbox("Reuse Ray For Diffuse", &settings.ReuseRayDiffuse);
-    ImGui::SameLine();
-    ImGui::Checkbox("Reuse Ray For Specular", &settings.ReuseRaySpecular);
-    ImGui::Text("Ray Reusing may help with irradiance accumulation but might introduce artifacts.");
     ImGui::Separator();
     ImGui::SliderFloat("Thickness", &settings.Thickness, 0.0f, 50.0f, "%.2f");
     ImGui::SliderFloat("Normal Bias", &settings.NormalBias, 0.0f, 1.0f, "%.2f");
@@ -86,6 +77,9 @@ void ScreenSpaceReflections::DrawSettings()
     ImGui::Checkbox("Use Dynamic Cubemaps as Fallback", &settings.UseDynamicCubemapsAsFallback);
     if (auto _tt = Util::HoverTooltipWrapper())
         ImGui::Text("When ray marching misses, use dynamic cubemaps for reflections. This with diffuse would provide natural ambient lighting.");
+    recompileFlag |= ImGui::Checkbox("(Experimental) Enable SSPT Diffuse", &settings.EnableSSPTDiffuse);
+    if (auto _tt = Util::HoverTooltipWrapper())
+        ImGui::Text("Path tracing on screen space for multi-bounce diffuse reflections.");
 #ifdef ENABLE_SHARC
     ImGui::Checkbox("Enable SHARC", &settings.EnableSharc);
     if (auto _tt = Util::HoverTooltipWrapper())
@@ -330,6 +324,10 @@ void ScreenSpaceReflections::CompileComputeShaders()
     auto definesSpecular = defines;
     definesSpecular.push_back({ "SSSR_SPECULAR", nullptr });
 
+    if (settings.EnableSSPTDiffuse) {
+        defines.push_back({ "SSPT_DIFFUSE", nullptr });
+    }
+
     std::vector<ShaderCompileInfo>
         shaderInfos = {
             { &raymarchDiffuseCS, "ssr_raymarch.hlsl", defines },
@@ -455,9 +453,9 @@ void ScreenSpaceReflections::DrawSSR()
         ssrCBData.NormalBias = settings.NormalBias;
         ssrCBData.BRDFBias = settings.BRDFBias;
         ssrCBData.UseDynamicCubemapsAsFallback = (uint)settings.UseDynamicCubemapsAsFallback && dynamicCubemaps.loaded;
-        ssrCBData.HistoryWeight = settings.HistoryWeight;
+        ssrCBData.HistoryWeight = 0;
         ssrCBData.OcclusionStrength = settings.OcclusionStrength;
-        ssrCBData.ReuseRay = settings.ReuseRaySpecular ? 1 : 0;
+        ssrCBData.ReuseRay = 0;
     }
     ssrCB->Update(ssrCBData);
     auto buffer = ssrCB->CB();
@@ -577,9 +575,9 @@ void ScreenSpaceReflections::DrawSSRTDiffuse()
         ssrCBData.NormalBias = settings.NormalBias;
         ssrCBData.BRDFBias = settings.BRDFBias;
         ssrCBData.UseDynamicCubemapsAsFallback = (uint)settings.UseDynamicCubemapsAsFallback && dynamicCubemaps.loaded;
-        ssrCBData.HistoryWeight = settings.HistoryWeight;
+        ssrCBData.HistoryWeight = 0;
         ssrCBData.OcclusionStrength = settings.OcclusionStrength;
-        ssrCBData.ReuseRay = settings.ReuseRayDiffuse ? 1 : 0;
+        ssrCBData.ReuseRay = 0;
     }
     ssrCB->Update(ssrCBData);
     auto buffer = ssrCB->CB();
