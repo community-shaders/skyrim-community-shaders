@@ -253,7 +253,7 @@ namespace SIE
 			QueryPerformanceFrequency(&frequency);
 			QueryPerformanceCounter(&lastReset);
 			QueryPerformanceCounter(&lastCalculation);
-			completionTime.store(0, std::memory_order_relaxed);		
+			completionTime.store(0, std::memory_order_relaxed);
 		}
 
 		std::optional<ShaderCompilationTask> WaitTake(std::stop_token stoken);

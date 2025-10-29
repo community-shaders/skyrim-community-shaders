@@ -2724,7 +2724,7 @@ namespace SIE
 		QueryPerformanceCounter(&now);
 		totalTime.QuadPart += now.QuadPart - lastCalculation.QuadPart;
 		lastCalculation = now;
-		
+
 		// Check if compilation is complete and set completion time if needed (thread-safe)
 		bool shouldLogCompletion = false;
 		if (completionTime.load(std::memory_order_acquire) == 0 && completedTasks + failedTasks >= totalTasks) {
@@ -2737,12 +2737,12 @@ namespace SIE
 				shouldLogCompletion = true;
 			}
 		}
-		
+
 		// Log completion outside the lock to avoid holding it during logging
 		if (shouldLogCompletion) {
-			logger::debug("Compilation completed in {} ms", GetHumanTime(static_cast<double>(completionTime.load(std::memory_order_relaxed) - lastReset.QuadPart) * 1000.0 / frequency.QuadPart));		
+			logger::debug("Compilation completed in {} ms", GetHumanTime(static_cast<double>(completionTime.load(std::memory_order_relaxed) - lastReset.QuadPart) * 1000.0 / frequency.QuadPart));
 		}
-		
+
 		// Handle task completion tracking
 		{
 			std::scoped_lock lock(compilationMutex);
@@ -2799,7 +2799,7 @@ namespace SIE
 		// Calculate elapsed time since compilation started
 		LARGE_INTEGER currentTime;
 		QueryPerformanceCounter(&currentTime);
-		
+
 		// Use completion time if compilation is finished, otherwise current time
 		int64_t endTime = (completionTime.load(std::memory_order_relaxed) != 0) ? completionTime.load(std::memory_order_relaxed) : currentTime.QuadPart;
 		double totalMs = static_cast<double>(endTime - lastReset.QuadPart) * 1000.0 / frequency.QuadPart;
