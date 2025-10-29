@@ -25,6 +25,27 @@
 #include <dxcapi.h>
 #include <directxpackedvector.h>
 
+struct ResourceKey
+{
+	ID3D12Resource* a;
+	ID3D12Resource* b;
+
+	bool operator==(const ResourceKey& other) const
+	{
+		return a == other.a && b == other.b;
+	}
+};
+
+struct ResourceKeyHash
+{
+	size_t operator()(const ResourceKey& key) const
+	{
+		size_t h1 = eastl::hash<ID3D12Resource*>()(key.a);
+		size_t h2 = eastl::hash<ID3D12Resource*>()(key.b);
+		return h1 ^ (h2 << 1);  // simple hash combining
+	}
+};
+
 struct RaytracedGI : public Feature
 {
 	////////////////////////////////////////////////// Boilerplate
@@ -79,9 +100,6 @@ struct RaytracedGI : public Feature
 	void BSShader_SetupGeometry(RE::BSShader* This, RE::BSRenderPass* Pass, uint32_t RenderFlags);
 	void BSBatchRenderer_RenderPassImmediately(RE::BSRenderPass* pass, uint32_t technique, bool alphaTest, uint32_t renderFlags);
 
-	//void RegisterVertexBuffer(const D3D11_BUFFER_DESC* pDesc, const D3D11_SUBRESOURCE_DATA* pInitialData, ID3D11Buffer** ppBuffer);
-	//void RegisterIndexBuffer(const D3D11_BUFFER_DESC* pDesc, const D3D11_SUBRESOURCE_DATA* pInitialData, ID3D11Buffer** ppBuffer);
-	void RegisterInputLayout(ID3D11InputLayout* pInputLayout, D3D11_INPUT_ELEMENT_DESC* pInputElementDescs, UINT NumElements);
 	void UnregisterBuffer(ID3D11Buffer* ppBuffer);
 	void CreateBuffers();
 
@@ -147,31 +165,18 @@ struct RaytracedGI : public Feature
 		uint8_t Color[4];
 	};
 
+	eastl::unordered_map<ID3D11Buffer*, winrt::com_ptr<ID3D12Resource>> vertexBuffers;
+	eastl::unordered_map<ID3D11Buffer*, winrt::com_ptr<ID3D12Resource>> indexBuffers;
+
+	eastl::unordered_map<ResourceKey, winrt::com_ptr<ID3D12Resource>, ResourceKeyHash> blasCollection;
+	//eastl::unordered_map<ID3D11Buffer*, winrt::com_ptr<ID3D12Resource>> instances;
+
 	struct InstanceData
 	{
 		float4x4 World;
 	};
 
-	eastl::unordered_map<ID3D11Buffer*, eastl::unique_ptr<uint8_t[]>> vertexData;
-	eastl::unordered_map<ID3D11Buffer*, eastl::unique_ptr<uint8_t[]>> indexData;
-
 	//eastl::unordered_map<RE::BSTriShape*, winrt::com_ptr<ID3D12Resource>> cachedTrishapes;
-
-	eastl::unordered_map<ID3D11Buffer*, winrt::com_ptr<ID3D12Resource>> vertexBuffers;
-	eastl::unordered_map<ID3D11Buffer*, winrt::com_ptr<ID3D12Resource>> indexBuffers;
-
-	struct InputLayout {
-		eastl::string SemanticName;
-		UINT SemanticIndex;
-		DXGI_FORMAT Format;
-		UINT InputSlot;
-		UINT AlignedByteOffset;
-		D3D11_INPUT_CLASSIFICATION InputSlotClass;
-		UINT InstanceDataStepRate;
-	};
-
-	eastl::unordered_map<ID3D11InputLayout*, eastl::vector<InputLayout>> inputLayouts;
-	eastl::unordered_map<uint64_t, ID3D11InputLayout*> vertexDescToInputLayout;
 
 	eastl::unique_ptr<ConstantBuffer> cheeseCb = nullptr;  // Omit this if you want to put your CB in src/FeatureBuffer.cpp
 	eastl::unique_ptr<Texture2D> cheeseTex = nullptr;
@@ -224,52 +229,6 @@ struct RaytracedGI : public Feature
 
 	struct Hooks
 	{
-		struct ID3D11Device_CreateBuffer
-		{
-			static HRESULT thunk(ID3D11Device* This, const D3D11_BUFFER_DESC* pDesc, const D3D11_SUBRESOURCE_DATA* pInitialData, ID3D11Buffer** ppBuffer)
-			{
-				HRESULT hr = func(This, pDesc, pInitialData, ppBuffer);
-
-				auto& rtgi = globals::features::raytracedGI;
-
-				if (rtgi.Active() && pInitialData) {
-					bool vertexBuffer = pDesc->BindFlags & D3D11_BIND_VERTEX_BUFFER;
-					bool indexBuffer = pDesc->BindFlags & D3D11_BIND_INDEX_BUFFER;
-
-					if (vertexBuffer || indexBuffer) {
-						size_t bufferSize = static_cast<size_t>(pDesc->ByteWidth);
-
-						eastl::unique_ptr<uint8_t[]> data{ new uint8_t[bufferSize] };
-
-						std::memcpy(data.get(), pInitialData->pSysMem, bufferSize);
-
-						if (vertexBuffer) 
-							rtgi.vertexData.emplace(*ppBuffer, eastl::move(data));
-						else if (indexBuffer)
-							rtgi.indexData.emplace(*ppBuffer, eastl::move(data));
-					}
-				}
-
-				return hr;
-			}
-			static inline REL::Relocation<decltype(thunk)> func;
-		};
-
-		struct ID3D11Device_CreateInputLayout
-		{
-			static HRESULT thunk(ID3D11Device* This, D3D11_INPUT_ELEMENT_DESC* pInputElementDescs, UINT NumElements, void* pShaderBytecodeWithInputSignature, SIZE_T BytecodeLength, ID3D11InputLayout** ppInputLayout)
-			{
-				HRESULT hr = func(This, pInputElementDescs, NumElements, pShaderBytecodeWithInputSignature, BytecodeLength, ppInputLayout);
-
-				if (globals::features::raytracedGI.Active() && pInputElementDescs && NumElements > 0) {
-					globals::features::raytracedGI.RegisterInputLayout(*ppInputLayout, pInputElementDescs, NumElements);
-				}
-
-				return hr;
-			}
-			static inline REL::Relocation<decltype(thunk)> func;
-		};
-
 		struct ID3D11Buffer_Release
 		{
 			static void thunk(ID3D11Buffer* This)
@@ -281,20 +240,6 @@ struct RaytracedGI : public Feature
 			}
 			static inline REL::Relocation<decltype(thunk)> func;
 		}; 
-
-		struct DirtyStates_CreateInputLayoutFromVertexDesc
-		{
-			static ID3D11InputLayout* thunk(uint64_t a_vertexDesc)
-			{
-				auto inputLayout = func(a_vertexDesc);
-
-				if (globals::features::raytracedGI.Active())
-					globals::features::raytracedGI.vertexDescToInputLayout.emplace(a_vertexDesc, inputLayout);
-
-				return inputLayout;
-			}
-			static inline REL::Relocation<decltype(thunk)> func;
-		};
 
 		struct ID3D11Device_CreateTexture2D
 		{
@@ -379,18 +324,12 @@ struct RaytracedGI : public Feature
 			//stl::write_vfunc<0x6, BSShader_SetupGeometry<RE::BSShader::Type::Lighting>>(RE::VTABLE_BSLightingShader[0]);
 			//stl::write_thunk_call<BSBatchRenderer_RenderPassImmediately>(REL::RelocationID(100852, 107642).address() + REL::Relocate(0x29E, 0x28F));
 
-			stl::write_thunk_call<DirtyStates_CreateInputLayoutFromVertexDesc>(REL::RelocationID(75580, 75580).address() + REL::Relocate(0x465, 0x465));
-
 			logger::info("[RTGI] Installed hooks");
 		}
 
 		static void InstallD3D11Hooks(ID3D11Device* ppDevice)
 		{
-			stl::detour_vfunc<3, ID3D11Device_CreateBuffer>(ppDevice);
-			stl::detour_vfunc<11, ID3D11Device_CreateInputLayout>(ppDevice);
-
 			//stl::detour_vfunc<2, ID3D11Buffer_Release>(*ppBuffer);
-
 			//stl::detour_vfunc<5, ID3D11Device_CreateTexture2D>(ppDevice);
 
 			logger::info("[RTGI] Installed D3D11 hooks - {}", reinterpret_cast<uintptr_t>(ppDevice));

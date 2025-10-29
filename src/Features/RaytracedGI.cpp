@@ -45,6 +45,13 @@ void RaytracedGI::DrawSettings()
 	ImGui::InputScalarN("Id A", ImGuiDataType_U32, &settings.IdA[0], 2, &step, NULL, "%u annoying uints");
 	ImGui::InputFloat2("UV A", &settings.UvA.x);
 
+	if (ImGui::TreeNodeEx("Statistics", ImGuiTreeNodeFlags_DefaultOpen)) {
+		ImGui::Text(std::format("Vertex buffers: {}", vertexBuffers.size()).c_str());
+		ImGui::Text(std::format("Index buffers: {}", indexBuffers.size()).c_str());
+
+		ImGui::TreePop();
+	}
+
 	D3D11_TEXTURE2D_DESC desc;
 	diffuseGITexture->resource11->GetDesc(&desc);
 	ImGui::Image(diffuseGITexture->srv, { desc.Width * 0.5f, desc.Height * 0.5f });
@@ -197,52 +204,6 @@ auto GetFlags(uint32_t value) {
 	return flags;
 };
 
-void RaytracedGI::RegisterInputLayout(ID3D11InputLayout* pInputLayout, D3D11_INPUT_ELEMENT_DESC* pInputElementDescs, UINT NumElements)
-{
-	auto& firstDesc = pInputElementDescs[0];
-	if (strcmp(firstDesc.SemanticName, "POSITION") == 0) {
-		auto format = firstDesc.Format;
-
-		if (format == DXGI_FORMAT_R32G32B32A32_FLOAT || format == DXGI_FORMAT_R32G32B32_FLOAT || format == DXGI_FORMAT_R16G16B16A16_FLOAT) {
-			eastl::vector<InputLayout> layouts;
-			layouts.reserve(NumElements);
-
-			for (UINT i = 0; i < NumElements; ++i) {
-				const auto& src = pInputElementDescs[i];
-
-				InputLayout dst = {
-					src.SemanticName ? eastl::string(src.SemanticName) : eastl::string(),
-					src.SemanticIndex,
-					src.Format,
-					src.InputSlot,
-					src.AlignedByteOffset,
-					src.InputSlotClass,
-					src.InstanceDataStepRate
-				};
-
-				layouts.push_back(eastl::move(dst));
-			}
-
-			inputLayouts.emplace(pInputLayout, eastl::move(layouts));
-		}
-	}
-
-	logger::info("RegisterInputLayout - [0x{:x}]", reinterpret_cast<uintptr_t>(pInputLayout));
-
-	for (UINT i = 0; i < NumElements; i++) {
-		auto& inputElementDesc = pInputElementDescs[i];
-		logger::info(
-			"Name: {}, Index: {}, Format: {}, Slot: {}, ByteOffset: {}, Class: {}, StepRate: {}",
-			inputElementDesc.SemanticName,
-			inputElementDesc.SemanticIndex,
-			magic_enum::enum_name(inputElementDesc.Format),
-			inputElementDesc.InputSlot,
-			inputElementDesc.AlignedByteOffset,
-			magic_enum::enum_name(inputElementDesc.InputSlotClass),
-			inputElementDesc.InstanceDataStepRate);
-	}
-}
-
 RE::BSFadeNode* FindBSFadeNode(RE::NiNode* a_niNode)
 {
 	if (auto fadeNode = a_niNode->AsFadeNode()) {
@@ -276,24 +237,19 @@ void RaytracedGI::CreateBuffers()
 	static auto shadowSceneNode = RE::BSShaderManager::State::GetSingleton().shadowSceneNode[0];
 
 	RE::BSVisit::TraverseScenegraphGeometries(shadowSceneNode, [&](RE::BSGeometry* geometry) -> RE::BSVisit::BSVisitControl {
-		//NiAVObject::HasShaderType(BSShaderMaterial::Feature a_type)
 		if (RE::BSTriShape* triShape = geometry->AsTriShape()) {
 
+			// Ensure its Lighting shader, for now
 			if (!triShape->lightingShaderProp_cast())
 				return RE::BSVisit::BSVisitControl::kContinue;
 
 			auto& flags = triShape->GetFlags();
 			uint32_t bsxFlagsValue = 0;
 
-			//if (flags.none(RE::NiAVObject::Flag::kHidden) && flags.all(RE::NiAVObject::Flag::kRenderUse)) {
 			if (flags.all(RE::NiAVObject::Flag::kRenderUse)) {
 				if (auto fadeNode = FindBSFadeNode((RE::NiNode*)triShape)) {
 					if (auto extraData = fadeNode->GetExtraData("BSX")) {
 						auto bsxFlags = (RE::BSXFlags*)extraData;
-						/*auto value = static_cast<int32_t>(bsxFlags->value);
-
-						if (value & (int32_t)RE::BSXFlags::Flag::kEditorMarker)
-							return RE::BSVisit::BSVisitControl::kContinue;*/
 
 						bsxFlagsValue = static_cast<uint32_t>(bsxFlags->value);
 
@@ -316,12 +272,6 @@ void RaytracedGI::CreateBuffers()
 
 				logger::info(fmt::runtime("Flags: {}"), flagsStr);
 
-				/*{
-
-					const auto& flagsUnd = geometry->GetFlags().underlying();
-					const auto flagsStr = GetFlags<RE::NiAVObject::Flag>(flagsUnd);
-				}*/
-
 				const auto triShapeRuntime = triShape->GetTrishapeRuntimeData();
 
 				uint vertexCount = triShapeRuntime.vertexCount;
@@ -335,6 +285,7 @@ void RaytracedGI::CreateBuffers()
 				if (!rendererData)
 					return RE::BSVisit::BSVisitControl::kContinue;
 
+				// Create vertex buffer
 				{
 					auto vertexDesc = rendererData->vertexDesc;
 
@@ -389,28 +340,26 @@ void RaytracedGI::CreateBuffers()
 
 					winrt::com_ptr<ID3D12Resource> vertexBuffer = nullptr;
 					MakeAndCopy(vertices, vertexBuffer);
+
+					vertexBuffers.emplace((ID3D11Buffer*)rendererData->vertexBuffer, std::move(vertexBuffer));
 				}
 
-
+				// Create indices buffer
 				{
 					eastl::vector<uint16_t> indexes(rendererData->rawIndexData, rendererData->rawIndexData + indexCount);
 
 					winrt::com_ptr<ID3D12Resource> indexBuffer = nullptr;
 					MakeAndCopy(indexes, indexBuffer);
+
+					indexBuffers.emplace((ID3D11Buffer*)rendererData->indexBuffer, std::move(indexBuffer));
 				}
 
-				//const RE::BSGraphics::TriShape& rendererData = triShape->rendererData;
-
 			}
-
 
 		}
 
 		return RE::BSVisit::BSVisitControl::kContinue;
 	});
-
-	vertexData.clear();
-	indexData.clear();
 
 	buffersCreated = true;
 }
@@ -704,8 +653,11 @@ ID3D12Resource* RaytracedGI::MakeBLAS(ID3D12Resource* vertexBuffer, UINT vertexF
 			.IndexCount = indices,
 			.VertexCount = vertexFloats / 3,
 			.IndexBuffer = indexBuffer ? indexBuffer->GetGPUVirtualAddress() : 0,
-			.VertexBuffer = { .StartAddress = vertexBuffer->GetGPUVirtualAddress(),
-				.StrideInBytes = sizeof(float) * 3 } }
+			.VertexBuffer = { 
+				.StartAddress = vertexBuffer->GetGPUVirtualAddress(),
+				.StrideInBytes = sizeof(float) * 3 
+			} 
+		}
 	};
 
 	D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_INPUTS inputs = {
