@@ -1,12 +1,4 @@
-#include "Common/FastMath.hlsli"
 #include "RaytracedGI/Raytracing/Common.hlsli"
-
-cbuffer FrameBuffer : register(b0)
-{
-    float4x4 ViewInverse;
-    float4x4 ProjInverse;
-    float4 Position;
-}
 
 RaytracingAccelerationStructure Scene : register(t0);
 

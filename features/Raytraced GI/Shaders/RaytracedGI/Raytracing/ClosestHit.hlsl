@@ -1,9 +1,11 @@
 #include "RaytracedGI/Raytracing/Common.hlsli"
 #include "RaytracedGI/Raytracing/Light.hlsli"
 
-RaytracingAccelerationStructure Scene : register(t0);
+RaytracingAccelerationStructure Scene : register(t0, space0);
 
-StructuredBuffer<Light> Lights : register(t1);
+StructuredBuffer<Light> Lights : register(t1, space0);
+StructuredBuffer<Vertex> Vertices[] : register(t0, space1);
+ByteAddressBuffer Indices[] : register(t0, space2);
 
 static const float3 light = float3(0, 200, 0);
 
@@ -14,16 +16,24 @@ void HitFloor(inout Payload payload, float2 uv);
 [shader("closesthit")]
 void main(inout Payload payload, BuiltInTriangleIntersectionAttributes attribs)
 {
+    uint instanceID = InstanceID();
+    uint primitiveIndex = PrimitiveIndex();
+    
+    StructuredBuffer<Vertex> vertices = Vertices[instanceID];
+    ByteAddressBuffer indices = Indices[instanceID];
+    
     float2 uv = attribs.barycentrics;
 
-    switch (InstanceID())
+    HitCube(payload, uv);
+    
+    /*switch (InstanceID())
     {
         case 0: HitCube(payload, uv); break;
         case 1: HitMirror(payload, uv); break;
         case 2: HitFloor(payload, uv); break;
 
         default: payload.color = float3(1, 0, 1); break;
-    }
+    }*/
 }
 
 void HitCube(inout Payload payload, float2 uv)

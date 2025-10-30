@@ -69,7 +69,7 @@ void RaytracedGI::SetupResources()
 	{
 		D3D12_DESCRIPTOR_HEAP_DESC commonHeapDesc = {
 			.Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV,
-			.NumDescriptors = 3,
+			.NumDescriptors = 25000,
 			.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE
 		};
 		d3d12Device->CreateDescriptorHeap(&commonHeapDesc, IID_PPV_ARGS(&commonHeap));	
@@ -100,8 +100,6 @@ void RaytracedGI::SetupResources()
 		uavDesc.Format = texDesc.Format;
 
 		auto cpuHandle = commonHeap->GetCPUDescriptorHandleForHeapStart();
-		cpuHandle.ptr += handleIncrement * 2;
-
 		d3d12Device->CreateUnorderedAccessView(diffuseGITexture->resource.get(), nullptr, &uavDesc, cpuHandle);
 	}
 
@@ -132,7 +130,7 @@ void RaytracedGI::SetupResources()
 	logger::debug("Creating structured buffers...");
 	{
 		lightBuffer = eastl::make_unique<StructuredBufferDX12<Light>>(d3d12Device.get(), MAX_LIGHTS);
-		lightBuffer->CreateSRV(commonHeap.get(), handleIncrement);
+		lightBuffer->CreateSRV(commonHeap.get(), handleIncrement * 2);
 	}
 
 	CompileShaders();
@@ -419,13 +417,13 @@ void RaytracedGI::CreateBuffers()
 					uint32_t normOffset = vertexDesc.GetAttributeOffset(RE::BSGraphics::Vertex::VA_NORMAL);
 					uint32_t colorOffset = vertexDesc.GetAttributeOffset(RE::BSGraphics::Vertex::VA_COLOR);
 
-					eastl::vector<VertexData> vertices;
+					eastl::vector<Vertex> vertices;
 					vertices.reserve(vertexCount);
 
 					for (uint32_t i = 0; i < vertexCount; i++) {
 						uint8_t* vtx = rendererData->rawVertexData + i * stride;
 
-						VertexData vertexData{};
+						Vertex vertexData{};
 
 						if (vertexFlags & RE::BSGraphics::Vertex::VF_VERTEX) {
 							const float* pos = reinterpret_cast<const float*>(vtx + posOffset);
@@ -466,10 +464,10 @@ void RaytracedGI::CreateBuffers()
 				// Create indices buffer
 				{
 					eastl::vector<uint16_t> indexes(rendererData->rawIndexData, rendererData->rawIndexData + indexCount);					
-					MakeAndCopy(indexes, indexBuffer);					
+					MakeAndCopy(indexes, indexBuffer);
 				}
 
-				auto resourceKey = TriBufferKey{ vertexBuffer.get(), indexBuffer.get() };
+				auto resourceKey = TriBufferKey{ vertexBuffer, indexBuffer };
 
 				// Create BLAS
 				{
@@ -499,6 +497,9 @@ void RaytracedGI::CreateBuffers()
 		return RE::BSVisit::BSVisitControl::kContinue;
 	});
 
+	std::vector<TriBufferKey> instanceKeys;
+	instanceKeys.reserve(instances.size());
+
 	// This probably shoudn't go here
 	// Create instance buffer
 	{
@@ -512,7 +513,7 @@ void RaytracedGI::CreateBuffers()
 
 			if (auto it = blasCollection.find(key); it != blasCollection.end()) {
 				instanceData[instanceCount] = {
-					.InstanceID = 0,  // All 0 for now idk
+					.InstanceID = instanceCount,
 					.InstanceMask = 1,
 					.AccelerationStructure = it->second->GetGPUVirtualAddress()		
 				};
@@ -520,9 +521,58 @@ void RaytracedGI::CreateBuffers()
 				auto* ptr = reinterpret_cast<DirectX::XMFLOAT3X4*>(&instanceData[instanceCount].Transform);
 				XMStoreFloat3x4(ptr, data.Transform);
 
+				instanceKeys.push_back(key);
 				instanceCount++;
 			}
 		}	
+	}
+
+	// Create SRVs
+	{
+		CD3DX12_CPU_DESCRIPTOR_HANDLE handle(commonHeap->GetCPUDescriptorHandleForHeapStart());
+		handle.Offset(3, handleIncrement);
+
+		// Vertex
+		for (size_t i = 0; i < instanceCount; i++)
+		{
+			auto& key = instanceKeys[i];
+			//logger::info("Vertex Key: {}", reinterpret_cast<uintptr_t>(key.vertexBuffer));
+			//logger::info(fmt::runtime("Base handle: 0x{:X}, Current handle: 0x{:X}, increment: {}"), commonHeap->GetCPUDescriptorHandleForHeapStart().ptr, handle.ptr, handleIncrement);
+
+			auto vbResDesc = key.vertexBuffer->GetDesc();
+
+			D3D12_SHADER_RESOURCE_VIEW_DESC vbDesc = {};
+			vbDesc.ViewDimension = D3D12_SRV_DIMENSION_BUFFER;
+			vbDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING; // Line 545
+			vbDesc.Format = DXGI_FORMAT_UNKNOWN;
+			vbDesc.Buffer.FirstElement = 0;
+			vbDesc.Buffer.NumElements = static_cast<int32_t>(vbResDesc.Width / sizeof(Vertex));
+			vbDesc.Buffer.StructureByteStride = sizeof(Vertex);
+			vbDesc.Buffer.Flags = D3D12_BUFFER_SRV_FLAG_NONE;
+
+			d3d12Device->CreateShaderResourceView(key.vertexBuffer.get(), &vbDesc, handle);
+			handle.Offset(1, handleIncrement);
+		}
+
+		// Index
+		for (size_t i = 0; i < instanceCount; i++)
+		{
+			auto& key = instanceKeys[i];
+			//logger::info("Index Key: {}", reinterpret_cast<uintptr_t>(key.indexBuffer));
+			auto ibResDesc = key.indexBuffer->GetDesc();
+
+			D3D12_SHADER_RESOURCE_VIEW_DESC ibDesc = {};
+			ibDesc.ViewDimension = D3D12_SRV_DIMENSION_BUFFER;
+			ibDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
+			ibDesc.Format = DXGI_FORMAT_R32_TYPELESS;
+			ibDesc.Buffer.FirstElement = 0;
+			ibDesc.Buffer.NumElements = static_cast<int32_t>(ibResDesc.Width / 4);
+			ibDesc.Buffer.StructureByteStride = 0;
+			ibDesc.Buffer.Flags = D3D12_BUFFER_SRV_FLAG_RAW;
+
+			d3d12Device->CreateShaderResourceView(key.indexBuffer.get(), &ibDesc, handle);
+			handle.Offset(1, handleIncrement);	
+		}
 	}
 
 	// Create TLAS
@@ -542,6 +592,7 @@ void RaytracedGI::CreateBuffers()
 		tlasDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
 
 		auto cpuHandle = commonHeap->GetCPUDescriptorHandleForHeapStart();
+		cpuHandle.ptr += handleIncrement;
 		d3d12Device->CreateShaderResourceView(nullptr, &tlasDesc, cpuHandle);
 	}
 
@@ -703,22 +754,30 @@ void RaytracedGI::DrawRTGI()
 	{
 		commandList->SetPipelineState1(pipelineRT.get());
 		commandList->SetComputeRootSignature(rootSignature.get());
-
 		auto commonHeapPtr = commonHeap.get();
 		commandList->SetDescriptorHeaps(1, &commonHeapPtr);
-
 		auto heapStart = commonHeap->GetGPUDescriptorHandleForHeapStart();
 
-		// SRV table
+		// Parameter 0: UAV table
 		commandList->SetComputeRootDescriptorTable(0, heapStart);
 
-		// UAV table
-		D3D12_GPU_DESCRIPTOR_HANDLE uavHandle = heapStart;
-		uavHandle.ptr += handleIncrement * 2;
-		commandList->SetComputeRootDescriptorTable(1, uavHandle);
+		// Parameter 1: Fixed SRVs (Scene + Lights) - offset 1
+		D3D12_GPU_DESCRIPTOR_HANDLE fixedSrvHandle = heapStart;
+		fixedSrvHandle.ptr += handleIncrement * 1;
+		commandList->SetComputeRootDescriptorTable(1, fixedSrvHandle);
 
-		// Constant buffer
-		commandList->SetComputeRootConstantBufferView(2, frameBuffer->GetGPUVirtualAddress());
+		// Parameter 2: Vertex buffers - offset 3 (after UAV + Scene + Lights)
+		D3D12_GPU_DESCRIPTOR_HANDLE vbHandle = heapStart;
+		vbHandle.ptr += handleIncrement * 3;
+		commandList->SetComputeRootDescriptorTable(2, vbHandle);
+
+		// Parameter 3: Index buffers - offset 3 + numMeshes
+		D3D12_GPU_DESCRIPTOR_HANDLE ibHandle = heapStart;
+		ibHandle.ptr += handleIncrement * (3 + instanceCount);
+		commandList->SetComputeRootDescriptorTable(3, ibHandle);
+
+		// Parameter 4: Constant buffer
+		commandList->SetComputeRootConstantBufferView(4, frameBuffer->GetGPUVirtualAddress());
 
 		auto rtDesc = diffuseGITexture->resource->GetDesc();
 
@@ -838,7 +897,7 @@ ID3D12Resource* RaytracedGI::MakeBLAS(ID3D12Resource* vertexBuffer, UINT vertice
 			.IndexBuffer = indexBuffer ? indexBuffer->GetGPUVirtualAddress() : 0,
 			.VertexBuffer = { 
 				.StartAddress = vertexBuffer->GetGPUVirtualAddress(),
-				.StrideInBytes = sizeof(VertexData) 
+				.StrideInBytes = sizeof(Vertex) 
 			} 
 		}
 	};
@@ -950,55 +1009,63 @@ void RaytracedGI::CreateRootSignature()
 	if (rootSignature)
 		return;
 
-	D3D12_DESCRIPTOR_RANGE srvRange = {
-		.RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV,
-		.NumDescriptors = 2, 
-		.BaseShaderRegister = 0,
-		.RegisterSpace = 0,
-		.OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND
-	};
+	// UAV range
+	CD3DX12_DESCRIPTOR_RANGE1 uavRange;
+	uavRange.Init(D3D12_DESCRIPTOR_RANGE_TYPE_UAV, 1, 0, 0);
 
-	D3D12_DESCRIPTOR_RANGE uavRange = {
-		.RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_UAV,
-		.NumDescriptors = 1,
-		.BaseShaderRegister = 0,
-		.RegisterSpace = 0,
-		.OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND
-	};
+	// Fixed SRV ranges (Scene + Lights)
+	CD3DX12_DESCRIPTOR_RANGE1 fixedSrvRanges[2];
+	fixedSrvRanges[0].Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 0, 0);  // Scene
+	fixedSrvRanges[1].Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 1, 0);  // Lights
 
-	D3D12_ROOT_PARAMETER params[] = {
-		{ 
-			.ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE,
-			.DescriptorTable = { 
-				.NumDescriptorRanges = 1,
-				.pDescriptorRanges = &srvRange
-			}
-		},
-		{ 
-			.ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE,
-			.DescriptorTable = { 
-				.NumDescriptorRanges = 1,
-				.pDescriptorRanges = &uavRange
-			}
-		},
-		{
-			.ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV,
-			.Descriptor = {
-				.ShaderRegister = 0,
-				.RegisterSpace = 0
-			},
-			.ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL
+	// Vertex buffers (unbounded)
+	CD3DX12_DESCRIPTOR_RANGE1 vertexBufferRange;
+	vertexBufferRange.Init(
+		D3D12_DESCRIPTOR_RANGE_TYPE_SRV,
+		UINT_MAX,  // Unbounded
+		0,         // t0
+		1,         // space1
+		D3D12_DESCRIPTOR_RANGE_FLAG_DESCRIPTORS_VOLATILE);
+
+	// Index buffers (unbounded)
+	CD3DX12_DESCRIPTOR_RANGE1 indexBufferRange;
+	indexBufferRange.Init(
+		D3D12_DESCRIPTOR_RANGE_TYPE_SRV,
+		UINT_MAX,  // Unbounded
+		0,         // t0
+		2,         // space2
+		D3D12_DESCRIPTOR_RANGE_FLAG_DESCRIPTORS_VOLATILE);
+
+	// Root parameters
+	CD3DX12_ROOT_PARAMETER1 params[5];
+	params[0].InitAsDescriptorTable(1, &uavRange);           // Parameter 0: UAV
+	params[1].InitAsDescriptorTable(2, fixedSrvRanges);      // Parameter 1: Scene + Lights
+	params[2].InitAsDescriptorTable(1, &vertexBufferRange);  // Parameter 2: Vertex buffers
+	params[3].InitAsDescriptorTable(1, &indexBufferRange);   // Parameter 3: Index buffers
+	params[4].InitAsConstantBufferView(0, 0);                // Parameter 4: CBV
+
+	// Create root signature
+	CD3DX12_VERSIONED_ROOT_SIGNATURE_DESC rootSigDesc;
+	rootSigDesc.Init_1_1(
+		_countof(params),
+		params,
+		0,
+		nullptr,
+		D3D12_ROOT_SIGNATURE_FLAG_NONE);
+
+	winrt::com_ptr<ID3DBlob> signature;
+	winrt::com_ptr<ID3DBlob> error;
+
+	HRESULT hr = D3DX12SerializeVersionedRootSignature(&rootSigDesc, D3D_ROOT_SIGNATURE_VERSION_1_1, signature.put(), error.put());
+
+	if (FAILED(hr)) {
+		if (error) {
+			OutputDebugStringA((char*)error->GetBufferPointer());
 		}
-	};
+		DX::ThrowIfFailed(hr);
+	}
 
-	D3D12_ROOT_SIGNATURE_DESC desc = { 
-		.NumParameters = std::size(params),
-		.pParameters = params 
-	};
-
-	winrt::com_ptr<ID3DBlob> blob;
-	DX::ThrowIfFailed(D3D12SerializeRootSignature(&desc, D3D_ROOT_SIGNATURE_VERSION_1_0, blob.put(), nullptr));
-	DX::ThrowIfFailed(d3d12Device->CreateRootSignature(0, blob->GetBufferPointer(), blob->GetBufferSize(), IID_PPV_ARGS(&rootSignature)));
+	DX::ThrowIfFailed(d3d12Device->CreateRootSignature(0, signature->GetBufferPointer(), signature->GetBufferSize(), IID_PPV_ARGS(&rootSignature)));
 }
 
 void RaytracedGI::Initialize()

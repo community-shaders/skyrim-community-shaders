@@ -29,22 +29,23 @@
 
 struct TriBufferKey
 {
-	ID3D12Resource* vertexBuffer;
-	ID3D12Resource* indexBuffer;
+	winrt::com_ptr<ID3D12Resource> vertexBuffer;
+	winrt::com_ptr<ID3D12Resource> indexBuffer;
 
-	bool operator==(const TriBufferKey& other) const
+	bool operator==(const TriBufferKey& other) const noexcept
 	{
-		return vertexBuffer == other.vertexBuffer && indexBuffer == other.indexBuffer;
+		return vertexBuffer.get() == other.vertexBuffer.get() &&
+		       indexBuffer.get() == other.indexBuffer.get();
 	}
 };
 
 struct TriBufferKeyHash
 {
-	size_t operator()(const TriBufferKey& key) const
+	size_t operator()(const TriBufferKey& key) const noexcept
 	{
-		size_t h1 = eastl::hash<ID3D12Resource*>()(key.vertexBuffer);
-		size_t h2 = eastl::hash<ID3D12Resource*>()(key.indexBuffer);
-		return h1 ^ (h2 << 1);  // simple hash combining
+		size_t h1 = eastl::hash<ID3D12Resource*>()(key.vertexBuffer.get());
+		size_t h2 = eastl::hash<ID3D12Resource*>()(key.indexBuffer.get());
+		return h1 ^ (h2 << 1);
 	}
 };
 
@@ -168,7 +169,7 @@ struct RaytracedGI : public Feature
 	bool renderingWorld = false;
 	bool buffersCreated = false;
 
-	struct VertexData
+	struct Vertex
 	{
 		float3 Position;
 		uint16_t Texcoord[2];
