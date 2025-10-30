@@ -1,0 +1,130 @@
+#include "ScreenSpaceReflections/ssr_common.hlsli"
+
+Texture2D<float4> HistoryTexture : register(t0);
+Texture2D<float4> MotionVectorTexture : register(t1);
+Texture2D<float4> SSRColorTexture : register(t3);
+Texture2D<float> DepthTexture : register(t4);
+
+RWTexture2D<float4> FilteredOutput : register(u0);
+
+SamplerState LinearSampler : register(s0);
+
+// util: void ReprojectHit(Texture2D MotionTexture, SamplerState s, float3 hitUVz, uint eyeIndex, out float2 outPrevUV)
+float CalculateWeight(float depthCenter, float depthP, float phiD, float3 normalCenter, float3 normalP, float phiN,
+					  float luminanceCenter, float luminanceP, float phiL)
+{
+	float epsilon = 0.0000001;
+
+	// Depth weight
+	float difference = abs(depthCenter - depthP);
+	float weightDepth = (phiD == 0) ? 0.f : difference / max(phiD, epsilon);
+
+	// Normal weight
+	float weightNormal = pow(max(0.f, dot(normalCenter, normalP)), phiN);
+
+	// Luminance weight
+	float weightLuminance = abs(luminanceCenter - luminanceP) / phiL;
+
+	float weight = exp(-weightDepth - weightLuminance) * weightNormal;
+	return weight;
+}
+
+float GaussianBlur(uint2 id)
+{
+    float sum = 0.f;
+    float kernelSum = 0.f;
+    const float kernel[2][2] =
+    {
+        { 1.0 / 4.0, 1.0 / 8.0 },
+        { 1.0 / 8.0, 1.0 / 16.0 }
+    };
+    
+    const int radius = 1;
+    
+    for (int y = -radius; y <= radius; y++)
+    {
+        for (int x = -radius; x <= radius; x++)
+        {
+            const int2 p = id + int2(x, y);
+            const bool inside = (p.x >= 0 && p.y >= 0) && (p.x < SharedData::BufferDim.x * FrameBuffer::DynamicResolutionParams1.x && p.y < SharedData::BufferDim.y * FrameBuffer::DynamicResolutionParams1.y);
+
+            if (inside)
+            {
+                const float k = kernel[abs(x)][abs(y)];
+                kernelSum += k;
+                sum += SSRColorTexture[p].w * k;
+            }
+        }
+    }
+
+    return sum / kernelSum;
+}
+
+static const float kernelWeights[3] = { 1.0, 2.0 / 3.0, 1.0 / 6.0 };
+
+#define VAR_EPSILON 0.0001f
+#define RADIANCE_PHI 4.0f
+#define NORMAL_PHI 32.0f
+#define DEPTH_PHI 0.1f
+
+// Spatiotemporal Variance-Guided Filter
+[numthreads(8, 8, 1)] void main(uint3 DTid : SV_DispatchThreadID)
+{
+    uint2 screen_size = SharedData::BufferDim.xy * FrameBuffer::DynamicResolutionParams1.xy;
+    if (DTid.x >= screen_size.x * FrameBuffer::DynamicResolutionParams1.x || DTid.y >= screen_size.y * FrameBuffer::DynamicResolutionParams1.y)
+        return;
+
+    float2 uv = float2(DTid.xy + 0.5) * SharedData::BufferDim.zw * FrameBuffer::DynamicResolutionParams2.xy;
+
+    float3 blendedColor = 0;
+    float4 historyColor = HistoryTexture[DTid.xy];
+    float4 motionVector = MotionVectorTexture[DTid.xy];
+    float4 ssrColor = SSRColorTexture[DTid.xy];
+    float depthCenter = DepthTexture[DTid.xy];
+
+    float3 normalVS;
+    float roughness;
+    GetNormalRoughness(DTid.xy, normalVS, roughness);
+    roughness = clamp(roughness, 0.02f, 1.0f);
+
+    float luminanceCenter = Color::RGBToLuminance(ssrColor.rgb);
+    float variance = GaussianBlur(DTid.xy);
+
+    FilteredOutput[DTid.xy].xyz = ssrColor.xyz;
+    if (depthCenter < 0.999f)
+    {
+        float phiLuminance = max(RADIANCE_PHI * sqrt(abs(variance) + VAR_EPSILON), VAR_EPSILON);
+        float phiNormal = NORMAL_PHI;
+        float phiDepth = DEPTH_PHI;
+        float weightSum = 0.f;
+
+        for (int ky = -2; ky <= 2; ky++)
+        {
+            for (int kx = -2; kx <= 2; kx++)
+            {
+                int2 samplePos = int2(DTid.xy) + int2(kx, ky);
+                bool inside = (samplePos.x >= 0 && samplePos.y >= 0) && (samplePos.x < screen_size.x * FrameBuffer::DynamicResolutionParams1.x && samplePos.y < screen_size.y * FrameBuffer::DynamicResolutionParams1.y);
+                if (inside)
+                {
+                    float4 sampleSSRColor = SSRColorTexture[samplePos];
+                    float sampleDepth = DepthTexture[samplePos];
+                    if (sampleDepth < 0.999f)
+                    {
+                        float3 sampleNormalVS;
+                        float sampleRoughness;
+                        GetNormalRoughness(samplePos, sampleNormalVS, sampleRoughness);
+                        sampleRoughness = clamp(sampleRoughness, 0.02f, 1.0f);
+
+                        float luminanceP = Color::RGBToLuminance(sampleSSRColor.rgb);
+                        float weight = CalculateWeight(depthCenter, sampleDepth, phiDepth, normalVS, sampleNormalVS, phiNormal, luminanceCenter, luminanceP, phiLuminance) * kernelWeights[abs(kx)] * kernelWeights[abs(ky)];
+
+                        blendedColor += sampleSSRColor.rgb * weight;
+                        weightSum += weight;
+                    }
+                }
+            }
+        }
+    }
+
+    FilteredOutput[DTid.xy] = float4(blendedColor, 1.0);
+}
