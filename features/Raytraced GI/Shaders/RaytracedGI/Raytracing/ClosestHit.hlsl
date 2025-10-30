@@ -1,8 +1,10 @@
-#include "RaytracedGI/Raytracing/Raytracing.hlsli"
+#include "RaytracedGI/Raytracing/Common.hlsli"
+#include "RaytracedGI/Raytracing/Light.hlsli"
 
-RaytracingAccelerationStructure scene : register(t0);
+RaytracingAccelerationStructure Scene : register(t0);
 
-static const float3 camera = float3(0, 1.5, -7);
+StructuredBuffer<Light> Lights : register(t1);
+
 static const float3 light = float3(0, 200, 0);
 
 void HitCube(inout Payload payload, float2 uv);
@@ -57,7 +59,7 @@ void HitMirror(inout Payload payload, float2 uv)
     mirrorRay.TMax = 1000;
 
     payload.allowReflection = false;
-    TraceRay(scene, RAY_FLAG_NONE, 0xFF, 0, 0, 0, mirrorRay, payload);
+    TraceRay(Scene, RAY_FLAG_NONE, 0xFF, 0, 0, 0, mirrorRay, payload);
 
 }
 
@@ -77,7 +79,7 @@ void HitFloor(inout Payload payload, float2 uv)
     Payload shadow;
     shadow.allowReflection = false;
     shadow.missed = false;
-    TraceRay(scene, RAY_FLAG_NONE, 0xFF, 0, 0, 0, shadowRay, shadow);
+    TraceRay(Scene, RAY_FLAG_NONE, 0xFF, 0, 0, 0, shadowRay, shadow);
 
     if (!shadow.missed)
         payload.color /= 2;

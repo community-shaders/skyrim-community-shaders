@@ -1,4 +1,4 @@
-#include "RaytracedGI/Raytracing/Raytracing.hlsli"
+#include "RaytracedGI/Raytracing/Common.hlsli"
 
 static const float3 skyTop = float3(0.24, 0.44, 0.72);
 static const float3 skyBottom = float3(0.75, 0.86, 0.93);

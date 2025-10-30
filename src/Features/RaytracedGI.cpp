@@ -7,6 +7,7 @@
 */
 
 #include "RaytracedGI.h"
+#include "InverseSquareLighting.h"
 
 #include "Globals.h"
 #include "State.h"
@@ -62,19 +63,16 @@ void RaytracedGI::SetupResources()
 	auto renderer = globals::game::renderer;
 	auto device = globals::d3d::device;
 
-	logger::debug("Creating buffers...");
-	{
-		cheeseCb = eastl::make_unique<ConstantBuffer>(ConstantBufferDesc<CbData>());
-	}
+	handleIncrement = d3d12Device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
 
-	// UAV heap
+	// Common heap
 	{
-		D3D12_DESCRIPTOR_HEAP_DESC uavHeapDesc = {
+		D3D12_DESCRIPTOR_HEAP_DESC commonHeapDesc = {
 			.Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV,
-			.NumDescriptors = 1,
+			.NumDescriptors = 3,
 			.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE
 		};
-		d3d12Device->CreateDescriptorHeap(&uavHeapDesc, IID_PPV_ARGS(&uavHeap));	
+		d3d12Device->CreateDescriptorHeap(&commonHeapDesc, IID_PPV_ARGS(&commonHeap));	
 	}
 
 	logger::debug("Creating textures...");
@@ -100,7 +98,11 @@ void RaytracedGI::SetupResources()
 		D3D12_UNORDERED_ACCESS_VIEW_DESC uavDesc = {};
 		uavDesc.ViewDimension = D3D12_UAV_DIMENSION_TEXTURE2D;
 		uavDesc.Format = texDesc.Format;
-		d3d12Device->CreateUnorderedAccessView(diffuseGITexture->resource.get(), nullptr, &uavDesc, uavHeap->GetCPUDescriptorHandleForHeapStart());
+
+		auto cpuHandle = commonHeap->GetCPUDescriptorHandleForHeapStart();
+		cpuHandle.ptr += handleIncrement * 2;
+
+		d3d12Device->CreateUnorderedAccessView(diffuseGITexture->resource.get(), nullptr, &uavDesc, cpuHandle);
 	}
 
 	logger::debug("Creating samplers...");
@@ -117,62 +119,173 @@ void RaytracedGI::SetupResources()
 		DX::ThrowIfFailed(device->CreateSamplerState(&samplerDesc, cheeseSampler.put()));
 	}
 
-	logger::info("[RTGI] Initializing meshes");
+	logger::debug("Creating framebuffer...");
 	{
-		auto makeAndCopy = [&](auto& data, winrt::com_ptr<ID3D12Resource>& res)
-		{
-			auto desc = BASIC_BUFFER_DESC;
-			desc.Width = sizeof(data);
+		auto frameBufferDesc = BASIC_BUFFER_DESC;
+		frameBufferDesc.Width = (sizeof(FrameBuffer) + 255) & ~255;
 
-			DX::ThrowIfFailed(d3d12Device->CreateCommittedResource(&UPLOAD_HEAP, D3D12_HEAP_FLAG_NONE, &desc, D3D12_RESOURCE_STATE_GENERIC_READ, nullptr, IID_PPV_ARGS(&res)));
-
-			void* ptr;
-			DX::ThrowIfFailed(res->Map(0, nullptr, &ptr));
-			memcpy(ptr, data, sizeof(data));
-			res->Unmap(0, nullptr);
-		};
-
-		makeAndCopy(quadVtx, quadVB);
-		makeAndCopy(cubeVtx, cubeVB);
-		makeAndCopy(cubeIdx, cubeIB);
+		d3d12Device->CreateCommittedResource(&UPLOAD_HEAP, D3D12_HEAP_FLAG_NONE, &frameBufferDesc, D3D12_RESOURCE_STATE_GENERIC_READ, nullptr, IID_PPV_ARGS(&frameBuffer));
+		frameBuffer->Map(0, nullptr, reinterpret_cast<void**>(&frameBufferData));	
 	}
 
-	logger::info("[RTGI] BLAS");
+	//MAX_LIGHTS
+	logger::debug("Creating structured buffers...");
 	{
-		quadBlas.attach(MakeBLAS(quadVB.get(), std::size(quadVtx)));
-		cubeBlas.attach(MakeBLAS(cubeVB.get(), std::size(cubeVtx), cubeIB.get(), std::size(cubeIdx)));
-	}
-
-	logger::info("[RTGI] Init scene");
-	{
-		auto instancesDesc = BASIC_BUFFER_DESC;
-		instancesDesc.Width = sizeof(D3D12_RAYTRACING_INSTANCE_DESC) * NUM_INSTANCES;
-		DX::ThrowIfFailed(d3d12Device->CreateCommittedResource(&UPLOAD_HEAP, D3D12_HEAP_FLAG_NONE, &instancesDesc, D3D12_RESOURCE_STATE_GENERIC_READ, nullptr, IID_PPV_ARGS(&instances)));
-		instances->Map(0, nullptr, reinterpret_cast<void**>(&instanceData));
-
-		for (UINT i = 0; i < NUM_INSTANCES; ++i)
-			instanceData[i] = {
-				.InstanceID = i,
-				.InstanceMask = 1,
-				.AccelerationStructure = (i ? quadBlas : cubeBlas)->GetGPUVirtualAddress(),
-			};
-
-		UpdateTransforms();
-	}
-
-	logger::info("[RTGI] TLAS");
-	{
-		UINT64 updateScratchSize;
-		tlas.attach(MakeTLAS(instances.get(), NUM_INSTANCES, &updateScratchSize));
-
-		auto desc = BASIC_BUFFER_DESC;
-		// WARP bug workaround: use 8 if the required size was reported as less
-		desc.Width = std::max(updateScratchSize, 8ULL);
-		desc.Flags = D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS;
-		DX::ThrowIfFailed(d3d12Device->CreateCommittedResource(&DEFAULT_HEAP, D3D12_HEAP_FLAG_NONE, &desc, D3D12_RESOURCE_STATE_COMMON, nullptr, IID_PPV_ARGS(&tlasUpdateScratch)));
+		lightBuffer = eastl::make_unique<StructuredBufferDX12<Light>>(d3d12Device.get(), MAX_LIGHTS);
+		lightBuffer->CreateSRV(commonHeap.get(), handleIncrement);
 	}
 
 	CompileShaders();
+}
+
+bool IsValidLight(RE::BSLight* a_light)
+{
+	return a_light && !a_light->light->GetFlags().any(RE::NiAVObject::Flag::kHidden);
+}
+
+bool IsGlobalLight(RE::BSLight* a_light)
+{
+	return !(a_light->portalStrict || !a_light->portalGraph);
+}
+
+eastl::vector<LightLimitFix::LightData> RaytracedGI::GetPointLights()
+{
+	eastl::vector<LightLimitFix::LightData> lightsData{};
+
+	auto accumulator = *globals::game::currentAccumulator.get();
+	const auto activeShadowSceneNode = accumulator->GetRuntimeData().activeShadowSceneNode;
+
+	auto& isl = globals::features::inverseSquareLighting;
+
+	auto addLight = [&](const RE::NiPointer<RE::BSLight>& e) 
+	{
+		if (auto bsLight = e.get()) {
+			if (auto niLight = bsLight->light.get()) {
+				if (IsValidLight(bsLight)) {
+					auto& runtimeData = niLight->GetLightRuntimeData();
+
+					LightLimitFix::LightData light{};
+					light.color = { runtimeData.diffuse.red, runtimeData.diffuse.green, runtimeData.diffuse.blue };
+					light.lightFlags = std::bit_cast<LightLimitFix::LightFlags>(runtimeData.ambient.red);
+
+					if (isl.loaded) {
+						isl.ProcessLight(light, bsLight, niLight);
+					} else {
+						light.radius = runtimeData.radius.x;
+						light.color *= runtimeData.fade;
+					}
+
+					light.color *= bsLight->lodDimmer;
+
+					if (!IsGlobalLight(bsLight)) {
+						light.lightFlags.set(LightLimitFix::LightFlags::PortalStrict);
+					}
+
+					if (bsLight->IsShadowLight()) {
+						auto* shadowLight = static_cast<RE::BSShadowLight*>(bsLight);
+						GET_INSTANCE_MEMBER(shadowLightIndex, shadowLight);
+						light.shadowMaskIndex = shadowLightIndex;
+						light.lightFlags.set(LightLimitFix::LightFlags::Shadow);
+					}
+
+					// Check for inactive shadow light
+					if (light.shadowMaskIndex != 255) {
+						auto worldPos = niLight->world.translate;
+
+						light.positionWS[0].data = float3(worldPos.x, worldPos.y, worldPos.z);
+
+						if ((light.color.x + light.color.y + light.color.z) > 1e-4 && light.radius > 1e-4) {
+							lightsData.push_back(light);
+						}
+					}
+				}
+			}
+		}
+	};
+
+	const auto& activeLights = activeShadowSceneNode->GetRuntimeData().activeLights;
+	for (auto& light : activeLights) {
+		addLight(light);
+	}
+
+	const auto& activeShadowLights = activeShadowSceneNode->GetRuntimeData().activeShadowLights;
+	for (auto& light : activeShadowLights) {
+		addLight(light);
+	}
+
+	return lightsData;
+}
+
+void RaytracedGI::UpdateLights() 
+{
+	// Directional light
+	{
+		auto accumulator = *globals::game::currentAccumulator.get();
+		auto dirLight = skyrim_cast<RE::NiDirectionalLight*>(accumulator->GetRuntimeData().activeShadowSceneNode->GetRuntimeData().sunLight->light.get());
+
+		auto& directionNi = dirLight->GetWorldDirection();
+		auto direction = float3(directionNi.x, directionNi.y, directionNi.z);
+		direction.Normalize();
+
+		auto diffuse = dirLight->GetLightRuntimeData().diffuse;
+		
+		frameBufferData->DirectionalLight.Vector = direction;
+		frameBufferData->DirectionalLight.Color = float3(diffuse.red, diffuse.green, diffuse.blue) * ( Util::IsInterior() ? 0.0f : 1.0f );
+	}
+
+	// Point lights
+	{
+		lightData.clear();
+		lightData.reserve(MAX_LIGHTS);
+
+		for (auto data : GetPointLights()) {
+			lightData.push_back({
+				.Vector = data.positionWS[0].data,
+				.Range = data.radius,
+				.Color = data.color,
+				.Pad = 0
+			});
+		}
+
+		lightBuffer->Update(lightData.data(), lightData.size());
+	}
+}
+
+DirectX::XMMATRIX GetXMFromNiTransform(const RE::NiTransform& Transform)
+{
+	DirectX::XMMATRIX temp;
+
+	const RE::NiMatrix3& m = Transform.rotate;
+	const float scale = Transform.scale;
+
+	temp.r[0] = DirectX::XMVectorScale(DirectX::XMVectorSet(
+										   m.entry[0][0],
+										   m.entry[1][0],
+										   m.entry[2][0],
+										   0.0f),
+		scale);
+
+	temp.r[1] = DirectX::XMVectorScale(DirectX::XMVectorSet(
+										   m.entry[0][1],
+										   m.entry[1][1],
+										   m.entry[2][1],
+										   0.0f),
+		scale);
+
+	temp.r[2] = DirectX::XMVectorScale(DirectX::XMVectorSet(
+										   m.entry[0][2],
+										   m.entry[1][2],
+										   m.entry[2][2],
+										   0.0f),
+		scale);
+
+	temp.r[3] = DirectX::XMVectorSet(
+		Transform.translate.x,
+		Transform.translate.y,
+		Transform.translate.z,
+		1.0f);
+
+	return temp;
 }
 
 void RaytracedGI::Main_RenderWorld(bool a1)
@@ -216,7 +329,7 @@ template <typename T>
 void RaytracedGI::MakeAndCopy(const eastl::vector<T>& data, winrt::com_ptr<ID3D12Resource>& res)
  {
 	auto desc = BASIC_BUFFER_DESC;
-	desc.Width = (UINT64)data.size();
+	desc.Width = sizeof(T) * data.size();
 
 	DX::ThrowIfFailed(d3d12Device->CreateCommittedResource(&UPLOAD_HEAP, D3D12_HEAP_FLAG_NONE, &desc, D3D12_RESOURCE_STATE_GENERIC_READ, nullptr, IID_PPV_ARGS(&res)));
 
@@ -233,6 +346,9 @@ void RaytracedGI::CreateBuffers()
 
 	vertexBuffers.clear();
 	indexBuffers.clear();
+	instances.clear();
+	blasCollection.clear();
+	instanceCount = 0;
 
 	static auto shadowSceneNode = RE::BSShaderManager::State::GetSingleton().shadowSceneNode[0];
 
@@ -241,6 +357,9 @@ void RaytracedGI::CreateBuffers()
 
 			// Ensure its Lighting shader, for now
 			if (!triShape->lightingShaderProp_cast())
+				return RE::BSVisit::BSVisitControl::kContinue;
+
+			if (geometry->worldBound.radius == 0.0f)
 				return RE::BSVisit::BSVisitControl::kContinue;
 
 			auto& flags = triShape->GetFlags();
@@ -261,29 +380,32 @@ void RaytracedGI::CreateBuffers()
 				}
 
 				const auto bsxFlagsStr = GetFlags<RE::BSXFlags::Flag>(bsxFlagsValue);
-				logger::info(fmt::runtime("BSXFlags: {}"), bsxFlagsStr);
+				//logger::info(fmt::runtime("BSXFlags: {}"), bsxFlagsStr);
 
 				const auto& geometryType = geometry->GetType().get();
 				const auto geometryTypeName = magic_enum::enum_name(geometryType);
 
-				logger::info(fmt::runtime("Geometry [0x{:x}]: {}, Type: {}"), reinterpret_cast<uintptr_t>(geometry), geometry->name.c_str(), geometryTypeName);
+				//logger::info(fmt::runtime("Geometry [0x{:x}]: {}, Type: {}"), reinterpret_cast<uintptr_t>(geometry), geometry->name.c_str(), geometryTypeName);
 
 				const auto flagsStr = GetFlags<RE::NiAVObject::Flag>(flags.underlying());
 
-				logger::info(fmt::runtime("Flags: {}"), flagsStr);
+				//logger::info(fmt::runtime("Flags: {}"), flagsStr);
 
 				const auto triShapeRuntime = triShape->GetTrishapeRuntimeData();
 
 				uint vertexCount = triShapeRuntime.vertexCount;
 				uint indexCount = triShapeRuntime.triangleCount * 3;
 
-				logger::info(fmt::runtime("Vertex Count: {}, Index Count: {}"), vertexCount, indexCount);
+				//logger::info(fmt::runtime("Vertex Count: {}, Index Count: {}"), vertexCount, indexCount);
 
 				RE::BSGraphics::TriShape* rendererData = triShape->GetGeometryRuntimeData().rendererData;
 				//RE::BSGraphics::TriShape* rendererData = geometry->GetGeometryRuntimeData().rendererData;
 
 				if (!rendererData)
 					return RE::BSVisit::BSVisitControl::kContinue;
+
+				winrt::com_ptr<ID3D12Resource> vertexBuffer = nullptr;
+				winrt::com_ptr<ID3D12Resource> indexBuffer = nullptr;
 
 				// Create vertex buffer
 				{
@@ -310,7 +432,7 @@ void RaytracedGI::CreateBuffers()
 							vertexData.Position.x = pos[0];
 							vertexData.Position.y = pos[1];
 							vertexData.Position.z = pos[2];
-							vertexData.Position.w = pos[3];
+							//vertexData.Position.w = pos[3];
 						}
 
 						if (vertexFlags & RE::BSGraphics::Vertex::VF_UV) {
@@ -337,29 +459,91 @@ void RaytracedGI::CreateBuffers()
 
 						vertices.push_back(vertexData);
 					}
-
-					winrt::com_ptr<ID3D12Resource> vertexBuffer = nullptr;
+					
 					MakeAndCopy(vertices, vertexBuffer);
-
-					vertexBuffers.emplace((ID3D11Buffer*)rendererData->vertexBuffer, std::move(vertexBuffer));
 				}
 
 				// Create indices buffer
 				{
-					eastl::vector<uint16_t> indexes(rendererData->rawIndexData, rendererData->rawIndexData + indexCount);
-
-					winrt::com_ptr<ID3D12Resource> indexBuffer = nullptr;
-					MakeAndCopy(indexes, indexBuffer);
-
-					indexBuffers.emplace((ID3D11Buffer*)rendererData->indexBuffer, std::move(indexBuffer));
+					eastl::vector<uint16_t> indexes(rendererData->rawIndexData, rendererData->rawIndexData + indexCount);					
+					MakeAndCopy(indexes, indexBuffer);					
 				}
 
-			}
+				auto resourceKey = TriBufferKey{ vertexBuffer.get(), indexBuffer.get() };
 
+				// Create BLAS
+				{
+					winrt::com_ptr<ID3D12Resource> blas;
+					blas.attach(MakeBLAS(vertexBuffer.get(), vertexCount, indexBuffer.get(), indexCount));
+
+					blasCollection.emplace(
+						resourceKey, 
+						std::move(blas)
+					);
+				}
+
+				// Create instances
+				{
+					float4x4 xmmTransform = GetXMFromNiTransform(triShape->world);
+
+					instances.emplace(
+						triShape, 
+						InstanceData(resourceKey, xmmTransform));
+				}
+
+				vertexBuffers.emplace((ID3D11Buffer*)rendererData->vertexBuffer, std::move(vertexBuffer));
+				indexBuffers.emplace((ID3D11Buffer*)rendererData->indexBuffer, std::move(indexBuffer));
+			}
 		}
 
 		return RE::BSVisit::BSVisitControl::kContinue;
 	});
+
+	// This probably shoudn't go here
+	// Create instance buffer
+	{
+		auto instancesDesc = BASIC_BUFFER_DESC;
+		instancesDesc.Width = sizeof(D3D12_RAYTRACING_INSTANCE_DESC) * instances.size();
+		DX::ThrowIfFailed(d3d12Device->CreateCommittedResource(&UPLOAD_HEAP, D3D12_HEAP_FLAG_NONE, &instancesDesc, D3D12_RESOURCE_STATE_GENERIC_READ, nullptr, IID_PPV_ARGS(&instanceBuffer)));
+		instanceBuffer->Map(0, nullptr, reinterpret_cast<void**>(&instanceData));
+
+		for (const auto& [ triShape, data ] : instances) {
+			auto& key = data.TriBufferKey;
+
+			if (auto it = blasCollection.find(key); it != blasCollection.end()) {
+				instanceData[instanceCount] = {
+					.InstanceID = 0,  // All 0 for now idk
+					.InstanceMask = 1,
+					.AccelerationStructure = it->second->GetGPUVirtualAddress()		
+				};
+
+				auto* ptr = reinterpret_cast<DirectX::XMFLOAT3X4*>(&instanceData[instanceCount].Transform);
+				XMStoreFloat3x4(ptr, data.Transform);
+
+				instanceCount++;
+			}
+		}	
+	}
+
+	// Create TLAS
+	{
+		UINT64 updateScratchSize;
+		tlas.attach(MakeTLAS(instanceBuffer.get(), instanceCount, &updateScratchSize));
+
+		auto desc = BASIC_BUFFER_DESC;
+		// WARP bug workaround: use 8 if the required size was reported as less
+		desc.Width = std::max(updateScratchSize, 8ULL);
+		desc.Flags = D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS;
+		DX::ThrowIfFailed(d3d12Device->CreateCommittedResource(&DEFAULT_HEAP, D3D12_HEAP_FLAG_NONE, &desc, D3D12_RESOURCE_STATE_COMMON, nullptr, IID_PPV_ARGS(&tlasUpdateScratch)));	
+	
+		D3D12_SHADER_RESOURCE_VIEW_DESC tlasDesc = {};
+		tlasDesc.ViewDimension = D3D12_SRV_DIMENSION_RAYTRACING_ACCELERATION_STRUCTURE;
+		tlasDesc.RaytracingAccelerationStructure.Location = tlas->GetGPUVirtualAddress();
+		tlasDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
+
+		auto cpuHandle = commonHeap->GetCPUDescriptorHandleForHeapStart();
+		d3d12Device->CreateShaderResourceView(nullptr, &tlasDesc, cpuHandle);
+	}
 
 	buffersCreated = true;
 }
@@ -476,18 +660,30 @@ void RaytracedGI::DrawRTGI()
 		DX::ThrowIfFailed(commandList->Reset(commandAllocator.get(), nullptr));
 	}
 
+	// Update framebuffer
+	{
+		frameBufferData->ViewInverse = globals::game::frameBufferCached.GetCameraViewInverse().Transpose();
+		frameBufferData->ProjInverse = globals::game::frameBufferCached.GetCameraProjInverse().Transpose();
+		frameBufferData->Position = globals::game::frameBufferCached.GetCameraPosAdjust();
+	}
+
+	// Upload to GPU
+	{
+		lightBuffer->Upload(commandList.get());
+	}
+
 	// Update scene
 	{
-		UpdateTransforms();
+		//UpdateTransforms();
 
 		D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_DESC desc = {
 			.DestAccelerationStructureData = tlas->GetGPUVirtualAddress(),
 			.Inputs = {
 				.Type = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL,
 				.Flags = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_PERFORM_UPDATE,
-				.NumDescs = NUM_INSTANCES,
+				.NumDescs = instanceCount,
 				.DescsLayout = D3D12_ELEMENTS_LAYOUT_ARRAY,
-				.InstanceDescs = instances->GetGPUVirtualAddress() 
+				.InstanceDescs = instanceBuffer->GetGPUVirtualAddress() 
 			},
 			.SourceAccelerationStructureData = tlas->GetGPUVirtualAddress(),
 			.ScratchAccelerationStructureData = tlasUpdateScratch->GetGPUVirtualAddress(),
@@ -508,13 +704,21 @@ void RaytracedGI::DrawRTGI()
 		commandList->SetPipelineState1(pipelineRT.get());
 		commandList->SetComputeRootSignature(rootSignature.get());
 
-		auto uavHeapPtr = uavHeap.get();
-		commandList->SetDescriptorHeaps(1, &uavHeapPtr);
+		auto commonHeapPtr = commonHeap.get();
+		commandList->SetDescriptorHeaps(1, &commonHeapPtr);
 
-		auto uavTable = uavHeap->GetGPUDescriptorHandleForHeapStart();
-		commandList->SetComputeRootDescriptorTable(0, uavTable);  // <u0 vt0
+		auto heapStart = commonHeap->GetGPUDescriptorHandleForHeapStart();
 
-		commandList->SetComputeRootShaderResourceView(1, tlas->GetGPUVirtualAddress());	
+		// SRV table
+		commandList->SetComputeRootDescriptorTable(0, heapStart);
+
+		// UAV table
+		D3D12_GPU_DESCRIPTOR_HANDLE uavHandle = heapStart;
+		uavHandle.ptr += handleIncrement * 2;
+		commandList->SetComputeRootDescriptorTable(1, uavHandle);
+
+		// Constant buffer
+		commandList->SetComputeRootConstantBufferView(2, frameBuffer->GetGPUVirtualAddress());
 
 		auto rtDesc = diffuseGITexture->resource->GetDesc();
 
@@ -565,30 +769,9 @@ void RaytracedGI::DrawRTGI()
 		DX::ThrowIfFailed(d3d11Context->Wait(d3d11Fence.get(), fenceValue));
 		fenceValue++;
 	}
-}
 
-void RaytracedGI::UpdateTransforms()
-{
-	using namespace DirectX;
-	auto set = [&](int idx, XMMATRIX mx) {
-		auto* ptr = reinterpret_cast<XMFLOAT3X4*>(&instanceData[idx].Transform);
-		XMStoreFloat3x4(ptr, mx);
-	};
-
-	auto time = static_cast<float>(GetTickCount64()) / 1000;
-
-	auto cube = XMMatrixRotationRollPitchYaw(time / 2, time / 3, time / 5);
-	cube *= XMMatrixTranslation(-1.5, 2, 2);
-	set(0, cube);
-
-	auto mirror = XMMatrixRotationX(-1.8f);
-	mirror *= XMMatrixRotationY(XMScalarSinEst(time) / 8 + 1);
-	mirror *= XMMatrixTranslation(2, 2, 2);
-	set(1, mirror);
-
-	auto floor = XMMatrixScaling(5, 5, 5);
-	floor *= XMMatrixTranslation(0, 0, 2);
-	set(2, floor);
+	auto main = globals::game::renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMAIN];
+	d3d11Context->CopyResource(main.texture, diffuseGITexture->resource11);
 }
 
 ID3D12Resource* RaytracedGI::MakeAccelerationStructure(const D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_INPUTS& inputs, UINT64* updateScratchSize)
@@ -639,7 +822,7 @@ ID3D12Resource* RaytracedGI::MakeAccelerationStructure(const D3D12_BUILD_RAYTRAC
 	return as;
 }
 
-ID3D12Resource* RaytracedGI::MakeBLAS(ID3D12Resource* vertexBuffer, UINT vertexFloats, ID3D12Resource* indexBuffer, UINT indices)
+ID3D12Resource* RaytracedGI::MakeBLAS(ID3D12Resource* vertexBuffer, UINT vertices, ID3D12Resource* indexBuffer, UINT indices)
 {
 	D3D12_RAYTRACING_GEOMETRY_DESC geometryDesc = {
 		.Type = D3D12_RAYTRACING_GEOMETRY_TYPE_TRIANGLES,
@@ -651,11 +834,11 @@ ID3D12Resource* RaytracedGI::MakeBLAS(ID3D12Resource* vertexBuffer, UINT vertexF
 			.IndexFormat = indexBuffer ? DXGI_FORMAT_R16_UINT : DXGI_FORMAT_UNKNOWN,
 			.VertexFormat = DXGI_FORMAT_R32G32B32_FLOAT,
 			.IndexCount = indices,
-			.VertexCount = vertexFloats / 3,
+			.VertexCount = vertices,
 			.IndexBuffer = indexBuffer ? indexBuffer->GetGPUVirtualAddress() : 0,
 			.VertexBuffer = { 
 				.StartAddress = vertexBuffer->GetGPUVirtualAddress(),
-				.StrideInBytes = sizeof(float) * 3 
+				.StrideInBytes = sizeof(VertexData) 
 			} 
 		}
 	};
@@ -767,22 +950,44 @@ void RaytracedGI::CreateRootSignature()
 	if (rootSignature)
 		return;
 
+	D3D12_DESCRIPTOR_RANGE srvRange = {
+		.RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV,
+		.NumDescriptors = 2, 
+		.BaseShaderRegister = 0,
+		.RegisterSpace = 0,
+		.OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND
+	};
+
 	D3D12_DESCRIPTOR_RANGE uavRange = {
 		.RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_UAV,
 		.NumDescriptors = 1,
+		.BaseShaderRegister = 0,
+		.RegisterSpace = 0,
+		.OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND
 	};
+
 	D3D12_ROOT_PARAMETER params[] = {
-		{ .ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE,
+		{ 
+			.ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE,
+			.DescriptorTable = { 
+				.NumDescriptorRanges = 1,
+				.pDescriptorRanges = &srvRange
+			}
+		},
+		{ 
+			.ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE,
 			.DescriptorTable = { 
 				.NumDescriptorRanges = 1,
 				.pDescriptorRanges = &uavRange
-			} 
+			}
 		},
-		{ .ParameterType = D3D12_ROOT_PARAMETER_TYPE_SRV,
-			.Descriptor = { 
-				.ShaderRegister = 0, 
-				.RegisterSpace = 0 
-			} 
+		{
+			.ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV,
+			.Descriptor = {
+				.ShaderRegister = 0,
+				.RegisterSpace = 0
+			},
+			.ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL
 		}
 	};
 

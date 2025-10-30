@@ -24,24 +24,26 @@
 #include "Features/Upscaling/DX12SwapChain.h"
 #include <dxcapi.h>
 #include <directxpackedvector.h>
+#include "Features/RaytracedGI/Buffer.h"
+#include "LightLimitFix.h"
 
-struct ResourceKey
+struct TriBufferKey
 {
-	ID3D12Resource* a;
-	ID3D12Resource* b;
+	ID3D12Resource* vertexBuffer;
+	ID3D12Resource* indexBuffer;
 
-	bool operator==(const ResourceKey& other) const
+	bool operator==(const TriBufferKey& other) const
 	{
-		return a == other.a && b == other.b;
+		return vertexBuffer == other.vertexBuffer && indexBuffer == other.indexBuffer;
 	}
 };
 
-struct ResourceKeyHash
+struct TriBufferKeyHash
 {
-	size_t operator()(const ResourceKey& key) const
+	size_t operator()(const TriBufferKey& key) const
 	{
-		size_t h1 = eastl::hash<ID3D12Resource*>()(key.a);
-		size_t h2 = eastl::hash<ID3D12Resource*>()(key.b);
+		size_t h1 = eastl::hash<ID3D12Resource*>()(key.vertexBuffer);
+		size_t h2 = eastl::hash<ID3D12Resource*>()(key.indexBuffer);
 		return h1 ^ (h2 << 1);  // simple hash combining
 	}
 };
@@ -91,10 +93,12 @@ struct RaytracedGI : public Feature
 	void CreateRootSignature();
 	ID3D12Resource* MakeAccelerationStructure(const D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_INPUTS& inputs, UINT64* updateScratchSize = nullptr);
 	void Flush();
-	ID3D12Resource* MakeBLAS(ID3D12Resource* vertexBuffer, UINT vertexFloats, ID3D12Resource* indexBuffer = nullptr, UINT indices = 0);
+	ID3D12Resource* MakeBLAS(ID3D12Resource* vertexBuffer, UINT vertices, ID3D12Resource* indexBuffer = nullptr, UINT indices = 0);
 	ID3D12Resource* MakeTLAS(ID3D12Resource* instances, UINT numInstances, UINT64* updateScratchSize);
-	void UpdateTransforms();
 	void DrawRTGI();
+
+	eastl::vector<LightLimitFix::LightData> GetPointLights();
+	void UpdateLights();
 
 	void Main_RenderWorld(bool a1);
 	void BSShader_SetupGeometry(RE::BSShader* This, RE::BSRenderPass* Pass, uint32_t RenderFlags);
@@ -115,10 +119,7 @@ struct RaytracedGI : public Feature
 
 	//void BSTriShape_UpdateWorldData(RE::BSTriShape* This, RE::NiUpdateData* a_data);
 	
-	static constexpr float quadVtx[] = { -1, 0, -1, -1, 0, 1, 1, 0, 1, -1, 0, -1, 1, 0, -1, 1, 0, 1 };
-	static constexpr float cubeVtx[] = { -1, -1, -1, 1, -1, -1, -1, 1, -1, 1, 1, -1, -1, -1, 1, 1, -1, 1, -1, 1, 1, 1, 1, 1 };
-	static constexpr short cubeIdx[] = { 4, 6, 0, 2, 0, 6, 0, 1, 4, 5, 4, 1, 0, 2, 1, 3, 1, 2, 1, 3, 5, 7, 5, 3, 2, 6, 3, 7, 3, 6, 4, 5, 6, 7, 6, 5 };
-	static constexpr UINT NUM_INSTANCES = 3;
+	static constexpr uint MAX_LIGHTS = 32;
 	static constexpr UINT64 NUM_SHADER_IDS = 3;
 
 	static constexpr DXGI_SAMPLE_DESC NO_AA = { .Count = 1, .Quality = 0 };
@@ -143,23 +144,33 @@ struct RaytracedGI : public Feature
 		float2 UvA = { 0.0f, 0.0f };
 	} settings;
 
-	struct CbData
+	struct Light
 	{
-		float3 ColorA;
-		float _pad0;  // Padding to align to 16 bytes
-		DirectX::XMUINT2 IdA;
-		float2 UvA;
+		float3 Vector;
+		float Range;
+		float3 Color;
+		uint Pad;
 	};
-	static_assert(sizeof(CbData) % 16 == 0,
-		"CbData must be aligned to 16 bytes. "
-		"Check out maraneshi.github.io/HLSL-ConstantBufferLayoutVisualizer/ if you're unsure.");
+
+	eastl::vector<Light> lightData;
+	eastl::unique_ptr<StructuredBufferDX12<Light>> lightBuffer = nullptr;
+
+	struct alignas(16) FrameBuffer
+	{
+		float4x4 ViewInverse;
+		float4x4 ProjInverse;
+		float4 Position;
+		Light DirectionalLight;
+	};
+	static_assert(sizeof(FrameBuffer) % 16 == 0);
+	FrameBuffer* frameBufferData;
 
 	bool renderingWorld = false;
 	bool buffersCreated = false;
 
 	struct VertexData
 	{
-		float4 Position;
+		float3 Position;
 		uint16_t Texcoord[2];
 		uint8_t Normal[4];
 		uint8_t Color[4];
@@ -168,13 +179,16 @@ struct RaytracedGI : public Feature
 	eastl::unordered_map<ID3D11Buffer*, winrt::com_ptr<ID3D12Resource>> vertexBuffers;
 	eastl::unordered_map<ID3D11Buffer*, winrt::com_ptr<ID3D12Resource>> indexBuffers;
 
-	eastl::unordered_map<ResourceKey, winrt::com_ptr<ID3D12Resource>, ResourceKeyHash> blasCollection;
-	//eastl::unordered_map<ID3D11Buffer*, winrt::com_ptr<ID3D12Resource>> instances;
+	eastl::unordered_map<TriBufferKey, winrt::com_ptr<ID3D12Resource>, TriBufferKeyHash> blasCollection;
+	//eastl::unordered_map<ID3D11Buffer*, winrt::com_ptr<ID3D12Resource>> instanceBuffer;
 
 	struct InstanceData
 	{
-		float4x4 World;
+		TriBufferKey TriBufferKey;
+		float4x4 Transform;
 	};
+
+	eastl::unordered_map<RE::BSTriShape*, InstanceData> instances;
 
 	//eastl::unordered_map<RE::BSTriShape*, winrt::com_ptr<ID3D12Resource>> cachedTrishapes;
 
@@ -183,18 +197,17 @@ struct RaytracedGI : public Feature
 	winrt::com_ptr<ID3D11SamplerState> cheeseSampler = nullptr;
 	winrt::com_ptr<ID3D11ComputeShader> cheeseCs = nullptr;
 
-	winrt::com_ptr<ID3D12Resource> quadVB = nullptr;
-	winrt::com_ptr<ID3D12Resource> cubeVB = nullptr;
-	winrt::com_ptr<ID3D12Resource> cubeIB = nullptr;
-
 	winrt::com_ptr<ID3D12Resource> quadBlas = nullptr;
 	winrt::com_ptr<ID3D12Resource> cubeBlas = nullptr;
 
-	winrt::com_ptr<ID3D12Resource> instances = nullptr;
+	winrt::com_ptr<ID3D12Resource> instanceBuffer = nullptr;
 	D3D12_RAYTRACING_INSTANCE_DESC* instanceData;
-	
+	uint instanceCount = 0;
+
 	winrt::com_ptr<ID3D12Resource> tlas = nullptr;
 	winrt::com_ptr<ID3D12Resource> tlasUpdateScratch = nullptr;
+
+	winrt::com_ptr<ID3D12Resource> frameBuffer = nullptr;
 
 	// Shaders
 	/*winrt::com_ptr<IDxcBlob> rayGenerationRT = nullptr;
@@ -212,12 +225,13 @@ struct RaytracedGI : public Feature
 
 	winrt::com_ptr<ID3D12RootSignature> rootSignature = nullptr;
 
-	winrt::com_ptr<ID3D12DescriptorHeap> uavHeap = nullptr;	
+	winrt::com_ptr<ID3D12DescriptorHeap> commonHeap = nullptr;	
 
 	winrt::com_ptr<ID3D11Fence> d3d11Fence = nullptr;
 	winrt::com_ptr<ID3D12Fence> d3d12Fence = nullptr;
 
 	UINT64 fenceValue = 1;
+	UINT handleIncrement;
 
 	// D3D11
 	winrt::com_ptr<ID3D11Device5> d3d11Device = nullptr;
