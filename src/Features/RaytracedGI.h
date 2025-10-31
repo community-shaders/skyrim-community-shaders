@@ -27,24 +27,24 @@
 #include "Features/RaytracedGI/Buffer.h"
 #include "LightLimitFix.h"
 
-struct TriBufferKey
+struct TriBufferPtrKey
 {
-	winrt::com_ptr<ID3D12Resource> vertexBuffer;
-	winrt::com_ptr<ID3D12Resource> indexBuffer;
+	ID3D11Buffer* vertexBuffer;
+	ID3D11Buffer* indexBuffer;
 
-	bool operator==(const TriBufferKey& other) const noexcept
+	bool operator==(const TriBufferPtrKey& other) const noexcept
 	{
-		return vertexBuffer.get() == other.vertexBuffer.get() &&
-		       indexBuffer.get() == other.indexBuffer.get();
+		return vertexBuffer == other.vertexBuffer &&
+		       indexBuffer == other.indexBuffer;
 	}
 };
 
-struct TriBufferKeyHash
+struct TriBufferPtrKeyHash
 {
-	size_t operator()(const TriBufferKey& key) const noexcept
+	size_t operator()(const TriBufferPtrKey& key) const noexcept
 	{
-		size_t h1 = eastl::hash<ID3D12Resource*>()(key.vertexBuffer.get());
-		size_t h2 = eastl::hash<ID3D12Resource*>()(key.indexBuffer.get());
+		size_t h1 = eastl::hash<ID3D11Buffer*>()(key.vertexBuffer);
+		size_t h2 = eastl::hash<ID3D11Buffer*>()(key.indexBuffer);
 		return h1 ^ (h2 << 1);
 	}
 };
@@ -105,7 +105,6 @@ struct RaytracedGI : public Feature
 	void BSShader_SetupGeometry(RE::BSShader* This, RE::BSRenderPass* Pass, uint32_t RenderFlags);
 	void BSBatchRenderer_RenderPassImmediately(RE::BSRenderPass* pass, uint32_t technique, bool alphaTest, uint32_t renderFlags);
 
-	void UnregisterBuffer(ID3D11Buffer* ppBuffer);
 	void CreateBuffers();
 
 	template <typename T>
@@ -168,6 +167,7 @@ struct RaytracedGI : public Feature
 
 	bool renderingWorld = false;
 	bool buffersCreated = false;
+	bool creatingBuffers = false;
 
 	struct Vertex
 	{
@@ -177,16 +177,25 @@ struct RaytracedGI : public Feature
 		uint8_t Color[4];
 	};
 
-	eastl::unordered_map<ID3D11Buffer*, winrt::com_ptr<ID3D12Resource>> vertexBuffers;
-	eastl::unordered_map<ID3D11Buffer*, winrt::com_ptr<ID3D12Resource>> indexBuffers;
+	struct MeshData
+	{
+		uint vertexCount;
+		uint indexCount;
+		winrt::com_ptr<ID3D12Resource> vertexBuffer;
+		winrt::com_ptr<ID3D12Resource> indexBuffer;
+		winrt::com_ptr<ID3D12Resource> blasBuffer;
+	};
 
-	eastl::unordered_map<TriBufferKey, winrt::com_ptr<ID3D12Resource>, TriBufferKeyHash> blasCollection;
-	//eastl::unordered_map<ID3D11Buffer*, winrt::com_ptr<ID3D12Resource>> instanceBuffer;
+	eastl::vector<MeshData> meshVector;
+	eastl::unordered_map<TriBufferPtrKey, size_t, TriBufferPtrKeyHash> meshMap;	
+
+	eastl::vector<uint> instanceMap;
+	winrt::com_ptr<ID3D12Resource> instanceMapBuffer = nullptr;
 
 	struct InstanceData
 	{
-		TriBufferKey TriBufferKey;
-		float4x4 Transform;
+		TriBufferPtrKey triBufferPtrKey;
+		float4x4 transform;
 	};
 
 	eastl::unordered_map<RE::BSTriShape*, InstanceData> instances;
@@ -198,12 +207,8 @@ struct RaytracedGI : public Feature
 	winrt::com_ptr<ID3D11SamplerState> cheeseSampler = nullptr;
 	winrt::com_ptr<ID3D11ComputeShader> cheeseCs = nullptr;
 
-	winrt::com_ptr<ID3D12Resource> quadBlas = nullptr;
-	winrt::com_ptr<ID3D12Resource> cubeBlas = nullptr;
-
 	winrt::com_ptr<ID3D12Resource> instanceBuffer = nullptr;
 	D3D12_RAYTRACING_INSTANCE_DESC* instanceData;
-	uint instanceCount = 0;
 
 	winrt::com_ptr<ID3D12Resource> tlas = nullptr;
 	winrt::com_ptr<ID3D12Resource> tlasUpdateScratch = nullptr;
@@ -248,8 +253,8 @@ struct RaytracedGI : public Feature
 		{
 			static void thunk(ID3D11Buffer* This)
 			{
-				if (globals::features::raytracedGI.Active())
-					globals::features::raytracedGI.UnregisterBuffer(This);
+				/*if (globals::features::raytracedGI.Active())
+					globals::features::raytracedGI.UnregisterBuffer(This);*/
 
 				func(This);
 			}

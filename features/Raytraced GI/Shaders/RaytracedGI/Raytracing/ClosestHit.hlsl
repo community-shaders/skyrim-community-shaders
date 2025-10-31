@@ -4,8 +4,10 @@
 RaytracingAccelerationStructure Scene : register(t0, space0);
 
 StructuredBuffer<Light> Lights : register(t1, space0);
+ByteAddressBuffer InstanceMap : register(t2, space0);
+
 StructuredBuffer<Vertex> Vertices[] : register(t0, space1);
-ByteAddressBuffer Indices[] : register(t0, space2);
+StructuredBuffer<uint3> Indices[] : register(t0, space2);
 
 static const float3 light = float3(0, 200, 0);
 
@@ -14,17 +16,29 @@ void HitMirror(inout Payload payload, float2 uv);
 void HitFloor(inout Payload payload, float2 uv);
 
 [shader("closesthit")]
-void main(inout Payload payload, BuiltInTriangleIntersectionAttributes attribs)
+void main(inout Payload payload, in BuiltInTriangleIntersectionAttributes attribs)
 {
     uint instanceID = InstanceID();
-    uint primitiveIndex = PrimitiveIndex();
-    
-    StructuredBuffer<Vertex> vertices = Vertices[instanceID];
-    ByteAddressBuffer indices = Indices[instanceID];
-    
-    float2 uv = attribs.barycentrics;
 
-    HitCube(payload, uv);
+    uint meshID = InstanceMap.Load(instanceID * 4);
+    
+    StructuredBuffer<Vertex> meshVertices = Vertices[meshID];
+    StructuredBuffer<uint3> meshIndices = Indices[meshID];
+    
+    uint3 triIndices = meshIndices[PrimitiveIndex()];
+    
+    Vertex v0 = meshVertices[triIndices.x];
+    Vertex v1 = meshVertices[triIndices.y];
+    Vertex v2 = meshVertices[triIndices.z];
+
+    float2 bary = attribs.barycentrics;
+    float u = bary.x;
+    float v = bary.y;
+    float w = 1.0 - u - v;    
+    
+    float3 normal = normalize(v0.Normal.unpack().xyz * w + v1.Normal.unpack().xyz * u + v2.Normal.unpack().xyz * v);
+    
+    HitCube(payload, bary);
     
     /*switch (InstanceID())
     {

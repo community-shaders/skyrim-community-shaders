@@ -47,9 +47,10 @@ void RaytracedGI::DrawSettings()
 	ImGui::InputFloat2("UV A", &settings.UvA.x);
 
 	if (ImGui::TreeNodeEx("Statistics", ImGuiTreeNodeFlags_DefaultOpen)) {
-		ImGui::Text(std::format("Vertex buffers: {}", vertexBuffers.size()).c_str());
-		ImGui::Text(std::format("Index buffers: {}", indexBuffers.size()).c_str());
+		ImGui::Text(std::format("Mesh Data (vertex, index and BLAS buffers): {}", meshVector.size()).c_str());
 
+		ImGui::Text(std::format("Instances: {}", instances.size()).c_str());
+		
 		ImGui::TreePop();
 	}
 
@@ -69,7 +70,7 @@ void RaytracedGI::SetupResources()
 	{
 		D3D12_DESCRIPTOR_HEAP_DESC commonHeapDesc = {
 			.Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV,
-			.NumDescriptors = 25000,
+			.NumDescriptors = 4096,
 			.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE
 		};
 		d3d12Device->CreateDescriptorHeap(&commonHeapDesc, IID_PPV_ARGS(&commonHeap));	
@@ -339,14 +340,15 @@ void RaytracedGI::MakeAndCopy(const eastl::vector<T>& data, winrt::com_ptr<ID3D1
 
 void RaytracedGI::CreateBuffers()
 {
-	if (buffersCreated)
+	if (buffersCreated || creatingBuffers)
 		return;
 
-	vertexBuffers.clear();
-	indexBuffers.clear();
+	creatingBuffers = true;
+
+	meshVector.clear();
+	meshMap.clear();
 	instances.clear();
-	blasCollection.clear();
-	instanceCount = 0;
+	instanceMap.clear();
 
 	static auto shadowSceneNode = RE::BSShaderManager::State::GetSingleton().shadowSceneNode[0];
 
@@ -402,10 +404,41 @@ void RaytracedGI::CreateBuffers()
 				if (!rendererData)
 					return RE::BSVisit::BSVisitControl::kContinue;
 
+				auto vertexBufferDX11 = (ID3D11Buffer*)rendererData->vertexBuffer;
+				auto indexBufferDX11 = (ID3D11Buffer*)rendererData->indexBuffer;
+
+				auto key = TriBufferPtrKey(vertexBufferDX11, indexBufferDX11);
+
 				winrt::com_ptr<ID3D12Resource> vertexBuffer = nullptr;
 				winrt::com_ptr<ID3D12Resource> indexBuffer = nullptr;
+				winrt::com_ptr<ID3D12Resource> blasBuffer = nullptr;
+
+				if (auto it = meshMap.find(key); it != meshMap.end()) {
+					size_t meshDataIndex = it->second;
+					MeshData meshData = meshVector[meshDataIndex];
+
+					vertexBuffer = meshData.vertexBuffer;
+					indexBuffer = meshData.indexBuffer;
+					blasBuffer = meshData.blasBuffer;
+				}
+
+				// Create instances before dropping out if buffers already exist
+				{
+					instances.emplace(
+						triShape, 
+						InstanceData(
+							key, 
+							GetXMFromNiTransform(triShape->world)
+						)
+					);
+				}
+
+				// Buffers already created
+				if (vertexBuffer != nullptr && indexBuffer != nullptr) // I don't think it is possible for these to be different (eg. one instance doesn't use the same vertex and index buffers with the rest)
+					return RE::BSVisit::BSVisitControl::kContinue;
 
 				// Create vertex buffer
+				if (vertexBuffer == nullptr) // Check comment above
 				{
 					auto vertexDesc = rendererData->vertexDesc;
 
@@ -462,115 +495,121 @@ void RaytracedGI::CreateBuffers()
 				}
 
 				// Create indices buffer
+				if (indexBuffer == nullptr) // Ditto
 				{
-					eastl::vector<uint16_t> indexes(rendererData->rawIndexData, rendererData->rawIndexData + indexCount);					
-					MakeAndCopy(indexes, indexBuffer);
-				}
+					eastl::vector<uint16_t> indices(rendererData->rawIndexData, rendererData->rawIndexData + indexCount);	
+					
+					eastl::vector<uint32_t> indices32;
+					indices32.reserve(indexCount);
 
-				auto resourceKey = TriBufferKey{ vertexBuffer, indexBuffer };
+					for (uint16_t idx : indices)
+						indices32.push_back(static_cast<uint32_t>(idx));
+
+					MakeAndCopy(indices32, indexBuffer);
+				}
 
 				// Create BLAS
+				if (blasBuffer == nullptr) 
 				{
-					winrt::com_ptr<ID3D12Resource> blas;
-					blas.attach(MakeBLAS(vertexBuffer.get(), vertexCount, indexBuffer.get(), indexCount));
-
-					blasCollection.emplace(
-						resourceKey, 
-						std::move(blas)
-					);
+					blasBuffer.attach(MakeBLAS(vertexBuffer.get(), vertexCount, indexBuffer.get(), indexCount));
 				}
 
-				// Create instances
+				// Emplace buffers
 				{
-					float4x4 xmmTransform = GetXMFromNiTransform(triShape->world);
-
-					instances.emplace(
-						triShape, 
-						InstanceData(resourceKey, xmmTransform));
+					auto [ it, inserted ] = meshMap.emplace(key, meshVector.size());
+					if (inserted)
+						meshVector.push_back(MeshData(vertexCount, indexCount, std::move(vertexBuffer), std::move(indexBuffer), std::move(blasBuffer)));
 				}
-
-				vertexBuffers.emplace((ID3D11Buffer*)rendererData->vertexBuffer, std::move(vertexBuffer));
-				indexBuffers.emplace((ID3D11Buffer*)rendererData->indexBuffer, std::move(indexBuffer));
 			}
 		}
 
 		return RE::BSVisit::BSVisitControl::kContinue;
 	});
 
-	std::vector<TriBufferKey> instanceKeys;
-	instanceKeys.reserve(instances.size());
+	
 
 	// This probably shoudn't go here
 	// Create instance buffer
 	{
+		instanceMap.reserve(instances.size());
+
 		auto instancesDesc = BASIC_BUFFER_DESC;
 		instancesDesc.Width = sizeof(D3D12_RAYTRACING_INSTANCE_DESC) * instances.size();
 		DX::ThrowIfFailed(d3d12Device->CreateCommittedResource(&UPLOAD_HEAP, D3D12_HEAP_FLAG_NONE, &instancesDesc, D3D12_RESOURCE_STATE_GENERIC_READ, nullptr, IID_PPV_ARGS(&instanceBuffer)));
 		instanceBuffer->Map(0, nullptr, reinterpret_cast<void**>(&instanceData));
 
-		for (const auto& [ triShape, data ] : instances) {
-			auto& key = data.TriBufferKey;
+		size_t instanceIndex = 0;
+		for (auto& [ triShape, data ] : instances) {
+			const auto& key = data.triBufferPtrKey;
 
-			if (auto it = blasCollection.find(key); it != blasCollection.end()) {
-				instanceData[instanceCount] = {
-					.InstanceID = instanceCount,
-					.InstanceMask = 1,
-					.AccelerationStructure = it->second->GetGPUVirtualAddress()		
-				};
+			auto& meshIndex = meshMap[key];
+			MeshData& meshData = meshVector[meshIndex];
 
-				auto* ptr = reinterpret_cast<DirectX::XMFLOAT3X4*>(&instanceData[instanceCount].Transform);
-				XMStoreFloat3x4(ptr, data.Transform);
+			instanceData[instanceIndex] = {
+				.InstanceID = static_cast<uint>(instanceIndex),
+				.InstanceMask = 1,
+				.AccelerationStructure = meshData.blasBuffer->GetGPUVirtualAddress()		
+			};
 
-				instanceKeys.push_back(key);
-				instanceCount++;
-			}
-		}	
+			auto* ptr = reinterpret_cast<DirectX::XMFLOAT3X4*>(&instanceData[instanceIndex].Transform);
+			XMStoreFloat3x4(ptr, data.transform);
+
+			instanceMap.push_back(static_cast<uint>(meshIndex));
+			instanceIndex++;
+		}
+	}
+
+	CD3DX12_CPU_DESCRIPTOR_HANDLE handle(commonHeap->GetCPUDescriptorHandleForHeapStart());
+	handle.Offset(3, handleIncrement);
+
+	// Maps instances to vertex/index buffer
+	{
+		MakeAndCopy(instanceMap, instanceMapBuffer);
+
+		D3D12_SHADER_RESOURCE_VIEW_DESC desc = {};
+		desc.ViewDimension = D3D12_SRV_DIMENSION_BUFFER;
+		desc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
+		desc.Format = DXGI_FORMAT_R32_TYPELESS;
+		desc.Buffer.FirstElement = 0;
+		desc.Buffer.NumElements = static_cast<int32_t>(instances.size());
+		desc.Buffer.StructureByteStride = 0;
+		desc.Buffer.Flags = D3D12_BUFFER_SRV_FLAG_RAW;
+
+		d3d12Device->CreateShaderResourceView(instanceMapBuffer.get(), &desc, handle);
+		handle.Offset(1, handleIncrement);
 	}
 
 	// Create SRVs
 	{
-		CD3DX12_CPU_DESCRIPTOR_HANDLE handle(commonHeap->GetCPUDescriptorHandleForHeapStart());
-		handle.Offset(3, handleIncrement);
-
-		// Vertex
-		for (size_t i = 0; i < instanceCount; i++)
+		// Vertex (Structured buffer)
+		for (const auto& meshData : meshVector)
 		{
-			auto& key = instanceKeys[i];
-			//logger::info("Vertex Key: {}", reinterpret_cast<uintptr_t>(key.vertexBuffer));
-			//logger::info(fmt::runtime("Base handle: 0x{:X}, Current handle: 0x{:X}, increment: {}"), commonHeap->GetCPUDescriptorHandleForHeapStart().ptr, handle.ptr, handleIncrement);
-
-			auto vbResDesc = key.vertexBuffer->GetDesc();
-
 			D3D12_SHADER_RESOURCE_VIEW_DESC vbDesc = {};
 			vbDesc.ViewDimension = D3D12_SRV_DIMENSION_BUFFER;
-			vbDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING; // Line 545
+			vbDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
 			vbDesc.Format = DXGI_FORMAT_UNKNOWN;
 			vbDesc.Buffer.FirstElement = 0;
-			vbDesc.Buffer.NumElements = static_cast<int32_t>(vbResDesc.Width / sizeof(Vertex));
+			vbDesc.Buffer.NumElements = static_cast<int32_t>(meshData.vertexCount);
 			vbDesc.Buffer.StructureByteStride = sizeof(Vertex);
 			vbDesc.Buffer.Flags = D3D12_BUFFER_SRV_FLAG_NONE;
 
-			d3d12Device->CreateShaderResourceView(key.vertexBuffer.get(), &vbDesc, handle);
+			d3d12Device->CreateShaderResourceView(meshData.vertexBuffer.get(), &vbDesc, handle);
 			handle.Offset(1, handleIncrement);
 		}
 
-		// Index
-		for (size_t i = 0; i < instanceCount; i++)
+		// Index (Structured buffer)
+		for (const auto& meshData : meshVector)
 		{
-			auto& key = instanceKeys[i];
-			//logger::info("Index Key: {}", reinterpret_cast<uintptr_t>(key.indexBuffer));
-			auto ibResDesc = key.indexBuffer->GetDesc();
-
 			D3D12_SHADER_RESOURCE_VIEW_DESC ibDesc = {};
 			ibDesc.ViewDimension = D3D12_SRV_DIMENSION_BUFFER;
 			ibDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
-			ibDesc.Format = DXGI_FORMAT_R32_TYPELESS;
+			ibDesc.Format = DXGI_FORMAT_UNKNOWN;
 			ibDesc.Buffer.FirstElement = 0;
-			ibDesc.Buffer.NumElements = static_cast<int32_t>(ibResDesc.Width / 4);
-			ibDesc.Buffer.StructureByteStride = 0;
-			ibDesc.Buffer.Flags = D3D12_BUFFER_SRV_FLAG_RAW;
+			ibDesc.Buffer.NumElements = static_cast<int32_t>(meshData.indexCount / 3);
+			ibDesc.Buffer.StructureByteStride = sizeof(uint32_t) * 3; // Structure size is uint3
+			ibDesc.Buffer.Flags = D3D12_BUFFER_SRV_FLAG_NONE;
 
-			d3d12Device->CreateShaderResourceView(key.indexBuffer.get(), &ibDesc, handle);
+			d3d12Device->CreateShaderResourceView(meshData.indexBuffer.get(), &ibDesc, handle);
 			handle.Offset(1, handleIncrement);	
 		}
 	}
@@ -578,7 +617,7 @@ void RaytracedGI::CreateBuffers()
 	// Create TLAS
 	{
 		UINT64 updateScratchSize;
-		tlas.attach(MakeTLAS(instanceBuffer.get(), instanceCount, &updateScratchSize));
+		tlas.attach(MakeTLAS(instanceBuffer.get(), static_cast<uint>(instances.size()), &updateScratchSize));
 
 		auto desc = BASIC_BUFFER_DESC;
 		// WARP bug workaround: use 8 if the required size was reported as less
@@ -597,12 +636,7 @@ void RaytracedGI::CreateBuffers()
 	}
 
 	buffersCreated = true;
-}
-
-void RaytracedGI::UnregisterBuffer(ID3D11Buffer* ppBuffer)
-{
-	vertexBuffers.erase(ppBuffer);
-	indexBuffers.erase(ppBuffer);
+	creatingBuffers = false;
 }
 
 void RaytracedGI::BSBatchRenderer_RenderPassImmediately(RE::BSRenderPass* pass, uint32_t technique, bool alphaTest, uint32_t renderFlags)
@@ -732,7 +766,7 @@ void RaytracedGI::DrawRTGI()
 			.Inputs = {
 				.Type = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL,
 				.Flags = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_PERFORM_UPDATE,
-				.NumDescs = instanceCount,
+				.NumDescs = static_cast<uint>(instances.size()),
 				.DescsLayout = D3D12_ELEMENTS_LAYOUT_ARRAY,
 				.InstanceDescs = instanceBuffer->GetGPUVirtualAddress() 
 			},
@@ -761,19 +795,19 @@ void RaytracedGI::DrawRTGI()
 		// Parameter 0: UAV table
 		commandList->SetComputeRootDescriptorTable(0, heapStart);
 
-		// Parameter 1: Fixed SRVs (Scene + Lights) - offset 1
+		// Parameter 1: Fixed SRVs (Scene + Lights + Index) - offset 1
 		D3D12_GPU_DESCRIPTOR_HANDLE fixedSrvHandle = heapStart;
 		fixedSrvHandle.ptr += handleIncrement * 1;
 		commandList->SetComputeRootDescriptorTable(1, fixedSrvHandle);
 
-		// Parameter 2: Vertex buffers - offset 3 (after UAV + Scene + Lights)
+		// Parameter 2: Vertex buffers - offset 4 (after UAV + Scene + Lights)
 		D3D12_GPU_DESCRIPTOR_HANDLE vbHandle = heapStart;
-		vbHandle.ptr += handleIncrement * 3;
+		vbHandle.ptr += handleIncrement * 4;
 		commandList->SetComputeRootDescriptorTable(2, vbHandle);
 
-		// Parameter 3: Index buffers - offset 3 + numMeshes
+		// Parameter 3: Index buffers - offset 4 + numMeshes
 		D3D12_GPU_DESCRIPTOR_HANDLE ibHandle = heapStart;
-		ibHandle.ptr += handleIncrement * (3 + instanceCount);
+		ibHandle.ptr += handleIncrement * (4 + instances.size());
 		commandList->SetComputeRootDescriptorTable(3, ibHandle);
 
 		// Parameter 4: Constant buffer
@@ -890,7 +924,7 @@ ID3D12Resource* RaytracedGI::MakeBLAS(ID3D12Resource* vertexBuffer, UINT vertice
 		.Triangles = {
 			.Transform3x4 = 0,
 
-			.IndexFormat = indexBuffer ? DXGI_FORMAT_R16_UINT : DXGI_FORMAT_UNKNOWN,
+			.IndexFormat = indexBuffer ? DXGI_FORMAT_R32_UINT : DXGI_FORMAT_UNKNOWN,
 			.VertexFormat = DXGI_FORMAT_R32G32B32_FLOAT,
 			.IndexCount = indices,
 			.VertexCount = vertices,
@@ -1017,6 +1051,7 @@ void RaytracedGI::CreateRootSignature()
 	CD3DX12_DESCRIPTOR_RANGE1 fixedSrvRanges[2];
 	fixedSrvRanges[0].Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 0, 0);  // Scene
 	fixedSrvRanges[1].Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 1, 0);  // Lights
+	fixedSrvRanges[2].Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 2, 0);  // Index map
 
 	// Vertex buffers (unbounded)
 	CD3DX12_DESCRIPTOR_RANGE1 vertexBufferRange;
