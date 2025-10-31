@@ -73,7 +73,7 @@ static const float kernelWeights[3] = { 1.0, 2.0 / 3.0, 1.0 / 6.0 };
     float luminanceCenter = Color::RGBToLuminance(ssrColor.rgb);
     float variance = GaussianBlur(DTid.xy);
 
-    if (depthCenter < 0.999f)
+    if (depthCenter > 0)
     {
         float phiLuminance = max(colorPhi * sqrt(abs(variance) + VAR_EPSILON), VAR_EPSILON);
         float phiNormal = normalPhi;
@@ -94,7 +94,7 @@ static const float kernelWeights[3] = { 1.0, 2.0 / 3.0, 1.0 / 6.0 };
                 {
                     float4 sampleSSRColor = SSRColorTexture[samplePos];
                     float sampleDepth = DepthTexture[samplePos];
-                    if (sampleDepth < 0.999f)
+                    if (sampleDepth > 0)
                     {
                         float3 sampleNormalVS;
                         float sampleRoughness;
