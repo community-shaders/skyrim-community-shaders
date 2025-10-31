@@ -88,7 +88,7 @@ float3 PurkinjeShift(float3 c, float nightAdaptation)
 	if (tid.x >= dims.x || tid.y >= dims.y)
 		return;
 
-	float3 color = TexColor[tid].rgb;
+	float3 color = abs(TexColor[tid].rgb);
 
 	// auto exposure
 	float avgLuma = RWTexAdaptation[0];
