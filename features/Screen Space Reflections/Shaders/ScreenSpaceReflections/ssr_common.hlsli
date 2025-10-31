@@ -283,3 +283,22 @@ float filterInf(float v) { return isinf(v) ? 0 : v; }
 float2 filterInf(float2 v) { return float2(filterInf(v.x), filterInf(v.y)); }
 float3 filterInf(float3 v) { return float3(filterInf(v.x), filterInf(v.y), filterInf(v.z)); }
 float4 filterInf(float4 v) { return float4(filterInf(v.x), filterInf(v.y), filterInf(v.z), filterInf(v.w)); }
+
+float CalculateWeight(float depthCenter, float depthP, float phiD, float3 normalCenter, float3 normalP, float phiN,
+					  float luminanceCenter, float luminanceP, float phiL)
+{
+	float epsilon = 0.0000001;
+
+	// Depth weight
+	float difference = abs(depthCenter - depthP);
+	float weightDepth = (phiD == 0) ? 0.f : difference / max(phiD, epsilon);
+
+	// Normal weight
+	float weightNormal = pow(max(0.f, dot(normalCenter, normalP)), phiN);
+
+	// Luminance weight
+	float weightLuminance = abs(luminanceCenter - luminanceP) / phiL;
+
+	float weight = exp(-weightDepth - weightLuminance) * weightNormal;
+	return weight;
+}

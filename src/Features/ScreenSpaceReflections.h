@@ -52,7 +52,7 @@ struct ScreenSpaceReflections : Feature
         float DiffuseMult = 1.0f;
         float AmbientMult = 1.0f;
         float OcclusionStrength = 1.0f;
-        bool EnableSpatial = false;
+        bool EnableSVGF = false;
 #ifdef ENABLE_SHARC
         bool EnableSharc = false;
 #endif
@@ -105,7 +105,11 @@ struct ScreenSpaceReflections : Feature
     eastl::unique_ptr<Texture2D> texHitPDF = nullptr;
     eastl::unique_ptr<Texture2D> texHistory = nullptr;
     eastl::unique_ptr<Texture2D> texHistoryDiffuse = nullptr;
-    eastl::unique_ptr<Texture2D> texSpatial = nullptr;
+    eastl::unique_ptr<Texture2D> texTemporal = nullptr;
+    eastl::unique_ptr<Texture2D> texMoments = nullptr;
+    eastl::unique_ptr<Texture2D> texHistoryMoments = nullptr;
+    eastl::unique_ptr<Texture2D> texHistoryMomentsDiffuse = nullptr;
+    eastl::unique_ptr<Texture2D> texVariance = nullptr;
     eastl::unique_ptr<Texture2D> texOutput = nullptr;
 
 #ifdef ENABLE_SHARC
@@ -131,6 +135,8 @@ struct ScreenSpaceReflections : Feature
     winrt::com_ptr<ID3D11ComputeShader> prepareColorCS = nullptr;
     winrt::com_ptr<ID3D11ComputeShader> depthDownsampleCS = nullptr;
     winrt::com_ptr<ID3D11ComputeShader> diffuseCompositeCS = nullptr;
+    winrt::com_ptr<ID3D11ComputeShader> temporalCS = nullptr;
+    winrt::com_ptr<ID3D11ComputeShader> varianceCS = nullptr;
     winrt::com_ptr<ID3D11ComputeShader> spatialCS = nullptr;
 #ifdef ENABLE_SHARC
     winrt::com_ptr<ID3D11ComputeShader> raymarchDiffuseSharcCS = nullptr;

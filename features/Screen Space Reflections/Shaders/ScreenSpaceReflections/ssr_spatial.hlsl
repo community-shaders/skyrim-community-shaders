@@ -1,31 +1,10 @@
 #include "ScreenSpaceReflections/ssr_common.hlsli"
 
 Texture2D<float4> HistoryTexture : register(t0);
-Texture2D<float4> MotionVectorTexture : register(t1);
 Texture2D<float4> SSRColorTexture : register(t3);
 Texture2D<float> DepthTexture : register(t4);
 
 RWTexture2D<float4> FilteredOutput : register(u0);
-
-// util: void ReprojectHit(Texture2D MotionTexture, SamplerState s, float3 hitUVz, uint eyeIndex, out float2 outPrevUV)
-float CalculateWeight(float depthCenter, float depthP, float phiD, float3 normalCenter, float3 normalP, float phiN,
-					  float luminanceCenter, float luminanceP, float phiL)
-{
-	float epsilon = 0.0000001;
-
-	// Depth weight
-	float difference = abs(depthCenter - depthP);
-	float weightDepth = (phiD == 0) ? 0.f : difference / max(phiD, epsilon);
-
-	// Normal weight
-	float weightNormal = pow(max(0.f, dot(normalCenter, normalP)), phiN);
-
-	// Luminance weight
-	float weightLuminance = abs(luminanceCenter - luminanceP) / phiL;
-
-	float weight = exp(-weightDepth - weightLuminance) * weightNormal;
-	return weight;
-}
 
 float GaussianBlur(uint2 id)
 {
@@ -76,7 +55,6 @@ static const float kernelWeights[3] = { 1.0, 2.0 / 3.0, 1.0 / 6.0 };
 
     float3 blendedColor = 0;
     float4 historyColor = HistoryTexture[DTid.xy];
-    float4 motionVector = MotionVectorTexture[DTid.xy];
     float4 ssrColor = SSRColorTexture[DTid.xy];
     float depthCenter = DepthTexture[DTid.xy];
 

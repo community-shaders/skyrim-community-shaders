@@ -1,0 +1,144 @@
+#include "ScreenSpaceReflections/ssr_common.hlsli"
+
+Texture2D<float4> HistoryTexture : register(t0);
+Texture2D<float4> MotionVectorTexture : register(t1);
+Texture2D<float4> SSRColorTexture : register(t3);
+Texture2D<float> DepthTexture : register(t4);
+Texture2D<float4> HistoryMomentsTexture : register(t5); // moments in RG, frame count in B
+
+RWTexture2D<float4> FilteredOutput : register(u0);
+RWTexture2D<float4> MomentsOutput : register(u1);
+
+[numthreads(8, 8, 1)] void main(uint3 DTid : SV_DispatchThreadID)
+{
+    uint2 screen_size = SharedData::BufferDim.xy * FrameBuffer::DynamicResolutionParams1.xy;
+    if (DTid.x >= screen_size.x || DTid.y >= screen_size.y)
+        return;
+
+    float2 uv = float2(DTid.xy + 0.5) * SharedData::BufferDim.zw * FrameBuffer::DynamicResolutionParams2.xy;
+    uint eyeIndex = Stereo::GetEyeIndexFromTexCoord(uv);
+
+    float3 blendedColor = 0;
+    float4 ssrColor = SSRColorTexture[DTid.xy];
+    float depthCenter = DepthTexture[DTid.xy];
+
+    float luminance = Color::RGBToLuminance(ssrColor.rgb);
+    float2 curMoment = float2(luminance, luminance * luminance) * 0.5;
+
+    // Reproject UVs using motion vectors
+    float2 prevUV = uv;
+    ReprojectHit(MotionVectorTexture, LinearSampler, float3(uv, depthCenter), eyeIndex, prevUV);
+    if (prevUV.x < 0 || prevUV.x > 1 || prevUV.y < 0 || prevUV.y > 1)
+    {
+        FilteredOutput[DTid.xy] = ssrColor;
+        return;
+    }
+
+    float4 prevColor = 0.f;
+    float prevAccumFrames = 0.f;
+    float2 prevMoments = float2(0.f, 0.f);
+    uint2 prevPixel = uint2(prevUV * screen_size);
+    bool valid = false;
+
+    if (prevUV.x >= 0 && prevUV.x <= 1 && prevUV.y >= 0 && prevUV.y <= 1)
+    {
+        prevColor = HistoryTexture[prevPixel];
+        prevAccumFrames = HistoryMomentsTexture[prevPixel].z;
+        prevMoments = HistoryMomentsTexture[prevPixel].xy;
+        valid = true;
+    }
+
+    if (!valid)
+    {
+        int2 bilinOffset[4] = { int2(-1, 0), int2(1, 0), int2(0, -1), int2(0, 1) };
+        float weightSum = 0.f;
+        [unroll(4)]
+        for (int i = 0; i < 4; i++)
+        {
+            int2 neighborPixel = int2(prevPixel) + bilinOffset[i];
+            bool inside = (neighborPixel.x >= 0 && neighborPixel.y >= 0) && (neighborPixel.x < screen_size.x && neighborPixel.y < screen_size.y);
+            if (inside)
+            {
+                float4 neighborColor = HistoryTexture[uint2(neighborPixel)];
+                float neighborAccumFrames = HistoryMomentsTexture[uint2(neighborPixel)].z;
+                if (neighborAccumFrames > 0.f)
+                {
+                    prevColor += neighborColor;
+                    prevAccumFrames += neighborAccumFrames;
+                    prevMoments += HistoryMomentsTexture[uint2(neighborPixel)].xy;
+                    weightSum += 1.f;
+                }
+            }
+        }
+
+        if (weightSum > 0.f)
+        {
+            prevColor /= weightSum;
+            prevAccumFrames /= weightSum;
+            prevMoments /= weightSum;
+            valid = true;
+        }
+    }
+    
+    if (!valid)
+    {
+        float weightSum = 0.f;
+            
+        int2 offsets[8] =
+        {
+            int2(0, 2),
+            int2(0, -2),
+            int2(1, 1),
+            int2(1, -1),
+            int2(-1, 1),
+            int2(-1, -1),
+            int2(2, 0),
+            int2(-2, 0)
+        };
+
+        [unroll(8)]
+        for (int i = 0; i < 8; i++)
+        {
+            int2 neighborPixel = int2(prevPixel) + offsets[i];
+            bool inside = (neighborPixel.x >= 0 && neighborPixel.y >= 0) && (neighborPixel.x < screen_size.x && neighborPixel.y < screen_size.y);
+            if (inside)
+            {
+                float4 neighborColor = HistoryTexture[uint2(neighborPixel)];
+                float neighborAccumFrames = HistoryMomentsTexture[uint2(neighborPixel)].z;
+                if (neighborAccumFrames > 0.f)
+                {
+                    prevColor += neighborColor;
+                    prevAccumFrames += neighborAccumFrames;
+                    prevMoments += HistoryMomentsTexture[uint2(neighborPixel)].xy;
+                    weightSum += 1.f;
+                }
+            }
+        }
+        if (weightSum > 0.f)
+        {
+            prevColor /= weightSum;
+            prevAccumFrames /= weightSum;
+            prevMoments /= weightSum;
+            valid = true;
+        }
+    }
+
+    if (valid)
+    {
+        float alpha = 1.0f / (prevAccumFrames + 1.0f);
+        blendedColor = lerp(prevColor.rgb, ssrColor.rgb, alpha);
+
+        float prevLuminance = Color::RGBToLuminance(prevColor.rgb);
+        float2 prevMoment = float2(prevLuminance, prevLuminance * prevLuminance);
+
+        float momentAlpha = 1.0f / (prevAccumFrames + 1.0f);
+        float2 moment = lerp(prevMoment, curMoment, momentAlpha);
+        float variance = moment.y - (moment.x * moment.x);
+        variance = max(variance, 0.f);
+        FilteredOutput[DTid.xy] = float4(blendedColor, variance);
+        MomentsOutput[DTid.xy] = float4(moment, prevAccumFrames + 1.0f, 0.f);
+        return;
+    }
+    MomentsOutput[DTid.xy] = float4(curMoment, 1.0f, 0.f);
+    FilteredOutput[DTid.xy] = float4(blendedColor, 1.0f);
+}
