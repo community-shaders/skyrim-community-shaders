@@ -2713,42 +2713,46 @@ namespace SIE
 		auto& cache = ShaderCache::Instance();
 		auto key = task.GetString();
 		auto shaderBlob = cache.GetCompletedShader(task);
-		if (shaderBlob) {
-			logger::debug("Compiling Task succeeded: {}", key);
-			completedTasks++;
-		} else {
-			logger::debug("Compiling Task failed: {}", key);
-			failedTasks++;
-		}
-		LARGE_INTEGER now;
-		QueryPerformanceCounter(&now);
-		totalTime.QuadPart += now.QuadPart - lastCalculation.QuadPart;
-		lastCalculation = now;
-
-		// Check if compilation is complete and set completion time if needed (thread-safe)
+		
 		bool shouldLogCompletion = false;
-		if (completionTime.load(std::memory_order_acquire) == 0 && completedTasks + failedTasks >= totalTasks) {
-			std::scoped_lock lock(compilationMutex);
-			// Double-check with lock held to prevent race condition
-			if (completionTime.load(std::memory_order_relaxed) == 0 && completedTasks + failedTasks >= totalTasks) {
-				LARGE_INTEGER temp;
-				QueryPerformanceCounter(&temp);
-				completionTime.store(temp.QuadPart, std::memory_order_release);
-				shouldLogCompletion = true;
-			}
-		}
-
-		// Log completion outside the lock to avoid holding it during logging
-		if (shouldLogCompletion) {
-			logger::debug("Compilation completed in {} ms", GetHumanTime(static_cast<double>(completionTime.load(std::memory_order_relaxed) - lastReset.QuadPart) * 1000.0 / frequency.QuadPart));
-		}
-
-		// Handle task completion tracking
+		double completionTimeMs = 0.0;
+		
+		// Perform all completion operations under one mutex acquisition
 		{
 			std::scoped_lock lock(compilationMutex);
+			
+			// Update task counters
+			if (shaderBlob) {
+				logger::debug("Compiling Task succeeded: {}", key);
+				completedTasks++;
+			} else {
+				logger::debug("Compiling Task failed: {}", key);
+				failedTasks++;
+			}
+			
+			// Update timing
+			LARGE_INTEGER now;
+			QueryPerformanceCounter(&now);
+			totalTime.QuadPart += now.QuadPart - lastCalculation.QuadPart;
+			lastCalculation = now;
+			
+			// Check if compilation is complete and set completion time if needed
+			if (completionTime.load(std::memory_order_relaxed) == 0 && completedTasks + failedTasks >= totalTasks) {
+				completionTime.store(now.QuadPart, std::memory_order_relaxed);
+				completionTimeMs = static_cast<double>(now.QuadPart - lastReset.QuadPart) * 1000.0 / frequency.QuadPart;
+				shouldLogCompletion = true;
+			}
+			
+			// Update task tracking
 			processedTasks.insert(task);
 			tasksInProgress.erase(task);
 		}
+		
+		// Log completion outside the lock
+		if (shouldLogCompletion) {
+			logger::debug("Compilation completed in {} ms", GetHumanTime(completionTimeMs));
+		}
+		
 		conditionVariable.notify_one();
 	}
 
