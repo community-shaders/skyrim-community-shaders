@@ -5,9 +5,39 @@ Texture2D<float4> MotionVectorTexture : register(t1);
 Texture2D<float4> SSRColorTexture : register(t3);
 Texture2D<float> DepthTexture : register(t4);
 Texture2D<float4> HistoryMomentsTexture : register(t5); // moments in RG, frame count in B
+Texture2D<float4> HistoryNormalsTexture : register(t6);
 
 RWTexture2D<float4> FilteredOutput : register(u0);
 RWTexture2D<float4> MomentsOutput : register(u1);
+
+cbuffer DenoiserCB : register(b2)
+{
+    float invMaxAccumulatedFrames;
+    uint atrousIterations;
+    float colorPhi;
+    float normalPhi;
+    float depthPhi;
+    float3 pad;
+};
+
+bool IsValidHistory(uint2 pixel, float2 uv, float3 currNormalVS)
+{
+    uint2 screen_size = SharedData::BufferDim.xy * FrameBuffer::DynamicResolutionParams1.xy;
+    if (uv.x < 0 || uv.x > 1 || uv.y < 0 || uv.y > 1)
+        return false;
+
+    if (pixel.x >= screen_size.x || pixel.y >= screen_size.y)
+        return false;
+
+    float3 prevNormalVS;
+    float roughness;
+    GetNormalRoughness(HistoryNormalsTexture, pixel, prevNormalVS, roughness);
+    float normalDiff = dot(currNormalVS, prevNormalVS);
+    if (normalDiff < 0.866f) // cos 30
+        return false;
+
+    return true;
+}
 
 [numthreads(8, 8, 1)] void main(uint3 DTid : SV_DispatchThreadID)
 {
@@ -22,17 +52,16 @@ RWTexture2D<float4> MomentsOutput : register(u1);
     float4 ssrColor = SSRColorTexture[DTid.xy];
     float depthCenter = DepthTexture[DTid.xy];
 
+    float3 normalVS;
+    float roughness;
+    GetNormalRoughness(DTid.xy, normalVS, roughness);
+
     float luminance = Color::RGBToLuminance(ssrColor.rgb);
     float2 curMoment = float2(luminance, luminance * luminance) * 0.5;
 
     // Reproject UVs using motion vectors
     float2 prevUV = uv;
     ReprojectHit(MotionVectorTexture, LinearSampler, float3(uv, depthCenter), eyeIndex, prevUV);
-    if (prevUV.x < 0 || prevUV.x > 1 || prevUV.y < 0 || prevUV.y > 1)
-    {
-        FilteredOutput[DTid.xy] = ssrColor;
-        return;
-    }
 
     float4 prevColor = 0.f;
     float prevAccumFrames = 0.f;
@@ -40,7 +69,7 @@ RWTexture2D<float4> MomentsOutput : register(u1);
     uint2 prevPixel = uint2(prevUV * screen_size);
     bool valid = false;
 
-    if (prevUV.x >= 0 && prevUV.x <= 1 && prevUV.y >= 0 && prevUV.y <= 1)
+    if (IsValidHistory(prevPixel, prevUV, normalVS))
     {
         prevColor = HistoryTexture[prevPixel];
         prevAccumFrames = HistoryMomentsTexture[prevPixel].z;
@@ -56,8 +85,7 @@ RWTexture2D<float4> MomentsOutput : register(u1);
         for (int i = 0; i < 4; i++)
         {
             int2 neighborPixel = int2(prevPixel) + bilinOffset[i];
-            bool inside = (neighborPixel.x >= 0 && neighborPixel.y >= 0) && (neighborPixel.x < screen_size.x && neighborPixel.y < screen_size.y);
-            if (inside)
+            if (IsValidHistory(uint2(neighborPixel), prevUV, normalVS))
             {
                 float4 neighborColor = HistoryTexture[uint2(neighborPixel)];
                 float neighborAccumFrames = HistoryMomentsTexture[uint2(neighborPixel)].z;
@@ -100,8 +128,7 @@ RWTexture2D<float4> MomentsOutput : register(u1);
         for (int i = 0; i < 8; i++)
         {
             int2 neighborPixel = int2(prevPixel) + offsets[i];
-            bool inside = (neighborPixel.x >= 0 && neighborPixel.y >= 0) && (neighborPixel.x < screen_size.x && neighborPixel.y < screen_size.y);
-            if (inside)
+            if (IsValidHistory(uint2(neighborPixel), prevUV, normalVS))
             {
                 float4 neighborColor = HistoryTexture[uint2(neighborPixel)];
                 float neighborAccumFrames = HistoryMomentsTexture[uint2(neighborPixel)].z;
@@ -125,13 +152,13 @@ RWTexture2D<float4> MomentsOutput : register(u1);
 
     if (valid)
     {
-        float alpha = 1.0f / (prevAccumFrames + 1.0f);
+        float alpha = max(1.0f / (prevAccumFrames + 1.0f), invMaxAccumulatedFrames);
         blendedColor = lerp(prevColor.rgb, ssrColor.rgb, alpha);
 
         float prevLuminance = Color::RGBToLuminance(prevColor.rgb);
         float2 prevMoment = float2(prevLuminance, prevLuminance * prevLuminance);
 
-        float momentAlpha = 1.0f / (prevAccumFrames + 1.0f);
+        float momentAlpha = max(1.0f / (prevAccumFrames + 1.0f), invMaxAccumulatedFrames);
         float2 moment = lerp(prevMoment, curMoment, momentAlpha);
         float variance = moment.y - (moment.x * moment.x);
         variance = max(variance, 0.f);
@@ -140,5 +167,5 @@ RWTexture2D<float4> MomentsOutput : register(u1);
         return;
     }
     MomentsOutput[DTid.xy] = float4(curMoment, 1.0f, 0.f);
-    FilteredOutput[DTid.xy] = float4(blendedColor, 1.0f);
+    FilteredOutput[DTid.xy] = float4(ssrColor.rgb, abs(curMoment.y - (curMoment.x * curMoment.x)));
 }

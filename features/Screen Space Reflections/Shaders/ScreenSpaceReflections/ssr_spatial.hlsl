@@ -6,6 +6,16 @@ Texture2D<float> DepthTexture : register(t4);
 
 RWTexture2D<float4> FilteredOutput : register(u0);
 
+cbuffer DenoiserCB : register(b2)
+{
+    float invMaxAccumulatedFrames;
+    uint atrousIterations;
+    float colorPhi;
+    float normalPhi;
+    float depthPhi;
+    float3 pad;
+};
+
 float GaussianBlur(uint2 id)
 {
     float sum = 0.f;
@@ -39,10 +49,7 @@ float GaussianBlur(uint2 id)
 
 static const float kernelWeights[3] = { 1.0, 2.0 / 3.0, 1.0 / 6.0 };
 
-#define VAR_EPSILON 0.0001f
-#define RADIANCE_PHI 4.0f
-#define NORMAL_PHI 32.0f
-#define DEPTH_PHI 0.1f
+#define VAR_EPSILON 0.00001f
 
 // Spatiotemporal Variance-Guided Filter
 [numthreads(8, 8, 1)] void main(uint3 DTid : SV_DispatchThreadID)
@@ -61,23 +68,27 @@ static const float kernelWeights[3] = { 1.0, 2.0 / 3.0, 1.0 / 6.0 };
     float3 normalVS;
     float roughness;
     GetNormalRoughness(DTid.xy, normalVS, roughness);
-    roughness = clamp(roughness, 0.02f, 1.0f);
+    roughness = clamp(roughness, 0.001f, 1.0f);
 
     float luminanceCenter = Color::RGBToLuminance(ssrColor.rgb);
     float variance = GaussianBlur(DTid.xy);
 
     if (depthCenter < 0.999f)
     {
-        float phiLuminance = max(RADIANCE_PHI * sqrt(abs(variance) + VAR_EPSILON), VAR_EPSILON);
-        float phiNormal = NORMAL_PHI;
-        float phiDepth = DEPTH_PHI;
+        float phiLuminance = max(colorPhi * sqrt(abs(variance) + VAR_EPSILON), VAR_EPSILON);
+        float phiNormal = normalPhi;
+#if defined(SSSR_SPECULAR)
+        phiLuminance *= roughness;
+        phiNormal /= roughness;
+#endif
+        float phiDepth = depthPhi * (atrousIterations + 1);
         float weightSum = 0.f;
 
         for (int ky = -2; ky <= 2; ky++)
         {
             for (int kx = -2; kx <= 2; kx++)
             {
-                int2 samplePos = int2(DTid.xy) + int2(kx, ky);
+                int2 samplePos = int2(DTid.xy) + int2(kx, ky) * (atrousIterations + 1);
                 bool inside = (samplePos.x >= 0 && samplePos.y >= 0) && (samplePos.x < screen_size.x && samplePos.y < screen_size.y);
                 if (inside)
                 {
@@ -88,7 +99,6 @@ static const float kernelWeights[3] = { 1.0, 2.0 / 3.0, 1.0 / 6.0 };
                         float3 sampleNormalVS;
                         float sampleRoughness;
                         GetNormalRoughness(samplePos, sampleNormalVS, sampleRoughness);
-                        sampleRoughness = clamp(sampleRoughness, 0.02f, 1.0f);
 
                         float luminanceP = Color::RGBToLuminance(sampleSSRColor.rgb);
                         float weight = CalculateWeight(depthCenter, sampleDepth, phiDepth, normalVS, sampleNormalVS, phiNormal, luminanceCenter, luminanceP, phiLuminance) * kernelWeights[abs(kx)] * kernelWeights[abs(ky)];

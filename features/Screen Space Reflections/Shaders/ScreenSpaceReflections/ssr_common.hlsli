@@ -136,6 +136,14 @@ void GetNormalRoughness(uint2 dtid, out float3 normal, out float roughness)
     roughness = 1.0f - normalGlossiness.z;
 }
 
+void GetNormalRoughness(Texture2D<float4> NormalRoughness, uint2 dtid, out float3 normal, out float roughness)
+{
+    float3 normalGlossiness = NormalRoughness[dtid].xyz;
+    // Normal is in view space
+    normal = GBuffer::DecodeNormal(normalGlossiness.xy);
+    roughness = 1.0f - normalGlossiness.z;
+}
+
 void GetNormalRoughnessUV(float2 uv, out float3 normal, out float roughness)
 {
     float3 normalGlossiness = NormalRoughnessTexture.SampleLevel(LinearSampler, uv, 0);
