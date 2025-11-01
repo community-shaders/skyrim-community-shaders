@@ -254,8 +254,8 @@ PS_OUTPUT main(PS_INPUT input)
 #			endif
 #			if defined(SSR) && defined(DEFERRED)
 	if (SharedData::ssrSettings.Enabled && SharedData::ssrSettings.DiffuseMult > 0.0) {
-		directionalAmbientColor *= SharedData::ssrSettings.AmbientMult;
-		iblColor *= SharedData::ssrSettings.AmbientMult;
+		directionalAmbientColor *= 0;
+		iblColor = 0;
 	}
 #			endif
 	diffuseColor += directionalAmbientColor;
@@ -294,8 +294,8 @@ PS_OUTPUT main(PS_INPUT input)
 #			endif
 #			if defined(SSR) && defined(DEFERRED)
 	if (SharedData::ssrSettings.Enabled && SharedData::ssrSettings.DiffuseMult > 0.0) {
-		directionalAmbientColor *= SharedData::ssrSettings.AmbientMult;
-		iblColor *= SharedData::ssrSettings.AmbientMult;
+		directionalAmbientColor *= 0;
+		iblColor = 0;
 	}
 #			endif
 	diffuseColor += directionalAmbientColor;

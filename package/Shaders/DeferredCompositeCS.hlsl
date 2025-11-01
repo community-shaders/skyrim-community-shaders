@@ -56,7 +56,10 @@ void SampleSSGISpecular(uint2 pixCoord, sh2 lobe, out float ao, out float3 il, i
 	float NdotV = dot(normal, view);
 	ao = Color::SpecularAOLagarde(saturate(NdotV), ao, roughness);
 #	if defined(SSR)
-	il = 0;
+	if (SharedData::ssrSettings.Enabled) {
+		il = 0;
+		return;
+	}
 #	else
 	float4 ssgiIlYSh = SsgiYTexture[pixCoord];
 	float ssgiIlY = SphericalHarmonics::FuncProductIntegral(ssgiIlYSh, lobe);
@@ -285,9 +288,7 @@ Texture2D<float4> SSRTexture : register(t16);
 #	if defined(SSR)
 		if (SharedData::ssrSettings.Enabled) {
 			float4 ssrIrradiance = SSRTexture[dispatchID.xy];
-			ssrIrradiance.xyz *= SharedData::ssrSettings.SpecularMult;
-			ssrIrradiance.a = lerp(ssrIrradiance.a, 1.0, 1.0 - SharedData::ssrSettings.AmbientMult);
-			finalIrradiance = lerp(finalIrradiance, Color::GammaToLinear(ssrIrradiance.rgb), ssrIrradiance.a);
+			finalIrradiance = ssrIrradiance.rgb;
 		}
 #	endif
 

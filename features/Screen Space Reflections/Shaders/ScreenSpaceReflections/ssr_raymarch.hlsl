@@ -293,7 +293,7 @@ float FFX_SSSR_ValidateHit(float3 hit, float2 uv, float3 world_space_ray_directi
     float3 hit_normal = normalize(mul(FrameBuffer::CameraViewInverse[eyeIndex], float4(hit_normalVS, 0)).xyz);
     if (dot(hit_normal, world_space_ray_direction) > 0)
     {
-        occlusion = distance > depth_buffer_thickness ? 1.f : 0.f;
+        occlusion = 1 - confidence;
         return 0;
     }
 
@@ -301,7 +301,7 @@ float FFX_SSSR_ValidateHit(float3 hit, float2 uv, float3 world_space_ray_directi
     float2 manhattan_dist = abs(hit.xy - uv);
     if ((manhattan_dist.x < (2.f / screen_size.x)) && (manhattan_dist.y < (2.f / screen_size.y)))
     {
-        occlusion = distance > depth_buffer_thickness ? 1.f : 0.f;
+        occlusion = 1 - confidence;
         return 0;
     }
 
@@ -473,6 +473,8 @@ bool ShouldProcessPixel(uint2 GroupThreadID, uint FrameCount)
     float z = FFX_SSSR_LoadDepth(uv * mip_resolution * FrameBuffer::DynamicResolutionParams1.xy, most_detailed_mip);
     float3 screen_uv_space_ray_origin = float3(uv, z);
     float3 view_space_ray = ScreenSpaceToViewSpace(screen_uv_space_ray_origin, FrameBuffer::CameraProjInverse[eyeIndex]);
+    if (dot(view_space_ray, normalVS) > 0)
+		normalVS = -normalVS;
     float3 world_space_normal = normalize(mul(FrameBuffer::CameraViewInverse[eyeIndex], float4(normalVS, 0)).xyz);
     float3 view_space_surface_normal = normalVS;
     float3 view_space_ray_direction = normalize(view_space_ray);
@@ -568,6 +570,12 @@ bool ShouldProcessPixel(uint2 GroupThreadID, uint FrameCount)
             // ReprojectHit(MotionVectorTexture, LinearSampler, hit, eyeIndex, projUV);
 
             sampleColor = ScreenColorTextureMips.SampleLevel(LinearSampler, hit.xy * FrameBuffer::DynamicResolutionParams1.xy, 0).xyz;
+            sampleColor = Color::GammaToLinear(sampleColor);
+#if !defined(SSSR_SPECULAR)
+            sampleColor *= SharedData::ssrSettings.DiffuseMult;
+#else
+            sampleColor *= SharedData::ssrSettings.SpecularMult;
+#endif
 
             outPDF.xyz += hit * confidence;
             outPDF.w += pdf * confidence;
@@ -581,6 +589,8 @@ bool ShouldProcessPixel(uint2 GroupThreadID, uint FrameCount)
 #   else
             const uint sampleMip = 2;
 #   endif
+            float directionalAmbientLuminance = Color::RGBToLuminance(max(0.0, mul(SharedData::DirectionalAmbient, float4(world_space_reflected_direction, 1.0)))) * Color::ReflectionNormalisationScale;
+            float envLuminance;
             // Fallback to dynamic cubemaps
             float3 envColor = EnvReflectionsTexture.SampleLevel(LinearSampler, world_space_reflected_direction, sampleMip);
 #	if defined(SKYLIGHTING)
@@ -601,12 +611,21 @@ bool ShouldProcessPixel(uint2 GroupThreadID, uint FrameCount)
 #       if defined(SSSR_SPECULAR)
                 skylightingDiffuse = GetSpecularOcclusionFromAmbientOcclusion(NdotV, skylightingDiffuse, roughness);
 #       endif
-                if (skylightingDiffuse < 0.99) {
-                    float3 envNoSkyColor = EnvTexture.SampleLevel(LinearSampler, world_space_reflected_direction, sampleMip).xyz;
-                    envColor = lerp(envColor, envNoSkyColor, 1 - skylightingDiffuse);
-                }
+                float3 envNoSkyColor = EnvTexture.SampleLevel(LinearSampler, world_space_reflected_direction, sampleMip);
+                float3 envSkyColor = envColor;
+                float3 skyColor = max(envSkyColor - envNoSkyColor, 0);
+                envLuminance = Color::RGBToLuminance(EnvTexture.SampleLevel(LinearSampler, world_space_reflected_direction, 15));
+                envColor = lerp(envNoSkyColor, envNoSkyColor * (directionalAmbientLuminance / max(envLuminance, 1e-4)), SharedData::ssrSettings.AmbientMult);
+                envColor += skyColor * skylightingDiffuse;
+            } else {
+                envLuminance = Color::RGBToLuminance(EnvReflectionsTexture.SampleLevel(LinearSampler, world_space_reflected_direction, 15));
+                envColor = lerp(envColor, envColor * (directionalAmbientLuminance / max(envLuminance, 1e-4)), SharedData::ssrSettings.AmbientMult);
             }
+#   else
+            envLuminance = Color::RGBToLuminance(EnvReflectionsTexture.SampleLevel(LinearSampler, world_space_reflected_direction, 15).xyz);
+            envColor = lerp(envColor, envColor * (directionalAmbientLuminance / max(envLuminance, 1e-4)), SharedData::ssrSettings.AmbientMult);
 #   endif
+            envColor = Color::GammaToLinear(envColor);
             float ao = lerp(1.0, occlusion, OcclusionStrength);
 #   if defined(SSGI)
             ao *= 1 - saturate(SsgiAoTexture[coords.xy].x);
