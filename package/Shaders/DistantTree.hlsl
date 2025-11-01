@@ -252,8 +252,8 @@ PS_OUTPUT main(PS_INPUT input)
 		directionalAmbientColor += Color::LinearToGamma(iblColor);
 	}
 #			endif
-#			if defined(SSR) && defined(DEFERRED)
-	if (SharedData::ssrSettings.Enabled && SharedData::ssrSettings.DiffuseMult > 0.0) {
+#			if defined(SSRT) && defined(DEFERRED)
+	if (SharedData::ssrtSettings.Enabled && SharedData::ssrtSettings.DiffuseMult > 0.0) {
 		directionalAmbientColor *= 0;
 		iblColor = 0;
 	}
@@ -292,8 +292,8 @@ PS_OUTPUT main(PS_INPUT input)
 		directionalAmbientColor += Color::LinearToGamma(iblColor);
 	}
 #			endif
-#			if defined(SSR) && defined(DEFERRED)
-	if (SharedData::ssrSettings.Enabled && SharedData::ssrSettings.DiffuseMult > 0.0) {
+#			if defined(SSRT) && defined(DEFERRED)
+	if (SharedData::ssrtSettings.Enabled && SharedData::ssrtSettings.DiffuseMult > 0.0) {
 		directionalAmbientColor *= 0;
 		iblColor = 0;
 	}

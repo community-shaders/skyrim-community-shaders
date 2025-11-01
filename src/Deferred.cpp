@@ -9,7 +9,7 @@
 #include "Features/DynamicCubemaps.h"
 #include "Features/IBL.h"
 #include "Features/ScreenSpaceGI.h"
-#include "Features/ScreenSpaceReflections.h"
+#include "Features/ScreenSpaceRayTracing.h"
 #include "Features/Skylighting.h"
 #include "Features/SubsurfaceScattering.h"
 #include "Features/TerrainBlending.h"
@@ -422,9 +422,9 @@ void Deferred::DeferredPasses()
 	auto [ssgi_ao, ssgi_y, ssgi_cocg, ssgi_gi_spec] = ssgi.GetOutputTextures();
 	bool ssgi_hq_spec = ssgi.settings.EnableExperimentalSpecularGI;
 
-	auto& ssr = globals::features::screenSpaceReflections;
-	if (ssr.loaded && ssr.settings.EnableDiffuse)
-		ssr.DrawSSRTDiffuse();
+	auto& ssrt = globals::features::screenSpaceRayTracing;
+	if (ssrt.loaded && ssrt.settings.EnableDiffuse)
+		ssrt.DrawSSRTDiffuse();
 
 	auto dispatchCount = Util::GetScreenDispatchCount(true);
 
@@ -440,8 +440,8 @@ void Deferred::DeferredPasses()
 
 	auto& ibl = globals::features::ibl;
 
-	if (ssr.loaded)
-		ssr.DrawSSR();
+	if (ssrt.loaded)
+		ssrt.DrawSSRTSpecular();
 
 	// Deferred Composite
 	{
@@ -464,7 +464,7 @@ void Deferred::DeferredPasses()
 			ssgi_hq_spec ? ssgi_gi_spec : nullptr,
 			ibl.loaded ? ibl.diffuseIBLTexture->srv.get() : nullptr,
 			ibl.loaded ? ibl.diffuseSkyIBLTexture->srv.get() : nullptr,
-			(ssr.loaded && ssr.settings.Enabled) ? ssr.texOutput->srv.get() : nullptr,
+			(ssrt.loaded && ssrt.settings.Enabled) ? ssrt.texOutput->srv.get() : nullptr,
 		};
 
 		if (dynamicCubemaps.loaded)
@@ -651,8 +651,8 @@ ID3D11ComputeShader* Deferred::GetComputeMainComposite()
 		if (globals::features::ibl.loaded)
 			defines.push_back({ "IBL", nullptr });
 
-		if (globals::features::screenSpaceReflections.loaded)
-			defines.push_back({ "SSR", nullptr });
+		if (globals::features::screenSpaceRayTracing.loaded)
+			defines.push_back({ "SSRT", nullptr });
 
 		if (REL::Module::IsVR())
 			defines.push_back({ "FRAMEBUFFER", nullptr });
@@ -679,8 +679,8 @@ ID3D11ComputeShader* Deferred::GetComputeMainCompositeInterior()
 		if (globals::features::ibl.loaded)
 			defines.push_back({ "IBL", nullptr });
 
-		if (globals::features::screenSpaceReflections.loaded)
-			defines.push_back({ "SSR", nullptr });
+		if (globals::features::screenSpaceRayTracing.loaded)
+			defines.push_back({ "SSRT", nullptr });
 
 		if (REL::Module::IsVR())
 			defines.push_back({ "FRAMEBUFFER", nullptr });

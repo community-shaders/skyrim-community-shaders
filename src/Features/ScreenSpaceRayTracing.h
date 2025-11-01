@@ -1,25 +1,27 @@
 #pragma once
 
-struct ScreenSpaceReflections : Feature
+struct ScreenSpaceRayTracing : Feature
 {
-    static ScreenSpaceReflections* GetSingleton()
+    static ScreenSpaceRayTracing* GetSingleton()
     {
-        static ScreenSpaceReflections singleton;
+        static ScreenSpaceRayTracing singleton;
         return &singleton;
     }
 
-    virtual inline std::string GetName() override { return "Screen Space Reflections"; }
-    virtual inline std::string GetShortName() override { return "ScreenSpaceReflections"; }
-    virtual inline std::string_view GetShaderDefineName() override { return "SSR"; }
+    virtual inline std::string GetName() override { return "Screen Space Ray Tracing"; }
+    virtual inline std::string GetShortName() override { return "ScreenSpaceRayTracing"; }
+    virtual inline std::string_view GetShaderDefineName() override { return "SSRT"; }
     virtual std::string_view GetCategory() const override { return "Lighting"; }
     virtual std::pair<std::string, std::vector<std::string>> GetFeatureSummary() override
 	{
 		return {
-			"Screen Space Reflections based on AMD FidelityFX Stochastic Screen Space Reflections (SSSR) implementation.",
+			"Screen Space Ray Tracing provides high-quality global illumination with information in screen space.",
             {
-                "Realistic reflections on surfaces",
-                "Importance sampling based on roughness",
-                "HiZ depth buffer for efficient ray marching"
+                "Realistic indirect lighting",
+                "Importance sampling for advanced reflections based on roughness",
+                "Efficient ray marching with Hi-Z buffer",
+                "Uses dynamic cubemaps as fallback for missing information",
+                "Spatiotemporal Variance-Guided Filtering (SVGF) denoiser"
             }
 		};
 	}
@@ -43,7 +45,7 @@ struct ScreenSpaceReflections : Feature
         uint MaxSteps = 128;
         uint MaxMips = 6;
         float Thickness = 5.f;
-        float NormalBias = 0.25f;
+        float NormalBias = 0.1f;
         float BRDFBias = 0.25f;
         bool UseDynamicCubemapsAsFallback = true;
         uint DiffuseSPP = 2;
@@ -56,8 +58,7 @@ struct ScreenSpaceReflections : Feature
         uint MaxAccumulatedFrames = 16;
         uint AtrousIterations = 3;
         float ColorPhi = 0.5f;
-        float NormalPhi = 128.0f;
-        float DepthPhi = 4.0f;
+        float NormalPhi = 512.0f;
 #ifdef ENABLE_SHARC
         bool EnableSharc = false;
 #endif
@@ -71,7 +72,7 @@ struct ScreenSpaceReflections : Feature
         float AmbientMult;
     };
 
-    struct alignas(16) SSRCB
+    struct alignas(16) SSRTCB
     {
         uint MaxSteps;
         uint MaxMips;
@@ -91,12 +92,12 @@ struct ScreenSpaceReflections : Feature
         float normalPhi;
     };
 
-    eastl::unique_ptr<ConstantBuffer> ssrCB;
+    eastl::unique_ptr<ConstantBuffer> ssrtCB;
     eastl::unique_ptr<ConstantBuffer> denoiserCB;
 
     bool recompileFlag = false;
 
-    void DrawSSR();
+    void DrawSSRTSpecular();
     void DrawSSRTDiffuse();
     virtual void Prepass() override;
 

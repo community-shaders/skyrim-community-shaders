@@ -194,7 +194,7 @@ namespace SharedData
 		float Strength;      // [0, 1.0] The inverse blend weight of the effect
 	};
 
-	struct SSRSettings
+	struct SSRTSettings
     {
         uint Enabled;
         float SpecularMult;
@@ -217,7 +217,7 @@ namespace SharedData
 		TerrainVariationSettings terrainVariationSettings;
 		IBLSettings iblSettings;
 		ExtendedTranslucencySettings extendedTranslucencySettings;
-		SSRSettings ssrSettings;
+		SSRTSettings ssrtSettings;
 	};
 
 	Texture2D<float4> DepthTexture : register(t17);

@@ -1,4 +1,4 @@
-#include "ScreenSpaceReflections/ssr_common.hlsli"
+#include "ScreenSpaceRayTracing/ssrt_common.hlsli"
 
 Texture2D<float4> HistoryTexture : register(t0);
 Texture2D<float4> MomentsTexture : register(t1);

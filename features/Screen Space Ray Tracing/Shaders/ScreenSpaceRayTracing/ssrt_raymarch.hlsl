@@ -20,11 +20,11 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-#include "ScreenSpaceReflections/ssr_common.hlsli"
+#include "ScreenSpaceRayTracing/ssrt_common.hlsli"
 
 #if SHARC_UPDATE || SHARC_RENDER
 #   define SHARC_ENABLE_64_BIT_ATOMICS 1
-#   include "ScreenSpaceReflections/sharc/SharcCommon.h"
+#   include "ScreenSpaceRayTracing/sharc/SharcCommon.h"
 #endif
 
 Texture2D<float4> HistoryTexture : register(t0);
@@ -55,7 +55,7 @@ RWStructuredBuffer<uint> u_HashCopyOffsetBuffer : register(u3);
 RWStructuredBuffer<uint4> u_SharcVoxelDataBuffer : register(u4);
 RWStructuredBuffer<uint4> u_SharcVoxelDataBufferPrev : register(u5);
 
-cbuffer SSRCB : register(b1)
+cbuffer SSRTCB : register(b1)
 {
     uint MaxSteps;
     uint MaxMips;
@@ -69,9 +69,9 @@ cbuffer SSRCB : register(b1)
 
 #define HIZ_MAX_ITERATIONS MaxSteps
 #define HIZ_MIN_MIP 0
-#define FFX_SSSR_FLOAT_MAX 3.402823466e+38
-#define FFX_SSSR_DEPTH_HIERARCHY_MAX_MIP MaxMips
-#if defined(SSSR_SPECULAR)
+#define SSRT_FLOAT_MAX 3.402823466e+38
+#define SSRT_DEPTH_HIERARCHY_MAX_MIP MaxMips
+#if defined(SSRT_SPECULAR)
 #   define SAMPLES_PER_PIXEL 1
 #elif SHARC_UPDATE
 #   define SAMPLES_PER_PIXEL 1
@@ -104,7 +104,7 @@ float3 InvProjectPosition(float3 coord, float4x4 mat)
     return projected.xyz;
 }
 
-float2 FFX_SSSR_GetMipResolution(float2 screen_dimensions, int mip_level)
+float2 SSRT_GetMipResolution(float2 screen_dimensions, int mip_level)
 {
     return screen_dimensions * pow(0.5, mip_level);
     // uint2 dimensions;
@@ -113,17 +113,17 @@ float2 FFX_SSSR_GetMipResolution(float2 screen_dimensions, int mip_level)
     // return float2(dimensions.x, dimensions.y);
 }
 
-float FFX_SSSR_LoadDepth(int2 pixel_coordinate, int mip)
+float SSRT_LoadDepth(int2 pixel_coordinate, int mip)
 {
     return DepthTextureMips.Load(int3(pixel_coordinate, mip /* + pc.depth_mip_bias*/)).x;
 }
 
-float3 FFX_SSSR_ScreenSpaceToViewSpace(float3 screen_space_position, uint eyeIndex)
+float3 SSRT_ScreenSpaceToViewSpace(float3 screen_space_position, uint eyeIndex)
 {
     return InvProjectPosition(screen_space_position, FrameBuffer::CameraProjInverse[eyeIndex]);
 }
 
-void FFX_SSSR_InitialAdvanceRay(float3     origin,
+void SSRT_InitialAdvanceRay(float3     origin,
                                 float3     direction,
                                 float3     inv_direction,
                                 float2     current_mip_resolution,
@@ -145,7 +145,7 @@ void FFX_SSSR_InitialAdvanceRay(float3     origin,
     position  = origin + current_t * direction;
 }
 
-bool FFX_SSSR_AdvanceRay(float3       origin,
+bool SSRT_AdvanceRay(float3       origin,
                          float3       direction,
                          float3       inv_direction,
                          float2       current_mip_position,
@@ -168,16 +168,16 @@ bool FFX_SSSR_AdvanceRay(float3       origin,
     float3 t = boundary_planes * inv_direction - origin * inv_direction;
 
     // Prevent using z plane when shooting out of the depth buffer.
-#if FFX_SSSR_OPTION_INVERTED_DEPTH
-    t.z = direction.z < 0 ? t.z : FFX_SSSR_FLOAT_MAX;
+#if SSRT_OPTION_INVERTED_DEPTH
+    t.z = direction.z < 0 ? t.z : SSRT_FLOAT_MAX;
 #else
-    t.z = direction.z > 0 ? t.z : FFX_SSSR_FLOAT_MAX;
+    t.z = direction.z > 0 ? t.z : SSRT_FLOAT_MAX;
 #endif
 
     // Choose nearest intersection with a boundary.
     float t_min = min(min(t.x, t.y), t.z);
 
-#if FFX_SSSR_OPTION_INVERTED_DEPTH
+#if SSRT_OPTION_INVERTED_DEPTH
     // Larger z means closer to the camera.
     bool above_surface = surface_z < position.z;
 #else
@@ -199,15 +199,15 @@ bool FFX_SSSR_AdvanceRay(float3       origin,
 }
 
 // Requires origin and direction of the ray to be in screen space [0, 1] x [0, 1]
-float3 FFX_SSSR_HierarchicalRaymarch(float3 origin, float3 direction, bool is_mirror, float2 screen_size, int most_detailed_mip, float roughness, float thickness,
+float3 SSRT_HierarchicalRaymarch(float3 origin, float3 direction, bool is_mirror, float2 screen_size, int most_detailed_mip, float roughness, float thickness,
                                      uint max_traversal_intersections, out bool valid_hit, out uint _num_iters) {
-    const float3 inv_direction = abs(direction) > float(1.0e-12) ? float(1.0) / direction : FFX_SSSR_FLOAT_MAX;
+    const float3 inv_direction = abs(direction) > float(1.0e-12) ? float(1.0) / direction : SSRT_FLOAT_MAX;
 
     // Start on mip with highest detail.
     int current_mip = most_detailed_mip;
 
     // Could recompute these every iteration, but it's faster to hoist them out and update them.
-    float2 current_mip_resolution     = FFX_SSSR_GetMipResolution(screen_size, current_mip);
+    float2 current_mip_resolution     = SSRT_GetMipResolution(screen_size, current_mip);
     float2 current_mip_resolution_inv = rcp(current_mip_resolution);
 
     // Offset to the bounding boxes uv space to intersect the ray with the center of the next pixel.
@@ -224,22 +224,22 @@ float3 FFX_SSSR_HierarchicalRaymarch(float3 origin, float3 direction, bool is_mi
     // Initially advance ray to avoid immediate self intersections.
     float  current_t;
     float3 position;
-    FFX_SSSR_InitialAdvanceRay(origin, direction, inv_direction, current_mip_resolution, current_mip_resolution_inv, floor_offset, uv_offset, position, current_t);
+    SSRT_InitialAdvanceRay(origin, direction, inv_direction, current_mip_resolution, current_mip_resolution_inv, floor_offset, uv_offset, position, current_t);
 
     _num_iters                     = uint(0);
     while (_num_iters < max_traversal_intersections && current_mip >= most_detailed_mip) {
         if (any(position.xy > float2(1.0, 1.0)) || any(position.xy < float2(0.0, 0.0))) break;
-#ifdef FFX_SSSR_INVERTED_DEPTH_RANGE
+#ifdef SSRT_INVERTED_DEPTH_RANGE
         if (position.z < f32(1.0e-6)) break;
 #else
         if (position.z > float(1.0) - float(1.0e-6)) break;
 #endif
 
         float2 current_mip_position = current_mip_resolution * position.xy;
-        float  surface_z            = FFX_SSSR_LoadDepth(current_mip_position * FrameBuffer::DynamicResolutionParams1.xy, current_mip);
+        float  surface_z            = SSRT_LoadDepth(current_mip_position * FrameBuffer::DynamicResolutionParams1.xy, current_mip);
         bool skipped_tile =
-            FFX_SSSR_AdvanceRay(origin, direction, inv_direction, current_mip_position, current_mip_resolution_inv, current_mip, floor_offset, uv_offset, surface_z, thickness, position, current_t);
-        bool nextMipIsOutOfRange = skipped_tile && (current_mip >= FFX_SSSR_DEPTH_HIERARCHY_MAX_MIP);
+            SSRT_AdvanceRay(origin, direction, inv_direction, current_mip_position, current_mip_resolution_inv, current_mip, floor_offset, uv_offset, surface_z, thickness, position, current_t);
+        bool nextMipIsOutOfRange = skipped_tile && (current_mip >= SSRT_DEPTH_HIERARCHY_MAX_MIP);
         if (!nextMipIsOutOfRange)
         {
             current_mip += skipped_tile ? 1 : -1;
@@ -254,7 +254,7 @@ float3 FFX_SSSR_HierarchicalRaymarch(float3 origin, float3 direction, bool is_mi
     return position;
 }
 
-float FFX_SSSR_ValidateHit(float3 hit, float2 uv, float3 world_space_ray_direction, float2 screen_size, float depth_buffer_thickness, uint eyeIndex, out float occlusion)
+float SSRT_ValidateHit(float3 hit, float2 uv, float3 world_space_ray_direction, float2 screen_size, float depth_buffer_thickness, uint eyeIndex, out float occlusion)
 {
     occlusion = 1.f;
 
@@ -266,8 +266,8 @@ float FFX_SSSR_ValidateHit(float3 hit, float2 uv, float3 world_space_ray_directi
 
     // Don't lookup radiance from the background.
     int2  texel_coords = int2(screen_size * hit.xy * FrameBuffer::DynamicResolutionParams1.xy);
-    float surface_z    = FFX_SSSR_LoadDepth(texel_coords / 2, 1);
-#if FFX_SSSR_OPTION_INVERTED_DEPTH
+    float surface_z    = SSRT_LoadDepth(texel_coords / 2, 1);
+#if SSRT_OPTION_INVERTED_DEPTH
     if (surface_z == 0.0)
     {
 #else
@@ -277,8 +277,8 @@ float FFX_SSSR_ValidateHit(float3 hit, float2 uv, float3 world_space_ray_directi
         return 0;
     }
 
-    float3 view_space_surface = FFX_SSSR_ScreenSpaceToViewSpace(float3(hit.xy, surface_z), eyeIndex);
-    float3 view_space_hit     = FFX_SSSR_ScreenSpaceToViewSpace(hit, eyeIndex);
+    float3 view_space_surface = SSRT_ScreenSpaceToViewSpace(float3(hit.xy, surface_z), eyeIndex);
+    float3 view_space_hit     = SSRT_ScreenSpaceToViewSpace(hit, eyeIndex);
     float  distance           = length(view_space_surface - view_space_hit);
 
     // We accept all hits that are within a reasonable minimum distance below the surface.
@@ -354,7 +354,7 @@ float2 SampleRandomVector2DBaked(uint2 pixel, uint index, uint numSamples) {
     seed.z = Random::pcg3d(int3(seed.xy, SharedData::FrameCount)).x;
     uint2 xi = Random::pcg3d(seed).xy / 0x10000;
     float2 E = Hammersley16(index, numSamples, xi);
-#if defined(SSSR_SPECULAR)
+#if defined(SSRT_SPECULAR)
     E.y = lerp(E.y, 0, BRDFBias);
 #endif
     return E;
@@ -369,7 +369,7 @@ float3 SampleReflectionVector(float3 view_direction, float3 normal, float roughn
     float3   view_direction_tbn = mul(-view_direction, tbn_transform);
     float2   u = SampleRandomVector2DBaked(dispatch_thread_id, index, numSamples);
     // float3   sampled_normal_tbn = Sample_GGX_VNDF_Hemisphere(view_direction_tbn, roughness, u.x, u.y);
-#if defined(SSSR_SPECULAR)
+#if defined(SSRT_SPECULAR)
     float4   sampled_normal_tbn = ImportanceSampleGGX(u, roughness * roughness * roughness * roughness);
 #else
     float4   sampled_normal_tbn = CosineSampleHemisphereConcentric(u);
@@ -377,7 +377,7 @@ float3 SampleReflectionVector(float3 view_direction, float3 normal, float roughn
 #ifdef PERFECT_REFLECTIONS
     sampled_normal_tbn.xyz = float3(0, 0, 1); // Overwrite normal sample to produce perfect reflection.
 #endif
-#if defined(SSSR_SPECULAR)
+#if defined(SSRT_SPECULAR)
     float3 reflected_direction_tbn = reflect(-view_direction_tbn, sampled_normal_tbn.xyz);
 #else
     float3 reflected_direction_tbn = sampled_normal_tbn.xyz;
@@ -411,7 +411,7 @@ static const int2 offset[4] = {
 };
 
 float LocalBRDF(float3 V, float3 L, float3 N, float roughness) {
-#if defined(SSSR_SPECULAR)  // D_GGX only
+#if defined(SSRT_SPECULAR)  // D_GGX only
     float3 H = normalize(V + L);
     float NdotL = saturate(dot(N, L));
     float NdotV = saturate(dot(N, V));
@@ -445,7 +445,7 @@ bool ShouldProcessPixel(uint2 GroupThreadID, uint FrameCount)
 {
     uint2 screen_size = SharedData::BufferDim.xy;
     uint2 coords = DTid.xy;
-#if defined(SSSR_SPECULAR)
+#if defined(SSRT_SPECULAR)
     uint sample_id = 0;
 #else
     uint sample_id = groupThreadID.z;
@@ -463,14 +463,14 @@ bool ShouldProcessPixel(uint2 GroupThreadID, uint FrameCount)
     GetNormalRoughness(coords.xy, normalVS, roughness);
     roughness = clamp(roughness, 0.02f, 1.0f);
 
-#if !defined(SSSR_SPECULAR)
+#if !defined(SSRT_SPECULAR)
     float3 albedo = AlbedoTexture[coords.xy].xyz;
 #endif
 
     bool is_mirror = IsMirrorReflection(roughness);
     int most_detailed_mip = HIZ_MIN_MIP;
-    float2 mip_resolution = FFX_SSSR_GetMipResolution(screen_size, most_detailed_mip);
-    float z = FFX_SSSR_LoadDepth(uv * mip_resolution * FrameBuffer::DynamicResolutionParams1.xy, most_detailed_mip);
+    float2 mip_resolution = SSRT_GetMipResolution(screen_size, most_detailed_mip);
+    float z = SSRT_LoadDepth(uv * mip_resolution * FrameBuffer::DynamicResolutionParams1.xy, most_detailed_mip);
     float3 screen_uv_space_ray_origin = float3(uv, z);
     float3 view_space_ray = ScreenSpaceToViewSpace(screen_uv_space_ray_origin, FrameBuffer::CameraProjInverse[eyeIndex]);
     if (dot(view_space_ray, normalVS) > 0)
@@ -540,7 +540,7 @@ bool ShouldProcessPixel(uint2 GroupThreadID, uint FrameCount)
         bool go_through_thin = false;
         uint numIterations;
         float thickness  = Thickness  + roughness * 10.0;
-        hit = FFX_SSSR_HierarchicalRaymarch(screen_uv_space_ray_origin,
+        hit = SSRT_HierarchicalRaymarch(screen_uv_space_ray_origin,
                                             screen_space_ray_direction,
                                             is_mirror,
                                             screen_size,
@@ -554,7 +554,7 @@ bool ShouldProcessPixel(uint2 GroupThreadID, uint FrameCount)
         world_space_ray  = world_space_hit - world_space_origin.xyz;
         world_ray_length = length(world_space_ray);
         float occlusion;
-        confidence       = valid_hit ? FFX_SSSR_ValidateHit(hit,
+        confidence       = valid_hit ? SSRT_ValidateHit(hit,
                                                       uv,
                                                       world_space_ray,
                                                       screen_size,
@@ -571,10 +571,10 @@ bool ShouldProcessPixel(uint2 GroupThreadID, uint FrameCount)
 
             sampleColor = ScreenColorTextureMips.SampleLevel(LinearSampler, hit.xy * FrameBuffer::DynamicResolutionParams1.xy, 0).xyz;
             sampleColor = Color::GammaToLinear(sampleColor);
-#if !defined(SSSR_SPECULAR)
-            sampleColor *= SharedData::ssrSettings.DiffuseMult;
+#if !defined(SSRT_SPECULAR)
+            sampleColor *= SharedData::ssrtSettings.DiffuseMult;
 #else
-            sampleColor *= SharedData::ssrSettings.SpecularMult;
+            sampleColor *= SharedData::ssrtSettings.SpecularMult;
 #endif
 
             outPDF.xyz += hit * confidence;
@@ -584,7 +584,7 @@ bool ShouldProcessPixel(uint2 GroupThreadID, uint FrameCount)
 #if defined(DYNAMIC_CUBEMAPS) && !SHARC_UPDATE
         if (UseDynamicCubemapsAsFallback != 0 && (confidence < 0.999f))
         {
-#   if defined(SSSR_SPECULAR)            
+#   if defined(SSRT_SPECULAR)            
             const uint sampleMip = 0;
 #   else
             const uint sampleMip = 2;
@@ -608,29 +608,29 @@ bool ShouldProcessPixel(uint2 GroupThreadID, uint FrameCount)
                 skylightingDiffuse *= 1.0 + saturate(world_space_normal.z) * (1.0 - SharedData::skylightingSettings.MinDiffuseVisibility);
 
                 skylightingDiffuse = Skylighting::mixDiffuse(SharedData::skylightingSettings, skylightingDiffuse);
-#       if defined(SSSR_SPECULAR)
+#       if defined(SSRT_SPECULAR)
                 skylightingDiffuse = GetSpecularOcclusionFromAmbientOcclusion(NdotV, skylightingDiffuse, roughness);
 #       endif
                 float3 envNoSkyColor = EnvTexture.SampleLevel(LinearSampler, world_space_reflected_direction, sampleMip);
                 float3 envSkyColor = envColor;
                 float3 skyColor = max(envSkyColor - envNoSkyColor, 0);
                 envLuminance = Color::RGBToLuminance(EnvTexture.SampleLevel(LinearSampler, world_space_reflected_direction, 15));
-                envColor = lerp(envNoSkyColor, envNoSkyColor * (directionalAmbientLuminance / max(envLuminance, 1e-4)), SharedData::ssrSettings.AmbientMult);
+                envColor = lerp(envNoSkyColor, envNoSkyColor * (directionalAmbientLuminance / max(envLuminance, 1e-4)), SharedData::ssrtSettings.AmbientMult);
                 envColor += skyColor * skylightingDiffuse;
             } else {
                 envLuminance = Color::RGBToLuminance(EnvReflectionsTexture.SampleLevel(LinearSampler, world_space_reflected_direction, 15));
-                envColor = lerp(envColor, envColor * (directionalAmbientLuminance / max(envLuminance, 1e-4)), SharedData::ssrSettings.AmbientMult);
+                envColor = lerp(envColor, envColor * (directionalAmbientLuminance / max(envLuminance, 1e-4)), SharedData::ssrtSettings.AmbientMult);
             }
 #   else
             envLuminance = Color::RGBToLuminance(EnvReflectionsTexture.SampleLevel(LinearSampler, world_space_reflected_direction, 15).xyz);
-            envColor = lerp(envColor, envColor * (directionalAmbientLuminance / max(envLuminance, 1e-4)), SharedData::ssrSettings.AmbientMult);
+            envColor = lerp(envColor, envColor * (directionalAmbientLuminance / max(envLuminance, 1e-4)), SharedData::ssrtSettings.AmbientMult);
 #   endif
             envColor = Color::GammaToLinear(envColor);
             float ao = lerp(1.0, occlusion, OcclusionStrength);
 #   if defined(SSGI)
             ao *= 1 - saturate(SsgiAoTexture[coords.xy].x);
 #   endif
-#   if defined(SSSR_SPECULAR)
+#   if defined(SSRT_SPECULAR)
             ao = GetSpecularOcclusionFromAmbientOcclusion(NdotV, ao, roughness);
             envColor *= ao;
 #   else
@@ -682,7 +682,7 @@ bool ShouldProcessPixel(uint2 GroupThreadID, uint FrameCount)
     GroupMemoryBarrierWithGroupSync();
 #endif
 
-#if defined(SSSR_SPECULAR)
+#if defined(SSRT_SPECULAR)
     outColor.xyz = samples[groupThreadID.x * 8 + groupThreadID.y][0].xyz;
     outColor.w = samples[groupThreadID.x * 8 + groupThreadID.y][0].w;
     SSRColorOutput[coords.xy] = outColor;

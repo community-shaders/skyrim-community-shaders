@@ -111,7 +111,7 @@
 #else
 #define HASH_GRID_ENABLE_64_BIT_ATOMICS 0
 #endif
-#include "ScreenSpaceReflections/sharc/HashGridCommon.h"
+#include "ScreenSpaceRayTracing/sharc/HashGridCommon.h"
 
 struct SharcParameters
 {

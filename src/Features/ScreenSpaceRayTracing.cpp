@@ -1,4 +1,4 @@
-#include "ScreenSpaceReflections.h"
+#include "ScreenSpaceRayTracing.h"
 
 #include <DDSTextureLoader.h>
 
@@ -13,7 +13,7 @@
 
 #ifdef ENABLE_SHARC
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
-    ScreenSpaceReflections::Settings,
+    ScreenSpaceRayTracing::Settings,
     Enabled,
     MaxSteps,
     MaxMips,
@@ -36,7 +36,7 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 )
 #else
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
-    ScreenSpaceReflections::Settings,
+    ScreenSpaceRayTracing::Settings,
     Enabled,
     MaxSteps,
     MaxMips,
@@ -58,7 +58,7 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 )
 #endif
 
-void ScreenSpaceReflections::DrawSettings()
+void ScreenSpaceRayTracing::DrawSettings()
 {
     ImGui::Checkbox("Enabled", &settings.Enabled);
     ImGui::SameLine();
@@ -129,29 +129,29 @@ void ScreenSpaceReflections::DrawSettings()
 	}
 }
 
-void ScreenSpaceReflections::RestoreDefaultSettings()
+void ScreenSpaceRayTracing::RestoreDefaultSettings()
 {
     settings = {};
 }
 
-void ScreenSpaceReflections::LoadSettings(json& o_json)
+void ScreenSpaceRayTracing::LoadSettings(json& o_json)
 {
     settings = o_json;
 }
 
-void ScreenSpaceReflections::SaveSettings(json& o_json)
+void ScreenSpaceRayTracing::SaveSettings(json& o_json)
 {
     o_json = settings;
 }
 
-void ScreenSpaceReflections::SetupResources()
+void ScreenSpaceRayTracing::SetupResources()
 {
     auto renderer = globals::game::renderer;
 	auto device = globals::d3d::device;
 
 	logger::debug("Creating buffers...");
 	{
-        ssrCB = eastl::make_unique<ConstantBuffer>(ConstantBufferDesc<SSRCB>());
+        ssrtCB = eastl::make_unique<ConstantBuffer>(ConstantBufferDesc<SSRTCB>());
         denoiserCB = eastl::make_unique<ConstantBuffer>(ConstantBufferDesc<DenoiserCB>());
     }
 
@@ -318,14 +318,14 @@ void ScreenSpaceReflections::SetupResources()
 
     logger::debug("Loading noise texture...");
     {
-        DirectX::CreateDDSTextureFromFile(device, globals::d3d::context, L"Data\\Shaders\\ScreenSpaceReflections\\noise.dds",
+        DirectX::CreateDDSTextureFromFile(device, globals::d3d::context, L"Data\\Shaders\\ScreenSpaceRayTracing\\noise.dds",
             nullptr, noiseSRV.put());
     }
 
 	CompileComputeShaders();
 }
 
-void ScreenSpaceReflections::ClearShaderCache()
+void ScreenSpaceRayTracing::ClearShaderCache()
 {
     static const std::vector<winrt::com_ptr<ID3D11ComputeShader>*> shaderPtrs = {
         &raymarchSpecularCS, &raymarchDiffuseCS, &prepareColorCS, &preprocessDepthCS, &depthDownsampleCS, &diffuseCompositeCS, &temporalCS, &varianceCS, &spatialCS,
@@ -340,7 +340,7 @@ void ScreenSpaceReflections::ClearShaderCache()
     CompileComputeShaders();
 }
 
-void ScreenSpaceReflections::CompileComputeShaders()
+void ScreenSpaceRayTracing::CompileComputeShaders()
 {
     struct ShaderCompileInfo
     {
@@ -373,35 +373,35 @@ void ScreenSpaceReflections::CompileComputeShaders()
 #endif
 
     auto definesSpecular = defines;
-    definesSpecular.push_back({ "SSSR_SPECULAR", nullptr });
+    definesSpecular.push_back({ "SSRT_SPECULAR", nullptr });
 
     std::vector<ShaderCompileInfo>
         shaderInfos = {
-            { &raymarchDiffuseCS, "ssr_raymarch.hlsl", defines },
-            { &raymarchSpecularCS, "ssr_raymarch.hlsl", definesSpecular },
-            { &prepareColorCS, "ssr_prepare_color.hlsl", {} },
-            { &preprocessDepthCS, "ssr_preprocess_depth.hlsl", {} },
-            { &depthDownsampleCS, "ssr_depth_downsample.hlsl", {} },
-            { &diffuseCompositeCS, "ssr_diffuse_composite.hlsl", {} },
-            { &temporalCS, "ssr_temporal.hlsl", {} },
-            { &varianceCS, "ssr_variance.hlsl", {} },
-            { &spatialCS, "ssr_spatial.hlsl", {} },
-            { &spatialSpecularCS, "ssr_spatial.hlsl", definesSpecular },
+            { &raymarchDiffuseCS, "ssrt_raymarch.hlsl", defines },
+            { &raymarchSpecularCS, "ssrt_raymarch.hlsl", definesSpecular },
+            { &prepareColorCS, "ssrt_prepare_color.hlsl", {} },
+            { &preprocessDepthCS, "ssrt_preprocess_depth.hlsl", {} },
+            { &depthDownsampleCS, "ssrt_depth_downsample.hlsl", {} },
+            { &diffuseCompositeCS, "ssrt_diffuse_composite.hlsl", {} },
+            { &temporalCS, "ssrt_temporal.hlsl", {} },
+            { &varianceCS, "ssrt_variance.hlsl", {} },
+            { &spatialCS, "ssrt_spatial.hlsl", {} },
+            { &spatialSpecularCS, "ssrt_spatial.hlsl", definesSpecular },
 #ifdef ENABLE_SHARC
-            { &raymarchDiffuseSharcCS, "ssr_raymarch.hlsl", definesSharc },
-            { &sharcUpdateRaymarchCS, "ssr_raymarch.hlsl", definesSharcUpdate },
+            { &raymarchDiffuseSharcCS, "ssrt_raymarch.hlsl", definesSharc },
+            { &sharcUpdateRaymarchCS, "ssrt_raymarch.hlsl", definesSharcUpdate },
             { &sharcResolveCS, "sharc_resolve.hlsl", {} }
 #endif
         };
 
     for (auto& info : shaderInfos) {
-        auto path = std::filesystem::path("Data\\Shaders\\ScreenSpaceReflections") / info.filename;
+        auto path = std::filesystem::path("Data\\Shaders\\ScreenSpaceRayTracing") / info.filename;
         if (auto rawPtr = reinterpret_cast<ID3D11ComputeShader*>(Util::CompileShader(path.c_str(), info.defines, "cs_5_0")))
             info.programPtr->attach(rawPtr);
     }
 }
 
-void ScreenSpaceReflections::Prepass()
+void ScreenSpaceRayTracing::Prepass()
 {
     if (recompileFlag) {
         recompileFlag = false;
@@ -431,7 +431,7 @@ void ScreenSpaceReflections::Prepass()
     std::array<ID3D11SamplerState*, 1> samplers = { linearSampler.get() };
     context->CSSetSamplers(0, 1, samplers.data());
 
-    state->BeginPerfEvent("SSR Prepass");
+    state->BeginPerfEvent("SSRT Prepass");
 
     // preprocess depth
     {
@@ -472,7 +472,7 @@ void ScreenSpaceReflections::Prepass()
     context->PSSetShaderResources(99, 1, &view);
 }
 
-void ScreenSpaceReflections::DrawSSR()
+void ScreenSpaceRayTracing::DrawSSRTSpecular()
 {
     if (!settings.Enabled)
         return;
@@ -481,7 +481,7 @@ void ScreenSpaceReflections::DrawSSR()
     auto context = globals::d3d::context;
     auto state = globals::state;
 
-    state->BeginPerfEvent("SSR Compute");
+    state->BeginPerfEvent("SSRT Compute");
 
     auto main = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMAIN];
     auto depth = renderer->GetDepthStencilData().depthStencils[RE::RENDER_TARGETS_DEPTHSTENCIL::kPOST_ZPREPASS_COPY];
@@ -496,7 +496,7 @@ void ScreenSpaceReflections::DrawSSR()
     float2 size = Util::ConvertToDynamic(state->screenSize);
     float2 dispatchCount = { (size.x + 7) / 8, (size.y + 7) / 8 };
     
-    SSRCB ssrCBData;
+    SSRTCB ssrCBData;
     {
         ssrCBData.MaxSteps = settings.MaxSteps;
         ssrCBData.MaxMips = settings.MaxMips;
@@ -506,8 +506,8 @@ void ScreenSpaceReflections::DrawSSR()
         ssrCBData.UseDynamicCubemapsAsFallback = (uint)settings.UseDynamicCubemapsAsFallback && dynamicCubemaps.loaded;
         ssrCBData.OcclusionStrength = settings.OcclusionStrength;
     }
-    ssrCB->Update(ssrCBData);
-    auto buffer = ssrCB->CB();
+    ssrtCB->Update(ssrCBData);
+    auto buffer = ssrtCB->CB();
     context->CSSetConstantBuffers(1, 1, &buffer);
 
     std::array<ID3D11ShaderResourceView*, 12> srvs = { nullptr };
@@ -667,7 +667,7 @@ void ScreenSpaceReflections::DrawSSR()
     state->EndPerfEvent();
 }
 
-void ScreenSpaceReflections::DrawSSRTDiffuse()
+void ScreenSpaceRayTracing::DrawSSRTDiffuse()
 {
     if (!(settings.Enabled && settings.EnableDiffuse))
         return;
@@ -692,7 +692,7 @@ void ScreenSpaceReflections::DrawSSRTDiffuse()
     float2 size = Util::ConvertToDynamic(state->screenSize);
     float2 dispatchCount = { (size.x + 7) / 8, (size.y + 7) / 8 };
     
-    SSRCB ssrCBData;
+    SSRTCB ssrCBData;
     {
         ssrCBData.MaxSteps = settings.MaxSteps;
         ssrCBData.MaxMips = settings.MaxMips;
@@ -702,8 +702,8 @@ void ScreenSpaceReflections::DrawSSRTDiffuse()
         ssrCBData.UseDynamicCubemapsAsFallback = (uint)settings.UseDynamicCubemapsAsFallback && dynamicCubemaps.loaded;
         ssrCBData.OcclusionStrength = settings.OcclusionStrength;
     }
-    ssrCB->Update(ssrCBData);
-    auto buffer = ssrCB->CB();
+    ssrtCB->Update(ssrCBData);
+    auto buffer = ssrtCB->CB();
     context->CSSetConstantBuffers(1, 1, &buffer);
 
     std::array<ID3D11ShaderResourceView*, 13> srvs = { nullptr };
@@ -884,7 +884,7 @@ void ScreenSpaceReflections::DrawSSRTDiffuse()
     context->CSSetShader(nullptr, nullptr, 0);
 }
 
-ScreenSpaceReflections::SharedData ScreenSpaceReflections::GetCommonBufferData()
+ScreenSpaceRayTracing::SharedData ScreenSpaceRayTracing::GetCommonBufferData()
 {
     SharedData data;
     data.Enabled = settings.Enabled;

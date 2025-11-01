@@ -1,4 +1,4 @@
-#include "ScreenSpaceReflections/ssr_common.hlsli"
+#include "ScreenSpaceRayTracing/ssrt_common.hlsli"
 
 Texture2D<float4> HistoryTexture : register(t0);
 Texture2D<float4> SSRColorTexture : register(t3);
@@ -75,7 +75,7 @@ static const float kernelWeights[3] = { 1.0, 2.0 / 3.0, 1.0 / 6.0 };
     {
         float phiLuminance = max(colorPhi * sqrt(abs(variance) + VAR_EPSILON), VAR_EPSILON);
         float phiNormal = normalPhi;
-#if defined(SSSR_SPECULAR)
+#if defined(SSRT_SPECULAR)
         // Trying to reduce blurriness on glossy surfaces
         phiLuminance *= roughness;
         phiNormal /= roughness;

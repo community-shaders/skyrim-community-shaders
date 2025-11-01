@@ -8,7 +8,7 @@
 #include "Common/Random.hlsli"
 
 #define Pow2(x) ((x) * (x))
-#define FFX_SSSR_FLOAT_MAX	3.402823466e+38
+#define SSRT_FLOAT_MAX	3.402823466e+38
 
 Texture2D<unorm float3> NormalRoughnessTexture : register(t2);
 

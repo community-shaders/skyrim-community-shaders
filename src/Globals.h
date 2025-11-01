@@ -12,7 +12,7 @@ struct LODBlending;
 struct InteriorSun;
 struct InverseSquareLighting;
 struct ScreenSpaceGI;
-struct ScreenSpaceReflections;
+struct ScreenSpaceRayTracing;
 struct ScreenSpaceShadows;
 struct Skylighting;
 struct TerrainVariation;
@@ -64,7 +64,7 @@ namespace globals
 		extern InteriorSun interiorSun;
 		extern InverseSquareLighting inverseSquareLighting;
 		extern ScreenSpaceGI screenSpaceGI;
-		extern ScreenSpaceReflections screenSpaceReflections;
+		extern ScreenSpaceRayTracing screenSpaceRayTracing;
 		extern ScreenSpaceShadows screenSpaceShadows;
 		extern Skylighting skylighting;
 		extern TerrainVariation terrainVariation;

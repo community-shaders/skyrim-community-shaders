@@ -13,7 +13,7 @@
 #include "Common/SharedData.hlsli"
 
 #define SHARC_ENABLE_64_BIT_ATOMICS 1
-#include "ScreenSpaceReflections/sharc/SharcCommon.h"
+#include "ScreenSpaceRayTracing/sharc/SharcCommon.h"
 
 #define LINEAR_BLOCK_SIZE 256
 

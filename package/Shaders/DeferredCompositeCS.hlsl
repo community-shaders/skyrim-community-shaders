@@ -55,8 +55,8 @@ void SampleSSGISpecular(uint2 pixCoord, sh2 lobe, out float ao, out float3 il, i
 	ao = 1 - SsgiAoTexture[pixCoord].x;
 	float NdotV = dot(normal, view);
 	ao = Color::SpecularAOLagarde(saturate(NdotV), ao, roughness);
-#	if defined(SSR)
-	if (SharedData::ssrSettings.Enabled) {
+#	if defined(SSRT)
+	if (SharedData::ssrtSettings.Enabled) {
 		il = 0;
 		return;
 	}
@@ -87,7 +87,7 @@ void SampleSSGISpecular(uint2 pixCoord, sh2 lobe, out float ao, out float3 il, i
 #	endif
 #endif
 
-#if defined(SSR)
+#if defined(SSRT)
 Texture2D<float4> SSRTexture : register(t16);
 #endif
 
@@ -285,8 +285,8 @@ Texture2D<float4> SSRTexture : register(t16);
 		finalIrradiance += ssgiIlSpecular;
 #	endif
 
-#	if defined(SSR)
-		if (SharedData::ssrSettings.Enabled) {
+#	if defined(SSRT)
+		if (SharedData::ssrtSettings.Enabled) {
 			float4 ssrIrradiance = SSRTexture[dispatchID.xy];
 			finalIrradiance = ssrIrradiance.rgb;
 		}
@@ -315,14 +315,6 @@ Texture2D<float4> SSRTexture : register(t16);
 		color = glossiness;
 	}
 
-#endif
-
-#if defined(SSR)
-#	if defined(SSR_DEBUG)
-	color = SSRTexture[dispatchID.xy].rgb;
-#	elif defined(SSR_DEBUG_DIFFUSE)
-	color = MainRW[dispatchID.xy].rgb;
-#	endif
 #endif
 
 	MainRW[dispatchID.xy] = float4(color, 1.0);
