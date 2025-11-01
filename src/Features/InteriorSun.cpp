@@ -24,7 +24,7 @@ void InteriorSun::DrawSettings()
 			"Prevents shadow quality degradation at distance, allowing smaller light-blocking masks. "
 			"Recommended for properly prepared interior spaces.");
 	}
-	if (ImGui::SliderFloat("Interior Shadow Distance", &settings.InteriorShadowDistance, 1000.0f, 8000.0f)) {
+	if (ImGui::SliderFloat("Interior Shadow Distance", &settings.InteriorShadowDistance, 3000.0f, 8000.0f)) { // min 3000, any less creates visual issues in most interiors.
 		*gInteriorShadowDistance = settings.InteriorShadowDistance;
 		auto tes = RE::TES::GetSingleton();
 		SetShadowDistance(tes && tes->interiorCell);
@@ -32,7 +32,7 @@ void InteriorSun::DrawSettings()
 	if (auto _tt = Util::HoverTooltipWrapper()) {
 		ImGui::Text(
 			"Sets the distance shadows are rendered at in interiors. "
-			"Lower values provide higher quality shadows and improved performance but may cause distant interior spaces to light up incorrectly. ");
+			"Lower values improve performance but may cause shadow popping and other visual issues.");
 	}
 }
 
