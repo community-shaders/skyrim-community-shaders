@@ -32,7 +32,6 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
     AtrousIterations,
     ColorPhi,
     NormalPhi,
-    DepthPhi,
     EnableSharc
 )
 #else
@@ -55,8 +54,7 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
     MaxAccumulatedFrames,
     AtrousIterations,
     ColorPhi,
-    NormalPhi,
-    DepthPhi
+    NormalPhi
 )
 #endif
 
@@ -88,12 +86,19 @@ void ScreenSpaceReflections::DrawSettings()
     if (auto _tt = Util::HoverTooltipWrapper())
         ImGui::Text("When ray marching misses, use dynamic cubemaps for reflections. This with diffuse would provide natural ambient lighting.");
     ImGui::Checkbox("Enable Spatiotemporal Variance-Guided Filtering", &settings.EnableSVGF);
+    if (auto _tt = Util::HoverTooltipWrapper())
+        ImGui::Text("SVGF denoiser. This may introduce some blurriness and temporal artifacts but significantly reduces noise.");
     if (settings.EnableSVGF) {
         ImGui::SliderInt("Max Accumulated Frames", (int*)&settings.MaxAccumulatedFrames, 1, 64, "%d", ImGuiSliderFlags_AlwaysClamp);
-        ImGui::SliderInt("Atrous Iterations", (int*)&settings.AtrousIterations, 1, 3, "%d", ImGuiSliderFlags_AlwaysClamp);
+        ImGui::SliderInt("À Trous Iterations", (int*)&settings.AtrousIterations, 1, 5, "%d", ImGuiSliderFlags_AlwaysClamp);
+        if (auto _tt = Util::HoverTooltipWrapper())
+            ImGui::Text("Number of À Trous wavelet filter iterations. More iterations yield smoother results but may blur details and have a higher computational cost.");
         ImGui::SliderFloat("Color Phi", &settings.ColorPhi, 0.01f, 32.0f, "%.2f");
+        if (auto _tt = Util::HoverTooltipWrapper())
+            ImGui::Text("Controls sensitivity to color differences in the À Trous filter. Lower values preserve more detail but may retain noise.");
         ImGui::SliderFloat("Normal Phi", &settings.NormalPhi, 1.0f, 1024.0f, "%.2f");
-        ImGui::SliderFloat("Depth Phi", &settings.DepthPhi, 0.1f, 32.0f, "%.2f");
+        if (auto _tt = Util::HoverTooltipWrapper())
+            ImGui::Text("Controls sensitivity to normal differences in the À Trous filter. Higher values preserve more detail but may retain noise.");
     }
 #ifdef ENABLE_SHARC
     ImGui::Checkbox("Enable SHARC", &settings.EnableSharc);
@@ -584,7 +589,6 @@ void ScreenSpaceReflections::DrawSSR()
             denoiserCBData.atrousIterations = settings.AtrousIterations;
             denoiserCBData.colorPhi = settings.ColorPhi;
             denoiserCBData.normalPhi = settings.NormalPhi;
-            denoiserCBData.depthPhi = settings.DepthPhi;
         }
         denoiserCB->Update(denoiserCBData);
         auto denoiserBuffer = denoiserCB->CB();
@@ -791,7 +795,6 @@ void ScreenSpaceReflections::DrawSSRTDiffuse()
             denoiserCBData.atrousIterations = settings.AtrousIterations;
             denoiserCBData.colorPhi = settings.ColorPhi;
             denoiserCBData.normalPhi = settings.NormalPhi;
-            denoiserCBData.depthPhi = settings.DepthPhi;
         }
         denoiserCB->Update(denoiserCBData);
         auto denoiserBuffer = denoiserCB->CB();

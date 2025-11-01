@@ -89,8 +89,6 @@ struct ScreenSpaceReflections : Feature
         uint atrousIterations;
         float colorPhi;
         float normalPhi;
-        float depthPhi;
-        float pad[3];
     };
 
     eastl::unique_ptr<ConstantBuffer> ssrCB;

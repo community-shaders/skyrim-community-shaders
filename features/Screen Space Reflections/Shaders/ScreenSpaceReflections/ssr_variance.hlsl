@@ -13,8 +13,6 @@ cbuffer DenoiserCB : register(b2)
     uint atrousIterations;
     float colorPhi;
     float normalPhi;
-    float depthPhi;
-    float3 pad;
 };
 
 [numthreads(8, 8, 1)] void main(uint3 DTid : SV_DispatchThreadID)

@@ -16,8 +16,6 @@ cbuffer DenoiserCB : register(b2)
     uint atrousIterations;
     float colorPhi;
     float normalPhi;
-    float depthPhi;
-    float3 pad;
 };
 
 bool IsValidHistory(uint2 pixel, float2 uv, float3 currNormalVS)
