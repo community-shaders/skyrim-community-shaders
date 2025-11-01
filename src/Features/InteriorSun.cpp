@@ -24,7 +24,7 @@ void InteriorSun::DrawSettings()
 			"Prevents shadow quality degradation at distance, allowing smaller light-blocking masks. "
 			"Recommended for properly prepared interior spaces.");
 	}
-	if (ImGui::SliderFloat("Interior Shadow Distance", &settings.InteriorShadowDistance, 3000.0f, 8000.0f)) { // min 3000, any less creates visual issues in most interiors.
+	if (ImGui::SliderFloat("Interior Shadow Distance", &settings.InteriorShadowDistance, 3000.0f, 8000.0f)) {  // min 3000, any less creates visual issues in most interiors.
 		*gInteriorShadowDistance = settings.InteriorShadowDistance;
 		auto tes = RE::TES::GetSingleton();
 		SetShadowDistance(tes && tes->interiorCell);
@@ -241,17 +241,17 @@ bool InteriorSun::BSShadowDirectionalLight_SetFrameCamera::thunk(RE::BSShadowDir
 	// These modified values will persist and be used when constant buffers are set up
 	if (result && singleton.loaded && singleton.isInteriorWithSun && singleton.settings.ForceSingleShadowCascade) {
 		auto& runtimeData = a_light->GetShadowDirectionalLightRuntimeData();
-		
+
 		// Force all cascades to use the maximum distance (effectively using only one cascade)
 		// This prevents shadow quality degradation at distance in interiors
 		const float maxDistance = *singleton.gShadowDistance;
-		
+
 		// Set all split distances to force a single high-quality cascade
 		// Cascade 0 covers the full range, cascades 1 and 2 are effectively disabled
 		runtimeData.endSplitDistances[0] = maxDistance;
 		runtimeData.endSplitDistances[1] = maxDistance;
 		runtimeData.endSplitDistances[2] = maxDistance;
-		
+
 		runtimeData.startSplitDistances[0] = 0.0f;
 		runtimeData.startSplitDistances[1] = maxDistance;  // Start beyond max, effectively disabled
 		runtimeData.startSplitDistances[2] = maxDistance;  // Start beyond max, effectively disabled

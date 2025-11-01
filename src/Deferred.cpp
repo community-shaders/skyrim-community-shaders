@@ -210,21 +210,20 @@ void Deferred::CopyShadowData()
 	context->CSSetShader(nullptr, nullptr, 0);
 
 	// Apply interior sun single cascade fix by modifying the shadow buffer that shaders actually read
-	if (globals::features::interiorSun.loaded && globals::features::interiorSun.isInteriorWithSun && 
+	if (globals::features::interiorSun.loaded && globals::features::interiorSun.isInteriorWithSun &&
 		globals::features::interiorSun.settings.ForceSingleShadowCascade) {
-		
 		D3D11_MAPPED_SUBRESOURCE mapped;
 		if (SUCCEEDED(context->Map(perShadow->resource.get(), 0, D3D11_MAP_READ_WRITE, 0, &mapped))) {
 			auto* shadowData = static_cast<PerGeometry*>(mapped.pData);
-			
+
 			// Get shadow distance from game global variable
 			static float* gShadowDistance = reinterpret_cast<float*>(REL::RelocationID(528314, 415263).address());
 			const float maxDistance = *gShadowDistance;
-			
+
 			// Override the split distances in the buffer that shaders read from
 			shadowData->EndSplitDistances = { maxDistance, maxDistance, maxDistance, shadowData->EndSplitDistances.w };
 			shadowData->StartSplitDistances = { 0.0f, maxDistance, maxDistance, shadowData->StartSplitDistances.w };
-			
+
 			context->Unmap(perShadow->resource.get(), 0);
 		}
 	}
