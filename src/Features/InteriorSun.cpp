@@ -6,7 +6,8 @@
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	InteriorSun::Settings,
 	ForceDoubleSidedRendering,
-	InteriorShadowDistance)
+	InteriorShadowDistance,
+	ForceSingleShadowCascade)
 
 void InteriorSun::DrawSettings()
 {
@@ -15,6 +16,13 @@ void InteriorSun::DrawSettings()
 		ImGui::Text(
 			"Disables backface culling during sun shadowmap rendering in interiors. "
 			"Will prevent most light leaking through unmasked/unprepared interiors at a small performance cost. ");
+	}
+	ImGui::Checkbox("Force Single Shadow Cascade", &settings.ForceSingleShadowCascade);
+	if (auto _tt = Util::HoverTooltipWrapper()) {
+		ImGui::Text(
+			"Forces the use of a single high-quality shadow cascade for interiors instead of multiple cascades. "
+			"Prevents shadow quality degradation at distance, allowing smaller light-blocking masks. "
+			"Recommended for properly prepared interior spaces.");
 	}
 	if (ImGui::SliderFloat("Interior Shadow Distance", &settings.InteriorShadowDistance, 1000.0f, 8000.0f)) {
 		*gInteriorShadowDistance = settings.InteriorShadowDistance;
@@ -67,6 +75,9 @@ void InteriorSun::PostPostLoad()
 	const std::uintptr_t address = REL::RelocationID(101499, 108496).address() + REL::Relocate(0xD62, 0xE6C, 0xE72);
 	const std::int32_t displacement = static_cast<std::int32_t>(reinterpret_cast<std::uintptr_t>(gShadowDistance) - (address + 8));
 	REL::safe_write(address + 4, &displacement, sizeof(displacement));
+
+	// Hook SetFrameCamera to modify shadow split distances for interior sun
+	stl::write_vfunc<0x10, BSShadowDirectionalLight_SetFrameCamera>(RE::VTABLE_BSShadowDirectionalLight[0]);
 
 	rasterStateCullMode = globals::game::isVR ? &globals::game::shadowState->GetVRRuntimeData().rasterStateCullMode : &globals::game::shadowState->GetRuntimeData().rasterStateCullMode;
 
@@ -217,4 +228,34 @@ void InteriorSun::SetShadowDistance(bool inInterior)
 	using func_t = decltype(SetShadowDistance);
 	static REL::Relocation<func_t> func{ REL::RelocationID(98978, 105631).address() };
 	func(inInterior);
+}
+
+bool InteriorSun::BSShadowDirectionalLight_SetFrameCamera::thunk(RE::BSShadowDirectionalLight* a_light, const RE::NiCamera& a_camera)
+{
+	// Call original function - it calculates the split distances
+	bool result = func(a_light, a_camera);
+
+	auto& singleton = globals::features::interiorSun;
+
+	// AFTER SetFrameCamera calculates splits, override them for interior sun if enabled
+	// These modified values will persist and be used when constant buffers are set up
+	if (result && singleton.loaded && singleton.isInteriorWithSun && singleton.settings.ForceSingleShadowCascade) {
+		auto& runtimeData = a_light->GetShadowDirectionalLightRuntimeData();
+		
+		// Force all cascades to use the maximum distance (effectively using only one cascade)
+		// This prevents shadow quality degradation at distance in interiors
+		const float maxDistance = *singleton.gShadowDistance;
+		
+		// Set all split distances to force a single high-quality cascade
+		// Cascade 0 covers the full range, cascades 1 and 2 are effectively disabled
+		runtimeData.endSplitDistances[0] = maxDistance;
+		runtimeData.endSplitDistances[1] = maxDistance;
+		runtimeData.endSplitDistances[2] = maxDistance;
+		
+		runtimeData.startSplitDistances[0] = 0.0f;
+		runtimeData.startSplitDistances[1] = maxDistance;  // Start beyond max, effectively disabled
+		runtimeData.startSplitDistances[2] = maxDistance;  // Start beyond max, effectively disabled
+	}
+
+	return result;
 }

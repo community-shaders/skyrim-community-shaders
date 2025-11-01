@@ -32,6 +32,7 @@ public:
 	{
 		bool ForceDoubleSidedRendering = true;
 		float InteriorShadowDistance = 5000;
+		bool ForceSingleShadowCascade = true;
 	};
 
 	Settings settings;
@@ -53,6 +54,12 @@ public:
 	struct BSBatchRenderer_RenderPassImmediately
 	{
 		static void thunk(RE::BSRenderPass* a_pass, uint32_t a_technique, bool a_alphaTest, uint32_t a_renderFlags);
+		static inline REL::Relocation<decltype(thunk)> func;
+	};
+
+	struct BSShadowDirectionalLight_SetFrameCamera
+	{
+		static bool thunk(RE::BSShadowDirectionalLight* a_light, const RE::NiCamera& a_camera);
 		static inline REL::Relocation<decltype(thunk)> func;
 	};
 
