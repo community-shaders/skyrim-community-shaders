@@ -1,111 +1,138 @@
+#include "RaytracedGI/Raytracing/Types.hlsli"
 #include "RaytracedGI/Raytracing/Common.hlsli"
-#include "RaytracedGI/Raytracing/Light.hlsli"
+#include "Common/Game.hlsli"
 
-RaytracingAccelerationStructure Scene : register(t0, space0);
+ConstantBuffer<FrameData> Frame         : register(b0);
 
-StructuredBuffer<Light> Lights : register(t1, space0);
-ByteAddressBuffer InstanceMap : register(t2, space0);
+RaytracingAccelerationStructure Scene   : register(t0, space0);
+StructuredBuffer<Light> Lights          : register(t1, space0);
+StructuredBuffer<Instance> Instances    : register(t2, space0);
 
-StructuredBuffer<Vertex> Vertices[] : register(t0, space1);
-StructuredBuffer<uint3> Indices[] : register(t0, space2);
+StructuredBuffer<Vertex> Vertices[]     : register(t0, space1);
+StructuredBuffer<uint3> Triangles[]     : register(t0, space2);
 
-static const float3 light = float3(0, 200, 0);
+static const float scale = GAME_UNIT_TO_M;
+static const float blendSharpness = 4.0f;
 
-void HitCube(inout Payload payload, float2 uv);
-void HitMirror(inout Payload payload, float2 uv);
-void HitFloor(inout Payload payload, float2 uv);
+float checker(float2 uv)
+{
+    float2 c = floor(uv);
+    return fmod(c.x + c.y, 2.0); // 0 or 1 alternating
+}
+
+float3 Triplanar(float3 worldPos, float3 worldNormal)
+{
+    // Compute blend weights based on normal
+    float3 n = abs(worldNormal);
+    n = pow(n, blendSharpness);
+    n /= (n.x + n.y + n.z + 1e-5); // Normalize
+
+    // Project UVs onto each plane
+    float2 uvX = worldPos.yz * scale;
+    float2 uvY = worldPos.xz * scale;
+    float2 uvZ = worldPos.xy * scale;
+
+    // Checkerboard pattern from each projection
+    float xCheck = checker(uvX);
+    float yCheck = checker(uvY);
+    float zCheck = checker(uvZ);
+
+    // Blend them together
+    float blended = xCheck * n.x + yCheck * n.y + zCheck * n.z;
+
+    // Optional: make it binary for sharper edges
+    return lerp(0.6f, 0.4f, blended).rrr;
+}
+
+void HitMesh(inout Payload payload, in BuiltInTriangleIntersectionAttributes attribs);
 
 [shader("closesthit")]
 void main(inout Payload payload, in BuiltInTriangleIntersectionAttributes attribs)
 {
-    uint instanceID = InstanceID();
+    HitMesh(payload, attribs);
+}
 
-    uint meshID = InstanceMap.Load(instanceID * 4);
+
+void HitMesh(inout Payload payload, in BuiltInTriangleIntersectionAttributes attribs)
+{
+    float3 worldPosition = WorldRayOrigin() + WorldRayDirection() * RayTCurrent();  
+
+    Instance instance = Instances[InstanceID()];
+    uint meshID = NonUniformResourceIndex(instance.MeshID);
     
     StructuredBuffer<Vertex> meshVertices = Vertices[meshID];
-    StructuredBuffer<uint3> meshIndices = Indices[meshID];
+    StructuredBuffer<uint3> meshTriangles = Triangles[meshID];
     
-    uint3 triIndices = meshIndices[PrimitiveIndex()];
+    uint3 meshTriangle = meshTriangles[PrimitiveIndex()];
     
-    Vertex v0 = meshVertices[triIndices.x];
-    Vertex v1 = meshVertices[triIndices.y];
-    Vertex v2 = meshVertices[triIndices.z];
+    Vertex vertice0 = meshVertices[meshTriangle.x];
+    Vertex vertice1 = meshVertices[meshTriangle.y];
+    Vertex vertice2 = meshVertices[meshTriangle.z];
+    
+    float v = attribs.barycentrics.x;
+    float w = attribs.barycentrics.y;
+    float u = 1.0 - v - w;
+      
+    half2 texCoord = vertice0.Texcoord0.unpack() * u + vertice1.Texcoord0.unpack() * v + vertice2.Texcoord0.unpack() * w;
+    
+    half4 normal0 = vertice0.Normal.unpack();
+    half4 normal1 = vertice1.Normal.unpack();   
+    half4 normal2 = vertice2.Normal.unpack();
+     
+    half3 normal = normalize(normal0.xyz * u + normal1.xyz * v + normal2.xyz * w); 
+    half3 worldNormal = normalize(mul((float3x3)ObjectToWorld3x4(), normal));
 
-    float2 bary = attribs.barycentrics;
-    float u = bary.x;
-    float v = bary.y;
-    float w = 1.0 - u - v;    
+    float3 albedo = Triplanar(worldPosition, worldNormal);
     
-    float3 normal = normalize(v0.Normal.unpack().xyz * w + v1.Normal.unpack().xyz * u + v2.Normal.unpack().xyz * v);
-    
-    HitCube(payload, bary);
-    
-    /*switch (InstanceID())
+    // Directional Light
+    float3 lighting = 0.0f;
     {
-        case 0: HitCube(payload, uv); break;
-        case 1: HitMirror(payload, uv); break;
-        case 2: HitFloor(payload, uv); break;
+        Light directionalLight = Frame.Directional;
+        
+        float NdotL = saturate(dot(worldNormal, directionalLight.Vector));
 
-        default: payload.color = float3(1, 0, 1); break;
-    }*/
+        // Shadow
+        {
+            RayDesc shadowRay;
+            shadowRay.Origin = worldPosition + worldNormal * 0.1f;
+            shadowRay.Direction = directionalLight.Vector;
+            shadowRay.TMin = 0.1f;
+            shadowRay.TMax = 1e30;
+
+            ShadowPayload shadowPayload;
+            shadowPayload.missed = false;
+        
+            TraceRay(Scene, RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH | RAY_FLAG_SKIP_CLOSEST_HIT_SHADER, 0xFF, 1, 0, 1, shadowRay, shadowPayload);    
+    
+            NdotL *= saturate(shadowPayload.missed);
+        }
+            
+        lighting = NdotL * directionalLight.Color;
+    }
+    
+    // Bounce
+    {
+        uint currentDepth = payload.data.GetDepth();
+
+        if (currentDepth < MAX_DEPTH)
+        {
+            uint randomSeed = payload.data.GetSeed();
+            float3 bounceDir = SampleHemisphere(worldNormal, randomSeed);
+            
+            RayDesc bounceRay;
+            bounceRay.Origin = worldPosition + worldNormal * 0.1f;
+            bounceRay.Direction = bounceDir;
+            bounceRay.TMin = 0.1f;
+            bounceRay.TMax = 1e30;
+    
+            Payload bouncePayload;
+            bouncePayload.color = float3(0, 0, 0);
+            bouncePayload.data = PayloadData::Create(false, currentDepth + 1, randomSeed);
+
+            TraceRay(Scene, RAY_FLAG_NONE, 0xFF, 0, 0, 0, bounceRay, bouncePayload);
+            lighting += bouncePayload.color;
+        }
+    }
+    
+    payload.color = albedo * lighting;
 }
-
-void HitCube(inout Payload payload, float2 uv)
-{
-    uint tri = PrimitiveIndex();
-
-    tri /= 2;
-    float3 normal = (tri.xxx % 3 == uint3(0, 1, 2)) * (tri < 3 ? -1 : 1);
-
-    float3 worldNormal = normalize(mul(normal, (float3x3)ObjectToWorld4x3()));
-
-    float3 color = abs(normal) / 3 + 0.5;
-    if (uv.x < 0.03 || uv.y < 0.03)
-        color = 0.25.rrr;
-
-    color *= saturate(dot(worldNormal, normalize(light))) + 0.33;
-    payload.color = color;
-}
-
-void HitMirror(inout Payload payload, float2 uv)
-{
-    if (!payload.allowReflection)
-        return;
-
-    float3 pos = WorldRayOrigin() + WorldRayDirection() * RayTCurrent();
-    float3 normal = normalize(mul(float3(0, 1, 0), (float3x3)ObjectToWorld4x3()));
-    float3 reflected = reflect(normalize(WorldRayDirection()), normal);
-
-    RayDesc mirrorRay;
-    mirrorRay.Origin = pos;
-    mirrorRay.Direction = reflected;
-    mirrorRay.TMin = 0.001;
-    mirrorRay.TMax = 1000;
-
-    payload.allowReflection = false;
-    TraceRay(Scene, RAY_FLAG_NONE, 0xFF, 0, 0, 0, mirrorRay, payload);
-
-}
-
-void HitFloor(inout Payload payload, float2 uv)
-{
-    float3 pos = WorldRayOrigin() + WorldRayDirection() * RayTCurrent();
-
-    bool2 pattern = frac(pos.xz) > 0.5;
-    payload.color = (pattern.x ^ pattern.y ? 0.6 : 0.4).rrr;
-
-    RayDesc shadowRay;
-    shadowRay.Origin = pos;
-    shadowRay.Direction = light - pos;
-    shadowRay.TMin = 0.001;
-    shadowRay.TMax = 1;
-
-    Payload shadow;
-    shadow.allowReflection = false;
-    shadow.missed = false;
-    TraceRay(Scene, RAY_FLAG_NONE, 0xFF, 0, 0, 0, shadowRay, shadow);
-
-    if (!shadow.missed)
-        payload.color /= 2;
-}
-

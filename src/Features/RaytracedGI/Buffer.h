@@ -40,12 +40,12 @@ public:
 			IID_PPV_ARGS(&uploadBuffer));
 	}
 
-	void Update(void const* src_data, [[maybe_unused]] size_t data_size)
+	void Update(void const* src_data, size_t data_size)
 	{
 		void* pData;
 		CD3DX12_RANGE readRange(0, 0);  // We do not intend to read from it on CPU
 		uploadBuffer->Map(0, &readRange, &pData);
-		memcpy(pData, src_data, sizeof(T) * count);
+		memcpy(pData, src_data, data_size);
 		uploadBuffer->Unmap(0, nullptr);
 	}
 

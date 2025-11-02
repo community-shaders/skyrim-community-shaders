@@ -66,10 +66,14 @@ namespace ShaderUtils
 		}
 
 		winrt::com_ptr<IDxcBlobUtf8> errors;
-		result->GetOutput(DXC_OUT_ERRORS, IID_PPV_ARGS(&errors), nullptr);
-		if (errors && errors->GetStringLength() > 0) {
-			logger::error("Shader compilation errors: {}", errors->GetStringPointer());
-		}
+		if (SUCCEEDED(result->GetOutput(DXC_OUT_ERRORS, IID_PPV_ARGS(&errors), nullptr))) {
+			if (errors && errors->GetStringLength() > 0) {
+				logger::error("Shader compilation errors: {}", errors->GetStringPointer());
+			}
+		} else {
+			logger::error("Failed to get compilation errors");
+			return;		
+		} 
 
 		if (FAILED(result->GetOutput(DXC_OUT_OBJECT, IID_PPV_ARGS(&shader), nullptr))) {
 			logger::error("Failed to get compiled shader");

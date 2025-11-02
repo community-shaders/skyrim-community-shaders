@@ -5,9 +5,9 @@
 
 // Conversion constants
 #define GAME_UNIT_TO_CM     1.428f
-#define GAME_UNIT_TO_M      GAME_UNIT_TO_CM / 100.0f
-#define GAME_UNIT_TO_FEET   GAME_UNIT_TO_CM / 30.48f
-#define GAME_UNIT_TO_INCHES GAME_UNIT_TO_CM / 2.54f
+#define GAME_UNIT_TO_M      (GAME_UNIT_TO_CM / 100.0f)
+#define GAME_UNIT_TO_FEET   (GAME_UNIT_TO_CM / 30.48f)
+#define GAME_UNIT_TO_INCHES (GAME_UNIT_TO_CM / 2.54f)
 
 // Wind speed conversions
 #define WIND_RAW_TO_NORMALIZED 1.0f / 255.0f

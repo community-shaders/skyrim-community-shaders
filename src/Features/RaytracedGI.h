@@ -27,6 +27,10 @@
 #include "Features/RaytracedGI/Buffer.h"
 #include "LightLimitFix.h"
 
+#define NTDDI_VERSION NTDDI_WINBLUE
+
+#include <DXProgrammableCapture.h>
+
 struct TriBufferPtrKey
 {
 	ID3D11Buffer* vertexBuffer;
@@ -120,7 +124,7 @@ struct RaytracedGI : public Feature
 	//void BSTriShape_UpdateWorldData(RE::BSTriShape* This, RE::NiUpdateData* a_data);
 	
 	static constexpr uint MAX_LIGHTS = 32;
-	static constexpr UINT64 NUM_SHADER_IDS = 3;
+	static constexpr UINT64 NUM_SHADER_IDS = 5;
 
 	static constexpr DXGI_SAMPLE_DESC NO_AA = { .Count = 1, .Quality = 0 };
 	static constexpr D3D12_HEAP_PROPERTIES UPLOAD_HEAP = { .Type = D3D12_HEAP_TYPE_UPLOAD };
@@ -138,10 +142,8 @@ struct RaytracedGI : public Feature
 	////////////////////////////////////////////////// Feature Specific Data
 	struct Settings
 	{
-		uint Enabled = true;
-		float3 ColorA = { 0.3f, 0.5f, 0.7f };
-		std::array<uint, 2> IdA = { 1, 2 };  // std::array is because we haven't defined XMUINT2 serialization yet
-		float2 UvA = { 0.0f, 0.0f };
+		bool Enabled = true;
+		bool EnablePIXCapture = true;
 	} settings;
 
 	struct Light
@@ -161,6 +163,10 @@ struct RaytracedGI : public Feature
 		float4x4 ProjInverse;
 		float4 Position;
 		Light DirectionalLight;
+		uint FrameCount;
+		uint Pad0;
+		uint Pad1;
+		uint Pad2;
 	};
 	static_assert(sizeof(FrameBuffer) % 16 == 0);
 	FrameBuffer* frameBufferData;
@@ -169,12 +175,22 @@ struct RaytracedGI : public Feature
 	bool buffersCreated = false;
 	bool creatingBuffers = false;
 
+	winrt::com_ptr<IDXGraphicsAnalysis> ga = nullptr;
+	bool capture = false;
+
+	#pragma pack(push, 1)
 	struct Vertex
 	{
 		float3 Position;
 		uint16_t Texcoord[2];
 		uint8_t Normal[4];
 		uint8_t Color[4];
+	};
+	#pragma pack(pop)
+
+	struct Instance
+	{
+		uint MeshID;
 	};
 
 	struct MeshData
@@ -189,7 +205,7 @@ struct RaytracedGI : public Feature
 	eastl::vector<MeshData> meshVector;
 	eastl::unordered_map<TriBufferPtrKey, size_t, TriBufferPtrKeyHash> meshMap;	
 
-	eastl::vector<uint> instanceMap;
+	eastl::vector<Instance> instanceMap;
 	winrt::com_ptr<ID3D12Resource> instanceMapBuffer = nullptr;
 
 	struct InstanceData

@@ -423,7 +423,7 @@ void Deferred::DeferredPasses()
 	bool ssgi_hq_spec = ssgi.settings.EnableExperimentalSpecularGI;
 
 	auto& rtgi = globals::features::raytracedGI;
-	if (rtgi.loaded)
+	if (rtgi.Active())
 		rtgi.DrawRTGI();
 
 	auto dispatchCount = Util::GetScreenDispatchCount(true);
