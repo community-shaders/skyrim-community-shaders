@@ -751,8 +751,9 @@ file(
     CONFIGURE_DEPENDS
     "${CMAKE_SOURCE_DIR}/package/*"
 )
-# Add SKSE plugin dll as dependency
-list(APPEND CORE_SOURCES ${PROJECT_NAME})
+# Add SKSE plugin dll as dependency (use target-file generator expression so CMake
+# knows the actual output path of the target at build time)
+list(APPEND CORE_SOURCES "$<TARGET_FILE:${PROJECT_NAME}>")
 
 set(CORE_FEATURE_PATHS "${CMAKE_SOURCE_DIR}/package/")
 
