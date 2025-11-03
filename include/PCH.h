@@ -10,7 +10,7 @@ void* operator new[](size_t size, size_t alignment, size_t alignmentOffset, cons
 #include <SKSE/SKSE.h>
 #include <xbyak/xbyak.h>
 
-#include <detours/Detours.h>
+#include <detours/detours.h>
 
 #ifdef NDEBUG
 #	include <spdlog/sinks/basic_file_sink.h>
@@ -57,6 +57,13 @@ namespace stl
 		T::func = vtbl.write_vfunc(idx, T::thunk);
 	}
 
+	template <std::size_t idx, class T>
+	void write_vfunc(REL::VariantOffset offset)
+	{
+		REL::Relocation<std::uintptr_t> vtbl{ offset };
+		T::func = vtbl.write_vfunc(idx, T::thunk);
+	}
+
 	template <class T>
 	void write_thunk_jmp(std::uintptr_t a_src)
 	{
@@ -74,19 +81,32 @@ namespace stl
 	template <class T>
 	void detour_thunk(REL::RelocationID a_relId)
 	{
-		*(uintptr_t*)&T::func = Detours::X64::DetourFunction(a_relId.address(), (uintptr_t)&T::thunk);
+		T::func = a_relId.address();
+		DetourTransactionBegin();
+		DetourUpdateThread(GetCurrentThread());
+		DetourAttach(reinterpret_cast<PVOID*>(&T::func), reinterpret_cast<PVOID>(T::thunk));
+		DetourTransactionCommit();
 	}
 
 	template <class T>
 	void detour_thunk_ignore_func(REL::RelocationID a_relId)
 	{
-		std::ignore = Detours::X64::DetourFunction(a_relId.address(), (uintptr_t)&T::thunk);
+		auto target = reinterpret_cast<PVOID>(a_relId.address());
+		DetourTransactionBegin();
+		DetourUpdateThread(GetCurrentThread());
+		DetourAttach(&target, reinterpret_cast<PVOID>(T::thunk));
+		DetourTransactionCommit();
 	}
 
 	template <std::size_t idx, class T>
 	void detour_vfunc(void* target)
 	{
-		*(uintptr_t*)&T::func = Detours::X64::DetourClassVTable(*(uintptr_t*)target, &T::thunk, idx);
+		auto vtable = *reinterpret_cast<uintptr_t**>(target);
+		T::func = vtable[idx];
+		DetourTransactionBegin();
+		DetourUpdateThread(GetCurrentThread());
+		DetourAttach(reinterpret_cast<PVOID*>(&T::func), reinterpret_cast<PVOID>(T::thunk));
+		DetourTransactionCommit();
 	}
 }
 
@@ -144,7 +164,7 @@ namespace DX
 #include <nlohmann/json.hpp>
 using json = nlohmann::json;
 
-#include <magic_enum.hpp>
+#include <magic_enum/magic_enum.hpp>
 
 #include <EASTL/algorithm.h>
 #include <EASTL/array.h>

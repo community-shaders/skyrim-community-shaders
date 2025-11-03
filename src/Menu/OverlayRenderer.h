@@ -40,7 +40,7 @@ public:
 		const std::function<void()>& processInputEventQueue,
 		const std::function<void()>& drawSettings,
 		const std::function<const char*(uint32_t)>& keyIdToString,
-		float cachedFontSize,
+		float& cachedFontSize,
 		float currentFontSize);
 
 private:
@@ -49,6 +49,8 @@ private:
 	static void HandleFontReload(Menu& menu, float& cachedFontSize, float currentFontSize);
 	static void InitializeImGuiFrame(Menu& menu);
 	static void RenderShaderCompilationStatus(const std::function<const char*(uint32_t)>& keyIdToString);
+	static void RenderShaderBlockingStatus();
+	static void RenderFirstTimeSetupOverlay();
 	static void RenderFeatureOverlays();
 	static void HandleABTesting();
 	static void FinalizeImGuiFrame();

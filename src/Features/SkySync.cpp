@@ -4,18 +4,35 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	SkySync::Settings,
 	Enabled,
 	UseAlternateSunPath,
-	MoonLightSource)
+	MoonLightSource,
+	SunPath,
+	CustomAngle)
 
 void SkySync::DrawSettings()
 {
 	ImGui::Checkbox("Enabled", &settings.Enabled);
+
 	ImGui::Checkbox("Use alternate sun path", &settings.UseAlternateSunPath);
-	ImGui::SliderInt("Moon light source", &settings.MoonLightSource, 0, static_cast<uint8_t>(MoonLightSource::Count) - 1, MoonLightSourceNames[settings.MoonLightSource]);
+
+	if (settings.UseAlternateSunPath) {
+		if (ImGui::SliderInt("Sun path", &settings.SunPath, 0, static_cast<uint8_t>(SunPath::Count) - 1, SunPathNames[settings.SunPath], ImGuiSliderFlags_AlwaysClamp))
+			SetSunAngle();
+
+		if (settings.SunPath == static_cast<int32_t>(SunPath::Custom)) {
+			if (ImGui::SliderFloat("Custom angle", &settings.CustomAngle, -90.0f, 90.0f, "%.0f", ImGuiSliderFlags_AlwaysClamp))
+				SetSunAngle();
+		}
+	}
+
+	ImGui::SliderInt("Moon light source", &settings.MoonLightSource, 0, static_cast<uint8_t>(MoonLightSource::Count) - 1, MoonLightSourceNames[settings.MoonLightSource], ImGuiSliderFlags_AlwaysClamp);
 }
 
 void SkySync::LoadSettings(json& o_json)
 {
 	settings = o_json;
+	settings.MoonLightSource = std::clamp(settings.MoonLightSource, static_cast<int32_t>(MoonLightSource::Brightest), static_cast<int32_t>(MoonLightSource::Secunda));
+	settings.SunPath = std::clamp(settings.SunPath, static_cast<int32_t>(SunPath::Southern), static_cast<int32_t>(SunPath::Custom));
+	SetSunAngle();
 }
 
 void SkySync::SaveSettings(json& o_json)
@@ -26,6 +43,7 @@ void SkySync::SaveSettings(json& o_json)
 void SkySync::RestoreDefaultSettings()
 {
 	settings = {};
+	SetSunAngle();
 }
 
 void SkySync::PostPostLoad()
@@ -102,6 +120,24 @@ void SkySync::Update(const RE::Sky* sky)
 
 	shadowFader.Update(sun, directions, intensities, isDayTime);
 }
+void SkySync::SetSunAngle()
+{
+	switch (static_cast<SunPath>(settings.SunPath)) {
+	case SunPath::Southern:
+		sunAngle = SouthernSunAngle;
+		break;
+	case SunPath::Northern:
+		sunAngle = NorthernSunAngle;
+		break;
+	case SunPath::Vanilla:
+		sunAngle = VanillaSunAngle;
+		break;
+	case SunPath::Custom:
+		sunAngle = 90.0f + settings.CustomAngle;
+		break;
+	default:;
+	}
+}
 
 void SkySync::SetSkyRotation(const RE::Sky* sky, RE::TESObjectCELL* cell)
 {
@@ -125,9 +161,9 @@ void SkySync::ProcessSun(const RE::Sun* sun, const float time, const float altit
 	RE::NiPoint3 dir;
 	float dist;
 
-	if (settings.UseAlternateSunPath)
-		CalculateAlternateSunDirectionAndDistance(dir, dist, time, timings.sunrise, timings.sunset);
-	else
+	if (settings.UseAlternateSunPath) {
+		CalculateAlternateSunDirectionAndDistance(dir, dist, time, timings.sunrise, timings.sunset, sunAngle);
+	} else
 		CalculateSunDirectionAndDistance(sun, dir, dist);
 
 	rawDirections[static_cast<int>(Caster::Sun)] = dir;
@@ -198,13 +234,13 @@ inline void SkySync::CalculateSunDirectionAndDistance(const RE::Sun* sun, RE::Ni
 	}
 }
 
-inline void SkySync::CalculateAlternateSunDirectionAndDistance(RE::NiPoint3& outDir, float& outDist, const float time, const float sunrise, const float sunset)
+inline void SkySync::CalculateAlternateSunDirectionAndDistance(RE::NiPoint3& outDir, float& outDist, const float time, const float sunrise, const float sunset, const float sunAngle)
 {
 	const float phi = DirectX::XM_PI * ((time - sunrise) / (sunset - sunrise));
 	float sinPhi, cosPhi;
 	DirectX::XMScalarSinCosEst(&sinPhi, &cosPhi, phi);
 
-	constexpr float tiltRadians = DirectX::XMConvertToRadians(SunArcTiltAngle);
+	float tiltRadians = DirectX::XMConvertToRadians(sunAngle);
 	float cosTilt, sinTilt;
 	DirectX::XMScalarSinCosEst(&sinTilt, &cosTilt, tiltRadians);
 
@@ -213,7 +249,7 @@ inline void SkySync::CalculateAlternateSunDirectionAndDistance(RE::NiPoint3& out
 	if (const float length = outDir.Unitize(); length < FLT_EPSILON)
 		outDir = { 0.0f, 0.0f, 1.0f };
 
-	const float elevationRatio = std::clamp(-outDir.y / cosTilt, 0.0f, 1.0f);
+	const float elevationRatio = std::max(sinPhi, 0.0f);
 	outDist = std::lerp(SunHorizonDistance, SunPeakDistance, elevationRatio);
 }
 

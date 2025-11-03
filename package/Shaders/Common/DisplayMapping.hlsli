@@ -48,10 +48,10 @@ namespace DisplayMapping
 
 	float3 PQtoLinear(float3 linearCol, const float maxPqValue)
 	{
-		float3 colToPow = pow(linearCol, 1.0 / PQ_constant_M);
+		float3 colToPow = pow(abs(linearCol), 1.0 / PQ_constant_M);
 		float3 numerator = max(colToPow - PQ_constant_C1, 0.0);
 		float3 denominator = PQ_constant_C2 - (PQ_constant_C3 * colToPow);
-		float3 linearColor = pow(numerator / denominator, 1.0 / PQ_constant_N);
+		float3 linearColor = pow(abs(numerator / denominator), 1.0 / PQ_constant_N);
 
 		linearColor *= maxPqValue;
 
@@ -136,18 +136,11 @@ namespace DisplayMapping
 		float saturationAmount = pow(smoothstep(1.0, 0.3, ictcp.x), 1.3);
 		col = ICtCpToRGB(ictcp * float3(1, saturationAmount.xx));
 
-		// Hue preserving mapping
-		float maxCol = Color::RGBToLuminance(col);
-		float mappedMax = GetTonemapFactorHejlBurgessDawson(maxCol).x;
-		float3 compressedHuePreserving = col * mappedMax / maxCol;
-
-		compressedHuePreserving += saturate(Param.x - mappedMax) * bloomCol;
-
 		// Non-hue preserving mapping
 		float3 perChannelCompressed = GetTonemapFactorHejlBurgessDawson(col);
 		perChannelCompressed += saturate(Param.x - perChannelCompressed) * bloomCol;
 
-		col = lerp(perChannelCompressed, compressedHuePreserving, 0.6);
+		col = perChannelCompressed;
 
 		float3 ictcpMapped = RGBToICtCp(col);
 

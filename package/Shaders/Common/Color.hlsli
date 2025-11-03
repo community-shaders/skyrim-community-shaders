@@ -7,6 +7,21 @@ namespace Color
 {
 	static float GammaCorrectionValue = 2.2;
 
+	// [Jimenez et al. 2016, "Practical Realtime Strategies for Accurate Indirect Occlusion"]
+	float3 MultiBounceAO(float3 baseColor, float ao)
+	{
+		float3 a = 2.0404 * baseColor - 0.3324;
+		float3 b = -4.7951 * baseColor + 0.6417;
+		float3 c = 2.7552 * baseColor + 0.6903;
+		return max(ao, ((ao * a + b) * ao + c) * ao);
+	}
+
+	// [Lagarde et al. 2014, "Moving Frostbite to Physically Based Rendering 3.0"]
+	float SpecularAOLagarde(float NdotV, float ao, float roughness)
+	{
+		return saturate(pow(abs(NdotV + ao), exp2(-16.0 * roughness - 1.0)) - 1.0 + ao);
+	}
+
 	float RGBToLuminance(float3 color)
 	{
 		return dot(color, float3(0.2125, 0.7154, 0.0721));
@@ -50,33 +65,46 @@ namespace Color
 		return color;
 	}
 
-	// Attempt to match vanilla materials tha are a darker than PBR
-	const static float PBRLightingScale = 0.666;
+	// Attempt to match vanilla materials that are darker than PBR
+	const static float PBRLightingScale = 0.65;
+
+	// Attempt to normalise reflection brightness against DALC
+	const static float ReflectionNormalisationScale = 0.65;
+
+	float GammaToLinear(float color)
+	{
+		return pow(abs(color), 1.6);
+	}
+
+	float LinearToGamma(float color)
+	{
+		return pow(abs(color), 1.0 / 1.6);
+	}
 
 	float3 GammaToLinear(float3 color)
 	{
-		return pow(color, 1.8);
+		return pow(abs(color), 1.6);
 	}
 
 	float3 LinearToGamma(float3 color)
 	{
-		return pow(color, 1.0 / 1.8);
+		return pow(abs(color), 1.0 / 1.6);
 	}
 
 	float3 GammaToTrueLinear(float3 color)
 	{
-		return pow(color, 2.2);
+		return pow(abs(color), 2.2);
 	}
 
 	float3 TrueLinearToGamma(float3 color)
 	{
-		return pow(color, 1.0 / 2.2);
+		return pow(abs(color), 1.0 / 2.2);
 	}
 
 	float3 Diffuse(float3 color)
 	{
 #if defined(TRUE_PBR)
-		return LinearToGamma(color);
+		return TrueLinearToGamma(color);
 #else
 		return color;
 #endif

@@ -29,9 +29,9 @@ public:
 
 	struct BendSettings
 	{
-		float SurfaceThickness = 0.010f;
+		float SurfaceThickness = 0.02f;
 		float BilinearThreshold = 0.02f;
-		float ShadowContrast = 4.0f;
+		float ShadowContrast = 1.0f;
 		uint Enable = 1;
 		uint SampleCount = 1;
 		uint pad0[3];
@@ -56,6 +56,10 @@ public:
 
 		float2 DynamicRes;
 
+		uint DynamicSampleCount;
+		uint DynamicReadCount;
+		float pad0[2];
+
 		BendSettings settings;
 	};
 
@@ -72,6 +76,7 @@ public:
 	virtual void DrawSettings() override;
 
 	virtual void ClearShaderCache() override;
+	uint GetScaledSampleCount(bool a_dynamic);
 	ID3D11ComputeShader* GetComputeRaymarch();
 	ID3D11ComputeShader* GetComputeRaymarchRight();
 
@@ -84,5 +89,5 @@ public:
 
 	virtual void RestoreDefaultSettings() override;
 
-	virtual bool SupportsVR() override { return true; };
+	virtual bool SupportsVR() override { return false; };
 };

@@ -4,74 +4,17 @@
 #include "Shadercache.h"
 #include "State.h"
 
-static constexpr uint CLUSTER_MAX_LIGHTS = 256;
+static constexpr uint CLUSTER_MAX_LIGHTS = 128;
 static constexpr uint MAX_LIGHTS = 1024;
 
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	LightLimitFix::Settings,
 	EnableContactShadows,
-	EnableParticleLights,
-	EnableParticleLightsCulling,
-	EnableParticleLightsDetection,
-	ParticleLightsSaturation,
-	EnableParticleLightsOptimization,
-	ParticleBrightness,
-	ParticleRadius,
-	BillboardBrightness,
-	BillboardRadius)
+	EnableLightsVisualisation,
+	LightsVisualisationMode)
 
 void LightLimitFix::DrawSettings()
 {
-	if (ImGui::TreeNodeEx("Particle Lights", ImGuiTreeNodeFlags_DefaultOpen)) {
-		ImGui::Checkbox("Enable Particle Lights", &settings.EnableParticleLights);
-		if (auto _tt = Util::HoverTooltipWrapper()) {
-			ImGui::Text("Enables Particle Lights.");
-		}
-
-		ImGui::Checkbox("Enable Culling", &settings.EnableParticleLightsCulling);
-		if (auto _tt = Util::HoverTooltipWrapper()) {
-			ImGui::Text("Significantly improves performance by not rendering empty textures. Only disable if you are encountering issues.");
-		}
-
-		ImGui::Checkbox("Enable Detection", &settings.EnableParticleLightsDetection);
-		if (auto _tt = Util::HoverTooltipWrapper()) {
-			ImGui::Text("Adds particle lights to the player light level, so that NPCs can detect them for stealth and gameplay.");
-		}
-
-		ImGui::Checkbox("Enable Optimization", &settings.EnableParticleLightsOptimization);
-		if (auto _tt = Util::HoverTooltipWrapper()) {
-			ImGui::Text("Merges vertices which are close enough to each other to improve performance.");
-		}
-
-		ImGui::Spacing();
-		ImGui::Spacing();
-
-		ImGui::TextWrapped("Particle Lights Customisation");
-		ImGui::SliderFloat("Saturation", &settings.ParticleLightsSaturation, 1.0, 2.0, "%.2f");
-		if (auto _tt = Util::HoverTooltipWrapper()) {
-			ImGui::Text("Particle light saturation.");
-		}
-		ImGui::SliderFloat("Particle Brightness", &settings.ParticleBrightness, 0.0, 10.0, "%.2f");
-		ImGui::SliderFloat("Particle Radius", &settings.ParticleRadius, 0.0, 10.0, "%.2f");
-		ImGui::SliderFloat("Billboard Brightness", &settings.BillboardBrightness, 0.0, 10.0, "%.2f");
-		ImGui::SliderFloat("Billboard Radius", &settings.BillboardRadius, 0.0, 10.0, "%.2f");
-
-		ImGui::Spacing();
-		ImGui::Spacing();
-		ImGui::TreePop();
-	}
-
-	if (ImGui::TreeNodeEx("Shadows", ImGuiTreeNodeFlags_DefaultOpen)) {
-		ImGui::Checkbox("Enable Contact Shadows", &settings.EnableContactShadows);
-		if (auto _tt = Util::HoverTooltipWrapper()) {
-			ImGui::Text("All lights cast small shadows. Performance impact.");
-		}
-
-		ImGui::Spacing();
-		ImGui::Spacing();
-		ImGui::TreePop();
-	}
-
 	auto shaderCache = globals::shaderCache;
 
 	if (ImGui::TreeNodeEx("Light Limit Visualization", ImGuiTreeNodeFlags_DefaultOpen)) {
@@ -98,14 +41,11 @@ void LightLimitFix::DrawSettings()
 			previousEnableLightsVisualisation = currentEnableLightsVisualisation;
 		}
 
-		ImGui::Spacing();
-		ImGui::Spacing();
 		ImGui::TreePop();
 	}
 
 	if (ImGui::TreeNodeEx("Statistics", ImGuiTreeNodeFlags_DefaultOpen)) {
 		ImGui::Text(std::format("Clustered Light Count : {}", lightCount).c_str());
-		ImGui::Text(std::format("Particle Lights Count : {}", currentParticleLights.size()).c_str());
 
 		ImGui::TreePop();
 	}
@@ -114,21 +54,15 @@ void LightLimitFix::DrawSettings()
 LightLimitFix::PerFrame LightLimitFix::GetCommonBufferData()
 {
 	PerFrame perFrame{};
-	perFrame.EnableContactShadows = settings.EnableContactShadows;
 	perFrame.EnableLightsVisualisation = settings.EnableLightsVisualisation;
 	perFrame.LightsVisualisationMode = settings.LightsVisualisationMode;
 	std::copy(clusterSize, clusterSize + 3, perFrame.ClusterSize);
 	return perFrame;
 }
 
-void LightLimitFix::CleanupParticleLights(RE::NiNode* a_node)
-{
-	particleLightsReferences.erase(a_node);
-}
-
 void LightLimitFix::SetupResources()
 {
-	auto screenSize = Util::ConvertToDynamic(globals::state->screenSize);
+	auto screenSize = globals::state->screenSize;
 	if (REL::Module::IsVR())
 		screenSize.x *= .5;
 	clusterSize[0] = ((uint)screenSize.x + 63) / 64;
@@ -137,18 +71,8 @@ void LightLimitFix::SetupResources()
 	uint clusterCount = clusterSize[0] * clusterSize[1] * clusterSize[2];
 
 	{
-		std::string clusterSizeStrs[3];
-		for (int i = 0; i < 3; ++i)
-			clusterSizeStrs[i] = std::format("{}", clusterSize[i]);
-
-		std::vector<std::pair<const char*, const char*>> defines = {
-			{ "CLUSTER_BUILDING_DISPATCH_SIZE_X", clusterSizeStrs[0].c_str() },
-			{ "CLUSTER_BUILDING_DISPATCH_SIZE_Y", clusterSizeStrs[1].c_str() },
-			{ "CLUSTER_BUILDING_DISPATCH_SIZE_Z", clusterSizeStrs[2].c_str() }
-		};
-
-		clusterBuildingCS = (ID3D11ComputeShader*)Util::CompileShader(L"Data\\Shaders\\LightLimitFix\\ClusterBuildingCS.hlsl", defines, "cs_5_0");
-		clusterCullingCS = (ID3D11ComputeShader*)Util::CompileShader(L"Data\\Shaders\\LightLimitFix\\ClusterCullingCS.hlsl", defines, "cs_5_0");
+		clusterBuildingCS = (ID3D11ComputeShader*)Util::CompileShader(L"Data\\Shaders\\LightLimitFix\\ClusterBuildingCS.hlsl", {}, "cs_5_0");
+		clusterCullingCS = (ID3D11ComputeShader*)Util::CompileShader(L"Data\\Shaders\\LightLimitFix\\ClusterCullingCS.hlsl", {}, "cs_5_0");
 
 		lightBuildingCB = new ConstantBuffer(ConstantBufferDesc<LightBuildingCB>());
 		lightCullingCB = new ConstantBuffer(ConstantBufferDesc<LightCullingCB>());
@@ -231,22 +155,6 @@ void LightLimitFix::SetupResources()
 	{
 		strictLightDataCB = new ConstantBuffer(ConstantBufferDesc<StrictLightDataCB>());
 	}
-}
-
-void LightLimitFix::Reset()
-{
-	for (auto& particleLight : currentParticleLights) {
-		if (!particleLight.billboard) {
-			if (const auto particleSystem = static_cast<RE::NiParticleSystem*>(particleLight.node)) {
-				if (auto particleData = particleSystem->GetParticleRuntimeData().particleData.get()) {
-					particleData->DecRefCount();
-				}
-			}
-		}
-		particleLight.node->DecRefCount();
-	}
-	currentParticleLights.clear();
-	std::swap(currentParticleLights, queuedParticleLights);
 }
 
 void LightLimitFix::LoadSettings(json& o_json)
@@ -386,61 +294,27 @@ void LightLimitFix::SetLightPosition(LightLimitFix::LightData& a_light, RE::NiPo
 {
 	for (int eyeIndex = 0; eyeIndex < eyeCount; eyeIndex++) {
 		RE::NiPoint3 eyePosition;
-		Matrix viewMatrix;
 
 		if (a_cached) {
 			eyePosition = eyePositionCached[eyeIndex];
-			viewMatrix = viewMatrixCached[eyeIndex];
 		} else {
 			eyePosition = Util::GetEyePosition(eyeIndex);
-			viewMatrix = Util::GetCameraData(eyeIndex).viewMat;
 		}
 
 		auto worldPos = a_initialPosition - eyePosition;
 		a_light.positionWS[eyeIndex].data.x = worldPos.x;
 		a_light.positionWS[eyeIndex].data.y = worldPos.y;
 		a_light.positionWS[eyeIndex].data.z = worldPos.z;
-		a_light.positionVS[eyeIndex].data = DirectX::SimpleMath::Vector3::Transform(a_light.positionWS[eyeIndex].data, viewMatrix);
 	}
-}
-
-float LightLimitFix::CalculateLuminance(CachedParticleLight& light, RE::NiPoint3& point)
-{
-	// See BSLight::CalculateLuminance_14131D3D0
-	// Performs lighting on the CPU which is identical to GPU code
-
-	auto lightDirection = light.position - point;
-	float lightDist = lightDirection.Length();
-	float intensityFactor = std::clamp(lightDist / light.radius, 0.0f, 1.0f);
-	float intensityMultiplier = 1 - intensityFactor * intensityFactor;
-
-	return light.grey * intensityMultiplier;
-}
-
-void LightLimitFix::AddParticleLightLuminance(RE::NiPoint3& targetPosition, int& numHits, float& lightLevel)
-{
-	auto shaderCache = globals::shaderCache;
-
-	if (!shaderCache->IsEnabled())
-		return;
-
-	std::lock_guard<std::shared_mutex> lk{ cachedParticleLightsMutex };
-	int particleLightsDetectionHits = 0;
-	if (settings.EnableParticleLightsDetection) {
-		for (auto& light : cachedParticleLights) {
-			auto luminance = CalculateLuminance(light, targetPosition);
-			lightLevel += luminance;
-			if (luminance > 0.0)
-				particleLightsDetectionHits++;
-		}
-	}
-	numHits += particleLightsDetectionHits;
 }
 
 void LightLimitFix::Prepass()
 {
 	auto context = globals::d3d::context;
 
+	auto state = globals::state;
+
+	state->BeginPerfEvent("LightLimitFix Prepass");
 	UpdateLights();
 
 	ID3D11ShaderResourceView* views[3]{};
@@ -448,6 +322,8 @@ void LightLimitFix::Prepass()
 	views[1] = lightIndexList->srv.get();
 	views[2] = lightGrid->srv.get();
 	context->PSSetShaderResources(35, ARRAYSIZE(views), views);
+
+	state->EndPerfEvent();
 }
 
 bool LightLimitFix::IsValidLight(RE::BSLight* a_light)
@@ -460,217 +336,8 @@ bool LightLimitFix::IsGlobalLight(RE::BSLight* a_light)
 	return !(a_light->portalStrict || !a_light->portalGraph);
 }
 
-struct VertexColor
-{
-	std::uint8_t data[4];
-};
-
-struct VertexPosition
-{
-	std::uint8_t data[3];
-};
-
-std::string ExtractTextureStem(std::string_view a_path)
-{
-	if (a_path.size() < 1)
-		return {};
-
-	auto lastSeparatorPos = a_path.find_last_of("\\/");
-	if (lastSeparatorPos == std::string::npos)
-		return {};
-
-	a_path = a_path.substr(lastSeparatorPos + 1);
-	a_path.remove_suffix(4);  // Remove ".dds"
-
-	auto textureNameView = a_path | std::views::transform([](auto c) { return (char)::tolower(c); });
-	std::string textureName = { textureNameView.begin(), textureNameView.end() };
-
-	return textureName;
-}
-
-LightLimitFix::ParticleLightReference LightLimitFix::GetParticleLightConfigs(RE::BSRenderPass* a_pass)
-{
-	auto& particleLights = globals::features::llf::particleLights;
-
-	// see https://www.nexusmods.com/skyrimspecialedition/articles/1391
-	if (settings.EnableParticleLights) {
-		if (auto shaderProperty = a_pass->shaderProperty->GetRTTI() == globals::rtti::BSEffectShaderPropertyRTTI.get() ? static_cast<RE::BSEffectShaderProperty*>(a_pass->shaderProperty) : nullptr) {
-			if (!shaderProperty->lightData) {
-				if (auto material = shaderProperty->GetMaterial()) {
-					// Check if it's a valid particle light
-					bool billboard = false;
-					if (a_pass->geometry->GetRTTI() != globals::rtti::NiParticleSystemRTTI.get()) {
-						if (auto parent = a_pass->geometry->parent) {
-							if (auto billboardNode = parent->GetRTTI() == globals::rtti::NiBillboardNodeRTTI.get() ? static_cast<RE::NiBillboardNode*>(parent) : nullptr) {
-								billboard = true;
-							} else {
-								return { false };
-							}
-						} else {
-							return { false };
-						}
-					}
-
-					// Already scanned
-					{
-						auto it = particleLightsReferences.find(reinterpret_cast<RE::NiNode*>(a_pass->geometry));
-						if (it != particleLightsReferences.end())
-							return (*it).second;
-					}
-
-					// Not scanned, scan now
-
-					if (!material->sourceTexturePath.empty()) {
-						std::string textureName = ExtractTextureStem(material->sourceTexturePath.c_str());
-						if (textureName.size() < 1) {
-							particleLightsReferences.insert({ (RE::NiNode*)a_pass->geometry, { false } });
-							return { false };
-						}
-
-						auto& configs = particleLights.particleLightConfigs;
-						auto it = configs.find(textureName);
-						if (it == configs.end()) {
-							particleLightsReferences.insert({ (RE::NiNode*)a_pass->geometry, { false } });
-							return { false };
-						}
-
-						ParticleLights::Config* config = &it->second;
-						ParticleLights::GradientConfig* gradientConfig = nullptr;
-						if (!material->greyscaleTexturePath.empty()) {
-							textureName = ExtractTextureStem(material->greyscaleTexturePath.c_str());
-							if (textureName.size() < 1) {
-								particleLightsReferences.insert({ (RE::NiNode*)a_pass->geometry, { false } });
-								return { false };
-							}
-
-							auto& gradientConfigs = particleLights.particleLightGradientConfigs;
-							auto itGradient = gradientConfigs.find(textureName);
-							if (itGradient == gradientConfigs.end()) {
-								particleLightsReferences.insert({ (RE::NiNode*)a_pass->geometry, { false } });
-								return { false };
-							}
-							gradientConfig = &itGradient->second;
-						}
-
-						ParticleLightReference reference{ true };
-						reference.billboard = billboard;
-						reference.config = config;
-						reference.gradientConfig = gradientConfig;
-						reference.baseColor = { 1, 1, 1, 1 };
-
-						if (billboard) {
-							if (auto rendererData = a_pass->geometry->GetGeometryRuntimeData().rendererData) {
-								if (auto triShape = a_pass->geometry->AsTriShape()) {
-									uint32_t vertexSize = rendererData->vertexDesc.GetSize();
-									if (rendererData->vertexDesc.HasFlag(RE::BSGraphics::Vertex::Flags::VF_COLORS)) {
-										uint32_t offset = rendererData->vertexDesc.GetAttributeOffset(RE::BSGraphics::Vertex::Attribute::VA_COLOR);
-
-										uint8_t maxAlpha = 0u;
-										VertexColor* vertexColor = nullptr;
-
-										for (int v = 0; v < triShape->GetTrishapeRuntimeData().vertexCount; v++) {
-											if (VertexColor* vertex = reinterpret_cast<VertexColor*>(&rendererData->rawVertexData[vertexSize * v + offset])) {
-												uint8_t alpha = vertex->data[3];
-												if (alpha > maxAlpha) {
-													maxAlpha = alpha;
-													vertexColor = vertex;
-												}
-											}
-										}
-
-										if (vertexColor) {
-											reference.baseColor.red *= vertexColor->data[0] / 255.f;
-											reference.baseColor.green *= vertexColor->data[1] / 255.f;
-											reference.baseColor.blue *= vertexColor->data[2] / 255.f;
-											if (shaderProperty->flags.any(RE::BSShaderProperty::EShaderPropertyFlag::kVertexAlpha)) {
-												reference.baseColor.alpha *= vertexColor->data[3] / 255.f;
-											}
-										}
-									}
-								}
-							}
-						}
-
-						particleLightsReferences.insert({ reinterpret_cast<RE::NiNode*>(a_pass->geometry), reference });
-						return reference;
-					}
-				}
-			}
-		}
-	}
-	return { false };
-}
-
-bool LightLimitFix::CheckParticleLights(RE::BSRenderPass* a_pass, uint32_t)
-{
-	auto shaderCache = globals::shaderCache;
-
-	if (!shaderCache->IsEnabled())
-		return true;
-
-	auto reference = GetParticleLightConfigs(a_pass);
-	if (reference.valid) {
-		if (AddParticleLight(a_pass, reference)) {
-			return !(settings.EnableParticleLightsCulling && reference.config->cull);
-		}
-	}
-	return true;
-}
-
-bool LightLimitFix::AddParticleLight(RE::BSRenderPass* a_pass, ParticleLightReference a_reference)
-{
-	auto shaderProperty = static_cast<RE::BSEffectShaderProperty*>(a_pass->shaderProperty);
-	auto material = shaderProperty->GetMaterial();
-	auto config = a_reference.config;
-	auto gradientConfig = a_reference.gradientConfig;
-
-	a_pass->geometry->IncRefCount();
-
-	if (!a_reference.billboard) {
-		if (auto particleSystem = static_cast<RE::NiParticleSystem*>(a_pass->geometry)) {
-			if (auto particleData = particleSystem->GetParticleRuntimeData().particleData.get()) {
-				particleData->IncRefCount();
-			}
-		}
-	}
-
-	RE::NiColorA color = a_reference.baseColor;
-	color.red *= material->baseColor.red * material->baseColorScale;
-	color.green *= material->baseColor.green * material->baseColorScale;
-	color.blue *= material->baseColor.blue * material->baseColorScale;
-	color.alpha *= material->baseColor.alpha * shaderProperty->alpha;
-
-	if (auto emittance = shaderProperty->unk88) {
-		color.red *= emittance->red;
-		color.green *= emittance->green;
-		color.blue *= emittance->blue;
-	}
-
-	if (gradientConfig) {
-		auto grey = float3(config->colorMult.red, config->colorMult.green, config->colorMult.blue).Dot(float3(0.3f, 0.59f, 0.11f));
-		color.red *= grey * gradientConfig->color.red;
-		color.green *= grey * gradientConfig->color.green;
-		color.blue *= grey * gradientConfig->color.blue;
-	} else {
-		color.red *= config->colorMult.red;
-		color.green *= config->colorMult.green;
-		color.blue *= config->colorMult.blue;
-	}
-
-	color.alpha = config->radiusMult;
-
-	ParticleLightInfo info;
-	info.billboard = a_reference.billboard;
-	info.node = a_pass->geometry;
-	info.color = color;
-
-	queuedParticleLights.push_back(info);
-	return true;
-}
-
 void LightLimitFix::PostPostLoad()
 {
-	globals::features::llf::particleLights.GetConfigs();
 	Hooks::Install();
 }
 
@@ -681,53 +348,18 @@ void LightLimitFix::DataLoaded()
 	logger::info("[LLF] Unlocked magic light limit");
 }
 
-float LightLimitFix::CalculateLightDistance(float3 a_lightPosition, float a_radius)
+void LightLimitFix::ClearShaderCache()
 {
-	return (a_lightPosition.x * a_lightPosition.x) + (a_lightPosition.y * a_lightPosition.y) + (a_lightPosition.z * a_lightPosition.z) - (a_radius * a_radius);
-}
-
-void LightLimitFix::AddCachedParticleLights(eastl::vector<LightData>& lightsData, LightLimitFix::LightData& light)
-{
-	static float& lightFadeStart = *reinterpret_cast<float*>(REL::RelocationID(527668, 414582).address());
-	static float& lightFadeEnd = *reinterpret_cast<float*>(REL::RelocationID(527669, 414583).address());
-
-	float distance = CalculateLightDistance(light.positionWS[0].data, light.radius);
-
-	float dimmer = 0.0f;
-
-	if (distance < lightFadeStart || lightFadeEnd == 0.0f) {
-		dimmer = 1.0f;
-	} else if (distance <= lightFadeEnd) {
-		dimmer = 1.0f - ((distance - lightFadeStart) / (lightFadeEnd - lightFadeStart));
-	} else {
-		dimmer = 0.0f;
+	if (clusterBuildingCS) {
+		clusterBuildingCS->Release();
+		clusterBuildingCS = nullptr;
 	}
-
-	light.color *= dimmer;
-
-	if ((light.color.x + light.color.y + light.color.z) > 1e-4 && light.radius > 1e-4) {
-		for (int eyeIndex = 0; eyeIndex < eyeCount; eyeIndex++)
-			light.positionVS[eyeIndex].data = DirectX::SimpleMath::Vector3::Transform(light.positionWS[eyeIndex].data, viewMatrixCached[eyeIndex]);
-
-		light.invRadius = 1.f / light.radius;
-		lightsData.push_back(light);
-
-		CachedParticleLight cachedParticleLight{};
-		cachedParticleLight.grey = float3(light.color.x, light.color.y, light.color.z).Dot(float3(0.3f, 0.59f, 0.11f));
-		cachedParticleLight.radius = light.radius;
-		cachedParticleLight.position = { light.positionWS[0].data.x + eyePositionCached[0].x, light.positionWS[0].data.y + eyePositionCached[0].y, light.positionWS[0].data.z + eyePositionCached[0].z };
-
-		cachedParticleLights.push_back(cachedParticleLight);
+	if (clusterCullingCS) {
+		clusterCullingCS->Release();
+		clusterCullingCS = nullptr;
 	}
-}
-
-float3 LightLimitFix::Saturation(float3 color, float saturation)
-{
-	float grey = color.Dot(float3(0.3f, 0.59f, 0.11f));
-	color.x = std::max(std::lerp(grey, color.x, saturation), 0.0f);
-	color.y = std::max(std::lerp(grey, color.y, saturation), 0.0f);
-	color.z = std::max(std::lerp(grey, color.z, saturation), 0.0f);
-	return color;
+	clusterBuildingCS = (ID3D11ComputeShader*)Util::CompileShader(L"Data\\Shaders\\LightLimitFix\\ClusterBuildingCS.hlsl", {}, "cs_5_0");
+	clusterCullingCS = (ID3D11ComputeShader*)Util::CompileShader(L"Data\\Shaders\\LightLimitFix\\ClusterCullingCS.hlsl", {}, "cs_5_0");
 }
 
 namespace RE
@@ -741,17 +373,13 @@ void LightLimitFix::UpdateLights()
 	auto smState = globals::game::smState;
 	auto& isl = globals::features::inverseSquareLighting;
 
-	lightsNear = *globals::game::cameraNear;
-	lightsFar = *globals::game::cameraFar;
-
 	auto shadowSceneNode = smState->shadowSceneNode[0];
 
 	// Cache data since cameraData can become invalid in first-person
 
 	for (int eyeIndex = 0; eyeIndex < eyeCount; eyeIndex++) {
-		eyePositionCached[eyeIndex] = Util::GetEyePosition(eyeIndex);
-		viewMatrixCached[eyeIndex] = Util::GetCameraData(eyeIndex).viewMat;
-		viewMatrixCached[eyeIndex].Invert(viewMatrixInverseCached[eyeIndex]);
+		auto eyePosition = globals::game::frameBufferCached.GetCameraPosAdjust(eyeIndex);
+		eyePositionCached[eyeIndex] = { eyePosition.x, eyePosition.y, eyePosition.z };
 	}
 
 	eastl::vector<LightData> lightsData{};
@@ -830,181 +458,59 @@ void LightLimitFix::UpdateLights()
 		addLight(e);
 	}
 
-	{
-		std::lock_guard<std::shared_mutex> lk{ cachedParticleLightsMutex };
-		cachedParticleLights.clear();
-
-		LightData clusteredLight{};
-		uint32_t clusteredLights = 0;
-
-		auto eyePositionOffset = eyePositionCached[0] - eyePositionCached[1];
-
-		for (const auto& particleLight : currentParticleLights) {
-			if (!particleLight.billboard) {
-				auto particleSystem = static_cast<RE::NiParticleSystem*>(particleLight.node);
-				if (particleSystem && particleSystem->GetParticleRuntimeData().particleData.get()) {
-					// Process BSGeometry
-					auto particleData = particleSystem->GetParticleRuntimeData().particleData.get();
-					auto& particleSystemRuntimeData = particleSystem->GetParticleSystemRuntimeData();
-					auto& particleRuntimeData = particleData->GetParticlesRuntimeData();
-
-					auto numVertices = particleData->GetActiveVertexCount();
-					for (std::uint32_t p = 0; p < numVertices; p++) {
-						float radius = particleRuntimeData.radii[p] * particleRuntimeData.sizes[p];
-
-						auto initialPosition = particleRuntimeData.positions[p];
-						if (!particleSystemRuntimeData.isWorldspace) {
-							// Detect first-person meshes
-							if ((particleLight.node->GetModelData().modelBound.radius * particleLight.node->world.scale) != particleLight.node->worldBound.radius)
-								initialPosition += particleLight.node->worldBound.center;
-							else
-								initialPosition += particleLight.node->world.translate;
-						}
-
-						RE::NiPoint3 positionWS = initialPosition - eyePositionCached[0];
-
-						if (clusteredLights) {
-							auto averageRadius = clusteredLight.radius / (float)clusteredLights;
-							float radiusDiff = abs(averageRadius - radius);
-
-							auto averagePosition = clusteredLight.positionWS[0].data / (float)clusteredLights;
-							float positionDiff = positionWS.GetDistance({ averagePosition.x, averagePosition.y, averagePosition.z });
-
-							if ((radiusDiff + positionDiff) > 32.0f || !settings.EnableParticleLightsOptimization) {
-								clusteredLight.radius /= (float)clusteredLights;
-								clusteredLight.positionWS[0].data /= (float)clusteredLights;
-								clusteredLight.positionWS[1].data = clusteredLight.positionWS[0].data;
-								if (eyeCount == 2) {
-									clusteredLight.positionWS[1].data.x += eyePositionOffset.x / (float)clusteredLights;
-									clusteredLight.positionWS[1].data.y += eyePositionOffset.y / (float)clusteredLights;
-									clusteredLight.positionWS[1].data.z += eyePositionOffset.z / (float)clusteredLights;
-								}
-
-								clusteredLight.lightFlags.set(LightFlags::Simple);
-
-								AddCachedParticleLights(lightsData, clusteredLight);
-
-								clusteredLights = 0;
-								clusteredLight.color = { 0, 0, 0 };
-								clusteredLight.radius = 0;
-								clusteredLight.positionWS[0].data = { 0, 0, 0 };
-							}
-						}
-
-						if (particleRuntimeData.color) {
-							float alpha = particleLight.color.alpha * particleRuntimeData.color[p].alpha;
-
-							float3 color;
-							color.x = particleLight.color.red * particleRuntimeData.color[p].red;
-							color.y = particleLight.color.green * particleRuntimeData.color[p].green;
-							color.z = particleLight.color.blue * particleRuntimeData.color[p].blue;
-
-							clusteredLight.color += Saturation(color, settings.ParticleLightsSaturation) * alpha * settings.ParticleBrightness;
-						} else {
-							float alpha = particleLight.color.alpha;
-
-							float3 color;
-							color.x = particleLight.color.red;
-							color.y = particleLight.color.green;
-							color.z = particleLight.color.blue;
-
-							clusteredLight.color += Saturation(color, settings.ParticleLightsSaturation) * alpha * settings.ParticleBrightness;
-						}
-
-						clusteredLight.radius += radius * particleLight.color.alpha * settings.ParticleRadius;
-
-						clusteredLight.positionWS[0].data.x += positionWS.x;
-						clusteredLight.positionWS[0].data.y += positionWS.y;
-						clusteredLight.positionWS[0].data.z += positionWS.z;
-
-						clusteredLights++;
-					}
-				}
-			} else {
-				// Process billboard
-				LightData light{};
-
-				light.color.x = particleLight.color.red;
-				light.color.y = particleLight.color.green;
-				light.color.z = particleLight.color.blue;
-
-				light.color = Saturation(light.color, settings.ParticleLightsSaturation);
-
-				light.color *= particleLight.color.alpha * settings.BillboardBrightness;
-				light.radius = particleLight.node->worldBound.radius * particleLight.color.alpha * settings.BillboardRadius * 0.5f;
-
-				auto position = particleLight.node->world.translate;
-
-				SetLightPosition(light, position);  // Light is complete for both eyes by now
-
-				light.lightFlags.set(LightFlags::Simple);
-
-				AddCachedParticleLights(lightsData, light);
-			}
-		}
-
-		if (clusteredLights) {
-			clusteredLight.radius /= (float)clusteredLights;
-			clusteredLight.positionWS[0].data /= (float)clusteredLights;
-			clusteredLight.positionWS[1].data = clusteredLight.positionWS[0].data;
-			if (eyeCount == 2) {
-				clusteredLight.positionWS[1].data.x += eyePositionOffset.x / (float)clusteredLights;
-				clusteredLight.positionWS[1].data.y += eyePositionOffset.y / (float)clusteredLights;
-				clusteredLight.positionWS[1].data.z += eyePositionOffset.z / (float)clusteredLights;
-			}
-			clusteredLight.lightFlags.set(LightFlags::Simple);
-			AddCachedParticleLights(lightsData, clusteredLight);
-		}
-	}
-
 	auto context = globals::d3d::context;
 
+	lightCount = std::min((uint)lightsData.size(), MAX_LIGHTS);
+
+	D3D11_MAPPED_SUBRESOURCE mapped;
+	DX::ThrowIfFailed(context->Map(lights->resource.get(), 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped));
+	size_t bytes = sizeof(LightData) * lightCount;
+	memcpy_s(mapped.pData, bytes, lightsData.data(), bytes);
+	context->Unmap(lights->resource.get(), 0);
+
+	UpdateStructure();
+}
+
+void LightLimitFix::UpdateStructure()
+{
+	auto context = globals::d3d::context;
+
+	lightsNear = *globals::game::cameraNear;
+	lightsFar = *globals::game::cameraFar;
+
+	auto renderSize = Util::ConvertToDynamic(globals::state->screenSize);
+	if (REL::Module::IsVR())
+		renderSize.x *= .5;
+	clusterSize[0] = ((uint)renderSize.x + 63) / 64;
+	clusterSize[1] = ((uint)renderSize.y + 63) / 64;
+	clusterSize[2] = 32;
+
 	{
-		auto projMatrixUnjittered = Util::GetCameraData(0).projMatrixUnjittered;
-		float fov = atan(1.0f / static_cast<float4x4>(projMatrixUnjittered).m[0][0]) * 2.0f * (180.0f / 3.14159265359f);
+		LightBuildingCB updateData{};
+		updateData.LightsNear = lightsNear;
+		updateData.LightsFar = lightsFar;
+		std::copy(clusterSize, clusterSize + 3, updateData.ClusterSize);
 
-		static float _lightsNear = 0.0f, _lightsFar = 0.0f, _fov = 0.0f;
-		if (fabs(_fov - fov) > 1e-4 || fabs(_lightsNear - lightsNear) > 1e-4 || fabs(_lightsFar - lightsFar) > 1e-4) {
-			LightBuildingCB updateData{};
-			updateData.InvProjMatrix[0] = DirectX::XMMatrixInverse(nullptr, projMatrixUnjittered);
-			if (eyeCount == 1)
-				updateData.InvProjMatrix[1] = updateData.InvProjMatrix[0];
-			else
-				updateData.InvProjMatrix[1] = DirectX::XMMatrixInverse(nullptr, Util::GetCameraData(1).projMatrixUnjittered);
-			updateData.LightsNear = lightsNear;
-			updateData.LightsFar = lightsFar;
+		lightBuildingCB->Update(updateData);
 
-			lightBuildingCB->Update(updateData);
+		ID3D11Buffer* buffer = lightBuildingCB->CB();
+		context->CSSetConstantBuffers(0, 1, &buffer);
 
-			ID3D11Buffer* buffer = lightBuildingCB->CB();
-			context->CSSetConstantBuffers(0, 1, &buffer);
+		ID3D11UnorderedAccessView* clusters_uav = clusters->uav.get();
+		context->CSSetUnorderedAccessViews(0, 1, &clusters_uav, nullptr);
 
-			ID3D11UnorderedAccessView* clusters_uav = clusters->uav.get();
-			context->CSSetUnorderedAccessViews(0, 1, &clusters_uav, nullptr);
+		context->CSSetShader(clusterBuildingCS, nullptr, 0);
+		context->Dispatch(clusterSize[0], clusterSize[1], clusterSize[2]);
 
-			context->CSSetShader(clusterBuildingCS, nullptr, 0);
-			context->Dispatch(clusterSize[0], clusterSize[1], clusterSize[2]);
-
-			ID3D11UnorderedAccessView* null_uav = nullptr;
-			context->CSSetUnorderedAccessViews(0, 1, &null_uav, nullptr);
-
-			_fov = fov;
-			_lightsNear = lightsNear;
-			_lightsFar = lightsFar;
-		}
+		ID3D11UnorderedAccessView* null_uav = nullptr;
+		context->CSSetUnorderedAccessViews(0, 1, &null_uav, nullptr);
 	}
 
 	{
-		lightCount = std::min((uint)lightsData.size(), MAX_LIGHTS);
-
-		D3D11_MAPPED_SUBRESOURCE mapped;
-		DX::ThrowIfFailed(context->Map(lights->resource.get(), 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped));
-		size_t bytes = sizeof(LightData) * lightCount;
-		memcpy_s(mapped.pData, bytes, lightsData.data(), bytes);
-		context->Unmap(lights->resource.get(), 0);
-
 		LightCullingCB updateData{};
 		updateData.LightCount = lightCount;
+		std::copy(clusterSize, clusterSize + 3, updateData.ClusterSize);
+
 		lightCullingCB->Update(updateData);
 
 		UINT counterReset[4] = { 0, 0, 0, 0 };
@@ -1058,16 +564,3 @@ void LightLimitFix::Hooks::BSWaterShader_SetupGeometry::thunk(RE::BSShader* This
 	singleton.BSLightingShader_SetupGeometry_Before(Pass);
 	singleton.BSLightingShader_SetupGeometry_After(Pass);
 };
-
-float LightLimitFix::Hooks::AIProcess_CalculateLightValue_GetLuminance::thunk(RE::ShadowSceneNode* shadowSceneNode, RE::NiPoint3& targetPosition, int& numHits, float& sunLightLevel, float& lightLevel, RE::NiLight& refLight, int32_t shadowBitMask)
-{
-	auto ret = func(shadowSceneNode, targetPosition, numHits, sunLightLevel, lightLevel, refLight, shadowBitMask);
-	globals::features::lightLimitFix.AddParticleLightLuminance(targetPosition, numHits, ret);
-	return ret;
-}
-
-void LightLimitFix::Hooks::NiNode_Destroy::thunk(RE::NiNode* This)
-{
-	globals::features::lightLimitFix.CleanupParticleLights(This);
-	func(This);
-}

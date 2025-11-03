@@ -41,7 +41,7 @@ namespace Util
 	RE::NiPoint3 GetEyePosition(int eyeIndex);
 	RE::BSGraphics::ViewData GetCameraData(int eyeIndex);
 
-	float2 ConvertToDynamic(float2 a_size);
+	float2 ConvertToDynamic(float2 a_size, bool a_ignoreLock = false);
 
 	// Game unit conversions
 	namespace Units
@@ -167,5 +167,7 @@ namespace Util
 	// TESForm formatting helpers
 	std::string FormatTESForm(const RE::TESForm* form);
 	std::string FormatWeather(const RE::TESWeather* weather);
+
+	bool IsInterior();
 
 }  // namespace Util

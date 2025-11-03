@@ -31,7 +31,7 @@ namespace Util
 	float4 TryGetWaterData(float offsetX, float offsetY)
 	{
 		if (globals::game::shadowState) {
-			if (auto tes = globals::game::tes) {
+			if (auto tes = RE::TES::GetSingleton()) {
 				auto position = GetEyePosition(0);
 				position.x += offsetX;
 				position.y += offsetY;
@@ -135,7 +135,7 @@ namespace Util
 	bool GetTemporal()
 	{
 		auto imageSpaceManager = RE::ImageSpaceManager::GetSingleton();
-		return (!REL::Module::IsVR() ? imageSpaceManager->GetRuntimeData().BSImagespaceShaderISTemporalAA->taaEnabled : imageSpaceManager->GetVRRuntimeData().BSImagespaceShaderISTemporalAA->taaEnabled) || globals::state->upscalerLoaded;
+		return (!REL::Module::IsVR() ? imageSpaceManager->GetRuntimeData().BSImagespaceShaderISTemporalAA->taaEnabled : imageSpaceManager->GetVRRuntimeData().BSImagespaceShaderISTemporalAA->taaEnabled);
 	}
 
 	// https://github.com/PureDark/Skyrim-Upscaler/blob/fa057bb088cf399e1112c1eaba714590c881e462/src/SkyrimUpscaler.cpp#L88
@@ -149,13 +149,17 @@ namespace Util
 		return vFOV;
 	}
 
-	float2 ConvertToDynamic(float2 a_size)
+	float2 ConvertToDynamic(float2 a_size, bool a_ignoreLock)
 	{
 		auto viewport = globals::game::graphicsState;
+		auto& runtimeData = viewport->GetRuntimeData();
+
+		if (runtimeData.dynamicResolutionLock && !a_ignoreLock)
+			return a_size;
 
 		return float2(
-			a_size.x * viewport->GetRuntimeData().dynamicResolutionWidthRatio,
-			a_size.y * viewport->GetRuntimeData().dynamicResolutionHeightRatio);
+			a_size.x * runtimeData.dynamicResolutionWidthRatio,
+			a_size.y * runtimeData.dynamicResolutionHeightRatio);
 	}
 
 	DispatchCount GetScreenDispatchCount(bool a_dynamic)
@@ -294,5 +298,18 @@ namespace Util
 		}
 
 		return textureSet;
+	}
+
+	bool IsInterior()
+	{
+		auto tes = RE::TES::GetSingleton();
+		if (tes && !tes->interiorCell) {
+			if (auto worldSpace = tes->GetRuntimeData2().worldSpace) {
+				if (!worldSpace->flags.any(RE::TESWorldSpace::Flag::kNoSky, RE::TESWorldSpace::Flag::kFixedDimensions)) {
+					return false;
+				}
+			}
+		}
+		return true;
 	}
 }  // namespace Util

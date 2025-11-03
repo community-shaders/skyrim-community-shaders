@@ -734,8 +734,8 @@ float3 GetWaterSpecularColor(PS_INPUT input, float3 normal, float3 viewDirection
 {
 	if (Permutation::PixelShaderDescriptor & Permutation::WaterFlags::Reflections) {
 		float3 finalSsrReflectionColor = 0.0.xxx;
-		float ssrFraction = 0;
-		float3 reflectionColor = 0;
+		float ssrFraction = 0.0;
+		float3 reflectionColor = 0.0.xxx;
 		float3 R = reflect(viewDirection, WaterParams.y * normal + float3(0, 0, 1 - WaterParams.y));
 
 		if (Permutation::PixelShaderDescriptor & Permutation::WaterFlags::Cubemap) {
@@ -918,26 +918,6 @@ DiffuseOutput GetWaterDiffuseColor(PS_INPUT input, float3 normal, float3 viewDir
 	float3 refractionColor = RefractionTex.Sample(RefractionSampler, refractionUV).xyz;
 	float3 refractionDiffuseColor = lerp(ShallowColor.xyz, DeepColor.xyz, distanceMul.y);
 
-	if (!(Permutation::PixelShaderDescriptor & Permutation::WaterFlags::Interior)) {
-#				if defined(SKYLIGHTING)
-		float3 skylightingPosition = lerp(input.WPosition.xyz, refractionWorldPosition.xyz, noise);
-
-#					if defined(VR)
-		float3 positionMSSkylight = skylightingPosition + FrameBuffer::CameraPosAdjust[eyeIndex].xyz - FrameBuffer::CameraPosAdjust[0].xyz;
-#					else
-		float3 positionMSSkylight = skylightingPosition;
-#					endif
-
-		sh2 skylightingSH = Skylighting::sampleNoBias(SharedData::skylightingSettings, Skylighting::SkylightingProbeArray, positionMSSkylight);
-		float skylightingDiffuse = SphericalHarmonics::FuncProductIntegral(skylightingSH, SphericalHarmonics::EvaluateCosineLobe(float3(0, 0, 1))) / Math::PI;
-		skylightingDiffuse = saturate(skylightingDiffuse);
-		skylightingDiffuse = lerp(1.0, skylightingDiffuse, Skylighting::getFadeOutFactor(input.WPosition.xyz));
-
-		float3 refractionDiffuseColorSkylight = Skylighting::mixDiffuse(SharedData::skylightingSettings, skylightingDiffuse);
-		refractionDiffuseColor = Color::LinearToGamma(Color::GammaToLinear(refractionDiffuseColor) * refractionDiffuseColorSkylight);
-#				endif
-	}
-
 #				if defined(UNDERWATER)
 	float refractionMul = 0;
 #				else
@@ -982,6 +962,10 @@ float3 GetSunColor(float3 normal, float3 viewDirection)
 
 #		if defined(ISL) && defined(LIGHT_LIMIT_FIX)
 #			include "InverseSquareLighting/InverseSquareLighting.hlsli"
+#		endif
+
+#		if defined(IBL)
+#			include "IBL/IBL.hlsli"
 #		endif
 
 PS_OUTPUT main(PS_INPUT input)
@@ -1048,7 +1032,7 @@ PS_OUTPUT main(PS_INPUT input)
 	float3 finalColor = 0.0.xxx;
 
 	for (int lightIndex = 0; lightIndex < NUM_SPECULAR_LIGHTS; ++lightIndex) {
-		float3 lightVector = LightPos[lightIndex].xyz - (PosAdjust[eyeIndex].xyz + input.WPosition.xyz, eyeIndex);
+		float3 lightVector = LightPos[lightIndex].xyz - (PosAdjust[eyeIndex].xyz + input.WPosition.xyz);
 		float3 lightDirection = normalize(normalize(lightVector) - viewDirection);
 		float lightFade = saturate(length(lightVector) / LightPos[lightIndex].w);
 		float lightColorMul = (1 - lightFade * lightFade);
@@ -1140,7 +1124,13 @@ PS_OUTPUT main(PS_INPUT input)
 #					if defined(VC)
 	float specularFraction = lerp(1, fresnel * diffuseOutput.refractionMul, distanceFactor);
 	float3 finalColorPreFog = lerp(diffuseColor, specularColor, specularFraction) + sunColor * depthControl.w;
-	float3 finalColor = lerp(finalColorPreFog, input.FogParam.xyz * PosAdjust[eyeIndex].w, input.FogParam.w);
+	float3 fogColor = input.FogParam.xyz;
+#						if defined(IBL)
+	if (SharedData::iblSettings.EnableDiffuseIBL && !SharedData::InInterior) {
+		fogColor = ImageBasedLighting::GetFogIBLColor(fogColor);
+	}
+#						endif
+	float3 finalColor = lerp(finalColorPreFog, fogColor * PosAdjust[eyeIndex].w, input.FogParam.w);
 #						if defined(WETNESS_EFFECTS) && defined(DEBUG_WETNESS_EFFECTS)
 	// DEBUG MODE: Override water color with debug visualization
 	float3 debugColor = WetnessEffects::GetDebugWetnessColorStandard(waterData.rippleInfo, 2.0, 3.0);
@@ -1152,12 +1142,23 @@ PS_OUTPUT main(PS_INPUT input)
 #					else
 	float specularFraction = lerp(1, fresnel, distanceFactor);
 	float3 finalColorPreFog = lerp(diffuseOutput.refractionDiffuseColor, specularColor, specularFraction) + sunColor * depthControl.w;
-	finalColorPreFog = lerp(finalColorPreFog, input.FogParam.xyz * PosAdjust[eyeIndex].w, input.FogParam.w);
+	float3 preFogColor = input.FogParam.xyz;
+#						if defined(IBL)
+	if (SharedData::iblSettings.EnableDiffuseIBL && !SharedData::InInterior) {
+		preFogColor = ImageBasedLighting::GetFogIBLColor(preFogColor);
+	}
+#						endif
+	finalColorPreFog = lerp(finalColorPreFog, preFogColor * PosAdjust[eyeIndex].w, input.FogParam.w);
 
 	float3 refractionColor = diffuseOutput.refractionColor;
 
 	float fogFactor = min(FogParam.w, pow(saturate(-diffuseOutput.depth * FogParam.y - FogParam.x), FogParam.z));
 	float3 fogColor = lerp(FogNearColor.xyz, FogFarColor.xyz, fogFactor);
+#						if defined(IBL)
+	if (SharedData::iblSettings.EnableDiffuseIBL && !SharedData::InInterior) {
+		fogColor = ImageBasedLighting::GetFogIBLColor(fogColor);
+	}
+#						endif
 	refractionColor = lerp(refractionColor, fogColor, fogFactor);
 
 	float3 finalColor = lerp(refractionColor, finalColorPreFog, diffuseOutput.refractionMul);
@@ -1172,7 +1173,7 @@ PS_OUTPUT main(PS_INPUT input)
 
 #				endif
 #			endif
-	psout.Lighting = saturate(float4(finalColor, isSpecular));
+	psout.Lighting = float4(finalColor, isSpecular);
 #		endif
 
 #		if defined(STENCIL)

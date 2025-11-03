@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Globals.h"
+#include <filesystem>
 
 /**
  * Centralized system for tracking and managing feature issues
@@ -54,6 +55,7 @@ namespace FeatureIssues
 		{
 			OBSOLETE,          // Known obsolete feature with replacement info
 			VERSION_MISMATCH,  // Feature exists but version is incompatible
+			OVERRIDE_FAILED,   // Override file failed to load or apply
 			UNKNOWN            // Feature not recognized by this CS version
 		};
 
@@ -62,6 +64,7 @@ namespace FeatureIssues
 		// Helper methods
 		bool IsObsolete() const { return issueType == IssueType::OBSOLETE; }
 		bool IsVersionMismatch() const { return issueType == IssueType::VERSION_MISMATCH; }
+		bool IsOverrideFailed() const { return issueType == IssueType::OVERRIDE_FAILED; }
 		bool IsUnknown() const { return issueType == IssueType::UNKNOWN; }
 		bool HasReplacement() const { return !replacementFeature.empty(); }
 		bool ModifiedShaderDirectory() const { return modifiedShaderDirectory; }

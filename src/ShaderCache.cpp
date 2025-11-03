@@ -14,6 +14,26 @@ namespace SIE
 		static void GetShaderDefines(const RE::BSShader&, uint32_t, D3D_SHADER_MACRO*);
 		static std::string GetShaderString(ShaderClass, const RE::BSShader&, uint32_t, bool = false);
 		/**
+		 * @brief Resolve image-space shader descriptor when applicable.
+		 *
+		 * If @p shader is an image-space shader, attempts to map it to a
+		 * runtime image-space descriptor via GetImagespaceShaderDescriptor and
+		 * returns true on success. If the shader is not image-space the
+		 * function returns true and leaves @p descriptor unchanged. Returns
+		 * false only when the shader is image-space and no valid descriptor
+		 * could be resolved.
+		 *
+		 * This helper is used by the shader loading and caching code paths to
+		 * determine whether an image-space shader can be loaded or cached. If
+		 * this function returns false the caller should skip loading/compiling
+		 * and caching that shader.
+		 *
+		 * @param shader The shader to resolve (may be an image-space shader).
+		 * @param[out] descriptor Resolved descriptor for image-space shaders.
+		 * @return True if descriptor is valid or not applicable, false on failure.
+		 */
+		static bool ResolveImageSpaceDescriptor(const RE::BSShader& shader, uint32_t& descriptor);
+		/**
 		@brief Get the BSShader::Type from the ShaderString
 		@param a_key The key generated from GetShaderString
 		@return A string with a valid BSShader::Type
@@ -1254,6 +1274,10 @@ namespace SIE
 
 		static ID3DBlob* CompileShader(ShaderClass shaderClass, const RE::BSShader& shader, uint32_t descriptor, bool useDiskCache)
 		{
+			if (!SShaderCache::ResolveImageSpaceDescriptor(shader, descriptor)) {
+				return nullptr;
+			}
+
 			// check hashmap
 			auto& cache = ShaderCache::Instance();
 			ID3DBlob* shaderBlob = cache.GetCompletedShader(shaderClass, shader, descriptor);
@@ -1508,147 +1532,163 @@ namespace SIE
 			using enum RE::ImageSpaceManager::ImageSpaceEffectEnum;
 
 			static const ankerl::unordered_dense::map<std::string_view, uint32_t> descriptors{
-				// { "BSImagespaceShaderISBlur", static_cast<uint32_t>(ISBlur) },
-				// { "BSImagespaceShaderBlur3", static_cast<uint32_t>(ISBlur3) },
-				// { "BSImagespaceShaderBlur5", static_cast<uint32_t>(ISBlur5) },
-				// { "BSImagespaceShaderBlur7", static_cast<uint32_t>(ISBlur7) },
-				// { "BSImagespaceShaderBlur9", static_cast<uint32_t>(ISBlur9) },
-				// { "BSImagespaceShaderBlur11", static_cast<uint32_t>(ISBlur11) },
-				// { "BSImagespaceShaderBlur13", static_cast<uint32_t>(ISBlur13) },
-				// { "BSImagespaceShaderBlur15", static_cast<uint32_t>(ISBlur15) },
-				// { "BSImagespaceShaderBrightPassBlur3", static_cast<uint32_t>(ISBrightPassBlur3) },
-				// { "BSImagespaceShaderBrightPassBlur5", static_cast<uint32_t>(ISBrightPassBlur5) },
-				// { "BSImagespaceShaderBrightPassBlur7", static_cast<uint32_t>(ISBrightPassBlur7) },
-				// { "BSImagespaceShaderBrightPassBlur9", static_cast<uint32_t>(ISBrightPassBlur9) },
-				// { "BSImagespaceShaderBrightPassBlur11", static_cast<uint32_t>(ISBrightPassBlur11) },
-				// { "BSImagespaceShaderBrightPassBlur13", static_cast<uint32_t>(ISBrightPassBlur13) },
-				// { "BSImagespaceShaderBrightPassBlur15", static_cast<uint32_t>(ISBrightPassBlur15) },
-				// { "BSImagespaceShaderNonHDRBlur3", static_cast<uint32_t>(ISNonHDRBlur3) },
-				// { "BSImagespaceShaderNonHDRBlur5", static_cast<uint32_t>(ISNonHDRBlur5) },
-				// { "BSImagespaceShaderNonHDRBlur7", static_cast<uint32_t>(ISNonHDRBlur7) },
-				// { "BSImagespaceShaderNonHDRBlur9", static_cast<uint32_t>(ISNonHDRBlur9) },
-				// { "BSImagespaceShaderNonHDRBlur11", static_cast<uint32_t>(ISNonHDRBlur11) },
-				// { "BSImagespaceShaderNonHDRBlur13", static_cast<uint32_t>(ISNonHDRBlur13) },
-				// { "BSImagespaceShaderNonHDRBlur15", static_cast<uint32_t>(ISNonHDRBlur15) },
-				// { "BSImagespaceShaderISBasicCopy", static_cast<uint32_t>(ISBasicCopy) },
-				// { "BSImagespaceShaderISSimpleColor", static_cast<uint32_t>(ISSimpleColor) },
-				// { "BSImagespaceShaderApplyReflections", static_cast<uint32_t>(ISApplyReflections) },
-				// { "BSImagespaceShaderISExp", static_cast<uint32_t>(ISExp) },
-				// { "BSImagespaceShaderISDisplayDepth", static_cast<uint32_t>(ISDisplayDepth) },
-				// { "BSImagespaceShaderAlphaBlend", static_cast<uint32_t>(ISAlphaBlend) },
-				// { "BSImagespaceShaderWaterFlow", static_cast<uint32_t>(ISWaterFlow) },
-				// { "BSImagespaceShaderISWaterBlend", static_cast<uint32_t>(ISWaterBlend) },
-				// { "BSImagespaceShaderGreyScale", static_cast<uint32_t>(ISCopyGrayScale) },
-				// { "BSImagespaceShaderCopy", static_cast<uint32_t>(ISCopy) },
-				// { "BSImagespaceShaderCopyScaleBias", static_cast<uint32_t>(ISCopyScaleBias) },
+				// { "BSImagespaceShaderISBlur", RE::ImageSpaceManager::GetCurrentIndex(ISBlur) },
+				// { "BSImagespaceShaderBlur3", RE::ImageSpaceManager::GetCurrentIndex(ISBlur3) },
+				// { "BSImagespaceShaderBlur5", RE::ImageSpaceManager::GetCurrentIndex(ISBlur5) },
+				// { "BSImagespaceShaderBlur7", RE::ImageSpaceManager::GetCurrentIndex(ISBlur7) },
+				// { "BSImagespaceShaderBlur9", RE::ImageSpaceManager::GetCurrentIndex(ISBlur9) },
+				// { "BSImagespaceShaderBlur11", RE::ImageSpaceManager::GetCurrentIndex(ISBlur11) },
+				// { "BSImagespaceShaderBlur13", RE::ImageSpaceManager::GetCurrentIndex(ISBlur13) },
+				// { "BSImagespaceShaderBlur15", RE::ImageSpaceManager::GetCurrentIndex(ISBlur15) },
+				// { "BSImagespaceShaderBrightPassBlur3", RE::ImageSpaceManager::GetCurrentIndex(ISBrightPassBlur3) },
+				// { "BSImagespaceShaderBrightPassBlur5", RE::ImageSpaceManager::GetCurrentIndex(ISBrightPassBlur5) },
+				// { "BSImagespaceShaderBrightPassBlur7", RE::ImageSpaceManager::GetCurrentIndex(ISBrightPassBlur7) },
+				// { "BSImagespaceShaderBrightPassBlur9", RE::ImageSpaceManager::GetCurrentIndex(ISBrightPassBlur9) },
+				// { "BSImagespaceShaderBrightPassBlur11", RE::ImageSpaceManager::GetCurrentIndex(ISBrightPassBlur11) },
+				// { "BSImagespaceShaderBrightPassBlur13", RE::ImageSpaceManager::GetCurrentIndex(ISBrightPassBlur13) },
+				// { "BSImagespaceShaderBrightPassBlur15", RE::ImageSpaceManager::GetCurrentIndex(ISBrightPassBlur15) },
+				// { "BSImagespaceShaderNonHDRBlur3", RE::ImageSpaceManager::GetCurrentIndex(ISNonHDRBlur3) },
+				// { "BSImagespaceShaderNonHDRBlur5", RE::ImageSpaceManager::GetCurrentIndex(ISNonHDRBlur5) },
+				// { "BSImagespaceShaderNonHDRBlur7", RE::ImageSpaceManager::GetCurrentIndex(ISNonHDRBlur7) },
+				// { "BSImagespaceShaderNonHDRBlur9", RE::ImageSpaceManager::GetCurrentIndex(ISNonHDRBlur9) },
+				// { "BSImagespaceShaderNonHDRBlur11", RE::ImageSpaceManager::GetCurrentIndex(ISNonHDRBlur11) },
+				// { "BSImagespaceShaderNonHDRBlur13", RE::ImageSpaceManager::GetCurrentIndex(ISNonHDRBlur13) },
+				// { "BSImagespaceShaderNonHDRBlur15", RE::ImageSpaceManager::GetCurrentIndex(ISNonHDRBlur15) },
+				// { "BSImagespaceShaderISBasicCopy", RE::ImageSpaceManager::GetCurrentIndex(ISBasicCopy) },
+				// { "BSImagespaceShaderISSimpleColor", RE::ImageSpaceManager::GetCurrentIndex(ISSimpleColor) },
+				// { "BSImagespaceShaderApplyReflections", RE::ImageSpaceManager::GetCurrentIndex(ISApplyReflections) },
+				// { "BSImagespaceShaderISExp", RE::ImageSpaceManager::GetCurrentIndex(ISExp) },
+				// { "BSImagespaceShaderISDisplayDepth", RE::ImageSpaceManager::GetCurrentIndex(ISDisplayDepth) },
+				// { "BSImagespaceShaderAlphaBlend", RE::ImageSpaceManager::GetCurrentIndex(ISAlphaBlend) },
+				// { "BSImagespaceShaderWaterFlow", RE::ImageSpaceManager::GetCurrentIndex(ISWaterFlow) },
+				{ "BSImagespaceShaderISWaterBlend", RE::ImageSpaceManager::GetCurrentIndex(ISWaterBlend) },
+				// { "BSImagespaceShaderGreyScale", RE::ImageSpaceManager::GetCurrentIndex(ISCopyGrayScale) },
+				// { "BSImagespaceShaderCopy", RE::ImageSpaceManager::GetCurrentIndex(ISCopy) },
+				// { "BSImagespaceShaderCopyScaleBias", RE::ImageSpaceManager::GetCurrentIndex(ISCopyScaleBias) },
 				// { "BSImagespaceShaderCopyCustomViewport",
-				// 	static_cast<uint32_t>(ISCopyCustomViewport) },
-				// { "BSImagespaceShaderCopyTextureMask", static_cast<uint32_t>(ISCopyTextureMask) },
+				//  RE::ImageSpaceManager::GetCurrentIndex(ISCopyCustomViewport) },
+				// { "BSImagespaceShaderCopyTextureMask", RE::ImageSpaceManager::GetCurrentIndex(ISCopyTextureMask) },
 				// { "BSImagespaceShaderCopyDynamicFetchDisabled",
-				// 	static_cast<uint32_t>(ISCopyDynamicFetchDisabled) },
+				//  RE::ImageSpaceManager::GetCurrentIndex(ISCopyDynamicFetchDisabled) },
 				{ "BSImagespaceShaderISCompositeVolumetricLighting",
-					static_cast<uint32_t>(ISCompositeVolumetricLighting) },
+					RE::ImageSpaceManager::GetCurrentIndex(ISCompositeVolumetricLighting) },
 				{ "BSImagespaceShaderISCompositeLensFlare",
-					static_cast<uint32_t>(ISCompositeLensFlare) },
+					RE::ImageSpaceManager::GetCurrentIndex(ISCompositeLensFlare) },
 				{ "BSImagespaceShaderISCompositeLensFlareVolumetricLighting",
-					static_cast<uint32_t>(ISCompositeLensFlareVolumetricLighting) },
-				// { "BSImagespaceShaderISDebugSnow", static_cast<uint32_t>(ISDebugSnow) },
-				// { "BSImagespaceShaderDepthOfField", static_cast<uint32_t>(ISDepthOfField) },
-				// { "BSImagespaceShaderDepthOfFieldFogged",
-				// 	static_cast<uint32_t>(ISDepthOfFieldFogged) },
-				// { "BSImagespaceShaderDepthOfFieldMaskedFogged",
-				// 	static_cast<uint32_t>(ISDepthOfFieldMaskedFogged) },
-				// { "BSImagespaceShaderDistantBlur", static_cast<uint32_t>(ISDistantBlur) },
+					RE::ImageSpaceManager::GetCurrentIndex(ISCompositeLensFlareVolumetricLighting) },
+				// { "BSImagespaceShaderISDebugSnow", RE::ImageSpaceManager::GetCurrentIndex(ISDebugSnow) },
+				{ "BSImagespaceShaderDepthOfField", RE::ImageSpaceManager::GetCurrentIndex(ISDepthOfField) },
+				{ "BSImagespaceShaderDepthOfFieldFogged",
+					RE::ImageSpaceManager::GetCurrentIndex(ISDepthOfFieldFogged) },
+				{ "BSImagespaceShaderDepthOfFieldMaskedFogged",
+					RE::ImageSpaceManager::GetCurrentIndex(ISDepthOfFieldMaskedFogged) },
+				// { "BSImagespaceShaderDistantBlur", RE::ImageSpaceManager::GetCurrentIndex(ISDistantBlur) },
 				// { "BSImagespaceShaderDistantBlurFogged",
-				// 	static_cast<uint32_t>(ISDistantBlurFogged) },
+				// 	RE::ImageSpaceManager::GetCurrentIndex(ISDistantBlurFogged) },
 				// { "BSImagespaceShaderDistantBlurMaskedFogged",
-				// 	static_cast<uint32_t>(ISDistantBlurMaskedFogged) },
-				// { "BSImagespaceShaderDoubleVision", static_cast<uint32_t>(ISDoubleVision) },
-				{ "BSImagespaceShaderISDownsample", static_cast<uint32_t>(ISDownsample) },
+				// 	RE::ImageSpaceManager::GetCurrentIndex(ISDistantBlurMaskedFogged) },
+				// { "BSImagespaceShaderDoubleVision", RE::ImageSpaceManager::GetCurrentIndex(ISDoubleVision) },
+				{ "BSImagespaceShaderISDownsample", RE::ImageSpaceManager::GetCurrentIndex(ISDownsample) },
 				{ "BSImagespaceShaderISDownsampleIgnoreBrightest",
-					static_cast<uint32_t>(ISDownsampleIgnoreBrightest) },
+					RE::ImageSpaceManager::GetCurrentIndex(ISDownsampleIgnoreBrightest) },
 				// { "BSImagespaceShaderISUpsampleDynamicResolution",
-				// 	static_cast<uint32_t>(ISUpsampleDynamicResolution) },
+				// 	RE::ImageSpaceManager::GetCurrentIndex(ISUpsampleDynamicResolution) },
 				{ "BSImageSpaceShaderVolumetricLighting",
-					static_cast<uint32_t>(ISVolumetricLighting) },
-				{ "BSImagespaceShaderHDRDownSample4", static_cast<uint32_t>(ISHDRDownSample4) },
+					RE::ImageSpaceManager::GetCurrentIndex(ISVolumetricLighting) },
+				{ "BSImagespaceShaderHDRDownSample4", RE::ImageSpaceManager::GetCurrentIndex(ISHDRDownSample4) },
 				{ "BSImagespaceShaderHDRDownSample4LightAdapt",
-					static_cast<uint32_t>(ISHDRDownSample4LightAdapt) },
+					RE::ImageSpaceManager::GetCurrentIndex(ISHDRDownSample4LightAdapt) },
 				{ "BSImagespaceShaderHDRDownSample4LumClamp",
-					static_cast<uint32_t>(ISHDRDownSample4LumClamp) },
+					RE::ImageSpaceManager::GetCurrentIndex(ISHDRDownSample4LumClamp) },
 				{ "BSImagespaceShaderHDRDownSample4RGB2Lum",
-					static_cast<uint32_t>(ISHDRDownSample4RGB2Lum) },
-				{ "BSImagespaceShaderHDRDownSample16", static_cast<uint32_t>(ISHDRDownSample16) },
+					RE::ImageSpaceManager::GetCurrentIndex(ISHDRDownSample4RGB2Lum) },
+				{ "BSImagespaceShaderHDRDownSample16", RE::ImageSpaceManager::GetCurrentIndex(ISHDRDownSample16) },
 				{ "BSImagespaceShaderHDRDownSample16LightAdapt",
-					static_cast<uint32_t>(ISHDRDownSample16LightAdapt) },
+					RE::ImageSpaceManager::GetCurrentIndex(ISHDRDownSample16LightAdapt) },
 				{ "BSImagespaceShaderHDRDownSample16Lum",
-					static_cast<uint32_t>(ISHDRDownSample16Lum) },
+					RE::ImageSpaceManager::GetCurrentIndex(ISHDRDownSample16Lum) },
 				{ "BSImagespaceShaderHDRDownSample16LumClamp",
-					static_cast<uint32_t>(ISHDRDownSample16LumClamp) },
+					RE::ImageSpaceManager::GetCurrentIndex(ISHDRDownSample16LumClamp) },
 				{ "BSImagespaceShaderHDRTonemapBlendCinematic",
-					static_cast<uint32_t>(ISHDRTonemapBlendCinematic) },
+					RE::ImageSpaceManager::GetCurrentIndex(ISHDRTonemapBlendCinematic) },
 				{ "BSImagespaceShaderHDRTonemapBlendCinematicFade",
-					static_cast<uint32_t>(ISHDRTonemapBlendCinematicFade) },
-				// { "BSImagespaceShaderISIBLensFlares", static_cast<uint32_t>(ISIBLensFlares) },
+					RE::ImageSpaceManager::GetCurrentIndex(ISHDRTonemapBlendCinematicFade) },
+				// { "BSImagespaceShaderISIBLensFlares", RE::ImageSpaceManager::GetCurrentIndex(ISIBLensFlares) },
 
 				// Those cause issue because of typo in shader name in vanilla code but at the same time they are not used by vanilla game.
-				/*{ "BSImagespaceShaderISLightingComposite",
-					static_cast<uint32_t>(ISLightingComposite) },
-				{ "BSImagespaceShaderISLightingCompositeMenu",
-					static_cast<uint32_t>(ISLightingCompositeMenu) },
-				{ "BSImagespaceShaderISLightingCompositeNoDirectionalLight",
-					static_cast<uint32_t>(ISLightingCompositeNoDirectionalLight) },*/
+				// { "BSImagespaceShaderISLightingComposite",
+				//  RE::ImageSpaceManager::GetCurrentIndex(ISLightingComposite) },
+				// { "BSImagespaceShaderISLightingCompositeMenu",
+				//  RE::ImageSpaceManager::GetCurrentIndex(ISLightingCompositeMenu) },
+				// { "BSImagespaceShaderISLightingCompositeNoDirectionalLight",
+				//  RE::ImageSpaceManager::GetCurrentIndex(ISLightingCompositeNoDirectionalLight) },
 
-				// { "BSImagespaceShaderLocalMap", static_cast<uint32_t>(ISLocalMap) },
-				// { "BSISWaterBlendHeightmaps", static_cast<uint32_t>(ISWaterBlendHeightmaps) },
+				// { "BSImagespaceShaderLocalMap", RE::ImageSpaceManager::GetCurrentIndex(ISLocalMap) },
+				// { "BSISWaterBlendHeightmaps", RE::ImageSpaceManager::GetCurrentIndex(ISWaterBlendHeightmaps) },
 				// { "BSISWaterDisplacementClearSimulation",
-				// 	static_cast<uint32_t>(ISWaterDisplacementClearSimulation) },
+				// 	RE::ImageSpaceManager::GetCurrentIndex(ISWaterDisplacementClearSimulation) },
 				// { "BSISWaterDisplacementNormals",
-				// 	static_cast<uint32_t>(ISWaterDisplacementNormals) },
+				// 	RE::ImageSpaceManager::GetCurrentIndex(ISWaterDisplacementNormals) },
 				// { "BSISWaterDisplacementRainRipple",
-				// 	static_cast<uint32_t>(ISWaterDisplacementRainRipple) },
+				// 	RE::ImageSpaceManager::GetCurrentIndex(ISWaterDisplacementRainRipple) },
 				// { "BSISWaterDisplacementTexOffset",
-				// 	static_cast<uint32_t>(ISWaterDisplacementTexOffset) },
-				// { "BSISWaterWadingHeightmap", static_cast<uint32_t>(ISWaterWadingHeightmap) },
-				// { "BSISWaterRainHeightmap", static_cast<uint32_t>(ISWaterRainHeightmap) },
-				// { "BSISWaterSmoothHeightmap", static_cast<uint32_t>(ISWaterSmoothHeightmap) },
-				// { "BSISWaterWadingHeightmap", static_cast<uint32_t>(ISWaterWadingHeightmap) },
-				// { "BSImagespaceShaderMap", static_cast<uint32_t>(ISMap) },
-				// { "BSImagespaceShaderMap", static_cast<uint32_t>(ISMap) },
-				// { "BSImagespaceShaderWorldMap", static_cast<uint32_t>(ISWorldMap) },
+				// 	RE::ImageSpaceManager::GetCurrentIndex(ISWaterDisplacementTexOffset) },
+				// { "BSISWaterWadingHeightmap", RE::ImageSpaceManager::GetCurrentIndex(ISWaterWadingHeightmap) },
+				// { "BSISWaterRainHeightmap", RE::ImageSpaceManager::GetCurrentIndex(ISWaterRainHeightmap) },
+				// { "BSISWaterSmoothHeightmap", RE::ImageSpaceManager::GetCurrentIndex(ISWaterSmoothHeightmap) },
+				// { "BSISWaterWadingHeightmap", RE::ImageSpaceManager::GetCurrentIndex(ISWaterWadingHeightmap) },
+				// { "BSImagespaceShaderMap", RE::ImageSpaceManager::GetCurrentIndex(ISMap) },
+				// { "BSImagespaceShaderMap", RE::ImageSpaceManager::GetCurrentIndex(ISMap) },
+				// { "BSImagespaceShaderWorldMap", RE::ImageSpaceManager::GetCurrentIndex(ISWorldMap) },
 				// { "BSImagespaceShaderWorldMapNoSkyBlur",
-				// 	static_cast<uint32_t>(ISWorldMapNoSkyBlur) },
-				// { "BSImagespaceShaderISMinify", static_cast<uint32_t>(ISMinify) },
-				// { "BSImagespaceShaderISMinifyContrast", static_cast<uint32_t>(ISMinifyContrast) },
-				// { "BSImagespaceShaderNoiseNormalmap", static_cast<uint32_t>(ISNoiseNormalmap) },
+				// 	RE::ImageSpaceManager::GetCurrentIndex(ISWorldMapNoSkyBlur) },
+				// { "BSImagespaceShaderISMinify", RE::ImageSpaceManager::GetCurrentIndex(ISMinify) },
+				// { "BSImagespaceShaderISMinifyContrast", RE::ImageSpaceManager::GetCurrentIndex(ISMinifyContrast) },
+				// { "BSImagespaceShaderNoiseNormalmap", RE::ImageSpaceManager::GetCurrentIndex(ISNoiseNormalmap) },
 				// { "BSImagespaceShaderNoiseScrollAndBlend",
-				// 	static_cast<uint32_t>(ISNoiseScrollAndBlend) },
+				// 	RE::ImageSpaceManager::GetCurrentIndex(ISNoiseScrollAndBlend) },
 				// { "BSImagespaceShaderRadialBlur",
-				// 	static_cast<uint32_t>(ISRadialBlur) },
-				// { "BSImagespaceShaderRadialBlurHigh", static_cast<uint32_t>(ISRadialBlurHigh) },
-				// { "BSImagespaceShaderRadialBlurMedium", static_cast<uint32_t>(ISRadialBlurMedium) },
-				// { "BSImagespaceShaderRefraction", static_cast<uint32_t>(ISRefraction) },
-				{ "BSImagespaceShaderISSAOCompositeSAO", static_cast<uint32_t>(ISSAOCompositeSAO) },
-				{ "BSImagespaceShaderISSAOCompositeFog", static_cast<uint32_t>(ISSAOCompositeFog) },
-				{ "BSImagespaceShaderISSAOCompositeSAOFog", static_cast<uint32_t>(ISSAOCompositeSAOFog) },
-				// { "BSImagespaceShaderISSAOCameraZ", static_cast<uint32_t>(ISSAOCameraZ) },
-				// { "BSImagespaceShaderISSILComposite", static_cast<uint32_t>(ISSILComposite) },
-				// { "BSImagespaceShaderISSnowSSS", static_cast<uint32_t>(ISSnowSSS) },
-				// { "BSImagespaceShaderISSAOBlurH", static_cast<uint32_t>(ISSAOBlurH) },
-				// { "BSImagespaceShaderISSAOBlurV", static_cast<uint32_t>(ISSAOBlurV) },
-				// { "BSImagespaceShaderISUnderwaterMask", static_cast<uint32_t>(ISUnderwaterMask) },
-				{ "BSImagespaceShaderISApplyVolumetricLighting", static_cast<uint32_t>(ISApplyVolumetricLighting) },
-				{ "BSImagespaceShaderReflectionsRayTracing", static_cast<uint32_t>(ISReflectionsRayTracing) },
-				//{ "BSImagespaceShaderReflectionsDebugSpecMask", static_cast<uint32_t>(ISReflectionsDebugSpecMask) },
+				// 	RE::ImageSpaceManager::GetCurrentIndex(ISRadialBlur) },
+				// { "BSImagespaceShaderRadialBlurHigh", RE::ImageSpaceManager::GetCurrentIndex(ISRadialBlurHigh) },
+				// { "BSImagespaceShaderRadialBlurMedium", RE::ImageSpaceManager::GetCurrentIndex(ISRadialBlurMedium) },
+				{ "BSImagespaceShaderRefraction", RE::ImageSpaceManager::GetCurrentIndex(ISRefraction) },
+				{ "BSImagespaceShaderISSAOCompositeSAO", RE::ImageSpaceManager::GetCurrentIndex(ISSAOCompositeSAO) },
+				{ "BSImagespaceShaderISSAOCompositeFog", RE::ImageSpaceManager::GetCurrentIndex(ISSAOCompositeFog) },
+				{ "BSImagespaceShaderISSAOCompositeSAOFog", RE::ImageSpaceManager::GetCurrentIndex(ISSAOCompositeSAOFog) },
+				// { "BSImagespaceShaderISSAOCameraZ", RE::ImageSpaceManager::GetCurrentIndex(ISSAOCameraZ) },
+				// { "BSImagespaceShaderISSILComposite", RE::ImageSpaceManager::GetCurrentIndex(ISSILComposite) },
+				// { "BSImagespaceShaderISSnowSSS", RE::ImageSpaceManager::GetCurrentIndex(ISSnowSSS) },
+				// { "BSImagespaceShaderISSAOBlurH", RE::ImageSpaceManager::GetCurrentIndex(ISSAOBlurH) },
+				// { "BSImagespaceShaderISSAOBlurV", RE::ImageSpaceManager::GetCurrentIndex(ISSAOBlurV) },
+				// { "BSImagespaceShaderISUnderwaterMask", RE::ImageSpaceManager::GetCurrentIndex(ISUnderwaterMask) },
+				{ "BSImagespaceShaderISApplyVolumetricLighting", RE::ImageSpaceManager::GetCurrentIndex(ISApplyVolumetricLighting) },
+				{ "BSImagespaceShaderReflectionsRayTracing", RE::ImageSpaceManager::GetCurrentIndex(ISReflectionsRayTracing) },
+				//{ "BSImagespaceShaderReflectionsDebugSpecMask", RE::ImageSpaceManager::GetCurrentIndex(ISReflectionsDebugSpecMask) },
 
 				{ "BSImagespaceShaderVolumetricLightingRaymarchCS", 256 },
 				{ "BSImagespaceShaderVolumetricLightingGenerateCS", 257 },
-				{ "BSImagespaceShaderVolumetricLightingBlurHCS", static_cast<uint32_t>(ISVolumetricLightingBlurHCS) },
-				{ "BSImagespaceShaderVolumetricLightingBlurVCS", static_cast<uint32_t>(ISVolumetricLightingBlurVCS) },
-				{ "BSImagespaceShaderCopyDepthBuffer", 98 },
-				{ "BSImagespaceShaderCopyDepthBuffer", 99 },
-				{ "BSImagespaceShaderCopyDepthBuffer", 100 },
-				{ "BSImagespaceShaderISFullScreenVR", 129 },
+				{ "BSImagespaceShaderVolumetricLightingBlurHCS", RE::ImageSpaceManager::GetCurrentIndex(ISVolumetricLightingBlurHCS) },
+				{ "BSImagespaceShaderVolumetricLightingBlurVCS", RE::ImageSpaceManager::GetCurrentIndex(ISVolumetricLightingBlurVCS) },
+
+				// VR only shaders
+				// Disable BSImagespaceShaderCopyDepthBuffer since we don't have it REed and it causes issues with cache and upscaling
+				// https://github.com/doodlum/skyrim-community-shaders/issues/1552
+				// { "BSImagespaceShaderCopyDepthBuffer", RE::ImageSpaceManager::GetCurrentIndex(ISCopyDepthBuffer) },
+				// { "BSImagespaceShaderCopyDepthBuffer_DR", RE::ImageSpaceManager::GetCurrentIndex(ISCopyDepthBuffer_DR) },
+				// { "BSImagespaceShaderCopyDepthBufferTargetSize", RE::ImageSpaceManager::GetCurrentIndex(ISCopyDepthBufferTargetSize) },
+				{ "BSImagespaceShaderGraphicsTextureFilterMode", RE::ImageSpaceManager::GetCurrentIndex(ISGraphicsTextureFilterMode) },
+				{ "BSImagespaceShaderISDownsampleHierarchicalDepthBufferCS", RE::ImageSpaceManager::GetCurrentIndex(ISDownsampleHierarchicalDepthBufferCS) },
+				{ "BSImagespaceShaderISDiffScaleDownsampleDepthBufferCS", RE::ImageSpaceManager::GetCurrentIndex(ISDiffScaleDownsampleDepthBufferCS) },
+				{ "BSImagespaceShaderISFullScreenVR", RE::ImageSpaceManager::GetCurrentIndex(ISFullScreenVR) },
+				{ "BSImagespaceShaderISTransformLvl7PreTest", RE::ImageSpaceManager::GetCurrentIndex(ISTransformLvl7PreTest) },
+				{ "BSImagespaceShaderISLvl6PreTest", RE::ImageSpaceManager::GetCurrentIndex(ISLvl6PreTest) },
+				{ "BSImagespaceShaderISLvl5PreTest", RE::ImageSpaceManager::GetCurrentIndex(ISLvl5PreTest) },
+				{ "BSImagespaceShaderISLvl4PreTest", RE::ImageSpaceManager::GetCurrentIndex(ISLvl4PreTest) },
+				{ "BSImagespaceShaderISLvl3PreTest", RE::ImageSpaceManager::GetCurrentIndex(ISLvl3PreTest) },
+				{ "BSImagespaceShaderISLvl2PreTest", RE::ImageSpaceManager::GetCurrentIndex(ISLvl2PreTest) },
+				{ "BSImagespaceShaderISLvl1PreTest", RE::ImageSpaceManager::GetCurrentIndex(ISLvl1PreTest) },
+				{ "BSImagespaceShaderISLvl0PreTest", RE::ImageSpaceManager::GetCurrentIndex(ISLvl0PreTest) },
+				{ "BSImagespaceShaderISSetupPreTest", RE::ImageSpaceManager::GetCurrentIndex(ISSetupPreTest) },
 			};
 
 			auto it = descriptors.find(imagespaceShader.name);
@@ -1658,16 +1698,22 @@ namespace SIE
 			descriptor = it->second;
 			return true;
 		}
+
+		static bool ResolveImageSpaceDescriptor(const RE::BSShader& shader, uint32_t& descriptor)
+		{
+			if (shader.shaderType == RE::BSShader::Type::ImageSpace) {
+				const auto& isShader = static_cast<const RE::BSImagespaceShader&>(shader);
+				return GetImagespaceShaderDescriptor(isShader, descriptor);
+			}
+			return true;
+		}
 	}
 
 	RE::BSGraphics::VertexShader* ShaderCache::GetVertexShader(const RE::BSShader& shader,
 		uint32_t descriptor)
 	{
-		if (shader.shaderType == RE::BSShader::Type::ImageSpace) {
-			const auto& isShader = static_cast<const RE::BSImagespaceShader&>(shader);
-			if (!SShaderCache::GetImagespaceShaderDescriptor(isShader, descriptor)) {
-				return nullptr;
-			}
+		if (!SShaderCache::ResolveImageSpaceDescriptor(shader, descriptor)) {
+			return nullptr;
 		}
 
 		auto state = globals::state;
@@ -1680,6 +1726,9 @@ namespace SIE
 		}
 
 		if (state->IsDeveloperMode()) {
+			// Track this shader as active
+			TrackActiveShader(ShaderClass::Vertex, shader, descriptor);
+
 			auto key = SIE::SShaderCache::GetShaderString(ShaderClass::Vertex, shader, descriptor, true);
 			if (blockedKeyIndex != -1 && !blockedKey.empty() && key == blockedKey) {
 				if (std::find(blockedIDs.begin(), blockedIDs.end(), descriptor) == blockedIDs.end()) {
@@ -1720,14 +1769,14 @@ namespace SIE
 			return nullptr;
 		}
 
-		if (shader.shaderType == RE::BSShader::Type::ImageSpace) {
-			const auto& isShader = static_cast<const RE::BSImagespaceShader&>(shader);
-			if (!SShaderCache::GetImagespaceShaderDescriptor(isShader, descriptor)) {
-				return nullptr;
-			}
+		if (!SShaderCache::ResolveImageSpaceDescriptor(shader, descriptor)) {
+			return nullptr;
 		}
 
 		if (state->IsDeveloperMode()) {
+			// Track this shader as active
+			TrackActiveShader(ShaderClass::Pixel, shader, descriptor);
+
 			auto key = SIE::SShaderCache::GetShaderString(ShaderClass::Pixel, shader, descriptor, true);
 			if (blockedKeyIndex != -1 && !blockedKey.empty() && key == blockedKey) {
 				if (std::find(blockedIDs.begin(), blockedIDs.end(), descriptor) == blockedIDs.end()) {
@@ -1764,14 +1813,14 @@ namespace SIE
 			return nullptr;
 		}
 
-		if (shader.shaderType == RE::BSShader::Type::ImageSpace) {
-			const auto& isShader = static_cast<const RE::BSImagespaceShader&>(shader);
-			if (!SShaderCache::GetImagespaceShaderDescriptor(isShader, descriptor)) {
-				return nullptr;
-			}
+		if (!SShaderCache::ResolveImageSpaceDescriptor(shader, descriptor)) {
+			return nullptr;
 		}
 
 		if (state->IsDeveloperMode()) {
+			// Track this shader as active
+			TrackActiveShader(ShaderClass::Compute, shader, descriptor);
+
 			auto key = SIE::SShaderCache::GetShaderString(ShaderClass::Compute, shader, descriptor, true);
 			if (blockedKeyIndex != -1 && !blockedKey.empty() && key == blockedKey) {
 				if (std::find(blockedIDs.begin(), blockedIDs.end(), descriptor) == blockedIDs.end()) {
@@ -2057,9 +2106,9 @@ namespace SIE
 		return ShaderCompilationTask::Status::Pending;
 	}
 
-	std::string ShaderCache::GetShaderStatsString(bool a_timeOnly)
+	std::string ShaderCache::GetShaderStatsString(bool a_timeOnly, bool a_elapsedOnly)
 	{
-		return compilationSet.GetStatsString(a_timeOnly);
+		return compilationSet.GetStatsString(a_timeOnly, a_elapsedOnly);
 	}
 
 	inline bool ShaderCache::IsShaderSourceAvailable(const RE::BSShader& shader)
@@ -2428,6 +2477,44 @@ namespace SIE
 
 	void ShaderCache::IterateShaderBlock(bool a_forward)
 	{
+		// Try to use active shaders list if available in developer mode
+		if (globals::state->IsDeveloperMode()) {
+			std::lock_guard lockActive(activeShadersMutex);
+			if (!activeShaders.empty()) {
+				// Build sorted list of active shader keys
+				std::vector<std::string> keys;
+				keys.reserve(activeShaders.size());
+				for (const auto& [key, _] : activeShaders) {
+					keys.push_back(key);
+				}
+				std::sort(keys.begin(), keys.end());
+
+				// Find current position or start
+				int currentIdx = -1;
+				if (!blockedKey.empty()) {
+					auto it = std::find(keys.begin(), keys.end(), blockedKey);
+					if (it != keys.end()) {
+						currentIdx = static_cast<int>(std::distance(keys.begin(), it));
+					}
+				}
+
+				// Calculate next index
+				int targetIdx = 0;
+				if (currentIdx >= 0) {
+					targetIdx = a_forward ? (currentIdx + 1) % static_cast<int>(keys.size()) : (currentIdx - 1 + static_cast<int>(keys.size())) % static_cast<int>(keys.size());
+				} else {
+					targetIdx = a_forward ? 0 : static_cast<int>(keys.size()) - 1;
+				}
+
+				blockedKey = keys[targetIdx];
+				blockedKeyIndex = -2;  // Set to -2 for dev selections to distinguish from shaderMap indices
+				blockedIDs.clear();
+				logger::debug("Blocking active shader ({}/{}) {}", targetIdx + 1, keys.size(), blockedKey);
+				return;
+			}
+		}
+
+		// Fallback to original behavior with full shader map
 		std::scoped_lock lockM{ mapMutex };
 		auto targetIndex = a_forward ? 0 : shaderMap.size() - 1;           // default start or last element
 		if (blockedKeyIndex >= 0 && shaderMap.size() > blockedKeyIndex) {  // grab next element
@@ -2437,7 +2524,7 @@ namespace SIE
 		for (auto& [key, value] : shaderMap) {
 			if (index++ == targetIndex) {
 				blockedKey = key;
-				blockedKeyIndex = (uint)targetIndex;
+				blockedKeyIndex = -1;
 				blockedIDs.clear();
 				logger::debug("Blocking shader ({}/{}) {}", blockedKeyIndex + 1, shaderMap.size(), blockedKey);
 				return;
@@ -2448,9 +2535,77 @@ namespace SIE
 	void ShaderCache::DisableShaderBlocking()
 	{
 		blockedKey = "";
-		blockedKeyIndex = (uint)-1;
+		blockedKeyIndex = -1;
 		blockedIDs.clear();
 		logger::debug("Stopped blocking shaders");
+	}
+
+	void ShaderCache::TrackActiveShader(ShaderClass shaderClass, const RE::BSShader& shader, uint32_t descriptor)
+	{
+		if (!globals::state->IsDeveloperMode())
+			return;
+
+		auto key = SIE::SShaderCache::GetShaderString(shaderClass, shader, descriptor, true);
+		std::lock_guard lock(activeShadersMutex);
+
+		auto& info = activeShaders[key];
+		if (info.key.empty()) {
+			// First time seeing this shader
+			info.key = key;
+			info.shaderType = shader.shaderType.get();
+			info.shaderClass = shaderClass;
+			info.descriptor = descriptor;
+
+			// Construct disk path
+			info.diskPath = SIE::SShaderCache::GetDiskPath(
+				shader.shaderType == RE::BSShader::Type::ImageSpace ?
+					static_cast<const RE::BSImagespaceShader&>(shader).originalShaderName :
+					shader.fxpFilename,
+				descriptor, shaderClass);
+		}
+
+		info.isActive = true;
+		info.drawCalls++;
+		info.lastUsed = std::chrono::steady_clock::now();
+	}
+
+	void ShaderCache::ResetFrameShaderTracking()
+	{
+		if (!globals::state->IsDeveloperMode())
+			return;
+
+		std::lock_guard lock(activeShadersMutex);
+
+		// Mark all shaders as inactive for this frame
+		// Keep shaders that were used recently (within last 60 frames / ~1 second at 60fps)
+		auto now = std::chrono::steady_clock::now();
+		auto timeout = std::chrono::seconds(1);
+
+		for (auto it = activeShaders.begin(); it != activeShaders.end();) {
+			auto& info = it->second;
+			info.isActive = false;
+			info.drawCalls = 0;
+
+			// Remove shaders that haven't been used recently
+			if (now - info.lastUsed > timeout) {
+				it = activeShaders.erase(it);
+			} else {
+				++it;
+			}
+		}
+	}
+
+	std::vector<ShaderCache::ActiveShaderInfo> ShaderCache::GetActiveShaders() const
+	{
+		std::lock_guard lock(activeShadersMutex);
+		std::vector<ActiveShaderInfo> result;
+		result.reserve(activeShaders.size());
+
+		for (const auto& [key, info] : activeShaders) {
+			result.push_back(info);
+		}
+
+		return result;
 	}
 
 	void ShaderCache::ManageCompilationSet(std::stop_token stoken)
@@ -2558,20 +2713,46 @@ namespace SIE
 		auto& cache = ShaderCache::Instance();
 		auto key = task.GetString();
 		auto shaderBlob = cache.GetCompletedShader(task);
-		if (shaderBlob) {
-			logger::debug("Compiling Task succeeded: {}", key);
-			completedTasks++;
-		} else {
-			logger::debug("Compiling Task failed: {}", key);
-			failedTasks++;
+
+		bool shouldLogCompletion = false;
+		double completionTimeMs = 0.0;
+
+		// Perform all completion operations under one mutex acquisition
+		{
+			std::scoped_lock lock(compilationMutex);
+
+			// Update task counters
+			if (shaderBlob) {
+				logger::debug("Compiling Task succeeded: {}", key);
+				completedTasks++;
+			} else {
+				logger::debug("Compiling Task failed: {}", key);
+				failedTasks++;
+			}
+
+			// Update timing
+			LARGE_INTEGER now;
+			QueryPerformanceCounter(&now);
+			totalTime.QuadPart += now.QuadPart - lastCalculation.QuadPart;
+			lastCalculation = now;
+
+			// Check if compilation is complete and set completion time if needed
+			if (completionTime.load(std::memory_order_relaxed) == 0 && completedTasks + failedTasks >= totalTasks) {
+				completionTime.store(now.QuadPart, std::memory_order_relaxed);
+				completionTimeMs = static_cast<double>(now.QuadPart - lastReset.QuadPart) * 1000.0 / frequency.QuadPart;
+				shouldLogCompletion = true;
+			}
+
+			// Update task tracking
+			processedTasks.insert(task);
+			tasksInProgress.erase(task);
 		}
-		LARGE_INTEGER now;
-		QueryPerformanceCounter(&now);
-		totalTime.QuadPart += now.QuadPart - lastCalculation.QuadPart;
-		lastCalculation = now;
-		std::scoped_lock lock(compilationMutex);
-		processedTasks.insert(task);
-		tasksInProgress.erase(task);
+
+		// Log completion outside the lock
+		if (shouldLogCompletion) {
+			logger::debug("Compilation completed in {} ms", GetHumanTime(completionTimeMs));
+		}
+
 		conditionVariable.notify_one();
 	}
 
@@ -2587,12 +2768,13 @@ namespace SIE
 		cacheHitTasks = 0;
 		QueryPerformanceCounter(&lastReset);
 		QueryPerformanceCounter(&lastCalculation);
+		completionTime = { 0 };  // Reset completion time
 		totalTime = { 0 };
 	}
 
 	std::string CompilationSet::GetHumanTime(double a_totalMs)
 	{
-		int milliseconds = (int)a_totalMs;
+		int milliseconds = static_cast<int>(a_totalMs);
 		int seconds = milliseconds / 1000;
 		int minutes = seconds / 60;
 		seconds %= 60;
@@ -2604,6 +2786,8 @@ namespace SIE
 
 	double CompilationSet::GetEta()
 	{
+		// For ETA calculation, we still use the active compilation time (totalTime)
+		// because it reflects the actual work time, not wall-clock time
 		double totalMs = static_cast<double>(totalTime.QuadPart) * 1000.0 / frequency.QuadPart;
 
 		if (totalMs == 0.0) {
@@ -2614,14 +2798,28 @@ namespace SIE
 		return std::max(remaining / rate, 0.0);
 	}
 
-	std::string CompilationSet::GetStatsString(bool a_timeOnly)
+	std::string CompilationSet::GetStatsString(bool a_timeOnly, bool a_elapsedOnly)
 	{
-		double totalMs = static_cast<double>(totalTime.QuadPart) * 1000.0 / frequency.QuadPart;
+		// Calculate elapsed time since compilation started
+		LARGE_INTEGER currentTime;
+		QueryPerformanceCounter(&currentTime);
 
-		if (a_timeOnly)
-			return fmt::format("{}/{}",
-				GetHumanTime(totalMs),
-				GetHumanTime(GetEta() + totalMs));
+		// Use completion time if compilation is finished, otherwise current time
+		int64_t endTime = (completionTime.load(std::memory_order_relaxed) != 0) ? completionTime.load(std::memory_order_relaxed) : currentTime.QuadPart;
+		double totalMs = static_cast<double>(endTime - lastReset.QuadPart) * 1000.0 / frequency.QuadPart;
+
+		if (a_timeOnly) {
+			if (a_elapsedOnly) {
+				// Only elapsed
+				return GetHumanTime(totalMs);
+			} else {
+				// Elapsed + estimated
+				return fmt::format("{}/{}",
+					GetHumanTime(totalMs),
+					GetHumanTime(GetEta() + totalMs));
+			}
+		}
+
 		return fmt::format("{}/{} (successful/total)\tfailed: {}\tcachehits: {}\nElapsed/Estimated Time: {}/{}",
 			(std::uint64_t)completedTasks,
 			(std::uint64_t)totalTasks,

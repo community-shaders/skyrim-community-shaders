@@ -86,6 +86,7 @@ public:
 	virtual void Prepass() {}
 	virtual void EarlyPrepass() {}
 
+	virtual void Load() {}  // Called during SKSE Load - earliest hook point only for critical hooks like d3d
 	virtual void DataLoaded() {}
 	virtual void PostPostLoad() {}
 
@@ -97,6 +98,12 @@ public:
 
 	virtual void RestoreDefaultSettings() {}
 	virtual bool ToggleAtBootSetting();
+
+	/**
+	 * @brief Reapplies override settings for this feature if available
+	 * @return True if overrides were found and applied, false otherwise
+	 */
+	virtual bool ReapplyOverrideSettings();
 
 	/**
 	 * Weather analysis configuration for features that want to provide weather analysis.

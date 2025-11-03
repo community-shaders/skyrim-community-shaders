@@ -22,6 +22,11 @@ repos:
             additional_dependencies: ["prettier@3.1.0"]
             files: \.(json|md|yml|yaml)$
             exclude: ^(\.\/)?(extern|include|build|dist)\/
+    - repo: https://github.com/BlankSpruce/gersemi
+      rev: 0.22.3
+      hooks:
+          - id: gersemi
+            files: '(^CMakeLists.txt$|.*\\.cmake$)'
 ci:
     autofix_commit_msg: |
         style: 🎨 apply pre-commit.ci formatting

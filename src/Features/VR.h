@@ -2,10 +2,9 @@
 #include "Menu.h"
 #include "OverlayFeature.h"
 #include <algorithm>
-#include <atomic>
 #include <d3d11.h>
 #include <imgui_impl_dx11.h>
-#include <magic_enum.hpp>
+#include <magic_enum/magic_enum.hpp>
 #include <openvr.h>
 #include <string>
 #include <unordered_map>
@@ -281,6 +280,9 @@ public:
 
 	virtual void PostPostLoad() override;
 	virtual void DataLoaded() override;
+	virtual void EarlyPrepass() override;
+
+	void UpdateDepthBufferCulling(bool desired);
 
 	virtual void LoadSettings(json& o_json) override;
 	virtual void SaveSettings(json& o_json) override;
@@ -312,8 +314,9 @@ public:
 	struct Settings
 	{
 		// Performance optimization settings
-		bool EnableDepthBufferCulling = true;  ///< Enable depth buffer culling for VR performance
-		float MinOccludeeBoxExtent = 10.0f;    ///< Minimum bounding box size for occlusion culling
+		bool EnableDepthBufferCullingExterior = true;  ///< Enable depth buffer culling for VR performance
+		bool EnableDepthBufferCullingInterior = false;
+		float MinOccludeeBoxExtent = 10.0f;  ///< Minimum bounding box size for occlusion culling
 
 		// VR Menu Overlay positioning settings
 		float VRMenuScale = Config::kDefaultMenuScale;  ///< Scale factor for overlay UI (0.5-2.0)
@@ -367,7 +370,7 @@ public:
 		// General interaction settings
 		float comboTimeout = Config::kDefaultComboTimeout;       ///< Timeout for button combo sequences (1.0-10.0 seconds)
 		int kAutoHideSeconds = Config::kDefaultAutoHideSeconds;  ///< Auto-hide timeout for overlay messages (>0 shows overlay, <=0 hides it)
-		bool EnableDragToReposition = true;                      ///< Allow drag-and-drop overlay repositioning
+		bool EnableDragToReposition = false;                     ///< Allow drag-and-drop overlay repositioning
 
 		float VRMenuAutoResetDistance = 1000.0f;  // Default: 1000 units ≈ 14.3 meters
 

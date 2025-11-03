@@ -3,17 +3,95 @@
 #include "Feature.h"
 #include "Menu/ThemeManager.h"
 #include "Utils/Serialize.h"
+#include <array>
+#include <atomic>
+#include <cstdint>
 #include <dxgi1_4.h>
 #include <nlohmann/json.hpp>
+#include <optional>
 #include <shared_mutex>
+#include <string>
+#include <string_view>
+#include <unordered_map>
 #include <vector>
 #include <winrt/base.h>
 
 using json = nlohmann::json;
 
+struct ImFont;
+
 class Menu
 {
 public:
+	/**
+	 * @brief Semantic font roles for hierarchical UI typography
+	 *
+	 * FONT ROLE SYSTEM:
+	 * =================
+	 * Replaces legacy single-font approach with semantic typography system.
+	 * Each role can use different font family, style, and size scaling.
+	 *
+	 * Roles:
+	 * - Body (0):       Default UI text, setting labels, general content
+	 * - Heading (1):    Feature section headers
+	 * - Subheading (2): Subsection headers within features
+	 * - Subtitle (3):   Secondary descriptive text, tooltips
+	 *
+	 * Theme JSON Configuration:
+	 * "FontRoles": [
+	 *   { "Family": "Jost", "Style": "Regular", "File": "Jost/Jost-Regular.ttf", "SizeScale": 1.0 },
+	 *   { "Family": "Jost", "Style": "Regular", "File": "Jost/Jost-Regular.ttf", "SizeScale": 1.0 },
+	 *   { "Family": "Jost", "Style": "Regular", "File": "Jost/Jost-Regular.ttf", "SizeScale": 1.0 },
+	 *   { "Family": "Jost", "Style": "Regular", "File": "Jost/Jost-Regular.ttf", "SizeScale": 1.0 }
+	 * ]
+	 *
+	 * SizeScale multiplies the base FontSize for each role.
+	 * Example: FontSize=27, Heading SizeScale=1.05 → 28.35px rendered size
+	 *
+	 * Migration from Legacy:
+	 * Old "FontName" field auto-populates Body role on theme load.
+	 * Themes without FontRoles get defaults (Jost family).
+	 */
+	enum class FontRole : std::uint8_t
+	{
+		Body = 0,    // Default UI text
+		Heading,     // Feature headers
+		Subheading,  // Subsection headers
+		Subtitle,    // Secondary text
+		Count        // Total number of roles
+	};
+
+	struct FontRoleDescriptor
+	{
+		std::string_view key;
+		std::string_view displayName;
+		float defaultScale;
+	};
+
+	static inline constexpr std::array<FontRoleDescriptor, static_cast<size_t>(FontRole::Count)> FontRoleDescriptors = {
+		FontRoleDescriptor{ "Body", "Body Text", 1.0f },
+		FontRoleDescriptor{ "Heading", "Headings", 1.0f },
+		FontRoleDescriptor{ "Subheading", "Subheadings", 1.0f },
+		FontRoleDescriptor{ "Subtitle", "Subtitles", 1.0f }
+	};
+
+	static constexpr std::string_view GetFontRoleKey(FontRole role)
+	{
+		return FontRoleDescriptors[static_cast<size_t>(role)].key;
+	}
+
+	static constexpr std::string_view GetFontRoleDisplayName(FontRole role)
+	{
+		return FontRoleDescriptors[static_cast<size_t>(role)].displayName;
+	}
+
+	static constexpr float GetFontRoleDefaultScale(FontRole role)
+	{
+		return FontRoleDescriptors[static_cast<size_t>(role)].defaultScale;
+	}
+
+	static std::optional<FontRole> ResolveFontRole(std::string_view key);
+
 	~Menu();
 	Menu(const Menu&) = delete;
 	Menu& operator=(const Menu&) = delete;
@@ -30,6 +108,14 @@ public:
 	void Load(json& o_json);
 	void Save(json& o_json);
 
+	void LoadTheme(json& o_json);
+	void SaveTheme(json& o_json);
+
+	// Multi-theme support
+	std::vector<std::string> DiscoverThemes();
+	bool LoadThemePreset(const std::string& themeName);
+	void CreateDefaultThemes();
+
 	void Init();
 	void DrawSettings();
 
@@ -40,6 +126,7 @@ public:
 
 	void ProcessInputEvents(RE::InputEvent* const* a_events);
 	bool ShouldSwallowInput();
+	std::string BuildFontSignature(float baseFontSize) const;
 
 public:
 	// Input handling flags (made public for InputEventHandler access)
@@ -49,6 +136,28 @@ public:
 	bool settingOverlayToggleKey = false;
 	uint32_t priorShaderKey = VK_PRIOR;  // used for blocking shaders in debugging
 	uint32_t nextShaderKey = VK_NEXT;    // used for blocking shaders in debugging
+
+	// Font caching (made public for ThemeManager and OverlayRenderer access)
+	// Marked mutable because they're cache fields that may be updated from const methods
+	float cachedFontSize = ThemeManager::Constants::DEFAULT_FONT_SIZE;  // Tracks whether font has been modified and may require reloading
+	mutable std::string cachedFontName = "Jost/Jost-Regular.ttf";       // Tracks whether font file has changed and may require reloading
+	std::array<std::string, static_cast<size_t>(FontRole::Count)> cachedFontFilesByRole = []() {
+		std::array<std::string, static_cast<size_t>(FontRole::Count)> files{};
+		auto setFile = [&files](FontRole role, std::string value) {
+			files[static_cast<size_t>(role)] = std::move(value);
+		};
+		setFile(FontRole::Body, "Jost/Jost-Regular.ttf");
+		setFile(FontRole::Heading, "Jost/Jost-Regular.ttf");
+		setFile(FontRole::Subheading, "Jost/Jost-Regular.ttf");
+		setFile(FontRole::Subtitle, "Jost/Jost-Regular.ttf");
+		return files;
+	}();
+	mutable std::array<float, static_cast<size_t>(FontRole::Count)> cachedFontPixelSizesByRole = {};
+	std::string cachedFontSignature;
+	mutable std::array<ImFont*, static_cast<size_t>(FontRole::Count)> loadedFontRoles = {};
+
+	// Deferred font reload system (public for SettingsTabRenderer access)
+	bool pendingFontReload = false;
 
 	// Used for resetting input keys to solve alt-tab stuck issue
 	std::atomic<bool> focusChanged = false;
@@ -78,11 +187,16 @@ public:
 		UIIcon saveSettings;
 		UIIcon loadSettings;
 		UIIcon clearCache;
-		UIIcon logo;    // New logo icon
-		UIIcon search;  // Search icon for search bars
+		UIIcon logo;                  // New logo icon
+		UIIcon search;                // Search icon for search bars
+		UIIcon featureSettingRevert;  // Feature revert settings icon
+
+		// Social media/external link icons
+		UIIcon discord;
 
 		// Category icons
 		UIIcon characters;
+		UIIcon display;
 		UIIcon grass;
 		UIIcon lighting;
 		UIIcon sky;
@@ -90,50 +204,96 @@ public:
 		UIIcon water;
 		UIIcon debug;
 		UIIcon materials;
+		UIIcon postProcessing;
 	} uiIcons;
 
 	struct ThemeSettings
 	{
-		float FontSize = ThemeManager::Constants::DEFAULT_FONT_SIZE;
-		float GlobalScale = REL::Module::IsVR() ? -0.5f : 0.f;  // exponential
+		struct FontRoleSettings
+		{
+			std::string Family;
+			std::string Style;
+			std::string File;
+			float SizeScale = 1.0f;
+		};
 
-		bool UseSimplePalette = true;    // simple palette or full customization
+		float FontSize = ThemeManager::Constants::DEFAULT_FONT_SIZE;
+		std::string FontName = "Jost/Jost-Regular.ttf";         // Default font file name (legacy)
+		float GlobalScale = REL::Module::IsVR() ? -0.5f : 0.f;  // exponential
+		std::array<FontRoleSettings, static_cast<size_t>(FontRole::Count)> FontRoles = []() {
+			std::array<FontRoleSettings, static_cast<size_t>(FontRole::Count)> roles{};
+			auto setRole = [&roles](FontRole role, std::string family, std::string style, std::string file, float sizeScale) {
+				auto index = static_cast<size_t>(role);
+				roles[index].Family = std::move(family);
+				roles[index].Style = std::move(style);
+				roles[index].File = std::move(file);
+				roles[index].SizeScale = sizeScale;
+			};
+
+			setRole(FontRole::Body, "Jost", "Regular", "Jost/Jost-Regular.ttf", 1.0f);
+			setRole(FontRole::Heading, "Jost", "Regular", "Jost/Jost-Regular.ttf", 1.0f);
+			setRole(FontRole::Subheading, "Jost", "Regular", "Jost/Jost-Regular.ttf", 1.0f);
+			setRole(FontRole::Subtitle, "Jost", "Regular", "Jost/Jost-Regular.ttf", 1.0f);
+
+			return roles;
+		}();
+
+		bool UseSimplePalette = false;   // DEPRECATED: No longer affects behavior. UI now shows both Simple and Advanced controls.
 		bool ShowActionIcons = true;     // whether to show action buttons as icons
 		float TooltipHoverDelay = 0.5f;  // tooltip hover delay in seconds
+
+		// Scrollbar opacity settings
+		struct ScrollbarOpacitySettings
+		{
+			float Background = 0.0f;     // Background of the scrollbar area
+			float Thumb = 0.5f;          // The draggable thumb/grip
+			float ThumbHovered = 0.75f;  // Thumb when hovered
+			float ThumbActive = 0.9f;    // Thumb when being dragged
+		} ScrollbarOpacity;
 		struct PaletteColors
 		{
-			ImVec4 Background{ 0.f, 0.f, 0.f, 0.5882353186607361f };
-			ImVec4 Text{ 1.f, 1.f, 1.f, 1.f };
-			ImVec4 Border{ 0.5882353186607361f, 0.5882353186607361f, 0.5882353186607361f, 0.5882353186607361f };
+			ImVec4 Background{ 0.10f, 0.10f, 0.10f, 0.80f };
+			ImVec4 Text{ 1.0f, 1.0f, 1.0f, 1.0f };
+			// Separated border controls for better theming granularity
+			ImVec4 WindowBorder{ 0.5f, 0.5f, 0.5f, 0.8f };  // Outer window borders
+			ImVec4 FrameBorder{ 0.4f, 0.4f, 0.4f, 0.7f };   // Button, slider, input field borders
+			ImVec4 Separator{ 0.5f, 0.5f, 0.5f, 0.6f };     // Internal separators and dividers
+			ImVec4 ResizeGrip{ 0.6f, 0.6f, 0.6f, 0.8f };    // Window resize grips
 		} Palette;
 		struct StatusPaletteColors
 		{
-			ImVec4 Disable{ 0.5f, 0.5f, 0.5f, 1.f };
-			ImVec4 Error{ 1.f, 0.5f, 0.5f, 1.f };
+			ImVec4 Disable{ 0.5f, 0.5f, 0.5f, 1.0f };
+			ImVec4 Error{ 1.0f, 0.4f, 0.4f, 1.0f };
 			ImVec4 Warning{ 1.0f, 0.6f, 0.2f, 1.0f };
-			ImVec4 RestartNeeded{ 0.5f, 1.f, 0.5f, 1.f };
-			ImVec4 CurrentHotkey{ 1.f, 1.f, 0.f, 1.f };
+			ImVec4 RestartNeeded{ 0.4f, 1.0f, 0.4f, 1.0f };
+			ImVec4 CurrentHotkey{ 1.0f, 1.0f, 0.0f, 1.0f };
 			ImVec4 SuccessColor{ 0.0f, 1.0f, 0.0f, 1.0f };
-			ImVec4 InfoColor{ 0.0f, 0.5f, 1.0f, 1.0f };
+			ImVec4 InfoColor{ 0.2f, 0.6f, 1.0f, 1.0f };
 		} StatusPalette;
 		struct FeatureHeadingColors
 		{
-			ImVec4 ColorDefault{ 0.47f, 0.47f, 0.47f, 1.00f };  // ~120, 120, 120
-			ImVec4 ColorHovered{ 0.39f, 0.39f, 0.39f, 1.00f };  // ~100, 100, 100
-			float MinimizedFactor = 0.7f;                       // 70% of original alpha for when the header is minimized
+			ImVec4 ColorDefault{ 0.8f, 0.8f, 0.8f, 1.0f };
+			ImVec4 ColorHovered{ 0.6f, 0.6f, 0.6f, 1.0f };
+			float MinimizedFactor = 0.7f;  // 70% of original alpha for when the header is minimized
 		} FeatureHeading;
 
 		ImGuiStyle Style = []() {
 			ImGuiStyle style = {};
-			style.WindowBorderSize = 3.f;
-			style.ChildBorderSize = 0.f;
-			style.FrameBorderSize = 1.5f;
-			style.WindowPadding = { 16.f, 16.f };
-			style.WindowRounding = 0.f;
-			style.IndentSpacing = 8.f;
-			style.FramePadding = { 4.0f, 4.0f };
-			style.CellPadding = { 16.f, 2.f };
-			style.ItemSpacing = { 8.f, 12.f };
+			style.WindowBorderSize = 2.0f;
+			style.ChildBorderSize = 0.0f;
+			style.FrameBorderSize = 1.0f;
+			style.WindowPadding = { 8.0f, 8.0f };
+			style.WindowRounding = 12.0f;
+			style.IndentSpacing = 8.0f;
+			style.FramePadding = { 8.0f, 4.0f };
+			style.CellPadding = { 8.0f, 2.0f };
+			style.ItemSpacing = { 4.0f, 8.0f };
+			style.FrameRounding = 4.0f;
+			style.TabRounding = 4.0f;
+			style.ScrollbarRounding = 9.0f;
+			style.ScrollbarSize = 12.0f;
+			style.GrabRounding = 3.0f;
+			style.GrabMinSize = 12.0f;
 			return std::move(style);
 		}();
 		// Theme by @Maksasj, edited by FiveLimbedCat
@@ -197,17 +357,24 @@ public:
 		};
 	};
 
+	static const ThemeSettings::FontRoleSettings& GetDefaultFontRole(FontRole role);
+
 	struct Settings
 	{
 		uint32_t ToggleKey = VK_END;
 		uint32_t SkipCompilationKey = VK_ESCAPE;
 		uint32_t EffectToggleKey = VK_MULTIPLY;  // toggle all effects
 		uint32_t OverlayToggleKey = VK_F10;      // Global overlay toggle key for all overlays
+		bool FirstTimeSetupCompleted = false;    // Track if first-time setup has been completed
 		ThemeSettings Theme;
+		std::string SelectedThemePreset = "";  // Currently selected theme preset (empty = custom/user theme)
 	};
 	const ThemeSettings& GetTheme() const { return settings.Theme; }                // Provide read-only access to the Theme.
 	Settings& GetSettings() { return settings; }                                    // Provide access to settings for other components
 	winrt::com_ptr<IDXGIAdapter3> GetDXGIAdapter3() const { return dxgiAdapter3; }  // Provide access to dxgiAdapter3
+	ThemeSettings::FontRoleSettings& GetFontRoleSettings(FontRole role) { return settings.Theme.FontRoles[static_cast<size_t>(role)]; }
+	const ThemeSettings::FontRoleSettings& GetFontRoleSettings(FontRole role) const { return settings.Theme.FontRoles[static_cast<size_t>(role)]; }
+	ImFont* GetFont(FontRole role) const { return loadedFontRoles[static_cast<size_t>(role)]; }
 
 	void SelectFeatureMenu(const std::string& featureName);
 	static std::unordered_map<std::string, int> categoryCounts;  // Number of features in each feature category
@@ -270,7 +437,7 @@ public:
 private:
 	Settings settings;
 
-	float cachedFontSize = ThemeManager::Constants::DEFAULT_FONT_SIZE;  // Tracks whether font has been modified and may require reloading
+	std::string cachedIniPath;  // io.IniFilename must point to a string that lives for the duration of the runtime
 
 	// Menu navigation
 	std::string pendingFeatureSelection;  // Feature to select on next frame
@@ -283,7 +450,6 @@ private:
 
 	void DrawGeneralSettings();
 	void DrawAdvancedSettings();
-	void DrawDisplaySettings();
 	void DrawDisableAtBootSettings();
 	void DrawFooter();
 	void BuildCategoryCounts();

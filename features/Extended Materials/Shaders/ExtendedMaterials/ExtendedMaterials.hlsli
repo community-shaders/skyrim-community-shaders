@@ -97,7 +97,7 @@ namespace ExtendedMaterials
 
 		[unroll] for (int j = 0; j < 6; j++)
 		{
-			weights[j] = min(100, pow(weights[j], heightBlend));
+			weights[j] = min(100, pow(abs(weights[j]), heightBlend));
 		}
 
 		float wsum = 0;

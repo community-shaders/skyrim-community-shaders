@@ -3,33 +3,40 @@
 #ifndef DIRECTINPUT_VERSION
 #	define DIRECTINPUT_VERSION 0x0800
 #endif
+#include <algorithm>
+#include <cmath>
 #include <dinput.h>
+#include <filesystem>
+#include <format>
+#include <fstream>
 #include <imgui_impl_dx11.h>
 #include <imgui_impl_win32.h>
 #include <imgui_internal.h>
 #include <imgui_stdlib.h>
+#include <iomanip>
+#include <string>
+#include <unordered_map>
+#include <vector>
 
-#include "DX12SwapChain.h"
 #include "Deferred.h"
 #include "Feature.h"
 #include "FeatureIssues.h"
 #include "FeatureVersions.h"
+#include "Features/Upscaling.h"
 #include "Menu/AdvancedSettingsRenderer.h"
-#include "Menu/DisplaySettingsRenderer.h"
 #include "Menu/FeatureListRenderer.h"
+#include "Menu/Fonts.h"
+#include "Menu/HomePageRenderer.h"
 #include "Menu/MenuHeaderRenderer.h"
 #include "Menu/OverlayRenderer.h"
 #include "Menu/SettingsTabRenderer.h"
 #include "Menu/ThemeManager.h"
 #include "ShaderCache.h"
 #include "State.h"
-#include "Streamline.h"
 #include "TruePBR.h"
-#include "Upscaling.h"
 #include "Util.h"
 #include "Utils/UI.h"
 
-#include "Features/LightLimitFix/ParticleLights.h"
 #include "Features/PerformanceOverlay.h"
 #include "Features/PerformanceOverlay/ABTesting/ABTestAggregator.h"
 #include "Features/PerformanceOverlay/ABTesting/ABTesting.h"
@@ -40,7 +47,10 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	Menu::ThemeSettings::PaletteColors,
 	Background,
 	Text,
-	Border)
+	WindowBorder,
+	FrameBorder,
+	Separator,
+	ResizeGrip)
 
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	Menu::ThemeSettings::StatusPaletteColors,
@@ -57,6 +67,20 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	ColorDefault,
 	ColorHovered,
 	MinimizedFactor)
+
+NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
+	Menu::ThemeSettings::ScrollbarOpacitySettings,
+	Background,
+	Thumb,
+	ThumbHovered,
+	ThumbActive)
+
+NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
+	Menu::ThemeSettings::FontRoleSettings,
+	Family,
+	Style,
+	File,
+	SizeScale)
 
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	ImGuiStyle,
@@ -98,10 +122,13 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	Menu::ThemeSettings,
 	FontSize,
+	FontName,
 	GlobalScale,
+	FontRoles,
 	UseSimplePalette,
 	ShowActionIcons,
 	TooltipHoverDelay,
+	ScrollbarOpacity,
 	Palette,
 	StatusPalette,
 	FeatureHeading,
@@ -114,10 +141,32 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	SkipCompilationKey,
 	EffectToggleKey,
 	OverlayToggleKey,
-	Theme)
+	FirstTimeSetupCompleted,
+	Theme,
+	SelectedThemePreset)
 
 bool IsEnabled = false;
 std::unordered_map<std::string, int> Menu::categoryCounts;
+
+std::optional<Menu::FontRole> Menu::ResolveFontRole(std::string_view key)
+{
+	for (size_t i = 0; i < FontRoleDescriptors.size(); ++i) {
+		if (FontRoleDescriptors[i].key == key) {
+			return static_cast<FontRole>(i);
+		}
+	}
+	return std::nullopt;
+}
+
+std::string Menu::BuildFontSignature(float baseFontSize) const
+{
+	return MenuFonts::BuildFontSignature(settings.Theme, baseFontSize);
+}
+
+const Menu::ThemeSettings::FontRoleSettings& Menu::GetDefaultFontRole(FontRole role)
+{
+	return MenuFonts::GetDefaultRole(role);
+}
 
 Menu::~Menu()
 {  // Release icon textures if loaded
@@ -125,7 +174,10 @@ Menu::~Menu()
 	uiIcons.loadSettings.Release();
 	uiIcons.clearCache.Release();
 	uiIcons.logo.Release();
+	uiIcons.featureSettingRevert.Release();
+	uiIcons.discord.Release();
 	uiIcons.characters.Release();
+	uiIcons.display.Release();
 	uiIcons.grass.Release();
 	uiIcons.lighting.Release();
 	uiIcons.sky.Release();
@@ -133,6 +185,7 @@ Menu::~Menu()
 	uiIcons.water.Release();
 	uiIcons.debug.Release();
 	uiIcons.materials.Release();
+	uiIcons.postProcessing.Release();
 
 	ImGui_ImplDX11_Shutdown();
 	ImGui_ImplWin32_Shutdown();
@@ -145,11 +198,126 @@ Menu::~Menu()
 void Menu::Load(json& o_json)
 {
 	settings = o_json;
+	bool hasThemeObject = o_json.contains("Theme") && o_json["Theme"].is_object();
+	bool hasFontRoles = hasThemeObject && o_json["Theme"].contains("FontRoles");
+	MenuFonts::NormalizeFontRoles(settings.Theme, hasFontRoles);
+	auto& bodyRole = settings.Theme.FontRoles[static_cast<size_t>(FontRole::Body)];
+	if (!Util::ValidateFont(bodyRole.File)) {
+		const auto& defaults = Menu::GetDefaultFontRole(FontRole::Body);
+		logger::warn("Font '{}' not found while loading settings, falling back to default font '{}'",
+			bodyRole.File, defaults.File);
+		settings.Theme.FontRoles[static_cast<size_t>(FontRole::Body)] = defaults;
+		settings.Theme.FontName = defaults.File;
+	}
+
+	// Apply Default Dark theme on first launch if no theme is selected
+	if (!settings.FirstTimeSetupCompleted && settings.SelectedThemePreset.empty()) {
+		// Ensure default themes are created/available
+		CreateDefaultThemes();
+
+		// Load the Default Dark theme and mark it as selected to prevent override
+		if (LoadThemePreset("Default")) {
+			settings.SelectedThemePreset = "Default";  // Mark as selected to prevent State::LoadTheme override
+			logger::info("Applied Default Dark theme on first launch");
+		} else {
+			logger::warn("Failed to load Default Dark theme on first launch");
+		}
+	}
 }
 
 void Menu::Save(json& o_json)
 {
+	settings.Theme.FontName = settings.Theme.FontRoles[static_cast<size_t>(FontRole::Body)].File;
 	o_json = settings;
+}
+
+void Menu::LoadTheme(json& o_json)
+{
+	if (o_json["Theme"].is_object()) {
+		bool hasFontRoles = o_json["Theme"].contains("FontRoles");
+		settings.Theme = o_json["Theme"];
+		MenuFonts::NormalizeFontRoles(settings.Theme, hasFontRoles);
+
+		auto& bodyRole = settings.Theme.FontRoles[static_cast<size_t>(FontRole::Body)];
+		if (!Util::ValidateFont(bodyRole.File)) {
+			const auto& defaults = Menu::GetDefaultFontRole(FontRole::Body);
+			logger::warn("Font '{}' not found, falling back to default font '{}'",
+				bodyRole.File, defaults.File);
+			settings.Theme.FontRoles[static_cast<size_t>(FontRole::Body)] = defaults;
+			settings.Theme.FontName = defaults.File;
+		}
+	}
+}
+
+void Menu::SaveTheme(json& o_json)
+{
+	settings.Theme.FontName = settings.Theme.FontRoles[static_cast<size_t>(FontRole::Body)].File;
+
+	if (!Util::ValidateFont(settings.Theme.FontName)) {
+		const auto& defaults = Menu::GetDefaultFontRole(FontRole::Body);
+		logger::warn("Font '{}' not found during save, falling back to default font '{}'",
+			settings.Theme.FontName, defaults.File);
+		settings.Theme.FontRoles[static_cast<size_t>(FontRole::Body)] = defaults;
+		settings.Theme.FontName = defaults.File;
+	}
+
+	o_json["Theme"] = settings.Theme;
+}
+
+std::vector<std::string> Menu::DiscoverThemes()
+{
+	auto themeManager = ThemeManager::GetSingleton();
+	if (themeManager) {
+		themeManager->DiscoverThemes();
+		return themeManager->GetThemeNames();
+	}
+	return {};
+}
+
+bool Menu::LoadThemePreset(const std::string& themeName)
+{
+	if (themeName.empty()) {
+		// Empty theme name means custom/user theme
+		settings.SelectedThemePreset = "";
+		return true;
+	}
+
+	auto themeManager = ThemeManager::GetSingleton();
+	json themeSettings;
+
+	if (themeManager->LoadTheme(themeName, themeSettings)) {
+		bool hasFontRoles = themeSettings.contains("FontRoles");
+		settings.Theme = themeSettings;
+		MenuFonts::NormalizeFontRoles(settings.Theme, hasFontRoles);
+		auto& bodyRole = settings.Theme.FontRoles[static_cast<size_t>(FontRole::Body)];
+		if (!Util::ValidateFont(bodyRole.File)) {
+			const auto& defaults = Menu::GetDefaultFontRole(FontRole::Body);
+			logger::warn("Font '{}' from theme '{}' not found, falling back to default font '{}'",
+				bodyRole.File, themeName, defaults.File);
+			settings.Theme.FontRoles[static_cast<size_t>(FontRole::Body)] = defaults;
+			settings.Theme.FontName = defaults.File;
+		}
+
+		settings.SelectedThemePreset = themeName;
+
+		// Schedule deferred font reload if font has changed
+		if (settings.Theme.FontName != cachedFontName) {
+			pendingFontReload = true;
+		}
+
+		logger::info("Loaded theme preset: {}", themeName);
+		return true;
+	} else {
+		logger::warn("Failed to load theme preset: {}", themeName);
+		return false;
+	}
+}
+
+void Menu::CreateDefaultThemes()
+{
+	// Use ThemeManager to create default theme files
+	auto themeManager = ThemeManager::GetSingleton();
+	themeManager->CreateDefaultThemeFiles();
 }
 
 void Menu::Init()
@@ -157,43 +325,38 @@ void Menu::Init()
 	// Setup Dear ImGui context
 	IMGUI_CHECKVERSION();
 	ImGui::CreateContext();
+
+	// IMPORTANT: Immediately override ImGui's default styles with our Default.json theme
+	// This prevents hardcoded ImGui defaults from ever showing through
+	auto* themeManager = ThemeManager::GetSingleton();
+	json defaultThemeSettings;
+	if (themeManager->LoadTheme("Default", defaultThemeSettings)) {
+		// Temporarily create a minimal theme structure to apply defaults
+		json tempSettings;
+		tempSettings["Theme"] = defaultThemeSettings;
+		LoadTheme(tempSettings);
+		logger::info("Applied Default.json theme immediately after ImGui context creation");
+	} else {
+		logger::warn("Could not load Default.json theme - trying direct force application");
+		// Last resort: Apply Default.json colors directly to ImGui
+		ThemeManager::ForceApplyDefaultTheme();
+	}
+
 	auto& imgui_io = ImGui::GetIO();
 	imgui_io.ConfigFlags = ImGuiConfigFlags_NavEnableKeyboard | ImGuiConfigFlags_NavEnableGamepad | ImGuiConfigFlags_DockingEnable;
 	imgui_io.BackendFlags = ImGuiBackendFlags_HasMouseCursors | ImGuiBackendFlags_RendererHasVtxOffset | ImGuiBackendFlags_HasGamepad;
 
-	// Enhanced font configuration for sharper text rendering
-	ImFontConfig font_config;
-	font_config.OversampleH = ThemeManager::Constants::FCONF_OVERSAMPLE_H;
-	font_config.OversampleV = ThemeManager::Constants::FCONF_OVERSAMPLE_V;
-	font_config.PixelSnapH = ThemeManager::Constants::FCONF_PIXELSNAP_H;
-	font_config.RasterizerMultiply = ThemeManager::Constants::FCONF_RASTERIZER_MULTIPLY;
+	cachedIniPath = Util::PathHelpers::GetImGuiIniPath().string();
+	imgui_io.IniFilename = cachedIniPath.c_str();
 
 	DXGI_SWAP_CHAIN_DESC desc{};
 	globals::d3d::swapChain->GetDesc(&desc);
 
-	float fontSize = settings.Theme.FontSize;
-
-	if (std::round(fontSize) != std::round(ThemeManager::Constants::DEFAULT_FONT_SIZE)) {
-		if (globals::state->screenSize.y > 0) {
-			fontSize = globals::state->screenSize.y * ThemeManager::Constants::DEFAULT_FONT_RATIO;
-		} else {
-			logger::warn("Menu::Init() - Failed to get game resolution from globals::state->screenSize.");
-		}
-	}
-
-	fontSize = std::clamp(fontSize, ThemeManager::Constants::MIN_FONT_SIZE, ThemeManager::Constants::MAX_FONT_SIZE);
-
-	if (!imgui_io.Fonts->AddFontFromFileTTF("Data\\Interface\\CommunityShaders\\Fonts\\Jost-Regular.ttf",
-			std::round(fontSize), &font_config)) {
-		logger::warn("Menu::Init() - Failed to load custom font. Using default font.");
-		imgui_io.Fonts->AddFontDefault();
-	}
-
-	imgui_io.FontGlobalScale = exp2(settings.Theme.GlobalScale);
-
 	// Setup Platform/Renderer backends
 	ImGui_ImplWin32_Init(desc.OutputWindow);
 	ImGui_ImplDX11_Init(globals::d3d::device, globals::d3d::context);
+
+	ThemeManager::ReloadFont(*this, cachedFontSize);
 
 	{
 		winrt::com_ptr<IDXGIDevice> dxgiDevice;
@@ -237,6 +400,10 @@ void Menu::DrawSettings()
 		OnFocusChanged();
 		focusChanged = false;
 	}
+
+	// Apply theme styling with universal contrast enhancement
+	ThemeManager::SetupImGuiStyle(*this);
+
 	ImGui::DockSpaceOverViewport(NULL, ImGuiDockNodeFlags_PassthruCentralNode);
 
 	ImGui::SetNextWindowPos(Util::GetNativeViewportSizeScaled(0.5f), ImGuiCond_FirstUseEver, ImVec2(0.5f, 0.5f));
@@ -260,7 +427,14 @@ void Menu::DrawSettings()
 		bool isDocked = ImGui::IsWindowDocked();
 		wasDocked = isDocked;
 
-		const float uiScale = exp2(settings.Theme.GlobalScale);  // Get current UI scale
+		float globalScale = settings.Theme.GlobalScale;
+
+		// Use default global scale (0.0) for built-in themes when GlobalScale equals the default
+		if (std::abs(globalScale - ThemeManager::Constants::DEFAULT_GLOBAL_SCALE) < 0.001f) {
+			globalScale = ThemeManager::Constants::DEFAULT_GLOBAL_SCALE;  // Ensure built-in themes stay at 0.0
+		}
+
+		const float uiScale = exp2(globalScale);  // Get current UI scale
 		// Check if we can show icons - require setting enabled and at least some icons loaded (for undocked)
 		// For docked mode, always show icons if textures are available
 		bool canShowIcons = settings.Theme.ShowActionIcons &&
@@ -288,8 +462,7 @@ void Menu::DrawSettings()
 			pendingFeatureSelection,
 			categoryExpansionStates,
 			[&]() { DrawGeneralSettings(); },
-			[&]() { DrawAdvancedSettings(); },
-			[&]() { DrawDisplaySettings(); });
+			[&]() { DrawAdvancedSettings(); });
 
 		ImGui::Spacing();
 		ImGui::SeparatorEx(ImGuiSeparatorFlags_Horizontal, ThemeManager::Constants::SEPARATOR_THICKNESS);
@@ -391,28 +564,13 @@ void Menu::DrawDisableAtBootSettings()
 	}
 }
 
-/**
- * @brief Renders the Display settings tab content
- *
- * Delegates rendering to DisplaySettingsRenderer to handle upscaling and frame
- * generation settings. Provides callbacks for feature status checking and upscaling
- * configuration while maintaining clean architecture separation.
- */
-void Menu::DrawDisplaySettings()
-{
-	DisplaySettingsRenderer::RenderDisplaySettings(
-		globals::state->upscalerLoaded,
-		[](const std::string& featureName) { return globals::state->IsFeatureDisabled(featureName); },
-		[]() { globals::upscaling->DrawSettings(); });
-}
-
 void Menu::DrawFooter()
 {
 	ImGui::BulletText(std::format("Game Version: {} {}", magic_enum::enum_name(REL::Module::GetRuntime()), Util::GetFormattedVersion(REL::Module::get().version()).c_str()).c_str());
 	ImGui::SameLine();
-	ImGui::BulletText(std::format("D3D12 Interop: {}", globals::upscaling->d3d12Interop ? "Active" : "Inactive").c_str());
+	ImGui::BulletText(std::format("D3D12 Swap Chain: {}", globals::features::upscaling.d3d12SwapChainActive ? "Active" : "Inactive").c_str());
 	ImGui::SameLine();
-	ImGui::Text(std::format("GPU: {}", globals::state->adapterDescription.c_str()).c_str());
+	ImGui::BulletText(std::format("GPU: {}", globals::state->adapterDescription.c_str()).c_str());
 }
 
 /**
@@ -427,13 +585,26 @@ void Menu::DrawFooter()
  */
 void Menu::DrawOverlay()
 {
+	// Process deferred font reload BEFORE any ImGui operations
+	// This is the safest place to do font atlas modifications
+	if (pendingFontReload) {
+		// Call ReloadFont first - only clear flag if it succeeds
+		if (ThemeManager::ReloadFont(*this, cachedFontSize)) {
+			// Reload completed successfully
+			pendingFontReload = false;
+		} else {
+			// Reload failed - keep flag true to retry next frame
+			logger::warn("Menu::DrawOverlay() - Font reload failed, will retry next frame");
+		}
+	}
+
 	OverlayRenderer::RenderOverlay(
 		*this,
 		[this]() { ProcessInputEventQueue(); },
 		[this]() { DrawSettings(); },
 		[](uint32_t key) { return Util::Input::KeyIdToString(key); },
 		cachedFontSize,
-		settings.Theme.FontSize);
+		ThemeManager::ResolveFontSize(*this));
 }
 
 /**
@@ -612,7 +783,7 @@ void Menu::ProcessInputEvents(RE::InputEvent* const* a_events)
 
 bool Menu::ShouldSwallowInput()
 {
-	return IsEnabled;
+	return IsEnabled || HomePageRenderer::ShouldShowFirstTimeSetup();
 }
 
 void Menu::SelectFeatureMenu(const std::string& featureName)

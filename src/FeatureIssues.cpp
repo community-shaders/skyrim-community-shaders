@@ -51,14 +51,6 @@ namespace FeatureIssues
 										  .removedInVersion = { 1, 0, 0 },
 										  .modifiedShaderDirectory = false,
 										  .issueType = FeatureIssueInfo::IssueType::OBSOLETE } },
-		{ "TerrainBlending", { .shortName = "TerrainBlending",
-								 .displayName = "Terrain Blending",
-								 .rejectionReason = "Feature removed due to broken implementation causing visual artifacts",
-								 .replacementFeature = "",
-								 .userMessage = "This feature has been removed due to visual artifacts. No replacement is available. Remove it from your setup.",
-								 .removedInVersion = { 1, 0, 0 },
-								 .modifiedShaderDirectory = false,
-								 .issueType = FeatureIssueInfo::IssueType::OBSOLETE } },
 		{ "TreeLODLighting", { .shortName = "TreeLODLighting",
 								 .displayName = "Tree LOD Lighting",
 								 .rejectionReason = "Functionality integrated into base CS lighting system",
@@ -362,6 +354,7 @@ namespace FeatureIssues
 		std::vector<const FeatureIssueInfo*> unknownIssues;
 		std::vector<const FeatureIssueInfo*> obsoleteIssues;
 		std::vector<const FeatureIssueInfo*> versionIssues;
+		std::vector<const FeatureIssueInfo*> overrideIssues;
 
 		for (const auto& issue : featureIssues) {
 			if (issue.IsObsolete() && issue.ModifiedShaderDirectory()) {
@@ -374,6 +367,8 @@ namespace FeatureIssues
 				obsoleteIssues.push_back(&issue);
 			} else if (issue.IsVersionMismatch()) {
 				versionIssues.push_back(&issue);
+			} else if (issue.IsOverrideFailed()) {
+				overrideIssues.push_back(&issue);
 			}
 		}
 		// Shader Breaking Features Section (most critical)
@@ -412,11 +407,19 @@ namespace FeatureIssues
 				DrawFeatureIssue(*issue, theme.StatusPalette.Warning);
 			}
 		}
+		// Override Failures Section
+		if (auto section = Util::SectionWrapper("Override Failures",
+				"The following override files failed to load or apply. Check the file format and content.",
+				theme.StatusPalette.Error, !overrideIssues.empty())) {
+			for (const auto* issue : overrideIssues) {
+				DrawFeatureIssue(*issue, theme.StatusPalette.Error);
+			}
+		}
 
 		// Common cleanup actions section
 		ImGui::TextColored(theme.Palette.Text, "Cleanup Actions:");
 		if (ImGui::Button("Open Features Folder")) {
-			std::filesystem::path featuresPath = Util::PathHelpers::GetFeaturesPath();
+			std::filesystem::path featuresPath = Util::PathHelpers::GetFeaturesRealPath();
 			ShellExecuteA(NULL, "open", featuresPath.string().c_str(), NULL, NULL, SW_SHOWNORMAL);
 		}
 		if (auto _tt = Util::HoverTooltipWrapper()) {
@@ -424,7 +427,7 @@ namespace FeatureIssues
 		}
 		ImGui::SameLine();
 		if (ImGui::Button("Open Shaders Directory")) {
-			std::filesystem::path shadersPath = Util::PathHelpers::GetShadersPath();
+			std::filesystem::path shadersPath = Util::PathHelpers::GetShadersRealPath();
 			ShellExecuteA(NULL, "open", shadersPath.string().c_str(), NULL, NULL, SW_SHOWNORMAL);
 		}
 		if (auto _tt = Util::HoverTooltipWrapper()) {
@@ -1433,7 +1436,7 @@ namespace FeatureIssues
 			auto* menu = Menu::GetSingleton();
 			const auto& themeSettings = menu->GetTheme();
 
-			if (ImGui::CollapsingHeader("Testing", ImGuiTreeNodeFlags_DefaultOpen | ImGuiTreeNodeFlags_OpenOnArrow | ImGuiTreeNodeFlags_OpenOnDoubleClick)) {
+			if (ImGui::CollapsingHeader("Testing", ImGuiTreeNodeFlags_OpenOnArrow | ImGuiTreeNodeFlags_OpenOnDoubleClick)) {
 				{
 					auto sectionWrapper = Util::SectionWrapper("Feature Issue Testing",
 						"These tools create test INI files to trigger all known feature issue types for testing purposes.",
@@ -1456,7 +1459,7 @@ namespace FeatureIssues
 						{
 							auto disableGuard = Util::DisableGuard(hasActiveTests);
 							auto buttonStyle = Util::StyledButtonWrapper(
-								themeSettings.Palette.Border,
+								themeSettings.Palette.FrameBorder,
 								themeSettings.StatusPalette.RestartNeeded,
 								themeSettings.StatusPalette.CurrentHotkey);
 
@@ -1479,7 +1482,7 @@ namespace FeatureIssues
 						{
 							auto disableGuard = Util::DisableGuard(!hasActiveTests);
 							auto buttonStyle = Util::StyledButtonWrapper(
-								themeSettings.Palette.Border,
+								themeSettings.Palette.FrameBorder,
 								themeSettings.StatusPalette.Error,
 								themeSettings.StatusPalette.CurrentHotkey);
 
