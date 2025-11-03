@@ -4,12 +4,15 @@
 
 ConstantBuffer<FrameData> Frame         : register(b0);
 
+SamplerState DiffuseSampler             : register(s0);
+
 RaytracingAccelerationStructure Scene   : register(t0, space0);
 StructuredBuffer<Light> Lights          : register(t1, space0);
 StructuredBuffer<Instance> Instances    : register(t2, space0);
 
 StructuredBuffer<Vertex> Vertices[]     : register(t0, space1);
 StructuredBuffer<uint3> Triangles[]     : register(t0, space2);
+Texture2D DiffuseTextures[]             : register(t0, space3);
 
 static const float scale = GAME_UNIT_TO_M;
 static const float blendSharpness = 4.0f;
@@ -62,6 +65,7 @@ void HitMesh(inout Payload payload, in BuiltInTriangleIntersectionAttributes att
     
     StructuredBuffer<Vertex> meshVertices = Vertices[meshID];
     StructuredBuffer<uint3> meshTriangles = Triangles[meshID];
+    Texture2D diffuseTexture = DiffuseTextures[meshID];
     
     uint3 meshTriangle = meshTriangles[PrimitiveIndex()];
     
@@ -73,7 +77,7 @@ void HitMesh(inout Payload payload, in BuiltInTriangleIntersectionAttributes att
     float w = attribs.barycentrics.y;
     float u = 1.0 - v - w;
       
-    half2 texCoord = vertice0.Texcoord0.unpack() * u + vertice1.Texcoord0.unpack() * v + vertice2.Texcoord0.unpack() * w;
+    half2 texCoord0 = vertice0.Texcoord0.unpack() * u + vertice1.Texcoord0.unpack() * v + vertice2.Texcoord0.unpack() * w;
     
     half4 normal0 = vertice0.Normal.unpack();
     half4 normal1 = vertice1.Normal.unpack();   
@@ -82,7 +86,8 @@ void HitMesh(inout Payload payload, in BuiltInTriangleIntersectionAttributes att
     half3 normal = normalize(normal0.xyz * u + normal1.xyz * v + normal2.xyz * w); 
     half3 worldNormal = normalize(mul((float3x3)ObjectToWorld3x4(), normal));
 
-    float3 albedo = Triplanar(worldPosition, worldNormal);
+    //float3 albedo = Triplanar(worldPosition, worldNormal);
+    float3 albedo = diffuseTexture.SampleLevel(DiffuseSampler, texCoord0, 0).rgb;
     
     // Directional Light
     float3 lighting = 0.0f;

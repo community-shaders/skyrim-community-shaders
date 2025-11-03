@@ -55,6 +55,8 @@ void RaytracedGI::DrawSettings()
 
 	if (ImGui::TreeNodeEx("Statistics", ImGuiTreeNodeFlags_DefaultOpen)) {
 		ImGui::Text(std::format("Mesh Data (vertex, index and BLAS buffers): {}", meshVector.size()).c_str());
+		ImGui::Text(std::format("Shared Textures: {}", sharedTextures.size()).c_str());
+
 		ImGui::Text(std::format("Instances: {}", instances.size()).c_str());
 		ImGui::Text(std::format("Lights: {}", lightData.size()).c_str());
 
@@ -77,7 +79,7 @@ void RaytracedGI::SetupResources()
 	{
 		D3D12_DESCRIPTOR_HEAP_DESC commonHeapDesc = {
 			.Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV,
-			.NumDescriptors = 4096,
+			.NumDescriptors = 4096 + 2048,
 			.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE
 		};
 		d3d12Device->CreateDescriptorHeap(&commonHeapDesc, IID_PPV_ARGS(&commonHeap));	
@@ -474,6 +476,9 @@ void RaytracedGI::CreateBuffers()
 				if (vertexBuffer != nullptr && indexBuffer != nullptr) // I don't think it is possible for these to be different (eg. one instance doesn't use the same vertex and index buffers with the rest)
 					return RE::BSVisit::BSVisitControl::kContinue;
 
+				ID3D12Resource* diffuseTexture = nullptr;
+				ID3D12Resource* glowTexture = nullptr;
+
 				std::wstring geometryNameW = ToWide(geometry->name.c_str());
 
 				//logger::info(fmt::runtime("Geometry [{}]"), geometry->name.c_str());
@@ -510,8 +515,8 @@ void RaytracedGI::CreateBuffers()
 						if (vertexFlags & RE::BSGraphics::Vertex::VF_UV) {
 							const uint16_t* texcoord = reinterpret_cast<const uint16_t*>(vtx + uvOffset);
 
-							vertexData.Texcoord[0] = texcoord[0];
-							vertexData.Texcoord[1] = texcoord[1];
+							vertexData.Texcoord0[0] = texcoord[0];
+							vertexData.Texcoord0[1] = texcoord[1];
 						}
 
 						if (vertexFlags & RE::BSGraphics::Vertex::VF_NORMAL) {
@@ -532,9 +537,9 @@ void RaytracedGI::CreateBuffers()
 							vertexData.Color[3] = col[3];
 						}
 
-						/*logger::info(fmt::runtime("Vertex {} - Position [{}, {}, {}], Texcoord [{}, {}], Normal [{}, {}, {}], Color [{}, {}, {}]"), i, 
+						/*logger::info(fmt::runtime("Vertex {} - Position [{}, {}, {}], Texcoord0 [{}, {}], Normal [{}, {}, {}], Color [{}, {}, {}]"), i, 
 							vertexData.Position.x, vertexData.Position.y, vertexData.Position.z, 
-							vertexData.Texcoord[0], vertexData.Texcoord[1],
+							vertexData.Texcoord0[0], vertexData.Texcoord0[1],
 							vertexData.Normal.x, vertexData.Normal.y, vertexData.Normal.z,
 							vertexData.Color[0], vertexData.Color[1], vertexData.Color[2], vertexData.Color[3]);*/
 
@@ -565,6 +570,68 @@ void RaytracedGI::CreateBuffers()
 					//DX::ThrowIfFailed(indexBuffer->SetName((LPCWSTR)std::format("Index Buffer - {}", geometry->name.c_str()).c_str()));
 				}
 
+				// Register textures buffer
+				{
+					using State = RE::BSGeometry::States;
+					using Feature = RE::BSShaderMaterial::Feature;
+
+					auto geometryRuntimeData = geometry->GetGeometryRuntimeData();
+
+					auto effect = geometryRuntimeData.properties[State::kEffect].get();
+
+					if (effect) {
+						auto lightingShader = netimmerse_cast<RE::BSLightingShaderProperty*>(effect);
+
+						if (lightingShader) {
+							auto material = lightingShader->material;
+
+							if (material) {
+								auto lightingBaseMaterial = static_cast<RE::BSLightingShaderMaterialBase*>(material);
+
+								auto niDiffuseTexture = lightingBaseMaterial->diffuseTexture;
+								auto bsDiffuseTexture = niDiffuseTexture->rendererTexture;
+
+								//ID3D11ShaderResourceView* d3d11DiffuseSRV = bsDiffuseTexture->resourceView;
+
+								if (auto it = sharedTextures.find(bsDiffuseTexture->texture); it != sharedTextures.end()) {
+									diffuseTexture = it->second.get();
+								} else {
+									logger::warn(fmt::runtime("[RTGI] Diffuse texture not found"));
+								}
+
+								if (material->GetFeature() == Feature::kGlowMap) {
+									auto lightingGlowMaterial = static_cast<RE::BSLightingShaderMaterialGlowmap*>(material);
+
+									RE::NiSourceTexture* niTextures;
+									auto niTexturesCount = lightingGlowMaterial->GetTextures(&niTextures);
+
+									if (niTexturesCount > 1) {
+										auto bsGlowTexture = niTextures[2].rendererTexture;
+
+										if (auto it = sharedTextures.find(bsGlowTexture->texture); it != sharedTextures.end()) {
+											glowTexture = it->second.get();
+										} else {
+											logger::warn(fmt::runtime("[RTGI] Glow texture not found"));
+										}
+									}
+								}
+
+								/*if (material->GetFeature() == Feature::kDefault)
+								{
+									auto lightingDefaultMaterial = static_cast<RE::BSLightingShaderMaterial*>(material);
+
+								} else if (material->GetFeature() == Feature::kGlowMap) 
+								{
+									auto lightingGlowMaterial = static_cast<RE::BSLightingShaderMaterialGlowmap*>(material);
+									
+								}*/
+							}
+						}
+					}
+
+
+				}
+
 				// Create BLAS
 				if (blasBuffer == nullptr) 
 				{
@@ -577,7 +644,13 @@ void RaytracedGI::CreateBuffers()
 
 					if (inserted) 
 					{
-						meshVector.emplace_back(vertexCount, indexCount, std::move(vertexBuffer), std::move(indexBuffer), std::move(blasBuffer));
+						meshVector.emplace_back(
+							vertexCount, 
+							indexCount, 
+							std::move(vertexBuffer), 
+							std::move(indexBuffer), 
+							std::move(blasBuffer),
+							MaterialData(diffuseTexture, glowTexture));
 					}
 				}
 			}
@@ -658,7 +731,7 @@ void RaytracedGI::CreateBuffers()
 			handle.Offset(1, handleIncrement);
 		}
 
-		// Index (Structured buffer)
+		// Index/Triangle (Structured buffer)
 		for (const auto& meshData : meshVector)
 		{
 			D3D12_SHADER_RESOURCE_VIEW_DESC ibDesc = {};
@@ -672,6 +745,26 @@ void RaytracedGI::CreateBuffers()
 
 			d3d12Device->CreateShaderResourceView(meshData.indexBuffer.get(), &ibDesc, handle);
 			handle.Offset(1, handleIncrement);	
+		}
+
+		// Diffuse Textures
+		for (const auto& meshData : meshVector) {
+			if (meshData.material.diffuseTexture) {
+				D3D12_RESOURCE_DESC texResDesc = meshData.material.diffuseTexture->GetDesc();
+
+				D3D12_SHADER_RESOURCE_VIEW_DESC texSrvDesc = {};
+				texSrvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
+				texSrvDesc.Format = texResDesc.Format;  // Texture format
+				texSrvDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
+				texSrvDesc.Texture2D.MostDetailedMip = 0;
+				texSrvDesc.Texture2D.MipLevels = texResDesc.MipLevels;
+				texSrvDesc.Texture2D.PlaneSlice = 0;
+				texSrvDesc.Texture2D.ResourceMinLODClamp = 0.0f;
+
+				d3d12Device->CreateShaderResourceView(meshData.material.diffuseTexture, &texSrvDesc, handle);
+			}
+
+			handle.Offset(1, handleIncrement);
 		}
 	}
 
@@ -880,8 +973,13 @@ void RaytracedGI::DrawRTGI()
 		ibHandle.ptr += handleIncrement * (4 + meshVector.size());
 		commandList->SetComputeRootDescriptorTable(3, ibHandle);
 
-		// Parameter 4: Constant buffer
-		commandList->SetComputeRootConstantBufferView(4, frameBuffer->GetGPUVirtualAddress());
+		// Parameter 4: Texture srvs - offset 4 + mesh count * 2
+		D3D12_GPU_DESCRIPTOR_HANDLE texHandle = heapStart;
+		texHandle.ptr += handleIncrement * (4 + meshVector.size() * 2);
+		commandList->SetComputeRootDescriptorTable(4, texHandle);
+
+		// Parameter 5: Constant buffer
+		commandList->SetComputeRootConstantBufferView(5, frameBuffer->GetGPUVirtualAddress());
 
 		auto rtDesc = diffuseGITexture->resource->GetDesc();
 
@@ -1077,7 +1175,7 @@ static std::wstring GetLatestWinPixGpuCapturerPath()
 	return pixInstallationPath / newestVersionFound / L"WinPixGpuCapturer.dll";
 }
 
-void RaytracedGI::InitD3D12(ID3D11Device* ppDevice, ID3D11DeviceContext* ppImmediateContext, IDXGIAdapter* a_adapter)
+void RaytracedGI::InitD3D12(ID3D11Device* ppDevice, ID3D11DeviceContext* pImmediateContext, IDXGIAdapter* a_adapter)
 {
 	Hooks::InstallD3D11Hooks(ppDevice);
 
@@ -1095,10 +1193,11 @@ void RaytracedGI::InitD3D12(ID3D11Device* ppDevice, ID3D11DeviceContext* ppImmed
 	DX::ThrowIfFailed(ppDevice->QueryInterface(IID_PPV_ARGS(&d3d11Device)));
 
 	// Set Context Device
-	DX::ThrowIfFailed(ppImmediateContext->QueryInterface(IID_PPV_ARGS(&d3d11Context)));
+	DX::ThrowIfFailed(pImmediateContext->QueryInterface(IID_PPV_ARGS(&d3d11Context)));
 
 	// Create debug device
-	/*{
+	if (!settings.EnablePIXCapture)
+	{
 		winrt::com_ptr<ID3D12Debug> debugController;
 		if (SUCCEEDED(D3D12GetDebugInterface(IID_PPV_ARGS(&debugController)))) {
 			debugController->EnableDebugLayer();
@@ -1108,7 +1207,7 @@ void RaytracedGI::InitD3D12(ID3D11Device* ppDevice, ID3D11DeviceContext* ppImmed
 				debugController1->SetEnableGPUBasedValidation(TRUE);
 			}
 		}
-	}*/
+	}
 
 	if (settings.EnablePIXCapture) {
 		DX::ThrowIfFailed(DXGIGetDebugInterface1(0, IID_PPV_ARGS(&ga)));
@@ -1184,21 +1283,33 @@ void RaytracedGI::CreateRootSignature()
 		2,         // space2
 		D3D12_DESCRIPTOR_RANGE_FLAG_DESCRIPTORS_VOLATILE);
 
+	// Textures (unbounded)
+	CD3DX12_DESCRIPTOR_RANGE1 texturesRange;
+	texturesRange.Init(
+		D3D12_DESCRIPTOR_RANGE_TYPE_SRV,
+		UINT_MAX,  // Unbounded
+		0,         // t0
+		3,         // space3
+		D3D12_DESCRIPTOR_RANGE_FLAG_DESCRIPTORS_VOLATILE);
+
 	// Root parameters
-	CD3DX12_ROOT_PARAMETER1 params[5];
+	CD3DX12_ROOT_PARAMETER1 params[6];
 	params[0].InitAsDescriptorTable(1, &uavRange);           // Parameter 0: UAV
 	params[1].InitAsDescriptorTable(3, fixedSrvRanges);      // Parameter 1: Scene + Lights + Index map
 	params[2].InitAsDescriptorTable(1, &vertexBufferRange);  // Parameter 2: Vertex buffers
 	params[3].InitAsDescriptorTable(1, &indexBufferRange);   // Parameter 3: Index buffers
-	params[4].InitAsConstantBufferView(0, 0);                // Parameter 4: CBV
+	params[4].InitAsDescriptorTable(1, &texturesRange);      // Parameter 3: Textures
+	params[5].InitAsConstantBufferView(0, 0);                // Parameter 4: CBV
+
+	CD3DX12_STATIC_SAMPLER_DESC staticSampler(0);  // register s0
 
 	// Create root signature
 	CD3DX12_VERSIONED_ROOT_SIGNATURE_DESC rootSigDesc;
 	rootSigDesc.Init_1_1(
 		_countof(params),
 		params,
-		0,
-		nullptr,
+		1,
+		&staticSampler,
 		D3D12_ROOT_SIGNATURE_FLAG_NONE);
 
 	winrt::com_ptr<ID3DBlob> signature;

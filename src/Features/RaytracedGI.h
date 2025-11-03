@@ -26,6 +26,8 @@
 #include <directxpackedvector.h>
 #include "Features/RaytracedGI/Buffer.h"
 #include "LightLimitFix.h"
+#include <DirectXTex.h>
+#include <shared_mutex>
 
 #define NTDDI_VERSION NTDDI_WINBLUE
 
@@ -94,7 +96,7 @@ struct RaytracedGI : public Feature
 	void CompileComputeShaders();
 
 	void Initialize();
-	void InitD3D12(ID3D11Device* ppDevice, ID3D11DeviceContext* ppImmediateContext, IDXGIAdapter* a_adapter);
+	void InitD3D12(ID3D11Device* ppDevice, ID3D11DeviceContext* pImmediateContext, IDXGIAdapter* a_adapter);
 	void CreateRootSignature();
 	ID3D12Resource* MakeAccelerationStructure(const D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_INPUTS& inputs, UINT64* updateScratchSize = nullptr);
 	void Flush();
@@ -143,7 +145,7 @@ struct RaytracedGI : public Feature
 	struct Settings
 	{
 		bool Enabled = true;
-		bool EnablePIXCapture = true;
+		bool EnablePIXCapture = false;
 	} settings;
 
 	struct Light
@@ -178,11 +180,13 @@ struct RaytracedGI : public Feature
 	winrt::com_ptr<IDXGraphicsAnalysis> ga = nullptr;
 	bool capture = false;
 
+	bool releaseHooked = false;
+
 	#pragma pack(push, 1)
 	struct Vertex
 	{
 		float3 Position;
-		uint16_t Texcoord[2];
+		uint16_t Texcoord0[2];
 		uint8_t Normal[4];
 		uint8_t Color[4];
 	};
@@ -193,13 +197,21 @@ struct RaytracedGI : public Feature
 		uint MeshID;
 	};
 
+	// do I call them vanilla Diffuse/Glow or CS Albedo/Emissive??
+	struct MaterialData
+	{
+		ID3D12Resource* diffuseTexture = nullptr;
+		ID3D12Resource* glowTexture = nullptr;
+	};
+
 	struct MeshData
 	{
 		uint vertexCount;
 		uint indexCount;
-		winrt::com_ptr<ID3D12Resource> vertexBuffer;
-		winrt::com_ptr<ID3D12Resource> indexBuffer;
-		winrt::com_ptr<ID3D12Resource> blasBuffer;
+		winrt::com_ptr<ID3D12Resource> vertexBuffer = nullptr;
+		winrt::com_ptr<ID3D12Resource> indexBuffer = nullptr;
+		winrt::com_ptr<ID3D12Resource> blasBuffer = nullptr;
+		MaterialData material;
 	};
 
 	eastl::vector<MeshData> meshVector;
@@ -207,6 +219,8 @@ struct RaytracedGI : public Feature
 
 	eastl::vector<Instance> instanceMap;
 	winrt::com_ptr<ID3D12Resource> instanceMapBuffer = nullptr;
+
+	eastl::unordered_map<ID3D11Texture2D*, winrt::com_ptr<ID3D12Resource>> sharedTextures;
 
 	struct InstanceData
 	{
@@ -263,6 +277,8 @@ struct RaytracedGI : public Feature
 	eastl::unique_ptr<WrappedResource> diffuseGITexture = nullptr;
 	eastl::unique_ptr<WrappedResource> specularGITexture = nullptr;
 
+	std::shared_mutex mutex;
+
 	struct Hooks
 	{
 		struct ID3D11Buffer_Release
@@ -281,42 +297,150 @@ struct RaytracedGI : public Feature
 		{
 			static HRESULT WINAPI thunk(ID3D11Device* This, const D3D11_TEXTURE2D_DESC* pDesc, const D3D11_SUBRESOURCE_DATA* pInitialData, ID3D11Texture2D** ppTexture2D)
 			{
-				const auto format = magic_enum::enum_name(pDesc->Format);
-				const auto usage = magic_enum::enum_name(pDesc->Usage);
+				D3D11_TEXTURE2D_DESC descCopy = *pDesc;
+				const D3D11_SUBRESOURCE_DATA* initialDataCopy = pInitialData;
 
-				const auto getFlags = [](uint value, const auto&entries) {
-					std::string flags;
+				auto& rtgi = globals::features::raytracedGI;
 
-					for (const auto& [flag, name] : entries) {
-						if ((value & static_cast<uint>(flag)) != 0) {
-							flags += fmt::format("{} ", name);
-						}
+				bool loaded = rtgi.loaded;
+
+				bool shareTexture = false;
+
+				std::vector<D3D11_SUBRESOURCE_DATA> initialDataLocal;
+				std::vector<DirectX::ScratchImage> decompressedMips;
+
+				if (loaded && pDesc && pInitialData && pDesc->ArraySize == 1 && pDesc->Usage == D3D11_USAGE_DEFAULT && pDesc->BindFlags == D3D11_BIND_SHADER_RESOURCE && pDesc->MiscFlags == 0 && pDesc->CPUAccessFlags == 0) {
+					switch (pDesc->Format) {
+						case DXGI_FORMAT_BC4_UNORM:
+							descCopy.Format = DXGI_FORMAT_R8_UNORM;
+							break;
+						case DXGI_FORMAT_BC4_SNORM:
+							descCopy.Format = DXGI_FORMAT_R8_SNORM;
+							break;
+						case DXGI_FORMAT_BC7_UNORM:
+							descCopy.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+							break;
+						case DXGI_FORMAT_BC7_UNORM_SRGB:
+							descCopy.Format = DXGI_FORMAT_R8G8B8A8_UNORM_SRGB;
+							break;
+						default:
+							break;
 					}
 
-					return flags;
-				};
+					if (pDesc->Format != descCopy.Format) {
+						initialDataLocal.resize(pDesc->MipLevels);
+						decompressedMips.resize(pDesc->MipLevels);
 
-				auto bindEntries = magic_enum::enum_entries<D3D11_BIND_FLAG>();
-				auto miscEntries = magic_enum::enum_entries<D3D11_RESOURCE_MISC_FLAG>();
-				std::array cpuEntries = {
-					std::pair{ D3D11_CPU_ACCESS_WRITE, "D3D11_CPU_ACCESS_WRITE" },
-					std::pair{ D3D11_CPU_ACCESS_READ, "D3D11_CPU_ACCESS_READ" }
-				};
+						for (UINT mip = 0; mip < pDesc->MipLevels; ++mip) {
+							DirectX::Image src;
+							src.width = std::max(1u, pDesc->Width >> mip);
+							src.height = std::max(1u, pDesc->Height >> mip);
+							src.format = pDesc->Format;
+							src.rowPitch = pInitialData[mip].SysMemPitch;
+							src.slicePitch = pInitialData[mip].SysMemSlicePitch;
+							src.pixels = (uint8_t*)pInitialData[mip].pSysMem;
 
-				auto bindFlags = getFlags(pDesc->BindFlags, bindEntries);
-				auto miscFlags = getFlags(pDesc->MiscFlags, miscEntries);
-				auto cpuFlags = getFlags(pDesc->CPUAccessFlags, cpuEntries);
+							DX::ThrowIfFailed(DirectX::Decompress(src, descCopy.Format, decompressedMips[mip]));
 
-				logger::info(fmt::runtime("ID3D11Device_CreateTexture2D - Width: {}, Height: {} Format: {}, Usage: {}, Bind Flags: ({}), Misc Flags: ({}), CPU Flags: {} ({}), Mip levels: {}"), pDesc->Width, pDesc->Height, format, usage, bindFlags, miscFlags, pDesc->CPUAccessFlags, cpuFlags, pDesc->MipLevels);
+							const DirectX::Image* img = decompressedMips[mip].GetImage(0, 0, 0);
+							initialDataLocal[mip].pSysMem = img->pixels;
+							initialDataLocal[mip].SysMemPitch = static_cast<UINT>(img->rowPitch);
+							initialDataLocal[mip].SysMemSlicePitch = static_cast<UINT>(img->slicePitch);
+						}
 
-				D3D11_TEXTURE2D_DESC descCopy = *pDesc;
+						initialDataCopy = initialDataLocal.data();  // point to new mip data
+					}
 
-				//if (pDesc->Usage == D3D11_USAGE_DEFAULT && (descCopy.BindFlags & static_cast<uint>(D3D11_BIND_RENDER_TARGET)) == 0 && (descCopy.MiscFlags & static_cast<uint>(D3D11_RESOURCE_MISC_GENERATE_MIPS)) == 0 && pDesc->MipLevels == 1)
-				if (pDesc->Usage == D3D11_USAGE_DEFAULT && descCopy.BindFlags == D3D11_BIND_SHADER_RESOURCE)
 					descCopy.MiscFlags |= D3D11_RESOURCE_MISC_SHARED | D3D11_RESOURCE_MISC_SHARED_NTHANDLE;
+					shareTexture = true;
+				}
 
-				return func(This, &descCopy, pInitialData, ppTexture2D);
+				HRESULT hr = func(This, &descCopy, initialDataCopy, ppTexture2D);
+
+				if (SUCCEEDED(hr) && shareTexture) {
+					winrt::com_ptr<IDXGIResource1> dxgiResource = nullptr;
+					DX::ThrowIfFailed((*ppTexture2D)->QueryInterface(IID_PPV_ARGS(dxgiResource.put())));
+
+					HANDLE sharedHandle = nullptr;
+					DX::ThrowIfFailed(dxgiResource->CreateSharedHandle(nullptr, DXGI_SHARED_RESOURCE_READ, nullptr, &sharedHandle));
+
+					winrt::com_ptr<ID3D12Resource> resource = nullptr;
+					DX::ThrowIfFailed(rtgi.d3d12Device->OpenSharedHandle(sharedHandle, IID_PPV_ARGS(resource.put())));
+					CloseHandle(sharedHandle);
+
+					rtgi.sharedTextures.emplace(*ppTexture2D, std::move(resource));
+
+					std::lock_guard lock{ rtgi.mutex };
+
+					if (!rtgi.releaseHooked) {
+						rtgi.releaseHooked = true;
+						stl::detour_vfunc<2, ID3D11Texture2D_Release>(*ppTexture2D);
+					}
+				}
+
+				return hr;
 			}
+			static inline REL::Relocation<decltype(thunk)> func;
+		};
+
+		struct ID3D11Device_CreateShaderResourceView
+		{
+			static HRESULT WINAPI thunk(ID3D11Device* This, ID3D11Resource* pResource, const D3D11_SHADER_RESOURCE_VIEW_DESC* pDesc, ID3D11ShaderResourceView** ppSRV)
+			{
+				D3D11_SHADER_RESOURCE_VIEW_DESC descCopy = {};
+				const D3D11_SHADER_RESOURCE_VIEW_DESC* descPtr = pDesc;
+
+				if (pDesc)
+					descCopy = *pDesc;
+
+				if (pResource && ppSRV && pDesc && pDesc->ViewDimension == D3D11_SRV_DIMENSION_TEXTURE2D) {
+					auto& rtgi = globals::features::raytracedGI;
+
+					std::lock_guard lock{ rtgi.mutex };
+
+					switch (pDesc->Format) {
+						case DXGI_FORMAT_BC4_UNORM:
+							descCopy.Format = DXGI_FORMAT_R8_UNORM;
+							break;
+						case DXGI_FORMAT_BC4_SNORM:
+							descCopy.Format = DXGI_FORMAT_R8_SNORM;
+							break;
+						case DXGI_FORMAT_BC7_UNORM:
+							descCopy.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+							break;
+						case DXGI_FORMAT_BC7_UNORM_SRGB:
+							descCopy.Format = DXGI_FORMAT_R8G8B8A8_UNORM_SRGB;
+							break;
+						default:
+							break;
+					}
+
+					if (pDesc->Format != descCopy.Format) {
+						if (rtgi.sharedTextures.find(static_cast<ID3D11Texture2D*>(pResource)) != rtgi.sharedTextures.end()) {
+							descPtr = &descCopy;
+						}
+					}
+				}
+
+				return func(This, pResource, descPtr, ppSRV);
+			}
+
+			static inline REL::Relocation<decltype(thunk)> func;
+		};
+
+		struct ID3D11Texture2D_Release
+		{
+			static ULONG WINAPI thunk(ID3D11Texture2D* This)
+			{			
+				ULONG refCount = func(This);
+
+				if (refCount == 0) {
+					globals::features::raytracedGI.sharedTextures.erase(This);
+				}
+
+				return refCount;
+			}
+
 			static inline REL::Relocation<decltype(thunk)> func;
 		};
 
@@ -363,10 +487,28 @@ struct RaytracedGI : public Feature
 			logger::info("[RTGI] Installed hooks");
 		}
 
+		static void CreateDummyTexture(ID3D11Device* device, ID3D11Texture2D** texture)
+		{
+			D3D11_TEXTURE2D_DESC desc{};
+			desc.Width = 1;
+			desc.Height = 1;
+			desc.MipLevels = 1;
+			desc.ArraySize = 1;
+			desc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+			desc.SampleDesc.Count = 1;
+			desc.Usage = D3D11_USAGE_DEFAULT;
+			desc.BindFlags = D3D11_BIND_SHADER_RESOURCE;
+			desc.CPUAccessFlags = 0;
+			desc.MiscFlags = 0;
+	
+			DX::ThrowIfFailed(device->CreateTexture2D(&desc, nullptr, texture));
+		}
+
 		static void InstallD3D11Hooks(ID3D11Device* ppDevice)
 		{
 			//stl::detour_vfunc<2, ID3D11Buffer_Release>(*ppBuffer);
-			//stl::detour_vfunc<5, ID3D11Device_CreateTexture2D>(ppDevice);
+			stl::detour_vfunc<5, ID3D11Device_CreateTexture2D>(ppDevice);
+			stl::detour_vfunc<7, ID3D11Device_CreateShaderResourceView>(ppDevice);
 
 			logger::info("[RTGI] Installed D3D11 hooks - {}", reinterpret_cast<uintptr_t>(ppDevice));
 		}

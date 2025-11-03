@@ -48,7 +48,7 @@ struct PayloadData
     // Set seed value
     void SetSeed(uint seed)
     {
-        data = (data & ~0xFFFFFFE0) | ((seed & 0x7FFFFFF) << 5);
+        data = (data & 0x1F) | ((seed & 0x7FFFFFF) << 5);
     }
 };
 
