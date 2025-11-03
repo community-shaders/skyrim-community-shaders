@@ -77,29 +77,25 @@ Right click on the target and select `Build` to create the zip package in `./dis
 
 ### Advanced build with CMake in command line
 
-In Windows Start menu, search for `x64 Native Tools Command Prompt`, open it in a Cmd or Powershell terminal:
+Open the "Developer PowerShell for VS 2022" or the "x64 Native Tools Command Prompt" (these set up the Visual Studio toolchain for you).
+
+Then from the repository root run:
 
 ```pwsh
-# Same as running `x64 Native Tools Command Prompt`
-# Adding cl.exe and cmake.exe into your PATH
-& "C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Auxiliary\Build\vcvarsall.bat" amd64
+# Generate the build files (uses the ALL preset)
+cmake --preset ALL
 
-# Change to the repository folder
-cd skyrim-community-shaders
+# Build using the preset
+cmake --build --preset ALL
 
-# Generate the build files in ./build/ALL
-cmake -S . --preset=ALL -B ./build/ALL
-
-# Invoke build tool to build the C++ source code
-# This also generate an AIO folder in ./build/ALL/aio
-cmake --build  ./build/ALL --preset ALL
-
-# The cmake & cmake --build comamnd are captured in this batch file as well
-# ./BuildRelease.bat
-
-# Install an AIO package into anywhere, e.g. $MOD_FOLDER
-cmake --install ./build/ALL --prefix $MOD_FOLDER
+# Install an AIO package somewhere, e.g. $MOD_FOLDER
+cmake --install --preset ALL -- --prefix $MOD_FOLDER
 ```
+
+# Notes
+
+-   If you prefer to run the VC environment manually, launch Developer PowerShell or the x64 Native Tools prompt instead of calling vcvarsall.bat directly from PowerShell.
+-   The convenience wrapper `BuildRelease.bat` also captures these steps.
 
 #### Build a zip package
 
