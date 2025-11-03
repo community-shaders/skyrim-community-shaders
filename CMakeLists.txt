@@ -2,8 +2,11 @@ cmake_minimum_required(VERSION 3.21)
 cmake_policy(SET CMP0116 NEW)
 set(CMAKE_POLICY_WARNING_CMP0116 OFF)
 
-if (CMAKE_VERSION VERSION_GREATER_EQUAL "4.0.0")
-	message(ERROR "EASTL will fail to install with vcpkg using cmake 4.0+, remove this line if the port get fixed.")
+if(CMAKE_VERSION VERSION_GREATER_EQUAL "4.0.0")
+    message(
+        ERROR
+        "EASTL will fail to install with vcpkg using cmake 4.0+, remove this line if the port get fixed."
+    )
 endif()
 
 project(
@@ -15,7 +18,10 @@ project(
 
 # default install path
 if(CMAKE_INSTALL_PREFIX_INITIALIZED_TO_DEFAULT)
-  set_property(CACHE CMAKE_INSTALL_PREFIX PROPERTY VALUE "${CMAKE_CURRENT_BINARY_DIR}/aio")
+    set_property(
+        CACHE CMAKE_INSTALL_PREFIX
+        PROPERTY VALUE "${CMAKE_CURRENT_BINARY_DIR}/aio"
+    )
 endif()
 
 list(APPEND CMAKE_MODULE_PATH "${PROJECT_SOURCE_DIR}/cmake")
@@ -270,8 +276,16 @@ list(TRANSFORM FEATURE_PATHS_SLASH APPEND /)
 # To copy AIO package at a folder do `${CMAKE_COMMAND} --install ${CMAKE_BINARY_DIR} --prefix ${AIO_DIR}`
 install(CODE "file(REMOVE_RECURSE \${CMAKE_INSTALL_PREFIX})")
 install(TARGETS ${PROJECT_NAME} RUNTIME DESTINATION SKSE/Plugins COMPONENT SKSE)
-install(FILES $<TARGET_PDB_FILE:${PROJECT_NAME}> DESTINATION SKSE/Plugins COMPONENT SKSE)
-install(DIRECTORY ${CMAKE_SOURCE_DIR}/package/ ${FEATURE_PATHS_SLASH} DESTINATION . COMPONENT Shaders)
+install(
+    FILES $<TARGET_PDB_FILE:${PROJECT_NAME}>
+    DESTINATION SKSE/Plugins
+    COMPONENT SKSE
+)
+install(
+    DIRECTORY ${CMAKE_SOURCE_DIR}/package/ ${FEATURE_PATHS_SLASH}
+    DESTINATION .
+    COMPONENT Shaders
+)
 install(CODE "file(REMOVE \${CMAKE_INSTALL_PREFIX}/Core)" COMPONENT Shaders)
 
 # #######################################################################################################################
@@ -693,17 +707,27 @@ if(AIO_ZIP_TO_DIST)
         )
     endif()
 
+    # Create a stamp-producing custom command for the AIO archive so CMake
+    # only rebuilds the archive when its inputs change. The archive filename
+    # keeps the UTC timestamp as before, but the command writes a stable
+    # stamp file that CMake can track as OUTPUT.
     set(TARGET_AIO_ZIP "${PROJECT_NAME}_AIO-${UTC_NOW}.7z")
-    message("Zipping ${AIO_DIR} to ${CMAKE_SOURCE_DIR}/dist/${TARGET_AIO_ZIP}")
-    add_custom_target(
-        AIO_ZIP_PACKAGE
-        ALL
-        COMMAND
-            ${CMAKE_COMMAND} -E tar cf
-            ${CMAKE_SOURCE_DIR}/dist/${TARGET_AIO_ZIP} --format=7zip -- .
+    set(AIO_ARCHIVE "${CMAKE_SOURCE_DIR}/dist/${TARGET_AIO_ZIP}")
+    set(AIO_ZIP_STAMP "${CMAKE_CURRENT_BINARY_DIR}/aio_package.stamp")
+
+    message("Zipping ${AIO_DIR} to ${AIO_ARCHIVE}")
+
+    add_custom_command(
+        OUTPUT ${AIO_ZIP_STAMP}
+        COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_SOURCE_DIR}/dist"
+        COMMAND ${CMAKE_COMMAND} -E tar cf ${AIO_ARCHIVE} --format=7zip -- .
+        COMMAND ${CMAKE_COMMAND} -E touch ${AIO_ZIP_STAMP}
         WORKING_DIRECTORY ${AIO_DIR}
         DEPENDS PREPARE_AIO
+        COMMENT "Creating AIO archive ${AIO_ARCHIVE}"
     )
+
+    add_custom_target(AIO_ZIP_PACKAGE ALL DEPENDS ${AIO_ZIP_STAMP})
 endif()
 
 if(NOT DEFINED ENV{CommunityShadersOutputDir})
@@ -722,7 +746,11 @@ file(MAKE_DIRECTORY "${CMAKE_SOURCE_DIR}/dist")
 set(CORE_PACKAGE "${DIST_PATH}/${PROJECT_NAME}-${UTC_NOW}.7z")
 
 # CORE_SOURCES = all content copied to the AIO directory + the SKSE plugin dll
-file(GLOB_RECURSE CORE_SOURCES CONFIGURE_DEPENDS "${CMAKE_SOURCE_DIR}/package/*")
+file(
+    GLOB_RECURSE CORE_SOURCES
+    CONFIGURE_DEPENDS
+    "${CMAKE_SOURCE_DIR}/package/*"
+)
 # Add SKSE plugin dll as dependency
 list(APPEND CORE_SOURCES ${PROJECT_NAME})
 
@@ -745,10 +773,10 @@ add_custom_command(
     COMMAND
         ${CMAKE_COMMAND} --install ${CMAKE_BINARY_DIR} --prefix ${FEATURE_PATH}
         --component SKSE
-    COMMAND ${CMAKE_COMMAND} -E copy_directory ${CORE_FEATURE_PATHS} ${FEATURE_PATH}
-    COMMAND ${CMAKE_COMMAND} -E rm -f -- ${FEATURE_PATH}/Core
     COMMAND
-        ${CMAKE_COMMAND} -E tar cfv ${CORE_PACKAGE} --format=7zip -- .
+        ${CMAKE_COMMAND} -E copy_directory ${CORE_FEATURE_PATHS} ${FEATURE_PATH}
+    COMMAND ${CMAKE_COMMAND} -E rm -f -- ${FEATURE_PATH}/Core
+    COMMAND ${CMAKE_COMMAND} -E tar cfv ${CORE_PACKAGE} --format=7zip -- .
     WORKING_DIRECTORY ${FEATURE_PATH}
     COMMENT "Creating Core zip package"
 )
@@ -796,8 +824,7 @@ add_custom_command(
     OUTPUT ${AIO_PACKAGE}
     DEPENDS ${CORE_SOURCES}
     COMMAND ${CMAKE_COMMAND} --install ${CMAKE_BINARY_DIR} --prefix ${AIO_DIR}
-    COMMAND
-        ${CMAKE_COMMAND} -E tar cfv ${AIO_PACKAGE} --format=7zip -- .
+    COMMAND ${CMAKE_COMMAND} -E tar cfv ${AIO_PACKAGE} --format=7zip -- .
     WORKING_DIRECTORY ${AIO_DIR}
     COMMENT "Creating AIO zip package (manual)"
 )

@@ -104,16 +104,24 @@ cmake --install ./build/ALL --prefix $MOD_FOLDER
 #### Build a zip package
 
 You can build zip packages for optional cmake targets.
-Currently support `Package-AIO`, `Package-Core`, and `Package-<Feature>`:
+Currently support `AIO_ZIP_PACKAGE`, `Package-AIO-Manual`, `Package-Core`, and `Package-<Feature>`:
 
 ```pwsh
 # Create a AIO package in ./dist/
-cmake --build  ./build/ALL --config Release --target Package-AIO
+# Automated AIO zip (requires AIO_ZIP_TO_DIST=ON)
+cmake --build ./build/ALL --config Release --target AIO_ZIP_PACKAGE
+
+# Manual AIO package (install + tar)
+cmake --build ./build/ALL --config Release --target Package-AIO-Manual
+
 # Create a CommunityShaders core package in ./dist/
-cmake --build  ./build/ALL --config Release --target Package-Core
-# Create a feature package in ./dist/
-cmake --build  ./build/ALL --config Release --target Package-GrassLighting
+cmake --build ./build/ALL --config Release --target Package-Core
+
+# Create a feature package in ./dist/ (example: GrassLighting)
+cmake --build ./build/ALL --config Release --target Package-GrassLighting
 ```
+
+For more details about packaging targets, options, and the difference between automated and manual packaging, see the "Manual packaging targets (detailed)" section in `.claude/CLAUDE.md`.
 
 #### CMAKE Options (optional)
 

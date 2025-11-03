@@ -75,14 +75,14 @@
             "description": "(Deprecated), kept for for CI, use Package instead",
             "configurePreset": "ALL",
             "configuration": "Release",
-            "targets": ["CommunityShaders", "Package-AIO"]
+            "targets": ["CommunityShaders", "Package-AIO-Manual"]
         },
         {
             "name": "Package",
             "description": "Build preset to generate a AIO zip package in <SRC>/dist folder, mostly for CI",
             "configurePreset": "ALL",
             "configuration": "Release",
-            "targets": ["CommunityShaders", "Package-AIO"]
+            "targets": ["CommunityShaders", "Package-AIO-Manual"]
         },
         {
             "name": "Shaders",
