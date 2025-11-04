@@ -164,56 +164,54 @@ void PerformanceOverlay::DrawSettings()
 		ImGui::Indent();
 
 		// Display options
-		if (ImGui::CollapsingHeader("Display Options", ImGuiTreeNodeFlags_DefaultOpen)) {
-			ImGui::Indent();
+		ImGui::TextUnformatted("Display Options");
+		ImGui::Separator();
 
-			ImGui::Checkbox("Show FPS Counter", &this->settings.ShowFPS);
-			ImGui::Checkbox("Show Draw Calls", &this->settings.ShowDrawCalls);
-			ImGui::Checkbox("Show VRAM Usage", &this->settings.ShowVRAM);
+		ImGui::Checkbox("Show FPS Counter", &this->settings.ShowFPS);
+		ImGui::Checkbox("Show Draw Calls", &this->settings.ShowDrawCalls);
+		ImGui::Checkbox("Show VRAM Usage", &this->settings.ShowVRAM);
 
-			bool isFrameGenerationActive = globals::features::upscaling.IsFrameGenerationActive();
-			if (this->settings.ShowFPS && isFrameGenerationActive) {
-				ImGui::Checkbox("Show Pre-FG Frametime Graph", &this->settings.ShowPreFGFrameTimeGraph);
+		bool isFrameGenerationActive = globals::features::upscaling.IsFrameGenerationActive();
+		if (this->settings.ShowFPS && isFrameGenerationActive) {
+			ImGui::Checkbox("Show Pre-FG Frametime Graph", &this->settings.ShowPreFGFrameTimeGraph);
 
-				ImGui::Checkbox("Show Post-FG Frametime Graph", &this->settings.ShowPostFGFrameTimeGraph);
-				if (ImGui::IsItemHovered()) {
-					if (auto _tt = Util::HoverTooltipWrapper()) {
-						ImGui::Text("FSR Frame Generation uses calculated timing data (2x Pre-FG).\nDLSS Frame Generation provides measured timing data.");
-					}
+			ImGui::Checkbox("Show Post-FG Frametime Graph", &this->settings.ShowPostFGFrameTimeGraph);
+			if (ImGui::IsItemHovered()) {
+				if (auto _tt = Util::HoverTooltipWrapper()) {
+					ImGui::Text("FSR Frame Generation uses calculated timing data (2x Pre-FG).\nDLSS Frame Generation provides measured timing data.");
 				}
-			} else if (this->settings.ShowFPS) {
-				ImGui::Checkbox("Show Frametime Graph", &this->settings.ShowPreFGFrameTimeGraph);
 			}
-
-			ImGui::Unindent();
+		} else if (this->settings.ShowFPS) {
+			ImGui::Checkbox("Show Frametime Graph", &this->settings.ShowPreFGFrameTimeGraph);
 		}
+
+		ImGui::Spacing();
+		ImGui::Spacing();
 
 		// Appearance settings
-		if (ImGui::CollapsingHeader("Appearance", ImGuiTreeNodeFlags_DefaultOpen)) {
-			ImGui::Indent();
+		ImGui::TextUnformatted("Appearance");
+		ImGui::Separator();
 
-			ImGui::SliderFloat("Text Size", &this->settings.TextSize, 0.8f, 1.2f, "%.2f");
-			ImGui::SliderFloat("Background Opacity", &this->settings.BackgroundOpacity, 0.0f, 1.0f, "%.2f");
-			ImGui::Checkbox("Show Border", &this->settings.ShowBorder);
-			ImGui::SliderFloat("Update Interval", &this->settings.UpdateInterval, 0.001f, PerformanceOverlay::Settings::kMaxUpdateInterval, "%.2f seconds");
-			ImGui::SliderInt("Frame History Size", &this->settings.FrameHistorySize,
-				this->settings.kMinFrameHistorySize, this->settings.kMaxFrameHistorySize);
+		ImGui::SliderFloat("Text Size", &this->settings.TextSize, 0.8f, 1.2f, "%.2f");
+		ImGui::SliderFloat("Background Opacity", &this->settings.BackgroundOpacity, 0.0f, 1.0f, "%.2f");
+		ImGui::Checkbox("Show Border", &this->settings.ShowBorder);
+		ImGui::SliderFloat("Update Interval", &this->settings.UpdateInterval, 0.001f, PerformanceOverlay::Settings::kMaxUpdateInterval, "%.2f seconds");
+		ImGui::SliderInt("Frame History Size", &this->settings.FrameHistorySize,
+			this->settings.kMinFrameHistorySize, this->settings.kMaxFrameHistorySize);
 
-			ImGui::Separator();
-			ImGui::Text("Position:");
-			if (ImGui::Button("Reset Position")) {
-				this->settings.PositionSet = false;
-			}
-			ImGui::SameLine();
-			if (ImGui::Button("Restore Defaults")) {
-				RestoreDefaultSettings();
-			}
-			if (auto _tt = Util::HoverTooltipWrapper()) {
-				ImGui::TextUnformatted("Restores Performance Overlay settings to defaults, including graphs, appearance, and update intervals.");
-			}
-
-			ImGui::Unindent();
+		ImGui::Separator();
+		ImGui::Text("Position:");
+		if (ImGui::Button("Reset Position")) {
+			this->settings.PositionSet = false;
 		}
+		ImGui::SameLine();
+		if (ImGui::Button("Restore Defaults")) {
+			RestoreDefaultSettings();
+		}
+		if (auto _tt = Util::HoverTooltipWrapper()) {
+			ImGui::TextUnformatted("Restores Performance Overlay settings to defaults, including graphs, appearance, and update intervals.");
+		}
+
 		ImGui::Unindent();
 	}
 }
@@ -1292,7 +1290,6 @@ void PerformanceOverlay::DrawABTestSection(const std::vector<DrawCallRow>& allRo
 		}
 	}
 }
-}
 // ============================================================================
 // TABLE BUILDING AND RENDERING FUNCTIONS
 // ============================================================================
@@ -1329,16 +1326,73 @@ void PerformanceOverlay::DrawDrawCallsTable(const std::vector<DrawCallRow>& main
 	// Create table row handler
 	auto rowHandler = overlay.CreateTableRowHandler(columns);
 
-	// Render the table
-	Util::ShowSortedStringTableCustom<DrawCallRow>(
-		"DrawCallOverlayTable",
-		[&columns]() { std::vector<std::string> h; for (const auto& c : columns) h.push_back(c.header); return h; }(),
-		mainRowsCopy,
-		0,     // Default sort column (Shader Type)
-		true,  // Default ascending
-		sorters,
-		rowHandler,
-		summaryRowsCopy);
+	// Render the table with auto-sizing based on content
+	auto headers = [&columns]() { std::vector<std::string> h; for (const auto& c : columns) h.push_back(c.header); return h; }();
+	
+	ImGuiTableFlags flags = ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_Sortable | 
+	                        ImGuiTableFlags_ScrollY | ImGuiTableFlags_SizingFixedFit;
+	
+	// Calculate table height: show all rows up to a reasonable maximum
+	float rowHeight = ImGui::GetTextLineHeightWithSpacing();
+	size_t totalRows = mainRowsCopy.size() + summaryRowsCopy.size();
+	size_t maxVisibleRows = 15;  // Show up to 15 rows before scrolling
+	size_t visibleRows = std::min(totalRows, maxVisibleRows);
+	float tableHeight = rowHeight * (visibleRows + 1.2f);  // +1.2 for header
+	
+	if (ImGui::BeginTable("DrawCallOverlayTable", static_cast<int>(headers.size()), flags, ImVec2(0.0f, tableHeight))) {
+		for (const auto& header : headers)
+			ImGui::TableSetupColumn(header.c_str(), ImGuiTableColumnFlags_WidthStretch);
+		ImGui::TableSetupScrollFreeze(0, 1);  // Freeze header row
+		ImGui::TableHeadersRow();
+
+		// Interactive sorting
+		int sortCol = 0;
+		bool sortAsc = true;
+		if (const ImGuiTableSortSpecs* sortSpecs = ImGui::TableGetSortSpecs()) {
+			if (sortSpecs->SpecsCount > 0) {
+				sortCol = sortSpecs->Specs->ColumnIndex;
+				sortAsc = sortSpecs->Specs->SortDirection == ImGuiSortDirection_Ascending;
+			}
+		}
+		if (sortCol >= 0 && static_cast<size_t>(sortCol) < sorters.size() && sorters[sortCol]) {
+			auto cmp = sorters[sortCol];
+			std::sort(mainRowsCopy.begin(), mainRowsCopy.end(), [sortCol, sortAsc, &cmp](const DrawCallRow& a, const DrawCallRow& b) {
+				return cmp(a, b, sortAsc);
+			});
+		}
+
+		// Render main (sorted) rows
+		for (size_t rowIdx = 0; rowIdx < mainRowsCopy.size(); ++rowIdx) {
+			const auto& row = mainRowsCopy[rowIdx];
+			ImGui::TableNextRow();
+			for (size_t col = 0; col < headers.size(); ++col) {
+				ImGui::TableSetColumnIndex(static_cast<int>(col));
+				if (rowHandler) {
+					rowHandler(static_cast<int>(rowIdx), static_cast<int>(col), row);
+				}
+			}
+		}
+
+		// Add separator between main rows and footer rows if there are footer rows
+		if (!summaryRowsCopy.empty() && !mainRowsCopy.empty()) {
+			ImGui::TableNextRow();
+			ImGui::TableSetColumnIndex(0);
+			ImGui::Separator();
+		}
+
+		// Render static footer rows (not sorted)
+		for (size_t rowIdx = 0; rowIdx < summaryRowsCopy.size(); ++rowIdx) {
+			const auto& row = summaryRowsCopy[rowIdx];
+			ImGui::TableNextRow();
+			for (size_t col = 0; col < headers.size(); ++col) {
+				ImGui::TableSetColumnIndex(static_cast<int>(col));
+				if (rowHandler) {
+					rowHandler(static_cast<int>(mainRowsCopy.size() + rowIdx), static_cast<int>(col), row);
+				}
+			}
+		}
+		ImGui::EndTable();
+	}
 
 	// Handle clear test data request
 	if (clearTestDataRequested) {
