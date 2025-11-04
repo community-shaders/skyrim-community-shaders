@@ -440,7 +440,7 @@ void Deferred::DeferredPasses()
 
 	auto& ibl = globals::features::ibl;
 
-	if (ssrt.loaded)
+	if (ssrt.loaded && ssrt.settings.EnableSpecular)
 		ssrt.DrawSSRTSpecular();
 
 	// Deferred Composite
@@ -464,7 +464,7 @@ void Deferred::DeferredPasses()
 			ssgi_hq_spec ? ssgi_gi_spec : nullptr,
 			ibl.loaded ? ibl.diffuseIBLTexture->srv.get() : nullptr,
 			ibl.loaded ? ibl.diffuseSkyIBLTexture->srv.get() : nullptr,
-			(ssrt.loaded && ssrt.settings.Enabled) ? ssrt.texOutput->srv.get() : nullptr,
+			(ssrt.loaded && ssrt.settings.EnableSpecular) ? ssrt.texOutput->srv.get() : nullptr,
 		};
 
 		if (dynamicCubemaps.loaded)

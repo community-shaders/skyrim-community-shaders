@@ -64,7 +64,7 @@ cbuffer SSRTCB : register(b1)
     float NormalBias;
     float BRDFBias;
     float OcclusionStrength;
-    float pad;
+    float CubemapNormalization;
 };
 
 #define HIZ_MAX_ITERATIONS MaxSteps
@@ -615,15 +615,15 @@ bool ShouldProcessPixel(uint2 GroupThreadID, uint FrameCount)
                 float3 envSkyColor = envColor;
                 float3 skyColor = max(envSkyColor - envNoSkyColor, 0);
                 envLuminance = Color::RGBToLuminance(EnvTexture.SampleLevel(LinearSampler, world_space_reflected_direction, 15));
-                envColor = lerp(envNoSkyColor, envNoSkyColor * (directionalAmbientLuminance / max(envLuminance, 1e-4)), SharedData::ssrtSettings.AmbientMult);
+                envColor = lerp(envNoSkyColor, envNoSkyColor * (directionalAmbientLuminance / max(envLuminance, 1e-4)), CubemapNormalization);
                 envColor += skyColor * skylightingDiffuse;
             } else {
                 envLuminance = Color::RGBToLuminance(EnvReflectionsTexture.SampleLevel(LinearSampler, world_space_reflected_direction, 15));
-                envColor = lerp(envColor, envColor * (directionalAmbientLuminance / max(envLuminance, 1e-4)), SharedData::ssrtSettings.AmbientMult);
+                envColor = lerp(envColor, envColor * (directionalAmbientLuminance / max(envLuminance, 1e-4)), CubemapNormalization);
             }
 #   else
             envLuminance = Color::RGBToLuminance(EnvReflectionsTexture.SampleLevel(LinearSampler, world_space_reflected_direction, 15).xyz);
-            envColor = lerp(envColor, envColor * (directionalAmbientLuminance / max(envLuminance, 1e-4)), SharedData::ssrtSettings.AmbientMult);
+            envColor = lerp(envColor, envColor * (directionalAmbientLuminance / max(envLuminance, 1e-4)), CubemapNormalization);
 #   endif
             envColor = Color::GammaToLinear(envColor);
             float ao = lerp(1.0, occlusion, OcclusionStrength);

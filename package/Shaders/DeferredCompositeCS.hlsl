@@ -56,7 +56,7 @@ void SampleSSGISpecular(uint2 pixCoord, sh2 lobe, out float ao, out float3 il, i
 	float NdotV = dot(normal, view);
 	ao = Color::SpecularAOLagarde(saturate(NdotV), ao, roughness);
 #	if defined(SSRT)
-	if (SharedData::ssrtSettings.Enabled) {
+	if (SharedData::ssrtSettings.EnableSpecular) {
 		il = 0;
 		return;
 	}
@@ -286,7 +286,7 @@ Texture2D<float4> SSRTexture : register(t16);
 #	endif
 
 #	if defined(SSRT)
-		if (SharedData::ssrtSettings.Enabled) {
+		if (SharedData::ssrtSettings.EnableSpecular) {
 			float4 ssrIrradiance = SSRTexture[dispatchID.xy];
 			finalIrradiance = ssrIrradiance.rgb;
 		}
