@@ -1326,73 +1326,16 @@ void PerformanceOverlay::DrawDrawCallsTable(const std::vector<DrawCallRow>& main
 	// Create table row handler
 	auto rowHandler = overlay.CreateTableRowHandler(columns);
 
-	// Render the table with auto-sizing based on content
-	auto headers = [&columns]() { std::vector<std::string> h; for (const auto& c : columns) h.push_back(c.header); return h; }();
-
-	ImGuiTableFlags flags = ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_Sortable |
-	                        ImGuiTableFlags_ScrollY | ImGuiTableFlags_SizingFixedFit;
-
-	// Calculate table height: show all rows up to a reasonable maximum
-	float rowHeight = ImGui::GetTextLineHeightWithSpacing();
-	size_t totalRows = mainRowsCopy.size() + summaryRowsCopy.size();
-	size_t maxVisibleRows = 15;  // Show up to 15 rows before scrolling
-	size_t visibleRows = std::min(totalRows, maxVisibleRows);
-	float tableHeight = rowHeight * (visibleRows + 1.2f);  // +1.2 for header
-
-	if (ImGui::BeginTable("DrawCallOverlayTable", static_cast<int>(headers.size()), flags, ImVec2(0.0f, tableHeight))) {
-		for (const auto& header : headers)
-			ImGui::TableSetupColumn(header.c_str(), ImGuiTableColumnFlags_WidthStretch);
-		ImGui::TableSetupScrollFreeze(0, 1);  // Freeze header row
-		ImGui::TableHeadersRow();
-
-		// Interactive sorting
-		int sortCol = 0;
-		bool sortAsc = true;
-		if (const ImGuiTableSortSpecs* sortSpecs = ImGui::TableGetSortSpecs()) {
-			if (sortSpecs->SpecsCount > 0) {
-				sortCol = sortSpecs->Specs->ColumnIndex;
-				sortAsc = sortSpecs->Specs->SortDirection == ImGuiSortDirection_Ascending;
-			}
-		}
-		if (sortCol >= 0 && static_cast<size_t>(sortCol) < sorters.size() && sorters[sortCol]) {
-			auto cmp = sorters[sortCol];
-			std::sort(mainRowsCopy.begin(), mainRowsCopy.end(), [sortCol, sortAsc, &cmp](const DrawCallRow& a, const DrawCallRow& b) {
-				return cmp(a, b, sortAsc);
-			});
-		}
-
-		// Render main (sorted) rows
-		for (size_t rowIdx = 0; rowIdx < mainRowsCopy.size(); ++rowIdx) {
-			const auto& row = mainRowsCopy[rowIdx];
-			ImGui::TableNextRow();
-			for (size_t col = 0; col < headers.size(); ++col) {
-				ImGui::TableSetColumnIndex(static_cast<int>(col));
-				if (rowHandler) {
-					rowHandler(static_cast<int>(rowIdx), static_cast<int>(col), row);
-				}
-			}
-		}
-
-		// Add separator between main rows and footer rows if there are footer rows
-		if (!summaryRowsCopy.empty() && !mainRowsCopy.empty()) {
-			ImGui::TableNextRow();
-			ImGui::TableSetColumnIndex(0);
-			ImGui::Separator();
-		}
-
-		// Render static footer rows (not sorted)
-		for (size_t rowIdx = 0; rowIdx < summaryRowsCopy.size(); ++rowIdx) {
-			const auto& row = summaryRowsCopy[rowIdx];
-			ImGui::TableNextRow();
-			for (size_t col = 0; col < headers.size(); ++col) {
-				ImGui::TableSetColumnIndex(static_cast<int>(col));
-				if (rowHandler) {
-					rowHandler(static_cast<int>(mainRowsCopy.size() + rowIdx), static_cast<int>(col), row);
-				}
-			}
-		}
-		ImGui::EndTable();
-	}
+	// Render the table
+	Util::ShowSortedStringTableCustom<DrawCallRow>(
+		"DrawCallOverlayTable",
+		[&columns]() { std::vector<std::string> h; for (const auto& c : columns) h.push_back(c.header); return h; }(),
+		mainRowsCopy,
+		0,     // Default sort column (Shader Type)
+		true,  // Default ascending
+		sorters,
+		rowHandler,
+		summaryRowsCopy);
 
 	// Handle clear test data request
 	if (clearTestDataRequested) {
