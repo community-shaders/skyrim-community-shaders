@@ -275,8 +275,12 @@ void HomePageRenderer::RenderFirstTimeSetupDialog()
 		return;
 	}
 
-	// Set font scale for better readability in this welcome dialog
-	ImGui::SetWindowFontScale(SETUP_DIALOG_FONT_SCALE);
+	// Set absolute font size for better readability in this welcome dialog
+	ImGuiIO& io = ImGui::GetIO();
+	float targetFontSize = 27.0f;
+	float currentFontSize = io.FontDefault ? io.FontDefault->FontSize : io.FontGlobalScale * 13.0f;
+	float fontScale = targetFontSize / currentFontSize;
+	ImGui::SetWindowFontScale(fontScale);
 
 	auto menu = Menu::GetSingleton();
 
