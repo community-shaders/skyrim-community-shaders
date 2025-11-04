@@ -145,17 +145,9 @@ public:
 
 	// Static UI helper methods
 	static void SetupImGuiStyle(const class Menu& menu);
-	static void ReloadFont(const class Menu& menu, float& cachedFontSize);
+	static bool ReloadFont(const class Menu& menu, float& cachedFontSize);
 	static void ApplyBackgroundBlur(float blurIntensity, ImVec4* colors);
-	static void RenderBackgroundBlur();    // Real-time shader-based blur rendering
 	static void ForceApplyDefaultTheme();  // Force Default.json colors to ImGui (bypass hardcoded defaults)
-
-	// Blur system methods - inspired by Unrimp rendering engine
-	// Credits: Christian Ofenberg and the Unrimp project (https://github.com/cofenberg/unrimp)
-	static bool InitializeBlurShaders();
-	static void CreateBlurTextures(UINT width, UINT height, DXGI_FORMAT format);
-	static void PerformGaussianBlur(ID3D11Texture2D* sourceTexture, ID3D11RenderTargetView* targetRTV, ImVec2 menuMin, ImVec2 menuMax);
-	static void CleanupBlurResources();
 
 	struct Constants
 	{
@@ -269,30 +261,6 @@ public:
 	void CreateDefaultThemeFiles();
 
 private:
-	// Blur system state
-	static inline float currentBlurIntensity = 0.0f;
-	static inline bool isBlurEnabled = false;
-
-	// DirectX blur resources (protected by blurResourcesMutex) - RAII managed
-	static inline std::mutex blurResourcesMutex;
-	static inline winrt::com_ptr<ID3D11VertexShader> blurVertexShader;
-	static inline winrt::com_ptr<ID3D11PixelShader> blurHorizontalPixelShader;
-	static inline winrt::com_ptr<ID3D11PixelShader> blurVerticalPixelShader;
-	static inline winrt::com_ptr<ID3D11Buffer> blurConstantBuffer;
-	static inline winrt::com_ptr<ID3D11SamplerState> blurSamplerState;
-	static inline winrt::com_ptr<ID3D11BlendState> blurBlendState;
-
-	// Intermediate blur textures
-	static inline winrt::com_ptr<ID3D11Texture2D> blurTexture1;
-	static inline winrt::com_ptr<ID3D11Texture2D> blurTexture2;
-	static inline winrt::com_ptr<ID3D11RenderTargetView> blurRTV1;
-	static inline winrt::com_ptr<ID3D11RenderTargetView> blurRTV2;
-	static inline winrt::com_ptr<ID3D11ShaderResourceView> blurSRV1;
-	static inline winrt::com_ptr<ID3D11ShaderResourceView> blurSRV2;
-
-	static inline UINT blurTextureWidth = 0;
-	static inline UINT blurTextureHeight = 0;
-
 	ThemeManager() = default;
 	~ThemeManager() = default;
 	ThemeManager(const ThemeManager&) = delete;

@@ -18,6 +18,7 @@
 #include <unordered_map>
 #include <vector>
 
+#include "Menu/BackgroundBlur.h"
 #include "Deferred.h"
 #include "Feature.h"
 #include "FeatureIssues.h"
@@ -189,7 +190,7 @@ Menu::~Menu()
 	uiIcons.postProcessing.Release();
 
 	// Clean up blur resources
-	ThemeManager::CleanupBlurResources();
+	BackgroundBlur::Cleanup();
 
 	ImGui_ImplDX11_Shutdown();
 	ImGui_ImplWin32_Shutdown();
@@ -250,6 +251,9 @@ void Menu::LoadTheme(json& o_json)
 			settings.Theme.FontRoles[static_cast<size_t>(FontRole::Body)] = defaults;
 			settings.Theme.FontName = defaults.File;
 		}
+
+		// Update background blur intensity from theme settings
+		BackgroundBlur::SetIntensity(settings.Theme.BackgroundBlur);
 	}
 }
 
@@ -374,6 +378,11 @@ void Menu::Init()
 	// Load UI icons
 	if (!Util::InitializeMenuIcons(this)) {
 		logger::warn("Menu::Init() - Failed to load UI icons. Will fallback to text buttons");
+	}
+
+	// Initialize background blur system
+	if (!BackgroundBlur::Initialize()) {
+		logger::warn("Menu::Init() - Failed to initialize background blur system");
 	}
 
 	BuildCategoryCounts();

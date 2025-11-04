@@ -10,6 +10,7 @@
 #include <string>
 #include <windows.h>
 
+#include "BackgroundBlur.h"
 #include "Fonts.h"
 #include "Globals.h"
 #include "Menu.h"
@@ -419,7 +420,9 @@ void SettingsTabRenderer::RenderThemesTab()
 			ImGui::TextUnformatted("Time in seconds to wait before a tooltip appears when hovering over an item.");
 		}
 
-		ImGui::SliderFloat("Background Blur", &themeSettings.BackgroundBlur, 0.0f, 1.0f, "%.2f", ImGuiSliderFlags_AlwaysClamp);
+		if (ImGui::SliderFloat("Background Blur", &themeSettings.BackgroundBlur, 0.0f, 1.0f, "%.2f", ImGuiSliderFlags_AlwaysClamp)) {
+			BackgroundBlur::SetIntensity(themeSettings.BackgroundBlur);
+		}
 		if (auto _tt = Util::HoverTooltipWrapper()) {
 			ImGui::Text(
 				"Applies a blur effect to the background.");

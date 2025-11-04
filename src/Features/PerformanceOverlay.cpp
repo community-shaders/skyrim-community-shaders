@@ -164,56 +164,54 @@ void PerformanceOverlay::DrawSettings()
 		ImGui::Indent();
 
 		// Display options
-		if (ImGui::CollapsingHeader("Display Options", ImGuiTreeNodeFlags_DefaultOpen)) {
-			ImGui::Indent();
+		ImGui::TextUnformatted("Display Options");
+		ImGui::Separator();
 
-			ImGui::Checkbox("Show FPS Counter", &this->settings.ShowFPS);
-			ImGui::Checkbox("Show Draw Calls", &this->settings.ShowDrawCalls);
-			ImGui::Checkbox("Show VRAM Usage", &this->settings.ShowVRAM);
+		ImGui::Checkbox("Show FPS Counter", &this->settings.ShowFPS);
+		ImGui::Checkbox("Show Draw Calls", &this->settings.ShowDrawCalls);
+		ImGui::Checkbox("Show VRAM Usage", &this->settings.ShowVRAM);
 
-			bool isFrameGenerationActive = globals::features::upscaling.IsFrameGenerationActive();
-			if (this->settings.ShowFPS && isFrameGenerationActive) {
-				ImGui::Checkbox("Show Pre-FG Frametime Graph", &this->settings.ShowPreFGFrameTimeGraph);
+		bool isFrameGenerationActive = globals::features::upscaling.IsFrameGenerationActive();
+		if (this->settings.ShowFPS && isFrameGenerationActive) {
+			ImGui::Checkbox("Show Pre-FG Frametime Graph", &this->settings.ShowPreFGFrameTimeGraph);
 
-				ImGui::Checkbox("Show Post-FG Frametime Graph", &this->settings.ShowPostFGFrameTimeGraph);
-				if (ImGui::IsItemHovered()) {
-					if (auto _tt = Util::HoverTooltipWrapper()) {
-						ImGui::Text("FSR Frame Generation uses calculated timing data (2x Pre-FG).\nDLSS Frame Generation provides measured timing data.");
-					}
+			ImGui::Checkbox("Show Post-FG Frametime Graph", &this->settings.ShowPostFGFrameTimeGraph);
+			if (ImGui::IsItemHovered()) {
+				if (auto _tt = Util::HoverTooltipWrapper()) {
+					ImGui::Text("FSR Frame Generation uses calculated timing data (2x Pre-FG).\nDLSS Frame Generation provides measured timing data.");
 				}
-			} else if (this->settings.ShowFPS) {
-				ImGui::Checkbox("Show Frametime Graph", &this->settings.ShowPreFGFrameTimeGraph);
 			}
-
-			ImGui::Unindent();
+		} else if (this->settings.ShowFPS) {
+			ImGui::Checkbox("Show Frametime Graph", &this->settings.ShowPreFGFrameTimeGraph);
 		}
+
+		ImGui::Spacing();
+		ImGui::Spacing();
 
 		// Appearance settings
-		if (ImGui::CollapsingHeader("Appearance", ImGuiTreeNodeFlags_DefaultOpen)) {
-			ImGui::Indent();
+		ImGui::TextUnformatted("Appearance");
+		ImGui::Separator();
 
-			ImGui::SliderFloat("Text Size", &this->settings.TextSize, 0.8f, 1.2f, "%.2f");
-			ImGui::SliderFloat("Background Opacity", &this->settings.BackgroundOpacity, 0.0f, 1.0f, "%.2f");
-			ImGui::Checkbox("Show Border", &this->settings.ShowBorder);
-			ImGui::SliderFloat("Update Interval", &this->settings.UpdateInterval, 0.001f, PerformanceOverlay::Settings::kMaxUpdateInterval, "%.2f seconds");
-			ImGui::SliderInt("Frame History Size", &this->settings.FrameHistorySize,
-				this->settings.kMinFrameHistorySize, this->settings.kMaxFrameHistorySize);
+		ImGui::SliderFloat("Text Size", &this->settings.TextSize, 0.8f, 1.2f, "%.2f");
+		ImGui::SliderFloat("Background Opacity", &this->settings.BackgroundOpacity, 0.0f, 1.0f, "%.2f");
+		ImGui::Checkbox("Show Border", &this->settings.ShowBorder);
+		ImGui::SliderFloat("Update Interval", &this->settings.UpdateInterval, 0.001f, PerformanceOverlay::Settings::kMaxUpdateInterval, "%.2f seconds");
+		ImGui::SliderInt("Frame History Size", &this->settings.FrameHistorySize,
+			this->settings.kMinFrameHistorySize, this->settings.kMaxFrameHistorySize);
 
-			ImGui::Separator();
-			ImGui::Text("Position:");
-			if (ImGui::Button("Reset Position")) {
-				this->settings.PositionSet = false;
-			}
-			ImGui::SameLine();
-			if (ImGui::Button("Restore Defaults")) {
-				RestoreDefaultSettings();
-			}
-			if (auto _tt = Util::HoverTooltipWrapper()) {
-				ImGui::TextUnformatted("Restores Performance Overlay settings to defaults, including graphs, appearance, and update intervals.");
-			}
-
-			ImGui::Unindent();
+		ImGui::Separator();
+		ImGui::Text("Position:");
+		if (ImGui::Button("Reset Position")) {
+			this->settings.PositionSet = false;
 		}
+		ImGui::SameLine();
+		if (ImGui::Button("Restore Defaults")) {
+			RestoreDefaultSettings();
+		}
+		if (auto _tt = Util::HoverTooltipWrapper()) {
+			ImGui::TextUnformatted("Restores Performance Overlay settings to defaults, including graphs, appearance, and update intervals.");
+		}
+
 		ImGui::Unindent();
 	}
 }
@@ -374,47 +372,26 @@ void PerformanceOverlay::DrawOverlay()
 	// Update graph values
 	this->UpdateGraphValues();
 
-	// Check if we should show collapsible sections (should swallow input only)
-	bool showCollapsibleSections = Menu::GetSingleton()->ShouldSwallowInput();
-
 	// Show FPS counter if enabled
 	if (this->settings.ShowFPS) {
-		static bool fpsExpanded = true;
-		if (showCollapsibleSections) {
-			Util::DrawSectionHeader("FPS & Frame Time", false, true, &fpsExpanded);
-		}
-		if (fpsExpanded) {
-			DrawFPS();
-		}
+		DrawFPS();
 	}
 
 	// Show Draw Calls if enabled
 	if (this->settings.ShowDrawCalls) {
-		static bool drawCallsExpanded = true;
-		if (showCollapsibleSections) {
-			Util::DrawSectionHeader("Draw Calls & Shader Performance", false, true, &drawCallsExpanded);
-		}
-		if (drawCallsExpanded) {
-			DrawDrawCallsTable(mainRows, summaryRows);
-		}
+		DrawDrawCallsTable(mainRows, summaryRows);
 	}
 
 	// VRAM & GPU Usage
 	if (this->settings.ShowVRAM && menu->GetDXGIAdapter3()) {
-		static bool vramExpanded = true;
-		if (showCollapsibleSections) {
-			Util::DrawSectionHeader("VRAM Usage", false, true, &vramExpanded);
-		}
-		if (vramExpanded) {
-			DrawVRAM();
-		}
+		DrawVRAM();
 	}
 
 	ImGui::PopStyleVar();             // ItemSpacing
 	ImGui::SetWindowFontScale(1.0f);  // Reset font scale
 
 	// --- A/B Test Section ---
-	DrawABTestSection(allRows, showCollapsibleSections);
+	DrawABTestSection(allRows);
 
 	ImGui::End();
 	ImGui::PopStyleVar();    // WindowBorderSize
@@ -1159,9 +1136,8 @@ std::vector<ColumnConfig> PerformanceOverlay::BuildABTestResultsTableColumns(con
   * - A/B test controls (clear results, show/hide settings diff)
   *
   * @param allRows The current draw call rows for data collection
-  * @param showCollapsibleSections Whether to show collapsible section headers
   */
-void PerformanceOverlay::DrawABTestSection(const std::vector<DrawCallRow>& allRows, bool showCollapsibleSections)
+void PerformanceOverlay::DrawABTestSection(const std::vector<DrawCallRow>& allRows)
 {
 	auto* menu = Menu::GetSingleton();
 	auto* abTestingManager = ABTestingManager::GetSingleton();
@@ -1204,125 +1180,113 @@ void PerformanceOverlay::DrawABTestSection(const std::vector<DrawCallRow>& allRo
 
 	// Display A/B test results if available
 	if (aggregator.HasResults()) {
-		static bool abResultsExpanded = true;
-		if (showCollapsibleSections) {
-			Util::DrawSectionHeader("Aggregated A/B Test Results", false, true, &abResultsExpanded);
+		this->DrawABTestResultsTable();
+		ImGui::Separator();
+		// --- A/B Results Controls ---
+		static bool showSettingsDiff = false;
+		ImGui::BeginGroup();
+		if (ImGui::Button(showSettingsDiff ? "Hide Settings Diff" : "Show Settings Diff")) {
+			showSettingsDiff = !showSettingsDiff;
 		}
-		if (abResultsExpanded) {
-			this->DrawABTestResultsTable();
-			ImGui::Separator();
-			// --- A/B Results Controls ---
-			static bool showSettingsDiff = false;
-			ImGui::BeginGroup();
-			if (ImGui::Button(showSettingsDiff ? "Hide Settings Diff" : "Show Settings Diff")) {
-				showSettingsDiff = !showSettingsDiff;
-			}
-			ImGui::SameLine();
-			if (ImGui::Button("Clear A/B Test Results")) {
-				aggregator.Clear();
-				this->settingsDiff.clear();
-				this->settingsDiffLoaded = false;
-				showSettingsDiff = false;
-				ImGui::EndGroup();
-				ImGui::Separator();
-				return;
-			}
+		ImGui::SameLine();
+		if (ImGui::Button("Clear A/B Test Results")) {
+			aggregator.Clear();
+			this->settingsDiff.clear();
+			this->settingsDiffLoaded = false;
+			showSettingsDiff = false;
 			ImGui::EndGroup();
-			// --- Settings diff section (inline, toggled) ---
-			if (showSettingsDiff) {
-				if (!this->settingsDiffLoaded) {
-					std::filesystem::path userPath = Util::PathHelpers::GetDataPath() / "SKSE/Plugins/CommunityShaders/SettingsUser.json";
-					std::filesystem::path testPath = Util::PathHelpers::GetDataPath() / "SKSE/Plugins/CommunityShaders/SettingsTest.json";
-					this->settingsDiff = Util::FileSystem::LoadJsonDiff(userPath, testPath);
-					this->settingsDiffLoaded = true;
-				}
-				static bool settingsDiffExpanded = true;
-				if (showCollapsibleSections) {
-					Util::DrawSectionHeader("A/B Test Settings Differences", false, true, &settingsDiffExpanded);
-				}
-				if (settingsDiffExpanded) {
-					ImGui::TextUnformatted("Differences between USER (A) and TEST (B) configs:");
-					if (this->settingsDiff.empty()) {
-						ImGui::TextUnformatted("No setting changes detected between USER (A) and TEST (B) configs.");
-					} else if (ImGui::BeginTable("ABSettingsDiffTable", 3, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_Sortable)) {
-						ImGui::TableSetupColumn("Setting Path", ImGuiTableColumnFlags_DefaultSort);
-						ImGui::TableSetupColumn("A Value");
-						ImGui::TableSetupColumn("B Value");
-						ImGui::TableHeadersRow();
+			ImGui::Separator();
+			return;
+		}
+		ImGui::EndGroup();
+		// --- Settings diff section (inline, toggled) ---
+		if (showSettingsDiff) {
+			if (!this->settingsDiffLoaded) {
+				std::filesystem::path userPath = Util::PathHelpers::GetDataPath() / "SKSE/Plugins/CommunityShaders/SettingsUser.json";
+				std::filesystem::path testPath = Util::PathHelpers::GetDataPath() / "SKSE/Plugins/CommunityShaders/SettingsTest.json";
+				this->settingsDiff = Util::FileSystem::LoadJsonDiff(userPath, testPath);
+				this->settingsDiffLoaded = true;
+			}
+			ImGui::TextUnformatted("Differences between USER (A) and TEST (B) configs:");
+			if (this->settingsDiff.empty()) {
+				ImGui::TextUnformatted("No setting changes detected between USER (A) and TEST (B) configs.");
+			} else if (ImGui::BeginTable("ABSettingsDiffTable", 3, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_Sortable)) {
+				ImGui::TableSetupColumn("Setting Path", ImGuiTableColumnFlags_DefaultSort);
+				ImGui::TableSetupColumn("A Value");
+				ImGui::TableSetupColumn("B Value");
+				ImGui::TableHeadersRow();
 
-						// Determine which variant performed better based on Total row
-						bool variantABetter = false;
-						bool variantBBetter = false;
-						auto results = aggregator.GetAggregatedResults();
-						for (const auto& stat : results) {
-							auto maybeSpecialType = magic_enum::enum_cast<SpecialShaderType>(stat.shaderType);
-							if (maybeSpecialType.has_value() && *maybeSpecialType == SpecialShaderType::Total) {  // Total row
-								if (stat.meanA < stat.meanB) {
-									variantABetter = true;  // A has lower frame time (better)
-								} else if (stat.meanB < stat.meanA) {
-									variantBBetter = true;  // B has lower frame time (better)
-								}
-								break;
-							}
+				// Determine which variant performed better based on Total row
+				bool variantABetter = false;
+				bool variantBBetter = false;
+				auto results = aggregator.GetAggregatedResults();
+				for (const auto& stat : results) {
+					auto maybeSpecialType = magic_enum::enum_cast<SpecialShaderType>(stat.shaderType);
+					if (maybeSpecialType.has_value() && *maybeSpecialType == SpecialShaderType::Total) {  // Total row
+						if (stat.meanA < stat.meanB) {
+							variantABetter = true;  // A has lower frame time (better)
+						} else if (stat.meanB < stat.meanA) {
+							variantBBetter = true;  // B has lower frame time (better)
 						}
-
-						// Get theme for color coding
-						const auto& theme = menu->GetTheme();
-
-						// Sort the settings diff if needed
-						std::vector<SettingsDiffEntry> sortedDiff = this->settingsDiff;
-						if (const ImGuiTableSortSpecs* sortSpecs = ImGui::TableGetSortSpecs()) {
-							if (sortSpecs->SpecsCount > 0) {
-								int sortCol = sortSpecs->Specs->ColumnIndex;
-								bool sortAsc = sortSpecs->Specs->SortDirection == ImGuiSortDirection_Ascending;
-								std::sort(sortedDiff.begin(), sortedDiff.end(), [sortCol, sortAsc](const SettingsDiffEntry& a, const SettingsDiffEntry& b) {
-									if (sortCol == 0)
-										return sortAsc ? (a.path < b.path) : (a.path > b.path);
-									if (sortCol == 1)
-										return sortAsc ? (a.aValue < b.aValue) : (a.aValue > b.aValue);
-									if (sortCol == 2)
-										return sortAsc ? (a.bValue < b.bValue) : (a.bValue > b.bValue);
-									return false;
-								});
-							}
-						}
-						for (const auto& entry : sortedDiff) {
-							ImGui::TableNextRow();
-							ImGui::TableSetColumnIndex(0);
-							ImGui::TextUnformatted(entry.path.c_str());
-							// Only show the path as text, no custom tooltip guessing
-							ImGui::TableSetColumnIndex(1);
-							// Color A value based on performance
-							if (variantABetter) {
-								ImGui::PushStyleColor(ImGuiCol_Text, theme.StatusPalette.SuccessColor);
-								ImGui::TextUnformatted(entry.aValue.c_str());
-								ImGui::PopStyleColor();
-							} else if (variantBBetter) {
-								ImGui::PushStyleColor(ImGuiCol_Text, theme.StatusPalette.Error);
-								ImGui::TextUnformatted(entry.aValue.c_str());
-								ImGui::PopStyleColor();
-							} else {
-								ImGui::TextUnformatted(entry.aValue.c_str());
-							}
-							ImGui::TableSetColumnIndex(2);
-							// Color B value based on performance
-							if (variantBBetter) {
-								ImGui::PushStyleColor(ImGuiCol_Text, theme.StatusPalette.SuccessColor);
-								ImGui::TextUnformatted(entry.bValue.c_str());
-								ImGui::PopStyleColor();
-							} else if (variantABetter) {
-								ImGui::PushStyleColor(ImGuiCol_Text, theme.StatusPalette.Error);
-								ImGui::TextUnformatted(entry.bValue.c_str());
-								ImGui::PopStyleColor();
-							} else {
-								ImGui::TextUnformatted(entry.bValue.c_str());
-							}
-						}
-						ImGui::EndTable();
+						break;
 					}
 				}
-				ImGui::Separator();
+
+				// Get theme for color coding
+				const auto& theme = menu->GetTheme();
+
+				// Sort the settings diff if needed
+				std::vector<SettingsDiffEntry> sortedDiff = this->settingsDiff;
+				if (const ImGuiTableSortSpecs* sortSpecs = ImGui::TableGetSortSpecs()) {
+					if (sortSpecs->SpecsCount > 0) {
+						int sortCol = sortSpecs->Specs->ColumnIndex;
+						bool sortAsc = sortSpecs->Specs->SortDirection == ImGuiSortDirection_Ascending;
+						std::sort(sortedDiff.begin(), sortedDiff.end(), [sortCol, sortAsc](const SettingsDiffEntry& a, const SettingsDiffEntry& b) {
+							if (sortCol == 0)
+								return sortAsc ? (a.path < b.path) : (a.path > b.path);
+							if (sortCol == 1)
+								return sortAsc ? (a.aValue < b.aValue) : (a.aValue > b.aValue);
+							if (sortCol == 2)
+								return sortAsc ? (a.bValue < b.bValue) : (a.bValue > b.bValue);
+							return false;
+						});
+					}
+				}
+				for (const auto& entry : sortedDiff) {
+					ImGui::TableNextRow();
+					ImGui::TableSetColumnIndex(0);
+					ImGui::TextUnformatted(entry.path.c_str());
+					// Only show the path as text, no custom tooltip guessing
+					ImGui::TableSetColumnIndex(1);
+					// Color A value based on performance
+					if (variantABetter) {
+						ImGui::PushStyleColor(ImGuiCol_Text, theme.StatusPalette.SuccessColor);
+						ImGui::TextUnformatted(entry.aValue.c_str());
+						ImGui::PopStyleColor();
+					} else if (variantBBetter) {
+						ImGui::PushStyleColor(ImGuiCol_Text, theme.StatusPalette.Error);
+						ImGui::TextUnformatted(entry.aValue.c_str());
+						ImGui::PopStyleColor();
+					} else {
+						ImGui::TextUnformatted(entry.aValue.c_str());
+					}
+					ImGui::TableSetColumnIndex(2);
+					// Color B value based on performance
+					if (variantBBetter) {
+						ImGui::PushStyleColor(ImGuiCol_Text, theme.StatusPalette.SuccessColor);
+						ImGui::TextUnformatted(entry.bValue.c_str());
+						ImGui::PopStyleColor();
+					} else if (variantABetter) {
+						ImGui::PushStyleColor(ImGuiCol_Text, theme.StatusPalette.Error);
+						ImGui::TextUnformatted(entry.bValue.c_str());
+						ImGui::PopStyleColor();
+					} else {
+						ImGui::TextUnformatted(entry.bValue.c_str());
+					}
+				}
+				ImGui::EndTable();
 			}
+			ImGui::Separator();
 		}
 	}
 }
