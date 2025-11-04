@@ -53,7 +53,7 @@ struct ScreenSpaceRayTracing : Feature
         bool EnableDiffuse = true;
         float SpecularMult = 1.0f;
         float DiffuseMult = 1.0f;
-        float AmbientMult = 1.0f;
+        float AmbientMult = 0.0f;
         float OcclusionStrength = 1.0f;
         float CubemapNormalization = 0.0f;
         bool EnableSVGF = false;

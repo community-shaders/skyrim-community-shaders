@@ -288,7 +288,7 @@ Texture2D<float4> SSRTexture : register(t16);
 #	if defined(SSRT)
 		if (SharedData::ssrtSettings.EnableSpecular) {
 			float4 ssrIrradiance = SSRTexture[dispatchID.xy];
-			finalIrradiance = ssrIrradiance.rgb;
+			finalIrradiance = any(ssrIrradiance.rgb > 0) ? ssrIrradiance.rgb : finalIrradiance;
 		}
 #	endif
 

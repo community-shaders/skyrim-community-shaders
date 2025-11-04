@@ -77,7 +77,7 @@ void ScreenSpaceRayTracing::DrawSettings()
     ImGui::SliderFloat("Occlusion Strength", &settings.OcclusionStrength, 0.0f, 1.0f, "%.2f");
     ImGui::SliderFloat("Ambient Multiplier", &settings.AmbientMult, 0.0f, 1.0f, "%.2f");
     if (auto _tt = Util::HoverTooltipWrapper())
-        ImGui::Text("Set this to 0 and use Dynamic Cubemaps as fallback if you want full dynamic ambient lighting.");
+        ImGui::Text("Mix diffuse with vanilla ambient color. Not suggested if using dynamic cubemaps as fallback.");
 
     ImGui::Separator();
 
@@ -93,7 +93,7 @@ void ScreenSpaceRayTracing::DrawSettings()
         ImGui::Text("When ray marching misses, use dynamic cubemaps for reflections.");
     ImGui::Checkbox("Use Dynamic Cubemaps as Fallback for Specular", &settings.UseDynamicCubemapsAsFallbackSpecular);
     if (auto _tt = Util::HoverTooltipWrapper())
-        ImGui::Text("When ray marching misses, use dynamic cubemaps for reflections.");
+        ImGui::Text("When ray marching misses, use dynamic cubemaps for reflections. Recommended for specular.");
     ImGui::SliderFloat("Cubemap Normalization", &settings.CubemapNormalization, 0.0f, 1.0f, "%.2f");
     if (auto _tt = Util::HoverTooltipWrapper())
         ImGui::Text("Matches cubemap luminance with ambient color.");
