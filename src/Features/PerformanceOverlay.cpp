@@ -1328,17 +1328,17 @@ void PerformanceOverlay::DrawDrawCallsTable(const std::vector<DrawCallRow>& main
 
 	// Render the table with auto-sizing based on content
 	auto headers = [&columns]() { std::vector<std::string> h; for (const auto& c : columns) h.push_back(c.header); return h; }();
-	
-	ImGuiTableFlags flags = ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_Sortable | 
+
+	ImGuiTableFlags flags = ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_Sortable |
 	                        ImGuiTableFlags_ScrollY | ImGuiTableFlags_SizingFixedFit;
-	
+
 	// Calculate table height: show all rows up to a reasonable maximum
 	float rowHeight = ImGui::GetTextLineHeightWithSpacing();
 	size_t totalRows = mainRowsCopy.size() + summaryRowsCopy.size();
 	size_t maxVisibleRows = 15;  // Show up to 15 rows before scrolling
 	size_t visibleRows = std::min(totalRows, maxVisibleRows);
 	float tableHeight = rowHeight * (visibleRows + 1.2f);  // +1.2 for header
-	
+
 	if (ImGui::BeginTable("DrawCallOverlayTable", static_cast<int>(headers.size()), flags, ImVec2(0.0f, tableHeight))) {
 		for (const auto& header : headers)
 			ImGui::TableSetupColumn(header.c_str(), ImGuiTableColumnFlags_WidthStretch);
