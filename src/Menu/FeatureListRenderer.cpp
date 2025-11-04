@@ -8,6 +8,7 @@
 
 #include "Feature.h"
 #include "FeatureIssues.h"
+#include "Fonts.h"
 #include "Globals.h"
 #include "Menu.h"
 #include "Menu/HomePageRenderer.h"
@@ -26,40 +27,9 @@ namespace
 		return std::find(CORE_MENU_NAMES.begin(), CORE_MENU_NAMES.end(), menuName) != CORE_MENU_NAMES.end();
 	}
 
-	class FontRoleGuard
-	{
-	public:
-		explicit FontRoleGuard(Menu::FontRole role)
-		{
-			Menu* menuInstance = globals::menu;
-			if (!menuInstance) {
-				menuInstance = Menu::GetSingleton();
-			}
-			if (menuInstance) {
-				font_ = menuInstance->GetFont(role);
-				if (font_) {
-					ImGui::PushFont(font_);
-				}
-			}
-		}
-
-		~FontRoleGuard()
-		{
-			if (font_) {
-				ImGui::PopFont();
-			}
-		}
-
-		FontRoleGuard(const FontRoleGuard&) = delete;
-		FontRoleGuard& operator=(const FontRoleGuard&) = delete;
-
-	private:
-		ImFont* font_ = nullptr;
-	};
-
 	void SeparatorTextWithFont(const char* text, Menu::FontRole role)
 	{
-		FontRoleGuard guard(role);
+		MenuFonts::FontRoleGuard guard(role);
 		ImGui::SeparatorText(text);
 	}
 
@@ -70,8 +40,7 @@ namespace
 
 	bool BeginTabItemWithFont(const char* label, Menu::FontRole role, ImGuiTabItemFlags flags = ImGuiTabItemFlags_None)
 	{
-		FontRoleGuard guard(role);
-		return ImGui::BeginTabItem(label, nullptr, flags);
+		return MenuFonts::BeginTabItemWithFont(label, role, flags);
 	}
 }
 

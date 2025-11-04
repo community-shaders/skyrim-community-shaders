@@ -57,6 +57,13 @@ namespace stl
 		T::func = vtbl.write_vfunc(idx, T::thunk);
 	}
 
+	template <std::size_t idx, class T>
+	void write_vfunc(REL::VariantOffset offset)
+	{
+		REL::Relocation<std::uintptr_t> vtbl{ offset };
+		T::func = vtbl.write_vfunc(idx, T::thunk);
+	}
+
 	template <class T>
 	void write_thunk_jmp(std::uintptr_t a_src)
 	{
@@ -157,7 +164,7 @@ namespace DX
 #include <nlohmann/json.hpp>
 using json = nlohmann::json;
 
-#include <magic_enum.hpp>
+#include <magic_enum/magic_enum.hpp>
 
 #include <EASTL/algorithm.h>
 #include <EASTL/array.h>

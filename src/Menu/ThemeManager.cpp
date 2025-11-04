@@ -5,9 +5,9 @@
 
 #include <algorithm>
 #include <atomic>
+#include <chrono>
 #include <cmath>
 #include <ctime>
-#include <d3dcompiler.h>
 #include <filesystem>
 #include <format>
 #include <fstream>
@@ -21,7 +21,6 @@
 
 #include "RE/Skyrim.h"
 #include "State.h"
-#include "Util.h"
 
 #include "../Globals.h"
 #include "../Util.h"
@@ -137,13 +136,12 @@ void ThemeManager::SetupImGuiStyle(const Menu& menu)
 	                        (themeSettings.Palette.Background.w == 0.0f && themeSettings.Palette.Text.w == 0.0f);
 
 	if (isThemeCorrupted) {
-		logger::warn("Theme appears corrupted, attempting to reload Default.json to prevent ImGui defaults");
-		// Note: This violates const correctness but is necessary for emergency theme recovery
-		// TODO: Refactor to use separate recovery path that doesn't require const_cast
+		logger::warn("Theme appears corrupted, attempting emergency reload of Default.json");
+		// Emergency recovery: const_cast is acceptable here to prevent total UI failure
 		if (const_cast<Menu*>(&menu)->LoadThemePreset("Default")) {
-			logger::info("Successfully reloaded Default.json theme");
+			logger::info("Successfully recovered with Default.json theme");
 		} else {
-			logger::error("Failed to reload Default.json - ImGui may show hardcoded defaults");
+			logger::error("Failed to reload Default.json - ImGui may revert to hardcoded defaults");
 		}
 	}
 
@@ -213,11 +211,15 @@ void ThemeManager::SetupImGuiStyle(const Menu& menu)
 	Util::ColorUtils::AdjustBackgroundForTextContrast(colors[ImGuiCol_TabHovered], textLum,
 		LUMINANCE_THRESHOLD, CONTRAST_DARKEN_FACTOR, CONTRAST_LIGHTEN_OFFSET);
 
-	// Apply contrast-aware text for selection states (TextSelectedBg is used when text is selected)
-	if (Util::ColorUtils::CalculateLuminance(colors[ImGuiCol_HeaderActive]) > LUMINANCE_THRESHOLD) {
-		colors[ImGuiCol_TextSelectedBg] = ImVec4(0.0f, 0.0f, 0.0f, 1.0f);  // Black text on light selection
+	// Apply semi-transparent tint for text selection background
+	// TextSelectedBg should be a tinted overlay, not opaque, so underlying text remains visible
+	float selectionLum = Util::ColorUtils::CalculateLuminance(colors[ImGuiCol_HeaderActive]);
+	if (selectionLum > LUMINANCE_THRESHOLD) {
+		// Light selection background - use semi-transparent dark tint
+		colors[ImGuiCol_TextSelectedBg] = ImVec4(0.0f, 0.0f, 0.0f, 0.25f);
 	} else {
-		colors[ImGuiCol_TextSelectedBg] = ImVec4(1.0f, 1.0f, 1.0f, 1.0f);  // White text on dark selection
+		// Dark selection background - use semi-transparent light tint
+		colors[ImGuiCol_TextSelectedBg] = ImVec4(1.0f, 1.0f, 1.0f, 0.25f);
 	}
 
 	// Apply scrollbar opacity settings
@@ -225,143 +227,6 @@ void ThemeManager::SetupImGuiStyle(const Menu& menu)
 	colors[ImGuiCol_ScrollbarGrab].w = themeSettings.ScrollbarOpacity.Thumb;
 	colors[ImGuiCol_ScrollbarGrabHovered].w = themeSettings.ScrollbarOpacity.ThumbHovered;
 	colors[ImGuiCol_ScrollbarGrabActive].w = themeSettings.ScrollbarOpacity.ThumbActive;
-
-	// Apply background blur effect
-	ApplyBackgroundBlur(themeSettings.BackgroundBlur, colors);
-}
-
-void ThemeManager::ApplyBackgroundBlur(float blurIntensity, ImVec4* colors)
-{
-	if (blurIntensity <= 0.0f) {
-		isBlurEnabled = false;
-		currentBlurIntensity = 0.0f;
-		return;
-	}
-
-	// Clamp blur intensity to valid range
-	blurIntensity = std::clamp(blurIntensity, 0.0f, 1.0f);
-
-	// Store blur parameters for backdrop rendering
-	currentBlurIntensity = blurIntensity;
-	isBlurEnabled = true;
-
-	// NOTE: Window transparency is now controlled by the background alpha setting
-	// The blur intensity only affects the backdrop effect strength, not window alpha
-
-	// Enhance text contrast slightly for better readability over blurred backgrounds
-	// Small boost preserves theme colors while compensating for reduced clarity
-	ImVec4& text = colors[ImGuiCol_Text];
-	float contrastBoost = 1.0f + (blurIntensity * BLUR_TEXT_CONTRAST_FACTOR);
-	text.x = std::min(1.0f, text.x * contrastBoost);
-	text.y = std::min(1.0f, text.y * contrastBoost);
-	text.z = std::min(1.0f, text.z * contrastBoost);
-}
-
-void ThemeManager::RenderBackgroundBlur()
-{
-	// This function should be called after ImGui::Render() but before presenting
-	// It renders blur behind visible ImGui windows only
-
-	if (!isBlurEnabled || currentBlurIntensity <= 0.0f) {
-		return;
-	}
-
-	// Get current theme to check if blur is enabled
-	auto menu = globals::menu;
-	if (!menu || !menu->IsEnabled) {
-		return;
-	}
-
-	float blurIntensity = menu->GetTheme().BackgroundBlur;
-	if (blurIntensity <= 0.0f) {
-		return;
-	}
-
-	// Update blur intensity from theme settings
-	currentBlurIntensity = blurIntensity;
-
-	// Initialize blur shaders if needed
-	if (!InitializeBlurShaders()) {
-		return;
-	}
-
-	{
-		std::lock_guard<std::mutex> lock(blurResourcesMutex);
-
-		// Ensure resources are initialized
-		if (!blurVertexShader || !blurHorizontalPixelShader || !blurVerticalPixelShader) {
-			return;
-		}
-	}
-
-	auto device = globals::d3d::device;
-	auto context = globals::d3d::context;
-	if (!device || !context) {
-		return;
-	}
-
-	// Get current render target
-	ID3D11RenderTargetView* currentRTV = nullptr;
-	context->OMGetRenderTargets(1, &currentRTV, nullptr);
-
-	if (!currentRTV) {
-		return;
-	}
-
-	// Get render target texture and its dimensions
-	ID3D11Resource* currentRT = nullptr;
-	currentRTV->GetResource(&currentRT);
-
-	ID3D11Texture2D* currentTexture = nullptr;
-	HRESULT hr = currentRT->QueryInterface(__uuidof(ID3D11Texture2D), (void**)&currentTexture);
-
-	if (FAILED(hr) || !currentTexture) {
-		if (currentRT)
-			currentRT->Release();
-		if (currentRTV)
-			currentRTV->Release();
-		return;
-	}
-
-	D3D11_TEXTURE2D_DESC texDesc;
-	currentTexture->GetDesc(&texDesc);
-
-	// Create blur textures if needed
-	CreateBlurTextures(texDesc.Width, texDesc.Height, texDesc.Format);
-
-	// Find ImGui windows that need blur
-	ImGuiContext* ctx = ImGui::GetCurrentContext();
-	if (!ctx || ctx->Windows.Size == 0) {
-		currentTexture->Release();
-		currentRT->Release();
-		currentRTV->Release();
-		return;
-	}
-
-	// Apply blur behind each visible ImGui window
-	for (int i = 0; i < ctx->Windows.Size; i++) {
-		ImGuiWindow* window = ctx->Windows[i];
-		if (!window || window->Hidden || !window->WasActive || window->SkipItems) {
-			continue;
-		}
-
-		// Skip if window has no background (fully transparent)
-		if (window->Flags & ImGuiWindowFlags_NoBackground) {
-			continue;
-		}
-
-		// Get window bounds
-		ImVec2 windowMin = window->Pos;
-		ImVec2 windowMax = ImVec2(window->Pos.x + window->Size.x, window->Pos.y + window->Size.y);
-
-		// Perform blur for this window area
-		PerformGaussianBlur(currentTexture, currentRTV, windowMin, windowMax);
-	}
-
-	// Cleanup
-	currentTexture->Release();
-	currentRT->Release();
-	currentRTV->Release();
 }
 
 void ThemeManager::ForceApplyDefaultTheme()
@@ -412,58 +277,59 @@ void ThemeManager::ForceApplyDefaultTheme()
 	}
 }
 
-void ThemeManager::ReloadFont(const Menu& menu, float& cachedFontSize)
+bool ThemeManager::ReloadFont(const Menu& menu, float& cachedFontSize)
 {
 	// Thread-safe reentrancy guard using atomic flag
 	static std::atomic<bool> isReloading{ false };
 	bool expected = false;
 	if (!isReloading.compare_exchange_strong(expected, true)) {
-		logger::warn("ThemeManager::ReloadFont() - Font reload already in progress, skipping");
-		return;
+		return false;
 	}
 
-	auto& themeSettings = menu.GetTheme();
+	// RAII scope guard to ensure isReloading is always reset on exit (exceptions, returns, etc.)
+	struct ReloadGuard
+	{
+		std::atomic<bool>& flag;
+		explicit ReloadGuard(std::atomic<bool>& f) :
+			flag(f) {}
+		~ReloadGuard() { flag = false; }
+	} guard(isReloading);
 
-	logger::info("ThemeManager::ReloadFont() - Starting font reload...");
+	auto& themeSettings = menu.GetTheme();
 
 	ImGuiIO& io = ImGui::GetIO();
 
 	// Additional safety checks: ensure ImGui is in a valid state
 	ImGuiContext* ctx = ImGui::GetCurrentContext();
 	if (!ctx) {
-		logger::error("ThemeManager::ReloadFont() - No valid ImGui context!");
-		isReloading = false;
-		return;
+		logger::error("ReloadFont: No valid ImGui context");
+		return false;
 	}
 
 	// Ensure we're not in the middle of a frame
 	if (ctx->WithinFrameScope) {
-		logger::error("ThemeManager::ReloadFont() - Cannot reload font within frame scope!");
-		isReloading = false;
-		return;
+		logger::error("ReloadFont: Cannot reload font within frame scope");
+		return false;
 	}
 
 	// Additional rendering state checks
 	if (ctx->CurrentWindow || ctx->CurrentTable) {
-		logger::error("ThemeManager::ReloadFont() - ImGui has active window/table state!");
-		isReloading = false;
-		return;
+		logger::error("ReloadFont: ImGui has active window/table state");
+		return false;
 	}
 
 	// Additional check: make sure font atlas exists
 	if (!io.Fonts) {
-		logger::error("ThemeManager::ReloadFont() - No font atlas available!");
-		isReloading = false;
-		return;
+		logger::error("ReloadFont: No font atlas available");
+		return false;
 	}
 
 	// Verify D3D11 device is valid
 	auto device = globals::d3d::device;
 	auto context = globals::d3d::context;
 	if (!device || !context) {
-		logger::error("ThemeManager::ReloadFont() - D3D11 device or context is null!");
-		isReloading = false;
-		return;
+		logger::error("ReloadFont: D3D11 device or context is null");
+		return false;
 	}
 
 	// Clear existing fonts from the atlas
@@ -494,7 +360,6 @@ void ThemeManager::ReloadFont(const Menu& menu, float& cachedFontSize)
 		}
 
 		if (effective.File.empty()) {
-			logger::warn("ThemeManager::ReloadFont() - No font specified for role '{}', using default.", Menu::GetFontRoleKey(role));
 			effective = Menu::GetDefaultFontRole(role);
 		}
 
@@ -508,7 +373,7 @@ void ThemeManager::ReloadFont(const Menu& menu, float& cachedFontSize)
 
 			// Security: Validate font path stays within fonts directory
 			if (!Util::IsPathWithinDirectory(fontsRoot, fontPath)) {
-				logger::error("Security: Font path traversal attempt detected for role '{}': {}",
+				logger::error("Security: Font path traversal attempt for role '{}': {}",
 					Menu::GetFontRoleKey(role), effective.File);
 				effective = Menu::GetDefaultFontRole(role);
 				fontPath = fontsRoot / effective.File;
@@ -525,12 +390,8 @@ void ThemeManager::ReloadFont(const Menu& menu, float& cachedFontSize)
 					if (font) {
 						atlasCache.emplace(cacheKey, font);
 						loadedFont = font;
-					} else {
-						logger::warn("ThemeManager::ReloadFont() - Failed to load '{}' for role '{}'.", fontPath.string(), Menu::GetFontRoleKey(role));
 					}
 				}
-			} else {
-				logger::warn("ThemeManager::ReloadFont() - Font file '{}' missing for role '{}'.", fontPath.string(), Menu::GetFontRoleKey(role));
 			}
 		}
 
@@ -539,7 +400,7 @@ void ThemeManager::ReloadFont(const Menu& menu, float& cachedFontSize)
 		} else {
 			menu.loadedFontRoles[i] = loadedFont;
 			mutableRoleSettings = effective;
-			menu.cachedFontFilesByRole[i] = effective.File;
+			const_cast<Menu&>(menu).cachedFontFilesByRole[i] = effective.File;
 		}
 	}
 
@@ -549,7 +410,6 @@ void ThemeManager::ReloadFont(const Menu& menu, float& cachedFontSize)
 		float bodySize = std::clamp(fontSize * defaults.SizeScale, Constants::MIN_FONT_SIZE, Constants::MAX_FONT_SIZE);
 		float roundedBodySize = std::round(bodySize);
 		menu.cachedFontPixelSizesByRole[bodyIndex] = roundedBodySize;
-		logger::warn("ThemeManager::ReloadFont() - Falling back to default body font '{}'.", defaults.File);
 
 		ImFont* bodyFont = nullptr;
 		auto defaultPath = fontsRoot / defaults.File;
@@ -567,7 +427,7 @@ void ThemeManager::ReloadFont(const Menu& menu, float& cachedFontSize)
 
 		menu.loadedFontRoles[bodyIndex] = bodyFont;
 		const_cast<Menu&>(menu).GetFontRoleSettings(Menu::FontRole::Body) = defaults;
-		menu.cachedFontFilesByRole[bodyIndex] = defaults.File;
+		const_cast<Menu&>(menu).cachedFontFilesByRole[bodyIndex] = defaults.File;
 		menu.cachedFontName = defaults.File;
 		const_cast<Menu&>(menu).GetSettings().Theme.FontName = defaults.File;
 	}
@@ -583,8 +443,7 @@ void ThemeManager::ReloadFont(const Menu& menu, float& cachedFontSize)
 		menu.cachedFontPixelSizesByRole[idx] = std::round(fallbackSize);
 		menu.loadedFontRoles[idx] = bodyFont;
 		const_cast<Menu&>(menu).GetFontRoleSettings(role) = defaults;
-		menu.cachedFontFilesByRole[idx] = defaults.File;
-		logger::warn("ThemeManager::ReloadFont() - Falling back to '{}' for role '{}'.", defaults.File, Menu::GetFontRoleKey(role));
+		const_cast<Menu&>(menu).cachedFontFilesByRole[idx] = defaults.File;
 	}
 
 	if (!bodyFont) {
@@ -600,39 +459,32 @@ void ThemeManager::ReloadFont(const Menu& menu, float& cachedFontSize)
 
 	// Build the font atlas - this bakes all fonts into the texture
 	if (!io.Fonts->Build()) {
-		logger::error("ThemeManager::ReloadFont() - Failed to build font atlas!");
+		logger::error("ReloadFont: Failed to build font atlas");
 
 		// Emergency fallback: try to restore with default font before giving up
-		logger::warn("ThemeManager::ReloadFont() - Attempting emergency fallback to default font...");
 		io.Fonts->Clear();
 		ImFont* fallbackFont = io.Fonts->AddFontDefault();
 		if (fallbackFont && io.Fonts->Build()) {
-			logger::info("ThemeManager::ReloadFont() - Emergency fallback successful");
 			menu.loadedFontRoles.fill(fallbackFont);
 			io.FontDefault = fallbackFont;
 		} else {
-			logger::error("ThemeManager::ReloadFont() - Emergency fallback also failed!");
-			isReloading = false;
-			return;
+			logger::error("ReloadFont: Emergency fallback failed");
+			return false;
 		}
 	}
 
 	// Recreate device objects - this is where crashes can occur
 	// Must be done between frames with no active rendering state
 
-	logger::debug("ThemeManager::ReloadFont() - Invalidating DX11 device objects...");
-
 	// Flush any pending GPU operations before invalidating
 	context->Flush();
 
 	ImGui_ImplDX11_InvalidateDeviceObjects();
 
-	logger::debug("ThemeManager::ReloadFont() - Creating DX11 device objects...");
 	if (!ImGui_ImplDX11_CreateDeviceObjects()) {
-		logger::error("ThemeManager::ReloadFont() - Failed to create device objects!");
+		logger::error("ReloadFont: Failed to create device objects");
 
 		// Emergency fallback: restore with default font and retry device objects
-		logger::warn("ThemeManager::ReloadFont() - Attempting emergency device object recovery...");
 		io.Fonts->Clear();
 		ImFont* fallbackFont = io.Fonts->AddFontDefault();
 
@@ -640,7 +492,6 @@ void ThemeManager::ReloadFont(const Menu& menu, float& cachedFontSize)
 		if (fallbackFont && io.Fonts->Build()) {
 			ImGui_ImplDX11_InvalidateDeviceObjects();
 			if (ImGui_ImplDX11_CreateDeviceObjects()) {
-				logger::warn("ThemeManager::ReloadFont() - Emergency recovery successful with default font");
 				menu.loadedFontRoles.fill(fallbackFont);
 				io.FontDefault = fallbackFont;
 				menu.cachedFontName = "ImGui Default";
@@ -649,20 +500,16 @@ void ThemeManager::ReloadFont(const Menu& menu, float& cachedFontSize)
 		}
 
 		if (!recoverySucceeded) {
-			logger::error("ThemeManager::ReloadFont() - Critical failure: unable to recover device objects!");
+			logger::error("ReloadFont: Critical failure - unable to recover device objects");
 		}
 
-		isReloading = false;
-		return;
+		return false;
 	}
-
-	logger::debug("ThemeManager::ReloadFont() - Device objects recreated successfully");
 
 	// Verify font texture was created successfully
 	if (!io.Fonts->TexID) {
-		logger::error("ThemeManager::ReloadFont() - Font texture not created!");
-		isReloading = false;
-		return;
+		logger::error("ReloadFont: Font texture not created");
+		return false;
 	}
 
 	float globalScale = themeSettings.GlobalScale;
@@ -678,8 +525,7 @@ void ThemeManager::ReloadFont(const Menu& menu, float& cachedFontSize)
 	// Also update cached font name in the menu instance
 	menu.cachedFontName = themeSettings.FontName;
 
-	logger::info("ThemeManager::ReloadFont() - Font reload completed successfully");
-	isReloading = false;
+	return true;
 }
 
 // Theme management methods

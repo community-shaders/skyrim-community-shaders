@@ -1,5 +1,6 @@
 #include "Fonts.h"
 
+#include "../Globals.h"
 #include "../Utils/FileSystem.h"
 #include "ThemeManager.h"
 
@@ -8,6 +9,7 @@
 #include <cmath>
 #include <filesystem>
 #include <format>
+#include <imgui.h>
 #include <mutex>
 #include <optional>
 #include <unordered_map>
@@ -116,6 +118,33 @@ namespace MenuFonts
 	const FontRoleSettings& GetDefaultRole(Menu::FontRole role)
 	{
 		return GetDefaultRoleInternal(role);
+	}
+
+	FontRoleGuard::FontRoleGuard(FontRole role)
+	{
+		Menu* menuInstance = globals::menu;
+		if (!menuInstance) {
+			menuInstance = Menu::GetSingleton();
+		}
+		if (menuInstance) {
+			font_ = menuInstance->GetFont(role);
+			if (font_) {
+				ImGui::PushFont(font_);
+			}
+		}
+	}
+
+	FontRoleGuard::~FontRoleGuard()
+	{
+		if (font_) {
+			ImGui::PopFont();
+		}
+	}
+
+	bool BeginTabItemWithFont(const char* label, FontRole role, ImGuiTabItemFlags flags)
+	{
+		FontRoleGuard guard(role);
+		return ImGui::BeginTabItem(label, nullptr, flags);
 	}
 
 	std::string BuildFontSignature(const Menu::ThemeSettings& theme, float baseFontSize)

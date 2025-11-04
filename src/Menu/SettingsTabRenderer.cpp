@@ -1,6 +1,7 @@
 #include "SettingsTabRenderer.h"
 
 #include <algorithm>
+#include <cctype>
 #include <cstring>
 #include <filesystem>
 #include <format>
@@ -9,6 +10,7 @@
 #include <string>
 #include <windows.h>
 
+#include "Fonts.h"
 #include "Globals.h"
 #include "Menu.h"
 #include "ShaderCache.h"
@@ -19,42 +21,21 @@ using json = nlohmann::json;
 
 namespace
 {
-	class FontRoleGuard
+	using FontRoleGuard = MenuFonts::FontRoleGuard;  // Convenience alias
+
+	// Portable case-insensitive string comparison
+	bool iequals(const std::string& a, const std::string& b)
 	{
-	public:
-		explicit FontRoleGuard(Menu::FontRole role)
-		{
-			Menu* menuInstance = globals::menu;
-			if (!menuInstance) {
-				menuInstance = Menu::GetSingleton();
-			}
-			if (menuInstance) {
-				font_ = menuInstance->GetFont(role);
-				if (font_) {
-					ImGui::PushFont(font_);
-				}
-			}
-		}
-
-		~FontRoleGuard()
-		{
-			if (font_) {
-				ImGui::PopFont();
-			}
-		}
-
-		FontRoleGuard(const FontRoleGuard&) = delete;
-		FontRoleGuard& operator=(const FontRoleGuard&) = delete;
-
-		[[nodiscard]] ImFont* Get() const { return font_; }
-
-	private:
-		ImFont* font_ = nullptr;
-	};
+		return std::equal(a.begin(), a.end(), b.begin(), b.end(),
+			[](char ca, char cb) {
+				return std::tolower(static_cast<unsigned char>(ca)) ==
+			           std::tolower(static_cast<unsigned char>(cb));
+			});
+	}
 
 	void SeparatorTextWithFont(const char* text, Menu::FontRole role)
 	{
-		FontRoleGuard guard(role);
+		MenuFonts::FontRoleGuard guard(role);
 		ImGui::SeparatorText(text);
 	}
 
@@ -65,8 +46,7 @@ namespace
 
 	bool BeginTabItemWithFont(const char* label, Menu::FontRole role, ImGuiTabItemFlags flags = ImGuiTabItemFlags_None)
 	{
-		FontRoleGuard guard(role);
-		return ImGui::BeginTabItem(label, nullptr, flags);
+		return MenuFonts::BeginTabItemWithFont(label, role, flags);
 	}
 
 	bool ComboWithFont(const char* label, int* currentItem, const char* const items[], int itemCount, Menu::FontRole role)
@@ -512,7 +492,7 @@ void SettingsTabRenderer::RenderFontsTab()
 			int familyIndex = 0;
 			if (!fontCatalog.families.empty()) {
 				for (size_t i = 0; i < fontCatalog.families.size(); ++i) {
-					if (_stricmp(fontCatalog.families[i].name.c_str(), roleSettings.Family.c_str()) == 0) {
+					if (iequals(fontCatalog.families[i].name, roleSettings.Family)) {
 						familyIndex = static_cast<int>(i);
 						break;
 					}
@@ -566,7 +546,7 @@ void SettingsTabRenderer::RenderFontsTab()
 			} else if (selectedFamily) {
 				int styleIndex = 0;
 				for (size_t s = 0; s < selectedFamily->styles.size(); ++s) {
-					if (_stricmp(selectedFamily->styles[s].style.c_str(), roleSettings.Style.c_str()) == 0) {
+					if (iequals(selectedFamily->styles[s].style, roleSettings.Style)) {
 						styleIndex = static_cast<int>(s);
 						break;
 					}

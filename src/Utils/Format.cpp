@@ -105,6 +105,57 @@ namespace Util
 		return oss.str();
 	}
 
+	std::string FormatFileSize(uint64_t bytes)
+	{
+		if (bytes >= 1024 * 1024) {
+			char buffer[32];
+			sprintf_s(buffer, "%.1f MB", static_cast<float>(bytes) / (1024 * 1024));
+			return buffer;
+		} else {
+			char buffer[32];
+			sprintf_s(buffer, "%.1f KB", static_cast<float>(bytes) / 1024);
+			return buffer;
+		}
+	}
+
+	std::string FormatTimeAgo(std::filesystem::file_time_type fileTime)
+	{
+		try {
+			// Convert filesystem time to system time correctly
+			// std::filesystem::file_time_type uses Windows FILETIME epoch (1601-01-01)
+			// std::chrono::system_clock uses Unix epoch (1970-01-01)
+			// Difference is 11644473600 seconds (number of seconds between 1601-01-01 and 1970-01-01)
+			constexpr int64_t WINDOWS_TO_UNIX_EPOCH_SECONDS = 11644473600LL;
+			auto fileDuration = fileTime.time_since_epoch();
+			auto systemDuration = std::chrono::duration_cast<std::chrono::system_clock::duration>(
+				fileDuration - std::chrono::seconds(WINDOWS_TO_UNIX_EPOCH_SECONDS));
+			auto systemTime = std::chrono::system_clock::time_point(systemDuration);
+			auto fileTimeT = std::chrono::system_clock::to_time_t(systemTime);
+			auto nowT = std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());
+
+			// Check if file time is in the future
+			if (fileTimeT > nowT) {
+				return "Future";
+			}
+
+			// Calculate duration in seconds
+			auto seconds = static_cast<int64_t>(nowT - fileTimeT);
+
+			// Format based on time difference
+			if (seconds < 60) {
+				return std::to_string(seconds) + "s ago";
+			} else if (seconds < 3600) {
+				return std::to_string(seconds / 60) + "m ago";
+			} else if (seconds < 86400) {
+				return std::to_string(seconds / 3600) + "h ago";
+			} else {
+				return std::to_string(seconds / 86400) + "d ago";
+			}
+		} catch (const std::exception&) {
+			return "Unknown";
+		}
+	}
+
 	std::string TimeAgoString(std::chrono::steady_clock::time_point last)
 	{
 		using namespace std::chrono;
@@ -153,8 +204,25 @@ namespace Util
 		} else if (b < a && b > 0.0f) {
 			percentDelta = 100.0f * (a - b) / b;
 		}
-		std::string percentStr = (percentDelta >= threshold) ? std::format(" ({:+.1f}%)", (b < a ? -percentDelta : percentDelta)) : "";
-		return (delta > 0.0f ? "+" : "") + FormatMilliseconds(delta) + percentStr;
+		char buffer[64];
+		if (percentDelta >= threshold) {
+			sprintf_s(buffer, " (+%.1f%%)", (b < a ? -percentDelta : percentDelta));
+		} else {
+			buffer[0] = '\0';
+		}
+		return (delta > 0.0f ? "+" : "") + FormatMilliseconds(delta) + buffer;
+	}
+
+	std::string FormatDeltaWithPercent(float delta)
+	{
+		// Format as percentage with sign
+		char buffer[32];
+		if (delta >= 0.0f) {
+			std::snprintf(buffer, sizeof(buffer), "+%.1f%%", delta);
+		} else {
+			std::snprintf(buffer, sizeof(buffer), "%.1f%%", delta);
+		}
+		return buffer;
 	}
 
 	float CalculatePercentage(float part, float total, float defaultValue)

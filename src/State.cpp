@@ -75,6 +75,9 @@ void State::Debug()
 		for (auto& ft : frameTimePerType)
 			ft = 0.0f;
 
+		// Reset active shader tracking for developer mode
+		globals::shaderCache->ResetFrameShaderTracking();
+
 		// Start timing for this frame
 		if (frameTimingFrequency.QuadPart == 0) {
 			QueryPerformanceFrequency(&frameTimingFrequency);
@@ -765,7 +768,9 @@ void State::UpdateSharedData([[maybe_unused]] bool a_inWorld, [[maybe_unused]] b
 			auto upscaleMethod = upscaling.GetUpscaleMethod();
 			if (temporal && upscaleMethod != Upscaling::UpscaleMethod::kTAA) {
 				auto renderSize = Util::ConvertToDynamic(screenSize, true);
-				data.MipBias = std::log2f(renderSize.x / screenSize.x) - 1.0f;
+				data.MipBias = std::log2f(renderSize.x / screenSize.x);
+				if (upscaleMethod == Upscaling::UpscaleMethod::kDLSS)
+					data.MipBias -= 1.0f;
 			} else {
 				data.MipBias = 0;
 			}

@@ -33,20 +33,16 @@ public:
 	 *
 	 * Roles:
 	 * - Body (0):       Default UI text, setting labels, general content
-	 * - Heading (1):    Feature section headers (bold/semibold recommended)
+	 * - Heading (1):    Feature section headers
 	 * - Subheading (2): Subsection headers within features
 	 * - Subtitle (3):   Secondary descriptive text, tooltips
-	 * - Caption (4):    Small auxiliary text (NOT CURRENTLY USED - reserved for future)
-	 * - Monospace (5):  Code, file paths, numeric values, logs
 	 *
 	 * Theme JSON Configuration:
 	 * "FontRoles": [
 	 *   { "Family": "Jost", "Style": "Regular", "File": "Jost/Jost-Regular.ttf", "SizeScale": 1.0 },
-	 *   { "Family": "Jost", "Style": "SemiBold", "File": "Jost/Jost-SemiBold.ttf", "SizeScale": 1.05 },
 	 *   { "Family": "Jost", "Style": "Regular", "File": "Jost/Jost-Regular.ttf", "SizeScale": 1.0 },
-	 *   { "Family": "Jost", "Style": "Light", "File": "Jost/Jost-Light.ttf", "SizeScale": 0.95 },
-	 *   { "Family": "Jost", "Style": "Light", "File": "Jost/Jost-Light.ttf", "SizeScale": 0.9 },
-	 *   { "Family": "IBMPlexMono", "Style": "Regular", "File": "IBMPlexMono/IBMPlexMono-Regular.ttf", "SizeScale": 1.0 }
+	 *   { "Family": "Jost", "Style": "Regular", "File": "Jost/Jost-Regular.ttf", "SizeScale": 1.0 },
+	 *   { "Family": "Jost", "Style": "Regular", "File": "Jost/Jost-Regular.ttf", "SizeScale": 1.0 }
 	 * ]
 	 *
 	 * SizeScale multiplies the base FontSize for each role.
@@ -54,7 +50,7 @@ public:
 	 *
 	 * Migration from Legacy:
 	 * Old "FontName" field auto-populates Body role on theme load.
-	 * Themes without FontRoles get defaults (Jost family + IBMPlexMono for code).
+	 * Themes without FontRoles get defaults (Jost family).
 	 */
 	enum class FontRole : std::uint8_t
 	{
@@ -62,8 +58,6 @@ public:
 		Heading,     // Feature headers
 		Subheading,  // Subsection headers
 		Subtitle,    // Secondary text
-		Caption,     // Small text (reserved, not yet used)
-		Monospace,   // Code/paths/numbers
 		Count        // Total number of roles
 	};
 

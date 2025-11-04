@@ -19,19 +19,22 @@ namespace
 		{
 			Menu* menuInstance = globals::menu;
 			if (!menuInstance) {
-				menuInstance = Menu::GetSingleton();
+				logger::error("RoleFontGuard: globals::menu is null, cannot retrieve font for role");
+				return;
 			}
-			if (menuInstance) {
-				font_ = menuInstance->GetFont(role);
-				if (font_) {
-					ImGui::PushFont(font_);
-				}
+
+			font_ = menuInstance->GetFont(role);
+			if (font_) {
+				ImGui::PushFont(font_);
+				fontPushed_ = true;
+			} else {
+				logger::warn("RoleFontGuard: Failed to retrieve font for role {}", static_cast<int>(role));
 			}
 		}
 
 		~RoleFontGuard()
 		{
-			if (font_) {
+			if (fontPushed_) {
 				ImGui::PopFont();
 			}
 		}
@@ -43,11 +46,17 @@ namespace
 
 	private:
 		ImFont* font_ = nullptr;
+		bool fontPushed_ = false;
 	};
 }
 
 void MenuHeaderRenderer::RenderHeader(bool isDocked, bool showLogo, bool canShowIcons, float uiScale, const Menu::UIIcons& uiIcons)
 {
+	if (!globals::menu) {
+		logger::error("MenuHeaderRenderer::RenderHeader: globals::menu is null, cannot render header");
+		return;
+	}
+
 	auto title = std::format("Community Shaders {}", Util::GetFormattedVersion(Plugin::VERSION));
 	auto actionIcons = BuildActionIcons(canShowIcons, uiIcons);
 

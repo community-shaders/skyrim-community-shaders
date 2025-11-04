@@ -1,4 +1,4 @@
-#include "PCH.h"
+#include "UI.h"
 
 #include "Menu.h"
 #include "UI.h"
@@ -18,6 +18,7 @@
 
 #define STB_IMAGE_IMPLEMENTATION
 #include <algorithm>
+#include <array>
 #include <chrono>
 #include <cmath>
 #include <format>
@@ -706,6 +707,43 @@ namespace Util
 		return ascending ? (a < b) : (b < a);
 	}
 
+	void RenderTextWithHighlights(const std::string& text, const std::string& searchTerm, ImVec4 highlightColor)
+	{
+		if (searchTerm.empty()) {
+			ImGui::TextUnformatted(text.c_str());
+			return;
+		}
+
+		std::string lowerText = text;
+		std::string lowerSearch = searchTerm;
+		std::transform(lowerText.begin(), lowerText.end(), lowerText.begin(), [](unsigned char c) { return static_cast<char>(::tolower(c)); });
+		std::transform(lowerSearch.begin(), lowerSearch.end(), lowerSearch.begin(), [](unsigned char c) { return static_cast<char>(::tolower(c)); });
+
+		size_t pos = 0;
+		size_t lastPos = 0;
+
+		while ((pos = lowerText.find(lowerSearch, lastPos)) != std::string::npos) {
+			// Render text before highlight
+			if (pos > lastPos) {
+				ImGui::TextUnformatted(text.substr(lastPos, pos - lastPos).c_str());
+				ImGui::SameLine(0, 0);
+			}
+
+			// Render highlighted text
+			ImGui::PushStyleColor(ImGuiCol_Text, highlightColor);
+			ImGui::TextUnformatted(text.substr(pos, searchTerm.length()).c_str());
+			ImGui::PopStyleColor();
+			ImGui::SameLine(0, 0);
+
+			lastPos = pos + searchTerm.length();
+		}
+
+		// Render remaining text
+		if (lastPos < text.length()) {
+			ImGui::TextUnformatted(text.substr(lastPos).c_str());
+		}
+	}
+
 	ImVec4 GetThresholdColor(float value, float good, float warn, ImVec4 goodColor, ImVec4 warnColor, ImVec4 badColor)
 	{
 		if (value < good)
@@ -727,9 +765,9 @@ namespace Util
 		std::string query = searchQuery;
 
 		// Convert all to lowercase for case-insensitive search
-		std::transform(shortName.begin(), shortName.end(), shortName.begin(), ::tolower);
-		std::transform(displayName.begin(), displayName.end(), displayName.begin(), ::tolower);
-		std::transform(query.begin(), query.end(), query.begin(), ::tolower);
+		std::transform(shortName.begin(), shortName.end(), shortName.begin(), [](unsigned char c) { return static_cast<char>(::tolower(c)); });
+		std::transform(displayName.begin(), displayName.end(), displayName.begin(), [](unsigned char c) { return static_cast<char>(::tolower(c)); });
+		std::transform(query.begin(), query.end(), query.begin(), [](unsigned char c) { return static_cast<char>(::tolower(c)); });
 
 		// Search in both short name and display name
 		return shortName.find(query) != std::string::npos ||
