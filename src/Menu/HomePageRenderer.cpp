@@ -267,8 +267,7 @@ void HomePageRenderer::RenderFirstTimeSetupDialog()
 
 	ImGuiWindowFlags flags = ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove |
 	                         ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoSavedSettings |
-	                         ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoTitleBar |
-	                         ImGuiWindowFlags_AlwaysAutoResize;  // Prevent scrolling, remove title, auto-resize
+	                         ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_AlwaysAutoResize;
 
 	if (!ImGui::Begin("##FirstTimeSetup", nullptr, flags)) {
 		ImGui::PopStyleVar(2);
@@ -437,9 +436,8 @@ void HomePageRenderer::RenderFirstTimeSetupDialog()
 	ImGui::SetCursorPosX((windowWidth - helpWidth) * 0.5f);
 	ImGui::TextDisabled("%s", helpText);
 
-	ImGui::SetWindowFontScale(1.0f);  // Reset font scale
-	ImGui::PopStyleVar(2);            // Pop WindowRounding and WindowBorderSize
 	ImGui::End();
+	ImGui::PopStyleVar(2);
 }
 
 bool HomePageRenderer::ShouldShowFirstTimeSetup()
