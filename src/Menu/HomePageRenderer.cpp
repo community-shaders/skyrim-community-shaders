@@ -381,6 +381,9 @@ void HomePageRenderer::RenderFirstTimeSetupDialog()
 
 	ImGui::TextColored(hotkeyColor, "%s", currentKeyName);
 
+	// Reset font scale
+	ImGui::SetWindowFontScale(fontScale);
+
 	// Handle click to start hotkey capture
 	if (clicked) {
 		menu->settingToggleKey = true;
