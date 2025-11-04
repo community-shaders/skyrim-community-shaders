@@ -276,7 +276,6 @@ void HomePageRenderer::RenderFirstTimeSetupDialog()
 	}
 
 	// Set absolute font size for better readability in this welcome dialog
-	ImGuiIO& io = ImGui::GetIO();
 	float targetFontSize = 27.0f;
 	float currentFontSize = io.FontDefault ? io.FontDefault->FontSize : io.FontGlobalScale * 13.0f;
 	float fontScale = targetFontSize / currentFontSize;
