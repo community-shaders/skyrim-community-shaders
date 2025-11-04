@@ -350,6 +350,9 @@ void HomePageRenderer::RenderFirstTimeSetupDialog()
 	auto& themeSettings = menu->GetTheme();
 	const char* currentKeyName = Util::Input::KeyIdToString(menu->GetSettings().ToggleKey);
 
+	// Increase font size for hotkey text
+	ImGui::SetWindowFontScale(fontScale * HOTKEY_TEXT_SCALE_MULTIPLIER);
+
 	// Calculate text dimensions for centering and button area
 	float hotkeyWidth = ImGui::CalcTextSize(currentKeyName).x;
 	float centerX = (windowWidth - hotkeyWidth) * 0.5f;
