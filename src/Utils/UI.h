@@ -375,6 +375,7 @@ namespace Util
 	 *        Each function should compare two rows and return true if the first should come before the second.
 	 * @param cellRender Function to render a cell: (rowIdx, colIdx, const T& row).
 	 * @param footerRows Optional static footer rows (not sorted, rendered after main rows).
+	 * @param outerSize Optional outer size for the table (0,0 = auto-size).
 	 */
 	template <typename T>
 	void ShowSortedStringTableCustom(
@@ -385,10 +386,16 @@ namespace Util
 		bool ascending,
 		const std::vector<std::function<bool(const T&, const T&, bool)>>& customSorts,
 		std::function<void(int, int, const T&)> cellRender,
-		const std::vector<T>& footerRows = {})
+		const std::vector<T>& footerRows = {},
+		const ImVec2& outerSize = ImVec2(0, 0))
 	{
 		ImGuiTableFlags flags = ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_Sortable | ImGuiTableFlags_Resizable | ImGuiTableFlags_ScrollX | ImGuiTableFlags_ScrollY | ImGuiTableFlags_SizingStretchProp;
-		if (ImGui::BeginTable(table_id, static_cast<int>(headers.size()), flags)) {
+		ImVec2 tableSize = outerSize;
+		if (outerSize.y == 0.0f) {
+			size_t totalRows = rows.size() + footerRows.size();
+			tableSize.y = ImGui::GetTextLineHeightWithSpacing() * (static_cast<float>((totalRows < 15) ? totalRows : 15) + 1.2f);
+		}
+		if (ImGui::BeginTable(table_id, static_cast<int>(headers.size()), flags, tableSize)) {
 			// Set up columns with content-based sizing
 			for (size_t i = 0; i < headers.size(); ++i) {
 				ImGui::TableSetupColumn(headers[i].c_str());
