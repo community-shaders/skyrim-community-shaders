@@ -1,0 +1,131 @@
+{
+    "DisplayName": "Ocean Blue",
+    "Description": "Cool blue tones inspired by deep ocean waters and maritime adventures",
+    "Version": "1.0.0",
+    "Author": "Community Shaders Team",
+    "Theme": {
+        "FontSize": 27.0,
+        "FontName": "Rubik/Rubik-Regular.ttf",
+        "GlobalScale": 0.0,
+        "FontRoles": [
+            {
+                "Family": "Rubik",
+                "Style": "Regular",
+                "File": "Rubik/Rubik-Regular.ttf",
+                "SizeScale": 1.0
+            },
+            {
+                "Family": "Rubik",
+                "Style": "SemiBold",
+                "File": "Rubik/Rubik-SemiBold.ttf",
+                "SizeScale": 1.05
+            },
+            {
+                "Family": "Rubik",
+                "Style": "Regular",
+                "File": "Rubik/Rubik-Regular.ttf",
+                "SizeScale": 1.0
+            },
+            {
+                "Family": "Rubik",
+                "Style": "Light",
+                "File": "Rubik/Rubik-Light.ttf",
+                "SizeScale": 0.95
+            }
+        ],
+        "UseSimplePalette": false,
+        "ShowActionIcons": true,
+        "TooltipHoverDelay": 0.5,
+        "BackgroundBlur": 0.5,
+        "Palette": {
+            "Background": [0.1, 0.2, 0.4, 0.9],
+            "Text": [0.9, 0.95, 1.0, 1.0],
+            "WindowBorder": [0.2, 0.6, 0.8, 0.85],
+            "FrameBorder": [0.15, 0.5, 0.7, 0.75],
+            "Separator": [0.2, 0.6, 0.8, 0.65],
+            "ResizeGrip": [0.25, 0.7, 0.9, 0.85]
+        },
+        "StatusPalette": {
+            "Disable": [0.4, 0.45, 0.5, 1.0],
+            "Error": [1.0, 0.4, 0.5, 1.0],
+            "Warning": [1.0, 0.8, 0.3, 1.0],
+            "RestartNeeded": [0.3, 0.8, 0.6, 1.0],
+            "CurrentHotkey": [0.6, 0.9, 1.0, 1.0],
+            "SuccessColor": [0.2, 0.7, 0.9, 1.0],
+            "InfoColor": [0.4, 0.7, 1.0, 1.0]
+        },
+        "FeatureHeading": {
+            "ColorDefault": [0.7, 0.85, 1.0, 1.0],
+            "ColorHovered": [0.8, 0.9, 1.0, 1.0],
+            "MinimizedFactor": 0.65
+        },
+        "Style": {
+            "WindowBorderSize": 2.0,
+            "ChildBorderSize": 1.0,
+            "FrameBorderSize": 1.5,
+            "WindowPadding": [15.0, 13.0],
+            "WindowRounding": 5.0,
+            "IndentSpacing": 8.5,
+            "FramePadding": [8.0, 5.0],
+            "CellPadding": [15.0, 4.0],
+            "ItemSpacing": [9.0, 8.0]
+        },
+        "FullPalette": [
+            [0.9, 0.95, 1.0, 0.9],
+            [0.6, 0.7, 0.85, 1.0],
+            [0.1, 0.2, 0.4, 0.9],
+            [0.0, 0.0, 0.0, 0.0],
+            [0.08, 0.16, 0.32, 0.85],
+            [0.5, 0.6, 0.8, 0.65],
+            [0.0, 0.0, 0.0, 0.0],
+            [0.05, 0.1, 0.2, 1.0],
+            [0.2, 0.3, 0.5, 0.4],
+            [0.3, 0.4, 0.6, 0.45],
+            [0.05, 0.1, 0.2, 0.83],
+            [0.08, 0.15, 0.25, 0.87],
+            [0.15, 0.25, 0.45, 0.9],
+            [0.1, 0.18, 0.35, 0.9],
+            [0.18, 0.28, 0.48, 0.9],
+            [0.25, 0.35, 0.55, 1.0],
+            [0.35, 0.45, 0.65, 1.0],
+            [0.45, 0.55, 0.75, 1.0],
+            [0.9, 0.95, 1.0, 1.0],
+            [0.7, 0.8, 0.9, 1.0],
+            [0.2, 0.3, 0.5, 1.0],
+            [0.3, 0.5, 0.8, 0.4],
+            [0.4, 0.6, 0.9, 0.67],
+            [0.5, 0.7, 1.0, 1.0],
+            [0.25, 0.55, 0.95, 1.0],
+            [0.35, 0.65, 1.0, 1.0],
+            [0.45, 0.75, 1.0, 1.0],
+            [0.4, 0.5, 0.7, 1.0],
+            [0.5, 0.6, 0.8, 1.0],
+            [0.7, 0.8, 0.95, 1.0],
+            [0.9, 0.95, 1.0, 1.0],
+            [0.9, 0.95, 1.0, 0.6],
+            [0.9, 0.95, 1.0, 0.9],
+            [0.3, 0.5, 0.8, 0.31],
+            [0.4, 0.6, 0.9, 0.8],
+            [0.5, 0.7, 1.0, 1.0],
+            [0.12, 0.18, 0.3, 0.97],
+            [0.35, 0.55, 0.85, 1.0],
+            [0.5, 0.6, 0.8, 0.5],
+            [0.0, 0.0, 0.0, 0.0],
+            [0.9, 0.95, 1.0, 1.0],
+            [0.6, 0.8, 1.0, 1.0],
+            [0.6, 0.8, 1.0, 1.0],
+            [0.6, 0.8, 1.0, 1.0],
+            [0.3, 0.5, 0.8, 0.4],
+            [0.2, 0.25, 0.4, 1.0],
+            [0.15, 0.2, 0.35, 1.0],
+            [0.0, 0.0, 0.0, 0.0],
+            [0.9, 0.95, 1.0, 0.06],
+            [0.3, 0.5, 0.8, 0.35],
+            [0.8, 0.4, 0.5, 1.0],
+            [0.4, 0.6, 0.9, 1.0],
+            [0.25, 0.35, 0.55, 0.56],
+            [0.18, 0.25, 0.4, 0.35],
+            [0.18, 0.25, 0.4, 0.35]
+        ]
+    }
+}

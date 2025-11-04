@@ -1,0 +1,131 @@
+{
+    "DisplayName": "Dwemer Bronze",
+    "Description": "Ancient bronze theme inspired by lost Dwemer technology and metallic machinery",
+    "Version": "1.0.0",
+    "Author": "Community Shaders Team",
+    "Theme": {
+        "FontSize": 27.0,
+        "FontName": "IBM_Plex_Sans/IBMPlexSans_Condensed-Regular.ttf",
+        "GlobalScale": 0.0,
+        "FontRoles": [
+            {
+                "Family": "IBM Plex Sans",
+                "Style": "Condensed Regular",
+                "File": "IBM_Plex_Sans/IBMPlexSans_Condensed-Regular.ttf",
+                "SizeScale": 1.0
+            },
+            {
+                "Family": "IBM Plex Sans",
+                "Style": "Condensed SemiBold",
+                "File": "IBM_Plex_Sans/IBMPlexSans_Condensed-SemiBold.ttf",
+                "SizeScale": 1.05
+            },
+            {
+                "Family": "IBM Plex Sans",
+                "Style": "Condensed Regular",
+                "File": "IBM_Plex_Sans/IBMPlexSans_Condensed-Regular.ttf",
+                "SizeScale": 1.0
+            },
+            {
+                "Family": "IBM Plex Sans",
+                "Style": "Condensed Light",
+                "File": "IBM_Plex_Sans/IBMPlexSans_Condensed-Light.ttf",
+                "SizeScale": 0.95
+            }
+        ],
+        "UseSimplePalette": false,
+        "ShowActionIcons": true,
+        "TooltipHoverDelay": 0.5,
+        "BackgroundBlur": 0.5,
+        "Palette": {
+            "Background": [0.15, 0.12, 0.08, 0.9],
+            "Text": [0.9, 0.75, 0.5, 1.0],
+            "WindowBorder": [0.7, 0.5, 0.3, 0.9],
+            "FrameBorder": [0.6, 0.4, 0.25, 0.8],
+            "Separator": [0.7, 0.5, 0.3, 0.7],
+            "ResizeGrip": [0.8, 0.6, 0.35, 0.9]
+        },
+        "StatusPalette": {
+            "Disable": [0.4, 0.35, 0.25, 1.0],
+            "Error": [0.9, 0.3, 0.1, 1.0],
+            "Warning": [1.0, 0.7, 0.2, 1.0],
+            "RestartNeeded": [0.8, 0.8, 0.4, 1.0],
+            "CurrentHotkey": [1.0, 0.8, 0.3, 1.0],
+            "SuccessColor": [0.5, 0.7, 0.3, 1.0],
+            "InfoColor": [0.6, 0.7, 0.8, 1.0]
+        },
+        "FeatureHeading": {
+            "ColorDefault": [0.8, 0.65, 0.4, 1.0],
+            "ColorHovered": [0.95, 0.8, 0.55, 1.0],
+            "MinimizedFactor": 0.7
+        },
+        "Style": {
+            "WindowBorderSize": 1.5,
+            "ChildBorderSize": 2.0,
+            "FrameBorderSize": 1.0,
+            "WindowPadding": [16.0, 14.0],
+            "WindowRounding": 2.0,
+            "IndentSpacing": 10.0,
+            "FramePadding": [8.0, 6.0],
+            "CellPadding": [14.0, 6.0],
+            "ItemSpacing": [10.0, 9.0]
+        },
+        "FullPalette": [
+            [0.9, 0.75, 0.5, 0.9],
+            [0.7, 0.6, 0.4, 1.0],
+            [0.15, 0.12, 0.08, 0.9],
+            [0.0, 0.0, 0.0, 0.0],
+            [0.13, 0.1, 0.06, 0.85],
+            [0.6, 0.5, 0.35, 0.65],
+            [0.0, 0.0, 0.0, 0.0],
+            [0.1, 0.08, 0.05, 1.0],
+            [0.35, 0.28, 0.18, 0.4],
+            [0.45, 0.36, 0.23, 0.45],
+            [0.1, 0.08, 0.05, 0.83],
+            [0.13, 0.1, 0.07, 0.87],
+            [0.25, 0.2, 0.13, 0.9],
+            [0.18, 0.14, 0.09, 0.9],
+            [0.3, 0.24, 0.15, 0.9],
+            [0.4, 0.32, 0.2, 1.0],
+            [0.5, 0.42, 0.28, 1.0],
+            [0.6, 0.52, 0.38, 1.0],
+            [0.9, 0.75, 0.5, 1.0],
+            [0.7, 0.6, 0.4, 1.0],
+            [0.35, 0.28, 0.18, 1.0],
+            [0.7, 0.5, 0.3, 0.4],
+            [0.8, 0.6, 0.35, 0.67],
+            [0.9, 0.7, 0.45, 1.0],
+            [0.85, 0.55, 0.25, 1.0],
+            [0.9, 0.65, 0.35, 1.0],
+            [0.95, 0.75, 0.45, 1.0],
+            [0.65, 0.5, 0.3, 1.0],
+            [0.75, 0.6, 0.4, 1.0],
+            [0.85, 0.7, 0.5, 1.0],
+            [0.9, 0.75, 0.5, 1.0],
+            [0.9, 0.75, 0.5, 0.6],
+            [0.9, 0.75, 0.5, 0.9],
+            [0.7, 0.5, 0.3, 0.31],
+            [0.8, 0.6, 0.35, 0.8],
+            [0.9, 0.7, 0.45, 1.0],
+            [0.13, 0.1, 0.06, 0.97],
+            [0.75, 0.6, 0.35, 1.0],
+            [0.65, 0.5, 0.3, 0.5],
+            [0.0, 0.0, 0.0, 0.0],
+            [0.9, 0.75, 0.5, 1.0],
+            [0.9, 0.7, 0.3, 1.0],
+            [0.9, 0.7, 0.3, 1.0],
+            [0.9, 0.7, 0.3, 1.0],
+            [0.7, 0.5, 0.3, 0.4],
+            [0.3, 0.24, 0.15, 1.0],
+            [0.23, 0.18, 0.11, 1.0],
+            [0.0, 0.0, 0.0, 0.0],
+            [0.9, 0.75, 0.5, 0.06],
+            [0.7, 0.5, 0.3, 0.35],
+            [0.8, 0.45, 0.25, 1.0],
+            [0.8, 0.6, 0.35, 1.0],
+            [0.45, 0.36, 0.23, 0.56],
+            [0.3, 0.24, 0.15, 0.35],
+            [0.3, 0.24, 0.15, 0.35]
+        ]
+    }
+}

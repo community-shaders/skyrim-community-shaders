@@ -1,6 +1,7 @@
 #include "UI.h"
 
 #include "Menu.h"
+#include "UI.h"
 
 #ifndef DIRECTINPUT_VERSION
 #	define DIRECTINPUT_VERSION 0x0800

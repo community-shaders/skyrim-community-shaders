@@ -128,6 +128,7 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	UseSimplePalette,
 	ShowActionIcons,
 	TooltipHoverDelay,
+	BackgroundBlur,
 	ScrollbarOpacity,
 	Palette,
 	StatusPalette,
@@ -186,6 +187,9 @@ Menu::~Menu()
 	uiIcons.debug.Release();
 	uiIcons.materials.Release();
 	uiIcons.postProcessing.Release();
+
+	// Clean up blur resources
+	ThemeManager::CleanupBlurResources();
 
 	ImGui_ImplDX11_Shutdown();
 	ImGui_ImplWin32_Shutdown();
