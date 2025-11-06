@@ -39,62 +39,118 @@ namespace
 	const char* GetFriendlyColorName(int colorIndex)
 	{
 		switch (colorIndex) {
-			case ImGuiCol_Text: return "Text";
-			case ImGuiCol_TextDisabled: return "Text (Disabled)";
-			case ImGuiCol_WindowBg: return "Window Background";
-			case ImGuiCol_ChildBg: return "Child Window Background";
-			case ImGuiCol_PopupBg: return "Popup Background";
-			case ImGuiCol_Border: return "Border";
-			case ImGuiCol_BorderShadow: return "Border Shadow";
-			case ImGuiCol_FrameBg: return "Frame Background";
-			case ImGuiCol_FrameBgHovered: return "Frame Background (Hovered)";
-			case ImGuiCol_FrameBgActive: return "Frame Background (Active)";
-			case ImGuiCol_TitleBg: return "Title Bar Background";
-			case ImGuiCol_TitleBgActive: return "Title Bar Background (Active)";
-			case ImGuiCol_TitleBgCollapsed: return "Title Bar Background (Collapsed)";
-			case ImGuiCol_MenuBarBg: return "Menu Bar Background";
-			case ImGuiCol_ScrollbarBg: return "Scrollbar Background";
-			case ImGuiCol_ScrollbarGrab: return "Scrollbar Grab";
-			case ImGuiCol_ScrollbarGrabHovered: return "Scrollbar Grab (Hovered)";
-			case ImGuiCol_ScrollbarGrabActive: return "Scrollbar Grab (Active)";
-			case ImGuiCol_CheckMark: return "Checkbox Checkmark";
-			case ImGuiCol_SliderGrab: return "Slider Grab";
-			case ImGuiCol_SliderGrabActive: return "Slider Grab (Active)";
-			case ImGuiCol_Button: return "Button";
-			case ImGuiCol_ButtonHovered: return "Button (Hovered)";
-			case ImGuiCol_ButtonActive: return "Button (Active)";
-			case ImGuiCol_Header: return "Header";
-			case ImGuiCol_HeaderHovered: return "Header (Hovered)";
-			case ImGuiCol_HeaderActive: return "Header (Active)";
-			case ImGuiCol_Separator: return "Separator";
-			case ImGuiCol_SeparatorHovered: return "Separator (Hovered)";
-			case ImGuiCol_SeparatorActive: return "Separator (Active)";
-			case ImGuiCol_ResizeGrip: return "Resize Grip";
-			case ImGuiCol_ResizeGripHovered: return "Resize Grip (Hovered)";
-			case ImGuiCol_ResizeGripActive: return "Resize Grip (Active)";
-			case ImGuiCol_Tab: return "Tab";
-			case ImGuiCol_TabHovered: return "Tab (Hovered)";
-			case ImGuiCol_TabActive: return "Tab (Active)";
-			case ImGuiCol_TabUnfocused: return "Tab (Unfocused)";
-			case ImGuiCol_TabUnfocusedActive: return "Tab (Unfocused Active)";
-			case ImGuiCol_DockingPreview: return "Docking Preview";
-			case ImGuiCol_DockingEmptyBg: return "Docking Empty Background";
-			case ImGuiCol_PlotLines: return "Plot Lines";
-			case ImGuiCol_PlotLinesHovered: return "Plot Lines (Hovered)";
-			case ImGuiCol_PlotHistogram: return "Plot Histogram";
-			case ImGuiCol_PlotHistogramHovered: return "Plot Histogram (Hovered)";
-			case ImGuiCol_TableHeaderBg: return "Table Header Background";
-			case ImGuiCol_TableBorderStrong: return "Table Border (Strong)";
-			case ImGuiCol_TableBorderLight: return "Table Border (Light)";
-			case ImGuiCol_TableRowBg: return "Table Row Background";
-			case ImGuiCol_TableRowBgAlt: return "Table Row Background (Alternate)";
-			case ImGuiCol_TextSelectedBg: return "Text Selection Background";
-			case ImGuiCol_DragDropTarget: return "Drag & Drop Target";
-			case ImGuiCol_NavHighlight: return "Navigation Highlight";
-			case ImGuiCol_NavWindowingHighlight: return "Window Navigation Highlight";
-			case ImGuiCol_NavWindowingDimBg: return "Window Navigation Dim Background";
-			case ImGuiCol_ModalWindowDimBg: return "Modal Window Dim Background";
-			default: return ImGui::GetStyleColorName(colorIndex);
+		case ImGuiCol_Text:
+			return "Text";
+		case ImGuiCol_TextDisabled:
+			return "Text (Disabled)";
+		case ImGuiCol_WindowBg:
+			return "Window Background";
+		case ImGuiCol_ChildBg:
+			return "Child Window Background";
+		case ImGuiCol_PopupBg:
+			return "Popup Background";
+		case ImGuiCol_Border:
+			return "Border";
+		case ImGuiCol_BorderShadow:
+			return "Border Shadow";
+		case ImGuiCol_FrameBg:
+			return "Frame Background";
+		case ImGuiCol_FrameBgHovered:
+			return "Frame Background (Hovered)";
+		case ImGuiCol_FrameBgActive:
+			return "Frame Background (Active)";
+		case ImGuiCol_TitleBg:
+			return "Title Bar Background";
+		case ImGuiCol_TitleBgActive:
+			return "Title Bar Background (Active)";
+		case ImGuiCol_TitleBgCollapsed:
+			return "Title Bar Background (Collapsed)";
+		case ImGuiCol_MenuBarBg:
+			return "Menu Bar Background";
+		case ImGuiCol_ScrollbarBg:
+			return "Scrollbar Background";
+		case ImGuiCol_ScrollbarGrab:
+			return "Scrollbar Grab";
+		case ImGuiCol_ScrollbarGrabHovered:
+			return "Scrollbar Grab (Hovered)";
+		case ImGuiCol_ScrollbarGrabActive:
+			return "Scrollbar Grab (Active)";
+		case ImGuiCol_CheckMark:
+			return "Checkbox Checkmark";
+		case ImGuiCol_SliderGrab:
+			return "Slider Grab";
+		case ImGuiCol_SliderGrabActive:
+			return "Slider Grab (Active)";
+		case ImGuiCol_Button:
+			return "Button";
+		case ImGuiCol_ButtonHovered:
+			return "Button (Hovered)";
+		case ImGuiCol_ButtonActive:
+			return "Button (Active)";
+		case ImGuiCol_Header:
+			return "Header";
+		case ImGuiCol_HeaderHovered:
+			return "Header (Hovered)";
+		case ImGuiCol_HeaderActive:
+			return "Header (Active)";
+		case ImGuiCol_Separator:
+			return "Separator";
+		case ImGuiCol_SeparatorHovered:
+			return "Separator (Hovered)";
+		case ImGuiCol_SeparatorActive:
+			return "Separator (Active)";
+		case ImGuiCol_ResizeGrip:
+			return "Resize Grip";
+		case ImGuiCol_ResizeGripHovered:
+			return "Resize Grip (Hovered)";
+		case ImGuiCol_ResizeGripActive:
+			return "Resize Grip (Active)";
+		case ImGuiCol_Tab:
+			return "Tab";
+		case ImGuiCol_TabHovered:
+			return "Tab (Hovered)";
+		case ImGuiCol_TabActive:
+			return "Tab (Active)";
+		case ImGuiCol_TabUnfocused:
+			return "Tab (Unfocused)";
+		case ImGuiCol_TabUnfocusedActive:
+			return "Tab (Unfocused Active)";
+		case ImGuiCol_DockingPreview:
+			return "Docking Preview";
+		case ImGuiCol_DockingEmptyBg:
+			return "Docking Empty Background";
+		case ImGuiCol_PlotLines:
+			return "Plot Lines";
+		case ImGuiCol_PlotLinesHovered:
+			return "Plot Lines (Hovered)";
+		case ImGuiCol_PlotHistogram:
+			return "Plot Histogram";
+		case ImGuiCol_PlotHistogramHovered:
+			return "Plot Histogram (Hovered)";
+		case ImGuiCol_TableHeaderBg:
+			return "Table Header Background";
+		case ImGuiCol_TableBorderStrong:
+			return "Table Border (Strong)";
+		case ImGuiCol_TableBorderLight:
+			return "Table Border (Light)";
+		case ImGuiCol_TableRowBg:
+			return "Table Row Background";
+		case ImGuiCol_TableRowBgAlt:
+			return "Table Row Background (Alternate)";
+		case ImGuiCol_TextSelectedBg:
+			return "Text Selection Background";
+		case ImGuiCol_DragDropTarget:
+			return "Drag & Drop Target";
+		case ImGuiCol_NavHighlight:
+			return "Navigation Highlight";
+		case ImGuiCol_NavWindowingHighlight:
+			return "Window Navigation Highlight";
+		case ImGuiCol_NavWindowingDimBg:
+			return "Window Navigation Dim Background";
+		case ImGuiCol_ModalWindowDimBg:
+			return "Modal Window Dim Background";
+		default:
+			return ImGui::GetStyleColorName(colorIndex);
 		}
 	}
 
@@ -405,7 +461,7 @@ void SettingsTabRenderer::RenderThemesTab()
 						globals::menu->SaveTheme(currentThemeJson);
 
 						logger::info("Attempting to update theme: '{}'", currentThemePreset);
-						
+
 						// Overwrite the current theme with updated settings
 						if (themeManager->SaveTheme(currentThemePreset, currentThemeJson["Theme"],
 								currentThemeInfo->displayName, currentThemeInfo->description)) {
@@ -464,7 +520,7 @@ void SettingsTabRenderer::RenderThemesTab()
 				std::string description = strlen(newThemeDescription) > 0 ? std::string(newThemeDescription) : "";
 
 				logger::info("Attempting to save new theme: '{}' with display name: '{}'", newThemeName, displayName);
-				
+
 				if (themeManager->SaveTheme(std::string(newThemeName), currentThemeJson["Theme"], displayName, description)) {
 					logger::info("Theme saved successfully. Loading theme preset: '{}'", newThemeName);
 					// Theme created successfully, load it and exit create mode
@@ -677,7 +733,7 @@ void SettingsTabRenderer::RenderStylingTab()
 		auto& style = themeSettings.Style;
 
 		SeparatorTextWithFont("Styling Options", Menu::FontRole::Subheading);
-		
+
 		ImGui::Checkbox("Show Icon Buttons in Header", &themeSettings.ShowActionIcons);
 		if (auto _tt = Util::HoverTooltipWrapper()) {
 			ImGui::Text(
@@ -810,34 +866,34 @@ void SettingsTabRenderer::RenderColorsTab()
 
 		// Color filter at the top with search icon
 		static ImGuiTextFilter colorFilter;
-		
+
 		float iconSize = 20.0f;
 		float iconSpace = iconSize + 14.0f;
 		ImVec2 cursorPos = ImGui::GetCursorScreenPos();
 		float availableWidth = ImGui::GetFontSize() * 16;
 		float frameHeight = ImGui::GetFrameHeight();
-		
+
 		// Custom style for filter with icon space
 		ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(iconSpace, 6.0f));
 		colorFilter.Draw("Filter colors", availableWidth);
 		ImGui::PopStyleVar();
-		
+
 		// Draw search icon
 		ImVec2 iconPos = ImVec2(cursorPos.x + 8.0f, cursorPos.y + (frameHeight - iconSize) * 0.5f);
 		ImDrawList* drawList = ImGui::GetWindowDrawList();
 		ImVec2 center = ImVec2(iconPos.x + iconSize * 0.46f, iconPos.y + iconSize * 0.5f);
 		float radius = iconSize * 0.3f;
-		
+
 		auto& palette = globals::menu->GetTheme().Palette;
 		ImVec4 iconColor = palette.Text;
 		iconColor.w *= 0.7f;
 		ImU32 iconColorU32 = ImGui::GetColorU32(iconColor);
-		
+
 		drawList->AddCircle(center, radius, iconColorU32, 12, 2.2f);
 		ImVec2 handleStart = ImVec2(center.x + radius * 0.81f, center.y + radius * 0.81f);
 		ImVec2 handleEnd = ImVec2(handleStart.x + iconSize * 0.29f, handleStart.y + iconSize * 0.29f);
 		drawList->AddLine(handleStart, handleEnd, iconColorU32, 2.1f);
-		
+
 		ImGui::Spacing();
 
 		// Background & Text

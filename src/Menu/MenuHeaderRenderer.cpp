@@ -89,12 +89,12 @@ void MenuHeaderRenderer::RenderHeader(bool isDocked, bool showLogo, bool canShow
 			if (centerHeader) {
 				// Calculate the width of the content
 				float contentWidth = 0.0f;
-				
+
 				if (showLogo) {
 					float logoAspectRatio = uiIcons.logo.size.x / uiIcons.logo.size.y;
 					contentWidth = (logoSize * logoAspectRatio) + 8.0f;  // Logo width + spacing
 				}
-				
+
 				// Calculate text width
 				{
 					RoleFontGuard titleFont(Menu::FontRole::Title);
@@ -153,7 +153,7 @@ void MenuHeaderRenderer::RenderHeader(bool isDocked, bool showLogo, bool canShow
 			// No icons available - show just the title without the table layout
 			const float baseTextScale = ThemeManager::Constants::HEADER_FALLBACK_TEXT_SCALE;
 			const float textScaleFactor = baseTextScale * uiScale;  // Apply UI scale
-			
+
 			if (centerHeader) {
 				// Calculate text width for centering
 				float textWidth = 0.0f;
@@ -421,12 +421,12 @@ void MenuHeaderRenderer::RenderUndockedIcons(const std::vector<ActionIcon>& acti
 	// Draw action icons as ImageButtons
 	for (size_t i = 0; i < actionIcons.size(); ++i) {
 		const auto& icon = actionIcons[i];
-		
+
 		// Skip if texture is null
 		if (!icon.texture) {
 			continue;
 		}
-		
+
 		std::string buttonId = std::format("##ActionBtn{}", i);
 
 		// Use ImageButton with reduced image size to minimize padding
@@ -483,6 +483,6 @@ void MenuHeaderRenderer::RenderWatermarkLogo(const Menu::UIIcons& uiIcons)
 	} else {
 		watermarkColor = IM_COL32(255, 255, 255, 45);
 	}
-	
+
 	drawList->AddImage(uiIcons.logo.texture, logoMin, logoMax, ImVec2(0, 0), ImVec2(1, 1), watermarkColor);
 }

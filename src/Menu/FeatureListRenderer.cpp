@@ -264,7 +264,7 @@ void FeatureListRenderer::RenderRightColumn(
 void FeatureListRenderer::ListMenuVisitor::operator()(const BuiltInMenu& menu)
 {
 	MenuFonts::FontRoleGuard fontGuard(Menu::FontRole::Subheading);
-	
+
 	// Use error color for Feature Issues menu item
 	bool isFeatureIssues = (menu.name == "Feature Issues");
 	if (isFeatureIssues) {
@@ -312,7 +312,7 @@ void FeatureListRenderer::ListMenuVisitor::operator()(const CategoryHeader& head
 void FeatureListRenderer::ListMenuVisitor::operator()(Feature* feat)
 {
 	MenuFonts::FontRoleGuard fontGuard(Menu::FontRole::Subheading);
-	
+
 	const auto featureName = feat->GetShortName();
 	bool isDisabled = globals::state->IsFeatureDisabled(featureName);
 	bool isLoaded = feat->loaded;

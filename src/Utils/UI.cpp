@@ -135,7 +135,7 @@ namespace Util
 		ImVec2 logoMin = logoPos;
 		ImVec2 logoMax = ImVec2(logoPos.x + logoSize.x, logoPos.y + logoSize.y);
 		ImGui::GetWindowDrawList()->AddImage(logoTexture, logoMin, logoMax, ImVec2(0, 0), ImVec2(1, 1), logoTint);
-		
+
 		// Advance cursor past logo
 		ImGui::Dummy(logoSize);
 		ImGui::SameLine();
@@ -290,24 +290,24 @@ namespace Util
 		if (ImGui::InvisibleButton("##CategoryHeader", ImVec2(availableWidth, textSize.y + 4.0f))) {
 			clicked = true;
 		}
-	hovered = ImGui::IsItemHovered();
+		hovered = ImGui::IsItemHovered();
 
-	// Draw the lines and text using Menu theme colors
-	auto& themeSettings = globals::menu->GetSettings().Theme;
-	auto& palette = themeSettings.Palette;
+		// Draw the lines and text using Menu theme colors
+		auto& themeSettings = globals::menu->GetSettings().Theme;
+		auto& palette = themeSettings.Palette;
 
-	// Use theme text color
-	ImVec4 color = palette.Text;
-	
-	// If minimized, apply reduced alpha
-	if (!isExpanded) {
-		color.w *= 0.7f;  // 70% alpha when minimized
-	}
-	// If hovered, slightly dim the color
-	if (hovered) {
-		color.w *= 0.8f;  // 80% alpha when hovered
-	}
-	ImU32 headerColor = ImGui::GetColorU32(color);		// Left line
+		// Use theme text color
+		ImVec4 color = palette.Text;
+
+		// If minimized, apply reduced alpha
+		if (!isExpanded) {
+			color.w *= 0.7f;  // 70% alpha when minimized
+		}
+		// If hovered, slightly dim the color
+		if (hovered) {
+			color.w *= 0.8f;  // 80% alpha when hovered
+		}
+		ImU32 headerColor = ImGui::GetColorU32(color);  // Left line
 		if (lineLength > 0) {
 			drawList->AddLine(ImVec2(pos.x, lineY), ImVec2(pos.x + lineLength, lineY), headerColor, 1.0f);
 		}

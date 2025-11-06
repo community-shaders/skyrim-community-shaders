@@ -22,7 +22,7 @@ namespace Util
 				auto executablePath = std::filesystem::path(buffer);
 
 				auto gamePath = executablePath.parent_path();
-				auto dataPath = gamePath / "Data";	
+				auto dataPath = gamePath / "Data";
 				return dataPath;
 			} catch (const std::exception& e) {
 				// Fallback to current_path if Windows API method fails

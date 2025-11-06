@@ -387,7 +387,7 @@ bool ThemeManager::ReloadFont(const Menu& menu, float& cachedFontSize)
 
 	// Flush and wait for GPU idle before invalidating resources
 	context->Flush();
-	
+
 	winrt::com_ptr<ID3D11Query> eventQuery;
 	D3D11_QUERY_DESC queryDesc = { D3D11_QUERY_EVENT, 0 };
 	if (SUCCEEDED(device->CreateQuery(&queryDesc, eventQuery.put()))) {
@@ -458,7 +458,7 @@ size_t ThemeManager::DiscoverThemes()
 
 	// Collect all theme directories to search
 	std::vector<std::filesystem::path> searchPaths;
-	
+
 	// Primary themes directory (always check this first)
 	auto themesDir = GetThemesDirectory();
 	logger::info("Checking base themes directory: {}", themesDir.string());
@@ -468,14 +468,14 @@ size_t ThemeManager::DiscoverThemes()
 	} else {
 		logger::warn("Base themes directory does not exist: {}", themesDir.string());
 	}
-	
+
 	// Check for MO2 Overwrite directory
 	auto dataPath = Util::PathHelpers::GetDataPath();
 	auto parentPath = dataPath.parent_path();  // Go up from Data to game root or MO2 instance
-	
+
 	logger::info("Data path: {}", dataPath.string());
 	logger::info("Parent path: {}", parentPath.string());
-	
+
 	// MO2 Overwrite path: <MO2 instance>/overwrite/SKSE/Plugins/CommunityShaders/Themes
 	auto mo2OverwritePath = parentPath / "overwrite" / "SKSE" / "Plugins" / "CommunityShaders" / "Themes";
 	logger::info("Checking MO2 Overwrite path: {}", mo2OverwritePath.string());
@@ -497,7 +497,7 @@ size_t ThemeManager::DiscoverThemes()
 	// Search all paths for theme files
 	for (const auto& searchPath : searchPaths) {
 		logger::info("Searching for themes in: {}", searchPath.string());
-		
+
 		try {
 			for (const auto& entry : std::filesystem::directory_iterator(searchPath)) {
 				if (!entry.is_regular_file() || entry.path().extension() != ".json") {
@@ -734,7 +734,6 @@ std::unique_ptr<ThemeManager::ThemeInfo> ThemeManager::LoadThemeFile(const std::
 	themeInfo->lastModified = GetFileModTime(filePath);
 
 	try {
-
 		std::ifstream file(filePath);
 		if (!file.is_open()) {
 			logger::warn("Failed to open theme file: {}", filePath.string());

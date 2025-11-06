@@ -93,7 +93,7 @@ namespace Util::IconLoader
 		const bool useMonochromeLogo = menu->GetSettings().Theme.UseMonochromeLogo;
 		const char* iconFolder = useMonochrome ? "Action Icons\\Monochrome" : "Action Icons";
 		const char* logoPath = useMonochromeLogo ? "Community Shaders Logo\\Monochrome\\cs-logo.png" : "Community Shaders Logo\\cs-logo.png";
-		
+
 		return {
 			{ std::string(iconFolder) + "\\save-settings.png", &menu->uiIcons.saveSettings.texture, &menu->uiIcons.saveSettings.size },
 			{ std::string(iconFolder) + "\\load-settings.png", &menu->uiIcons.loadSettings.texture, &menu->uiIcons.loadSettings.size },
@@ -130,21 +130,22 @@ namespace Util::IconLoader
 		logger::info("LoadThemeSpecificIcons: Checking for custom icons in theme '{}' at path: {}", selectedTheme, themeIconsPath.string());
 
 		ID3D11DeviceContext* context = globals::d3d::context;
-		if (context) context->Flush();
+		if (context)
+			context->Flush();
 
 		int iconsOverridden = 0;
 
 		for (const auto& iconDef : iconDefs) {
 			std::filesystem::path iconPath = themeIconsPath / std::filesystem::path(iconDef.filename).filename();
-			
+
 			logger::trace("LoadThemeSpecificIcons: Checking for icon: {}", iconPath.string());
-			
+
 			if (std::filesystem::exists(iconPath)) {
 				if (*iconDef.texture) {
 					(*iconDef.texture)->Release();
 					*iconDef.texture = nullptr;
 				}
-				
+
 				if (LoadTextureFromFile(device, iconPath.string().c_str(), iconDef.texture, *iconDef.size)) {
 					logger::debug("LoadThemeSpecificIcons: Loaded custom icon: {}", iconPath.filename().string());
 					iconsOverridden++;

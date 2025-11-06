@@ -307,7 +307,7 @@ void HomePageRenderer::RenderFirstTimeSetupDialog()
 		} else {
 			watermarkColor = IM_COL32(255, 255, 255, 60);
 		}
-		
+
 		// Render as subtle watermark background
 		ImGui::GetWindowDrawList()->AddImage(menu->uiIcons.logo.texture, logoMin, logoMax,
 			ImVec2(0, 0), ImVec2(1, 1), watermarkColor);

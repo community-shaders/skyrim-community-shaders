@@ -18,13 +18,13 @@
 #include <unordered_map>
 #include <vector>
 
-#include "Menu/BackgroundBlur.h"
 #include "Deferred.h"
 #include "Feature.h"
 #include "FeatureIssues.h"
 #include "FeatureVersions.h"
 #include "Features/Upscaling.h"
 #include "Menu/AdvancedSettingsRenderer.h"
+#include "Menu/BackgroundBlur.h"
 #include "Menu/FeatureListRenderer.h"
 #include "Menu/Fonts.h"
 #include "Menu/HomePageRenderer.h"
@@ -299,7 +299,7 @@ bool Menu::LoadThemePreset(const std::string& themeName)
 	json themeSettings;
 
 	if (themeManager->LoadTheme(themeName, themeSettings)) {
-			try {
+		try {
 			// Create a backup of current theme in case loading fails
 			ThemeSettings backupTheme = settings.Theme;
 			ThemeSettings defaultTheme;  // For fallback values
@@ -599,8 +599,9 @@ void Menu::DrawSettings()
 
 		// Main content starts here - no additional separator needed as it's already handled in the conditions above
 
-		float footer_height = settings.Theme.ShowFooter ? 
-			(ImGui::GetFrameHeightWithSpacing() + ImGui::GetStyle().ItemSpacing.y * 3 + 3.0f) : 0.0f;
+		float footer_height = settings.Theme.ShowFooter ?
+		                          (ImGui::GetFrameHeightWithSpacing() + ImGui::GetStyle().ItemSpacing.y * 3 + 3.0f) :
+		                          0.0f;
 
 		// Static storage for menu state - must persist across frames
 		static size_t selectedMenu = 0;
@@ -741,7 +742,7 @@ void Menu::DrawOverlay()
 	// Only process reloads when ImGui is NOT in an active frame
 	ImGuiContext* ctx = ImGui::GetCurrentContext();
 	bool canReload = ctx && !ctx->WithinFrameScope && !ctx->WithinEndChild;
-	
+
 	// Process deferred font reload BEFORE any ImGui operations
 	// This is the safest place to do font atlas modifications
 	if (pendingFontReload && canReload) {
