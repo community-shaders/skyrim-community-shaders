@@ -53,10 +53,9 @@ using namespace std::literals;
 	constexpr float BLUR_TEXT_CONTRAST_FACTOR = 0.05f;  // 5% brightness boost at max blur
 
 	// Gaussian blur sigma: Controls blur kernel spread (standard deviation)
-	// Value 0.5 provides smooth blur without over-blurring fine details
 	// Based on Unrimp rendering engine's empirically tested value
 	// Lower = sharper (more detail, more banding), Higher = softer (less detail, smoother)
-	constexpr float GAUSSIAN_BLUR_SIGMA = 0.5f;
+	constexpr float GAUSSIAN_BLUR_SIGMA = 2.0f;
 
 namespace BackgroundBlur
 {
@@ -126,7 +125,7 @@ VS_OUTPUT VS_Main(uint vertexID : SV_VertexID)
 
 float GaussianWeight(float offset)
 {
-    const float SIGMA = 0.5f;
+    const float SIGMA = 2.0f;
     const float v = 2.0f * SIGMA * SIGMA;
     return exp(-(offset * offset) / v) / (3.14159265f * v);
 }
@@ -188,7 +187,7 @@ VS_OUTPUT VS_Main(uint vertexID : SV_VertexID)
 
 float GaussianWeight(float offset)
 {
-    const float SIGMA = 0.5f;
+    const float SIGMA = 2.0f;
     const float v = 2.0f * SIGMA * SIGMA;
     return exp(-(offset * offset) / v) / (3.14159265f * v);
 }
@@ -498,8 +497,8 @@ float4 PS_Main(VS_OUTPUT input) : SV_TARGET
 		context->RSGetState(&originalRS);
 
 		// Calculate blur parameters
-		float blurRadius = currentIntensity * 5.0f;
-		int sampleCount = (std::max)(3, (std::min)(15, static_cast<int>(7 + currentIntensity * 8)));
+		float blurRadius = currentIntensity * 10.0f;
+		int sampleCount = (std::max)(5, (std::min)(15, static_cast<int>(9 + currentIntensity * 6)));
 
 		BlurConstants constants = {};
 		constants.texelSize[0] = blurRadius / static_cast<float>(textureWidth);

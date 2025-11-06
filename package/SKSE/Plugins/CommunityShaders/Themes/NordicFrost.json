@@ -5,7 +5,7 @@
     "Author": "Community Shaders Team",
     "Theme": {
         "FontSize": 27.0,
-        "FontName": "Crimson_Pro/CrimsonPro-Regular.ttf",
+        "FontName": "Jost/Jost-Regular.ttf",
         "GlobalScale": 0.0,
         "FontRoles": [
             {
@@ -37,7 +37,7 @@
         "ShowActionIcons": true,
         "UseMonochromeIcons": true,
         "TooltipHoverDelay": 0.5,
-        "BackgroundBlur": 0.75,
+        "BackgroundBlur": 0.3,
         "Palette": {
             "Background": [0.05, 0.15, 0.25, 0.9],
             "Text": [0.9, 0.95, 1.0, 1.0],

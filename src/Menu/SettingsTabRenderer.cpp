@@ -364,7 +364,7 @@ void SettingsTabRenderer::RenderThemesTab()
 			}
 		}
 
-		ImGui::SameLine();
+		// Theme action buttons (moved below dropdown to prevent clipping)
 		if (ImGui::Button("Refresh Themes")) {
 			themeManager->RefreshThemes();
 			// Ensure a valid theme is still selected
@@ -694,6 +694,13 @@ void SettingsTabRenderer::RenderStylingTab()
 			if (auto _tt = Util::HoverTooltipWrapper()) {
 				ImGui::Text("Uses white monochrome icons that adapt to your theme's text color");
 			}
+			ImGui::SameLine();
+			if (ImGui::Checkbox("Use Monochrome CS Logo", &themeSettings.UseMonochromeLogo)) {
+				globals::menu->pendingIconReload = true;
+			}
+			if (auto _tt = Util::HoverTooltipWrapper()) {
+				ImGui::Text("Uses monochrome version of the Community Shaders logo");
+			}
 			ImGui::Unindent();
 		}
 
@@ -801,49 +808,90 @@ void SettingsTabRenderer::RenderColorsTab()
 		auto& themeSettings = globals::menu->GetSettings().Theme;
 		auto& colors = themeSettings.FullPalette;
 
-		// Color search bar at the top
-		static std::string colorSearch;
-		Util::DrawFeatureSearchBar(colorSearch);
+		// Color filter at the top with search icon
+		static ImGuiTextFilter colorFilter;
+		
+		float iconSize = 20.0f;
+		float iconSpace = iconSize + 14.0f;
+		ImVec2 cursorPos = ImGui::GetCursorScreenPos();
+		float availableWidth = ImGui::GetFontSize() * 16;
+		float frameHeight = ImGui::GetFrameHeight();
+		
+		// Custom style for filter with icon space
+		ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(iconSpace, 6.0f));
+		colorFilter.Draw("Filter colors", availableWidth);
+		ImGui::PopStyleVar();
+		
+		// Draw search icon
+		ImVec2 iconPos = ImVec2(cursorPos.x + 8.0f, cursorPos.y + (frameHeight - iconSize) * 0.5f);
+		ImDrawList* drawList = ImGui::GetWindowDrawList();
+		ImVec2 center = ImVec2(iconPos.x + iconSize * 0.46f, iconPos.y + iconSize * 0.5f);
+		float radius = iconSize * 0.3f;
+		
+		auto& palette = globals::menu->GetTheme().Palette;
+		ImVec4 iconColor = palette.Text;
+		iconColor.w *= 0.7f;
+		ImU32 iconColorU32 = ImGui::GetColorU32(iconColor);
+		
+		drawList->AddCircle(center, radius, iconColorU32, 12, 2.2f);
+		ImVec2 handleStart = ImVec2(center.x + radius * 0.81f, center.y + radius * 0.81f);
+		ImVec2 handleEnd = ImVec2(handleStart.x + iconSize * 0.29f, handleStart.y + iconSize * 0.29f);
+		drawList->AddLine(handleStart, handleEnd, iconColorU32, 2.1f);
+		
 		ImGui::Spacing();
 
 		// Background & Text
-		ImGui::ColorEdit4("Background", (float*)&themeSettings.Palette.Background);
-		ImGui::ColorEdit4("Text", (float*)&themeSettings.Palette.Text);
+		if (colorFilter.PassFilter("Background"))
+			ImGui::ColorEdit4("Background", (float*)&themeSettings.Palette.Background);
+		if (colorFilter.PassFilter("Text"))
+			ImGui::ColorEdit4("Text", (float*)&themeSettings.Palette.Text);
 
 		if (ImGui::TreeNodeEx("Borders & Separators", ImGuiTreeNodeFlags_DefaultOpen)) {
-			ImGui::ColorEdit4("Window Border", (float*)&themeSettings.Palette.WindowBorder);
-			ImGui::ColorEdit4("Slider & Input Background", (float*)&themeSettings.Palette.FrameBorder);
-			ImGui::ColorEdit4("Separator Line", (float*)&themeSettings.Palette.Separator);
-			ImGui::ColorEdit4("Resize Grip", (float*)&themeSettings.Palette.ResizeGrip);
+			if (colorFilter.PassFilter("Window Border"))
+				ImGui::ColorEdit4("Window Border", (float*)&themeSettings.Palette.WindowBorder);
+			if (colorFilter.PassFilter("Slider & Input Background"))
+				ImGui::ColorEdit4("Slider & Input Background", (float*)&themeSettings.Palette.FrameBorder);
+			if (colorFilter.PassFilter("Separator Line"))
+				ImGui::ColorEdit4("Separator Line", (float*)&themeSettings.Palette.Separator);
+			if (colorFilter.PassFilter("Resize Grip"))
+				ImGui::ColorEdit4("Resize Grip", (float*)&themeSettings.Palette.ResizeGrip);
 			ImGui::TreePop();
 		}
 
 		if (ImGui::TreeNodeEx("Feature Headings", ImGuiTreeNodeFlags_DefaultOpen)) {
-			ImGui::ColorEdit4("Default", (float*)&themeSettings.FeatureHeading.ColorDefault);
-			ImGui::ColorEdit4("Hovered", (float*)&themeSettings.FeatureHeading.ColorHovered);
-			ImGui::SliderFloat("Minimized Transparency", &themeSettings.FeatureHeading.MinimizedFactor, 0.0f, 1.0f, "%.2f");
+			if (colorFilter.PassFilter("Default"))
+				ImGui::ColorEdit4("Default", (float*)&themeSettings.FeatureHeading.ColorDefault);
+			if (colorFilter.PassFilter("Hovered"))
+				ImGui::ColorEdit4("Hovered", (float*)&themeSettings.FeatureHeading.ColorHovered);
+			if (colorFilter.PassFilter("Minimized Transparency"))
+				ImGui::SliderFloat("Minimized Transparency", &themeSettings.FeatureHeading.MinimizedFactor, 0.0f, 1.0f, "%.2f");
 			ImGui::TreePop();
 		}
 
 		if (ImGui::TreeNodeEx("Status", ImGuiTreeNodeFlags_DefaultOpen)) {
-			ImGui::ColorEdit4("Disabled", (float*)&themeSettings.StatusPalette.Disable);
-			ImGui::ColorEdit4("Error", (float*)&themeSettings.StatusPalette.Error);
-			ImGui::ColorEdit4("Warning", (float*)&themeSettings.StatusPalette.Warning);
-			ImGui::ColorEdit4("Restart Needed", (float*)&themeSettings.StatusPalette.RestartNeeded);
-			ImGui::ColorEdit4("Current Hotkey", (float*)&themeSettings.StatusPalette.CurrentHotkey);
-			ImGui::ColorEdit4("Success", (float*)&themeSettings.StatusPalette.SuccessColor);
-			ImGui::ColorEdit4("Info", (float*)&themeSettings.StatusPalette.InfoColor);
+			if (colorFilter.PassFilter("Disabled"))
+				ImGui::ColorEdit4("Disabled", (float*)&themeSettings.StatusPalette.Disable);
+			if (colorFilter.PassFilter("Error"))
+				ImGui::ColorEdit4("Error", (float*)&themeSettings.StatusPalette.Error);
+			if (colorFilter.PassFilter("Warning"))
+				ImGui::ColorEdit4("Warning", (float*)&themeSettings.StatusPalette.Warning);
+			if (colorFilter.PassFilter("Restart Needed"))
+				ImGui::ColorEdit4("Restart Needed", (float*)&themeSettings.StatusPalette.RestartNeeded);
+			if (colorFilter.PassFilter("Current Hotkey"))
+				ImGui::ColorEdit4("Current Hotkey", (float*)&themeSettings.StatusPalette.CurrentHotkey);
+			if (colorFilter.PassFilter("Success"))
+				ImGui::ColorEdit4("Success", (float*)&themeSettings.StatusPalette.SuccessColor);
+			if (colorFilter.PassFilter("Info"))
+				ImGui::ColorEdit4("Info", (float*)&themeSettings.StatusPalette.InfoColor);
 			ImGui::TreePop();
 		}
 
 		if (ImGui::TreeNode("Full Palette")) {
 			ImGui::TextWrapped("Advanced color controls for detailed customization of all UI elements.");
-			static ImGuiTextFilter filter;
-			filter.Draw("Filter colors", ImGui::GetFontSize() * 16);
 
 			for (int i = 0; i < ImGuiCol_COUNT; i++) {
 				const char* friendlyName = GetFriendlyColorName(i);
-				if (!filter.PassFilter(friendlyName))
+				if (!colorFilter.PassFilter(friendlyName))
 					continue;
 				ImGui::ColorEdit4(friendlyName, (float*)&colors[i], ImGuiColorEditFlags_AlphaBar | ImGuiColorEditFlags_AlphaPreviewHalf);
 			}

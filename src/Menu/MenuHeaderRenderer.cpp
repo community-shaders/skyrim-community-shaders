@@ -117,6 +117,13 @@ void MenuHeaderRenderer::RenderHeader(bool isDocked, bool showLogo, bool canShow
 				float logoAspectRatio = uiIcons.logo.size.x / uiIcons.logo.size.y;
 				ImVec2 logoSizeVec(logoSize * logoAspectRatio, logoSize);
 
+				// Determine tint color for logo
+				ImU32 logoTint = IM_COL32_WHITE;
+				if (globals::menu->GetSettings().Theme.UseMonochromeLogo) {
+					ImVec4 textColor = globals::menu->GetSettings().Theme.Palette.Text;
+					logoTint = ImGui::GetColorU32(textColor);
+				}
+
 				// Use our helper to render aligned logo and text with perfect vertical alignment
 				{
 					RoleFontGuard titleFont(Menu::FontRole::Title);
@@ -124,7 +131,8 @@ void MenuHeaderRenderer::RenderHeader(bool isDocked, bool showLogo, bool canShow
 						uiIcons.logo.texture,
 						logoSizeVec,
 						title.c_str(),
-						textScaleFactor);
+						textScaleFactor,
+						logoTint);
 				}
 			} else {
 				// No logo, just render the text with proper alignment
@@ -466,7 +474,15 @@ void MenuHeaderRenderer::RenderWatermarkLogo(const Menu::UIIcons& uiIcons)
 	ImVec2 logoMin(logoX, logoY);
 	ImVec2 logoMax(logoX + watermarkWidth, logoY + watermarkHeight);
 
-	// Use very low alpha for subtle watermark effect
-	ImU32 watermarkColor = IM_COL32(255, 255, 255, 45);
+	// Determine watermark color based on monochrome logo setting
+	ImU32 watermarkColor;
+	if (globals::menu->GetSettings().Theme.UseMonochromeLogo) {
+		ImVec4 textColor = globals::menu->GetSettings().Theme.Palette.Text;
+		textColor.w = 0.18f;  // Very low alpha for subtle watermark effect
+		watermarkColor = ImGui::GetColorU32(textColor);
+	} else {
+		watermarkColor = IM_COL32(255, 255, 255, 45);
+	}
+	
 	drawList->AddImage(uiIcons.logo.texture, logoMin, logoMax, ImVec2(0, 0), ImVec2(1, 1), watermarkColor);
 }

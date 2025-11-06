@@ -182,7 +182,7 @@ namespace Util
 	// Text rendering helpers for clearer title text
 	// These functions modify ImGui rendering state and should be called within ImGui context
 	ImVec2 DrawSharpText(const char* text, bool alignToPixelGrid = true, float scale = 1.0f);
-	ImVec2 DrawAlignedTextWithLogo(ID3D11ShaderResourceView* logoTexture, const ImVec2& logoSize, const char* text, float textScale = DefaultHeaderTextScale);
+	ImVec2 DrawAlignedTextWithLogo(ID3D11ShaderResourceView* logoTexture, const ImVec2& logoSize, const char* text, float textScale = DefaultHeaderTextScale, ImU32 logoTint = IM_COL32_WHITE);
 
 	/**
 	 * Calculates the horizontal offset needed to center content within the full window width

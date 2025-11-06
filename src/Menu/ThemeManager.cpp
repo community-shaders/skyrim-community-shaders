@@ -14,6 +14,7 @@
 #include <fstream>
 #include <iomanip>
 #include <numeric>
+#include <thread>
 #include <unordered_map>
 #include <vector>
 
@@ -384,8 +385,18 @@ bool ThemeManager::ReloadFont(const Menu& menu, float& cachedFontSize)
 	// Recreate device objects - this is where crashes can occur
 	// Must be done between frames with no active rendering state
 
-	// Flush any pending GPU operations before invalidating
+	// Flush and wait for GPU idle before invalidating resources
 	context->Flush();
+	
+	winrt::com_ptr<ID3D11Query> eventQuery;
+	D3D11_QUERY_DESC queryDesc = { D3D11_QUERY_EVENT, 0 };
+	if (SUCCEEDED(device->CreateQuery(&queryDesc, eventQuery.put()))) {
+		context->End(eventQuery.get());
+		BOOL queryData = FALSE;
+		for (int i = 0; i < 1000 && context->GetData(eventQuery.get(), &queryData, sizeof(BOOL), 0) != S_OK; i++) {
+			std::this_thread::sleep_for(std::chrono::milliseconds(1));
+		}
+	}
 
 	ImGui_ImplDX11_InvalidateDeviceObjects();
 
@@ -445,44 +456,76 @@ size_t ThemeManager::DiscoverThemes()
 
 	themes.clear();
 
-	// Use VFS path - MO2 merges mod folder and overwrite folder into single virtual directory
-	auto themesDir = GetThemesDirectory();
+	// Collect all theme directories to search
+	std::vector<std::filesystem::path> searchPaths;
 	
-	if (!std::filesystem::exists(themesDir)) {
-		logger::info("Themes directory does not exist: {}", themesDir.string());
+	// Primary themes directory (always check this first)
+	auto themesDir = GetThemesDirectory();
+	logger::info("Checking base themes directory: {}", themesDir.string());
+	if (std::filesystem::exists(themesDir)) {
+		searchPaths.push_back(themesDir);
+		logger::info("Base themes directory exists, added to search paths");
+	} else {
+		logger::warn("Base themes directory does not exist: {}", themesDir.string());
+	}
+	
+	// Check for MO2 Overwrite directory
+	auto dataPath = Util::PathHelpers::GetDataPath();
+	auto parentPath = dataPath.parent_path();  // Go up from Data to game root or MO2 instance
+	
+	logger::info("Data path: {}", dataPath.string());
+	logger::info("Parent path: {}", parentPath.string());
+	
+	// MO2 Overwrite path: <MO2 instance>/overwrite/SKSE/Plugins/CommunityShaders/Themes
+	auto mo2OverwritePath = parentPath / "overwrite" / "SKSE" / "Plugins" / "CommunityShaders" / "Themes";
+	logger::info("Checking MO2 Overwrite path: {}", mo2OverwritePath.string());
+	if (std::filesystem::exists(mo2OverwritePath)) {
+		searchPaths.push_back(mo2OverwritePath);
+		logger::info("Found MO2 Overwrite themes directory");
+	} else {
+		logger::info("MO2 Overwrite themes directory does not exist");
+	}
+
+	if (searchPaths.empty()) {
+		logger::info("No theme directories found");
 		discovered = true;
 		return 0;
 	}
 
-	logger::info("Discovering themes in: {}", themesDir.string());
+	logger::info("Discovering themes in {} directories", searchPaths.size());
 
-	try {
-		for (const auto& entry : std::filesystem::directory_iterator(themesDir)) {
-			if (!entry.is_regular_file() || entry.path().extension() != ".json") {
-				continue;
-			}
+	// Search all paths for theme files
+	for (const auto& searchPath : searchPaths) {
+		logger::info("Searching for themes in: {}", searchPath.string());
+		
+		try {
+			for (const auto& entry : std::filesystem::directory_iterator(searchPath)) {
+				if (!entry.is_regular_file() || entry.path().extension() != ".json") {
+					continue;
+				}
 
-			// Check file size
-			auto fileSize = entry.file_size();
-			if (fileSize > MAX_FILE_SIZE) {
-				logger::warn("Theme file too large, skipping: {} ({}MB)",
-					entry.path().filename().string(), fileSize / (1024 * 1024));
-				continue;
-			}
+				// Check file size
+				auto fileSize = entry.file_size();
+				if (fileSize > MAX_FILE_SIZE) {
+					logger::warn("Theme file too large, skipping: {} ({}MB)",
+						entry.path().filename().string(), fileSize / (1024 * 1024));
+					continue;
+				}
 
-			if (themes.size() >= MAX_THEMES) {
-				logger::warn("Maximum number of themes ({}) reached, skipping remaining files", MAX_THEMES);
-				break;
-			}
+				if (themes.size() >= MAX_THEMES) {
+					logger::warn("Maximum number of themes ({}) reached, skipping remaining files", MAX_THEMES);
+					break;
+				}
 
-			auto themeInfo = LoadThemeFile(entry.path());
-			if (themeInfo && themeInfo->isValid) {
-				themes.push_back(std::move(*themeInfo));
-				logger::info("Discovered theme: {} ({})", themes.back().name, themes.back().displayName);
+				auto themeInfo = LoadThemeFile(entry.path());
+				if (themeInfo && themeInfo->isValid) {
+					themes.push_back(std::move(*themeInfo));
+					logger::info("Discovered theme: {} ({})", themes.back().name, themes.back().displayName);
+				}
 			}
+		} catch (const std::filesystem::filesystem_error& e) {
+			logger::warn("Error discovering themes in {}: {}", searchPath.string(), e.what());
 		}
-	} catch (const std::filesystem::filesystem_error& e) {
-		logger::warn("Error discovering themes: {}", e.what());
 	}
 
 	// Sort themes alphabetically by display name
@@ -691,12 +734,6 @@ std::unique_ptr<ThemeManager::ThemeInfo> ThemeManager::LoadThemeFile(const std::
 	themeInfo->lastModified = GetFileModTime(filePath);
 
 	try {
-		// Security: Verify path is within themes directory
-		auto themesDir = GetThemesDirectory();
-		if (!Util::IsPathWithinDirectory(themesDir, filePath)) {
-			logger::error("Security: Theme file outside allowed directory: {}", filePath.string());
-			return themeInfo;
-		}
 
 		std::ifstream file(filePath);
 		if (!file.is_open()) {

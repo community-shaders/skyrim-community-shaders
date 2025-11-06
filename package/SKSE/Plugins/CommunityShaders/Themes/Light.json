@@ -1,36 +1,44 @@
 {
     "DisplayName": "Default Light",
     "Description": "Sleek monochrome theme with modern minimalist aesthetic",
-    "Version": "2.0.0",
+    "Version": "1.0.0",
     "Author": "Community Shaders Team",
     "Theme": {
         "FontSize": 27.0,
-        "FontName": "Inter/Inter_24pt-Regular.ttf",
+        "FontName": "Jost/Jost-Regular.ttf",
         "GlobalScale": 0.0,
         "FontRoles": [
             {
-                "Family": "Inter",
-                "Style": "24pt Light",
-                "File": "Inter/Inter_24pt-Light.ttf",
+                "Family": "IBMPlex Sans",
+                "Style": "Condensed Light",
+                "File": "IBMPlexSans/IBMPlexSans_Condensed-Light.ttf",
                 "SizeScale": 1.0
             },
             {
-                "Family": "Inter",
-                "Style": "24pt SemiBold",
-                "File": "Inter/Inter_24pt-SemiBold.ttf",
+                "Family": "IBMPlex Mono",
+                "Style": "Regular",
+                "File": "IBMPlexMono/IBMPlexMono-Regular.ttf",
                 "SizeScale": 1.0
             },
             {
-                "Family": "Inter",
-                "Style": "24pt Light",
-                "File": "Inter/Inter_24pt-Light.ttf",
+                "Family": "IBMPlex Sans",
+                "Style": "Regular",
+                "File": "IBMPlexSans/IBMPlexSans-Regular.ttf",
+                "SizeScale": 1.0
+            },
+            {
+                "Family": "IBMPlex Serif",
+                "Style": "Light",
+                "File": "IBMPlexSerif/IBMPlexSerif-Light.ttf",
                 "SizeScale": 1.0
             }
         ],
         "UseSimplePalette": false,
         "ShowActionIcons": true,
+        "ShowFooter": false,
+        "CenterHeader": true,
         "TooltipHoverDelay": 0.5,
-        "BackgroundBlur": 0.5,
+        "BackgroundBlur": 0.3,
         "Palette": {
             "Background": [0.98, 0.98, 0.98, 0.90],
             "Text": [0.08, 0.08, 0.08, 1.0],

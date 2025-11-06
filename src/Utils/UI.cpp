@@ -115,7 +115,7 @@ namespace Util
 		return ImVec2(endPos.x - startPos.x, endPos.y - startPos.y);
 	}
 
-	ImVec2 DrawAlignedTextWithLogo(ID3D11ShaderResourceView* logoTexture, const ImVec2& logoSize, const char* text, float textScale)
+	ImVec2 DrawAlignedTextWithLogo(ID3D11ShaderResourceView* logoTexture, const ImVec2& logoSize, const char* text, float textScale, ImU32 logoTint)
 	{
 		// Save current cursor position
 		ImVec2 startPos = ImGui::GetCursorPos();
@@ -130,8 +130,14 @@ namespace Util
 		// Position cursor for logo with vertical alignment
 		ImGui::SetCursorPos(ImVec2(startPos.x, startPos.y + verticalOffset));
 
-		// Render logo
-		ImGui::Image(logoTexture, logoSize);
+		// Render logo using draw list with tint color support
+		ImVec2 logoPos = ImGui::GetCursorScreenPos();
+		ImVec2 logoMin = logoPos;
+		ImVec2 logoMax = ImVec2(logoPos.x + logoSize.x, logoPos.y + logoSize.y);
+		ImGui::GetWindowDrawList()->AddImage(logoTexture, logoMin, logoMax, ImVec2(0, 0), ImVec2(1, 1), logoTint);
+		
+		// Advance cursor past logo
+		ImGui::Dummy(logoSize);
 		ImGui::SameLine();
 
 		// Add consistent spacing between logo and text

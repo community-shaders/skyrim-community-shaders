@@ -1,23 +1,17 @@
 {
-    "DisplayName": "High Contrast",
-    "Description": "High contrast black and white theme for improved accessibility and visibility",
+    "DisplayName": "CS Classic",
+    "Description": "A theme reminiscent of the original Community Shaders 1.0 look.",
     "Version": "1.0.0",
     "Author": "Community Shaders Team",
     "Theme": {
         "FontSize": 27.0,
-        "FontName": "Work_Sans/WorkSans-SemiBold.ttf",
+        "FontName": "Jost/Jost-Regular.ttf",
         "GlobalScale": 0.0,
         "FontRoles": [
             {
                 "Family": "Inter",
-                "Style": "Regular",
-                "File": "Inter/Inter-Regular.ttf",
-                "SizeScale": 1.0
-            },
-            {
-                "Family": "Inter",
-                "Style": "Bold",
-                "File": "Inter/Inter-Bold.ttf",
+                "Style": "Light",
+                "File": "Inter/Inter-Light.ttf",
                 "SizeScale": 1.0
             },
             {
@@ -27,9 +21,15 @@
                 "SizeScale": 1.0
             },
             {
+                "Family": "Rubik",
+                "Style": "SemiBold",
+                "File": "Rubik/Rubik-SemiBold.ttf",
+                "SizeScale": 1.0
+            },
+            {
                 "Family": "Inter",
-                "Style": "Medium",
-                "File": "Inter/Inter-Medium.ttf",
+                "Style": "Light",
+                "File": "Inter/Inter-Light.ttf",
                 "SizeScale": 1.0
             }
         ],
@@ -37,7 +37,7 @@
         "ShowActionIcons": true,
         "UseMonochromeIcons": true,
         "TooltipHoverDelay": 0.5,
-        "BackgroundBlur": 0.75,
+        "BackgroundBlur": 0.3,
         "Palette": {
             "Background": [0.0, 0.0, 0.0, 0.95],
             "Text": [1.0, 1.0, 1.0, 1.0],
@@ -61,11 +61,11 @@
             "MinimizedFactor": 0.6
         },
         "Style": {
-            "WindowBorderSize": 4.0,
+            "WindowBorderSize": 2.0,
             "ChildBorderSize": 2.0,
             "FrameBorderSize": 2.0,
             "WindowPadding": [18.0, 16.0],
-            "WindowRounding": 0.0,
+            "WindowRounding": 2.0,
             "IndentSpacing": 12.0,
             "FramePadding": [10.0, 6.0],
             "CellPadding": [16.0, 8.0],
@@ -75,7 +75,7 @@
             [1.0, 1.0, 1.0, 0.9],
             [0.8, 0.8, 0.8, 1.0],
             [0.0, 0.0, 0.0, 0.95],
-            [0.0, 0.0, 0.0, 0.0],
+            [1.0, 1.0, 1.0, 0.39],
             [0.05, 0.05, 0.05, 0.85],
             [1.0, 1.0, 1.0, 0.65],
             [0.0, 0.0, 0.0, 0.0],

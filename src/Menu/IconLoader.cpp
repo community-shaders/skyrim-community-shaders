@@ -11,8 +11,10 @@
 #include <stb_image.h>
 
 #include <array>
+#include <chrono>
 #include <filesystem>
 #include <string>
+#include <thread>
 
 namespace Util::IconLoader
 {
@@ -88,13 +90,15 @@ namespace Util::IconLoader
 	std::vector<IconDefinition> GetIconDefinitions(Menu* menu)
 	{
 		const bool useMonochrome = menu->GetSettings().Theme.UseMonochromeIcons;
+		const bool useMonochromeLogo = menu->GetSettings().Theme.UseMonochromeLogo;
 		const char* iconFolder = useMonochrome ? "Action Icons\\Monochrome" : "Action Icons";
+		const char* logoPath = useMonochromeLogo ? "Community Shaders Logo\\Monochrome\\cs-logo.png" : "Community Shaders Logo\\cs-logo.png";
 		
 		return {
 			{ std::string(iconFolder) + "\\save-settings.png", &menu->uiIcons.saveSettings.texture, &menu->uiIcons.saveSettings.size },
 			{ std::string(iconFolder) + "\\load-settings.png", &menu->uiIcons.loadSettings.texture, &menu->uiIcons.loadSettings.size },
 			{ std::string(iconFolder) + "\\clear-cache.png", &menu->uiIcons.clearCache.texture, &menu->uiIcons.clearCache.size },
-			{ "Community Shaders Logo\\cs-logo.png", &menu->uiIcons.logo.texture, &menu->uiIcons.logo.size },
+			{ logoPath, &menu->uiIcons.logo.texture, &menu->uiIcons.logo.size },
 			{ std::string(iconFolder) + "\\restore-settings.png", &menu->uiIcons.featureSettingRevert.texture, &menu->uiIcons.featureSettingRevert.size },
 			{ std::string(iconFolder) + "\\discord.png", &menu->uiIcons.discord.texture, &menu->uiIcons.discord.size },
 			{ "Categories\\characters.png", &menu->uiIcons.characters.texture, &menu->uiIcons.characters.size },
@@ -124,6 +128,9 @@ namespace Util::IconLoader
 		}
 
 		logger::info("LoadThemeSpecificIcons: Checking for custom icons in theme '{}' at path: {}", selectedTheme, themeIconsPath.string());
+
+		ID3D11DeviceContext* context = globals::d3d::context;
+		if (context) context->Flush();
 
 		int iconsOverridden = 0;
 
@@ -158,9 +165,22 @@ namespace Util::IconLoader
 		}
 
 		ID3D11Device* device = globals::d3d::device;
-		if (!device) {
-			logger::warn("InitializeMenuIcons: D3D device is null");
+		ID3D11DeviceContext* context = globals::d3d::context;
+		if (!device || !context) {
+			logger::warn("InitializeMenuIcons: D3D device or context is null");
 			return false;
+		}
+
+		// Flush and wait for GPU idle before releasing textures
+		context->Flush();
+		winrt::com_ptr<ID3D11Query> eventQuery;
+		D3D11_QUERY_DESC queryDesc = { D3D11_QUERY_EVENT, 0 };
+		if (SUCCEEDED(device->CreateQuery(&queryDesc, eventQuery.put()))) {
+			context->End(eventQuery.get());
+			BOOL queryData = FALSE;
+			for (int i = 0; i < 1000 && context->GetData(eventQuery.get(), &queryData, sizeof(BOOL), 0) != S_OK; i++) {
+				std::this_thread::sleep_for(std::chrono::milliseconds(1));
+			}
 		}
 
 		std::string basePath = Util::PathHelpers::GetIconsPath().string() + "\\";
@@ -191,7 +211,29 @@ namespace Util::IconLoader
 				iconsLoaded++;
 				anyIconLoaded = true;
 			} else {
-				logger::warn("InitializeMenuIcons: Failed to load icon from: {}", fullPath);
+				// If monochrome icon failed to load, try fallback to colored version
+				if (basePath.find("Monochrome") != std::string::npos) {
+					std::string fallbackPath = basePath;
+					size_t pos = fallbackPath.find("\\Monochrome");
+					if (pos != std::string::npos) {
+						fallbackPath.erase(pos, 11);  // Remove "\Monochrome"
+					}
+					fallbackPath += iconDef.filename;
+					// Try to extract just the filename from iconDef.filename if it has path
+					size_t lastSlash = iconDef.filename.find_last_of("\\/");
+					if (lastSlash != std::string::npos) {
+						std::string justFilename = iconDef.filename.substr(lastSlash + 1);
+						fallbackPath = fallbackPath.substr(0, fallbackPath.find_last_of("\\/") + 1) + justFilename;
+					}
+					if (LoadTextureFromFile(device, fallbackPath.c_str(), iconDef.texture, *iconDef.size)) {
+						iconsLoaded++;
+						anyIconLoaded = true;
+					} else {
+						logger::warn("InitializeMenuIcons: Failed to load icon from: {} (and fallback)", fullPath);
+					}
+				} else {
+					logger::warn("InitializeMenuIcons: Failed to load icon from: {}", fullPath);
+				}
 			}
 		}
 

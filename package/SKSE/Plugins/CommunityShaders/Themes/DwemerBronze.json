@@ -5,41 +5,42 @@
     "Author": "Community Shaders Team",
     "Theme": {
         "FontSize": 27.0,
-        "FontName": "IBM_Plex_Sans/IBMPlexSans_Condensed-Regular.ttf",
+        "FontName": "Jost/Jost-Regular.ttf",
         "GlobalScale": 0.0,
-        "FontRoles": [
+"FontRoles": [
             {
                 "Family": "Crimson Pro",
-                "Style": "Regular",
                 "File": "CrimsonPro/CrimsonPro-Regular.ttf",
-                "SizeScale": 1.0
+                "SizeScale": 1.0,
+                "Style": "Regular"
             },
             {
                 "Family": "Sovngarde",
-                "Style": "Light",
                 "File": "Sovngarde/SovngardeLight.ttf",
-                "SizeScale": 1.0
+                "SizeScale": 1.0,
+                "Style": "Light"
             },
             {
                 "Family": "Roboto",
-                "Style": "Semi Bold",
-                "File": "Roboto/Roboto-SemiBold.ttf",
-                "SizeScale": 1.0
-            },
-            {
-                "Family": "Roboto",
-                "Style": "Regular",
                 "File": "Roboto/Roboto-Regular.ttf",
-                "SizeScale": 1.0
+                "SizeScale": 1.0,
+                "Style": "Regular"
+            },
+            {
+                "Family": "RobotoSlab",
+                "File": "RobotoSlab/RobotoSlab-Light.ttf",
+                "SizeScale": 1.0,
+                "Style": "Light"
             }
         ],
         "UseSimplePalette": false,
         "ShowActionIcons": true,
         "UseMonochromeIcons": true,
+        "UseMonochromeLogo": true,
         "ShowFooter": false,
         "CenterHeader": true,
         "TooltipHoverDelay": 0.5,
-        "BackgroundBlur": 0.75,
+        "BackgroundBlur": 0.3,
         "Palette": {
             "Background": [0.15, 0.12, 0.08, 0.9],
             "Text": [0.9, 0.75, 0.5, 1.0],

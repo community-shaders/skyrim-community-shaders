@@ -130,6 +130,7 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	UseSimplePalette,
 	ShowActionIcons,
 	UseMonochromeIcons,
+	UseMonochromeLogo,
 	ShowFooter,
 	CenterHeader,
 	TooltipHoverDelay,
@@ -343,6 +344,11 @@ bool Menu::LoadThemePreset(const std::string& themeName)
 						settings.Theme.UseMonochromeIcons = themeSettings["UseMonochromeIcons"];
 					} catch (...) {}
 				}
+				if (themeSettings.contains("UseMonochromeLogo")) {
+					try {
+						settings.Theme.UseMonochromeLogo = themeSettings["UseMonochromeLogo"];
+					} catch (...) {}
+				}
 				if (themeSettings.contains("TooltipHoverDelay")) {
 					try {
 						settings.Theme.TooltipHoverDelay = themeSettings["TooltipHoverDelay"];
@@ -438,10 +444,8 @@ bool Menu::LoadThemePreset(const std::string& themeName)
 				pendingFontReload = true;
 			}
 
-			// Reload icons to apply theme-specific icon overrides
-			if (!Util::InitializeMenuIcons(this)) {
-				logger::warn("LoadThemePreset: Failed to reload icons for theme '{}'", themeName);
-			}
+			// Schedule deferred icon reload to apply theme-specific icon overrides
+			pendingIconReload = true;
 
 			logger::info("Loaded theme preset: {}", themeName);
 			return true;
@@ -734,9 +738,13 @@ void Menu::DrawFooter()
  */
 void Menu::DrawOverlay()
 {
+	// Only process reloads when ImGui is NOT in an active frame
+	ImGuiContext* ctx = ImGui::GetCurrentContext();
+	bool canReload = ctx && !ctx->WithinFrameScope && !ctx->WithinEndChild;
+	
 	// Process deferred font reload BEFORE any ImGui operations
 	// This is the safest place to do font atlas modifications
-	if (pendingFontReload) {
+	if (pendingFontReload && canReload) {
 		// Call ReloadFont first - only clear flag if it succeeds
 		if (ThemeManager::ReloadFont(*this, cachedFontSize)) {
 			// Reload completed successfully
@@ -748,7 +756,7 @@ void Menu::DrawOverlay()
 	}
 
 	// Process deferred icon reload BEFORE rendering
-	if (pendingIconReload) {
+	if (pendingIconReload && canReload) {
 		if (Util::IconLoader::InitializeMenuIcons(this)) {
 			pendingIconReload = false;
 		} else {
