@@ -22,7 +22,8 @@ namespace Util
 				auto executablePath = std::filesystem::path(buffer);
 
 				auto gamePath = executablePath.parent_path();
-				return gamePath / "Data";
+				auto dataPath = gamePath / "Data";	
+				return dataPath;
 			} catch (const std::exception& e) {
 				// Fallback to current_path if Windows API method fails
 				logger::warn("Failed to get game path via Windows API, falling back to current_path: {}", e.what());

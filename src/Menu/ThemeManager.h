@@ -169,9 +169,9 @@ public:
 
 		// Header rendering constants
 		static constexpr float HEADER_BASE_TEXT_SCALE = 1.7f;
-		static constexpr float HEADER_BASE_ICON_MULTIPLIER = 1.5f;
+		static constexpr float HEADER_BASE_ICON_MULTIPLIER = 1.85f;
 		static constexpr float HEADER_FALLBACK_TEXT_SCALE = 1.5f;
-		static constexpr float DOCKED_ICON_SIZE_MULTIPLIER = 1.25f;
+		static constexpr float DOCKED_ICON_SIZE_MULTIPLIER = 1.5f;
 		static constexpr float DOCKED_ICON_SPACING = 8.0f;
 		static constexpr float DOCKED_RIGHT_MARGIN = 45.0f;
 		static constexpr float WATERMARK_HEIGHT_PERCENT = 0.50f;

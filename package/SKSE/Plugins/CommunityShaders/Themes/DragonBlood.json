@@ -9,9 +9,9 @@
         "GlobalScale": 0.0,
         "FontRoles": [
             {
-                "Family": "Bitter",
-                "Style": "SemiBold",
-                "File": "Bitter/Bitter-SemiBold.ttf",
+                "Family": "Crimson Pro",
+                "Style": "Regular",
+                "File": "CrimsonPro/CrimsonPro-Regular.ttf",
                 "SizeScale": 1.0
             },
             {
@@ -21,22 +21,23 @@
                 "SizeScale": 1.1
             },
             {
-                "Family": "Bitter",
-                "Style": "Regular",
-                "File": "Bitter/Bitter-Regular.ttf",
+                "Family": "Crimson Pro",
+                "Style": "SemiBold",
+                "File": "CrimsonPro/CrimsonPro-SemiBold.ttf",
                 "SizeScale": 1.0
             },
             {
-                "Family": "Bitter",
+                "Family": "Crimson Pro",
                 "Style": "Light",
-                "File": "Bitter/Bitter-Light.ttf",
-                "SizeScale": 0.95
+                "File": "CrimsonPro/CrimsonPro-Light.ttf",
+                "SizeScale": 1.0
             }
         ],
         "UseSimplePalette": false,
         "ShowActionIcons": true,
+        "UseMonochromeIcons": true,
         "TooltipHoverDelay": 0.5,
-        "BackgroundBlur": 0.5,
+        "BackgroundBlur": 0.75,
         "Palette": {
             "Background": [0.25, 0.05, 0.05, 0.9],
             "Text": [1.0, 0.85, 0.85, 1.0],
@@ -104,12 +105,12 @@
             [1.0, 0.85, 0.85, 1.0],
             [1.0, 0.85, 0.85, 0.6],
             [1.0, 0.85, 0.85, 0.9],
-            [0.8, 0.3, 0.3, 0.31],
-            [0.9, 0.4, 0.4, 0.8],
-            [1.0, 0.5, 0.5, 1.0],
+            [0.7, 0.5, 0.3, 0.31],
+            [0.4, 0.08, 0.08, 0.9],
+            [0.55, 0.12, 0.12, 1.0],
             [0.2, 0.05, 0.05, 0.97],
-            [0.85, 0.35, 0.35, 1.0],
-            [0.7, 0.3, 0.3, 0.5],
+            [0.45, 0.1, 0.1, 1.0],
+            [0.35, 0.08, 0.08, 0.7],
             [0.0, 0.0, 0.0, 0.0],
             [1.0, 0.85, 0.85, 1.0],
             [1.0, 0.6, 0.2, 1.0],

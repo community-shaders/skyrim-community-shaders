@@ -45,20 +45,6 @@ namespace
 	// Low value maintains minimalist aesthetic while providing hover feedback
 	constexpr float RESIZE_GRIP_HOVER_ALPHA = 0.1f;  // 10% opacity for hover state
 
-	// Contrast Adjustment Constants
-	// ------------------------------
-	// Luminance threshold for background/text contrast (sRGB middle gray)
-	// 0.5 represents perceptual midpoint between black and white
-	constexpr float LUMINANCE_THRESHOLD = 0.5f;
-
-	// Background darkening factor for light-on-light contrast issues
-	// Multiplies RGB by 0.4 = 60% darker, prevents white text on white background
-	constexpr float CONTRAST_DARKEN_FACTOR = 0.4f;
-
-	// Background lightening offset for dark-on-dark contrast issues
-	// Adds 0.3 to RGB = 30% brighter, prevents black text on black background
-	constexpr float CONTRAST_LIGHTEN_OFFSET = 0.3f;
-
 	/**
 	 * @brief Gets file modification time
 	 */
@@ -143,38 +129,6 @@ void ThemeManager::SetupImGuiStyle(const Menu& menu)
 	resizeGripHovered.w = RESIZE_GRIP_HOVER_ALPHA;
 	colors[ImGuiCol_ResizeGripHovered] = resizeGripHovered;
 	colors[ImGuiCol_ResizeGripActive] = resizeGripHovered;
-
-	// Auto-adjust text colors for better contrast on selection backgrounds
-	// This fixes white-on-white text issues in high contrast themes
-	// Use centralized color utilities from Utils/UI.h instead of duplicating logic
-
-	// Apply contrast-aware adjustments for headers and tabs
-	float textLum = Util::ColorUtils::CalculateLuminance(colors[ImGuiCol_Text]);
-
-	// Apply contrast adjustments for all header and tab backgrounds using unified logic
-	Util::ColorUtils::AdjustBackgroundForTextContrast(colors[ImGuiCol_Header], textLum,
-		LUMINANCE_THRESHOLD, CONTRAST_DARKEN_FACTOR, CONTRAST_LIGHTEN_OFFSET);
-	Util::ColorUtils::AdjustBackgroundForTextContrast(colors[ImGuiCol_HeaderHovered], textLum,
-		LUMINANCE_THRESHOLD, CONTRAST_DARKEN_FACTOR, CONTRAST_LIGHTEN_OFFSET);
-	Util::ColorUtils::AdjustBackgroundForTextContrast(colors[ImGuiCol_HeaderActive], textLum,
-		LUMINANCE_THRESHOLD, CONTRAST_DARKEN_FACTOR, CONTRAST_LIGHTEN_OFFSET);
-	Util::ColorUtils::AdjustBackgroundForTextContrast(colors[ImGuiCol_Tab], textLum,
-		LUMINANCE_THRESHOLD, CONTRAST_DARKEN_FACTOR, CONTRAST_LIGHTEN_OFFSET);
-	Util::ColorUtils::AdjustBackgroundForTextContrast(colors[ImGuiCol_TabActive], textLum,
-		LUMINANCE_THRESHOLD, CONTRAST_DARKEN_FACTOR, CONTRAST_LIGHTEN_OFFSET);
-	Util::ColorUtils::AdjustBackgroundForTextContrast(colors[ImGuiCol_TabHovered], textLum,
-		LUMINANCE_THRESHOLD, CONTRAST_DARKEN_FACTOR, CONTRAST_LIGHTEN_OFFSET);
-
-	// Apply semi-transparent tint for text selection background
-	// TextSelectedBg should be a tinted overlay, not opaque, so underlying text remains visible
-	float selectionLum = Util::ColorUtils::CalculateLuminance(colors[ImGuiCol_HeaderActive]);
-	if (selectionLum > LUMINANCE_THRESHOLD) {
-		// Light selection background - use semi-transparent dark tint
-		colors[ImGuiCol_TextSelectedBg] = ImVec4(0.0f, 0.0f, 0.0f, 0.25f);
-	} else {
-		// Dark selection background - use semi-transparent light tint
-		colors[ImGuiCol_TextSelectedBg] = ImVec4(1.0f, 1.0f, 1.0f, 0.25f);
-	}
 
 	// Apply scrollbar opacity settings
 	colors[ImGuiCol_ScrollbarBg].w = themeSettings.ScrollbarOpacity.Background;
@@ -491,7 +445,9 @@ size_t ThemeManager::DiscoverThemes()
 
 	themes.clear();
 
+	// Use VFS path - MO2 merges mod folder and overwrite folder into single virtual directory
 	auto themesDir = GetThemesDirectory();
+	
 	if (!std::filesystem::exists(themesDir)) {
 		logger::info("Themes directory does not exist: {}", themesDir.string());
 		discovered = true;
@@ -614,9 +570,13 @@ bool ThemeManager::SaveTheme(const std::string& themeName, const json& themeSett
 	auto themesDir = GetThemesDirectory();
 	auto filePath = themesDir / (safeFileName + ".json");
 
+	logger::info("SaveTheme: Saving theme '{}' to file: {}", themeName, filePath.string());
+	logger::debug("SaveTheme: Theme has {} top-level keys", fullTheme.size());
+
 	try {
 		// Ensure themes directory exists
 		std::filesystem::create_directories(themesDir);
+		logger::debug("SaveTheme: Themes directory ensured: {}", themesDir.string());
 
 		// Write the theme file
 		std::ofstream file(filePath);

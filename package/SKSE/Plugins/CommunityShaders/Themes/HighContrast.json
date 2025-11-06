@@ -9,39 +9,40 @@
         "GlobalScale": 0.0,
         "FontRoles": [
             {
-                "Family": "Work Sans",
-                "Style": "SemiBold",
-                "File": "Work_Sans/WorkSans-SemiBold.ttf",
-                "SizeScale": 1.0
-            },
-            {
-                "Family": "Work Sans",
-                "Style": "SemiBold",
-                "File": "Work_Sans/WorkSans-SemiBold.ttf",
-                "SizeScale": 1.1
-            },
-            {
-                "Family": "Work Sans",
+                "Family": "Inter",
                 "Style": "Regular",
-                "File": "Work_Sans/WorkSans-Regular.ttf",
+                "File": "Inter/Inter-Regular.ttf",
                 "SizeScale": 1.0
             },
             {
-                "Family": "Work Sans",
-                "Style": "Light",
-                "File": "Work_Sans/WorkSans-Light.ttf",
-                "SizeScale": 0.95
+                "Family": "Inter",
+                "Style": "Bold",
+                "File": "Inter/Inter-Bold.ttf",
+                "SizeScale": 1.0
+            },
+            {
+                "Family": "Inter",
+                "Style": "SemiBold",
+                "File": "Inter/Inter-SemiBold.ttf",
+                "SizeScale": 1.0
+            },
+            {
+                "Family": "Inter",
+                "Style": "Medium",
+                "File": "Inter/Inter-Medium.ttf",
+                "SizeScale": 1.0
             }
         ],
         "UseSimplePalette": false,
         "ShowActionIcons": true,
+        "UseMonochromeIcons": true,
         "TooltipHoverDelay": 0.5,
-        "BackgroundBlur": 0.5,
+        "BackgroundBlur": 0.75,
         "Palette": {
             "Background": [0.0, 0.0, 0.0, 0.95],
             "Text": [1.0, 1.0, 1.0, 1.0],
             "WindowBorder": [1.0, 1.0, 1.0, 1.0],
-            "FrameBorder": [0.9, 0.9, 0.9, 0.9],
+            "FrameBorder": [0.4, 0.4, 0.4, 0.9],
             "Separator": [1.0, 1.0, 1.0, 0.8],
             "ResizeGrip": [1.0, 1.0, 1.0, 1.0]
         },
@@ -92,22 +93,22 @@
             [1.0, 1.0, 1.0, 1.0],
             [0.8, 0.8, 0.8, 1.0],
             [0.2, 0.2, 0.2, 1.0],
-            [0.6, 0.6, 0.6, 0.4],
-            [0.8, 0.8, 0.8, 0.67],
-            [1.0, 1.0, 1.0, 1.0],
-            [0.9, 0.9, 0.9, 1.0],
-            [0.85, 0.85, 0.85, 1.0],
-            [0.75, 0.75, 0.75, 1.0],
-            [0.6, 0.6, 0.6, 1.0],
-            [0.8, 0.8, 0.8, 1.0],
-            [0.9, 0.9, 0.9, 1.0],
+            [0.3, 0.3, 0.3, 1.0],
+            [0.35, 0.35, 0.35, 1.0],
+            [0.4, 0.4, 0.4, 1.0],
+            [0.25, 0.25, 0.25, 1.0],
+            [0.3, 0.3, 0.3, 1.0],
+            [0.35, 0.35, 0.35, 1.0],
+            [0.3, 0.3, 0.3, 1.0],
+            [0.35, 0.35, 0.35, 1.0],
+            [0.4, 0.4, 0.4, 1.0],
             [1.0, 1.0, 1.0, 1.0],
             [1.0, 1.0, 1.0, 0.6],
             [1.0, 1.0, 1.0, 0.9],
             [0.6, 0.6, 0.6, 0.31],
             [0.8, 0.8, 0.8, 0.8],
-            [1.0, 1.0, 1.0, 1.0],
-            [0.1, 0.1, 0.1, 0.97],
+            [0.5, 0.5, 0.5, 1.0],
+            [0.55, 0.55, 0.55, 1.0],
             [0.85, 0.85, 0.85, 1.0],
             [0.7, 0.7, 0.7, 0.5],
             [0.0, 0.0, 0.0, 0.0],

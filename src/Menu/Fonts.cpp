@@ -141,9 +141,44 @@ namespace MenuFonts
 		}
 	}
 
+	TabBarPaddingGuard::TabBarPaddingGuard(FontRole tabFontRole)
+	{
+		// Get the font that will be used for tabs
+		ImFont* tabFont = globals::menu->GetFont(tabFontRole);
+		ImFont* bodyFont = globals::menu->GetFont(FontRole::Body);
+		
+		if (tabFont && bodyFont) {
+			float fontScale = tabFont->FontSize / bodyFont->FontSize;
+			
+			// Only scale if the tab font is noticeably larger
+			if (fontScale > 1.05f) {
+				ImGuiStyle& style = ImGui::GetStyle();
+				originalPadding_ = style.FramePadding;
+				
+				// Scale padding proportionally to font size
+				style.FramePadding.x *= fontScale;
+				style.FramePadding.y *= fontScale;
+				
+				scaled_ = true;
+			}
+		}
+	}
+
+	TabBarPaddingGuard::~TabBarPaddingGuard()
+	{
+		if (scaled_) {
+			ImGuiStyle& style = ImGui::GetStyle();
+			style.FramePadding = originalPadding_;
+		}
+	}
+
 	bool BeginTabItemWithFont(const char* label, FontRole role, ImGuiTabItemFlags flags)
 	{
+		// Push the font for this role
 		FontRoleGuard guard(role);
+		
+		// Simply begin the tab item - padding adjustments should be handled
+		// by the tab bar wrapper, not individual tab items
 		return ImGui::BeginTabItem(label, nullptr, flags);
 	}
 

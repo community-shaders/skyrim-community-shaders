@@ -55,9 +55,9 @@ public:
 	enum class FontRole : std::uint8_t
 	{
 		Body = 0,    // Default UI text
-		Heading,     // Feature headers
-		Subheading,  // Subsection headers
-		Subtitle,    // Secondary text
+		Title,       // Large title text (e.g., "Community Shaders" header)
+		Heading,     // Section headers (tabs, category labels)
+		Subheading,  // Subsection headers (feature names, separators)
 		Count        // Total number of roles
 	};
 
@@ -70,9 +70,9 @@ public:
 
 	static inline constexpr std::array<FontRoleDescriptor, static_cast<size_t>(FontRole::Count)> FontRoleDescriptors = {
 		FontRoleDescriptor{ "Body", "Body Text", 1.0f },
+		FontRoleDescriptor{ "Title", "Title", 1.0f },
 		FontRoleDescriptor{ "Heading", "Headings", 1.0f },
-		FontRoleDescriptor{ "Subheading", "Subheadings", 1.0f },
-		FontRoleDescriptor{ "Subtitle", "Subtitles", 1.0f }
+		FontRoleDescriptor{ "Subheading", "Subheadings", 1.0f }
 	};
 
 	static constexpr std::string_view GetFontRoleKey(FontRole role)
@@ -149,15 +149,15 @@ public:
 		setFile(FontRole::Body, "Jost/Jost-Regular.ttf");
 		setFile(FontRole::Heading, "Jost/Jost-Regular.ttf");
 		setFile(FontRole::Subheading, "Jost/Jost-Regular.ttf");
-		setFile(FontRole::Subtitle, "Jost/Jost-Regular.ttf");
 		return files;
 	}();
 	mutable std::array<float, static_cast<size_t>(FontRole::Count)> cachedFontPixelSizesByRole = {};
 	std::string cachedFontSignature;
 	mutable std::array<ImFont*, static_cast<size_t>(FontRole::Count)> loadedFontRoles = {};
 
-	// Deferred font reload system (public for SettingsTabRenderer access)
+	// Deferred reload systems (public for SettingsTabRenderer access)
 	bool pendingFontReload = false;
+	bool pendingIconReload = false;
 
 	// Used for resetting input keys to solve alt-tab stuck issue
 	std::atomic<bool> focusChanged = false;
@@ -231,19 +231,21 @@ public:
 			};
 
 			setRole(FontRole::Body, "Jost", "Regular", "Jost/Jost-Regular.ttf", 1.0f);
+			setRole(FontRole::Title, "Jost", "Regular", "Jost/Jost-Regular.ttf", 1.0f);
 			setRole(FontRole::Heading, "Jost", "Regular", "Jost/Jost-Regular.ttf", 1.0f);
 			setRole(FontRole::Subheading, "Jost", "Regular", "Jost/Jost-Regular.ttf", 1.0f);
-			setRole(FontRole::Subtitle, "Jost", "Regular", "Jost/Jost-Regular.ttf", 1.0f);
 
 			return roles;
 		}();
 
-		bool UseSimplePalette = false;   // DEPRECATED: No longer affects behavior. UI now shows both Simple and Advanced controls.
-		bool ShowActionIcons = true;     // whether to show action buttons as icons
-		float TooltipHoverDelay = 0.5f;  // tooltip hover delay in seconds
-		float BackgroundBlur = 0.5f;     // background blur effect intensity
 
-		// Scrollbar opacity settings
+	bool UseSimplePalette = false;   // DEPRECATED: No longer affects behavior. UI now shows both Simple and Advanced controls.
+	bool ShowActionIcons = true;     // whether to show action buttons as icons
+	bool UseMonochromeIcons = false; // whether to use monochrome (white) action icons with text color tinting
+	bool ShowFooter = true;          // whether to show the footer with game version/GPU info
+	bool CenterHeader = false;       // whether to center the header title and logo
+	float TooltipHoverDelay = 0.5f;  // tooltip hover delay in seconds
+	float BackgroundBlur = 0.5f;     // background blur effect intensity		// Scrollbar opacity settings
 		struct ScrollbarOpacitySettings
 		{
 			float Background = 0.0f;     // Background of the scrollbar area

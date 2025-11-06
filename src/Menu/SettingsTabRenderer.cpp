@@ -13,6 +13,7 @@
 #include "BackgroundBlur.h"
 #include "Fonts.h"
 #include "Globals.h"
+#include "IconLoader.h"
 #include "Menu.h"
 #include "ShaderCache.h"
 #include "ThemeManager.h"
@@ -32,6 +33,69 @@ namespace
 				return std::tolower(static_cast<unsigned char>(ca)) ==
 			           std::tolower(static_cast<unsigned char>(cb));
 			});
+	}
+
+	// Convert ImGui internal color names to user-friendly display names
+	const char* GetFriendlyColorName(int colorIndex)
+	{
+		switch (colorIndex) {
+			case ImGuiCol_Text: return "Text";
+			case ImGuiCol_TextDisabled: return "Text (Disabled)";
+			case ImGuiCol_WindowBg: return "Window Background";
+			case ImGuiCol_ChildBg: return "Child Window Background";
+			case ImGuiCol_PopupBg: return "Popup Background";
+			case ImGuiCol_Border: return "Border";
+			case ImGuiCol_BorderShadow: return "Border Shadow";
+			case ImGuiCol_FrameBg: return "Frame Background";
+			case ImGuiCol_FrameBgHovered: return "Frame Background (Hovered)";
+			case ImGuiCol_FrameBgActive: return "Frame Background (Active)";
+			case ImGuiCol_TitleBg: return "Title Bar Background";
+			case ImGuiCol_TitleBgActive: return "Title Bar Background (Active)";
+			case ImGuiCol_TitleBgCollapsed: return "Title Bar Background (Collapsed)";
+			case ImGuiCol_MenuBarBg: return "Menu Bar Background";
+			case ImGuiCol_ScrollbarBg: return "Scrollbar Background";
+			case ImGuiCol_ScrollbarGrab: return "Scrollbar Grab";
+			case ImGuiCol_ScrollbarGrabHovered: return "Scrollbar Grab (Hovered)";
+			case ImGuiCol_ScrollbarGrabActive: return "Scrollbar Grab (Active)";
+			case ImGuiCol_CheckMark: return "Checkbox Checkmark";
+			case ImGuiCol_SliderGrab: return "Slider Grab";
+			case ImGuiCol_SliderGrabActive: return "Slider Grab (Active)";
+			case ImGuiCol_Button: return "Button";
+			case ImGuiCol_ButtonHovered: return "Button (Hovered)";
+			case ImGuiCol_ButtonActive: return "Button (Active)";
+			case ImGuiCol_Header: return "Header";
+			case ImGuiCol_HeaderHovered: return "Header (Hovered)";
+			case ImGuiCol_HeaderActive: return "Header (Active)";
+			case ImGuiCol_Separator: return "Separator";
+			case ImGuiCol_SeparatorHovered: return "Separator (Hovered)";
+			case ImGuiCol_SeparatorActive: return "Separator (Active)";
+			case ImGuiCol_ResizeGrip: return "Resize Grip";
+			case ImGuiCol_ResizeGripHovered: return "Resize Grip (Hovered)";
+			case ImGuiCol_ResizeGripActive: return "Resize Grip (Active)";
+			case ImGuiCol_Tab: return "Tab";
+			case ImGuiCol_TabHovered: return "Tab (Hovered)";
+			case ImGuiCol_TabActive: return "Tab (Active)";
+			case ImGuiCol_TabUnfocused: return "Tab (Unfocused)";
+			case ImGuiCol_TabUnfocusedActive: return "Tab (Unfocused Active)";
+			case ImGuiCol_DockingPreview: return "Docking Preview";
+			case ImGuiCol_DockingEmptyBg: return "Docking Empty Background";
+			case ImGuiCol_PlotLines: return "Plot Lines";
+			case ImGuiCol_PlotLinesHovered: return "Plot Lines (Hovered)";
+			case ImGuiCol_PlotHistogram: return "Plot Histogram";
+			case ImGuiCol_PlotHistogramHovered: return "Plot Histogram (Hovered)";
+			case ImGuiCol_TableHeaderBg: return "Table Header Background";
+			case ImGuiCol_TableBorderStrong: return "Table Border (Strong)";
+			case ImGuiCol_TableBorderLight: return "Table Border (Light)";
+			case ImGuiCol_TableRowBg: return "Table Row Background";
+			case ImGuiCol_TableRowBgAlt: return "Table Row Background (Alternate)";
+			case ImGuiCol_TextSelectedBg: return "Text Selection Background";
+			case ImGuiCol_DragDropTarget: return "Drag & Drop Target";
+			case ImGuiCol_NavHighlight: return "Navigation Highlight";
+			case ImGuiCol_NavWindowingHighlight: return "Window Navigation Highlight";
+			case ImGuiCol_NavWindowingDimBg: return "Window Navigation Dim Background";
+			case ImGuiCol_ModalWindowDimBg: return "Modal Window Dim Background";
+			default: return ImGui::GetStyleColorName(colorIndex);
+		}
 	}
 
 	void SeparatorTextWithFont(const char* text, Menu::FontRole role)
@@ -61,6 +125,7 @@ void SettingsTabRenderer::RenderGeneralSettings(
 	SettingsState& state,
 	const std::function<const char*(uint32_t)>& keyIdToString)
 {
+	MenuFonts::TabBarPaddingGuard tabPaddingGuard(Menu::FontRole::Heading);
 	if (ImGui::BeginTabBar("##GeneralTabBar", ImGuiTabBarFlags_None)) {
 		RenderShadersTab();
 		RenderKeybindingsTab(state, keyIdToString);
@@ -190,6 +255,7 @@ void SettingsTabRenderer::RenderKeybindingsTab(
 void SettingsTabRenderer::RenderInterfaceTab()
 {
 	if (BeginTabItemWithFont("Interface", Menu::FontRole::Heading)) {
+		MenuFonts::TabBarPaddingGuard tabPaddingGuard(Menu::FontRole::Subheading);
 		if (ImGui::BeginTabBar("##tabs", ImGuiTabBarFlags_None)) {
 			RenderThemesTab();
 			RenderFontsTab();
@@ -203,7 +269,7 @@ void SettingsTabRenderer::RenderInterfaceTab()
 
 void SettingsTabRenderer::RenderThemesTab()
 {
-	if (BeginTabItemWithFont("Themes", Menu::FontRole::Subheading)) {
+	if (BeginTabItemWithFont("Themes", Menu::FontRole::Heading)) {
 		auto& themeSettings = globals::menu->GetSettings().Theme;
 
 		// Static variables for popup state and new theme creation
@@ -272,7 +338,7 @@ void SettingsTabRenderer::RenderThemesTab()
 		}
 
 		// Theme preset dropdown
-		if (ComboWithFont("##ThemePreset", &currentItem, items.data(), static_cast<int>(items.size()), Menu::FontRole::Subtitle)) {
+		if (ComboWithFont("##ThemePreset", &currentItem, items.data(), static_cast<int>(items.size()), Menu::FontRole::Body)) {
 			if (currentItem == 0) {
 				// "+ Create New" selected
 				isCreatingNewTheme = true;
@@ -338,11 +404,17 @@ void SettingsTabRenderer::RenderThemesTab()
 						json currentThemeJson;
 						globals::menu->SaveTheme(currentThemeJson);
 
+						logger::info("Attempting to update theme: '{}'", currentThemePreset);
+						
 						// Overwrite the current theme with updated settings
 						if (themeManager->SaveTheme(currentThemePreset, currentThemeJson["Theme"],
 								currentThemeInfo->displayName, currentThemeInfo->description)) {
-							// Theme updated successfully
+							logger::info("Theme '{}' updated successfully", currentThemePreset);
+						} else {
+							logger::error("Failed to update theme: '{}'", currentThemePreset);
 						}
+					} else {
+						logger::warn("Cannot update theme '{}' - theme info not found", currentThemePreset);
 					}
 				}
 			}
@@ -391,11 +463,17 @@ void SettingsTabRenderer::RenderThemesTab()
 				std::string displayName = strlen(newThemeDisplayName) > 0 ? std::string(newThemeDisplayName) : std::string(newThemeName);
 				std::string description = strlen(newThemeDescription) > 0 ? std::string(newThemeDescription) : "";
 
+				logger::info("Attempting to save new theme: '{}' with display name: '{}'", newThemeName, displayName);
+				
 				if (themeManager->SaveTheme(std::string(newThemeName), currentThemeJson["Theme"], displayName, description)) {
+					logger::info("Theme saved successfully. Loading theme preset: '{}'", newThemeName);
 					// Theme created successfully, load it and exit create mode
 					globals::menu->LoadThemePreset(std::string(newThemeName));
 					isCreatingNewTheme = false;
 					showCreateThemePopup = false;
+					logger::info("Theme creation complete. Total themes: {}", themeManager->GetThemes().size());
+				} else {
+					logger::error("Failed to save theme: '{}'", newThemeName);
 				}
 			}
 
@@ -407,34 +485,13 @@ void SettingsTabRenderer::RenderThemesTab()
 			ImGui::EndPopup();
 		}
 
-		SeparatorTextWithFont("UI Elements", Menu::FontRole::Subheading);
-		ImGui::Checkbox("Use Icon Buttons in Header", &themeSettings.ShowActionIcons);
-		if (auto _tt = Util::HoverTooltipWrapper()) {
-			ImGui::Text(
-				"When enabled: Shows action buttons (Save, Load, Clear Cache) as icons in the header\n"
-				"When disabled: Shows as text buttons below the header");
-		}
-
-		ImGui::SliderFloat("Tooltip Hover Delay", &themeSettings.TooltipHoverDelay, 0.0f, 2.0f, "%.2f s", ImGuiSliderFlags_AlwaysClamp);
-		if (auto _tt = Util::HoverTooltipWrapper()) {
-			ImGui::TextUnformatted("Time in seconds to wait before a tooltip appears when hovering over an item.");
-		}
-
-		if (ImGui::SliderFloat("Background Blur", &themeSettings.BackgroundBlur, 0.0f, 1.0f, "%.2f", ImGuiSliderFlags_AlwaysClamp)) {
-			BackgroundBlur::SetIntensity(themeSettings.BackgroundBlur);
-		}
-		if (auto _tt = Util::HoverTooltipWrapper()) {
-			ImGui::Text(
-				"Applies a blur effect to the background.");
-		}
-
 		ImGui::EndTabItem();
 	}
 }
 
 void SettingsTabRenderer::RenderFontsTab()
 {
-	if (BeginTabItemWithFont("Fonts", Menu::FontRole::Subheading)) {
+	if (BeginTabItemWithFont("Fonts", Menu::FontRole::Heading)) {
 		auto* menuInstance = globals::menu;
 		auto& themeSettings = menuInstance->GetSettings().Theme;
 
@@ -508,7 +565,7 @@ void SettingsTabRenderer::RenderFontsTab()
 			const char* familyPreview = fontCatalog.families.empty() ? "No families" : fontCatalog.families[familyIndex].displayName.c_str();
 			std::string familyLabel = std::format("{} Family##{}", descriptor.displayName, roleIndex);
 			{
-				FontRoleGuard familyComboFont(Menu::FontRole::Subtitle);
+				FontRoleGuard familyComboFont(Menu::FontRole::Body);
 				if (ImGui::BeginCombo(familyLabel.c_str(), familyPreview)) {
 					if (fontCatalog.families.empty()) {
 						ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f), "No font families available");
@@ -560,7 +617,7 @@ void SettingsTabRenderer::RenderFontsTab()
 				const char* stylePreview = selectedFamily->styles.empty() ? "No styles" : selectedFamily->styles[styleIndex].displayName.c_str();
 				std::string styleLabel = std::format("{} Style##{}", descriptor.displayName, roleIndex);
 				{
-					FontRoleGuard styleComboFont(Menu::FontRole::Subtitle);
+					FontRoleGuard styleComboFont(Menu::FontRole::Body);
 					if (ImGui::BeginCombo(styleLabel.c_str(), stylePreview)) {
 						for (int s = 0; s < static_cast<int>(selectedFamily->styles.size()); ++s) {
 							bool isSelected = (s == styleIndex);
@@ -615,9 +672,52 @@ void SettingsTabRenderer::RenderFontsTab()
 
 void SettingsTabRenderer::RenderStylingTab()
 {
-	if (BeginTabItemWithFont("Styling", Menu::FontRole::Subheading)) {
+	if (BeginTabItemWithFont("Styling", Menu::FontRole::Heading)) {
 		auto& themeSettings = globals::menu->GetSettings().Theme;
 		auto& style = themeSettings.Style;
+
+		SeparatorTextWithFont("Styling Options", Menu::FontRole::Subheading);
+		
+		ImGui::Checkbox("Show Icon Buttons in Header", &themeSettings.ShowActionIcons);
+		if (auto _tt = Util::HoverTooltipWrapper()) {
+			ImGui::Text(
+				"When enabled: Shows action buttons (Save, Load, Clear Cache) as icons in the header\n"
+				"When disabled: Shows as text buttons below the header");
+		}
+
+		if (themeSettings.ShowActionIcons) {
+			ImGui::Indent();
+			if (ImGui::Checkbox("Use Monochrome Icons", &themeSettings.UseMonochromeIcons)) {
+				// Defer icon reload to next frame to avoid rendering with released textures
+				globals::menu->pendingIconReload = true;
+			}
+			if (auto _tt = Util::HoverTooltipWrapper()) {
+				ImGui::Text("Uses white monochrome icons that adapt to your theme's text color");
+			}
+			ImGui::Unindent();
+		}
+
+		ImGui::Checkbox("Show Footer", &themeSettings.ShowFooter);
+		if (auto _tt = Util::HoverTooltipWrapper()) {
+			ImGui::Text("Shows the footer with game version, swap chain, and GPU information at the bottom of the window");
+		}
+
+		ImGui::Checkbox("Center Header Title", &themeSettings.CenterHeader);
+		if (auto _tt = Util::HoverTooltipWrapper()) {
+			ImGui::Text("Centers the Community Shaders title and logo in the header title bar");
+		}
+
+		ImGui::SliderFloat("Tooltip Hover Delay", &themeSettings.TooltipHoverDelay, 0.0f, 2.0f, "%.2f s", ImGuiSliderFlags_AlwaysClamp);
+		if (auto _tt = Util::HoverTooltipWrapper()) {
+			ImGui::TextUnformatted("Time in seconds to wait before a tooltip appears when hovering over an item.");
+		}
+
+		if (ImGui::SliderFloat("Background Blur", &themeSettings.BackgroundBlur, 0.0f, 1.0f, "%.2f", ImGuiSliderFlags_AlwaysClamp)) {
+			BackgroundBlur::SetIntensity(themeSettings.BackgroundBlur);
+		}
+		if (auto _tt = Util::HoverTooltipWrapper()) {
+			ImGui::Text("Applies a blur effect to the background behind the menu window.");
+		}
 
 		SeparatorTextWithFont("Main", Menu::FontRole::Subheading);
 		if (ImGui::SliderFloat("Global Scale", &themeSettings.GlobalScale, -1.f, 1.f, "%.2f")) {
@@ -674,7 +774,7 @@ void SettingsTabRenderer::RenderStylingTab()
 
 		SeparatorTextWithFont("Widgets", Menu::FontRole::Subheading);
 		{
-			FontRoleGuard comboFont(Menu::FontRole::Subtitle);
+			FontRoleGuard comboFont(Menu::FontRole::Body);
 			ImGui::Combo("ColorButtonPosition", (int*)&style.ColorButtonPosition, "Left\0Right\0");
 		}
 		ImGui::SliderFloat2("Button Text Align", (float*)&style.ButtonTextAlign, 0.0f, 1.0f, "%.2f");
@@ -697,57 +797,57 @@ void SettingsTabRenderer::RenderStylingTab()
 
 void SettingsTabRenderer::RenderColorsTab()
 {
-	if (BeginTabItemWithFont("Colors", Menu::FontRole::Subheading)) {
+	if (BeginTabItemWithFont("Colors", Menu::FontRole::Heading)) {
 		auto& themeSettings = globals::menu->GetSettings().Theme;
 		auto& colors = themeSettings.FullPalette;
 
-		SeparatorTextWithFont("Status", Menu::FontRole::Subheading);
+		// Color search bar at the top
+		static std::string colorSearch;
+		Util::DrawFeatureSearchBar(colorSearch);
+		ImGui::Spacing();
 
-		ImGui::ColorEdit4("Disabled Text", (float*)&themeSettings.StatusPalette.Disable);
-		ImGui::ColorEdit4("Error Text", (float*)&themeSettings.StatusPalette.Error);
-		ImGui::ColorEdit4("Warning Text", (float*)&themeSettings.StatusPalette.Warning);
-		ImGui::ColorEdit4("Restart Needed Text", (float*)&themeSettings.StatusPalette.RestartNeeded);
-		ImGui::ColorEdit4("Current Hotkey Text", (float*)&themeSettings.StatusPalette.CurrentHotkey);
-		ImGui::ColorEdit4("Success Text", (float*)&themeSettings.StatusPalette.SuccessColor);
-		ImGui::ColorEdit4("Info Text", (float*)&themeSettings.StatusPalette.InfoColor);
+		// Background & Text
+		ImGui::ColorEdit4("Background", (float*)&themeSettings.Palette.Background);
+		ImGui::ColorEdit4("Text", (float*)&themeSettings.Palette.Text);
 
-		SeparatorTextWithFont("Feature Headings", Menu::FontRole::Subheading);
-
-		ImGui::ColorEdit4("Regular", (float*)&themeSettings.FeatureHeading.ColorDefault);
-		ImGui::ColorEdit4("Hovered", (float*)&themeSettings.FeatureHeading.ColorHovered);
-		ImGui::SliderFloat("Minimized Alpha Factor", &themeSettings.FeatureHeading.MinimizedFactor, 0.0f, 1.0f, "%.2f");
-
-		SeparatorTextWithFont("Palette", Menu::FontRole::Subheading);
-
-		// Simple Colors Section - collapsed by default for clean interface
-		if (ImGui::CollapsingHeader("Simple", ImGuiTreeNodeFlags_DefaultOpen)) {
-			ImGui::ColorEdit4("Background", (float*)&themeSettings.Palette.Background);
-			ImGui::ColorEdit4("Text", (float*)&themeSettings.Palette.Text);
+		if (ImGui::TreeNodeEx("Borders & Separators", ImGuiTreeNodeFlags_DefaultOpen)) {
+			ImGui::ColorEdit4("Window Border", (float*)&themeSettings.Palette.WindowBorder);
+			ImGui::ColorEdit4("Slider & Input Background", (float*)&themeSettings.Palette.FrameBorder);
+			ImGui::ColorEdit4("Separator Line", (float*)&themeSettings.Palette.Separator);
+			ImGui::ColorEdit4("Resize Grip", (float*)&themeSettings.Palette.ResizeGrip);
+			ImGui::TreePop();
 		}
 
-		// Advanced Colors Section - collapsed by default to avoid overwhelming users
-		if (ImGui::CollapsingHeader("Advanced")) {
-			if (ImGui::TreeNodeEx("Border Controls", ImGuiTreeNodeFlags_DefaultOpen)) {
-				ImGui::ColorEdit4("Window Border", (float*)&themeSettings.Palette.WindowBorder);
-				ImGui::ColorEdit4("Frame Border", (float*)&themeSettings.Palette.FrameBorder);
-				ImGui::ColorEdit4("Separator", (float*)&themeSettings.Palette.Separator);
-				ImGui::ColorEdit4("Resize Grip", (float*)&themeSettings.Palette.ResizeGrip);
-				ImGui::TreePop();
-			}
+		if (ImGui::TreeNodeEx("Feature Headings", ImGuiTreeNodeFlags_DefaultOpen)) {
+			ImGui::ColorEdit4("Default", (float*)&themeSettings.FeatureHeading.ColorDefault);
+			ImGui::ColorEdit4("Hovered", (float*)&themeSettings.FeatureHeading.ColorHovered);
+			ImGui::SliderFloat("Minimized Transparency", &themeSettings.FeatureHeading.MinimizedFactor, 0.0f, 1.0f, "%.2f");
+			ImGui::TreePop();
+		}
 
-			if (ImGui::TreeNode("Full Palette")) {
-				ImGui::TextWrapped("Advanced color controls for detailed customization of all UI elements.");
-				static ImGuiTextFilter filter;
-				filter.Draw("Filter colors", ImGui::GetFontSize() * 16);
+		if (ImGui::TreeNodeEx("Status", ImGuiTreeNodeFlags_DefaultOpen)) {
+			ImGui::ColorEdit4("Disabled", (float*)&themeSettings.StatusPalette.Disable);
+			ImGui::ColorEdit4("Error", (float*)&themeSettings.StatusPalette.Error);
+			ImGui::ColorEdit4("Warning", (float*)&themeSettings.StatusPalette.Warning);
+			ImGui::ColorEdit4("Restart Needed", (float*)&themeSettings.StatusPalette.RestartNeeded);
+			ImGui::ColorEdit4("Current Hotkey", (float*)&themeSettings.StatusPalette.CurrentHotkey);
+			ImGui::ColorEdit4("Success", (float*)&themeSettings.StatusPalette.SuccessColor);
+			ImGui::ColorEdit4("Info", (float*)&themeSettings.StatusPalette.InfoColor);
+			ImGui::TreePop();
+		}
 
-				for (int i = 0; i < ImGuiCol_COUNT; i++) {
-					const char* name = ImGui::GetStyleColorName(i);
-					if (!filter.PassFilter(name))
-						continue;
-					ImGui::ColorEdit4(name, (float*)&colors[i], ImGuiColorEditFlags_AlphaBar | ImGuiColorEditFlags_AlphaPreviewHalf);
-				}
-				ImGui::TreePop();
+		if (ImGui::TreeNode("Full Palette")) {
+			ImGui::TextWrapped("Advanced color controls for detailed customization of all UI elements.");
+			static ImGuiTextFilter filter;
+			filter.Draw("Filter colors", ImGui::GetFontSize() * 16);
+
+			for (int i = 0; i < ImGuiCol_COUNT; i++) {
+				const char* friendlyName = GetFriendlyColorName(i);
+				if (!filter.PassFilter(friendlyName))
+					continue;
+				ImGui::ColorEdit4(friendlyName, (float*)&colors[i], ImGuiColorEditFlags_AlphaBar | ImGuiColorEditFlags_AlphaPreviewHalf);
 			}
+			ImGui::TreePop();
 		}
 
 		ImGui::EndTabItem();

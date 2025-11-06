@@ -708,14 +708,27 @@ float4 PS_Main(VS_OUTPUT input) : SV_TARGET
 				continue;
 			}
 
+			// Skip child windows - only blur root windows to cover headers and footers
+			if (window->ParentWindow != nullptr) {
+				continue;
+			}
+
+			// Skip Performance Overlay window (no blur)
+			if (window->Name && std::string_view(window->Name) == "Performance Overlay") {
+				continue;
+			}
+
 			// Skip if window has no background (fully transparent)
 			if (window->Flags & ImGuiWindowFlags_NoBackground) {
 				continue;
 			}
 
-			// Get window bounds
-			ImVec2 windowMin = window->Pos;
-			ImVec2 windowMax = ImVec2(window->Pos.x + window->Size.x, window->Pos.y + window->Size.y);
+			// Get window outer bounds (includes title bar, borders, etc.)
+			// Use window's inner rect which includes all content drawn inside the window
+			// including custom headers and footers, not just OuterRectClipped
+			ImRect windowRect = window->Rect();
+			ImVec2 windowMin = windowRect.Min;
+			ImVec2 windowMax = windowRect.Max;
 
 			// Perform blur for this window area
 			PerformBlur(currentTexture, currentRTV, windowMin, windowMax);
