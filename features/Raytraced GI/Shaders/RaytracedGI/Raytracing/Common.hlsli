@@ -1,6 +1,9 @@
 #ifndef COMMON_HLSI
 #define COMMON_HLSI
 
+#include "RaytracedGI/Raytracing/Types.hlsli"
+
+#define M_TO_GAME_UNIT (1.0f / (GAME_UNIT_TO_M))
 #define MAX_DEPTH 2
 
 uint InitRandomSeed(uint2 coord, uint2 size, uint frameCount)

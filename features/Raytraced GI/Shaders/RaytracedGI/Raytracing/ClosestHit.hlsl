@@ -1,6 +1,7 @@
 #include "RaytracedGI/Raytracing/Types.hlsli"
 #include "RaytracedGI/Raytracing/Common.hlsli"
 #include "Common/Game.hlsli"
+#include "Common/Color.hlsli"
 
 ConstantBuffer<FrameData> Frame         : register(b0);
 
@@ -55,7 +56,6 @@ void main(inout Payload payload, in BuiltInTriangleIntersectionAttributes attrib
     HitMesh(payload, attribs);
 }
 
-
 void HitMesh(inout Payload payload, in BuiltInTriangleIntersectionAttributes attribs)
 {
     float3 worldPosition = WorldRayOrigin() + WorldRayDirection() * RayTCurrent();  
@@ -90,7 +90,7 @@ void HitMesh(inout Payload payload, in BuiltInTriangleIntersectionAttributes att
     float3 albedo = diffuseTexture.SampleLevel(DiffuseSampler, texCoord0, 0).rgb;
     
     // Directional Light
-    float3 lighting = 0.0f;
+    float3 directLighting = 0.0f;
     {
         Light directionalLight = Frame.Directional;
         
@@ -112,32 +112,75 @@ void HitMesh(inout Payload payload, in BuiltInTriangleIntersectionAttributes att
             NdotL *= saturate(shadowPayload.missed);
         }
             
-        lighting = NdotL * directionalLight.Color;
+        directLighting = NdotL * directionalLight.Color;
+    }
+    
+    uint currentDepth = payload.data.GetDepth();
+    
+    // Point lights
+    LightData lightData = instance.LightData;
+    for(uint i = 0; i < lightData.Count; i++)
+    {
+        uint lightID = lightData.GetID(i);
+        Light pointLight = Lights[lightID];
+        
+        float3 lightVector = (pointLight.Vector - worldPosition) * GAME_UNIT_TO_M;
+        float lightDistanceSqr = dot(lightVector, lightVector);
+        float lightDistance = sqrt(lightDistanceSqr);
+        
+        lightVector /= lightDistance;
+            
+        float fade = saturate(1.0 - pow(lightDistance / pointLight.Range, 4.0));
+            
+        float NdotL = saturate(dot(worldNormal, lightVector)) * (1.0 / max(lightDistanceSqr, 0.01)) * fade * fade;
+        
+        // Shadow
+        if(currentDepth < 1)
+        {
+            RayDesc shadowRay;
+            shadowRay.Origin = worldPosition + worldNormal * 0.1f;
+            shadowRay.Direction = lightVector;
+            shadowRay.TMin = 0.1f;
+            shadowRay.TMax = lightDistance * M_TO_GAME_UNIT;
+
+            ShadowPayload shadowPayload;
+            shadowPayload.missed = false;
+        
+            TraceRay(Scene, RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH | RAY_FLAG_SKIP_CLOSEST_HIT_SHADER, 0xFF, 1, 0, 1, shadowRay, shadowPayload);    
+    
+            NdotL *= saturate(shadowPayload.missed);
+        }
+            
+        directLighting += NdotL * pointLight.Color;       
     }
     
     // Bounce
+    float3 indirectLight = 0.0f;
     {
-        uint currentDepth = payload.data.GetDepth();
-
         if (currentDepth < MAX_DEPTH)
         {
             uint randomSeed = payload.data.GetSeed();
-            float3 bounceDir = SampleHemisphere(worldNormal, randomSeed);
             
-            RayDesc bounceRay;
-            bounceRay.Origin = worldPosition + worldNormal * 0.1f;
-            bounceRay.Direction = bounceDir;
-            bounceRay.TMin = 0.1f;
-            bounceRay.TMax = 1e30;
+            [unroll]
+            for(uint i = 0; i < 2; i++) 
+            {
+                float3 bounceDir = SampleHemisphere(worldNormal, randomSeed);
+            
+                RayDesc bounceRay;
+                bounceRay.Origin = worldPosition + worldNormal * 0.1f;
+                bounceRay.Direction = bounceDir;
+                bounceRay.TMin = 0.1f;
+                bounceRay.TMax = 1e30;
     
-            Payload bouncePayload;
-            bouncePayload.color = float3(0, 0, 0);
-            bouncePayload.data = PayloadData::Create(false, currentDepth + 1, randomSeed);
+                Payload bouncePayload;
+                bouncePayload.color = float3(0, 0, 0);
+                bouncePayload.data = PayloadData::Create(false, currentDepth + 1, randomSeed);
 
-            TraceRay(Scene, RAY_FLAG_NONE, 0xFF, 0, 0, 0, bounceRay, bouncePayload);
-            lighting += bouncePayload.color;
+                TraceRay(Scene, RAY_FLAG_NONE, 0xFF, 0, 0, 0, bounceRay, bouncePayload);
+                indirectLight = bouncePayload.color * 2.0f;
+            }
         }
     }
     
-    payload.color = albedo * lighting;
+    payload.color = albedo * directLighting + albedo * indirectLight;
 }

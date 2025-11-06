@@ -9,10 +9,10 @@ struct FrameData
     float4x4 ProjInverse;
     float4 Position;
     Light Directional;
+    uint LightCount;
     uint FrameCount;
 	uint Pad0;
-	uint Pad1;
-	uint Pad2;    
+	uint Pad1;    
 };
 
 #endif

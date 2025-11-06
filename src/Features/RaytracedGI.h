@@ -1,20 +1,3 @@
-
-/*
-* This file defines a new feature template for Community Shader.
-* Copy the .h and .cpp files to src/Features and rename them to your feature's name.
-* Replace all NewFeature occurances in both files as well, and change the metadata accordingly.
-* Don't forget to add the feature singleton to src/Feature.cpp, Globals.h & Globals.cpp
-* and copy and rename the "New Feature" folder and contents to features/ so it gets registered.
-*
-* The naming and coding style are adapted to my personal practice,
-* but we don't really have a strict, solidified guideline on that.
-* So take your liberties within reason.
-*
-* Cheers,
-* ProfJack
-* 2025-06-28
-*/
-
 #pragma once
 
 #include "Feature.h"
@@ -28,32 +11,13 @@
 #include "LightLimitFix.h"
 #include <DirectXTex.h>
 #include <shared_mutex>
+#include "Features/RaytracedGI/IrradianceCache.h"
+#include "Features/RaytracedGI/Allocator.h"
+#include "Features/RaytracedGI/HeapManager.h"
 
 #define NTDDI_VERSION NTDDI_WINBLUE
 
 #include <DXProgrammableCapture.h>
-
-struct TriBufferPtrKey
-{
-	ID3D11Buffer* vertexBuffer;
-	ID3D11Buffer* indexBuffer;
-
-	bool operator==(const TriBufferPtrKey& other) const noexcept
-	{
-		return vertexBuffer == other.vertexBuffer &&
-		       indexBuffer == other.indexBuffer;
-	}
-};
-
-struct TriBufferPtrKeyHash
-{
-	size_t operator()(const TriBufferPtrKey& key) const noexcept
-	{
-		size_t h1 = eastl::hash<ID3D11Buffer*>()(key.vertexBuffer);
-		size_t h2 = eastl::hash<ID3D11Buffer*>()(key.indexBuffer);
-		return h1 ^ (h2 << 1);
-	}
-};
 
 struct RaytracedGI : public Feature
 {
@@ -100,7 +64,7 @@ struct RaytracedGI : public Feature
 	void CreateRootSignature();
 	ID3D12Resource* MakeAccelerationStructure(const D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_INPUTS& inputs, UINT64* updateScratchSize = nullptr);
 	void Flush();
-	ID3D12Resource* MakeBLAS(ID3D12Resource* vertexBuffer, UINT vertices, ID3D12Resource* indexBuffer = nullptr, UINT indices = 0);
+	ID3D12Resource* MakeBLAS(ID3D12Resource* vertexBuffer, UINT vertices, ID3D12Resource* indexBuffer, UINT indices);
 	ID3D12Resource* MakeTLAS(ID3D12Resource* instances, UINT numInstances, UINT64* updateScratchSize);
 	void DrawRTGI();
 
@@ -111,7 +75,14 @@ struct RaytracedGI : public Feature
 	void BSShader_SetupGeometry(RE::BSShader* This, RE::BSRenderPass* Pass, uint32_t RenderFlags);
 	void BSBatchRenderer_RenderPassImmediately(RE::BSRenderPass* pass, uint32_t technique, bool alphaTest, uint32_t renderFlags);
 
-	void CreateBuffers();
+	void AddInstance(RE::BSTriShape* pTriShape);
+	void AddUpdateInstance(RE::BSTriShape* pTriShape);
+
+	eastl::vector<size_t> GatherInstanceLights(RE::BSTriShape* pBSTriShape);
+
+	void VertexBufferReleased(ID3D11Buffer* pBuffer);
+
+	void UpdateInstances();
 
 	template <typename T>
 	void MakeAndCopy(const eastl::vector<T>& data, winrt::com_ptr<ID3D12Resource>& res);
@@ -123,10 +94,16 @@ struct RaytracedGI : public Feature
 
 	//void BSShader_RestoreGeometry(RE::BSShader* This, RE::BSRenderPass* Pass);
 
-	//void BSTriShape_UpdateWorldData(RE::BSTriShape* This, RE::NiUpdateData* a_data);
-	
-	static constexpr uint MAX_LIGHTS = 32;
-	static constexpr UINT64 NUM_SHADER_IDS = 5;
+	void BSTriShape_UpdateWorldData(RE::BSTriShape* This, RE::NiUpdateData* a_data);
+
+	static constexpr uint64_t NUM_SHADER_IDS = 5;
+
+	static constexpr uint MAX_MESHES = 2048;
+	static constexpr uint MAX_DESCRIPTORS = MAX_MESHES * 3;
+	static constexpr uint MAX_INSTANCES = 4096;	
+
+	static constexpr uint MAX_LIGHTS = 255;
+	static constexpr uint MAX_IRRADIANCE_ENTRIES = 256 * 256 * 256;
 
 	static constexpr DXGI_SAMPLE_DESC NO_AA = { .Count = 1, .Quality = 0 };
 	static constexpr D3D12_HEAP_PROPERTIES UPLOAD_HEAP = { .Type = D3D12_HEAP_TYPE_UPLOAD };
@@ -148,16 +125,17 @@ struct RaytracedGI : public Feature
 		bool EnablePIXCapture = false;
 	} settings;
 
-	struct Light
+	struct alignas(16) Light
 	{
 		float3 Vector;
 		float Range;
 		float3 Color;
 		uint Pad;
 	};
+	static_assert(sizeof(Light) % 16 == 0);
 
-	eastl::vector<Light> lightData;
-	eastl::unique_ptr<StructuredBufferDX12<Light>> lightBuffer = nullptr;
+	eastl::vector<Light> lights;
+	eastl::unique_ptr<DX12::StructuredBufferUpload<Light>> lightBuffer = nullptr;
 
 	struct alignas(16) FrameBuffer
 	{
@@ -165,24 +143,24 @@ struct RaytracedGI : public Feature
 		float4x4 ProjInverse;
 		float4 Position;
 		Light DirectionalLight;
+		uint LightCount;
 		uint FrameCount;
 		uint Pad0;
 		uint Pad1;
-		uint Pad2;
 	};
 	static_assert(sizeof(FrameBuffer) % 16 == 0);
 	FrameBuffer* frameBufferData;
 
 	bool renderingWorld = false;
-	bool buffersCreated = false;
-	bool creatingBuffers = false;
+	bool lightsUpdated = false;
 
 	winrt::com_ptr<IDXGraphicsAnalysis> ga = nullptr;
 	bool capture = false;
 
+	bool releaseBufferHooked = false;
 	bool releaseHooked = false;
 
-	#pragma pack(push, 1)
+#pragma pack(push, 1)
 	struct Vertex
 	{
 		float3 Position;
@@ -190,14 +168,59 @@ struct RaytracedGI : public Feature
 		uint8_t Normal[4];
 		uint8_t Color[4];
 	};
-	#pragma pack(pop)
+#pragma pack(pop)
 
-	struct Instance
+	struct LightData
 	{
-		uint MeshID;
+		uint Count;
+		uint Data[4]; // Each byte stores the light ID from 0 to 255, with 16 bytes we get
+
+		LightData() = default;
+
+		LightData(const eastl::vector<size_t>& ids)
+		{
+			StoreIDs(ids);
+		}
+
+		uint GetGroup(uint index)
+		{
+			return index >> 2;
+		}
+
+		uint GetOffset(uint index)
+		{
+			return (index & 3) << 3;
+		}
+
+		uint GetID(uint index)
+		{
+			uint group = GetGroup(index);
+			uint offset = GetOffset(index);
+
+			return (Data[group] >> offset) & 0xFFu;
+		}
+
+		void SetID(uint index, uint val)
+		{
+			uint group = GetGroup(index);
+			uint offset = GetOffset(index);
+			uint mask = ~(0xFFu << offset);
+			Data[group] = (Data[group] & mask) | ((val & 0xFFu) << offset);
+		}
+
+		void StoreIDs(const eastl::vector<size_t>& ids)
+		{
+			size_t count = std::min(ids.size(), static_cast<size_t>(16));
+			Count = static_cast<uint32_t>(count);
+
+			for (size_t i = 0; i < count; ++i) {
+				uint32_t id = std::min(static_cast<uint32_t>(ids[i]), 255u);
+				SetID(static_cast<uint32_t>(i), id);
+			}
+		}
 	};
 
-	// do I call them vanilla Diffuse/Glow or CS Albedo/Emissive??
+	// Mesh - do I call them vanilla Diffuse/Glow or CS Albedo/Emissive??
 	struct MaterialData
 	{
 		ID3D12Resource* diffuseTexture = nullptr;
@@ -206,29 +229,45 @@ struct RaytracedGI : public Feature
 
 	struct MeshData
 	{
+		uint registerIndex; // The position of this meshes SRV in the register stack
 		uint vertexCount;
 		uint indexCount;
 		winrt::com_ptr<ID3D12Resource> vertexBuffer = nullptr;
 		winrt::com_ptr<ID3D12Resource> indexBuffer = nullptr;
 		winrt::com_ptr<ID3D12Resource> blasBuffer = nullptr;
 		MaterialData material;
+		eastl::vector<RE::BSTriShape*> instances;
 	};
 
-	eastl::vector<MeshData> meshVector;
-	eastl::unordered_map<TriBufferPtrKey, size_t, TriBufferPtrKeyHash> meshMap;	
+	Allocator registers = Allocator(MAX_MESHES);
 
-	eastl::vector<Instance> instanceMap;
-	winrt::com_ptr<ID3D12Resource> instanceMapBuffer = nullptr;
+	// Key is RE::BSGraphics::TriShape.vertexBuffer (the original vertexBuffer)
+	eastl::unordered_map<ID3D11Buffer*, MeshData> meshes;	
 
-	eastl::unordered_map<ID3D11Texture2D*, winrt::com_ptr<ID3D12Resource>> sharedTextures;
-
+	// Instance
 	struct InstanceData
 	{
-		TriBufferPtrKey triBufferPtrKey;
+		ID3D11Buffer* meshKey;
 		float4x4 transform;
+		eastl::vector<size_t> lights;
 	};
 
 	eastl::unordered_map<RE::BSTriShape*, InstanceData> instances;
+
+	// Instance buffer
+	struct Instance
+	{
+		uint MeshID;
+		LightData LightData;
+	};
+
+	eastl::vector<Instance> instanceData;
+	eastl::unique_ptr<DX12::StructuredBufferUpload<Instance>> instanceBuffer = nullptr;
+
+	// Textures
+	eastl::unordered_map<ID3D11Texture2D*, winrt::com_ptr<ID3D12Resource>> sharedTextures;
+
+	eastl::unique_ptr<DX12::StructuredAppendBuffer<IrradianceCache::Entry<IrradianceCache::SH1Data>>> irradianceCacheBuffer = nullptr;	
 
 	//eastl::unordered_map<RE::BSTriShape*, winrt::com_ptr<ID3D12Resource>> cachedTrishapes;
 
@@ -237,8 +276,8 @@ struct RaytracedGI : public Feature
 	winrt::com_ptr<ID3D11SamplerState> cheeseSampler = nullptr;
 	winrt::com_ptr<ID3D11ComputeShader> cheeseCs = nullptr;
 
-	winrt::com_ptr<ID3D12Resource> instanceBuffer = nullptr;
-	D3D12_RAYTRACING_INSTANCE_DESC* instanceData;
+	winrt::com_ptr<ID3D12Resource> blasInstanceBuffer = nullptr;
+	D3D12_RAYTRACING_INSTANCE_DESC* blasInstances;
 
 	winrt::com_ptr<ID3D12Resource> tlas = nullptr;
 	winrt::com_ptr<ID3D12Resource> tlasUpdateScratch = nullptr;
@@ -261,13 +300,27 @@ struct RaytracedGI : public Feature
 
 	winrt::com_ptr<ID3D12RootSignature> rootSignature = nullptr;
 
-	winrt::com_ptr<ID3D12DescriptorHeap> commonHeap = nullptr;	
+	enum CommonHeap : uint32_t
+	{
+		OutputUAV,
+		TLAS,
+		Lights,
+		Instances,
+		Vertices,
+		Triangles = Vertices + MAX_MESHES,
+		DiffuseTextures = Triangles + MAX_MESHES
+	};
+
+	eastl::unique_ptr<DX12::DescriptorHeap<CommonHeap>> commonHeap = nullptr;	
 
 	winrt::com_ptr<ID3D11Fence> d3d11Fence = nullptr;
 	winrt::com_ptr<ID3D12Fence> d3d12Fence = nullptr;
 
 	UINT64 fenceValue = 1;
-	UINT handleIncrement;
+
+	eastl::vector<winrt::com_ptr<ID3D12Resource>> asScratchBuffers;
+	eastl::vector<eastl::array<D3D12_RAYTRACING_GEOMETRY_DESC>> rtGeometryDescs;
+	eastl::vector<eastl::unique_ptr<D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_DESC>> rtASDescs;
 
 	// D3D11
 	winrt::com_ptr<ID3D11Device5> d3d11Device = nullptr;
@@ -277,18 +330,59 @@ struct RaytracedGI : public Feature
 	eastl::unique_ptr<WrappedResource> diffuseGITexture = nullptr;
 	eastl::unique_ptr<WrappedResource> specularGITexture = nullptr;
 
-	std::shared_mutex mutex;
+	std::shared_mutex meshMutex;
+	std::shared_mutex bufferMutex;
+	std::shared_mutex sharedTextureMutex;
+	std::shared_mutex renderMutex;
+
+	inline float3 Float3(const RE::NiPoint3& point3)
+	{
+		return float3(point3.x, point3.y, point3.z);
+	}
 
 	struct Hooks
 	{
+		struct ID3D11Device_CreateBuffer
+		{
+			static HRESULT thunk(ID3D11Device* oThis, const D3D11_BUFFER_DESC* pDesc, const D3D11_SUBRESOURCE_DATA* pInitialData, ID3D11Buffer** ppBuffer)
+			{
+				HRESULT hr = func(oThis, pDesc, pInitialData, ppBuffer);
+
+				auto& rtgi = globals::features::raytracedGI;
+
+				if (SUCCEEDED(hr) && *ppBuffer) {
+					if (rtgi.loaded && !rtgi.releaseBufferHooked) {
+						std::lock_guard lock{ rtgi.bufferMutex };
+
+						if (!rtgi.releaseBufferHooked)
+						{
+							rtgi.releaseBufferHooked = true;
+							stl::detour_vfunc<2, ID3D11Buffer_Release>(*ppBuffer);					
+						}
+					}
+				}
+
+				return hr;
+			}
+			static inline REL::Relocation<decltype(thunk)> func;
+		};
+
 		struct ID3D11Buffer_Release
 		{
-			static void thunk(ID3D11Buffer* This)
+			static void thunk(ID3D11Buffer* oThis)
 			{
-				/*if (globals::features::raytracedGI.Active())
-					globals::features::raytracedGI.UnregisterBuffer(This);*/
+				auto& rtgi = globals::features::raytracedGI;
 
-				func(This);
+				if (rtgi.loaded) {
+					/*D3D11_BUFFER_DESC desc{};
+					oThis->GetDesc(&desc);
+
+					if (desc.BindFlags & D3D11_BIND_VERTEX_BUFFER)*/
+
+					//rtgi.VertexBufferReleased(oThis);
+				}
+
+				func(oThis);
 			}
 			static inline REL::Relocation<decltype(thunk)> func;
 		}; 
@@ -358,6 +452,15 @@ struct RaytracedGI : public Feature
 				HRESULT hr = func(This, &descCopy, initialDataCopy, ppTexture2D);
 
 				if (SUCCEEDED(hr) && shareTexture) {
+					if (!rtgi.releaseHooked) {
+						std::lock_guard lock{ rtgi.sharedTextureMutex };
+
+						if (!rtgi.releaseHooked) {
+							rtgi.releaseHooked = true;
+							stl::detour_vfunc<2, ID3D11Texture2D_Release>(*ppTexture2D);
+						}					
+					}
+
 					winrt::com_ptr<IDXGIResource1> dxgiResource = nullptr;
 					DX::ThrowIfFailed((*ppTexture2D)->QueryInterface(IID_PPV_ARGS(dxgiResource.put())));
 
@@ -365,16 +468,15 @@ struct RaytracedGI : public Feature
 					DX::ThrowIfFailed(dxgiResource->CreateSharedHandle(nullptr, DXGI_SHARED_RESOURCE_READ, nullptr, &sharedHandle));
 
 					winrt::com_ptr<ID3D12Resource> resource = nullptr;
-					DX::ThrowIfFailed(rtgi.d3d12Device->OpenSharedHandle(sharedHandle, IID_PPV_ARGS(resource.put())));
+					//DX::ThrowIfFailed(rtgi.d3d12Device->OpenSharedHandle(sharedHandle, IID_PPV_ARGS(resource.put())));
+					HRESULT hrOSH = rtgi.d3d12Device->OpenSharedHandle(sharedHandle, IID_PPV_ARGS(resource.put()));
+
 					CloseHandle(sharedHandle);
 
-					rtgi.sharedTextures.emplace(*ppTexture2D, std::move(resource));
-
-					std::lock_guard lock{ rtgi.mutex };
-
-					if (!rtgi.releaseHooked) {
-						rtgi.releaseHooked = true;
-						stl::detour_vfunc<2, ID3D11Texture2D_Release>(*ppTexture2D);
+					if (SUCCEEDED(hrOSH)) {
+						rtgi.sharedTextures.emplace(*ppTexture2D, std::move(resource));
+					} else {
+						logger::warn("[RTGI] Error creating shared texture - [0x{:x}]", hrOSH);
 					}
 				}
 
@@ -396,7 +498,7 @@ struct RaytracedGI : public Feature
 				if (pResource && ppSRV && pDesc && pDesc->ViewDimension == D3D11_SRV_DIMENSION_TEXTURE2D) {
 					auto& rtgi = globals::features::raytracedGI;
 
-					std::lock_guard lock{ rtgi.mutex };
+					std::lock_guard lock{ rtgi.sharedTextureMutex };
 
 					switch (pDesc->Format) {
 						case DXGI_FORMAT_BC4_UNORM:
@@ -478,39 +580,88 @@ struct RaytracedGI : public Feature
 			static inline REL::Relocation<decltype(thunk)> func;
 		};
 
+		struct BSTriShape_UpdateWorldData
+		{
+			static void thunk(RE::BSTriShape* This, RE::NiUpdateData* data)
+			{
+				globals::features::raytracedGI.BSTriShape_UpdateWorldData(This, data);
+			}
+			static inline REL::Relocation<decltype(thunk)> func;
+		};
+
+		struct BSTriShape_OnVisible
+		{
+			static void thunk(RE::BSTriShape* This, RE::NiCullingProcess& a_process)
+			{
+				//logger::info("[RTGI] BSTriShape_OnVisible");
+				func(This, a_process);
+			}
+			static inline REL::Relocation<decltype(thunk)> func;
+		};
+
+		struct BSTriShape_LoadBinary
+		{
+			static void thunk(RE::BSTriShape* oThis, RE::NiStream& a_stream)
+			{
+				func(oThis, a_stream);
+				
+				auto& rtgi = globals::features::raytracedGI;
+
+				if (rtgi.Active()) 
+				{
+					logger::info("[RTGI] BSTriShape::LoadBinary {}", oThis->name);
+					//rtgi.AddInstance(oThis);
+				}
+			}
+			static inline REL::Relocation<decltype(thunk)> func;
+		};	
+
+		struct BSLightingShaderProperty_SetupGeometry
+		{
+			static void thunk(RE::BSLightingShaderProperty* oThis, RE::BSGeometry* pGeometry, RE::NiStream& a_stream)
+			{
+				func(oThis, pGeometry, a_stream);
+
+				auto& rtgi = globals::features::raytracedGI;
+
+				if (rtgi.Active()) {
+					//rtgi.AddInstance(netimmerse_cast<RE::BSTriShape*>(pGeometry));
+				}
+			}
+			static inline REL::Relocation<decltype(thunk)> func;
+		};	
+
 		static void Install()
 		{
 			stl::detour_thunk<Main_RenderWorld>(REL::RelocationID(100424, 107142));
-			//stl::write_vfunc<0x6, BSShader_SetupGeometry<RE::BSShader::Type::Lighting>>(RE::VTABLE_BSLightingShader[0]);
+			stl::write_vfunc<0x6, BSShader_SetupGeometry<RE::BSShader::Type::Lighting>>(RE::VTABLE_BSLightingShader[0]);
 			//stl::write_thunk_call<BSBatchRenderer_RenderPassImmediately>(REL::RelocationID(100852, 107642).address() + REL::Relocate(0x29E, 0x28F));
+
+			if (REL::Module::IsAE()) {
+				stl::write_vfunc<0x31, BSTriShape_UpdateWorldData>(RE::VTABLE_BSTriShape[0]);
+			} else {
+				stl::write_vfunc<0x30, BSTriShape_UpdateWorldData>(RE::VTABLE_BSTriShape[0]);
+			}
+
+			if (REL::Module::IsAE()) {
+				stl::write_vfunc<0x35, BSTriShape_OnVisible>(RE::VTABLE_BSTriShape[0]);
+			} else {
+				stl::write_vfunc<0x34, BSTriShape_OnVisible>(RE::VTABLE_BSTriShape[0]);
+			}
+
+			stl::write_vfunc<0x18, BSTriShape_LoadBinary>(RE::VTABLE_BSTriShape[0]);
+			stl::write_vfunc<0x27, BSLightingShaderProperty_SetupGeometry>(RE::VTABLE_BSLightingShaderProperty[0]);
 
 			logger::info("[RTGI] Installed hooks");
 		}
 
-		static void CreateDummyTexture(ID3D11Device* device, ID3D11Texture2D** texture)
+		static void InstallD3D11Hooks(ID3D11Device* pDevice)
 		{
-			D3D11_TEXTURE2D_DESC desc{};
-			desc.Width = 1;
-			desc.Height = 1;
-			desc.MipLevels = 1;
-			desc.ArraySize = 1;
-			desc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
-			desc.SampleDesc.Count = 1;
-			desc.Usage = D3D11_USAGE_DEFAULT;
-			desc.BindFlags = D3D11_BIND_SHADER_RESOURCE;
-			desc.CPUAccessFlags = 0;
-			desc.MiscFlags = 0;
-	
-			DX::ThrowIfFailed(device->CreateTexture2D(&desc, nullptr, texture));
-		}
+			stl::detour_vfunc<3, ID3D11Device_CreateBuffer>(pDevice);
+			stl::detour_vfunc<5, ID3D11Device_CreateTexture2D>(pDevice);
+			stl::detour_vfunc<7, ID3D11Device_CreateShaderResourceView>(pDevice);
 
-		static void InstallD3D11Hooks(ID3D11Device* ppDevice)
-		{
-			//stl::detour_vfunc<2, ID3D11Buffer_Release>(*ppBuffer);
-			stl::detour_vfunc<5, ID3D11Device_CreateTexture2D>(ppDevice);
-			stl::detour_vfunc<7, ID3D11Device_CreateShaderResourceView>(ppDevice);
-
-			logger::info("[RTGI] Installed D3D11 hooks - {}", reinterpret_cast<uintptr_t>(ppDevice));
+			logger::info("[RTGI] Installed D3D11 hooks - {}", reinterpret_cast<uintptr_t>(pDevice));
 		}
 	};
 
@@ -530,6 +681,24 @@ struct RaytracedGI : public Feature
 			}
 
 			ui->GetEventSource<RE::MenuOpenCloseEvent>()->AddEventSink(&singleton);
+
+			logger::info("Registered {}", typeid(singleton).name());
+
+			return true;
+		}
+	};
+
+	class TESLoadGameEventHandler : public RE::BSTEventSink<RE::TESLoadGameEvent>
+	{
+	public:
+		virtual RE::BSEventNotifyControl ProcessEvent(const RE::TESLoadGameEvent* a_event, RE::BSTEventSource<RE::TESLoadGameEvent>*);
+
+		static bool Register()
+		{
+			static TESLoadGameEventHandler singleton;
+
+            auto scriptEventSourceHolder = RE::ScriptEventSourceHolder::GetSingleton();
+			scriptEventSourceHolder->GetEventSource<RE::TESLoadGameEvent>()->AddEventSink(&singleton);
 
 			logger::info("Registered {}", typeid(singleton).name());
 
