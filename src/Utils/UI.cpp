@@ -736,6 +736,21 @@ namespace Util
 		       displayName.find(query) != std::string::npos;
 	}
 
+	bool StringMatchesSearch(const std::string& text, const std::string& searchQuery)
+	{
+		if (searchQuery.empty())
+			return true;
+
+		std::string lowerText = text;
+		std::string lowerQuery = searchQuery;
+
+		// Convert all to lowercase for case-insensitive search
+		std::transform(lowerText.begin(), lowerText.end(), lowerText.begin(), ::tolower);
+		std::transform(lowerQuery.begin(), lowerQuery.end(), lowerQuery.begin(), ::tolower);
+
+		return lowerText.find(lowerQuery) != std::string::npos;
+	}
+
 	void DrawFeatureSearchBar(std::string& searchString, float availableWidth)
 	{
 		ImGui::PushID("FeatureSearchBar");

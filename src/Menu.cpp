@@ -507,8 +507,10 @@ void Menu::DrawAdvancedSettings()
 {
 	// Render advanced settings using extracted component
 	AdvancedSettingsRenderer::RenderAdvancedSettings(
-		[]() { globals::truePBR->DrawSettings(); },
-		[this]() { DrawDisableAtBootSettings(); });
+		[this]() { globals::truePBR->DrawSettings(pbrTextureSetSearch, pbrMaterialObjectSearch); },
+		[this]() { DrawDisableAtBootSettings(); },
+		pbrTextureSetSearch,
+		pbrMaterialObjectSearch);
 }
 
 void Menu::DrawDisableAtBootSettings()
@@ -516,49 +518,49 @@ void Menu::DrawDisableAtBootSettings()
 	auto state = globals::state;
 	auto& disabledFeatures = state->GetDisabledFeatures();
 
-	if (ImGui::CollapsingHeader("Disable at Boot", ImGuiTreeNodeFlags_DefaultOpen | ImGuiTreeNodeFlags_OpenOnArrow | ImGuiTreeNodeFlags_OpenOnDoubleClick)) {
-		ImGui::Text(
-			"Select features to disable at boot. "
-			"This is the same as deleting a feature.ini file. "
-			"Restart will be required to reenable.");
+	ImGui::Text(
+		"Select features to disable at boot. "
+		"This is the same as deleting a feature.ini file. "
+		"Restart will be required to reenable.");
 
-		if (ImGui::CollapsingHeader("Special Features")) {
-			// Prepare a sorted list of special feature names
-			std::vector<std::string> specialFeatureNames;
-			for (const auto& [featureName, _] : state->specialFeatures) {
-				specialFeatureNames.push_back(featureName);
-			}
-			std::sort(specialFeatureNames.begin(), specialFeatureNames.end());
+	ImGui::Spacing();
 
-			// Display sorted special features
-			for (const auto& featureName : specialFeatureNames) {
-				// Check if the feature is currently disabled
-				bool isDisabled = disabledFeatures.contains(featureName) && disabledFeatures[featureName];
+	if (ImGui::CollapsingHeader("Special Features", ImGuiTreeNodeFlags_DefaultOpen)) {
+		// Prepare a sorted list of special feature names
+		std::vector<std::string> specialFeatureNames;
+		for (const auto& [featureName, _] : state->specialFeatures) {
+			specialFeatureNames.push_back(featureName);
+		}
+		std::sort(specialFeatureNames.begin(), specialFeatureNames.end());
 
-				// Create a checkbox for each feature
-				if (ImGui::Checkbox(featureName.c_str(), &isDisabled)) {
-					// Update the disabledFeatures map based on user interaction
-					disabledFeatures[featureName] = isDisabled;
-				}
+		// Display sorted special features
+		for (const auto& featureName : specialFeatureNames) {
+			// Check if the feature is currently disabled
+			bool isDisabled = disabledFeatures.contains(featureName) && disabledFeatures[featureName];
+
+			// Create a checkbox for each feature
+			if (ImGui::Checkbox(featureName.c_str(), &isDisabled)) {
+				// Update the disabledFeatures map based on user interaction
+				disabledFeatures[featureName] = isDisabled;
 			}
 		}
+	}
 
-		if (ImGui::CollapsingHeader("Features")) {
-			// Prepare a sorted list of feature pointers
-			auto featureList = Feature::GetFeatureList();
-			std::sort(featureList.begin(), featureList.end(), [](Feature* a, Feature* b) {
-				return a->GetShortName() < b->GetShortName();
-			});
+	if (ImGui::CollapsingHeader("Features", ImGuiTreeNodeFlags_DefaultOpen)) {
+		// Prepare a sorted list of feature pointers
+		auto featureList = Feature::GetFeatureList();
+		std::sort(featureList.begin(), featureList.end(), [](Feature* a, Feature* b) {
+			return a->GetShortName() < b->GetShortName();
+		});
 
-			// Display sorted features
-			for (auto* feature : featureList) {
-				const std::string featureName = feature->GetShortName();
-				bool isDisabled = disabledFeatures.contains(featureName) && disabledFeatures[featureName];
+		// Display sorted features
+		for (auto* feature : featureList) {
+			const std::string featureName = feature->GetShortName();
+			bool isDisabled = disabledFeatures.contains(featureName) && disabledFeatures[featureName];
 
-				if (ImGui::Checkbox(featureName.c_str(), &isDisabled)) {
-					// Update the disabledFeatures map based on user interaction
-					disabledFeatures[featureName] = isDisabled;
-				}
+			if (ImGui::Checkbox(featureName.c_str(), &isDisabled)) {
+				// Update the disabledFeatures map based on user interaction
+				disabledFeatures[featureName] = isDisabled;
 			}
 		}
 	}

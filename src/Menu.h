@@ -442,6 +442,10 @@ private:
 	// Menu navigation
 	std::string pendingFeatureSelection;  // Feature to select on next frame
 
+	// Search strings
+	std::string pbrTextureSetSearch;    // Search string for PBR texture sets
+	std::string pbrMaterialObjectSearch;  // Search string for PBR material objects
+
 	// Input event handling
 	std::vector<KeyEvent> _keyEventQueue;
 	mutable std::shared_mutex _inputEventMutex;

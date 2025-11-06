@@ -7,6 +7,7 @@
 #include "Hooks.h"
 #include "ShaderCache.h"
 #include "State.h"
+#include "Util.h"
 
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	GlintParameters,
@@ -105,13 +106,27 @@ void SetupPBRLandscapeTextureParameters(BSLightingShaderMaterialPBRLandscape& ma
 
 void TruePBR::DrawSettings()
 {
+	std::string dummyTextureSetSearch;
+	std::string dummyMaterialObjectSearch;
+	DrawSettings(dummyTextureSetSearch, dummyMaterialObjectSearch);
+}
+
+void TruePBR::DrawSettings(std::string& textureSetSearch, std::string& materialObjectSearch)
+{
 	if (ImGui::CollapsingHeader("PBR", ImGuiTreeNodeFlags_DefaultOpen | ImGuiTreeNodeFlags_OpenOnArrow | ImGuiTreeNodeFlags_OpenOnDoubleClick)) {
 		if (ImGui::TreeNodeEx("Texture Set Settings", ImGuiTreeNodeFlags_DefaultOpen)) {
+			// Add search bar for texture sets
+			Util::DrawFeatureSearchBar(textureSetSearch);
+			ImGui::Spacing();
+
 			if (ImGui::BeginCombo("Texture Set", selectedPbrTextureSetName.c_str())) {
 				for (auto& [textureSetName, textureSet] : pbrTextureSets) {
-					if (ImGui::Selectable(textureSetName.c_str(), textureSetName == selectedPbrTextureSetName)) {
-						selectedPbrTextureSetName = textureSetName;
-						selectedPbrTextureSet = &textureSet;
+					// Filter by search query using Util helper
+					if (Util::StringMatchesSearch(textureSetName, textureSetSearch)) {
+						if (ImGui::Selectable(textureSetName.c_str(), textureSetName == selectedPbrTextureSetName)) {
+							selectedPbrTextureSetName = textureSetName;
+							selectedPbrTextureSet = &textureSet;
+						}
 					}
 				}
 				ImGui::EndCombo();
@@ -200,11 +215,18 @@ void TruePBR::DrawSettings()
 		}
 
 		if (ImGui::TreeNodeEx("Material Object Settings", ImGuiTreeNodeFlags_DefaultOpen)) {
+			// Add search bar for material objects
+			Util::DrawFeatureSearchBar(materialObjectSearch);
+			ImGui::Spacing();
+
 			if (ImGui::BeginCombo("Material Object", selectedPbrMaterialObjectName.c_str())) {
 				for (auto& [materialObjectName, materialObject] : pbrMaterialObjects) {
-					if (ImGui::Selectable(materialObjectName.c_str(), materialObjectName == selectedPbrMaterialObjectName)) {
-						selectedPbrMaterialObjectName = materialObjectName;
-						selectedPbrMaterialObject = &materialObject;
+					// Filter by search query using Util helper
+					if (Util::StringMatchesSearch(materialObjectName, materialObjectSearch)) {
+						if (ImGui::Selectable(materialObjectName.c_str(), materialObjectName == selectedPbrMaterialObjectName)) {
+							selectedPbrMaterialObjectName = materialObjectName;
+							selectedPbrMaterialObject = &materialObject;
+						}
 					}
 				}
 				ImGui::EndCombo();

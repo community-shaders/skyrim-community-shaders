@@ -475,6 +475,14 @@ namespace Util
 	bool FeatureMatchesSearch(Feature* feat, const std::string& searchQuery);
 
 	/**
+	 * @brief Generic case-insensitive string matching for search functionality.
+	 * @param text The text to search in
+	 * @param searchQuery The search query string
+	 * @return True if the text matches the search query (case-insensitive)
+	 */
+	bool StringMatchesSearch(const std::string& text, const std::string& searchQuery);
+
+	/**
 	 * @brief Draws the feature search bar with magnifying glass icon.
 	 * @param searchString Reference to the search string to modify
 	 * @param availableWidth The available width for the search bar
