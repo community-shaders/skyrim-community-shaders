@@ -223,6 +223,7 @@ float4 PS_Main(VS_OUTPUT input) : SV_TARGET
 
 			if (FAILED(hr)) {
 				if (errorBlob) {
+					logger::error("Blur shader compilation failed: {}", static_cast<char*>(errorBlob->GetBufferPointer()));
 					errorBlob->Release();
 				}
 				return false;
