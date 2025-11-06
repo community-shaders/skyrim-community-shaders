@@ -1,3 +1,7 @@
+// Based on Unrimp rendering engine's separable blur implementation
+// Credits: Christian Ofenberg and the Unrimp project (https://github.com/cofenberg/unrimp)
+// License: MIT License
+
 #include "BackgroundBlur.h"
 #include "../Globals.h"
 
@@ -27,34 +31,14 @@ using namespace std::literals;
  * The blur uses a separable Gaussian kernel split into two passes:
  *   1. Horizontal pass: Samples along X-axis, outputs to intermediate texture
  *   2. Vertical pass:   Samples along Y-axis from intermediate, outputs final result
- *
- * Performance scales with sample count (O(width*height*samples)).
- * Higher sample counts = smoother blur but lower FPS.
- * Sub-pixel jitter reduces banding artifacts at low sample counts.
- *
- * FONT ATLAS REBUILDING:
- * ----------------------
- * Font changes require rebuilding ImGui's texture atlas, which invalidates GPU resources.
- * Must flush GPU pipeline before invalidation to prevent use-after-free crashes.
- * Emergency fallback loads Default.json if user font fails validation.
- *
- * THREAD SAFETY:
- * --------------
- * - blurResourcesMutex protects all D3D11 blur resources (textures, shaders, buffers)
- * - Font reloading uses atomic flag with compare_exchange_strong to prevent re-entry
- * - Theme discovery caches are protected per-access basis
  */
 
  // Blur System Constants
 	// ---------------------
 	// Text contrast boost per unit blur: Compensates for reduced clarity behind blurred backgrounds
-	// Small value preserves theme colors while improving readability
-	// Reduced from 0.15f after user testing showed excessive brightness on light themes
 	constexpr float BLUR_TEXT_CONTRAST_FACTOR = 0.05f;  // 5% brightness boost at max blur
 
 	// Gaussian blur sigma: Controls blur kernel spread (standard deviation)
-	// Based on Unrimp rendering engine's empirically tested value
-	// Lower = sharper (more detail, more banding), Higher = softer (less detail, smoother)
 	constexpr float GAUSSIAN_BLUR_SIGMA = 2.0f;
 
 namespace BackgroundBlur
@@ -95,7 +79,7 @@ namespace BackgroundBlur
 			int blurParams[4];   // x = samples, y = unused, z = unused, w = unused
 		};
 
-		// Inline HLSL shader code
+		// Inline HLSL shader code - Horizontal Pass
 		const char* GetHorizontalBlurShader()
 		{
 			return R"(
@@ -239,7 +223,6 @@ float4 PS_Main(VS_OUTPUT input) : SV_TARGET
 
 			if (FAILED(hr)) {
 				if (errorBlob) {
-					logger::error("Blur shader compilation failed: {}", static_cast<char*>(errorBlob->GetBufferPointer()));
 					errorBlob->Release();
 				}
 				return false;
