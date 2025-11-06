@@ -389,7 +389,7 @@ namespace Util
 		const std::vector<T>& footerRows = {},
 		const ImVec2& outerSize = ImVec2(0, 0))
 	{
-		ImGuiTableFlags flags = ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_Sortable | ImGuiTableFlags_Resizable | ImGuiTableFlags_ScrollX | ImGuiTableFlags_ScrollY | ImGuiTableFlags_SizingStretchProp;
+		ImGuiTableFlags flags = ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_Sortable | ImGuiTableFlags_Resizable | ImGuiTableFlags_SizingStretchProp;
 		ImVec2 tableSize = outerSize;
 		if (outerSize.y == 0.0f) {
 			size_t totalRows = rows.size() + footerRows.size();
