@@ -5,9 +5,9 @@
 #include "BackgroundBlur.h"
 #include "../Globals.h"
 
-#include <d3dcompiler.h>
 #include <algorithm>
 #include <cmath>
+#include <d3dcompiler.h>
 #include <imgui.h>
 #include <imgui_internal.h>
 
@@ -33,13 +33,13 @@ using namespace std::literals;
  *   2. Vertical pass:   Samples along Y-axis from intermediate, outputs final result
  */
 
- // Blur System Constants
-	// ---------------------
-	// Text contrast boost per unit blur: Compensates for reduced clarity behind blurred backgrounds
-	constexpr float BLUR_TEXT_CONTRAST_FACTOR = 0.05f;  // 5% brightness boost at max blur
+// Blur System Constants
+// ---------------------
+// Text contrast boost per unit blur: Compensates for reduced clarity behind blurred backgrounds
+constexpr float BLUR_TEXT_CONTRAST_FACTOR = 0.05f;  // 5% brightness boost at max blur
 
-	// Gaussian blur sigma: Controls blur kernel spread (standard deviation)
-	constexpr float GAUSSIAN_BLUR_SIGMA = 2.0f;
+// Gaussian blur sigma: Controls blur kernel spread (standard deviation)
+constexpr float GAUSSIAN_BLUR_SIGMA = 2.0f;
 
 namespace BackgroundBlur
 {
@@ -118,25 +118,25 @@ float4 PS_Main(VS_OUTPUT input) : SV_TARGET
 {
     float4 result = float4(0.0f, 0.0f, 0.0f, 0.0f);
     float totalWeight = 0.0f;
-    
+
     const int samples = min(BlurParams.x, 15);
     const int halfSamples = samples / 2;
-    
+
     for (int i = -halfSamples; i <= halfSamples; ++i)
     {
         float2 sampleCoord = input.TexCoord + float2(i * TexelSize.x, 0.0f);
         float weight = GaussianWeight(float(i));
-        
+
         if (sampleCoord.x >= 0.0f && sampleCoord.x <= 1.0f)
         {
             result += InputTexture.Sample(LinearSampler, sampleCoord) * weight;
             totalWeight += weight;
         }
     }
-    
+
     if (totalWeight > 0.0f)
         result /= totalWeight;
-    
+
     return result;
 }
 )";
@@ -180,25 +180,25 @@ float4 PS_Main(VS_OUTPUT input) : SV_TARGET
 {
     float4 result = float4(0.0f, 0.0f, 0.0f, 0.0f);
     float totalWeight = 0.0f;
-    
+
     const int samples = min(BlurParams.x, 15);
     const int halfSamples = samples / 2;
-    
+
     for (int i = -halfSamples; i <= halfSamples; ++i)
     {
         float2 sampleCoord = input.TexCoord + float2(0.0f, i * TexelSize.y);
         float weight = GaussianWeight(float(i));
-        
+
         if (sampleCoord.y >= 0.0f && sampleCoord.y <= 1.0f)
         {
             result += InputTexture.Sample(LinearSampler, sampleCoord) * weight;
             totalWeight += weight;
         }
     }
-    
+
     if (totalWeight > 0.0f)
         result /= totalWeight;
-    
+
     return result;
 }
 )";
@@ -572,11 +572,16 @@ float4 PS_Main(VS_OUTPUT input) : SV_TARGET
 		context->RSSetScissorRects(0, nullptr);
 
 		// Cleanup
-		if (sourceSRV) sourceSRV->Release();
-		if (originalRTV) originalRTV->Release();
-		if (originalDSV) originalDSV->Release();
-		if (originalRS) originalRS->Release();
-		if (scissorRS) scissorRS->Release();
+		if (sourceSRV)
+			sourceSRV->Release();
+		if (originalRTV)
+			originalRTV->Release();
+		if (originalDSV)
+			originalDSV->Release();
+		if (originalRS)
+			originalRS->Release();
+		if (scissorRS)
+			scissorRS->Release();
 	}
 
 	void Cleanup()
@@ -660,8 +665,10 @@ float4 PS_Main(VS_OUTPUT input) : SV_TARGET
 		HRESULT hr = currentRT->QueryInterface(__uuidof(ID3D11Texture2D), (void**)&currentTexture);
 
 		if (FAILED(hr) || !currentTexture) {
-			if (currentRT) currentRT->Release();
-			if (currentRTV) currentRTV->Release();
+			if (currentRT)
+				currentRT->Release();
+			if (currentRTV)
+				currentRTV->Release();
 			return;
 		}
 
