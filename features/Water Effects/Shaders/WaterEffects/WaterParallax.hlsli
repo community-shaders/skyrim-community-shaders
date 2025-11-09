@@ -91,27 +91,13 @@ namespace WaterEffects
 	// Samples height from flowmap normal texture alpha channel
 	float2 GetFlowmapParallaxOffset(PS_INPUT input, float2 baseUV)
 	{
-		// Calculate view direction using screen-space gradients instead of WPosition
-		// This avoids discontinuities at player coordinates (WPosition is player-relative)
-		float3 viewDirDDX = ddx_coarse(input.WPosition.xyz);
-		float3 viewDirDDY = ddy_coarse(input.WPosition.xyz);
-		
-		// Reconstruct view direction from world position gradient
-		// Use fine derivatives for smoothness
-		float3 posX = input.WPosition.xyz + ddx_fine(input.WPosition.xyz);
-		float3 posY = input.WPosition.xyz + ddy_fine(input.WPosition.xyz);
-		float3 viewDir = normalize(cross(normalize(posX), normalize(posY)));
-		
-		// Calculate parallax offset in tangent space
-		float2 parallaxOffsetTS = viewDir.xy / max(-viewDir.z, 0.001);
-		
-		// Apply parallax scale - VERY reduced to prevent dark water
-		parallaxOffsetTS *= SharedData::waterEffectsSettings.ParallaxHeight * 0.01;
-		
-		// Clamp to prevent excessive offset
-		float maxOffset = 0.001;
-		parallaxOffsetTS = clamp(parallaxOffsetTS, -maxOffset, maxOffset);
-		
+		// Use exact same view direction calculation as regular water
+		float3 viewDirection = normalize(input.WPosition.xyz);
+		float2 parallaxOffsetTS = viewDirection.xy / -viewDirection.z;
+
+		// Apply same parallax scale as regular water
+		parallaxOffsetTS *= 5.0;
+
 		// Calculate mip level using same method as GetFlowmapNormal
 		float2 textureDims;
 		FlowMapNormalsTex.GetDimensions(textureDims.x, textureDims.y);
@@ -120,32 +106,37 @@ namespace WaterEffects
 		float delta = max(dot(dx, dx), dot(dy, dy));
 		float mipLevel = 0.5 * log2(max(delta, 0.00001)) + SharedData::MipBias;
 		mipLevel = clamp(mipLevel, 0.0, 5.0);
-		
-		// Ray march through flowmap height field with more steps for better height detail
-		float stepSize = rcp(32.0); // Increased from 16 to 32 steps for finer height resolution
+
+		// Ray march with same step count as regular water
+		float stepSize = rcp(16.0);
 		float currBound = 0.0;
 		float currHeight = 1.0;
 		float prevHeight = 1.0;
-		
+
 		[loop] while (currHeight > currBound)
 		{
 			prevHeight = currHeight;
 			currBound += stepSize;
 			float2 sampleUV = baseUV + currBound * parallaxOffsetTS;
-			// Read alpha directly - no inversion needed
-			currHeight = FlowMapNormalsTex.SampleLevel(FlowMapNormalsSampler, sampleUV, mipLevel).a;
+			// Read alpha and process it for better height contrast
+			float rawHeight = FlowMapNormalsTex.SampleLevel(FlowMapNormalsSampler, sampleUV, mipLevel).a;
+			
+			// Gentle contrast enhancement - expand range by 1.5x instead of 2x
+			rawHeight = saturate((rawHeight - 0.5) * 1.5 + 0.5);
+			
+			// More conservative amplification
+			currHeight = 1.0 - (rawHeight * 20.0);
 		}
-		
-		// Binary refinement
+
+		// Binary refinement - same as regular water
 		float prevBound = currBound - stepSize;
 		float delta2 = prevBound - prevHeight;
 		float delta1 = currBound - currHeight;
 		float denominator = delta2 - delta1;
-		float parallaxAmount = (abs(denominator) > 0.0001) 
-			? (currBound * delta2 - prevBound * delta1) / denominator
-			: currBound;
-		
-		return parallaxOffsetTS * parallaxAmount;
+		float parallaxAmount = (currBound * delta2 - prevBound * delta1) / denominator;
+
+		return parallaxOffsetTS.xy * parallaxAmount;
 	}
 }
+
 
