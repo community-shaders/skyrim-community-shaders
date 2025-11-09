@@ -118,14 +118,11 @@ namespace WaterEffects
 			prevHeight = currHeight;
 			currBound += stepSize;
 			float2 sampleUV = baseUV + currBound * parallaxOffsetTS;
-			// Read alpha and process it for better height contrast
+			// Read alpha and amplify it - flowmap height data is very subtle
+			// Needs strong amplification to match regular water intensity
 			float rawHeight = FlowMapNormalsTex.SampleLevel(FlowMapNormalsSampler, sampleUV, mipLevel).a;
-			
-			// Gentle contrast enhancement - expand range by 1.5x instead of 2x
-			rawHeight = saturate((rawHeight - 0.5) * 1.5 + 0.5);
-			
-			// More conservative amplification
-			currHeight = 1.0 - (rawHeight * 20.0);
+			// Amplify by 60x and invert like regular water
+			currHeight = 1.0 - (rawHeight * 60.0);
 		}
 
 		// Binary refinement - same as regular water
