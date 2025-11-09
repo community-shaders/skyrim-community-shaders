@@ -201,23 +201,64 @@ struct UnifiedWave
 	float phaseOffset;
 };
 
+// Gerstner Wave Evaluation
+// Based on GPU Gems Chapter 1. Effective Water Simulation from Physical Models: https://developer.nvidia.com/gpugems/gpugems/part-i-natural-effects/chapter-1-effective-water-simulation-physical-models
+// Catlike Coding Gerstner wave implementation: https://catlikecoding.com/unity/tutorials/flow/waves/
 float3 EvaluateUnifiedWave(UnifiedWave wave, float2 position, float timeSeconds)
 {
+	// Calculate wave phase: f = k * (D · position - c * t)
 	float spatialPhase = dot(wave.direction, position) * wave.waveNumber + wave.phaseOffset;
-	float phase = WrapUnifiedPhase(spatialPhase + wave.angularVelocity * timeSeconds);
+	float phase = WrapUnifiedPhase(spatialPhase - wave.angularVelocity * timeSeconds);
 
 	float sineValue;
 	float cosineValue;
 	sincos(phase, sineValue, cosineValue);
 
+	// Gerstner wave displacement with steepness parameter
+	// Q (steepness) controls sharpness: 0 = sine wave, 1 = sharpest before looping
+	// Amplitude A = steepness / k (for proper scaling)
 	float QA = wave.steepness * wave.amplitude;
-	float QAC = QA * cosineValue;
 
+	// Gerstner waves create circular motion:
+	// Horizontal displacement = D * (Q*A) * cos(f)
+	// Vertical displacement = A * sin(f)
 	return float3(
-		QAC * wave.direction.x,
-		QAC * wave.direction.y,
-		wave.amplitude * sineValue
+		wave.direction.x * QA * cosineValue,  // X displacement
+		wave.direction.y * QA * cosineValue,  // Y displacement (Z in world)
+		wave.amplitude * sineValue            // Vertical (Y in world)
 	);
+}
+
+// Calculate Gerstner wave tangent and binormal for normal calculation
+// Returns: float4(tangent.xyz, binormal.z) - optimized to reduce calculations
+// From GPU Gems: Tangent/Binormal derivatives for proper surface orientation
+void EvaluateUnifiedWaveTangents(UnifiedWave wave, float2 position, float timeSeconds, 
+                                  inout float3 tangent, inout float3 binormal)
+{
+	float spatialPhase = dot(wave.direction, position) * wave.waveNumber + wave.phaseOffset;
+	float phase = WrapUnifiedPhase(spatialPhase - wave.angularVelocity * timeSeconds);
+
+	float sineValue;
+	float cosineValue;
+	sincos(phase, sineValue, cosineValue);
+
+	float steepnessSin = wave.steepness * sineValue;
+	float steepnessCos = wave.steepness * cosineValue;
+	
+	float Dx = wave.direction.x;
+	float Dz = wave.direction.y;  // Note: our Y is world Z
+	
+	// Tangent (partial derivative in X direction)
+	// T = [1 - Dx² * S * sin(f), Dx * S * cos(f), -Dx * Dz * S * sin(f)]
+	tangent.x += -Dx * Dx * steepnessSin;  // Accumulated, so subtract from 1 later
+	tangent.y += Dx * steepnessCos;
+	tangent.z += -Dx * Dz * steepnessSin;
+	
+	// Binormal (partial derivative in Z direction)  
+	// B = [-Dx * Dz * S * sin(f), Dz * S * cos(f), 1 - Dz² * S * sin(f)]
+	binormal.x += -Dx * Dz * steepnessSin;
+	binormal.y += Dz * steepnessCos;
+	binormal.z += -Dz * Dz * steepnessSin;  // Accumulated, so subtract from 1 later
 }
 
 #define UNIFIED_WATER_HAS_PER_FRAME_CBUFFER 1
@@ -251,6 +292,30 @@ cbuffer UnifiedWaterPerFrame : register(b7)
 	float WaveDetailSpeed : packoffset(c6.y);
 	float WaveDirectionBlend : packoffset(c6.z);
 	float TriVisualizerEnabled : packoffset(c6.w);
+	
+	// Wave 1 (Primary) parameters - Period removed, speed now from physics
+	float Wave1Amplitude : packoffset(c7.x);
+	float Wave1Wavelength : packoffset(c7.y);
+	float Wave1Steepness : packoffset(c7.z);
+	// padding c7.w
+	
+	// Wave 2 (Secondary) parameters
+	float Wave2Amplitude : packoffset(c8.x);
+	float Wave2Wavelength : packoffset(c8.y);
+	float Wave2Steepness : packoffset(c8.z);
+	// padding c8.w
+	
+	// Wave 3 (Detail) parameters
+	float Wave3Amplitude : packoffset(c9.x);
+	float Wave3Wavelength : packoffset(c9.y);
+	float Wave3Steepness : packoffset(c9.z);
+	// padding c9.w
+	
+	// Wave angle offsets (in radians)
+	float Wave1AngleOffset : packoffset(c10.x);
+	float Wave2AngleOffset : packoffset(c10.y);
+	float Wave3AngleOffset : packoffset(c10.z);
+	// padding c10.w
 }
 
 cbuffer UnifiedWaterPerTile : register(b8)
@@ -301,6 +366,7 @@ float fractalNoise(float2 p, int octaves)
 struct WaveSample
 {
 	float3 displacement;
+	float3 normal;
 	float2 primaryDirection;
 	float shoreInfluence;
 	float shoreDistance;
@@ -311,6 +377,7 @@ WaveSample CalculateWaterDisplacement(float2 worldPos, float2 textureDims, float
 	if (waveIntensity <= 0.0f) {
 		WaveSample zeroSample;
 		zeroSample.displacement = float3(0.0f, 0.0f, 0.0f);
+		zeroSample.normal = float3(0.0f, 0.0f, 1.0f);
 		zeroSample.primaryDirection = float2(0.0f, 1.0f);
 		zeroSample.shoreInfluence = 0.0f;
 		zeroSample.shoreDistance = 10000.0f;
@@ -325,30 +392,38 @@ WaveSample CalculateWaterDisplacement(float2 worldPos, float2 textureDims, float
 	// Create 3 wave directions that harmonize with primary direction
 	float2 baseDirections[3];
 	
-	// Primary wave follows primary direction exactly
-	baseDirections[0] = primaryDir;
+	// Primary wave with user-defined angle offset
+	float angle1 = Wave1AngleOffset;
+	float cos1, sin1;
+	sincos(angle1, sin1, cos1);
+	baseDirections[0] = float2(
+		primaryDir.x * cos1 - primaryDir.y * sin1,
+		primaryDir.x * sin1 + primaryDir.y * cos1);
 	
-	// Secondary wave at +50° angle for natural variation
-	float angle2 = 0.872665f; // 50 degrees in radians
+	// Secondary wave at user-defined angle
+	float angle2 = Wave2AngleOffset;
 	float cos2, sin2;
 	sincos(angle2, sin2, cos2);
 	baseDirections[1] = float2(
 		primaryDir.x * cos2 - primaryDir.y * sin2,
 		primaryDir.x * sin2 + primaryDir.y * cos2);
 
-	// Tertiary wave at -50° angle (100° spread)
-	float angle3 = -0.872665f;
+	// Tertiary wave at user-defined angle
+	float angle3 = Wave3AngleOffset;
 	float cos3, sin3;
 	sincos(angle3, sin3, cos3);
 	baseDirections[2] = float2(
 		primaryDir.x * cos3 - primaryDir.y * sin3,
 		primaryDir.x * sin3 + primaryDir.y * cos3);
 	
-	// Dramatic wave amplitudes for substantial peaks and visible wave motion
-	float baseAmplitudes[3] = { 8.5f, 5.5f, 3.2f };  // Significantly increased for larger peaks
-	float baseWaveLengths[3] = { 4800.0f, 3200.0f, 2000.0f };  // Longer wavelengths to support larger amplitudes
-	float basePeriods[3] = { 28.0f, 20.0f, 14.0f };  // Slightly slower for larger waves
-	float baseSteepness[3] = { 0.35f, 0.28f, 0.22f };  // Increased steepness for sharper, more dramatic peaks
+	// User-configurable wave parameters
+	float baseAmplitudes[3] = { Wave1Amplitude, Wave2Amplitude, Wave3Amplitude };
+	float baseWaveLengths[3] = { Wave1Wavelength, Wave2Wavelength, Wave3Wavelength };
+	float baseSteepness[3] = { Wave1Steepness, Wave2Steepness, Wave3Steepness };
+	
+	// Physics constants
+	const float gravity = 9.8f; // Earth gravity in m/s²
+	
 	float contributions[3] = {
 		max(WavePrimaryContribution, 0.0f),
 		max(WaveSecondaryContribution, 0.0f),
@@ -370,25 +445,51 @@ WaveSample CalculateWaterDisplacement(float2 worldPos, float2 textureDims, float
 	float dayScale[3] = { 1.0f, 1.45f, 2.2f };
 	float dayBias[3] = { 0.0f, 2.0943951f, 4.1887903f };
 
-	[unroll] for (int i = 0; i < 3; ++i) {
-		waves[i].direction = baseDirections[i];
-		waves[i].amplitude = baseAmplitudes[i] * waveIntensity * amplitudeMult * contributions[i];
-		float waveNumberBase = UW_TWO_PI / baseWaveLengths[i];
-		waves[i].waveNumber = waveNumberBase;
-		float angularBase = UW_TWO_PI / basePeriods[i];
-		waves[i].angularVelocity = angularBase * speedMult * speedScale[i];
-		waves[i].steepness = saturate(baseSteepness[i] * steepnessMult * contributions[i]);
-		waves[i].phaseOffset = dayPhase * dayScale[i] + dayBias[i];
+	[unroll] for (int j = 0; j < 3; ++j) {
+		waves[j].direction = normalize(baseDirections[j]);
+		waves[j].amplitude = baseAmplitudes[j] * waveIntensity * amplitudeMult * contributions[j];
+		
+		// Calculate wave number: k = 2π / wavelength
+		float waveNumberBase = UW_TWO_PI / baseWaveLengths[j];
+		waves[j].waveNumber = waveNumberBase;
+		
+		// Physically accurate phase speed: c = sqrt(g / k) = sqrt(g * wavelength / 2π)
+		// This relationship ensures longer waves travel faster (dispersion relation for deep water)
+		float phaseSpeed = sqrt(gravity * baseWaveLengths[j] / UW_TWO_PI);
+		
+		// Angular velocity: ω = k * c (relates wave number and phase speed)
+		// User speed multiplier allows artistic control while maintaining physical relationships
+		waves[j].angularVelocity = waveNumberBase * phaseSpeed * speedMult * speedScale[j];
+		
+		// Steepness parameter controls wave sharpness (0 = sine wave, 1 = sharpest)
+		// Sum of all steepness should not exceed 1 to prevent wave loops
+		waves[j].steepness = saturate(baseSteepness[j] * steepnessMult * contributions[j]);
+		
+		waves[j].phaseOffset = dayPhase * dayScale[j] + dayBias[j];
 	}
 
 	float3 totalDisplacement = float3(0.0f, 0.0f, 0.0f);
+	
+	// Initialize tangent and binormal for normal calculation
+	// Start with flat plane: tangent = (1, 0, 0), binormal = (0, 0, 1)
+	float3 tangent = float3(1.0f, 0.0f, 0.0f);
+	float3 binormal = float3(0.0f, 0.0f, 1.0f);
 
-	[unroll] for (int j = 0; j < 3; ++j) {
+	[unroll] for (int k = 0; k < 3; ++k) {
 		// Skip disabled waves entirely to prevent precision issues
-		if (contributions[j] > 0.0f) {
-			totalDisplacement += EvaluateUnifiedWave(waves[j], worldPos, timeSeconds);
+		if (contributions[k] > 0.0f) {
+			totalDisplacement += EvaluateUnifiedWave(waves[k], worldPos, timeSeconds);
+			EvaluateUnifiedWaveTangents(waves[k], worldPos, timeSeconds, tangent, binormal);
 		}
 	}
+	
+	// Complete the tangent and binormal by adding back the base values
+	// (derivatives accumulated the changes, now restore the flat plane base)
+	tangent.x += 1.0f;
+	binormal.z += 1.0f;
+	
+	// Calculate normal via cross product: N = normalize(binormal × tangent)
+	float3 waveNormal = normalize(cross(binormal, tangent));
 	
 	// Clamp displacement to prevent extreme values that cause rendering artifacts
 	totalDisplacement.xy = clamp(totalDisplacement.xy, -100.0f, 100.0f);
@@ -396,6 +497,7 @@ WaveSample CalculateWaterDisplacement(float2 worldPos, float2 textureDims, float
 
 	WaveSample sample;
 	sample.displacement = totalDisplacement;
+	sample.normal = waveNormal;
 	sample.primaryDirection = primaryDir;
 	sample.shoreInfluence = 0.0f;
 	sample.shoreDistance = 10000.0f;
@@ -491,7 +593,10 @@ VS_OUTPUT main(VS_INPUT input)
 	float3 waveDisplacement = currentWave.displacement;
 	float horizontalDisplacement = length(waveDisplacement.xy);
 	vsout.UnifiedWaveInfo = float4(currentWave.primaryDirection, waveDisplacement.z, currentWave.shoreInfluence);
-	vsout.UnifiedWaveNormal = float4(0.0f, 0.0f, 1.0f, horizontalDisplacement);
+	
+	// Use properly calculated Gerstner wave normal instead of flat normal
+	// This gives correct lighting and surface appearance with sharper crests and flatter troughs
+	vsout.UnifiedWaveNormal = float4(currentWave.normal, horizontalDisplacement);
 	const float2 fallbackWaveDirVS = float2(-0.70710678f, 0.70710678f);
 	float2 wavePrimaryDirVS = currentWave.primaryDirection;
 	float wavePrimaryLenSqVS = dot(wavePrimaryDirVS, wavePrimaryDirVS);
@@ -891,6 +996,8 @@ struct FlowmapData
 	float2 flowVector;  // Flow vector (coordinate space depends on source function)
 };
 
+#			endif
+
 #if defined(FLOWMAP)
 /**
  * Gets raw flowmap data before UV-space coordinate transformation
@@ -993,9 +1100,9 @@ float3 GetFlowmapNormal(PS_INPUT input, float2 uvShift, float multiplier, float 
 	float3 normalSample = FlowMapNormalsTex.SampleLevel(Normals01Sampler, uv, mipLevel).xyz;
 	
 	// Return raw XY and flow strength - processing happens in the blending code
+	
 	return float3(normalSample.xy, flowData.color.z);
 }
-#endif  // FLOWMAP
 
 /**
  * Gets flowmap data with world-space flow vector for positioning effects
@@ -1038,6 +1145,8 @@ FlowmapData GetFlowmapDataWorldSpace(PS_INPUT input, float2 uvShift)
 	data.flowVector = data.flowVector * finalFlowDir;  // Transform to world space
 	return data;
 }
+
+#endif  // FLOWMAP
 
 #			if defined(UNIFIED_WATER)
 /**
@@ -1136,8 +1245,6 @@ float3 ComputeEnhancedWaveNormal(float3 worldPos, float3 baseNormal, float timer
 
 #			endif
 
-#			endif
-
 #			if defined(LOD)
 #				undef WATER_EFFECTS
 #				undef WETNESS_EFFECTS
@@ -1146,6 +1253,32 @@ float3 ComputeEnhancedWaveNormal(float3 worldPos, float3 baseNormal, float timer
 #			if defined(WATER_EFFECTS) && !defined(VC)
 #				define WATER_PARALLAX
 #				include "WaterEffects/WaterParallax.hlsli"
+#			endif
+
+#			if defined(WATER_PARALLAX) && defined(FLOWMAP)
+/**
+ * Flowmap normal sampling with parallax occlusion mapping
+ * NOTE: Currently disabled - flowmap textures don't contain height data in alpha channel
+ * This function currently behaves identically to GetFlowmapNormal
+ */
+float3 GetFlowmapNormalParallax(PS_INPUT input, float2 uvShift, float multiplier, float offset, uint eyeIndex)
+{
+	FlowmapData flowData = GetFlowmapDataUV(input, uvShift, eyeIndex);
+	float2 uv = offset + (flowData.flowVector - float2(multiplier * ((0.001 * ReflectionColor.w) * flowData.color.w), 0));
+	
+	// Calculate mip level and clamp to preserve detail at distance
+	float2 textureDims;
+	FlowMapNormalsTex.GetDimensions(textureDims.x, textureDims.y);
+	float2 dx = ddx(uv * textureDims);
+	float2 dy = ddy(uv * textureDims);
+	float delta = max(dot(dx, dx), dot(dy, dy));
+	float mipLevel = 0.5 * log2(max(delta, 0.00001)) + SharedData::MipBias;
+	mipLevel = clamp(mipLevel, 0.0, 5.0);
+	
+	float3 normalSample = FlowMapNormalsTex.SampleLevel(Normals01Sampler, uv, mipLevel).xyz;
+	
+	return float3(normalSample.xy, flowData.color.z);
+}
 #			endif
 
 #			if defined(DYNAMIC_CUBEMAPS)
@@ -1400,11 +1533,19 @@ WaterNormalData GetWaterNormal(PS_INPUT input, float distanceFactor, float norma
 	float2 normalMul = 0.5 + -(-0.5 + abs(frac(input.TexCoord2.zw * (64 * flowmapDimensions)) * 2 - 1));
 	float2 uvShift = 1 / (128 * flowmapDimensions);
 
-	// Flowmaps don't use parallax - the flow animation provides depth
+#				if defined(WATER_PARALLAX)
+	// Use parallax-enabled flowmap normals
+	float3 flowmapNormal0 = GetFlowmapNormalParallax(input, uvShift, 9.92, 0, eyeIndex);
+	float3 flowmapNormal1 = GetFlowmapNormalParallax(input, float2(0, uvShift.y), 10.64, 0.27, eyeIndex);
+	float3 flowmapNormal2 = GetFlowmapNormalParallax(input, 0.0.xx, 8, 0, eyeIndex);
+	float3 flowmapNormal3 = GetFlowmapNormalParallax(input, float2(uvShift.x, 0), 8.48, 0.62, eyeIndex);
+#				else
+	// Standard flowmap normals without parallax
 	float3 flowmapNormal0 = GetFlowmapNormal(input, uvShift, 9.92, 0, eyeIndex);
 	float3 flowmapNormal1 = GetFlowmapNormal(input, float2(0, uvShift.y), 10.64, 0.27, eyeIndex);
 	float3 flowmapNormal2 = GetFlowmapNormal(input, 0.0.xx, 8, 0, eyeIndex);
 	float3 flowmapNormal3 = GetFlowmapNormal(input, float2(uvShift.x, 0), 8.48, 0.62, eyeIndex);
+#				endif
 
 	float2 flowmapNormalWeighted =
 		normalMul.y * (normalMul.x * flowmapNormal2.xy + (1 - normalMul.x) * flowmapNormal3.xy) +

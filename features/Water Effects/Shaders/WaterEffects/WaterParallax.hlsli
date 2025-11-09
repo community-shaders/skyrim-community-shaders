@@ -86,4 +86,73 @@ namespace WaterEffects
 
 		return parallaxOffsetTS.xy * parallaxAmount;
 	}
+
+	// Flowmap-specific parallax function
+	// Samples height from flowmap normal texture alpha channel
+	float2 GetFlowmapParallaxOffset(PS_INPUT input, float2 baseUV)
+	{
+		float3 viewDirection = normalize(input.WPosition.xyz);
+		float2 parallaxDirection = viewDirection.xy / -viewDirection.z;
+		
+		// Use much smaller parallax scale for flowmaps (reduced from 20.0)
+		float parallaxScale = SharedData::waterEffectsSettings.ParallaxHeight * 2.0;
+		float2 parallaxOffsetTS = parallaxDirection * parallaxScale;
+		
+		// Calculate mip level for flowmap texture
+		float2 textureDims;
+		FlowMapNormalsTex.GetDimensions(textureDims.x, textureDims.y);
+		
+#if defined(VR)
+		textureDims /= 16.0;
+#else
+		textureDims /= 8.0;
+#endif
+		
+		float2 texCoordsPerSize = baseUV * textureDims;
+		float2 dxSize = ddx(texCoordsPerSize);
+		float2 dySize = ddy(texCoordsPerSize);
+		float2 dTexCoords = dxSize * dxSize + dySize * dySize;
+		float minTexCoordDelta = max(dTexCoords.x, dTexCoords.y);
+		float mipLevel = max(0.5 * log2(minTexCoordDelta), 0);
+		
+#if defined(VR)
+		mipLevel += 4.0;
+#else
+		mipLevel += 3.0;
+#endif
+		
+		// Ray march through flowmap height field
+		float stepSize = rcp(16.0);
+		float currBound = 0.0;
+		float currHeight = 1.0;
+		float prevHeight = 1.0;
+		float2 currentUV = baseUV;
+		
+		[loop] for (int i = 0; i < 16; i++)
+		{
+			// Sample height from flowmap alpha channel
+			currHeight = FlowMapNormalsTex.SampleLevel(Normals01Sampler, currentUV, mipLevel).a;
+			
+			if (currHeight <= currBound)
+				break;
+			
+			prevHeight = currHeight;
+			currBound += stepSize;
+			currentUV += parallaxOffsetTS * stepSize;
+		}
+		
+		// Binary refinement
+		float prevBound = currBound - stepSize;
+		float delta2 = prevBound - prevHeight;
+		float delta1 = currBound - currHeight;
+		float denominator = delta2 - delta1;
+		float parallaxAmount = (abs(denominator) > 0.0001) 
+			? (currBound * delta2 - prevBound * delta1) / denominator
+			: currBound;
+		
+		// Clamp parallax offset to prevent extreme displacement
+		float2 result = parallaxOffsetTS * parallaxAmount;
+		return clamp(result, -0.1, 0.1);
+	}
 }
+

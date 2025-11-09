@@ -861,6 +861,58 @@ void UnifiedWater::DrawSettings()
 		}
 
 		ImGui::Spacing();
+		ImGui::Separator();
+		ImGui::Spacing();
+		
+		if (ImGui::TreeNodeEx("Wave 1 (Primary) Parameters", ImGuiTreeNodeFlags_DefaultOpen)) {
+			ImGui::SliderFloat("W1 Amplitude", &settings.Wave1Amplitude, 0.0f, 20.0f, "%.2f");
+			if (auto _tt = Util::HoverTooltipWrapper()) ImGui::Text("Height of the primary wave");
+			
+			ImGui::SliderFloat("W1 Wavelength", &settings.Wave1Wavelength, 500.0f, 10000.0f, "%.0f");
+			if (auto _tt = Util::HoverTooltipWrapper()) ImGui::Text("Distance between wave crests (affects speed via physics)");
+			
+			ImGui::SliderFloat("W1 Steepness", &settings.Wave1Steepness, 0.0f, 1.0f, "%.3f");
+			if (auto _tt = Util::HoverTooltipWrapper()) ImGui::Text("Sharpness of wave peaks (0=sine wave, 1=sharpest)");
+			
+			ImGui::SliderFloat("W1 Angle", &settings.Wave1AngleOffset, -180.0f, 180.0f, "%.1f°");
+			if (auto _tt = Util::HoverTooltipWrapper()) ImGui::Text("Direction offset in degrees from primary wave direction");
+			
+			ImGui::TreePop();
+		}
+		
+		if (ImGui::TreeNodeEx("Wave 2 (Secondary) Parameters", ImGuiTreeNodeFlags_DefaultOpen)) {
+			ImGui::SliderFloat("W2 Amplitude", &settings.Wave2Amplitude, 0.0f, 20.0f, "%.2f");
+			if (auto _tt = Util::HoverTooltipWrapper()) ImGui::Text("Height of the secondary wave");
+			
+			ImGui::SliderFloat("W2 Wavelength", &settings.Wave2Wavelength, 500.0f, 10000.0f, "%.0f");
+			if (auto _tt = Util::HoverTooltipWrapper()) ImGui::Text("Distance between wave crests (affects speed via physics)");
+			
+			ImGui::SliderFloat("W2 Steepness", &settings.Wave2Steepness, 0.0f, 1.0f, "%.3f");
+			if (auto _tt = Util::HoverTooltipWrapper()) ImGui::Text("Sharpness of wave peaks (0=sine wave, 1=sharpest)");
+			
+			ImGui::SliderFloat("W2 Angle", &settings.Wave2AngleOffset, -180.0f, 180.0f, "%.1f°");
+			if (auto _tt = Util::HoverTooltipWrapper()) ImGui::Text("Direction offset in degrees from primary wave direction");
+			
+			ImGui::TreePop();
+		}
+		
+		if (ImGui::TreeNodeEx("Wave 3 (Detail) Parameters", ImGuiTreeNodeFlags_DefaultOpen)) {
+			ImGui::SliderFloat("W3 Amplitude", &settings.Wave3Amplitude, 0.0f, 20.0f, "%.2f");
+			if (auto _tt = Util::HoverTooltipWrapper()) ImGui::Text("Height of the detail wave");
+			
+			ImGui::SliderFloat("W3 Wavelength", &settings.Wave3Wavelength, 500.0f, 10000.0f, "%.0f");
+			if (auto _tt = Util::HoverTooltipWrapper()) ImGui::Text("Distance between wave crests (affects speed via physics)");
+			
+			ImGui::SliderFloat("W3 Steepness", &settings.Wave3Steepness, 0.0f, 1.0f, "%.3f");
+			if (auto _tt = Util::HoverTooltipWrapper()) ImGui::Text("Sharpness of wave peaks (0=sine wave, 1=sharpest)");
+			
+			ImGui::SliderFloat("W3 Angle", &settings.Wave3AngleOffset, -180.0f, 180.0f, "%.1f°");
+			if (auto _tt = Util::HoverTooltipWrapper()) ImGui::Text("Direction offset in degrees from primary wave direction");
+			
+			ImGui::TreePop();
+		}
+
+		ImGui::Spacing();
 		
 		ImGui::Text("Advanced Foam System");
 		ImGui::SliderFloat("Foam Intensity", &settings.FoamIntensity, 0.0f, 2.0f, "%.2f");
@@ -1664,6 +1716,24 @@ void UnifiedWater::BSWaterShader_SetupGeometry::thunk(RE::BSShader* waterShader,
 		perFrameData.WaveDetailSpeed = singleton.settings.WaveDetailSpeed;
 		perFrameData.WaveDirectionBlend = singleton.settings.WaveDirectionBlend;
 		perFrameData.TriVisualizerEnabled = singleton.settings.ShowSubdivisionVisualizer ? 1.0f : 0.0f;
+		
+		// Wave parameters (Period removed - speed now calculated from wavelength via physics)
+		perFrameData.Wave1Amplitude = singleton.settings.Wave1Amplitude;
+		perFrameData.Wave1Wavelength = singleton.settings.Wave1Wavelength;
+		perFrameData.Wave1Steepness = singleton.settings.Wave1Steepness;
+		
+		perFrameData.Wave2Amplitude = singleton.settings.Wave2Amplitude;
+		perFrameData.Wave2Wavelength = singleton.settings.Wave2Wavelength;
+		perFrameData.Wave2Steepness = singleton.settings.Wave2Steepness;
+		
+		perFrameData.Wave3Amplitude = singleton.settings.Wave3Amplitude;
+		perFrameData.Wave3Wavelength = singleton.settings.Wave3Wavelength;
+		perFrameData.Wave3Steepness = singleton.settings.Wave3Steepness;
+		
+		// Convert angles from degrees to radians
+		perFrameData.Wave1AngleOffset = singleton.settings.Wave1AngleOffset * 0.0174532925f;  // degrees to radians
+		perFrameData.Wave2AngleOffset = singleton.settings.Wave2AngleOffset * 0.0174532925f;
+		perFrameData.Wave3AngleOffset = singleton.settings.Wave3AngleOffset * 0.0174532925f;
 
 		const auto* state = globals::state;
 		const std::uint32_t frameIndex = state ? state->frameCount : singleton.lastTimingFrameIndex;

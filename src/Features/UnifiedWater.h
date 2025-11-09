@@ -61,6 +61,24 @@ struct UnifiedWater : OverlayFeature
 		float WaveSecondarySpeed = 1.0f;
 		float WaveDetailSpeed = 1.0f;
 		float WaveDirectionBlend = 1.0f;
+		
+		// Wave 1 (Primary) parameters
+		float Wave1Amplitude = 8.5f;
+		float Wave1Wavelength = 4800.0f;
+		float Wave1Steepness = 0.35f;
+		float Wave1AngleOffset = 0.0f;
+		
+		// Wave 2 (Secondary) parameters
+		float Wave2Amplitude = 5.5f;
+		float Wave2Wavelength = 3200.0f;
+		float Wave2Steepness = 0.28f;
+		float Wave2AngleOffset = 50.0f;
+		
+		// Wave 3 (Detail) parameters
+		float Wave3Amplitude = 3.2f;
+		float Wave3Wavelength = 2000.0f;
+		float Wave3Steepness = 0.22f;
+		float Wave3AngleOffset = -50.0f;
 	};
 
 #pragma warning(push)
@@ -95,7 +113,30 @@ struct UnifiedWater : OverlayFeature
 		float WaveDetailSpeed;
 		float WaveDirectionBlend;
 		float TriVisualizerEnabled;
-		float _paddingPerFrame[3];
+		
+		// Wave 1 (Primary) parameters
+		float Wave1Amplitude;
+		float Wave1Wavelength;
+		float Wave1Steepness;
+		float _paddingWave1;
+		
+		// Wave 2 (Secondary) parameters
+		float Wave2Amplitude;
+		float Wave2Wavelength;
+		float Wave2Steepness;
+		float _paddingWave2;
+		
+		// Wave 3 (Detail) parameters
+		float Wave3Amplitude;
+		float Wave3Wavelength;
+		float Wave3Steepness;
+		float _paddingWave3;
+		
+		// Wave angle offsets (in radians)
+		float Wave1AngleOffset;
+		float Wave2AngleOffset;
+		float Wave3AngleOffset;
+		float _paddingAngles;
 	};
 #pragma warning(pop)
 
