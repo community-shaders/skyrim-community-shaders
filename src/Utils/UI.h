@@ -616,4 +616,69 @@ namespace Util
 		 */
 		const char* KeyIdToString(uint32_t key);
 	}
+
+	/**
+	 * @brief Renders a searchable combo box with case-insensitive filtering
+	 *
+	 * Provides a reusable ImGui combo box with built-in search functionality.
+	 * When opened, automatically focuses a search input that filters items as you type.
+	 * The search is case-insensitive and clears automatically on selection or close.
+	 *
+	 * @tparam T The value type stored in the map
+	 * @param label The label for the combo box
+	 * @param selectedName Reference to the currently selected item's name (will be updated on selection)
+	 * @param itemMap The map of items to display (key = item name, value = item data)
+	 * @return true if a new item was selected, false otherwise
+	 *
+	 * @note Uses a static search buffer, so only one SearchableCombo should be open at a time
+	 *
+	 * @example
+	 * @code
+	 * std::unordered_map<std::string, MyData> myItems;
+	 * std::string selectedName;
+	 * MyData* selectedItem = nullptr;
+	 * 
+	 * if (Util::SearchableCombo("Choose Item", selectedName, myItems)) {
+	 *     selectedItem = &myItems[selectedName];
+	 * }
+	 * @endcode
+	 */
+	template <typename T>
+	bool SearchableCombo(const char* label, std::string& selectedName, std::unordered_map<std::string, T>& itemMap)
+	{
+		bool valueChanged = false;
+		static std::unordered_map<std::string, char[256]> searchBuffers;
+		
+		std::string comboId = std::string(label);
+		auto& searchBuffer = searchBuffers[comboId];
+
+		if (ImGui::BeginCombo(label, selectedName.c_str())) {
+			ImGui::InputText("##search", searchBuffer, IM_ARRAYSIZE(searchBuffer));
+
+			ImGui::Separator();
+
+			// Filter and display items
+			for (auto& [itemName, item] : itemMap) {
+				// Simple case-insensitive search
+				if (searchBuffer[0] == '\0' ||
+					std::search(itemName.begin(), itemName.end(), searchBuffer, searchBuffer + strlen(searchBuffer),
+						[](char a, char b) { return std::tolower(a) == std::tolower(b); }) != itemName.end()) {
+
+					if (ImGui::Selectable(itemName.c_str(), itemName == selectedName)) {
+						selectedName = itemName;
+						valueChanged = true;
+						searchBuffer[0] = '\0';  // Clear search on selection
+					}
+				}
+			}
+
+			ImGui::EndCombo();
+		} else {
+			// Reset search when combo is closed
+			searchBuffer[0] = '\0';
+		}
+
+		return valueChanged;
+	}
+
 }  // namespace Util

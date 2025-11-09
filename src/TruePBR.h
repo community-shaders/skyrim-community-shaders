@@ -23,8 +23,6 @@ public:
 	inline std::string GetShortName() { return "TruePBR"; }
 
 	void DrawSettings();
-	void DrawSettings(std::string& textureSetSearch, std::string& materialObjectSearch);
-	void DrawSettings(std::string& textureSetSearch, std::string& materialObjectSearch);
 	void SetupResources();
 	void PrePass();
 	void PostPostLoad();

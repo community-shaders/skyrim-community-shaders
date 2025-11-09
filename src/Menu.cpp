@@ -507,10 +507,8 @@ void Menu::DrawAdvancedSettings()
 {
 	// Render advanced settings using extracted component
 	AdvancedSettingsRenderer::RenderAdvancedSettings(
-		[this]() { globals::truePBR->DrawSettings(pbrTextureSetSearch, pbrMaterialObjectSearch); },
-		[this]() { DrawDisableAtBootSettings(); },
-		pbrTextureSetSearch,
-		pbrMaterialObjectSearch);
+		[this]() { globals::truePBR->DrawSettings(); },
+		[this]() { DrawDisableAtBootSettings(); });
 }
 
 void Menu::DrawDisableAtBootSettings()

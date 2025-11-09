@@ -18,9 +18,7 @@
 
 void AdvancedSettingsRenderer::RenderAdvancedSettings(
 	const std::function<void()>& drawTruePBRSettings,
-	const std::function<void()>& drawDisableAtBootSettings,
-	std::string& pbrTextureSetSearch,
-	std::string& pbrMaterialObjectSearch)
+	const std::function<void()>& drawDisableAtBootSettings)
 {
 	// Use TabBar system for better organization
 	if (ImGui::BeginTabBar("##AdvancedSettingsTabs", ImGuiTabBarFlags_None)) {
@@ -45,7 +43,7 @@ void AdvancedSettingsRenderer::RenderAdvancedSettings(
 		// PBR Settings Tab
 		if (MenuFonts::BeginTabItemWithFont("PBR Settings", Menu::FontRole::Subheading)) {
 			if (ImGui::BeginChild("##PBRSettingsContent", ImVec2(0, 0), false)) {
-				RenderPBRSection(drawTruePBRSettings, pbrTextureSetSearch, pbrMaterialObjectSearch);
+				RenderPBRSection(drawTruePBRSettings);
 			}
 			ImGui::EndChild();
 			ImGui::EndTabItem();
@@ -250,12 +248,8 @@ void AdvancedSettingsRenderer::RenderShaderReplacementSection()
 	}
 }
 
-void AdvancedSettingsRenderer::RenderPBRSection(
-	const std::function<void()>& drawTruePBRSettings,
-	std::string& pbrTextureSetSearch,
-	std::string& pbrMaterialObjectSearch)
+void AdvancedSettingsRenderer::RenderPBRSection(const std::function<void()>& drawTruePBRSettings)
 {
-	// Call TruePBR DrawSettings with search parameters
 	drawTruePBRSettings();
 }
 
