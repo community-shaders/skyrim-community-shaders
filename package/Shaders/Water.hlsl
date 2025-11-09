@@ -998,7 +998,7 @@ struct FlowmapData
 
 #			endif
 
-#if defined(FLOWMAP)
+#			if defined(FLOWMAP)
 /**
  * Gets raw flowmap data before UV-space coordinate transformation
  *
@@ -1037,7 +1037,6 @@ FlowmapData GetFlowmapDataTextureSpace(PS_INPUT input, float2 uvShift)
  * @details This function:
  *          - Samples the flowmap texture at the specified UV coordinates
  *          - Decodes flow direction from RG channels (remapped from [0,1] to [-1,1])
- *          - Aligns decoded flow direction with the Gerstner wave heading exported by the VS
  *          - Calculates flow strength using the blue channel with sqrt falloff
  *          - Applies transpose rotation matrix to transform flow direction to UV space
  *          - Scales flow vector by world position and strength factors
@@ -1048,18 +1047,11 @@ FlowmapData GetFlowmapDataTextureSpace(PS_INPUT input, float2 uvShift)
  *       - Blue channel: Flow strength (0 = no flow, 1 = maximum flow)
  *       - Alpha channel: Flow mask/intensity multiplier
  */
-FlowmapData GetFlowmapDataUV(PS_INPUT input, float2 uvShift, uint eyeIndex)
+FlowmapData GetFlowmapDataUV(PS_INPUT input, float2 uvShift)
 {
 	FlowmapData data = GetFlowmapDataTextureSpace(input, uvShift);
-	
-	// Decode flow direction BEFORE rotation matrix
-	float2 rawFlowDir = data.color.xy * 2 - 1;
-	float rawDirLenSq = dot(rawFlowDir, rawFlowDir);
-	float2 normalizedFlowDir = (rawDirLenSq > 1e-5f) ? rawFlowDir * rsqrt(rawDirLenSq) : float2(0.0f, 1.0f);
-	float2 finalFlowDir = normalizedFlowDir;
-
-
-	float2x2 flowRotationMatrix = float2x2(finalFlowDir.x, finalFlowDir.y, -finalFlowDir.y, finalFlowDir.x);
+	float2 flowSinCos = data.color.xy * 2 - 1;
+	float2x2 flowRotationMatrix = float2x2(flowSinCos.x, flowSinCos.y, -flowSinCos.y, flowSinCos.x);
 	data.flowVector = mul(transpose(flowRotationMatrix), data.flowVector);
 	return data;
 }
@@ -1081,27 +1073,11 @@ FlowmapData GetFlowmapDataUV(PS_INPUT input, float2 uvShift, uint eyeIndex)
  * @note The returned Z component contains the original flowmap strength value
  *       which can be used for blending between flow and non-flow normals
  */
-float3 GetFlowmapNormal(PS_INPUT input, float2 uvShift, float multiplier, float offset, uint eyeIndex)
+float3 GetFlowmapNormal(PS_INPUT input, float2 uvShift, float multiplier, float offset)
 {
-	FlowmapData flowData = GetFlowmapDataUV(input, uvShift, eyeIndex);
+	FlowmapData flowData = GetFlowmapDataUV(input, uvShift);
 	float2 uv = offset + (flowData.flowVector - float2(multiplier * ((0.001 * ReflectionColor.w) * flowData.color.w), 0));
-	
-	// Calculate mip level and clamp to preserve detail at distance
-	float2 textureDims;
-	FlowMapNormalsTex.GetDimensions(textureDims.x, textureDims.y);
-	float2 dx = ddx(uv * textureDims);
-	float2 dy = ddy(uv * textureDims);
-	float delta = max(dot(dx, dx), dot(dy, dy));
-	float mipLevel = 0.5 * log2(max(delta, 0.00001)) + SharedData::MipBias;
-	
-	// Clamp to preserve detail without over-blurring
-	mipLevel = clamp(mipLevel, 0.0, 5.0);
-	
-	float3 normalSample = FlowMapNormalsTex.SampleLevel(Normals01Sampler, uv, mipLevel).xyz;
-	
-	// Return raw XY and flow strength - processing happens in the blending code
-	
-	return float3(normalSample.xy, flowData.color.z);
+	return float3(FlowMapNormalsTex.SampleBias(FlowMapNormalsSampler, uv, SharedData::MipBias).xy, flowData.color.z);
 }
 
 /**
@@ -1114,7 +1090,6 @@ float3 GetFlowmapNormal(PS_INPUT input, float2 uvShift, float multiplier, float 
  * @details This function:
  *          - Samples raw flowmap data (before UV-space transformations)
  *          - Decodes flow direction from flowmap RG channels
- *          - Aligns decoded flow direction with the Gerstner wave heading exported by the VS
  *          - Applies component-wise directional transformation
  *          - Returns complete flowmap data with world-space flow vector
  *
@@ -1124,29 +1099,27 @@ float3 GetFlowmapNormal(PS_INPUT input, float2 uvShift, float multiplier, float 
 FlowmapData GetFlowmapDataWorldSpace(PS_INPUT input, float2 uvShift)
 {
 	FlowmapData data = GetFlowmapDataTextureSpace(input, uvShift);
-	float2 rawFlowDir = -(data.color.xy * 2 - 1);    // Decode direction with 180° correction
-	float rawDirLenSq = dot(rawFlowDir, rawFlowDir);
-	float2 normalizedFlowDir = (rawDirLenSq > 1e-5f) ? rawFlowDir * rsqrt(rawDirLenSq) : float2(0.0f, 1.0f);
-	float2 finalFlowDir = normalizedFlowDir;
-
-#if defined(UNIFIED_WATER)
-	float2 waveDir = input.UnifiedWaveInfo.xy;
-	float waveDirLenSq = dot(waveDir, waveDir);
-	if (waveDirLenSq > 1e-5f) {
-		float2 normalizedWaveDir = waveDir * rsqrt(waveDirLenSq);
-		float waveMotion = saturate(input.UnifiedWaveNormal.w * 0.1f);
-		float alignStrength = waveMotion;
-		float2 alignedDir = lerp(finalFlowDir, normalizedWaveDir, alignStrength);
-		float alignedLenSq = dot(alignedDir, alignedDir);
-		finalFlowDir = (alignedLenSq > 1e-5f) ? alignedDir * rsqrt(alignedLenSq) : normalizedWaveDir;
-	}
-#endif
-
-	data.flowVector = data.flowVector * finalFlowDir;  // Transform to world space
+	float2 flowDirection = -(data.color.xy * 2 - 1);    // Decode direction with 180° correction
+	data.flowVector = data.flowVector * flowDirection;  // Transform to world space
 	return data;
 }
 
-#endif  // FLOWMAP
+/**
+ * Converts existing texture-space flowmap data to world-space (avoids duplicate sampling)
+ *
+ * @param textureSpaceData FlowmapData from GetFlowmapDataTextureSpace()
+ * @return FlowmapData Complete flowmap data with world-space flow vector
+ *
+ * @note Use this overload when you already have texture-space flowmap data to avoid duplicate texture sampling
+ */
+FlowmapData GetFlowmapDataWorldSpace(FlowmapData textureSpaceData)
+{
+	FlowmapData data = textureSpaceData;
+	float2 flowDirection = -(data.color.xy * 2 - 1);    // Decode direction with 180° correction
+	data.flowVector = data.flowVector * flowDirection;  // Transform to world space
+	return data;
+}
+#			endif
 
 #			if defined(UNIFIED_WATER)
 /**
@@ -1258,24 +1231,30 @@ float3 ComputeEnhancedWaveNormal(float3 worldPos, float3 baseNormal, float timer
 #			if defined(WATER_PARALLAX) && defined(FLOWMAP)
 /**
  * Flowmap normal sampling with parallax occlusion mapping
- * NOTE: Currently disabled - flowmap textures don't contain height data in alpha channel
- * This function currently behaves identically to GetFlowmapNormal
+ * Uses height data from flowmap alpha channel for depth perception
  */
 float3 GetFlowmapNormalParallax(PS_INPUT input, float2 uvShift, float multiplier, float offset, uint eyeIndex)
 {
-	FlowmapData flowData = GetFlowmapDataUV(input, uvShift, eyeIndex);
-	float2 uv = offset + (flowData.flowVector - float2(multiplier * ((0.001 * ReflectionColor.w) * flowData.color.w), 0));
+	FlowmapData flowData = GetFlowmapDataUV(input, uvShift);
 	
-	// Calculate mip level and clamp to preserve detail at distance
+	// Calculate base UV with flow displacement (same as non-parallax version)
+	float2 baseUV = offset + (flowData.flowVector - float2(multiplier * ((0.001 * ReflectionColor.w) * flowData.color.w), 0));
+	
+	// Calculate mip level from base UV BEFORE parallax to avoid derivative discontinuities
 	float2 textureDims;
 	FlowMapNormalsTex.GetDimensions(textureDims.x, textureDims.y);
-	float2 dx = ddx(uv * textureDims);
-	float2 dy = ddy(uv * textureDims);
+	float2 dx = ddx(baseUV * textureDims);
+	float2 dy = ddy(baseUV * textureDims);
 	float delta = max(dot(dx, dx), dot(dy, dy));
 	float mipLevel = 0.5 * log2(max(delta, 0.00001)) + SharedData::MipBias;
 	mipLevel = clamp(mipLevel, 0.0, 5.0);
 	
-	float3 normalSample = FlowMapNormalsTex.SampleLevel(Normals01Sampler, uv, mipLevel).xyz;
+	// Apply parallax using gradient-based view direction (avoids player-position artifacts)
+	float2 parallaxOffset = WaterEffects::GetFlowmapParallaxOffset(input, baseUV);
+	float2 finalUV = baseUV + parallaxOffset;
+	
+	// Sample using pre-calculated mip level
+	float3 normalSample = FlowMapNormalsTex.SampleLevel(FlowMapNormalsSampler, finalUV, mipLevel).xyz;
 	
 	return float3(normalSample.xy, flowData.color.z);
 }
@@ -1520,10 +1499,6 @@ WaterNormalData GetWaterNormal(PS_INPUT input, float distanceFactor, float norma
 	float2 parallaxOffset = WaterEffects::GetParallaxOffset(input, normalScalesRcp);
 #			endif
 
-	float3 flowmapNormal = float3(0.0f, 0.0f, 1.0f);
-	float flowmapStrength = 0.0f;
-	float normalBlendFactor = 0.0f;
-
 #			if defined(FLOWMAP)
 #				if defined(UNIFIED_WATER)
 	float2 flowmapDimensions = input.TexCoord4.xy;
@@ -1541,10 +1516,10 @@ WaterNormalData GetWaterNormal(PS_INPUT input, float distanceFactor, float norma
 	float3 flowmapNormal3 = GetFlowmapNormalParallax(input, float2(uvShift.x, 0), 8.48, 0.62, eyeIndex);
 #				else
 	// Standard flowmap normals without parallax
-	float3 flowmapNormal0 = GetFlowmapNormal(input, uvShift, 9.92, 0, eyeIndex);
-	float3 flowmapNormal1 = GetFlowmapNormal(input, float2(0, uvShift.y), 10.64, 0.27, eyeIndex);
-	float3 flowmapNormal2 = GetFlowmapNormal(input, 0.0.xx, 8, 0, eyeIndex);
-	float3 flowmapNormal3 = GetFlowmapNormal(input, float2(uvShift.x, 0), 8.48, 0.62, eyeIndex);
+	float3 flowmapNormal0 = GetFlowmapNormal(input, uvShift, 9.92, 0);
+	float3 flowmapNormal1 = GetFlowmapNormal(input, float2(0, uvShift.y), 10.64, 0.27);
+	float3 flowmapNormal2 = GetFlowmapNormal(input, 0.0.xx, 8, 0);
+	float3 flowmapNormal3 = GetFlowmapNormal(input, float2(uvShift.x, 0), 8.48, 0.62);
 #				endif
 
 	float2 flowmapNormalWeighted =
@@ -1552,16 +1527,12 @@ WaterNormalData GetWaterNormal(PS_INPUT input, float distanceFactor, float norma
 		(1 - normalMul.y) *
 			(normalMul.x * flowmapNormal1.xy + (1 - normalMul.x) * flowmapNormal0.xy);
 	float2 flowmapDenominator = sqrt(normalMul * normalMul + (1 - normalMul) * (1 - normalMul));
-	float2 flowmapXY =
-		((-0.5 + flowmapNormalWeighted) / (flowmapDenominator.x * flowmapDenominator.y)) *
-			max(0.4, normalsDepthFactor);
-	flowmapNormal = float3(flowmapXY, 0.0f);
-	float xyLenSq = dot(flowmapXY, flowmapXY);
-	flowmapNormal.z = sqrt(saturate(1.0f - xyLenSq));
-	flowmapStrength = saturate(1.0f - flowmapNormal.z);
-	normalBlendFactor =
-		normalMul.y * ((1 - normalMul.x) * flowmapNormal3.z + normalMul.x * flowmapNormal2.z) +
-		(1 - normalMul.y) * (normalMul.x * flowmapNormal1.z + (1 - normalMul.x) * flowmapNormal0.z);
+	float3 flowmapNormal =
+		float3(((-0.5 + flowmapNormalWeighted) / (flowmapDenominator.x * flowmapDenominator.y)) *
+				   max(0.4, normalsDepthFactor),
+			0);
+	flowmapNormal.z =
+		sqrt(1 - flowmapNormal.x * flowmapNormal.x - flowmapNormal.y * flowmapNormal.y);
 #			endif
 
 #			if defined(WATER_PARALLAX)
@@ -1570,50 +1541,41 @@ WaterNormalData GetWaterNormal(PS_INPUT input, float distanceFactor, float norma
 	float3 normals1 = Normals01Tex.SampleBias(Normals01Sampler, input.TexCoord1.xy, SharedData::MipBias).xyz * 2.0 + float3(-1, -1, -2);
 #			endif
 
-	float3 normals2 = float3(0.0f, 0.0f, 0.0f);
-	float3 normals3 = float3(0.0f, 0.0f, 0.0f);
+#			if defined(FLOWMAP) && !defined(BLEND_NORMALS)
+#				ifdef DISABLE_FLOWMAP_NORMALS
+	// FLOWMAP NORMALS DISABLED: Using only base normals (flow system still active for ripples/splashes)
+	float3 finalNormal = normalize(normals1 + float3(0, 0, 1));
+#				else
+	// FLOWMAP NORMALS ENABLED: Blending flow-based normals with base normals
+	float3 finalNormal = normalize(lerp(normals1 + float3(0, 0, 1), flowmapNormal, distanceFactor));
+#				endif
+#			elif !defined(LOD)
 
-#			if !defined(LOD)
 #				if defined(WATER_PARALLAX)
-	normals2 = Normals02Tex.SampleBias(Normals02Sampler, input.TexCoord1.zw + parallaxOffset.xy * normalScalesRcp.y, SharedData::MipBias).xyz * 2.0 - 1.0;
-	normals3 = Normals03Tex.SampleBias(Normals03Sampler, input.TexCoord2.xy + parallaxOffset.xy * normalScalesRcp.z, SharedData::MipBias).xyz * 2.0 - 1.0;
+	float3 normals2 = Normals02Tex.SampleBias(Normals02Sampler, input.TexCoord1.zw + parallaxOffset.xy * normalScalesRcp.y, SharedData::MipBias).xyz * 2.0 - 1.0;
+	float3 normals3 = Normals03Tex.SampleBias(Normals03Sampler, input.TexCoord2.xy + parallaxOffset.xy * normalScalesRcp.z, SharedData::MipBias).xyz * 2.0 - 1.0;
 #				else
-	normals2 = Normals02Tex.SampleBias(Normals02Sampler, input.TexCoord1.zw, SharedData::MipBias).xyz * 2.0 - 1.0;
-	normals3 = Normals03Tex.SampleBias(Normals03Sampler, input.TexCoord2.xy, SharedData::MipBias).xyz * 2.0 - 1.0;
+	float3 normals2 = Normals02Tex.SampleBias(Normals02Sampler, input.TexCoord1.zw, SharedData::MipBias).xyz * 2.0 - 1.0;
+	float3 normals3 = Normals03Tex.SampleBias(Normals03Sampler, input.TexCoord2.xy, SharedData::MipBias).xyz * 2.0 - 1.0;
 #				endif
-#			endif
 
-	float3 layeredNormal = NormalsAmplitude.x * normals1;
-#			if !defined(LOD)
-	layeredNormal += NormalsAmplitude.y * normals2;
-	layeredNormal += NormalsAmplitude.z * normals3;
-#			endif
-
-	float3 detailNormal = normalize(float3(0.0f, 0.0f, 1.0f) + layeredNormal);
-#			if !defined(UNDERWATER)
-#				if !defined(LOD)
-	detailNormal = normalize(lerp(float3(0.0f, 0.0f, 1.0f), detailNormal, normalsDepthFactor));
+	float3 blendedNormal = normalize(float3(0, 0, 1) + NormalsAmplitude.x * normals1 +
+									 NormalsAmplitude.y * normals2 + NormalsAmplitude.z * normals3);
+#				if defined(UNDERWATER)
+	float3 finalNormal = blendedNormal;
 #				else
-	detailNormal = normalize(detailNormal);
+	float3 finalNormal = normalize(lerp(float3(0, 0, 1), blendedNormal, normalsDepthFactor));
 #				endif
-#			endif
 
-	float3 finalNormal = detailNormal;
-
-#			if defined(FLOWMAP)
-#				if !defined(DISABLE_FLOWMAP_NORMALS)
-	#if !defined(BLEND_NORMALS)
-	// Stronger, working flowmap blend: base normal vs flowmap normal by distance
-	float3 baseNormal = normalize(normals1 + float3(0, 0, 1));
-	finalNormal = normalize(lerp(baseNormal, flowmapNormal, distanceFactor));
-	#else
-	// Working blend for BLEND_NORMALS path using normalBlendFactor
-	finalNormal = normalize(lerp(
-		normals1 + float3(0, 0, 1),
-		normalize(lerp(finalNormal, flowmapNormal, normalBlendFactor)),
-		distanceFactor));
-	#endif
+#				if defined(FLOWMAP)
+	float normalBlendFactor =
+		normalMul.y * ((1 - normalMul.x) * flowmapNormal3.z + normalMul.x * flowmapNormal2.z) +
+		(1 - normalMul.y) * (normalMul.x * flowmapNormal1.z + (1 - normalMul.x) * flowmapNormal0.z);
+	finalNormal = normalize(lerp(normals1 + float3(0, 0, 1), normalize(lerp(finalNormal, flowmapNormal, normalBlendFactor)), distanceFactor));
 #				endif
+#			else
+	float3 finalNormal =
+		normalize(float3(0, 0, 1) + NormalsAmplitude.xxx * normals1);
 #			endif
 
 #			if defined(WADING)
@@ -2246,6 +2208,27 @@ PS_OUTPUT main(PS_INPUT input)
 	
 #		endif
 	psout.Lighting = float4(finalColor, isSpecular);
+	
+	// DEBUG: Show parallax offset (uncomment to test)
+// #if defined(FLOWMAP) && defined(WATER_PARALLAX)
+// 	{
+// 	    FlowmapData flowData = GetFlowmapDataUV(input, float2(0, 0));
+// 	    float offset = 0.0;
+// 	    float multiplier = 9.92;
+// 	    float2 baseUV = offset + (flowData.flowVector - float2(multiplier * ((0.001 * ReflectionColor.w) * flowData.color.w), 0));
+// 	    float2 debugParallaxOffset = WaterEffects::GetFlowmapParallaxOffset(input, baseUV);
+// 	    
+// 	    // Show offset components scaled up for visibility
+// 	    // Red = X offset, Green = Y offset, Blue = magnitude
+// 	    float magnitude = length(debugParallaxOffset);
+// 	    psout.Lighting = float4(
+// 	        abs(debugParallaxOffset.x) * 100.0,
+// 	        abs(debugParallaxOffset.y) * 100.0,
+// 	        magnitude * 100.0,
+// 	        1.0
+// 	    );
+// 	}
+// #endif
 #		endif
 
 #		if defined(STENCIL)

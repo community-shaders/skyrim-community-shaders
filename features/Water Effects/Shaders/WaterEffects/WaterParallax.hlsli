@@ -52,7 +52,7 @@ namespace WaterEffects
 		float2 parallaxOffsetTS = viewDirection.xy / -viewDirection.z;
 
 		// Parallax scale is also multiplied by normalScalesRcp
-		parallaxOffsetTS *= 20.0;
+		parallaxOffsetTS *= 5.0;
 
 		float3 mipLevels;
 		mipLevels.x = GetMipLevel(input.TexCoord1.xy, Normals01Tex);
@@ -91,54 +91,49 @@ namespace WaterEffects
 	// Samples height from flowmap normal texture alpha channel
 	float2 GetFlowmapParallaxOffset(PS_INPUT input, float2 baseUV)
 	{
-		float3 viewDirection = normalize(input.WPosition.xyz);
-		float2 parallaxDirection = viewDirection.xy / -viewDirection.z;
+		// Calculate view direction using screen-space gradients instead of WPosition
+		// This avoids discontinuities at player coordinates (WPosition is player-relative)
+		float3 viewDirDDX = ddx_coarse(input.WPosition.xyz);
+		float3 viewDirDDY = ddy_coarse(input.WPosition.xyz);
 		
-		// Use much smaller parallax scale for flowmaps (reduced from 20.0)
-		float parallaxScale = SharedData::waterEffectsSettings.ParallaxHeight * 2.0;
-		float2 parallaxOffsetTS = parallaxDirection * parallaxScale;
+		// Reconstruct view direction from world position gradient
+		// Use fine derivatives for smoothness
+		float3 posX = input.WPosition.xyz + ddx_fine(input.WPosition.xyz);
+		float3 posY = input.WPosition.xyz + ddy_fine(input.WPosition.xyz);
+		float3 viewDir = normalize(cross(normalize(posX), normalize(posY)));
 		
-		// Calculate mip level for flowmap texture
+		// Calculate parallax offset in tangent space
+		float2 parallaxOffsetTS = viewDir.xy / max(-viewDir.z, 0.001);
+		
+		// Apply parallax scale - VERY reduced to prevent dark water
+		parallaxOffsetTS *= SharedData::waterEffectsSettings.ParallaxHeight * 0.01;
+		
+		// Clamp to prevent excessive offset
+		float maxOffset = 0.001;
+		parallaxOffsetTS = clamp(parallaxOffsetTS, -maxOffset, maxOffset);
+		
+		// Calculate mip level using same method as GetFlowmapNormal
 		float2 textureDims;
 		FlowMapNormalsTex.GetDimensions(textureDims.x, textureDims.y);
+		float2 dx = ddx(baseUV * textureDims);
+		float2 dy = ddy(baseUV * textureDims);
+		float delta = max(dot(dx, dx), dot(dy, dy));
+		float mipLevel = 0.5 * log2(max(delta, 0.00001)) + SharedData::MipBias;
+		mipLevel = clamp(mipLevel, 0.0, 5.0);
 		
-#if defined(VR)
-		textureDims /= 16.0;
-#else
-		textureDims /= 8.0;
-#endif
-		
-		float2 texCoordsPerSize = baseUV * textureDims;
-		float2 dxSize = ddx(texCoordsPerSize);
-		float2 dySize = ddy(texCoordsPerSize);
-		float2 dTexCoords = dxSize * dxSize + dySize * dySize;
-		float minTexCoordDelta = max(dTexCoords.x, dTexCoords.y);
-		float mipLevel = max(0.5 * log2(minTexCoordDelta), 0);
-		
-#if defined(VR)
-		mipLevel += 4.0;
-#else
-		mipLevel += 3.0;
-#endif
-		
-		// Ray march through flowmap height field
-		float stepSize = rcp(16.0);
+		// Ray march through flowmap height field with more steps for better height detail
+		float stepSize = rcp(32.0); // Increased from 16 to 32 steps for finer height resolution
 		float currBound = 0.0;
 		float currHeight = 1.0;
 		float prevHeight = 1.0;
-		float2 currentUV = baseUV;
 		
-		[loop] for (int i = 0; i < 16; i++)
+		[loop] while (currHeight > currBound)
 		{
-			// Sample height from flowmap alpha channel
-			currHeight = FlowMapNormalsTex.SampleLevel(Normals01Sampler, currentUV, mipLevel).a;
-			
-			if (currHeight <= currBound)
-				break;
-			
 			prevHeight = currHeight;
 			currBound += stepSize;
-			currentUV += parallaxOffsetTS * stepSize;
+			float2 sampleUV = baseUV + currBound * parallaxOffsetTS;
+			// Read alpha directly - no inversion needed
+			currHeight = FlowMapNormalsTex.SampleLevel(FlowMapNormalsSampler, sampleUV, mipLevel).a;
 		}
 		
 		// Binary refinement
@@ -150,9 +145,7 @@ namespace WaterEffects
 			? (currBound * delta2 - prevBound * delta1) / denominator
 			: currBound;
 		
-		// Clamp parallax offset to prevent extreme displacement
-		float2 result = parallaxOffsetTS * parallaxAmount;
-		return clamp(result, -0.1, 0.1);
+		return parallaxOffsetTS * parallaxAmount;
 	}
 }
 
