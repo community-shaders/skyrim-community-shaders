@@ -354,6 +354,14 @@ WaveSample CalculateWaterDisplacement(float2 worldPos, float2 textureDims, float
 		max(WaveSecondaryContribution, 0.0f),
 		max(WaveDetailContribution, 0.0f)
 	};
+	
+	// Completely disable waves with very small contributions to prevent artifacts
+	[unroll] for (int i = 0; i < 3; ++i) {
+		if (contributions[i] < 0.001f) {
+			contributions[i] = 0.0f;
+		}
+	}
+	
 	float speedScale[3] = {
 		max(WavePrimarySpeed, 0.0f),
 		max(WaveSecondarySpeed, 0.0f),
@@ -376,8 +384,15 @@ WaveSample CalculateWaterDisplacement(float2 worldPos, float2 textureDims, float
 	float3 totalDisplacement = float3(0.0f, 0.0f, 0.0f);
 
 	[unroll] for (int j = 0; j < 3; ++j) {
-		totalDisplacement += EvaluateUnifiedWave(waves[j], worldPos, timeSeconds);
+		// Skip disabled waves entirely to prevent precision issues
+		if (contributions[j] > 0.0f) {
+			totalDisplacement += EvaluateUnifiedWave(waves[j], worldPos, timeSeconds);
+		}
 	}
+	
+	// Clamp displacement to prevent extreme values that cause rendering artifacts
+	totalDisplacement.xy = clamp(totalDisplacement.xy, -100.0f, 100.0f);
+	totalDisplacement.z = clamp(totalDisplacement.z, -50.0f, 50.0f);
 
 	WaveSample sample;
 	sample.displacement = totalDisplacement;
