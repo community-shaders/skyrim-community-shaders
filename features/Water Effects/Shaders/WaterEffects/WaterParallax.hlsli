@@ -95,8 +95,9 @@ namespace WaterEffects
 		float3 viewDirection = normalize(input.WPosition.xyz);
 		float2 parallaxOffsetTS = viewDirection.xy / -viewDirection.z;
 
-		// Apply same parallax scale as regular water
-		parallaxOffsetTS *= 5.0;
+		// Apply parallax scale with user control
+		// Base scale of 5.0 matches regular water, multiplied by user setting
+		parallaxOffsetTS *= 25.0;
 
 		// Calculate mip level using same method as GetFlowmapNormal
 		float2 textureDims;
@@ -107,8 +108,8 @@ namespace WaterEffects
 		float mipLevel = 0.5 * log2(max(delta, 0.00001)) + SharedData::MipBias;
 		mipLevel = clamp(mipLevel, 0.0, 5.0);
 
-		// Ray march with same step count as regular water
-		float stepSize = rcp(16.0);
+		// Ray march with more steps for finer height detail
+		float stepSize = rcp(32.0);  // 32 steps instead of 16 for smoother parallax
 		float currBound = 0.0;
 		float currHeight = 1.0;
 		float prevHeight = 1.0;
@@ -122,7 +123,7 @@ namespace WaterEffects
 			// Needs strong amplification to match regular water intensity
 			float rawHeight = FlowMapNormalsTex.SampleLevel(FlowMapNormalsSampler, sampleUV, mipLevel).a;
 			// Amplify by 60x and invert like regular water
-			currHeight = 1.0 - (rawHeight * 60.0);
+			currHeight = 1.0 - (rawHeight * 200.0);
 		}
 
 		// Binary refinement - same as regular water
