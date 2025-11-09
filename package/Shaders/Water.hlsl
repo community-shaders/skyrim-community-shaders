@@ -1229,6 +1229,12 @@ float3 ComputeEnhancedWaveNormal(float3 worldPos, float3 baseNormal, float timer
 #			endif
 
 #			if defined(WATER_PARALLAX) && defined(FLOWMAP)
+
+// ===== FLOWMAP PARALLAX TOGGLE =====
+// Comment out the next line to disable flowmap parallax
+#define ENABLE_FLOWMAP_PARALLAX
+// ===================================
+
 /**
  * Flowmap normal sampling with parallax occlusion mapping
  * Uses height data from flowmap alpha channel for depth perception
@@ -1240,6 +1246,7 @@ float3 GetFlowmapNormalParallax(PS_INPUT input, float2 uvShift, float multiplier
 	// Calculate base UV with flow displacement (same as non-parallax version)
 	float2 baseUV = offset + (flowData.flowVector - float2(multiplier * ((0.001 * ReflectionColor.w) * flowData.color.w), 0));
 	
+#ifdef ENABLE_FLOWMAP_PARALLAX
 	// Calculate mip level from base UV BEFORE parallax to avoid derivative discontinuities
 	float2 textureDims;
 	FlowMapNormalsTex.GetDimensions(textureDims.x, textureDims.y);
@@ -1255,6 +1262,10 @@ float3 GetFlowmapNormalParallax(PS_INPUT input, float2 uvShift, float multiplier
 	
 	// Sample using pre-calculated mip level
 	float3 normalSample = FlowMapNormalsTex.SampleLevel(FlowMapNormalsSampler, finalUV, mipLevel).xyz;
+#else
+	// No parallax - sample directly
+	float3 normalSample = FlowMapNormalsTex.Sample(FlowMapNormalsSampler, baseUV).xyz;
+#endif
 	
 	return float3(normalSample.xy, flowData.color.z);
 }
@@ -2248,6 +2259,7 @@ PS_OUTPUT main(PS_INPUT input)
 #endif
 	}
 #endif
+// END DEBUG
 #		endif
 
 #		if defined(STENCIL)
