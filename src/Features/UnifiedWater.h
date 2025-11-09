@@ -6,6 +6,7 @@
 #include <cstdint>
 #include <limits>
 #include <unordered_map>
+#include <unordered_set>
 
 // Ensure BGS terrain classes are available
 #include "RE/B/BGSTerrainBlock.h"
@@ -125,6 +126,7 @@ struct UnifiedWater : OverlayFeature
 	};
 
 	std::unordered_map<std::uint64_t, PrevTileData> prevTileData;
+	std::unordered_set<std::uint64_t> loggedCells;
 	
 	virtual void SetupResources() override;
 	virtual void Reset() override;

@@ -387,37 +387,6 @@ WaveSample CalculateWaterDisplacement(float2 worldPos, float2 textureDims, float
 	return sample;
 }
 
-float3 CalculateGerstnerNormals(float2 worldPos, float2 textureDims, float2 texCoordOffset, float waveIntensity, float amplitudeMult, float speedMult, float steepnessMult, float2 flowBiasDir, float flowBiasWeight, float timeSeconds, float dayPhase)
-{
-	if (waveIntensity <= 0.0f)
-		return float3(0.0f, 0.0f, 1.0f);
-
-	#if defined(UNIFIED_WATER_HAS_PER_FRAME_CBUFFER)
-	const float cellWorldSize = max(CellWorldSize, 1.0f);
-	#else
-	const float cellWorldSize = 4096.0f;
-	#endif
-	const float epsilon = max(cellWorldSize * 0.003f, 6.0f);
-
-	WaveSample centerSample = CalculateWaterDisplacement(worldPos, textureDims, texCoordOffset, waveIntensity, amplitudeMult, speedMult, steepnessMult, timeSeconds, dayPhase, flowBiasDir, flowBiasWeight, false);
-	WaveSample offsetXSample = CalculateWaterDisplacement(worldPos + float2(epsilon, 0.0f), textureDims, texCoordOffset, waveIntensity, amplitudeMult, speedMult, steepnessMult, timeSeconds, dayPhase, flowBiasDir, flowBiasWeight, false);
-	WaveSample offsetYSample = CalculateWaterDisplacement(worldPos + float2(0.0f, epsilon), textureDims, texCoordOffset, waveIntensity, amplitudeMult, speedMult, steepnessMult, timeSeconds, dayPhase, flowBiasDir, flowBiasWeight, false);
-
-	float3 centerPos = float3(worldPos, 0.0f) + centerSample.displacement;
-	float3 offsetXPos = float3(worldPos + float2(epsilon, 0.0f), 0.0f) + offsetXSample.displacement;
-	float3 offsetYPos = float3(worldPos + float2(0.0f, epsilon), 0.0f) + offsetYSample.displacement;
-
-	float3 tangentX = offsetXPos - centerPos;
-	float3 tangentY = offsetYPos - centerPos;
-
-	float3 normal = cross(tangentY, tangentX);
-	float normalLenSq = dot(normal, normal);
-	if (normalLenSq < 1e-6f)
-		return float3(0.0f, 0.0f, 1.0f);
-
-	return normalize(normal);
-}
-
 #endif // UNIFIED_WATER
 
 #	ifdef VSHADER
@@ -507,9 +476,7 @@ VS_OUTPUT main(VS_INPUT input)
 	float3 waveDisplacement = currentWave.displacement;
 	float horizontalDisplacement = length(waveDisplacement.xy);
 	vsout.UnifiedWaveInfo = float4(currentWave.primaryDirection, waveDisplacement.z, currentWave.shoreInfluence);
-	float3 gerstnerNormalVS = CalculateGerstnerNormals(waveWorldPos, float2(0.0f, 0.0f), float2(0.0f, 0.0f), WaveIntensity, WaveAmplitude, WaveSpeed, WaveSteepness, flowBiasDirVS, flowBiasWeightVS, waveTimeSeconds, waveDayPhase);
-	// xyz = Gerstner normal, w = lateral displacement magnitude used for weighting
-	vsout.UnifiedWaveNormal = float4(gerstnerNormalVS, horizontalDisplacement);
+	vsout.UnifiedWaveNormal = float4(0.0f, 0.0f, 1.0f, horizontalDisplacement);
 	const float2 fallbackWaveDirVS = float2(-0.70710678f, 0.70710678f);
 	float2 wavePrimaryDirVS = currentWave.primaryDirection;
 	float wavePrimaryLenSqVS = dot(wavePrimaryDirVS, wavePrimaryDirVS);
@@ -526,9 +493,9 @@ VS_OUTPUT main(VS_INPUT input)
 		normalizedWaveDirVS.x * cosSpreadVSNeg - normalizedWaveDirVS.y * sinSpreadVSNeg,
 		normalizedWaveDirVS.x * sinSpreadVSNeg + normalizedWaveDirVS.y * cosSpreadVSNeg);
 	
-	// Wave direction alignment strength for normal scroll alignment
-	float alignStrengthVS = horizontalDisplacement * 0.5f;
-	float alignSingleStrengthVS = horizontalDisplacement * 0.3f;
+	// Disable wave direction alignment to prevent swirl distortion
+	float alignStrengthVS = 0.0f;
+	float alignSingleStrengthVS = 0.0f;
 	
 	currentPosition.xyz += waveDisplacement;
 
@@ -909,6 +876,7 @@ struct FlowmapData
 	float2 flowVector;  // Flow vector (coordinate space depends on source function)
 };
 
+#if defined(FLOWMAP)
 /**
  * Gets raw flowmap data before UV-space coordinate transformation
  *
@@ -958,7 +926,7 @@ FlowmapData GetFlowmapDataTextureSpace(PS_INPUT input, float2 uvShift)
  *       - Blue channel: Flow strength (0 = no flow, 1 = maximum flow)
  *       - Alpha channel: Flow mask/intensity multiplier
  */
-FlowmapData GetFlowmapDataUV(PS_INPUT input, float2 uvShift)
+FlowmapData GetFlowmapDataUV(PS_INPUT input, float2 uvShift, uint eyeIndex)
 {
 	FlowmapData data = GetFlowmapDataTextureSpace(input, uvShift);
 	
@@ -968,18 +936,6 @@ FlowmapData GetFlowmapDataUV(PS_INPUT input, float2 uvShift)
 	float2 normalizedFlowDir = (rawDirLenSq > 1e-5f) ? rawFlowDir * rsqrt(rawDirLenSq) : float2(0.0f, 1.0f);
 	float2 finalFlowDir = normalizedFlowDir;
 
-#if defined(UNIFIED_WATER)
-	float2 waveDir = input.UnifiedWaveInfo.xy;
-	float waveDirLenSq = dot(waveDir, waveDir);
-	if (waveDirLenSq > 1e-5f) {
-		float2 normalizedWaveDir = waveDir * rsqrt(waveDirLenSq);
-		float waveMotion = saturate(input.UnifiedWaveNormal.w * 0.1f);
-		float alignStrength = waveMotion;
-		float2 alignedDir = lerp(finalFlowDir, normalizedWaveDir, alignStrength);
-		float alignedLenSq = dot(alignedDir, alignedDir);
-		finalFlowDir = (alignedLenSq > 1e-5f) ? alignedDir * rsqrt(alignedLenSq) : normalizedWaveDir;
-	}
-#endif
 
 	float2x2 flowRotationMatrix = float2x2(finalFlowDir.x, finalFlowDir.y, -finalFlowDir.y, finalFlowDir.x);
 	data.flowVector = mul(transpose(flowRotationMatrix), data.flowVector);
@@ -1003,12 +959,118 @@ FlowmapData GetFlowmapDataUV(PS_INPUT input, float2 uvShift)
  * @note The returned Z component contains the original flowmap strength value
  *       which can be used for blending between flow and non-flow normals
  */
-float3 GetFlowmapNormal(PS_INPUT input, float2 uvShift, float multiplier, float offset)
+float3 GetFlowmapNormal(PS_INPUT input, float2 uvShift, float multiplier, float offset, uint eyeIndex)
 {
-	FlowmapData flowData = GetFlowmapDataUV(input, uvShift);
+	FlowmapData flowData = GetFlowmapDataUV(input, uvShift, eyeIndex);
 	float2 uv = offset + (flowData.flowVector - float2(multiplier * ((0.001 * ReflectionColor.w) * flowData.color.w), 0));
 	return float3(FlowMapNormalsTex.SampleBias(FlowMapNormalsSampler, uv, SharedData::MipBias).xy, flowData.color.z);
 }
+
+/**
+ * Parallax-enabled flowmap normal sampling with proper depth perception
+ * 
+ * @param input Pixel shader input
+ * @param uvShift UV offset for flowmap animation
+ * @param multiplier Flow animation speed multiplier
+ * @param offset Base UV offset
+ * @param eyeIndex Eye index for VR
+ * @return float3 Parallax-corrected flowmap normal (XY=normal, Z=flow strength)
+ * 
+ * @details This performs parallax occlusion mapping on the flowmap normals:
+ *          1. Calculate view-dependent parallax offset using height from alpha channel
+ *          2. Ray march through height field to find intersection point
+ *          3. Apply flow-based animation to the parallax-corrected UVs
+ *          4. Sample final normal with proper depth perception
+ * 
+ * This creates convincing depth in flowing water, making waves appear to have
+ * volume rather than being flat texture projections.
+ */
+float3 GetFlowmapNormalParallax(PS_INPUT input, float2 uvShift, float multiplier, float offset, uint eyeIndex)
+{
+	// Get flow data for UV transformation
+	FlowmapData flowData = GetFlowmapDataUV(input, uvShift, eyeIndex);
+	
+	// Calculate base flow-animated UV
+	float2 baseUV = offset + (flowData.flowVector - float2(multiplier * ((0.001 * ReflectionColor.w) * flowData.color.w), 0));
+	
+	// View direction in tangent space for parallax
+	float3 viewDirection = normalize(input.WPosition.xyz);
+	float2 parallaxDirection = viewDirection.xy / max(abs(viewDirection.z), 0.001);
+	
+	// Parallax scale - moderate for visible depth without distortion
+	float parallaxScale = 0.08;  // Increased from 0.025 but not extreme
+	float2 parallaxOffsetTS = parallaxDirection * parallaxScale;
+	
+	// Get initial mip level for consistent sampling during ray march
+	float2 textureDims;
+	FlowMapNormalsTex.GetDimensions(textureDims.x, textureDims.y);
+	
+#if defined(VR)
+	textureDims /= 16.0;
+#else
+	textureDims /= 8.0;
+#endif
+	
+	float2 texCoordsPerSize = baseUV * textureDims;
+	float2 dxSize = ddx(texCoordsPerSize);
+	float2 dySize = ddy(texCoordsPerSize);
+	float2 dTexCoords = dxSize * dxSize + dySize * dySize;
+	float minTexCoordDelta = max(dTexCoords.x, dTexCoords.y);
+	float mipLevel = max(0.5 * log2(minTexCoordDelta), 0);
+	
+#if defined(VR)
+	mipLevel += 3.0;
+#else
+	mipLevel += 2.0;
+#endif
+	
+	// Ray marching parameters - fewer steps for water since it's already flowing
+	const int numSteps = 12;
+	float stepSize = 1.0 / float(numSteps);
+	
+	// Ray march to find intersection
+	float currBound = 0.0;
+	float currHeight = 1.0;
+	float prevHeight = 1.0;
+	float2 currentUV = baseUV;
+	
+	[loop] for (int i = 0; i < numSteps; i++)
+	{
+		// Sample normal and derive approximate height from Z component (surface curvature)
+		float3 normalSample = FlowMapNormalsTex.SampleLevel(FlowMapNormalsSampler, currentUV, mipLevel).rgb;
+		// Convert from [0,1] to [-1,1] and use length of XY as height proxy
+		float2 normalXY = normalSample.xy * 2.0 - 1.0;
+		currHeight = 1.0 - saturate(length(normalXY) * 0.5);  // More bent normal = lower height
+		
+		// Check if we've intersected the heightfield
+		if (currHeight <= currBound)
+			break;
+		
+		prevHeight = currHeight;
+		currBound += stepSize;
+		currentUV += parallaxOffsetTS * stepSize;
+	}
+	
+	// Binary refinement for smoother result
+	float prevBound = currBound - stepSize;
+	float delta2 = prevBound - prevHeight;
+	float delta1 = currBound - currHeight;
+	float denominator = delta2 - delta1;
+	
+	// Prevent division by zero
+	float parallaxAmount = (abs(denominator) > 0.0001) 
+		? (currBound * delta2 - prevBound * delta1) / denominator
+		: currBound;
+	
+	// Calculate final parallax-corrected UV
+	float2 finalUV = baseUV + parallaxOffsetTS * parallaxAmount;
+	
+	// Sample the parallax-corrected normal
+	float4 flowmapSample = FlowMapNormalsTex.SampleBias(FlowMapNormalsSampler, finalUV, SharedData::MipBias);
+	
+	return float3(flowmapSample.xy, flowData.color.z);
+}
+#endif  // FLOWMAP
 
 /**
  * Gets flowmap data with world-space flow vector for positioning effects
@@ -1128,25 +1190,21 @@ float3 ComputeEnhancedWaveNormal(float3 worldPos, float3 baseNormal, float timer
 {
 	if (waveIntensity < 0.01) return baseNormal;
 	
-	// Wave parameters - tuned for Skyrim's scale
-	float2 waveDir1 = normalize(float2(1.0, 0.3));  // Primary wave direction
-	float2 waveDir2 = normalize(float2(-0.5, 1.0)); // Secondary wave direction
+	float2 waveDir1 = normalize(float2(1.0, 0.3));
+	float2 waveDir2 = normalize(float2(-0.5, 1.0));
 	
 	float3 combinedNormal = baseNormal;
 	
-	// Primary wave set
 	float3 vals1 = GerstnerWaveValues(worldPos.xz * 0.01, waveDir1, 0.8, 120.0, 0.3, timer * 0.5);
 	float3 normal1 = GerstnerWaveNormal(waveDir1, 0.8, 0.3, vals1);
 	
-	float3 vals2 = GerstnerWaveValues(worldPos.xz * 0.015, waveDir2, 0.5, 80.0, 0.4, timer * 0.7);
+	float3 vals2 = GerstnerWaveValues(worldPos.xz * 0.3, waveDir2, 0.5, 4.0, 0.4, timer * 0.7);
 	float3 normal2 = GerstnerWaveNormal(waveDir2, 0.5, 0.4, vals2);
 	
-	// Smaller detail waves
-	float3 vals3 = GerstnerWaveValues(worldPos.xz * 0.03, waveDir1, 0.2, 40.0, 0.5, timer * 1.2);
-	float3 normal3 = GerstnerWaveNormal(waveDir1, 0.2, 0.5, vals3);
+	float3 vals3 = GerstnerWaveValues(worldPos.xz * 1.0, waveDir1, 0.3, 1.2, 0.6, timer * 1.2);
+	float3 normal3 = GerstnerWaveNormal(waveDir1, 0.3, 0.6, vals3);
 	
-	// Blend wave normals with base normal
-	combinedNormal = normalize(baseNormal + waveIntensity * (normal1 * 0.5 + normal2 * 0.3 + normal3 * 0.2));
+	combinedNormal = normalize(baseNormal + waveIntensity * (normal1 * 0.3 + normal2 * 0.2 + normal3 * 0.5));
 
 	return combinedNormal;
 }
@@ -1201,30 +1259,95 @@ FoamData ComputePhysicalFoam(float3 worldPos, float waterDepth, float timer, flo
 
 	float2 absoluteWorldPos = worldPos.xz;
 
+	// Extract wave properties
 	float2 primaryDir = waveInfo.xy;
 	float primaryDirLen = dot(primaryDir, primaryDir);
 	float2 flowDir = primaryDirLen > 1e-5f ? primaryDir * rsqrt(primaryDirLen) : float2(-0.70710678f, 0.70710678f);
 	float2 flowPerp = float2(-flowDir.y, flowDir.x);
-	float shallowBoost = saturate((4.0f - max(waterDepth, 0.0f)) * 0.25f);
+	
+	// Enhanced wave displacement analysis
+	float waveHeight = waveInfo.z;  // Actual vertical displacement from Gerstner waves
+	float shoreInfluence = waveInfo.w;  // Shore proximity from vertex shader
+	float horizontalDisplacement = waveNormalData.w;  // Lateral wave motion
+	
+	// Enhanced shallow water detection
+	// Combine depth-based and shore influence for better coastal behavior
+	float depthFactor = saturate((256.0f - max(waterDepth, 0.0f)) / 256.0f);
+	float shallowBoost = saturate(depthFactor + shoreInfluence * 0.5f);
+	shallowBoost = pow(shallowBoost, 1.5f);  // Sharper falloff from shore
 
+	// Analyze wave crest characteristics
 	float waveNormalLenSq = dot(waveNormalData.xyz, waveNormalData.xyz);
 	float3 crestNormal = waveNormalLenSq > 1e-5f ? waveNormalData.xyz * rsqrt(waveNormalLenSq) : float3(0.0f, 0.0f, 1.0f);
+	
+	// Crest sharpness - steeper normals = sharper crests = more foam
 	float crestSharpness = saturate(1.0f - crestNormal.z);
+	
+	// Wave amplitude and height-based crest detection
 	float amplitudeScale = max(WaveAmplitude, 0.0001f);
-	float crestHeight = saturate((waveInfo.z - amplitudeScale * 0.35f) / (amplitudeScale * 0.9f + 0.0001f));
-	float lateralMotion = saturate(waveNormalData.w / (amplitudeScale * 6.0f + 8.0f));
-	float whitecapEnergy = saturate(crestSharpness * 1.35f + crestHeight * 0.9f + lateralMotion * 0.75f);
-	float turbulence = saturate(crestSharpness * 0.7f + lateralMotion * 0.4f);
+	
+	// Detect wave peaks: foam accumulates at the TOP of waves
+	// Use actual wave height displacement, not just normalized position
+	float waveHeightNormalized = waveHeight / (amplitudeScale + 0.0001f);
+	float crestHeight = saturate((waveHeightNormalized + 0.5f) * 1.2f);  // Positive displacement = crest
+	crestHeight = pow(crestHeight, 2.0f);  // Sharper peak detection
+	
+	// Lateral motion creates turbulence and foam
+	float lateralMotion = saturate(horizontalDisplacement / (amplitudeScale * 6.0f + 8.0f));
+	
+	// Wave steepness indicator - combine multiple factors
+	// Steep waves break and create whitecaps
+	float waveSpeed = length(primaryDir) / max(amplitudeScale, 0.01f);
+	float steepnessFactor = saturate(waveSpeed * 0.3f);
+	
+	// Whitecap energy: combination of height, steepness, and motion
+	// This is the primary driver for foam on wave crests
+	float whitecapEnergy = saturate(
+		crestSharpness * 1.2f +      // Steep slope creates foam
+		crestHeight * 1.5f +          // Peak of wave has most foam
+		lateralMotion * 0.9f +        // Horizontal motion adds turbulence
+		steepnessFactor * 0.4f        // Fast steep waves break
+	);
+	whitecapEnergy = pow(whitecapEnergy, 1.3f);  // Non-linear accumulation
+	
+	// Turbulence: wave breaking and chaotic motion
+	float turbulence = saturate(
+		crestSharpness * 0.8f + 
+		lateralMotion * 0.6f +
+		shallowBoost * 0.3f  // Shallow water increases turbulence
+	);
 
-	float flowSpeed = FoamFlowSpeedBase + FoamFlowSpeedRange * whitecapEnergy;
-	float2 advectedPos = absoluteWorldPos - flowDir * timer * (flowSpeed * 28.0f);
-	float swirlPhase = dot(absoluteWorldPos, float2(0.00045f, 0.00073f)) + timer * 0.55f;
-	float swirlAmplitude = FoamSwirlStrength + FoamSwirlEnergyScale * whitecapEnergy;
+	// Base flow with spatial variation to prevent uniform patterns
+	// Flow speed increases with wave energy and shallow water turbulence
+	float flowSpeed = FoamFlowSpeedBase + FoamFlowSpeedRange * (whitecapEnergy * 0.7f + shallowBoost * 0.3f);
+	
+	// Add spatial hash to break up uniform flow direction
+	float spatialVariation = frac(sin(dot(absoluteWorldPos * 0.0001f, float2(12.9898, 78.233))) * 43758.5453);
+	float2 flowVariation = float2(
+		sin(spatialVariation * 6.2832) * 0.3,
+		cos(spatialVariation * 6.2832) * 0.3
+	);
+	
+	// Advection with wave-driven flow
+	// Near crests, foam flows faster and along wave direction
+	float waveFlowBoost = crestHeight * lateralMotion * 15.0f;
+	float2 advectedPos = absoluteWorldPos - (flowDir + flowVariation) * timer * (flowSpeed * 28.0f + waveFlowBoost);
+	
+	// Multi-frequency swirl using Perlin noise instead of simple dot product
+	// This creates organic, flowing patterns instead of straight lines
+	// Swirl is stronger at wave crests where water is more turbulent
+	float swirlNoise1 = Random::perlinNoise(float3(absoluteWorldPos * 0.0008f, timer * 0.15f), 0x19u);
+	float swirlNoise2 = Random::perlinNoise(float3(absoluteWorldPos * 0.0021f, timer * 0.25f), 0x2Fu);
+	float swirlPhase = (swirlNoise1 + swirlNoise2 * 0.5f) * 6.2832; // Convert to radians
+	
+	float swirlAmplitude = (FoamSwirlStrength + FoamSwirlEnergyScale * whitecapEnergy) * (1.0f + turbulence * 0.5f);
 	float swirlAmount = sin(swirlPhase) * swirlAmplitude;
+	
 	float jitter = Random::perlinNoise(float3(absoluteWorldPos * 0.002f, timer * 0.2f), 0x15u) * 2.0f - 1.0f;
 	float jitterScale = FoamSwirlStrength * 0.5f + 1.0f;
 	advectedPos += flowPerp * (swirlAmount + jitter * jitterScale);
 
+	// Multi-scale foam pattern with wave-height based modulation
 	float2 foamUV1 = advectedPos * 0.06f;
 	float2 foamUV2 = advectedPos * 0.14f;
 	float2 foamUV3 = advectedPos * 0.32f + flowDir * timer * 1.2f;
@@ -1233,18 +1356,33 @@ FoamData ComputePhysicalFoam(float3 worldPos, float waterDepth, float timer, flo
 	float noise2 = Random::perlinNoise(float3(foamUV2, timer * 0.31f), 0x53u) * 0.5f + 0.5f;
 	float noise3 = Random::perlinNoise(float3(foamUV3, timer * 0.47f), 0x7Du) * 0.5f + 0.5f;
 
+	// Combine noise layers with turbulence modulation
 	float foamPattern = noise1 * 0.45f + noise2 * 0.35f + noise3 * 0.20f;
-	foamPattern = lerp(foamPattern, turbulence, 0.2f);
+	foamPattern = lerp(foamPattern, turbulence, 0.25f);  // Increased turbulence influence
+	
+	// Add dither for smooth transitions
 	float dither = Random::InterleavedGradientNoise(screenPos, SharedData::FrameCount);
 	foamPattern = lerp(foamPattern, dither, 0.08f);
+	
+	// Wave crest foam: accumulates at peaks, enhanced by whitecap energy
+	// Lower threshold for earlier foam appearance on crests
+	float crestFoamBase = smoothstep(0.65f, 0.92f, foamPattern + whitecapEnergy * 0.35f) * whitecapEnergy;
+	crestFoamBase = pow(crestFoamBase, 0.9f);  // Softer curve for more gradual buildup
+	
+	// Shoreline foam: enhanced in shallow water and near beaches
+	// More aggressive threshold for concentrated beach foam
+	float shallowFoamBase = smoothstep(0.68f, 0.94f, foamPattern + shallowBoost * 0.25f) * shallowBoost;
+	shallowFoamBase *= lerp(0.25f, 0.65f, pow(shallowBoost, 2.0f));  // Stronger near shore
+	
+	// Turbulent foam: from wave breaking and chaotic motion
+	float turbulentFoamBase = smoothstep(0.75f, 0.95f, foamPattern + turbulence * 0.15f) * turbulence * 0.25f;
 
-	float crestFoamBase = smoothstep(0.78f, 0.96f, foamPattern + whitecapEnergy * 0.20f) * whitecapEnergy;
-	float shallowFoamBase = smoothstep(0.76f, 0.96f, foamPattern + shallowBoost * 0.16f) * shallowBoost * 0.35f;
-	float turbulentFoamBase = smoothstep(0.78f, 0.96f, foamPattern) * turbulence * 0.18f;
-
+	// Directional alignment: foam streaks along wave direction
 	float2 surfaceXZ = normal.xz;
 	float surfaceLen = length(surfaceXZ);
-	float directionalFactor = surfaceLen > 1e-4f ? saturate(dot(surfaceXZ / surfaceLen, flowDir) * 0.4f + 0.6f) : 0.7f;
+	float directionalFactor = surfaceLen > 1e-4f ? saturate(dot(surfaceXZ / surfaceLen, flowDir) * 0.5f + 0.5f) : 0.7f;
+	
+	// Apply strength multipliers
 	float crestFoam = crestFoamBase * directionalFactor * FoamCrestStrength;
 	float shallowFoam = shallowFoamBase * FoamShoreStrength;
 	float turbulentFoam = turbulentFoamBase * FoamTurbulenceStrength;
@@ -1337,10 +1475,19 @@ WaterNormalData GetWaterNormal(PS_INPUT input, float distanceFactor, float norma
 	float2 normalMul = 0.5 + -(-0.5 + abs(frac(input.TexCoord2.zw * (64 * flowmapDimensions)) * 2 - 1));
 	float2 uvShift = 1 / (128 * flowmapDimensions);
 
-	float3 flowmapNormal0 = GetFlowmapNormal(input, uvShift, 9.92, 0);
-	float3 flowmapNormal1 = GetFlowmapNormal(input, float2(0, uvShift.y), 10.64, 0.27);
-	float3 flowmapNormal2 = GetFlowmapNormal(input, 0.0.xx, 8, 0);
-	float3 flowmapNormal3 = GetFlowmapNormal(input, float2(uvShift.x, 0), 8.48, 0.62);
+#				if defined(WATER_PARALLAX)
+	// Use parallax-corrected flowmap normals for enhanced depth perception
+	float3 flowmapNormal0 = GetFlowmapNormalParallax(input, uvShift, 9.92, 0, eyeIndex);
+	float3 flowmapNormal1 = GetFlowmapNormalParallax(input, float2(0, uvShift.y), 10.64, 0.27, eyeIndex);
+	float3 flowmapNormal2 = GetFlowmapNormalParallax(input, 0.0.xx, 8, 0, eyeIndex);
+	float3 flowmapNormal3 = GetFlowmapNormalParallax(input, float2(uvShift.x, 0), 8.48, 0.62, eyeIndex);
+#				else
+	// Standard flowmap normals without parallax
+	float3 flowmapNormal0 = GetFlowmapNormal(input, uvShift, 9.92, 0, eyeIndex);
+	float3 flowmapNormal1 = GetFlowmapNormal(input, float2(0, uvShift.y), 10.64, 0.27, eyeIndex);
+	float3 flowmapNormal2 = GetFlowmapNormal(input, 0.0.xx, 8, 0, eyeIndex);
+	float3 flowmapNormal3 = GetFlowmapNormal(input, float2(uvShift.x, 0), 8.48, 0.62, eyeIndex);
+#				endif
 
 	float2 flowmapNormalWeighted =
 		normalMul.y * (normalMul.x * flowmapNormal2.xy + (1 - normalMul.x) * flowmapNormal3.xy) +
@@ -1421,17 +1568,6 @@ WaterNormalData GetWaterNormal(PS_INPUT input, float distanceFactor, float norma
 		0.04));
 	finalNormal = lerp(displacement, finalNormal, displacement.z);
 #			endif
-
-#	if defined(UNIFIED_WATER)
-	float3 waveNormalPS = input.UnifiedWaveNormal.xyz;
-	float waveNormalLenSq = dot(waveNormalPS, waveNormalPS);
-	if (waveNormalLenSq > 1e-5f) {
-		waveNormalPS *= rsqrt(waveNormalLenSq);
-		float displacementWeight = saturate(input.UnifiedWaveNormal.w * 0.12f);
-		float waveInfluence = saturate(0.2f + displacementWeight * 0.8f);
-		finalNormal = normalize(lerp(finalNormal, waveNormalPS, waveInfluence));
-	}
-#	endif
 
 #			if defined(WETNESS_EFFECTS)
 	// Wetness Effects Debug System:
@@ -1600,7 +1736,8 @@ float3 GetWaterSpecularColor(PS_INPUT input, float3 normal, float3 viewDirection
 	return ReflectionColor.xyz * VarAmounts.y;
 }
 
-float GetScreenDepthWater(float2 screenPosition, uint a_useVR = 0)
+#if defined(DEPTH)
+float GetScreenDepthWater(float2 screenPosition, uint a_useVR)
 {
 	float depth = DepthTex.Load(float3(screenPosition, 0)).x;
 #			if defined(VR)  // VR appears to use hard coded values
@@ -1609,6 +1746,8 @@ float GetScreenDepthWater(float2 screenPosition, uint a_useVR = 0)
 	return (CameraDataWater.w / (-depth * CameraDataWater.z + CameraDataWater.x));
 #			endif
 }
+#endif
+
 
 float3 GetLdotN(float3 normal)
 {
@@ -1658,7 +1797,7 @@ DiffuseOutput GetWaterDiffuseColor(PS_INPUT input, float3 normal, float3 viewDir
 	float4 refractionWorldPosition = float4(input.WPosition.xyz * depth / viewPosition.z, 0);
 
 #				if defined(DEPTH) && !defined(VERTEX_ALPHA_DEPTH)
-	float refractionDepth = GetScreenDepthWater(refractionScreenPosition);
+	float refractionDepth = GetScreenDepthWater(refractionScreenPosition, eyeIndex);
 
 #					if !defined(VR)
 	float refractionDepthMul = length(float3((((VPOSOffset.zw + refractionUvRaw) * 2 - 1)) * refractionDepth / ProjData.xy, refractionDepth));
@@ -1791,7 +1930,7 @@ PS_OUTPUT main(PS_INPUT input)
 #				else
 	distanceMul = 0;
 
-	depth = GetScreenDepthWater(screenPosition);
+	depth = GetScreenDepthWater(screenPosition, eyeIndex);
 	float2 depthOffset =
 		FrameBuffer::DynamicResolutionParams2.xy * input.HPosition.xy * VPOSOffset.xy + VPOSOffset.zw;
 #					if !defined(VR)

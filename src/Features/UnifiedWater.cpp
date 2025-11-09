@@ -1551,14 +1551,19 @@ void UnifiedWater::BGSTerrainBlock_Attach::thunk(RE::BGSTerrainBlock* block)
 				templateShape = singleton.waterMesh.get();
 			}
 
-			logger::info(
-				"[Unified Water] Mesh selection: LOD index = {}, distance = {:.0f}, terrain LOD = {}, optimised = {}, subdivided = {}, tileSize = {}",
-				meshLODIndex,
-				distanceToCamera,
-				lodLevel,
-				useOptimised,
-				useSubdividedMesh,
-				instruction.size);
+			// Only log each unique cell once
+			const std::uint64_t cellKey = (static_cast<std::uint64_t>(instruction.x) << 32) | static_cast<std::uint64_t>(instruction.y);
+			if (singleton.loggedCells.find(cellKey) == singleton.loggedCells.end()) {
+				singleton.loggedCells.insert(cellKey);
+				logger::info(
+					"[Unified Water] Mesh selection: LOD index = {}, distance = {:.0f}, terrain LOD = {}, optimised = {}, subdivided = {}, tileSize = {}",
+					meshLODIndex,
+					distanceToCamera,
+					lodLevel,
+					useOptimised,
+					useSubdividedMesh,
+					instruction.size);
+			}
 
 			if (!templateShape)
 				continue;
@@ -1569,16 +1574,6 @@ void UnifiedWater::BGSTerrainBlock_Attach::thunk(RE::BGSTerrainBlock* block)
 			const auto posY = (instruction.y - node->y) * 4096.0f + instruction.size * 2048.0f;
 			shape->local.scale = static_cast<float>(instruction.size);
 			shape->local.translate = { posX, posY, instruction.waterHeight };
-			
-			// Log actual mesh geometry counts
-			auto& runtime = shape->GetTrishapeRuntimeData();
-			logger::info(
-				"[Unified Water] Created water tile: {} verts, {} tris, distance={:.0f}, LOD={}, subdivided={}",
-				runtime.vertexCount,
-				runtime.triangleCount,
-				distanceToCamera,
-				meshLODIndex,
-				useSubdividedMesh);
 			
 			// Store LOD level in the shape name for later retrieval during rendering
 			// Format: "WaterLOD_<level>" (e.g., "WaterLOD_8")

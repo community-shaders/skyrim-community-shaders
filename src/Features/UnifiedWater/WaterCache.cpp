@@ -469,19 +469,19 @@ bool WaterCache::BuildDiskCache(RE::TESWorldSpace* worldSpace, DiskCache& diskCa
 	// Array indices: 0=LOD1, 1=LOD4, 2=LOD8, 3=LOD16, 4=LOD32
 	int32_t instructionCount;
 	GenerateInstructions(1, diskCache, cellData, instructionCount);
-	logger::info("[Unified Water] [Cache] {}: LOD1 - {} instructions generated", editorID.c_str(), instructionCount);
+	logger::debug("[Unified Water] [Cache] {}: LOD1 - {} instructions generated", editorID.c_str(), instructionCount);
 	
 	GenerateInstructions(4, diskCache, cellData, instructionCount);
-	logger::info("[Unified Water] [Cache] {}: LOD4 - {} instructions generated", editorID.c_str(), instructionCount);
+	logger::debug("[Unified Water] [Cache] {}: LOD4 - {} instructions generated", editorID.c_str(), instructionCount);
 
 	GenerateInstructions(8, diskCache, cellData, instructionCount);
-	logger::info("[Unified Water] [Cache] {}: LOD8 - {} instructions generated", editorID.c_str(), instructionCount);
+	logger::debug("[Unified Water] [Cache] {}: LOD8 - {} instructions generated", editorID.c_str(), instructionCount);
 
 	GenerateInstructions(16, diskCache, cellData, instructionCount);
-	logger::info("[Unified Water] [Cache] {}: LOD16 - {} instructions generated", editorID.c_str(), instructionCount);
+	logger::debug("[Unified Water] [Cache] {}: LOD16 - {} instructions generated", editorID.c_str(), instructionCount);
 
 	GenerateInstructions(32, diskCache, cellData, instructionCount);
-	logger::info("[Unified Water] [Cache] {}: LOD32 - {} instructions generated", editorID.c_str(), instructionCount);
+	logger::debug("[Unified Water] [Cache] {}: LOD32 - {} instructions generated", editorID.c_str(), instructionCount);
 
 	diskCache.header.dataCount = static_cast<int32_t>(diskCache.instructions.size());
 
