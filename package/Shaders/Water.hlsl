@@ -963,112 +963,22 @@ float3 GetFlowmapNormal(PS_INPUT input, float2 uvShift, float multiplier, float 
 {
 	FlowmapData flowData = GetFlowmapDataUV(input, uvShift, eyeIndex);
 	float2 uv = offset + (flowData.flowVector - float2(multiplier * ((0.001 * ReflectionColor.w) * flowData.color.w), 0));
-	return float3(FlowMapNormalsTex.SampleBias(FlowMapNormalsSampler, uv, SharedData::MipBias).xy, flowData.color.z);
-}
-
-/**
- * Parallax-enabled flowmap normal sampling with proper depth perception
- * 
- * @param input Pixel shader input
- * @param uvShift UV offset for flowmap animation
- * @param multiplier Flow animation speed multiplier
- * @param offset Base UV offset
- * @param eyeIndex Eye index for VR
- * @return float3 Parallax-corrected flowmap normal (XY=normal, Z=flow strength)
- * 
- * @details This performs parallax occlusion mapping on the flowmap normals:
- *          1. Calculate view-dependent parallax offset using height from alpha channel
- *          2. Ray march through height field to find intersection point
- *          3. Apply flow-based animation to the parallax-corrected UVs
- *          4. Sample final normal with proper depth perception
- * 
- * This creates convincing depth in flowing water, making waves appear to have
- * volume rather than being flat texture projections.
- */
-float3 GetFlowmapNormalParallax(PS_INPUT input, float2 uvShift, float multiplier, float offset, uint eyeIndex)
-{
-	// Get flow data for UV transformation
-	FlowmapData flowData = GetFlowmapDataUV(input, uvShift, eyeIndex);
 	
-	// Calculate base flow-animated UV
-	float2 baseUV = offset + (flowData.flowVector - float2(multiplier * ((0.001 * ReflectionColor.w) * flowData.color.w), 0));
-	
-	// View direction in tangent space for parallax
-	float3 viewDirection = normalize(input.WPosition.xyz);
-	float2 parallaxDirection = viewDirection.xy / max(abs(viewDirection.z), 0.001);
-	
-	// Parallax scale - moderate for visible depth without distortion
-	float parallaxScale = 0.08;  // Increased from 0.025 but not extreme
-	float2 parallaxOffsetTS = parallaxDirection * parallaxScale;
-	
-	// Get initial mip level for consistent sampling during ray march
+	// Calculate mip level and clamp to preserve detail at distance
 	float2 textureDims;
 	FlowMapNormalsTex.GetDimensions(textureDims.x, textureDims.y);
+	float2 dx = ddx(uv * textureDims);
+	float2 dy = ddy(uv * textureDims);
+	float delta = max(dot(dx, dx), dot(dy, dy));
+	float mipLevel = 0.5 * log2(max(delta, 0.00001)) + SharedData::MipBias;
 	
-#if defined(VR)
-	textureDims /= 16.0;
-#else
-	textureDims /= 8.0;
-#endif
+	// Clamp to preserve detail without over-blurring
+	mipLevel = clamp(mipLevel, 0.0, 5.0);
 	
-	float2 texCoordsPerSize = baseUV * textureDims;
-	float2 dxSize = ddx(texCoordsPerSize);
-	float2 dySize = ddy(texCoordsPerSize);
-	float2 dTexCoords = dxSize * dxSize + dySize * dySize;
-	float minTexCoordDelta = max(dTexCoords.x, dTexCoords.y);
-	float mipLevel = max(0.5 * log2(minTexCoordDelta), 0);
+	float3 normalSample = FlowMapNormalsTex.SampleLevel(Normals01Sampler, uv, mipLevel).xyz;
 	
-#if defined(VR)
-	mipLevel += 3.0;
-#else
-	mipLevel += 2.0;
-#endif
-	
-	// Ray marching parameters - fewer steps for water since it's already flowing
-	const int numSteps = 12;
-	float stepSize = 1.0 / float(numSteps);
-	
-	// Ray march to find intersection
-	float currBound = 0.0;
-	float currHeight = 1.0;
-	float prevHeight = 1.0;
-	float2 currentUV = baseUV;
-	
-	[loop] for (int i = 0; i < numSteps; i++)
-	{
-		// Sample normal and derive approximate height from Z component (surface curvature)
-		float3 normalSample = FlowMapNormalsTex.SampleLevel(FlowMapNormalsSampler, currentUV, mipLevel).rgb;
-		// Convert from [0,1] to [-1,1] and use length of XY as height proxy
-		float2 normalXY = normalSample.xy * 2.0 - 1.0;
-		currHeight = 1.0 - saturate(length(normalXY) * 0.5);  // More bent normal = lower height
-		
-		// Check if we've intersected the heightfield
-		if (currHeight <= currBound)
-			break;
-		
-		prevHeight = currHeight;
-		currBound += stepSize;
-		currentUV += parallaxOffsetTS * stepSize;
-	}
-	
-	// Binary refinement for smoother result
-	float prevBound = currBound - stepSize;
-	float delta2 = prevBound - prevHeight;
-	float delta1 = currBound - currHeight;
-	float denominator = delta2 - delta1;
-	
-	// Prevent division by zero
-	float parallaxAmount = (abs(denominator) > 0.0001) 
-		? (currBound * delta2 - prevBound * delta1) / denominator
-		: currBound;
-	
-	// Calculate final parallax-corrected UV
-	float2 finalUV = baseUV + parallaxOffsetTS * parallaxAmount;
-	
-	// Sample the parallax-corrected normal
-	float4 flowmapSample = FlowMapNormalsTex.SampleBias(FlowMapNormalsSampler, finalUV, SharedData::MipBias);
-	
-	return float3(flowmapSample.xy, flowData.color.z);
+	// Return raw XY and flow strength - processing happens in the blending code
+	return float3(normalSample.xy, flowData.color.z);
 }
 #endif  // FLOWMAP
 
@@ -1475,19 +1385,11 @@ WaterNormalData GetWaterNormal(PS_INPUT input, float distanceFactor, float norma
 	float2 normalMul = 0.5 + -(-0.5 + abs(frac(input.TexCoord2.zw * (64 * flowmapDimensions)) * 2 - 1));
 	float2 uvShift = 1 / (128 * flowmapDimensions);
 
-#				if defined(WATER_PARALLAX)
-	// Use parallax-corrected flowmap normals for enhanced depth perception
-	float3 flowmapNormal0 = GetFlowmapNormalParallax(input, uvShift, 9.92, 0, eyeIndex);
-	float3 flowmapNormal1 = GetFlowmapNormalParallax(input, float2(0, uvShift.y), 10.64, 0.27, eyeIndex);
-	float3 flowmapNormal2 = GetFlowmapNormalParallax(input, 0.0.xx, 8, 0, eyeIndex);
-	float3 flowmapNormal3 = GetFlowmapNormalParallax(input, float2(uvShift.x, 0), 8.48, 0.62, eyeIndex);
-#				else
-	// Standard flowmap normals without parallax
+	// Flowmaps don't use parallax - the flow animation provides depth
 	float3 flowmapNormal0 = GetFlowmapNormal(input, uvShift, 9.92, 0, eyeIndex);
 	float3 flowmapNormal1 = GetFlowmapNormal(input, float2(0, uvShift.y), 10.64, 0.27, eyeIndex);
 	float3 flowmapNormal2 = GetFlowmapNormal(input, 0.0.xx, 8, 0, eyeIndex);
 	float3 flowmapNormal3 = GetFlowmapNormal(input, float2(uvShift.x, 0), 8.48, 0.62, eyeIndex);
-#				endif
 
 	float2 flowmapNormalWeighted =
 		normalMul.y * (normalMul.x * flowmapNormal2.xy + (1 - normalMul.x) * flowmapNormal3.xy) +

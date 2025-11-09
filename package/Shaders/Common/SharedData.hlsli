@@ -205,6 +205,12 @@ namespace SharedData
 		float2 pad0;
 	};
 
+	struct WaterEffectsSettings
+	{
+		float ParallaxHeight;
+		float3 pad0;
+	};
+
 	cbuffer FeatureData : register(b6)
 	{
 		GrassLightingSettings grassLightingSettings;
@@ -221,6 +227,7 @@ namespace SharedData
 		IBLSettings iblSettings;
 		ExtendedTranslucencySettings extendedTranslucencySettings;
 		UnifiedWaterSettings unifiedWaterSettings;
+		WaterEffectsSettings waterEffectsSettings;
 	};
 
 	Texture2D<float4> DepthTexture : register(t17);
