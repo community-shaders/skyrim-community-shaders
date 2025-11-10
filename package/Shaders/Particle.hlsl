@@ -2,7 +2,7 @@
 #include "Common/VR.hlsli"
 
 #ifndef ViewPosition
-#define ViewPosition Position
+#	define ViewPosition Position
 #endif
 
 struct VS_INPUT

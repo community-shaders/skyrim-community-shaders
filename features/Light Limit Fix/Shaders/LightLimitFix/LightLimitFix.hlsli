@@ -23,7 +23,7 @@ namespace LightLimitFix
 		// (keeps changes minimal; wire to SharedData if/when available in the compile context).
 		const uint3 clusterSize = uint3(16, 16, 16);
 
-		if (!FrameBuffer::FrameParams.y) // Fix first person lights
+		if (!FrameBuffer::FrameParams.y)  // Fix first person lights
 			uv = 0.5;
 
 		// Use safe fallback near plane (0.1) if SharedData::CameraData is not available
@@ -72,8 +72,7 @@ namespace LightLimitFix
 
 	bool IsLightIgnored(Light light)
 	{
-		if (light.lightFlags & LightLimitFix::LightFlags::Shadow)
-		{
+		if (light.lightFlags & LightLimitFix::LightFlags::Shadow) {
 			return !(ShadowBitMask & (1 << light.shadowLightIndex));
 		}
 
