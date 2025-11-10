@@ -2221,44 +2221,44 @@ PS_OUTPUT main(PS_INPUT input)
 	psout.Lighting = float4(finalColor, isSpecular);
 	
 	// DEBUG: Show parallax offset for ALL water types (uncomment to test)
-#if defined(WATER_PARALLAX)
-	{
-	    float2 debugParallaxOffset = float2(0, 0);
-	    float visualizationScale = 10.0; // Different scale for different water types
+// #if defined(WATER_PARALLAX)
+// 	{
+// 	    float2 debugParallaxOffset = float2(0, 0);
+// 	    float visualizationScale = 10.0; // Different scale for different water types
 	    
-#if defined(FLOWMAP)
-	    // For flowmap water, get the flowmap parallax offset
-	    FlowmapData flowData = GetFlowmapDataUV(input, float2(0, 0));
-	    float offset = 0.0;
-	    float multiplier = 9.92;
-	    float2 baseUV = offset + (flowData.flowVector - float2(multiplier * ((0.001 * ReflectionColor.w) * flowData.color.w), 0));
-	    debugParallaxOffset = WaterEffects::GetFlowmapParallaxOffset(input, baseUV);
-	    visualizationScale = 100.0; // Flowmap needs higher multiplier
-#else
-	    // For regular water, get the standard parallax offset
-	    float3 normalScalesRcp = rcp(input.NormalsScale.xyz);
-	    debugParallaxOffset = WaterEffects::GetParallaxOffset(input, normalScalesRcp);
-	    visualizationScale = 1.0; // Regular water needs lower multiplier
-#endif
+// #if defined(FLOWMAP)
+// 	    // For flowmap water, get the flowmap parallax offset
+// 	    FlowmapData flowData = GetFlowmapDataUV(input, float2(0, 0));
+// 	    float offset = 0.0;
+// 	    float multiplier = 9.92;
+// 	    float2 baseUV = offset + (flowData.flowVector - float2(multiplier * ((0.001 * ReflectionColor.w) * flowData.color.w), 0));
+// 	    debugParallaxOffset = WaterEffects::GetFlowmapParallaxOffset(input, baseUV);
+// 	    visualizationScale = 100.0; // Flowmap needs higher multiplier
+// #else
+// 	    // For regular water, get the standard parallax offset
+// 	    float3 normalScalesRcp = rcp(input.NormalsScale.xyz);
+// 	    debugParallaxOffset = WaterEffects::GetParallaxOffset(input, normalScalesRcp);
+// 	    visualizationScale = 1.0; // Regular water needs lower multiplier
+// #endif
 	    
-	    // Show offset components scaled up for visibility
-	    // Red = X offset, Green = Y offset, Blue = magnitude
-	    float magnitude = length(debugParallaxOffset);
-	    float4 debugColor = float4(
-	        abs(debugParallaxOffset.x) * visualizationScale,
-	        abs(debugParallaxOffset.y) * visualizationScale,
-	        magnitude * visualizationScale,
-	        1.0
-	    );
+// 	    // Show offset components scaled up for visibility
+// 	    // Red = X offset, Green = Y offset, Blue = magnitude
+// 	    float magnitude = length(debugParallaxOffset);
+// 	    float4 debugColor = float4(
+// 	        abs(debugParallaxOffset.x) * visualizationScale,
+// 	        abs(debugParallaxOffset.y) * visualizationScale,
+// 	        magnitude * visualizationScale,
+// 	        1.0
+// 	    );
 	    
-	    // Output to correct render target based on shader variant
-#if defined(STENCIL)
-	    psout.WaterMask = debugColor;
-#else
-	    psout.Lighting = debugColor;
-#endif
-	}
-#endif
+// 	    // Output to correct render target based on shader variant
+// #if defined(STENCIL)
+// 	    psout.WaterMask = debugColor;
+// #else
+// 	    psout.Lighting = debugColor;
+// #endif
+// 	}
+// #endif
 // END DEBUG
 #		endif
 

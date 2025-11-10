@@ -91,12 +91,11 @@ namespace WaterEffects
 	// Adaptively steps through the heightfield based on safe distance from surface
 	float2 GetFlowmapParallaxOffset(PS_INPUT input, float2 baseUV)
 	{
-		float3 viewDirection = normalize(input.WPosition.xyz);
-		float2 rayDir = viewDirection.xy / -viewDirection.z;
+		float3 viewDirection = -normalize(input.WPosition.xyz);
+		float2 rayDir = viewDirection.xy / viewDirection.z;
 		
-		// Normalize ray direction and apply parallax scale
-		float rayLength = length(rayDir);
-		rayDir = normalize(rayDir) * 0.08;  // Scale for flowmap UV space
+		// Apply parallax scale (keep perspective-correct scaling)
+		rayDir *= 0.08;
 		
 		// Calculate base mip level from UV gradients
 		float2 textureDims;
@@ -125,6 +124,7 @@ namespace WaterEffects
 			float heightFromAlpha = texSample.a;
 			float heightFromNormal = decodedNormal.z;
 			float surfaceHeight = lerp(heightFromNormal, heightFromAlpha, 0.7);
+			surfaceHeight = (surfaceHeight - 0.5) * 1.5 + 0.5;  // Amplify contrast around midpoint
 			
 			// Calculate distance to surface (how far we are above/below surface)
 			float heightDifference = currentHeight - surfaceHeight;
