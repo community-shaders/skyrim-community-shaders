@@ -1,6 +1,7 @@
 #ifndef COMMON_HLSI
 #define COMMON_HLSI
 
+#include "Common/Game.hlsli"
 #include "RaytracedGI/Raytracing/Types.hlsli"
 
 #define M_TO_GAME_UNIT (1.0f / (GAME_UNIT_TO_M))
@@ -57,6 +58,24 @@ float3 SampleHemisphere(float3 normal, inout uint randomSeed)
         bitangent * tangentSample.y +
         normal * tangentSample.z
     );
+}
+
+float3 TraceRayIndirect(RaytracingAccelerationStructure scene, float3 position, float3 normal, uint currentDepth, uint randomSeed)
+{
+    float3 bounceDir = SampleHemisphere(normal, randomSeed);
+            
+    RayDesc bounceRay;
+    bounceRay.Origin = position + normal * 0.1f;
+    bounceRay.Direction = bounceDir;
+    bounceRay.TMin = 0.1f;
+    bounceRay.TMax = 1e30;
+    
+    Payload bouncePayload;
+    bouncePayload.color = float3(0, 0, 0);
+    bouncePayload.data = PayloadData::Create(false, currentDepth + 1, randomSeed);
+
+    TraceRay(scene, RAY_FLAG_NONE, 0xFF, 0, 0, 0, bounceRay, bouncePayload);
+    return bouncePayload.color * 2.0f;
 }
 
 #endif

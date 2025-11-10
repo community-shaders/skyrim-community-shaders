@@ -343,6 +343,8 @@ struct PS_OUTPUT
 	float4 Masks : SV_Target6;
 #	if defined(SNOW)
 	float4 Parameters : SV_Target7;
+#	else
+	float4 NormalDepth : SV_Target7;
 #	endif
 };
 #else
@@ -3380,7 +3382,20 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 
 	float stochasticBlend = (screenNoise * screenNoise) < psout.Diffuse.w ? 1.0 : 0.0;
 	psout.NormalGlossiness.w = stochasticBlend;
-#	endif
+	
+#		if !defined(SNOW)
+	float3 modelNormal = float3(0.0, 0.0, 1.0);		
+	
+#			if defined(SKINNED) || !defined(MODELSPACENORMALS)	
+	float3 worldModelNormal = normalize(mul(tbn, modelNormal));
+#			else
+	float3 worldModelNormal = modelNormal;	
+#			endif // defined (MODELSPACENORMALS) && !defined (SKINNED)
+
+	psout.NormalDepth = float4(worldModelNormal, 1.0f);
+#		endif // !defined(SNOW)
+
+#	endif // DEFERRED
 
 	return psout;
 }

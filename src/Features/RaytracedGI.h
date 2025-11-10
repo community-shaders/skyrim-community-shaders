@@ -55,6 +55,7 @@ struct RaytracedGI : public Feature
 	// Resources
 	virtual void SetupResources() override;
 	virtual void ClearShaderCache() override;
+	void SetupSharedRT();
 	void CompileShaders();
 	void CompileRaytracingShaders();
 	void CompileComputeShaders();
@@ -86,6 +87,10 @@ struct RaytracedGI : public Feature
 
 	template <typename T>
 	void MakeAndCopy(const eastl::vector<T>& data, winrt::com_ptr<ID3D12Resource>& res);
+
+	void DeviceRemovedHandler();
+
+	void CopyDepth();
 
 	const bool Active() 
 	{
@@ -123,6 +128,8 @@ struct RaytracedGI : public Feature
 	{
 		bool Enabled = true;
 		bool EnablePIXCapture = false;
+		bool EnableDebugDevice = true;
+		float SHARCScale = 1.0f;
 	} settings;
 
 	struct alignas(16) Light
@@ -141,12 +148,15 @@ struct RaytracedGI : public Feature
 	{
 		float4x4 ViewInverse;
 		float4x4 ProjInverse;
-		float4 Position;
+		float4 CameraData;
+		float4 NDCToView;
 		Light DirectionalLight;
-		uint LightCount;
+		float3 Position;
 		uint FrameCount;
+		float SHARCScale;
 		uint Pad0;
 		uint Pad1;
+		uint Pad2;
 	};
 	static_assert(sizeof(FrameBuffer) % 16 == 0);
 	FrameBuffer* frameBufferData;
@@ -159,6 +169,7 @@ struct RaytracedGI : public Feature
 
 	bool releaseBufferHooked = false;
 	bool releaseHooked = false;
+	HANDLE fenceEvent;
 
 #pragma pack(push, 1)
 	struct Vertex
@@ -167,6 +178,13 @@ struct RaytracedGI : public Feature
 		uint16_t Texcoord0[2];
 		uint8_t Normal[4];
 		uint8_t Color[4];
+	};
+
+	struct Triangle
+	{
+		uint v0;
+		uint v1;
+		uint v2;
 	};
 #pragma pack(pop)
 
@@ -231,9 +249,9 @@ struct RaytracedGI : public Feature
 	{
 		uint registerIndex; // The position of this meshes SRV in the register stack
 		uint vertexCount;
-		uint indexCount;
-		winrt::com_ptr<ID3D12Resource> vertexBuffer = nullptr;
-		winrt::com_ptr<ID3D12Resource> indexBuffer = nullptr;
+		uint triangleCount;
+		eastl::unique_ptr<DX12::StructuredBufferUpload<Vertex>> vertexBuffer = nullptr;
+		eastl::unique_ptr<DX12::StructuredBufferUpload<Triangle>> indexBuffer = nullptr;
 		winrt::com_ptr<ID3D12Resource> blasBuffer = nullptr;
 		MaterialData material;
 		eastl::vector<RE::BSTriShape*> instances;
@@ -269,12 +287,12 @@ struct RaytracedGI : public Feature
 
 	eastl::unique_ptr<DX12::StructuredAppendBuffer<IrradianceCache::Entry<IrradianceCache::SH1Data>>> irradianceCacheBuffer = nullptr;	
 
-	//eastl::unordered_map<RE::BSTriShape*, winrt::com_ptr<ID3D12Resource>> cachedTrishapes;
-
 	eastl::unique_ptr<ConstantBuffer> cheeseCb = nullptr;  // Omit this if you want to put your CB in src/FeatureBuffer.cpp
 	eastl::unique_ptr<Texture2D> cheeseTex = nullptr;
 	winrt::com_ptr<ID3D11SamplerState> cheeseSampler = nullptr;
-	winrt::com_ptr<ID3D11ComputeShader> cheeseCs = nullptr;
+	winrt::com_ptr<ID3D11ComputeShader> copyDepthCS = nullptr;
+
+	eastl::multimap<std::string, eastl::array<std::string, 2>> debugMultimap;
 
 	winrt::com_ptr<ID3D12Resource> blasInstanceBuffer = nullptr;
 	D3D12_RAYTRACING_INSTANCE_DESC* blasInstances;
@@ -303,6 +321,8 @@ struct RaytracedGI : public Feature
 	enum CommonHeap : uint32_t
 	{
 		OutputUAV,
+		NormalRoughness,
+		MeshNormalDepth,
 		TLAS,
 		Lights,
 		Instances,
@@ -316,10 +336,10 @@ struct RaytracedGI : public Feature
 	winrt::com_ptr<ID3D11Fence> d3d11Fence = nullptr;
 	winrt::com_ptr<ID3D12Fence> d3d12Fence = nullptr;
 
-	UINT64 fenceValue = 1;
+	UINT64 fenceValue = 0;
 
 	eastl::vector<winrt::com_ptr<ID3D12Resource>> asScratchBuffers;
-	eastl::vector<eastl::array<D3D12_RAYTRACING_GEOMETRY_DESC>> rtGeometryDescs;
+	eastl::vector<eastl::vector<D3D12_RAYTRACING_GEOMETRY_DESC>> rtGeometryDescs;
 	eastl::vector<eastl::unique_ptr<D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_DESC>> rtASDescs;
 
 	// D3D11
@@ -329,6 +349,9 @@ struct RaytracedGI : public Feature
 	// Resources
 	eastl::unique_ptr<WrappedResource> diffuseGITexture = nullptr;
 	eastl::unique_ptr<WrappedResource> specularGITexture = nullptr;
+
+	winrt::com_ptr<ID3D12Resource> normalRoughnessTexture = nullptr;
+	winrt::com_ptr<ID3D12Resource> meshNormalDepthTexture = nullptr;
 
 	std::shared_mutex meshMutex;
 	std::shared_mutex bufferMutex;
@@ -379,7 +402,7 @@ struct RaytracedGI : public Feature
 
 					if (desc.BindFlags & D3D11_BIND_VERTEX_BUFFER)*/
 
-					//rtgi.VertexBufferReleased(oThis);
+					rtgi.VertexBufferReleased(oThis);
 				}
 
 				func(oThis);
@@ -609,13 +632,29 @@ struct RaytracedGI : public Feature
 
 				if (rtgi.Active()) 
 				{
-					logger::info("[RTGI] BSTriShape::LoadBinary {}", oThis->name);
+					//logger::info("[RTGI] BSTriShape::LoadBinary {} - {}", oThis->name, a_stream.inputFilePath);
 					//rtgi.AddInstance(oThis);
 				}
 			}
 			static inline REL::Relocation<decltype(thunk)> func;
 		};	
 
+		struct BSTriShape_LinkObject
+		{
+			static void thunk(RE::BSTriShape* oThis, RE::NiStream& a_stream)
+			{
+				func(oThis, a_stream);
+
+				auto& rtgi = globals::features::raytracedGI;
+
+				if (rtgi.Active()) {
+					//logger::info("[RTGI] BSTriShape::LinkObject {} - {}", oThis->name, a_stream.inputFilePath);
+					//rtgi.AddInstance(oThis);
+				}
+			}
+			static inline REL::Relocation<decltype(thunk)> func;
+		};
+		
 		struct BSLightingShaderProperty_SetupGeometry
 		{
 			static void thunk(RE::BSLightingShaderProperty* oThis, RE::BSGeometry* pGeometry, RE::NiStream& a_stream)
@@ -634,7 +673,10 @@ struct RaytracedGI : public Feature
 		static void Install()
 		{
 			stl::detour_thunk<Main_RenderWorld>(REL::RelocationID(100424, 107142));
+
 			stl::write_vfunc<0x6, BSShader_SetupGeometry<RE::BSShader::Type::Lighting>>(RE::VTABLE_BSLightingShader[0]);
+			//stl::write_vfunc<0x6, BSShader_SetupGeometry<RE::BSShader::Type::Effect>>(RE::VTABLE_BSEffectShader[0]);
+
 			//stl::write_thunk_call<BSBatchRenderer_RenderPassImmediately>(REL::RelocationID(100852, 107642).address() + REL::Relocate(0x29E, 0x28F));
 
 			if (REL::Module::IsAE()) {
@@ -649,8 +691,10 @@ struct RaytracedGI : public Feature
 				stl::write_vfunc<0x34, BSTriShape_OnVisible>(RE::VTABLE_BSTriShape[0]);
 			}
 
-			stl::write_vfunc<0x18, BSTriShape_LoadBinary>(RE::VTABLE_BSTriShape[0]);
-			stl::write_vfunc<0x27, BSLightingShaderProperty_SetupGeometry>(RE::VTABLE_BSLightingShaderProperty[0]);
+			//stl::write_vfunc<0x18, BSTriShape_LoadBinary>(RE::VTABLE_BSTriShape[0]);
+			stl::write_vfunc<0x19, BSTriShape_LinkObject>(RE::VTABLE_BSTriShape[0]);
+
+			stl::write_vfunc<0x27, BSLightingShaderProperty_SetupGeometry>(RE::VTABLE_BSLightingShaderProperty[0]); //FinishSetupGeometry = 0x28
 
 			logger::info("[RTGI] Installed hooks");
 		}

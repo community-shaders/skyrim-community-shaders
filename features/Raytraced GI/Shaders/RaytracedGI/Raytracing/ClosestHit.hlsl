@@ -7,9 +7,12 @@ ConstantBuffer<FrameData> Frame         : register(b0);
 
 SamplerState DiffuseSampler             : register(s0);
 
-RaytracingAccelerationStructure Scene   : register(t0, space0);
-StructuredBuffer<Light> Lights          : register(t1, space0);
-StructuredBuffer<Instance> Instances    : register(t2, space0);
+Texture2D<unorm float3> NormalRoughnessTexture  : register(t0);
+Texture2D<float4> MeshNormalDepthTexture        : register(t1);
+
+RaytracingAccelerationStructure Scene   : register(t2, space0);
+StructuredBuffer<Light> Lights          : register(t3, space0);
+StructuredBuffer<Instance> Instances    : register(t4, space0);
 
 StructuredBuffer<Vertex> Vertices[]     : register(t0, space1);
 StructuredBuffer<uint3> Triangles[]     : register(t0, space2);
@@ -161,24 +164,11 @@ void HitMesh(inout Payload payload, in BuiltInTriangleIntersectionAttributes att
         {
             uint randomSeed = payload.data.GetSeed();
             
-            [unroll]
+            /*[unroll]
             for(uint i = 0; i < 2; i++) 
-            {
-                float3 bounceDir = SampleHemisphere(worldNormal, randomSeed);
-            
-                RayDesc bounceRay;
-                bounceRay.Origin = worldPosition + worldNormal * 0.1f;
-                bounceRay.Direction = bounceDir;
-                bounceRay.TMin = 0.1f;
-                bounceRay.TMax = 1e30;
-    
-                Payload bouncePayload;
-                bouncePayload.color = float3(0, 0, 0);
-                bouncePayload.data = PayloadData::Create(false, currentDepth + 1, randomSeed);
-
-                TraceRay(Scene, RAY_FLAG_NONE, 0xFF, 0, 0, 0, bounceRay, bouncePayload);
-                indirectLight = bouncePayload.color * 2.0f;
-            }
+            {*/
+            indirectLight += TraceRayIndirect(Scene, worldPosition, worldNormal, currentDepth, randomSeed);
+            //}
         }
     }
     
