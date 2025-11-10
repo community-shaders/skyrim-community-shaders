@@ -91,8 +91,10 @@ namespace WaterEffects
 	// Adaptively steps through the heightfield based on safe distance from surface
 	float2 GetFlowmapParallaxOffset(PS_INPUT input, float2 baseUV)
 	{
-		float3 viewDirection = -normalize(input.WPosition.xyz);
-		float2 rayDir = viewDirection.xy / viewDirection.z;
+		// WPosition is camera-relative world position (camera at origin)
+		// normalize gives view direction from camera to pixel
+		float3 viewDirection = normalize(input.WPosition.xyz);
+		float2 rayDir = viewDirection.xy / -viewDirection.z;
 		
 		// Apply parallax scale (keep perspective-correct scaling)
 		rayDir *= 0.08;
@@ -104,27 +106,23 @@ namespace WaterEffects
 		float2 dy = ddy(baseUV * textureDims);
 		float delta = max(dot(dx, dx), dot(dy, dy));
 		float baseMipLevel = 0.5 * log2(max(delta, 0.00001)) + SharedData::MipBias;
-		baseMipLevel = clamp(baseMipLevel, 0.0, 5.0);
+		baseMipLevel = clamp(baseMipLevel, 0.0, 2.0);
 		
 		// Sphere tracing: march along ray using distance field
 		float2 currentUV = baseUV;
-		float currentHeight = 1.0;  // Start at maximum height
+		float currentHeight = 2.0;  // Start at maximum height
 		float distanceTraveled = 0.0;
-		const int maxSteps = 12;
+		const int maxSteps = 48;
 		const float minStepSize = 0.001;
 		
 		[unroll]
 		for (int i = 0; i < maxSteps; i++)
 		{
-			// Sample height from texture (use alpha + normal hybrid)
+			// Sample height from alpha channel only
 			float4 texSample = FlowMapNormalsTex.SampleLevel(FlowMapNormalsSampler, currentUV, baseMipLevel);
-			float3 decodedNormal = normalize(texSample.xyz * 2.0 - 1.0);
 			
-			// Hybrid height: blend alpha (70%) and normal.z (30%) for stability
-			float heightFromAlpha = texSample.a;
-			float heightFromNormal = decodedNormal.z;
-			float surfaceHeight = lerp(heightFromNormal, heightFromAlpha, 0.7);
-			surfaceHeight = (surfaceHeight - 0.5) * 1.5 + 0.5;  // Amplify contrast around midpoint
+			// Use only alpha channel for height
+			float surfaceHeight = texSample.a;
 			
 			// Calculate distance to surface (how far we are above/below surface)
 			float heightDifference = currentHeight - surfaceHeight;
@@ -135,7 +133,7 @@ namespace WaterEffects
 			
 			// Safe step distance based on height above surface
 			// Scale by heightDifference to take larger steps when far from surface
-			float stepDistance = max(heightDifference * 0.5, minStepSize);
+			float stepDistance = max(heightDifference * 0.1, minStepSize);
 			
 			// March along ray by safe distance
 			currentUV += rayDir * stepDistance;
@@ -143,7 +141,7 @@ namespace WaterEffects
 			currentHeight -= stepDistance;
 			
 			// Safety: don't march too far
-			if (distanceTraveled > 1.0 || currentHeight < 0.0)
+			if (distanceTraveled > 4.0 || currentHeight < 0.0)
 				break;
 		}
 		
