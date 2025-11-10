@@ -87,54 +87,67 @@ namespace WaterEffects
 		return parallaxOffsetTS.xy * parallaxAmount;
 	}
 
-	// Flowmap-specific parallax function
-	// Samples height from flowmap normal texture alpha channel
+	// Sphere tracing using distance-based ray marching (GPU Gems 2, Chapter 8)
+	// Adaptively steps through the heightfield based on safe distance from surface
 	float2 GetFlowmapParallaxOffset(PS_INPUT input, float2 baseUV)
 	{
-		// Use exact same view direction calculation as regular water
 		float3 viewDirection = normalize(input.WPosition.xyz);
-		float2 parallaxOffsetTS = viewDirection.xy / -viewDirection.z;
-
-		// Apply parallax scale with user control
-		// Base scale of 5.0 matches regular water, multiplied by user setting
-		parallaxOffsetTS *= 25.0;
-
-		// Calculate mip level using same method as GetFlowmapNormal
+		float2 rayDir = viewDirection.xy / -viewDirection.z;
+		
+		// Normalize ray direction and apply parallax scale
+		float rayLength = length(rayDir);
+		rayDir = normalize(rayDir) * 0.08;  // Scale for flowmap UV space
+		
+		// Calculate base mip level from UV gradients
 		float2 textureDims;
 		FlowMapNormalsTex.GetDimensions(textureDims.x, textureDims.y);
 		float2 dx = ddx(baseUV * textureDims);
 		float2 dy = ddy(baseUV * textureDims);
 		float delta = max(dot(dx, dx), dot(dy, dy));
-		float mipLevel = 0.5 * log2(max(delta, 0.00001)) + SharedData::MipBias;
-		mipLevel = clamp(mipLevel, 0.0, 5.0);
-
-		// Ray march with more steps for finer height detail
-		float stepSize = rcp(32.0);  // 32 steps instead of 16 for smoother parallax
-		float currBound = 0.0;
-		float currHeight = 1.0;
-		float prevHeight = 1.0;
-
-		[loop] while (currHeight > currBound)
+		float baseMipLevel = 0.5 * log2(max(delta, 0.00001)) + SharedData::MipBias;
+		baseMipLevel = clamp(baseMipLevel, 0.0, 5.0);
+		
+		// Sphere tracing: march along ray using distance field
+		float2 currentUV = baseUV;
+		float currentHeight = 1.0;  // Start at maximum height
+		float distanceTraveled = 0.0;
+		const int maxSteps = 12;
+		const float minStepSize = 0.001;
+		
+		[unroll]
+		for (int i = 0; i < maxSteps; i++)
 		{
-			prevHeight = currHeight;
-			currBound += stepSize;
-			float2 sampleUV = baseUV + currBound * parallaxOffsetTS;
-			// Read alpha and amplify it - flowmap height data is very subtle
-			// Needs strong amplification to match regular water intensity
-			float rawHeight = FlowMapNormalsTex.SampleLevel(FlowMapNormalsSampler, sampleUV, mipLevel).a;
-			// Amplify by 60x and invert like regular water
-			currHeight = 1.0 - (rawHeight * 200.0);
+			// Sample height from texture (use alpha + normal hybrid)
+			float4 texSample = FlowMapNormalsTex.SampleLevel(FlowMapNormalsSampler, currentUV, baseMipLevel);
+			float3 decodedNormal = normalize(texSample.xyz * 2.0 - 1.0);
+			
+			// Hybrid height: blend alpha (70%) and normal.z (30%) for stability
+			float heightFromAlpha = texSample.a;
+			float heightFromNormal = decodedNormal.z;
+			float surfaceHeight = lerp(heightFromNormal, heightFromAlpha, 0.7);
+			
+			// Calculate distance to surface (how far we are above/below surface)
+			float heightDifference = currentHeight - surfaceHeight;
+			
+			// If we're below the surface, we've intersected - stop marching
+			if (heightDifference < 0.0)
+				break;
+			
+			// Safe step distance based on height above surface
+			// Scale by heightDifference to take larger steps when far from surface
+			float stepDistance = max(heightDifference * 0.5, minStepSize);
+			
+			// March along ray by safe distance
+			currentUV += rayDir * stepDistance;
+			distanceTraveled += stepDistance;
+			currentHeight -= stepDistance;
+			
+			// Safety: don't march too far
+			if (distanceTraveled > 1.0 || currentHeight < 0.0)
+				break;
 		}
-
-		// Binary refinement - same as regular water
-		float prevBound = currBound - stepSize;
-		float delta2 = prevBound - prevHeight;
-		float delta1 = currBound - currHeight;
-		float denominator = delta2 - delta1;
-		float parallaxAmount = (currBound * delta2 - prevBound * delta1) / denominator;
-
-		return parallaxOffsetTS.xy * parallaxAmount;
+		
+		// Return the offset from original UV
+		return currentUV - baseUV;
 	}
 }
-
-
