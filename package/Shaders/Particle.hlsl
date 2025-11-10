@@ -1,6 +1,10 @@
 #include "Common/FrameBuffer.hlsli"
 #include "Common/VR.hlsli"
 
+#ifndef ViewPosition
+#define ViewPosition Position
+#endif
+
 struct VS_INPUT
 {
 	float4 Position : POSITION0;

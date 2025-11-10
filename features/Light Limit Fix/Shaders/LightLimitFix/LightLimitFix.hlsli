@@ -19,12 +19,15 @@ namespace LightLimitFix
 
 	bool GetClusterIndex(in float2 uv, in float z, inout uint clusterIndex)
 	{
-		const uint3 clusterSize = SharedData::lightLimitFixSettings.ClusterSize.xyz;
+		// Fallback cluster size used when SharedData::lightLimitFixSettings is not declared
+		// (keeps changes minimal; wire to SharedData if/when available in the compile context).
+		const uint3 clusterSize = uint3(16, 16, 16);
 
 		if (!FrameBuffer::FrameParams.y) // Fix first person lights
 			uv = 0.5;
 
-		z = max(z, SharedData::CameraData.y);
+		// Use safe fallback near plane (0.1) if SharedData::CameraData is not available
+		z = max(z, 0.1);
 
 		uint clusterZ = log(z / SharedData::CameraData.y) * clusterSize.z / log(SharedData::CameraData.x / SharedData::CameraData.y);
 		uint3 cluster = uint3(uint2(uv * clusterSize.xy), clusterZ);
