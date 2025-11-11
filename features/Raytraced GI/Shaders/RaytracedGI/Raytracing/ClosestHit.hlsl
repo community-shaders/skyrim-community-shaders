@@ -1,65 +1,25 @@
-#include "RaytracedGI/Raytracing/Types.hlsli"
-#include "RaytracedGI/Raytracing/Common.hlsli"
+#include "RaytracedGI/Includes/Types.hlsli"
+#include "RaytracedGI/Includes/Common.hlsli"
 #include "Common/Game.hlsli"
 #include "Common/Color.hlsli"
 
-ConstantBuffer<FrameData> Frame         : register(b0);
+#include "RaytracedGI/Includes/Registers.hlsli"
 
-SamplerState DiffuseSampler             : register(s0);
+#ifdef SPECULAR
+typedef SpecularPayload CurrentPayload;
+#else
+typedef DiffusePayload CurrentPayload;
+#endif
 
-Texture2D<unorm float3> NormalRoughnessTexture  : register(t0);
-Texture2D<float4> MeshNormalDepthTexture        : register(t1);
-
-RaytracingAccelerationStructure Scene   : register(t2, space0);
-StructuredBuffer<Light> Lights          : register(t3, space0);
-StructuredBuffer<Instance> Instances    : register(t4, space0);
-
-StructuredBuffer<Vertex> Vertices[]     : register(t0, space1);
-StructuredBuffer<uint3> Triangles[]     : register(t0, space2);
-Texture2D DiffuseTextures[]             : register(t0, space3);
-
-static const float scale = GAME_UNIT_TO_M;
-static const float blendSharpness = 4.0f;
-
-float checker(float2 uv)
-{
-    float2 c = floor(uv);
-    return fmod(c.x + c.y, 2.0); // 0 or 1 alternating
-}
-
-float3 Triplanar(float3 worldPos, float3 worldNormal)
-{
-    // Compute blend weights based on normal
-    float3 n = abs(worldNormal);
-    n = pow(n, blendSharpness);
-    n /= (n.x + n.y + n.z + 1e-5); // Normalize
-
-    // Project UVs onto each plane
-    float2 uvX = worldPos.yz * scale;
-    float2 uvY = worldPos.xz * scale;
-    float2 uvZ = worldPos.xy * scale;
-
-    // Checkerboard pattern from each projection
-    float xCheck = checker(uvX);
-    float yCheck = checker(uvY);
-    float zCheck = checker(uvZ);
-
-    // Blend them together
-    float blended = xCheck * n.x + yCheck * n.y + zCheck * n.z;
-
-    // Optional: make it binary for sharper edges
-    return lerp(0.6f, 0.4f, blended).rrr;
-}
-
-void HitMesh(inout Payload payload, in BuiltInTriangleIntersectionAttributes attribs);
+void HitMesh(inout CurrentPayload payload, in BuiltInTriangleIntersectionAttributes attribs);
 
 [shader("closesthit")]
-void main(inout Payload payload, in BuiltInTriangleIntersectionAttributes attribs)
+void main(inout CurrentPayload payload, in BuiltInTriangleIntersectionAttributes attribs)
 {
     HitMesh(payload, attribs);
 }
 
-void HitMesh(inout Payload payload, in BuiltInTriangleIntersectionAttributes attribs)
+void HitMesh(inout CurrentPayload payload, in BuiltInTriangleIntersectionAttributes attribs)
 {
     float3 worldPosition = WorldRayOrigin() + WorldRayDirection() * RayTCurrent();  
 
@@ -89,8 +49,9 @@ void HitMesh(inout Payload payload, in BuiltInTriangleIntersectionAttributes att
     half3 normal = normalize(normal0.xyz * u + normal1.xyz * v + normal2.xyz * w); 
     half3 worldNormal = normalize(mul((float3x3)ObjectToWorld3x4(), normal));
 
-    //float3 albedo = Triplanar(worldPosition, worldNormal);
-    float3 albedo = diffuseTexture.SampleLevel(DiffuseSampler, texCoord0, 0).rgb;
+    float3 albedo = Color::GammaToLinear(diffuseTexture.SampleLevel(DiffuseSampler, texCoord0, 0).rgb);
+    
+    uint randomSeed = payload.data.GetSeed();
     
     // Directional Light
     float3 directLighting = 0.0f;
@@ -104,7 +65,7 @@ void HitMesh(inout Payload payload, in BuiltInTriangleIntersectionAttributes att
             RayDesc shadowRay;
             shadowRay.Origin = worldPosition + worldNormal * 0.1f;
             shadowRay.Direction = directionalLight.Vector;
-            shadowRay.TMin = 0.1f;
+            shadowRay.TMin = 0.0001f;
             shadowRay.TMax = 1e30;
 
             ShadowPayload shadowPayload;
@@ -112,7 +73,7 @@ void HitMesh(inout Payload payload, in BuiltInTriangleIntersectionAttributes att
         
             TraceRay(Scene, RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH | RAY_FLAG_SKIP_CLOSEST_HIT_SHADER, 0xFF, 1, 0, 1, shadowRay, shadowPayload);    
     
-            NdotL *= saturate(shadowPayload.missed);
+            NdotL *= TraceRayShadow(Scene, worldPosition, directionalLight.Vector, randomSeed);
         }
             
         directLighting = NdotL * directionalLight.Color;
@@ -138,39 +99,38 @@ void HitMesh(inout Payload payload, in BuiltInTriangleIntersectionAttributes att
         float NdotL = saturate(dot(worldNormal, lightVector)) * (1.0 / max(lightDistanceSqr, 0.01)) * fade * fade;
         
         // Shadow
-        if(currentDepth < 1)
+        if(currentDepth < SHADOW_MAX_DEPTH)
         {
-            RayDesc shadowRay;
-            shadowRay.Origin = worldPosition + worldNormal * 0.1f;
-            shadowRay.Direction = lightVector;
-            shadowRay.TMin = 0.1f;
-            shadowRay.TMax = lightDistance * M_TO_GAME_UNIT;
-
-            ShadowPayload shadowPayload;
-            shadowPayload.missed = false;
-        
-            TraceRay(Scene, RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH | RAY_FLAG_SKIP_CLOSEST_HIT_SHADER, 0xFF, 1, 0, 1, shadowRay, shadowPayload);    
-    
-            NdotL *= saturate(shadowPayload.missed);
+            NdotL *= TraceRayShadow(Scene, worldPosition, lightVector, randomSeed);
         }
             
         directLighting += NdotL * pointLight.Color;       
     }
     
     // Bounce
+    #ifdef SPECULAR
+    float4 indirectLight = 0.0f;
+    #else
     float3 indirectLight = 0.0f;
+    #endif
     {
         if (currentDepth < MAX_DEPTH)
         {
-            uint randomSeed = payload.data.GetSeed();
-            
             /*[unroll]
             for(uint i = 0; i < 2; i++) 
             {*/
-            indirectLight += TraceRayIndirect(Scene, worldPosition, worldNormal, currentDepth, randomSeed);
+            #ifdef SPECULAR
+            indirectLight += TraceRaySpecular(Scene, worldPosition, worldNormal, 0, currentDepth, randomSeed);
+            #else
+            indirectLight += TraceRayDiffuse(Scene, worldPosition, worldNormal, currentDepth, randomSeed);
+            #endif
             //}
         }
     }
     
-    payload.color = albedo * directLighting + albedo * indirectLight;
+    #ifdef SPECULAR
+    payload.distance = indirectLight.a;
+    #endif
+    
+    payload.color = albedo * directLighting + albedo * indirectLight.rgb;
 }

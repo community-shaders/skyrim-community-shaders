@@ -3,7 +3,7 @@
 
 struct ShadowPayload
 {
-    uint missed;
+    float missed;
 };
 
-#endif
+#endif // #ifndef SHADOWPAYLOAD_HLSI

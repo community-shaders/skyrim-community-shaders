@@ -6,7 +6,7 @@
 
 namespace ShaderUtils 
 {
-	void CompileShader(winrt::com_ptr<IDxcBlob>& shader, const wchar_t* FilePath, const wchar_t* Target, const wchar_t* EntryPoint)
+	void CompileShader(winrt::com_ptr<IDxcBlob>& shader, const wchar_t* FilePath, eastl::vector<DxcDefine> defines, const wchar_t* Target, const wchar_t* EntryPoint)
 	{
 		if (FAILED(CoInitializeEx(nullptr, COINIT_MULTITHREADED))) {
 			logger::error("Failed to initialize COM");
@@ -59,8 +59,14 @@ namespace ShaderUtils
 			L"-O3",
 		};
 
+		winrt::com_ptr<IDxcCompilerArgs> compilerArgs;
+		DxcCreateInstance(CLSID_DxcCompilerArgs, IID_PPV_ARGS(&compilerArgs));
+
+		compilerArgs->AddArguments(args, _countof(args));
+		compilerArgs->AddDefines(defines.data(), static_cast<uint>(defines.size()));
+
 		winrt::com_ptr<IDxcResult> result;
-		if (FAILED(compiler->Compile(&sourceBuffer, args, _countof(args), baseHandler.get(), IID_PPV_ARGS(&result)))) {
+		if (FAILED(compiler->Compile(&sourceBuffer, compilerArgs->GetArguments(), compilerArgs->GetCount(), baseHandler.get(), IID_PPV_ARGS(&result)))) {
 			logger::error("Compile call failed");
 			return;
 		}

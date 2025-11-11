@@ -1,7 +1,7 @@
-#include "RaytracedGI/Raytracing/Types.hlsli"
+#include "RaytracedGI/Includes/Types.hlsli"
 
 [shader("miss")]
 void main(inout ShadowPayload payload)
 {
-    payload.missed = true;
+    payload.missed = 1.0f;
 }

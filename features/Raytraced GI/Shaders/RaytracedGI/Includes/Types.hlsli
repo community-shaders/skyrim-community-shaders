@@ -39,10 +39,10 @@ struct byte4f
 };
 
 
-#include "RaytracedGI/Raytracing/Types/Vertex.hlsli"
-#include "RaytracedGI/Raytracing/Types/Instance.hlsli"
-#include "RaytracedGI/Raytracing/Types/Light.hlsli"
-#include "RaytracedGI/Raytracing/Types/RT.hlsli"
-#include "RaytracedGI/Raytracing/Types/FrameData.hlsli"
+#include "RaytracedGI/Includes/Types/Vertex.hlsli"
+#include "RaytracedGI/Includes/Types/Instance.hlsli"
+#include "RaytracedGI/Includes/Types/Light.hlsli"
+#include "RaytracedGI/Includes/RT.hlsli"
+#include "RaytracedGI/Includes/Types/FrameData.hlsli"
 
 #endif

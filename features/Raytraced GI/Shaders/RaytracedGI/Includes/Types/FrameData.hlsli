@@ -1,7 +1,7 @@
 #ifndef FRAMEDATA_HLSI
 #define FRAMEDATA_HLSI
 
-#include "RaytracedGI/Raytracing/Types/Light.hlsli"
+#include "RaytracedGI/Includes/Types/Light.hlsli"
 
 struct FrameData
 {

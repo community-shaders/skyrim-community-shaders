@@ -1,19 +1,8 @@
-#include "RaytracedGI/Raytracing/Types.hlsli"
-#include "RaytracedGI/Raytracing/Common.hlsli"
-#include "RaytracedGI/Raytracing/SHARC/SharcCommon.hlsli"
+#include "RaytracedGI/Includes/Types.hlsli"
+#include "RaytracedGI/Includes/Common.hlsli"
+#include "RaytracedGI/Includes/RT/SHARC/SharcCommon.hlsli"
 
-ConstantBuffer<FrameData> Frame                 : register(b0);
-
-Texture2D<unorm float3> NormalRoughnessTexture  : register(t0);
-Texture2D<float4> MeshNormalDepthTexture        : register(t1);
-
-RaytracingAccelerationStructure Scene   : register(t2);
-
-RWStructuredBuffer<uint64_t>                u_SharcHashEntriesBuffer    : register(u0, space3);
-RWStructuredBuffer<SharcAccumulationData>   u_SharcAccumulationBuffer   : register(u1, space3);
-RWStructuredBuffer<SharcPackedData>         u_SharcResolvedBuffer       : register(u2, space3);
-
-RWTexture2D<float4> Output : register(u0);
+#include "RaytracedGI/Includes/Registers.hlsli"
 
 #define FP_Z (16.5)
 
@@ -59,11 +48,11 @@ void main()
 
     float2 uv = (idx + 0.5f) / size;
     
-    const unorm float4 meshNormalDepth = MeshNormalDepthTexture[idx];
+    const unorm float4 geometryNormalDepth = GeometryNormalDepthTexture[idx];
     
-    const unorm float3 meshNormalWS = normalize(meshNormalDepth.xyz);
+    const unorm float3 meshNormalWS = normalize(geometryNormalDepth.xyz);
     
-	const unorm float depth = meshNormalDepth.w;
+	const unorm float depth = geometryNormalDepth.w;
 	const unorm float depthLinear = ScreenToViewDepth(depth);
 
 	const unorm float3 normalRoughness = NormalRoughnessTexture[idx];
@@ -76,30 +65,16 @@ void main()
 	const half3 normalVS = DecodeNormal(normalRoughness.xy);
 	const float3 normalWS = normalize(ViewToWorldVector(normalVS, Frame.ViewInverse));	   
 
-    float3 origin = Frame.Position.xyz;
-    
-    float4 clip = float4(uv * 2.0f - 1.0f, 1.0f, 1.0f);
-    clip.y = -clip.y;
-    
-    float4 view = mul(Frame.ProjInverse, clip);
-    view /= view.w;
-
-    float3 direction = normalize(mul((float3x3)Frame.ViewInverse, view.xyz));   
-
-    RayDesc ray;
-    ray.Origin = origin;
-    ray.Direction = direction;
-    ray.TMin = 0.1f;
-    ray.TMax = 1e30;
+ 	const float3 invViewWS = normalize(positionCS);
+	const float3 reflectWS = reflect(invViewWS, normalWS);   
     
     uint seed = InitRandomSeed(DispatchRaysIndex().xy, DispatchRaysDimensions().xy, Frame.FrameCount);
     
-    Payload payload;
-    payload.data = PayloadData::Create(false, 0, seed);
-
-    TraceRay(Scene, RAY_FLAG_NONE, 0xFF, 0, 0, 0, ray, payload);
-
-    Output[idx] = float4(payload.color, 1);
+    float3 origin = positionWS + normalWS * 0.01f;
+    
+    // Let's raytrace straight from GBuffer, we save one ray per pixel
+    DiffuseOutputTexture[idx] = float4(TraceRayDiffuse(Scene, origin, normalWS, 0, seed), 1);
+    SpecularOutputTexture[idx] = float4(TraceRaySpecular(Scene, origin, reflectWS, MAX_DEPTH-1, seed, roughness));
     
     //NormalRoughness
     

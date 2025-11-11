@@ -58,4 +58,5 @@ struct Payload
     PayloadData data;
 };
 
-#endif
+
+#endif // PAYLOAD_HLSI

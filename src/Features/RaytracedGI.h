@@ -19,8 +19,68 @@
 
 #include <DXProgrammableCapture.h>
 
+//#define DLSS_RR
+
+#ifdef DLSS_RR
+#	define NV_WINDOWS
+#pragma warning(push)
+#pragma warning(disable: 4471)
+#include <sl.h>
+#include <sl_consts.h>
+#include <sl_dlss.h>
+#include <sl_dlss_d.h>
+#include <sl_matrix_helpers.h>
+#include <sl_nis.h>
+#include <sl_version.h>
+#pragma warning(pop)
+#endif
+
 struct RaytracedGI : public Feature
 {
+	static constexpr uint64_t NUM_SHADER_IDS = 7;
+
+	static constexpr uint MAX_MESHES = 2048;
+	static constexpr uint MAX_INSTANCES = 4096;
+
+	static constexpr uint MAX_LIGHTS = 255;
+	static constexpr uint MAX_IRRADIANCE_ENTRIES = 256 * 256 * 256;
+
+	struct HeapSlot
+	{
+		enum Slot : uint32_t
+		{
+			Final,
+			DiffuseGI,
+			SpecularGI,
+			SpecHitDist,
+			Albedo,
+			Reflectance,
+			NormalRoughness,
+			GeometryNormalDepth,
+			TLAS,
+			Lights,
+			Instances,
+			Vertices,
+			Triangles = Vertices + MAX_MESHES,
+			DiffuseTextures = Triangles + MAX_MESHES,
+			NumDescriptors
+		};
+	};
+
+	struct HeapType
+	{
+		enum Type : uint32_t
+		{
+			UAV,
+			SRV,
+			VertexBuffer,
+			TriangleBuffer,
+			DiffuseTextures,
+			GlowTextures,
+			CBV
+		};
+	};
+
 	////////////////////////////////////////////////// Boilerplate
 	// Metadata
 	virtual inline std::string GetName() override { return "Raytraced GI"; }
@@ -55,6 +115,8 @@ struct RaytracedGI : public Feature
 	// Resources
 	virtual void SetupResources() override;
 	virtual void ClearShaderCache() override;
+
+	void ShareRT(ID3D11Texture2D* pTexture2D, const HeapSlot::Slot& target, ID3D12Resource** ppResource);
 	void SetupSharedRT();
 	void CompileShaders();
 	void CompileRaytracingShaders();
@@ -78,6 +140,7 @@ struct RaytracedGI : public Feature
 
 	void AddInstance(RE::BSTriShape* pTriShape);
 	void AddUpdateInstance(RE::BSTriShape* pTriShape);
+	void AddUpdateAllInstances();
 
 	eastl::vector<size_t> GatherInstanceLights(RE::BSTriShape* pBSTriShape);
 
@@ -92,6 +155,11 @@ struct RaytracedGI : public Feature
 
 	void CopyDepth();
 
+#ifdef DLSS_RR
+	void InitRR();
+	void CheckFrameConstants();
+#endif
+
 	const bool Active() 
 	{
 		return loaded && settings.Enabled;
@@ -100,15 +168,6 @@ struct RaytracedGI : public Feature
 	//void BSShader_RestoreGeometry(RE::BSShader* This, RE::BSRenderPass* Pass);
 
 	void BSTriShape_UpdateWorldData(RE::BSTriShape* This, RE::NiUpdateData* a_data);
-
-	static constexpr uint64_t NUM_SHADER_IDS = 5;
-
-	static constexpr uint MAX_MESHES = 2048;
-	static constexpr uint MAX_DESCRIPTORS = MAX_MESHES * 3;
-	static constexpr uint MAX_INSTANCES = 4096;	
-
-	static constexpr uint MAX_LIGHTS = 255;
-	static constexpr uint MAX_IRRADIANCE_ENTRIES = 256 * 256 * 256;
 
 	static constexpr DXGI_SAMPLE_DESC NO_AA = { .Count = 1, .Quality = 0 };
 	static constexpr D3D12_HEAP_PROPERTIES UPLOAD_HEAP = { .Type = D3D12_HEAP_TYPE_UPLOAD };
@@ -127,9 +186,16 @@ struct RaytracedGI : public Feature
 	struct Settings
 	{
 		bool Enabled = true;
+		int Bounces = 2;
+		int SamplesPerPixel = 1;
+		float2 Roughness = {0.0f, 1.0f};
+		float2 Specularity = {0.0f, 1.0f};
 		bool EnablePIXCapture = false;
 		bool EnableDebugDevice = true;
 		float SHARCScale = 1.0f;
+#ifdef DLSS_RR
+		bool EnableRR = true;
+#endif
 	} settings;
 
 	struct alignas(16) Light
@@ -170,6 +236,8 @@ struct RaytracedGI : public Feature
 	bool releaseBufferHooked = false;
 	bool releaseHooked = false;
 	HANDLE fenceEvent;
+
+	bool addedAllInstances = false;
 
 #pragma pack(push, 1)
 	struct Vertex
@@ -318,20 +386,7 @@ struct RaytracedGI : public Feature
 
 	winrt::com_ptr<ID3D12RootSignature> rootSignature = nullptr;
 
-	enum CommonHeap : uint32_t
-	{
-		OutputUAV,
-		NormalRoughness,
-		MeshNormalDepth,
-		TLAS,
-		Lights,
-		Instances,
-		Vertices,
-		Triangles = Vertices + MAX_MESHES,
-		DiffuseTextures = Triangles + MAX_MESHES
-	};
-
-	eastl::unique_ptr<DX12::DescriptorHeap<CommonHeap>> commonHeap = nullptr;	
+	eastl::unique_ptr<DX12::DescriptorHeap<HeapSlot::Slot, HeapType::Type>> commonHeap = nullptr;	
 
 	winrt::com_ptr<ID3D11Fence> d3d11Fence = nullptr;
 	winrt::com_ptr<ID3D12Fence> d3d12Fence = nullptr;
@@ -347,16 +402,46 @@ struct RaytracedGI : public Feature
 	winrt::com_ptr<ID3D11DeviceContext4> d3d11Context = nullptr;
 
 	// Resources
-	eastl::unique_ptr<WrappedResource> diffuseGITexture = nullptr;
+	/*eastl::unique_ptr<WrappedResource> diffuseGITexture = nullptr;
 	eastl::unique_ptr<WrappedResource> specularGITexture = nullptr;
+	eastl::unique_ptr<WrappedResource> specularHitDistanceTexture = nullptr;*/
 
+	eastl::unique_ptr<WrappedResource> finalTexture = nullptr;
+
+	winrt::com_ptr<ID3D12Resource> diffuseGITexture = nullptr;
+	winrt::com_ptr<ID3D12Resource> specularGITexture = nullptr;
+	winrt::com_ptr<ID3D12Resource> specularHitDistanceTexture = nullptr;
+
+	winrt::com_ptr<ID3D12Resource> albedoTexture = nullptr;
+	winrt::com_ptr<ID3D12Resource> reflectanceTexture = nullptr;
 	winrt::com_ptr<ID3D12Resource> normalRoughnessTexture = nullptr;
-	winrt::com_ptr<ID3D12Resource> meshNormalDepthTexture = nullptr;
+	winrt::com_ptr<ID3D12Resource> goemetryNormalDepthTexture = nullptr;
 
 	std::shared_mutex meshMutex;
 	std::shared_mutex bufferMutex;
 	std::shared_mutex sharedTextureMutex;
 	std::shared_mutex renderMutex;
+
+#if defined(DLSS_RR)
+	HMODULE interposer;
+	PFun_slInit* slInit;
+	PFun_slEvaluateFeature* slEvaluateFeature;
+	PFun_slGetNewFrameToken* slGetNewFrameToken;
+	PFun_slSetD3DDevice* slSetD3DDevice;
+
+	PFun_slDLSSDGetOptimalSettings* slDLSSDGetOptimalSettings{};
+	PFun_slDLSSDGetState* slDLSSDGetState{};
+	PFun_slDLSSDSetOptions* slDLSSDSetOptions{};
+	PFun_slSetConstants* slSetConstants;
+	PFun_slGetFeatureFunction* slGetFeatureFunction;
+
+	sl::ViewportHandle slViewportHandle{ 0 };
+
+	Util::FrameChecker frameChecker;
+	sl::FrameToken* frameToken = nullptr;
+
+	float2 jitter = { 0, 0 };
+#endif
 
 	inline float3 Float3(const RE::NiPoint3& point3)
 	{
@@ -465,7 +550,7 @@ struct RaytracedGI : public Feature
 							initialDataLocal[mip].SysMemSlicePitch = static_cast<UINT>(img->slicePitch);
 						}
 
-						initialDataCopy = initialDataLocal.data();  // point to new mip data
+						initialDataCopy = initialDataLocal.data();
 					}
 
 					descCopy.MiscFlags |= D3D11_RESOURCE_MISC_SHARED | D3D11_RESOURCE_MISC_SHARED_NTHANDLE;
@@ -491,7 +576,6 @@ struct RaytracedGI : public Feature
 					DX::ThrowIfFailed(dxgiResource->CreateSharedHandle(nullptr, DXGI_SHARED_RESOURCE_READ, nullptr, &sharedHandle));
 
 					winrt::com_ptr<ID3D12Resource> resource = nullptr;
-					//DX::ThrowIfFailed(rtgi.d3d12Device->OpenSharedHandle(sharedHandle, IID_PPV_ARGS(resource.put())));
 					HRESULT hrOSH = rtgi.d3d12Device->OpenSharedHandle(sharedHandle, IID_PPV_ARGS(resource.put()));
 
 					CloseHandle(sharedHandle);
