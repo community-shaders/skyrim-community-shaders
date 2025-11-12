@@ -1,7 +1,7 @@
 #ifndef VERTEX_HLSI
 #define VERTEX_HLSI
 
-#include "RaytracedGI/Raytracing/Types.hlsli"
+#include "RaytracedGI/Includes/Types.hlsli"
 
 struct Vertex
 {

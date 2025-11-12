@@ -15,8 +15,8 @@
 #define SHADOW_RAY_HITGROUP_IDX 1
 #define SHADOW_RAY_MISS_IDX 1
 
-#define REFLECTION_RAY_HITGROUP_IDX 2
-#define REFLECTION_RAY_MISS_IDX 2
+#define SPECULAR_RAY_HITGROUP_IDX 2
+#define SPECULAR_RAY_MISS_IDX 2
 
 uint InitRandomSeed(uint2 coord, uint2 size, uint frameCount)
 {
@@ -96,7 +96,7 @@ float3 SampleHemisphere(float3 normal, float3 tangentSample)
 }
 
 
-float3 TraceRayDiffuse(RaytracingAccelerationStructure scene, float3 origin, float3 direction, uint currentDepth, inout uint randomSeed)
+float3 TraceRayDiffuse(RaytracingAccelerationStructure scene, float3 origin, float3 direction, uint currentDepth, inout uint randomSeed, float multiplier)
 {
     float3 tangentSample = TangentSample(randomSeed);
     float3 randomDirection = SampleHemisphere(direction, tangentSample);
@@ -112,7 +112,7 @@ float3 TraceRayDiffuse(RaytracingAccelerationStructure scene, float3 origin, flo
     diffusePayload.data = PayloadData::Create(false, currentDepth + 1, randomSeed);
 
     TraceRay(scene, RAY_FLAG_NONE, 0xFF, COMMON_RAY_HIT_IDX, 0, COMMON_RAY_MISS_IDX, ray, diffusePayload);
-    return diffusePayload.color * 2.0f;
+    return diffusePayload.color * multiplier;
 }
 
 float TraceRayShadow(RaytracingAccelerationStructure scene, float3 origin, float3 direction, inout uint randomSeed)
@@ -133,7 +133,7 @@ float TraceRayShadow(RaytracingAccelerationStructure scene, float3 origin, float
     return shadowPayload.missed;
 }
 
-float4 TraceRaySpecular(RaytracingAccelerationStructure scene, float3 origin, float3 direction, uint currentDepth, inout uint randomSeed, float roughness)
+float4 TraceRaySpecular(RaytracingAccelerationStructure scene, float3 origin, float3 direction, uint currentDepth, inout uint randomSeed, float multiplier, float roughness)
 {
     float3 tangentSample = TangentSampleScaled(randomSeed, roughness);
     float3 randomDirection = SampleHemisphere(direction, tangentSample);
@@ -149,7 +149,7 @@ float4 TraceRaySpecular(RaytracingAccelerationStructure scene, float3 origin, fl
     specularPayload.distance = 0.0f;
     specularPayload.data = PayloadData::Create(false, currentDepth + 1, randomSeed);
 
-    TraceRay(scene, RAY_FLAG_NONE, 0xFF, REFLECTION_RAY_HITGROUP_IDX, 0, REFLECTION_RAY_MISS_IDX, ray, specularPayload);
-    return float4(specularPayload.color, specularPayload.distance);
+    TraceRay(scene, RAY_FLAG_NONE, 0xFF, SPECULAR_RAY_HITGROUP_IDX, 0, SPECULAR_RAY_MISS_IDX, ray, specularPayload);
+    return float4(specularPayload.color * multiplier, specularPayload.distance);
 }  
 #endif

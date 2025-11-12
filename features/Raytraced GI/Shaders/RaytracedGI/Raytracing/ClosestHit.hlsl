@@ -120,9 +120,9 @@ void HitMesh(inout CurrentPayload payload, in BuiltInTriangleIntersectionAttribu
             for(uint i = 0; i < 2; i++) 
             {*/
             #ifdef SPECULAR
-            indirectLight += TraceRaySpecular(Scene, worldPosition, worldNormal, 0, currentDepth, randomSeed);
+            indirectLight += TraceRaySpecular(Scene, worldPosition, worldNormal, currentDepth, randomSeed, Frame.Specular, 0);
             #else
-            indirectLight += TraceRayDiffuse(Scene, worldPosition, worldNormal, currentDepth, randomSeed);
+            indirectLight += TraceRayDiffuse(Scene, worldPosition, worldNormal, currentDepth, randomSeed, Frame.Diffuse);
             #endif
             //}
         }

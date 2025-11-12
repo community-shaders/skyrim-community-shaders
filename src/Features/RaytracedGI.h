@@ -14,6 +14,7 @@
 #include "Features/RaytracedGI/IrradianceCache.h"
 #include "Features/RaytracedGI/Allocator.h"
 #include "Features/RaytracedGI/HeapManager.h"
+#include "Features/RaytracedGI/RTPipelineBuilder.h"
 
 #define NTDDI_VERSION NTDDI_WINBLUE
 
@@ -41,7 +42,7 @@ struct RaytracedGI : public Feature
 
 	static constexpr uint MAX_MESHES = 2048;
 	static constexpr uint MAX_INSTANCES = 4096;
-
+	
 	static constexpr uint MAX_LIGHTS = 255;
 	static constexpr uint MAX_IRRADIANCE_ENTRIES = 256 * 256 * 256;
 
@@ -63,7 +64,8 @@ struct RaytracedGI : public Feature
 			Vertices,
 			Triangles = Vertices + MAX_MESHES,
 			DiffuseTextures = Triangles + MAX_MESHES,
-			NumDescriptors
+			NumDescriptors = DiffuseTextures + MAX_MESHES,
+			None
 		};
 	};
 
@@ -76,7 +78,32 @@ struct RaytracedGI : public Feature
 			VertexBuffer,
 			TriangleBuffer,
 			DiffuseTextures,
-			GlowTextures,
+			//GlowTextures,
+			//CBV
+		};
+	};
+
+	struct ComputeHeapSlot
+	{
+		enum Slot : uint32_t
+		{
+			Final,
+			DiffuseGI,
+			SpecularGI,
+			SpecHitDist,
+			Albedo,
+			Reflectance,
+			NumDescriptors,
+			None
+		};
+	};
+
+	struct ComputeHeapType
+	{
+		enum Type : uint32_t
+		{
+			UAV,
+			SRV,
 			CBV
 		};
 	};
@@ -116,15 +143,17 @@ struct RaytracedGI : public Feature
 	virtual void SetupResources() override;
 	virtual void ClearShaderCache() override;
 
-	void ShareRT(ID3D11Texture2D* pTexture2D, const HeapSlot::Slot& target, ID3D12Resource** ppResource);
+	void ShareRT(ID3D11Texture2D* pTexture2D, const HeapSlot::Slot& target, const ComputeHeapSlot::Slot& cTarget, ID3D12Resource** ppResource);
 	void SetupSharedRT();
 	void CompileShaders();
 	void CompileRaytracingShaders();
+	void CompileDX12ComputeShaders();
 	void CompileComputeShaders();
 
 	void Initialize();
 	void InitD3D12(ID3D11Device* ppDevice, ID3D11DeviceContext* pImmediateContext, IDXGIAdapter* a_adapter);
 	void CreateRootSignature();
+	void CreateComputeRootSignature();
 	ID3D12Resource* MakeAccelerationStructure(const D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_INPUTS& inputs, UINT64* updateScratchSize = nullptr);
 	void Flush();
 	ID3D12Resource* MakeBLAS(ID3D12Resource* vertexBuffer, UINT vertices, ID3D12Resource* indexBuffer, UINT indices);
@@ -182,17 +211,41 @@ struct RaytracedGI : public Feature
 		.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR
 	};
 
+	enum struct Denoiser : int32_t
+	{
+		None,
+		Accumulation,
+		DLSSRR
+	};
+
+	enum struct DebugOutput : int32_t
+	{
+		None,
+		Indirect,
+		Specular,
+		Passthrough
+	};
+
 	////////////////////////////////////////////////// Feature Specific Data
 	struct Settings
 	{
 		bool Enabled = true;
+		Denoiser Denoiser = Denoiser::None;
 		int Bounces = 2;
 		int SamplesPerPixel = 1;
 		float2 Roughness = {0.0f, 1.0f};
 		float2 Specularity = {0.0f, 1.0f};
-		bool EnablePIXCapture = false;
-		bool EnableDebugDevice = true;
+		float Diffuse = 1.0f;
+		float Specular = 1.0f;
+		float Directional = 1.0f;
+		float Point = 1.0f;
+		bool PointFade = true;
+		DebugOutput DebugOutput = DebugOutput::None;
+		bool EnablePIXCapture = true;
+		bool EnableDebugDevice = false;
+#ifdef SHARC
 		float SHARCScale = 1.0f;
+#endif
 #ifdef DLSS_RR
 		bool EnableRR = true;
 #endif
@@ -216,13 +269,17 @@ struct RaytracedGI : public Feature
 		float4x4 ProjInverse;
 		float4 CameraData;
 		float4 NDCToView;
-		Light DirectionalLight;
+		Light Directional;
 		float3 Position;
 		uint FrameCount;
-		float SHARCScale;
+		float Diffuse;
+		float Specular;
 		uint Pad0;
+#ifdef SHARC
+		float SHARCScale;
+#else
 		uint Pad1;
-		uint Pad2;
+#endif
 	};
 	static_assert(sizeof(FrameBuffer) % 16 == 0);
 	FrameBuffer* frameBufferData;
@@ -378,6 +435,8 @@ struct RaytracedGI : public Feature
 	winrt::com_ptr<ID3D12StateObject> pipelineRT = nullptr;
 	winrt::com_ptr<ID3D12Resource> shaderIDs = nullptr;
 
+	winrt::com_ptr<ID3D12PipelineState> pipelineCS = nullptr;
+
 	// D3D12
 	winrt::com_ptr<ID3D12Device5> d3d12Device = nullptr;
 	winrt::com_ptr<ID3D12CommandQueue> commandQueue = nullptr;
@@ -385,8 +444,10 @@ struct RaytracedGI : public Feature
 	winrt::com_ptr<ID3D12GraphicsCommandList4> commandList = nullptr;
 
 	winrt::com_ptr<ID3D12RootSignature> rootSignature = nullptr;
+	winrt::com_ptr<ID3D12RootSignature> rootSignatureCS = nullptr;
 
 	eastl::unique_ptr<DX12::DescriptorHeap<HeapSlot::Slot, HeapType::Type>> commonHeap = nullptr;	
+	eastl::unique_ptr<DX12::DescriptorHeap<ComputeHeapSlot::Slot, ComputeHeapType::Type>> computeHeap = nullptr;	
 
 	winrt::com_ptr<ID3D11Fence> d3d11Fence = nullptr;
 	winrt::com_ptr<ID3D12Fence> d3d12Fence = nullptr;

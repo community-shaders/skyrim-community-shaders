@@ -11,11 +11,15 @@ struct FrameData
     float4 NDCToView;    
     Light Directional;
     float3 Position;
-    uint FrameCount;   
+    uint FrameCount; 
+    float Diffuse;
+    float Specular;
+    uint Pad0;   
+    #ifdef SHARC
     float SHARCScale;
-    uint Pad0;
+    #else
     uint Pad1;
-    uint Pad2;    
+    #endif    
 };
 
 #endif

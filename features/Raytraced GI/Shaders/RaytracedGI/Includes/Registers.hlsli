@@ -5,12 +5,14 @@
 
 ConstantBuffer<FrameData> Frame                 : register(b0);
 
-Texture2D<unorm float3> NormalRoughnessTexture  : register(t0, space0);
-Texture2D<float4> GeometryNormalDepthTexture    : register(t1, space0);
+Texture2D<float4> AlbedoTexture                 : register(t0, space0);
+Texture2D<float4> ReflectanceTexture            : register(t1, space0);
+Texture2D<unorm float3> NormalRoughnessTexture  : register(t2, space0);
+Texture2D<float4> GeometryNormalDepthTexture    : register(t3, space0);
 
-RaytracingAccelerationStructure Scene           : register(t2, space0);
-StructuredBuffer<Light> Lights                  : register(t3, space0);
-StructuredBuffer<Instance> Instances            : register(t4, space0);
+RaytracingAccelerationStructure Scene           : register(t4, space0);
+StructuredBuffer<Light> Lights                  : register(t5, space0);
+StructuredBuffer<Instance> Instances            : register(t6, space0);
 
 StructuredBuffer<Vertex> Vertices[]             : register(t0, space1);
 StructuredBuffer<uint3> Triangles[]             : register(t0, space2);
@@ -24,7 +26,9 @@ RWStructuredBuffer<SharcPackedData>         u_SharcResolvedBuffer       : regist
 
 SamplerState DiffuseSampler                     : register(s0);
 
-RWTexture2D<float4> DiffuseOutputTexture        : register(u0);
-RWTexture2D<float4> SpecularOutputTexture       : register(u1);
+RWTexture2D<float4> FinalTexture                : register(u0);
+RWTexture2D<float4> DiffuseOutputTexture        : register(u1);
+RWTexture2D<float4> SpecularOutputTexture       : register(u2);
+RWTexture2D<float> SpecHitDistanceTexture       : register(u3);
 
 #endif

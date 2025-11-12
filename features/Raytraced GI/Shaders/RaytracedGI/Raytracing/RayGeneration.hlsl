@@ -1,6 +1,9 @@
 #include "RaytracedGI/Includes/Types.hlsli"
 #include "RaytracedGI/Includes/Common.hlsli"
+
+#ifdef SHARC
 #include "RaytracedGI/Includes/RT/SHARC/SharcCommon.hlsli"
+#endif
 
 #include "RaytracedGI/Includes/Registers.hlsli"
 
@@ -73,8 +76,8 @@ void main()
     float3 origin = positionWS + normalWS * 0.01f;
     
     // Let's raytrace straight from GBuffer, we save one ray per pixel
-    DiffuseOutputTexture[idx] = float4(TraceRayDiffuse(Scene, origin, normalWS, 0, seed), 1);
-    SpecularOutputTexture[idx] = float4(TraceRaySpecular(Scene, origin, reflectWS, MAX_DEPTH-1, seed, roughness));
+    DiffuseOutputTexture[idx] = float4(TraceRayDiffuse(Scene, origin, normalWS, 0, seed, Frame.Diffuse), 1);
+    SpecularOutputTexture[idx] = TraceRaySpecular(Scene, origin, reflectWS, MAX_DEPTH-1, seed, Frame.Specular, roughness);
     
     //NormalRoughness
     
