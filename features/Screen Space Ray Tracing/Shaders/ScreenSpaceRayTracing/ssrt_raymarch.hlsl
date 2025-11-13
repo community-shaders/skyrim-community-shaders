@@ -473,8 +473,6 @@ bool ShouldProcessPixel(uint2 GroupThreadID, uint FrameCount)
     float z = SSRT_LoadDepth(uv * mip_resolution * FrameBuffer::DynamicResolutionParams1.xy, most_detailed_mip);
     float3 screen_uv_space_ray_origin = float3(uv, z);
     float3 view_space_ray = ScreenSpaceToViewSpace(screen_uv_space_ray_origin, FrameBuffer::CameraProjInverse[eyeIndex]);
-    if (dot(view_space_ray, normalVS) > 0)
-		normalVS = -normalVS;
     float3 world_space_normal = normalize(mul(FrameBuffer::CameraViewInverse[eyeIndex], float4(normalVS, 0)).xyz);
     float3 view_space_surface_normal = normalVS;
     float3 view_space_ray_direction = normalize(view_space_ray);
