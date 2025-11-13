@@ -525,7 +525,12 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 		baseColor.xyz *= SharedData::grassLightingSettings.BasicGrassBrightness;
 #			endif  // !TRUE_PBR
 
-	float3 F0 = saturate(specColor.w * SharedData::grassLightingSettings.SpecularStrength / Math::PI);
+#			if defined(VANILLA_FRESNEL)
+	const bool enableVanillaFresnel = SharedData::vanillaFresnelSettings.Enable;
+	float3 F0 = enableVanillaFresnel ? max(SharedData::vanillaFresnelSettings.MinF0, saturate(specColor.w * SharedData::grassLightingSettings.SpecularStrength * SharedData::vanillaFresnelSettings.BaseF0Multiplier / Math::PI)) : 0.0;
+#			else
+	float3 F0 = 0.0;
+#			endif
 	float roughness = saturate(1.0 - SharedData::grassLightingSettings.Glossiness * 0.01);
 
 #			if defined(TRUE_PBR)
@@ -764,7 +769,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 
 	specularColor += lightsSpecularColor;
 #				if defined(VANILLA_FRESNEL)
-	if (!SharedData::vanillaFresnelSettings.Enable && !SharedData::vanillaFresnelSettings.EnableGGXOnGrass)
+	if (!(SharedData::vanillaFresnelSettings.Enable && SharedData::vanillaFresnelSettings.EnableGGXOnGrass))
 #				endif
 	specularColor *= specColor.w * SharedData::grassLightingSettings.SpecularStrength;
 	specularColor = Color::GammaToLinear(specularColor);
@@ -798,7 +803,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #					if defined(VANILLA_FRESNEL)
 	if (SharedData::vanillaFresnelSettings.Enable) {
 #					endif
-	float2 specularBDRF = BRDF::EnvBRDF(roughness, saturate(dot(viewDirection, normalVS)));
+	float2 specularBDRF = BRDF::EnvBRDF(roughness, saturate(dot(viewDirection, normal)));
 	reflectance = F0 * specularBDRF.x + specularBDRF.y;
 #					if defined(VANILLA_FRESNEL)
 	}
