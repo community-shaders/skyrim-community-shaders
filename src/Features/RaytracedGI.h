@@ -48,10 +48,8 @@ struct RaytracedGI : public Feature
 	{
 		enum Slot : uint32_t
 		{
-			Final,
 			DiffuseGI,
 			SpecularGI,
-			SpecHitDist,
 			Albedo,
 			Reflectance,
 			NormalRoughness,
@@ -62,7 +60,8 @@ struct RaytracedGI : public Feature
 			Vertices,
 			Triangles = Vertices + MAX_MESHES,
 			DiffuseTextures = Triangles + MAX_MESHES,
-			NumDescriptors = DiffuseTextures + MAX_MESHES,
+			GlowTextures = DiffuseTextures + MAX_MESHES,
+			NumDescriptors = GlowTextures + MAX_MESHES,
 			None
 		};
 	};
@@ -76,7 +75,7 @@ struct RaytracedGI : public Feature
 			VertexBuffer,
 			TriangleBuffer,
 			DiffuseTextures,
-			//GlowTextures,
+			GlowTextures
 			//CBV
 		};
 	};
@@ -104,7 +103,7 @@ struct RaytracedGI : public Feature
 		{
 			UAV,
 			SRV,
-			CBV
+			//CBV
 		};
 	};
 
@@ -242,6 +241,7 @@ struct RaytracedGI : public Feature
 		float2 Specularity = {0.0f, 1.0f};
 		float Diffuse = 1.0f;
 		float Specular = 1.0f;
+		float Emissive = 1.0f;
 		float Directional = 1.0f;
 		float Point = 1.0f;
 		bool PointFade = true;
@@ -280,7 +280,7 @@ struct RaytracedGI : public Feature
 		uint FrameCount;
 		float Diffuse;
 		float Specular;
-		uint Pad0;
+		float Emissive;
 #ifdef SHARC
 		float SHARCScale;
 #else
@@ -471,18 +471,14 @@ struct RaytracedGI : public Feature
 	winrt::com_ptr<ID3D11DeviceContext4> d3d11Context = nullptr;
 
 	// Resources
-	/*eastl::unique_ptr<WrappedResource> diffuseGITexture = nullptr;
-	eastl::unique_ptr<WrappedResource> specularGITexture = nullptr;
-	eastl::unique_ptr<WrappedResource> specularHitDistanceTexture = nullptr;*/
-
 	eastl::unique_ptr<WrappedResource> finalTexture = nullptr;
-	winrt::com_ptr<ID3D12Resource> intermediaryTexture = nullptr;
+	eastl::unique_ptr<DX12::Texture2D> outputTexture = nullptr;
 
-	winrt::com_ptr<ID3D12Resource> diffuseGITexture = nullptr;
-	winrt::com_ptr<ID3D12Resource> specularGITexture = nullptr;
-	winrt::com_ptr<ID3D12Resource> specularHitDistanceTexture = nullptr;
+	eastl::unique_ptr<DX12::Texture2D> diffuseGITexture = nullptr;
+	eastl::unique_ptr<DX12::Texture2D> specularGITexture = nullptr;
+	eastl::unique_ptr<DX12::Texture2D> specularHitDistanceTexture = nullptr;
 
-	winrt::com_ptr<ID3D12Resource> depthTexture = nullptr;
+	eastl::unique_ptr<DX12::Texture2D> depthTexture = nullptr;
 	eastl::unique_ptr<WrappedResource> motionVectorsTexture = nullptr;
 
 	winrt::com_ptr<ID3D12Resource> albedoTexture = nullptr;

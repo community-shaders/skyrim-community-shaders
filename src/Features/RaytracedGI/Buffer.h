@@ -7,7 +7,7 @@ namespace DX12
 	{
 	public:
 		explicit Resource(ID3D12Device5* device, D3D12_HEAP_TYPE heapType, const D3D12_RESOURCE_DESC& desc, D3D12_RESOURCE_STATES initialState) :
-			device(device)
+			device(device), desc(desc)
 		{
 			const auto& heapProps = CD3DX12_HEAP_PROPERTIES(heapType);
 			DX::ThrowIfFailed(device->CreateCommittedResource(
@@ -16,19 +16,34 @@ namespace DX12
 				&desc,
 				initialState,
 				nullptr,
-				IID_PPV_ARGS(&buffer)));
+				IID_PPV_ARGS(&resource)));
 
 			state = initialState;
 		}
 
 		virtual ~Resource() = default;
 
-		virtual void TransitionBarrier(ID3D12GraphicsCommandList4* commandList, D3D12_RESOURCE_STATES stateAfter, UINT subresource)
+		void SetName(LPCWSTR name)
+		{
+			DX::ThrowIfFailed(device->SetName(name));
+		}
+
+		virtual CD3DX12_RESOURCE_BARRIER GetTransitionBarrier(bool setState, D3D12_RESOURCE_STATES stateAfter, UINT subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES)
+		{
+			D3D12_RESOURCE_STATES stateBefore = state;
+
+			if (setState)
+				state = stateAfter;
+
+			return CD3DX12_RESOURCE_BARRIER::Transition(resource.get(), stateBefore, stateAfter, subresource);
+		}
+
+		virtual void TransitionBarrier(ID3D12GraphicsCommandList4* commandList, D3D12_RESOURCE_STATES stateAfter, UINT subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES)
 		{
 			if (state == stateAfter)
 				return;
 
-			const auto& resourceBarrier = CD3DX12_RESOURCE_BARRIER::Transition(buffer.get(), state, stateAfter, subresource);
+			const auto& resourceBarrier = CD3DX12_RESOURCE_BARRIER::Transition(resource.get(), state, stateAfter, subresource);
 			commandList->ResourceBarrier(1, &resourceBarrier);
 
 			state = stateAfter;
@@ -36,28 +51,34 @@ namespace DX12
 
 		virtual void UAVBarrier(ID3D12GraphicsCommandList4* commandList)
 		{
-			const auto& resourceBarrier = CD3DX12_RESOURCE_BARRIER::UAV(buffer.get());
+			const auto& resourceBarrier = CD3DX12_RESOURCE_BARRIER::UAV(resource.get());
 			commandList->ResourceBarrier(1, &resourceBarrier);
 		}
 
 		virtual void CreateSRV(D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc, CD3DX12_CPU_DESCRIPTOR_HANDLE handle)
 		{
-			device->CreateShaderResourceView(buffer.get(), &srvDesc, handle);
+			device->CreateShaderResourceView(resource.get(), &srvDesc, handle);
+		}
+
+		virtual void CreateUAV(D3D12_UNORDERED_ACCESS_VIEW_DESC uavDesc, CD3DX12_CPU_DESCRIPTOR_HANDLE handle)
+		{
+			device->CreateUnorderedAccessView(resource.get(), nullptr, &uavDesc, handle);
 		}
 
 		virtual void CreateUAV(D3D12_UNORDERED_ACCESS_VIEW_DESC uavDesc, ID3D12Resource* counterResource, CD3DX12_CPU_DESCRIPTOR_HANDLE handle)
 		{
-			device->CreateUnorderedAccessView(buffer.get(), counterResource, &uavDesc, handle);
+			device->CreateUnorderedAccessView(resource.get(), counterResource, &uavDesc, handle);
 		}
 
-		winrt::com_ptr<ID3D12Resource> buffer = nullptr;
+		winrt::com_ptr<ID3D12Resource> resource = nullptr;
 
 	protected:
 		ID3D12Device5* device;
 		D3D12_RESOURCE_STATES state;
+		D3D12_RESOURCE_DESC desc;
 	};
 
-	class TextureResource : public Resource
+	class Texture : public Resource
 	{
 		static D3D12_RESOURCE_DESC Desc(D3D12_RESOURCE_DIMENSION dimension, UINT64 width, UINT height, DXGI_FORMAT format, D3D12_RESOURCE_FLAGS flags)
 		{
@@ -71,19 +92,39 @@ namespace DX12
 			desc.Format = format;
 			desc.SampleDesc.Count = 1;
 			desc.SampleDesc.Quality = 0;
-			desc.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
+			desc.Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN;
 			desc.Flags = flags;
 
 			return desc;
 		}
 
 	public:
-		explicit TextureResource(
+		explicit Texture(
 			ID3D12Device5* device, 
 			D3D12_RESOURCE_DIMENSION dimension, UINT64 width, UINT height, DXGI_FORMAT format, D3D12_RESOURCE_FLAGS flags) :
 			Resource(device, D3D12_HEAP_TYPE_DEFAULT, Desc(dimension, width, height, format, flags), D3D12_RESOURCE_STATE_COMMON) {}
 
-		virtual ~TextureResource() = default;
+		virtual ~Texture() = default;
+	};
+
+	class Texture2D : public Texture
+	{
+	public:
+		explicit Texture2D(
+			ID3D12Device5* device,
+			UINT64 width, UINT height, DXGI_FORMAT format, D3D12_RESOURCE_FLAGS flags) :
+			Texture(device, D3D12_RESOURCE_DIMENSION_TEXTURE2D, width, height, format, flags) {}
+
+		virtual ~Texture2D() = default;
+
+		virtual void CreateUAV(CD3DX12_CPU_DESCRIPTOR_HANDLE handle)
+		{
+			D3D12_UNORDERED_ACCESS_VIEW_DESC uavDesc = {};
+			uavDesc.ViewDimension = D3D12_UAV_DIMENSION_TEXTURE2D;
+			uavDesc.Format = desc.Format;
+
+			Texture::CreateUAV(uavDesc, handle);
+		}
 	};
 
 	template <typename T>
@@ -160,7 +201,7 @@ namespace DX12
 		explicit StructuredBufferUpload(ID3D12Device5* a_device, const uint64_t& a_count, bool uav = false) :
 			StructuredBuffer<T>(a_device, a_count, uav)
 		{
-			D3D12_RESOURCE_DESC desc = this->buffer->GetDesc();
+			D3D12_RESOURCE_DESC desc = this->resource->GetDesc();
 			const auto& uploadHeap = CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_UPLOAD);
 
 			DX::ThrowIfFailed(a_device->CreateCommittedResource(
@@ -187,9 +228,9 @@ namespace DX12
 
 		void Upload(ID3D12GraphicsCommandList4* commandList)
 		{
-			this->TransitionBarrier(commandList, D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES);
-			commandList->CopyBufferRegion(this->buffer.get(), 0, uploadBuffer.get(), 0, sizeof(T) * this->count);
-			this->TransitionBarrier(commandList, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES);
+			this->TransitionBarrier(commandList, D3D12_RESOURCE_STATE_COPY_DEST);
+			commandList->CopyBufferRegion(this->resource.get(), 0, uploadBuffer.get(), 0, sizeof(T) * this->count);
+			this->TransitionBarrier(commandList, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
 		}
 
 		winrt::com_ptr<ID3D12Resource> uploadBuffer = nullptr;

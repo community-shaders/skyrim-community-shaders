@@ -29,6 +29,7 @@ void HitMesh(inout CurrentPayload payload, in BuiltInTriangleIntersectionAttribu
     StructuredBuffer<Vertex> meshVertices = Vertices[meshID];
     StructuredBuffer<uint3> meshTriangles = Triangles[meshID];
     Texture2D diffuseTexture = DiffuseTextures[meshID];
+    Texture2D glowTexture = GlowTextures[meshID];
     
     uint3 meshTriangle = meshTriangles[PrimitiveIndex()];
     
@@ -50,36 +51,19 @@ void HitMesh(inout CurrentPayload payload, in BuiltInTriangleIntersectionAttribu
     half3 worldNormal = normalize(mul((float3x3)ObjectToWorld3x4(), normal));
 
     float3 albedo = Color::GammaToLinear(diffuseTexture.SampleLevel(DiffuseSampler, texCoord0, 0).rgb);
+    float3 emissive = Color::GammaToLinear(glowTexture.SampleLevel(DiffuseSampler, texCoord0, 0).rgb);
     
     uint randomSeed = payload.data.GetSeed();
     
-    // Directional Light
-    float3 directLighting = 0.0f;
-    {
-        Light directionalLight = Frame.Directional;
-        
-        float NdotL = saturate(dot(worldNormal, directionalLight.Vector));
-
-        // Shadow
-        {
-            RayDesc shadowRay;
-            shadowRay.Origin = worldPosition + worldNormal * 0.1f;
-            shadowRay.Direction = directionalLight.Vector;
-            shadowRay.TMin = 0.0001f;
-            shadowRay.TMax = 1e30;
-
-            ShadowPayload shadowPayload;
-            shadowPayload.missed = false;
-        
-            TraceRay(Scene, RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH | RAY_FLAG_SKIP_CLOSEST_HIT_SHADER, 0xFF, 1, 0, 1, shadowRay, shadowPayload);    
+    Light directionalLight = Frame.Directional;
     
-            NdotL *= TraceRayShadow(Scene, worldPosition, directionalLight.Vector, randomSeed);
-        }
-            
-        directLighting = NdotL * directionalLight.Color;
-    }
+    // Directional Light   
+    float NdotL = saturate(dot(worldNormal, directionalLight.Vector));
+    NdotL *= TraceRayShadow(Scene, worldPosition, directionalLight.Vector, randomSeed);
     
-    uint currentDepth = payload.data.GetDepth();
+    float3 directLighting = NdotL * directionalLight.Color;
+
+    //uint currentDepth = payload.data.GetDepth();
     
     // Point lights
     LightData lightData = instance.LightData;
@@ -99,16 +83,16 @@ void HitMesh(inout CurrentPayload payload, in BuiltInTriangleIntersectionAttribu
         float NdotL = saturate(dot(worldNormal, lightVector)) * (1.0 / max(lightDistanceSqr, 0.01)) * fade * fade;
         
         // Shadow
-        if(currentDepth < SHADOW_MAX_DEPTH)
+        /*if(currentDepth < SHADOW_MAX_DEPTH)
         {
             NdotL *= TraceRayShadow(Scene, worldPosition, lightVector, randomSeed);
-        }
+        }*/
             
         directLighting += NdotL * pointLight.Color;       
     }
     
     // Bounce
-    #ifdef SPECULAR
+    /*#ifdef SPECULAR
     float4 indirectLight = 0.0f;
     #else
     float3 indirectLight = 0.0f;
@@ -116,9 +100,9 @@ void HitMesh(inout CurrentPayload payload, in BuiltInTriangleIntersectionAttribu
     {
         if (currentDepth < MAX_DEPTH)
         {
-            /*[unroll]
-            for(uint i = 0; i < 2; i++) 
-            {*/
+            //[unroll]
+            //for(uint i = 0; i < 2; i++) 
+            //{
             #ifdef SPECULAR
             indirectLight += TraceRaySpecular(Scene, worldPosition, worldNormal, currentDepth, randomSeed, Frame.Specular, 0);
             #else
@@ -126,11 +110,12 @@ void HitMesh(inout CurrentPayload payload, in BuiltInTriangleIntersectionAttribu
             #endif
             //}
         }
-    }
+    }*/
+   
+    payload.color = albedo * directLighting + emissive * Frame.Emissive; // + albedo * indirectLight.rgb;
+    payload.color *= saturate(-dot(worldNormal, WorldRayDirection()));
     
     #ifdef SPECULAR
-    payload.distance = indirectLight.a;
-    #endif
-    
-    payload.color = albedo * directLighting + albedo * indirectLight.rgb;
+    payload.distance = RayTCurrent();
+    #endif    
 }

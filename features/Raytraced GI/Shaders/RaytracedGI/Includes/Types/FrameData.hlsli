@@ -14,7 +14,7 @@ struct FrameData
     uint FrameCount; 
     float Diffuse;
     float Specular;
-    uint Pad0;   
+    float Emissive;   
     #ifdef SHARC
     float SHARCScale;
     #else

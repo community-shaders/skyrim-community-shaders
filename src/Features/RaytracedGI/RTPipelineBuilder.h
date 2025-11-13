@@ -196,6 +196,8 @@ namespace DX12
 				const size_t tableSizeAligned = Align(tableSize, D3D12_RAYTRACING_SHADER_TABLE_BYTE_ALIGNMENT);
 				ptr = tableStartPtr + tableSizeAligned;
 
+				logger::info("[RT] WriteShaderIdentifiers Start: {}, Size: {}, Size Aligned: {}", tableStartPtr - startPtr, tableSize, tableSizeAligned);
+
 				return tableSize;
 			};
 

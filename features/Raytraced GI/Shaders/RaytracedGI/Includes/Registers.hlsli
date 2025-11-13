@@ -17,6 +17,7 @@ StructuredBuffer<Instance> Instances            : register(t6, space0);
 StructuredBuffer<Vertex> Vertices[]             : register(t0, space1);
 StructuredBuffer<uint3> Triangles[]             : register(t0, space2);
 Texture2D DiffuseTextures[]                     : register(t0, space3);
+Texture2D GlowTextures[]                        : register(t0, space4);
 
 #ifdef SHARC
 RWStructuredBuffer<uint64_t>                u_SharcHashEntriesBuffer    : register(u0, space3);
@@ -25,10 +26,9 @@ RWStructuredBuffer<SharcPackedData>         u_SharcResolvedBuffer       : regist
 #endif
 
 SamplerState DiffuseSampler                     : register(s0);
+//SamplerState GlowSampler                        : register(s1);
 
-RWTexture2D<float4> FinalTexture                : register(u0);
-RWTexture2D<float4> DiffuseOutputTexture        : register(u1);
-RWTexture2D<float4> SpecularOutputTexture       : register(u2);
-RWTexture2D<float> SpecHitDistanceTexture       : register(u3);
+RWTexture2D<float4> DiffuseOutputTexture        : register(u0);
+RWTexture2D<float4> SpecularOutputTexture       : register(u1);
 
 #endif

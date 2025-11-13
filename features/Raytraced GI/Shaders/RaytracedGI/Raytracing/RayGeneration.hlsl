@@ -51,13 +51,15 @@ void main()
 
     float2 uv = (idx + 0.5f) / size;
     
-    const unorm float4 geometryNormalDepth = GeometryNormalDepthTexture[idx];
-    
+    const unorm float4 geometryNormalDepth = GeometryNormalDepthTexture[idx];  
     const unorm float3 meshNormalWS = normalize(geometryNormalDepth.xyz);
     
-	const unorm float depth = geometryNormalDepth.w;
+	const unorm float depth = geometryNormalDepth.w;   
 	const unorm float depthLinear = ScreenToViewDepth(depth);
 
+    if (depthLinear < FP_Z || depth >= 0.9999f)
+        return;
+    
 	const unorm float3 normalRoughness = NormalRoughnessTexture[idx];
 	const unorm float roughness = normalRoughness.z;    
     
@@ -69,15 +71,15 @@ void main()
 	const float3 normalWS = normalize(ViewToWorldVector(normalVS, Frame.ViewInverse));	   
 
  	const float3 invViewWS = normalize(positionCS);
-	const float3 reflectWS = reflect(invViewWS, normalWS);   
+	const float3 reflectWS = reflect(invViewWS, normalWS);
     
     uint seed = InitRandomSeed(DispatchRaysIndex().xy, DispatchRaysDimensions().xy, Frame.FrameCount);
     
-    float3 origin = positionWS + normalWS * 0.01f;
+    //float3 origin = positionWS + meshNormalWS * 0.01f;
     
     // Let's raytrace straight from GBuffer, we save one ray per pixel
-    DiffuseOutputTexture[idx] = float4(TraceRayDiffuse(Scene, origin, normalWS, 0, seed, Frame.Diffuse), 1);
-    SpecularOutputTexture[idx] = TraceRaySpecular(Scene, origin, reflectWS, MAX_DEPTH-1, seed, Frame.Specular, roughness);
+    DiffuseOutputTexture[idx] = float4(TraceRayDiffuse(Scene, positionWS, normalWS, 0, seed, Frame.Diffuse), 1);
+    SpecularOutputTexture[idx] = TraceRaySpecular(Scene, positionWS, reflectWS, 0, seed, Frame.Specular, roughness);
     
     //NormalRoughness
     
