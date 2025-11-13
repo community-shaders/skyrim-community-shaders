@@ -44,11 +44,14 @@ public:
 
 	void DestroyFSRResources();
 
-	float GetInputResolutionScale(uint32_t outputWidth, uint32_t outputHeight, uint32_t qualityMode);
+	float2 GetInputResolutionScale(uint32_t outputWidth, uint32_t outputHeight, uint32_t qualityMode);
 
 	void Upscale(ID3D11Resource* a_upscalingTexture, ID3D11Resource* a_reactiveMask, ID3D11Resource* a_transparencyCompositionMask, ID3D11Resource* a_motionVectors, float a_sharpness);
 
 private:
 	// FSR scratch buffer - needs to be freed in DestroyFSRResources
 	void* fsrScratchBuffer = nullptr;
+
+	// Flag to prevent spamming the log with FSR3 dispatch crash messages
+	bool fsrDispatchCrashLogged = false;
 };

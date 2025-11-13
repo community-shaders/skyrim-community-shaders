@@ -3,7 +3,7 @@
 #include <BS_thread_pool.hpp>
 #include <efsw/efsw.hpp>
 
-static constexpr REL::Version SHADER_CACHE_VERSION = { 0, 0, 0, 38 };
+static constexpr REL::Version SHADER_CACHE_VERSION = { 0, 0, 0, 41 };
 
 using namespace std::chrono;
 
@@ -244,6 +244,7 @@ namespace SIE
 	public:
 		LARGE_INTEGER lastReset;
 		LARGE_INTEGER lastCalculation;
+		std::atomic<int64_t> completionTime;  // When compilation completed (QuadPart equivalent)
 		LARGE_INTEGER frequency;
 		LARGE_INTEGER totalTime = { 0 };
 
@@ -252,6 +253,7 @@ namespace SIE
 			QueryPerformanceFrequency(&frequency);
 			QueryPerformanceCounter(&lastReset);
 			QueryPerformanceCounter(&lastCalculation);
+			completionTime.store(0, std::memory_order_relaxed);
 		}
 
 		std::optional<ShaderCompilationTask> WaitTake(std::stop_token stoken);
@@ -631,9 +633,36 @@ namespace SIE
 			OpaqueEffect = 1 << 29,
 		};
 
-		uint blockedKeyIndex = (uint)-1;  // index in shaderMap; negative value indicates disabled
+		// Shader blocking data for developer mode
+		int blockedKeyIndex = -1;  // index in shaderMap; negative value indicates disabled
 		std::string blockedKey = "";
 		std::vector<uint32_t> blockedIDs;  // more than one descriptor could be blocked based on shader hash
+
+		// Active shader tracking for developer mode
+		struct ActiveShaderInfo
+		{
+			std::string key;
+			RE::BSShader::Type shaderType;
+			ShaderClass shaderClass;
+			uint32_t descriptor;
+			std::wstring diskPath;
+			uint32_t drawCalls = 0;
+			bool isActive = false;  // Used in current/recent frames
+			std::chrono::steady_clock::time_point lastUsed;
+
+			bool operator<(const ActiveShaderInfo& other) const
+			{
+				return key < other.key;
+			}
+		};
+
+		ankerl::unordered_dense::map<std::string, ActiveShaderInfo> activeShaders;
+		mutable std::mutex activeShadersMutex;
+
+		void TrackActiveShader(ShaderClass shaderClass, const RE::BSShader& shader, uint32_t descriptor);
+		void ResetFrameShaderTracking();
+		std::vector<ActiveShaderInfo> GetActiveShaders() const;
+
 		HANDLE managementThread = nullptr;
 
 	private:

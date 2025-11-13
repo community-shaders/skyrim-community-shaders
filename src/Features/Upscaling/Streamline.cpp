@@ -270,15 +270,8 @@ void Streamline::CheckFrameConstants()
 	}
 }
 
-void Streamline::Upscale(ID3D11Resource* a_upscalingTexture, ID3D11Resource* a_reactiveMask, ID3D11Resource* a_transparencyCompositionMask, ID3D11Resource* a_motionVectors)
+void Streamline::SetDLSSOptions()
 {
-	CheckFrameConstants();
-
-	auto state = globals::state;
-
-	auto renderer = globals::game::renderer;
-	auto& depthTexture = renderer->GetDepthStencilData().depthStencils[RE::RENDER_TARGETS_DEPTHSTENCIL::kMAIN];
-
 	sl::DLSSOptions dlssOptions{};
 
 	// Map quality mode to DLSS mode
@@ -301,6 +294,8 @@ void Streamline::Upscale(ID3D11Resource* a_upscalingTexture, ID3D11Resource* a_r
 		break;
 	}
 
+	auto state = globals::state;
+
 	dlssOptions.outputWidth = (uint)state->screenSize.x;
 	dlssOptions.outputHeight = (uint)state->screenSize.y;
 	dlssOptions.colorBuffersHDR = sl::Boolean::eTrue;
@@ -309,15 +304,41 @@ void Streamline::Upscale(ID3D11Resource* a_upscalingTexture, ID3D11Resource* a_r
 	dlssOptions.preExposure = 1.0f;
 	dlssOptions.sharpness = 0.0f;
 
-	dlssOptions.dlaaPreset = sl::DLSSPreset::ePresetK;
-	dlssOptions.qualityPreset = dlssOptions.dlaaPreset;
-	dlssOptions.balancedPreset = dlssOptions.dlaaPreset;
-	dlssOptions.performancePreset = dlssOptions.dlaaPreset;
-	dlssOptions.ultraPerformancePreset = dlssOptions.dlaaPreset;
+	// Set DLSS preset based on VR mode
+	sl::DLSSPreset preset = sl::DLSSPreset::ePresetK;  // Default
+	switch (globals::features::upscaling.settings.DLSSPreset) {
+	case 0:
+		preset = sl::DLSSPreset::ePresetF;
+		break;
+	case 1:
+		preset = sl::DLSSPreset::ePresetJ;
+		break;
+	case 2:
+	default:
+		preset = sl::DLSSPreset::ePresetK;
+		break;
+	}
+
+	dlssOptions.dlaaPreset = preset;
+	dlssOptions.qualityPreset = preset;
+	dlssOptions.balancedPreset = preset;
+	dlssOptions.performancePreset = preset;
+	dlssOptions.ultraPerformancePreset = preset;
 
 	if (SL_FAILED(result, slDLSSSetOptions(viewport, dlssOptions))) {
 		logger::critical("[Streamline] Could not enable DLSS");
 	}
+}
+
+void Streamline::Upscale(ID3D11Resource* a_upscalingTexture, ID3D11Resource* a_reactiveMask, ID3D11Resource* a_transparencyCompositionMask, ID3D11Resource* a_motionVectors)
+{
+	CheckFrameConstants();
+	SetDLSSOptions();
+
+	auto state = globals::state;
+
+	auto renderer = globals::game::renderer;
+	auto& depthTexture = renderer->GetDepthStencilData().depthStencils[RE::RENDER_TARGETS_DEPTHSTENCIL::kMAIN];
 
 	{
 		auto screenSize = state->screenSize;
@@ -352,7 +373,7 @@ void Streamline::Upscale(ID3D11Resource* a_upscalingTexture, ID3D11Resource* a_r
 	slEvaluateFeature(sl::kFeatureDLSS, *frameToken, inputs, _countof(inputs), globals::d3d::context);
 }
 
-float Streamline::GetInputResolutionScale(uint32_t outputWidth, uint32_t outputHeight, uint32_t qualityMode)
+float2 Streamline::GetInputResolutionScale(uint32_t outputWidth, uint32_t outputHeight, uint32_t qualityMode)
 {
 	sl::DLSSMode dlssMode;
 	switch (qualityMode) {
@@ -382,7 +403,7 @@ float Streamline::GetInputResolutionScale(uint32_t outputWidth, uint32_t outputH
 	sl::Result result = slDLSSGetOptimalSettings(dlssOptions, optimalSettings);
 	if (result != sl::Result::eOk) {
 		logger::critical("[Streamline] Failed to get DLSS optimal settings, error code: {}", (int)result);
-		return 1.0f;
+		return { 1.0f, 1.0f };
 	}
 
 	float scaleX;
@@ -398,8 +419,8 @@ float Streamline::GetInputResolutionScale(uint32_t outputWidth, uint32_t outputH
 		scaleY = (float)optimalSettings.optimalRenderHeight / (float)outputHeight;
 	}
 
-	// Use the average scale (both should be the same for uniform scaling)
-	return (scaleX + scaleY) * 0.5f;
+	// Return separate X and Y scales for more precision
+	return { scaleX, scaleY };
 }
 
 /**

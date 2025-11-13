@@ -20,7 +20,7 @@ public:
 	// Feature interface
 	virtual inline std::string GetName() override { return "Upscaling"; }
 	virtual inline std::string GetShortName() override { return "Upscaling"; }
-	virtual inline bool SupportsVR() override { return false; }
+	virtual inline bool SupportsVR() override { return true; }
 	virtual inline bool IsCore() const override { return false; }
 	virtual inline std::string_view GetCategory() const override { return "Display"; }
 
@@ -57,6 +57,7 @@ public:
 		uint streamlineLogLevel = 0;  // 0=Off, 1=Default, 2=Verbose
 		float sharpnessFSR = 1.0f;
 		float sharpnessDLSS = 0.1f;
+		uint DLSSPreset = 2;  // VR-specific DLSS preset: 0=F, 1=J, 2=K
 	};
 
 	Settings settings;
@@ -90,6 +91,7 @@ public:
 	// FG FPS Measurement for Overlay
 	bool IsFrameGenerationActive() const;
 	float GetFrameGenerationFrameTime() const;
+	bool IsUpscalingActive();
 
 	// Feature interface overrides
 	virtual void DrawSettings() override;
@@ -154,6 +156,8 @@ public:
 	float dynamicResolutionWidthRatio = 1.0f;
 	float dynamicResolutionHeightRatio = 1.0f;
 
+	bool previousUpscalingWasActive = false;
+
 	void CopySharedD3D12Resources();
 	void PostDisplay();
 	void PerformUpscaling();
@@ -206,7 +210,7 @@ private:
 
 	struct Main_PostProcessing
 	{
-		static void thunk(RE::ImageSpaceManager* a1, uint32_t a3, uint32_t er8_);
+		static void thunk(RE::ImageSpaceManager* a_this, uint32_t a3, RE::RENDER_TARGET a_target, void* a_4, bool a_5);
 		static inline REL::Relocation<decltype(thunk)> func;
 	};
 

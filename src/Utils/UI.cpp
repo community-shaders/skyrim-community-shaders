@@ -1,4 +1,5 @@
 #include "UI.h"
+
 #include "Menu.h"
 
 #ifndef DIRECTINPUT_VERSION
@@ -16,14 +17,17 @@
 
 #define STB_IMAGE_IMPLEMENTATION
 #include <algorithm>
+#include <array>
 #include <chrono>
 #include <cmath>
 #include <format>
 #include <functional>
 #include <iomanip>
+#include <mutex>
 #include <sstream>
 #include <stb_image.h>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 namespace Util
@@ -173,11 +177,12 @@ namespace Util
 		logger::info("InitializeMenuIcons: Loading icons from base path: {}", basePath);
 
 		// Initialize all texture pointers to nullptr for safe cleanup
-		std::array<ID3D11ShaderResourceView**, 15> texturePointers = {
+		std::array<ID3D11ShaderResourceView**, 16> texturePointers = {
 			&menu->uiIcons.saveSettings.texture,
 			&menu->uiIcons.loadSettings.texture,
 			&menu->uiIcons.clearCache.texture,
 			&menu->uiIcons.logo.texture,
+			&menu->uiIcons.featureSettingRevert.texture,
 			&menu->uiIcons.discord.texture,
 			&menu->uiIcons.characters.texture,
 			&menu->uiIcons.display.texture,
@@ -225,6 +230,7 @@ namespace Util
 		loadIconWithLogging(basePath + "Action Icons\\load-settings.png", &menu->uiIcons.loadSettings.texture, menu->uiIcons.loadSettings.size, "load-settings");
 		loadIconWithLogging(basePath + "Action Icons\\clear-cache.png", &menu->uiIcons.clearCache.texture, menu->uiIcons.clearCache.size, "clear-cache");
 		loadIconWithLogging(basePath + "Community Shaders Logo\\cs-logo.png", &menu->uiIcons.logo.texture, menu->uiIcons.logo.size, "logo");
+		loadIconWithLogging(basePath + "Action Icons\\restore-settings.png", &menu->uiIcons.featureSettingRevert.texture, menu->uiIcons.featureSettingRevert.size, "restore-settings");
 		loadIconWithLogging(basePath + "Action Icons\\discord.png", &menu->uiIcons.discord.texture, menu->uiIcons.discord.size, "discord");
 
 		// Load category icons in a more compact way
@@ -253,7 +259,7 @@ namespace Util
 			loadIcon(path, icon.texture, icon.size);
 		}
 
-		logger::info("InitializeMenuIcons: Loaded {}/15 icons successfully", iconsLoaded);
+		logger::info("InitializeMenuIcons: Loaded {}/16 icons successfully", iconsLoaded);
 
 		return anyIconLoaded;
 	}
@@ -308,6 +314,9 @@ namespace Util
 		// Render logo
 		ImGui::Image(logoTexture, logoSize);
 		ImGui::SameLine();
+
+		// Add consistent spacing between logo and text
+		ImGui::SetCursorPosX(ImGui::GetCursorPosX() + 8.0f);
 
 		// Reset cursor for text with proper vertical alignment
 		ImGui::SetCursorPos(ImVec2(ImGui::GetCursorPosX(), startPos.y));
@@ -440,13 +449,17 @@ namespace Util
 		hovered = ImGui::IsItemHovered();
 
 		// Draw the lines and text using Menu theme colors
-		auto& theme = globals::menu->GetTheme().FeatureHeading;
+		auto& palette = globals::menu->GetTheme().Palette;
 
-		// Get the color based on hover state
-		ImVec4 color = hovered ? theme.ColorHovered : theme.ColorDefault;
-		// If minimized, apply the minimized factor
+		// Use theme text color for category headers to match other text elements
+		ImVec4 color = palette.Text;
+		// If minimized, apply reduced alpha
 		if (!isExpanded) {
-			color.w *= theme.MinimizedFactor;
+			color.w *= 0.7f;  // 70% alpha when minimized
+		}
+		// If hovered, slightly dim the color
+		if (hovered) {
+			color.w *= 0.8f;  // 80% alpha when hovered
 		}
 		ImU32 headerColor = ImGui::GetColorU32(color);
 
@@ -498,7 +511,9 @@ namespace Util
 
 		// Use Menu theme colors for consistent styling
 		auto& theme = globals::menu->GetTheme().FeatureHeading;
-		ImVec4 color = useWhiteText ? ImVec4(1.0f, 1.0f, 1.0f, 1.0f) : theme.ColorDefault;
+		auto& palette = globals::menu->GetTheme().Palette;
+		// When useWhiteText is true, use the theme's text color instead of hardcoded white
+		ImVec4 color = useWhiteText ? palette.Text : theme.ColorDefault;
 
 		ImU32 headerColor = ImGui::GetColorU32(color);
 
@@ -691,6 +706,43 @@ namespace Util
 		return ascending ? (a < b) : (b < a);
 	}
 
+	void RenderTextWithHighlights(const std::string& text, const std::string& searchTerm, ImVec4 highlightColor)
+	{
+		if (searchTerm.empty()) {
+			ImGui::TextUnformatted(text.c_str());
+			return;
+		}
+
+		std::string lowerText = text;
+		std::string lowerSearch = searchTerm;
+		std::transform(lowerText.begin(), lowerText.end(), lowerText.begin(), [](unsigned char c) { return static_cast<char>(::tolower(c)); });
+		std::transform(lowerSearch.begin(), lowerSearch.end(), lowerSearch.begin(), [](unsigned char c) { return static_cast<char>(::tolower(c)); });
+
+		size_t pos = 0;
+		size_t lastPos = 0;
+
+		while ((pos = lowerText.find(lowerSearch, lastPos)) != std::string::npos) {
+			// Render text before highlight
+			if (pos > lastPos) {
+				ImGui::TextUnformatted(text.substr(lastPos, pos - lastPos).c_str());
+				ImGui::SameLine(0, 0);
+			}
+
+			// Render highlighted text
+			ImGui::PushStyleColor(ImGuiCol_Text, highlightColor);
+			ImGui::TextUnformatted(text.substr(pos, searchTerm.length()).c_str());
+			ImGui::PopStyleColor();
+			ImGui::SameLine(0, 0);
+
+			lastPos = pos + searchTerm.length();
+		}
+
+		// Render remaining text
+		if (lastPos < text.length()) {
+			ImGui::TextUnformatted(text.substr(lastPos).c_str());
+		}
+	}
+
 	ImVec4 GetThresholdColor(float value, float good, float warn, ImVec4 goodColor, ImVec4 warnColor, ImVec4 badColor)
 	{
 		if (value < good)
@@ -712,9 +764,9 @@ namespace Util
 		std::string query = searchQuery;
 
 		// Convert all to lowercase for case-insensitive search
-		std::transform(shortName.begin(), shortName.end(), shortName.begin(), ::tolower);
-		std::transform(displayName.begin(), displayName.end(), displayName.begin(), ::tolower);
-		std::transform(query.begin(), query.end(), query.begin(), ::tolower);
+		std::transform(shortName.begin(), shortName.end(), shortName.begin(), [](unsigned char c) { return static_cast<char>(::tolower(c)); });
+		std::transform(displayName.begin(), displayName.end(), displayName.begin(), [](unsigned char c) { return static_cast<char>(::tolower(c)); });
+		std::transform(query.begin(), query.end(), query.begin(), [](unsigned char c) { return static_cast<char>(::tolower(c)); });
 
 		// Search in both short name and display name
 		return shortName.find(query) != std::string::npos ||
@@ -738,7 +790,9 @@ namespace Util
 		// Custom style - always transparent background to avoid click blocking
 		ImVec4 bgColor = ImVec4(0.0f, 0.0f, 0.0f, 0.0f);
 		ImVec4 bgColorActive = ImVec4(0.3f, 0.3f, 0.3f, 0.9f);
-		ImVec4 textColor = ImVec4(0.9f, 0.9f, 0.9f, 1.0f);
+		// Use theme text color instead of hardcoded color
+		auto& palette = globals::menu->GetTheme().Palette;
+		ImVec4 textColor = palette.Text;
 
 		ImGui::PushStyleColor(ImGuiCol_FrameBg, bgColor);
 		ImGui::PushStyleColor(ImGuiCol_FrameBgHovered, bgColor);
@@ -764,7 +818,12 @@ namespace Util
 
 		ImVec2 center = ImVec2(iconPos.x + iconSize * 0.46f, iconPos.y + iconSize * 0.5f);
 		float radius = iconSize * 0.3f;
-		ImU32 placeholderColor = IM_COL32(140, 140, 140, 180);
+
+		// Use themed text color with reduced alpha for search icon
+		auto& theme = globals::menu->GetTheme().Palette;
+		ImVec4 iconColor = theme.Text;
+		iconColor.w *= 0.7f;  // Reduce alpha for subtler appearance
+		ImU32 placeholderColor = ImGui::GetColorU32(iconColor);
 
 		// Draw circle
 		drawList->AddCircle(center, radius, placeholderColor, 12, 2.2f);
@@ -1192,5 +1251,277 @@ namespace Util
 
 			return keyboard_keys_international[key];
 		}
+	}  // namespace Input
+
+	// Color utilities for contrast and readability
+	namespace ColorUtils
+	{
+		float CalculateLuminance(const ImVec4& color)
+		{
+			// Convert to linear RGB first (gamma correction)
+			auto toLinear = [](float c) {
+				return c <= 0.03928f ? c / 12.92f : std::pow((c + 0.055f) / 1.055f, 2.4f);
+			};
+
+			float r = toLinear(color.x);
+			float g = toLinear(color.y);
+			float b = toLinear(color.z);
+
+			// Calculate relative luminance using WCAG formula
+			return 0.2126f * r + 0.7152f * g + 0.0722f * b;
+		}
+
+		ImVec4 GetContrastingTextColor(const ImVec4& backgroundColor, float threshold)
+		{
+			float luminance = CalculateLuminance(backgroundColor);
+
+			// If background is bright (high luminance), use black text
+			// If background is dark (low luminance), use white text
+			if (luminance > threshold) {
+				return ImVec4(0.0f, 0.0f, 0.0f, 1.0f);  // Black
+			} else {
+				return ImVec4(1.0f, 1.0f, 1.0f, 1.0f);  // White
+			}
+		}
+
+		float CalculateContrastRatio(const ImVec4& color1, const ImVec4& color2)
+		{
+			float lum1 = CalculateLuminance(color1);
+			float lum2 = CalculateLuminance(color2);
+
+			// Ensure lighter color is in numerator
+			float lighter = (std::max)(lum1, lum2);
+			float darker = (std::min)(lum1, lum2);
+
+			return (lighter + 0.05f) / (darker + 0.05f);
+		}
+
+		void AdjustBackgroundForTextContrast(ImVec4& backgroundColor, float textLuminance,
+			float luminanceThreshold, float darkenFactor, float lightenOffset)
+		{
+			float bgLuminance = CalculateLuminance(backgroundColor);
+
+			if (bgLuminance > luminanceThreshold && textLuminance > luminanceThreshold) {
+				// Both background and text are light - darken the background
+				backgroundColor.x *= darkenFactor;
+				backgroundColor.y *= darkenFactor;
+				backgroundColor.z *= darkenFactor;
+			} else if (bgLuminance < luminanceThreshold && textLuminance < luminanceThreshold) {
+				// Both background and text are dark - lighten the background
+				backgroundColor.x = std::min(1.0f, backgroundColor.x + lightenOffset);
+				backgroundColor.y = std::min(1.0f, backgroundColor.y + lightenOffset);
+				backgroundColor.z = std::min(1.0f, backgroundColor.z + lightenOffset);
+			}
+		}
+
+		bool ContrastSelectable(const char* label, bool selected, ImGuiSelectableFlags flags, const ImVec2& size)
+		{
+			// Get current style colors for different states
+			ImGuiStyle& style = ImGui::GetStyle();
+
+			// We need to handle text color based on the selectable's background state
+			// For selected items, ImGui uses HeaderActive color which might be light
+			ImVec4 selectedBgColor = style.Colors[ImGuiCol_HeaderActive];
+			ImVec4 hoveredBgColor = style.Colors[ImGuiCol_HeaderHovered];
+
+			// Calculate text colors for each state
+			ImVec4 selectedTextColor = GetContrastingTextColor(selectedBgColor, 0.5f);
+			ImVec4 hoveredTextColor = GetContrastingTextColor(hoveredBgColor, 0.5f);
+			ImVec4 normalTextColor = style.Colors[ImGuiCol_Text];
+
+			// If the item is selected, we know it will have the selected background
+			if (selected) {
+				ImGui::PushStyleColor(ImGuiCol_Text, selectedTextColor);
+			} else {
+				// For non-selected items, we'll use normal text unless we detect high contrast issues
+				// Check if hover/active backgrounds would cause contrast issues
+				float hoveredContrast = CalculateContrastRatio(normalTextColor, hoveredBgColor);
+				if (hoveredContrast < 3.0f) {  // WCAG AA minimum is 4.5, but 3.0 for safety
+					ImGui::PushStyleColor(ImGuiCol_Text, hoveredTextColor);
+				} else {
+					ImGui::PushStyleColor(ImGuiCol_Text, normalTextColor);
+				}
+			}
+
+			// Create the selectable with the adjusted text color
+			bool result = ImGui::Selectable(label, selected, flags, size);
+
+			// Restore original text color
+			ImGui::PopStyleColor();
+
+			return result;
+		}
+
+		bool ContrastSelectableWithColor(const char* label, bool selected, const ImVec4& semanticTextColor, ImGuiSelectableFlags flags, const ImVec2& size)
+		{
+			// Get current style colors for different states
+			ImGuiStyle& style = ImGui::GetStyle();
+
+			// We need to handle text color based on the selectable's background state
+			// For selected items, ImGui uses HeaderActive color which might be light
+			ImVec4 selectedBgColor = style.Colors[ImGuiCol_HeaderActive];
+			ImVec4 hoveredBgColor = style.Colors[ImGuiCol_HeaderHovered];
+
+			// Use the provided semantic color but ensure it has good contrast
+			ImVec4 textColor = semanticTextColor;
+
+			// If the item is selected, we know it will have the selected background
+			if (selected) {
+				// Check contrast with selected background
+				float contrast = CalculateContrastRatio(semanticTextColor, selectedBgColor);
+				if (contrast < 3.0f) {
+					textColor = GetContrastingTextColor(selectedBgColor, 0.5f);
+				}
+			} else {
+				// Check contrast with potential hover background
+				float hoveredContrast = CalculateContrastRatio(semanticTextColor, hoveredBgColor);
+				if (hoveredContrast < 3.0f) {
+					textColor = GetContrastingTextColor(hoveredBgColor, 0.5f);
+				}
+			}
+
+			ImGui::PushStyleColor(ImGuiCol_Text, textColor);
+
+			// Create the selectable with the adjusted text color
+			bool result = ImGui::Selectable(label, selected, flags, size);
+
+			// Restore original text color
+			ImGui::PopStyleColor();
+
+			return result;
+		}
+	}  // namespace ColorUtils
+
+	bool ButtonWithFlash(const char* label, const ImVec2& size, int flashDurationMs)
+	{
+		static std::unordered_map<std::string, std::chrono::steady_clock::time_point> flashTimers;
+		static std::mutex flashTimersMutex;
+
+		std::string buttonId = std::string(label);
+		auto now = std::chrono::steady_clock::now();
+
+		// Check if this button has active flash (thread-safe)
+		bool hasActiveFlash = false;
+		{
+			std::lock_guard<std::mutex> lock(flashTimersMutex);
+			auto it = flashTimers.find(buttonId);
+			if (it != flashTimers.end()) {
+				auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(now - it->second);
+				if (elapsed.count() < flashDurationMs) {
+					hasActiveFlash = true;
+				} else {
+					// Flash expired, remove it
+					flashTimers.erase(it);
+				}
+			}
+		}
+
+		// Style the button with flash effect if active.
+		bool styleChanged = false;
+		if (hasActiveFlash) {
+			// Use subtle white overlay similar to action icon hover effect
+			ImVec4 normalButton = ImGui::GetStyleColorVec4(ImGuiCol_Button);
+			ImVec4 flashColor = ImVec4(
+				normalButton.x + 0.2f,  // Brighten slightly
+				normalButton.y + 0.2f,
+				normalButton.z + 0.2f,
+				normalButton.w);
+			ImVec4 flashHovered = ImVec4(flashColor.x * 1.1f, flashColor.y * 1.1f, flashColor.z * 1.1f, flashColor.w);
+			ImVec4 flashActive = ImVec4(flashColor.x * 0.9f, flashColor.y * 0.9f, flashColor.z * 0.9f, flashColor.w);
+
+			ImGui::PushStyleColor(ImGuiCol_Button, flashColor);
+			ImGui::PushStyleColor(ImGuiCol_ButtonHovered, flashHovered);
+			ImGui::PushStyleColor(ImGuiCol_ButtonActive, flashActive);
+			styleChanged = true;
+		}
+
+		bool clicked = ImGui::Button(label, size);
+
+		if (styleChanged) {
+			ImGui::PopStyleColor(3);
+		}
+
+		// If clicked, start the flash timer (thread-safe)
+		if (clicked) {
+			std::lock_guard<std::mutex> lock(flashTimersMutex);
+			flashTimers[buttonId] = now;
+		}
+
+		return clicked;
 	}
+
+	bool FeatureToggle(const char* label, bool* enabled, const ImVec2& size)
+	{
+		if (!enabled)
+			return false;
+
+		// Calculate appropriate size if not specified - make it smaller
+		ImVec2 toggleSize = size;
+		if (toggleSize.x <= 0) {
+			toggleSize.x = ImGui::GetFrameHeight() * 1.6f;  // Smaller 1.6:1 aspect ratio
+		}
+		if (toggleSize.y <= 0) {
+			toggleSize.y = ImGui::GetFrameHeight() * 0.8f;  // Smaller height
+		}
+
+		// Get theme colors for better integration
+		auto& style = ImGui::GetStyle();
+		auto& colors = style.Colors;
+
+		// Use theme header colors instead of bright green/red
+		ImVec4 toggleBg = *enabled ?
+		                      colors[ImGuiCol_Header] :  // Use header color when enabled
+		                      colors[ImGuiCol_FrameBg];  // Use frame background when disabled
+
+		ImVec4 toggleBgHovered = *enabled ?
+		                             colors[ImGuiCol_HeaderHovered] :  // Use header hovered when enabled
+		                             colors[ImGuiCol_FrameBgHovered];  // Use frame hovered when disabled
+
+		ImVec4 toggleBgActive = *enabled ?
+		                            colors[ImGuiCol_HeaderActive] :  // Use header active when enabled
+		                            colors[ImGuiCol_FrameBgActive];  // Use frame active when disabled
+
+		// Apply toggle styling with border
+		ImGui::PushStyleColor(ImGuiCol_Button, toggleBg);
+		ImGui::PushStyleColor(ImGuiCol_ButtonHovered, toggleBgHovered);
+		ImGui::PushStyleColor(ImGuiCol_ButtonActive, toggleBgActive);
+		ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, toggleSize.y * 0.5f);  // Round ends
+		ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 1.5f);               // Larger border
+
+		// Create unique ID for the toggle
+		ImGui::PushID(label);
+
+		// Draw the toggle button
+		bool clicked = ImGui::Button("", toggleSize);
+
+		// Draw the toggle knob
+		ImDrawList* drawList = ImGui::GetWindowDrawList();
+		ImVec2 buttonMin = ImGui::GetItemRectMin();
+		ImVec2 buttonMax = ImGui::GetItemRectMax();
+
+		// Calculate knob position and size
+		float knobRadius = (toggleSize.y - 4.0f) * 0.5f;
+		float knobPadding = 2.0f;
+		float knobTravel = toggleSize.x - (knobRadius * 2.0f) - (knobPadding * 2.0f);
+		float knobX = *enabled ?
+		                  buttonMin.x + knobPadding + knobRadius + knobTravel :
+		                  buttonMin.x + knobPadding + knobRadius;
+		float knobY = buttonMin.y + toggleSize.y * 0.5f;
+
+		// Draw knob
+		ImU32 knobColor = ImGui::ColorConvertFloat4ToU32(ImVec4(1.0f, 1.0f, 1.0f, 1.0f));
+		drawList->AddCircleFilled(ImVec2(knobX, knobY), knobRadius, knobColor);
+
+		ImGui::PopID();
+		ImGui::PopStyleVar(2);  // Pop both FrameRounding and FrameBorderSize
+		ImGui::PopStyleColor(3);
+
+		// Handle toggle action
+		if (clicked) {
+			*enabled = !*enabled;
+		}
+
+		return clicked;
+	}
+
 }  // namespace Util

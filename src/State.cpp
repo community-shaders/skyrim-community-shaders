@@ -15,6 +15,7 @@
 #include "SettingsOverrideManager.h"
 #include "ShaderCache.h"
 #include "TruePBR.h"
+#include "Utils/FileSystem.h"
 
 void State::Draw()
 {
@@ -73,6 +74,9 @@ void State::Debug()
 			c = 0;
 		for (auto& ft : frameTimePerType)
 			ft = 0.0f;
+
+		// Reset active shader tracking for developer mode
+		globals::shaderCache->ResetFrameShaderTracking();
 
 		// Start timing for this frame
 		if (frameTimingFrequency.QuadPart == 0) {
@@ -151,16 +155,18 @@ void State::Setup()
 	globals::deferred->SetupResources();
 }
 
-static const std::string& GetConfigPath(State::ConfigMode a_configMode)
+static std::string GetConfigPath(State::ConfigMode a_configMode)
 {
 	switch (a_configMode) {
 	case State::ConfigMode::USER:
-		return globals::state->userConfigPath;
+		return Util::PathHelpers::GetSettingsUserPath().string();
 	case State::ConfigMode::TEST:
-		return globals::state->testConfigPath;
+		return Util::PathHelpers::GetSettingsTestPath().string();
+	case State::ConfigMode::THEME:
+		return Util::PathHelpers::GetSettingsThemePath().string();
 	case State::ConfigMode::DEFAULT:
 	default:
-		return globals::state->defaultConfigPath;
+		return Util::PathHelpers::GetSettingsDefaultPath().string();
 	}
 }
 
@@ -396,9 +402,9 @@ void State::Save(ConfigMode a_configMode)
 	std::ofstream o{ configPath };
 
 	try {
-		std::filesystem::create_directories(folderPath);
+		std::filesystem::create_directories(Util::PathHelpers::GetCommunityShaderPath());
 	} catch (const std::filesystem::filesystem_error& e) {
-		logger::warn("Error creating directory during Save ({}) : {}\n", folderPath, e.what());
+		logger::warn("Error creating directory during Save ({}) : {}\n", Util::PathHelpers::GetCommunityShaderPath().string(), e.what());
 		return;
 	}
 
@@ -762,7 +768,9 @@ void State::UpdateSharedData([[maybe_unused]] bool a_inWorld, [[maybe_unused]] b
 			auto upscaleMethod = upscaling.GetUpscaleMethod();
 			if (temporal && upscaleMethod != Upscaling::UpscaleMethod::kTAA) {
 				auto renderSize = Util::ConvertToDynamic(screenSize, true);
-				data.MipBias = std::log2f(renderSize.x / screenSize.x) - 1.0f;
+				data.MipBias = std::log2f(renderSize.x / screenSize.x);
+				if (upscaleMethod == Upscaling::UpscaleMethod::kDLSS)
+					data.MipBias -= 1.0f;
 			} else {
 				data.MipBias = 0;
 			}
@@ -823,4 +831,65 @@ std::unordered_map<std::string, bool>& State::GetDisabledFeatures()
 float State::GetTotalSmoothedDrawCalls() const
 {
 	return static_cast<float>(smoothDrawCalls[magic_enum::enum_integer(RE::BSShader::Type::Total)]);
+}
+
+void State::LoadTheme()
+{
+	// Don't override if a theme preset is already selected (e.g., first-time Default Dark setup)
+	if (!globals::menu->GetSettings().SelectedThemePreset.empty()) {
+		logger::info("Theme preset '{}' already selected, skipping SettingsTheme.json load", globals::menu->GetSettings().SelectedThemePreset);
+		return;
+	}
+
+	auto themeConfigPath = Util::PathHelpers::GetSettingsThemePath();
+
+	if (!std::filesystem::exists(themeConfigPath)) {
+		logger::info("No theme config file found at: {}", themeConfigPath.string());
+		return;
+	}
+
+	try {
+		std::ifstream themeFile(themeConfigPath);
+		if (!themeFile.is_open()) {
+			logger::warn("Unable to open theme config file: {}", themeConfigPath.string());
+			return;
+		}
+
+		json themeSettings;
+		themeFile >> themeSettings;
+		themeFile.close();
+
+		if (themeSettings["Menu"].is_object()) {
+			logger::info("Loading theme settings from: {}", themeConfigPath.string());
+			globals::menu->LoadTheme(themeSettings["Menu"]);
+		}
+	} catch (const std::exception& e) {
+		logger::warn("Error loading theme config file: {}", e.what());
+	}
+}
+
+void State::SaveTheme()
+{
+	auto themeConfigPath = Util::PathHelpers::GetSettingsThemePath();
+
+	try {
+		std::filesystem::create_directories(themeConfigPath.parent_path());
+	} catch (const std::filesystem::filesystem_error& e) {
+		logger::warn("Error creating directory during SaveTheme: {}", e.what());
+		return;
+	}
+
+	std::ofstream themeFile(themeConfigPath);
+	if (!themeFile.is_open()) {
+		logger::warn("Failed to open theme config file for saving: {}", themeConfigPath.string());
+		return;
+	}
+
+	json themeSettings;
+	globals::menu->SaveTheme(themeSettings["Menu"]);
+
+	themeFile << std::setw(4) << themeSettings << std::endl;
+	themeFile.close();
+
+	logger::info("Theme settings saved to: {}", themeConfigPath.string());
 }
