@@ -1,22 +1,100 @@
 #include <d3d12.h>
+#include <directx/d3dx12.h>
 
 namespace DX12
 {
-	// ======================================================================================
-	// Base: GPU-only structured buffer
-	// ======================================================================================
-
-	template <typename T>
-	class StructuredBuffer
+	class Resource
 	{
 	public:
-		explicit StructuredBuffer(ID3D12Device5* a_device, const uint64_t& a_count, bool uav = false) :
-			count(a_count), device(a_device)
+		explicit Resource(ID3D12Device5* device, D3D12_HEAP_TYPE heapType, const D3D12_RESOURCE_DESC& desc, D3D12_RESOURCE_STATES initialState) :
+			device(device)
+		{
+			const auto& heapProps = CD3DX12_HEAP_PROPERTIES(heapType);
+			DX::ThrowIfFailed(device->CreateCommittedResource(
+				&heapProps,
+				D3D12_HEAP_FLAG_NONE,
+				&desc,
+				initialState,
+				nullptr,
+				IID_PPV_ARGS(&buffer)));
+
+			state = initialState;
+		}
+
+		virtual ~Resource() = default;
+
+		virtual void TransitionBarrier(ID3D12GraphicsCommandList4* commandList, D3D12_RESOURCE_STATES stateAfter, UINT subresource)
+		{
+			if (state == stateAfter)
+				return;
+
+			const auto& resourceBarrier = CD3DX12_RESOURCE_BARRIER::Transition(buffer.get(), state, stateAfter, subresource);
+			commandList->ResourceBarrier(1, &resourceBarrier);
+
+			state = stateAfter;
+		}
+
+		virtual void UAVBarrier(ID3D12GraphicsCommandList4* commandList)
+		{
+			const auto& resourceBarrier = CD3DX12_RESOURCE_BARRIER::UAV(buffer.get());
+			commandList->ResourceBarrier(1, &resourceBarrier);
+		}
+
+		virtual void CreateSRV(D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc, CD3DX12_CPU_DESCRIPTOR_HANDLE handle)
+		{
+			device->CreateShaderResourceView(buffer.get(), &srvDesc, handle);
+		}
+
+		virtual void CreateUAV(D3D12_UNORDERED_ACCESS_VIEW_DESC uavDesc, ID3D12Resource* counterResource, CD3DX12_CPU_DESCRIPTOR_HANDLE handle)
+		{
+			device->CreateUnorderedAccessView(buffer.get(), counterResource, &uavDesc, handle);
+		}
+
+		winrt::com_ptr<ID3D12Resource> buffer = nullptr;
+
+	protected:
+		ID3D12Device5* device;
+		D3D12_RESOURCE_STATES state;
+	};
+
+	class TextureResource : public Resource
+	{
+		static D3D12_RESOURCE_DESC Desc(D3D12_RESOURCE_DIMENSION dimension, UINT64 width, UINT height, DXGI_FORMAT format, D3D12_RESOURCE_FLAGS flags)
+		{
+			D3D12_RESOURCE_DESC desc = {};
+			desc.Dimension = dimension;
+			desc.Alignment = 0;
+			desc.Width = width;
+			desc.Height = height;
+			desc.DepthOrArraySize = 1;
+			desc.MipLevels = 1;
+			desc.Format = format;
+			desc.SampleDesc.Count = 1;
+			desc.SampleDesc.Quality = 0;
+			desc.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
+			desc.Flags = flags;
+
+			return desc;
+		}
+
+	public:
+		explicit TextureResource(
+			ID3D12Device5* device, 
+			D3D12_RESOURCE_DIMENSION dimension, UINT64 width, UINT height, DXGI_FORMAT format, D3D12_RESOURCE_FLAGS flags) :
+			Resource(device, D3D12_HEAP_TYPE_DEFAULT, Desc(dimension, width, height, format, flags), D3D12_RESOURCE_STATE_COMMON) {}
+
+		virtual ~TextureResource() = default;
+	};
+
+	template <typename T>
+	class StructuredBuffer : public Resource
+	{
+		static D3D12_RESOURCE_DESC Desc(UINT64 width, bool uav = false)
 		{
 			D3D12_RESOURCE_DESC desc = {};
 			desc.Dimension = D3D12_RESOURCE_DIMENSION_BUFFER;
 			desc.Alignment = 0;
-			desc.Width = sizeof(T) * count;
+			desc.Width = width;
 			desc.Height = 1;
 			desc.DepthOrArraySize = 1;
 			desc.MipLevels = 1;
@@ -26,28 +104,14 @@ namespace DX12
 			desc.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
 			desc.Flags = uav ? D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS : D3D12_RESOURCE_FLAG_NONE;
 
-			const auto& defaultHeap = CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_DEFAULT);
-			DX::ThrowIfFailed(device->CreateCommittedResource(
-				&defaultHeap,
-				D3D12_HEAP_FLAG_NONE,
-				&desc,
-				state,
-				nullptr,
-				IID_PPV_ARGS(&buffer)));
+			return desc;
 		}
+
+	public:
+		explicit StructuredBuffer(ID3D12Device5* device, const uint64_t& a_count, bool uav = false) :
+			Resource(device, D3D12_HEAP_TYPE_DEFAULT, Desc(sizeof(T) * a_count, uav), D3D12_RESOURCE_STATE_COPY_DEST), count(a_count) {}
 
 		virtual ~StructuredBuffer() = default;
-
-		void Transition(ID3D12GraphicsCommandList4* commandList, D3D12_RESOURCE_STATES targetState, UINT subresource)
-		{
-			if (state == targetState)
-				return;
-
-			const auto& resourceBarrier = CD3DX12_RESOURCE_BARRIER::Transition(buffer.get(), state, targetState, subresource);
-			commandList->ResourceBarrier(1, &resourceBarrier);
-
-			state = targetState;
-		}
 
 		virtual void CreateSRV(CD3DX12_CPU_DESCRIPTOR_HANDLE handle)
 		{
@@ -60,10 +124,10 @@ namespace DX12
 			srvDesc.Buffer.Flags = D3D12_BUFFER_SRV_FLAG_NONE;
 			srvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
 
-			device->CreateShaderResourceView(buffer.get(), &srvDesc, handle);
+			Resource::CreateSRV(srvDesc, handle);
 		}
 
-		virtual void CreateUAV(CD3DX12_CPU_DESCRIPTOR_HANDLE handle)
+		virtual void CreateUAV(ID3D12Resource* counterResource, CD3DX12_CPU_DESCRIPTOR_HANDLE handle)
 		{
 			D3D12_UNORDERED_ACCESS_VIEW_DESC uavDesc = {};
 			uavDesc.ViewDimension = D3D12_UAV_DIMENSION_BUFFER;
@@ -71,22 +135,23 @@ namespace DX12
 			uavDesc.Buffer.FirstElement = 0;
 			uavDesc.Buffer.NumElements = static_cast<uint>(count);
 			uavDesc.Buffer.StructureByteStride = sizeof(T);
+
+			if (counterResource)
+				uavDesc.Buffer.CounterOffsetInBytes = 0;
+
 			uavDesc.Buffer.Flags = D3D12_BUFFER_UAV_FLAG_NONE;
 
-			device->CreateUnorderedAccessView(buffer.get(), nullptr, &uavDesc, handle);
+			Resource::CreateUAV(uavDesc, counterResource, handle);
 		}
 
-		winrt::com_ptr<ID3D12Resource> buffer = nullptr;
 
+		virtual void CreateUAV(CD3DX12_CPU_DESCRIPTOR_HANDLE handle)
+		{
+			StructuredBuffer::CreateUAV(nullptr, handle);
+		}
 	protected:
 		uint64_t count;
-		ID3D12Device5* device;
-		D3D12_RESOURCE_STATES state = D3D12_RESOURCE_STATE_COPY_DEST;
 	};
-
-	// ======================================================================================
-	// Derived: StructuredBufferUpload (adds CPU upload buffer)
-	// ======================================================================================
 
 	template <typename T>
 	class StructuredBufferUpload : public StructuredBuffer<T>
@@ -122,17 +187,13 @@ namespace DX12
 
 		void Upload(ID3D12GraphicsCommandList4* commandList)
 		{
-			this->Transition(commandList, D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES);
+			this->TransitionBarrier(commandList, D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES);
 			commandList->CopyBufferRegion(this->buffer.get(), 0, uploadBuffer.get(), 0, sizeof(T) * this->count);
-			this->Transition(commandList, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES);
+			this->TransitionBarrier(commandList, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES);
 		}
 
 		winrt::com_ptr<ID3D12Resource> uploadBuffer = nullptr;
 	};
-
-	// ======================================================================================
-	// Derived: StructuredAppendBuffer (adds counter buffer for Append/Consume UAVs)
-	// ======================================================================================
 
 	template <typename T>
 	class StructuredAppendBuffer : public StructuredBuffer<T>
@@ -165,23 +226,14 @@ namespace DX12
 				IID_PPV_ARGS(&counterBuffer)));
 		}
 
-		void CreateUAV(CD3DX12_CPU_DESCRIPTOR_HANDLE handle) override
-		{
-			D3D12_UNORDERED_ACCESS_VIEW_DESC uavDesc = {};
-			uavDesc.ViewDimension = D3D12_UAV_DIMENSION_BUFFER;
-			uavDesc.Format = DXGI_FORMAT_UNKNOWN;
-			uavDesc.Buffer.FirstElement = 0;
-			uavDesc.Buffer.NumElements = static_cast<uint>(this->count);
-			uavDesc.Buffer.StructureByteStride = sizeof(T);
-			uavDesc.Buffer.CounterOffsetInBytes = 0;
-			uavDesc.Buffer.Flags = D3D12_BUFFER_UAV_FLAG_NONE;
-
-			this->device->CreateUnorderedAccessView(this->buffer.get(), counterBuffer.get(), &uavDesc, handle);
-		}
-
 		void CreateSRV(CD3DX12_CPU_DESCRIPTOR_HANDLE handle) override
 		{
 			StructuredBuffer<T>::CreateSRV(handle);
+		}
+
+		void CreateUAV(CD3DX12_CPU_DESCRIPTOR_HANDLE handle) override
+		{
+			StructuredBuffer<T>::CreateUAV(counterBuffer.get(), handle);
 		}
 
 		winrt::com_ptr<ID3D12Resource> counterBuffer = nullptr;

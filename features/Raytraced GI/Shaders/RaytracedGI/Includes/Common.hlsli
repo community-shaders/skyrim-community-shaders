@@ -6,7 +6,7 @@
 
 #define M_TO_GAME_UNIT (1.0f / (GAME_UNIT_TO_M))
 
-#define MAX_DEPTH 2
+#define MAX_DEPTH 1
 #define SHADOW_MAX_DEPTH 1
 
 #define COMMON_RAY_HIT_IDX 0

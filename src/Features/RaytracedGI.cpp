@@ -146,6 +146,7 @@ void RaytracedGI::DrawSettings()
 	{
 		if (ImGui::Button("Create PIX Capture")) {
 			capture = true;
+			captureStarted = false;
 		}
 	}
 
@@ -235,6 +236,29 @@ void RaytracedGI::SetupResources()
 			d3d12Device->CreateUnorderedAccessView(finalTexture->resource.get(), nullptr, &uavDesc, computeHeap->CPUHandle(ComputeHeapSlot::Final));
 		}
 
+		// Motion vector
+		{
+			D3D11_TEXTURE2D_DESC texDesc{};
+			texDesc.Width = mainDesc.Width;
+			texDesc.Height = mainDesc.Height;
+			texDesc.MipLevels = 1;
+			texDesc.ArraySize = 1;
+			texDesc.Format = DXGI_FORMAT_R16G16_FLOAT;
+			texDesc.SampleDesc.Count = 1;
+			texDesc.SampleDesc.Quality = 0;
+			texDesc.BindFlags = D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_UNORDERED_ACCESS;
+
+			motionVectorsTexture = eastl::make_unique<WrappedResource>(texDesc, d3d11Device.get(), d3d12Device.get());
+			DX::ThrowIfFailed(motionVectorsTexture->resource->SetName(L"Motion Vectors Texture"));
+
+			/*D3D12_UNORDERED_ACCESS_VIEW_DESC uavDesc = {};
+			uavDesc.ViewDimension = D3D12_UAV_DIMENSION_TEXTURE2D;
+			uavDesc.Format = texDesc.Format;
+
+			d3d12Device->CreateUnorderedAccessView(motionVectorsTexture->resource.get(), nullptr, &uavDesc, commonHeap->CPUHandle(HeapSlot::Final));
+			d3d12Device->CreateUnorderedAccessView(motionVectorsTexture->resource.get(), nullptr, &uavDesc, computeHeap->CPUHandle(ComputeHeapSlot::Final));*/
+		}
+
 		{
 			D3D12_RESOURCE_DESC resDesc = {};
 			resDesc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
@@ -281,6 +305,17 @@ void RaytracedGI::SetupResources()
 
 				d3d12Device->CreateUnorderedAccessView(specularHitDistanceTexture.get(), nullptr, &uavDesc, commonHeap->CPUHandle(HeapSlot::SpecHitDist));
 				d3d12Device->CreateUnorderedAccessView(specularHitDistanceTexture.get(), nullptr, &uavDesc, computeHeap->CPUHandle(ComputeHeapSlot::SpecHitDist));
+			}
+
+			// u4 - Depth (Compute only)
+			{
+				resDesc.Format = DXGI_FORMAT_R32_FLOAT;
+				uavDesc.Format = resDesc.Format;
+
+				DX::ThrowIfFailed(d3d12Device->CreateCommittedResource(&DEFAULT_HEAP, D3D12_HEAP_FLAG_NONE, &resDesc, D3D12_RESOURCE_STATE_COMMON, nullptr, IID_PPV_ARGS(&depthTexture)));
+				DX::ThrowIfFailed(depthTexture->SetName(L"Depth Texture"));
+
+				d3d12Device->CreateUnorderedAccessView(depthTexture.get(), nullptr, &uavDesc, computeHeap->CPUHandle(ComputeHeapSlot::Depth));
 			}
 		}
 	}
@@ -390,6 +425,7 @@ void RaytracedGI::InitRR()
 	slEvaluateFeature = (PFun_slEvaluateFeature*)GetProcAddress(interposer, "slEvaluateFeature");
 	slSetConstants = (PFun_slSetConstants*)GetProcAddress(interposer, "slSetConstants");
 	slGetFeatureFunction = (PFun_slGetFeatureFunction*)GetProcAddress(interposer, "slGetFeatureFunction");
+	slSetTag = (PFun_slSetTag*)GetProcAddress(interposer, "slSetTag");
 
 	if (SL_FAILED(res, slInit(pref, sl::kSDKVersion))) {
 		logger::critical("[Streamline] Failed to initialize Streamline");
@@ -397,11 +433,150 @@ void RaytracedGI::InitRR()
 		logger::info("[Streamline] Successfully initialized Streamline");
 	}
 
+	slSetD3DDevice((void*)d3d12Device.get());
+
 	slGetFeatureFunction(sl::kFeatureDLSS_RR, "slDLSSDGetOptimalSettings", (void*&)slDLSSDGetOptimalSettings);
 	slGetFeatureFunction(sl::kFeatureDLSS_RR, "slDLSSDGetState", (void*&)slDLSSDGetState);
 	slGetFeatureFunction(sl::kFeatureDLSS_RR, "slDLSSDSetOptions", (void*&)slDLSSDSetOptions);
+}
 
-	slSetD3DDevice((void*)d3d12Device.get());
+int32_t RaytracedGI::GetJitterPhaseCount(int32_t renderWidth, int32_t displayWidth)
+{
+	const float basePhaseCount = 8.0f;
+	const int32_t jitterPhaseCount = int32_t(basePhaseCount * pow((float(displayWidth) / renderWidth), 2.0f));
+	return jitterPhaseCount;
+}
+
+// Calculate halton number for index and base.
+float RaytracedGI::Halton(int32_t index, int32_t base)
+{
+	float f = 1.0f, result = 0.0f;
+
+	for (int32_t currentIndex = index; currentIndex > 0;) {
+		f /= (float)base;
+		result = result + f * (float)(currentIndex % base);
+		currentIndex = (uint32_t)(floorf((float)(currentIndex) / (float)(base)));
+	}
+
+	return result;
+}
+
+void RaytracedGI::GetJitterOffset(float* outX, float* outY, int32_t index, int32_t phaseCount)
+{
+	const float x = Halton((index % phaseCount) + 1, 2) - 0.5f;
+	const float y = Halton((index % phaseCount) + 1, 3) - 0.5f;
+
+	*outX = x;
+	*outY = y;
+}
+
+float2 RaytracedGI::GetInputResolutionScaleRR(uint32_t outputWidth, uint32_t outputHeight, uint32_t qualityMode)
+{
+	logger::debug("[DLSS RR] Getting input resolution scale for output {}x{} and quality mode {}", outputWidth, outputHeight, qualityMode);
+	sl::DLSSMode dlssMode;
+	switch (qualityMode) {
+	case 1:
+		dlssMode = sl::DLSSMode::eMaxQuality;
+		break;
+	case 2:
+		dlssMode = sl::DLSSMode::eBalanced;
+		break;
+	case 3:
+		dlssMode = sl::DLSSMode::eMaxPerformance;
+		break;
+	case 4:
+		dlssMode = sl::DLSSMode::eUltraPerformance;
+		break;
+	default:
+		dlssMode = sl::DLSSMode::eDLAA;
+		break;
+	}
+
+	sl::DLSSDOptions dlssdOptions{};
+	dlssdOptions.mode = dlssMode;
+	dlssdOptions.outputWidth = outputWidth;
+	dlssdOptions.outputHeight = outputHeight;
+
+	sl::DLSSDOptimalSettings optimalSettings{};
+	sl::Result result = slDLSSDGetOptimalSettings(dlssdOptions, optimalSettings);
+	if (result != sl::Result::eOk) {
+		logger::critical("[Streamline] Failed to get DLSS RR optimal settings, error code: {}", (int)result);
+		return { 1.0f, 1.0f };
+	}
+
+	float scaleX;
+	float scaleY;
+
+	if (globals::game::ui->GameIsPaused()) {
+		// Calculate scale as ratio of minimum render resolution to output resolution
+		scaleX = (float)optimalSettings.renderWidthMin / (float)outputWidth;
+		scaleY = (float)optimalSettings.renderHeightMin / (float)outputHeight;
+	} else {
+		// Calculate scale as ratio of optimal render resolution to output resolution
+		scaleX = (float)optimalSettings.optimalRenderWidth / (float)outputWidth;
+		scaleY = (float)optimalSettings.optimalRenderHeight / (float)outputHeight;
+	}
+
+	// Return separate X and Y scales for more precision
+	return { scaleX, scaleY };
+}
+
+void RaytracedGI::SetDLSSRROptions()
+{
+	sl::DLSSDOptions dlssdOptions{};
+
+	// Map quality mode to DLSS mode
+	switch (settings.DLSSRRQualityMode) {
+	case 1:
+		dlssdOptions.mode = sl::DLSSMode::eMaxQuality;
+		break;
+	case 2:
+		dlssdOptions.mode = sl::DLSSMode::eBalanced;
+		break;
+	case 3:
+		dlssdOptions.mode = sl::DLSSMode::eMaxPerformance;
+		break;
+	case 4:
+		dlssdOptions.mode = sl::DLSSMode::eUltraPerformance;
+		break;
+	default:
+		dlssdOptions.mode = sl::DLSSMode::eDLAA;
+		break;
+	}
+
+	auto worldToCameraView = globals::game::frameBufferCached.GetCameraView().Transpose();
+	auto cameraViewToWorld = globals::game::frameBufferCached.GetCameraViewInverse().Transpose();
+
+	auto state = globals::state;
+
+	dlssdOptions.outputWidth = (uint)state->screenSize.x;
+	dlssdOptions.outputHeight = (uint)state->screenSize.y;
+	dlssdOptions.colorBuffersHDR = sl::Boolean::eTrue;
+	dlssdOptions.normalRoughnessMode = sl::DLSSDNormalRoughnessMode::ePacked;
+	dlssdOptions.alphaUpscalingEnabled = sl::Boolean::eFalse;
+
+	dlssdOptions.worldToCameraView = sl::float4x4{
+		sl::float4{ worldToCameraView._11, worldToCameraView._12, worldToCameraView._13, worldToCameraView._14 },
+		sl::float4{ worldToCameraView._21, worldToCameraView._22, worldToCameraView._23, worldToCameraView._24 },
+		sl::float4{ worldToCameraView._31, worldToCameraView._32, worldToCameraView._33, worldToCameraView._34 },
+		sl::float4{ worldToCameraView._41, worldToCameraView._42, worldToCameraView._43, worldToCameraView._44 }
+	};
+	dlssdOptions.cameraViewToWorld = sl::float4x4{
+		sl::float4{ cameraViewToWorld._11, cameraViewToWorld._12, cameraViewToWorld._13, cameraViewToWorld._14 },
+		sl::float4{ cameraViewToWorld._21, cameraViewToWorld._22, cameraViewToWorld._23, cameraViewToWorld._24 },
+		sl::float4{ cameraViewToWorld._31, cameraViewToWorld._32, cameraViewToWorld._33, cameraViewToWorld._34 },
+		sl::float4{ cameraViewToWorld._41, cameraViewToWorld._42, cameraViewToWorld._43, cameraViewToWorld._44 }
+	};
+	dlssdOptions.dlaaPreset = sl::DLSSDPreset::ePresetD;
+	dlssdOptions.qualityPreset = sl::DLSSDPreset::ePresetD;
+	dlssdOptions.balancedPreset = sl::DLSSDPreset::ePresetD;
+	dlssdOptions.performancePreset = sl::DLSSDPreset::ePresetD;
+	dlssdOptions.ultraPerformancePreset = sl::DLSSDPreset::ePresetD;
+
+	if (SL_FAILED(result, slDLSSDSetOptions(slViewportHandle, dlssdOptions))) {
+		logger::critical("[DLSS RR] Could not set DLSS RR options");
+		return;
+	}
 }
 
 void RaytracedGI::CheckFrameConstants()
@@ -437,9 +612,32 @@ void RaytracedGI::CheckFrameConstants()
 
 		recalculateCameraMatrices(slConstants);
 
-		//auto& upscaling = globals::features::upscaling;
-		//auto jitter = upscaling.jitter;
-		//slConstants.jitterOffset = { -jitter.x, -jitter.y };
+		auto screenSize = state->screenSize;
+
+		auto screenWidth = static_cast<int>(screenSize.x);
+		auto screenHeight = static_cast<int>(screenSize.y);
+
+		float2 resolutionScaleBase = GetInputResolutionScaleRR((uint32_t)screenSize.x, (uint32_t)screenSize.y, settings.DLSSRRQualityMode);
+		auto renderWidth = static_cast<int>(screenWidth * resolutionScaleBase.x);
+		auto renderHeight = static_cast<int>(screenHeight * resolutionScaleBase.y);
+
+		float2 resolutionScale = { 1.0f, 1.0f };
+
+		// Use precise scale if the integer conversion doesn't change the dimensions
+		if (renderWidth == screenWidth && renderHeight == screenHeight) {
+			// For DLAA and other 1:1 modes, ensure exactly 1.0
+			resolutionScale.x = 1.0f;
+			resolutionScale.y = 1.0f;
+		} else {
+			resolutionScale.x = static_cast<float>(renderWidth) / static_cast<float>(screenWidth);
+			resolutionScale.y = static_cast<float>(renderHeight) / static_cast<float>(screenHeight);
+		}
+
+		auto phaseCount = GetJitterPhaseCount(renderWidth, screenWidth);
+
+		GetJitterOffset(&jitter.x, &jitter.y, state->frameCount, phaseCount);
+
+		slConstants.jitterOffset = { -jitter.x, -jitter.y };
 		slConstants.reset = sl::Boolean::eFalse;
 
 		slConstants.mvecScale = { (globals::game::isVR ? 0.5f : 1.0f), 1 };
@@ -508,7 +706,7 @@ void RaytracedGI::SetupSharedRT()
 	ShareRT(rendererRD.renderTargets[ALBEDO].texture, HeapSlot::Albedo, ComputeHeapSlot::Albedo, albedoTexture.put());
 	ShareRT(rendererRD.renderTargets[REFLECTANCE].texture, HeapSlot::Reflectance, ComputeHeapSlot::Reflectance, reflectanceTexture.put());
 	ShareRT(rendererRD.renderTargets[NORMALROUGHNESS].texture, HeapSlot::NormalRoughness, ComputeHeapSlot::None, normalRoughnessTexture.put());
-	ShareRT(rendererRD.renderTargets[MASKS2].texture, HeapSlot::GeometryNormalDepth, ComputeHeapSlot::None, goemetryNormalDepthTexture.put());
+	ShareRT(rendererRD.renderTargets[MASKS2].texture, HeapSlot::GeometryNormalDepth, ComputeHeapSlot::GeometryNormalDepth, goemetryNormalDepthTexture.put());
 	
 }
 
@@ -695,7 +893,7 @@ void RaytracedGI::Main_RenderWorld(bool a1)
 		//CopyDepth();
 		if (!addedAllInstances)
 		{
-			AddUpdateAllInstances();
+			//AddUpdateAllInstances();
 			addedAllInstances = true;
 		}
 	}
@@ -1241,10 +1439,11 @@ void RaytracedGI::DrawRTGI()
 		logger::error("d3d11Fence is nullptr");
 	}
 
-	auto main = globals::game::renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMAIN];
+	auto rendererRuntimeData = globals::game::renderer->GetRuntimeData();
+	auto main = rendererRuntimeData.renderTargets[RE::RENDER_TARGETS::kMAIN];
 
-	// Copy main to finalTexture
 	d3d11Context->CopyResource(finalTexture->resource11, main.texture);
+	d3d11Context->CopyResource(motionVectorsTexture->resource11, rendererRuntimeData.renderTargets[RE::RENDER_TARGETS::kMOTION_VECTOR].texture);
 
 	// Copy depth and normal/roughness to wrapped resources
 	{
@@ -1278,12 +1477,10 @@ void RaytracedGI::DrawRTGI()
 		rtASDescs.clear();
 	}*/
 
-	bool captureStarted = false;
-
-	if (capture) {
+	/*if (capture) {
 		captureStarted = true;
 		ga->BeginCapture();
-	}
+	}*/
 
 	UpdateInstances();
 
@@ -1294,8 +1491,10 @@ void RaytracedGI::DrawRTGI()
 	}
 
 #ifdef DLSS_RR
-	if (settings.EnableRR)
+	if (settings.EnableRR) {
+		SetDLSSRROptions();
 		CheckFrameConstants();
+	}
 #endif
 
 	// Update framebuffer
@@ -1444,12 +1643,71 @@ void RaytracedGI::DrawRTGI()
 			// Constant buffer
 			//commandList->SetComputeRootConstantBufferView(5, frameBuffer->GetGPUVirtualAddress());
 
-			barrier(specularHitDistanceTexture.get(), D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+			CD3DX12_RESOURCE_BARRIER commonToUAVBarrier[2] = { CD3DX12_RESOURCE_BARRIER::Transition(specularHitDistanceTexture.get(), D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_STATE_UNORDERED_ACCESS), CD3DX12_RESOURCE_BARRIER::Transition(depthTexture.get(), D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_STATE_UNORDERED_ACCESS) };
+			commandList->ResourceBarrier(2, commonToUAVBarrier);
 
 			auto dispatchCount = Util::GetScreenDispatchCount();
 			commandList->Dispatch(dispatchCount.x, dispatchCount.y, 1);
 
-			barrier(specularHitDistanceTexture.get(), D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_COMMON);
+			CD3DX12_RESOURCE_BARRIER uavToCommonBarrier[2] = { CD3DX12_RESOURCE_BARRIER::Transition(specularHitDistanceTexture.get(), D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_COMMON), CD3DX12_RESOURCE_BARRIER::Transition(depthTexture.get(), D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_COMMON) };
+			commandList->ResourceBarrier(2, uavToCommonBarrier);
+
+			//const auto& specHitDistBarrier = CD3DX12_RESOURCE_BARRIER::UAV(specularHitDistanceTexture.get());
+			//commandList->ResourceBarrier(1, &specHitDistBarrier);
+
+#ifdef DLSS_RR
+			if (settings.EnableRR) {
+
+				CD3DX12_RESOURCE_BARRIER rtBarrier[1] = { CD3DX12_RESOURCE_BARRIER::UAV(finalTexture->resource.get()) };
+				commandList->ResourceBarrier(1, rtBarrier);
+
+				/*auto renderer = globals::game::renderer;
+				auto& motionVectorTexture = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGET::kMOTION_VECTOR];
+				auto& depthTexture = renderer->GetDepthStencilData().depthStencils[RE::RENDER_TARGETS_DEPTHSTENCIL::kMAIN];
+
+				auto& mainTexture = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGET::kMAIN];*/
+
+				//finalTexture
+
+				{
+					auto screenSize = globals::state->screenSize;
+					auto renderSize = Util::ConvertToDynamic(screenSize);
+
+					sl::Extent inputExtent{ 0, 0, (uint)renderSize.x, (uint)renderSize.y };
+					sl::Extent outputExtent{ 0, 0, (uint)screenSize.x, (uint)screenSize.y };
+
+					sl::Resource colorIn = { sl::ResourceType::eTex2d, finalTexture->resource.get(), 0 };
+					sl::Resource colorOut = { sl::ResourceType::eTex2d, finalTexture->resource.get(), 0 }; // This probably will break, we'll see...
+					sl::Resource depth = { sl::ResourceType::eTex2d, depthTexture.get(), 0 };
+					sl::Resource mvec = { sl::ResourceType::eTex2d, motionVectorsTexture->resource.get(), 0 };
+					sl::Resource diffuseAlbedo = { sl::ResourceType::eTex2d, albedoTexture.get(), 0 };
+					sl::Resource specularAlbedo = { sl::ResourceType::eTex2d, reflectanceTexture.get(), 0 };
+					sl::Resource normalRoughness = { sl::ResourceType::eTex2d, normalRoughnessTexture.get(), 0 };
+					sl::Resource specHitDistance = { sl::ResourceType::eTex2d, specularHitDistanceTexture.get(), 0 };
+
+					sl::ResourceTag colorInTag = sl::ResourceTag{ &colorIn, sl::kBufferTypeScalingInputColor, sl::ResourceLifecycle::eOnlyValidNow, &inputExtent };
+					sl::ResourceTag colorOutTag = sl::ResourceTag{ &colorOut, sl::kBufferTypeScalingOutputColor, sl::ResourceLifecycle::eOnlyValidNow, &outputExtent };
+					sl::ResourceTag depthTag = sl::ResourceTag{ &depth, sl::kBufferTypeDepth, sl::ResourceLifecycle::eValidUntilPresent, &inputExtent };
+					sl::ResourceTag mvecTag = sl::ResourceTag{ &mvec, sl::kBufferTypeMotionVectors, sl::ResourceLifecycle::eValidUntilPresent, &inputExtent };
+					sl::ResourceTag diffuseAlbedoTag = sl::ResourceTag{ &diffuseAlbedo, sl::kBufferTypeAlbedo, sl::ResourceLifecycle::eValidUntilPresent, &inputExtent };
+					sl::ResourceTag specularAlbedoTag = sl::ResourceTag{ &specularAlbedo, sl::kBufferTypeSpecularAlbedo, sl::ResourceLifecycle::eValidUntilPresent, &inputExtent };
+					sl::ResourceTag normalRoughnessTag = sl::ResourceTag{ &normalRoughness, sl::kBufferTypeNormalRoughness, sl::ResourceLifecycle::eValidUntilPresent, &inputExtent };
+					sl::ResourceTag specHitDistanceTag = sl::ResourceTag{ &specHitDistance, sl::kBufferTypeSpecularHitDistance, sl::ResourceLifecycle::eValidUntilPresent, &inputExtent };
+
+					sl::ResourceTag resourceTags[] = { colorInTag, colorOutTag, depthTag, mvecTag, diffuseAlbedoTag, specularAlbedoTag, normalRoughnessTag, specHitDistanceTag };
+					if (SL_FAILED(result, slSetTag(slViewportHandle, resourceTags, _countof(resourceTags), commandList.get()))) {
+						logger::error("[DLSS RR] Failed to set DLSS RR tags, error: {}", magic_enum::enum_name(result));
+						return;
+					}
+				}
+
+				const sl::BaseStructure* inputs[] = { &slViewportHandle };
+
+				if (SL_FAILED(result, slEvaluateFeature(sl::kFeatureDLSS_RR, *frameToken, inputs, _countof(inputs), commandList.get()))) {
+					logger::error("[DLSS RR] Failed to evaluate DLSS RR feature, error: {}", magic_enum::enum_name(result));
+				}
+			}
+#endif
 		} else {
 			if (settings.DebugOutput == DebugOutput::Indirect) {
 				barrier(diffuseGITexture.get(), D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_COPY_SOURCE);
@@ -1479,14 +1737,15 @@ void RaytracedGI::DrawRTGI()
 	{
 		DX::ThrowIfFailed(commandQueue->Signal(d3d12Fence.get(), fenceValue));
 
+		// Wait until GPU is done with previous frame
+		if (d3d12Fence->GetCompletedValue() < fenceValue) {
+			DX::ThrowIfFailed(d3d12Fence->SetEventOnCompletion(fenceValue, nullptr));
+		}
+
 		if (capture && captureStarted) {
 			ga->EndCapture();
 			capture = false;
-		}
-
-		// Wait until GPU is done with previous frame before reusing allocator
-		if (d3d12Fence->GetCompletedValue() < fenceValue) {
-			DX::ThrowIfFailed(d3d12Fence->SetEventOnCompletion(fenceValue, nullptr));
+			captureStarted = false;
 		}
 
 		DX::ThrowIfFailed(d3d11Context->Wait(d3d11Fence.get(), fenceValue));
@@ -1499,66 +1758,17 @@ void RaytracedGI::DrawRTGI()
 		DX::ThrowIfFailed(commandList->Reset(commandAllocator.get(), nullptr));
 	}
 
+	if (capture) {
+		captureStarted = true;
+		ga->BeginCapture();
+	}
+
 	//Release scratch buffers
 	{
 		asScratchBuffers.clear();
 		rtGeometryDescs.clear();
 		rtASDescs.clear();
 	}
-
-#ifdef DLSS_RR
-	if (settings.EnableRR) {
-		auto state = globals::state;
-
-		auto renderer = globals::game::renderer;
-		auto& motionVectorTexture = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGET::kMOTION_VECTOR];
-		auto& depthTexture = renderer->GetDepthStencilData().depthStencils[RE::RENDER_TARGETS_DEPTHSTENCIL::kMAIN];
-
-		auto& mainTexture = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGET::kMAIN];
-
-		auto& albedoTexture = renderer->GetRuntimeData().renderTargets[ALBEDO];
-		auto& reflectanceTexture = renderer->GetRuntimeData().renderTargets[REFLECTANCE];
-		auto& normalRoughnessTexture = renderer->GetRuntimeData().renderTargets[NORMALROUGHNESS];
-
-		{
-			auto screenSize = state->screenSize;
-			auto renderSize = Util::ConvertToDynamic(screenSize);
-
-			sl::Extent inputExtent{ 0, 0, (uint)renderSize.x, (uint)renderSize.y };
-			sl::Extent outputExtent{ 0, 0, (uint)screenSize.x, (uint)screenSize.y };
-
-			sl::Resource colorIn = { sl::ResourceType::eTex2d, mainTexture.texture, 0 };
-			sl::Resource colorOut = { sl::ResourceType::eTex2d, a_outputTexture, 0 };
-			sl::Resource depth = { sl::ResourceType::eTex2d, depthTexture.texture, 0 };
-			sl::Resource mvec = { sl::ResourceType::eTex2d, motionVectorTexture.texture, 0 };
-			sl::Resource diffuseAlbedo = { sl::ResourceType::eTex2d, albedoTexture.texture, 0 };
-			sl::Resource specularAlbedo = { sl::ResourceType::eTex2d, reflectanceTexture.texture, 0 };
-			sl::Resource normalRoughness = { sl::ResourceType::eTex2d, normalRoughnessTexture.texture, 0 };
-			sl::Resource specHitDistance = { sl::ResourceType::eTex2d, specularHitDistanceTexture.get(), 0 };
-
-			sl::ResourceTag colorInTag = sl::ResourceTag{ &colorIn, sl::kBufferTypeScalingInputColor, sl::ResourceLifecycle::eOnlyValidNow, &inputExtent };
-			sl::ResourceTag colorOutTag = sl::ResourceTag{ &colorOut, sl::kBufferTypeScalingOutputColor, sl::ResourceLifecycle::eOnlyValidNow, &outputExtent };
-			sl::ResourceTag depthTag = sl::ResourceTag{ &depth, sl::kBufferTypeDepth, sl::ResourceLifecycle::eValidUntilPresent, &inputExtent };
-			sl::ResourceTag mvecTag = sl::ResourceTag{ &mvec, sl::kBufferTypeMotionVectors, sl::ResourceLifecycle::eValidUntilPresent, &inputExtent };
-			sl::ResourceTag diffuseAlbedoTag = sl::ResourceTag{ &diffuseAlbedo, sl::kBufferTypeAlbedo, sl::ResourceLifecycle::eValidUntilPresent, &inputExtent };
-			sl::ResourceTag specularAlbedoTag = sl::ResourceTag{ &specularAlbedo, sl::kBufferTypeSpecularAlbedo, sl::ResourceLifecycle::eValidUntilPresent, &inputExtent };
-			sl::ResourceTag normalRoughnessTag = sl::ResourceTag{ &normalRoughness, sl::kBufferTypeNormalRoughness, sl::ResourceLifecycle::eValidUntilPresent, &inputExtent };
-			sl::ResourceTag specHitDistanceTag = sl::ResourceTag{ &specHitDistance, sl::kBufferTypeSpecularHitDistance, sl::ResourceLifecycle::eValidUntilPresent, &inputExtent };
-
-			sl::ResourceTag resourceTags[] = { colorInTag, colorOutTag, depthTag, mvecTag, diffuseAlbedoTag, specularAlbedoTag, normalRoughnessTag, specHitDistanceTag };
-			if (SL_FAILED(result, slSetTag(slViewportHandle, resourceTags, _countof(resourceTags), globals::d3d::context))) {
-				logger::error("[DLSS RR] Failed to set DLSS RR tags, error: {}", magic_enum::enum_name(result));
-				return;
-			}
-		}
-
-		const sl::BaseStructure* inputs[] = { &slViewportHandle };
-
-		if (SL_FAILED(result, slEvaluateFeature(sl::kFeatureDLSS_RR, *frameToken, inputs, _countof(inputs), globals::d3d::context))) {
-			logger::error("[DLSS RR] Failed to evaluate DLSS RR feature, error: {}", magic_enum::enum_name(result));
-		}
-	}
-#endif
 
 	d3d11Context->CopyResource(main.texture, finalTexture->resource11);
 
@@ -1948,18 +2158,22 @@ void RaytracedGI::CreateComputeRootSignature()
 	computeHeap->CreateTable(
 		ComputeHeapType::UAV,
 		D3D12_DESCRIPTOR_RANGE_TYPE_UAV,
-		{ { ComputeHeapSlot::Final, 1 },
+		{ 
+			{ ComputeHeapSlot::Final, 1 },
 			{ ComputeHeapSlot::DiffuseGI, 1 },
 			{ ComputeHeapSlot::SpecularGI, 1 },
-			{ ComputeHeapSlot::SpecHitDist, 1 } });
+			{ ComputeHeapSlot::SpecHitDist, 1 },
+			{ ComputeHeapSlot::Depth, 1 }
+		});
 
 	// SRV range
 	computeHeap->CreateTable(
 		ComputeHeapType::SRV,
 		D3D12_DESCRIPTOR_RANGE_TYPE_SRV,
 		{
+			{ ComputeHeapSlot::GeometryNormalDepth, 1 },
 			{ ComputeHeapSlot::Albedo, 1 },
-			{ ComputeHeapSlot::Reflectance, 1 },
+			{ ComputeHeapSlot::Reflectance, 1 }
 		});
 
 	auto rootParameters = computeHeap->GetRootParameters();
@@ -2045,7 +2259,7 @@ void RaytracedGI::CompileRaytracingShaders()
 		// Shader + pipeline config
 		pipelineBuilder.AddShaderConfig(20, 8);
 		pipelineBuilder.AddGlobalRootSignature(rootSignature.get());
-		pipelineBuilder.AddPipelineConfig(6);
+		pipelineBuilder.AddPipelineConfig(2);
 
 		auto desc = pipelineBuilder.MakeStateObjectDesc();
 		HRESULT hr = d3d12Device->CreateStateObject(desc, IID_PPV_ARGS(&pipelineRT));

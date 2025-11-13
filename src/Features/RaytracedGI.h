@@ -20,7 +20,7 @@
 
 #include <DXProgrammableCapture.h>
 
-//#define DLSS_RR
+#define DLSS_RR
 
 #ifdef DLSS_RR
 #	define NV_WINDOWS
@@ -38,8 +38,6 @@
 
 struct RaytracedGI : public Feature
 {
-	static constexpr uint64_t NUM_SHADER_IDS = 7;
-
 	static constexpr uint MAX_MESHES = 2048;
 	static constexpr uint MAX_INSTANCES = 4096;
 	
@@ -91,6 +89,8 @@ struct RaytracedGI : public Feature
 			DiffuseGI,
 			SpecularGI,
 			SpecHitDist,
+			Depth,
+			GeometryNormalDepth,
 			Albedo,
 			Reflectance,
 			NumDescriptors,
@@ -187,6 +187,11 @@ struct RaytracedGI : public Feature
 #ifdef DLSS_RR
 	void InitRR();
 	void CheckFrameConstants();
+	void SetDLSSRROptions();
+	int32_t GetJitterPhaseCount(int32_t renderWidth, int32_t displayWidth);
+	void GetJitterOffset(float* outX, float* outY, int32_t index, int32_t phaseCount);
+	float Halton(int32_t index, int32_t base);
+	float2 GetInputResolutionScaleRR(uint32_t outputWidth, uint32_t outputHeight, uint32_t qualityMode);
 #endif
 
 	const bool Active() 
@@ -240,6 +245,7 @@ struct RaytracedGI : public Feature
 		float Directional = 1.0f;
 		float Point = 1.0f;
 		bool PointFade = true;
+		int DLSSRRQualityMode = 2;
 		DebugOutput DebugOutput = DebugOutput::None;
 		bool EnablePIXCapture = true;
 		bool EnableDebugDevice = false;
@@ -288,7 +294,9 @@ struct RaytracedGI : public Feature
 	bool lightsUpdated = false;
 
 	winrt::com_ptr<IDXGraphicsAnalysis> ga = nullptr;
+
 	bool capture = false;
+	bool captureStarted = false;
 
 	bool releaseBufferHooked = false;
 	bool releaseHooked = false;
@@ -468,10 +476,14 @@ struct RaytracedGI : public Feature
 	eastl::unique_ptr<WrappedResource> specularHitDistanceTexture = nullptr;*/
 
 	eastl::unique_ptr<WrappedResource> finalTexture = nullptr;
+	winrt::com_ptr<ID3D12Resource> intermediaryTexture = nullptr;
 
 	winrt::com_ptr<ID3D12Resource> diffuseGITexture = nullptr;
 	winrt::com_ptr<ID3D12Resource> specularGITexture = nullptr;
 	winrt::com_ptr<ID3D12Resource> specularHitDistanceTexture = nullptr;
+
+	winrt::com_ptr<ID3D12Resource> depthTexture = nullptr;
+	eastl::unique_ptr<WrappedResource> motionVectorsTexture = nullptr;
 
 	winrt::com_ptr<ID3D12Resource> albedoTexture = nullptr;
 	winrt::com_ptr<ID3D12Resource> reflectanceTexture = nullptr;
@@ -484,17 +496,20 @@ struct RaytracedGI : public Feature
 	std::shared_mutex renderMutex;
 
 #if defined(DLSS_RR)
-	HMODULE interposer;
-	PFun_slInit* slInit;
-	PFun_slEvaluateFeature* slEvaluateFeature;
-	PFun_slGetNewFrameToken* slGetNewFrameToken;
-	PFun_slSetD3DDevice* slSetD3DDevice;
+	HMODULE interposer = NULL;
+
+	PFun_slInit* slInit{};
+	PFun_slEvaluateFeature* slEvaluateFeature{};
+	PFun_slGetNewFrameToken* slGetNewFrameToken{};
+	PFun_slSetD3DDevice* slSetD3DDevice{};
 
 	PFun_slDLSSDGetOptimalSettings* slDLSSDGetOptimalSettings{};
 	PFun_slDLSSDGetState* slDLSSDGetState{};
 	PFun_slDLSSDSetOptions* slDLSSDSetOptions{};
-	PFun_slSetConstants* slSetConstants;
-	PFun_slGetFeatureFunction* slGetFeatureFunction;
+
+	PFun_slSetConstants* slSetConstants{};
+	PFun_slGetFeatureFunction* slGetFeatureFunction{};
+	PFun_slSetTag* slSetTag{};
 
 	sl::ViewportHandle slViewportHandle{ 0 };
 
