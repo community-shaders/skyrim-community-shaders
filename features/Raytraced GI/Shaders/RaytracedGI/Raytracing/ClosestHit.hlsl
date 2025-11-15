@@ -44,14 +44,19 @@ void HitMesh(inout CurrentPayload payload, in BuiltInTriangleIntersectionAttribu
     half2 texCoord0 = vertice0.Texcoord0.unpack() * u + vertice1.Texcoord0.unpack() * v + vertice2.Texcoord0.unpack() * w;
     
     half4 normal0 = vertice0.Normal.unpack();
-    half4 normal1 = vertice1.Normal.unpack();   
+    half4 normal1 = vertice1.Normal.unpack();
     half4 normal2 = vertice2.Normal.unpack();
      
     half3 normal = normalize(normal0.xyz * u + normal1.xyz * v + normal2.xyz * w); 
     half3 worldNormal = normalize(mul((float3x3)ObjectToWorld3x4(), normal));
 
-    float3 albedo = Color::GammaToLinear(diffuseTexture.SampleLevel(DiffuseSampler, texCoord0, 0).rgb);
-    float3 emissive = Color::GammaToLinear(glowTexture.SampleLevel(DiffuseSampler, texCoord0, 0).rgb);
+    Material material = instance.Material;
+    
+    texCoord0 += material.texCoordOffsetScale.xy;
+    texCoord0 *= material.texCoordOffsetScale.zw;
+    
+    float3 albedo = Color::Diffuse(diffuseTexture.SampleLevel(DiffuseSampler, texCoord0, 0).rgb);
+    float3 emissive = Color::Diffuse(glowTexture.SampleLevel(DiffuseSampler, texCoord0, 0).rgb) * material.emissiveColor.rgb * material.emissiveColor.a;
     
     uint randomSeed = payload.data.GetSeed();
     
@@ -77,16 +82,17 @@ void HitMesh(inout CurrentPayload payload, in BuiltInTriangleIntersectionAttribu
         float lightDistance = sqrt(lightDistanceSqr);
         
         lightVector /= lightDistance;
-            
+         
+        float attenuation = 1.0 / max(lightDistanceSqr, 0.01);
         float fade = saturate(1.0 - pow(lightDistance / pointLight.Range, 4.0));
             
-        float NdotL = saturate(dot(worldNormal, lightVector)) * (1.0 / max(lightDistanceSqr, 0.01)) * fade * fade;
+        float NdotL = saturate(dot(worldNormal, lightVector)) * attenuation * fade * fade;
         
         // Shadow
-        /*if(currentDepth < SHADOW_MAX_DEPTH)
-        {
-            NdotL *= TraceRayShadow(Scene, worldPosition, lightVector, randomSeed);
-        }*/
+        //if(currentDepth < SHADOW_MAX_DEPTH)
+        //{
+            NdotL *= TraceRayShadowFinite(Scene, worldPosition, lightVector, lightDistance * M_TO_GAME_UNIT, randomSeed);
+        //}
             
         directLighting += NdotL * pointLight.Color;       
     }
@@ -111,8 +117,18 @@ void HitMesh(inout CurrentPayload payload, in BuiltInTriangleIntersectionAttribu
             //}
         }
     }*/
-   
-    payload.color = albedo * directLighting + emissive * Frame.Emissive; // + albedo * indirectLight.rgb;
+    
+    
+#ifndef SPECULAR
+    uint currentDepth = payload.data.GetDepth();
+    
+    if (currentDepth < MAX_DEPTH)
+    {
+        directLighting += TraceRayDiffuse(Scene, worldPosition, worldNormal, currentDepth, randomSeed, Frame.Diffuse);
+    } 
+#endif
+    
+    payload.color = albedo * directLighting + emissive * Frame.Emissive;
     payload.color *= saturate(-dot(worldNormal, WorldRayDirection()));
     
     #ifdef SPECULAR

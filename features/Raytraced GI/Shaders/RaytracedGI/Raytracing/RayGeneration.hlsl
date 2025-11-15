@@ -58,7 +58,12 @@ void main()
 	const unorm float depthLinear = ScreenToViewDepth(depth);
 
     if (depthLinear < FP_Z || depth >= 0.9999f)
+    {
+        DiffuseOutputTexture[idx] = float4(0.0f, 0.0f, 0.0f, 1.0f);
+        SpecularOutputTexture[idx] = float4(0.0f, 0.0f, 0.0f, 0.0f);
+        
         return;
+    }
     
 	const unorm float3 normalRoughness = NormalRoughnessTexture[idx];
 	const unorm float roughness = normalRoughness.z;    
@@ -75,11 +80,12 @@ void main()
     
     uint seed = InitRandomSeed(DispatchRaysIndex().xy, DispatchRaysDimensions().xy, Frame.FrameCount);
     
-    //float3 origin = positionWS + meshNormalWS * 0.01f;
+    // Prevents Z-fighting caused by far depth precision
+    float3 origin = positionWS + meshNormalWS * depthLinear * 0.0001f;
     
     // Let's raytrace straight from GBuffer, we save one ray per pixel
-    DiffuseOutputTexture[idx] = float4(TraceRayDiffuse(Scene, positionWS, normalWS, 0, seed, Frame.Diffuse), 1);
-    SpecularOutputTexture[idx] = TraceRaySpecular(Scene, positionWS, reflectWS, 0, seed, Frame.Specular, roughness);
+    DiffuseOutputTexture[idx] = float4(TraceRayDiffuse(Scene, origin, normalWS, 0, seed, Frame.Diffuse), 1);
+    SpecularOutputTexture[idx] = TraceRaySpecular(Scene, origin, reflectWS, 0, seed, Frame.Specular, roughness);
     
     //NormalRoughness
     

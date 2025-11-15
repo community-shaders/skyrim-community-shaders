@@ -15,6 +15,7 @@
 #include "Features/RaytracedGI/Allocator.h"
 #include "Features/RaytracedGI/HeapManager.h"
 #include "Features/RaytracedGI/RTPipelineBuilder.h"
+#include "Features/RaytracedGI/ShaderBindingTable.h"
 
 #define NTDDI_VERSION NTDDI_WINBLUE
 
@@ -43,6 +44,8 @@ struct RaytracedGI : public Feature
 	
 	static constexpr uint MAX_LIGHTS = 255;
 	static constexpr uint MAX_IRRADIANCE_ENTRIES = 256 * 256 * 256;
+
+	static constexpr uint TLAS_BUFFER_SIZE_MULT = 2u;
 
 	struct HeapSlot
 	{
@@ -153,12 +156,13 @@ struct RaytracedGI : public Feature
 	void InitD3D12(ID3D11Device* ppDevice, ID3D11DeviceContext* pImmediateContext, IDXGIAdapter* a_adapter);
 	void CreateRootSignature();
 	void CreateComputeRootSignature();
-	ID3D12Resource* MakeAccelerationStructure(const D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_INPUTS& inputs, UINT64* updateScratchSize = nullptr);
+	ID3D12Resource* MakeAccelerationStructure(const D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_INPUTS& inputs, UINT64* scratchSize = nullptr, UINT64* updateScratchSize = nullptr);
 	void Flush();
 	ID3D12Resource* MakeBLAS(ID3D12Resource* vertexBuffer, UINT vertices, ID3D12Resource* indexBuffer, UINT indices);
-	ID3D12Resource* MakeTLAS(ID3D12Resource* instances, UINT numInstances, UINT64* updateScratchSize);
+	ID3D12Resource* MakeTLAS(ID3D12Resource* instances, UINT numInstances, UINT64* scratchSize, UINT64* updateScratchSize);
 	void DrawRTGI();
 
+	float3 GammaToLinear(float3 color);
 	eastl::vector<LightLimitFix::LightData> GetPointLights();
 	void UpdateLights();
 
@@ -166,6 +170,7 @@ struct RaytracedGI : public Feature
 	void BSShader_SetupGeometry(RE::BSShader* This, RE::BSRenderPass* Pass, uint32_t RenderFlags);
 	void BSBatchRenderer_RenderPassImmediately(RE::BSRenderPass* pass, uint32_t technique, bool alphaTest, uint32_t renderFlags);
 
+	bool ValidTriShape(RE::BSTriShape* pTriShape);
 	void AddInstance(RE::BSTriShape* pTriShape);
 	void AddUpdateInstance(RE::BSTriShape* pTriShape);
 	void AddUpdateAllInstances();
@@ -245,6 +250,7 @@ struct RaytracedGI : public Feature
 		float Directional = 1.0f;
 		float Point = 1.0f;
 		bool PointFade = true;
+		bool GammaToLinear = false;
 		int DLSSRRQualityMode = 2;
 		DebugOutput DebugOutput = DebugOutput::None;
 		bool EnablePIXCapture = true;
@@ -295,8 +301,8 @@ struct RaytracedGI : public Feature
 
 	winrt::com_ptr<IDXGraphicsAnalysis> ga = nullptr;
 
-	bool capture = false;
-	bool captureStarted = false;
+	bool pixCapture = false;
+	bool pixCaptureStarted = false;
 
 	bool releaseBufferHooked = false;
 	bool releaseHooked = false;
@@ -374,8 +380,11 @@ struct RaytracedGI : public Feature
 	// Mesh - do I call them vanilla Diffuse/Glow or CS Albedo/Emissive??
 	struct MaterialData
 	{
+		RE::BSShaderMaterial::Feature feature;
+		float4 texCoordOffsetScale;
 		ID3D12Resource* diffuseTexture = nullptr;
 		ID3D12Resource* glowTexture = nullptr;
+		float4 emissiveColor;
 	};
 
 	struct MeshData
@@ -400,16 +409,23 @@ struct RaytracedGI : public Feature
 	{
 		ID3D11Buffer* meshKey;
 		float4x4 transform;
-		eastl::vector<size_t> lights;
 	};
 
 	eastl::unordered_map<RE::BSTriShape*, InstanceData> instances;
+
+	// Instance material
+	struct Material
+	{
+		float4 texCoordOffsetScale;
+		float4 emissiveColor;
+	};
 
 	// Instance buffer
 	struct Instance
 	{
 		uint MeshID;
 		LightData LightData;
+		Material Material;
 	};
 
 	eastl::vector<Instance> instanceData;
@@ -427,10 +443,12 @@ struct RaytracedGI : public Feature
 
 	eastl::multimap<std::string, eastl::array<std::string, 2>> debugMultimap;
 
-	winrt::com_ptr<ID3D12Resource> blasInstanceBuffer = nullptr;
-	D3D12_RAYTRACING_INSTANCE_DESC* blasInstances;
+	//winrt::com_ptr<ID3D12Resource> blasInstanceBuffer = nullptr;
+	eastl::unique_ptr<DX12::StructuredBufferUpload<D3D12_RAYTRACING_INSTANCE_DESC>> blasInstanceBuffer = nullptr;	
+	eastl::vector<D3D12_RAYTRACING_INSTANCE_DESC> blasInstances;
 
 	winrt::com_ptr<ID3D12Resource> tlas = nullptr;
+	winrt::com_ptr<ID3D12Resource> tlasScratch = nullptr;
 	winrt::com_ptr<ID3D12Resource> tlasUpdateScratch = nullptr;
 
 	winrt::com_ptr<ID3D12Resource> frameBuffer = nullptr;
@@ -441,7 +459,8 @@ struct RaytracedGI : public Feature
 	winrt::com_ptr<IDxcBlob> closestHitRT = nullptr;*/
 
 	winrt::com_ptr<ID3D12StateObject> pipelineRT = nullptr;
-	winrt::com_ptr<ID3D12Resource> shaderIDs = nullptr;
+	eastl::unique_ptr<DX12::ShaderBindingTable> shaderBindingTable = nullptr;	
+	eastl::unique_ptr<DX12::ResourceUpload> shaderBindingTableBuffer = nullptr;
 
 	winrt::com_ptr<ID3D12PipelineState> pipelineCS = nullptr;
 

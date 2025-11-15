@@ -6,11 +6,11 @@
 
 #define M_TO_GAME_UNIT (1.0f / (GAME_UNIT_TO_M))
 
-#define MAX_DEPTH 1
+#define MAX_DEPTH 2
 #define SHADOW_MAX_DEPTH 1
 
-#define COMMON_RAY_HIT_IDX 0
-#define COMMON_RAY_MISS_IDX 0
+#define DIFFUSE_RAY_HITGROUP_IDX 0
+#define DIFFUSE_RAY_MISS_IDX 0
 
 #define SHADOW_RAY_HITGROUP_IDX 1
 #define SHADOW_RAY_MISS_IDX 1
@@ -111,7 +111,7 @@ float3 TraceRayDiffuse(RaytracingAccelerationStructure scene, float3 origin, flo
     diffusePayload.color = float3(0, 0, 0);
     diffusePayload.data = PayloadData::Create(false, currentDepth + 1, randomSeed);
 
-    TraceRay(scene, RAY_FLAG_NONE, 0xFF, COMMON_RAY_HIT_IDX, 0, COMMON_RAY_MISS_IDX, ray, diffusePayload);
+    TraceRay(scene, RAY_FLAG_NONE, 0xFF, DIFFUSE_RAY_HITGROUP_IDX, 0, DIFFUSE_RAY_MISS_IDX, ray, diffusePayload);
     return diffusePayload.color * multiplier;
 }
 
@@ -129,9 +129,28 @@ float TraceRayShadow(RaytracingAccelerationStructure scene, float3 origin, float
     ShadowPayload shadowPayload;
     shadowPayload.missed = 0.0f;
         
-    TraceRay(scene,  RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH | RAY_FLAG_SKIP_CLOSEST_HIT_SHADER | RAY_FLAG_CULL_NON_OPAQUE | RAY_FLAG_SKIP_PROCEDURAL_PRIMITIVES, 0xFF, SHADOW_RAY_HITGROUP_IDX, 0, COMMON_RAY_MISS_IDX, ray, shadowPayload);
+    TraceRay(scene,  RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH | RAY_FLAG_SKIP_CLOSEST_HIT_SHADER | RAY_FLAG_CULL_NON_OPAQUE | RAY_FLAG_SKIP_PROCEDURAL_PRIMITIVES, 0xFF, SHADOW_RAY_HITGROUP_IDX, 0, SHADOW_RAY_MISS_IDX, ray, shadowPayload);
     return shadowPayload.missed;
 }
+
+float TraceRayShadowFinite(RaytracingAccelerationStructure scene, float3 origin, float3 direction, float tmax, inout uint randomSeed)
+{
+    float3 tangentSample = TangentSampleScaled(randomSeed, 0.5f);
+    float3 randomDirection = SampleHemisphere(direction, tangentSample);
+    
+    RayDesc ray;
+    ray.Origin = origin;
+    ray.Direction = randomDirection;
+    ray.TMin = 0.01f;
+    ray.TMax = tmax;
+
+    ShadowPayload shadowPayload;
+    shadowPayload.missed = 0.0f;
+        
+    TraceRay(scene,  RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH | RAY_FLAG_SKIP_CLOSEST_HIT_SHADER | RAY_FLAG_CULL_NON_OPAQUE | RAY_FLAG_SKIP_PROCEDURAL_PRIMITIVES, 0xFF, SHADOW_RAY_HITGROUP_IDX, 0, SHADOW_RAY_MISS_IDX, ray, shadowPayload);
+    return shadowPayload.missed;
+}
+
 
 float4 TraceRaySpecular(RaytracingAccelerationStructure scene, float3 origin, float3 direction, uint currentDepth, inout uint randomSeed, float multiplier, float roughness)
 {

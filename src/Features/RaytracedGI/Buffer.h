@@ -78,6 +78,62 @@ namespace DX12
 		D3D12_RESOURCE_DESC desc;
 	};
 
+
+	class ResourceUpload : public Resource
+	{
+		static D3D12_RESOURCE_DESC Desc(UINT64 size, D3D12_RESOURCE_FLAGS flags)
+		{
+			D3D12_RESOURCE_DESC desc = {};
+			desc.Dimension = D3D12_RESOURCE_DIMENSION_BUFFER;
+			desc.Alignment = 0;
+			desc.Width = size;
+			desc.Height = 1;
+			desc.DepthOrArraySize = 1;
+			desc.MipLevels = 1;
+			desc.Format = DXGI_FORMAT_UNKNOWN;
+			desc.SampleDesc.Count = 1;
+			desc.SampleDesc.Quality = 0;
+			desc.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
+			desc.Flags = flags;
+
+			return desc;
+		}
+
+	public:
+		explicit ResourceUpload(ID3D12Device5* device, const uint64_t& size, D3D12_RESOURCE_FLAGS flags = D3D12_RESOURCE_FLAG_NONE) :
+			Resource(device, D3D12_HEAP_TYPE_DEFAULT, Desc(size, flags), D3D12_RESOURCE_STATE_COPY_DEST), size(size)
+		{
+			const auto& heapProps = CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_UPLOAD);
+			DX::ThrowIfFailed(device->CreateCommittedResource(
+				&heapProps,
+				D3D12_HEAP_FLAG_NONE,
+				&this->desc,
+				D3D12_RESOURCE_STATE_GENERIC_READ,
+				nullptr,
+				IID_PPV_ARGS(&uploadResource)));
+		}
+
+		void Update(void const* src_data, size_t data_size)
+		{
+			void* pData;
+			DX::ThrowIfFailed(uploadResource->Map(0, nullptr, &pData));
+			memcpy(pData, src_data, data_size);
+			uploadResource->Unmap(0, nullptr);
+		}
+
+		void Upload(ID3D12GraphicsCommandList4* commandList)
+		{
+			this->TransitionBarrier(commandList, D3D12_RESOURCE_STATE_COPY_DEST);
+			commandList->CopyBufferRegion(this->resource.get(), 0, uploadResource.get(), 0, size);
+			this->TransitionBarrier(commandList, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+		}
+
+		winrt::com_ptr<ID3D12Resource> uploadResource = nullptr;
+
+	private:
+		UINT64 size;
+	};
+
 	class Texture : public Resource
 	{
 		static D3D12_RESOURCE_DESC Desc(D3D12_RESOURCE_DIMENSION dimension, UINT64 width, UINT height, DXGI_FORMAT format, D3D12_RESOURCE_FLAGS flags)
@@ -240,8 +296,8 @@ namespace DX12
 	class StructuredAppendBuffer : public StructuredBuffer<T>
 	{
 	public:
-		explicit StructuredAppendBuffer(ID3D12Device5* a_device, const uint64_t& a_count, bool uav = true) :
-			StructuredBuffer<T>(a_device, a_count, uav)
+		explicit StructuredAppendBuffer(ID3D12Device5* device, const uint64_t& count, bool uav = true) :
+			StructuredBuffer<T>(device, count, uav)
 		{
 			// Create 4-byte counter buffer
 			D3D12_RESOURCE_DESC desc = {};
@@ -258,7 +314,7 @@ namespace DX12
 			desc.Flags = D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS;
 
 			const auto& heap = CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_DEFAULT);
-			DX::ThrowIfFailed(a_device->CreateCommittedResource(
+			DX::ThrowIfFailed(device->CreateCommittedResource(
 				&heap,
 				D3D12_HEAP_FLAG_NONE,
 				&desc,

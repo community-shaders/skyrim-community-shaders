@@ -7,6 +7,7 @@
 #include <d3d12.h>
 #include <dxcapi.h>
 #include "Features/RaytracedGI/HeapManager.h"
+#include "Features/RaytracedGI/ShaderBindingTable.h"
 
 namespace DX12
 {
@@ -145,70 +146,59 @@ namespace DX12
 		// 
 		// D3D12_RAYTRACING_SHADER_TABLE_BYTE_ALIGNMENT
 
-		static size_t Align(size_t size, size_t alignment)
+		inline std::string ToUtf8(const eastl::wstring& wstr)
 		{
-			return (size + alignment - 1) & ~(alignment - 1);
+			if (wstr.empty())
+				return std::string();
+
+			int size_needed = ::WideCharToMultiByte(
+				CP_UTF8,       // convert to UTF-8
+				0,             // no special flags
+				wstr.c_str(),  // source wide string
+				static_cast<int>(wstr.size()),
+				nullptr,  // no output buffer yet
+				0,
+				nullptr,
+				nullptr);
+
+			std::string result(size_needed, 0);
+			::WideCharToMultiByte(
+				CP_UTF8,
+				0,
+				wstr.c_str(),
+				static_cast<int>(wstr.size()),
+				result.data(),
+				size_needed,
+				nullptr,
+				nullptr);
+
+			return result;
 		}
 
-		size_t ShaderTablesSize()
+		ShaderBindingTable CreateShaderBindingTable(ID3D12StateObjectProperties* pipelineProps)
 		{
-			size_t size = 0;
+			ShaderBindingTable shaderBindingTable;
 
-			auto writeTable = [&](const eastl::vector<eastl::wstring>& names) {
-				size_t tableSize = 0; 
-
-				for (size_t i = 0; i < names.size(); i++) {
-					tableSize += Align(D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES, D3D12_RAYTRACING_SHADER_RECORD_BYTE_ALIGNMENT);
-				}
-
-				size += Align(tableSize, D3D12_RAYTRACING_SHADER_TABLE_BYTE_ALIGNMENT);
-			};
-
-			writeTable(rayGenNames);
-			writeTable(missNames);
-			writeTable(hitGroupNames);
-
-			return size;
-		}
-
-		ShaderTable WriteShaderIdentifiers(ID3D12StateObjectProperties* pipelineProps, void* mappedData) const
-		{
-			ShaderTable shaderTable{};
-
-			uint8_t* startPtr = static_cast<uint8_t*>(mappedData);
-
-			uint8_t* ptr = startPtr;
-
-			auto writeTable = [&](const eastl::vector<eastl::wstring>& names) {
-				const size_t shaderIDSize = D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES;
-
-				uint8_t* tableStartPtr = ptr;
-
+			auto writeRecords = [&](const eastl::vector<eastl::wstring>& names, ShaderTableSection& shaderTableSection) {
 				for (const auto& name : names) {
-					
-					void* shaderID = pipelineProps->GetShaderIdentifier(name.c_str());
-					memcpy(ptr, shaderID, shaderIDSize);
+					logger::info("[RT] Shader Identifier: {}", ToUtf8(name).c_str());
 
-					ptr += Align(shaderIDSize, D3D12_RAYTRACING_SHADER_RECORD_BYTE_ALIGNMENT);
+					ShaderRecord shaderRecord(pipelineProps->GetShaderIdentifier(name.c_str()), D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES);
+					shaderTableSection.AddRecord(shaderRecord);
 				}
-
-				const size_t tableSize = ptr - tableStartPtr;
-				const size_t tableSizeAligned = Align(tableSize, D3D12_RAYTRACING_SHADER_TABLE_BYTE_ALIGNMENT);
-				ptr = tableStartPtr + tableSizeAligned;
-
-				logger::info("[RT] WriteShaderIdentifiers Start: {}, Size: {}, Size Aligned: {}", tableStartPtr - startPtr, tableSize, tableSizeAligned);
-
-				return tableSize;
 			};
 
-			shaderTable.RayGenerationShaderRecord = { 0, writeTable(rayGenNames) };
-			shaderTable.MissShaderTable = { static_cast<UINT64>(ptr - startPtr), writeTable(missNames), D3D12_RAYTRACING_SHADER_RECORD_BYTE_ALIGNMENT };
-			shaderTable.HitGroupTable = { static_cast<UINT64>(ptr - startPtr), writeTable(hitGroupNames), D3D12_RAYTRACING_SHADER_RECORD_BYTE_ALIGNMENT };
+			logger::info("[RT] Writting Raygen Records");
+			writeRecords(rayGenNames, shaderBindingTable.RayGen);
 
-			return shaderTable;
+			logger::info("[RT] Writting Miss Records");
+			writeRecords(missNames, shaderBindingTable.Miss);
+
+			logger::info("[RT] Writting HitGroup Records");
+			writeRecords(hitGroupNames, shaderBindingTable.HitGroup);
+
+			return shaderBindingTable;
 		}
-
-
 
 	private:
 		// Storage for lifetime management

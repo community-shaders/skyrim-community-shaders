@@ -1,5 +1,7 @@
 #pragma once
 
+#include "Features/RaytracedGI/ShaderBindingTable.h"
+
 namespace DX12
 {
 	template <typename T>
@@ -15,14 +17,6 @@ namespace DX12
 
 		DescriptorDesc(T slot, UINT numDescriptors, UINT registerSpace = 0, D3D12_DESCRIPTOR_RANGE_FLAGS flags = D3D12_DESCRIPTOR_RANGE_FLAG_NONE) :
 			slot(slot), numDescriptors(numDescriptors), registerSpace(registerSpace), flags(flags) {}
-	};
-
-	struct ShaderTable
-	{
-		D3D12_GPU_VIRTUAL_ADDRESS_RANGE RayGenerationShaderRecord;
-		D3D12_GPU_VIRTUAL_ADDRESS_RANGE_AND_STRIDE MissShaderTable;
-		D3D12_GPU_VIRTUAL_ADDRESS_RANGE_AND_STRIDE HitGroupTable;
-		D3D12_GPU_VIRTUAL_ADDRESS_RANGE_AND_STRIDE CallableShaderTable;
 	};
 
 	template <EnumUInt32 T>
@@ -72,16 +66,6 @@ namespace DX12
 		{
 			DX::ThrowIfFailed(device->CreateDescriptorHeap(&descriptorHeapDesc, IID_PPV_ARGS(&descriptorHeap)));
 			descriptorIncrementSize = device->GetDescriptorHandleIncrementSize(descriptorHeapDesc.Type);
-		}
-
-		void SetShaderTable(ShaderTable shaderTableIn)
-		{
-			shaderTable = shaderTableIn;
-		}
-
-		const ShaderTable& GetShaderTable()
-		{
-			return shaderTable;
 		}
 
 		ID3D12DescriptorHeap* Heap() const
@@ -143,7 +127,6 @@ namespace DX12
 		}
 
 	private:
-		ShaderTable shaderTable;
 		D3D12_DESCRIPTOR_HEAP_DESC descriptorHeapDesc{};
 		winrt::com_ptr<ID3D12DescriptorHeap> descriptorHeap;
 		uint descriptorIncrementSize{};
