@@ -795,7 +795,11 @@ namespace Util
 		auto& searchBuffer = searchBuffers[comboId];
 
 		if (ImGui::BeginCombo(label, selectedName.c_str())) {
+			ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(24.0f, ImGui::GetStyle().FramePadding.y));
 			ImGui::InputText("##search", searchBuffer, IM_ARRAYSIZE(searchBuffer));
+			ImGui::PopStyleVar();
+			ImVec2 iconPos = ImVec2(ImGui::GetItemRectMin().x + 5.0f, ImGui::GetItemRectMin().y + (ImGui::GetItemRectSize().y - 16.0f) * 0.5f);
+			DrawSearchIcon(iconPos, 16.0f, 0.5f);
 
 			ImGui::Separator();
 

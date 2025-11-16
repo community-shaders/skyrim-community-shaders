@@ -422,10 +422,8 @@ namespace SIE
 		void IncCacheHitTasks();
 		void ToggleErrorMessages();
 		void DisableShaderBlocking();
-		void ToggleShaderBlocking(const std::string& key);
 		void IterateShaderBlock(bool a_forward = true);
 		bool IsHideErrors();
-		std::wstring GetDiskCacheShaderPath(ShaderClass shaderClass, const std::string& key) const;
 
 		/**
 		 * @brief Clears all shaders of a specific type from the shader map.
