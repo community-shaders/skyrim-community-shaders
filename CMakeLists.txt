@@ -473,7 +473,9 @@ if(AUTO_PLUGIN_DEPLOYMENT OR AIO_ZIP_TO_DIST)
             get_filename_component(_feat_name "${_fpath}" NAME)
             foreach(_src IN LISTS _feat_shaders)
                 file(RELATIVE_PATH _rel "${_fpath}/Shaders" "${_src}")
-                set(_dst "${AIO_DIR}/Shaders/${_feat_name}/${_rel}")
+                # Place feature shader files directly under AIO_DIR/Shaders to preserve expected include paths
+                # This matches the package shader layout and ensures includes like "TerrainShadows/..." resolve correctly
+                set(_dst "${AIO_DIR}/Shaders/${_rel}")
                 get_filename_component(_dst_dir "${_dst}" DIRECTORY)
                 list(
                     APPEND
