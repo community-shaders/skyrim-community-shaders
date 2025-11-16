@@ -242,23 +242,23 @@ void AdvancedSettingsRenderer::RenderShaderDebugSection()
 					ImGui::Text("Class: %s", magic_enum::enum_name(shader.shaderClass).data());
 					ImGui::Text("Descriptor: 0x%X", shader.descriptor);
 
-				// Add button to copy shader info to clipboard
-				ImGui::PushID(shader.key.c_str());
-				if (ImGui::SmallButton("Copy Info##BlockedShader")) {
-					std::string diskPathStr;
-					diskPathStr.reserve(shader.diskPath.size());
-					for (wchar_t wc : shader.diskPath) {
-						diskPathStr += static_cast<char>(wc);
-					}
+					// Add button to copy shader info to clipboard
+					ImGui::PushID(shader.key.c_str());
+					if (ImGui::SmallButton("Copy Info##BlockedShader")) {
+						std::string diskPathStr;
+						diskPathStr.reserve(shader.diskPath.size());
+						for (wchar_t wc : shader.diskPath) {
+							diskPathStr += static_cast<char>(wc);
+						}
 
-					std::string fullInfo = std::format("Type: {}\nClass: {}\nDescriptor: 0x{:X}\nKey: {}\nCache Path: {}",
-						magic_enum::enum_name(shader.shaderType).data(),
-						magic_enum::enum_name(shader.shaderClass).data(),
-						shader.descriptor,
-						shader.key,
-						diskPathStr);
-					ImGui::SetClipboardText(fullInfo.c_str());
-				}
+						std::string fullInfo = std::format("Type: {}\nClass: {}\nDescriptor: 0x{:X}\nKey: {}\nCache Path: {}",
+							magic_enum::enum_name(shader.shaderType).data(),
+							magic_enum::enum_name(shader.shaderClass).data(),
+							shader.descriptor,
+							shader.key,
+							diskPathStr);
+						ImGui::SetClipboardText(fullInfo.c_str());
+					}
 					ImGui::PopID();
 					if (ImGui::IsItemHovered()) {
 						if (auto _tt = Util::HoverTooltipWrapper()) {
@@ -294,11 +294,11 @@ void AdvancedSettingsRenderer::RenderShaderDebugSection()
 			totalDrawCalls += shader.drawCalls;
 		}
 
-	// Static variables to maintain table filter state
-	static char filterText[256] = "";
-	static int searchColumn = 0;  // 0 = All Columns, 1 = Type, 2 = Class, 3 = Descriptor, 4 = Draw Calls, 5 = Key
-	static size_t sortColumn = 4;  // Default sort by Frame % (draw calls)
-	static bool sortAscending = false;  // Descending by default (highest usage first)		// Create shader rows for the table utility (simplified - no filter data needed)
+		// Static variables to maintain table filter state
+		static char filterText[256] = "";
+		static int searchColumn = 0;        // 0 = All Columns, 1 = Type, 2 = Class, 3 = Descriptor, 4 = Draw Calls, 5 = Key
+		static size_t sortColumn = 4;       // Default sort by Frame % (draw calls)
+		static bool sortAscending = false;  // Descending by default (highest usage first)		// Create shader rows for the table utility (simplified - no filter data needed)
 		struct ShaderRow
 		{
 			SIE::ShaderCache::ActiveShaderInfo shader;
@@ -330,33 +330,34 @@ void AdvancedSettingsRenderer::RenderShaderDebugSection()
 			 } }
 		};
 
-	// Row click callbacks
-	auto onRowLeftClick = [shaderCache](const ShaderRow& row) {
-		if (row.shader.key == shaderCache->blockedKey) {
-			shaderCache->DisableShaderBlocking();
-		} else {
-			// Block this shader - use IterateShaderBlock to find and block it
-			// Or set blockedKey directly (simpler for click-to-block)
-			shaderCache->blockedKey = row.shader.key;
-			logger::info("Blocking shader: {}", row.shader.key);
-		}
-	};
+		// Row click callbacks
+		auto onRowLeftClick = [shaderCache](const ShaderRow& row) {
+			if (row.shader.key == shaderCache->blockedKey) {
+				shaderCache->DisableShaderBlocking();
+			} else {
+				// Block this shader - use IterateShaderBlock to find and block it
+				// Or set blockedKey directly (simpler for click-to-block)
+				shaderCache->blockedKey = row.shader.key;
+				logger::info("Blocking shader: {}", row.shader.key);
+			}
+		};
 
-	auto onRowRightClick = [shaderCache](const ShaderRow& row) {
-		std::string diskPathStr;
-		diskPathStr.reserve(row.shader.diskPath.size());
-		for (wchar_t wc : row.shader.diskPath) {
-			diskPathStr += static_cast<char>(wc);
-		}
+		auto onRowRightClick = [shaderCache](const ShaderRow& row) {
+			std::string diskPathStr;
+			diskPathStr.reserve(row.shader.diskPath.size());
+			for (wchar_t wc : row.shader.diskPath) {
+				diskPathStr += static_cast<char>(wc);
+			}
 
-		std::string fullInfo = std::format("Type: {}\nClass: {}\nDescriptor: 0x{:X}\nKey: {}\nCache Path: {}",
-			magic_enum::enum_name(row.shader.shaderType).data(),
-			magic_enum::enum_name(row.shader.shaderClass).data(),
-			row.shader.descriptor,
-			row.shader.key,
-			diskPathStr);
-		ImGui::SetClipboardText(fullInfo.c_str());
-	};		auto getRowTooltip = [shaderCache](const ShaderRow& row) {
+			std::string fullInfo = std::format("Type: {}\nClass: {}\nDescriptor: 0x{:X}\nKey: {}\nCache Path: {}",
+				magic_enum::enum_name(row.shader.shaderType).data(),
+				magic_enum::enum_name(row.shader.shaderClass).data(),
+				row.shader.descriptor,
+				row.shader.key,
+				diskPathStr);
+			ImGui::SetClipboardText(fullInfo.c_str());
+		};
+		auto getRowTooltip = [shaderCache](const ShaderRow& row) {
 			std::string clickAction = (row.shader.key == shaderCache->blockedKey) ? "Left-click to unblock this shader" : "Left-click to block this shader";
 
 			return std::format("Type: {}\nClass: {}\nDescriptor: 0x{:X}\nKey: {}\n\n{}",
@@ -423,22 +424,22 @@ void AdvancedSettingsRenderer::RenderShaderDebugSection()
 			{ Util::TableInputEventType::ContextMenu, onRowRightClick, "Copy Info", 1 }
 		};
 
-	// Render the table with all configurations
-	Util::ShowInteractiveTable<ShaderRow>(
-		"##ActiveShadersTable",
-		columns,
-		shaderRows,
-		sortColumn,
-		sortAscending,
-		sorters,
-		filterState,
-		inputEvents,
-		getRowTooltip);
+		// Render the table with all configurations
+		Util::ShowInteractiveTable<ShaderRow>(
+			"##ActiveShadersTable",
+			columns,
+			shaderRows,
+			sortColumn,
+			sortAscending,
+			sorters,
+			filterState,
+			inputEvents,
+			getRowTooltip);
 
-	// Update static variables with modified filter state
-	strncpy_s(filterText, filterState.filterText.c_str(), sizeof(filterText) - 1);
-	filterText[sizeof(filterText) - 1] = '\0';
-	searchColumn = filterState.searchColumn;
+		// Update static variables with modified filter state
+		strncpy_s(filterText, filterState.filterText.c_str(), sizeof(filterText) - 1);
+		filterText[sizeof(filterText) - 1] = '\0';
+		searchColumn = filterState.searchColumn;
 	}
 }
 
