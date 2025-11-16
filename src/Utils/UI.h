@@ -617,6 +617,14 @@ namespace Util
 	bool StringMatchesSearch(const std::string& text, const std::string& searchQuery);
 
 	/**
+	 * @brief Draws a search icon (magnifying glass) at the specified position.
+	 * @param position The screen position where the icon should be drawn
+	 * @param size The size of the icon (default: 20.0f)
+	 * @param alpha Alpha multiplier for the icon color (default: 0.7f for subtle appearance)
+	 */
+	void DrawSearchIcon(const ImVec2& position, float size = 20.0f, float alpha = 0.7f);
+
+	/**
 	 * @brief Draws the feature search bar with magnifying glass icon.
 	 * @param searchString Reference to the search string to modify
 	 * @param availableWidth The available width for the search bar

@@ -788,6 +788,28 @@ namespace Util
 		return lowerText.find(lowerQuery) != std::string::npos;
 	}
 
+	void DrawSearchIcon(const ImVec2& position, float size, float alpha)
+	{
+		ImDrawList* drawList = ImGui::GetWindowDrawList();
+
+		ImVec2 center = ImVec2(position.x + size * 0.46f, position.y + size * 0.5f);
+		float radius = size * 0.3f;
+
+		// Use themed text color with reduced alpha for search icon
+		auto& theme = globals::menu->GetTheme().Palette;
+		ImVec4 iconColor = theme.Text;
+		iconColor.w *= alpha;  // Apply alpha multiplier for subtler appearance
+		ImU32 placeholderColor = ImGui::GetColorU32(iconColor);
+
+		// Draw circle
+		drawList->AddCircle(center, radius, placeholderColor, 12, 2.2f);
+
+		// Draw handle
+		ImVec2 handleStart = ImVec2(center.x + radius * 0.81f, center.y + radius * 0.81f);
+		ImVec2 handleEnd = ImVec2(handleStart.x + size * 0.29f, handleStart.y + size * 0.29f);
+		drawList->AddLine(handleStart, handleEnd, placeholderColor, 2.1f);
+	}
+
 	void DrawFeatureSearchBar(std::string& searchString, float availableWidth)
 	{
 		ImGui::PushID("FeatureSearchBar");
@@ -827,26 +849,9 @@ namespace Util
 			searchString = buffer;
 		}
 
-		// Draw a simple search icon (magnifying glass shape)
+		// Draw search icon using the reusable function
 		ImVec2 iconPos = ImVec2(cursorPos.x + 8.0f, cursorPos.y + (frameHeight - iconSize) * 0.5f);
-		ImDrawList* drawList = ImGui::GetWindowDrawList();
-
-		ImVec2 center = ImVec2(iconPos.x + iconSize * 0.46f, iconPos.y + iconSize * 0.5f);
-		float radius = iconSize * 0.3f;
-
-		// Use themed text color with reduced alpha for search icon
-		auto& theme = globals::menu->GetTheme().Palette;
-		ImVec4 iconColor = theme.Text;
-		iconColor.w *= 0.7f;  // Reduce alpha for subtler appearance
-		ImU32 placeholderColor = ImGui::GetColorU32(iconColor);
-
-		// Draw circle
-		drawList->AddCircle(center, radius, placeholderColor, 12, 2.2f);
-
-		// Draw handle
-		ImVec2 handleStart = ImVec2(center.x + radius * 0.81f, center.y + radius * 0.81f);
-		ImVec2 handleEnd = ImVec2(handleStart.x + iconSize * 0.29f, handleStart.y + iconSize * 0.29f);
-		drawList->AddLine(handleStart, handleEnd, placeholderColor, 2.1f);
+		DrawSearchIcon(iconPos, iconSize, 0.7f);
 
 		ImGui::PopStyleVar(2);
 		ImGui::PopStyleColor(5);
