@@ -36,6 +36,9 @@ on:
             - "vcpkg-configuration.json"
             - ".gitmodules"
             - "extern/**"
+            - "cmake/**"
+            - ".github/workflows/**"
+            - ".github/configs/**"
 
 permissions:
     contents: read
