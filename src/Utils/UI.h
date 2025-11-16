@@ -771,7 +771,7 @@ namespace Util
 	 * std::unordered_map<std::string, MyData> myItems;
 	 * std::string selectedName;
 	 * MyData* selectedItem = nullptr;
-	 * 
+	 *
 	 * if (Util::SearchableCombo("Choose Item", selectedName, myItems)) {
 	 *     selectedItem = &myItems[selectedName];
 	 * }
@@ -782,7 +782,7 @@ namespace Util
 	{
 		bool valueChanged = false;
 		static std::unordered_map<std::string, char[256]> searchBuffers;
-		
+
 		std::string comboId = std::string(label);
 		auto& searchBuffer = searchBuffers[comboId];
 
@@ -797,7 +797,6 @@ namespace Util
 				if (searchBuffer[0] == '\0' ||
 					std::search(itemName.begin(), itemName.end(), searchBuffer, searchBuffer + strlen(searchBuffer),
 						[](char a, char b) { return std::tolower(a) == std::tolower(b); }) != itemName.end()) {
-
 					if (ImGui::Selectable(itemName.c_str(), itemName == selectedName)) {
 						selectedName = itemName;
 						valueChanged = true;
@@ -814,8 +813,8 @@ namespace Util
 
 		return valueChanged;
 	}
-  
-   /**
+
+	/**
 	 * @brief Renders a table cell with automatic text highlighting and optional tooltip/fallback.
 	 * Convenience function for table cell renderers that combines text rendering with highlighting,
 	 * tooltips, and fallback text for empty content.
@@ -827,7 +826,7 @@ namespace Util
 	 * @param enableWrapping Whether to enable text wrapping for multi-line content (default: true)
 	 * @param textColor Optional text color override (default: use default text color)
 	 */
-  
+
 	inline void RenderTableCell(const std::string& text, const std::string& filterText,
 		const std::string& tooltipText = "", const char* fallbackText = nullptr,
 		ImVec4 highlightColor = ImVec4(1.0f, 1.0f, 0.0f, 1.0f), bool enableWrapping = true,
