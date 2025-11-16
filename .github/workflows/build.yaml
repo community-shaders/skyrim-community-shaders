@@ -52,7 +52,7 @@ jobs:
         if: ${{ github.event_name == 'pull_request_target' }}
         outputs:
             should-build: ${{ steps.changed-files.outputs.build_any_changed == 'true' || steps.changed-files.outputs.cpp_any_changed == 'true' || steps.changed-files.conclusion == 'failure' }}
-            hlsl-should-build: ${{ steps.changed-files.outputs.hlsl_any_changed == 'true' || steps.changed-files.conclusion == 'failure' }}
+            hlsl-should-build: ${{ steps.changed-files.outputs.hlsl_any_changed == 'true' || steps.changed-files.outputs.build_any_changed == 'true' || steps.changed-files.conclusion == 'failure' }}
         steps:
             - uses: actions/checkout@v4
               with:
