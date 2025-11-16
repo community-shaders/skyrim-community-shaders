@@ -1,5 +1,6 @@
 #include "AdvancedSettingsRenderer.h"
 
+#include <algorithm>
 #include <format>
 #include <imgui.h>
 #include <imgui_stdlib.h>
@@ -58,19 +59,8 @@ void AdvancedSettingsRenderer::RenderAdvancedSettings(
 			ImGui::EndTabItem();
 		}
 
-		// Developer Tools Tab (only in developer mode)
-		if (globals::state->IsDeveloperMode()) {
-			if (MenuFonts::BeginTabItemWithFont("Developer Tools", Menu::FontRole::Subheading)) {
-				if (ImGui::BeginChild("##DeveloperToolsContent", ImVec2(0, 0), false)) {
-					RenderDeveloperSection();
-				}
-				ImGui::EndChild();
-				ImGui::EndTabItem();
-			}
-		}
-
-		ImGui::EndTabBar();
-	}
+	RenderShaderDebugSection();
+	RenderDeveloperSection();
 }
 
 void AdvancedSettingsRenderer::RenderAdvancedSection()
@@ -173,24 +163,19 @@ void AdvancedSettingsRenderer::RenderAdvancedSection()
 			shaderCache->DisableShaderBlocking();
 		}
 		if (auto _tt = Util::HoverTooltipWrapper()) {
-			ImGui::Text(
-				"Stop blocking Community Shaders shader. "
-				"Blocking is helpful when debugging shader errors in game to determine which shader has issues. "
-				"Blocking is enabled if in developer mode and pressing PAGEUP and PAGEDOWN. "
-				"Specific shader will be printed to logfile. ");
+			ImGui::Text("Clear all compiled shaders from memory. Forces recompilation of all shaders on next use.");
 		}
-	}
 
-	// Debug addresses section
-	if (ImGui::TreeNodeEx("Addresses")) {
-		auto Renderer = globals::game::renderer;
-		auto BSShaderAccumulator = *globals::game::currentAccumulator.get();
-		auto RendererShadowState = globals::game::shadowState;
-		ADDRESS_NODE(Renderer)
-		ADDRESS_NODE(BSShaderAccumulator)
-		ADDRESS_NODE(RendererShadowState)
-		ImGui::TreePop();
-	}
+		// Debug addresses section
+		if (ImGui::TreeNodeEx("Addresses")) {
+			auto Renderer = globals::game::renderer;
+			auto BSShaderAccumulator = *globals::game::currentAccumulator.get();
+			auto RendererShadowState = globals::game::shadowState;
+			ADDRESS_NODE(Renderer)
+			ADDRESS_NODE(BSShaderAccumulator)
+			ADDRESS_NODE(RendererShadowState)
+			ImGui::TreePop();
+		}
 
 	// Statistics section
 	if (ImGui::TreeNodeEx("Statistics", ImGuiTreeNodeFlags_DefaultOpen)) {
