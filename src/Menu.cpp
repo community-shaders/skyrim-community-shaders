@@ -442,20 +442,6 @@ void Menu::DrawSettings()
 			globalScale = ThemeManager::Constants::DEFAULT_GLOBAL_SCALE;  // Ensure built-in themes stay at 0.0
 		}
 
-		if (ImGui::BeginTable("##LeButtons", 4, ImGuiTableFlags_SizingStretchSame)) {
-			ImGui::TableNextColumn();
-			if (ImGui::Button("Open Editor", { -1, 0 })) {
-				EditorWindow::GetSingleton()->open = true;
-			}
-
-			ImGui::TableNextColumn();
-			if (ImGui::Button("Save Settings", { -1, 0 })) {
-				State::GetSingleton()->Save();
-			}
-
-			ImGui::EndTable();
-		}
-
 		const float uiScale = exp2(globalScale);  // Get current UI scale
 		// Check if we can show icons - require setting enabled and at least some icons loaded (for undocked)
 		// For docked mode, always show icons if textures are available

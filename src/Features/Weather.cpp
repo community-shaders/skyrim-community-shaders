@@ -1,7 +1,10 @@
 #include "Weather.h"
 
 #include "Deferred.h"
+#include "State.h"
 #include "Util.h"
+
+#include "Editor/EditorWindow.h"
 
 int8_t LerpInt8_t(const int8_t oldValue, const int8_t newVal, const float lerpValue)
 {
@@ -39,7 +42,27 @@ void LerpDirectional(RE::BGSDirectionalAmbientLightingColors::Directional& oldCo
 	LerpColor(oldColor.z.min, newColor.z.min, changePct);
 }
 
-void Weather::Bind()
+void WeatherEditor::DrawSettings()
+{
+	ImGui::TextWrapped("Weather Editor provides controls for saving settings and opening the weather editor window.");
+	ImGui::Spacing();
+
+	if (ImGui::BeginTable("##WeatherEditorButtons", 2, ImGuiTableFlags_SizingStretchSame)) {
+		ImGui::TableNextColumn();
+		if (ImGui::Button("Open Editor", { -1, 0 })) {
+			EditorWindow::GetSingleton()->open = true;
+		}
+
+		ImGui::TableNextColumn();
+		if (ImGui::Button("Save Settings", { -1, 0 })) {
+			State::GetSingleton()->Save();
+		}
+
+		ImGui::EndTable();
+	}
+}
+
+void WeatherEditor::Bind()
 {
 	if (loaded) {
 		auto& context = globals::d3d::context;
@@ -52,7 +75,7 @@ void Weather::Bind()
 	}
 }
 
-void Weather::Prepass()
+void WeatherEditor::Prepass()
 {
 	auto& context = globals::d3d::context;
 
@@ -99,7 +122,7 @@ void Weather::Prepass()
 	}
 }
 
-void Weather::SetupResources()
+void WeatherEditor::SetupResources()
 {
 	GetDiffuseIBLCS();
 
@@ -135,21 +158,21 @@ void Weather::SetupResources()
 	}
 }
 
-void Weather::ClearShaderCache()
+void WeatherEditor::ClearShaderCache()
 {
 	if (diffuseIBLCS)
 		diffuseIBLCS->Release();
 	diffuseIBLCS = nullptr;
 }
 
-ID3D11ComputeShader* Weather::GetDiffuseIBLCS()
+ID3D11ComputeShader* WeatherEditor::GetDiffuseIBLCS()
 {
 	if (!diffuseIBLCS)
 		diffuseIBLCS = static_cast<ID3D11ComputeShader*>(Util::CompileShader(L"Data\\Shaders\\Weather\\DiffuseIBLCS.hlsl", {}, "cs_5_0"));
 	return diffuseIBLCS;
 }
 
-void Weather::LerpWeather(RE::TESWeather* oldWeather, RE::TESWeather* newWeather, float currentWeatherPct)
+void WeatherEditor::LerpWeather(RE::TESWeather* oldWeather, RE::TESWeather* newWeather, float currentWeatherPct)
 {
 	//// Precipitation
 	newWeather->data.precipitationBeginFadeIn = LerpInt8_t(oldWeather->data.precipitationBeginFadeIn, newWeather->data.precipitationBeginFadeIn, currentWeatherPct);

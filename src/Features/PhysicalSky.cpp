@@ -9,8 +9,13 @@
 #include "Util.h"
 
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
+	PhysicalSky::WorldspaceInfo,
+	zBottom)
+
+NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	PhysicalSky::Settings,
 	enabled,
+	overrideWhitelist,
 	overrideDirLight,
 	tonemapper,
 	vanillaMix,
@@ -37,7 +42,8 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	cloudRelightMix,
 	cloudOriginalMix,
 	silverLiningMix,
-	silverLiningSpread)
+	silverLiningSpread,
+	worldspaceWhitelist)
 
 namespace
 {
@@ -138,6 +144,9 @@ void PhysicalSky::SettingsGeneral()
 	}
 
 	ImGui::Checkbox("Enabled", &settings.enabled);
+	ImGui::Checkbox("Override Whitelist", &settings.overrideWhitelist);
+	if (auto _tt = Util::HoverTooltipWrapper())
+		ImGui::Text("FOR TESTING: Enable Physical Sky in any worldspace, bypassing the whitelist check.");
 
 	ImGui::SeparatorText("Post Processing");
 	{
@@ -471,9 +480,14 @@ void PhysicalSky::Reset()
 	if (globals::game::tes) {
 		if (auto worldspace = globals::game::tes->GetRuntimeData2().worldSpace; worldspace) {
 			std::string worldspaceName = worldspace->GetFormEditorID();
-			worldspaceEnabled = settings.worldspaceWhitelist.contains(worldspaceName);
-			if (worldspaceEnabled)
-				worldspaceInfo = settings.worldspaceWhitelist.at(worldspaceName);
+			if (settings.overrideWhitelist) {
+				worldspaceEnabled = true;
+				worldspaceInfo = { -14500.f };  // Default Tamriel value
+			} else {
+				worldspaceEnabled = settings.worldspaceWhitelist.contains(worldspaceName);
+				if (worldspaceEnabled)
+					worldspaceInfo = settings.worldspaceWhitelist.at(worldspaceName);
+			}
 		}
 		if (auto player = RE::PlayerCharacter::GetSingleton(); player) {
 			if (auto cell = player->GetParentCell(); cell) {

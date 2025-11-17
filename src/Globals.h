@@ -29,7 +29,7 @@ struct WetnessEffects;
 struct ExtendedTranslucency;
 struct Upscaling;
 struct PhysicalSky;
-struct Weather;
+struct WeatherEditor;
 
 class State;
 class Deferred;
@@ -83,7 +83,7 @@ namespace globals
 		extern Upscaling upscaling;
 		extern RenderDoc renderDoc;
 		extern PhysicalSky physicalSky;
-		extern Weather weather;
+		extern WeatherEditor weatherEditor;
 
 		namespace llf
 		{

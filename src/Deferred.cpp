@@ -300,7 +300,7 @@ void Deferred::PrepassPasses()
 
 void Deferred::StartDeferred()
 {
-	Weather::GetSingleton()->Bind();
+	WeatherEditor::GetSingleton()->Bind();
 
 	if (!globals::state->inWorld)
 		return;
@@ -420,7 +420,7 @@ void Deferred::DeferredPasses()
 
 	auto& terrainBlending = globals::features::terrainBlending;
 	auto& physSky = globals::features::physicalSky;
-	auto& weather = globals::features::weather;
+	auto& weatherEditor = globals::features::weatherEditor;
 	auto& ibl = globals::features::ibl;
 
 	auto shadowMask = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kSHADOW_MASK];
@@ -446,7 +446,7 @@ void Deferred::DeferredPasses()
 			ssgi_hq_spec ? ssgi_gi_spec : nullptr,
 			physSky.loaded ? physSky.texApLut->srv.get() : nullptr,
 			physSky.loaded ? physSky.texApShadow->srv.get() : nullptr,
-			weather.loaded ? weather.diffuseIBLTexture->srv.get() : nullptr,
+			weatherEditor.loaded ? weatherEditor.diffuseIBLTexture->srv.get() : nullptr,
 			ibl.loaded ? ibl.diffuseIBLTexture->srv.get() : nullptr,
 			ibl.loaded ? ibl.diffuseSkyIBLTexture->srv.get() : nullptr,
 		};

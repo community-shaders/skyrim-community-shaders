@@ -79,7 +79,7 @@ namespace globals
 		Upscaling upscaling{};
 		RenderDoc renderDoc{};
 		PhysicalSky physicalSky{};
-		Weather weather{};
+		WeatherEditor weatherEditor{};
 
 		namespace llf
 		{

@@ -77,6 +77,7 @@ struct PhysicalSky final : public Feature
 	struct Settings
 	{
 		bool enabled = true;
+		bool overrideWhitelist = false;
 		bool overrideDirLight = false;
 		int tonemapper = 2;
 		float vanillaMix = 0;
