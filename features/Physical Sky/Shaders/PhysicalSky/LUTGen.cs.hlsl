@@ -17,7 +17,7 @@ RWTexture2D<float4> RWTexOutput : register(u0);
 #endif
 
 void rayMarch(
-	float3 pos, float3 rayDir, 
+	float3 pos, float3 rayDir,
 #if LUTGEN == 0
 	float3 sunDir,
 	inout float3 tr
@@ -118,7 +118,7 @@ void rayMarch(
 
 		float2 lutUvSecunda = TrLutUvPlanet(curr_pos, data.secundaDir);
 		float3 trSecunda = TexTrLut.SampleLevel(SampTr, lutUvSecunda, 0).rgb;
-		
+
 		float3 psiMs = TexMsLut.SampleLevel(SampTr, lutUvSun, 0).rgb * data.sunlightColor;
 		psiMs += TexMsLut.SampleLevel(SampTr, lutUvMasser, 0).rgb * data.masserColor;
 		psiMs += TexMsLut.SampleLevel(SampTr, lutUvSecunda, 0).rgb * data.secundaColor;

@@ -210,7 +210,7 @@ PS_OUTPUT main(PS_INPUT input)
 #	if defined(PS_CLOUDS)
 	float psCloudDist = 1e3f / 1.428e-2;
 	float3 viewDir = normalize(input.WorldPosition.xyz);
-#		if defined(CLOUD_SHADOWS) 
+#		if defined(CLOUD_SHADOWS)
 	if (SharedData::physSkyData.enabled)
 		psCloudDist = CloudShadows::IntersectCloudDist(float3(0, 0, 0), viewDir);
 #		endif
@@ -228,7 +228,7 @@ PS_OUTPUT main(PS_INPUT input)
 	baseColor = PParams.xxxx * (-baseColor + blendColor) + baseColor;
 #		endif
 
-#		if defined(PS_CLOUDS) && defined(CLOUD_SHADOWS) 
+#		if defined(PS_CLOUDS) && defined(CLOUD_SHADOWS)
 	if (SharedData::physSkyData.enabled)
 		baseColor.rgb = PhysSky::RelightCloud(baseColor, viewDir, float3(0, 0, 0) + viewDir * psCloudDist, PhysSky::SampTr, SampBaseSampler);
 #		endif

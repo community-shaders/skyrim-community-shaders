@@ -15,11 +15,11 @@ SamplerState SampNoise : register(s2);
 
 #ifdef PS_SKY_SAMPLERS
 SamplerState SampTr : register(s3);
-SamplerState SampSv : register(s4); 
+SamplerState SampSv : register(s4);
 #endif
 
 #ifdef PS_DEFERRED_SAMPLERS
-SamplerState SampSv : register(s2); 
+SamplerState SampSv : register(s2);
 #endif
 
 #ifdef PS_PREPASS_RSRCS
@@ -289,7 +289,7 @@ float3 RelightCloud(float4 baseColor, float3 viewDir, float3 cloudPosWS, Sampler
 	float3 trAtmos = TexTrLut.SampleLevel(sampTr, lutUv, 0).rgb;
 	trAtmos = lerp(1, trAtmos, data.trMix);
 	dirLightColor *= trAtmos;
-	
+
 	float u = dot(viewDir, dirLightDir);
 	float phaseCloud = Remap(
 		baseColor.w,
@@ -303,7 +303,7 @@ float3 RelightCloud(float4 baseColor, float3 viewDir, float3 cloudPosWS, Sampler
 	if (baseColor.w > 0.0)
 	{
 		float rayStep = 1.0 / 32.0;
-		float rayPos = rayStep * 0.5; 
+		float rayPos = rayStep * 0.5;
 		float4 rayShadow = 0.0;
 
 		float3 PoissonDisc[] = {
@@ -315,7 +315,7 @@ float3 RelightCloud(float4 baseColor, float3 viewDir, float3 cloudPosWS, Sampler
 
 		[unroll]
 		for(int i = 0; i < 4; i++)
-		{		
+		{
 			float3 raySample = normalize(lerp(viewDir, SharedData::DirLightDirection.xyz, rayPos));
 
 			raySample += (PoissonDisc[i] * 2.0 - 1.0) * 0.01;

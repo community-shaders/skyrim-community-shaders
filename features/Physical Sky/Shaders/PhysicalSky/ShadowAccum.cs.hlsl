@@ -76,7 +76,7 @@ void main(uint2 tid	: SV_DispatchThreadID)
 {
 	const SharedData::PhysSkyData data = SharedData::physSkyData;
 	const uint2 pxCoords = tid;
-	
+
 	const uint2 seed = Random::pcg2d(pxCoords.xy);
 	const float2 rnd = Random::R2Modified(SharedData::FrameCountAlwaysActive, seed / 4294967295.f);
 
@@ -88,7 +88,7 @@ void main(uint2 tid	: SV_DispatchThreadID)
     float4 posWorld = float4(2 * float2(uv.x, -uv.y + 1) - 1, depth, 1);
 	posWorld = mul(FrameBuffer::CameraViewProjInverse[eyeIndex], posWorld);
 	posWorld.xyz /= posWorld.w;
-	
+
 	float dist = length(posWorld.xyz);
 	float distClamped = min(AP_MAX_DIST, dist);
 	float3 dir = posWorld.xyz / dist;
