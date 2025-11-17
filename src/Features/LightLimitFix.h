@@ -1,5 +1,7 @@
 #pragma once
 
+#include "Buffer.h"
+
 struct LightLimitFix : Feature
 {
 private:
@@ -59,6 +61,7 @@ public:
 		uint pad0;
 		uint pad1;
 	};
+	STATIC_ASSERT_ALIGNAS_16(LightData);
 
 	struct ClusterAABB
 	{
@@ -72,6 +75,7 @@ public:
 		uint lightCount;
 		uint pad0[2];
 	};
+	STATIC_ASSERT_ALIGNAS_16(LightGrid);
 
 	struct alignas(16) LightBuildingCB
 	{
@@ -80,6 +84,7 @@ public:
 		uint pad0[2];
 		uint ClusterSize[4];
 	};
+	STATIC_ASSERT_ALIGNAS_16(LightBuildingCB);
 
 	struct alignas(16) LightCullingCB
 	{
@@ -87,6 +92,7 @@ public:
 		uint pad[3];
 		uint ClusterSize[4];
 	};
+	STATIC_ASSERT_ALIGNAS_16(LightCullingCB);
 
 	struct alignas(16) PerFrame
 	{
@@ -95,6 +101,7 @@ public:
 		float pad0[2];
 		uint ClusterSize[4];
 	};
+	STATIC_ASSERT_ALIGNAS_16(PerFrame);
 
 	PerFrame GetCommonBufferData();
 
@@ -106,6 +113,7 @@ public:
 		uint pad0;
 		LightData StrictLights[15];
 	};
+	STATIC_ASSERT_ALIGNAS_16(StrictLightDataCB);
 
 	StrictLightDataCB strictLightDataTemp;
 
