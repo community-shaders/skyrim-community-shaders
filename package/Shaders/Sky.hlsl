@@ -1,5 +1,5 @@
-#include "Common/Color.hlsli"
 #include "Common/FrameBuffer.hlsli"
+#include "Common/Random.hlsli"
 #include "Common/VR.hlsli"
 
 struct VS_INPUT
@@ -188,11 +188,14 @@ cbuffer AlphaTestRefCB : register(b11)
 #		include "CloudShadows/CloudShadows.hlsli"
 #	endif
 
-#	if defined(PHYS_SKY)
-#		define SKY_SAMPLERS
-#		define SKY_SHADER
-#		include "PhysicalSky/PhysicalSky.hlsli"
+#	if defined(PHYSICAL_SKY)
+#		define PS_SKY_SAMPLERS
+#		include "PhysicalSky/Common.hlsli"
+#		if defined(TEX) && defined(CLOUDS)
+#			define PS_CLOUDS
+#		endif
 #	endif
+
 Texture2D<float> TexDepthSampler : register(t17);
 
 PS_OUTPUT main(PS_INPUT input)
@@ -204,6 +207,15 @@ PS_OUTPUT main(PS_INPUT input)
 	uint eyeIndex = input.EyeIndex;
 #	endif  // !VR
 
+#	if defined(PS_CLOUDS)
+	float psCloudDist = 1e3f / 1.428e-2;
+	float3 viewDir = normalize(input.WorldPosition.xyz);
+#		if defined(CLOUD_SHADOWS) 
+	if (SharedData::physSkyData.enabled)
+		psCloudDist = CloudShadows::IntersectCloudDist(float3(0, 0, 0), viewDir);
+#		endif
+#	endif
+
 #	ifndef OCCLUSION
 #		ifndef TEXLERP
 	float4 baseColor = TexBaseSampler.Sample(SampBaseSampler, input.TexCoord0.xy);
@@ -214,6 +226,11 @@ PS_OUTPUT main(PS_INPUT input)
 	float4 blendColor = TexBlendSampler.Sample(SampBlendSampler, input.TexCoord1.xy);
 	float4 baseColor = TexBaseSampler.Sample(SampBaseSampler, input.TexCoord0.xy);
 	baseColor = PParams.xxxx * (-baseColor + blendColor) + baseColor;
+#		endif
+
+#		if defined(PS_CLOUDS) && defined(CLOUD_SHADOWS) 
+	if (SharedData::physSkyData.enabled)
+		baseColor.rgb = PhysSky::RelightCloud(baseColor, viewDir, float3(0, 0, 0) + viewDir * psCloudDist, PhysSky::SampTr, SampBaseSampler);
 #		endif
 
 #		if defined(DITHER)
@@ -248,6 +265,21 @@ PS_OUTPUT main(PS_INPUT input)
 	psout.Color = float4(0, 0, 0, 1.0);
 #	endif  // OCCLUSION
 
+#if defined(PHYSICAL_SKY)
+	if (SharedData::physSkyData.enabled)
+	{
+# 		if defined(DITHER) && !defined(TEX)
+		// SKY
+		float3 skyColor = PhysSky::SampleSky(normalize(input.WorldPosition.xyz), input.Position.xy, PhysSky::SampSv);
+		psout.Color.xyz = lerp(skyColor, psout.Color.xyz, SharedData::physSkyData.vanillaMix);
+
+#		elif defined(PS_CLOUDS)
+		float4 apColor = PhysSky::SampleAp(viewDir, input.Position.xy, psCloudDist, PhysSky::SampSv);
+		psout.Color.xyz = psout.Color.xyz * apColor.a + apColor.rgb;
+#		endif
+	}
+#endif
+
 	float2 screenMotionVector = MotionBlur::GetSSMotionVector(input.WorldPosition, input.PreviousWorldPosition, eyeIndex);
 
 	psout.MotionVectors = float4(screenMotionVector, 0, psout.Color.w);
@@ -260,13 +292,6 @@ PS_OUTPUT main(PS_INPUT input)
 	if (depth < input.Position.z)
 		psout.Color.w = 0;
 
-#	endif
-
-#	if defined(PHYS_SKY)
-	if (PhysSkyBuffer[0].enable_sky) {
-		DrawPhysicalSky(psout.Color, input);
-		psout.Color.rgb = Color::LinearToGamma(psout.Color.rgb);
-	}
 #	endif
 
 	return psout;

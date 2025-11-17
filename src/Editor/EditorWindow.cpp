@@ -236,7 +236,7 @@ void EditorWindow::RenderUI()
 {
 	auto renderer = RE::BSGraphics::Renderer::GetSingleton();
 	auto& framebuffer = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kFRAMEBUFFER];
-	auto& context = State::GetSingleton()->context;
+	auto& context = globals::d3d::context;
 
 	context->ClearRenderTargetView(framebuffer.RTV, (float*)&ImGui::GetStyle().Colors[ImGuiCol_WindowBg]);
 
@@ -333,7 +333,7 @@ void EditorWindow::Draw()
 		tempTexture->CreateSRV(srvDesc);
 	}
 
-	auto& context = State::GetSingleton()->context;
+	auto& context = globals::d3d::context;
 
 	context->CopyResource(tempTexture->resource.get(), resource);
 
@@ -438,7 +438,7 @@ void EditorWindow::ShowSettingsWindow()
 void EditorWindow::Save()
 {
 	SaveSettings();
-	const std::string filePath = State::GetSingleton()->folderPath;
+	const std::string filePath = Util::PathHelpers::GetCommunityShaderPath().string();
 	const std::string file = std::format("{}\\{}.json", filePath, settingsFilename);
 
 	std::ofstream settingsFile(file);
@@ -468,7 +468,7 @@ void EditorWindow::Save()
 
 void EditorWindow::Load()
 {
-	std::string filePath = std::format("{}\\{}.json", State::GetSingleton()->folderPath, settingsFilename);
+	std::string filePath = std::format("{}\\{}.json", Util::PathHelpers::GetCommunityShaderPath().string(), settingsFilename);
 
 	std::ifstream settingsFile(filePath);
 

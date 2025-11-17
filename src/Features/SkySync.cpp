@@ -118,7 +118,7 @@ void SkySync::Update(const RE::Sky* sky)
 	ProcessMoon(sky->masser, time, Caster::Masser, altitude, isDayTime);
 	ProcessMoon(sky->secunda, time, Caster::Secunda, altitude, isDayTime);
 
-	shadowFader.Update(sun, directions, intensities, isDayTime);
+	shadowFader.Update(sun, directions, intensities, lightColors, isDayTime);
 }
 void SkySync::SetSunAngle()
 {
@@ -309,7 +309,7 @@ void SkySync::ShadowFader::Reset()
 	fadeTimer = 0.0f;
 }
 
-void SkySync::ShadowFader::Update(const RE::Sun* sun, RE::NiPoint3 dirs[3], float intensities[3], const bool isDayTime)
+void SkySync::ShadowFader::Update(const RE::Sun* sun, RE::NiPoint3 dirs[3], float intensities[3], std::optional<std::array<RE::NiColor, 3>> colors, const bool isDayTime)
 {
 	const float masserIntensity = intensities[static_cast<int>(Caster::Masser)];
 	const float secundaIntensity = intensities[static_cast<int>(Caster::Secunda)];
@@ -343,17 +343,23 @@ void SkySync::ShadowFader::Update(const RE::Sun* sun, RE::NiPoint3 dirs[3], floa
 		current = target;
 	}
 
+	std::optional<RE::NiColor> color = std::nullopt;
+	if (colors.has_value())
+		color = { 0.f, 0.f, 0.f };
+
 	if (current == Caster::None) {
 		fadePhase = Phase::None;
-		SetLighting(sun, { 0.0f, 0.0f, 1.0f }, 0.0f);
+		SetLighting(sun, { 0.0f, 0.0f, 1.0f }, 0.0f, color);
 		return;
 	}
 
 	const auto& dir = dirs[static_cast<int>(current)];
 	const auto intensity = intensities[static_cast<int>(current)];
+	if (colors.has_value())
+		color = (*colors)[static_cast<int>(current)];
 
 	if (fadePhase == Phase::None) {
-		SetLighting(sun, dir, intensity);
+		SetLighting(sun, dir, intensity, color);
 		return;
 	}
 
@@ -361,7 +367,7 @@ void SkySync::ShadowFader::Update(const RE::Sun* sun, RE::NiPoint3 dirs[3], floa
 
 	const float t = fadeTimer / FadeTime;
 	const float fade = fadePhase == Phase::FadeIn ? t : 1.0f - t;
-	SetLighting(sun, dir, intensity * fade);
+	SetLighting(sun, dir, intensity * fade, color);
 
 	if (fadePhase == Phase::FadeOut) {
 		if (t >= 1.0f || intensity <= 0.0f) {
@@ -375,7 +381,7 @@ void SkySync::ShadowFader::Update(const RE::Sun* sun, RE::NiPoint3 dirs[3], floa
 	}
 }
 
-void SkySync::ShadowFader::SetLighting(const RE::Sun* sun, RE::NiPoint3 dir, float intensity)
+void SkySync::ShadowFader::SetLighting(const RE::Sun* sun, RE::NiPoint3 dir, float intensity, std::optional<RE::NiColor> color)
 {
 	ClampDirection(dir);
 
@@ -383,6 +389,9 @@ void SkySync::ShadowFader::SetLighting(const RE::Sun* sun, RE::NiPoint3 dir, flo
 	m.entry[0][0] = -dir.x;
 	m.entry[1][0] = -dir.y;
 	m.entry[2][0] = -dir.z;
+
+	if (color.has_value())
+		sun->light->GetLightRuntimeData().diffuse = *color;
 
 	RE::NiUpdateData updateData;
 	sun->light->Update(updateData);

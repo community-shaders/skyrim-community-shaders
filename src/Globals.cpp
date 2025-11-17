@@ -27,6 +27,8 @@
 #include "Features/Upscaling.h"
 #include "Features/VR.h"
 #include "Features/VolumetricLighting.h"
+#include "Features/PhysicalSky.h"
+#include "Features/Weather.h"
 #include "Features/WaterEffects.h"
 #include "Features/WeatherPicker.h"
 #include "Features/WetnessEffects.h"
@@ -76,6 +78,8 @@ namespace globals
 		ExtendedTranslucency extendedTranslucency{};
 		Upscaling upscaling{};
 		RenderDoc renderDoc{};
+		PhysicalSky physicalSky{};
+		Weather weather{};
 
 		namespace llf
 		{
@@ -88,7 +92,9 @@ namespace globals
 		RE::BSGraphics::State* graphicsState = nullptr;
 		RE::BSGraphics::Renderer* renderer = nullptr;
 		RE::BSShaderManager::State* smState = nullptr;
+		RE::TES* tes = nullptr;
 		bool isVR = false;
+		RE::MemoryManager* memoryManager = nullptr;
 		RE::INISettingCollection* iniSettingCollection = nullptr;
 		RE::INIPrefSettingCollection* iniPrefSettingCollection = nullptr;
 		RE::GameSettingCollection* gameSettingCollection = nullptr;

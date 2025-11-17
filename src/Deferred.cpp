@@ -302,7 +302,7 @@ void Deferred::StartDeferred()
 {
 	Weather::GetSingleton()->Bind();
 
-	if (!inWorld)
+	if (!globals::state->inWorld)
 		return;
 	globals::state->UpdateSharedData(true, false);
 
@@ -419,48 +419,17 @@ void Deferred::DeferredPasses()
 		dynamicCubemaps.UpdateCubemap();
 
 	auto& terrainBlending = globals::features::terrainBlending;
-
-			ID3D11UnorderedAccessView* uavs[2]{ main.UAV, prevDiffuseAmbientTexture->uav.get() };
-			context->CSSetUnorderedAccessViews(0, ARRAYSIZE(uavs), uavs, nullptr);
-
-			auto shader = interior ? GetComputeAmbientCompositeInterior() : GetComputeAmbientComposite();
-			context->CSSetShader(shader, nullptr, 0);
-
-			context->Dispatch(dispatchCount.x, dispatchCount.y, 1);
-		}
-
-		// Clear
-		{
-			ID3D11ShaderResourceView* views[6]{ nullptr, nullptr, nullptr, nullptr, nullptr, nullptr };
-			context->CSSetShaderResources(0, ARRAYSIZE(views), views);
-
-			ID3D11UnorderedAccessView* uavs[2]{ nullptr, nullptr };
-			context->CSSetUnorderedAccessViews(0, ARRAYSIZE(uavs), uavs, nullptr);
-
-			context->CSSetShader(nullptr, nullptr, 0);
-		}
-	}
-
-	auto sss = SubsurfaceScattering::GetSingleton();
-	if (sss->loaded)
-		sss->DrawSSS();
-
-	auto dynamicCubemaps = DynamicCubemaps::GetSingleton();
-	if (dynamicCubemaps->loaded)
-		dynamicCubemaps->UpdateCubemap();
-
-	auto terrainBlending = TerrainBlending::GetSingleton();
-	auto physSky = PhysicalSky::GetSingleton();
-	auto weather = Weather::GetSingleton();
+	auto& physSky = globals::features::physicalSky;
+	auto& weather = globals::features::weather;
+	auto& ibl = globals::features::ibl;
 
 	auto shadowMask = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kSHADOW_MASK];
-	auto& ibl = globals::features::ibl;
 
 	// Deferred Composite
 	{
 		TracyD3D11Zone(globals::state->tracyCtx, "Deferred Composite");
 
-		ID3D11ShaderResourceView* srvs[18]{
+		ID3D11ShaderResourceView* srvs[]{
 			specular.SRV,
 			albedo.SRV,
 			normalRoughness.SRV,
@@ -476,15 +445,18 @@ void Deferred::DeferredPasses()
 			ssgi_hq_spec ? nullptr : ssgi_cocg,
 			ssgi_hq_spec ? ssgi_gi_spec : nullptr,
 			physSky->loaded ? physSky->main_view_tr_tex->srv.get() : nullptr,
-			physSky->loaded ? physSky->main_view_lum_tex->srv.get() : nullptr,
-			weather->loaded ? weather->diffuseIBLTexture->srv.get() : nullptr,
-			shadowMask.SRV
+			physSky.loaded ? physSky.texApLut->srv.get() : nullptr,
+			physSky.loaded ? physSky.texApShadow->srv.get() : nullptr,
+			weather.loaded ? weather.diffuseIBLTexture->srv.get() : nullptr,
 			ibl.loaded ? ibl.diffuseIBLTexture->srv.get() : nullptr,
 			ibl.loaded ? ibl.diffuseSkyIBLTexture->srv.get() : nullptr,
 		};
 
-		if (dynamicCubemaps.loaded)
-			context->CSSetSamplers(0, 1, &linearSampler);
+		ID3D11SamplerState* samplers[]{
+			dynamicCubemaps.loaded ? linearSampler : nullptr,
+			physSky.loaded ? physSky.sampSv.get() : nullptr,
+		};
+		context->CSSetSamplers(0, ARRAYSIZE(samplers), samplers);
 
 		context->CSSetShaderResources(0, ARRAYSIZE(srvs), srvs);
 
@@ -499,7 +471,7 @@ void Deferred::DeferredPasses()
 
 	// Clear
 	{
-		ID3D11ShaderResourceView* views[16]{ nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr };
+		ID3D11ShaderResourceView* views[17]{ nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr };
 		context->CSSetShaderResources(0, ARRAYSIZE(views), views);
 
 		ID3D11UnorderedAccessView* uavs[3]{ nullptr, nullptr, nullptr };
@@ -507,6 +479,9 @@ void Deferred::DeferredPasses()
 
 		ID3D11Buffer* buffers[1] = { nullptr };
 		context->CSSetConstantBuffers(12, 1, buffers);
+
+		ID3D11SamplerState* samplers[2]{ nullptr, nullptr };
+		context->CSSetSamplers(0, ARRAYSIZE(samplers), samplers);
 
 		context->CSSetShader(nullptr, nullptr, 0);
 	}
@@ -664,8 +639,8 @@ ID3D11ComputeShader* Deferred::GetComputeMainComposite()
 		if (globals::features::screenSpaceGI.loaded)
 			defines.push_back({ "SSGI", nullptr });
 
-		if (PhysicalSky::GetSingleton()->loaded)
-			defines.push_back({ "PHYS_SKY", nullptr });
+		if (globals::features::physicalSky.loaded)
+			defines.push_back({ "PHYSICAL_SKY", nullptr });
 			
 		if (globals::features::ibl.loaded)
 			defines.push_back({ "IBL", nullptr });

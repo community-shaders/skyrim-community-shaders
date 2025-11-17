@@ -6,10 +6,6 @@
 #include "Common/SharedData.hlsli"
 #include "Common/VR.hlsli"
 
-#if !defined(DYNAMIC_CUBEMAPS) && defined(IBL)
-#	undef IBL
-#endif
-
 struct VS_INPUT
 {
 	float3 Position : POSITION0;
@@ -122,6 +118,8 @@ struct PS_OUTPUT
 #ifdef PSHADER
 SamplerState SampDiffuse : register(s0);
 
+SamplerState SampShadowMaskSampler : register(s14);
+
 Texture2D<float4> TexDiffuse : register(t0);
 
 #	if !defined(VR)
@@ -175,12 +173,12 @@ const static float DepthOffsets[16] = {
 #		include "CloudShadows/CloudShadows.hlsli"
 #	endif
 
-#	if defined(PHYS_SKY)
-#		include "PhysicalSky/PhysicalSky.hlsli"
-#	endif
-
 #	if defined(IBL)
 #		include "IBL/IBL.hlsli"
+#	endif
+
+#	if defined(PHYSICAL_SKY)
+#		include "PhysicalSky/Common.hlsli"
 #	endif
 
 #	define LinearSampler SampDiffuse
@@ -208,7 +206,7 @@ PS_OUTPUT main(PS_INPUT input)
 		discard;
 	}
 
-	float alpha = TexDiffuse.SampleBias(SampDiffuse, input.TexCoord.xy, SharedData::MipBias).w;
+	float alpha = TexDiffuse.Sample(SampDiffuse, input.TexCoord.xy).w;
 
 	if ((alpha - AlphaTestRefRS) < 0) {
 		discard;
@@ -217,7 +215,7 @@ PS_OUTPUT main(PS_INPUT input)
 	psout.Diffuse.xyz = input.Depth.xxx / input.Depth.yyy;
 	psout.Diffuse.w = 0;
 #	else
-	float4 baseColor = TexDiffuse.SampleBias(SampDiffuse, input.TexCoord.xy, SharedData::MipBias);
+	float4 baseColor = TexDiffuse.Sample(SampDiffuse, input.TexCoord.xy);
 
 	if ((baseColor.w - AlphaTestRefRS) < 0) {
 		discard;
@@ -228,19 +226,6 @@ PS_OUTPUT main(PS_INPUT input)
 	float2 screenUV = FrameBuffer::ViewToUV(viewPosition, true, eyeIndex);
 	float screenNoise = Random::InterleavedGradientNoise(input.Position.xy, SharedData::FrameCount);
 
-	// dirLightColor start
-	float3 dirLightColor = SharedData::DirLightColor.xyz;
-
-#			if defined(PHYS_SKY)
-	if (PhysSkyBuffer[0].enable_sky && PhysSkyBuffer[0].override_dirlight_color) {
-		dirLightColor = PhysSkyBuffer[0].dirlight_color * PhysSkyBuffer[0].horizon_penumbra;
-		dirLightColor *= getDirlightTransmittance(input.WorldPosition + FrameBuffer::CameraPosAdjust[eyeIndex], SampDiffuse);
-		dirLightColor = Color::LinearToGamma(dirLightColor) / Color::LightPreMult;
-	}
-#			endif
-	// dirLightColor end
-
-	// dirShadow start
 	float dirShadow = 1;
 
 #			if defined(SCREEN_SPACE_SHADOWS)
@@ -252,27 +237,35 @@ PS_OUTPUT main(PS_INPUT input)
 
 	float3 diffuseColor = SharedData::DirLightColor.xyz * dirShadow * 0.5;
 
+#			if defined(PHYSICAL_SKY)
+	if (SharedData::physSkyData.enabled)
+		diffuseColor *= PhysSky::SampleTr(normalize(SharedData::DirLightDirection.xyz), SampShadowMaskSampler);
+#			endif
+
 	float3 ddx = ddx_coarse(input.WorldPosition.xyz);
 	float3 ddy = ddy_coarse(input.WorldPosition.xyz);
 	float3 normal = -normalize(cross(ddx, ddy));
 
+#			if !defined(SSGI)
 	float3 directionalAmbientColor = max(0, mul(SharedData::DirectionalAmbient, float4(normal, 1.0)));
-#			if defined(IBL)
-	float3 iblColor = 0;
+#				if defined(IBL)
 	if (SharedData::iblSettings.EnableDiffuseIBL) {
 		directionalAmbientColor *= SharedData::iblSettings.DALCAmount;
-#					if defined(SKYLIGHTING)
-		iblColor += Color::Saturation(ImageBasedLighting::GetIBLColor(-normal, 1.0), SharedData::iblSettings.IBLSaturation) * SharedData::iblSettings.DiffuseIBLScale;
-#					else
-		iblColor += Color::Saturation(ImageBasedLighting::GetIBLColor(-normal), SharedData::iblSettings.IBLSaturation) * SharedData::iblSettings.DiffuseIBLScale;
-#					endif
-		directionalAmbientColor += Color::LinearToGamma(iblColor);
+		directionalAmbientColor += Color::Saturation(ImageBasedLighting::GetDiffuseIBL(-normal), SharedData::iblSettings.IBLSaturation) * SharedData::iblSettings.DiffuseIBLScale;
 	}
-#			endif
+#				endif
 	diffuseColor += directionalAmbientColor;
+#			endif
 
 	psout.Diffuse.xyz = diffuseColor * baseColor.xyz;
 	psout.Diffuse.w = 1;
+
+#			if !defined(DEFERRED) && defined(PHYSICAL_SKY)
+	if (SharedData::physSkyData.enabled) {
+		const float4 apSample = PhysSky::SampleAp(normalize(input.WorldPosition.xyz), input.Position.xy, length(input.WorldPosition.xyz), SampColorSampler);
+		psout.Diffuse.xyz = psout.Diffuse.xyz * apSample.w + apSample.xyz;
+	}
+#			endif
 
 	psout.MotionVector = MotionBlur::GetSSMotionVector(input.WorldPosition, input.PreviousWorldPosition, eyeIndex);
 
@@ -286,21 +279,20 @@ PS_OUTPUT main(PS_INPUT input)
 
 	float3 diffuseColor = SharedData::DirLightColor.xyz * dirShadow * 0.5;
 
+#			if defined(PHYSICAL_SKY)
+	if (SharedData::physSkyData.enabled)
+		diffuseColor *= PhysSky::SampleTr(normalize(SharedData::DirLightDirection.xyz), SampShadowMaskSampler);
+#			endif
+
 	float3 ddx = ddx_coarse(input.WorldPosition.xyz);
 	float3 ddy = ddy_coarse(input.WorldPosition.xyz);
 	float3 normal = normalize(cross(ddx, ddy));
 
 	float3 directionalAmbientColor = mul(SharedData::DirectionalAmbient, float4(normal, 1.0));
 #			if defined(IBL)
-	float3 iblColor = 0;
 	if (SharedData::iblSettings.EnableDiffuseIBL) {
 		directionalAmbientColor *= SharedData::iblSettings.DALCAmount;
-#					if defined(SKYLIGHTING)
-		iblColor += Color::Saturation(ImageBasedLighting::GetIBLColor(-normal, 1.0), SharedData::iblSettings.IBLSaturation) * SharedData::iblSettings.DiffuseIBLScale;
-#					else
-		iblColor += Color::Saturation(ImageBasedLighting::GetIBLColor(-normal), SharedData::iblSettings.IBLSaturation) * SharedData::iblSettings.DiffuseIBLScale;
-#					endif
-		directionalAmbientColor += Color::LinearToGamma(iblColor);
+		directionalAmbientColor += Color::Saturation(ImageBasedLighting::GetDiffuseIBL(-normal), SharedData::iblSettings.IBLSaturation) * SharedData::iblSettings.DiffuseIBLScale;
 	}
 #			endif
 	diffuseColor += directionalAmbientColor;

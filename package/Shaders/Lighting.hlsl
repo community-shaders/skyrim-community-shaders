@@ -954,11 +954,6 @@ float GetSnowParameterY(float texProjTmp, float alpha)
 #		include "Skylighting/Skylighting.hlsli"
 #	endif
 
-
-#	if defined(PHYS_SKY)
-#		include "PhysicalSky/PhysicalSky.hlsli"
-#	endif
-
 #	if defined(HAIR) && defined(CS_HAIR)
 #		include "Hair/Hair.hlsli"
 #	endif
@@ -970,14 +965,16 @@ float GetSnowParameterY(float texProjTmp, float alpha)
 #	if defined(EXTENDED_TRANSLUCENCY) && !(defined(LOD) || defined(SKIN) || defined(HAIR) || defined(EYE) || defined(TREE_ANIM) || defined(LODOBJECTSHD) || defined(LODOBJECTS) || defined(DEPTH_WRITE_DECALS))
 #		include "ExtendedTranslucency/ExtendedTranslucency.hlsli"
 #		define ANISOTROPIC_ALPHA
+#	endif
 
+#	if defined(PHYSICAL_SKY)
+#		include "PhysicalSky/Common.hlsli"
 #	endif
 
 #	define LinearSampler SampColorSampler
 
 #	include "Common/ShadowSampling.hlsli"
 
-#	include "Weather/Weather.hlsli"
 
 #	if defined(IBL)
 #		include "IBL/IBL.hlsli"
@@ -2302,17 +2299,13 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	waterRoughnessSpecular = 1.0 - wetnessGlossinessSpecular;
 #	endif
 
-
-#	if defined(PHYS_SKY)
-	if (PhysSkyBuffer[0].enable_sky && PhysSkyBuffer[0].override_dirlight_color) {
-		dirLightColor = PhysSkyBuffer[0].dirlight_color * PhysSkyBuffer[0].horizon_penumbra;
-		dirLightColor *= getDirlightTransmittance(input.WorldPosition.xyz + FrameBuffer::CameraPosAdjust[eyeIndex].xyz, SampColorSampler);
-		dirLightColor = Color::LinearToGamma(dirLightColor);
-	}
-#	endif
-
 	float3 dirLightColor = Color::Light(DirLightColor.xyz);
 	float3 dirLightColorMultiplier = 1;
+
+#	if defined(PHYSICAL_SKY)
+	if (SharedData::physSkyData.enabled)
+		dirLightColorMultiplier *= PhysSky::SampleTr(normalize(DirLightDirection.xyz), SampShadowMaskSampler);
+#	endif
 
 #	if defined(WATER_EFFECTS)
 	dirLightColorMultiplier *= WaterEffects::ComputeCaustics(waterData, input.WorldPosition.xyz, eyeIndex);
@@ -2780,33 +2773,21 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	}
 #	endif
 
-	directionalAmbientColor = Weather::GetDiffuseIBL(-worldSpaceNormal);
-	float3 directionalAmbientColorLinear = directionalAmbientColor;
-	directionalAmbientColor = Color::GammaToLinear(directionalAmbientColor);
-
 	float3 reflectionDiffuseColor = diffuseColor + directionalAmbientColor;
-
-#	if defined(SKYLIGHTING)
-	float skylightingDiffuse = SphericalHarmonics::FuncProductIntegral(skylightingSH, SphericalHarmonics::EvaluateCosineLobe(float3(worldSpaceNormal.xy, worldSpaceNormal.z * 0.5 + 0.5))) / Math::PI;
-	skylightingDiffuse = lerp(1.0, skylightingDiffuse, Skylighting::getFadeOutFactor(input.WorldPosition.xyz));
-	skylightingDiffuse = Skylighting::mixDiffuse(SharedData::skylightingSettings, skylightingDiffuse);
-	directionalAmbientColorLinear *= skylightingDiffuse;
-#		if !defined(TRUE_PBR)
-	directionalAmbientColor = Color::GammaToLinear(directionalAmbientColor) / Color::LightPreMult;
-#		endif
-	directionalAmbientColor *= skylightingDiffuse;
-#		if !defined(TRUE_PBR)
-	directionalAmbientColor = Color::LinearToGamma(directionalAmbientColor * Color::LightPreMult);
-#		endif
-#	endif
 
 #	if defined(TRUE_PBR) && defined(LOD_LAND_BLEND) && !defined(DEFERRED)
 	lodLandDiffuseColor += directionalAmbientColor;
 #	endif
 
-	// #	if !(defined(DEFERRED) && defined(SSGI)) && !defined(TRUE_PBR)
-	// 	diffuseColor += directionalAmbientColor;
-	// #	endif
+#	if !defined(TRUE_PBR)
+#		if defined(HAIR) && defined(CS_HAIR)
+	if (!SharedData::hairSpecularSettings.Enabled)
+		diffuseColor += directionalAmbientColor;
+#		else
+	diffuseColor += directionalAmbientColor;
+#		endif
+#	endif
+
 #	if defined(ENVMAP) || defined(MULTI_LAYER_PARALLAX) || defined(EYE)
 	float envMask = EnvmapData.x * MaterialData.x;
 
@@ -3118,14 +3099,6 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	specularColor += wetnessSpecular * wetnessGlossinessSpecular;
 #	endif
 
-#	if defined(TRUE_PBR) && !defined(DEFERRED)
-	color.xyz += specularColorPBR;
-#	endif
-
-	color.xyz += directionalAmbientColorLinear * Color::GammaToLinear(baseColor.xyz * vertexColor);
-
-	color.xyz = Color::LinearToGamma(color.xyz);
-
 #	if defined(LOD_LAND_BLEND) && defined(TRUE_PBR)
 	{
 		lodLandDiffuseColor += directionalAmbientColor;
@@ -3180,6 +3153,12 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #		endif
 	if (FrameBuffer::FrameParams.y && FrameBuffer::FrameParams.z)
 		color.xyz = lerp(color.xyz, fogColor, input.FogParam.w);
+#		if defined(PHYSICAL_SKY)
+	if (SharedData::physSkyData.enabled) {
+		const float4 apSample = PhysSky::SampleAp(normalize(input.WorldPosition.xyz), input.Position.xy, length(input.WorldPosition.xyz), SampColorSampler);
+		color.xyz = color.xyz * apSample.w + apSample.xyz;
+	}
+#		endif
 #	endif
 
 #	if defined(TESTCUBEMAP) && defined(ENVMAP) && defined(DYNAMIC_CUBEMAPS)

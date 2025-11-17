@@ -5,7 +5,7 @@
 void Widget::Save()
 {
 	SaveSettings();
-	const std::string filePath = std::format("{}\\{}", State::GetSingleton()->folderPath, GetFolderName());
+	const std::string filePath = std::format("{}\\{}", Util::PathHelpers::GetCommunityShaderPath().string(), GetFolderName());
 	const std::string file = std::format("{}\\{}.json", filePath, GetEditorID());
 
 	std::ofstream settingsFile(file);
@@ -43,7 +43,7 @@ void Widget::Save()
 
 void Widget::Load()
 {
-	std::string filePath = std::format("{}\\{}\\{}.json", State::GetSingleton()->folderPath, GetFolderName(), GetEditorID());
+	std::string filePath = std::format("{}\\{}\\{}.json", Util::PathHelpers::GetCommunityShaderPath().string(), GetFolderName(), GetEditorID());
 
 	std::ifstream settingsFile(filePath);
 

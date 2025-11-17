@@ -130,3 +130,23 @@ std::string ColorTypeLabel(const int i)
 	}
 	return label;
 }
+
+void DrawSliderInt8(const std::string& label, int& property)
+{
+	ImGui::SliderInt(label.c_str(), &property, -128, 127);
+}
+
+void DrawColorEdit(const std::string& l, float3& property)
+{
+	ImGui::ColorEdit3(l.c_str(), (float*)&property);
+}
+
+void DrawSliderUint8(const std::string& label, int& property)
+{
+	ImGui::SliderInt(label.c_str(), &property, 0, 255);
+}
+
+void DrawSliderFloat(const std::string& label, float& property)
+{
+	ImGui::SliderFloat(label.c_str(), &property, 0, 50000);
+}

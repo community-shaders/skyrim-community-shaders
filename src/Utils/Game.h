@@ -49,6 +49,7 @@ namespace Util
 		// Conversion constants
 		constexpr float GAME_UNIT_TO_CM = 1.428f;
 		constexpr float GAME_UNIT_TO_M = GAME_UNIT_TO_CM / 100.0f;
+		constexpr float GAME_UNIT_TO_KM = GAME_UNIT_TO_M / 1000.0f;
 		constexpr float GAME_UNIT_TO_FEET = GAME_UNIT_TO_CM / 30.48f;
 		constexpr float GAME_UNIT_TO_INCHES = GAME_UNIT_TO_CM / 2.54f;
 
@@ -64,6 +65,7 @@ namespace Util
 		// Distance conversions
 		inline float GameUnitsToMeters(float gameUnits) { return gameUnits * GAME_UNIT_TO_M; }
 		inline float GameUnitsToCm(float gameUnits) { return gameUnits * GAME_UNIT_TO_CM; }
+		inline float GameUnitsToKm(float gameUnits) { return gameUnits * GAME_UNIT_TO_KM; }
 		inline float GameUnitsToFeet(float gameUnits) { return gameUnits * GAME_UNIT_TO_FEET; }
 		inline float GameUnitsToInches(float gameUnits) { return gameUnits * GAME_UNIT_TO_INCHES; }
 

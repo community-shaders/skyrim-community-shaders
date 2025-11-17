@@ -28,6 +28,8 @@ struct PerformanceOverlay;
 struct WetnessEffects;
 struct ExtendedTranslucency;
 struct Upscaling;
+struct PhysicalSky;
+struct Weather;
 
 class State;
 class Deferred;
@@ -80,6 +82,8 @@ namespace globals
 		extern ExtendedTranslucency extendedTranslucency;
 		extern Upscaling upscaling;
 		extern RenderDoc renderDoc;
+		extern PhysicalSky physicalSky;
+		extern Weather weather;
 
 		namespace llf
 		{
@@ -199,7 +203,9 @@ namespace globals
 		extern RE::BSGraphics::State* graphicsState;
 		extern RE::BSGraphics::Renderer* renderer;
 		extern RE::BSShaderManager::State* smState;
+		extern RE::TES* tes;
 		extern bool isVR;
+		extern RE::MemoryManager* memoryManager;
 		extern RE::INISettingCollection* iniSettingCollection;
 		extern RE::INIPrefSettingCollection* iniPrefSettingCollection;
 		extern RE::GameSettingCollection* gameSettingCollection;

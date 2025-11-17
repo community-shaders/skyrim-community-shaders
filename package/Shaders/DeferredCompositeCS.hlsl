@@ -10,26 +10,19 @@
 Texture2D<float3> SpecularTexture : register(t0);
 Texture2D<unorm float3> AlbedoTexture : register(t1);
 Texture2D<unorm float3> NormalRoughnessTexture : register(t2);
-Texture2D<float3> MasksTexture : register(t3);
+Texture2D<unorm float3> MasksTexture : register(t3);
 
 RWTexture2D<float4> MainRW : register(u0);
 RWTexture2D<float4> NormalTAAMaskSpecularMaskRW : register(u1);
 RWTexture2D<float2> MotionVectorsRW : register(u2);
 Texture2D<float> DepthTexture : register(t4);
 
-Texture2D<float> DepthTexture : register(t5);
-
 #if defined(DYNAMIC_CUBEMAPS)
-// Texture2D<float> DepthTexture : register(t5);
-Texture2D<half3> ReflectanceTexture : register(t6);
-TextureCube<half3> EnvTexture : register(t7);
-TextureCube<half3> EnvReflectionsTexture : register(t8);
+Texture2D<float3> ReflectanceTexture : register(t5);
+TextureCube<float3> EnvTexture : register(t6);
+TextureCube<float3> EnvReflectionsTexture : register(t7);
 
 SamplerState LinearSampler : register(s0);
-#endif
-
-#if !defined(DYNAMIC_CUBEMAPS) && defined(VR)  // VR also needs a depthbuffer
-// Texture2D<float> DepthTexture : register(t5);
 #endif
 
 #if defined(SKYLIGHTING)
@@ -46,26 +39,21 @@ Texture2D<float4> SsgiYTexture : register(t11);
 Texture2D<float4> SsgiCoCgTexture : register(t12);
 Texture2D<float4> SsgiSpecularTexture : register(t13);
 
-void SampleSSGI(uint2 pixCoord, float3 normalWS, out float ao, out float3 il)
+void SampleSSGISpecular(uint2 pixCoord, sh2 lobe, out float ao, out float3 il, in float3 normal, in float3 view)
 {
-	ao = 1 - SsgiAoTexture[pixCoord];
-	float4 ssgiIlYSh = SsgiYTexture[pixCoord];
-	// without ZH hallucination
-	// float ssgiIlY = SphericalHarmonics::FuncProductIntegral(ssgiIlYSh, SphericalHarmonics::EvaluateCosineLobe(normalWS));
-	float ssgiIlY = SphericalHarmonics::SHHallucinateZH3Irradiance(ssgiIlYSh, normalWS);
-	float2 ssgiIlCoCg = SsgiCoCgTexture[pixCoord];
-	il = max(0, Color::YCoCgToRGB(float3(ssgiIlY, ssgiIlCoCg)));
-}
-
-void SampleSSGISpecular(uint2 pixCoord, sh2 lobe, out float ao, out float3 il, in float3 normal, in float3 view, in float roughness)
-{
+	// https://www.iryoku.com/stare-into-the-future/
 	ao = 1 - SsgiAoTexture[pixCoord].x;
+	const float SpecularPow = 8.0;
 	float NdotV = dot(normal, view);
-	ao = Color::SpecularAOLagarde(saturate(NdotV), ao, roughness);
+	float s = saturate(-0.3 + NdotV * NdotV);
+	ao = lerp(pow(ao, SpecularPow), 1.0, s);
 
 	float4 ssgiIlYSh = SsgiYTexture[pixCoord];
 	float ssgiIlY = SphericalHarmonics::FuncProductIntegral(ssgiIlYSh, lobe);
 	float2 ssgiIlCoCg = SsgiCoCgTexture[pixCoord].xy;
+	// specular is a bit too saturated, because CoCg are average over hemisphere
+	// we just cheese this bit
+	ssgiIlCoCg *= 0.8;
 
 	// pi to compensate for the /pi in specularLobe
 	// i don't think there really should be a 1/PI but without it the specular is too strong
@@ -79,21 +67,12 @@ void SampleSSGISpecular(uint2 pixCoord, sh2 lobe, out float ao, out float3 il, i
 }
 #endif
 
-#if defined(PHYS_SKY)
-Texture2D<float3> PhysSkyTrTexture : register(t14);
-Texture2D<float3> PhysSkyLumTexture : register(t15);
-#endif
-
-[numthreads(8, 8, 1)] void main(uint3 dispatchID
-								: SV_DispatchThreadID) {
-	half2 uv = half2(dispatchID.xy + 0.5) * SharedData::BufferDim.zw;
-#if defined(IBL)
-#	if !defined(DYNAMIC_CUBEMAPS)
-#		undef IBL
-#	else
-#		define IBL_DEFERRED
-#		include "IBL/IBL.hlsli"
-#	endif
+#if defined(PHYSICAL_SKY)
+#	define PS_DEFERRED_RSRCS
+#	define PS_DEFERRED_SAMPLERS
+#	include "PhysicalSky/Common.hlsli"
+// Texture3D<float4> TexApLut : register(t15);
+// SamplerState SampSv : register(s2); 
 #endif
 
 [numthreads(8, 8, 1)] void main(uint3 dispatchID : SV_DispatchThreadID) {
@@ -124,58 +103,21 @@ Texture2D<float3> PhysSkyLumTexture : register(t15);
 
 	float glossiness = normalGlossiness.z;
 
-	float3 linDiffuseColor = Color::GammaToLinear(diffuseColor);
-	float3 normalWS = normalize(mul(FrameBuffer::CameraViewInverse[eyeIndex], float4(normalVS, 0)).xyz);
-
-#if defined(SSGI)
-
-	float ssgiAo;
-	float3 ssgiIl;
-	SampleSSGI(dispatchID.xy, normalWS, ssgiAo, ssgiIl);
-
-	float3 directionalAmbientColor = max(0, mul(SharedData::DirectionalAmbient, float4(normalWS, 1.0)));
-	directionalAmbientColor *= albedo;
-
-	directionalAmbientColor = Color::RGBToYCoCg(directionalAmbientColor);
-	directionalAmbientColor.x = MasksTexture[dispatchID.xy].z;
-	directionalAmbientColor = Color::YCoCgToRGB(directionalAmbientColor);
-	directionalAmbientColor = max(0, directionalAmbientColor);
-
-	float maxScale = 1.0;
-	if (directionalAmbientColor.x > 0.0)
-		maxScale = min(maxScale, diffuseColor.x / directionalAmbientColor.x);
-	if (directionalAmbientColor.y > 0.0)
-		maxScale = min(maxScale, diffuseColor.y / directionalAmbientColor.y);
-	if (directionalAmbientColor.z > 0.0)
-		maxScale = min(maxScale, diffuseColor.z / directionalAmbientColor.z);
-	directionalAmbientColor *= maxScale;
-
-	diffuseColor = max(0.0, diffuseColor - directionalAmbientColor);
-
-	linDiffuseColor = Color::GammaToLinear(diffuseColor);
-
-	float3 linAlbedo = Color::GammaToLinear(albedo / Color::PBRLightingScale);
-
-	float3 multiBounceAO = Color::MultiBounceAO(linAlbedo, ssgiAo);
-
-	linDiffuseColor *= sqrt(multiBounceAO);
-
-	diffuseColor = Color::LinearToGamma(linDiffuseColor);
-
-	diffuseColor += Color::LinearToGamma(Color::GammaToLinear(directionalAmbientColor) * multiBounceAO);
-
-	linDiffuseColor = Color::GammaToLinear(diffuseColor);
-
-	linDiffuseColor += ssgiIl * linAlbedo;
-#endif
-
-	float3 color = linDiffuseColor + specularColor;
+	float3 color = Color::GammaToLinear(diffuseColor) + specularColor;
 
 #if defined(DYNAMIC_CUBEMAPS)
 
 	float3 reflectance = ReflectanceTexture[dispatchID.xy];
 
 	if (reflectance.x > 0.0 || reflectance.y > 0.0 || reflectance.z > 0.0) {
+		float3 normalWS = normalize(mul(FrameBuffer::CameraViewInverse[eyeIndex], float4(normalVS, 0)).xyz);
+
+		float wetnessMask = MasksTexture[dispatchID.xy].z * 2.0 - 1.0;
+
+		normalWS.z = wetnessMask;
+		float xyLength = sqrt(max(0.0, 1.0 - wetnessMask * wetnessMask));
+		normalWS.xy = normalize(normalWS.xy) * xyLength;
+
 		float3 V = normalize(positionWS.xyz);
 		float3 R = reflect(V, normalWS);
 
@@ -186,25 +128,10 @@ Texture2D<float3> PhysSkyLumTexture : register(t15);
 
 		float3 finalIrradiance = 0;
 
-        float directionalAmbientColorSpecular = Color::RGBToLuminance(max(0, mul(SharedData::DirectionalAmbient, float4(R, 1.0)))) * Color::ReflectionNormalisationScale;
-
 #	if defined(INTERIOR)
-		float3 specularIrradiance = EnvTexture.SampleLevel(LinearSampler, R, level);
+		float3 specularIrradiance = Color::GammaToLinear(EnvTexture.SampleLevel(LinearSampler, R, level));
 
-        float specularIrradianceLuminance = Color::RGBToLuminance(EnvTexture.SampleLevel(LinearSampler, R, 15));
-
-#		if defined(IBL)
-		float3 iblColor = 0;
-		if (SharedData::iblSettings.EnableDiffuseIBL && SharedData::iblSettings.EnableInterior) {
-			directionalAmbientColorSpecular *= SharedData::iblSettings.DALCAmount;
-			iblColor += Color::Saturation(ImageBasedLighting::GetIBLColor(-R), SharedData::iblSettings.IBLSaturation) * SharedData::iblSettings.DiffuseIBLScale;
-			float iblColorLuminance = Color::RGBToLuminance(Color::LinearToGamma(iblColor));
-			directionalAmbientColorSpecular += iblColorLuminance;
-		}
-#		endif
-        specularIrradiance = (specularIrradiance / max(specularIrradianceLuminance, 0.001)) * directionalAmbientColorSpecular;
-
-        finalIrradiance = Color::GammaToLinear(specularIrradiance);
+		finalIrradiance += specularIrradiance;
 #	elif defined(SKYLIGHTING)
 #		if defined(VR)
 		float3 positionMS = positionWS.xyz + FrameBuffer::CameraPosAdjust[eyeIndex].xyz - FrameBuffer::CameraPosAdjust[0].xyz;
@@ -215,79 +142,48 @@ Texture2D<float3> PhysSkyLumTexture : register(t15);
 		sh2 skylighting = Skylighting::sample(SharedData::skylightingSettings, SkylightingProbeArray, stbn_vec3_2Dx1D_128x128x64, dispatchID.xy, positionMS.xyz, R);
 
 		float skylightingSpecular = SphericalHarmonics::FuncProductIntegral(skylighting, specularLobe);
-		skylightingSpecular = saturate(skylightingSpecular);
 		skylightingSpecular = Skylighting::mixSpecular(SharedData::skylightingSettings, skylightingSpecular);
 
-#		if defined(IBL)
-		float3 iblColor = 0;
-		if (SharedData::iblSettings.EnableDiffuseIBL) {
-			directionalAmbientColorSpecular *= SharedData::iblSettings.DALCAmount;
-			iblColor += Color::Saturation(ImageBasedLighting::GetIBLColor(-R, skylightingSpecular), SharedData::iblSettings.IBLSaturation) * SharedData::iblSettings.DiffuseIBLScale;
-			float iblColorLuminance = Color::RGBToLuminance(Color::LinearToGamma(iblColor));
-			directionalAmbientColorSpecular += iblColorLuminance;
-		}
-#		endif
+		float3 specularIrradiance = 1;
 
-		float3 specularIrradianceReflections = 0.0;
+		if (skylightingSpecular < 1.0)
+			specularIrradiance = Color::GammaToLinear(EnvTexture.SampleLevel(LinearSampler, R, level));
 
-		if (skylightingSpecular > 0.0){
-			specularIrradianceReflections = EnvReflectionsTexture.SampleLevel(LinearSampler, R, level);
+		float3 specularIrradianceReflections = 1.0;
 
-			float specularIrradianceLuminance = Color::RGBToLuminance(EnvReflectionsTexture.SampleLevel(LinearSampler, R, 15));
-
-			specularIrradianceReflections = (specularIrradianceReflections / max(specularIrradianceLuminance, 0.001)) * directionalAmbientColorSpecular;
-
-			specularIrradianceReflections = Color::GammaToLinear(specularIrradianceReflections);
-
-		}
-
-		float3 specularIrradiance = 0.0;
-
-		if (skylightingSpecular < 1.0){
-			specularIrradiance = EnvTexture.SampleLevel(LinearSampler, R, level);
-
-			float specularIrradianceLuminance = Color::RGBToLuminance(EnvTexture.SampleLevel(LinearSampler, R, 15));
-
-			directionalAmbientColorSpecular = Color::GammaToLinear(directionalAmbientColorSpecular);
-			directionalAmbientColorSpecular *= skylightingSpecular;
-			directionalAmbientColorSpecular = Color::LinearToGamma(directionalAmbientColorSpecular);
-
-			specularIrradiance = (specularIrradiance / max(specularIrradianceLuminance, 0.001)) * directionalAmbientColorSpecular;
-
-			specularIrradiance = Color::GammaToLinear(specularIrradiance);
-		}
+		if (skylightingSpecular > 0.0)
+			specularIrradianceReflections = Color::GammaToLinear(EnvReflectionsTexture.SampleLevel(LinearSampler, R, level));
 
 		finalIrradiance = lerp(specularIrradiance, specularIrradianceReflections, skylightingSpecular);
 #	else
-#		if defined(IBL)
-		float3 iblColor = 0;
-		if (SharedData::iblSettings.EnableDiffuseIBL) {
-			directionalAmbientColorSpecular *= SharedData::iblSettings.DALCAmount;
-			iblColor += Color::Saturation(ImageBasedLighting::GetIBLColor(-R), SharedData::iblSettings.IBLSaturation) * SharedData::iblSettings.DiffuseIBLScale;
-			float iblColorLuminance = Color::RGBToLuminance(Color::LinearToGamma(iblColor));
-			directionalAmbientColorSpecular += iblColorLuminance;
-		}
-#		endif
-		float3 specularIrradianceReflections = EnvReflectionsTexture.SampleLevel(LinearSampler, R, level);
+		float3 specularIrradianceReflections = Color::GammaToLinear(EnvReflectionsTexture.SampleLevel(LinearSampler, R, level));
 
-        float specularIrradianceReflectionsLuminance = Color::RGBToLuminance(EnvReflectionsTexture.SampleLevel(LinearSampler, R, 15));
-
-	    specularIrradianceReflections = (specularIrradianceReflections / max(specularIrradianceReflectionsLuminance, 0.001)) * directionalAmbientColorSpecular;
-
-		finalIrradiance = Color::GammaToLinear(specularIrradianceReflections);
+		finalIrradiance += specularIrradianceReflections;
 #	endif
 
 #	if defined(SSGI)
+#		if defined(VR)
+		float3 uvF = float3((dispatchID.xy + 0.5) * SharedData::BufferDim.zw, DepthTexture[dispatchID.xy]);  // calculate high precision uv of initial eye
+		float3 uv2 = Stereo::ConvertStereoUVToOtherEyeStereoUV(uvF, eyeIndex, false);                        // calculate other eye uv
+		float3 uv1Mono = Stereo::ConvertFromStereoUV(uvF, eyeIndex);
+		float3 uv2Mono = Stereo::ConvertFromStereoUV(uv2, (1 - eyeIndex));
+		uint2 pixCoord2 = (uint2)(uv2.xy / SharedData::BufferDim.zw - 0.5);
+#		endif
+
 		float ssgiAo;
 		float3 ssgiIlSpecular;
-		SampleSSGISpecular(dispatchID.xy, specularLobe, ssgiAo, ssgiIlSpecular, normalWS, V, roughness);
+		SampleSSGISpecular(dispatchID.xy, specularLobe, ssgiAo, ssgiIlSpecular, normalWS, V);
 
-		finalIrradiance = (finalIrradiance * ssgiAo);
+#		if defined(VR)
+		float ssgiAo2;
+		float3 ssgiIlSpecular2;
+		SampleSSGISpecular(pixCoord2, specularLobe, ssgiAo2, ssgiIlSpecular2, normalWS, V);
+		float4 ssgiMixed = Stereo::BlendEyeColors(uv1Mono, float4(ssgiIlSpecular, ssgiAo), uv2Mono, float4(ssgiIlSpecular2, ssgiAo2));
+		ssgiAo = ssgiMixed.a;
+		ssgiIlSpecular = ssgiMixed.rgb;
+#		endif
 
-		ssgiIlSpecular = Color::RGBToYCoCg(ssgiIlSpecular);
-		ssgiIlSpecular = max(0, Color::YCoCgToRGB(float3(ssgiIlSpecular.x, lerp(ssgiIlSpecular.yz, Color::RGBToYCoCg(finalIrradiance).yz, 0.5))));
-
-		finalIrradiance += ssgiIlSpecular;
+		finalIrradiance = (finalIrradiance * ssgiAo) + ssgiIlSpecular;
 #	endif
 
 		color += reflectance * finalIrradiance;
@@ -295,10 +191,14 @@ Texture2D<float3> PhysSkyLumTexture : register(t15);
 
 #endif
 
-#if defined(PHYS_SKY)
-	color = Color::LinearToGamma(Color::GammaToLinear(color) * PhysSkyTrTexture[dispatchID.xy] + PhysSkyLumTexture[dispatchID.xy]);
-#endif
 	color = Color::LinearToGamma(color);
+
+#if defined(PHYSICAL_SKY)
+	if (SharedData::physSkyData.enabled && depth < 1 - 1e-6) {
+		const float4 apSample = PhysSky::SampleAp(normalize(positionWS.xyz), dispatchID.xy, length(positionWS.xyz), PhysSky::SampSv);
+		color.xyz = color.xyz * apSample.w + apSample.xyz;
+	}
+#endif
 
 #if defined(DEBUG)
 

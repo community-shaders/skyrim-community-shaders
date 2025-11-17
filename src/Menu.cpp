@@ -441,7 +441,6 @@ void Menu::DrawSettings()
 		if (std::abs(globalScale - ThemeManager::Constants::DEFAULT_GLOBAL_SCALE) < 0.001f) {
 			globalScale = ThemeManager::Constants::DEFAULT_GLOBAL_SCALE;  // Ensure built-in themes stay at 0.0
 		}
-		auto& shaderCache = SIE::ShaderCache::Instance();
 
 		if (ImGui::BeginTable("##LeButtons", 4, ImGuiTableFlags_SizingStretchSame)) {
 			ImGui::TableNextColumn();
@@ -453,6 +452,9 @@ void Menu::DrawSettings()
 			if (ImGui::Button("Save Settings", { -1, 0 })) {
 				State::GetSingleton()->Save();
 			}
+
+			ImGui::EndTable();
+		}
 
 		const float uiScale = exp2(globalScale);  // Get current UI scale
 		// Check if we can show icons - require setting enabled and at least some icons loaded (for undocked)

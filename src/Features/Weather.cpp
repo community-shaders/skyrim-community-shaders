@@ -42,7 +42,7 @@ void LerpDirectional(RE::BGSDirectionalAmbientLightingColors::Directional& oldCo
 void Weather::Bind()
 {
 	if (loaded) {
-		auto& context = State::GetSingleton()->context;
+		auto& context = globals::d3d::context;
 
 		// Set PS shader resource
 		{
@@ -54,7 +54,7 @@ void Weather::Bind()
 
 void Weather::Prepass()
 {
-	auto& context = State::GetSingleton()->context;
+	auto& context = globals::d3d::context;
 
 	auto renderer = RE::BSGraphics::Renderer::GetSingleton();
 	auto& reflections = renderer->GetRendererData().cubemapRenderTargets[RE::RENDER_TARGET_CUBEMAP::kREFLECTIONS];

@@ -1,6 +1,10 @@
+#ifndef TERRAIN_SHADOW_REGISTER
+#	define TERRAIN_SHADOW_REGISTER t60
+#endif
+
 namespace TerrainShadows
 {
-	Texture2D<float2> ShadowHeightTexture : register(t60);
+	Texture2D<float2> ShadowHeightTexture : register(TERRAIN_SHADOW_REGISTER);
 
 	float2 GetTerrainShadowUV(float2 xy)
 	{
