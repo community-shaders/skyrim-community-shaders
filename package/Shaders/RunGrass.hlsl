@@ -999,6 +999,7 @@ PS_OUTPUT main(PS_INPUT input)
 		const float4 apSample = PhysSky::SampleAp(normalize(input.WorldPosition.xyz), input.Position.xy, length(input.WorldPosition.xyz), SampColorSampler);
 		psout.Diffuse.xyz = psout.Diffuse.xyz * apSample.w + apSample.xyz;
 	}
+#			endif
 #			if defined(SKYLIGHTING)
 	Skylighting::applySkylighting(diffuseColor, directionalAmbientColor, albedo, skylightingDiffuse);
 #			endif
