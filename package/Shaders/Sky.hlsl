@@ -1,3 +1,4 @@
+#include "Common/Color.hlsli"
 #include "Common/FrameBuffer.hlsli"
 #include "Common/VR.hlsli"
 
@@ -187,6 +188,11 @@ cbuffer AlphaTestRefCB : register(b11)
 #		include "CloudShadows/CloudShadows.hlsli"
 #	endif
 
+#	if defined(PHYS_SKY)
+#		define SKY_SAMPLERS
+#		define SKY_SHADER
+#		include "PhysicalSky/PhysicalSky.hlsli"
+#	endif
 Texture2D<float> TexDepthSampler : register(t17);
 
 PS_OUTPUT main(PS_INPUT input)
@@ -254,6 +260,13 @@ PS_OUTPUT main(PS_INPUT input)
 	if (depth < input.Position.z)
 		psout.Color.w = 0;
 
+#	endif
+
+#	if defined(PHYS_SKY)
+	if (PhysSkyBuffer[0].enable_sky) {
+		DrawPhysicalSky(psout.Color, input);
+		psout.Color.rgb = Color::LinearToGamma(psout.Color.rgb);
+	}
 #	endif
 
 	return psout;

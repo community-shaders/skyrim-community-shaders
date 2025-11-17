@@ -17,12 +17,19 @@ RWTexture2D<float4> NormalTAAMaskSpecularMaskRW : register(u1);
 RWTexture2D<float2> MotionVectorsRW : register(u2);
 Texture2D<float> DepthTexture : register(t4);
 
+Texture2D<float> DepthTexture : register(t5);
+
 #if defined(DYNAMIC_CUBEMAPS)
-Texture2D<float3> ReflectanceTexture : register(t5);
-TextureCube<float3> EnvTexture : register(t6);
-TextureCube<float3> EnvReflectionsTexture : register(t7);
+// Texture2D<float> DepthTexture : register(t5);
+Texture2D<half3> ReflectanceTexture : register(t6);
+TextureCube<half3> EnvTexture : register(t7);
+TextureCube<half3> EnvReflectionsTexture : register(t8);
 
 SamplerState LinearSampler : register(s0);
+#endif
+
+#if !defined(DYNAMIC_CUBEMAPS) && defined(VR)  // VR also needs a depthbuffer
+// Texture2D<float> DepthTexture : register(t5);
 #endif
 
 #if defined(SKYLIGHTING)
@@ -72,6 +79,14 @@ void SampleSSGISpecular(uint2 pixCoord, sh2 lobe, out float ao, out float3 il, i
 }
 #endif
 
+#if defined(PHYS_SKY)
+Texture2D<float3> PhysSkyTrTexture : register(t14);
+Texture2D<float3> PhysSkyLumTexture : register(t15);
+#endif
+
+[numthreads(8, 8, 1)] void main(uint3 dispatchID
+								: SV_DispatchThreadID) {
+	half2 uv = half2(dispatchID.xy + 0.5) * SharedData::BufferDim.zw;
 #if defined(IBL)
 #	if !defined(DYNAMIC_CUBEMAPS)
 #		undef IBL
@@ -280,6 +295,9 @@ void SampleSSGISpecular(uint2 pixCoord, sh2 lobe, out float ao, out float3 il, i
 
 #endif
 
+#if defined(PHYS_SKY)
+	color = Color::LinearToGamma(Color::GammaToLinear(color) * PhysSkyTrTexture[dispatchID.xy] + PhysSkyLumTexture[dispatchID.xy]);
+#endif
 	color = Color::LinearToGamma(color);
 
 #if defined(DEBUG)

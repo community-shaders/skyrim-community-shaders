@@ -43,6 +43,8 @@
 #include "Features/VR.h"
 #include "Features/WeatherPicker.h"
 
+#include "Editor/EditorWindow.h"
+
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	Menu::ThemeSettings::PaletteColors,
 	Background,
@@ -408,6 +410,12 @@ void Menu::DrawSettings()
 
 	ImGui::SetNextWindowPos(Util::GetNativeViewportSizeScaled(0.5f), ImGuiCond_FirstUseEver, ImVec2(0.5f, 0.5f));
 	ImGui::SetNextWindowSize(Util::GetNativeViewportSizeScaled(0.8f), ImGuiCond_FirstUseEver);
+
+	if (EditorWindow::GetSingleton()->open) {
+		EditorWindow::GetSingleton()->Draw();
+		return;
+	}
+
 	auto title = std::format("Community Shaders {}", Util::GetFormattedVersion(Plugin::VERSION));
 
 	// Determine window flags based on docking state
@@ -433,6 +441,18 @@ void Menu::DrawSettings()
 		if (std::abs(globalScale - ThemeManager::Constants::DEFAULT_GLOBAL_SCALE) < 0.001f) {
 			globalScale = ThemeManager::Constants::DEFAULT_GLOBAL_SCALE;  // Ensure built-in themes stay at 0.0
 		}
+		auto& shaderCache = SIE::ShaderCache::Instance();
+
+		if (ImGui::BeginTable("##LeButtons", 4, ImGuiTableFlags_SizingStretchSame)) {
+			ImGui::TableNextColumn();
+			if (ImGui::Button("Open Editor", { -1, 0 })) {
+				EditorWindow::GetSingleton()->open = true;
+			}
+
+			ImGui::TableNextColumn();
+			if (ImGui::Button("Save Settings", { -1, 0 })) {
+				State::GetSingleton()->Save();
+			}
 
 		const float uiScale = exp2(globalScale);  // Get current UI scale
 		// Check if we can show icons - require setting enabled and at least some icons loaded (for undocked)

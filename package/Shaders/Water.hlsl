@@ -566,6 +566,10 @@ FlowmapData GetFlowmapDataWorldSpace(FlowmapData textureSpaceData)
 #				include "DynamicCubemaps/DynamicCubemaps.hlsli"
 #			endif
 
+#			if defined(PHYS_SKY)
+#				include "PhysicalSky/PhysicalSky.hlsli"
+#			endif
+
 #			if defined(WETNESS_EFFECTS)
 #				include "WetnessEffects/WetnessEffects.hlsli"
 #			endif
@@ -940,7 +944,7 @@ DiffuseOutput GetWaterDiffuseColor(PS_INPUT input, float3 normal, float3 viewDir
 #			endif
 }
 
-float3 GetSunColor(float3 normal, float3 viewDirection)
+float3 GetSunColor(float3 normal, float3 viewDirection, uint eyeIndex, PS_INPUT input)
 {
 #			if defined(UNDERWATER)
 	return 0.0.xxx;
@@ -1115,7 +1119,7 @@ PS_OUTPUT main(PS_INPUT input)
 	}
 #					endif
 #				else
-	float3 sunColor = GetSunColor(normal, viewDirection);
+	float3 sunColor = GetSunColor(normal, viewDirection, eyeIndex, input);
 
 	if (!(Permutation::PixelShaderDescriptor & Permutation::WaterFlags::Interior) && any(sunColor > 0.0)) {
 		sunColor *= ShadowSampling::GetWaterShadow(screenNoise, input.WPosition.xyz, eyeIndex);

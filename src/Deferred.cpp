@@ -7,11 +7,13 @@
 #include "TruePBR.h"
 
 #include "Features/DynamicCubemaps.h"
+#include "Features/PhysicalSky.h"
 #include "Features/IBL.h"
 #include "Features/ScreenSpaceGI.h"
 #include "Features/Skylighting.h"
 #include "Features/SubsurfaceScattering.h"
 #include "Features/TerrainBlending.h"
+#include "Features/Weather.h"
 #include "Features/Upscaling.h"
 
 #include "Hooks.h"
@@ -298,6 +300,10 @@ void Deferred::PrepassPasses()
 
 void Deferred::StartDeferred()
 {
+	Weather::GetSingleton()->Bind();
+
+	if (!inWorld)
+		return;
 	globals::state->UpdateSharedData(true, false);
 
 	auto shadowState = globals::game::shadowState;
@@ -414,13 +420,47 @@ void Deferred::DeferredPasses()
 
 	auto& terrainBlending = globals::features::terrainBlending;
 
+			ID3D11UnorderedAccessView* uavs[2]{ main.UAV, prevDiffuseAmbientTexture->uav.get() };
+			context->CSSetUnorderedAccessViews(0, ARRAYSIZE(uavs), uavs, nullptr);
+
+			auto shader = interior ? GetComputeAmbientCompositeInterior() : GetComputeAmbientComposite();
+			context->CSSetShader(shader, nullptr, 0);
+
+			context->Dispatch(dispatchCount.x, dispatchCount.y, 1);
+		}
+
+		// Clear
+		{
+			ID3D11ShaderResourceView* views[6]{ nullptr, nullptr, nullptr, nullptr, nullptr, nullptr };
+			context->CSSetShaderResources(0, ARRAYSIZE(views), views);
+
+			ID3D11UnorderedAccessView* uavs[2]{ nullptr, nullptr };
+			context->CSSetUnorderedAccessViews(0, ARRAYSIZE(uavs), uavs, nullptr);
+
+			context->CSSetShader(nullptr, nullptr, 0);
+		}
+	}
+
+	auto sss = SubsurfaceScattering::GetSingleton();
+	if (sss->loaded)
+		sss->DrawSSS();
+
+	auto dynamicCubemaps = DynamicCubemaps::GetSingleton();
+	if (dynamicCubemaps->loaded)
+		dynamicCubemaps->UpdateCubemap();
+
+	auto terrainBlending = TerrainBlending::GetSingleton();
+	auto physSky = PhysicalSky::GetSingleton();
+	auto weather = Weather::GetSingleton();
+
+	auto shadowMask = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kSHADOW_MASK];
 	auto& ibl = globals::features::ibl;
 
 	// Deferred Composite
 	{
 		TracyD3D11Zone(globals::state->tracyCtx, "Deferred Composite");
 
-		ID3D11ShaderResourceView* srvs[16]{
+		ID3D11ShaderResourceView* srvs[18]{
 			specular.SRV,
 			albedo.SRV,
 			normalRoughness.SRV,
@@ -435,6 +475,10 @@ void Deferred::DeferredPasses()
 			ssgi_hq_spec ? nullptr : ssgi_y,
 			ssgi_hq_spec ? nullptr : ssgi_cocg,
 			ssgi_hq_spec ? ssgi_gi_spec : nullptr,
+			physSky->loaded ? physSky->main_view_tr_tex->srv.get() : nullptr,
+			physSky->loaded ? physSky->main_view_lum_tex->srv.get() : nullptr,
+			weather->loaded ? weather->diffuseIBLTexture->srv.get() : nullptr,
+			shadowMask.SRV
 			ibl.loaded ? ibl.diffuseIBLTexture->srv.get() : nullptr,
 			ibl.loaded ? ibl.diffuseSkyIBLTexture->srv.get() : nullptr,
 		};
@@ -620,6 +664,9 @@ ID3D11ComputeShader* Deferred::GetComputeMainComposite()
 		if (globals::features::screenSpaceGI.loaded)
 			defines.push_back({ "SSGI", nullptr });
 
+		if (PhysicalSky::GetSingleton()->loaded)
+			defines.push_back({ "PHYS_SKY", nullptr });
+			
 		if (globals::features::ibl.loaded)
 			defines.push_back({ "IBL", nullptr });
 

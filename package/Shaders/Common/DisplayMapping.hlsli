@@ -128,7 +128,40 @@ namespace DisplayMapping
 		return XYZToRGB(col);
 	}
 
-	float3 HuePreservingHejlBurgessDawson(float3 col, float3 bloomCol)
+	float3 HuePreservingShoulder(float3 col, float limit = 0.25)
+	{
+		float3 ictcp = RGBToICtCp(col);
+
+		// Hue-preserving range compression requires desaturation in order to achieve a natural look. We adaptively desaturate the input based on its luminance.
+		float saturationAmount = pow(smoothstep(1.0, 0.3, ictcp.x), 1.3);
+		col = ICtCpToRGB(ictcp * float3(1, saturationAmount.xx));
+
+		// Hue preserving mapping
+		float maxCol = Color::RGBToLuminance(col);
+		float mappedMax = RangeCompress(maxCol, limit);
+		float3 compressedHuePreserving = col * mappedMax / maxCol;
+
+		// Non-hue preserving mapping
+		float3 perChannelCompressed = RangeCompress(col, limit);
+
+		col = lerp(perChannelCompressed, compressedHuePreserving, 0.6);
+
+		float3 ictcpMapped = RGBToICtCp(col);
+
+		// Smoothly ramp off saturation as brightness increases, but keep some even for very bright input
+		float postCompressionSaturationBoost = 0.3 * smoothstep(1.0, 0.5, ictcp.x);
+
+		// Re-introduce some hue from the pre-compression color. Something similar could be accomplished by delaying the luma-dependent desaturation before range compression.
+		// Doing it here however does a better job of preserving perceptual luminance of highly saturated colors. Because in the hue-preserving path we only range-compress the max channel,
+		// saturated colors lose luminance. By desaturating them more aggressively first, compressing, and then re-adding some saturation, we can preserve their brightness to a greater extent.
+		ictcpMapped.yz = lerp(ictcpMapped.yz, ictcp.yz * ictcpMapped.x / max(1e-3, ictcp.x), postCompressionSaturationBoost);
+
+		col = ICtCpToRGB(ictcpMapped);
+
+		return col;
+	}
+
+	float3 HuePreservingHejlBurgessDawson(float3 col)
 	{
 		float3 ictcp = RGBToICtCp(col);
 
