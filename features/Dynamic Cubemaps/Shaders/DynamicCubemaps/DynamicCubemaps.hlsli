@@ -59,7 +59,7 @@ namespace DynamicCubemaps
 			if (SharedData::iblSettings.EnableDiffuseIBL && SharedData::iblSettings.EnableInterior) {
 				directionalAmbientColorSpecular *= SharedData::iblSettings.DALCAmount;
 				iblColor += Color::Saturation(ImageBasedLighting::GetIBLColor(-R, 0), SharedData::iblSettings.IBLSaturation) * SharedData::iblSettings.DiffuseIBLScale;
-				float iblColorLuminance = Color::RGBToLuminance(Color::LinearToGamma(iblColor));
+				float iblColorLuminance = Color::RGBToLuminance(Color::IrradianceToGamma(iblColor));
 				directionalAmbientColorSpecular += iblColorLuminance;
 			}
 #			endif
@@ -85,7 +85,7 @@ namespace DynamicCubemaps
 		if (SharedData::iblSettings.EnableDiffuseIBL) {
 			directionalAmbientColorSpecular *= SharedData::iblSettings.DALCAmount;
 			iblColor += Color::Saturation(ImageBasedLighting::GetIBLColor(-R, skylightingSpecular), SharedData::iblSettings.IBLSaturation) * SharedData::iblSettings.DiffuseIBLScale;
-			float iblColorLuminance = Color::RGBToLuminance(Color::LinearToGamma(iblColor));
+			float iblColorLuminance = Color::RGBToLuminance(Color::IrradianceToGamma(iblColor));
 			directionalAmbientColorSpecular += iblColorLuminance;
 		}
 #			endif
@@ -123,7 +123,7 @@ namespace DynamicCubemaps
 		if (SharedData::iblSettings.EnableDiffuseIBL) {
 			directionalAmbientColorSpecular *= SharedData::iblSettings.DALCAmount;
 			iblColor += Color::Saturation(ImageBasedLighting::GetIBLColor(-R), SharedData::iblSettings.IBLSaturation) * SharedData::iblSettings.DiffuseIBLScale;
-			float iblColorLuminance = Color::RGBToLuminance(Color::LinearToGamma(iblColor));
+			float iblColorLuminance = Color::RGBToLuminance(Color::IrradianceToGamma(iblColor));
 			directionalAmbientColorSpecular += iblColorLuminance;
 		}
 #			endif
@@ -183,7 +183,7 @@ namespace DynamicCubemaps
 			if (SharedData::iblSettings.EnableDiffuseIBL && SharedData::iblSettings.EnableInterior) {
 				directionalAmbientColorSpecular *= SharedData::iblSettings.DALCAmount;
 				iblColor += Color::Saturation(ImageBasedLighting::GetIBLColor(-R, 0), SharedData::iblSettings.IBLSaturation) * SharedData::iblSettings.DiffuseIBLScale;
-				float iblColorLuminance = Color::RGBToLuminance(Color::LinearToGamma(iblColor));
+				float iblColorLuminance = Color::RGBToLuminance(Color::IrradianceToGamma(iblColor));
 				directionalAmbientColorSpecular += iblColorLuminance;
 			}
 #			endif
@@ -209,7 +209,7 @@ namespace DynamicCubemaps
 		if (SharedData::iblSettings.EnableDiffuseIBL) {
 			directionalAmbientColorSpecular *= SharedData::iblSettings.DALCAmount;
 			iblColor += Color::Saturation(ImageBasedLighting::GetIBLColor(-R, skylightingSpecular), SharedData::iblSettings.IBLSaturation) * SharedData::iblSettings.DiffuseIBLScale;
-			float iblColorLuminance = Color::RGBToLuminance(Color::LinearToGamma(iblColor));
+			float iblColorLuminance = Color::RGBToLuminance(Color::IrradianceToGamma(iblColor));
 			directionalAmbientColorSpecular += iblColorLuminance;
 		}
 #			endif
@@ -245,7 +245,7 @@ namespace DynamicCubemaps
 		if (SharedData::iblSettings.EnableDiffuseIBL) {
 			directionalAmbientColorSpecular *= SharedData::iblSettings.DALCAmount;
 			iblColor += Color::Saturation(ImageBasedLighting::GetIBLColor(-R), SharedData::iblSettings.IBLSaturation) * SharedData::iblSettings.DiffuseIBLScale;
-			float iblColorLuminance = Color::RGBToLuminance(Color::LinearToGamma(iblColor));
+			float iblColorLuminance = Color::RGBToLuminance(Color::IrradianceToGamma(iblColor));
 			directionalAmbientColorSpecular += iblColorLuminance;
 		}
 #			endif
