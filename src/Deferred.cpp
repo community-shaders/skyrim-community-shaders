@@ -7,14 +7,14 @@
 #include "TruePBR.h"
 
 #include "Features/DynamicCubemaps.h"
-#include "Features/PhysicalSky.h"
 #include "Features/IBL.h"
+#include "Features/PhysicalSky.h"
 #include "Features/ScreenSpaceGI.h"
 #include "Features/Skylighting.h"
 #include "Features/SubsurfaceScattering.h"
 #include "Features/TerrainBlending.h"
-#include "Features/Weather.h"
 #include "Features/Upscaling.h"
+#include "Features/Weather.h"
 
 #include "Hooks.h"
 
@@ -640,7 +640,7 @@ ID3D11ComputeShader* Deferred::GetComputeMainComposite()
 
 		if (globals::features::physicalSky.loaded)
 			defines.push_back({ "PHYSICAL_SKY", nullptr });
-			
+
 		if (globals::features::ibl.loaded)
 			defines.push_back({ "IBL", nullptr });
 

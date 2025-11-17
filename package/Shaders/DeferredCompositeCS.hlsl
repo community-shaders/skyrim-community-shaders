@@ -72,7 +72,7 @@ void SampleSSGISpecular(uint2 pixCoord, sh2 lobe, out float ao, out float3 il, i
 #	define PS_DEFERRED_SAMPLERS
 #	include "PhysicalSky/Common.hlsli"
 // Texture3D<float4> TexApLut : register(t15);
-// SamplerState SampSv : register(s2); 
+// SamplerState SampSv : register(s2);
 #endif
 
 [numthreads(8, 8, 1)] void main(uint3 dispatchID : SV_DispatchThreadID) {

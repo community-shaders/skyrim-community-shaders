@@ -26,7 +26,7 @@ class Widget
 public:
 	RE::TESForm* form = nullptr;
 
-	virtual ~Widget(){};
+	virtual ~Widget() {};
 
 	virtual std::string GetEditorID()
 	{
