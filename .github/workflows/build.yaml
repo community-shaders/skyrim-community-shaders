@@ -36,6 +36,9 @@ on:
             - "vcpkg-configuration.json"
             - ".gitmodules"
             - "extern/**"
+            - "cmake/**"
+            - ".github/workflows/**"
+            - ".github/configs/**"
 
 permissions:
     contents: read
@@ -52,7 +55,7 @@ jobs:
         if: ${{ github.event_name == 'pull_request_target' }}
         outputs:
             should-build: ${{ steps.changed-files.outputs.build_any_changed == 'true' || steps.changed-files.outputs.cpp_any_changed == 'true' || steps.changed-files.conclusion == 'failure' }}
-            hlsl-should-build: ${{ steps.changed-files.outputs.hlsl_any_changed == 'true' || steps.changed-files.conclusion == 'failure' }}
+            hlsl-should-build: ${{ steps.changed-files.outputs.hlsl_any_changed == 'true' || steps.changed-files.outputs.cmake_any_changed == 'true' || steps.changed-files.outputs.ci_any_changed == 'true' || steps.changed-files.conclusion == 'failure' }}
         steps:
             - uses: actions/checkout@v4
               with:
@@ -86,6 +89,13 @@ jobs:
                         - 'vcpkg-configuration.json'
                         - '.gitmodules'
                         - 'extern/**'
+                      cmake:
+                        - 'CMakeLists.txt'
+                        - 'CMakePresets.json'
+                        - 'cmake/**'
+                      ci:
+                        - '.github/workflows/**'
+                        - '.github/configs/**'
                       hlsl:
                         - '**.hlsl'
                         - '**.hlsli'
