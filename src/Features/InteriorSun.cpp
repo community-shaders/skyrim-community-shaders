@@ -245,67 +245,54 @@ bool InteriorSun::BSShadowDirectionalLight_SetFrameCamera::thunk(RE::BSShadowDir
 {
 	auto& singleton = globals::features::interiorSun;
 	
-	// Disable frustum culling for interior sun to prevent view-dependent geometry culling
-	// This ensures windows and other shadow-casting geometry remain visible to shadow rendering
+	// Save and disable frustum culling for interior sun to prevent view-dependent geometry culling
+	bool savedCullingStates = false;
 	if (singleton.loaded && singleton.isInteriorWithSun && a_light) {
 		auto& runtimeData = a_light->GetShadowDirectionalLightRuntimeData();
 		if (runtimeData.cullingProcesses.data()) {
+			singleton.savedActivePlanes.clear();
 			for (auto& cullingProcessPtr : runtimeData.cullingProcesses) {
 				if (cullingProcessPtr) {
+					// Save original state
+					singleton.savedActivePlanes.push_back(cullingProcessPtr->planes.activePlanes);
+					// Disable all frustum planes
 					cullingProcessPtr->planes.activePlanes = static_cast<RE::NiFrustumPlanes::ActivePlane>(0);
+				} else {
+					singleton.savedActivePlanes.push_back(static_cast<RE::NiFrustumPlanes::ActivePlane>(0));
 				}
 			}
+			savedCullingStates = true;
 		}
 	}
 	
-	// For interior sun, we need to modify the camera BEFORE the original function processes it
-	// The const_cast is necessary because we need to widen the frustum to prevent view-dependent culling
-	RE::NiFrustum originalFrustum{};
-	bool modifiedCamera = false;
-	
-	if (singleton.loaded && singleton.isInteriorWithSun) {
-		// Save original frustum and expand it massively for shadow rendering
-		auto* camera = const_cast<RE::NiCamera*>(&a_camera);
-		auto& frustum = camera->GetRuntimeData2().viewFrustum;
-		
-		originalFrustum = frustum;  // Save original
-		modifiedCamera = true;
-		
-		// Expand to near-omnidirectional to capture all geometry regardless of player view direction
-		frustum.fLeft = -10.0f;
-		frustum.fRight = 10.0f;
-		frustum.fTop = 10.0f;
-		frustum.fBottom = -10.0f;
-		// Keep near/far unchanged
-	}
-	
-	// Call original function with the (possibly modified) camera
+	// Call original function
 	bool result = func(a_light, a_camera);
 	
-	// Restore original camera frustum
-	if (modifiedCamera) {
-		auto* camera = const_cast<RE::NiCamera*>(&a_camera);
-		camera->GetRuntimeData2().viewFrustum = originalFrustum;
+	// Restore original culling process states
+	if (savedCullingStates && a_light) {
+		auto& runtimeData = a_light->GetShadowDirectionalLightRuntimeData();
+		if (runtimeData.cullingProcesses.data() && static_cast<size_t>(runtimeData.cullingProcesses.size()) == singleton.savedActivePlanes.size()) {
+			for (std::uint32_t i = 0; i < runtimeData.cullingProcesses.size(); ++i) {
+				if (runtimeData.cullingProcesses[i]) {
+					runtimeData.cullingProcesses[i]->planes.activePlanes = singleton.savedActivePlanes[i];
+				}
+			}
+		}
+		singleton.savedActivePlanes.clear();
 	}
 
-	// AFTER SetFrameCamera calculates splits, override them for interior sun if enabled
-	// These modified values will persist and be used when constant buffers are set up
+	// Override split distances for single cascade mode
 	if (result && singleton.loaded && singleton.isInteriorWithSun && singleton.settings.ForceSingleShadowCascade) {
 		auto& runtimeData = a_light->GetShadowDirectionalLightRuntimeData();
-
-		// Force all cascades to use the maximum distance (effectively using only one cascade)
-		// This prevents shadow quality degradation at distance in interiors
 		const float maxDistance = *singleton.gShadowDistance;
 
-		// Set all split distances to force a single high-quality cascade
-		// Cascade 0 covers the full range, cascades 1 and 2 are effectively disabled
 		runtimeData.endSplitDistances[0] = maxDistance;
 		runtimeData.endSplitDistances[1] = maxDistance;
 		runtimeData.endSplitDistances[2] = maxDistance;
 
 		runtimeData.startSplitDistances[0] = 0.0f;
-		runtimeData.startSplitDistances[1] = maxDistance;  // Start beyond max, effectively disabled
-		runtimeData.startSplitDistances[2] = maxDistance;  // Start beyond max, effectively disabled
+		runtimeData.startSplitDistances[1] = maxDistance;
+		runtimeData.startSplitDistances[2] = maxDistance;
 	}
 
 	return result;
