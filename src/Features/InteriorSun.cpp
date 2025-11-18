@@ -243,10 +243,50 @@ void InteriorSun::SetShadowDistance(bool inInterior)
 
 bool InteriorSun::BSShadowDirectionalLight_SetFrameCamera::thunk(RE::BSShadowDirectionalLight* a_light, const RE::NiCamera& a_camera)
 {
-	// Call original function - it calculates the split distances
-	bool result = func(a_light, a_camera);
-
 	auto& singleton = globals::features::interiorSun;
+	
+	// Disable frustum culling for interior sun to prevent view-dependent geometry culling
+	// This ensures windows and other shadow-casting geometry remain visible to shadow rendering
+	if (singleton.loaded && singleton.isInteriorWithSun && a_light) {
+		auto& runtimeData = a_light->GetShadowDirectionalLightRuntimeData();
+		if (runtimeData.cullingProcesses.data()) {
+			for (auto& cullingProcessPtr : runtimeData.cullingProcesses) {
+				if (cullingProcessPtr) {
+					cullingProcessPtr->planes.activePlanes = static_cast<RE::NiFrustumPlanes::ActivePlane>(0);
+				}
+			}
+		}
+	}
+	
+	// For interior sun, we need to modify the camera BEFORE the original function processes it
+	// The const_cast is necessary because we need to widen the frustum to prevent view-dependent culling
+	RE::NiFrustum originalFrustum{};
+	bool modifiedCamera = false;
+	
+	if (singleton.loaded && singleton.isInteriorWithSun) {
+		// Save original frustum and expand it massively for shadow rendering
+		auto* camera = const_cast<RE::NiCamera*>(&a_camera);
+		auto& frustum = camera->GetRuntimeData2().viewFrustum;
+		
+		originalFrustum = frustum;  // Save original
+		modifiedCamera = true;
+		
+		// Expand to near-omnidirectional to capture all geometry regardless of player view direction
+		frustum.fLeft = -10.0f;
+		frustum.fRight = 10.0f;
+		frustum.fTop = 10.0f;
+		frustum.fBottom = -10.0f;
+		// Keep near/far unchanged
+	}
+	
+	// Call original function with the (possibly modified) camera
+	bool result = func(a_light, a_camera);
+	
+	// Restore original camera frustum
+	if (modifiedCamera) {
+		auto* camera = const_cast<RE::NiCamera*>(&a_camera);
+		camera->GetRuntimeData2().viewFrustum = originalFrustum;
+	}
 
 	// AFTER SetFrameCamera calculates splits, override them for interior sun if enabled
 	// These modified values will persist and be used when constant buffers are set up
