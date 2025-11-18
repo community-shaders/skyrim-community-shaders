@@ -191,11 +191,22 @@ void InteriorSun::PopulateReplacementJobArrays(RE::TESObjectCELL* cell, const RE
 
 	// Add extra rooms and portals that are in the direction of the sun
 	for (const auto& object : currentCellRoomsAndPortals) {
-		if (addedSet.find(object.get()) != addedSet.end() || !IsInSunDirectionAndWithinShadowDistance(object, lightDir, playerPos))
+		if (addedSet.find(object.get()) != addedSet.end())
 			continue;
 
-		addedSet.insert(object.get());
-		replacementJobArrays[count++ % jobArraySize].push_back(object);
+		// For single cascade mode, include ALL rooms/portals within shadow distance
+		// regardless of sun direction to prevent view-dependent culling issues
+		if (settings.ForceSingleShadowCascade) {
+			// Include EVERYTHING - no distance checks at all for maximum coverage
+			addedSet.insert(object.get());
+			replacementJobArrays[count++ % jobArraySize].push_back(object);
+		} else {
+			// Normal multi-cascade mode: only add if in sun direction
+			if (IsInSunDirectionAndWithinShadowDistance(object, lightDir, playerPos)) {
+				addedSet.insert(object.get());
+				replacementJobArrays[count++ % jobArraySize].push_back(object);
+			}
+		}
 	}
 
 	arraysCleared = false;
