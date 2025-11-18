@@ -47,6 +47,8 @@ struct RaytracedGI : public Feature
 
 	static constexpr uint TLAS_BUFFER_SIZE_MULT = 2u;
 
+	static constexpr uint SKY_CUBEMAP_SIZE = 256;
+
 	struct HeapSlot
 	{
 		enum Slot : uint32_t
@@ -56,8 +58,9 @@ struct RaytracedGI : public Feature
 			Albedo,
 			Reflectance,
 			NormalRoughness,
-			GeometryNormalDepth,
+			GNMD, // Geometry Normals + Metalness + Depth
 			TLAS,
+			SkyHemisphere,
 			Lights,
 			Instances,
 			Vertices,
@@ -92,7 +95,7 @@ struct RaytracedGI : public Feature
 			SpecularGI,
 			SpecHitDist,
 			Depth,
-			GeometryNormalDepth,
+			GNMD, // Geometry Normals + Metalness + Depth
 			Albedo,
 			Reflectance,
 			NumDescriptors,
@@ -129,7 +132,7 @@ struct RaytracedGI : public Feature
 	}
 
 	// Functionality
-	virtual bool inline SupportsVR() override { return true; }
+	virtual bool inline SupportsVR() override { return false; }
 	virtual inline std::string_view GetShaderDefineName() override { return "RTGI"; }
 	virtual inline bool HasShaderDefine(RE::BSShader::Type t) override { return t == RE::BSShader::Type::Lighting; };
 
@@ -168,7 +171,11 @@ struct RaytracedGI : public Feature
 
 	void Main_RenderWorld(bool a1);
 	void BSShader_SetupGeometry(RE::BSShader* This, RE::BSRenderPass* Pass, uint32_t RenderFlags);
+	void BSSkyShader_SetupGeometry(RE::BSShader* This, RE::BSRenderPass* Pass, uint32_t RenderFlags);
 	void BSBatchRenderer_RenderPassImmediately(RE::BSRenderPass* pass, uint32_t technique, bool alphaTest, uint32_t renderFlags);
+
+	void SkyCubeToHemi();
+	void CheckResourcesSide(int side);
 
 	bool ValidTriShape(RE::BSTriShape* pTriShape);
 	void AddInstance(RE::BSTriShape* pTriShape);
@@ -187,15 +194,17 @@ struct RaytracedGI : public Feature
 	void DeviceRemovedHandler();
 
 	void CopyDepth();
+	void ConvertNormalGlossiness();
 
 #ifdef DLSS_RR
 	void InitRR();
 	void CheckFrameConstants();
+	sl::DLSSMode GetDLSSMode();
 	void SetDLSSRROptions();
 	int32_t GetJitterPhaseCount(int32_t renderWidth, int32_t displayWidth);
 	void GetJitterOffset(float* outX, float* outY, int32_t index, int32_t phaseCount);
 	float Halton(int32_t index, int32_t base);
-	float2 GetInputResolutionScaleRR(uint32_t outputWidth, uint32_t outputHeight, uint32_t qualityMode);
+	float2 GetInputResolutionScaleRR(uint32_t outputWidth, uint32_t outputHeight);
 #endif
 
 	const bool Active() 
@@ -224,42 +233,54 @@ struct RaytracedGI : public Feature
 	{
 		None,
 		Accumulation,
+#ifdef DLSS_RR
 		DLSSRR
+#endif	
 	};
 
 	enum struct DebugOutput : int32_t
 	{
 		None,
-		Indirect,
-		Specular,
+		IndirectGI,
+		SpecularGI,
+		ReflectangeGBuffer,
+		RoughnessGBuffer,
 		Passthrough
+	};
+
+	enum struct DLSSRRQuality : int32_t
+	{
+		MaxPerformance,	
+		Balanced,
+		MaxQuality		
 	};
 
 	////////////////////////////////////////////////// Feature Specific Data
 	struct Settings
 	{
 		bool Enabled = true;
-		Denoiser Denoiser = Denoiser::None;
+		Denoiser Denoiser = Denoiser::Accumulation;
 		int Bounces = 2;
 		int SamplesPerPixel = 1;
 		float2 Roughness = {0.0f, 1.0f};
-		float2 Specularity = {0.0f, 1.0f};
+		float2 Metalness = {0.0f, 1.0f};
 		float Diffuse = 1.0f;
 		float Specular = 1.0f;
 		float Emissive = 1.0f;
+		float Effect = 1.0f;
+		float Sky = 1.0f;
 		float Directional = 1.0f;
 		float Point = 1.0f;
 		bool PointFade = true;
 		bool GammaToLinear = false;
-		int DLSSRRQualityMode = 2;
+#ifdef DLSS_RR
+		DLSSRRQuality DLSSRRQualityMode = DLSSRRQuality::MaxQuality;
+#endif
 		DebugOutput DebugOutput = DebugOutput::None;
 		bool EnablePIXCapture = true;
 		bool EnableDebugDevice = false;
 #ifdef SHARC
 		float SHARCScale = 1.0f;
-#endif
-#ifdef DLSS_RR
-		bool EnableRR = true;
 #endif
 	} settings;
 
@@ -275,7 +296,7 @@ struct RaytracedGI : public Feature
 	eastl::vector<Light> lights;
 	eastl::unique_ptr<DX12::StructuredBufferUpload<Light>> lightBuffer = nullptr;
 
-	struct alignas(16) FrameBuffer
+	struct FrameBuffer
 	{
 		float4x4 ViewInverse;
 		float4x4 ProjInverse;
@@ -284,17 +305,21 @@ struct RaytracedGI : public Feature
 		Light Directional;
 		float3 Position;
 		uint FrameCount;
+		float2 Roughness;
+		float2 Metalness;
 		float Diffuse;
 		float Specular;
 		float Emissive;
+		float Effect;
+		float Sky;
 #ifdef SHARC
 		float SHARCScale;
 #else
-		uint Pad1;
+		uint Pad0;
 #endif
-	};
-	static_assert(sizeof(FrameBuffer) % 16 == 0);
-	FrameBuffer* frameBufferData;
+		uint Pad1[2];
+	} frameBufferData;
+	static_assert(sizeof(FrameBuffer) % 256 == 0);
 
 	bool renderingWorld = false;
 	bool lightsUpdated = false;
@@ -377,14 +402,15 @@ struct RaytracedGI : public Feature
 		}
 	};
 
-	// Mesh - do I call them vanilla Diffuse/Glow or CS Albedo/Emissive??
 	struct MaterialData
 	{
 		RE::BSShaderMaterial::Feature feature;
 		float4 texCoordOffsetScale;
 		ID3D12Resource* diffuseTexture = nullptr;
-		ID3D12Resource* glowTexture = nullptr;
-		float4 emissiveColor;
+		ID3D12Resource* effectTexture = nullptr;
+		ID3D12Resource* rmaosTexture = nullptr;
+		float4 effectColor;
+		int shaderType;
 	};
 
 	struct MeshData
@@ -392,6 +418,7 @@ struct RaytracedGI : public Feature
 		uint registerIndex; // The position of this meshes SRV in the register stack
 		uint vertexCount;
 		uint triangleCount;
+		bool skinned;
 		eastl::unique_ptr<DX12::StructuredBufferUpload<Vertex>> vertexBuffer = nullptr;
 		eastl::unique_ptr<DX12::StructuredBufferUpload<Triangle>> indexBuffer = nullptr;
 		winrt::com_ptr<ID3D12Resource> blasBuffer = nullptr;
@@ -416,8 +443,9 @@ struct RaytracedGI : public Feature
 	// Instance material
 	struct Material
 	{
-		float4 texCoordOffsetScale;
-		float4 emissiveColor;
+		float4 TexCoordOffsetScale;
+		float4 EffectColor;
+		float ShaderType;  
 	};
 
 	// Instance buffer
@@ -436,12 +464,10 @@ struct RaytracedGI : public Feature
 
 	eastl::unique_ptr<DX12::StructuredAppendBuffer<IrradianceCache::Entry<IrradianceCache::SH1Data>>> irradianceCacheBuffer = nullptr;	
 
-	eastl::unique_ptr<ConstantBuffer> cheeseCb = nullptr;  // Omit this if you want to put your CB in src/FeatureBuffer.cpp
-	eastl::unique_ptr<Texture2D> cheeseTex = nullptr;
-	winrt::com_ptr<ID3D11SamplerState> cheeseSampler = nullptr;
+	winrt::com_ptr<ID3D11SamplerState> samplerState = nullptr;
 	winrt::com_ptr<ID3D11ComputeShader> copyDepthCS = nullptr;
-
-	eastl::multimap<std::string, eastl::array<std::string, 2>> debugMultimap;
+	winrt::com_ptr<ID3D11ComputeShader> convertNormalGlossCS = nullptr;
+	//eastl::unique_ptr<ConstantBuffer> frameBufferDX11CB = nullptr;
 
 	//winrt::com_ptr<ID3D12Resource> blasInstanceBuffer = nullptr;
 	eastl::unique_ptr<DX12::StructuredBufferUpload<D3D12_RAYTRACING_INSTANCE_DESC>> blasInstanceBuffer = nullptr;	
@@ -451,7 +477,7 @@ struct RaytracedGI : public Feature
 	winrt::com_ptr<ID3D12Resource> tlasScratch = nullptr;
 	winrt::com_ptr<ID3D12Resource> tlasUpdateScratch = nullptr;
 
-	winrt::com_ptr<ID3D12Resource> frameBuffer = nullptr;
+	eastl::unique_ptr<DX12::StructuredBufferUpload<FrameBuffer>> frameBuffer = nullptr;
 
 	// Shaders
 	/*winrt::com_ptr<IDxcBlob> rayGenerationRT = nullptr;
@@ -489,6 +515,12 @@ struct RaytracedGI : public Feature
 	winrt::com_ptr<ID3D11Device5> d3d11Device = nullptr;
 	winrt::com_ptr<ID3D11DeviceContext4> d3d11Context = nullptr;
 
+	// Sky Cubemap
+	bool renderingCubemap = false;
+
+	eastl::unique_ptr<WrappedResource> skyHemisphere = nullptr;
+	winrt::com_ptr<ID3D11ComputeShader> cubeToHemiCS = nullptr;
+	
 	// Resources
 	eastl::unique_ptr<WrappedResource> finalTexture = nullptr;
 	eastl::unique_ptr<DX12::Texture2D> outputTexture = nullptr;
@@ -502,8 +534,8 @@ struct RaytracedGI : public Feature
 
 	winrt::com_ptr<ID3D12Resource> albedoTexture = nullptr;
 	winrt::com_ptr<ID3D12Resource> reflectanceTexture = nullptr;
-	winrt::com_ptr<ID3D12Resource> normalRoughnessTexture = nullptr;
-	winrt::com_ptr<ID3D12Resource> goemetryNormalDepthTexture = nullptr;
+	eastl::unique_ptr<WrappedResource> normalRoughnessTexture = nullptr;
+	winrt::com_ptr<ID3D12Resource> GNMDTexture = nullptr;
 
 	std::shared_mutex meshMutex;
 	std::shared_mutex bufferMutex;
@@ -549,14 +581,14 @@ struct RaytracedGI : public Feature
 
 				auto& rtgi = globals::features::raytracedGI;
 
-				if (SUCCEEDED(hr) && *ppBuffer) {
+				if (SUCCEEDED(hr) && pInitialData && pDesc->BindFlags & D3D11_BIND_VERTEX_BUFFER) {
 					if (rtgi.loaded && !rtgi.releaseBufferHooked) {
 						std::lock_guard lock{ rtgi.bufferMutex };
 
 						if (!rtgi.releaseBufferHooked)
 						{
+							stl::detour_vfunc<2, ID3D11Buffer_Release>(*ppBuffer);	
 							rtgi.releaseBufferHooked = true;
-							stl::detour_vfunc<2, ID3D11Buffer_Release>(*ppBuffer);					
 						}
 					}
 				}
@@ -758,11 +790,45 @@ struct RaytracedGI : public Feature
 		{
 			static void thunk(RE::BSShader* This, RE::BSRenderPass* Pass, uint32_t RenderFlags)
 			{
-				if (globals::features::raytracedGI.Active())
-					globals::features::raytracedGI.BSShader_SetupGeometry(This, Pass, RenderFlags);
+				auto& rtgi = globals::features::raytracedGI;
+
+				if (rtgi.Active()) {
+					rtgi.BSShader_SetupGeometry(This, Pass, RenderFlags);
+
+					if (rtgi.renderingCubemap)
+						return;
+				}
 
 				func(This, Pass, RenderFlags);
 			}
+			static inline REL::Relocation<decltype(thunk)> func;
+		};
+
+		struct BSSkyShader_SetupGeometry
+		{
+			static void thunk(RE::BSShader* This, RE::BSRenderPass* Pass, uint32_t RenderFlags)
+			{
+				func(This, Pass, RenderFlags);
+
+				if (globals::features::raytracedGI.Active())
+					globals::features::raytracedGI.BSSkyShader_SetupGeometry(This, Pass, RenderFlags);
+			}
+			static inline REL::Relocation<decltype(thunk)> func;
+		};
+
+		struct BSCubeMapCamera_RenderCubemap
+		{
+			static void thunk(RE::NiAVObject* camera, int a2, bool a3, bool a4, bool a5)
+			{
+				auto& rtgi = globals::features::raytracedGI;
+
+				rtgi.renderingCubemap = true;
+
+				func(camera, a2, a3, a4, a5);
+
+				rtgi.renderingCubemap = false;
+			}
+
 			static inline REL::Relocation<decltype(thunk)> func;
 		};
 
@@ -850,7 +916,10 @@ struct RaytracedGI : public Feature
 			stl::detour_thunk<Main_RenderWorld>(REL::RelocationID(100424, 107142));
 
 			stl::write_vfunc<0x6, BSShader_SetupGeometry<RE::BSShader::Type::Lighting>>(RE::VTABLE_BSLightingShader[0]);
-			//stl::write_vfunc<0x6, BSShader_SetupGeometry<RE::BSShader::Type::Effect>>(RE::VTABLE_BSEffectShader[0]);
+			stl::write_vfunc<0x6, BSShader_SetupGeometry<RE::BSShader::Type::Effect>>(RE::VTABLE_BSEffectShader[0]);
+			//stl::write_vfunc<0x6, BSSkyShader_SetupGeometry>(RE::VTABLE_BSSkyShader[0]);
+
+			stl::write_vfunc<0x35, BSCubeMapCamera_RenderCubemap>(RE::VTABLE_BSCubeMapCamera[0]);
 
 			//stl::write_thunk_call<BSBatchRenderer_RenderPassImmediately>(REL::RelocationID(100852, 107642).address() + REL::Relocate(0x29E, 0x28F));
 

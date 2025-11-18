@@ -35,8 +35,9 @@ struct LightData
 
 struct Material
 {
-	float4 texCoordOffsetScale;
-	float4 emissiveColor;
+	float4 TexCoordOffsetScale; 
+	float4 EffectColor;
+    float ShaderType;  
 };
 
 struct Instance

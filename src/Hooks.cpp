@@ -629,8 +629,8 @@ namespace Hooks
 	{
 		static void thunk(RE::BSGraphics::Renderer* This, uint32_t a_target, RE::BSGraphics::CubeMapRenderTargetProperties* a_properties)
 		{
-			a_properties->height = 128;
-			a_properties->width = 128;
+			a_properties->height = CubemapResolution();
+			a_properties->width = CubemapResolution();
 			func(This, a_target, a_properties);
 		}
 		static inline REL::Relocation<decltype(thunk)> func;
@@ -640,8 +640,8 @@ namespace Hooks
 	{
 		static void thunk(RE::BSGraphics::Renderer* This, uint32_t a_target, RE::BSGraphics::DepthStencilTargetProperties* a_properties)
 		{
-			a_properties->height = 128;
-			a_properties->width = 128;
+			a_properties->height = CubemapResolution();
+			a_properties->width = CubemapResolution();
 			func(This, a_target, a_properties);
 		}
 		static inline REL::Relocation<decltype(thunk)> func;
@@ -958,5 +958,16 @@ namespace Hooks
 
 		logger::info("Hooking CreateDXGIFactory");
 		*(uintptr_t*)&ptrCreateDXGIFactory = SKSE::PatchIAT(hk_CreateDXGIFactory, "dxgi.dll", !REL::Module::IsVR() ? "CreateDXGIFactory" : "CreateDXGIFactory1");
+	}
+
+	uint CubemapResolution()
+	{
+		auto& rt = globals::features::raytracedGI;
+
+		if (rt.loaded) {
+			return rt.SKY_CUBEMAP_SIZE;
+		} else {
+			return 128;
+		}
 	}
 }

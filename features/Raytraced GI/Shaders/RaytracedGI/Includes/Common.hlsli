@@ -1,174 +1,48 @@
 #ifndef COMMON_HLSI
 #define COMMON_HLSI
 
-#include "Common/Game.hlsli"
-#include "RaytracedGI/Includes/Types.hlsli"
-
 #define M_TO_GAME_UNIT (1.0f / (GAME_UNIT_TO_M))
 
-#define MAX_DEPTH 2
-#define SHADOW_MAX_DEPTH 1
-
-#define DIFFUSE_RAY_HITGROUP_IDX 0
-#define DIFFUSE_RAY_MISS_IDX 0
-
-#define SHADOW_RAY_HITGROUP_IDX 1
-#define SHADOW_RAY_MISS_IDX 1
-
-#define SPECULAR_RAY_HITGROUP_IDX 2
-#define SPECULAR_RAY_MISS_IDX 2
-
-uint InitRandomSeed(uint2 coord, uint2 size, uint frameCount)
+float3 ScreenToViewPosition(const float2 screenPos, const float viewspaceDepth, const float4 ndcToView)
 {
-    // Simple hash function
-    uint seed = coord.x + coord.y * size.x + frameCount * 719393;
-    return seed;
+	float3 ret;
+	ret.xy = (ndcToView.xy * screenPos.xy + ndcToView.zw) * viewspaceDepth;
+	ret.z = viewspaceDepth;
+	return ret;
 }
 
-uint PCGHash(uint seed)
+float ScreenToViewDepth(const float screenDepth, float4 cameraData)
 {
-    uint state = seed * 747796405u + 2891336453u;
-    uint word = ((state >> ((state >> 28u) + 4u)) ^ state) * 277803737u;
-    return (word >> 22u) ^ word;
+	return (cameraData.w / (-screenDepth * cameraData.z + cameraData.x));
 }
 
-float Random(inout uint seed)
+float3 ViewToWorldPosition(const float3 pos, const float4x4 invView)
 {
-    seed = PCGHash(seed);
-    return float(seed) / 4294967296.0; // Divide by 2^32
+	float4 worldpos = mul(invView, float4(pos, 1));
+	return worldpos.xyz / worldpos.w;
 }
 
-void CreateOrthonormalBasis(in float3 normal, out float3 tangent, out float3 bitangent)
+float3 ViewToWorldVector(const float3 vec, const float4x4 invView)
 {
-    //float sign = copysign(1.0f, normal.z);
-    float sign = normal.z >= 0.0 ? 1.0 : -1.0;
-    float a = -1.0 / (sign + normal.z);
-    float b = normal.x * normal.y * a;
-    
-    tangent = float3(1.0 + sign * normal.x * normal.x * a, sign * b, -sign * normal.x);
-    bitangent = float3(b, sign + normal.y * normal.y * a, -normal.y);
+	return mul((float3x3)invView, vec);
 }
 
-float3 TangentSample(inout uint randomSeed)
+float Scale01(float x, float min, float max)
 {
-    float r1 = Random(randomSeed);
-    float r2 = Random(randomSeed);
-    
-    float phi = 2.0 * 3.14159265359 * r1;
-    
-    float cosTheta = sqrt(1.0 - r2);
-    float sinTheta = sqrt(r2);
-
-    return float3(
-        cos(phi) * sinTheta,
-        sin(phi) * sinTheta,
-        cosTheta
-    );
+    return min + x * (max - min);
 }
 
-float3 TangentSampleScaled(inout uint randomSeed, float roughness)
+half3 DecodeNormal(half2 f)
 {
-    float r1 = Random(randomSeed);
-    float r2 = Random(randomSeed);
-
-    float phi = 2.0 * 3.14159265359 * r1;
-    
-    float alpha = roughness * roughness;
-    float cosTheta = sqrt((1.0 - r2) * alpha + (1.0 - alpha));
-    float sinTheta = sqrt(1.0 - cosTheta * cosTheta);
-
-    return float3(
-        cos(phi) * sinTheta,
-        sin(phi) * sinTheta,
-        cosTheta
-    );
+	f = f * 2.0 - 1.0;
+	// https://twitter.com/Stubbesaurus/status/937994790553227264
+	half3 n = half3(f.x, f.y, 1.0 - abs(f.x) - abs(f.y));
+	half t = saturate(-n.z);
+	#if !defined(DX11)
+	n.xy += select(n.xy >= 0.0, -t, t);	
+	#else
+	n.xy += n.xy >= 0.0 ? -t : t;	
+	#endif
+	return -normalize(n);
 }
-
-float3 SampleHemisphere(float3 normal, float3 tangentSample)
-{   
-    float3 tangent;
-    float3 bitangent;
-    CreateOrthonormalBasis(normal, tangent, bitangent);
-
-    return tangent * tangentSample.x +
-           bitangent * tangentSample.y +
-           normal * tangentSample.z;
-}
-
-
-float3 TraceRayDiffuse(RaytracingAccelerationStructure scene, float3 origin, float3 direction, uint currentDepth, inout uint randomSeed, float multiplier)
-{
-    float3 tangentSample = TangentSample(randomSeed);
-    float3 randomDirection = SampleHemisphere(direction, tangentSample);
-            
-    RayDesc ray;
-    ray.Origin = origin;
-    ray.Direction = randomDirection;
-    ray.TMin = 0.01f;
-    ray.TMax = 1e30;
-    
-    DiffusePayload diffusePayload;
-    diffusePayload.color = float3(0, 0, 0);
-    diffusePayload.data = PayloadData::Create(false, currentDepth + 1, randomSeed);
-
-    TraceRay(scene, RAY_FLAG_NONE, 0xFF, DIFFUSE_RAY_HITGROUP_IDX, 0, DIFFUSE_RAY_MISS_IDX, ray, diffusePayload);
-    return diffusePayload.color * multiplier;
-}
-
-float TraceRayShadow(RaytracingAccelerationStructure scene, float3 origin, float3 direction, inout uint randomSeed)
-{
-    float3 tangentSample = TangentSampleScaled(randomSeed, 0.5f);
-    float3 randomDirection = SampleHemisphere(direction, tangentSample);
-    
-    RayDesc ray;
-    ray.Origin = origin;
-    ray.Direction = randomDirection;
-    ray.TMin = 0.01f;
-    ray.TMax = 1e30;
-
-    ShadowPayload shadowPayload;
-    shadowPayload.missed = 0.0f;
-        
-    TraceRay(scene,  RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH | RAY_FLAG_SKIP_CLOSEST_HIT_SHADER | RAY_FLAG_CULL_NON_OPAQUE | RAY_FLAG_SKIP_PROCEDURAL_PRIMITIVES, 0xFF, SHADOW_RAY_HITGROUP_IDX, 0, SHADOW_RAY_MISS_IDX, ray, shadowPayload);
-    return shadowPayload.missed;
-}
-
-float TraceRayShadowFinite(RaytracingAccelerationStructure scene, float3 origin, float3 direction, float tmax, inout uint randomSeed)
-{
-    float3 tangentSample = TangentSampleScaled(randomSeed, 0.5f);
-    float3 randomDirection = SampleHemisphere(direction, tangentSample);
-    
-    RayDesc ray;
-    ray.Origin = origin;
-    ray.Direction = randomDirection;
-    ray.TMin = 0.01f;
-    ray.TMax = tmax;
-
-    ShadowPayload shadowPayload;
-    shadowPayload.missed = 0.0f;
-        
-    TraceRay(scene,  RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH | RAY_FLAG_SKIP_CLOSEST_HIT_SHADER | RAY_FLAG_CULL_NON_OPAQUE | RAY_FLAG_SKIP_PROCEDURAL_PRIMITIVES, 0xFF, SHADOW_RAY_HITGROUP_IDX, 0, SHADOW_RAY_MISS_IDX, ray, shadowPayload);
-    return shadowPayload.missed;
-}
-
-
-float4 TraceRaySpecular(RaytracingAccelerationStructure scene, float3 origin, float3 direction, uint currentDepth, inout uint randomSeed, float multiplier, float roughness)
-{
-    float3 tangentSample = TangentSampleScaled(randomSeed, roughness);
-    float3 randomDirection = SampleHemisphere(direction, tangentSample);
-
-    RayDesc ray;
-    ray.Origin = origin;
-    ray.Direction = randomDirection;
-    ray.TMin = 0.01f;
-    ray.TMax = 1e30;
-    
-    SpecularPayload specularPayload;
-    specularPayload.color = float3(0, 0, 0);
-    specularPayload.distance = 0.0f;
-    specularPayload.data = PayloadData::Create(false, currentDepth + 1, randomSeed);
-
-    TraceRay(scene, RAY_FLAG_NONE, 0xFF, SPECULAR_RAY_HITGROUP_IDX, 0, SPECULAR_RAY_MISS_IDX, ray, specularPayload);
-    return float4(specularPayload.color * multiplier, specularPayload.distance);
-}  
 #endif

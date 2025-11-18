@@ -1,25 +1,23 @@
 #include "RaytracedGI/Includes/Types.hlsli"
+#include "RaytracedGI/Includes/Registers.hlsli"
+
 #include "RaytracedGI/Includes/Common.hlsli"
+#include "RaytracedGI/Includes/RT/CommonRT.hlsli"
+#include "RaytracedGI/Includes/RT/Rays.hlsli"
+#include "RaytracedGI/Includes/RT/Shading.hlsli"
+
 #include "Common/Game.hlsli"
 #include "Common/Color.hlsli"
 
-#include "RaytracedGI/Includes/Registers.hlsli"
-
-#ifdef SPECULAR
-typedef SpecularPayload CurrentPayload;
-#else
-typedef DiffusePayload CurrentPayload;
-#endif
-
-void HitMesh(inout CurrentPayload payload, in BuiltInTriangleIntersectionAttributes attribs);
+void HitMesh(inout IndirectPayload payload, in BuiltInTriangleIntersectionAttributes attribs);
 
 [shader("closesthit")]
-void main(inout CurrentPayload payload, in BuiltInTriangleIntersectionAttributes attribs)
+void main(inout IndirectPayload payload, in BuiltInTriangleIntersectionAttributes attribs)
 {
     HitMesh(payload, attribs);
 }
 
-void HitMesh(inout CurrentPayload payload, in BuiltInTriangleIntersectionAttributes attribs)
+void HitMesh(inout IndirectPayload payload, in BuiltInTriangleIntersectionAttributes attribs)
 {
     float3 worldPosition = WorldRayOrigin() + WorldRayDirection() * RayTCurrent();  
 
@@ -29,7 +27,7 @@ void HitMesh(inout CurrentPayload payload, in BuiltInTriangleIntersectionAttribu
     StructuredBuffer<Vertex> meshVertices = Vertices[meshID];
     StructuredBuffer<uint3> meshTriangles = Triangles[meshID];
     Texture2D diffuseTexture = DiffuseTextures[meshID];
-    Texture2D glowTexture = GlowTextures[meshID];
+    Texture2D effectTexture = EffectTextures[meshID];
     
     uint3 meshTriangle = meshTriangles[PrimitiveIndex()];
     
@@ -50,88 +48,62 @@ void HitMesh(inout CurrentPayload payload, in BuiltInTriangleIntersectionAttribu
     half3 normal = normalize(normal0.xyz * u + normal1.xyz * v + normal2.xyz * w); 
     half3 worldNormal = normalize(mul((float3x3)ObjectToWorld3x4(), normal));
 
+    half4 vertexColor = vertice0.Color.unpack() * u + vertice1.Color.unpack() * v + vertice2.Color.unpack() * w;
+    
     Material material = instance.Material;
     
-    texCoord0 += material.texCoordOffsetScale.xy;
-    texCoord0 *= material.texCoordOffsetScale.zw;
+    texCoord0 += material.TexCoordOffsetScale.xy;
+    texCoord0 *= material.TexCoordOffsetScale.zw;
     
-    float3 albedo = Color::Diffuse(diffuseTexture.SampleLevel(DiffuseSampler, texCoord0, 0).rgb);
-    float3 emissive = Color::Diffuse(glowTexture.SampleLevel(DiffuseSampler, texCoord0, 0).rgb) * material.emissiveColor.rgb * material.emissiveColor.a;
+    float3 diffuse = diffuseTexture.SampleLevel(DiffuseSampler, texCoord0, 0).rgb;
+    float3 effect = effectTexture.SampleLevel(DiffuseSampler, texCoord0, 0).rgb;
+    
+    // Lighting Shader
+    float3 lightingAlbedo = Color::GammaToLinear(diffuse) * vertexColor.rgb;
+    float3 lightingEmissive = Color::GammaToLinear(effect) * material.EffectColor.rgb * material.EffectColor.a;
+    
+    // Effect Shader
+    float3 baseColorMul = material.EffectColor.rgb * vertexColor.rgb;
+    float3 baseColor = diffuse.rgb * baseColorMul;
+
+    float baseColorScale = material.EffectColor.a;
+    float2 grayscaleToColorUv = float2(diffuse.y, baseColorMul.x);
+    
+    baseColor = baseColorScale * effectTexture.SampleLevel(DiffuseSampler, grayscaleToColorUv, 0).rgb;
+   
+    float3 effectAlbedo = Color::GammaToLinear(baseColor.xyz);
+    float3 effectEmissive = baseColor * Frame.Effect;
+    
+    float3 albedo = lerp(lightingAlbedo, effectAlbedo, material.ShaderType);
+    float3 emissive = lerp(lightingEmissive, effectEmissive, material.ShaderType);
+    
+    //float3 albedo = Color::Diffuse(diffuseTexture.SampleLevel(DiffuseSampler, texCoord0, 0).rgb);
+    //float3 emissive = Color::Diffuse(effectTexture.SampleLevel(DiffuseSampler, texCoord0, 0).rgb) * material.EffectColor.rgb * material.EffectColor.a; 
     
     uint randomSeed = payload.data.GetSeed();
     
+    float3 viewDirection = normalize(WorldRayDirection());
+    
+    // Directional Light
     Light directionalLight = Frame.Directional;
-    
-    // Directional Light   
     float NdotL = saturate(dot(worldNormal, directionalLight.Vector));
-    NdotL *= TraceRayShadow(Scene, worldPosition, directionalLight.Vector, randomSeed);
+    NdotL *= TraceRayShadow(Scene, worldPosition, directionalLight.Vector);  
+    payload.color = NdotL * directionalLight.Color * albedo * Frame.Diffuse;
     
-    float3 directLighting = NdotL * directionalLight.Color;
-
-    //uint currentDepth = payload.data.GetDepth();
-    
-    // Point lights
-    LightData lightData = instance.LightData;
-    for(uint i = 0; i < lightData.Count; i++)
-    {
-        uint lightID = lightData.GetID(i);
-        Light pointLight = Lights[lightID];
-        
-        float3 lightVector = (pointLight.Vector - worldPosition) * GAME_UNIT_TO_M;
-        float lightDistanceSqr = dot(lightVector, lightVector);
-        float lightDistance = sqrt(lightDistanceSqr);
-        
-        lightVector /= lightDistance;
-         
-        float attenuation = 1.0 / max(lightDistanceSqr, 0.01);
-        float fade = saturate(1.0 - pow(lightDistance / pointLight.Range, 4.0));
-            
-        float NdotL = saturate(dot(worldNormal, lightVector)) * attenuation * fade * fade;
-        
-        // Shadow
-        //if(currentDepth < SHADOW_MAX_DEPTH)
-        //{
-            NdotL *= TraceRayShadowFinite(Scene, worldPosition, lightVector, lightDistance * M_TO_GAME_UNIT, randomSeed);
-        //}
-            
-        directLighting += NdotL * pointLight.Color;       
-    }
-    
-    // Bounce
-    /*#ifdef SPECULAR
-    float4 indirectLight = 0.0f;
+    #if defined(LAMBERT)
+    payload.color += LambertianDirect(worldPosition, worldNormal, albedo, instance.LightData, randomSeed);
     #else
-    float3 indirectLight = 0.0f;
+    payload.color += GGXDirect(worldPosition, worldNormal, viewDirection, albedo, DEFAULT_SPECULAR, DEFAULT_ROUGHNESS, instance.LightData, randomSeed);
     #endif
-    {
-        if (currentDepth < MAX_DEPTH)
-        {
-            //[unroll]
-            //for(uint i = 0; i < 2; i++) 
-            //{
-            #ifdef SPECULAR
-            indirectLight += TraceRaySpecular(Scene, worldPosition, worldNormal, currentDepth, randomSeed, Frame.Specular, 0);
-            #else
-            indirectLight += TraceRayDiffuse(Scene, worldPosition, worldNormal, currentDepth, randomSeed, Frame.Diffuse);
-            #endif
-            //}
-        }
-    }*/
     
-    
-#ifndef SPECULAR
     uint currentDepth = payload.data.GetDepth();
     
     if (currentDepth < MAX_DEPTH)
     {
-        directLighting += TraceRayDiffuse(Scene, worldPosition, worldNormal, currentDepth, randomSeed, Frame.Diffuse);
-    } 
-#endif
-    
-    payload.color = albedo * directLighting + emissive * Frame.Emissive;
-    payload.color *= saturate(-dot(worldNormal, WorldRayDirection()));
-    
-    #ifdef SPECULAR
-    payload.distance = RayTCurrent();
-    #endif    
+        #if defined(LAMBERT)
+        payload.color += LambertianIndirect(worldPosition, worldNormal, albedo, currentDepth, randomSeed);
+        #else
+        payload.color += GGXIndirect(worldPosition, worldNormal, worldNormal, viewDirection, albedo, DEFAULT_SPECULAR, DEFAULT_ROUGHNESS, currentDepth, randomSeed);
+        #endif        
+    }    
 }

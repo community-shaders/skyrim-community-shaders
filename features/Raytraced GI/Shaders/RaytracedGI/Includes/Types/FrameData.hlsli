@@ -12,9 +12,13 @@ struct FrameData
     Light Directional;
     float3 Position;
     uint FrameCount; 
+	float2 Roughness; 
+ 	float2 Metalness;   
     float Diffuse;
     float Specular;
-    float Emissive;   
+    float Emissive;
+	float Effect;
+	float Sky;    
     #ifdef SHARC
     float SHARCScale;
     #else

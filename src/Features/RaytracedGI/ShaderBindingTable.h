@@ -110,13 +110,13 @@ namespace DX12
 			size = Align(size + rayGenSize, D3D12_RAYTRACING_SHADER_TABLE_BYTE_ALIGNMENT);
 
 			UINT64 missSize = Miss.SectionSize();
-			size += Align(size + missSize, D3D12_RAYTRACING_SHADER_TABLE_BYTE_ALIGNMENT);
+			size = Align(size + missSize, D3D12_RAYTRACING_SHADER_TABLE_BYTE_ALIGNMENT);
 
 			UINT64 hitSize = HitGroup.SectionSize();
-			size += Align(size + hitSize, D3D12_RAYTRACING_SHADER_TABLE_BYTE_ALIGNMENT);
+			size = Align(size + hitSize, D3D12_RAYTRACING_SHADER_TABLE_BYTE_ALIGNMENT);
 
 			UINT64 callSize = Callable.SectionSize();
-			size += Align(size + callSize, D3D12_RAYTRACING_SHADER_TABLE_BYTE_ALIGNMENT);
+			size = Align(size + callSize, D3D12_RAYTRACING_SHADER_TABLE_BYTE_ALIGNMENT);
 
 			return size;
 		}

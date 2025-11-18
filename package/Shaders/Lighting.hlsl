@@ -344,7 +344,7 @@ struct PS_OUTPUT
 #	if defined(SNOW)
 	float4 Parameters : SV_Target7;
 #	else
-	float4 NormalDepth : SV_Target7;
+	float4 GeomNormalMetalnessDepth : SV_Target7;
 #	endif
 };
 #else
@@ -3324,7 +3324,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #			else
 	psout.NormalGlossiness = float4(GBuffer::EncodeNormal(screenSpaceNormal), pbrGlossiness, psout.Diffuse.w);
 #			endif
-#		elif defined(HAIR) && defined(CS_HAIR)
+#		elif defined(HAIR) && defined(CS_HAIR) // !defined(TRUE_PBR)
 	if (SharedData::hairSpecularSettings.Enabled) {
 #			if defined(WETNESS_EFFECTS)
 		psout.Reflectance = float4(indirectSpecularLobeWeightPrim + indirectSpecularLobeWeightSec + wetnessReflectance, psout.Diffuse.w);
@@ -3383,18 +3383,22 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	float stochasticBlend = (screenNoise * screenNoise) < psout.Diffuse.w ? 1.0 : 0.0;
 	psout.NormalGlossiness.w = stochasticBlend;
 	
-#		if !defined(SNOW)
-	float3 modelNormal = float3(0.0, 0.0, 1.0);		
-	
-#			if defined(SKINNED) || !defined(MODELSPACENORMALS)	
-	float3 worldModelNormal = normalize(mul(tbn, modelNormal));
-#			else
-	float3 worldModelNormal = modelNormal;	
-#			endif // defined (MODELSPACENORMALS) && !defined (SKINNED)
+#		if defined(RTGI)
+#			if !defined(SNOW)
+#				if defined(SKINNED) || !defined(MODELSPACENORMALS)	
+	float3 worldGeometryNormal = tbnTr[2];
+#				else
+	float3 worldGeometryNormal = vertexNormal;	
+#				endif // !defined (SKINNED) && defined (MODELSPACENORMALS)
 
-	psout.NormalDepth = float4(worldModelNormal, 1.0f);
-#		endif // !defined(SNOW)
+#				if defined(TRUE_PBR)
+	float3 screenSpaceGeomNormal = normalize(FrameBuffer::WorldToView(worldGeometryNormal, false, eyeIndex));
+	psout.GeomNormalMetalnessDepth = float4(GBuffer::EncodeNormal(screenSpaceGeomNormal), pbrSurfaceProperties.Metallic, 1.0f);
+	psout.NormalGlossiness.w
+#				endif
 
+#			endif // !defined(SNOW)
+#		endif // !defined(RTGI)
 #	endif // DEFERRED
 
 	return psout;

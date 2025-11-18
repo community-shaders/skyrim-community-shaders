@@ -7,17 +7,18 @@ ConstantBuffer<FrameData> Frame                 : register(b0);
 
 Texture2D<float4> AlbedoTexture                 : register(t0, space0);
 Texture2D<float4> ReflectanceTexture            : register(t1, space0);
-Texture2D<unorm float3> NormalRoughnessTexture  : register(t2, space0);
-Texture2D<float4> GeometryNormalDepthTexture    : register(t3, space0);
+Texture2D<snorm float4> NormalRoughnessTexture  : register(t2, space0);
+Texture2D<float4> NormalMetalnessDepthTexture   : register(t3, space0);
 
 RaytracingAccelerationStructure Scene           : register(t4, space0);
-StructuredBuffer<Light> Lights                  : register(t5, space0);
-StructuredBuffer<Instance> Instances            : register(t6, space0);
+Texture2D<float3> SkyHemisphere                 : register(t5, space0);
+StructuredBuffer<Light> Lights                  : register(t6, space0);
+StructuredBuffer<Instance> Instances            : register(t7, space0);
 
 StructuredBuffer<Vertex> Vertices[]             : register(t0, space1);
 StructuredBuffer<uint3> Triangles[]             : register(t0, space2);
-Texture2D DiffuseTextures[]                     : register(t0, space3);
-Texture2D GlowTextures[]                        : register(t0, space4);
+Texture2D<float4> DiffuseTextures[]             : register(t0, space3);
+Texture2D<float4> EffectTextures[]              : register(t0, space4);
 
 #ifdef SHARC
 RWStructuredBuffer<uint64_t>                u_SharcHashEntriesBuffer    : register(u0, space3);
