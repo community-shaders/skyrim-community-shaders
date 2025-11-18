@@ -97,6 +97,9 @@ private:
 	RE::BSTArray<RE::BSTArray<RE::NiPointer<RE::NiAVObject>>> replacementJobArrays = {};
 	eastl::hash_set<RE::NiAVObject*> addedSet = {};
 
+	// Storage for saved culling process states
+	std::vector<REX::EnumSet<RE::NiFrustumPlanes::ActivePlane, std::uint32_t>> savedActivePlanes = {};
+
 	static RE::TESWorldSpace* enableInteriorSun;
 	static RE::TESWorldSpace* disableInteriorSun;
 
