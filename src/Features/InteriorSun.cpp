@@ -244,7 +244,7 @@ void InteriorSun::SetShadowDistance(bool inInterior)
 bool InteriorSun::BSShadowDirectionalLight_SetFrameCamera::thunk(RE::BSShadowDirectionalLight* a_light, const RE::NiCamera& a_camera)
 {
 	auto& singleton = globals::features::interiorSun;
-	
+
 	// Save and disable frustum culling for interior sun to prevent view-dependent geometry culling
 	bool savedCullingStates = false;
 	if (singleton.loaded && singleton.isInteriorWithSun && a_light) {
@@ -264,10 +264,10 @@ bool InteriorSun::BSShadowDirectionalLight_SetFrameCamera::thunk(RE::BSShadowDir
 			savedCullingStates = true;
 		}
 	}
-	
+
 	// Call original function
 	bool result = func(a_light, a_camera);
-	
+
 	// Restore original culling process states
 	if (savedCullingStates && a_light) {
 		auto& runtimeData = a_light->GetShadowDirectionalLightRuntimeData();
