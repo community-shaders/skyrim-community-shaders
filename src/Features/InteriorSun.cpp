@@ -81,7 +81,7 @@ void InteriorSun::PostPostLoad()
 void InteriorSun::EarlyPrepass()
 {
 	isInteriorWithSun = IsInteriorWithSun(RE::TES::GetSingleton()->interiorCell);
-	
+
 	// Force interior shadow distance to 8000 if it doesn't match (overrides INI value)
 	if (gInteriorShadowDistance && *gInteriorShadowDistance != INTERIOR_SHADOW_DISTANCE) {
 		*gInteriorShadowDistance = INTERIOR_SHADOW_DISTANCE;
