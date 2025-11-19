@@ -31,13 +31,14 @@ public:
 	struct Settings
 	{
 		bool ForceDoubleSidedRendering = true;
-		float InteriorShadowDistance = 5000;
 		bool ForceSingleShadowCascade = true;
 	};
 
 	Settings settings;
 
 	bool isInteriorWithSun = false;
+	static constexpr float INTERIOR_SHADOW_DISTANCE = 8000.0f;
+
 
 	struct GetWorldSpace
 	{

@@ -6,7 +6,6 @@
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	InteriorSun::Settings,
 	ForceDoubleSidedRendering,
-	InteriorShadowDistance,
 	ForceSingleShadowCascade)
 
 void InteriorSun::DrawSettings()
@@ -24,18 +23,7 @@ void InteriorSun::DrawSettings()
 			"Prevents shadow quality degradation at distance, allowing smaller light-blocking masks. "
 			"Recommended for properly prepared interior spaces.");
 	}
-	if (ImGui::SliderFloat("Interior Shadow Distance", &settings.InteriorShadowDistance, 3000.0f, 8000.0f)) {  // min 3000, any less creates visual issues in most interiors.
-		*gInteriorShadowDistance = settings.InteriorShadowDistance;
-		auto tes = RE::TES::GetSingleton();
-		SetShadowDistance(tes && tes->interiorCell);
-	}
-	if (auto _tt = Util::HoverTooltipWrapper()) {
-		ImGui::Text(
-			"Sets the distance shadows are rendered at in interiors. "
-			"Lower values improve performance but may cause shadow popping and other visual issues.");
-	}
-	ImGui::TextWrapped("Note: Match this value to fInteriorShadowDistance in your SkyrimPrefs.ini. Minimum recommended: 5000 (lower values may cause visual bugs in large interiors).");
-	ImGui::Spacing();
+	ImGui::TextDisabled("Interior Shadow Distance: %.0f (fixed)", INTERIOR_SHADOW_DISTANCE);
 }
 
 void InteriorSun::LoadSettings(json& o_json)
@@ -73,9 +61,13 @@ void InteriorSun::PostPostLoad()
 	gShadowDistance = reinterpret_cast<float*>(REL::RelocationID(528314, 415263).address());
 	gInteriorShadowDistance = reinterpret_cast<float*>(REL::RelocationID(513755, 391724).address());
 
+	// Force interior shadow distance to 8000 to ensure consistency
+	*gInteriorShadowDistance = INTERIOR_SHADOW_DISTANCE;
+
 	// Patches BSShadowDirectionalLight::SetFrameCamera to read the correct shadow distance value in interior cells
+	// This redirects the vanilla code to use gInteriorShadowDistance instead of gShadowDistance for interiors
 	const std::uintptr_t address = REL::RelocationID(101499, 108496).address() + REL::Relocate(0xD62, 0xE6C, 0xE72);
-	const std::int32_t displacement = static_cast<std::int32_t>(reinterpret_cast<std::uintptr_t>(gShadowDistance) - (address + 8));
+	const std::int32_t displacement = static_cast<std::int32_t>(reinterpret_cast<std::uintptr_t>(gInteriorShadowDistance) - (address + 8));
 	REL::safe_write(address + 4, &displacement, sizeof(displacement));
 
 	// Hook SetFrameCamera to modify shadow split distances for interior sun
@@ -89,6 +81,11 @@ void InteriorSun::PostPostLoad()
 void InteriorSun::EarlyPrepass()
 {
 	isInteriorWithSun = IsInteriorWithSun(RE::TES::GetSingleton()->interiorCell);
+	
+	// Force interior shadow distance to 8000 if it doesn't match (overrides INI value)
+	if (gInteriorShadowDistance && *gInteriorShadowDistance != INTERIOR_SHADOW_DISTANCE) {
+		*gInteriorShadowDistance = INTERIOR_SHADOW_DISTANCE;
+	}
 }
 
 inline bool InteriorSun::IsInteriorWithSun(const RE::TESObjectCELL* cell)
@@ -231,7 +228,7 @@ bool InteriorSun::IsInSunDirectionAndWithinShadowDistance(const RE::NiPointer<RE
 	const auto diff = object->worldBound.center - playerPos;
 	const float distance = diff.Length();
 	const float projection = lightDir.Dot(diff);
-	return projection >= -radius && (distance - radius) <= *gShadowDistance;
+	return projection >= -radius && (distance - radius) <= *gInteriorShadowDistance;
 }
 
 void InteriorSun::SetShadowDistance(bool inInterior)
@@ -246,16 +243,17 @@ bool InteriorSun::BSShadowDirectionalLight_SetFrameCamera::thunk(RE::BSShadowDir
 	auto& singleton = globals::features::interiorSun;
 
 	// Save and disable frustum culling for interior sun to prevent view-dependent geometry culling
+	// This allows geometry behind the camera to cast shadows, preventing light leaks
+	// Only do this when ForceSingleShadowCascade is enabled to avoid the straight-line light leak issue
 	bool savedCullingStates = false;
-	if (singleton.loaded && singleton.isInteriorWithSun && a_light) {
+	if (singleton.loaded && singleton.isInteriorWithSun && singleton.settings.ForceSingleShadowCascade && a_light) {
 		auto& runtimeData = a_light->GetShadowDirectionalLightRuntimeData();
 		if (runtimeData.cullingProcesses.data()) {
 			singleton.savedActivePlanes.clear();
 			for (auto& cullingProcessPtr : runtimeData.cullingProcesses) {
 				if (cullingProcessPtr) {
-					// Save original state
 					singleton.savedActivePlanes.push_back(cullingProcessPtr->planes.activePlanes);
-					// Disable all frustum planes
+					// Disable frustum culling to allow all geometry to cast shadows
 					cullingProcessPtr->planes.activePlanes = static_cast<RE::NiFrustumPlanes::ActivePlane>(0);
 				} else {
 					singleton.savedActivePlanes.push_back(static_cast<RE::NiFrustumPlanes::ActivePlane>(0));
@@ -265,7 +263,7 @@ bool InteriorSun::BSShadowDirectionalLight_SetFrameCamera::thunk(RE::BSShadowDir
 		}
 	}
 
-	// Call original function
+	// Call original function - it calculates the split distances
 	bool result = func(a_light, a_camera);
 
 	// Restore original culling process states
@@ -281,17 +279,20 @@ bool InteriorSun::BSShadowDirectionalLight_SetFrameCamera::thunk(RE::BSShadowDir
 		singleton.savedActivePlanes.clear();
 	}
 
-	// Override split distances for single cascade mode
+	// AFTER SetFrameCamera calculates splits, override them for interior sun if enabled
 	if (result && singleton.loaded && singleton.isInteriorWithSun && singleton.settings.ForceSingleShadowCascade) {
 		auto& runtimeData = a_light->GetShadowDirectionalLightRuntimeData();
-		const float maxDistance = *singleton.gShadowDistance;
+		const float maxDistance = *singleton.gInteriorShadowDistance;
 
+		// Cascade 0 covers the full range
 		runtimeData.endSplitDistances[0] = maxDistance;
-		runtimeData.endSplitDistances[1] = maxDistance;
-		runtimeData.endSplitDistances[2] = maxDistance;
-
 		runtimeData.startSplitDistances[0] = 0.0f;
+
+		// Cascades 1 and 2 start at maxDistance, effectively disabling them
+		runtimeData.endSplitDistances[1] = maxDistance;
 		runtimeData.startSplitDistances[1] = maxDistance;
+
+		runtimeData.endSplitDistances[2] = maxDistance;
 		runtimeData.startSplitDistances[2] = maxDistance;
 	}
 
