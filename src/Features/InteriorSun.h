@@ -25,6 +25,8 @@ public:
 	virtual void SaveSettings(json& o_json) override;
 	virtual void RestoreDefaultSettings() override;
 	virtual bool SupportsVR() override { return true; }
+	virtual void Load() override;
+	virtual void DataLoaded() override;
 	virtual void PostPostLoad() override;
 	virtual void EarlyPrepass() override;
 

@@ -41,6 +41,40 @@ void InteriorSun::RestoreDefaultSettings()
 	settings = {};
 }
 
+void InteriorSun::Load()
+{
+	// Get BOTH shadow distance pointers
+	gShadowDistance = reinterpret_cast<float*>(REL::RelocationID(528314, 415263).address());
+	gInteriorShadowDistance = reinterpret_cast<float*>(REL::RelocationID(513755, 391724).address());
+	
+	logger::info("[Interior Sun] gShadowDistance: {:X} = {}", 
+		reinterpret_cast<uintptr_t>(gShadowDistance), *gShadowDistance);
+	logger::info("[Interior Sun] gInteriorShadowDistance: {:X} = {}", 
+		reinterpret_cast<uintptr_t>(gInteriorShadowDistance), *gInteriorShadowDistance);
+	
+	// Force BOTH to 8000 - the game might be reading from either one
+	*gShadowDistance = INTERIOR_SHADOW_DISTANCE;
+	*gInteriorShadowDistance = INTERIOR_SHADOW_DISTANCE;
+	
+	logger::info("[Interior Sun] Forced both shadow distances to {}", INTERIOR_SHADOW_DISTANCE);
+}
+
+void InteriorSun::DataLoaded()
+{
+	// This is called AFTER kDataLoaded, which is when the game loads INI values
+	// Force shadow distances again to override the INI values
+	if (gShadowDistance && gInteriorShadowDistance) {
+		logger::info("[Interior Sun] DataLoaded - Before: gShadowDistance={}, gInteriorShadowDistance={}", 
+			*gShadowDistance, *gInteriorShadowDistance);
+		
+		*gShadowDistance = INTERIOR_SHADOW_DISTANCE;
+		*gInteriorShadowDistance = INTERIOR_SHADOW_DISTANCE;
+		
+		logger::info("[Interior Sun] DataLoaded - After: gShadowDistance={}, gInteriorShadowDistance={}", 
+			*gShadowDistance, *gInteriorShadowDistance);
+	}
+}
+
 void InteriorSun::PostPostLoad()
 {
 	stl::write_thunk_call<BSBatchRenderer_RenderPassImmediately>(REL::RelocationID(100852, 107642).address() + REL::Relocate(0x29E, 0x28F));
@@ -59,10 +93,7 @@ void InteriorSun::PostPostLoad()
 	REL::safe_fill(REL::RelocationID(38900, 39946).address() + REL::Relocate(0x2CA, 0x22B), REL::NOP, REL::Module::IsAE() ? 6 : 2);
 
 	gShadowDistance = reinterpret_cast<float*>(REL::RelocationID(528314, 415263).address());
-	gInteriorShadowDistance = reinterpret_cast<float*>(REL::RelocationID(513755, 391724).address());
 
-	// Force interior shadow distance to 8000 to ensure consistency
-	*gInteriorShadowDistance = INTERIOR_SHADOW_DISTANCE;
 
 	// Patches BSShadowDirectionalLight::SetFrameCamera to read the correct shadow distance value in interior cells
 	// This redirects the vanilla code to use gInteriorShadowDistance instead of gShadowDistance for interiors
@@ -75,15 +106,23 @@ void InteriorSun::PostPostLoad()
 
 	rasterStateCullMode = globals::game::isVR ? &globals::game::shadowState->GetVRRuntimeData().rasterStateCullMode : &globals::game::shadowState->GetRuntimeData().rasterStateCullMode;
 
+	// Force both shadow distances again in case game loaded INI after Load()
+	*gShadowDistance = INTERIOR_SHADOW_DISTANCE;
+	*gInteriorShadowDistance = INTERIOR_SHADOW_DISTANCE;
+	logger::info("[Interior Sun] Re-forced shadow distances in PostPostLoad: gShadowDistance={}, gInteriorShadowDistance={}", 
+		*gShadowDistance, *gInteriorShadowDistance);
+
 	logger::info("[Interior Sun] Installed hooks");
 }
 
 void InteriorSun::EarlyPrepass()
 {
 	isInteriorWithSun = IsInteriorWithSun(RE::TES::GetSingleton()->interiorCell);
-	
-	// Force interior shadow distance to 8000 if it doesn't match (overrides INI value)
+
+	// Continuously force interior shadow distance to override INI value
 	if (gInteriorShadowDistance && *gInteriorShadowDistance != INTERIOR_SHADOW_DISTANCE) {
+		logger::info("[Interior Sun] EarlyPrepass detected wrong shadow distance: {}, forcing to {}", 
+			*gInteriorShadowDistance, INTERIOR_SHADOW_DISTANCE);
 		*gInteriorShadowDistance = INTERIOR_SHADOW_DISTANCE;
 	}
 }
