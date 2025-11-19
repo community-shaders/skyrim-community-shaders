@@ -37,6 +37,8 @@ void InverseSquareLighting::SetExtLightData(RE::NiLight* niLight, const RE::TESO
 	runtimeData->flags.set(LightLimitFix::LightFlags::Initialised);
 	if (ligh->data.flags.any(static_cast<RE::TES_LIGHT_FLAGS>(ISLCommon::TES_LIGHT_FLAGS_EXT::kInverseSquare)))
 		runtimeData->flags.set(LightLimitFix::LightFlags::InverseSquare);
+	if (ligh->data.flags.any(static_cast<RE::TES_LIGHT_FLAGS>(ISLCommon::TES_LIGHT_FLAGS_EXT::kLinear)))
+		runtimeData->flags.set(LightLimitFix::LightFlags::Linear);
 	runtimeData->cutoffOverride = std::clamp(ligh->data.fallofExponent, 0.01f, 1.f);
 	runtimeData->lighFormId = ligh->formID;
 	const float size = ligh->data.fov >= 50.0f ? std::numbers::sqrt2_v<float> : ligh->data.fov;

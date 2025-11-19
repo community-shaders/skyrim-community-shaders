@@ -38,6 +38,7 @@ public:
 		Initialised = (1 << 8),
 		Disabled = (1 << 9),
 		InverseSquare = (1 << 10),
+		Linear = (1 << 11),
 	};
 
 	struct PositionOpt

@@ -1,4 +1,5 @@
 #include "LightLimitFix.h"
+#include "LinearLighting.h"
 #include "InverseSquareLighting.h"
 
 #include "Shadercache.h"
