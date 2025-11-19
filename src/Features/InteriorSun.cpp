@@ -34,6 +34,8 @@ void InteriorSun::DrawSettings()
 			"Sets the distance shadows are rendered at in interiors. "
 			"Lower values improve performance but may cause shadow popping and other visual issues.");
 	}
+	ImGui::TextWrapped("Note: Match this value to fInteriorShadowDistance in your SkyrimPrefs.ini. Minimum recommended: 5000 (lower values may cause visual bugs in large interiors).");
+	ImGui::Spacing();
 }
 
 void InteriorSun::LoadSettings(json& o_json)
