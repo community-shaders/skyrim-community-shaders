@@ -1,6 +1,6 @@
 #include "LightLimitFix.h"
-#include "LinearLighting.h"
 #include "InverseSquareLighting.h"
+#include "LinearLighting.h"
 
 #include "Shadercache.h"
 #include "State.h"
