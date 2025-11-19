@@ -201,7 +201,7 @@ In Launch Application Menu, use the following settings:
 Specifically, the Modded Code includes:
 
 -   Skyrim (and its variants)
--   Hardware drivers to enable additional functionality provided via proprietary SDKs, such as [Nvidia DLSS](https://developer.nvidia.com/rtx/dlss/get-started), [AMD FidelityFX FSR3](https://gpuopen.com/fidelityfx-super-resolution-3/), and [Intel XeSS](https://github.com/intel/xess)
+-   Hardware drivers to enable additional functionality provided via proprietary SDKs, such as [Nvidia DLSS](https://developer.nvidia.com/rtx/dlss/get-started) and [AMD FidelityFX FSR3](https://gpuopen.com/fidelityfx-super-resolution-3/)
 
 The Modding Libraries include:
 
