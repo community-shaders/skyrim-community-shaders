@@ -41,7 +41,7 @@ void InteriorSun::DrawSettings()
 	ImGui::Spacing();
 	ImGui::Separator();
 	ImGui::Text("Shadow Quality Settings (Advanced)");
-	
+
 	if (iShadowMapResolution) {
 		int shadowMapRes = iShadowMapResolution->GetSInt();
 		if (ImGui::SliderInt("Shadow Map Resolution", &shadowMapRes, 512, 8192, "%d")) {
@@ -353,32 +353,32 @@ bool InteriorSun::BSShadowDirectionalLight_SetFrameCamera::thunk(RE::BSShadowDir
 				cascadeCamera = shadowData.shadowmapDescriptors[0].camera;
 			}
 		}
-		
+
 		if (cascadeCamera) {
 			auto& frustum = cascadeCamera->GetRuntimeData2().viewFrustum;
-			
+
 			if (frustum.bOrtho) {
 				// Calculate current frustum dimensions
 				const float currentWidth = frustum.fRight - frustum.fLeft;
 				const float currentHeight = frustum.fTop - frustum.fBottom;
-				
+
 				// Scale factor to tighten frustum - smaller = higher texel density
 				// Use a percentage of the shadow distance for dynamic scaling
 				const float targetScale = 0.4f;  // 40% of original size = 2.5x texel density boost
-				
+
 				// Calculate center point
 				const float centerX = (frustum.fLeft + frustum.fRight) * 0.5f;
 				const float centerY = (frustum.fTop + frustum.fBottom) * 0.5f;
-				
+
 				// Apply scaling around center point
 				const float newHalfWidth = (currentWidth * targetScale) * 0.5f;
 				const float newHalfHeight = (currentHeight * targetScale) * 0.5f;
-				
+
 				frustum.fLeft = centerX - newHalfWidth;
 				frustum.fRight = centerX + newHalfWidth;
 				frustum.fTop = centerY + newHalfHeight;
 				frustum.fBottom = centerY - newHalfHeight;
-				
+
 				// Update the camera with modified frustum
 				RE::NiUpdateData updateData;
 				cascadeCamera->Update(updateData);
