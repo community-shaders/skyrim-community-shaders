@@ -1,0 +1,35 @@
+# Codecov Configuration for Skyrim Community Shaders
+# https://docs.codecov.com/docs/codecov-yaml
+
+coverage:
+    status:
+        project:
+            default:
+                target: auto
+                threshold: 1%
+                informational: true # Don't fail CI on coverage drops
+        patch:
+            default:
+                target: 80%
+                threshold: 5%
+                informational: true
+
+comment:
+    layout: "header, diff, files, footer"
+    behavior: default
+    require_changes: false
+
+ignore:
+    - "tests/**" # Don't measure coverage of test files themselves
+    - "extern/**" # External dependencies
+    - "build/**" # Build artifacts
+    - "vcpkg_installed/**" # vcpkg packages
+    - "**/*.h" # Headers (coverage in .cpp files)
+
+flags:
+    unittests:
+        paths:
+            - src/
+        carryforward: true
+# Only track coverage on utility code (src/Utils/, etc.)
+# Not the full plugin since we can't mock Skyrim

@@ -27,6 +27,16 @@ repos:
       hooks:
           - id: gersemi
             files: '(^CMakeLists.txt$|.*\\.cmake$)'
+    - repo: local
+      hooks:
+          - id: run-unit-tests
+            name: Run C++ Unit Tests
+            entry: cmake --build build/ALL --target CommunityShaders_Tests --config Release
+            language: system
+            pass_filenames: false
+            files: '(tests/.*\.(cpp|h|hpp)$|src/Utils/.*\.(cpp|h|hpp)$)'
+          # Note: Coverage runs automatically in CI on PRs
+          # To test coverage locally: .\tests\test_coverage_local.ps1
 ci:
     autofix_commit_msg: |
         style: 🎨 apply pre-commit.ci formatting

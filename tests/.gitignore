@@ -1,0 +1,13 @@
+# Test build artifacts
+*.exe
+*.obj
+*.o
+*.pdb
+*.ilk
+
+# Test results
+test-results*.xml
+*.log
+
+# Generated stubs
+test_stubs.h

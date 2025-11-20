@@ -46,7 +46,10 @@ set(CMAKE_INTERPROCEDURAL_OPTIMIZATION_DEBUG OFF)
 set(Boost_USE_STATIC_LIBS ON)
 set(Boost_USE_STATIC_RUNTIME ON)
 
-set(BUILD_TESTS OFF)
+# Don't override BUILD_TESTS if it's already set (e.g., from command line)
+if(NOT DEFINED BUILD_TESTS OR BUILD_TESTS STREQUAL "")
+    set(BUILD_TESTS OFF)
+endif()
 
 # Define _WINDOWS for all Windows builds (required by FidelityFX API loader)
 if(WIN32)

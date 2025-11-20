@@ -11,6 +11,7 @@
     "default-features": ["commonlibsse-ng"],
     "dependencies": [
         "bshoshany-thread-pool",
+        "catch2",
         "clib-util",
         "cppwinrt",
         "directx-headers",

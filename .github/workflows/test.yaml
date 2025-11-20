@@ -1,0 +1,214 @@
+name: Unit Tests
+
+on:
+    push:
+        branches: [main, dev]
+        paths:
+            - "src/**"
+            - "tests/**"
+            - "CMakeLists.txt"
+            - "tests/CMakeLists.txt"
+            - "vcpkg.json"
+            - ".github/workflows/test.yaml"
+    pull_request:
+        branches: [main, dev]
+        paths:
+            - "src/**"
+            - "tests/**"
+            - "CMakeLists.txt"
+            - "tests/CMakeLists.txt"
+            - "vcpkg.json"
+            - ".github/workflows/test.yaml"
+    workflow_dispatch:
+
+env:
+    VCPKG_COMMIT_ID: a62ce77d56ee07513b4b67de1ec2daeaebfae51a
+
+jobs:
+    test:
+        runs-on: windows-latest
+
+        strategy:
+            matrix:
+                configuration: [Release, Debug]
+
+        steps:
+            - name: Checkout
+              uses: actions/checkout@v4
+              with:
+                  submodules: recursive
+                  fetch-depth: 0
+
+            - name: Setup vcpkg
+              uses: lukka/run-vcpkg@v11
+              with:
+                  vcpkgGitCommitId: ${{ env.VCPKG_COMMIT_ID }}
+
+            - name: Setup MSVC
+              uses: ilammy/msvc-dev-cmd@v1
+
+            - name: Configure CMake (with tests)
+              run: |
+                  cmake --preset=ALL `
+                    -DBUILD_TESTS=ON `
+                    -DCMAKE_BUILD_TYPE=${{ matrix.configuration }}
+
+            - name: Build Tests
+              run: cmake --build build/ALL --config ${{ matrix.configuration }} --target CommunityShaders_Tests
+
+            - name: Run Tests
+              run: |
+                  cd build/ALL/tests
+                  if (Test-Path "./CommunityShaders_Tests.exe") {
+                    .\CommunityShaders_Tests.exe --reporter junit --out test-results-${{ matrix.configuration }}.xml
+                  } elseif (Test-Path "./${{ matrix.configuration }}/CommunityShaders_Tests.exe") {
+                    .\${{ matrix.configuration }}\CommunityShaders_Tests.exe --reporter junit --out test-results-${{ matrix.configuration }}.xml
+                  } else {
+                    Write-Error "Test executable not found!"
+                    exit 1
+                  }
+
+            - name: Upload Test Results
+              uses: actions/upload-artifact@v4
+              if: always()
+              with:
+                  name: test-results-${{ matrix.configuration }}
+                  path: build/ALL/tests/test-results-*.xml
+
+            - name: Publish Test Results
+              uses: EnricoMi/publish-unit-test-result-action/composite@v2
+              if: always()
+              with:
+                  files: |
+                      build/ALL/tests/test-results-*.xml
+                  check_name: "Test Results (${{ matrix.configuration }})"
+                  comment_mode: off
+
+    coverage:
+        runs-on: windows-latest
+        if: github.event_name == 'pull_request' || github.event_name == 'push'
+
+        steps:
+            - name: Checkout
+              uses: actions/checkout@v4
+              with:
+                  submodules: recursive
+                  fetch-depth: 0
+
+            - name: Setup vcpkg
+              uses: lukka/run-vcpkg@v11
+              with:
+                  vcpkgGitCommitId: ${{ env.VCPKG_COMMIT_ID }}
+
+            - name: Setup Clang
+              uses: egor-tensin/setup-clang@v1
+              with:
+                  version: latest
+                  platform: x64
+
+            - name: Configure CMake (with Clang coverage)
+              shell: pwsh
+              run: |
+                  cmake --preset=ALL `
+                    -DCMAKE_C_COMPILER=clang `
+                    -DCMAKE_CXX_COMPILER=clang++ `
+                    -DBUILD_TESTS=ON `
+                    -DENABLE_COVERAGE=ON `
+                    -DCMAKE_BUILD_TYPE=Debug
+              env:
+                  CC: clang
+                  CXX: clang++
+
+            - name: Build Tests
+              run: cmake --build build/ALL --config Debug --target CommunityShaders_Tests
+
+            - name: Run Tests with Coverage
+              shell: pwsh
+              run: |
+                  $env:LLVM_PROFILE_FILE = "coverage-%p.profraw"
+
+                  cd build/ALL/tests
+                  if (Test-Path "./CommunityShaders_Tests.exe") {
+                    .\CommunityShaders_Tests.exe
+                  } elseif (Test-Path "./Debug/CommunityShaders_Tests.exe") {
+                    .\Debug\CommunityShaders_Tests.exe
+                  } else {
+                    Write-Error "Test executable not found!"
+                    exit 1
+                  }
+
+            - name: Generate Coverage Report
+              shell: pwsh
+              run: |
+                  cd build/ALL/tests
+
+                  # Find the test executable
+                  $testExe = ""
+                  if (Test-Path "./CommunityShaders_Tests.exe") {
+                    $testExe = "./CommunityShaders_Tests.exe"
+                  } elseif (Test-Path "./Debug/CommunityShaders_Tests.exe") {
+                    $testExe = "./Debug/CommunityShaders_Tests.exe"
+                  }
+
+                  # Merge profile data
+                  llvm-profdata merge -sparse coverage-*.profraw -o coverage.profdata
+
+                  # Generate lcov format for Codecov
+                  llvm-cov export $testExe `
+                    -instr-profile=coverage.profdata `
+                    -format=lcov `
+                    -ignore-filename-regex="(tests/|build/|extern/|vcpkg_installed/)" > coverage.lcov
+
+                  # Generate HTML report for artifacts
+                  llvm-cov show $testExe `
+                    -instr-profile=coverage.profdata `
+                    -format=html `
+                    -output-dir=coverage-html `
+                    -ignore-filename-regex="(tests/|build/|extern/|vcpkg_installed/)"
+
+                  Write-Host "Coverage report generated successfully"
+
+            - name: Upload Coverage to Codecov
+              uses: codecov/codecov-action@v4
+              with:
+                  files: ./build/ALL/tests/coverage.lcov
+                  flags: unittests
+                  name: codecov-umbrella
+                  fail_ci_if_error: false
+                  verbose: true
+              env:
+                  CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+
+            - name: Upload HTML Coverage Report
+              uses: actions/upload-artifact@v4
+              if: always()
+              with:
+                  name: coverage-report
+                  path: build/ALL/tests/coverage-html/
+
+            - name: Comment Coverage Summary
+              if: github.event_name == 'pull_request'
+              uses: actions/github-script@v7
+              with:
+                  script: |
+                      const fs = require('fs');
+                      const path = require('path');
+
+                      let body = '## 📊 Code Coverage Report\n\n';
+
+                      const coverageFile = 'build/ALL/tests/coverage.lcov';
+                      if (fs.existsSync(coverageFile)) {
+                        body += '✅ Coverage data generated successfully!\n\n';
+                        body += '- 📈 [View detailed coverage on Codecov](https://codecov.io/gh/${{ github.repository }}/pull/${{ github.event.pull_request.number }})\n';
+                        body += '- 📁 Download the HTML coverage report from the workflow artifacts\n\n';
+                        body += '> Coverage reports show which lines of code are tested by the unit test suite.';
+                      } else {
+                        body += '⚠️ Coverage data not found. Check the workflow logs.';
+                      }
+
+                      github.rest.issues.createComment({
+                        issue_number: context.issue.number,
+                        owner: context.repo.owner,
+                        repo: context.repo.repo,
+                        body: body
+                      });

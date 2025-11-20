@@ -46,10 +46,12 @@ option(
     ON
 )
 option(TRACY_SUPPORT "Enable support for tracy profiler" OFF)
+option(BUILD_TESTS "Build unit tests" OFF)
 message("\tAuto plugin deployment: ${AUTO_PLUGIN_DEPLOYMENT}")
 message("\tZip to dist: ${ZIP_TO_DIST}")
 message("\tAIO Zip to dist: ${AIO_ZIP_TO_DIST}")
 message("\tTracy profiler: ${TRACY_SUPPORT}")
+message("\tBuild tests: ${BUILD_TESTS}")
 
 # #######################################################################################################################
 # # Add CMake features
@@ -832,6 +834,15 @@ add_custom_command(
 )
 add_custom_target("Package-AIO-Manual" DEPENDS ${AIO_PACKAGE})
 
+# #######################################################################################################################
+# # Unit Tests
+# #######################################################################################################################
+if(BUILD_TESTS)
+    enable_testing()
+    add_subdirectory(tests)
+    message(STATUS "Unit tests enabled. Build target: CommunityShaders_Tests")
+endif()
+
 message("*************************************************************")
 message("Community Shaders configuration complete")
 message("To prepare a ZIP package of AIO, Core, or Features")
@@ -841,5 +852,10 @@ message("    - Package-AIO-Manual: AIO package (manual)")
 message("    - Package-<Feature>: Individual feature packages")
 message("  Or use cmake --install for custom deployment:")
 message("    cmake --install ./build/ALL --prefix <TARGET_DIR>")
+if(BUILD_TESTS)
+    message("  To run unit tests:")
+    message("    cmake --build ./build --target test")
+    message("    or: cd build/tests && ./CommunityShaders_Tests")
+endif()
 message("Try switching to build preset 'Dev' for faster iteration time")
 message("*************************************************************")
