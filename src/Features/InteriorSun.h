@@ -93,6 +93,8 @@ private:
 
 	float* gShadowDistance = nullptr;
 	float* gInteriorShadowDistance = nullptr;
+	RE::Setting* iShadowMapResolution = nullptr;
+	RE::Setting* fFirstSliceDistance = nullptr;
 	uint32_t* rasterStateCullMode = nullptr;
 
 	RE::TESObjectCELL* currentCell = nullptr;

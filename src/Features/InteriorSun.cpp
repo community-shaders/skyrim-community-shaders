@@ -37,6 +37,37 @@ void InteriorSun::DrawSettings()
 			"Higher values cover larger areas but reduce shadow quality. "
 			"Lower values improve quality but may not cover entire interior.");
 	}
+
+	ImGui::Spacing();
+	ImGui::Separator();
+	ImGui::Text("Shadow Quality Settings (Advanced)");
+	
+	if (iShadowMapResolution) {
+		int shadowMapRes = iShadowMapResolution->GetSInt();
+		if (ImGui::SliderInt("Shadow Map Resolution", &shadowMapRes, 512, 8192, "%d")) {
+			iShadowMapResolution->data.i = shadowMapRes;
+		}
+		if (auto _tt = Util::HoverTooltipWrapper()) {
+			ImGui::Text(
+				"Resolution of the shadow map texture. "
+				"Higher values = sharper shadows but lower performance. "
+				"Affects ALL shadows in the game, not just interiors. "
+				"Requires game restart to take full effect.");
+		}
+	}
+
+	if (fFirstSliceDistance) {
+		float firstSlice = fFirstSliceDistance->GetFloat();
+		if (ImGui::SliderFloat("First Slice Distance", &firstSlice, 100.0f, 10000.0f, "%.0f")) {
+			fFirstSliceDistance->data.f = firstSlice;
+		}
+		if (auto _tt = Util::HoverTooltipWrapper()) {
+			ImGui::Text(
+				"Distance of the first shadow cascade slice. "
+				"Lower values = better close-range shadow quality. "
+				"Only applies when not using Force Single Shadow Cascade.");
+		}
+	}
 }
 
 void InteriorSun::LoadSettings(json& o_json)
@@ -60,10 +91,21 @@ void InteriorSun::Load()
 	gShadowDistance = reinterpret_cast<float*>(REL::RelocationID(528314, 415263).address());
 	gInteriorShadowDistance = reinterpret_cast<float*>(REL::RelocationID(513755, 391724).address());
 
+	// Get INI settings
+	iShadowMapResolution = RE::GetINISetting("iShadowMapResolution:Display");
+	fFirstSliceDistance = RE::GetINISetting("fFirstSliceDistance:Display");
+
 	logger::info("[Interior Sun] gShadowDistance: {:X} = {}",
 		reinterpret_cast<uintptr_t>(gShadowDistance), *gShadowDistance);
 	logger::info("[Interior Sun] gInteriorShadowDistance: {:X} = {}",
 		reinterpret_cast<uintptr_t>(gInteriorShadowDistance), *gInteriorShadowDistance);
+
+	if (iShadowMapResolution) {
+		logger::info("[Interior Sun] iShadowMapResolution = {}", iShadowMapResolution->GetSInt());
+	}
+	if (fFirstSliceDistance) {
+		logger::info("[Interior Sun] fFirstSliceDistance = {}", fFirstSliceDistance->GetFloat());
+	}
 
 	// Force BOTH to user setting - the game might be reading from either one
 	*gShadowDistance = settings.InteriorShadowDistance;
@@ -311,6 +353,53 @@ bool InteriorSun::BSShadowDirectionalLight_SetFrameCamera::thunk(RE::BSShadowDir
 
 		runtimeData.startSplitDistances[2] = maxDistance;
 		runtimeData.endSplitDistances[2] = maxDistance;
+
+		// Adjust frustum bounds based on shadow distance for better quality
+		RE::NiPointer<RE::NiCamera> camera;
+		if (globals::game::isVR) {
+			auto& shadowData = a_light->GetVRRuntimeData();
+			if (!shadowData.shadowmapDescriptors.empty()) {
+				camera = shadowData.shadowmapDescriptors[0].camera;
+			}
+		} else {
+			auto& shadowData = a_light->GetRuntimeData();
+			if (!shadowData.shadowmapDescriptors.empty()) {
+				camera = shadowData.shadowmapDescriptors[0].camera;
+			}
+		}
+		
+		if (camera) {
+			auto& frustum = camera->GetRuntimeData2().viewFrustum;
+			
+			if (frustum.bOrtho) {
+				const float currentWidth = frustum.fRight - frustum.fLeft;
+				const float currentHeight = frustum.fTop - frustum.fBottom;
+				
+				// Tighten frustum for higher shadow resolution
+				// Scale with shadow distance but keep good quality at lower distances
+				const float targetFrustumSize = std::max(2500.0f, maxDistance * 0.6f);
+				
+				// Only tighten if current frustum is larger than target
+				if (currentWidth > targetFrustumSize || currentHeight > targetFrustumSize) {
+					const float maxDim = (currentWidth > currentHeight) ? currentWidth : currentHeight;
+					const float scale = targetFrustumSize / maxDim;
+					const float centerX = (frustum.fLeft + frustum.fRight) * 0.5f;
+					const float centerY = (frustum.fTop + frustum.fBottom) * 0.5f;
+					const float halfWidth = (currentWidth * scale) * 0.5f;
+					const float halfHeight = (currentHeight * scale) * 0.5f;
+					
+					frustum.fLeft = centerX - halfWidth;
+					frustum.fRight = centerX + halfWidth;
+					frustum.fTop = centerY + halfHeight;
+					frustum.fBottom = centerY - halfHeight;
+					frustum.fNear = 1.0f;
+					frustum.fFar = maxDistance;
+					
+					RE::NiUpdateData updateData;
+					camera->Update(updateData);
+				}
+			}
+		}
 	}
 
 	return result;
