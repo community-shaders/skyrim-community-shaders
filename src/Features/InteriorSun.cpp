@@ -335,8 +335,56 @@ bool InteriorSun::BSShadowDirectionalLight_SetFrameCamera::thunk(RE::BSShadowDir
 {
 	auto& singleton = globals::features::interiorSun;
 
-	// Call original function - it calculates the split distances
+	// Call original function first - it calculates everything
 	bool result = func(a_light, a_camera);
+
+	// AFTER SetFrameCamera completes, tighten the frustum bounds for cascade 0 in interior sun mode
+	if (result && singleton.loaded && singleton.isInteriorWithSun && singleton.settings.ForceSingleShadowCascade) {
+		// Access the first cascade camera
+		RE::NiPointer<RE::NiCamera> cascadeCamera;
+		if (globals::game::isVR) {
+			auto& shadowData = a_light->GetVRRuntimeData();
+			if (!shadowData.shadowmapDescriptors.empty()) {
+				cascadeCamera = shadowData.shadowmapDescriptors[0].camera;
+			}
+		} else {
+			auto& shadowData = a_light->GetRuntimeData();
+			if (!shadowData.shadowmapDescriptors.empty()) {
+				cascadeCamera = shadowData.shadowmapDescriptors[0].camera;
+			}
+		}
+		
+		if (cascadeCamera) {
+			auto& frustum = cascadeCamera->GetRuntimeData2().viewFrustum;
+			
+			if (frustum.bOrtho) {
+				// Calculate current frustum dimensions
+				const float currentWidth = frustum.fRight - frustum.fLeft;
+				const float currentHeight = frustum.fTop - frustum.fBottom;
+				
+				// Scale factor to tighten frustum - smaller = higher texel density
+				// Use a percentage of the shadow distance for dynamic scaling
+				const float targetScale = 0.4f;  // 40% of original size = 2.5x texel density boost
+				
+				// Calculate center point
+				const float centerX = (frustum.fLeft + frustum.fRight) * 0.5f;
+				const float centerY = (frustum.fTop + frustum.fBottom) * 0.5f;
+				
+				// Apply scaling around center point
+				const float newHalfWidth = (currentWidth * targetScale) * 0.5f;
+				const float newHalfHeight = (currentHeight * targetScale) * 0.5f;
+				
+				frustum.fLeft = centerX - newHalfWidth;
+				frustum.fRight = centerX + newHalfWidth;
+				frustum.fTop = centerY + newHalfHeight;
+				frustum.fBottom = centerY - newHalfHeight;
+				
+				// Update the camera with modified frustum
+				RE::NiUpdateData updateData;
+				cascadeCamera->Update(updateData);
+			}
+		}
+	}
 
 	// AFTER SetFrameCamera calculates splits, override them for interior sun if enabled
 	if (result && singleton.loaded && singleton.isInteriorWithSun && singleton.settings.ForceSingleShadowCascade) {
@@ -353,53 +401,6 @@ bool InteriorSun::BSShadowDirectionalLight_SetFrameCamera::thunk(RE::BSShadowDir
 
 		runtimeData.startSplitDistances[2] = maxDistance;
 		runtimeData.endSplitDistances[2] = maxDistance;
-
-		// Adjust frustum bounds based on shadow distance for better quality
-		RE::NiPointer<RE::NiCamera> camera;
-		if (globals::game::isVR) {
-			auto& shadowData = a_light->GetVRRuntimeData();
-			if (!shadowData.shadowmapDescriptors.empty()) {
-				camera = shadowData.shadowmapDescriptors[0].camera;
-			}
-		} else {
-			auto& shadowData = a_light->GetRuntimeData();
-			if (!shadowData.shadowmapDescriptors.empty()) {
-				camera = shadowData.shadowmapDescriptors[0].camera;
-			}
-		}
-		
-		if (camera) {
-			auto& frustum = camera->GetRuntimeData2().viewFrustum;
-			
-			if (frustum.bOrtho) {
-				const float currentWidth = frustum.fRight - frustum.fLeft;
-				const float currentHeight = frustum.fTop - frustum.fBottom;
-				
-				// Tighten frustum for higher shadow resolution
-				// Scale with shadow distance but keep good quality at lower distances
-				const float targetFrustumSize = std::max(2500.0f, maxDistance * 0.6f);
-				
-				// Only tighten if current frustum is larger than target
-				if (currentWidth > targetFrustumSize || currentHeight > targetFrustumSize) {
-					const float maxDim = (currentWidth > currentHeight) ? currentWidth : currentHeight;
-					const float scale = targetFrustumSize / maxDim;
-					const float centerX = (frustum.fLeft + frustum.fRight) * 0.5f;
-					const float centerY = (frustum.fTop + frustum.fBottom) * 0.5f;
-					const float halfWidth = (currentWidth * scale) * 0.5f;
-					const float halfHeight = (currentHeight * scale) * 0.5f;
-					
-					frustum.fLeft = centerX - halfWidth;
-					frustum.fRight = centerX + halfWidth;
-					frustum.fTop = centerY + halfHeight;
-					frustum.fBottom = centerY - halfHeight;
-					frustum.fNear = 1.0f;
-					frustum.fFar = maxDistance;
-					
-					RE::NiUpdateData updateData;
-					camera->Update(updateData);
-				}
-			}
-		}
 	}
 
 	return result;
