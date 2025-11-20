@@ -34,12 +34,15 @@ public:
 	{
 		bool ForceDoubleSidedRendering = true;
 		bool ForceSingleShadowCascade = true;
+		float InteriorShadowDistance = 8000.0f;
 	};
 
 	Settings settings;
 
 	bool isInteriorWithSun = false;
-	static constexpr float INTERIOR_SHADOW_DISTANCE = 8000.0f;
+	static constexpr float MIN_SHADOW_DISTANCE = 3000.0f;
+	static constexpr float MAX_SHADOW_DISTANCE = 15000.0f;
+	static constexpr float DEFAULT_SHADOW_DISTANCE = 8000.0f;
 
 	struct GetWorldSpace
 	{
@@ -98,9 +101,6 @@ private:
 	RE::BSTArray<RE::NiPointer<RE::NiAVObject>> currentCellRoomsAndPortals = {};
 	RE::BSTArray<RE::BSTArray<RE::NiPointer<RE::NiAVObject>>> replacementJobArrays = {};
 	eastl::hash_set<RE::NiAVObject*> addedSet = {};
-
-	// Storage for saved culling process states
-	std::vector<REX::EnumSet<RE::NiFrustumPlanes::ActivePlane, std::uint32_t>> savedActivePlanes = {};
 
 	static RE::TESWorldSpace* enableInteriorSun;
 	static RE::TESWorldSpace* disableInteriorSun;

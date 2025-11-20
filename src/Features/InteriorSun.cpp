@@ -6,7 +6,8 @@
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	InteriorSun::Settings,
 	ForceDoubleSidedRendering,
-	ForceSingleShadowCascade)
+	ForceSingleShadowCascade,
+	InteriorShadowDistance)
 
 void InteriorSun::DrawSettings()
 {
@@ -23,7 +24,19 @@ void InteriorSun::DrawSettings()
 			"Prevents shadow quality degradation at distance, allowing smaller light-blocking masks. "
 			"Recommended for properly prepared interior spaces.");
 	}
-	ImGui::TextDisabled("Interior Shadow Distance: %.0f (fixed)", INTERIOR_SHADOW_DISTANCE);
+	if (ImGui::SliderFloat("Interior Shadow Distance", &settings.InteriorShadowDistance, MIN_SHADOW_DISTANCE, MAX_SHADOW_DISTANCE, "%.0f")) {
+		// Update both shadow distance pointers when slider changes
+		if (gShadowDistance && gInteriorShadowDistance) {
+			*gShadowDistance = settings.InteriorShadowDistance;
+			*gInteriorShadowDistance = settings.InteriorShadowDistance;
+		}
+	}
+	if (auto _tt = Util::HoverTooltipWrapper()) {
+		ImGui::Text(
+			"Maximum distance for interior sun shadows. "
+			"Higher values cover larger areas but reduce shadow quality. "
+			"Lower values improve quality but may not cover entire interior.");
+	}
 }
 
 void InteriorSun::LoadSettings(json& o_json)
@@ -52,11 +65,11 @@ void InteriorSun::Load()
 	logger::info("[Interior Sun] gInteriorShadowDistance: {:X} = {}",
 		reinterpret_cast<uintptr_t>(gInteriorShadowDistance), *gInteriorShadowDistance);
 
-	// Force BOTH to 8000 - the game might be reading from either one
-	*gShadowDistance = INTERIOR_SHADOW_DISTANCE;
-	*gInteriorShadowDistance = INTERIOR_SHADOW_DISTANCE;
+	// Force BOTH to user setting - the game might be reading from either one
+	*gShadowDistance = settings.InteriorShadowDistance;
+	*gInteriorShadowDistance = settings.InteriorShadowDistance;
 
-	logger::info("[Interior Sun] Forced both shadow distances to {}", INTERIOR_SHADOW_DISTANCE);
+	logger::info("[Interior Sun] Forced both shadow distances to {}", settings.InteriorShadowDistance);
 }
 
 void InteriorSun::DataLoaded()
@@ -67,8 +80,8 @@ void InteriorSun::DataLoaded()
 		logger::info("[Interior Sun] DataLoaded - Before: gShadowDistance={}, gInteriorShadowDistance={}",
 			*gShadowDistance, *gInteriorShadowDistance);
 
-		*gShadowDistance = INTERIOR_SHADOW_DISTANCE;
-		*gInteriorShadowDistance = INTERIOR_SHADOW_DISTANCE;
+		*gShadowDistance = settings.InteriorShadowDistance;
+		*gInteriorShadowDistance = settings.InteriorShadowDistance;
 
 		logger::info("[Interior Sun] DataLoaded - After: gShadowDistance={}, gInteriorShadowDistance={}",
 			*gShadowDistance, *gInteriorShadowDistance);
@@ -106,8 +119,8 @@ void InteriorSun::PostPostLoad()
 	rasterStateCullMode = globals::game::isVR ? &globals::game::shadowState->GetVRRuntimeData().rasterStateCullMode : &globals::game::shadowState->GetRuntimeData().rasterStateCullMode;
 
 	// Force both shadow distances again in case game loaded INI after Load()
-	*gShadowDistance = INTERIOR_SHADOW_DISTANCE;
-	*gInteriorShadowDistance = INTERIOR_SHADOW_DISTANCE;
+	*gShadowDistance = settings.InteriorShadowDistance;
+	*gInteriorShadowDistance = settings.InteriorShadowDistance;
 	logger::info("[Interior Sun] Re-forced shadow distances in PostPostLoad: gShadowDistance={}, gInteriorShadowDistance={}",
 		*gShadowDistance, *gInteriorShadowDistance);
 
@@ -119,11 +132,10 @@ void InteriorSun::EarlyPrepass()
 	isInteriorWithSun = IsInteriorWithSun(RE::TES::GetSingleton()->interiorCell);
 
 	// Continuously force interior shadow distance to override INI value
-	// Force interior shadow distance to 8000 if it doesn't match (overrides INI value)
-	if (gInteriorShadowDistance && *gInteriorShadowDistance != INTERIOR_SHADOW_DISTANCE) {
+	if (gInteriorShadowDistance && *gInteriorShadowDistance != settings.InteriorShadowDistance) {
 		logger::info("[Interior Sun] EarlyPrepass detected wrong shadow distance: {}, forcing to {}",
-			*gInteriorShadowDistance, INTERIOR_SHADOW_DISTANCE);
-		*gInteriorShadowDistance = INTERIOR_SHADOW_DISTANCE;
+			*gInteriorShadowDistance, settings.InteriorShadowDistance);
+		*gInteriorShadowDistance = settings.InteriorShadowDistance;
 	}
 }
 
@@ -281,58 +293,24 @@ bool InteriorSun::BSShadowDirectionalLight_SetFrameCamera::thunk(RE::BSShadowDir
 {
 	auto& singleton = globals::features::interiorSun;
 
-	// Save and disable frustum culling for interior sun to prevent view-dependent geometry culling
-	// This allows geometry behind the camera to cast shadows, preventing light leaks
-	// Only do this when ForceSingleShadowCascade is enabled to avoid the straight-line light leak issue
-	bool savedCullingStates = false;
-	if (singleton.loaded && singleton.isInteriorWithSun && singleton.settings.ForceSingleShadowCascade && a_light) {
-		auto& runtimeData = a_light->GetShadowDirectionalLightRuntimeData();
-		if (runtimeData.cullingProcesses.data()) {
-			singleton.savedActivePlanes.clear();
-			for (auto& cullingProcessPtr : runtimeData.cullingProcesses) {
-				if (cullingProcessPtr) {
-					singleton.savedActivePlanes.push_back(cullingProcessPtr->planes.activePlanes);
-					// Disable frustum culling to allow all geometry to cast shadows
-					cullingProcessPtr->planes.activePlanes = static_cast<RE::NiFrustumPlanes::ActivePlane>(0);
-				} else {
-					singleton.savedActivePlanes.push_back(static_cast<RE::NiFrustumPlanes::ActivePlane>(0));
-				}
-			}
-			savedCullingStates = true;
-		}
-	}
-
 	// Call original function - it calculates the split distances
 	bool result = func(a_light, a_camera);
-
-	// Restore original culling process states
-	if (savedCullingStates && a_light) {
-		auto& runtimeData = a_light->GetShadowDirectionalLightRuntimeData();
-		if (runtimeData.cullingProcesses.data() && static_cast<size_t>(runtimeData.cullingProcesses.size()) == singleton.savedActivePlanes.size()) {
-			for (std::uint32_t i = 0; i < runtimeData.cullingProcesses.size(); ++i) {
-				if (runtimeData.cullingProcesses[i]) {
-					runtimeData.cullingProcesses[i]->planes.activePlanes = singleton.savedActivePlanes[i];
-				}
-			}
-		}
-		singleton.savedActivePlanes.clear();
-	}
 
 	// AFTER SetFrameCamera calculates splits, override them for interior sun if enabled
 	if (result && singleton.loaded && singleton.isInteriorWithSun && singleton.settings.ForceSingleShadowCascade) {
 		auto& runtimeData = a_light->GetShadowDirectionalLightRuntimeData();
 		const float maxDistance = *singleton.gInteriorShadowDistance;
 
-		// Cascade 0 covers the full range
-		runtimeData.endSplitDistances[0] = maxDistance;
+		// Single cascade mode: cascade 0 covers the full range from 0 to maxDistance
 		runtimeData.startSplitDistances[0] = 0.0f;
+		runtimeData.endSplitDistances[0] = maxDistance;
 
-		// Cascades 1 and 2 start at maxDistance, effectively disabling them
-		runtimeData.endSplitDistances[1] = maxDistance;
+		// Disable cascades 1 and 2 by setting their ranges to maxDistance
 		runtimeData.startSplitDistances[1] = maxDistance;
+		runtimeData.endSplitDistances[1] = maxDistance;
 
-		runtimeData.endSplitDistances[2] = maxDistance;
 		runtimeData.startSplitDistances[2] = maxDistance;
+		runtimeData.endSplitDistances[2] = maxDistance;
 	}
 
 	return result;
