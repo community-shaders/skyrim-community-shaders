@@ -54,7 +54,7 @@ struct PayloadData
 
 struct Payload
 {
-    float3 color;
+    float4 color;
     PayloadData data;
 };
 

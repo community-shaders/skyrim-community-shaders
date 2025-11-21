@@ -1,6 +1,9 @@
 #ifndef COMMON_HLSI
 #define COMMON_HLSI
 
+#define DEPTH_SCALE (0.99920h)
+#define FP_Z (16.5f)
+#define SKY_Z (0.99999f)
 #define M_TO_GAME_UNIT (1.0f / (GAME_UNIT_TO_M))
 
 float3 ScreenToViewPosition(const float2 screenPos, const float viewspaceDepth, const float4 ndcToView)
@@ -29,7 +32,7 @@ float3 ViewToWorldVector(const float3 vec, const float4x4 invView)
 
 float Scale01(float x, float min, float max)
 {
-    return min + x * (max - min);
+    return min + saturate(x) * (max - min);
 }
 
 half3 DecodeNormal(half2 f)

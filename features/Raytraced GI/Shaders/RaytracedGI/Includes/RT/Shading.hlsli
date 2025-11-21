@@ -12,6 +12,35 @@
 
 #include "RaytracedGI/Includes/RT/microfacetBRDFUtils.hlsli"
 
+float InverseSquareAtten2(float dist, float range)
+{
+    // Inverse square base
+    float atten = 1.0 / (dist * dist + 0.0001);
+
+    // Smooth fade to zero at range
+    float fade = saturate(1.0 - dist / range);
+    fade = fade * fade * (3.0 - 2.0 * fade);
+
+    return atten * fade;
+}
+
+float InverseSquareAtten(float dist, float range)
+{
+    // Normalized inverse-square (scale-agnostic)
+    float atten = 1.0 / (1.0 + dist * dist);
+
+    // Smooth fade to zero at range
+    float fade = saturate(1.0 - dist / range);
+    fade = fade * fade * (3.0 - 2.0 * fade);
+
+    return atten * fade;
+}
+
+float LinearAtten(float dist, float range)
+{
+    return saturate(1.0 - dist / range);
+}
+
 float3 LambertianDirect(in float3 position, in float3 normal, in float3 albedo, in LightData lightData, inout uint randomSeed)
 {
     uint lightIdx = min(uint(Random(randomSeed) * lightData.Count), lightData.Count - 1);
@@ -38,109 +67,211 @@ float3 LambertianDirect(in float3 position, in float3 normal, in float3 albedo, 
 float3 LambertianIndirect(float3 position, float3 normal, float3 albedo, uint depth, inout uint randomSeed)
 {
     float3 tangentSample = TangentSample(randomSeed);
-    float3 randomDirection = SampleHemisphere(normal, tangentSample);
+    float3 randomDirection = TangentToWorld(normal, tangentSample);
             
-    float3 bounceColor = TraceRayIndirect(Scene, position, randomDirection, depth, randomSeed);
+    float3 bounceColor = TraceRayIndirect(Scene, position, randomDirection, depth, randomSeed).rgb;
     
     return bounceColor * albedo * Frame.Diffuse;
 }
 
-float Vis_Smith(float roughness, float NdotV, float NdotL)
+float3 GGXDirectP(in float3 position, in float3 normal, in float3 view, in float3 albedo, in float3 specular, in float roughness, in LightData lightData, inout uint randomSeed)
 {
-    float a = roughness * roughness;
-    float a2 = a * a;
-    float Vis_SmithV = NdotV + sqrt(a2 + (1.0 - a2) * NdotV * NdotV);
-    float Vis_SmithL = NdotL + sqrt(a2 + (1.0 - a2) * NdotL * NdotL);
-    return max(Vis_SmithV * Vis_SmithL, EPSILON_DIVISION);
-}
-
-float3 GGXDirect(in float3 position, in float3 normal, in float3 view, in float3 albedo, in float3 specular, in float roughness, in LightData lightData, inout uint randomSeed)
-{
+    if (lightData.Count == 0) return float3(0, 0, 0);
+    
     uint lightIdx = min(uint(Random(randomSeed) * lightData.Count), lightData.Count - 1);
 
     uint lightID = lightData.GetID(lightIdx);
     
     Light light = Lights[lightID];
         
-    float3 lightVector = (light.Vector - position) * GAME_UNIT_TO_M;
-    float lightDistanceSqr = dot(lightVector, lightVector);
-    float lightDistance = sqrt(lightDistanceSqr);
-        
-    lightVector /= lightDistance;
+    float3 L = (light.Vector - position);
+    float dist = length(L);      
+    L /= dist;
          
-    float attenuation = 1.0 / max(lightDistanceSqr, 0.01);
-    float fade = saturate(1.0 - pow(lightDistance / light.Range, 4.0));
-            
-    float NdotL= saturate(dot(normal, lightVector));
-    float shadow = TraceRayShadowFinite(Scene, position, lightVector, lightDistance * M_TO_GAME_UNIT);
-           
-	float3 H = normalize(view + lightVector);
-	float NdotH = saturate(dot(normal, H));
-	float LdotH = saturate(dot(lightVector, H));
+    float NdotL = saturate(dot(normal, L));
 	float NdotV = saturate(dot(normal, view));
     
-    float satNdotL = clamp(NdotL, EPSILON_DOT_CLAMP, 1);
-    float satNdotV = saturate(abs(NdotV) + EPSILON_DOT_CLAMP);
+    if (NdotL <= 0.0 || NdotV <= 0.0) return 0;       
+        
+	float3 H = normalize(view + L);
+	float NdotH = saturate(dot(normal, H));
+    float VdotH = saturate(dot(view, H));
     
-    float D = BRDF::D_GGX(roughness, NdotH);
+    float D = D_GGX(roughness, NdotH);
     float G = Vis_Smith(roughness, NdotV, NdotL);
-    float3 F = BRDF::F_Schlick(specular, LdotH);
-
-    float3 specBRDF = D * G * F;
-    float2 specularBRDF = BRDF::EnvBRDF(roughness, satNdotV);
-    specBRDF *= 1 + specBRDF * (1 / (specularBRDF.x + specularBRDF.y) - 1);
+    float3 F = F_Schlick(specular, VdotH);
     
-    float3 diffBRDF = albedo / Math::PI;
+    float3 diffBRDF = (albedo / Math::PI) * (1.0f - F);  
     
-    float3 radiance = light.Color * attenuation * fade * fade;
+    //float atten = InverseSquareAtten(dist, light.Range); // This requires all lights to be ISL enabled
+    float atten = LinearAtten(dist, light.Range);    
     
-    float weight = lightData.Count;
+    float shadow = 1.0f;
     
-    float3 ggxTerm = D * G * F / (4 * satNdotV );
+    if (NdotL >= 0)
+        shadow = TraceRayShadowFinite(Scene, position, L, dist);
     
-    return shadow * radiance * (ggxTerm + diffBRDF) * NdotL * weight * Frame.Diffuse;
+    float3 radiance = light.Color * atten * shadow;
+    
+    float weight = float(lightData.Count);
+    
+    float3 specBRDF = D * G * F / max(4 * NdotV, EPSILON_DIVISION);
+    
+    return radiance * weight * (diffBRDF * NdotL + specBRDF) * Frame.Diffuse;
 }
 
-float3 GGXIndirect(in float3 position, in float3 geomNormal, in float3 normal, in float3 view, in float3 albedo, in float3 specular, in float roughness, in uint depth, inout uint randomSeed)
-{ 
-    float probDiffuse = ProbabilityToSampleDiffuse(albedo, specular);
-    float chooseDiffuse = (Random(randomSeed) < probDiffuse);
+float3 GGXDirectD(in float3 position, in float3 normal, in float3 view, in float3 albedo, in float3 specular, in float roughness, in Light light)
+{
+    float3 L = light.Vector;
+
+    float NdotL = saturate(dot(normal, L));
+	float NdotV = saturate(dot(normal, view));
     
-    float NdotV = saturate(dot(normal, view));
+    if (NdotL <= 0.0 || NdotV <= 0.0) return 0;       
+        
+	float3 H = normalize(view + L);
+	float NdotH = saturate(dot(normal, H));
+    float VdotH = saturate(dot(view, H));
+    
+    float D = D_GGX(roughness, NdotH);
+    float G = Vis_Smith(roughness, NdotV, NdotL);
+    float3 F = F_Schlick3(specular, VdotH);
+    
+    float3 diffBRDF = (albedo / Math::PI) * (1.0f - F);  
+
+    float3 radiance = light.Color * TraceRayShadow(Scene, position, L);
+
+    float3 specBRDF = D * G * F / max(4 * NdotV, EPSILON_DIVISION);
+    
+    return radiance * (diffBRDF * NdotL + specBRDF) * Frame.Diffuse;
+}
+
+float4 GGXIndirect(in float3 position, in float3 GN, in float3 N, in float3 V, in float3 albedo, in float3 specular, in float roughness, in float metalness, in uint depth, inout uint randomSeed)
+{ 
+    float NdotV = dot(N, V);
+    
+    if (NdotV <= 0.0f)
+        return float4(0.0f, 0.0f, 0.0f, 0.0f);  
+    
+    float diffuseProbability = DiffuseProbability(albedo, specular, metalness, roughness, NdotV);
+    bool chooseDiffuse = (Random(randomSeed) < diffuseProbability);
     
     if (chooseDiffuse)
     {
         float3 tangentSample = TangentSample(randomSeed);
-        float3 L = SampleHemisphere(normal, tangentSample);
-            
-        float3 bounceColor = TraceRayIndirect(Scene, position, L, depth, randomSeed);
+        float3 L = TangentToWorld(N, tangentSample);
+
+        if (dot(GN, L) <= 0.0f) 
+            return float4(0.0f, 0.0f, 0.0f, 0.0f);        
+               
+        float3 bounceColor = TraceRayIndirect(Scene, position, L, depth, randomSeed).rgb;
     
-        return (bounceColor * albedo / probDiffuse) * Frame.Diffuse;
+        return float4((bounceColor * albedo / diffuseProbability) * Frame.Diffuse, 0.0f);
     }
     else
     {
-        float3 tangentSample = TangentSampleScaled(randomSeed, roughness);
-        float3 H = SampleHemisphere(normal, tangentSample);       
+        float2 alpha = float2(roughness * roughness, roughness * roughness); // Just a test
         
-        float3 L = normalize(2.f * dot(view, H) * H - view);
-        
-        if (dot(geomNormal, L) <= 0.0f) return float3(0, 0, 0);
-        
-        float3 bounceColor = TraceRayIndirect(Scene, position, L, depth, randomSeed);
-        
-        float NdotL = saturate(dot(normal, L));
-   	    float NdotH = saturate(dot(normal, H));
-	    float LdotH = saturate(dot(L, H));
+        float3 Ht = GGXSample(randomSeed, alpha);
 
-        float D = BRDF::D_GGX(roughness, NdotH);
+        float3 H = TangentToWorld(N, Ht);
+        float3 L = reflect(-V, H);
+
+        if (dot(GN, L) <= 0.0f) 
+            return float4(0.0f, 0.0f, 0.0f, 0.0f);
+        
+        float NdotL = max(dot(N, L), EPSILON_DOT_CLAMP);
+        
+        //if (NdotL <= 0.0f)
+        //    return float4(0.0f, 0.0f, 0.0f, 0.0f);            
+        
+   	    float NdotH = max(dot(N, H), EPSILON_DOT_CLAMP); 
+        
+        //if (NdotH <= 0.0f)
+        //    return float4(0.0f, 0.0f, 0.0f, 0.0f);           
+        
+	    float LdotH = max(dot(L, H), EPSILON_DOT_CLAMP);
+        
+        //if (LdotH <= 0.0f)
+        //    return float4(0.0f, 0.0f, 0.0f, 0.0f);            
+        
+	    float VdotH = max(dot(V, H), EPSILON_DOT_CLAMP);      
+                  
+        float4 bounceColor = TraceRayIndirect(Scene, position, L, depth, randomSeed);        
+        
+        float D = D_GGX(roughness, NdotH);
         float G = Vis_Smith(roughness, NdotV, NdotL);
-        float3 F = BRDF::F_Schlick(specular, LdotH);         
         
-        float3 ggxTerm = D * G * F / max(4 * NdotL * NdotV, EPSILON_DOT_CLAMP);     
+        //float F0 = lerp(float3(0.04, 0.04, 0.04), albedo, metalness);
+        float3 F = F_Schlick3(specular, VdotH);
         
+        float3 ggxTerm = D * G * F / max(4 * NdotL * NdotV, EPSILON_DOT_CLAMP);
+    
         float ggxProb = D * NdotH / (4 * LdotH);
         
-        return (NdotL * bounceColor * ggxTerm / (ggxProb * (1.0f - probDiffuse))) * Frame.Specular;
+        return float4((NdotL * bounceColor.rgb * ggxTerm / (ggxProb * (1.0f - diffuseProbability))) * Frame.Specular, bounceColor.a);
+    }
+}
+
+float4 GGXIndirect2(in float3 position, in float3 geomNormal, in float3 N, in float3 V, in float3 albedo, in float3 specular, in float roughness, in float metalness, in uint depth, inout uint randomSeed)
+{ 
+    float NdotV = saturate(dot(N, V));
+    
+    float diffuseProbability = DiffuseProbability(albedo, specular, metalness, roughness, NdotV);
+    bool chooseDiffuse = (Random(randomSeed) < diffuseProbability);
+    
+    if (chooseDiffuse)
+    {
+        float3 tangentSample = TangentSample(randomSeed);
+        float3 L = TangentToWorld(N, tangentSample);
+            
+        //if (dot(geomNormal, L) <= 0.0f) return float3(0, 0, 0);
+        
+        float3 bounceColor = TraceRayIndirect(Scene, position, L, depth, randomSeed).rgb;
+    
+        return float4((bounceColor * albedo / diffuseProbability) * Frame.Diffuse, 0.0f);
+    }
+    else
+    {
+        float2 alpha = float2(roughness * roughness, roughness * roughness); // Just a test
+        
+        float3 Ht = GGXSample(randomSeed, alpha);
+
+        float3 H = TangentToWorld(N, Ht);
+        float3 L = reflect(-V, H);
+
+        //if (dot(geomNormal, L) <= 0.0f) return float3(0, 0, 0);
+        
+        float NdotL = dot(N, L);
+   	    float NdotH = dot(N, H); 
+	    float LdotH = dot(L, H);
+	    float VdotH = dot(V, H);
+        
+        if (NdotL <= 0.0f || NdotV <= 0.0f || NdotH <= 0.0f || LdotH <= 0.0f)
+            return float4(0.0f, 0.0f, 0.0f, 0.0f);    
+        
+        float4 bounceColor = TraceRayIndirect(Scene, position, L, depth, randomSeed);               
+        
+        float D = D_GGX_Ani(alpha, H);
+        float G = Vis_Smith_Ani(alpha, V, L);
+        
+        /*float anisotropy = (alpha.y - alpha.x) / max(alpha.y + alpha.x, 1e-6f);
+        
+        float F0 = lerp(float3(0.04, 0.04, 0.04), albedo, metalness);
+        
+        float3 F = F_Schlick2(F0, VdotH);
+        
+        float3 F0 = ComputeF0Aniso(baseColor, metallic, anisotropy);
+        float3 F = F_SchlickAniso(F0x, F0y, dot(V,H), dot(H,tangent), dot(H,bitangent));  */      
+        
+        float3 F0 = lerp(float3(0.04, 0.04, 0.04), albedo, metalness);     
+        float3 F = F_Schlick2(F0, VdotH);       
+        
+        float3 ggxTerm = D * G * F / max(4 * NdotL * NdotV, EPSILON_DOT_CLAMP);
+    
+        float ggxProb = (D * NdotH) / (4 * LdotH); 
+        
+        return float4((NdotL * bounceColor.rgb * ggxTerm / (ggxProb * (1.0f - diffuseProbability))) * Frame.Specular, bounceColor.a);
     }
 }
 

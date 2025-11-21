@@ -139,9 +139,12 @@ void RaytracedGI::DrawSettings()
 
 			ImGui::Checkbox("Point Fade", &settings.PointFade);
 			ImGui::Checkbox("Gamma To Linear", &settings.GammaToLinear);
+
+			ImGui::Checkbox("Raytraced Shadows", &settings.RaytracedShadows);
+			if (auto _tt = Util::HoverTooltipWrapper()) {
+				ImGui::Text("Replaces directional light shadowmaps.\n");
+			}
 		}
-
-
 	}
 	/*if (auto _tt = Util::HoverTooltipWrapper()) {
 		ImGui::Text("Number of clipmaps to use\n");
@@ -162,7 +165,6 @@ void RaytracedGI::DrawSettings()
 
 		ImGui::EndCombo();
 	}
-
 
 #ifdef SHARC
 	ImGui::DragFloat("SHARC Scale", &settings.SHARCScale, 1.0f, 0.1f, 100.0f);
@@ -204,15 +206,20 @@ void RaytracedGI::DrawSettings()
 
 		ImGui::Text(std::format("Lights: {}", lights.size()).c_str());
 
+		if (settings.RaytracedShadows) {
+			ImGui::Text(std::format("Unculled Shadow Instances: {}", blasShadowInstances.size()).c_str());
+		}
 		ImGui::TreePop();
 	}
 
-	ImGui::Image(skyHemisphere->srv, { 512.0f, 512.0f });
+	ImGui::Image(shadowMaskTexture->srv, { 960.f, 540.f });
+
+	//ImGui::Image(skyHemisphere->srv, { 64.0f, 64.0f });
 
 	/*
 	D3D11_TEXTURE2D_DESC desc;
-	finalTexture->resource11->GetDesc(&desc);
-	ImGui::Image(finalTexture->srv, { desc.Width * 0.5f, desc.Height * 0.5f });*/
+	mainTexture->resource11->GetDesc(&desc);
+	ImGui::Image(mainTexture->srv, { desc.Width * 0.5f, desc.Height * 0.5f });*/
 }
 
 void RaytracedGI::SetupResources()
@@ -224,17 +231,77 @@ void RaytracedGI::SetupResources()
 		d3d12Device.get(), 
 		D3D12_DESCRIPTOR_HEAP_DESC(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, HeapSlot::NumDescriptors, D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE));
 
-	computeHeap = eastl::make_unique<DX12::DescriptorHeap<ComputeHeapSlot::Slot, ComputeHeapType::Type>>(
+	/*computeHeap = eastl::make_unique<DX12::DescriptorHeap<ComputeHeapSlot::Slot, ComputeHeapType::Type>>(
 		d3d12Device.get(),
-		D3D12_DESCRIPTOR_HEAP_DESC(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, ComputeHeapSlot::NumDescriptors, D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE));
+		D3D12_DESCRIPTOR_HEAP_DESC(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, ComputeHeapSlot::NumDescriptors, D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE));*/
+
+	computeHeapShadows = eastl::make_unique<DX12::DescriptorHeap<ComputeHeapShadowsSlot::Slot, ComputeHeapShadowsType::Type>>(
+		d3d12Device.get(),
+		D3D12_DESCRIPTOR_HEAP_DESC(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, ComputeHeapShadowsSlot::NumDescriptors, D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE));
+
+	auto mainTex = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMAIN];
+
+	D3D11_TEXTURE2D_DESC mainDesc;
+	mainTex.texture->GetDesc(&mainDesc);
+
+	// Depth
+	{
+		D3D11_TEXTURE2D_DESC texDesc{};
+		texDesc.Width = mainDesc.Width;
+		texDesc.Height = mainDesc.Height;
+		texDesc.MipLevels = 1;
+		texDesc.ArraySize = 1;
+		texDesc.Format = DXGI_FORMAT_R32_FLOAT;
+		texDesc.SampleDesc.Count = 1;
+		texDesc.SampleDesc.Quality = 0;
+		texDesc.BindFlags = D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_UNORDERED_ACCESS;
+
+		depthTexture = eastl::make_unique<WrappedResource>(texDesc, d3d11Device.get(), d3d12Device.get());
+		DX::ThrowIfFailed(depthTexture->resource->SetName(L"Depth texture"));
+
+		D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
+		srvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
+		srvDesc.Format = texDesc.Format;
+		srvDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
+		srvDesc.Texture2D.MostDetailedMip = 0;
+		srvDesc.Texture2D.MipLevels = texDesc.MipLevels;
+		srvDesc.Texture2D.PlaneSlice = 0;
+		srvDesc.Texture2D.ResourceMinLODClamp = 0.0f;
+
+		d3d12Device->CreateShaderResourceView(depthTexture->resource.get(), &srvDesc, commonHeap->CPUHandle(HeapSlot::Depth));
+		d3d12Device->CreateShaderResourceView(depthTexture->resource.get(), &srvDesc, computeHeapShadows->CPUHandle(ComputeHeapShadowsSlot::Depth));	
+	}
+
+	// Shadow mask
+	{
+		auto shadowMask = globals::game::renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kSHADOW_MASK];
+		D3D11_TEXTURE2D_DESC shadowMaskDesc;
+		shadowMask.texture->GetDesc(&shadowMaskDesc);
+
+		logger::info("[RT] Shadowmask Format: {}", magic_enum::enum_name(shadowMaskDesc.Format));
+
+		D3D11_TEXTURE2D_DESC texDesc{};
+		texDesc.Width = mainDesc.Width;
+		texDesc.Height = mainDesc.Height;
+		texDesc.MipLevels = 1;
+		texDesc.ArraySize = 1;
+		texDesc.Format = shadowMaskDesc.Format;
+		texDesc.SampleDesc.Count = 1;
+		texDesc.SampleDesc.Quality = 0;
+		texDesc.BindFlags = D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_UNORDERED_ACCESS;
+
+		shadowMaskTexture = eastl::make_unique<WrappedResource>(texDesc, d3d11Device.get(), d3d12Device.get());
+		DX::ThrowIfFailed(shadowMaskTexture->resource->SetName(L"Shadow Mask"));
+
+		D3D12_UNORDERED_ACCESS_VIEW_DESC uavDesc = {};
+		uavDesc.ViewDimension = D3D12_UAV_DIMENSION_TEXTURE2D;
+		uavDesc.Format = texDesc.Format;
+
+		d3d12Device->CreateUnorderedAccessView(shadowMaskTexture->resource.get(), nullptr, &uavDesc, computeHeapShadows->CPUHandle(ComputeHeapShadowsSlot::ShadowMask));	
+	}
 
 	// UAVs
 	{	
-		auto mainTex = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMAIN];
-
-		D3D11_TEXTURE2D_DESC mainDesc;
-		mainTex.texture->GetDesc(&mainDesc);
-
 		// u0 - Final texture
 		{
 			D3D11_TEXTURE2D_DESC texDesc{};
@@ -247,14 +314,14 @@ void RaytracedGI::SetupResources()
 			texDesc.SampleDesc.Quality = 0;
 			texDesc.BindFlags = D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_UNORDERED_ACCESS;
 
-			finalTexture = eastl::make_unique<WrappedResource>(texDesc, d3d11Device.get(), d3d12Device.get());
-			DX::ThrowIfFailed(finalTexture->resource->SetName(L"Final Texture"));
+			mainTexture = eastl::make_unique<WrappedResource>(texDesc, d3d11Device.get(), d3d12Device.get());
+			DX::ThrowIfFailed(mainTexture->resource->SetName(L"Main Texture"));
 
 			D3D12_UNORDERED_ACCESS_VIEW_DESC uavDesc = {};
 			uavDesc.ViewDimension = D3D12_UAV_DIMENSION_TEXTURE2D;
 			uavDesc.Format = texDesc.Format;
 
-			d3d12Device->CreateUnorderedAccessView(finalTexture->resource.get(), nullptr, &uavDesc, computeHeap->CPUHandle(ComputeHeapSlot::Final));
+			d3d12Device->CreateUnorderedAccessView(mainTexture->resource.get(), nullptr, &uavDesc, commonHeap->CPUHandle(HeapSlot::Main));
 		}
 
 		// Motion vector
@@ -273,26 +340,35 @@ void RaytracedGI::SetupResources()
 			DX::ThrowIfFailed(motionVectorsTexture->resource->SetName(L"Motion Vectors Texture"));
 		}
 
-		// u1 - Diffuse GI texture
+		// u1 - Output texture
 		{
-			diffuseGITexture = eastl::make_unique<DX12::Texture2D>(d3d12Device.get(), mainDesc.Width, mainDesc.Height, DXGI_FORMAT_R16G16B16A16_FLOAT, D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS);
-			diffuseGITexture->SetName(L"Diffuse GI Texture");
+			outputTexture = eastl::make_unique<DX12::Texture2D>(d3d12Device.get(), mainDesc.Width, mainDesc.Height, DXGI_FORMAT_R16G16B16A16_FLOAT, D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS);
+			outputTexture->SetName(L"Output texture");
 
-			diffuseGITexture->TransitionBarrier(commandList.get(), D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+			outputTexture->TransitionBarrier(commandList.get(), D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
 
-			diffuseGITexture->CreateUAV(commonHeap->CPUHandle(HeapSlot::DiffuseGI));
-			diffuseGITexture->CreateUAV(computeHeap->CPUHandle(ComputeHeapSlot::DiffuseGI));
+			outputTexture->CreateUAV(commonHeap->CPUHandle(HeapSlot::Output));
+			//outputTexture->CreateUAV(computeHeap->CPUHandle(ComputeHeapSlot::DiffuseGI));
 		}
 
-		// u2 - Specular GI texture
+		// u2 - Reflectance texture
 		{				
-			specularGITexture = eastl::make_unique<DX12::Texture2D>(d3d12Device.get(), mainDesc.Width, mainDesc.Height, DXGI_FORMAT_R16G16B16A16_FLOAT, D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS);
-			specularGITexture->SetName(L"Specular GI Texture");
+			reflectanceTexture = eastl::make_unique<DX12::Texture2D>(d3d12Device.get(), mainDesc.Width, mainDesc.Height, DXGI_FORMAT_R16G16B16A16_FLOAT, D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS);
+			reflectanceTexture->SetName(L"Reflectance Texture");
 
-			specularGITexture->TransitionBarrier(commandList.get(), D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+			reflectanceTexture->TransitionBarrier(commandList.get(), D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
 
-			specularGITexture->CreateUAV(commonHeap->CPUHandle(HeapSlot::SpecularGI));
-			specularGITexture->CreateUAV(computeHeap->CPUHandle(ComputeHeapSlot::SpecularGI));	
+			reflectanceTexture->CreateUAV(commonHeap->CPUHandle(HeapSlot::Reflectance));
+			//reflectanceTexture->CreateUAV(computeHeap->CPUHandle(ComputeHeapSlot::SpecularGI));	
+		}
+
+		// u3 - Specular Hit Distance texture
+		{
+			specularHitDistanceTexture = eastl::make_unique<DX12::Texture2D>(d3d12Device.get(), mainDesc.Width, mainDesc.Height, DXGI_FORMAT_R16_FLOAT, D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS);
+			specularHitDistanceTexture->SetName(L"Specular Hit Distance Texture");
+
+			reflectanceTexture->CreateUAV(commonHeap->CPUHandle(HeapSlot::SpecularHitDist));
+			//specularHitDistanceTexture->CreateUAV(computeHeap->CPUHandle(ComputeHeapSlot::SpecHitDist));
 		}
 
 		{
@@ -320,22 +396,6 @@ void RaytracedGI::SetupResources()
 
 			d3d12Device->CreateShaderResourceView(normalRoughnessTexture->resource.get(), &srvDesc, commonHeap->CPUHandle(HeapSlot::NormalRoughness));
 		}
-
-		// u3 - Specular Hit Distance texture
-		{
-			specularHitDistanceTexture = eastl::make_unique<DX12::Texture2D>(d3d12Device.get(), mainDesc.Width, mainDesc.Height, DXGI_FORMAT_R16_FLOAT, D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS);
-			specularHitDistanceTexture->SetName(L"Specular Hit Distance Texture");
-
-			specularHitDistanceTexture->CreateUAV(computeHeap->CPUHandle(ComputeHeapSlot::SpecHitDist));
-		}
-
-		// u4 - Depth (Compute only)
-		{
-			depthTexture = eastl::make_unique<DX12::Texture2D>(d3d12Device.get(), mainDesc.Width, mainDesc.Height, DXGI_FORMAT_R32_FLOAT, D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS);
-			depthTexture->SetName(L"Depth Texture");
-
-			depthTexture->CreateUAV(computeHeap->CPUHandle(ComputeHeapSlot::Depth));
-		}
 	}
 
 	// t3 - Light buffer
@@ -360,12 +420,23 @@ void RaytracedGI::SetupResources()
 		DX::ThrowIfFailed(blasInstanceBuffer->resource->SetName(L"BLAS Instance Buffer"));
 	}
 
-	logger::debug("Creating framebuffer...");
+	// Create shadow instance buffer for BLAS
 	{
-		frameBuffer = eastl::make_unique<DX12::StructuredBufferUpload<FrameBuffer>>(d3d12Device.get(), 1);
-		DX::ThrowIfFailed(frameBuffer->resource->SetName(L"Frame Buffer"));
+		blasShadowInstanceBuffer = eastl::make_unique<DX12::StructuredBufferUpload<D3D12_RAYTRACING_INSTANCE_DESC>>(d3d12Device.get(), MAX_INSTANCES);
+		DX::ThrowIfFailed(blasShadowInstanceBuffer->resource->SetName(L"BLAS Instance Buffer"));
 	}
 
+	logger::debug("Creating constant buffer...");
+	{
+		frameBuffer = eastl::make_unique<DX12::StructuredBufferUpload<FrameBuffer>>(d3d12Device.get(), 1);
+		frameBuffer->TransitionBarrier(commandList.get(), D3D12_RESOURCE_STATE_VERTEX_AND_CONSTANT_BUFFER);
+		DX::ThrowIfFailed(frameBuffer->resource->SetName(L"Frame Buffer"));
+
+		shadowsCB = eastl::make_unique<DX12::StructuredBufferUpload<ShadowsCB>>(d3d12Device.get(), 1);
+		shadowsCB->TransitionBarrier(commandList.get(), D3D12_RESOURCE_STATE_VERTEX_AND_CONSTANT_BUFFER);
+		DX::ThrowIfFailed(shadowsCB->resource->SetName(L"Shadows Constant Buffer"));
+	}
+	
 	logger::debug("Creating samplers...");
 	{
 		D3D11_SAMPLER_DESC samplerDesc = {
@@ -539,11 +610,6 @@ void RaytracedGI::SetupResources()
 	logger::debug("Creating irradiance cache buffer...");
 	{
 		irradianceCacheBuffer = eastl::make_unique<DX12::StructuredAppendBuffer<IrradianceCache::Entry<IrradianceCache::SH1Data>>>(d3d12Device.get(), MAX_IRRADIANCE_ENTRIES);
-	}
-
-	logger::debug("Creating constant buffers...");
-	{
-		//frameBufferDX11CB = eastl::make_unique<ConstantBuffer>(ConstantBufferDesc<FrameBufferDX11>());
 	}
 
 	fenceEvent = CreateEvent(nullptr, FALSE, FALSE, nullptr);
@@ -820,7 +886,7 @@ LPCWSTR StringViewToLPCWSTR(std::string_view sv)
 	return wstr.c_str();
 }
 
-void RaytracedGI::ShareRT(ID3D11Texture2D* pTexture2D, const HeapSlot::Slot& target, const ComputeHeapSlot::Slot& cTarget, ID3D12Resource** ppResource)
+void RaytracedGI::ShareRT(ID3D11Texture2D* pTexture2D, const HeapSlot::Slot& target, const ComputeHeapShadowsSlot::Slot& cTarget, ID3D12Resource** ppResource)
 {
 	D3D11_TEXTURE2D_DESC desc;
 	pTexture2D->GetDesc(&desc);
@@ -847,23 +913,24 @@ void RaytracedGI::ShareRT(ID3D11Texture2D* pTexture2D, const HeapSlot::Slot& tar
 	srvDesc.Texture2D.PlaneSlice = 0;
 	srvDesc.Texture2D.ResourceMinLODClamp = 0.0f;
 
-	d3d12Device->CreateShaderResourceView(*ppResource, &srvDesc, commonHeap->CPUHandle(target));
+	if (target != HeapSlot::None)
+		d3d12Device->CreateShaderResourceView(*ppResource, &srvDesc, commonHeap->CPUHandle(target));
 
-	if (cTarget != ComputeHeapSlot::None)
-		d3d12Device->CreateShaderResourceView(*ppResource, &srvDesc, computeHeap->CPUHandle(cTarget));
+	if (cTarget != ComputeHeapShadowsSlot::None)
+		d3d12Device->CreateShaderResourceView(*ppResource, &srvDesc, computeHeapShadows->CPUHandle(cTarget));
 }
 
 void RaytracedGI::SetupSharedRT()
 {
 	const auto& rendererRD = globals::game::renderer->GetRuntimeData();
 
-	ShareRT(rendererRD.renderTargets[ALBEDO].texture, HeapSlot::Albedo, ComputeHeapSlot::Albedo, albedoTexture.put());
-	ShareRT(rendererRD.renderTargets[REFLECTANCE].texture, HeapSlot::Reflectance, ComputeHeapSlot::Reflectance, reflectanceTexture.put());
+	ShareRT(rendererRD.renderTargets[ALBEDO].texture, HeapSlot::Albedo, ComputeHeapShadowsSlot::None, albedoTexture.put());
+	ShareRT(rendererRD.renderTargets[REFLECTANCE].texture, HeapSlot::None, ComputeHeapShadowsSlot::None, gbufferReflectanceTexture.put());
 	//ShareRT(rendererRD.renderTargets[NORMALROUGHNESS].texture, HeapSlot::NormalRoughness, ComputeHeapSlot::None, normalRoughnessTexture.put());
-	ShareRT(rendererRD.renderTargets[MASKS2].texture, HeapSlot::GNMD, ComputeHeapSlot::GNMD, GNMDTexture.put());
-	
+	ShareRT(rendererRD.renderTargets[MASKS2].texture, HeapSlot::GNMD, ComputeHeapShadowsSlot::None, GNMDTexture.put());  // GNMD
+
 	DX::ThrowIfFailed(albedoTexture->SetName(L"Shared Albedo Texture"));
-	DX::ThrowIfFailed(reflectanceTexture->SetName(L"Shared Reflectance Texture"));
+	DX::ThrowIfFailed(gbufferReflectanceTexture->SetName(L"Shared Reflectance Texture"));
 	//DX::ThrowIfFailed(normalRoughnessTexture->SetName(L"Shared NormalRoughness Texture"));
 	DX::ThrowIfFailed(GNMDTexture->SetName(L"Shared GNMD Texture"));
 }
@@ -885,7 +952,7 @@ eastl::vector<LightLimitFix::LightData> RaytracedGI::GetPointLights()
 	auto accumulator = *globals::game::currentAccumulator.get();
 	const auto activeShadowSceneNode = accumulator->GetRuntimeData().activeShadowSceneNode;
 
-	auto& isl = globals::features::inverseSquareLighting;
+	//auto& isl = globals::features::inverseSquareLighting;
 
 	auto addLight = [&](const RE::NiPointer<RE::BSLight>& e) 
 	{
@@ -898,14 +965,19 @@ eastl::vector<LightLimitFix::LightData> RaytracedGI::GetPointLights()
 					light.color = { runtimeData.diffuse.red, runtimeData.diffuse.green, runtimeData.diffuse.blue };
 					light.lightFlags = std::bit_cast<LightLimitFix::LightFlags>(runtimeData.ambient.red);
 
-					if (isl.loaded) {
+					/*if (isl.loaded) {
 						isl.ProcessLight(light, bsLight, niLight);
 					} else {
 						light.radius = runtimeData.radius.x;
 
 						if (settings.PointFade)
 							light.color *= runtimeData.fade;
-					}
+					}*/
+
+					light.radius = runtimeData.radius.x;
+
+					if (settings.PointFade)
+						light.color *= runtimeData.fade;
 
 					//light.color *= bsLight->lodDimmer;
 
@@ -987,7 +1059,7 @@ void RaytracedGI::UpdateLights()
 			if (lights.size() >= MAX_LIGHTS)
 				break;
 
-			lights.emplace_back(data.positionWS[0].data, Util::Units::GameUnitsToMeters(data.radius), GammaToLinear(data.color) * settings.Point, 0);
+			lights.emplace_back(data.positionWS[0].data, data.radius, GammaToLinear(data.color) * settings.Point, 0);
 		}
 
 		lightBuffer->UpdateList(lights.data(), lights.size());
@@ -1040,11 +1112,10 @@ void RaytracedGI::CopyDepth()
 
 	context->CSSetShader(copyDepthCS.get(), nullptr, 0);
 
-	auto depth = renderer->GetDepthStencilData().depthStencils[RE::RENDER_TARGETS_DEPTHSTENCIL::kMAIN];
+	auto depth = renderer->GetDepthStencilData().depthStencils[RE::RENDER_TARGETS_DEPTHSTENCIL::kMAIN]; // kPOST_ZPREPASS_COPY
 	context->CSSetShaderResources(0, 1, &depth.depthSRV);
 
-	auto masks2 = renderer->GetRuntimeData().renderTargets[MASKS2];
-	context->CSSetUnorderedAccessViews(0, 1, &masks2.UAV, nullptr);
+	context->CSSetUnorderedAccessViews(0, 1, &depthTexture->uav, nullptr);
 
 	auto dispatchCount = Util::GetScreenDispatchCount();
 	context->Dispatch(dispatchCount.x, dispatchCount.y, 1);
@@ -1530,7 +1601,7 @@ eastl::vector<size_t> RaytracedGI::GatherInstanceLights(RE::BSTriShape* pBSTriSh
 	for (size_t i = 0; i < lights.size(); i++) {
 		const Light& light = lights[i];
 
-		if ((center - light.Vector).Length() <= radius + (light.Range / Util::Units::GAME_UNIT_TO_M))
+		if ((center - light.Vector).Length() <= radius + light.Range)
 			instanceLights.push_back(i);
 	}
 
@@ -1685,6 +1756,35 @@ void RaytracedGI::UpdateInstances()
 	instanceBuffer->Upload(commandList.get());
 }
 
+void RaytracedGI::UpdateShadowInstances()
+{
+	std::lock_guard lock{ meshMutex };
+
+	if (!shadowLight)
+		return;
+
+	blasShadowInstances.clear();
+	blasShadowInstances.reserve(instances.size());
+
+	//RE::NiCamera* camera = shadowLight->GetShadowDirectionalLightRuntimeData().cullingCamera.get();
+
+	for (auto& [pTriShape, data] : instances) {
+		MeshData& meshData = meshes[data.meshKey];
+
+		//if (!RE::NiCamera::BoundInFrustum(pTriShape->worldBound, camera))
+		//	continue;
+
+		blasShadowInstances.push_back({ .InstanceID = static_cast<uint>(blasShadowInstances.size()),
+			.InstanceMask = 1,
+			.AccelerationStructure = meshData.blasBuffer->GetGPUVirtualAddress() });
+
+		auto* ptr = reinterpret_cast<DirectX::XMFLOAT3X4*>(&blasShadowInstances.back().Transform);
+		XMStoreFloat3x4(ptr, data.transform);
+	}
+
+	blasShadowInstanceBuffer->UpdateList(blasShadowInstances.data(), blasShadowInstances.size());
+	blasShadowInstanceBuffer->Upload(commandList.get());
+}
 
 void RaytracedGI::BSBatchRenderer_RenderPassImmediately(RE::BSRenderPass* pass, uint32_t technique, bool alphaTest, uint32_t renderFlags)
 {
@@ -1968,14 +2068,17 @@ void RaytracedGI::DrawRTGI()
 	auto rendererRuntimeData = globals::game::renderer->GetRuntimeData();
 	auto main = rendererRuntimeData.renderTargets[RE::RENDER_TARGETS::kMAIN];
 
-	d3d11Context->CopyResource(finalTexture->resource11, main.texture);
+	d3d11Context->CopyResource(mainTexture->resource11, main.texture);
 	d3d11Context->CopyResource(motionVectorsTexture->resource11, rendererRuntimeData.renderTargets[RE::RENDER_TARGETS::kMOTION_VECTOR].texture);
 
-	CopyDepth();
+	if (!settings.RaytracedShadows)
+		CopyDepth();
+
 	ConvertNormalGlossiness();
 
 	// Wait for D3D11 to finish
 	{
+		//d3d11Context->Flush1(D3D11_CONTEXT_TYPE_ALL, nullptr);
 		d3d11Context->Flush();
 		DX::ThrowIfFailed(d3d11Context->Signal(d3d11Fence.get(), fenceValue));
 		DX::ThrowIfFailed(commandQueue->Wait(d3d12Fence.get(), fenceValue));
@@ -1995,10 +2098,10 @@ void RaytracedGI::DrawRTGI()
 		rtASDescs.clear();
 	}*/
 
-	if (pixCapture) {
+	/*if (pixCapture) {
 		pixCaptureStarted = true;
 		ga->BeginCapture();
-	}
+	}*/
 
 	UpdateInstances();
 
@@ -2044,6 +2147,7 @@ void RaytracedGI::DrawRTGI()
 
 		frameBuffer->Update(&frameBufferData, sizeof(FrameBuffer));
 		frameBuffer->Upload(commandList.get());
+		frameBuffer->TransitionBarrier(commandList.get(), D3D12_RESOURCE_STATE_VERTEX_AND_CONSTANT_BUFFER);
 	}
 
 	if (tlas == nullptr && tlasScratch == nullptr)
@@ -2075,6 +2179,7 @@ void RaytracedGI::DrawRTGI()
 			tlasDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
 
 			d3d12Device->CreateShaderResourceView(nullptr, &tlasDesc, commonHeap->CPUHandle(HeapSlot::TLAS));
+			d3d12Device->CreateShaderResourceView(nullptr, &tlasDesc, computeHeapShadows->CPUHandle(ComputeHeapShadowsSlot::TLAS));
 		}
 
 		// TLAS scratch (used for rebuilding)
@@ -2140,7 +2245,7 @@ void RaytracedGI::DrawRTGI()
 			// Parameter 6: Constant buffer
 			commandList->SetComputeRootConstantBufferView(6, frameBuffer->resource->GetGPUVirtualAddress());
 
-			auto finalTexDesc = finalTexture->resource->GetDesc();
+			auto finalTexDesc = mainTexture->resource->GetDesc();
 			
 			D3D12_DISPATCH_RAYS_DESC dispatchDesc{};
 			dispatchDesc.Width = static_cast<uint>(finalTexDesc.Width);
@@ -2151,53 +2256,18 @@ void RaytracedGI::DrawRTGI()
 
 			commandList->DispatchRays(&dispatchDesc);
 
-			CD3DX12_RESOURCE_BARRIER rtUAVBarrier[2] = {
-				CD3DX12_RESOURCE_BARRIER::UAV(diffuseGITexture->resource.get()),
-				CD3DX12_RESOURCE_BARRIER::UAV(specularGITexture->resource.get())
+			CD3DX12_RESOURCE_BARRIER rtUAVBarrier[3] = {
+				CD3DX12_RESOURCE_BARRIER::UAV(outputTexture->resource.get()),
+				CD3DX12_RESOURCE_BARRIER::UAV(reflectanceTexture->resource.get()),
+				CD3DX12_RESOURCE_BARRIER::UAV(specularHitDistanceTexture->resource.get())
 			};
+
 			commandList->ResourceBarrier(_countof(rtUAVBarrier), rtUAVBarrier);
 		}
 
-		// Compute
 		if (settings.DebugOutput == DebugOutput::None) {
-			commandList->SetPipelineState(pipelineCS.get());
-			commandList->SetComputeRootSignature(rootSignatureCS.get());
-
-			auto computeHeapPtr = computeHeap->Heap();
-			commandList->SetDescriptorHeaps(1, &computeHeapPtr);
-
-			// UAV table
-			commandList->SetComputeRootDescriptorTable(0, computeHeap->TableGPUHandle(ComputeHeapType::UAV));
-
-			// SRV table
-			commandList->SetComputeRootDescriptorTable(1, computeHeap->TableGPUHandle(ComputeHeapType::SRV));
-
-			// Constant buffer
-			//commandList->SetComputeRootConstantBufferView(5, frameBuffer->GetGPUVirtualAddress());
-
-			CD3DX12_RESOURCE_BARRIER commonToUAVBarrier[2] = {
-				specularHitDistanceTexture->GetTransitionBarrier(true, D3D12_RESOURCE_STATE_UNORDERED_ACCESS),
-				depthTexture->GetTransitionBarrier(true, D3D12_RESOURCE_STATE_UNORDERED_ACCESS)
-			};
-			commandList->ResourceBarrier(_countof(commonToUAVBarrier), commonToUAVBarrier);
-
-			auto dispatchCount = Util::GetScreenDispatchCount();
-			commandList->Dispatch(dispatchCount.x, dispatchCount.y, 1);
-
-			CD3DX12_RESOURCE_BARRIER uavToCommonBarrier[2] = {
-				specularHitDistanceTexture->GetTransitionBarrier(true, D3D12_RESOURCE_STATE_COMMON),
-				depthTexture->GetTransitionBarrier(true, D3D12_RESOURCE_STATE_COMMON)
-			};
-			commandList->ResourceBarrier(_countof(uavToCommonBarrier), uavToCommonBarrier);
-
-			//const auto& specHitDistBarrier = CD3DX12_RESOURCE_BARRIER::UAV(specularHitDistanceTexture.get());
-			//commandList->ResourceBarrier(1, &specHitDistBarrier);
-
 #ifdef DLSS_RR
 			if (settings.Denoiser == Denoiser::DLSSRR) {
-				CD3DX12_RESOURCE_BARRIER rtBarrier[1] = { CD3DX12_RESOURCE_BARRIER::UAV(finalTexture->resource.get()) };
-				commandList->ResourceBarrier(1, rtBarrier);
-
 				{
 					auto screenSize = globals::state->screenSize;
 					auto renderSize = Util::ConvertToDynamic(screenSize);
@@ -2205,12 +2275,12 @@ void RaytracedGI::DrawRTGI()
 					sl::Extent inputExtent{ 0, 0, (uint)renderSize.x, (uint)renderSize.y };
 					sl::Extent outputExtent{ 0, 0, (uint)screenSize.x, (uint)screenSize.y };
 
-					sl::Resource colorIn = { sl::ResourceType::eTex2d, finalTexture->resource.get(), D3D12_RESOURCE_STATE_UNORDERED_ACCESS };
-					sl::Resource colorOut = { sl::ResourceType::eTex2d, finalTexture->resource.get(), D3D12_RESOURCE_STATE_UNORDERED_ACCESS };  // This probably will break, we'll see...
+					sl::Resource colorIn = { sl::ResourceType::eTex2d, outputTexture->resource.get(), D3D12_RESOURCE_STATE_UNORDERED_ACCESS };
+					sl::Resource colorOut = { sl::ResourceType::eTex2d, mainTexture->resource.get(), D3D12_RESOURCE_STATE_UNORDERED_ACCESS };  // This probably will break, we'll see...
 					sl::Resource depth = { sl::ResourceType::eTex2d, depthTexture->resource.get(), D3D12_RESOURCE_STATE_COMMON };
 					sl::Resource mvec = { sl::ResourceType::eTex2d, motionVectorsTexture->resource.get(), 0 };
 					sl::Resource diffuseAlbedo = { sl::ResourceType::eTex2d, albedoTexture.get(), D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE };
-					sl::Resource specularAlbedo = { sl::ResourceType::eTex2d, reflectanceTexture.get(), D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE };
+					sl::Resource specularAlbedo = { sl::ResourceType::eTex2d, gbufferReflectanceTexture.get(), D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE };
 					sl::Resource normalRoughness = { sl::ResourceType::eTex2d, normalRoughnessTexture->resource.get(), D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE };
 					sl::Resource specHitDistance = { sl::ResourceType::eTex2d, specularHitDistanceTexture->resource.get(), D3D12_RESOURCE_STATE_COMMON };
 
@@ -2235,19 +2305,28 @@ void RaytracedGI::DrawRTGI()
 				if (SL_FAILED(result, slEvaluateFeature(sl::kFeatureDLSS_RR, *frameToken, inputs, _countof(inputs), commandList.get()))) {
 					logger::error("[DLSS RR] Failed to evaluate DLSS RR feature, error: {}", magic_enum::enum_name(result));
 				}
+			} else {
+				outputTexture->TransitionBarrier(commandList.get(), D3D12_RESOURCE_STATE_COPY_SOURCE);
+				commandList->CopyResource(mainTexture->resource.get(), outputTexture->resource.get());
+				outputTexture->TransitionBarrier(commandList.get(), D3D12_RESOURCE_STATE_UNORDERED_ACCESS);		
 			}
 #endif
 		} else {
-			if (settings.DebugOutput == DebugOutput::IndirectGI) {
-				diffuseGITexture->TransitionBarrier(commandList.get(), D3D12_RESOURCE_STATE_COPY_SOURCE);
-				commandList->CopyResource(finalTexture->resource.get(), diffuseGITexture->resource.get());
-				diffuseGITexture->TransitionBarrier(commandList.get(), D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+			if (settings.DebugOutput == DebugOutput::Output) {
+				outputTexture->TransitionBarrier(commandList.get(), D3D12_RESOURCE_STATE_COPY_SOURCE);
+				commandList->CopyResource(mainTexture->resource.get(), outputTexture->resource.get());
+				outputTexture->TransitionBarrier(commandList.get(), D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
 
-			} else if (settings.DebugOutput == DebugOutput::SpecularGI) {
-				specularGITexture->TransitionBarrier(commandList.get(), D3D12_RESOURCE_STATE_COPY_SOURCE);
-				commandList->CopyResource(finalTexture->resource.get(), specularGITexture->resource.get());
-				specularGITexture->TransitionBarrier(commandList.get(), D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+			} else if (settings.DebugOutput == DebugOutput::Reflectance) {
+				reflectanceTexture->TransitionBarrier(commandList.get(), D3D12_RESOURCE_STATE_COPY_SOURCE);
+				commandList->CopyResource(mainTexture->resource.get(), reflectanceTexture->resource.get());
+				reflectanceTexture->TransitionBarrier(commandList.get(), D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+			} else if (settings.DebugOutput == DebugOutput::SpecularHitDistance) {
+				specularHitDistanceTexture->TransitionBarrier(commandList.get(), D3D12_RESOURCE_STATE_COPY_SOURCE);
+				commandList->CopyResource(mainTexture->resource.get(), specularHitDistanceTexture->resource.get());
+				specularHitDistanceTexture->TransitionBarrier(commandList.get(), D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
 			}
+
 		}
 
 		DX::ThrowIfFailed(commandList->Close());
@@ -2265,11 +2344,11 @@ void RaytracedGI::DrawRTGI()
 			DX::ThrowIfFailed(d3d12Fence->SetEventOnCompletion(fenceValue, nullptr));
 		}
 
-		if (pixCapture && pixCaptureStarted) {
+		/*if (pixCapture && pixCaptureStarted) {
 			ga->EndCapture();
 			pixCapture = false;
 			pixCaptureStarted = false;
-		}
+		}*/
 
 		DX::ThrowIfFailed(d3d11Context->Wait(d3d11Fence.get(), fenceValue));
 		fenceValue++;
@@ -2293,13 +2372,142 @@ void RaytracedGI::DrawRTGI()
 		rtASDescs.clear();
 	}
 
-	d3d11Context->CopyResource(main.texture, finalTexture->resource11);
+	d3d11Context->CopyResource(main.texture, mainTexture->resource11);
 
 	// Clear specular for now, just so I can see the results better 
 	/*{
 		float clearColor[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
 		d3d11Context->ClearRenderTargetView(globals::game::renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kINDIRECT_DOWNSCALED].RTV, clearColor);
 	}*/
+}
+
+void RaytracedGI::RenderShadows()
+{
+	//logger::info("[RT] RenderShadows - ShadowLight [0x{:x}], TLAS [0x{:x}]", reinterpret_cast<uintptr_t>(shadowLight), reinterpret_cast<uintptr_t>(tlas.get()));
+
+	if (!shadowLight || tlas == nullptr)
+		return;
+
+	auto rendererRuntimeData = globals::game::renderer->GetRuntimeData();
+	auto shadowMask = rendererRuntimeData.renderTargets[RE::RENDER_TARGETS::kSHADOW_MASK];
+
+	CopyDepth();
+
+	// Tell DX11 to finish and wait
+	//d3d11Context->Flush1(D3D11_CONTEXT_TYPE_ALL, nullptr);
+	d3d11Context->Flush();
+	DX::ThrowIfFailed(d3d11Context->Signal(d3d11Fence.get(), fenceValue));
+	DX::ThrowIfFailed(commandQueue->Wait(d3d12Fence.get(), fenceValue));
+	fenceValue++;
+
+	if (pixCapture) {
+		pixCaptureStarted = true;
+		ga->BeginCapture();
+	}
+
+	// Do DX12 work...
+	{
+		{
+			shadowsCBData.CameraData = Util::GetCameraData();
+			shadowsCBData.Size = globals::state->screenSize;
+
+			auto eye = Util::GetCameraData(0);
+			float2 ndcToViewMult = float2(2.0f / eye.projMat(0, 0), -2.0f / eye.projMat(1, 1));
+			float2 ndcToViewAdd = float2(-1.0f / eye.projMat(0, 0), 1.0f / eye.projMat(1, 1));
+			shadowsCBData.NDCToView = float4(ndcToViewMult.x, ndcToViewMult.y, ndcToViewAdd.x, ndcToViewAdd.y);
+
+			shadowsCBData.ViewInverse = globals::game::frameBufferCached.GetCameraViewInverse().Transpose();
+
+			float4 cameraPosition = globals::game::frameBufferCached.GetCameraPosAdjust();
+			shadowsCBData.Position = float3(cameraPosition.x, cameraPosition.y, cameraPosition.z);
+
+			auto direction = Float3(shadowLight->GetShadowDirectionalLightRuntimeData().lightDirection);
+			direction.Normalize();
+			shadowsCBData.Direction = -direction;
+
+			shadowsCB->Update(&shadowsCBData, sizeof(ShadowsCB));
+			shadowsCB->Upload(commandList.get());
+			shadowsCB->TransitionBarrier(commandList.get(), D3D12_RESOURCE_STATE_VERTEX_AND_CONSTANT_BUFFER);
+		}
+
+		// Build/Rebuild TLAS
+		/*{
+			D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_INPUTS inputs = {
+				.Type = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL,
+				.Flags = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_PREFER_FAST_TRACE,
+				.NumDescs = static_cast<uint>(blasShadowInstances.size()),
+				.DescsLayout = D3D12_ELEMENTS_LAYOUT_ARRAY,
+				.InstanceDescs = blasShadowInstanceBuffer->resource->GetGPUVirtualAddress()
+			};
+
+			D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_DESC buildDesc = {
+				.DestAccelerationStructureData = tlas->GetGPUVirtualAddress(),
+				.Inputs = inputs,
+				.ScratchAccelerationStructureData = tlasScratch->GetGPUVirtualAddress()
+			};
+
+			commandList->BuildRaytracingAccelerationStructure(&buildDesc, 0, nullptr);
+
+			const auto& asBarrier = CD3DX12_RESOURCE_BARRIER::UAV(tlas.get());
+			commandList->ResourceBarrier(1, &asBarrier);
+		}*/
+
+		commandList->SetPipelineState(pipelineCSShadows.get());
+		commandList->SetComputeRootSignature(rootSignatureCSShadows.get());
+
+		auto computeHeapPtr = computeHeapShadows->Heap();
+		commandList->SetDescriptorHeaps(1, &computeHeapPtr);
+
+		// UAV table
+		commandList->SetComputeRootDescriptorTable(0, computeHeapShadows->TableGPUHandle(ComputeHeapShadowsType::UAV));
+
+		// SRV table
+		commandList->SetComputeRootDescriptorTable(1, computeHeapShadows->TableGPUHandle(ComputeHeapShadowsType::SRV));
+
+		// Constant buffer
+		commandList->SetComputeRootConstantBufferView(2, shadowsCB->resource->GetGPUVirtualAddress());
+
+		CD3DX12_RESOURCE_BARRIER ctuBarrier[1] = {
+			CD3DX12_RESOURCE_BARRIER::Transition(shadowMaskTexture->resource.get(), D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_STATE_UNORDERED_ACCESS),
+		};
+		commandList->ResourceBarrier(_countof(ctuBarrier), ctuBarrier);
+
+		auto dispatchCount = Util::GetScreenDispatchCount();
+		commandList->Dispatch(dispatchCount.x, dispatchCount.y, 1);
+
+		CD3DX12_RESOURCE_BARRIER utcBarrier[1] = {
+			CD3DX12_RESOURCE_BARRIER::Transition(shadowMaskTexture->resource.get(), D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_COMMON),
+		};
+		commandList->ResourceBarrier(_countof(utcBarrier), utcBarrier);
+
+		DX::ThrowIfFailed(commandList->Close());
+
+		ID3D12CommandList* commandListPtr = commandList.get();
+		commandQueue->ExecuteCommandLists(1, &commandListPtr);
+	}
+
+	// Wait for D3D12 to finish and signal DX11
+	DX::ThrowIfFailed(commandQueue->Signal(d3d12Fence.get(), fenceValue));
+
+	// Wait for GPU
+	if (d3d12Fence->GetCompletedValue() < fenceValue) {
+		DX::ThrowIfFailed(d3d12Fence->SetEventOnCompletion(fenceValue, nullptr));
+	}
+
+	if (pixCapture && pixCaptureStarted) {
+		ga->EndCapture();
+		pixCapture = false;
+		pixCaptureStarted = false;
+	}
+
+	DX::ThrowIfFailed(d3d11Context->Wait(d3d11Fence.get(), fenceValue));
+	fenceValue++;
+
+	// Reset for next command list usage
+	DX::ThrowIfFailed(commandAllocator->Reset());
+	DX::ThrowIfFailed(commandList->Reset(commandAllocator.get(), nullptr));
+
+	d3d11Context->CopyResource(shadowMask.texture, shadowMaskTexture->resource11);
 }
 
 ID3D12Resource* RaytracedGI::MakeAccelerationStructure(const D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_INPUTS& inputs, UINT64* sratchSize, UINT64* updateScratchSize)
@@ -2511,7 +2719,7 @@ void RaytracedGI::InitD3D12(ID3D11Device* ppDevice, ID3D11DeviceContext* pImmedi
 	// Create debug device
 	if (!settings.EnablePIXCapture && settings.EnableDebugDevice)
 	{
-		winrt::com_ptr<ID3D12Debug1> debugController;
+		winrt::com_ptr<ID3D12Debug6> debugController;
 		if (SUCCEEDED(D3D12GetDebugInterface(IID_PPV_ARGS(&debugController)))) {
 			debugController->EnableDebugLayer();
 			debugController->SetEnableGPUBasedValidation(TRUE);
@@ -2591,8 +2799,9 @@ void RaytracedGI::CreateRootSignature()
 		HeapType::UAV, 
 		D3D12_DESCRIPTOR_RANGE_TYPE_UAV, 
 		{  
-			{ HeapSlot::DiffuseGI, 1 }, 
-			{ HeapSlot::SpecularGI, 1 }, 
+			{ HeapSlot::Output, 1 }, 
+			{ HeapSlot::Reflectance, 1 }, 
+			{ HeapSlot::SpecularHitDist, 1 }
 		});
 
 	// Fixed SRV ranges (NormalRoughness + GNMD + Scene + Lights + Index map)
@@ -2600,8 +2809,9 @@ void RaytracedGI::CreateRootSignature()
 		HeapType::SRV, 
 		D3D12_DESCRIPTOR_RANGE_TYPE_SRV,
 		{
+			{ HeapSlot::Main, 1 },
+			{ HeapSlot::Depth, 1 },
 			{ HeapSlot::Albedo, 1 },
-			{ HeapSlot::Reflectance, 1 },
 			{ HeapSlot::NormalRoughness, 1 },
 			{ HeapSlot::GNMD, 1 },
 			{ HeapSlot::TLAS, 1 },
@@ -2682,7 +2892,7 @@ void RaytracedGI::CreateRootSignature()
 void RaytracedGI::CreateComputeRootSignature()
 {
 	// UAV range
-	computeHeap->CreateTable(
+	/*computeHeap->CreateTable(
 		ComputeHeapType::UAV,
 		D3D12_DESCRIPTOR_RANGE_TYPE_UAV,
 		{ 
@@ -2705,10 +2915,6 @@ void RaytracedGI::CreateComputeRootSignature()
 
 	auto rootParameters = computeHeap->GetRootParameters();
 
-	/*CD3DX12_ROOT_PARAMETER1 constantRootParam;
-	constantRootParam.InitAsConstantBufferView(0, 0);
-	rootParameters.push_back(constantRootParam);*/
-
 	CD3DX12_VERSIONED_ROOT_SIGNATURE_DESC rootSigDesc;
 	rootSigDesc.Init_1_1(
 		static_cast<uint>(rootParameters.size()),
@@ -2722,7 +2928,48 @@ void RaytracedGI::CreateComputeRootSignature()
 
 	DX::ThrowIfFailed(D3DX12SerializeVersionedRootSignature(&rootSigDesc, D3D_ROOT_SIGNATURE_VERSION_1_1, serializedRootSig.put(), errorBlob.put()));
 	DX::ThrowIfFailed(d3d12Device->CreateRootSignature(0, serializedRootSig->GetBufferPointer(), serializedRootSig->GetBufferSize(), IID_PPV_ARGS(rootSignatureCS.put())));
-	DX::ThrowIfFailed(rootSignatureCS->SetName(L"Compute Root Signature"));
+	DX::ThrowIfFailed(rootSignatureCS->SetName(L"Compute Root Signature"));*/
+}
+
+void RaytracedGI::CreateComputeRootSignatureShadows()
+{
+	// UAV range
+	computeHeapShadows->CreateTable(
+		ComputeHeapShadowsType::UAV,
+		D3D12_DESCRIPTOR_RANGE_TYPE_UAV,
+		{ 
+			{ ComputeHeapShadowsSlot::ShadowMask, 1 } 
+		});
+
+	// SRV
+	computeHeapShadows->CreateTable(
+		ComputeHeapShadowsType::SRV,
+		D3D12_DESCRIPTOR_RANGE_TYPE_SRV,
+		{	
+			{ ComputeHeapShadowsSlot::Depth, 1 },
+			{ ComputeHeapShadowsSlot::TLAS, 1 }
+		});
+
+	auto rootParameters = computeHeapShadows->GetRootParameters();
+
+	CD3DX12_ROOT_PARAMETER1 constantRootParam;
+	constantRootParam.InitAsConstantBufferView(0, 0);
+	rootParameters.push_back(constantRootParam);
+
+	CD3DX12_VERSIONED_ROOT_SIGNATURE_DESC rootSigDesc;
+	rootSigDesc.Init_1_1(
+		static_cast<uint>(rootParameters.size()),
+		rootParameters.data(),
+		0,
+		nullptr,
+		D3D12_ROOT_SIGNATURE_FLAG_NONE);
+
+	winrt::com_ptr<ID3DBlob> serializedRootSig;
+	winrt::com_ptr<ID3DBlob> errorBlob;
+
+	DX::ThrowIfFailed(D3DX12SerializeVersionedRootSignature(&rootSigDesc, D3D_ROOT_SIGNATURE_VERSION_1_1, serializedRootSig.put(), errorBlob.put()));
+	DX::ThrowIfFailed(d3d12Device->CreateRootSignature(0, serializedRootSig->GetBufferPointer(), serializedRootSig->GetBufferSize(), IID_PPV_ARGS(rootSignatureCSShadows.put())));
+	DX::ThrowIfFailed(rootSignatureCSShadows->SetName(L"Compute Root Signature - Shadows"));
 }
 
 void RaytracedGI::Initialize()
@@ -2744,8 +2991,12 @@ void RaytracedGI::CompileShaders()
 		CompileRaytracingShaders();
 	}
 
-	if (!rootSignatureCS) {
+	/*if (!rootSignatureCS) {
 		CreateComputeRootSignature();
+	}*/
+
+	if (!rootSignatureCSShadows) {
+		CreateComputeRootSignatureShadows();
 		CompileDX12ComputeShaders();
 	}
 
@@ -2829,15 +3080,27 @@ void RaytracedGI::CompileRaytracingShaders()
 
 void RaytracedGI::CompileDX12ComputeShaders()
 {
-	winrt::com_ptr<IDxcBlob> compositeBlob;
-	ShaderUtils::CompileShader(compositeBlob, L"Data/Shaders/RaytracedGI/CompositeCS.hlsl", {}, L"cs_6_3");
+	winrt::com_ptr<IDxcBlob> shaderBlob;
+	ShaderUtils::CompileShader(shaderBlob, L"Data/Shaders/RaytracedGI/RTShadowsCS.hlsl", {}, L"cs_6_5");
 
 	D3D12_COMPUTE_PIPELINE_STATE_DESC computeDesc = {};
-	computeDesc.pRootSignature = rootSignatureCS.get();
-	computeDesc.CS = { compositeBlob->GetBufferPointer(), compositeBlob->GetBufferSize() };
+	computeDesc.pRootSignature = rootSignatureCSShadows.get();
+	computeDesc.CS = { shaderBlob->GetBufferPointer(), shaderBlob->GetBufferSize() };
 
-	DX::ThrowIfFailed(d3d12Device->CreateComputePipelineState(&computeDesc, IID_PPV_ARGS(pipelineCS.put())));
-	DX::ThrowIfFailed(pipelineCS->SetName(L"Compute Pipeline"));
+	DX::ThrowIfFailed(d3d12Device->CreateComputePipelineState(&computeDesc, IID_PPV_ARGS(pipelineCSShadows.put())));
+	DX::ThrowIfFailed(pipelineCSShadows->SetName(L"Compute Pipeline - Shadows"));
+
+	/*{
+		winrt::com_ptr<IDxcBlob> shaderBlob;
+		ShaderUtils::CompileShader(shaderBlob, L"Data/Shaders/RaytracedGI/CompositeCS.hlsl", {}, L"cs_6_3");
+
+		D3D12_COMPUTE_PIPELINE_STATE_DESC computeDesc = {};
+		computeDesc.pRootSignature = rootSignatureCS.get();
+		computeDesc.CS = { shaderBlob->GetBufferPointer(), shaderBlob->GetBufferSize() };
+
+		DX::ThrowIfFailed(d3d12Device->CreateComputePipelineState(&computeDesc, IID_PPV_ARGS(pipelineCS.put())));
+		DX::ThrowIfFailed(pipelineCS->SetName(L"Compute Pipeline"));
+	}*/
 }
 
 void RaytracedGI::CompileComputeShaders()

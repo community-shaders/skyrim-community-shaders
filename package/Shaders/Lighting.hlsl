@@ -3386,17 +3386,19 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #		if defined(RTGI)
 #			if !defined(SNOW)
 #				if defined(SKINNED) || !defined(MODELSPACENORMALS)	
-	float3 worldGeometryNormal = tbnTr[2];
+	float3 worldGeomNormal = tbnTr[2];
 #				else
-	float3 worldGeometryNormal = vertexNormal;	
+	float3 worldGeomNormal = float3(0.0, 0.0, 1.0);	
 #				endif // !defined (SKINNED) && defined (MODELSPACENORMALS)
 
 #				if defined(TRUE_PBR)
-	float3 screenSpaceGeomNormal = normalize(FrameBuffer::WorldToView(worldGeometryNormal, false, eyeIndex));
-	psout.GeomNormalMetalnessDepth = float4(GBuffer::EncodeNormal(screenSpaceGeomNormal), pbrSurfaceProperties.Metallic, 1.0f);
-	psout.NormalGlossiness.w
+	float metallic = pbrSurfaceProperties.Metallic;
+#				else
+	float metallic = 0.0f;
 #				endif
 
+	float3 screenGeomNormal = normalize(FrameBuffer::WorldToView(worldGeomNormal, false, eyeIndex));
+	psout.GeomNormalMetalnessDepth = float4(GBuffer::EncodeNormal(screenGeomNormal), metallic, 1.0f);
 #			endif // !defined(SNOW)
 #		endif // !defined(RTGI)
 #	endif // DEFERRED

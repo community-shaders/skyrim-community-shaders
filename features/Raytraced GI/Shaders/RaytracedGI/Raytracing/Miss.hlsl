@@ -15,11 +15,6 @@ void main(inout IndirectPayload payload)
     float2 disk = float2(r * cos(phi), r * sin(phi));
     float2 uv   = disk * 0.5f + 0.5f;   
 
-    payload.color = Color::GammaToLinear(SkyHemisphere.SampleLevel(DiffuseSampler, uv, 0.0f)) * Frame.Sky;
-    
-#ifdef SPECULAR
-    payload.distance = RayTCurrent();
-#endif
-    
+    payload.color = float4(Color::GammaToLinear(SkyHemisphere.SampleLevel(DiffuseSampler, uv, 0.0f)) * Frame.Sky, 0.0f);  
     payload.data.SetMissed(true);
 }

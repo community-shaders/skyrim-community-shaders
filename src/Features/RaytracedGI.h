@@ -53,10 +53,12 @@ struct RaytracedGI : public Feature
 	{
 		enum Slot : uint32_t
 		{
-			DiffuseGI,
-			SpecularGI,
-			Albedo,
+			Output,
 			Reflectance,
+			SpecularHitDist,
+			Main,
+			Depth,
+			Albedo,
 			NormalRoughness,
 			GNMD, // Geometry Normals + Metalness + Depth
 			TLAS,
@@ -86,7 +88,7 @@ struct RaytracedGI : public Feature
 		};
 	};
 
-	struct ComputeHeapSlot
+	/*struct ComputeHeapSlot
 	{
 		enum Slot : uint32_t
 		{
@@ -110,6 +112,28 @@ struct RaytracedGI : public Feature
 			UAV,
 			SRV,
 			//CBV
+		};
+	};*/
+
+	struct ComputeHeapShadowsSlot
+	{
+		enum Slot : uint32_t
+		{
+			ShadowMask,
+			TLAS,
+			Depth,
+			//GNMD,
+			NumDescriptors,
+			None
+		};
+	};
+
+	struct ComputeHeapShadowsType
+	{
+		enum Type : uint32_t
+		{
+			UAV,
+			SRV
 		};
 	};
 
@@ -148,7 +172,7 @@ struct RaytracedGI : public Feature
 	virtual void SetupResources() override;
 	virtual void ClearShaderCache() override;
 
-	void ShareRT(ID3D11Texture2D* pTexture2D, const HeapSlot::Slot& target, const ComputeHeapSlot::Slot& cTarget, ID3D12Resource** ppResource);
+	void ShareRT(ID3D11Texture2D* pTexture2D, const HeapSlot::Slot& target, const ComputeHeapShadowsSlot::Slot& cTarget, ID3D12Resource** ppResource);
 	void SetupSharedRT();
 	void CompileShaders();
 	void CompileRaytracingShaders();
@@ -159,11 +183,13 @@ struct RaytracedGI : public Feature
 	void InitD3D12(ID3D11Device* ppDevice, ID3D11DeviceContext* pImmediateContext, IDXGIAdapter* a_adapter);
 	void CreateRootSignature();
 	void CreateComputeRootSignature();
+	void CreateComputeRootSignatureShadows();
 	ID3D12Resource* MakeAccelerationStructure(const D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_INPUTS& inputs, UINT64* scratchSize = nullptr, UINT64* updateScratchSize = nullptr);
 	void Flush();
 	ID3D12Resource* MakeBLAS(ID3D12Resource* vertexBuffer, UINT vertices, ID3D12Resource* indexBuffer, UINT indices);
 	ID3D12Resource* MakeTLAS(ID3D12Resource* instances, UINT numInstances, UINT64* scratchSize, UINT64* updateScratchSize);
 	void DrawRTGI();
+	void RenderShadows();
 
 	float3 GammaToLinear(float3 color);
 	eastl::vector<LightLimitFix::LightData> GetPointLights();
@@ -187,6 +213,7 @@ struct RaytracedGI : public Feature
 	void VertexBufferReleased(ID3D11Buffer* pBuffer);
 
 	void UpdateInstances();
+	void UpdateShadowInstances();
 
 	template <typename T>
 	void MakeAndCopy(const eastl::vector<T>& data, winrt::com_ptr<ID3D12Resource>& res);
@@ -241,8 +268,9 @@ struct RaytracedGI : public Feature
 	enum struct DebugOutput : int32_t
 	{
 		None,
-		IndirectGI,
-		SpecularGI,
+		Output,
+		Reflectance,
+		SpecularHitDistance,
 		ReflectangeGBuffer,
 		RoughnessGBuffer,
 		Passthrough
@@ -273,6 +301,7 @@ struct RaytracedGI : public Feature
 		float Point = 1.0f;
 		bool PointFade = true;
 		bool GammaToLinear = false;
+		bool RaytracedShadows = true;
 #ifdef DLSS_RR
 		DLSSRRQuality DLSSRRQualityMode = DLSSRRQuality::MaxQuality;
 #endif
@@ -321,6 +350,18 @@ struct RaytracedGI : public Feature
 	} frameBufferData;
 	static_assert(sizeof(FrameBuffer) % 256 == 0);
 
+	struct ShadowsCB
+	{
+		float4 CameraData;
+		float2 Size;
+		float4 NDCToView;
+		float4x4 ViewInverse;
+		float3 Position;
+		float3 Direction;
+		uint Pad[32];
+	} shadowsCBData;
+	static_assert(sizeof(ShadowsCB) % 256 == 0);
+
 	bool renderingWorld = false;
 	bool lightsUpdated = false;
 
@@ -341,6 +382,7 @@ struct RaytracedGI : public Feature
 		float3 Position;
 		uint16_t Texcoord0[2];
 		uint8_t Normal[4];
+		//uint8_t Tangent[4];
 		uint8_t Color[4];
 	};
 
@@ -479,6 +521,14 @@ struct RaytracedGI : public Feature
 
 	eastl::unique_ptr<DX12::StructuredBufferUpload<FrameBuffer>> frameBuffer = nullptr;
 
+	// Shadows
+	eastl::unique_ptr<DX12::StructuredBufferUpload<D3D12_RAYTRACING_INSTANCE_DESC>> blasShadowInstanceBuffer = nullptr;
+	eastl::vector<D3D12_RAYTRACING_INSTANCE_DESC> blasShadowInstances;
+
+	RE::BSShadowDirectionalLight* shadowLight;
+
+	eastl::unique_ptr<DX12::StructuredBufferUpload<ShadowsCB>> shadowsCB = nullptr;
+
 	// Shaders
 	/*winrt::com_ptr<IDxcBlob> rayGenerationRT = nullptr;
 	winrt::com_ptr<IDxcBlob> missRT = nullptr;
@@ -488,7 +538,8 @@ struct RaytracedGI : public Feature
 	eastl::unique_ptr<DX12::ShaderBindingTable> shaderBindingTable = nullptr;	
 	eastl::unique_ptr<DX12::ResourceUpload> shaderBindingTableBuffer = nullptr;
 
-	winrt::com_ptr<ID3D12PipelineState> pipelineCS = nullptr;
+	//winrt::com_ptr<ID3D12PipelineState> pipelineCS = nullptr;
+	winrt::com_ptr<ID3D12PipelineState> pipelineCSShadows = nullptr;
 
 	// D3D12
 	winrt::com_ptr<ID3D12Device5> d3d12Device = nullptr;
@@ -497,10 +548,12 @@ struct RaytracedGI : public Feature
 	winrt::com_ptr<ID3D12GraphicsCommandList4> commandList = nullptr;
 
 	winrt::com_ptr<ID3D12RootSignature> rootSignature = nullptr;
-	winrt::com_ptr<ID3D12RootSignature> rootSignatureCS = nullptr;
-
+	//winrt::com_ptr<ID3D12RootSignature> rootSignatureCS = nullptr;
+	winrt::com_ptr<ID3D12RootSignature> rootSignatureCSShadows = nullptr;
+	
 	eastl::unique_ptr<DX12::DescriptorHeap<HeapSlot::Slot, HeapType::Type>> commonHeap = nullptr;	
-	eastl::unique_ptr<DX12::DescriptorHeap<ComputeHeapSlot::Slot, ComputeHeapType::Type>> computeHeap = nullptr;	
+	//eastl::unique_ptr<DX12::DescriptorHeap<ComputeHeapSlot::Slot, ComputeHeapType::Type>> computeHeap = nullptr;	
+	eastl::unique_ptr<DX12::DescriptorHeap<ComputeHeapShadowsSlot::Slot, ComputeHeapShadowsType::Type>> computeHeapShadows = nullptr;
 
 	winrt::com_ptr<ID3D11Fence> d3d11Fence = nullptr;
 	winrt::com_ptr<ID3D12Fence> d3d12Fence = nullptr;
@@ -521,21 +574,25 @@ struct RaytracedGI : public Feature
 	eastl::unique_ptr<WrappedResource> skyHemisphere = nullptr;
 	winrt::com_ptr<ID3D11ComputeShader> cubeToHemiCS = nullptr;
 	
-	// Resources
-	eastl::unique_ptr<WrappedResource> finalTexture = nullptr;
-	eastl::unique_ptr<DX12::Texture2D> outputTexture = nullptr;
+	// Shadow maps
+	bool renderingShadowmap = false;
+	eastl::unique_ptr<WrappedResource> shadowMaskTexture = nullptr;
 
-	eastl::unique_ptr<DX12::Texture2D> diffuseGITexture = nullptr;
-	eastl::unique_ptr<DX12::Texture2D> specularGITexture = nullptr;
+	// Resources
+	eastl::unique_ptr<DX12::Texture2D> outputTexture = nullptr;
+	eastl::unique_ptr<DX12::Texture2D> reflectanceTexture = nullptr;
 	eastl::unique_ptr<DX12::Texture2D> specularHitDistanceTexture = nullptr;
 
-	eastl::unique_ptr<DX12::Texture2D> depthTexture = nullptr;
+	eastl::unique_ptr<WrappedResource> depthTexture = nullptr;
 	eastl::unique_ptr<WrappedResource> motionVectorsTexture = nullptr;
 
 	winrt::com_ptr<ID3D12Resource> albedoTexture = nullptr;
-	winrt::com_ptr<ID3D12Resource> reflectanceTexture = nullptr;
 	eastl::unique_ptr<WrappedResource> normalRoughnessTexture = nullptr;
 	winrt::com_ptr<ID3D12Resource> GNMDTexture = nullptr;
+
+	winrt::com_ptr<ID3D12Resource> gbufferReflectanceTexture = nullptr;
+
+	eastl::unique_ptr<WrappedResource> mainTexture = nullptr;
 
 	std::shared_mutex meshMutex;
 	std::shared_mutex bufferMutex;
@@ -911,6 +968,81 @@ struct RaytracedGI : public Feature
 			static inline REL::Relocation<decltype(thunk)> func;
 		};	
 
+		struct BSShadowDirectionalLight_Cull
+		{
+			static void thunk(RE::BSShadowDirectionalLight* oThis, uint32_t& globalShadowLightCount, uint32_t shadowMaskChannel, RE::NiPointer<RE::NiAVObject> cullingScene)
+			{
+				auto& rt = globals::features::raytracedGI;
+
+				if (rt.Active() && !rt.settings.RaytracedShadows)
+					func(oThis, globalShadowLightCount, shadowMaskChannel, cullingScene);
+			}
+
+			static inline REL::Relocation<decltype(thunk)> func;
+		};
+
+		struct BSShadowDirectionalLight_RenderShadowmaps
+		{
+			static void thunk(RE::BSShadowDirectionalLight* light, void* a2)
+			{
+				auto& rt = globals::features::raytracedGI;
+				rt.renderingShadowmap = true;
+
+				// This is effectively bypassed (removing the call freezes the game...)
+				func(light, a2);
+
+				rt.renderingShadowmap = false;
+
+				if (rt.Active() && rt.settings.RaytracedShadows) {
+					rt.shadowLight = light;
+					//rt.UpdateShadowInstances();
+				}
+			}
+
+			static inline REL::Relocation<decltype(thunk)> func;
+		};
+
+		struct BSShaderAccumulator_StartAccumulating
+		{
+			static void thunk(RE::BSGraphics::BSShaderAccumulator* shaderAccumulator, RE::NiCamera const* camera)
+			{
+				auto& rt = globals::features::raytracedGI;
+
+				// Bypassing this alone does absolutely nothing.
+				if (!rt.Active() || !rt.renderingShadowmap || !rt.settings.RaytracedShadows)
+					func(shaderAccumulator, camera);			
+			}
+
+			static inline REL::Relocation<decltype(thunk)> func;
+		};
+
+		struct BSShaderAccumulator_FinishAccumulatingDispatch
+		{
+			static void thunk(RE::BSGraphics::BSShaderAccumulator* shaderAccumulator, uint32_t renderFlags)
+			{
+				auto& rt = globals::features::raytracedGI;
+
+				if (!rt.Active() || !rt.renderingShadowmap || !rt.settings.RaytracedShadows)
+					func(shaderAccumulator, renderFlags);
+			}
+
+			static inline REL::Relocation<decltype(thunk)> func;
+		};
+
+		struct Main_RenderShadowmasks
+		{
+			static void thunk(bool a1)
+			{
+				auto& rt = globals::features::raytracedGI;
+
+				if (rt.Active() && rt.settings.RaytracedShadows)
+					rt.RenderShadows();
+				else
+					func(a1);
+			};
+			static inline REL::Relocation<decltype(thunk)> func;
+		};
+
 		static void Install()
 		{
 			stl::detour_thunk<Main_RenderWorld>(REL::RelocationID(100424, 107142));
@@ -939,6 +1071,14 @@ struct RaytracedGI : public Feature
 			stl::write_vfunc<0x19, BSTriShape_LinkObject>(RE::VTABLE_BSTriShape[0]);
 
 			stl::write_vfunc<0x27, BSLightingShaderProperty_SetupGeometry>(RE::VTABLE_BSLightingShaderProperty[0]); //FinishSetupGeometry = 0x28
+
+			
+			//stl::write_vfunc<0x9, BSShadowDirectionalLight_Cull>(RE::VTABLE_BSShadowDirectionalLight[0]);
+			stl::write_vfunc<0xA, BSShadowDirectionalLight_RenderShadowmaps>(RE::VTABLE_BSShadowDirectionalLight[0]);
+
+			stl::write_vfunc<0x29, BSShaderAccumulator_StartAccumulating>(RE::VTABLE_BSShaderAccumulator[0]);
+			stl::write_vfunc<0x2A, BSShaderAccumulator_FinishAccumulatingDispatch>(RE::VTABLE_BSShaderAccumulator[0]);
+			stl::detour_thunk<Main_RenderShadowmasks>(REL::RelocationID(100422, 107140));
 
 			logger::info("[RTGI] Installed hooks");
 		}

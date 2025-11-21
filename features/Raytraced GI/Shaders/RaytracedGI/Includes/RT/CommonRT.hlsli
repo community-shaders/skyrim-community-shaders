@@ -18,9 +18,13 @@
 #define SPECULAR_RAY_HITGROUP_IDX 2
 #define SPECULAR_RAY_MISS_IDX 2
 
-#define DEFAULT_METALIC 0.0
-#define DEFAULT_SPECULAR float3(0.04, 0.04, 0.04)
+#define DEFAULT_METALNESS 0.0
+#define DEFAULT_SPECULAR float3(0.5, 0.5, 0.5)
+#define DEFAULT_SPECULARF0 float3(0.04, 0.04, 0.04)
 #define DEFAULT_ROUGHNESS 0.5
+
+#define MIN_DIELECTRICS_F0 0.04f
+#define MIN_ROUGHNESS 0.04f
 
 uint InitRandomSeed(uint2 coord, uint2 size, uint frameCount)
 {
@@ -86,7 +90,27 @@ float3 TangentSampleScaled(inout uint randomSeed, float roughness)
     );
 }
 
-float3 SampleHemisphere(float3 normal, float3 tangentSample)
+float3 GGXSample(inout uint randomSeed, float2 alpha)
+{
+    float r1 = Random(randomSeed);
+    float r2 = Random(randomSeed);
+
+    
+    float theta = atan(alpha.y * sqrt(r1) / sqrt(max(1e-6f, 1.0f - r1))); // Walter, Formula (35).
+    float phi = 2.0f * Math::PI * r2; // Walter, Formula (36).
+
+    float sinTheta = sin(theta);
+    float cosTheta = cos(theta);
+
+    // Heitz, Formula (77)
+    float x = cos(phi) * sinTheta * (alpha.x / alpha.y);
+    float y = sin(phi) * sinTheta;
+    float z = cosTheta;
+
+    return normalize(float3(x, y, z));
+}
+
+float3 TangentToWorld(float3 normal, float3 tangentSample)
 {   
     float3 tangent;
     float3 bitangent;
@@ -97,15 +121,102 @@ float3 SampleHemisphere(float3 normal, float3 tangentSample)
            normal * tangentSample.z;
 }
 
-float Luminance(float3 color)
+float D_GGX_Ani(float2 alpha, float3 H)
 {
-    return dot(color, float3(0.2126, 0.7152, 0.0722));
+    float denom = (H.x*H.x) / (alpha.x*alpha.x) + (H.y*H.y) / (alpha.y*alpha.y) + H.z*H.z;
+    return 1.0 / max(Math::PI * alpha.x * alpha.y * denom * denom, EPSILON_DIVISION);
 }
 
-float ProbabilityToSampleDiffuse(float3 difColor, float3 specColor)
+float G1_Smith_Ani(float2 alpha, float3 V)
 {
-	float lumDiffuse = max(0.01f, Luminance(difColor.rgb));
-	float lumSpecular = max(0.01f, Luminance(specColor.rgb));
-	return lumDiffuse / (lumDiffuse + lumSpecular);
+    float a = sqrt((V.x*V.x) / (alpha.x*alpha.x) + (V.y*V.y) / (alpha.y*alpha.y) + V.z*V.z);
+    return 2.0 / (1.0 + sqrt(1.0 + a*a));
 }
+
+float Vis_Smith_Ani(float2 alpha, float3 V, float3 L)
+{
+    return G1_Smith_Ani(alpha, V) * G1_Smith_Ani(alpha, L);
+}
+
+float D_GGX(float roughness, float NdotH)
+{
+    float a = roughness * roughness;
+    float NdotH2 = NdotH * NdotH;
+    float a2 = a * a;
+    float d = NdotH2 * (a2 - 1.0) + 1.0;
+    return (a2 / (Math::PI * d * d));
+}
+
+float Vis_Smith(float roughness, float NdotV, float NdotL)
+{
+    float a = roughness * roughness;
+    float a2 = a * a;   
+    float Vis_SmithV = NdotV + sqrt(a2 + (1.0 - a2) * NdotV * NdotV);
+    float Vis_SmithL = NdotL + sqrt(a2 + (1.0 - a2) * NdotL * NdotL);
+    return max(Vis_SmithV * Vis_SmithL, EPSILON_DIVISION);
+}
+
+float3 F_Schlick(float3 specularColor, float VdotH)
+{
+	float Fc = pow(1 - VdotH, 5);
+	return Fc + (1 - Fc) * specularColor;
+}
+
+float3 ComputeF0Aniso(float3 baseColor, float metallic, float anisotropy)
+{
+    // Dielectric F0
+    float3 dielectricF0 = float3(0.04, 0.04, 0.04);
+
+    // Metal F0 along X and Y axes, scaled by anisotropy
+    float3 F0x = lerp(dielectricF0, baseColor, metallic * (1.0 - anisotropy));
+    float3 F0y = lerp(dielectricF0, baseColor, metallic * (1.0 + anisotropy));
+
+    return float3(F0x.r, F0y.g, max(F0x.b, F0y.b)); // pack for shader use
+}
+
+float3 F_SchlickAniso(float3 F0x, float3 F0y, float VdotH, float tangentH, float bitangentH)
+{
+    float Fc = pow(1.0f - VdotH, 5);
+
+    // interpolate F0 along tangent/bitangent axes
+    float3 F0 = F0x * tangentH*tangentH + F0y * bitangentH*bitangentH;
+
+    return F0 + (1.0f - F0) * Fc;
+}
+
+float3 F_Schlick2(float3 F0, float VdotH)
+{
+    float Fc = pow(1.0 - VdotH, 5.0);
+    return F0 + (1.0 - F0) * Fc;
+}
+
+float3 F_Schlick3(float3 specularColor, float VdotH)
+{
+    float Fc = pow(1.0 - VdotH, 5.0);
+    return (1- Fc) * specularColor + Fc;
+}
+
+float3 F_Schlick(float3 F0, float3 F90, float VdotH)
+{
+    float Fc = pow(1 - VdotH, 5);
+    return F0 + (F90 - F0) * Fc;
+}
+
+float Luminance(float3 rgb)
+{
+    return dot(rgb, float3(0.2126, 0.7152, 0.0722));
+}
+
+float DiffuseProbability(float3 albedo, float3 specular, float metalness, float roughness, float NdotV)
+{
+    if (metalness == 1.0f && roughness == 0.0f) return 0.0f;
+
+    float3 F0 = lerp(float3(0.04,0.04,0.04), specular, metalness);
+    float3 F = F_Schlick(F0, float3(1.0f, 1.0f, 1.0f), NdotV);
+    
+    float specularEnergy = Luminance(F) * (1.0f - 0.5f * roughness);
+    
+    return clamp(1.0f - specularEnergy, 0.1f, 0.9f);
+}
+
 #endif // COMMONRT_HLSI

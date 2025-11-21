@@ -5,15 +5,20 @@
 
 ConstantBuffer<FrameData> Frame                 : register(b0);
 
-Texture2D<float4> AlbedoTexture                 : register(t0, space0);
-Texture2D<float4> ReflectanceTexture            : register(t1, space0);
-Texture2D<snorm float4> NormalRoughnessTexture  : register(t2, space0);
-Texture2D<float4> NormalMetalnessDepthTexture   : register(t3, space0);
+RWTexture2D<float4> OutputTexture               : register(u0);
+RWTexture2D<float4> ReflectanceTexture          : register(u1);
+RWTexture2D<float> SpecularHitDist              : register(u2);
 
-RaytracingAccelerationStructure Scene           : register(t4, space0);
-Texture2D<float3> SkyHemisphere                 : register(t5, space0);
-StructuredBuffer<Light> Lights                  : register(t6, space0);
-StructuredBuffer<Instance> Instances            : register(t7, space0);
+Texture2D<float4> MainTexture                   : register(t0, space0);
+Texture2D<float> DepthTexture                   : register(t1, space0);
+Texture2D<float4> AlbedoTexture                 : register(t2, space0);
+Texture2D<snorm float4> NormalRoughnessTexture  : register(t3, space0);
+Texture2D<float4> GNMXTexture                   : register(t4, space0);
+
+RaytracingAccelerationStructure Scene           : register(t5, space0);
+Texture2D<float3> SkyHemisphere                 : register(t6, space0);
+StructuredBuffer<Light> Lights                  : register(t7, space0);
+StructuredBuffer<Instance> Instances            : register(t8, space0);
 
 StructuredBuffer<Vertex> Vertices[]             : register(t0, space1);
 StructuredBuffer<uint3> Triangles[]             : register(t0, space2);
@@ -28,8 +33,5 @@ RWStructuredBuffer<SharcPackedData>         u_SharcResolvedBuffer       : regist
 
 SamplerState DiffuseSampler                     : register(s0);
 //SamplerState GlowSampler                        : register(s1);
-
-RWTexture2D<float4> DiffuseOutputTexture        : register(u0);
-RWTexture2D<float4> SpecularOutputTexture       : register(u1);
 
 #endif

@@ -80,20 +80,21 @@ void HitMesh(inout IndirectPayload payload, in BuiltInTriangleIntersectionAttrib
     //float3 albedo = Color::Diffuse(diffuseTexture.SampleLevel(DiffuseSampler, texCoord0, 0).rgb);
     //float3 emissive = Color::Diffuse(effectTexture.SampleLevel(DiffuseSampler, texCoord0, 0).rgb) * material.EffectColor.rgb * material.EffectColor.a; 
     
+    const unorm float metalness = Scale01(DEFAULT_METALNESS, Frame.Metalness.x, Frame.Metalness.y);
+	const unorm float roughness = max(Scale01(DEFAULT_ROUGHNESS, Frame.Roughness.x, Frame.Roughness.y), MIN_ROUGHNESS);      
+    
     uint randomSeed = payload.data.GetSeed();
     
-    float3 viewDirection = normalize(WorldRayDirection());
+    //float3 viewDirection = normalize(Frame.Position - worldPosition);
+    float3 viewDirection = normalize(-WorldRayDirection());
     
     // Directional Light
-    Light directionalLight = Frame.Directional;
-    float NdotL = saturate(dot(worldNormal, directionalLight.Vector));
-    NdotL *= TraceRayShadow(Scene, worldPosition, directionalLight.Vector);  
-    payload.color = NdotL * directionalLight.Color * albedo * Frame.Diffuse;
+    payload.color += float4(GGXDirectD(worldPosition, worldNormal, viewDirection, albedo, DEFAULT_SPECULAR, roughness, Frame.Directional), 0.0f);
     
     #if defined(LAMBERT)
     payload.color += LambertianDirect(worldPosition, worldNormal, albedo, instance.LightData, randomSeed);
     #else
-    payload.color += GGXDirect(worldPosition, worldNormal, viewDirection, albedo, DEFAULT_SPECULAR, DEFAULT_ROUGHNESS, instance.LightData, randomSeed);
+    payload.color += float4(GGXDirectP(worldPosition, worldNormal, viewDirection, albedo, DEFAULT_SPECULAR, roughness, instance.LightData, randomSeed), 0.0f);
     #endif
     
     uint currentDepth = payload.data.GetDepth();
@@ -103,7 +104,10 @@ void HitMesh(inout IndirectPayload payload, in BuiltInTriangleIntersectionAttrib
         #if defined(LAMBERT)
         payload.color += LambertianIndirect(worldPosition, worldNormal, albedo, currentDepth, randomSeed);
         #else
-        payload.color += GGXIndirect(worldPosition, worldNormal, worldNormal, viewDirection, albedo, DEFAULT_SPECULAR, DEFAULT_ROUGHNESS, currentDepth, randomSeed);
+        float4 indirect = GGXIndirect(worldPosition, worldNormal, worldNormal, viewDirection, albedo, DEFAULT_SPECULAR, roughness, metalness, currentDepth, randomSeed);
+        indirect.a = RayTCurrent();// * (1.0f - saturate(abs(currentDepth - 1.0f))); // 0,1,2,... to -1,0,1,... to 1,0,1 to 0, 1, 0
+        
+        payload.color += indirect;
         #endif        
     }    
 }
