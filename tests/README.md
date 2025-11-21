@@ -1,8 +1,6 @@
 # Community Shaders Unit Tests
 
-**766 assertions across 56 test cases - ALL PASSING** ✅
-
-Fast, standalone tests for critical Community Shaders logic with zero Skyrim dependencies.
+**812 assertions across 66 test cases** testing actual production code with proper mocks.
 
 ## Quick Start
 
@@ -20,61 +18,16 @@ cd build/ALL/tests/Release
 
 **That's it!** See [QUICKSTART.md](QUICKSTART.md) for 5-minute setup guide.
 
----
+## What's Tested (Real Production Code!)
 
-## Test Coverage
-
-### Test Files (7 total)
-
-1. **`test_simple_utilities.cpp`** (56 assertions)
-
-    - Path normalization, math utilities, formatting, basic alignment
-
-2. **`test_shader_validation.cpp`** (64 assertions)
-
-    - Shader defines, version parsing, feature names, permutations
-
-3. **`test_configuration.cpp`** (84 assertions)
-
-    - JSON/INI parsing, settings validation, error handling
-
-4. **`test_gpu_structures.cpp`** (118 assertions) ⚠️ **CRITICAL**
-
-    - GPU buffer alignment (prevents crashes!)
-    - 16-byte and 64-byte alignment enforcement
-    - Real-world buffer patterns from features
-
-5. **`test_shader_constants.cpp`** (71 assertions) ⚠️ **CRITICAL**
-
-    - Shader register mapping (prevents compilation failures!)
-    - VR vs Flat build consistency
-    - Register range validation
-
-6. **`test_enums_and_types.cpp`** (92 assertions)
-
-    - Enum validation, type safety, flag combinations
-    - Alignment requirements, type traits
-
-7. **`test_conversion_utilities.cpp`** (281 assertions)
-    - Game unit conversions (meters, feet, inches, cm)
-    - Wind/weather conversions (raw to normalized/percent)
-    - Direction conversions, real-world validation
-
-### Coverage Breakdown
-
-| Category          | Assertions | Impact      | Why Critical                  |
-| ----------------- | ---------- | ----------- | ----------------------------- |
-| Conversions       | 281        | 🟠 HIGH     | Accurate game measurements    |
-| GPU Buffers       | 118        | 🔴 CRITICAL | Prevents GPU crashes          |
-| Enums/Types       | 92         | 🟠 HIGH     | Type safety, flag correctness |
-| Configuration     | 84         | 🟠 HIGH     | Prevents invalid settings     |
-| Shader Constants  | 71         | 🔴 CRITICAL | Prevents shader bugs          |
-| Shader Validation | 64         | 🟠 HIGH     | Catches define errors         |
-| Simple Utilities  | 56         | 🟡 MEDIUM   | Logic correctness             |
-
-**Total: 766 assertions covering critical logic paths**
-
----
+-   **Format.cpp**: String formatting, math utilities, path normalization (ACTUAL code)
+-   **FileSystem.cpp**: Path helpers, file operations, JSON diff (ACTUAL code with mocked imgui/json)
+-   **GPU Buffers**: 16-byte and 64-byte alignment validation
+-   **Shader Constants**: Register mapping, VR vs Flat build consistency
+-   **Configuration**: JSON/INI parsing, settings validation
+-   **Game Conversions**: Unit conversions, weather data transformations
+-   **Enums & Types**: Type safety, flag combinations
+-   **API Contracts**: Function signature validation at compile-time
 
 ## Running Tests
 
@@ -109,49 +62,16 @@ ctest -R gpu  # Run GPU tests only
 
 ---
 
-## Design Philosophy
+## Architecture (Industry Best Practice)
 
-### Why Standalone Tests?
+Tests compile actual production code using **proper dependency mocking**:
 
-Most Community Shaders code requires:
+1. **Static Library**: Compiles `src/Utils/*.cpp` with test-compatible settings
+2. **Precompiled Headers**: Provides standard library + mocks for external dependencies
+3. **Mock External Dependencies**: ImGui, nlohmann/json, Skyrim SDK, DirectX
+4. **No Code Duplication**: Tests use real production code, not duplicates
 
--   DirectX 11 device context
--   Skyrim game engine (CommonLibSSE)
--   GPU resources and game state
-
-**Our Solution**: Test the _logic_, not the integration.
-
-✅ **Do:**
-
--   Test utility functions with standalone implementations
--   Validate constants (alignment, sizes, register indices)
--   Test pure algorithms (conversions, parsing, validation)
--   Ensure business logic correctness
-
-❌ **Don't:**
-
--   Try to mock the entire Skyrim engine
--   Test DirectX API calls (no GPU needed!)
--   Compile actual source files with Skyrim dependencies
--   Test tightly-coupled rendering code
-
-### What This Covers
-
-✅ Business logic correctness  
-✅ Math and conversion accuracy  
-✅ GPU alignment requirements  
-✅ Configuration parsing  
-✅ Type safety and enums  
-✅ Shader constant validation
-
-### What This Doesn't Cover
-
-❌ DirectX API integration  
-❌ Actual shader compilation (use Python tests)  
-❌ Feature integration with Skyrim  
-❌ Rendering pipeline
-
----
+**Why Mock?** Industry standard practice - isolates business logic from external dependencies, enabling fast, deterministic tests without heavy UI/game engine dependencies.
 
 ## Writing New Tests
 
@@ -245,60 +165,8 @@ cd build/ALL/tests/Release && ./CommunityShaders_Tests.exe
 
 ---
 
-## Code Coverage
+## Resources
 
-Code coverage runs **automatically in CI** using Clang + Codecov. No local setup needed!
-
-### Viewing Coverage
-
--   **In PRs**: Automatic comment with coverage stats
--   **Dashboard**: https://codecov.io (once token is added)
-
-### Why Not in Pre-commit?
-
-Coverage is 2-3x slower than tests. We prioritize fast commits:
-
--   ✅ Pre-commit: Fast tests (15s)
--   ✅ CI: Coverage (automatic on PRs)
-
-**Current coverage: ~40-50%** of testable utility code (critical areas well-covered!)
-
-For maintainers: See [CODECOV_SETUP_INSTRUCTIONS.md](CODECOV_SETUP_INSTRUCTIONS.md) to enable Codecov.
-
----
-
-## Key Metrics
-
--   **Total Assertions**: 766
--   **Test Cases**: 56
--   **Pass Rate**: 100%
--   **Execution Time**: <1 second
--   **Build Time**: ~5 seconds
--   **False Positives**: 0
--   **Skyrim Dependencies**: 0
-
----
-
-## Contributing
-
-When adding new testable code:
-
-1. ✅ **Write tests first** (TDD when possible)
-2. ✅ **Keep tests standalone** (no Skyrim dependencies)
-3. ✅ **Test edge cases** (zero, negative, boundary values)
-4. ✅ **Use meaningful test names**
-5. ✅ **Run before committing** (pre-commit hook will catch failures)
-
----
-
-## Questions?
-
--   **Quick Setup**: See [QUICKSTART.md](QUICKSTART.md)
--   **Coverage Tools**: See [COVERAGE_GUIDE.md](COVERAGE_GUIDE.md)
--   **Remaining Gaps**: See [GAP_ANALYSIS.md](GAP_ANALYSIS.md)
--   **Examples**: Look at existing test files
--   **Community**: Ask in Community Shaders Discord
-
----
-
-**Tests are production-ready! Keep writing testable code! 🚀**
+-   [QUICKSTART.md](QUICKSTART.md) - 5-minute setup guide
+-   [TROUBLESHOOTING.md](TROUBLESHOOTING.md) - Common issues
+-   [CODECOV_SETUP_INSTRUCTIONS.md](CODECOV_SETUP_INSTRUCTIONS.md) - Coverage setup

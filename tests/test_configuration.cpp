@@ -60,10 +60,15 @@ namespace ConfigValidation
 	{
 		INIPair result;
 
-		// Trim whitespace
+		// Trim leading/trailing whitespace
 		std::string trimmed = line;
-		trimmed.erase(0, trimmed.find_first_not_of(" \t"));
-		trimmed.erase(trimmed.find_last_not_of(" \t") + 1);
+		auto first = trimmed.find_first_not_of(" \t");
+		if (first == std::string::npos) {
+			// Line is all whitespace
+			return result;
+		}
+		auto last = trimmed.find_last_not_of(" \t");
+		trimmed = trimmed.substr(first, last - first + 1);
 
 		// Skip comments and empty lines
 		if (trimmed.empty() || trimmed[0] == ';' || trimmed[0] == '#' || trimmed[0] == '[')
@@ -77,10 +82,22 @@ namespace ConfigValidation
 		result.key = trimmed.substr(0, eqPos);
 		result.value = trimmed.substr(eqPos + 1);
 
-		// Trim key and value
-		result.key.erase(result.key.find_last_not_of(" \t") + 1);
-		result.value.erase(0, result.value.find_first_not_of(" \t"));
-		result.value.erase(result.value.find_last_not_of(" \t") + 1);
+		// Trim key
+		auto keyFirst = result.key.find_first_not_of(" \t");
+		if (keyFirst == std::string::npos) {
+			return result;  // key is all whitespace → invalid
+		}
+		auto keyLast = result.key.find_last_not_of(" \t");
+		result.key = result.key.substr(keyFirst, keyLast - keyFirst + 1);
+
+		// Trim value (allow empty after trimming)
+		auto valFirst = result.value.find_first_not_of(" \t");
+		if (valFirst == std::string::npos) {
+			result.value.clear();
+		} else {
+			auto valLast = result.value.find_last_not_of(" \t");
+			result.value = result.value.substr(valFirst, valLast - valFirst + 1);
+		}
 
 		result.valid = !result.key.empty();
 		return result;

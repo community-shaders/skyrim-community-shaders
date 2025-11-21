@@ -1,127 +1,56 @@
 /**
- * Simple standalone utility tests
- * These test pure C++ logic without any Skyrim dependencies
+ * Simple utility tests
+ * Tests the ACTUAL production code from src/Utils/Format.cpp
  */
 
-#include <algorithm>
+// CRITICAL: Include test stubs FIRST before any project headers
+// This provides std:: types and Skyrim mocks that Format.h needs
+#include "test_stubs.h"
+
+// Now include Catch2 (after stubs to avoid conflicts)
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/matchers/catch_matchers_floating_point.hpp>
 #include <catch2/matchers/catch_matchers_string.hpp>
-#include <cmath>
-#include <filesystem>
-#include <sstream>
-#include <string>
+
+// Include the ACTUAL header we're testing
+// test_stubs.h already provided all the std:: types this needs
+#include "../src/Utils/Format.h"
 
 using Catch::Matchers::ContainsSubstring;
 using Catch::Matchers::Equals;
 using Catch::Matchers::WithinAbs;
 
-// Standalone implementations of utility functions for testing
-// These replicate the logic from the actual codebase
-
-namespace TestUtils
-{
-	/**
-	 * Normalize a file path (from Format.h logic)
-	 */
-	std::string FixFilePath(const std::string& a_path)
-	{
-		std::string lowerFilePath = a_path;
-
-		// Replace all backslashes with forward slashes
-		std::replace(lowerFilePath.begin(), lowerFilePath.end(), '\\', '/');
-
-		// Remove consecutive forward slashes
-		std::string::iterator newEnd = std::unique(lowerFilePath.begin(), lowerFilePath.end(),
-			[](char a, char b) { return a == '/' && b == '/'; });
-		lowerFilePath.erase(newEnd, lowerFilePath.end());
-
-		// Convert all characters to lowercase
-		std::transform(lowerFilePath.begin(), lowerFilePath.end(), lowerFilePath.begin(),
-			[](unsigned char c) { return static_cast<char>(std::tolower(c)); });
-
-		return lowerFilePath;
-	}
-
-	/**
-	 * Calculate percentage (from Format.h logic)
-	 */
-	float CalculatePercentage(float part, float total, float defaultValue = 0.0f)
-	{
-		return (total > 0.0f) ? (part / total * 100.0f) : defaultValue;
-	}
-
-	/**
-	 * Calculate cost per call (from Format.h logic)
-	 */
-	float CalculateCostPerCall(float frameTime, float drawCalls)
-	{
-		return (drawCalls > 0.0f) ? (frameTime / drawCalls) : 0.0f;
-	}
-
-	/**
-	 * Format file size (from Format.h logic)
-	 */
-	std::string FormatFileSize(uint64_t bytes)
-	{
-		if (bytes >= 1024 * 1024) {
-			char buffer[32];
-			sprintf_s(buffer, "%.1f MB", static_cast<float>(bytes) / (1024 * 1024));
-			return buffer;
-		} else {
-			char buffer[32];
-			sprintf_s(buffer, "%.1f KB", static_cast<float>(bytes) / 1024);
-			return buffer;
-		}
-	}
-
-	/**
-	 * Format milliseconds (from Format.h logic)
-	 */
-	std::string FormatMilliseconds(float ms)
-	{
-		if (std::abs(ms) < 1e-4f)
-			return "0 ms";
-		std::ostringstream oss;
-		if (ms < 0.1f)
-			oss << std::fixed << std::setprecision(3) << ms << " ms";
-		else
-			oss << std::fixed << std::setprecision(2) << ms << " ms";
-		return oss.str();
-	}
-}
-
 TEST_CASE("FixFilePath normalizes paths correctly", "[Utilities][Path]")
 {
 	SECTION("Converts backslashes to forward slashes")
 	{
-		REQUIRE(TestUtils::FixFilePath("path\\to\\file.txt") == "path/to/file.txt");
+		REQUIRE(Util::FixFilePath("path\\to\\file.txt") == "path/to/file.txt");
 	}
 
 	SECTION("Removes consecutive slashes")
 	{
-		REQUIRE(TestUtils::FixFilePath("path//to///file.txt") == "path/to/file.txt");
+		REQUIRE(Util::FixFilePath("path//to///file.txt") == "path/to/file.txt");
 	}
 
 	SECTION("Converts to lowercase")
 	{
-		REQUIRE(TestUtils::FixFilePath("Path/To/FILE.TXT") == "path/to/file.txt");
+		REQUIRE(Util::FixFilePath("Path/To/FILE.TXT") == "path/to/file.txt");
 	}
 
 	SECTION("Handles mixed backslashes and forward slashes")
 	{
-		REQUIRE(TestUtils::FixFilePath("Path\\To/Mixed\\Slashes") == "path/to/mixed/slashes");
+		REQUIRE(Util::FixFilePath("Path\\To/Mixed\\Slashes") == "path/to/mixed/slashes");
 	}
 
 	SECTION("Handles empty path")
 	{
-		REQUIRE(TestUtils::FixFilePath("") == "");
+		REQUIRE(Util::FixFilePath("") == "");
 	}
 
 	SECTION("Handles Skyrim-style paths")
 	{
-		REQUIRE(TestUtils::FixFilePath("Data\\SKSE\\Plugins\\CommunityShaders") == "data/skse/plugins/communityshaders");
-		REQUIRE(TestUtils::FixFilePath("Shaders\\Features\\TerrainBlending.hlsl") == "shaders/features/terrainblending.hlsl");
+		REQUIRE(Util::FixFilePath("Data\\SKSE\\Plugins\\CommunityShaders") == "data/skse/plugins/communityshaders");
+		REQUIRE(Util::FixFilePath("Shaders\\Features\\TerrainBlending.hlsl") == "shaders/features/terrainblending.hlsl");
 	}
 }
 
@@ -129,30 +58,30 @@ TEST_CASE("CalculatePercentage computes percentages correctly", "[Utilities][Mat
 {
 	SECTION("Calculates normal percentages")
 	{
-		REQUIRE_THAT(TestUtils::CalculatePercentage(50.0f, 100.0f), WithinAbs(50.0f, 0.001f));
-		REQUIRE_THAT(TestUtils::CalculatePercentage(25.0f, 200.0f), WithinAbs(12.5f, 0.001f));
-		REQUIRE_THAT(TestUtils::CalculatePercentage(1.0f, 3.0f), WithinAbs(33.333f, 0.01f));
+		REQUIRE_THAT(Util::CalculatePercentage(50.0f, 100.0f), WithinAbs(50.0f, 0.001f));
+		REQUIRE_THAT(Util::CalculatePercentage(25.0f, 200.0f), WithinAbs(12.5f, 0.001f));
+		REQUIRE_THAT(Util::CalculatePercentage(1.0f, 3.0f), WithinAbs(33.333f, 0.01f));
 	}
 
 	SECTION("Returns default value when total is zero")
 	{
-		REQUIRE_THAT(TestUtils::CalculatePercentage(10.0f, 0.0f, 0.0f), WithinAbs(0.0f, 0.001f));
-		REQUIRE_THAT(TestUtils::CalculatePercentage(10.0f, 0.0f, 100.0f), WithinAbs(100.0f, 0.001f));
+		REQUIRE_THAT(Util::CalculatePercentage(10.0f, 0.0f, 0.0f), WithinAbs(0.0f, 0.001f));
+		REQUIRE_THAT(Util::CalculatePercentage(10.0f, 0.0f, 100.0f), WithinAbs(100.0f, 0.001f));
 	}
 
 	SECTION("Returns default value when total is negative")
 	{
-		REQUIRE_THAT(TestUtils::CalculatePercentage(10.0f, -5.0f, 0.0f), WithinAbs(0.0f, 0.001f));
+		REQUIRE_THAT(Util::CalculatePercentage(10.0f, -5.0f, 0.0f), WithinAbs(0.0f, 0.001f));
 	}
 
 	SECTION("Handles zero part")
 	{
-		REQUIRE_THAT(TestUtils::CalculatePercentage(0.0f, 100.0f), WithinAbs(0.0f, 0.001f));
+		REQUIRE_THAT(Util::CalculatePercentage(0.0f, 100.0f), WithinAbs(0.0f, 0.001f));
 	}
 
 	SECTION("Handles values over 100%")
 	{
-		REQUIRE_THAT(TestUtils::CalculatePercentage(150.0f, 100.0f), WithinAbs(150.0f, 0.001f));
+		REQUIRE_THAT(Util::CalculatePercentage(150.0f, 100.0f), WithinAbs(150.0f, 0.001f));
 	}
 }
 
@@ -160,18 +89,18 @@ TEST_CASE("CalculateCostPerCall computes per-call cost correctly", "[Utilities][
 {
 	SECTION("Calculates normal cost per call")
 	{
-		REQUIRE_THAT(TestUtils::CalculateCostPerCall(100.0f, 10.0f), WithinAbs(10.0f, 0.001f));
-		REQUIRE_THAT(TestUtils::CalculateCostPerCall(16.67f, 1000.0f), WithinAbs(0.01667f, 0.00001f));
+		REQUIRE_THAT(Util::CalculateCostPerCall(100.0f, 10.0f), WithinAbs(10.0f, 0.001f));
+		REQUIRE_THAT(Util::CalculateCostPerCall(16.67f, 1000.0f), WithinAbs(0.01667f, 0.00001f));
 	}
 
 	SECTION("Returns zero when draw calls is zero")
 	{
-		REQUIRE_THAT(TestUtils::CalculateCostPerCall(100.0f, 0.0f), WithinAbs(0.0f, 0.001f));
+		REQUIRE_THAT(Util::CalculateCostPerCall(100.0f, 0.0f), WithinAbs(0.0f, 0.001f));
 	}
 
 	SECTION("Returns zero when draw calls is negative")
 	{
-		REQUIRE_THAT(TestUtils::CalculateCostPerCall(100.0f, -5.0f), WithinAbs(0.0f, 0.001f));
+		REQUIRE_THAT(Util::CalculateCostPerCall(100.0f, -5.0f), WithinAbs(0.0f, 0.001f));
 	}
 }
 
@@ -179,27 +108,27 @@ TEST_CASE("FormatFileSize formats bytes correctly", "[Utilities][Format]")
 {
 	SECTION("Formats kilobytes")
 	{
-		REQUIRE_THAT(TestUtils::FormatFileSize(512), Equals("0.5 KB"));
-		REQUIRE_THAT(TestUtils::FormatFileSize(1024), Equals("1.0 KB"));
-		REQUIRE_THAT(TestUtils::FormatFileSize(2048), Equals("2.0 KB"));
+		REQUIRE_THAT(Util::FormatFileSize(512), Equals("0.5 KB"));
+		REQUIRE_THAT(Util::FormatFileSize(1024), Equals("1.0 KB"));
+		REQUIRE_THAT(Util::FormatFileSize(2048), Equals("2.0 KB"));
 	}
 
 	SECTION("Formats megabytes")
 	{
-		REQUIRE_THAT(TestUtils::FormatFileSize(1024 * 1024), Equals("1.0 MB"));
-		REQUIRE_THAT(TestUtils::FormatFileSize(5 * 1024 * 1024), Equals("5.0 MB"));
-		REQUIRE_THAT(TestUtils::FormatFileSize(1536 * 1024), Equals("1.5 MB"));
+		REQUIRE_THAT(Util::FormatFileSize(1024 * 1024), Equals("1.0 MB"));
+		REQUIRE_THAT(Util::FormatFileSize(5 * 1024 * 1024), Equals("5.0 MB"));
+		REQUIRE_THAT(Util::FormatFileSize(1536 * 1024), Equals("1.5 MB"));
 	}
 
 	SECTION("Handles very small sizes")
 	{
-		REQUIRE_THAT(TestUtils::FormatFileSize(0), Equals("0.0 KB"));
-		REQUIRE_THAT(TestUtils::FormatFileSize(100), Equals("0.1 KB"));
+		REQUIRE_THAT(Util::FormatFileSize(0), Equals("0.0 KB"));
+		REQUIRE_THAT(Util::FormatFileSize(100), Equals("0.1 KB"));
 	}
 
 	SECTION("Handles large sizes")
 	{
-		REQUIRE_THAT(TestUtils::FormatFileSize(1024ULL * 1024ULL * 1024ULL), Equals("1024.0 MB"));
+		REQUIRE_THAT(Util::FormatFileSize(1024ULL * 1024ULL * 1024ULL), Equals("1024.0 MB"));
 	}
 }
 
@@ -207,25 +136,25 @@ TEST_CASE("FormatMilliseconds formats time correctly", "[Utilities][Format]")
 {
 	SECTION("Formats zero as '0 ms'")
 	{
-		REQUIRE_THAT(TestUtils::FormatMilliseconds(0.0f), Equals("0 ms"));
+		REQUIRE_THAT(Util::FormatMilliseconds(0.0f), Equals("0 ms"));
 	}
 
 	SECTION("Formats small values with 3 decimal places")
 	{
-		REQUIRE_THAT(TestUtils::FormatMilliseconds(0.001f), Equals("0.001 ms"));
-		REQUIRE_THAT(TestUtils::FormatMilliseconds(0.099f), Equals("0.099 ms"));
+		REQUIRE_THAT(Util::FormatMilliseconds(0.001f), Equals("0.001 ms"));
+		REQUIRE_THAT(Util::FormatMilliseconds(0.099f), Equals("0.099 ms"));
 	}
 
 	SECTION("Formats larger values with 2 decimal places")
 	{
-		REQUIRE_THAT(TestUtils::FormatMilliseconds(1.234f), Equals("1.23 ms"));
-		REQUIRE_THAT(TestUtils::FormatMilliseconds(10.567f), Equals("10.57 ms"));
+		REQUIRE_THAT(Util::FormatMilliseconds(1.234f), Equals("1.23 ms"));
+		REQUIRE_THAT(Util::FormatMilliseconds(10.567f), Equals("10.57 ms"));
 	}
 
 	SECTION("Handles negative values")
 	{
 		// Note: actual implementation behavior may vary
-		auto result = TestUtils::FormatMilliseconds(-1.5f);
+		auto result = Util::FormatMilliseconds(-1.5f);
 		REQUIRE_THAT(result, ContainsSubstring("-1.5"));
 		REQUIRE_THAT(result, ContainsSubstring("ms"));
 	}

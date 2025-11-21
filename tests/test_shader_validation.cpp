@@ -19,7 +19,7 @@ namespace ShaderValidation
 	 * Validate shader define name follows conventions
 	 * Community Shaders uses UPPER_SNAKE_CASE for shader defines
 	 */
-	bool IsValidDefineNam(const std::string& name)
+	bool IsValidDefineName(const std::string& name)
 	{
 		if (name.empty())
 			return false;
@@ -141,33 +141,33 @@ TEST_CASE("Shader define name validation", "[Shader][Validation]")
 
 	SECTION("Valid define names")
 	{
-		REQUIRE(IsValidDefineNam("TERRAIN_SHADOWS"));
-		REQUIRE(IsValidDefineNam("SCREEN_SPACE_GI"));
-		REQUIRE(IsValidDefineNam("WETNESS_EFFECTS"));
-		REQUIRE(IsValidDefineNam("IBL"));
-		REQUIRE(IsValidDefineNam("VR"));
-		REQUIRE(IsValidDefineNam("LIGHT_LIMIT_FIX"));
-		REQUIRE(IsValidDefineNam("DYNAMIC_CUBEMAPS"));
-		REQUIRE(IsValidDefineNam("MAX_LIGHTS_32"));
+		REQUIRE(IsValidDefineName("TERRAIN_SHADOWS"));
+		REQUIRE(IsValidDefineName("SCREEN_SPACE_GI"));
+		REQUIRE(IsValidDefineName("WETNESS_EFFECTS"));
+		REQUIRE(IsValidDefineName("IBL"));
+		REQUIRE(IsValidDefineName("VR"));
+		REQUIRE(IsValidDefineName("LIGHT_LIMIT_FIX"));
+		REQUIRE(IsValidDefineName("DYNAMIC_CUBEMAPS"));
+		REQUIRE(IsValidDefineName("MAX_LIGHTS_32"));
 	}
 
 	SECTION("Invalid define names")
 	{
-		REQUIRE_FALSE(IsValidDefineNam("invalid-define"));   // Hyphens not allowed
-		REQUIRE_FALSE(IsValidDefineNam("lowerCase"));        // Lowercase not allowed
-		REQUIRE_FALSE(IsValidDefineNam("Mixed_Case_Name"));  // Mixed case not allowed
-		REQUIRE_FALSE(IsValidDefineNam("has space"));        // Spaces not allowed
-		REQUIRE_FALSE(IsValidDefineNam("special@char"));     // Special chars not allowed
-		REQUIRE_FALSE(IsValidDefineNam(""));                 // Empty not allowed
+		REQUIRE_FALSE(IsValidDefineName("invalid-define"));   // Hyphens not allowed
+		REQUIRE_FALSE(IsValidDefineName("lowerCase"));        // Lowercase not allowed
+		REQUIRE_FALSE(IsValidDefineName("Mixed_Case_Name"));  // Mixed case not allowed
+		REQUIRE_FALSE(IsValidDefineName("has space"));        // Spaces not allowed
+		REQUIRE_FALSE(IsValidDefineName("special@char"));     // Special chars not allowed
+		REQUIRE_FALSE(IsValidDefineName(""));                 // Empty not allowed
 	}
 
 	SECTION("Edge cases")
 	{
-		REQUIRE(IsValidDefineNam("_"));                     // Single underscore valid
-		REQUIRE(IsValidDefineNam("A"));                     // Single letter valid
-		REQUIRE(IsValidDefineNam("_LEADING_UNDERSCORE"));   // Leading underscore valid
-		REQUIRE(IsValidDefineNam("TRAILING_UNDERSCORE_"));  // Trailing underscore valid
-		REQUIRE(IsValidDefineNam("NUMBER_123"));            // Numbers valid
+		REQUIRE(IsValidDefineName("_"));                     // Single underscore valid
+		REQUIRE(IsValidDefineName("A"));                     // Single letter valid
+		REQUIRE(IsValidDefineName("_LEADING_UNDERSCORE"));   // Leading underscore valid
+		REQUIRE(IsValidDefineName("TRAILING_UNDERSCORE_"));  // Trailing underscore valid
+		REQUIRE(IsValidDefineName("NUMBER_123"));            // Numbers valid
 	}
 }
 
