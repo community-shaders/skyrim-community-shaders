@@ -2713,20 +2713,46 @@ namespace SIE
 		auto& cache = ShaderCache::Instance();
 		auto key = task.GetString();
 		auto shaderBlob = cache.GetCompletedShader(task);
-		if (shaderBlob) {
-			logger::debug("Compiling Task succeeded: {}", key);
-			completedTasks++;
-		} else {
-			logger::debug("Compiling Task failed: {}", key);
-			failedTasks++;
+
+		bool shouldLogCompletion = false;
+		double completionTimeMs = 0.0;
+
+		// Perform all completion operations under one mutex acquisition
+		{
+			std::scoped_lock lock(compilationMutex);
+
+			// Update task counters
+			if (shaderBlob) {
+				logger::debug("Compiling Task succeeded: {}", key);
+				completedTasks++;
+			} else {
+				logger::debug("Compiling Task failed: {}", key);
+				failedTasks++;
+			}
+
+			// Update timing
+			LARGE_INTEGER now;
+			QueryPerformanceCounter(&now);
+			totalTime.QuadPart += now.QuadPart - lastCalculation.QuadPart;
+			lastCalculation = now;
+
+			// Check if compilation is complete and set completion time if needed
+			if (completionTime.load(std::memory_order_relaxed) == 0 && completedTasks + failedTasks >= totalTasks) {
+				completionTime.store(now.QuadPart, std::memory_order_relaxed);
+				completionTimeMs = static_cast<double>(now.QuadPart - lastReset.QuadPart) * 1000.0 / frequency.QuadPart;
+				shouldLogCompletion = true;
+			}
+
+			// Update task tracking
+			processedTasks.insert(task);
+			tasksInProgress.erase(task);
 		}
-		LARGE_INTEGER now;
-		QueryPerformanceCounter(&now);
-		totalTime.QuadPart += now.QuadPart - lastCalculation.QuadPart;
-		lastCalculation = now;
-		std::scoped_lock lock(compilationMutex);
-		processedTasks.insert(task);
-		tasksInProgress.erase(task);
+
+		// Log completion outside the lock
+		if (shouldLogCompletion) {
+			logger::debug("Compilation completed in {} ms", GetHumanTime(completionTimeMs));
+		}
+
 		conditionVariable.notify_one();
 	}
 
@@ -2742,6 +2768,7 @@ namespace SIE
 		cacheHitTasks = 0;
 		QueryPerformanceCounter(&lastReset);
 		QueryPerformanceCounter(&lastCalculation);
+		completionTime = { 0 };  // Reset completion time
 		totalTime = { 0 };
 	}
 
@@ -2759,6 +2786,8 @@ namespace SIE
 
 	double CompilationSet::GetEta()
 	{
+		// For ETA calculation, we still use the active compilation time (totalTime)
+		// because it reflects the actual work time, not wall-clock time
 		double totalMs = static_cast<double>(totalTime.QuadPart) * 1000.0 / frequency.QuadPart;
 
 		if (totalMs == 0.0) {
@@ -2771,7 +2800,13 @@ namespace SIE
 
 	std::string CompilationSet::GetStatsString(bool a_timeOnly, bool a_elapsedOnly)
 	{
-		double totalMs = static_cast<double>(totalTime.QuadPart) * 1000.0 / frequency.QuadPart;
+		// Calculate elapsed time since compilation started
+		LARGE_INTEGER currentTime;
+		QueryPerformanceCounter(&currentTime);
+
+		// Use completion time if compilation is finished, otherwise current time
+		int64_t endTime = (completionTime.load(std::memory_order_relaxed) != 0) ? completionTime.load(std::memory_order_relaxed) : currentTime.QuadPart;
+		double totalMs = static_cast<double>(endTime - lastReset.QuadPart) * 1000.0 / frequency.QuadPart;
 
 		if (a_timeOnly) {
 			if (a_elapsedOnly) {

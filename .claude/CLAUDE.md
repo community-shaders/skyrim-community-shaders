@@ -21,22 +21,38 @@ powershell.exe -Command "./BuildRelease.bat [PRESET_NAME]"
 
 **Available Presets** (from CMakePresets.json):
 
--   `ALL` (default) - Builds for SE/AE/VR in single binary
--   `SE` - Skyrim Special Edition only
--   `AE` - Anniversary Edition only
--   `VR` - Skyrim VR only
--   `ALL-TRACY` - Includes Tracy profiler support
--   `ALL-WITH-AUTO-DEPLOYMENT` - Auto-deploys to configured Skyrim directories when template used.
+-   `ALL` (default) - Builds universal binary supporting SE/AE/VR runtime detection
+-   `SE` - Skyrim Special Edition only (compile-time targeting)
+-   `AE` - Anniversary Edition only (compile-time targeting)
+-   `VR` - Skyrim VR only (compile-time targeting)
+-   `PRE-AE` - SE + VR (excludes AE)
+-   `FLATRIM` - SE + AE (excludes VR)
+-   `ALL-TRACY` - Universal binary with Tracy profiler support enabled
+
+**User Preset Template**:
+
+-   `ALL-WITH-AUTO-DEPLOYMENT` - Extends `ALL` with `AUTO_PLUGIN_DEPLOYMENT=ON` (copy template to use)
 
 ### Development Setup
 
 1. Copy `CMakeUserPresets.json.template` → `CMakeUserPresets.json`
 2. Configure `CommunityShadersOutputDir` for auto-deployment to Skyrim installations
-3. Set build options in user preset:
-    - `AUTO_PLUGIN_DEPLOYMENT`: Auto-copy to Skyrim dirs
-    - `AIO_ZIP_TO_DIST`: Creates all-in-one distribution package
-    - `ZIP_TO_DIST`: Creates individual feature packages
-    - `TRACY_SUPPORT`: Enables performance profiling
+3. Set build options in user preset or CMake cache:
+
+**Build Options** (CMake cache variables):
+
+-   `AUTO_PLUGIN_DEPLOYMENT` (default: OFF) - Auto-copy build output to `CommunityShadersOutputDir`
+-   `ZIP_TO_DIST` (default: ON) - Creates individual feature packages as 7z files in `/dist`
+-   `AIO_ZIP_TO_DIST` (default: ON) - Creates all-in-one distribution package as 7z in `/dist`
+-   `TRACY_SUPPORT` (default: OFF) - Enables Tracy profiler integration for performance analysis
+
+**Auto-Deployment Configuration**:
+
+Set `CommunityShadersOutputDir` environment variable to semicolon-separated Skyrim Data directories:
+
+```
+CommunityShadersOutputDir=F:/MySkyrimModpack/mods/CommunityShaders;F:/SteamLibrary/steamapps/common/SkyrimVR/Data;F:/SteamLibrary/steamapps/common/Skyrim Special Edition/Data
+```
 
 ### Shader Development and Testing
 
@@ -73,7 +89,71 @@ hlslkit-generate-defines --log CommunityShaders.log
 hlslkit-buffer-scan --features-dir features/
 ```
 
+### Custom CMake Targets
+
+**Package and Deployment Targets**:
+
+```bash
+# Prepare AIO package structure (automatic with AIO_ZIP_TO_DIST or AUTO_PLUGIN_DEPLOYMENT)
+cmake --build ./build/ALL --target PREPARE_AIO
+
+# Prepare shaders only (useful for CI shader validation)
+cmake --build ./build/ALL --target prepare_shaders
+
+# Copy shaders to deployment directories (when AUTO_PLUGIN_DEPLOYMENT=ON)
+cmake --build ./build/ALL --target COPY_SHADERS
+
+# Create AIO zip package (when AIO_ZIP_TO_DIST=ON)
+cmake --build ./build/ALL --target AIO_ZIP_PACKAGE
+```
+
+**Development Targets**:
+
+```bash
+# Format all C++ and HLSL code (requires clang-format)
+cmake --build ./build/ALL --target FORMAT_CODE
+
+# Generate shader validation configs from game logs (requires PowerShell)
+cmake --build ./build/ALL --target generate_shader_configs
+```
+
 ## Architecture Overview
+
+### Manual packaging targets (detailed)
+
+The project also provides a set of manual packaging targets that create distributable 7z packages or install the project into the AIO folder. These targets are useful when you want precise control over packaging (CI artifacts, local QA, or manual deployment).
+
+Quick commands:
+
+```bash
+# Create the Core package (includes CORE features + plugin DLL)
+cmake --build ./build/ALL --target Package-Core
+
+# Create a manual AIO package (.7z) via install + tar
+cmake --build ./build/ALL --target Package-AIO-Manual
+
+# Create an individual feature package (name is sanitized from the feature folder)
+cmake --build ./build/ALL --target Package-<Feature>
+
+# Install into the AIO folder (installs to build/<preset>/aio)
+cmake --build ./build/ALL --target AIO
+
+# Alternatively use cmake --install to install to a custom prefix
+cmake --install ./build/ALL --prefix <TARGET_DIR>  # installs files according to CMake install() rules
+```
+
+Notes and behaviour:
+
+-   `Package-Core` collects everything marked as CORE and the built plugin into a temporary folder, then tars it to `dist/${PROJECT_NAME}-${UTC_NOW}.7z`.
+-   `Package-<Feature>` targets are generated per feature directory (non-CORE features). They create `${FEATURE}-${UTC_NOW}.7z` in `dist/`.
+-   `Package-AIO-Manual` performs an install to the AIO folder and then creates a single AIO archive. This is similar to the automated `AIO_ZIP_PACKAGE`, but wired as an explicit file-producing custom target (useful for CI reproducibility).
+-   `AIO` target runs `cmake --install` with the `aio` prefix so you can locally inspect the AIO folder layout without creating an archive.
+-   The install-based packaging uses the CMake `install()` rules defined near the top of `CMakeLists.txt` (the project installs `SKSE/Plugins`, copies `package/` and feature folders, and removes the Core placeholder). This makes manual installs and CI artifacts consistent with the runtime AIO layout.
+
+Where to look in `CMakeLists.txt`:
+
+-   Manual packaging targets are defined in the "Manual packaging targets (Package-XXX)" section and create files under `${CMAKE_SOURCE_DIR}/dist`.
+-   The `install()` rules near the top of the file show what gets placed into the AIO layout when running `cmake --install`.
 
 ### Plugin Architecture
 

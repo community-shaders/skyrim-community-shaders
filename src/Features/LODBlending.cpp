@@ -5,13 +5,19 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	LODTerrainBrightness,
 	LODObjectBrightness,
 	LODObjectSnowBrightness,
-	DisableTerrainVertexColors)
+	DisableTerrainVertexColors,
+	LODTerrainGamma,
+	LODObjectGamma,
+	LODObjectSnowGamma)
 
 void LODBlending::DrawSettings()
 {
-	ImGui::SliderFloat("LOD Terrain Brightness", &settings.LODTerrainBrightness, 0.01f, 2.f, "%.2f");
-	ImGui::SliderFloat("LOD Object Brightness", &settings.LODObjectBrightness, 0.01f, 2.f, "%.2f");
-	ImGui::SliderFloat("LOD Object Snow Brightness", &settings.LODObjectSnowBrightness, 0.01f, 2.f, "%.2f");
+	ImGui::SliderFloat("LOD Terrain Brightness", &settings.LODTerrainBrightness, 0.01f, 5.f, "%.2f");
+	ImGui::SliderFloat("LOD Object Brightness", &settings.LODObjectBrightness, 0.01f, 5.f, "%.2f");
+	ImGui::SliderFloat("LOD Object Snow Brightness", &settings.LODObjectSnowBrightness, 0.01f, 5.f, "%.2f");
+	ImGui::SliderFloat("LOD Terrain Gamma", &settings.LODTerrainGamma, 0.1f, 3.f, "%.2f");
+	ImGui::SliderFloat("LOD Object Gamma", &settings.LODObjectGamma, 0.1f, 3.f, "%.2f");
+	ImGui::SliderFloat("LOD Object Snow Gamma", &settings.LODObjectSnowGamma, 0.1f, 3.f, "%.2f");
 	ImGui::Checkbox("Disable Terrain Vertex Colors", (bool*)&settings.DisableTerrainVertexColors);
 	if (auto _tt = Util::HoverTooltipWrapper()) {
 		ImGui::Text(
