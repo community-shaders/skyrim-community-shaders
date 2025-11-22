@@ -165,6 +165,7 @@ struct RaytracedGI : public Feature
 	ID3D12Resource* MakeBLAS(ID3D12Resource* vertexBuffer, UINT vertices, ID3D12Resource* indexBuffer, UINT indices);
 	ID3D12Resource* MakeTLAS(ID3D12Resource* instances, UINT numInstances, UINT64* scratchSize, UINT64* updateScratchSize);
 	void DrawRTGI();
+	void UpdateShadowsFrameBuffer();
 	void RenderShadows();
 
 	float3 GammaToLinear(float3 color);
@@ -481,7 +482,6 @@ struct RaytracedGI : public Feature
 	// Shadows
 	winrt::com_ptr<ID3D12RootSignature> shadowRS = nullptr;
 	winrt::com_ptr<ID3D12StateObject> shadowPipeline = nullptr;
-	eastl::unique_ptr<DX12::ShaderBindingTable> shadowSBT = nullptr;
 	eastl::unique_ptr<DX12::ResourceUpload> shadowSBTBuffer = nullptr;
 	eastl::unique_ptr<DX12::DescriptorHeap<ShadowsHeap::Slot, ShadowsHeap::Table>> shadowHeap = nullptr;
 
@@ -915,6 +915,9 @@ struct RaytracedGI : public Feature
 				auto& rt = globals::features::raytracedGI;
 				rt.renderingShadowmap = true;
 
+				if (rt.Active() && rt.settings.RaytracedShadows)
+					rt.UpdateShadowsFrameBuffer();
+
 				// This is effectively bypassed (removing the call freezes the game...)
 				func(light, a2);
 
@@ -953,6 +956,20 @@ struct RaytracedGI : public Feature
 					func(shaderAccumulator, renderFlags);
 			}
 
+			static inline REL::Relocation<decltype(thunk)> func;
+		};
+
+		struct Main_RenderPlayerView
+		{
+			static void thunk(void* a1, bool a2, bool a3)
+			{
+				auto& rt = globals::features::raytracedGI;
+
+				if (rt.Active() && rt.settings.RaytracedShadows)
+					rt.UpdateShadowsFrameBuffer();
+
+				func(a1, a2, a3);
+			};
 			static inline REL::Relocation<decltype(thunk)> func;
 		};
 
@@ -998,13 +1015,14 @@ struct RaytracedGI : public Feature
 			stl::write_vfunc<0x19, BSTriShape_LinkObject>(RE::VTABLE_BSTriShape[0]);
 
 			stl::write_vfunc<0x27, BSLightingShaderProperty_SetupGeometry>(RE::VTABLE_BSLightingShaderProperty[0]); //FinishSetupGeometry = 0x28
-
-			
+		
 			//stl::write_vfunc<0x9, BSShadowDirectionalLight_Cull>(RE::VTABLE_BSShadowDirectionalLight[0]);
 			stl::write_vfunc<0xA, BSShadowDirectionalLight_RenderShadowmaps>(RE::VTABLE_BSShadowDirectionalLight[0]);
 
 			stl::write_vfunc<0x29, BSShaderAccumulator_StartAccumulating>(RE::VTABLE_BSShaderAccumulator[0]);
 			stl::write_vfunc<0x2A, BSShaderAccumulator_FinishAccumulatingDispatch>(RE::VTABLE_BSShaderAccumulator[0]);
+
+			//stl::detour_thunk<Main_RenderPlayerView>(REL::RelocationID(35560, 36559)); // Used to cache main camera frame buffer
 			stl::detour_thunk<Main_RenderShadowmasks>(REL::RelocationID(100422, 107140));
 
 			logger::info("[RTGI] Installed hooks");

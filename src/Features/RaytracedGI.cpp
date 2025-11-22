@@ -1119,7 +1119,7 @@ void RaytracedGI::CopyDepth()
 	} 
 	else
 	{
-		auto depth = renderer->GetDepthStencilData().depthStencils[RE::RENDER_TARGETS_DEPTHSTENCIL::kMAIN];  // kPOST_ZPREPASS_COPY
+		auto depth = renderer->GetDepthStencilData().depthStencils[RE::RENDER_TARGETS_DEPTHSTENCIL::kMAIN];  // kMAIN kPOST_ZPREPASS_COPY
 
 		context->CSSetShader(copyDepthCS.get(), nullptr, 0);
 
@@ -1129,6 +1129,8 @@ void RaytracedGI::CopyDepth()
 
 		auto dispatchCount = Util::GetScreenDispatchCount();
 		context->Dispatch(dispatchCount.x, dispatchCount.y, 1);
+
+
 	}
 }
 
@@ -1769,7 +1771,16 @@ void RaytracedGI::UpdateInstances()
 
 void RaytracedGI::UpdateShadowInstances()
 {
-	std::lock_guard lock{ meshMutex };
+	auto* playerCamera = RE::PlayerCamera::GetSingleton();
+	auto* tesCamera = playerCamera->currentState->camera;
+
+	RE::NiCamera* camera = FindNiCamera(tesCamera->cameraRoot.get());
+
+	RE::NiFrustum frustum = camera->GetRuntimeData2().viewFrustum;
+
+	logger::info("[RT] Frustum: {}, {}, {}, {}, {}, {}", frustum.fLeft, frustum.fRight, frustum.fBottom, frustum.fTop, frustum.fNear, frustum.fFar);
+
+	/*std::lock_guard lock{ meshMutex };
 
 	if (!shadowLight)
 		return;
@@ -1777,7 +1788,14 @@ void RaytracedGI::UpdateShadowInstances()
 	blasShadowInstances.clear();
 	blasShadowInstances.reserve(instances.size());
 
-	//RE::NiCamera* camera = shadowLight->GetShadowDirectionalLightRuntimeData().cullingCamera.get();
+	auto* playerCamera = RE::PlayerCamera::GetSingleton();
+	auto* tesCamera = playerCamera->currentState->camera;
+
+	RE::NiCamera* camera = FindNiCamera(tesCamera->cameraRoot.get());
+
+	RE::NiFrustum frustrum = camera->GetRuntimeData2().viewFrustum;
+
+	logger::info("[RT] Frustrum: ", frustrum.fLeft, frustrum.fRight, frustrum.fBottom, frustrum.fTop, frustrum.fNear, frustrum.fFar);
 
 	for (auto& [pTriShape, data] : instances) {
 		MeshData& meshData = meshes[data.meshKey];
@@ -1794,7 +1812,7 @@ void RaytracedGI::UpdateShadowInstances()
 	}
 
 	blasShadowInstanceBuffer->UpdateList(blasShadowInstances.data(), blasShadowInstances.size());
-	blasShadowInstanceBuffer->Upload(commandList.get());
+	blasShadowInstanceBuffer->Upload(commandList.get());*/
 }
 
 void RaytracedGI::BSBatchRenderer_RenderPassImmediately(RE::BSRenderPass* pass, uint32_t technique, bool alphaTest, uint32_t renderFlags)
@@ -2189,8 +2207,8 @@ void RaytracedGI::DrawRTGI()
 			tlasDesc.RaytracingAccelerationStructure.Location = tlas->GetGPUVirtualAddress();
 			tlasDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
 
-			d3d12Device->CreateShaderResourceView(nullptr, &tlasDesc, giHeap->CPUHandle(GIHeap::Slot::TLAS));
 			d3d12Device->CreateShaderResourceView(nullptr, &tlasDesc, shadowHeap->CPUHandle(ShadowsHeap::Slot::TLAS));
+			d3d12Device->CreateShaderResourceView(nullptr, &tlasDesc, giHeap->CPUHandle(GIHeap::Slot::TLAS));
 		}
 
 		// TLAS scratch (used for rebuilding)
@@ -2392,16 +2410,40 @@ void RaytracedGI::DrawRTGI()
 	}*/
 }
 
+void RaytracedGI::UpdateShadowsFrameBuffer()
+{
+	shadowsCBData.CameraData = Util::GetCameraData();
+
+	auto eye = Util::GetCameraData(0);
+	float2 ndcToViewMult = float2(2.0f / eye.projMat(0, 0), -2.0f / eye.projMat(1, 1));
+	float2 ndcToViewAdd = float2(-1.0f / eye.projMat(0, 0), 1.0f / eye.projMat(1, 1));
+	shadowsCBData.NDCToView = float4(ndcToViewMult.x, ndcToViewMult.y, ndcToViewAdd.x, ndcToViewAdd.y);
+
+	shadowsCBData.ViewInverse = globals::game::frameBufferCached.GetCameraViewInverse().Transpose();
+
+	float4 cameraPosition = globals::game::frameBufferCached.GetCameraPosAdjust();
+	shadowsCBData.Position = float4(cameraPosition.x, cameraPosition.y, cameraPosition.z, 0.0f);
+
+	if (shadowLight) {
+		auto direction = Float3(-shadowLight->GetShadowDirectionalLightRuntimeData().lightDirection);
+		direction.Normalize();
+		shadowsCBData.Direction = float4(direction.x, direction.y, direction.z, 0.0f);
+	}
+
+	shadowsCB->Update(&shadowsCBData, sizeof(ShadowsFrameData));
+}
+
 void RaytracedGI::RenderShadows()
 {
 	//logger::info("[RT] RenderShadows - ShadowLight [0x{:x}], TLAS [0x{:x}]", reinterpret_cast<uintptr_t>(shadowLight), reinterpret_cast<uintptr_t>(tlas.get()));
 
-	if (!shadowLight || tlas == nullptr)
+	if (!shadowLight || !tlas)
 		return;
 
 	auto rendererRuntimeData = globals::game::renderer->GetRuntimeData();
 	auto shadowMask = rendererRuntimeData.renderTargets[RE::RENDER_TARGETS::kSHADOW_MASK];
 
+	UpdateShadowInstances();
 	CopyDepth();
 
 	// Tell DX11 to finish and wait
@@ -2418,37 +2460,70 @@ void RaytracedGI::RenderShadows()
 
 	// Do DX12 work...
 	{
-		{
-			shadowsCBData.CameraData = Util::GetCameraData();
-			//shadowsCBData.Size = globals::state->screenSize;
+		shadowsCB->Upload(commandList.get());
+		shadowsCB->TransitionBarrier(commandList.get(), D3D12_RESOURCE_STATE_VERTEX_AND_CONSTANT_BUFFER);
 
-			auto eye = Util::GetCameraData(0);
-			float2 ndcToViewMult = float2(2.0f / eye.projMat(0, 0), -2.0f / eye.projMat(1, 1));
-			float2 ndcToViewAdd = float2(-1.0f / eye.projMat(0, 0), 1.0f / eye.projMat(1, 1));
-			shadowsCBData.NDCToView = float4(ndcToViewMult.x, ndcToViewMult.y, ndcToViewAdd.x, ndcToViewAdd.y);
+		/*{
+			shadowsCBData.CameraData = frameBufferData.CameraData;
+			shadowsCBData.NDCToView = frameBufferData.NDCToView;
 
-			shadowsCBData.ViewInverse = globals::game::frameBufferCached.GetCameraViewInverse().Transpose();
+			shadowsCBData.ViewInverse = frameBufferData.ViewInverse;
+			shadowsCBData.Position = float4(frameBufferData.Position.x, frameBufferData.Position.y, frameBufferData.Position.z, 0.0f);
 
-			float4 cameraPosition = globals::game::frameBufferCached.GetCameraPosAdjust();
-			shadowsCBData.Position = float4(cameraPosition.x, cameraPosition.y, cameraPosition.z, 0.0f);
-
-			auto direction = Float3(shadowLight->GetShadowDirectionalLightRuntimeData().lightDirection);
+			auto direction = Float3(-shadowLight->GetShadowDirectionalLightRuntimeData().lightDirection);
 			direction.Normalize();
-			shadowsCBData.Direction = float4(-direction.x, -direction.y, -direction.z, 0.0f);
+			shadowsCBData.Direction = float4(direction.x, direction.y, direction.z, 0.0f);
 
 			shadowsCB->Update(&shadowsCBData, sizeof(ShadowsFrameData));
 			shadowsCB->Upload(commandList.get());
 			shadowsCB->TransitionBarrier(commandList.get(), D3D12_RESOURCE_STATE_VERTEX_AND_CONSTANT_BUFFER);
-		}
+		}*/
 
-		// Build/Rebuild TLAS
-		/*{
+		/*if (tlas == nullptr) {
 			D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_INPUTS inputs = {
 				.Type = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL,
 				.Flags = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_PREFER_FAST_TRACE,
-				.NumDescs = static_cast<uint>(blasShadowInstances.size()),
+				.NumDescs = MAX_INSTANCES,
 				.DescsLayout = D3D12_ELEMENTS_LAYOUT_ARRAY,
-				.InstanceDescs = blasShadowInstanceBuffer->resource->GetGPUVirtualAddress()
+				.InstanceDescs = blasInstanceBuffer->resource->GetGPUVirtualAddress()
+			};
+
+			D3D12_RAYTRACING_ACCELERATION_STRUCTURE_PREBUILD_INFO prebuildInfo;
+			d3d12Device->GetRaytracingAccelerationStructurePrebuildInfo(&inputs, &prebuildInfo);
+
+			auto desc = BASIC_BUFFER_DESC;
+			desc.Flags = D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS;
+
+			// TLAS
+			{
+				desc.Width = prebuildInfo.ResultDataMaxSizeInBytes * TLAS_BUFFER_SIZE_MULT;
+				DX::ThrowIfFailed(d3d12Device->CreateCommittedResource(&DEFAULT_HEAP, D3D12_HEAP_FLAG_NONE, &desc, D3D12_RESOURCE_STATE_RAYTRACING_ACCELERATION_STRUCTURE, nullptr, IID_PPV_ARGS(&tlas)));
+				DX::ThrowIfFailed(tlas->SetName(L"TLAS"));
+
+				// SRV
+				D3D12_SHADER_RESOURCE_VIEW_DESC tlasDesc = {};
+				tlasDesc.ViewDimension = D3D12_SRV_DIMENSION_RAYTRACING_ACCELERATION_STRUCTURE;
+				tlasDesc.RaytracingAccelerationStructure.Location = tlas->GetGPUVirtualAddress();
+				tlasDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
+
+				d3d12Device->CreateShaderResourceView(nullptr, &tlasDesc, shadowHeap->CPUHandle(ShadowsHeap::Slot::TLAS));
+				d3d12Device->CreateShaderResourceView(nullptr, &tlasDesc, giHeap->CPUHandle(GIHeap::Slot::TLAS));
+			}
+
+			// TLAS scratch (used for rebuilding)
+			desc.Width = std::max(prebuildInfo.ScratchDataSizeInBytes * TLAS_BUFFER_SIZE_MULT, 8ULL);
+			DX::ThrowIfFailed(d3d12Device->CreateCommittedResource(&DEFAULT_HEAP, D3D12_HEAP_FLAG_NONE, &desc, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, nullptr, IID_PPV_ARGS(&tlasScratch)));
+			DX::ThrowIfFailed(tlasScratch->SetName(L"TLAS scratch"));
+		}
+
+		// Build/Rebuild TLAS
+		{
+			D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_INPUTS inputs = {
+				.Type = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL,
+				.Flags = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_PREFER_FAST_TRACE,
+				.NumDescs = static_cast<uint>(instanceData.size()),
+				.DescsLayout = D3D12_ELEMENTS_LAYOUT_ARRAY,
+				.InstanceDescs = blasInstanceBuffer->resource->GetGPUVirtualAddress()
 			};
 
 			D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_DESC buildDesc = {
@@ -2486,12 +2561,25 @@ void RaytracedGI::RenderShadows()
 		// Dispatch
 		auto shadowMaskDesc = shadowMaskTexture->resource->GetDesc();
 
-		D3D12_DISPATCH_RAYS_DESC dispatchDesc{};
-		dispatchDesc.Width = static_cast<uint>(shadowMaskDesc.Width);
-		dispatchDesc.Height = shadowMaskDesc.Height;
-		dispatchDesc.Depth = 1;
+		D3D12_GPU_VIRTUAL_ADDRESS sbtAddr = shadowSBTBuffer->resource->GetGPUVirtualAddress();
 
-		shadowSBT->FillDispatchShaderBindingTable(dispatchDesc, shadowSBTBuffer->resource->GetGPUVirtualAddress());
+		D3D12_DISPATCH_RAYS_DESC dispatchDesc = {
+			.RayGenerationShaderRecord = {
+				.StartAddress = sbtAddr,
+				.SizeInBytes = D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES 
+			},
+			.MissShaderTable = { 
+				.StartAddress = sbtAddr + D3D12_RAYTRACING_SHADER_TABLE_BYTE_ALIGNMENT, 
+				.SizeInBytes = D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES 
+			},
+			.HitGroupTable = { 
+				.StartAddress = sbtAddr + 2 * D3D12_RAYTRACING_SHADER_TABLE_BYTE_ALIGNMENT, 
+				.SizeInBytes = D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES 
+			},
+			.Width = static_cast<UINT>(shadowMaskDesc.Width),
+			.Height = shadowMaskDesc.Height,
+			.Depth = 1
+		};
 
 		commandList->DispatchRays(&dispatchDesc);
 
@@ -3072,24 +3160,42 @@ void RaytracedGI::CompileRTShadowsShaders()
 	winrt::com_ptr<IDxcBlob> shadowsRTBlob;
 	ShaderUtils::CompileShader(shadowsRTBlob, L"Data/Shaders/RaytracedGI/ShadowsRT.hlsl");
 
-	DX12::RTPipelineBuilder pipelineBuilder;
-
 	// Init pipeline
 	{
-		// Libraries
-		pipelineBuilder.AddRayGenLib(shadowsRTBlob.get(), L"RayGeneration", L"RayGeneration");
-		pipelineBuilder.AddMissLib(shadowsRTBlob.get(), L"Miss", L"Miss");
+		D3D12_DXIL_LIBRARY_DESC lib = {
+			.DXILLibrary = { 
+				.pShaderBytecode = shadowsRTBlob->GetBufferPointer(),
+				.BytecodeLength = shadowsRTBlob->GetBufferSize() 
+			}
+		};
 
-		// Hit groups
-		pipelineBuilder.AddHitGroup(L"HitGroup");
+		D3D12_HIT_GROUP_DESC hitGroup = { 
+			.HitGroupExport = L"HitGroup",
+			.Type = D3D12_HIT_GROUP_TYPE_TRIANGLES,
+			.ClosestHitShaderImport = L"ClosestHit" 
+		};
 
-		// Shader + pipeline config
-		pipelineBuilder.AddShaderConfig(4, 8);
-		pipelineBuilder.AddGlobalRootSignature(shadowRS.get());
-		pipelineBuilder.AddPipelineConfig(1);
+		D3D12_RAYTRACING_SHADER_CONFIG shaderCfg = {
+			.MaxPayloadSizeInBytes = 4,
+			.MaxAttributeSizeInBytes = 8,
+		};
 
-		auto desc = pipelineBuilder.MakeStateObjectDesc();
-		HRESULT hr = d3d12Device->CreateStateObject(desc, IID_PPV_ARGS(&shadowPipeline));
+		D3D12_GLOBAL_ROOT_SIGNATURE globalSig = { shadowRS.get() };
+
+		D3D12_RAYTRACING_PIPELINE_CONFIG pipelineCfg = { .MaxTraceRecursionDepth = 2 };
+
+		D3D12_STATE_SUBOBJECT subobjects[] = {
+			{ .Type = D3D12_STATE_SUBOBJECT_TYPE_DXIL_LIBRARY, .pDesc = &lib },
+			{ .Type = D3D12_STATE_SUBOBJECT_TYPE_HIT_GROUP, .pDesc = &hitGroup },
+			{ .Type = D3D12_STATE_SUBOBJECT_TYPE_RAYTRACING_SHADER_CONFIG, .pDesc = &shaderCfg },
+			{ .Type = D3D12_STATE_SUBOBJECT_TYPE_GLOBAL_ROOT_SIGNATURE, .pDesc = &globalSig },
+			{ .Type = D3D12_STATE_SUBOBJECT_TYPE_RAYTRACING_PIPELINE_CONFIG, .pDesc = &pipelineCfg }
+		};
+		D3D12_STATE_OBJECT_DESC desc = { .Type = D3D12_STATE_OBJECT_TYPE_RAYTRACING_PIPELINE,
+			.NumSubobjects = std::size(subobjects),
+			.pSubobjects = subobjects };
+
+		HRESULT hr = d3d12Device->CreateStateObject(&desc, IID_PPV_ARGS(&shadowPipeline));
 
 		if (FAILED(hr)) {
 			logger::error("CreateStateObject failed: {}", hr);
@@ -3105,18 +3211,24 @@ void RaytracedGI::CompileRTShadowsShaders()
 		winrt::com_ptr<ID3D12StateObjectProperties> props;
 		shadowPipeline->QueryInterface(props.put());
 
-		shadowSBT = eastl::make_unique<DX12::ShaderBindingTable>(pipelineBuilder.CreateShaderBindingTable(props.get()));
-
-		auto shaderBindingTableSize = shadowSBT->GetTotalSize();
-		logger::debug("[RT] RTShadows SBT size: {}", shaderBindingTableSize);
+		size_t shaderBindingTableSize = D3D12_RAYTRACING_SHADER_TABLE_BYTE_ALIGNMENT * 3;
 
 		shadowSBTBuffer = eastl::make_unique<DX12::ResourceUpload>(d3d12Device.get(), shaderBindingTableSize);
 		shadowSBTBuffer->SetName(L"Shadows SBT");
 
 		std::vector<uint8_t> shaderBindingTableCPU(shaderBindingTableSize);
-		shadowSBT->Build(shaderBindingTableCPU.data());
 
-		shadowSBT->LogShaderBindingTable(shadowSBTBuffer->resource->GetGPUVirtualAddress());
+		void* data = shaderBindingTableCPU.data();
+		auto writeId = [&](const wchar_t* name) {
+			void* id = props->GetShaderIdentifier(name);
+			memcpy(data, id, D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES);
+			data = static_cast<char*>(data) +
+				   D3D12_RAYTRACING_SHADER_TABLE_BYTE_ALIGNMENT;
+		};
+	
+		writeId(L"RayGeneration");
+		writeId(L"Miss");
+		writeId(L"HitGroup");
 
 		shadowSBTBuffer->Update(shaderBindingTableCPU.data(), shaderBindingTableSize);
 		shadowSBTBuffer->Upload(commandList.get());

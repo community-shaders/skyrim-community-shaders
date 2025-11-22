@@ -27,7 +27,7 @@ void RayGeneration()
     
     if (depthView < FP_Z || depth >= SKY_Z)
     {
-        ShadowMask[idx] = float4(direction * 0.5f + 0.5, 1.0f);
+        ShadowMask[idx] = float4(1.0, 0.0, 0.0, 1.0f);
         return;
     }
 
@@ -46,15 +46,9 @@ void RayGeneration()
     Payload payload;
     payload.missed = 0.0f;    
     
-    TraceRay(Scene, RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH | RAY_FLAG_SKIP_CLOSEST_HIT_SHADER | RAY_FLAG_CULL_NON_OPAQUE | RAY_FLAG_SKIP_PROCEDURAL_PRIMITIVES, 0xFF, 0, 0, 0, ray, payload);    
+    TraceRay(Scene, RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH | RAY_FLAG_SKIP_CLOSEST_HIT_SHADER, 0xFF, 0, 0, 0, ray, payload);    
 
-    ShadowMask[idx] = float4(payload.missed, 0.0f, 0.0f, 1.0f);
-}
-
-[shader("closesthit")]
-void ClosestHit(inout Payload payload, in BuiltInTriangleIntersectionAttributes attribs)
-{
-    payload.missed = RayTCurrent();
+    ShadowMask[idx] = float4(payload.missed, depth, 0.0f, 1.0f);
 }
 
 [shader("miss")]
@@ -63,3 +57,8 @@ void Miss(inout Payload payload)
     payload.missed = 1.0f;
 }
 
+[shader("closesthit")]
+void ClosestHit(inout Payload payload, in BuiltInTriangleIntersectionAttributes attribs)
+{
+    payload.missed = 0.0f;
+}
