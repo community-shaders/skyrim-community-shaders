@@ -65,8 +65,9 @@ Write-Host ""
 
 # Run tests
 & $testExe
+$testExitCode = $LASTEXITCODE
 
-if ($LASTEXITCODE -eq 0) {
+if ($testExitCode -eq 0) {
     Write-Host ""
     Write-Host "========================================" -ForegroundColor Cyan
     Write-Host "✅ All Tests Passed!" -ForegroundColor Green

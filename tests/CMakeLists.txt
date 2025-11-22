@@ -111,6 +111,18 @@ option(ENABLE_COVERAGE "Enable code coverage" OFF)
 if(ENABLE_COVERAGE)
     if(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
         message(STATUS "Enabling Clang source-based code coverage")
+
+        # CRITICAL: Apply coverage flags to BOTH the test executable AND the library being tested
+        # Otherwise, we only measure test code, not the production code!
+        target_compile_options(UtilsForTesting PRIVATE
+            -fprofile-instr-generate
+            -fcoverage-mapping
+        )
+        target_link_options(UtilsForTesting PRIVATE
+            -fprofile-instr-generate
+            -fcoverage-mapping
+        )
+
         target_compile_options(${PROJECT_NAME} PRIVATE
             -fprofile-instr-generate
             -fcoverage-mapping

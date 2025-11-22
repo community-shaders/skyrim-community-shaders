@@ -31,12 +31,13 @@ repos:
       hooks:
           - id: run-unit-tests
             name: Run C++ Unit Tests
+            # Script auto-builds tests if not built, so this is safe
             entry: powershell -ExecutionPolicy Bypass -File tests/run_tests.ps1
             language: system
             pass_filenames: false
             files: '(tests/.*\.(cpp|h|hpp)$|src/Utils/.*\.(cpp|h|hpp)$)'
           # Note: Coverage runs automatically in CI on PRs
-          # To test coverage locally: .\tests\run_tests.ps1
+          # Note: run_tests.ps1 auto-builds tests if missing, so this hook won't fail on first commit
 ci:
     autofix_commit_msg: |
         style: 🎨 apply pre-commit.ci formatting
