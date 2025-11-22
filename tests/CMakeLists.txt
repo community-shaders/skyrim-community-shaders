@@ -38,6 +38,12 @@ target_include_directories(UtilsForTesting
         ${CMAKE_SOURCE_DIR}/src
 )
 
+# Link against real nlohmann_json for UtilsForTesting
+target_link_libraries(UtilsForTesting
+    PRIVATE
+        nlohmann_json::nlohmann_json
+)
+
 target_compile_definitions(UtilsForTesting
     PRIVATE
         UNIT_TEST_BUILD
@@ -233,60 +239,6 @@ struct ImVec4 { float x, y, z, w; };
 namespace ImGui {
     // Stub functions - not called by FileSystem
     inline ImGuiIO& GetIO() { static ImGuiIO io; return io; }
-}
-")
-
-# Create mock nlohmann/json.hpp header
-# FileSystem uses json::diff which we mock minimally
-file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/nlohmann/json.hpp" "
-// Mock nlohmann/json for testing
-// Industry practice: Provide minimal mock interface matching only what's used
-#pragma once
-#include <string>
-#include <istream>
-
-namespace nlohmann {
-    // Forward declare json_pointer (needed for at() method)
-    class json_pointer;
-
-    class json {
-    public:
-        // Nested json_pointer class (matches real nlohmann::json API)
-        class json_pointer {
-        public:
-            explicit json_pointer(const std::string&) {}
-        };
-
-        json() = default;
-
-        static json parse(const std::string&) { return json(); }
-        static json diff(const json&, const json&) { return json(); }
-
-        json& operator[](const std::string&) { return *this; }
-        const json& operator[](const std::string&) const { return *this; }
-
-        json& at(const json_pointer&) { return *this; }
-        const json& at(const json_pointer&) const { return *this; }
-
-        std::string value(const std::string&, const std::string& default_val) const {
-            return default_val;
-        }
-
-        std::string dump() const { return \"{}\"; }
-
-        class iterator {
-        public:
-            iterator& operator++() { return *this; }
-            bool operator!=(const iterator&) const { return false; }
-            json& operator*() { static json j; return j; }
-        };
-        iterator begin() { return iterator(); }
-        iterator end() { return iterator(); }
-    };
-}
-
-inline std::istream& operator>>(std::istream& is, nlohmann::json&) {
-    return is;
 }
 ")
 
