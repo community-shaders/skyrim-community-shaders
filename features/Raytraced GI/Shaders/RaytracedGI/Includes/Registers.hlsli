@@ -3,7 +3,7 @@
 
 #include "RaytracedGI/Includes/Types.hlsli"
 
-ConstantBuffer<FrameData> Frame                 : register(b0);
+ConstantBuffer<GIFrameData> Frame               : register(b0);
 
 RWTexture2D<float4> OutputTexture               : register(u0);
 RWTexture2D<float4> ReflectanceTexture          : register(u1);

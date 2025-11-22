@@ -13,6 +13,7 @@
         "bshoshany-thread-pool",
         "clib-util",
         "cppwinrt",
+        "directx12-agility",
         "directx-dxc",
         "directx-headers",
         "directxtex",

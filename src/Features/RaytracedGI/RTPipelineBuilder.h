@@ -78,9 +78,14 @@ namespace DX12
 			// Store hit group name for lifetime
 			hitGroupNames.push_back(hitGroupName);
 
-			closestHitNames.push_back(closestHit);
-			anyHitNames.push_back(anyHit);
-			intersectionNames.push_back(intersection);
+			if (!closestHit.empty())
+				closestHitNames.push_back(closestHit);
+
+			if (!anyHit.empty())
+				anyHitNames.push_back(anyHit);
+
+			if (!intersection.empty())
+				intersectionNames.push_back(intersection);
 
 			hitGroupStorage.emplace_back(eastl::make_unique<D3D12_HIT_GROUP_DESC>(
 				hitGroupNames.back().c_str(),
@@ -141,11 +146,6 @@ namespace DX12
 			return stateObjectDesc.get();
 		}
 
-		// D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES
-		// D3D12_RAYTRACING_SHADER_RECORD_BYTE_ALIGNMENT
-		// 
-		// D3D12_RAYTRACING_SHADER_TABLE_BYTE_ALIGNMENT
-
 		inline std::string ToUtf8(const eastl::wstring& wstr)
 		{
 			if (wstr.empty())
@@ -181,20 +181,20 @@ namespace DX12
 
 			auto writeRecords = [&](const eastl::vector<eastl::wstring>& names, ShaderTableSection& shaderTableSection) {
 				for (const auto& name : names) {
-					logger::info("[RT] Shader Identifier: {}", ToUtf8(name).c_str());
+					logger::debug("[RT] Shader Identifier: {}", ToUtf8(name).c_str());
 
 					ShaderRecord shaderRecord(pipelineProps->GetShaderIdentifier(name.c_str()), D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES);
 					shaderTableSection.AddRecord(shaderRecord);
 				}
 			};
 
-			logger::info("[RT] Writting Raygen Records");
+			logger::debug("[RT] Writting Raygen Records");
 			writeRecords(rayGenNames, shaderBindingTable.RayGen);
 
-			logger::info("[RT] Writting Miss Records");
+			logger::debug("[RT] Writting Miss Records");
 			writeRecords(missNames, shaderBindingTable.Miss);
 
-			logger::info("[RT] Writting HitGroup Records");
+			logger::debug("[RT] Writting HitGroup Records");
 			writeRecords(hitGroupNames, shaderBindingTable.HitGroup);
 
 			return shaderBindingTable;

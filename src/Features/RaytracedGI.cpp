@@ -1,5 +1,6 @@
 #include "RaytracedGI.h"
 #include "InverseSquareLighting.h"
+#include "TerrainBlending.h"
 
 #include "Globals.h"
 #include "State.h"
@@ -27,6 +28,7 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	Point,
 	PointFade,
 	GammaToLinear,
+	RaytracedShadows,
 	DLSSRRQualityMode,
 	DebugOutput,
 	EnablePIXCapture,
@@ -47,6 +49,7 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	Point,
 	PointFade,
 	GammaToLinear,
+	RaytracedShadows,
 	DebugOutput,
 	EnablePIXCapture,
 	EnableDebugDevice)
@@ -227,17 +230,17 @@ void RaytracedGI::SetupResources()
 	auto renderer = globals::game::renderer;
 	auto device = globals::d3d::device;
 
-	commonHeap = eastl::make_unique<DX12::DescriptorHeap<HeapSlot::Slot, HeapType::Type>>(
+	giHeap = eastl::make_unique<DX12::DescriptorHeap<GIHeap::Slot::Values, GIHeap::Table::Values>>(
 		d3d12Device.get(), 
-		D3D12_DESCRIPTOR_HEAP_DESC(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, HeapSlot::NumDescriptors, D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE));
+		D3D12_DESCRIPTOR_HEAP_DESC(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, GIHeap::Slot::NumDescriptors, D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE));
 
 	/*computeHeap = eastl::make_unique<DX12::DescriptorHeap<ComputeHeapSlot::Slot, ComputeHeapType::Type>>(
 		d3d12Device.get(),
 		D3D12_DESCRIPTOR_HEAP_DESC(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, ComputeHeapSlot::NumDescriptors, D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE));*/
 
-	computeHeapShadows = eastl::make_unique<DX12::DescriptorHeap<ComputeHeapShadowsSlot::Slot, ComputeHeapShadowsType::Type>>(
+	shadowHeap = eastl::make_unique<DX12::DescriptorHeap<ShadowsHeap::Slot, ShadowsHeap::Table>>(
 		d3d12Device.get(),
-		D3D12_DESCRIPTOR_HEAP_DESC(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, ComputeHeapShadowsSlot::NumDescriptors, D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE));
+		D3D12_DESCRIPTOR_HEAP_DESC(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, ShadowsHeap::Slot::NumDescriptors, D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE));
 
 	auto mainTex = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMAIN];
 
@@ -268,8 +271,8 @@ void RaytracedGI::SetupResources()
 		srvDesc.Texture2D.PlaneSlice = 0;
 		srvDesc.Texture2D.ResourceMinLODClamp = 0.0f;
 
-		d3d12Device->CreateShaderResourceView(depthTexture->resource.get(), &srvDesc, commonHeap->CPUHandle(HeapSlot::Depth));
-		d3d12Device->CreateShaderResourceView(depthTexture->resource.get(), &srvDesc, computeHeapShadows->CPUHandle(ComputeHeapShadowsSlot::Depth));	
+		d3d12Device->CreateShaderResourceView(depthTexture->resource.get(), &srvDesc, giHeap->CPUHandle(GIHeap::Slot::Depth));
+		d3d12Device->CreateShaderResourceView(depthTexture->resource.get(), &srvDesc, shadowHeap->CPUHandle(ShadowsHeap::Slot::Depth));	
 	}
 
 	// Shadow mask
@@ -297,7 +300,7 @@ void RaytracedGI::SetupResources()
 		uavDesc.ViewDimension = D3D12_UAV_DIMENSION_TEXTURE2D;
 		uavDesc.Format = texDesc.Format;
 
-		d3d12Device->CreateUnorderedAccessView(shadowMaskTexture->resource.get(), nullptr, &uavDesc, computeHeapShadows->CPUHandle(ComputeHeapShadowsSlot::ShadowMask));	
+		d3d12Device->CreateUnorderedAccessView(shadowMaskTexture->resource.get(), nullptr, &uavDesc, shadowHeap->CPUHandle(ShadowsHeap::Slot::ShadowMask));	
 	}
 
 	// UAVs
@@ -321,7 +324,7 @@ void RaytracedGI::SetupResources()
 			uavDesc.ViewDimension = D3D12_UAV_DIMENSION_TEXTURE2D;
 			uavDesc.Format = texDesc.Format;
 
-			d3d12Device->CreateUnorderedAccessView(mainTexture->resource.get(), nullptr, &uavDesc, commonHeap->CPUHandle(HeapSlot::Main));
+			d3d12Device->CreateUnorderedAccessView(mainTexture->resource.get(), nullptr, &uavDesc, giHeap->CPUHandle(GIHeap::Slot::Main));
 		}
 
 		// Motion vector
@@ -347,7 +350,7 @@ void RaytracedGI::SetupResources()
 
 			outputTexture->TransitionBarrier(commandList.get(), D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
 
-			outputTexture->CreateUAV(commonHeap->CPUHandle(HeapSlot::Output));
+			outputTexture->CreateUAV(giHeap->CPUHandle(GIHeap::Slot::Output));
 			//outputTexture->CreateUAV(computeHeap->CPUHandle(ComputeHeapSlot::DiffuseGI));
 		}
 
@@ -358,7 +361,7 @@ void RaytracedGI::SetupResources()
 
 			reflectanceTexture->TransitionBarrier(commandList.get(), D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
 
-			reflectanceTexture->CreateUAV(commonHeap->CPUHandle(HeapSlot::Reflectance));
+			reflectanceTexture->CreateUAV(giHeap->CPUHandle(GIHeap::Slot::Reflectance));
 			//reflectanceTexture->CreateUAV(computeHeap->CPUHandle(ComputeHeapSlot::SpecularGI));	
 		}
 
@@ -367,7 +370,7 @@ void RaytracedGI::SetupResources()
 			specularHitDistanceTexture = eastl::make_unique<DX12::Texture2D>(d3d12Device.get(), mainDesc.Width, mainDesc.Height, DXGI_FORMAT_R16_FLOAT, D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS);
 			specularHitDistanceTexture->SetName(L"Specular Hit Distance Texture");
 
-			reflectanceTexture->CreateUAV(commonHeap->CPUHandle(HeapSlot::SpecularHitDist));
+			reflectanceTexture->CreateUAV(giHeap->CPUHandle(GIHeap::Slot::SpecularHitDist));
 			//specularHitDistanceTexture->CreateUAV(computeHeap->CPUHandle(ComputeHeapSlot::SpecHitDist));
 		}
 
@@ -394,7 +397,7 @@ void RaytracedGI::SetupResources()
 			srvDesc.Texture2D.PlaneSlice = 0;
 			srvDesc.Texture2D.ResourceMinLODClamp = 0.0f;
 
-			d3d12Device->CreateShaderResourceView(normalRoughnessTexture->resource.get(), &srvDesc, commonHeap->CPUHandle(HeapSlot::NormalRoughness));
+			d3d12Device->CreateShaderResourceView(normalRoughnessTexture->resource.get(), &srvDesc, giHeap->CPUHandle(GIHeap::Slot::NormalRoughness));
 		}
 	}
 
@@ -403,7 +406,7 @@ void RaytracedGI::SetupResources()
 		lightBuffer = eastl::make_unique<DX12::StructuredBufferUpload<Light>>(d3d12Device.get(), MAX_LIGHTS);
 		DX::ThrowIfFailed(lightBuffer->resource->SetName(L"Light Buffer"));
 
-		lightBuffer->CreateSRV(commonHeap->CPUHandle(HeapSlot::Lights));
+		lightBuffer->CreateSRV(giHeap->CPUHandle(GIHeap::Slot::Lights));
 	}
 
 	// t4 - Instance buffer
@@ -411,7 +414,7 @@ void RaytracedGI::SetupResources()
 		instanceBuffer = eastl::make_unique<DX12::StructuredBufferUpload<Instance>>(d3d12Device.get(), MAX_INSTANCES);
 		DX::ThrowIfFailed(instanceBuffer->resource->SetName(L"Instance Buffer"));
 
-		instanceBuffer->CreateSRV(commonHeap->CPUHandle(HeapSlot::Instances));
+		instanceBuffer->CreateSRV(giHeap->CPUHandle(GIHeap::Slot::Instances));
 	}
 
 	// Create instance buffer for BLAS
@@ -428,11 +431,11 @@ void RaytracedGI::SetupResources()
 
 	logger::debug("Creating constant buffer...");
 	{
-		frameBuffer = eastl::make_unique<DX12::StructuredBufferUpload<FrameBuffer>>(d3d12Device.get(), 1);
+		frameBuffer = eastl::make_unique<DX12::StructuredBufferUpload<GIFrameData>>(d3d12Device.get(), 1);
 		frameBuffer->TransitionBarrier(commandList.get(), D3D12_RESOURCE_STATE_VERTEX_AND_CONSTANT_BUFFER);
 		DX::ThrowIfFailed(frameBuffer->resource->SetName(L"Frame Buffer"));
 
-		shadowsCB = eastl::make_unique<DX12::StructuredBufferUpload<ShadowsCB>>(d3d12Device.get(), 1);
+		shadowsCB = eastl::make_unique<DX12::StructuredBufferUpload<ShadowsFrameData>>(d3d12Device.get(), 1);
 		shadowsCB->TransitionBarrier(commandList.get(), D3D12_RESOURCE_STATE_VERTEX_AND_CONSTANT_BUFFER);
 		DX::ThrowIfFailed(shadowsCB->resource->SetName(L"Shadows Constant Buffer"));
 	}
@@ -475,7 +478,7 @@ void RaytracedGI::SetupResources()
 		srvDesc.Texture2D.PlaneSlice = 0;
 		srvDesc.Texture2D.ResourceMinLODClamp = 0.0f;
 
-		d3d12Device->CreateShaderResourceView(skyHemisphere->resource.get(), &srvDesc, commonHeap->CPUHandle(HeapSlot::SkyHemisphere));
+		d3d12Device->CreateShaderResourceView(skyHemisphere->resource.get(), &srvDesc, giHeap->CPUHandle(GIHeap::Slot::SkyHemisphere));
 	}
 
 	// Sky cubemap
@@ -886,7 +889,7 @@ LPCWSTR StringViewToLPCWSTR(std::string_view sv)
 	return wstr.c_str();
 }
 
-void RaytracedGI::ShareRT(ID3D11Texture2D* pTexture2D, const HeapSlot::Slot& target, const ComputeHeapShadowsSlot::Slot& cTarget, ID3D12Resource** ppResource)
+void RaytracedGI::ShareRT(ID3D11Texture2D* pTexture2D, const GIHeap::Slot::Values& target, const ShadowsHeap::Slot& cTarget, ID3D12Resource** ppResource)
 {
 	D3D11_TEXTURE2D_DESC desc;
 	pTexture2D->GetDesc(&desc);
@@ -913,21 +916,21 @@ void RaytracedGI::ShareRT(ID3D11Texture2D* pTexture2D, const HeapSlot::Slot& tar
 	srvDesc.Texture2D.PlaneSlice = 0;
 	srvDesc.Texture2D.ResourceMinLODClamp = 0.0f;
 
-	if (target != HeapSlot::None)
-		d3d12Device->CreateShaderResourceView(*ppResource, &srvDesc, commonHeap->CPUHandle(target));
+	if (target != GIHeap::Slot::None)
+		d3d12Device->CreateShaderResourceView(*ppResource, &srvDesc, giHeap->CPUHandle(target));
 
-	if (cTarget != ComputeHeapShadowsSlot::None)
-		d3d12Device->CreateShaderResourceView(*ppResource, &srvDesc, computeHeapShadows->CPUHandle(cTarget));
+	if (cTarget != ShadowsHeap::Slot::None)
+		d3d12Device->CreateShaderResourceView(*ppResource, &srvDesc, shadowHeap->CPUHandle(cTarget));
 }
 
 void RaytracedGI::SetupSharedRT()
 {
 	const auto& rendererRD = globals::game::renderer->GetRuntimeData();
 
-	ShareRT(rendererRD.renderTargets[ALBEDO].texture, HeapSlot::Albedo, ComputeHeapShadowsSlot::None, albedoTexture.put());
-	ShareRT(rendererRD.renderTargets[REFLECTANCE].texture, HeapSlot::None, ComputeHeapShadowsSlot::None, gbufferReflectanceTexture.put());
+	ShareRT(rendererRD.renderTargets[ALBEDO].texture, GIHeap::Slot::Albedo, ShadowsHeap::Slot::None, albedoTexture.put());
+	ShareRT(rendererRD.renderTargets[REFLECTANCE].texture, GIHeap::Slot::None, ShadowsHeap::Slot::None, gbufferReflectanceTexture.put());
 	//ShareRT(rendererRD.renderTargets[NORMALROUGHNESS].texture, HeapSlot::NormalRoughness, ComputeHeapSlot::None, normalRoughnessTexture.put());
-	ShareRT(rendererRD.renderTargets[MASKS2].texture, HeapSlot::GNMD, ComputeHeapShadowsSlot::None, GNMDTexture.put());  // GNMD
+	ShareRT(rendererRD.renderTargets[MASKS2].texture, GIHeap::Slot::GNMD, ShadowsHeap::Slot::None, GNMDTexture.put());  // GNMD
 
 	DX::ThrowIfFailed(albedoTexture->SetName(L"Shared Albedo Texture"));
 	DX::ThrowIfFailed(gbufferReflectanceTexture->SetName(L"Shared Reflectance Texture"));
@@ -1109,16 +1112,24 @@ void RaytracedGI::CopyDepth()
 {
 	auto context = globals::d3d::context;
 	auto renderer = globals::game::renderer;
+	auto tb = globals::features::terrainBlending;
 
-	context->CSSetShader(copyDepthCS.get(), nullptr, 0);
+	if (tb.loaded) {
+		context->CopyResource(depthTexture->resource11, tb.blendedDepthTexture->resource.get());
+	} 
+	else
+	{
+		auto depth = renderer->GetDepthStencilData().depthStencils[RE::RENDER_TARGETS_DEPTHSTENCIL::kMAIN];  // kPOST_ZPREPASS_COPY
 
-	auto depth = renderer->GetDepthStencilData().depthStencils[RE::RENDER_TARGETS_DEPTHSTENCIL::kMAIN]; // kPOST_ZPREPASS_COPY
-	context->CSSetShaderResources(0, 1, &depth.depthSRV);
+		context->CSSetShader(copyDepthCS.get(), nullptr, 0);
 
-	context->CSSetUnorderedAccessViews(0, 1, &depthTexture->uav, nullptr);
+		context->CSSetShaderResources(0, 1, &depth.depthSRV);
 
-	auto dispatchCount = Util::GetScreenDispatchCount();
-	context->Dispatch(dispatchCount.x, dispatchCount.y, 1);
+		context->CSSetUnorderedAccessViews(0, 1, &depthTexture->uav, nullptr);
+
+		auto dispatchCount = Util::GetScreenDispatchCount();
+		context->Dispatch(dispatchCount.x, dispatchCount.y, 1);
+	}
 }
 
 void RaytracedGI::ConvertNormalGlossiness()
@@ -1519,7 +1530,7 @@ void RaytracedGI::AddInstance(RE::BSTriShape* pTriShape)
 			vbDesc.Buffer.StructureByteStride = sizeof(Vertex);
 			vbDesc.Buffer.Flags = D3D12_BUFFER_SRV_FLAG_NONE;
 
-			d3d12Device->CreateShaderResourceView(vertexBuffer->resource.get(), &vbDesc, commonHeap->CPUHandle(HeapSlot::Vertices, registerIndex));
+			d3d12Device->CreateShaderResourceView(vertexBuffer->resource.get(), &vbDesc, giHeap->CPUHandle(GIHeap::Slot::Vertices, registerIndex));
 
 			// Index/Triangle (Structured buffer)
 			D3D12_SHADER_RESOURCE_VIEW_DESC ibDesc = {};
@@ -1531,7 +1542,7 @@ void RaytracedGI::AddInstance(RE::BSTriShape* pTriShape)
 			ibDesc.Buffer.StructureByteStride = sizeof(Triangle);
 			ibDesc.Buffer.Flags = D3D12_BUFFER_SRV_FLAG_NONE;
 
-			d3d12Device->CreateShaderResourceView(triangleBuffer->resource.get(), &ibDesc, commonHeap->CPUHandle(HeapSlot::Triangles, registerIndex));
+			d3d12Device->CreateShaderResourceView(triangleBuffer->resource.get(), &ibDesc, giHeap->CPUHandle(GIHeap::Slot::Triangles, registerIndex));
 
 			// Diffuse Texture
 			if (diffuseTexture) {
@@ -1546,7 +1557,7 @@ void RaytracedGI::AddInstance(RE::BSTriShape* pTriShape)
 				texSrvDesc.Texture2D.PlaneSlice = 0;
 				texSrvDesc.Texture2D.ResourceMinLODClamp = 0.0f;
 
-				d3d12Device->CreateShaderResourceView(diffuseTexture, &texSrvDesc, commonHeap->CPUHandle(HeapSlot::DiffuseTextures, registerIndex));
+				d3d12Device->CreateShaderResourceView(diffuseTexture, &texSrvDesc, giHeap->CPUHandle(GIHeap::Slot::DiffuseTextures, registerIndex));
 			}
 
 			// Glow Texture
@@ -1562,7 +1573,7 @@ void RaytracedGI::AddInstance(RE::BSTriShape* pTriShape)
 				texSrvDesc.Texture2D.PlaneSlice = 0;
 				texSrvDesc.Texture2D.ResourceMinLODClamp = 0.0f;
 
-				d3d12Device->CreateShaderResourceView(effectTexture, &texSrvDesc, commonHeap->CPUHandle(HeapSlot::GlowTextures, registerIndex));
+				d3d12Device->CreateShaderResourceView(effectTexture, &texSrvDesc, giHeap->CPUHandle(GIHeap::Slot::GlowTextures, registerIndex));
 			}		
 		}
 
@@ -2145,12 +2156,12 @@ void RaytracedGI::DrawRTGI()
 		frameBufferData.SHARCScale = settings.SHARCScale / Util::Units::GAME_UNIT_TO_M;
 #endif
 
-		frameBuffer->Update(&frameBufferData, sizeof(FrameBuffer));
+		frameBuffer->Update(&frameBufferData, sizeof(GIFrameData));
 		frameBuffer->Upload(commandList.get());
 		frameBuffer->TransitionBarrier(commandList.get(), D3D12_RESOURCE_STATE_VERTEX_AND_CONSTANT_BUFFER);
 	}
 
-	if (tlas == nullptr && tlasScratch == nullptr)
+	if (tlas == nullptr)
 	{
 		D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_INPUTS inputs = {
 			.Type = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL,
@@ -2178,8 +2189,8 @@ void RaytracedGI::DrawRTGI()
 			tlasDesc.RaytracingAccelerationStructure.Location = tlas->GetGPUVirtualAddress();
 			tlasDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
 
-			d3d12Device->CreateShaderResourceView(nullptr, &tlasDesc, commonHeap->CPUHandle(HeapSlot::TLAS));
-			d3d12Device->CreateShaderResourceView(nullptr, &tlasDesc, computeHeapShadows->CPUHandle(ComputeHeapShadowsSlot::TLAS));
+			d3d12Device->CreateShaderResourceView(nullptr, &tlasDesc, giHeap->CPUHandle(GIHeap::Slot::TLAS));
+			d3d12Device->CreateShaderResourceView(nullptr, &tlasDesc, shadowHeap->CPUHandle(ShadowsHeap::Slot::TLAS));
 		}
 
 		// TLAS scratch (used for rebuilding)
@@ -2221,26 +2232,26 @@ void RaytracedGI::DrawRTGI()
 			commandList->SetPipelineState1(pipelineRT.get());
 			commandList->SetComputeRootSignature(rootSignature.get());
 
-			auto commonHeapPtr = commonHeap->Heap();
+			auto commonHeapPtr = giHeap->Heap();
 			commandList->SetDescriptorHeaps(1, &commonHeapPtr);
 
 			// Parameter 0: UAV table
-			commandList->SetComputeRootDescriptorTable(0, commonHeap->TableGPUHandle(HeapType::UAV));
+			commandList->SetComputeRootDescriptorTable(0, giHeap->TableGPUHandle(GIHeap::Table::UAV));
 
 			// Parameter 1: Fixed SRVs
-			commandList->SetComputeRootDescriptorTable(1, commonHeap->TableGPUHandle(HeapType::SRV));
+			commandList->SetComputeRootDescriptorTable(1, giHeap->TableGPUHandle(GIHeap::Table::SRV));
 
 			// Parameter 2: Vertex buffers
-			commandList->SetComputeRootDescriptorTable(2, commonHeap->TableGPUHandle(HeapType::VertexBuffer));
+			commandList->SetComputeRootDescriptorTable(2, giHeap->TableGPUHandle(GIHeap::Table::VertexBuffer));
 
 			// Parameter 3: Triangle buffers
-			commandList->SetComputeRootDescriptorTable(3, commonHeap->TableGPUHandle(HeapType::TriangleBuffer));
+			commandList->SetComputeRootDescriptorTable(3, giHeap->TableGPUHandle(GIHeap::Table::TriangleBuffer));
 
 			// Parameter 4: Diffuse Textures
-			commandList->SetComputeRootDescriptorTable(4, commonHeap->TableGPUHandle(HeapType::DiffuseTextures));
+			commandList->SetComputeRootDescriptorTable(4, giHeap->TableGPUHandle(GIHeap::Table::DiffuseTextures));
 
 			// Parameter 5: Glow Textures
-			commandList->SetComputeRootDescriptorTable(5, commonHeap->TableGPUHandle(HeapType::GlowTextures));
+			commandList->SetComputeRootDescriptorTable(5, giHeap->TableGPUHandle(GIHeap::Table::GlowTextures));
 
 			// Parameter 6: Constant buffer
 			commandList->SetComputeRootConstantBufferView(6, frameBuffer->resource->GetGPUVirtualAddress());
@@ -2409,7 +2420,7 @@ void RaytracedGI::RenderShadows()
 	{
 		{
 			shadowsCBData.CameraData = Util::GetCameraData();
-			shadowsCBData.Size = globals::state->screenSize;
+			//shadowsCBData.Size = globals::state->screenSize;
 
 			auto eye = Util::GetCameraData(0);
 			float2 ndcToViewMult = float2(2.0f / eye.projMat(0, 0), -2.0f / eye.projMat(1, 1));
@@ -2419,13 +2430,13 @@ void RaytracedGI::RenderShadows()
 			shadowsCBData.ViewInverse = globals::game::frameBufferCached.GetCameraViewInverse().Transpose();
 
 			float4 cameraPosition = globals::game::frameBufferCached.GetCameraPosAdjust();
-			shadowsCBData.Position = float3(cameraPosition.x, cameraPosition.y, cameraPosition.z);
+			shadowsCBData.Position = float4(cameraPosition.x, cameraPosition.y, cameraPosition.z, 0.0f);
 
 			auto direction = Float3(shadowLight->GetShadowDirectionalLightRuntimeData().lightDirection);
 			direction.Normalize();
-			shadowsCBData.Direction = -direction;
+			shadowsCBData.Direction = float4(-direction.x, -direction.y, -direction.z, 0.0f);
 
-			shadowsCB->Update(&shadowsCBData, sizeof(ShadowsCB));
+			shadowsCB->Update(&shadowsCBData, sizeof(ShadowsFrameData));
 			shadowsCB->Upload(commandList.get());
 			shadowsCB->TransitionBarrier(commandList.get(), D3D12_RESOURCE_STATE_VERTEX_AND_CONSTANT_BUFFER);
 		}
@@ -2452,17 +2463,17 @@ void RaytracedGI::RenderShadows()
 			commandList->ResourceBarrier(1, &asBarrier);
 		}*/
 
-		commandList->SetPipelineState(pipelineCSShadows.get());
-		commandList->SetComputeRootSignature(rootSignatureCSShadows.get());
+		commandList->SetPipelineState1(shadowPipeline.get());
+		commandList->SetComputeRootSignature(shadowRS.get());
 
-		auto computeHeapPtr = computeHeapShadows->Heap();
+		auto computeHeapPtr = shadowHeap->Heap();
 		commandList->SetDescriptorHeaps(1, &computeHeapPtr);
 
 		// UAV table
-		commandList->SetComputeRootDescriptorTable(0, computeHeapShadows->TableGPUHandle(ComputeHeapShadowsType::UAV));
+		commandList->SetComputeRootDescriptorTable(0, shadowHeap->TableGPUHandle(ShadowsHeap::Table::UAV));
 
 		// SRV table
-		commandList->SetComputeRootDescriptorTable(1, computeHeapShadows->TableGPUHandle(ComputeHeapShadowsType::SRV));
+		commandList->SetComputeRootDescriptorTable(1, shadowHeap->TableGPUHandle(ShadowsHeap::Table::SRV));
 
 		// Constant buffer
 		commandList->SetComputeRootConstantBufferView(2, shadowsCB->resource->GetGPUVirtualAddress());
@@ -2472,8 +2483,17 @@ void RaytracedGI::RenderShadows()
 		};
 		commandList->ResourceBarrier(_countof(ctuBarrier), ctuBarrier);
 
-		auto dispatchCount = Util::GetScreenDispatchCount();
-		commandList->Dispatch(dispatchCount.x, dispatchCount.y, 1);
+		// Dispatch
+		auto shadowMaskDesc = shadowMaskTexture->resource->GetDesc();
+
+		D3D12_DISPATCH_RAYS_DESC dispatchDesc{};
+		dispatchDesc.Width = static_cast<uint>(shadowMaskDesc.Width);
+		dispatchDesc.Height = shadowMaskDesc.Height;
+		dispatchDesc.Depth = 1;
+
+		shadowSBT->FillDispatchShaderBindingTable(dispatchDesc, shadowSBTBuffer->resource->GetGPUVirtualAddress());
+
+		commandList->DispatchRays(&dispatchDesc);
 
 		CD3DX12_RESOURCE_BARRIER utcBarrier[1] = {
 			CD3DX12_RESOURCE_BARRIER::Transition(shadowMaskTexture->resource.get(), D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_COMMON),
@@ -2795,68 +2815,68 @@ void RaytracedGI::InitD3D12(ID3D11Device* ppDevice, ID3D11DeviceContext* pImmedi
 void RaytracedGI::CreateRootSignature()
 {
 	// UAV range
-	commonHeap->CreateTable(
-		HeapType::UAV, 
+	giHeap->CreateTable(
+		GIHeap::Table::UAV, 
 		D3D12_DESCRIPTOR_RANGE_TYPE_UAV, 
 		{  
-			{ HeapSlot::Output, 1 }, 
-			{ HeapSlot::Reflectance, 1 }, 
-			{ HeapSlot::SpecularHitDist, 1 }
+			{ GIHeap::Slot::Output, 1 }, 
+			{ GIHeap::Slot::Reflectance, 1 }, 
+			{ GIHeap::Slot::SpecularHitDist, 1 }
 		});
 
 	// Fixed SRV ranges (NormalRoughness + GNMD + Scene + Lights + Index map)
-	commonHeap->CreateTable(
-		HeapType::SRV, 
+	giHeap->CreateTable(
+		GIHeap::Table::SRV, 
 		D3D12_DESCRIPTOR_RANGE_TYPE_SRV,
 		{
-			{ HeapSlot::Main, 1 },
-			{ HeapSlot::Depth, 1 },
-			{ HeapSlot::Albedo, 1 },
-			{ HeapSlot::NormalRoughness, 1 },
-			{ HeapSlot::GNMD, 1 },
-			{ HeapSlot::TLAS, 1 },
-			{ HeapSlot::SkyHemisphere, 1 },
-			{ HeapSlot::Lights, 1 },
-			{ HeapSlot::Instances, 1 }		
+			{ GIHeap::Slot::Main, 1 },
+			{ GIHeap::Slot::Depth, 1 },
+			{ GIHeap::Slot::Albedo, 1 },
+			{ GIHeap::Slot::NormalRoughness, 1 },
+			{ GIHeap::Slot::GNMD, 1 },
+			{ GIHeap::Slot::TLAS, 1 },
+			{ GIHeap::Slot::SkyHemisphere, 1 },
+			{ GIHeap::Slot::Lights, 1 },
+			{ GIHeap::Slot::Instances, 1 }		
 		});
 
 
 	// Vertex buffers (unbounded)
-	commonHeap->CreateTable(
-		HeapType::VertexBuffer, 
+	giHeap->CreateTable(
+		GIHeap::Table::VertexBuffer, 
 		D3D12_DESCRIPTOR_RANGE_TYPE_SRV,
 		{
-			{ HeapSlot::Vertices, UINT_MAX, 1, D3D12_DESCRIPTOR_RANGE_FLAG_DESCRIPTORS_VOLATILE }
+			{ GIHeap::Slot::Vertices, UINT_MAX, 1, D3D12_DESCRIPTOR_RANGE_FLAG_DESCRIPTORS_VOLATILE }
 		});
 	
 
 	// Index buffers (unbounded)
-	commonHeap->CreateTable(
-		HeapType::TriangleBuffer, 
+	giHeap->CreateTable(
+		GIHeap::Table::TriangleBuffer, 
 		D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 
 		{ 
-			{ HeapSlot::Triangles, UINT_MAX, 2, D3D12_DESCRIPTOR_RANGE_FLAG_DESCRIPTORS_VOLATILE } 
+			{ GIHeap::Slot::Triangles, UINT_MAX, 2, D3D12_DESCRIPTOR_RANGE_FLAG_DESCRIPTORS_VOLATILE } 
 		});
 	
 
 	// Diffuse Textures (unbounded)
-	commonHeap->CreateTable(
-		HeapType::DiffuseTextures,
+	giHeap->CreateTable(
+		GIHeap::Table::DiffuseTextures,
 		D3D12_DESCRIPTOR_RANGE_TYPE_SRV,
-		{
-			{ HeapSlot::DiffuseTextures, UINT_MAX, 3, D3D12_DESCRIPTOR_RANGE_FLAG_DESCRIPTORS_VOLATILE }	
+		{ 
+			{ GIHeap::Slot::DiffuseTextures, UINT_MAX, 3, D3D12_DESCRIPTOR_RANGE_FLAG_DESCRIPTORS_VOLATILE }	
 		});
 
 	// Glow Textures (unbounded)
-	commonHeap->CreateTable(
-		HeapType::GlowTextures,
+	giHeap->CreateTable(
+		GIHeap::Table::GlowTextures,
 		D3D12_DESCRIPTOR_RANGE_TYPE_SRV,
 		{ 
-			{ HeapSlot::GlowTextures, UINT_MAX, 4, D3D12_DESCRIPTOR_RANGE_FLAG_DESCRIPTORS_VOLATILE } 
+			{ GIHeap::Slot::GlowTextures, UINT_MAX, 4, D3D12_DESCRIPTOR_RANGE_FLAG_DESCRIPTORS_VOLATILE } 
 		});
 
 
-	auto rootParameters = commonHeap->GetRootParameters();
+	auto rootParameters = giHeap->GetRootParameters();
 
 	CD3DX12_ROOT_PARAMETER1 constantRootParam;
 	constantRootParam.InitAsConstantBufferView(0, 0); 
@@ -2889,68 +2909,26 @@ void RaytracedGI::CreateRootSignature()
 	DX::ThrowIfFailed(rootSignature->SetName(L"RT Root Signature"));
 }
 
-void RaytracedGI::CreateComputeRootSignature()
+void RaytracedGI::CreateShadowsRootSignature()
 {
 	// UAV range
-	/*computeHeap->CreateTable(
-		ComputeHeapType::UAV,
+	shadowHeap->CreateTable(
+		ShadowsHeap::Table::UAV,
 		D3D12_DESCRIPTOR_RANGE_TYPE_UAV,
 		{ 
-			{ ComputeHeapSlot::Final, 1 },
-			{ ComputeHeapSlot::DiffuseGI, 1 },
-			{ ComputeHeapSlot::SpecularGI, 1 },
-			{ ComputeHeapSlot::SpecHitDist, 1 },
-			{ ComputeHeapSlot::Depth, 1 }
-		});
-
-	// SRV range
-	computeHeap->CreateTable(
-		ComputeHeapType::SRV,
-		D3D12_DESCRIPTOR_RANGE_TYPE_SRV,
-		{
-			{ ComputeHeapSlot::GNMD, 1 },
-			{ ComputeHeapSlot::Albedo, 1 },
-			{ ComputeHeapSlot::Reflectance, 1 }
-		});
-
-	auto rootParameters = computeHeap->GetRootParameters();
-
-	CD3DX12_VERSIONED_ROOT_SIGNATURE_DESC rootSigDesc;
-	rootSigDesc.Init_1_1(
-		static_cast<uint>(rootParameters.size()),
-		rootParameters.data(),
-		0,
-		nullptr,
-		D3D12_ROOT_SIGNATURE_FLAG_NONE);
-
-	winrt::com_ptr<ID3DBlob> serializedRootSig;
-	winrt::com_ptr<ID3DBlob> errorBlob;
-
-	DX::ThrowIfFailed(D3DX12SerializeVersionedRootSignature(&rootSigDesc, D3D_ROOT_SIGNATURE_VERSION_1_1, serializedRootSig.put(), errorBlob.put()));
-	DX::ThrowIfFailed(d3d12Device->CreateRootSignature(0, serializedRootSig->GetBufferPointer(), serializedRootSig->GetBufferSize(), IID_PPV_ARGS(rootSignatureCS.put())));
-	DX::ThrowIfFailed(rootSignatureCS->SetName(L"Compute Root Signature"));*/
-}
-
-void RaytracedGI::CreateComputeRootSignatureShadows()
-{
-	// UAV range
-	computeHeapShadows->CreateTable(
-		ComputeHeapShadowsType::UAV,
-		D3D12_DESCRIPTOR_RANGE_TYPE_UAV,
-		{ 
-			{ ComputeHeapShadowsSlot::ShadowMask, 1 } 
+			{ ShadowsHeap::Slot::ShadowMask, 1 } 
 		});
 
 	// SRV
-	computeHeapShadows->CreateTable(
-		ComputeHeapShadowsType::SRV,
+	shadowHeap->CreateTable(
+		ShadowsHeap::Table::SRV,
 		D3D12_DESCRIPTOR_RANGE_TYPE_SRV,
 		{	
-			{ ComputeHeapShadowsSlot::Depth, 1 },
-			{ ComputeHeapShadowsSlot::TLAS, 1 }
+			{ ShadowsHeap::Slot::Depth, 1 },
+			{ ShadowsHeap::Slot::TLAS, 1 }
 		});
 
-	auto rootParameters = computeHeapShadows->GetRootParameters();
+	auto rootParameters = shadowHeap->GetRootParameters();
 
 	CD3DX12_ROOT_PARAMETER1 constantRootParam;
 	constantRootParam.InitAsConstantBufferView(0, 0);
@@ -2964,12 +2942,20 @@ void RaytracedGI::CreateComputeRootSignatureShadows()
 		nullptr,
 		D3D12_ROOT_SIGNATURE_FLAG_NONE);
 
-	winrt::com_ptr<ID3DBlob> serializedRootSig;
-	winrt::com_ptr<ID3DBlob> errorBlob;
+	winrt::com_ptr<ID3DBlob> signature;
+	winrt::com_ptr<ID3DBlob> error;
 
-	DX::ThrowIfFailed(D3DX12SerializeVersionedRootSignature(&rootSigDesc, D3D_ROOT_SIGNATURE_VERSION_1_1, serializedRootSig.put(), errorBlob.put()));
-	DX::ThrowIfFailed(d3d12Device->CreateRootSignature(0, serializedRootSig->GetBufferPointer(), serializedRootSig->GetBufferSize(), IID_PPV_ARGS(rootSignatureCSShadows.put())));
-	DX::ThrowIfFailed(rootSignatureCSShadows->SetName(L"Compute Root Signature - Shadows"));
+	HRESULT hr = D3DX12SerializeVersionedRootSignature(&rootSigDesc, D3D_ROOT_SIGNATURE_VERSION_1_1, signature.put(), error.put());
+
+	if (FAILED(hr)) {
+		if (error) {
+			logger::error("[RT] D3DX12SerializeVersionedRootSignature {}", (char*)error->GetBufferPointer());
+		}
+		DX::ThrowIfFailed(hr);
+	}
+
+	DX::ThrowIfFailed(d3d12Device->CreateRootSignature(0, signature->GetBufferPointer(), signature->GetBufferSize(), IID_PPV_ARGS(&shadowRS)));
+	DX::ThrowIfFailed(shadowRS->SetName(L"Shadow Root Signature"));
 }
 
 void RaytracedGI::Initialize()
@@ -2988,32 +2974,34 @@ void RaytracedGI::CompileShaders()
 {
 	if (!rootSignature) {
 		CreateRootSignature();
-		CompileRaytracingShaders();
+		CompileRTGIShaders();
 	}
 
 	/*if (!rootSignatureCS) {
 		CreateComputeRootSignature();
 	}*/
 
-	if (!rootSignatureCSShadows) {
-		CreateComputeRootSignatureShadows();
-		CompileDX12ComputeShaders();
+	if (!shadowRS) {
+		CreateShadowsRootSignature();
+		CompileRTShadowsShaders();
 	}
+
+	//CompileDX12ComputeShaders();
 
 	CompileComputeShaders();
 }
 
-void RaytracedGI::CompileRaytracingShaders()
+void RaytracedGI::CompileRTGIShaders()
 {
 	winrt::com_ptr<IDxcBlob> rayGenBlob;
-	ShaderUtils::CompileShader(rayGenBlob, L"Data/Shaders/RaytracedGI/Raytracing/RayGeneration.hlsl");
+	ShaderUtils::CompileShader(rayGenBlob, L"Data/Shaders/RaytracedGI/GI/RayGeneration.hlsl");
 
 	winrt::com_ptr<IDxcBlob> diffuseMissBlob, diffuseClosestHitBlob;
-	ShaderUtils::CompileShader(diffuseMissBlob, L"Data/Shaders/RaytracedGI/Raytracing/Miss.hlsl");
-	ShaderUtils::CompileShader(diffuseClosestHitBlob, L"Data/Shaders/RaytracedGI/Raytracing/ClosestHit.hlsl");
+	ShaderUtils::CompileShader(diffuseMissBlob, L"Data/Shaders/RaytracedGI/GI/Miss.hlsl");
+	ShaderUtils::CompileShader(diffuseClosestHitBlob, L"Data/Shaders/RaytracedGI/GI/ClosestHit.hlsl");
 
 	winrt::com_ptr<IDxcBlob> shadowMissBlob;
-	ShaderUtils::CompileShader(shadowMissBlob, L"Data/Shaders/RaytracedGI/Raytracing/ShadowMiss.hlsl");
+	ShaderUtils::CompileShader(shadowMissBlob, L"Data/Shaders/RaytracedGI/GI/ShadowMiss.hlsl");
 
 	/*winrt::com_ptr<IDxcBlob> specularMissBlob, specularClosestHitBlob;
 	ShaderUtils::CompileShader(specularMissBlob, L"Data/Shaders/RaytracedGI/Raytracing/Miss.hlsl", { { L"SPECULAR", nullptr } });
@@ -3041,7 +3029,7 @@ void RaytracedGI::CompileRaytracingShaders()
 		// Shader + pipeline config
 		pipelineBuilder.AddShaderConfig(20, 8);
 		pipelineBuilder.AddGlobalRootSignature(rootSignature.get());
-		pipelineBuilder.AddPipelineConfig(6);
+		pipelineBuilder.AddPipelineConfig(4);
 
 		auto desc = pipelineBuilder.MakeStateObjectDesc();
 		HRESULT hr = d3d12Device->CreateStateObject(desc, IID_PPV_ARGS(&pipelineRT));
@@ -3063,9 +3051,10 @@ void RaytracedGI::CompileRaytracingShaders()
 		shaderBindingTable = eastl::make_unique<DX12::ShaderBindingTable>(pipelineBuilder.CreateShaderBindingTable(props.get()));
 
 		auto shaderBindingTableSize = shaderBindingTable->GetTotalSize();
-		logger::info("[RT] Shader Binding Table size: {}", shaderBindingTableSize);
+		logger::debug("[RT] GI SBT size: {}", shaderBindingTableSize);
 
 		shaderBindingTableBuffer = eastl::make_unique<DX12::ResourceUpload>(d3d12Device.get(), shaderBindingTableSize);
+		shaderBindingTableBuffer->SetName(L"GI SBT");
 
 		std::vector<uint8_t> shaderBindingTableCPU(shaderBindingTableSize);
 		shaderBindingTable->Build(shaderBindingTableCPU.data());
@@ -3078,9 +3067,66 @@ void RaytracedGI::CompileRaytracingShaders()
 	}
 }
 
+void RaytracedGI::CompileRTShadowsShaders()
+{
+	winrt::com_ptr<IDxcBlob> shadowsRTBlob;
+	ShaderUtils::CompileShader(shadowsRTBlob, L"Data/Shaders/RaytracedGI/ShadowsRT.hlsl");
+
+	DX12::RTPipelineBuilder pipelineBuilder;
+
+	// Init pipeline
+	{
+		// Libraries
+		pipelineBuilder.AddRayGenLib(shadowsRTBlob.get(), L"RayGeneration", L"RayGeneration");
+		pipelineBuilder.AddMissLib(shadowsRTBlob.get(), L"Miss", L"Miss");
+
+		// Hit groups
+		pipelineBuilder.AddHitGroup(L"HitGroup");
+
+		// Shader + pipeline config
+		pipelineBuilder.AddShaderConfig(4, 8);
+		pipelineBuilder.AddGlobalRootSignature(shadowRS.get());
+		pipelineBuilder.AddPipelineConfig(1);
+
+		auto desc = pipelineBuilder.MakeStateObjectDesc();
+		HRESULT hr = d3d12Device->CreateStateObject(desc, IID_PPV_ARGS(&shadowPipeline));
+
+		if (FAILED(hr)) {
+			logger::error("CreateStateObject failed: {}", hr);
+		}
+
+		DX::ThrowIfFailed(hr);
+
+		DX::ThrowIfFailed(shadowPipeline->SetName(L"Shadow Pipeline"));
+	}
+
+	// Init shader tables
+	{
+		winrt::com_ptr<ID3D12StateObjectProperties> props;
+		shadowPipeline->QueryInterface(props.put());
+
+		shadowSBT = eastl::make_unique<DX12::ShaderBindingTable>(pipelineBuilder.CreateShaderBindingTable(props.get()));
+
+		auto shaderBindingTableSize = shadowSBT->GetTotalSize();
+		logger::debug("[RT] RTShadows SBT size: {}", shaderBindingTableSize);
+
+		shadowSBTBuffer = eastl::make_unique<DX12::ResourceUpload>(d3d12Device.get(), shaderBindingTableSize);
+		shadowSBTBuffer->SetName(L"Shadows SBT");
+
+		std::vector<uint8_t> shaderBindingTableCPU(shaderBindingTableSize);
+		shadowSBT->Build(shaderBindingTableCPU.data());
+
+		shadowSBT->LogShaderBindingTable(shadowSBTBuffer->resource->GetGPUVirtualAddress());
+
+		shadowSBTBuffer->Update(shaderBindingTableCPU.data(), shaderBindingTableSize);
+		shadowSBTBuffer->Upload(commandList.get());
+		shadowSBTBuffer->TransitionBarrier(commandList.get(), D3D12_RESOURCE_STATE_GENERIC_READ);
+	}
+}
+
 void RaytracedGI::CompileDX12ComputeShaders()
 {
-	winrt::com_ptr<IDxcBlob> shaderBlob;
+	/*winrt::com_ptr<IDxcBlob> shaderBlob;
 	ShaderUtils::CompileShader(shaderBlob, L"Data/Shaders/RaytracedGI/RTShadowsCS.hlsl", {}, L"cs_6_5");
 
 	D3D12_COMPUTE_PIPELINE_STATE_DESC computeDesc = {};
@@ -3088,7 +3134,7 @@ void RaytracedGI::CompileDX12ComputeShaders()
 	computeDesc.CS = { shaderBlob->GetBufferPointer(), shaderBlob->GetBufferSize() };
 
 	DX::ThrowIfFailed(d3d12Device->CreateComputePipelineState(&computeDesc, IID_PPV_ARGS(pipelineCSShadows.put())));
-	DX::ThrowIfFailed(pipelineCSShadows->SetName(L"Compute Pipeline - Shadows"));
+	DX::ThrowIfFailed(pipelineCSShadows->SetName(L"Compute Pipeline - Shadows"));*/
 
 	/*{
 		winrt::com_ptr<IDxcBlob> shaderBlob;

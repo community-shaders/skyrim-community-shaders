@@ -70,6 +70,15 @@ namespace DX12
 			device->CreateUnorderedAccessView(resource.get(), counterResource, &uavDesc, handle);
 		}
 
+		virtual void CreateCBV(CD3DX12_CPU_DESCRIPTOR_HANDLE handle)
+		{
+			D3D12_CONSTANT_BUFFER_VIEW_DESC cbvDesc = {};
+			cbvDesc.BufferLocation = resource->GetGPUVirtualAddress();
+			cbvDesc.SizeInBytes = static_cast<uint>(desc.Width);
+
+			device->CreateConstantBufferView(&cbvDesc, handle);
+		}
+		//D3D12_CONSTANT_BUFFER_VIEW_DESC
 		winrt::com_ptr<ID3D12Resource> resource = nullptr;
 
 	protected:

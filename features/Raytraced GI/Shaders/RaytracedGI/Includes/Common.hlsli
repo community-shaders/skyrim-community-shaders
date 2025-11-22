@@ -3,8 +3,13 @@
 
 #define DEPTH_SCALE (0.99920h)
 #define FP_Z (16.5f)
-#define SKY_Z (0.99999f)
+#define SKY_Z (0.9999f)
 #define M_TO_GAME_UNIT (1.0f / (GAME_UNIT_TO_M))
+
+float ScreenToViewDepth(const float screenDepth, float4 cameraData)
+{
+	return (cameraData.w / (-screenDepth * cameraData.z + cameraData.x));
+}
 
 float3 ScreenToViewPosition(const float2 screenPos, const float viewspaceDepth, const float4 ndcToView)
 {
@@ -12,11 +17,6 @@ float3 ScreenToViewPosition(const float2 screenPos, const float viewspaceDepth, 
 	ret.xy = (ndcToView.xy * screenPos.xy + ndcToView.zw) * viewspaceDepth;
 	ret.z = viewspaceDepth;
 	return ret;
-}
-
-float ScreenToViewDepth(const float screenDepth, float4 cameraData)
-{
-	return (cameraData.w / (-screenDepth * cameraData.z + cameraData.x));
 }
 
 float3 ViewToWorldPosition(const float3 pos, const float4x4 invView)

@@ -1,9 +1,13 @@
-#ifndef FRAMEDATA_HLSI
-#define FRAMEDATA_HLSI
+#ifndef GI_FRAMEDATA_HLSI
+#define GI_FRAMEDATA_HLSI
 
 #include "RaytracedGI/Includes/Types/Light.hlsli"
 
-struct FrameData
+struct 
+#ifdef __cplusplus
+alignas(16)
+#endif   
+    GIFrameData
 {
     float4x4 ViewInverse;
     float4x4 ProjInverse;
@@ -22,8 +26,13 @@ struct FrameData
     #ifdef SHARC
     float SHARCScale;
     #else
+    uint Pad0;
+    #endif  
     uint Pad1;
-    #endif    
+	uint Pad2;    
 };
+#ifdef __cplusplus
+static_assert(sizeof(GIFrameData) % 256 == 0);
+#endif
 
 #endif

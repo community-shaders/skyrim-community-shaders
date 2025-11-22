@@ -154,7 +154,7 @@ namespace DX12
 
 		void LogShaderBindingTable(D3D12_GPU_VIRTUAL_ADDRESS baseAddr)
 		{
-			logger::info(
+			logger::debug(
 				"[RT] SBT Layout:\n"
 				"  Base GPU VA:                0x{:016X}\n"
 				"  RayGen:\n"

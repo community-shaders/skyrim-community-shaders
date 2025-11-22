@@ -17,6 +17,10 @@
 #include "Features/RaytracedGI/RTPipelineBuilder.h"
 #include "Features/RaytracedGI/ShaderBindingTable.h"
 
+#include "RaytracedGI/Includes/Types/Light.hlsli"
+#include "RaytracedGI/Includes/Types/GIFrameData.hlsli"
+#include "RaytracedGI/Includes/Types/ShadowsFrameData.hlsli"
+
 #define NTDDI_VERSION NTDDI_WINBLUE
 
 #include <DXProgrammableCapture.h>
@@ -49,91 +53,61 @@ struct RaytracedGI : public Feature
 
 	static constexpr uint SKY_CUBEMAP_SIZE = 256;
 
-	struct HeapSlot
+	struct GIHeap
 	{
-		enum Slot : uint32_t
+		struct Table
 		{
-			Output,
-			Reflectance,
-			SpecularHitDist,
-			Main,
-			Depth,
-			Albedo,
-			NormalRoughness,
-			GNMD, // Geometry Normals + Metalness + Depth
-			TLAS,
-			SkyHemisphere,
-			Lights,
-			Instances,
-			Vertices,
-			Triangles = Vertices + MAX_MESHES,
-			DiffuseTextures = Triangles + MAX_MESHES,
-			GlowTextures = DiffuseTextures + MAX_MESHES,
-			NumDescriptors = GlowTextures + MAX_MESHES,
-			None
+			enum Values : uint32_t
+			{
+				UAV,
+				SRV,
+				VertexBuffer,
+				TriangleBuffer,
+				DiffuseTextures,
+				GlowTextures
+			};
+		};
+
+		struct Slot
+		{
+			enum Values : uint32_t
+			{
+				Output,
+				Reflectance,
+				SpecularHitDist,
+				Main,
+				Depth,
+				Albedo,
+				NormalRoughness,
+				GNMD,
+				TLAS,
+				SkyHemisphere,
+				Lights,
+				Instances,
+				Vertices,
+				Triangles = Vertices + MAX_MESHES,
+				DiffuseTextures = Triangles + MAX_MESHES,
+				GlowTextures = DiffuseTextures + MAX_MESHES,
+				NumDescriptors = GlowTextures + MAX_MESHES,
+				None
+			};
 		};
 	};
-
-	struct HeapType
+	struct ShadowsHeap
 	{
-		enum Type : uint32_t
-		{
-			UAV,
-			SRV,
-			VertexBuffer,
-			TriangleBuffer,
-			DiffuseTextures,
-			GlowTextures
-			//CBV
-		};
-	};
-
-	/*struct ComputeHeapSlot
-	{
-		enum Slot : uint32_t
-		{
-			Final,
-			DiffuseGI,
-			SpecularGI,
-			SpecHitDist,
-			Depth,
-			GNMD, // Geometry Normals + Metalness + Depth
-			Albedo,
-			Reflectance,
-			NumDescriptors,
-			None
-		};
-	};
-
-	struct ComputeHeapType
-	{
-		enum Type : uint32_t
-		{
-			UAV,
-			SRV,
-			//CBV
-		};
-	};*/
-
-	struct ComputeHeapShadowsSlot
-	{
-		enum Slot : uint32_t
-		{
-			ShadowMask,
-			TLAS,
-			Depth,
-			//GNMD,
-			NumDescriptors,
-			None
-		};
-	};
-
-	struct ComputeHeapShadowsType
-	{
-		enum Type : uint32_t
+		enum Table : uint32_t
 		{
 			UAV,
 			SRV
+		};
+
+		enum Slot : uint32_t
+		{
+			ShadowMask,
+			Depth,
+			TLAS,
+			NumDescriptors,
+			None
 		};
 	};
 
@@ -172,18 +146,20 @@ struct RaytracedGI : public Feature
 	virtual void SetupResources() override;
 	virtual void ClearShaderCache() override;
 
-	void ShareRT(ID3D11Texture2D* pTexture2D, const HeapSlot::Slot& target, const ComputeHeapShadowsSlot::Slot& cTarget, ID3D12Resource** ppResource);
+	void ShareRT(ID3D11Texture2D* pTexture2D, const GIHeap::Slot::Values& target, const ShadowsHeap::Slot& cTarget, ID3D12Resource** ppResource);
 	void SetupSharedRT();
 	void CompileShaders();
-	void CompileRaytracingShaders();
-	void CompileDX12ComputeShaders();
 	void CompileComputeShaders();
+
+	void CompileRTGIShaders();
+	void CompileRTShadowsShaders();
+
+	void CompileDX12ComputeShaders();
 
 	void Initialize();
 	void InitD3D12(ID3D11Device* ppDevice, ID3D11DeviceContext* pImmediateContext, IDXGIAdapter* a_adapter);
 	void CreateRootSignature();
-	void CreateComputeRootSignature();
-	void CreateComputeRootSignatureShadows();
+	void CreateShadowsRootSignature();
 	ID3D12Resource* MakeAccelerationStructure(const D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_INPUTS& inputs, UINT64* scratchSize = nullptr, UINT64* updateScratchSize = nullptr);
 	void Flush();
 	ID3D12Resource* MakeBLAS(ID3D12Resource* vertexBuffer, UINT vertices, ID3D12Resource* indexBuffer, UINT indices);
@@ -312,55 +288,6 @@ struct RaytracedGI : public Feature
 		float SHARCScale = 1.0f;
 #endif
 	} settings;
-
-	struct alignas(16) Light
-	{
-		float3 Vector;
-		float Range;
-		float3 Color;
-		uint Pad;
-	};
-	static_assert(sizeof(Light) % 16 == 0);
-
-	eastl::vector<Light> lights;
-	eastl::unique_ptr<DX12::StructuredBufferUpload<Light>> lightBuffer = nullptr;
-
-	struct FrameBuffer
-	{
-		float4x4 ViewInverse;
-		float4x4 ProjInverse;
-		float4 CameraData;
-		float4 NDCToView;
-		Light Directional;
-		float3 Position;
-		uint FrameCount;
-		float2 Roughness;
-		float2 Metalness;
-		float Diffuse;
-		float Specular;
-		float Emissive;
-		float Effect;
-		float Sky;
-#ifdef SHARC
-		float SHARCScale;
-#else
-		uint Pad0;
-#endif
-		uint Pad1[2];
-	} frameBufferData;
-	static_assert(sizeof(FrameBuffer) % 256 == 0);
-
-	struct ShadowsCB
-	{
-		float4 CameraData;
-		float2 Size;
-		float4 NDCToView;
-		float4x4 ViewInverse;
-		float3 Position;
-		float3 Direction;
-		uint Pad[32];
-	} shadowsCBData;
-	static_assert(sizeof(ShadowsCB) % 256 == 0);
 
 	bool renderingWorld = false;
 	bool lightsUpdated = false;
@@ -519,7 +446,12 @@ struct RaytracedGI : public Feature
 	winrt::com_ptr<ID3D12Resource> tlasScratch = nullptr;
 	winrt::com_ptr<ID3D12Resource> tlasUpdateScratch = nullptr;
 
-	eastl::unique_ptr<DX12::StructuredBufferUpload<FrameBuffer>> frameBuffer = nullptr;
+	eastl::vector<Light> lights;
+	eastl::unique_ptr<DX12::StructuredBufferUpload<Light>> lightBuffer = nullptr;
+
+	// GI
+	eastl::unique_ptr<DX12::StructuredBufferUpload<GIFrameData>> frameBuffer = nullptr;
+	GIFrameData frameBufferData = {};
 
 	// Shadows
 	eastl::unique_ptr<DX12::StructuredBufferUpload<D3D12_RAYTRACING_INSTANCE_DESC>> blasShadowInstanceBuffer = nullptr;
@@ -527,19 +459,8 @@ struct RaytracedGI : public Feature
 
 	RE::BSShadowDirectionalLight* shadowLight;
 
-	eastl::unique_ptr<DX12::StructuredBufferUpload<ShadowsCB>> shadowsCB = nullptr;
-
-	// Shaders
-	/*winrt::com_ptr<IDxcBlob> rayGenerationRT = nullptr;
-	winrt::com_ptr<IDxcBlob> missRT = nullptr;
-	winrt::com_ptr<IDxcBlob> closestHitRT = nullptr;*/
-
-	winrt::com_ptr<ID3D12StateObject> pipelineRT = nullptr;
-	eastl::unique_ptr<DX12::ShaderBindingTable> shaderBindingTable = nullptr;	
-	eastl::unique_ptr<DX12::ResourceUpload> shaderBindingTableBuffer = nullptr;
-
-	//winrt::com_ptr<ID3D12PipelineState> pipelineCS = nullptr;
-	winrt::com_ptr<ID3D12PipelineState> pipelineCSShadows = nullptr;
+	eastl::unique_ptr<DX12::StructuredBufferUpload<ShadowsFrameData>> shadowsCB = nullptr;
+	ShadowsFrameData shadowsCBData = {};
 
 	// D3D12
 	winrt::com_ptr<ID3D12Device5> d3d12Device = nullptr;
@@ -547,16 +468,22 @@ struct RaytracedGI : public Feature
 	winrt::com_ptr<ID3D12CommandAllocator> commandAllocator = nullptr;
 	winrt::com_ptr<ID3D12GraphicsCommandList4> commandList = nullptr;
 
-	winrt::com_ptr<ID3D12RootSignature> rootSignature = nullptr;
-	//winrt::com_ptr<ID3D12RootSignature> rootSignatureCS = nullptr;
-	winrt::com_ptr<ID3D12RootSignature> rootSignatureCSShadows = nullptr;
-	
-	eastl::unique_ptr<DX12::DescriptorHeap<HeapSlot::Slot, HeapType::Type>> commonHeap = nullptr;	
-	//eastl::unique_ptr<DX12::DescriptorHeap<ComputeHeapSlot::Slot, ComputeHeapType::Type>> computeHeap = nullptr;	
-	eastl::unique_ptr<DX12::DescriptorHeap<ComputeHeapShadowsSlot::Slot, ComputeHeapShadowsType::Type>> computeHeapShadows = nullptr;
-
 	winrt::com_ptr<ID3D11Fence> d3d11Fence = nullptr;
 	winrt::com_ptr<ID3D12Fence> d3d12Fence = nullptr;
+
+	// GI
+	winrt::com_ptr<ID3D12RootSignature> rootSignature = nullptr;
+	winrt::com_ptr<ID3D12StateObject> pipelineRT = nullptr;
+	eastl::unique_ptr<DX12::ShaderBindingTable> shaderBindingTable = nullptr;	
+	eastl::unique_ptr<DX12::ResourceUpload> shaderBindingTableBuffer = nullptr;
+	eastl::unique_ptr<DX12::DescriptorHeap<GIHeap::Slot::Values, GIHeap::Table::Values>> giHeap = nullptr;	
+
+	// Shadows
+	winrt::com_ptr<ID3D12RootSignature> shadowRS = nullptr;
+	winrt::com_ptr<ID3D12StateObject> shadowPipeline = nullptr;
+	eastl::unique_ptr<DX12::ShaderBindingTable> shadowSBT = nullptr;
+	eastl::unique_ptr<DX12::ResourceUpload> shadowSBTBuffer = nullptr;
+	eastl::unique_ptr<DX12::DescriptorHeap<ShadowsHeap::Slot, ShadowsHeap::Table>> shadowHeap = nullptr;
 
 	UINT64 fenceValue = 0;
 

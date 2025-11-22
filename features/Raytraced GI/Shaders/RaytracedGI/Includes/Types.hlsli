@@ -43,6 +43,6 @@ struct byte4f
 #include "RaytracedGI/Includes/Types/Instance.hlsli"
 #include "RaytracedGI/Includes/Types/Light.hlsli"
 #include "RaytracedGI/Includes/RT.hlsli"
-#include "RaytracedGI/Includes/Types/FrameData.hlsli"
+#include "RaytracedGI/Includes/Types/GIFrameData.hlsli"
 
 #endif
