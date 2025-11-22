@@ -235,6 +235,27 @@ if(CLANG_FORMAT_PATH)
 endif()
 
 # #######################################################################################################################
+# # HLSL additional include directories for VS intellisense
+# #######################################################################################################################
+
+set(HLSL_INCLUDE_DIRS ${FEATURE_SHADER_DIRS} "package/Shaders")
+
+set(HLSL_INCLUDE_JSON "")
+foreach(dir IN LISTS HLSL_INCLUDE_DIRS)
+    if(HLSL_INCLUDE_JSON STREQUAL "")
+        set(HLSL_INCLUDE_JSON "    \"${dir}\"")
+    else()
+        set(HLSL_INCLUDE_JSON "${HLSL_INCLUDE_JSON},\n    \"${dir}\"")
+    endif()
+endforeach()
+
+configure_file(
+    "${CMAKE_CURRENT_SOURCE_DIR}/cmake/shadertoolsconfig.json.in"
+    "${CMAKE_CURRENT_SOURCE_DIR}/shadertoolsconfig.json"
+    @ONLY
+)
+
+# #######################################################################################################################
 # # Shader validation config generation
 # #######################################################################################################################
 
