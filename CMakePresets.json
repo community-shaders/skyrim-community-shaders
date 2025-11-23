@@ -60,9 +60,30 @@
                 "AUTO_PLUGIN_DEPLOYMENT": "OFF"
             },
             "inherits": "skyrim"
+        },
+        {
+            "name": "ALL-WITH-AUTO-DEPLOYMENT",
+            "inherits": "skyrim",
+            "cacheVariables": {
+                "ENABLE_SKYRIM_AE": "ON",
+                "ENABLE_SKYRIM_SE": "ON",
+                "ENABLE_SKYRIM_VR": "ON",
+                "AUTO_PLUGIN_DEPLOYMENT": "ON",
+                "ZIP_TO_DIST": "OFF",
+                "AIO_ZIP_TO_DIST": "OFF"
+            },
+            "environment": {
+                "CommunityShadersOutputDir": "I:/Games/Modding/MO2/mods/CommunityShaders_AIO"
+            }
         }
     ],
     "buildPresets": [
+	      {
+	          "name": "Dev-Auto-Deploy",
+	          "configurePreset": "ALL-WITH-AUTO-DEPLOYMENT",
+	          "configuration": "Release",
+	          "targets": ["CommunityShaders", "AIO"]  
+	      },
         {
             "name": "Dev",
             "description": "Default build preset for developers, generate an AIO folder thats ready to copy",

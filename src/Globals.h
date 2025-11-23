@@ -28,7 +28,7 @@ struct PerformanceOverlay;
 struct WetnessEffects;
 struct ExtendedTranslucency;
 struct Upscaling;
-struct RaytracedGI;
+struct Raytracing;
 
 class State;
 class Deferred;
@@ -81,7 +81,7 @@ namespace globals
 		extern ExtendedTranslucency extendedTranslucency;
 		extern Upscaling upscaling;
 		extern RenderDoc renderDoc;
-		extern RaytracedGI raytracedGI;
+		extern Raytracing raytracing;
 
 		namespace llf
 		{

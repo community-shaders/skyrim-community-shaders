@@ -14,7 +14,7 @@
 #include "Features/LODBlending.h"
 #include "Features/LightLimitFix.h"
 #include "Features/PerformanceOverlay.h"
-#include "Features/RaytracedGI.h"
+#include "Features/Raytracing.h"
 #include "Features/RenderDoc.h"
 #include "Features/ScreenSpaceGI.h"
 #include "Features/ScreenSpaceShadows.h"
@@ -78,7 +78,7 @@ namespace globals
 		ExtendedTranslucency extendedTranslucency{};
 		Upscaling upscaling{};
 		RenderDoc renderDoc{};
-		RaytracedGI raytracedGI{};
+		Raytracing raytracing{};
 
 		namespace llf
 		{

@@ -6,8 +6,8 @@
 #include <cstring>
 #include <d3d12.h>
 #include <dxcapi.h>
-#include "Features/RaytracedGI/HeapManager.h"
-#include "Features/RaytracedGI/ShaderBindingTable.h"
+#include "Features/Raytracing/HeapManager.h"
+#include "Features/Raytracing/ShaderBindingTable.h"
 
 namespace DX12
 {

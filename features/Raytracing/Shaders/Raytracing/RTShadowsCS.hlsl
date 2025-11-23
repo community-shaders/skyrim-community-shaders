@@ -1,4 +1,4 @@
-#include "RaytracedGI/Includes/Common.hlsli"
+#include "Raytracing/Includes/Common.hlsli"
 
 cbuffer ShadowsCB: register(b0)
 {

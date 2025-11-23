@@ -1,4 +1,4 @@
-#include "RaytracedGI/Includes/Common.hlsli"
+#include "Raytracing/Includes/Common.hlsli"
 #include "Common/FrameBuffer.hlsli"
 #include "Common/GBuffer.hlsli"
 

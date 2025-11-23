@@ -1,7 +1,7 @@
 #ifndef GI_FRAMEDATA_HLSI
 #define GI_FRAMEDATA_HLSI
 
-#include "RaytracedGI/Includes/Types/Light.hlsli"
+#include "Raytracing/Includes/Types/Light.hlsli"
 
 struct 
 #ifdef __cplusplus

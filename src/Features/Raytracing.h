@@ -7,19 +7,19 @@
 #include "Features/Upscaling/DX12SwapChain.h"
 #include <dxcapi.h>
 #include <directxpackedvector.h>
-#include "Features/RaytracedGI/Buffer.h"
+#include "Features/Raytracing/Buffer.h"
 #include "LightLimitFix.h"
 #include <DirectXTex.h>
 #include <shared_mutex>
-#include "Features/RaytracedGI/IrradianceCache.h"
-#include "Features/RaytracedGI/Allocator.h"
-#include "Features/RaytracedGI/HeapManager.h"
-#include "Features/RaytracedGI/RTPipelineBuilder.h"
-#include "Features/RaytracedGI/ShaderBindingTable.h"
+#include "Features/Raytracing/IrradianceCache.h"
+#include "Features/Raytracing/Allocator.h"
+#include "Features/Raytracing/HeapManager.h"
+#include "Features/Raytracing/RTPipelineBuilder.h"
+#include "Features/Raytracing/ShaderBindingTable.h"
 
-#include "RaytracedGI/Includes/Types/Light.hlsli"
-#include "RaytracedGI/Includes/Types/GIFrameData.hlsli"
-#include "RaytracedGI/Includes/Types/ShadowsFrameData.hlsli"
+#include "Raytracing/Includes/Types/Light.hlsli"
+#include "Raytracing/Includes/Types/GIFrameData.hlsli"
+#include "Raytracing/Includes/Types/ShadowsFrameData.hlsli"
 
 #define NTDDI_VERSION NTDDI_WINBLUE
 
@@ -41,7 +41,7 @@
 #pragma warning(pop)
 #endif
 
-struct RaytracedGI : public Feature
+struct Raytracing : public Feature
 {
 	static constexpr uint MAX_MESHES = 2048;
 	static constexpr uint MAX_INSTANCES = 4096;
@@ -113,8 +113,8 @@ struct RaytracedGI : public Feature
 
 	////////////////////////////////////////////////// Boilerplate
 	// Metadata
-	virtual inline std::string GetName() override { return "Raytraced GI"; }
-	virtual inline std::string GetShortName() override { return "RaytracedGI"; }
+	virtual inline std::string GetName() override { return "Raytracing"; }
+	virtual inline std::string GetShortName() override { return "Raytracing"; }
 	virtual inline std::string_view GetCategory() const override { return "Lighting"; }
 	virtual inline std::string GetFeatureModLink() override { return MakeNexusModURL("999999"); }
 	virtual inline std::pair<std::string, std::vector<std::string>> GetFeatureSummary() override
@@ -264,6 +264,7 @@ struct RaytracedGI : public Feature
 	struct Settings
 	{
 		bool Enabled = true;
+		bool GlobalIllumination = true;
 		Denoiser Denoiser = Denoiser::Accumulation;
 		int Bounces = 2;
 		int SamplesPerPixel = 1;
@@ -279,6 +280,7 @@ struct RaytracedGI : public Feature
 		bool PointFade = true;
 		bool GammaToLinear = false;
 		bool RaytracedShadows = true;
+		bool RecompressTextures = true;
 #ifdef DLSS_RR
 		DLSSRRQuality DLSSRRQualityMode = DLSSRRQuality::MaxQuality;
 #endif
@@ -430,6 +432,7 @@ struct RaytracedGI : public Feature
 	eastl::unique_ptr<DX12::StructuredBufferUpload<Instance>> instanceBuffer = nullptr;
 
 	// Textures
+	eastl::hash_set<eastl::string> texturesToShare;
 	eastl::unordered_map<ID3D11Texture2D*, winrt::com_ptr<ID3D12Resource>> sharedTextures;
 
 	eastl::unique_ptr<DX12::StructuredAppendBuffer<IrradianceCache::Entry<IrradianceCache::SH1Data>>> irradianceCacheBuffer = nullptr;	
@@ -555,6 +558,42 @@ struct RaytracedGI : public Feature
 		return float3(point3.x, point3.y, point3.z);
 	}
 
+	inline DXGI_FORMAT GetCompatibleFormat(DXGI_FORMAT format, bool recompress)
+	{
+		/*switch (format) {
+		case DXGI_FORMAT_BC4_UNORM:
+			return DXGI_FORMAT_R8_UNORM;
+			break;
+		case DXGI_FORMAT_BC4_SNORM:
+			return DXGI_FORMAT_R8_SNORM;
+			break;
+		case DXGI_FORMAT_BC7_UNORM:
+			return DXGI_FORMAT_R8G8B8A8_UNORM;
+			break;
+		case DXGI_FORMAT_BC7_UNORM_SRGB:
+			return DXGI_FORMAT_R8G8B8A8_UNORM_SRGB;
+			break;
+		default:
+			return format;
+			break;
+		}*/
+
+		switch (format) {
+		case DXGI_FORMAT_BC4_UNORM:
+			return recompress ? DXGI_FORMAT_BC1_UNORM : DXGI_FORMAT_R8_UNORM;
+			break;
+		case DXGI_FORMAT_BC7_UNORM:
+			return recompress ? DXGI_FORMAT_BC3_UNORM : DXGI_FORMAT_R8G8B8A8_UNORM;
+			break;
+		case DXGI_FORMAT_BC7_UNORM_SRGB:
+			return recompress ? DXGI_FORMAT_BC3_UNORM_SRGB : DXGI_FORMAT_R8G8B8A8_UNORM_SRGB;
+			break;
+		default:
+			return format;
+			break;
+		}
+	}
+
 	struct Hooks
 	{
 		struct ID3D11Device_CreateBuffer
@@ -563,7 +602,7 @@ struct RaytracedGI : public Feature
 			{
 				HRESULT hr = func(oThis, pDesc, pInitialData, ppBuffer);
 
-				auto& rtgi = globals::features::raytracedGI;
+				auto& rtgi = globals::features::raytracing;
 
 				if (SUCCEEDED(hr) && pInitialData && pDesc->BindFlags & D3D11_BIND_VERTEX_BUFFER) {
 					if (rtgi.loaded && !rtgi.releaseBufferHooked) {
@@ -586,7 +625,7 @@ struct RaytracedGI : public Feature
 		{
 			static void thunk(ID3D11Buffer* oThis)
 			{
-				auto& rtgi = globals::features::raytracedGI;
+				auto& rtgi = globals::features::raytracing;
 
 				if (rtgi.loaded) {
 					/*D3D11_BUFFER_DESC desc{};
@@ -609,38 +648,29 @@ struct RaytracedGI : public Feature
 				D3D11_TEXTURE2D_DESC descCopy = *pDesc;
 				const D3D11_SUBRESOURCE_DATA* initialDataCopy = pInitialData;
 
-				auto& rtgi = globals::features::raytracedGI;
-
-				bool loaded = rtgi.loaded;
+				auto& rt = globals::features::raytracing;
 
 				bool shareTexture = false;
 
-				std::vector<D3D11_SUBRESOURCE_DATA> initialDataLocal;
-				std::vector<DirectX::ScratchImage> decompressedMips;
+				eastl::vector<D3D11_SUBRESOURCE_DATA> initialDataLocal;
+				eastl::vector<DirectX::ScratchImage> outputMips;
 
-				if (loaded && pDesc && pInitialData && pDesc->ArraySize == 1 && pDesc->Usage == D3D11_USAGE_DEFAULT && pDesc->BindFlags == D3D11_BIND_SHADER_RESOURCE && pDesc->MiscFlags == 0 && pDesc->CPUAccessFlags == 0) {
-					switch (pDesc->Format) {
-						case DXGI_FORMAT_BC4_UNORM:
-							descCopy.Format = DXGI_FORMAT_R8_UNORM;
-							break;
-						case DXGI_FORMAT_BC4_SNORM:
-							descCopy.Format = DXGI_FORMAT_R8_SNORM;
-							break;
-						case DXGI_FORMAT_BC7_UNORM:
-							descCopy.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
-							break;
-						case DXGI_FORMAT_BC7_UNORM_SRGB:
-							descCopy.Format = DXGI_FORMAT_R8G8B8A8_UNORM_SRGB;
-							break;
-						default:
-							break;
-					}
+				if (rt.loaded && pDesc && pInitialData && pDesc->ArraySize == 1 && pDesc->Usage == D3D11_USAGE_DEFAULT && pDesc->BindFlags == D3D11_BIND_SHADER_RESOURCE && pDesc->MiscFlags == 0 && pDesc->CPUAccessFlags == 0) {
+					bool recompress = rt.settings.RecompressTextures;
 
+					//logger::info("[RT] ID3D11Device::CreateTexture2D - Texture: [0x{:x}]", reinterpret_cast<uintptr_t>(*ppTexture2D));
+
+					descCopy.Format = rt.GetCompatibleFormat(pDesc->Format, recompress);
+	
 					if (pDesc->Format != descCopy.Format) {
 						initialDataLocal.resize(pDesc->MipLevels);
-						decompressedMips.resize(pDesc->MipLevels);
+						outputMips.resize(pDesc->MipLevels);
 
-						for (UINT mip = 0; mip < pDesc->MipLevels; ++mip) {
+						auto range = std::views::iota(0u, pDesc->MipLevels);
+
+						auto decompressedFormat = rt.GetCompatibleFormat(pDesc->Format, false);
+
+						std::for_each(std::execution::par, range.begin(), range.end(), [&](uint mip) {
 							DirectX::Image src;
 							src.width = std::max(1u, pDesc->Width >> mip);
 							src.height = std::max(1u, pDesc->Height >> mip);
@@ -649,13 +679,20 @@ struct RaytracedGI : public Feature
 							src.slicePitch = pInitialData[mip].SysMemSlicePitch;
 							src.pixels = (uint8_t*)pInitialData[mip].pSysMem;
 
-							DX::ThrowIfFailed(DirectX::Decompress(src, descCopy.Format, decompressedMips[mip]));
+							DirectX::ScratchImage decompressedScratch;
+							DX::ThrowIfFailed(DirectX::Decompress(src, decompressedFormat, recompress ? decompressedScratch : outputMips[mip]));
+							const DirectX::Image* decompressed = (recompress ? decompressedScratch : outputMips[mip]).GetImage(0, 0, 0);
 
-							const DirectX::Image* img = decompressedMips[mip].GetImage(0, 0, 0);
+							//logger::info("[RT] ID3D11Device::CreateTexture2D - Compressing: [0x{:x}]", reinterpret_cast<uintptr_t>(decompressed));
+
+							if (recompress)
+								DX::ThrowIfFailed(DirectX::Compress(*decompressed, descCopy.Format, DirectX::TEX_COMPRESS_DEFAULT, 0.5f, outputMips[mip]));
+
+							const DirectX::Image* img = recompress ? outputMips[mip].GetImage(0, 0, 0) : decompressed;
 							initialDataLocal[mip].pSysMem = img->pixels;
 							initialDataLocal[mip].SysMemPitch = static_cast<UINT>(img->rowPitch);
-							initialDataLocal[mip].SysMemSlicePitch = static_cast<UINT>(img->slicePitch);
-						}
+							initialDataLocal[mip].SysMemSlicePitch = static_cast<UINT>(img->slicePitch);							
+						});
 
 						initialDataCopy = initialDataLocal.data();
 					}
@@ -666,31 +703,35 @@ struct RaytracedGI : public Feature
 
 				HRESULT hr = func(This, &descCopy, initialDataCopy, ppTexture2D);
 
-				if (SUCCEEDED(hr) && shareTexture) {
-					if (!rtgi.releaseHooked) {
-						std::lock_guard lock{ rtgi.sharedTextureMutex };
+				if (shareTexture) {
+					if (SUCCEEDED(hr)) {
+						if (!rt.releaseHooked) {
+							std::lock_guard lock{ rt.sharedTextureMutex };
 
-						if (!rtgi.releaseHooked) {
-							rtgi.releaseHooked = true;
-							stl::detour_vfunc<2, ID3D11Texture2D_Release>(*ppTexture2D);
-						}					
-					}
+							if (!rt.releaseHooked) {
+								rt.releaseHooked = true;
+								stl::detour_vfunc<2, ID3D11Texture2D_Release>(*ppTexture2D);
+							}
+						}
 
-					winrt::com_ptr<IDXGIResource1> dxgiResource = nullptr;
-					DX::ThrowIfFailed((*ppTexture2D)->QueryInterface(IID_PPV_ARGS(dxgiResource.put())));
+						winrt::com_ptr<IDXGIResource1> dxgiResource = nullptr;
+						DX::ThrowIfFailed((*ppTexture2D)->QueryInterface(IID_PPV_ARGS(dxgiResource.put())));
 
-					HANDLE sharedHandle = nullptr;
-					DX::ThrowIfFailed(dxgiResource->CreateSharedHandle(nullptr, DXGI_SHARED_RESOURCE_READ, nullptr, &sharedHandle));
+						HANDLE sharedHandle = nullptr;
+						DX::ThrowIfFailed(dxgiResource->CreateSharedHandle(nullptr, DXGI_SHARED_RESOURCE_READ, nullptr, &sharedHandle));
 
-					winrt::com_ptr<ID3D12Resource> resource = nullptr;
-					HRESULT hrOSH = rtgi.d3d12Device->OpenSharedHandle(sharedHandle, IID_PPV_ARGS(resource.put()));
+						winrt::com_ptr<ID3D12Resource> resource = nullptr;
+						HRESULT hrOSH = rt.d3d12Device->OpenSharedHandle(sharedHandle, IID_PPV_ARGS(resource.put()));
 
-					CloseHandle(sharedHandle);
+						CloseHandle(sharedHandle);
 
-					if (SUCCEEDED(hrOSH)) {
-						rtgi.sharedTextures.emplace(*ppTexture2D, std::move(resource));
+						if (SUCCEEDED(hrOSH)) {
+							rt.sharedTextures.emplace(*ppTexture2D, std::move(resource));
+						} else {
+							logger::warn("[RT] Error opening shared handle - [0x{:x}], Format: {}, Dimension: ({}, {}), MipLevels: {}", hrOSH, magic_enum::enum_name(pDesc->Format), pDesc->Width, pDesc->Height, pDesc->MipLevels);
+						}
 					} else {
-						logger::warn("[RTGI] Error creating shared texture - [0x{:x}]", hrOSH);
+						logger::warn("[RT] Error creating shareable texture - [0x{:x}], Format: {}, Dimension: ({}, {}), MipLevels: {}", hr, magic_enum::enum_name(pDesc->Format), pDesc->Width, pDesc->Height, pDesc->MipLevels);
 					}
 				}
 
@@ -710,29 +751,14 @@ struct RaytracedGI : public Feature
 					descCopy = *pDesc;
 
 				if (pResource && ppSRV && pDesc && pDesc->ViewDimension == D3D11_SRV_DIMENSION_TEXTURE2D) {
-					auto& rtgi = globals::features::raytracedGI;
+					auto& rt = globals::features::raytracing;
 
-					std::lock_guard lock{ rtgi.sharedTextureMutex };
+					std::lock_guard lock{ rt.sharedTextureMutex };
 
-					switch (pDesc->Format) {
-						case DXGI_FORMAT_BC4_UNORM:
-							descCopy.Format = DXGI_FORMAT_R8_UNORM;
-							break;
-						case DXGI_FORMAT_BC4_SNORM:
-							descCopy.Format = DXGI_FORMAT_R8_SNORM;
-							break;
-						case DXGI_FORMAT_BC7_UNORM:
-							descCopy.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
-							break;
-						case DXGI_FORMAT_BC7_UNORM_SRGB:
-							descCopy.Format = DXGI_FORMAT_R8G8B8A8_UNORM_SRGB;
-							break;
-						default:
-							break;
-					}
+					descCopy.Format = rt.GetCompatibleFormat(pDesc->Format, rt.settings.RecompressTextures);
 
 					if (pDesc->Format != descCopy.Format) {
-						if (rtgi.sharedTextures.find(static_cast<ID3D11Texture2D*>(pResource)) != rtgi.sharedTextures.end()) {
+						if (rt.sharedTextures.find(static_cast<ID3D11Texture2D*>(pResource)) != rt.sharedTextures.end()) {
 							descPtr = &descCopy;
 						}
 					}
@@ -751,7 +777,7 @@ struct RaytracedGI : public Feature
 				ULONG refCount = func(This);
 
 				if (refCount == 0) {
-					globals::features::raytracedGI.sharedTextures.erase(This);
+					globals::features::raytracing.sharedTextures.erase(This);
 				}
 
 				return refCount;
@@ -764,7 +790,7 @@ struct RaytracedGI : public Feature
 		{
 			static void thunk(bool a1)
 			{
-				globals::features::raytracedGI.Main_RenderWorld(a1);
+				globals::features::raytracing.Main_RenderWorld(a1);
 			}
 			static inline REL::Relocation<decltype(thunk)> func;
 		};
@@ -774,7 +800,7 @@ struct RaytracedGI : public Feature
 		{
 			static void thunk(RE::BSShader* This, RE::BSRenderPass* Pass, uint32_t RenderFlags)
 			{
-				auto& rtgi = globals::features::raytracedGI;
+				auto& rtgi = globals::features::raytracing;
 
 				if (rtgi.Active()) {
 					rtgi.BSShader_SetupGeometry(This, Pass, RenderFlags);
@@ -794,8 +820,8 @@ struct RaytracedGI : public Feature
 			{
 				func(This, Pass, RenderFlags);
 
-				if (globals::features::raytracedGI.Active())
-					globals::features::raytracedGI.BSSkyShader_SetupGeometry(This, Pass, RenderFlags);
+				if (globals::features::raytracing.Active())
+					globals::features::raytracing.BSSkyShader_SetupGeometry(This, Pass, RenderFlags);
 			}
 			static inline REL::Relocation<decltype(thunk)> func;
 		};
@@ -804,7 +830,7 @@ struct RaytracedGI : public Feature
 		{
 			static void thunk(RE::NiAVObject* camera, int a2, bool a3, bool a4, bool a5)
 			{
-				auto& rtgi = globals::features::raytracedGI;
+				auto& rtgi = globals::features::raytracing;
 
 				rtgi.renderingCubemap = true;
 
@@ -820,8 +846,8 @@ struct RaytracedGI : public Feature
 		{
 			static void thunk(RE::BSRenderPass* a_pass, uint32_t a_technique, bool a_alphaTest, uint32_t a_renderFlags)
 			{
-				if (globals::features::raytracedGI.Active())
-					globals::features::raytracedGI.BSBatchRenderer_RenderPassImmediately(a_pass, a_technique, a_alphaTest, a_renderFlags);
+				if (globals::features::raytracing.Active())
+					globals::features::raytracing.BSBatchRenderer_RenderPassImmediately(a_pass, a_technique, a_alphaTest, a_renderFlags);
 
 				func(a_pass, a_technique, a_alphaTest, a_renderFlags);
 			}
@@ -832,7 +858,7 @@ struct RaytracedGI : public Feature
 		{
 			static void thunk(RE::BSTriShape* This, RE::NiUpdateData* data)
 			{
-				globals::features::raytracedGI.BSTriShape_UpdateWorldData(This, data);
+				globals::features::raytracing.BSTriShape_UpdateWorldData(This, data);
 			}
 			static inline REL::Relocation<decltype(thunk)> func;
 		};
@@ -853,7 +879,7 @@ struct RaytracedGI : public Feature
 			{
 				func(oThis, a_stream);
 				
-				auto& rtgi = globals::features::raytracedGI;
+				auto& rtgi = globals::features::raytracing;
 
 				if (rtgi.Active()) 
 				{
@@ -870,7 +896,7 @@ struct RaytracedGI : public Feature
 			{
 				func(oThis, a_stream);
 
-				auto& rtgi = globals::features::raytracedGI;
+				auto& rtgi = globals::features::raytracing;
 
 				if (rtgi.Active()) {
 					//logger::info("[RTGI] BSTriShape::LinkObject {} - {}", oThis->name, a_stream.inputFilePath);
@@ -886,7 +912,7 @@ struct RaytracedGI : public Feature
 			{
 				func(oThis, pGeometry, a_stream);
 
-				auto& rtgi = globals::features::raytracedGI;
+				auto& rtgi = globals::features::raytracing;
 
 				if (rtgi.Active()) {
 					//rtgi.AddInstance(netimmerse_cast<RE::BSTriShape*>(pGeometry));
@@ -899,7 +925,7 @@ struct RaytracedGI : public Feature
 		{
 			static void thunk(RE::BSShadowDirectionalLight* oThis, uint32_t& globalShadowLightCount, uint32_t shadowMaskChannel, RE::NiPointer<RE::NiAVObject> cullingScene)
 			{
-				auto& rt = globals::features::raytracedGI;
+				auto& rt = globals::features::raytracing;
 
 				if (rt.Active() && !rt.settings.RaytracedShadows)
 					func(oThis, globalShadowLightCount, shadowMaskChannel, cullingScene);
@@ -912,7 +938,7 @@ struct RaytracedGI : public Feature
 		{
 			static void thunk(RE::BSShadowDirectionalLight* light, void* a2)
 			{
-				auto& rt = globals::features::raytracedGI;
+				auto& rt = globals::features::raytracing;
 				rt.renderingShadowmap = true;
 
 				if (rt.Active() && rt.settings.RaytracedShadows)
@@ -936,7 +962,7 @@ struct RaytracedGI : public Feature
 		{
 			static void thunk(RE::BSGraphics::BSShaderAccumulator* shaderAccumulator, RE::NiCamera const* camera)
 			{
-				auto& rt = globals::features::raytracedGI;
+				auto& rt = globals::features::raytracing;
 
 				// Bypassing this alone does absolutely nothing.
 				if (!rt.Active() || !rt.renderingShadowmap || !rt.settings.RaytracedShadows)
@@ -950,7 +976,7 @@ struct RaytracedGI : public Feature
 		{
 			static void thunk(RE::BSGraphics::BSShaderAccumulator* shaderAccumulator, uint32_t renderFlags)
 			{
-				auto& rt = globals::features::raytracedGI;
+				auto& rt = globals::features::raytracing;
 
 				if (!rt.Active() || !rt.renderingShadowmap || !rt.settings.RaytracedShadows)
 					func(shaderAccumulator, renderFlags);
@@ -963,7 +989,7 @@ struct RaytracedGI : public Feature
 		{
 			static void thunk(void* a1, bool a2, bool a3)
 			{
-				auto& rt = globals::features::raytracedGI;
+				auto& rt = globals::features::raytracing;
 
 				if (rt.Active() && rt.settings.RaytracedShadows)
 					rt.UpdateShadowsFrameBuffer();
@@ -977,7 +1003,7 @@ struct RaytracedGI : public Feature
 		{
 			static void thunk(bool a1)
 			{
-				auto& rt = globals::features::raytracedGI;
+				auto& rt = globals::features::raytracing;
 
 				if (rt.Active() && rt.settings.RaytracedShadows)
 					rt.RenderShadows();
@@ -987,6 +1013,73 @@ struct RaytracedGI : public Feature
 			static inline REL::Relocation<decltype(thunk)> func;
 		};
 
+		struct BSShaderTextureSet_SetTexturePath
+		{
+			static void thunk(RE::BSShaderTextureSet* oThis, RE::BSTextureSet::Texture a_texture, const char* a_path)
+			{
+				//auto& rt = globals::features::raytracing;
+
+				logger::info("[RT] BSShaderTextureSet::SetTexturePath - Texture: {}, Path: {}", magic_enum::enum_name(a_texture), a_path);
+				func(oThis, a_texture, a_path);
+			};
+			static inline REL::Relocation<decltype(thunk)> func;
+		};
+
+		struct BGSTextureSet_SetTexture
+		{
+			static void thunk(RE::BGSTextureSet* oThis, RE::BSTextureSet::Texture a_texture, RE::NiSourceTexturePtr& a_srcTexture)
+			{
+				//auto& rt = globals::features::raytracing;
+
+				logger::info("[RT] BGSTextureSet::SetTexture - Texture: {}, Src Texture: {}", magic_enum::enum_name(a_texture), reinterpret_cast<uintptr_t>(&a_srcTexture));
+				func(oThis, a_texture, a_srcTexture);
+			};
+			static inline REL::Relocation<decltype(thunk)> func;
+		};
+
+		struct BSShaderManager_GetTexture
+		{
+			static void thunk(const char* a_path, bool a_demand, RE::NiPointer<RE::NiTexture>& a_textureOut, bool a_isHeightMap)
+			{
+				//auto& rt = globals::features::raytracing;
+
+				logger::info("[RT] BSShaderManager::GetTexture - Path: {}, Demand: {}, Address: [0x{:x}], Address: [0x{:x}], Is HeightMap: {}", a_path, a_demand, reinterpret_cast<uintptr_t>(&a_textureOut), reinterpret_cast<uintptr_t>(a_textureOut.get()), a_isHeightMap);
+				func(a_path, a_demand, a_textureOut, a_isHeightMap);
+				logger::info("[RT] BSShaderManager::GetTexture - Address: [0x{:x}], Address: [0x{:x}]", reinterpret_cast<uintptr_t>(&a_textureOut), reinterpret_cast<uintptr_t>(a_textureOut.get()));
+			};
+			static inline REL::Relocation<decltype(thunk)> func;
+		};
+
+		struct BSLightingShaderMaterialBase_OnLoadTextureSet
+		{
+			static void thunk(RE::BSLightingShaderMaterialBase* oThis, std::uint64_t arg1, RE::BSTextureSet* inTextureSet)
+			{
+				//auto& rt = globals::features::raytracing;
+				//RE::BSShaderTextureSet
+				//RE::BGSTextureSet
+
+				logger::info("[RT] BSLightingShaderMaterialBase::OnLoadTextureSet - Diffuse: [0x{:x}]", reinterpret_cast<uintptr_t>(oThis->diffuseTexture.get()));
+
+				//rt.texturesToShare.emplace();
+	
+				//inTextureSet->
+
+				func(oThis, arg1, inTextureSet);
+
+				logger::info("[RT] BSLightingShaderMaterialBase::OnLoadTextureSet End - Diffuse: [0x{:x}]", reinterpret_cast<uintptr_t>(oThis->diffuseTexture.get()));
+
+				if (inTextureSet) {
+					auto diffusePath = inTextureSet->GetTexturePath(RE::BSTextureSet::Texture::kDiffuse);
+					auto glowPath = inTextureSet->GetTexturePath(RE::BSTextureSet::Texture::kGloss);
+
+					logger::info("[RT] BSLightingShaderMaterialBase::OnLoadTextureSet - Diffuse: {}, Glow: {}", diffusePath, glowPath);
+				}
+
+				//logger::info("[RT] BSShaderManager::OnLoadTextureSet - Address: {}, Address: {}", reinterpret_cast<uintptr_t>(&a_textureOut), reinterpret_cast<uintptr_t>(a_textureOut.get()));
+			};
+			static inline REL::Relocation<decltype(thunk)> func;
+		};
+		
 		static void Install()
 		{
 			stl::detour_thunk<Main_RenderWorld>(REL::RelocationID(100424, 107142));
@@ -1024,6 +1117,13 @@ struct RaytracedGI : public Feature
 
 			//stl::detour_thunk<Main_RenderPlayerView>(REL::RelocationID(35560, 36559)); // Used to cache main camera frame buffer
 			stl::detour_thunk<Main_RenderShadowmasks>(REL::RelocationID(100422, 107140));
+
+			//stl::write_vfunc<0x8, BSLightingShaderMaterialBase_OnLoadTextureSet>(RE::VTABLE_BSLightingShaderMaterialBase[0]);
+
+			//stl::write_vfunc<0x27, BGSTextureSet_SetTexture>(RE::VTABLE_BGSTextureSet[0]);
+			//stl::write_vfunc<0x27, BSShaderTextureSet_SetTexturePath>(RE::VTABLE_BSShaderTextureSet[0]);
+
+			//stl::detour_thunk<BSShaderManager_GetTexture>(REL::RelocationID(98986, 105640));
 
 			logger::info("[RTGI] Installed hooks");
 		}

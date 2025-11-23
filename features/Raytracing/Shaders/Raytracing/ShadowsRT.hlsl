@@ -1,5 +1,5 @@
-#include "RaytracedGI/Includes/Common.hlsli"
-#include "RaytracedGI/Includes/Types/ShadowsFrameData.hlsli"
+#include "Raytracing/Includes/Common.hlsli"
+#include "Raytracing/Includes/Types/ShadowsFrameData.hlsli"
 
 ConstantBuffer<ShadowsFrameData> Frame  : register(b0);
 

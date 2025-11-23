@@ -1,10 +1,10 @@
-#include "RaytracedGI/Includes/Types.hlsli"
-#include "RaytracedGI/Includes/Registers.hlsli"
+#include "Raytracing/Includes/Types.hlsli"
+#include "Raytracing/Includes/Registers.hlsli"
 
-#include "RaytracedGI/Includes/Common.hlsli"
-#include "RaytracedGI/Includes/RT/CommonRT.hlsli"
-#include "RaytracedGI/Includes/RT/Rays.hlsli"
-#include "RaytracedGI/Includes/RT/Shading.hlsli"
+#include "Raytracing/Includes/Common.hlsli"
+#include "Raytracing/Includes/RT/CommonRT.hlsli"
+#include "Raytracing/Includes/RT/Rays.hlsli"
+#include "Raytracing/Includes/RT/Shading.hlsli"
 
 #include "Common/Game.hlsli"
 #include "Common/Color.hlsli"

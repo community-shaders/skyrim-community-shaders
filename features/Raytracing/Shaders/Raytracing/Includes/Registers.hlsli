@@ -1,7 +1,7 @@
 #ifndef REGISTERS_HLSI
 #define REGISTERS_HLSI
 
-#include "RaytracedGI/Includes/Types.hlsli"
+#include "Raytracing/Includes/Types.hlsli"
 
 ConstantBuffer<GIFrameData> Frame               : register(b0);
 

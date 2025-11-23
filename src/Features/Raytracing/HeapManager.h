@@ -1,6 +1,6 @@
 #pragma once
 
-#include "Features/RaytracedGI/ShaderBindingTable.h"
+#include "Features/Raytracing/ShaderBindingTable.h"
 
 namespace DX12
 {

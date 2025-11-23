@@ -1,4 +1,4 @@
-#include "RaytracedGI/Shadows/Payload.hlsli"
+#include "Raytracing/Shadows/Payload.hlsli"
 
 [shader("miss")]
 void main(inout Payload payload)

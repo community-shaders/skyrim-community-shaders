@@ -16,7 +16,7 @@
 #include "Features/Upscaling.h"
 #include "Features/VR.h"
 #include "Features/VolumetricLighting.h"
-#include "Features/RaytracedGI.h"
+#include "Features/Raytracing.h"
 
 #include "ShaderTools/BSShaderHooks.h"
 
@@ -307,8 +307,8 @@ HRESULT WINAPI hk_D3D11CreateDeviceAndSwapChain(
 		pFeatureLevel,
 		ppImmediateContext);
 
-	if (globals::features::raytracedGI.loaded) {
-		globals::features::raytracedGI.InitD3D12(*ppDevice, *ppImmediateContext, pAdapter);
+	if (globals::features::raytracing.loaded) {
+		globals::features::raytracing.InitD3D12(*ppDevice, *ppImmediateContext, pAdapter);
 	}
 
 	return ret;
@@ -962,7 +962,7 @@ namespace Hooks
 
 	uint CubemapResolution()
 	{
-		auto& rt = globals::features::raytracedGI;
+		auto& rt = globals::features::raytracing;
 
 		if (rt.loaded) {
 			return rt.SKY_CUBEMAP_SIZE;

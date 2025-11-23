@@ -1,5 +1,5 @@
-#include "RaytracedGI/Includes/Types.hlsli"
-#include "RaytracedGI/Includes/Registers.hlsli"
+#include "Raytracing/Includes/Types.hlsli"
+#include "Raytracing/Includes/Registers.hlsli"
 
 #include "Common/Color.hlsli"
 

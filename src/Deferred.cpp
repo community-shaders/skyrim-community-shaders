@@ -8,7 +8,7 @@
 
 #include "Features/DynamicCubemaps.h"
 #include "Features/IBL.h"
-#include "Features/RaytracedGI.h"
+#include "Features/Raytracing.h"
 #include "Features/ScreenSpaceGI.h"
 #include "Features/Skylighting.h"
 #include "Features/SubsurfaceScattering.h"
@@ -99,11 +99,11 @@ void Deferred::SetupResources()
 		// TEMPORAL_AA_WATER_1
 		// TEMPORAL_AA_WATER_2
 
-		auto& rtgi = globals::features::raytracedGI;
+		auto& rt = globals::features::raytracing;
 
 		uint miscFlags = 0;
 
-		if (rtgi.loaded)
+		if (rt.loaded)
 		{
 			miscFlags = D3D11_RESOURCE_MISC_SHARED | D3D11_RESOURCE_MISC_SHARED_NTHANDLE;
 		}
@@ -120,10 +120,10 @@ void Deferred::SetupResources()
 		SetupRenderTarget(MASKS, texDesc, srvDesc, rtvDesc, uavDesc, DXGI_FORMAT_R11G11B10_FLOAT, D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE);
 
 		// "Masks2" aka Geometry normals
-		if (rtgi.loaded)
+		if (rt.loaded)
 		{
 			SetupRenderTarget(MASKS2, texDesc, srvDesc, rtvDesc, uavDesc, DXGI_FORMAT_R16G16B16A16_UNORM, D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_UNORDERED_ACCESS, miscFlags);
-			rtgi.SetupSharedRT();
+			rt.SetupSharedRT();
 		}
 	}
 
@@ -398,9 +398,9 @@ void Deferred::DeferredPasses()
 	auto [ssgi_ao, ssgi_y, ssgi_cocg, ssgi_gi_spec] = ssgi.GetOutputTextures();
 	bool ssgi_hq_spec = ssgi.settings.EnableExperimentalSpecularGI;
 
-	auto& rtgi = globals::features::raytracedGI;
-	if (rtgi.Active())
-		rtgi.DrawRTGI();
+	auto& rt = globals::features::raytracing;
+	if (rt.Active() && rt.settings.GlobalIllumination)
+		rt.DrawRTGI();
 
 	auto dispatchCount = Util::GetScreenDispatchCount(true);
 

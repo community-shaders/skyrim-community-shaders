@@ -15,7 +15,7 @@
 #include "Features/LODBlending.h"
 #include "Features/LightLimitFix.h"
 #include "Features/PerformanceOverlay.h"
-#include "Features/RaytracedGI.h"
+#include "Features/Raytracing.h"
 #include "Features/RenderDoc.h"
 #include "Features/ScreenSpaceGI.h"
 #include "Features/ScreenSpaceShadows.h"
@@ -229,7 +229,7 @@ const std::vector<Feature*>& Feature::GetFeatureList()
 		&globals::features::extendedTranslucency,
 		&globals::features::upscaling,
 		&globals::features::renderDoc,
-		&globals::features::raytracedGI
+		&globals::features::raytracing
 	};
 
 	if (REL::Module::IsVR()) {

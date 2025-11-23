@@ -1,10 +1,10 @@
-#include "RaytracedGI.h"
+#include "Raytracing.h"
 #include "InverseSquareLighting.h"
 #include "TerrainBlending.h"
 
 #include "Globals.h"
 #include "State.h"
-#include "RaytracedGI/ShaderUtils.h"
+#include "Raytracing/ShaderUtils.h"
 #include "ShaderCache.h"
 
 #include <filesystem>
@@ -14,8 +14,9 @@
 
 #ifdef DLSS_RR
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
-	RaytracedGI::Settings,
+	Raytracing::Settings,
 	Enabled,
+	GlobalIllumination,
 	Denoiser,
 	Bounces,
 	SamplesPerPixel,
@@ -58,17 +59,17 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 
 ////////////////////////////////////////////////////////////////////////////////////
 
-void RaytracedGI::RestoreDefaultSettings()
+void Raytracing::RestoreDefaultSettings()
 {
 	settings = {};
 }
 
-void RaytracedGI::LoadSettings(json& o_json)
+void Raytracing::LoadSettings(json& o_json)
 {
 	settings = o_json;
 }
 
-void RaytracedGI::SaveSettings(json& o_json)
+void Raytracing::SaveSettings(json& o_json)
 {
 	o_json = settings;
 }
@@ -82,12 +83,14 @@ void DrawFloat2(const char* label, float2& v, float min = 0.0f, float max = 1.0f
 	}
 }
 
-void RaytracedGI::DrawSettings()
+void Raytracing::DrawSettings()
 {
 	ImGui::Checkbox("Enabled", &settings.Enabled);
 	if (auto _tt = Util::HoverTooltipWrapper()) {
 		ImGui::Text("Enable Ray-Traced Global Illumination.");
 	}
+
+	ImGui::Checkbox("Global Illumination", &settings.GlobalIllumination);
 
 	// Denoiser
 	{
@@ -142,16 +145,18 @@ void RaytracedGI::DrawSettings()
 
 			ImGui::Checkbox("Point Fade", &settings.PointFade);
 			ImGui::Checkbox("Gamma To Linear", &settings.GammaToLinear);
-
+			
 			ImGui::Checkbox("Raytraced Shadows", &settings.RaytracedShadows);
 			if (auto _tt = Util::HoverTooltipWrapper()) {
 				ImGui::Text("Replaces directional light shadowmaps.\n");
 			}
 		}
 	}
-	/*if (auto _tt = Util::HoverTooltipWrapper()) {
-		ImGui::Text("Number of clipmaps to use\n");
-	}*/
+
+	ImGui::Checkbox("Recompress Textures", &settings.RecompressTextures);
+	if (auto _tt = Util::HoverTooltipWrapper()) {
+		ImGui::Text("Some texture formats cannot be shared between APIs, enabling this option ensures they'll be recompressed in a lower quality yet compatible format.\n");
+	}
 
 	// Debug display mode
 	if (ImGui::BeginCombo("Debug Output", magic_enum::enum_name(settings.DebugOutput).data())) {
@@ -225,7 +230,7 @@ void RaytracedGI::DrawSettings()
 	ImGui::Image(mainTexture->srv, { desc.Width * 0.5f, desc.Height * 0.5f });*/
 }
 
-void RaytracedGI::SetupResources()
+void Raytracing::SetupResources()
 {
 	auto renderer = globals::game::renderer;
 	auto device = globals::d3d::device;
@@ -629,7 +634,7 @@ void RaytracedGI::SetupResources()
 }
 
 #ifdef DLSS_RR
-void RaytracedGI::InitRR()
+void Raytracing::InitRR()
 {
 	std::wstring interposerPath = L"Data\\Shaders\\Upscaling\\Streamline\\sl.interposer.dll";
 	interposer = LoadLibraryW(interposerPath.c_str());
@@ -679,7 +684,7 @@ void RaytracedGI::InitRR()
 	slGetFeatureFunction(sl::kFeatureDLSS_RR, "slDLSSDSetOptions", (void*&)slDLSSDSetOptions);
 }
 
-int32_t RaytracedGI::GetJitterPhaseCount(int32_t renderWidth, int32_t displayWidth)
+int32_t Raytracing::GetJitterPhaseCount(int32_t renderWidth, int32_t displayWidth)
 {
 	const float basePhaseCount = 8.0f;
 	const int32_t jitterPhaseCount = int32_t(basePhaseCount * pow((float(displayWidth) / renderWidth), 2.0f));
@@ -687,7 +692,7 @@ int32_t RaytracedGI::GetJitterPhaseCount(int32_t renderWidth, int32_t displayWid
 }
 
 // Calculate halton number for index and base.
-float RaytracedGI::Halton(int32_t index, int32_t base)
+float Raytracing::Halton(int32_t index, int32_t base)
 {
 	float f = 1.0f, result = 0.0f;
 
@@ -700,7 +705,7 @@ float RaytracedGI::Halton(int32_t index, int32_t base)
 	return result;
 }
 
-void RaytracedGI::GetJitterOffset(float* outX, float* outY, int32_t index, int32_t phaseCount)
+void Raytracing::GetJitterOffset(float* outX, float* outY, int32_t index, int32_t phaseCount)
 {
 	const float x = Halton((index % phaseCount) + 1, 2) - 0.5f;
 	const float y = Halton((index % phaseCount) + 1, 3) - 0.5f;
@@ -709,7 +714,7 @@ void RaytracedGI::GetJitterOffset(float* outX, float* outY, int32_t index, int32
 	*outY = y;
 }
 
-float2 RaytracedGI::GetInputResolutionScaleRR(uint32_t outputWidth, uint32_t outputHeight)
+float2 Raytracing::GetInputResolutionScaleRR(uint32_t outputWidth, uint32_t outputHeight)
 {
 	sl::DLSSDOptions dlssdOptions{};
 	dlssdOptions.mode = GetDLSSMode();
@@ -742,7 +747,7 @@ float2 RaytracedGI::GetInputResolutionScaleRR(uint32_t outputWidth, uint32_t out
 	return { scaleX, scaleY };
 }
 
-sl::DLSSMode RaytracedGI::GetDLSSMode()
+sl::DLSSMode Raytracing::GetDLSSMode()
 {
 	switch (settings.DLSSRRQualityMode) {
 	case DLSSRRQuality::MaxPerformance:
@@ -757,7 +762,7 @@ sl::DLSSMode RaytracedGI::GetDLSSMode()
 	}
 }
 
-void RaytracedGI::SetDLSSRROptions()
+void Raytracing::SetDLSSRROptions()
 {
 	sl::DLSSDOptions dlssdOptions{};
 
@@ -801,7 +806,7 @@ void RaytracedGI::SetDLSSRROptions()
 	}
 }
 
-void RaytracedGI::CheckFrameConstants()
+void Raytracing::CheckFrameConstants()
 {
 	if (frameChecker.IsNewFrame()) {
 		slGetNewFrameToken(frameToken, &globals::state->frameCount);
@@ -889,7 +894,7 @@ LPCWSTR StringViewToLPCWSTR(std::string_view sv)
 	return wstr.c_str();
 }
 
-void RaytracedGI::ShareRT(ID3D11Texture2D* pTexture2D, const GIHeap::Slot::Values& target, const ShadowsHeap::Slot& cTarget, ID3D12Resource** ppResource)
+void Raytracing::ShareRT(ID3D11Texture2D* pTexture2D, const GIHeap::Slot::Values& target, const ShadowsHeap::Slot& cTarget, ID3D12Resource** ppResource)
 {
 	D3D11_TEXTURE2D_DESC desc;
 	pTexture2D->GetDesc(&desc);
@@ -923,7 +928,7 @@ void RaytracedGI::ShareRT(ID3D11Texture2D* pTexture2D, const GIHeap::Slot::Value
 		d3d12Device->CreateShaderResourceView(*ppResource, &srvDesc, shadowHeap->CPUHandle(cTarget));
 }
 
-void RaytracedGI::SetupSharedRT()
+void Raytracing::SetupSharedRT()
 {
 	const auto& rendererRD = globals::game::renderer->GetRuntimeData();
 
@@ -948,7 +953,7 @@ bool IsGlobalLight(RE::BSLight* a_light)
 	return !(a_light->portalStrict || !a_light->portalGraph);
 }
 
-eastl::vector<LightLimitFix::LightData> RaytracedGI::GetPointLights()
+eastl::vector<LightLimitFix::LightData> Raytracing::GetPointLights()
 {
 	eastl::vector<LightLimitFix::LightData> lightsData{};
 
@@ -1023,7 +1028,7 @@ eastl::vector<LightLimitFix::LightData> RaytracedGI::GetPointLights()
 	return lightsData;
 }
 
-float3 RaytracedGI::GammaToLinear(float3 color)
+float3 Raytracing::GammaToLinear(float3 color)
 {
 	if (settings.GammaToLinear) {
 		float3 colorAbs = DirectX::XMVectorAbs(color);
@@ -1033,7 +1038,7 @@ float3 RaytracedGI::GammaToLinear(float3 color)
 	}
 }
 
-void RaytracedGI::UpdateLights() 
+void Raytracing::UpdateLights() 
 {
 	if (!renderingWorld || lightsUpdated)
 		return;
@@ -1108,7 +1113,7 @@ DirectX::XMMATRIX GetXMFromNiTransform(const RE::NiTransform& Transform)
 	return temp;
 }
 
-void RaytracedGI::CopyDepth()
+void Raytracing::CopyDepth()
 {
 	auto context = globals::d3d::context;
 	auto renderer = globals::game::renderer;
@@ -1130,11 +1135,11 @@ void RaytracedGI::CopyDepth()
 		auto dispatchCount = Util::GetScreenDispatchCount();
 		context->Dispatch(dispatchCount.x, dispatchCount.y, 1);
 
-
+		context->CSSetUnorderedAccessViews(0, 1, nullptr, nullptr);
 	}
 }
 
-void RaytracedGI::ConvertNormalGlossiness()
+void Raytracing::ConvertNormalGlossiness()
 {
 	auto context = globals::d3d::context;
 	auto renderer = globals::game::renderer;
@@ -1154,7 +1159,7 @@ void RaytracedGI::ConvertNormalGlossiness()
 	context->Dispatch(dispatchCount.x, dispatchCount.y, 1);
 }
 
-void RaytracedGI::SkyCubeToHemi()
+void Raytracing::SkyCubeToHemi()
 {
 	auto context = globals::d3d::context;
 
@@ -1174,7 +1179,7 @@ void RaytracedGI::SkyCubeToHemi()
 	context->Dispatch(dispatch, dispatch, 1);
 }
 
-void RaytracedGI::Main_RenderWorld(bool a1)
+void Raytracing::Main_RenderWorld(bool a1)
 {
 	if (Active()) {
 		renderingWorld = true;
@@ -1236,7 +1241,7 @@ RE::BSFadeNode* FindBSFadeNode(RE::NiNode* a_niNode)
 }
 
 template <typename T>
-void RaytracedGI::MakeAndCopy(const eastl::vector<T>& data, winrt::com_ptr<ID3D12Resource>& res)
+void Raytracing::MakeAndCopy(const eastl::vector<T>& data, winrt::com_ptr<ID3D12Resource>& res)
  {
 	auto desc = BASIC_BUFFER_DESC;
 	desc.Width = sizeof(T) * data.size();
@@ -1262,7 +1267,7 @@ inline std::wstring ToWide(const std::string& str)
 	return wstr;
 }
 
-void RaytracedGI::AddInstance(RE::BSTriShape* pTriShape)
+void Raytracing::AddInstance(RE::BSTriShape* pTriShape)
 {
 	//std::lock_guard lock{ renderMutex };
 
@@ -1604,7 +1609,7 @@ void RaytracedGI::AddInstance(RE::BSTriShape* pTriShape)
 			GetXMFromNiTransform(pTriShape->world)));
 }
 
-eastl::vector<size_t> RaytracedGI::GatherInstanceLights(RE::BSTriShape* pBSTriShape)
+eastl::vector<size_t> Raytracing::GatherInstanceLights(RE::BSTriShape* pBSTriShape)
 {
 	eastl::vector<size_t> instanceLights;
 
@@ -1621,7 +1626,7 @@ eastl::vector<size_t> RaytracedGI::GatherInstanceLights(RE::BSTriShape* pBSTriSh
 	return instanceLights;
 }
 
-void RaytracedGI::AddUpdateInstance(RE::BSTriShape* pTriShape)
+void Raytracing::AddUpdateInstance(RE::BSTriShape* pTriShape)
 {
 	std::lock_guard lock{ meshMutex };
 
@@ -1642,7 +1647,7 @@ void RaytracedGI::AddUpdateInstance(RE::BSTriShape* pTriShape)
 	}
 }
 
-void RaytracedGI::VertexBufferReleased(ID3D11Buffer* pBuffer)
+void Raytracing::VertexBufferReleased(ID3D11Buffer* pBuffer)
 {
 	std::lock_guard lock{ meshMutex };
 
@@ -1662,7 +1667,7 @@ void RaytracedGI::VertexBufferReleased(ID3D11Buffer* pBuffer)
 	}
 }
 
-bool RaytracedGI::ValidTriShape(RE::BSTriShape* pTriShape)
+bool Raytracing::ValidTriShape(RE::BSTriShape* pTriShape)
 {
 	if (pTriShape->GetFlags().all(RE::NiAVObject::Flag::kRenderUse)) {
 		if (auto fadeNode = FindBSFadeNode((RE::NiNode*)pTriShape)) {
@@ -1682,7 +1687,7 @@ bool RaytracedGI::ValidTriShape(RE::BSTriShape* pTriShape)
 	return true;
 }
 
-void RaytracedGI::AddUpdateAllInstances()
+void Raytracing::AddUpdateAllInstances()
 {
 	static auto shadowSceneNode = RE::BSShaderManager::State::GetSingleton().shadowSceneNode[0];
 
@@ -1712,7 +1717,7 @@ RE::NiCamera* FindNiCamera(RE::NiAVObject* object)
 	return nullptr;
 }
 
-void RaytracedGI::UpdateInstances()
+void Raytracing::UpdateInstances()
 {
 	std::lock_guard lock{ meshMutex };
 
@@ -1769,7 +1774,7 @@ void RaytracedGI::UpdateInstances()
 	instanceBuffer->Upload(commandList.get());
 }
 
-void RaytracedGI::UpdateShadowInstances()
+void Raytracing::UpdateShadowInstances()
 {
 	auto* playerCamera = RE::PlayerCamera::GetSingleton();
 	auto* tesCamera = playerCamera->currentState->camera;
@@ -1778,7 +1783,7 @@ void RaytracedGI::UpdateShadowInstances()
 
 	RE::NiFrustum frustum = camera->GetRuntimeData2().viewFrustum;
 
-	logger::info("[RT] Frustum: {}, {}, {}, {}, {}, {}", frustum.fLeft, frustum.fRight, frustum.fBottom, frustum.fTop, frustum.fNear, frustum.fFar);
+	//logger::info("[RT] Frustum: {}, {}, {}, {}, {}, {}", frustum.fLeft, frustum.fRight, frustum.fBottom, frustum.fTop, frustum.fNear, frustum.fFar);
 
 	/*std::lock_guard lock{ meshMutex };
 
@@ -1815,7 +1820,7 @@ void RaytracedGI::UpdateShadowInstances()
 	blasShadowInstanceBuffer->Upload(commandList.get());*/
 }
 
-void RaytracedGI::BSBatchRenderer_RenderPassImmediately(RE::BSRenderPass* pass, uint32_t technique, bool alphaTest, uint32_t renderFlags)
+void Raytracing::BSBatchRenderer_RenderPassImmediately(RE::BSRenderPass* pass, uint32_t technique, bool alphaTest, uint32_t renderFlags)
 {
 	const auto shader = pass->shader;
 	const auto shaderType = shader->shaderType.get();
@@ -1855,7 +1860,7 @@ void RaytracedGI::BSBatchRenderer_RenderPassImmediately(RE::BSRenderPass* pass, 
 	//logger::info(fmt::runtime("LightingShaderTechniques: {}"), GetFlags<SIE::ShaderCache::LightingShaderTechniques>(technique));
 }
 
-void RaytracedGI::BSTriShape_UpdateWorldData(RE::BSTriShape* oThis, RE::NiUpdateData* pData)
+void Raytracing::BSTriShape_UpdateWorldData(RE::BSTriShape* oThis, RE::NiUpdateData* pData)
 {
 	if (Active() && pData->flags.any(RE::NiUpdateData::Flag::kDirty)) {
 		RE::NiPoint3 pointA = oThis->world * RE::NiPoint3{ 1.0f, 1.0f, 1.0f };
@@ -1872,7 +1877,7 @@ void RaytracedGI::BSTriShape_UpdateWorldData(RE::BSTriShape* oThis, RE::NiUpdate
 	}
 }
 
-void RaytracedGI::BSShader_SetupGeometry([[maybe_unused]] RE::BSShader* oThis, [[maybe_unused]] RE::BSRenderPass* pPass, [[maybe_unused]] uint32_t renderFlags)
+void Raytracing::BSShader_SetupGeometry([[maybe_unused]] RE::BSShader* oThis, [[maybe_unused]] RE::BSRenderPass* pPass, [[maybe_unused]] uint32_t renderFlags)
 {
 	if (!Active() || !renderingWorld)
 		return;
@@ -1885,7 +1890,7 @@ void RaytracedGI::BSShader_SetupGeometry([[maybe_unused]] RE::BSShader* oThis, [
 		logger::warn("TriShape not available for {}, type: {}", pPass->geometry->name, magic_enum::enum_name(pPass->geometry->GetType().get()));*/
 }
 
-void RaytracedGI::CheckResourcesSide(int side)
+void Raytracing::CheckResourcesSide(int side)
 {
 	static Util::FrameChecker frame_checker[6];
 	if (!frame_checker[side].IsNewFrame())
@@ -1899,7 +1904,7 @@ void RaytracedGI::CheckResourcesSide(int side)
 }
 
 
-void RaytracedGI::BSSkyShader_SetupGeometry([[maybe_unused]] RE::BSShader* oThis, [[maybe_unused]] RE::BSRenderPass* pPass, [[maybe_unused]] uint32_t renderFlags)
+void Raytracing::BSSkyShader_SetupGeometry([[maybe_unused]] RE::BSShader* oThis, [[maybe_unused]] RE::BSRenderPass* pPass, [[maybe_unused]] uint32_t renderFlags)
 {
 	/*if (!Active() || !renderingCubemap)
 		return;
@@ -2082,7 +2087,7 @@ void RaytracedGI::BSSkyShader_SetupGeometry([[maybe_unused]] RE::BSShader* oThis
 	}
 }*/
 
-void RaytracedGI::DrawRTGI()
+void Raytracing::DrawRTGI()
 {
 	//std::lock_guard lock{ renderMutex };
 
@@ -2410,7 +2415,7 @@ void RaytracedGI::DrawRTGI()
 	}*/
 }
 
-void RaytracedGI::UpdateShadowsFrameBuffer()
+void Raytracing::UpdateShadowsFrameBuffer()
 {
 	shadowsCBData.CameraData = Util::GetCameraData();
 
@@ -2433,7 +2438,7 @@ void RaytracedGI::UpdateShadowsFrameBuffer()
 	shadowsCB->Update(&shadowsCBData, sizeof(ShadowsFrameData));
 }
 
-void RaytracedGI::RenderShadows()
+void Raytracing::RenderShadows()
 {
 	//logger::info("[RT] RenderShadows - ShadowLight [0x{:x}], TLAS [0x{:x}]", reinterpret_cast<uintptr_t>(shadowLight), reinterpret_cast<uintptr_t>(tlas.get()));
 
@@ -2618,7 +2623,7 @@ void RaytracedGI::RenderShadows()
 	d3d11Context->CopyResource(shadowMask.texture, shadowMaskTexture->resource11);
 }
 
-ID3D12Resource* RaytracedGI::MakeAccelerationStructure(const D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_INPUTS& inputs, UINT64* sratchSize, UINT64* updateScratchSize)
+ID3D12Resource* Raytracing::MakeAccelerationStructure(const D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_INPUTS& inputs, UINT64* sratchSize, UINT64* updateScratchSize)
 {
 	auto makeBuffer = [&](UINT64 size, auto initialState) {
 		auto desc = BASIC_BUFFER_DESC;
@@ -2663,7 +2668,7 @@ ID3D12Resource* RaytracedGI::MakeAccelerationStructure(const D3D12_BUILD_RAYTRAC
 	return as;
 }
 
-ID3D12Resource* RaytracedGI::MakeBLAS(ID3D12Resource* vertexBuffer, UINT vertices, ID3D12Resource* indexBuffer, UINT indices)
+ID3D12Resource* Raytracing::MakeBLAS(ID3D12Resource* vertexBuffer, UINT vertices, ID3D12Resource* indexBuffer, UINT indices)
 {
 	eastl::vector<D3D12_RAYTRACING_GEOMETRY_DESC> geometryDescs({ D3D12_RAYTRACING_GEOMETRY_DESC{
 		.Type = D3D12_RAYTRACING_GEOMETRY_TYPE_TRIANGLES,
@@ -2695,7 +2700,7 @@ ID3D12Resource* RaytracedGI::MakeBLAS(ID3D12Resource* vertexBuffer, UINT vertice
 	return MakeAccelerationStructure(inputs);
 }
 
-ID3D12Resource* RaytracedGI::MakeTLAS(ID3D12Resource* localInstances, UINT numInstances, UINT64* scratchSize, UINT64* updateScratchSize)
+ID3D12Resource* Raytracing::MakeTLAS(ID3D12Resource* localInstances, UINT numInstances, UINT64* scratchSize, UINT64* updateScratchSize)
 {
 	D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_INPUTS inputs = {
 		.Type = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL,
@@ -2708,7 +2713,7 @@ ID3D12Resource* RaytracedGI::MakeTLAS(ID3D12Resource* localInstances, UINT numIn
 	return MakeAccelerationStructure(inputs, scratchSize, updateScratchSize);
 }
 
-void RaytracedGI::Flush()
+void Raytracing::Flush()
 {
 	static UINT64 value = 1;
 	commandQueue->Signal(d3d12Fence.get(), value);
@@ -2716,7 +2721,7 @@ void RaytracedGI::Flush()
 }
 
 
-void RaytracedGI::PostPostLoad()
+void Raytracing::PostPostLoad()
 {
 	Hooks::Install();
 	Initialize();
@@ -2780,7 +2785,7 @@ void DumpDredBreadcrumbs(const D3D12_DRED_AUTO_BREADCRUMBS_OUTPUT1& breadcrumbsO
 	}
 }
 
-void RaytracedGI::DeviceRemovedHandler()
+void Raytracing::DeviceRemovedHandler()
 {
 	// 1. Device removed reason
 	HRESULT reason = d3d12Device->GetDeviceRemovedReason();
@@ -2804,7 +2809,7 @@ void RaytracedGI::DeviceRemovedHandler()
 	}
 }
 
-void RaytracedGI::InitD3D12(ID3D11Device* ppDevice, ID3D11DeviceContext* pImmediateContext, IDXGIAdapter* a_adapter)
+void Raytracing::InitD3D12(ID3D11Device* ppDevice, ID3D11DeviceContext* pImmediateContext, IDXGIAdapter* a_adapter)
 {
 	Hooks::InstallD3D11Hooks(ppDevice);
 
@@ -2900,7 +2905,7 @@ void RaytracedGI::InitD3D12(ID3D11Device* ppDevice, ID3D11DeviceContext* pImmedi
 	}
 }
 
-void RaytracedGI::CreateRootSignature()
+void Raytracing::CreateRootSignature()
 {
 	// UAV range
 	giHeap->CreateTable(
@@ -2997,7 +3002,7 @@ void RaytracedGI::CreateRootSignature()
 	DX::ThrowIfFailed(rootSignature->SetName(L"RT Root Signature"));
 }
 
-void RaytracedGI::CreateShadowsRootSignature()
+void Raytracing::CreateShadowsRootSignature()
 {
 	// UAV range
 	shadowHeap->CreateTable(
@@ -3046,19 +3051,19 @@ void RaytracedGI::CreateShadowsRootSignature()
 	DX::ThrowIfFailed(shadowRS->SetName(L"Shadow Root Signature"));
 }
 
-void RaytracedGI::Initialize()
+void Raytracing::Initialize()
 {
 	
 }
 
 
-void RaytracedGI::ClearShaderCache()
+void Raytracing::ClearShaderCache()
 {
 	copyDepthCS = nullptr;  // This is actually optional
 	CompileShaders();
 }
 
-void RaytracedGI::CompileShaders()
+void Raytracing::CompileShaders()
 {
 	if (!rootSignature) {
 		CreateRootSignature();
@@ -3079,7 +3084,7 @@ void RaytracedGI::CompileShaders()
 	CompileComputeShaders();
 }
 
-void RaytracedGI::CompileRTGIShaders()
+void Raytracing::CompileRTGIShaders()
 {
 	winrt::com_ptr<IDxcBlob> rayGenBlob;
 	ShaderUtils::CompileShader(rayGenBlob, L"Data/Shaders/RaytracedGI/GI/RayGeneration.hlsl");
@@ -3155,7 +3160,7 @@ void RaytracedGI::CompileRTGIShaders()
 	}
 }
 
-void RaytracedGI::CompileRTShadowsShaders()
+void Raytracing::CompileRTShadowsShaders()
 {
 	winrt::com_ptr<IDxcBlob> shadowsRTBlob;
 	ShaderUtils::CompileShader(shadowsRTBlob, L"Data/Shaders/RaytracedGI/ShadowsRT.hlsl");
@@ -3236,7 +3241,7 @@ void RaytracedGI::CompileRTShadowsShaders()
 	}
 }
 
-void RaytracedGI::CompileDX12ComputeShaders()
+void Raytracing::CompileDX12ComputeShaders()
 {
 	/*winrt::com_ptr<IDxcBlob> shaderBlob;
 	ShaderUtils::CompileShader(shaderBlob, L"Data/Shaders/RaytracedGI/RTShadowsCS.hlsl", {}, L"cs_6_5");
@@ -3261,7 +3266,7 @@ void RaytracedGI::CompileDX12ComputeShaders()
 	}*/
 }
 
-void RaytracedGI::CompileComputeShaders()
+void Raytracing::CompileComputeShaders()
 {
 	if (auto rawPtr = reinterpret_cast<ID3D11ComputeShader*>(Util::CompileShader(L"Data\\Shaders\\RaytracedGI\\CopyDepthCS.hlsl", { { "DX11", "" } }, "cs_5_0")); rawPtr)
 		copyDepthCS.attach(rawPtr);
@@ -3273,11 +3278,11 @@ void RaytracedGI::CompileComputeShaders()
 		convertNormalGlossCS.attach(rawPtr);
 }
 
-RE::BSEventNotifyControl RaytracedGI::MenuOpenCloseEventHandler::ProcessEvent(const RE::MenuOpenCloseEvent* a_event, RE::BSTEventSource<RE::MenuOpenCloseEvent>*)
+RE::BSEventNotifyControl Raytracing::MenuOpenCloseEventHandler::ProcessEvent(const RE::MenuOpenCloseEvent* a_event, RE::BSTEventSource<RE::MenuOpenCloseEvent>*)
 {
 	// When entering a loadscreen
 	if (a_event->menuName == RE::LoadingMenu::MENU_NAME) {
-		//auto& rtgi = globals::features::raytracedGI;
+		//auto& rtgi = globals::features::raytracing;
 
 		logger::info("MenuOpenCloseEventHandler::ProcessEvent - Opening: {}", a_event->opening);
 
@@ -3289,7 +3294,7 @@ RE::BSEventNotifyControl RaytracedGI::MenuOpenCloseEventHandler::ProcessEvent(co
 	return RE::BSEventNotifyControl::kContinue;
 }
 
-RE::BSEventNotifyControl RaytracedGI::TESLoadGameEventHandler::ProcessEvent(const RE::TESLoadGameEvent* a_event, RE::BSTEventSource<RE::TESLoadGameEvent>*)
+RE::BSEventNotifyControl Raytracing::TESLoadGameEventHandler::ProcessEvent(const RE::TESLoadGameEvent* a_event, RE::BSTEventSource<RE::TESLoadGameEvent>*)
 {
 	logger::info("TESLoadGameEventHandler::ProcessEvent {}", reinterpret_cast<intptr_t>(a_event));
 
