@@ -2,6 +2,7 @@
 
 #include "PostProcessing/PostProcessFeature.h"
 
+#include "PostProcessing/Border.h"
 #include "PostProcessing/CODBloom.h"
 #include "PostProcessing/ColourTransforms.h"
 #include "PostProcessing/DoF.h"
@@ -78,6 +79,7 @@ struct PostProcessing : Feature
 		LUT,
 		Vignette,
 		Camera,
+		Border,
 		COUNT
 	};
 

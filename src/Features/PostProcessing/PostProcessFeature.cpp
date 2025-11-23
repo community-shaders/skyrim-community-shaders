@@ -1,5 +1,6 @@
 #include "PostProcessFeature.h"
 
+#include "Border.h"
 #include "CODBloom.h"
 #include "ColourTransforms.h"
 #include "DoF.h"

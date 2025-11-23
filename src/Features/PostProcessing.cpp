@@ -406,6 +406,8 @@ void PostProcessing::SetupResources()
 		pipeline[static_cast<size_t>(FeaturePipelineIndex::Vignette)].get()->enabled = true;
 		pipeline[static_cast<size_t>(FeaturePipelineIndex::Camera)] = std::make_unique<Camera>();
 		pipeline[static_cast<size_t>(FeaturePipelineIndex::Camera)].get()->enabled = false;
+		pipeline[static_cast<size_t>(FeaturePipelineIndex::Border)] = std::make_unique<Border>();
+		pipeline[static_cast<size_t>(FeaturePipelineIndex::Border)].get()->enabled = false;
 	}
 
 	for (auto& pipe : pipeline) {
