@@ -19,9 +19,13 @@ cbuffer BorderCB : register(b1)
     if (depth > depthThreshold || depthThreshold == 0.0f)
     {
         float2 uv = (DTid.xy + 0.5f) * SharedData::BufferDim.zw;
-        if (uv.y < Scale.x || uv.y > (Scale.y) || uv.x < Scale.z || uv.x > (Scale.w))
+        if (uv.y < Scale.x || uv.y > (1 - Scale.y) || uv.x < Scale.z || uv.x > (1 - Scale.w))
         {
             OutputTexture[DTid.xy] = float4(borderColor, 1.0);
+        }
+        else
+        {
+            OutputTexture[DTid.xy] = InputTexture[DTid.xy];
         }
     }
     else

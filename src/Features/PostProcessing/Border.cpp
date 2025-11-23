@@ -125,13 +125,13 @@ void Border::Draw(TextureInfo& inout_tex)
 	res = Util::ConvertToDynamic(res);
 
     BorderCB data = {
-		.BorderColor = float4(settings.BorderColor, settings.DepthThreshold),
+		.BorderColor = float4(settings.BorderColor.x, settings.BorderColor.y, settings.BorderColor.z, settings.DepthThreshold),
         .Scale = settings.Scale
 	};
 	borderCB->Update(data);
 
     auto depth = renderer->GetDepthStencilData().depthStencils[RE::RENDER_TARGETS_DEPTHSTENCIL::kMAIN];
-    ID3D11ShaderResourceView* srvs[2] = { inout_tex.srv, depth.srv };
+    ID3D11ShaderResourceView* srvs[2] = { inout_tex.srv, depth.depthSRV };
     context->CSSetShaderResources(0, 2, srvs);
     ID3D11UnorderedAccessView* uav = texOutput->uav.get();
     context->CSSetUnorderedAccessViews(0, 1, &uav, nullptr);
