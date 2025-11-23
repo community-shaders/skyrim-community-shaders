@@ -9,7 +9,7 @@
 #include <winrt/base.h>
 
 /**
- * @brief Provides upscaling functionality including DLSS, FSR, XeSS and TAA.
+ * @brief Provides upscaling functionality including DLSS, FSR and TAA.
  *
  * This feature handles various upscaling methods and frame generation technologies
  * to improve performance while maintaining visual quality.
@@ -30,7 +30,6 @@ public:
 			"Advanced upscaling and frame generation technologies for improved performance",
 			{ "DLSS (Deep Learning Super Sampling) support",
 				"FSR (FidelityFX Super Resolution) support",
-				"XeSS (Intel Xe Super Sampling) support",
 				"TAA (Temporal Anti-Aliasing) support",
 				"Frame generation for supported systems" }
 		};

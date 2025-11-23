@@ -1,5 +1,7 @@
 #pragma once
 
+#include "Buffer.h"
+
 struct GrassCollision : Feature
 {
 private:
@@ -43,6 +45,7 @@ public:
 		uint IndexEnd = 0;
 		float2 pad0;
 	};
+	STATIC_ASSERT_ALIGNAS_16(BoundingBoxPacked);
 
 	struct alignas(16) PerFrame
 	{
@@ -56,6 +59,7 @@ public:
 		float CameraHeightDelta;
 		float3 pad0;
 	};
+	STATIC_ASSERT_ALIGNAS_16(PerFrame);
 
 	Settings settings;
 
