@@ -216,9 +216,8 @@ void Deferred::CopyShadowData()
 		if (SUCCEEDED(context->Map(perShadow->resource.get(), 0, D3D11_MAP_READ_WRITE, 0, &mapped))) {
 			auto* shadowData = static_cast<PerGeometry*>(mapped.pData);
 
-			// Get shadow distance from game global variable
-			static float* gShadowDistance = reinterpret_cast<float*>(REL::RelocationID(528314, 415263).address());
-			const float maxDistance = *gShadowDistance;
+			// Use the same interior shadow distance that we set in SetFrameCamera for consistency
+			const float maxDistance = *globals::features::interiorSun.gInteriorShadowDistance;
 
 			// Override the split distances in the buffer that shaders read from
 			shadowData->EndSplitDistances = { maxDistance, maxDistance, maxDistance, shadowData->EndSplitDistances.w };
