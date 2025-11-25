@@ -41,7 +41,7 @@ float4 PS_Main(VS_OUTPUT input) : SV_TARGET
 {
     const int samples = min(BlurParams.x, 15);
     const int halfSamples = samples / 2;
-    
+
     // Compute normalization factor for actual weights used
     float weightSum = WEIGHTS[0];
     [unroll(7)]
@@ -50,20 +50,20 @@ float4 PS_Main(VS_OUTPUT input) : SV_TARGET
         weightSum += 2.0f * WEIGHTS[min(j, 7)];
     }
     const float normalization = 1.0f / weightSum;
-    
+
     // Sample center pixel
     float4 result = InputTexture.Sample(LinearSampler, input.TexCoord) * (WEIGHTS[0] * normalization);
-    
+
     // Sample symmetric pairs
     [unroll(7)]
     for (int i = 1; i <= halfSamples; ++i)
     {
         float weight = WEIGHTS[min(i, 7)] * normalization;
         float offset = i * TexelSize.x;
-        
+
         result += InputTexture.Sample(LinearSampler, input.TexCoord + float2(offset, 0.0f)) * weight;
         result += InputTexture.Sample(LinearSampler, input.TexCoord - float2(offset, 0.0f)) * weight;
     }
-    
+
     return result;
 }
