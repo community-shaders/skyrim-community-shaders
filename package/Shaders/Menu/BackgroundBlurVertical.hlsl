@@ -25,35 +25,37 @@ VS_OUTPUT VS_Main(uint vertexID : SV_VertexID)
     return output;
 }
 
-float GaussianWeight(float offset)
-{
-    const float SIGMA = 2.0f;
-    const float v = 2.0f * SIGMA * SIGMA;
-    return exp(-(offset * offset) / v) / (3.14159265f * v);
-}
+// Precomputed normalized Gaussian weights (sigma = 2.0)
+static const float WEIGHTS[8] = {
+    0.1760327f,  // offset 0 (center)
+    0.1658591f,  // offset ±1
+    0.1403215f,  // offset ±2
+    0.1069852f,  // offset ±3
+    0.0732894f,  // offset ±4
+    0.0451904f,  // offset ±5
+    0.0248657f,  // offset ±6
+    0.0122423f   // offset ±7
+};
 
 float4 PS_Main(VS_OUTPUT input) : SV_TARGET
 {
-    float4 result = float4(0.0f, 0.0f, 0.0f, 0.0f);
-    float totalWeight = 0.0f;
-
     const int samples = min(BlurParams.x, 15);
     const int halfSamples = samples / 2;
-
-    for (int i = -halfSamples; i <= halfSamples; ++i)
+    
+    // Sample center pixel
+    float4 result = InputTexture.Sample(LinearSampler, input.TexCoord) * WEIGHTS[0];
+    
+    // Sample symmetric pairs (2x loop unrolling opportunity)
+    [unroll(7)]
+    for (int i = 1; i <= halfSamples; ++i)
     {
-        float2 sampleCoord = input.TexCoord + float2(0.0f, i * TexelSize.y);
-        float weight = GaussianWeight(float(i));
-
-        if (sampleCoord.y >= 0.0f && sampleCoord.y <= 1.0f)
-        {
-            result += InputTexture.Sample(LinearSampler, sampleCoord) * weight;
-            totalWeight += weight;
-        }
+        float weight = WEIGHTS[min(i, 7)];
+        float offset = i * TexelSize.y;
+        
+        // Sampler CLAMP mode handles edge cases - no bounds check needed
+        result += InputTexture.Sample(LinearSampler, input.TexCoord + float2(0.0f, offset)) * weight;
+        result += InputTexture.Sample(LinearSampler, input.TexCoord - float2(0.0f, offset)) * weight;
     }
-
-    if (totalWeight > 0.0f)
-        result /= totalWeight;
-
+    
     return result;
 }
