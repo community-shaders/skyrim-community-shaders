@@ -41,21 +41,21 @@ float4 PS_Main(VS_OUTPUT input) : SV_TARGET
 {
     const int samples = min(BlurParams.x, 15);
     const int halfSamples = samples / 2;
-    
+
     // Sample center pixel
     float4 result = InputTexture.Sample(LinearSampler, input.TexCoord) * WEIGHTS[0];
-    
+
     // Sample symmetric pairs (2x loop unrolling opportunity)
     [unroll(7)]
     for (int i = 1; i <= halfSamples; ++i)
     {
         float weight = WEIGHTS[min(i, 7)];
         float offset = i * TexelSize.y;
-        
+
         // Sampler CLAMP mode handles edge cases - no bounds check needed
         result += InputTexture.Sample(LinearSampler, input.TexCoord + float2(0.0f, offset)) * weight;
         result += InputTexture.Sample(LinearSampler, input.TexCoord - float2(0.0f, offset)) * weight;
     }
-    
+
     return result;
 }
