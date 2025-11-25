@@ -242,10 +242,11 @@ public:
 		bool ShowActionIcons = true;      // whether to show action buttons as icons
 		bool UseMonochromeIcons = false;  // whether to use monochrome (white) action icons with text color tinting
 		bool UseMonochromeLogo = false;   // whether to use monochrome CS logo
-		bool ShowFooter = true;           // whether to show the footer with game version/GPU info
-		bool CenterHeader = false;        // whether to center the header title and logo
-		float TooltipHoverDelay = 0.5f;   // tooltip hover delay in seconds
-		float BackgroundBlur = 0.5f;      // background blur effect intensity		// Scrollbar opacity settings
+		bool ShowFooter = true;              // whether to show the footer with game version/GPU info
+		bool CenterHeader = false;           // whether to center the header title and logo
+		float TooltipHoverDelay = 0.5f;      // tooltip hover delay in seconds
+		bool BackgroundBlurEnabled = false;  // enable background blur effect
+		// Scrollbar opacity settings
 		struct ScrollbarOpacitySettings
 		{
 			float Background = 0.0f;     // Background of the scrollbar area

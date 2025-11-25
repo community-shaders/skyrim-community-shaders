@@ -35,9 +35,9 @@
         ],
         "UseSimplePalette": false,
         "ShowActionIcons": true,
-        "UseMonochromeIcons": true,
+        "UseMonochromeIcons": false,
         "TooltipHoverDelay": 0.5,
-        "BackgroundBlur": 0.3,
+        "BackgroundBlurEnabled": false,
         "Palette": {
             "Background": [0.0, 0.0, 0.0, 0.95],
             "Text": [1.0, 1.0, 1.0, 1.0],

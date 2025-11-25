@@ -1,13 +1,13 @@
-// Based on Unrimp rendering engine's separable blur implementation
+// Inspired by Unrimp rendering engine's separable blur implementation
 // Credits: Christian Ofenberg and the Unrimp project (https://github.com/cofenberg/unrimp)
 // License: MIT License
 
 #include "BackgroundBlur.h"
 #include "../Globals.h"
+#include "../Util.h"
 
 #include <algorithm>
 #include <cmath>
-#include <d3dcompiler.h>
 #include <imgui.h>
 #include <imgui_internal.h>
 
@@ -15,31 +15,11 @@
 
 using namespace std::literals;
 
-/**
- * THEME MANAGER IMPLEMENTATION NOTES
- * ===================================
- *
- * BLUR SHADER PARAMETERS:
- * -----------------------
- * The background blur system uses constant buffers to pass parameters to HLSL shaders:
- *
- * BlurBuffer (cbuffer b0):
- *   - TexelSize.xy: Inverse texture dimensions (1/width, 1/height) for UV calculations
- *   - TexelSize.z:  Blur strength multiplier (0.0-1.0 from BackgroundBlur theme setting)
- *   - BlurParams.x: Number of blur samples (default: 13, must be odd for centered kernel)
- *
- * The blur uses a separable Gaussian kernel split into two passes:
- *   1. Horizontal pass: Samples along X-axis, outputs to intermediate texture
- *   2. Vertical pass:   Samples along Y-axis from intermediate, outputs final result
- */
+// Blur intensity hardcoded. Super downscaled blur is very sensitive, this value looks best.
+constexpr float BLUR_INTENSITY = 0.03f;
 
-// Blur System Constants
-// ---------------------
-// Text contrast boost per unit blur: Compensates for reduced clarity behind blurred backgrounds
-constexpr float BLUR_TEXT_CONTRAST_FACTOR = 0.05f;  // 5% brightness boost at max blur
-
-// Gaussian blur sigma: Controls blur kernel spread (standard deviation)
-constexpr float GAUSSIAN_BLUR_SIGMA = 2.0f;
+// Downsampling factor (8 = eighth resolution for performance)
+constexpr UINT DOWNSAMPLE_FACTOR = 8;
 
 namespace BackgroundBlur
 {
@@ -47,7 +27,6 @@ namespace BackgroundBlur
 	namespace
 	{
 		std::mutex resourceMutex;
-		float currentIntensity = 0.0f;
 		bool enabled = false;
 
 		// DirectX resources (RAII managed)
@@ -57,8 +36,14 @@ namespace BackgroundBlur
 		winrt::com_ptr<ID3D11Buffer> constantBuffer;
 		winrt::com_ptr<ID3D11SamplerState> samplerState;
 		winrt::com_ptr<ID3D11BlendState> blendState;
+		winrt::com_ptr<ID3D11RasterizerState> scissorRasterizerState;
 
-		// Intermediate blur textures
+		// Downsampled textures for blur (quarter-res for performance)
+		winrt::com_ptr<ID3D11Texture2D> downsampleTexture;
+		winrt::com_ptr<ID3D11RenderTargetView> downsampleRTV;
+		winrt::com_ptr<ID3D11ShaderResourceView> downsampleSRV;
+
+		// Intermediate blur textures (at downsampled resolution)
 		winrt::com_ptr<ID3D11Texture2D> blurTexture1;
 		winrt::com_ptr<ID3D11Texture2D> blurTexture2;
 		winrt::com_ptr<ID3D11RenderTargetView> blurRTV1;
@@ -68,6 +53,8 @@ namespace BackgroundBlur
 
 		UINT textureWidth = 0;
 		UINT textureHeight = 0;
+		UINT downsampledWidth = 0;
+		UINT downsampledHeight = 0;
 
 		bool initialized = false;
 		bool initializationFailed = false;
@@ -78,159 +65,6 @@ namespace BackgroundBlur
 			float texelSize[4];  // x = 1/width, y = 1/height, z = blur strength, w = unused
 			int blurParams[4];   // x = samples, y = unused, z = unused, w = unused
 		};
-
-		// Inline HLSL shader code - Horizontal Pass
-		const char* GetHorizontalBlurShader()
-		{
-			return R"(
-cbuffer BlurBuffer : register(b0)
-{
-    float4 TexelSize;
-    int4   BlurParams;
-};
-
-SamplerState LinearSampler : register(s0);
-Texture2D InputTexture : register(t0);
-
-struct VS_OUTPUT
-{
-    float4 Position : SV_POSITION;
-    float2 TexCoord : TEXCOORD0;
-};
-
-VS_OUTPUT VS_Main(uint vertexID : SV_VertexID)
-{
-    VS_OUTPUT output;
-    output.TexCoord = float2((vertexID << 1) & 2, vertexID & 2);
-    output.Position = float4(output.TexCoord * 2.0f - 1.0f, 0.0f, 1.0f);
-    output.Position.y = -output.Position.y;
-    return output;
-}
-
-float GaussianWeight(float offset)
-{
-    const float SIGMA = 2.0f;
-    const float v = 2.0f * SIGMA * SIGMA;
-    return exp(-(offset * offset) / v) / (3.14159265f * v);
-}
-
-float4 PS_Main(VS_OUTPUT input) : SV_TARGET
-{
-    float4 result = float4(0.0f, 0.0f, 0.0f, 0.0f);
-    float totalWeight = 0.0f;
-
-    const int samples = min(BlurParams.x, 15);
-    const int halfSamples = samples / 2;
-
-    for (int i = -halfSamples; i <= halfSamples; ++i)
-    {
-        float2 sampleCoord = input.TexCoord + float2(i * TexelSize.x, 0.0f);
-        float weight = GaussianWeight(float(i));
-
-        if (sampleCoord.x >= 0.0f && sampleCoord.x <= 1.0f)
-        {
-            result += InputTexture.Sample(LinearSampler, sampleCoord) * weight;
-            totalWeight += weight;
-        }
-    }
-
-    if (totalWeight > 0.0f)
-        result /= totalWeight;
-
-    return result;
-}
-)";
-		}
-
-		const char* GetVerticalBlurShader()
-		{
-			return R"(
-cbuffer BlurBuffer : register(b0)
-{
-    float4 TexelSize;
-    int4   BlurParams;
-};
-
-SamplerState LinearSampler : register(s0);
-Texture2D InputTexture : register(t0);
-
-struct VS_OUTPUT
-{
-    float4 Position : SV_POSITION;
-    float2 TexCoord : TEXCOORD0;
-};
-
-VS_OUTPUT VS_Main(uint vertexID : SV_VertexID)
-{
-    VS_OUTPUT output;
-    output.TexCoord = float2((vertexID << 1) & 2, vertexID & 2);
-    output.Position = float4(output.TexCoord * 2.0f - 1.0f, 0.0f, 1.0f);
-    output.Position.y = -output.Position.y;
-    return output;
-}
-
-float GaussianWeight(float offset)
-{
-    const float SIGMA = 2.0f;
-    const float v = 2.0f * SIGMA * SIGMA;
-    return exp(-(offset * offset) / v) / (3.14159265f * v);
-}
-
-float4 PS_Main(VS_OUTPUT input) : SV_TARGET
-{
-    float4 result = float4(0.0f, 0.0f, 0.0f, 0.0f);
-    float totalWeight = 0.0f;
-
-    const int samples = min(BlurParams.x, 15);
-    const int halfSamples = samples / 2;
-
-    for (int i = -halfSamples; i <= halfSamples; ++i)
-    {
-        float2 sampleCoord = input.TexCoord + float2(0.0f, i * TexelSize.y);
-        float weight = GaussianWeight(float(i));
-
-        if (sampleCoord.y >= 0.0f && sampleCoord.y <= 1.0f)
-        {
-            result += InputTexture.Sample(LinearSampler, sampleCoord) * weight;
-            totalWeight += weight;
-        }
-    }
-
-    if (totalWeight > 0.0f)
-        result /= totalWeight;
-
-    return result;
-}
-)";
-		}
-
-		bool CompileShader(const char* shaderSource, const char* entryPoint, const char* target,
-			ID3DBlob** outBlob)
-		{
-			ID3DBlob* errorBlob = nullptr;
-			HRESULT hr = D3DCompile(
-				shaderSource,
-				strlen(shaderSource),
-				"InlineBlurShader",
-				nullptr,
-				nullptr,
-				entryPoint,
-				target,
-				D3DCOMPILE_OPTIMIZATION_LEVEL3,
-				0,
-				outBlob,
-				&errorBlob);
-
-			if (FAILED(hr)) {
-				if (errorBlob) {
-					logger::error("Blur shader compilation failed: {}", static_cast<char*>(errorBlob->GetBufferPointer()));
-					errorBlob->Release();
-				}
-				return false;
-			}
-
-			return true;
-		}
 
 	}  // anonymous namespace
 
@@ -248,50 +82,26 @@ float4 PS_Main(VS_OUTPUT input) : SV_TARGET
 			return false;
 		}
 
-		// Compile vertex shader
-		ID3DBlob* vsBlob = nullptr;
-		if (!CompileShader(GetHorizontalBlurShader(), "VS_Main", "vs_5_0", &vsBlob)) {
-			initializationFailed = true;
-			return false;
-		}
-
-		HRESULT hr = device->CreateVertexShader(vsBlob->GetBufferPointer(), vsBlob->GetBufferSize(), nullptr, vertexShader.put());
-		vsBlob->Release();
-
-		if (FAILED(hr)) {
-			logger::error("Failed to create blur vertex shader");
+		// Compile vertex shader from horizontal blur file (both share same vertex shader)
+		vertexShader.attach(static_cast<ID3D11VertexShader*>(Util::CompileShader(L"Data\\Shaders\\Menu\\BackgroundBlurHorizontal.hlsl", {}, "vs_5_0", "VS_Main")));
+		if (!vertexShader) {
+			logger::error("Failed to compile blur vertex shader");
 			initializationFailed = true;
 			return false;
 		}
 
 		// Compile horizontal pixel shader
-		ID3DBlob* hpsBlob = nullptr;
-		if (!CompileShader(GetHorizontalBlurShader(), "PS_Main", "ps_5_0", &hpsBlob)) {
-			initializationFailed = true;
-			return false;
-		}
-
-		hr = device->CreatePixelShader(hpsBlob->GetBufferPointer(), hpsBlob->GetBufferSize(), nullptr, horizontalPixelShader.put());
-		hpsBlob->Release();
-
-		if (FAILED(hr)) {
-			logger::error("Failed to create horizontal blur pixel shader");
+		horizontalPixelShader.attach(static_cast<ID3D11PixelShader*>(Util::CompileShader(L"Data\\Shaders\\Menu\\BackgroundBlurHorizontal.hlsl", {}, "ps_5_0", "PS_Main")));
+		if (!horizontalPixelShader) {
+			logger::error("Failed to compile horizontal blur pixel shader");
 			initializationFailed = true;
 			return false;
 		}
 
 		// Compile vertical pixel shader
-		ID3DBlob* vpsBlob = nullptr;
-		if (!CompileShader(GetVerticalBlurShader(), "PS_Main", "ps_5_0", &vpsBlob)) {
-			initializationFailed = true;
-			return false;
-		}
-
-		hr = device->CreatePixelShader(vpsBlob->GetBufferPointer(), vpsBlob->GetBufferSize(), nullptr, verticalPixelShader.put());
-		vpsBlob->Release();
-
-		if (FAILED(hr)) {
-			logger::error("Failed to create vertical blur pixel shader");
+		verticalPixelShader.attach(static_cast<ID3D11PixelShader*>(Util::CompileShader(L"Data\\Shaders\\Menu\\BackgroundBlurVertical.hlsl", {}, "ps_5_0", "PS_Main")));
+		if (!verticalPixelShader) {
+			logger::error("Failed to compile vertical blur pixel shader");
 			initializationFailed = true;
 			return false;
 		}
@@ -302,7 +112,7 @@ float4 PS_Main(VS_OUTPUT input) : SV_TARGET
 		bufferDesc.ByteWidth = sizeof(BlurConstants);
 		bufferDesc.BindFlags = D3D11_BIND_CONSTANT_BUFFER;
 
-		hr = device->CreateBuffer(&bufferDesc, nullptr, constantBuffer.put());
+		HRESULT hr = device->CreateBuffer(&bufferDesc, nullptr, constantBuffer.put());
 		if (FAILED(hr)) {
 			logger::error("Failed to create blur constant buffer");
 			initializationFailed = true;
@@ -344,6 +154,21 @@ float4 PS_Main(VS_OUTPUT input) : SV_TARGET
 			return false;
 		}
 
+		// Create scissor-enabled rasterizer state
+		D3D11_RASTERIZER_DESC rsDesc = {};
+		rsDesc.FillMode = D3D11_FILL_SOLID;
+		rsDesc.CullMode = D3D11_CULL_BACK;
+		rsDesc.FrontCounterClockwise = FALSE;
+		rsDesc.DepthClipEnable = TRUE;
+		rsDesc.ScissorEnable = TRUE;
+
+		hr = device->CreateRasterizerState(&rsDesc, scissorRasterizerState.put());
+		if (FAILED(hr)) {
+			logger::error("Failed to create scissor rasterizer state");
+			initializationFailed = true;
+			return false;
+		}
+
 		initialized = true;
 		return true;
 	}
@@ -361,7 +186,14 @@ float4 PS_Main(VS_OUTPUT input) : SV_TARGET
 			return;
 		}
 
+		// Calculate downsampled dimensions
+		UINT dsWidth = (std::max)(1u, width / DOWNSAMPLE_FACTOR);
+		UINT dsHeight = (std::max)(1u, height / DOWNSAMPLE_FACTOR);
+
 		// Release old textures
+		downsampleTexture = nullptr;
+		downsampleRTV = nullptr;
+		downsampleSRV = nullptr;
 		blurTexture1 = nullptr;
 		blurTexture2 = nullptr;
 		blurRTV1 = nullptr;
@@ -369,10 +201,10 @@ float4 PS_Main(VS_OUTPUT input) : SV_TARGET
 		blurSRV1 = nullptr;
 		blurSRV2 = nullptr;
 
-		// Create texture description
+		// Create downsampled texture description
 		D3D11_TEXTURE2D_DESC texDesc = {};
-		texDesc.Width = width;
-		texDesc.Height = height;
+		texDesc.Width = dsWidth;
+		texDesc.Height = dsHeight;
 		texDesc.MipLevels = 1;
 		texDesc.ArraySize = 1;
 		texDesc.Format = format;
@@ -380,8 +212,30 @@ float4 PS_Main(VS_OUTPUT input) : SV_TARGET
 		texDesc.Usage = D3D11_USAGE_DEFAULT;
 		texDesc.BindFlags = D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE;
 
-		// Create first blur texture
-		HRESULT hr = device->CreateTexture2D(&texDesc, nullptr, blurTexture1.put());
+		// Create downsample texture
+		HRESULT hr = device->CreateTexture2D(&texDesc, nullptr, downsampleTexture.put());
+		if (FAILED(hr)) {
+			logger::error("Failed to create downsample texture");
+			return;
+		}
+
+		hr = device->CreateRenderTargetView(downsampleTexture.get(), nullptr, downsampleRTV.put());
+		if (FAILED(hr)) {
+			logger::error("Failed to create downsample RTV");
+			downsampleTexture = nullptr;
+			return;
+		}
+
+		hr = device->CreateShaderResourceView(downsampleTexture.get(), nullptr, downsampleSRV.put());
+		if (FAILED(hr)) {
+			logger::error("Failed to create downsample SRV");
+			downsampleTexture = nullptr;
+			downsampleRTV = nullptr;
+			return;
+		}
+
+		// Create first blur texture (at downsampled resolution)
+		hr = device->CreateTexture2D(&texDesc, nullptr, blurTexture1.put());
 		if (FAILED(hr)) {
 			logger::error("Failed to create blur texture 1");
 			return;
@@ -437,6 +291,8 @@ float4 PS_Main(VS_OUTPUT input) : SV_TARGET
 
 		textureWidth = width;
 		textureHeight = height;
+		downsampledWidth = dsWidth;
+		downsampledHeight = dsHeight;
 	}
 
 	void PerformBlur(ID3D11Texture2D* sourceTexture, ID3D11RenderTargetView* targetRTV, ImVec2 menuMin, ImVec2 menuMax)
@@ -480,14 +336,47 @@ float4 PS_Main(VS_OUTPUT input) : SV_TARGET
 		ID3D11RasterizerState* originalRS = nullptr;
 		context->RSGetState(&originalRS);
 
-		// Calculate blur parameters
-		float blurRadius = currentIntensity * 10.0f;
-		int sampleCount = (std::max)(5, (std::min)(15, static_cast<int>(9 + currentIntensity * 6)));
+		// Downsample source to quarter resolution with bilinear filtering
+		D3D11_VIEWPORT downsampleViewport = {};
+		downsampleViewport.Width = static_cast<FLOAT>(downsampledWidth);
+		downsampleViewport.Height = static_cast<FLOAT>(downsampledHeight);
+		downsampleViewport.MinDepth = 0.0f;
+		downsampleViewport.MaxDepth = 1.0f;
+		context->RSSetViewports(1, &downsampleViewport);
+
+		auto downsampleRTVPtr = downsampleRTV.get();
+		context->OMSetRenderTargets(1, &downsampleRTVPtr, nullptr);
+
+		auto constantBufferPtr = constantBuffer.get();
+		auto samplerStatePtr = samplerState.get();
+		context->VSSetShader(vertexShader.get(), nullptr, 0);
+		context->PSSetSamplers(0, 1, &samplerStatePtr);
+
+		// Simple copy to downsample (bilinear filtering does the work)
+		BlurConstants downsampleConstants = {};
+		downsampleConstants.texelSize[0] = 1.0f / static_cast<float>(sourceDesc.Width);
+		downsampleConstants.texelSize[1] = 1.0f / static_cast<float>(sourceDesc.Height);
+		downsampleConstants.texelSize[2] = 0.0f;
+		downsampleConstants.texelSize[3] = 0.0f;
+		downsampleConstants.blurParams[0] = 1;  // Single sample for downsample
+		context->UpdateSubresource(constantBuffer.get(), 0, nullptr, &downsampleConstants, 0, 0);
+
+		context->PSSetConstantBuffers(0, 1, &constantBufferPtr);
+		context->PSSetShader(horizontalPixelShader.get(), nullptr, 0);
+		context->PSSetShaderResources(0, 1, &sourceSRV);
+		context->Draw(3, 0);
+
+		ID3D11ShaderResourceView* nullSRV = nullptr;
+		context->PSSetShaderResources(0, 1, &nullSRV);
+
+		// Calculate blur parameters at eighth resolution
+		float blurRadius = BLUR_INTENSITY * 10.0f;
+		int sampleCount = 9;
 
 		BlurConstants constants = {};
-		constants.texelSize[0] = blurRadius / static_cast<float>(textureWidth);
-		constants.texelSize[1] = blurRadius / static_cast<float>(textureHeight);
-		constants.texelSize[2] = currentIntensity;
+		constants.texelSize[0] = blurRadius / static_cast<float>(downsampledWidth);
+		constants.texelSize[1] = blurRadius / static_cast<float>(downsampledHeight);
+		constants.texelSize[2] = BLUR_INTENSITY;
 		constants.texelSize[3] = 0.0f;
 		constants.blurParams[0] = sampleCount;
 		constants.blurParams[1] = 0;
@@ -496,39 +385,36 @@ float4 PS_Main(VS_OUTPUT input) : SV_TARGET
 
 		context->UpdateSubresource(constantBuffer.get(), 0, nullptr, &constants, 0, 0);
 
-		// Set up viewport for blur
+		// Set up viewport for blur (quarter resolution)
 		D3D11_VIEWPORT blurViewport = {};
-		blurViewport.Width = static_cast<FLOAT>(textureWidth);
-		blurViewport.Height = static_cast<FLOAT>(textureHeight);
+		blurViewport.Width = static_cast<FLOAT>(downsampledWidth);
+		blurViewport.Height = static_cast<FLOAT>(downsampledHeight);
 		blurViewport.MinDepth = 0.0f;
 		blurViewport.MaxDepth = 1.0f;
 		context->RSSetViewports(1, &blurViewport);
 
-		// Set common shader resources
-		auto constantBufferPtr = constantBuffer.get();
-		auto samplerStatePtr = samplerState.get();
-		context->VSSetShader(vertexShader.get(), nullptr, 0);
 		context->PSSetConstantBuffers(0, 1, &constantBufferPtr);
-		context->PSSetSamplers(0, 1, &samplerStatePtr);
 
-		// First pass: Horizontal blur
+		// First pass: Horizontal blur (on downsampled texture)
 		auto rtv1Ptr = blurRTV1.get();
+		auto downsampleSRVPtr = downsampleSRV.get();
 		context->OMSetRenderTargets(1, &rtv1Ptr, nullptr);
 		context->PSSetShader(horizontalPixelShader.get(), nullptr, 0);
-		context->PSSetShaderResources(0, 1, &sourceSRV);
+		context->PSSetShaderResources(0, 1, &downsampleSRVPtr);
 		context->Draw(3, 0);
 
-		// Second pass: Vertical blur
-		ID3D11ShaderResourceView* nullSRV = nullptr;
+		// Second pass: Vertical blur (on downsampled texture)
+		context->PSSetShaderResources(0, 1, &nullSRV);
 		auto rtv2Ptr = blurRTV2.get();
 		auto srv1Ptr = blurSRV1.get();
 		context->OMSetRenderTargets(1, &rtv2Ptr, nullptr);
 		context->PSSetShader(verticalPixelShader.get(), nullptr, 0);
-		context->PSSetShaderResources(0, 1, &nullSRV);
 		context->PSSetShaderResources(0, 1, &srv1Ptr);
 		context->Draw(3, 0);
+		context->PSSetShaderResources(0, 1, &nullSRV);
 
-		// Final composition with scissor test
+		// Final composition: upscale from quarter-res with scissor test
+		// Bilinear sampler smooths the upscale automatically
 		context->RSSetViewports(1, &originalViewport);
 
 		D3D11_RECT scissorRect;
@@ -537,32 +423,18 @@ float4 PS_Main(VS_OUTPUT input) : SV_TARGET
 		scissorRect.right = static_cast<LONG>((std::min)(static_cast<FLOAT>(sourceDesc.Width), menuMax.x));
 		scissorRect.bottom = static_cast<LONG>((std::min)(static_cast<FLOAT>(sourceDesc.Height), menuMax.y));
 
-		D3D11_RASTERIZER_DESC rsDesc = {};
-		if (originalRS) {
-			originalRS->GetDesc(&rsDesc);
-		} else {
-			rsDesc.FillMode = D3D11_FILL_SOLID;
-			rsDesc.CullMode = D3D11_CULL_BACK;
-			rsDesc.FrontCounterClockwise = FALSE;
-			rsDesc.DepthClipEnable = TRUE;
-		}
-		rsDesc.ScissorEnable = TRUE;
-
-		ID3D11RasterizerState* scissorRS = nullptr;
-		globals::d3d::device->CreateRasterizerState(&rsDesc, &scissorRS);
-		if (scissorRS) {
-			context->RSSetState(scissorRS);
-			context->RSSetScissorRects(1, &scissorRect);
-		}
+		context->RSSetState(scissorRasterizerState.get());
+		context->RSSetScissorRects(1, &scissorRect);
 
 		context->OMSetRenderTargets(1, &targetRTV, nullptr);
-		float blendFactor[4] = { 1.0f, 1.0f, 1.0f, currentIntensity * 0.8f };
+		float blendFactor[4] = { 1.0f, 1.0f, 1.0f, BLUR_INTENSITY * 0.8f };
 		context->OMSetBlendState(blendState.get(), blendFactor, 0xFFFFFFFF);
 
+		// Use blurred quarter-res texture, bilinear filtering upscales smoothly
 		auto srv2Ptr = blurSRV2.get();
-		context->PSSetShaderResources(0, 1, &nullSRV);
 		context->PSSetShaderResources(0, 1, &srv2Ptr);
 		context->Draw(3, 0);
+		context->PSSetShaderResources(0, 1, &nullSRV);
 
 		// Restore state
 		context->OMSetRenderTargets(1, &originalRTV, originalDSV);
@@ -580,8 +452,6 @@ float4 PS_Main(VS_OUTPUT input) : SV_TARGET
 			originalDSV->Release();
 		if (originalRS)
 			originalRS->Release();
-		if (scissorRS)
-			scissorRS->Release();
 	}
 
 	void Cleanup()
@@ -594,6 +464,11 @@ float4 PS_Main(VS_OUTPUT input) : SV_TARGET
 		constantBuffer = nullptr;
 		samplerState = nullptr;
 		blendState = nullptr;
+		scissorRasterizerState = nullptr;
+
+		downsampleTexture = nullptr;
+		downsampleRTV = nullptr;
+		downsampleSRV = nullptr;
 
 		blurTexture1 = nullptr;
 		blurTexture2 = nullptr;
@@ -604,21 +479,22 @@ float4 PS_Main(VS_OUTPUT input) : SV_TARGET
 
 		textureWidth = 0;
 		textureHeight = 0;
+		downsampledWidth = 0;
+		downsampledHeight = 0;
 		enabled = false;
 		currentIntensity = 0.0f;
 		initialized = false;
 		initializationFailed = false;
 	}
 
-	void SetIntensity(float intensity)
+	void SetEnabled(bool enable)
 	{
-		currentIntensity = std::clamp(intensity, 0.0f, 1.0f);
-		enabled = (currentIntensity > 0.0f);
+		enabled = enable;
 	}
 
-	float GetIntensity()
+	bool GetEnabled()
 	{
-		return currentIntensity;
+		return enabled;
 	}
 
 	bool IsEnabled()
@@ -635,7 +511,7 @@ float4 PS_Main(VS_OUTPUT input) : SV_TARGET
 
 	void RenderBackgroundBlur()
 	{
-		if (!enabled || currentIntensity <= 0.0f) {
+		if (!enabled) {
 			return;
 		}
 
@@ -700,6 +576,11 @@ float4 PS_Main(VS_OUTPUT input) : SV_TARGET
 
 			// Skip child windows - only blur root windows to cover headers and footers
 			if (window->ParentWindow != nullptr) {
+				continue;
+			}
+
+			// Skip tooltip windows
+			if (window->Flags & ImGuiWindowFlags_Tooltip) {
 				continue;
 			}
 

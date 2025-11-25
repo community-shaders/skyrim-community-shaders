@@ -102,15 +102,9 @@ using json = nlohmann::json;
  *
  * BLUR SHADER SYSTEM:
  * ===================
- * Implements separable Gaussian blur using DirectX 11 shaders:
- * - Two-pass blur (horizontal + vertical) for performance
- * - Configurable sample count via BlurParams.x (default: 13 samples)
- * - Sub-pixel jitter for smoother results at low sample counts
- * - Blur strength controlled by BackgroundBlur field (0.0-1.0)
- * - Renders behind ImGui windows only (respects window bounds)
- *
- * Based on Unrimp rendering engine architecture:
- * https://github.com/cofenberg/unrimp
+ * Separable Gaussian blur (horizontal + vertical passes) rendered at eighth resolution.
+ * Hardcoded intensity (0.04) for consistent appearance. Toggle via BackgroundBlurEnabled.
+ * Based on Unrimp rendering engine: https://github.com/cofenberg/unrimp
  *
  * MIGRATION FROM OLD CONFIGS:
  * ===========================
@@ -146,7 +140,6 @@ public:
 	// Static UI helper methods
 	static void SetupImGuiStyle(const class Menu& menu);
 	static bool ReloadFont(const class Menu& menu, float& cachedFontSize);
-	static void ApplyBackgroundBlur(float blurIntensity, ImVec4* colors);
 	static void ForceApplyDefaultTheme();  // Force Default.json colors to ImGui (bypass hardcoded defaults)
 
 	struct Constants

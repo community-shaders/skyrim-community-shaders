@@ -775,8 +775,8 @@ void SettingsTabRenderer::RenderStylingTab()
 			ImGui::TextUnformatted("Time in seconds to wait before a tooltip appears when hovering over an item.");
 		}
 
-		if (ImGui::SliderFloat("Background Blur", &themeSettings.BackgroundBlur, 0.0f, 1.0f, "%.2f", ImGuiSliderFlags_AlwaysClamp)) {
-			BackgroundBlur::SetIntensity(themeSettings.BackgroundBlur);
+		if (ImGui::Checkbox("Background Blur", &themeSettings.BackgroundBlurEnabled)) {
+			BackgroundBlur::SetEnabled(themeSettings.BackgroundBlurEnabled);
 		}
 		if (auto _tt = Util::HoverTooltipWrapper()) {
 			ImGui::Text("Applies a blur effect to the background behind the menu window.");

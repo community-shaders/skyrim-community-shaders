@@ -248,21 +248,18 @@ void Menu::LoadTheme(json& o_json)
 		settings.Theme = o_json["Theme"];
 		MenuFonts::NormalizeFontRoles(settings.Theme, hasFontRoles);
 
-		auto& bodyRole = settings.Theme.FontRoles[static_cast<size_t>(FontRole::Body)];
-		if (!Util::ValidateFont(bodyRole.File)) {
-			const auto& defaults = Menu::GetDefaultFontRole(FontRole::Body);
-			logger::warn("Font '{}' not found, falling back to default font '{}'",
-				bodyRole.File, defaults.File);
-			settings.Theme.FontRoles[static_cast<size_t>(FontRole::Body)] = defaults;
-			settings.Theme.FontName = defaults.File;
-		}
-
-		// Update background blur intensity from theme settings
-		BackgroundBlur::SetIntensity(settings.Theme.BackgroundBlur);
+	auto& bodyRole = settings.Theme.FontRoles[static_cast<size_t>(FontRole::Body)];
+	if (!Util::ValidateFont(bodyRole.File)) {
+		const auto& defaults = Menu::GetDefaultFontRole(FontRole::Body);
+		logger::warn("Font '{}' not found, falling back to default font '{}'",
+			bodyRole.File, defaults.File);
+		settings.Theme.FontRoles[static_cast<size_t>(FontRole::Body)] = defaults;
+		settings.Theme.FontName = defaults.File;
 	}
-}
 
-void Menu::SaveTheme(json& o_json)
+	// Apply background blur enabled state from theme
+	BackgroundBlur::SetEnabled(settings.Theme.BackgroundBlurEnabled);
+}void Menu::SaveTheme(json& o_json)
 {
 	settings.Theme.FontName = settings.Theme.FontRoles[static_cast<size_t>(FontRole::Body)].File;
 
@@ -354,9 +351,9 @@ bool Menu::LoadThemePreset(const std::string& themeName)
 						settings.Theme.TooltipHoverDelay = themeSettings["TooltipHoverDelay"];
 					} catch (...) {}
 				}
-				if (themeSettings.contains("BackgroundBlur")) {
+				if (themeSettings.contains("BackgroundBlurEnabled")) {
 					try {
-						settings.Theme.BackgroundBlur = themeSettings["BackgroundBlur"];
+						settings.Theme.BackgroundBlurEnabled = themeSettings["BackgroundBlurEnabled"];
 					} catch (...) {}
 				}
 				if (themeSettings.contains("ScrollbarOpacity")) {
@@ -444,10 +441,13 @@ bool Menu::LoadThemePreset(const std::string& themeName)
 				pendingFontReload = true;
 			}
 
-			// Schedule deferred icon reload to apply theme-specific icon overrides
-			pendingIconReload = true;
+		// Schedule deferred icon reload to apply theme-specific icon overrides
+		pendingIconReload = true;
 
-			logger::info("Loaded theme preset: {}", themeName);
+		// Apply background blur enabled state from theme
+		BackgroundBlur::SetEnabled(settings.Theme.BackgroundBlurEnabled);
+
+		logger::info("Loaded theme preset: {}", themeName);
 			return true;
 		} catch (const std::exception& e) {
 			logger::error("Fatal error loading theme '{}': {}.", themeName, e.what());
