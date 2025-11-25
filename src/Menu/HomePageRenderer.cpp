@@ -267,8 +267,7 @@ void HomePageRenderer::RenderFirstTimeSetupDialog()
 
 	ImGuiWindowFlags flags = ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove |
 	                         ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoSavedSettings |
-	                         ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoTitleBar |
-	                         ImGuiWindowFlags_AlwaysAutoResize;  // Prevent scrolling, remove title, auto-resize
+	                         ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_AlwaysAutoResize;
 
 	if (!ImGui::Begin("##FirstTimeSetup", nullptr, flags)) {
 		ImGui::PopStyleVar(2);
@@ -276,8 +275,11 @@ void HomePageRenderer::RenderFirstTimeSetupDialog()
 		return;
 	}
 
-	// Set font scale for better readability in this welcome dialog
-	ImGui::SetWindowFontScale(SETUP_DIALOG_FONT_SCALE);
+	// Set absolute font size for better readability in this welcome dialog
+	float targetFontSize = 27.0f;
+	float currentFontSize = io.FontDefault ? io.FontDefault->FontSize : io.FontGlobalScale * 13.0f;
+	float fontScale = targetFontSize / currentFontSize;
+	ImGui::SetWindowFontScale(fontScale);
 
 	auto menu = Menu::GetSingleton();
 
@@ -357,6 +359,9 @@ void HomePageRenderer::RenderFirstTimeSetupDialog()
 	auto& themeSettings = menu->GetTheme();
 	const char* currentKeyName = Util::Input::KeyIdToString(menu->GetSettings().ToggleKey);
 
+	// Increase font size for hotkey text
+	ImGui::SetWindowFontScale(fontScale * HOTKEY_TEXT_SCALE_MULTIPLIER);
+
 	// Calculate text dimensions for centering and button area
 	float hotkeyWidth = ImGui::CalcTextSize(currentKeyName).x;
 	float centerX = (windowWidth - hotkeyWidth) * 0.5f;
@@ -387,6 +392,9 @@ void HomePageRenderer::RenderFirstTimeSetupDialog()
 	                         themeSettings.StatusPalette.CurrentHotkey;
 
 	ImGui::TextColored(hotkeyColor, "%s", currentKeyName);
+
+	// Reset font scale
+	ImGui::SetWindowFontScale(fontScale);
 
 	// Handle click to start hotkey capture
 	if (clicked) {
@@ -446,9 +454,8 @@ void HomePageRenderer::RenderFirstTimeSetupDialog()
 	ImGui::SetCursorPosX((windowWidth - helpWidth) * 0.5f);
 	ImGui::TextDisabled("%s", helpText);
 
-	ImGui::SetWindowFontScale(1.0f);  // Reset font scale
-	ImGui::PopStyleVar(2);            // Pop WindowRounding and WindowBorderSize
 	ImGui::End();
+	ImGui::PopStyleVar(2);
 }
 
 bool HomePageRenderer::ShouldShowFirstTimeSetup()

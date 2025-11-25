@@ -36,6 +36,9 @@ on:
             - "vcpkg-configuration.json"
             - ".gitmodules"
             - "extern/**"
+            - "cmake/**"
+            - ".github/workflows/**"
+            - ".github/configs/**"
 
 permissions:
     contents: read
@@ -52,7 +55,7 @@ jobs:
         if: ${{ github.event_name == 'pull_request_target' }}
         outputs:
             should-build: ${{ steps.changed-files.outputs.build_any_changed == 'true' || steps.changed-files.outputs.cpp_any_changed == 'true' || steps.changed-files.conclusion == 'failure' }}
-            hlsl-should-build: ${{ steps.changed-files.outputs.hlsl_any_changed == 'true' || steps.changed-files.conclusion == 'failure' }}
+            hlsl-should-build: ${{ steps.changed-files.outputs.hlsl_any_changed == 'true' || steps.changed-files.outputs.cmake_any_changed == 'true' || steps.changed-files.outputs.ci_any_changed == 'true' || steps.changed-files.conclusion == 'failure' }}
         steps:
             - uses: actions/checkout@v4
               with:
@@ -86,6 +89,13 @@ jobs:
                         - 'vcpkg-configuration.json'
                         - '.gitmodules'
                         - 'extern/**'
+                      cmake:
+                        - 'CMakeLists.txt'
+                        - 'CMakePresets.json'
+                        - 'cmake/**'
+                      ci:
+                        - '.github/workflows/**'
+                        - '.github/configs/**'
                       hlsl:
                         - '**.hlsl'
                         - '**.hlsli'
@@ -387,6 +397,37 @@ jobs:
               with:
                   vcpkgJsonGlob: vcpkg.json
 
+            - name: Locate fxc.exe
+              if: steps.check-hlsl.outputs.skip != 'true'
+              id: find_fxc
+              shell: pwsh
+              run: |
+                  # Try to find fxc.exe on PATH first
+                  $fxcCmd = Get-Command -Name fxc.exe -ErrorAction SilentlyContinue
+                  if ($fxcCmd) {
+                    $fxcPath = $fxcCmd.Source
+                    Write-Host "Found fxc.exe at $fxcPath"
+                    Add-Content -Path $env:GITHUB_OUTPUT -Value "fxc_path=$fxcPath"
+                  } else {
+                    # Try known Windows SDK locations (x64)
+                    $fxcPath = ''
+                    $sdkRoot = 'C:\Program Files (x86)\Windows Kits\10\bin'
+                    if (Test-Path $sdkRoot) {
+                      $versions = Get-ChildItem -Path $sdkRoot -Directory | Sort-Object -Descending
+                      foreach ($v in $versions) {
+                        $candidate = Join-Path $v.FullName 'x64\fxc.exe'
+                        if (Test-Path $candidate) { $fxcPath = $candidate; break }
+                      }
+                    }
+                    if ($fxcPath -ne '') {
+                      Write-Host "Found fxc.exe at $fxcPath"
+                      Add-Content -Path $env:GITHUB_OUTPUT -Value "fxc_path=$fxcPath"
+                    } else {
+                      Write-Warning "fxc.exe not found in PATH or common SDK locations"
+                      Add-Content -Path $env:GITHUB_OUTPUT -Value "fxc_path="
+                    }
+                  }
+
             - name: Cache CMake build output
               if: steps.check-hlsl.outputs.skip != 'true'
               uses: actions/cache@v4
@@ -437,7 +478,12 @@ jobs:
 
             - name: Validate shader compilation (${{ matrix.config.name }})
               if: steps.check-hlsl.outputs.skip != 'true'
-              run: hlslkit-compile --shader-dir build/ALL/aio/Shaders --output-dir build/ShaderCache --config ${{ matrix.config.file }} --max-warnings 0 --suppress-warnings X1519
+              run: |
+                  if [ -z "${{ steps.find_fxc.outputs.fxc_path }}" ]; then
+                    echo "fxc.exe not found - shader validation requires fxc.exe. Set --fxc to a valid path or ensure fxc.exe is in PATH." >&2
+                    exit 1
+                  fi
+                  hlslkit-compile --fxc "${{ steps.find_fxc.outputs.fxc_path }}" --shader-dir build/ALL/aio/Shaders --output-dir build/ShaderCache --config ${{ matrix.config.file }} --max-warnings 0 --suppress-warnings X1519
               shell: bash
 
             - name: Upload shader validation logs

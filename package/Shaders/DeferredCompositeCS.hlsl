@@ -178,7 +178,7 @@ void SampleSSGISpecular(uint2 pixCoord, sh2 lobe, out float ao, out float3 il, i
 
         float specularIrradianceLuminance = Color::RGBToLuminance(EnvTexture.SampleLevel(LinearSampler, R, 15));
 
-		#		if defined(IBL)
+#		if defined(IBL)
 		float3 iblColor = 0;
 		if (SharedData::iblSettings.EnableDiffuseIBL && SharedData::iblSettings.EnableInterior) {
 			directionalAmbientColorSpecular *= SharedData::iblSettings.DALCAmount;
