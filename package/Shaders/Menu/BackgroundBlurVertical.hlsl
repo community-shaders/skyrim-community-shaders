@@ -41,21 +41,29 @@ float4 PS_Main(VS_OUTPUT input) : SV_TARGET
 {
     const int samples = min(BlurParams.x, 15);
     const int halfSamples = samples / 2;
-
+    
+    // Compute normalization factor for actual weights used
+    float weightSum = WEIGHTS[0];
+    [unroll(7)]
+    for (int j = 1; j <= halfSamples; ++j)
+    {
+        weightSum += 2.0f * WEIGHTS[min(j, 7)];
+    }
+    const float normalization = 1.0f / weightSum;
+    
     // Sample center pixel
-    float4 result = InputTexture.Sample(LinearSampler, input.TexCoord) * WEIGHTS[0];
-
-    // Sample symmetric pairs (2x loop unrolling opportunity)
+    float4 result = InputTexture.Sample(LinearSampler, input.TexCoord) * (WEIGHTS[0] * normalization);
+    
+    // Sample symmetric pairs
     [unroll(7)]
     for (int i = 1; i <= halfSamples; ++i)
     {
-        float weight = WEIGHTS[min(i, 7)];
+        float weight = WEIGHTS[min(i, 7)] * normalization;
         float offset = i * TexelSize.y;
-
-        // Sampler CLAMP mode handles edge cases - no bounds check needed
+        
         result += InputTexture.Sample(LinearSampler, input.TexCoord + float2(0.0f, offset)) * weight;
         result += InputTexture.Sample(LinearSampler, input.TexCoord - float2(0.0f, offset)) * weight;
     }
-
+    
     return result;
 }

@@ -42,17 +42,8 @@ namespace BackgroundBlur
 	 */
 	void Cleanup();
 
-	/**
-	 * @brief Sets the blur intensity for next render
-	 * @param intensity Blur strength (0.0 = disabled, 1.0 = maximum)
-	 */
-	void SetIntensity(float intensity);
-
-	/**
-	 * @brief Gets current blur intensity
-	 * @return Current blur intensity value
-	 */
-	float GetIntensity();
+	void SetEnabled(bool enable);
+	bool GetEnabled();
 
 	/**
 	 * @brief Checks if blur is enabled

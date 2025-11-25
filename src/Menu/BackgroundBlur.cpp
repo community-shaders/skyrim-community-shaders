@@ -1,4 +1,4 @@
-// Based on Unrimp rendering engine's separable blur implementation
+// Inspired by Unrimp rendering engine's separable blur implementation
 // Credits: Christian Ofenberg and the Unrimp project (https://github.com/cofenberg/unrimp)
 // License: MIT License
 
@@ -15,31 +15,11 @@
 
 using namespace std::literals;
 
-/**
- * THEME MANAGER IMPLEMENTATION NOTES
- * ===================================
- *
- * BLUR SHADER PARAMETERS:
- * -----------------------
- * The background blur system uses constant buffers to pass parameters to HLSL shaders:
- *
- * BlurBuffer (cbuffer b0):
- *   - TexelSize.xy: Inverse texture dimensions (1/width, 1/height) for UV calculations
- *   - TexelSize.z:  Blur strength multiplier (0.0-1.0 from BackgroundBlur theme setting)
- *   - BlurParams.x: Number of blur samples (default: 13, must be odd for centered kernel)
- *
- * The blur uses a separable Gaussian kernel split into two passes:
- *   1. Horizontal pass: Samples along X-axis, outputs to intermediate texture
- *   2. Vertical pass:   Samples along Y-axis from intermediate, outputs final result
- */
+// Blur intensity hardcoded. Super downscaled blur is very sensitive, this value looks best.
+constexpr float BLUR_INTENSITY = 0.03f;
 
-// Blur System Constants
-// ---------------------
-// Text contrast boost per unit blur: Compensates for reduced clarity behind blurred backgrounds
-constexpr float BLUR_TEXT_CONTRAST_FACTOR = 0.05f;  // 5% brightness boost at max blur
-
-// Gaussian blur sigma: Controls blur kernel spread (standard deviation)
-constexpr float GAUSSIAN_BLUR_SIGMA = 2.0f;
+// Downsampling factor (8 = eighth resolution for performance)
+constexpr UINT DOWNSAMPLE_FACTOR = 8;
 
 namespace BackgroundBlur
 {
@@ -47,11 +27,7 @@ namespace BackgroundBlur
 	namespace
 	{
 		std::mutex resourceMutex;
-		float currentIntensity = 0.0f;
 		bool enabled = false;
-
-		// Downsample factor for performance (4 = quarter resolution, 16x fewer pixels)
-		constexpr UINT DOWNSAMPLE_FACTOR = 8;
 
 		// DirectX resources (RAII managed)
 		winrt::com_ptr<ID3D11VertexShader> vertexShader;
@@ -262,6 +238,9 @@ namespace BackgroundBlur
 		hr = device->CreateTexture2D(&texDesc, nullptr, blurTexture1.put());
 		if (FAILED(hr)) {
 			logger::error("Failed to create blur texture 1");
+			downsampleTexture = nullptr;
+			downsampleRTV = nullptr;
+			downsampleSRV = nullptr;
 			return;
 		}
 
@@ -270,6 +249,9 @@ namespace BackgroundBlur
 		if (FAILED(hr)) {
 			logger::error("Failed to create blur texture 2");
 			blurTexture1 = nullptr;
+			downsampleTexture = nullptr;
+			downsampleRTV = nullptr;
+			downsampleSRV = nullptr;
 			return;
 		}
 
@@ -279,6 +261,9 @@ namespace BackgroundBlur
 			logger::error("Failed to create blur RTV 1");
 			blurTexture1 = nullptr;
 			blurTexture2 = nullptr;
+			downsampleTexture = nullptr;
+			downsampleRTV = nullptr;
+			downsampleSRV = nullptr;
 			return;
 		}
 
@@ -288,6 +273,9 @@ namespace BackgroundBlur
 			blurTexture1 = nullptr;
 			blurTexture2 = nullptr;
 			blurRTV1 = nullptr;
+			downsampleTexture = nullptr;
+			downsampleRTV = nullptr;
+			downsampleSRV = nullptr;
 			return;
 		}
 
@@ -299,6 +287,9 @@ namespace BackgroundBlur
 			blurTexture2 = nullptr;
 			blurRTV1 = nullptr;
 			blurRTV2 = nullptr;
+			downsampleTexture = nullptr;
+			downsampleRTV = nullptr;
+			downsampleSRV = nullptr;
 			return;
 		}
 
@@ -310,6 +301,9 @@ namespace BackgroundBlur
 			blurRTV1 = nullptr;
 			blurRTV2 = nullptr;
 			blurSRV1 = nullptr;
+			downsampleTexture = nullptr;
+			downsampleRTV = nullptr;
+			downsampleSRV = nullptr;
 			return;
 		}
 
@@ -393,14 +387,14 @@ namespace BackgroundBlur
 		ID3D11ShaderResourceView* nullSRV = nullptr;
 		context->PSSetShaderResources(0, 1, &nullSRV);
 
-		// Calculate blur parameters (working at quarter resolution)
-		float blurRadius = currentIntensity * 10.0f;
-		int sampleCount = (std::max)(5, (std::min)(15, static_cast<int>(9 + currentIntensity * 6)));
+		// Calculate blur parameters at eighth resolution
+		float blurRadius = BLUR_INTENSITY * 10.0f;
+		int sampleCount = 9;
 
 		BlurConstants constants = {};
 		constants.texelSize[0] = blurRadius / static_cast<float>(downsampledWidth);
 		constants.texelSize[1] = blurRadius / static_cast<float>(downsampledHeight);
-		constants.texelSize[2] = currentIntensity;
+		constants.texelSize[2] = BLUR_INTENSITY;
 		constants.texelSize[3] = 0.0f;
 		constants.blurParams[0] = sampleCount;
 		constants.blurParams[1] = 0;
@@ -451,7 +445,7 @@ namespace BackgroundBlur
 		context->RSSetScissorRects(1, &scissorRect);
 
 		context->OMSetRenderTargets(1, &targetRTV, nullptr);
-		float blendFactor[4] = { 1.0f, 1.0f, 1.0f, currentIntensity * 0.8f };
+		float blendFactor[4] = { 1.0f, 1.0f, 1.0f, BLUR_INTENSITY * 0.8f };
 		context->OMSetBlendState(blendState.get(), blendFactor, 0xFFFFFFFF);
 
 		// Use blurred quarter-res texture, bilinear filtering upscales smoothly
@@ -511,15 +505,14 @@ namespace BackgroundBlur
 		initializationFailed = false;
 	}
 
-	void SetIntensity(float intensity)
+	void SetEnabled(bool enable)
 	{
-		currentIntensity = std::clamp(intensity, 0.0f, 1.0f);
-		enabled = (currentIntensity > 0.0f);
+		enabled = enable;
 	}
 
-	float GetIntensity()
+	bool GetEnabled()
 	{
-		return currentIntensity;
+		return enabled;
 	}
 
 	bool IsEnabled()
@@ -536,7 +529,7 @@ namespace BackgroundBlur
 
 	void RenderBackgroundBlur()
 	{
-		if (!enabled || currentIntensity <= 0.0f) {
+		if (!enabled) {
 			return;
 		}
 
@@ -601,6 +594,11 @@ namespace BackgroundBlur
 
 			// Skip child windows - only blur root windows to cover headers and footers
 			if (window->ParentWindow != nullptr) {
+				continue;
+			}
+
+			// Skip tooltip windows
+			if (window->Flags & ImGuiWindowFlags_Tooltip) {
 				continue;
 			}
 
