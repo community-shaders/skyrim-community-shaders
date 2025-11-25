@@ -64,6 +64,6 @@ float4 PS_Main(VS_OUTPUT input) : SV_TARGET
         result += InputTexture.Sample(LinearSampler, input.TexCoord + float2(offset, 0.0f)) * weight;
         result += InputTexture.Sample(LinearSampler, input.TexCoord - float2(offset, 0.0f)) * weight;
     }
-    
+
     return result;
 }
