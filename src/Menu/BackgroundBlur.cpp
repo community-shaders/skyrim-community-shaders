@@ -238,6 +238,9 @@ namespace BackgroundBlur
 		hr = device->CreateTexture2D(&texDesc, nullptr, blurTexture1.put());
 		if (FAILED(hr)) {
 			logger::error("Failed to create blur texture 1");
+			downsampleTexture = nullptr;
+			downsampleRTV = nullptr;
+			downsampleSRV = nullptr;
 			return;
 		}
 
@@ -246,6 +249,9 @@ namespace BackgroundBlur
 		if (FAILED(hr)) {
 			logger::error("Failed to create blur texture 2");
 			blurTexture1 = nullptr;
+			downsampleTexture = nullptr;
+			downsampleRTV = nullptr;
+			downsampleSRV = nullptr;
 			return;
 		}
 
@@ -255,6 +261,9 @@ namespace BackgroundBlur
 			logger::error("Failed to create blur RTV 1");
 			blurTexture1 = nullptr;
 			blurTexture2 = nullptr;
+			downsampleTexture = nullptr;
+			downsampleRTV = nullptr;
+			downsampleSRV = nullptr;
 			return;
 		}
 
@@ -264,6 +273,9 @@ namespace BackgroundBlur
 			blurTexture1 = nullptr;
 			blurTexture2 = nullptr;
 			blurRTV1 = nullptr;
+			downsampleTexture = nullptr;
+			downsampleRTV = nullptr;
+			downsampleSRV = nullptr;
 			return;
 		}
 
@@ -275,6 +287,9 @@ namespace BackgroundBlur
 			blurTexture2 = nullptr;
 			blurRTV1 = nullptr;
 			blurRTV2 = nullptr;
+			downsampleTexture = nullptr;
+			downsampleRTV = nullptr;
+			downsampleSRV = nullptr;
 			return;
 		}
 
@@ -286,6 +301,9 @@ namespace BackgroundBlur
 			blurRTV1 = nullptr;
 			blurRTV2 = nullptr;
 			blurSRV1 = nullptr;
+			downsampleTexture = nullptr;
+			downsampleRTV = nullptr;
+			downsampleSRV = nullptr;
 			return;
 		}
 
