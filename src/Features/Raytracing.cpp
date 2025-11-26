@@ -30,6 +30,7 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	PointFade,
 	GammaToLinear,
 	RaytracedShadows,
+	RecompressTextures,
 	DLSSRRQualityMode,
 	DebugOutput,
 	EnablePIXCapture,
@@ -51,6 +52,7 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	PointFade,
 	GammaToLinear,
 	RaytracedShadows,
+	RecompressTextures,
 	DebugOutput,
 	EnablePIXCapture,
 	EnableDebugDevice)
@@ -1267,6 +1269,419 @@ inline std::wstring ToWide(const std::string& str)
 	return wstr;
 }
 
+void Raytracing::BeginGeometry(RE::BSFadeNode* pFadeNode, RE::NiStream& rNiStream)
+{
+	currentFadeNode = pFadeNode;
+
+	logger::info("[RT] BeginGeometry - Path: {}, Fade Node: [0x{:x}]", rNiStream.inputFilePath, reinterpret_cast<uintptr_t>(pFadeNode));
+}
+
+Raytracing::MeshData Raytracing::CreateTriShapeBuffers(RE::BSGraphics::TriShape* rendererData, const std::uint16_t& vertexCount, const std::uint16_t& triangleCount, const std::wstring& name)
+{
+	MeshData meshData{};
+
+	meshData.registerIndex = registers.allocate();
+
+	meshData.vertexCount = vertexCount;
+	meshData.triangleCount = triangleCount;
+
+	meshData.vertexBuffer = eastl::make_unique<DX12::StructuredBufferUpload<Vertex>>(d3d12Device.get(), vertexCount);
+	meshData.triangleBuffer = eastl::make_unique<DX12::StructuredBufferUpload<Triangle>>(d3d12Device.get(), triangleCount);
+
+	// Vertex Buffer
+	{
+		auto vertexDesc = rendererData->vertexDesc;
+
+		auto vertexFlags = vertexDesc.GetFlags();
+		uint32_t stride = vertexDesc.GetSize();
+
+		uint32_t posOffset = vertexDesc.GetAttributeOffset(RE::BSGraphics::Vertex::VA_POSITION);
+		uint32_t uvOffset = vertexDesc.GetAttributeOffset(RE::BSGraphics::Vertex::VA_TEXCOORD0);
+		uint32_t normOffset = vertexDesc.GetAttributeOffset(RE::BSGraphics::Vertex::VA_NORMAL);
+		uint32_t tangOffset = vertexDesc.GetAttributeOffset(RE::BSGraphics::Vertex::VA_BINORMAL);
+		uint32_t colorOffset = vertexDesc.GetAttributeOffset(RE::BSGraphics::Vertex::VA_COLOR);
+
+		eastl::vector<Vertex> vertices(vertexCount);
+
+		for (uint32_t i = 0; i < vertexCount; i++) {
+			uint8_t* vtx = rendererData->rawVertexData + i * stride;
+
+			Vertex vertexData{};
+
+			if (vertexFlags & RE::BSGraphics::Vertex::VF_VERTEX) {
+				const float* pos = reinterpret_cast<const float*>(vtx + posOffset);
+				vertexData.Position.x = pos[0];
+				vertexData.Position.y = pos[1];
+				vertexData.Position.z = pos[2];
+				//vertexData.Position.w = pos[3];
+			}
+
+			if (vertexFlags & RE::BSGraphics::Vertex::VF_UV) {
+				const uint16_t* texcoord = reinterpret_cast<const uint16_t*>(vtx + uvOffset);
+
+				vertexData.Texcoord0[0] = texcoord[0];
+				vertexData.Texcoord0[1] = texcoord[1];
+			}
+
+			if (vertexFlags & RE::BSGraphics::Vertex::VF_NORMAL) {
+				const uint8_t* norm = reinterpret_cast<const uint8_t*>(vtx + normOffset);
+
+				vertexData.Normal[0] = norm[0];
+				vertexData.Normal[1] = norm[1];
+				vertexData.Normal[2] = norm[2];
+				vertexData.Normal[3] = norm[3];
+
+				if (vertexFlags & RE::BSGraphics::Vertex::VF_TANGENT) {
+					const uint8_t* tang = reinterpret_cast<const uint8_t*>(vtx + tangOffset);
+
+					vertexData.Tangent[0] = tang[0];
+					vertexData.Tangent[1] = tang[1];
+					vertexData.Tangent[2] = tang[2];
+					vertexData.Tangent[3] = tang[3];
+				}
+			}
+
+			if (vertexFlags & RE::BSGraphics::Vertex::VF_COLORS) {
+				const uint8_t* col = reinterpret_cast<const uint8_t*>(vtx + colorOffset);
+
+				vertexData.Color[0] = col[0];
+				vertexData.Color[1] = col[1];
+				vertexData.Color[2] = col[2];
+				vertexData.Color[3] = col[3];
+			}
+
+			vertices[i] = eastl::move(vertexData);
+		}
+
+		meshData.vertexBuffer->UpdateList(vertices.data(), vertices.size());
+		DX::ThrowIfFailed(meshData.vertexBuffer->resource->SetName(std::format(L"Vertex Buffer [{}] - {}", meshes.size(), name).c_str()));
+
+		meshData.vertexBuffer->Upload(commandList.get());
+
+		// SRV
+		D3D12_SHADER_RESOURCE_VIEW_DESC vbDesc = {};
+		vbDesc.ViewDimension = D3D12_SRV_DIMENSION_BUFFER;
+		vbDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
+		vbDesc.Format = DXGI_FORMAT_UNKNOWN;
+		vbDesc.Buffer.FirstElement = 0;
+		vbDesc.Buffer.NumElements = static_cast<int32_t>(meshData.vertexCount);
+		vbDesc.Buffer.StructureByteStride = sizeof(Vertex);
+		vbDesc.Buffer.Flags = D3D12_BUFFER_SRV_FLAG_NONE;
+
+		d3d12Device->CreateShaderResourceView(meshData.vertexBuffer->resource.get(), &vbDesc, giHeap->CPUHandle(GIHeap::Slot::Vertices, meshData.registerIndex));
+	}
+
+	// Index Buffer
+	{
+		const uint16_t* indexes = rendererData->rawIndexData;
+
+		eastl::vector<Triangle> triangles(triangleCount);
+
+		for (uint32_t t = 0; t < triangleCount; ++t) {
+			uint32_t i = t * 3;
+
+			triangles[t] = Triangle(
+				static_cast<uint32_t>(indexes[i]),
+				static_cast<uint32_t>(indexes[i + 1]),
+				static_cast<uint32_t>(indexes[i + 2]));
+		}
+
+		meshData.triangleBuffer->UpdateList(triangles.data(), triangles.size());
+		DX::ThrowIfFailed(meshData.triangleBuffer->resource->SetName(std::format(L"Index Buffer [{}] - {}", meshes.size(), name).c_str()));
+
+		meshData.triangleBuffer->Upload(commandList.get());
+
+		// SRV
+		D3D12_SHADER_RESOURCE_VIEW_DESC ibDesc = {};
+		ibDesc.ViewDimension = D3D12_SRV_DIMENSION_BUFFER;
+		ibDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
+		ibDesc.Format = DXGI_FORMAT_UNKNOWN;
+		ibDesc.Buffer.FirstElement = 0;
+		ibDesc.Buffer.NumElements = static_cast<int32_t>(meshData.triangleCount);
+		ibDesc.Buffer.StructureByteStride = sizeof(Triangle);
+		ibDesc.Buffer.Flags = D3D12_BUFFER_SRV_FLAG_NONE;
+
+		d3d12Device->CreateShaderResourceView(meshData.triangleBuffer->resource.get(), &ibDesc, giHeap->CPUHandle(GIHeap::Slot::Triangles, meshData.registerIndex));
+	}
+
+	return meshData;
+}
+
+void Raytracing::CreateTriShapeMaterials(MeshData& meshData, const RE::BSGeometry::GEOMETRY_RUNTIME_DATA& geometryRuntimeData, const char* name)
+{
+	using State = RE::BSGeometry::States;
+	using Feature = RE::BSShaderMaterial::Feature;
+
+	Feature feature = Feature::kNone;
+	ID3D12Resource* diffuseTexture = nullptr;
+	ID3D12Resource* effectTexture = nullptr;
+	float4 effectColor = { 0.0f, 0.0f, 0.0f, 1.0f };
+	int effectType = 0;
+
+	float4 texCoordOffsetScale = { 0.0f, 0.0f, 1.0f, 1.0f };
+	float4 texCoord1OffsetScale = { 0.0f, 0.0f, 1.0f, 1.0f };
+
+	// Register textures buffer
+	{
+		//auto geometryRuntimeData = pGeometry->GetGeometryRuntimeData();
+
+		auto effect = geometryRuntimeData.properties[State::kEffect].get();
+
+		if (effect) {
+			//auto shaderProperty = netimmerse_cast<RE::BSShaderProperty*>(effect);
+
+			//logger::warn(fmt::runtime("[RT] AddInstance - {}, ShaderPropertyFlags: {}"), pTriShape->name, GetFlags<RE::BSShaderProperty::EShaderPropertyFlag>(shaderProperty->flags.underlying()));
+
+			auto lightingShader = netimmerse_cast<RE::BSLightingShaderProperty*>(effect);
+
+			if (lightingShader) {
+				effectColor = {
+					lightingShader->emissiveColor->red,
+					lightingShader->emissiveColor->green,
+					lightingShader->emissiveColor->blue,
+					lightingShader->emissiveMult
+				};
+
+				if (auto material = lightingShader->material) {
+					texCoordOffsetScale = {
+						material->texCoordOffset[0].x, material->texCoordOffset[0].y,
+						material->texCoordScale[0].x, material->texCoordScale[0].y
+					};
+
+					/*texCoord1OffsetScale = {
+							material->texCoordOffset[1].x, material->texCoordOffset[1].y,
+							material->texCoordScale[1].x, material->texCoordScale[1].y
+						};*/
+
+					feature = material->GetFeature();
+
+					auto lightingBaseMaterial = static_cast<RE::BSLightingShaderMaterialBase*>(material);
+
+					if (lightingBaseMaterial) {
+						auto niDiffuseTexture = lightingBaseMaterial->diffuseTexture;
+						auto bsDiffuseTexture = niDiffuseTexture->rendererTexture;
+
+						if (auto it = sharedTextures.find(bsDiffuseTexture->texture); it != sharedTextures.end()) {
+							diffuseTexture = it->second.get();
+						} else {
+							logger::warn(fmt::runtime("[RT] Diffuse texture not found for {}"), name);
+						}
+
+						if (feature == Feature::kGlowMap) {
+							const auto& lightingGlowMaterial = static_cast<RE::BSLightingShaderMaterialGlowmap*>(material);
+
+							if (lightingGlowMaterial) {
+								if (const auto& niGlowTexture = lightingGlowMaterial->glowTexture; niGlowTexture) {
+									if (const auto& bsGlowTexture = niGlowTexture->rendererTexture; bsGlowTexture) {
+										if (auto it = sharedTextures.find(bsGlowTexture->texture); it != sharedTextures.end()) {
+											effectTexture = it->second.get();
+										}
+									}
+								}
+							}
+
+							if (!effectTexture)
+								logger::warn(fmt::runtime("[RT] Glow texture not found for {}"), name);
+						}
+					}
+				}
+			}
+
+			auto effectShader = netimmerse_cast<RE::BSEffectShaderProperty*>(effect);
+
+			if (effectShader) {
+				if (auto material = effectShader->material) {
+					auto effectMaterial = static_cast<RE::BSEffectShaderMaterial*>(material);
+
+					if (effectMaterial) {
+						effectType = 1;
+						effectColor = { effectMaterial->baseColor.red, effectMaterial->baseColor.green, effectMaterial->baseColor.blue, effectMaterial->baseColorScale };
+
+						if (auto niSourceTexture = effectMaterial->sourceTexture) {
+							if (auto bsSourceTexture = niSourceTexture->rendererTexture) {
+								if (auto it = sharedTextures.find(bsSourceTexture->texture); it != sharedTextures.end()) {
+									diffuseTexture = it->second.get();
+								} else {
+									logger::warn(fmt::runtime("[RT] Source texture not found for {}"), name);
+								}
+							}
+						}
+
+						if (auto niGreyscaleTexture = effectMaterial->greyscaleTexture) {
+							if (auto bsGreyscaleTexture = niGreyscaleTexture->rendererTexture) {
+								if (auto it = sharedTextures.find(bsGreyscaleTexture->texture); it != sharedTextures.end()) {
+									effectTexture = it->second.get();
+								} else {
+									logger::warn(fmt::runtime("[RT] Greyscale texture not found for {}"), name);
+								}
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+
+	// Diffuse Texture
+	if (diffuseTexture) {
+		D3D12_RESOURCE_DESC texResDesc = diffuseTexture->GetDesc();
+
+		D3D12_SHADER_RESOURCE_VIEW_DESC texSrvDesc = {};
+		texSrvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
+		texSrvDesc.Format = texResDesc.Format;
+		texSrvDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
+		texSrvDesc.Texture2D.MostDetailedMip = 0;
+		texSrvDesc.Texture2D.MipLevels = texResDesc.MipLevels;
+		texSrvDesc.Texture2D.PlaneSlice = 0;
+		texSrvDesc.Texture2D.ResourceMinLODClamp = 0.0f;
+
+		d3d12Device->CreateShaderResourceView(diffuseTexture, &texSrvDesc, giHeap->CPUHandle(GIHeap::Slot::DiffuseTextures, meshData.registerIndex));
+	}
+
+	// Glow Texture
+	if (effectTexture) {
+		D3D12_RESOURCE_DESC texResDesc = effectTexture->GetDesc();
+
+		D3D12_SHADER_RESOURCE_VIEW_DESC texSrvDesc = {};
+		texSrvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
+		texSrvDesc.Format = texResDesc.Format;
+		texSrvDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
+		texSrvDesc.Texture2D.MostDetailedMip = 0;
+		texSrvDesc.Texture2D.MipLevels = texResDesc.MipLevels;
+		texSrvDesc.Texture2D.PlaneSlice = 0;
+		texSrvDesc.Texture2D.ResourceMinLODClamp = 0.0f;
+
+		d3d12Device->CreateShaderResourceView(effectTexture, &texSrvDesc, giHeap->CPUHandle(GIHeap::Slot::GlowTextures, meshData.registerIndex));
+	}
+}
+
+void Raytracing::AddTriShape(RE::BSTriShape* pTriShape)
+{
+	if (!currentFadeNode)
+		return;
+
+	logger::info("[RT] ProcessTriShape - Fade Node: [0x{:x}], TriShape: [0x{:x}]", reinterpret_cast<uintptr_t>(currentFadeNode), reinterpret_cast<uintptr_t>(pTriShape));
+
+	auto [it, emplaced] = fadeNodeGeometry.try_emplace(currentFadeNode, GeometryData());
+
+	if (pTriShape->worldBound.radius == 0.0f)
+		return;
+
+	const auto& geometryRuntimeData = pTriShape->GetGeometryRuntimeData();
+
+	RE::BSGraphics::TriShape* rendererData = geometryRuntimeData.rendererData;
+
+	// RenderData is null for skinned meshes, just ignore them for now
+	if (!rendererData)
+		return;
+
+	const auto& triShapeRuntime = pTriShape->GetTrishapeRuntimeData();
+
+	const char* name = pTriShape->name.c_str();
+
+	auto meshData = CreateTriShapeBuffers(rendererData, triShapeRuntime.vertexCount, triShapeRuntime.triangleCount, ToWide(name));
+	CreateTriShapeMaterials(meshData, geometryRuntimeData, name);
+
+	it->second.meshes.push_back(eastl::move(meshData));
+}
+
+void Raytracing::CommitGeometry()
+{
+	if (!currentFadeNode)
+		return;
+
+	if (auto it = fadeNodeGeometry.find(currentFadeNode); it != fadeNodeGeometry.end()) {
+		auto& geometryData = it->second;
+
+		auto& geometryMeshes = geometryData.meshes;
+
+		auto triShapeCount = meshes.size();
+
+		if (triShapeCount == 0) {
+			logger::warn("[RT] CommitGeometry - Nothing to commit.");
+		} else {
+			logger::info("[RT] CommitGeometry - TriShapes: {}", triShapeCount);
+
+			eastl::vector<D3D12_RAYTRACING_GEOMETRY_DESC> geometryDescs(triShapeCount);
+
+			bool skinned = false;
+
+			for (auto meshData = geometryMeshes.begin(); meshData != geometryMeshes.end(); meshData++) {
+				geometryDescs.push_back(D3D12_RAYTRACING_GEOMETRY_DESC{
+					.Type = D3D12_RAYTRACING_GEOMETRY_TYPE_TRIANGLES,
+					.Flags = D3D12_RAYTRACING_GEOMETRY_FLAG_OPAQUE,
+					.Triangles = {
+						.Transform3x4 = 0,
+						.IndexFormat = DXGI_FORMAT_R32_UINT,
+						.VertexFormat = DXGI_FORMAT_R32G32B32_FLOAT,
+						.IndexCount = meshData->triangleCount * 3,
+						.VertexCount = meshData->vertexCount,
+						.IndexBuffer = meshData->triangleBuffer->resource->GetGPUVirtualAddress(),
+						.VertexBuffer = {
+							.StartAddress = meshData->vertexBuffer->resource->GetGPUVirtualAddress(),
+							.StrideInBytes = sizeof(Vertex) 
+						} 
+					} 
+				});
+			}
+
+			D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_INPUTS inputs = {
+				.Type = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL,
+				.Flags = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_PREFER_FAST_TRACE | (skinned ? D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_ALLOW_UPDATE : D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_ALLOW_COMPACTION),
+				.NumDescs = static_cast<uint>(triShapeCount),
+				.DescsLayout = D3D12_ELEMENTS_LAYOUT_ARRAY,
+				.pGeometryDescs = geometryDescs.data()
+			};
+
+			D3D12_RAYTRACING_ACCELERATION_STRUCTURE_PREBUILD_INFO prebuildInfo;
+			d3d12Device->GetRaytracingAccelerationStructurePrebuildInfo(&inputs, &prebuildInfo);
+
+			D3D12_RESOURCE_DESC desc = {
+				.Dimension = D3D12_RESOURCE_DIMENSION_BUFFER,
+				.Width = prebuildInfo.ScratchDataSizeInBytes,
+				.Height = 1,
+				.DepthOrArraySize = 1,
+				.MipLevels = 1,
+				.SampleDesc = NO_AA,
+				.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR,
+				.Flags = D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS
+			};
+
+			winrt::com_ptr<ID3D12Resource> scratch = nullptr;
+			DX::ThrowIfFailed(d3d12Device->CreateCommittedResource(&DEFAULT_HEAP, D3D12_HEAP_FLAG_NONE, &desc, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, nullptr, IID_PPV_ARGS(scratch.put())));
+
+			desc.Width = prebuildInfo.ResultDataMaxSizeInBytes,
+			DX::ThrowIfFailed(d3d12Device->CreateCommittedResource(&DEFAULT_HEAP, D3D12_HEAP_FLAG_NONE, &desc, D3D12_RESOURCE_STATE_RAYTRACING_ACCELERATION_STRUCTURE, nullptr, IID_PPV_ARGS(geometryData.blasBuffer.put())));
+
+			auto buildDesc = eastl::make_unique<D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_DESC>(
+				D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_DESC{
+					.DestAccelerationStructureData = geometryData.blasBuffer->GetGPUVirtualAddress(),
+					.Inputs = inputs,
+					.ScratchAccelerationStructureData = scratch->GetGPUVirtualAddress() 
+				});
+
+			/*auto buildDesc = D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_DESC{
+				.DestAccelerationStructureData = geometryData.blasBuffer->GetGPUVirtualAddress(),
+				.Inputs = inputs,
+				.ScratchAccelerationStructureData = scratch->GetGPUVirtualAddress() 
+			};*/
+
+			commandList->BuildRaytracingAccelerationStructure(buildDesc.get(), 0, nullptr);
+
+			const auto& asBarrier = CD3DX12_RESOURCE_BARRIER::UAV(geometryData.blasBuffer.get());
+			commandList->ResourceBarrier(1, &asBarrier);
+
+			rtASDescs.push_back(eastl::move(buildDesc));
+			asScratchBuffers.push_back(std::move(scratch));
+			rtGeometryDescs.push_back(eastl::move(geometryDescs));
+		}
+	} else {
+		logger::error("[RT] CommitGeometry - Fade Node not found in geometry list.");
+	}
+
+	currentFadeNode = nullptr;
+}
+
 void Raytracing::AddInstance(RE::BSTriShape* pTriShape)
 {
 	//std::lock_guard lock{ renderMutex };
@@ -1300,7 +1715,9 @@ void Raytracing::AddInstance(RE::BSTriShape* pTriShape)
 	// Mesh doesn't exist yet
 	if (meshIt == meshes.end()) 
 	{
-		//logger::warn(fmt::runtime("[RT] AddInstance - {}, Child Index {}: Parent [0x{:x}] - Name: {}"), pTriShape->name, pTriShape->parentIndex, reinterpret_cast<uintptr_t>(pTriShape->parent), pTriShape->parent->name);
+		//RE::BSFadeNode* fadeNode = FindBSFadeNode((RE::NiNode*)pTriShape);
+
+		//logger::info("[RT] AddInstance - {}, Child Index {}: Parent [0x{:x}] - Name: {}, Fade node: [0x{:x}] - Name: {}", pTriShape->name, pTriShape->parentIndex, reinterpret_cast<uintptr_t>(pTriShape->parent), pTriShape->parent->name, reinterpret_cast<uintptr_t>(fadeNode), fadeNode->name);
 
 		const auto triShapeRuntime = pTriShape->GetTrishapeRuntimeData();
 		uint vertexCount = triShapeRuntime.vertexCount;
@@ -1597,6 +2014,8 @@ void Raytracing::AddInstance(RE::BSTriShape* pTriShape)
 				std::move(blasBuffer),
 				MaterialData(feature, texCoordOffsetScale, diffuseTexture, effectTexture, nullptr, effectColor, effectType),
 				{ pTriShape }));
+
+		//fadeNodeGeometry.emplace(fadeNode, eastl::vector<ID3D11Buffer*>({ vertexBufferDX11 }));
 
 	} else {
 		meshIt->second.instances.push_back(pTriShape);

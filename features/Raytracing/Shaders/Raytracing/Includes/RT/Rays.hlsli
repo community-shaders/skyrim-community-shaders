@@ -1,8 +1,8 @@
 #ifndef RAYS_HLSI
 #define RAYS_HLSI
 
-#include "RaytracedGI/Includes/Types.hlsli"
-#include "RaytracedGI/Includes/RT/CommonRT.hlsli"
+#include "Raytracing/Includes/Types.hlsli"
+#include "Raytracing/Includes/RT/CommonRT.hlsli"
 
 float4 TraceRayIndirect(RaytracingAccelerationStructure scene, float3 origin, float3 direction, uint currentDepth, inout uint randomSeed)
 {

@@ -88,6 +88,17 @@ namespace stl
 		DetourTransactionCommit();
 	}
 
+
+	template <class T>
+	void detour_thunk(size_t address)
+	{
+		T::func = address;
+		DetourTransactionBegin();
+		DetourUpdateThread(GetCurrentThread());
+		DetourAttach(reinterpret_cast<PVOID*>(&T::func), reinterpret_cast<PVOID>(T::thunk));
+		DetourTransactionCommit();
+	}
+
 	template <class T>
 	void detour_thunk_ignore_func(REL::RelocationID a_relId)
 	{

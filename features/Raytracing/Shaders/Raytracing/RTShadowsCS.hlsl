@@ -1,37 +1,24 @@
 #include "Raytracing/Includes/Common.hlsli"
+#include "Raytracing/Includes/Types/ShadowsFrameData.hlsli"
 
-cbuffer ShadowsCB: register(b0)
-{
-    float4 CameraData;
-    float2 Size;
-    float4 NDCToView;
-    float4x4 ViewInverse;
-    float3 Position;
-    float3 Direction;
-    uint Pad[35];
-};
+ConstantBuffer<ShadowsFrameData> Frame  : register(b0);
 
 RWTexture2D<float4> ShadowMask          : register(u0);
 
 Texture2D<float> DepthTexture           : register(t0);
 RaytracingAccelerationStructure Scene   : register(t1);
 
-//Texture2D<float4> GNMDTexture         : register(t0, space1);
-
 [numthreads(8, 8, 1)]
 void main(uint2 id : SV_DispatchThreadID)
 {
-    if (any(id > Size))
-        return;
+    const float2 size = float2(Frame.Position.w, Frame.Direction.w);
     
-    //const float4 gnmd = GNMDTexture[id];     
-	//const unorm float depth = gnmd.w * DEPTH_SCALE;  
-
-    //const  float depth = gnmd.w * DEPTH_SCALE;  
+    if (any(id > size))
+        return;
     
     const float depth = DepthTexture[id];  
     
-	const float depthView = ScreenToViewDepth(depth, CameraData);
+	const float depthView = ScreenToViewDepth(depth, Frame.CameraData);
 
     if (depthView < FP_Z || depth >= SKY_Z)
     {
@@ -39,15 +26,15 @@ void main(uint2 id : SV_DispatchThreadID)
         return;
     }
     
-    float2 uv = (id + 0.5f) / Size;    
+    float2 uv = (id + 0.5f) / size;    
     
- 	const float3 positionVS = ScreenToViewPosition(uv, depthView, NDCToView);
-	const float3 positionCS = ViewToWorldPosition(positionVS, ViewInverse);
-	const float3 positionWS = positionCS + Position.xyz;
+ 	const float3 positionVS = ScreenToViewPosition(uv, depthView, Frame.NDCToView);
+	const float3 positionCS = ViewToWorldPosition(positionVS, Frame.ViewInverse);
+	const float3 positionWS = positionCS + Frame.Position.xyz;
     
     RayQuery<RAY_FLAG_FORCE_OPAQUE | RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH> q;
    
-    float3 direction = normalize(Direction);
+    float3 direction = normalize(Frame.Direction.xyz);
     
     RayDesc ray;
     ray.Origin = positionWS + direction * 0.1f;
@@ -61,7 +48,7 @@ void main(uint2 id : SV_DispatchThreadID)
         0xFF,
         ray);
     
-    while (q.Proceed()) {}
+    q.Proceed();
     
     if (q.CommittedStatus() == COMMITTED_TRIANGLE_HIT)
     {

@@ -180,6 +180,10 @@ struct Raytracing : public Feature
 	void SkyCubeToHemi();
 	void CheckResourcesSide(int side);
 
+	void BeginGeometry(RE::BSFadeNode* pFadeNode, RE::NiStream& rNiStream);
+	void AddTriShape(RE::BSTriShape* pTriShape);
+	void CommitGeometry();
+
 	bool ValidTriShape(RE::BSTriShape* pTriShape);
 	void AddInstance(RE::BSTriShape* pTriShape);
 	void AddUpdateInstance(RE::BSTriShape* pTriShape);
@@ -280,7 +284,7 @@ struct Raytracing : public Feature
 		bool PointFade = true;
 		bool GammaToLinear = false;
 		bool RaytracedShadows = true;
-		bool RecompressTextures = true;
+		bool RecompressTextures = false;
 #ifdef DLSS_RR
 		DLSSRRQuality DLSSRRQualityMode = DLSSRRQuality::MaxQuality;
 #endif
@@ -292,6 +296,7 @@ struct Raytracing : public Feature
 #endif
 	} settings;
 
+	bool settingSharedTexture = false;
 	bool renderingWorld = false;
 	bool lightsUpdated = false;
 
@@ -312,7 +317,7 @@ struct Raytracing : public Feature
 		float3 Position;
 		uint16_t Texcoord0[2];
 		uint8_t Normal[4];
-		//uint8_t Tangent[4];
+		uint8_t Tangent[4];
 		uint8_t Color[4];
 	};
 
@@ -392,16 +397,31 @@ struct Raytracing : public Feature
 		uint triangleCount;
 		bool skinned;
 		eastl::unique_ptr<DX12::StructuredBufferUpload<Vertex>> vertexBuffer = nullptr;
-		eastl::unique_ptr<DX12::StructuredBufferUpload<Triangle>> indexBuffer = nullptr;
+		eastl::unique_ptr<DX12::StructuredBufferUpload<Triangle>> triangleBuffer = nullptr;
 		winrt::com_ptr<ID3D12Resource> blasBuffer = nullptr;
 		MaterialData material;
 		eastl::vector<RE::BSTriShape*> instances;
 	};
 
+	struct GeometryData
+	{
+		eastl::vector<MeshData> meshes;
+		winrt::com_ptr<ID3D12Resource> blasBuffer = nullptr;
+	};
+
+	MeshData CreateTriShapeBuffers(RE::BSGraphics::TriShape* rendererData, const std::uint16_t& vertexCount, const std::uint16_t& triangleCount, const std::wstring& name);
+	void CreateTriShapeMaterials(MeshData& meshData, const RE::BSGeometry::GEOMETRY_RUNTIME_DATA& geometryRuntimeData, const char* name);
+
 	Allocator registers = Allocator(MAX_MESHES);
 
 	// Key is RE::BSGraphics::TriShape.vertexBuffer (the original vertexBuffer)
 	eastl::unordered_map<ID3D11Buffer*, MeshData> meshes;	
+
+	RE::BSFadeNode* currentFadeNode;
+
+	// We'll group trishapes by their parent nodes, hopefully trishapes don't move on their own
+	//eastl::unordered_map<RE::NiNode*, eastl::vector<ID3D11Buffer*>> fadeNodeGeometry;
+	eastl::unordered_map<RE::BSFadeNode*, GeometryData> fadeNodeGeometry;
 
 	// Instance
 	struct InstanceData
@@ -553,12 +573,12 @@ struct Raytracing : public Feature
 	float2 jitter = { 0, 0 };
 #endif
 
-	inline float3 Float3(const RE::NiPoint3& point3)
+	static inline float3 Float3(const RE::NiPoint3& point3)
 	{
 		return float3(point3.x, point3.y, point3.z);
 	}
 
-	inline DXGI_FORMAT GetCompatibleFormat(DXGI_FORMAT format, bool recompress)
+	static inline DXGI_FORMAT GetCompatibleFormat(DXGI_FORMAT format, bool recompress)
 	{
 		/*switch (format) {
 		case DXGI_FORMAT_BC4_UNORM:
@@ -592,6 +612,21 @@ struct Raytracing : public Feature
 			return format;
 			break;
 		}
+	}
+
+	static inline bool EndsWith(const char* str, const char* suffix)
+	{
+		if (!str || !suffix)
+			return false;
+
+		size_t strLen = std::strlen(str);
+		size_t suffixLen = std::strlen(suffix);
+
+		if (suffixLen > strLen)
+			return false;
+
+		// Compare the end of str with suffix
+		return std::strcmp(str + strLen - suffixLen, suffix) == 0;
 	}
 
 	struct Hooks
@@ -655,12 +690,12 @@ struct Raytracing : public Feature
 				eastl::vector<D3D11_SUBRESOURCE_DATA> initialDataLocal;
 				eastl::vector<DirectX::ScratchImage> outputMips;
 
-				if (rt.loaded && pDesc && pInitialData && pDesc->ArraySize == 1 && pDesc->Usage == D3D11_USAGE_DEFAULT && pDesc->BindFlags == D3D11_BIND_SHADER_RESOURCE && pDesc->MiscFlags == 0 && pDesc->CPUAccessFlags == 0) {
+				if (rt.loaded && rt.settingSharedTexture && pDesc && pInitialData && pDesc->ArraySize == 1 && pDesc->Usage == D3D11_USAGE_DEFAULT && pDesc->BindFlags == D3D11_BIND_SHADER_RESOURCE && pDesc->MiscFlags == 0 && pDesc->CPUAccessFlags == 0) {
 					bool recompress = rt.settings.RecompressTextures;
 
-					//logger::info("[RT] ID3D11Device::CreateTexture2D - Texture: [0x{:x}]", reinterpret_cast<uintptr_t>(*ppTexture2D));
+					//logger::info("[RT] ID3D11Device::CreateTexture2D - Texture: [0x{:x}], [0x{:x}]", reinterpret_cast<uintptr_t>(*ppTexture2D), reinterpret_cast<uintptr_t>(ppTexture2D));
 
-					descCopy.Format = rt.GetCompatibleFormat(pDesc->Format, recompress);
+					descCopy.Format = GetCompatibleFormat(pDesc->Format, recompress);
 	
 					if (pDesc->Format != descCopy.Format) {
 						initialDataLocal.resize(pDesc->MipLevels);
@@ -668,7 +703,7 @@ struct Raytracing : public Feature
 
 						auto range = std::views::iota(0u, pDesc->MipLevels);
 
-						auto decompressedFormat = rt.GetCompatibleFormat(pDesc->Format, false);
+						auto decompressedFormat = GetCompatibleFormat(pDesc->Format, false);
 
 						std::for_each(std::execution::par, range.begin(), range.end(), [&](uint mip) {
 							DirectX::Image src;
@@ -755,7 +790,7 @@ struct Raytracing : public Feature
 
 					std::lock_guard lock{ rt.sharedTextureMutex };
 
-					descCopy.Format = rt.GetCompatibleFormat(pDesc->Format, rt.settings.RecompressTextures);
+					descCopy.Format = GetCompatibleFormat(pDesc->Format, rt.settings.RecompressTextures);
 
 					if (pDesc->Format != descCopy.Format) {
 						if (rt.sharedTextures.find(static_cast<ID3D11Texture2D*>(pResource)) != rt.sharedTextures.end()) {
@@ -873,18 +908,94 @@ struct Raytracing : public Feature
 			static inline REL::Relocation<decltype(thunk)> func;
 		};
 
+#pragma region GeometryLoad
+
+		struct NiStream_LoadObject
+		{
+			static bool thunk(RE::NiStream* oThis)
+			{
+				//logger::info("[RT] NiStream::LoadObject - Before - Path: {}", oThis->inputFilePath);
+
+				auto& rt = globals::features::raytracing;
+
+				auto result = func(oThis);
+
+				rt.CommitGeometry();
+
+				//logger::info("[RT] NiStream::LoadObject - After");
+				//logger::info("[RT] NiStream::LoadObject | After - Buffers: {}", currentBuffers.size());
+
+				return result;
+			}
+			static inline REL::Relocation<decltype(thunk)> func;
+		};
+
+		struct BSFadeNode_LoadBinary
+		{
+			static void thunk(RE::BSFadeNode* oThis, RE::NiStream& a_stream)
+			{
+				//logger::info("[RT] BSFadeNode::LoadBinary - Path: {}, Self Pointer: [0x{:x}]", a_stream.inputFilePath, reinterpret_cast<uintptr_t>(oThis));
+
+				auto& rt = globals::features::raytracing;
+
+				rt.BeginGeometry(oThis, a_stream);
+
+				func(oThis, a_stream);
+
+				//logger::info("[RT] BSFadeNode::LoadBinary - Name: {}, Self Pointer: [0x{:x}]", oThis->name, reinterpret_cast<uintptr_t>(oThis));
+
+				if (rt.Active()) {
+					auto& children = oThis->GetChildren();
+
+					for (auto it = children.begin(); it != children.end(); it++) {
+						logger::info("[RT] BSFadeNode::LoadBinary - Child: {}", it->get()->name);
+					}
+
+					/*RE::BSVisit::TraverseScenegraphGeometries(oThis, [&](RE::BSGeometry* geometry) -> RE::BSVisit::BSVisitControl {
+						if (RE::BSTriShape* pTriShape = geometry->AsTriShape()) {
+							auto effect = pTriShape->GetGeometryRuntimeData().properties[RE::BSGeometry::States::kEffect].get();
+							auto shaderProperty = netimmerse_cast<RE::BSShaderProperty*>(effect);
+
+							auto& geometryRuntimeData = pTriShape->GetGeometryRuntimeData();
+							RE::BSGraphics::TriShape* rendererData = geometryRuntimeData.rendererData;
+
+							logger::info("[RT] BSFadeNode::TraverseScenegraphGeometries {} - TriShape: [0x{:x}], Shader Property: [0x{:x}]", geometry->name, reinterpret_cast<uintptr_t>(rendererData), reinterpret_cast<uintptr_t>(shaderProperty));
+						} else {
+							logger::info("[RT] BSFadeNode::TraverseScenegraphGeometries {}", geometry->name);
+						}
+
+						return RE::BSVisit::BSVisitControl::kContinue;
+					});*/
+					//rtgi.AddInstance(oThis);
+				}
+			}
+			static inline REL::Relocation<decltype(thunk)> func;
+		};	
+
 		struct BSTriShape_LoadBinary
 		{
 			static void thunk(RE::BSTriShape* oThis, RE::NiStream& a_stream)
 			{
-				func(oThis, a_stream);
-				
-				auto& rtgi = globals::features::raytracing;
+				//logger::info("[RT] BSTriShape::LoadBinary | Before - Path: {}", a_stream.inputFilePath);
 
-				if (rtgi.Active()) 
+				func(oThis, a_stream);
+
+				auto geometry = oThis->AsGeometry();
+				auto geomRuntimeData = geometry->GetGeometryRuntimeData();
+
+				//logger::info("[RT] BSTriShape::LoadBinary | After - Name: {}, Parent: [0x{:x}], Type: {}", oThis->name, reinterpret_cast<uintptr_t>(oThis->parent), magic_enum::enum_name(oThis->AsGeometry()->GetType().get()));
+				/*logger::info(
+					"[RT] BSTriShape::LoadBinary | After - Name: {}, Type: {}, Renderer Data: [0x{:x}]", 
+					oThis->name,
+					magic_enum::enum_name(oThis->AsGeometry()->GetType().get()),
+					reinterpret_cast<uintptr_t>(geomRuntimeData.rendererData)
+					);*/
+				
+				auto& rt = globals::features::raytracing;
+
+				if (rt.Active()) 
 				{
-					//logger::info("[RTGI] BSTriShape::LoadBinary {} - {}", oThis->name, a_stream.inputFilePath);
-					//rtgi.AddInstance(oThis);
+					rt.AddTriShape(oThis);
 				}
 			}
 			static inline REL::Relocation<decltype(thunk)> func;
@@ -894,14 +1005,69 @@ struct Raytracing : public Feature
 		{
 			static void thunk(RE::BSTriShape* oThis, RE::NiStream& a_stream)
 			{
+				logger::info("[RT] BSTriShape::LinkObject | Before - Path: {}, Name: {}, Parent: [0x{:x}]", a_stream.inputFilePath, oThis->name, reinterpret_cast<uintptr_t>(oThis->parent));
+
 				func(oThis, a_stream);
 
-				auto& rtgi = globals::features::raytracing;
+				logger::info("[RT] BSTriShape::LinkObject | Before - Parent Name: {}, Index: {}", oThis->parent->name, oThis->parentIndex);
+			}
+			static inline REL::Relocation<decltype(thunk)> func;
+		};
 
-				if (rtgi.Active()) {
-					//logger::info("[RTGI] BSTriShape::LinkObject {} - {}", oThis->name, a_stream.inputFilePath);
-					//rtgi.AddInstance(oThis);
-				}
+		struct NiSkinPartition_LoadBinary
+		{
+			static void thunk(RE::NiSkinPartition* oThis, RE::NiStream& a_stream)
+			{
+				logger::info("[RT] NiSkinPartition::LoadBinary | Before");
+
+				func(oThis, a_stream);
+
+				logger::info("[RT] NiSkinPartition::LoadBinary | After");
+			}
+			static inline REL::Relocation<decltype(thunk)> func;
+		};
+
+		struct BSGeometry_LoadBinary
+		{
+			static void thunk(RE::BSGeometry* oThis, RE::NiStream& a_stream)
+			{
+				logger::info("[RT] BSGeometry::LoadBinary | Before - Path: {}, Name: {}, Parent: [0x{:x}]", a_stream.inputFilePath, oThis->name, reinterpret_cast<uintptr_t>(oThis->parent));
+
+				func(oThis, a_stream);
+
+				logger::info("[RT] BSGeometry::LoadBinary | Before - Parent Name: {}, Index: {}, Type: {}", oThis->parent->name, oThis->parentIndex, magic_enum::enum_name(oThis->GetType().get()));
+			}
+			static inline REL::Relocation<decltype(thunk)> func;
+		};
+
+#pragma endregion
+
+		struct sub_7FF6F3FC3C00
+		{
+			static void* thunk(char* Source, __int64* a2, __int64 a3)
+			{
+				logger::info("[RT] sub_7FF6F3FC3C00 - Source: {}", Source);
+
+				auto result = func(Source, a2, a3);
+
+				logger::info("[RT] sub_7FF6F3FC3C00");
+
+				return result;
+			}
+			static inline REL::Relocation<decltype(thunk)> func;
+		};
+
+		struct sub_1401CBF40
+		{
+			static void* thunk(char* Source)
+			{
+				logger::info("[RT] sub_1401CBF40 - Source: {}", Source);
+
+				auto result = func(Source);
+
+				logger::info("[RT] sub_1401CBF40");
+
+				return result;
 			}
 			static inline REL::Relocation<decltype(thunk)> func;
 		};
@@ -1013,6 +1179,17 @@ struct Raytracing : public Feature
 			static inline REL::Relocation<decltype(thunk)> func;
 		};
 
+
+		/*struct BSShaderResourceManager_LoadTexture
+		{
+			static void thunk(void* oThis, RE::NiSourceTexture* a_texture)
+			{
+				func(oThis, a_texture);
+				logger::info("[RT] BSShaderResourceManager::LoadTexture - Texture: [0x{:x}] Name: {}", reinterpret_cast<uintptr_t>(a_texture), a_texture->name);
+			};
+			static inline REL::Relocation<decltype(thunk)> func;
+		};
+
 		struct BSShaderTextureSet_SetTexturePath
 		{
 			static void thunk(RE::BSShaderTextureSet* oThis, RE::BSTextureSet::Texture a_texture, const char* a_path)
@@ -1023,16 +1200,125 @@ struct Raytracing : public Feature
 				func(oThis, a_texture, a_path);
 			};
 			static inline REL::Relocation<decltype(thunk)> func;
+		};*/
+
+		/*struct BSShaderResourceManager_CreateTriShape
+		{
+			static RE::BSTriShape* thunk(void* oThis, RE::NiStream* pStream, void* a3, int a4, uint a5)
+			{
+				RE::BSTriShape* output = func(oThis, pStream, a3, a4, a5);
+
+				//logger::info("[RT] BSShaderResourceManager::CreateTriShape - Name: {}", output->name);
+				logger::info("[RT] BSShaderResourceManager::CreateTriShape - Stream: {}", pStream->filePath);
+
+				//if (output) {
+				//	auto geometry = output->AsGeometry();
+
+				//	auto runtimeData = geometry->GetGeometryRuntimeData();
+
+				//	logger::info("[RT] BSShaderResourceManager::CreateTriShape - Name: {}, TriShape: [0x{:x}]", output->name, reinterpret_cast<uintptr_t>(runtimeData.rendererData));
+				//}
+				//logger::info("[RT] BSShaderResourceManager::CreateTriShape - Name: {}", output->name);
+
+				return output;
+			};
+			static inline REL::Relocation<decltype(thunk)> func;
+		};*/
+
+		/*struct NiSkinPartition_TriggersDataLoad
+		{
+			static void thunk(RE::NiSkinPartition* oThis, void* arg)
+			{
+				logger::info("[RT] NiSkinPartition::TriggersDataLoad - Nome {}, Index Buffer [0x{:x}]", oThis->AsDynamicTriShape, reinterpret_cast<uintptr_t>(output->indexBuffer));
+
+				func(oThis, arg);
+
+				logger::info("[RT] NiSkinPartition::TriggersDataLoad - Vertex Buffer [0x{:x}], Index Buffer [0x{:x}]", reinterpret_cast<uintptr_t>(output->vertexBuffer), reinterpret_cast<uintptr_t>(output->indexBuffer));
+			};
+			static inline REL::Relocation<decltype(thunk)> func;
+		};*/
+
+		struct BSShaderResourceManager_CreateTriShapeRendererData
+		{
+			static RE::BSGraphics::TriShape* thunk(void* oThis, void* vertexBuffer, uint64_t vertexDesc, uint16_t* indices, uint indexCount)
+			{
+				auto output = func(oThis, vertexBuffer, vertexDesc, indices, indexCount);
+
+				logger::info("[RT] BSShaderResourceManager::CreateTriShapeRendererData - Vertex Buffer [0x{:x}], Index Buffer [0x{:x}]", reinterpret_cast<uintptr_t>(output->vertexBuffer), reinterpret_cast<uintptr_t>(output->indexBuffer));
+
+				return output;
+			};
+			static inline REL::Relocation<decltype(thunk)> func;
+		};
+
+		// ---------
+
+		// Only used by skinned meshes?
+		struct BSShaderTextureSet_SetTexture
+		{
+			static void thunk(RE::BSShaderTextureSet* oThis, RE::BSTextureSet::Texture a_texture, RE::NiSourceTexturePtr& a_srcTexture)
+			{
+				auto& rt = globals::features::raytracing;
+				rt.settingSharedTexture = a_texture == RE::BSTextureSet::Texture::kDiffuse || a_texture == RE::BSTextureSet::Texture::kGlowMap;
+
+				logger::info(fmt::runtime("[RT] BSShaderTextureSet::SetTexture - Texture: {}, Src Texture: [0x{:x}] [0x{:x}]"), magic_enum::enum_name(a_texture), reinterpret_cast<uintptr_t>(&a_srcTexture), reinterpret_cast<uintptr_t>(a_srcTexture.get()));
+				func(oThis, a_texture, a_srcTexture);
+				logger::info("[RT] BSShaderTextureSet::SetTexture Src Texture: [0x{:x}] [0x{:x}]", reinterpret_cast<uintptr_t>(&a_srcTexture), reinterpret_cast<uintptr_t>(a_srcTexture.get()));
+				
+				rt.settingSharedTexture = false;
+			};
+			static inline REL::Relocation<decltype(thunk)> func;
+		};
+
+		struct BSTextureSet_SetTexture
+		{
+			static void thunk(RE::BSTextureSet* oThis, RE::BSTextureSet::Texture a_texture, RE::NiSourceTexturePtr& a_srcTexture)
+			{
+				auto& rt = globals::features::raytracing;
+				rt.settingSharedTexture = a_texture == RE::BSTextureSet::Texture::kDiffuse || a_texture == RE::BSTextureSet::Texture::kGlowMap;
+
+				logger::info(fmt::runtime("[RT] BSTextureSet::SetTexture - Texture: {}, Src Texture: [0x{:x}] [0x{:x}]"), magic_enum::enum_name(a_texture), reinterpret_cast<uintptr_t>(&a_srcTexture), reinterpret_cast<uintptr_t>(a_srcTexture.get()));
+				func(oThis, a_texture, a_srcTexture);
+				logger::info("[RT] BSTextureSet::SetTexture Src Texture: [0x{:x}] [0x{:x}]", reinterpret_cast<uintptr_t>(&a_srcTexture), reinterpret_cast<uintptr_t>(a_srcTexture.get()));
+
+				rt.settingSharedTexture = false;
+			};
+			static inline REL::Relocation<decltype(thunk)> func;
 		};
 
 		struct BGSTextureSet_SetTexture
 		{
-			static void thunk(RE::BGSTextureSet* oThis, RE::BSTextureSet::Texture a_texture, RE::NiSourceTexturePtr& a_srcTexture)
+			static void thunk(RE::BGSTextureSet* oThis, __int64 a_texture, RE::NiSourceTexturePtr& a_srcTexture)
+			{
+				//auto& rt = globals::features::raytracing;
+				//rt.settingSharedTexture = a_texture == RE::BSTextureSet::Texture::kDiffuse || a_texture == RE::BSTextureSet::Texture::kGlowMap;
+
+				/*logger::info(fmt::runtime("[RT] BGSTextureSet::SetTexture - Texture: {}, Src Texture: [0x{:x}] [0x{:x}]"), magic_enum::enum_name(a_texture), reinterpret_cast<uintptr_t>(&a_srcTexture), reinterpret_cast<uintptr_t>(a_srcTexture.get()));
+				func(oThis, a_texture, a_srcTexture);
+				logger::info("[RT] BGSTextureSet::SetTexture Src Texture: [0x{:x}] [0x{:x}]", reinterpret_cast<uintptr_t>(&a_srcTexture), reinterpret_cast<uintptr_t>(a_srcTexture.get()));*/
+
+				//logger::info(fmt::runtime("[RT] BGSTextureSet::SetTexture - Texture: {}"), magic_enum::enum_name(a_texture));
+
+				auto a_texture64 = static_cast<RE::BSTextureSet::Texture>(a_texture);
+
+				logger::info(fmt::runtime("[RT] BGSTextureSet::SetTexture - Before Texture: {}"), magic_enum::enum_name(a_texture64));
+				func(oThis, a_texture, a_srcTexture);
+				logger::info("[RT] BGSTextureSet::SetTexture - After");
+
+				//rt.settingSharedTexture = false;
+			};
+			static inline REL::Relocation<decltype(thunk)> func;
+		};
+
+		struct BSShaderTextureSet_SetTexturePath
+		{
+			static void thunk(RE::BSShaderTextureSet* oThis, RE::BSTextureSet::Texture a_texture, const char* a_path)
 			{
 				//auto& rt = globals::features::raytracing;
 
-				logger::info("[RT] BGSTextureSet::SetTexture - Texture: {}, Src Texture: {}", magic_enum::enum_name(a_texture), reinterpret_cast<uintptr_t>(&a_srcTexture));
-				func(oThis, a_texture, a_srcTexture);
+				logger::info("[RT] BSShaderTextureSet::SetTexturePath - Texture: {}, Path: {}", magic_enum::enum_name(a_texture), a_path);
+				func(oThis, a_texture, a_path);
+				logger::info("[RT] BSShaderTextureSet::SetTexturePath");
 			};
 			static inline REL::Relocation<decltype(thunk)> func;
 		};
@@ -1041,23 +1327,30 @@ struct Raytracing : public Feature
 		{
 			static void thunk(const char* a_path, bool a_demand, RE::NiPointer<RE::NiTexture>& a_textureOut, bool a_isHeightMap)
 			{
-				//auto& rt = globals::features::raytracing;
+				
+				auto path = std::string(a_path);
 
-				logger::info("[RT] BSShaderManager::GetTexture - Path: {}, Demand: {}, Address: [0x{:x}], Address: [0x{:x}], Is HeightMap: {}", a_path, a_demand, reinterpret_cast<uintptr_t>(&a_textureOut), reinterpret_cast<uintptr_t>(a_textureOut.get()), a_isHeightMap);
+				auto& rt = globals::features::raytracing;
+				rt.settingSharedTexture = path.ends_with("_d.dds") || path.ends_with("_p.dds");  // path.ends_with"_rmaos.dds")
+
+				//logger::info("[RT] BSShaderManager::GetTexture - Path: {}, Demand: {}, Address: [0x{:x}], Address: [0x{:x}], Is HeightMap: {}", a_path, a_demand, reinterpret_cast<uintptr_t>(&a_textureOut), reinterpret_cast<uintptr_t>(a_textureOut.get()), a_isHeightMap);
 				func(a_path, a_demand, a_textureOut, a_isHeightMap);
-				logger::info("[RT] BSShaderManager::GetTexture - Address: [0x{:x}], Address: [0x{:x}]", reinterpret_cast<uintptr_t>(&a_textureOut), reinterpret_cast<uintptr_t>(a_textureOut.get()));
+				//logger::info("[RT] BSShaderManager::GetTexture - Address: [0x{:x}], Address: [0x{:x}]", reinterpret_cast<uintptr_t>(&a_textureOut), reinterpret_cast<uintptr_t>(a_textureOut.get()));
+			
+				rt.settingSharedTexture = false;
 			};
 			static inline REL::Relocation<decltype(thunk)> func;
 		};
 
-		struct BSLightingShaderMaterialBase_OnLoadTextureSet
+		// -------------
+
+		/*struct BSLightingShaderMaterialBase_OnLoadTextureSet
 		{
 			static void thunk(RE::BSLightingShaderMaterialBase* oThis, std::uint64_t arg1, RE::BSTextureSet* inTextureSet)
 			{
 				//auto& rt = globals::features::raytracing;
 				//RE::BSShaderTextureSet
 				//RE::BGSTextureSet
-
 				logger::info("[RT] BSLightingShaderMaterialBase::OnLoadTextureSet - Diffuse: [0x{:x}]", reinterpret_cast<uintptr_t>(oThis->diffuseTexture.get()));
 
 				//rt.texturesToShare.emplace();
@@ -1078,7 +1371,7 @@ struct Raytracing : public Feature
 				//logger::info("[RT] BSShaderManager::OnLoadTextureSet - Address: {}, Address: {}", reinterpret_cast<uintptr_t>(&a_textureOut), reinterpret_cast<uintptr_t>(a_textureOut.get()));
 			};
 			static inline REL::Relocation<decltype(thunk)> func;
-		};
+		};*/
 		
 		static void Install()
 		{
@@ -1104,8 +1397,34 @@ struct Raytracing : public Feature
 				stl::write_vfunc<0x34, BSTriShape_OnVisible>(RE::VTABLE_BSTriShape[0]);
 			}
 
-			//stl::write_vfunc<0x18, BSTriShape_LoadBinary>(RE::VTABLE_BSTriShape[0]);
-			stl::write_vfunc<0x19, BSTriShape_LinkObject>(RE::VTABLE_BSTriShape[0]);
+			stl::write_vfunc<0x18, BSTriShape_LoadBinary>(RE::VTABLE_BSTriShape[0]);
+			stl::write_vfunc<0x18, BSFadeNode_LoadBinary>(RE::VTABLE_BSFadeNode[0]);
+			stl::write_vfunc<0x18, NiSkinPartition_LoadBinary>(RE::VTABLE_NiSkinPartition[0]);
+			stl::write_vfunc<0x18, BSGeometry_LoadBinary>(RE::VTABLE_BSGeometry[0]);
+
+			//stl::write_vfunc<0x19, BSTriShape_LinkObject>(RE::VTABLE_BSTriShape[0]);
+
+
+			//stl::detour_thunk<sub_7FF6F3FC3C00>(REL::Offset(0x7ff6eba40100).address());
+
+			//auto VTABLE_NiStream = REL::VariantID(286064, 237126, 0x17ef860);
+			//stl::write_vfunc<0x15, NiStream_LoadObject>(VTABLE_NiStream);
+
+			/*stl::write_vfunc<0x15, NiStream_LoadObject>(RE::VTABLE_NiStream[0]);
+			stl::write_vfunc<0x15, NiStream_LoadObject>(RE::VTABLE___DeepCopyStream[0]);
+			stl::write_vfunc<0x15, BSStream_LoadObject>(RE::VTABLE_BSStream[0]);*/
+
+			//stl::detour_thunk<sub_7FF6F3FC3C00>(REL::Offset(0x7ff6eba40100).address());
+
+			logger::info("Base: [0x{:x}]", REL::Module::get().base());
+			stl::detour_thunk<NiStream_LoadObject>(REL::Offset(0xd21790).address());
+			//stl::detour_thunk<BSStream_LoadObject>(REL::Offset(0xe0cbb0).address());
+			
+			//stl::detour_thunk<sub_7FF6F3FC3C00>(0x7FF6F3FC3C00);
+			//stl::detour_thunk<sub_1401CBF40>(0x1401CBF40);
+			//sub_7FF6F35E1350(char *Source, volatile signed __int32 **a2)
+
+			stl::detour_thunk<Main_RenderShadowmasks>(REL::RelocationID(100422, 107140));
 
 			stl::write_vfunc<0x27, BSLightingShaderProperty_SetupGeometry>(RE::VTABLE_BSLightingShaderProperty[0]); //FinishSetupGeometry = 0x28
 		
@@ -1120,10 +1439,22 @@ struct Raytracing : public Feature
 
 			//stl::write_vfunc<0x8, BSLightingShaderMaterialBase_OnLoadTextureSet>(RE::VTABLE_BSLightingShaderMaterialBase[0]);
 
-			//stl::write_vfunc<0x27, BGSTextureSet_SetTexture>(RE::VTABLE_BGSTextureSet[0]);
+			//stl::write_vfunc<0x26, BSShaderTextureSet_SetTexture>(RE::VTABLE_BSShaderTextureSet[0]); // This is the golden standard
+
+			//stl::write_vfunc<0x26, BSTextureSet_SetTexture>(RE::VTABLE_BSTextureSet[0]);
+			//stl::write_vfunc<0x26, BGSTextureSet_SetTexture>(RE::VTABLE_BGSTextureSet[0]);
+
 			//stl::write_vfunc<0x27, BSShaderTextureSet_SetTexturePath>(RE::VTABLE_BSShaderTextureSet[0]);
 
-			//stl::detour_thunk<BSShaderManager_GetTexture>(REL::RelocationID(98986, 105640));
+			stl::detour_thunk<BSShaderManager_GetTexture>(REL::RelocationID(98986, 105640));
+
+			//stl::write_vfunc<0x1a, BSShaderResourceManager_LoadTexture>(RE::VTABLE_BSShaderResourceManager[0]);
+
+			//stl::write_vfunc<0x2, BSShaderResourceManager_CreateTriShape>(RE::VTABLE_BSShaderResourceManager[0]);
+			stl::write_vfunc<0x3, BSShaderResourceManager_CreateTriShapeRendererData>(RE::VTABLE_BSShaderResourceManager[0]);
+			
+			//NiSkinPartition::TriggersDataLoad
+			//stl::write_vfunc<0x25, NiSkinPartition_TriggersDataLoad>(RE::VTABLE_NiSkinPartition[0]);
 
 			logger::info("[RTGI] Installed hooks");
 		}
