@@ -1560,24 +1560,25 @@ void Raytracing::AddTriShape(RE::BSTriShape* pTriShape)
 	if (!currentFadeNode)
 		return;
 
-	logger::info("[RT] ProcessTriShape - Fade Node: [0x{:x}], TriShape: [0x{:x}]", reinterpret_cast<uintptr_t>(currentFadeNode), reinterpret_cast<uintptr_t>(pTriShape));
-
-	auto [it, emplaced] = fadeNodeGeometry.try_emplace(currentFadeNode, GeometryData());
+	const char* name = pTriShape->name.c_str();
 
 	if (pTriShape->worldBound.radius == 0.0f)
 		return;
 
 	const auto& geometryRuntimeData = pTriShape->GetGeometryRuntimeData();
-
 	RE::BSGraphics::TriShape* rendererData = geometryRuntimeData.rendererData;
 
 	// RenderData is null for skinned meshes, just ignore them for now
-	if (!rendererData)
+	if (!rendererData) {
+		logger::warn("[RT] ProcessTriShape - Fade Node: [0x{:x}], TriShape [0x{:x}]: {} - Null Renderer Data.", reinterpret_cast<uintptr_t>(currentFadeNode), reinterpret_cast<uintptr_t>(pTriShape), name);
 		return;
+	}
+
+	logger::info("[RT] ProcessTriShape - Fade Node: [0x{:x}], TriShape [0x{:x}]: {}", reinterpret_cast<uintptr_t>(currentFadeNode), reinterpret_cast<uintptr_t>(pTriShape), name);
+
+	auto [it, emplaced] = fadeNodeGeometry.try_emplace(currentFadeNode);
 
 	const auto& triShapeRuntime = pTriShape->GetTrishapeRuntimeData();
-
-	const char* name = pTriShape->name.c_str();
 
 	auto meshData = CreateTriShapeBuffers(rendererData, triShapeRuntime.vertexCount, triShapeRuntime.triangleCount, ToWide(name));
 	CreateTriShapeMaterials(meshData, geometryRuntimeData, name);
@@ -1595,7 +1596,7 @@ void Raytracing::CommitGeometry()
 
 		auto& geometryMeshes = geometryData.meshes;
 
-		auto triShapeCount = meshes.size();
+		auto triShapeCount = geometryMeshes.size();
 
 		if (triShapeCount == 0) {
 			logger::warn("[RT] CommitGeometry - Nothing to commit.");
@@ -1636,7 +1637,7 @@ void Raytracing::CommitGeometry()
 			D3D12_RAYTRACING_ACCELERATION_STRUCTURE_PREBUILD_INFO prebuildInfo;
 			d3d12Device->GetRaytracingAccelerationStructurePrebuildInfo(&inputs, &prebuildInfo);
 
-			D3D12_RESOURCE_DESC desc = {
+			D3D12_RESOURCE_DESC scratchDesc = {
 				.Dimension = D3D12_RESOURCE_DIMENSION_BUFFER,
 				.Width = prebuildInfo.ScratchDataSizeInBytes,
 				.Height = 1,
@@ -1648,9 +1649,18 @@ void Raytracing::CommitGeometry()
 			};
 
 			winrt::com_ptr<ID3D12Resource> scratch = nullptr;
-			DX::ThrowIfFailed(d3d12Device->CreateCommittedResource(&DEFAULT_HEAP, D3D12_HEAP_FLAG_NONE, &desc, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, nullptr, IID_PPV_ARGS(scratch.put())));
+			DX::ThrowIfFailed(d3d12Device->CreateCommittedResource(&DEFAULT_HEAP, D3D12_HEAP_FLAG_NONE, &scratchDesc, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, nullptr, IID_PPV_ARGS(scratch.put())));
 
-			desc.Width = prebuildInfo.ResultDataMaxSizeInBytes,
+			D3D12_RESOURCE_DESC desc = {
+				.Dimension = D3D12_RESOURCE_DIMENSION_BUFFER,
+				.Width = prebuildInfo.ResultDataMaxSizeInBytes,
+				.Height = 1,
+				.DepthOrArraySize = 1,
+				.MipLevels = 1,
+				.SampleDesc = NO_AA,
+				.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR,
+				.Flags = D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS
+			};
 			DX::ThrowIfFailed(d3d12Device->CreateCommittedResource(&DEFAULT_HEAP, D3D12_HEAP_FLAG_NONE, &desc, D3D12_RESOURCE_STATE_RAYTRACING_ACCELERATION_STRUCTURE, nullptr, IID_PPV_ARGS(geometryData.blasBuffer.put())));
 
 			auto buildDesc = eastl::make_unique<D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_DESC>(

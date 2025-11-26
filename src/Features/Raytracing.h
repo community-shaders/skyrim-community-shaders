@@ -420,7 +420,6 @@ struct Raytracing : public Feature
 	RE::BSFadeNode* currentFadeNode;
 
 	// We'll group trishapes by their parent nodes, hopefully trishapes don't move on their own
-	//eastl::unordered_map<RE::NiNode*, eastl::vector<ID3D11Buffer*>> fadeNodeGeometry;
 	eastl::unordered_map<RE::BSFadeNode*, GeometryData> fadeNodeGeometry;
 
 	// Instance
