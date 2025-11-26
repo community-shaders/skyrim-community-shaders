@@ -52,7 +52,7 @@ namespace WaterEffects
 		float2 parallaxOffsetTS = viewDirection.xy / -viewDirection.z;
 
 		// Parallax scale is also multiplied by normalScalesRcp
-		parallaxOffsetTS *= 5.0;
+		parallaxOffsetTS *= 20.0;
 
 		float3 mipLevels;
 		mipLevels.x = GetMipLevel(input.TexCoord1.xy, Normals01Tex);
@@ -85,67 +85,5 @@ namespace WaterEffects
 		float parallaxAmount = (currBound * delta2 - prevBound * delta1) / denominator;
 
 		return parallaxOffsetTS.xy * parallaxAmount;
-	}
-
-	// Sphere tracing using distance-based ray marching (GPU Gems 2, Chapter 8)
-	// Adaptively steps through the heightfield based on safe distance from surface
-	float2 GetFlowmapParallaxOffset(PS_INPUT input, float2 baseUV)
-	{
-		// WPosition is camera-relative world position (camera at origin)
-		// normalize gives view direction from camera to pixel
-		float3 viewDirection = normalize(input.WPosition.xyz);
-		float2 rayDir = viewDirection.xy / -viewDirection.z;
-		
-		// Apply parallax scale (keep perspective-correct scaling)
-		rayDir *= 0.08;
-		
-		// Calculate base mip level from UV gradients
-		float2 textureDims;
-		FlowMapNormalsTex.GetDimensions(textureDims.x, textureDims.y);
-		float2 dx = ddx(baseUV * textureDims);
-		float2 dy = ddy(baseUV * textureDims);
-		float delta = max(dot(dx, dx), dot(dy, dy));
-		float baseMipLevel = 0.5 * log2(max(delta, 0.00001)) + SharedData::MipBias;
-		baseMipLevel = clamp(baseMipLevel, 0.0, 2.0);
-		
-		// Sphere tracing: march along ray using distance field
-		float2 currentUV = baseUV;
-		float currentHeight = 2.0;  // Start at maximum height
-		float distanceTraveled = 0.0;
-		const int maxSteps = 48;
-		const float minStepSize = 0.001;
-		
-		[unroll]
-		for (int i = 0; i < maxSteps; i++)
-		{
-			// Sample height from alpha channel only
-			float4 texSample = FlowMapNormalsTex.SampleLevel(FlowMapNormalsSampler, currentUV, baseMipLevel);
-			
-			// Use only alpha channel for height
-			float surfaceHeight = texSample.a;
-			
-			// Calculate distance to surface (how far we are above/below surface)
-			float heightDifference = currentHeight - surfaceHeight;
-			
-			// If we're below the surface, we've intersected - stop marching
-			if (heightDifference < 0.0)
-				break;
-			
-			// Safe step distance based on height above surface
-			// Scale by heightDifference to take larger steps when far from surface
-			float stepDistance = max(heightDifference * 0.1, minStepSize);
-			
-			// March along ray by safe distance
-			currentUV += rayDir * stepDistance;
-			distanceTraveled += stepDistance;
-			currentHeight -= stepDistance;
-			
-			// Safety: don't march too far
-			if (distanceTraveled > 4.0 || currentHeight < 0.0)
-				break;
-		}
-		
-		// Return the offset from original UV
-		return currentUV - baseUV;
 	}
 }

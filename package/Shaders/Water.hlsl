@@ -293,29 +293,41 @@ cbuffer UnifiedWaterPerFrame : register(b7)
 	float WaveDirectionBlend : packoffset(c6.z);
 	float TriVisualizerEnabled : packoffset(c6.w);
 	
-	// Wave 1 (Primary) parameters - Period removed, speed now from physics
+	// Wave 1 (Primary) - Large swells
 	float Wave1Amplitude : packoffset(c7.x);
 	float Wave1Wavelength : packoffset(c7.y);
 	float Wave1Steepness : packoffset(c7.z);
-	// padding c7.w
+	float Wave1AngleOffset : packoffset(c7.w);
 	
-	// Wave 2 (Secondary) parameters
+	// Wave 2 (Secondary) - Medium waves
 	float Wave2Amplitude : packoffset(c8.x);
 	float Wave2Wavelength : packoffset(c8.y);
 	float Wave2Steepness : packoffset(c8.z);
-	// padding c8.w
+	float Wave2AngleOffset : packoffset(c8.w);
 	
-	// Wave 3 (Detail) parameters
+	// Wave 3 (Detail) - Small waves
 	float Wave3Amplitude : packoffset(c9.x);
 	float Wave3Wavelength : packoffset(c9.y);
 	float Wave3Steepness : packoffset(c9.z);
-	// padding c9.w
+	float Wave3AngleOffset : packoffset(c9.w);
 	
-	// Wave angle offsets (in radians)
-	float Wave1AngleOffset : packoffset(c10.x);
-	float Wave2AngleOffset : packoffset(c10.y);
-	float Wave3AngleOffset : packoffset(c10.z);
-	// padding c10.w
+	// Wave 4 (Fine Ripple 1) - Sub-meter detail
+	float Wave4Amplitude : packoffset(c10.x);
+	float Wave4Wavelength : packoffset(c10.y);
+	float Wave4Steepness : packoffset(c10.z);
+	float Wave4AngleOffset : packoffset(c10.w);
+	
+	// Wave 5 (Fine Ripple 2) - Micro ripples
+	float Wave5Amplitude : packoffset(c11.x);
+	float Wave5Wavelength : packoffset(c11.y);
+	float Wave5Steepness : packoffset(c11.z);
+	float Wave5AngleOffset : packoffset(c11.w);
+	
+	// Wave 6 (Fine Ripple 3) - Tiny surface detail
+	float Wave6Amplitude : packoffset(c12.x);
+	float Wave6Wavelength : packoffset(c12.y);
+	float Wave6Steepness : packoffset(c12.z);
+	float Wave6AngleOffset : packoffset(c12.w);
 }
 
 cbuffer UnifiedWaterPerTile : register(b8)
@@ -384,87 +396,119 @@ WaveSample CalculateWaterDisplacement(float2 worldPos, float2 textureDims, float
 		return zeroSample;
 	}
 
-	UnifiedWave waves[3];
+	// Skyrim unit conversion: 4096 units = 1 cell ≈ 192 meters (from game data)
+	// Therefore: 1 Skyrim unit ≈ 0.046875 meters (192m / 4096 units)
+	// Inverse: 1 meter ≈ 21.33 Skyrim units
+	const float SKYRIM_UNITS_PER_METER = 21.333333f;
+	
+	UnifiedWave waves[6];
 
 	const float2 defaultWaveDir = float2(-0.70710678f, 0.70710678f);
 	float2 primaryDir = defaultWaveDir;
 	
-	// Create 3 wave directions that harmonize with primary direction
-	float2 baseDirections[3];
+	// Create 6 wave directions with varying angles for natural dispersion
+	float2 baseDirections[6];
 	
-	// Primary wave with user-defined angle offset
-	float angle1 = Wave1AngleOffset;
-	float cos1, sin1;
-	sincos(angle1, sin1, cos1);
-	baseDirections[0] = float2(
-		primaryDir.x * cos1 - primaryDir.y * sin1,
-		primaryDir.x * sin1 + primaryDir.y * cos1);
+	// Wave angle offsets from user parameters (in radians)
+	float angleOffsets[6] = {
+		Wave1AngleOffset,
+		Wave2AngleOffset,
+		Wave3AngleOffset,
+		Wave4AngleOffset,
+		Wave5AngleOffset,
+		Wave6AngleOffset
+	};
 	
-	// Secondary wave at user-defined angle
-	float angle2 = Wave2AngleOffset;
-	float cos2, sin2;
-	sincos(angle2, sin2, cos2);
-	baseDirections[1] = float2(
-		primaryDir.x * cos2 - primaryDir.y * sin2,
-		primaryDir.x * sin2 + primaryDir.y * cos2);
-
-	// Tertiary wave at user-defined angle
-	float angle3 = Wave3AngleOffset;
-	float cos3, sin3;
-	sincos(angle3, sin3, cos3);
-	baseDirections[2] = float2(
-		primaryDir.x * cos3 - primaryDir.y * sin3,
-		primaryDir.x * sin3 + primaryDir.y * cos3);
+	// Generate wave directions by rotating primary direction
+	[unroll] for (int dirIdx = 0; dirIdx < 6; ++dirIdx) {
+		float angle = angleOffsets[dirIdx];
+		float cosA, sinA;
+		sincos(angle, sinA, cosA);
+		baseDirections[dirIdx] = float2(
+			primaryDir.x * cosA - primaryDir.y * sinA,
+			primaryDir.x * sinA + primaryDir.y * cosA);
+	}
 	
-	// User-configurable wave parameters
-	float baseAmplitudes[3] = { Wave1Amplitude, Wave2Amplitude, Wave3Amplitude };
-	float baseWaveLengths[3] = { Wave1Wavelength, Wave2Wavelength, Wave3Wavelength };
-	float baseSteepness[3] = { Wave1Steepness, Wave2Steepness, Wave3Steepness };
+	// User-configurable wave parameters (wavelengths in Skyrim units)
+	// Convert to meters for physical calculations: wavelength_meters = wavelength_units / SKYRIM_UNITS_PER_METER
+	float baseAmplitudesUnits[6] = {
+		Wave1Amplitude, Wave2Amplitude, Wave3Amplitude,
+		Wave4Amplitude, Wave5Amplitude, Wave6Amplitude
+	};
+	float baseWaveLengthsUnits[6] = {
+		Wave1Wavelength, Wave2Wavelength, Wave3Wavelength,
+		Wave4Wavelength, Wave5Wavelength, Wave6Wavelength
+	};
+	float baseSteepness[6] = {
+		Wave1Steepness, Wave2Steepness, Wave3Steepness,
+		Wave4Steepness, Wave5Steepness, Wave6Steepness
+	};
 	
 	// Physics constants
 	const float gravity = 9.8f; // Earth gravity in m/s²
 	
-	float contributions[3] = {
+	// Contribution weights for user control (first 3 exposed in UI, rest auto-calculated)
+	float contributions[6] = {
 		max(WavePrimaryContribution, 0.0f),
 		max(WaveSecondaryContribution, 0.0f),
-		max(WaveDetailContribution, 0.0f)
+		max(WaveDetailContribution, 0.0f),
+		// Detail waves use physics-based amplitude falloff
+		max(WaveDetailContribution * 0.65f, 0.0f),  // Wave 4: 65% of detail
+		max(WaveDetailContribution * 0.45f, 0.0f),  // Wave 5: 45% of detail
+		max(WaveDetailContribution * 0.30f, 0.0f)   // Wave 6: 30% of detail
 	};
 	
-	// Completely disable waves with very small contributions to prevent artifacts
-	[unroll] for (int i = 0; i < 3; ++i) {
+	// Disable waves with negligible contribution to prevent artifacts
+	[unroll] for (int i = 0; i < 6; ++i) {
 		if (contributions[i] < 0.001f) {
 			contributions[i] = 0.0f;
 		}
 	}
 	
-	float speedScale[3] = {
+	// Speed scaling per wave (first 3 user-controlled, rest use physics)
+	float speedScale[6] = {
 		max(WavePrimarySpeed, 0.0f),
 		max(WaveSecondarySpeed, 0.0f),
-		max(WaveDetailSpeed, 0.0f)
+		max(WaveDetailSpeed, 0.0f),
+		max(WaveDetailSpeed * 1.15f, 0.0f),  // Detail waves slightly faster
+		max(WaveDetailSpeed * 1.30f, 0.0f),
+		max(WaveDetailSpeed * 1.50f, 0.0f)
 	};
-	float dayScale[3] = { 1.0f, 1.45f, 2.2f };
-	float dayBias[3] = { 0.0f, 2.0943951f, 4.1887903f };
+	
+	// Day-phase variation for temporal diversity (reduces repetition)
+	float dayScale[6] = { 1.0f, 1.45f, 2.2f, 3.1f, 4.5f, 6.2f };
+	float dayBias[6] = { 0.0f, 2.0943951f, 4.1887903f, 1.5707963f, 3.6651914f, 5.4977871f };
 
-	[unroll] for (int j = 0; j < 3; ++j) {
+	[unroll] for (int j = 0; j < 6; ++j) {
 		waves[j].direction = normalize(baseDirections[j]);
-		waves[j].amplitude = baseAmplitudes[j] * waveIntensity * amplitudeMult * contributions[j];
 		
-		// Calculate wave number: k = 2π / wavelength
-		float waveNumberBase = UW_TWO_PI / baseWaveLengths[j];
-		waves[j].waveNumber = waveNumberBase;
+		// Convert wavelength from Skyrim units to meters for physics calculations
+		float wavelengthMeters = baseWaveLengthsUnits[j] / SKYRIM_UNITS_PER_METER;
 		
-		// Physically accurate phase speed: c = sqrt(g / k) = sqrt(g * wavelength / 2π)
-		// This relationship ensures longer waves travel faster (dispersion relation for deep water)
-		float phaseSpeed = sqrt(gravity * baseWaveLengths[j] / UW_TWO_PI);
+		// Amplitude in Skyrim units (already correctly scaled for visual output)
+		waves[j].amplitude = baseAmplitudesUnits[j] * waveIntensity * amplitudeMult * contributions[j];
 		
-		// Angular velocity: ω = k * c (relates wave number and phase speed)
-		// User speed multiplier allows artistic control while maintaining physical relationships
-		waves[j].angularVelocity = waveNumberBase * phaseSpeed * speedMult * speedScale[j];
+		// Calculate wave number in Skyrim units: k = 2π / wavelength_units
+		float waveNumberUnits = UW_TWO_PI / baseWaveLengthsUnits[j];
+		waves[j].waveNumber = waveNumberUnits;
 		
-		// Steepness parameter controls wave sharpness (0 = sine wave, 1 = sharpest)
-		// Sum of all steepness should not exceed 1 to prevent wave loops
+		// Physically accurate phase speed using METER wavelength: c = sqrt(g * λ_meters / 2π)
+		// Deep water dispersion relation ensures longer waves travel faster
+		float phaseSpeedMetersPerSec = sqrt(gravity * wavelengthMeters / UW_TWO_PI);
+		
+		// Convert phase speed to Skyrim units/sec
+		float phaseSpeedUnitsPerSec = phaseSpeedMetersPerSec * SKYRIM_UNITS_PER_METER;
+		
+		// Angular velocity: ω = k * c (in Skyrim units)
+		// User speed multiplier allows artistic control while preserving physics
+		waves[j].angularVelocity = waveNumberUnits * phaseSpeedUnitsPerSec * speedMult * speedScale[j];
+		
+		// Steepness controls wave sharpness (0 = sine, 1 = sharp crest)
+		// Physically, sum of Q*k*A should not exceed 1 to prevent looping
+		// We apply conservative limits per wave
 		waves[j].steepness = saturate(baseSteepness[j] * steepnessMult * contributions[j]);
 		
+		// Temporal phase offset for variation (reduces repetition)
 		waves[j].phaseOffset = dayPhase * dayScale[j] + dayBias[j];
 	}
 
@@ -475,8 +519,8 @@ WaveSample CalculateWaterDisplacement(float2 worldPos, float2 textureDims, float
 	float3 tangent = float3(1.0f, 0.0f, 0.0f);
 	float3 binormal = float3(0.0f, 0.0f, 1.0f);
 
-	[unroll] for (int k = 0; k < 3; ++k) {
-		// Skip disabled waves entirely to prevent precision issues
+	[unroll] for (int k = 0; k < 6; ++k) {
+		// Skip disabled waves to prevent precision artifacts
 		if (contributions[k] > 0.0f) {
 			totalDisplacement += EvaluateUnifiedWave(waves[k], worldPos, timeSeconds);
 			EvaluateUnifiedWaveTangents(waves[k], worldPos, timeSeconds, tangent, binormal);
@@ -1228,49 +1272,6 @@ float3 ComputeEnhancedWaveNormal(float3 worldPos, float3 baseNormal, float timer
 #				include "WaterEffects/WaterParallax.hlsli"
 #			endif
 
-#			if defined(WATER_PARALLAX) && defined(FLOWMAP)
-
-// ===== FLOWMAP PARALLAX TOGGLE =====
-// Comment out the next line to disable flowmap parallax
-#define ENABLE_FLOWMAP_PARALLAX
-// ===================================
-
-/**
- * Flowmap normal sampling with parallax occlusion mapping
- * Uses height data from flowmap alpha channel for depth perception
- */
-float3 GetFlowmapNormalParallax(PS_INPUT input, float2 uvShift, float multiplier, float offset, uint eyeIndex)
-{
-	FlowmapData flowData = GetFlowmapDataUV(input, uvShift);
-	
-	// Calculate base UV with flow displacement (same as non-parallax version)
-	float2 baseUV = offset + (flowData.flowVector - float2(multiplier * ((0.001 * ReflectionColor.w) * flowData.color.w), 0));
-	
-#ifdef ENABLE_FLOWMAP_PARALLAX
-	// Calculate mip level from base UV BEFORE parallax to avoid derivative discontinuities
-	float2 textureDims;
-	FlowMapNormalsTex.GetDimensions(textureDims.x, textureDims.y);
-	float2 dx = ddx(baseUV * textureDims);
-	float2 dy = ddy(baseUV * textureDims);
-	float delta = max(dot(dx, dx), dot(dy, dy));
-	float mipLevel = 0.5 * log2(max(delta, 0.00001)) + SharedData::MipBias;
-	mipLevel = clamp(mipLevel, 0.0, 5.0);
-	
-	// Apply parallax using gradient-based view direction (avoids player-position artifacts)
-	float2 parallaxOffset = WaterEffects::GetFlowmapParallaxOffset(input, baseUV);
-	float2 finalUV = baseUV + parallaxOffset;
-	
-	// Sample using pre-calculated mip level
-	float3 normalSample = FlowMapNormalsTex.SampleLevel(FlowMapNormalsSampler, finalUV, mipLevel).xyz;
-#else
-	// No parallax - sample directly
-	float3 normalSample = FlowMapNormalsTex.Sample(FlowMapNormalsSampler, baseUV).xyz;
-#endif
-	
-	return float3(normalSample.xy, flowData.color.z);
-}
-#			endif
-
 #			if defined(DYNAMIC_CUBEMAPS)
 #				include "DynamicCubemaps/DynamicCubemaps.hlsli"
 #			endif
@@ -1519,25 +1520,18 @@ WaterNormalData GetWaterNormal(PS_INPUT input, float distanceFactor, float norma
 	float2 normalMul = 0.5 + -(-0.5 + abs(frac(input.TexCoord2.zw * (64 * flowmapDimensions)) * 2 - 1));
 	float2 uvShift = 1 / (128 * flowmapDimensions);
 
-#				if defined(WATER_PARALLAX)
-	// Use parallax-enabled flowmap normals
-	float3 flowmapNormal0 = GetFlowmapNormalParallax(input, uvShift, 9.92, 0, eyeIndex);
-	float3 flowmapNormal1 = GetFlowmapNormalParallax(input, float2(0, uvShift.y), 10.64, 0.27, eyeIndex);
-	float3 flowmapNormal2 = GetFlowmapNormalParallax(input, 0.0.xx, 8, 0, eyeIndex);
-	float3 flowmapNormal3 = GetFlowmapNormalParallax(input, float2(uvShift.x, 0), 8.48, 0.62, eyeIndex);
-#				else
-	// Standard flowmap normals without parallax
+	// Standard flowmap normals (parallax applied after blending)
 	float3 flowmapNormal0 = GetFlowmapNormal(input, uvShift, 9.92, 0);
 	float3 flowmapNormal1 = GetFlowmapNormal(input, float2(0, uvShift.y), 10.64, 0.27);
 	float3 flowmapNormal2 = GetFlowmapNormal(input, 0.0.xx, 8, 0);
 	float3 flowmapNormal3 = GetFlowmapNormal(input, float2(uvShift.x, 0), 8.48, 0.62);
-#				endif
 
 	float2 flowmapNormalWeighted =
 		normalMul.y * (normalMul.x * flowmapNormal2.xy + (1 - normalMul.x) * flowmapNormal3.xy) +
 		(1 - normalMul.y) *
 			(normalMul.x * flowmapNormal1.xy + (1 - normalMul.x) * flowmapNormal0.xy);
 	float2 flowmapDenominator = sqrt(normalMul * normalMul + (1 - normalMul) * (1 - normalMul));
+
 	float3 flowmapNormal =
 		float3(((-0.5 + flowmapNormalWeighted) / (flowmapDenominator.x * flowmapDenominator.y)) *
 				   max(0.4, normalsDepthFactor),

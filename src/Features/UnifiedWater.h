@@ -62,23 +62,41 @@ struct UnifiedWater : OverlayFeature
 		float WaveDetailSpeed = 1.0f;
 		float WaveDirectionBlend = 1.0f;
 		
-		// Wave 1 (Primary) parameters
+		// Wave 1 (Primary) - Large swells: 4.8m wavelength, 0.85m amplitude
 		float Wave1Amplitude = 8.5f;
 		float Wave1Wavelength = 4800.0f;
 		float Wave1Steepness = 0.35f;
 		float Wave1AngleOffset = 0.0f;
 		
-		// Wave 2 (Secondary) parameters
+		// Wave 2 (Secondary) - Medium waves: 3.2m wavelength, 0.55m amplitude
 		float Wave2Amplitude = 5.5f;
 		float Wave2Wavelength = 3200.0f;
 		float Wave2Steepness = 0.28f;
 		float Wave2AngleOffset = 50.0f;
 		
-		// Wave 3 (Detail) parameters
+		// Wave 3 (Detail) - Small waves: 2.0m wavelength, 0.32m amplitude
 		float Wave3Amplitude = 3.2f;
 		float Wave3Wavelength = 2000.0f;
 		float Wave3Steepness = 0.22f;
 		float Wave3AngleOffset = -50.0f;
+		
+		// Wave 4 (Fine Ripple 1) - Sub-meter: 0.8m wavelength, 0.12m amplitude
+		float Wave4Amplitude = 1.2f;
+		float Wave4Wavelength = 800.0f;
+		float Wave4Steepness = 0.18f;
+		float Wave4AngleOffset = 25.0f;
+		
+		// Wave 5 (Fine Ripple 2) - Tiny ripples: 0.4m wavelength, 0.06m amplitude
+		float Wave5Amplitude = 0.6f;
+		float Wave5Wavelength = 400.0f;
+		float Wave5Steepness = 0.15f;
+		float Wave5AngleOffset = -25.0f;
+		
+		// Wave 6 (Fine Ripple 3) - Micro detail: 0.2m wavelength, 0.03m amplitude
+		float Wave6Amplitude = 0.3f;
+		float Wave6Wavelength = 200.0f;
+		float Wave6Steepness = 0.12f;
+		float Wave6AngleOffset = 70.0f;
 	};
 
 #pragma warning(push)
@@ -114,29 +132,41 @@ struct UnifiedWater : OverlayFeature
 		float WaveDirectionBlend;
 		float TriVisualizerEnabled;
 		
-		// Wave 1 (Primary) parameters
+		// Wave 1 (Primary) - Large swells
 		float Wave1Amplitude;
 		float Wave1Wavelength;
 		float Wave1Steepness;
-		float _paddingWave1;
+		float Wave1AngleOffset;
 		
-		// Wave 2 (Secondary) parameters
+		// Wave 2 (Secondary) - Medium waves
 		float Wave2Amplitude;
 		float Wave2Wavelength;
 		float Wave2Steepness;
-		float _paddingWave2;
+		float Wave2AngleOffset;
 		
-		// Wave 3 (Detail) parameters
+		// Wave 3 (Detail) - Small waves
 		float Wave3Amplitude;
 		float Wave3Wavelength;
 		float Wave3Steepness;
-		float _paddingWave3;
-		
-		// Wave angle offsets (in radians)
-		float Wave1AngleOffset;
-		float Wave2AngleOffset;
 		float Wave3AngleOffset;
-		float _paddingAngles;
+		
+		// Wave 4 (Fine Ripple 1) - Sub-meter detail
+		float Wave4Amplitude;
+		float Wave4Wavelength;
+		float Wave4Steepness;
+		float Wave4AngleOffset;
+		
+		// Wave 5 (Fine Ripple 2) - Micro ripples
+		float Wave5Amplitude;
+		float Wave5Wavelength;
+		float Wave5Steepness;
+		float Wave5AngleOffset;
+		
+		// Wave 6 (Fine Ripple 3) - Tiny surface detail
+		float Wave6Amplitude;
+		float Wave6Wavelength;
+		float Wave6Steepness;
+		float Wave6AngleOffset;
 	};
 #pragma warning(pop)
 

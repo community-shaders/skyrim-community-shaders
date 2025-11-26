@@ -911,6 +911,38 @@ void UnifiedWater::DrawSettings()
 			
 			ImGui::TreePop();
 		}
+		
+		ImGui::Spacing();
+		ImGui::Text("Fine Detail Waves (Sub-meter Ripples)");
+		ImGui::TextWrapped("These three additional waves add realistic small-scale detail. Controlled by 'Detail Wave Contribution' above.");
+		ImGui::Spacing();
+		
+		if (ImGui::TreeNodeEx("Wave 4 (Fine Ripple 1)", ImGuiTreeNodeFlags_None)) {
+			ImGui::TextDisabled("0.8m wavelength ripples - visible up close");
+			ImGui::SliderFloat("W4 Amplitude", &settings.Wave4Amplitude, 0.0f, 5.0f, "%.2f");
+			ImGui::SliderFloat("W4 Wavelength", &settings.Wave4Wavelength, 100.0f, 2000.0f, "%.0f");
+			ImGui::SliderFloat("W4 Steepness", &settings.Wave4Steepness, 0.0f, 0.5f, "%.3f");
+			ImGui::SliderFloat("W4 Angle", &settings.Wave4AngleOffset, -180.0f, 180.0f, "%.1f°");
+			ImGui::TreePop();
+		}
+		
+		if (ImGui::TreeNodeEx("Wave 5 (Fine Ripple 2)", ImGuiTreeNodeFlags_None)) {
+			ImGui::TextDisabled("0.4m wavelength ripples - surface texture");
+			ImGui::SliderFloat("W5 Amplitude", &settings.Wave5Amplitude, 0.0f, 3.0f, "%.2f");
+			ImGui::SliderFloat("W5 Wavelength", &settings.Wave5Wavelength, 50.0f, 1000.0f, "%.0f");
+			ImGui::SliderFloat("W5 Steepness", &settings.Wave5Steepness, 0.0f, 0.5f, "%.3f");
+			ImGui::SliderFloat("W5 Angle", &settings.Wave5AngleOffset, -180.0f, 180.0f, "%.1f°");
+			ImGui::TreePop();
+		}
+		
+		if (ImGui::TreeNodeEx("Wave 6 (Fine Ripple 3)", ImGuiTreeNodeFlags_None)) {
+			ImGui::TextDisabled("0.2m wavelength micro-ripples - finest detail");
+			ImGui::SliderFloat("W6 Amplitude", &settings.Wave6Amplitude, 0.0f, 2.0f, "%.2f");
+			ImGui::SliderFloat("W6 Wavelength", &settings.Wave6Wavelength, 50.0f, 500.0f, "%.0f");
+			ImGui::SliderFloat("W6 Steepness", &settings.Wave6Steepness, 0.0f, 0.5f, "%.3f");
+			ImGui::SliderFloat("W6 Angle", &settings.Wave6AngleOffset, -180.0f, 180.0f, "%.1f°");
+			ImGui::TreePop();
+		}
 
 		ImGui::Spacing();
 		
@@ -1730,10 +1762,25 @@ void UnifiedWater::BSWaterShader_SetupGeometry::thunk(RE::BSShader* waterShader,
 		perFrameData.Wave3Wavelength = singleton.settings.Wave3Wavelength;
 		perFrameData.Wave3Steepness = singleton.settings.Wave3Steepness;
 		
+		perFrameData.Wave4Amplitude = singleton.settings.Wave4Amplitude;
+		perFrameData.Wave4Wavelength = singleton.settings.Wave4Wavelength;
+		perFrameData.Wave4Steepness = singleton.settings.Wave4Steepness;
+		
+		perFrameData.Wave5Amplitude = singleton.settings.Wave5Amplitude;
+		perFrameData.Wave5Wavelength = singleton.settings.Wave5Wavelength;
+		perFrameData.Wave5Steepness = singleton.settings.Wave5Steepness;
+		
+		perFrameData.Wave6Amplitude = singleton.settings.Wave6Amplitude;
+		perFrameData.Wave6Wavelength = singleton.settings.Wave6Wavelength;
+		perFrameData.Wave6Steepness = singleton.settings.Wave6Steepness;
+		
 		// Convert angles from degrees to radians
 		perFrameData.Wave1AngleOffset = singleton.settings.Wave1AngleOffset * 0.0174532925f;  // degrees to radians
 		perFrameData.Wave2AngleOffset = singleton.settings.Wave2AngleOffset * 0.0174532925f;
 		perFrameData.Wave3AngleOffset = singleton.settings.Wave3AngleOffset * 0.0174532925f;
+		perFrameData.Wave4AngleOffset = singleton.settings.Wave4AngleOffset * 0.0174532925f;
+		perFrameData.Wave5AngleOffset = singleton.settings.Wave5AngleOffset * 0.0174532925f;
+		perFrameData.Wave6AngleOffset = singleton.settings.Wave6AngleOffset * 0.0174532925f;
 
 		const auto* state = globals::state;
 		const std::uint32_t frameIndex = state ? state->frameCount : singleton.lastTimingFrameIndex;
