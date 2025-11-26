@@ -500,7 +500,6 @@ namespace BackgroundBlur
 		downsampledWidth = 0;
 		downsampledHeight = 0;
 		enabled = false;
-		currentIntensity = 0.0f;
 		initialized = false;
 		initializationFailed = false;
 	}
