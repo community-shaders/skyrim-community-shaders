@@ -14,9 +14,14 @@ namespace WaterEffects
 		float3 N = normalize(waveNormal);
 		
 		// Build orthonormal tangent frame from wave normal
-		// Use up vector that isn't parallel to the normal
-		float3 up = abs(N.z) < 0.999f ? float3(0.0f, 0.0f, 1.0f) : float3(1.0f, 0.0f, 0.0f);
-		float3 T = normalize(cross(up, N));
+		// For water, we want T to align with world X when normal is flat (0,0,1)
+		// Use world Y as the reference to cross with normal to get tangent
+		float3 worldY = float3(0.0f, 1.0f, 0.0f);
+		float3 worldX = float3(1.0f, 0.0f, 0.0f);
+		
+		// When normal is nearly vertical, cross with Y gives us X direction for tangent
+		// When normal is nearly horizontal (rare for water), fall back to crossing with X
+		float3 T = abs(N.y) < 0.999f ? normalize(cross(worldY, N)) : normalize(cross(N, worldX));
 		float3 B = cross(N, T);
 		
 		// Transform view direction to tangent space
