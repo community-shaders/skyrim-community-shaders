@@ -2345,23 +2345,49 @@ PS_OUTPUT main(PS_INPUT input)
 	{
 		float debugHeight = 0;
 #				if defined(FLOWMAP)
+		// Get flowmap dimensions and cell blend weights (same as normal sampling)
+#					if defined(UNIFIED_WATER)
+		float2 flowmapDims = input.TexCoord4.xy;
+#					else
+		float2 flowmapDims = input.TexCoord4.xx;
+#					endif
+		float2 uvShiftDbg = 1 / (128 * flowmapDims);
+		
 		// For flowmap water - apply parallax to source coords BEFORE flowmap transform
-		float viewDotUp = -viewDirection.z;  // How much we're looking down (1 = straight down, 0 = horizontal)
+		float viewDotUp = -viewDirection.z;
 		
 		// Skip parallax at very grazing angles to avoid artifacts
 		if (viewDotUp < 0.05) {
-			FlowmapData flowData = GetFlowmapDataUV(input, 0.0.xx);
-			float2 sampleUV = 0 + (flowData.flowVector - float2(8 * ((0.001 * ReflectionColor.w) * flowData.color.w), 0));
-			debugHeight = FlowMapNormalsTex.SampleLevel(FlowMapNormalsSampler, sampleUV, 0).w;
+			// Sample 4 phases and blend (same pattern as GetFlowmapNormal)
+			PS_INPUT sampleInput = input;
+			float2 cellBlend = 0.5 + -(-0.5 + abs(frac(sampleInput.TexCoord2.zw * (64 * flowmapDims)) * 2 - 1));
+			
+			FlowmapData fd0 = GetFlowmapDataUV(sampleInput, uvShiftDbg);
+			FlowmapData fd1 = GetFlowmapDataUV(sampleInput, float2(0, uvShiftDbg.y));
+			FlowmapData fd2 = GetFlowmapDataUV(sampleInput, 0.0.xx);
+			FlowmapData fd3 = GetFlowmapDataUV(sampleInput, float2(uvShiftDbg.x, 0));
+			
+			float2 uv0 = 0 + (fd0.flowVector - float2(9.92 * ((0.001 * ReflectionColor.w) * fd0.color.w), 0));
+			float2 uv1 = 0.27 + (fd1.flowVector - float2(10.64 * ((0.001 * ReflectionColor.w) * fd1.color.w), 0));
+			float2 uv2 = 0 + (fd2.flowVector - float2(8 * ((0.001 * ReflectionColor.w) * fd2.color.w), 0));
+			float2 uv3 = 0.62 + (fd3.flowVector - float2(8.48 * ((0.001 * ReflectionColor.w) * fd3.color.w), 0));
+			
+			float h0 = FlowMapNormalsTex.SampleLevel(FlowMapNormalsSampler, uv0, 0).w;
+			float h1 = FlowMapNormalsTex.SampleLevel(FlowMapNormalsSampler, uv1, 0).w;
+			float h2 = FlowMapNormalsTex.SampleLevel(FlowMapNormalsSampler, uv2, 0).w;
+			float h3 = FlowMapNormalsTex.SampleLevel(FlowMapNormalsSampler, uv3, 0).w;
+			
+			// Bilinear blend between 4 samples (same as normal blending)
+			float blendedHeight = cellBlend.y * (cellBlend.x * h2 + (1 - cellBlend.x) * h3) +
+			                     (1 - cellBlend.y) * (cellBlend.x * h1 + (1 - cellBlend.x) * h0);
+			debugHeight = blendedHeight;
 		} else {
 			float2 parallaxDir = viewDirection.xy / -viewDirection.z;
-			parallaxDir.y = -parallaxDir.y;  // Fix Y direction - negate to correct distortion
+			parallaxDir.y = -parallaxDir.y;
 			
-			// Scale parallax strength - stronger when looking down, weaker at grazing angles
 			float parallaxScale = 0.008 * saturate(viewDotUp * 2.0);
 			parallaxDir *= parallaxScale;
 			
-			// More steps at grazing angles for better quality
 			int numSteps = (int)lerp(32.0, 8.0, viewDotUp);
 			float stepSize = rcp((float)numSteps);
 			
@@ -2374,13 +2400,31 @@ PS_OUTPUT main(PS_INPUT input)
 				prevHeight = currHeight;
 				currBound += stepSize;
 				
-				// Create offset input and compute flowmap UV with offset applied to source
 				PS_INPUT offsetInput = input;
 				offsetInput.TexCoord3.xy = input.TexCoord3.xy + currBound * parallaxDir;
 				
-				FlowmapData flowData = GetFlowmapDataUV(offsetInput, 0.0.xx);
-				float2 sampleUV = 0 + (flowData.flowVector - float2(8 * ((0.001 * ReflectionColor.w) * flowData.color.w), 0));
-				currHeight = 1.0 - FlowMapNormalsTex.SampleLevel(FlowMapNormalsSampler, sampleUV, 0).w;
+				// Calculate cell blend weights for this offset position
+				float2 cellBlend = 0.5 + -(-0.5 + abs(frac(offsetInput.TexCoord2.zw * (64 * flowmapDims)) * 2 - 1));
+				
+				// Sample all 4 phases with the offset
+				FlowmapData fd0 = GetFlowmapDataUV(offsetInput, uvShiftDbg);
+				FlowmapData fd1 = GetFlowmapDataUV(offsetInput, float2(0, uvShiftDbg.y));
+				FlowmapData fd2 = GetFlowmapDataUV(offsetInput, 0.0.xx);
+				FlowmapData fd3 = GetFlowmapDataUV(offsetInput, float2(uvShiftDbg.x, 0));
+				
+				float2 uv0 = 0 + (fd0.flowVector - float2(9.92 * ((0.001 * ReflectionColor.w) * fd0.color.w), 0));
+				float2 uv1 = 0.27 + (fd1.flowVector - float2(10.64 * ((0.001 * ReflectionColor.w) * fd1.color.w), 0));
+				float2 uv2 = 0 + (fd2.flowVector - float2(8 * ((0.001 * ReflectionColor.w) * fd2.color.w), 0));
+				float2 uv3 = 0.62 + (fd3.flowVector - float2(8.48 * ((0.001 * ReflectionColor.w) * fd3.color.w), 0));
+				
+				float h0 = FlowMapNormalsTex.SampleLevel(FlowMapNormalsSampler, uv0, 0).w;
+				float h1 = FlowMapNormalsTex.SampleLevel(FlowMapNormalsSampler, uv1, 0).w;
+				float h2 = FlowMapNormalsTex.SampleLevel(FlowMapNormalsSampler, uv2, 0).w;
+				float h3 = FlowMapNormalsTex.SampleLevel(FlowMapNormalsSampler, uv3, 0).w;
+				
+				float blendedHeight = cellBlend.y * (cellBlend.x * h2 + (1 - cellBlend.x) * h3) +
+				                     (1 - cellBlend.y) * (cellBlend.x * h1 + (1 - cellBlend.x) * h0);
+				currHeight = 1.0 - blendedHeight;
 			}
 			
 			float prevBound = currBound - stepSize;
@@ -2389,12 +2433,29 @@ PS_OUTPUT main(PS_INPUT input)
 			float denominator = delta2 - delta1;
 			float parallaxAmount = denominator != 0.0 ? (currBound * delta2 - prevBound * delta1) / denominator : currBound;
 			
-			// Final sample with parallax
+			// Final blended sample with parallax
 			PS_INPUT finalInput = input;
 			finalInput.TexCoord3.xy = input.TexCoord3.xy + parallaxAmount * parallaxDir;
-			FlowmapData finalFlowData = GetFlowmapDataUV(finalInput, 0.0.xx);
-			float2 finalUV = 0 + (finalFlowData.flowVector - float2(8 * ((0.001 * ReflectionColor.w) * finalFlowData.color.w), 0));
-			debugHeight = FlowMapNormalsTex.SampleLevel(FlowMapNormalsSampler, finalUV, 0).w;
+			
+			float2 cellBlend = 0.5 + -(-0.5 + abs(frac(finalInput.TexCoord2.zw * (64 * flowmapDims)) * 2 - 1));
+			
+			FlowmapData fd0 = GetFlowmapDataUV(finalInput, uvShiftDbg);
+			FlowmapData fd1 = GetFlowmapDataUV(finalInput, float2(0, uvShiftDbg.y));
+			FlowmapData fd2 = GetFlowmapDataUV(finalInput, 0.0.xx);
+			FlowmapData fd3 = GetFlowmapDataUV(finalInput, float2(uvShiftDbg.x, 0));
+			
+			float2 uv0 = 0 + (fd0.flowVector - float2(9.92 * ((0.001 * ReflectionColor.w) * fd0.color.w), 0));
+			float2 uv1 = 0.27 + (fd1.flowVector - float2(10.64 * ((0.001 * ReflectionColor.w) * fd1.color.w), 0));
+			float2 uv2 = 0 + (fd2.flowVector - float2(8 * ((0.001 * ReflectionColor.w) * fd2.color.w), 0));
+			float2 uv3 = 0.62 + (fd3.flowVector - float2(8.48 * ((0.001 * ReflectionColor.w) * fd3.color.w), 0));
+			
+			float h0 = FlowMapNormalsTex.SampleLevel(FlowMapNormalsSampler, uv0, 0).w;
+			float h1 = FlowMapNormalsTex.SampleLevel(FlowMapNormalsSampler, uv1, 0).w;
+			float h2 = FlowMapNormalsTex.SampleLevel(FlowMapNormalsSampler, uv2, 0).w;
+			float h3 = FlowMapNormalsTex.SampleLevel(FlowMapNormalsSampler, uv3, 0).w;
+			
+			debugHeight = cellBlend.y * (cellBlend.x * h2 + (1 - cellBlend.x) * h3) +
+			             (1 - cellBlend.y) * (cellBlend.x * h1 + (1 - cellBlend.x) * h0);
 		}
 #				else
 		// For regular water - use the parallax offset from WaterEffects
@@ -2408,16 +2469,8 @@ PS_OUTPUT main(PS_INPUT input)
 		heights *= NormalsAmplitude.xyz;
 		debugHeight = (heights.x + heights.y + heights.z) / (NormalsAmplitude.x + NormalsAmplitude.y + NormalsAmplitude.z);
 #				endif
-		// DEBUG: Blend wave height with viewDirection.xy visualization
-		float vx = viewDirection.x;
-		float vy = viewDirection.y;
-		float3 viewDirColor = float3(
-			vx > 0 ? vx : -vx * 0.3,   // RED = positive X, dim red = negative X
-			vy > 0 ? vy : -vy * 0.3,   // GREEN = positive Y, dim green = negative Y
-			0
-		);
-		// Multiply height by view direction colors so waves are visible
-		finalColor = debugHeight * (0.5 + viewDirColor);
+		// Show blended height as grayscale
+		finalColor = float3(debugHeight, debugHeight, debugHeight);
 	}
 #			endif
 
