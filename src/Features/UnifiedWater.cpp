@@ -1071,11 +1071,12 @@ void UnifiedWater::BSWaterShader_SetupGeometry::thunk(RE::BSShader* waterShader,
 	static bool loggedTessSetup = false;
 	static int tessFrameCount = 0;
 	tessFrameCount++;
-	bool shouldLog = !loggedTessSetup || (tessFrameCount % 1000 == 0);
+	bool shouldLog = !loggedTessSetup;
 	
 	if (shouldLog) {
 		logger::info("[Unified Water] SetupGeometry - passEnum:0x{:X} technique:{} numLights:{} tessCompat:{}", 
 			pass->passEnum, technique, pass->numLights, techniqueSupportsTessel);
+		loggedTessSetup = true;
 	}
 
 	// CRITICAL: Call original SetupGeometry FIRST to set up VS, PS, textures, etc.

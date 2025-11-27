@@ -1825,6 +1825,29 @@ PS_OUTPUT main(PS_INPUT input)
 
 	float fresnel = GetFresnelValue(normal, viewDirection);
 
+#			if defined(SKYLIGHTING)
+	float skylightingDiffuse = 1.0;
+	float skylightingSpecular = 1.0;
+	const bool inWorldSkylight = (Permutation::ExtraShaderDescriptor & Permutation::ExtraFlags::InWorld);
+	if (inWorldSkylight && !(Permutation::PixelShaderDescriptor & Permutation::WaterFlags::Interior)) {
+#				if defined(VR)
+		float3 positionMSSkylight = input.WPosition.xyz + FrameBuffer::CameraPosAdjust[eyeIndex].xyz - FrameBuffer::CameraPosAdjust[0].xyz;
+#				else
+		float3 positionMSSkylight = input.WPosition.xyz;
+#				endif
+		sh2 skylightingSH = Skylighting::sample(SharedData::skylightingSettings, Skylighting::SkylightingProbeArray, Skylighting::stbn_vec3_2Dx1D_128x128x64, input.HPosition.xy, positionMSSkylight, normal);
+		skylightingDiffuse = SphericalHarmonics::FuncProductIntegral(skylightingSH, SphericalHarmonics::EvaluateCosineLobe(float3(0, 0, 1))) / Math::PI;
+		skylightingDiffuse = saturate(skylightingDiffuse);
+		skylightingDiffuse = lerp(1.0, skylightingDiffuse, Skylighting::getFadeOutFactor(input.WPosition.xyz));
+		skylightingDiffuse = Skylighting::mixDiffuse(SharedData::skylightingSettings, skylightingDiffuse);
+
+		sh2 specularLobe = SphericalHarmonics::FauxSpecularLobe(normal, -viewDirection, 0.0);
+		skylightingSpecular = SphericalHarmonics::FuncProductIntegral(skylightingSH, specularLobe);
+		skylightingSpecular = lerp(1.0, skylightingSpecular, Skylighting::getFadeOutFactor(input.WPosition.xyz));
+		skylightingSpecular = Skylighting::mixSpecular(SharedData::skylightingSettings, skylightingSpecular);
+	}
+#			endif
+
 #			if defined(SPECULAR) && (NUM_SPECULAR_LIGHTS != 0)
 	float3 finalColor = 0.0.xxx;
 
@@ -1922,9 +1945,15 @@ PS_OUTPUT main(PS_INPUT input)
 
 	if (!(Permutation::PixelShaderDescriptor & Permutation::WaterFlags::Interior) && any(sunColor > 0.0)) {
 		sunColor *= ShadowSampling::GetWaterShadow(screenNoise, input.WPosition.xyz, eyeIndex);
+#						if defined(SKYLIGHTING)
+		sunColor *= skylightingSpecular;
+#						endif
 	}
 
 #					if defined(VC)
+#						if defined(SKYLIGHTING)
+	diffuseColor *= skylightingDiffuse;
+#						endif
 	float specularFraction = lerp(1, fresnel * diffuseOutput.refractionMul, distanceBlendFactor);
 	float3 finalColorPreFog = lerp(diffuseColor, specularColor, specularFraction) + sunColor * depthControl.w;
 	
@@ -1951,6 +1980,9 @@ PS_OUTPUT main(PS_INPUT input)
 #						endif
 
 #					else
+#						if defined(SKYLIGHTING)
+	diffuseOutput.refractionDiffuseColor *= skylightingDiffuse;
+#						endif
 	float specularFraction = lerp(1, fresnel, distanceBlendFactor);
 	float3 finalColorPreFog = lerp(diffuseOutput.refractionDiffuseColor, specularColor, specularFraction) + sunColor * depthControl.w;
 
