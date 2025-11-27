@@ -1220,7 +1220,7 @@ float GetFlowmapParallaxHeight(PS_INPUT input, float2 currentOffset, float3 norm
 float2 GetFlowmapParallaxUVOffset(PS_INPUT input, float3 viewDirection, float3 normalScalesRcp)
 {
 	float2 parallaxOffsetTS = viewDirection.xy / -viewDirection.z;
-	parallaxOffsetTS *= 20.0;
+	parallaxOffsetTS *= 80.0;  // Much stronger parallax for flowmaps
 	
 	// Compute mip level
 	float2 textureDims;
@@ -2345,14 +2345,57 @@ PS_OUTPUT main(PS_INPUT input)
 	{
 		float debugHeight = 0;
 #				if defined(FLOWMAP)
-		// For flowmap water - use base normal texture (Normals01Tex) for clean parallax
-		float3 normalScalesRcpDebug = rcp(input.NormalsScale.xyz);
+		// For flowmap water - apply parallax to source coords BEFORE flowmap transform
+		float viewDotUp = -viewDirection.z;  // How much we're looking down (1 = straight down, 0 = horizontal)
 		
-		// Get parallax UV offset using same method as regular water
-		float2 parallaxUVOffset = GetFlowmapParallaxUVOffset(input, viewDirection, normalScalesRcpDebug);
-		
-		// Sample height from base normal texture with parallax offset
-		debugHeight = Normals01Tex.SampleLevel(Normals01Sampler, input.TexCoord1.xy + parallaxUVOffset * normalScalesRcpDebug.x, 0).w;
+		// Skip parallax at very grazing angles to avoid artifacts
+		if (viewDotUp < 0.05) {
+			FlowmapData flowData = GetFlowmapDataUV(input, 0.0.xx);
+			float2 sampleUV = 0 + (flowData.flowVector - float2(8 * ((0.001 * ReflectionColor.w) * flowData.color.w), 0));
+			debugHeight = FlowMapNormalsTex.SampleLevel(FlowMapNormalsSampler, sampleUV, 0).w;
+		} else {
+			float2 parallaxDir = viewDirection.xy / -viewDirection.z;
+			parallaxDir.y = -parallaxDir.y;  // Fix Y direction - negate to correct distortion
+			
+			// Scale parallax strength - stronger when looking down, weaker at grazing angles
+			float parallaxScale = 0.008 * saturate(viewDotUp * 2.0);
+			parallaxDir *= parallaxScale;
+			
+			// More steps at grazing angles for better quality
+			int numSteps = (int)lerp(32.0, 8.0, viewDotUp);
+			float stepSize = rcp((float)numSteps);
+			
+			float currBound = 0.0;
+			float currHeight = 1.0;
+			float prevHeight = 1.0;
+			
+			[loop] for (int i = 0; i < numSteps && currHeight > currBound; i++)
+			{
+				prevHeight = currHeight;
+				currBound += stepSize;
+				
+				// Create offset input and compute flowmap UV with offset applied to source
+				PS_INPUT offsetInput = input;
+				offsetInput.TexCoord3.xy = input.TexCoord3.xy + currBound * parallaxDir;
+				
+				FlowmapData flowData = GetFlowmapDataUV(offsetInput, 0.0.xx);
+				float2 sampleUV = 0 + (flowData.flowVector - float2(8 * ((0.001 * ReflectionColor.w) * flowData.color.w), 0));
+				currHeight = 1.0 - FlowMapNormalsTex.SampleLevel(FlowMapNormalsSampler, sampleUV, 0).w;
+			}
+			
+			float prevBound = currBound - stepSize;
+			float delta2 = prevBound - prevHeight;
+			float delta1 = currBound - currHeight;
+			float denominator = delta2 - delta1;
+			float parallaxAmount = denominator != 0.0 ? (currBound * delta2 - prevBound * delta1) / denominator : currBound;
+			
+			// Final sample with parallax
+			PS_INPUT finalInput = input;
+			finalInput.TexCoord3.xy = input.TexCoord3.xy + parallaxAmount * parallaxDir;
+			FlowmapData finalFlowData = GetFlowmapDataUV(finalInput, 0.0.xx);
+			float2 finalUV = 0 + (finalFlowData.flowVector - float2(8 * ((0.001 * ReflectionColor.w) * finalFlowData.color.w), 0));
+			debugHeight = FlowMapNormalsTex.SampleLevel(FlowMapNormalsSampler, finalUV, 0).w;
+		}
 #				else
 		// For regular water - use the parallax offset from WaterEffects
 		float3 normalScalesRcpDebug = rcp(input.NormalsScale.xyz);
@@ -2365,7 +2408,16 @@ PS_OUTPUT main(PS_INPUT input)
 		heights *= NormalsAmplitude.xyz;
 		debugHeight = (heights.x + heights.y + heights.z) / (NormalsAmplitude.x + NormalsAmplitude.y + NormalsAmplitude.z);
 #				endif
-		finalColor = float3(debugHeight, debugHeight, debugHeight);
+		// DEBUG: Blend wave height with viewDirection.xy visualization
+		float vx = viewDirection.x;
+		float vy = viewDirection.y;
+		float3 viewDirColor = float3(
+			vx > 0 ? vx : -vx * 0.3,   // RED = positive X, dim red = negative X
+			vy > 0 ? vy : -vy * 0.3,   // GREEN = positive Y, dim green = negative Y
+			0
+		);
+		// Multiply height by view direction colors so waves are visible
+		finalColor = debugHeight * (0.5 + viewDirColor);
 	}
 #			endif
 
