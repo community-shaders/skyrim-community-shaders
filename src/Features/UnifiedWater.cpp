@@ -5,764 +5,23 @@
 #include "PCH.h"
 #include "State.h"
 #include "ShaderCache.h"
+#include "Util.h"
 #include "RE/C/Calendar.h"
 #include "Globals.h"
-#include "RE/M/MemoryManager.h"
-#include "RE/N/NiGeometry.h"
-#include "RE/N/NiGeometryData.h"
-#include "RE/N/NiSmartPointer.h"
 
-#include <algorithm>
-#include <array>
 #include <cmath>
-#include <cstdint>
-#include <cstring>
-#include <limits>
-#include <unordered_map>
-#include <vector>
 
 #include <d3d11.h>
-
-namespace
-{
-struct EdgeKey
-{
-	std::uint32_t v0;
-	std::uint32_t v1;
-
-	bool operator==(const EdgeKey& rhs) const noexcept
-	{
-		return v0 == rhs.v0 && v1 == rhs.v1;
-	}
-};
-
-struct EdgeKeyHash
-{
-	std::size_t operator()(const EdgeKey& key) const noexcept
-	{
-		return (static_cast<std::size_t>(key.v0) << 32) ^ key.v1;
-	}
-};
-
-struct EdgeInfo
-{
-	std::uint32_t oppositeA = std::numeric_limits<std::uint32_t>::max();
-	std::uint32_t oppositeB = std::numeric_limits<std::uint32_t>::max();
-	std::uint32_t newIndex = std::numeric_limits<std::uint32_t>::max();
-
-	[[nodiscard]] bool IsBoundary() const noexcept
-	{
-		return oppositeB == std::numeric_limits<std::uint32_t>::max();
-	}
-};
-
-static std::uint16_t FloatToHalf(float value) noexcept
-{
-	if (!std::isfinite(value)) {
-		return value > 0.0f ? 0x7C00 : 0xFC00;
-	}
-
-	std::uint32_t bits = 0;
-	std::memcpy(&bits, &value, sizeof(bits));
-
-	std::uint32_t sign = (bits >> 31) & 0x1;
-	int32_t exponent = static_cast<int32_t>((bits >> 23) & 0xFF) - 127;
-	std::uint32_t mantissa = bits & 0x7FFFFF;
-
-	std::uint16_t result = static_cast<std::uint16_t>(sign << 15);
-
-	if (exponent > 15) {
-		return static_cast<std::uint16_t>(result | 0x7C00);
-	}
-
-	if (exponent < -14) {
-		if (exponent < -24) {
-			return result;
-		}
-
-		signed int shift = (-14 - exponent);
-		mantissa |= 0x800000;
-		std::uint32_t sub = mantissa >> (shift + 13);
-		if (((mantissa >> (shift + 12)) & 0x1) && ((sub & 0x1) || (mantissa & ((1u << (shift + 12)) - 1u)))) {
-			++sub;
-		}
-		return static_cast<std::uint16_t>(result | (sub & 0x03FF));
-	}
-
-	std::uint16_t halfExp = static_cast<std::uint16_t>(exponent + 15);
-	std::uint16_t halfMant = static_cast<std::uint16_t>(mantissa >> 13);
-	if ((mantissa & 0x1FFF) > 0x1000 || ((mantissa & 0x3FFF) == 0x3000)) {
-		++halfMant;
-		if (halfMant == 0x0400) {
-			halfMant = 0;
-			++halfExp;
-			if (halfExp >= 31) {
-				return static_cast<std::uint16_t>(result | 0x7C00);
-			}
-		}
-	}
-	return static_cast<std::uint16_t>(result | (halfExp << 10) | (halfMant & 0x03FF));
-}
-
-static float HalfToFloat(std::uint16_t value) noexcept
-{
-	const std::uint32_t sign = (value >> 15) & 0x1;
-	std::uint32_t exponent = (value >> 10) & 0x1F;
-	std::uint32_t mantissa = value & 0x3FF;
-
-	std::uint32_t bits;
-	if (exponent == 0) {
-		if (mantissa == 0) {
-			bits = sign << 31;
-		} else {
-			exponent = 1;
-			while ((mantissa & 0x400) == 0) {
-				mantissa <<= 1;
-				--exponent;
-			}
-			mantissa &= 0x3FF;
-			bits = (sign << 31) | ((exponent + 127 - 15) << 23) | (mantissa << 13);
-		}
-	} else if (exponent == 0x1F) {
-		bits = (sign << 31) | 0x7F800000 | (mantissa << 13);
-	} else {
-		bits = (sign << 31) | ((exponent + 127 - 15) << 23) | (mantissa << 13);
-	}
-
-	float result;
-	std::memcpy(&result, &bits, sizeof(result));
-	return result;
-}
-
-static void UpdateBounds(const std::vector<RE::NiPoint3>& positions, RE::NiBound& bound) noexcept
-{
-	if (positions.empty()) {
-		bound.center = RE::NiPoint3();
-		bound.radius = 0.0f;
-		return;
-	}
-
-	RE::NiPoint3 minP = positions.front();
-	RE::NiPoint3 maxP = positions.front();
-	for (const auto& pos : positions) {
-		minP.x = std::min(minP.x, pos.x);
-		minP.y = std::min(minP.y, pos.y);
-		minP.z = std::min(minP.z, pos.z);
-		maxP.x = std::max(maxP.x, pos.x);
-		maxP.y = std::max(maxP.y, pos.y);
-		maxP.z = std::max(maxP.z, pos.z);
-	}
-
-	RE::NiPoint3 center{
-		(minP.x + maxP.x) * 0.5f,
-		(minP.y + maxP.y) * 0.5f,
-		(minP.z + maxP.z) * 0.5f
-	};
-
-	float maxRadiusSq = 0.0f;
-	for (const auto& pos : positions) {
-		const float dx = pos.x - center.x;
-		const float dy = pos.y - center.y;
-		const float dz = pos.z - center.z;
-		maxRadiusSq = std::max(maxRadiusSq, dx * dx + dy * dy + dz * dz);
-	}
-
-	bound.center = center;
-	bound.radius = std::sqrt(maxRadiusSq);
-}
-
-
-static void ReleaseBuffer(RE::ID3D11Buffer*& buffer) noexcept
-{
-	if (buffer) {
-		reinterpret_cast<ID3D11Buffer*>(buffer)->Release();
-		buffer = nullptr;
-	}
-}
-
-static bool EnsureRendererData(RE::BSTriShape* target, const RE::BSTriShape* source) noexcept
-{
-	if (!target)
-		return false;
-
-	const RE::BSGraphics::TriShape* sourceRendererData = nullptr;
-	if (source) {
-		sourceRendererData = source->GetGeometryRuntimeData().rendererData;
-	}
-
-	auto& targetRuntime = target->GetGeometryRuntimeData();
-	auto* targetRendererData = targetRuntime.rendererData;
-	if (!sourceRendererData || !sourceRendererData->rawVertexData || !sourceRendererData->rawIndexData) {
-		sourceRendererData = targetRendererData;
-	}
-
-	if (!sourceRendererData || !sourceRendererData->rawVertexData || !sourceRendererData->rawIndexData) {
-		logger::warn("[Unified Water] Missing renderer buffers while preparing mesh instance");
-		return false;
-	}
-
-	const auto& runtime = target->GetTrishapeRuntimeData();
-	const auto vertexCount = runtime.vertexCount;
-	const auto triangleCount = runtime.triangleCount;
-	if (vertexCount == 0 || triangleCount == 0) {
-		logger::warn("[Unified Water] Mesh has no geometry to initialise renderer data");
-		return false;
-	}
-
-	const std::size_t vertexStride = const_cast<RE::BSGraphics::VertexDesc&>(sourceRendererData->vertexDesc).GetSize();
-	if (vertexStride == 0) {
-		logger::warn("[Unified Water] Water mesh has an unexpected vertex stride");
-		return false;
-	}
-
-	const std::size_t vertexBytes = static_cast<std::size_t>(vertexCount) * vertexStride;
-	const std::size_t indexCount = static_cast<std::size_t>(triangleCount) * 3;
-	const std::size_t indexBytes = indexCount * sizeof(std::uint16_t);
-	if (vertexBytes == 0 || indexBytes == 0) {
-		logger::warn("[Unified Water] Calculated buffer sizes are zero for mesh instance");
-		return false;
-	}
-
-	auto* newVertexData = static_cast<std::uint8_t*>(RE::malloc(vertexBytes));
-	if (!newVertexData) {
-		logger::warn("[Unified Water] Failed to allocate CPU vertex data for mesh instance");
-		return false;
-	}
-	std::memcpy(newVertexData, sourceRendererData->rawVertexData, vertexBytes);
-
-	auto* newIndexData = static_cast<std::uint16_t*>(RE::malloc(indexBytes));
-	if (!newIndexData) {
-		logger::warn("[Unified Water] Failed to allocate CPU index data for mesh instance");
-		RE::free(newVertexData);
-		return false;
-	}
-	std::memcpy(newIndexData, sourceRendererData->rawIndexData, indexBytes);
-
-	const bool allocateStruct = !targetRendererData || targetRendererData == sourceRendererData;
-	if (allocateStruct) {
-		auto* replacement = static_cast<RE::BSGraphics::TriShape*>(RE::malloc(sizeof(RE::BSGraphics::TriShape)));
-		if (!replacement) {
-			logger::warn("[Unified Water] Failed to allocate renderer data for mesh instance");
-			RE::free(newIndexData);
-			RE::free(newVertexData);
-			return false;
-		}
-
-		std::memcpy(replacement, sourceRendererData, sizeof(RE::BSGraphics::TriShape));
-		replacement->vertexBuffer = nullptr;
-		replacement->indexBuffer = nullptr;
-		replacement->rawVertexData = nullptr;
-		replacement->rawIndexData = nullptr;
-		replacement->refCount = 1;
-		targetRuntime.rendererData = replacement;
-		targetRendererData = replacement;
-	} else {
-		targetRendererData->vertexDesc = sourceRendererData->vertexDesc;
-	}
-
-	if (targetRendererData->rawVertexData)
-		RE::free(targetRendererData->rawVertexData);
-	if (targetRendererData->rawIndexData)
-		RE::free(targetRendererData->rawIndexData);
-
-	if (targetRendererData->vertexBuffer && targetRendererData->vertexBuffer != sourceRendererData->vertexBuffer)
-		ReleaseBuffer(targetRendererData->vertexBuffer);
-	else
-		targetRendererData->vertexBuffer = nullptr;
-
-	if (targetRendererData->indexBuffer && targetRendererData->indexBuffer != sourceRendererData->indexBuffer)
-		ReleaseBuffer(targetRendererData->indexBuffer);
-	else
-		targetRendererData->indexBuffer = nullptr;
-
-	targetRendererData->rawVertexData = newVertexData;
-	targetRendererData->rawIndexData = newIndexData;
-	targetRendererData->refCount = 1;
-
-	return true;
-}
-}
-
-static bool ApplyLoopSubdivision(RE::BSTriShape* shape, std::uint32_t iterations, bool verbose = true)
-{
-	if (!shape || iterations == 0) {
-		if (verbose) {
-			logger::info(
-				"[Unified Water] Subdivision skipped (shape = {}, iterations = {})",
-				static_cast<const void*>(shape),
-				iterations);
-		}
-		return true;
-	}
-
-	auto* rendererData = shape->GetGeometryRuntimeData().rendererData;
-	if (!rendererData) {
-		logger::warn("[Unified Water] Missing renderer data for subdivision");
-		return false;
-	}
-
-	const auto* rawVertexData = rendererData->rawVertexData;
-	if (!rawVertexData) {
-		logger::warn("[Unified Water] Missing CPU vertex data for subdivision");
-		return false;
-	}
-
-	RE::NiGeometryData* geometryData = nullptr;
-	if (auto& geometryRuntime = shape->GetGeometryRuntimeData(); geometryRuntime.unk20) {
-		auto* geometryHandle = reinterpret_cast<RE::NiPointer<RE::NiGeometryData>*>(&geometryRuntime.unk20);
-		geometryData = geometryHandle ? geometryHandle->get() : nullptr;
-	}
-
-	auto& runtime = shape->GetTrishapeRuntimeData();
-	const std::uint32_t originalVertexCount = runtime.vertexCount;
-	const std::uint32_t originalTriangleCount = runtime.triangleCount;
-
-	if (originalVertexCount == 0 || originalTriangleCount == 0 || !rendererData->rawIndexData) {
-		logger::warn("[Unified Water] Invalid mesh data for subdivision");
-		return false;
-	}
-
-	const std::size_t vertexStride = rendererData->vertexDesc.GetSize();
-	if (vertexStride < sizeof(float) * 4) {
-		logger::warn("[Unified Water] Unexpected vertex stride for water mesh");
-		return false;
-	}
-
-	std::vector<RE::NiPoint3> positions(originalVertexCount);
-	for (std::uint32_t i = 0; i < originalVertexCount; ++i) {
-		const auto* base = rawVertexData + i * vertexStride;
-		const auto* pos = reinterpret_cast<const float*>(base);
-		positions[i] = { pos[0], pos[1], pos[2] };
-	}
-
-	const bool hasPrimaryUV = rendererData->vertexDesc.HasFlag(RE::BSGraphics::Vertex::VF_UV);
-	std::vector<std::array<float, 2>> primaryUVs;
-	if (hasPrimaryUV) {
-		primaryUVs.resize(originalVertexCount);
-		const std::uint32_t offset0 = rendererData->vertexDesc.GetAttributeOffset(RE::BSGraphics::Vertex::VA_TEXCOORD0);
-		for (std::uint32_t i = 0; i < originalVertexCount; ++i) {
-			const auto* base = rawVertexData + i * vertexStride;
-			if (offset0 + sizeof(std::uint16_t) * 2 <= vertexStride) {
-				const auto* uv = reinterpret_cast<const std::uint16_t*>(base + offset0);
-				primaryUVs[i][0] = HalfToFloat(uv[0]);
-				primaryUVs[i][1] = HalfToFloat(uv[1]);
-			} else {
-				primaryUVs[i][0] = 0.0f;
-				primaryUVs[i][1] = 0.0f;
-			}
-		}
-	}
-
-	const std::size_t indexCount = static_cast<std::size_t>(originalTriangleCount) * 3;
-	std::vector<std::uint32_t> indices;
-	indices.reserve(indexCount);
-	std::size_t invalidTriangles = 0;
-	for (std::size_t i = 0; i + 2 < indexCount; i += 3) {
-		std::uint32_t tri[3];
-		bool isValid = true;
-		for (std::size_t j = 0; j < 3; ++j) {
-			const auto value = static_cast<std::uint32_t>(rendererData->rawIndexData[i + j]);
-			if (value >= originalVertexCount) {
-				isValid = false;
-				break;
-			}
-			tri[j] = value;
-		}
-		if (!isValid) {
-			++invalidTriangles;
-			continue;
-		}
-		indices.push_back(tri[0]);
-		indices.push_back(tri[1]);
-		indices.push_back(tri[2]);
-	}
-
-	if (indices.empty()) {
-		logger::warn("[Unified Water] Subdivision aborted due to invalid triangle data");
-		return false;
-	}
-
-	if (invalidTriangles > 0) {
-		logger::warn("[Unified Water] Skipped {} triangle(s) with invalid indices during subdivision", invalidTriangles);
-	}
-
-	if (verbose) {
-		logger::info(
-			"[Unified Water] Starting subdivision: iterations = {}, initial verts = {}, initial tris = {}",
-			iterations,
-			originalVertexCount,
-			originalTriangleCount);
-	}
-
-	for (std::uint32_t iteration = 0; iteration < iterations; ++iteration) {
-		const std::size_t vertexCount = positions.size();
-		std::unordered_map<EdgeKey, EdgeInfo, EdgeKeyHash> edges;
-		edges.reserve(indices.size());
-
-		std::vector<std::vector<std::uint32_t>> neighborLists(vertexCount);
-		std::vector<std::vector<std::uint32_t>> boundaryNeighbors(vertexCount);
-
-		auto registerNeighbor = [&neighborLists](std::uint32_t from, std::uint32_t to) {
-			neighborLists[from].push_back(to);
-		};
-
-		auto registerEdge = [&edges](std::uint32_t a, std::uint32_t b, std::uint32_t opposite) {
-			EdgeKey key{ std::min(a, b), std::max(a, b) };
-			auto [it, inserted] = edges.try_emplace(key);
-			auto& info = it->second;
-			if (inserted) {
-				info.oppositeA = opposite;
-			} else if (info.oppositeA != opposite && info.oppositeB == std::numeric_limits<std::uint32_t>::max()) {
-				info.oppositeB = opposite;
-			}
-		};
-
-		for (std::size_t idx = 0; idx < indices.size(); idx += 3) {
-			const std::uint32_t a = indices[idx + 0];
-			const std::uint32_t b = indices[idx + 1];
-			const std::uint32_t c = indices[idx + 2];
-
-			registerNeighbor(a, b);
-			registerNeighbor(a, c);
-			registerNeighbor(b, a);
-			registerNeighbor(b, c);
-			registerNeighbor(c, a);
-			registerNeighbor(c, b);
-
-			registerEdge(a, b, c);
-			registerEdge(b, c, a);
-			registerEdge(c, a, b);
-		}
-
-		std::vector<bool> isBoundary(vertexCount, false);
-		auto deduplicate = [](std::vector<std::uint32_t>& list) {
-			std::sort(list.begin(), list.end());
-			list.erase(std::unique(list.begin(), list.end()), list.end());
-		};
-
-		for (auto& [key, edge] : edges) {
-			if (edge.IsBoundary()) {
-				isBoundary[key.v0] = true;
-				isBoundary[key.v1] = true;
-				boundaryNeighbors[key.v0].push_back(key.v1);
-				boundaryNeighbors[key.v1].push_back(key.v0);
-			}
-		}
-
-		for (std::size_t i = 0; i < vertexCount; ++i) {
-			deduplicate(neighborLists[i]);
-			deduplicate(boundaryNeighbors[i]);
-		}
-
-		const auto previousPositions = positions;
-		std::vector<std::array<float, 2>> previousUVs;
-		if (hasPrimaryUV)
-			previousUVs = primaryUVs;
-
-		std::vector<RE::NiPoint3> updatedPositions(vertexCount);
-		std::vector<std::array<float, 2>> updatedUVs;
-		if (hasPrimaryUV)
-			updatedUVs.resize(vertexCount);
-
-		for (std::size_t i = 0; i < vertexCount; ++i) {
-			const auto& current = previousPositions[i];
-			if (isBoundary[i]) {
-				// Keep boundary vertices fixed to preserve straight cell edges
-				updatedPositions[i] = current;
-				if (hasPrimaryUV)
-					updatedUVs[i] = previousUVs[i];
-			} else {
-				const auto& neighbors = neighborLists[i];
-				if (neighbors.size() >= 3) {
-					const float neighborCount = static_cast<float>(neighbors.size());
-					const float beta = (neighborCount == 3.0f) ? (3.0f / 16.0f) : (3.0f / (8.0f * neighborCount));
-					RE::NiPoint3 neighborSum{};
-					std::array<float, 2> uvSum{ 0.0f, 0.0f };
-					for (auto index : neighbors) {
-						neighborSum += previousPositions[index];
-						if (hasPrimaryUV) {
-							uvSum[0] += previousUVs[index][0];
-							uvSum[1] += previousUVs[index][1];
-						}
-					}
-					updatedPositions[i] = current * (1.0f - neighborCount * beta) + neighborSum * beta;
-					if (hasPrimaryUV) {
-						const auto& uvSelf = previousUVs[i];
-						updatedUVs[i][0] = uvSelf[0] * (1.0f - neighborCount * beta) + uvSum[0] * beta;
-						updatedUVs[i][1] = uvSelf[1] * (1.0f - neighborCount * beta) + uvSum[1] * beta;
-					}
-				} else {
-					updatedPositions[i] = current;
-					if (hasPrimaryUV)
-						updatedUVs[i] = previousUVs[i];
-				}
-			}
-		}
-
-		std::vector<RE::NiPoint3> nextPositions = updatedPositions;
-		std::vector<std::array<float, 2>> nextUVs;
-		if (hasPrimaryUV)
-			nextUVs = updatedUVs;
-
-		nextPositions.reserve(updatedPositions.size() + edges.size());
-		if (hasPrimaryUV)
-			nextUVs.reserve(updatedUVs.size() + edges.size());
-
-		auto appendUV = [&](const std::array<float, 2>& uv) {
-			if (hasPrimaryUV)
-				nextUVs.push_back(uv);
-		};
-
-		for (auto& [key, edge] : edges) {
-			const auto& p0 = previousPositions[key.v0];
-			const auto& p1 = previousPositions[key.v1];
-			RE::NiPoint3 newPos;
-			std::array<float, 2> newUV{ 0.0f, 0.0f };
-
-			if (edge.IsBoundary()) {
-				newPos = (p0 + p1) * 0.5f;
-				if (hasPrimaryUV) {
-					const auto& uv0 = previousUVs[key.v0];
-					const auto& uv1 = previousUVs[key.v1];
-					newUV[0] = 0.5f * (uv0[0] + uv1[0]);
-					newUV[1] = 0.5f * (uv0[1] + uv1[1]);
-				}
-			} else {
-				const auto& pa = previousPositions[edge.oppositeA];
-				const auto& pb = previousPositions[edge.oppositeB];
-				newPos = (p0 + p1) * 0.375f + (pa + pb) * 0.125f;
-				if (hasPrimaryUV) {
-					const auto& uv0 = previousUVs[key.v0];
-					const auto& uv1 = previousUVs[key.v1];
-					const auto& uvA = previousUVs[edge.oppositeA];
-					const auto& uvB = previousUVs[edge.oppositeB];
-					newUV[0] = 0.375f * (uv0[0] + uv1[0]) + 0.125f * (uvA[0] + uvB[0]);
-					newUV[1] = 0.375f * (uv0[1] + uv1[1]) + 0.125f * (uvA[1] + uvB[1]);
-				}
-			}
-
-			edge.newIndex = static_cast<std::uint32_t>(nextPositions.size());
-			nextPositions.push_back(newPos);
-			appendUV(newUV);
-		}
-
-		std::vector<std::uint32_t> nextIndices;
-		nextIndices.reserve(indices.size() * 4);
-
-		auto edgeIndex = [&edges](std::uint32_t u, std::uint32_t v) -> std::uint32_t {
-			EdgeKey key{ std::min(u, v), std::max(u, v) };
-			auto it = edges.find(key);
-			return it != edges.end() ? it->second.newIndex : std::numeric_limits<std::uint32_t>::max();
-		};
-
-		for (std::size_t idx = 0; idx < indices.size(); idx += 3) {
-			const std::uint32_t a = indices[idx + 0];
-			const std::uint32_t b = indices[idx + 1];
-			const std::uint32_t c = indices[idx + 2];
-			const std::uint32_t ab = edgeIndex(a, b);
-			const std::uint32_t bc = edgeIndex(b, c);
-			const std::uint32_t ca = edgeIndex(c, a);
-
-			if (ab == std::numeric_limits<std::uint32_t>::max() ||
-				bc == std::numeric_limits<std::uint32_t>::max() ||
-				ca == std::numeric_limits<std::uint32_t>::max()) {
-				continue;
-			}
-
-			nextIndices.push_back(a);
-			nextIndices.push_back(ab);
-			nextIndices.push_back(ca);
-
-			nextIndices.push_back(ab);
-			nextIndices.push_back(b);
-			nextIndices.push_back(bc);
-
-			nextIndices.push_back(ca);
-			nextIndices.push_back(bc);
-			nextIndices.push_back(c);
-
-			nextIndices.push_back(ab);
-			nextIndices.push_back(bc);
-			nextIndices.push_back(ca);
-		}
-
-		positions = std::move(nextPositions);
-		indices = std::move(nextIndices);
-		if (hasPrimaryUV)
-			primaryUVs = std::move(nextUVs);
-
-		if (positions.size() > std::numeric_limits<std::uint16_t>::max() || indices.size() > static_cast<std::size_t>(std::numeric_limits<std::uint16_t>::max()) * 3) {
-			logger::warn("[Unified Water] Subdivision exceeded 16-bit index limits");
-			return false;
-		}
-
-		logger::debug(
-			"[Unified Water] Subdivision iteration {}/{} -> {} verts, {} tris",
-			iteration + 1,
-			iterations,
-			positions.size(),
-			indices.size() / 3);
-	}
-
-	const std::size_t finalVertexCount = positions.size();
-	const std::size_t finalIndexCount = indices.size();
-	if (finalVertexCount == 0 || finalIndexCount == 0) {
-		logger::warn("[Unified Water] Subdivision produced empty mesh");
-		return false;
-	}
-
-	if (verbose) {
-		logger::info(
-			"[Unified Water] Subdivision finished: final verts = {}, final tris = {}",
-			finalVertexCount,
-			finalIndexCount / 3);
-	}
-
-	std::vector<std::uint16_t> indexBufferData(finalIndexCount);
-	for (std::size_t i = 0; i < finalIndexCount; ++i)
-		indexBufferData[i] = static_cast<std::uint16_t>(indices[i]);
-
-	std::vector<std::uint8_t> vertexBufferData(vertexStride * finalVertexCount, 0);
-	for (std::size_t i = 0; i < finalVertexCount; ++i) {
-		std::uint8_t* base = vertexBufferData.data() + i * vertexStride;
-		auto* positionOut = reinterpret_cast<float*>(base);
-		positionOut[0] = positions[i].x;
-		positionOut[1] = positions[i].y;
-		positionOut[2] = positions[i].z;
-		positionOut[3] = 1.0f;
-
-		if (hasPrimaryUV) {
-			const std::uint32_t offset0 = rendererData->vertexDesc.GetAttributeOffset(RE::BSGraphics::Vertex::VA_TEXCOORD0);
-			if (offset0 + sizeof(std::uint16_t) * 2 <= vertexStride) {
-				auto* uvOut = reinterpret_cast<std::uint16_t*>(base + offset0);
-				uvOut[0] = FloatToHalf(primaryUVs[i][0]);
-				uvOut[1] = FloatToHalf(primaryUVs[i][1]);
-			}
-		}
-
-		if (rendererData->vertexDesc.HasFlag(RE::BSGraphics::Vertex::VF_UV_2)) {
-			const std::uint32_t offset1 = rendererData->vertexDesc.GetAttributeOffset(RE::BSGraphics::Vertex::VA_TEXCOORD1);
-			if (offset1 + sizeof(std::uint16_t) * 2 <= vertexStride) {
-				auto* uvOut1 = reinterpret_cast<std::uint16_t*>(base + offset1);
-				const float u = hasPrimaryUV ? primaryUVs[i][0] : 0.0f;
-				const float v = hasPrimaryUV ? primaryUVs[i][1] : 0.0f;
-				uvOut1[0] = FloatToHalf(u);
-				uvOut1[1] = FloatToHalf(v);
-			}
-		}
-	}
-
-	auto* oldRawVertex = rendererData->rawVertexData;
-	auto* newRawVertex = static_cast<std::uint8_t*>(RE::malloc(vertexBufferData.size()));
-	if (!newRawVertex) {
-		logger::warn("[Unified Water] Failed to allocate CPU vertex buffer");
-		return false;
-	}
-	std::memcpy(newRawVertex, vertexBufferData.data(), vertexBufferData.size());
-
-	auto* oldRawIndex = rendererData->rawIndexData;
-	auto* newRawIndex = static_cast<std::uint16_t*>(RE::malloc(indexBufferData.size() * sizeof(std::uint16_t)));
-	if (!newRawIndex) {
-		logger::warn("[Unified Water] Failed to allocate CPU index buffer");
-		RE::free(newRawVertex);
-		return false;
-	}
-	std::memcpy(newRawIndex, indexBufferData.data(), indexBufferData.size() * sizeof(std::uint16_t));
-
-	auto* device = globals::d3d::device;
-	if (!device) {
-		logger::warn("[Unified Water] Missing D3D device during subdivision");
-		RE::free(newRawVertex);
-		RE::free(newRawIndex);
-		return false;
-	}
-
-	ReleaseBuffer(rendererData->vertexBuffer);
-	ReleaseBuffer(rendererData->indexBuffer);
-
-	D3D11_BUFFER_DESC vbDesc{};
-	vbDesc.ByteWidth = static_cast<UINT>(vertexBufferData.size());
-	vbDesc.Usage = D3D11_USAGE_DEFAULT;
-	vbDesc.BindFlags = D3D11_BIND_VERTEX_BUFFER;
-
-	D3D11_SUBRESOURCE_DATA vbInit{};
-	vbInit.pSysMem = vertexBufferData.data();
-
-	if (FAILED(device->CreateBuffer(&vbDesc, &vbInit, reinterpret_cast<ID3D11Buffer**>(&rendererData->vertexBuffer)))) {
-		logger::warn("[Unified Water] Failed to create vertex buffer for subdivided mesh");
-		RE::free(newRawVertex);
-		RE::free(newRawIndex);
-		return false;
-	}
-
-	D3D11_BUFFER_DESC ibDesc{};
-	ibDesc.ByteWidth = static_cast<UINT>(indexBufferData.size() * sizeof(std::uint16_t));
-	ibDesc.Usage = D3D11_USAGE_DEFAULT;
-	ibDesc.BindFlags = D3D11_BIND_INDEX_BUFFER;
-
-	D3D11_SUBRESOURCE_DATA ibInit{};
-	ibInit.pSysMem = indexBufferData.data();
-
-	if (FAILED(device->CreateBuffer(&ibDesc, &ibInit, reinterpret_cast<ID3D11Buffer**>(&rendererData->indexBuffer)))) {
-		logger::warn("[Unified Water] Failed to create index buffer for subdivided mesh");
-		RE::free(newRawVertex);
-		RE::free(newRawIndex);
-		ReleaseBuffer(rendererData->vertexBuffer);
-		return false;
-	}
-
-	rendererData->rawVertexData = newRawVertex;
-	rendererData->rawIndexData = newRawIndex;
-	if (oldRawVertex)
-		RE::free(oldRawVertex);
-	if (oldRawIndex)
-		RE::free(oldRawIndex);
-
-	runtime.vertexCount = static_cast<std::uint16_t>(finalVertexCount);
-	runtime.triangleCount = static_cast<std::uint16_t>(finalIndexCount / 3);
-
-	if (geometryData) {
-		const auto previousVertexCount = geometryData->vertices;
-		RE::NiPoint3* const previousVertexArray = geometryData->vertex;
-		RE::NiPoint3* const replacementVertexArray = static_cast<RE::NiPoint3*>(RE::malloc(finalVertexCount * sizeof(RE::NiPoint3)));
-		if (replacementVertexArray) {
-			std::memcpy(replacementVertexArray, positions.data(), finalVertexCount * sizeof(RE::NiPoint3));
-			geometryData->vertex = replacementVertexArray;
-			if (previousVertexArray)
-				RE::free(previousVertexArray);
-			geometryData->vertices = static_cast<std::uint16_t>(finalVertexCount);
-		} else {
-			geometryData->vertex = previousVertexArray;
-			geometryData->vertices = previousVertexCount;
-		}
-
-		if (hasPrimaryUV) {
-			RE::NiPoint2* const previousUVArray = geometryData->texture;
-			RE::NiPoint2* const replacementUVArray = static_cast<RE::NiPoint2*>(RE::malloc(finalVertexCount * sizeof(RE::NiPoint2)));
-			if (replacementUVArray) {
-				for (std::size_t i = 0; i < finalVertexCount; ++i)
-					replacementUVArray[i] = RE::NiPoint2(primaryUVs[i][0], primaryUVs[i][1]);
-				geometryData->texture = replacementUVArray;
-				if (previousUVArray)
-					RE::free(previousUVArray);
-			} else {
-				geometryData->texture = previousUVArray;
-			}
-		}
-
-		UpdateBounds(positions, geometryData->bound);
-	}
-
-	UpdateBounds(positions, shape->GetModelData().modelBound);
-
-	return true;
-}
 
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	UnifiedWater::Settings,
 	UseOptimisedMeshes,
-	EnableMeshSubdivision,
-	ShowSubdivisionVisualizer,
+	ShowTriVisualizer,
+	EnableTessellation,
+	TessellationMinDistance,
+	TessellationMaxDistance,
+	TessellationMinFactor,
+	TessellationMaxFactor,
 	WaveIntensity,
 	WaveAmplitude,
 	WaveSpeed,
@@ -782,7 +41,8 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	WavePrimarySpeed,
 	WaveSecondarySpeed,
 	WaveDetailSpeed,
-	WaveDirectionBlend)
+	WaveDirectionBlend,
+	DisableVanillaWaterFoam)
 
 void UnifiedWater::LoadSettings(json& o_json)
 {
@@ -808,12 +68,33 @@ void UnifiedWater::DrawSettings()
 			"Will only affect newly created water - requires a change of location or game restart to take effect.");
 	}
 
-	ImGui::Checkbox("Enable Mesh Subdivision", &settings.EnableMeshSubdivision);
+	ImGui::Checkbox("Enable Tessellation", &settings.EnableTessellation);
 	if (auto _tt = Util::HoverTooltipWrapper()) {
 		ImGui::Text(
-			"Enables 2x mesh subdivision for wave displacement near the camera.\n"
-			"Increases detail and wave fidelity at the cost of performance.\n"
-			"Requires a change of location or game restart to take effect.");
+			"Hardware tessellation for dynamic mesh density based on camera distance.\n"
+			"Provides smooth wave detail at close range without requiring high base mesh density.\n"
+			"May impact performance on older GPUs.");
+	}
+
+	if (settings.EnableTessellation) {
+		ImGui::Indent();
+		ImGui::SliderFloat("Min Distance", &settings.TessellationMinDistance, 64.0f, 1024.0f, "%.0f");
+		if (auto _tt = Util::HoverTooltipWrapper()) {
+			ImGui::Text("Distance at which maximum tessellation is applied.");
+		}
+		ImGui::SliderFloat("Max Distance", &settings.TessellationMaxDistance, 1024.0f, 16384.0f, "%.0f");
+		if (auto _tt = Util::HoverTooltipWrapper()) {
+			ImGui::Text("Distance beyond which minimum tessellation is applied.");
+		}
+		ImGui::SliderFloat("Min Factor", &settings.TessellationMinFactor, 1.0f, 4.0f, "%.0f");
+		if (auto _tt = Util::HoverTooltipWrapper()) {
+			ImGui::Text("Tessellation factor at maximum distance (1 = no tessellation).");
+		}
+		ImGui::SliderFloat("Max Factor", &settings.TessellationMaxFactor, 4.0f, 64.0f, "%.0f");
+		if (auto _tt = Util::HoverTooltipWrapper()) {
+			ImGui::Text("Tessellation factor at minimum distance (higher = more triangles).");
+		}
+		ImGui::Unindent();
 	}
 
 	ImGui::Spacing();
@@ -865,13 +146,13 @@ void UnifiedWater::DrawSettings()
 		ImGui::Spacing();
 		
 		if (ImGui::TreeNodeEx("Wave 1 (Primary) Parameters", ImGuiTreeNodeFlags_DefaultOpen)) {
-			ImGui::SliderFloat("W1 Amplitude", &settings.Wave1Amplitude, 0.0f, 20.0f, "%.2f");
-			if (auto _tt = Util::HoverTooltipWrapper()) ImGui::Text("Height of the primary wave");
+			ImGui::SliderFloat("W1 Amplitude", &settings.Wave1Amplitude, 0.0f, 6.0f, "%.2f");
+			if (auto _tt = Util::HoverTooltipWrapper()) ImGui::Text("Height of the primary wave (~10cm default)");
 			
-			ImGui::SliderFloat("W1 Wavelength", &settings.Wave1Wavelength, 500.0f, 10000.0f, "%.0f");
-			if (auto _tt = Util::HoverTooltipWrapper()) ImGui::Text("Distance between wave crests (affects speed via physics)");
+			ImGui::SliderFloat("W1 Wavelength", &settings.Wave1Wavelength, 50.0f, 800.0f, "%.0f");
+			if (auto _tt = Util::HoverTooltipWrapper()) ImGui::Text("Distance between wave crests (~12m default)");
 			
-			ImGui::SliderFloat("W1 Steepness", &settings.Wave1Steepness, 0.0f, 1.0f, "%.3f");
+			ImGui::SliderFloat("W1 Steepness", &settings.Wave1Steepness, 0.0f, 0.6f, "%.3f");
 			if (auto _tt = Util::HoverTooltipWrapper()) ImGui::Text("Sharpness of wave peaks (0=sine wave, 1=sharpest)");
 			
 			ImGui::SliderFloat("W1 Angle", &settings.Wave1AngleOffset, -180.0f, 180.0f, "%.1f°");
@@ -881,13 +162,13 @@ void UnifiedWater::DrawSettings()
 		}
 		
 		if (ImGui::TreeNodeEx("Wave 2 (Secondary) Parameters", ImGuiTreeNodeFlags_DefaultOpen)) {
-			ImGui::SliderFloat("W2 Amplitude", &settings.Wave2Amplitude, 0.0f, 20.0f, "%.2f");
-			if (auto _tt = Util::HoverTooltipWrapper()) ImGui::Text("Height of the secondary wave");
+			ImGui::SliderFloat("W2 Amplitude", &settings.Wave2Amplitude, 0.0f, 4.0f, "%.2f");
+			if (auto _tt = Util::HoverTooltipWrapper()) ImGui::Text("Height of the secondary wave (~6cm default)");
 			
-			ImGui::SliderFloat("W2 Wavelength", &settings.Wave2Wavelength, 500.0f, 10000.0f, "%.0f");
-			if (auto _tt = Util::HoverTooltipWrapper()) ImGui::Text("Distance between wave crests (affects speed via physics)");
+			ImGui::SliderFloat("W2 Wavelength", &settings.Wave2Wavelength, 30.0f, 400.0f, "%.0f");
+			if (auto _tt = Util::HoverTooltipWrapper()) ImGui::Text("Distance between wave crests (~6m default)");
 			
-			ImGui::SliderFloat("W2 Steepness", &settings.Wave2Steepness, 0.0f, 1.0f, "%.3f");
+			ImGui::SliderFloat("W2 Steepness", &settings.Wave2Steepness, 0.0f, 0.5f, "%.3f");
 			if (auto _tt = Util::HoverTooltipWrapper()) ImGui::Text("Sharpness of wave peaks (0=sine wave, 1=sharpest)");
 			
 			ImGui::SliderFloat("W2 Angle", &settings.Wave2AngleOffset, -180.0f, 180.0f, "%.1f°");
@@ -897,13 +178,13 @@ void UnifiedWater::DrawSettings()
 		}
 		
 		if (ImGui::TreeNodeEx("Wave 3 (Detail) Parameters", ImGuiTreeNodeFlags_DefaultOpen)) {
-			ImGui::SliderFloat("W3 Amplitude", &settings.Wave3Amplitude, 0.0f, 20.0f, "%.2f");
-			if (auto _tt = Util::HoverTooltipWrapper()) ImGui::Text("Height of the detail wave");
+			ImGui::SliderFloat("W3 Amplitude", &settings.Wave3Amplitude, 0.0f, 2.0f, "%.2f");
+			if (auto _tt = Util::HoverTooltipWrapper()) ImGui::Text("Height of the detail wave (~3cm default)");
 			
-			ImGui::SliderFloat("W3 Wavelength", &settings.Wave3Wavelength, 500.0f, 10000.0f, "%.0f");
-			if (auto _tt = Util::HoverTooltipWrapper()) ImGui::Text("Distance between wave crests (affects speed via physics)");
+			ImGui::SliderFloat("W3 Wavelength", &settings.Wave3Wavelength, 15.0f, 200.0f, "%.0f");
+			if (auto _tt = Util::HoverTooltipWrapper()) ImGui::Text("Distance between wave crests (~3m default)");
 			
-			ImGui::SliderFloat("W3 Steepness", &settings.Wave3Steepness, 0.0f, 1.0f, "%.3f");
+			ImGui::SliderFloat("W3 Steepness", &settings.Wave3Steepness, 0.0f, 0.4f, "%.3f");
 			if (auto _tt = Util::HoverTooltipWrapper()) ImGui::Text("Sharpness of wave peaks (0=sine wave, 1=sharpest)");
 			
 			ImGui::SliderFloat("W3 Angle", &settings.Wave3AngleOffset, -180.0f, 180.0f, "%.1f°");
@@ -918,28 +199,28 @@ void UnifiedWater::DrawSettings()
 		ImGui::Spacing();
 		
 		if (ImGui::TreeNodeEx("Wave 4 (Fine Ripple 1)", ImGuiTreeNodeFlags_None)) {
-			ImGui::TextDisabled("0.8m wavelength ripples - visible up close");
-			ImGui::SliderFloat("W4 Amplitude", &settings.Wave4Amplitude, 0.0f, 5.0f, "%.2f");
-			ImGui::SliderFloat("W4 Wavelength", &settings.Wave4Wavelength, 100.0f, 2000.0f, "%.0f");
-			ImGui::SliderFloat("W4 Steepness", &settings.Wave4Steepness, 0.0f, 0.5f, "%.3f");
+			ImGui::TextDisabled("~1.2m wavelength ripples - visible up close");
+			ImGui::SliderFloat("W4 Amplitude", &settings.Wave4Amplitude, 0.0f, 1.0f, "%.2f");
+			ImGui::SliderFloat("W4 Wavelength", &settings.Wave4Wavelength, 8.0f, 80.0f, "%.0f");
+			ImGui::SliderFloat("W4 Steepness", &settings.Wave4Steepness, 0.0f, 0.3f, "%.3f");
 			ImGui::SliderFloat("W4 Angle", &settings.Wave4AngleOffset, -180.0f, 180.0f, "%.1f°");
 			ImGui::TreePop();
 		}
 		
 		if (ImGui::TreeNodeEx("Wave 5 (Fine Ripple 2)", ImGuiTreeNodeFlags_None)) {
-			ImGui::TextDisabled("0.4m wavelength ripples - surface texture");
-			ImGui::SliderFloat("W5 Amplitude", &settings.Wave5Amplitude, 0.0f, 3.0f, "%.2f");
-			ImGui::SliderFloat("W5 Wavelength", &settings.Wave5Wavelength, 50.0f, 1000.0f, "%.0f");
-			ImGui::SliderFloat("W5 Steepness", &settings.Wave5Steepness, 0.0f, 0.5f, "%.3f");
+			ImGui::TextDisabled("~0.6m wavelength ripples - surface texture");
+			ImGui::SliderFloat("W5 Amplitude", &settings.Wave5Amplitude, 0.0f, 0.5f, "%.2f");
+			ImGui::SliderFloat("W5 Wavelength", &settings.Wave5Wavelength, 4.0f, 40.0f, "%.0f");
+			ImGui::SliderFloat("W5 Steepness", &settings.Wave5Steepness, 0.0f, 0.25f, "%.3f");
 			ImGui::SliderFloat("W5 Angle", &settings.Wave5AngleOffset, -180.0f, 180.0f, "%.1f°");
 			ImGui::TreePop();
 		}
 		
 		if (ImGui::TreeNodeEx("Wave 6 (Fine Ripple 3)", ImGuiTreeNodeFlags_None)) {
-			ImGui::TextDisabled("0.2m wavelength micro-ripples - finest detail");
-			ImGui::SliderFloat("W6 Amplitude", &settings.Wave6Amplitude, 0.0f, 2.0f, "%.2f");
-			ImGui::SliderFloat("W6 Wavelength", &settings.Wave6Wavelength, 50.0f, 500.0f, "%.0f");
-			ImGui::SliderFloat("W6 Steepness", &settings.Wave6Steepness, 0.0f, 0.5f, "%.3f");
+			ImGui::TextDisabled("~0.3m wavelength micro-ripples - finest detail");
+			ImGui::SliderFloat("W6 Amplitude", &settings.Wave6Amplitude, 0.0f, 0.3f, "%.2f");
+			ImGui::SliderFloat("W6 Wavelength", &settings.Wave6Wavelength, 2.0f, 20.0f, "%.0f");
+			ImGui::SliderFloat("W6 Steepness", &settings.Wave6Steepness, 0.0f, 0.2f, "%.3f");
 			ImGui::SliderFloat("W6 Angle", &settings.Wave6AngleOffset, -180.0f, 180.0f, "%.1f°");
 			ImGui::TreePop();
 		}
@@ -947,6 +228,14 @@ void UnifiedWater::DrawSettings()
 		ImGui::Spacing();
 		
 		ImGui::Text("Advanced Foam System");
+		
+		ImGui::Checkbox("Disable Vanilla Water Foam", &settings.DisableVanillaWaterFoam);
+		if (auto _tt = Util::HoverTooltipWrapper()) {
+			ImGui::Text(
+				"Disables Skyrim's vanilla water foam decal effect.\n"
+				"Recommended when using Unified Water's own foam system to avoid conflicts.");
+		}
+
 		ImGui::SliderFloat("Foam Intensity", &settings.FoamIntensity, 0.0f, 2.0f, "%.2f");
 		if (auto _tt = Util::HoverTooltipWrapper()) {
 			ImGui::Text(
@@ -991,9 +280,9 @@ void UnifiedWater::DrawSettings()
 	ImGui::Spacing();
 
 	if (ImGui::TreeNodeEx("Debug", ImGuiTreeNodeFlags_DefaultOpen)) {
-		ImGui::Checkbox("Show Tri Visualizer", &settings.ShowSubdivisionVisualizer);
+		ImGui::Checkbox("Show Tri Visualizer", &settings.ShowTriVisualizer);
 		if (auto _tt = Util::HoverTooltipWrapper()) {
-			ImGui::Text("Overlays triangle edges in the water shader to inspect subdivision levels.\nUseful for validating mesh LOD blends and subdivision multiplier tweaks.");
+			ImGui::Text("Overlays triangle edges in the water shader to inspect mesh detail.\nUseful for validating mesh LOD blends.");
 		}
 
 		if (ImGui::Button("Regenerate Flowmap") && flowmap) {
@@ -1110,39 +399,6 @@ void UnifiedWater::DataLoaded()
 		optimisedTriangleCount = optRuntime.triangleCount;
 	}
 
-	subdividedWaterMeshVariants.fill(nullptr);
-	subdividedWaterMeshVariants[2] = waterMesh;  // Index 2 = base mesh (lowest detail for distance)
-
-	if (waterMesh) {
-		auto buildVariant = [&](std::uint32_t iterations) -> RE::NiPointer<RE::BSTriShape> {
-			if (!iterations)
-				return nullptr;
-			RE::NiCloningProcess process;
-			auto clone = RE::NiPointer(waterMesh->CreateClone(process)->AsTriShape());
-			if (!clone)
-				return nullptr;
-			if (!EnsureRendererData(clone.get(), waterMesh.get())) {
-				logger::warn("[Unified Water] Failed to prepare renderer data for subdivided mesh clone");
-				return nullptr;
-			}
-			logger::info("[Unified Water] Building subdivided mesh variant with {} iteration(s)", iterations);
-			if (!ApplyLoopSubdivision(clone.get(), iterations, true)) {
-				logger::warn("[Unified Water] Failed to build subdivided mesh variant {}", iterations);
-				return nullptr;
-			}
-			logger::info("[Unified Water] Subdivided mesh variant {} ready", iterations);
-			return clone;
-		};
-
-		// Build LOD variants for distance-based selection
-		if (auto variant = buildVariant(2); variant) {
-			subdividedWaterMeshVariants[0] = variant;  // Highest detail (2x subdivision) - close water
-		}
-		if (auto variant = buildVariant(1); variant) {
-			subdividedWaterMeshVariants[1] = variant;  // Medium detail (1x subdivision) - medium distance
-		}
-	}
-
 	flowmap = new Flowmap();
 	waterCache = new WaterCache();
 
@@ -1234,6 +490,41 @@ void UnifiedWater::SetupResources()
 {
 	perFrame = new ConstantBuffer(ConstantBufferDesc<PerFrame>());
 	perTile = new ConstantBuffer(ConstantBufferDesc<PerTile>());
+	tessellationParams = new ConstantBuffer(ConstantBufferDesc<TessellationParams>());
+
+	// Compile tessellation shaders
+	// Using SPECULAR + FLOWMAP + BLEND_NORMALS as the common water permutation
+	// NUM_SPECULAR_LIGHTS must match what the game's VS uses for correct VS_OUTPUT structure
+	std::vector<std::pair<const char*, const char*>> tessDefines = {
+		{ "HSHADER", "" },
+		{ "UNIFIED_WATER", "" },
+		{ "SPECULAR", "" },
+		{ "NUM_SPECULAR_LIGHTS", "0" },
+		{ "FLOWMAP", "" },
+		{ "BLEND_NORMALS", "" },
+		{ "NORMAL_TEXCOORD", "" }
+	};
+
+	logger::info("[Unified Water] Compiling hull shader with defines: HSHADER, UNIFIED_WATER, SPECULAR, NUM_SPECULAR_LIGHTS=0, FLOWMAP, BLEND_NORMALS, NORMAL_TEXCOORD");
+
+	if (auto* hullShader = static_cast<ID3D11HullShader*>(Util::CompileShader(L"Data\\Shaders\\Water.hlsl", tessDefines, "hs_5_0"))) {
+		waterHullShader.attach(hullShader);
+		logger::info("[Unified Water] Hull shader compiled successfully - ptr:{:p}", (void*)hullShader);
+	} else {
+		logger::error("[Unified Water] Failed to compile hull shader");
+	}
+
+	// Domain shader with same defines but DSHADER instead of HSHADER
+	tessDefines[0] = { "DSHADER", "" };
+
+	logger::info("[Unified Water] Compiling domain shader with defines: DSHADER, UNIFIED_WATER, SPECULAR, NUM_SPECULAR_LIGHTS=0, FLOWMAP, BLEND_NORMALS, NORMAL_TEXCOORD");
+
+	if (auto* domainShader = static_cast<ID3D11DomainShader*>(Util::CompileShader(L"Data\\Shaders\\Water.hlsl", tessDefines, "ds_5_0"))) {
+		waterDomainShader.attach(domainShader);
+		logger::info("[Unified Water] Domain shader compiled successfully - ptr:{:p}", (void*)domainShader);
+	} else {
+		logger::error("[Unified Water] Failed to compile domain shader");
+	}
 }
 
 void UnifiedWater::Reset()
@@ -1276,6 +567,7 @@ void UnifiedWater::PostPostLoad()
 	stl::detour_thunk<TESWaterSystem_UpdateDisplacementMeshPosition>(REL::RelocationID(31384, 32175));
 
 	stl::write_vfunc<0x6, BSWaterShader_SetupGeometry>(RE::VTABLE_BSWaterShader[0]);
+	stl::write_vfunc<0x7, BSWaterShader_RestoreGeometry>(RE::VTABLE_BSWaterShader[0]);
 
 	// Patch out the code compute shader calls that write to the flow map in Main::RenderWaterEffects
 	REL::safe_fill(REL::RelocationID(35561, 36560).address() + REL::Relocate(0x1B7, 0x1F7), REL::NOP, 5);
@@ -1320,135 +612,6 @@ void UnifiedWater::TESWaterSystem_InitializeWater_SetWaterShaderMaterialParams::
 void UnifiedWater::TESWaterSystem_InitializeWater::thunk(RE::TESWaterSystem* waterSystem, RE::BSTriShape* waterTri, RE::TESWaterForm* form, float waterHeight, void* unk4, bool noDisplacement, bool isProcedural)
 {
 	func(waterSystem, waterTri, form, waterHeight, unk4, noDisplacement, isProcedural);
-
-	auto& singleton = globals::features::unifiedWater;
-	
-	// Log every water mesh initialization
-	if (waterTri) {
-		const char* name = waterTri->name.c_str();
-		logger::info("[Unified Water] InitializeWater called: name='{}', noDisplacement={}, isProcedural={}", 
-			name ? name : "NULL", noDisplacement, isProcedural);
-	}
-	
-	if (!singleton.settings.EnableMeshSubdivision || noDisplacement || isProcedural) {
-		logger::info("[Unified Water] Skipping mesh replacement: EnableMeshSubdivision={}, noDisplacement={}, isProcedural={}", 
-			singleton.settings.EnableMeshSubdivision, noDisplacement, isProcedural);
-		return;
-	}
-
-	if (!waterTri || !singleton.waterMesh || singleton.baseTriangleCount == 0) {
-		logger::info("[Unified Water] Skipping: waterTri={}, waterMesh={}, baseTriangleCount={}", 
-			(void*)waterTri, (void*)singleton.waterMesh.get(), singleton.baseTriangleCount);
-		return;
-	}
-
-	// Skip if this is LOD water (handled by BGSTerrainBlock_Attach)
-	const char* name = waterTri->name.c_str();
-	if (name && std::strncmp(name, "WaterLOD_", 9) == 0) {
-		logger::info("[Unified Water] Skipping LOD water: {}", name);
-		return;
-	}
-
-	auto& runtime = waterTri->GetTrishapeRuntimeData();
-	if (runtime.triangleCount == 0 || runtime.vertexCount == 0) {
-		logger::info("[Unified Water] Skipping: zero geometry (tris={}, verts={})", runtime.triangleCount, runtime.vertexCount);
-		return;
-	}
-
-	// Skip if already subdivided
-	if (runtime.triangleCount > singleton.baseTriangleCount) {
-		logger::info("[Unified Water] Already subdivided: tris={} > base={}", runtime.triangleCount, singleton.baseTriangleCount);
-		return;
-	}
-
-	const float scale = waterTri->local.scale;
-	if (!std::isfinite(scale) || scale > 1.5f) {
-		logger::info("[Unified Water] Invalid scale: {}", scale);
-		return;
-	}
-
-	// Calculate distance to camera for LOD selection
-	float distanceToCamera = FLT_MAX;
-	if (auto player = RE::PlayerCharacter::GetSingleton()) {
-		RE::NiPoint3 playerPos = player->GetPosition();
-		RE::NiPoint3 waterPos = waterTri->world.translate;
-		
-		float dx = playerPos.x - waterPos.x;
-		float dy = playerPos.y - waterPos.y;
-		distanceToCamera = std::sqrt(dx * dx + dy * dy);
-	}
-	
-	logger::info("[Unified Water] Close water distance: {:.1f} units from player", distanceToCamera);
-
-	// Determine LOD level based on distance
-	std::uint32_t meshLODIndex = 2;  // Default to base mesh
-	constexpr float LOD0_DISTANCE = 8192.0f;   // ~2 cells - highest detail
-	constexpr float LOD1_DISTANCE = 16384.0f;  // ~4 cells - medium detail
-	
-	if (distanceToCamera < LOD0_DISTANCE) {
-		meshLODIndex = 0;  // 2x subdivision
-	} else if (distanceToCamera < LOD1_DISTANCE) {
-		meshLODIndex = 1;  // 1x subdivision
-	} else {
-		// Too far for subdivision, use base mesh
-		return;
-	}
-
-	// Use pre-subdivided mesh variant
-	auto& variant = singleton.subdividedWaterMeshVariants[meshLODIndex];
-	if (!variant) {
-		logger::info("[Unified Water] Subdivided mesh variant {} not available", meshLODIndex);
-		return;
-	}
-
-	// Get source geometry data from variant
-	RE::NiGeometryData* variantGeomData = nullptr;
-	if (auto& variantGeomRuntime = variant->GetGeometryRuntimeData(); variantGeomRuntime.unk20) {
-		auto* geometryHandle = reinterpret_cast<RE::NiPointer<RE::NiGeometryData>*>(&variantGeomRuntime.unk20);
-		variantGeomData = geometryHandle ? geometryHandle->get() : nullptr;
-	}
-
-	if (!variantGeomData) {
-		logger::info("[Unified Water] Failed to get geometry data from variant mesh");
-		return;
-	}
-
-	// Get target geometry data
-	RE::NiGeometryData* targetGeomData = nullptr;
-	if (auto& targetGeomRuntime = waterTri->GetGeometryRuntimeData(); targetGeomRuntime.unk20) {
-		auto* geometryHandle = reinterpret_cast<RE::NiPointer<RE::NiGeometryData>*>(&targetGeomRuntime.unk20);
-		targetGeomData = geometryHandle ? geometryHandle->get() : nullptr;
-	}
-
-	if (!targetGeomData) {
-		logger::info("[Unified Water] Failed to get geometry data from water mesh");
-		return;
-	}
-
-	// Copy the subdivided geometry data pointers (shares the data, doesn't deep copy)
-	targetGeomData->vertices = variantGeomData->vertices;
-	targetGeomData->vertex = variantGeomData->vertex;
-	targetGeomData->normal = variantGeomData->normal;
-	targetGeomData->texture = variantGeomData->texture;
-	targetGeomData->bound = variantGeomData->bound;
-	
-	// Update runtime counts
-	auto& variantRuntime = variant->GetTrishapeRuntimeData();
-	runtime.vertexCount = variantRuntime.vertexCount;
-	runtime.triangleCount = variantRuntime.triangleCount;
-	
-	// Mark renderer data as needing update
-	if (!EnsureRendererData(waterTri, variant.get())) {
-		logger::info("[Unified Water] Failed to update renderer data for close water");
-		return;
-	}
-	
-	logger::info(
-		"[Unified Water] Applied pre-subdivided mesh LOD {} (distance: {:.0f}) to close water: {} verts, {} tris",
-		meshLODIndex,
-		distanceToCamera,
-		runtime.vertexCount,
-		runtime.triangleCount);
 }
 
 int32_t UnifiedWater::BSWaterShaderMaterial_ComputeCRC32::thunk(RE::BSWaterShaderMaterial* material, uint32_t srcHash)
@@ -1571,82 +734,25 @@ void UnifiedWater::BGSTerrainBlock_Attach::thunk(RE::BGSTerrainBlock* block)
 			return;
 		}
 
-		// Calculate distance to camera for LOD selection
-		float distanceToCamera = FLT_MAX;
-		if (auto player = RE::PlayerCharacter::GetSingleton()) {
-			RE::NiPoint3 playerPos = player->GetPosition();
-			// Calculate block center position in world space
-			float blockCenterX = (node->x * 4096.0f) + 2048.0f;
-			float blockCenterY = (node->y * 4096.0f) + 2048.0f;
-			RE::NiPoint3 blockCenter(blockCenterX, blockCenterY, 0.0f);
-			
-			float dx = playerPos.x - blockCenter.x;
-			float dy = playerPos.y - blockCenter.y;
-			distanceToCamera = std::sqrt(dx * dx + dy * dy);
-		}
-
 		for (auto& instruction : *instructions) {
 			if (!instruction.form.ptr)
 				continue;
 
 			RE::NiCloningProcess cloningProcess;
 
-			const bool farLOD = lodLevel > 4;
-			const bool subdivisionEnabled = singleton.settings.EnableMeshSubdivision;
-			const bool forceSubdivision = subdivisionEnabled && !farLOD;
-			bool useOptimised = singleton.settings.UseOptimisedMeshes && !forceSubdivision;
+			const bool farLOD = lodLevel > 8;
+			
+			bool useOptimised = singleton.settings.UseOptimisedMeshes;
 			if (farLOD)
 				useOptimised = false;  // Always keep far LOD water at normal vertex counts
-			if (singleton.settings.UseOptimisedMeshes && !useOptimised) {
-				logger::debug("[Unified Water] Subdivision or LOD requirements overriding optimised mesh usage for LOD {}", lodLevel);
-			}
-
-			// LOD selection based on camera distance (only for small tiles and when subdivision enabled)
-			std::uint32_t meshLODIndex = 2;  // Default to base mesh (lowest detail)
-			bool useSubdividedMesh = false;
-			
-			if (subdivisionEnabled && !farLOD && instruction.size <= 1) {
-				// Distance thresholds in game units (1 cell = 4096 units)
-				constexpr float LOD0_DISTANCE = 8192.0f;   // ~2 cells - highest detail (2x subdivision)
-				constexpr float LOD1_DISTANCE = 16384.0f;  // ~4 cells - medium detail (1x subdivision)
-				// Beyond LOD1_DISTANCE uses base mesh
-				
-				if (distanceToCamera < LOD0_DISTANCE) {
-					meshLODIndex = 0;  // Highest detail (2x subdivision)
-					useSubdividedMesh = true;
-				} else if (distanceToCamera < LOD1_DISTANCE) {
-					meshLODIndex = 1;  // Medium detail (1x subdivision)
-					useSubdividedMesh = true;
-				}
-				// else meshLODIndex = 2 (base mesh)
-			}
 
 			RE::BSTriShape* templateShape = nullptr;
 			if (useOptimised) {
 				templateShape = singleton.optimisedWaterMesh.get();
-			} else if (useSubdividedMesh) {
-				auto& variant = singleton.subdividedWaterMeshVariants[meshLODIndex];
-				if (variant) {
-					templateShape = variant.get();
-				}
 			}
 
 			if (!templateShape) {
 				templateShape = singleton.waterMesh.get();
-			}
-
-			// Only log each unique cell once
-			const std::uint64_t cellKey = (static_cast<std::uint64_t>(instruction.x) << 32) | static_cast<std::uint64_t>(instruction.y);
-			if (singleton.loggedCells.find(cellKey) == singleton.loggedCells.end()) {
-				singleton.loggedCells.insert(cellKey);
-				logger::info(
-					"[Unified Water] Mesh selection: LOD index = {}, distance = {:.0f}, terrain LOD = {}, optimised = {}, subdivided = {}, tileSize = {}",
-					meshLODIndex,
-					distanceToCamera,
-					lodLevel,
-					useOptimised,
-					useSubdividedMesh,
-					instruction.size);
 			}
 
 			if (!templateShape)
@@ -1747,7 +853,7 @@ void UnifiedWater::BSWaterShader_SetupGeometry::thunk(RE::BSShader* waterShader,
 		perFrameData.WaveSecondarySpeed = singleton.settings.WaveSecondarySpeed;
 		perFrameData.WaveDetailSpeed = singleton.settings.WaveDetailSpeed;
 		perFrameData.WaveDirectionBlend = singleton.settings.WaveDirectionBlend;
-		perFrameData.TriVisualizerEnabled = singleton.settings.ShowSubdivisionVisualizer ? 1.0f : 0.0f;
+		perFrameData.TriVisualizerEnabled = singleton.settings.ShowTriVisualizer ? 1.0f : 0.0f;
 		
 		// Wave parameters (Period removed - speed now calculated from wavelength via physics)
 		perFrameData.Wave1Amplitude = singleton.settings.Wave1Amplitude;
@@ -1781,6 +887,15 @@ void UnifiedWater::BSWaterShader_SetupGeometry::thunk(RE::BSShader* waterShader,
 		perFrameData.Wave4AngleOffset = singleton.settings.Wave4AngleOffset * 0.0174532925f;
 		perFrameData.Wave5AngleOffset = singleton.settings.Wave5AngleOffset * 0.0174532925f;
 		perFrameData.Wave6AngleOffset = singleton.settings.Wave6AngleOffset * 0.0174532925f;
+
+		// Set tessellation enabled flag - tells VS to skip wave displacement so DS can handle it
+		bool tessellationEnabled = singleton.settings.EnableTessellation && 
+		                           singleton.waterHullShader && 
+		                           singleton.waterDomainShader;
+		perFrameData.TessellationEnabled = tessellationEnabled ? 1.0f : 0.0f;
+		perFrameData.TessPadding1 = 0.0f;
+		perFrameData.TessPadding2 = 0.0f;
+		perFrameData.TessPadding3 = 0.0f;
 
 		const auto* state = globals::state;
 		const std::uint32_t frameIndex = state ? state->frameCount : singleton.lastTimingFrameIndex;
@@ -1939,7 +1054,167 @@ void UnifiedWater::BSWaterShader_SetupGeometry::thunk(RE::BSShader* waterShader,
 			waterShaderProp->cellY = y;                                                                                                     // CellTexCoordOffset.w
 		}
 	}
+
+	// Extract technique from passEnum (bits 11-14 typically for water shader)
+	uint32_t technique = (pass->passEnum >> 11) & 0xF;
+	
+	// Tessellation is only compatible with SPECULAR techniques (0-7)
+	// UNDERWATER (8), LOD (9), STENCIL (10), SIMPLE (11) have different VS_OUTPUT structures
+	// Our HS/DS are compiled with SPECULAR + FLOWMAP + BLEND_NORMALS defines
+	bool techniqueSupportsTessel = (technique < 8);
+
+	// Tessellation setup
+	bool tessellationEnabled = singleton.settings.EnableTessellation && 
+	                           singleton.waterHullShader && 
+	                           singleton.waterDomainShader &&
+	                           techniqueSupportsTessel;
+
+	auto context = globals::d3d::context;
+
+	// Clean up any lingering tessellation state from previous passes BEFORE calling func()
+	// This ensures the original SetupGeometry sees a clean non-tessellated pipeline state
+	if (tessellationActiveForPass) {
+		context->HSSetShader(nullptr, nullptr, 0);
+		context->DSSetShader(nullptr, nullptr, 0);
+		if (originalTopology != D3D11_PRIMITIVE_TOPOLOGY_UNDEFINED) {
+			context->IASetPrimitiveTopology(originalTopology);
+		}
+	}
+
+	tessellationActiveForPass = false;
+	originalTopology = D3D11_PRIMITIVE_TOPOLOGY_UNDEFINED;
+
+	static bool loggedTessSetup = false;
+	static int tessFrameCount = 0;
+	tessFrameCount++;
+	bool shouldLog = !loggedTessSetup || (tessFrameCount % 1000 == 0);
+	
+	if (shouldLog) {
+		logger::info("[Unified Water] SetupGeometry - passEnum:0x{:X} technique:{} numLights:{} tessCompat:{}", 
+			pass->passEnum, technique, pass->numLights, techniqueSupportsTessel);
+	}
+
+	// CRITICAL: Call original SetupGeometry FIRST to set up VS, PS, textures, etc.
+	// THEN apply tessellation state after, so it's not overwritten by the original
 	func(waterShader, pass);
+
+	if (tessellationEnabled) {
+		if (shouldLog) {
+			logger::info("[Unified Water] Tessellation enabled - HS: {:p}, DS: {:p}", 
+				(void*)singleton.waterHullShader.get(), (void*)singleton.waterDomainShader.get());
+		}
+
+		// Update tessellation constant buffer with current camera position
+		if (singleton.tessellationParams) {
+			TessellationParams tessParams{};
+			tessParams.TessellationMinDistance = singleton.settings.TessellationMinDistance;
+			tessParams.TessellationMaxDistance = singleton.settings.TessellationMaxDistance;
+			tessParams.TessellationMinFactor = singleton.settings.TessellationMinFactor;
+			tessParams.TessellationMaxFactor = singleton.settings.TessellationMaxFactor;
+
+			// Get camera world position using established utility function
+			auto cameraPos = Util::GetEyePosition(0);
+			tessParams.CameraWorldPosX = cameraPos.x;
+			tessParams.CameraWorldPosY = cameraPos.y;
+			tessParams.CameraWorldPosZ = cameraPos.z;
+			
+			if (shouldLog) {
+				logger::info("[Unified Water] Tess params - MinDist:{} MaxDist:{} MinFactor:{} MaxFactor:{} CamPos:({},{},{})",
+					tessParams.TessellationMinDistance, tessParams.TessellationMaxDistance,
+					tessParams.TessellationMinFactor, tessParams.TessellationMaxFactor,
+					tessParams.CameraWorldPosX, tessParams.CameraWorldPosY, tessParams.CameraWorldPosZ);
+			}
+			tessParams.Padding = 0.0f;
+
+			singleton.tessellationParams->Update(tessParams);
+
+			// Bind tessellation constant buffer to HS and DS
+			ID3D11Buffer* tessBuffers[1] = { singleton.tessellationParams->CB() };
+			context->HSSetConstantBuffers(9, 1, tessBuffers);
+			context->DSSetConstantBuffers(9, 1, tessBuffers);
+		}
+
+		// Save original topology for RestoreGeometry (after original SetupGeometry has set it)
+		context->IAGetPrimitiveTopology(&originalTopology);
+		
+		if (shouldLog) {
+			logger::info("[Unified Water] Original topology after func: {}", static_cast<int>(originalTopology));
+		}
+
+		// Set patch list topology for tessellation (3 control points per patch)
+		context->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_3_CONTROL_POINT_PATCHLIST);
+
+		// Bind hull and domain shaders
+		context->HSSetShader(singleton.waterHullShader.get(), nullptr, 0);
+		context->DSSetShader(singleton.waterDomainShader.get(), nullptr, 0);
+		
+		// Verify shaders were bound and topology set
+		if (shouldLog) {
+			ID3D11HullShader* boundHS = nullptr;
+			ID3D11DomainShader* boundDS = nullptr;
+			context->HSGetShader(&boundHS, nullptr, nullptr);
+			context->DSGetShader(&boundDS, nullptr, nullptr);
+			logger::info("[Unified Water] After bind - HS: {:p}, DS: {:p}", (void*)boundHS, (void*)boundDS);
+			if (boundHS) boundHS->Release();
+			if (boundDS) boundDS->Release();
+			
+			D3D11_PRIMITIVE_TOPOLOGY currentTopo;
+			context->IAGetPrimitiveTopology(&currentTopo);
+			logger::info("[Unified Water] After set - topology: {} (expected 35 for 3-control-point patch list)", static_cast<int>(currentTopo));
+		}
+
+		// Bind VS constant buffers to DS as well (DS needs the same transforms)
+		// Do this AFTER func() so the original has set up the VS constant buffers
+		ID3D11Buffer* vsBuffers[3] = { nullptr, nullptr, nullptr };
+		context->VSGetConstantBuffers(0, 3, vsBuffers);
+		context->DSSetConstantBuffers(0, 3, vsBuffers);
+		
+		// Bind the FrameBuffer cbuffer (b12) to DS - needed for CameraPosAdjust in wave calculations
+		ID3D11Buffer* frameBuffer[1] = { nullptr };
+		context->PSGetConstantBuffers(12, 1, frameBuffer);  // FrameBuffer is typically bound to PS
+		if (frameBuffer[0]) {
+			context->DSSetConstantBuffers(12, 1, frameBuffer);
+		}
+		
+		if (shouldLog) {
+			logger::info("[Unified Water] VS CBs bound to DS - b0:{:p} b1:{:p} b2:{:p} b12:{:p}", 
+				(void*)vsBuffers[0], (void*)vsBuffers[1], (void*)vsBuffers[2], (void*)frameBuffer[0]);
+		}
+
+		// Also bind the UnifiedWater per-frame buffer to HS/DS
+		if (singleton.perFrame) {
+			ID3D11Buffer* perFrameBuffers[1] = { singleton.perFrame->CB() };
+			context->HSSetConstantBuffers(7, 1, perFrameBuffers);
+			context->DSSetConstantBuffers(7, 1, perFrameBuffers);
+		}
+
+		tessellationActiveForPass = true;
+		loggedTessSetup = true;
+	} else if (shouldLog && singleton.settings.EnableTessellation) {
+		logger::warn("[Unified Water] Tessellation enabled in settings but shaders missing - HS:{:p} DS:{:p}",
+			(void*)singleton.waterHullShader.get(), (void*)singleton.waterDomainShader.get());
+	}
+}
+
+void UnifiedWater::BSWaterShader_RestoreGeometry::thunk(RE::BSShader* waterShader, RE::BSRenderPass* pass, uint32_t renderFlags)
+{
+	// Restore tessellation state after the draw call
+	if (tessellationActiveForPass) {
+		auto context = globals::d3d::context;
+
+		// Unbind hull and domain shaders
+		context->HSSetShader(nullptr, nullptr, 0);
+		context->DSSetShader(nullptr, nullptr, 0);
+
+		// Restore original topology
+		if (originalTopology != D3D11_PRIMITIVE_TOPOLOGY_UNDEFINED) {
+			context->IASetPrimitiveTopology(originalTopology);
+		}
+
+		tessellationActiveForPass = false;
+	}
+
+	func(waterShader, pass, renderFlags);
 }
 
 void UnifiedWater::TESWaterSystem_UpdateDisplacementMeshPosition::thunk(RE::TESWaterSystem* waterSystem)

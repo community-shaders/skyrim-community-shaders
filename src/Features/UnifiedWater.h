@@ -35,8 +35,13 @@ struct UnifiedWater : OverlayFeature
 	struct Settings
 	{
 		bool UseOptimisedMeshes = false;
-		bool EnableMeshSubdivision = true;
-		bool ShowSubdivisionVisualizer = false;
+		bool ShowTriVisualizer = false;
+
+		bool EnableTessellation = true;
+		float TessellationMinDistance = 256.0f;
+		float TessellationMaxDistance = 8192.0f;
+		float TessellationMinFactor = 1.0f;
+		float TessellationMaxFactor = 16.0f;
 
 		float WaveIntensity = 0.3f;
 		float WaveAmplitude = 1.0f;
@@ -62,41 +67,43 @@ struct UnifiedWater : OverlayFeature
 		float WaveDetailSpeed = 1.0f;
 		float WaveDirectionBlend = 1.0f;
 		
-		// Wave 1 (Primary) - Large swells: 4.8m wavelength, 0.85m amplitude
-		float Wave1Amplitude = 8.5f;
-		float Wave1Wavelength = 4800.0f;
-		float Wave1Steepness = 0.35f;
+		// Wave 1 (Primary) - Lake swells: ~12m wavelength, ~10cm amplitude
+		float Wave1Amplitude = 2.2f;
+		float Wave1Wavelength = 260.0f;
+		float Wave1Steepness = 0.25f;
 		float Wave1AngleOffset = 0.0f;
 		
-		// Wave 2 (Secondary) - Medium waves: 3.2m wavelength, 0.55m amplitude
-		float Wave2Amplitude = 5.5f;
-		float Wave2Wavelength = 3200.0f;
-		float Wave2Steepness = 0.28f;
-		float Wave2AngleOffset = 50.0f;
+		// Wave 2 (Secondary) - Wind chop: ~6m wavelength, ~6cm amplitude
+		float Wave2Amplitude = 1.3f;
+		float Wave2Wavelength = 130.0f;
+		float Wave2Steepness = 0.22f;
+		float Wave2AngleOffset = 35.0f;
 		
-		// Wave 3 (Detail) - Small waves: 2.0m wavelength, 0.32m amplitude
-		float Wave3Amplitude = 3.2f;
-		float Wave3Wavelength = 2000.0f;
-		float Wave3Steepness = 0.22f;
-		float Wave3AngleOffset = -50.0f;
+		// Wave 3 (Detail) - Surface ripples: ~3m wavelength, ~3cm amplitude
+		float Wave3Amplitude = 0.65f;
+		float Wave3Wavelength = 65.0f;
+		float Wave3Steepness = 0.18f;
+		float Wave3AngleOffset = -40.0f;
 		
-		// Wave 4 (Fine Ripple 1) - Sub-meter: 0.8m wavelength, 0.12m amplitude
-		float Wave4Amplitude = 1.2f;
-		float Wave4Wavelength = 800.0f;
-		float Wave4Steepness = 0.18f;
+		// Wave 4 (Fine Ripple 1) - Small ripples: ~1.2m wavelength, ~1.5cm amplitude
+		float Wave4Amplitude = 0.32f;
+		float Wave4Wavelength = 26.0f;
+		float Wave4Steepness = 0.14f;
 		float Wave4AngleOffset = 25.0f;
 		
-		// Wave 5 (Fine Ripple 2) - Tiny ripples: 0.4m wavelength, 0.06m amplitude
-		float Wave5Amplitude = 0.6f;
-		float Wave5Wavelength = 400.0f;
-		float Wave5Steepness = 0.15f;
+		// Wave 5 (Fine Ripple 2) - Tiny ripples: ~0.6m wavelength, ~0.8cm amplitude
+		float Wave5Amplitude = 0.17f;
+		float Wave5Wavelength = 13.0f;
+		float Wave5Steepness = 0.10f;
 		float Wave5AngleOffset = -25.0f;
 		
-		// Wave 6 (Fine Ripple 3) - Micro detail: 0.2m wavelength, 0.03m amplitude
-		float Wave6Amplitude = 0.3f;
-		float Wave6Wavelength = 200.0f;
-		float Wave6Steepness = 0.12f;
+		// Wave 6 (Fine Ripple 3) - Micro detail: ~0.3m wavelength, ~0.4cm amplitude
+		float Wave6Amplitude = 0.09f;
+		float Wave6Wavelength = 6.5f;
+		float Wave6Steepness = 0.08f;
 		float Wave6AngleOffset = 70.0f;
+
+		bool DisableVanillaWaterFoam = true;
 	};
 
 #pragma warning(push)
@@ -167,6 +174,12 @@ struct UnifiedWater : OverlayFeature
 		float Wave6Wavelength;
 		float Wave6Steepness;
 		float Wave6AngleOffset;
+		
+		// Tessellation control
+		float TessellationEnabled;
+		float TessPadding1;
+		float TessPadding2;
+		float TessPadding3;
 	};
 #pragma warning(pop)
 
@@ -176,9 +189,26 @@ struct UnifiedWater : OverlayFeature
 		float TileData[4];  // x/y = tile cell coords, z = LOD level, w = tile span (cells)
 	};
 
+	struct alignas(16) TessellationParams
+	{
+		float TessellationMinDistance;
+		float TessellationMaxDistance;
+		float TessellationMinFactor;
+		float TessellationMaxFactor;
+		float CameraWorldPosX;
+		float CameraWorldPosY;
+		float CameraWorldPosZ;
+		float Padding;
+	};
+
 	Settings settings;
 	ConstantBuffer* perFrame = nullptr;
 	ConstantBuffer* perTile = nullptr;
+	ConstantBuffer* tessellationParams = nullptr;
+	
+	winrt::com_ptr<ID3D11HullShader> waterHullShader;
+	winrt::com_ptr<ID3D11DomainShader> waterDomainShader;
+	
 	float lastGameTimeHours = 0.0f;
 	float lastRealTimeSeconds = 0.0f;
 	float lastTimeScale = 1.0f;
@@ -197,7 +227,6 @@ struct UnifiedWater : OverlayFeature
 	};
 
 	std::unordered_map<std::uint64_t, PrevTileData> prevTileData;
-	std::unordered_set<std::uint64_t> loggedCells;
 	
 	virtual void SetupResources() override;
 	virtual void Reset() override;
@@ -256,6 +285,15 @@ struct UnifiedWater : OverlayFeature
 		static inline REL::Relocation<decltype(thunk)> func;
 	};
 
+	struct BSWaterShader_RestoreGeometry
+	{
+		static void thunk(RE::BSShader* waterShader, RE::BSRenderPass* pass, uint32_t renderFlags);
+		static inline REL::Relocation<decltype(thunk)> func;
+	};
+
+	static inline thread_local bool tessellationActiveForPass = false;
+	static inline thread_local D3D11_PRIMITIVE_TOPOLOGY originalTopology = D3D11_PRIMITIVE_TOPOLOGY_UNDEFINED;
+
 	struct TESWaterSystem_UpdateDisplacementMeshPosition
 	{
 		static void thunk(RE::TESWaterSystem* waterSystem);
@@ -285,7 +323,6 @@ private:
 	std::uint16_t optimisedVertexCount = 0;
 	std::uint16_t optimisedTriangleCount = 0;
 	RE::NiPointer<RE::BSTriShape> optimisedWaterMesh;
-	std::array<RE::NiPointer<RE::BSTriShape>, 3> subdividedWaterMeshVariants{};
 	Flowmap* flowmap = nullptr;
 	WaterCache* waterCache = nullptr;
 

@@ -200,6 +200,8 @@ namespace SIE
 		Vertex,
 		Pixel,
 		Compute,
+		Hull,
+		Domain,
 		Total,
 	};
 

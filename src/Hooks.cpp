@@ -13,6 +13,7 @@
 #include "Features/InteriorSun.h"
 #include "Features/LightLimitFix.h"
 #include "Features/TerrainHelper.h"
+#include "Features/UnifiedWater.h"
 #include "Features/Upscaling.h"
 #include "Features/VR.h"
 #include "Features/VolumetricLighting.h"
@@ -168,6 +169,26 @@ namespace EffectExtensions
 	{
 		static void thunk(RE::BSShader* shader, RE::BSRenderPass* pass, uint32_t renderFlags)
 		{
+			// Check for vanilla water foam and skip if UnifiedWater is active
+			auto& unifiedWater = globals::features::unifiedWater;
+			if (unifiedWater.loaded && unifiedWater.settings.DisableVanillaWaterFoam) {
+				if (auto* shaderProperty = static_cast<RE::BSEffectShaderProperty*>(pass->geometry->GetGeometryRuntimeData().properties[1].get())) {
+					if (auto* material = shaderProperty->GetMaterial()) {
+						const char* texPath = material->sourceTexturePath.c_str();
+						if (texPath && texPath[0] != '\0') {
+							// Case-insensitive check for water foam textures
+							std::string path(texPath);
+							for (auto& c : path) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+							// Check for vanilla foam (fxwhitewater*.dds) and any modded foam textures
+							if (path.find("whitewater") != std::string::npos ||
+								path.find("waterfoam") != std::string::npos) {
+								return;  // Skip rendering this foam decal
+							}
+						}
+					}
+				}
+			}
+
 			func(shader, pass, renderFlags);
 
 			auto state = globals::state;
