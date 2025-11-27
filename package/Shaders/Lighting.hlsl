@@ -976,34 +976,7 @@ float GetSnowParameterY(float texProjTmp, float alpha)
 #		include "IBL/IBL.hlsli"
 #	endif
 
-struct MaterialProperties
-{
-	float3 BaseColor = 0;
-#	if !defined(TRUE_PBR)
-	float Shininess = 0;
-	float Glossiness = 0;
-	float3 SpecularColor = 0;
-#	else
-	float Roughness = 1;
-	float Metallic = 0;
-	float AO = 1;
-	float3 F0 = 0;
-	float3 SubsurfaceColor = 0;
-	float Thickness = 0;
-	float3 CoatColor = 0;
-	float CoatStrength = 0;
-	float CoatRoughness = 0;
-	float3 CoatF0 = 0;
-	float3 FuzzColor = 0;
-	float FuzzWeight = 0;
-	float GlintScreenSpaceScale = 1.5;
-	float GlintLogMicrofacetDensity = 1.0;
-	float GlintMicrofacetRoughness = 0.015;
-	float GlintDensityRandomization = 2.0;
-	Glints::GlintCachedVars GlintCache;
-	float Noise = 0;
-#	endif
-};
+#include "Common/LightingCommon.hlsli"
 
 PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 {
