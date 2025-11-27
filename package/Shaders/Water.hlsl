@@ -1175,93 +1175,105 @@ float GetFlowmapMipLevel(float2 flowmapUV)
 
 /**
  * Samples height from flowmap texture (riverflow.dds alpha channel)
+ * Uses the same UV calculation as GetFlowmapNormal for consistency
  */
-float GetFlowmapHeight(PS_INPUT input, float2 uvShift, float multiplier, float offset, float2 parallaxOffset, float mipLevel)
+float GetFlowmapHeight(PS_INPUT input, float2 uvShift, float multiplier, float offset, float mipLevel)
 {
 	FlowmapData flowData = GetFlowmapDataUV(input, uvShift);
 	float2 baseUV = offset + (flowData.flowVector - float2(multiplier * ((0.001 * ReflectionColor.w) * flowData.color.w), 0));
-	baseUV += parallaxOffset;
 	return FlowMapNormalsTex.SampleLevel(FlowMapNormalsSampler, baseUV, mipLevel).w;
 }
 
 /**
  * Computes blended flowmap height using 4-sample weighted blend
  * Returns height value where 1.0 = high (white in texture), 0.0 = low (black)
+ * This samples height at the same 4 points as the flowmap normals
  */
-float GetFlowmapBlendedHeight(PS_INPUT input, float2 normalMul, float2 uvShift, float2 parallaxOffset, float mipLevel)
+float GetFlowmapBlendedHeight(PS_INPUT input, float2 normalMul, float2 uvShift, float mipLevel)
 {
-	float height0 = GetFlowmapHeight(input, uvShift, 9.92, 0, parallaxOffset, mipLevel);
-	float height1 = GetFlowmapHeight(input, float2(0, uvShift.y), 10.64, 0.27, parallaxOffset, mipLevel);
-	float height2 = GetFlowmapHeight(input, 0.0.xx, 8, 0, parallaxOffset, mipLevel);
-	float height3 = GetFlowmapHeight(input, float2(uvShift.x, 0), 8.48, 0.62, parallaxOffset, mipLevel);
+	float height0 = GetFlowmapHeight(input, uvShift, 9.92, 0, mipLevel);
+	float height1 = GetFlowmapHeight(input, float2(0, uvShift.y), 10.64, 0.27, mipLevel);
+	float height2 = GetFlowmapHeight(input, 0.0.xx, 8, 0, mipLevel);
+	float height3 = GetFlowmapHeight(input, float2(uvShift.x, 0), 8.48, 0.62, mipLevel);
 	
 	float blendedHeight =
 		normalMul.y * (normalMul.x * height2 + (1 - normalMul.x) * height3) +
 		(1 - normalMul.y) * (normalMul.x * height1 + (1 - normalMul.x) * height0);
 	
-	return blendedHeight;  // Return raw height (1.0 = high, 0.0 = low)
+	return blendedHeight;
 }
 
 /**
- * Computes flowmap parallax offset using POM (Parallax Occlusion Mapping)
- * Uses height from riverflow.dds alpha channel
+ * Gets height for flowmap parallax iteration (single texture version)
  */
-float2 GetFlowmapParallaxOffset(PS_INPUT input, float2 flowmapDimensions, float3 viewDirection)
+float GetFlowmapParallaxHeight(PS_INPUT input, float2 currentOffset, float3 normalScalesRcp, float mipLevel)
 {
-	// Limit parallax at grazing angles to prevent artifacts
-	float viewDotUp = -viewDirection.z;
-	if (viewDotUp < 0.1)
-		return float2(0, 0);
+	float height = Normals01Tex.SampleLevel(Normals01Sampler, input.TexCoord1.xy + currentOffset * normalScalesRcp.x, mipLevel).w;
+	height *= NormalsAmplitude.x;
+	return 1.0 - height;
+}
+
+/**
+ * Computes parallax offset for flowmap water using the base normal texture
+ * Mirrors WaterEffects::GetParallaxOffset but for single texture
+ */
+float2 GetFlowmapParallaxUVOffset(PS_INPUT input, float3 viewDirection, float3 normalScalesRcp)
+{
+	float2 parallaxOffsetTS = viewDirection.xy / -viewDirection.z;
+	parallaxOffsetTS *= 20.0;
 	
-	// Convert view direction to tangent space for the water surface
-	float2 parallaxOffsetTS = viewDirection.xy / viewDotUp;
+	// Compute mip level
+	float2 textureDims;
+	Normals01Tex.GetDimensions(textureDims.x, textureDims.y);
+#if defined(VR)
+	textureDims /= 16.0;
+#else
+	textureDims /= 8.0;
+#endif
+	float2 texCoordsPerSize = input.TexCoord1.xy * textureDims;
+	float2 dxSize = ddx(texCoordsPerSize);
+	float2 dySize = ddy(texCoordsPerSize);
+	float2 dTexCoords = dxSize * dxSize + dySize * dySize;
+	float minTexCoordDelta = max(dTexCoords.x, dTexCoords.y);
+	float mipLevel = max(0.5 * log2(minTexCoordDelta), 0);
+#if defined(VR)
+	mipLevel += 4;
+#else
+	mipLevel += 3;
+#endif
 	
-	// Parallax scale - controls depth of the effect
-	float parallaxScale = 0.15;
-	parallaxOffsetTS *= parallaxScale;
-	
-	// Fade out parallax at grazing angles
-	float angleFade = saturate((viewDotUp - 0.1) / 0.3);
-	parallaxOffsetTS *= angleFade;
-	
-	float2 normalMul = 0.5 + -(-0.5 + abs(frac(input.TexCoord2.zw * (64 * flowmapDimensions)) * 2 - 1));
-	float2 uvShift = 1 / (128 * flowmapDimensions);
-	
-	// POM ray marching
-	float numSteps = 8.0;
-	float stepSize = 1.0 / numSteps;
+	float stepSize = rcp(16.0);
 	float currBound = 0.0;
-	float prevBound = 0.0;
 	float currHeight = 1.0;
 	float prevHeight = 1.0;
 	
-	float mipLevel = 0;
-	
-	[loop] for (int i = 0; i < 8; i++)
+	[loop] while (currHeight > currBound)
 	{
 		prevHeight = currHeight;
-		prevBound = currBound;
 		currBound += stepSize;
-		
-		// Sample height at offset position (1.0 - height because white = high)
-		float sampledHeight = GetFlowmapBlendedHeight(input, normalMul, uvShift, currBound * parallaxOffsetTS, mipLevel);
-		currHeight = 1.0 - sampledHeight;
-		
-		if (currHeight < currBound)
-			break;
+		currHeight = GetFlowmapParallaxHeight(input, currBound * parallaxOffsetTS.xy, normalScalesRcp, mipLevel);
 	}
 	
-	// Linear interpolation for refined intersection
-	float delta1 = currBound - currHeight;
+	float prevBound = currBound - stepSize;
 	float delta2 = prevBound - prevHeight;
-	float denom = delta1 - delta2;
-	float parallaxAmount = (denom != 0.0) ? (prevBound * delta1 - currBound * delta2) / denom : currBound;
+	float delta1 = currBound - currHeight;
+	float denominator = delta2 - delta1;
+	float parallaxAmount = (currBound * delta2 - prevBound * delta1) / denominator;
 	
-	return parallaxOffsetTS * parallaxAmount;
+	return parallaxOffsetTS.xy * parallaxAmount;
 }
 
 /**
- * Generates flowmap-based normal
+ * Computes parallax offset for flowmap water (wrapper for the POM version)
+ * Returns the UV offset to apply to base normal texture sampling
+ */
+float2 GetFlowmapParallaxOffset(PS_INPUT input, float2 flowmapDimensions, float3 viewDirection, float3 normalScalesRcp)
+{
+	return GetFlowmapParallaxUVOffset(input, viewDirection, normalScalesRcp);
+}
+
+/**
+ * Generates flowmap-based normal (no parallax - flowmap normals are not parallax-shifted)
  */
 float3 GetFlowmapNormal(PS_INPUT input, float2 uvShift, float multiplier, float offset)
 {
@@ -1666,6 +1678,13 @@ WaterNormalData GetWaterNormal(PS_INPUT input, float distanceFactor, float norma
 	float2 normalMul = 0.5 + -(-0.5 + abs(frac(input.TexCoord2.zw * (64 * flowmapDimensions)) * 2 - 1));
 	float2 uvShift = 1 / (128 * flowmapDimensions);
 
+	// Compute flowmap-specific parallax offset for the base normal texture
+	float2 flowmapParallaxOffset = float2(0, 0);
+#				if defined(WATER_PARALLAX) && !defined(LOD)
+	flowmapParallaxOffset = GetFlowmapParallaxOffset(input, flowmapDimensions, viewDirection, normalScalesRcp);
+#				endif
+
+	// Sample flowmap normals (no parallax applied to flowmap animation itself)
 	float3 flowmapNormal0 = GetFlowmapNormal(input, uvShift, 9.92, 0);
 	float3 flowmapNormal1 = GetFlowmapNormal(input, float2(0, uvShift.y), 10.64, 0.27);
 	float3 flowmapNormal2 = GetFlowmapNormal(input, 0.0.xx, 8, 0);
@@ -1686,7 +1705,8 @@ WaterNormalData GetWaterNormal(PS_INPUT input, float distanceFactor, float norma
 
 	float2 baseNormalUv = input.TexCoord1.xy;
 #			if defined(WATER_PARALLAX)
-	baseNormalUv += parallaxOffset.xy * normalScalesRcp.x;
+	// Use flowmap-derived parallax offset for base normals
+	baseNormalUv += flowmapParallaxOffset.xy * normalScalesRcp.x;
 #			endif
 	float3 normals1 = Normals01Tex.SampleBias(Normals01Sampler, baseNormalUv, SharedData::MipBias).xyz * 2.0 + float3(-1, -1, -2);
 #			endif  // End of FLOWMAP block
@@ -1708,33 +1728,6 @@ WaterNormalData GetWaterNormal(PS_INPUT input, float distanceFactor, float norma
 	float3 finalNormal = normalize(lerp(normals1 + float3(0, 0, 1), flowmapNormal, distanceFactor));
 #				endif
 
-#				if defined(WATER_PARALLAX) && !defined(LOD)
-	// Add height-derived detail normal from flowmap height texture
-	// Uses the same 4-sample blend as flowmap normals for seamless transitions
-	{
-		// Sample heights using the same blend system as flowmap normals
-		float2 texelSize = 0.003;
-		float heightCenter = GetFlowmapHeightBlended(input, normalMul, uvShift, 0);
-		
-		// For gradient, we need slightly offset samples - approximate by adjusting normalMul slightly
-		float2 normalMulRight = saturate(normalMul + float2(texelSize.x * 64, 0));
-		float2 normalMulUp = saturate(normalMul + float2(0, texelSize.y * 64));
-		float heightRight = GetFlowmapHeightBlended(input, normalMulRight, uvShift, 0);
-		float heightUp = GetFlowmapHeightBlended(input, normalMulUp, uvShift, 0);
-		
-		float heightScale = 2.0;
-		float3 heightNormal = normalize(float3(
-			(heightCenter - heightRight) * heightScale,
-			(heightCenter - heightUp) * heightScale,
-			1.0
-		));
-		
-		// Blend using reoriented normal mapping
-		float3 t = finalNormal + float3(0, 0, 1);
-		float3 u = heightNormal * float3(-1, -1, 1);
-		finalNormal = normalize(t * dot(t, u) - u * t.z);
-	}
-#				endif
 #			elif !defined(LOD)
 
 #				if defined(WATER_PARALLAX)
@@ -1758,33 +1751,6 @@ WaterNormalData GetWaterNormal(PS_INPUT input, float distanceFactor, float norma
 		normalMul.y * ((1 - normalMul.x) * flowmapNormal3.z + normalMul.x * flowmapNormal2.z) +
 		(1 - normalMul.y) * (normalMul.x * flowmapNormal1.z + (1 - normalMul.x) * flowmapNormal0.z);
 	finalNormal = normalize(lerp(normals1 + float3(0, 0, 1), normalize(lerp(finalNormal, flowmapNormal, normalBlendFactor)), distanceFactor));
-
-#					if defined(WATER_PARALLAX)
-	// Add height-derived detail normal from flowmap height texture
-	// Uses the same 4-sample blend as flowmap normals for seamless transitions
-	{
-		// Sample heights using the same blend system as flowmap normals
-		float2 texelSize = 0.003;
-		float heightCenter = GetFlowmapHeightBlended(input, normalMul, uvShift, 0);
-		
-		// For gradient, we need slightly offset samples
-		float2 normalMulRight = saturate(normalMul + float2(texelSize.x * 64, 0));
-		float2 normalMulUp = saturate(normalMul + float2(0, texelSize.y * 64));
-		float heightRight = GetFlowmapHeightBlended(input, normalMulRight, uvShift, 0);
-		float heightUp = GetFlowmapHeightBlended(input, normalMulUp, uvShift, 0);
-		
-		float heightScale = 2.0;
-		float3 heightNormal = normalize(float3(
-			(heightCenter - heightRight) * heightScale,
-			(heightCenter - heightUp) * heightScale,
-			1.0
-		));
-		
-		float3 t = finalNormal + float3(0, 0, 1);
-		float3 u = heightNormal * float3(-1, -1, 1);
-		finalNormal = normalize(t * dot(t, u) - u * t.z);
-	}
-#					endif
 #				endif
 #			else
 	float3 finalNormal =
@@ -2374,26 +2340,28 @@ PS_OUTPUT main(PS_INPUT input)
 	// Apply physically-based foam with light blue color and lighting
 	finalColor = lerp(finalColor, foamData.color, foamData.density);
 
-	// DEBUG: Visualize height map for all water types
+	// DEBUG: Visualize height map with parallax applied
 #			if defined(WATER_PARALLAX)
 	{
 		float debugHeight = 0;
 #				if defined(FLOWMAP)
-		// For flowmap water - use same 4-sample blend as flowmap normals
-#					if defined(UNIFIED_WATER)
-		float2 debugFlowmapDimensions = input.TexCoord4.xy;
-#					else
-		float2 debugFlowmapDimensions = input.TexCoord4.xx;
-#					endif
-		float2 debugNormalMul = 0.5 + -(-0.5 + abs(frac(input.TexCoord2.zw * (64 * debugFlowmapDimensions)) * 2 - 1));
-		float2 debugUvShift = 1 / (128 * debugFlowmapDimensions);
-		debugHeight = GetFlowmapHeightBlended(input, debugNormalMul, debugUvShift, 0);
+		// For flowmap water - use base normal texture (Normals01Tex) for clean parallax
+		float3 normalScalesRcpDebug = rcp(input.NormalsScale.xyz);
+		
+		// Get parallax UV offset using same method as regular water
+		float2 parallaxUVOffset = GetFlowmapParallaxUVOffset(input, viewDirection, normalScalesRcpDebug);
+		
+		// Sample height from base normal texture with parallax offset
+		debugHeight = Normals01Tex.SampleLevel(Normals01Sampler, input.TexCoord1.xy + parallaxUVOffset * normalScalesRcpDebug.x, 0).w;
 #				else
-		// For regular water, sample height from normal texture alpha channels (same as WaterParallax.hlsli)
+		// For regular water - use the parallax offset from WaterEffects
+		float3 normalScalesRcpDebug = rcp(input.NormalsScale.xyz);
+		float2 debugParallaxOffset = WaterEffects::GetParallaxOffset(input, normalScalesRcpDebug);
+		
 		float3 heights;
-		heights.x = Normals01Tex.SampleLevel(Normals01Sampler, input.TexCoord1.xy, 0).w;
-		heights.y = Normals02Tex.SampleLevel(Normals02Sampler, input.TexCoord1.zw, 0).w;
-		heights.z = Normals03Tex.SampleLevel(Normals03Sampler, input.TexCoord2.xy, 0).w;
+		heights.x = Normals01Tex.SampleLevel(Normals01Sampler, input.TexCoord1.xy + debugParallaxOffset * normalScalesRcpDebug.x, 0).w;
+		heights.y = Normals02Tex.SampleLevel(Normals02Sampler, input.TexCoord1.zw + debugParallaxOffset * normalScalesRcpDebug.y, 0).w;
+		heights.z = Normals03Tex.SampleLevel(Normals03Sampler, input.TexCoord2.xy + debugParallaxOffset * normalScalesRcpDebug.z, 0).w;
 		heights *= NormalsAmplitude.xyz;
 		debugHeight = (heights.x + heights.y + heights.z) / (NormalsAmplitude.x + NormalsAmplitude.y + NormalsAmplitude.z);
 #				endif
