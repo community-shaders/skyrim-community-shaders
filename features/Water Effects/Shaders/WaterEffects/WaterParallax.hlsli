@@ -7,6 +7,22 @@ namespace WaterEffects
 	// http://www.diva-portal.org/smash/get/diva2:831762/FULLTEXT01.pdf
 	// https://bartwronski.files.wordpress.com/2014/03/ac4_gdc.pdf
 
+	// Transforms view direction from world space to tangent space accounting for Gerstner wave displacement
+	// This corrects parallax offset calculation when the water surface is deformed by 3D waves
+	float3 TransformViewToWaveTangentSpace(float3 viewDirWorld, float3 waveNormal)
+	{
+		float3 N = normalize(waveNormal);
+		
+		// Build orthonormal tangent frame from wave normal
+		// Use up vector that isn't parallel to the normal
+		float3 up = abs(N.z) < 0.999f ? float3(0.0f, 0.0f, 1.0f) : float3(1.0f, 0.0f, 0.0f);
+		float3 T = normalize(cross(up, N));
+		float3 B = cross(N, T);
+		
+		// Transform view direction to tangent space
+		return float3(dot(viewDirWorld, T), dot(viewDirWorld, B), dot(viewDirWorld, N));
+	}
+
 	float GetMipLevel(float2 coords, Texture2D<float4> tex)
 	{
 		// Compute the current gradients:
@@ -48,8 +64,28 @@ namespace WaterEffects
 
 	float2 GetParallaxOffset(PS_INPUT input, float3 normalScalesRcp)
 	{
-		float3 viewDirection = normalize(input.WPosition.xyz);
-		float2 parallaxOffsetTS = viewDirection.xy / -viewDirection.z;
+		float3 viewDirectionWorld = normalize(input.WPosition.xyz);
+		
+		// Transform view direction to account for wave-displaced surface
+#if defined(UNIFIED_WATER)
+		float3 waveNormal = input.UnifiedWaveNormal.xyz;
+		float waveNormalLen = length(waveNormal);
+		if (waveNormalLen > 0.001f) {
+			waveNormal /= waveNormalLen;
+		} else {
+			waveNormal = float3(0.0f, 0.0f, 1.0f);
+		}
+		float3 viewDirection = TransformViewToWaveTangentSpace(viewDirectionWorld, waveNormal);
+#else
+		float3 viewDirection = viewDirectionWorld;
+#endif
+		
+		// Prevent division by zero and artifacts at grazing angles
+		float viewDotN = -viewDirection.z;
+		if (viewDotN < 0.01f) {
+			return float2(0.0f, 0.0f);
+		}
+		float2 parallaxOffsetTS = viewDirection.xy / viewDotN;
 
 		// Parallax scale is also multiplied by normalScalesRcp
 		parallaxOffsetTS *= 20.0;

@@ -479,6 +479,11 @@ WaveSample CalculateWaterDisplacement(float2 worldPos, float2 textureDims, float
 	float dayScale[6] = { 1.0f, 1.45f, 2.2f, 3.1f, 4.5f, 6.2f };
 	float dayBias[6] = { 0.0f, 2.0943951f, 4.1887903f, 1.5707963f, 3.6651914f, 5.4977871f };
 
+	// Track cumulative steepness to prevent triangle holes from vertex crossover
+	// Per GPU Gems: sum of Q*k*A for all waves must not exceed 1 to prevent looping
+	float cumulativeSteepnessKA = 0.0f;
+	const float MAX_CUMULATIVE_STEEPNESS = 0.85f;  // Conservative limit below 1.0
+	
 	[unroll] for (int j = 0; j < 6; ++j) {
 		waves[j].direction = normalize(baseDirections[j]);
 		
@@ -504,9 +509,21 @@ WaveSample CalculateWaterDisplacement(float2 worldPos, float2 textureDims, float
 		waves[j].angularVelocity = waveNumberUnits * phaseSpeedUnitsPerSec * speedMult * speedScale[j];
 		
 		// Steepness controls wave sharpness (0 = sine, 1 = sharp crest)
-		// Physically, sum of Q*k*A should not exceed 1 to prevent looping
-		// We apply conservative limits per wave
-		waves[j].steepness = saturate(baseSteepness[j] * steepnessMult * contributions[j]);
+		// Calculate this wave's contribution to cumulative steepness: Q*k*A
+		float rawSteepness = saturate(baseSteepness[j] * steepnessMult * contributions[j]);
+		float thisWaveKA = waveNumberUnits * waves[j].amplitude;
+		float thisWaveSteepnessContrib = rawSteepness * thisWaveKA;
+		
+		// Scale down steepness if cumulative would exceed safe limit
+		if (cumulativeSteepnessKA + thisWaveSteepnessContrib > MAX_CUMULATIVE_STEEPNESS && thisWaveSteepnessContrib > 0.001f) {
+			float allowedContrib = max(0.0f, MAX_CUMULATIVE_STEEPNESS - cumulativeSteepnessKA);
+			float scaleFactor = allowedContrib / thisWaveSteepnessContrib;
+			rawSteepness *= scaleFactor;
+			thisWaveSteepnessContrib = allowedContrib;
+		}
+		
+		waves[j].steepness = rawSteepness;
+		cumulativeSteepnessKA += thisWaveSteepnessContrib;
 		
 		// Temporal phase offset for variation (reduces repetition)
 		waves[j].phaseOffset = dayPhase * dayScale[j] + dayBias[j];
@@ -536,8 +553,12 @@ WaveSample CalculateWaterDisplacement(float2 worldPos, float2 textureDims, float
 	float3 waveNormal = normalize(cross(binormal, tangent));
 	
 	// Clamp displacement to prevent extreme values that cause rendering artifacts
-	totalDisplacement.xy = clamp(totalDisplacement.xy, -100.0f, 100.0f);
-	totalDisplacement.z = clamp(totalDisplacement.z, -50.0f, 50.0f);
+	// Horizontal displacement limited more aggressively to prevent triangle holes
+	// (typical water mesh has ~64-128 unit vertex spacing)
+	const float maxHorizontalDisp = 24.0f;
+	const float maxVerticalDisp = 35.0f;
+	totalDisplacement.xy = clamp(totalDisplacement.xy, -maxHorizontalDisp, maxHorizontalDisp);
+	totalDisplacement.z = clamp(totalDisplacement.z, -maxVerticalDisp, maxVerticalDisp);
 
 	WaveSample sample;
 	sample.displacement = totalDisplacement;
@@ -663,11 +684,20 @@ VS_OUTPUT main(VS_INPUT input)
 	
 	currentPosition.xyz += waveDisplacement;
 
+	// For DLSS/FG motion vectors, calculate previous frame wave state
+	// CRITICAL: Use the SAME absolute world position for both frames!
+	// Water is stationary in world space - only time changes between frames, not position.
+	// Using different world positions (due to camera movement) would cause incorrect motion vectors.
 	float waveTimeSecondsPrev = ComputeWaveTimeSeconds(PrevGameTimeHours, PrevRealTimeSeconds);
 	float waveDayPhasePrev = ComputeWaveDayPhase(PrevGameTimeHours);
-	WaveSample prevWave = CalculateWaterDisplacement(waveWorldPosPrev, float2(0.0f, 0.0f), float2(0.0f, 0.0f), WaveIntensity, WaveAmplitude, WaveSpeed, WaveSteepness, waveTimeSecondsPrev, waveDayPhasePrev, flowBiasDirVS, flowBiasWeightVS, true);
+	
+	// Sample wave at the SAME world position as current frame, but with previous frame's time
+	// This correctly captures the temporal wave motion without introducing spatial offset artifacts
+	WaveSample prevWave = CalculateWaterDisplacement(waveWorldPos, float2(0.0f, 0.0f), float2(0.0f, 0.0f), WaveIntensity, WaveAmplitude, WaveSpeed, WaveSteepness, waveTimeSecondsPrev, waveDayPhasePrev, flowBiasDirVS, flowBiasWeightVS, true);
 	float3 prevWaveDisplacement = prevWave.displacement;
-	previousPosition.xyz += prevWaveDisplacement;
+	
+	// Apply previous displacement in local space (same as current frame) then transform
+	previousPosition = float4(input.Position.xyz + prevWaveDisplacement, 1.0);
 
 	inputPosition = currentPosition;
 	worldPos = mul(World[eyeIndex], currentPosition);
@@ -689,11 +719,7 @@ VS_OUTPUT main(VS_INPUT input)
 
 #		if defined(STENCIL)
 	vsout.WorldPosition = worldPos;
-	#if defined(UNIFIED_WATER)
 	vsout.PreviousWorldPosition = mul(PreviousWorld[eyeIndex], previousPosition);
-	#else
-	vsout.PreviousWorldPosition = mul(PreviousWorld[eyeIndex], inputPosition);
-	#endif
 #		else
 
 #		if !defined(UNIFIED_WATER)
@@ -2334,7 +2360,15 @@ PS_OUTPUT main(PS_INPUT input)
 	float VdotN = dot(viewDirection, normal);
 	psout.WaterMask = float4(0, 0, VdotN, 0);
 
+#	if defined(UNIFIED_WATER)
+	// Output camera-only motion vectors for Gerstner waves
+	// Pass the SAME world position for both current and previous frame projection
+	// This captures camera movement without the wave animation component
+	// The wave animation will be handled as temporal noise by TAA/DLSS
+	psout.MotionVector = MotionBlur::GetSSMotionVector(input.WorldPosition, input.WorldPosition);
+#	else
 	psout.MotionVector = MotionBlur::GetSSMotionVector(input.WorldPosition, input.PreviousWorldPosition);
+#	endif
 #		endif
 
 	return psout;
