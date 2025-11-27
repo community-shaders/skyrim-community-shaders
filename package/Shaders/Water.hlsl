@@ -602,6 +602,14 @@ HS_OUTPUT main(InputPatch<VS_OUTPUT, 3> patch, uint cpID : SV_OutputControlPoint
 #		if defined(UNIFIED_WATER)
 #			include "UnifiedWater/WaterTessellation.hlsli"
 #			include "UnifiedWater/GerstnerWaves.hlsli"
+
+// Normal textures for heightmap-based detail displacement
+Texture2D<float4> DSNormals01Tex : register(t4);
+Texture2D<float4> DSNormals02Tex : register(t5);
+Texture2D<float4> DSNormals03Tex : register(t6);
+SamplerState DSNormals01Sampler : register(s4);
+SamplerState DSNormals02Sampler : register(s5);
+SamplerState DSNormals03Sampler : register(s6);
 #		endif
 
 // Domain shader cbuffers - need same cbuffers as VS for matrix transforms
@@ -634,6 +642,12 @@ VS_OUTPUT main(HS_CONSTANT_OUTPUT patchConst, float3 bary : SV_DomainLocation, c
 	float4 interpHPosition = patch[0].HPosition * bary.x + patch[1].HPosition * bary.y + patch[2].HPosition * bary.z;
 	float4 interpWPosition = patch[0].WPosition * bary.x + patch[1].WPosition * bary.y + patch[2].WPosition * bary.z;
 	
+	// Interpolate texture coordinates early - needed for heightmap sampling
+	float4 interpTexCoord1 = patch[0].TexCoord1 * bary.x + patch[1].TexCoord1 * bary.y + patch[2].TexCoord1 * bary.z;
+#		if defined(SPECULAR) || defined(UNDERWATER) || defined(SIMPLE)
+	float4 interpTexCoord2 = patch[0].TexCoord2 * bary.x + patch[1].TexCoord2 * bary.y + patch[2].TexCoord2 * bary.z;
+#		endif
+	
 #		if defined(UNIFIED_WATER)
 	// Calculate absolute world position for wave sampling
 	// WPosition is camera-relative, add CameraPosAdjust to get absolute world pos
@@ -657,8 +671,30 @@ VS_OUTPUT main(HS_CONSTANT_OUTPUT patchConst, float3 bary : SV_DomainLocation, c
 		0.0f,                 // No flow bias weight
 		false);
 	
+	// Sample heightmaps for detail displacement
+	float detailHeight = 0.0f;
+	if (DetailHeightScale > 0.0f) {
+		float dist = length(interpWPosition.xyz);
+		float detailFalloff = saturate(1.0f - dist / TessellationMaxDistance);
+		detailFalloff *= detailFalloff;  // Quadratic falloff
+		
+		// Sample heights from normal texture .w channels (same as parallax)
+		float h1 = DSNormals01Tex.SampleLevel(DSNormals01Sampler, interpTexCoord1.xy, 0).w;
+		float h2 = DSNormals02Tex.SampleLevel(DSNormals02Sampler, interpTexCoord1.zw, 0).w;
+#		if defined(SPECULAR) || defined(UNDERWATER) || defined(SIMPLE)
+		float h3 = DSNormals03Tex.SampleLevel(DSNormals03Sampler, interpTexCoord2.xy, 0).w;
+#		else
+		float h3 = 0.5f;
+#		endif
+		
+		// Combine heights (centered around 0)
+		float combinedHeight = (h1 + h2 + h3) / 3.0f - 0.5f;
+		detailHeight = combinedHeight * DetailHeightScale * detailFalloff;
+	}
+	
 	// Apply displacement in camera-relative world space, then transform to clip
 	float3 displacedWorldPos = interpWPosition.xyz + waveSample.displacement;
+	displacedWorldPos.z += detailHeight;
 	output.HPosition = mul(FrameBuffer::CameraViewProj[eyeIndex], float4(displacedWorldPos, 1.0f));
 	
 	// World position with displacement applied (camera-relative)
@@ -674,17 +710,16 @@ VS_OUTPUT main(HS_CONSTANT_OUTPUT patchConst, float3 bary : SV_DomainLocation, c
 	// MPosition stores displaced world position for PS (same as WPosition.xyz)
 	output.MPosition = float4(displacedWorldPos, 1.0f);
 #		else
-	// Non-unified water: simple interpolation
-	float4 interpHPosition = patch[0].HPosition * bary.x + patch[1].HPosition * bary.y + patch[2].HPosition * bary.z;
+	// Non-unified water: simple interpolation (interpHPosition already calculated above)
 	output.HPosition = interpHPosition;
 	output.WPosition = interpWPosition;
 #		endif
 	
-	// Interpolate other attributes
-	output.TexCoord1 = patch[0].TexCoord1 * bary.x + patch[1].TexCoord1 * bary.y + patch[2].TexCoord1 * bary.z;
+	// Copy interpolated texture coordinates to output
+	output.TexCoord1 = interpTexCoord1;
 	
 #		if defined(SPECULAR) || defined(UNDERWATER) || defined(SIMPLE)
-	output.TexCoord2 = patch[0].TexCoord2 * bary.x + patch[1].TexCoord2 * bary.y + patch[2].TexCoord2 * bary.z;
+	output.TexCoord2 = interpTexCoord2;
 #		endif
 
 #		if !defined(UNIFIED_WATER) && !defined(LOD)
@@ -723,6 +758,32 @@ VS_OUTPUT main(HS_CONSTANT_OUTPUT patchConst, float3 bary : SV_DomainLocation, c
 }
 
 #	endif  // DSHADER
+
+// ============================================================================
+// GEOMETRY SHADER - Assigns per-triangle barycentric coordinates for tri visualization
+// ============================================================================
+#	if defined(GSHADER) || defined(GEOMETRYSHADER)
+
+[maxvertexcount(3)]
+void main(triangle VS_OUTPUT input[3], inout TriangleStream<VS_OUTPUT> outStream)
+{
+	VS_OUTPUT v0 = input[0];
+	VS_OUTPUT v1 = input[1];
+	VS_OUTPUT v2 = input[2];
+	
+#	if defined(UNIFIED_WATER)
+	v0.Barycentric = float3(1.0f, 0.0f, 0.0f);
+	v1.Barycentric = float3(0.0f, 1.0f, 0.0f);
+	v2.Barycentric = float3(0.0f, 0.0f, 1.0f);
+#	endif
+	
+	outStream.Append(v0);
+	outStream.Append(v1);
+	outStream.Append(v2);
+	outStream.RestartStrip();
+}
+
+#	endif  // GSHADER || GEOMETRYSHADER
 
 typedef VS_OUTPUT PS_INPUT;
 
@@ -1029,7 +1090,7 @@ float3 GetFlowmapNormal(PS_INPUT input, float2 uvShift, float multiplier, float 
  *          - Applies component-wise directional transformation
  *          - Returns complete flowmap data with world-space flow vector
  *
- * @note Use this for effects that need to move with water current (ripples, debris, foam, etc.)
+ * @note Use this for effects that need to move with water current (ripples, debris, etc.)
  *       For UV-space normal sampling, use GetFlowmapDataUV() instead
  */
 FlowmapData GetFlowmapDataWorldSpace(PS_INPUT input, float2 uvShift)
@@ -1171,220 +1232,6 @@ float3 ComputeEnhancedWaveNormal(float3 worldPos, float3 baseNormal, float timer
 #			if defined(WETNESS_EFFECTS)
 #				include "WetnessEffects/WetnessEffects.hlsli"
 #			endif
-
-// Foam data structure for unified water
-struct FoamData
-{
-	float density;      // Foam coverage (0-1)
-	float3 color;       // Foam color with lighting
-	float roughness;    // Surface roughness for BRDF
-	float thickness;    // For SSS calculation
-};
-
-#			if defined(UNIFIED_WATER)
-/**
- * Physically-Based Foam System with BRDF and SSS
- * High-resolution procedural foam using Perlin noise independent of wave crests
- * Includes specular highlights (GGX BRDF), subsurface scattering, and light blue coloration
- */
-FoamData ComputePhysicalFoam(float3 worldPos, float waterDepth, float timer, float foamIntensityMult, float2 screenPos, float3 normal, float3 viewDir, float3 lightDir, float4 waveInfo, float4 waveNormalData)
-{
-	FoamData foam;
-	foam.density = 0.0f;
-	foam.color = float3(0.85f, 0.95f, 1.0f); // Light blue base color
-	foam.roughness = 0.35f;
-	foam.thickness = 0.08f;
-	
-	if (foamIntensityMult <= 0.001f)
-		return foam;
-
-	float2 absoluteWorldPos = worldPos.xz;
-
-	// Extract wave properties
-	float2 primaryDir = waveInfo.xy;
-	float primaryDirLen = dot(primaryDir, primaryDir);
-	float2 flowDir = primaryDirLen > 1e-5f ? primaryDir * rsqrt(primaryDirLen) : float2(-0.70710678f, 0.70710678f);
-	float2 flowPerp = float2(-flowDir.y, flowDir.x);
-	
-	// Enhanced wave displacement analysis
-	float waveHeight = waveInfo.z;  // Actual vertical displacement from Gerstner waves
-	float shoreInfluence = waveInfo.w;  // Shore proximity from vertex shader
-	float horizontalDisplacement = waveNormalData.w;  // Lateral wave motion
-	
-	// Enhanced shallow water detection
-	// Combine depth-based and shore influence for better coastal behavior
-	float depthFactor = saturate((256.0f - max(waterDepth, 0.0f)) / 256.0f);
-	float shallowBoost = saturate(depthFactor + shoreInfluence * 0.5f);
-	shallowBoost = pow(shallowBoost, 1.5f);  // Sharper falloff from shore
-
-	// Analyze wave crest characteristics
-	float waveNormalLenSq = dot(waveNormalData.xyz, waveNormalData.xyz);
-	float3 crestNormal = waveNormalLenSq > 1e-5f ? waveNormalData.xyz * rsqrt(waveNormalLenSq) : float3(0.0f, 0.0f, 1.0f);
-	
-	// Crest sharpness - steeper normals = sharper crests = more foam
-	float crestSharpness = saturate(1.0f - crestNormal.z);
-	
-	// Wave amplitude and height-based crest detection
-	float amplitudeScale = max(WaveAmplitude, 0.0001f);
-	
-	// Detect wave peaks: foam accumulates at the TOP of waves
-	// Use actual wave height displacement, not just normalized position
-	float waveHeightNormalized = waveHeight / (amplitudeScale + 0.0001f);
-	float crestHeight = saturate((waveHeightNormalized + 0.5f) * 1.2f);  // Positive displacement = crest
-	crestHeight = pow(crestHeight, 2.0f);  // Sharper peak detection
-	
-	// Lateral motion creates turbulence and foam
-	float lateralMotion = saturate(horizontalDisplacement / (amplitudeScale * 6.0f + 8.0f));
-	
-	// Wave steepness indicator - combine multiple factors
-	// Steep waves break and create whitecaps
-	float waveSpeed = length(primaryDir) / max(amplitudeScale, 0.01f);
-	float steepnessFactor = saturate(waveSpeed * 0.3f);
-	
-	// Whitecap energy: combination of height, steepness, and motion
-	// This is the primary driver for foam on wave crests
-	float whitecapEnergy = saturate(
-		crestSharpness * 1.2f +      // Steep slope creates foam
-		crestHeight * 1.5f +          // Peak of wave has most foam
-		lateralMotion * 0.9f +        // Horizontal motion adds turbulence
-		steepnessFactor * 0.4f        // Fast steep waves break
-	);
-	whitecapEnergy = pow(whitecapEnergy, 1.3f);  // Non-linear accumulation
-	
-	// Turbulence: wave breaking and chaotic motion
-	float turbulence = saturate(
-		crestSharpness * 0.8f + 
-		lateralMotion * 0.6f +
-		shallowBoost * 0.3f  // Shallow water increases turbulence
-	);
-
-	// Base flow with spatial variation to prevent uniform patterns
-	// Flow speed increases with wave energy and shallow water turbulence
-	float flowSpeed = FoamFlowSpeedBase + FoamFlowSpeedRange * (whitecapEnergy * 0.7f + shallowBoost * 0.3f);
-	
-	// Add spatial hash to break up uniform flow direction
-	float spatialVariation = frac(sin(dot(absoluteWorldPos * 0.0001f, float2(12.9898, 78.233))) * 43758.5453);
-	float2 flowVariation = float2(
-		sin(spatialVariation * 6.2832) * 0.3,
-		cos(spatialVariation * 6.2832) * 0.3
-	);
-	
-	// Advection with wave-driven flow
-	// Near crests, foam flows faster and along wave direction
-	float waveFlowBoost = crestHeight * lateralMotion * 15.0f;
-	float2 advectedPos = absoluteWorldPos - (flowDir + flowVariation) * timer * (flowSpeed * 28.0f + waveFlowBoost);
-	
-	// Multi-frequency swirl using Perlin noise instead of simple dot product
-	// This creates organic, flowing patterns instead of straight lines
-	// Swirl is stronger at wave crests where water is more turbulent
-	float swirlNoise1 = Random::perlinNoise(float3(absoluteWorldPos * 0.0008f, timer * 0.15f), 0x19u);
-	float swirlNoise2 = Random::perlinNoise(float3(absoluteWorldPos * 0.0021f, timer * 0.25f), 0x2Fu);
-	float swirlPhase = (swirlNoise1 + swirlNoise2 * 0.5f) * 6.2832; // Convert to radians
-	
-	float swirlAmplitude = (FoamSwirlStrength + FoamSwirlEnergyScale * whitecapEnergy) * (1.0f + turbulence * 0.5f);
-	float swirlAmount = sin(swirlPhase) * swirlAmplitude;
-	
-	float jitter = Random::perlinNoise(float3(absoluteWorldPos * 0.002f, timer * 0.2f), 0x15u) * 2.0f - 1.0f;
-	float jitterScale = FoamSwirlStrength * 0.5f + 1.0f;
-	advectedPos += flowPerp * (swirlAmount + jitter * jitterScale);
-
-	// Multi-scale foam pattern with wave-height based modulation
-	float2 foamUV1 = advectedPos * 0.06f;
-	float2 foamUV2 = advectedPos * 0.14f;
-	float2 foamUV3 = advectedPos * 0.32f + flowDir * timer * 1.2f;
-
-	float noise1 = Random::perlinNoise(float3(foamUV1, timer * 0.22f), 0x31u) * 0.5f + 0.5f;
-	float noise2 = Random::perlinNoise(float3(foamUV2, timer * 0.31f), 0x53u) * 0.5f + 0.5f;
-	float noise3 = Random::perlinNoise(float3(foamUV3, timer * 0.47f), 0x7Du) * 0.5f + 0.5f;
-
-	// Combine noise layers with turbulence modulation
-	float foamPattern = noise1 * 0.45f + noise2 * 0.35f + noise3 * 0.20f;
-	foamPattern = lerp(foamPattern, turbulence, 0.25f);  // Increased turbulence influence
-	
-	// Add dither for smooth transitions
-	float dither = Random::InterleavedGradientNoise(screenPos, SharedData::FrameCount);
-	foamPattern = lerp(foamPattern, dither, 0.08f);
-	
-	// Wave crest foam: accumulates at peaks, enhanced by whitecap energy
-	// Lower threshold for earlier foam appearance on crests
-	float crestFoamBase = smoothstep(0.65f, 0.92f, foamPattern + whitecapEnergy * 0.35f) * whitecapEnergy;
-	crestFoamBase = pow(crestFoamBase, 0.9f);  // Softer curve for more gradual buildup
-	
-	// Shoreline foam: enhanced in shallow water and near beaches
-	// More aggressive threshold for concentrated beach foam
-	float shallowFoamBase = smoothstep(0.68f, 0.94f, foamPattern + shallowBoost * 0.25f) * shallowBoost;
-	shallowFoamBase *= lerp(0.25f, 0.65f, pow(shallowBoost, 2.0f));  // Stronger near shore
-	
-	// Turbulent foam: from wave breaking and chaotic motion
-	float turbulentFoamBase = smoothstep(0.75f, 0.95f, foamPattern + turbulence * 0.15f) * turbulence * 0.25f;
-
-	// Directional alignment: foam streaks along wave direction
-	float2 surfaceXZ = normal.xz;
-	float surfaceLen = length(surfaceXZ);
-	float directionalFactor = surfaceLen > 1e-4f ? saturate(dot(surfaceXZ / surfaceLen, flowDir) * 0.5f + 0.5f) : 0.7f;
-	
-	// Apply strength multipliers
-	float crestFoam = crestFoamBase * directionalFactor * FoamCrestStrength;
-	float shallowFoam = shallowFoamBase * FoamShoreStrength;
-	float turbulentFoam = turbulentFoamBase * FoamTurbulenceStrength;
-
-	float combinedFoam = crestFoam + shallowFoam + turbulentFoam;
-	combinedFoam *= lerp(0.52f, 1.04f, whitecapEnergy);
-
-	float baseCoverage = saturate(combinedFoam * 1.18f);
-	float intensityRange = clamp(foamIntensityMult, 0.0f, 2.0f);
-	float limitedRange = min(intensityRange, 1.0f);
-	float coverageScale = lerp(0.04f, 0.36f, limitedRange);
-	float extraIntensity = max(intensityRange - 1.0f, 0.0f);
-	float foamCoverage = saturate(baseCoverage * (coverageScale + extraIntensity * 0.3f));
-	foam.density = foamCoverage;
-	
-	// GGX BRDF for specular highlights (using functions from SSGI)
-	float3 H = normalize(lightDir + viewDir);
-	float NdotH = saturate(dot(normal, H));
-	float NdotV = saturate(dot(normal, viewDir));
-	float NdotL = saturate(dot(normal, lightDir));
-	float VdotH = saturate(dot(viewDir, H));
-	
-	float a = foam.roughness * foam.roughness;
-	float a2 = a * a;
-	float ggxDenom = max((NdotH * a2 - NdotH) * NdotH + 1, 1e-5);
-	float D_GGX = a2 / (Math::PI * ggxDenom * ggxDenom);
-	
-	// Smith visibility term
-	float visSmithV = NdotL * (NdotV * (1 - a) + a);
-	float visSmithL = NdotV * (NdotL * (1 - a) + a);
-	float visDenom = visSmithV + visSmithL;
-	float Vis_Smith = (visDenom > 0) ? (0.5 / visDenom) : 0;
-	
-	// Schlick Fresnel
-	float Fc = pow(1 - VdotH, 5);
-	float F0 = 0.04f; // Water-foam interface
-	float fresnel = Fc + (1 - Fc) * F0;
-	
-	float specular = D_GGX * Vis_Smith * fresnel;
-	
-	// Burley-inspired SSS approximation
-	float3 sssScaling = float3(1.0f, 1.0f, 1.0f) / 3.5f; // Scaling factor
-	float3 meanFreePath = float3(0.12f, 0.15f, 0.18f); // Mean free path (light blue tint)
-	float sssRadius = foam.thickness;
-	float3 sssR = sssRadius / meanFreePath;
-	float3 negRbyD = -sssR / sssScaling;
-	float3 sss = max((exp(negRbyD) + exp(negRbyD / 3.0f)) / (sssScaling * meanFreePath * 8.0f * Math::PI), 1e-12f);
-	
-	// Combine lighting contributions with much brighter base
-	float3 diffuse = foam.color * max(NdotL, 0.4f); // Ensure minimum brightness
-	float3 scattering = sss * foam.color * 0.3f;
-	float3 specularColor = specular * 0.5f;
-	foam.color = saturate(diffuse + scattering + specularColor);
-	foam.color *= lerp(1.0f, 1.12f, whitecapEnergy);
-	
-	return foam;
-}
-#			endif
-
-// Forward declaration to ensure availability across permutations
-FoamData ComputePhysicalFoam(float3 worldPos, float waterDepth, float timer, float foamIntensityMult, float2 screenPos, float3 normal, float3 viewDir, float3 lightDir, float4 waveInfo, float4 waveNormalData);
 
 // Structure to return both normal and ripple/splash color information
 struct WaterNormalData
@@ -1574,6 +1421,23 @@ WaterNormalData GetWaterNormal(PS_INPUT input, float distanceFactor, float norma
 	finalNormal = WetnessEffects::ReorientNormal(rippleNormal, finalNormal);
 #			endif
 
+#			if defined(UNIFIED_WATER)
+	// Blend in Gerstner wave normals from vertex/domain shader
+	// UnifiedWaveNormal.xyz contains the geometric wave normal
+	float3 waveNormalGeom = input.UnifiedWaveNormal.xyz;
+	float waveNormalLen = length(waveNormalGeom);
+	if (waveNormalLen > 0.01f && WaveIntensity > 0.01f) {
+		waveNormalGeom = normalize(waveNormalGeom);
+		// Use UDN blending to combine texture normals with geometric wave normals
+		// This preserves small-scale detail while respecting large-scale wave shape
+		float3 waveNormalTangent = float3(waveNormalGeom.xy, waveNormalGeom.z);
+		finalNormal = normalize(float3(
+			finalNormal.xy + waveNormalTangent.xy * WaveIntensity,
+			finalNormal.z * waveNormalTangent.z
+		));
+	}
+#			endif
+
 	result.normal = finalNormal;
 	return result;
 }
@@ -1673,6 +1537,13 @@ float3 GetWaterSpecularColor(PS_INPUT input, float3 normal, float3 viewDirection
 #			endif
 
 		float3 finalReflectionColor = Color::LinearToGamma(lerp(Color::GammaToLinear(reflectionColor), Color::GammaToLinear(finalSsrReflectionColor), ssrFraction));
+		
+#			if defined(UNIFIED_WATER)
+		if (EnableLightingOverrides > 0.5f) {
+			finalReflectionColor *= ReflectionStrength;
+		}
+#			endif
+		
 		return finalReflectionColor;
 	}
 	return ReflectionColor.xyz * VarAmounts.y;
@@ -1709,7 +1580,19 @@ float GetFresnelValue(float3 normal, float3 viewDirection)
 #			else
 	float3 actualNormal = normal;
 #			endif
-	float viewAngle = 1 - saturate(dot(-viewDirection, actualNormal));
+	float NdotV = saturate(dot(-viewDirection, actualNormal));
+	float viewAngle = 1 - NdotV;
+	
+#			if defined(UNIFIED_WATER)
+	if (EnableLightingOverrides > 0.5f) {
+		// Schlick fresnel with configurable F0 and power
+		// F = F0 + (1 - F0) * (1 - cos(theta))^power
+		float fresnelTerm = pow(viewAngle, FresnelPower);
+		return FresnelBias + (1.0f - FresnelBias) * fresnelTerm;
+	}
+#			endif
+	
+	// Vanilla calculation
 	return (1 - FresnelRI.x) * pow(viewAngle, 5) + FresnelRI.x;
 }
 
@@ -1776,6 +1659,28 @@ DiffuseOutput GetWaterDiffuseColor(PS_INPUT input, float3 normal, float3 viewDir
 	float refractionMul = 1 - pow(saturate((-distanceMul.x * FogParam.z + FogParam.z) / FogParam.w), FogNearColor.w);
 #				endif
 
+#				if defined(UNIFIED_WATER)
+	if (EnableLightingOverrides > 0.5f) {
+		// Enhanced depth-based absorption using Beer-Lambert law
+		// Absorption increases exponentially with depth
+		float depthMeters = distanceMul.x * FogParam.z * 0.01f; // Convert to rough meters
+		float absorption = 1.0f - exp(-AbsorptionDensity * depthMeters);
+		
+		// Apply transparency control to shallow water
+		float transparencyFactor = saturate(WaterTransparency * (1.0f - absorption));
+		
+		// Blend more towards deep color with absorption
+		refractionDiffuseColor = lerp(ShallowColor.xyz, DeepColor.xyz, saturate(distanceMul.y + absorption * 0.5f));
+		
+		// Apply scattering - adds subtle glow from scattered light
+		float3 scatterColor = DeepColor.xyz * ScatteringCoeff * (1.0f - absorption);
+		refractionDiffuseColor += scatterColor;
+		
+		// Modulate refraction visibility
+		refractionMul = saturate(refractionMul * transparencyFactor);
+	}
+#				endif
+
 	DiffuseOutput output;
 	output.refractionColor = refractionColor;
 	output.refractionDiffuseColor = refractionDiffuseColor;
@@ -1801,9 +1706,21 @@ float3 GetSunColor(float3 normal, float3 viewDirection)
 		return 0.0.xxx;
 
 	float3 reflectionDirection = reflect(viewDirection, normal);
+	
+#			if defined(UNIFIED_WATER)
+	if (EnableLightingOverrides > 0.5f) {
+		// Use override sun specular power
+		float reflectionMul = exp2(SunSpecularPower * log2(saturate(dot(reflectionDirection, SunDir.xyz))));
+		float3 sunSpecular = reflectionMul * SunColor.xyz * SunDir.w * DeepColor.w;
+		sunSpecular *= SunSpecularMagnitude * SpecularBrightness;
+		return sunSpecular;
+	}
+#			endif
+	
 	float reflectionMul = exp2(VarAmounts.x * log2(saturate(dot(reflectionDirection, SunDir.xyz))));
-
-	return reflectionMul * SunColor.xyz * SunDir.w * DeepColor.w;
+	float3 sunSpecular = reflectionMul * SunColor.xyz * SunDir.w * DeepColor.w;
+	
+	return sunSpecular;
 #			endif
 }
 #		endif
@@ -1882,6 +1799,12 @@ PS_OUTPUT main(PS_INPUT input)
 	float4 depthControl = float4(0, 0, 1, 0);
 #			else
 	float4 depthControl = DepthControl * (distanceMul - 1) + 1;
+#				if defined(UNIFIED_WATER)
+	if (EnableLightingOverrides > 0.5f) {
+		float4 overrideDepth = float4(DepthReflections, DepthRefractions, DepthNormals, DepthSpecularLighting);
+		depthControl = overrideDepth * (distanceMul - 1) + 1;
+	}
+#				endif
 #			endif
 	float3 viewPosition = mul(FrameBuffer::CameraView[eyeIndex], float4(input.WPosition.xyz, 1)).xyz;
 	float2 screenUV = FrameBuffer::ViewToUV(viewPosition, true, eyeIndex);
@@ -1890,30 +1813,14 @@ PS_OUTPUT main(PS_INPUT input)
 	float3 normal = waterData.normal;
 
 #		if defined(UNIFIED_WATER)
-	FoamData foamData;
-	foamData.density = 0.0f;
-	foamData.color = float3(0.85f, 0.95f, 1.0f);
-	float waterDepth = 1e5f; // Declare outside block so it's available later
+	float waterDepth = 1e5f;
 	{
 #		if defined(DEPTH)
 		float surfaceDepth = -viewPosition.z;
 		if (depth > 0.0f)
 			waterDepth = max(0.0f, depth - surfaceDepth);
 #		endif
-		float waveTimeSeconds = ComputeWaveTimeSeconds(GameTimeHours, RealTimeSeconds);
-		
-		// Compute physically-based foam with BRDF and SSS
-		// World position = camera offset + view-space position (same as used for lights)
-		float3 worldPosForFoam = PosAdjust[eyeIndex].xyz + input.WPosition.xyz;
-		float3 lightDir = normalize(-SunDir.xyz); // Sun direction
-		foamData = ComputePhysicalFoam(worldPosForFoam, waterDepth, waveTimeSeconds, FoamIntensity, input.HPosition.xy, normal, viewDirection, lightDir, input.UnifiedWaveInfo, input.UnifiedWaveNormal);
-		
-		if (Permutation::PixelShaderDescriptor & Permutation::WaterFlags::Interior)
-			foamData.density *= 0.35f;
 	}
-#		if defined(UNDERWATER)
-	foamData.density = 0.0f;
-#		endif
 #		endif
 
 	float fresnel = GetFresnelValue(normal, viewDirection);
@@ -1953,6 +1860,12 @@ PS_OUTPUT main(PS_INPUT input)
 	float3 diffuseColor = lerp(diffuseOutput.refractionColor, diffuseOutput.refractionDiffuseColor, diffuseOutput.refractionMul);
 
 	depthControl = DepthControl * (distanceMul - 1) + 1;
+#			if defined(UNIFIED_WATER)
+	if (EnableLightingOverrides > 0.5f) {
+		float4 overrideDepth = float4(DepthReflections, DepthRefractions, DepthNormals, DepthSpecularLighting);
+		depthControl = overrideDepth * (distanceMul - 1) + 1;
+	}
+#			endif
 
 	float3 specularLighting = 0;
 
@@ -2080,8 +1993,6 @@ PS_OUTPUT main(PS_INPUT input)
 #				endif
 #			endif
 #		if defined(UNIFIED_WATER)
-	// Apply physically-based foam with light blue color and lighting
-	finalColor = lerp(finalColor, foamData.color, foamData.density);
 
 // Uncomment to enable parallax height debug visualization
 // #define DEBUG_WATER_PARALLAX

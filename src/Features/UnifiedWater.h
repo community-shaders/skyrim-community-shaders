@@ -38,26 +38,16 @@ struct UnifiedWater : OverlayFeature
 		bool ShowTriVisualizer = false;
 
 		bool EnableTessellation = true;
-		float TessellationMinDistance = 256.0f;
-		float TessellationMaxDistance = 8192.0f;
+		float TessellationMinDistance = 128.0f;
+		float TessellationMaxDistance = 4096.0f;
 		float TessellationMinFactor = 1.0f;
-		float TessellationMaxFactor = 16.0f;
+		float TessellationMaxFactor = 8.0f;
+		float DetailHeightScale = 0.0f;
 
 		float WaveIntensity = 0.3f;
 		float WaveAmplitude = 1.0f;
-		float WaveSpeed = 1.0f;
+		float WaveSpeed = 0.05f;
 		float WaveSteepness = 1.0f;
-
-		float FoamIntensity = 1.0f;
-		float FoamShoreStrength = 1.0f;
-		float FoamCrestStrength = 1.0f;
-		float FoamTurbulenceStrength = 1.0f;
-
-		float FoamFlowSpeedBase = 0.06f;
-		float FoamFlowSpeedRange = 0.11f;
-		float FoamShoreBoost = 0.03f;
-		float FoamSwirlStrength = 9.0f;
-		float FoamSwirlEnergyScale = 12.0f;
 
 		float WavePrimaryContribution = 1.0f;
 		float WaveSecondaryContribution = 1.0f;
@@ -104,6 +94,39 @@ struct UnifiedWater : OverlayFeature
 		float Wave6AngleOffset = 70.0f;
 
 		bool DisableVanillaWaterFoam = true;
+		
+		// Water Lighting Overrides
+		bool EnableLightingOverrides = false;
+		float FresnelBias = 0.02f;          // F0 for water (~0.02 for IOR 1.33)
+		float FresnelPower = 5.0f;          // Schlick exponent
+		float ReflectionStrength = 1.0f;    // Multiplier for reflection intensity
+		float RefractionStrength = 1.0f;    // Refraction distortion amount
+		float WaterTransparency = 1.0f;     // Shallow water transparency
+		float AbsorptionDensity = 0.15f;    // Light absorption rate with depth
+		float ScatteringCoeff = 0.05f;      // Subsurface scattering amount
+		float SpecularIntensity = 1.0f;     // Overall specular intensity multiplier
+		
+		// Sun Specular Overrides
+		float SunSpecularPower = 250.0f;    // Sharpness of sun highlight (VarAmounts.x)
+		float SunSpecularMagnitude = 1.0f;  // Sun specular intensity multiplier
+		float SunSparklePower = 50.0f;      // Sparkle highlight sharpness
+		float SunSparkleMagnitude = 1.0f;   // Sparkle intensity
+		float SpecularRadius = 128.0f;      // Specular highlight radius
+		float SpecularBrightness = 1.0f;    // Overall specular brightness
+		
+		// Fog Overrides
+		float AboveWaterFogDistNear = 0.0f;     // Near fog distance
+		float AboveWaterFogDistFar = 163840.0f; // Far fog distance
+		float AboveWaterFogAmount = 1.0f;       // Fog intensity above water
+		float UnderwaterFogDistNear = 0.0f;     // Underwater near fog
+		float UnderwaterFogDistFar = 4096.0f;   // Underwater far fog
+		float UnderwaterFogAmount = 1.0f;       // Underwater fog intensity
+		
+		// Depth Properties (from ESP DepthControl)
+		float DepthReflections = 1.0f;      // Depth-based reflection factor
+		float DepthRefractions = 1.0f;      // Depth-based refraction factor
+		float DepthNormals = 1.0f;          // Depth-based normal intensity
+		float DepthSpecularLighting = 1.0f; // Depth-based specular factor
 	};
 
 #pragma warning(push)
@@ -121,15 +144,40 @@ struct UnifiedWater : OverlayFeature
 		float PrevGameTimeHours;
 		float PrevRealTimeSeconds;
 		float PrevTimeScale;
-		float FoamIntensity;
-		float FoamShoreStrength;
-		float FoamCrestStrength;
-		float FoamTurbulenceStrength;
-		float FoamFlowSpeedBase;
-		float FoamFlowSpeedRange;
-		float FoamShoreBoost;
-		float FoamSwirlStrength;
-		float FoamSwirlEnergyScale;
+		
+		// Water Lighting Overrides (repurposed foam system slots)
+		float EnableLightingOverrides;
+		float FresnelBias;           // F0 for water (0.02 = IOR 1.33)
+		float FresnelPower;          // Schlick exponent
+		float ReflectionStrength;    // Reflection intensity multiplier
+		float RefractionStrength;    // Refraction distortion amount
+		float WaterTransparency;     // Shallow water transparency
+		float AbsorptionDensity;     // Light absorption rate
+		float ScatteringCoeff;       // Subsurface scattering
+		float SpecularIntensity;     // Overall specular intensity
+		
+		// Sun Specular Overrides
+		float SunSpecularPower;      // Sharpness of sun highlight
+		float SunSpecularMagnitude;  // Sun specular intensity
+		float SunSparklePower;       // Sparkle sharpness
+		float SunSparkleMagnitude;   // Sparkle intensity
+		float SpecularRadius;        // Specular highlight radius
+		float SpecularBrightness;    // Overall specular brightness
+		
+		// Fog Overrides
+		float AboveWaterFogDistNear;
+		float AboveWaterFogDistFar;
+		float AboveWaterFogAmount;
+		float UnderwaterFogDistNear;
+		float UnderwaterFogDistFar;
+		float UnderwaterFogAmount;
+		
+		// Depth Properties
+		float DepthReflections;
+		float DepthRefractions;
+		float DepthNormals;
+		float DepthSpecularLighting;
+		
 		float WavePrimaryContribution;
 		float WaveSecondaryContribution;
 		float WaveDetailContribution;
@@ -198,7 +246,7 @@ struct UnifiedWater : OverlayFeature
 		float CameraWorldPosX;
 		float CameraWorldPosY;
 		float CameraWorldPosZ;
-		float Padding;
+		float DetailHeightScale;
 	};
 
 	Settings settings;
@@ -208,6 +256,7 @@ struct UnifiedWater : OverlayFeature
 	
 	winrt::com_ptr<ID3D11HullShader> waterHullShader;
 	winrt::com_ptr<ID3D11DomainShader> waterDomainShader;
+	winrt::com_ptr<ID3D11GeometryShader> waterGeometryShader;
 	
 	float lastGameTimeHours = 0.0f;
 	float lastRealTimeSeconds = 0.0f;

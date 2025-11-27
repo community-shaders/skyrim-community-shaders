@@ -25,7 +25,7 @@ cbuffer TessellationParams : register(b9)
 	float TessCameraWorldPosX;
 	float TessCameraWorldPosY;
 	float TessCameraWorldPosZ;
-	float TessPadding;
+	float DetailHeightScale;         // Scale for heightmap-based detail displacement
 }
 
 // Patch constant data (output from hull shader patch constant function)
@@ -39,23 +39,37 @@ struct HS_CONSTANT_OUTPUT
 // In camera-relative space, camera is at origin (0,0,0), so distance is just length(worldPos)
 float CalculateTessellationFactor(float3 worldPos)
 {
-	// Camera is at origin in camera-relative coordinates
 	float dist = length(worldPos);
 	
-	// Linear interpolation between min and max tessellation based on distance
-	float t = saturate((dist - TessellationMinDistance) / (TessellationMaxDistance - TessellationMinDistance));
+	// Early out - no tessellation beyond max distance
+	if (dist > TessellationMaxDistance)
+		return TessellationMinFactor;
 	
-	// Smooth falloff using smoothstep for better visual transition
-	t = smoothstep(0.0, 1.0, t);
+	// Inverse distance falloff - more aggressive reduction with distance
+	float t = saturate((dist - TessellationMinDistance) / (TessellationMaxDistance - TessellationMinDistance));
+	t = t * t;  // Quadratic falloff - faster reduction at distance
 	
 	return lerp(TessellationMaxFactor, TessellationMinFactor, t);
 }
 
-// Calculate edge tessellation factor (average of the two vertices defining the edge)
+// Calculate edge tessellation factor based on screen-space edge length
 float CalculateEdgeTessellation(float3 p0, float3 p1)
 {
 	float3 edgeMid = (p0 + p1) * 0.5;
-	return CalculateTessellationFactor(edgeMid);
+	float dist = length(edgeMid);
+	
+	// Skip tessellation for distant edges
+	if (dist > TessellationMaxDistance)
+		return TessellationMinFactor;
+	
+	// Factor in edge length - longer edges need more tessellation
+	float edgeLength = length(p1 - p0);
+	float screenFactor = edgeLength / max(dist, 1.0);  // Approximate screen-space size
+	
+	float baseFactor = CalculateTessellationFactor(edgeMid);
+	
+	// Scale by screen factor but clamp to reasonable range
+	return clamp(baseFactor * saturate(screenFactor * 0.1), TessellationMinFactor, TessellationMaxFactor);
 }
 
 #endif // __WATER_TESSELLATION_HLSLI__

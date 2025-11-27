@@ -112,65 +112,88 @@ cbuffer UnifiedWaterPerFrame : register(b7)
 	float PrevGameTimeHours : packoffset(c2.x);
 	float PrevRealTimeSeconds : packoffset(c2.y);
 	float PrevTimeScale : packoffset(c2.z);
-	float FoamIntensity : packoffset(c2.w);
-	float FoamShoreStrength : packoffset(c3.x);
-	float FoamCrestStrength : packoffset(c3.y);
-	float FoamTurbulenceStrength : packoffset(c3.z);
-	float FoamFlowSpeedBase : packoffset(c3.w);
-	float FoamFlowSpeedRange : packoffset(c4.x);
-	float FoamShoreBoost : packoffset(c4.y);
-	float FoamSwirlStrength : packoffset(c4.z);
-	float FoamSwirlEnergyScale : packoffset(c4.w);
-	float WavePrimaryContribution : packoffset(c5.x);
-	float WaveSecondaryContribution : packoffset(c5.y);
-	float WaveDetailContribution : packoffset(c5.z);
-	float WavePrimarySpeed : packoffset(c5.w);
-	float WaveSecondarySpeed : packoffset(c6.x);
-	float WaveDetailSpeed : packoffset(c6.y);
-	float WaveDirectionBlend : packoffset(c6.z);
-	float TriVisualizerEnabled : packoffset(c6.w);
+	float EnableLightingOverrides : packoffset(c2.w);
+	float FresnelBias : packoffset(c3.x);
+	float FresnelPower : packoffset(c3.y);
+	float ReflectionStrength : packoffset(c3.z);
+	float RefractionStrength : packoffset(c3.w);
+	float WaterTransparency : packoffset(c4.x);
+	float AbsorptionDensity : packoffset(c4.y);
+	float ScatteringCoeff : packoffset(c4.z);
+	float SpecularIntensity : packoffset(c4.w);  // Overall specular intensity multiplier
+	
+	// Sun specular overrides
+	float SunSpecularPower : packoffset(c5.x);
+	float SunSpecularMagnitude : packoffset(c5.y);
+	float SunSparklePower : packoffset(c5.z);
+	float SunSparkleMagnitude : packoffset(c5.w);
+	float SpecularRadius : packoffset(c6.x);
+	float SpecularBrightness : packoffset(c6.y);
+	
+	// Fog overrides
+	float AboveWaterFogDistNear : packoffset(c6.z);
+	float AboveWaterFogDistFar : packoffset(c6.w);
+	float AboveWaterFogAmount : packoffset(c7.x);
+	float UnderwaterFogDistNear : packoffset(c7.y);
+	float UnderwaterFogDistFar : packoffset(c7.z);
+	float UnderwaterFogAmount : packoffset(c7.w);
+	
+	// Depth properties
+	float DepthReflections : packoffset(c8.x);
+	float DepthRefractions : packoffset(c8.y);
+	float DepthNormals : packoffset(c8.z);
+	float DepthSpecularLighting : packoffset(c8.w);
+	
+	float WavePrimaryContribution : packoffset(c9.x);
+	float WaveSecondaryContribution : packoffset(c9.y);
+	float WaveDetailContribution : packoffset(c9.z);
+	float WavePrimarySpeed : packoffset(c9.w);
+	float WaveSecondarySpeed : packoffset(c10.x);
+	float WaveDetailSpeed : packoffset(c10.y);
+	float WaveDirectionBlend : packoffset(c10.z);
+	float TriVisualizerEnabled : packoffset(c10.w);
 	
 	// Wave 1 (Primary) - Large swells
-	float Wave1Amplitude : packoffset(c7.x);
-	float Wave1Wavelength : packoffset(c7.y);
-	float Wave1Steepness : packoffset(c7.z);
-	float Wave1AngleOffset : packoffset(c7.w);
+	float Wave1Amplitude : packoffset(c11.x);
+	float Wave1Wavelength : packoffset(c11.y);
+	float Wave1Steepness : packoffset(c11.z);
+	float Wave1AngleOffset : packoffset(c11.w);
 	
 	// Wave 2 (Secondary) - Medium waves
-	float Wave2Amplitude : packoffset(c8.x);
-	float Wave2Wavelength : packoffset(c8.y);
-	float Wave2Steepness : packoffset(c8.z);
-	float Wave2AngleOffset : packoffset(c8.w);
+	float Wave2Amplitude : packoffset(c12.x);
+	float Wave2Wavelength : packoffset(c12.y);
+	float Wave2Steepness : packoffset(c12.z);
+	float Wave2AngleOffset : packoffset(c12.w);
 	
 	// Wave 3 (Detail) - Small waves
-	float Wave3Amplitude : packoffset(c9.x);
-	float Wave3Wavelength : packoffset(c9.y);
-	float Wave3Steepness : packoffset(c9.z);
-	float Wave3AngleOffset : packoffset(c9.w);
+	float Wave3Amplitude : packoffset(c13.x);
+	float Wave3Wavelength : packoffset(c13.y);
+	float Wave3Steepness : packoffset(c13.z);
+	float Wave3AngleOffset : packoffset(c13.w);
 	
 	// Wave 4 (Fine Ripple 1) - Sub-meter detail
-	float Wave4Amplitude : packoffset(c10.x);
-	float Wave4Wavelength : packoffset(c10.y);
-	float Wave4Steepness : packoffset(c10.z);
-	float Wave4AngleOffset : packoffset(c10.w);
+	float Wave4Amplitude : packoffset(c14.x);
+	float Wave4Wavelength : packoffset(c14.y);
+	float Wave4Steepness : packoffset(c14.z);
+	float Wave4AngleOffset : packoffset(c14.w);
 	
 	// Wave 5 (Fine Ripple 2) - Micro ripples
-	float Wave5Amplitude : packoffset(c11.x);
-	float Wave5Wavelength : packoffset(c11.y);
-	float Wave5Steepness : packoffset(c11.z);
-	float Wave5AngleOffset : packoffset(c11.w);
+	float Wave5Amplitude : packoffset(c15.x);
+	float Wave5Wavelength : packoffset(c15.y);
+	float Wave5Steepness : packoffset(c15.z);
+	float Wave5AngleOffset : packoffset(c15.w);
 	
 	// Wave 6 (Fine Ripple 3) - Tiny surface detail
-	float Wave6Amplitude : packoffset(c12.x);
-	float Wave6Wavelength : packoffset(c12.y);
-	float Wave6Steepness : packoffset(c12.z);
-	float Wave6AngleOffset : packoffset(c12.w);
+	float Wave6Amplitude : packoffset(c16.x);
+	float Wave6Wavelength : packoffset(c16.y);
+	float Wave6Steepness : packoffset(c16.z);
+	float Wave6AngleOffset : packoffset(c16.w);
 	
 	// Tessellation control - when enabled, VS skips wave displacement (DS handles it)
-	float TessellationEnabled : packoffset(c13.x);
-	float TessPadding1 : packoffset(c13.y);
-	float TessPadding2 : packoffset(c13.z);
-	float TessPadding3 : packoffset(c13.w);
+	float TessellationEnabled : packoffset(c17.x);
+	float TessPadding1 : packoffset(c17.y);
+	float TessPadding2 : packoffset(c17.z);
+	float TessPadding3 : packoffset(c17.w);
 }
 
 cbuffer UnifiedWaterPerTile : register(b8)
