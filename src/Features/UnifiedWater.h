@@ -228,9 +228,9 @@ struct UnifiedWater : OverlayFeature
 		
 		// Tessellation control
 		float TessellationEnabled;
-		float TessPadding1;
-		float TessPadding2;
-		float TessPadding3;
+		float DisplacementMeshCenterX;
+		float DisplacementMeshCenterY;
+		float DisplacementPadding;
 	};
 #pragma warning(pop)
 

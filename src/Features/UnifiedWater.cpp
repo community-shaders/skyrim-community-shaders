@@ -926,17 +926,6 @@ void UnifiedWater::BSWaterShader_SetupGeometry::thunk(RE::BSShader* waterShader,
 		bool tessellationEnabled = singleton.settings.EnableTessellation && 
 		                           singleton.AreTessellationShadersReady();
 		perFrameData.TessellationEnabled = tessellationEnabled ? 1.0f : 0.0f;
-		
-		// Pass displacement mesh center position (player position) for wave calculations
-		// This is needed because the displacement water mesh follows the player, not the camera
-		if (singleton.gDisplacementMeshPos) {
-			perFrameData.DisplacementMeshCenterX = singleton.gDisplacementMeshPos->x;
-			perFrameData.DisplacementMeshCenterY = singleton.gDisplacementMeshPos->y;
-		} else {
-			perFrameData.DisplacementMeshCenterX = 0.0f;
-			perFrameData.DisplacementMeshCenterY = 0.0f;
-		}
-		perFrameData.DisplacementPadding = 0.0f;
 
 		const auto* state = globals::state;
 		const std::uint32_t frameIndex = state ? state->frameCount : singleton.lastTimingFrameIndex;
