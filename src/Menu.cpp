@@ -683,6 +683,13 @@ void Menu::ProcessInputEventQueue()
 				bool handled = false;
 				for (auto& h : hotkeyActions) {
 					if (*(h.settingFlag)) {
+						// During first-time setup, don't capture Enter or Escape as hotkeys
+						// These keys are reserved for closing the dialog
+						if (HomePageRenderer::ShouldShowFirstTimeSetup() && (key == VK_RETURN || key == VK_ESCAPE)) {
+							*(h.settingFlag) = false;  // Cancel hotkey capture mode
+							handled = true;
+							break;
+						}
 						h.action(key);
 						handled = true;
 						break;
