@@ -617,7 +617,13 @@ void UnifiedWater::TESWaterSystem_InitializeWater_SetWaterShaderMaterialParams::
 
 void UnifiedWater::TESWaterSystem_InitializeWater::thunk(RE::TESWaterSystem* waterSystem, RE::BSTriShape* waterTri, RE::TESWaterForm* form, float waterHeight, void* unk4, bool noDisplacement, bool isProcedural)
 {
-	func(waterSystem, waterTri, form, waterHeight, unk4, noDisplacement, isProcedural);
+	(void)noDisplacement;  // Intentionally unused - we force true below
+	// Force noDisplacement=true to prevent the engine from creating a separate
+	// displacement mesh (WADING geometry) near the player. This eliminates the
+	// double-rendering issue where two water meshes would show Gerstner waves
+	// slightly out of sync. The wading ripple effects are still applied by
+	// sampling DisplacementTex on the regular water geometry using gDisplacementMeshPos.
+	func(waterSystem, waterTri, form, waterHeight, unk4, true, isProcedural);
 }
 
 int32_t UnifiedWater::BSWaterShaderMaterial_ComputeCRC32::thunk(RE::BSWaterShaderMaterial* material, uint32_t srcHash)
