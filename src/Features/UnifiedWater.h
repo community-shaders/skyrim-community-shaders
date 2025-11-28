@@ -3,7 +3,9 @@
 #include "UnifiedWater/Flowmap.h"
 #include "UnifiedWater/WaterCache.h"
 #include <array>
+#include <atomic>
 #include <cstdint>
+#include <future>
 #include <limits>
 #include <unordered_map>
 #include <unordered_set>
@@ -36,6 +38,7 @@ struct UnifiedWater : OverlayFeature
 	{
 		bool UseOptimisedMeshes = false;
 		bool ShowTriVisualizer = false;
+		bool TriVisualizerRawMode = false;
 
 		bool EnableTessellation = true;
 		float TessellationMinDistance = 128.0f;
@@ -257,6 +260,14 @@ struct UnifiedWater : OverlayFeature
 	winrt::com_ptr<ID3D11HullShader> waterHullShader;
 	winrt::com_ptr<ID3D11DomainShader> waterDomainShader;
 	winrt::com_ptr<ID3D11GeometryShader> waterGeometryShader;
+	
+	// Async shader compilation state
+	std::atomic<bool> tessellationShadersReady{ false };
+	std::atomic<bool> tessellationShadersCompiling{ false };
+	std::future<void> shaderCompileFuture;
+	
+	void CompileTessellationShadersAsync();
+	bool AreTessellationShadersReady() const { return tessellationShadersReady.load(); }
 	
 	float lastGameTimeHours = 0.0f;
 	float lastRealTimeSeconds = 0.0f;

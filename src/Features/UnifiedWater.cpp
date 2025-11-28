@@ -89,6 +89,15 @@ void UnifiedWater::DrawSettings()
 			if (auto _tt = Util::HoverTooltipWrapper()) {
 				ImGui::Text("Hardware tessellation for dynamic mesh density based on distance.");
 			}
+			
+			// Show tessellation shader compilation status
+			if (tessellationShadersCompiling.load()) {
+				ImGui::SameLine();
+				ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.0f, 1.0f), "(Compiling shaders...)");
+			} else if (!AreTessellationShadersReady() && settings.EnableTessellation) {
+				ImGui::SameLine();
+				ImGui::TextColored(ImVec4(1.0f, 0.3f, 0.3f, 1.0f), "(Shader compilation failed)");
+			}
 
 			if (settings.EnableTessellation) {
 				ImGui::Indent();
@@ -233,6 +242,13 @@ void UnifiedWater::DrawSettings()
 
 		if (ImGui::BeginTabItem("Debug")) {
 			ImGui::Checkbox("Show Tri Visualizer", &settings.ShowTriVisualizer);
+			if (settings.ShowTriVisualizer) {
+				ImGui::SameLine();
+				ImGui::Checkbox("Raw Barycentrics", &settings.TriVisualizerRawMode);
+				if (auto _tt = Util::HoverTooltipWrapper()) {
+					ImGui::Text("Shows raw barycentric coordinates as RGB.\nRed/Green/Blue at vertices = GS working.\nGray/Purple everywhere = GS not running.");
+				}
+			}
 
 			if (ImGui::Button("Regenerate Flowmap") && flowmap) {
 				if (flowmap->RegenerateAndLoadFlowmap(waterCache))
@@ -445,42 +461,76 @@ void UnifiedWater::SetupResources()
 	perTile = new ConstantBuffer(ConstantBufferDesc<PerTile>());
 	tessellationParams = new ConstantBuffer(ConstantBufferDesc<TessellationParams>());
 
-	// Compile tessellation shaders
-	// Using SPECULAR + FLOWMAP + BLEND_NORMALS as the common water permutation
-	// NUM_SPECULAR_LIGHTS must match what the game's VS uses for correct VS_OUTPUT structure
-	std::vector<std::pair<const char*, const char*>> tessDefines = {
-		{ "HSHADER", "" },
-		{ "UNIFIED_WATER", "" },
-		{ "SPECULAR", "" },
-		{ "NUM_SPECULAR_LIGHTS", "0" },
-		{ "FLOWMAP", "" },
-		{ "BLEND_NORMALS", "" },
-		{ "NORMAL_TEXCOORD", "" }
-	};
+	// Start async tessellation shader compilation
+	CompileTessellationShadersAsync();
+}
 
-	if (auto* hullShader = static_cast<ID3D11HullShader*>(Util::CompileShader(L"Data\\Shaders\\Water.hlsl", tessDefines, "hs_5_0"))) {
-		waterHullShader.attach(hullShader);
-	} else {
-		logger::error("[Unified Water] Failed to compile hull shader");
+void UnifiedWater::CompileTessellationShadersAsync()
+{
+	// Don't start if already compiling or ready
+	if (tessellationShadersCompiling.load() || tessellationShadersReady.load()) {
+		return;
 	}
+	
+	tessellationShadersCompiling.store(true);
+	logger::info("[Unified Water] Starting async tessellation shader compilation");
+	
+	// Launch compilation on a separate thread
+	shaderCompileFuture = std::async(std::launch::async, [this]() {
+		// Compile tessellation shaders
+		// Using SPECULAR + FLOWMAP + BLEND_NORMALS as the common water permutation
+		// NUM_SPECULAR_LIGHTS must match what the game's VS uses for correct VS_OUTPUT structure
+		std::vector<std::pair<const char*, const char*>> tessDefines = {
+			{ "HSHADER", "" },
+			{ "UNIFIED_WATER", "" },
+			{ "SPECULAR", "" },
+			{ "NUM_SPECULAR_LIGHTS", "0" },
+			{ "FLOWMAP", "" },
+			{ "BLEND_NORMALS", "" },
+			{ "NORMAL_TEXCOORD", "" }
+		};
+		
+		bool allSuccess = true;
 
-	// Domain shader with same defines but DSHADER instead of HSHADER
-	tessDefines[0] = { "DSHADER", "" };
+		if (auto* hullShader = static_cast<ID3D11HullShader*>(Util::CompileShader(L"Data\\Shaders\\Water.hlsl", tessDefines, "hs_5_0"))) {
+			waterHullShader.attach(hullShader);
+			logger::debug("[Unified Water] Hull shader compiled successfully");
+		} else {
+			logger::error("[Unified Water] Failed to compile hull shader");
+			allSuccess = false;
+		}
 
-	if (auto* domainShader = static_cast<ID3D11DomainShader*>(Util::CompileShader(L"Data\\Shaders\\Water.hlsl", tessDefines, "ds_5_0"))) {
-		waterDomainShader.attach(domainShader);
-	} else {
-		logger::error("[Unified Water] Failed to compile domain shader");
-	}
+		// Domain shader with same defines but DSHADER instead of HSHADER
+		tessDefines[0] = { "DSHADER", "" };
 
-	// Geometry shader for proper per-triangle barycentric coordinates (needed for tri visualizer)
-	tessDefines[0] = { "GSHADER", "" };
+		if (auto* domainShader = static_cast<ID3D11DomainShader*>(Util::CompileShader(L"Data\\Shaders\\Water.hlsl", tessDefines, "ds_5_0"))) {
+			waterDomainShader.attach(domainShader);
+			logger::debug("[Unified Water] Domain shader compiled successfully");
+		} else {
+			logger::error("[Unified Water] Failed to compile domain shader");
+			allSuccess = false;
+		}
 
-	if (auto* geometryShader = static_cast<ID3D11GeometryShader*>(Util::CompileShader(L"Data\\Shaders\\Water.hlsl", tessDefines, "gs_5_0"))) {
-		waterGeometryShader.attach(geometryShader);
-	} else {
-		logger::error("[Unified Water] Failed to compile geometry shader");
-	}
+		// Geometry shader for proper per-triangle barycentric coordinates (needed for tri visualizer)
+		tessDefines[0] = { "GSHADER", "" };
+
+		if (auto* geometryShader = static_cast<ID3D11GeometryShader*>(Util::CompileShader(L"Data\\Shaders\\Water.hlsl", tessDefines, "gs_5_0"))) {
+			waterGeometryShader.attach(geometryShader);
+			logger::debug("[Unified Water] Geometry shader compiled successfully");
+		} else {
+			logger::error("[Unified Water] Failed to compile geometry shader");
+			allSuccess = false;
+		}
+		
+		tessellationShadersCompiling.store(false);
+		tessellationShadersReady.store(allSuccess);
+		
+		if (allSuccess) {
+			logger::info("[Unified Water] Tessellation shaders compiled successfully (async)");
+		} else {
+			logger::warn("[Unified Water] Some tessellation shaders failed to compile");
+		}
+	});
 }
 
 void UnifiedWater::Reset()
@@ -834,7 +884,9 @@ void UnifiedWater::BSWaterShader_SetupGeometry::thunk(RE::BSShader* waterShader,
 		perFrameData.WaveSecondarySpeed = singleton.settings.WaveSecondarySpeed;
 		perFrameData.WaveDetailSpeed = singleton.settings.WaveDetailSpeed;
 		perFrameData.WaveDirectionBlend = singleton.settings.WaveDirectionBlend;
-		perFrameData.TriVisualizerEnabled = singleton.settings.ShowTriVisualizer ? 1.0f : 0.0f;
+		// TriVisualizerEnabled: 0=off, 1=wireframe, 2=raw barycentrics debug
+		perFrameData.TriVisualizerEnabled = singleton.settings.ShowTriVisualizer ? 
+			(singleton.settings.TriVisualizerRawMode ? 2.0f : 1.0f) : 0.0f;
 		
 		// Wave parameters (Period removed - speed now calculated from wavelength via physics)
 		perFrameData.Wave1Amplitude = singleton.settings.Wave1Amplitude;
@@ -870,14 +922,21 @@ void UnifiedWater::BSWaterShader_SetupGeometry::thunk(RE::BSShader* waterShader,
 		perFrameData.Wave6AngleOffset = singleton.settings.Wave6AngleOffset * 0.0174532925f;
 
 		// Set tessellation enabled flag - tells VS to skip wave displacement so DS can handle it
+		// Use AreTessellationShadersReady() to check async compilation status
 		bool tessellationEnabled = singleton.settings.EnableTessellation && 
-		                           singleton.waterHullShader && 
-		                           singleton.waterDomainShader &&
-		                           singleton.waterGeometryShader;
+		                           singleton.AreTessellationShadersReady();
 		perFrameData.TessellationEnabled = tessellationEnabled ? 1.0f : 0.0f;
-		perFrameData.TessPadding1 = 0.0f;
-		perFrameData.TessPadding2 = 0.0f;
-		perFrameData.TessPadding3 = 0.0f;
+		
+		// Pass displacement mesh center position (player position) for wave calculations
+		// This is needed because the displacement water mesh follows the player, not the camera
+		if (singleton.gDisplacementMeshPos) {
+			perFrameData.DisplacementMeshCenterX = singleton.gDisplacementMeshPos->x;
+			perFrameData.DisplacementMeshCenterY = singleton.gDisplacementMeshPos->y;
+		} else {
+			perFrameData.DisplacementMeshCenterX = 0.0f;
+			perFrameData.DisplacementMeshCenterY = 0.0f;
+		}
+		perFrameData.DisplacementPadding = 0.0f;
 
 		const auto* state = globals::state;
 		const std::uint32_t frameIndex = state ? state->frameCount : singleton.lastTimingFrameIndex;
@@ -1045,11 +1104,9 @@ void UnifiedWater::BSWaterShader_SetupGeometry::thunk(RE::BSShader* waterShader,
 	// Our HS/DS are compiled with SPECULAR + FLOWMAP + BLEND_NORMALS defines
 	bool techniqueSupportsTessel = (technique < 8);
 
-	// Tessellation setup
+	// Tessellation setup - use AreTessellationShadersReady() to check async compilation status
 	bool tessellationEnabled = singleton.settings.EnableTessellation && 
-	                           singleton.waterHullShader && 
-	                           singleton.waterDomainShader &&
-	                           singleton.waterGeometryShader &&
+	                           singleton.AreTessellationShadersReady() &&
 	                           techniqueSupportsTessel;
 
 	auto context = globals::d3d::context;
@@ -1082,6 +1139,12 @@ void UnifiedWater::BSWaterShader_SetupGeometry::thunk(RE::BSShader* waterShader,
 	// CRITICAL: Call original SetupGeometry FIRST to set up VS, PS, textures, etc.
 	// THEN apply tessellation state after, so it's not overwritten by the original
 	func(waterShader, pass);
+
+	// Track if we need to bind just the geometry shader (for tri visualizer without tessellation)
+	bool geometryShaderOnlyForVisualizer = !tessellationEnabled && 
+	                                        singleton.settings.ShowTriVisualizer && 
+	                                        singleton.AreTessellationShadersReady() &&
+	                                        techniqueSupportsTessel;
 
 	if (tessellationEnabled) {
 		if (shouldLog) {
@@ -1194,6 +1257,17 @@ void UnifiedWater::BSWaterShader_SetupGeometry::thunk(RE::BSShader* waterShader,
 
 		tessellationActiveForPass = true;
 		loggedTessSetup = true;
+	} else if (geometryShaderOnlyForVisualizer) {
+		// Bind only the geometry shader for tri visualization without tessellation
+		// GS assigns proper per-triangle barycentric coordinates needed for wireframe rendering
+		context->GSSetShader(singleton.waterGeometryShader.get(), nullptr, 0);
+		tessellationActiveForPass = true;  // Reuse flag to trigger cleanup in RestoreGeometry
+		
+		static bool loggedGSOnly = false;
+		if (!loggedGSOnly) {
+			logger::info("[Unified Water] Tri visualizer active - binding GS only (no tessellation): {:p}", (void*)singleton.waterGeometryShader.get());
+			loggedGSOnly = true;
+		}
 	} else if (!loggedTessSetup && singleton.settings.EnableTessellation) {
 		logger::warn("[Unified Water] Tessellation enabled in settings but shaders missing - HS:{:p} DS:{:p} GS:{:p}",
 			(void*)singleton.waterHullShader.get(), (void*)singleton.waterDomainShader.get(), (void*)singleton.waterGeometryShader.get());

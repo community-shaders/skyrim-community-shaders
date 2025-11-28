@@ -318,7 +318,7 @@ VS_OUTPUT main(VS_INPUT input)
 	worldPos = mul(World[eyeIndex], inputPosition);
 	worldViewPos = mul(WorldViewProj[eyeIndex], inputPosition);
 #endif
-// #endif
+
 #if defined(UNIFIED_WATER)
 	// Don't modify depth with wave displacement - use true projected depth
 	vsout.HPosition = worldViewPos;
@@ -2066,38 +2066,43 @@ PS_OUTPUT main(PS_INPUT input)
 	if (TriVisualizerEnabled > 0.5f) {
 		float3 baryCoords = input.Barycentric;
 		
-		float3 baryDeriv = fwidth(baryCoords);
-		
-		bool tessellationActive = any(baryDeriv > 1e-5.xxx);
-		
-		if (tessellationActive) {
-			float3 edgeDist = baryCoords / max(baryDeriv, 1e-6.xxx);
-			float minEdgeDist = min(edgeDist.x, min(edgeDist.y, edgeDist.z));
 			
-			float wireThickness = 1.2f;
-			float wireSmooth = 0.8f;
-			float wireHighlight = 1.0f - smoothstep(wireThickness - wireSmooth, wireThickness + wireSmooth, minEdgeDist);
-			
-			float vertexThickness = 3.5f;
-			float vertexSmooth = 1.5f;
-			float3 vertexDist = (1.0f - baryCoords) / max(baryDeriv, 1e-6.xxx);
 			float minVertDist = min(vertexDist.x, min(vertexDist.y, vertexDist.z));
-			float vertexHighlight = 1.0f - smoothstep(vertexThickness - vertexSmooth, vertexThickness + vertexSmooth, minVertDist);
-			
-			float3 wireColor = float3(0.95f, 0.45f, 0.15f);
-			float3 vertexColor = float3(0.15f, 0.95f, 0.35f);
-			
-			finalColor = lerp(finalColor, wireColor, wireHighlight);
-			finalColor = lerp(finalColor, vertexColor, vertexHighlight);
+		// Each vertex should be a pure color: Red (1,0,0), Green (0,1,0), Blue (0,0,1)
+		// Interior should blend smoothly between these colors
+		// If you see gray/purple everywhere, the GS isn't assigning proper barycentrics
+		if (TriVisualizerEnabled > 1.5f) {
+			// Mode 2: Raw barycentric visualization (debug)
+			finalColor = baryCoords;
 		} else {
-			float2 worldUV = input.WPosition.xy * 0.01f;
 			float2 gridFrac = frac(worldUV);
-			float2 gridDist = min(gridFrac, 1.0f - gridFrac);
-			float2 gridFw = max(fwidth(worldUV), 1e-4.xx);
-			float gridLine = 1.0f - smoothstep(gridFw.x * 0.5f, gridFw.x * 1.5f, min(gridDist.x, gridDist.y));
+			// Mode 1: Wireframe visualization
+			float3 baryDeriv = fwidth(baryCoords);
 			
-			float3 fallbackColor = float3(0.8f, 0.2f, 0.2f);
+			bool geometryShaderActive = any(baryDeriv > 1e-5.xxx);
+			
 			finalColor = lerp(finalColor, fallbackColor, gridLine * 0.8f);
+			if (geometryShaderActive) {
+				float3 edgeDist = baryCoords / max(baryDeriv, 1e-6.xxx);
+				float minEdgeDist = min(edgeDist.x, min(edgeDist.y, edgeDist.z));
+				
+				float wireThickness = 1.2f;
+				float wireSmooth = 0.8f;
+				float wireHighlight = 1.0f - smoothstep(wireThickness - wireSmooth, wireThickness + wireSmooth, minEdgeDist);
+				float minVertDist = min(vertexDist.x, min(vertexDist.y, vertexDist.z));
+				float vertexHighlight = 1.0f - smoothstep(vertexThickness - vertexSmooth, vertexThickness + vertexSmooth, minVertDist);
+				
+				float3 wireColor = float3(0.95f, 0.45f, 0.15f);
+				float3 vertexColor = float3(0.15f, 0.95f, 0.35f);
+				
+				finalColor = lerp(finalColor, wireColor, wireHighlight);
+				float2 gridDist = min(gridFrac, 1.0f - gridFrac);
+				float2 gridFw = max(fwidth(worldUV), 1e-4.xx);
+				float gridLine = 1.0f - smoothstep(gridFw.x * 0.5f, gridFw.x * 1.5f, min(gridDist.x, gridDist.y));
+				
+				float3 fallbackColor = float3(0.8f, 0.2f, 0.2f);
+				finalColor = lerp(finalColor, fallbackColor, gridLine * 0.8f);
+			}
 		}
 	}
 	
