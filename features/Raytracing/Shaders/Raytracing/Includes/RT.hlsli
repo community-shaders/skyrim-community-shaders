@@ -3,7 +3,6 @@
 
 #include "Raytracing/Includes/RT/IndirectPayload.hlsli"
 #include "Raytracing/Includes/RT/ShadowPayload.hlsli"
-#include "Raytracing/Includes/RT/SpecularPayload.hlsli"
 #include "Raytracing/Includes/RT/IrradianceCache.hlsli"
 
 #endif

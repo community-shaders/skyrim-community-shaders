@@ -11,6 +11,8 @@
 #include "LightLimitFix.h"
 #include <DirectXTex.h>
 #include <shared_mutex>
+#include <EASTL/deque.h>
+
 #include "Features/Raytracing/IrradianceCache.h"
 #include "Features/Raytracing/Allocator.h"
 #include "Features/Raytracing/HeapManager.h"
@@ -44,12 +46,10 @@
 struct Raytracing : public Feature
 {
 	static constexpr uint MAX_MESHES = 2048;
-	static constexpr uint MAX_INSTANCES = 4096;
+	static constexpr uint MAX_SUBMESHES = 2048;
+	static constexpr uint MAX_INSTANCES = 2048;
 	
 	static constexpr uint MAX_LIGHTS = 255;
-	static constexpr uint MAX_IRRADIANCE_ENTRIES = 256 * 256 * 256;
-
-	static constexpr uint TLAS_BUFFER_SIZE_MULT = 2u;
 
 	static constexpr uint SKY_CUBEMAP_SIZE = 256;
 
@@ -85,10 +85,10 @@ struct Raytracing : public Feature
 				Lights,
 				Instances,
 				Vertices,
-				Triangles = Vertices + MAX_MESHES,
-				DiffuseTextures = Triangles + MAX_MESHES,
-				GlowTextures = DiffuseTextures + MAX_MESHES,
-				NumDescriptors = GlowTextures + MAX_MESHES,
+				Triangles = Vertices + MAX_SUBMESHES,
+				DiffuseTextures = Triangles + MAX_SUBMESHES,
+				GlowTextures = DiffuseTextures + MAX_SUBMESHES,
+				NumDescriptors = GlowTextures + MAX_SUBMESHES,
 				None
 			};
 		};
@@ -174,13 +174,13 @@ struct Raytracing : public Feature
 	void SkyCubeToHemi();
 	void CheckResourcesSide(int side);
 
-	void BeginGeometry(RE::BSFadeNode* pFadeNode, RE::NiStream& a_stream);
-	void AddTriShape(RE::BSTriShape* pTriShape, RE::NiStream& a_stream);
+	void BeginGeometry(RE::NiNode* pFadeNode, RE::NiStream& a_stream);
+	void AddTriShape(RE::BSTriShape* pTriShape, RE::NiStream* a_stream = nullptr);
 	void CommitGeometry(RE::NiStream* pNiStream);
 	void RegisterClone(RE::BSFadeNode* pFadeNode, RE::NiObject* pNiObject);
 
 	bool ValidTriShape(RE::NiNode* pNiNode);
-	void UpdateInstance(RE::BSFadeNode* pTriShape);
+	void AddUpdateInstance(RE::BSGeometry* pGeometry);
 	void AddUpdateAllInstances();
 
 	eastl::vector<size_t> GatherInstanceLights(RE::BSFadeNode* pBSFadeNode);
@@ -195,6 +195,11 @@ struct Raytracing : public Feature
 
 	void CopyDepth();
 	void ConvertNormalGlossiness();
+
+	void ReleaseTempGPUData();
+
+	void BuildTLAS();
+	void RebuildTLAS(ID3D12GraphicsCommandList4* pCommandList, size_t numDescs, D3D12_GPU_VIRTUAL_ADDRESS instanceDescs);
 
 #ifdef DLSS_RR
 	void InitRR();
@@ -407,6 +412,7 @@ struct Raytracing : public Feature
 	{
 		eastl::vector<MeshData> meshes;
 		winrt::com_ptr<ID3D12Resource> blasBuffer = nullptr;
+		//RE::NiBound localBound;
 
 		bool HasFeature(RE::BSShaderMaterial::Feature feature)
 		{
@@ -430,21 +436,25 @@ struct Raytracing : public Feature
 	MeshData CreateTriShapeBuffers(RE::BSGraphics::TriShape* rendererData, const std::uint16_t& vertexCount, const std::uint16_t& triangleCount, const std::wstring& name);
 	void CreateTriShapeMaterials(MeshData& meshData, const RE::BSGeometry::GEOMETRY_RUNTIME_DATA& geometryRuntimeData, const char* name);
 
-	Allocator registers = Allocator(MAX_MESHES);
+	Allocator registers = Allocator(MAX_SUBMESHES);
 
 	// We'll group trishapes by their parent nodes, hopefully trishapes don't move on their own
 	eastl::unordered_map<eastl::string, GeometryData> geometry;
 	eastl::hash_set<eastl::string> pendingGeometry;
-	eastl::unordered_map<RE::BSFadeNode*, eastl::string> inputPaths;
+	eastl::unordered_map<RE::NiNode*, eastl::string> inputPaths;
+	eastl::string currentPath;
 
 	// Instance
 	struct InstanceData
 	{
+		uint lastUpdate;
 		eastl::string filename;
-		float4x4 transform;
+		DirectX::XMFLOAT3X4 transform;
 	};
 
 	eastl::unordered_map<RE::BSFadeNode*, InstanceData> instances;
+
+	void UpdateInstanceTransform(RE::BSFadeNode* pFadeNode, InstanceData& instanceData);
 
 	// Instance material
 	struct Material
@@ -488,7 +498,7 @@ struct Raytracing : public Feature
 
 	// GI
 	eastl::unique_ptr<DX12::StructuredBufferUpload<GIFrameData>> frameBuffer = nullptr;
-	GIFrameData frameBufferData = {};
+	eastl::unique_ptr<GIFrameData> frameBufferData = nullptr;
 
 	// Shadows
 	eastl::unique_ptr<DX12::StructuredBufferUpload<D3D12_RAYTRACING_INSTANCE_DESC>> blasShadowInstanceBuffer = nullptr;
@@ -497,7 +507,7 @@ struct Raytracing : public Feature
 	RE::BSShadowDirectionalLight* shadowLight;
 
 	eastl::unique_ptr<DX12::StructuredBufferUpload<ShadowsFrameData>> shadowsCB = nullptr;
-	ShadowsFrameData shadowsCBData = {};
+	eastl::unique_ptr<ShadowsFrameData> shadowsCBData = nullptr;
 
 	// D3D12
 	winrt::com_ptr<ID3D12Device5> d3d12Device = nullptr;
@@ -521,11 +531,16 @@ struct Raytracing : public Feature
 	eastl::unique_ptr<DX12::ResourceUpload> shadowSBTBuffer = nullptr;
 	eastl::unique_ptr<DX12::DescriptorHeap<ShadowsHeap::Slot, ShadowsHeap::Table>> shadowHeap = nullptr;
 
-	UINT64 fenceValue = 0;
+	uint64_t fenceValue = 0;
 
-	eastl::vector<winrt::com_ptr<ID3D12Resource>> asScratchBuffers;
-	eastl::vector<eastl::vector<D3D12_RAYTRACING_GEOMETRY_DESC>> rtGeometryDescs;
-	eastl::vector<eastl::unique_ptr<D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_DESC>> rtASDescs;
+	struct TempGPUData
+	{
+		//std::vector<D3D12_RAYTRACING_GEOMETRY_DESC> geometryDescs;
+		winrt::com_ptr<ID3D12Resource> scratchBuffers;
+		uint64_t fenceValue;
+	};
+
+	eastl::deque<TempGPUData> tempGPUData;
 
 	// D3D11
 	winrt::com_ptr<ID3D11Device5> d3d11Device = nullptr;
@@ -626,6 +641,38 @@ struct Raytracing : public Feature
 			break;
 		}
 	}
+
+	template <typename T>
+	static inline auto GetFlags(uint32_t value)
+	{
+		const auto& entries = magic_enum::enum_entries<T>();
+
+		std::string flags;
+
+		for (const auto& [flag, name] : entries) {
+			if ((value & static_cast<uint32_t>(flag)) != 0) {
+				flags += fmt::format("{} ", name);
+			}
+		}
+
+		return flags;
+	};
+
+	template <typename T>
+	static inline auto GetFlags(uint64_t value)
+	{
+		const auto& entries = magic_enum::enum_entries<T>();
+
+		std::string flags;
+
+		for (const auto& [flag, name] : entries) {
+			if ((value & static_cast<uint64_t>(flag)) != 0) {
+				flags += fmt::format("{} ", name);
+			}
+		}
+
+		return flags;
+	};
 
 	static inline bool EndsWith(const char* str, const char* suffix)
 	{
@@ -873,6 +920,27 @@ struct Raytracing : public Feature
 		{
 			static bool thunk(RE::NiStream* oThis)
 			{
+				logger::info("[RT] NiStream::LoadObject - Before - Path: {}", oThis->inputFilePath);
+
+				auto result = func(oThis);
+
+				auto& rt = globals::features::raytracing;
+				if (rt.Active()) {
+					rt.CommitGeometry(oThis);
+				}
+
+				logger::info("[RT] NiStream::LoadObject - After");
+				//logger::info("[RT] NiStream::LoadObject | After - Buffers: {}", currentBuffers.size());
+
+				return result;
+			}
+			static inline REL::Relocation<decltype(thunk)> func;
+		};
+
+		struct BSStream_LoadObject
+		{
+			static bool thunk(RE::BSStream* oThis)
+			{
 				//logger::info("[RT] NiStream::LoadObject - Before - Path: {}", oThis->inputFilePath);
 
 				auto result = func(oThis);
@@ -889,25 +957,33 @@ struct Raytracing : public Feature
 			}
 			static inline REL::Relocation<decltype(thunk)> func;
 		};
-
-		struct BSFadeNode_LoadBinary
+		
+		template <typename T>
+		requires std::is_base_of_v<RE::NiNode, T>
+		struct NiNode_LoadBinary
 		{
-			static void thunk(RE::BSFadeNode* oThis, RE::NiStream& a_stream)
+			static void thunk(T* oThis, RE::NiStream& a_stream)
 			{
-				//logger::info("[RT] BSFadeNode::LoadBinary - Path: {}, Self Pointer: [0x{:x}]", a_stream.inputFilePath, reinterpret_cast<uintptr_t>(oThis));
+				//auto name = oThis->GetRTTI()->GetName();
+				//logger::info("[RT] {}::LoadBinary - Path: {}, Self Pointer: [0x{:x}]", name, a_stream.inputFilePath, reinterpret_cast<uintptr_t>(oThis));
 
 				auto& rt = globals::features::raytracing;
 				rt.BeginGeometry(oThis, a_stream);
 
 				func(oThis, a_stream);
 
-				//logger::info("[RT] BSFadeNode::LoadBinary - Name: {}, Self Pointer: [0x{:x}]", oThis->name, reinterpret_cast<uintptr_t>(oThis));
+				/*const auto bsxFlags = oThis->GetExtraData<RE::BSXFlags>("BSX");
+
+				if (bsxFlags)
+					logger::info("[RT] BSFadeNode::LoadBinary | After - BSX Flags [0x{:x}]: {}", bsxFlags->value, GetFlags<RE::BSXFlags::Flag>(static_cast<uint32_t>(bsxFlags->value)));*/
+
+				//logger::info("[RT] {}::LoadBinary - Name: {}, Self Pointer: [0x{:x}]", name, oThis->name, reinterpret_cast<uintptr_t>(oThis));
 
 				if (rt.Active()) {
 					auto& children = oThis->GetChildren();
 
 					for (auto it = children.begin(); it != children.end(); it++) {
-						logger::info("[RT] BSFadeNode::LoadBinary - Child: {}", it->get()->name);
+						logger::info("[RT] NiNode::LoadBinary - Child: {}", it->get()->name);
 					}
 
 					/*RE::BSVisit::TraverseScenegraphGeometries(oThis, [&](RE::BSGeometry* geometry) -> RE::BSVisit::BSVisitControl {
@@ -941,7 +1017,7 @@ struct Raytracing : public Feature
 
 				if (rt.Active()) 
 				{
-					rt.AddTriShape(oThis, a_stream);
+					//rt.AddTriShape(oThis, a_stream);
 				}
 			}
 			static inline REL::Relocation<decltype(thunk)> func;
@@ -955,6 +1031,10 @@ struct Raytracing : public Feature
 
 				func(oThis, a_stream);
 
+				const auto bsxFlags = oThis->GetExtraData<RE::BSXFlags>("BSX");
+
+				if (bsxFlags)
+					logger::info("[RT] BSTriShape::LinkObject | After - BSX Flags [0x{:x}]: {}", bsxFlags->value, GetFlags<RE::BSXFlags::Flag>(static_cast<uint32_t>(bsxFlags->value)));
 				//logger::info("[RT] BSTriShape::LinkObject | Before - Parent [0x{:x}]: {}, Index: {}", reinterpret_cast<uintptr_t>(oThis->parent), oThis->parent->name, oThis->parentIndex);
 			}
 			static inline REL::Relocation<decltype(thunk)> func;
@@ -990,14 +1070,19 @@ struct Raytracing : public Feature
 
 		struct BSLightingShaderProperty_SetupGeometry
 		{
-			static void thunk(RE::BSLightingShaderProperty* oThis, RE::BSGeometry* pGeometry, RE::NiStream& a_stream)
+			static void thunk(RE::BSLightingShaderProperty* oThis, RE::BSGeometry* pGeometry)
 			{
-				func(oThis, pGeometry, a_stream);
+				//logger::info("[RT] BSLightingShaderProperty::SetupGeometry | Before - Geometry: {}, Flags: {}, Type: {}", pGeometry->name, GetFlags<RE::BSLightingShaderProperty::EShaderPropertyFlag>(oThis->flags.underlying()), magic_enum::enum_name(pGeometry->GetType().get()));
 
-				auto& rtgi = globals::features::raytracing;
+				func(oThis, pGeometry);
 
-				if (rtgi.Active()) {
-					//rtgi.AddInstance(netimmerse_cast<RE::BSTriShape*>(pGeometry));
+				//logger::info("[RT] BSLightingShaderProperty::SetupGeometry | After");
+
+				auto& rt = globals::features::raytracing;
+
+				if (rt.Active()) {
+					if (pGeometry->GetType().get() == RE::BSGeometry::Type::kTriShape)
+						rt.AddTriShape((RE::BSTriShape*)pGeometry);
 				}
 			}
 			static inline REL::Relocation<decltype(thunk)> func;
@@ -1286,24 +1371,32 @@ struct Raytracing : public Feature
 				stl::write_vfunc<0x34, BSTriShape_OnVisible>(RE::VTABLE_BSTriShape[0]);
 			}
 
+			stl::write_vfunc<0x18, NiNode_LoadBinary<RE::BSFadeNode>>(RE::VTABLE_BSFadeNode[0]);
+			stl::write_vfunc<0x18, NiNode_LoadBinary<RE::BSMultiBoundNode>>(RE::VTABLE_BSMultiBoundNode[0]);
+			//stl::write_vfunc<0x18, NiNode_LoadBinary<RE::BSNiNode>>(RE::VTABLE_BSNiNode[0]);
+			//stl::write_vfunc<0x18, NiNode_LoadBinary<RE::BSPortalSharedNode>>(RE::VTABLE_BSPortalSharedNode[0]);
+			// 
+			//stl::write_vfunc<0x18, NiNode_LoadBinary<RE::NiNode>>(RE::VTABLE_NiNode[0]);
+
 			stl::write_vfunc<0x18, BSTriShape_LoadBinary>(RE::VTABLE_BSTriShape[0]);
-			stl::write_vfunc<0x18, BSFadeNode_LoadBinary>(RE::VTABLE_BSFadeNode[0]);
 			stl::write_vfunc<0x18, NiSkinPartition_LoadBinary>(RE::VTABLE_NiSkinPartition[0]);
 			stl::write_vfunc<0x18, BSGeometry_LoadBinary>(RE::VTABLE_BSGeometry[0]);
 
 			stl::write_vfunc<0x17, BSFadeNode_CreateClone>(RE::VTABLE_BSFadeNode[0]);
 
-			//stl::write_vfunc<0x19, BSTriShape_LinkObject>(RE::VTABLE_BSTriShape[0]);
+			stl::write_vfunc<0x19, BSTriShape_LinkObject>(RE::VTABLE_BSTriShape[0]);
 
 			//auto VTABLE_NiStream = REL::VariantID(286064, 237126, 0x17ef860);
 			//stl::write_vfunc<0x15, NiStream_LoadObject>(VTABLE_NiStream);
 
 			/*stl::write_vfunc<0x15, NiStream_LoadObject>(RE::VTABLE_NiStream[0]);
 			stl::write_vfunc<0x15, NiStream_LoadObject>(RE::VTABLE___DeepCopyStream[0]);
-			stl::write_vfunc<0x15, BSStream_LoadObject>(RE::VTABLE_BSStream[0]);*/
+			*/
 
 			logger::info("Base: [0x{:x}]", REL::Module::get().base());
 			stl::detour_thunk<NiStream_LoadObject>(REL::Offset(0xd21790).address());
+	
+			//stl::detour_thunk<BSStream_LoadObject>(REL::Offset(0xd1cb60).address());
 
 			stl::detour_thunk<Main_RenderShadowmasks>(REL::RelocationID(100422, 107140));
 
@@ -1364,6 +1457,24 @@ struct Raytracing : public Feature
 
             auto scriptEventSourceHolder = RE::ScriptEventSourceHolder::GetSingleton();
 			scriptEventSourceHolder->GetEventSource<RE::TESLoadGameEvent>()->AddEventSink(&singleton);
+
+			logger::info("Registered {}", typeid(singleton).name());
+
+			return true;
+		}
+	};
+
+	class TESObjectLoadedEventHandler : public RE::BSTEventSink<RE::TESObjectLoadedEvent>
+	{
+	public:
+		virtual RE::BSEventNotifyControl ProcessEvent(const RE::TESObjectLoadedEvent* a_event, RE::BSTEventSource<RE::TESObjectLoadedEvent>*);
+
+		static bool Register()
+		{
+			static TESObjectLoadedEventHandler singleton;
+
+			auto scriptEventSourceHolder = RE::ScriptEventSourceHolder::GetSingleton();
+			scriptEventSourceHolder->GetEventSource<RE::TESObjectLoadedEvent>()->AddEventSink(&singleton);
 
 			logger::info("Registered {}", typeid(singleton).name());
 

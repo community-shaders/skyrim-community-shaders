@@ -227,16 +227,24 @@ void Raytracing::DrawSettings()
 	ImGui::Checkbox("Enabled Debug Device", &settings.EnableDebugDevice);
 
 	if (ImGui::TreeNodeEx("Statistics", ImGuiTreeNodeFlags_DefaultOpen)) {
+		ImGui::Text(std::format("Lights: {}", lights.size()).c_str());
+
 		ImGui::Text(std::format("Geometries: {}", geometry.size()).c_str());
 		ImGui::Text(std::format("Shared Textures: {}", sharedTextures.size()).c_str());
 
-		ImGui::Text(std::format("Instances: {}, Unculled: {}, Culled: {}", instances.size(), instanceData.size(), instances.size() - instanceData.size()).c_str());
+		auto instanceCount = instances.size();
+		ImGui::Text(std::format("Instances: {}", instanceCount).c_str());
 
-		ImGui::Text(std::format("Lights: {}", lights.size()).c_str());
+		if (settings.GlobalIllumination) {
+			auto blasInstancesCount = blasInstances.size();
+			ImGui::Text(std::format("GI Unculled: {}, Culled: {}", blasInstancesCount, instanceCount - blasInstancesCount).c_str());
+		}
 
 		if (settings.RaytracedShadows) {
-			ImGui::Text(std::format("Unculled Shadow Instances: {}", blasShadowInstances.size()).c_str());
+			auto blasInstancesCount = blasShadowInstances.size();
+			ImGui::Text(std::format("Shadow Unculled: {}, Culled: {}", blasInstancesCount, instanceCount - blasInstancesCount).c_str());
 		}
+
 		ImGui::TreePop();
 	}
 
@@ -460,9 +468,13 @@ void Raytracing::SetupResources()
 		frameBuffer->TransitionBarrier(commandList.get(), D3D12_RESOURCE_STATE_VERTEX_AND_CONSTANT_BUFFER);
 		DX::ThrowIfFailed(frameBuffer->resource->SetName(L"Frame Buffer"));
 
+		frameBufferData = eastl::make_unique<GIFrameData>();
+
 		shadowsCB = eastl::make_unique<DX12::StructuredBufferUpload<ShadowsFrameData>>(d3d12Device.get(), 1);
 		shadowsCB->TransitionBarrier(commandList.get(), D3D12_RESOURCE_STATE_VERTEX_AND_CONSTANT_BUFFER);
 		DX::ThrowIfFailed(shadowsCB->resource->SetName(L"Shadows Constant Buffer"));
+
+		shadowsCBData = eastl::make_unique<ShadowsFrameData>();
 	}
 	
 	logger::debug("Creating samplers...");
@@ -637,7 +649,7 @@ void Raytracing::SetupResources()
 
 	logger::debug("Creating irradiance cache buffer...");
 	{
-		irradianceCacheBuffer = eastl::make_unique<DX12::StructuredAppendBuffer<IrradianceCache::Entry<IrradianceCache::SH1Data>>>(d3d12Device.get(), MAX_IRRADIANCE_ENTRIES);
+		//irradianceCacheBuffer = eastl::make_unique<DX12::StructuredAppendBuffer<IrradianceCache::Entry<IrradianceCache::SH1Data>>>(d3d12Device.get(), MAX_IRRADIANCE_ENTRIES);
 	}
 
 	fenceEvent = CreateEvent(nullptr, FALSE, FALSE, nullptr);
@@ -1074,8 +1086,8 @@ void Raytracing::UpdateLights()
 
 		auto diffuse = dirLight->GetLightRuntimeData().diffuse;
 
-		frameBufferData.Directional.Vector = -direction;
-		frameBufferData.Directional.Color = GammaToLinear(float3(diffuse.red, diffuse.green, diffuse.blue)) * settings.Directional;  // * ( Util::IsInterior() ? 0.0f : 1.0f );
+		frameBufferData->Directional.Vector = -direction;
+		frameBufferData->Directional.Color = GammaToLinear(float3(diffuse.red, diffuse.green, diffuse.blue)) * settings.Directional;  // * ( Util::IsInterior() ? 0.0f : 1.0f );
 	}
 
 	// Point lights
@@ -1096,7 +1108,7 @@ void Raytracing::UpdateLights()
 	lightsUpdated = true;
 }
 
-DirectX::XMMATRIX GetXMFromNiTransform(const RE::NiTransform& Transform)
+static DirectX::XMMATRIX GetXMFromNiTransform(const RE::NiTransform& Transform)
 {
 	DirectX::XMMATRIX temp;
 
@@ -1131,6 +1143,19 @@ DirectX::XMMATRIX GetXMFromNiTransform(const RE::NiTransform& Transform)
 		1.0f);
 
 	return temp;
+}
+
+static DirectX::XMFLOAT3X4 GetXMF3X4FromNiTransform(const RE::NiTransform& Transform)
+{
+	const RE::NiMatrix3& m = Transform.rotate;
+	const float scale = Transform.scale;
+
+	return { 
+		m.entry[0][0] * scale, m.entry[1][0] * scale, m.entry[2][0] * scale,
+		m.entry[0][1] * scale, m.entry[1][1] * scale, m.entry[2][1] * scale,
+		m.entry[0][2] * scale, m.entry[1][2] * scale, m.entry[2][2] * scale,
+		Transform.translate.x, Transform.translate.y, Transform.translate.z
+	};
 }
 
 void Raytracing::CopyDepth()
@@ -1221,37 +1246,6 @@ void Raytracing::Main_RenderWorld(bool a1)
 	}
 }
 
-template <typename T>
-auto GetFlags(uint32_t value) {
-	const auto& entries = magic_enum::enum_entries<T>();
-
-	std::string flags;
-
-	for (const auto& [flag, name] : entries) {
-		if ((value & static_cast<uint32_t>(flag)) != 0) {
-			flags += fmt::format("{} ", name);
-		}
-	}
-
-	return flags;
-};
-
-template <typename T>
-auto GetFlags(uint64_t value)
-{
-	const auto& entries = magic_enum::enum_entries<T>();
-
-	std::string flags;
-
-	for (const auto& [flag, name] : entries) {
-		if ((value & static_cast<uint64_t>(flag)) != 0) {
-			flags += fmt::format("{} ", name);
-		}
-	}
-
-	return flags;
-};
-
 RE::BSFadeNode* FindBSFadeNode(RE::NiNode* a_niNode)
 {
 	if (auto fadeNode = a_niNode->AsFadeNode()) {
@@ -1287,12 +1281,14 @@ inline std::wstring ToWide(const std::string& str)
 	return wstr;
 }
 
-void Raytracing::BeginGeometry(RE::BSFadeNode* pFadeNode, [[maybe_unused]] RE::NiStream& a_stream)
+void Raytracing::BeginGeometry(RE::NiNode* pFadeNode, [[maybe_unused]] RE::NiStream& a_stream)
 {
 	const auto& inputPath = a_stream.inputFilePath;
 
 	if (strlen(inputPath) == 0)
 		return;
+
+	currentPath = inputPath;
 
 	pendingGeometry.emplace(inputPath);
 
@@ -1307,9 +1303,12 @@ Raytracing::MeshData Raytracing::CreateTriShapeBuffers(RE::BSGraphics::TriShape*
 	MeshData meshData{};
 
 	meshData.registerIndex = registers.allocate();
+	//logger::info("[RT] CreateTriShapeBuffers - Register: {}", meshData.registerIndex);
 
 	meshData.vertexCount = vertexCount;
 	meshData.triangleCount = triangleCount;
+
+	//logger::info("[RT] CreateTriShapeBuffers - Vertices: {}, Indices: {}", vertexCount, triangleCount);
 
 	meshData.vertexBuffer = eastl::make_unique<DX12::StructuredBufferUpload<Vertex>>(d3d12Device.get(), vertexCount);
 	meshData.triangleBuffer = eastl::make_unique<DX12::StructuredBufferUpload<Triangle>>(d3d12Device.get(), triangleCount);
@@ -1549,7 +1548,7 @@ void Raytracing::CreateTriShapeMaterials(MeshData& meshData, const RE::BSGeometr
 	}
 
 	// Diffuse Texture
-	if (diffuseTexture) {
+	/*if (diffuseTexture) {
 		D3D12_RESOURCE_DESC texResDesc = diffuseTexture->GetDesc();
 
 		D3D12_SHADER_RESOURCE_VIEW_DESC texSrvDesc = {};
@@ -1562,10 +1561,10 @@ void Raytracing::CreateTriShapeMaterials(MeshData& meshData, const RE::BSGeometr
 		texSrvDesc.Texture2D.ResourceMinLODClamp = 0.0f;
 
 		d3d12Device->CreateShaderResourceView(diffuseTexture, &texSrvDesc, giHeap->CPUHandle(GIHeap::Slot::DiffuseTextures, meshData.registerIndex));
-	}
+	}*/
 
 	// Glow Texture
-	if (effectTexture) {
+	/*if (effectTexture) {
 		D3D12_RESOURCE_DESC texResDesc = effectTexture->GetDesc();
 
 		D3D12_SHADER_RESOURCE_VIEW_DESC texSrvDesc = {};
@@ -1578,10 +1577,12 @@ void Raytracing::CreateTriShapeMaterials(MeshData& meshData, const RE::BSGeometr
 		texSrvDesc.Texture2D.ResourceMinLODClamp = 0.0f;
 
 		d3d12Device->CreateShaderResourceView(effectTexture, &texSrvDesc, giHeap->CPUHandle(GIHeap::Slot::GlowTextures, meshData.registerIndex));
-	}
+	}*/
+
+	meshData.material = MaterialData(feature, texCoordOffsetScale, diffuseTexture, effectTexture, nullptr, effectColor, effectType == 0 ? RE::BSShader::Type::Lighting : RE::BSShader::Type::Effect);
 }
 
-void Raytracing::AddTriShape(RE::BSTriShape* pTriShape, RE::NiStream& a_stream)
+void Raytracing::AddTriShape(RE::BSTriShape* pTriShape, RE::NiStream* a_stream)
 {
 	/*auto* pFadeNode = FindBSFadeNode((RE::NiNode*)pTriShape);
 
@@ -1597,15 +1598,32 @@ void Raytracing::AddTriShape(RE::BSTriShape* pTriShape, RE::NiStream& a_stream)
 		return;
 	}*/
 
-	const auto& inputPath = a_stream.inputFilePath;
+	eastl::string inputPath;
 
-	if (strlen(inputPath) == 0)
-		return;
+	if (a_stream) {
+		const auto& streamInputPath = a_stream->inputFilePath;
+
+		if (strlen(streamInputPath) == 0)
+			return;
+
+		inputPath = streamInputPath;
+	} else {
+		inputPath = currentPath;
+	}
 
 	if (pendingGeometry.find(inputPath) == pendingGeometry.end())
 		return;
 
+	//if (!ValidTriShape((RE::NiNode*)pTriShape))
+	//	return;
+
+	if (pTriShape->GetFlags().any(RE::NiAVObject::Flag::kHidden))
+		return;
+
 	const char* name = pTriShape->name.c_str();
+
+	if (strcmp(name, "Land") == 0)
+		return;
 
 	/*if (!ValidTriShape(pTriShape)) {
 		logger::warn("[RT] AddTriShape - Invalid TriShape [0x{:x}]: {}", reinterpret_cast<uintptr_t>(pTriShape), pTriShape->name.c_str());
@@ -1613,6 +1631,13 @@ void Raytracing::AddTriShape(RE::BSTriShape* pTriShape, RE::NiStream& a_stream)
 	}*/
 
 	const auto& geometryRuntimeData = pTriShape->GetGeometryRuntimeData();
+
+	/*auto effect = geometryRuntimeData.properties[RE::BSGeometry::States::kEffect];
+	auto lightingShader = netimmerse_cast<RE::BSLightingShaderProperty*>(effect.get());
+
+	if (!lightingShader)
+		return;*/
+
 	RE::BSGraphics::TriShape* rendererData = geometryRuntimeData.rendererData;
 
 	// RenderData is null for skinned meshes, just ignore them for now
@@ -1623,10 +1648,38 @@ void Raytracing::AddTriShape(RE::BSTriShape* pTriShape, RE::NiStream& a_stream)
 
 	logger::info("[RT] AddTriShape - Filename: {}, TriShape [0x{:x}]: {}", inputPath, reinterpret_cast<uintptr_t>(pTriShape), name);
 
+	const auto bsxFlags = pTriShape->GetExtraData<RE::BSXFlags>("BSX");
+
+	if (bsxFlags)
+		logger::info("[RT] AddTriShape - BSX Flags [0x{:x}]: {}", bsxFlags->value, GetFlags<RE::BSXFlags::Flag>(static_cast<uint32_t>(bsxFlags->value)));
+
+	//logger::info("[RT] AddTriShape - Type: {}", magic_enum::enum_name(pTriShape->GetType().get()));
+
+	//logger::info("[RT] AddTriShape - Flags: {}", GetFlags<RE::NiAVObject::Flag>(pTriShape->GetFlags().underlying()));
+
+	/*auto property = geometryRuntimeData.properties[RE::BSGeometry::States::kProperty].get();
+
+	if (property) {
+		auto propertyRTTI = property->GetRTTI();
+
+		logger::info("[RT] AddTriShape - RTTI: {}", propertyRTTI->GetName());
+	}*/
+
+	/*auto extraData = pTriShape->GetExtraData("BSX");
+
+	if (extraData) {
+		auto bsxFlags = (RE::BSXFlags*)extraData;
+
+		if (bsxFlags) {
+			logger::info("[RT] AddTriShape - BSX Flags: {}", GetFlags<RE::BSXFlags::Flag>(static_cast<uint32_t>(bsxFlags->value)));
+		}
+	}*/
+
 	auto [it, emplaced] = geometry.try_emplace(inputPath);
 
 	const auto& triShapeRuntime = pTriShape->GetTrishapeRuntimeData();
 
+	//kProperty
 	auto meshData = CreateTriShapeBuffers(rendererData, triShapeRuntime.vertexCount, triShapeRuntime.triangleCount, ToWide(name));
 	CreateTriShapeMaterials(meshData, geometryRuntimeData, name);
 
@@ -1706,27 +1759,26 @@ void Raytracing::CommitGeometry(RE::NiStream* pNiStream)
 			desc.Width = prebuildInfo.ResultDataMaxSizeInBytes;
 			DX::ThrowIfFailed(d3d12Device->CreateCommittedResource(&DEFAULT_HEAP, D3D12_HEAP_FLAG_NONE, &desc, D3D12_RESOURCE_STATE_RAYTRACING_ACCELERATION_STRUCTURE, nullptr, IID_PPV_ARGS(&geometryData.blasBuffer)));
 
-			auto buildDesc = eastl::make_unique<D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_DESC>(
-				D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_DESC{
-					.DestAccelerationStructureData = geometryData.blasBuffer->GetGPUVirtualAddress(),
-					.Inputs = inputs,
-					.ScratchAccelerationStructureData = scratch->GetGPUVirtualAddress() 
-				});
+			D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_DESC buildDesc = {
+				.DestAccelerationStructureData = geometryData.blasBuffer->GetGPUVirtualAddress(),
+				.Inputs = inputs,
+				.ScratchAccelerationStructureData = scratch->GetGPUVirtualAddress() 
+			};
 
-			commandList->BuildRaytracingAccelerationStructure(buildDesc.get(), 0, nullptr);
+			commandList->BuildRaytracingAccelerationStructure(&buildDesc, 0, nullptr);
 
 			const auto& asBarrier = CD3DX12_RESOURCE_BARRIER::UAV(geometryData.blasBuffer.get());
 			commandList->ResourceBarrier(1, &asBarrier);
 
-			rtASDescs.push_back(eastl::move(buildDesc));
-			asScratchBuffers.push_back(std::move(scratch));
-			rtGeometryDescs.push_back(eastl::move(geometryDescs));
+			//tempGPUData.emplace_back(eastl::move(geometryDescs), std::move(scratch));
+			tempGPUData.emplace_back(std::move(scratch), fenceValue);
 		}
 	} else {
 		logger::error("[RT] CommitGeometry - Fade Node not found in geometry list.");
 	}
 
 	pendingGeometry.erase(inputPath);
+	currentPath.clear();
 }
 
 void Raytracing::RegisterClone(RE::BSFadeNode* pBSFadeNode, RE::NiObject* pNiObject)
@@ -1757,7 +1809,7 @@ eastl::vector<size_t> Raytracing::GatherInstanceLights(RE::BSFadeNode* pBSFadeNo
 	return instanceLights;
 }
 
-void Raytracing::UpdateInstance(RE::BSFadeNode* pFadeNode)
+void Raytracing::AddUpdateInstance(RE::BSGeometry* pGeometry)
 {
 	std::lock_guard lock{ meshMutex };
 
@@ -1769,10 +1821,17 @@ void Raytracing::UpdateInstance(RE::BSFadeNode* pFadeNode)
 
 	//logger::info("[RT] {} [0x{:x}] [0x{:x}]", pTriShape->name.c_str(), reinterpret_cast<uintptr_t>(pTriShape), reinterpret_cast<uintptr_t>(pTriShape->GetGeometryRuntimeData().rendererData->vertexBuffer));
 
-	if (const auto it = instances.find(pFadeNode); it != instances.end()) {
-		InstanceData& instance = it->second;
+	const auto pFadeNode = FindBSFadeNode((RE::NiNode*)pGeometry);
 
-		instance.transform = GetXMFromNiTransform(pFadeNode->world);
+	if (!pFadeNode)
+		return;
+
+	auto it = instances.find(pFadeNode);
+
+	if (it == instances.end()) {
+		if (auto inputPathIt = inputPaths.find(pFadeNode); inputPathIt != inputPaths.end()) {
+			instances.emplace(pFadeNode, InstanceData(0, inputPathIt->second));
+		}
 	}
 }
 
@@ -1826,6 +1885,15 @@ static RE::NiCamera* FindNiCamera(RE::NiAVObject* object)
 	return nullptr;
 }
 
+void Raytracing::UpdateInstanceTransform(RE::BSFadeNode* pFadeNode, InstanceData& instData)
+{
+	if (instData.lastUpdate == 0 || instData.lastUpdate < globals::state->frameCount) {
+		XMStoreFloat3x4(&instData.transform, GetXMFromNiTransform(pFadeNode->world));
+		//instData.transform = GetXMF3X4FromNiTransform(pFadeNode->world);
+		instData.lastUpdate = globals::state->frameCount;
+	}
+}
+
 void Raytracing::UpdateInstances()
 {
 	std::lock_guard lock{ meshMutex };
@@ -1836,12 +1904,12 @@ void Raytracing::UpdateInstances()
 	blasInstances.clear();
 	blasInstances.reserve(instances.size());
 
-	/*auto* playerCamera = RE::PlayerCamera::GetSingleton();
+	auto* playerCamera = RE::PlayerCamera::GetSingleton();
 	auto* tesCamera = playerCamera->currentState->camera;
 
 	RE::NiCamera* camera = FindNiCamera(tesCamera->cameraRoot.get());
 
-	auto eye = Util::GetAverageEyePosition();*/
+	auto eye = Util::GetAverageEyePosition();
 
 	for (auto& [pFadeNode, data] : instances) {
 		//pFadeNode->SetMotionType
@@ -1849,39 +1917,46 @@ void Raytracing::UpdateInstances()
 		auto it = geometry.find(data.filename);
 
 		if (it == geometry.end())
-			return;
+			continue;
+
+		//logger::info("[RT] UpdateInstances - FadeNode: [0x{:x}], World Bounds - Center: {}, Radius: {}", reinterpret_cast<uintptr_t>(pFadeNode), Float3(pFadeNode->worldBound.center), pFadeNode->worldBound.radius);
 
 		GeometryData& geometryData = it->second;
-		/*auto worldBound = pFadeNode->worldBound;
+		auto worldBound = pFadeNode->worldBound;
 
 		float worldBoundRadius= worldBound.radius;
 		float distanceToBounds = Util::Units::GameUnitsToMeters(eye.GetDistance(worldBound.center) - worldBoundRadius);
 
-		// Both may glow, if we cull a light source might be culled darkening the view (a better filter for shader type might be better, by vertexShaderDesc)
+		// Both may glow, if the object is a light source and behind the camera culling it will darken the visible scene (a better filter instead of shader types might be using their pixelDescriptor)
 		auto cullOutOfView = !geometryData.HasFeature(RE::BSShaderMaterial::Feature::kGlowMap) && !geometryData.HasShaderType(RE::BSShader::Type::Effect);
 
+		// We'll cull small geometry or very distant ones (that are outside the player view)
 		if ((cullOutOfView && Util::Units::GameUnitsToMeters(worldBoundRadius) < 1.0f) || distanceToBounds > 100.0f) {
-			if (!RE::NiCamera::BoundInFrustum(worldBound, camera))
+			//if (!RE::NiCamera::BoundInFrustum(worldBound, camera))
+			if (!camera->NodeInFrustum(pFadeNode))
 				continue;
-		}*/
+		}
 
-		blasInstances.push_back({ 
+		UpdateInstanceTransform(pFadeNode, data);
+
+		D3D12_RAYTRACING_INSTANCE_DESC blasInstance = {
 			.InstanceID = static_cast<uint>(blasInstances.size()),
 			.InstanceMask = 1,
 			.AccelerationStructure = geometryData.blasBuffer->GetGPUVirtualAddress()
-		});
+		};
 
-		auto* ptr = reinterpret_cast<DirectX::XMFLOAT3X4*>(&blasInstances.back().Transform);
-		XMStoreFloat3x4(ptr, data.transform);
+		memcpy(blasInstance.Transform, data.transform.m, sizeof(blasInstance.Transform));
+
+		blasInstances.push_back(blasInstance);
 
 		const auto& material = geometryData.meshes[0].material; // TODO: proper materials
 
-		logger::info("[RT] UpdateInstances - FadeNode: [0x{:x}], Position: [{}, {}, {}], InputFile: {}", reinterpret_cast<uintptr_t>(pFadeNode), data.transform._41, data.transform._42, data.transform._43, data.filename);
+		//logger::info("[RT] UpdateInstances - FadeNode: [0x{:x}], Position: [{}, {}, {}], InputFile: {}", reinterpret_cast<uintptr_t>(pFadeNode), data.transform._41, data.transform._42, data.transform._43, data.filename);
 
 		instanceData.emplace_back(
 			static_cast<uint>(geometryData.meshes[0].registerIndex), 
 			LightData(GatherInstanceLights(pFadeNode)), 
-			Material(material.texCoordOffsetScale, material.effectColor, static_cast<float>(material.shaderType))
+			Material(material.texCoordOffsetScale, material.effectColor, material.shaderType == RE::BSShader::Type::Lighting ? 0.0f : 1.0f)
 		);
 	}
 	
@@ -1892,50 +1967,232 @@ void Raytracing::UpdateInstances()
 	instanceBuffer->Upload(commandList.get());
 }
 
+auto GetFrustumCorners2(const RE::NiFrustum& frustum)
+{
+	eastl::array<float3, 8> corners;
+
+	// Near plane
+	corners[0] = { frustum.fLeft, frustum.fTop, frustum.fNear };      // near top-left
+	corners[1] = { frustum.fRight, frustum.fTop, frustum.fNear };     // near top-right
+	corners[2] = { frustum.fRight, frustum.fBottom, frustum.fNear };  // near bottom-right
+	corners[3] = { frustum.fLeft, frustum.fBottom, frustum.fNear };   // near bottom-left
+
+	// Far plane
+	float scale = frustum.fFar / frustum.fNear;
+	corners[4] = { frustum.fLeft * scale, frustum.fTop * scale, frustum.fFar };
+	corners[5] = { frustum.fRight * scale, frustum.fTop * scale, frustum.fFar };
+	corners[6] = { frustum.fRight * scale, frustum.fBottom * scale, frustum.fFar };
+	corners[7] = { frustum.fLeft * scale, frustum.fBottom * scale, frustum.fFar };
+
+	return corners;
+}
+
+auto GetFrustumCorners(const RE::NiFrustum& frustum)
+{
+	eastl::array<float3, 8> corners;
+
+	float scale = frustum.fFar / frustum.fNear;
+
+	// Near plane (Y = forward)
+	corners[0] = { frustum.fLeft, frustum.fNear, frustum.fTop };      // near top-left
+	corners[1] = { frustum.fRight, frustum.fNear, frustum.fTop };     // near top-right
+	corners[2] = { frustum.fRight, frustum.fNear, frustum.fBottom };  // near bottom-right
+	corners[3] = { frustum.fLeft, frustum.fNear, frustum.fBottom };   // near bottom-left
+
+	// Far plane
+	corners[4] = { frustum.fLeft * scale, frustum.fFar, frustum.fTop * scale };
+	corners[5] = { frustum.fRight * scale, frustum.fFar, frustum.fTop * scale };
+	corners[6] = { frustum.fRight * scale, frustum.fFar, frustum.fBottom * scale };
+	corners[7] = { frustum.fLeft * scale, frustum.fFar, frustum.fBottom * scale };
+
+	return corners;
+}
+
+void ComputeFrustumAABB(eastl::array<float3, 8> corners, float3& bbMin, float3& bbMax, DirectX::XMMATRIX* transform = nullptr)
+{
+	if (transform)
+		for (int i = 0; i < 8; i++) {
+			corners[i]  = float3::Transform(corners[i], *transform);
+		}
+
+	// Initialize AABB
+	bbMin = corners[0];
+	bbMax = corners[0];
+
+	// Compute min/max for X, Y, Z
+	for (int i = 1; i < 8; i++) {
+		bbMin.x = std::min(bbMin.x, corners[i].x);
+		bbMin.y = std::min(bbMin.y, corners[i].y);
+		bbMin.z = std::min(bbMin.z, corners[i].z);
+
+		bbMax.x = std::max(bbMax.x, corners[i].x);
+		bbMax.y = std::max(bbMax.y, corners[i].y);
+		bbMax.z = std::max(bbMax.z, corners[i].z);
+	}
+}
+
+bool SphereCastAABB(const float3& sphereCenter, float sphereRadius, const float3& dir, float maxDistance, const float3& bbMin, const float3& bbMax, float* hitDistance = nullptr)
+{
+	auto SphereCastAxis = [](float origin, float dir, float min, float max, float& tmin, float& tmax) -> bool {
+		if (std::abs(dir) < 1e-6f) {
+			if (origin < min || origin > max)
+				return false;
+
+			return true;
+		}
+
+		float ood = 1.0f / dir;
+		float t1 = (min - origin) * ood;
+		float t2 = (max - origin) * ood;
+
+		if (t1 > t2)
+			std::swap(t1, t2);
+
+		tmin = std::max(tmin, t1);
+		tmax = std::min(tmax, t2);
+
+		return tmin <= tmax;
+	};
+
+	// Expand AABB by sphere radius
+	float3 min = bbMin - float3(sphereRadius, sphereRadius, sphereRadius);
+	float3 max = bbMax + float3(sphereRadius, sphereRadius, sphereRadius);
+
+	float tmin = 0.0f;
+	float tmax = maxDistance;
+
+	if (!SphereCastAxis(sphereCenter.x, dir.x, min.x, max.x, tmin, tmax))
+		return false;
+
+	if (!SphereCastAxis(sphereCenter.y, dir.y, min.y, max.y, tmin, tmax))
+		return false;
+
+	if (!SphereCastAxis(sphereCenter.z, dir.z, min.z, max.z, tmin, tmax))
+		return false;
+
+	if (hitDistance)
+		*hitDistance = tmin;
+
+	return true;
+}
+
+auto GetPlanes(float3 corners[8])
+{
+	eastl::array<DirectX::SimpleMath::Plane, 6> planes;
+
+	// Near plane
+	planes[0] = Plane(corners[0], corners[1], corners[2]);
+
+	// Far plane
+	planes[1] = Plane(corners[5], corners[4], corners[7]);
+
+	// Left plane
+	planes[2] = Plane(corners[4], corners[0], corners[3]);
+
+	// Right plane
+	planes[3] = Plane(corners[1], corners[5], corners[6]);
+
+	// Bottom plane
+	planes[4] = Plane(corners[0], corners[4], corners[5]);
+
+	// Top plane
+	planes[5] = Plane(corners[3], corners[7], corners[6]);
+
+	return planes;
+}
+
+bool SphereCastFrustum(const float3& sphereCenter, float radius, const float3& dir, const std::array<Plane, 6>& planes, float maxDistance = FLT_MAX, float* hitDistance = nullptr)
+{
+	float tmin = 0.0f;
+	float tmax = maxDistance;
+
+	for (const auto& plane : planes) {
+		float nDotDir = plane.DotNormal(dir);
+		float dist = plane.DotCoordinate(sphereCenter);
+
+		if (std::abs(nDotDir) < 1e-6f) {
+			// Ray is parallel to plane
+			if (dist < -radius)  // sphere completely outside
+				return false;
+			else
+				continue;  // sphere may be intersecting
+		}
+
+		float t1 = (-radius - dist) / nDotDir;
+		float t2 = (radius - dist) / nDotDir;
+		if (t1 > t2)
+			std::swap(t1, t2);
+
+		tmin = std::max(tmin, t1);
+		tmax = std::min(tmax, t2);
+
+		if (tmin > tmax)  // no intersection along this ray
+			return false;
+	}
+
+	if (hitDistance)
+		*hitDistance = tmin;
+
+	return true;
+}
+
 void Raytracing::UpdateShadowInstances()
 {
-	auto* playerCamera = RE::PlayerCamera::GetSingleton();
-	auto* tesCamera = playerCamera->currentState->camera;
-
-	RE::NiCamera* camera = FindNiCamera(tesCamera->cameraRoot.get());
-
-	RE::NiFrustum frustum = camera->GetRuntimeData2().viewFrustum;
-
-	//logger::info("[RT] Frustum: {}, {}, {}, {}, {}, {}", frustum.fLeft, frustum.fRight, frustum.fBottom, frustum.fTop, frustum.fNear, frustum.fFar);
-
-	/*std::lock_guard lock{ meshMutex };
-
-	if (!shadowLight)
-		return;
+	std::lock_guard lock{ meshMutex };
 
 	blasShadowInstances.clear();
 	blasShadowInstances.reserve(instances.size());
 
-	auto* playerCamera = RE::PlayerCamera::GetSingleton();
+	/*auto* playerCamera = RE::PlayerCamera::GetSingleton();
 	auto* tesCamera = playerCamera->currentState->camera;
 
 	RE::NiCamera* camera = FindNiCamera(tesCamera->cameraRoot.get());
 
+	auto transform = GetXMFromNiTransform(camera->world); // camera->GetRuntimeData().worldToCam
+	auto transformInverse = DirectX::XMMatrixInverse(nullptr, transform);
+
 	RE::NiFrustum frustrum = camera->GetRuntimeData2().viewFrustum;
 
-	logger::info("[RT] Frustrum: ", frustrum.fLeft, frustrum.fRight, frustrum.fBottom, frustrum.fTop, frustrum.fNear, frustrum.fFar);
+	auto frustumCorners = GetFrustumCorners(frustrum);
 
-	for (auto& [pTriShape, data] : instances) {
-		MeshData& meshData = meshes[data.meshKey];
+	float3 bbMin, bbMax;
+	ComputeFrustumAABB(frustumCorners, bbMin, bbMax); // In local (camera) space
 
-		//if (!RE::NiCamera::BoundInFrustum(pTriShape->worldBound, camera))
-		//	continue;
+	//logger::info("[RT] UpdateShadowInstances - Min: {}, Max: {}", bbMin, bbMax);
 
-		blasShadowInstances.push_back({ .InstanceID = static_cast<uint>(blasShadowInstances.size()),
+	float3 localLightDirection = float3::TransformNormal(float3(shadowsCBData->Direction), transformInverse);*/
+
+	for (auto& [pFadeNode, data] : instances) {
+		auto it = geometry.find(data.filename);
+
+		if (it == geometry.end())
+			continue;
+
+		/*auto worldBound = pFadeNode->worldBound;
+		float3 localCenter = float3::Transform(Float3(worldBound.center), transformInverse);
+
+		//logger::info("[RT] UpdateShadowInstances - Local Center: {}, Radius: {}", localCenter, worldBound.radius);
+
+		if (!SphereCastAABB(localCenter, worldBound.radius, localLightDirection, FLT_MAX, bbMin, bbMax))
+			continue;*/
+
+		GeometryData& geometryData = it->second;
+
+		UpdateInstanceTransform(pFadeNode, data);
+
+		D3D12_RAYTRACING_INSTANCE_DESC blasShadowInstance = { 
+			.InstanceID = static_cast<uint>(blasShadowInstances.size()),
 			.InstanceMask = 1,
-			.AccelerationStructure = meshData.blasBuffer->GetGPUVirtualAddress() });
+			.AccelerationStructure = geometryData.blasBuffer->GetGPUVirtualAddress() 
+		};
 
-		auto* ptr = reinterpret_cast<DirectX::XMFLOAT3X4*>(&blasShadowInstances.back().Transform);
-		XMStoreFloat3x4(ptr, data.transform);
+		memcpy(blasShadowInstance.Transform, data.transform.m, sizeof(blasShadowInstance.Transform));
+
+		blasShadowInstances.push_back(blasShadowInstance);
 	}
 
 	blasShadowInstanceBuffer->UpdateList(blasShadowInstances.data(), blasShadowInstances.size());
-	blasShadowInstanceBuffer->Upload(commandList.get());*/
+	blasShadowInstanceBuffer->Upload(commandList.get());
 }
 
 void Raytracing::BSTriShape_UpdateWorldData(RE::BSTriShape* oThis, RE::NiUpdateData* pData)
@@ -1955,6 +2212,13 @@ void Raytracing::BSTriShape_UpdateWorldData(RE::BSTriShape* oThis, RE::NiUpdateD
 	}
 }
 
+void Raytracing::ReleaseTempGPUData()
+{
+	while (!tempGPUData.empty() && tempGPUData.front().fenceValue <= fenceValue) {
+		tempGPUData.pop_front();
+	}
+}
+
 void Raytracing::BSShader_SetupGeometry([[maybe_unused]] RE::BSShader* oThis, [[maybe_unused]] RE::BSRenderPass* pPass, [[maybe_unused]] uint32_t renderFlags)
 {
 	if (!Active() || !renderingWorld)
@@ -1967,25 +2231,77 @@ void Raytracing::BSShader_SetupGeometry([[maybe_unused]] RE::BSShader* oThis, [[
 	if (!pGeometry)
 		return;
 
-	//if (!ValidTriShape((RE::NiNode*)pGeometry))
-	//	return;
+	AddUpdateInstance(pGeometry);
+}
 
-	const auto pFadeNode = FindBSFadeNode((RE::NiNode*)pGeometry);
-
-	if (!pFadeNode)
+void Raytracing::BuildTLAS()
+{
+	if (tlas)
 		return;
 
-	auto it = instances.find(pFadeNode);
+	D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_INPUTS inputs = {
+		.Type = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL,
+		.Flags = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_PREFER_FAST_TRACE,
+		.NumDescs = MAX_INSTANCES,
+		.DescsLayout = D3D12_ELEMENTS_LAYOUT_ARRAY,
+		.InstanceDescs = blasInstanceBuffer->resource->GetGPUVirtualAddress()
+	};
 
-	if (it == instances.end()) {
-		if (auto inputPathIt = inputPaths.find(pFadeNode); inputPathIt != inputPaths.end()) {
-			instances.emplace(pFadeNode, InstanceData(inputPathIt->second, GetXMFromNiTransform(pFadeNode->world)));
-		} else {
-			//logger::info("[RT] BSShader::SetupGeometry - Empty filename for {}", pGeometry->name);
-		}
-	} else {
-		it->second.transform = GetXMFromNiTransform(pFadeNode->world);
+	D3D12_RAYTRACING_ACCELERATION_STRUCTURE_PREBUILD_INFO prebuildInfo;
+	d3d12Device->GetRaytracingAccelerationStructurePrebuildInfo(&inputs, &prebuildInfo);
+
+	//logger::info("[RT] DrawRTGI - First TLAS - Instances: {}, ResultDataMaxSizeInBytes: {}", blasInstances.size(), prebuildInfo.ResultDataMaxSizeInBytes);
+
+	auto desc = BASIC_BUFFER_DESC;
+	desc.Flags = D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS;
+
+	// TLAS
+	{
+		desc.Width = prebuildInfo.ResultDataMaxSizeInBytes;
+		DX::ThrowIfFailed(d3d12Device->CreateCommittedResource(&DEFAULT_HEAP, D3D12_HEAP_FLAG_NONE, &desc, D3D12_RESOURCE_STATE_RAYTRACING_ACCELERATION_STRUCTURE, nullptr, IID_PPV_ARGS(&tlas)));
+		DX::ThrowIfFailed(tlas->SetName(L"TLAS"));
+
+		// SRV
+		D3D12_SHADER_RESOURCE_VIEW_DESC tlasDesc = {};
+		tlasDesc.ViewDimension = D3D12_SRV_DIMENSION_RAYTRACING_ACCELERATION_STRUCTURE;
+		tlasDesc.RaytracingAccelerationStructure.Location = tlas->GetGPUVirtualAddress();
+		tlasDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
+
+		d3d12Device->CreateShaderResourceView(nullptr, &tlasDesc, shadowHeap->CPUHandle(ShadowsHeap::Slot::TLAS));
+		d3d12Device->CreateShaderResourceView(nullptr, &tlasDesc, giHeap->CPUHandle(GIHeap::Slot::TLAS));
 	}
+
+	// TLAS scratch (used for rebuilding)
+	desc.Width = std::max(prebuildInfo.ScratchDataSizeInBytes, 8ULL);
+	DX::ThrowIfFailed(d3d12Device->CreateCommittedResource(&DEFAULT_HEAP, D3D12_HEAP_FLAG_NONE, &desc, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, nullptr, IID_PPV_ARGS(&tlasScratch)));
+	DX::ThrowIfFailed(tlasScratch->SetName(L"TLAS scratch"));
+
+	// TLAS update scratch
+	/*desc.Width = std::max(prebuildInfo.UpdateScratchDataSizeInBytes * TLAS_BUFFER_SIZE_MULT, 8ULL);  // WARP bug workaround: use 8 if the required size was reported as less
+	DX::ThrowIfFailed(d3d12Device->CreateCommittedResource(&DEFAULT_HEAP, D3D12_HEAP_FLAG_NONE, &desc, D3D12_RESOURCE_STATE_COMMON, nullptr, IID_PPV_ARGS(&tlasUpdateScratch)));
+	DX::ThrowIfFailed(tlasUpdateScratch->SetName(L"TLAS update scratch"));*/
+}
+
+void Raytracing::RebuildTLAS(ID3D12GraphicsCommandList4* pCommandList, size_t numDescs, D3D12_GPU_VIRTUAL_ADDRESS instanceDescs)
+{
+	D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_INPUTS inputs = {
+		.Type = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL,
+		.Flags = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_PREFER_FAST_TRACE,
+		.NumDescs = static_cast<uint>(numDescs),
+		.DescsLayout = D3D12_ELEMENTS_LAYOUT_ARRAY,
+		.InstanceDescs = instanceDescs
+	};
+
+	D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_DESC buildDesc = {
+		.DestAccelerationStructureData = tlas->GetGPUVirtualAddress(),
+		.Inputs = inputs,
+		.ScratchAccelerationStructureData = tlasScratch->GetGPUVirtualAddress()
+	};
+
+	pCommandList->BuildRaytracingAccelerationStructure(&buildDesc, 0, nullptr);
+
+	const auto& asBarrier = CD3DX12_RESOURCE_BARRIER::UAV(tlas.get());
+	pCommandList->ResourceBarrier(1, &asBarrier);
 }
 
 void Raytracing::DrawRTGI()
@@ -2020,24 +2336,11 @@ void Raytracing::DrawRTGI()
 		fenceValue++;
 	}
 
-	// New frame, reset
-	/*{
-		DX::ThrowIfFailed(commandAllocator->Reset());
-		DX::ThrowIfFailed(commandList->Reset(commandAllocator.get(), nullptr));
-	}
-
-	// Release scratch buffers
-	{
-		asScratchBuffers.clear();
-		rtGeometryDescs.clear();
-		rtASDescs.clear();
-	}*/
-
 	if (pixCapture && settings.PIXCaptureLocation == PIXCaptureLocation::GlobalIllumination) {
 		pixCaptureStarted = true;
 		ga->BeginCapture();
 	}
-
+	
 	UpdateInstances();
 
 	// Upload buffers
@@ -2052,116 +2355,41 @@ void Raytracing::DrawRTGI()
 
 	// Update framebuffer
 	{
-		frameBufferData.ViewInverse = globals::game::frameBufferCached.GetCameraViewInverse().Transpose();
-		frameBufferData.ProjInverse = globals::game::frameBufferCached.GetCameraProjInverse().Transpose();
+		frameBufferData->ViewInverse = globals::game::frameBufferCached.GetCameraViewInverse().Transpose();
+		frameBufferData->ProjInverse = globals::game::frameBufferCached.GetCameraProjInverse().Transpose();
 
 		float4 cameraPosition = globals::game::frameBufferCached.GetCameraPosAdjust();
-		frameBufferData.Position = float3(cameraPosition.x, cameraPosition.y, cameraPosition.z);
-		frameBufferData.FrameCount = globals::state->frameCount;
+		frameBufferData->Position = float3(cameraPosition.x, cameraPosition.y, cameraPosition.z);
+		frameBufferData->FrameCount = globals::state->frameCount;
 
-		frameBufferData.CameraData = Util::GetCameraData();
+		frameBufferData->CameraData = Util::GetCameraData();
 
 		auto eye = Util::GetCameraData(0);
 		float2 ndcToViewMult = float2(2.0f / eye.projMat(0, 0), -2.0f / eye.projMat(1, 1));
 		float2 ndcToViewAdd = float2(-1.0f / eye.projMat(0, 0), 1.0f / eye.projMat(1, 1));
 
-		frameBufferData.NDCToView = float4(ndcToViewMult.x, ndcToViewMult.y, ndcToViewAdd.x, ndcToViewAdd.y);
+		frameBufferData->NDCToView = float4(ndcToViewMult.x, ndcToViewMult.y, ndcToViewAdd.x, ndcToViewAdd.y);
 
-		frameBufferData.Roughness = settings.Roughness;
-		frameBufferData.Metalness = settings.Metalness;
+		frameBufferData->Roughness = settings.Roughness;
+		frameBufferData->Metalness = settings.Metalness;
 
-		frameBufferData.Diffuse = settings.Diffuse;
-		frameBufferData.Specular = settings.Specular;
-		frameBufferData.Emissive = settings.Emissive;
-		frameBufferData.Effect = settings.Effect;
-		frameBufferData.Sky = settings.Sky;
+		frameBufferData->Diffuse = settings.Diffuse;
+		frameBufferData->Specular = settings.Specular;
+		frameBufferData->Emissive = settings.Emissive;
+		frameBufferData->Effect = settings.Effect;
+		frameBufferData->Sky = settings.Sky;
 
 #ifdef SHARC
-		frameBufferData.SHARCScale = settings.SHARCScale / Util::Units::GAME_UNIT_TO_M;
+		frameBufferData->SHARCScale = settings.SHARCScale / Util::Units::GAME_UNIT_TO_M;
 #endif
 
-		frameBuffer->Update(&frameBufferData, sizeof(GIFrameData));
+		frameBuffer->Update(frameBufferData.get(), sizeof(GIFrameData));
 		frameBuffer->Upload(commandList.get());
 		frameBuffer->TransitionBarrier(commandList.get(), D3D12_RESOURCE_STATE_VERTEX_AND_CONSTANT_BUFFER);
 	}
 
-	if (tlas == nullptr)
-	{
-		D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_INPUTS inputs = {
-			.Type = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL,
-			.Flags = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_PREFER_FAST_TRACE,
-			.NumDescs = MAX_INSTANCES,
-			.DescsLayout = D3D12_ELEMENTS_LAYOUT_ARRAY,
-			.InstanceDescs = blasInstanceBuffer->resource->GetGPUVirtualAddress()
-		};
-
-		D3D12_RAYTRACING_ACCELERATION_STRUCTURE_PREBUILD_INFO prebuildInfo;
-		d3d12Device->GetRaytracingAccelerationStructurePrebuildInfo(&inputs, &prebuildInfo);
-
-		logger::info("[RT] DrawRTGI - First TLAS - Instances: {}, ResultDataMaxSizeInBytes: {}", blasInstances.size(), prebuildInfo.ResultDataMaxSizeInBytes);
-
-		auto desc = BASIC_BUFFER_DESC;
-		desc.Flags = D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS;
-
-		// TLAS
-		{	
-			desc.Width = prebuildInfo.ResultDataMaxSizeInBytes * TLAS_BUFFER_SIZE_MULT;
-			DX::ThrowIfFailed(d3d12Device->CreateCommittedResource(&DEFAULT_HEAP, D3D12_HEAP_FLAG_NONE, &desc, D3D12_RESOURCE_STATE_RAYTRACING_ACCELERATION_STRUCTURE, nullptr, IID_PPV_ARGS(&tlas)));
-			DX::ThrowIfFailed(tlas->SetName(L"TLAS"));
-
-			// SRV
-			D3D12_SHADER_RESOURCE_VIEW_DESC tlasDesc = {};
-			tlasDesc.ViewDimension = D3D12_SRV_DIMENSION_RAYTRACING_ACCELERATION_STRUCTURE;
-			tlasDesc.RaytracingAccelerationStructure.Location = tlas->GetGPUVirtualAddress();
-			tlasDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
-
-			d3d12Device->CreateShaderResourceView(nullptr, &tlasDesc, shadowHeap->CPUHandle(ShadowsHeap::Slot::TLAS));
-			d3d12Device->CreateShaderResourceView(nullptr, &tlasDesc, giHeap->CPUHandle(GIHeap::Slot::TLAS));
-		}
-
-		// TLAS scratch (used for rebuilding)
-		desc.Width = std::max(prebuildInfo.ScratchDataSizeInBytes * TLAS_BUFFER_SIZE_MULT, 8ULL);
-		DX::ThrowIfFailed(d3d12Device->CreateCommittedResource(&DEFAULT_HEAP, D3D12_HEAP_FLAG_NONE, &desc, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, nullptr, IID_PPV_ARGS(&tlasScratch)));
-		DX::ThrowIfFailed(tlasScratch->SetName(L"TLAS scratch"));
-
-		// TLAS update scratch
-		/*desc.Width = std::max(prebuildInfo.UpdateScratchDataSizeInBytes * TLAS_BUFFER_SIZE_MULT, 8ULL);  // WARP bug workaround: use 8 if the required size was reported as less
-		DX::ThrowIfFailed(d3d12Device->CreateCommittedResource(&DEFAULT_HEAP, D3D12_HEAP_FLAG_NONE, &desc, D3D12_RESOURCE_STATE_COMMON, nullptr, IID_PPV_ARGS(&tlasUpdateScratch)));
-		DX::ThrowIfFailed(tlasUpdateScratch->SetName(L"TLAS update scratch"));*/
-	} else {
-		D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_INPUTS inputs = {
-			.Type = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL,
-			.Flags = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_PREFER_FAST_TRACE,
-			.NumDescs = static_cast<uint>(instanceData.size()),
-			.DescsLayout = D3D12_ELEMENTS_LAYOUT_ARRAY,
-			.InstanceDescs = blasInstanceBuffer->resource->GetGPUVirtualAddress()
-		};
-
-		D3D12_RAYTRACING_ACCELERATION_STRUCTURE_PREBUILD_INFO prebuildInfo;
-		d3d12Device->GetRaytracingAccelerationStructurePrebuildInfo(&inputs, &prebuildInfo);
-
-		logger::info("[RT] DrawRTGI - Instances: {}, ResultDataMaxSizeInBytes: {}", blasInstances.size(), prebuildInfo.ResultDataMaxSizeInBytes);	
-	}
-
-	// Build/Rebuild TLAS
-	D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_INPUTS inputs = {
-		.Type = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL,
-		.Flags = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_PREFER_FAST_TRACE,
-		.NumDescs = static_cast<uint>(instanceData.size()),
-		.DescsLayout = D3D12_ELEMENTS_LAYOUT_ARRAY,
-		.InstanceDescs = blasInstanceBuffer->resource->GetGPUVirtualAddress()
-	};
-
-	D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_DESC buildDesc = {
-		.DestAccelerationStructureData = tlas->GetGPUVirtualAddress(),
-		.Inputs = inputs,
-		.ScratchAccelerationStructureData = tlasScratch->GetGPUVirtualAddress() 
-	};
-
-	commandList->BuildRaytracingAccelerationStructure(&buildDesc, 0, nullptr);
-
-	const auto& asBarrier = CD3DX12_RESOURCE_BARRIER::UAV(tlas.get());
-	commandList->ResourceBarrier(1, &asBarrier);
+	BuildTLAS();
+	RebuildTLAS(commandList.get(), blasInstances.size(), blasInstanceBuffer->resource->GetGPUVirtualAddress());
 
 	{
 		// Raytracing
@@ -2309,12 +2537,7 @@ void Raytracing::DrawRTGI()
 		ga->BeginCapture();
 	}*/
 
-	//Release scratch buffers
-	{
-		asScratchBuffers.clear();
-		rtGeometryDescs.clear();
-		rtASDescs.clear();
-	}
+	ReleaseTempGPUData();
 
 	d3d11Context->CopyResource(main.texture, mainTexture->resource11);
 
@@ -2327,38 +2550,37 @@ void Raytracing::DrawRTGI()
 
 void Raytracing::UpdateShadowsFrameBuffer()
 {
-	shadowsCBData.CameraData = Util::GetCameraData();
+	shadowsCBData->CameraData = Util::GetCameraData();
 
 	auto eye = Util::GetCameraData(0);
 	float2 ndcToViewMult = float2(2.0f / eye.projMat(0, 0), -2.0f / eye.projMat(1, 1));
 	float2 ndcToViewAdd = float2(-1.0f / eye.projMat(0, 0), 1.0f / eye.projMat(1, 1));
-	shadowsCBData.NDCToView = float4(ndcToViewMult.x, ndcToViewMult.y, ndcToViewAdd.x, ndcToViewAdd.y);
+	shadowsCBData->NDCToView = float4(ndcToViewMult.x, ndcToViewMult.y, ndcToViewAdd.x, ndcToViewAdd.y);
 
-	shadowsCBData.ViewInverse = globals::game::frameBufferCached.GetCameraViewInverse().Transpose();
+	shadowsCBData->ViewInverse = globals::game::frameBufferCached.GetCameraViewInverse().Transpose();
 
 	float4 cameraPosition = globals::game::frameBufferCached.GetCameraPosAdjust();
-	shadowsCBData.Position = float4(cameraPosition.x, cameraPosition.y, cameraPosition.z, 0.0f);
+	shadowsCBData->Position = float4(cameraPosition.x, cameraPosition.y, cameraPosition.z, 0.0f);
 
 	if (shadowLight) {
 		auto direction = Float3(-shadowLight->GetShadowDirectionalLightRuntimeData().lightDirection);
 		direction.Normalize();
-		shadowsCBData.Direction = float4(direction.x, direction.y, direction.z, 0.0f);
+		shadowsCBData->Direction = float4(direction.x, direction.y, direction.z, 0.0f);
 	}
 
-	shadowsCB->Update(&shadowsCBData, sizeof(ShadowsFrameData));
+	shadowsCB->Update(shadowsCBData.get(), sizeof(ShadowsFrameData));
 }
 
 void Raytracing::RenderShadows()
 {
 	//logger::info("[RT] RenderShadows - ShadowLight [0x{:x}], TLAS [0x{:x}]", reinterpret_cast<uintptr_t>(shadowLight), reinterpret_cast<uintptr_t>(tlas.get()));
 
-	if (!shadowLight || !tlas)
+	if (!shadowLight)
 		return;
 
 	auto rendererRuntimeData = globals::game::renderer->GetRuntimeData();
 	auto shadowMask = rendererRuntimeData.renderTargets[RE::RENDER_TARGETS::kSHADOW_MASK];
 
-	UpdateShadowInstances();
 	CopyDepth();
 
 	// Tell DX11 to finish and wait
@@ -2374,140 +2596,68 @@ void Raytracing::RenderShadows()
 	}
 
 	// Do DX12 work...
-	{
-		shadowsCB->Upload(commandList.get());
-		shadowsCB->TransitionBarrier(commandList.get(), D3D12_RESOURCE_STATE_VERTEX_AND_CONSTANT_BUFFER);
+	UpdateShadowInstances();
 
-		/*{
-			shadowsCBData.CameraData = frameBufferData.CameraData;
-			shadowsCBData.NDCToView = frameBufferData.NDCToView;
+	shadowsCB->Upload(commandList.get());
+	shadowsCB->TransitionBarrier(commandList.get(), D3D12_RESOURCE_STATE_VERTEX_AND_CONSTANT_BUFFER);
 
-			shadowsCBData.ViewInverse = frameBufferData.ViewInverse;
-			shadowsCBData.Position = float4(frameBufferData.Position.x, frameBufferData.Position.y, frameBufferData.Position.z, 0.0f);
+	BuildTLAS();
+	RebuildTLAS(commandList.get(), blasShadowInstances.size(), blasShadowInstanceBuffer->resource->GetGPUVirtualAddress());
 
-			auto direction = Float3(-shadowLight->GetShadowDirectionalLightRuntimeData().lightDirection);
-			direction.Normalize();
-			shadowsCBData.Direction = float4(direction.x, direction.y, direction.z, 0.0f);
+	commandList->SetPipelineState1(shadowPipeline.get());
+	commandList->SetComputeRootSignature(shadowRS.get());
 
-			shadowsCB->Update(&shadowsCBData, sizeof(ShadowsFrameData));
-			shadowsCB->Upload(commandList.get());
-			shadowsCB->TransitionBarrier(commandList.get(), D3D12_RESOURCE_STATE_VERTEX_AND_CONSTANT_BUFFER);
-		}*/
+	auto computeHeapPtr = shadowHeap->Heap();
+	commandList->SetDescriptorHeaps(1, &computeHeapPtr);
 
-		/*if (tlas == nullptr) {
-			D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_INPUTS inputs = {
-				.Type = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL,
-				.Flags = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_PREFER_FAST_TRACE,
-				.NumDescs = MAX_INSTANCES,
-				.DescsLayout = D3D12_ELEMENTS_LAYOUT_ARRAY,
-				.InstanceDescs = blasInstanceBuffer->resource->GetGPUVirtualAddress()
-			};
+	// UAV table
+	commandList->SetComputeRootDescriptorTable(0, shadowHeap->TableGPUHandle(ShadowsHeap::Table::UAV));
 
-			D3D12_RAYTRACING_ACCELERATION_STRUCTURE_PREBUILD_INFO prebuildInfo;
-			d3d12Device->GetRaytracingAccelerationStructurePrebuildInfo(&inputs, &prebuildInfo);
+	// SRV table
+	commandList->SetComputeRootDescriptorTable(1, shadowHeap->TableGPUHandle(ShadowsHeap::Table::SRV));
 
-			auto desc = BASIC_BUFFER_DESC;
-			desc.Flags = D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS;
+	// Constant buffer
+	commandList->SetComputeRootConstantBufferView(2, shadowsCB->resource->GetGPUVirtualAddress());
 
-			// TLAS
-			{
-				desc.Width = prebuildInfo.ResultDataMaxSizeInBytes * TLAS_BUFFER_SIZE_MULT;
-				DX::ThrowIfFailed(d3d12Device->CreateCommittedResource(&DEFAULT_HEAP, D3D12_HEAP_FLAG_NONE, &desc, D3D12_RESOURCE_STATE_RAYTRACING_ACCELERATION_STRUCTURE, nullptr, IID_PPV_ARGS(&tlas)));
-				DX::ThrowIfFailed(tlas->SetName(L"TLAS"));
+	CD3DX12_RESOURCE_BARRIER ctuBarrier[1] = {
+		CD3DX12_RESOURCE_BARRIER::Transition(shadowMaskTexture->resource.get(), D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_STATE_UNORDERED_ACCESS),
+	};
+	commandList->ResourceBarrier(_countof(ctuBarrier), ctuBarrier);
 
-				// SRV
-				D3D12_SHADER_RESOURCE_VIEW_DESC tlasDesc = {};
-				tlasDesc.ViewDimension = D3D12_SRV_DIMENSION_RAYTRACING_ACCELERATION_STRUCTURE;
-				tlasDesc.RaytracingAccelerationStructure.Location = tlas->GetGPUVirtualAddress();
-				tlasDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
+	// Dispatch
+	auto shadowMaskDesc = shadowMaskTexture->resource->GetDesc();
 
-				d3d12Device->CreateShaderResourceView(nullptr, &tlasDesc, shadowHeap->CPUHandle(ShadowsHeap::Slot::TLAS));
-				d3d12Device->CreateShaderResourceView(nullptr, &tlasDesc, giHeap->CPUHandle(GIHeap::Slot::TLAS));
-			}
+	D3D12_GPU_VIRTUAL_ADDRESS sbtAddr = shadowSBTBuffer->resource->GetGPUVirtualAddress();
 
-			// TLAS scratch (used for rebuilding)
-			desc.Width = std::max(prebuildInfo.ScratchDataSizeInBytes * TLAS_BUFFER_SIZE_MULT, 8ULL);
-			DX::ThrowIfFailed(d3d12Device->CreateCommittedResource(&DEFAULT_HEAP, D3D12_HEAP_FLAG_NONE, &desc, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, nullptr, IID_PPV_ARGS(&tlasScratch)));
-			DX::ThrowIfFailed(tlasScratch->SetName(L"TLAS scratch"));
-		}
+	D3D12_DISPATCH_RAYS_DESC dispatchDesc = {
+		.RayGenerationShaderRecord = {
+			.StartAddress = sbtAddr,
+			.SizeInBytes = D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES 
+		},
+		.MissShaderTable = { 
+			.StartAddress = sbtAddr + D3D12_RAYTRACING_SHADER_TABLE_BYTE_ALIGNMENT, 
+			.SizeInBytes = D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES 
+		},
+		.HitGroupTable = { 
+			.StartAddress = sbtAddr + 2 * D3D12_RAYTRACING_SHADER_TABLE_BYTE_ALIGNMENT, 
+			.SizeInBytes = D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES 
+		},
+		.Width = static_cast<UINT>(shadowMaskDesc.Width),
+		.Height = shadowMaskDesc.Height,
+		.Depth = 1
+	};
 
-		// Build/Rebuild TLAS
-		{
-			D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_INPUTS inputs = {
-				.Type = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL,
-				.Flags = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_PREFER_FAST_TRACE,
-				.NumDescs = static_cast<uint>(instanceData.size()),
-				.DescsLayout = D3D12_ELEMENTS_LAYOUT_ARRAY,
-				.InstanceDescs = blasInstanceBuffer->resource->GetGPUVirtualAddress()
-			};
+	commandList->DispatchRays(&dispatchDesc);
 
-			D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_DESC buildDesc = {
-				.DestAccelerationStructureData = tlas->GetGPUVirtualAddress(),
-				.Inputs = inputs,
-				.ScratchAccelerationStructureData = tlasScratch->GetGPUVirtualAddress()
-			};
+	CD3DX12_RESOURCE_BARRIER utcBarrier[1] = {
+		CD3DX12_RESOURCE_BARRIER::Transition(shadowMaskTexture->resource.get(), D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_COMMON),
+	};
+	commandList->ResourceBarrier(_countof(utcBarrier), utcBarrier);
 
-			commandList->BuildRaytracingAccelerationStructure(&buildDesc, 0, nullptr);
+	DX::ThrowIfFailed(commandList->Close());
 
-			const auto& asBarrier = CD3DX12_RESOURCE_BARRIER::UAV(tlas.get());
-			commandList->ResourceBarrier(1, &asBarrier);
-		}*/
-
-		commandList->SetPipelineState1(shadowPipeline.get());
-		commandList->SetComputeRootSignature(shadowRS.get());
-
-		auto computeHeapPtr = shadowHeap->Heap();
-		commandList->SetDescriptorHeaps(1, &computeHeapPtr);
-
-		// UAV table
-		commandList->SetComputeRootDescriptorTable(0, shadowHeap->TableGPUHandle(ShadowsHeap::Table::UAV));
-
-		// SRV table
-		commandList->SetComputeRootDescriptorTable(1, shadowHeap->TableGPUHandle(ShadowsHeap::Table::SRV));
-
-		// Constant buffer
-		commandList->SetComputeRootConstantBufferView(2, shadowsCB->resource->GetGPUVirtualAddress());
-
-		CD3DX12_RESOURCE_BARRIER ctuBarrier[1] = {
-			CD3DX12_RESOURCE_BARRIER::Transition(shadowMaskTexture->resource.get(), D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_STATE_UNORDERED_ACCESS),
-		};
-		commandList->ResourceBarrier(_countof(ctuBarrier), ctuBarrier);
-
-		// Dispatch
-		auto shadowMaskDesc = shadowMaskTexture->resource->GetDesc();
-
-		D3D12_GPU_VIRTUAL_ADDRESS sbtAddr = shadowSBTBuffer->resource->GetGPUVirtualAddress();
-
-		D3D12_DISPATCH_RAYS_DESC dispatchDesc = {
-			.RayGenerationShaderRecord = {
-				.StartAddress = sbtAddr,
-				.SizeInBytes = D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES 
-			},
-			.MissShaderTable = { 
-				.StartAddress = sbtAddr + D3D12_RAYTRACING_SHADER_TABLE_BYTE_ALIGNMENT, 
-				.SizeInBytes = D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES 
-			},
-			.HitGroupTable = { 
-				.StartAddress = sbtAddr + 2 * D3D12_RAYTRACING_SHADER_TABLE_BYTE_ALIGNMENT, 
-				.SizeInBytes = D3D12_SHADER_IDENTIFIER_SIZE_IN_BYTES 
-			},
-			.Width = static_cast<UINT>(shadowMaskDesc.Width),
-			.Height = shadowMaskDesc.Height,
-			.Depth = 1
-		};
-
-		commandList->DispatchRays(&dispatchDesc);
-
-		CD3DX12_RESOURCE_BARRIER utcBarrier[1] = {
-			CD3DX12_RESOURCE_BARRIER::Transition(shadowMaskTexture->resource.get(), D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_COMMON),
-		};
-		commandList->ResourceBarrier(_countof(utcBarrier), utcBarrier);
-
-		DX::ThrowIfFailed(commandList->Close());
-
-		ID3D12CommandList* commandListPtr = commandList.get();
-		commandQueue->ExecuteCommandLists(1, &commandListPtr);
-	}
+	ID3D12CommandList* commandListPtr = commandList.get();
+	commandQueue->ExecuteCommandLists(1, &commandListPtr);
 
 	// Wait for D3D12 to finish and signal DX11
 	DX::ThrowIfFailed(commandQueue->Signal(d3d12Fence.get(), fenceValue));
@@ -2530,6 +2680,8 @@ void Raytracing::RenderShadows()
 	DX::ThrowIfFailed(commandAllocator->Reset());
 	DX::ThrowIfFailed(commandList->Reset(commandAllocator.get(), nullptr));
 
+	ReleaseTempGPUData();
+
 	d3d11Context->CopyResource(shadowMask.texture, shadowMaskTexture->resource11);
 }
 
@@ -2540,6 +2692,7 @@ void Raytracing::PostPostLoad()
 
 	//MenuOpenCloseEventHandler::Register();
 	//TESLoadGameEventHandler::Register();
+	TESObjectLoadedEventHandler::Register();
 }
 
 static std::wstring GetLatestWinPixGpuCapturerPath()
@@ -2899,18 +3052,18 @@ void Raytracing::CompileShaders()
 void Raytracing::CompileRTGIShaders()
 {
 	winrt::com_ptr<IDxcBlob> rayGenBlob;
-	ShaderUtils::CompileShader(rayGenBlob, L"Data/Shaders/RaytracedGI/GI/RayGeneration.hlsl");
+	ShaderUtils::CompileShader(rayGenBlob, L"Data/Shaders/Raytracing/GI/RayGeneration.hlsl");
 
 	winrt::com_ptr<IDxcBlob> diffuseMissBlob, diffuseClosestHitBlob;
-	ShaderUtils::CompileShader(diffuseMissBlob, L"Data/Shaders/RaytracedGI/GI/Miss.hlsl");
-	ShaderUtils::CompileShader(diffuseClosestHitBlob, L"Data/Shaders/RaytracedGI/GI/ClosestHit.hlsl");
+	ShaderUtils::CompileShader(diffuseMissBlob, L"Data/Shaders/Raytracing/GI/Miss.hlsl");
+	ShaderUtils::CompileShader(diffuseClosestHitBlob, L"Data/Shaders/Raytracing/GI/ClosestHit.hlsl");
 
 	winrt::com_ptr<IDxcBlob> shadowMissBlob;
-	ShaderUtils::CompileShader(shadowMissBlob, L"Data/Shaders/RaytracedGI/GI/ShadowMiss.hlsl");
+	ShaderUtils::CompileShader(shadowMissBlob, L"Data/Shaders/Raytracing/GI/ShadowMiss.hlsl");
 
 	/*winrt::com_ptr<IDxcBlob> specularMissBlob, specularClosestHitBlob;
-	ShaderUtils::CompileShader(specularMissBlob, L"Data/Shaders/RaytracedGI/Raytracing/Miss.hlsl", { { L"SPECULAR", nullptr } });
-	ShaderUtils::CompileShader(specularClosestHitBlob, L"Data/Shaders/RaytracedGI/Raytracing/ClosestHit.hlsl", { { L"SPECULAR", nullptr } });*/
+	ShaderUtils::CompileShader(specularMissBlob, L"Data/Shaders/Raytracing/Raytracing/Miss.hlsl", { { L"SPECULAR", nullptr } });
+	ShaderUtils::CompileShader(specularClosestHitBlob, L"Data/Shaders/Raytracing/Raytracing/ClosestHit.hlsl", { { L"SPECULAR", nullptr } });*/
 	
 	DX12::RTPipelineBuilder pipelineBuilder;
 
@@ -2975,7 +3128,7 @@ void Raytracing::CompileRTGIShaders()
 void Raytracing::CompileRTShadowsShaders()
 {
 	winrt::com_ptr<IDxcBlob> shadowsRTBlob;
-	ShaderUtils::CompileShader(shadowsRTBlob, L"Data/Shaders/RaytracedGI/ShadowsRT.hlsl");
+	ShaderUtils::CompileShader(shadowsRTBlob, L"Data/Shaders/Raytracing/ShadowsRT.hlsl");
 
 	// Init pipeline
 	{
@@ -3056,7 +3209,7 @@ void Raytracing::CompileRTShadowsShaders()
 void Raytracing::CompileDX12ComputeShaders()
 {
 	/*winrt::com_ptr<IDxcBlob> shaderBlob;
-	ShaderUtils::CompileShader(shaderBlob, L"Data/Shaders/RaytracedGI/RTShadowsCS.hlsl", {}, L"cs_6_5");
+	ShaderUtils::CompileShader(shaderBlob, L"Data/Shaders/Raytracing/RTShadowsCS.hlsl", {}, L"cs_6_5");
 
 	D3D12_COMPUTE_PIPELINE_STATE_DESC computeDesc = {};
 	computeDesc.pRootSignature = rootSignatureCSShadows.get();
@@ -3067,7 +3220,7 @@ void Raytracing::CompileDX12ComputeShaders()
 
 	/*{
 		winrt::com_ptr<IDxcBlob> shaderBlob;
-		ShaderUtils::CompileShader(shaderBlob, L"Data/Shaders/RaytracedGI/CompositeCS.hlsl", {}, L"cs_6_3");
+		ShaderUtils::CompileShader(shaderBlob, L"Data/Shaders/Raytracing/CompositeCS.hlsl", {}, L"cs_6_3");
 
 		D3D12_COMPUTE_PIPELINE_STATE_DESC computeDesc = {};
 		computeDesc.pRootSignature = rootSignatureCS.get();
@@ -3080,13 +3233,13 @@ void Raytracing::CompileDX12ComputeShaders()
 
 void Raytracing::CompileComputeShaders()
 {
-	if (auto rawPtr = reinterpret_cast<ID3D11ComputeShader*>(Util::CompileShader(L"Data\\Shaders\\RaytracedGI\\CopyDepthCS.hlsl", { { "DX11", "" } }, "cs_5_0")); rawPtr)
+	if (auto rawPtr = reinterpret_cast<ID3D11ComputeShader*>(Util::CompileShader(L"Data\\Shaders\\Raytracing\\CopyDepthCS.hlsl", { { "DX11", "" } }, "cs_5_0")); rawPtr)
 		copyDepthCS.attach(rawPtr);
 
-	if (auto rawPtr = reinterpret_cast<ID3D11ComputeShader*>(Util::CompileShader(L"Data\\Shaders\\RaytracedGI\\CubeToHemiCS.hlsl", { { "DX11", "" } }, "cs_5_0")); rawPtr)
+	if (auto rawPtr = reinterpret_cast<ID3D11ComputeShader*>(Util::CompileShader(L"Data\\Shaders\\Raytracing\\CubeToHemiCS.hlsl", { { "DX11", "" } }, "cs_5_0")); rawPtr)
 		cubeToHemiCS.attach(rawPtr);
 
-	if (auto rawPtr = reinterpret_cast<ID3D11ComputeShader*>(Util::CompileShader(L"Data\\Shaders\\RaytracedGI\\ConvertNormalGlossCS.hlsl", { { "DX11", "" } }, "cs_5_0")); rawPtr)
+	if (auto rawPtr = reinterpret_cast<ID3D11ComputeShader*>(Util::CompileShader(L"Data\\Shaders\\Raytracing\\ConvertNormalGlossCS.hlsl", { { "DX11", "" } }, "cs_5_0")); rawPtr)
 		convertNormalGlossCS.attach(rawPtr);
 }
 
@@ -3109,6 +3262,52 @@ RE::BSEventNotifyControl Raytracing::MenuOpenCloseEventHandler::ProcessEvent(con
 RE::BSEventNotifyControl Raytracing::TESLoadGameEventHandler::ProcessEvent(const RE::TESLoadGameEvent* a_event, RE::BSTEventSource<RE::TESLoadGameEvent>*)
 {
 	logger::info("TESLoadGameEventHandler::ProcessEvent {}", reinterpret_cast<intptr_t>(a_event));
+
+	return RE::BSEventNotifyControl::kContinue;
+}
+
+RE::BSEventNotifyControl Raytracing::TESObjectLoadedEventHandler::ProcessEvent(const RE::TESObjectLoadedEvent* a_event, RE::BSTEventSource<RE::TESObjectLoadedEvent>*)
+{
+	if (a_event) {
+		/*auto* form = RE::TESForm::LookupByID(a_event->formID);
+		auto* actor = RE::TESForm::LookupByID<RE::Actor>(a_event->formID);
+
+		if (form) {
+			logger::info("[RT] Form Loaded: {}", form->GetName());
+		}*/
+
+		auto* eventRef = RE::TESForm::LookupByID<RE::TESObjectREFR>(a_event->formID);
+
+		auto model = eventRef->GetBaseObject()->As<RE::TESModel>();
+
+		if (model) {
+			logger::info("[RT] TESObjectLoadedEventHandler - Filename '{}'", model->GetModel());
+		}
+
+		auto* ref3D = eventRef->Get3D();
+
+		if (ref3D) {
+			/*auto* ownerFile = eventRef->GetDescriptionOwnerFile();
+
+			logger::info("[RT] 3D Loaded {}: {} - {} - {}", a_event->loaded, ref3D->name, ownerFile ? ownerFile->path : "", ownerFile->GetFilename());
+
+			auto fileContainer = eventRef->sourceFiles;*/
+
+			
+			logger::info("[RT] TESObjectLoadedEventHandler - 3D Loaded '{}' - Type: {}, Reference Type: {}", ref3D->name, magic_enum::enum_name(eventRef->formType.get()), magic_enum::enum_name(eventRef->data.objectReference->formType.get()));
+
+			auto* ownerFile = eventRef->data.objectReference->GetDescriptionOwnerFile();
+
+			if (ownerFile)
+				logger::info("[RT] TESObjectLoadedEventHandler - File Path: {}, Filename {}", ownerFile->path, ownerFile->GetFilename());
+
+			RE::BSVisit::TraverseScenegraphGeometries(ref3D, [&](RE::BSGeometry* geometry) -> RE::BSVisit::BSVisitControl {
+				logger::info("[RT] TESObjectLoadedEventHandler::TraverseScenegraphGeometries - Geometry [0x{:x}]: {}, Type: {}", reinterpret_cast<uintptr_t>(geometry), geometry->name, magic_enum::enum_name(geometry->GetType().get()));
+				
+				return RE::BSVisit::BSVisitControl::kContinue;
+			});
+		}
+	}
 
 	return RE::BSEventNotifyControl::kContinue;
 }

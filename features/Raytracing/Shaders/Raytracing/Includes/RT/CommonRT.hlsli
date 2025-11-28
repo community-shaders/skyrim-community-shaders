@@ -4,7 +4,7 @@
 #include "Common/Game.hlsli"
 #include "Common/Math.hlsli"
 
-#include "RaytracedGI/Includes/Types.hlsli"
+#include "Raytracing/Includes/Types.hlsli"
 
 #define MAX_DEPTH 2
 #define SHADOW_MAX_DEPTH 1
