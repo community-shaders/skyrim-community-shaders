@@ -256,8 +256,7 @@ VS_OUTPUT main(VS_INPUT input)
 	float waveTimeSeconds = ComputeWaveTimeSeconds(GameTimeHours, RealTimeSeconds);
 	float waveDayPhase = ComputeWaveDayPhase(GameTimeHours);
 	
-	// When tessellation is enabled, skip wave displacement in VS - the DS will handle it
-	// This allows tessellated vertices to get proper wave calculations
+	// Wave displacement variables
 	float3 waveDisplacement = float3(0.0f, 0.0f, 0.0f);
 	float3 waveNormal = float3(0.0f, 0.0f, 1.0f);
 	float2 wavePrimaryDir = float2(-0.70710678f, 0.70710678f);
@@ -265,7 +264,6 @@ VS_OUTPUT main(VS_INPUT input)
 	float horizontalDisplacement = 0.0f;
 	
 	if (TessellationEnabled < 0.5f) {
-		// Tessellation disabled - compute waves in VS as normal
 		WaveSample currentWave = CalculateWaterDisplacement(waveWorldPos, float2(0.0f, 0.0f), float2(0.0f, 0.0f), WaveIntensity, WaveAmplitude, WaveSpeed, WaveSteepness, waveTimeSeconds, waveDayPhase, flowBiasDirVS, flowBiasWeightVS, false);
 		waveDisplacement = currentWave.displacement;
 		waveNormal = currentWave.normal;
@@ -2066,8 +2064,7 @@ PS_OUTPUT main(PS_INPUT input)
 	if (TriVisualizerEnabled > 0.5f) {
 		float3 baryCoords = input.Barycentric;
 		
-			
-			float minVertDist = min(vertexDist.x, min(vertexDist.y, vertexDist.z));
+		// Debug: Show raw barycentric coordinates as RGB to verify GS is working
 		// Each vertex should be a pure color: Red (1,0,0), Green (0,1,0), Blue (0,0,1)
 		// Interior should blend smoothly between these colors
 		// If you see gray/purple everywhere, the GS isn't assigning proper barycentrics
@@ -2075,13 +2072,11 @@ PS_OUTPUT main(PS_INPUT input)
 			// Mode 2: Raw barycentric visualization (debug)
 			finalColor = baryCoords;
 		} else {
-			float2 gridFrac = frac(worldUV);
 			// Mode 1: Wireframe visualization
 			float3 baryDeriv = fwidth(baryCoords);
 			
 			bool geometryShaderActive = any(baryDeriv > 1e-5.xxx);
 			
-			finalColor = lerp(finalColor, fallbackColor, gridLine * 0.8f);
 			if (geometryShaderActive) {
 				float3 edgeDist = baryCoords / max(baryDeriv, 1e-6.xxx);
 				float minEdgeDist = min(edgeDist.x, min(edgeDist.y, edgeDist.z));
@@ -2089,6 +2084,10 @@ PS_OUTPUT main(PS_INPUT input)
 				float wireThickness = 1.2f;
 				float wireSmooth = 0.8f;
 				float wireHighlight = 1.0f - smoothstep(wireThickness - wireSmooth, wireThickness + wireSmooth, minEdgeDist);
+				
+				float vertexThickness = 3.5f;
+				float vertexSmooth = 1.5f;
+				float3 vertexDist = (1.0f - baryCoords) / max(baryDeriv, 1e-6.xxx);
 				float minVertDist = min(vertexDist.x, min(vertexDist.y, vertexDist.z));
 				float vertexHighlight = 1.0f - smoothstep(vertexThickness - vertexSmooth, vertexThickness + vertexSmooth, minVertDist);
 				
@@ -2096,6 +2095,10 @@ PS_OUTPUT main(PS_INPUT input)
 				float3 vertexColor = float3(0.15f, 0.95f, 0.35f);
 				
 				finalColor = lerp(finalColor, wireColor, wireHighlight);
+				finalColor = lerp(finalColor, vertexColor, vertexHighlight);
+			} else {
+				float2 worldUV = input.WPosition.xy * 0.01f;
+				float2 gridFrac = frac(worldUV);
 				float2 gridDist = min(gridFrac, 1.0f - gridFrac);
 				float2 gridFw = max(fwidth(worldUV), 1e-4.xx);
 				float gridLine = 1.0f - smoothstep(gridFw.x * 0.5f, gridFw.x * 1.5f, min(gridDist.x, gridDist.y));
