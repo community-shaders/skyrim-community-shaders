@@ -194,6 +194,20 @@ cbuffer UnifiedWaterPerFrame : register(b7)
 	float TessPadding1 : packoffset(c17.y);
 	float TessPadding2 : packoffset(c17.z);
 	float TessPadding3 : packoffset(c17.w);
+	
+	// Player ripples data
+	float PlayerPosX : packoffset(c18.x);
+	float PlayerPosY : packoffset(c18.y);
+	float PlayerPosZ : packoffset(c18.z);
+	float PlayerSpeed : packoffset(c18.w);
+	float PlayerInWater : packoffset(c19.x);
+	float RippleStrength : packoffset(c19.y);
+	float RippleRadius : packoffset(c19.z);
+	float RippleWaveSpeed : packoffset(c19.w);
+	float RippleWaveFreq1 : packoffset(c20.x);
+	float RippleWaveFreq2 : packoffset(c20.y);
+	float RippleWaveFreq3 : packoffset(c20.z);
+	float RippleNormalStrength : packoffset(c20.w);
 }
 
 cbuffer UnifiedWaterPerTile : register(b8)

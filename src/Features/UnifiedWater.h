@@ -34,6 +34,8 @@ struct UnifiedWater : OverlayFeature
 	}
 	virtual inline bool HasShaderDefine(RE::BSShader::Type) override { return true; }
 
+	static constexpr uint32_t MAX_ACTOR_RIPPLES = 32;
+
 	struct Settings
 	{
 		bool UseOptimisedMeshes = false;
@@ -130,6 +132,16 @@ struct UnifiedWater : OverlayFeature
 		float DepthRefractions = 1.0f;      // Depth-based refraction factor
 		float DepthNormals = 1.0f;          // Depth-based normal intensity
 		float DepthSpecularLighting = 1.0f; // Depth-based specular factor
+		
+		// Actor Wading Ripples
+		bool EnableActorRipples = true;
+		float RippleStrength = 1.0f;        // Overall ripple intensity
+		float RippleRadius = 512.0f;        // Maximum ripple expansion radius
+		float RippleWaveSpeed = 4.0f;       // Speed of ripple wave animation
+		float RippleWaveFreq1 = 0.08f;      // Primary wave frequency
+		float RippleWaveFreq2 = 0.12f;      // Secondary wave frequency
+		float RippleWaveFreq3 = 0.18f;      // Tertiary wave frequency
+		float RippleNormalStrength = 2.0f;  // Normal map intensity for ripples
 	};
 
 #pragma warning(push)
@@ -231,6 +243,35 @@ struct UnifiedWater : OverlayFeature
 		float TessPadding1;
 		float TessPadding2;
 		float TessPadding3;
+		
+		// Player ripples data
+		float PlayerPosX;
+		float PlayerPosY;
+		float PlayerPosZ;
+		float PlayerSpeed;
+		float PlayerInWater;
+		float RippleStrength;
+		float RippleRadius;
+		float RippleWaveSpeed;
+		float RippleWaveFreq1;
+		float RippleWaveFreq2;
+		float RippleWaveFreq3;
+		float RippleNormalStrength;
+	};
+
+	struct alignas(16) ActorRippleData
+	{
+		float PosX;
+		float PosY;
+		float Speed;
+		float InWater;  // 1.0 if actor is in water, 0.0 otherwise
+	};
+
+	struct alignas(16) ActorRippleBuffer
+	{
+		ActorRippleData actors[MAX_ACTOR_RIPPLES];
+		uint32_t numActors;
+		uint32_t pad0[3];
 	};
 #pragma warning(pop)
 
@@ -256,6 +297,7 @@ struct UnifiedWater : OverlayFeature
 	ConstantBuffer* perFrame = nullptr;
 	ConstantBuffer* perTile = nullptr;
 	ConstantBuffer* tessellationParams = nullptr;
+	ConstantBuffer* actorRippleBuffer = nullptr;
 	
 	winrt::com_ptr<ID3D11HullShader> waterHullShader;
 	winrt::com_ptr<ID3D11DomainShader> waterDomainShader;

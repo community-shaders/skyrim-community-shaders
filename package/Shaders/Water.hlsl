@@ -169,6 +169,7 @@ struct VS_OUTPUT
 
 #if defined(UNIFIED_WATER)
 #	include "UnifiedWater/GerstnerWaves.hlsli"
+#	include "UnifiedWater/WaterActorRipples.hlsli"
 #endif // UNIFIED_WATER
 
 #	ifdef VSHADER
@@ -1067,12 +1068,34 @@ float GetFlowmapMipLevel(float2 flowmapUV)
 
 /**
  * Generates flowmap-based normal (no parallax - flowmap normals are not parallax-shifted)
+ * Uses mip clamping to preserve detail at distance and prevent over-blurring
  */
 float3 GetFlowmapNormal(PS_INPUT input, float2 uvShift, float multiplier, float offset)
 {
 	FlowmapData flowData = GetFlowmapDataUV(input, uvShift);
 	float2 baseUV = offset + (flowData.flowVector - float2(multiplier * ((0.001 * ReflectionColor.w) * flowData.color.w), 0));
-	return float3(FlowMapNormalsTex.SampleBias(FlowMapNormalsSampler, baseUV, SharedData::MipBias).xy, flowData.color.z);
+	
+	// Calculate screen-space derivatives for anisotropic filtering
+	float2 dxUV = ddx(baseUV);
+	float2 dyUV = ddy(baseUV);
+	
+	// Clamp derivatives to prevent selecting too high mip levels at distance
+	// This preserves surface detail on distant water instead of going completely flat
+	float maxGradient = 0.02;  // Limits effective mip level
+	float gradientScale = max(length(dxUV), length(dyUV));
+	if (gradientScale > maxGradient) {
+		float clampScale = maxGradient / gradientScale;
+		dxUV *= clampScale;
+		dyUV *= clampScale;
+	}
+	
+	// Use SampleGrad with clamped derivatives
+	float3 normalSample = FlowMapNormalsTex.SampleGrad(FlowMapNormalsSampler, baseUV, dxUV, dyUV).xyz;
+	
+	float2 normalXY = (normalSample.xy - 0.5) * 2.0;
+	normalXY = normalXY * 0.5 + 0.5;  // Back to 0-1 range
+	
+	return float3(normalXY, flowData.color.z);
 }
 
 /**
@@ -1420,6 +1443,26 @@ WaterNormalData GetWaterNormal(PS_INPUT input, float distanceFactor, float norma
 #			endif
 
 #			if defined(UNIFIED_WATER)
+	// Apply actor wading ripples (player + NPCs)
+	{
+		float2 playerPos = float2(PlayerPosX, PlayerPosY);
+		// Convert camera-relative water position to absolute world coordinates
+		// WPosition is camera-relative, but PlayerPos is in absolute world coordinates
+		float2 waterWorldPos = input.WPosition.xy + FrameBuffer::CameraPosAdjust[eyeIndex].xy;
+		float4 actorRipples = PlayerRipples::GetAllActorRipples(
+			waterWorldPos,
+			RealTimeSeconds,
+			playerPos,
+			PlayerSpeed,
+			PlayerInWater
+		);
+		
+		// Blend ripple normal with current normal
+		if (abs(actorRipples.w) > 0.001f) {
+			finalNormal = PlayerRipples::ApplyRippleNormal(actorRipples.xyz, finalNormal);
+		}
+	}
+
 	// Blend in Gerstner wave normals from vertex/domain shader
 	// UnifiedWaveNormal.xyz contains the geometric wave normal
 	float3 waveNormalGeom = input.UnifiedWaveNormal.xyz;
@@ -1449,11 +1492,24 @@ float3 GetWaterSpecularColor(PS_INPUT input, float3 normal, float3 viewDirection
 		float3 reflectionColor = 0.0.xxx;
 		float3 R = reflect(viewDirection, WaterParams.y * normal + float3(0, 0, 1 - WaterParams.y));
 
+		// Water surface roughness for reflection sampling
+		float waterReflectionRoughness = 0.08;
+#			if defined(UNIFIED_WATER)
+		waterReflectionRoughness = lerp(0.05, 0.15, saturate(WaveIntensity));
+#			endif
+
+		// Horizon specular occlusion - prevents cubemap from showing where geometry blocks reflections
+		// When reflection ray points below the surface normal plane, attenuate reflections
+		float horizon = saturate(1.0 + dot(R, float3(0, 0, 1)));
+		horizon *= horizon;
+
 		if (Permutation::PixelShaderDescriptor & Permutation::WaterFlags::Cubemap) {
 #			if defined(DYNAMIC_CUBEMAPS)
 #				if defined(SKYLIGHTING)
 
 			float3 dynamicCubemap;
+			float skylightingSpecular = 1.0;
+			
 			if (SharedData::InInterior) {
 				dynamicCubemap = DynamicCubemaps::EnvTexture.SampleLevel(CubeMapSampler, R, 0).xyz;
 			} else {
@@ -1464,9 +1520,9 @@ float3 GetWaterSpecularColor(PS_INPUT input, float3 normal, float3 viewDirection
 #					endif
 
 				sh2 skylighting = Skylighting::sample(SharedData::skylightingSettings, Skylighting::SkylightingProbeArray, Skylighting::stbn_vec3_2Dx1D_128x128x64, input.HPosition.xy, positionMSSkylight, R);
-				sh2 specularLobe = SphericalHarmonics::FauxSpecularLobe(normal, -viewDirection, 0.0);
+				sh2 specularLobe = SphericalHarmonics::FauxSpecularLobe(normal, -viewDirection, waterReflectionRoughness);
 
-				float skylightingSpecular = SphericalHarmonics::FuncProductIntegral(skylighting, specularLobe);
+				skylightingSpecular = SphericalHarmonics::FuncProductIntegral(skylighting, specularLobe);
 				skylightingSpecular = lerp(1.0, skylightingSpecular, Skylighting::getFadeOutFactor(input.WPosition.xyz));
 				skylightingSpecular = Skylighting::mixSpecular(SharedData::skylightingSettings, skylightingSpecular);
 
@@ -1486,24 +1542,32 @@ float3 GetWaterSpecularColor(PS_INPUT input, float3 normal, float3 viewDirection
 
 				dynamicCubemap = Color::LinearToGamma(lerp(specularIrradiance, specularIrradianceReflections, skylightingSpecular));
 			}
-#				else
-			float3 dynamicCubemap = DynamicCubemaps::EnvReflectionsTexture.SampleLevel(CubeMapSampler, R, 0);
-#				endif
+
+			// Apply horizon and skylighting occlusion to cubemap reflections
+			skylightingSpecular *= skylightingSpecular;
+			dynamicCubemap *= horizon * skylightingSpecular;
 
 #				if defined(VR)
 			// Reflection cubemap is incorrect for interiors in VR, ignore it
 			if (Permutation::PixelShaderDescriptor & Permutation::WaterFlags::Interior || SharedData::HideSky)
 				reflectionColor = dynamicCubemap.xyz;
-			else
-				reflectionColor = lerp(dynamicCubemap.xyz, CubeMapTex.SampleLevel(CubeMapSampler, R, 0).xyz, saturate(length(input.WPosition.xyz) / 1024.0));
+			else {
+				float distanceBlend = saturate(length(input.WPosition.xyz) / 1024.0);
+				float3 vanillaCubemap = CubeMapTex.SampleLevel(CubeMapSampler, R, 0).xyz * horizon * skylightingSpecular;
+				reflectionColor = lerp(dynamicCubemap.xyz, vanillaCubemap, distanceBlend);
+			}
 #				else
 			if (SharedData::HideSky)
 				reflectionColor = dynamicCubemap.xyz;
-			else
-				reflectionColor = lerp(dynamicCubemap.xyz, CubeMapTex.SampleLevel(CubeMapSampler, R, 0).xyz, saturate(length(input.WPosition.xyz) / 1024.0));
+			else {
+				float distanceBlend = saturate(length(input.WPosition.xyz) / 1024.0);
+				float3 vanillaCubemap = CubeMapTex.SampleLevel(CubeMapSampler, R, 0).xyz * horizon * skylightingSpecular;
+				reflectionColor = lerp(dynamicCubemap.xyz, vanillaCubemap, distanceBlend);
+			}
 #				endif
 #			else
-			reflectionColor = CubeMapTex.SampleLevel(CubeMapSampler, R, 0).xyz;
+			float3 dynamicCubemap = DynamicCubemaps::EnvReflectionsTexture.SampleLevel(CubeMapSampler, R, 0) * horizon;
+#				endif
 #			endif
 		} else {
 #			if !defined(LOD) && NUM_SPECULAR_LIGHTS == 0
@@ -1528,8 +1592,9 @@ float3 GetWaterSpecularColor(PS_INPUT input, float3 normal, float3 viewDirection
 				float4 ssrReflectionColorRaw = RawSSRReflectionTex.Sample(RawSSRReflectionSampler, ssrReflectionUvDR);
 				float4 ssrReflectionColor = lerp(ssrReflectionColorBlurred, ssrReflectionColorRaw, ssrAmount * 0.7);
 
-				finalSsrReflectionColor = max(0, ssrReflectionColor.xyz);
-				ssrFraction = saturate(ssrReflectionColor.w * distanceFactor * ssrAmount);
+				// Apply horizon occlusion to SSR as well
+				finalSsrReflectionColor = max(0, ssrReflectionColor.xyz) * horizon;
+				ssrFraction = saturate(ssrReflectionColor.w * distanceFactor * ssrAmount * horizon);
 			}
 		}
 #			endif
@@ -1537,6 +1602,7 @@ float3 GetWaterSpecularColor(PS_INPUT input, float3 normal, float3 viewDirection
 		float3 finalReflectionColor = Color::LinearToGamma(lerp(Color::GammaToLinear(reflectionColor), Color::GammaToLinear(finalSsrReflectionColor), ssrFraction));
 		
 #			if defined(UNIFIED_WATER)
+		// Apply reflection strength multiplier only when ESP overrides enabled
 		if (EnableLightingOverrides > 0.5f) {
 			finalReflectionColor *= ReflectionStrength;
 		}
@@ -1571,6 +1637,8 @@ float3 GetLdotN(float3 normal)
 #			endif
 }
 
+#			include "Common/BRDF.hlsli"
+
 float GetFresnelValue(float3 normal, float3 viewDirection)
 {
 #			if defined(UNDERWATER)
@@ -1579,19 +1647,28 @@ float GetFresnelValue(float3 normal, float3 viewDirection)
 	float3 actualNormal = normal;
 #			endif
 	float NdotV = saturate(dot(-viewDirection, actualNormal));
-	float viewAngle = 1 - NdotV;
 	
 #			if defined(UNIFIED_WATER)
+	// PBR Schlick fresnel: F = F0 + (1-F0) * (1-NdotV)^power
+	// Use ESP override values when enabled, otherwise derive from vanilla FresnelRI
+	float F0;
+	float fresnelPower;
 	if (EnableLightingOverrides > 0.5f) {
-		// Schlick fresnel with configurable F0 and power
-		// F = F0 + (1 - F0) * (1 - cos(theta))^power
-		float fresnelTerm = pow(viewAngle, FresnelPower);
-		return FresnelBias + (1.0f - FresnelBias) * fresnelTerm;
+		F0 = FresnelBias;
+		fresnelPower = FresnelPower;
+	} else {
+		// FresnelRI.x is the vanilla F0 value from ESP
+		F0 = FresnelRI.x;
+		fresnelPower = 5.0f;  // Standard Schlick exponent
 	}
-#			endif
-	
-	// Vanilla calculation
+	float Fc = pow(1.0f - NdotV, fresnelPower);
+	float fresnel = F0 + (1.0f - F0) * Fc;
+	return fresnel;
+#			else
+	// Vanilla calculation for non-UNIFIED_WATER
+	float viewAngle = 1 - NdotV;
 	return (1 - FresnelRI.x) * pow(viewAngle, 5) + FresnelRI.x;
+#			endif
 }
 
 struct DiffuseOutput
@@ -1658,23 +1735,15 @@ DiffuseOutput GetWaterDiffuseColor(PS_INPUT input, float3 normal, float3 viewDir
 #				endif
 
 #				if defined(UNIFIED_WATER)
+	// Enhanced depth-based absorption using Beer-Lambert law
+	// Only apply override values when ESP overrides enabled
 	if (EnableLightingOverrides > 0.5f) {
-		// Enhanced depth-based absorption using Beer-Lambert law
-		// Absorption increases exponentially with depth
-		float depthMeters = distanceMul.x * FogParam.z * 0.01f; // Convert to rough meters
+		float depthMeters = distanceMul.x * FogParam.z * 0.01f;
 		float absorption = 1.0f - exp(-AbsorptionDensity * depthMeters);
-		
-		// Apply transparency control to shallow water
 		float transparencyFactor = saturate(WaterTransparency * (1.0f - absorption));
-		
-		// Blend more towards deep color with absorption
 		refractionDiffuseColor = lerp(ShallowColor.xyz, DeepColor.xyz, saturate(distanceMul.y + absorption * 0.5f));
-		
-		// Apply scattering - adds subtle glow from scattered light
 		float3 scatterColor = DeepColor.xyz * ScatteringCoeff * (1.0f - absorption);
 		refractionDiffuseColor += scatterColor;
-		
-		// Modulate refraction visibility
 		refractionMul = saturate(refractionMul * transparencyFactor);
 	}
 #				endif
@@ -1706,19 +1775,29 @@ float3 GetSunColor(float3 normal, float3 viewDirection)
 	float3 reflectionDirection = reflect(viewDirection, normal);
 	
 #			if defined(UNIFIED_WATER)
+	// PBR sun specular calculation
+	float specPower;
+	float specMagnitude;
+	float specBrightness;
 	if (EnableLightingOverrides > 0.5f) {
-		// Use override sun specular power
-		float reflectionMul = exp2(SunSpecularPower * log2(saturate(dot(reflectionDirection, SunDir.xyz))));
-		float3 sunSpecular = reflectionMul * SunColor.xyz * SunDir.w * DeepColor.w;
-		sunSpecular *= SunSpecularMagnitude * SpecularBrightness;
-		return sunSpecular;
+		specPower = SunSpecularPower;
+		specMagnitude = SunSpecularMagnitude;
+		specBrightness = SpecularBrightness;
+	} else {
+		// Use vanilla ESP values
+		specPower = VarAmounts.x;
+		specMagnitude = 1.0f;
+		specBrightness = 1.0f;
 	}
-#			endif
-	
+	float reflectionMul = exp2(specPower * log2(saturate(dot(reflectionDirection, SunDir.xyz))));
+	float3 sunSpecular = reflectionMul * SunColor.xyz * SunDir.w * DeepColor.w;
+	sunSpecular *= specMagnitude * specBrightness;
+	return sunSpecular;
+#			else
 	float reflectionMul = exp2(VarAmounts.x * log2(saturate(dot(reflectionDirection, SunDir.xyz))));
 	float3 sunSpecular = reflectionMul * SunColor.xyz * SunDir.w * DeepColor.w;
-	
 	return sunSpecular;
+#			endif
 #			endif
 }
 #		endif
@@ -1798,6 +1877,7 @@ PS_OUTPUT main(PS_INPUT input)
 #			else
 	float4 depthControl = DepthControl * (distanceMul - 1) + 1;
 #				if defined(UNIFIED_WATER)
+	// Use enhanced depth control values only when ESP overrides enabled
 	if (EnableLightingOverrides > 0.5f) {
 		float4 overrideDepth = float4(DepthReflections, DepthRefractions, DepthNormals, DepthSpecularLighting);
 		depthControl = overrideDepth * (distanceMul - 1) + 1;
@@ -1839,7 +1919,14 @@ PS_OUTPUT main(PS_INPUT input)
 		skylightingDiffuse = lerp(1.0, skylightingDiffuse, Skylighting::getFadeOutFactor(input.WPosition.xyz));
 		skylightingDiffuse = Skylighting::mixDiffuse(SharedData::skylightingSettings, skylightingDiffuse);
 
-		sh2 specularLobe = SphericalHarmonics::FauxSpecularLobe(normal, -viewDirection, 0.0);
+		// Water roughness for specular occlusion: 0.0 = mirror, 0.1 = slight ripples
+		// Small roughness softens harsh skylight occlusion transitions from geometry
+		float waterRoughness = 0.08;
+#				if defined(UNIFIED_WATER)
+		// Scale roughness with wave intensity - more waves = rougher surface
+		waterRoughness = lerp(0.05, 0.15, saturate(WaveIntensity));
+#				endif
+		sh2 specularLobe = SphericalHarmonics::FauxSpecularLobe(normal, -viewDirection, waterRoughness);
 		skylightingSpecular = SphericalHarmonics::FuncProductIntegral(skylightingSH, specularLobe);
 		skylightingSpecular = lerp(1.0, skylightingSpecular, Skylighting::getFadeOutFactor(input.WPosition.xyz));
 		skylightingSpecular = Skylighting::mixSpecular(SharedData::skylightingSettings, skylightingSpecular);
@@ -1882,9 +1969,10 @@ PS_OUTPUT main(PS_INPUT input)
 
 	depthControl = DepthControl * (distanceMul - 1) + 1;
 #			if defined(UNIFIED_WATER)
+	// Recalculate depth control with enhanced values only when ESP overrides enabled
 	if (EnableLightingOverrides > 0.5f) {
-		float4 overrideDepth = float4(DepthReflections, DepthRefractions, DepthNormals, DepthSpecularLighting);
-		depthControl = overrideDepth * (distanceMul - 1) + 1;
+		float4 overrideDepth2 = float4(DepthReflections, DepthRefractions, DepthNormals, DepthSpecularLighting);
+		depthControl = overrideDepth2 * (distanceMul - 1) + 1;
 	}
 #			endif
 
@@ -1952,7 +2040,13 @@ PS_OUTPUT main(PS_INPUT input)
 #						if defined(SKYLIGHTING)
 	diffuseColor *= skylightingDiffuse;
 #						endif
+#						if defined(UNIFIED_WATER)
+	// PBR fresnel-based blending: fresnel determines reflection/refraction ratio directly
+	// Fresnel already accounts for viewing angle, no need for distance-based lerp override
+	float specularFraction = fresnel * diffuseOutput.refractionMul;
+#						else
 	float specularFraction = lerp(1, fresnel * diffuseOutput.refractionMul, distanceBlendFactor);
+#						endif
 	float3 finalColorPreFog = lerp(diffuseColor, specularColor, specularFraction) + sunColor * depthControl.w;
 	
 #						if !defined(UNIFIED_WATER)
@@ -1981,7 +2075,12 @@ PS_OUTPUT main(PS_INPUT input)
 #						if defined(SKYLIGHTING)
 	diffuseOutput.refractionDiffuseColor *= skylightingDiffuse;
 #						endif
+#						if defined(UNIFIED_WATER)
+	// PBR fresnel-based blending: fresnel determines reflection/refraction ratio directly
+	float specularFraction = fresnel;
+#						else
 	float specularFraction = lerp(1, fresnel, distanceBlendFactor);
+#						endif
 	float3 finalColorPreFog = lerp(diffuseOutput.refractionDiffuseColor, specularColor, specularFraction) + sunColor * depthControl.w;
 
 #						if !defined(UNIFIED_WATER)

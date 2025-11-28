@@ -59,7 +59,15 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	DepthReflections,
 	DepthRefractions,
 	DepthNormals,
-	DepthSpecularLighting)
+	DepthSpecularLighting,
+	EnableActorRipples,
+	RippleStrength,
+	RippleRadius,
+	RippleWaveSpeed,
+	RippleWaveFreq1,
+	RippleWaveFreq2,
+	RippleWaveFreq3,
+	RippleNormalStrength)
 
 void UnifiedWater::LoadSettings(json& o_json)
 {
@@ -236,6 +244,47 @@ void UnifiedWater::DrawSettings()
 				ImGui::SliderFloat("UW Near Distance", &settings.UnderwaterFogDistNear, 0.0f, 1000.0f, "%.0f");
 				ImGui::SliderFloat("UW Far Distance", &settings.UnderwaterFogDistFar, 100.0f, 20000.0f, "%.0f");
 				ImGui::SliderFloat("UW Fog Amount", &settings.UnderwaterFogAmount, 0.0f, 2.0f, "%.2f");
+			}
+			ImGui::EndTabItem();
+		}
+
+		if (ImGui::BeginTabItem("Wading Ripples")) {
+			ImGui::Checkbox("Enable Actor Ripples", &settings.EnableActorRipples);
+			if (auto _tt = Util::HoverTooltipWrapper()) {
+				ImGui::Text("Creates ripple effects when actors (player and NPCs) wade through water.");
+			}
+
+			if (settings.EnableActorRipples) {
+				ImGui::Spacing();
+				ImGui::Text("Ripple Appearance");
+				ImGui::SliderFloat("Ripple Strength", &settings.RippleStrength, 0.0f, 3.0f, "%.2f");
+				if (auto _tt = Util::HoverTooltipWrapper()) {
+					ImGui::Text("Overall intensity of ripple effects.");
+				}
+				ImGui::SliderFloat("Ripple Radius", &settings.RippleRadius, 128.0f, 1024.0f, "%.0f");
+				if (auto _tt = Util::HoverTooltipWrapper()) {
+					ImGui::Text("Maximum distance ripples spread from actor.");
+				}
+				ImGui::SliderFloat("Normal Strength", &settings.RippleNormalStrength, 0.0f, 5.0f, "%.2f");
+				if (auto _tt = Util::HoverTooltipWrapper()) {
+					ImGui::Text("How much ripples affect water surface normals.");
+				}
+
+				ImGui::Spacing();
+				ImGui::Text("Wave Animation");
+				ImGui::SliderFloat("Wave Speed", &settings.RippleWaveSpeed, 1.0f, 10.0f, "%.1f");
+				if (auto _tt = Util::HoverTooltipWrapper()) {
+					ImGui::Text("Speed of ripple wave animation.");
+				}
+				
+				ImGui::Spacing();
+				ImGui::Text("Wave Frequencies");
+				ImGui::SliderFloat("Primary Freq", &settings.RippleWaveFreq1, 0.02f, 0.2f, "%.3f");
+				ImGui::SliderFloat("Secondary Freq", &settings.RippleWaveFreq2, 0.04f, 0.3f, "%.3f");
+				ImGui::SliderFloat("Tertiary Freq", &settings.RippleWaveFreq3, 0.06f, 0.4f, "%.3f");
+				if (auto _tt = Util::HoverTooltipWrapper()) {
+					ImGui::Text("Higher values = more ripple rings per unit distance.");
+				}
 			}
 			ImGui::EndTabItem();
 		}
@@ -460,6 +509,7 @@ void UnifiedWater::SetupResources()
 	perFrame = new ConstantBuffer(ConstantBufferDesc<PerFrame>());
 	perTile = new ConstantBuffer(ConstantBufferDesc<PerTile>());
 	tessellationParams = new ConstantBuffer(ConstantBufferDesc<TessellationParams>());
+	actorRippleBuffer = new ConstantBuffer(ConstantBufferDesc<ActorRippleBuffer>());
 
 	// Start async tessellation shader compilation
 	CompileTessellationShadersAsync();
@@ -933,6 +983,102 @@ void UnifiedWater::BSWaterShader_SetupGeometry::thunk(RE::BSShader* waterShader,
 		                           singleton.AreTessellationShadersReady();
 		perFrameData.TessellationEnabled = tessellationEnabled ? 1.0f : 0.0f;
 
+		// Player ripple data
+		perFrameData.PlayerPosX = 0.0f;
+		perFrameData.PlayerPosY = 0.0f;
+		perFrameData.PlayerPosZ = 0.0f;
+		perFrameData.PlayerSpeed = 0.0f;
+		perFrameData.PlayerInWater = 0.0f;
+		
+		// Ripple settings from UI
+		perFrameData.RippleStrength = singleton.settings.EnableActorRipples ? singleton.settings.RippleStrength : 0.0f;
+		perFrameData.RippleRadius = singleton.settings.RippleRadius;
+		perFrameData.RippleWaveSpeed = singleton.settings.RippleWaveSpeed;
+		perFrameData.RippleWaveFreq1 = singleton.settings.RippleWaveFreq1;
+		perFrameData.RippleWaveFreq2 = singleton.settings.RippleWaveFreq2;
+		perFrameData.RippleWaveFreq3 = singleton.settings.RippleWaveFreq3;
+		perFrameData.RippleNormalStrength = singleton.settings.RippleNormalStrength;
+		
+		float waterSurfaceHeight = 0.0f;
+		bool hasWaterHeight = false;
+		
+		if (auto player = RE::PlayerCharacter::GetSingleton()) {
+			auto pos = player->GetPosition();
+			perFrameData.PlayerPosX = pos.x;
+			perFrameData.PlayerPosY = pos.y;
+			perFrameData.PlayerPosZ = pos.z;
+			
+			// Get player movement speed from ActorState
+			perFrameData.PlayerSpeed = player->AsActorState()->DoGetMovementSpeed();
+			
+			// Get the relevant water height for the player
+			float playerWaterHeight = player->GetWaterHeight();
+			if (playerWaterHeight > -1000000.0f) {
+				hasWaterHeight = true;
+				waterSurfaceHeight = playerWaterHeight;
+				
+				// Player is in water if their feet are below water surface (with some tolerance for wading)
+				// Use a generous threshold: player Z below water + 64 units (roughly knee-deep)
+				if (pos.z < playerWaterHeight + 64.0f) {
+					perFrameData.PlayerInWater = 1.0f;
+				}
+			}
+		}
+		
+		// Update actor ripple buffer with all actors near water
+		ActorRippleBuffer actorRippleData{};
+		actorRippleData.numActors = 0;
+		
+		if (hasWaterHeight) {
+			RE::NiPoint3 cameraPos;
+			if (auto player = RE::PlayerCharacter::GetSingleton()) {
+				cameraPos = player->GetPosition();
+			}
+			
+			if (const auto processLists = RE::ProcessLists::GetSingleton(); processLists) {
+				for (auto& actorHandle : processLists->highActorHandles) {
+					if (actorRippleData.numActors >= MAX_ACTOR_RIPPLES)
+						break;
+						
+					auto actorPtr = actorHandle.get();
+					if (!actorPtr || !actorPtr.get() || !actorPtr.get()->Is3DLoaded())
+						continue;
+					
+					auto actor = actorPtr.get();
+					auto pos = actor->GetPosition();
+					
+					// Skip actors too far from camera
+					float distFromCamera = cameraPos.GetDistance(pos);
+					if (distFromCamera > 4096.0f)
+						continue;
+					
+					// Get the actor's relevant water height
+					float actorWaterHeight = actor->GetWaterHeight();
+					if (actorWaterHeight <= -1000000.0f)
+						continue;
+					
+					// Check if actor is near water surface
+					float heightAboveWater = pos.z - actorWaterHeight;
+					bool nearWater = (heightAboveWater > -256.0f && heightAboveWater < 128.0f);
+					
+					if (!nearWater)
+						continue;
+					
+					ActorRippleData& ripple = actorRippleData.actors[actorRippleData.numActors];
+					ripple.PosX = pos.x;
+					ripple.PosY = pos.y;
+					ripple.InWater = (heightAboveWater < 64.0f) ? 1.0f : 0.0f;
+					
+					// Get actor movement speed from ActorState
+					ripple.Speed = actor->AsActorState()->DoGetMovementSpeed();
+					
+					actorRippleData.numActors++;
+				}
+			}
+		}
+		
+		singleton.actorRippleBuffer->Update(actorRippleData);
+
 		const auto* state = globals::state;
 		const std::uint32_t frameIndex = state ? state->frameCount : singleton.lastTimingFrameIndex;
 		if (singleton.lastTimingFrameIndex != frameIndex) {
@@ -970,7 +1116,11 @@ void UnifiedWater::BSWaterShader_SetupGeometry::thunk(RE::BSShader* waterShader,
 		auto context = globals::d3d::context;
 		ID3D11Buffer* buffers[1] = { singleton.perFrame->CB() };
 		context->VSSetConstantBuffers(7, 1, buffers);
-		context->PSSetConstantBuffers(7, 1, buffers); // Bind to pixel shader too for foam
+		context->PSSetConstantBuffers(7, 1, buffers);
+		
+		// Bind actor ripple buffer to slot 10
+		ID3D11Buffer* actorBuffers[1] = { singleton.actorRippleBuffer->CB() };
+		context->PSSetConstantBuffers(10, 1, actorBuffers);
 
 		singleton.currentGameTimeHours = gameTimeHours;
 		singleton.currentRealTimeSeconds = realTimeSeconds;
