@@ -188,7 +188,7 @@ Texture2D<float4> SSRTexture : register(t16);
 
         float specularIrradianceLuminance = Color::RGBToLuminance(EnvTexture.SampleLevel(LinearSampler, R, 15));
 
-		#		if defined(IBL)
+#		if defined(IBL)
 		float3 iblColor = 0;
 		if (SharedData::iblSettings.EnableDiffuseIBL && SharedData::iblSettings.EnableInterior) {
 			directionalAmbientColorSpecular *= SharedData::iblSettings.DALCAmount;

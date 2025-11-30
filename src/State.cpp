@@ -75,6 +75,9 @@ void State::Debug()
 		for (auto& ft : frameTimePerType)
 			ft = 0.0f;
 
+		// Reset active shader tracking for developer mode
+		globals::shaderCache->ResetFrameShaderTracking();
+
 		// Start timing for this frame
 		if (frameTimingFrequency.QuadPart == 0) {
 			QueryPerformanceFrequency(&frameTimingFrequency);

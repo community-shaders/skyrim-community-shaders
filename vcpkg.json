@@ -21,7 +21,6 @@
             "name": "imgui",
             "features": ["dx11-binding", "win32-binding", "docking-experimental"]
         },
-        "intel-xess",
         "magic-enum",
         "detours",
         "nlohmann-json",

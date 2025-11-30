@@ -143,6 +143,10 @@ namespace SharedData
 		float LODObjectBrightness;
 		float LODObjectSnowBrightness;
 		bool DisableTerrainVertexColors;
+		float LODTerrainGamma;
+		float LODObjectGamma;
+		float LODObjectSnowGamma;
+		float pad0;
 	};
 
 	struct HairSpecularSettings

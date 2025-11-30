@@ -184,6 +184,7 @@ public:
 			       ExtraFeatureDescriptor == other.ExtraFeatureDescriptor;
 		}
 	};
+	STATIC_ASSERT_ALIGNAS_16(PermutationCB);
 
 	ConstantBuffer* permutationCB = nullptr;
 
@@ -204,6 +205,7 @@ public:
 		float MipBias;
 		float pad0;
 	};
+	STATIC_ASSERT_ALIGNAS_16(SharedDataCB);
 
 	ConstantBuffer* sharedDataCB = nullptr;
 	ConstantBuffer* featureDataCB = nullptr;
