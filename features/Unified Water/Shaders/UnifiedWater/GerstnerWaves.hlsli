@@ -113,9 +113,18 @@ float3 EvaluateGerstnerWave(GerstnerWave wave, float2 position, float timeSecond
 	);
 }
 
-// Calculate tangent and binormal contributions for normal computation
-// From GPU Gems Equations 10-12:
-// Tangent (∂P/∂x) and Binormal (∂P/∂y) derivatives
+// Calculate partial derivatives for normal computation
+// From GPU Gems Equations 10-12 and Catlike Coding's wave tutorial
+// 
+// The surface position with Gerstner waves is:
+// P(x,y,t) = (x + sum(Qi*Ai*Dxi*cos(fi)), y + sum(Qi*Ai*Dyi*cos(fi)), sum(Ai*sin(fi)))
+// 
+// The partial derivatives are:
+// dP/dx = (1 - sum(Dxi²*Qi*ki*Ai*sin(fi)), -sum(Dxi*Dyi*Qi*ki*Ai*sin(fi)), sum(Dxi*ki*Ai*cos(fi)))
+// dP/dy = (-sum(Dxi*Dyi*Qi*ki*Ai*sin(fi)), 1 - sum(Dyi²*Qi*ki*Ai*sin(fi)), sum(Dyi*ki*Ai*cos(fi)))
+//
+// We accumulate the SUM terms separately, then the caller constructs the final tangent/binormal
+// by subtracting from the identity basis.
 void EvaluateGerstnerWaveTangents(GerstnerWave wave, float2 position, float timeSeconds, 
                                    inout float3 tangent, inout float3 binormal)
 {
@@ -131,17 +140,26 @@ void EvaluateGerstnerWaveTangents(GerstnerWave wave, float2 position, float time
 	float kA = wave.waveNumber * wave.amplitude;
 	float QkA = wave.steepness * kA;
 	
-	// Tangent accumulation (partial derivative in X direction)
-	// T = [1 - Dx²·Q·k·A·sin(f), -Dx·Dy·Q·k·A·sin(f), Dx·k·A·cos(f)]
-	tangent.x += -Dx * Dx * QkA * sinPhase;
-	tangent.y += -Dx * Dy * QkA * sinPhase;
-	tangent.z += Dx * kA * cosPhase;
+	// Accumulate derivative contributions
+	// Note: The minus signs are part of the accumulation because the formula is (1 - sum(...))
+	// for diagonal elements, so we accumulate negative values that will be subtracted from 1
+	float DxDxQkAsin = Dx * Dx * QkA * sinPhase;
+	float DxDyQkAsin = Dx * Dy * QkA * sinPhase;
+	float DyDyQkAsin = Dy * Dy * QkA * sinPhase;
+	float DxkAcos = Dx * kA * cosPhase;
+	float DykAcos = Dy * kA * cosPhase;
 	
-	// Binormal accumulation (partial derivative in Y direction)
-	// B = [-Dx·Dy·Q·k·A·sin(f), 1 - Dy²·Q·k·A·sin(f), Dy·k·A·cos(f)]
-	binormal.x += -Dx * Dy * QkA * sinPhase;
-	binormal.y += -Dy * Dy * QkA * sinPhase;
-	binormal.z += Dy * kA * cosPhase;
+	// Tangent (dP/dx): starts as (1,0,0), we subtract the wave contributions from x, add to y and z
+	// Final: (1 - sum(Dx²QkAsin), -sum(DxDyQkAsin), sum(DxkAcos))
+	tangent.x -= DxDxQkAsin;
+	tangent.y -= DxDyQkAsin;
+	tangent.z += DxkAcos;
+	
+	// Binormal (dP/dy): starts as (0,1,0), we subtract the wave contributions
+	// Final: (-sum(DxDyQkAsin), 1 - sum(Dy²QkAsin), sum(DykAcos))
+	binormal.x -= DxDyQkAsin;
+	binormal.y -= DyDyQkAsin;
+	binormal.z += DykAcos;
 }
 
 // ============================================================================
@@ -456,9 +474,13 @@ WaveSample CalculateWaterDisplacement(
 	// Build waves with proper physical parameters
 	GerstnerWave waves[6];
 	
-	// Track cumulative Q*k*A to prevent looping (must stay < 1)
+	// Track cumulative Q*k*A contributions per direction to prevent normal degeneracy
+	// The Gerstner wave constraint sum(Q*k*A) < 1 applies to the DIRECTIONAL components
+	// When waves align, their tangent perturbations compound and can cause normal flip
+	float2 cumulativeQkADir = float2(0.0f, 0.0f);  // Accumulated (Dx*Q*k*A, Dy*Q*k*A)
+	const float MAX_QKA_PER_AXIS = 0.7f;  // Per-axis limit for stability
+	const float MAX_QKA_TOTAL = 0.85f;    // Total limit
 	float cumulativeQkA = 0.0f;
-	const float MAX_QKA = 0.9f;  // Safety margin below 1.0
 	
 	[unroll]
 	for (int i = 0; i < 6; ++i) {
@@ -498,14 +520,39 @@ WaveSample CalculateWaterDisplacement(
 		// Apply speed multiplier to angular frequency
 		waves[i].angularFrequency *= speedMult * speedMults[i];
 		
-		// Enforce cumulative steepness limit to prevent triangle holes
+		// Calculate this wave's Q*k*A contribution per direction
 		float thisQkA = waves[i].steepness * waves[i].waveNumber * waves[i].amplitude;
-		if (cumulativeQkA + thisQkA > MAX_QKA && thisQkA > 0.0001f) {
-			float allowedQkA = max(0.0f, MAX_QKA - cumulativeQkA);
-			float scaleFactor = allowedQkA / thisQkA;
-			waves[i].steepness *= scaleFactor;
-			thisQkA = allowedQkA;
+		float2 thisQkADir = abs(waveDir) * thisQkA;  // Directional contribution
+		
+		// Check if adding this wave would exceed per-axis limits
+		// This prevents the tangent/binormal from degenerating when waves align
+		float2 newQkADir = cumulativeQkADir + thisQkADir;
+		float newQkATotal = cumulativeQkA + thisQkA;
+		
+		float scaleFactor = 1.0f;
+		
+		// Limit per-axis accumulation (prevents swirl artifacts from aligned waves)
+		if (newQkADir.x > MAX_QKA_PER_AXIS && thisQkADir.x > 0.0001f) {
+			scaleFactor = min(scaleFactor, (MAX_QKA_PER_AXIS - cumulativeQkADir.x) / thisQkADir.x);
 		}
+		if (newQkADir.y > MAX_QKA_PER_AXIS && thisQkADir.y > 0.0001f) {
+			scaleFactor = min(scaleFactor, (MAX_QKA_PER_AXIS - cumulativeQkADir.y) / thisQkADir.y);
+		}
+		
+		// Also limit total accumulation
+		if (newQkATotal > MAX_QKA_TOTAL && thisQkA > 0.0001f) {
+			scaleFactor = min(scaleFactor, (MAX_QKA_TOTAL - cumulativeQkA) / thisQkA);
+		}
+		
+		scaleFactor = max(0.0f, scaleFactor);
+		
+		if (scaleFactor < 1.0f) {
+			waves[i].steepness *= scaleFactor;
+			thisQkA *= scaleFactor;
+			thisQkADir *= scaleFactor;
+		}
+		
+		cumulativeQkADir += thisQkADir;
 		cumulativeQkA += thisQkA;
 	}
 	
@@ -538,7 +585,18 @@ WaveSample CalculateWaterDisplacement(
 	
 	// Compute full-detail normal via cross product (Catlike Coding method)
 	// Normal = cross(binormal, tangent) gives us the surface normal
-	float3 waveNormal = normalize(cross(binormal, tangent));
+	float3 rawNormal = cross(binormal, tangent);
+	float normalLen = length(rawNormal);
+	
+	// Check for degenerate case where tangent/binormal are nearly parallel
+	// This can happen when cumulative Q*k*A approaches limits despite our checks
+	float3 waveNormal;
+	if (normalLen < 0.1f) {
+		// Fallback: blend between flat normal and partial result based on degeneracy
+		waveNormal = normalize(lerp(float3(0.0f, 0.0f, 1.0f), rawNormal / max(normalLen, 0.001f), normalLen * 10.0f));
+	} else {
+		waveNormal = rawNormal / normalLen;
+	}
 	
 	// Ensure normal points upward (Z positive in our coordinate system)
 	if (waveNormal.z < 0.0f) {
@@ -546,7 +604,16 @@ WaveSample CalculateWaterDisplacement(
 	}
 	
 	// Compute softer geometric normal for diffuse lighting
-	float3 geoNormal = normalize(cross(softBinormal, softTangent));
+	float3 rawGeoNormal = cross(softBinormal, softTangent);
+	float geoNormalLen = length(rawGeoNormal);
+	
+	float3 geoNormal;
+	if (geoNormalLen < 0.1f) {
+		geoNormal = normalize(lerp(float3(0.0f, 0.0f, 1.0f), rawGeoNormal / max(geoNormalLen, 0.001f), geoNormalLen * 10.0f));
+	} else {
+		geoNormal = rawGeoNormal / geoNormalLen;
+	}
+	
 	if (geoNormal.z < 0.0f) {
 		geoNormal = -geoNormal;
 	}
