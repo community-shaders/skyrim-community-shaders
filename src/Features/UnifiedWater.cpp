@@ -110,10 +110,17 @@ void UnifiedWater::DrawSettings()
 			if (settings.EnableTessellation) {
 				ImGui::Indent();
 				ImGui::SliderFloat("Min Distance", &settings.TessellationMinDistance, 64.0f, 1024.0f, "%.0f");
+				if (ImGui::IsItemHovered())
+					ImGui::SetTooltip("Distance (game units) where maximum tessellation is applied.\nCloser water gets more subdivision.");
 				ImGui::SliderFloat("Max Distance", &settings.TessellationMaxDistance, 1024.0f, 16384.0f, "%.0f");
+				if (ImGui::IsItemHovered())
+					ImGui::SetTooltip("Distance (game units) where minimum tessellation is applied.\nBeyond this, only base mesh is used.");
 				ImGui::SliderFloat("Min Factor", &settings.TessellationMinFactor, 1.0f, 4.0f, "%.0f");
+				if (ImGui::IsItemHovered())
+					ImGui::SetTooltip("Tessellation factor for distant water.\n1 = no subdivision, 4 = light subdivision.");
 				ImGui::SliderFloat("Max Factor", &settings.TessellationMaxFactor, 4.0f, 64.0f, "%.0f");
-				ImGui::SliderFloat("Detail Height Scale", &settings.DetailHeightScale, 0.0f, 10.0f, "%.2f");
+				if (ImGui::IsItemHovered())
+					ImGui::SetTooltip("Tessellation factor for nearby water.\nHigher = more polygons = better wave detail but slower.\n8-16 is usually sufficient.");
 				ImGui::Unindent();
 			}
 
@@ -141,41 +148,41 @@ void UnifiedWater::DrawSettings()
 
 			ImGui::Spacing();
 			if (ImGui::TreeNodeEx("Wave 1 (Primary)", ImGuiTreeNodeFlags_None)) {
-				ImGui::SliderFloat("W1 Amplitude", &settings.Wave1Amplitude, 0.0f, 6.0f, "%.2f");
-				ImGui::SliderFloat("W1 Wavelength", &settings.Wave1Wavelength, 50.0f, 800.0f, "%.0f");
+				ImGui::SliderFloat("W1 Amplitude (m)", &settings.Wave1Amplitude, 0.0f, 2.0f, "%.2f");
+				ImGui::SliderFloat("W1 Wavelength (m)", &settings.Wave1Wavelength, 10.0f, 150.0f, "%.1f");
 				ImGui::SliderFloat("W1 Steepness", &settings.Wave1Steepness, 0.0f, 0.6f, "%.3f");
-				ImGui::SliderFloat("W1 Angle", &settings.Wave1AngleOffset, -180.0f, 180.0f, "%.1f");
+				ImGui::SliderFloat("W1 Angle (rad)", &settings.Wave1AngleOffset, -3.14f, 3.14f, "%.2f");
 				ImGui::TreePop();
 			}
 			if (ImGui::TreeNodeEx("Wave 2 (Secondary)", ImGuiTreeNodeFlags_None)) {
-				ImGui::SliderFloat("W2 Amplitude", &settings.Wave2Amplitude, 0.0f, 4.0f, "%.2f");
-				ImGui::SliderFloat("W2 Wavelength", &settings.Wave2Wavelength, 30.0f, 400.0f, "%.0f");
+				ImGui::SliderFloat("W2 Amplitude (m)", &settings.Wave2Amplitude, 0.0f, 1.5f, "%.2f");
+				ImGui::SliderFloat("W2 Wavelength (m)", &settings.Wave2Wavelength, 5.0f, 100.0f, "%.1f");
 				ImGui::SliderFloat("W2 Steepness", &settings.Wave2Steepness, 0.0f, 0.5f, "%.3f");
-				ImGui::SliderFloat("W2 Angle", &settings.Wave2AngleOffset, -180.0f, 180.0f, "%.1f");
+				ImGui::SliderFloat("W2 Angle (rad)", &settings.Wave2AngleOffset, -3.14f, 3.14f, "%.2f");
 				ImGui::TreePop();
 			}
 			if (ImGui::TreeNodeEx("Wave 3 (Detail)", ImGuiTreeNodeFlags_None)) {
-				ImGui::SliderFloat("W3 Amplitude", &settings.Wave3Amplitude, 0.0f, 2.0f, "%.2f");
-				ImGui::SliderFloat("W3 Wavelength", &settings.Wave3Wavelength, 15.0f, 200.0f, "%.0f");
+				ImGui::SliderFloat("W3 Amplitude (m)", &settings.Wave3Amplitude, 0.0f, 0.5f, "%.3f");
+				ImGui::SliderFloat("W3 Wavelength (m)", &settings.Wave3Wavelength, 2.0f, 50.0f, "%.1f");
 				ImGui::SliderFloat("W3 Steepness", &settings.Wave3Steepness, 0.0f, 0.4f, "%.3f");
-				ImGui::SliderFloat("W3 Angle", &settings.Wave3AngleOffset, -180.0f, 180.0f, "%.1f");
+				ImGui::SliderFloat("W3 Angle (rad)", &settings.Wave3AngleOffset, -3.14f, 3.14f, "%.2f");
 				ImGui::TreePop();
 			}
 			if (ImGui::TreeNodeEx("Fine Ripples (4-6)", ImGuiTreeNodeFlags_None)) {
-				ImGui::SliderFloat("W4 Amplitude", &settings.Wave4Amplitude, 0.0f, 1.0f, "%.2f");
-				ImGui::SliderFloat("W4 Wavelength", &settings.Wave4Wavelength, 8.0f, 80.0f, "%.0f");
-				ImGui::SliderFloat("W4 Steepness", &settings.Wave4Steepness, 0.0f, 0.3f, "%.3f");
-				ImGui::SliderFloat("W4 Angle", &settings.Wave4AngleOffset, -180.0f, 180.0f, "%.1f");
+				ImGui::SliderFloat("W4 Amplitude (m)", &settings.Wave4Amplitude, 0.0f, 0.25f, "%.3f");
+				ImGui::SliderFloat("W4 Wavelength (m)", &settings.Wave4Wavelength, 1.0f, 20.0f, "%.1f");
+				ImGui::SliderFloat("W4 Steepness", &settings.Wave4Steepness, 0.0f, 0.35f, "%.3f");
+				ImGui::SliderFloat("W4 Angle (rad)", &settings.Wave4AngleOffset, -3.14f, 3.14f, "%.2f");
 				ImGui::Spacing();
-				ImGui::SliderFloat("W5 Amplitude", &settings.Wave5Amplitude, 0.0f, 0.5f, "%.2f");
-				ImGui::SliderFloat("W5 Wavelength", &settings.Wave5Wavelength, 4.0f, 40.0f, "%.0f");
-				ImGui::SliderFloat("W5 Steepness", &settings.Wave5Steepness, 0.0f, 0.25f, "%.3f");
-				ImGui::SliderFloat("W5 Angle", &settings.Wave5AngleOffset, -180.0f, 180.0f, "%.1f");
+				ImGui::SliderFloat("W5 Amplitude (m)", &settings.Wave5Amplitude, 0.0f, 0.15f, "%.3f");
+				ImGui::SliderFloat("W5 Wavelength (m)", &settings.Wave5Wavelength, 0.5f, 10.0f, "%.1f");
+				ImGui::SliderFloat("W5 Steepness", &settings.Wave5Steepness, 0.0f, 0.3f, "%.3f");
+				ImGui::SliderFloat("W5 Angle (rad)", &settings.Wave5AngleOffset, -3.14f, 3.14f, "%.2f");
 				ImGui::Spacing();
-				ImGui::SliderFloat("W6 Amplitude", &settings.Wave6Amplitude, 0.0f, 0.3f, "%.2f");
-				ImGui::SliderFloat("W6 Wavelength", &settings.Wave6Wavelength, 2.0f, 20.0f, "%.0f");
-				ImGui::SliderFloat("W6 Steepness", &settings.Wave6Steepness, 0.0f, 0.2f, "%.3f");
-				ImGui::SliderFloat("W6 Angle", &settings.Wave6AngleOffset, -180.0f, 180.0f, "%.1f");
+				ImGui::SliderFloat("W6 Amplitude (m)", &settings.Wave6Amplitude, 0.0f, 0.08f, "%.3f");
+				ImGui::SliderFloat("W6 Wavelength (m)", &settings.Wave6Wavelength, 0.25f, 6.0f, "%.2f");
+				ImGui::SliderFloat("W6 Steepness", &settings.Wave6Steepness, 0.0f, 0.25f, "%.3f");
+				ImGui::SliderFloat("W6 Angle (rad)", &settings.Wave6AngleOffset, -3.14f, 3.14f, "%.2f");
 				ImGui::TreePop();
 			}
 			ImGui::EndTabItem();
@@ -969,13 +976,13 @@ void UnifiedWater::BSWaterShader_SetupGeometry::thunk(RE::BSShader* waterShader,
 		perFrameData.Wave6Wavelength = singleton.settings.Wave6Wavelength;
 		perFrameData.Wave6Steepness = singleton.settings.Wave6Steepness;
 		
-		// Convert angles from degrees to radians
-		perFrameData.Wave1AngleOffset = singleton.settings.Wave1AngleOffset * 0.0174532925f;  // degrees to radians
-		perFrameData.Wave2AngleOffset = singleton.settings.Wave2AngleOffset * 0.0174532925f;
-		perFrameData.Wave3AngleOffset = singleton.settings.Wave3AngleOffset * 0.0174532925f;
-		perFrameData.Wave4AngleOffset = singleton.settings.Wave4AngleOffset * 0.0174532925f;
-		perFrameData.Wave5AngleOffset = singleton.settings.Wave5AngleOffset * 0.0174532925f;
-		perFrameData.Wave6AngleOffset = singleton.settings.Wave6AngleOffset * 0.0174532925f;
+		// Wave angles are already in radians from the UI
+		perFrameData.Wave1AngleOffset = singleton.settings.Wave1AngleOffset;
+		perFrameData.Wave2AngleOffset = singleton.settings.Wave2AngleOffset;
+		perFrameData.Wave3AngleOffset = singleton.settings.Wave3AngleOffset;
+		perFrameData.Wave4AngleOffset = singleton.settings.Wave4AngleOffset;
+		perFrameData.Wave5AngleOffset = singleton.settings.Wave5AngleOffset;
+		perFrameData.Wave6AngleOffset = singleton.settings.Wave6AngleOffset;
 
 		// Set tessellation enabled flag - tells VS to skip wave displacement so DS can handle it
 		// Use AreTessellationShadersReady() to check async compilation status

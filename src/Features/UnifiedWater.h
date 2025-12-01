@@ -62,41 +62,45 @@ struct UnifiedWater : OverlayFeature
 		float WaveDetailSpeed = 1.0f;
 		float WaveDirectionBlend = 1.0f;
 		
-		// Wave 1 (Primary) - Lake swells: ~12m wavelength, ~10cm amplitude
-		float Wave1Amplitude = 2.2f;
-		float Wave1Wavelength = 260.0f;
-		float Wave1Steepness = 0.25f;
-		float Wave1AngleOffset = 0.0f;
+		// Wave parameters are in METERS for intuitive real-world scale
+		// Amplitude = wave height from trough to crest (typical lake: 0.3-1m, rough sea: 2-5m)
+		// Wavelength = distance between crests (typical lake: 10-50m, ocean swell: 50-300m)
 		
-		// Wave 2 (Secondary) - Wind chop: ~6m wavelength, ~6cm amplitude
-		float Wave2Amplitude = 1.3f;
-		float Wave2Wavelength = 130.0f;
-		float Wave2Steepness = 0.22f;
-		float Wave2AngleOffset = 35.0f;
+		// Wave 1 (Primary) - Main swell: longest wavelength, slowest
+		float Wave1Amplitude = 0.8f;       // 80cm wave height
+		float Wave1Wavelength = 60.0f;     // 60m between crests
+		float Wave1Steepness = 0.4f;       // Moderate steepness
+		float Wave1AngleOffset = 0.0f;     // Base direction
 		
-		// Wave 3 (Detail) - Surface ripples: ~3m wavelength, ~3cm amplitude
-		float Wave3Amplitude = 0.65f;
-		float Wave3Wavelength = 65.0f;
-		float Wave3Steepness = 0.18f;
-		float Wave3AngleOffset = -40.0f;
+		// Wave 2 (Secondary) - Secondary swell at different angle
+		float Wave2Amplitude = 0.5f;       // 50cm wave height
+		float Wave2Wavelength = 35.0f;     // 35m between crests
+		float Wave2Steepness = 0.35f;
+		float Wave2AngleOffset = 0.6f;     // ~35 degrees offset (radians)
 		
-		// Wave 4 (Fine Ripple 1) - Small ripples: ~1.2m wavelength, ~1.5cm amplitude
-		float Wave4Amplitude = 0.32f;
-		float Wave4Wavelength = 26.0f;
-		float Wave4Steepness = 0.14f;
-		float Wave4AngleOffset = 25.0f;
+		// Wave 3 (Detail) - Wind waves
+		float Wave3Amplitude = 0.25f;      // 25cm wave height
+		float Wave3Wavelength = 18.0f;     // 18m between crests
+		float Wave3Steepness = 0.3f;
+		float Wave3AngleOffset = -0.7f;    // ~-40 degrees
 		
-		// Wave 5 (Fine Ripple 2) - Tiny ripples: ~0.6m wavelength, ~0.8cm amplitude
-		float Wave5Amplitude = 0.17f;
-		float Wave5Wavelength = 13.0f;
-		float Wave5Steepness = 0.10f;
-		float Wave5AngleOffset = -25.0f;
+		// Wave 4 (Fine Ripple 1) - Chop
+		float Wave4Amplitude = 0.12f;      // 12cm
+		float Wave4Wavelength = 8.0f;      // 8m
+		float Wave4Steepness = 0.25f;
+		float Wave4AngleOffset = 0.44f;    // ~25 degrees
 		
-		// Wave 6 (Fine Ripple 3) - Micro detail: ~0.3m wavelength, ~0.4cm amplitude
-		float Wave6Amplitude = 0.09f;
-		float Wave6Wavelength = 6.5f;
-		float Wave6Steepness = 0.08f;
-		float Wave6AngleOffset = 70.0f;
+		// Wave 5 (Fine Ripple 2) - Fine ripples
+		float Wave5Amplitude = 0.06f;      // 6cm
+		float Wave5Wavelength = 4.0f;      // 4m
+		float Wave5Steepness = 0.2f;
+		float Wave5AngleOffset = -0.44f;   // ~-25 degrees
+		
+		// Wave 6 (Fine Ripple 3) - Micro detail
+		float Wave6Amplitude = 0.03f;      // 3cm
+		float Wave6Wavelength = 2.0f;      // 2m
+		float Wave6Steepness = 0.15f;
+		float Wave6AngleOffset = 1.22f;    // ~70 degrees
 
 		bool DisableVanillaWaterFoam = true;
 		

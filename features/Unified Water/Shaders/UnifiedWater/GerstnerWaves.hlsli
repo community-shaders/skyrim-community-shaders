@@ -1,17 +1,26 @@
 #ifndef __GERSTNER_WAVES_HLSLI__
 #define __GERSTNER_WAVES_HLSLI__
 
-// Unified Gerstner Wave System for Enhanced Water Rendering
+#include "Common/Game.hlsli"
+
+// Realistic Ocean Wave System - Gerstner Wave Implementation
 //
-// This system anchors wave motion to both world position and in-game time to prevent spatial
-// discontinuities while still allowing smooth temporal animation.
-//
-// Based on GPU Gems Chapter 1. Effective Water Simulation from Physical Models:
+// Based on GPU Gems Chapter 1 "Effective Water Simulation from Physical Models" by Mark Finch:
 // https://developer.nvidia.com/gpugems/gpugems/part-i-natural-effects/chapter-1-effective-water-simulation-physical-models
-// Catlike Coding Gerstner wave implementation: https://catlikecoding.com/unity/tutorials/flow/waves/
+//
+// And Catlike Coding's Gerstner Wave tutorial:
+// https://catlikecoding.com/unity/tutorials/flow/waves/
+//
+// Key physical principles implemented:
+// 1. Deep water dispersion relation: ω² = g·k where ω is angular frequency, g is gravity, k is wave number
+// 2. Phase speed: c = √(g/k) = √(g·λ/2π) - longer waves travel faster
+// 3. Gerstner wave motion: particles move in circles, creating sharp crests and flat troughs
+// 4. Steepness limit: sum(Q·k·A) ≤ 1 prevents wave looping
+// 5. Normal calculation via Catlike Coding's accumulated tangent/binormal method
 
 static const float UW_PI = 3.14159265f;
 static const float UW_TWO_PI = 6.28318530f;
+static const float UW_GRAVITY = 9.81f;  // m/s²
 
 float WrapUnifiedPhase(float phase)
 {
@@ -32,79 +41,123 @@ float ComputeWaveDayPhase(float gameTimeHours)
 	return dayFraction * UW_TWO_PI;
 }
 
-struct UnifiedWave
+struct GerstnerWave
 {
-	float2 direction;
-	float amplitude;
-	float waveNumber;
-	float angularVelocity;
-	float steepness;
-	float phaseOffset;
+	float2 direction;      // Normalized wave travel direction
+	float amplitude;       // Wave height (Skyrim units)
+	float wavelength;      // Crest-to-crest distance (Skyrim units)
+	float waveNumber;      // k = 2π/λ (inverse Skyrim units)
+	float angularFrequency;// ω = √(g·k) (rad/s) - deep water dispersion
+	float phaseSpeed;      // c = ω/k (Skyrim units/s)
+	float steepness;       // Q parameter: 0 = sine wave, 1 = sharp crest
+	float phaseOffset;     // Initial phase offset for variation
 };
 
-// Gerstner Wave Evaluation
-// Q (steepness) controls sharpness: 0 = sine wave, 1 = sharpest before looping
-float3 EvaluateUnifiedWave(UnifiedWave wave, float2 position, float timeSeconds)
+// Initialize a Gerstner wave with physically accurate parameters
+// wavelengthMeters: desired wavelength in real-world meters
+// amplitudeMeters: desired amplitude in real-world meters
+// Returns wave with all parameters in game units
+GerstnerWave CreateGerstnerWave(float2 direction, float wavelengthMeters, float amplitudeMeters, float steepness, float phaseOffset)
 {
-	// Calculate wave phase: f = k * (D · position - c * t)
-	float spatialPhase = dot(wave.direction, position) * wave.waveNumber + wave.phaseOffset;
-	float phase = WrapUnifiedPhase(spatialPhase - wave.angularVelocity * timeSeconds);
+	GerstnerWave wave;
+	
+	wave.direction = normalize(direction);
+	
+	// Convert to game units using Game.hlsli constant
+	wave.wavelength = wavelengthMeters * M_TO_GAME_UNIT;
+	wave.amplitude = amplitudeMeters * M_TO_GAME_UNIT;
+	
+	// Wave number in game unit space: k = 2π / λ
+	wave.waveNumber = UW_TWO_PI / wave.wavelength;
+	
+	// Deep water dispersion relation: ω = √(g·k)
+	// Convert gravity to game units: g_game = g_meters * meters_to_game_unit
+	float gravityGame = UW_GRAVITY * M_TO_GAME_UNIT;
+	wave.angularFrequency = sqrt(gravityGame * wave.waveNumber);
+	
+	// Phase speed: c = ω/k = √(g/k)
+	wave.phaseSpeed = wave.angularFrequency / wave.waveNumber;
+	
+	// Steepness (Q parameter) - clamped to prevent looping
+	// Maximum safe Q for single wave = 1/(k·A)
+	wave.steepness = steepness;
+	
+	wave.phaseOffset = phaseOffset;
+	
+	return wave;
+}
 
-	float sineValue;
-	float cosineValue;
-	sincos(phase, sineValue, cosineValue);
-
-	// Gerstner wave displacement with steepness parameter
+// Evaluate Gerstner wave displacement at a position
+// From GPU Gems Equation 9:
+// P(x,y,t) = [x + Q·A·Dx·cos(k·D·(x,y) - ωt + φ),
+//             y + Q·A·Dy·cos(k·D·(x,y) - ωt + φ),
+//             A·sin(k·D·(x,y) - ωt + φ)]
+float3 EvaluateGerstnerWave(GerstnerWave wave, float2 position, float timeSeconds)
+{
+	// Phase: f = k·(D·position) - ω·t + φ
+	float phase = wave.waveNumber * dot(wave.direction, position) 
+	            - wave.angularFrequency * timeSeconds 
+	            + wave.phaseOffset;
+	
+	float sinPhase, cosPhase;
+	sincos(phase, sinPhase, cosPhase);
+	
+	// Horizontal displacement pulls vertices toward crests
+	// This creates sharp peaks and flat troughs characteristic of ocean waves
 	float QA = wave.steepness * wave.amplitude;
-
-	// Gerstner waves create circular motion:
-	// Horizontal displacement = D * (Q*A) * cos(f)
-	// Vertical displacement = A * sin(f)
+	
 	return float3(
-		wave.direction.x * QA * cosineValue,  // X displacement
-		wave.direction.y * QA * cosineValue,  // Y displacement (Z in world)
-		wave.amplitude * sineValue            // Vertical (Y in world)
+		wave.direction.x * QA * cosPhase,  // X displacement
+		wave.direction.y * QA * cosPhase,  // Y displacement (horizontal)
+		wave.amplitude * sinPhase          // Z displacement (vertical)
 	);
 }
 
-// Calculate Gerstner wave tangent and binormal for normal calculation
-// From GPU Gems: Tangent/Binormal derivatives for proper surface orientation
-void EvaluateUnifiedWaveTangents(UnifiedWave wave, float2 position, float timeSeconds, 
-                                  inout float3 tangent, inout float3 binormal)
+// Calculate tangent and binormal contributions for normal computation
+// From GPU Gems Equations 10-12:
+// Tangent (∂P/∂x) and Binormal (∂P/∂y) derivatives
+void EvaluateGerstnerWaveTangents(GerstnerWave wave, float2 position, float timeSeconds, 
+                                   inout float3 tangent, inout float3 binormal)
 {
-	float spatialPhase = dot(wave.direction, position) * wave.waveNumber + wave.phaseOffset;
-	float phase = WrapUnifiedPhase(spatialPhase - wave.angularVelocity * timeSeconds);
-
-	float sineValue;
-	float cosineValue;
-	sincos(phase, sineValue, cosineValue);
-
-	float steepnessSin = wave.steepness * sineValue;
-	float steepnessCos = wave.steepness * cosineValue;
+	float phase = wave.waveNumber * dot(wave.direction, position) 
+	            - wave.angularFrequency * timeSeconds 
+	            + wave.phaseOffset;
+	
+	float sinPhase, cosPhase;
+	sincos(phase, sinPhase, cosPhase);
 	
 	float Dx = wave.direction.x;
-	float Dz = wave.direction.y;  // Note: our Y is world Z
+	float Dy = wave.direction.y;
+	float kA = wave.waveNumber * wave.amplitude;
+	float QkA = wave.steepness * kA;
 	
-	// Tangent (partial derivative in X direction)
-	// T = [1 - Dx² * S * sin(f), Dx * S * cos(f), -Dx * Dz * S * sin(f)]
-	tangent.x += -Dx * Dx * steepnessSin;  // Accumulated, so subtract from 1 later
-	tangent.y += Dx * steepnessCos;
-	tangent.z += -Dx * Dz * steepnessSin;
+	// Tangent accumulation (partial derivative in X direction)
+	// T = [1 - Dx²·Q·k·A·sin(f), -Dx·Dy·Q·k·A·sin(f), Dx·k·A·cos(f)]
+	tangent.x += -Dx * Dx * QkA * sinPhase;
+	tangent.y += -Dx * Dy * QkA * sinPhase;
+	tangent.z += Dx * kA * cosPhase;
 	
-	// Binormal (partial derivative in Z direction)  
-	// B = [-Dx * Dz * S * sin(f), Dz * S * cos(f), 1 - Dz² * S * sin(f)]
-	binormal.x += -Dx * Dz * steepnessSin;
-	binormal.y += Dz * steepnessCos;
-	binormal.z += -Dz * Dz * steepnessSin;  // Accumulated, so subtract from 1 later
+	// Binormal accumulation (partial derivative in Y direction)
+	// B = [-Dx·Dy·Q·k·A·sin(f), 1 - Dy²·Q·k·A·sin(f), Dy·k·A·cos(f)]
+	binormal.x += -Dx * Dy * QkA * sinPhase;
+	binormal.y += -Dy * Dy * QkA * sinPhase;
+	binormal.z += Dy * kA * cosPhase;
 }
+
+// ============================================================================
+// CONSTANT BUFFER - Wave parameters from CPU
+// ============================================================================
 
 #define UNIFIED_WATER_HAS_PER_FRAME_CBUFFER 1
 cbuffer UnifiedWaterPerFrame : register(b7)
 {
-	float WaveIntensity : packoffset(c0.x);
-	float WaveAmplitude : packoffset(c0.y);
-	float WaveSpeed : packoffset(c0.z);
-	float WaveSteepness : packoffset(c0.w);
+	// Main wave controls
+	float WaveIntensity : packoffset(c0.x);      // Master wave strength (0-1)
+	float WaveAmplitude : packoffset(c0.y);      // Amplitude multiplier for all waves
+	float WaveSpeed : packoffset(c0.z);          // Speed multiplier (1.0 = physically accurate)
+	float WaveSteepness : packoffset(c0.w);      // Global steepness multiplier
+	
+	// Time synchronization
 	float GameTimeHours : packoffset(c1.x);
 	float RealTimeSeconds : packoffset(c1.y);
 	float TimeScale : packoffset(c1.z);
@@ -113,16 +166,20 @@ cbuffer UnifiedWaterPerFrame : register(b7)
 	float PrevRealTimeSeconds : packoffset(c2.y);
 	float PrevTimeScale : packoffset(c2.z);
 	float EnableLightingOverrides : packoffset(c2.w);
+	
+	// Fresnel and reflection
 	float FresnelBias : packoffset(c3.x);
 	float FresnelPower : packoffset(c3.y);
 	float ReflectionStrength : packoffset(c3.z);
 	float RefractionStrength : packoffset(c3.w);
+	
+	// Water optical properties
 	float WaterTransparency : packoffset(c4.x);
 	float AbsorptionDensity : packoffset(c4.y);
 	float ScatteringCoeff : packoffset(c4.z);
-	float SpecularIntensity : packoffset(c4.w);  // Overall specular intensity multiplier
+	float SpecularIntensity : packoffset(c4.w);
 	
-	// Sun specular overrides
+	// Sun specular
 	float SunSpecularPower : packoffset(c5.x);
 	float SunSpecularMagnitude : packoffset(c5.y);
 	float SunSparklePower : packoffset(c5.z);
@@ -130,7 +187,7 @@ cbuffer UnifiedWaterPerFrame : register(b7)
 	float SpecularRadius : packoffset(c6.x);
 	float SpecularBrightness : packoffset(c6.y);
 	
-	// Fog overrides
+	// Fog
 	float AboveWaterFogDistNear : packoffset(c6.z);
 	float AboveWaterFogDistFar : packoffset(c6.w);
 	float AboveWaterFogAmount : packoffset(c7.x);
@@ -138,64 +195,66 @@ cbuffer UnifiedWaterPerFrame : register(b7)
 	float UnderwaterFogDistFar : packoffset(c7.z);
 	float UnderwaterFogAmount : packoffset(c7.w);
 	
-	// Depth properties
+	// Depth controls
 	float DepthReflections : packoffset(c8.x);
 	float DepthRefractions : packoffset(c8.y);
 	float DepthNormals : packoffset(c8.z);
 	float DepthSpecularLighting : packoffset(c8.w);
 	
-	float WavePrimaryContribution : packoffset(c9.x);
-	float WaveSecondaryContribution : packoffset(c9.y);
-	float WaveDetailContribution : packoffset(c9.z);
-	float WavePrimarySpeed : packoffset(c9.w);
-	float WaveSecondarySpeed : packoffset(c10.x);
-	float WaveDetailSpeed : packoffset(c10.y);
-	float WaveDirectionBlend : packoffset(c10.z);
-	float TriVisualizerEnabled : packoffset(c10.w);
+	// Wave layer contribution weights
+	float WavePrimaryContribution : packoffset(c9.x);    // Primary swell weight
+	float WaveSecondaryContribution : packoffset(c9.y);  // Secondary wave weight
+	float WaveDetailContribution : packoffset(c9.z);     // Fine detail weight
+	float WavePrimarySpeed : packoffset(c9.w);           // Primary speed mult
+	float WaveSecondarySpeed : packoffset(c10.x);        // Secondary speed mult
+	float WaveDetailSpeed : packoffset(c10.y);           // Detail speed mult
+	float WaveDirectionBlend : packoffset(c10.z);        // Wind direction influence
+	float TriVisualizerEnabled : packoffset(c10.w);      // Debug wireframe
 	
-	// Wave 1 (Primary) - Large swells
-	float Wave1Amplitude : packoffset(c11.x);
-	float Wave1Wavelength : packoffset(c11.y);
-	float Wave1Steepness : packoffset(c11.z);
-	float Wave1AngleOffset : packoffset(c11.w);
+	// Individual wave parameters (wavelength & amplitude in METERS for intuitive editing)
+	// Wave 1: Primary ocean swell (largest, slowest)
+	float Wave1Amplitude : packoffset(c11.x);     // Amplitude in meters (typ. 0.3-1.0m)
+	float Wave1Wavelength : packoffset(c11.y);    // Wavelength in meters (typ. 30-100m)
+	float Wave1Steepness : packoffset(c11.z);     // Steepness 0-1 (typ. 0.3-0.5)
+	float Wave1AngleOffset : packoffset(c11.w);   // Direction offset radians
 	
-	// Wave 2 (Secondary) - Medium waves
-	float Wave2Amplitude : packoffset(c12.x);
-	float Wave2Wavelength : packoffset(c12.y);
+	// Wave 2: Secondary swell (medium)
+	float Wave2Amplitude : packoffset(c12.x);     // typ. 0.15-0.5m
+	float Wave2Wavelength : packoffset(c12.y);    // typ. 15-40m
 	float Wave2Steepness : packoffset(c12.z);
 	float Wave2AngleOffset : packoffset(c12.w);
 	
-	// Wave 3 (Detail) - Small waves
-	float Wave3Amplitude : packoffset(c13.x);
-	float Wave3Wavelength : packoffset(c13.y);
+	// Wave 3: Wind waves (smaller, faster)
+	float Wave3Amplitude : packoffset(c13.x);     // typ. 0.08-0.25m
+	float Wave3Wavelength : packoffset(c13.y);    // typ. 8-20m
 	float Wave3Steepness : packoffset(c13.z);
 	float Wave3AngleOffset : packoffset(c13.w);
 	
-	// Wave 4 (Fine Ripple 1) - Sub-meter detail
-	float Wave4Amplitude : packoffset(c14.x);
-	float Wave4Wavelength : packoffset(c14.y);
+	// Wave 4: Chop (short period)
+	float Wave4Amplitude : packoffset(c14.x);     // typ. 0.03-0.1m
+	float Wave4Wavelength : packoffset(c14.y);    // typ. 3-8m
 	float Wave4Steepness : packoffset(c14.z);
 	float Wave4AngleOffset : packoffset(c14.w);
 	
-	// Wave 5 (Fine Ripple 2) - Micro ripples
-	float Wave5Amplitude : packoffset(c15.x);
-	float Wave5Wavelength : packoffset(c15.y);
+	// Wave 5: Fine ripples
+	float Wave5Amplitude : packoffset(c15.x);     // typ. 0.01-0.05m
+	float Wave5Wavelength : packoffset(c15.y);    // typ. 1-4m
 	float Wave5Steepness : packoffset(c15.z);
 	float Wave5AngleOffset : packoffset(c15.w);
 	
-	// Wave 6 (Fine Ripple 3) - Tiny surface detail
-	float Wave6Amplitude : packoffset(c16.x);
-	float Wave6Wavelength : packoffset(c16.y);
+	// Wave 6: Micro detail
+	float Wave6Amplitude : packoffset(c16.x);     // typ. 0.005-0.02m
+	float Wave6Wavelength : packoffset(c16.y);    // typ. 0.5-2m
 	float Wave6Steepness : packoffset(c16.z);
 	float Wave6AngleOffset : packoffset(c16.w);
 	
-	// Tessellation control - when enabled, VS skips wave displacement (DS handles it)
+	// Tessellation
 	float TessellationEnabled : packoffset(c17.x);
 	float TessPadding1 : packoffset(c17.y);
 	float TessPadding2 : packoffset(c17.z);
 	float TessPadding3 : packoffset(c17.w);
 	
-	// Player ripples data
+	// Player ripples
 	float PlayerPosX : packoffset(c18.x);
 	float PlayerPosY : packoffset(c18.y);
 	float PlayerPosZ : packoffset(c18.z);
@@ -212,84 +271,127 @@ cbuffer UnifiedWaterPerFrame : register(b7)
 
 cbuffer UnifiedWaterPerTile : register(b8)
 {
-	float4 PrevData : packoffset(c0);  // x/y = prev normal, z = prev distance, w = prev segments per axis
-	float4 TileData : packoffset(c1);  // x/y = tile cell coords, z = LOD level, w = tile span
+	float4 PrevData : packoffset(c0);
+	float4 TileData : packoffset(c1);
 }
 
-// Simple hash function for procedural noise
+// ============================================================================
+// PROCEDURAL NOISE - For organic wave variation
+// ============================================================================
+
 float hash(float2 p)
 {
 	float h = dot(p, float2(127.1, 311.7));
 	return frac(sin(h) * 43758.5453123);
 }
 
-// 2D noise function for organic variation
 float noise2D(float2 p)
 {
 	float2 i = floor(p);
 	float2 f = frac(p);
-
-	float2 u = f * f * (3.0 - 2.0 * f);
-
+	float2 u = f * f * (3.0 - 2.0 * f);  // Smoothstep
+	
 	float a = hash(i);
 	float b = hash(i + float2(1.0, 0.0));
 	float c = hash(i + float2(0.0, 1.0));
 	float d = hash(i + float2(1.0, 1.0));
-
+	
 	return lerp(lerp(a, b, u.x), lerp(c, d, u.x), u.y);
 }
 
-// Multi-octave noise for richer detail
-float fractalNoise(float2 p, int octaves)
-{
-	float value = 0.0;
-	float amplitude = 0.5;
-	float frequency = 1.0;
-	
-	for (int i = 0; i < octaves; i++) {
-		value += amplitude * noise2D(p * frequency);
-		frequency *= 2.0;
-		amplitude *= 0.5;
-	}
-	
-	return value;
-}
+// ============================================================================
+// WAVE OUTPUT STRUCTURE
+// ============================================================================
 
 struct WaveSample
 {
-	float3 displacement;
-	float3 normal;
-	float2 primaryDirection;
-	float shoreInfluence;
-	float shoreDistance;
+	float3 displacement;      // XYZ offset in game units
+	float3 normal;            // Surface normal (full detail for specular/reflections)
+	float3 geometricNormal;   // Softer normal for diffuse lighting (prevents distortion)
+	float2 primaryDirection;  // Dominant wave direction for texture scrolling
+	float shoreInfluence;     // Shore proximity factor (future use)
+	float shoreDistance;      // Distance to shore (future use)
 };
 
-WaveSample CalculateWaterDisplacement(float2 worldPos, float2 textureDims, float2 texCoordOffset, float waveIntensity, float amplitudeMult, float speedMult, float steepnessMult, float timeSeconds, float dayPhase, float2 flowBiasDir, float flowBiasWeight, bool usePreviousFrame = false)
+// ============================================================================
+// MAIN WAVE CALCULATION
+// ============================================================================
+
+// Realistic multi-layer Gerstner wave composition
+// Uses 6 waves across different frequency bands for natural ocean appearance:
+// - Primary swell: Long-period waves from distant weather systems
+// - Secondary swell: Shorter swells that travel with primary
+// - Wind waves: Medium waves generated by local wind
+// - Chop: Short-period waves that add texture
+// - Ripples: Fine surface detail
+// - Micro detail: Highest frequency for close-up views
+
+WaveSample CalculateWaterDisplacement(
+	float2 worldPos,           // Absolute world position (Skyrim units)
+	float2 textureDims,        // Texture dimensions (unused, kept for interface)
+	float2 texCoordOffset,     // Texture offset (unused)
+	float waveIntensity,       // Master intensity (0-1)
+	float amplitudeMult,       // Amplitude multiplier
+	float speedMult,           // Speed multiplier
+	float steepnessMult,       // Steepness multiplier
+	float timeSeconds,         // Current time
+	float dayPhase,            // Day cycle phase for variation
+	float2 flowBiasDir,        // Flow direction bias (rivers)
+	float flowBiasWeight,      // Flow direction weight
+	bool usePreviousFrame      // For motion vectors
+)
 {
-	if (waveIntensity <= 0.0f) {
-		WaveSample zeroSample;
-		zeroSample.displacement = float3(0.0f, 0.0f, 0.0f);
-		zeroSample.normal = float3(0.0f, 0.0f, 1.0f);
-		zeroSample.primaryDirection = float2(0.0f, 1.0f);
-		zeroSample.shoreInfluence = 0.0f;
-		zeroSample.shoreDistance = 10000.0f;
-		return zeroSample;
+	WaveSample result;
+	result.displacement = float3(0.0f, 0.0f, 0.0f);
+	result.normal = float3(0.0f, 0.0f, 1.0f);
+	result.geometricNormal = float3(0.0f, 0.0f, 1.0f);
+	result.primaryDirection = float2(0.0f, 1.0f);
+	result.shoreInfluence = 0.0f;
+	result.shoreDistance = 10000.0f;
+	
+	if (waveIntensity <= 0.001f) {
+		return result;
 	}
-
-	// Skyrim unit conversion: 4096 units = 1 cell ≈ 192 meters (from game data)
-	// Therefore: 1 Skyrim unit ≈ 0.046875 meters (192m / 4096 units)
-	// Inverse: 1 meter ≈ 21.33 Skyrim units
-	const float SKYRIM_UNITS_PER_METER = 21.333333f;
 	
-	UnifiedWave waves[6];
-
-	const float2 defaultWaveDir = float2(-0.70710678f, 0.70710678f);
-	float2 primaryDir = defaultWaveDir;
+	// Base wind direction - default southwest to northeast (typical for northern hemisphere)
+	float2 windDir = normalize(float2(0.707f, 0.707f));
 	
-	// Create 6 wave directions with varying angles for natural dispersion
-	float2 baseDirections[6];
+	// Apply flow bias for rivers/streams
+	if (flowBiasWeight > 0.01f) {
+		windDir = normalize(lerp(windDir, flowBiasDir, flowBiasWeight));
+	}
 	
-	// Wave angle offsets from user parameters (in radians)
+	result.primaryDirection = windDir;
+	
+	// Read wave parameters from cbuffer
+	// Parameters are in METERS for intuitive editing
+	float wavelengthsM[6] = {
+		max(Wave1Wavelength, 1.0f),
+		max(Wave2Wavelength, 0.5f),
+		max(Wave3Wavelength, 0.25f),
+		max(Wave4Wavelength, 0.1f),
+		max(Wave5Wavelength, 0.05f),
+		max(Wave6Wavelength, 0.025f)
+	};
+	
+	float amplitudesM[6] = {
+		max(Wave1Amplitude, 0.0f),
+		max(Wave2Amplitude, 0.0f),
+		max(Wave3Amplitude, 0.0f),
+		max(Wave4Amplitude, 0.0f),
+		max(Wave5Amplitude, 0.0f),
+		max(Wave6Amplitude, 0.0f)
+	};
+	
+	float steepnesses[6] = {
+		saturate(Wave1Steepness),
+		saturate(Wave2Steepness),
+		saturate(Wave3Steepness),
+		saturate(Wave4Steepness),
+		saturate(Wave5Steepness),
+		saturate(Wave6Steepness)
+	};
+	
 	float angleOffsets[6] = {
 		Wave1AngleOffset,
 		Wave2AngleOffset,
@@ -299,154 +401,244 @@ WaveSample CalculateWaterDisplacement(float2 worldPos, float2 textureDims, float
 		Wave6AngleOffset
 	};
 	
-	// Generate wave directions by rotating primary direction
-	[unroll] for (int dirIdx = 0; dirIdx < 6; ++dirIdx) {
-		float angle = angleOffsets[dirIdx];
-		float cosA, sinA;
-		sincos(angle, sinA, cosA);
-		baseDirections[dirIdx] = float2(
-			primaryDir.x * cosA - primaryDir.y * sinA,
-			primaryDir.x * sinA + primaryDir.y * cosA);
-	}
-	
-	// User-configurable wave parameters (wavelengths in Skyrim units)
-	// Convert to meters for physical calculations: wavelength_meters = wavelength_units / SKYRIM_UNITS_PER_METER
-	float baseAmplitudesUnits[6] = {
-		Wave1Amplitude, Wave2Amplitude, Wave3Amplitude,
-		Wave4Amplitude, Wave5Amplitude, Wave6Amplitude
-	};
-	float baseWaveLengthsUnits[6] = {
-		Wave1Wavelength, Wave2Wavelength, Wave3Wavelength,
-		Wave4Wavelength, Wave5Wavelength, Wave6Wavelength
-	};
-	float baseSteepness[6] = {
-		Wave1Steepness, Wave2Steepness, Wave3Steepness,
-		Wave4Steepness, Wave5Steepness, Wave6Steepness
-	};
-	
-	// Physics constants
-	const float gravity = 9.8f; // Earth gravity in m/s²
-	
-	// Contribution weights for user control (first 3 exposed in UI, rest auto-calculated)
+	// Contribution weights per layer
 	float contributions[6] = {
 		max(WavePrimaryContribution, 0.0f),
 		max(WaveSecondaryContribution, 0.0f),
 		max(WaveDetailContribution, 0.0f),
-		// Detail waves use physics-based amplitude falloff
-		max(WaveDetailContribution * 0.65f, 0.0f),  // Wave 4: 65% of detail
-		max(WaveDetailContribution * 0.45f, 0.0f),  // Wave 5: 45% of detail
-		max(WaveDetailContribution * 0.30f, 0.0f)   // Wave 6: 30% of detail
+		max(WaveDetailContribution * 0.7f, 0.0f),
+		max(WaveDetailContribution * 0.5f, 0.0f),
+		max(WaveDetailContribution * 0.3f, 0.0f)
 	};
 	
-	// Disable waves with negligible contribution to prevent artifacts
-	[unroll] for (int i = 0; i < 6; ++i) {
-		if (contributions[i] < 0.001f) {
-			contributions[i] = 0.0f;
-		}
-	}
-	
-	// Speed scaling per wave (first 3 user-controlled, rest use physics)
-	float speedScale[6] = {
-		max(WavePrimarySpeed, 0.0f),
-		max(WaveSecondarySpeed, 0.0f),
-		max(WaveDetailSpeed, 0.0f),
-		max(WaveDetailSpeed * 1.15f, 0.0f),  // Detail waves slightly faster
-		max(WaveDetailSpeed * 1.30f, 0.0f),
-		max(WaveDetailSpeed * 1.50f, 0.0f)
+	// Speed multipliers per layer (longer waves should move faster per dispersion)
+	float speedMults[6] = {
+		max(WavePrimarySpeed, 0.1f),
+		max(WaveSecondarySpeed, 0.1f),
+		max(WaveDetailSpeed, 0.1f),
+		max(WaveDetailSpeed * 1.1f, 0.1f),
+		max(WaveDetailSpeed * 1.2f, 0.1f),
+		max(WaveDetailSpeed * 1.3f, 0.1f)
 	};
 	
-	// Day-phase variation for temporal diversity (reduces repetition)
-	float dayScale[6] = { 1.0f, 1.45f, 2.2f, 3.1f, 4.5f, 6.2f };
-	float dayBias[6] = { 0.0f, 2.0943951f, 4.1887903f, 1.5707963f, 3.6651914f, 5.4977871f };
-
-	// Track cumulative steepness to prevent triangle holes from vertex crossover
-	// Per GPU Gems: sum of Q*k*A for all waves must not exceed 1 to prevent looping
-	float cumulativeSteepnessKA = 0.0f;
-	const float MAX_CUMULATIVE_STEEPNESS = 0.85f;  // Conservative limit below 1.0
+	// Phase offsets for temporal variation (prevent repetitive patterns)
+	float phaseOffsets[6] = {
+		0.0f,
+		dayPhase * 0.3f + 2.094f,
+		dayPhase * 0.5f + 4.189f,
+		dayPhase * 0.7f + 1.047f,
+		dayPhase * 0.9f + 5.236f,
+		dayPhase * 1.1f + 3.142f
+	};
 	
-	[unroll] for (int j = 0; j < 6; ++j) {
-		waves[j].direction = normalize(baseDirections[j]);
-		
-		// Convert wavelength from Skyrim units to meters for physics calculations
-		float wavelengthMeters = baseWaveLengthsUnits[j] / SKYRIM_UNITS_PER_METER;
-		
-		// Amplitude in Skyrim units (already correctly scaled for visual output)
-		waves[j].amplitude = baseAmplitudesUnits[j] * waveIntensity * amplitudeMult * contributions[j];
-		
-		// Calculate wave number in Skyrim units: k = 2π / wavelength_units
-		float waveNumberUnits = UW_TWO_PI / baseWaveLengthsUnits[j];
-		waves[j].waveNumber = waveNumberUnits;
-		
-		// Physically accurate phase speed using METER wavelength: c = sqrt(g * λ_meters / 2π)
-		// Deep water dispersion relation ensures longer waves travel faster
-		float phaseSpeedMetersPerSec = sqrt(gravity * wavelengthMeters / UW_TWO_PI);
-		
-		// Convert phase speed to Skyrim units/sec
-		float phaseSpeedUnitsPerSec = phaseSpeedMetersPerSec * SKYRIM_UNITS_PER_METER;
-		
-		// Angular velocity: ω = k * c (in Skyrim units)
-		// User speed multiplier allows artistic control while preserving physics
-		waves[j].angularVelocity = waveNumberUnits * phaseSpeedUnitsPerSec * speedMult * speedScale[j];
-		
-		// Steepness controls wave sharpness (0 = sine, 1 = sharp crest)
-		// Calculate this wave's contribution to cumulative steepness: Q*k*A
-		float rawSteepness = saturate(baseSteepness[j] * steepnessMult * contributions[j]);
-		float thisWaveKA = waveNumberUnits * waves[j].amplitude;
-		float thisWaveSteepnessContrib = rawSteepness * thisWaveKA;
-		
-		// Scale down steepness if cumulative would exceed safe limit
-		if (cumulativeSteepnessKA + thisWaveSteepnessContrib > MAX_CUMULATIVE_STEEPNESS && thisWaveSteepnessContrib > 0.001f) {
-			float allowedContrib = max(0.0f, MAX_CUMULATIVE_STEEPNESS - cumulativeSteepnessKA);
-			float scaleFactor = allowedContrib / thisWaveSteepnessContrib;
-			rawSteepness *= scaleFactor;
-			thisWaveSteepnessContrib = allowedContrib;
+	// Build waves with proper physical parameters
+	GerstnerWave waves[6];
+	
+	// Track cumulative Q*k*A to prevent looping (must stay < 1)
+	float cumulativeQkA = 0.0f;
+	const float MAX_QKA = 0.9f;  // Safety margin below 1.0
+	
+	[unroll]
+	for (int i = 0; i < 6; ++i) {
+		// Skip waves with negligible contribution
+		if (contributions[i] < 0.001f || amplitudesM[i] < 0.0001f) {
+			waves[i].amplitude = 0.0f;
+			waves[i].steepness = 0.0f;
+			waves[i].waveNumber = 1.0f;
+			waves[i].angularFrequency = 1.0f;
+			waves[i].direction = windDir;
+			waves[i].phaseOffset = 0.0f;
+			waves[i].wavelength = 1.0f;
+			waves[i].phaseSpeed = 1.0f;
+			continue;
 		}
 		
-		waves[j].steepness = rawSteepness;
-		cumulativeSteepnessKA += thisWaveSteepnessContrib;
+		// Create rotation for wave direction spread
+		// Each wave has slightly different direction for realistic interference
+		float angle = angleOffsets[i];
+		float cosA, sinA;
+		sincos(angle, sinA, cosA);
+		float2 waveDir = float2(
+			windDir.x * cosA - windDir.y * sinA,
+			windDir.x * sinA + windDir.y * cosA
+		);
 		
-		// Temporal phase offset for variation (reduces repetition)
-		waves[j].phaseOffset = dayPhase * dayScale[j] + dayBias[j];
+		// Create wave with physical parameters
+		waves[i] = CreateGerstnerWave(
+			waveDir,
+			wavelengthsM[i],
+			amplitudesM[i] * contributions[i] * waveIntensity * amplitudeMult,
+			steepnesses[i] * steepnessMult,
+			phaseOffsets[i]
+		);
+		
+		// Apply speed multiplier to angular frequency
+		waves[i].angularFrequency *= speedMult * speedMults[i];
+		
+		// Enforce cumulative steepness limit to prevent triangle holes
+		float thisQkA = waves[i].steepness * waves[i].waveNumber * waves[i].amplitude;
+		if (cumulativeQkA + thisQkA > MAX_QKA && thisQkA > 0.0001f) {
+			float allowedQkA = max(0.0f, MAX_QKA - cumulativeQkA);
+			float scaleFactor = allowedQkA / thisQkA;
+			waves[i].steepness *= scaleFactor;
+			thisQkA = allowedQkA;
+		}
+		cumulativeQkA += thisQkA;
 	}
-
-	float3 totalDisplacement = float3(0.0f, 0.0f, 0.0f);
 	
-	// Initialize tangent and binormal for normal calculation
-	// Start with flat plane: tangent = (1, 0, 0), binormal = (0, 0, 1)
+	// Evaluate all waves and accumulate displacement + tangent frame
+	// Using Catlike Coding's method: accumulate derivative offsets, then cross product
+	float3 totalDisp = float3(0.0f, 0.0f, 0.0f);
+	
+	// Tangent/binormal start as flat surface basis vectors
+	// Wave contributions are ADDED to these (the 1s in the diagonal are implicit)
 	float3 tangent = float3(1.0f, 0.0f, 0.0f);
-	float3 binormal = float3(0.0f, 0.0f, 1.0f);
-
-	[unroll] for (int k = 0; k < 6; ++k) {
-		// Skip disabled waves to prevent precision artifacts
-		if (contributions[k] > 0.0f) {
-			totalDisplacement += EvaluateUnifiedWave(waves[k], worldPos, timeSeconds);
-			EvaluateUnifiedWaveTangents(waves[k], worldPos, timeSeconds, tangent, binormal);
+	float3 binormal = float3(0.0f, 1.0f, 0.0f);
+	
+	// Also track a softer version for diffuse lighting (only uses primary waves)
+	float3 softTangent = float3(1.0f, 0.0f, 0.0f);
+	float3 softBinormal = float3(0.0f, 1.0f, 0.0f);
+	
+	[unroll]
+	for (int j = 0; j < 6; ++j) {
+		if (waves[j].amplitude > 0.0001f) {
+			totalDisp += EvaluateGerstnerWave(waves[j], worldPos, timeSeconds);
+			EvaluateGerstnerWaveTangents(waves[j], worldPos, timeSeconds, tangent, binormal);
+			
+			// Only primary waves (0-2) contribute to soft/geometric normal
+			// This prevents high-frequency detail from distorting diffuse lighting
+			if (j < 3) {
+				EvaluateGerstnerWaveTangents(waves[j], worldPos, timeSeconds, softTangent, softBinormal);
+			}
 		}
 	}
 	
-	// Complete the tangent and binormal by adding back the base values
-	// (derivatives accumulated the changes, now restore the flat plane base)
-	tangent.x += 1.0f;
-	binormal.z += 1.0f;
-	
-	// Calculate normal via cross product: N = normalize(binormal × tangent)
+	// Compute full-detail normal via cross product (Catlike Coding method)
+	// Normal = cross(binormal, tangent) gives us the surface normal
 	float3 waveNormal = normalize(cross(binormal, tangent));
 	
-	// Clamp displacement to prevent extreme values that cause rendering artifacts
-	// Horizontal displacement limited more aggressively to prevent triangle holes
-	// (typical water mesh has ~64-128 unit vertex spacing)
-	const float maxHorizontalDisp = 24.0f;
-	const float maxVerticalDisp = 35.0f;
-	totalDisplacement.xy = clamp(totalDisplacement.xy, -maxHorizontalDisp, maxHorizontalDisp);
-	totalDisplacement.z = clamp(totalDisplacement.z, -maxVerticalDisp, maxVerticalDisp);
+	// Ensure normal points upward (Z positive in our coordinate system)
+	if (waveNormal.z < 0.0f) {
+		waveNormal = -waveNormal;
+	}
+	
+	// Compute softer geometric normal for diffuse lighting
+	float3 geoNormal = normalize(cross(softBinormal, softTangent));
+	if (geoNormal.z < 0.0f) {
+		geoNormal = -geoNormal;
+	}
+	
+	// Clamp displacement to prevent extreme values
+	// With larger waves (up to 80cm), we need larger clamps
+	// Horizontal displacement should still be conservative to prevent mesh tearing
+	const float maxHorizDisp = 25.0f;  // ~36cm - conservative for mesh stability
+	const float maxVertDisp = 100.0f;  // ~143cm - allows for larger swells
+	
+	totalDisp.xy = clamp(totalDisp.xy, -maxHorizDisp, maxHorizDisp);
+	totalDisp.z = clamp(totalDisp.z, -maxVertDisp, maxVertDisp);
+	
+	result.displacement = totalDisp;
+	result.normal = waveNormal;
+	result.geometricNormal = geoNormal;
+	
+	return result;
+}
 
-	WaveSample sample;
-	sample.displacement = totalDisplacement;
-	sample.normal = waveNormal;
-	sample.primaryDirection = primaryDir;
-	sample.shoreInfluence = 0.0f;
-	sample.shoreDistance = 10000.0f;
-	return sample;
+// ============================================================================
+// WAVE SELF-SHADOWING
+// ============================================================================
+// Approximates self-shadowing of waves without requiring shadow map modifications.
+// This technique traces along the light direction using wave height information
+// to determine if nearby wave crests would occlude the current point.
+// Based on horizon-based ambient occlusion concepts applied to wave geometry.
+
+float CalculateWaveSelfShadow(
+	float2 worldPos,          // Current world position XY
+	float currentHeight,      // Current wave height at this position
+	float3 lightDir,          // Sun direction (pointing toward sun)
+	float waveIntensity,      // Master wave intensity
+	float amplitudeMult,      // Amplitude multiplier
+	float timeSeconds,        // Current time
+	float dayPhase            // Day phase for consistency
+)
+{
+	// Skip if waves are disabled or light is directly overhead
+	if (waveIntensity <= 0.01f || lightDir.z > 0.95f) {
+		return 1.0f;
+	}
+	
+	// Project light direction onto XY plane for tracing
+	float2 lightDirXY = lightDir.xy;
+	float lightDirXYLen = length(lightDirXY);
+	if (lightDirXYLen < 0.01f) {
+		return 1.0f;  // Light is nearly vertical
+	}
+	lightDirXY /= lightDirXYLen;
+	
+	// Calculate how much height we gain per unit distance toward the light
+	// tan(elevation) = z / sqrt(x² + y²)
+	float lightElevationTan = lightDir.z / lightDirXYLen;
+	
+	// Sample parameters - trace toward the light to find occluders
+	const int NUM_SAMPLES = 4;
+	const float MAX_TRACE_DIST = 150.0f;  // Maximum trace distance in game units (~2m)
+	const float STEP_SIZE = MAX_TRACE_DIST / float(NUM_SAMPLES);
+	
+	float shadow = 1.0f;
+	float baseHeight = currentHeight;
+	
+	// Trace toward the light source
+	[unroll]
+	for (int i = 1; i <= NUM_SAMPLES; i++) {
+		float dist = float(i) * STEP_SIZE;
+		float2 samplePos = worldPos + lightDirXY * dist;
+		
+		// Calculate expected height if no occlusion (height increases toward sun)
+		float expectedHeight = baseHeight + dist * lightElevationTan;
+		
+		// Sample wave height at this position (simplified - just primary waves)
+		// Using a simplified calculation for performance
+		float2 windDir = normalize(float2(0.707f, 0.707f));
+		
+		// Sample primary wave
+		GerstnerWave wave1 = CreateGerstnerWave(
+			windDir,
+			max(Wave1Wavelength, 1.0f),
+			max(Wave1Amplitude, 0.0f) * waveIntensity * amplitudeMult,
+			saturate(Wave1Steepness),
+			0.0f
+		);
+		float3 disp1 = EvaluateGerstnerWave(wave1, samplePos, timeSeconds);
+		
+		// Sample secondary wave with offset direction
+		float angle2 = Wave2AngleOffset;
+		float cosA2, sinA2;
+		sincos(angle2, sinA2, cosA2);
+		float2 waveDir2 = float2(windDir.x * cosA2 - windDir.y * sinA2, windDir.x * sinA2 + windDir.y * cosA2);
+		GerstnerWave wave2 = CreateGerstnerWave(
+			waveDir2,
+			max(Wave2Wavelength, 0.5f),
+			max(Wave2Amplitude, 0.0f) * waveIntensity * amplitudeMult * WaveSecondaryContribution,
+			saturate(Wave2Steepness),
+			dayPhase * 0.3f + 2.094f
+		);
+		float3 disp2 = EvaluateGerstnerWave(wave2, samplePos, timeSeconds);
+		
+		float sampleHeight = disp1.z + disp2.z;
+		
+		// If the sampled wave is higher than expected height, it's blocking light
+		float occlusion = sampleHeight - expectedHeight;
+		if (occlusion > 0.0f) {
+			// Soft shadow falloff based on how much the wave exceeds expected height
+			float shadowStrength = saturate(occlusion / (Wave1Amplitude * M_TO_GAME_UNIT * 0.5f));
+			// Closer samples have more influence (soft penumbra)
+			float distanceFalloff = 1.0f - float(i - 1) / float(NUM_SAMPLES);
+			shadow = min(shadow, 1.0f - shadowStrength * distanceFalloff * 0.7f);
+		}
+	}
+	
+	// Smooth the shadow to prevent harsh transitions
+	return lerp(shadow, 1.0f, 0.3f);
 }
 
 #endif // __GERSTNER_WAVES_HLSLI__

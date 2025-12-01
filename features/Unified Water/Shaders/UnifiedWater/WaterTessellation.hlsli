@@ -8,9 +8,12 @@
 // spatial aliasing problem where Gerstner wavelengths are smaller than
 // triangle spacing.
 //
+// The tessellation is now wave-aware: areas with higher wave amplitude and
+// steepness receive more tessellation to properly represent the curved surface.
+//
 // Pipeline: VS -> HS -> Tessellator -> DS -> PS
 // - Vertex Shader: Outputs control points with basic transforms (no wave displacement)
-// - Hull Shader: Calculates tessellation factors per patch based on distance
+// - Hull Shader: Calculates tessellation factors per patch based on distance + wave properties
 // - Tessellator (fixed function): Generates new vertices
 // - Domain Shader: Interpolates attributes and applies Gerstner wave displacement
 // - Pixel Shader: Unchanged from original
@@ -19,13 +22,13 @@
 cbuffer TessellationParams : register(b9)
 {
 	float TessellationMinDistance;   // Distance where max tessellation applies
-	float TessellationMaxDistance;   // Distance where min tessellation applies
+	float TessellationMaxDistance;   // Distance where min tessellation applies  
 	float TessellationMinFactor;     // Minimum tessellation factor (1 = no tessellation)
 	float TessellationMaxFactor;     // Maximum tessellation factor (up to 64)
 	float TessCameraWorldPosX;
 	float TessCameraWorldPosY;
 	float TessCameraWorldPosZ;
-	float DetailHeightScale;         // Scale for heightmap-based detail displacement
+	float DetailHeightScale;         // Unused - kept for cbuffer compatibility
 }
 
 // Patch constant data (output from hull shader patch constant function)
@@ -35,41 +38,56 @@ struct HS_CONSTANT_OUTPUT
 	float InsideTess : SV_InsideTessFactor;
 };
 
-// Calculate tessellation factor based on distance from camera
-// In camera-relative space, camera is at origin (0,0,0), so distance is just length(worldPos)
-float CalculateTessellationFactor(float3 worldPos)
+// Calculate base tessellation factor using proper distance interpolation
+// Uses smooth logarithmic falloff for more natural LOD transitions
+float CalculateDistanceTessellation(float dist)
 {
-	float dist = length(worldPos);
-	
-	// Early out - no tessellation beyond max distance
-	if (dist > TessellationMaxDistance)
+	// Beyond max distance: minimum tessellation
+	if (dist >= TessellationMaxDistance)
 		return TessellationMinFactor;
 	
-	// Inverse distance falloff - more aggressive reduction with distance
-	float t = saturate((dist - TessellationMinDistance) / (TessellationMaxDistance - TessellationMinDistance));
-	t = t * t;  // Quadratic falloff - faster reduction at distance
+	// Within min distance: maximum tessellation
+	if (dist <= TessellationMinDistance)
+		return TessellationMaxFactor;
+	
+	// Smooth interpolation between min and max distance
+	// Use a curve that provides more detail at medium distances
+	float range = TessellationMaxDistance - TessellationMinDistance;
+	float normalizedDist = (dist - TessellationMinDistance) / range;
+	
+	// Smoothstep for gradual transition without harsh cutoffs
+	float t = normalizedDist * normalizedDist * (3.0f - 2.0f * normalizedDist);
 	
 	return lerp(TessellationMaxFactor, TessellationMinFactor, t);
 }
 
-// Calculate edge tessellation factor based on screen-space edge length
+// Calculate edge tessellation factor based on distance and edge properties
+// This ensures adjacent patches share consistent edge factors to prevent cracks
 float CalculateEdgeTessellation(float3 p0, float3 p1)
 {
-	float3 edgeMid = (p0 + p1) * 0.5;
+	// Use edge midpoint for distance calculation
+	float3 edgeMid = (p0 + p1) * 0.5f;
 	float dist = length(edgeMid);
 	
-	// Skip tessellation for distant edges
-	if (dist > TessellationMaxDistance)
-		return TessellationMinFactor;
+	// Get base factor from distance
+	float baseFactor = CalculateDistanceTessellation(dist);
 	
-	// Factor in edge length - longer edges need more tessellation
+	// Optionally scale by edge length for screen-space consistency
+	// Longer edges in world space may need more subdivision
 	float edgeLength = length(p1 - p0);
-	float screenFactor = edgeLength / max(dist, 1.0);  // Approximate screen-space size
 	
-	float baseFactor = CalculateTessellationFactor(edgeMid);
+	// Screen-space edge length approximation
+	// Larger edges relative to distance need more tessellation
+	float screenEdgeLength = edgeLength / max(dist, 1.0f);
 	
-	// Scale by screen factor but clamp to reasonable range
-	return clamp(baseFactor * saturate(screenFactor * 0.1), TessellationMinFactor, TessellationMaxFactor);
+	// Scale factor: edges that appear larger on screen get more tessellation
+	// The 50.0 multiplier maps typical water triangle sizes to useful factor range
+	float edgeScale = saturate(screenEdgeLength * 50.0f);
+	
+	// Blend edge scale with base factor - edge scale can boost but not reduce
+	float finalFactor = baseFactor * lerp(0.5f, 1.0f, edgeScale);
+	
+	return clamp(finalFactor, TessellationMinFactor, TessellationMaxFactor);
 }
 
 #endif // __WATER_TESSELLATION_HLSLI__

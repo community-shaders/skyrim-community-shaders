@@ -3,11 +3,17 @@
 
 #include "Common/Math.hlsli"
 
-// Conversion constants
+// Conversion constants (game unit to real world)
 #define GAME_UNIT_TO_CM     1.428f
-#define GAME_UNIT_TO_M      GAME_UNIT_TO_CM / 100.0f
-#define GAME_UNIT_TO_FEET   GAME_UNIT_TO_CM / 30.48f
-#define GAME_UNIT_TO_INCHES GAME_UNIT_TO_CM / 2.54f
+#define GAME_UNIT_TO_M      (GAME_UNIT_TO_CM / 100.0f)
+#define GAME_UNIT_TO_FEET   (GAME_UNIT_TO_CM / 30.48f)
+#define GAME_UNIT_TO_INCHES (GAME_UNIT_TO_CM / 2.54f)
+
+// Conversion constants (real world to game unit)
+#define CM_TO_GAME_UNIT     (1.0f / GAME_UNIT_TO_CM)
+#define M_TO_GAME_UNIT      (100.0f / GAME_UNIT_TO_CM)
+#define FEET_TO_GAME_UNIT   (30.48f / GAME_UNIT_TO_CM)
+#define INCHES_TO_GAME_UNIT (2.54f / GAME_UNIT_TO_CM)
 
 // Wind speed conversions
 #define WIND_RAW_TO_NORMALIZED 1.0f / 255.0f
