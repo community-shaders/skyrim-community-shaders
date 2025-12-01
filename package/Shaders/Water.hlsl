@@ -265,7 +265,8 @@ VS_OUTPUT main(VS_INPUT input)
 	float horizontalDisplacement = 0.0f;
 	
 	if (TessellationEnabled < 0.5f) {
-		WaveSample currentWave = CalculateWaterDisplacement(waveWorldPos, float2(0.0f, 0.0f), float2(0.0f, 0.0f), WaveIntensity, WaveAmplitude, WaveSpeed, WaveSteepness, waveTimeSeconds, waveDayPhase, flowBiasDirVS, flowBiasWeightVS, false);
+		float cameraDistVS = length(worldPosBase.xyz);
+		WaveSample currentWave = CalculateWaterDisplacement(waveWorldPos, float2(0.0f, 0.0f), float2(0.0f, 0.0f), WaveIntensity, WaveAmplitude, WaveSpeed, WaveSteepness, waveTimeSeconds, waveDayPhase, flowBiasDirVS, flowBiasWeightVS, false, cameraDistVS);
 		waveDisplacement = currentWave.displacement;
 		waveNormal = currentWave.normal;
 		wavePrimaryDir = currentWave.primaryDirection;
@@ -303,7 +304,8 @@ VS_OUTPUT main(VS_INPUT input)
 	if (TessellationEnabled < 0.5f) {
 		float waveTimeSecondsPrev = ComputeWaveTimeSeconds(PrevGameTimeHours, PrevRealTimeSeconds);
 		float waveDayPhasePrev = ComputeWaveDayPhase(PrevGameTimeHours);
-		WaveSample prevWave = CalculateWaterDisplacement(waveWorldPos, float2(0.0f, 0.0f), float2(0.0f, 0.0f), WaveIntensity, WaveAmplitude, WaveSpeed, WaveSteepness, waveTimeSecondsPrev, waveDayPhasePrev, flowBiasDirVS, flowBiasWeightVS, true);
+		float cameraDistVSPrev = length(worldPosBase.xyz);
+		WaveSample prevWave = CalculateWaterDisplacement(waveWorldPos, float2(0.0f, 0.0f), float2(0.0f, 0.0f), WaveIntensity, WaveAmplitude, WaveSpeed, WaveSteepness, waveTimeSecondsPrev, waveDayPhasePrev, flowBiasDirVS, flowBiasWeightVS, true, cameraDistVSPrev);
 		prevWaveDisplacement = prevWave.displacement;
 	}
 	
@@ -648,6 +650,8 @@ VS_OUTPUT main(HS_CONSTANT_OUTPUT patchConst, float3 bary : SV_DomainLocation, c
 	float waveDayPhase = ComputeWaveDayPhase(GameTimeHours);
 	
 	// Calculate Gerstner waves for this tessellated vertex
+	// Pass camera distance for distance-based wave fadeout on distant tiles
+	float cameraDistDS = length(interpWPosition.xyz);
 	WaveSample waveSample = CalculateWaterDisplacement(
 		waveWorldPos, 
 		float2(0.0f, 0.0f), 
@@ -660,7 +664,8 @@ VS_OUTPUT main(HS_CONSTANT_OUTPUT patchConst, float3 bary : SV_DomainLocation, c
 		waveDayPhase, 
 		float2(0.0f, 0.0f),  // No flow bias in DS for simplicity
 		0.0f,                 // No flow bias weight
-		false);
+		false,
+		cameraDistDS);        // Camera distance for LOD fadeout
 	
 	// Apply wave displacement in camera-relative world space, then transform to clip
 	// Note: Detail heightmap displacement has been removed - it caused mesh holes,
