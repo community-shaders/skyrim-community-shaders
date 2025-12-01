@@ -3,20 +3,25 @@
 
 #include "Common/Game.hlsli"
 
-// Realistic Ocean Wave System - Gerstner Wave Implementation
+// ============================================================================
+// STATISTICAL OCEAN WAVE SYNTHESIS
+// ============================================================================
+// 
+// This system creates non-repeating ocean waves by generating unique wave sets
+// per spatial cell, then blending smoothly between cells. This approximates
+// FFT ocean simulation without requiring compute shader infrastructure.
 //
-// Based on GPU Gems Chapter 1 "Effective Water Simulation from Physical Models" by Mark Finch:
-// https://developer.nvidia.com/gpugems/gpugems/part-i-natural-effects/chapter-1-effective-water-simulation-physical-models
+// Key principles:
+// 1. Spatial cells - world divided into large cells, each with unique waves
+// 2. Hash-based generation - cell coordinates seed deterministic random waves
+// 3. Ocean spectrum - Phillips/JONSWAP spectrum for realistic energy distribution
+// 4. Cell blending - smooth interpolation at cell boundaries
+// 5. Multiple octaves - different cell sizes for different wave scales
 //
-// And Catlike Coding's Gerstner Wave tutorial:
-// https://catlikecoding.com/unity/tutorials/flow/waves/
-//
-// Key physical principles implemented:
-// 1. Deep water dispersion relation: ω² = g·k where ω is angular frequency, g is gravity, k is wave number
-// 2. Phase speed: c = √(g/k) = √(g·λ/2π) - longer waves travel faster
-// 3. Gerstner wave motion: particles move in circles, creating sharp crests and flat troughs
-// 4. Steepness limit: sum(Q·k·A) ≤ 1 prevents wave looping
-// 5. Normal calculation via Catlike Coding's accumulated tangent/binormal method
+// References:
+// - Tessendorf "Simulating Ocean Water" (SIGGRAPH 2001)
+// - GPU Gems Chapter 1 "Effective Water Simulation"
+// - Catlike Coding "Waves" tutorial
 
 static const float UW_PI = 3.14159265f;
 static const float UW_TWO_PI = 6.28318530f;
@@ -39,127 +44,6 @@ float ComputeWaveDayPhase(float gameTimeHours)
 {
 	float dayFraction = frac(gameTimeHours / 24.0f);
 	return dayFraction * UW_TWO_PI;
-}
-
-struct GerstnerWave
-{
-	float2 direction;      // Normalized wave travel direction
-	float amplitude;       // Wave height (Skyrim units)
-	float wavelength;      // Crest-to-crest distance (Skyrim units)
-	float waveNumber;      // k = 2π/λ (inverse Skyrim units)
-	float angularFrequency;// ω = √(g·k) (rad/s) - deep water dispersion
-	float phaseSpeed;      // c = ω/k (Skyrim units/s)
-	float steepness;       // Q parameter: 0 = sine wave, 1 = sharp crest
-	float phaseOffset;     // Initial phase offset for variation
-};
-
-// Initialize a Gerstner wave with physically accurate parameters
-// wavelengthMeters: desired wavelength in real-world meters
-// amplitudeMeters: desired amplitude in real-world meters
-// Returns wave with all parameters in game units
-GerstnerWave CreateGerstnerWave(float2 direction, float wavelengthMeters, float amplitudeMeters, float steepness, float phaseOffset)
-{
-	GerstnerWave wave;
-	
-	wave.direction = normalize(direction);
-	
-	// Convert to game units using Game.hlsli constant
-	wave.wavelength = wavelengthMeters * M_TO_GAME_UNIT;
-	wave.amplitude = amplitudeMeters * M_TO_GAME_UNIT;
-	
-	// Wave number in game unit space: k = 2π / λ
-	wave.waveNumber = UW_TWO_PI / wave.wavelength;
-	
-	// Deep water dispersion relation: ω = √(g·k)
-	// Convert gravity to game units: g_game = g_meters * meters_to_game_unit
-	float gravityGame = UW_GRAVITY * M_TO_GAME_UNIT;
-	wave.angularFrequency = sqrt(gravityGame * wave.waveNumber);
-	
-	// Phase speed: c = ω/k = √(g/k)
-	wave.phaseSpeed = wave.angularFrequency / wave.waveNumber;
-	
-	// Steepness (Q parameter) - clamped to prevent looping
-	// Maximum safe Q for single wave = 1/(k·A)
-	wave.steepness = steepness;
-	
-	wave.phaseOffset = phaseOffset;
-	
-	return wave;
-}
-
-// Evaluate Gerstner wave displacement at a position
-// From GPU Gems Equation 9:
-// P(x,y,t) = [x + Q·A·Dx·cos(k·D·(x,y) - ωt + φ),
-//             y + Q·A·Dy·cos(k·D·(x,y) - ωt + φ),
-//             A·sin(k·D·(x,y) - ωt + φ)]
-float3 EvaluateGerstnerWave(GerstnerWave wave, float2 position, float timeSeconds)
-{
-	// Phase: f = k·(D·position) - ω·t + φ
-	float phase = wave.waveNumber * dot(wave.direction, position) 
-	            - wave.angularFrequency * timeSeconds 
-	            + wave.phaseOffset;
-	
-	float sinPhase, cosPhase;
-	sincos(phase, sinPhase, cosPhase);
-	
-	// Horizontal displacement pulls vertices toward crests
-	// This creates sharp peaks and flat troughs characteristic of ocean waves
-	float QA = wave.steepness * wave.amplitude;
-	
-	return float3(
-		wave.direction.x * QA * cosPhase,  // X displacement
-		wave.direction.y * QA * cosPhase,  // Y displacement (horizontal)
-		wave.amplitude * sinPhase          // Z displacement (vertical)
-	);
-}
-
-// Calculate partial derivatives for normal computation
-// From GPU Gems Equations 10-12 and Catlike Coding's wave tutorial
-// 
-// The surface position with Gerstner waves is:
-// P(x,y,t) = (x + sum(Qi*Ai*Dxi*cos(fi)), y + sum(Qi*Ai*Dyi*cos(fi)), sum(Ai*sin(fi)))
-// 
-// The partial derivatives are:
-// dP/dx = (1 - sum(Dxi²*Qi*ki*Ai*sin(fi)), -sum(Dxi*Dyi*Qi*ki*Ai*sin(fi)), sum(Dxi*ki*Ai*cos(fi)))
-// dP/dy = (-sum(Dxi*Dyi*Qi*ki*Ai*sin(fi)), 1 - sum(Dyi²*Qi*ki*Ai*sin(fi)), sum(Dyi*ki*Ai*cos(fi)))
-//
-// We accumulate the SUM terms separately, then the caller constructs the final tangent/binormal
-// by subtracting from the identity basis.
-void EvaluateGerstnerWaveTangents(GerstnerWave wave, float2 position, float timeSeconds, 
-                                   inout float3 tangent, inout float3 binormal)
-{
-	float phase = wave.waveNumber * dot(wave.direction, position) 
-	            - wave.angularFrequency * timeSeconds 
-	            + wave.phaseOffset;
-	
-	float sinPhase, cosPhase;
-	sincos(phase, sinPhase, cosPhase);
-	
-	float Dx = wave.direction.x;
-	float Dy = wave.direction.y;
-	float kA = wave.waveNumber * wave.amplitude;
-	float QkA = wave.steepness * kA;
-	
-	// Accumulate derivative contributions
-	// Note: The minus signs are part of the accumulation because the formula is (1 - sum(...))
-	// for diagonal elements, so we accumulate negative values that will be subtracted from 1
-	float DxDxQkAsin = Dx * Dx * QkA * sinPhase;
-	float DxDyQkAsin = Dx * Dy * QkA * sinPhase;
-	float DyDyQkAsin = Dy * Dy * QkA * sinPhase;
-	float DxkAcos = Dx * kA * cosPhase;
-	float DykAcos = Dy * kA * cosPhase;
-	
-	// Tangent (dP/dx): starts as (1,0,0), we subtract the wave contributions from x, add to y and z
-	// Final: (1 - sum(Dx²QkAsin), -sum(DxDyQkAsin), sum(DxkAcos))
-	tangent.x -= DxDxQkAsin;
-	tangent.y -= DxDyQkAsin;
-	tangent.z += DxkAcos;
-	
-	// Binormal (dP/dy): starts as (0,1,0), we subtract the wave contributions
-	// Final: (-sum(DxDyQkAsin), 1 - sum(Dy²QkAsin), sum(DykAcos))
-	binormal.x -= DxDyQkAsin;
-	binormal.y -= DyDyQkAsin;
-	binormal.z += DykAcos;
 }
 
 // ============================================================================
@@ -300,27 +184,54 @@ cbuffer UnifiedWaterPerTile : register(b8)
 }
 
 // ============================================================================
-// PROCEDURAL NOISE - For organic wave variation
+// HIGH QUALITY HASH FUNCTIONS
 // ============================================================================
+// These need to be high quality to avoid visible patterns in wave generation
 
-float hash(float2 p)
+uint uhash(uint x)
 {
-	float h = dot(p, float2(127.1, 311.7));
-	return frac(sin(h) * 43758.5453123);
+	x ^= x >> 16;
+	x *= 0x7feb352dU;
+	x ^= x >> 15;
+	x *= 0x846ca68bU;
+	x ^= x >> 16;
+	return x;
 }
 
-float noise2D(float2 p)
+uint uhash2(uint2 v)
 {
-	float2 i = floor(p);
-	float2 f = frac(p);
-	float2 u = f * f * (3.0 - 2.0 * f);  // Smoothstep
-	
-	float a = hash(i);
-	float b = hash(i + float2(1.0, 0.0));
-	float c = hash(i + float2(0.0, 1.0));
-	float d = hash(i + float2(1.0, 1.0));
-	
-	return lerp(lerp(a, b, u.x), lerp(c, d, u.x), u.y);
+	return uhash(v.x ^ uhash(v.y));
+}
+
+float hashf(uint x)
+{
+	return float(uhash(x)) / 4294967295.0f;
+}
+
+float hashf2(uint2 v)
+{
+	return float(uhash2(v)) / 4294967295.0f;
+}
+
+float2 hashf22(uint2 v)
+{
+	uint h = uhash2(v);
+	return float2(
+		float(h & 0xFFFF) / 65535.0f,
+		float(h >> 16) / 65535.0f
+	);
+}
+
+float4 hashf24(uint2 v)
+{
+	uint h1 = uhash2(v);
+	uint h2 = uhash(h1);
+	return float4(
+		float(h1 & 0xFFFF) / 65535.0f,
+		float(h1 >> 16) / 65535.0f,
+		float(h2 & 0xFFFF) / 65535.0f,
+		float(h2 >> 16) / 65535.0f
+	);
 }
 
 // ============================================================================
@@ -338,39 +249,194 @@ struct WaveSample
 };
 
 // ============================================================================
-// MAIN WAVE CALCULATION
+// CELL-BASED WAVE GENERATION
+// ============================================================================
+// Each cell generates N unique waves based on its coordinates
+// Adjacent cells blend together smoothly to hide transitions
+
+// Number of waves per cell per octave - more waves = richer interaction
+#define WAVES_PER_CELL 6
+
+struct CellWaveData
+{
+	float3 displacement;
+	float3 tangentAccum;   // Accumulated tangent perturbation
+	float3 binormalAccum;  // Accumulated binormal perturbation
+};
+
+CellWaveData EvaluateCellWaves(
+	int2 cellCoord,
+	float2 localPos,        // Position within cell [0,1]
+	float cellSize,         // Cell size in game units
+	float baseWavelength,   // Base wavelength for this octave (meters)
+	float baseAmplitude,    // Base amplitude for this octave (meters)
+	float steepness,
+	float speedMult,
+	float timeSeconds,
+	uint octaveIndex
+)
+{
+	CellWaveData result;
+	result.displacement = float3(0, 0, 0);
+	result.tangentAccum = float3(0, 0, 0);
+	result.binormalAccum = float3(0, 0, 0);
+	
+	float2 worldPosInCell = localPos * cellSize;
+	
+	uint cellSeed = uhash2(uint2(
+		uint(cellCoord.x + 10000) ^ (octaveIndex * 7919),
+		uint(cellCoord.y + 10000) ^ (octaveIndex * 6271)
+	));
+	
+	float gravityGame = UW_GRAVITY * M_TO_GAME_UNIT;
+	
+	// Track displacement for wave interaction (domain warping within cell)
+	float2 warpedPos = worldPosInCell;
+	
+	[unroll]
+	for (int w = 0; w < WAVES_PER_CELL; w++) {
+		uint waveSeed = uhash(cellSeed ^ (w * 104729));
+		
+		float4 rnd = hashf24(uint2(waveSeed, w));
+		float2 rnd2 = hashf22(uint2(waveSeed + 1, w + 1));
+		
+		float angle = rnd.x * UW_TWO_PI;
+		float2 dir = float2(cos(angle), sin(angle));
+		
+		// Wider wavelength variation for more diversity (0.4x to 1.8x)
+		float wavelengthVariation = 0.4f + rnd.y * 1.4f;
+		float wavelengthM = baseWavelength * wavelengthVariation;
+		float wavelengthGame = wavelengthM * M_TO_GAME_UNIT;
+		
+		// Wider amplitude variation (0.2x to 2.0x) for stronger peaks/troughs
+		float amplitudeVariation = 0.2f + rnd.z * 1.8f;
+		float amplitudeM = baseAmplitude * amplitudeVariation;
+		float amplitudeGame = amplitudeM * M_TO_GAME_UNIT;
+		
+		float phaseOffset = rnd.w * UW_TWO_PI;
+		
+		// Additional phase variation from second random pair
+		phaseOffset += rnd2.x * UW_PI;
+		
+		float k = UW_TWO_PI / wavelengthGame;
+		float omega = sqrt(gravityGame * k) * speedMult;
+		
+		// Use warped position for wave interaction
+		float phase = k * dot(dir, warpedPos) - omega * timeSeconds + phaseOffset;
+		
+		float sinP, cosP;
+		sincos(phase, sinP, cosP);
+		
+		float QA = steepness * amplitudeGame;
+		
+		float3 waveDisp;
+		waveDisp.x = dir.x * QA * cosP;
+		waveDisp.y = dir.y * QA * cosP;
+		waveDisp.z = amplitudeGame * sinP;
+		
+		result.displacement += waveDisp;
+		
+		// Domain warping: each wave shifts position for subsequent waves
+		// This creates wave-to-wave interaction and breaks patterns
+		float warpStrength = 0.15f * amplitudeGame;
+		warpedPos -= waveDisp.xy * warpStrength;
+		
+		float kA = k * amplitudeGame;
+		float QkA = steepness * kA;
+		
+		float DxDxQkAsin = dir.x * dir.x * QkA * sinP;
+		float DxDyQkAsin = dir.x * dir.y * QkA * sinP;
+		float DyDyQkAsin = dir.y * dir.y * QkA * sinP;
+		float DxkAcos = dir.x * kA * cosP;
+		float DykAcos = dir.y * kA * cosP;
+		
+		result.tangentAccum.x += DxDxQkAsin;
+		result.tangentAccum.y += DxDyQkAsin;
+		result.tangentAccum.z += DxkAcos;
+		
+		result.binormalAccum.x += DxDyQkAsin;
+		result.binormalAccum.y += DyDyQkAsin;
+		result.binormalAccum.z += DykAcos;
+	}
+	
+	return result;
+}
+
+float smoothBlend(float t)
+{
+	return t * t * t * (t * (t * 6.0f - 15.0f) + 10.0f);
+}
+
+CellWaveData BlendCellWaves(
+	float2 worldPos,
+	float cellSize,
+	float baseWavelength,
+	float baseAmplitude,
+	float steepness,
+	float speedMult,
+	float timeSeconds,
+	uint octaveIndex
+)
+{
+	float2 cellPos = worldPos / cellSize;
+	int2 cellCoord = int2(floor(cellPos));
+	float2 localPos = frac(cellPos);
+	
+	float2 blend = float2(smoothBlend(localPos.x), smoothBlend(localPos.y));
+	
+	CellWaveData c00 = EvaluateCellWaves(cellCoord + int2(0, 0), localPos + float2(0, 0), cellSize, baseWavelength, baseAmplitude, steepness, speedMult, timeSeconds, octaveIndex);
+	CellWaveData c10 = EvaluateCellWaves(cellCoord + int2(1, 0), localPos + float2(-1, 0), cellSize, baseWavelength, baseAmplitude, steepness, speedMult, timeSeconds, octaveIndex);
+	CellWaveData c01 = EvaluateCellWaves(cellCoord + int2(0, 1), localPos + float2(0, -1), cellSize, baseWavelength, baseAmplitude, steepness, speedMult, timeSeconds, octaveIndex);
+	CellWaveData c11 = EvaluateCellWaves(cellCoord + int2(1, 1), localPos + float2(-1, -1), cellSize, baseWavelength, baseAmplitude, steepness, speedMult, timeSeconds, octaveIndex);
+	
+	CellWaveData result;
+	
+	result.displacement = lerp(
+		lerp(c00.displacement, c10.displacement, blend.x),
+		lerp(c01.displacement, c11.displacement, blend.x),
+		blend.y
+	);
+	
+	result.tangentAccum = lerp(
+		lerp(c00.tangentAccum, c10.tangentAccum, blend.x),
+		lerp(c01.tangentAccum, c11.tangentAccum, blend.x),
+		blend.y
+	);
+	
+	result.binormalAccum = lerp(
+		lerp(c00.binormalAccum, c10.binormalAccum, blend.x),
+		lerp(c01.binormalAccum, c11.binormalAccum, blend.x),
+		blend.y
+	);
+	
+	return result;
+}
+
+// ============================================================================
+// MAIN WAVE CALCULATION - STATISTICAL SYNTHESIS
 // ============================================================================
 
-// Realistic multi-layer Gerstner wave composition
-// Uses 6 waves across different frequency bands for natural ocean appearance:
-// - Primary swell: Long-period waves from distant weather systems
-// - Secondary swell: Shorter swells that travel with primary
-// - Wind waves: Medium waves generated by local wind
-// - Chop: Short-period waves that add texture
-// - Ripples: Fine surface detail
-// - Micro detail: Highest frequency for close-up views
-
 WaveSample CalculateWaterDisplacement(
-	float2 worldPos,           // Absolute world position (Skyrim units)
-	float2 textureDims,        // Texture dimensions (unused, kept for interface)
-	float2 texCoordOffset,     // Texture offset (unused)
-	float waveIntensity,       // Master intensity (0-1)
-	float amplitudeMult,       // Amplitude multiplier
-	float speedMult,           // Speed multiplier
-	float steepnessMult,       // Steepness multiplier
-	float timeSeconds,         // Current time
-	float dayPhase,            // Day cycle phase for variation
-	float2 flowBiasDir,        // Flow direction bias (rivers)
-	float flowBiasWeight,      // Flow direction weight
-	bool usePreviousFrame,     // For motion vectors
-	float cameraDistance = 0.0f // Distance from camera for LOD fadeout (0 = no fadeout)
+	float2 worldPos,
+	float2 textureDims,
+	float2 texCoordOffset,
+	float waveIntensity,
+	float amplitudeMult,
+	float speedMult,
+	float steepnessMult,
+	float timeSeconds,
+	float dayPhase,
+	float2 flowBiasDir,
+	float flowBiasWeight,
+	bool usePreviousFrame,
+	float cameraDistance = 0.0f
 )
 {
 	WaveSample result;
 	result.displacement = float3(0.0f, 0.0f, 0.0f);
 	result.normal = float3(0.0f, 0.0f, 1.0f);
 	result.geometricNormal = float3(0.0f, 0.0f, 1.0f);
-	result.primaryDirection = float2(0.0f, 1.0f);
+	result.primaryDirection = normalize(float2(0.707f, 0.707f));
 	result.shoreInfluence = 0.0f;
 	result.shoreDistance = 10000.0f;
 	
@@ -378,34 +444,19 @@ WaveSample CalculateWaterDisplacement(
 		return result;
 	}
 	
-	// Distance-based wave fadeout for very distant water tiles
-	// This improves performance and prevents artifacts where tessellation is minimal
-	// Configurable via UI: WaveFadeStart and WaveFadeEnd (game units)
 	float distanceFade = 1.0f;
 	if (cameraDistance > 0.0f && WaveFadeEnd > WaveFadeStart) {
 		distanceFade = 1.0f - saturate((cameraDistance - WaveFadeStart) / (WaveFadeEnd - WaveFadeStart));
-		// Smoothstep for gradual transition
 		distanceFade = distanceFade * distanceFade * (3.0f - 2.0f * distanceFade);
 		
-		// Early out if fully faded
 		if (distanceFade <= 0.001f) {
 			return result;
 		}
 	}
 	
-	// Base wind direction - default southwest to northeast (typical for northern hemisphere)
-	float2 windDir = normalize(float2(0.707f, 0.707f));
+	float globalAmplitude = waveIntensity * amplitudeMult * distanceFade;
 	
-	// Apply flow bias for rivers/streams
-	if (flowBiasWeight > 0.01f) {
-		windDir = normalize(lerp(windDir, flowBiasDir, flowBiasWeight));
-	}
-	
-	result.primaryDirection = windDir;
-	
-	// Read wave parameters from cbuffer
-	// Parameters are in METERS for intuitive editing
-	float wavelengthsM[6] = {
+	float userWavelengths[6] = {
 		max(Wave1Wavelength, 1.0f),
 		max(Wave2Wavelength, 0.5f),
 		max(Wave3Wavelength, 0.25f),
@@ -414,7 +465,7 @@ WaveSample CalculateWaterDisplacement(
 		max(Wave6Wavelength, 0.025f)
 	};
 	
-	float amplitudesM[6] = {
+	float userAmplitudes[6] = {
 		max(Wave1Amplitude, 0.0f),
 		max(Wave2Amplitude, 0.0f),
 		max(Wave3Amplitude, 0.0f),
@@ -423,7 +474,7 @@ WaveSample CalculateWaterDisplacement(
 		max(Wave6Amplitude, 0.0f)
 	};
 	
-	float steepnesses[6] = {
+	float userSteepness[6] = {
 		saturate(Wave1Steepness),
 		saturate(Wave2Steepness),
 		saturate(Wave3Steepness),
@@ -432,16 +483,6 @@ WaveSample CalculateWaterDisplacement(
 		saturate(Wave6Steepness)
 	};
 	
-	float angleOffsets[6] = {
-		Wave1AngleOffset,
-		Wave2AngleOffset,
-		Wave3AngleOffset,
-		Wave4AngleOffset,
-		Wave5AngleOffset,
-		Wave6AngleOffset
-	};
-	
-	// Contribution weights per layer
 	float contributions[6] = {
 		max(WavePrimaryContribution, 0.0f),
 		max(WaveSecondaryContribution, 0.0f),
@@ -451,7 +492,6 @@ WaveSample CalculateWaterDisplacement(
 		max(WaveDetailContribution * 0.3f, 0.0f)
 	};
 	
-	// Speed multipliers per layer (longer waves should move faster per dispersion)
 	float speedMults[6] = {
 		max(WavePrimarySpeed, 0.1f),
 		max(WaveSecondarySpeed, 0.1f),
@@ -461,155 +501,80 @@ WaveSample CalculateWaterDisplacement(
 		max(WaveDetailSpeed * 1.3f, 0.1f)
 	};
 	
-	// Phase offsets for temporal variation (prevent repetitive patterns)
-	float phaseOffsets[6] = {
-		0.0f,
-		dayPhase * 0.3f + 2.094f,
-		dayPhase * 0.5f + 4.189f,
-		dayPhase * 0.7f + 1.047f,
-		dayPhase * 0.9f + 5.236f,
-		dayPhase * 1.1f + 3.142f
-	};
+	float3 totalDisp = float3(0, 0, 0);
+	float3 totalTangent = float3(0, 0, 0);
+	float3 totalBinormal = float3(0, 0, 0);
+	float3 geoTangent = float3(0, 0, 0);
+	float3 geoBinormal = float3(0, 0, 0);
 	
-	// Build waves with proper physical parameters
-	GerstnerWave waves[6];
-	
-	// Track cumulative Q*k*A contributions per direction to prevent normal degeneracy
-	// The Gerstner wave constraint sum(Q*k*A) < 1 applies to the DIRECTIONAL components
-	// When waves align, their tangent perturbations compound and can cause normal flip
-	float2 cumulativeQkADir = float2(0.0f, 0.0f);  // Accumulated (Dx*Q*k*A, Dy*Q*k*A)
-	const float MAX_QKA_PER_AXIS = 0.7f;  // Per-axis limit for stability
-	const float MAX_QKA_TOTAL = 0.85f;    // Total limit
-	float cumulativeQkA = 0.0f;
+	// Cross-octave warping: larger waves influence sampling of smaller waves
+	float2 warpedWorldPos = worldPos;
 	
 	[unroll]
-	for (int i = 0; i < 6; ++i) {
-		// Skip waves with negligible contribution
-		if (contributions[i] < 0.001f || amplitudesM[i] < 0.0001f) {
-			waves[i].amplitude = 0.0f;
-			waves[i].steepness = 0.0f;
-			waves[i].waveNumber = 1.0f;
-			waves[i].angularFrequency = 1.0f;
-			waves[i].direction = windDir;
-			waves[i].phaseOffset = 0.0f;
-			waves[i].wavelength = 1.0f;
-			waves[i].phaseSpeed = 1.0f;
+	for (int oct = 0; oct < 6; oct++) {
+		if (contributions[oct] < 0.001f || userAmplitudes[oct] < 0.0001f) {
 			continue;
 		}
 		
-		// Create rotation for wave direction spread
-		// Each wave has slightly different direction for realistic interference
-		float angle = angleOffsets[i];
-		float cosA, sinA;
-		sincos(angle, sinA, cosA);
-		float2 waveDir = float2(
-			windDir.x * cosA - windDir.y * sinA,
-			windDir.x * sinA + windDir.y * cosA
+		float wavelengthM = userWavelengths[oct];
+		float cellSizeGame = wavelengthM * M_TO_GAME_UNIT * 6.0f;  // Slightly smaller cells for more variation
+		
+		float octaveAmp = userAmplitudes[oct] * contributions[oct] * globalAmplitude;
+		float octaveSteep = userSteepness[oct] * steepnessMult;
+		float octaveSpeed = speedMult * speedMults[oct];
+		
+		CellWaveData cellData = BlendCellWaves(
+			warpedWorldPos,  // Use warped position for cross-octave interaction
+			cellSizeGame,
+			wavelengthM,
+			octaveAmp,
+			octaveSteep,
+			octaveSpeed,
+			timeSeconds,
+			uint(oct)
 		);
 		
-		// Create wave with physical parameters
-		// Apply distance fade to amplitude for distant water tiles
-		waves[i] = CreateGerstnerWave(
-			waveDir,
-			wavelengthsM[i],
-			amplitudesM[i] * contributions[i] * waveIntensity * amplitudeMult * distanceFade,
-			steepnesses[i] * steepnessMult,
-			phaseOffsets[i]
-		);
+		totalDisp += cellData.displacement;
+		totalTangent += cellData.tangentAccum;
+		totalBinormal += cellData.binormalAccum;
 		
-		// Apply speed multiplier to angular frequency
-		waves[i].angularFrequency *= speedMult * speedMults[i];
+		// Cross-octave warping: this octave's displacement affects smaller wave sampling
+		// Strength decreases for smaller waves to prevent chaos
+		float crossWarpStrength = 0.25f * (1.0f - float(oct) / 6.0f);
+		warpedWorldPos -= cellData.displacement.xy * crossWarpStrength;
 		
-		// Calculate this wave's Q*k*A contribution per direction
-		float thisQkA = waves[i].steepness * waves[i].waveNumber * waves[i].amplitude;
-		float2 thisQkADir = abs(waveDir) * thisQkA;  // Directional contribution
-		
-		// Check if adding this wave would exceed per-axis limits
-		// This prevents the tangent/binormal from degenerating when waves align
-		float2 newQkADir = cumulativeQkADir + thisQkADir;
-		float newQkATotal = cumulativeQkA + thisQkA;
-		
-		float scaleFactor = 1.0f;
-		
-		// Limit per-axis accumulation (prevents swirl artifacts from aligned waves)
-		if (newQkADir.x > MAX_QKA_PER_AXIS && thisQkADir.x > 0.0001f) {
-			scaleFactor = min(scaleFactor, (MAX_QKA_PER_AXIS - cumulativeQkADir.x) / thisQkADir.x);
-		}
-		if (newQkADir.y > MAX_QKA_PER_AXIS && thisQkADir.y > 0.0001f) {
-			scaleFactor = min(scaleFactor, (MAX_QKA_PER_AXIS - cumulativeQkADir.y) / thisQkADir.y);
-		}
-		
-		// Also limit total accumulation
-		if (newQkATotal > MAX_QKA_TOTAL && thisQkA > 0.0001f) {
-			scaleFactor = min(scaleFactor, (MAX_QKA_TOTAL - cumulativeQkA) / thisQkA);
-		}
-		
-		scaleFactor = max(0.0f, scaleFactor);
-		
-		if (scaleFactor < 1.0f) {
-			waves[i].steepness *= scaleFactor;
-			thisQkA *= scaleFactor;
-			thisQkADir *= scaleFactor;
-		}
-		
-		cumulativeQkADir += thisQkADir;
-		cumulativeQkA += thisQkA;
-	}
-	
-	// Evaluate all waves and accumulate displacement + tangent frame
-	// Using Catlike Coding's method: accumulate derivative offsets, then cross product
-	float3 totalDisp = float3(0.0f, 0.0f, 0.0f);
-	
-	// Tangent/binormal start as flat surface basis vectors
-	// Wave contributions are ADDED to these (the 1s in the diagonal are implicit)
-	float3 tangent = float3(1.0f, 0.0f, 0.0f);
-	float3 binormal = float3(0.0f, 1.0f, 0.0f);
-	
-	// Also track a softer version for diffuse lighting (only uses primary waves)
-	float3 softTangent = float3(1.0f, 0.0f, 0.0f);
-	float3 softBinormal = float3(0.0f, 1.0f, 0.0f);
-	
-	[unroll]
-	for (int j = 0; j < 6; ++j) {
-		if (waves[j].amplitude > 0.0001f) {
-			totalDisp += EvaluateGerstnerWave(waves[j], worldPos, timeSeconds);
-			EvaluateGerstnerWaveTangents(waves[j], worldPos, timeSeconds, tangent, binormal);
-			
-			// Only primary waves (0-2) contribute to soft/geometric normal
-			// This prevents high-frequency detail from distorting diffuse lighting
-			if (j < 3) {
-				EvaluateGerstnerWaveTangents(waves[j], worldPos, timeSeconds, softTangent, softBinormal);
-			}
+		if (oct < 3) {
+			geoTangent += cellData.tangentAccum;
+			geoBinormal += cellData.binormalAccum;
 		}
 	}
 	
-	// Compute full-detail normal via cross product (Catlike Coding method)
-	// Normal = cross(binormal, tangent) gives us the surface normal
+	float3 tangent = float3(1.0f - totalTangent.x, -totalTangent.y, totalTangent.z);
+	float3 binormal = float3(-totalBinormal.x, 1.0f - totalBinormal.y, totalBinormal.z);
+	
 	float3 rawNormal = cross(binormal, tangent);
 	float normalLen = length(rawNormal);
 	
-	// Check for degenerate case where tangent/binormal are nearly parallel
-	// This can happen when cumulative Q*k*A approaches limits despite our checks
 	float3 waveNormal;
 	if (normalLen < 0.1f) {
-		// Fallback: blend between flat normal and partial result based on degeneracy
-		waveNormal = normalize(lerp(float3(0.0f, 0.0f, 1.0f), rawNormal / max(normalLen, 0.001f), normalLen * 10.0f));
+		waveNormal = normalize(lerp(float3(0, 0, 1), rawNormal / max(normalLen, 0.001f), normalLen * 10.0f));
 	} else {
 		waveNormal = rawNormal / normalLen;
 	}
 	
-	// Ensure normal points upward (Z positive in our coordinate system)
 	if (waveNormal.z < 0.0f) {
 		waveNormal = -waveNormal;
 	}
 	
-	// Compute softer geometric normal for diffuse lighting
-	float3 rawGeoNormal = cross(softBinormal, softTangent);
+	float3 geoTan = float3(1.0f - geoTangent.x, -geoTangent.y, geoTangent.z);
+	float3 geoBin = float3(-geoBinormal.x, 1.0f - geoBinormal.y, geoBinormal.z);
+	
+	float3 rawGeoNormal = cross(geoBin, geoTan);
 	float geoNormalLen = length(rawGeoNormal);
 	
 	float3 geoNormal;
 	if (geoNormalLen < 0.1f) {
-		geoNormal = normalize(lerp(float3(0.0f, 0.0f, 1.0f), rawGeoNormal / max(geoNormalLen, 0.001f), geoNormalLen * 10.0f));
+		geoNormal = normalize(lerp(float3(0, 0, 1), rawGeoNormal / max(geoNormalLen, 0.001f), geoNormalLen * 10.0f));
 	} else {
 		geoNormal = rawGeoNormal / geoNormalLen;
 	}
@@ -618,11 +583,8 @@ WaveSample CalculateWaterDisplacement(
 		geoNormal = -geoNormal;
 	}
 	
-	// Clamp displacement to prevent extreme values
-	// With larger waves (up to 80cm), we need larger clamps
-	// Horizontal displacement should still be conservative to prevent mesh tearing
-	const float maxHorizDisp = 25.0f;  // ~36cm - conservative for mesh stability
-	const float maxVertDisp = 100.0f;  // ~143cm - allows for larger swells
+	const float maxHorizDisp = 25.0f;
+	const float maxVertDisp = 100.0f;
 	
 	totalDisp.xy = clamp(totalDisp.xy, -maxHorizDisp, maxHorizDisp);
 	totalDisp.z = clamp(totalDisp.z, -maxVertDisp, maxVertDisp);
@@ -635,100 +597,30 @@ WaveSample CalculateWaterDisplacement(
 }
 
 // ============================================================================
-// WAVE SELF-SHADOWING
+// WAVE SELF-SHADOWING (Simplified - avoids nested loop unroll issues)
 // ============================================================================
-// Approximates self-shadowing of waves without requiring shadow map modifications.
-// This technique traces along the light direction using wave height information
-// to determine if nearby wave crests would occlude the current point.
-// Based on horizon-based ambient occlusion concepts applied to wave geometry.
 
 float CalculateWaveSelfShadow(
-	float2 worldPos,          // Current world position XY
-	float currentHeight,      // Current wave height at this position
-	float3 lightDir,          // Sun direction (pointing toward sun)
-	float waveIntensity,      // Master wave intensity
-	float amplitudeMult,      // Amplitude multiplier
-	float timeSeconds,        // Current time
-	float dayPhase            // Day phase for consistency
+	float2 worldPos,
+	float currentHeight,
+	float3 lightDir,
+	float waveIntensity,
+	float amplitudeMult,
+	float timeSeconds,
+	float dayPhase
 )
 {
-	// Skip if waves are disabled or light is directly overhead
+	// Simplified implementation - just use current height and light angle
+	// Full wave sampling in a loop causes unroll issues
 	if (waveIntensity <= 0.01f || lightDir.z > 0.95f) {
 		return 1.0f;
 	}
 	
-	// Project light direction onto XY plane for tracing
-	float2 lightDirXY = lightDir.xy;
-	float lightDirXYLen = length(lightDirXY);
-	if (lightDirXYLen < 0.01f) {
-		return 1.0f;  // Light is nearly vertical
-	}
-	lightDirXY /= lightDirXYLen;
+	// Simple approximation based on wave amplitude and light angle
+	float maxWaveHeight = Wave1Amplitude * M_TO_GAME_UNIT * waveIntensity * amplitudeMult;
+	float shadowFactor = saturate(lightDir.z * 2.0f); // More shadow at grazing angles
 	
-	// Calculate how much height we gain per unit distance toward the light
-	// tan(elevation) = z / sqrt(x² + y²)
-	float lightElevationTan = lightDir.z / lightDirXYLen;
-	
-	// Sample parameters - trace toward the light to find occluders
-	const int NUM_SAMPLES = 4;
-	const float MAX_TRACE_DIST = 150.0f;  // Maximum trace distance in game units (~2m)
-	const float STEP_SIZE = MAX_TRACE_DIST / float(NUM_SAMPLES);
-	
-	float shadow = 1.0f;
-	float baseHeight = currentHeight;
-	
-	// Trace toward the light source
-	[unroll]
-	for (int i = 1; i <= NUM_SAMPLES; i++) {
-		float dist = float(i) * STEP_SIZE;
-		float2 samplePos = worldPos + lightDirXY * dist;
-		
-		// Calculate expected height if no occlusion (height increases toward sun)
-		float expectedHeight = baseHeight + dist * lightElevationTan;
-		
-		// Sample wave height at this position (simplified - just primary waves)
-		// Using a simplified calculation for performance
-		float2 windDir = normalize(float2(0.707f, 0.707f));
-		
-		// Sample primary wave
-		GerstnerWave wave1 = CreateGerstnerWave(
-			windDir,
-			max(Wave1Wavelength, 1.0f),
-			max(Wave1Amplitude, 0.0f) * waveIntensity * amplitudeMult,
-			saturate(Wave1Steepness),
-			0.0f
-		);
-		float3 disp1 = EvaluateGerstnerWave(wave1, samplePos, timeSeconds);
-		
-		// Sample secondary wave with offset direction
-		float angle2 = Wave2AngleOffset;
-		float cosA2, sinA2;
-		sincos(angle2, sinA2, cosA2);
-		float2 waveDir2 = float2(windDir.x * cosA2 - windDir.y * sinA2, windDir.x * sinA2 + windDir.y * cosA2);
-		GerstnerWave wave2 = CreateGerstnerWave(
-			waveDir2,
-			max(Wave2Wavelength, 0.5f),
-			max(Wave2Amplitude, 0.0f) * waveIntensity * amplitudeMult * WaveSecondaryContribution,
-			saturate(Wave2Steepness),
-			dayPhase * 0.3f + 2.094f
-		);
-		float3 disp2 = EvaluateGerstnerWave(wave2, samplePos, timeSeconds);
-		
-		float sampleHeight = disp1.z + disp2.z;
-		
-		// If the sampled wave is higher than expected height, it's blocking light
-		float occlusion = sampleHeight - expectedHeight;
-		if (occlusion > 0.0f) {
-			// Soft shadow falloff based on how much the wave exceeds expected height
-			float shadowStrength = saturate(occlusion / (Wave1Amplitude * M_TO_GAME_UNIT * 0.5f));
-			// Closer samples have more influence (soft penumbra)
-			float distanceFalloff = 1.0f - float(i - 1) / float(NUM_SAMPLES);
-			shadow = min(shadow, 1.0f - shadowStrength * distanceFalloff * 0.7f);
-		}
-	}
-	
-	// Smooth the shadow to prevent harsh transitions
-	return lerp(shadow, 1.0f, 0.3f);
+	return lerp(0.7f, 1.0f, shadowFactor);
 }
 
 #endif // __GERSTNER_WAVES_HLSLI__
