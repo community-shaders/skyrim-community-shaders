@@ -150,6 +150,12 @@ struct UnifiedWater : OverlayFeature
 		float RippleWaveFreq2 = 0.12f;      // Secondary wave frequency
 		float RippleWaveFreq3 = 0.18f;      // Tertiary wave frequency
 		float RippleNormalStrength = 2.0f;  // Normal map intensity for ripples
+		
+		// Foam System
+		bool EnableFoam = false;
+		float FoamIntensity = 1.0f;         // Master foam strength (0-1)
+		float FoamThreshold = 0.8f;         // Jacobian threshold for foam
+		float FoamSharpness = 2.0f;         // Foam edge sharpness
 	};
 
 #pragma warning(push)
@@ -265,6 +271,12 @@ struct UnifiedWater : OverlayFeature
 		float RippleWaveFreq2;
 		float RippleWaveFreq3;
 		float RippleNormalStrength;
+		
+		// Foam System
+		float FoamEnabled;
+		float FoamIntensity;
+		float FoamThreshold;
+		float FoamSharpness;
 	};
 
 	struct alignas(16) ActorRippleData

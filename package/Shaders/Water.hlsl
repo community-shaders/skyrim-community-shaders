@@ -170,6 +170,7 @@ struct VS_OUTPUT
 #if defined(UNIFIED_WATER)
 #	include "UnifiedWater/GerstnerWaves.hlsli"
 #	include "UnifiedWater/WaterActorRipples.hlsli"
+#	include "UnifiedWater/WaterFoam.hlsli"
 #endif // UNIFIED_WATER
 
 #	ifdef VSHADER
@@ -1125,103 +1126,6 @@ FlowmapData GetFlowmapDataWorldSpace(FlowmapData textureSpaceData)
 }
 #			endif
 
-#			if defined(UNIFIED_WATER)
-/**
- * Enhanced Wave System - Gerstner Wave Implementation
- * Based on GPU Gems Chapter 1 by Mark Finch and Cyan Worlds
- * Provides more realistic wave simulation with directionality and steepness control
- */
-
-/**
- * Calculate Gerstner wave values for a given position
- * @param position 2D world position
- * @param direction Normalized wave direction vector
- * @param amplitude Wave height multiplier
- * @param wavelength Distance between wave peaks
- * @param steepness Wave steepness factor (0-1, higher = more peaked)
- * @param timer Time value for animation
- * @return float3 (cos(phase), sin(phase), frequency)
- */
-
-float3 GerstnerWaveValues(float2 position, float2 direction, float amplitude, float wavelength, float steepness, float timer)
-{
-	float w = 2.0 * 3.14159265 / wavelength;
-	float dotD = dot(position, direction);
-	float phase = w * dotD + timer;
-	return float3(cos(phase), sin(phase), w);
-}
-
-/**
- * Calculate Gerstner wave normal contribution
- * @param direction Wave direction
- * @param amplitude Wave amplitude  
- * @param steepness Wave steepness (Q factor)
- * @param vals Wave values from GerstnerWaveValues
- * @return Normal contribution
- */
-
-float3 GerstnerWaveNormal(float2 direction, float amplitude, float steepness, float3 vals)
-{
-	float C = vals.x;
-	float S = vals.y; 
-	float w = vals.z;
-	float WA = w * amplitude;
-	float WAC = WA * C;
-	float3 normal = float3(-direction.x * WAC, 1.0 - steepness * WA * S, -direction.y * WAC);
-	return normalize(normal);
-}
-
-/**
- * Calculate Gerstner wave displacement
- * @param direction Wave direction
- * @param amplitude Wave amplitude
- * @param steepness Wave steepness
- * @param vals Wave values from GerstnerWaveValues
- * @return 3D displacement vector
- */
-
-float3 GerstnerWaveDisplacement(float2 direction, float amplitude, float steepness, float3 vals)
-{
-	float C = vals.x;
-	float S = vals.y;
-	float Q = steepness / (2.0 * 3.14159265 / 60.0 * amplitude); // Normalize steepness
-	return float3(Q * amplitude * direction.x * C, amplitude * S, Q * amplitude * direction.y * C);
-}
-
-/**
- * Compute enhanced wave normal with Gerstner wave contribution
- * @param worldPos World space position
- * @param baseNormal Existing normal from texture sampling
- * @param timer Time for animation
- * @param waveIntensity Overall wave intensity multiplier
- * @return Enhanced normal with wave displacement
- */
-
-float3 ComputeEnhancedWaveNormal(float3 worldPos, float3 baseNormal, float timer, float waveIntensity)
-{
-	if (waveIntensity < 0.01) return baseNormal;
-	
-	float2 waveDir1 = normalize(float2(1.0, 0.3));
-	float2 waveDir2 = normalize(float2(-0.5, 1.0));
-	
-	float3 combinedNormal = baseNormal;
-	
-	float3 vals1 = GerstnerWaveValues(worldPos.xz * 0.01, waveDir1, 0.8, 120.0, 0.3, timer * 0.5);
-	float3 normal1 = GerstnerWaveNormal(waveDir1, 0.8, 0.3, vals1);
-	
-	float3 vals2 = GerstnerWaveValues(worldPos.xz * 0.3, waveDir2, 0.5, 4.0, 0.4, timer * 0.7);
-	float3 normal2 = GerstnerWaveNormal(waveDir2, 0.5, 0.4, vals2);
-	
-	float3 vals3 = GerstnerWaveValues(worldPos.xz * 1.0, waveDir1, 0.3, 1.2, 0.6, timer * 1.2);
-	float3 normal3 = GerstnerWaveNormal(waveDir1, 0.3, 0.6, vals3);
-	
-	combinedNormal = normalize(baseNormal + waveIntensity * (normal1 * 0.3 + normal2 * 0.2 + normal3 * 0.5));
-
-	return combinedNormal;
-}
-
-#			endif
-
 #			if defined(LOD)
 #				undef WATER_EFFECTS
 #				undef WETNESS_EFFECTS
@@ -1614,6 +1518,26 @@ float3 GetWaterSpecularColor(PS_INPUT input, float3 normal, float3 viewDirection
 				float4 ssrReflectionColorRaw = RawSSRReflectionTex.Sample(RawSSRReflectionSampler, ssrReflectionUvDR);
 				float4 ssrReflectionColor = lerp(ssrReflectionColorBlurred, ssrReflectionColorRaw, ssrAmount * 0.7);
 
+				// Reject SSR hits that are below the water surface (underwater geometry)
+				float underwaterReject = 1.0f;
+#				if defined(DEPTH) && defined(UNIFIED_WATER)
+				{
+					float2 ssrScreenPos = ssrReflectionUvDR * SharedData::BufferDim.xy;
+					float ssrDepthRaw = DepthTex.Load(float3(ssrScreenPos, 0)).x;
+					
+					float4 ssrClipPos = float4(ssrReflectionUv * 2.0f - 1.0f, ssrDepthRaw, 1.0f);
+					ssrClipPos.y = -ssrClipPos.y;
+					float4 ssrWorldPos = mul(FrameBuffer::CameraViewProjInverse[eyeIndex], ssrClipPos);
+					ssrWorldPos.xyz /= ssrWorldPos.w;
+					
+					float waterSurfaceZ = input.WPosition.z + FrameBuffer::CameraPosAdjust[eyeIndex].z;
+					float ssrHitZ = ssrWorldPos.z + FrameBuffer::CameraPosAdjust[eyeIndex].z;
+					
+					float depthBelowWater = waterSurfaceZ - ssrHitZ;
+					underwaterReject = saturate(1.0f - depthBelowWater * 0.1f);
+				}
+#				endif
+
 				// Apply horizon occlusion to SSR as well
 				finalSsrReflectionColor = max(0, ssrReflectionColor.xyz) * horizon;
 				
@@ -1622,7 +1546,7 @@ float3 GetWaterSpecularColor(PS_INPUT input, float3 normal, float3 viewDirection
 				float ssrLuminance = Color::RGBToLuminance(finalSsrReflectionColor);
 				float multiReflectionSuppress = saturate(1.0f - pow(ssrLuminance * 0.5f, 2.0f));
 				
-				ssrFraction = saturate(ssrReflectionColor.w * distanceFactor * ssrAmount * horizon * multiReflectionSuppress);
+				ssrFraction = saturate(ssrReflectionColor.w * distanceFactor * ssrAmount * horizon * multiReflectionSuppress * underwaterReject);
 			}
 		}
 #			endif
@@ -1792,6 +1716,62 @@ WaterScatteringResult CalculateWaterScattering(float3 startPosWS, float3 endPosW
 	return result;
 }
 
+// ============================================================================
+// WAVE EDGE SUBSURFACE SCATTERING (PBR)
+// Based on FFTWater.shader approach using Smith masking for smooth transitions
+// ============================================================================
+
+float SmithMaskingBeckmannWater(float3 H, float3 S, float a) {
+	float hdots = max(0.001f, saturate(dot(H, S)));
+	float a2 = a * a;
+	float hdots2 = hdots * hdots;
+	float tanTheta = sqrt((1.0f - hdots2) / hdots2);
+	float A = 1.0f / (a * tanTheta);
+	return A < 1.6f ? (1.0f - 1.259f * A + 0.396f * A * A) / (3.535f * A + 2.181f * A * A) : 0.0f;
+}
+
+float3 CalculateWaveEdgeSSS(
+	float3 viewDirection,    // Points FROM camera TO surface
+	float3 waveNormal,
+	float3 sunDir,
+	float3 sunColor,
+	float waveHeight,
+	float horizontalDisplacement,
+	float3 shallowColor,
+	float3 deepColor)
+{
+	float3 mesoNormal = normalize(waveNormal);
+	float3 toCamera = -viewDirection;  // Points FROM surface TO camera
+	float3 halfwayDir = normalize(sunDir + toCamera);
+	
+	float NdotL = saturate(dot(mesoNormal, sunDir));
+	float NdotV = saturate(dot(mesoNormal, toCamera));
+	
+	float roughness = 0.1f;
+	float lightMask = SmithMaskingBeckmannWater(halfwayDir, sunDir, roughness);
+	
+	float H = max(0.0f, waveHeight);
+	
+	float wavePeakScatterStrength = 1.5f;
+	float scatterStrength = 0.3f;
+	
+	// k1: Wave peak scatter - light passing through wave crests
+	// DotClamped(lightDir, -viewDir) = looking toward sun (backlit condition)
+	float LdotV = saturate(dot(sunDir, viewDirection));  // High when looking toward sun
+	float normalMask = pow(saturate(0.5f - 0.5f * dot(sunDir, mesoNormal)), 3.0f);
+	float k1 = wavePeakScatterStrength * H * pow(LdotV, 4.0f) * normalMask;
+	
+	// k2: General scatter based on view angle to surface
+	float k2 = scatterStrength * pow(NdotV, 2.0f);
+	
+	// Use game's water colors - blend shallow/deep for scatter tint
+	float3 scatterColor = lerp(deepColor, shallowColor, 0.5f);
+	
+	float3 scatter = (k1 + k2) * scatterColor * sunColor * rcp(1.0f + lightMask);
+	
+	return scatter;
+}
+
 struct DiffuseOutput
 {
 	float3 refractionColor;
@@ -1800,6 +1780,7 @@ struct DiffuseOutput
 	float refractionMul;
 	float3 scatter;       // Physically-based in-scattered light
 	float3 transmittance; // Light transmission through water
+	float3 waveSSS;       // Wave edge subsurface scattering
 };
 
 DiffuseOutput GetWaterDiffuseColor(PS_INPUT input, float3 normal, float3 viewDirection, inout float4 distanceMul, float refractionsDepthFactor, float fresnel, uint eyeIndex, float3 viewPosition, float noise, float depth)
@@ -1895,9 +1876,32 @@ DiffuseOutput GetWaterDiffuseColor(PS_INPUT input, float3 normal, float3 viewDir
 #				if defined(UNIFIED_WATER)
 	output.scatter = scatterResult.scatter;
 	output.transmittance = scatterResult.transmittance;
+	
+	// PBR wave scatter using Smith masking for smooth transitions
+	float3 rawWaveSSS = CalculateWaveEdgeSSS(
+		viewDirection,
+		input.UnifiedWaveNormal.xyz,
+		SunDir.xyz,
+		SunColor.xyz * SunDir.w,
+		input.UnifiedWaveInfo.z,
+		input.UnifiedWaveNormal.w,
+		ShallowColor.xyz,
+		DeepColor.xyz
+	);
+	
+	// Smooth distance fade for wave SSS to avoid harsh cutoff at Gerstner fade boundary
+	float camDist = input.WPosition.w;
+	float sssFade = 1.0f - saturate((camDist - WaveFadeStart) / max(WaveFadeEnd - WaveFadeStart, 1.0f));
+	sssFade = sssFade * sssFade * (3.0f - 2.0f * sssFade);  // Smoothstep
+	
+	// Gentle muting when scatter is very strong (keeps wave SSS visible)
+	float scatterLuminance = dot(scatterResult.scatter, float3(0.2126f, 0.7152f, 0.0722f));
+	float scatterMuting = saturate(1.0f - scatterLuminance * 0.5f);
+	output.waveSSS = rawWaveSSS * sssFade * scatterMuting;
 #				else
 	output.scatter = 0.0f;
 	output.transmittance = 1.0f;
+	output.waveSSS = 0.0f;
 #				endif
 	return output;
 #			else
@@ -1908,6 +1912,7 @@ DiffuseOutput GetWaterDiffuseColor(PS_INPUT input, float3 normal, float3 viewDir
 	output.refractionMul = 1;
 	output.scatter = 0.0f;
 	output.transmittance = 1.0f;
+	output.waveSSS = 0.0f;
 	return output;
 #			endif
 }
@@ -2312,6 +2317,35 @@ PS_OUTPUT main(PS_INPUT input)
 #						endif
 	float3 finalColorPreFog = lerp(diffuseColor, specularColor, specularFraction) + sunColor * depthControl.w;
 	
+#						if defined(UNIFIED_WATER)
+	finalColorPreFog += diffuseOutput.scatter;
+	finalColorPreFog += diffuseOutput.waveSSS;
+	
+	// Foam contribution based on wave Jacobian
+	if (FoamEnabled > 0.5f) {
+		float2 waveWorldPosPS = input.WPosition.xy + FrameBuffer::CameraPosAdjust[eyeIndex].xy;
+		float waveTimeSecondsPS = ComputeWaveTimeSeconds(GameTimeHours, RealTimeSeconds);
+		float waveDayPhasePS = ComputeWaveDayPhase(GameTimeHours);
+		float waveHeightPS = input.UnifiedWaveInfo.z;
+		float horizDispPS = input.UnifiedWaveNormal.w;
+		
+		float foamAmount = GetFoamIntensity(
+			waveWorldPosPS,
+			waveHeightPS,
+			horizDispPS,
+			WaveIntensity,
+			WaveAmplitude,
+			waveTimeSecondsPS,
+			waveDayPhasePS,
+			FoamThreshold,
+			FoamIntensity
+		);
+		
+		float3 foamColor = float3(0.95f, 0.97f, 1.0f);
+		finalColorPreFog = lerp(finalColorPreFog, foamColor, foamAmount);
+	}
+#						endif
+
 #						if !defined(UNIFIED_WATER)
 	float fogDistanceFactor = input.FogParam.w;
 	float3 fogColor = input.FogParam.xyz;
@@ -2349,6 +2383,31 @@ PS_OUTPUT main(PS_INPUT input)
 	// Add physically-based water scattering
 #						if defined(UNIFIED_WATER)
 	finalColorPreFog += diffuseOutput.scatter;
+	finalColorPreFog += diffuseOutput.waveSSS;
+	
+	// Foam contribution based on wave Jacobian
+	if (FoamEnabled > 0.5f) {
+		float2 waveWorldPosPS2 = input.WPosition.xy + FrameBuffer::CameraPosAdjust[eyeIndex].xy;
+		float waveTimeSecondsPS2 = ComputeWaveTimeSeconds(GameTimeHours, RealTimeSeconds);
+		float waveDayPhasePS2 = ComputeWaveDayPhase(GameTimeHours);
+		float waveHeightPS2 = input.UnifiedWaveInfo.z;
+		float horizDispPS2 = input.UnifiedWaveNormal.w;
+		
+		float foamAmount2 = GetFoamIntensity(
+			waveWorldPosPS2,
+			waveHeightPS2,
+			horizDispPS2,
+			WaveIntensity,
+			WaveAmplitude,
+			waveTimeSecondsPS2,
+			waveDayPhasePS2,
+			FoamThreshold,
+			FoamIntensity
+		);
+		
+		float3 foamColor2 = float3(0.95f, 0.97f, 1.0f);
+		finalColorPreFog = lerp(finalColorPreFog, foamColor2, foamAmount2);
+	}
 #						endif
 
 #						if !defined(UNIFIED_WATER)

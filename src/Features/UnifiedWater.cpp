@@ -69,7 +69,11 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	RippleWaveFreq1,
 	RippleWaveFreq2,
 	RippleWaveFreq3,
-	RippleNormalStrength)
+	RippleNormalStrength,
+	EnableFoam,
+	FoamIntensity,
+	FoamThreshold,
+	FoamSharpness)
 
 void UnifiedWater::LoadSettings(json& o_json)
 {
@@ -302,6 +306,30 @@ void UnifiedWater::DrawSettings()
 				ImGui::SliderFloat("Tertiary Freq", &settings.RippleWaveFreq3, 0.06f, 0.4f, "%.3f");
 				if (auto _tt = Util::HoverTooltipWrapper()) {
 					ImGui::Text("Higher values = more ripple rings per unit distance.");
+				}
+			}
+			
+			ImGui::Spacing();
+			ImGui::Separator();
+			ImGui::Spacing();
+			
+			ImGui::Checkbox("Enable Foam", &settings.EnableFoam);
+			if (auto _tt = Util::HoverTooltipWrapper()) {
+				ImGui::Text("Generates foam on wave peaks based on Jacobian analysis.\nFoam accumulates where waves compress and fold.");
+			}
+			
+			if (settings.EnableFoam) {
+				ImGui::SliderFloat("Foam Intensity", &settings.FoamIntensity, 0.0f, 2.0f, "%.2f");
+				if (auto _tt = Util::HoverTooltipWrapper()) {
+					ImGui::Text("Master foam strength. Higher = more visible foam.");
+				}
+				ImGui::SliderFloat("Foam Threshold", &settings.FoamThreshold, 0.5f, 1.0f, "%.2f");
+				if (auto _tt = Util::HoverTooltipWrapper()) {
+					ImGui::Text("Jacobian threshold below which foam appears.\nLower values = more foam on gentler waves.");
+				}
+				ImGui::SliderFloat("Foam Sharpness", &settings.FoamSharpness, 0.5f, 5.0f, "%.2f");
+				if (auto _tt = Util::HoverTooltipWrapper()) {
+					ImGui::Text("How sharply foam edges are defined.\nHigher = more defined edges.");
 				}
 			}
 			ImGui::EndTabItem();
@@ -1019,6 +1047,12 @@ void UnifiedWater::BSWaterShader_SetupGeometry::thunk(RE::BSShader* waterShader,
 		perFrameData.RippleWaveFreq3 = singleton.settings.RippleWaveFreq3;
 		perFrameData.RippleNormalStrength = singleton.settings.RippleNormalStrength;
 		
+		// Foam system
+		perFrameData.FoamEnabled = singleton.settings.EnableFoam ? 1.0f : 0.0f;
+		perFrameData.FoamIntensity = singleton.settings.FoamIntensity;
+		perFrameData.FoamThreshold = singleton.settings.FoamThreshold;
+		perFrameData.FoamSharpness = singleton.settings.FoamSharpness;
+		
 		float waterSurfaceHeight = 0.0f;
 		bool hasWaterHeight = false;
 		
@@ -1387,10 +1421,13 @@ void UnifiedWater::BSWaterShader_SetupGeometry::thunk(RE::BSShader* waterShader,
 		context->VSGetConstantBuffers(0, 3, vsBuffers);
 		context->DSSetConstantBuffers(0, 3, vsBuffers);
 		
-		// Bind the FrameBuffer cbuffer (b12) to DS - needed for CameraPosAdjust in wave calculations
+		// Bind the FrameBuffer cbuffer (b12) to HS and DS - needed for CameraPosAdjust
+		// HS uses CameraPosAdjust for absolute world position in tessellation factor calculation
+		// DS uses CameraPosAdjust for wave position calculation
 		ID3D11Buffer* frameBuffer[1] = { nullptr };
 		context->PSGetConstantBuffers(12, 1, frameBuffer);  // FrameBuffer is typically bound to PS
 		if (frameBuffer[0]) {
+			context->HSSetConstantBuffers(12, 1, frameBuffer);  // HS needs this for cell boundary fix
 			context->DSSetConstantBuffers(12, 1, frameBuffer);
 		}
 		
@@ -1417,6 +1454,18 @@ void UnifiedWater::BSWaterShader_SetupGeometry::thunk(RE::BSShader* waterShader,
 			for (int i = 0; i < 3; i++) {
 				if (normalSRVs[i]) normalSRVs[i]->Release();
 				if (normalSamplers[i]) normalSamplers[i]->Release();
+			}
+			
+			// Also bind flowmap textures (slots 8-9) for flowmap water
+			ID3D11ShaderResourceView* flowmapSRVs[2] = { nullptr, nullptr };
+			ID3D11SamplerState* flowmapSamplers[2] = { nullptr, nullptr };
+			context->PSGetShaderResources(8, 2, flowmapSRVs);
+			context->PSGetSamplers(8, 2, flowmapSamplers);
+			context->DSSetShaderResources(8, 2, flowmapSRVs);
+			context->DSSetSamplers(8, 2, flowmapSamplers);
+			for (int i = 0; i < 2; i++) {
+				if (flowmapSRVs[i]) flowmapSRVs[i]->Release();
+				if (flowmapSamplers[i]) flowmapSamplers[i]->Release();
 			}
 		}
 

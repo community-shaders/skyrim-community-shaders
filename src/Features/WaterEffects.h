@@ -8,13 +8,6 @@ private:
 	static constexpr std::string_view MOD_ID = "112762";
 
 public:
-	struct Settings
-	{
-		float ParallaxHeight = 0.15f;
-	};
-
-	Settings settings;
-
 	winrt::com_ptr<ID3D11ShaderResourceView> causticsView;
 	virtual inline std::string GetName() override { return "Water Effects"; }
 	virtual inline std::string GetShortName() override { return "WaterEffects"; }
@@ -36,11 +29,6 @@ public:
 	}
 
 	bool HasShaderDefine(RE::BSShader::Type shaderType) override;
-
-	virtual void DrawSettings() override;
-	virtual void LoadSettings(json& o_json) override;
-	virtual void SaveSettings(json& o_json) override;
-	virtual void RestoreDefaultSettings() override;
 
 	virtual void SetupResources() override;
 
