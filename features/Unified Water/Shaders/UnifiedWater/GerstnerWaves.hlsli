@@ -250,8 +250,8 @@ cbuffer UnifiedWaterPerFrame : register(b7)
 	
 	// Tessellation
 	float TessellationEnabled : packoffset(c17.x);
-	float TessPadding1 : packoffset(c17.y);
-	float TessPadding2 : packoffset(c17.z);
+	float WaveFadeStart : packoffset(c17.y);       // Distance where waves start fading
+	float WaveFadeEnd : packoffset(c17.z);         // Distance where waves fully fade
 	float TessPadding3 : packoffset(c17.w);
 	
 	// Player ripples
@@ -338,7 +338,8 @@ WaveSample CalculateWaterDisplacement(
 	float dayPhase,            // Day cycle phase for variation
 	float2 flowBiasDir,        // Flow direction bias (rivers)
 	float flowBiasWeight,      // Flow direction weight
-	bool usePreviousFrame      // For motion vectors
+	bool usePreviousFrame,     // For motion vectors
+	float cameraDistance = 0.0f // Distance from camera for LOD fadeout (0 = no fadeout)
 )
 {
 	WaveSample result;
@@ -351,6 +352,21 @@ WaveSample CalculateWaterDisplacement(
 	
 	if (waveIntensity <= 0.001f) {
 		return result;
+	}
+	
+	// Distance-based wave fadeout for very distant water tiles
+	// This improves performance and prevents artifacts where tessellation is minimal
+	// Configurable via UI: WaveFadeStart and WaveFadeEnd (game units)
+	float distanceFade = 1.0f;
+	if (cameraDistance > 0.0f && WaveFadeEnd > WaveFadeStart) {
+		distanceFade = 1.0f - saturate((cameraDistance - WaveFadeStart) / (WaveFadeEnd - WaveFadeStart));
+		// Smoothstep for gradual transition
+		distanceFade = distanceFade * distanceFade * (3.0f - 2.0f * distanceFade);
+		
+		// Early out if fully faded
+		if (distanceFade <= 0.001f) {
+			return result;
+		}
 	}
 	
 	// Base wind direction - default southwest to northeast (typical for northern hemisphere)
@@ -464,10 +480,11 @@ WaveSample CalculateWaterDisplacement(
 		);
 		
 		// Create wave with physical parameters
+		// Apply distance fade to amplitude for distant water tiles
 		waves[i] = CreateGerstnerWave(
 			waveDir,
 			wavelengthsM[i],
-			amplitudesM[i] * contributions[i] * waveIntensity * amplitudeMult,
+			amplitudesM[i] * contributions[i] * waveIntensity * amplitudeMult * distanceFade,
 			steepnesses[i] * steepnessMult,
 			phaseOffsets[i]
 		);

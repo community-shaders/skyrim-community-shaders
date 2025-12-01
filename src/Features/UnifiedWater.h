@@ -53,6 +53,10 @@ struct UnifiedWater : OverlayFeature
 		float WaveAmplitude = 1.0f;
 		float WaveSpeed = 0.05f;
 		float WaveSteepness = 1.0f;
+		
+		// Distance-based wave fadeout (game units)
+		float WaveFadeStart = 4096.0f;   // Distance where waves start fading (~58m)
+		float WaveFadeEnd = 8192.0f;     // Distance where waves fully fade (~117m)
 
 		float WavePrimaryContribution = 1.0f;
 		float WaveSecondaryContribution = 1.0f;
@@ -244,8 +248,8 @@ struct UnifiedWater : OverlayFeature
 		
 		// Tessellation control
 		float TessellationEnabled;
-		float TessPadding1;
-		float TessPadding2;
+		float WaveFadeStart;      // Distance where waves start fading
+		float WaveFadeEnd;        // Distance where waves fully fade
 		float TessPadding3;
 		
 		// Player ripples data

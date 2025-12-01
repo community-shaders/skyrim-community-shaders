@@ -27,6 +27,8 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	WaveAmplitude,
 	WaveSpeed,
 	WaveSteepness,
+	WaveFadeStart,
+	WaveFadeEnd,
 	WavePrimaryContribution,
 	WaveSecondaryContribution,
 	WaveDetailContribution,
@@ -135,6 +137,15 @@ void UnifiedWater::DrawSettings()
 			ImGui::SliderFloat("Wave Height", &settings.WaveAmplitude, 0.1f, 10.0f, "%.2f");
 			ImGui::SliderFloat("Wave Speed", &settings.WaveSpeed, 0.01f, 1.0f, "%.3f");
 			ImGui::SliderFloat("Wave Steepness", &settings.WaveSteepness, 0.1f, 10.0f, "%.2f");
+			
+			ImGui::Spacing();
+			ImGui::Text("Wave Distance Fade");
+			ImGui::SliderFloat("Fade Start", &settings.WaveFadeStart, 1024.0f, 16384.0f, "%.0f");
+			if (ImGui::IsItemHovered())
+				ImGui::SetTooltip("Distance (game units) where waves start fading.\n4096 = ~58 meters.");
+			ImGui::SliderFloat("Fade End", &settings.WaveFadeEnd, 2048.0f, 32768.0f, "%.0f");
+			if (ImGui::IsItemHovered())
+				ImGui::SetTooltip("Distance (game units) where waves fully fade out.\n8192 = ~117 meters.\nDistant water becomes flat beyond this.");
 
 			ImGui::Spacing();
 			ImGui::Text("Wave Composition");
@@ -989,6 +1000,8 @@ void UnifiedWater::BSWaterShader_SetupGeometry::thunk(RE::BSShader* waterShader,
 		bool tessellationEnabled = singleton.settings.EnableTessellation && 
 		                           singleton.AreTessellationShadersReady();
 		perFrameData.TessellationEnabled = tessellationEnabled ? 1.0f : 0.0f;
+		perFrameData.WaveFadeStart = singleton.settings.WaveFadeStart;
+		perFrameData.WaveFadeEnd = singleton.settings.WaveFadeEnd;
 
 		// Player ripple data
 		perFrameData.PlayerPosX = 0.0f;
