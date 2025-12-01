@@ -31,6 +31,7 @@
         "stb",
         "tracy",
         "unordered-dense",
+        "winpixevent",
         "xbyak"
     ],
     "overrides": [

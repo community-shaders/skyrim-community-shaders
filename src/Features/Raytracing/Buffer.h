@@ -125,9 +125,10 @@ namespace DX12
 		void Update(void const* src_data, size_t data_size)
 		{
 			void* pData;
-			DX::ThrowIfFailed(uploadResource->Map(0, nullptr, &pData));
+			DX::ThrowIfFailed(uploadResource->Map(0, &readRange, &pData));
 			memcpy(pData, src_data, data_size);
-			uploadResource->Unmap(0, nullptr);
+			D3D12_RANGE writeRange = { 0, data_size };
+			uploadResource->Unmap(0, &writeRange);
 		}
 
 		void Upload(ID3D12GraphicsCommandList4* commandList)
@@ -141,6 +142,7 @@ namespace DX12
 
 	private:
 		UINT64 size;
+		D3D12_RANGE readRange = { 0, 0 };
 	};
 
 	class Texture : public Resource
@@ -266,8 +268,8 @@ namespace DX12
 		explicit StructuredBufferUpload(ID3D12Device5* a_device, const uint64_t& a_count, bool uav = false) :
 			StructuredBuffer<T>(a_device, a_count, uav)
 		{
-			D3D12_RESOURCE_DESC desc = this->resource->GetDesc();
 			const auto& uploadHeap = CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_UPLOAD);
+			D3D12_RESOURCE_DESC desc = Resource::desc;
 
 			DX::ThrowIfFailed(a_device->CreateCommittedResource(
 				&uploadHeap,
@@ -281,9 +283,10 @@ namespace DX12
 		void Update(void const* src_data, size_t data_size)
 		{
 			void* pData;
-			DX::ThrowIfFailed(uploadBuffer->Map(0, nullptr, &pData));
+			DX::ThrowIfFailed(uploadBuffer->Map(0, &readRange, &pData));
 			memcpy(pData, src_data, data_size);
-			uploadBuffer->Unmap(0, nullptr);
+			D3D12_RANGE writeRange = { 0, data_size };
+			uploadBuffer->Unmap(0, &writeRange);
 		}
 
 		void UpdateList(T const* src_data, std::int64_t localCount)
@@ -294,11 +297,15 @@ namespace DX12
 		void Upload(ID3D12GraphicsCommandList4* commandList)
 		{
 			this->TransitionBarrier(commandList, D3D12_RESOURCE_STATE_COPY_DEST);
-			commandList->CopyBufferRegion(this->resource.get(), 0, uploadBuffer.get(), 0, sizeof(T) * this->count);
+			commandList->CopyResource(this->resource.get(), uploadBuffer.get());			
+			//commandList->CopyBufferRegion(this->resource.get(), 0, uploadBuffer.get(), 0, sizeof(T) * this->count);
 			this->TransitionBarrier(commandList, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
 		}
 
 		winrt::com_ptr<ID3D12Resource> uploadBuffer = nullptr;
+
+	private:
+		D3D12_RANGE readRange = { 0, 0 };
 	};
 
 	template <typename T>

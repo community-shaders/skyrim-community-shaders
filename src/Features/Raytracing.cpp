@@ -30,10 +30,12 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	PointFade,
 	GammaToLinear,
 	RaytracedShadows,
+	CullShadows,
 	RecompressTextures,
 	DLSSRRQualityMode,
 	DebugOutput,
 	EnablePIXCapture,
+	PIXCaptureLocation,
 	EnableDebugDevice)
 #else
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
@@ -53,9 +55,11 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	PointFade,
 	GammaToLinear,
 	RaytracedShadows,
+	CullShadows,
 	RecompressTextures,
 	DebugOutput,
 	EnablePIXCapture,
+	PIXCaptureLocation,
 	EnableDebugDevice)
 #endif
 
@@ -153,6 +157,8 @@ void Raytracing::DrawSettings()
 			if (auto _tt = Util::HoverTooltipWrapper()) {
 				ImGui::Text("Replaces directional light shadowmaps.\n");
 			}
+
+			ImGui::Checkbox("Cull Shadows", &settings.CullShadows);
 		}
 	}
 
@@ -202,25 +208,45 @@ void Raytracing::DrawSettings()
 
 	if (settings.EnablePIXCapture)
 	{
-		//Pix Capture Location
-		{
-			int pixCapLocation = static_cast<int32_t>(settings.PIXCaptureLocation);
-			ImGui::TextUnformatted("PIX Capture");
+		if (ImGui::TreeNodeEx("Pix Capture", ImGuiTreeNodeFlags_DefaultOpen)) {
+			//Pix Capture Location
+			{
+				int pixCapLocation = static_cast<int32_t>(settings.PIXCaptureLocation);
+				ImGui::TextUnformatted("PIX Capture");
 
-			ImGui::SameLine();
-			ImGui::Dummy(ImVec2(25, 0));
-
-			for (auto& [value, name] : magic_enum::enum_entries<PIXCaptureLocation>()) {
 				ImGui::SameLine();
-				ImGui::RadioButton(name.data(), &pixCapLocation, static_cast<int32_t>(value));
+				ImGui::Dummy(ImVec2(25, 0));
+
+				for (auto& [value, name] : magic_enum::enum_entries<PIXCaptureLocation>()) {
+					ImGui::SameLine();
+					ImGui::RadioButton(name.data(), &pixCapLocation, static_cast<int32_t>(value));
+				}
+
+				settings.PIXCaptureLocation = static_cast<PIXCaptureLocation>(pixCapLocation);
+
+				ImGui::TreePop();
 			}
 
-			settings.PIXCaptureLocation = static_cast<PIXCaptureLocation>(pixCapLocation);
-		}
+			if (ImGui::Button("Single Frame Capture")) {
+				pixCapture = true;
+				pixCaptureStarted = false;
+			}
 
-		if (ImGui::Button("Create PIX Capture")) {
-			pixCapture = true;
-			pixCaptureStarted = false;
+			if (ImGui::Button("Start MultiFrame Capture")) {
+				pixCapture = true;
+				pixCaptureStarted = false;
+				pixMultiFrame = true;
+			}
+
+			if (pixCapture && pixCaptureStarted && pixMultiFrame && ImGui::Button("End MultiFrame Capture")) {
+				pixMultiFrame = false;
+			}
+
+			if (ImGui::Button("Start TRD Capture")) {
+				pixCapture = true;
+				pixCaptureStarted = false;
+				pixTDR = true;
+			}
 		}
 	}
 
@@ -1281,39 +1307,13 @@ inline std::wstring ToWide(const std::string& str)
 	return wstr;
 }
 
-void Raytracing::BeginGeometry(RE::NiNode* pFadeNode, [[maybe_unused]] RE::NiStream& a_stream)
+void Raytracing::ReadRendererData(MeshData& meshData, RE::BSGraphics::TriShape* rendererData, const std::uint16_t& vertexCount, const std::uint16_t& triangleCount, const std::uint16_t& bonesPerVertex, const eastl::unordered_map<uint16_t, uint16_t>& vertexMap, const float4x4& transform)
 {
-	const auto& inputPath = a_stream.inputFilePath;
+	bool hasVertexMap = vertexMap.size() > 0;
 
-	if (strlen(inputPath) == 0)
-		return;
+	uint16_t vertexOffset = static_cast<uint16_t>(meshData.vertexCount);
 
-	currentPath = inputPath;
-
-	pendingGeometry.emplace(inputPath);
-
-	inputPaths.try_emplace(pFadeNode, inputPath);
-
-	//a_stream.inputFilePath
-	logger::info("[RT] BeginGeometry - Filename: {}, Self Pointer: [0x{:x}]", inputPath, reinterpret_cast<uintptr_t>(pFadeNode));
-}
-
-Raytracing::MeshData Raytracing::CreateTriShapeBuffers(RE::BSGraphics::TriShape* rendererData, const std::uint16_t& vertexCount, const std::uint16_t& triangleCount, const std::wstring& name)
-{
-	MeshData meshData{};
-
-	meshData.registerIndex = registers.allocate();
-	//logger::info("[RT] CreateTriShapeBuffers - Register: {}", meshData.registerIndex);
-
-	meshData.vertexCount = vertexCount;
-	meshData.triangleCount = triangleCount;
-
-	//logger::info("[RT] CreateTriShapeBuffers - Vertices: {}, Indices: {}", vertexCount, triangleCount);
-
-	meshData.vertexBuffer = eastl::make_unique<DX12::StructuredBufferUpload<Vertex>>(d3d12Device.get(), vertexCount);
-	meshData.triangleBuffer = eastl::make_unique<DX12::StructuredBufferUpload<Triangle>>(d3d12Device.get(), triangleCount);
-
-	// Vertex Buffer
+	// Vertex
 	{
 		auto vertexDesc = rendererData->vertexDesc;
 
@@ -1325,114 +1325,156 @@ Raytracing::MeshData Raytracing::CreateTriShapeBuffers(RE::BSGraphics::TriShape*
 		uint32_t normOffset = vertexDesc.GetAttributeOffset(RE::BSGraphics::Vertex::VA_NORMAL);
 		uint32_t tangOffset = vertexDesc.GetAttributeOffset(RE::BSGraphics::Vertex::VA_BINORMAL);
 		uint32_t colorOffset = vertexDesc.GetAttributeOffset(RE::BSGraphics::Vertex::VA_COLOR);
+		uint32_t skinOffset = vertexDesc.GetAttributeOffset(RE::BSGraphics::Vertex::VA_SKINNING);
 
-		eastl::vector<Vertex> vertices(vertexCount);
-
-		for (uint32_t i = 0; i < vertexCount; i++) {
+		for (uint16_t i = 0; i < vertexCount; i++) {
 			uint8_t* vtx = rendererData->rawVertexData + i * stride;
 
 			Vertex vertexData{};
 
 			if (vertexFlags & RE::BSGraphics::Vertex::VF_VERTEX) {
-				const float* pos = reinterpret_cast<const float*>(vtx + posOffset);
-				vertexData.Position.x = pos[0];
-				vertexData.Position.y = pos[1];
-				vertexData.Position.z = pos[2];
-				//vertexData.Position.w = pos[3];
+				float3 pos;
+				std::memcpy(&pos, vtx + posOffset, sizeof(float3));
+
+				vertexData.Position = float3::Transform(pos, transform);
 			}
 
+			//logger::info("Vertex - Global {}, Local {} - Position: {}", meshData.vertexCount + i, i, vertexData.Position);
+
 			if (vertexFlags & RE::BSGraphics::Vertex::VF_UV) {
-				const uint16_t* texcoord = reinterpret_cast<const uint16_t*>(vtx + uvOffset);
+				uint16_t texcoord[2];
+				std::memcpy(texcoord, vtx + uvOffset, sizeof(uint16_t) * 2);
 
 				vertexData.Texcoord0[0] = texcoord[0];
 				vertexData.Texcoord0[1] = texcoord[1];
 			}
 
 			if (vertexFlags & RE::BSGraphics::Vertex::VF_NORMAL) {
-				const uint8_t* norm = reinterpret_cast<const uint8_t*>(vtx + normOffset);
+				std::memcpy(&vertexData.Normal, vtx + normOffset, sizeof(uint32_t));
 
-				vertexData.Normal[0] = norm[0];
-				vertexData.Normal[1] = norm[1];
-				vertexData.Normal[2] = norm[2];
-				vertexData.Normal[3] = norm[3];
+				// Unpack normals -> transform -> pack again
+				auto normalUnpacked = UnpackByte4(vertexData.Normal);
+
+				auto normal = float3::TransformNormal({ normalUnpacked.x, normalUnpacked.y, normalUnpacked.z }, transform);
+				normal.Normalize();
+
+				vertexData.Normal = PackByte4({ normal.x, normal.y, normal.z, normalUnpacked.w });
 
 				if (vertexFlags & RE::BSGraphics::Vertex::VF_TANGENT) {
-					const uint8_t* tang = reinterpret_cast<const uint8_t*>(vtx + tangOffset);
+					std::memcpy(&vertexData.Tangent, vtx + tangOffset, sizeof(uint32_t));
 
-					vertexData.Tangent[0] = tang[0];
-					vertexData.Tangent[1] = tang[1];
-					vertexData.Tangent[2] = tang[2];
-					vertexData.Tangent[3] = tang[3];
+					// Unpack tangent -> transform -> pack again
+					auto tangentUnpacked = UnpackByte4(vertexData.Normal);
+
+					auto tangent = float3::TransformNormal({ tangentUnpacked.x, tangentUnpacked.y, tangentUnpacked.z }, transform);
+					tangent.Normalize();
+
+					vertexData.Tangent = PackByte4({ tangent.x, tangent.y, tangent.z, tangentUnpacked.w });
 				}
 			}
 
-			if (vertexFlags & RE::BSGraphics::Vertex::VF_COLORS) {
-				const uint8_t* col = reinterpret_cast<const uint8_t*>(vtx + colorOffset);
-
-				vertexData.Color[0] = col[0];
-				vertexData.Color[1] = col[1];
-				vertexData.Color[2] = col[2];
-				vertexData.Color[3] = col[3];
+			// Just ignore it for now
+			if (vertexFlags & RE::BSGraphics::Vertex::VF_SKINNED) {
+				SkinData skinData[4];
+				std::memcpy(skinData, vtx + skinOffset, sizeof(SkinData) * bonesPerVertex);
 			}
 
-			vertices[i] = eastl::move(vertexData);
+			if (vertexFlags & RE::BSGraphics::Vertex::VF_COLORS) {
+				std::memcpy(&vertexData.Color, vtx + colorOffset, sizeof(uint32_t));
+			}
+
+			uint16_t offset = i;
+
+			if (hasVertexMap) {
+				offset = vertexMap.find(i)->second;
+			}
+
+			meshData.vertices[vertexOffset + offset] = vertexData;
 		}
 
-		meshData.vertexBuffer->UpdateList(vertices.data(), vertices.size());
-		DX::ThrowIfFailed(meshData.vertexBuffer->resource->SetName(std::format(L"Vertex Buffer [{}] - {}", meshData.registerIndex, name).c_str()));
-
-		meshData.vertexBuffer->Upload(commandList.get());
-
-		// SRV
-		D3D12_SHADER_RESOURCE_VIEW_DESC vbDesc = {};
-		vbDesc.ViewDimension = D3D12_SRV_DIMENSION_BUFFER;
-		vbDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
-		vbDesc.Format = DXGI_FORMAT_UNKNOWN;
-		vbDesc.Buffer.FirstElement = 0;
-		vbDesc.Buffer.NumElements = static_cast<int32_t>(meshData.vertexCount);
-		vbDesc.Buffer.StructureByteStride = sizeof(Vertex);
-		vbDesc.Buffer.Flags = D3D12_BUFFER_SRV_FLAG_NONE;
-
-		d3d12Device->CreateShaderResourceView(meshData.vertexBuffer->resource.get(), &vbDesc, giHeap->CPUHandle(GIHeap::Slot::Vertices, meshData.registerIndex));
+		meshData.vertexCount += vertexCount;
 	}
 
-	// Index Buffer
+	// Triangle
 	{
-		const uint16_t* indexes = rendererData->rawIndexData;
+		/*auto indexBuffer = (ID3D11Buffer*)rendererData->indexBuffer;
 
-		eastl::vector<Triangle> triangles(triangleCount);
+		D3D11_BUFFER_DESC desc{};
+		indexBuffer->GetDesc(&desc);
 
-		for (uint32_t t = 0; t < triangleCount; ++t) {
-			uint32_t i = t * 3;
+		auto realTriangleCount = desc.ByteWidth / (sizeof(uint16_t) * 3);
 
-			triangles[t] = Triangle(
-				static_cast<uint32_t>(indexes[i]),
-				static_cast<uint32_t>(indexes[i + 1]),
-				static_cast<uint32_t>(indexes[i + 2]));
-		}
+		auto context = globals::d3d::context;
 
-		meshData.triangleBuffer->UpdateList(triangles.data(), triangles.size());
-		DX::ThrowIfFailed(meshData.triangleBuffer->resource->SetName(std::format(L"Index Buffer [{}] - {}", meshData.registerIndex, name).c_str()));
+		D3D11_MAPPED_SUBRESOURCE mapped{};
+		context->Map(indexBuffer, 0, D3D11_MAP_READ, 0, &mapped);
+		eastl::vector<uint16_t> indices(triangleCount * 3);
+		std::memcpy(indices.data(), rendererData->rawIndexData, sizeof(uint16_t) * triangleCount * 3);
+		context->Unmap(indexBuffer, 0);*/
 
-		meshData.triangleBuffer->Upload(commandList.get());
+		/*{
+			auto indexBuffer = (ID3D11Buffer*)rendererData->indexBuffer;
 
-		// SRV
-		D3D12_SHADER_RESOURCE_VIEW_DESC ibDesc = {};
-		ibDesc.ViewDimension = D3D12_SRV_DIMENSION_BUFFER;
-		ibDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
-		ibDesc.Format = DXGI_FORMAT_UNKNOWN;
-		ibDesc.Buffer.FirstElement = 0;
-		ibDesc.Buffer.NumElements = static_cast<int32_t>(meshData.triangleCount);
-		ibDesc.Buffer.StructureByteStride = sizeof(Triangle);
-		ibDesc.Buffer.Flags = D3D12_BUFFER_SRV_FLAG_NONE;
+			D3D11_BUFFER_DESC desc{};
+			indexBuffer->GetDesc(&desc);
 
-		d3d12Device->CreateShaderResourceView(meshData.triangleBuffer->resource.get(), &ibDesc, giHeap->CPUHandle(GIHeap::Slot::Triangles, meshData.registerIndex));
+			auto indexCount = desc.ByteWidth / sizeof(uint16_t);
+			eastl::vector<uint16_t> indicesBuffer(indexCount);
+
+			auto context = globals::d3d::context;
+
+			D3D11_MAPPED_SUBRESOURCE mapped{};
+			DX::ThrowIfFailed(context->Map(indexBuffer, 0, D3D11_MAP_READ, 0, &mapped));
+			std::memcpy(indicesBuffer.data(), mapped.pData, sizeof(uint16_t) * indexCount);
+			context->Unmap(indexBuffer, 0);
+
+			for (uint16_t t = 0; t < (indexCount/3); ++t) {
+				uint16_t i = t * 3u;
+				uint16_t i2 = i + 1u;
+				uint16_t i3 = i + 2u;
+
+				logger::info("Triangle A - Global {}, Local {} - Vertices: [{}, {}, {}]", meshData.triangleCount + t, t, indicesBuffer[i], indicesBuffer[i2], indicesBuffer[i3]);
+			}	
+		}*/
+
+		eastl::vector<uint16_t> indices(triangleCount * 3);
+		std::memcpy(indices.data(), rendererData->rawIndexData, sizeof(uint16_t) * triangleCount * 3);
+
+		for (uint16_t t = 0; t < triangleCount; ++t) {
+			uint16_t i = t * 3u;
+
+			uint16_t v0 = indices[i];
+			uint16_t v1 = indices[i + 1u];
+			uint16_t v2 = indices[i + 2u];
+
+			//logger::info("Triangle B - Global {}, Local {} - Vertices: [{}, {}, {}]", meshData.triangleCount + t, t, indices[i], indices[i2], indices[i3]);
+
+			if (hasVertexMap) {
+				v0 = vertexOffset + vertexMap.find(v0)->second;
+				v1 = vertexOffset + vertexMap.find(v1)->second;
+				v2 = vertexOffset + vertexMap.find(v2)->second;
+			}
+
+			meshData.triangles.emplace_back(v0, v1, v2);
+		}	
+
+		meshData.triangleCount += triangleCount;
 	}
-
-	return meshData;
 }
 
-void Raytracing::CreateTriShapeMaterials(MeshData& meshData, const RE::BSGeometry::GEOMETRY_RUNTIME_DATA& geometryRuntimeData, const char* name)
+void Raytracing::ReadPartition(MeshData& meshData, RE::NiSkinPartition::Partition& partition, const float4x4& transform)
+{
+	eastl::unordered_map<uint16_t, uint16_t> vertexMap;
+	vertexMap.reserve(partition.vertices);
+
+	for (uint16_t i = 0; i < partition.vertices; i++) {
+		vertexMap.emplace(partition.vertexMap[i], i);
+	}
+
+	ReadRendererData(meshData, partition.buffData, partition.vertices, partition.triangles, partition.bonesPerVertex, vertexMap, transform);
+}
+
+void Raytracing::ReadMaterial(MeshData& meshData, const RE::BSGeometry::GEOMETRY_RUNTIME_DATA& geometryRuntimeData, [[ maybe_unused ]] const char* name)
 {
 	using State = RE::BSGeometry::States;
 	using Feature = RE::BSShaderMaterial::Feature;
@@ -1489,7 +1531,7 @@ void Raytracing::CreateTriShapeMaterials(MeshData& meshData, const RE::BSGeometr
 						if (auto it = sharedTextures.find(bsDiffuseTexture->texture); it != sharedTextures.end()) {
 							diffuseTexture = it->second.get();
 						} else {
-							logger::warn(fmt::runtime("[RT] Diffuse texture not found for {}"), name);
+							//logger::warn(fmt::runtime("[RT] Diffuse texture not found for {}"), name);
 						}
 
 						if (feature == Feature::kGlowMap) {
@@ -1505,8 +1547,9 @@ void Raytracing::CreateTriShapeMaterials(MeshData& meshData, const RE::BSGeometr
 								}
 							}
 
-							if (!effectTexture)
-								logger::warn(fmt::runtime("[RT] Glow texture not found for {}"), name);
+							if (!effectTexture) {
+								//logger::warn(fmt::runtime("[RT] Glow texture not found for {}"), name);
+							}
 						}
 					}
 				}
@@ -1527,7 +1570,7 @@ void Raytracing::CreateTriShapeMaterials(MeshData& meshData, const RE::BSGeometr
 								if (auto it = sharedTextures.find(bsSourceTexture->texture); it != sharedTextures.end()) {
 									diffuseTexture = it->second.get();
 								} else {
-									logger::warn(fmt::runtime("[RT] Source texture not found for {}"), name);
+									//logger::warn(fmt::runtime("[RT] Source texture not found for {}"), name);
 								}
 							}
 						}
@@ -1537,7 +1580,7 @@ void Raytracing::CreateTriShapeMaterials(MeshData& meshData, const RE::BSGeometr
 								if (auto it = sharedTextures.find(bsGreyscaleTexture->texture); it != sharedTextures.end()) {
 									effectTexture = it->second.get();
 								} else {
-									logger::warn(fmt::runtime("[RT] Greyscale texture not found for {}"), name);
+									//logger::warn(fmt::runtime("[RT] Greyscale texture not found for {}"), name);
 								}
 							}
 						}
@@ -1582,255 +1625,355 @@ void Raytracing::CreateTriShapeMaterials(MeshData& meshData, const RE::BSGeometr
 	meshData.material = MaterialData(feature, texCoordOffsetScale, diffuseTexture, effectTexture, nullptr, effectColor, effectType == 0 ? RE::BSShader::Type::Lighting : RE::BSShader::Type::Effect);
 }
 
-void Raytracing::AddTriShape(RE::BSTriShape* pTriShape, RE::NiStream* a_stream)
+void Raytracing::CreateBuffers(MeshData& meshData, const std::wstring& name)
 {
-	/*auto* pFadeNode = FindBSFadeNode((RE::NiNode*)pTriShape);
+	// Vertices
+	{
+		if (meshData.vertexCount != meshData.vertices.size())
+			logger::critical("[RT] Vertex count and data mismatch - vertexCount: {}, vertices.size(): {}", meshData.vertexCount, meshData.vertices.size());
 
-	if (!pFadeNode) {
-		logger::warn("[RT] AddTriShape - FadeNode not found for TriShape [0x{:x}]: {}", reinterpret_cast<uintptr_t>(pTriShape), pTriShape->name.c_str());
-		return;
-	}
+		meshData.vertexBuffer = eastl::make_unique<DX12::StructuredBufferUpload<Vertex>>(d3d12Device.get(), meshData.vertexCount);
 
-	auto inputPathsIt = inputPaths.find(pFadeNode);
+		meshData.vertexBuffer->UpdateList(meshData.vertices.data(), meshData.vertexCount);
+		DX::ThrowIfFailed(meshData.vertexBuffer->resource->SetName(std::format(L"Vertex Buffer [{}] - {}", meshData.registerIndex, name).c_str()));
 
-	if (inputPathsIt == inputPaths.end()) {
-		logger::warn("[RT] AddTriShape - FadeNode path not registered for TriShape [0x{:x}]: {}", reinterpret_cast<uintptr_t>(pTriShape), pTriShape->name.c_str());
-		return;
-	}*/
+		meshData.vertexBuffer->Upload(commandList.get());
 
-	eastl::string inputPath;
+		// SRV
+		{
+			D3D12_SHADER_RESOURCE_VIEW_DESC vbDesc = {};
+			vbDesc.ViewDimension = D3D12_SRV_DIMENSION_BUFFER;
+			vbDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
+			vbDesc.Format = DXGI_FORMAT_UNKNOWN;
+			vbDesc.Buffer.FirstElement = 0;
+			vbDesc.Buffer.NumElements = static_cast<int32_t>(meshData.vertexCount);
+			vbDesc.Buffer.StructureByteStride = sizeof(Vertex);
+			vbDesc.Buffer.Flags = D3D12_BUFFER_SRV_FLAG_NONE;
 
-	if (a_stream) {
-		const auto& streamInputPath = a_stream->inputFilePath;
-
-		if (strlen(streamInputPath) == 0)
-			return;
-
-		inputPath = streamInputPath;
-	} else {
-		inputPath = currentPath;
-	}
-
-	if (pendingGeometry.find(inputPath) == pendingGeometry.end())
-		return;
-
-	//if (!ValidTriShape((RE::NiNode*)pTriShape))
-	//	return;
-
-	if (pTriShape->GetFlags().any(RE::NiAVObject::Flag::kHidden))
-		return;
-
-	const char* name = pTriShape->name.c_str();
-
-	if (strcmp(name, "Land") == 0)
-		return;
-
-	/*if (!ValidTriShape(pTriShape)) {
-		logger::warn("[RT] AddTriShape - Invalid TriShape [0x{:x}]: {}", reinterpret_cast<uintptr_t>(pTriShape), pTriShape->name.c_str());
-		return;
-	}*/
-
-	const auto& geometryRuntimeData = pTriShape->GetGeometryRuntimeData();
-
-	/*auto effect = geometryRuntimeData.properties[RE::BSGeometry::States::kEffect];
-	auto lightingShader = netimmerse_cast<RE::BSLightingShaderProperty*>(effect.get());
-
-	if (!lightingShader)
-		return;*/
-
-	RE::BSGraphics::TriShape* rendererData = geometryRuntimeData.rendererData;
-
-	// RenderData is null for skinned meshes, just ignore them for now
-	if (!rendererData) {
-		logger::warn("[RT] AddTriShape - Filename: {}, TriShape [0x{:x}]: {} - Null Renderer Data.", inputPath, reinterpret_cast<uintptr_t>(pTriShape), name);
-		return;
-	}
-
-	logger::info("[RT] AddTriShape - Filename: {}, TriShape [0x{:x}]: {}", inputPath, reinterpret_cast<uintptr_t>(pTriShape), name);
-
-	const auto bsxFlags = pTriShape->GetExtraData<RE::BSXFlags>("BSX");
-
-	if (bsxFlags)
-		logger::info("[RT] AddTriShape - BSX Flags [0x{:x}]: {}", bsxFlags->value, GetFlags<RE::BSXFlags::Flag>(static_cast<uint32_t>(bsxFlags->value)));
-
-	//logger::info("[RT] AddTriShape - Type: {}", magic_enum::enum_name(pTriShape->GetType().get()));
-
-	//logger::info("[RT] AddTriShape - Flags: {}", GetFlags<RE::NiAVObject::Flag>(pTriShape->GetFlags().underlying()));
-
-	/*auto property = geometryRuntimeData.properties[RE::BSGeometry::States::kProperty].get();
-
-	if (property) {
-		auto propertyRTTI = property->GetRTTI();
-
-		logger::info("[RT] AddTriShape - RTTI: {}", propertyRTTI->GetName());
-	}*/
-
-	/*auto extraData = pTriShape->GetExtraData("BSX");
-
-	if (extraData) {
-		auto bsxFlags = (RE::BSXFlags*)extraData;
-
-		if (bsxFlags) {
-			logger::info("[RT] AddTriShape - BSX Flags: {}", GetFlags<RE::BSXFlags::Flag>(static_cast<uint32_t>(bsxFlags->value)));
+			d3d12Device->CreateShaderResourceView(meshData.vertexBuffer->resource.get(), &vbDesc, giHeap->CPUHandle(GIHeap::Slot::Vertices, meshData.registerIndex));
 		}
-	}*/
+	}
 
-	auto [it, emplaced] = geometry.try_emplace(inputPath);
+	// Triangles
+	{
+		if (meshData.triangleCount != meshData.triangles.size())
+			logger::critical("[RT] Triangle count and data mismatch");
 
-	const auto& triShapeRuntime = pTriShape->GetTrishapeRuntimeData();
+		meshData.triangleBuffer = eastl::make_unique<DX12::StructuredBufferUpload<Triangle>>(d3d12Device.get(), meshData.triangleCount);
 
-	//kProperty
-	auto meshData = CreateTriShapeBuffers(rendererData, triShapeRuntime.vertexCount, triShapeRuntime.triangleCount, ToWide(name));
-	CreateTriShapeMaterials(meshData, geometryRuntimeData, name);
+		meshData.triangleBuffer->UpdateList(meshData.triangles.data(), meshData.triangles.size());
+		DX::ThrowIfFailed(meshData.triangleBuffer->resource->SetName(std::format(L"Triangle Buffer [{}] - {}", meshData.registerIndex, name).c_str()));
 
-	it->second.meshes.push_back(eastl::move(meshData));
+		meshData.triangleBuffer->Upload(commandList.get());
+
+		// SRV
+		{
+			D3D12_SHADER_RESOURCE_VIEW_DESC ibDesc = {};
+			ibDesc.ViewDimension = D3D12_SRV_DIMENSION_BUFFER;
+			ibDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
+			ibDesc.Format = DXGI_FORMAT_UNKNOWN;
+			ibDesc.Buffer.FirstElement = 0;
+			ibDesc.Buffer.NumElements = static_cast<int32_t>(meshData.triangleCount);
+			ibDesc.Buffer.StructureByteStride = sizeof(Triangle);
+			ibDesc.Buffer.Flags = D3D12_BUFFER_SRV_FLAG_NONE;
+
+			d3d12Device->CreateShaderResourceView(meshData.triangleBuffer->resource.get(), &ibDesc, giHeap->CPUHandle(GIHeap::Slot::Triangles, meshData.registerIndex));
+		}
+	}
 }
 
-void Raytracing::CommitGeometry(RE::NiStream* pNiStream)
+void Raytracing::CommitGeometry(GeometryData& geometryData)
 {
-	const auto& inputPath = pNiStream->inputFilePath;
+	auto& meshes = geometryData.meshes;
+	auto meshCount = meshes.size();
 
-	if (strlen(inputPath) == 0)
+	eastl::vector<D3D12_RAYTRACING_GEOMETRY_DESC> geometryDescs(meshCount);
+
+	bool skinned = false;
+
+	for (auto i = 0; i < meshCount; i++) {
+		auto& meshData = meshes[i];
+
+		geometryDescs[i] = {
+			.Type = D3D12_RAYTRACING_GEOMETRY_TYPE_TRIANGLES,
+			.Flags = D3D12_RAYTRACING_GEOMETRY_FLAG_OPAQUE,
+			.Triangles = {
+				.Transform3x4 = 0,
+				.IndexFormat = DXGI_FORMAT_R32_UINT,
+				.VertexFormat = DXGI_FORMAT_R32G32B32_FLOAT,
+				.IndexCount = meshData.triangleCount * 3,
+				.VertexCount = meshData.vertexCount,
+				.IndexBuffer = meshData.triangleBuffer->resource->GetGPUVirtualAddress(),
+				.VertexBuffer = {
+					.StartAddress = meshData.vertexBuffer->resource->GetGPUVirtualAddress(),
+					.StrideInBytes = sizeof(Vertex) 
+				} 
+			} 
+		};
+	}
+
+	D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_INPUTS inputs = {
+		.Type = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL,
+		.Flags = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_PREFER_FAST_TRACE | (skinned ? D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_ALLOW_UPDATE : D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_ALLOW_COMPACTION),
+		.NumDescs = static_cast<uint>(geometryDescs.size()),
+		.DescsLayout = D3D12_ELEMENTS_LAYOUT_ARRAY,
+		.pGeometryDescs = geometryDescs.data()
+	};
+
+	D3D12_RAYTRACING_ACCELERATION_STRUCTURE_PREBUILD_INFO prebuildInfo;
+	d3d12Device->GetRaytracingAccelerationStructurePrebuildInfo(&inputs, &prebuildInfo);
+
+	D3D12_RESOURCE_DESC desc = {
+		.Dimension = D3D12_RESOURCE_DIMENSION_BUFFER,
+		.Width = prebuildInfo.ScratchDataSizeInBytes,
+		.Height = 1,
+		.DepthOrArraySize = 1,
+		.MipLevels = 1,
+		.SampleDesc = NO_AA,
+		.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR,
+		.Flags = D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS
+	};
+
+	winrt::com_ptr<ID3D12Resource> scratch = nullptr;
+	DX::ThrowIfFailed(d3d12Device->CreateCommittedResource(&DEFAULT_HEAP, D3D12_HEAP_FLAG_NONE, &desc, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, nullptr, IID_PPV_ARGS(&scratch)));
+
+	desc.Width = prebuildInfo.ResultDataMaxSizeInBytes;
+	DX::ThrowIfFailed(d3d12Device->CreateCommittedResource(&DEFAULT_HEAP, D3D12_HEAP_FLAG_NONE, &desc, D3D12_RESOURCE_STATE_RAYTRACING_ACCELERATION_STRUCTURE, nullptr, IID_PPV_ARGS(&geometryData.blasBuffer)));
+
+	D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_DESC buildDesc = {
+		.DestAccelerationStructureData = geometryData.blasBuffer->GetGPUVirtualAddress(),
+		.Inputs = inputs,
+		.ScratchAccelerationStructureData = scratch->GetGPUVirtualAddress() 
+	};
+
+	commandList->BuildRaytracingAccelerationStructure(&buildDesc, 0, nullptr);
+
+	const auto& asBarrier = CD3DX12_RESOURCE_BARRIER::UAV(geometryData.blasBuffer.get());
+	commandList->ResourceBarrier(1, &asBarrier);
+
+	//tempGPUData.emplace_back(eastl::move(geometryDescs), std::move(scratch));
+	tempGPUData.emplace_back(std::move(scratch), fenceValue);
+}
+
+void Raytracing::CreateGeometry(const char* path, RE::NiNode* pRoot)
+{
+	if (!path) {
+		//logger::info("[RT] CreateGeometry \"{}\" - Invalid Path", pRoot->name);
 		return;
+	}
 
-	if (auto it = geometry.find(inputPath); it != geometry.end()) {
-		auto& geometryData = it->second;
+	if (strlen(path) == 0) {
+		//logger::info("[RT] CreateGeometry \"{}\" - Empty Path", pRoot->name);
+		return;
+	}
 
-		auto& geometryMeshes = geometryData.meshes;
+	const auto* bsxFlags = pRoot->GetExtraData<RE::BSXFlags>("BSX");
 
-		auto triShapeCount = geometryMeshes.size();
+	if (bsxFlags) {
+		if (static_cast<int32_t>(bsxFlags->value) & static_cast<int32_t>(RE::BSXFlags::Flag::kEditorMarker))
+			return;
+		
+		//logger::info("[RT] CreateGeometry - BSX Flags [0x{:x}]: {}", bsxFlags->value, GetFlags<RE::BSXFlags::Flag>(static_cast<uint32_t>(bsxFlags->value)));
+	}
 
-		if (triShapeCount == 0) {
-			logger::warn("[RT] CommitGeometry - Nothing to commit.");
-		} else {
-			logger::info("[RT] CommitGeometry - TriShapes: {}", triShapeCount);
+	// We only need one buffer per model
+	if (geometry.find(path) != geometry.end()) {
+		AddInstance(pRoot, path);
+		return;
+	}
 
-			eastl::vector<D3D12_RAYTRACING_GEOMETRY_DESC> geometryDescs;
-			geometryDescs.reserve(triShapeCount);
+	std::lock_guard lock{ renderMutex };
 
-			bool skinned = false;
+	logger::info("[RT] CreateGeometry - Path: {}, NiNode [0x{:X}]: {}", path, reinterpret_cast<uintptr_t>(pRoot), pRoot->name);
 
-			for (auto meshData = geometryMeshes.begin(); meshData != geometryMeshes.end(); meshData++) {
-				//logger::warn("[RT] CommitGeometry {} - Vertices: {}, Triangles: {}", geometryDescs.size(), meshData->vertexCount, meshData->triangleCount);
+	auto rootWorldInverse = pRoot->world.Invert();
 
-				geometryDescs.push_back(D3D12_RAYTRACING_GEOMETRY_DESC{
-					.Type = D3D12_RAYTRACING_GEOMETRY_TYPE_TRIANGLES,
-					.Flags = D3D12_RAYTRACING_GEOMETRY_FLAG_OPAQUE,
-					.Triangles = {
-						.Transform3x4 = 0,
-						.IndexFormat = DXGI_FORMAT_R32_UINT,
-						.VertexFormat = DXGI_FORMAT_R32G32B32_FLOAT,
-						.IndexCount = meshData->triangleCount * 3,
-						.VertexCount = meshData->vertexCount,
-						.IndexBuffer = meshData->triangleBuffer->resource->GetGPUVirtualAddress(),
-						.VertexBuffer = {
-							.StartAddress = meshData->vertexBuffer->resource->GetGPUVirtualAddress(),
-							.StrideInBytes = sizeof(Vertex) 
-						} 
-					} 
-				});
+	eastl::vector<MeshData> meshes;
+
+	RE::BSVisit::TraverseScenegraphGeometries(pRoot, [&](RE::BSGeometry* pGeometry) -> RE::BSVisit::BSVisitControl {
+		/*logger::info("\t\t[RT] CreateGeometry::TraverseScenegraphGeometries - Geometry [0x{:x}]: {}, Type: {}", reinterpret_cast<uintptr_t>(pGeometry), pGeometry->name, magic_enum::enum_name(pGeometry->GetType().get()));
+
+		const auto* geomBSXFlags = pGeometry->GetExtraData<RE::BSXFlags>("BSX");
+
+		if (geomBSXFlags)
+			logger::info("\t\t[RT] CreateGeometry::TraverseScenegraphGeometries - BSX Flags [0x{:x}]: {}", geomBSXFlags->value, GetFlags<RE::BSXFlags::Flag>(static_cast<uint32_t>(geomBSXFlags->value)));*/
+
+		const char* name = pGeometry->name.c_str();
+
+		// TODO: kDynamicTriShape support (used in mouth/eyes)
+		if (pGeometry->GetType().none(RE::BSGeometry::Type::kTriShape)) {
+			logger::warn("\t\t[RT] CreateGeometry::TraverseScenegraphGeometries - Unsupported Geometry: {} for {}", magic_enum::enum_name(pGeometry->GetType().get()), name);
+			return RE::BSVisit::BSVisitControl::kContinue;
+		}
+
+		// Early workaround since Land cause(ed?)s DX12 Device removal (why?)
+		if (strcmp(name, "Land") == 0) {
+			logger::warn("\t\t[RT] CreateGeometry::TraverseScenegraphGeometries - Is Land");
+			return RE::BSVisit::BSVisitControl::kContinue;
+		}
+
+		const auto& geometryRuntimeData = pGeometry->GetGeometryRuntimeData();
+
+		auto effect = geometryRuntimeData.properties[RE::BSGeometry::States::kEffect];
+
+		auto lightingShader = netimmerse_cast<RE::BSLightingShaderProperty*>(effect.get());
+
+		if (!lightingShader) {
+			//logger::warn("\t\t[RT] CreateGeometry::TraverseScenegraphGeometries - Not LightingShader");
+			return RE::BSVisit::BSVisitControl::kContinue;
+		}
+
+		bool skinned = lightingShader->flags.any(RE::BSShaderProperty::EShaderPropertyFlag::kSkinned);
+
+		auto& geomFlags = pGeometry->GetFlags();
+
+		if (geomFlags.any(RE::NiAVObject::Flag::kHidden) && !skinned) {
+			logger::warn("\t\t[RT] CreateGeometry::TraverseScenegraphGeometries - Is Hidden");
+			return RE::BSVisit::BSVisitControl::kContinue;
+		}
+
+		//logger::info("\t\t[RT] CreateGeometry::TraverseScenegraphGeometries - Geom Flags [0x{:x}]: {}", geomFlags.underlying(), GetFlags<RE::NiAVObject::Flag>(geomFlags.underlying()));
+
+		auto localToRoot = rootWorldInverse * pGeometry->world;
+		
+		if (auto* triShapeRD = geometryRuntimeData.rendererData) { // Non-Skinned
+			//logger::warn("\t\t[RT] CreateGeometry::TraverseScenegraphGeometries - No RendererData");
+
+			auto* pTriShape = netimmerse_cast<RE::BSTriShape*>(pGeometry);
+
+			const auto& triShapeRuntime = pTriShape->GetTrishapeRuntimeData();
+
+			auto meshData = MeshData(registers.allocate());
+			meshData.vertices.resize(triShapeRuntime.vertexCount);
+			ReadRendererData(meshData, triShapeRD, triShapeRuntime.vertexCount, triShapeRuntime.triangleCount, 0, {}, GetXMFromNiTransform(localToRoot));
+			meshData.vertexCount = triShapeRuntime.vertexCount;
+
+			CreateBuffers(meshData, ToWide(name));
+			ReadMaterial(meshData, geometryRuntimeData, name);
+
+			meshes.push_back(eastl::move(meshData));
+		} else if (auto* skinInstance = geometryRuntimeData.skinInstance.get()) { // Skinned
+			logger::warn("\t\t[RT] CreateGeometry::TraverseScenegraphGeometries - Skinned Geometry: {}", name);
+
+			auto& skinData = skinInstance->skinData;
+
+			if (!skinData) {
+				logger::warn("\t\t[RT] CreateGeometry::TraverseScenegraphGeometries - Invalid SkinData");
+				//return RE::BSVisit::BSVisitControl::kContinue;
 			}
 
-			D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_INPUTS inputs = {
-				.Type = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL,
-				.Flags = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_PREFER_FAST_TRACE | (skinned ? D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_ALLOW_UPDATE : D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_ALLOW_COMPACTION),
-				.NumDescs = static_cast<uint>(geometryDescs.size()),
-				.DescsLayout = D3D12_ELEMENTS_LAYOUT_ARRAY,
-				.pGeometryDescs = geometryDescs.data()
-			};
+			auto& skinPartition = skinInstance->skinPartition;
+	
+			if (!skinPartition) {
+				logger::warn("\t\t[RT] CreateGeometry::TraverseScenegraphGeometries - Invalid SkinPartition");
+				return RE::BSVisit::BSVisitControl::kContinue;
+			}
 
-			D3D12_RAYTRACING_ACCELERATION_STRUCTURE_PREBUILD_INFO prebuildInfo;
-			d3d12Device->GetRaytracingAccelerationStructurePrebuildInfo(&inputs, &prebuildInfo);
+			logger::info("\t\t[RT] CreateGeometry::TraverseScenegraphGeometries - Partitions: {}, VertexCount: {}, Unk24: [0x{:X}]", skinPartition->numPartitions, skinPartition->vertexCount, skinPartition->unk24);
 
-			D3D12_RESOURCE_DESC desc = {
-				.Dimension = D3D12_RESOURCE_DIMENSION_BUFFER,
-				.Width = prebuildInfo.ScratchDataSizeInBytes,
-				.Height = 1,
-				.DepthOrArraySize = 1,
-				.MipLevels = 1,
-				.SampleDesc = NO_AA,
-				.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR,
-				.Flags = D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS
-			};
+			auto transform = GetXMFromNiTransform(localToRoot);
 
-			winrt::com_ptr<ID3D12Resource> scratch = nullptr;
-			DX::ThrowIfFailed(d3d12Device->CreateCommittedResource(&DEFAULT_HEAP, D3D12_HEAP_FLAG_NONE, &desc, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, nullptr, IID_PPV_ARGS(&scratch)));
+			auto meshData = MeshData(registers.allocate());
+			meshData.vertices.resize(skinPartition->vertexCount);
 
-			desc.Width = prebuildInfo.ResultDataMaxSizeInBytes;
-			DX::ThrowIfFailed(d3d12Device->CreateCommittedResource(&DEFAULT_HEAP, D3D12_HEAP_FLAG_NONE, &desc, D3D12_RESOURCE_STATE_RAYTRACING_ACCELERATION_STRUCTURE, nullptr, IID_PPV_ARGS(&geometryData.blasBuffer)));
+			for (auto& partition : skinPartition->partitions) {
+				/*if (meshData.vertexCount + partition.vertices > skinPartition->vertexCount) {
+					continue;
+				}*/
 
-			D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_DESC buildDesc = {
-				.DestAccelerationStructureData = geometryData.blasBuffer->GetGPUVirtualAddress(),
-				.Inputs = inputs,
-				.ScratchAccelerationStructureData = scratch->GetGPUVirtualAddress() 
-			};
+				logger::info("\t\t\t\t[RT] CreateGeometry::TraverseScenegraphGeometries - Vertices: {}, Triangles: {}", partition.vertices, partition.triangles);
+				//logger::info("\t\t\t\t[RT] CreateGeometry::TraverseScenegraphGeometries - Pad42: {}, Unk44: [0x{:X}]", partition.pad42, *reinterpret_cast<uint32_t*>(&partition.unk44));
+				//logger::info("\t\t\t\t[RT] CreateGeometry::TraverseScenegraphGeometries - RawIndexData: [0x{:X}]", reinterpret_cast<uintptr_t>(partition.buffData->rawIndexData));
+				ReadPartition(meshData, partition, transform);
+			}
 
-			commandList->BuildRaytracingAccelerationStructure(&buildDesc, 0, nullptr);
+			meshData.vertexCount = skinPartition->vertexCount;
 
-			const auto& asBarrier = CD3DX12_RESOURCE_BARRIER::UAV(geometryData.blasBuffer.get());
-			commandList->ResourceBarrier(1, &asBarrier);
+			CreateBuffers(meshData, ToWide(name));
+			ReadMaterial(meshData, geometryRuntimeData, name);
 
-			//tempGPUData.emplace_back(eastl::move(geometryDescs), std::move(scratch));
-			tempGPUData.emplace_back(std::move(scratch), fenceValue);
+			meshes.push_back(eastl::move(meshData));
+
+			/*auto* rootParent = skinInstance->rootParent;
+			auto* bones = skinInstance->bones;
+			auto* boneWorldTransforms = skinInstance->boneWorldTransforms;
+
+			auto& numMatrices = skinInstance->numMatrices;
+			auto* boneMatrices = skinInstance->boneMatrices;*/
+		}
+
+		return RE::BSVisit::BSVisitControl::kContinue;
+	});
+
+	auto meshCount = meshes.size();
+
+	if (meshCount > 0) {
+		//inputPaths.try_emplace(pRoot, path);
+
+		auto [it, emplaced] = geometry.try_emplace(path, GeometryData(eastl::move(meshes)));
+
+		if (emplaced) {
+			CommitGeometry(it->second);
+			AddInstance(pRoot, path);
+
+			logger::info("[RT] CreateGeometry - Commited {} TriShapes", meshCount);
+		} else {
+			logger::warn("[RT] CreateGeometry - Emplace failed for {} TriShapes", meshCount);
 		}
 	} else {
-		logger::error("[RT] CommitGeometry - Fade Node not found in geometry list.");
+		logger::warn("[RT] CreateGeometry - No TriShapes to commit");
 	}
-
-	pendingGeometry.erase(inputPath);
-	currentPath.clear();
 }
 
-void Raytracing::RegisterClone(RE::BSFadeNode* pBSFadeNode, RE::NiObject* pNiObject)
+void Raytracing::RegisterInstance(RE::BSFadeNode* pOriginal, RE::NiObject* pInstance)
 {
-	const auto& inputPathIt = inputPaths.find(pBSFadeNode);
+	const auto& inputPathIt = inputPaths.find(pOriginal);
 
 	if (inputPathIt != inputPaths.end()) {
-		auto* fadeNode = FindBSFadeNode((RE::NiNode*)pNiObject); // This seems wrong
+		//auto* fadeNode = FindBSFadeNode(netimmerse_cast<RE::NiNode*>(pInstance));  // This seems wrong
 
-		inputPaths.try_emplace(fadeNode, inputPathIt->second);
+		auto* pInstanceNiNode = netimmerse_cast<RE::NiNode*>(pInstance);
+
+		logger::info("[RT] RegisterInstance - Original [0x{:x}]: \"{}\", Instance [0x{:x}]: \"{}\"",
+			reinterpret_cast<uintptr_t>(pOriginal), pOriginal->name,
+			reinterpret_cast<uintptr_t>(pInstance), pInstanceNiNode ? pInstanceNiNode->name : "");
+
+		/*auto dataHandler = RE::TESDataHandler::GetSingleton();
+
+		if (auto object = pOriginal->GetUserData()) {
+			if (auto ref = object->AsReference()) {
+				uint32_t formID = ref->GetFormID();
+				std::uint8_t modIndex = formID >> 24;
+
+				eastl::string path;
+
+				if (modIndex < 0xFE) {
+					auto file = dataHandler->LookupLoadedModByIndex(modIndex);
+					path = file->fileName;
+				}
+				if (modIndex == 0xFE) {
+					RE::FormID relativeID = formID % (1 << 24);
+					std::uint16_t lightModIndex = static_cast<std::uint16_t>(relativeID >> 12);
+					relativeID %= 1 << 12;
+					auto file = dataHandler->LookupLoadedLightModByIndex(lightModIndex);
+					path = file->fileName;
+				}
+
+				logger::info("[RT] RegisterInstance - Cached Path: \"{}\", FormID {:08X} Path: \"{}\"", inputPathIt->second, formID, path);
+			}
+		}*/
+
+		inputPaths.try_emplace(netimmerse_cast<RE::NiNode*>(pInstance), inputPathIt->second);
 	}
 }
 
-eastl::vector<size_t> Raytracing::GatherInstanceLights(RE::BSFadeNode* pBSFadeNode)
+void Raytracing::AddInstance(RE::NiNode* pNiNode, const char* path)
 {
-	eastl::vector<size_t> instanceLights;
+	std::lock_guard lock{ geometryMutex };
 
-	float3 center = Float3(pBSFadeNode->worldBound.center);
-	float radius = pBSFadeNode->worldBound.radius;
-
-	for (size_t i = 0; i < lights.size(); i++) {
-		const Light& light = lights[i];
-
-		if ((center - light.Vector).Length() <= radius + light.Range)
-			instanceLights.push_back(i);
-	}
-
-	return instanceLights;
-}
-
-void Raytracing::AddUpdateInstance(RE::BSGeometry* pGeometry)
-{
-	std::lock_guard lock{ meshMutex };
-
-	/*auto effect = pFadeNode->GetGeometryRuntimeData().properties[RE::BSGeometry::States::kEffect].get();
-	auto shaderProperty = netimmerse_cast<RE::BSShaderProperty*>(effect);
-
-	if (!ValidTriShape(pTriShape) && (!shaderProperty || (shaderProperty && shaderProperty->flags.none(RE::BSShaderProperty::EShaderPropertyFlag::kGrayscaleToPaletteColor))))
-		return;*/
-
-	//logger::info("[RT] {} [0x{:x}] [0x{:x}]", pTriShape->name.c_str(), reinterpret_cast<uintptr_t>(pTriShape), reinterpret_cast<uintptr_t>(pTriShape->GetGeometryRuntimeData().rendererData->vertexBuffer));
-
-	const auto pFadeNode = FindBSFadeNode((RE::NiNode*)pGeometry);
-
-	if (!pFadeNode)
-		return;
-
-	auto it = instances.find(pFadeNode);
-
-	if (it == instances.end()) {
-		if (auto inputPathIt = inputPaths.find(pFadeNode); inputPathIt != inputPaths.end()) {
-			instances.emplace(pFadeNode, InstanceData(0, inputPathIt->second));
+	if (auto it = instances.find(pNiNode); it == instances.end()) {
+		if (auto it2 = geometry.find(path); it2 != geometry.end()) {
+			instances.try_emplace(pNiNode, InstanceData(0, path));
 		}
 	}
 }
@@ -1853,6 +1996,23 @@ bool Raytracing::ValidTriShape(RE::NiNode* pNiNode)
 	}
 
 	return true;
+}
+
+eastl::vector<size_t> Raytracing::GatherInstanceLights(RE::NiNode* pNiNode)
+{
+	eastl::vector<size_t> instanceLights;
+
+	float3 center = Float3(pNiNode->worldBound.center);
+	float radius = pNiNode->worldBound.radius;
+
+	for (size_t i = 0; i < lights.size(); i++) {
+		const Light& light = lights[i];
+
+		if ((center - light.Vector).Length() <= radius + light.Range)
+			instanceLights.push_back(i);
+	}
+
+	return instanceLights;
 }
 
 void Raytracing::AddUpdateAllInstances()
@@ -1885,10 +2045,10 @@ static RE::NiCamera* FindNiCamera(RE::NiAVObject* object)
 	return nullptr;
 }
 
-void Raytracing::UpdateInstanceTransform(RE::BSFadeNode* pFadeNode, InstanceData& instData)
+void Raytracing::UpdateInstanceTransform(RE::NiNode* pNiNode, InstanceData& instData)
 {
 	if (instData.lastUpdate == 0 || instData.lastUpdate < globals::state->frameCount) {
-		XMStoreFloat3x4(&instData.transform, GetXMFromNiTransform(pFadeNode->world));
+		XMStoreFloat3x4(&instData.transform, GetXMFromNiTransform(pNiNode->world));
 		//instData.transform = GetXMF3X4FromNiTransform(pFadeNode->world);
 		instData.lastUpdate = globals::state->frameCount;
 	}
@@ -1896,7 +2056,7 @@ void Raytracing::UpdateInstanceTransform(RE::BSFadeNode* pFadeNode, InstanceData
 
 void Raytracing::UpdateInstances()
 {
-	std::lock_guard lock{ meshMutex };
+	std::lock_guard lock{ geometryMutex };
 
 	instanceData.clear();
 	instanceData.reserve(instances.size());
@@ -1911,7 +2071,7 @@ void Raytracing::UpdateInstances()
 
 	auto eye = Util::GetAverageEyePosition();
 
-	for (auto& [pFadeNode, data] : instances) {
+	for (auto& [pNiNode, data] : instances) {
 		//pFadeNode->SetMotionType
 
 		auto it = geometry.find(data.filename);
@@ -1922,7 +2082,7 @@ void Raytracing::UpdateInstances()
 		//logger::info("[RT] UpdateInstances - FadeNode: [0x{:x}], World Bounds - Center: {}, Radius: {}", reinterpret_cast<uintptr_t>(pFadeNode), Float3(pFadeNode->worldBound.center), pFadeNode->worldBound.radius);
 
 		GeometryData& geometryData = it->second;
-		auto worldBound = pFadeNode->worldBound;
+		auto worldBound = pNiNode->worldBound;
 
 		float worldBoundRadius= worldBound.radius;
 		float distanceToBounds = Util::Units::GameUnitsToMeters(eye.GetDistance(worldBound.center) - worldBoundRadius);
@@ -1933,11 +2093,11 @@ void Raytracing::UpdateInstances()
 		// We'll cull small geometry or very distant ones (that are outside the player view)
 		if ((cullOutOfView && Util::Units::GameUnitsToMeters(worldBoundRadius) < 1.0f) || distanceToBounds > 100.0f) {
 			//if (!RE::NiCamera::BoundInFrustum(worldBound, camera))
-			if (!camera->NodeInFrustum(pFadeNode))
+			if (!camera->NodeInFrustum(pNiNode))
 				continue;
 		}
 
-		UpdateInstanceTransform(pFadeNode, data);
+		UpdateInstanceTransform(pNiNode, data);
 
 		D3D12_RAYTRACING_INSTANCE_DESC blasInstance = {
 			.InstanceID = static_cast<uint>(blasInstances.size()),
@@ -1955,7 +2115,7 @@ void Raytracing::UpdateInstances()
 
 		instanceData.emplace_back(
 			static_cast<uint>(geometryData.meshes[0].registerIndex), 
-			LightData(GatherInstanceLights(pFadeNode)), 
+			LightData(GatherInstanceLights(pNiNode)), 
 			Material(material.texCoordOffsetScale, material.effectColor, material.shaderType == RE::BSShader::Type::Lighting ? 0.0f : 1.0f)
 		);
 	}
@@ -2138,29 +2298,34 @@ bool SphereCastFrustum(const float3& sphereCenter, float radius, const float3& d
 
 void Raytracing::UpdateShadowInstances()
 {
-	std::lock_guard lock{ meshMutex };
+	std::lock_guard lock{ geometryMutex };
 
 	blasShadowInstances.clear();
 	blasShadowInstances.reserve(instances.size());
 
-	/*auto* playerCamera = RE::PlayerCamera::GetSingleton();
-	auto* tesCamera = playerCamera->currentState->camera;
-
-	RE::NiCamera* camera = FindNiCamera(tesCamera->cameraRoot.get());
-
-	auto transform = GetXMFromNiTransform(camera->world); // camera->GetRuntimeData().worldToCam
-	auto transformInverse = DirectX::XMMatrixInverse(nullptr, transform);
-
-	RE::NiFrustum frustrum = camera->GetRuntimeData2().viewFrustum;
-
-	auto frustumCorners = GetFrustumCorners(frustrum);
-
+	DirectX::XMMATRIX transformInverse;
 	float3 bbMin, bbMax;
-	ComputeFrustumAABB(frustumCorners, bbMin, bbMax); // In local (camera) space
+	float3 localLightDirection;
 
-	//logger::info("[RT] UpdateShadowInstances - Min: {}, Max: {}", bbMin, bbMax);
+	if (settings.CullShadows) {
+		auto* playerCamera = RE::PlayerCamera::GetSingleton();
+		auto* tesCamera = playerCamera->currentState->camera;
 
-	float3 localLightDirection = float3::TransformNormal(float3(shadowsCBData->Direction), transformInverse);*/
+		RE::NiCamera* camera = FindNiCamera(tesCamera->cameraRoot.get());
+
+		auto transform = GetXMFromNiTransform(camera->world);  // camera->GetRuntimeData().worldToCam
+		transformInverse = DirectX::XMMatrixInverse(nullptr, transform);
+
+		RE::NiFrustum frustrum = camera->GetRuntimeData2().viewFrustum;
+
+		auto frustumCorners = GetFrustumCorners(frustrum);
+
+		ComputeFrustumAABB(frustumCorners, bbMin, bbMax);  // In local (camera) space
+
+		//logger::info("[RT] UpdateShadowInstances - Min: {}, Max: {}", bbMin, bbMax);
+
+		localLightDirection = float3::TransformNormal(float3(shadowsCBData->Direction), transformInverse);
+	}
 
 	for (auto& [pFadeNode, data] : instances) {
 		auto it = geometry.find(data.filename);
@@ -2168,13 +2333,15 @@ void Raytracing::UpdateShadowInstances()
 		if (it == geometry.end())
 			continue;
 
-		/*auto worldBound = pFadeNode->worldBound;
-		float3 localCenter = float3::Transform(Float3(worldBound.center), transformInverse);
+		if (settings.CullShadows) {
+			auto worldBound = pFadeNode->worldBound;
+			float3 localCenter = float3::Transform(Float3(worldBound.center), transformInverse);
 
-		//logger::info("[RT] UpdateShadowInstances - Local Center: {}, Radius: {}", localCenter, worldBound.radius);
+			//logger::info("[RT] UpdateShadowInstances - Local Center: {}, Radius: {}", localCenter, worldBound.radius);
 
-		if (!SphereCastAABB(localCenter, worldBound.radius, localLightDirection, FLT_MAX, bbMin, bbMax))
-			continue;*/
+			if (!SphereCastAABB(localCenter, worldBound.radius, localLightDirection, FLT_MAX, bbMin, bbMax))
+				continue;
+		}
 
 		GeometryData& geometryData = it->second;
 
@@ -2226,12 +2393,12 @@ void Raytracing::BSShader_SetupGeometry([[maybe_unused]] RE::BSShader* oThis, [[
 
 	UpdateLights();
 
-	const auto pGeometry = pPass->geometry;
+	auto* pGeometry = pPass->geometry;
 
 	if (!pGeometry)
 		return;
 
-	AddUpdateInstance(pGeometry);
+	//AddInstance(FindBSFadeNode((RE::NiNode*)pGeometry));
 }
 
 void Raytracing::BuildTLAS()
@@ -2250,7 +2417,7 @@ void Raytracing::BuildTLAS()
 	D3D12_RAYTRACING_ACCELERATION_STRUCTURE_PREBUILD_INFO prebuildInfo;
 	d3d12Device->GetRaytracingAccelerationStructurePrebuildInfo(&inputs, &prebuildInfo);
 
-	//logger::info("[RT] DrawRTGI - First TLAS - Instances: {}, ResultDataMaxSizeInBytes: {}", blasInstances.size(), prebuildInfo.ResultDataMaxSizeInBytes);
+	//logger::info("[RT] Build TLAS - Instances: {}, ResultDataMaxSizeInBytes: {}, ScratchDataSizeInBytes: {}", MAX_INSTANCES, prebuildInfo.ResultDataMaxSizeInBytes, prebuildInfo.ScratchDataSizeInBytes);
 
 	auto desc = BASIC_BUFFER_DESC;
 	desc.Flags = D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS;
@@ -2292,6 +2459,11 @@ void Raytracing::RebuildTLAS(ID3D12GraphicsCommandList4* pCommandList, size_t nu
 		.InstanceDescs = instanceDescs
 	};
 
+	D3D12_RAYTRACING_ACCELERATION_STRUCTURE_PREBUILD_INFO prebuildInfo;
+	d3d12Device->GetRaytracingAccelerationStructurePrebuildInfo(&inputs, &prebuildInfo);
+
+	//logger::info("[RT] Rebuild TLAS - Instances: {}, ResultDataMaxSizeInBytes: {}, ScratchDataSizeInBytes: {}", numDescs, prebuildInfo.ResultDataMaxSizeInBytes, prebuildInfo.ScratchDataSizeInBytes);
+
 	D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_DESC buildDesc = {
 		.DestAccelerationStructureData = tlas->GetGPUVirtualAddress(),
 		.Inputs = inputs,
@@ -2306,7 +2478,7 @@ void Raytracing::RebuildTLAS(ID3D12GraphicsCommandList4* pCommandList, size_t nu
 
 void Raytracing::DrawRTGI()
 {
-	//std::lock_guard lock{ renderMutex };
+	std::lock_guard lock{ renderMutex };
 
 	if (!d3d11Context) {
 		logger::error("d3d11Context is nullptr");
@@ -2336,9 +2508,15 @@ void Raytracing::DrawRTGI()
 		fenceValue++;
 	}
 
-	if (pixCapture && settings.PIXCaptureLocation == PIXCaptureLocation::GlobalIllumination) {
+	if (pixCapture && (!pixCaptureStarted || pixTDR) && settings.PIXCaptureLocation == PIXCaptureLocation::GlobalIllumination) {
 		pixCaptureStarted = true;
-		ga->BeginCapture();
+
+		/*if (pixMultiFrame) {
+			PIXGpuCaptureNextFrames(L"I:/Temp/Pix/TDRCap.pix", 60);
+		} else {*/
+			//PIXBeginCapture(PIX_CAPTURE_GPU, PIXCaptureParameters
+			ga->BeginCapture();
+		//}
 	}
 	
 	UpdateInstances();
@@ -2519,9 +2697,9 @@ void Raytracing::DrawRTGI()
 		DX::ThrowIfFailed(d3d12Fence->SetEventOnCompletion(fenceValue, nullptr));
 	}
 
-	if (pixCapture && pixCaptureStarted && settings.PIXCaptureLocation == PIXCaptureLocation::GlobalIllumination) {
+	if (pixCapture && pixCaptureStarted && !pixTDR && settings.PIXCaptureLocation == PIXCaptureLocation::GlobalIllumination) {
 		ga->EndCapture();
-		pixCapture = false;
+		pixCapture = pixMultiFrame;
 		pixCaptureStarted = false;
 	}
 
@@ -2573,10 +2751,16 @@ void Raytracing::UpdateShadowsFrameBuffer()
 
 void Raytracing::RenderShadows()
 {
+
 	//logger::info("[RT] RenderShadows - ShadowLight [0x{:x}], TLAS [0x{:x}]", reinterpret_cast<uintptr_t>(shadowLight), reinterpret_cast<uintptr_t>(tlas.get()));
 
 	if (!shadowLight)
 		return;
+
+	if (!shadowFrameChecker.IsNewFrame())
+		return;
+
+	std::lock_guard lock{ renderMutex };
 
 	auto rendererRuntimeData = globals::game::renderer->GetRuntimeData();
 	auto shadowMask = rendererRuntimeData.renderTargets[RE::RENDER_TARGETS::kSHADOW_MASK];
@@ -2590,9 +2774,15 @@ void Raytracing::RenderShadows()
 	DX::ThrowIfFailed(commandQueue->Wait(d3d12Fence.get(), fenceValue));
 	fenceValue++;
 
-	if (pixCapture && settings.PIXCaptureLocation == PIXCaptureLocation::Shadows) {
+	if (pixCapture && (!pixCaptureStarted || pixTDR) && settings.PIXCaptureLocation == PIXCaptureLocation::Shadows) {
 		pixCaptureStarted = true;
-		ga->BeginCapture();
+
+		/*if (pixMultiFrame) {
+			PIXGpuCaptureNextFrames(L"I:/Temp/Pix/TDRCap.pix", 60);
+		} else {*/
+			//PIXBeginCapture(PIX_CAPTURE_GPU, PIXCaptureParameters
+			ga->BeginCapture();
+		//}
 	}
 
 	// Do DX12 work...
@@ -2667,9 +2857,9 @@ void Raytracing::RenderShadows()
 		DX::ThrowIfFailed(d3d12Fence->SetEventOnCompletion(fenceValue, nullptr));
 	}
 
-	if (pixCapture && pixCaptureStarted && settings.PIXCaptureLocation == PIXCaptureLocation::Shadows) {
+	if (pixCapture && pixCaptureStarted && !pixTDR && settings.PIXCaptureLocation == PIXCaptureLocation::Shadows) {
 		ga->EndCapture();
-		pixCapture = false;
+		pixCapture = pixMultiFrame; // Do not stop capture when doing multiframe
 		pixCaptureStarted = false;
 	}
 
@@ -2689,11 +2879,21 @@ void Raytracing::PostPostLoad()
 {
 	Hooks::Install();
 	Initialize();
+	//RE::BSTSingletonExplicit<RE::BSModelDB::BSModelProcessor>;
+
+	//auto* g_TESProcessor = REL::Relocation<RE::BSModelDB::BSModelProcessor*>(0x01F5D910).get();
+	//(g_TESProcessor) = new RTProcessor(g_TESProcessor);
 
 	//MenuOpenCloseEventHandler::Register();
 	//TESLoadGameEventHandler::Register();
 	TESObjectLoadedEventHandler::Register();
 }
+
+/*void Raytracing::RTProcessor::PostCreate(const RE::BSModelDB::DBTraits::ArgsType& a_args, const char* modelName, RE::NiPointer<RE::NiNode>& a_root, std::uint32_t& typeOut)
+{
+	m_oldProcessor->PostCreate(a_args, modelName, a_root, typeOut);
+	logger::error("[RT] RTProcessor::PostCreate - ModelName: {}", modelName);
+}*/
 
 static std::wstring GetLatestWinPixGpuCapturerPath()
 {
@@ -2752,25 +2952,35 @@ void DumpDredBreadcrumbs(const D3D12_DRED_AUTO_BREADCRUMBS_OUTPUT1& breadcrumbsO
 
 void Raytracing::DeviceRemovedHandler()
 {
-	// 1. Device removed reason
-	HRESULT reason = d3d12Device->GetDeviceRemovedReason();
-	logger::error("[RT] ============================================================");
-	logger::error("[RT] DEVICE REMOVED! HRESULT = 0x{:08X}", reason);
-
-	winrt::com_ptr<ID3D12DeviceRemovedExtendedData1> dred;
-	if (FAILED(d3d12Device->QueryInterface(IID_PPV_ARGS(&dred)))) {
-		logger::error("[RT] DRED not available on this device.");
-		return;
+	if (settings.EnablePIXCapture) {
+		ga->EndCapture();
+		pixCapture = false;
+		pixCaptureStarted = false;
+		pixMultiFrame = false;
+		pixTDR = false;
 	}
 
-	// ---------------------------------------------------------------------
-	// 2. Auto Breadcrumbs
-	// ---------------------------------------------------------------------
-	D3D12_DRED_AUTO_BREADCRUMBS_OUTPUT1 bcOutput = {};
-	if (SUCCEEDED(dred->GetAutoBreadcrumbsOutput1(&bcOutput)) && bcOutput.pHeadAutoBreadcrumbNode) {
-		DumpDredBreadcrumbs(bcOutput);
-	} else {
-		logger::error("[RT] No breadcrumbs available.");
+	if (settings.EnableDebugDevice) {
+		// 1. Device removed reason
+		HRESULT reason = d3d12Device->GetDeviceRemovedReason();
+		logger::error("[RT] ============================================================");
+		logger::error("[RT] DEVICE REMOVED! HRESULT = 0x{:08X}", reason);
+
+		winrt::com_ptr<ID3D12DeviceRemovedExtendedData1> dred;
+		if (FAILED(d3d12Device->QueryInterface(IID_PPV_ARGS(&dred)))) {
+			logger::error("[RT] DRED not available on this device.");
+			return;
+		}
+
+		// ---------------------------------------------------------------------
+		// 2. Auto Breadcrumbs
+		// ---------------------------------------------------------------------
+		D3D12_DRED_AUTO_BREADCRUMBS_OUTPUT1 bcOutput = {};
+		if (SUCCEEDED(dred->GetAutoBreadcrumbsOutput1(&bcOutput)) && bcOutput.pHeadAutoBreadcrumbNode) {
+			DumpDredBreadcrumbs(bcOutput);
+		} else {
+			logger::error("[RT] No breadcrumbs available.");
+		}
 	}
 }
 
@@ -2779,6 +2989,7 @@ void Raytracing::InitD3D12(ID3D11Device* ppDevice, ID3D11DeviceContext* pImmedia
 	Hooks::InstallD3D11Hooks(ppDevice);
 
 	if (settings.EnablePIXCapture) {
+		//PIXLoadLatestWinPixGpuCapturerLibrary();
 		// Check to see if a copy of WinPixGpuCapturer.dll has already been injected into the application.
 		// This may happen if the application is launched through the PIX UI.
 		if (GetModuleHandle(L"WinPixGpuCapturer.dll") == 0) {
@@ -2858,7 +3069,7 @@ void Raytracing::InitD3D12(ID3D11Device* ppDevice, ID3D11DeviceContext* pImmedia
 		CloseHandle(sharedFenceHandle);
 	}
 
-	if (settings.EnableDebugDevice)
+	if (settings.EnableDebugDevice || settings.EnablePIXCapture)
 	{
 		HANDLE disconnectEvent = CreateEvent(nullptr, FALSE, FALSE, nullptr);
 		DX::ThrowIfFailed(d3d12Fence->SetEventOnCompletion(UINT64_MAX, disconnectEvent));
@@ -3268,46 +3479,37 @@ RE::BSEventNotifyControl Raytracing::TESLoadGameEventHandler::ProcessEvent(const
 
 RE::BSEventNotifyControl Raytracing::TESObjectLoadedEventHandler::ProcessEvent(const RE::TESObjectLoadedEvent* a_event, RE::BSTEventSource<RE::TESObjectLoadedEvent>*)
 {
-	if (a_event) {
-		/*auto* form = RE::TESForm::LookupByID(a_event->formID);
-		auto* actor = RE::TESForm::LookupByID<RE::Actor>(a_event->formID);
+	if (!a_event)
+		return RE::BSEventNotifyControl::kContinue;
 
-		if (form) {
-			logger::info("[RT] Form Loaded: {}", form->GetName());
-		}*/
+	auto* eventRef = RE::TESForm::LookupByID<RE::TESObjectREFR>(a_event->formID);
 
-		auto* eventRef = RE::TESForm::LookupByID<RE::TESObjectREFR>(a_event->formID);
+	//if (eventRef->formType.none(RE::FormType::NPC, RE::FormType::LeveledNPC, RE::FormType::ActorCharacter))
+	if (eventRef->formType.none(RE::FormType::ActorCharacter))
+		return RE::BSEventNotifyControl::kContinue;
 
-		auto model = eventRef->GetBaseObject()->As<RE::TESModel>();
+	/*if (eventRef->data.objectReference->formType.none(RE::FormType::NPC))
+		return RE::BSEventNotifyControl::kContinue;*/
 
-		if (model) {
-			logger::info("[RT] TESObjectLoadedEventHandler - Filename '{}'", model->GetModel());
-		}
+	auto* actor = eventRef->As<RE::Actor>();
 
-		auto* ref3D = eventRef->Get3D();
+	if (!actor)
+		return RE::BSEventNotifyControl::kContinue;
 
-		if (ref3D) {
-			/*auto* ownerFile = eventRef->GetDescriptionOwnerFile();
+	/*if (actor) {
+		logger::info("[RT] TESObjectLoadedEventHandler - Actor: {}", actor->GetName());
 
-			logger::info("[RT] 3D Loaded {}: {} - {} - {}", a_event->loaded, ref3D->name, ownerFile ? ownerFile->path : "", ownerFile->GetFilename());
+		auto* actorBase = actor->GetActorBase();
+		if (actorBase)
+			logger::info("[RT] TESObjectLoadedEventHandler - ActorBase: {}", actorBase->GetFullName());
+	}*/
 
-			auto fileContainer = eventRef->sourceFiles;*/
+	auto* pNiAVObject = eventRef->Get3D();
 
-			
-			logger::info("[RT] TESObjectLoadedEventHandler - 3D Loaded '{}' - Type: {}, Reference Type: {}", ref3D->name, magic_enum::enum_name(eventRef->formType.get()), magic_enum::enum_name(eventRef->data.objectReference->formType.get()));
+	if (!pNiAVObject)
+		return RE::BSEventNotifyControl::kContinue;
 
-			auto* ownerFile = eventRef->data.objectReference->GetDescriptionOwnerFile();
-
-			if (ownerFile)
-				logger::info("[RT] TESObjectLoadedEventHandler - File Path: {}, Filename {}", ownerFile->path, ownerFile->GetFilename());
-
-			RE::BSVisit::TraverseScenegraphGeometries(ref3D, [&](RE::BSGeometry* geometry) -> RE::BSVisit::BSVisitControl {
-				logger::info("[RT] TESObjectLoadedEventHandler::TraverseScenegraphGeometries - Geometry [0x{:x}]: {}, Type: {}", reinterpret_cast<uintptr_t>(geometry), geometry->name, magic_enum::enum_name(geometry->GetType().get()));
-				
-				return RE::BSVisit::BSVisitControl::kContinue;
-			});
-		}
-	}
+	globals::features::raytracing.CreateGeometry(actor->GetName(), netimmerse_cast<RE::NiNode*>(pNiAVObject));
 
 	return RE::BSEventNotifyControl::kContinue;
 }
