@@ -416,4 +416,3 @@ void Streamline::DestroyDLSSResources()
 	slDLSSSetOptions(viewport, dlssOptions);
 	slFreeResources(sl::kFeatureDLSS, viewport);
 }
-
