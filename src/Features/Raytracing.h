@@ -449,6 +449,7 @@ struct Raytracing : public Feature
 		uint vertexCount = 0;
 		uint triangleCount = 0;
 		eastl::vector<Vertex> vertices;
+		eastl::vector<SkinData> skinData;
 		eastl::vector<Triangle> triangles;
 		bool skinned;
 		eastl::unique_ptr<DX12::StructuredBufferUpload<Vertex>> vertexBuffer = nullptr;
@@ -483,12 +484,13 @@ struct Raytracing : public Feature
 		}
 	};
 
-	// Appends RE::BSGraphics::TriShape data into MeshData
-	void ReadRendererData(MeshData& meshData, RE::BSGraphics::TriShape* rendererData, const std::uint16_t& vertexCount, const std::uint16_t& triangleCount, const std::uint16_t& bonesPerVertex, const eastl::unordered_map<uint16_t, uint16_t>& vertexMap, const float4x4& transform);
+	void ReadVertices(eastl::vector<Vertex>& vertices, RE::BSGraphics::TriShape* rendererData, const std::uint32_t& vertexCount, const std::uint16_t& bonesPerVertex, const float4x4& transform);
 	
-	// Shortcut to ReadRendererData for RE::NiSkinPartition::Partition
-	void ReadPartition(MeshData& meshData, RE::NiSkinPartition::Partition& partition, const float4x4& transform);
+	void ReadTriangles(eastl::vector<Triangle>& triangles, RE::BSGraphics::TriShape* rendererData, const std::uint32_t& vertexCount, const std::uint16_t& triangleCount);
 
+	// Appends RE::BSGraphics::TriShape data into MeshData
+	void ReadRendererData(MeshData& meshData, RE::BSGraphics::TriShape* rendererData, const std::uint32_t& vertexCount, const std::uint16_t& triangleCount, const std::uint16_t& bonesPerVertex, const float4x4& transform);
+	
 	// Reads material data
 	void ReadMaterial(MeshData& meshData, const RE::BSGeometry::GEOMETRY_RUNTIME_DATA& geometryRuntimeData, const char* name);
 
