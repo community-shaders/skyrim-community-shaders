@@ -103,78 +103,74 @@ cbuffer UnifiedWaterPerFrame : register(b7)
 	float DepthNormals : packoffset(c8.z);
 	float DepthSpecularLighting : packoffset(c8.w);
 	
-	// Wave layer contribution weights
-	float WavePrimaryContribution : packoffset(c9.x);    // Primary swell weight
-	float WaveSecondaryContribution : packoffset(c9.y);  // Secondary wave weight
-	float WaveDetailContribution : packoffset(c9.z);     // Fine detail weight
-	float WavePrimarySpeed : packoffset(c9.w);           // Primary speed mult
-	float WaveSecondarySpeed : packoffset(c10.x);        // Secondary speed mult
-	float WaveDetailSpeed : packoffset(c10.y);           // Detail speed mult
-	float WaveDirectionBlend : packoffset(c10.z);        // Wind direction influence
-	float TriVisualizerEnabled : packoffset(c10.w);      // Debug wireframe
+	// Debug visualizer
+	float TriVisualizerEnabled : packoffset(c9.x);
+	float PerFramePad0 : packoffset(c9.y);
+	float PerFramePad1 : packoffset(c9.z);
+	float PerFramePad2 : packoffset(c9.w);
 	
 	// Individual wave parameters (wavelength & amplitude in METERS for intuitive editing)
 	// Wave 1: Primary ocean swell (largest, slowest)
-	float Wave1Amplitude : packoffset(c11.x);     // Amplitude in meters (typ. 0.3-1.0m)
-	float Wave1Wavelength : packoffset(c11.y);    // Wavelength in meters (typ. 30-100m)
-	float Wave1Steepness : packoffset(c11.z);     // Steepness 0-1 (typ. 0.3-0.5)
-	float Wave1AngleOffset : packoffset(c11.w);   // Direction offset radians
+	float Wave1Amplitude : packoffset(c10.x);     // Amplitude in meters (typ. 0.3-1.0m)
+	float Wave1Wavelength : packoffset(c10.y);    // Wavelength in meters (typ. 30-100m)
+	float Wave1Steepness : packoffset(c10.z);     // Steepness 0-1 (typ. 0.3-0.5)
+	float Wave1AngleOffset : packoffset(c10.w);   // Direction offset radians
 	
 	// Wave 2: Secondary swell (medium)
-	float Wave2Amplitude : packoffset(c12.x);     // typ. 0.15-0.5m
-	float Wave2Wavelength : packoffset(c12.y);    // typ. 15-40m
-	float Wave2Steepness : packoffset(c12.z);
-	float Wave2AngleOffset : packoffset(c12.w);
+	float Wave2Amplitude : packoffset(c11.x);     // typ. 0.15-0.5m
+	float Wave2Wavelength : packoffset(c11.y);    // typ. 15-40m
+	float Wave2Steepness : packoffset(c11.z);
+	float Wave2AngleOffset : packoffset(c11.w);
 	
 	// Wave 3: Wind waves (smaller, faster)
-	float Wave3Amplitude : packoffset(c13.x);     // typ. 0.08-0.25m
-	float Wave3Wavelength : packoffset(c13.y);    // typ. 8-20m
-	float Wave3Steepness : packoffset(c13.z);
-	float Wave3AngleOffset : packoffset(c13.w);
+	float Wave3Amplitude : packoffset(c12.x);     // typ. 0.08-0.25m
+	float Wave3Wavelength : packoffset(c12.y);    // typ. 8-20m
+	float Wave3Steepness : packoffset(c12.z);
+	float Wave3AngleOffset : packoffset(c12.w);
 	
 	// Wave 4: Chop (short period)
-	float Wave4Amplitude : packoffset(c14.x);     // typ. 0.03-0.1m
-	float Wave4Wavelength : packoffset(c14.y);    // typ. 3-8m
-	float Wave4Steepness : packoffset(c14.z);
-	float Wave4AngleOffset : packoffset(c14.w);
+	float Wave4Amplitude : packoffset(c13.x);     // typ. 0.03-0.1m
+	float Wave4Wavelength : packoffset(c13.y);    // typ. 3-8m
+	float Wave4Steepness : packoffset(c13.z);
+	float Wave4AngleOffset : packoffset(c13.w);
 	
 	// Wave 5: Fine ripples
-	float Wave5Amplitude : packoffset(c15.x);     // typ. 0.01-0.05m
-	float Wave5Wavelength : packoffset(c15.y);    // typ. 1-4m
-	float Wave5Steepness : packoffset(c15.z);
-	float Wave5AngleOffset : packoffset(c15.w);
+	float Wave5Amplitude : packoffset(c14.x);     // typ. 0.01-0.05m
+	float Wave5Wavelength : packoffset(c14.y);    // typ. 1-4m
+	float Wave5Steepness : packoffset(c14.z);
+	float Wave5AngleOffset : packoffset(c14.w);
 	
 	// Wave 6: Micro detail
-	float Wave6Amplitude : packoffset(c16.x);     // typ. 0.005-0.02m
-	float Wave6Wavelength : packoffset(c16.y);    // typ. 0.5-2m
-	float Wave6Steepness : packoffset(c16.z);
-	float Wave6AngleOffset : packoffset(c16.w);
+	float Wave6Amplitude : packoffset(c15.x);     // typ. 0.005-0.02m
+	float Wave6Wavelength : packoffset(c15.y);    // typ. 0.5-2m
+	float Wave6Steepness : packoffset(c15.z);
+	float Wave6AngleOffset : packoffset(c15.w);
 	
 	// Tessellation
-	float TessellationEnabled : packoffset(c17.x);
-	float WaveFadeStart : packoffset(c17.y);       // Distance where waves start fading
-	float WaveFadeEnd : packoffset(c17.z);         // Distance where waves fully fade
-	float TessPadding3 : packoffset(c17.w);
+	float TessellationEnabled : packoffset(c16.x);
+	float WaveFadeStart : packoffset(c16.y);       // Distance where waves start fading
+	float WaveFadeEnd : packoffset(c16.z);         // Distance where waves fully fade
+	float TessPadding3 : packoffset(c16.w);
 	
 	// Player ripples
-	float PlayerPosX : packoffset(c19.x);
-	float PlayerPosY : packoffset(c19.y);
-	float PlayerPosZ : packoffset(c19.z);
-	float PlayerSpeed : packoffset(c19.w);
-	float PlayerInWater : packoffset(c20.x);
-	float RippleStrength : packoffset(c20.y);
-	float RippleRadius : packoffset(c20.z);
-	float RippleWaveSpeed : packoffset(c20.w);
-	float RippleWaveFreq1 : packoffset(c21.x);
-	float RippleWaveFreq2 : packoffset(c21.y);
-	float RippleWaveFreq3 : packoffset(c21.z);
-	float RippleNormalStrength : packoffset(c21.w);
+	float PlayerPosX : packoffset(c17.x);
+	float PlayerPosY : packoffset(c17.y);
+	float PlayerPosZ : packoffset(c17.z);
+	float PlayerSpeed : packoffset(c17.w);
+	float PlayerInWater : packoffset(c18.x);
+	float RippleStrength : packoffset(c18.y);
+	float RippleRadius : packoffset(c18.z);
+	float RippleWaveSpeed : packoffset(c18.w);
+	float RippleWaveFreq1 : packoffset(c19.x);
+	float RippleWaveFreq2 : packoffset(c19.y);
+	float RippleWaveFreq3 : packoffset(c19.z);
+	float RippleNormalStrength : packoffset(c19.w);
 	
 	// Foam System
-	float FoamEnabled : packoffset(c22.x);
-	float FoamIntensity : packoffset(c22.y);
-	float FoamThreshold : packoffset(c22.z);
-	float FoamSharpness : packoffset(c22.w);
+	float FoamEnabled : packoffset(c20.x);
+	float FoamIntensity : packoffset(c20.y);
+	float FoamThreshold : packoffset(c20.z);
+	float FoamSharpness : packoffset(c20.w);
 }
 
 cbuffer UnifiedWaterPerTile : register(b8)
@@ -483,24 +479,6 @@ WaveSample CalculateWaterDisplacement(
 		saturate(Wave6Steepness)
 	};
 	
-	float contributions[6] = {
-		max(WavePrimaryContribution, 0.0f),
-		max(WaveSecondaryContribution, 0.0f),
-		max(WaveDetailContribution, 0.0f),
-		max(WaveDetailContribution * 0.7f, 0.0f),
-		max(WaveDetailContribution * 0.5f, 0.0f),
-		max(WaveDetailContribution * 0.3f, 0.0f)
-	};
-	
-	float speedMults[6] = {
-		max(WavePrimarySpeed, 0.1f),
-		max(WaveSecondarySpeed, 0.1f),
-		max(WaveDetailSpeed, 0.1f),
-		max(WaveDetailSpeed * 1.1f, 0.1f),
-		max(WaveDetailSpeed * 1.2f, 0.1f),
-		max(WaveDetailSpeed * 1.3f, 0.1f)
-	};
-	
 	float3 totalDisp = float3(0, 0, 0);
 	float3 totalTangent = float3(0, 0, 0);
 	float3 totalBinormal = float3(0, 0, 0);
@@ -512,16 +490,16 @@ WaveSample CalculateWaterDisplacement(
 	
 	[unroll]
 	for (int oct = 0; oct < 6; oct++) {
-		if (contributions[oct] < 0.001f || userAmplitudes[oct] < 0.0001f) {
+		if (userAmplitudes[oct] < 0.0001f) {
 			continue;
 		}
 		
 		float wavelengthM = userWavelengths[oct];
 		float cellSizeGame = wavelengthM * M_TO_GAME_UNIT * 6.0f;  // Slightly smaller cells for more variation
 		
-		float octaveAmp = userAmplitudes[oct] * contributions[oct] * globalAmplitude;
+		float octaveAmp = userAmplitudes[oct] * globalAmplitude;
 		float octaveSteep = userSteepness[oct] * steepnessMult;
-		float octaveSpeed = speedMult * speedMults[oct];
+		float octaveSpeed = speedMult;
 		
 		CellWaveData cellData = BlendCellWaves(
 			warpedWorldPos,  // Use warped position for cross-octave interaction
@@ -549,38 +527,78 @@ WaveSample CalculateWaterDisplacement(
 		}
 	}
 	
+	// Clamp tangent/binormal perturbations to prevent extreme deformation
+	// This prevents triangular artifacts on steep waves while preserving detail
+	const float maxTangentPerturbation = 0.8f;  // Allows up to 80% perturbation
+	totalTangent = clamp(totalTangent, -maxTangentPerturbation, maxTangentPerturbation);
+	totalBinormal = clamp(totalBinormal, -maxTangentPerturbation, maxTangentPerturbation);
+	geoTangent = clamp(geoTangent, -maxTangentPerturbation, maxTangentPerturbation);
+	geoBinormal = clamp(geoBinormal, -maxTangentPerturbation, maxTangentPerturbation);
+	
 	float3 tangent = float3(1.0f - totalTangent.x, -totalTangent.y, totalTangent.z);
 	float3 binormal = float3(-totalBinormal.x, 1.0f - totalBinormal.y, totalBinormal.z);
+	
+	// Ensure tangent and binormal are normalized to prevent scaling issues
+	tangent = normalize(tangent);
+	binormal = normalize(binormal);
 	
 	float3 rawNormal = cross(binormal, tangent);
 	float normalLen = length(rawNormal);
 	
 	float3 waveNormal;
-	if (normalLen < 0.1f) {
-		waveNormal = normalize(lerp(float3(0, 0, 1), rawNormal / max(normalLen, 0.001f), normalLen * 10.0f));
+	if (normalLen < 0.5f) {
+		// Degenerate case: blend toward up vector
+		waveNormal = normalize(lerp(float3(0, 0, 1), rawNormal / max(normalLen, 0.001f), normalLen * 2.0f));
 	} else {
 		waveNormal = rawNormal / normalLen;
 	}
 	
+	// Ensure normal points upward (prevent flipped triangles)
 	if (waveNormal.z < 0.0f) {
 		waveNormal = -waveNormal;
+	}
+	
+	// Clamp normal slope to prevent extreme angles (prevents sharp triangular artifacts)
+	// Max slope: atan(maxSlope) degrees from vertical
+	const float maxSlope = 1.2f;  // ~50 degrees max tilt
+	float2 normalXY = waveNormal.xy;
+	float xyLen = length(normalXY);
+	if (xyLen > maxSlope) {
+		normalXY = normalXY * (maxSlope / xyLen);
+		waveNormal.xy = normalXY;
+		waveNormal.z = sqrt(max(1.0f - dot(normalXY, normalXY), 0.1f));
+		waveNormal = normalize(waveNormal);
 	}
 	
 	float3 geoTan = float3(1.0f - geoTangent.x, -geoTangent.y, geoTangent.z);
 	float3 geoBin = float3(-geoBinormal.x, 1.0f - geoBinormal.y, geoBinormal.z);
 	
+	// Normalize geometric tangent/binormal
+	geoTan = normalize(geoTan);
+	geoBin = normalize(geoBin);
+	
 	float3 rawGeoNormal = cross(geoBin, geoTan);
 	float geoNormalLen = length(rawGeoNormal);
 	
 	float3 geoNormal;
-	if (geoNormalLen < 0.1f) {
-		geoNormal = normalize(lerp(float3(0, 0, 1), rawGeoNormal / max(geoNormalLen, 0.001f), geoNormalLen * 10.0f));
+	if (geoNormalLen < 0.5f) {
+		geoNormal = normalize(lerp(float3(0, 0, 1), rawGeoNormal / max(geoNormalLen, 0.001f), geoNormalLen * 2.0f));
 	} else {
 		geoNormal = rawGeoNormal / geoNormalLen;
 	}
 	
 	if (geoNormal.z < 0.0f) {
 		geoNormal = -geoNormal;
+	}
+	
+	// Apply same slope limiting to geometric normal
+	float2 geoNormalXY = geoNormal.xy;
+	float geoXYLen = length(geoNormalXY);
+	if (geoXYLen > maxSlope) {
+		geoNormalXY = geoNormalXY * (maxSlope / geoXYLen);
+		geoNormal.xy = geoNormalXY;
+		geoNormal.z = sqrt(max(1.0f - dot(geoNormalXY, geoNormalXY), 0.1f));
+		geoNormal = normalize(geoNormal);
 	}
 	
 	const float maxHorizDisp = 25.0f;

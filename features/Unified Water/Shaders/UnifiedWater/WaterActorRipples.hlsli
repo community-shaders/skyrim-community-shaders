@@ -137,13 +137,12 @@ namespace PlayerRipples
 		float totalWave = bowWave + wakeWave + turbulence;
 		totalWave *= baseStrength;
 		
-		// Distance-based overall falloff
+		// Distance-based overall falloff (linear, not squared for better visibility)
 		float overallFalloff = 1.0f - smoothstep(0.0f, MAX_RIPPLE_RADIUS, dist);
-		overallFalloff *= overallFalloff;
 		totalWave *= overallFalloff;
 		
-		// Near boost for immediate splash effect
-		float nearBoost = 1.0f + smoothstep(64.0f, 0.0f, dist) * 2.0f;
+		// Near boost for immediate splash effect (increased from 2x to 5x)
+		float nearBoost = 1.0f + smoothstep(128.0f, 0.0f, dist) * 5.0f;
 		totalWave *= nearBoost;
 		
 		// Calculate combined gradient for normal
@@ -179,25 +178,25 @@ namespace PlayerRipples
 			return float4(0, 0, 1, 0);
 		
 		// Gentle circular waves for standing still
-		// Higher frequencies for more visible ripples
+		// Higher frequencies and amplitudes for visibility
 		float wave1 = sin(dist * 0.12f - time * 3.0f);
 		float wave2 = sin(dist * 0.18f - time * 4.0f) * 0.6f;
 		
 		float combinedWave = (wave1 + wave2) / 1.6f;
 		
-		// Distance falloff - extend the effective range
-		float falloff = 1.0f - smoothstep(0.0f, MAX_RIPPLE_RADIUS * 0.7f, dist);
-		falloff *= falloff;
+		// Distance falloff - linear for better visibility at distance
+		float falloff = 1.0f - smoothstep(0.0f, MAX_RIPPLE_RADIUS * 0.8f, dist);
 		
-		float amplitude = combinedWave * falloff * rippleStrength;
+		// Boost amplitude for stationary ripples (increased by 3x)
+		float amplitude = combinedWave * falloff * rippleStrength * 3.0f;
 		
 		float2 dir = dist > 0.001f ? toPos / dist : float2(0, 1);
 		float waveGradient = cos(dist * 0.12f - time * 3.0f) * 0.12f +
 		                     cos(dist * 0.18f - time * 4.0f) * 0.6f * 0.18f;
 		waveGradient /= 1.6f;
-		waveGradient *= falloff * rippleStrength;
+		waveGradient *= falloff * rippleStrength * 3.0f;
 		
-		float3 normal = normalize(float3(-dir * waveGradient * 2.0f, 1.0f));
+		float3 normal = normalize(float3(-dir * waveGradient * 3.0f, 1.0f));
 		
 		return float4(normal, amplitude);
 	}
@@ -223,7 +222,8 @@ namespace PlayerRipples
 		if (dist > MAX_RIPPLE_RADIUS)
 			return float4(0, 0, 1, 0);
 		
-		float baseStrength = lerp(0.1f, 0.8f, saturate(actorSpeed / 300.0f));
+		// Increased base strength for better visibility (was 0.1-0.8, now 0.5-1.5)
+		float baseStrength = lerp(0.5f, 1.5f, saturate(actorSpeed / 300.0f));
 		float speedFactor = saturate(actorSpeed / 300.0f);
 		
 		// For stationary or very slow actors, use gentle circular ripples
@@ -248,8 +248,8 @@ namespace PlayerRipples
 		
 		// Player ripples - use wake pattern
 		if (playerInWater > 0.5f) {
-			// Base strength: minimum 0.5 for visibility, up to 1.0 with speed
-			float baseStrength = lerp(0.5f, 1.0f, saturate(playerSpeed / 300.0f));
+			// Increased base strength for better visibility (was 0.5-1.0, now 1.0-2.0)
+			float baseStrength = lerp(1.0f, 2.0f, saturate(playerSpeed / 300.0f));
 			float speedFactor = saturate(playerSpeed / 300.0f);
 			
 			float4 playerResult;

@@ -2,14 +2,14 @@
 #define __WATER_FOAM_HLSLI__
 
 // Water Foam System
-// Generates foam based on wave Jacobian - foam accumulates where waves compress/converge
-// Negative Jacobian indicates surface folding/compression = wave peaks = foam
+// Generates foam on wave crests and steep wave faces based on wave height and displacement
+// 
+// Current Implementation:
+// - Uses wave height (Z displacement) to detect crests
+// - Uses horizontal displacement to detect steep slopes
+// - More robust than Jacobian-based approach for cell-based statistical wave synthesis
 //
-// The Jacobian determinant J measures local area change:
-// J < 1.0: Surface is compressed (converging waves)
-// J = 1.0: No change 
-// J > 1.0: Surface is stretched
-// When J approaches 0 or goes negative, waves would theoretically "break"
+// Legacy Jacobian functions are preserved below for reference but not currently used
 
 // Foam calculation parameters
 struct FoamParams
@@ -85,24 +85,6 @@ float CalculateGerstnerJacobian(
 		Wave6AngleOffset
 	};
 	
-	float contributions[6] = {
-		max(WavePrimaryContribution, 0.0f),
-		max(WaveSecondaryContribution, 0.0f),
-		max(WaveDetailContribution, 0.0f),
-		max(WaveDetailContribution * 0.7f, 0.0f),
-		max(WaveDetailContribution * 0.5f, 0.0f),
-		max(WaveDetailContribution * 0.3f, 0.0f)
-	};
-	
-	float speedMults[6] = {
-		max(WavePrimarySpeed, 0.1f),
-		max(WaveSecondarySpeed, 0.1f),
-		max(WaveDetailSpeed, 0.1f),
-		max(WaveDetailSpeed * 1.1f, 0.1f),
-		max(WaveDetailSpeed * 1.2f, 0.1f),
-		max(WaveDetailSpeed * 1.3f, 0.1f)
-	};
-	
 	float phaseOffsets[6] = {
 		0.0f,
 		dayPhase * 0.3f + 2.094f,
@@ -114,7 +96,7 @@ float CalculateGerstnerJacobian(
 	
 	[unroll]
 	for (int i = 0; i < 6; ++i) {
-		if (contributions[i] < 0.001f || amplitudesM[i] < 0.0001f) {
+		if (amplitudesM[i] < 0.0001f) {
 			continue;
 		}
 		
@@ -129,7 +111,7 @@ float CalculateGerstnerJacobian(
 		
 		// Convert to game units
 		float wavelengthGame = wavelengthsM[i] * M_TO_GAME_UNIT;
-		float amplitudeGame = amplitudesM[i] * contributions[i] * waveIntensity * amplitudeMult * M_TO_GAME_UNIT;
+		float amplitudeGame = amplitudesM[i] * waveIntensity * amplitudeMult * M_TO_GAME_UNIT;
 		float steepness = steepnesses[i] * steepnessMult;
 		
 		// Wave number k = 2π / λ
@@ -137,7 +119,7 @@ float CalculateGerstnerJacobian(
 		
 		// Angular frequency ω = √(g·k) with speed multiplier
 		float gravityGame = UW_GRAVITY * M_TO_GAME_UNIT;
-		float omega = sqrt(gravityGame * k) * WaveSpeed * speedMults[i];
+		float omega = sqrt(gravityGame * k) * WaveSpeed;
 		
 		// Phase at this position and time
 		float phase = k * dot(waveDir, worldPos) - omega * timeSeconds + phaseOffsets[i];
@@ -224,8 +206,9 @@ float3 SampleWaterFoam(
 	return foamColor * foamAmount;
 }
 
-// Simplified foam function for quick integration
-// Returns foam intensity 0-1 based on wave state
+// Wave peak foam detection - similar to wave edge highlight approach
+// Returns foam intensity 0-1 based on wave crest height
+// Only shows foam on the TOP 20% of wave crests
 float GetFoamIntensity(
 	float2 worldPos,
 	float waveHeight,
@@ -234,41 +217,26 @@ float GetFoamIntensity(
 	float amplitudeMult,
 	float timeSeconds,
 	float dayPhase,
-	float foamThreshold,   // Default: 0.8
-	float foamIntensity    // Default: 1.0
+	float foamThreshold,   // Default: 0.8 (now 0.8 = top 20% threshold)
+	float foamIntensity,   // Default: 1.0
+	float foamSharpness    // Default: 2.0
 )
 {
-	if (waveIntensity <= 0.001f || foamIntensity <= 0.001f) {
-		return 0.0f;
-	}
+	// Use wave height to detect peaks (same approach as wave edge highlights)
+	float H = max(0.0f, waveHeight);
 	
-	// Calculate Jacobian
-	float jacobian = CalculateGerstnerJacobian(
-		worldPos,
-		waveIntensity,
-		amplitudeMult,
-		WaveSteepness,
-		timeSeconds,
-		dayPhase
-	);
+	// Normalize wave height
+	// Wave1Amplitude is max wave height (defined above)
+	float maxWaveHeight = Wave1Amplitude * (100.0f / 1.428f);  // M_TO_GAME_UNIT conversion
+	float normalizedHeight = saturate(H / max(maxWaveHeight, 0.01f));
 	
-	// Foam when Jacobian indicates compression
-	float foam = 0.0f;
-	if (jacobian < foamThreshold) {
-		foam = saturate((foamThreshold - jacobian) / foamThreshold);
-		foam = foam * foam;  // Sharpen
-	}
+	// Only foam on top portion of wave peaks (threshold = 0.8 means top 20%)
+	float wavePeakMask = saturate((normalizedHeight - foamThreshold) / max(1.0f - foamThreshold, 0.01f));
 	
-	// Additional foam on wave peaks (positive height)
-	float peakFoam = saturate(waveHeight * 0.015f);
+	// Apply sharpness and intensity
+	wavePeakMask = pow(wavePeakMask, foamSharpness);
 	
-	// Horizontal displacement also indicates steep wave faces
-	float slopeFoam = saturate(horizontalDisplacement * 0.01f);
-	
-	// Combine
-	float totalFoam = saturate(foam + peakFoam * 0.3f + slopeFoam * 0.2f);
-	
-	return totalFoam * foamIntensity;
+	return wavePeakMask * foamIntensity;
 }
 
 #endif // __WATER_FOAM_HLSLI__

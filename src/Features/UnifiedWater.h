@@ -36,126 +36,129 @@ struct UnifiedWater : OverlayFeature
 
 	static constexpr uint32_t MAX_ACTOR_RIPPLES = 32;
 
-	struct Settings
+	struct GeneralSettings
 	{
 		bool UseOptimisedMeshes = false;
 		bool ShowTriVisualizer = false;
 		bool TriVisualizerRawMode = false;
+	};
 
+	struct TessellationSettings
+	{
 		bool EnableTessellation = true;
 		float TessellationMinDistance = 128.0f;
 		float TessellationMaxDistance = 4096.0f;
 		float TessellationMinFactor = 1.0f;
 		float TessellationMaxFactor = 8.0f;
-		float DetailHeightScale = 0.0f;
+	};
 
+	struct WaveSettings
+	{
 		float WaveIntensity = 0.3f;
-		float WaveAmplitude = 1.0f;
-		float WaveSpeed = 0.05f;
-		float WaveSteepness = 1.0f;
+		float WaveAmplitude = 0.7f;
+		float WaveSpeed = 0.025f;
+		float WaveSteepness = 5.0f;
+		float WaveFadeStart = 4096.0f;
+		float WaveFadeEnd = 8192.0f;
 		
-		// Distance-based wave fadeout (game units)
-		float WaveFadeStart = 4096.0f;   // Distance where waves start fading (~58m)
-		float WaveFadeEnd = 8192.0f;     // Distance where waves fully fade (~117m)
-
-		float WavePrimaryContribution = 1.0f;
-		float WaveSecondaryContribution = 1.0f;
-		float WaveDetailContribution = 1.0f;
-		float WavePrimarySpeed = 1.0f;
-		float WaveSecondarySpeed = 1.0f;
-		float WaveDetailSpeed = 1.0f;
-		float WaveDirectionBlend = 1.0f;
+		float Wave1Amplitude = 0.8f;
+		float Wave1Wavelength = 60.0f;
+		float Wave1Steepness = 0.4f;
+		float Wave1AngleOffset = 0.0f;
 		
-		// Wave parameters are in METERS for intuitive real-world scale
-		// Amplitude = wave height from trough to crest (typical lake: 0.3-1m, rough sea: 2-5m)
-		// Wavelength = distance between crests (typical lake: 10-50m, ocean swell: 50-300m)
-		
-		// Wave 1 (Primary) - Main swell: longest wavelength, slowest
-		float Wave1Amplitude = 0.8f;       // 80cm wave height
-		float Wave1Wavelength = 60.0f;     // 60m between crests
-		float Wave1Steepness = 0.4f;       // Moderate steepness
-		float Wave1AngleOffset = 0.0f;     // Base direction
-		
-		// Wave 2 (Secondary) - Secondary swell at different angle
-		float Wave2Amplitude = 0.5f;       // 50cm wave height
-		float Wave2Wavelength = 35.0f;     // 35m between crests
+		float Wave2Amplitude = 0.5f;
+		float Wave2Wavelength = 35.0f;
 		float Wave2Steepness = 0.35f;
-		float Wave2AngleOffset = 0.6f;     // ~35 degrees offset (radians)
+		float Wave2AngleOffset = 0.6f;
 		
-		// Wave 3 (Detail) - Wind waves
-		float Wave3Amplitude = 0.25f;      // 25cm wave height
-		float Wave3Wavelength = 18.0f;     // 18m between crests
+		float Wave3Amplitude = 0.25f;
+		float Wave3Wavelength = 18.0f;
 		float Wave3Steepness = 0.3f;
-		float Wave3AngleOffset = -0.7f;    // ~-40 degrees
+		float Wave3AngleOffset = -0.7f;
 		
-		// Wave 4 (Fine Ripple 1) - Chop
-		float Wave4Amplitude = 0.12f;      // 12cm
-		float Wave4Wavelength = 8.0f;      // 8m
+		float Wave4Amplitude = 0.12f;
+		float Wave4Wavelength = 8.0f;
 		float Wave4Steepness = 0.25f;
-		float Wave4AngleOffset = 0.44f;    // ~25 degrees
+		float Wave4AngleOffset = 0.44f;
 		
-		// Wave 5 (Fine Ripple 2) - Fine ripples
-		float Wave5Amplitude = 0.06f;      // 6cm
-		float Wave5Wavelength = 4.0f;      // 4m
+		float Wave5Amplitude = 0.06f;
+		float Wave5Wavelength = 4.0f;
 		float Wave5Steepness = 0.2f;
-		float Wave5AngleOffset = -0.44f;   // ~-25 degrees
+		float Wave5AngleOffset = -0.44f;
 		
-		// Wave 6 (Fine Ripple 3) - Micro detail
-		float Wave6Amplitude = 0.03f;      // 3cm
-		float Wave6Wavelength = 2.0f;      // 2m
+		float Wave6Amplitude = 0.03f;
+		float Wave6Wavelength = 2.0f;
 		float Wave6Steepness = 0.15f;
-		float Wave6AngleOffset = 1.22f;    // ~70 degrees
+		float Wave6AngleOffset = 1.22f;
+	};
 
-		bool DisableVanillaWaterFoam = true;
-		
-		// Water Lighting Overrides
+	struct LightingSettings
+	{
 		bool EnableLightingOverrides = false;
-		float FresnelBias = 0.02f;          // F0 for water (~0.02 for IOR 1.33)
-		float FresnelPower = 5.0f;          // Schlick exponent
-		float ReflectionStrength = 1.0f;    // Multiplier for reflection intensity
-		float RefractionStrength = 1.0f;    // Refraction distortion amount
-		float WaterTransparency = 1.0f;     // Shallow water transparency
-		float AbsorptionDensity = 0.15f;    // Light absorption rate with depth
-		float ScatteringCoeff = 0.05f;      // Subsurface scattering amount
-		float SpecularIntensity = 1.0f;     // Overall specular intensity multiplier
-		
-		// Sun Specular Overrides
-		float SunSpecularPower = 250.0f;    // Sharpness of sun highlight (VarAmounts.x)
-		float SunSpecularMagnitude = 1.0f;  // Sun specular intensity multiplier
-		float SunSparklePower = 50.0f;      // Sparkle highlight sharpness
-		float SunSparkleMagnitude = 1.0f;   // Sparkle intensity
-		float SpecularRadius = 128.0f;      // Specular highlight radius
-		float SpecularBrightness = 1.0f;    // Overall specular brightness
-		
-		// Fog Overrides
-		float AboveWaterFogDistNear = 0.0f;     // Near fog distance
-		float AboveWaterFogDistFar = 163840.0f; // Far fog distance
-		float AboveWaterFogAmount = 1.0f;       // Fog intensity above water
-		float UnderwaterFogDistNear = 0.0f;     // Underwater near fog
-		float UnderwaterFogDistFar = 4096.0f;   // Underwater far fog
-		float UnderwaterFogAmount = 1.0f;       // Underwater fog intensity
-		
-		// Depth Properties (from ESP DepthControl)
-		float DepthReflections = 1.0f;      // Depth-based reflection factor
-		float DepthRefractions = 1.0f;      // Depth-based refraction factor
-		float DepthNormals = 1.0f;          // Depth-based normal intensity
-		float DepthSpecularLighting = 1.0f; // Depth-based specular factor
-		
-		// Actor Wading Ripples
+		float FresnelBias = 0.02f;
+		float FresnelPower = 5.0f;
+		float ReflectionStrength = 1.0f;
+		float RefractionStrength = 1.0f;
+		float WaterTransparency = 1.0f;
+		float AbsorptionDensity = 0.15f;
+		float ScatteringCoeff = 0.05f;
+		float SpecularIntensity = 1.0f;
+		float SunSpecularPower = 250.0f;
+		float SunSpecularMagnitude = 1.0f;
+		float SunSparklePower = 50.0f;
+		float SunSparkleMagnitude = 1.0f;
+		float SpecularRadius = 128.0f;
+		float SpecularBrightness = 1.0f;
+	};
+
+	struct FogSettings
+	{
+		float AboveWaterFogDistNear = 0.0f;
+		float AboveWaterFogDistFar = 163840.0f;
+		float AboveWaterFogAmount = 1.0f;
+		float UnderwaterFogDistNear = 0.0f;
+		float UnderwaterFogDistFar = 4096.0f;
+		float UnderwaterFogAmount = 1.0f;
+	};
+
+	struct DepthSettings
+	{
+		float DepthReflections = 1.0f;
+		float DepthRefractions = 1.0f;
+		float DepthNormals = 1.0f;
+		float DepthSpecularLighting = 1.0f;
+	};
+
+	struct RippleSettings
+	{
 		bool EnableActorRipples = true;
-		float RippleStrength = 1.0f;        // Overall ripple intensity
-		float RippleRadius = 512.0f;        // Maximum ripple expansion radius
-		float RippleWaveSpeed = 4.0f;       // Speed of ripple wave animation
-		float RippleWaveFreq1 = 0.08f;      // Primary wave frequency
-		float RippleWaveFreq2 = 0.12f;      // Secondary wave frequency
-		float RippleWaveFreq3 = 0.18f;      // Tertiary wave frequency
-		float RippleNormalStrength = 2.0f;  // Normal map intensity for ripples
-		
-		// Foam System
-		bool EnableFoam = false;
-		float FoamIntensity = 1.0f;         // Master foam strength (0-1)
-		float FoamThreshold = 0.8f;         // Jacobian threshold for foam
-		float FoamSharpness = 2.0f;         // Foam edge sharpness
+		float RippleStrength = 1.0f;
+		float RippleRadius = 512.0f;
+		float RippleWaveSpeed = 4.0f;
+		float RippleWaveFreq1 = 0.08f;
+		float RippleWaveFreq2 = 0.12f;
+		float RippleWaveFreq3 = 0.18f;
+		float RippleNormalStrength = 2.0f;
+	};
+
+	struct FoamSettings
+	{
+		bool EnableFoam = true;
+		float FoamIntensity = 1.5f;
+		float FoamThreshold = 0.6f;
+		float FoamSharpness = 2.0f;
+	};
+
+	struct Settings
+	{
+		GeneralSettings general;
+		TessellationSettings tessellation;
+		WaveSettings waves;
+		LightingSettings lighting;
+		FogSettings fog;
+		DepthSettings depth;
+		RippleSettings ripples;
+		FoamSettings foam;
 	};
 
 #pragma warning(push)
@@ -174,24 +177,24 @@ struct UnifiedWater : OverlayFeature
 		float PrevRealTimeSeconds;
 		float PrevTimeScale;
 		
-		// Water Lighting Overrides (repurposed foam system slots)
+		// Water Lighting Overrides
 		float EnableLightingOverrides;
-		float FresnelBias;           // F0 for water (0.02 = IOR 1.33)
-		float FresnelPower;          // Schlick exponent
-		float ReflectionStrength;    // Reflection intensity multiplier
-		float RefractionStrength;    // Refraction distortion amount
-		float WaterTransparency;     // Shallow water transparency
-		float AbsorptionDensity;     // Light absorption rate
-		float ScatteringCoeff;       // Subsurface scattering
-		float SpecularIntensity;     // Overall specular intensity
+		float FresnelBias;
+		float FresnelPower;
+		float ReflectionStrength;
+		float RefractionStrength;
+		float WaterTransparency;
+		float AbsorptionDensity;
+		float ScatteringCoeff;
+		float SpecularIntensity;
 		
 		// Sun Specular Overrides
-		float SunSpecularPower;      // Sharpness of sun highlight
-		float SunSpecularMagnitude;  // Sun specular intensity
-		float SunSparklePower;       // Sparkle sharpness
-		float SunSparkleMagnitude;   // Sparkle intensity
-		float SpecularRadius;        // Specular highlight radius
-		float SpecularBrightness;    // Overall specular brightness
+		float SunSpecularPower;
+		float SunSpecularMagnitude;
+		float SunSparklePower;
+		float SunSparkleMagnitude;
+		float SpecularRadius;
+		float SpecularBrightness;
 		
 		// Fog Overrides
 		float AboveWaterFogDistNear;
@@ -207,14 +210,11 @@ struct UnifiedWater : OverlayFeature
 		float DepthNormals;
 		float DepthSpecularLighting;
 		
-		float WavePrimaryContribution;
-		float WaveSecondaryContribution;
-		float WaveDetailContribution;
-		float WavePrimarySpeed;
-		float WaveSecondarySpeed;
-		float WaveDetailSpeed;
-		float WaveDirectionBlend;
+		// Debug visualizer
 		float TriVisualizerEnabled;
+		float PerFramePad0;
+		float PerFramePad1;
+		float PerFramePad2;
 		
 		// Wave 1 (Primary) - Large swells
 		float Wave1Amplitude;

@@ -171,7 +171,7 @@ namespace EffectExtensions
 		{
 			// Check for vanilla water foam and skip if UnifiedWater is active
 			auto& unifiedWater = globals::features::unifiedWater;
-			if (unifiedWater.loaded && unifiedWater.settings.DisableVanillaWaterFoam) {
+			if (unifiedWater.loaded && unifiedWater.settings.foam.EnableFoam) {
 				if (auto* shaderProperty = static_cast<RE::BSEffectShaderProperty*>(pass->geometry->GetGeometryRuntimeData().properties[1].get())) {
 					if (auto* material = shaderProperty->GetMaterial()) {
 						const char* texPath = material->sourceTexturePath.c_str();

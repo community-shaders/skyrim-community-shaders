@@ -2325,7 +2325,7 @@ PS_OUTPUT main(PS_INPUT input)
 	finalColorPreFog += diffuseOutput.scatter;
 	finalColorPreFog += diffuseOutput.waveSSS;
 	
-	// Foam contribution based on wave Jacobian
+	// Foam contribution based on wave height and normal map detail
 	if (FoamEnabled > 0.5f) {
 		float2 waveWorldPosPS = input.WPosition.xy + FrameBuffer::CameraPosAdjust[eyeIndex].xy;
 		float waveTimeSecondsPS = ComputeWaveTimeSeconds(GameTimeHours, RealTimeSeconds);
@@ -2333,7 +2333,8 @@ PS_OUTPUT main(PS_INPUT input)
 		float waveHeightPS = input.UnifiedWaveInfo.z;
 		float horizDispPS = input.UnifiedWaveNormal.w;
 		
-		float foamAmount = GetFoamIntensity(
+		// Calculate foam mask (WHERE foam appears)
+		float foamMask = GetFoamIntensity(
 			waveWorldPosPS,
 			waveHeightPS,
 			horizDispPS,
@@ -2342,11 +2343,73 @@ PS_OUTPUT main(PS_INPUT input)
 			waveTimeSecondsPS,
 			waveDayPhasePS,
 			FoamThreshold,
-			FoamIntensity
+			FoamIntensity,
+			FoamSharpness
 		);
 		
-		float3 foamColor = float3(0.95f, 0.97f, 1.0f);
-		finalColorPreFog = lerp(finalColorPreFog, foamColor, foamAmount);
+		if (foamMask > 0.001f) {
+			// Sample height from normal map to create foam texture detail
+			float foamHeight = 0.0f;
+			
+#			if defined(FLOWMAP)
+				// Recalculate flowmap variables for foam
+#				if defined(UNIFIED_WATER)
+				float2 foamFlowmapDims = input.TexCoord4.xy;
+#				else
+				float2 foamFlowmapDims = input.TexCoord4.xx;
+#				endif
+				float2 foamUVShift = 1 / (128 * foamFlowmapDims);
+				PS_INPUT foamFlowmapInput = input;
+#				if defined(WATER_PARALLAX) && !defined(LOD)
+				float3 foamNormalScalesRcp = rcp(input.NormalsScale.xyz);
+				float foamParallaxAmount = WaterEffects::GetFlowmapParallaxAmount(input, foamFlowmapDims, viewDirection);
+				float2 foamParallaxDir = viewDirection.xy / -viewDirection.z;
+				foamParallaxDir.y = -foamParallaxDir.y;
+				float foamViewDotUp = -viewDirection.z;
+				foamParallaxDir *= 0.008 * saturate(foamViewDotUp * 2.0);
+				foamFlowmapInput.TexCoord3.xy = input.TexCoord3.xy + foamParallaxAmount * foamParallaxDir;
+#				endif
+				float2 foamNormalMul = 0.5 + -(-0.5 + abs(frac(foamFlowmapInput.TexCoord2.zw * (64 * foamFlowmapDims)) * 2 - 1));
+				// Flowmap water: sample blended flowmap height
+				foamHeight = GetFlowmapHeightBlended(foamFlowmapInput, foamNormalMul, foamUVShift, 0);
+				// Normalize to 0-1 range (height maps are typically 0-1 but can vary)
+				foamHeight = saturate(foamHeight);
+#			else
+				// Non-flowmap water: blend normal map heights
+				float3 heights;
+#				if defined(WATER_PARALLAX)
+				float3 foamNormalScalesRcp = rcp(input.NormalsScale.xyz);
+				float2 foamParallaxOffset = WaterEffects::GetParallaxOffset(input, foamNormalScalesRcp);
+				heights.x = Normals01Tex.SampleLevel(Normals01Sampler, input.TexCoord1.xy + foamParallaxOffset.xy * foamNormalScalesRcp.x, 0).w;
+				heights.y = Normals02Tex.SampleLevel(Normals02Sampler, input.TexCoord1.zw + foamParallaxOffset.xy * foamNormalScalesRcp.y, 0).w;
+				heights.z = Normals03Tex.SampleLevel(Normals03Sampler, input.TexCoord2.xy + foamParallaxOffset.xy * foamNormalScalesRcp.z, 0).w;
+#				else
+				heights.x = Normals01Tex.SampleLevel(Normals01Sampler, input.TexCoord1.xy, 0).w;
+				heights.y = Normals02Tex.SampleLevel(Normals02Sampler, input.TexCoord1.zw, 0).w;
+				heights.z = Normals03Tex.SampleLevel(Normals03Sampler, input.TexCoord2.xy, 0).w;
+#				endif
+				heights *= NormalsAmplitude.xyz;
+				foamHeight = (heights.x + heights.y + heights.z) / max(NormalsAmplitude.x + NormalsAmplitude.y + NormalsAmplitude.z, 0.001f);
+				// Normalize to consistent 0-1 range
+				foamHeight = saturate(foamHeight);
+#			endif
+			
+			// Enhance height contrast for foam texture
+			// Higher heights = brighter foam (peaks), lower = darker (troughs)
+			float foamTexture = pow(saturate(foamHeight * 1.2f), 1.3f);
+			
+			// Create foam color with texture detail
+			// Base white-blue foam color modulated by height texture
+			float3 foamBaseColor = float3(0.98f, 0.99f, 1.0f);
+			float3 foamColor = foamBaseColor * lerp(0.4f, 1.0f, foamTexture);
+			
+			// Combine wave peak mask (WHERE foam appears) with heightmap texture (WHAT foam looks like)
+			float combinedFoam = foamMask * foamTexture;
+			combinedFoam = saturate(combinedFoam);
+			
+			// Apply foam to water color
+			finalColorPreFog = lerp(finalColorPreFog, foamColor, combinedFoam);
+		}
 	}
 #						endif
 
@@ -2389,7 +2452,7 @@ PS_OUTPUT main(PS_INPUT input)
 	finalColorPreFog += diffuseOutput.scatter;
 	finalColorPreFog += diffuseOutput.waveSSS;
 	
-	// Foam contribution based on wave Jacobian
+	// Foam contribution based on wave height and normal map detail
 	if (FoamEnabled > 0.5f) {
 		float2 waveWorldPosPS2 = input.WPosition.xy + FrameBuffer::CameraPosAdjust[eyeIndex].xy;
 		float waveTimeSecondsPS2 = ComputeWaveTimeSeconds(GameTimeHours, RealTimeSeconds);
@@ -2397,7 +2460,8 @@ PS_OUTPUT main(PS_INPUT input)
 		float waveHeightPS2 = input.UnifiedWaveInfo.z;
 		float horizDispPS2 = input.UnifiedWaveNormal.w;
 		
-		float foamAmount2 = GetFoamIntensity(
+		// Calculate foam mask (WHERE foam appears)
+		float foamMask2 = GetFoamIntensity(
 			waveWorldPosPS2,
 			waveHeightPS2,
 			horizDispPS2,
@@ -2406,11 +2470,73 @@ PS_OUTPUT main(PS_INPUT input)
 			waveTimeSecondsPS2,
 			waveDayPhasePS2,
 			FoamThreshold,
-			FoamIntensity
+			FoamIntensity,
+			FoamSharpness
 		);
 		
-		float3 foamColor2 = float3(0.95f, 0.97f, 1.0f);
-		finalColorPreFog = lerp(finalColorPreFog, foamColor2, foamAmount2);
+		if (foamMask2 > 0.001f) {
+			// Sample height from normal map to create foam texture detail
+			float foamHeight2 = 0.0f;
+			
+#			if defined(FLOWMAP)
+				// Recalculate flowmap variables for foam
+#				if defined(UNIFIED_WATER)
+				float2 foamFlowmapDims2 = input.TexCoord4.xy;
+#				else
+				float2 foamFlowmapDims2 = input.TexCoord4.xx;
+#				endif
+				float2 foamUVShift2 = 1 / (128 * foamFlowmapDims2);
+				PS_INPUT foamFlowmapInput2 = input;
+#				if defined(WATER_PARALLAX) && !defined(LOD)
+				float3 foamNormalScalesRcp2 = rcp(input.NormalsScale.xyz);
+				float foamParallaxAmount2 = WaterEffects::GetFlowmapParallaxAmount(input, foamFlowmapDims2, viewDirection);
+				float2 foamParallaxDir2 = viewDirection.xy / -viewDirection.z;
+				foamParallaxDir2.y = -foamParallaxDir2.y;
+				float foamViewDotUp2 = -viewDirection.z;
+				foamParallaxDir2 *= 0.008 * saturate(foamViewDotUp2 * 2.0);
+				foamFlowmapInput2.TexCoord3.xy = input.TexCoord3.xy + foamParallaxAmount2 * foamParallaxDir2;
+#				endif
+				float2 foamNormalMul2 = 0.5 + -(-0.5 + abs(frac(foamFlowmapInput2.TexCoord2.zw * (64 * foamFlowmapDims2)) * 2 - 1));
+				// Flowmap water: sample blended flowmap height
+				foamHeight2 = GetFlowmapHeightBlended(foamFlowmapInput2, foamNormalMul2, foamUVShift2, 0);
+				// Normalize to 0-1 range (height maps are typically 0-1 but can vary)
+				foamHeight2 = saturate(foamHeight2);
+#			else
+				// Non-flowmap water: blend normal map heights
+				float3 heights2;
+#				if defined(WATER_PARALLAX)
+				float3 foamNormalScalesRcp2 = rcp(input.NormalsScale.xyz);
+				float2 foamParallaxOffset2 = WaterEffects::GetParallaxOffset(input, foamNormalScalesRcp2);
+				heights2.x = Normals01Tex.SampleLevel(Normals01Sampler, input.TexCoord1.xy + foamParallaxOffset2.xy * foamNormalScalesRcp2.x, 0).w;
+				heights2.y = Normals02Tex.SampleLevel(Normals02Sampler, input.TexCoord1.zw + foamParallaxOffset2.xy * foamNormalScalesRcp2.y, 0).w;
+				heights2.z = Normals03Tex.SampleLevel(Normals03Sampler, input.TexCoord2.xy + foamParallaxOffset2.xy * foamNormalScalesRcp2.z, 0).w;
+#				else
+				heights2.x = Normals01Tex.SampleLevel(Normals01Sampler, input.TexCoord1.xy, 0).w;
+				heights2.y = Normals02Tex.SampleLevel(Normals02Sampler, input.TexCoord1.zw, 0).w;
+				heights2.z = Normals03Tex.SampleLevel(Normals03Sampler, input.TexCoord2.xy, 0).w;
+#				endif
+				heights2 *= NormalsAmplitude.xyz;
+				foamHeight2 = (heights2.x + heights2.y + heights2.z) / max(NormalsAmplitude.x + NormalsAmplitude.y + NormalsAmplitude.z, 0.001f);
+				// Normalize to consistent 0-1 range
+				foamHeight2 = saturate(foamHeight2);
+#			endif
+			
+			// Enhance height contrast for foam texture
+			// Higher heights = brighter foam (peaks), lower = darker (troughs)
+			float foamTexture2 = pow(saturate(foamHeight2 * 1.2f), 1.3f);
+			
+			// Create foam color with texture detail
+			// Base white-blue foam color modulated by height texture
+			float3 foamBaseColor2 = float3(0.98f, 0.99f, 1.0f);
+			float3 foamColor2 = foamBaseColor2 * lerp(0.4f, 1.0f, foamTexture2);
+			
+			// Combine wave peak mask (WHERE foam appears) with heightmap texture (WHAT foam looks like)
+			float combinedFoam2 = foamMask2 * foamTexture2;
+			combinedFoam2 = saturate(combinedFoam2);
+			
+			// Apply foam to water color
+			finalColorPreFog = lerp(finalColorPreFog, foamColor2, combinedFoam2);
+		}
 	}
 #						endif
 
