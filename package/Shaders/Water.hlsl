@@ -685,8 +685,12 @@ VS_OUTPUT main(HS_CONSTANT_OUTPUT patchConst, float3 bary : SV_DomainLocation, c
 	output.UnifiedWaveNormal = float4(waveSample.normal, horizontalDisplacement);
 	output.Barycentric = bary;
 	
-	// MPosition stores displaced world position for PS (same as WPosition.xyz)
-	output.MPosition = float4(displacedWorldPos, 1.0f);
+	// MPosition must store MODEL-SPACE position (interpolated from VS patch vertices + wave displacement)
+	// The pixel shader uses MPosition with TextureProj matrix which expects model-space coordinates.
+	// VS stores input.Position.xyz (model-space) when tessellation is enabled.
+	// We interpolate the model-space positions from the patch vertices and add wave displacement.
+	float4 interpMPosition = patch[0].MPosition * bary.x + patch[1].MPosition * bary.y + patch[2].MPosition * bary.z;
+	output.MPosition = float4(interpMPosition.xyz + waveSample.displacement, 1.0f);
 #		else
 	// Non-unified water: simple interpolation (interpHPosition already calculated above)
 	output.HPosition = interpHPosition;
