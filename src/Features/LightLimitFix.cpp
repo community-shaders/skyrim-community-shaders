@@ -17,7 +17,16 @@ void LightLimitFix::DrawSettings()
 {
 	auto shaderCache = globals::shaderCache;
 
-	if (ImGui::TreeNodeEx("Light Limit Visualization", ImGuiTreeNodeFlags_DefaultOpen)) {
+	if (ImGui::TreeNodeEx("Statistics", ImGuiTreeNodeFlags_DefaultOpen)) {
+		ImGui::Text(std::format("Clustered Light Count : {}", lightCount).c_str());
+
+		ImGui::TreePop();
+	}
+
+	///////////////////////////////
+	ImGui::SeparatorText("Debug");
+
+	if (ImGui::TreeNode("Light Limit Visualization")) {
 		ImGui::Checkbox("Enable Lights Visualisation", &settings.EnableLightsVisualisation);
 		if (auto _tt = Util::HoverTooltipWrapper()) {
 			ImGui::Text("Enables visualization of the light limit\n");
@@ -40,12 +49,6 @@ void LightLimitFix::DrawSettings()
 			shaderCache->Clear(RE::BSShader::Type::Lighting);
 			previousEnableLightsVisualisation = currentEnableLightsVisualisation;
 		}
-
-		ImGui::TreePop();
-	}
-
-	if (ImGui::TreeNodeEx("Statistics", ImGuiTreeNodeFlags_DefaultOpen)) {
-		ImGui::Text(std::format("Clustered Light Count : {}", lightCount).c_str());
 
 		ImGui::TreePop();
 	}
