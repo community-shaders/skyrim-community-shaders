@@ -11,20 +11,22 @@
 
 bool WaterCache::SetCurrentWorldSpace(const RE::TESWorldSpace* worldSpace)
 {
-	if (!worldSpace)
+	if (!worldSpace || reinterpret_cast<uintptr_t>(worldSpace) < 0x10000)
 		return false;
 
 	// Traverse to root parent world that has water data
 	while (worldSpace->parentWorld && worldSpace->parentUseFlags.all(RE::TESWorldSpace::ParentUseFlag::kUseWaterData)) {
 		auto parent = worldSpace->parentWorld;
 		if (!parent || reinterpret_cast<uintptr_t>(parent) < 0x10000) {
-			break;  // Invalid parent pointer, stop traversal
+			logger::warn("[Unified Water] [Cache] Invalid parent worldspace pointer detected during traversal");
+			return false;
 		}
 		worldSpace = parent;
 	}
 	
 	// Validate final worldspace pointer before accessing members
 	if (!worldSpace || reinterpret_cast<uintptr_t>(worldSpace) < 0x10000) {
+		logger::warn("[Unified Water] [Cache] Invalid worldspace pointer after parent traversal");
 		return false;
 	}
 

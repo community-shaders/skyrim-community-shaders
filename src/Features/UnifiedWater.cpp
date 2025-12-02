@@ -15,8 +15,8 @@
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	UnifiedWater::GeneralSettings,
 	UseOptimisedMeshes,
-	ShowTriVisualizer,
-	TriVisualizerRawMode)
+	ShowWireframe,
+	WireframeRawMode)
 
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	UnifiedWater::TessellationSettings,
@@ -357,7 +357,11 @@ void UnifiedWater::DrawSettings()
 			if (settings.foam.EnableFoam) {
 				ImGui::SliderFloat("Foam Intensity", &settings.foam.FoamIntensity, 0.0f, 2.0f, "%.2f");
 				if (auto _tt = Util::HoverTooltipWrapper()) {
-					ImGui::Text("Master foam strength. Higher = more visible foam.");
+					ImGui::Text("Foam strength for non-flowmap water (lakes, ocean).");
+				}
+				ImGui::SliderFloat("Foam Intensity (Flowmap)", &settings.foam.FoamIntensityFlowmap, 0.0f, 2.0f, "%.2f");
+				if (auto _tt = Util::HoverTooltipWrapper()) {
+					ImGui::Text("Foam strength for flowmap water (rivers).");
 				}
 				ImGui::SliderFloat("Foam Threshold", &settings.foam.FoamThreshold, 0.3f, 0.9f, "%.2f");
 				if (auto _tt = Util::HoverTooltipWrapper()) {
@@ -372,10 +376,10 @@ void UnifiedWater::DrawSettings()
 		}
 
 		if (ImGui::BeginTabItem("Debug")) {
-			ImGui::Checkbox("Show Tri Visualizer", &settings.general.ShowTriVisualizer);
-			if (settings.general.ShowTriVisualizer) {
+			ImGui::Checkbox("Show Tri Visualizer", &settings.general.ShowWireframe);
+			if (settings.general.ShowWireframe) {
 				ImGui::SameLine();
-				ImGui::Checkbox("Raw Barycentrics", &settings.general.TriVisualizerRawMode);
+				ImGui::Checkbox("Raw Barycentrics", &settings.general.WireframeRawMode);
 				if (auto _tt = Util::HoverTooltipWrapper()) {
 					ImGui::Text("Shows raw barycentric coordinates as RGB.\nRed/Green/Blue at vertices = GS working.\nGray/Purple everywhere = GS not running.");
 				}
@@ -643,7 +647,7 @@ void UnifiedWater::CompileTessellationShadersAsync()
 			allSuccess = false;
 		}
 
-		// Geometry shader for proper per-triangle barycentric coordinates (needed for tri visualizer)
+		// Geometry shader for proper per-triangle barycentric coordinates (needed for wireframe view)
 		tessDefines[0] = { "GSHADER", "" };
 
 		if (auto* geometryShader = static_cast<ID3D11GeometryShader*>(Util::CompileShader(L"Data\\Shaders\\Water.hlsl", tessDefines, "gs_5_0"))) {
@@ -1015,9 +1019,9 @@ void UnifiedWater::BSWaterShader_SetupGeometry::thunk(RE::BSShader* waterShader,
 		perFrameData.DepthNormals = singleton.settings.depth.DepthNormals;
 		perFrameData.DepthSpecularLighting = singleton.settings.depth.DepthSpecularLighting;
 		
-		// TriVisualizerEnabled: 0=off, 1=wireframe, 2=raw barycentrics debug
-		perFrameData.TriVisualizerEnabled = singleton.settings.general.ShowTriVisualizer ? 
-			(singleton.settings.general.TriVisualizerRawMode ? 2.0f : 1.0f) : 0.0f;
+		// WireframeEnabled: 0=off, 1=wireframe, 2=raw barycentrics debug
+		perFrameData.WireframeEnabled = singleton.settings.general.ShowWireframe ? 
+			(singleton.settings.general.WireframeRawMode ? 2.0f : 1.0f) : 0.0f;
 		perFrameData.PerFramePad0 = 0.0f;
 		perFrameData.PerFramePad1 = 0.0f;
 		perFrameData.PerFramePad2 = 0.0f;
@@ -1082,6 +1086,7 @@ void UnifiedWater::BSWaterShader_SetupGeometry::thunk(RE::BSShader* waterShader,
 		// Foam system
 		perFrameData.FoamEnabled = singleton.settings.foam.EnableFoam ? 1.0f : 0.0f;
 		perFrameData.FoamIntensity = singleton.settings.foam.FoamIntensity;
+		perFrameData.FoamIntensityFlowmap = singleton.settings.foam.FoamIntensityFlowmap;
 		perFrameData.FoamThreshold = singleton.settings.foam.FoamThreshold;
 		perFrameData.FoamSharpness = singleton.settings.foam.FoamSharpness;
 		
@@ -1373,7 +1378,7 @@ void UnifiedWater::BSWaterShader_SetupGeometry::thunk(RE::BSShader* waterShader,
 
 	// Track if we need to bind just the geometry shader (for tri visualizer without tessellation)
 	bool geometryShaderOnlyForVisualizer = !tessellationEnabled && 
-	                                        singleton.settings.general.ShowTriVisualizer && 
+	                                        singleton.settings.general.ShowWireframe && 
 	                                        singleton.AreTessellationShadersReady() &&
 	                                        techniqueSupportsTessel;
 
@@ -1510,7 +1515,7 @@ void UnifiedWater::BSWaterShader_SetupGeometry::thunk(RE::BSShader* waterShader,
 		
 		static bool loggedGSOnly = false;
 		if (!loggedGSOnly) {
-			logger::info("[Unified Water] Tri visualizer active - binding GS only (no tessellation): {:p}", (void*)singleton.waterGeometryShader.get());
+			logger::info("[Unified Water] Wireframe view active - binding GS only (no tessellation): {:p}", (void*)singleton.waterGeometryShader.get());
 			loggedGSOnly = true;
 		}
 	} else if (!loggedTessSetup && singleton.settings.tessellation.EnableTessellation) {

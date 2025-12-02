@@ -103,8 +103,8 @@ cbuffer UnifiedWaterPerFrame : register(b7)
 	float DepthNormals : packoffset(c8.z);
 	float DepthSpecularLighting : packoffset(c8.w);
 	
-	// Debug visualizer
-	float TriVisualizerEnabled : packoffset(c9.x);
+	// Wireframe view
+	float WireframeEnabled : packoffset(c9.x);
 	float PerFramePad0 : packoffset(c9.y);
 	float PerFramePad1 : packoffset(c9.z);
 	float PerFramePad2 : packoffset(c9.w);
@@ -169,8 +169,9 @@ cbuffer UnifiedWaterPerFrame : register(b7)
 	// Foam System
 	float FoamEnabled : packoffset(c20.x);
 	float FoamIntensity : packoffset(c20.y);
-	float FoamThreshold : packoffset(c20.z);
-	float FoamSharpness : packoffset(c20.w);
+	float FoamIntensityFlowmap : packoffset(c20.z);
+	float FoamThreshold : packoffset(c20.w);
+	float FoamSharpness : packoffset(c21.x);
 }
 
 cbuffer UnifiedWaterPerTile : register(b8)

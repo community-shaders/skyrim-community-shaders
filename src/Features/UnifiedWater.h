@@ -39,17 +39,17 @@ struct UnifiedWater : OverlayFeature
 	struct GeneralSettings
 	{
 		bool UseOptimisedMeshes = false;
-		bool ShowTriVisualizer = false;
-		bool TriVisualizerRawMode = false;
+	bool ShowWireframe = false;
+	bool WireframeRawMode = false;
 	};
 
 	struct TessellationSettings
 	{
 		bool EnableTessellation = true;
-		float TessellationMinDistance = 128.0f;
-		float TessellationMaxDistance = 4096.0f;
+		float TessellationMinDistance = 256.0f;
+		float TessellationMaxDistance = 6144.0f;
 		float TessellationMinFactor = 1.0f;
-		float TessellationMaxFactor = 8.0f;
+		float TessellationMaxFactor = 16.0f;
 	};
 
 	struct WaveSettings
@@ -145,6 +145,7 @@ struct UnifiedWater : OverlayFeature
 	{
 		bool EnableFoam = true;
 		float FoamIntensity = 1.5f;
+		float FoamIntensityFlowmap = 1.5f;
 		float FoamThreshold = 0.6f;
 		float FoamSharpness = 2.0f;
 	};
@@ -211,7 +212,7 @@ struct UnifiedWater : OverlayFeature
 		float DepthSpecularLighting;
 		
 		// Debug visualizer
-		float TriVisualizerEnabled;
+		float WireframeEnabled;
 		float PerFramePad0;
 		float PerFramePad1;
 		float PerFramePad2;
@@ -275,6 +276,7 @@ struct UnifiedWater : OverlayFeature
 		// Foam System
 		float FoamEnabled;
 		float FoamIntensity;
+		float FoamIntensityFlowmap;
 		float FoamThreshold;
 		float FoamSharpness;
 	};

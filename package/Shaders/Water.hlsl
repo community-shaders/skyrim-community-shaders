@@ -551,36 +551,25 @@ VS_OUTPUT main(VS_INPUT input)
 // ============================================================================
 #	ifdef HSHADER
 
+// Include tessellation system BEFORE any shader definitions
 #		if defined(UNIFIED_WATER)
 #			include "UnifiedWater/WaterTessellation.hlsli"
+#		else
+// Fallback for non-unified water - simple distance-based tessellation
+HS_CONSTANT_OUTPUT PatchConstantFunc(InputPatch<VS_OUTPUT, 3> patch, uint patchID : SV_PrimitiveID)
+{
+	HS_CONSTANT_OUTPUT output;
+	float3 cameraPos = FrameBuffer::CameraPosAdjust[0].xyz;
+	float3 center = (patch[0].WPosition.xyz + patch[1].WPosition.xyz + patch[2].WPosition.xyz) / 3.0f;
+	float dist = length(center);
+	float factor = lerp(TessellationMaxFactor, TessellationMinFactor, saturate(dist / TessellationMaxDistance));
+	output.EdgeTess[0] = output.EdgeTess[1] = output.EdgeTess[2] = output.InsideTess = factor;
+	return output;
+}
 #		endif
 
 // Hull shader control point output - passes VS_OUTPUT through
 typedef VS_OUTPUT HS_OUTPUT;
-
-// Patch constant function - calculates tessellation factors
-HS_CONSTANT_OUTPUT PatchConstantFunc(InputPatch<VS_OUTPUT, 3> patch, uint patchID : SV_PrimitiveID)
-{
-	HS_CONSTANT_OUTPUT output;
-	
-	// Get world positions of patch vertices
-	float3 p0 = patch[0].WPosition.xyz;
-	float3 p1 = patch[1].WPosition.xyz;
-	float3 p2 = patch[2].WPosition.xyz;
-	
-	// Calculate edge tessellation factors based on distance to camera
-	// Edge 0 connects vertices 1 and 2
-	// Edge 1 connects vertices 2 and 0
-	// Edge 2 connects vertices 0 and 1
-	output.EdgeTess[0] = CalculateEdgeTessellation(p1, p2);
-	output.EdgeTess[1] = CalculateEdgeTessellation(p2, p0);
-	output.EdgeTess[2] = CalculateEdgeTessellation(p0, p1);
-	
-	// Inside tessellation is average of edge factors
-	output.InsideTess = (output.EdgeTess[0] + output.EdgeTess[1] + output.EdgeTess[2]) / 3.0;
-	
-	return output;
-}
 
 // Hull shader main - passes through control points
 [domain("tri")]
@@ -624,119 +613,13 @@ cbuffer PerGeometryDS : register(b2)
 #		endif
 };
 
-// Domain shader - interpolates tessellated vertices and applies wave displacement
+// Domain shader - now uses DomainShaderImpl from WaterTessellation.hlsli
+// Provides curvature-adaptive tessellation with proper Gerstner wave displacement
 [domain("tri")]
 VS_OUTPUT main(HS_CONSTANT_OUTPUT patchConst, float3 bary : SV_DomainLocation, const OutputPatch<VS_OUTPUT, 3> patch)
 {
-	VS_OUTPUT output;
-	
 	uint eyeIndex = 0;  // DS runs after VS which already handled stereo
-	
-	// Barycentric interpolation of clip-space position from VS
-	float4 interpHPosition = patch[0].HPosition * bary.x + patch[1].HPosition * bary.y + patch[2].HPosition * bary.z;
-	float4 interpWPosition = patch[0].WPosition * bary.x + patch[1].WPosition * bary.y + patch[2].WPosition * bary.z;
-	
-	// Interpolate texture coordinates early - needed for heightmap sampling
-	float4 interpTexCoord1 = patch[0].TexCoord1 * bary.x + patch[1].TexCoord1 * bary.y + patch[2].TexCoord1 * bary.z;
-#		if defined(SPECULAR) || defined(UNDERWATER) || defined(SIMPLE)
-	float4 interpTexCoord2 = patch[0].TexCoord2 * bary.x + patch[1].TexCoord2 * bary.y + patch[2].TexCoord2 * bary.z;
-#		endif
-	
-#		if defined(UNIFIED_WATER)
-	// Calculate absolute world position for wave sampling
-	// WPosition is camera-relative, add CameraPosAdjust to get absolute world pos
-	float2 waveWorldPos = interpWPosition.xy + FrameBuffer::CameraPosAdjust[eyeIndex].xy;
-	
-	float waveTimeSeconds = ComputeWaveTimeSeconds(GameTimeHours, RealTimeSeconds);
-	float waveDayPhase = ComputeWaveDayPhase(GameTimeHours);
-	
-	// Calculate Gerstner waves for this tessellated vertex
-	// Pass camera distance for distance-based wave fadeout on distant tiles
-	float cameraDistDS = length(interpWPosition.xyz);
-	WaveSample waveSample = CalculateWaterDisplacement(
-		waveWorldPos, 
-		float2(0.0f, 0.0f), 
-		float2(0.0f, 0.0f), 
-		WaveIntensity, 
-		WaveAmplitude, 
-		WaveSpeed, 
-		WaveSteepness, 
-		waveTimeSeconds, 
-		waveDayPhase, 
-		float2(0.0f, 0.0f),  // No flow bias in DS for simplicity
-		0.0f,                 // No flow bias weight
-		false,
-		cameraDistDS);        // Camera distance for LOD fadeout
-	
-	// Apply wave displacement in camera-relative world space, then transform to clip
-	// Note: Detail heightmap displacement has been removed - it caused mesh holes,
-	// stencil issues, and DLSS artifacts. The Gerstner wave system provides
-	// sufficient geometric detail when combined with proper tessellation.
-	float3 displacedWorldPos = interpWPosition.xyz + waveSample.displacement;
-	output.HPosition = mul(FrameBuffer::CameraViewProj[eyeIndex], float4(displacedWorldPos, 1.0f));
-	
-	// World position with displacement applied (camera-relative)
-	output.WPosition.xyz = displacedWorldPos;
-	output.WPosition.w = length(displacedWorldPos);
-	
-	// Set wave info for pixel shader
-	float horizontalDisplacement = length(waveSample.displacement.xy);
-	output.UnifiedWaveInfo = float4(waveSample.primaryDirection, waveSample.displacement.z, waveSample.shoreInfluence);
-	output.UnifiedWaveNormal = float4(waveSample.normal, horizontalDisplacement);
-	output.Barycentric = bary;
-	
-	// MPosition must store MODEL-SPACE position (interpolated from VS patch vertices + wave displacement)
-	// The pixel shader uses MPosition with TextureProj matrix which expects model-space coordinates.
-	// VS stores input.Position.xyz (model-space) when tessellation is enabled.
-	// We interpolate the model-space positions from the patch vertices and add wave displacement.
-	float4 interpMPosition = patch[0].MPosition * bary.x + patch[1].MPosition * bary.y + patch[2].MPosition * bary.z;
-	output.MPosition = float4(interpMPosition.xyz + waveSample.displacement, 1.0f);
-#		else
-	// Non-unified water: simple interpolation (interpHPosition already calculated above)
-	output.HPosition = interpHPosition;
-	output.WPosition = interpWPosition;
-#		endif
-	
-	// Copy interpolated texture coordinates to output
-	output.TexCoord1 = interpTexCoord1;
-	
-#		if defined(SPECULAR) || defined(UNDERWATER) || defined(SIMPLE)
-	output.TexCoord2 = interpTexCoord2;
-#		endif
-
-#		if !defined(UNIFIED_WATER) && !defined(LOD)
-	output.FogParam = patch[0].FogParam * bary.x + patch[1].FogParam * bary.y + patch[2].FogParam * bary.z;
-#		endif
-
-#		if defined(UNIFIED_WATER)
-	output.TexCoord3 = patch[0].TexCoord3 * bary.x + patch[1].TexCoord3 * bary.y + patch[2].TexCoord3 * bary.z;
-	output.TexCoord4 = patch[0].TexCoord4;
-	// MPosition is already set above in the wave computation block for UNIFIED_WATER
-#		else
-#			if defined(WADING) || (defined(FLOWMAP) && (defined(REFRACTIONS) || defined(BLEND_NORMALS))) || (defined(VERTEX_ALPHA_DEPTH) && defined(VC)) || ((defined(SPECULAR) && NUM_SPECULAR_LIGHTS == 0) && defined(FLOWMAP))
-	output.TexCoord3 = patch[0].TexCoord3 * bary.x + patch[1].TexCoord3 * bary.y + patch[2].TexCoord3 * bary.z;
-#			endif
-#			if defined(FLOWMAP)
-	output.TexCoord4 = patch[0].TexCoord4;
-#			endif
-#			if NUM_SPECULAR_LIGHTS == 0 || defined(SIMPLE)
-	output.MPosition = patch[0].MPosition * bary.x + patch[1].MPosition * bary.y + patch[2].MPosition * bary.z;
-#			endif
-#		endif
-
-#		if defined(STENCIL)
-	output.WorldPosition = patch[0].WorldPosition * bary.x + patch[1].WorldPosition * bary.y + patch[2].WorldPosition * bary.z;
-	output.PreviousWorldPosition = patch[0].PreviousWorldPosition * bary.x + patch[1].PreviousWorldPosition * bary.y + patch[2].PreviousWorldPosition * bary.z;
-#		endif
-
-	output.NormalsScale = patch[0].NormalsScale * bary.x + patch[1].NormalsScale * bary.y + patch[2].NormalsScale * bary.z;
-
-#		if defined(VR)
-	output.ClipDistance = patch[0].ClipDistance * bary.x + patch[1].ClipDistance * bary.y + patch[2].ClipDistance * bary.z;
-	output.CullDistance = patch[0].CullDistance * bary.x + patch[1].CullDistance * bary.y + patch[2].CullDistance * bary.z;
-#		endif
-
-	return output;
+	return DomainShaderImpl(patchConst, bary, patch, eyeIndex);
 }
 
 #	endif  // DSHADER
@@ -2617,14 +2500,14 @@ PS_OUTPUT main(PS_INPUT input)
 	}
 #			endif
 
-	if (TriVisualizerEnabled > 0.5f) {
+	if (WireframeEnabled > 0.5f) {
 		float3 baryCoords = input.Barycentric;
 		
 		// Debug: Show raw barycentric coordinates as RGB to verify GS is working
 		// Each vertex should be a pure color: Red (1,0,0), Green (0,1,0), Blue (0,0,1)
 		// Interior should blend smoothly between these colors
 		// If you see gray/purple everywhere, the GS isn't assigning proper barycentrics
-		if (TriVisualizerEnabled > 1.5f) {
+		if (WireframeEnabled > 1.5f) {
 			// Mode 2: Raw barycentric visualization (debug)
 			finalColor = baryCoords;
 		} else {
@@ -2637,11 +2520,11 @@ PS_OUTPUT main(PS_INPUT input)
 				float3 edgeDist = baryCoords / max(baryDeriv, 1e-6.xxx);
 				float minEdgeDist = min(edgeDist.x, min(edgeDist.y, edgeDist.z));
 				
-				float wireThickness = 1.2f;
-				float wireSmooth = 0.8f;
+				float wireThickness = 0.4f;
+				float wireSmooth = 0.3f;
 				float wireHighlight = 1.0f - smoothstep(wireThickness - wireSmooth, wireThickness + wireSmooth, minEdgeDist);
 				
-				float vertexThickness = 3.5f;
+				float vertexThickness = 1.2f;
 				float vertexSmooth = 1.5f;
 				float3 vertexDist = (1.0f - baryCoords) / max(baryDeriv, 1e-6.xxx);
 				float minVertDist = min(vertexDist.x, min(vertexDist.y, vertexDist.z));
