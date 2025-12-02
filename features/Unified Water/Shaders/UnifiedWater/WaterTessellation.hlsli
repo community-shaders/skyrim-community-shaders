@@ -35,7 +35,7 @@ cbuffer TessellationParams : register(b9)
 {
 	float TessellationMinDistance;   // Distance where max tessellation applies
 	float TessellationMaxDistance;   // Distance where min tessellation applies  
-	float TessellationMinFactor;     // Minimum tessellation factor (1 = no tessellation)
+	float TessellationMinFactor;     // Minimum tessellation factor (can go below 1 for distant water optimization)
 	float TessellationMaxFactor;     // Maximum tessellation factor (up to 64)
 	float TessCameraWorldPosX;       // Backup camera pos (prefer FrameBuffer::CameraPosAdjust)
 	float TessCameraWorldPosY;
@@ -275,7 +275,9 @@ float CalculateEdgeTessellation(float3 p0, float3 p1)
 	// Combine all factors multiplicatively
 	float finalFactor = distFactor * curvatureScale * screenScale * viewScale;
 	
-	return clamp(finalFactor, TessellationMinFactor, TessellationMaxFactor);
+	// Allow sub-1 tessellation for distant water (GPU clamps to hardware minimum)
+	// This enables aggressive triangle reduction to ~2 tris for super distant water
+	return min(finalFactor, TessellationMaxFactor);
 }
 
 // ============================================================================
@@ -297,13 +299,13 @@ HS_CONSTANT_OUTPUT PatchConstantFunc(InputPatch<VS_OUTPUT, 3> patch, uint patchI
 	// This provides massive performance savings by not tessellating invisible geometry
 	uint eyeIndex = 0;  // Use eye 0 for frustum test (conservative for VR)
 	if (!IsPatchInFrustum(p0, p1, p2, eyeIndex)) {
-		// Patch is outside frustum - use minimum tessellation
-		// We can't set to 0 (would create degenerate triangles)
-		// Setting to min factor allows the patch to exist but not waste tessellation
-		output.EdgeTess[0] = TessellationMinFactor;
-		output.EdgeTess[1] = TessellationMinFactor;
-		output.EdgeTess[2] = TessellationMinFactor;
-		output.InsideTess = TessellationMinFactor;
+		// Patch is outside frustum - use ultra-minimal tessellation
+		// Allow very low factors (GPU hardware will clamp to viable minimum ~0.5)
+		// This reduces culled patches to basically 2 triangles
+		output.EdgeTess[0] = 0.1f;
+		output.EdgeTess[1] = 0.1f;
+		output.EdgeTess[2] = 0.1f;
+		output.InsideTess = 0.1f;
 		return output;
 	}
 	
@@ -337,8 +339,8 @@ HS_CONSTANT_OUTPUT PatchConstantFunc(InputPatch<VS_OUTPUT, 3> patch, uint patchI
 	// Base inside tessellation as average of edges
 	float baseInsideTess = (output.EdgeTess[0] + output.EdgeTess[1] + output.EdgeTess[2]) / 3.0f;
 	
-	// Apply curvature boost
-	output.InsideTess = clamp(baseInsideTess * curvatureBoost, TessellationMinFactor, TessellationMaxFactor);
+	// Apply curvature boost (allow sub-1 for distant water optimization)
+	output.InsideTess = min(baseInsideTess * curvatureBoost, TessellationMaxFactor);
 	
 	return output;
 }

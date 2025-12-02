@@ -167,10 +167,7 @@ void UnifiedWater::DrawSettings()
 					ImGui::SetTooltip("Distance (game units) where maximum tessellation is applied.\nCloser water gets more subdivision.");
 				ImGui::SliderFloat("Max Distance", &settings.tessellation.TessellationMaxDistance, 1024.0f, 16384.0f, "%.0f");
 				if (ImGui::IsItemHovered())
-					ImGui::SetTooltip("Distance (game units) where minimum tessellation is applied.\nBeyond this, only base mesh is used.");
-				ImGui::SliderFloat("Min Factor", &settings.tessellation.TessellationMinFactor, 1.0f, 4.0f, "%.0f");
-				if (ImGui::IsItemHovered())
-					ImGui::SetTooltip("Tessellation factor for distant water.\n1 = no subdivision, 4 = light subdivision.");
+					ImGui::SetTooltip("Distance (game units) where minimum tessellation is applied.\nBeyond this, water triangles are minimized (~2 tris).");
 				ImGui::SliderFloat("Max Factor", &settings.tessellation.TessellationMaxFactor, 4.0f, 64.0f, "%.0f");
 				if (ImGui::IsItemHovered())
 					ImGui::SetTooltip("Tessellation factor for nearby water.\nHigher = more polygons = better wave detail but slower.\n8-16 is usually sufficient.");

@@ -1534,7 +1534,7 @@ struct WaterScatteringResult
 
 // Calculate physically-based water scattering between two world positions
 // Uses real water absorption coefficients and accounts for sun angle
-WaterScatteringResult CalculateWaterScattering(float3 startPosWS, float3 endPosWS, float3 sunDir, float3 sunColor)
+WaterScatteringResult CalculateWaterScattering(float3 startPosWS, float3 endPosWS, float3 sunDir, float3 sunColor, float occlusion)
 {
 	WaterScatteringResult result;
 	result.scatter = 0.0f;
@@ -1596,8 +1596,8 @@ WaterScatteringResult CalculateWaterScattering(float3 startPosWS, float3 endPosW
 		scatter += inScatter * (1.0f - sampleTransmittance) / max(extinction, 0.0001f) * transmittance;
 	}
 	
-	// Apply sun color and intensity
-	result.scatter = scatter * sunColor * 3.0f;
+	// Apply sun color, intensity, and occlusion (terrain shadows + skylighting)
+	result.scatter = scatter * sunColor * occlusion * 3.0f;
 	result.transmittance = exp(-dist * (1.0f + distRatio) * extinction);
 	
 	return result;
@@ -1734,11 +1734,32 @@ DiffuseOutput GetWaterDiffuseColor(PS_INPUT input, float3 normal, float3 viewDir
 	
 	// Only compute scattering for exterior water with valid depth
 	if (!(Permutation::PixelShaderDescriptor & Permutation::WaterFlags::Interior)) {
+		// Calculate occlusion from terrain shadows and skylighting
+		float scatterOcclusion = 1.0f;
+		
+#					if defined(TERRAIN_SHADOWS)
+		// Sample terrain shadow at water surface position
+		scatterOcclusion *= TerrainShadows::GetTerrainShadow(input.WPosition.xyz, LinearSampler);
+#					endif
+		
+#					if defined(SKYLIGHTING)
+		// Sample skylighting for ambient occlusion (use upward normal for ambient visibility)
+#						if defined(VR)
+		float3 positionMSSkylight = input.WPosition.xyz + FrameBuffer::CameraPosAdjust[eyeIndex].xyz - FrameBuffer::CameraPosAdjust[0].xyz;
+#						else
+		float3 positionMSSkylight = input.WPosition.xyz;
+#						endif
+		sh2 skylightingSH = Skylighting::sample(SharedData::skylightingSettings, Skylighting::SkylightingProbeArray, Skylighting::stbn_vec3_2Dx1D_128x128x64, input.HPosition.xy, positionMSSkylight, float3(0, 0, 1));
+		float skylighting = SphericalHarmonics::Unproject(skylightingSH, float3(0, 0, 1));
+		scatterOcclusion *= saturate(skylighting);
+#					endif
+		
 		scatterResult = CalculateWaterScattering(
 			input.WPosition.xyz,
 			refractionWorldPosition.xyz,
 			SunDir.xyz,
-			SunColor.xyz * SunDir.w
+			SunColor.xyz * SunDir.w,
+			scatterOcclusion
 		);
 	}
 	
@@ -2230,12 +2251,11 @@ PS_OUTPUT main(PS_INPUT input)
 			FoamSharpness
 		);
 		
-		if (foamMask > 0.001f) {
-			// Sample height from normal map to create foam texture detail
-			float foamHeight = 0.0f;
-			
-#			if defined(FLOWMAP)
-				// Recalculate flowmap variables for foam
+		// Always sample heightmap for base foam texture detail
+		float foamHeight = 0.0f;
+		
+#			if defined(FLOWMAP) && !defined(BLEND_NORMALS)
+				// Pure flowmap water: use flowmap height sampling
 #				if defined(UNIFIED_WATER)
 				float2 foamFlowmapDims = input.TexCoord4.xy;
 #				else
@@ -2258,7 +2278,7 @@ PS_OUTPUT main(PS_INPUT input)
 				// Normalize to 0-1 range (height maps are typically 0-1 but can vary)
 				foamHeight = saturate(foamHeight);
 #			else
-				// Non-flowmap water: blend normal map heights
+				// Non-flowmap or BLEND_NORMALS mode: use regular 3-texture blend (matches normal sampling)
 				float3 heights;
 #				if defined(WATER_PARALLAX)
 				float3 foamNormalScalesRcp = rcp(input.NormalsScale.xyz);
@@ -2276,23 +2296,32 @@ PS_OUTPUT main(PS_INPUT input)
 				// Normalize to consistent 0-1 range
 				foamHeight = saturate(foamHeight);
 #			endif
-			
-			// Enhance height contrast for foam texture
-			// Higher heights = brighter foam (peaks), lower = darker (troughs)
-			float foamTexture = pow(saturate(foamHeight * 1.2f), 1.3f);
-			
-			// Create foam color with texture detail
-			// Base white-blue foam color modulated by height texture
-			float3 foamBaseColor = float3(0.98f, 0.99f, 1.0f);
-			float3 foamColor = foamBaseColor * lerp(0.4f, 1.0f, foamTexture);
-			
-			// Combine wave peak mask (WHERE foam appears) with heightmap texture (WHAT foam looks like)
-			float combinedFoam = foamMask * foamTexture;
-			combinedFoam = saturate(combinedFoam);
-			
-			// Apply foam to water color
-			finalColorPreFog = lerp(finalColorPreFog, foamColor, combinedFoam);
-		}
+		
+		// Enhance height contrast for foam texture
+		// Higher heights = brighter foam (peaks), lower = darker (troughs)
+		float foamTexture = pow(saturate(foamHeight * 1.2f), 1.3f);
+		
+		// Create foam color with texture detail
+		// Base white-blue foam color modulated by height texture
+		float3 foamBaseColor = float3(0.98f, 0.99f, 1.0f);
+		float3 foamColor = foamBaseColor * lerp(0.4f, 1.0f, foamTexture);
+		
+		// Combine base foam (semi-uniform) with wave peak boost (extra on crests)
+		// Make wave crest foam follow heightmap detail to avoid oval effect
+#			if defined(FLOWMAP) && !defined(BLEND_NORMALS)
+		float activeFoamIntensity = FoamIntensityFlowmap;  // Use flowmap-specific intensity
+#			else
+		float activeFoamIntensity = FoamIntensity;  // Use normal intensity (includes BLEND_NORMALS)
+#			endif
+		float baseFoamIntensity = activeFoamIntensity * 0.5f;  // Semi-uniform base foam
+		// Wave crest boost only applies where heightmap shows detail (high values)
+		// This makes foam follow the texture detail instead of forming an oval
+		float peakFoamBoost = activeFoamIntensity * foamMask * foamTexture;
+		float combinedFoam = (baseFoamIntensity * foamTexture) + peakFoamBoost;
+		combinedFoam = saturate(combinedFoam);
+		
+		// Apply foam to water color
+		finalColorPreFog = lerp(finalColorPreFog, foamColor, combinedFoam);
 	}
 #						endif
 
@@ -2357,12 +2386,11 @@ PS_OUTPUT main(PS_INPUT input)
 			FoamSharpness
 		);
 		
-		if (foamMask2 > 0.001f) {
-			// Sample height from normal map to create foam texture detail
-			float foamHeight2 = 0.0f;
-			
-#			if defined(FLOWMAP)
-				// Recalculate flowmap variables for foam
+		// Always sample heightmap for base foam texture detail
+		float foamHeight2 = 0.0f;
+		
+#			if defined(FLOWMAP) && !defined(BLEND_NORMALS)
+				// Pure flowmap water: use flowmap height sampling
 #				if defined(UNIFIED_WATER)
 				float2 foamFlowmapDims2 = input.TexCoord4.xy;
 #				else
@@ -2385,7 +2413,7 @@ PS_OUTPUT main(PS_INPUT input)
 				// Normalize to 0-1 range (height maps are typically 0-1 but can vary)
 				foamHeight2 = saturate(foamHeight2);
 #			else
-				// Non-flowmap water: blend normal map heights
+				// Non-flowmap or BLEND_NORMALS mode: use regular 3-texture blend (matches normal sampling)
 				float3 heights2;
 #				if defined(WATER_PARALLAX)
 				float3 foamNormalScalesRcp2 = rcp(input.NormalsScale.xyz);
@@ -2403,23 +2431,32 @@ PS_OUTPUT main(PS_INPUT input)
 				// Normalize to consistent 0-1 range
 				foamHeight2 = saturate(foamHeight2);
 #			endif
-			
-			// Enhance height contrast for foam texture
-			// Higher heights = brighter foam (peaks), lower = darker (troughs)
-			float foamTexture2 = pow(saturate(foamHeight2 * 1.2f), 1.3f);
-			
-			// Create foam color with texture detail
-			// Base white-blue foam color modulated by height texture
-			float3 foamBaseColor2 = float3(0.98f, 0.99f, 1.0f);
-			float3 foamColor2 = foamBaseColor2 * lerp(0.4f, 1.0f, foamTexture2);
-			
-			// Combine wave peak mask (WHERE foam appears) with heightmap texture (WHAT foam looks like)
-			float combinedFoam2 = foamMask2 * foamTexture2;
-			combinedFoam2 = saturate(combinedFoam2);
-			
-			// Apply foam to water color
-			finalColorPreFog = lerp(finalColorPreFog, foamColor2, combinedFoam2);
-		}
+		
+		// Enhance height contrast for foam texture
+		// Higher heights = brighter foam (peaks), lower = darker (troughs)
+		float foamTexture2 = pow(saturate(foamHeight2 * 1.2f), 1.3f);
+		
+		// Create foam color with texture detail
+		// Base white-blue foam color modulated by height texture
+		float3 foamBaseColor2 = float3(0.98f, 0.99f, 1.0f);
+		float3 foamColor2 = foamBaseColor2 * lerp(0.4f, 1.0f, foamTexture2);
+		
+		// Combine base foam (semi-uniform) with wave peak boost (extra on crests)
+		// Make wave crest foam follow heightmap detail to avoid oval effect
+#			if defined(FLOWMAP) && !defined(BLEND_NORMALS)
+		float activeFoamIntensity2 = FoamIntensityFlowmap;  // Use flowmap-specific intensity
+#			else
+		float activeFoamIntensity2 = FoamIntensity;  // Use normal intensity (includes BLEND_NORMALS)
+#			endif
+		float baseFoamIntensity2 = activeFoamIntensity2 * 0.5f;  // Semi-uniform base foam
+		// Wave crest boost only applies where heightmap shows detail (high values)
+		// This makes foam follow the texture detail instead of forming an oval
+		float peakFoamBoost2 = activeFoamIntensity2 * foamMask2 * foamTexture2;
+		float combinedFoam2 = (baseFoamIntensity2 * foamTexture2) + peakFoamBoost2;
+		combinedFoam2 = saturate(combinedFoam2);
+		
+		// Apply foam to water color
+		finalColorPreFog = lerp(finalColorPreFog, foamColor2, combinedFoam2);
 	}
 #						endif
 

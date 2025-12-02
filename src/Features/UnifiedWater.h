@@ -48,7 +48,7 @@ struct UnifiedWater : OverlayFeature
 		bool EnableTessellation = true;
 		float TessellationMinDistance = 256.0f;
 		float TessellationMaxDistance = 6144.0f;
-		float TessellationMinFactor = 1.0f;
+		float TessellationMinFactor = 0.1f;
 		float TessellationMaxFactor = 16.0f;
 	};
 
@@ -145,7 +145,7 @@ struct UnifiedWater : OverlayFeature
 	{
 		bool EnableFoam = true;
 		float FoamIntensity = 1.5f;
-		float FoamIntensityFlowmap = 1.5f;
+		float FoamIntensityFlowmap = 0.3f;
 		float FoamThreshold = 0.6f;
 		float FoamSharpness = 2.0f;
 	};
