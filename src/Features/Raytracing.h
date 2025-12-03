@@ -6,19 +6,22 @@
 #include <dxgi1_6.h>
 #include "Features/Upscaling/DX12SwapChain.h"
 #include <dxcapi.h>
-#include <directxpackedvector.h>
 #include "Features/Raytracing/Buffer.h"
 #include "LightLimitFix.h"
 #include <DirectXTex.h>
 #include <shared_mutex>
 #include <EASTL/deque.h>
+//#include <half.hpp>
 
 #include "Features/Raytracing/IrradianceCache.h"
 #include "Features/Raytracing/Allocator.h"
 #include "Features/Raytracing/HeapManager.h"
 #include "Features/Raytracing/RTPipelineBuilder.h"
 #include "Features/Raytracing/ShaderBindingTable.h"
+#include "Features/Raytracing/Types.h"
 
+#include "Raytracing/Includes/Types/Vertex.hlsli"
+#include "Raytracing/Includes/Types/Triangle.hlsli"
 #include "Raytracing/Includes/Types/Light.hlsli"
 #include "Raytracing/Includes/Types/GIFrameData.hlsli"
 #include "Raytracing/Includes/Types/ShadowsFrameData.hlsli"
@@ -44,6 +47,8 @@
 #include <sl_version.h>
 #pragma warning(pop)
 #endif
+
+//using half_float::half;
 
 struct Raytracing : public Feature
 {
@@ -352,70 +357,6 @@ struct Raytracing : public Feature
 		return vector;
 	}
 
-#pragma pack(push, 1)
-	struct half
-	{
-		DirectX::PackedVector::HALF v;
-
-		half() = default;
-		half(const half&) = default;
-		half& operator=(const half&) = default;
-
-		half(const float& fv)
-		{
-			v = DirectX::PackedVector::XMConvertFloatToHalf(fv);
-		}
-
-		operator float() const
-		{
-			return DirectX::PackedVector::XMConvertHalfToFloat(v);
-		}
-	};
-
-	struct half2
-	{
-		half x;
-		half y;
-
-		half2() = default;
-
-		half2(half hx, half hy) :
-			x(hx), y(hy) {}
-
-		half2(const float2& v) :
-			x(v.x), y(v.y) {}
-
-		operator float2() const
-		{
-			return float2(
-				static_cast<float>(x),
-				static_cast<float>(y));
-		}
-	};
-
-	struct half3
-	{
-		half x;
-		half y;
-		half z;
-
-		half3() = default;
-
-		half3(half hx, half hy, half hz) :
-			x(hx), y(hy), z(hz) {}
-
-		half3(const float3& v) :
-			x(v.x), y(v.y), z(v.z) {}
-
-		operator float3() const
-		{
-			return float3(
-				static_cast<float>(x),
-				static_cast<float>(y),
-				static_cast<float>(z));
-		}
-	};
-
 	struct Skinning
 	{
 		half weight[4];
@@ -434,61 +375,6 @@ struct Raytracing : public Feature
 			}
 		}
 	};
-
-	struct bsfloat_t
-	{
-		uint8_t value;
-
-		void PackByte(float unpacked)
-		{
-			value = static_cast<uint8_t>(std::clamp((unpacked * 0.5f + 0.5f) * 255.0f, 0.0f, 255.0f));
-		}
-
-		float UnpackByte() const
-		{
-			return (value / 255.0f) * 2.0f - 1.0f;
-		}
-	};
-
-	struct sbyte3
-	{
-		bsfloat_t x;
-		bsfloat_t y;
-		bsfloat_t z;
-
-		sbyte3()
-		{
-			x.PackByte(0);
-			y.PackByte(0);
-			z.PackByte(0);
-		}
-
-		sbyte3(float3 value) {
-			value.Normalize();
-
-			x.PackByte(value.x);
-			y.PackByte(value.y);
-			z.PackByte(value.z);
-		}
-	};
-
-	struct Vertex
-	{
-		float3 Position;
-		half2 Texcoord0;
-		half3 Normal;
-		half3 Tangent;
-		half3 Bitangent;
-		uint32_t Color;
-	};
-
-	struct Triangle
-	{
-		uint32_t v0;
-		uint32_t v1;
-		uint32_t v2;
-	};
-#pragma pack(pop)
 
 	struct LightData
 	{

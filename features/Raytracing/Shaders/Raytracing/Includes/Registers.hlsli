@@ -21,7 +21,7 @@ StructuredBuffer<Light> Lights                  : register(t7, space0);
 StructuredBuffer<Instance> Instances            : register(t8, space0);
 
 StructuredBuffer<Vertex> Vertices[]             : register(t0, space1);
-StructuredBuffer<uint3> Triangles[]             : register(t0, space2);
+StructuredBuffer<Triangle> Triangles[]          : register(t0, space2);
 Texture2D<float4> DiffuseTextures[]             : register(t0, space3);
 Texture2D<float4> EffectTextures[]              : register(t0, space4);
 

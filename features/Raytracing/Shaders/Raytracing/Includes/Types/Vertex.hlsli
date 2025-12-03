@@ -1,7 +1,7 @@
 #ifndef VERTEX_HLSI
 #define VERTEX_HLSI
 
-#include "Raytracing/Includes/Types.hlsli"
+#include "Raytracing/Includes/Types/byte4.hlsli"
 
 struct Vertex
 {
@@ -9,8 +9,12 @@ struct Vertex
 	half2 Texcoord0;
 	half3 Normal;
 	half3 Tangent;
-	half3 Bitangent;	
-	ubyte4f Color;
+	ubyte4f Color; // Color before bitangent fixes alignment
+	half3 Bitangent;
+	uint16_t Pad; // Padding to 4-byte boundary
 };
+#ifdef __cplusplus
+static_assert(sizeof(Vertex) % 4 == 0);
+#endif
 
 #endif

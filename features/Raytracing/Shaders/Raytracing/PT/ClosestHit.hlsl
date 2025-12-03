@@ -25,11 +25,11 @@ void HitMesh(inout IndirectPayload payload, in BuiltInTriangleIntersectionAttrib
     uint meshID = NonUniformResourceIndex(instance.MeshID) + GeometryIndex();
     
     StructuredBuffer<Vertex> meshVertices = Vertices[meshID];
-    StructuredBuffer<uint3> meshTriangles = Triangles[meshID];
+    StructuredBuffer<Triangle> meshTriangles = Triangles[meshID];
     Texture2D diffuseTexture = DiffuseTextures[meshID];
     Texture2D effectTexture = EffectTextures[meshID];
     
-    uint3 meshTriangle = meshTriangles[PrimitiveIndex()];
+    Triangle meshTriangle = meshTriangles[PrimitiveIndex()];
     
     Vertex vertice0 = meshVertices[meshTriangle.x];
     Vertex vertice1 = meshVertices[meshTriangle.y];
@@ -41,7 +41,7 @@ void HitMesh(inout IndirectPayload payload, in BuiltInTriangleIntersectionAttrib
     
     float3 uvw = float3(u, v, w);
 
-    half2 texCoord0 = vertice0.Texcoord0 * u + vertice1.Texcoord0 * v + vertice2.Texcoord0 * w;
+    float2 texCoord0 = vertice0.Texcoord0 * u + vertice1.Texcoord0 * v + vertice2.Texcoord0 * w;
     
     float3x3 objectToWorld3x3 = (float3x3)ObjectToWorld3x4();
     

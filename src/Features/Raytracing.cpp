@@ -1323,6 +1323,8 @@ void Raytracing::ReadRendererData(MeshData& meshData, RE::BSGraphics::TriShape* 
 		auto vertexFlags = vertexDesc.GetFlags();
 		uint32_t stride = vertexDesc.GetSize();
 
+		bool hasPosition = vertexFlags & RE::BSGraphics::Vertex::VF_VERTEX;
+
 		uint32_t posOffset = vertexDesc.GetAttributeOffset(RE::BSGraphics::Vertex::VA_POSITION);
 		uint32_t uvOffset = vertexDesc.GetAttributeOffset(RE::BSGraphics::Vertex::VA_TEXCOORD0);
 		uint32_t normOffset = vertexDesc.GetAttributeOffset(RE::BSGraphics::Vertex::VA_NORMAL);
@@ -1342,10 +1344,10 @@ void Raytracing::ReadRendererData(MeshData& meshData, RE::BSGraphics::TriShape* 
 
 			float4 pos;
 
-			if (vertexFlags & RE::BSGraphics::Vertex::VF_VERTEX) {
+			if (hasPosition) {
 				std::memcpy(&pos, vtx + posOffset, sizeof(float4));
 
-				vertexData.Position = float3::Transform(float3(pos), transform);
+				vertexData.Position = float3::Transform({ pos.x, pos.y, pos.z }, transform);
 			}
 
 			if (vertexFlags & RE::BSGraphics::Vertex::VF_UV) {
@@ -1365,7 +1367,9 @@ void Raytracing::ReadRendererData(MeshData& meshData, RE::BSGraphics::TriShape* 
 					auto tangentUnpacked = UnpackByte4(tangentData);
 
 					vertexData.Tangent = Normalize(float3::TransformNormal({ tangentUnpacked.x, tangentUnpacked.y, tangentUnpacked.z }, transform));
-					vertexData.Bitangent = Normalize(float3::TransformNormal({ pos.w, normalUnpacked.w, tangentUnpacked.w }, transform));		
+
+					float3 bitangent = { pos.w, normalUnpacked.w, tangentUnpacked.w };
+					vertexData.Bitangent = hasPosition ? Normalize(float3::TransformNormal(bitangent, transform)) : bitangent;
 				}
 			}
 
@@ -1390,6 +1394,16 @@ void Raytracing::ReadRendererData(MeshData& meshData, RE::BSGraphics::TriShape* 
 			if (vertexFlags & RE::BSGraphics::Vertex::VF_COLORS) {
 				std::memcpy(&vertexData.Color, vtx + colorOffset, sizeof(uint32_t));
 			}
+
+			/*logger::info("[RT] Vertex {} - Position: {}, UV: [{}, {}], Normal: {}, Tangent: {}, Bitangent: {}, Color: {}", 
+				i, 
+				vertexData.Position,
+				(float)vertexData.Texcoord0.x,
+				(float)vertexData.Texcoord0.y,
+				(float3)vertexData.Normal,
+				(float3)vertexData.Tangent,
+				(float3)vertexData.Bitangent,
+				UnpackUByte4(vertexData.Color));*/
 
 			meshData.vertices[i] = vertexData;
 
@@ -1594,7 +1608,7 @@ void Raytracing::CreateBuffers(MeshData& meshData, const std::wstring& name)
 			vbDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
 			vbDesc.Format = DXGI_FORMAT_UNKNOWN;
 			vbDesc.Buffer.FirstElement = 0;
-			vbDesc.Buffer.NumElements = static_cast<int32_t>(meshData.vertexCount);
+			vbDesc.Buffer.NumElements = meshData.vertexCount;
 			vbDesc.Buffer.StructureByteStride = sizeof(Vertex);
 			vbDesc.Buffer.Flags = D3D12_BUFFER_SRV_FLAG_NONE;
 
@@ -1621,7 +1635,7 @@ void Raytracing::CreateBuffers(MeshData& meshData, const std::wstring& name)
 			ibDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
 			ibDesc.Format = DXGI_FORMAT_UNKNOWN;
 			ibDesc.Buffer.FirstElement = 0;
-			ibDesc.Buffer.NumElements = static_cast<int32_t>(meshData.triangleCount);
+			ibDesc.Buffer.NumElements = meshData.triangleCount;
 			ibDesc.Buffer.StructureByteStride = sizeof(Triangle);
 			ibDesc.Buffer.Flags = D3D12_BUFFER_SRV_FLAG_NONE;
 
@@ -1647,7 +1661,7 @@ void Raytracing::CommitGeometry(GeometryData& geometryData)
 			.Flags = D3D12_RAYTRACING_GEOMETRY_FLAG_OPAQUE,
 			.Triangles = {
 				.Transform3x4 = 0,
-				.IndexFormat = DXGI_FORMAT_R32_UINT,
+				.IndexFormat = DXGI_FORMAT_R16_UINT,
 				.VertexFormat = DXGI_FORMAT_R32G32B32_FLOAT,
 				.IndexCount = meshData.triangleCount * 3,
 				.VertexCount = meshData.vertexCount,

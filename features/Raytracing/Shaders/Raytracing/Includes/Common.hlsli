@@ -53,9 +53,4 @@ float3 Interpolate(float3 u, float3 v, float3 w, float3 uvw)
 {
     return u * uvw.x + v * uvw.y + w * uvw.z;
 }
-
-float3 Interpolate(half3 u, half3 v, half3 w, float3 uvw)
-{
-    return u * uvw.x + v * uvw.y + w * uvw.z;
-}
 #endif

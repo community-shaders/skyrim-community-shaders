@@ -52,6 +52,7 @@ namespace ShaderUtils
 		LPCWSTR args[] = {
 			FilePath,
 			L"-E", EntryPoint,
+			L"-enable-16bit-types",
 			L"-T", Target,
 			L"-I", L"Data\\Shaders",
 			L"-Zi",
