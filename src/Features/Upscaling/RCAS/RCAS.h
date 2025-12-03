@@ -10,9 +10,10 @@ class RCAS
 {
 public:
 	RCAS() = default;
+	~RCAS();
 
 	void Initialize();
-	void ApplySharpen(ID3D11ShaderResourceView* inputTexture, ID3D11UnorderedAccessView* outputUAV, float sharpness = 0.15f);
+	void ApplySharpen(ID3D11ShaderResourceView* inputTexture, ID3D11UnorderedAccessView* outputUAV, float sharpness);
 
 private:
 	void CreateComputeShader();

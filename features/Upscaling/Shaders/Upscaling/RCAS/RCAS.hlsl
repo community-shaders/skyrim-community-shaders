@@ -28,13 +28,12 @@ float getRCASLuma(float3 rgb)
 	int2 minCoord = int2(0, 0);
 	int2 maxCoord = int2(texDim - 1);
 
-	int2 eCoord = clamp(center, minCoord, maxCoord);
-	int2 bCoord = clamp(eCoord + int2(0, -1), minCoord, maxCoord);
-	int2 dCoord = clamp(eCoord + int2(-1, 0), minCoord, maxCoord);
-	int2 fCoord = clamp(eCoord + int2(1, 0), minCoord, maxCoord);
-	int2 hCoord = clamp(eCoord + int2(0, 1), minCoord, maxCoord);
+	int2 bCoord = clamp(center + int2(0, -1), minCoord, maxCoord);
+	int2 dCoord = clamp(center + int2(-1, 0), minCoord, maxCoord);
+	int2 fCoord = clamp(center + int2(1, 0), minCoord, maxCoord);
+	int2 hCoord = clamp(center + int2(0, 1), minCoord, maxCoord);
 
-	float3 e = Source.Load(int3(eCoord, 0)).rgb;
+	float3 e = Source.Load(int3(center, 0)).rgb;
 
 	float3 b = Source.Load(int3(bCoord, 0)).rgb;
 	float3 d = Source.Load(int3(dCoord, 0)).rgb;

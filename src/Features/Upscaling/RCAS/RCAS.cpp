@@ -10,8 +10,17 @@ struct RCASConfig
 	float3 pad;
 };
 
+RCAS::~RCAS()
+{
+	delete rcasConfigCB;
+	rcasConfigCB = nullptr;
+}
+
 void RCAS::Initialize()
 {
+	if (rcasConfigCB)
+		return;
+
 	logger::info("[RCAS] Creating resources");
 	CreateComputeShader();
 	rcasConfigCB = new ConstantBuffer(ConstantBufferDesc<RCASConfig>());
@@ -38,7 +47,7 @@ void RCAS::ApplySharpen(ID3D11ShaderResourceView* inputSRV, ID3D11UnorderedAcces
 	uint32_t screenWidth = (uint32_t)state->screenSize.x;
 	uint32_t screenHeight = (uint32_t)state->screenSize.y;
 
-	RCASConfig config;
+	RCASConfig config{};
 	config.sharpness = sharpness;
 
 	rcasConfigCB->Update(config);
