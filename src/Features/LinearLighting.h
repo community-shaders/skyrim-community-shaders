@@ -111,4 +111,6 @@ struct LinearLighting : Feature
 	virtual void Prepass() override;
 
 	PerFrameData GetCommonBufferData();
+
+	RE::NiColor ColorToLinear(RE::NiColor inColor, float gamma);
 };

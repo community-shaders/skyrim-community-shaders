@@ -140,3 +140,12 @@ LinearLighting::PerFrameData LinearLighting::GetCommonBufferData()
 	data.otherEffectMult = settings.otherEffectMult;
 	return data;
 }
+
+LinearLighting::ColorToLinear(RE::NiColor inColor, float gamma)
+{
+	RE::NiColor outColor;
+	outColor.r = std::pow(inColor.r, gamma);
+	outColor.g = std::pow(inColor.g, gamma);
+	outColor.b = std::pow(inColor.b, gamma);
+	return outColor;
+}
