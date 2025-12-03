@@ -24,7 +24,6 @@
 #include "Raytracing/Includes/Types/ShadowsFrameData.hlsli"
 
 #define USE_PIX
-#include <pix3.h>
 
 #define NTDDI_VERSION NTDDI_WINBLUE
 
@@ -306,17 +305,6 @@ struct Raytracing : public Feature
 
 	winrt::com_ptr<IDXGraphicsAnalysis> ga = nullptr;
 
-	inline auto CaptureParams()
-	{
-		PIXCaptureParameters params{
-			.GpuCaptureParameters = {
-				.FileName = L"TDRCap.pix",
-			}
-		};
-
-		return params;
-	}
-
 	bool pixCapture = false;
 	bool pixCaptureStarted = false;
 	bool pixMultiFrame = false;
@@ -358,19 +346,139 @@ struct Raytracing : public Feature
 		return UnpackUByte4(packed) * 2.0f - float4(1.0f, 1.0f, 1.0f, 1.0f);
 	}
 
-#pragma pack(push, 1)
-	struct SkinData
+	static inline float3 Normalize(float3 vector)
 	{
-		uint16_t weight;
-		uint8_t bone;
+		vector.Normalize();
+		return vector;
+	}
+
+#pragma pack(push, 1)
+	struct half
+	{
+		DirectX::PackedVector::HALF v;
+
+		half() = default;
+		half(const half&) = default;
+		half& operator=(const half&) = default;
+
+		half(const float& fv)
+		{
+			v = DirectX::PackedVector::XMConvertFloatToHalf(fv);
+		}
+
+		operator float() const
+		{
+			return DirectX::PackedVector::XMConvertHalfToFloat(v);
+		}
+	};
+
+	struct half2
+	{
+		half x;
+		half y;
+
+		half2() = default;
+
+		half2(half hx, half hy) :
+			x(hx), y(hy) {}
+
+		half2(const float2& v) :
+			x(v.x), y(v.y) {}
+
+		operator float2() const
+		{
+			return float2(
+				static_cast<float>(x),
+				static_cast<float>(y));
+		}
+	};
+
+	struct half3
+	{
+		half x;
+		half y;
+		half z;
+
+		half3() = default;
+
+		half3(half hx, half hy, half hz) :
+			x(hx), y(hy), z(hz) {}
+
+		half3(const float3& v) :
+			x(v.x), y(v.y), z(v.z) {}
+
+		operator float3() const
+		{
+			return float3(
+				static_cast<float>(x),
+				static_cast<float>(y),
+				static_cast<float>(z));
+		}
+	};
+
+	struct Skinning
+	{
+		half weight[4];
+		uint8_t bone[4];
+
+		Skinning() = default;
+
+		Skinning(eastl::vector<half> weights, eastl::vector<uint8_t> boneIds)
+		{
+			auto weightCount = weights.size();
+			auto boneIdsCount = boneIds.size();
+
+			for (size_t i = 0; i < 4; i++) {
+				weight[i] = i < weightCount ? weights[i] : half(0.0f);
+				bone[i] = i < boneIdsCount ? boneIds[i] : 0;
+			}
+		}
+	};
+
+	struct bsfloat_t
+	{
+		uint8_t value;
+
+		void PackByte(float unpacked)
+		{
+			value = static_cast<uint8_t>(std::clamp((unpacked * 0.5f + 0.5f) * 255.0f, 0.0f, 255.0f));
+		}
+
+		float UnpackByte() const
+		{
+			return (value / 255.0f) * 2.0f - 1.0f;
+		}
+	};
+
+	struct sbyte3
+	{
+		bsfloat_t x;
+		bsfloat_t y;
+		bsfloat_t z;
+
+		sbyte3()
+		{
+			x.PackByte(0);
+			y.PackByte(0);
+			z.PackByte(0);
+		}
+
+		sbyte3(float3 value) {
+			value.Normalize();
+
+			x.PackByte(value.x);
+			y.PackByte(value.y);
+			z.PackByte(value.z);
+		}
 	};
 
 	struct Vertex
 	{
 		float3 Position;
-		uint16_t Texcoord0[2];
-		uint32_t Normal;
-		uint32_t Tangent;
+		half2 Texcoord0;
+		half3 Normal;
+		half3 Tangent;
+		half3 Bitangent;
 		uint32_t Color;
 	};
 
@@ -449,7 +557,8 @@ struct Raytracing : public Feature
 		uint vertexCount = 0;
 		uint triangleCount = 0;
 		eastl::vector<Vertex> vertices;
-		eastl::vector<SkinData> skinData;
+		eastl::vector<float4> dynamic;
+		eastl::vector<Skinning> skinning;
 		eastl::vector<Triangle> triangles;
 		bool skinned;
 		eastl::unique_ptr<DX12::StructuredBufferUpload<Vertex>> vertexBuffer = nullptr;
@@ -457,6 +566,14 @@ struct Raytracing : public Feature
 		winrt::com_ptr<ID3D12Resource> blasBuffer = nullptr;
 		MaterialData material;
 		eastl::vector<RE::BSTriShape*> instances;
+
+		MeshData() = default;
+
+		MeshData(uint registerIndex, eastl::vector<float4> dynamic) :
+			registerIndex(registerIndex), dynamic(dynamic)
+		{
+
+		}
 	};
 
 	struct GeometryData
@@ -484,10 +601,6 @@ struct Raytracing : public Feature
 		}
 	};
 
-	void ReadVertices(eastl::vector<Vertex>& vertices, RE::BSGraphics::TriShape* rendererData, const std::uint32_t& vertexCount, const std::uint16_t& bonesPerVertex, const float4x4& transform);
-	
-	void ReadTriangles(eastl::vector<Triangle>& triangles, RE::BSGraphics::TriShape* rendererData, const std::uint32_t& vertexCount, const std::uint16_t& triangleCount);
-
 	// Appends RE::BSGraphics::TriShape data into MeshData
 	void ReadRendererData(MeshData& meshData, RE::BSGraphics::TriShape* rendererData, const std::uint32_t& vertexCount, const std::uint16_t& triangleCount, const std::uint16_t& bonesPerVertex, const float4x4& transform);
 	
@@ -506,6 +619,7 @@ struct Raytracing : public Feature
 	void CreateGeometry(const char* path, RE::NiNode* pRoot);
 
 	Allocator registers = Allocator(MAX_SUBMESHES);
+	Allocator textureRegisters = Allocator(MAX_SUBMESHES);
 
 	// We'll group trishapes by their parent nodes, hopefully trishapes don't move on their own
 	eastl::unordered_map<eastl::string, GeometryData> geometry;
@@ -527,6 +641,8 @@ struct Raytracing : public Feature
 	struct Material
 	{
 		float4 TexCoordOffsetScale;
+		//uint DiffuseTexture;
+		//uint GlowTexture;
 		float4 EffectColor;
 		float ShaderType;  
 	};
@@ -711,47 +827,17 @@ struct Raytracing : public Feature
 		}
 	}
 
-	template <typename T, typename N>
-	static inline auto GetFlags(N value)
-	{
-		const auto& entries = magic_enum::enum_entries<T>();
-
-		std::string flags;
-
-		for (const auto& [flag, name] : entries) {
-			if ((static_cast<N>(value) & static_cast<N>(flag)) != 0) {
-				flags += fmt::format("{} ", name);
-			}
-		}
-
-		return flags;
-	};
-
 	template <typename T>
-	static inline auto GetFlags(uint32_t value)
+	static inline std::string GetFlags(auto value)
 	{
+		using N = decltype(value);
+
 		const auto& entries = magic_enum::enum_entries<T>();
 
 		std::string flags;
 
 		for (const auto& [flag, name] : entries) {
-			if ((value & static_cast<uint32_t>(flag)) != 0) {
-				flags += fmt::format("{} ", name);
-			}
-		}
-
-		return flags;
-	};
-
-	template <typename T>
-	static inline auto GetFlags(uint64_t value)
-	{
-		const auto& entries = magic_enum::enum_entries<T>();
-
-		std::string flags;
-
-		for (const auto& [flag, name] : entries) {
-			if ((value & static_cast<uint64_t>(flag)) != 0) {
+			if (static_cast<N>(value) & static_cast<N>(flag)) {
 				flags += fmt::format("{} ", name);
 			}
 		}

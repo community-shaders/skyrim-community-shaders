@@ -6,9 +6,10 @@
 struct Vertex
 {
 	float3 Position;
-	half2p Texcoord0;
-	byte4f Normal;
-	byte4f Tangent;
+	half2 Texcoord0;
+	half3 Normal;
+	half3 Tangent;
+	half3 Bitangent;	
 	ubyte4f Color;
 };
 

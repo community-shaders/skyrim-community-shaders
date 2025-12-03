@@ -1307,106 +1307,121 @@ inline std::wstring ToWide(const std::string& str)
 	return wstr;
 }
 
-void Raytracing::ReadVertices(eastl::vector<Vertex>& vertices, RE::BSGraphics::TriShape* rendererData, const std::uint32_t& vertexCount, const std::uint16_t& bonesPerVertex, const float4x4& transform)
-{
-	auto vertexDesc = rendererData->vertexDesc;
-
-	auto vertexFlags = vertexDesc.GetFlags();
-	uint32_t stride = vertexDesc.GetSize();
-
-	uint32_t posOffset = vertexDesc.GetAttributeOffset(RE::BSGraphics::Vertex::VA_POSITION);
-	uint32_t uvOffset = vertexDesc.GetAttributeOffset(RE::BSGraphics::Vertex::VA_TEXCOORD0);
-	uint32_t normOffset = vertexDesc.GetAttributeOffset(RE::BSGraphics::Vertex::VA_NORMAL);
-	uint32_t tangOffset = vertexDesc.GetAttributeOffset(RE::BSGraphics::Vertex::VA_BINORMAL);
-	uint32_t colorOffset = vertexDesc.GetAttributeOffset(RE::BSGraphics::Vertex::VA_COLOR);
-	uint32_t skinOffset = vertexDesc.GetAttributeOffset(RE::BSGraphics::Vertex::VA_SKINNING);
-
-	for (uint16_t i = 0; i < vertexCount; i++) {
-		uint8_t* vtx = rendererData->rawVertexData + i * stride;
-
-		Vertex vertexData{};
-
-		if (vertexFlags & RE::BSGraphics::Vertex::VF_VERTEX) {
-			float3 pos;
-			std::memcpy(&pos, vtx + posOffset, sizeof(float3));
-
-			vertexData.Position = float3::Transform(pos, transform);
-		}
-
-		if (vertexFlags & RE::BSGraphics::Vertex::VF_UV) {
-			uint16_t texcoord[2];
-			std::memcpy(texcoord, vtx + uvOffset, sizeof(uint16_t) * 2);
-
-			vertexData.Texcoord0[0] = texcoord[0];
-			vertexData.Texcoord0[1] = texcoord[1];
-		}
-
-		if (vertexFlags & RE::BSGraphics::Vertex::VF_NORMAL) {
-			std::memcpy(&vertexData.Normal, vtx + normOffset, sizeof(uint32_t));
-
-			// Unpack normals -> transform -> pack again
-			auto normalUnpacked = UnpackByte4(vertexData.Normal);
-
-			auto normal = float3::TransformNormal({ normalUnpacked.x, normalUnpacked.y, normalUnpacked.z }, transform);
-			normal.Normalize();
-
-			vertexData.Normal = PackByte4({ normal.x, normal.y, normal.z, normalUnpacked.w });
-
-			if (vertexFlags & RE::BSGraphics::Vertex::VF_TANGENT) {
-				std::memcpy(&vertexData.Tangent, vtx + tangOffset, sizeof(uint32_t));
-
-				// Unpack tangent -> transform -> pack again
-				auto tangentUnpacked = UnpackByte4(vertexData.Normal);
-
-				auto tangent = float3::TransformNormal({ tangentUnpacked.x, tangentUnpacked.y, tangentUnpacked.z }, transform);
-				tangent.Normalize();
-
-				vertexData.Tangent = PackByte4({ tangent.x, tangent.y, tangent.z, tangentUnpacked.w });
-			}
-		}
-
-		// Just ignore it for now
-		if (vertexFlags & RE::BSGraphics::Vertex::VF_SKINNED) {
-			SkinData skinData[4];
-			std::memcpy(skinData, vtx + skinOffset, sizeof(SkinData) * bonesPerVertex);
-		}
-
-		if (vertexFlags & RE::BSGraphics::Vertex::VF_COLORS) {
-			std::memcpy(&vertexData.Color, vtx + colorOffset, sizeof(uint32_t));
-		}
-
-		vertices[i] = vertexData;
-	}
-}
-
-void Raytracing::ReadTriangles(eastl::vector<Triangle>& triangles, RE::BSGraphics::TriShape* rendererData, const std::uint32_t& vertexCount, const std::uint16_t& triangleCount)
-{
-	eastl::vector<uint16_t> indices(triangleCount * 3);
-	std::memcpy(indices.data(), rendererData->rawIndexData, sizeof(uint16_t) * triangleCount * 3);
-
-	for (uint16_t t = 0; t < triangleCount; ++t) {
-		uint16_t i = t * 3u;
-
-		uint16_t v0 = indices[i];
-		uint16_t v1 = indices[i + 1u];
-		uint16_t v2 = indices[i + 2u];
-
-		if (v0 > vertexCount || v1 > vertexCount || v2 > vertexCount)
-			logger::critical("[RT] Triangle {} vertice overflow: [{}, {}, {}]", t, v0, v1, v2);
-
-		triangles.emplace_back(v0, v1, v2);
-	}
-}
-
 void Raytracing::ReadRendererData(MeshData& meshData, RE::BSGraphics::TriShape* rendererData, const std::uint32_t& vertexCount, const std::uint16_t& triangleCount, const std::uint16_t& bonesPerVertex, const float4x4& transform)
-{
-	meshData.vertices.resize(vertexCount);
-	ReadVertices(meshData.vertices, rendererData, vertexCount, bonesPerVertex, transform);
-	meshData.vertexCount = vertexCount;
+{	
+	// Vertices
+	{
+		bool skinned = bonesPerVertex > 0;
 
-	meshData.triangles.reserve(triangleCount);
-	ReadTriangles(meshData.triangles, rendererData, vertexCount, triangleCount);
-	meshData.triangleCount = triangleCount;
+		meshData.vertices.resize(vertexCount);
+
+		if (skinned)
+			meshData.skinning.resize(vertexCount);
+
+		auto vertexDesc = rendererData->vertexDesc;
+
+		auto vertexFlags = vertexDesc.GetFlags();
+		uint32_t stride = vertexDesc.GetSize();
+
+		uint32_t posOffset = vertexDesc.GetAttributeOffset(RE::BSGraphics::Vertex::VA_POSITION);
+		uint32_t uvOffset = vertexDesc.GetAttributeOffset(RE::BSGraphics::Vertex::VA_TEXCOORD0);
+		uint32_t normOffset = vertexDesc.GetAttributeOffset(RE::BSGraphics::Vertex::VA_NORMAL);
+		uint32_t tangOffset = vertexDesc.GetAttributeOffset(RE::BSGraphics::Vertex::VA_BINORMAL);
+		uint32_t colorOffset = vertexDesc.GetAttributeOffset(RE::BSGraphics::Vertex::VA_COLOR);
+		uint32_t skinOffset = vertexDesc.GetAttributeOffset(RE::BSGraphics::Vertex::VA_SKINNING);
+
+		uint32_t boneIDOffset = sizeof(uint16_t) * bonesPerVertex;
+		
+		eastl::vector<half> weights(bonesPerVertex);
+		eastl::vector<uint8_t> boneIds(bonesPerVertex);
+
+		for (uint16_t i = 0; i < vertexCount; i++) {
+			uint8_t* vtx = rendererData->rawVertexData + i * stride;
+
+			Vertex vertexData{};
+
+			float4 pos;
+
+			if (vertexFlags & RE::BSGraphics::Vertex::VF_VERTEX) {
+				std::memcpy(&pos, vtx + posOffset, sizeof(float4));
+
+				vertexData.Position = float3::Transform(float3(pos), transform);
+			}
+
+			if (vertexFlags & RE::BSGraphics::Vertex::VF_UV) {
+				std::memcpy(&vertexData.Texcoord0, vtx + uvOffset, sizeof(half2));
+			}
+
+			if (vertexFlags & RE::BSGraphics::Vertex::VF_NORMAL) {
+				uint32_t normalData;
+				std::memcpy(&normalData, vtx + normOffset, sizeof(uint32_t));
+				auto normalUnpacked = UnpackByte4(normalData);
+
+				vertexData.Normal = Normalize(float3::TransformNormal({ normalUnpacked.x, normalUnpacked.y, normalUnpacked.z }, transform));
+
+				if (vertexFlags & RE::BSGraphics::Vertex::VF_TANGENT) {
+					uint32_t tangentData;
+					std::memcpy(&tangentData, vtx + tangOffset, sizeof(uint32_t));
+					auto tangentUnpacked = UnpackByte4(tangentData);
+
+					vertexData.Tangent = Normalize(float3::TransformNormal({ tangentUnpacked.x, tangentUnpacked.y, tangentUnpacked.z }, transform));
+					vertexData.Bitangent = Normalize(float3::TransformNormal({ pos.w, normalUnpacked.w, tangentUnpacked.w }, transform));		
+				}
+			}
+
+			if (skinned) {
+				if (vertexFlags & RE::BSGraphics::Vertex::VF_SKINNED) {
+					std::memcpy(weights.data(), vtx + skinOffset, sizeof(half) * bonesPerVertex);
+					std::memcpy(boneIds.data(), vtx + skinOffset + boneIDOffset, sizeof(uint8_t) * bonesPerVertex);
+
+					/*logger::info("[RT] Vertex {} - Weights: [{}, {}, {}, {}], BoneIDs: [{}, {}, {}, {}]", 
+						i,
+						(float)weights[0], (float)weights[1], (float)weights[2], (float)weights[3], 
+						boneIds[0], boneIds[1], boneIds[2], boneIds[3]);*/
+				} else {
+					weights.clear();
+					weights.resize(bonesPerVertex);
+
+					boneIds.clear();
+					boneIds.resize(bonesPerVertex);
+				}
+			}
+
+			if (vertexFlags & RE::BSGraphics::Vertex::VF_COLORS) {
+				std::memcpy(&vertexData.Color, vtx + colorOffset, sizeof(uint32_t));
+			}
+
+			meshData.vertices[i] = vertexData;
+
+			if (skinned)
+				meshData.skinning[i] = Skinning(weights, boneIds);
+		}
+
+		meshData.vertexCount = vertexCount;
+	}
+
+	// Triangles
+	{
+		meshData.triangles.resize(triangleCount);
+
+		eastl::vector<uint16_t> indices(triangleCount * 3);
+		std::memcpy(indices.data(), rendererData->rawIndexData, sizeof(uint16_t) * triangleCount * 3);
+
+		for (uint16_t t = 0; t < triangleCount; ++t) {
+			uint16_t i = t * 3u;
+
+			uint16_t v0 = indices[i];
+			uint16_t v1 = indices[i + 1u];
+			uint16_t v2 = indices[i + 2u];
+
+			if (v0 > vertexCount || v1 > vertexCount || v2 > vertexCount)
+				logger::critical("[RT] Triangle {} vertice overflow: [{}, {}, {}]", t, v0, v1, v2);
+
+			meshData.triangles[t] = Triangle(v0, v1, v2);
+		}	
+
+		meshData.triangleCount = triangleCount;
+	}
 }
 
 void Raytracing::ReadMaterial(MeshData& meshData, const RE::BSGeometry::GEOMETRY_RUNTIME_DATA& geometryRuntimeData, [[ maybe_unused ]] const char* name)
@@ -1425,8 +1440,6 @@ void Raytracing::ReadMaterial(MeshData& meshData, const RE::BSGeometry::GEOMETRY
 
 	// Register textures buffer
 	{
-		//auto geometryRuntimeData = pGeometry->GetGeometryRuntimeData();
-
 		auto effect = geometryRuntimeData.properties[State::kEffect].get();
 
 		if (effect) {
@@ -1526,7 +1539,7 @@ void Raytracing::ReadMaterial(MeshData& meshData, const RE::BSGeometry::GEOMETRY
 	}
 
 	// Diffuse Texture
-	/*if (diffuseTexture) {
+	if (diffuseTexture) {
 		D3D12_RESOURCE_DESC texResDesc = diffuseTexture->GetDesc();
 
 		D3D12_SHADER_RESOURCE_VIEW_DESC texSrvDesc = {};
@@ -1539,10 +1552,10 @@ void Raytracing::ReadMaterial(MeshData& meshData, const RE::BSGeometry::GEOMETRY
 		texSrvDesc.Texture2D.ResourceMinLODClamp = 0.0f;
 
 		d3d12Device->CreateShaderResourceView(diffuseTexture, &texSrvDesc, giHeap->CPUHandle(GIHeap::Slot::DiffuseTextures, meshData.registerIndex));
-	}*/
+	}
 
 	// Glow Texture
-	/*if (effectTexture) {
+	if (effectTexture) {
 		D3D12_RESOURCE_DESC texResDesc = effectTexture->GetDesc();
 
 		D3D12_SHADER_RESOURCE_VIEW_DESC texSrvDesc = {};
@@ -1555,7 +1568,7 @@ void Raytracing::ReadMaterial(MeshData& meshData, const RE::BSGeometry::GEOMETRY
 		texSrvDesc.Texture2D.ResourceMinLODClamp = 0.0f;
 
 		d3d12Device->CreateShaderResourceView(effectTexture, &texSrvDesc, giHeap->CPUHandle(GIHeap::Slot::GlowTextures, meshData.registerIndex));
-	}*/
+	}
 
 	meshData.material = MaterialData(feature, texCoordOffsetScale, diffuseTexture, effectTexture, nullptr, effectColor, effectType == 0 ? RE::BSShader::Type::Lighting : RE::BSShader::Type::Effect);
 }
@@ -1735,9 +1748,10 @@ void Raytracing::CreateGeometry(const char* path, RE::NiNode* pRoot)
 
 		const char* name = pGeometry->name.c_str();
 
-		// TODO: kDynamicTriShape support (used in mouth/eyes)
-		if (pGeometry->GetType().none(RE::BSGeometry::Type::kTriShape)) {
-			logger::warn("\t\t[RT] CreateGeometry::TraverseScenegraphGeometries - Unsupported Geometry: {} for {}", magic_enum::enum_name(pGeometry->GetType().get()), name);
+		const auto& geometryType = pGeometry->GetType();
+
+		if (geometryType.none(RE::BSGeometry::Type::kTriShape, RE::BSGeometry::Type::kDynamicTriShape)) {
+			logger::warn("\t\t[RT] CreateGeometry::TraverseScenegraphGeometries - Unsupported Geometry: {} for {}", magic_enum::enum_name(geometryType.get()), name);
 			return RE::BSVisit::BSVisitControl::kContinue;
 		}
 
@@ -1767,16 +1781,29 @@ void Raytracing::CreateGeometry(const char* path, RE::NiNode* pRoot)
 			return RE::BSVisit::BSVisitControl::kContinue;
 		}
 
+		eastl::vector<float4> dynamic;
+
+		if (geometryType.all(RE::BSGeometry::Type::kDynamicTriShape)) {
+			auto* pDynamicTriShape = netimmerse_cast<RE::BSDynamicTriShape*>(pGeometry);
+
+			const auto& dynTriShapeRuntime = pDynamicTriShape->GetDynamicTrishapeRuntimeData();
+
+			dynamic.resize(dynTriShapeRuntime.dataSize / sizeof(float4));
+			std::memcpy(dynamic.data(), dynTriShapeRuntime.dynamicData, dynTriShapeRuntime.dataSize);
+		}
+
 		//logger::info("\t\t[RT] CreateGeometry::TraverseScenegraphGeometries - Geom Flags [0x{:x}]: {}", geomFlags.underlying(), GetFlags<RE::NiAVObject::Flag>(geomFlags.underlying()));
 
 		auto localToRoot = GetXMFromNiTransform(rootWorldInverse * pGeometry->world);
 		
 		if (auto* triShapeRD = geometryRuntimeData.rendererData) { // Non-Skinned
+			logger::warn("\t\t[RT] CreateGeometry::TraverseScenegraphGeometries - Standard Geometry: {}", name);
+
 			auto* pTriShape = netimmerse_cast<RE::BSTriShape*>(pGeometry);
 
 			const auto& triShapeRuntime = pTriShape->GetTrishapeRuntimeData();
 
-			auto meshData = MeshData(registers.allocate());
+			auto meshData = MeshData(registers.allocate(), dynamic);
 			ReadRendererData(meshData, triShapeRD, triShapeRuntime.vertexCount, triShapeRuntime.triangleCount, 0, localToRoot);
 
 			CreateBuffers(meshData, ToWide(name));
@@ -1786,12 +1813,11 @@ void Raytracing::CreateGeometry(const char* path, RE::NiNode* pRoot)
 		} else if (auto* skinInstance = (RE::BSDismemberSkinInstance*)geometryRuntimeData.skinInstance.get()) {  // Skinned
 			logger::warn("\t\t[RT] CreateGeometry::TraverseScenegraphGeometries - Skinned Geometry: {}", name);
 
-			auto* rtti = skinInstance->GetRTTI();
-
 			static REL::Relocation<const RE::NiRTTI*> bsDismemberedSkinInstanceRTTI{ RE::BSDismemberSkinInstance::Ni_RTTI };
-			bool isDismembered = rtti->IsKindOf(bsDismemberedSkinInstanceRTTI.get());
+			bool isDismembered = skinInstance->GetRTTI()->IsKindOf(bsDismemberedSkinInstanceRTTI.get());
 
-			logger::warn("\t\t[RT] CreateGeometry::TraverseScenegraphGeometries - Is dismembered: {}", isDismembered);
+			if (isDismembered)
+				logger::warn("\t\t[RT] CreateGeometry::TraverseScenegraphGeometries - Is dismembered");
 
 			/*auto& skinData = skinInstance->skinData;
 
@@ -1810,7 +1836,7 @@ void Raytracing::CreateGeometry(const char* path, RE::NiNode* pRoot)
 			logger::info("\t\t[RT] CreateGeometry::TraverseScenegraphGeometries - Partitions: {}, VertexCount: {}, Unk24: [0x{:X}]", skinPartition->numPartitions, skinPartition->vertexCount, skinPartition->unk24);
 
 			for (auto& partition : skinPartition->partitions) {
-				auto meshData = MeshData(registers.allocate());
+				auto meshData = MeshData(registers.allocate(), dynamic);
 				ReadRendererData(meshData, partition.buffData, skinPartition->vertexCount, partition.triangles, partition.bonesPerVertex, localToRoot);
 
 				CreateBuffers(meshData, ToWide(name));
@@ -1989,12 +2015,12 @@ void Raytracing::UpdateInstances()
 	blasInstances.clear();
 	blasInstances.reserve(instances.size());
 
-	auto* playerCamera = RE::PlayerCamera::GetSingleton();
+	/*auto* playerCamera = RE::PlayerCamera::GetSingleton();
 	auto* tesCamera = playerCamera->currentState->camera;
 
 	RE::NiCamera* camera = FindNiCamera(tesCamera->cameraRoot.get());
 
-	auto eye = Util::GetAverageEyePosition();
+	auto eye = Util::GetAverageEyePosition();*/
 
 	for (auto& [pNiNode, data] : instances) {
 		//pFadeNode->SetMotionType
@@ -2007,7 +2033,7 @@ void Raytracing::UpdateInstances()
 		//logger::info("[RT] UpdateInstances - FadeNode: [0x{:x}], World Bounds - Center: {}, Radius: {}", reinterpret_cast<uintptr_t>(pFadeNode), Float3(pFadeNode->worldBound.center), pFadeNode->worldBound.radius);
 
 		GeometryData& geometryData = it->second;
-		auto worldBound = pNiNode->worldBound;
+		/*auto worldBound = pNiNode->worldBound;
 
 		float worldBoundRadius= worldBound.radius;
 		float distanceToBounds = Util::Units::GameUnitsToMeters(eye.GetDistance(worldBound.center) - worldBoundRadius);
@@ -2020,7 +2046,7 @@ void Raytracing::UpdateInstances()
 			//if (!RE::NiCamera::BoundInFrustum(worldBound, camera))
 			if (!camera->NodeInFrustum(pNiNode))
 				continue;
-		}
+		}*/
 
 		UpdateInstanceTransform(pNiNode, data);
 
@@ -2033,6 +2059,10 @@ void Raytracing::UpdateInstances()
 		memcpy(blasInstance.Transform, data.transform.m, sizeof(blasInstance.Transform));
 
 		blasInstances.push_back(blasInstance);
+
+		/*for (auto& mesh: geometryData.meshes) {
+			const auto& material = mesh.material;
+		}*/
 
 		const auto& material = geometryData.meshes[0].material; // TODO: proper materials
 
@@ -2645,10 +2675,10 @@ void Raytracing::DrawRTGI()
 	d3d11Context->CopyResource(main.texture, mainTexture->resource11);
 
 	// Clear specular for now, just so I can see the results better 
-	/*{
+	{
 		float clearColor[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
 		d3d11Context->ClearRenderTargetView(globals::game::renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kINDIRECT_DOWNSCALED].RTV, clearColor);
-	}*/
+	}
 }
 
 void Raytracing::UpdateShadowsFrameBuffer()
@@ -3188,11 +3218,11 @@ void Raytracing::CompileShaders()
 void Raytracing::CompileRTGIShaders()
 {
 	winrt::com_ptr<IDxcBlob> rayGenBlob;
-	ShaderUtils::CompileShader(rayGenBlob, L"Data/Shaders/Raytracing/GI/RayGeneration.hlsl");
+	ShaderUtils::CompileShader(rayGenBlob, L"Data/Shaders/Raytracing/PT/RayGeneration.hlsl");
 
 	winrt::com_ptr<IDxcBlob> diffuseMissBlob, diffuseClosestHitBlob;
 	ShaderUtils::CompileShader(diffuseMissBlob, L"Data/Shaders/Raytracing/GI/Miss.hlsl");
-	ShaderUtils::CompileShader(diffuseClosestHitBlob, L"Data/Shaders/Raytracing/GI/ClosestHit.hlsl");
+	ShaderUtils::CompileShader(diffuseClosestHitBlob, L"Data/Shaders/Raytracing/PT/ClosestHit.hlsl");
 
 	winrt::com_ptr<IDxcBlob> shadowMissBlob;
 	ShaderUtils::CompileShader(shadowMissBlob, L"Data/Shaders/Raytracing/GI/ShadowMiss.hlsl");

@@ -45,9 +45,13 @@ void HitMesh(inout IndirectPayload payload, in BuiltInTriangleIntersectionAttrib
     
     float3x3 objectToWorld3x3 = (float3x3)ObjectToWorld3x4();
     
-    float3 worldNormal = mul(objectToWorld3x3, Interpolate(vertice0.Normal, vertice1.Normal, vertice2.Normal, uvw));
-    float3 worldTangent = mul(objectToWorld3x3, Interpolate(vertice0.Tangent, vertice1.Tangent, vertice2.Tangent, uvw));
-    float3 worldBitangent = mul(objectToWorld3x3, Interpolate(vertice0.Bitangent, vertice1.Bitangent, vertice2.Bitangent, uvw));
+    float3 worldNormal = normalize(mul(objectToWorld3x3, Interpolate(vertice0.Normal, vertice1.Normal, vertice2.Normal, uvw)));
+    
+    payload.color += float4(worldNormal * 0.5 + 0.5f, 1.0f);
+    return;    
+    
+    float3 worldTangent = normalize(mul(objectToWorld3x3, Interpolate(vertice0.Tangent, vertice1.Tangent, vertice2.Tangent, uvw)));
+    float3 worldBitangent = normalize(mul(objectToWorld3x3, Interpolate(vertice0.Bitangent, vertice1.Bitangent, vertice2.Bitangent, uvw)));
     
     half4 vertexColor = vertice0.Color.unpack() * u + vertice1.Color.unpack() * v + vertice2.Color.unpack() * w;
     
@@ -58,6 +62,9 @@ void HitMesh(inout IndirectPayload payload, in BuiltInTriangleIntersectionAttrib
     
     float3 diffuse = diffuseTexture.SampleLevel(DiffuseSampler, texCoord0, 0).rgb;
     float3 effect = effectTexture.SampleLevel(DiffuseSampler, texCoord0, 0).rgb;
+    
+    //payload.color += float4(diffuse, 1.0f);
+    //return;   
     
     // Lighting Shader
     float3 lightingAlbedo = Color::GammaToLinear(diffuse) * vertexColor.rgb;
