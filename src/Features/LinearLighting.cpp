@@ -102,6 +102,30 @@ void LinearLighting::Prepass()
 	dirLightMult = !globals::game::isVR ? imageSpaceManager->GetRuntimeData().data.baseData.hdr.sunlightScale : imageSpaceManager->GetVRRuntimeData().data.baseData.hdr.sunlightScale;
 }
 
+struct LinearLighting::Hooks
+{
+	struct BSLightingShader_SetupGeometry
+	{
+		static void thunk(RE::BSShader* This, RE::BSRenderPass* Pass, uint32_t RenderFlags)
+		{
+			globals::features::linearLighting.BSLightingShader_SetupGeometry(Pass);
+			func(This, Pass, RenderFlags);
+		}
+		static inline REL::Relocation<decltype(thunk)> func;
+	};
+
+	static void Install()
+	{
+		stl::write_vfunc<0x6, BSLightingShader_SetupGeometry>(RE::VTABLE_BSLightingShader[0]);
+		logger::info("[LinearLighting] Installed hooks - BSLightingShader_SetupGeometry");
+	}
+};
+
+void LinearLighting::PostPostLoad()
+{
+	LinearLighting::Hooks::Install();
+}
+
 LinearLighting::PerFrameData LinearLighting::GetCommonBufferData()
 {
 	bool isMainLoadingMenu = globals::game::ui && (globals::game::ui->IsMenuOpen(RE::MainMenu::MENU_NAME) || globals::game::ui->IsMenuOpen(RE::LoadingMenu::MENU_NAME));
@@ -141,11 +165,24 @@ LinearLighting::PerFrameData LinearLighting::GetCommonBufferData()
 	return data;
 }
 
-LinearLighting::ColorToLinear(RE::NiColor inColor, float gamma)
+RE::NiColor LinearLighting::ColorToLinear(RE::NiColor inColor, float gamma)
 {
 	RE::NiColor outColor;
-	outColor.r = std::pow(inColor.r, gamma);
-	outColor.g = std::pow(inColor.g, gamma);
-	outColor.b = std::pow(inColor.b, gamma);
+	outColor.red = std::pow(inColor.red, gamma);
+	outColor.green = std::pow(inColor.green, gamma);
+	outColor.blue = std::pow(inColor.blue, gamma);
 	return outColor;
+}
+
+void LinearLighting::BSLightingShader_SetupGeometry(RE::BSRenderPass* a_pass)
+{
+	auto& property1 = a_pass->geometry->GetGeometryRuntimeData().properties[1];
+	auto lightProperty = property1 && property1->GetRTTI() == globals::rtti::BSLightingShaderPropertyRTTI.get() ? static_cast<RE::BSLightingShaderProperty*>(property1.get()) : nullptr;
+
+	if (lightProperty != nullptr && settings.enableLinearLighting) {
+		auto emissiveColor = lightProperty->emissiveColor;
+		if (emissiveColor != nullptr) {
+			*emissiveColor = ColorToLinear(*emissiveColor, settings.emitColorGamma);
+		}
+	}
 }

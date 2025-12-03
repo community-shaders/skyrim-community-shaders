@@ -4,7 +4,6 @@
 #include "TruePBR/BSLightingShaderMaterialPBRLandscape.h"
 
 #include "Features/InteriorSun.h"
-#include "Features/LinearLighting.h"
 #include "Hooks.h"
 #include "ShaderCache.h"
 #include "State.h"
@@ -584,17 +583,11 @@ struct BSLightingShaderProperty_LoadBinary
 
 		stream.LoadLinkID();
 
-		auto& ll = globals::features::linearLighting;
-
 		{
 			RE::NiColor emissiveColor{};
 			stream.iStr->read(&emissiveColor.red, 1);
 			stream.iStr->read(&emissiveColor.green, 1);
 			stream.iStr->read(&emissiveColor.blue, 1);
-
-			if (ll.loaded && ll.settings.enableLinearLighting) {
-				emissiveColor = ll.ColorToLinear(emissiveColor, ll.settings.emitColorGamma);
-			}
 
 			if (property->emissiveColor != nullptr && property->flags.any(kOwnEmit)) {
 				*property->emissiveColor = emissiveColor;
@@ -602,10 +595,6 @@ struct BSLightingShaderProperty_LoadBinary
 		}
 
 		stream.iStr->read(&property->emissiveMult, 1);
-
-		if (ll.loaded && ll.settings.enableLinearLighting) {
-			property->emissiveMult *= ll.settings.emitColorMult;
-		}
 
 		static_cast<RE::BSLightingShaderMaterialBase*>(property->material)->LoadBinary(stream);
 
