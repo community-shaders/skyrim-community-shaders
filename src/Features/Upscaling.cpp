@@ -497,6 +497,7 @@ void Upscaling::CreateUpscalingTextureResources(UpscaleMethod a_upscalemethod)
 			motionVectorCopyTexture->CreateUAV(uavDesc);
 		}
 
+		// RCAS sharpener texture - matches kMAIN format for HDR sharpening
 		if (!sharpenerTexture) {
 			main.texture->GetDesc(&texDesc);
 			main.SRV->GetDesc(&srvDesc);
