@@ -16,13 +16,30 @@ float getRCASLuma(float3 rgb)
 	return dot(rgb, float3(0.5, 1.0, 0.5));
 }
 
-[numthreads(8, 8, 1)] void main(uint3 DTid : SV_DispatchThreadID) {
-	float3 e = Source.Load(int3(DTid.x, DTid.y, 0)).rgb;
+[numthreads(8, 8, 1)] void main(uint3 DTid : SV_DispatchThreadID)
+{
+	uint2 texDim;
+	Dest.GetDimensions(texDim.x, texDim.y);
 
-	float3 b = Source.Load(int3(DTid.x, DTid.y - 1, 0)).rgb;
-	float3 d = Source.Load(int3(DTid.x - 1, DTid.y, 0)).rgb;
-	float3 f = Source.Load(int3(DTid.x + 1, DTid.y, 0)).rgb;
-	float3 h = Source.Load(int3(DTid.x, DTid.y + 1, 0)).rgb;
+	if (DTid.x >= texDim.x || DTid.y >= texDim.y)
+		return;
+
+	int2 center = int2(DTid.xy);
+	int2 minCoord = int2(0, 0);
+	int2 maxCoord = int2(texDim - 1);
+
+	int2 eCoord = clamp(center, minCoord, maxCoord);
+	int2 bCoord = clamp(eCoord + int2(0, -1), minCoord, maxCoord);
+	int2 dCoord = clamp(eCoord + int2(-1, 0), minCoord, maxCoord);
+	int2 fCoord = clamp(eCoord + int2(1, 0), minCoord, maxCoord);
+	int2 hCoord = clamp(eCoord + int2(0, 1), minCoord, maxCoord);
+
+	float3 e = Source.Load(int3(eCoord, 0)).rgb;
+
+	float3 b = Source.Load(int3(bCoord, 0)).rgb;
+	float3 d = Source.Load(int3(dCoord, 0)).rgb;
+	float3 f = Source.Load(int3(fCoord, 0)).rgb;
+	float3 h = Source.Load(int3(hCoord, 0)).rgb;
 
 	float bL = getRCASLuma(b);
 	float dL = getRCASLuma(d);
