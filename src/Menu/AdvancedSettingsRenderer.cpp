@@ -277,13 +277,63 @@ void AdvancedSettingsRenderer::RenderShaderDebugSection()
 		ImGui::PopStyleColor();  // ChildBg
 	}
 
+	// Shader Debug section
+	if (ImGui::CollapsingHeader("Shader Debug")) {
+		auto menu = globals::menu;
+		auto& menuSettings = menu->GetSettings();
+		auto& themeSettings = menuSettings.Theme;
+
+		if (ImGui::Checkbox("Enable Shader Blocking", &menuSettings.EnableShaderBlocking)) {
+			// Setting saved automatically on next save
+		}
+		if (auto _tt = Util::HoverTooltipWrapper()) {
+			ImGui::Text("Enables hotkeys to cycle through and block individual shaders for debugging purposes.");
+		}
+
+		if (menuSettings.EnableShaderBlocking) {
+			ImGui::Indent();
+
+			// Shader Block Previous Key
+			if (menu->settingShaderBlockPrevKey) {
+				ImGui::Text("Press any key for Shader Block Previous...");
+			} else {
+				ImGui::AlignTextToFramePadding();
+				ImGui::Text("Block Previous:");
+				ImGui::SameLine();
+				ImGui::AlignTextToFramePadding();
+				ImGui::TextColored(themeSettings.StatusPalette.CurrentHotkey, "%s", Util::Input::KeyIdToString(menuSettings.ShaderBlockPrevKey));
+				ImGui::SameLine();
+				if (ImGui::Button("Change##ShaderBlockPrev")) {
+					menu->settingShaderBlockPrevKey = true;
+				}
+			}
+
+			// Shader Block Next Key
+			if (menu->settingShaderBlockNextKey) {
+				ImGui::Text("Press any key for Shader Block Next...");
+			} else {
+				ImGui::AlignTextToFramePadding();
+				ImGui::Text("Block Next:");
+				ImGui::SameLine();
+				ImGui::AlignTextToFramePadding();
+				ImGui::TextColored(themeSettings.StatusPalette.CurrentHotkey, "%s", Util::Input::KeyIdToString(menuSettings.ShaderBlockNextKey));
+				ImGui::SameLine();
+				if (ImGui::Button("Change##ShaderBlockNext")) {
+					menu->settingShaderBlockNextKey = true;
+				}
+			}
+
+			ImGui::Unindent();
+		}
+	}
+
 	// Active shaders list
 	if (ImGui::CollapsingHeader("Active Shaders", ImGuiTreeNodeFlags_DefaultOpen)) {
 		ImGui::Text("Active Shaders (Used Recently)");
 		if (auto _tt = Util::HoverTooltipWrapper()) {
 			ImGui::Text(
 				"List of shaders that have been used in recent frames. "
-				"Use PAGEUP/PAGEDOWN to cycle through and block shaders for debugging. "
+				"Enable Shader Blocking above to use hotkeys to cycle through and block shaders for debugging. "
 				"Shaders not used for ~1 second are removed from this list.");
 		}
 
