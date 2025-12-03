@@ -145,9 +145,9 @@ public:
 
 	// Static instances instead of singletons
 	static inline Streamline streamline;
-	static inline FidelityFX fidelityFX;  // Only for frame generation
+	static inline FidelityFX fidelityFX;  ///< Only for frame generation
 	static inline DX12SwapChain dx12SwapChain;
-	static inline RCAS rcas;
+	static inline RCAS rcas;  ///< Standalone RCAS sharpening for DLSS
 
 	winrt::com_ptr<ID3D11PixelShader> copyDepthToSharedBufferPS;
 
@@ -164,6 +164,11 @@ public:
 	void PerformUpscaling();
 	void UpscaleDepth();
 
+	/**
+	 * @brief Applies RCAS sharpening to the main render target after DLSS upscaling.
+	 *
+	 * Runs in HDR space before tonemapping. Only called when DLSS is active and sharpness > 0.
+	 */
 	void ApplySharpening();
 
 	static void TimerSleepQPC(int64_t targetQPC);

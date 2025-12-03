@@ -1,16 +1,20 @@
-// RCAS - Robust Contrast Adaptive Sharpening
-// Based on AMD FidelityFX FSR1
-// https://github.com/GPUOpen-LibrariesAndSDKs/FidelityFX-SDK
+/// RCAS - Robust Contrast Adaptive Sharpening
+/// Based on AMD FidelityFX FSR1 RCAS algorithm.
+/// https://github.com/GPUOpen-LibrariesAndSDKs/FidelityFX-SDK
+///
+/// Applies adaptive sharpening using a 3x3 cross pattern neighborhood.
+/// Includes noise detection to avoid sharpening noise/grain.
 
 cbuffer RCASConfig : register(b0)
 {
-	float sharpness;
+	float sharpness;  ///< Sharpening strength (0 = none, higher = sharper)
 	float3 pad;
 };
 
-Texture2D<float4> Source : register(t0);
-RWTexture2D<float4> Dest : register(u0);
+Texture2D<float4> Source : register(t0);   ///< Input texture to sharpen
+RWTexture2D<float4> Dest : register(u0);   ///< Output sharpened texture
 
+/// Compute perceptual luma using RCAS weighting (emphasizes green channel)
 float getRCASLuma(float3 rgb)
 {
 	return dot(rgb, float3(0.5, 1.0, 0.5));
