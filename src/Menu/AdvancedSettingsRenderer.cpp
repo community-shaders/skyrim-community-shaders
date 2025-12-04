@@ -8,210 +8,224 @@
 
 #include "FeatureIssues.h"
 #include "Features/PerformanceOverlay/ABTesting/ABTesting.h"
+#include "Fonts.h"
 #include "Globals.h"
 #include "Menu.h"
 #include "ShaderCache.h"
 #include "State.h"
 #include "TruePBR.h"
 #include "Util.h"
+#include "Utils/Format.h"
 #include "Utils/UI.h"
 
 void AdvancedSettingsRenderer::RenderAdvancedSettings(
 	const std::function<void()>& drawTruePBRSettings,
 	const std::function<void()>& drawDisableAtBootSettings)
 {
-	RenderAdvancedSection();
-	RenderShaderReplacementSection();
-
-	// TruePBR settings
-	drawTruePBRSettings();
-
-	// Disable at boot settings
-	drawDisableAtBootSettings();
-
-	RenderShaderDebugSection();
-	RenderDeveloperSection();
-}
-
-void AdvancedSettingsRenderer::RenderAdvancedSection()
-{
-	auto shaderCache = globals::shaderCache;
-
-	if (ImGui::CollapsingHeader("Advanced", ImGuiTreeNodeFlags_DefaultOpen | ImGuiTreeNodeFlags_OpenOnArrow | ImGuiTreeNodeFlags_OpenOnDoubleClick)) {
-		// Dump Shaders option
-		bool useDump = shaderCache->IsDump();
-		if (ImGui::Checkbox("Dump Shaders", &useDump)) {
-			shaderCache->SetDump(useDump);
-		}
-		if (auto _tt = Util::HoverTooltipWrapper()) {
-			ImGui::Text("Dump shaders at startup. This should be used only when reversing shaders. Normal users don't need this.");
+	// Use TabBar system - tabs sorted alphabetically
+	if (ImGui::BeginTabBar("##AdvancedSettingsTabs", ImGuiTabBarFlags_None)) {
+		// Developer Tab
+		if (MenuFonts::BeginTabItemWithFont("Developer", Menu::FontRole::Subheading)) {
+			if (ImGui::BeginChild("##DeveloperContent", ImVec2(0, 0), false)) {
+				RenderDeveloperSection();
+			}
+			ImGui::EndChild();
+			ImGui::EndTabItem();
 		}
 
-		// Log Level selection
-		spdlog::level::level_enum logLevel = globals::state->GetLogLevel();
-		const char* items[] = {
-			"trace",
-			"debug",
-			"info",
-			"warn",
-			"err",
-			"critical",
-			"off"
-		};
-		static int item_current = static_cast<int>(logLevel);
-		if (ImGui::Combo("Log Level", &item_current, items, IM_ARRAYSIZE(items))) {
-			ImGui::SameLine();
-			globals::state->SetLogLevel(static_cast<spdlog::level::level_enum>(item_current));
-		}
-		if (auto _tt = Util::HoverTooltipWrapper()) {
-			ImGui::Text("Log level. Trace is most verbose. Default is info.");
+		// Disable at Boot Tab
+		if (MenuFonts::BeginTabItemWithFont("Disable at Boot", Menu::FontRole::Subheading)) {
+			if (ImGui::BeginChild("##DisableAtBootContent", ImVec2(0, 0), false)) {
+				RenderDisableAtBootSection(drawDisableAtBootSettings);
+			}
+			ImGui::EndChild();
+			ImGui::EndTabItem();
 		}
 
-		// Shader Defines input
-		auto& shaderDefines = globals::state->shaderDefinesString;
-		if (ImGui::InputText("Shader Defines", &shaderDefines)) {
-			globals::state->SetDefines(shaderDefines);
-		}
-		if (ImGui::IsItemDeactivatedAfterEdit() || (ImGui::IsItemActive() &&
-													   (ImGui::IsKeyPressed(ImGui::GetKeyIndex(ImGuiKey_Enter)) ||
-														   ImGui::IsKeyPressed(ImGui::GetKeyIndex(ImGuiKey_KeypadEnter))))) {
-			globals::state->SetDefines(shaderDefines);
-			shaderCache->Clear();
-		}
-		if (auto _tt = Util::HoverTooltipWrapper()) {
-			ImGui::Text("Defines for Shader Compiler. Semicolon \";\" separated. Clear with space. Rebuild shaders after making change. Compute Shaders require a restart to recompile.");
+		// Logging Tab
+		if (MenuFonts::BeginTabItemWithFont("Logging", Menu::FontRole::Subheading)) {
+			if (ImGui::BeginChild("##LoggingContent", ImVec2(0, 0), false)) {
+				RenderLoggingSection();
+			}
+			ImGui::EndChild();
+			ImGui::EndTabItem();
 		}
 
-		ImGui::Spacing();
-
-		// Compiler Thread controls
-		ImGui::SliderInt("Compiler Threads", &shaderCache->compilationThreadCount, 1, static_cast<int32_t>(std::thread::hardware_concurrency()));
-		if (auto _tt = Util::HoverTooltipWrapper()) {
-			ImGui::Text(
-				"Number of threads to use to compile shaders. "
-				"The more threads the faster compilation will finish but may make the system unresponsive. ");
-		}
-		ImGui::SliderInt("Background Compiler Threads", &shaderCache->backgroundCompilationThreadCount, 1, static_cast<int32_t>(std::thread::hardware_concurrency()));
-		if (auto _tt = Util::HoverTooltipWrapper()) {
-			ImGui::Text(
-				"Number of threads to use to compile shaders while playing game. "
-				"This is activated if the startup compilation is skipped. "
-				"The more threads the faster compilation will finish but may make the system unresponsive. ");
+		// PBR Settings Tab
+		if (MenuFonts::BeginTabItemWithFont("PBR Settings", Menu::FontRole::Subheading)) {
+			if (ImGui::BeginChild("##PBRSettingsContent", ImVec2(0, 0), false)) {
+				RenderPBRSection(drawTruePBRSettings);
+			}
+			ImGui::EndChild();
+			ImGui::EndTabItem();
 		}
 
-		// A/B Testing settings
-		auto* abTestingManager = ABTestingManager::GetSingleton();
-		abTestingManager->DrawSettingsUI();
-
-		// File Watcher option
-		bool useFileWatcher = shaderCache->UseFileWatcher();
-		if (ImGui::Checkbox("Enable File Watcher", &useFileWatcher)) {
-			shaderCache->SetFileWatcher(useFileWatcher);
-		}
-		if (auto _tt = Util::HoverTooltipWrapper()) {
-			ImGui::Text(
-				"Automatically recompile shaders on file change. "
-				"Intended for developing.");
+		// Shader Debug Tab
+		if (MenuFonts::BeginTabItemWithFont("Shader Debug", Menu::FontRole::Subheading)) {
+			if (ImGui::BeginChild("##ShaderDebugContent", ImVec2(0, 0), false)) {
+				RenderShaderDebugSection();
+			}
+			ImGui::EndChild();
+			ImGui::EndTabItem();
 		}
 
-		// Dump Ini Settings button
-		if (ImGui::Button("Dump Ini Settings", { -1, 0 })) {
-			Util::DumpSettingsOptions();
-		}
-
-		// Clear Shader Cache button
-		if (ImGui::Button("Clear Shader Cache", { -1, 0 })) {
-			shaderCache->Clear();
-		}
-		if (auto _tt = Util::HoverTooltipWrapper()) {
-			ImGui::Text("Clear all compiled shaders from memory. Forces recompilation of all shaders on next use.");
-		}
-
-		// Debug addresses section
-		if (ImGui::TreeNodeEx("Addresses")) {
-			auto Renderer = globals::game::renderer;
-			auto BSShaderAccumulator = *globals::game::currentAccumulator.get();
-			auto RendererShadowState = globals::game::shadowState;
-			ADDRESS_NODE(Renderer)
-			ADDRESS_NODE(BSShaderAccumulator)
-			ADDRESS_NODE(RendererShadowState)
-			ImGui::TreePop();
-		}
-
-		// Statistics section
-		if (ImGui::TreeNodeEx("Statistics", ImGuiTreeNodeFlags_DefaultOpen)) {
-			ImGui::Text(std::format("Shader Compiler : {}", shaderCache->GetShaderStatsString()).c_str());
-			ImGui::TreePop();
-		}
-
-		// Frame annotations toggle
-		ImGui::Checkbox("Frame Annotations", &globals::state->frameAnnotations);
-		if (auto _tt = Util::HoverTooltipWrapper()) {
-			ImGui::Text("Enable detailed frame annotations for debugging render passes and draw calls.");
-		}
+		ImGui::EndTabBar();
 	}
 }
 
-void AdvancedSettingsRenderer::RenderShaderReplacementSection()
+void AdvancedSettingsRenderer::RenderLoggingSection()
 {
-	if (ImGui::CollapsingHeader("Replace Original Shaders", ImGuiTreeNodeFlags_DefaultOpen | ImGuiTreeNodeFlags_OpenOnArrow | ImGuiTreeNodeFlags_OpenOnDoubleClick)) {
-		auto state = globals::state;
-		if (ImGui::BeginTable("##ReplaceToggles", 3, ImGuiTableFlags_SizingStretchSame)) {
-			globals::state->ForEachShaderTypeWithIndex([&](auto type, int classIndex) {
-				ImGui::TableNextColumn();
+	auto shaderCache = globals::shaderCache;
 
-				if (!(SIE::ShaderCache::IsSupportedShader(type) || state->IsDeveloperMode())) {
-					ImGui::BeginDisabled();
-					ImGui::Checkbox(std::format("{}", magic_enum::enum_name(type)).c_str(), &state->enabledClasses[classIndex]);
-					ImGui::EndDisabled();
-				} else
-					ImGui::Checkbox(std::format("{}", magic_enum::enum_name(type)).c_str(), &state->enabledClasses[classIndex]);
-			});
-			if (state->IsDeveloperMode()) {
-				ImGui::Checkbox("Vertex", &state->enableVShaders);
-				if (auto _tt = Util::HoverTooltipWrapper()) {
-					ImGui::Text(
-						"Replace Vertex Shaders. "
-						"When false, will disable the custom Vertex Shaders for the types above. "
-						"For developers to test whether CS shaders match vanilla behavior. ");
-				}
+	// Log Level selection
+	spdlog::level::level_enum logLevel = globals::state->GetLogLevel();
+	const char* items[] = {
+		"trace",
+		"debug",
+		"info",
+		"warn",
+		"err",
+		"critical",
+		"off"
+	};
+	static int item_current = static_cast<int>(logLevel);
+	if (ImGui::Combo("Log Level", &item_current, items, IM_ARRAYSIZE(items))) {
+		ImGui::SameLine();
+		globals::state->SetLogLevel(static_cast<spdlog::level::level_enum>(item_current));
+	}
+	if (auto _tt = Util::HoverTooltipWrapper()) {
+		ImGui::Text("Log level. Trace is most verbose. Default is info.");
+	}
 
-				ImGui::Checkbox("Pixel", &state->enablePShaders);
-				if (auto _tt = Util::HoverTooltipWrapper()) {
-					ImGui::Text(
-						"Replace Pixel Shaders. "
-						"When false, will disable the custom Pixel Shaders for the types above. "
-						"For developers to test whether CS shaders match vanilla behavior. ");
-				}
+	// Shader Defines input
+	auto& shaderDefines = globals::state->shaderDefinesString;
+	if (ImGui::InputText("Shader Defines", &shaderDefines)) {
+		globals::state->SetDefines(shaderDefines);
+	}
+	if (ImGui::IsItemDeactivatedAfterEdit() || (ImGui::IsItemActive() &&
+												   (ImGui::IsKeyPressed(ImGui::GetKeyIndex(ImGuiKey_Enter)) ||
+													   ImGui::IsKeyPressed(ImGui::GetKeyIndex(ImGuiKey_KeypadEnter))))) {
+		globals::state->SetDefines(shaderDefines);
+		shaderCache->Clear();
+	}
+	if (auto _tt = Util::HoverTooltipWrapper()) {
+		ImGui::Text("Defines for Shader Compiler. Semicolon \";\" separated. Clear with space. Rebuild shaders after making change. Compute Shaders require a restart to recompile.");
+	}
 
-				ImGui::Checkbox("Compute", &state->enableCShaders);
-				if (auto _tt = Util::HoverTooltipWrapper()) {
-					ImGui::Text(
-						"Replace Compute Shaders. "
-						"When false, will disable the custom Compute Shaders for the types above. "
-						"For developers to test whether CS shaders match vanilla behavior. ");
-				}
-			}
-			ImGui::EndTable();
-		}
+	ImGui::Spacing();
+
+	// Compiler Thread controls
+	ImGui::SliderInt("Compiler Threads", &shaderCache->compilationThreadCount, 1, static_cast<int32_t>(std::thread::hardware_concurrency()));
+	if (auto _tt = Util::HoverTooltipWrapper()) {
+		ImGui::Text(
+			"Number of threads to use to compile shaders. "
+			"The more threads the faster compilation will finish but may make the system unresponsive. ");
+	}
+	ImGui::SliderInt("Background Compiler Threads", &shaderCache->backgroundCompilationThreadCount, 1, static_cast<int32_t>(std::thread::hardware_concurrency()));
+	if (auto _tt = Util::HoverTooltipWrapper()) {
+		ImGui::Text(
+			"Number of threads to use to compile shaders while playing game. "
+			"This is activated if the startup compilation is skipped. "
+			"The more threads the faster compilation will finish but may make the system unresponsive. ");
+	}
+
+	// A/B Testing settings
+	auto* abTestingManager = ABTestingManager::GetSingleton();
+	abTestingManager->DrawSettingsUI();
+
+	// Dump Ini Settings button
+	if (ImGui::Button("Dump Ini Settings", { -1, 0 })) {
+		Util::DumpSettingsOptions();
 	}
 }
 
 void AdvancedSettingsRenderer::RenderShaderDebugSection()
 {
 	auto shaderCache = globals::shaderCache;
+	auto state = globals::state;
 
+	// Dump Shaders option
+	bool useDump = shaderCache->IsDump();
+	if (ImGui::Checkbox("Dump Shaders", &useDump)) {
+		shaderCache->SetDump(useDump);
+	}
+	if (auto _tt = Util::HoverTooltipWrapper()) {
+		ImGui::Text("Dump shaders at startup. This should be used only when reversing shaders. Normal users don't need this.");
+	}
+
+	// Clear Shader Cache button
+	if (ImGui::Button("Clear Shader Cache", { -1, 0 })) {
+		shaderCache->Clear();
+	}
+	if (auto _tt = Util::HoverTooltipWrapper()) {
+		ImGui::Text("Clear all compiled shaders from memory. Forces recompilation of all shaders on next use.");
+	}
+
+	ImGui::Spacing();
+	ImGui::Separator();
+	ImGui::Spacing();
+
+	// Shader Replacement section
+	Util::DrawSectionHeader("Replace Original Shaders");
+
+	if (ImGui::BeginTable("##ReplaceToggles", 3, ImGuiTableFlags_SizingStretchSame)) {
+		globals::state->ForEachShaderTypeWithIndex([&](auto type, int classIndex) {
+			ImGui::TableNextColumn();
+
+			if (!(SIE::ShaderCache::IsSupportedShader(type) || state->IsDeveloperMode())) {
+				ImGui::BeginDisabled();
+				ImGui::Checkbox(std::format("{}", magic_enum::enum_name(type)).c_str(), &state->enabledClasses[classIndex]);
+				ImGui::EndDisabled();
+			} else
+				ImGui::Checkbox(std::format("{}", magic_enum::enum_name(type)).c_str(), &state->enabledClasses[classIndex]);
+		});
+		if (state->IsDeveloperMode()) {
+			ImGui::Checkbox("Vertex", &state->enableVShaders);
+			if (auto _tt = Util::HoverTooltipWrapper()) {
+				ImGui::Text(
+					"Replace Vertex Shaders. "
+					"When false, will disable the custom Vertex Shaders for the types above. "
+					"For developers to test whether CS shaders match vanilla behavior. ");
+			}
+
+			ImGui::Checkbox("Pixel", &state->enablePShaders);
+			if (auto _tt = Util::HoverTooltipWrapper()) {
+				ImGui::Text(
+					"Replace Pixel Shaders. "
+					"When false, will disable the custom Pixel Shaders for the types above. "
+					"For developers to test whether CS shaders match vanilla behavior. ");
+			}
+
+			ImGui::Checkbox("Compute", &state->enableCShaders);
+			if (auto _tt = Util::HoverTooltipWrapper()) {
+				ImGui::Text(
+					"Replace Compute Shaders. "
+					"When false, will disable the custom Compute Shaders for the types above. "
+					"For developers to test whether CS shaders match vanilla behavior. ");
+			}
+		}
+		ImGui::EndTable();
+	}
+
+	// Only show shader blocking section in developer mode
 	if (!globals::state->IsDeveloperMode()) {
 		return;
 	}
 
+	ImGui::Spacing();
+	ImGui::Separator();
+	ImGui::Spacing();
+
 	// Show blocked shader status as a regular section
 	if (!shaderCache->blockedKey.empty()) {
-		ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0.2f, 0.1f, 0.1f, 0.8f));
-		ImGui::PushStyleVar(ImGuiStyleVar_ChildRounding, 4.0f);
-		ImGui::PushStyleVar(ImGuiStyleVar_ChildBorderSize, 1.0f);
+		// Create a visually distinct box for the blocked shader info with rounded corners and border
+		ImGui::PushStyleVar(ImGuiStyleVar_ChildRounding, 8.0f);
+		ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 2.0f);
+		ImVec4 blockedBgColor = Util::Colors::GetError();
+		blockedBgColor.w = 0.15f;  // Semi-transparent background
+		ImGui::PushStyleColor(ImGuiCol_ChildBg, blockedBgColor);
 
-		if (ImGui::CollapsingHeader("Currently Blocked Shader", ImGuiTreeNodeFlags_DefaultOpen)) {
+		if (ImGui::BeginChild("##BlockedShaderInfo", ImVec2(0, 0), true, ImGuiChildFlags_AutoResizeY)) {
 			ImGui::TextColored(Util::Colors::GetError(), "Shader Blocking Active");
 			ImGui::SameLine();
 			if (ImGui::SmallButton("Stop Blocking##Section")) {
@@ -224,20 +238,18 @@ void AdvancedSettingsRenderer::RenderShaderDebugSection()
 			auto activeShaders = shaderCache->GetActiveShaders();
 			for (const auto& shader : activeShaders) {
 				if (shader.key == shaderCache->blockedKey) {
-					ImGui::Text("Type: %s | Class: %s | Descriptor: 0x%X",
-						magic_enum::enum_name(shader.shaderType).data(),
-						magic_enum::enum_name(shader.shaderClass).data(),
-						shader.descriptor);
+					ImGui::Text("Type: %s", magic_enum::enum_name(shader.shaderType).data());
+					ImGui::Text("Class: %s", magic_enum::enum_name(shader.shaderClass).data());
+					ImGui::Text("Descriptor: 0x%X", shader.descriptor);
 
-					// Add copy button with full information including disk cache
-					ImGui::SameLine();
-					ImGui::PushID("copy_blocked_shader");
-					if (ImGui::SmallButton("Copy Info")) {
-						// Convert wstring to string for display
+					// Add button to copy shader info to clipboard
+					ImGui::PushID(shader.key.c_str());
+					if (ImGui::SmallButton("Copy Info##BlockedShader")) {
 						std::string diskPathStr;
-						diskPathStr.resize(shader.diskPath.size());
-						std::transform(shader.diskPath.begin(), shader.diskPath.end(), diskPathStr.begin(),
-							[](wchar_t c) { return static_cast<char>(c); });
+						diskPathStr.reserve(shader.diskPath.size());
+						for (wchar_t wc : shader.diskPath) {
+							diskPathStr += static_cast<char>(wc);
+						}
 
 						std::string fullInfo = std::format("Type: {}\nClass: {}\nDescriptor: 0x{:X}\nKey: {}\nCache Path: {}",
 							magic_enum::enum_name(shader.shaderType).data(),
@@ -258,10 +270,11 @@ void AdvancedSettingsRenderer::RenderShaderDebugSection()
 				}
 			}
 		}
+		ImGui::EndChild();
 
 		ImGui::PopStyleVar();    // ChildRounding
 		ImGui::PopStyleVar();    // WindowBorderSize
-		ImGui::PopStyleColor();  // WindowBg
+		ImGui::PopStyleColor();  // ChildBg
 	}
 
 	// Active shaders list
@@ -276,19 +289,16 @@ void AdvancedSettingsRenderer::RenderShaderDebugSection()
 
 		// Get fresh active shaders data for accurate count and table
 		auto activeShaders = shaderCache->GetActiveShaders();
-		ImGui::Text("Total Active: %zu", activeShaders.size());
-
-		// Calculate total draw calls for percentage calculation
 		uint32_t totalDrawCalls = 0;
 		for (const auto& shader : activeShaders) {
 			totalDrawCalls += shader.drawCalls;
 		}
 
-		// Filter controls (now handled by ShowFilteredStringTableCustom)
+		// Static variables to maintain table filter state
 		static char filterText[256] = "";
-		static int searchColumn = 0;  // 0 = All Columns, 1 = Type, 2 = Class, 3 = Descriptor, 4 = Draw Calls, 5 = Key
-
-		// Create shader rows for the table utility (simplified - no filter data needed)
+		static int searchColumn = 0;        // 0 = All Columns, 1 = Type, 2 = Class, 3 = Descriptor, 4 = Draw Calls, 5 = Key
+		static size_t sortColumn = 4;       // Default sort by Frame % (draw calls)
+		static bool sortAscending = false;  // Descending by default (highest usage first)		// Create shader rows for the table utility (simplified - no filter data needed)
 		struct ShaderRow
 		{
 			SIE::ShaderCache::ActiveShaderInfo shader;
@@ -308,10 +318,10 @@ void AdvancedSettingsRenderer::RenderShaderDebugSection()
 			{ "Class", "Shader class", [](const ShaderRow& row) {
 				 return std::string(magic_enum::enum_name(row.shader.shaderClass));
 			 } },
-			{ "Descriptor", "Shader descriptor hash", [](const ShaderRow& row) {
+			{ "Descriptor", "Shader descriptor", [](const ShaderRow& row) {
 				 return std::format("0x{:X}", row.shader.descriptor);
 			 } },
-			{ "Frame %", "Percentage of total draw calls in current frame", [](const ShaderRow& row) {
+			{ "Frame %", "Percentage of draw calls this frame", [](const ShaderRow& row) {
 				 float percentage = Util::CalculatePercentage(static_cast<float>(row.shader.drawCalls), static_cast<float>(row.totalDrawCalls));
 				 return Util::FormatPercent(percentage);
 			 } },
@@ -323,23 +333,21 @@ void AdvancedSettingsRenderer::RenderShaderDebugSection()
 		// Row click callbacks
 		auto onRowLeftClick = [shaderCache](const ShaderRow& row) {
 			if (row.shader.key == shaderCache->blockedKey) {
-				// Clicking on already blocked shader - unblock it
 				shaderCache->DisableShaderBlocking();
 			} else {
-				// Clicking on different shader - block it
+				// Block this shader - use IterateShaderBlock to find and block it
+				// Or set blockedKey directly (simpler for click-to-block)
 				shaderCache->blockedKey = row.shader.key;
-				shaderCache->blockedKeyIndex = 0;
-				shaderCache->blockedIDs.clear();
-				logger::debug("Manually blocking shader: {}", row.shader.key);
+				logger::info("Blocking shader: {}", row.shader.key);
 			}
 		};
 
 		auto onRowRightClick = [shaderCache](const ShaderRow& row) {
-			// Convert wstring to string for display
 			std::string diskPathStr;
-			diskPathStr.resize(row.shader.diskPath.size());
-			std::transform(row.shader.diskPath.begin(), row.shader.diskPath.end(), diskPathStr.begin(),
-				[](wchar_t c) { return static_cast<char>(c); });
+			diskPathStr.reserve(row.shader.diskPath.size());
+			for (wchar_t wc : row.shader.diskPath) {
+				diskPathStr += static_cast<char>(wc);
+			}
 
 			std::string fullInfo = std::format("Type: {}\nClass: {}\nDescriptor: 0x{:X}\nKey: {}\nCache Path: {}",
 				magic_enum::enum_name(row.shader.shaderType).data(),
@@ -349,7 +357,6 @@ void AdvancedSettingsRenderer::RenderShaderDebugSection()
 				diskPathStr);
 			ImGui::SetClipboardText(fullInfo.c_str());
 		};
-
 		auto getRowTooltip = [shaderCache](const ShaderRow& row) {
 			std::string clickAction = (row.shader.key == shaderCache->blockedKey) ? "Left-click to unblock this shader" : "Left-click to block this shader";
 
@@ -417,37 +424,77 @@ void AdvancedSettingsRenderer::RenderShaderDebugSection()
 			{ Util::TableInputEventType::ContextMenu, onRowRightClick, "Copy Info", 1 }
 		};
 
-		// Define function to get row text color (highlight blocked shaders)
-		auto getRowTextColor = [shaderCache](const ShaderRow& row) -> ImVec4 {
-			if (row.shader.key == shaderCache->blockedKey) {
-				// Use theme error color for blocked shader text
-				return Util::Colors::GetError();
-			}
-			return ImVec4(0, 0, 0, 0);  // Default text color for normal rows
-		};
-
-		// Use the new interactive table
+		// Render the table with all configurations
 		Util::ShowInteractiveTable<ShaderRow>(
-			"ActiveShadersTable",
+			"##ActiveShadersTable",
 			columns,
 			shaderRows,
-			3,      // Default sort column (Frame %)
-			false,  // Default descending (for "hot" shaders)
+			sortColumn,
+			sortAscending,
 			sorters,
 			filterState,
 			inputEvents,
-			getRowTooltip,
-			nullptr,           // No background color
-			getRowTextColor);  // Pass the new text color function
+			getRowTooltip);
 
-		// Update the filter text back to the char array
+		// Update static variables with modified filter state
 		strncpy_s(filterText, filterState.filterText.c_str(), sizeof(filterText) - 1);
+		filterText[sizeof(filterText) - 1] = '\0';
 		searchColumn = filterState.searchColumn;
 	}
 }
 
+void AdvancedSettingsRenderer::RenderPBRSection(const std::function<void()>& drawTruePBRSettings)
+{
+	drawTruePBRSettings();
+}
+
+void AdvancedSettingsRenderer::RenderDisableAtBootSection(const std::function<void()>& drawDisableAtBootSettings)
+{
+	drawDisableAtBootSettings();
+}
+
 void AdvancedSettingsRenderer::RenderDeveloperSection()
 {
+	auto shaderCache = globals::shaderCache;
+
+	// File Watcher option (moved from Advanced/Logging)
+	bool useFileWatcher = shaderCache->UseFileWatcher();
+	if (ImGui::Checkbox("Enable File Watcher", &useFileWatcher)) {
+		shaderCache->SetFileWatcher(useFileWatcher);
+	}
+	if (auto _tt = Util::HoverTooltipWrapper()) {
+		ImGui::Text(
+			"Automatically recompile shaders on file change. "
+			"Intended for developing.");
+	}
+
+	// Debug addresses section (moved from Advanced/Logging)
+	if (ImGui::TreeNodeEx("Addresses")) {
+		auto Renderer = globals::game::renderer;
+		auto BSShaderAccumulator = *globals::game::currentAccumulator.get();
+		auto RendererShadowState = globals::game::shadowState;
+		ADDRESS_NODE(Renderer)
+		ADDRESS_NODE(BSShaderAccumulator)
+		ADDRESS_NODE(RendererShadowState)
+		ImGui::TreePop();
+	}
+
+	// Statistics section (moved from Advanced/Logging)
+	if (ImGui::TreeNodeEx("Statistics", ImGuiTreeNodeFlags_DefaultOpen)) {
+		ImGui::Text(std::format("Shader Compiler : {}", shaderCache->GetShaderStatsString()).c_str());
+		ImGui::TreePop();
+	}
+
+	// Frame annotations toggle (moved from Advanced/Logging)
+	ImGui::Checkbox("Frame Annotations", &globals::state->frameAnnotations);
+	if (auto _tt = Util::HoverTooltipWrapper()) {
+		ImGui::Text("Enable detailed frame annotations for debugging render passes and draw calls.");
+	}
+
+	ImGui::Spacing();
+	ImGui::Separator();
+	ImGui::Spacing();
+
 	// Developer Mode Testing Section
 	if (globals::state->IsDeveloperMode()) {
 		FeatureIssues::Test::DrawDeveloperModeTestingUI();
