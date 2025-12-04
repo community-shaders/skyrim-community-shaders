@@ -20,6 +20,7 @@ struct half
 		return DirectX::PackedVector::XMConvertHalfToFloat(v);
 	}
 };
+static_assert(sizeof(half) == 2);
 
 struct half2
 {
@@ -72,3 +73,32 @@ struct half3
 	}
 };
 static_assert(sizeof(half3) == 6);
+
+struct half4
+{
+	half x;
+	half y;
+	half z;
+	half w;
+
+	half4() = default;
+
+	constexpr half4(half _x, half _y, half _z, half _w) :
+		x(_x), y(_y), z(_z), w(_w) {}
+
+	half4(float _x, float _y, float _z, float _w) :
+		x(_x), y(_y), z(_z), w(_w) {}
+
+	half4(const float4& v) :
+		x(v.x), y(v.y), z(v.z), w(v.w) {}
+
+	operator float4() const
+	{
+		return float4(
+			static_cast<float>(x),
+			static_cast<float>(y),
+			static_cast<float>(z),
+			static_cast<float>(w));
+	}
+};
+static_assert(sizeof(half4) == 8);

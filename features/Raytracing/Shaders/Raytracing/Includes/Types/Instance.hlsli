@@ -33,18 +33,10 @@ struct LightData
     }    
 };
 
-struct Material
-{
-	float4 TexCoordOffsetScale; 
-	float4 EffectColor;
-    float ShaderType;  
-};
-
 struct Instance
 {
 	uint MeshID;
     LightData LightData;
-    Material Material;
 };
 
 #endif

@@ -468,7 +468,15 @@ void Raytracing::SetupResources()
 		lightBuffer->CreateSRV(giHeap->CPUHandle(GIHeap::Slot::Lights));
 	}
 
-	// t4 - Instance buffer
+	// t4 - Material buffer
+	{
+		materialBuffer = eastl::make_unique<DX12::StructuredBufferUpload<Material>>(d3d12Device.get(), MAX_MATERIALS);
+		DX::ThrowIfFailed(materialBuffer->resource->SetName(L"Material Buffer"));
+
+		materialBuffer->CreateSRV(giHeap->CPUHandle(GIHeap::Slot::Materials));
+	}
+
+	// t5 - Instance buffer
 	{
 		instanceBuffer = eastl::make_unique<DX12::StructuredBufferUpload<Instance>>(d3d12Device.get(), MAX_INSTANCES);
 		DX::ThrowIfFailed(instanceBuffer->resource->SetName(L"Instance Buffer"));
@@ -1438,32 +1446,50 @@ void Raytracing::ReadRendererData(MeshData& meshData, RE::BSGraphics::TriShape* 
 	}
 }
 
+static ID3D11Texture2D* TryGetTexture(const RE::NiPointer<RE::NiSourceTexture> niPointer)
+{
+	if (niPointer) {
+		if (const auto& bsTexture = niPointer->rendererTexture; bsTexture) {
+			return bsTexture->texture;
+		}
+	}
+
+	return nullptr;
+}
+
 void Raytracing::ReadMaterial(MeshData& meshData, const RE::BSGeometry::GEOMETRY_RUNTIME_DATA& geometryRuntimeData, [[ maybe_unused ]] const char* name)
 {
 	using State = RE::BSGeometry::States;
 	using Feature = RE::BSShaderMaterial::Feature;
 
-	Feature feature = Feature::kNone;
-	ID3D12Resource* diffuseTexture = nullptr;
-	ID3D12Resource* effectTexture = nullptr;
+	//Feature feature = Feature::kNone;
+	float4 baseColor = { 0.0f, 0.0f, 0.0f, 1.0f };
 	float4 effectColor = { 0.0f, 0.0f, 0.0f, 1.0f };
-	int effectType = 0;
 
 	float4 texCoordOffsetScale = { 0.0f, 0.0f, 1.0f, 1.0f };
 	float4 texCoord1OffsetScale = { 0.0f, 0.0f, 1.0f, 1.0f };
+
+	uint16_t baseTextureRegister = 0;
+	uint16_t effectTextureRegister = 0;
+	uint16_t rmaosTextureRegister = 0;
+	int effectType = 0;
+
+	RE::BSShader::Type shaderType = RE::BSShader::Type::None;
+
+	ID3D11Texture2D* baseTexture = nullptr;
+	ID3D11Texture2D* effectTexture = nullptr;
+	//ID3D11Texture2D* rmaosTexture;
 
 	// Register textures buffer
 	{
 		auto effect = geometryRuntimeData.properties[State::kEffect].get();
 
 		if (effect) {
-			//auto shaderProperty = netimmerse_cast<RE::BSShaderProperty*>(effect);
-
-			//logger::warn(fmt::runtime("[RT] AddInstance - {}, ShaderPropertyFlags: {}"), pTriShape->name, GetFlags<RE::BSShaderProperty::EShaderPropertyFlag>(shaderProperty->flags.underlying()));
-
 			auto lightingShader = netimmerse_cast<RE::BSLightingShaderProperty*>(effect);
 
 			if (lightingShader) {
+				shaderType = RE::BSShader::Type::Lighting;
+
 				effectColor = {
 					lightingShader->emissiveColor->red,
 					lightingShader->emissiveColor->green,
@@ -1482,35 +1508,17 @@ void Raytracing::ReadMaterial(MeshData& meshData, const RE::BSGeometry::GEOMETRY
 							material->texCoordScale[1].x, material->texCoordScale[1].y
 						};*/
 
-					feature = material->GetFeature();
 
-					auto lightingBaseMaterial = static_cast<RE::BSLightingShaderMaterialBase*>(material);
+					const auto* lightingBaseMaterial = static_cast<RE::BSLightingShaderMaterialBase*>(material);
 
 					if (lightingBaseMaterial) {
-						auto niDiffuseTexture = lightingBaseMaterial->diffuseTexture;
-						auto bsDiffuseTexture = niDiffuseTexture->rendererTexture;
+						baseTexture = TryGetTexture(lightingBaseMaterial->diffuseTexture);
 
-						if (auto it = sharedTextures.find(bsDiffuseTexture->texture); it != sharedTextures.end()) {
-							diffuseTexture = it->second.get();
-						} else {
-							//logger::warn(fmt::runtime("[RT] Diffuse texture not found for {}"), name);
-						}
-
-						if (feature == Feature::kGlowMap) {
-							const auto& lightingGlowMaterial = static_cast<RE::BSLightingShaderMaterialGlowmap*>(material);
+						if (material->GetFeature() == Feature::kGlowMap) {
+							const auto* lightingGlowMaterial = static_cast<RE::BSLightingShaderMaterialGlowmap*>(material);
 
 							if (lightingGlowMaterial) {
-								if (const auto& niGlowTexture = lightingGlowMaterial->glowTexture; niGlowTexture) {
-									if (const auto& bsGlowTexture = niGlowTexture->rendererTexture; bsGlowTexture) {
-										if (auto it = sharedTextures.find(bsGlowTexture->texture); it != sharedTextures.end()) {
-											effectTexture = it->second.get();
-										}
-									}
-								}
-							}
-
-							if (!effectTexture) {
-								//logger::warn(fmt::runtime("[RT] Glow texture not found for {}"), name);
+								effectTexture = TryGetTexture(lightingGlowMaterial->glowTexture);
 							}
 						}
 					}
@@ -1520,6 +1528,8 @@ void Raytracing::ReadMaterial(MeshData& meshData, const RE::BSGeometry::GEOMETRY
 			auto effectShader = netimmerse_cast<RE::BSEffectShaderProperty*>(effect);
 
 			if (effectShader) {
+				shaderType = RE::BSShader::Type::Effect;
+
 				if (auto material = effectShader->material) {
 					auto effectMaterial = static_cast<RE::BSEffectShaderMaterial*>(material);
 
@@ -1527,64 +1537,35 @@ void Raytracing::ReadMaterial(MeshData& meshData, const RE::BSGeometry::GEOMETRY
 						effectType = 1;
 						effectColor = { effectMaterial->baseColor.red, effectMaterial->baseColor.green, effectMaterial->baseColor.blue, effectMaterial->baseColorScale };
 
-						if (auto niSourceTexture = effectMaterial->sourceTexture) {
-							if (auto bsSourceTexture = niSourceTexture->rendererTexture) {
-								if (auto it = sharedTextures.find(bsSourceTexture->texture); it != sharedTextures.end()) {
-									diffuseTexture = it->second.get();
-								} else {
-									//logger::warn(fmt::runtime("[RT] Source texture not found for {}"), name);
-								}
-							}
-						}
-
-						if (auto niGreyscaleTexture = effectMaterial->greyscaleTexture) {
-							if (auto bsGreyscaleTexture = niGreyscaleTexture->rendererTexture) {
-								if (auto it = sharedTextures.find(bsGreyscaleTexture->texture); it != sharedTextures.end()) {
-									effectTexture = it->second.get();
-								} else {
-									//logger::warn(fmt::runtime("[RT] Greyscale texture not found for {}"), name);
-								}
-							}
-						}
+						baseTexture = TryGetTexture(effectMaterial->sourceTexture);
+						effectTexture = TryGetTexture(effectMaterial->greyscaleTexture);
 					}
 				}
 			}
 		}
 	}
 
-	// Diffuse Texture
-	if (diffuseTexture) {
-		D3D12_RESOURCE_DESC texResDesc = diffuseTexture->GetDesc();
+	if (baseTexture == nullptr)
+		logger::warn("[RT] CreateMaterial {} - Base texture is nullptr", name);
 
-		D3D12_SHADER_RESOURCE_VIEW_DESC texSrvDesc = {};
-		texSrvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
-		texSrvDesc.Format = texResDesc.Format;
-		texSrvDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
-		texSrvDesc.Texture2D.MostDetailedMip = 0;
-		texSrvDesc.Texture2D.MipLevels = texResDesc.MipLevels;
-		texSrvDesc.Texture2D.PlaneSlice = 0;
-		texSrvDesc.Texture2D.ResourceMinLODClamp = 0.0f;
+	baseTextureRegister = GetTextureRegister(baseTexture, true);
+	effectTextureRegister = GetTextureRegister(effectTexture, false);
 
-		d3d12Device->CreateShaderResourceView(diffuseTexture, &texSrvDesc, giHeap->CPUHandle(GIHeap::Slot::DiffuseTextures, meshData.registerIndex));
-	}
+	if (baseTexture && baseTextureRegister == 0)
+		logger::warn("[RT] CreateMaterial {} - Base texture [0x{:8X}] not shared", name, reinterpret_cast<uintptr_t>(baseTexture));
 
-	// Glow Texture
-	if (effectTexture) {
-		D3D12_RESOURCE_DESC texResDesc = effectTexture->GetDesc();
+	auto material = Material(
+		baseColor,
+		effectColor,
+		texCoordOffsetScale,
+		baseTextureRegister,
+		effectTextureRegister,
+		rmaosTextureRegister,
+		static_cast<uint16_t>(shaderType));
 
-		D3D12_SHADER_RESOURCE_VIEW_DESC texSrvDesc = {};
-		texSrvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
-		texSrvDesc.Format = texResDesc.Format;
-		texSrvDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
-		texSrvDesc.Texture2D.MostDetailedMip = 0;
-		texSrvDesc.Texture2D.MipLevels = texResDesc.MipLevels;
-		texSrvDesc.Texture2D.PlaneSlice = 0;
-		texSrvDesc.Texture2D.ResourceMinLODClamp = 0.0f;
+	meshData.material = material;
 
-		d3d12Device->CreateShaderResourceView(effectTexture, &texSrvDesc, giHeap->CPUHandle(GIHeap::Slot::GlowTextures, meshData.registerIndex));
-	}
-
-	meshData.material = MaterialData(feature, texCoordOffsetScale, diffuseTexture, effectTexture, nullptr, effectColor, effectType == 0 ? RE::BSShader::Type::Lighting : RE::BSShader::Type::Effect);
+	materialBuffer->Update(&material, sizeof(Material), sizeof(Material) * meshData.registerIndex);
 }
 
 void Raytracing::CreateBuffers(MeshData& meshData, const std::wstring& name)
@@ -1753,13 +1734,6 @@ void Raytracing::CreateGeometry(const char* path, RE::NiNode* pRoot)
 	eastl::vector<MeshData> meshes;
 
 	RE::BSVisit::TraverseScenegraphGeometries(pRoot, [&](RE::BSGeometry* pGeometry) -> RE::BSVisit::BSVisitControl {
-		/*logger::info("\t\t[RT] CreateGeometry::TraverseScenegraphGeometries - Geometry [0x{:x}]: {}, Type: {}", reinterpret_cast<uintptr_t>(pGeometry), pGeometry->name, magic_enum::enum_name(pGeometry->GetType().get()));
-
-		const auto* geomBSXFlags = pGeometry->GetExtraData<RE::BSXFlags>("BSX");
-
-		if (geomBSXFlags)
-			logger::info("\t\t[RT] CreateGeometry::TraverseScenegraphGeometries - BSX Flags [0x{:x}]: {}", geomBSXFlags->value, GetFlags<RE::BSXFlags::Flag>(static_cast<uint32_t>(geomBSXFlags->value)));*/
-
 		const char* name = pGeometry->name.c_str();
 
 		const auto& geometryType = pGeometry->GetType();
@@ -1782,7 +1756,6 @@ void Raytracing::CreateGeometry(const char* path, RE::NiNode* pRoot)
 		auto lightingShader = netimmerse_cast<RE::BSLightingShaderProperty*>(effect.get());
 
 		if (!lightingShader) {
-			//logger::warn("\t\t[RT] CreateGeometry::TraverseScenegraphGeometries - Not LightingShader");
 			return RE::BSVisit::BSVisitControl::kContinue;
 		}
 
@@ -1806,13 +1779,9 @@ void Raytracing::CreateGeometry(const char* path, RE::NiNode* pRoot)
 			std::memcpy(dynamic.data(), dynTriShapeRuntime.dynamicData, dynTriShapeRuntime.dataSize);
 		}
 
-		//logger::info("\t\t[RT] CreateGeometry::TraverseScenegraphGeometries - Geom Flags [0x{:x}]: {}", geomFlags.underlying(), GetFlags<RE::NiAVObject::Flag>(geomFlags.underlying()));
-
 		auto localToRoot = GetXMFromNiTransform(rootWorldInverse * pGeometry->world);
 		
 		if (auto* triShapeRD = geometryRuntimeData.rendererData) { // Non-Skinned
-			logger::warn("\t\t[RT] CreateGeometry::TraverseScenegraphGeometries - Standard Geometry: {}", name);
-
 			auto* pTriShape = netimmerse_cast<RE::BSTriShape*>(pGeometry);
 
 			const auto& triShapeRuntime = pTriShape->GetTrishapeRuntimeData();
@@ -1825,20 +1794,11 @@ void Raytracing::CreateGeometry(const char* path, RE::NiNode* pRoot)
 
 			meshes.push_back(eastl::move(meshData));
 		} else if (auto* skinInstance = (RE::BSDismemberSkinInstance*)geometryRuntimeData.skinInstance.get()) {  // Skinned
-			logger::warn("\t\t[RT] CreateGeometry::TraverseScenegraphGeometries - Skinned Geometry: {}", name);
-
-			static REL::Relocation<const RE::NiRTTI*> bsDismemberedSkinInstanceRTTI{ RE::BSDismemberSkinInstance::Ni_RTTI };
+			/*static REL::Relocation<const RE::NiRTTI*> bsDismemberedSkinInstanceRTTI{ RE::BSDismemberSkinInstance::Ni_RTTI };
 			bool isDismembered = skinInstance->GetRTTI()->IsKindOf(bsDismemberedSkinInstanceRTTI.get());
 
 			if (isDismembered)
-				logger::warn("\t\t[RT] CreateGeometry::TraverseScenegraphGeometries - Is dismembered");
-
-			/*auto& skinData = skinInstance->skinData;
-
-			if (skinData->skinPartition) {
-				logger::warn("\t\t[RT] CreateGeometry::TraverseScenegraphGeometries - Valid skinData->skinPartition");
-				//return RE::BSVisit::BSVisitControl::kContinue;
-			}*/
+				logger::warn("\t\t[RT] CreateGeometry::TraverseScenegraphGeometries - Is dismembered");*/
 			
 			auto& skinPartition = skinInstance->skinPartition;
 	
@@ -1847,7 +1807,7 @@ void Raytracing::CreateGeometry(const char* path, RE::NiNode* pRoot)
 				return RE::BSVisit::BSVisitControl::kContinue;
 			}
 
-			logger::info("\t\t[RT] CreateGeometry::TraverseScenegraphGeometries - Partitions: {}, VertexCount: {}, Unk24: [0x{:X}]", skinPartition->numPartitions, skinPartition->vertexCount, skinPartition->unk24);
+			logger::debug("\t\t[RT] CreateGeometry::TraverseScenegraphGeometries - Partitions: {}, VertexCount: {}, Unk24: [0x{:X}]", skinPartition->numPartitions, skinPartition->vertexCount, skinPartition->unk24);
 
 			for (auto& partition : skinPartition->partitions) {
 				auto meshData = MeshData(registers.allocate(), dynamic);
@@ -1873,21 +1833,53 @@ void Raytracing::CreateGeometry(const char* path, RE::NiNode* pRoot)
 	auto meshCount = meshes.size();
 
 	if (meshCount > 0) {
-		//inputPaths.try_emplace(pRoot, path);
-
 		auto [it, emplaced] = geometry.try_emplace(path, GeometryData(eastl::move(meshes)));
 
 		if (emplaced) {
 			CommitGeometry(it->second);
 			AddInstance(pRoot, path);
 
-			logger::info("[RT] CreateGeometry - Commited {} TriShapes", meshCount);
+			logger::debug("[RT] CreateGeometry - Commited {} TriShapes", meshCount);
 		} else {
 			logger::warn("[RT] CreateGeometry - Emplace failed for {} TriShapes", meshCount);
 		}
 	} else {
 		logger::warn("[RT] CreateGeometry - No TriShapes to commit");
 	}
+}
+
+uint16_t Raytracing::GetTextureRegister(ID3D11Texture2D* dx11Texture, bool whiteDefault)
+{
+	if (auto it = sharedTextures.find(dx11Texture); it != sharedTextures.end()) {
+		if (auto refIt = textures.find(dx11Texture); refIt != textures.end()) {
+			return refIt->second.registerIndex;
+		} else {
+			auto dx12Texture = it->second.get();
+
+			D3D12_RESOURCE_DESC texResDesc = dx12Texture->GetDesc();
+
+			D3D12_SHADER_RESOURCE_VIEW_DESC texSrvDesc = {};
+			texSrvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
+			texSrvDesc.Format = texResDesc.Format;
+			texSrvDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
+			texSrvDesc.Texture2D.MostDetailedMip = 0;
+			texSrvDesc.Texture2D.MipLevels = texResDesc.MipLevels;
+			texSrvDesc.Texture2D.PlaneSlice = 0;
+			texSrvDesc.Texture2D.ResourceMinLODClamp = 0.0f;
+
+			auto registerIndex = textureRegisters.allocate();
+
+			textures.emplace(dx11Texture, TextureReference(dx12Texture, registerIndex));
+
+			d3d12Device->CreateShaderResourceView(dx12Texture, &texSrvDesc, giHeap->CPUHandle(GIHeap::Slot::Textures, registerIndex));
+
+			return registerIndex;
+		}
+	}
+
+	logger::debug("[RT] Source texture not found");
+
+	return whiteDefault ? 0u : 1u;
 }
 
 void Raytracing::RegisterInstance(RE::BSFadeNode* pOriginal, RE::NiObject* pInstance)
@@ -2078,14 +2070,11 @@ void Raytracing::UpdateInstances()
 			const auto& material = mesh.material;
 		}*/
 
-		const auto& material = geometryData.meshes[0].material; // TODO: proper materials
-
 		//logger::info("[RT] UpdateInstances - FadeNode: [0x{:x}], Position: [{}, {}, {}], InputFile: {}", reinterpret_cast<uintptr_t>(pFadeNode), data.transform._41, data.transform._42, data.transform._43, data.filename);
 
 		instanceData.emplace_back(
 			static_cast<uint>(geometryData.meshes[0].registerIndex), 
-			LightData(GatherInstanceLights(pNiNode)), 
-			Material(material.texCoordOffsetScale, material.effectColor, material.shaderType == RE::BSShader::Type::Lighting ? 0.0f : 1.0f)
+			LightData(GatherInstanceLights(pNiNode))
 		);
 	}
 	
@@ -2094,6 +2083,8 @@ void Raytracing::UpdateInstances()
 
 	instanceBuffer->UpdateList(instanceData.data(), instanceData.size());
 	instanceBuffer->Upload(commandList.get());
+
+	materialBuffer->Upload(commandList.get());
 }
 
 auto GetFrustumCorners2(const RE::NiFrustum& frustum)
@@ -2559,14 +2550,11 @@ void Raytracing::DrawRTGI()
 			// Parameter 3: Triangle buffers
 			commandList->SetComputeRootDescriptorTable(3, giHeap->TableGPUHandle(GIHeap::Table::TriangleBuffer));
 
-			// Parameter 4: Diffuse Textures
-			commandList->SetComputeRootDescriptorTable(4, giHeap->TableGPUHandle(GIHeap::Table::DiffuseTextures));
+			// Parameter 4: Textures
+			commandList->SetComputeRootDescriptorTable(4, giHeap->TableGPUHandle(GIHeap::Table::Textures));
 
-			// Parameter 5: Glow Textures
-			commandList->SetComputeRootDescriptorTable(5, giHeap->TableGPUHandle(GIHeap::Table::GlowTextures));
-
-			// Parameter 6: Constant buffer
-			commandList->SetComputeRootConstantBufferView(6, frameBuffer->resource->GetGPUVirtualAddress());
+			// Parameter 5: Constant buffer
+			commandList->SetComputeRootConstantBufferView(5, frameBuffer->resource->GetGPUVirtualAddress());
 
 			auto finalTexDesc = mainTexture->resource->GetDesc();
 			
@@ -3075,6 +3063,7 @@ void Raytracing::CreateRootSignature()
 			{ GIHeap::Slot::TLAS, 1 },
 			{ GIHeap::Slot::SkyHemisphere, 1 },
 			{ GIHeap::Slot::Lights, 1 },
+			{ GIHeap::Slot::Materials, 1 },	
 			{ GIHeap::Slot::Instances, 1 }		
 		});
 
@@ -3088,29 +3077,20 @@ void Raytracing::CreateRootSignature()
 		});
 	
 
-	// Index buffers (unbounded)
+	// Triangle buffers (unbounded)
 	giHeap->CreateTable(
 		GIHeap::Table::TriangleBuffer, 
 		D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 
 		{ 
 			{ GIHeap::Slot::Triangles, UINT_MAX, 2, D3D12_DESCRIPTOR_RANGE_FLAG_DESCRIPTORS_VOLATILE } 
 		});
-	
 
-	// Diffuse Textures (unbounded)
+	// Textures (unbounded)
 	giHeap->CreateTable(
-		GIHeap::Table::DiffuseTextures,
+		GIHeap::Table::Textures,
 		D3D12_DESCRIPTOR_RANGE_TYPE_SRV,
 		{ 
-			{ GIHeap::Slot::DiffuseTextures, UINT_MAX, 3, D3D12_DESCRIPTOR_RANGE_FLAG_DESCRIPTORS_VOLATILE }	
-		});
-
-	// Glow Textures (unbounded)
-	giHeap->CreateTable(
-		GIHeap::Table::GlowTextures,
-		D3D12_DESCRIPTOR_RANGE_TYPE_SRV,
-		{ 
-			{ GIHeap::Slot::GlowTextures, UINT_MAX, 4, D3D12_DESCRIPTOR_RANGE_FLAG_DESCRIPTORS_VOLATILE } 
+			{ GIHeap::Slot::Textures, UINT_MAX, 3, D3D12_DESCRIPTOR_RANGE_FLAG_DESCRIPTORS_VOLATILE } 
 		});
 
 

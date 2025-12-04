@@ -3,6 +3,7 @@
 
 #include "Raytracing/Includes/Types/Vertex.hlsli"
 #include "Raytracing/Includes/Types/Triangle.hlsli"
+#include "Raytracing/Includes/Types/Material.hlsli"
 #include "Raytracing/Includes/Types/Instance.hlsli"
 #include "Raytracing/Includes/Types/Light.hlsli"
 #include "Raytracing/Includes/RT.hlsli"

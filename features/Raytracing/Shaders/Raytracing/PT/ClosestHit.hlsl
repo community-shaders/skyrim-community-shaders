@@ -26,8 +26,6 @@ void HitMesh(inout IndirectPayload payload, in BuiltInTriangleIntersectionAttrib
     
     StructuredBuffer<Vertex> meshVertices = Vertices[meshID];
     StructuredBuffer<Triangle> meshTriangles = Triangles[meshID];
-    Texture2D diffuseTexture = DiffuseTextures[meshID];
-    Texture2D effectTexture = EffectTextures[meshID];
     
     Triangle meshTriangle = meshTriangles[PrimitiveIndex()];
     
@@ -47,24 +45,27 @@ void HitMesh(inout IndirectPayload payload, in BuiltInTriangleIntersectionAttrib
     
     float3 worldNormal = normalize(mul(objectToWorld3x3, Interpolate(vertice0.Normal, vertice1.Normal, vertice2.Normal, uvw)));
     
-    payload.color += float4(worldNormal * 0.5 + 0.5f, 1.0f);
-    return;    
+    //payload.color += float4(worldNormal * 0.5 + 0.5f, 1.0f);
+    //return;    
     
     float3 worldTangent = normalize(mul(objectToWorld3x3, Interpolate(vertice0.Tangent, vertice1.Tangent, vertice2.Tangent, uvw)));
     float3 worldBitangent = normalize(mul(objectToWorld3x3, Interpolate(vertice0.Bitangent, vertice1.Bitangent, vertice2.Bitangent, uvw)));
     
-    half4 vertexColor = vertice0.Color.unpack() * u + vertice1.Color.unpack() * v + vertice2.Color.unpack() * w;
+    float4 vertexColor = vertice0.Color.unpack() * u + vertice1.Color.unpack() * v + vertice2.Color.unpack() * w;
     
-    Material material = instance.Material;
+    Material material = Materials[meshID];
     
     texCoord0 += material.TexCoordOffsetScale.xy;
     texCoord0 *= material.TexCoordOffsetScale.zw;
     
-    float3 diffuse = diffuseTexture.SampleLevel(DiffuseSampler, texCoord0, 0).rgb;
-    float3 effect = effectTexture.SampleLevel(DiffuseSampler, texCoord0, 0).rgb;
+    Texture2D baseTexture = Textures[NonUniformResourceIndex(material.BaseTexture)];
+    Texture2D effectTexture = Textures[NonUniformResourceIndex(material.EffectTexture)];    
     
-    //payload.color += float4(diffuse, 1.0f);
-    //return;   
+    float3 diffuse = baseTexture.SampleLevel(BaseSampler, texCoord0, 0).rgb;
+    float3 effect = effectTexture.SampleLevel(BaseSampler, texCoord0, 0).rgb;
+    
+    payload.color += float4(diffuse, 1.0f);
+    return;   
     
     // Lighting Shader
     float3 lightingAlbedo = Color::GammaToLinear(diffuse) * vertexColor.rgb;
@@ -77,7 +78,7 @@ void HitMesh(inout IndirectPayload payload, in BuiltInTriangleIntersectionAttrib
     float baseColorScale = material.EffectColor.a;
     float2 grayscaleToColorUv = float2(diffuse.y, baseColorMul.x);
     
-    baseColor = baseColorScale * effectTexture.SampleLevel(DiffuseSampler, grayscaleToColorUv, 0).rgb;
+    baseColor = baseColorScale * effectTexture.SampleLevel(BaseSampler, grayscaleToColorUv, 0).rgb;
    
     float3 effectAlbedo = Color::GammaToLinear(baseColor.xyz);
     float3 effectEmissive = baseColor * Frame.Effect;

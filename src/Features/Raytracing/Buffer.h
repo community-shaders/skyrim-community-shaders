@@ -280,12 +280,15 @@ namespace DX12
 				IID_PPV_ARGS(&uploadBuffer)));
 		}
 
-		void Update(void const* src_data, size_t data_size)
+		void Update(void const* src_data, size_t data_size, size_t begin = 0)
 		{
 			void* pData;
 			DX::ThrowIfFailed(uploadBuffer->Map(0, &readRange, &pData));
-			memcpy(pData, src_data, data_size);
-			D3D12_RANGE writeRange = { 0, data_size };
+
+			uint8_t* dst = static_cast<uint8_t*>(pData) + begin;
+			memcpy(dst, src_data, data_size);
+
+			D3D12_RANGE writeRange = { begin, begin + data_size };
 			uploadBuffer->Unmap(0, &writeRange);
 		}
 
