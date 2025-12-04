@@ -37,16 +37,4 @@ void main()
     
     uint seed = InitRandomSeed(idx, size, Frame.FrameCount);
     OutputTexture[idx] = float4(TraceRayIndirect(Scene, origin, direction, 0, seed).rgb, 1.0f);
-    
-    //SpecularOutputTexture[idx] = TraceRaySpecular(Scene, positionWS, reflectWS, 0, seed, Frame.Specular, roughness);
-    
-    /*HashGridParameters gridParameters;
-    gridParameters.cameraPosition = Frame.Position;
-    gridParameters.logarithmBase = SHARC_GRID_LOGARITHM_BASE * GAME_UNIT_TO_CM;
-    gridParameters.sceneScale = Frame.SHARCScale;
-    gridParameters.levelBias = SHARC_GRID_LEVEL_BIAS;    
-    
-    float3 color = HashGridDebugColoredHash(positionWS, meshNormalWS, gridParameters);
-    
-    Output[idx] = float4(color, 1);*/ 
 }
