@@ -118,5 +118,4 @@ struct LinearLighting : Feature
 	void BSLightingShader_SetupGeometry(RE::BSRenderPass* a_pass);
 
 	struct Hooks;
-	
 };
