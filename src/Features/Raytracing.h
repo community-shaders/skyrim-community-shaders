@@ -1328,3 +1328,20 @@ struct Raytracing : public Feature
 		}
 	};
 };
+
+inline Raytracing::Mesh::Flags operator|(Raytracing::Mesh::Flags lhs, Raytracing::Mesh::Flags rhs)
+{
+	return static_cast<Raytracing::Mesh::Flags>(lhs | rhs);
+}
+
+inline Raytracing::Mesh::Flags& operator|=(Raytracing::Mesh::Flags& lhs, Raytracing::Mesh::Flags rhs)
+{
+	lhs = static_cast<Raytracing::Mesh::Flags>(lhs | rhs);
+	return lhs;
+}
+
+inline Raytracing::Mesh::Flags& operator&=(Raytracing::Mesh::Flags& lhs, Raytracing::Mesh::Flags rhs)
+{
+	lhs = lhs & rhs;
+	return lhs;
+}

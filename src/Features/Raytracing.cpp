@@ -1479,7 +1479,7 @@ void Raytracing::BuildMaterial(Mesh& mesh, const RE::BSGeometry::GEOMETRY_RUNTIM
 		auto* property = geometryRuntimeData.properties[State::kProperty].get();
 
 		if (property && property->GetType() == RE::NiProperty::Type::kAlpha) {
-			mesh.flags = static_cast<Mesh::Flags>(mesh.flags | Mesh::Flags::Alpha);
+			mesh.flags |= Mesh::Flags::Alpha;
 		}
 
 		if (property; auto lightingShader = netimmerse_cast<RE::BSLightingShaderProperty*>(property)) {
@@ -1647,7 +1647,7 @@ void Raytracing::CommitGeometry(GeometryData& geometryData)
 	for (auto i = 0; i < meshCount; i++) {
 		auto& meshData = meshes[i];
 
-		flags = static_cast<Mesh::Flags>(flags | meshData.flags);
+		flags |= meshData.flags;
 
 		geometryDescs[i] = {
 			.Type = D3D12_RAYTRACING_GEOMETRY_TYPE_TRIANGLES,
@@ -1787,6 +1787,8 @@ void Raytracing::CreateGeometry(const char* path, RE::NiNode* pRoot)
 		eastl::vector<float4> dynamic;
 
 		if (geometryType.all(RE::BSGeometry::Type::kDynamicTriShape)) {
+			flags |= Mesh::Flags::Dynamic;
+
 			auto* pDynamicTriShape = netimmerse_cast<RE::BSDynamicTriShape*>(pGeometry);
 
 			const auto& dynTriShapeRuntime = pDynamicTriShape->GetDynamicTrishapeRuntimeData();
@@ -1826,7 +1828,7 @@ void Raytracing::CreateGeometry(const char* path, RE::NiNode* pRoot)
 			logger::debug("\t\t[RT] CreateGeometry::TraverseScenegraphGeometries - Partitions: {}, VertexCount: {}, Unk24: [0x{:X}]", skinPartition->numPartitions, skinPartition->vertexCount, skinPartition->unk24);
 
 			for (auto& partition : skinPartition->partitions) {
-				auto meshData = Mesh(registers.allocate(), dynamic, static_cast<Mesh::Flags>(flags | Mesh::Skinned));
+				auto meshData = Mesh(registers.allocate(), dynamic, flags | Mesh::Skinned);
 
 				BuildMesh(meshData, partition.buffData, skinPartition->vertexCount, partition.triangles, partition.bonesPerVertex, localToRoot);
 				BuildMaterial(meshData, geometryRuntimeData, name);
