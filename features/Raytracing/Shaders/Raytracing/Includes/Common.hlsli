@@ -49,8 +49,4 @@ half3 DecodeNormal(half2 f)
 	return -normalize(n);
 }
 
-float3 Interpolate(float3 u, float3 v, float3 w, float3 uvw)
-{
-    return u * uvw.x + v * uvw.y + w * uvw.z;
-}
 #endif

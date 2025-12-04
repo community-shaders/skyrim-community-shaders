@@ -35,7 +35,7 @@ struct LightData
 
 struct Instance
 {
-	uint MeshID;
+	uint FirstMeshID;
     LightData LightData;
 };
 

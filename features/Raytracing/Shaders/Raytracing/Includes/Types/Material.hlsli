@@ -10,6 +10,13 @@ struct Material
 	uint16_t EffectTexture;
 	uint16_t RmaosTexture;
 	uint16_t ShaderType;
+	
+#ifndef __cplusplus	
+	float2 TexCoord(float2 texCoord)
+    {
+		return texCoord * TexCoordOffsetScale.zw + TexCoordOffsetScale.xy;
+	}
+#endif
 };
 
 #ifdef __cplusplus

@@ -18,7 +18,8 @@ namespace DX12
 		{
 			RayGeneration,
 			Miss,
-			Hit
+			Hit,
+			AnyHit
 		};
 
 		void AddRayGenLib(IDxcBlob* shaderBlob, const eastl::wstring& exportName, const eastl::wstring& renameFrom = L"main")
@@ -34,6 +35,11 @@ namespace DX12
 		void AddHitLib(IDxcBlob* shaderBlob, const eastl::wstring& exportName, const eastl::wstring& renameFrom = L"main")
 		{
 			AddLibrary(shaderBlob, exportName, renameFrom, ExportType::Hit);
+		}
+
+		void AddAnyHitLib(IDxcBlob* shaderBlob, const eastl::wstring& exportName, const eastl::wstring& renameFrom = L"main")
+		{
+			AddLibrary(shaderBlob, exportName, renameFrom, ExportType::AnyHit);
 		}
 
 		// Add a DXIL library (shader blob) with exports

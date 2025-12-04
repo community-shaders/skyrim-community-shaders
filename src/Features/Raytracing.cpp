@@ -1265,12 +1265,6 @@ void Raytracing::Main_RenderWorld(bool a1)
 		lightsUpdated = false;
 
 		SkyCubeToHemi();
-
-		if (!addedAllInstances)
-		{
-			AddUpdateAllInstances();
-			addedAllInstances = true;
-		}
 	}
 
 	Hooks::Main_RenderWorld::func(a1);
@@ -1315,7 +1309,7 @@ inline std::wstring ToWide(const std::string& str)
 	return wstr;
 }
 
-void Raytracing::ReadRendererData(MeshData& meshData, RE::BSGraphics::TriShape* rendererData, const std::uint32_t& vertexCount, const std::uint16_t& triangleCount, const std::uint16_t& bonesPerVertex, const float4x4& transform)
+void Raytracing::BuildMesh(Mesh& meshData, RE::BSGraphics::TriShape* rendererData, const std::uint32_t& vertexCount, const std::uint16_t& triangleCount, const std::uint16_t& bonesPerVertex, const float4x4& transform)
 {	
 	// Vertices
 	{
@@ -1457,10 +1451,11 @@ static ID3D11Texture2D* TryGetTexture(const RE::NiPointer<RE::NiSourceTexture> n
 	return nullptr;
 }
 
-void Raytracing::ReadMaterial(MeshData& meshData, const RE::BSGeometry::GEOMETRY_RUNTIME_DATA& geometryRuntimeData, [[ maybe_unused ]] const char* name)
+void Raytracing::BuildMaterial(Mesh& mesh, const RE::BSGeometry::GEOMETRY_RUNTIME_DATA& geometryRuntimeData, [[ maybe_unused ]] const char* name)
 {
 	using State = RE::BSGeometry::States;
 	using Feature = RE::BSShaderMaterial::Feature;
+	using EShaderPropertyFlag = RE::BSShaderProperty::EShaderPropertyFlag;
 
 	//Feature feature = Feature::kNone;
 	float4 baseColor = { 0.0f, 0.0f, 0.0f, 1.0f };
@@ -1478,16 +1473,34 @@ void Raytracing::ReadMaterial(MeshData& meshData, const RE::BSGeometry::GEOMETRY
 
 	ID3D11Texture2D* baseTexture = nullptr;
 	ID3D11Texture2D* effectTexture = nullptr;
-	//ID3D11Texture2D* rmaosTexture;
+	//ID3D11Texture2D* rmaosTexture = nullptr; // Useful for path tracing, not much for GI
 
-	// Register textures buffer
 	{
-		auto effect = geometryRuntimeData.properties[State::kEffect].get();
+		auto* property = geometryRuntimeData.properties[State::kProperty].get();
+
+		if (property && property->GetType() == RE::NiProperty::Type::kAlpha) {
+			mesh.flags = static_cast<Mesh::Flags>(mesh.flags | Mesh::Flags::Alpha);
+		}
+
+		if (property; auto lightingShader = netimmerse_cast<RE::BSLightingShaderProperty*>(property)) {
+			if (auto& effectData = lightingShader->effectData) {
+				logger::info("[RT] CreateMaterial - Effect - Alpha: {}, Z Test Func: {}", effectData->alpha, magic_enum::enum_name(effectData->zTestFunc));
+			}
+		}
+
+		auto* effect = geometryRuntimeData.properties[State::kEffect].get();
 
 		if (effect) {
 			auto lightingShader = netimmerse_cast<RE::BSLightingShaderProperty*>(effect);
 
+			//logger::warn("[RT] CreateMaterial - BSLightingShaderProperty Flags: {}", GetFlags<EShaderPropertyFlag>(lightingShader->flags.underlying()));
+
 			if (lightingShader) {
+				// This is always nullptr :(
+				if (auto& effectData = lightingShader->effectData) {
+					logger::info("[RT] CreateMaterial - Effect - Alpha: {}, Z Test Func: {}", effectData->alpha, magic_enum::enum_name(effectData->zTestFunc));
+				}
+
 				shaderType = RE::BSShader::Type::Lighting;
 
 				effectColor = {
@@ -1496,6 +1509,8 @@ void Raytracing::ReadMaterial(MeshData& meshData, const RE::BSGeometry::GEOMETRY
 					lightingShader->emissiveColor->blue,
 					lightingShader->emissiveMult
 				};
+				
+				//logger::warn("[RT] CreateMaterial - BSLightingShaderProperty Alpha: {}", lightingShader->alpha);
 
 				if (auto material = lightingShader->material) {
 					texCoordOffsetScale = {
@@ -1513,6 +1528,8 @@ void Raytracing::ReadMaterial(MeshData& meshData, const RE::BSGeometry::GEOMETRY
 
 					if (lightingBaseMaterial) {
 						baseTexture = TryGetTexture(lightingBaseMaterial->diffuseTexture);
+
+						//logger::warn("[RT] CreateMaterial - BSLightingShaderMaterialBase Alpha: {}", lightingBaseMaterial->materialAlpha);
 
 						if (material->GetFeature() == Feature::kGlowMap) {
 							const auto* lightingGlowMaterial = static_cast<RE::BSLightingShaderMaterialGlowmap*>(material);
@@ -1554,7 +1571,7 @@ void Raytracing::ReadMaterial(MeshData& meshData, const RE::BSGeometry::GEOMETRY
 	if (baseTexture && baseTextureRegister == 0)
 		logger::warn("[RT] CreateMaterial {} - Base texture [0x{:8X}] not shared", name, reinterpret_cast<uintptr_t>(baseTexture));
 
-	auto material = Material(
+	mesh.material = Material(
 		baseColor,
 		effectColor,
 		texCoordOffsetScale,
@@ -1562,19 +1579,12 @@ void Raytracing::ReadMaterial(MeshData& meshData, const RE::BSGeometry::GEOMETRY
 		effectTextureRegister,
 		rmaosTextureRegister,
 		static_cast<uint16_t>(shaderType));
-
-	meshData.material = material;
-
-	materialBuffer->Update(&material, sizeof(Material), sizeof(Material) * meshData.registerIndex);
 }
 
-void Raytracing::CreateBuffers(MeshData& meshData, const std::wstring& name)
+void Raytracing::CreateBuffers(Mesh& meshData, const std::wstring& name)
 {
 	// Vertices
 	{
-		if (meshData.vertexCount != meshData.vertices.size())
-			logger::critical("[RT] Vertex count and data mismatch - vertexCount: {}, vertices.size(): {}", meshData.vertexCount, meshData.vertices.size());
-
 		meshData.vertexBuffer = eastl::make_unique<DX12::StructuredBufferUpload<Vertex>>(d3d12Device.get(), meshData.vertexCount);
 
 		meshData.vertexBuffer->UpdateList(meshData.vertices.data(), meshData.vertexCount);
@@ -1599,9 +1609,6 @@ void Raytracing::CreateBuffers(MeshData& meshData, const std::wstring& name)
 
 	// Triangles
 	{
-		if (meshData.triangleCount != meshData.triangles.size())
-			logger::critical("[RT] Triangle count and data mismatch");
-
 		meshData.triangleBuffer = eastl::make_unique<DX12::StructuredBufferUpload<Triangle>>(d3d12Device.get(), meshData.triangleCount);
 
 		meshData.triangleBuffer->UpdateList(meshData.triangles.data(), meshData.triangles.size());
@@ -1623,6 +1630,9 @@ void Raytracing::CreateBuffers(MeshData& meshData, const std::wstring& name)
 			d3d12Device->CreateShaderResourceView(meshData.triangleBuffer->resource.get(), &ibDesc, giHeap->CPUHandle(GIHeap::Slot::Triangles, meshData.registerIndex));
 		}
 	}
+
+	// Material
+	materialBuffer->Update(&meshData.material, sizeof(Material), sizeof(Material) * meshData.registerIndex);
 }
 
 void Raytracing::CommitGeometry(GeometryData& geometryData)
@@ -1632,14 +1642,16 @@ void Raytracing::CommitGeometry(GeometryData& geometryData)
 
 	eastl::vector<D3D12_RAYTRACING_GEOMETRY_DESC> geometryDescs(meshCount);
 
-	bool skinned = false;
+	auto flags = Mesh::Flags::None;
 
 	for (auto i = 0; i < meshCount; i++) {
 		auto& meshData = meshes[i];
 
+		flags = static_cast<Mesh::Flags>(flags | meshData.flags);
+
 		geometryDescs[i] = {
 			.Type = D3D12_RAYTRACING_GEOMETRY_TYPE_TRIANGLES,
-			.Flags = D3D12_RAYTRACING_GEOMETRY_FLAG_OPAQUE,
+			.Flags = meshData.flags & Mesh::Flags::Alpha ? D3D12_RAYTRACING_GEOMETRY_FLAG_NONE : D3D12_RAYTRACING_GEOMETRY_FLAG_OPAQUE,
 			.Triangles = {
 				.Transform3x4 = 0,
 				.IndexFormat = DXGI_FORMAT_R16_UINT,
@@ -1655,9 +1667,11 @@ void Raytracing::CommitGeometry(GeometryData& geometryData)
 		};
 	}
 
+	bool updatable = (flags & Mesh::Flags::Skinned) || (flags & Mesh::Flags::Dynamic);
+
 	D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_INPUTS inputs = {
 		.Type = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL,
-		.Flags = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_PREFER_FAST_TRACE | (skinned ? D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_ALLOW_UPDATE : D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_ALLOW_COMPACTION),
+		.Flags = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_PREFER_FAST_TRACE | (updatable ? D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_ALLOW_UPDATE : D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_ALLOW_COMPACTION),
 		.NumDescs = static_cast<uint>(geometryDescs.size()),
 		.DescsLayout = D3D12_ELEMENTS_LAYOUT_ARRAY,
 		.pGeometryDescs = geometryDescs.data()
@@ -1731,7 +1745,7 @@ void Raytracing::CreateGeometry(const char* path, RE::NiNode* pRoot)
 
 	auto rootWorldInverse = pRoot->world.Invert();
 
-	eastl::vector<MeshData> meshes;
+	eastl::vector<Mesh> meshes;
 
 	RE::BSVisit::TraverseScenegraphGeometries(pRoot, [&](RE::BSGeometry* pGeometry) -> RE::BSVisit::BSVisitControl {
 		const char* name = pGeometry->name.c_str();
@@ -1768,6 +1782,8 @@ void Raytracing::CreateGeometry(const char* path, RE::NiNode* pRoot)
 			return RE::BSVisit::BSVisitControl::kContinue;
 		}
 
+		auto flags = Mesh::Flags::None;
+
 		eastl::vector<float4> dynamic;
 
 		if (geometryType.all(RE::BSGeometry::Type::kDynamicTriShape)) {
@@ -1786,11 +1802,11 @@ void Raytracing::CreateGeometry(const char* path, RE::NiNode* pRoot)
 
 			const auto& triShapeRuntime = pTriShape->GetTrishapeRuntimeData();
 
-			auto meshData = MeshData(registers.allocate(), dynamic);
-			ReadRendererData(meshData, triShapeRD, triShapeRuntime.vertexCount, triShapeRuntime.triangleCount, 0, localToRoot);
+			auto meshData = Mesh(registers.allocate(), dynamic, flags);
 
+			BuildMesh(meshData, triShapeRD, triShapeRuntime.vertexCount, triShapeRuntime.triangleCount, 0, localToRoot);
+			BuildMaterial(meshData, geometryRuntimeData, name);
 			CreateBuffers(meshData, ToWide(name));
-			ReadMaterial(meshData, geometryRuntimeData, name);
 
 			meshes.push_back(eastl::move(meshData));
 		} else if (auto* skinInstance = (RE::BSDismemberSkinInstance*)geometryRuntimeData.skinInstance.get()) {  // Skinned
@@ -1810,11 +1826,11 @@ void Raytracing::CreateGeometry(const char* path, RE::NiNode* pRoot)
 			logger::debug("\t\t[RT] CreateGeometry::TraverseScenegraphGeometries - Partitions: {}, VertexCount: {}, Unk24: [0x{:X}]", skinPartition->numPartitions, skinPartition->vertexCount, skinPartition->unk24);
 
 			for (auto& partition : skinPartition->partitions) {
-				auto meshData = MeshData(registers.allocate(), dynamic);
-				ReadRendererData(meshData, partition.buffData, skinPartition->vertexCount, partition.triangles, partition.bonesPerVertex, localToRoot);
+				auto meshData = Mesh(registers.allocate(), dynamic, static_cast<Mesh::Flags>(flags | Mesh::Skinned));
 
+				BuildMesh(meshData, partition.buffData, skinPartition->vertexCount, partition.triangles, partition.bonesPerVertex, localToRoot);
+				BuildMaterial(meshData, geometryRuntimeData, name);
 				CreateBuffers(meshData, ToWide(name));
-				ReadMaterial(meshData, geometryRuntimeData, name);
 
 				meshes.push_back(eastl::move(meshData));
 			}
@@ -1895,31 +1911,6 @@ void Raytracing::RegisterInstance(RE::BSFadeNode* pOriginal, RE::NiObject* pInst
 			reinterpret_cast<uintptr_t>(pOriginal), pOriginal->name,
 			reinterpret_cast<uintptr_t>(pInstance), pInstanceNiNode ? pInstanceNiNode->name : "");
 
-		/*auto dataHandler = RE::TESDataHandler::GetSingleton();
-
-		if (auto object = pOriginal->GetUserData()) {
-			if (auto ref = object->AsReference()) {
-				uint32_t formID = ref->GetFormID();
-				std::uint8_t modIndex = formID >> 24;
-
-				eastl::string path;
-
-				if (modIndex < 0xFE) {
-					auto file = dataHandler->LookupLoadedModByIndex(modIndex);
-					path = file->fileName;
-				}
-				if (modIndex == 0xFE) {
-					RE::FormID relativeID = formID % (1 << 24);
-					std::uint16_t lightModIndex = static_cast<std::uint16_t>(relativeID >> 12);
-					relativeID %= 1 << 12;
-					auto file = dataHandler->LookupLoadedLightModByIndex(lightModIndex);
-					path = file->fileName;
-				}
-
-				logger::info("[RT] RegisterInstance - Cached Path: \"{}\", FormID {:08X} Path: \"{}\"", inputPathIt->second, formID, path);
-			}
-		}*/
-
 		inputPaths.try_emplace(netimmerse_cast<RE::NiNode*>(pInstance), inputPathIt->second);
 	}
 }
@@ -1933,26 +1924,6 @@ void Raytracing::AddInstance(RE::NiNode* pNiNode, const char* path)
 			instances.try_emplace(pNiNode, InstanceData(0, path));
 		}
 	}
-}
-
-bool Raytracing::ValidTriShape(RE::NiNode* pNiNode)
-{
-	if (pNiNode->GetFlags().all(RE::NiAVObject::Flag::kRenderUse)) {
-		if (auto fadeNode = FindBSFadeNode(pNiNode)) {
-			if (auto extraData = fadeNode->GetExtraData("BSX")) {
-				auto bsxFlags = (RE::BSXFlags*)extraData;
-
-				if (static_cast<uint32_t>(bsxFlags->value) & (uint32_t)RE::BSXFlags::Flag::kEditorMarker)
-					return false;
-			}
-		} else {  // Else it crashes on Block stuff when reading indexes
-			return false;
-		}
-	} else {
-		return false;
-	}
-
-	return true;
 }
 
 eastl::vector<size_t> Raytracing::GatherInstanceLights(RE::NiNode* pNiNode)
@@ -1970,18 +1941,6 @@ eastl::vector<size_t> Raytracing::GatherInstanceLights(RE::NiNode* pNiNode)
 	}
 
 	return instanceLights;
-}
-
-void Raytracing::AddUpdateAllInstances()
-{
-	/*static auto shadowSceneNode = RE::BSShaderManager::State::GetSingleton().shadowSceneNode[0];
-
-	RE::BSVisit::TraverseScenegraphGeometries(shadowSceneNode, [&](RE::BSGeometry* geometry) -> RE::BSVisit::BSVisitControl {
-		if (RE::BSTriShape* pTriShape = geometry->AsTriShape())
-			AddUpdateInstance(pTriShape);
-
-		return RE::BSVisit::BSVisitControl::kContinue;
-	});*/
 }
 
 static RE::NiCamera* FindNiCamera(RE::NiAVObject* object)
@@ -2006,7 +1965,6 @@ void Raytracing::UpdateInstanceTransform(RE::NiNode* pNiNode, InstanceData& inst
 {
 	if (instData.lastUpdate == 0 || instData.lastUpdate < globals::state->frameCount) {
 		XMStoreFloat3x4(&instData.transform, GetXMFromNiTransform(pNiNode->world));
-		//instData.transform = GetXMF3X4FromNiTransform(pFadeNode->world);
 		instData.lastUpdate = globals::state->frameCount;
 	}
 }
@@ -2056,8 +2014,10 @@ void Raytracing::UpdateInstances()
 
 		UpdateInstanceTransform(pNiNode, data);
 
+		auto& firstMeshIndex = geometryData.meshes[0].registerIndex;
+
 		D3D12_RAYTRACING_INSTANCE_DESC blasInstance = {
-			.InstanceID = static_cast<uint>(blasInstances.size()),
+			.InstanceID = firstMeshIndex,
 			.InstanceMask = 1,
 			.AccelerationStructure = geometryData.blasBuffer->GetGPUVirtualAddress()
 		};
@@ -2073,7 +2033,7 @@ void Raytracing::UpdateInstances()
 		//logger::info("[RT] UpdateInstances - FadeNode: [0x{:x}], Position: [{}, {}, {}], InputFile: {}", reinterpret_cast<uintptr_t>(pFadeNode), data.transform._41, data.transform._42, data.transform._43, data.filename);
 
 		instanceData.emplace_back(
-			static_cast<uint>(geometryData.meshes[0].registerIndex), 
+			firstMeshIndex, 
 			LightData(GatherInstanceLights(pNiNode))
 		);
 	}
@@ -2946,15 +2906,21 @@ void Raytracing::InitD3D12(ID3D11Device* ppDevice, ID3D11DeviceContext* pImmedia
 	Hooks::InstallD3D11Hooks(ppDevice);
 
 	if (settings.EnablePIXCapture) {
-		//PIXLoadLatestWinPixGpuCapturerLibrary();
 		// Check to see if a copy of WinPixGpuCapturer.dll has already been injected into the application.
 		// This may happen if the application is launched through the PIX UI.
 		if (GetModuleHandle(L"WinPixGpuCapturer.dll") == 0) {
-			LoadLibrary(GetLatestWinPixGpuCapturerPath().c_str());
+			auto pixGPUCapturerPath = GetLatestWinPixGpuCapturerPath();
+
+			if (pixGPUCapturerPath.empty()) {
+				logger::warn("[RT] PIX capture is enabled but binaries where not found.");
+			} else
+			{
+				LoadLibrary(pixGPUCapturerPath.c_str());
+			}
 		}
 	}
 
-	logger::info("[RTGI] Creating D3D12 device");
+	logger::info("[RT] Creating D3D12 device");
 
 	// Set Device
 	DX::ThrowIfFailed(ppDevice->QueryInterface(IID_PPV_ARGS(&d3d11Device)));
@@ -2991,9 +2957,9 @@ void Raytracing::InitD3D12(ID3D11Device* ppDevice, ID3D11DeviceContext* pImmedia
 			D3D12_FEATURE_DATA_D3D12_OPTIONS5 options5 = {};
 			if (SUCCEEDED(d3d12Device->CheckFeatureSupport(D3D12_FEATURE_D3D12_OPTIONS5, &options5, sizeof(options5)))) {
 				if (options5.RaytracingTier != D3D12_RAYTRACING_TIER_NOT_SUPPORTED)
-					logger::info("Hardware ray tracing supported! Tier: {}", magic_enum::enum_name(options5.RaytracingTier));
+					logger::info("[RT] Hardware ray tracing supported! Tier: {}", magic_enum::enum_name(options5.RaytracingTier));
 				else
-					logger::warn("Hardware ray tracing not supported.");
+					logger::warn("[RT] Hardware ray tracing not supported.");
 			}		
 		}
 
@@ -3214,17 +3180,14 @@ void Raytracing::CompileRTGIShaders()
 	winrt::com_ptr<IDxcBlob> rayGenBlob;
 	ShaderUtils::CompileShader(rayGenBlob, L"Data/Shaders/Raytracing/PT/RayGeneration.hlsl");
 
-	winrt::com_ptr<IDxcBlob> diffuseMissBlob, diffuseClosestHitBlob;
-	ShaderUtils::CompileShader(diffuseMissBlob, L"Data/Shaders/Raytracing/GI/Miss.hlsl");
-	ShaderUtils::CompileShader(diffuseClosestHitBlob, L"Data/Shaders/Raytracing/PT/ClosestHit.hlsl");
+	winrt::com_ptr<IDxcBlob> missBlob, closestHitBlob, anyHitBlob;
+	ShaderUtils::CompileShader(missBlob, L"Data/Shaders/Raytracing/GI/Miss.hlsl");
+	ShaderUtils::CompileShader(closestHitBlob, L"Data/Shaders/Raytracing/PT/ClosestHit.hlsl");
+	ShaderUtils::CompileShader(anyHitBlob, L"Data/Shaders/Raytracing/GI/AnyHit.hlsl");
 
 	winrt::com_ptr<IDxcBlob> shadowMissBlob;
 	ShaderUtils::CompileShader(shadowMissBlob, L"Data/Shaders/Raytracing/GI/ShadowMiss.hlsl");
 
-	/*winrt::com_ptr<IDxcBlob> specularMissBlob, specularClosestHitBlob;
-	ShaderUtils::CompileShader(specularMissBlob, L"Data/Shaders/Raytracing/Raytracing/Miss.hlsl", { { L"SPECULAR", nullptr } });
-	ShaderUtils::CompileShader(specularClosestHitBlob, L"Data/Shaders/Raytracing/Raytracing/ClosestHit.hlsl", { { L"SPECULAR", nullptr } });*/
-	
 	DX12::RTPipelineBuilder pipelineBuilder;
 
 	// Init pipeline
@@ -3232,17 +3195,16 @@ void Raytracing::CompileRTGIShaders()
 		// Libraries
 		pipelineBuilder.AddRayGenLib(rayGenBlob.get(), L"RayGeneration");
 
-		pipelineBuilder.AddMissLib(diffuseMissBlob.get(), L"IndirectMiss");
+		pipelineBuilder.AddMissLib(missBlob.get(), L"IndirectMiss");
 		pipelineBuilder.AddMissLib(shadowMissBlob.get(), L"ShadowMiss");
-		//pipelineBuilder.AddMissLib(specularMissBlob.get(), L"SpecularMiss");
 
-		pipelineBuilder.AddHitLib(diffuseClosestHitBlob.get(), L"IndirectClosestHit");
-		//pipelineBuilder.AddHitLib(specularClosestHitBlob.get(), L"SpecularClosestHit");
+		pipelineBuilder.AddHitLib(closestHitBlob.get(), L"IndirectClosestHit");
 
+		pipelineBuilder.AddAnyHitLib(anyHitBlob.get(), L"IndirectAnyHit");
+		
 		// Hit groups
-		pipelineBuilder.AddHitGroup(L"IndirectHitGroup", L"IndirectClosestHit");
+		pipelineBuilder.AddHitGroup(L"IndirectHitGroup", L"IndirectClosestHit", L"IndirectAnyHit");
 		pipelineBuilder.AddHitGroup(L"ShadowHitGroup");
-		//pipelineBuilder.AddHitGroup(L"SpecularHitGroup", L"SpecularClosestHit");
 
 		// Shader + pipeline config
 		pipelineBuilder.AddShaderConfig(20, 8);

@@ -1,5 +1,6 @@
 #include "Raytracing/Includes/Types.hlsli"
 #include "Raytracing/Includes/Registers.hlsli"
+#include "Raytracing/Includes/RT/Geometry.hlsli"
 
 #include "Raytracing/Includes/Common.hlsli"
 #include "Raytracing/Includes/RT/CommonRT.hlsli"
@@ -21,62 +22,50 @@ void HitMesh(inout IndirectPayload payload, in BuiltInTriangleIntersectionAttrib
 {
     float3 worldPosition = WorldRayOrigin() + WorldRayDirection() * RayTCurrent();  
 
-    Instance instance = Instances[InstanceID()];
-    uint meshID = NonUniformResourceIndex(instance.MeshID) + GeometryIndex();
+    Instance instance = GetInstance();
+    uint meshID = GetMeshID();
     
-    StructuredBuffer<Vertex> meshVertices = Vertices[meshID];
-    StructuredBuffer<Triangle> meshTriangles = Triangles[meshID];
-    
-    Triangle meshTriangle = meshTriangles[PrimitiveIndex()];
-    
-    Vertex vertice0 = meshVertices[meshTriangle.x];
-    Vertex vertice1 = meshVertices[meshTriangle.y];
-    Vertex vertice2 = meshVertices[meshTriangle.z];
-    
-    float v = attribs.barycentrics.x;
-    float w = attribs.barycentrics.y;
-    float u = 1.0 - v - w;
-    
-    float3 uvw = float3(u, v, w);
+    Vertex v0, v1, v2;    
+    GetVertices(meshID, v0, v1, v2);
 
-    float2 texCoord0 = vertice0.Texcoord0 * u + vertice1.Texcoord0 * v + vertice2.Texcoord0 * w;
+    float3 uvw = GetBary(attribs);
+    
+    Material material = Materials[meshID];
+    
+    
+    float2 texCoord = material.TexCoord(Interpolate(v0.Texcoord0, v1.Texcoord0, v2.Texcoord0, uvw));
     
     float3x3 objectToWorld3x3 = (float3x3)ObjectToWorld3x4();
     
-    float3 worldNormal = normalize(mul(objectToWorld3x3, Interpolate(vertice0.Normal, vertice1.Normal, vertice2.Normal, uvw)));
+    float3 worldNormal = normalize(mul(objectToWorld3x3, Interpolate(v0.Normal, v1.Normal, v2.Normal, uvw)));
     
     //payload.color += float4(worldNormal * 0.5 + 0.5f, 1.0f);
     //return;    
     
-    float3 worldTangent = normalize(mul(objectToWorld3x3, Interpolate(vertice0.Tangent, vertice1.Tangent, vertice2.Tangent, uvw)));
-    float3 worldBitangent = normalize(mul(objectToWorld3x3, Interpolate(vertice0.Bitangent, vertice1.Bitangent, vertice2.Bitangent, uvw)));
+    float3 worldTangent = normalize(mul(objectToWorld3x3, Interpolate(v0.Tangent, v1.Tangent, v2.Tangent, uvw)));
+    float3 worldBitangent = normalize(mul(objectToWorld3x3, Interpolate(v0.Bitangent, v1.Bitangent, v2.Bitangent, uvw)));
     
-    float4 vertexColor = vertice0.Color.unpack() * u + vertice1.Color.unpack() * v + vertice2.Color.unpack() * w;
-    
-    Material material = Materials[meshID];
-    
-    texCoord0 += material.TexCoordOffsetScale.xy;
-    texCoord0 *= material.TexCoordOffsetScale.zw;
+    float4 vertexColor = Interpolate(v0.Color.unpack(), v1.Color.unpack(), v2.Color.unpack(), uvw);
     
     Texture2D baseTexture = Textures[NonUniformResourceIndex(material.BaseTexture)];
     Texture2D effectTexture = Textures[NonUniformResourceIndex(material.EffectTexture)];    
     
-    float3 diffuse = baseTexture.SampleLevel(BaseSampler, texCoord0, 0).rgb;
-    float3 effect = effectTexture.SampleLevel(BaseSampler, texCoord0, 0).rgb;
+    float3 base = baseTexture.SampleLevel(BaseSampler, texCoord, 0).rgb;
+    float3 effect = effectTexture.SampleLevel(BaseSampler, texCoord, 0).rgb;
     
-    payload.color += float4(diffuse, 1.0f);
+    payload.color += float4(base, 1.0f);
     return;   
     
     // Lighting Shader
-    float3 lightingAlbedo = Color::GammaToLinear(diffuse) * vertexColor.rgb;
+    float3 lightingAlbedo = Color::GammaToLinear(base) * vertexColor.rgb;
     float3 lightingEmissive = Color::GammaToLinear(effect) * material.EffectColor.rgb * material.EffectColor.a;
     
     // Effect Shader
     float3 baseColorMul = material.EffectColor.rgb * vertexColor.rgb;
-    float3 baseColor = diffuse.rgb * baseColorMul;
+    float3 baseColor = base.rgb * baseColorMul;
 
     float baseColorScale = material.EffectColor.a;
-    float2 grayscaleToColorUv = float2(diffuse.y, baseColorMul.x);
+    float2 grayscaleToColorUv = float2(base.y, baseColorMul.x);
     
     baseColor = baseColorScale * effectTexture.SampleLevel(BaseSampler, grayscaleToColorUv, 0).rgb;
    
