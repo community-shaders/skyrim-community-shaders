@@ -1701,12 +1701,12 @@ void Raytracing::CommitGeometry(GeometryData& geometryData)
 void Raytracing::CreateGeometry(const char* path, RE::NiNode* pRoot)
 {
 	if (!path) {
-		//logger::info("[RT] CreateGeometry \"{}\" - Invalid Path", pRoot->name);
+		logger::debug("[RT] CreateGeometry \"{}\" - Invalid Path", pRoot->name);
 		return;
 	}
 
 	if (strlen(path) == 0) {
-		//logger::info("[RT] CreateGeometry \"{}\" - Empty Path", pRoot->name);
+		logger::debug("[RT] CreateGeometry \"{}\" - Empty Path", pRoot->name);
 		return;
 	}
 
@@ -1727,7 +1727,7 @@ void Raytracing::CreateGeometry(const char* path, RE::NiNode* pRoot)
 
 	std::lock_guard lock{ renderMutex };
 
-	logger::info("[RT] CreateGeometry - Path: {}, NiNode [0x{:X}]: {}", path, reinterpret_cast<uintptr_t>(pRoot), pRoot->name);
+	logger::debug("[RT] CreateGeometry - Path: {}, NiNode [0x{:X}]: {}", path, reinterpret_cast<uintptr_t>(pRoot), pRoot->name);
 
 	auto rootWorldInverse = pRoot->world.Invert();
 
@@ -1764,7 +1764,7 @@ void Raytracing::CreateGeometry(const char* path, RE::NiNode* pRoot)
 		auto& geomFlags = pGeometry->GetFlags();
 
 		if (geomFlags.any(RE::NiAVObject::Flag::kHidden) && !skinned) {
-			logger::warn("\t\t[RT] CreateGeometry::TraverseScenegraphGeometries - Is Hidden");
+			logger::debug("\t\t[RT] CreateGeometry::TraverseScenegraphGeometries - Is Hidden");
 			return RE::BSVisit::BSVisitControl::kContinue;
 		}
 
@@ -1844,7 +1844,7 @@ void Raytracing::CreateGeometry(const char* path, RE::NiNode* pRoot)
 			logger::warn("[RT] CreateGeometry - Emplace failed for {} TriShapes", meshCount);
 		}
 	} else {
-		logger::warn("[RT] CreateGeometry - No TriShapes to commit");
+		logger::debug("[RT] CreateGeometry - No TriShapes to commit");
 	}
 }
 
