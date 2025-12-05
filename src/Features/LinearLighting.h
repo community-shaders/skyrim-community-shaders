@@ -98,6 +98,14 @@ struct LinearLighting : Feature
 		float otherEffectMult;
 	};
 
+	struct alignas(16) PerGeometryData
+	{
+		float emissiveMult;
+		float pad0[3];
+	};
+
+	ConstantBuffer* PerGeometryCB = nullptr;
+
 	uint isDirLightLinear = false;
 	float dirLightMult = 1.0f;
 
@@ -110,6 +118,8 @@ struct LinearLighting : Feature
 
 	virtual void Prepass() override;
 	virtual void PostPostLoad() override;
+
+	virtual void SetupResources() override;
 
 	PerFrameData GetCommonBufferData();
 

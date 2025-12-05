@@ -88,6 +88,11 @@ void LinearLighting::RestoreDefaultSettings()
 	settings = {};
 }
 
+void LinearLighting::SetupResources()
+{
+	PerGeometryCB = new ConstantBuffer(ConstantBufferDesc<PerGeometryData>());
+}
+
 void LinearLighting::Prepass()
 {
 	bool isMainLoadingMenu = globals::game::ui && (globals::game::ui->IsMenuOpen(RE::MainMenu::MENU_NAME) || globals::game::ui->IsMenuOpen(RE::LoadingMenu::MENU_NAME));
@@ -179,10 +184,17 @@ void LinearLighting::BSLightingShader_SetupGeometry(RE::BSRenderPass* a_pass)
 	auto& property1 = a_pass->geometry->GetGeometryRuntimeData().properties[1];
 	auto lightProperty = property1 && property1->GetRTTI() == globals::rtti::BSLightingShaderPropertyRTTI.get() ? static_cast<RE::BSLightingShaderProperty*>(property1.get()) : nullptr;
 
-	if (lightProperty != nullptr && settings.enableLinearLighting) {
-		auto emissiveColor = lightProperty->emissiveColor;
-		if (emissiveColor != nullptr) {
-			*emissiveColor = ColorToLinear(*emissiveColor, settings.emitColorGamma);
+	if (lightProperty != nullptr) {
+		float emissiveMult = 1.0f;
+		if (settings.enableLinearLighting) {
+			emissiveMult = lightProperty->emissiveMult;
+			PerGeometryData perGeometryData{};
+			perGeometryData.emissiveMult = emissiveMult;
+			PerGeometryCB->Update(perGeometryData);
+
+			ID3D11Buffer* buffer = { PerGeometryCB->CB() };
+			auto context = globals::d3d::context;
+			context->PSSetConstantBuffers(8, 1, &buffer);
 		}
 	}
 }

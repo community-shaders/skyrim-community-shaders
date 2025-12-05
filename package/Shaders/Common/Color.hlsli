@@ -6,6 +6,14 @@
 
 #define ENABLE_LL SharedData::linearLightingSettings.enableLinearLighting
 
+#if defined(PSHADER) && defined(LIGHTING)
+cbuffer LLPerGeometry : register(b8)
+{
+	float emissiveMult;
+	float3 pad0;
+};
+#endif
+
 namespace Color
 {
 	static float GammaCorrectionValue = 2.2;
@@ -168,11 +176,12 @@ namespace Color
 	{
 		return Light(color, isLinear) * ((ENABLE_LL && !isLinear) ? SharedData::linearLightingSettings.pointLightMult : 1.0f);
 	}
-
+#	if defined(LIGHTING)
 	float3 EmitColor(float3 color)
 	{
-		return color * (ENABLE_LL ? SharedData::linearLightingSettings.emitColorMult : 1.0f);
+		return ENABLE_LL ? (pow(abs(color / max(emissiveMult, 1e-5)), SharedData::linearLightingSettings.emitColorGamma) * emissiveMult * SharedData::linearLightingSettings.emitColorMult) : color;
 	}
+#	endif
 
 	float3 Glowmap(float3 color)
 	{
