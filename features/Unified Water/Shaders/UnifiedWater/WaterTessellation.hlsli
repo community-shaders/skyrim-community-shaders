@@ -466,8 +466,10 @@ VS_OUTPUT DomainShaderImpl(HS_CONSTANT_OUTPUT patchConst, float3 bary, const Out
 	// The pixel shader uses MPosition with TextureProj matrix which expects model-space coordinates.
 	// VS stores input.Position.xyz (model-space) when tessellation is enabled.
 	// We interpolate the model-space positions from the patch vertices and add wave displacement.
+#if !defined(LOD)
 	float4 interpMPosition = patch[0].MPosition * bary.x + patch[1].MPosition * bary.y + patch[2].MPosition * bary.z;
 	output.MPosition = float4(interpMPosition.xyz + waveSample.displacement, 1.0f);
+#endif
 #else
 	// Non-unified water: simple interpolation (interpHPosition already calculated above)
 	output.HPosition = interpHPosition;
