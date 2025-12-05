@@ -1,6 +1,8 @@
 #ifndef __WATER_TESSELLATION_HLSLI__
 #define __WATER_TESSELLATION_HLSLI__
 
+#include "UnifiedWater/WaterDepthEstimation.hlsli"
+
 // ============================================================================
 // CURVATURE-ADAPTIVE WATER TESSELLATION SYSTEM
 // ============================================================================
@@ -51,19 +53,24 @@ struct HS_CONSTANT_OUTPUT
 };
 
 // ============================================================================
-// WAVE CURVATURE PREDICTION
+// WAVE CURVATURE AND NORMAL PREDICTION (COMBINED)
 // ============================================================================
-// Predicts wave curvature at a world position WITHOUT full Gerstner calculation
+// Predicts wave curvature AND normal in single pass to avoid redundant wave iterations
 // Uses analytical derivatives for fast approximation in Hull Shader
 // Higher curvature = sharper wave peaks = needs more tessellation
 
-float PredictWaveCurvature(float2 worldPos)
+struct WavePrediction
 {
-	// Sample 6 predefined waves with different wavelengths
-	// These match the Gerstner wave system but use simplified calculation
+	float curvature;
+	float3 normal;
+};
+
+WavePrediction PredictWaveProperties(float2 worldPos, bool needsNormal)
+{
+	WavePrediction result;
 	float curvature = 0.0f;
+	float2 normalXY = float2(0.0f, 0.0f);
 	
-	// Time for wave phase calculation
 	float timeSeconds = ComputeWaveTimeSeconds(GameTimeHours, RealTimeSeconds);
 	
 	// Wave parameters: [amplitude, wavelength, steepness, angleOffset]
@@ -75,19 +82,25 @@ float PredictWaveCurvature(float2 worldPos)
 	waves[4] = float4(Wave5Amplitude, Wave5Wavelength, Wave5Steepness, Wave5AngleOffset);
 	waves[5] = float4(Wave6Amplitude, Wave6Wavelength, Wave6Steepness, Wave6AngleOffset);
 	
-	// Primary wave direction (diagonal for natural look)
-	float2 baseDir = normalize(float2(-0.70710678f, 0.70710678f));
+	const float2 baseDir = float2(-0.70710678f, 0.70710678f);  // Pre-normalized constant
+	
+	float totalHorizDisp = 0.0f;
+	
+	// Process either all 6 waves (curvature) or first 3 (normal)
+	int waveCount = needsNormal ? 3 : 6;
 	
 	[unroll]
 	for (int i = 0; i < 6; i++) {
+		if (i >= waveCount) break;  // Early exit for normal calculation
+		
 		float amplitude = waves[i].x * WaveAmplitude;
 		float wavelength = waves[i].y;
 		float steepness = waves[i].z * WaveSteepness;
 		float angleOffset = waves[i].w;
 		
+		[branch]
 		if (amplitude < 0.001f || wavelength < 0.1f) continue;
 		
-		// Wave direction with angle offset
 		float sinAngle, cosAngle;
 		sincos(angleOffset, sinAngle, cosAngle);
 		float2 dir = float2(
@@ -95,24 +108,39 @@ float PredictWaveCurvature(float2 worldPos)
 			baseDir.x * sinAngle + baseDir.y * cosAngle
 		);
 		
-		// Wavenumber and frequency
-		float k = 6.28318530f / wavelength;  // 2π / λ
-		float omega = sqrt(9.81f * k);        // ω = sqrt(gk) for deep water
+		float k = 6.28318530f / wavelength;
+		float omega = sqrt(9.81f * k);  // Could use fast sqrt approximation
 		float phase = k * dot(dir, worldPos) - omega * timeSeconds * WaveSpeed;
 		
-		// Curvature approximation: second derivative of displacement
-		// For Gerstner: z = A * sin(phase), so z'' = -A * k² * sin(phase)
-		// We use absolute value since we care about curvature magnitude
-		float curvatureMagnitude = amplitude * k * k * abs(sin(phase));
+		float sinP, cosP;
+		sincos(phase, sinP, cosP);
 		
-		// Weight by steepness (steeper waves create sharper peaks)
-		curvature += curvatureMagnitude * steepness;
+		float QA = steepness * amplitude;
+		
+		// Curvature calculation (always needed)
+		totalHorizDisp += abs(QA * cosP);
+		float curvatureMagnitude = amplitude * k * k * abs(sinP);
+		float wavelengthFactor = rcp(max(wavelength, 1.0f));  // Use rcp for division
+		curvature += curvatureMagnitude * steepness * (1.0f + wavelengthFactor * 2.0f);
+		
+		// Normal calculation (only if needed)
+		if (needsNormal) {
+			normalXY -= dir * QA * k * cosP;
+		}
 	}
 	
-	// Scale by wave intensity
 	curvature *= WaveIntensity;
+	float compressionFactor = saturate(totalHorizDisp * 0.1f);
+	result.curvature = curvature * (1.0f + compressionFactor * 1.5f);
 	
-	return curvature;
+	if (needsNormal) {
+		normalXY *= WaveIntensity;
+		result.normal = normalize(float3(-normalXY.x, -normalXY.y, 1.0f));
+	} else {
+		result.normal = float3(0.0f, 0.0f, 1.0f);
+	}
+	
+	return result;
 }
 
 // Calculate base tessellation factor using proper distance interpolation
@@ -155,7 +183,8 @@ float CalculateViewDependentScale(float3 edgeMid, float3 cameraPos, float3 norma
 	
 	if (NdotV < 0.0f) {
 		// Back-facing: use minimal tessellation
-		return 0.25f;
+		// Still provide some tessellation for when surface rotates into view
+		return 0.3f;
 	}
 	
 	// Front-facing: scale by how directly we're viewing
@@ -163,8 +192,9 @@ float CalculateViewDependentScale(float3 edgeMid, float3 cameraPos, float3 norma
 	float viewScale = saturate(NdotV);
 	viewScale = viewScale * viewScale;  // Square for more aggressive falloff
 	
-	// Blend between 0.4 (edge-on) and 1.0 (direct view)
-	return lerp(0.4f, 1.0f, viewScale);
+	// Blend between 0.5 (edge-on) and 1.0 (direct view)
+	// Increased minimum from 0.4 to 0.5 to maintain better quality on grazing angles
+	return lerp(0.5f, 1.0f, viewScale);
 }
 
 // ============================================================================
@@ -203,11 +233,14 @@ bool IsPatchInFrustum(float3 p0, float3 p1, float3 p2, uint eyeIndex)
 	// Use conservative bounds to avoid culling patches that might be partially visible
 	float ndcRadius = radius / clipPos.w;
 	
-	// Add extra padding to prevent edge artifacts
-	// Expand frustum by 20% beyond normal bounds
-	float frustumPadding = 0.2f;
+	// Add VERY generous padding to prevent edge artifacts and visible seams
+	// The issue: aggressive culling in screen space causes holes at screen edges
+	// Solution: expand frustum significantly beyond normal bounds (50% instead of 20%)
+	// This ensures water patches extend beyond screen edges for seamless appearance
+	float frustumPadding = 0.5f;  // Increased from 0.2 to 0.5 for seamless edges
 	
 	// Test against expanded NDC bounds with radius padding and extra margin
+	// More conservative culling = fewer visual artifacts but slightly more geometry
 	bool inFrustumX = (ndc.x + ndcRadius) >= (-1.0f - frustumPadding) && (ndc.x - ndcRadius) <= (1.0f + frustumPadding);
 	bool inFrustumY = (ndc.y + ndcRadius) >= (-1.0f - frustumPadding) && (ndc.y - ndcRadius) <= (1.0f + frustumPadding);
 	bool inFrustumZ = (ndc.z + ndcRadius) >= -0.1f && (ndc.z - ndcRadius) <= (1.0f + frustumPadding);
@@ -218,18 +251,14 @@ bool IsPatchInFrustum(float3 p0, float3 p1, float3 p2, uint eyeIndex)
 // ============================================================================
 // CURVATURE-ADAPTIVE EDGE TESSELLATION
 // ============================================================================
-// This is where the magic happens: we predict wave curvature and adapt tessellation
+// Predicts wave curvature and adapts tessellation for optimal wave crest detail
+// IMPROVED: More aggressive tessellation on wave peaks for better foam placement
 // 
 // CRITICAL: To prevent cracks at cell boundaries, the tessellation factor for a shared
-// edge must be computed identically by both triangles that share it. We achieve this by:
-// 1. Using FrameBuffer::CameraPosAdjust (same value used throughout the shader pipeline)
-// 2. Computing absolute world position for edge calculation
-// 3. Quantizing edge midpoint to avoid floating-point precision issues
-// 4. Using only the edge endpoints (which are shared) not any per-triangle data
+// edge must be computed identically by both triangles that share it.
 
 float CalculateEdgeTessellation(float3 p0, float3 p1)
 {
-	// Use FrameBuffer::CameraPosAdjust for consistency with rest of shader pipeline
 	float3 cameraPos = FrameBuffer::CameraPosAdjust[0].xyz;
 	
 	// Convert from camera-relative to absolute world position
@@ -240,43 +269,34 @@ float CalculateEdgeTessellation(float3 p0, float3 p1)
 	float3 absEdgeMid = (absP0 + absP1) * 0.5f;
 	
 	// CRITICAL: Quantize to world-space grid for crack prevention
-	// 0.5 unit grid ensures adjacent patches compute identical factors
 	absEdgeMid = floor(absEdgeMid * 2.0f + 0.5f) * 0.5f;
 	
 	// Distance-based LOD
 	float dist = length(absEdgeMid - cameraPos);
 	float distFactor = CalculateDistanceTessellation(dist);
 	
-	// CURVATURE-ADAPTIVE: Predict wave curvature at edge midpoint
-	// High curvature (wave peaks) = boost tessellation
-	// Low curvature (flat water) = reduce tessellation
-	float curvature = PredictWaveCurvature(absEdgeMid.xy);
+	// OPTIMIZED: Get both curvature and normal in single wave iteration
+	WavePrediction wavePred = PredictWaveProperties(absEdgeMid.xy, true);
 	
-	// Strong curvature-based variation for wave peaks
-	// Range: 0.8x (flat water) to 2.5x (wave peaks)
-	float curvatureNormalized = saturate(curvature * 0.5f);
-	// Apply quadratic power to boost wave peaks more
-	curvatureNormalized = curvatureNormalized * curvatureNormalized;
-	float curvatureScale = lerp(0.8f, 2.5f, curvatureNormalized);
+	// IMPROVED: More aggressive curvature response for wave peaks
+	float curvatureNormalized = saturate(wavePred.curvature * 0.5f);
+	curvatureNormalized = curvatureNormalized * curvatureNormalized * curvatureNormalized;
+	float curvatureScale = lerp(0.6f, 3.5f, curvatureNormalized);
 	
-	// Screen-space edge length (longer edges on screen need more tessellation)
+	// Screen-space edge length using fast rcp for division
 	float3 quantP0 = floor(absP0 * 2.0f + 0.5f) * 0.5f;
 	float3 quantP1 = floor(absP1 * 2.0f + 0.5f) * 0.5f;
 	float edgeLength = length(quantP1 - quantP0);
-	float screenEdgeLength = edgeLength / max(dist, 1.0f);
+	float screenEdgeLength = edgeLength * rcp(max(dist, 1.0f));
 	float screenScale = saturate(screenEdgeLength * 30.0f);
 	screenScale = lerp(0.5f, 1.0f, screenScale);
 	
-	// VIEW-DEPENDENT: Reduce tessellation for back-facing/edge-on surfaces
-	// Use flat normal (0,0,1) as approximation - good enough for view culling
-	float3 approxNormal = float3(0.0f, 0.0f, 1.0f);
-	float viewScale = CalculateViewDependentScale(absEdgeMid, cameraPos, approxNormal);
+	// VIEW-DEPENDENT: Use already-computed normal from wave prediction
+	float viewScale = CalculateViewDependentScale(absEdgeMid, cameraPos, wavePred.normal);
 	
 	// Combine all factors multiplicatively
 	float finalFactor = distFactor * curvatureScale * screenScale * viewScale;
 	
-	// Allow sub-1 tessellation for distant water (GPU clamps to hardware minimum)
-	// This enables aggressive triangle reduction to ~2 tris for super distant water
 	return min(finalFactor, TessellationMaxFactor);
 }
 
@@ -297,15 +317,33 @@ HS_CONSTANT_OUTPUT PatchConstantFunc(InputPatch<VS_OUTPUT, 3> patch, uint patchI
 	
 	// FRUSTUM CULLING: Cull patches outside the view frustum
 	// This provides massive performance savings by not tessellating invisible geometry
+	// IMPORTANT: Use conservative culling to prevent holes and seams at screen edges
 	uint eyeIndex = 0;  // Use eye 0 for frustum test (conservative for VR)
 	if (!IsPatchInFrustum(p0, p1, p2, eyeIndex)) {
-		// Patch is outside frustum - use ultra-minimal tessellation
-		// Allow very low factors (GPU hardware will clamp to viable minimum ~0.5)
-		// This reduces culled patches to basically 2 triangles
-		output.EdgeTess[0] = 0.1f;
-		output.EdgeTess[1] = 0.1f;
-		output.EdgeTess[2] = 0.1f;
-		output.InsideTess = 0.1f;
+		// Patch is outside frustum - use reduced tessellation but NOT zero
+		// Increased from 0.1 to 1.0 to prevent mesh holes and maintain continuity
+		// Even off-screen patches need minimal geometry to prevent edge artifacts
+		output.EdgeTess[0] = 1.0f;
+		output.EdgeTess[1] = 1.0f;
+		output.EdgeTess[2] = 1.0f;
+		output.InsideTess = 1.0f;
+		return output;
+	}
+	
+	// Calculate patch center once for distance check
+	float3 patchCenter = (p0 + p1 + p2) * 0.333333f;  // Faster constant
+	float3 cameraPos = FrameBuffer::CameraPosAdjust[0].xyz;
+	float3 absPatchCenter = patchCenter + cameraPos;
+	float centerDist = length(absPatchCenter - cameraPos);
+	
+	// EARLY EXIT: Very distant patches get minimal tessellation across all edges
+	// Avoids expensive edge calculations for patches that will be min tessellation anyway
+	if (centerDist >= TessellationMaxDistance * 0.95f) {
+		float minTess = TessellationMinFactor;
+		output.EdgeTess[0] = minTess;
+		output.EdgeTess[1] = minTess;
+		output.EdgeTess[2] = minTess;
+		output.InsideTess = minTess;
 		return output;
 	}
 	
@@ -317,30 +355,26 @@ HS_CONSTANT_OUTPUT PatchConstantFunc(InputPatch<VS_OUTPUT, 3> patch, uint patchI
 	output.EdgeTess[1] = CalculateEdgeTessellation(p2, p0);
 	output.EdgeTess[2] = CalculateEdgeTessellation(p0, p1);
 	
-	// CURVATURE-AWARE INSIDE TESSELLATION
-	// Predict curvature at patch center to boost detail on wave peaks
-	float3 patchCenter = (p0 + p1 + p2) / 3.0f;
-	float3 cameraPos = FrameBuffer::CameraPosAdjust[0].xyz;
-	float3 absPatchCenter = patchCenter + cameraPos;
-	
+	// IMPROVED CURVATURE-AWARE INSIDE TESSELLATION
 	// Quantize for consistency
 	absPatchCenter = floor(absPatchCenter * 2.0f + 0.5f) * 0.5f;
 	
-	// Predict curvature at patch center
-	float centerCurvature = PredictWaveCurvature(absPatchCenter.xy);
+	// OPTIMIZED: Get both curvature and normal in single call
+	WavePrediction centerPred = PredictWaveProperties(absPatchCenter.xy, true);
 	
-	// AGGRESSIVE inside tessellation boost based on curvature
-	// High curvature patches (wave peaks) get MUCH more inside detail
-	float centerCurvatureNormalized = saturate(centerCurvature * 0.5f);
-	// Apply quadratic power to amplify peaks
-	centerCurvatureNormalized = centerCurvatureNormalized * centerCurvatureNormalized;
-	float curvatureBoost = lerp(0.8f, 3.0f, centerCurvatureNormalized);
+	// IMPROVED: More aggressive inside tessellation boost for wave peaks
+	float centerCurvatureNormalized = saturate(centerPred.curvature * 0.5f);
+	centerCurvatureNormalized = centerCurvatureNormalized * centerCurvatureNormalized * centerCurvatureNormalized;
+	float curvatureBoost = lerp(0.6f, 4.0f, centerCurvatureNormalized);
 	
-	// Base inside tessellation as average of edges
-	float baseInsideTess = (output.EdgeTess[0] + output.EdgeTess[1] + output.EdgeTess[2]) / 3.0f;
+	// Base inside tessellation as average of edges (use fast rcp for division)
+	float baseInsideTess = (output.EdgeTess[0] + output.EdgeTess[1] + output.EdgeTess[2]) * 0.333333f;
 	
-	// Apply curvature boost (allow sub-1 for distant water optimization)
-	output.InsideTess = min(baseInsideTess * curvatureBoost, TessellationMaxFactor);
+	// Apply view-dependent scaling using already-computed center normal
+	float centerViewScale = CalculateViewDependentScale(absPatchCenter, cameraPos, centerPred.normal);
+	
+	// Apply curvature boost and view scaling
+	output.InsideTess = min(baseInsideTess * curvatureBoost * centerViewScale, TessellationMaxFactor);
 	
 	return output;
 }
@@ -376,6 +410,22 @@ VS_OUTPUT DomainShaderImpl(HS_CONSTANT_OUTPUT patchConst, float3 bary, const Out
 	// Calculate Gerstner waves for this tessellated vertex
 	// Pass camera distance for distance-based wave fadeout on distant tiles
 	float cameraDistDS = length(interpWPosition.xyz);
+	
+	// Estimate water depth from terrain using heightmap sampling
+	// This is critical for shallow water wave attenuation
+	// EstimateWaterDepthFromTerrain samples the terrain heightmap at the water surface position
+	// and calculates vertical distance from terrain to water surface
+	// Use interpWPosition (camera-relative) + CameraPosAdjust for all XYZ
+	float3 absoluteWorldPos = interpWPosition.xyz + FrameBuffer::CameraPosAdjust[eyeIndex].xyz;
+	DepthEstimationDebug depthDebug;
+	float estimatedDepthDS = EstimateWaterDepthFromTerrain(
+		absoluteWorldPos,                                 // Absolute world position
+		float2(TerrainScaleX, TerrainScaleY),            // Heightmap UV scale
+		float2(TerrainOffsetX, TerrainOffsetY),          // Heightmap UV offset
+		TerrainZRangeMin,                                 // Z range min
+		TerrainZRangeMax,                                 // Z range max
+		depthDebug);                                      // Debug output
+	
 	WaveSample waveSample = CalculateWaterDisplacement(
 		waveWorldPos, 
 		float2(0.0f, 0.0f), 
@@ -389,7 +439,11 @@ VS_OUTPUT DomainShaderImpl(HS_CONSTANT_OUTPUT patchConst, float3 bary, const Out
 		float2(0.0f, 0.0f),  // No flow bias in DS for simplicity
 		0.0f,                 // No flow bias weight
 		false,
-		cameraDistDS);        // Camera distance for LOD fadeout
+		cameraDistDS,         // Camera distance for LOD fadeout
+		estimatedDepthDS);    // Water depth from terrain depth buffer
+	
+	// Store debug info for pixel shader visualization
+	output.DepthDebug = float4(depthDebug.depth, depthDebug.debugCode, depthDebug.terrainZ, depthDebug.waterZ);
 	
 	// Apply wave displacement in camera-relative world space, then transform to clip
 	// Note: Detail heightmap displacement has been removed - it caused mesh holes,

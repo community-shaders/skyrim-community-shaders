@@ -90,6 +90,12 @@ struct UnifiedWater : OverlayFeature
 		float Wave6Wavelength = 2.0f;
 		float Wave6Steepness = 0.15f;
 		float Wave6AngleOffset = 1.22f;
+		
+		// Depth-based wave control
+		float ShallowWaveDepthMin = 50.0f;     // Depth where waves start reducing (game units, ~0.7m)
+		float ShallowWaveDepthMax = 500.0f;    // Depth where waves reach full strength (game units, ~7m)
+		float ShoreWaveDepthThreshold = 300.0f; // Depth range for shore-directed waves (game units, ~4.3m)
+		float ShoreWaveStrength = 1.0f;        // Strength of shore-directed wave influence (0-1)
 	};
 
 	struct LightingSettings
@@ -265,6 +271,9 @@ struct UnifiedWater : OverlayFeature
 		float PlayerPosZ;
 		float PlayerSpeed;
 		float PlayerInWater;
+		float PlayerVelocityX;  // Actual velocity for wake direction
+		float PlayerVelocityY;
+		float PlayerWaterDepth;  // Depth below water surface
 		float RippleStrength;
 		float RippleRadius;
 		float RippleWaveSpeed;
@@ -279,6 +288,22 @@ struct UnifiedWater : OverlayFeature
 		float FoamIntensityFlowmap;
 		float FoamThreshold;
 		float FoamSharpness;
+		
+		// Depth-based wave control
+		float ShallowWaveDepthMin;
+		float ShallowWaveDepthMax;
+		float ShoreWaveDepthThreshold;
+		float ShoreWaveStrength;
+		
+		// Terrain heightmap parameters (for vertex shader depth estimation)
+		float TerrainHeightmapEnabled;
+		float TerrainScaleX;
+		float TerrainScaleY;
+		float TerrainOffsetX;
+		float TerrainOffsetY;
+		float TerrainZRangeMin;
+		float TerrainZRangeMax;
+		float TerrainPad0;
 	};
 
 	struct alignas(16) ActorRippleData
@@ -287,6 +312,10 @@ struct UnifiedWater : OverlayFeature
 		float PosY;
 		float Speed;
 		float InWater;  // 1.0 if actor is in water, 0.0 otherwise
+		float VelocityX;  // Actual velocity for wake direction
+		float VelocityY;
+		float WaterDepth;  // Depth below water surface (negative = above)
+		float pad0;
 	};
 
 	struct alignas(16) ActorRippleBuffer
@@ -341,6 +370,12 @@ struct UnifiedWater : OverlayFeature
 	float currentTimeScale = 1.0f;
 	std::uint32_t lastTimingFrameIndex = std::numeric_limits<std::uint32_t>::max();
 	bool hasLastTimingSample = false;
+	
+	// Player movement tracking
+	RE::NiPoint3 lastPlayerPos{ 0.0f, 0.0f, 0.0f };
+	RE::NiPoint2 playerVelocity{ 0.0f, 0.0f };
+	float lastPlayerUpdateTime = 0.0f;
+	bool hasPlayerMovementData = false;
 
 	struct PrevTileData
 	{

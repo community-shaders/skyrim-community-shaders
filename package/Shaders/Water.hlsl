@@ -160,6 +160,7 @@ struct VS_OUTPUT
 	float4 UnifiedWaveInfo : TEXCOORD9;
 	float4 UnifiedWaveNormal : TEXCOORD10;
 	float3 Barycentric : TEXCOORD11;
+	float4 DepthDebug : TEXCOORD12;  // x=depth, y=debugCode, z=terrainZ, w=waterZ
 #	endif
 #	if defined(VR)
 	float ClipDistance : SV_ClipDistance0;  // o11
@@ -171,6 +172,7 @@ struct VS_OUTPUT
 #	include "UnifiedWater/GerstnerWaves.hlsli"
 #	include "UnifiedWater/WaterActorRipples.hlsli"
 #	include "UnifiedWater/WaterFoam.hlsli"
+#	include "UnifiedWater/WaterDepthEstimation.hlsli"
 #endif // UNIFIED_WATER
 
 #	ifdef VSHADER
@@ -265,15 +267,41 @@ VS_OUTPUT main(VS_INPUT input)
 	float shoreInfluence = 0.0f;
 	float horizontalDisplacement = 0.0f;
 	
+	// Depth estimation for wave attenuation (both tessellation and non-tessellation paths)
+	DepthEstimationDebug depthDebug;
+	depthDebug.depth = 1e5f;
+	depthDebug.debugCode = 0.0f;
+	depthDebug.terrainZ = 0.0f;
+	depthDebug.waterZ = 0.0f;
+	float estimatedDepth = 1e5f;
+	
 	if (TessellationEnabled < 0.5f) {
 		float cameraDistVS = length(worldPosBase.xyz);
-		WaveSample currentWave = CalculateWaterDisplacement(waveWorldPos, float2(0.0f, 0.0f), float2(0.0f, 0.0f), WaveIntensity, WaveAmplitude, WaveSpeed, WaveSteepness, waveTimeSeconds, waveDayPhase, flowBiasDirVS, flowBiasWeightVS, false, cameraDistVS);
+		
+		// Estimate water depth from terrain heightmap (worldspace-based)
+		// Use worldPosBase for all XYZ - it's camera-relative, add CameraPosAdjust for absolute
+		// This gives us the actual water surface position before wave displacement
+		float3 absoluteWorldPos = worldPosBase.xyz + FrameBuffer::CameraPosAdjust[eyeIndex].xyz;
+		// Pass terrain parameters from PerFrame buffer
+		estimatedDepth = EstimateWaterDepthFromTerrain(
+			absoluteWorldPos,
+			float2(TerrainScaleX, TerrainScaleY),
+			float2(TerrainOffsetX, TerrainOffsetY),
+			TerrainZRangeMin,
+			TerrainZRangeMax,
+			depthDebug
+		);
+		
+		WaveSample currentWave = CalculateWaterDisplacement(waveWorldPos, float2(0.0f, 0.0f), float2(0.0f, 0.0f), WaveIntensity, WaveAmplitude, WaveSpeed, WaveSteepness, waveTimeSeconds, waveDayPhase, flowBiasDirVS, flowBiasWeightVS, false, cameraDistVS, estimatedDepth);
 		waveDisplacement = currentWave.displacement;
 		waveNormal = currentWave.normal;
 		wavePrimaryDir = currentWave.primaryDirection;
 		shoreInfluence = currentWave.shoreInfluence;
 		horizontalDisplacement = length(waveDisplacement.xy);
 	}
+	
+	// Store debug info for pixel shader visualization
+	vsout.DepthDebug = float4(depthDebug.depth, depthDebug.debugCode, depthDebug.terrainZ, depthDebug.waterZ);
 	
 	vsout.UnifiedWaveInfo = float4(wavePrimaryDir, waveDisplacement.z, shoreInfluence);
 	vsout.UnifiedWaveNormal = float4(waveNormal, horizontalDisplacement);
@@ -793,9 +821,6 @@ struct FlowmapData
 	float2 flowVector;  // Flow vector (coordinate space depends on source function)
 };
 
-#			endif
-
-#			if defined(FLOWMAP)
 /**
  * Gets raw flowmap data before UV-space coordinate transformation
  *
@@ -1233,6 +1258,7 @@ WaterNormalData GetWaterNormal(PS_INPUT input, float distanceFactor, float norma
 	// Apply actor wading ripples (player + NPCs)
 	if (RippleStrength > 0.01f) {
 		float2 playerPos = float2(PlayerPosX, PlayerPosY);
+		float2 playerVelocity = float2(PlayerVelocityX, PlayerVelocityY);
 		// Convert camera-relative water position to absolute world coordinates
 		// WPosition is camera-relative, but PlayerPos is in absolute world coordinates
 		float2 waterWorldPos = input.WPosition.xy + FrameBuffer::CameraPosAdjust[eyeIndex].xy;
@@ -1240,8 +1266,9 @@ WaterNormalData GetWaterNormal(PS_INPUT input, float distanceFactor, float norma
 			waterWorldPos,
 			RealTimeSeconds,
 			playerPos,
-			PlayerSpeed,
-			PlayerInWater
+			playerVelocity,
+			PlayerInWater,
+			PlayerWaterDepth
 		);
 		
 		// Blend ripple normal with current normal, scaled by RippleStrength
@@ -1315,6 +1342,11 @@ float3 GetWaterSpecularColor(PS_INPUT input, float3 normal, float3 viewDirection
 		// When reflection ray points below the surface normal plane, attenuate reflections
 		float horizon = saturate(1.0 + dot(R, float3(0, 0, 1)));
 		horizon *= horizon;
+		
+		// Filter reflections by upward-facing normals to prevent underwater elements (terrain, grass)
+		// from reflecting on wave tops. Only allow reflections when normal points mostly upward.
+		// Threshold of 0.3 allows some tolerance for wave slopes while blocking downward normals.
+		float upwardFacingMask = saturate((normal.z - 0.3) * 2.5);  // Smooth transition from z=0.3 to z=0.7
 
 		if (Permutation::PixelShaderDescriptor & Permutation::WaterFlags::Cubemap) {
 #			if defined(DYNAMIC_CUBEMAPS)
@@ -1356,9 +1388,9 @@ float3 GetWaterSpecularColor(PS_INPUT input, float3 normal, float3 viewDirection
 				dynamicCubemap = Color::LinearToGamma(lerp(specularIrradiance, specularIrradianceReflections, skylightingSpecular));
 			}
 
-			// Apply horizon and skylighting occlusion to cubemap reflections
+			// Apply horizon, skylighting, and upward-facing occlusion to cubemap reflections
 			skylightingSpecular *= skylightingSpecular;
-			dynamicCubemap *= horizon * skylightingSpecular;
+			dynamicCubemap *= horizon * skylightingSpecular * upwardFacingMask;
 
 #				if defined(VR)
 			// Reflection cubemap is incorrect for interiors in VR, ignore it
@@ -1366,7 +1398,7 @@ float3 GetWaterSpecularColor(PS_INPUT input, float3 normal, float3 viewDirection
 				reflectionColor = dynamicCubemap.xyz;
 			else {
 				float distanceBlend = saturate(length(input.WPosition.xyz) / 1024.0);
-				float3 vanillaCubemap = CubeMapTex.SampleLevel(CubeMapSampler, R, 0).xyz * horizon * skylightingSpecular;
+				float3 vanillaCubemap = CubeMapTex.SampleLevel(CubeMapSampler, R, 0).xyz * horizon * skylightingSpecular * upwardFacingMask;
 				reflectionColor = lerp(dynamicCubemap.xyz, vanillaCubemap, distanceBlend);
 			}
 #				else
@@ -1374,12 +1406,12 @@ float3 GetWaterSpecularColor(PS_INPUT input, float3 normal, float3 viewDirection
 				reflectionColor = dynamicCubemap.xyz;
 			else {
 				float distanceBlend = saturate(length(input.WPosition.xyz) / 1024.0);
-				float3 vanillaCubemap = CubeMapTex.SampleLevel(CubeMapSampler, R, 0).xyz * horizon * skylightingSpecular;
+				float3 vanillaCubemap = CubeMapTex.SampleLevel(CubeMapSampler, R, 0).xyz * horizon * skylightingSpecular * upwardFacingMask;
 				reflectionColor = lerp(dynamicCubemap.xyz, vanillaCubemap, distanceBlend);
 			}
 #				endif
 #			else
-			float3 dynamicCubemap = DynamicCubemaps::EnvReflectionsTexture.SampleLevel(CubeMapSampler, R, 0) * horizon;
+			float3 dynamicCubemap = DynamicCubemaps::EnvReflectionsTexture.SampleLevel(CubeMapSampler, R, 0) * horizon * upwardFacingMask;
 #				endif
 #			endif
 		} else {
@@ -1405,40 +1437,41 @@ float3 GetWaterSpecularColor(PS_INPUT input, float3 normal, float3 viewDirection
 				float4 ssrReflectionColorRaw = RawSSRReflectionTex.Sample(RawSSRReflectionSampler, ssrReflectionUvDR);
 				float4 ssrReflectionColor = lerp(ssrReflectionColorBlurred, ssrReflectionColorRaw, ssrAmount * 0.7);
 
-				// Reject SSR hits that are below the water surface (underwater geometry)
-				float underwaterReject = 1.0f;
-#				if defined(DEPTH) && defined(UNIFIED_WATER)
-				{
-					float2 ssrScreenPos = ssrReflectionUvDR * SharedData::BufferDim.xy;
-					float ssrDepthRaw = DepthTex.Load(float3(ssrScreenPos, 0)).x;
-					
-					float4 ssrClipPos = float4(ssrReflectionUv * 2.0f - 1.0f, ssrDepthRaw, 1.0f);
-					ssrClipPos.y = -ssrClipPos.y;
-					float4 ssrWorldPos = mul(FrameBuffer::CameraViewProjInverse[eyeIndex], ssrClipPos);
-					ssrWorldPos.xyz /= ssrWorldPos.w;
-					
-					float waterSurfaceZ = input.WPosition.z + FrameBuffer::CameraPosAdjust[eyeIndex].z;
-					float ssrHitZ = ssrWorldPos.z + FrameBuffer::CameraPosAdjust[eyeIndex].z;
-					
-					float depthBelowWater = waterSurfaceZ - ssrHitZ;
-					underwaterReject = saturate(1.0f - depthBelowWater * 0.1f);
-				}
-#				endif
-
-				// Apply horizon occlusion to SSR as well
-				finalSsrReflectionColor = max(0, ssrReflectionColor.xyz) * horizon;
+				// Apply horizon and upward-facing occlusion to SSR to prevent underwater elements
+				finalSsrReflectionColor = max(0, ssrReflectionColor.xyz) * horizon * upwardFacingMask;
 				
-				// Suppress multi-reflection artifacts by detecting overly bright/saturated reflections
-				// that may be secondary reflections from other water or reflective surfaces
-				float ssrLuminance = Color::RGBToLuminance(finalSsrReflectionColor);
-				float multiReflectionSuppress = saturate(1.0f - pow(ssrLuminance * 0.5f, 2.0f));
-				
-				ssrFraction = saturate(ssrReflectionColor.w * distanceFactor * ssrAmount * horizon * multiReflectionSuppress * underwaterReject);
+				ssrFraction = saturate(ssrReflectionColor.w * distanceFactor * ssrAmount * horizon * upwardFacingMask);
 			}
 		}
 #			endif
 
 		float3 finalReflectionColor = Color::LinearToGamma(lerp(Color::GammaToLinear(reflectionColor), Color::GammaToLinear(finalSsrReflectionColor), ssrFraction));
+		
+#			if defined(UNIFIED_WATER)
+		// Apply physically-based BRDF to reflections (cubemap and/or SSR)
+		// Based on Filament's IBL evaluation with EnvBRDF approximation
+		// Water F0 ≈ 0.02 for IOR 1.33, F90 = 1.0 (all surfaces reach 100% reflection at grazing)
+		float3 V = -viewDirection;  // View direction (from surface to camera)
+		float NdotV = max(dot(normal, V), 1e-5f);
+		
+		// Use BRDF.hlsli's analytical DFG approximation (Lazarov or Hirvonen)
+		// This computes the split-sum approximation terms for specular IBL
+		float2 envBRDF = BRDF::EnvBRDF(waterReflectionRoughness, NdotV);
+		
+		// Water F0 and F90 for dielectric interface (air-water)
+		const float waterF0 = 0.02f;  // Physical value for water IOR 1.33
+		const float waterF90 = 1.0f;   // All materials approach 100% reflectance at grazing
+		
+		// Apply the DFG terms: (F0 * envBRDF.x + F90 * envBRDF.y)
+		// This accounts for fresnel variation with viewing angle AND roughness
+		float specularBRDF = waterF0 * envBRDF.x + waterF90 * envBRDF.y;
+		
+		// Apply BRDF instead of simple fresnel
+		finalReflectionColor *= specularBRDF;
+#			else
+		// Non-unified water: use simple fresnel (legacy behavior)
+		// This is kept for compatibility with vanilla water paths
+#			endif
 		
 #			if defined(UNIFIED_WATER)
 		// Apply reflection strength multiplier only when ESP overrides enabled
@@ -1965,13 +1998,6 @@ float3 GetSunColor(float3 normal, float3 viewDirection)
 PS_OUTPUT main(PS_INPUT input)
 {
 	PS_OUTPUT psout;
-
-#ifdef FLOWMAP
-	// Debug visualization disabled - parallax active
-#endif
-
-
-	
 
 	uint eyeIndex = Stereo::GetEyeIndexPS(input.HPosition, VPOSOffset);
 	float2 screenPosition = FrameBuffer::DynamicResolutionParams1.xy * (FrameBuffer::DynamicResolutionParams2.xy * input.HPosition.xy);
@@ -2536,6 +2562,61 @@ PS_OUTPUT main(PS_INPUT input)
 		finalColor = float3(debugHeight, debugHeight, debugHeight);
 	}
 #			endif
+
+	// Depth Estimation Debug Visualization
+	// REQUIRES: Terrain Shadows feature enabled in Community Shaders menu
+	// Uncomment to enable depth debug view
+	#define DEBUG_WATER_DEPTH
+	#if defined(DEBUG_WATER_DEPTH)
+	{
+		float depth = input.DepthDebug.x;
+		float debugCode = input.DepthDebug.y;
+		float terrainZ = input.DepthDebug.z;
+		float waterZ = input.DepthDebug.w;
+		
+		// Debug mode to show what's happening:
+		// Mode 0: Show depth with color gradient  
+		// Mode 1: Show water Z (red) vs terrain Z (green) to diagnose coordinate systems
+		// Mode 2: Show if terrain was sampled
+		float debugMode = 1.0f;
+		
+		if (debugMode < 0.5f) {
+			// Mode 0: Standard visualization
+			DepthEstimationDebug debugInfo;
+			debugInfo.depth = depth;
+			debugInfo.debugCode = debugCode;
+			debugInfo.terrainZ = terrainZ;
+			debugInfo.waterZ = waterZ;
+			finalColor = VisualizeDepthEstimation(debugInfo);
+		} else if (debugMode < 1.5f) {
+			// Mode 1: Show terrain height vs water height
+			// This helps diagnose if they're in the same coordinate system
+			// If both move together with camera = coordinate system mismatch
+			// Red = water elevation (absolute), Green = terrain elevation (absolute)
+			// Blue = difference (depth)
+			// Scale: -5000 to +5000 range for Z values
+			finalColor.r = saturate((waterZ + 5000.0f) / 10000.0f);
+			finalColor.g = saturate((terrainZ + 5000.0f) / 10000.0f);
+			finalColor.b = saturate(depth / 1000.0f);
+		} else {
+			// Mode 2: Was terrain actually sampled?
+			if (terrainZ < -1.5e6f) {
+				// Orange = Both texture channels zero - texture not bound or all black
+				finalColor = float3(1.0f, 0.5f, 0.0f);
+			} else if (terrainZ < -100000.0f) {
+				// Magenta = terrainZ is fallback value (-1e6), outside coverage
+				finalColor = float3(1.0f, 0.0f, 1.0f);
+			} else if (abs(terrainZ) < 0.01f) {
+				// Yellow = terrainZ is exactly 0, zRange might be wrong
+				finalColor = float3(1.0f, 1.0f, 0.0f);
+			} else {
+				// Cyan = terrainZ has a real value, show depth as brightness
+				float brightness = saturate(depth / 1000.0f);
+				finalColor = float3(0.0f, brightness, brightness);
+			}
+		}
+	}
+	#endif
 
 	if (WireframeEnabled > 0.5f) {
 		float3 baryCoords = input.Barycentric;

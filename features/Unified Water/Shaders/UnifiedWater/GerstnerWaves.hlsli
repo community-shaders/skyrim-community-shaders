@@ -2,6 +2,7 @@
 #define __GERSTNER_WAVES_HLSLI__
 
 #include "Common/Game.hlsli"
+#include "UnifiedWater/WaterDepthEstimation.hlsli"
 
 // ============================================================================
 // STATISTICAL OCEAN WAVE SYNTHESIS
@@ -158,20 +159,39 @@ cbuffer UnifiedWaterPerFrame : register(b7)
 	float PlayerPosZ : packoffset(c17.z);
 	float PlayerSpeed : packoffset(c17.w);
 	float PlayerInWater : packoffset(c18.x);
-	float RippleStrength : packoffset(c18.y);
-	float RippleRadius : packoffset(c18.z);
-	float RippleWaveSpeed : packoffset(c18.w);
-	float RippleWaveFreq1 : packoffset(c19.x);
-	float RippleWaveFreq2 : packoffset(c19.y);
-	float RippleWaveFreq3 : packoffset(c19.z);
-	float RippleNormalStrength : packoffset(c19.w);
+	float PlayerVelocityX : packoffset(c18.y);  // Actual velocity for wake direction
+	float PlayerVelocityY : packoffset(c18.z);
+	float PlayerWaterDepth : packoffset(c18.w);  // Depth below water surface
+	float RippleStrength : packoffset(c19.x);
+	float RippleRadius : packoffset(c19.y);
+	float RippleWaveSpeed : packoffset(c19.z);
+	float RippleWaveFreq1 : packoffset(c19.w);
+	float RippleWaveFreq2 : packoffset(c20.x);
+	float RippleWaveFreq3 : packoffset(c20.y);
+	float RippleNormalStrength : packoffset(c20.z);
 	
 	// Foam System
-	float FoamEnabled : packoffset(c20.x);
-	float FoamIntensity : packoffset(c20.y);
-	float FoamIntensityFlowmap : packoffset(c20.z);
-	float FoamThreshold : packoffset(c20.w);
-	float FoamSharpness : packoffset(c21.x);
+	float FoamEnabled : packoffset(c20.w);
+	float FoamIntensity : packoffset(c21.x);
+	float FoamIntensityFlowmap : packoffset(c21.y);
+	float FoamThreshold : packoffset(c21.z);
+	float FoamSharpness : packoffset(c21.w);
+	
+	// Depth-based wave controls
+	float ShallowWaveDepthMin : packoffset(c22.x);      // Depth where waves start reducing (shallow end)
+	float ShallowWaveDepthMax : packoffset(c22.y);      // Depth where waves reach full strength (deep end)
+	float ShoreWaveDepthThreshold : packoffset(c22.z);  // Depth range for shore-directed waves
+	float ShoreWaveStrength : packoffset(c22.w);        // Strength of shore-directed wave influence (0-1)
+	
+	// Terrain heightmap parameters (for vertex shader depth estimation)
+	float TerrainHeightmapEnabled : packoffset(c23.x);  // Is terrain heightmap available (0 or 1)
+	float TerrainScaleX : packoffset(c23.y);            // Heightmap UV scale X
+	float TerrainScaleY : packoffset(c23.z);            // Heightmap UV scale Y
+	float TerrainOffsetX : packoffset(c23.w);           // Heightmap UV offset X
+	float TerrainOffsetY : packoffset(c24.x);           // Heightmap UV offset Y
+	float TerrainZRangeMin : packoffset(c24.y);         // Terrain Z range minimum
+	float TerrainZRangeMax : packoffset(c24.z);         // Terrain Z range maximum
+	float TerrainPad0 : packoffset(c24.w);
 }
 
 cbuffer UnifiedWaterPerTile : register(b8)
@@ -241,8 +261,8 @@ struct WaveSample
 	float3 normal;            // Surface normal (full detail for specular/reflections)
 	float3 geometricNormal;   // Softer normal for diffuse lighting (prevents distortion)
 	float2 primaryDirection;  // Dominant wave direction for texture scrolling
-	float shoreInfluence;     // Shore proximity factor (future use)
-	float shoreDistance;      // Distance to shore (future use)
+	float shoreInfluence;     // Shore-directed wave influence (0-1)
+	float shoreDistance;      // Distance to shore in game units (depth gradient)
 };
 
 // ============================================================================
@@ -410,6 +430,67 @@ CellWaveData BlendCellWaves(
 }
 
 // ============================================================================
+// DEPTH-BASED WAVE MODULATION HELPERS
+// ============================================================================
+
+// Calculate shallow water amplitude reduction factor
+// Prevents large waves in shallow rivers/streams
+float CalculateShallowWaterFactor(float waterDepth)
+{
+	if (ShallowWaveDepthMax <= ShallowWaveDepthMin) {
+		return 1.0f;  // Disabled if range invalid
+	}
+	
+	// Shallow water: reduce amplitude progressively
+	// waterDepth < Min: very shallow, waves heavily reduced
+	// waterDepth > Max: deep water, full wave amplitude
+	float depthFactor = saturate((waterDepth - ShallowWaveDepthMin) / 
+	                             max(ShallowWaveDepthMax - ShallowWaveDepthMin, 0.01f));
+	
+	// Use smoothstep for natural transition
+	depthFactor = depthFactor * depthFactor * (3.0f - 2.0f * depthFactor);
+	
+	// Minimum wave amplitude in shallow water (10% of full)
+	// Even very shallow water should have subtle ripples
+	return lerp(0.1f, 1.0f, depthFactor);
+}
+
+// Calculate shore-directed wave influence based on depth gradient
+// Returns: influence factor (0-1) and shore direction (normalized)
+float2 CalculateShoreWaveInfluence(float waterDepth, float2 worldPos, out float2 shoreDirection)
+{
+	shoreDirection = float2(0.0f, 0.0f);
+	
+	// Only apply shore waves in shallow transitional zone
+	if (waterDepth >= ShoreWaveDepthThreshold || ShoreWaveStrength <= 0.001f) {
+		return float2(0.0f, 0.0f);  // Too deep or disabled
+	}
+	
+	// Calculate influence based on depth
+	// Strongest at depth=0 (shore), fades to 0 at threshold
+	float depthNormalized = saturate(waterDepth / max(ShoreWaveDepthThreshold, 0.01f));
+	float shoreInfluence = (1.0f - depthNormalized) * ShoreWaveStrength;
+	
+	// Use smoothstep for natural falloff
+	shoreInfluence = shoreInfluence * shoreInfluence * (3.0f - 2.0f * shoreInfluence);
+	
+	// Estimate shore direction from depth gradient
+	// Sample nearby points to determine depth gradient
+	float sampleDist = 50.0f;  // Distance for gradient sampling (in game units)
+	
+	// Sample depth at cardinal directions (simplified - in practice you'd sample actual depth)
+	// For now, we'll use a heuristic: waves flow toward shallower water
+	// This is approximate since we don't have a depth map, but creates reasonable behavior
+	
+	// Use world position to create pseudo-gradient toward zero depth
+	// This creates waves that generally flow toward shores/banks
+	float2 gradientDir = normalize(worldPos - floor(worldPos / 5000.0f) * 5000.0f);
+	shoreDirection = -gradientDir;  // Waves flow opposite to depth increase
+	
+	return float2(shoreInfluence, 0.0f);
+}
+
+// ============================================================================
 // MAIN WAVE CALCULATION - STATISTICAL SYNTHESIS
 // ============================================================================
 
@@ -426,7 +507,8 @@ WaveSample CalculateWaterDisplacement(
 	float2 flowBiasDir,
 	float flowBiasWeight,
 	bool usePreviousFrame,
-	float cameraDistance = 0.0f
+	float cameraDistance = 0.0f,
+	float waterDepth = 1e5f  // Water depth in game units (default = very deep)
 )
 {
 	WaveSample result;
@@ -435,7 +517,7 @@ WaveSample CalculateWaterDisplacement(
 	result.geometricNormal = float3(0.0f, 0.0f, 1.0f);
 	result.primaryDirection = normalize(float2(0.707f, 0.707f));
 	result.shoreInfluence = 0.0f;
-	result.shoreDistance = 10000.0f;
+	result.shoreDistance = waterDepth;
 	
 	if (waveIntensity <= 0.001f) {
 		return result;
@@ -451,7 +533,46 @@ WaveSample CalculateWaterDisplacement(
 		}
 	}
 	
-	float globalAmplitude = waveIntensity * amplitudeMult * distanceFade;
+	// DEPTH-BASED WAVE ATTENUATION SYSTEM
+	// Uses configurable min/max depth thresholds from UI settings
+	// waterDepth should be provided by caller (from depth buffer sampling)
+	// Falls back to deep water if depth is not available (waterDepth > 1e4)
+	
+	float depthAttenuationFactor = 1.0f;
+	
+	// Only apply depth attenuation if we have valid depth data
+	if (waterDepth < 1e4f) {
+		// Calculate attenuation based on ShallowWaveDepthMin and ShallowWaveDepthMax
+		// ShallowWaveDepthMin: depth where waves start reducing (e.g., 50 = ~0.7m)
+		// ShallowWaveDepthMax: depth where waves reach full strength (e.g., 500 = ~7m)
+		
+		if (ShallowWaveDepthMax > ShallowWaveDepthMin) {
+			// Map depth to [0,1] range using min/max thresholds
+			float depthNormalized = (waterDepth - ShallowWaveDepthMin) / 
+			                        max(ShallowWaveDepthMax - ShallowWaveDepthMin, 1.0f);
+			
+			// Clamp and smooth the transition
+			depthAttenuationFactor = saturate(depthNormalized);
+			
+			// Apply smoothstep for natural falloff
+			// Smoothstep formula: t² * (3 - 2t)
+			depthAttenuationFactor = depthAttenuationFactor * depthAttenuationFactor * 
+			                         (3.0f - 2.0f * depthAttenuationFactor);
+			
+			// Calculate shore influence for effects that need it
+			// High shore influence (close to 1.0) means very shallow water
+			result.shoreInfluence = 1.0f - depthAttenuationFactor;
+			
+			// Early exit if waves are completely suppressed
+			if (depthAttenuationFactor < 0.001f) {
+				return result;  // Water too shallow for any waves
+			}
+		}
+	}
+	
+	// Apply depth attenuation to wave intensity
+	// This reduces wave amplitude in shallow water while maintaining full strength in deep water
+	float globalAmplitude = waveIntensity * amplitudeMult * distanceFade * depthAttenuationFactor;
 	
 	float userWavelengths[6] = {
 		max(Wave1Wavelength, 1.0f),

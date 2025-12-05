@@ -7,6 +7,7 @@
 #include "Util.h"
 #include "RE/C/Calendar.h"
 #include "Globals.h"
+#include "TerrainShadows.h"
 
 #include <cmath>
 
@@ -57,7 +58,11 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	Wave6Amplitude,
 	Wave6Wavelength,
 	Wave6Steepness,
-	Wave6AngleOffset)
+	Wave6AngleOffset,
+	ShallowWaveDepthMin,
+	ShallowWaveDepthMax,
+	ShoreWaveDepthThreshold,
+	ShoreWaveStrength)
 
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	UnifiedWater::LightingSettings,
@@ -233,6 +238,46 @@ void UnifiedWater::DrawSettings()
 				ImGui::SliderFloat("W6 Angle (rad)", &settings.waves.Wave6AngleOffset, -3.14f, 3.14f, "%.2f");
 				ImGui::TreePop();
 			}
+			
+			ImGui::Spacing();
+			ImGui::Separator();
+			ImGui::Spacing();
+			
+			if (ImGui::TreeNodeEx("Depth-Based Wave Modulation", ImGuiTreeNodeFlags_DefaultOpen)) {
+				ImGui::Text("Shallow Water Effects");
+				if (auto _tt = Util::HoverTooltipWrapper()) {
+					ImGui::Text("Reduces wave amplitude in shallow water for more realistic shoreline behavior.");
+				}
+				
+				ImGui::SliderFloat("Shallow Depth Min", &settings.waves.ShallowWaveDepthMin, 0.0f, 500.0f, "%.0f");
+				if (auto _tt = Util::HoverTooltipWrapper()) {
+					ImGui::Text("Depth (game units) where waves fully disappear.\n~70 units = 1 meter.\nDefault: 50 (~0.7m)");
+				}
+				
+				ImGui::SliderFloat("Shallow Depth Max", &settings.waves.ShallowWaveDepthMax, 50.0f, 2000.0f, "%.0f");
+				if (auto _tt = Util::HoverTooltipWrapper()) {
+					ImGui::Text("Depth (game units) where waves reach full amplitude.\nDefault: 500 (~7m)");
+				}
+				
+				ImGui::Spacing();
+				ImGui::Text("Shore-Directed Waves");
+				if (auto _tt = Util::HoverTooltipWrapper()) {
+					ImGui::Text("Creates waves that flow toward the shore in shallow water.");
+				}
+				
+				ImGui::SliderFloat("Shore Depth Threshold", &settings.waves.ShoreWaveDepthThreshold, 50.0f, 1000.0f, "%.0f");
+				if (auto _tt = Util::HoverTooltipWrapper()) {
+					ImGui::Text("Depth (game units) below which shore waves activate.\nDefault: 300 (~4.3m)");
+				}
+				
+				ImGui::SliderFloat("Shore Wave Strength", &settings.waves.ShoreWaveStrength, 0.0f, 2.0f, "%.2f");
+				if (auto _tt = Util::HoverTooltipWrapper()) {
+					ImGui::Text("Intensity of shore-directed wave bias.\n0 = disabled, 1 = default, 2 = very strong");
+				}
+				
+				ImGui::TreePop();
+			}
+			
 			ImGui::EndTabItem();
 		}
 
@@ -1070,6 +1115,9 @@ void UnifiedWater::BSWaterShader_SetupGeometry::thunk(RE::BSShader* waterShader,
 		perFrameData.PlayerPosZ = 0.0f;
 		perFrameData.PlayerSpeed = 0.0f;
 		perFrameData.PlayerInWater = 0.0f;
+		perFrameData.PlayerVelocityX = 0.0f;
+		perFrameData.PlayerVelocityY = 0.0f;
+		perFrameData.PlayerWaterDepth = 0.0f;
 		
 		// Ripple settings from UI
 		perFrameData.RippleStrength = singleton.settings.ripples.EnableActorRipples ? singleton.settings.ripples.RippleStrength : 0.0f;
@@ -1087,6 +1135,27 @@ void UnifiedWater::BSWaterShader_SetupGeometry::thunk(RE::BSShader* waterShader,
 		perFrameData.FoamThreshold = singleton.settings.foam.FoamThreshold;
 		perFrameData.FoamSharpness = singleton.settings.foam.FoamSharpness;
 		
+		// Depth-based wave control settings
+		perFrameData.ShallowWaveDepthMin = singleton.settings.waves.ShallowWaveDepthMin;
+		perFrameData.ShallowWaveDepthMax = singleton.settings.waves.ShallowWaveDepthMax;
+		perFrameData.ShoreWaveDepthThreshold = singleton.settings.waves.ShoreWaveDepthThreshold;
+		perFrameData.ShoreWaveStrength = singleton.settings.waves.ShoreWaveStrength;
+		
+		// Get terrain heightmap parameters from Terrain Shadows feature
+		auto& terrainShadows = globals::features::terrainShadows;
+		auto terrainData = terrainShadows.GetCommonBufferData();
+		perFrameData.TerrainHeightmapEnabled = terrainData.EnableTerrainShadow ? 1.0f : 0.0f;
+		perFrameData.TerrainScaleX = terrainData.Scale.x;
+		perFrameData.TerrainScaleY = terrainData.Scale.y;
+		perFrameData.TerrainOffsetX = terrainData.Offset.x;
+		perFrameData.TerrainOffsetY = terrainData.Offset.y;
+		perFrameData.TerrainZRangeMin = terrainData.ZRange.x;
+		perFrameData.TerrainZRangeMax = terrainData.ZRange.y;
+		perFrameData.TerrainPad0 = 0.0f;
+		
+		// Get timing data for player velocity calculation
+		float currentRealTime = globals::state ? globals::state->timer : 0.0f;
+		
 		float waterSurfaceHeight = 0.0f;
 		bool hasWaterHeight = false;
 		
@@ -1099,15 +1168,36 @@ void UnifiedWater::BSWaterShader_SetupGeometry::thunk(RE::BSShader* waterShader,
 			// Get player movement speed from ActorState
 			perFrameData.PlayerSpeed = player->AsActorState()->DoGetMovementSpeed();
 			
+			// Calculate actual velocity from position change
+			if (singleton.hasPlayerMovementData && currentRealTime > singleton.lastPlayerUpdateTime) {
+				float deltaTime = currentRealTime - singleton.lastPlayerUpdateTime;
+				if (deltaTime > 0.001f && deltaTime < 1.0f) {  // Sanity check
+					singleton.playerVelocity.x = (pos.x - singleton.lastPlayerPos.x) / deltaTime;
+					singleton.playerVelocity.y = (pos.y - singleton.lastPlayerPos.y) / deltaTime;
+				}
+			}
+			singleton.lastPlayerPos = pos;
+			singleton.lastPlayerUpdateTime = currentRealTime;
+			singleton.hasPlayerMovementData = true;
+			
+			perFrameData.PlayerVelocityX = singleton.playerVelocity.x;
+			perFrameData.PlayerVelocityY = singleton.playerVelocity.y;
+			
 			// Get the relevant water height for the player
 			float playerWaterHeight = player->GetWaterHeight();
 			if (playerWaterHeight > -1000000.0f) {
 				hasWaterHeight = true;
 				waterSurfaceHeight = playerWaterHeight;
 				
-				// Player is in water if their feet are below water surface (with some tolerance for wading)
-				// Use a generous threshold: player Z below water + 64 units (roughly knee-deep)
-				if (pos.z < playerWaterHeight + 64.0f) {
+				// Calculate depth below water surface (positive = underwater)
+				perFrameData.PlayerWaterDepth = playerWaterHeight - pos.z;
+				
+				// Player head height estimate: ~120 units above feet (player Z position)
+				float estimatedHeadHeight = pos.z + 120.0f;
+				
+				// Only create ripples if wading (feet wet but head above water)
+				// If head is below water surface, disable ripples (fully submerged)
+				if (pos.z < playerWaterHeight + 64.0f && estimatedHeadHeight > playerWaterHeight) {
 					perFrameData.PlayerInWater = 1.0f;
 				}
 			}
@@ -1155,10 +1245,24 @@ void UnifiedWater::BSWaterShader_SetupGeometry::thunk(RE::BSShader* waterShader,
 					ActorRippleData& ripple = actorRippleData.actors[actorRippleData.numActors];
 					ripple.PosX = pos.x;
 					ripple.PosY = pos.y;
-					ripple.InWater = (heightAboveWater < 64.0f) ? 1.0f : 0.0f;
+					
+					// Estimate head height for actor (roughly 100-120 units above feet)
+					float estimatedHeadHeight = pos.z + 100.0f;
+					
+					// Only enable ripples if wading (not fully submerged)
+					ripple.InWater = (heightAboveWater < 64.0f && estimatedHeadHeight > actorWaterHeight) ? 1.0f : 0.0f;
+					ripple.WaterDepth = actorWaterHeight - pos.z;  // Positive = below surface
 					
 					// Get actor movement speed from ActorState
 					ripple.Speed = actor->AsActorState()->DoGetMovementSpeed();
+					
+					// Get velocity direction from actor's angle
+					// Note: We don't have frame-to-frame position tracking for NPCs,
+					// so we use their rotation angle as an approximation
+					float angleZ = actor->GetAngleZ();  // Actor's facing direction in radians
+					float speed = ripple.Speed;
+					ripple.VelocityX = sin(angleZ) * speed;
+					ripple.VelocityY = cos(angleZ) * speed;
 					
 					actorRippleData.numActors++;
 				}
@@ -1373,6 +1477,25 @@ void UnifiedWater::BSWaterShader_SetupGeometry::thunk(RE::BSShader* waterShader,
 	// THEN apply tessellation state after, so it's not overwritten by the original
 	func(waterShader, pass);
 
+	// Bind terrain heightmap texture to VS/DS for depth estimation (slot 60)
+	// This needs to happen after func() since we need Terrain Shadows to have already bound it to PS
+	ID3D11ShaderResourceView* terrainHeightSRV[1] = { nullptr };
+	context->PSGetShaderResources(60, 1, terrainHeightSRV);
+	if (terrainHeightSRV[0]) {
+		context->VSSetShaderResources(60, 1, terrainHeightSRV);
+		context->DSSetShaderResources(60, 1, terrainHeightSRV);
+		terrainHeightSRV[0]->Release();
+	}
+	
+	// Bind a linear sampler to VS/DS for terrain heightmap sampling (slot 12)
+	ID3D11SamplerState* terrainSampler[1] = { nullptr };
+	context->PSGetSamplers(4, 1, terrainSampler);
+	if (terrainSampler[0]) {
+		context->VSSetSamplers(12, 1, terrainSampler);
+		context->DSSetSamplers(12, 1, terrainSampler);
+		terrainSampler[0]->Release();
+	}
+
 	// Track if we need to bind just the geometry shader (for tri visualizer without tessellation)
 	bool geometryShaderOnlyForVisualizer = !tessellationEnabled && 
 	                                        singleton.settings.general.ShowWireframe && 
@@ -1484,6 +1607,7 @@ void UnifiedWater::BSWaterShader_SetupGeometry::thunk(RE::BSShader* waterShader,
 			context->PSGetSamplers(4, 3, normalSamplers);
 			context->DSSetShaderResources(4, 3, normalSRVs);
 			context->DSSetSamplers(4, 3, normalSamplers);
+			
 			for (int i = 0; i < 3; i++) {
 				if (normalSRVs[i]) normalSRVs[i]->Release();
 				if (normalSamplers[i]) normalSamplers[i]->Release();

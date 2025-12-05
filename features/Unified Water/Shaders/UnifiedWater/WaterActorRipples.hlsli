@@ -13,6 +13,10 @@ struct ActorRippleData
 	float PosY;
 	float Speed;
 	float InWater;
+	float VelocityX;  // Actual velocity for wake direction
+	float VelocityY;
+	float WaterDepth;  // Depth below water surface (negative = above)
+	float Pad0;
 };
 
 cbuffer ActorRippleBuffer : register(b10)
@@ -169,6 +173,7 @@ namespace PlayerRipples
 	}
 	
 	// Gentle circular ripples for stationary actors
+	// Only generated when actor has minimal velocity (truly stationary)
 	float4 GetStationaryRipples(float2 actorPos, float2 worldPos, float time, float rippleStrength)
 	{
 		float2 toPos = worldPos - actorPos;
@@ -177,26 +182,26 @@ namespace PlayerRipples
 		if (dist > MAX_RIPPLE_RADIUS)
 			return float4(0, 0, 1, 0);
 		
-		// Gentle circular waves for standing still
-		// Higher frequencies and amplitudes for visibility
-		float wave1 = sin(dist * 0.12f - time * 3.0f);
-		float wave2 = sin(dist * 0.18f - time * 4.0f) * 0.6f;
+		// Subtle breathing/idle motion ripples (very gentle)
+		// These should be minimal - just enough to show presence
+		float wave1 = sin(dist * 0.08f - time * 1.5f);  // Slower, gentler than before
+		float wave2 = sin(dist * 0.12f - time * 2.0f) * 0.4f;
 		
-		float combinedWave = (wave1 + wave2) / 1.6f;
+		float combinedWave = (wave1 + wave2) / 1.4f;
 		
-		// Distance falloff - linear for better visibility at distance
-		float falloff = 1.0f - smoothstep(0.0f, MAX_RIPPLE_RADIUS * 0.8f, dist);
+		// Stronger distance falloff to keep ripples closer
+		float falloff = 1.0f - smoothstep(0.0f, MAX_RIPPLE_RADIUS * 0.5f, dist);
 		
-		// Boost amplitude for stationary ripples (increased by 3x)
-		float amplitude = combinedWave * falloff * rippleStrength * 3.0f;
+		// Much reduced amplitude (was * 3.0f, now * 0.3f) for subtle idle ripples
+		float amplitude = combinedWave * falloff * rippleStrength * 0.3f;
 		
 		float2 dir = dist > 0.001f ? toPos / dist : float2(0, 1);
-		float waveGradient = cos(dist * 0.12f - time * 3.0f) * 0.12f +
-		                     cos(dist * 0.18f - time * 4.0f) * 0.6f * 0.18f;
-		waveGradient /= 1.6f;
-		waveGradient *= falloff * rippleStrength * 3.0f;
+		float waveGradient = cos(dist * 0.08f - time * 1.5f) * 0.08f +
+		                     cos(dist * 0.12f - time * 2.0f) * 0.4f * 0.12f;
+		waveGradient /= 1.4f;
+		waveGradient *= falloff * rippleStrength * 0.3f;
 		
-		float3 normal = normalize(float3(-dir * waveGradient * 3.0f, 1.0f));
+		float3 normal = normalize(float3(-dir * waveGradient * 2.0f, 1.0f));
 		
 		return float4(normal, amplitude);
 	}
@@ -210,10 +215,14 @@ namespace PlayerRipples
 	}
 	
 	// Calculate ripples from a single actor position
-	// Creates realistic V-shaped wake patterns based on movement
-	float4 GetActorRipples(float2 actorPos, float2 worldPos, float time, float actorSpeed, float inWater)
+	// Creates realistic V-shaped wake patterns based on actual movement
+	float4 GetActorRipples(float2 actorPos, float2 worldPos, float time, float2 velocity, float inWater, float waterDepth)
 	{
 		if (inWater < 0.5f)
+			return float4(0, 0, 1, 0);
+		
+		// Don't create ripples if actor is fully submerged (waterDepth > 100 = head underwater)
+		if (waterDepth > 100.0f)
 			return float4(0, 0, 1, 0);
 			
 		float2 toPos = worldPos - actorPos;
@@ -222,53 +231,61 @@ namespace PlayerRipples
 		if (dist > MAX_RIPPLE_RADIUS)
 			return float4(0, 0, 1, 0);
 		
-		// Increased base strength for better visibility (was 0.1-0.8, now 0.5-1.5)
-		float baseStrength = lerp(0.5f, 1.5f, saturate(actorSpeed / 300.0f));
-		float speedFactor = saturate(actorSpeed / 300.0f);
+		// Calculate actual speed from velocity vector
+		float actualSpeed = length(velocity);
 		
-		// For stationary or very slow actors, use gentle circular ripples
-		if (speedFactor < 0.1f) {
-			return GetStationaryRipples(actorPos, worldPos, time, baseStrength);
+		// Movement threshold: require actual velocity to create directional wake
+		// Below 10 units/sec is considered stationary (idle sway/breathing motion)
+		float movementThreshold = 10.0f;
+		
+		// Increased base strength for better visibility (was 0.5-1.5, now 0.8-2.0)
+		float baseStrength = lerp(0.8f, 2.0f, saturate(actualSpeed / 300.0f));
+		
+		// For truly stationary actors (very low velocity), use gentle circular ripples
+		if (actualSpeed < movementThreshold) {
+			// Only create subtle idle ripples, not constant strong ones
+			return GetStationaryRipples(actorPos, worldPos, time, baseStrength * 0.5f);
 		}
 		
-		// For moving actors, create wake pattern with pseudo-direction
-		// Since we don't have actual movement direction, derive it from position hash + time
-		float dirAngle = hash(actorPos) * 6.28318f + time * 0.3f;
-		float2 pseudoMoveDir = float2(cos(dirAngle), sin(dirAngle));
+		// For moving actors, create wake pattern using actual velocity direction
+		float2 moveDir = normalize(velocity);
 		
-		return EvaluateWakeRipples(worldPos, actorPos, pseudoMoveDir, time, actorSpeed, baseStrength);
+		return EvaluateWakeRipples(worldPos, actorPos, moveDir, time, actualSpeed, baseStrength);
 	}
 	
 	// Main function: Calculate ripples from ALL actors (player + NPCs)
-	float4 GetAllActorRipples(float2 worldPos, float time, float2 playerPos, float playerSpeed, float playerInWater)
+	float4 GetAllActorRipples(float2 worldPos, float time, float2 playerPos, float2 playerVelocity, float playerInWater, float playerWaterDepth)
 	{
 		float3 resultNormal = float3(0, 0, 1);
 		float resultHeight = 0.0f;
 		float totalWeight = 0.0f;
 		
-		// Player ripples - use wake pattern
+		// Player ripples - use wake pattern based on actual velocity
 		if (playerInWater > 0.5f) {
-			// Increased base strength for better visibility (was 0.5-1.0, now 1.0-2.0)
-			float baseStrength = lerp(1.0f, 2.0f, saturate(playerSpeed / 300.0f));
-			float speedFactor = saturate(playerSpeed / 300.0f);
-			
-			float4 playerResult;
-			if (speedFactor < 0.1f) {
-				// Stationary player gets gentle circular ripples
-				playerResult = GetStationaryRipples(playerPos, worldPos, time, baseStrength);
-			} else {
-				// Moving player gets wake pattern
-				// Use a consistent direction based on position for visual stability
-				float dirAngle = hash(playerPos * 0.01f) * 6.28318f + time * 0.2f;
-				float2 pseudoMoveDir = float2(cos(dirAngle), sin(dirAngle));
-				playerResult = EvaluateWakeRipples(worldPos, playerPos, pseudoMoveDir, time, playerSpeed, baseStrength);
-			}
-			
-			if (playerResult.w != 0.0f) {
-				float weight = abs(playerResult.w);
-				resultNormal.xy += playerResult.xy * weight;
-				resultHeight += playerResult.w;
-				totalWeight += weight;
+			// Don't create ripples if player is fully submerged
+			if (playerWaterDepth <= 100.0f) {
+				float actualSpeed = length(playerVelocity);
+				float movementThreshold = 10.0f;
+				
+				// Increased base strength for better visibility (was 1.0-2.0, now 1.2-2.5)
+				float baseStrength = lerp(1.2f, 2.5f, saturate(actualSpeed / 300.0f));
+				
+				float4 playerResult;
+				if (actualSpeed < movementThreshold) {
+					// Truly stationary player gets very subtle circular ripples
+					playerResult = GetStationaryRipples(playerPos, worldPos, time, baseStrength * 0.5f);
+				} else {
+					// Moving player gets wake pattern using actual velocity direction
+					float2 moveDir = normalize(playerVelocity);
+					playerResult = EvaluateWakeRipples(worldPos, playerPos, moveDir, time, actualSpeed, baseStrength);
+				}
+				
+				if (playerResult.w != 0.0f) {
+					float weight = abs(playerResult.w);
+					resultNormal.xy += playerResult.xy * weight;
+					resultHeight += playerResult.w;
+					totalWeight += weight;
+				}
 			}
 		}
 		
@@ -277,8 +294,9 @@ namespace PlayerRipples
 		for (uint i = 0; i < actorCount; i++) {
 			ActorRippleData actor = ActorRipples[i];
 			float2 actorPos = float2(actor.PosX, actor.PosY);
+			float2 actorVelocity = float2(actor.VelocityX, actor.VelocityY);
 			
-			float4 actorResult = GetActorRipples(actorPos, worldPos, time, actor.Speed, actor.InWater);
+			float4 actorResult = GetActorRipples(actorPos, worldPos, time, actorVelocity, actor.InWater, actor.WaterDepth);
 			if (actorResult.w != 0.0f) {
 				float weight = abs(actorResult.w);
 				resultNormal.xy += actorResult.xy * weight;
