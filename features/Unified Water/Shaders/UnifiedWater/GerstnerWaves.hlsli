@@ -176,22 +176,29 @@ cbuffer UnifiedWaterPerFrame : register(b7)
 	float FoamIntensityFlowmap : packoffset(c21.y);
 	float FoamThreshold : packoffset(c21.z);
 	float FoamSharpness : packoffset(c21.w);
+	float FoamLargeWaveSlopeRequirement : packoffset(c22.x);
+	float FoamSmallWaveSlopeMultiplier : packoffset(c22.y);
+	float FoamSmallWaveBaseOffset : packoffset(c22.z);
+	float FoamSmallWaveHeightRange : packoffset(c22.w);
+	float FoamPad0 : packoffset(c23.x);
+	float FoamPad1 : packoffset(c23.y);
+	float FoamPad2 : packoffset(c23.z);
 	
 	// Depth-based wave controls
-	float ShallowWaveDepthMin : packoffset(c22.x);      // Depth where waves start reducing (shallow end)
-	float ShallowWaveDepthMax : packoffset(c22.y);      // Depth where waves reach full strength (deep end)
-	float ShoreWaveDepthThreshold : packoffset(c22.z);  // Depth range for shore-directed waves
-	float ShoreWaveStrength : packoffset(c22.w);        // Strength of shore-directed wave influence (0-1)
+	float ShallowWaveDepthMin : packoffset(c23.w);      // Depth where waves start reducing (shallow end)
+	float ShallowWaveDepthMax : packoffset(c24.x);      // Depth where waves reach full strength (deep end)
+	float ShoreWaveDepthThreshold : packoffset(c24.y);  // Depth range for shore-directed waves
+	float ShoreWaveStrength : packoffset(c24.z);        // Strength of shore-directed wave influence (0-1)
 	
 	// Terrain heightmap parameters (for vertex shader depth estimation)
-	float TerrainHeightmapEnabled : packoffset(c23.x);  // Is terrain heightmap available (0 or 1)
-	float TerrainScaleX : packoffset(c23.y);            // Heightmap UV scale X
-	float TerrainScaleY : packoffset(c23.z);            // Heightmap UV scale Y
-	float TerrainOffsetX : packoffset(c23.w);           // Heightmap UV offset X
-	float TerrainOffsetY : packoffset(c24.x);           // Heightmap UV offset Y
-	float TerrainZRangeMin : packoffset(c24.y);         // Terrain Z range minimum
-	float TerrainZRangeMax : packoffset(c24.z);         // Terrain Z range maximum
-	float TerrainPad0 : packoffset(c24.w);
+	float TerrainHeightmapEnabled : packoffset(c24.w);  // Is terrain heightmap available (0 or 1)
+	float TerrainScaleX : packoffset(c25.x);            // Heightmap UV scale X
+	float TerrainScaleY : packoffset(c25.y);            // Heightmap UV scale Y
+	float TerrainOffsetX : packoffset(c25.z);           // Heightmap UV offset X
+	float TerrainOffsetY : packoffset(c25.w);           // Heightmap UV offset Y
+	float TerrainZRangeMin : packoffset(c26.x);         // Terrain Z range minimum
+	float TerrainZRangeMax : packoffset(c26.y);         // Terrain Z range maximum
+	float TerrainPad0 : packoffset(c26.z);
 }
 
 cbuffer UnifiedWaterPerTile : register(b8)
@@ -680,15 +687,15 @@ WaveSample CalculateWaterDisplacement(
 		waveNormal = -waveNormal;
 	}
 	
-	// Clamp normal slope to prevent extreme angles (prevents sharp triangular artifacts)
-	// Max slope: atan(maxSlope) degrees from vertical
-	const float maxSlope = 1.2f;  // ~50 degrees max tilt
+	// Clamp normal slope to prevent extreme angles
+	// Relaxed limit to avoid distortion at grazing viewing angles
+	const float maxSlope = 2.0f;  // ~63 degrees max tilt
 	float2 normalXY = waveNormal.xy;
 	float xyLen = length(normalXY);
 	if (xyLen > maxSlope) {
 		normalXY = normalXY * (maxSlope / xyLen);
 		waveNormal.xy = normalXY;
-		waveNormal.z = sqrt(max(1.0f - dot(normalXY, normalXY), 0.1f));
+		waveNormal.z = sqrt(max(1.0f - dot(normalXY, normalXY), 0.05f));
 		waveNormal = normalize(waveNormal);
 	}
 	
@@ -713,13 +720,13 @@ WaveSample CalculateWaterDisplacement(
 		geoNormal = -geoNormal;
 	}
 	
-	// Apply same slope limiting to geometric normal
+	// Apply same relaxed slope limiting to geometric normal
 	float2 geoNormalXY = geoNormal.xy;
 	float geoXYLen = length(geoNormalXY);
 	if (geoXYLen > maxSlope) {
 		geoNormalXY = geoNormalXY * (maxSlope / geoXYLen);
 		geoNormal.xy = geoNormalXY;
-		geoNormal.z = sqrt(max(1.0f - dot(geoNormalXY, geoNormalXY), 0.1f));
+		geoNormal.z = sqrt(max(1.0f - dot(geoNormalXY, geoNormalXY), 0.05f));
 		geoNormal = normalize(geoNormal);
 	}
 	

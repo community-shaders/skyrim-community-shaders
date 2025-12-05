@@ -154,6 +154,10 @@ struct UnifiedWater : OverlayFeature
 		float FoamIntensityFlowmap = 0.3f;
 		float FoamThreshold = 0.6f;
 		float FoamSharpness = 2.0f;
+		float LargeWaveSlopeRequirement = 0.3f;
+		float SmallWaveSlopeMultiplier = 3.0f;
+		float SmallWaveBaseOffset = 0.2f;
+		float SmallWaveHeightRange = 0.7f;
 	};
 
 	struct Settings
@@ -288,6 +292,13 @@ struct UnifiedWater : OverlayFeature
 		float FoamIntensityFlowmap;
 		float FoamThreshold;
 		float FoamSharpness;
+		float FoamLargeWaveSlopeRequirement;
+		float FoamSmallWaveSlopeMultiplier;
+		float FoamSmallWaveBaseOffset;
+		float FoamSmallWaveHeightRange;
+		float FoamPad0;
+		float FoamPad1;
+		float FoamPad2;
 		
 		// Depth-based wave control
 		float ShallowWaveDepthMin;

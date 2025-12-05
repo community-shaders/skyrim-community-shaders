@@ -113,8 +113,13 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	UnifiedWater::FoamSettings,
 	EnableFoam,
 	FoamIntensity,
+	FoamIntensityFlowmap,
 	FoamThreshold,
-	FoamSharpness)
+	FoamSharpness,
+	LargeWaveSlopeRequirement,
+	SmallWaveSlopeMultiplier,
+	SmallWaveBaseOffset,
+	SmallWaveHeightRange)
 
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	UnifiedWater::Settings,
@@ -387,36 +392,71 @@ void UnifiedWater::DrawSettings()
 				}
 			}
 			
-			ImGui::Spacing();
-			ImGui::Separator();
-			ImGui::Spacing();
-			
+			ImGui::EndTabItem();
+		}
+
+		if (ImGui::BeginTabItem("Foam")) {
 			ImGui::Checkbox("Enable Foam", &settings.foam.EnableFoam);
 			if (auto _tt = Util::HoverTooltipWrapper()) {
-				ImGui::Text("Generates foam on wave crests and steep slopes.\nFoam appears on the upper portions of waves.");
+				ImGui::Text("Generates foam on wave crests based on wave height and slope.\nFoam appears on steep, sharp waves.");
 			}
 			
 			if (settings.foam.EnableFoam) {
+				ImGui::Spacing();
+				ImGui::Text("General Foam Settings");
+				ImGui::Separator();
+				
 				ImGui::SliderFloat("Foam Intensity", &settings.foam.FoamIntensity, 0.0f, 2.0f, "%.2f");
 				if (auto _tt = Util::HoverTooltipWrapper()) {
-					ImGui::Text("Foam strength for non-flowmap water (lakes, ocean).");
+					ImGui::Text("Overall foam strength for non-flowmap water (lakes, ocean).\nAlso shifts height threshold upward (higher = tighter to peak).");
 				}
+				
 				ImGui::SliderFloat("Foam Intensity (Flowmap)", &settings.foam.FoamIntensityFlowmap, 0.0f, 2.0f, "%.2f");
 				if (auto _tt = Util::HoverTooltipWrapper()) {
 					ImGui::Text("Foam strength for flowmap water (rivers).");
 				}
-				ImGui::SliderFloat("Foam Threshold", &settings.foam.FoamThreshold, 0.3f, 0.9f, "%.2f");
+				
+				ImGui::SliderFloat("Height Threshold", &settings.foam.FoamThreshold, 0.0f, 0.9f, "%.2f");
 				if (auto _tt = Util::HoverTooltipWrapper()) {
-					ImGui::Text("Height threshold for foam appearance.\nLower values = foam on more of the wave.");
+					ImGui::Text("Minimum wave height for foam appearance.\nLower values = foam appears lower on waves.");
 				}
-				ImGui::SliderFloat("Foam Sharpness", &settings.foam.FoamSharpness, 0.5f, 5.0f, "%.2f");
+				
+				ImGui::SliderFloat("Edge Sharpness", &settings.foam.FoamSharpness, 0.5f, 8.0f, "%.2f");
 				if (auto _tt = Util::HoverTooltipWrapper()) {
-					ImGui::Text("How sharply foam edges are defined.\nHigher = more defined edges.");
+					ImGui::Text("How sharply foam edges are defined.\nHigher = more crisp edges.");
+				}
+				
+				ImGui::Spacing();
+				ImGui::Text("Large Wave Foam (Waves 1-3)");
+				ImGui::Separator();
+				
+				ImGui::SliderFloat("Slope Requirement", &settings.foam.LargeWaveSlopeRequirement, 0.0f, 0.8f, "%.2f");
+				if (auto _tt = Util::HoverTooltipWrapper()) {
+					ImGui::Text("Minimum slope ratio for large waves to generate foam.\nHigher = only steep waves foam (prevents foam on gentle rolling tops).\nLower = more foam on larger waves.");
+				}
+				
+				ImGui::Spacing();
+				ImGui::Text("Small Wave Foam (Waves 4-6)");
+				ImGui::Separator();
+				
+				ImGui::SliderFloat("Slope Multiplier", &settings.foam.SmallWaveSlopeMultiplier, 1.0f, 5.0f, "%.2f");
+				if (auto _tt = Util::HoverTooltipWrapper()) {
+					ImGui::Text("How easily small waves generate foam based on slope.\nHigher = more foam on small waves.");
+				}
+				
+				ImGui::SliderFloat("Base Foam Offset", &settings.foam.SmallWaveBaseOffset, 0.0f, 0.5f, "%.2f");
+				if (auto _tt = Util::HoverTooltipWrapper()) {
+					ImGui::Text("Base foam amount for small waves regardless of slope.\nAdds minimum foam to all small wave crests.");
+				}
+				
+				ImGui::SliderFloat("Height Range", &settings.foam.SmallWaveHeightRange, 0.5f, 1.0f, "%.2f");
+				if (auto _tt = Util::HoverTooltipWrapper()) {
+					ImGui::Text("Height range requirement for small wave foam.\nLower = foam appears on smaller height variations.");
 				}
 			}
 			ImGui::EndTabItem();
 		}
-
+		
 		if (ImGui::BeginTabItem("Debug")) {
 			ImGui::Checkbox("Show Tri Visualizer", &settings.general.ShowWireframe);
 			if (settings.general.ShowWireframe) {
@@ -1134,6 +1174,10 @@ void UnifiedWater::BSWaterShader_SetupGeometry::thunk(RE::BSShader* waterShader,
 		perFrameData.FoamIntensityFlowmap = singleton.settings.foam.FoamIntensityFlowmap;
 		perFrameData.FoamThreshold = singleton.settings.foam.FoamThreshold;
 		perFrameData.FoamSharpness = singleton.settings.foam.FoamSharpness;
+		perFrameData.FoamLargeWaveSlopeRequirement = singleton.settings.foam.LargeWaveSlopeRequirement;
+		perFrameData.FoamSmallWaveSlopeMultiplier = singleton.settings.foam.SmallWaveSlopeMultiplier;
+		perFrameData.FoamSmallWaveBaseOffset = singleton.settings.foam.SmallWaveBaseOffset;
+		perFrameData.FoamSmallWaveHeightRange = singleton.settings.foam.SmallWaveHeightRange;
 		
 		// Depth-based wave control settings
 		perFrameData.ShallowWaveDepthMin = singleton.settings.waves.ShallowWaveDepthMin;
