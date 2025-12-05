@@ -24,9 +24,9 @@
 
 // Terrain heightmap from Terrain Shadows feature (slot 60)
 // Format: DXGI_FORMAT_R16G16_FLOAT - RG channels contain shadow height range
-// .x (red) = upper terrain height (shadow receiver - terrain surface)
-// .y (green) = lower terrain height (shadow caster - for shadow calc)
-// We use .x channel for water depth as it represents the actual terrain surface
+// .x (red) = upper height (shadow receiver - terrain + shadow projection)
+// .y (green) = lower height (shadow caster - actual terrain surface)
+// We use .y channel for water depth as it represents the true terrain elevation
 #if defined(VSHADER) || defined(DSHADER)
 Texture2D<float2> TerrainHeightTexture : register(t60);
 
@@ -88,8 +88,8 @@ float SampleTerrainHeight(float2 worldXY, float2 scaleXY, float2 offsetXY, float
 	}
 	
 	// Sample heightmap - .rg format contains shadow height range
-	// TerrainShadows uses: .x = upper height (terrain surface), .y = lower height (shadows)
-	// We want the actual terrain surface for water depth calculation
+	// TerrainShadows uses: .x = upper height (terrain + shadow), .y = lower height (actual terrain)
+	// We want the ACTUAL terrain surface for water depth, not the shadow receiver height
 	float2 heightmapSample = TerrainHeightTexture.SampleLevel(TerrainHeightSampler, heightmapUV, 0);
 	
 	// DEBUG: If both channels zero, texture not bound
@@ -97,9 +97,9 @@ float SampleTerrainHeight(float2 worldXY, float2 scaleXY, float2 offsetXY, float
 		return -2e6f;  // Both channels zero - texture not bound or all black
 	}
 	
-	// Use .x channel - this is the upper terrain height (surface)
-	// Match TerrainShadows: shadowHeight.x is the receiver (terrain surface)
-	float normalizedHeight = heightmapSample.x;
+	// Use .y channel - this is the actual terrain height (shadow caster)
+	// NOT .x which is the shadow receiver height (terrain + shadow projection)
+	float normalizedHeight = heightmapSample.y;
 	
 	// Convert normalized height to world Z
 	float terrainWorldZ = GetTerrainWorldZ(normalizedHeight, zRangeMin, zRangeMax);

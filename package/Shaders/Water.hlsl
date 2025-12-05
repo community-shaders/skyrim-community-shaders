@@ -2578,7 +2578,7 @@ PS_OUTPUT main(PS_INPUT input)
 		// Mode 0: Show depth with color gradient  
 		// Mode 1: Show water Z (red) vs terrain Z (green) to diagnose coordinate systems
 		// Mode 2: Show if terrain was sampled
-		float debugMode = 1.0f;
+		float debugMode = 0.0f;
 		
 		if (debugMode < 0.5f) {
 			// Mode 0: Standard visualization
