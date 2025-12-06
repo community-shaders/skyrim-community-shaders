@@ -214,6 +214,7 @@ struct ankerl::unordered_dense::hash<std::string>
 using float2 = DirectX::SimpleMath::Vector2;
 using float3 = DirectX::SimpleMath::Vector3;
 using float4 = DirectX::SimpleMath::Vector4;
+using float3x4 = DirectX::XMFLOAT3X4;
 using float4x4 = DirectX::SimpleMath::Matrix;
 using uint = uint32_t;
 

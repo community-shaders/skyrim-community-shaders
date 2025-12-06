@@ -1,3 +1,5 @@
+#pragma once
+
 #include <d3d12.h>
 #include <directx/d3dx12.h>
 
@@ -197,6 +199,7 @@ namespace DX12
 	template <typename T>
 	class StructuredBuffer : public Resource
 	{
+	public:
 		static D3D12_RESOURCE_DESC Desc(UINT64 width, bool uav = false)
 		{
 			D3D12_RESOURCE_DESC desc = {};
@@ -215,7 +218,6 @@ namespace DX12
 			return desc;
 		}
 
-	public:
 		explicit StructuredBuffer(ID3D12Device5* device, const uint64_t& a_count, bool uav = false) :
 			Resource(device, D3D12_HEAP_TYPE_DEFAULT, Desc(sizeof(T) * a_count, uav), D3D12_RESOURCE_STATE_COPY_DEST), count(a_count) {}
 
@@ -252,7 +254,6 @@ namespace DX12
 			Resource::CreateUAV(uavDesc, counterResource, handle);
 		}
 
-
 		virtual void CreateUAV(CD3DX12_CPU_DESCRIPTOR_HANDLE handle)
 		{
 			StructuredBuffer::CreateUAV(nullptr, handle);
@@ -269,7 +270,7 @@ namespace DX12
 			StructuredBuffer<T>(a_device, a_count, uav)
 		{
 			const auto& uploadHeap = CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_UPLOAD);
-			D3D12_RESOURCE_DESC desc = Resource::desc;
+			D3D12_RESOURCE_DESC desc = StructuredBuffer<T>::Desc(Resource::desc.Width);
 
 			DX::ThrowIfFailed(a_device->CreateCommittedResource(
 				&uploadHeap,

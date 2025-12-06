@@ -1,6 +1,9 @@
 #ifndef GEOMETRY_HLSI
 #define GEOMETRY_HLSI
 
+#include "Raytracing/Includes/Registers.hlsli"
+#include "Raytracing/Includes/Types.hlsli"
+
 float3 GetBary(BuiltInTriangleIntersectionAttributes attribs)
 {
     return float3(

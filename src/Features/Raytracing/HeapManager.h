@@ -1,5 +1,6 @@
 #pragma once
 
+#include "Features/Raytracing/Heap.h"
 #include "Features/Raytracing/ShaderBindingTable.h"
 
 namespace DX12
@@ -7,7 +8,8 @@ namespace DX12
 	template <typename T>
 	concept EnumUInt32 = std::is_enum_v<T> && std::is_same_v<std::underlying_type_t<T>, uint32_t>;
 
-	template <EnumUInt32 T>
+	//template <EnumUInt32 T>
+	template <typename T>
 	struct DescriptorDesc
 	{
 		T slot;
@@ -19,7 +21,8 @@ namespace DX12
 			slot(slot), numDescriptors(numDescriptors), registerSpace(registerSpace), flags(flags) {}
 	};
 
-	template <EnumUInt32 T>
+	//template <EnumUInt32 T>
+	template <typename T>
 	class DescriptorTable
 	{
 	public:
@@ -57,10 +60,13 @@ namespace DX12
 		eastl::unique_ptr<CD3DX12_ROOT_PARAMETER1> rootParameter;
 	};
 
-	template <EnumUInt32 TSlot, EnumUInt32 TType>
+	template <IsHeap HeapType>
 	class DescriptorHeap
 	{
 	public:
+		using Table = HeapType::Table;
+		using Slot = HeapType::Slot;
+
 		DescriptorHeap(ID3D12Device5* device, const D3D12_DESCRIPTOR_HEAP_DESC& descriptorHeapDesc) :
 			descriptorHeapDesc(descriptorHeapDesc)
 		{
@@ -73,49 +79,37 @@ namespace DX12
 			return descriptorHeap.get();
 		}
 
-		CD3DX12_CPU_DESCRIPTOR_HANDLE CPUHandle(TSlot item, uint offset = 0) const
+		CD3DX12_CPU_DESCRIPTOR_HANDLE CPUHandle(Slot item, uint offset = 0) const
 		{
-			return CD3DX12_CPU_DESCRIPTOR_HANDLE(descriptorHeap->GetCPUDescriptorHandleForHeapStart(), item + offset, descriptorIncrementSize);
+			return CD3DX12_CPU_DESCRIPTOR_HANDLE(descriptorHeap->GetCPUDescriptorHandleForHeapStart(), HeapType::GetSlotValue(item) + offset, descriptorIncrementSize);
 		}
 
-		CD3DX12_GPU_DESCRIPTOR_HANDLE GPUHandle(TSlot item, uint offset = 0) const
+		CD3DX12_GPU_DESCRIPTOR_HANDLE GPUHandle(Slot item, uint offset = 0) const
 		{
-			return CD3DX12_GPU_DESCRIPTOR_HANDLE(descriptorHeap->GetGPUDescriptorHandleForHeapStart(), item + offset, descriptorIncrementSize);
+			return CD3DX12_GPU_DESCRIPTOR_HANDLE(descriptorHeap->GetGPUDescriptorHandleForHeapStart(), HeapType::GetSlotValue(item) + offset, descriptorIncrementSize);
 		}
 
-		CD3DX12_GPU_DESCRIPTOR_HANDLE TableGPUHandle(TType type, uint offset = 0) const
+		CD3DX12_GPU_DESCRIPTOR_HANDLE TableGPUHandle(Table type, uint offset = 0) const
 		{
 			auto it = descriptorRanges.find(type);
 			if (it == descriptorRanges.end()) {
-				/*logger::error(
-					"[RT] DescriptorHeap::TableGPUHandle('{}' [{}], {}) - Table not found.",
-					magic_enum::enum_name(type),
-					static_cast<uint32_t>(type),
-					offset);*/
 				throw std::out_of_range("[RT] DescriptorHeap::TableGPUHandle, Table not found.");
 			}
 
-			TSlot firstSlot = it->second->FirstSlot();
-			/*logger::info(
-				"[RT] DescriptorHeap::TableGPUHandle('{}' [{}], {}) - First Slot: '{}' [{}]",
-				magic_enum::enum_name(type),
-				static_cast<uint32_t>(type),
-				offset,
-				magic_enum::enum_name(firstSlot),
-				static_cast<uint32_t>(firstSlot));*/
+			Slot firstSlot = it->second->FirstSlot();
 
-			return CD3DX12_GPU_DESCRIPTOR_HANDLE(descriptorHeap->GetGPUDescriptorHandleForHeapStart(), firstSlot + offset, descriptorIncrementSize);
+			return CD3DX12_GPU_DESCRIPTOR_HANDLE(descriptorHeap->GetGPUDescriptorHandleForHeapStart(), HeapType::GetSlotValue(firstSlot) + offset, descriptorIncrementSize);
 		}
 
-		void CreateTable(TType type, D3D12_DESCRIPTOR_RANGE_TYPE rangeType, const eastl::vector<DescriptorDesc<TSlot>>& descriptors)
+		void CreateTable(Table type, D3D12_DESCRIPTOR_RANGE_TYPE rangeType, const eastl::vector<DescriptorDesc<Slot>>& descriptors)
 		{
-			descriptorRanges.emplace(type, eastl::unique_ptr<DescriptorTable<TSlot>>(new DescriptorTable<TSlot>(rangeType, descriptors)));
+			descriptorRanges.emplace(type, eastl::unique_ptr<DescriptorTable<Slot>>(new DescriptorTable<Slot>(rangeType, descriptors)));
 		}
 
 		eastl::vector<CD3DX12_ROOT_PARAMETER1> GetRootParameters() const
 		{
 			eastl::vector<CD3DX12_ROOT_PARAMETER1> rootParams;
-			for (const auto& type : magic_enum::enum_values<TType>()) {
+			for (const auto& type : magic_enum::enum_values<Table>()) {
 				auto it = descriptorRanges.find(type);
 				if (it != descriptorRanges.end()) {
 					rootParams.push_back(it->second->GetRootParameter());
@@ -130,6 +124,6 @@ namespace DX12
 		D3D12_DESCRIPTOR_HEAP_DESC descriptorHeapDesc{};
 		winrt::com_ptr<ID3D12DescriptorHeap> descriptorHeap;
 		uint descriptorIncrementSize{};
-		eastl::unordered_map<TType, eastl::unique_ptr<DescriptorTable<TSlot>>> descriptorRanges;
+		eastl::unordered_map<Table, eastl::unique_ptr<DescriptorTable<Slot>>> descriptorRanges;
 	};
 }
