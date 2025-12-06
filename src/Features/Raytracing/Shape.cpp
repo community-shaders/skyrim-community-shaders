@@ -266,6 +266,9 @@ void Shape::CreateBuffers(const std::wstring& name)
 
 	// Dynamic
 	if (flags & Flags::Dynamic) {
+		// Not really a buffer but we need to initialize it somewhere
+		dynamicPosition.resize(vertexCount);
+
 		dynamicPositionBuffer = eastl::make_unique<DX12::StructuredBufferUpload<float4>>(device, vertexCount);
 		dynamicPositionBuffer->CreateSRV(skinningHeap->CPUHandle(SkinningHeap::Slot::DynamicVertices, registerIndex));
 	}

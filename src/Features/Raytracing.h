@@ -22,7 +22,7 @@
 #include "Features/Raytracing/Shape.h"
 #include "Features/Raytracing/Model.h"
 
-#include "Raytracing/Includes/Types/BoneMatrices.hlsli"
+#include "Raytracing/Includes/Types/VertexUpdate.hlsli"
 #include "Raytracing/Includes/Types/Vertex.hlsli"
 #include "Raytracing/Includes/Types/Skinning.hlsli"
 #include "Raytracing/Includes/Types/Triangle.hlsli"
@@ -113,8 +113,7 @@ struct Raytracing : public Feature
 		{
 			Output,
 			LocalToRoot,
-			MeshFlags,
-			VertexCount,
+			UpdateData,
 			BoneMatrices,
 			Skinning,
 			Vertices = Skinning + Raytracing::MAX_SUBMESHES,
@@ -193,6 +192,7 @@ struct Raytracing : public Feature
 	void CreateRootSignature();
 	void CreateShadowsRootSignature();
 	void CreateSkinningRootSignature();
+	void UpdateDynamicSkinning(ID3D12GraphicsCommandList4* pCommandList);
 	void DrawRTGI();
 	void UpdateShadowsFrameBuffer();
 	void RenderShadows();
@@ -417,27 +417,44 @@ struct Raytracing : public Feature
 		float3x4 transform;
 		Util::FrameChecker frameChecker;
 
-		void Update(RE::NiNode* pNiNode, Model& model, ID3D12GraphicsCommandList4* commandList)
+		void Update(RE::NiNode* pNiNode, Model& model)
 		{
 			if (frameChecker.IsNewFrame()) {
 				XMStoreFloat3x4(&transform, GetXMFromNiTransform(pNiNode->world));
 
 				if ((model.GetFlags() & Flags::Dynamic) || (model.GetFlags() & Flags::Skinned)) {
 					for (auto& shape : model.shapes) {
+						Flags updateFlags = Flags::None;
+
 						// Updates Dynamic Vertex position (and Bitangent.x) buffer
 						// TODO: Test performance and stability of using a upload heap buffer and keeping it mapped to dynamicData
 						if ((shape.flags & Flags::Dynamic) && shape.geometry) {
 							auto* pDynamicTriShape = netimmerse_cast<RE::BSDynamicTriShape*>(shape.geometry);
 							const auto& dynTriShapeRuntime = pDynamicTriShape->GetDynamicTrishapeRuntimeData();
 
-							shape.dynamicPositionBuffer->Update(dynTriShapeRuntime.dynamicData, dynTriShapeRuntime.dataSize);
+							// We'll test if dynamic data has changed before updating and uploading
+							// It does mean we have to memcpy twice, but I suppose the GPU bandwith we save makes up for it
+							if (std::memcmp(shape.dynamicPosition.data(), dynTriShapeRuntime.dynamicData, dynTriShapeRuntime.dataSize) != 0) {
+								std::memcpy(shape.dynamicPosition.data(), dynTriShapeRuntime.dynamicData, dynTriShapeRuntime.dataSize);
+
+								shape.dynamicPositionBuffer->Update(dynTriShapeRuntime.dynamicData, dynTriShapeRuntime.dataSize);
+
+								// We'll barrier and upload ourselfs in batch
+								//shape.dynamicPositionBuffer->Upload(commandList);
+								updateFlags |= Flags::Dynamic;
+							}
 						}
 
 						// TODO: Handle skinned meshes
 						if ((shape.flags & Flags::Skinned) && shape.geometry) {
 							// Restore pre-skinning vertices
-							shape.vertexBuffer->Upload(commandList);
+							//shape.vertexBuffer->Upload(commandList);
+
+							updateFlags |= Flags::Skinned;
 						}
+
+						if (updateFlags & Flags::Dynamic || updateFlags & Flags::Skinned)
+							globals::features::raytracing.vertexUpdate.emplace_back(shape.registerIndex, updateFlags & Flags::Dynamic ? shape.dynamicPositionBuffer.get() : nullptr, shape.vertexBuffer.get(), shape.vertexCount, updateFlags);
 					}
 				}
 			}
@@ -509,6 +526,18 @@ struct Raytracing : public Feature
 	winrt::com_ptr<ID3D12RootSignature> skinningRS = nullptr;
 	winrt::com_ptr<ID3D12PipelineState> skinningPipeline = nullptr;
 	eastl::unique_ptr<DX12::DescriptorHeap<SkinningHeap>> skinningHeap = nullptr;
+
+	struct VertexUpdate
+	{
+		uint16_t registerIndex;
+		DX12::StructuredBufferUpload<float4>* dynamicPositionBuffer = nullptr;
+		DX12::StructuredBufferUpload<Vertex>* vertexBuffer = nullptr;
+		uint16_t vertexCount;
+		Flags flags;
+	};
+
+	eastl::vector<VertexUpdate> vertexUpdate;
+	eastl::unique_ptr<DX12::StructuredBufferUpload<VertexUpdateData>> vertexUpdateBuffer = nullptr;
 
 	// GI
 	winrt::com_ptr<ID3D12RootSignature> rootSignature = nullptr;

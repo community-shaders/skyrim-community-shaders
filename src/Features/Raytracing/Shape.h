@@ -10,7 +10,6 @@
 
 #include "Features/Raytracing/Types.h"
 
-#include "Raytracing/Includes/Types/BoneMatrices.hlsli"
 #include "Raytracing/Includes/Types/Vertex.hlsli"
 #include "Raytracing/Includes/Types/Skinning.hlsli"
 #include "Raytracing/Includes/Types/Triangle.hlsli"
@@ -29,7 +28,7 @@ class Shape
 {
 public:
 	// The position of this meshes SRV in the register stack
-	uint registerIndex;
+	uint16_t registerIndex;
 
 	uint vertexCount = 0;
 	uint triangleCount = 0;
@@ -37,6 +36,7 @@ public:
 	// Reference to original geometry
 	RE::BSGeometry* geometry = nullptr;
 
+	eastl::vector<float4> dynamicPosition;
 	eastl::vector<Vertex> vertices;
 	eastl::vector<Skinning> skinning;
 	eastl::vector<Triangle> triangles;
@@ -52,20 +52,13 @@ public:
 
 	Flags flags = Flags::None;
 
-	Shape(uint registerIndex, Flags flags = Flags::None) :
+	Shape(uint16_t registerIndex, Flags flags = Flags::None) :
 		registerIndex(registerIndex), flags(flags) {}
 
-	Shape(uint registerIndex, RE::BSGeometry* geometry, Flags flags = Flags::None) :
+	Shape(uint16_t registerIndex, RE::BSGeometry* geometry, Flags flags = Flags::None) :
 		registerIndex(registerIndex), geometry(geometry), flags(flags) {}
 
-	// Doesn't work
-	/*Shape(const Shape&) = delete;
-	Shape& operator=(const Shape&) = delete;
-
-	Shape(Shape&&) noexcept = default;
-	Shape& operator=(Shape&&) noexcept = default;*/
-
-	/*inline Shape Clone(uint registerIndexIn, RE::BSGeometry* geometryIn) const
+	/*inline Shape Clone(uint16_t registerIndexIn, RE::BSGeometry* geometryIn) const
 	{
 		auto clone = Shape(registerIndexIn, geometryIn, flags);
 

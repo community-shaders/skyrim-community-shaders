@@ -545,138 +545,12 @@ void Raytracing::SetupResources()
 		d3d12Device->CreateShaderResourceView(skyHemisphere->resource.get(), &srvDesc, giHeap->CPUHandle(GIHeap::Slot::SkyHemisphere));
 	}
 
-	// Sky cubemap
+	// Skinning
 	{
-		/*auto reflections = renderer->GetRendererData().cubemapRenderTargets[RE::RENDER_TARGET_CUBEMAP::kREFLECTIONS];
+		vertexUpdateBuffer = eastl::make_unique<DX12::StructuredBufferUpload<VertexUpdateData>>(d3d12Device.get(), MAX_MESHES);
+		DX::ThrowIfFailed(vertexUpdateBuffer->resource->SetName(L"Vertex Update Buffer"));
 
-		D3D11_TEXTURE2D_DESC texDesc{};
-
-		reflections.texture->GetDesc(&texDesc);
-
-		D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
-		srvDesc.Format = texDesc.Format;
-		srvDesc.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2DARRAY;
-		srvDesc.Texture2DArray.MostDetailedMip = 0;
-		srvDesc.Texture2DArray.MipLevels = 1;
-		srvDesc.Texture2DArray.ArraySize = 1;
-		
-		for (UINT i = 0; i < 6; ++i) {
-			srvDesc.Texture2DArray.FirstArraySlice = i;
-			DX::ThrowIfFailed(device->CreateShaderResourceView(reflections.texture, &srvDesc, skyCubemapSRV[i].put()));
-		}*/
-
-		/*D3D11_TEXTURE2D_DESC texDesc{};
-		texDesc.Width = SKY_CUBEMAP_SIZE;
-		texDesc.Height = SKY_CUBEMAP_SIZE;
-		texDesc.MipLevels = 1;
-		texDesc.ArraySize = 6;
-		texDesc.Format = DXGI_FORMAT_R11G11B10_FLOAT; //DXGI_FORMAT_R16G16B16A16_FLOAT;  // DXGI_FORMAT_R11G11B10_FLOAT
-		texDesc.SampleDesc.Count = 1;
-		texDesc.SampleDesc.Quality = 0;
-		texDesc.Usage = D3D11_USAGE_DEFAULT;
-		texDesc.BindFlags = D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_RENDER_TARGET;
-		texDesc.CPUAccessFlags = 0;
-		texDesc.MiscFlags = D3D11_RESOURCE_MISC_TEXTURECUBE;
-
-		DX::ThrowIfFailed(device->CreateTexture2D(&texDesc, nullptr, skyCubemap.put()));*/
-
-		/*winrt::com_ptr<IDXGIResource1> dxgiResource;
-		DX::ThrowIfFailed(skyCubemap->QueryInterface(IID_PPV_ARGS(dxgiResource.put())));
-		HANDLE sharedHandle = nullptr;
-		DX::ThrowIfFailed(dxgiResource->CreateSharedHandle(nullptr, DXGI_SHARED_RESOURCE_READ | DXGI_SHARED_RESOURCE_WRITE, nullptr, &sharedHandle));
-
-		// Share with DX12
-		DX::ThrowIfFailed(d3d12Device->OpenSharedHandle(sharedHandle, IID_PPV_ARGS(skyCubemapDX12.put())));
-		CloseHandle(sharedHandle);*/
-
-		// Create SRV (just to Debug)
-		/*D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
-		srvDesc.Format = texDesc.Format;
-		srvDesc.ViewDimension = D3D11_SRV_DIMENSION_TEXTURECUBE;
-		srvDesc.TextureCube.MipLevels = 1;
-
-		DX::ThrowIfFailed(device->CreateShaderResourceView(skyCubemap.get(), &srvDesc, skyCubemapSRV[0].put()));*/
-
-		/*D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
-		srvDesc.Format = texDesc.Format;
-		srvDesc.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2DARRAY;
-		srvDesc.Texture2DArray.MostDetailedMip = 0;
-		srvDesc.Texture2DArray.MipLevels = 1;
-		srvDesc.Texture2DArray.ArraySize = 1;
-		
-		for (UINT i = 0; i < 6; i++) {
-			srvDesc.Texture2DArray.FirstArraySlice = i;
-			DX::ThrowIfFailed(device->CreateShaderResourceView(skyCubemap.get(), &srvDesc, skyCubemapSRV[i].put()));
-		}
-
-		// Create RTV
-		D3D11_RENDER_TARGET_VIEW_DESC rtvDesc = {};
-		rtvDesc.Format = texDesc.Format;
-		rtvDesc.ViewDimension = D3D11_RTV_DIMENSION_TEXTURE2DARRAY;
-		rtvDesc.Texture2DArray.MipSlice = 0;
-		rtvDesc.Texture2DArray.ArraySize = 1;
-		
-		for (UINT i = 0; i < 6; i++) {
-			rtvDesc.Texture2DArray.FirstArraySlice = i;
-			DX::ThrowIfFailed(device->CreateRenderTargetView(skyCubemap.get(), &rtvDesc, skyCubemapRTV[i].put()));
-		}
-
-		// Create Depth
-		D3D11_TEXTURE2D_DESC depthDesc = {};
-		depthDesc.Width = SKY_CUBEMAP_SIZE;
-		depthDesc.Height = SKY_CUBEMAP_SIZE;
-		depthDesc.MipLevels = 1;
-		depthDesc.ArraySize = 6;
-		depthDesc.Format = DXGI_FORMAT_R24G8_TYPELESS;
-		depthDesc.SampleDesc.Count = 1;
-		depthDesc.BindFlags = D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_DEPTH_STENCIL;
-
-		DX::ThrowIfFailed(device->CreateTexture2D(&depthDesc, nullptr, skyCubemapDepth.put()));
-
-		// Create SRV		
-		D3D11_SHADER_RESOURCE_VIEW_DESC depthSrvDesc = {};
-		depthSrvDesc.Format = DXGI_FORMAT_R24_UNORM_X8_TYPELESS;*/
-		/*depthSrvDesc.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2D;
-		depthSrvDesc.Texture2D.MostDetailedMip = 0;
-		depthSrvDesc.Texture2D.MipLevels = 1;
-		DX::ThrowIfFailed(device->CreateShaderResourceView(skyCubemapDepth.get(), &depthSrvDesc, skyCubemapDepthSRV.put()));*/
-		/*depthSrvDesc.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2DARRAY;
-		depthSrvDesc.Texture2DArray.MipLevels = 1;
-		depthSrvDesc.Texture2DArray.ArraySize = 1;
-
-		for (UINT i = 0; i < 6; i++) {
-			depthSrvDesc.Texture2DArray.FirstArraySlice = i;
-			DX::ThrowIfFailed(device->CreateShaderResourceView(skyCubemapDepth.get(), &depthSrvDesc, skyCubemapDepthSRV[i].put()));
-		}
-
-		// Create DSV
-		D3D11_DEPTH_STENCIL_VIEW_DESC dsvDesc = {};
-		dsvDesc.Format = DXGI_FORMAT_D24_UNORM_S8_UINT;*/
-		/*dsvDesc.ViewDimension = D3D11_DSV_DIMENSION_TEXTURE2D;
-		dsvDesc.Texture2D.MipSlice = 0;
-		DX::ThrowIfFailed(device->CreateDepthStencilView(skyCubemapDepth.get(), &dsvDesc, skyCubemapDSV.put()));*/
-		/*dsvDesc.ViewDimension = D3D11_DSV_DIMENSION_TEXTURE2DARRAY;
-		dsvDesc.Texture2DArray.MipSlice = 0;
-		dsvDesc.Texture2DArray.ArraySize = 1;
-
-		for (UINT i = 0; i < 6; i++) {
-			dsvDesc.Texture2DArray.FirstArraySlice = i;
-			DX::ThrowIfFailed(device->CreateDepthStencilView(skyCubemapDepth.get(), &dsvDesc, skyCubemapDSV[i].put()));
-		}
-
-		skyCubemapViewport.TopLeftX = 0.0f;
-		skyCubemapViewport.TopLeftY = 0.0f;
-		skyCubemapViewport.Width = SKY_CUBEMAP_SIZE * 1.0f;
-		skyCubemapViewport.Height = SKY_CUBEMAP_SIZE * 1.0f;
-		skyCubemapViewport.MinDepth = 0.0f;
-		skyCubemapViewport.MaxDepth = 1.0f;
-
-		skyPerGeometryCB = eastl::make_unique<ConstantBuffer>(ConstantBufferDesc<SkyPerGeometry>());*/
-	}
-
-	logger::debug("Creating irradiance cache buffer...");
-	{
-		//irradianceCacheBuffer = eastl::make_unique<DX12::StructuredAppendBuffer<IrradianceCache::Entry<IrradianceCache::SH1Data>>>(d3d12Device.get(), MAX_IRRADIANCE_ENTRIES);
+		vertexUpdateBuffer->CreateSRV(skinningHeap->CPUHandle(SkinningHeap::Slot::UpdateData));
 	}
 
 	fenceEvent = CreateEvent(nullptr, FALSE, FALSE, nullptr);
@@ -1539,6 +1413,88 @@ void Raytracing::AddInstance(RE::NiNode* pNiNode, eastl::string path)
 	}
 }
 
+void Raytracing::UpdateDynamicSkinning(ID3D12GraphicsCommandList4* pCommandList) {
+	if (vertexUpdate.empty())
+		return;
+
+	auto updateCount = vertexUpdate.size();
+
+	eastl::vector<VertexUpdateData> vertexUpdateData;
+	vertexUpdateData.reserve(updateCount);
+
+	// Reset vertices ( having another buffer and just reading from it in shaders might be better)
+	{
+		eastl::vector<CD3DX12_RESOURCE_BARRIER> barriers;
+		barriers.reserve(updateCount);
+
+		for (auto& item : vertexUpdate) {
+			vertexUpdateData.emplace_back(item.registerIndex, item.flags, item.vertexCount, 0);
+
+			if (item.flags & Flags::Skinned) {
+				barriers.push_back(item.vertexBuffer->GetTransitionBarrier(true, D3D12_RESOURCE_STATE_COPY_DEST));
+			}
+		}
+
+		if (!barriers.empty()) {
+			pCommandList->ResourceBarrier((uint32_t)barriers.size(), barriers.data());
+
+			for (auto& item : vertexUpdate) {
+				if (item.flags & Flags::Skinned) {
+					pCommandList->CopyResource(item.vertexBuffer->resource.get(), item.vertexBuffer->uploadBuffer.get());				
+				}
+			}
+		}
+	}
+
+	vertexUpdateBuffer->UpdateList(vertexUpdateData.data(), vertexUpdateData.size());
+	vertexUpdateBuffer->Upload(pCommandList);
+
+	pCommandList->SetPipelineState(skinningPipeline.get());
+	pCommandList->SetComputeRootSignature(skinningRS.get());
+
+	auto computeHeapPtr = skinningHeap->Heap();
+	pCommandList->SetDescriptorHeaps(1, &computeHeapPtr);
+
+	// UAV table
+	pCommandList->SetComputeRootDescriptorTable(0, skinningHeap->TableGPUHandle(SkinningHeap::Table::UAV));
+
+	// SRV table
+	pCommandList->SetComputeRootDescriptorTable(1, skinningHeap->TableGPUHandle(SkinningHeap::Table::SRV));
+
+	// Constant buffer
+	//pCommandList->SetComputeRootConstantBufferView(2, shadowsCB->resource->GetGPUVirtualAddress());
+
+	// Transition to Unordered Access
+	{
+		eastl::vector<CD3DX12_RESOURCE_BARRIER> barriers;
+		barriers.reserve(updateCount);
+
+		for (auto& item : vertexUpdate) {
+			barriers.push_back(item.vertexBuffer->GetTransitionBarrier(true, D3D12_RESOURCE_STATE_UNORDERED_ACCESS));
+		}
+
+		pCommandList->ResourceBarrier((uint32_t)barriers.size(), barriers.data());
+	}
+
+	// Dispatch our GPU vertex update
+	auto dispatchCount = static_cast<uint32_t>(ceil(updateCount / 16.0f));
+	pCommandList->Dispatch(dispatchCount, 1, 1);
+
+	// Transition back to non-pixel shader resource
+	{
+		eastl::vector<CD3DX12_RESOURCE_BARRIER> barriers;
+		barriers.reserve(updateCount);
+
+		for (auto& item : vertexUpdate) {
+			barriers.push_back(item.vertexBuffer->GetTransitionBarrier(true, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE));
+		}
+
+		pCommandList->ResourceBarrier((uint32_t)barriers.size(), barriers.data());
+	}
+
+	vertexUpdate.clear();
+}
+
 eastl::vector<size_t> Raytracing::GatherInstanceLights(RE::NiNode* pNiNode)
 {
 	eastl::vector<size_t> instanceLights;
@@ -1613,7 +1569,7 @@ void Raytracing::UpdateInstances()
 				continue;
 		}*/
 
-		instance.Update(pNiNode, geometryData, commandList.get());
+		instance.Update(pNiNode, geometryData);
 
 		auto& firstShapeIndex = geometryData.shapes[0].registerIndex;
 
@@ -1861,7 +1817,7 @@ void Raytracing::UpdateShadowInstances()
 
 		Model& geometryData = it->second;
 
-		instance.Update(pNiNode, geometryData, commandList.get());
+		instance.Update(pNiNode, geometryData);
 
 		D3D12_RAYTRACING_INSTANCE_DESC blasShadowInstance = { 
 			.InstanceID = static_cast<uint>(blasShadowInstances.size()),
@@ -1891,13 +1847,6 @@ void Raytracing::BSShader_SetupGeometry([[maybe_unused]] RE::BSShader* oThis, [[
 		return;
 
 	UpdateLights();
-
-	auto* pGeometry = pPass->geometry;
-
-	if (!pGeometry)
-		return;
-
-	//AddInstance(FindBSFadeNode((RE::NiNode*)pGeometry));
 }
 
 void Raytracing::BuildTLAS()
@@ -2283,6 +2232,8 @@ void Raytracing::RenderShadows()
 
 	// Do DX12 work...
 	UpdateShadowInstances();
+
+	UpdateDynamicSkinning(commandList.get());
 
 	shadowsCB->Upload(commandList.get());
 	shadowsCB->TransitionBarrier(commandList.get(), D3D12_RESOURCE_STATE_VERTEX_AND_CONSTANT_BUFFER);
@@ -2735,8 +2686,7 @@ void Raytracing::CreateSkinningRootSignature()
 		D3D12_DESCRIPTOR_RANGE_TYPE_SRV,
 		{ 
 			{ SkinningHeap::Slot::LocalToRoot, 1 },
-			{ SkinningHeap::Slot::MeshFlags, 1 },
-			{ SkinningHeap::Slot::VertexCount, 1 },
+			{ SkinningHeap::Slot::UpdateData, 1 },
 			{ SkinningHeap::Slot::BoneMatrices, 1 }
 		});
 
