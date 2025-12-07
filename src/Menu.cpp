@@ -141,6 +141,9 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	SkipCompilationKey,
 	EffectToggleKey,
 	OverlayToggleKey,
+	ShaderBlockPrevKey,
+	ShaderBlockNextKey,
+	EnableShaderBlocking,
 	FirstTimeSetupCompleted,
 	Theme,
 	SelectedThemePreset)
@@ -487,7 +490,9 @@ void Menu::DrawGeneralSettings()
 		.settingToggleKey = settingToggleKey,
 		.settingsEffectsToggle = settingsEffectsToggle,
 		.settingSkipCompilationKey = settingSkipCompilationKey,
-		.settingOverlayToggleKey = settingOverlayToggleKey
+		.settingOverlayToggleKey = settingOverlayToggleKey,
+		.settingShaderBlockPrevKey = settingShaderBlockPrevKey,
+		.settingShaderBlockNextKey = settingShaderBlockNextKey
 	};
 
 	// Render settings using extracted component
@@ -673,12 +678,13 @@ void Menu::ProcessInputEventQueue()
 					std::function<void(uint32_t)> action;
 				};
 				auto shaderCache = globals::shaderCache;
-				auto devMode = globals::state->IsDeveloperMode();
 				HotkeyAction hotkeyActions[] = {
 					{ &settings.ToggleKey, &settingToggleKey, [this](uint32_t key) { settings.ToggleKey = key; settingToggleKey = false; } },
 					{ &settings.SkipCompilationKey, &settingSkipCompilationKey, [this](uint32_t key) { settings.SkipCompilationKey = key; settingSkipCompilationKey = false; } },
 					{ &settings.EffectToggleKey, &settingsEffectsToggle, [this](uint32_t key) { settings.EffectToggleKey = key; settingsEffectsToggle = false; } },
 					{ &settings.OverlayToggleKey, &settingOverlayToggleKey, [this](uint32_t key) { settings.OverlayToggleKey = key; settingOverlayToggleKey = false; } },
+					{ &settings.ShaderBlockPrevKey, &settingShaderBlockPrevKey, [this](uint32_t key) { settings.ShaderBlockPrevKey = key; settingShaderBlockPrevKey = false; } },
+					{ &settings.ShaderBlockNextKey, &settingShaderBlockNextKey, [this](uint32_t key) { settings.ShaderBlockNextKey = key; settingShaderBlockNextKey = false; } },
 				};
 				bool handled = false;
 				for (auto& h : hotkeyActions) {
@@ -705,8 +711,8 @@ void Menu::ProcessInputEventQueue()
 						{ settings.ToggleKey, [this]() { IsEnabled = !IsEnabled; } },
 						{ settings.SkipCompilationKey, [shaderCache]() { shaderCache->backgroundCompilation = true; } },
 						{ settings.EffectToggleKey, [shaderCache]() { shaderCache->SetEnabled(!shaderCache->IsEnabled()); } },
-						{ priorShaderKey, [shaderCache, devMode]() { if (devMode) shaderCache->IterateShaderBlock(); } },
-						{ nextShaderKey, [shaderCache, devMode]() { if (devMode) shaderCache->IterateShaderBlock(false); } },
+						{ settings.ShaderBlockPrevKey, [this, shaderCache]() { if (settings.EnableShaderBlocking) shaderCache->IterateShaderBlock(); } },
+						{ settings.ShaderBlockNextKey, [this, shaderCache]() { if (settings.EnableShaderBlocking) shaderCache->IterateShaderBlock(false); } },
 						{ settings.OverlayToggleKey, []() {
 							 Menu::GetSingleton()->overlayVisible = !Menu::GetSingleton()->overlayVisible;
 						 } },
