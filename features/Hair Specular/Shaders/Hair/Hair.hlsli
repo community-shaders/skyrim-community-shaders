@@ -326,6 +326,9 @@ namespace Hair
 	float3 GetHairDynamicCubemapSpecularIrradiance(float2 uv, float2 ScreenUV, float3 T, float3 N, float3 VN, float3 V, float glossiness, float3 specLobePrim, float3 specLobeSec)
 #	endif
 	{
+		if (SharedData::hairSpecularSettings.HairMode == 1) {
+			return 0;
+		}
 		float3 SpecularIrradiance = 0;
 		float3 N1 = N;
 		float3 N2 = N;
