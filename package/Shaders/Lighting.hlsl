@@ -289,7 +289,8 @@ VS_OUTPUT main(VS_INPUT input)
 	vsout.LandBlendWeights2.w = 1 - saturate(0.000375600968 * (9625.59961 - length(gridOffset)));
 	vsout.LandBlendWeights2.xyz = input.LandBlendWeights2.xyz;
 #	elif defined(PROJECTED_UV) && !defined(SKINNED)
-	vsout.TexProj = TextureProj[eyeIndex][2].xyz;
+	float3x3 texProjWorld3x3 = float3x3(World[eyeIndex][0].xyz, World[eyeIndex][1].xyz, World[eyeIndex][2].xyz);
+	vsout.TexProj = mul(texProjWorld3x3, TextureProj[eyeIndex][2].xyz);
 #	endif
 
 #	if defined(EYE)
