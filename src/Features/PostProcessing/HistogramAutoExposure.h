@@ -33,7 +33,7 @@ struct HistogramAutoExposure : public PostProcessFeature
 		// purkinje
 		float PurkinjeStartEV = -1.5f;  // EV
 		float PurkinjeMaxEV = -4.f;     // EV
-		float PurkinjeStrength = 1.f;
+		float PurkinjeStrength = 0.f;
 	} settings;
 
 	// buffers

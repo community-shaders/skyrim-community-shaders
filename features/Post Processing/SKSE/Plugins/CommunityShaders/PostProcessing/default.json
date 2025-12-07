@@ -1220,7 +1220,7 @@
             "InteriorExposure": 0.0,
             "PurkinjeMaxEV": -4.0,
             "PurkinjeStartEV": -1.5,
-            "PurkinjeStrength": 0.10000000149011612,
+            "PurkinjeStrength": 0.0,
             "ToDExposure[0]": 0.0,
             "ToDExposure[1]": 0.0,
             "ToDExposure[2]": 0.0,
