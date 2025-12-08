@@ -46,41 +46,39 @@ void WeatherWidget::DrawWidget()
 {
 	ImGui::SetNextWindowSizeConstraints(ImVec2(600, 0), ImVec2(FLT_MAX, FLT_MAX));
 	if (ImGui::Begin(GetEditorID().c_str(), &open, ImGuiWindowFlags_NoSavedSettings)) {
-
 		// Draw header with search and all buttons
 		DrawWidgetHeader("##WeatherSearch", false, true, true, weather);
-		
+
 		// Update search results when search buffer changes
 		if (searchActive) {
 			UpdateSearchResults();
 		}
-		
+
 		// Show search results dropdown
 		if (searchBuffer[0] != '\0' && !searchResults.empty()) {
 			// Find the search input position for dropdown placement
 			ImGui::SetNextWindowPos(ImVec2(ImGui::GetCursorScreenPos().x, ImGui::GetCursorScreenPos().y));
 			ImGui::SetNextWindowSize(ImVec2(200.0f * 1.5f, 0));
 			ImGui::SetNextWindowFocus();
-			if (ImGui::Begin("##SearchDropdown", nullptr, 
-				ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize | 
-				ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoSavedSettings)) {
-				
+			if (ImGui::Begin("##SearchDropdown", nullptr,
+					ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize |
+						ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoSavedSettings)) {
 				for (size_t i = 0; i < std::min(size_t(5), searchResults.size()); ++i) {
 					const auto& result = searchResults[i];
 					std::string label = std::format("{} ({})", result.displayName, result.tabName);
-					
+
 					if (ImGui::Selectable(label.c_str(), false, ImGuiSelectableFlags_DontClosePopups)) {
 						NavigateToSetting(result);
 						searchBuffer[0] = '\0';
 						searchResults.clear();
 					}
 				}
-				
+
 				if (searchResults.size() > 5) {
 					ImGui::Separator();
 					ImGui::TextDisabled("... %zu more results", searchResults.size() - 5);
 				}
-				
+
 				// Close dropdown if clicking outside or pressing Escape
 				if (!ImGui::IsWindowFocused() || ImGui::IsKeyPressed(ImGuiKey_Escape)) {
 					searchBuffer[0] = '\0';
@@ -145,9 +143,9 @@ void WeatherWidget::DrawWidget()
 			ImGuiTabItemFlags featuresFlags = (activeTabOverride == "Features") ? ImGuiTabItemFlags_SetSelected : 0;
 			ImGuiTabItemFlags imageSpaceFlags = (activeTabOverride == "ImageSpace") ? ImGuiTabItemFlags_SetSelected : 0;
 			if (!activeTabOverride.empty()) {
-				activeTabOverride = ""; // Clear after use
+				activeTabOverride = "";  // Clear after use
 			}
-			
+
 			if (ImGui::BeginTabItem("Basic", nullptr, basicFlags)) {
 				DrawProperties("Sun", { { "Sun Glare", INT8_SLIDER }, { "Sun Damage", INT8_SLIDER } });
 				DrawProperties("Wind", { { "Wind Speed", UINT8_SLIDER }, { "Wind Direction", INT8_SLIDER }, { "Wind Direction Range", INT8_SLIDER } });
@@ -198,12 +196,12 @@ void WeatherWidget::DrawWidget()
 void WeatherWidget::LoadSettings()
 {
 	bool hadErrors = false;
-	
+
 	if (!js.empty()) {
 		try {
 			// Attempt to load settings from JSON
 			settings = js;
-			
+
 			// Validate that critical fields were loaded correctly
 			if (js.contains("weatherProperties") && settings.weatherProperties.empty() && !js["weatherProperties"].empty()) {
 				logger::warn("Weather {}: weatherProperties loaded but appears empty, reverting to vanilla values", GetEditorID());
@@ -217,7 +215,7 @@ void WeatherWidget::LoadSettings()
 				logger::warn("Weather {}: fogProperties loaded but appears empty, reverting to vanilla values", GetEditorID());
 				hadErrors = true;
 			}
-			
+
 			if (hadErrors) {
 				// Fallback to vanilla/game values
 				LoadWeatherValues();
@@ -232,7 +230,7 @@ void WeatherWidget::LoadSettings()
 					settings.weatherColors.size(),
 					settings.fogProperties.size());
 			}
-			
+
 		} catch (const nlohmann::json::exception& e) {
 			logger::error("Weather {}: Failed to deserialize settings from JSON: {}", GetEditorID(), e.what());
 			logger::error("JSON content: {}", js.dump(2));
@@ -255,17 +253,17 @@ void WeatherWidget::LoadSettings()
 void WeatherWidget::SaveSettings()
 {
 	SaveFeatureSettings();
-	
+
 	try {
 		js = settings;
-		
+
 		// Log what we're saving for debugging
 		logger::info("Weather {}: Saving settings - {} weather properties, {} colors, {} fog properties",
 			GetEditorID(),
 			settings.weatherProperties.size(),
 			settings.weatherColors.size(),
 			settings.fogProperties.size());
-			
+
 		// Validate serialization worked
 		if (js.is_null()) {
 			logger::error("Weather {}: Serialization produced null JSON!", GetEditorID());
@@ -276,7 +274,7 @@ void WeatherWidget::SaveSettings()
 		} else if (!js.contains("clouds")) {
 			logger::error("Weather {}: Serialized JSON missing clouds field!", GetEditorID());
 		}
-		
+
 	} catch (const nlohmann::json::exception& e) {
 		logger::error("Weather {}: Failed to serialize settings to JSON: {}", GetEditorID(), e.what());
 	}
@@ -636,9 +634,11 @@ void WeatherWidget::DrawCloudSettings()
 			std::string layer = std::format("Layer {}", i);
 
 			if (ImGui::CollapsingHeader(layer.c_str(), ImGuiTreeNodeFlags_OpenOnArrow | ImGuiTreeNodeFlags_OpenOnDoubleClick)) {
-				if (DrawSliderInt8(std::format("Cloud Layer Speed Y##{}", layer), settings.clouds[i].cloudLayerSpeedY)) changed = true;
+				if (DrawSliderInt8(std::format("Cloud Layer Speed Y##{}", layer), settings.clouds[i].cloudLayerSpeedY))
+					changed = true;
 				ImGui::Spacing();
-				if (DrawSliderInt8(std::format("Cloud Layer Speed X##{}", layer), settings.clouds[i].cloudLayerSpeedX)) changed = true;
+				if (DrawSliderInt8(std::format("Cloud Layer Speed X##{}", layer), settings.clouds[i].cloudLayerSpeedX))
+					changed = true;
 				ImGui::Spacing();
 
 				if (TOD::BeginTODTable((layer + "_TOD_Table").c_str())) {
@@ -682,7 +682,7 @@ void WeatherWidget::DrawFogSettings()
 			ImGui::TableSetupColumn("Parameter", ImGuiTableColumnFlags_WidthFixed, 200.0f);
 			ImGui::TableSetupColumn("Day", ImGuiTableColumnFlags_WidthFixed, 250.0f);
 			ImGui::TableSetupColumn("Night", ImGuiTableColumnFlags_WidthFixed, 250.0f);
-			
+
 			// Header row
 			ImGui::TableNextRow();
 			ImGui::TableSetColumnIndex(0);
@@ -690,7 +690,7 @@ void WeatherWidget::DrawFogSettings()
 			ImGui::Text("Day");
 			ImGui::TableSetColumnIndex(2);
 			ImGui::Text("Night");
-			
+
 			ImGui::TableNextRow();
 			ImGui::TableSetColumnIndex(0);
 			ImGui::Separator();
@@ -763,7 +763,7 @@ void WeatherWidget::DrawFogSettings()
 void WeatherWidget::DrawProperties(std::string category, std::map<std::string, int> properties)
 {
 	bool& doesInherit = settings.inheritance[category];
-	
+
 	// Check if any property matches search (only check if search is active)
 	bool hasMatchingProperty = false;
 	if (searchBuffer[0] != '\0') {
@@ -781,7 +781,7 @@ void WeatherWidget::DrawProperties(std::string category, std::map<std::string, i
 			return;
 		}
 	}
-	
+
 	ImGui::Checkbox(std::format("Inherit From Parent##{}", category).c_str(), &doesInherit);
 
 	if (doesInherit && HasParent()) {
@@ -797,32 +797,36 @@ void WeatherWidget::DrawProperties(std::string category, std::map<std::string, i
 			if (searchBuffer[0] != '\0' && !MatchesSearch(p.first)) {
 				continue;
 			}
-			
+
 			// Apply highlight effect if this setting should be highlighted
 			if (ShouldHighlight(p.first)) {
 				float elapsed = static_cast<float>(ImGui::GetTime()) - highlightStartTime;
-				float alpha = 0.3f * (1.0f - std::abs(elapsed - 0.5f) * 2.0f); // Fade in/out over 1 second
+				float alpha = 0.3f * (1.0f - std::abs(elapsed - 0.5f) * 2.0f);  // Fade in/out over 1 second
 				ImGui::PushStyleColor(ImGuiCol_FrameBg, ImVec4(0.3f, 0.6f, 1.0f, alpha));
 				ImGui::PushStyleColor(ImGuiCol_FrameBgHovered, ImVec4(0.4f, 0.7f, 1.0f, alpha));
 			}
-			
+
 			switch (p.second) {
 			case 0:
-				if (DrawSliderInt8(p.first, settings.weatherProperties[p.first])) changed = true;
+				if (DrawSliderInt8(p.first, settings.weatherProperties[p.first]))
+					changed = true;
 				break;
 			case 1:
-				if (DrawColorEdit(p.first, settings.weatherColors[p.first])) changed = true;
+				if (DrawColorEdit(p.first, settings.weatherColors[p.first]))
+					changed = true;
 				break;
 			case 2:
-				if (DrawSliderUint8(p.first, settings.weatherProperties[p.first])) changed = true;
+				if (DrawSliderUint8(p.first, settings.weatherProperties[p.first]))
+					changed = true;
 				break;
 			case 3:
-				if (DrawSliderFloat(p.first, settings.fogProperties[p.first])) changed = true;
+				if (DrawSliderFloat(p.first, settings.fogProperties[p.first]))
+					changed = true;
 				break;
 			default:
 				break;
 			}
-			
+
 			if (ShouldHighlight(p.first)) {
 				ImGui::PopStyleColor(2);
 			}
@@ -850,7 +854,7 @@ void WeatherWidget::InheritFromParent(const std::string& property)
 void WeatherWidget::SaveFeatureSettings()
 {
 	auto* weatherManager = WeatherManager::GetSingleton();
-	
+
 	for (const auto& [featureName, featureJson] : settings.featureSettings) {
 		if (!featureJson.empty()) {
 			weatherManager->SaveSettingsToWeather(weather, featureName, featureJson);
@@ -862,14 +866,14 @@ void WeatherWidget::LoadFeatureSettings()
 {
 	auto* weatherManager = WeatherManager::GetSingleton();
 	auto* globalRegistry = WeatherVariables::GlobalWeatherRegistry::GetSingleton();
-	
+
 	for (auto* feature : Feature::GetFeatureList()) {
 		if (!feature || !feature->loaded) {
 			continue;
 		}
 
 		std::string featureName = feature->GetShortName();
-		
+
 		// Check if feature has registered weather variables
 		if (!globalRegistry->HasWeatherSupport(featureName)) {
 			continue;
@@ -907,7 +911,7 @@ void WeatherWidget::DrawFeatureSettings()
 		}
 
 		std::string featureName = feature->GetShortName();
-		
+
 		// Check if feature has registered weather variables
 		if (!globalRegistry->HasWeatherSupport(featureName)) {
 			continue;
@@ -925,7 +929,7 @@ void WeatherWidget::DrawFeatureSettings()
 
 			if (hasSettings) {
 				ImGui::TextColored({ 0.0f, 1.0f, 0.0f, 1.0f }, "Has weather-specific settings");
-				
+
 				if (ImGui::Button("Clear Settings")) {
 					settings.featureSettings[featureName] = json::object();
 				}
@@ -946,8 +950,9 @@ void WeatherWidget::DrawFeatureSettings()
 			}
 
 			ImGui::Spacing();
-			ImGui::TextWrapped("Note: Feature settings should be configured through the feature's own settings panel. "
-			                   "This section shows which features have per-weather overrides.");
+			ImGui::TextWrapped(
+				"Note: Feature settings should be configured through the feature's own settings panel. "
+				"This section shows which features have per-weather overrides.");
 
 			ImGui::TreePop();
 		}
@@ -1207,23 +1212,23 @@ void WeatherWidget::SetImageSpaceValues()
 void WeatherWidget::UpdateSearchResults()
 {
 	searchResults.clear();
-	
+
 	if (searchBuffer[0] == '\0')
 		return;
-	
+
 	std::string searchTerm = searchBuffer;
-	
+
 	// Search in Basic tab properties
 	std::vector<std::pair<std::string, std::map<std::string, int>>> basicCategories = {
 		{ "Sun", { { "Sun Glare", 0 }, { "Sun Damage", 0 } } },
 		{ "Wind", { { "Wind Speed", 0 }, { "Wind Direction", 0 }, { "Wind Direction Range", 0 } } },
 		{ "Precipitation", { { "Precipitation Begin Fade In", 0 }, { "Precipitation Begin Fade Out", 0 } } },
-		{ "Lightning", { { "Thunder Lightning Begin Fade In", 0 }, { "Thunder Lightning End Fade Out", 0 }, 
-						{ "Thunder Lightning Frequency", 0 }, { "Lightning Color", 1 } } },
+		{ "Lightning", { { "Thunder Lightning Begin Fade In", 0 }, { "Thunder Lightning End Fade Out", 0 },
+						   { "Thunder Lightning Frequency", 0 }, { "Lightning Color", 1 } } },
 		{ "Visual Effects", { { "Visual Effect Begin", 0 }, { "Visual Effect End", 0 } } },
 		{ "Weather Transition", { { "Trans Delta", 0 } } }
 	};
-	
+
 	for (const auto& [category, properties] : basicCategories) {
 		for (const auto& [propName, type] : properties) {
 			if (ContainsStringIgnoreCase(propName, searchTerm)) {
@@ -1231,7 +1236,7 @@ void WeatherWidget::UpdateSearchResults()
 			}
 		}
 	}
-	
+
 	// Search in Fog tab
 	std::vector<std::string> fogProperties = {
 		"Day Near", "Day Far", "Day Power", "Day Max",
@@ -1242,7 +1247,7 @@ void WeatherWidget::UpdateSearchResults()
 			searchResults.push_back({ propName, "Fog", propName });
 		}
 	}
-	
+
 	// Search in DALC settings
 	std::vector<std::string> dalcSettings = {
 		"Fresnel Power", "Specular",
@@ -1255,7 +1260,7 @@ void WeatherWidget::UpdateSearchResults()
 			searchResults.push_back({ setting, "Lighting (DALC)", setting });
 		}
 	}
-	
+
 	// Search in Atmosphere Colors
 	for (int i = 0; i < ColorTypes::kTotal; i++) {
 		std::string colorType = ColorTypeLabel(i);
@@ -1263,16 +1268,16 @@ void WeatherWidget::UpdateSearchResults()
 			searchResults.push_back({ colorType, "Atmosphere Colors", colorType });
 		}
 	}
-	
+
 	// Search in Cloud settings
 	for (int i = 0; i < TESWeather::kTotalLayers; i++) {
 		std::string layer = std::format("Layer {}", i);
-		if (ContainsStringIgnoreCase(layer, searchTerm) || 
+		if (ContainsStringIgnoreCase(layer, searchTerm) ||
 			ContainsStringIgnoreCase("Cloud", searchTerm)) {
 			searchResults.push_back({ std::format("Cloud {}", layer), "Clouds", layer });
 		}
 	}
-	
+
 	// Search in ImageSpace settings
 	std::vector<std::string> imageSpaceSettings = {
 		"Eye Adapt Speed", "Bloom Blur Radius", "Bloom Threshold", "Bloom Scale",
@@ -1297,8 +1302,7 @@ bool WeatherWidget::ShouldHighlight(const std::string& settingId) const
 {
 	if (highlightedSetting != settingId)
 		return false;
-	
-	float elapsed = static_cast<float>(ImGui::GetTime()) - highlightStartTime;
-	return elapsed < 1.0f; // Highlight for 1 second
-}
 
+	float elapsed = static_cast<float>(ImGui::GetTime()) - highlightStartTime;
+	return elapsed < 1.0f;  // Highlight for 1 second
+}

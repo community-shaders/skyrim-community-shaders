@@ -113,9 +113,16 @@ private:
 	json j;
 	std::string settingsFilename = "EditorSettings";
 	bool showSettingsWindow = false;
-	
+
 	// Sorting state
-	enum class SortColumn { None, EditorID, FormID, File, Status };
+	enum class SortColumn
+	{
+		None,
+		EditorID,
+		FormID,
+		File,
+		Status
+	};
 	SortColumn currentSortColumn = SortColumn::None;
 	bool sortAscending = true;
 };

@@ -123,9 +123,10 @@ private:
 	void DrawCloudSettings();
 	void DrawFogSettings();
 	void DrawFeatureSettings();
-	
+
 	// Search functionality
-	struct SearchResult {
+	struct SearchResult
+	{
 		std::string displayName;
 		std::string tabName;
 		std::string settingId;
