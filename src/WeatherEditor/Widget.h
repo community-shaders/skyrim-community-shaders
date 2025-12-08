@@ -67,7 +67,11 @@ public:
 	virtual void LoadSettings() = 0;
 	virtual void SaveSettings() = 0;
 	virtual void ApplyChanges() = 0;
+	virtual void RevertChanges() { LoadSettings(); }
 	virtual bool HasUnsavedChanges() const { return false; }
+
+	// Draw common header with search bar and action buttons
+	void DrawWidgetHeader(const char* searchId, bool showApplyRevert = true, bool showSaveLoad = false, bool showForceWeather = false, RE::TESWeather* weather = nullptr);
 
 	// Search functionality
 	char searchBuffer[256] = "";
