@@ -452,10 +452,6 @@ cbuffer AlphaTestRefCB : register(b11)
 #		include "IBL/IBL.hlsli"
 #	endif
 
-#	if defined(PHYSICAL_SKY)
-#		include "PhysicalSky/Common.hlsli"
-#	endif
-
 #	define LinearSampler SampBaseSampler
 
 #	include "Common/ShadowSampling.hlsli"
@@ -584,11 +580,6 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 
 	float3 dirLightColor = SharedData::DirLightColor.xyz;
 	float3 dirLightColorMultiplier = 1;
-
-#			if defined(PHYSICAL_SKY)
-	if (SharedData::physSkyData.enabled)
-		dirLightColorMultiplier *= PhysSky::SampleTr(normalize(SharedData::DirLightDirection.xyz), SampShadowMaskSampler);
-#			endif
 
 	float dirLightAngle = dot(normal, SharedData::DirLightDirection.xyz);
 
@@ -994,12 +985,6 @@ PS_OUTPUT main(PS_INPUT input)
 #			endif
 	directionalAmbientColor *= albedo;
 
-#			if !defined(DEFERRED) && defined(PHYSICAL_SKY)
-	if (SharedData::physSkyData.enabled) {
-		const float4 apSample = PhysSky::SampleAp(normalize(input.WorldPosition.xyz), input.Position.xy, length(input.WorldPosition.xyz), SampColorSampler);
-		psout.Diffuse.xyz = psout.Diffuse.xyz * apSample.w + apSample.xyz;
-	}
-#			endif
 #			if defined(SKYLIGHTING)
 	Skylighting::applySkylighting(diffuseColor, directionalAmbientColor, albedo, skylightingDiffuse);
 #			endif

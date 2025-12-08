@@ -14,7 +14,6 @@
 #include "Features/LODBlending.h"
 #include "Features/LightLimitFix.h"
 #include "Features/PerformanceOverlay.h"
-#include "Features/PhysicalSky.h"
 #include "Features/RenderDoc.h"
 #include "Features/ScreenSpaceGI.h"
 #include "Features/ScreenSpaceShadows.h"
@@ -78,7 +77,6 @@ namespace globals
 		ExtendedTranslucency extendedTranslucency{};
 		Upscaling upscaling{};
 		RenderDoc renderDoc{};
-		PhysicalSky physicalSky{};
 		WeatherEditor weatherEditor{};
 
 		namespace llf

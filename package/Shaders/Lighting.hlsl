@@ -967,10 +967,6 @@ float GetSnowParameterY(float texProjTmp, float alpha)
 #		define ANISOTROPIC_ALPHA
 #	endif
 
-#	if defined(PHYSICAL_SKY)
-#		include "PhysicalSky/Common.hlsli"
-#	endif
-
 #	define LinearSampler SampColorSampler
 
 #	include "Common/ShadowSampling.hlsli"
@@ -2302,11 +2298,6 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	float3 dirLightColor = Color::Light(DirLightColor.xyz);
 	float3 dirLightColorMultiplier = 1;
 
-#	if defined(PHYSICAL_SKY)
-	if (SharedData::physSkyData.enabled)
-		dirLightColorMultiplier *= PhysSky::SampleTr(normalize(DirLightDirection.xyz), SampShadowMaskSampler);
-#	endif
-
 #	if defined(WATER_EFFECTS)
 	dirLightColorMultiplier *= WaterEffects::ComputeCaustics(waterData, input.WorldPosition.xyz, eyeIndex);
 #	endif
@@ -3153,12 +3144,6 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #		endif
 	if (FrameBuffer::FrameParams.y && FrameBuffer::FrameParams.z)
 		color.xyz = lerp(color.xyz, fogColor, input.FogParam.w);
-#		if defined(PHYSICAL_SKY)
-	if (SharedData::physSkyData.enabled) {
-		const float4 apSample = PhysSky::SampleAp(normalize(input.WorldPosition.xyz), input.Position.xy, length(input.WorldPosition.xyz), SampColorSampler);
-		color.xyz = color.xyz * apSample.w + apSample.xyz;
-	}
-#		endif
 #	endif
 
 #	if defined(TESTCUBEMAP) && defined(ENVMAP) && defined(DYNAMIC_CUBEMAPS)

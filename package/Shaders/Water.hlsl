@@ -566,10 +566,6 @@ FlowmapData GetFlowmapDataWorldSpace(FlowmapData textureSpaceData)
 #				include "DynamicCubemaps/DynamicCubemaps.hlsli"
 #			endif
 
-#			if defined(PHYS_SKY)
-#				include "PhysicalSky/PhysicalSky.hlsli"
-#			endif
-
 #			if defined(WETNESS_EFFECTS)
 #				include "WetnessEffects/WetnessEffects.hlsli"
 #			endif

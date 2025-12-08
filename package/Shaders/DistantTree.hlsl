@@ -177,10 +177,6 @@ const static float DepthOffsets[16] = {
 #		include "IBL/IBL.hlsli"
 #	endif
 
-#	if defined(PHYSICAL_SKY)
-#		include "PhysicalSky/Common.hlsli"
-#	endif
-
 #	define LinearSampler SampDiffuse
 
 #	include "Common/ShadowSampling.hlsli"
@@ -237,11 +233,6 @@ PS_OUTPUT main(PS_INPUT input)
 
 	float3 diffuseColor = SharedData::DirLightColor.xyz * dirShadow * 0.5;
 
-#			if defined(PHYSICAL_SKY)
-	if (SharedData::physSkyData.enabled)
-		diffuseColor *= PhysSky::SampleTr(normalize(SharedData::DirLightDirection.xyz), SampShadowMaskSampler);
-#			endif
-
 	float3 ddx = ddx_coarse(input.WorldPosition.xyz);
 	float3 ddy = ddy_coarse(input.WorldPosition.xyz);
 	float3 normal = -normalize(cross(ddx, ddy));
@@ -260,13 +251,6 @@ PS_OUTPUT main(PS_INPUT input)
 	psout.Diffuse.xyz = diffuseColor * baseColor.xyz;
 	psout.Diffuse.w = 1;
 
-#			if !defined(DEFERRED) && defined(PHYSICAL_SKY)
-	if (SharedData::physSkyData.enabled) {
-		const float4 apSample = PhysSky::SampleAp(normalize(input.WorldPosition.xyz), input.Position.xy, length(input.WorldPosition.xyz), SampColorSampler);
-		psout.Diffuse.xyz = psout.Diffuse.xyz * apSample.w + apSample.xyz;
-	}
-#			endif
-
 	psout.MotionVector = MotionBlur::GetSSMotionVector(input.WorldPosition, input.PreviousWorldPosition, eyeIndex);
 
 	psout.Normal.xy = GBuffer::EncodeNormal(FrameBuffer::WorldToView(normal, false, eyeIndex));
@@ -278,11 +262,6 @@ PS_OUTPUT main(PS_INPUT input)
 	float dirShadow = ShadowSampling::GetWorldShadow(input.WorldPosition.xyz, FrameBuffer::CameraPosAdjust[eyeIndex].xyz, eyeIndex);
 
 	float3 diffuseColor = SharedData::DirLightColor.xyz * dirShadow * 0.5;
-
-#			if defined(PHYSICAL_SKY)
-	if (SharedData::physSkyData.enabled)
-		diffuseColor *= PhysSky::SampleTr(normalize(SharedData::DirLightDirection.xyz), SampShadowMaskSampler);
-#			endif
 
 	float3 ddx = ddx_coarse(input.WorldPosition.xyz);
 	float3 ddy = ddy_coarse(input.WorldPosition.xyz);

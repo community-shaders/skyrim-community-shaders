@@ -57,6 +57,9 @@ public:
 		Atmosphere atmosphereColors[ColorTypes::kTotal];
 		DALC dalc[ColorTimes::kTotal];
 		Cloud clouds[TESWeather::kTotalLayers];
+
+		// Per-feature settings storage
+		std::map<std::string, json> featureSettings;
 	};
 
 	Settings settings;
@@ -72,10 +75,15 @@ public:
 	void SetWeatherValues();
 	void LoadWeatherValues();
 
+	// New methods for per-feature settings
+	void SaveFeatureSettings();
+	void LoadFeatureSettings();
+
 private:
 	void DrawDALCSettings();
 	void DrawWeatherColorSettings();
 	void DrawCloudSettings();
+	void DrawFeatureSettings();
 	void DrawProperties(std::string category, std::map<std::string, int> properties);
 	void InheritFromParent(const std::string& property);
 };

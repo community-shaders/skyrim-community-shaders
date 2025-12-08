@@ -4,8 +4,10 @@
 
 #include <algorithm>
 
+#include "Feature.h"
 #include "State.h"
 #include "Util.h"
+#include "WeatherManager.h"
 
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(WeatherWidget::Atmosphere, colorTimes)
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(WeatherWidget::DirectionalColor, max, min)
@@ -19,7 +21,8 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(WeatherWidget::Settings,
 	fogProperties,
 
 	weatherColors,
-	dalc)
+	dalc,
+	featureSettings)
 
 WeatherWidget::~WeatherWidget()
 {
@@ -94,6 +97,8 @@ void WeatherWidget::DrawWidget()
 								  { "Night Near", FLOAT_SLIDER }, { "Night Far", FLOAT_SLIDER }, { "Night Power", FLOAT_SLIDER }, { "Night Max", FLOAT_SLIDER } });
 
 		DrawProperties("Weather Transition", { { "Trans Delta", INT8_SLIDER } });
+
+		DrawFeatureSettings();
 	}
 	ImGui::End();
 }
@@ -103,10 +108,12 @@ void WeatherWidget::LoadSettings()
 	if (!js.empty()) {
 		settings = js;
 	}
+	LoadFeatureSettings();
 }
 
 void WeatherWidget::SaveSettings()
 {
+	SaveFeatureSettings();
 	js = settings;
 }
 
@@ -442,5 +449,86 @@ void WeatherWidget::InheritFromParent(const std::string& property)
 		settings.weatherProperties[property] = GetParent()->settings.weatherProperties[property];
 	} else if (settings.weatherColors.find(property) != settings.weatherColors.end()) {
 		settings.weatherColors[property] = GetParent()->settings.weatherColors[property];
+	}
+}
+
+void WeatherWidget::SaveFeatureSettings()
+{
+	auto* weatherManager = WeatherManager::GetSingleton();
+	
+	for (const auto& [featureName, featureJson] : settings.featureSettings) {
+		if (!featureJson.empty()) {
+			weatherManager->SaveSettingsToWeather(weather, featureName, featureJson);
+		}
+	}
+}
+
+void WeatherWidget::LoadFeatureSettings()
+{
+	auto* weatherManager = WeatherManager::GetSingleton();
+	
+	for (auto* feature : Feature::GetFeatureList()) {
+		if (!feature || !feature->loaded || !feature->SupportsWeather()) {
+			continue;
+		}
+
+		json featureJson;
+		if (weatherManager->LoadSettingsFromWeather(weather, feature->GetShortName(), featureJson)) {
+			settings.featureSettings[feature->GetShortName()] = featureJson;
+		}
+	}
+}
+
+void WeatherWidget::DrawFeatureSettings()
+{
+	if (ImGui::CollapsingHeader("Per-Feature Weather Settings", ImGuiTreeNodeFlags_OpenOnArrow | ImGuiTreeNodeFlags_OpenOnDoubleClick)) {
+		ImGui::TextWrapped("Configure feature-specific settings that will be applied when this weather is active.");
+		ImGui::Spacing();
+
+		for (auto* feature : Feature::GetFeatureList()) {
+			if (!feature || !feature->loaded || !feature->SupportsWeather()) {
+				continue;
+			}
+
+			std::string featureName = feature->GetShortName();
+			std::string displayName = feature->GetName();
+
+			if (ImGui::TreeNode(displayName.c_str())) {
+				ImGui::Text("Feature: %s", featureName.c_str());
+				ImGui::Spacing();
+
+				// Show if settings exist for this feature
+				bool hasSettings = settings.featureSettings.find(featureName) != settings.featureSettings.end() &&
+				                   !settings.featureSettings[featureName].empty();
+
+				if (hasSettings) {
+					ImGui::TextColored({ 0.0f, 1.0f, 0.0f, 1.0f }, "Has weather-specific settings");
+					
+					if (ImGui::Button("Clear Settings")) {
+						settings.featureSettings[featureName] = json::object();
+					}
+					ImGui::SameLine();
+					if (ImGui::Button("View JSON")) {
+						ImGui::OpenPopup("FeatureJSON");
+					}
+
+					if (ImGui::BeginPopup("FeatureJSON")) {
+						ImGui::Text("Settings JSON:");
+						ImGui::Separator();
+						std::string jsonStr = settings.featureSettings[featureName].dump(2);
+						ImGui::TextWrapped("%s", jsonStr.c_str());
+						ImGui::EndPopup();
+					}
+				} else {
+					ImGui::TextColored({ 0.7f, 0.7f, 0.7f, 1.0f }, "No weather-specific settings");
+				}
+
+				ImGui::Spacing();
+				ImGui::TextWrapped("Note: Feature settings should be configured through the feature's own settings panel. "
+				                   "This section shows which features have per-weather overrides.");
+
+				ImGui::TreePop();
+			}
+		}
 	}
 }

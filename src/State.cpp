@@ -16,6 +16,7 @@
 #include "ShaderCache.h"
 #include "TruePBR.h"
 #include "Utils/FileSystem.h"
+#include "WeatherManager.h"
 
 void State::Draw()
 {
@@ -26,6 +27,9 @@ void State::Draw()
 	auto& cloudShadows = globals::features::cloudShadows;
 	auto truePBR = globals::truePBR;
 	auto context = globals::d3d::context;
+
+	// Update weather-based feature settings
+	WeatherManager::GetSingleton()->UpdateFeatures();
 
 	if (shaderCache->IsEnabled()) {
 		if (terrainBlending.loaded)
@@ -153,6 +157,9 @@ void State::Setup()
 		if (feature->loaded)
 			feature->SetupResources();
 	globals::deferred->SetupResources();
+
+	// Load per-weather settings after features are setup
+	WeatherManager::GetSingleton()->LoadPerWeatherSettingsFromDisk();
 }
 
 static std::string GetConfigPath(State::ConfigMode a_configMode)

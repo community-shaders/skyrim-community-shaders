@@ -23,6 +23,7 @@ public:
 			"Development tool for editing weather settings and testing IBL.",
 			{ "Provides weather editing functionality",
 				"Includes save/load settings controls",
+				"Real-time weather transition monitoring",
 				"Debug feature for development" }
 		};
 	}
@@ -39,4 +40,8 @@ public:
 
 	ID3D11ComputeShader* GetDiffuseIBLCS();
 	void LerpWeather(RE::TESWeather*, RE::TESWeather*, float);
+
+private:
+	void DrawWeatherStatusPanel();
+	void DrawQuickWeatherSpawner();
 };

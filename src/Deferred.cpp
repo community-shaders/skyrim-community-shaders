@@ -8,7 +8,6 @@
 
 #include "Features/DynamicCubemaps.h"
 #include "Features/IBL.h"
-#include "Features/PhysicalSky.h"
 #include "Features/ScreenSpaceGI.h"
 #include "Features/Skylighting.h"
 #include "Features/SubsurfaceScattering.h"
@@ -419,7 +418,6 @@ void Deferred::DeferredPasses()
 		dynamicCubemaps.UpdateCubemap();
 
 	auto& terrainBlending = globals::features::terrainBlending;
-	auto& physSky = globals::features::physicalSky;
 	auto& weatherEditor = globals::features::weatherEditor;
 	auto& ibl = globals::features::ibl;
 
@@ -444,8 +442,6 @@ void Deferred::DeferredPasses()
 			ssgi_hq_spec ? nullptr : ssgi_y,
 			ssgi_hq_spec ? nullptr : ssgi_cocg,
 			ssgi_hq_spec ? ssgi_gi_spec : nullptr,
-			physSky.loaded ? physSky.texApLut->srv.get() : nullptr,
-			physSky.loaded ? physSky.texApShadow->srv.get() : nullptr,
 			weatherEditor.loaded ? weatherEditor.diffuseIBLTexture->srv.get() : nullptr,
 			ibl.loaded ? ibl.diffuseIBLTexture->srv.get() : nullptr,
 			ibl.loaded ? ibl.diffuseSkyIBLTexture->srv.get() : nullptr,
@@ -453,7 +449,6 @@ void Deferred::DeferredPasses()
 
 		ID3D11SamplerState* samplers[]{
 			dynamicCubemaps.loaded ? linearSampler : nullptr,
-			physSky.loaded ? physSky.sampSv.get() : nullptr,
 		};
 		context->CSSetSamplers(0, ARRAYSIZE(samplers), samplers);
 
@@ -637,9 +632,6 @@ ID3D11ComputeShader* Deferred::GetComputeMainComposite()
 
 		if (globals::features::screenSpaceGI.loaded)
 			defines.push_back({ "SSGI", nullptr });
-
-		if (globals::features::physicalSky.loaded)
-			defines.push_back({ "PHYSICAL_SKY", nullptr });
 
 		if (globals::features::ibl.loaded)
 			defines.push_back({ "IBL", nullptr });

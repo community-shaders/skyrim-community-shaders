@@ -3,6 +3,7 @@
 #include "Deferred.h"
 #include "State.h"
 #include "Util.h"
+#include "WeatherManager.h"
 
 #include "Editor/EditorWindow.h"
 
@@ -60,6 +61,18 @@ void WeatherEditor::DrawSettings()
 
 		ImGui::EndTable();
 	}
+
+	ImGui::Spacing();
+	ImGui::Separator();
+	ImGui::Spacing();
+
+	DrawWeatherStatusPanel();
+
+	ImGui::Spacing();
+	ImGui::Separator();
+	ImGui::Spacing();
+
+	DrawQuickWeatherSpawner();
 }
 
 void WeatherEditor::Bind()
@@ -237,5 +250,94 @@ void WeatherEditor::LerpWeather(RE::TESWeather* oldWeather, RE::TESWeather* newW
 
 		newWeather->cloudLayerSpeedY[i] = LerpInt8_t(oldWeather->cloudLayerSpeedY[i], newWeather->cloudLayerSpeedY[i], currentWeatherPct);
 		newWeather->cloudLayerSpeedX[i] = LerpInt8_t(oldWeather->cloudLayerSpeedX[i], newWeather->cloudLayerSpeedX[i], currentWeatherPct);
+	}
+}
+
+void WeatherEditor::DrawWeatherStatusPanel()
+{
+	if (ImGui::CollapsingHeader("Current Weather Status", ImGuiTreeNodeFlags_DefaultOpen)) {
+		auto weatherManager = WeatherManager::GetSingleton();
+		auto currentWeathers = weatherManager->GetCurrentWeathers();
+
+		if (currentWeathers.currentWeather) {
+			ImGui::Text("Current Weather: %s", 
+				currentWeathers.currentWeather->GetFormEditorID() ? 
+				currentWeathers.currentWeather->GetFormEditorID() : 
+				std::format("{:08X}", currentWeathers.currentWeather->GetFormID()).c_str());
+
+			if (currentWeathers.lastWeather && currentWeathers.lerpFactor < 1.0f) {
+				ImGui::Text("Transitioning From: %s", 
+					currentWeathers.lastWeather->GetFormEditorID() ? 
+					currentWeathers.lastWeather->GetFormEditorID() : 
+					std::format("{:08X}", currentWeathers.lastWeather->GetFormID()).c_str());
+
+				ImGui::ProgressBar(currentWeathers.lerpFactor, ImVec2(-1, 0), 
+					std::format("Transition: {:.1f}%%", currentWeathers.lerpFactor * 100.0f).c_str());
+			} else {
+				ImGui::Text("Transition: Complete (100%%)");
+			}
+
+			// Show if weather has custom settings
+			if (weatherManager->HasWeatherSettings(currentWeathers.currentWeather)) {
+				ImGui::TextColored({ 0.0f, 1.0f, 0.0f, 1.0f }, "Has Custom Settings");
+			} else {
+				ImGui::TextColored({ 0.7f, 0.7f, 0.7f, 1.0f }, "Using Default Settings");
+			}
+		} else {
+			ImGui::TextColored({ 1.0f, 0.5f, 0.0f, 1.0f }, "No Active Weather");
+		}
+	}
+}
+
+void WeatherEditor::DrawQuickWeatherSpawner()
+{
+	if (ImGui::CollapsingHeader("Quick Weather Spawner")) {
+		ImGui::TextWrapped("Quickly test different weather conditions. Note: Weather changes may take time to transition.");
+		ImGui::Spacing();
+
+		static char weatherFilter[128] = "";
+		ImGui::InputTextWithHint("##WeatherFilter", "Search weathers...", weatherFilter, sizeof(weatherFilter));
+
+		if (ImGui::BeginChild("WeatherList", ImVec2(0, 200), true)) {
+			auto dataHandler = RE::TESDataHandler::GetSingleton();
+			if (dataHandler) {
+				auto& weatherArray = dataHandler->GetFormArray<RE::TESWeather>();
+
+				for (auto* weather : weatherArray) {
+					if (!weather) continue;
+
+					const char* editorID = weather->GetFormEditorID();
+					std::string displayName = editorID ? editorID : std::format("{:08X}", weather->GetFormID());
+
+					// Filter
+					if (weatherFilter[0] != '\0' && 
+						displayName.find(weatherFilter) == std::string::npos) {
+						continue;
+					}
+
+					if (ImGui::Selectable(displayName.c_str())) {
+						// Force weather change
+						auto sky = RE::Sky::GetSingleton();
+						if (sky) {
+							sky->ForceWeather(weather, false);
+						}
+					}
+
+					// Show if this weather has custom settings
+					if (WeatherManager::GetSingleton()->HasWeatherSettings(weather)) {
+						ImGui::SameLine();
+						ImGui::TextColored({ 0.0f, 0.8f, 0.0f, 1.0f }, "[Modified]");
+					}
+				}
+			}
+		}
+		ImGui::EndChild();
+
+		if (ImGui::Button("Reset to Natural Weather", ImVec2(-1, 0))) {
+			auto sky = RE::Sky::GetSingleton();
+			if (sky) {
+				sky->ReleaseWeatherOverride();
+			}
+		}
 	}
 }

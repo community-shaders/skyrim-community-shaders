@@ -28,7 +28,6 @@ struct PerformanceOverlay;
 struct WetnessEffects;
 struct ExtendedTranslucency;
 struct Upscaling;
-struct PhysicalSky;
 struct WeatherEditor;
 
 class State;
@@ -82,7 +81,6 @@ namespace globals
 		extern ExtendedTranslucency extendedTranslucency;
 		extern Upscaling upscaling;
 		extern RenderDoc renderDoc;
-		extern PhysicalSky physicalSky;
 		extern WeatherEditor weatherEditor;
 
 		namespace llf
