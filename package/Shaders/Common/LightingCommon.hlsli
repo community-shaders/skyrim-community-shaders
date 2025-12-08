@@ -3,19 +3,47 @@
 
 #include "Common/BRDF.hlsli"
 
+#if defined(TRUE_PBR)
+#	include "Common/PBR.hlsli"
+#endif
+
+#if defined(TRUE_PBR)
+struct CoatContext
+{
+	float3 coatNormal;
+	float3 coatViewDir;
+	float3 coatLightDir;
+	float3 coatHalfVector;
+};
+#endif
+
 struct Context
 {
     float3 worldNormal;
+	float NdotL;
     float3 geometryNormal;
+	float NdotV;
     float3 viewDir;
+	float NdotH;
     float3 lightDir;
+	float VdotH;
     float3 halfVector;
+	float LdotH;
     float3 lightColor;
-    float NdotL;
-    float NdotV;
-    float NdotH;
-    float VdotH;
-    float LdotH;
+
+#if defined(TRUE_PBR)
+	CoatContext coatContext;
+#endif
+};
+
+struct LightingOutput
+{
+	float3 diffuse = 0;
+	float3 specular = 0;
+	float3 transmission = 0;
+#if defined(TRUE_PBR)
+	float3 coatDiffuse = 0;
+#endif
 };
 
 struct MaterialProperties
@@ -113,24 +141,32 @@ float3 VanillaSpecular(Context context, float shininess, float2 uv)
 	return lightColorMultiplier;
 }
 
-void EvaluateLighting(Context context, MaterialProperties material, float2 uv, out float3 outDiffuse, out float3 outSpecular, out float3 outTransmission)
+#if defined(TRUE_PBR)
+void EvaluateLightingPBR(Context context, MaterialProperties material, float3x3 tbnTr, float2 uv, out LightingOutput outLighting)
 {
-#if !defined(TRUE_PBR)
-    outDiffuse = material.BaseColor * saturate(context.NdotL) * context.lightColor;
-    #		if defined(SOFT_LIGHTING)
-	outDiffuse += context.lightColor * GetSoftLightMultiplier(context.NdotL) * rimSoftLightColor.xyz;
+	// TODO: migrate PBR lighting code here
+}
+#endif
+
+void EvaluateLighting(Context context, MaterialProperties material, float3x3 tbnTr, float2 uv, out LightingOutput outLighting)
+{
+	outLighting = (LightingOutput)0;
+#if defined(TRUE_PBR)
+	EvaluateLightingPBR(context, material, tbnTr, uv, outLighting);
+#else
+    outLighting.diffuse = material.BaseColor * saturate(context.NdotL) * context.lightColor;
+#		if defined(SOFT_LIGHTING)
+	outLighting.diffuse += context.lightColor * GetSoftLightMultiplier(context.NdotL) * rimSoftLightColor.xyz;
 #		endif
 
 #		if defined(RIM_LIGHTING)
-	outDiffuse += context.lightColor * GetRimLightMultiplier(context.lightDir, context.viewDir, context.worldNormal) * rimSoftLightColor.xyz;
+	outLighting.diffuse += context.lightColor * GetRimLightMultiplier(context.lightDir, context.viewDir, context.worldNormal) * rimSoftLightColor.xyz;
 #		endif
 
 #		if defined(BACK_LIGHTING)
-	outDiffuse += context.lightColor * saturate(-context.NdotL) * backLightColor.xyz;
+	outLighting.diffuse += context.lightColor * saturate(-context.NdotL) * backLightColor.xyz;
 #		endif
-    outSpecular = VanillaSpecular(context, material.Shininess, uv) * material.SpecularColor * material.Glossiness * context.lightColor;
-#else
-    // TODO: Migrate from PBR.hlsli
+    outLighting.specular = VanillaSpecular(context, material.Shininess, uv) * material.SpecularColor * material.Glossiness * context.lightColor;
 #endif
 }
 
