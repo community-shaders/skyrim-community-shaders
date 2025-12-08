@@ -8,6 +8,7 @@
 #include "ShaderCache.h"
 #include "State.h"
 #include "TruePBR.h"
+#include "WeatherEditor/EditorWindow.h"
 
 #include "ENB/ENBSeriesAPI.h"
 
@@ -109,6 +110,8 @@ void MessageHandler(SKSE::MessagingInterface::Message* message)
 				auto& errorMessage = *it;
 				RE::DebugMessageBox(std::format("Community Shaders\n{}, will disable all hooks and features", errorMessage).c_str());
 			}
+
+			EditorWindow::GetSingleton()->SetupResources();
 
 			if (errors.empty()) {
 				globals::OnDataLoaded();

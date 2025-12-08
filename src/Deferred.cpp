@@ -13,6 +13,7 @@
 #include "Features/SubsurfaceScattering.h"
 #include "Features/TerrainBlending.h"
 #include "Features/Upscaling.h"
+#include "Features/WeatherEditor.h"
 
 #include "Hooks.h"
 
@@ -298,6 +299,10 @@ void Deferred::PrepassPasses()
 
 void Deferred::StartDeferred()
 {
+	WeatherEditor::GetSingleton()->Bind();
+
+	if (!globals::state->inWorld)
+		return;
 	globals::state->UpdateSharedData(true, false);
 
 	auto shadowState = globals::game::shadowState;
@@ -413,14 +418,16 @@ void Deferred::DeferredPasses()
 		dynamicCubemaps.UpdateCubemap();
 
 	auto& terrainBlending = globals::features::terrainBlending;
-
+	auto& weatherEditor = globals::features::weatherEditor;
 	auto& ibl = globals::features::ibl;
+
+	auto shadowMask = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kSHADOW_MASK];
 
 	// Deferred Composite
 	{
 		TracyD3D11Zone(globals::state->tracyCtx, "Deferred Composite");
 
-		ID3D11ShaderResourceView* srvs[16]{
+		ID3D11ShaderResourceView* srvs[17]{
 			specular.SRV,
 			albedo.SRV,
 			normalRoughness.SRV,
@@ -435,12 +442,15 @@ void Deferred::DeferredPasses()
 			ssgi_hq_spec ? nullptr : ssgi_y,
 			ssgi_hq_spec ? nullptr : ssgi_cocg,
 			ssgi_hq_spec ? ssgi_gi_spec : nullptr,
+			weatherEditor.loaded ? weatherEditor.diffuseIBLTexture->srv.get() : nullptr,
 			ibl.loaded ? ibl.diffuseIBLTexture->srv.get() : nullptr,
 			ibl.loaded ? ibl.diffuseSkyIBLTexture->srv.get() : nullptr,
 		};
 
-		if (dynamicCubemaps.loaded)
-			context->CSSetSamplers(0, 1, &linearSampler);
+		ID3D11SamplerState* samplers[]{
+			dynamicCubemaps.loaded ? linearSampler : nullptr,
+		};
+		context->CSSetSamplers(0, ARRAYSIZE(samplers), samplers);
 
 		context->CSSetShaderResources(0, ARRAYSIZE(srvs), srvs);
 
@@ -455,7 +465,7 @@ void Deferred::DeferredPasses()
 
 	// Clear
 	{
-		ID3D11ShaderResourceView* views[16]{ nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr };
+		ID3D11ShaderResourceView* views[17]{ nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr };
 		context->CSSetShaderResources(0, ARRAYSIZE(views), views);
 
 		ID3D11UnorderedAccessView* uavs[3]{ nullptr, nullptr, nullptr };
@@ -463,6 +473,9 @@ void Deferred::DeferredPasses()
 
 		ID3D11Buffer* buffers[1] = { nullptr };
 		context->CSSetConstantBuffers(12, 1, buffers);
+
+		ID3D11SamplerState* samplers[2]{ nullptr, nullptr };
+		context->CSSetSamplers(0, ARRAYSIZE(samplers), samplers);
 
 		context->CSSetShader(nullptr, nullptr, 0);
 	}

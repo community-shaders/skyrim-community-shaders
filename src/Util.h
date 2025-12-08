@@ -8,3 +8,4 @@
 #include "Utils/Serialize.h"
 #include "Utils/UI.h"
 #include "Utils/WinApi.h"
+#include "Utils/Form.h"

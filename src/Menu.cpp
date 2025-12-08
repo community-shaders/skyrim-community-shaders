@@ -42,6 +42,7 @@
 #include "Features/PerformanceOverlay/ABTesting/ABTesting.h"
 #include "Features/VR.h"
 #include "Features/WeatherPicker.h"
+#include "WeatherEditor/EditorWindow.h"
 
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	Menu::ThemeSettings::PaletteColors,
@@ -412,6 +413,11 @@ void Menu::DrawSettings()
 	ImGui::SetNextWindowPos(Util::GetNativeViewportSizeScaled(0.5f), ImGuiCond_FirstUseEver, ImVec2(0.5f, 0.5f));
 	ImGui::SetNextWindowSize(Util::GetNativeViewportSizeScaled(0.8f), ImGuiCond_FirstUseEver);
 	auto title = std::format("Community Shaders {}", Util::GetFormattedVersion(Plugin::VERSION));
+
+	if (EditorWindow::GetSingleton()->open) {
+		EditorWindow::GetSingleton()->Draw();
+		return;
+	}
 
 	// Determine window flags based on docking state
 	ImGuiWindowFlags windowFlags = ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoScrollbar;
