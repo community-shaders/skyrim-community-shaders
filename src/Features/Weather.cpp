@@ -260,18 +260,18 @@ void WeatherEditor::DrawWeatherStatusPanel()
 		auto currentWeathers = weatherManager->GetCurrentWeathers();
 
 		if (currentWeathers.currentWeather) {
-			ImGui::Text("Current Weather: %s", 
-				currentWeathers.currentWeather->GetFormEditorID() ? 
-				currentWeathers.currentWeather->GetFormEditorID() : 
-				std::format("{:08X}", currentWeathers.currentWeather->GetFormID()).c_str());
+			ImGui::Text("Current Weather: %s",
+				currentWeathers.currentWeather->GetFormEditorID() ?
+					currentWeathers.currentWeather->GetFormEditorID() :
+					std::format("{:08X}", currentWeathers.currentWeather->GetFormID()).c_str());
 
 			if (currentWeathers.lastWeather && currentWeathers.lerpFactor < 1.0f) {
-				ImGui::Text("Transitioning From: %s", 
-					currentWeathers.lastWeather->GetFormEditorID() ? 
-					currentWeathers.lastWeather->GetFormEditorID() : 
-					std::format("{:08X}", currentWeathers.lastWeather->GetFormID()).c_str());
+				ImGui::Text("Transitioning From: %s",
+					currentWeathers.lastWeather->GetFormEditorID() ?
+						currentWeathers.lastWeather->GetFormEditorID() :
+						std::format("{:08X}", currentWeathers.lastWeather->GetFormID()).c_str());
 
-				ImGui::ProgressBar(currentWeathers.lerpFactor, ImVec2(-1, 0), 
+				ImGui::ProgressBar(currentWeathers.lerpFactor, ImVec2(-1, 0),
 					std::format("Transition: {:.1f}%%", currentWeathers.lerpFactor * 100.0f).c_str());
 			} else {
 				ImGui::Text("Transition: Complete (100%%)");
@@ -304,13 +304,14 @@ void WeatherEditor::DrawQuickWeatherSpawner()
 				auto& weatherArray = dataHandler->GetFormArray<RE::TESWeather>();
 
 				for (auto* weather : weatherArray) {
-					if (!weather) continue;
+					if (!weather)
+						continue;
 
 					const char* editorID = weather->GetFormEditorID();
 					std::string displayName = editorID ? editorID : std::format("{:08X}", weather->GetFormID());
 
 					// Filter
-					if (weatherFilter[0] != '\0' && 
+					if (weatherFilter[0] != '\0' &&
 						displayName.find(weatherFilter) == std::string::npos) {
 						continue;
 					}

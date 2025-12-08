@@ -110,7 +110,7 @@ void WeatherManager::SaveSettingsToWeather(RE::TESWeather* weather, const std::s
 	}
 
 	std::string weatherKey = GetWeatherKey(weather);
-	
+
 	// Update cache
 	perWeatherSettingsCache[weatherKey][featureName] = settings;
 

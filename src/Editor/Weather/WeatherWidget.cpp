@@ -455,7 +455,7 @@ void WeatherWidget::InheritFromParent(const std::string& property)
 void WeatherWidget::SaveFeatureSettings()
 {
 	auto* weatherManager = WeatherManager::GetSingleton();
-	
+
 	for (const auto& [featureName, featureJson] : settings.featureSettings) {
 		if (!featureJson.empty()) {
 			weatherManager->SaveSettingsToWeather(weather, featureName, featureJson);
@@ -466,7 +466,7 @@ void WeatherWidget::SaveFeatureSettings()
 void WeatherWidget::LoadFeatureSettings()
 {
 	auto* weatherManager = WeatherManager::GetSingleton();
-	
+
 	for (auto* feature : Feature::GetFeatureList()) {
 		if (!feature || !feature->loaded || !feature->SupportsWeather()) {
 			continue;
@@ -503,7 +503,7 @@ void WeatherWidget::DrawFeatureSettings()
 
 				if (hasSettings) {
 					ImGui::TextColored({ 0.0f, 1.0f, 0.0f, 1.0f }, "Has weather-specific settings");
-					
+
 					if (ImGui::Button("Clear Settings")) {
 						settings.featureSettings[featureName] = json::object();
 					}
@@ -524,8 +524,9 @@ void WeatherWidget::DrawFeatureSettings()
 				}
 
 				ImGui::Spacing();
-				ImGui::TextWrapped("Note: Feature settings should be configured through the feature's own settings panel. "
-				                   "This section shows which features have per-weather overrides.");
+				ImGui::TextWrapped(
+					"Note: Feature settings should be configured through the feature's own settings panel. "
+					"This section shows which features have per-weather overrides.");
 
 				ImGui::TreePop();
 			}
