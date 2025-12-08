@@ -298,7 +298,7 @@ void ImageSpaceWidget::LoadSettings()
 	try {
 		if (!js.empty() && js.contains("Settings")) {
 			auto settingsJson = js["Settings"];
-			
+
 			// Validate that we have actual data
 			bool hasValidData = false;
 			for (const auto& [key, value] : settingsJson.items()) {

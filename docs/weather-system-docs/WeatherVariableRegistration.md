@@ -10,11 +10,11 @@ The weather variable registration system provides a centralized way for features
 
 **WeatherVariableRegistry.h** contains:
 
-- **`IWeatherVariable`**: Base interface for all weather variables
-- **`WeatherVariable<T>`**: Templated variable with type-safe serialization and interpolation
-- **`FloatVariable`, `Float3Variable`, `Float4Variable`**: Specialized types with range support
-- **`FeatureWeatherRegistry`**: Manages all variables for a single feature
-- **`GlobalWeatherRegistry`**: Singleton coordinating all features
+-   **`IWeatherVariable`**: Base interface for all weather variables
+-   **`WeatherVariable<T>`**: Templated variable with type-safe serialization and interpolation
+-   **`FloatVariable`, `Float3Variable`, `Float4Variable`**: Specialized types with range support
+-   **`FeatureWeatherRegistry`**: Manages all variables for a single feature
+-   **`GlobalWeatherRegistry`**: Singleton coordinating all features
 
 ### Data Flow
 
@@ -98,10 +98,11 @@ void MyFeature::RegisterWeatherVariables() override
 #### Step 3: Implementation Complete
 
 The system now automatically:
-- Saves/loads weather-specific settings to JSON
-- Interpolates variables during weather transitions
-- Appears in the weather editor UI
-- Handles default values and missing dataanced Usage
+
+-   Saves/loads weather-specific settings to JSON
+-   Interpolates variables during weather transitions
+-   Appears in the weather editor UI
+-   Handles default values and missing dataanced Usage
 
 ### Custom Variable Types
 
@@ -144,9 +145,9 @@ LoadSettingsFromWeather(lastWeather, featureName, nextWeatherSettings);
 
 // Interpolation during weather transitions
 globalRegistry->UpdateFeatureFromWeathers(
-    featureName, 
-    currWeatherSettings, 
-    nextWeatherSettings, 
+    featureName,
+    currWeatherSettings,
+    nextWeatherSettings,
     lerpFactor  // 0.0 to 1.0
 );
 ```
@@ -154,12 +155,14 @@ globalRegistry->UpdateFeatureFromWeathers(
 ### File Structure
 
 Weather-specific settings are stored in:
+
 ```
 Data/SKSE/Plugins/CommunityShaders/Weathers/
     WeatherEditorID_FormID.json
 ```
 
 Each file contains settings for all features:
+
 ```json
 {
     "FeatureName1": {
@@ -218,30 +221,37 @@ if (registry) {
 ## Implementation Notes
 
 ### Memory Management
-- Registry uses `std::shared_ptr` for variable lifetime
-- Variables store raw pointers to feature data (safe as features outlive registry)
-- No copying - variables are modified in-place
+
+-   Registry uses `std::shared_ptr` for variable lifetime
+-   Variables store raw pointers to feature data (safe as features outlive registry)
+-   No copying - variables are modified in-place
 
 ### Thread Safety
+
 Current implementation is single-threaded (main game thread). Variables are accessed and modified on the same thread that updates weather.
 
 ### JSON Serialization
+
 Uses nlohmann::json for type conversion. Built-in support for:
-- Primitive types (float, int, bool)
-- float2, float3, float4 (see `Utils/Serialize.h`)
-- Custom types require NLOHMANN_DEFINE_TYPE_* macros
+
+-   Primitive types (float, int, bool)
+-   float2, float3, float4 (see `Utils/Serialize.h`)
+-   Custom types require NLOHMANN*DEFINE_TYPE*\* macros
 
 ### Error Handling
-- Missing JSON keys use default values
-- Type mismatches caught by json exceptions
-- Invalid weather files logged but don't crashherVariables::FloatVariable>(
-            "intensity", "Intensity", "Effect intensity",
-            &settings.intensity, 1.0f, 0.0f, 2.0f
-        ));
+
+-   Missing JSON keys use default values
+-   Type mismatches caught by json exceptions
+-   Invalid weather files logged but don't crashherVariables::FloatVariable>(
+    "intensity", "Intensity", "Effect intensity",
+    &settings.intensity, 1.0f, 0.0f, 2.0f
+    ));
     }
 
-    // That's it! No save/load/update code needed for weather variables
-};
+        // That's it! No save/load/update code needed for weather variables
+
+    };
+
 ```
 
 ## Architecture Benefits
@@ -263,3 +273,4 @@ The centralized registry enables:
 - Variables are directly modified in place (no copying)
 - Interpolation only happens during weather transitions
 - Registration is one-time during feature initialization
+```

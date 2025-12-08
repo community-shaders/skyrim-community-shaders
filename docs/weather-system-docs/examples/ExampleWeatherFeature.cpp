@@ -1,5 +1,5 @@
 // Example Feature: Demonstrates the Weather Variable Registration Pattern
-// 
+//
 // This is a minimal example showing how features can support per-weather settings.
 // Simply register your variables once during RegisterWeatherVariables() and the weather system handles the rest.
 
@@ -10,17 +10,17 @@ void ExampleWeatherFeature::RegisterWeatherVariables()
 {
 	// Get or create the registry for this feature
 	auto* registry = WeatherVariables::GlobalWeatherRegistry::GetSingleton()
-		->GetOrCreateFeatureRegistry(GetShortName());
+	                     ->GetOrCreateFeatureRegistry(GetShortName());
 
 	// Register a simple float variable
 	registry->RegisterVariable(std::make_shared<WeatherVariables::FloatVariable>(
-		"Intensity",                           // JSON key name
-		"Effect Intensity",                    // Display name for UI
+		"Intensity",                          // JSON key name
+		"Effect Intensity",                   // Display name for UI
 		"Controls how strong the effect is",  // Tooltip/description
-		&settings.intensity,                   // Pointer to the actual variable
-		1.0f,                                  // Default value
-		0.0f, 2.0f                             // Min/max range (optional)
-	));
+		&settings.intensity,                  // Pointer to the actual variable
+		1.0f,                                 // Default value
+		0.0f, 2.0f                            // Min/max range (optional)
+		));
 
 	// Register a float3 color variable
 	registry->RegisterVariable(std::make_shared<WeatherVariables::Float3Variable>(
@@ -29,7 +29,7 @@ void ExampleWeatherFeature::RegisterWeatherVariables()
 		"RGB color values for the effect",
 		&settings.color,
 		float3{ 1.0f, 0.5f, 0.2f }  // Default orange color
-	));
+		));
 
 	// Register a float4 variable (could be RGBA color or other 4-component data)
 	registry->RegisterVariable(std::make_shared<WeatherVariables::Float4Variable>(
@@ -38,7 +38,7 @@ void ExampleWeatherFeature::RegisterWeatherVariables()
 		"RGBA tint color with alpha",
 		&settings.tintColor,
 		float4{ 1.0f, 1.0f, 1.0f, 1.0f }  // Default white with full opacity
-	));
+		));
 
 	// Register a custom type with manual lerp function
 	// This example shows a bool that transitions at the halfway point
@@ -51,8 +51,7 @@ void ExampleWeatherFeature::RegisterWeatherVariables()
 		[](const bool& from, const bool& to, float factor) {
 			// Custom lerp: switch to target value when more than halfway through transition
 			return factor > 0.5f ? to : from;
-		}
-	));
+		}));
 
 	// That's it! No need to override:
 	// - SupportsWeather() - automatically detected via HasWeatherSupport()
@@ -87,9 +86,10 @@ void ExampleWeatherFeature::DrawSettings()
 	ImGui::Separator();
 	ImGui::Spacing();
 
-	ImGui::TextWrapped("Note: When weather-specific settings exist for the current weather, "
-	                   "they will automatically override these base settings. The weather system "
-	                   "handles all interpolation during weather transitions.");
+	ImGui::TextWrapped(
+		"Note: When weather-specific settings exist for the current weather, "
+		"they will automatically override these base settings. The weather system "
+		"handles all interpolation during weather transitions.");
 }
 
 void ExampleWeatherFeature::LoadSettings(json& o_json)
