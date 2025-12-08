@@ -62,6 +62,8 @@ struct MaterialProperties
 #	    if (defined(RIM_LIGHTING) || defined(SOFT_LIGHTING) || defined(LOAD_SOFT_LIGHTING))
     float3 rimSoftLightColor = 0;
 #       endif
+	float Roughness = 1;
+	float3 F0 = 0;
 #	else
 	float Roughness = 1;
 	float Metallic = 0;
