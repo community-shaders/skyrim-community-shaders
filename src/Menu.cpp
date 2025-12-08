@@ -176,10 +176,12 @@ Menu::~Menu()
 {  // Release icon textures if loaded
 	uiIcons.saveSettings.Release();
 	uiIcons.loadSettings.Release();
+	uiIcons.deleteSettings.Release();
 	uiIcons.clearCache.Release();
 	uiIcons.logo.Release();
 	uiIcons.featureSettingRevert.Release();
 	uiIcons.applyToGame.Release();
+	uiIcons.pauseTime.Release();
 	uiIcons.discord.Release();
 	uiIcons.characters.Release();
 	uiIcons.display.Release();

@@ -36,7 +36,7 @@ void LightingTemplateWidget::DrawWidget()
 
 		if (!editorWindow->settings.autoApplyChanges) {
 			auto menu = globals::menu;
-			bool useIcons = menu && menu->GetSettings().Theme.ShowActionIcons &&
+			bool useIcons = !editorWindow->settings.useTextButtons && menu && menu->GetSettings().Theme.ShowActionIcons &&
 			                menu->uiIcons.saveSettings.texture &&
 			                menu->uiIcons.featureSettingRevert.texture;
 
@@ -67,17 +67,29 @@ void LightingTemplateWidget::DrawWidget()
 				ImGui::PopStyleColor(2);
 				ImGui::PopStyleVar();
 			} else {
+				const float buttonHeight = ImGui::GetFrameHeight();
+				
+				ImVec2 applySize = ImGui::CalcTextSize("Apply");
+				applySize.x += ImGui::GetStyle().FramePadding.x * 2.0f;
+				applySize.y = buttonHeight;
+				
 				ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.2f, 0.6f, 0.9f, 1.0f));
-				if (ImGui::Button("Apply", ImVec2(ImGui::GetContentRegionAvail().x * 0.49f, 0))) {
+				if (ImGui::Button("Apply", applySize)) {
 					ApplyChanges();
 				}
 				ImGui::PopStyleColor();
 				if (ImGui::IsItemHovered()) {
 					ImGui::SetTooltip("Apply changes to the game");
 				}
+				
 				ImGui::SameLine();
+				
+				ImVec2 revertSize = ImGui::CalcTextSize("Revert");
+				revertSize.x += ImGui::GetStyle().FramePadding.x * 2.0f;
+				revertSize.y = buttonHeight;
+				
 				ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.7f, 0.3f, 0.2f, 1.0f));
-				if (ImGui::Button("Revert", ImVec2(-1, 0))) {
+				if (ImGui::Button("Revert", revertSize)) {
 					RevertChanges();
 				}
 				ImGui::PopStyleColor();
@@ -87,6 +99,9 @@ void LightingTemplateWidget::DrawWidget()
 			}
 		}
 		ImGui::Separator();
+
+		// Search bar (activatable with Ctrl+F)
+		BeginWidgetSearchBar(searchBuffer, sizeof(searchBuffer), searchActive);
 
 		if (ImGui::BeginTabBar("LightingTemplateSettingsTabs", ImGuiTabBarFlags_None)) {
 			if (ImGui::BeginTabItem("Basic")) {
@@ -116,34 +131,34 @@ void LightingTemplateWidget::DrawBasicSettings()
 
 	if (ImGui::CollapsingHeader("Ambient & Directional", ImGuiTreeNodeFlags_DefaultOpen)) {
 		ImGui::Spacing();
-		if (DrawColorEdit("Ambient Color", settings.ambient)) changed = true;
-		ImGui::Spacing();
-		if (DrawColorEdit("Directional Color", settings.directional)) changed = true;
-		ImGui::Spacing();
+		if (MatchesSearch("Ambient Color") && DrawColorEdit("Ambient Color", settings.ambient)) changed = true;
+		if (MatchesSearch("Ambient Color")) ImGui::Spacing();
+		if (MatchesSearch("Directional Color") && DrawColorEdit("Directional Color", settings.directional)) changed = true;
+		if (MatchesSearch("Directional Color")) ImGui::Spacing();
 	}
 
 	if (ImGui::CollapsingHeader("Directional Settings", ImGuiTreeNodeFlags_DefaultOpen)) {
 		ImGui::Spacing();
-		if (DrawSliderFloat("Directional XY", settings.directionalXY)) changed = true;
-		ImGui::Spacing();
-		if (DrawSliderFloat("Directional Z", settings.directionalZ)) changed = true;
-		ImGui::Spacing();
-		if (DrawSliderFloat("Directional Fade", settings.directionalFade)) changed = true;
-		ImGui::Spacing();
+		if (MatchesSearch("Directional XY") && DrawSliderFloat("Directional XY", settings.directionalXY)) changed = true;
+		if (MatchesSearch("Directional XY")) ImGui::Spacing();
+		if (MatchesSearch("Directional Z") && DrawSliderFloat("Directional Z", settings.directionalZ)) changed = true;
+		if (MatchesSearch("Directional Z")) ImGui::Spacing();
+		if (MatchesSearch("Directional Fade") && DrawSliderFloat("Directional Fade", settings.directionalFade)) changed = true;
+		if (MatchesSearch("Directional Fade")) ImGui::Spacing();
 	}
 
 	if (ImGui::CollapsingHeader("Light Fade", ImGuiTreeNodeFlags_DefaultOpen)) {
 		ImGui::Spacing();
-		if (DrawSliderFloat("Light Fade Start", settings.lightFadeStart)) changed = true;
-		ImGui::Spacing();
-		if (DrawSliderFloat("Light Fade End", settings.lightFadeEnd)) changed = true;
-		ImGui::Spacing();
+		if (MatchesSearch("Light Fade Start") && DrawSliderFloat("Light Fade Start", settings.lightFadeStart)) changed = true;
+		if (MatchesSearch("Light Fade Start")) ImGui::Spacing();
+		if (MatchesSearch("Light Fade End") && DrawSliderFloat("Light Fade End", settings.lightFadeEnd)) changed = true;
+		if (MatchesSearch("Light Fade End")) ImGui::Spacing();
 	}
 
 	if (ImGui::CollapsingHeader("Other", ImGuiTreeNodeFlags_DefaultOpen)) {
 		ImGui::Spacing();
-		if (DrawSliderFloat("Clip Distance", settings.clipDist)) changed = true;
-		ImGui::Spacing();
+		if (MatchesSearch("Clip Distance") && DrawSliderFloat("Clip Distance", settings.clipDist)) changed = true;
+		if (MatchesSearch("Clip Distance")) ImGui::Spacing();
 	}
 
 	if (changed && EditorWindow::GetSingleton()->settings.autoApplyChanges) {
@@ -156,22 +171,22 @@ void LightingTemplateWidget::DrawFogSettings()
 	bool changed = false;
 
 	ImGui::Spacing();
-	if (DrawColorEdit("Fog Color Near", settings.fogColorNear)) changed = true;
-	ImGui::Spacing();
-	if (DrawColorEdit("Fog Color Far", settings.fogColorFar)) changed = true;
-	ImGui::Spacing();
+	if (MatchesSearch("Fog Color Near") && DrawColorEdit("Fog Color Near", settings.fogColorNear)) changed = true;
+	if (MatchesSearch("Fog Color Near")) ImGui::Spacing();
+	if (MatchesSearch("Fog Color Far") && DrawColorEdit("Fog Color Far", settings.fogColorFar)) changed = true;
+	if (MatchesSearch("Fog Color Far")) ImGui::Spacing();
 
 	ImGui::Spacing();
-	if (DrawSliderFloat("Fog Near", settings.fogNear)) changed = true;
-	ImGui::Spacing();
-	if (DrawSliderFloat("Fog Far", settings.fogFar)) changed = true;
-	ImGui::Spacing();
+	if (MatchesSearch("Fog Near") && DrawSliderFloat("Fog Near", settings.fogNear)) changed = true;
+	if (MatchesSearch("Fog Near")) ImGui::Spacing();
+	if (MatchesSearch("Fog Far") && DrawSliderFloat("Fog Far", settings.fogFar)) changed = true;
+	if (MatchesSearch("Fog Far")) ImGui::Spacing();
 
 	ImGui::Spacing();
-	if (DrawSliderFloat("Fog Power", settings.fogPower)) changed = true;
-	ImGui::Spacing();
-	if (DrawSliderFloat("Fog Clamp", settings.fogClamp)) changed = true;
-	ImGui::Spacing();
+	if (MatchesSearch("Fog Power") && DrawSliderFloat("Fog Power", settings.fogPower)) changed = true;
+	if (MatchesSearch("Fog Power")) ImGui::Spacing();
+	if (MatchesSearch("Fog Clamp") && DrawSliderFloat("Fog Clamp", settings.fogClamp)) changed = true;
+	if (MatchesSearch("Fog Clamp")) ImGui::Spacing();
 
 	if (changed && EditorWindow::GetSingleton()->settings.autoApplyChanges) {
 		ApplyChanges();
@@ -182,19 +197,60 @@ void LightingTemplateWidget::DrawDALCSettings()
 {
 	bool changed = false;
 
-	ImGui::Spacing();
-	if (DrawColorEdit("Specular", settings.dalc.specular)) changed = true;
-	ImGui::Spacing();
-	if (DrawSliderFloat("Fresnel Power", settings.dalc.fresnelPower)) changed = true;
-	ImGui::Spacing();
-
-	for (int j = 0; j < 3; j++) {
-		const char* labels[] = { "X", "Y", "Z" };
-		ImGui::Separator();
-		ImGui::Text("Directional %s", labels[j]);
-		if (DrawColorEdit(std::format("Max##{}", labels[j]), settings.dalc.directional[j].max)) changed = true;
-		if (DrawColorEdit(std::format("Min##{}", labels[j]), settings.dalc.directional[j].min)) changed = true;
+	if (ImGui::CollapsingHeader("Basic DALC", ImGuiTreeNodeFlags_DefaultOpen)) {
 		ImGui::Spacing();
+		if (DrawColorEdit("Specular", settings.dalc.specular)) changed = true;
+		ImGui::Spacing();
+		if (DrawSliderFloat("Fresnel Power", settings.dalc.fresnelPower)) changed = true;
+		ImGui::Spacing();
+	}
+
+	if (ImGui::CollapsingHeader("Directional Colors (Time of Day)", ImGuiTreeNodeFlags_DefaultOpen)) {
+		// Note: The game engine uses X, Y, Z to represent time periods
+		// We map them to: X=Sunrise/Day, Y=Sunset, Z=Night for TOD display
+		
+		if (TOD::BeginTODTable("DALCDirectionalTable")) {
+			TOD::RenderTODHeader();
+			ImGui::TableNextRow();
+			ImGui::TableSetColumnIndex(0);
+			ImGui::Separator();
+			ImGui::TableSetColumnIndex(1);
+			ImGui::Separator();
+
+			// Prepare arrays for TOD rendering (map X,Y,Z to Sunrise,Day,Sunset,Night)
+			float3 maxColors[4];
+			float3 minColors[4];
+			
+			// Map X (index 0) to Sunrise and Day
+			maxColors[TOD::Sunrise] = settings.dalc.directional[0].max;
+			maxColors[TOD::Day] = settings.dalc.directional[0].max;
+			minColors[TOD::Sunrise] = settings.dalc.directional[0].min;
+			minColors[TOD::Day] = settings.dalc.directional[0].min;
+			
+			// Map Y (index 1) to Sunset
+			maxColors[TOD::Sunset] = settings.dalc.directional[1].max;
+			minColors[TOD::Sunset] = settings.dalc.directional[1].min;
+			
+			// Map Z (index 2) to Night
+			maxColors[TOD::Night] = settings.dalc.directional[2].max;
+			minColors[TOD::Night] = settings.dalc.directional[2].min;
+
+			if (TOD::DrawTODColorRow("Max", maxColors)) {
+				settings.dalc.directional[0].max = maxColors[TOD::Sunrise];  // X from Sunrise
+				settings.dalc.directional[1].max = maxColors[TOD::Sunset];   // Y from Sunset
+				settings.dalc.directional[2].max = maxColors[TOD::Night];    // Z from Night
+				changed = true;
+			}
+
+			if (TOD::DrawTODColorRow("Min", minColors)) {
+				settings.dalc.directional[0].min = minColors[TOD::Sunrise];  // X from Sunrise
+				settings.dalc.directional[1].min = minColors[TOD::Sunset];   // Y from Sunset
+				settings.dalc.directional[2].min = minColors[TOD::Night];    // Z from Night
+				changed = true;
+			}
+
+			TOD::EndTODTable();
+		}
 	}
 
 	if (changed && EditorWindow::GetSingleton()->settings.autoApplyChanges) {
@@ -285,6 +341,8 @@ void LightingTemplateWidget::LoadSettings()
 {
 	if (!js.empty()) {
 		settings = js;
+	} else {
+		LoadLightingTemplateValues();
 	}
 }
 

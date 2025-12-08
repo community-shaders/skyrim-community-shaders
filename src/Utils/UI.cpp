@@ -235,6 +235,7 @@ namespace Util
 		loadIconWithLogging(basePath + "Community Shaders Logo\\cs-logo.png", &menu->uiIcons.logo.texture, menu->uiIcons.logo.size, "logo");
 		loadIconWithLogging(basePath + "Action Icons\\restore-settings.png", &menu->uiIcons.featureSettingRevert.texture, menu->uiIcons.featureSettingRevert.size, "restore-settings");
 		loadIconWithLogging(basePath + "Action Icons\\apply-to-game.png", &menu->uiIcons.applyToGame.texture, menu->uiIcons.applyToGame.size, "apply-to-game");
+		loadIconWithLogging(basePath + "Action Icons\\pause.png", &menu->uiIcons.pauseTime.texture, menu->uiIcons.pauseTime.size, "pause");
 		loadIconWithLogging(basePath + "Action Icons\\discord.png", &menu->uiIcons.discord.texture, menu->uiIcons.discord.size, "discord");
 
 		// Load category icons in a more compact way

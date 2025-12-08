@@ -2,6 +2,16 @@
 #include "EditorWindow.h"
 #include "State.h"
 #include "Util.h"
+#include "WeatherUtils.h"
+
+bool Widget::MatchesSearch(const std::string& text) const
+{
+	// If search is empty or inactive, match everything
+	if (searchBuffer[0] == '\0') {
+		return true;
+	}
+	return ContainsStringIgnoreCase(text, searchBuffer);
+}
 
 void Widget::Save()
 {
@@ -66,18 +76,28 @@ void Widget::Load()
 {
 	std::string filePath = std::format("{}\\{}\\{}.json", Util::PathHelpers::GetCommunityShaderPath().string(), GetFolderName(), GetEditorID());
 
-	std::ifstream settingsFile(filePath);
-
 	if (!std::filesystem::exists(filePath)) {
-		// No saved file exists, reload vanilla/default values
-		logger::info("{}: No settings file found, reloading vanilla values", GetEditorID());
+		// No saved file exists, reset to vanilla/default values
+		logger::info("{}: No settings file found, resetting to vanilla values", GetEditorID());
 		js = json();
 		LoadSettings();
+		
+		EditorWindow::GetSingleton()->ShowNotification(
+			std::format("No saved file - reset {} to vanilla values", GetEditorID()),
+			ImVec4(0.3f, 0.8f, 1.0f, 1.0f),
+			3.0f);
 		return;
 	}
 
+	// File exists, load from it
+	std::ifstream settingsFile(filePath);
+
 	if (!settingsFile.good() || !settingsFile.is_open()) {
-		logger::warn("Failed to load settings file: {}", filePath);
+		logger::warn("Failed to open settings file: {}", filePath);
+		EditorWindow::GetSingleton()->ShowNotification(
+			std::format("Failed to open file for {}", GetEditorID()),
+			ImVec4(1.0f, 0.5f, 0.0f, 1.0f),
+			3.0f);
 		return;
 	}
 
@@ -89,33 +109,44 @@ void Widget::Load()
 		if (js.is_null()) {
 			logger::warn("{}: Loaded JSON is null, file may be empty or invalid", filePath);
 			EditorWindow::GetSingleton()->ShowNotification(
-				std::format("Failed to load settings for {}", GetEditorID()),
-				ImVec4(1.0f, 0.0f, 0.0f, 1.0f),
+				std::format("Invalid file for {} - resetting to vanilla", GetEditorID()),
+				ImVec4(1.0f, 0.5f, 0.0f, 1.0f),
 				3.0f);
+			js = json();
+			LoadSettings();
 			return;
 		}
 		
-		logger::info("{}: Successfully loaded settings file", GetEditorID());
+		logger::info("{}: Successfully loaded settings from file", GetEditorID());
+		LoadSettings();
 		
+		EditorWindow::GetSingleton()->ShowNotification(
+			std::format("Loaded saved settings for {}", GetEditorID()),
+			ImVec4(0.0f, 1.0f, 0.5f, 1.0f),
+			3.0f);
+			
 	} catch (const nlohmann::json::parse_error& e) {
 		logger::error("Error parsing settings for file ({}) : {}\n", filePath, e.what());
 		logger::error("Parse error at byte {}: {}", e.byte, e.what());
 		settingsFile.close();
 		EditorWindow::GetSingleton()->ShowNotification(
-			std::format("Failed to parse settings for {}", GetEditorID()),
+			std::format("Parse error for {} - resetting to vanilla", GetEditorID()),
 			ImVec4(1.0f, 0.0f, 0.0f, 1.0f),
 			3.0f);
+		js = json();
+		LoadSettings();
 		return;
 	} catch (const std::exception& e) {
 		logger::error("Unexpected error loading settings file ({}) : {}\n", filePath, e.what());
 		settingsFile.close();
 		EditorWindow::GetSingleton()->ShowNotification(
-			std::format("Failed to load settings for {}", GetEditorID()),
+			std::format("Error loading {} - resetting to vanilla", GetEditorID()),
 			ImVec4(1.0f, 0.0f, 0.0f, 1.0f),
 			3.0f);
+		js = json();
+		LoadSettings();
 		return;
 	}
-	LoadSettings();
 }
 
 void Widget::Delete()
@@ -137,6 +168,9 @@ void Widget::Delete()
 		// Reload settings from vanilla/mod defaults
 		LoadSettings();
 		
+		// Apply the vanilla values to the game
+		ApplyChanges();
+		
 		EditorWindow::GetSingleton()->ShowNotification(
 			std::format("Deleted {} - reverted to vanilla values", GetEditorID()),
 			ImVec4(0.0f, 1.0f, 0.0f, 1.0f),
@@ -144,6 +178,12 @@ void Widget::Delete()
 	} catch (const std::filesystem::filesystem_error& e) {
 		logger::warn("Error deleting settings file ({}) : {}\n", filePath, e.what());
 	}
+}
+
+bool Widget::HasSavedFile() const
+{
+	std::string filePath = std::format("{}\\{}\\{}.json", Util::PathHelpers::GetCommunityShaderPath().string(), const_cast<Widget*>(this)->GetFolderName(), GetEditorID());
+	return std::filesystem::exists(filePath);
 }
 
 void Widget::DrawMenu()

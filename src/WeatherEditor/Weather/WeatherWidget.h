@@ -18,6 +18,8 @@ public:
 		form = a_weather;
 		weather = a_weather;
 		LoadWeatherValues();
+		// Cache the original vanilla values for restoration
+		vanillaSettings = settings;
 	}
 
 	struct DirectionalColor
@@ -91,6 +93,8 @@ public:
 	};
 
 	Settings settings;
+	// Cached original vanilla values for restoration
+	Settings vanillaSettings;
 
 	~WeatherWidget();
 
@@ -117,7 +121,22 @@ private:
 	void DrawDALCSettings();
 	void DrawWeatherColorSettings();
 	void DrawCloudSettings();
+	void DrawFogSettings();
 	void DrawFeatureSettings();
+	
+	// Search functionality
+	struct SearchResult {
+		std::string displayName;
+		std::string tabName;
+		std::string settingId;
+	};
+	std::vector<SearchResult> searchResults;
+	std::string activeTabOverride = "";
+	std::string highlightedSetting = "";
+	float highlightStartTime = 0.0f;
+	void UpdateSearchResults();
+	void NavigateToSetting(const SearchResult& result);
+	bool ShouldHighlight(const std::string& settingId) const;
 	void DrawImageSpaceSettings();
 	void DrawProperties(std::string category, std::map<std::string, int> properties);
 	void InheritFromParent(const std::string& property);

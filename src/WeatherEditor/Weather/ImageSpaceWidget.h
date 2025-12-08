@@ -51,10 +51,4 @@ public:
 	void LoadImageSpaceValues();
 	void ApplyChanges();
 	void RevertChanges();
-
-private:
-	void DrawHDRSettings();
-	void DrawCinematicSettings();
-	void DrawTintSettings();
-	void DrawDOFSettings();
 };

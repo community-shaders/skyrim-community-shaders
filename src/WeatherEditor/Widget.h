@@ -28,17 +28,17 @@ public:
 
 	virtual ~Widget() {};
 
-	virtual std::string GetEditorID()
+	virtual std::string GetEditorID() const
 	{
 		return form->GetFormEditorID();
 	}
 
-	virtual std::string GetFormID()
+	virtual std::string GetFormID() const
 	{
 		return std::format("{:08X}", form->GetFormID());
 	}
 
-	virtual std::string GetFilename()
+	virtual std::string GetFilename() const
 	{
 		if (auto file = form->GetFile())
 			return std::format("{}", file->GetFilename());
@@ -62,9 +62,18 @@ public:
 	void Save();
 	void Load();
 	void Delete();
+	bool HasSavedFile() const;
 
 	virtual void LoadSettings() = 0;
 	virtual void SaveSettings() = 0;
+	virtual void ApplyChanges() = 0;
+	virtual bool HasUnsavedChanges() const { return false; }
+
+	// Search functionality
+	char searchBuffer[256] = "";
+	bool searchActive = false;
+
+	bool MatchesSearch(const std::string& text) const;
 
 protected:
 	json js = json();

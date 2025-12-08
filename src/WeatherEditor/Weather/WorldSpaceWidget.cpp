@@ -16,7 +16,7 @@ void WorldSpaceWidget::DrawWidget()
 
 		if (!editorWindow->settings.autoApplyChanges) {
 			auto menu = globals::menu;
-			bool useIcons = menu && menu->GetSettings().Theme.ShowActionIcons &&
+			bool useIcons = !editorWindow->settings.useTextButtons && menu && menu->GetSettings().Theme.ShowActionIcons &&
 			                menu->uiIcons.saveSettings.texture &&
 			                menu->uiIcons.featureSettingRevert.texture;
 
@@ -47,17 +47,29 @@ void WorldSpaceWidget::DrawWidget()
 				ImGui::PopStyleColor(2);
 				ImGui::PopStyleVar();
 			} else {
+				const float buttonHeight = ImGui::GetFrameHeight();
+				
+				ImVec2 applySize = ImGui::CalcTextSize("Apply");
+				applySize.x += ImGui::GetStyle().FramePadding.x * 2.0f;
+				applySize.y = buttonHeight;
+				
 				ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.2f, 0.6f, 0.9f, 1.0f));
-				if (ImGui::Button("Apply", ImVec2(ImGui::GetContentRegionAvail().x * 0.49f, 0))) {
+				if (ImGui::Button("Apply", applySize)) {
 					ApplyChanges();
 				}
 				ImGui::PopStyleColor();
 				if (ImGui::IsItemHovered()) {
 					ImGui::SetTooltip("Apply changes to the game");
 				}
+				
 				ImGui::SameLine();
+				
+				ImVec2 revertSize = ImGui::CalcTextSize("Revert");
+				revertSize.x += ImGui::GetStyle().FramePadding.x * 2.0f;
+				revertSize.y = buttonHeight;
+				
 				ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.7f, 0.3f, 0.2f, 1.0f));
-				if (ImGui::Button("Revert", ImVec2(-1, 0))) {
+				if (ImGui::Button("Revert", revertSize)) {
 					RevertChanges();
 				}
 				ImGui::PopStyleColor();
@@ -67,6 +79,9 @@ void WorldSpaceWidget::DrawWidget()
 			}
 		}
 		ImGui::Separator();
+
+		// Search bar (activatable with Ctrl+F)
+		BeginWidgetSearchBar(searchBuffer, sizeof(searchBuffer), searchActive);
 	}
 	ImGui::End();
 }

@@ -87,11 +87,22 @@ public:
 		std::map<std::string, std::string> markedRecords;
 		bool autoApplyChanges = true;
 		bool suppressDeleteWarning = false;
+		bool useTextButtons = false;
+		std::vector<std::string> favoriteWidgets;
+		std::vector<std::string> recentWidgets;
+		int maxRecentWidgets = 10;
+		bool rememberOpenWidgets = true;
+		std::vector<std::string> lastOpenWidgets;
 	};
 
 	Settings settings;
 
 	void Save();
+	void AddToRecent(const std::string& widgetId);
+	void ToggleFavorite(const std::string& widgetId);
+	bool IsFavorite(const std::string& widgetId) const;
+	void SaveSessionWidgets();
+	void RestoreSessionWidgets();
 
 private:
 	void SaveAll();
@@ -102,4 +113,9 @@ private:
 	json j;
 	std::string settingsFilename = "EditorSettings";
 	bool showSettingsWindow = false;
+	
+	// Sorting state
+	enum class SortColumn { None, EditorID, FormID, File, Status };
+	SortColumn currentSortColumn = SortColumn::None;
+	bool sortAscending = true;
 };
