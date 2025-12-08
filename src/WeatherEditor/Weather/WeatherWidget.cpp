@@ -1,13 +1,9 @@
 #include "WeatherWidget.h"
 
 #include "../EditorWindow.h"
-
-#include <algorithm>
-
-#include "Feature.h"
 #include "State.h"
-#include "Util.h"
 #include "WeatherManager.h"
+#include "WeatherVariableRegistry.h"
 
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(WeatherWidget::Atmosphere, colorTimes)
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(WeatherWidget::DirectionalColor, max, min)
@@ -39,9 +35,6 @@ void WeatherWidget::DrawWidget()
 
 		// Weather lock controls
 		if (isLocked) {
-			ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.2f, 1.0f, 0.2f, 1.0f));
-			ImGui::TextWrapped("WEATHER LOCKED - This weather is active and won't change with time");
-			ImGui::PopStyleColor();
 			if (ImGui::Button("Unlock Weather", ImVec2(-1, 0))) {
 				editorWindow->UnlockWeather();
 			}
@@ -53,39 +46,79 @@ void WeatherWidget::DrawWidget()
 				ImGui::SetTooltip("Force this weather to be active and prevent time-based weather changes");
 			}
 		}
-		ImGui::Separator();
 
-		// Auto-apply toggle and manual buttons
-		ImGui::Checkbox("Auto-Apply Changes", &autoApply);
-		if (ImGui::IsItemHovered()) {
-			ImGui::SetTooltip("Automatically apply changes to the game as you edit");
-		}
-		ImGui::SameLine();
-		
 		// Time pause toggle
 		bool isPaused = editorWindow->IsTimePaused();
 		if (isPaused) {
 			ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.2f, 0.8f, 0.2f, 1.0f));
 			ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.3f, 0.9f, 0.3f, 1.0f));
-			if (ImGui::Button("Resume Time", ImVec2(ImGui::GetContentRegionAvail().x, 0))) {
+			if (ImGui::Button("Resume Time", ImVec2(-1, 0))) {
 				editorWindow->ResumeTime();
 			}
 			ImGui::PopStyleColor(2);
 		} else {
-			if (ImGui::Button("Pause Time", ImVec2(ImGui::GetContentRegionAvail().x, 0))) {
+			if (ImGui::Button("Pause Time", ImVec2(-1, 0))) {
 				editorWindow->PauseTime();
 			}
 		}
 		if (ImGui::IsItemHovered()) {
 			ImGui::SetTooltip("Pause/resume time progression in game");
 		}
-		
-		if (ImGui::Button("Apply Now", ImVec2(ImGui::GetContentRegionAvail().x * 0.49f, 0))) {
-			ApplyChanges();
-		}
-		ImGui::SameLine();
-		if (ImGui::Button("Revert", ImVec2(-1, 0))) {
-			RevertChanges();
+
+		// Show Apply/Revert buttons only when auto-apply is disabled
+		if (!editorWindow->settings.autoApplyChanges) {
+			auto menu = globals::menu;
+			bool useIcons = menu && menu->GetSettings().Theme.ShowActionIcons &&
+			                menu->uiIcons.saveSettings.texture &&
+			                menu->uiIcons.featureSettingRevert.texture;
+
+			if (useIcons) {
+				// Icon-based buttons
+				const float iconSize = ImGui::GetFrameHeight();
+				const ImVec2 buttonSize(iconSize, iconSize);
+
+				ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 0.0f);
+				ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0));
+				ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.8f, 0.8f, 0.8f, 0.25f));
+
+				if (ImGui::ImageButton("##ApplyWeather", menu->uiIcons.saveSettings.texture, buttonSize)) {
+					ApplyChanges();
+				}
+				if (ImGui::IsItemHovered()) {
+					ImGui::SetTooltip("Apply changes to the game");
+				}
+
+				ImGui::SameLine();
+
+				if (ImGui::ImageButton("##RevertWeather", menu->uiIcons.featureSettingRevert.texture, buttonSize)) {
+					RevertChanges();
+				}
+				if (ImGui::IsItemHovered()) {
+					ImGui::SetTooltip("Revert to saved values");
+				}
+
+				ImGui::PopStyleColor(2);
+				ImGui::PopStyleVar();
+			} else {
+				// Text-based fallback buttons
+				ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.2f, 0.6f, 0.9f, 1.0f));
+				if (ImGui::Button("Apply", ImVec2(ImGui::GetContentRegionAvail().x * 0.49f, 0))) {
+					ApplyChanges();
+				}
+				ImGui::PopStyleColor();
+				if (ImGui::IsItemHovered()) {
+					ImGui::SetTooltip("Apply changes to the game");
+				}
+				ImGui::SameLine();
+				ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.7f, 0.3f, 0.2f, 1.0f));
+				if (ImGui::Button("Revert", ImVec2(-1, 0))) {
+					RevertChanges();
+				}
+				ImGui::PopStyleColor();
+				if (ImGui::IsItemHovered()) {
+					ImGui::SetTooltip("Revert to saved values");
+				}
+			}
 		}
 		ImGui::Separator();
 
@@ -414,7 +447,7 @@ void WeatherWidget::DrawDALCSettings()
 					}
 				}
 			}
-			if (changed && autoApply) {
+			if (changed && EditorWindow::GetSingleton()->settings.autoApplyChanges) {
 				ApplyChanges();
 			}
 		}
@@ -446,7 +479,7 @@ void WeatherWidget::DrawWeatherColorSettings()
 				}
 			}
 
-			if (changed && autoApply) {
+			if (changed && EditorWindow::GetSingleton()->settings.autoApplyChanges) {
 				ApplyChanges();
 			}
 		}
@@ -486,7 +519,7 @@ void WeatherWidget::DrawCloudSettings()
 					}
 				}
 			}
-			if (changed && autoApply) {
+			if (changed && EditorWindow::GetSingleton()->settings.autoApplyChanges) {
 				ApplyChanges();
 			}
 		}
@@ -526,7 +559,7 @@ void WeatherWidget::DrawProperties(std::string category, std::map<std::string, i
 				}
 			}
 
-			if (changed && autoApply) {
+			if (changed && EditorWindow::GetSingleton()->settings.autoApplyChanges) {
 				ApplyChanges();
 			}
 		}
@@ -549,6 +582,7 @@ void WeatherWidget::InheritFromParent(const std::string& property)
 void WeatherWidget::SaveFeatureSettings()
 {
 	auto* weatherManager = WeatherManager::GetSingleton();
+	auto* globalRegistry = WeatherVariables::GlobalWeatherRegistry::GetSingleton();
 	
 	for (const auto& [featureName, featureJson] : settings.featureSettings) {
 		if (!featureJson.empty()) {
@@ -560,15 +594,23 @@ void WeatherWidget::SaveFeatureSettings()
 void WeatherWidget::LoadFeatureSettings()
 {
 	auto* weatherManager = WeatherManager::GetSingleton();
+	auto* globalRegistry = WeatherVariables::GlobalWeatherRegistry::GetSingleton();
 	
 	for (auto* feature : Feature::GetFeatureList()) {
-		if (!feature || !feature->loaded || !feature->SupportsWeather()) {
+		if (!feature || !feature->loaded) {
+			continue;
+		}
+
+		std::string featureName = feature->GetShortName();
+		
+		// Check if feature has registered weather variables
+		if (!globalRegistry->HasWeatherSupport(featureName)) {
 			continue;
 		}
 
 		json featureJson;
-		if (weatherManager->LoadSettingsFromWeather(weather, feature->GetShortName(), featureJson)) {
-			settings.featureSettings[feature->GetShortName()] = featureJson;
+		if (weatherManager->LoadSettingsFromWeather(weather, featureName, featureJson)) {
+			settings.featureSettings[featureName] = featureJson;
 		}
 	}
 }
@@ -591,12 +633,20 @@ void WeatherWidget::DrawFeatureSettings()
 		ImGui::TextWrapped("Configure feature-specific settings that will be applied when this weather is active.");
 		ImGui::Spacing();
 
+		auto* globalRegistry = WeatherVariables::GlobalWeatherRegistry::GetSingleton();
+
 		for (auto* feature : Feature::GetFeatureList()) {
-			if (!feature || !feature->loaded || !feature->SupportsWeather()) {
+			if (!feature || !feature->loaded) {
 				continue;
 			}
 
 			std::string featureName = feature->GetShortName();
+			
+			// Check if feature has registered weather variables
+			if (!globalRegistry->HasWeatherSupport(featureName)) {
+				continue;
+			}
+
 			std::string displayName = feature->GetName();
 
 			if (ImGui::TreeNode(displayName.c_str())) {

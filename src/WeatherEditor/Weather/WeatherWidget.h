@@ -63,7 +63,6 @@ public:
 	};
 
 	Settings settings;
-	bool autoApply = true;  // Auto-apply changes to game in real-time
 
 	~WeatherWidget();
 

@@ -34,6 +34,10 @@ public:
 	bool timePaused = false;
 	float savedTimeScale = 1.0f;
 
+	// Vanity camera control
+	bool vanityCameraDisabled = false;
+	float savedVanityCameraDelay = 180.0f;
+
 	void ShowObjectsWindow();
 
 	void ShowViewportWindow();
@@ -55,6 +59,9 @@ public:
 	void ResumeTime();
 	bool IsTimePaused() const { return timePaused; }
 
+	void DisableVanityCamera();
+	void RestoreVanityCamera();
+
 	struct Settings
 	{
 		std::map<std::string, ImVec4> recordMarkers = {
@@ -63,6 +70,7 @@ public:
 			{ "Done", { 0.05f, 0.85f, 0.3f, 1 } }
 		};
 		std::map<std::string, std::string> markedRecords;
+		bool autoApplyChanges = true;
 	};
 
 	Settings settings;

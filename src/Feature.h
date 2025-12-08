@@ -129,20 +129,11 @@ public:
 	virtual WeatherAnalysisConfig GetWeatherAnalysisConfig() const { return {}; }
 
 	/**
-	 * @brief Indicates whether this feature supports per-weather settings
-	 * @return True if the feature has weather-specific settings that should be interpolated
+	 * @brief Called during feature initialization to register weather-controllable variables
+	 * Features should register their weather variables here using the WeatherVariables::GlobalWeatherRegistry
+	 * The weather system will automatically handle save/load/lerp for all registered variables
 	 */
-	virtual bool SupportsWeather() const { return false; }
-
-	/**
-	 * @brief Updates feature settings based on weather transition
-	 * Called by WeatherManager when weather changes or transitions occur.
-	 * Features should lerp between currWeather and nextWeather settings using lerpFactor.
-	 * @param currWeather Settings from the current weather (may be empty if no settings exist)
-	 * @param nextWeather Settings from the transitioning weather (may be empty)
-	 * @param lerpFactor Blend factor between weathers (0.0 = fully nextWeather, 1.0 = fully currWeather)
-	 */
-	virtual void UpdateSettingsFromWeathers(const json& currWeather, const json& nextWeather, float lerpFactor) {}
+	virtual void RegisterWeatherVariables() {}
 
 	virtual bool ValidateCache(CSimpleIniA& a_ini);
 	virtual void WriteDiskCacheInfo(CSimpleIniA& a_ini);

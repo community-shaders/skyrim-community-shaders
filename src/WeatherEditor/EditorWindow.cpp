@@ -1,10 +1,10 @@
 #include "EditorWindow.h"
 
 #include "State.h"
-#include "features/Weather.h"
+#include "Features/WeatherEditor.h"
 #include "imgui_internal.h"
 
-NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(EditorWindow::Settings, recordMarkers, markedRecords)
+NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(EditorWindow::Settings, recordMarkers, markedRecords, autoApplyChanges)
 
 bool ContainsStringIgnoreCase(const std::string_view a_string, const std::string_view a_substring)
 {
@@ -164,8 +164,10 @@ void EditorWindow::ShowObjectsWindow()
 				// Status column
 				ImGui::TableNextColumn();
 
+				// Re-check if the record exists after potential removal
+				markedRecord = settings.markedRecords.find(editorLabel);
 				if (markedRecord != settings.markedRecords.end()) {
-					ImGui::Text(markedRecord->second.c_str());
+					ImGui::Text("%s", markedRecord->second.c_str());
 				}
 			}
 
@@ -240,6 +242,9 @@ void EditorWindow::RenderUI()
 
 	context->ClearRenderTargetView(framebuffer.RTV, (float*)&ImGui::GetStyle().Colors[ImGuiCol_WindowBg]);
 
+	// Increase background opacity for all editor windows
+	ImGui::PushStyleVar(ImGuiStyleVar_Alpha, 1.0f);
+
 	// Check for Escape key to close editor
 	if (ImGui::IsKeyPressed(ImGuiKey_Escape)) {
 		open = false;
@@ -260,9 +265,18 @@ void EditorWindow::RenderUI()
 			if (ImGui::MenuItem("Close All Lighting Widgets")) {
 				for (auto* widget : lightingTemplateWidgets) widget->SetOpen(false);
 			}
-			ImGui::Separator();
-			if (ImGui::MenuItem("Editor Settings")) {
+			ImGui::EndMenu();
+		}
+		if (ImGui::BeginMenu("Settings")) {
+			if (ImGui::MenuItem("Editor Preferences")) {
 				showSettingsWindow = !showSettingsWindow;
+			}
+			ImGui::Separator();
+			if (ImGui::Checkbox("Auto-Apply Changes", &settings.autoApplyChanges)) {
+				Save();
+			}
+			if (ImGui::IsItemHovered()) {
+				ImGui::SetTooltip("Automatically apply weather changes to the game as you edit");
 			}
 			ImGui::EndMenu();
 		}
@@ -337,7 +351,7 @@ void EditorWindow::RenderUI()
 		
 		// Close button on the right side
 		float menuBarHeight = ImGui::GetFrameHeight();
-		ImGui::SameLine(ImGui::GetWindowWidth() - menuBarHeight);
+		ImGui::SameLine(ImGui::GetWindowWidth() - menuBarHeight - 10.0f);
 		ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.8f, 0.2f, 0.2f, 1.0f));
 		ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(1.0f, 0.3f, 0.3f, 1.0f));
 		ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.7f, 0.1f, 0.1f, 1.0f));
@@ -371,6 +385,9 @@ void EditorWindow::RenderUI()
 	}
 
 	ShowWidgetWindow();
+
+	// Pop the alpha style var
+	ImGui::PopStyleVar();
 }
 
 void EditorWindow::SetupResources()
@@ -405,6 +422,27 @@ void EditorWindow::SetupResources()
 
 void EditorWindow::Draw()
 {
+	// Track editor open state for vanity camera management
+	static bool wasOpen = false;
+	
+	if (open && !wasOpen) {
+		// Editor just opened - disable vanity camera
+		DisableVanityCamera();
+	} else if (!open && wasOpen) {
+		// Editor just closed - restore vanity camera
+		RestoreVanityCamera();
+	}
+	
+	wasOpen = open;
+
+	// Re-enforce weather lock if active (handles time changes)
+	if (weatherLockActive && lockedWeather) {
+		auto sky = RE::Sky::GetSingleton();
+		if (sky && sky->currentWeather != lockedWeather) {
+			sky->ForceWeather(lockedWeather, false);
+		}
+	}
+
 	auto renderer = RE::BSGraphics::Renderer::GetSingleton();
 	auto& framebuffer = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kFRAMEBUFFER];
 
@@ -462,7 +500,7 @@ void EditorWindow::LoadSettings()
 
 void EditorWindow::ShowSettingsWindow()
 {
-	ImGui::Begin("Settings");
+	ImGui::Begin("Settings", &showSettingsWindow);
 
 	// Static variable to track the selected category
 	static std::string selectedOption = "Preferences";
@@ -635,5 +673,30 @@ void EditorWindow::ResumeTime()
 		calendar->timeScale->value = savedTimeScale;
 		timePaused = false;
 		logger::info("Time resumed (timescale: {})", savedTimeScale);
+	}
+}
+
+void EditorWindow::DisableVanityCamera()
+{
+	if (vanityCameraDisabled) return;
+
+	auto setting = RE::GetINISetting("fAutoVanityModeDelay:Camera");
+	if (setting) {
+		savedVanityCameraDelay = setting->GetFloat();
+		setting->data.f = 10000.0f;
+		vanityCameraDisabled = true;
+		logger::info("Vanity camera disabled (saved delay: {})", savedVanityCameraDelay);
+	}
+}
+
+void EditorWindow::RestoreVanityCamera()
+{
+	if (!vanityCameraDisabled) return;
+
+	auto setting = RE::GetINISetting("fAutoVanityModeDelay:Camera");
+	if (setting) {
+		setting->data.f = savedVanityCameraDelay;
+		vanityCameraDisabled = false;
+		logger::info("Vanity camera restored (delay: {})", savedVanityCameraDelay);
 	}
 }

@@ -1,11 +1,11 @@
-#include "Weather.h"
+#include "WeatherEditor.h"
 
 #include "Deferred.h"
 #include "State.h"
 #include "Util.h"
 #include "WeatherManager.h"
 
-#include "Editor/EditorWindow.h"
+#include "WeatherEditor/EditorWindow.h"
 
 int8_t LerpInt8_t(const int8_t oldValue, const int8_t newVal, const float lerpValue)
 {

@@ -73,29 +73,33 @@ void WeatherManager::UpdateFeatures()
 
 	// Always update if lerp factor changes or weather changed
 	if (weatherChanged || std::abs(currentWeathers.lerpFactor - lastKnownWeather.lerpFactor) > 0.001f) {
-		// Get all features and update those that support weather
+		auto* globalRegistry = WeatherVariables::GlobalWeatherRegistry::GetSingleton();
+
+		// Get all features and update those that have registered weather variables
 		for (auto* feature : Feature::GetFeatureList()) {
 			if (!feature || !feature->loaded) {
 				continue;
 			}
 
-			// Check if feature supports weather (will be added to Feature class)
-			if (feature->SupportsWeather()) {
+			std::string featureName = feature->GetShortName();
+
+			// Check if feature has registered weather variables
+			if (globalRegistry->HasWeatherSupport(featureName)) {
 				json currWeatherSettings;
 				json nextWeatherSettings;
 
 				// Load settings for current weather
 				if (currentWeathers.currentWeather) {
-					LoadSettingsFromWeather(currentWeathers.currentWeather, feature->GetShortName(), currWeatherSettings);
+					LoadSettingsFromWeather(currentWeathers.currentWeather, featureName, currWeatherSettings);
 				}
 
 				// Load settings for transitioning weather
 				if (currentWeathers.lastWeather && currentWeathers.lerpFactor < 1.0f) {
-					LoadSettingsFromWeather(currentWeathers.lastWeather, feature->GetShortName(), nextWeatherSettings);
+					LoadSettingsFromWeather(currentWeathers.lastWeather, featureName, nextWeatherSettings);
 				}
 
-				// Let the feature update its settings based on weather transition
-				feature->UpdateSettingsFromWeathers(currWeatherSettings, nextWeatherSettings, currentWeathers.lerpFactor);
+				// Let the global registry handle variable interpolation
+				globalRegistry->UpdateFeatureFromWeathers(featureName, currWeatherSettings, nextWeatherSettings, currentWeathers.lerpFactor);
 			}
 		}
 

@@ -350,6 +350,9 @@ void State::Load(ConfigMode a_configMode, bool a_allowReload)
 					// Load base feature settings from merged config (default + user)
 					feature->Load(settings);
 
+					// Register weather variables (features opt-in by implementing this)
+					feature->RegisterWeatherVariables();
+
 					// Apply new/changed feature-specific overrides if any
 					if (overridesDiscovered > 0) {
 						json featureJson;

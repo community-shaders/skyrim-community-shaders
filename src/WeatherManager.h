@@ -1,5 +1,6 @@
 #pragma once
 
+#include "WeatherVariableRegistry.h"
 #include <map>
 #include <string>
 
