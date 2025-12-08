@@ -186,10 +186,12 @@ public:
 	{
 		UIIcon saveSettings;
 		UIIcon loadSettings;
+		UIIcon deleteSettings;
 		UIIcon clearCache;
 		UIIcon logo;                  // New logo icon
 		UIIcon search;                // Search icon for search bars
 		UIIcon featureSettingRevert;  // Feature revert settings icon
+		UIIcon applyToGame;           // Apply changes to game icon (weather editor)
 
 		// Social media/external link icons
 		UIIcon discord;

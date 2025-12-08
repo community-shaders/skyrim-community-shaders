@@ -1,3 +1,5 @@
+#pragma once
+
 #include "Util.h"
 
 void Float3ToColor(const float3& newColor, RE::Color& color);

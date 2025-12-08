@@ -179,6 +179,7 @@ Menu::~Menu()
 	uiIcons.clearCache.Release();
 	uiIcons.logo.Release();
 	uiIcons.featureSettingRevert.Release();
+	uiIcons.applyToGame.Release();
 	uiIcons.discord.Release();
 	uiIcons.characters.Release();
 	uiIcons.display.Release();
@@ -730,7 +731,7 @@ void Menu::ProcessInputEventQueue()
 						}
 					}
 				}
-				if (key == VK_ESCAPE && IsEnabled) {
+				if (key == VK_ESCAPE && IsEnabled && !EditorWindow::GetSingleton()->open) {
 					IsEnabled = false;
 				}
 			}

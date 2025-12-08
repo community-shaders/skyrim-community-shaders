@@ -61,6 +61,7 @@ public:
 
 	void Save();
 	void Load();
+	void Delete();
 
 	virtual void LoadSettings() = 0;
 	virtual void SaveSettings() = 0;

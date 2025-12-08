@@ -507,6 +507,19 @@ void WeatherPicker::RenderWeatherControls(RE::Sky* sky)
 		ImGui::EndCombo();
 	}
 
+	// Instantly Change Weather button
+	if (ImGui::Button("Instantly Change Weather", ImVec2(-1, 0))) {
+		if (s_selectedWeatherIdx >= 0 && s_selectedWeatherIdx < s_filteredWeathers.size()) {
+			auto selectedWeather = s_filteredWeathers[s_selectedWeatherIdx];
+			sky->ForceWeather(selectedWeather, false);
+			logger::info("[WeatherPicker] Instantly forced weather to: {}", Util::FormatWeather(selectedWeather));
+		}
+	}
+	if (auto _tt = Util::HoverTooltipWrapper()) {
+		Util::DrawMultiLineTooltip({ "Immediately forces the selected weather without transition.",
+			"This bypasses the normal transition system for instant testing." });
+	}
+
 	ImGui::Spacing();
 }
 

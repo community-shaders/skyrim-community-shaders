@@ -177,12 +177,14 @@ namespace Util
 		logger::info("InitializeMenuIcons: Loading icons from base path: {}", basePath);
 
 		// Initialize all texture pointers to nullptr for safe cleanup
-		std::array<ID3D11ShaderResourceView**, 16> texturePointers = {
+		std::array<ID3D11ShaderResourceView**, 18> texturePointers = {
 			&menu->uiIcons.saveSettings.texture,
 			&menu->uiIcons.loadSettings.texture,
+			&menu->uiIcons.deleteSettings.texture,
 			&menu->uiIcons.clearCache.texture,
 			&menu->uiIcons.logo.texture,
 			&menu->uiIcons.featureSettingRevert.texture,
+			&menu->uiIcons.applyToGame.texture,
 			&menu->uiIcons.discord.texture,
 			&menu->uiIcons.characters.texture,
 			&menu->uiIcons.display.texture,
@@ -228,9 +230,11 @@ namespace Util
 		// Load action icons
 		loadIconWithLogging(basePath + "Action Icons\\save-settings.png", &menu->uiIcons.saveSettings.texture, menu->uiIcons.saveSettings.size, "save-settings");
 		loadIconWithLogging(basePath + "Action Icons\\load-settings.png", &menu->uiIcons.loadSettings.texture, menu->uiIcons.loadSettings.size, "load-settings");
+		loadIconWithLogging(basePath + "Action Icons\\delete.png", &menu->uiIcons.deleteSettings.texture, menu->uiIcons.deleteSettings.size, "delete");
 		loadIconWithLogging(basePath + "Action Icons\\clear-cache.png", &menu->uiIcons.clearCache.texture, menu->uiIcons.clearCache.size, "clear-cache");
 		loadIconWithLogging(basePath + "Community Shaders Logo\\cs-logo.png", &menu->uiIcons.logo.texture, menu->uiIcons.logo.size, "logo");
 		loadIconWithLogging(basePath + "Action Icons\\restore-settings.png", &menu->uiIcons.featureSettingRevert.texture, menu->uiIcons.featureSettingRevert.size, "restore-settings");
+		loadIconWithLogging(basePath + "Action Icons\\apply-to-game.png", &menu->uiIcons.applyToGame.texture, menu->uiIcons.applyToGame.size, "apply-to-game");
 		loadIconWithLogging(basePath + "Action Icons\\discord.png", &menu->uiIcons.discord.texture, menu->uiIcons.discord.size, "discord");
 
 		// Load category icons in a more compact way
@@ -397,7 +401,7 @@ namespace Util
 			categoryIcon = menu.grass.texture;
 		} else if (strcmp(categoryName, "Lighting") == 0) {
 			categoryIcon = menu.lighting.texture;
-		} else if (strcmp(categoryName, "Sky") == 0) {
+		} else if (strcmp(categoryName, "Sky & Weather") == 0) {
 			categoryIcon = menu.sky.texture;
 		} else if (strcmp(categoryName, "Landscape & Textures") == 0) {
 			categoryIcon = menu.landscape.texture;

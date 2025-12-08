@@ -2,6 +2,7 @@
 
 #include "Buffer.h"
 
+#include "Weather/ImageSpaceWidget.h"
 #include "Weather/LightingTemplateWidget.h"
 #include "Weather/WeatherWidget.h"
 #include "Weather/WorldSpaceWidget.h"
@@ -25,6 +26,7 @@ public:
 	std::vector<Widget*> weatherWidgets;
 	std::vector<Widget*> worldSpaceWidgets;
 	std::vector<Widget*> lightingTemplateWidgets;
+	std::vector<Widget*> imageSpaceWidgets;
 
 	// Weather locking for editing
 	RE::TESWeather* lockedWeather = nullptr;
@@ -62,25 +64,40 @@ public:
 	void DisableVanityCamera();
 	void RestoreVanityCamera();
 
+	// Notification system
+	struct Notification
+	{
+		std::string message;
+		ImVec4 color;
+		float startTime;
+		float duration;
+	};
+	std::vector<Notification> notifications;
+
+	void ShowNotification(const std::string& message, const ImVec4& color = ImVec4(1.0f, 0.0f, 0.0f, 1.0f), float duration = 3.0f);
+	void RenderNotifications();
+
 	struct Settings
 	{
 		std::map<std::string, ImVec4> recordMarkers = {
-			{ "TO-DO", { 0.9f, 0.15, 0.15, 1 } },
-			{ "In-progress", { 0.5f, 0.8f, 0.0f, 1 } },
-			{ "Done", { 0.05f, 0.85f, 0.3f, 1 } }
+			{ "To Do", { 1.0f, 0.0f, 0.0f, 1.0f } },
+			{ "In Progress", { 190.0f / 255.0f, 155.0f / 255.0f, 0.0f, 1.0f } },
+			{ "Complete", { 0.0f, 130.0f / 255.0f, 0.0f, 1.0f } }
 		};
 		std::map<std::string, std::string> markedRecords;
 		bool autoApplyChanges = true;
+		bool suppressDeleteWarning = false;
 	};
 
 	Settings settings;
+
+	void Save();
 
 private:
 	void SaveAll();
 	void SaveSettings();
 	void LoadSettings();
 	void ShowSettingsWindow();
-	void Save();
 	void Load();
 	json j;
 	std::string settingsFilename = "EditorSettings";

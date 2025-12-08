@@ -46,6 +46,31 @@ public:
 		float cloudAlpha[ColorTimes::kTotal];
 	};
 
+	struct ImageSpaceSettings
+	{
+		// HDR Settings
+		float hdrEyeAdaptSpeed = 0.0f;
+		float hdrBloomBlurRadius = 0.0f;
+		float hdrBloomThreshold = 0.0f;
+		float hdrBloomScale = 0.0f;
+		float hdrSunlightScale = 0.0f;
+		float hdrSkyScale = 0.0f;
+
+		// Cinematic Settings
+		float cinematicSaturation = 0.0f;
+		float cinematicBrightness = 0.0f;
+		float cinematicContrast = 0.0f;
+
+		// Tint Colors
+		float3 tintColor = { 1.0f, 1.0f, 1.0f };
+		float tintAmount = 0.0f;
+
+		// Depth of Field
+		float dofStrength = 0.0f;
+		float dofDistance = 0.0f;
+		float dofRange = 0.0f;
+	};
+
 	struct Settings
 	{
 		std::string parent = "None";
@@ -57,6 +82,9 @@ public:
 		Atmosphere atmosphereColors[ColorTypes::kTotal];
 		DALC dalc[ColorTimes::kTotal];
 		Cloud clouds[TESWeather::kTotalLayers];
+
+		// ImageSpace settings for each time of day
+		ImageSpaceSettings imageSpaces[ColorTimes::kTotal];
 
 		// Per-feature settings storage
 		std::map<std::string, json> featureSettings;
@@ -81,11 +109,16 @@ public:
 	void SaveFeatureSettings();
 	void LoadFeatureSettings();
 
+	// ImageSpace methods
+	void LoadImageSpaceValues();
+	void SetImageSpaceValues();
+
 private:
 	void DrawDALCSettings();
 	void DrawWeatherColorSettings();
 	void DrawCloudSettings();
 	void DrawFeatureSettings();
+	void DrawImageSpaceSettings();
 	void DrawProperties(std::string category, std::map<std::string, int> properties);
 	void InheritFromParent(const std::string& property);
 };

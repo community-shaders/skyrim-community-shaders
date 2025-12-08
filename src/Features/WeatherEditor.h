@@ -16,15 +16,14 @@ public:
 	virtual inline std::string GetName() override { return "Weather Editor"; }
 	virtual inline std::string GetShortName() override { return "WeatherEditor"; }
 	virtual inline std::string_view GetShaderDefineName() override { return "WEATHER"; }
-	virtual inline std::string_view GetCategory() const override { return "Debug"; }
+	virtual inline std::string_view GetCategory() const override { return "Sky & Weather"; }
 	virtual inline std::pair<std::string, std::vector<std::string>> GetFeatureSummary() override
 	{
 		return {
-			"Development tool for editing weather settings and testing IBL.",
+			"Development tool for editing weather, testing weather transitions, and managing weather-related feature settings.",
 			{ "Provides weather editing functionality",
-				"Includes save/load settings controls",
-				"Real-time weather transition monitoring",
-				"Debug feature for development" }
+				"Includes dynamic saving and loading of imagespace, weather and lighting template settings.",
+				"Real-time editing and previewing of effects" }
 		};
 	}
 
@@ -43,5 +42,4 @@ public:
 
 private:
 	void DrawWeatherStatusPanel();
-	void DrawQuickWeatherSpawner();
 };
