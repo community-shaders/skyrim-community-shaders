@@ -75,7 +75,6 @@ find_package(efsw CONFIG REQUIRED)
 find_package(Tracy CONFIG REQUIRED)
 find_package(directx-headers CONFIG REQUIRED)
 add_subdirectory(${CMAKE_SOURCE_DIR}/cmake/Streamline)
-include(XeSS-SDK)
 
 find_path(DETOURS_INCLUDE_DIRS "detours/detours.h")
 find_library(DETOURS_LIBRARY detours REQUIRED)
@@ -234,6 +233,27 @@ if(CLANG_FORMAT_PATH)
         COMMENT "Running clang format for cpp and hlsl files"
     )
 endif()
+
+# #######################################################################################################################
+# # HLSL additional include directories for VS intellisense
+# #######################################################################################################################
+
+set(HLSL_INCLUDE_DIRS ${FEATURE_SHADER_DIRS} "package/Shaders")
+
+set(HLSL_INCLUDE_JSON "")
+foreach(dir IN LISTS HLSL_INCLUDE_DIRS)
+    if(HLSL_INCLUDE_JSON STREQUAL "")
+        set(HLSL_INCLUDE_JSON "    \"${dir}\"")
+    else()
+        set(HLSL_INCLUDE_JSON "${HLSL_INCLUDE_JSON},\n    \"${dir}\"")
+    endif()
+endforeach()
+
+configure_file(
+    "${CMAKE_CURRENT_SOURCE_DIR}/cmake/shadertoolsconfig.json.in"
+    "${CMAKE_CURRENT_SOURCE_DIR}/shadertoolsconfig.json"
+    @ONLY
+)
 
 # #######################################################################################################################
 # # Shader validation config generation
@@ -826,9 +846,11 @@ set(AIO_PACKAGE "${DIST_PATH}/${PROJECT_NAME}_AIO-${UTC_NOW}.7z")
 add_custom_command(
     OUTPUT ${AIO_PACKAGE}
     DEPENDS ${CORE_SOURCES}
+    COMMAND ${CMAKE_COMMAND} -E make_directory ${AIO_DIR}
     COMMAND ${CMAKE_COMMAND} --install ${CMAKE_BINARY_DIR} --prefix ${AIO_DIR}
-    COMMAND ${CMAKE_COMMAND} -E tar cfv ${AIO_PACKAGE} --format=7zip -- .
-    WORKING_DIRECTORY ${AIO_DIR}
+    COMMAND
+        ${CMAKE_COMMAND} -E chdir ${AIO_DIR} ${CMAKE_COMMAND} -E tar cfv
+        ${AIO_PACKAGE} --format=7zip -- .
     COMMENT "Creating AIO zip package (manual)"
 )
 add_custom_target("Package-AIO-Manual" DEPENDS ${AIO_PACKAGE})

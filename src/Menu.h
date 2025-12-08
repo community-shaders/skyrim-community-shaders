@@ -134,8 +134,8 @@ public:
 	bool settingSkipCompilationKey = false;
 	bool settingsEffectsToggle = false;
 	bool settingOverlayToggleKey = false;
-	uint32_t priorShaderKey = VK_PRIOR;  // used for blocking shaders in debugging
-	uint32_t nextShaderKey = VK_NEXT;    // used for blocking shaders in debugging
+	bool settingShaderBlockPrevKey = false;  // Debug: capture shader block prev key
+	bool settingShaderBlockNextKey = false;  // Debug: capture shader block next key
 
 	// Font caching (made public for ThemeManager and OverlayRenderer access)
 	// Marked mutable because they're cache fields that may be updated from const methods
@@ -365,6 +365,9 @@ public:
 		uint32_t SkipCompilationKey = VK_ESCAPE;
 		uint32_t EffectToggleKey = VK_MULTIPLY;  // toggle all effects
 		uint32_t OverlayToggleKey = VK_F10;      // Global overlay toggle key for all overlays
+		uint32_t ShaderBlockPrevKey = VK_PRIOR;  // Debug: cycle backward through shaders (PageUp)
+		uint32_t ShaderBlockNextKey = VK_NEXT;   // Debug: cycle forward through shaders (PageDown)
+		bool EnableShaderBlocking = false;       // Enable shader blocking hotkeys for debugging
 		bool FirstTimeSetupCompleted = false;    // Track if first-time setup has been completed
 		ThemeSettings Theme;
 		std::string SelectedThemePreset = "";  // Currently selected theme preset (empty = custom/user theme)
