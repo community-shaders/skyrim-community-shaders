@@ -39,7 +39,7 @@ void Widget::Save()
 		}
 
 		logger::info("{}: Saving settings file: {}", GetEditorID(), file);
-		
+
 		// Write with indentation for readability
 		settingsFile << js.dump(2);
 		settingsFile.flush();
@@ -52,7 +52,7 @@ void Widget::Save()
 
 		settingsFile.close();
 		logger::info("{}: Successfully saved settings", GetEditorID());
-		
+
 	} catch (const nlohmann::json::exception& e) {
 		logger::error("{}: JSON error while saving settings: {}", GetEditorID(), e.what());
 		settingsFile.close();
@@ -84,7 +84,7 @@ void Widget::Load()
 	try {
 		settingsFile >> js;
 		settingsFile.close();
-		
+
 		// Validate that we loaded valid JSON
 		if (js.is_null()) {
 			logger::warn("{}: Loaded JSON is null, file may be empty or invalid", filePath);
@@ -94,9 +94,9 @@ void Widget::Load()
 				3.0f);
 			return;
 		}
-		
+
 		logger::info("{}: Successfully loaded settings file", GetEditorID());
-		
+
 	} catch (const nlohmann::json::parse_error& e) {
 		logger::error("Error parsing settings for file ({}) : {}\n", filePath, e.what());
 		logger::error("Parse error at byte {}: {}", e.byte, e.what());
@@ -130,13 +130,13 @@ void Widget::Delete()
 	try {
 		std::filesystem::remove(filePath);
 		logger::info("Deleted settings file: {}", filePath);
-		
+
 		// Clear the in-memory JSON data
 		js = json();
-		
+
 		// Reload settings from vanilla/mod defaults
 		LoadSettings();
-		
+
 		EditorWindow::GetSingleton()->ShowNotification(
 			std::format("Deleted {} - reverted to vanilla values", GetEditorID()),
 			ImVec4(0.0f, 1.0f, 0.0f, 1.0f),
@@ -166,7 +166,7 @@ void Widget::DrawMenu()
 					ImGui::OpenPopup("ConfirmDelete");
 				}
 			}
-			
+
 			// Confirmation popup for delete
 			if (ImGui::BeginPopupModal("ConfirmDelete", NULL, ImGuiWindowFlags_AlwaysAutoResize)) {
 				ImGui::Text("Are you sure you want to delete this file?");
@@ -174,15 +174,15 @@ void Widget::DrawMenu()
 				ImGui::Spacing();
 				ImGui::Separator();
 				ImGui::Spacing();
-				
+
 				auto& settings = EditorWindow::GetSingleton()->settings;
 				if (ImGui::Checkbox("Don't show this warning again", &settings.suppressDeleteWarning)) {
 					// Save the preference immediately
 					EditorWindow::GetSingleton()->Save();
 				}
-				
+
 				ImGui::Spacing();
-				
+
 				if (ImGui::Button("Yes", ImVec2(120, 0))) {
 					Delete();
 					ImGui::CloseCurrentPopup();
@@ -194,7 +194,7 @@ void Widget::DrawMenu()
 				}
 				ImGui::EndPopup();
 			}
-			
+
 			ImGui::EndMenu();
 		}
 		ImGui::EndMenuBar();

@@ -46,13 +46,12 @@ void WeatherWidget::DrawWidget()
 {
 	ImGui::SetNextWindowSizeConstraints(ImVec2(600, 0), ImVec2(FLT_MAX, FLT_MAX));
 	if (ImGui::Begin(GetEditorID().c_str(), &open, ImGuiWindowFlags_NoSavedSettings)) {
-
 		auto editorWindow = EditorWindow::GetSingleton();
 		bool isLocked = editorWindow->IsWeatherLocked() && editorWindow->GetLockedWeather() == weather;
 
 		// Weather lock and time controls (inline)
 		float buttonWidth = ImGui::GetContentRegionAvail().x * 0.49f;
-		
+
 		// Weather lock controls
 		if (isLocked) {
 			if (ImGui::Button("Unlock Weather", ImVec2(buttonWidth, 0))) {
@@ -154,7 +153,7 @@ void WeatherWidget::DrawWidget()
 			bool hasApplyButton = !editorWindow->settings.autoApplyChanges;
 			int buttonCount = hasApplyButton ? 4 : 3;
 			float textButtonWidth = ImGui::GetContentRegionAvail().x / buttonCount;
-			
+
 			// Apply button - only show when auto-apply is disabled
 			if (hasApplyButton) {
 				ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.2f, 0.6f, 0.9f, 1.0f));
@@ -167,7 +166,7 @@ void WeatherWidget::DrawWidget()
 				}
 				ImGui::SameLine();
 			}
-			
+
 			// Save button - always visible
 			if (ImGui::Button("Save", ImVec2(textButtonWidth * 0.97f, 0))) {
 				Save();
@@ -175,9 +174,9 @@ void WeatherWidget::DrawWidget()
 			if (ImGui::IsItemHovered()) {
 				ImGui::SetTooltip("Save to file");
 			}
-			
+
 			ImGui::SameLine();
-			
+
 			// Load button - always visible
 			if (ImGui::Button("Load", ImVec2(textButtonWidth * 0.97f, 0))) {
 				Load();
@@ -185,9 +184,9 @@ void WeatherWidget::DrawWidget()
 			if (ImGui::IsItemHovered()) {
 				ImGui::SetTooltip("Load from file");
 			}
-			
+
 			ImGui::SameLine();
-			
+
 			// Delete button - always visible
 			float deleteIconSize = ImGui::GetFrameHeight();
 			ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.7f, 0.3f, 0.2f, 1.0f));
@@ -204,7 +203,7 @@ void WeatherWidget::DrawWidget()
 				ImGui::SetTooltip("Delete saved file and revert to defaults");
 			}
 		}
-		
+
 		// Confirmation popup for delete
 		if (ImGui::BeginPopupModal("ConfirmDelete", NULL, ImGuiWindowFlags_AlwaysAutoResize)) {
 			ImGui::Text("Are you sure you want to delete this file?");
@@ -212,14 +211,14 @@ void WeatherWidget::DrawWidget()
 			ImGui::Spacing();
 			ImGui::Separator();
 			ImGui::Spacing();
-			
+
 			if (ImGui::Checkbox("Don't show this warning again", &editorWindow->settings.suppressDeleteWarning)) {
 				// Save the preference immediately
 				editorWindow->Save();
 			}
-			
+
 			ImGui::Spacing();
-			
+
 			if (ImGui::Button("Yes", ImVec2(120, 0))) {
 				Delete();
 				ImGui::CloseCurrentPopup();
@@ -231,7 +230,7 @@ void WeatherWidget::DrawWidget()
 			}
 			ImGui::EndPopup();
 		}
-		
+
 		ImGui::Separator();
 
 		auto& widgets = editorWindow->weatherWidgets;
@@ -330,12 +329,12 @@ void WeatherWidget::DrawWidget()
 void WeatherWidget::LoadSettings()
 {
 	bool hadErrors = false;
-	
+
 	if (!js.empty()) {
 		try {
 			// Attempt to load settings from JSON
 			settings = js;
-			
+
 			// Validate that critical fields were loaded correctly
 			if (js.contains("weatherProperties") && settings.weatherProperties.empty() && !js["weatherProperties"].empty()) {
 				logger::warn("Weather {}: weatherProperties loaded but appears empty, reverting to vanilla values", GetEditorID());
@@ -349,7 +348,7 @@ void WeatherWidget::LoadSettings()
 				logger::warn("Weather {}: fogProperties loaded but appears empty, reverting to vanilla values", GetEditorID());
 				hadErrors = true;
 			}
-			
+
 			if (hadErrors) {
 				// Fallback to vanilla/game values
 				LoadWeatherValues();
@@ -364,7 +363,7 @@ void WeatherWidget::LoadSettings()
 					settings.weatherColors.size(),
 					settings.fogProperties.size());
 			}
-			
+
 		} catch (const nlohmann::json::exception& e) {
 			logger::error("Weather {}: Failed to deserialize settings from JSON: {}", GetEditorID(), e.what());
 			logger::error("JSON content: {}", js.dump(2));
@@ -387,17 +386,17 @@ void WeatherWidget::LoadSettings()
 void WeatherWidget::SaveSettings()
 {
 	SaveFeatureSettings();
-	
+
 	try {
 		js = settings;
-		
+
 		// Log what we're saving for debugging
 		logger::info("Weather {}: Saving settings - {} weather properties, {} colors, {} fog properties",
 			GetEditorID(),
 			settings.weatherProperties.size(),
 			settings.weatherColors.size(),
 			settings.fogProperties.size());
-			
+
 		// Validate serialization worked
 		if (js.is_null()) {
 			logger::error("Weather {}: Serialization produced null JSON!", GetEditorID());
@@ -408,7 +407,7 @@ void WeatherWidget::SaveSettings()
 		} else if (!js.contains("clouds")) {
 			logger::error("Weather {}: Serialized JSON missing clouds field!", GetEditorID());
 		}
-		
+
 	} catch (const nlohmann::json::exception& e) {
 		logger::error("Weather {}: Failed to serialize settings to JSON: {}", GetEditorID(), e.what());
 	}
@@ -630,14 +629,18 @@ void WeatherWidget::DrawDALCSettings()
 
 			if (ImGui::CollapsingHeader(label.c_str(), ImGuiTreeNodeFlags_DefaultOpen | ImGuiTreeNodeFlags_OpenOnArrow | ImGuiTreeNodeFlags_OpenOnDoubleClick)) {
 				ImGui::Spacing();
-				if (DrawColorEdit(std::format("Specular##{}", label), settings.dalc[i].specular)) changed = true;
+				if (DrawColorEdit(std::format("Specular##{}", label), settings.dalc[i].specular))
+					changed = true;
 				ImGui::Spacing();
-				if (DrawSliderFloat(std::format("Fresnel Power##{}", label), settings.dalc[i].fresnelPower)) changed = true;
+				if (DrawSliderFloat(std::format("Fresnel Power##{}", label), settings.dalc[i].fresnelPower))
+					changed = true;
 				ImGui::Spacing();
 
 				for (int j = 0; j < 3; j++) {
-					if (DrawColorEdit(std::format("DALC X Max##{}", label), settings.dalc[i].directional[j].max)) changed = true;
-					if (DrawColorEdit(std::format("DALC X Min##{}", label), settings.dalc[i].directional[j].min)) changed = true;
+					if (DrawColorEdit(std::format("DALC X Max##{}", label), settings.dalc[i].directional[j].max))
+						changed = true;
+					if (DrawColorEdit(std::format("DALC X Min##{}", label), settings.dalc[i].directional[j].min))
+						changed = true;
 					ImGui::Spacing();
 				}
 			}
@@ -666,7 +669,8 @@ void WeatherWidget::DrawWeatherColorSettings()
 
 			if (ImGui::CollapsingHeader(colorTypeLabel.c_str(), ImGuiTreeNodeFlags_DefaultOpen | ImGuiTreeNodeFlags_OpenOnArrow | ImGuiTreeNodeFlags_OpenOnDoubleClick)) {
 				for (int j = 0; j < ColorTimes::kTotal; j++) {
-					if (DrawColorEdit(std::format("{}##{}", ColorTimeLabel(j), colorTypeLabel), settings.atmosphereColors[i].colorTimes[j])) changed = true;
+					if (DrawColorEdit(std::format("{}##{}", ColorTimeLabel(j), colorTypeLabel), settings.atmosphereColors[i].colorTimes[j]))
+						changed = true;
 					ImGui::Spacing();
 				}
 			}
@@ -694,17 +698,21 @@ void WeatherWidget::DrawCloudSettings()
 			std::string layer = std::format("Layer {}", i);
 
 			if (ImGui::CollapsingHeader(layer.c_str(), ImGuiTreeNodeFlags_OpenOnArrow | ImGuiTreeNodeFlags_OpenOnDoubleClick)) {
-				if (DrawSliderInt8(std::format("Cloud Layer Speed Y##{}", layer), settings.clouds[i].cloudLayerSpeedY)) changed = true;
+				if (DrawSliderInt8(std::format("Cloud Layer Speed Y##{}", layer), settings.clouds[i].cloudLayerSpeedY))
+					changed = true;
 				ImGui::Spacing();
-				if (DrawSliderInt8(std::format("Cloud Layer Speed X##{}", layer), settings.clouds[i].cloudLayerSpeedX)) changed = true;
+				if (DrawSliderInt8(std::format("Cloud Layer Speed X##{}", layer), settings.clouds[i].cloudLayerSpeedX))
+					changed = true;
 
 				for (int j = 0; j < ColorTimes::kTotal; j++) {
 					std::string colorTime = ColorTimeLabel(j).c_str();
 
 					if (ImGui::CollapsingHeader(colorTime.c_str(), ImGuiTreeNodeFlags_DefaultOpen | ImGuiTreeNodeFlags_OpenOnArrow | ImGuiTreeNodeFlags_OpenOnDoubleClick)) {
-						if (DrawColorEdit(std::format("Cloud Color##{}{}", colorTime, i), settings.clouds[i].color[j])) changed = true;
+						if (DrawColorEdit(std::format("Cloud Color##{}{}", colorTime, i), settings.clouds[i].color[j]))
+							changed = true;
 						ImGui::Spacing();
-						if (DrawSliderFloat(std::format("Cloud Alpha##{}{}", colorTime, i), settings.clouds[i].cloudAlpha[j])) changed = true;
+						if (DrawSliderFloat(std::format("Cloud Alpha##{}{}", colorTime, i), settings.clouds[i].cloudAlpha[j]))
+							changed = true;
 						ImGui::Spacing();
 					}
 				}
@@ -732,16 +740,20 @@ void WeatherWidget::DrawProperties(std::string category, std::map<std::string, i
 		for (auto& p : properties) {
 			switch (p.second) {
 			case 0:
-				if (DrawSliderInt8(p.first, settings.weatherProperties[p.first])) changed = true;
+				if (DrawSliderInt8(p.first, settings.weatherProperties[p.first]))
+					changed = true;
 				break;
 			case 1:
-				if (DrawColorEdit(p.first, settings.weatherColors[p.first])) changed = true;
+				if (DrawColorEdit(p.first, settings.weatherColors[p.first]))
+					changed = true;
 				break;
 			case 2:
-				if (DrawSliderUint8(p.first, settings.weatherProperties[p.first])) changed = true;
+				if (DrawSliderUint8(p.first, settings.weatherProperties[p.first]))
+					changed = true;
 				break;
 			case 3:
-				if (DrawSliderFloat(p.first, settings.fogProperties[p.first])) changed = true;
+				if (DrawSliderFloat(p.first, settings.fogProperties[p.first]))
+					changed = true;
 				break;
 			default:
 				break;
@@ -770,7 +782,7 @@ void WeatherWidget::InheritFromParent(const std::string& property)
 void WeatherWidget::SaveFeatureSettings()
 {
 	auto* weatherManager = WeatherManager::GetSingleton();
-	
+
 	for (const auto& [featureName, featureJson] : settings.featureSettings) {
 		if (!featureJson.empty()) {
 			weatherManager->SaveSettingsToWeather(weather, featureName, featureJson);
@@ -782,14 +794,14 @@ void WeatherWidget::LoadFeatureSettings()
 {
 	auto* weatherManager = WeatherManager::GetSingleton();
 	auto* globalRegistry = WeatherVariables::GlobalWeatherRegistry::GetSingleton();
-	
+
 	for (auto* feature : Feature::GetFeatureList()) {
 		if (!feature || !feature->loaded) {
 			continue;
 		}
 
 		std::string featureName = feature->GetShortName();
-		
+
 		// Check if feature has registered weather variables
 		if (!globalRegistry->HasWeatherSupport(featureName)) {
 			continue;
@@ -827,7 +839,7 @@ void WeatherWidget::DrawFeatureSettings()
 		}
 
 		std::string featureName = feature->GetShortName();
-		
+
 		// Check if feature has registered weather variables
 		if (!globalRegistry->HasWeatherSupport(featureName)) {
 			continue;
@@ -845,7 +857,7 @@ void WeatherWidget::DrawFeatureSettings()
 
 			if (hasSettings) {
 				ImGui::TextColored({ 0.0f, 1.0f, 0.0f, 1.0f }, "Has weather-specific settings");
-				
+
 				if (ImGui::Button("Clear Settings")) {
 					settings.featureSettings[featureName] = json::object();
 				}
@@ -866,8 +878,9 @@ void WeatherWidget::DrawFeatureSettings()
 			}
 
 			ImGui::Spacing();
-			ImGui::TextWrapped("Note: Feature settings should be configured through the feature's own settings panel. "
-			                   "This section shows which features have per-weather overrides.");
+			ImGui::TextWrapped(
+				"Note: Feature settings should be configured through the feature's own settings panel. "
+				"This section shows which features have per-weather overrides.");
 
 			ImGui::TreePop();
 		}

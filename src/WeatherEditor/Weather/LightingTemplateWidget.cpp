@@ -116,33 +116,41 @@ void LightingTemplateWidget::DrawBasicSettings()
 
 	if (ImGui::CollapsingHeader("Ambient & Directional", ImGuiTreeNodeFlags_DefaultOpen)) {
 		ImGui::Spacing();
-		if (DrawColorEdit("Ambient Color", settings.ambient)) changed = true;
+		if (DrawColorEdit("Ambient Color", settings.ambient))
+			changed = true;
 		ImGui::Spacing();
-		if (DrawColorEdit("Directional Color", settings.directional)) changed = true;
+		if (DrawColorEdit("Directional Color", settings.directional))
+			changed = true;
 		ImGui::Spacing();
 	}
 
 	if (ImGui::CollapsingHeader("Directional Settings", ImGuiTreeNodeFlags_DefaultOpen)) {
 		ImGui::Spacing();
-		if (DrawSliderFloat("Directional XY", settings.directionalXY)) changed = true;
+		if (DrawSliderFloat("Directional XY", settings.directionalXY))
+			changed = true;
 		ImGui::Spacing();
-		if (DrawSliderFloat("Directional Z", settings.directionalZ)) changed = true;
+		if (DrawSliderFloat("Directional Z", settings.directionalZ))
+			changed = true;
 		ImGui::Spacing();
-		if (DrawSliderFloat("Directional Fade", settings.directionalFade)) changed = true;
+		if (DrawSliderFloat("Directional Fade", settings.directionalFade))
+			changed = true;
 		ImGui::Spacing();
 	}
 
 	if (ImGui::CollapsingHeader("Light Fade", ImGuiTreeNodeFlags_DefaultOpen)) {
 		ImGui::Spacing();
-		if (DrawSliderFloat("Light Fade Start", settings.lightFadeStart)) changed = true;
+		if (DrawSliderFloat("Light Fade Start", settings.lightFadeStart))
+			changed = true;
 		ImGui::Spacing();
-		if (DrawSliderFloat("Light Fade End", settings.lightFadeEnd)) changed = true;
+		if (DrawSliderFloat("Light Fade End", settings.lightFadeEnd))
+			changed = true;
 		ImGui::Spacing();
 	}
 
 	if (ImGui::CollapsingHeader("Other", ImGuiTreeNodeFlags_DefaultOpen)) {
 		ImGui::Spacing();
-		if (DrawSliderFloat("Clip Distance", settings.clipDist)) changed = true;
+		if (DrawSliderFloat("Clip Distance", settings.clipDist))
+			changed = true;
 		ImGui::Spacing();
 	}
 
@@ -156,21 +164,27 @@ void LightingTemplateWidget::DrawFogSettings()
 	bool changed = false;
 
 	ImGui::Spacing();
-	if (DrawColorEdit("Fog Color Near", settings.fogColorNear)) changed = true;
+	if (DrawColorEdit("Fog Color Near", settings.fogColorNear))
+		changed = true;
 	ImGui::Spacing();
-	if (DrawColorEdit("Fog Color Far", settings.fogColorFar)) changed = true;
-	ImGui::Spacing();
-
-	ImGui::Spacing();
-	if (DrawSliderFloat("Fog Near", settings.fogNear)) changed = true;
-	ImGui::Spacing();
-	if (DrawSliderFloat("Fog Far", settings.fogFar)) changed = true;
+	if (DrawColorEdit("Fog Color Far", settings.fogColorFar))
+		changed = true;
 	ImGui::Spacing();
 
 	ImGui::Spacing();
-	if (DrawSliderFloat("Fog Power", settings.fogPower)) changed = true;
+	if (DrawSliderFloat("Fog Near", settings.fogNear))
+		changed = true;
 	ImGui::Spacing();
-	if (DrawSliderFloat("Fog Clamp", settings.fogClamp)) changed = true;
+	if (DrawSliderFloat("Fog Far", settings.fogFar))
+		changed = true;
+	ImGui::Spacing();
+
+	ImGui::Spacing();
+	if (DrawSliderFloat("Fog Power", settings.fogPower))
+		changed = true;
+	ImGui::Spacing();
+	if (DrawSliderFloat("Fog Clamp", settings.fogClamp))
+		changed = true;
 	ImGui::Spacing();
 
 	if (changed && EditorWindow::GetSingleton()->settings.autoApplyChanges) {
@@ -183,17 +197,21 @@ void LightingTemplateWidget::DrawDALCSettings()
 	bool changed = false;
 
 	ImGui::Spacing();
-	if (DrawColorEdit("Specular", settings.dalc.specular)) changed = true;
+	if (DrawColorEdit("Specular", settings.dalc.specular))
+		changed = true;
 	ImGui::Spacing();
-	if (DrawSliderFloat("Fresnel Power", settings.dalc.fresnelPower)) changed = true;
+	if (DrawSliderFloat("Fresnel Power", settings.dalc.fresnelPower))
+		changed = true;
 	ImGui::Spacing();
 
 	for (int j = 0; j < 3; j++) {
 		const char* labels[] = { "X", "Y", "Z" };
 		ImGui::Separator();
 		ImGui::Text("Directional %s", labels[j]);
-		if (DrawColorEdit(std::format("Max##{}", labels[j]), settings.dalc.directional[j].max)) changed = true;
-		if (DrawColorEdit(std::format("Min##{}", labels[j]), settings.dalc.directional[j].min)) changed = true;
+		if (DrawColorEdit(std::format("Max##{}", labels[j]), settings.dalc.directional[j].max))
+			changed = true;
+		if (DrawColorEdit(std::format("Min##{}", labels[j]), settings.dalc.directional[j].min))
+			changed = true;
 		ImGui::Spacing();
 	}
 
