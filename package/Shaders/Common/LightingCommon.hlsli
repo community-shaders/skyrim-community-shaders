@@ -25,23 +25,23 @@ struct IndirectContext
 	float3 worldNormal;
 	float3 vertexNormal;
 	float3 viewDir;
-}
+};
 
 struct DirectLightingOutput
 {
-	float3 diffuse = 0;
-	float3 specular = 0;
-	float3 transmission = 0;
+	float3 diffuse;
+	float3 specular;
+	float3 transmission;
 #if defined(TRUE_PBR)
-	float3 coatDiffuse = 0;
+	float3 coatDiffuse;
 #endif
 };
 
 struct IndirectLobeWeights
 {
-	float3 diffuse = 0;
-	float3 specular = 0;
-}
+	float3 diffuse;
+	float3 specular;
+};
 
 #if defined(TRUE_PBR)
 #	if defined(GLINT)
@@ -56,40 +56,57 @@ namespace Glints
 
 struct MaterialProperties
 {
-	float3 BaseColor = 0;
+	float3 BaseColor;
 #if !defined(TRUE_PBR)
-	float Shininess = 0;
-	float Glossiness = 0;
-	float3 SpecularColor = 0;
+	float Shininess;
+	float Glossiness;
+	float3 SpecularColor;
 #	if (defined(RIM_LIGHTING) || defined(SOFT_LIGHTING) || defined(LOAD_SOFT_LIGHTING))
-    float3 rimSoftLightColor = 0;
+    float3 rimSoftLightColor;
 #   endif
-	float Roughness = 1;
-	float3 F0 = 0;
+#	if defined(BACK_LIGHTING)
+	float3 backLightColor;
+#	endif
+	float Roughness;
+	float3 F0;
 #else
-	float Roughness = 1;
-	float Metallic = 0;
-	float AO = 1;
-	float3 F0 = 0;
-	float3 SubsurfaceColor = 0;
-	float Thickness = 0;
-	float3 CoatColor = 0;
-	float CoatStrength = 0;
-	float CoatRoughness = 0;
-	float3 CoatF0 = 0;
-	float3 FuzzColor = 0;
-	float FuzzWeight = 0;
-	float GlintScreenSpaceScale = 1.5;
-	float GlintLogMicrofacetDensity = 1.0;
-	float GlintMicrofacetRoughness = 0.015;
-	float GlintDensityRandomization = 2.0;
+	float Roughness;
+	float Metallic;
+	float AO;
+	float3 F0;
+	float3 SubsurfaceColor;
+	float Thickness;
+	float3 CoatColor;
+	float CoatStrength;
+	float CoatRoughness;
+	float3 CoatF0;
+	float3 FuzzColor;
+	float FuzzWeight;
+	float GlintScreenSpaceScale;
+	float GlintLogMicrofacetDensity;
+	float GlintMicrofacetRoughness;
+	float GlintDensityRandomization;
 	Glints::GlintCachedVars GlintCache;
-	float Noise = 0;
+	float Noise;
 #endif
 };
 
 float ShininessToRoughness(float shininess)
 {
 	return pow(abs(2.0 / (shininess + 2.0)), 0.25);
+}
+
+float3x3 ReconstructTBN(float3 worldPos, float3 worldNormal, float2 uv)
+{
+	float3 dFdx = ddx(worldPos);
+	float3 dFdy = ddy(worldPos);
+	float2 dUVdx = ddx(uv);
+	float2 dUVdy = ddy(uv);
+	float3 tangent = normalize(dFdx * dUVdy.y - dFdy * dUVdx.y);
+	float3 bitangent = normalize(dFdy * dUVdx.x - dFdx * dUVdy.x);
+	tangent = normalize(tangent - worldNormal * dot(worldNormal, tangent));
+	bitangent = normalize(bitangent - worldNormal * dot(worldNormal, bitangent));
+	
+	return float3x3(tangent, bitangent, normalize(worldNormal));
 }
 #endif

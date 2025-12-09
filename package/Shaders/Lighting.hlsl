@@ -1989,6 +1989,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 
 #	if defined(MODELSPACENORMALS) && !defined(SKINNED)
 	float3 worldNormal = normal.xyz;
+	float3x3 tbnTr = ReconstructTBN(input.WorldPosition.xyz, worldNormal, screenUV);
 #	else
 	float3 worldNormal = normalize(mul(tbn, normal.xyz));
 
@@ -2113,7 +2114,10 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	}
 #	endif
 
-	MaterialProperties material;
+	MaterialProperties material = (MaterialProperties)0;
+
+	material.F0 = 0;
+	material.Roughness = 1;
 
 #	if defined(TRUE_PBR)
 	material.Noise = screenNoise;
@@ -2130,7 +2134,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 
 #		if defined(GLINT)
 	float glintNoise = Random::R1Modified(float(SharedData::FrameCount), (Random::pcg2d(uint2(input.Position.xy)) / 4294967296.0).x);
-	PBR::Glints::PrecomputeGlints(glintNoise, uvOriginal, ddx(uvOriginal), ddy(uvOriginal), material.GlintScreenSpaceScale, material.GlintCache);
+	Glints::PrecomputeGlints(glintNoise, uvOriginal, ddx(uvOriginal), ddy(uvOriginal), material.GlintScreenSpaceScale, material.GlintCache);
 #		endif
 
 	baseColor.xyz *= 1 - material.Metallic;
@@ -2191,19 +2195,28 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #		endif
 #	else
 	material.BaseColor = baseColor.xyz;
+#		if defined(SPECULAR)
 	material.Shininess = shininess;
 	material.Glossiness = glossiness;
 	material.SpecularColor = SpecularColor.xyz;
+#		else
+	material.Shininess = 0;
+	material.Glossiness = 0;
+	material.SpecularColor = 0;
+#		endif
 #	    if (defined(RIM_LIGHTING) || defined(SOFT_LIGHTING) || defined(LOAD_SOFT_LIGHTING))
     material.rimSoftLightColor = rimSoftLightColor.xyz;
 #       endif
+#		if defined(BACK_LIGHTING)
+	material.backLightColor = backLightColor.xyz;
+#		endif
 #	endif  // TRUE_PBR
 
 #	if defined(CS_HAIR) && defined(HAIR)
 	if (SharedData::hairSpecularSettings.Enabled) {
 		material.Shininess = SharedData::hairSpecularSettings.HairGlossiness;
 		material.F0 = Hair::HairF0();
-		material.Roughness = SharedData::hairSpecularSettings.HairMode == 1 ? 1 : ShininessToRoughness(SharedData::hairSpecularSettings.HairGlossiness);
+		material.Roughness = 1;
 	}
 #	endif
 
@@ -2389,7 +2402,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	float3 rippleNormal = normalize(lerp(float3(0, 0, 1), raindropInfo.xyz, lerp(flatnessAmount, 1.0, 0.5)));
 	wetnessNormal = WetnessEffects::ReorientNormal(rippleNormal, wetnessNormal);
 
-	waterRoughnessSpecular = 1.0 - wetnessGlossinessSpecular;
+	waterRoughnessSpecular = saturate(1.0 - wetnessGlossinessSpecular);
 #	endif
 
 	float3 dirLightColor = Color::Light(DirLightColor.xyz);
@@ -2498,9 +2511,9 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	DirectContext dirLightContext;
 	DirectLightingOutput dirLightOutput;
 #	if defined(TRUE_PBR)
-	dirLightContext = CreateDirectLightingContext(worldNormal.xyz, coatWorldNormal, vertexNormal.xyz, refractedViewDirection, viewDirection, refractedDirLightDirection, DirLightDirection, dirLightColor, dirLightColorMultiplier, dirDetailShadow, parallaxShadow);
+	dirLightContext = CreateDirectLightingContext(worldNormal.xyz, coatWorldNormal, vertexNormal.xyz, refractedViewDirection, viewDirection, refractedDirLightDirection, DirLightDirection, dirLightColor * dirLightColorMultiplier, dirDetailShadow, parallaxShadow);
 #	else
-	dirLightContext = CreateDirectLightingContext(worldNormal.xyz, vertexNormal.xyz, viewDirection, DirLightDirection, dirLightColor, dirLightColorMultiplier, dirDetailShadow, parallaxShadow);
+	dirLightContext = CreateDirectLightingContext(worldNormal.xyz, vertexNormal.xyz, viewDirection, DirLightDirection, dirLightColor * dirLightColorMultiplier, dirDetailShadow, parallaxShadow);
 #		if defined(HAIR) && defined(CS_HAIR)
 	if (SharedData::hairSpecularSettings.Enabled) {
 		float hairShadow = Hair::HairSelfShadow(input.WorldPosition.xyz, DirLightDirection, screenNoise, eyeIndex);
@@ -2739,7 +2752,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	diffuseColor += emitColor.xyz;
 #	endif
 
-	IndirectContext indirectContext;
+	IndirectContext indirectContext = (IndirectContext)0;
 	IndirectLobeWeights indirectLobeWeights;
 
 	float3 ambientNormal = worldNormal;
@@ -2814,13 +2827,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	porosity = lerp(porosity, 0.0, saturate(sqrt(envMask)));
 #			endif
 	float wetnessDarkeningAmount = porosity * wetnessGlossinessAlbedo;
-	baseColor.xyz = lerp(baseColor.xyz, pow(abs(baseColor.xyz), 1.0 + wetnessDarkeningAmount), 0.5);
-#		endif
-
-#		if defined(DYNAMIC_CUBEMAPS)
-	float3 wetnessReflectance = GetWetnessIndirectLobeWeights(indirectLobeWeights, wetnessNormal, waterRoughnessSpecular, indirectContext);
-#		else
-	float3 wetnessReflectance = 0.0;
+	material.BaseColor = lerp(material.BaseColor, pow(abs(material.BaseColor), 1.0 + wetnessDarkeningAmount), 0.5);
 #		endif
 #	endif
 
@@ -2869,7 +2876,15 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 
 	indirectContext = CreateIndirectLightingContext(ambientNormal, vertexNormal.xyz, viewDirection);
 
-	GetIndirectLobeWeights(indirectLobeWeights, indirectContext, material);
+	GetIndirectLobeWeights(indirectLobeWeights, indirectContext, material, uvOriginal);
+
+#	if defined(WETNESS_EFFECTS)
+#		if defined(DYNAMIC_CUBEMAPS)
+	float3 wetnessReflectance = GetWetnessIndirectLobeWeights(indirectLobeWeights, wetnessNormal, waterRoughnessSpecular, indirectContext);
+#		else
+	float3 wetnessReflectance = 0.0;
+#		endif
+#	endif
 #	if defined(ENVMAP) || defined(MULTI_LAYER_PARALLAX) || defined(EYE)
 	indirectLobeWeights.specular *= envMask;
 #	endif
@@ -2961,7 +2976,11 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #	endif
 
 #	if !defined(DEFERRED)
-	if (any(indirectLobeWeights.specular > 0))
+	if (any(indirectLobeWeights.specular > 0)
+#		if defined(WETNESS_EFFECTS)
+		|| any(wetnessReflectance > 0)
+#		endif
+	)
 #		if defined(DYNAMIC_CUBEMAPS)
 #			if defined(SKYLIGHTING)
 		color.xyz += indirectLobeWeights.specular * DynamicCubemaps::GetDynamicCubemapSpecularIrradiance(screenUV, worldNormal, vertexNormal, viewDirection, material.Roughness, skylightingSH);
@@ -3162,7 +3181,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	screenSpaceNormal = normalize(FrameBuffer::WorldToView(wetnessNormal, false, eyeIndex));
 	indirectLobeWeights.specular += wetnessReflectance;
 	if (waterRoughnessSpecular < 1)
-		material.Roughness = lerp(material.Roughness, waterRoughnessSpecular, wetnessGlossinessSpecular);
+		material.Roughness = lerp(material.Roughness, waterRoughnessSpecular, wetnessReflectance);
 #		endif
 
 	psout.Reflectance = float4(indirectLobeWeights.specular, psout.Diffuse.w);

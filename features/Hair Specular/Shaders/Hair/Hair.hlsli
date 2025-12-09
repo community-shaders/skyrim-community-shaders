@@ -227,11 +227,11 @@ namespace Hair
 		}
 	}
 
-	void GetHairIndirectSpecularLobeWeights(out IndirectLobeWeights lobeWeights, IndirectContext context, MaterialProperties material, float2 uv)
+	void GetHairIndirectLobeWeights(out IndirectLobeWeights lobeWeights, IndirectContext context, MaterialProperties material, float2 uv)
 	{
 		lobeWeights = (IndirectLobeWeights)0;
 		
-		const float3 T = normalize(context.worldNormal);
+		float3 T = normalize(context.worldNormal);
 		const float3 V = normalize(context.viewDir);
 		const float3 N = normalize(context.vertexNormal);
 
@@ -242,8 +242,8 @@ namespace Hair
 			}
 			float3 L = normalize(V - T * dot(V, T));
 
-			lobeWeights.diffuse = D_Marschner(L, V, T, 1 - saturate(shininess * 0.01), material.BaseColor, 0.2, 0) * Math::PI;
-			lobeWeights.diffuse += GetHairDiffuseAttenuationKajiyaKay(T, V, L, 1, material.BaseColor) * Math::PI;
+			lobeWeights.diffuse = D_Marschner(L, V, T, 1 - saturate(material.Shininess * 0.01), material.BaseColor, 0.2, 0) * Math::PI * SharedData::hairSpecularSettings.SpecularIndirectMult;
+			lobeWeights.diffuse += GetHairDiffuseAttenuationKajiyaKay(T, V, L, 1, material.BaseColor) * Math::PI * SharedData::hairSpecularSettings.DiffuseIndirectMult;
 			return;
 		} else {
 			float3 L = normalize(V - T * dot(V, T));
@@ -251,9 +251,9 @@ namespace Hair
 			float3 specularLobeWeight;
 			float3 transmissionLobeWeight;
 
-			GetHairDirectLightScheuermann(diffuseLobeWeight, specularLobeWeight, transmissionLobeWeight, T, L, V, N, N, 1, material.Shininess * 0.75, 1, uv, material.BaseColor)
-			lobeWeights.diffuse = material.BaseColor;
-			lobeWeights.specular = specularLobeWeight;
+			GetHairDirectLightScheuermann(diffuseLobeWeight, specularLobeWeight, transmissionLobeWeight, T, L, V, N, N, 1, material.Shininess * 0.75, 1, uv, material.BaseColor);
+			lobeWeights.diffuse = material.BaseColor * SharedData::hairSpecularSettings.DiffuseIndirectMult;
+			lobeWeights.diffuse += specularLobeWeight * SharedData::hairSpecularSettings.SpecularIndirectMult;
 		}
 	}
 
