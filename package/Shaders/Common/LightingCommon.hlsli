@@ -15,6 +15,8 @@ struct DirectContext
 	float3 coatLightDir;
 	float3 coatHalfVector;
 	float3 coatLightColor;
+#elif defined(HAIR) && defined(CS_HAIR)
+	float hairShadow;
 #endif
 };
 
@@ -55,16 +57,16 @@ namespace Glints
 struct MaterialProperties
 {
 	float3 BaseColor = 0;
-#	if !defined(TRUE_PBR)
+#if !defined(TRUE_PBR)
 	float Shininess = 0;
 	float Glossiness = 0;
 	float3 SpecularColor = 0;
-#	    if (defined(RIM_LIGHTING) || defined(SOFT_LIGHTING) || defined(LOAD_SOFT_LIGHTING))
+#	if (defined(RIM_LIGHTING) || defined(SOFT_LIGHTING) || defined(LOAD_SOFT_LIGHTING))
     float3 rimSoftLightColor = 0;
-#       endif
+#   endif
 	float Roughness = 1;
 	float3 F0 = 0;
-#	else
+#else
 	float Roughness = 1;
 	float Metallic = 0;
 	float AO = 1;
@@ -83,5 +85,11 @@ struct MaterialProperties
 	float GlintDensityRandomization = 2.0;
 	Glints::GlintCachedVars GlintCache;
 	float Noise = 0;
-#	endif
+#endif
 };
+
+float ShininessToRoughness(float shininess)
+{
+	return pow(abs(2.0 / (shininess + 2.0)), 0.25);
+}
+#endif

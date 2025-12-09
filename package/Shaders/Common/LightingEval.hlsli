@@ -98,6 +98,13 @@ void EvaluateLighting(DirectContext context, MaterialProperties material, float3
 #if defined(TRUE_PBR)
 	PBR::GetDirectLightInput(lightingOutput, context, material, tbnTr, uv);
 #else
+#	if defined(HAIR) && defined(CS_HAIR)
+	if (SharedData::hairSpecularSettings.Enabled)
+	{
+		Hair::GetHairDirectLight(lightingOutput, context, material, tbnTr, uv);
+		return;
+	}
+#	endif
 	const float NdotL = dot(context.worldNormal, context.lightDir);
     lightingOutput.diffuse = material.BaseColor * saturate(NdotL) * context.lightColor;
 #		if defined(SOFT_LIGHTING)

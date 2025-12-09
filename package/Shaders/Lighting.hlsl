@@ -2199,6 +2199,14 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #       endif
 #	endif  // TRUE_PBR
 
+#	if defined(CS_HAIR) && defined(HAIR)
+	if (SharedData::hairSpecularSettings.Enabled) {
+		material.Shininess = SharedData::hairSpecularSettings.HairGlossiness;
+		material.F0 = Hair::HairF0();
+		material.Roughness = SharedData::hairSpecularSettings.HairMode == 1 ? 1 : ShininessToRoughness(SharedData::hairSpecularSettings.HairGlossiness);
+	}
+#	endif
+
 	bool dynamicCubemap = false;
 
 #	if defined(ENVMAP) || defined(MULTI_LAYER_PARALLAX) || defined(EYE)
@@ -2211,7 +2219,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 		if (EnvmapData.y) {
 			envMask *= TexEnvMaskSampler.Sample(SampEnvMaskSampler, uv).x;
 		} else {
-			envMask *= glossiness;
+			envMask *= material.Glossiness;
 		}
 	}
 
@@ -2469,6 +2477,13 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 
 	dirLightColorMultiplier *= dirShadow;
 
+#	if defined(CS_HAIR) && defined(HAIR)
+	if (SharedData::hairSpecularSettings.Enabled) {
+		vertexNormal.xyz = worldNormal.xyz;
+		worldNormal.xyz = hairT;
+	}
+#	endif
+
 	float3 diffuseColor = 0.0.xxx;
 	float3 specularColor = 0.0.xxx;
 	float3 transmissionColor = 0.0.xxx;
@@ -2486,6 +2501,12 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	dirLightContext = CreateDirectLightingContext(worldNormal.xyz, coatWorldNormal, vertexNormal.xyz, refractedViewDirection, viewDirection, refractedDirLightDirection, DirLightDirection, dirLightColor, dirLightColorMultiplier, dirDetailShadow, parallaxShadow);
 #	else
 	dirLightContext = CreateDirectLightingContext(worldNormal.xyz, vertexNormal.xyz, viewDirection, DirLightDirection, dirLightColor, dirLightColorMultiplier, dirDetailShadow, parallaxShadow);
+#		if defined(HAIR) && defined(CS_HAIR)
+	if (SharedData::hairSpecularSettings.Enabled) {
+		float hairShadow = Hair::HairSelfShadow(input.WorldPosition.xyz, DirLightDirection, screenNoise, eyeIndex);
+		dirLightContext.hairShadow = hairShadow;
+	}
+#		endif
 #	endif
 
 	EvaluateLighting(dirLightContext, material, tbnTr, uvOriginal, dirLightOutput);
@@ -2541,6 +2562,12 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 		}
 #			else
 		pointLightContext = CreateDirectLightingContext(worldNormal.xyz, vertexNormal.xyz, viewDirection, normalizedLightDirection, lightColor, lightShadow, 1);
+#				if defined(HAIR) && defined(CS_HAIR)
+		if (SharedData::hairSpecularSettings.Enabled) {
+			float hairShadow = Hair::HairSelfShadow(input.WorldPosition.xyz, normalizedLightDirection, screenNoise, eyeIndex);
+			pointLightContext.hairShadow = hairShadow;
+		}
+#				endif
 #			endif
 		EvaluateLighting(pointLightContext, material, tbnTr, uvOriginal, pointLightOutput);
 #			if defined(WETNESS_EFFECTS)
@@ -2657,6 +2684,12 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 		pointLightContext = CreateDirectLightingContext(worldNormal.xyz, coatWorldNormal, vertexNormal.xyz, refractedViewDirection, viewDirection, refractedLightDirection, normalizedLightDirection, lightColor, lightShadow, parallaxShadow);
 #			else
 		pointLightContext = CreateDirectLightingContext(worldNormal.xyz, vertexNormal.xyz, viewDirection, normalizedLightDirection, lightColor, lightShadow, parallaxShadow);
+#				if defined(HAIR) && defined(CS_HAIR)
+		if (SharedData::hairSpecularSettings.Enabled) {
+			float hairShadow = Hair::HairSelfShadow(input.WorldPosition.xyz, normalizedLightDirection, screenNoise, eyeIndex);
+			pointLightContext.hairShadow = hairShadow;
+		}
+#				endif
 #			endif
 		EvaluateLighting(pointLightContext, material, tbnTr, uvOriginal, pointLightOutput);
 #			if defined(WETNESS_EFFECTS)
