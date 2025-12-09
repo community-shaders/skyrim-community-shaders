@@ -2189,10 +2189,6 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 		material.FuzzWeight = lerp(material.FuzzWeight, 0, projectedMaterialWeight);
 	}
 #		endif
-
-	float3 specularColorPBR = 0;
-
-	float pbrGlossiness = 1 - material.Roughness;
 #	else
 	material.BaseColor = baseColor.xyz;
 	material.Shininess = shininess;
@@ -2308,7 +2304,6 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #	if defined(WETNESS_EFFECTS)
 	// Initialize wetness parameters
 	float wetness = 0.0;
-	float3 wetnessSpecular = 0.0;
 	float3 wetnessNormal = worldNormal;
 
 	// Calculate shore wetness factors
@@ -2494,6 +2489,11 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #	endif
 
 	EvaluateLighting(dirLightContext, material, tbnTr, uvOriginal, dirLightOutput);
+#	if defined(WETNESS_EFFECTS)
+	if (waterRoughnessSpecular < 1)
+		EvaluateWetnessLighting(wetnessNormal, dirLightContext, waterRoughnessSpecular, dirLightOutput);
+#	endif
+
 	lightsDiffuseColor += dirLightOutput.diffuse;
 	lightsSpecularColor += dirLightOutput.specular;
 #	if defined(TRUE_PBR)
@@ -2543,6 +2543,10 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 		pointLightContext = CreateDirectLightingContext(worldNormal.xyz, vertexNormal.xyz, viewDirection, normalizedLightDirection, lightColor, lightShadow, 1);
 #			endif
 		EvaluateLighting(pointLightContext, material, tbnTr, uvOriginal, pointLightOutput);
+#			if defined(WETNESS_EFFECTS)
+		if (waterRoughnessSpecular < 1)
+			EvaluateWetnessLighting(wetnessNormal, pointLightContext, waterRoughnessSpecular, pointLightOutput);
+#			endif
 		lightsDiffuseColor += pointLightOutput.diffuse;
 		lightsSpecularColor += pointLightOutput.specular;
 #			if defined(TRUE_PBR)
@@ -2655,6 +2659,11 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 		pointLightContext = CreateDirectLightingContext(worldNormal.xyz, vertexNormal.xyz, viewDirection, normalizedLightDirection, lightColor, lightShadow, parallaxShadow);
 #			endif
 		EvaluateLighting(pointLightContext, material, tbnTr, uvOriginal, pointLightOutput);
+#			if defined(WETNESS_EFFECTS)
+		if (waterRoughnessSpecular < 1)
+			EvaluateWetnessLighting(wetnessNormal, pointLightContext, waterRoughnessSpecular, pointLightOutput);
+#			endif
+
 		lightsDiffuseColor += pointLightOutput.diffuse;
 		lightsSpecularColor += pointLightOutput.specular;
 #			if defined(TRUE_PBR)
@@ -2776,31 +2785,14 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #		endif
 
 #		if defined(DYNAMIC_CUBEMAPS)
-#			if defined(SKYLIGHTING)
-	float3 wetnessReflectance = DynamicCubemaps::GetDynamicCubemap(wetnessNormal, vertexNormal, viewDirection, waterRoughnessSpecular, 0.02 * wetnessGlossinessSpecular, skylightingSH);
-#			else
-	float3 wetnessReflectance = DynamicCubemaps::GetDynamicCubemap(wetnessNormal, vertexNormal, viewDirection, waterRoughnessSpecular, 0.02 * wetnessGlossinessSpecular);
-#			endif
+	float3 wetnessReflectance = GetWetnessIndirectLobeWeights(indirectLobeWeights, wetnessNormal, waterRoughnessSpecular, indirectContext);
 #		else
 	float3 wetnessReflectance = 0.0;
-#		endif
-
-#		if !defined(DEFERRED)
-	wetnessSpecular += wetnessReflectance;
 #		endif
 #	endif
 
 #	if defined(HAIR)
 	float3 vertexColor = lerp(1, TintColor.xyz, input.Color.y);
-#		if defined(CS_HAIR)
-	float3 indirectDiffuseLobeWeight, indirectSpecularLobeWeightPrim, indirectSpecularLobeWeightSec;
-	if (SharedData::hairSpecularSettings.Enabled)
-		vertexColor = 1;
-	Hair::GetHairIndirectSpecularLobeWeights(indirectDiffuseLobeWeight, indirectSpecularLobeWeightPrim, indirectSpecularLobeWeightSec, hairT, worldNormal.xyz, viewDirection, vertexNormal, SharedData::hairSpecularSettings.HairGlossiness, uv, baseColor.xyz);
-	indirectDiffuseLobeWeight *= SharedData::hairSpecularSettings.DiffuseIndirectMult;
-	indirectSpecularLobeWeightPrim *= SharedData::hairSpecularSettings.SpecularIndirectMult;
-	indirectSpecularLobeWeightSec *= SharedData::hairSpecularSettings.SpecularIndirectMult;
-#		endif  // CS_HAIR
 #	elif defined(SKYLIGHTING)
 	float3 vertexColor = input.Color.xyz;
 	float vertexAO = max(max(vertexColor.r, vertexColor.g), vertexColor.b);
@@ -2877,19 +2869,6 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	color.xyz += indirectLobeWeights.diffuse * directionalAmbientColor;
 	color.xyz += transmissionColor;
 
-#	if !defined(DEFERRED)
-	if (any(indirectLobeWeights.specular > 0))
-#		if defined(DYNAMIC_CUBEMAPS)
-#			if defined(SKYLIGHTING)
-		color.xyz += indirectLobeWeights.specular * DynamicCubemaps::GetDynamicCubemapSpecularIrradiance(screenUV, worldNormal, vertexNormal, viewDirection, material.Roughness, skylightingSH);
-#			else
-		color.xyz += indirectLobeWeights.specular * DynamicCubemaps::GetDynamicCubemapSpecularIrradiance(screenUV, worldNormal, vertexNormal, viewDirection, material.Roughness);
-#			endif
-#		else
-		color.xyz += indirectLobeWeights.specular * directionalAmbientColor;
-#		endif
-#	endif
-
 	color.xyz *= vertexColor;
 
 #	if defined(MULTI_LAYER_PARALLAX)
@@ -2931,39 +2910,45 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	specularColor *= complexSpecular;
 #	endif  // defined (EMAT) && defined(ENVMAP)
 
-#	if defined(WETNESS_EFFECTS) && !defined(TRUE_PBR)
-	specularColor += wetnessSpecular * wetnessGlossinessSpecular;
-#	endif
-
 #	if defined(LOD_LAND_BLEND) && defined(TRUE_PBR)
 	{
 		lodLandDiffuseColor += directionalAmbientColor;
 		float3 litLodLandColor = vertexColor * lodLandColor.xyz * lodLandFadeFactor * lodLandDiffuseColor;
 		color.xyz = lerp(color.xyz * Color::PBRLightingScale, litLodLandColor, lodLandBlendFactor);
 
-		specularColor = lerp(specularColorPBR * Color::PBRLightingScale, 0, lodLandBlendFactor);
-		indirectDiffuseLobeWeight = lerp(indirectDiffuseLobeWeight * Color::PBRLightingScale, vertexColor * lodLandColor.xyz * lodLandFadeFactor, lodLandBlendFactor);
-		indirectSpecularLobeWeight = lerp(indirectSpecularLobeWeight, 0, lodLandBlendFactor);
-		pbrGlossiness = lerp(pbrGlossiness, 0, lodLandBlendFactor);
+		specularColor = lerp(specularColor * Color::PBRLightingScale, 0, lodLandBlendFactor);
+		indirectLobeWeights.diffuse = lerp(indirectLobeWeights.diffuse * Color::PBRLightingScale, vertexColor * lodLandColor.xyz * lodLandFadeFactor, lodLandBlendFactor);
+		indirectLobeWeights.specular = lerp(indirectLobeWeights.specular, 0, lodLandBlendFactor);
+		material.Roughness = lerp(material.Roughness, 1, lodLandBlendFactor);
 	}
 #	elif defined(TRUE_PBR)
 	color.xyz *= Color::PBRLightingScale;
-	specularColorPBR *= Color::PBRLightingScale;
-	indirectDiffuseLobeWeight *= Color::PBRLightingScale;
-	specularColor = specularColorPBR;
+	specularColor *= Color::PBRLightingScale;
+	indirectLobeWeights.diffuse *= Color::PBRLightingScale;
 #	endif
 
-	float3 outputAlbedo = baseColor.xyz * vertexColor;
-
-#		if defined(TRUE_PBR)
-	outputAlbedo = indirectDiffuseLobeWeight;
+#	if !defined(DEFERRED)
+	if (any(indirectLobeWeights.specular > 0))
+#		if defined(DYNAMIC_CUBEMAPS)
+#			if defined(SKYLIGHTING)
+		color.xyz += indirectLobeWeights.specular * DynamicCubemaps::GetDynamicCubemapSpecularIrradiance(screenUV, worldNormal, vertexNormal, viewDirection, material.Roughness, skylightingSH);
+#				if defined(WETNESS_EFFECTS)
+		if (waterRoughnessSpecular < 1)
+			color.xyz += wetnessReflectance * DynamicCubemaps::GetDynamicCubemapSpecularIrradiance(screenUV, wetnessNormal, vertexNormal, viewDirection, waterRoughnessSpecular, skylightingSH);
+#				endif
+#			else
+		color.xyz += indirectLobeWeights.specular * DynamicCubemaps::GetDynamicCubemapSpecularIrradiance(screenUV, worldNormal, vertexNormal, viewDirection, material.Roughness);
+#				if defined(WETNESS_EFFECTS)
+		if (waterRoughnessSpecular < 1)
+			color.xyz += wetnessReflectance * DynamicCubemaps::GetDynamicCubemapSpecularIrradiance(screenUV, wetnessNormal, vertexNormal, viewDirection, waterRoughnessSpecular);
+#				endif
+#			endif
+#		else
+		color.xyz += indirectLobeWeights.specular * directionalAmbientColor;
 #		endif
+#	endif
 
-#		if defined(HAIR) && defined(CS_HAIR)
-	if (SharedData::hairSpecularSettings.Enabled) {
-		outputAlbedo = indirectDiffuseLobeWeight;
-	}
-#		endif
+	float3 outputAlbedo = indirectLobeWeights.diffuse;
 
 #	if defined(IBL) && defined(SKYLIGHTING)
 	directionalAmbientColor -= iblColor;
@@ -3142,6 +3127,9 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 
 #		if defined(WETNESS_EFFECTS)
 	screenSpaceNormal = normalize(FrameBuffer::WorldToView(wetnessNormal, false, eyeIndex));
+	indirectLobeWeights.specular += wetnessReflectance;
+	if (waterRoughnessSpecular < 1)
+		material.Roughness = lerp(material.Roughness, waterRoughnessSpecular, wetnessGlossinessSpecular);
 #		endif
 
 	psout.Reflectance = float4(indirectLobeWeights.specular, psout.Diffuse.w);

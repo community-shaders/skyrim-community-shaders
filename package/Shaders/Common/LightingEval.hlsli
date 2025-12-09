@@ -3,6 +3,7 @@
 #include "Common/LightingCommon.hlsli"
 
 #include "Common/BRDF.hlsli"
+#include "Common/Math.hlsli"
 #if defined(TRUE_PBR)
 #	include "Common/PBR.hlsli"
 #endif
@@ -146,4 +147,66 @@ void GetIndirectLobeWeights(out IndirectLobeWeights lobeWeights, IndirectContext
 #endif
 }
 
+#if defined(WETNESS_EFFECTS)
+void EvaluateWetnessLighting(float3 wetnessNormal, DirectContext context, float roughness, inout DirectLightingOutput lightingOutput)
+{
+	const float wetnessStrength = 1 - roughness;
+#	if defined(TRUE_PBR)
+	const float3 lightColor = context.coatLightColor;
+#	else
+	const float3 lightColor = context.lightColor;
+#	endif
+
+	const float wetnessF0 = 0.02;
+
+	const float3 N = wetnessNormal;
+	const float3 V = context.viewDir;
+	const float3 L = context.lightDir;
+	const float3 H = context.halfVector;
+
+	float NdotL = clamp(dot(N, L), EPSILON_DOT_CLAMP, 1);
+	float NdotV = saturate(abs(dot(N, V)) + EPSILON_DOT_CLAMP);
+	float NdotH = saturate(dot(N, H));
+	float VdotH = saturate(dot(V, H));
+
+	float D = BRDF::D_GGX(roughness, NdotH);
+	float G = BRDF::Vis_SmithJointApprox(roughness, NdotV, NdotL);
+	float3 F = BRDF::F_Schlick(specularColor, VdotH);
+
+	F *= wetnessStrength;
+
+	float3 wetnessSpecular = D * G * F * NdotL * lightColor;
+
+	lightingOutput.diffuse *= 1 - F;
+	lightingOutput.specular *= 1 - F;
+	lightingOutput.specular += wetnessSpecular;
+}
+
+float3 GetWetnessIndirectLobeWeights(inout IndirectLobeWeights lobeWeights, float3 wetnessNormal, float roughness, IndirectContext context)
+{
+	const float wetnessF0 = 0.02;
+	const float wetnessStrength = 1 - roughness;
+
+	const float3 N = wetnessNormal;
+	const float3 V = context.viewDir;
+
+	float NdotV = saturate(abs(dot(N, V)) + EPSILON_DOT_CLAMP);
+	float2 specularBRDF = BRDF::EnvBRDF(roughness, NdotV);
+	float3 specularLobeWeight = wetnessF0 * specularBRDF.x + specularBRDF.y;
+
+	specularLobeWeight *= wetnessStrength;
+
+	lobeWeights.diffuse *= 1 - specularLobeWeight;
+	lobeWeights.specular *= 1 - specularLobeWeight;
+
+	// Horizon specular occlusion
+	// https://marmosetco.tumblr.com/post/81245981087
+	float3 R = reflect(-V, N);
+	float horizon = min(1.0 + dot(R, VN), 1.0);
+	horizon = horizon * horizon;
+	specularLobeWeight *= horizon;
+
+	return specularLobeWeight;
+}
+#endif
 #endif
