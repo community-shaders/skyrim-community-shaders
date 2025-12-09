@@ -51,7 +51,7 @@ float3 VanillaSpecular(DirectContext context, float shininess, float2 uv)
 {
     const float3 N = context.worldNormal;
     const float3 G = context.vertexNormal;
-    const float3 V = context.viewDir;
+    float3 V = context.viewDir;
     const float3 L = context.lightDir;
     const float3 H = context.halfVector;
     float HdotN;
