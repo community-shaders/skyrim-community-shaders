@@ -29,19 +29,13 @@ ImageSpaceWidget::~ImageSpaceWidget()
 
 void ImageSpaceWidget::DrawWidget()
 {
-	if (!open)
-		return;
-
 	auto editorWindow = EditorWindow::GetSingleton();
 
-	ImGui::SetNextWindowSize(ImVec2(600, 800), ImGuiCond_FirstUseEver);
-	if (ImGui::Begin(std::format("ImageSpace Editor - {}", GetEditorID()).c_str(), &open)) {
-		ImGui::Text("Form ID: %s", GetFormID().c_str());
-		ImGui::Text("Plugin: %s", GetFilename().c_str());
-		ImGui::Separator();
-
-		// Search bar (activatable with Ctrl+F)
-		BeginWidgetSearchBar(searchBuffer, sizeof(searchBuffer), searchActive);
+	ImGui::SetNextWindowSizeConstraints(ImVec2(600, 0), ImVec2(FLT_MAX, FLT_MAX));
+	if (ImGui::Begin(GetEditorID().c_str(), &open, ImGuiWindowFlags_NoSavedSettings)) {
+		
+		// Draw header with search and Save/Load/Delete buttons
+		DrawWidgetHeader("##ImageSpaceSearch", false, true);
 
 		// Draw all settings in a unified table
 		if (ImGui::BeginTable("ImageSpaceSettings", 2, ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_SizingStretchProp)) {
@@ -221,74 +215,6 @@ void ImageSpaceWidget::DrawWidget()
 				ApplyChanges();
 			}
 		}
-
-		ImGui::Spacing();
-		ImGui::Separator();
-		ImGui::Spacing();
-
-		// Action buttons
-		ImGui::BeginDisabled(!editorWindow->settings.autoApplyChanges);
-		if (ImGui::Button("Apply", ImVec2(-1, 0))) {
-			ApplyChanges();
-		}
-		ImGui::EndDisabled();
-
-		if (ImGui::Button("Revert", ImVec2(-1, 0))) {
-			RevertChanges();
-		}
-
-		// Save/Load buttons (always visible)
-		if (ImGui::Button("Save to File", ImVec2(-1, 0))) {
-			Save();
-		}
-
-		if (ImGui::Button("Load from File", ImVec2(-1, 0))) {
-			Load();
-		}
-
-		// Delete button with confirmation (only show if file exists)
-		std::string filePath = std::format("{}\\{}\\{}.json", Util::PathHelpers::GetCommunityShaderPath().string(), GetFolderName(), GetEditorID());
-		if (std::filesystem::exists(filePath)) {
-			static bool showDeleteConfirm = false;
-			ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.7f, 0.3f, 0.2f, 1.0f));
-			ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.9f, 0.4f, 0.3f, 1.0f));
-			if (ImGui::ImageButton("##DeleteImageSpace", globals::menu->uiIcons.deleteSettings.texture, ImVec2(32, 32))) {
-				if (editorWindow->settings.suppressDeleteWarning) {
-					Delete();
-				} else {
-					showDeleteConfirm = true;
-				}
-			}
-			ImGui::PopStyleColor(2);
-			if (ImGui::IsItemHovered()) {
-				ImGui::SetTooltip("Delete saved file and revert to defaults");
-			}
-
-			if (showDeleteConfirm) {
-				ImGui::OpenPopup("Delete Confirmation##ImageSpace");
-			}
-
-			if (ImGui::BeginPopupModal("Delete Confirmation##ImageSpace", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
-				ImGui::Text("Are you sure you want to delete the settings file?");
-				ImGui::Text("This will reload default values from the game.");
-				ImGui::Spacing();
-
-				ImGui::Checkbox("Don't ask again", &editorWindow->settings.suppressDeleteWarning);
-
-				ImGui::Spacing();
-				if (ImGui::Button("Delete", ImVec2(120, 0))) {
-					Delete();
-					showDeleteConfirm = false;
-					ImGui::CloseCurrentPopup();
-				}
-				ImGui::SameLine();
-				if (ImGui::Button("Cancel", ImVec2(120, 0))) {
-					showDeleteConfirm = false;
-					ImGui::CloseCurrentPopup();
-				}
-				ImGui::EndPopup();
-			}
-		}
 	}
 	ImGui::End();
 }
@@ -296,55 +222,20 @@ void ImageSpaceWidget::DrawWidget()
 void ImageSpaceWidget::LoadSettings()
 {
 	try {
-		if (!js.empty() && js.contains("Settings")) {
-			auto settingsJson = js["Settings"];
-
-			// Validate that we have actual data
-			bool hasValidData = false;
-			for (const auto& [key, value] : settingsJson.items()) {
-				if (value.is_number() && value.get<float>() != 0.0f) {
-					hasValidData = true;
-					break;
-				}
-				if (value.is_array() && !value.empty()) {
-					hasValidData = true;
-					break;
-				}
-			}
-
-			if (hasValidData) {
-				settings = settingsJson;
-				logger::info("ImageSpace settings loaded successfully for {}", GetEditorID());
-			} else {
-				logger::warn("ImageSpace settings contained only zero values for {}, loading from form", GetEditorID());
-				LoadImageSpaceValues();
-				EditorWindow::GetSingleton()->ShowNotification(
-					std::format("Failed to load {} - using default values", GetEditorID()),
-					ImVec4(1.0f, 0.0f, 0.0f, 1.0f));
-			}
+		if (!js.empty() && js.contains("Settings") && js["Settings"].is_object()) {
+			settings = js["Settings"];
 		} else {
 			LoadImageSpaceValues();
 		}
 	} catch (const std::exception& e) {
 		logger::error("Failed to load ImageSpace settings for {}: {}", GetEditorID(), e.what());
 		LoadImageSpaceValues();
-		EditorWindow::GetSingleton()->ShowNotification(
-			std::format("Error loading {} - using default values", GetEditorID()),
-			ImVec4(1.0f, 0.0f, 0.0f, 1.0f));
 	}
 }
 
 void ImageSpaceWidget::SaveSettings()
 {
-	try {
-		js["Settings"] = settings;
-		logger::info("ImageSpace settings saved for {}", GetEditorID());
-	} catch (const std::exception& e) {
-		logger::error("Failed to save ImageSpace settings for {}: {}", GetEditorID(), e.what());
-		EditorWindow::GetSingleton()->ShowNotification(
-			std::format("Failed to save {}", GetEditorID()),
-			ImVec4(1.0f, 0.0f, 0.0f, 1.0f));
-	}
+	js["Settings"] = settings;
 }
 
 void ImageSpaceWidget::SetImageSpaceValues()

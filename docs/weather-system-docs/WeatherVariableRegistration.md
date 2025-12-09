@@ -242,15 +242,7 @@ Uses nlohmann::json for type conversion. Built-in support for:
 
 -   Missing JSON keys use default values
 -   Type mismatches caught by json exceptions
--   Invalid weather files logged but don't crashherVariables::FloatVariable>(
-    "intensity", "Intensity", "Effect intensity",
-    &settings.intensity, 1.0f, 0.0f, 2.0f
-    ));
-    }
-
-        // That's it! No save/load/update code needed for weather variables
-
-    };
+-   Invalid weather files are logged but do not crash the system
 
 ```
 

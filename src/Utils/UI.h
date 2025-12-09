@@ -250,6 +250,12 @@ namespace Util
 		const char* filename,
 		ID3D11ShaderResourceView** out_srv,
 		ImVec2& out_size);
+
+	bool LoadDDSTextureFromFile(ID3D11Device* device,
+		const char* filename,
+		ID3D11ShaderResourceView** out_srv,
+		ImVec2& out_size);
+
 	bool InitializeMenuIcons(Menu* menu);
 
 	// Text rendering helpers for clearer title text

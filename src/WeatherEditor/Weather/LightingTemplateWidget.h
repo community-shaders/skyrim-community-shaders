@@ -9,6 +9,10 @@ public:
 
 	LightingTemplateWidget(RE::BGSLightingTemplate* a_lightingTemplate)
 	{
+		if (!a_lightingTemplate) {
+			logger::error("LightingTemplateWidget created with null pointer");
+			return;
+		}
 		form = a_lightingTemplate;
 		lightingTemplate = a_lightingTemplate;
 		LoadLightingTemplateValues();

@@ -15,6 +15,9 @@ auto Util::GetFormFromIdentifier(const std::string& a_identifier) -> RE::TESForm
 
 auto Util::GetIdentifierFromForm(const RE::TESForm* a_form) -> std::string
 {
+	if (a_form == nullptr) {
+		return "0|Null";
+	}
 	if (auto file = a_form->GetFile()) {
 		return std::format("{:X}|{}", a_form->GetLocalFormID(), file->GetFilename());
 	}

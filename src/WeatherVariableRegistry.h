@@ -52,8 +52,27 @@ namespace WeatherVariables
 			if (!valuePtr || !lerpFunc)
 				return;
 
-			T fromVal = from.is_null() ? defaultValue : from.get<T>();
-			T toVal = to.is_null() ? defaultValue : to.get<T>();
+			T fromVal = defaultValue;
+			T toVal = defaultValue;
+
+			if (!from.is_null()) {
+				try {
+					fromVal = from.get<T>();
+				} catch (const nlohmann::json::type_error& e) {
+					logger::debug("Type error in Lerp 'from' for {}: {}", name, e.what());
+					fromVal = defaultValue;
+				}
+			}
+
+			if (!to.is_null()) {
+				try {
+					toVal = to.get<T>();
+				} catch (const nlohmann::json::type_error& e) {
+					logger::debug("Type error in Lerp 'to' for {}: {}", name, e.what());
+					toVal = defaultValue;
+				}
+			}
+
 			*valuePtr = lerpFunc(fromVal, toVal, factor);
 		}
 
@@ -67,7 +86,12 @@ namespace WeatherVariables
 		void LoadFromJson(const json& j) override
 		{
 			if (valuePtr && j.contains(name)) {
-				*valuePtr = j[name].get<T>();
+				try {
+					*valuePtr = j[name].get<T>();
+				} catch (const nlohmann::json::type_error& e) {
+					logger::debug("Type error in LoadFromJson for {}: {}", name, e.what());
+					*valuePtr = defaultValue;
+				}
 			}
 		}
 

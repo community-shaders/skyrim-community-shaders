@@ -1,14 +1,17 @@
 #include "WeatherWidget.h"
 
+#include <format>
+
 #include "../EditorWindow.h"
 #include "State.h"
+#include "Utils/UI.h"
 #include "WeatherManager.h"
 #include "WeatherVariableRegistry.h"
 
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(WeatherWidget::Atmosphere, colorTimes)
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(WeatherWidget::DirectionalColor, max, min)
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(WeatherWidget::DALC, specular, fresnelPower, directional)
-NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(WeatherWidget::Cloud, cloudLayerSpeedY, cloudLayerSpeedX, color, cloudAlpha)
+NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(WeatherWidget::Cloud, cloudLayerSpeedY, cloudLayerSpeedX, color, cloudAlpha, enabled, texturePath)
 
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(WeatherWidget::ImageSpaceSettings,
 	hdrEyeAdaptSpeed,
@@ -28,7 +31,7 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(WeatherWidget::ImageSpaceSettings,
 
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(WeatherWidget::Settings,
 	parent,
-	inheritance,
+	inheritFlags,
 	weatherProperties,
 	weatherColors,
 	fogProperties,
@@ -40,6 +43,12 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(WeatherWidget::Settings,
 
 WeatherWidget::~WeatherWidget()
 {
+	for (auto& [layerIndex, srv] : cloudTextureCache) {
+		if (srv) {
+			srv->Release();
+		}
+	}
+	cloudTextureCache.clear();
 }
 
 void WeatherWidget::DrawWidget()
@@ -61,6 +70,8 @@ void WeatherWidget::DrawWidget()
 			ImGui::SetNextWindowPos(ImVec2(ImGui::GetCursorScreenPos().x, ImGui::GetCursorScreenPos().y));
 			ImGui::SetNextWindowSize(ImVec2(200.0f * 1.5f, 0));
 			ImGui::SetNextWindowFocus();
+			ImGui::PushStyleVar(ImGuiStyleVar_Alpha, 1.0f);
+			ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(0.16f, 0.16f, 0.16f, 1.0f));
 			if (ImGui::Begin("##SearchDropdown", nullptr, 
 				ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize | 
 				ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoSavedSettings)) {
@@ -88,18 +99,21 @@ void WeatherWidget::DrawWidget()
 				}
 			}
 			ImGui::End();
+			ImGui::PopStyleColor();
+			ImGui::PopStyleVar();
 		}
 
 		auto editorWindow = EditorWindow::GetSingleton();
 		auto& widgets = editorWindow->weatherWidgets;
 
 		// Sets the parent widget if settings have been loaded.
-		if (settings.parent != "None") {
-			parent = GetParent();
-			if (parent == nullptr)
-				settings.parent = "None";
-		}
+	if (settings.parent != "None") {
+		parent = GetParent();
+		if (parent == nullptr)
+			settings.parent = "None";
+	}
 
+	if (editorWindow->settings.enableInheritFromParent) {
 		if (ImGui::BeginCombo("Parent", settings.parent.c_str())) {
 			// Option for "None"
 			if (ImGui::Selectable("None", parent == nullptr)) {
@@ -111,30 +125,49 @@ void WeatherWidget::DrawWidget()
 				auto& widget = widgets[i];
 
 				// Skip self-selection
-				if (widget == this)
+				if (widget.get() == this)
 					continue;
 
 				// Option for each widget
-				if (ImGui::Selectable(widget->GetEditorID().c_str(), parent == widget)) {
-					parent = (WeatherWidget*)widget;
+				if (ImGui::Selectable(widget->GetEditorID().c_str(), parent == widget.get())) {
+					parent = (WeatherWidget*)widget.get();
 					settings.parent = widget->GetEditorID();
 				}
 
 				// Set default focus to the current parent
-				if (parent == widget) {
+				if (parent == widget.get()) {
 					ImGui::SetItemDefaultFocus();
 				}
 			}
 			ImGui::EndCombo();
 		}
-
-		if (parent && !parent->IsOpen()) {
-			ImGui::SameLine();
-			if (ImGui::Button("Open"))
-				parent->SetOpen(true);
+		ImGui::SameLine();
+		ImGui::TextDisabled("(?)");
+		if (ImGui::IsItemHovered()) {
+			ImGui::BeginTooltip();
+			ImGui::TextUnformatted("Editor-only feature: Set a parent weather to copy settings from.");
+			ImGui::TextUnformatted("Use 'Inherit From Parent' checkboxes to copy specific values.");
+			ImGui::TextColored(ImVec4(1.0f, 0.7f, 0.0f, 1.0f), "Note: This is NOT the same as cell lighting template inheritance.");
+			ImGui::EndTooltip();
 		}
 
-		// Tab bar for organizing settings
+		if (parent) {
+			ImGui::SameLine();
+			if (ImGui::Button("Inherit All")) {
+				InheritAllFromParent();
+			}
+			if (ImGui::IsItemHovered()) {
+				ImGui::SetTooltip("Copy all parameter values from parent weather");
+			}
+			
+			if (!parent->IsOpen()) {
+				ImGui::SameLine();
+				if (ImGui::Button("Open"))
+					parent->SetOpen(true);
+			}
+		}
+	}
+}		// Tab bar for organizing settings
 		if (ImGui::BeginTabBar("WeatherSettingsTabs", ImGuiTabBarFlags_None)) {
 			// Use activeTabOverride to auto-navigate to specific tab
 			ImGuiTabItemFlags basicFlags = (activeTabOverride == "Basic") ? ImGuiTabItemFlags_SetSelected : 0;
@@ -143,7 +176,7 @@ void WeatherWidget::DrawWidget()
 			ImGuiTabItemFlags cloudsFlags = (activeTabOverride == "Clouds") ? ImGuiTabItemFlags_SetSelected : 0;
 			ImGuiTabItemFlags fogFlags = (activeTabOverride == "Fog") ? ImGuiTabItemFlags_SetSelected : 0;
 			ImGuiTabItemFlags featuresFlags = (activeTabOverride == "Features") ? ImGuiTabItemFlags_SetSelected : 0;
-			ImGuiTabItemFlags imageSpaceFlags = (activeTabOverride == "ImageSpace") ? ImGuiTabItemFlags_SetSelected : 0;
+			ImGuiTabItemFlags recordsFlags = (activeTabOverride == "Records") ? ImGuiTabItemFlags_SetSelected : 0;
 			if (!activeTabOverride.empty()) {
 				activeTabOverride = ""; // Clear after use
 			}
@@ -153,13 +186,11 @@ void WeatherWidget::DrawWidget()
 				DrawProperties("Wind", { { "Wind Speed", UINT8_SLIDER }, { "Wind Direction", INT8_SLIDER }, { "Wind Direction Range", INT8_SLIDER } });
 				DrawProperties("Precipitation", { { "Precipitation Begin Fade In", INT8_SLIDER }, { "Precipitation Begin Fade Out", INT8_SLIDER } });
 				DrawProperties("Lightning", { { "Thunder Lightning Begin Fade In", INT8_SLIDER }, { "Thunder Lightning End Fade Out", INT8_SLIDER },
-												{ "Thunder Lightning Frequency", INT8_SLIDER }, { "Lightning Color", COLOR3_PICKER } });
+											{ "Thunder Lightning Frequency", INT8_SLIDER }, { "Lightning Color", COLOR3_PICKER } });
 				DrawProperties("Visual Effects", { { "Visual Effect Begin", INT8_SLIDER }, { "Visual Effect End", INT8_SLIDER } });
 				DrawProperties("Weather Transition", { { "Trans Delta", INT8_SLIDER } });
 				ImGui::EndTabItem();
-			}
-
-			if (ImGui::BeginTabItem("Lighting (DALC)", nullptr, dalcFlags)) {
+			}			if (ImGui::BeginTabItem("Lighting (DALC)", nullptr, dalcFlags)) {
 				DrawDALCSettings();
 				ImGui::EndTabItem();
 			}
@@ -184,22 +215,202 @@ void WeatherWidget::DrawWidget()
 				ImGui::EndTabItem();
 			}
 
-			if (ImGui::BeginTabItem("ImageSpace", nullptr, imageSpaceFlags)) {
-				DrawImageSpaceSettings();
-				ImGui::EndTabItem();
+		if (ImGui::BeginTabItem("Records", nullptr, recordsFlags)) {
+			ImGui::Spacing();
+			ImGui::TextWrapped("Form record references used by this weather.");
+			ImGui::Spacing();
+			ImGui::Separator();
+			ImGui::Spacing();
+			auto* editorWindow = EditorWindow::GetSingleton();
+
+		bool recordChanged = false;
+		bool hasParent = editorWindow->settings.enableInheritFromParent && HasParent();
+		WeatherWidget* parentWidget = hasParent ? GetParent() : nullptr;
+
+		// ImageSpace Records (per time of day)
+		if (ImGui::CollapsingHeader("ImageSpace", ImGuiTreeNodeFlags_DefaultOpen)) {
+			for (int i = 0; i < ColorTimes::kTotal; i++) {
+				ImGui::PushID(i);
+				std::string label = ColorTimeLabel(i);
+				std::string inheritKey = "ImageSpace_" + std::to_string(i);
+				
+				// Inherit checkbox
+				if (hasParent) {
+					bool& inheritFlag = settings.inheritFlags[inheritKey];
+					if (ImGui::Checkbox(("##inherit_" + inheritKey).c_str(), &inheritFlag)) {
+						if (inheritFlag && parentWidget) {
+							weather->imageSpaces[i] = parentWidget->weather->imageSpaces[i];
+							recordChanged = true;
+						}
+					}
+					if (ImGui::IsItemHovered()) {
+						ImGui::SetTooltip(inheritFlag ? "Inheriting from parent" : "Inherit from parent");
+					}
+					ImGui::SameLine();
+				}
+				
+			ImGui::Text("%s:", label.c_str());
+			ImGui::SameLine(hasParent ? 120.0f : 100.0f);				if (WeatherUtils::DrawFormPickerCached("##ImageSpace", weather->imageSpaces[i], editorWindow->imageSpaceWidgets, false, true)) {
+					recordChanged = true;
+				}					// Add "Open" button
+					if (weather->imageSpaces[i]) {
+						ImGui::SameLine();
+						if (ImGui::SmallButton(std::format("Open##{}", i).c_str())) {
+							for (auto& widget : editorWindow->imageSpaceWidgets) {
+								if (widget->form == weather->imageSpaces[i]) {
+									widget->SetOpen(true);
+									break;
+								}
+							}
+						}
+						if (ImGui::IsItemHovered()) {
+							ImGui::SetTooltip("Open this ImageSpace for editing");
+						}
+					}
+					
+					ImGui::PopID();
+				}
+				ImGui::Spacing();
 			}
 
-			ImGui::EndTabBar();
+		// Volumetric Lighting Records (per time of day)
+		if (ImGui::CollapsingHeader("Volumetric Lighting", ImGuiTreeNodeFlags_DefaultOpen)) {
+			for (int i = 0; i < ColorTimes::kTotal; i++) {
+				ImGui::PushID(100 + i);
+				std::string label = ColorTimeLabel(i);
+				std::string inheritKey = "VolumetricLighting_" + std::to_string(i);
+				
+				// Inherit checkbox
+				if (hasParent) {
+					bool& inheritFlag = settings.inheritFlags[inheritKey];
+					if (ImGui::Checkbox(("##inherit_" + inheritKey).c_str(), &inheritFlag)) {
+						if (inheritFlag && parentWidget) {
+							weather->volumetricLighting[i] = parentWidget->weather->volumetricLighting[i];
+							recordChanged = true;
+						}
+					}
+					if (ImGui::IsItemHovered()) {
+						ImGui::SetTooltip(inheritFlag ? "Inheriting from parent" : "Inherit from parent");
+					}
+					ImGui::SameLine();
+				}
+				
+			ImGui::Text("%s:", label.c_str());
+			ImGui::SameLine(hasParent ? 120.0f : 100.0f);				if (WeatherUtils::DrawFormPickerCached("##VolumetricLighting", weather->volumetricLighting[i], editorWindow->volumetricLightingWidgets, false, true)) {
+					recordChanged = true;
+				}					// Add "Open" button
+					if (weather->volumetricLighting[i]) {
+						ImGui::SameLine();
+						if (ImGui::SmallButton(std::format("Open##{}", i).c_str())) {
+							for (auto& widget : editorWindow->volumetricLightingWidgets) {
+								if (widget->form == weather->volumetricLighting[i]) {
+									widget->SetOpen(true);
+									break;
+								}
+							}
+						}
+						if (ImGui::IsItemHovered()) {
+							ImGui::SetTooltip("Open this Volumetric Lighting for editing");
+						}
+					}
+					
+					ImGui::PopID();
+				}
+				ImGui::Spacing();
+			}
+
+		// Precipitation Data
+		if (ImGui::CollapsingHeader("Precipitation", ImGuiTreeNodeFlags_DefaultOpen)) {
+			// Inherit checkbox
+			if (hasParent) {
+				bool& inheritFlag = settings.inheritFlags["Precipitation"];
+				if (ImGui::Checkbox("##inherit_Precipitation", &inheritFlag)) {
+					if (inheritFlag && parentWidget) {
+						weather->precipitationData = parentWidget->weather->precipitationData;
+						recordChanged = true;
+					}
+				}
+				if (ImGui::IsItemHovered()) {
+					ImGui::SetTooltip(inheritFlag ? "Inheriting from parent" : "Inherit from parent");
+				}
+				ImGui::SameLine();
+			}
+			
+		ImGui::Text("Particle Shader:");
+		ImGui::SameLine(hasParent ? 170.0f : 150.0f);			if (WeatherUtils::DrawFormPickerCached("##Precipitation", weather->precipitationData, editorWindow->precipitationWidgets, false, true)) {
+				recordChanged = true;
+			}				// Add "Open" button
+				if (weather->precipitationData) {
+					ImGui::SameLine();
+					if (ImGui::SmallButton("Open##Precip")) {
+						for (auto& widget : editorWindow->precipitationWidgets) {
+							if (widget->form == weather->precipitationData) {
+								widget->SetOpen(true);
+								break;
+							}
+						}
+					}
+					if (ImGui::IsItemHovered()) {
+						ImGui::SetTooltip("Open this Precipitation for editing");
+					}
+				}
+				
+				ImGui::Spacing();
+			}
+
+		// Visual Effect (Reference Effect)
+		if (ImGui::CollapsingHeader("Visual Effect", ImGuiTreeNodeFlags_DefaultOpen)) {
+			// Inherit checkbox
+			if (hasParent) {
+				bool& inheritFlag = settings.inheritFlags["ReferenceEffect"];
+				if (ImGui::Checkbox("##inherit_ReferenceEffect", &inheritFlag)) {
+					if (inheritFlag && parentWidget) {
+						weather->referenceEffect = parentWidget->weather->referenceEffect;
+						recordChanged = true;
+					}
+				}
+				if (ImGui::IsItemHovered()) {
+					ImGui::SetTooltip(inheritFlag ? "Inheriting from parent" : "Inherit from parent");
+				}
+				ImGui::SameLine();
+			}
+			
+		ImGui::Text("Reference Effect:");
+		ImGui::SameLine(hasParent ? 170.0f : 150.0f);			if (WeatherUtils::DrawFormPickerCached("##ReferenceEffect", weather->referenceEffect, editorWindow->referenceEffectWidgets, false, true)) {
+				recordChanged = true;
+			}				// Add "Open" button
+				if (weather->referenceEffect) {
+					ImGui::SameLine();
+					if (ImGui::SmallButton("Open##RefEffect")) {
+						for (auto& widget : editorWindow->referenceEffectWidgets) {
+							if (widget->form == weather->referenceEffect) {
+								widget->SetOpen(true);
+								break;
+							}
+						}
+					}
+					if (ImGui::IsItemHovered()) {
+						ImGui::SetTooltip("Open this Visual Effect for editing");
+					}
+				}
+				
+			
+			ImGui::Spacing();
 		}
+
+		if (recordChanged) {
+		}
+
+		ImGui::EndTabItem();
+	}
+	ImGui::EndTabBar();
 	}
 	ImGui::End();
 }
 
 void WeatherWidget::LoadSettings()
 {
-	bool hadErrors = false;
-	
-	if (!js.empty()) {
+	bool hadErrors = false;	if (!js.empty()) {
 		try {
 			// Attempt to load settings from JSON
 			settings = js;
@@ -235,7 +446,6 @@ void WeatherWidget::LoadSettings()
 			
 		} catch (const nlohmann::json::exception& e) {
 			logger::error("Weather {}: Failed to deserialize settings from JSON: {}", GetEditorID(), e.what());
-			logger::error("JSON content: {}", js.dump(2));
 			// Fallback to vanilla/game values on exception
 			LoadWeatherValues();
 			EditorWindow::GetSingleton()->ShowNotification(
@@ -245,8 +455,6 @@ void WeatherWidget::LoadSettings()
 			return;
 		}
 	} else {
-		// No JSON data, restore cached vanilla values
-		logger::info("Weather {}: No JSON data, restoring cached vanilla values", GetEditorID());
 		settings = vanillaSettings;
 	}
 	LoadFeatureSettings();
@@ -259,14 +467,6 @@ void WeatherWidget::SaveSettings()
 	try {
 		js = settings;
 		
-		// Log what we're saving for debugging
-		logger::info("Weather {}: Saving settings - {} weather properties, {} colors, {} fog properties",
-			GetEditorID(),
-			settings.weatherProperties.size(),
-			settings.weatherColors.size(),
-			settings.fogProperties.size());
-			
-		// Validate serialization worked
 		if (js.is_null()) {
 			logger::error("Weather {}: Serialization produced null JSON!", GetEditorID());
 		} else if (!js.contains("weatherProperties")) {
@@ -287,9 +487,9 @@ WeatherWidget* WeatherWidget::GetParent()
 	auto editorWindow = EditorWindow::GetSingleton();
 	auto& widgets = editorWindow->weatherWidgets;
 
-	auto temp = std::find_if(widgets.begin(), widgets.end(), [&](Widget* w) { return w->GetEditorID() == settings.parent; });
+	auto temp = std::find_if(widgets.begin(), widgets.end(), [&](const auto& w) { return w->GetEditorID() == settings.parent; });
 	if (temp != widgets.end())
-		return (WeatherWidget*)*temp;
+		return (WeatherWidget*)temp->get();
 
 	return nullptr;
 }
@@ -371,11 +571,16 @@ void WeatherWidget::SetWeatherValues()
 	}
 
 	// Clouds
+	uint32_t disabledBits = 0;
 	for (size_t i = 0; i < TESWeather::kTotalLayers; i++) {
 		auto& settingsCloud = settings.clouds[i];
 
 		weather->cloudLayerSpeedX[i] = (int8_t)settingsCloud.cloudLayerSpeedX;
 		weather->cloudLayerSpeedY[i] = (int8_t)settingsCloud.cloudLayerSpeedY;
+		
+		if (!settingsCloud.enabled) {
+			disabledBits |= (1 << i);
+		}
 
 		auto& cloudColors = weather->cloudColorData[i];
 		auto& cloudAlphas = weather->cloudAlpha[i];
@@ -385,9 +590,7 @@ void WeatherWidget::SetWeatherValues()
 			Float3ToColor(settingsCloud.color[j], cloudColors[j]);
 		}
 	}
-
-	// ImageSpace
-	SetImageSpaceValues();
+	weather->cloudLayerDisabledBits = disabledBits;
 }
 
 void WeatherWidget::LoadWeatherValues()
@@ -467,6 +670,8 @@ void WeatherWidget::LoadWeatherValues()
 
 		settingsCloud.cloudLayerSpeedX = weather->cloudLayerSpeedX[i];
 		settingsCloud.cloudLayerSpeedY = weather->cloudLayerSpeedY[i];
+		settingsCloud.enabled = !(weather->cloudLayerDisabledBits & (1 << i));
+		settingsCloud.texturePath = weather->cloudTextures[i].textureName.c_str();
 
 		auto& cloudColors = weather->cloudColorData[i];
 		auto& cloudAlphas = weather->cloudAlpha[i];
@@ -476,294 +681,504 @@ void WeatherWidget::LoadWeatherValues()
 			ColorToFloat3(cloudColors[j], settingsCloud.color[j]);
 		}
 	}
-
-	// ImageSpace
-	LoadImageSpaceValues();
 }
 
 void WeatherWidget::DrawDALCSettings()
 {
-	bool& doesInherit = settings.inheritance["DALC"];
-	ImGui::Checkbox("Inherit From Parent##dalc", &doesInherit);
+	auto editorWindow = EditorWindow::GetSingleton();
+	bool hasParent = editorWindow->settings.enableInheritFromParent && HasParent();
+	WeatherWidget* parentWidget = hasParent ? GetParent() : nullptr;
 
-	if (doesInherit && HasParent()) {
-		for (size_t i = 0; i < RE::TESWeather::ColorTimes::kTotal; i++) {
-			settings.dalc[i] = GetParent()->settings.dalc[i];
+	bool changed = false;
+
+	if (TOD::BeginTODTable("DALC_TOD_Table")) {
+		TOD::RenderTODHeader();
+
+		ImGui::TableNextRow();
+		ImGui::TableSetColumnIndex(0);
+		ImGui::Separator();
+		ImGui::TableSetColumnIndex(1);
+		ImGui::Separator();
+
+		// Prepare arrays for TOD rendering
+		float3 specularColors[4];
+		float fresnelPowers[4];
+		float3 directionalXMax[4], directionalXMin[4];
+		float3 directionalYMax[4], directionalYMin[4];
+		float3 directionalZMax[4], directionalZMin[4];
+
+		// Parent values
+		float3 parentSpecular[4] = {};
+		float parentFresnel[4] = {};
+		float3 parentDirXMax[4] = {}, parentDirXMin[4] = {};
+		float3 parentDirYMax[4] = {}, parentDirYMin[4] = {};
+		float3 parentDirZMax[4] = {}, parentDirZMin[4] = {};
+
+		for (int i = 0; i < ColorTimes::kTotal; i++) {
+			specularColors[i] = settings.dalc[i].specular;
+			fresnelPowers[i] = settings.dalc[i].fresnelPower;
+			directionalXMax[i] = settings.dalc[i].directional[0].max;
+			directionalXMin[i] = settings.dalc[i].directional[0].min;
+			directionalYMax[i] = settings.dalc[i].directional[1].max;
+			directionalYMin[i] = settings.dalc[i].directional[1].min;
+			directionalZMax[i] = settings.dalc[i].directional[2].max;
+			directionalZMin[i] = settings.dalc[i].directional[2].min;
+
+			if (parentWidget) {
+				parentSpecular[i] = parentWidget->settings.dalc[i].specular;
+				parentFresnel[i] = parentWidget->settings.dalc[i].fresnelPower;
+				parentDirXMax[i] = parentWidget->settings.dalc[i].directional[0].max;
+				parentDirXMin[i] = parentWidget->settings.dalc[i].directional[0].min;
+				parentDirYMax[i] = parentWidget->settings.dalc[i].directional[1].max;
+				parentDirYMin[i] = parentWidget->settings.dalc[i].directional[1].min;
+				parentDirZMax[i] = parentWidget->settings.dalc[i].directional[2].max;
+				parentDirZMin[i] = parentWidget->settings.dalc[i].directional[2].min;
+			}
 		}
-	} else {
-		doesInherit = false;
-		bool changed = false;
 
-		if (TOD::BeginTODTable("DALC_TOD_Table")) {
-			TOD::RenderTODHeader();
-			ImGui::TableNextRow();
-			ImGui::TableSetColumnIndex(0);
-			ImGui::Separator();
-			ImGui::TableSetColumnIndex(1);
-			ImGui::Separator();
-
-			// Prepare arrays for TOD rendering
-			float3 specularColors[4];
-			float fresnelPowers[4];
-			float3 directionalXMax[4], directionalXMin[4];
-			float3 directionalYMax[4], directionalYMin[4];
-			float3 directionalZMax[4], directionalZMin[4];
-
-			for (int i = 0; i < ColorTimes::kTotal; i++) {
-				specularColors[i] = settings.dalc[i].specular;
-				fresnelPowers[i] = settings.dalc[i].fresnelPower;
-				directionalXMax[i] = settings.dalc[i].directional[0].max;
-				directionalXMin[i] = settings.dalc[i].directional[0].min;
-				directionalYMax[i] = settings.dalc[i].directional[1].max;
-				directionalYMin[i] = settings.dalc[i].directional[1].min;
-				directionalZMax[i] = settings.dalc[i].directional[2].max;
-				directionalZMin[i] = settings.dalc[i].directional[2].min;
+		// Draw with per-parameter inheritance
+		if (hasParent) {
+			if (TOD::DrawTODColorRow("Specular", specularColors, settings.inheritFlags["DALC_Specular"], parentSpecular)) {
+				for (int i = 0; i < ColorTimes::kTotal; i++)
+					settings.dalc[i].specular = specularColors[i];
+				changed = true;
 			}
 
+			if (TOD::DrawTODFloatRow("Fresnel Power", fresnelPowers, settings.inheritFlags["DALC_Fresnel"], parentFresnel, 0.0f, 10.0f)) {
+				for (int i = 0; i < ColorTimes::kTotal; i++)
+					settings.dalc[i].fresnelPower = fresnelPowers[i];
+				changed = true;
+			}
+		} else {
 			if (TOD::DrawTODColorRow("Specular", specularColors)) {
 				for (int i = 0; i < ColorTimes::kTotal; i++)
 					settings.dalc[i].specular = specularColors[i];
 				changed = true;
 			}
 
-			if (TOD::DrawTODSliderRow("Fresnel Power", fresnelPowers, 0.0f, 10.0f)) {
+			if (TOD::DrawTODFloatRow("Fresnel Power", fresnelPowers, 0.0f, 10.0f)) {
 				for (int i = 0; i < ColorTimes::kTotal; i++)
 					settings.dalc[i].fresnelPower = fresnelPowers[i];
 				changed = true;
 			}
+		}
 
-			ImGui::TableNextRow();
-			ImGui::TableSetColumnIndex(0);
-			ImGui::Separator();
-			ImGui::TableSetColumnIndex(1);
-			ImGui::Separator();
+		ImGui::TableNextRow();
+		ImGui::TableSetColumnIndex(0);
+		ImGui::Separator();
+		ImGui::TableSetColumnIndex(1);
+		ImGui::Separator();
 
-			if (TOD::DrawTODColorRow("Directional X Max", directionalXMax)) {
+		// Directional colors with per-parameter inheritance
+		if (hasParent) {
+			if (TOD::DrawTODColorRow("Directional +X", directionalXMax, settings.inheritFlags["DALC_DirXMax"], parentDirXMax)) {
 				for (int i = 0; i < ColorTimes::kTotal; i++)
 					settings.dalc[i].directional[0].max = directionalXMax[i];
 				changed = true;
 			}
 
-			if (TOD::DrawTODColorRow("Directional X Min", directionalXMin)) {
+			if (TOD::DrawTODColorRow("Directional -X", directionalXMin, settings.inheritFlags["DALC_DirXMin"], parentDirXMin)) {
 				for (int i = 0; i < ColorTimes::kTotal; i++)
 					settings.dalc[i].directional[0].min = directionalXMin[i];
 				changed = true;
 			}
 
-			if (TOD::DrawTODColorRow("Directional Y Max", directionalYMax)) {
+			if (TOD::DrawTODColorRow("Directional +Y", directionalYMax, settings.inheritFlags["DALC_DirYMax"], parentDirYMax)) {
 				for (int i = 0; i < ColorTimes::kTotal; i++)
 					settings.dalc[i].directional[1].max = directionalYMax[i];
 				changed = true;
 			}
 
-			if (TOD::DrawTODColorRow("Directional Y Min", directionalYMin)) {
+			if (TOD::DrawTODColorRow("Directional -Y", directionalYMin, settings.inheritFlags["DALC_DirYMin"], parentDirYMin)) {
 				for (int i = 0; i < ColorTimes::kTotal; i++)
 					settings.dalc[i].directional[1].min = directionalYMin[i];
 				changed = true;
 			}
 
-			if (TOD::DrawTODColorRow("Directional Z Max", directionalZMax)) {
+			if (TOD::DrawTODColorRow("Directional +Z", directionalZMax, settings.inheritFlags["DALC_DirZMax"], parentDirZMax)) {
 				for (int i = 0; i < ColorTimes::kTotal; i++)
 					settings.dalc[i].directional[2].max = directionalZMax[i];
 				changed = true;
 			}
 
-			if (TOD::DrawTODColorRow("Directional Z Min", directionalZMin)) {
+			if (TOD::DrawTODColorRow("Directional -Z", directionalZMin, settings.inheritFlags["DALC_DirZMin"], parentDirZMin)) {
 				for (int i = 0; i < ColorTimes::kTotal; i++)
 					settings.dalc[i].directional[2].min = directionalZMin[i];
 				changed = true;
 			}
+		} else {
+			if (TOD::DrawTODColorRow("Directional +X", directionalXMax)) {
+				for (int i = 0; i < ColorTimes::kTotal; i++)
+					settings.dalc[i].directional[0].max = directionalXMax[i];
+				changed = true;
+			}
 
-			TOD::EndTODTable();
+			if (TOD::DrawTODColorRow("Directional -X", directionalXMin)) {
+				for (int i = 0; i < ColorTimes::kTotal; i++)
+					settings.dalc[i].directional[0].min = directionalXMin[i];
+				changed = true;
+			}
+
+			if (TOD::DrawTODColorRow("Directional +Y", directionalYMax)) {
+				for (int i = 0; i < ColorTimes::kTotal; i++)
+					settings.dalc[i].directional[1].max = directionalYMax[i];
+				changed = true;
+			}
+
+			if (TOD::DrawTODColorRow("Directional -Y", directionalYMin)) {
+				for (int i = 0; i < ColorTimes::kTotal; i++)
+					settings.dalc[i].directional[1].min = directionalYMin[i];
+				changed = true;
+			}
+
+			if (TOD::DrawTODColorRow("Directional +Z", directionalZMax)) {
+				for (int i = 0; i < ColorTimes::kTotal; i++)
+					settings.dalc[i].directional[2].max = directionalZMax[i];
+				changed = true;
+			}
+
+			if (TOD::DrawTODColorRow("Directional -Z", directionalZMin)) {
+				for (int i = 0; i < ColorTimes::kTotal; i++)
+					settings.dalc[i].directional[2].min = directionalZMin[i];
+				changed = true;
+			}
 		}
-		if (changed && EditorWindow::GetSingleton()->settings.autoApplyChanges) {
-			ApplyChanges();
-		}
+
+		TOD::EndTODTable();
+	}
+	if (changed && EditorWindow::GetSingleton()->settings.autoApplyChanges) {
+		ApplyChanges();
 	}
 }
 
 void WeatherWidget::DrawWeatherColorSettings()
 {
-	bool& doesInherit = settings.inheritance["Atmosphere Colors"];
-	ImGui::Checkbox("Inherit From Parent##atmosphereColors", &doesInherit);
+	auto editorWindow = EditorWindow::GetSingleton();
+	bool hasParent = editorWindow->settings.enableInheritFromParent && HasParent();
+	WeatherWidget* parentWidget = hasParent ? GetParent() : nullptr;
 
-	if (&doesInherit && HasParent()) {
-		for (size_t i = 0; i < ColorTypes::kTotal; i++) {
-			settings.atmosphereColors[i] = GetParent()->settings.atmosphereColors[i];
-		}
-	} else {
-		doesInherit = false;
-		bool changed = false;
+	bool changed = false;
 
-		if (TOD::BeginTODTable("AtmosphereColors_Table")) {
-			TOD::RenderTODHeader();
-			ImGui::TableNextRow();
-			ImGui::TableSetColumnIndex(0);
-			ImGui::Separator();
-			ImGui::TableSetColumnIndex(1);
-			ImGui::Separator();
+	if (TOD::BeginTODTable("AtmosphereColors_Table")) {
+		TOD::RenderTODHeader();
 
-			for (int i = 0; i < ColorTypes::kTotal; i++) {
-				std::string colorTypeLabel = ColorTypeLabel(i);
+		ImGui::TableNextRow();
+		ImGui::TableSetColumnIndex(0);
+		ImGui::Separator();
+		ImGui::TableSetColumnIndex(1);
+		ImGui::Separator();
 
+		// Organized display order: group related sky/fog/lighting properties
+		static const int displayOrder[] = {
+			0,  // Sky Upper
+			7,  // Sky Lower
+			8,  // Horizon
+			1,  // Fog Near
+			12, // Fog Far
+			3,  // Ambient
+			4,  // Sunlight
+			5,  // Sun
+			6,  // Stars
+			9,  // Effect Lighting
+			10, // Cloud LOD Diffuse
+			11, // Cloud LOD Ambient
+			13, // Sky Statics
+			14, // Water Multiplier
+			15, // Sun Glare
+			16, // Moon Glare
+			2,  // Unknown
+		};
+
+		for (int idx = 0; idx < ColorTypes::kTotal; idx++) {
+			int i = displayOrder[idx];
+			std::string colorTypeLabel = ColorTypeLabel(i);
+
+			if (hasParent) {
+				float3 parentColors[4];
+				for (int j = 0; j < 4; j++)
+					parentColors[j] = parentWidget->settings.atmosphereColors[i].colorTimes[j];
+
+				std::string inheritKey = "Atmosphere_" + colorTypeLabel;
+				if (TOD::DrawTODColorRow(colorTypeLabel.c_str(), settings.atmosphereColors[i].colorTimes, settings.inheritFlags[inheritKey], parentColors)) {
+					changed = true;
+				}
+			} else {
 				if (TOD::DrawTODColorRow(colorTypeLabel.c_str(), settings.atmosphereColors[i].colorTimes)) {
 					changed = true;
 				}
 			}
-
-			TOD::EndTODTable();
 		}
 
-		if (changed && EditorWindow::GetSingleton()->settings.autoApplyChanges) {
-			ApplyChanges();
-		}
+		TOD::EndTODTable();
+	}
+
+	if (changed && EditorWindow::GetSingleton()->settings.autoApplyChanges) {
+		ApplyChanges();
 	}
 }
 
 void WeatherWidget::DrawCloudSettings()
 {
-	bool& doesInherit = settings.inheritance["Clouds"];
-	ImGui::Checkbox("Inherit From Parent##cloud", &doesInherit);
+	auto editorWindow = EditorWindow::GetSingleton();
+	bool hasParent = editorWindow->settings.enableInheritFromParent && HasParent();
+	WeatherWidget* parentWidget = hasParent ? GetParent() : nullptr;
 
-	if (doesInherit && HasParent()) {
-		for (size_t i = 0; i < RE::TESWeather::ColorTimes::kTotal; i++) {
-			settings.dalc[i] = GetParent()->settings.dalc[i];
+	bool changed = false;
+	for (int i = 0; i < TESWeather::kTotalLayers; i++) {
+		std::string layer = std::format("Layer {}", i);
+		
+		// Default to open if this layer has a texture (is being used)
+		ImGuiTreeNodeFlags flags = ImGuiTreeNodeFlags_OpenOnArrow | ImGuiTreeNodeFlags_OpenOnDoubleClick;
+		if (!settings.clouds[i].texturePath.empty()) {
+			flags |= ImGuiTreeNodeFlags_DefaultOpen;
 		}
-	} else {
-		doesInherit = false;
-		bool changed = false;
-		for (int i = 0; i < TESWeather::kTotalLayers; i++) {
-			std::string layer = std::format("Layer {}", i);
 
-			if (ImGui::CollapsingHeader(layer.c_str(), ImGuiTreeNodeFlags_OpenOnArrow | ImGuiTreeNodeFlags_OpenOnDoubleClick)) {
-				if (DrawSliderInt8(std::format("Cloud Layer Speed Y##{}", layer), settings.clouds[i].cloudLayerSpeedY)) changed = true;
-				ImGui::Spacing();
-				if (DrawSliderInt8(std::format("Cloud Layer Speed X##{}", layer), settings.clouds[i].cloudLayerSpeedX)) changed = true;
-				ImGui::Spacing();
+	if (ImGui::CollapsingHeader(layer.c_str(), flags)) {
+		ImGui::Indent(10.0f);
+		ImGui::Spacing();
+		
+		bool layerEnabled = settings.clouds[i].enabled;
+		
+		// Begin horizontal layout for enable checkbox and sliders on left, texture on right
+		ImGui::BeginGroup();
+		
+		if (ImGui::Checkbox(std::format("Enable##{}", layer).c_str(), &layerEnabled)) {
+			settings.clouds[i].enabled = layerEnabled;
+			changed = true;
+		}
+		
+		ImGui::Spacing();
+		ImGui::Spacing();
+		
+		// Make sliders 1/3 width
+		ImGui::PushItemWidth(ImGui::GetContentRegionAvail().x * 0.4f);
+		if (WeatherUtils::DrawSliderInt8(std::format("Cloud Layer Speed Y##{}", layer), settings.clouds[i].cloudLayerSpeedY)) changed = true;
+		ImGui::Spacing();
+		if (WeatherUtils::DrawSliderInt8(std::format("Cloud Layer Speed X##{}", layer), settings.clouds[i].cloudLayerSpeedX)) changed = true;
+		ImGui::PopItemWidth();
+		
+		ImGui::EndGroup();
+		
+		// Draw texture in upper right if available
+		if (!settings.clouds[i].texturePath.empty()) {
+			auto* texture = GetCloudTexture(i);
+			if (texture) {
+				ImGui::SameLine(0.0f, 20.0f);
+				ImGui::BeginGroup();
+				float textureSize = 128.0f;
+				ImGui::Image((void*)texture, ImVec2(textureSize, textureSize));
+				// Small grey subtext below image
+				ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.5f, 0.5f, 0.5f, 1.0f));
+				ImGui::PushFont(ImGui::GetFont());
+				ImGui::SetWindowFontScale(0.8f);
+				float textWidth = ImGui::CalcTextSize(settings.clouds[i].texturePath.c_str()).x;
+				if (textWidth > textureSize) {
+					ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + textureSize);
+					ImGui::TextWrapped("%s", settings.clouds[i].texturePath.c_str());
+					ImGui::PopTextWrapPos();
+				} else {
+					ImGui::Text("%s", settings.clouds[i].texturePath.c_str());
+				}
+				ImGui::SetWindowFontScale(1.0f);
+				ImGui::PopFont();
+				ImGui::PopStyleColor();
+				ImGui::EndGroup();
+			}
+		}
+		
+		ImGui::Spacing();
+		ImGui::Spacing();			if (TOD::BeginTODTable((layer + "_TOD_Table").c_str())) {
+				TOD::RenderTODHeader();
+				
+				ImGui::TableNextRow();
+				ImGui::TableSetColumnIndex(0);
+				ImGui::Separator();
+				ImGui::TableSetColumnIndex(1);
+				ImGui::Separator();
 
-				if (TOD::BeginTODTable((layer + "_TOD_Table").c_str())) {
-					TOD::RenderTODHeader();
-					ImGui::TableNextRow();
-					ImGui::TableSetColumnIndex(0);
-					ImGui::Separator();
-					ImGui::TableSetColumnIndex(1);
-					ImGui::Separator();
+				if (hasParent) {
+					float3 parentColors[4];
+					float parentAlphas[4];
+					for (int j = 0; j < 4; j++) {
+						parentColors[j] = parentWidget->settings.clouds[i].color[j];
+						parentAlphas[j] = parentWidget->settings.clouds[i].cloudAlpha[j];
+					}
 
+					std::string colorKey = std::format("Cloud{}_Color", i);
+					std::string alphaKey = std::format("Cloud{}_Alpha", i);
+
+					if (TOD::DrawTODColorRow("Cloud Color", settings.clouds[i].color, settings.inheritFlags[colorKey], parentColors)) {
+						changed = true;
+					}
+
+					if (TOD::DrawTODFloatRow("Cloud Alpha", settings.clouds[i].cloudAlpha, settings.inheritFlags[alphaKey], parentAlphas, 0.0f, 1.0f)) {
+						changed = true;
+					}
+				} else {
 					if (TOD::DrawTODColorRow("Cloud Color", settings.clouds[i].color)) {
 						changed = true;
 					}
 
-					if (TOD::DrawTODSliderRow("Cloud Alpha", settings.clouds[i].cloudAlpha, 0.0f, 1.0f)) {
+					if (TOD::DrawTODFloatRow("Cloud Alpha", settings.clouds[i].cloudAlpha, 0.0f, 1.0f)) {
 						changed = true;
 					}
-
-					TOD::EndTODTable();
 				}
+
+				TOD::EndTODTable();
 			}
+			
+			ImGui::Spacing();
+			ImGui::Unindent(10.0f);
 		}
-		if (changed && EditorWindow::GetSingleton()->settings.autoApplyChanges) {
-			ApplyChanges();
-		}
+	}
+	if (changed && EditorWindow::GetSingleton()->settings.autoApplyChanges) {
+		ApplyChanges();
 	}
 }
 
 void WeatherWidget::DrawFogSettings()
 {
-	bool& doesInherit = settings.inheritance["Fog"];
-	ImGui::Checkbox("Inherit From Parent##fog", &doesInherit);
+	auto editorWindow = EditorWindow::GetSingleton();
+	bool hasParent = editorWindow->settings.enableInheritFromParent && HasParent();
+	WeatherWidget* parentWidget = hasParent ? GetParent() : nullptr;
 
-	if (doesInherit && HasParent()) {
-		settings.fogProperties = GetParent()->settings.fogProperties;
-	} else {
-		doesInherit = false;
-		bool changed = false;
+	bool changed = false;
 
-		if (ImGui::BeginTable("FogTable", 3, ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_SizingFixedFit)) {
-			ImGui::TableSetupColumn("Parameter", ImGuiTableColumnFlags_WidthFixed, 200.0f);
-			ImGui::TableSetupColumn("Day", ImGuiTableColumnFlags_WidthFixed, 250.0f);
-			ImGui::TableSetupColumn("Night", ImGuiTableColumnFlags_WidthFixed, 250.0f);
-			
-			// Header row
-			ImGui::TableNextRow();
-			ImGui::TableSetColumnIndex(0);
-			ImGui::TableSetColumnIndex(1);
-			ImGui::Text("Day");
-			ImGui::TableSetColumnIndex(2);
-			ImGui::Text("Night");
-			
-			ImGui::TableNextRow();
-			ImGui::TableSetColumnIndex(0);
-			ImGui::Separator();
-			ImGui::TableSetColumnIndex(1);
-			ImGui::Separator();
-			ImGui::TableSetColumnIndex(2);
-			ImGui::Separator();
+	if (ImGui::BeginTable("FogTable", 3, ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_SizingFixedFit)) {
+		ImGui::TableSetupColumn("Parameter", ImGuiTableColumnFlags_WidthFixed, 200.0f);
+		ImGui::TableSetupColumn("Day", ImGuiTableColumnFlags_WidthFixed, 250.0f);
+		ImGui::TableSetupColumn("Night", ImGuiTableColumnFlags_WidthFixed, 250.0f);
+		
+		// Header row
+		ImGui::TableNextRow();
+		ImGui::TableSetColumnIndex(0);
+		ImGui::TableSetColumnIndex(1);
+		ImGui::Text("Day");
+		ImGui::TableSetColumnIndex(2);
+		ImGui::Text("Night");
+		
+		ImGui::TableNextRow();
+		ImGui::TableSetColumnIndex(0);
+		ImGui::Separator();
+		ImGui::TableSetColumnIndex(1);
+		ImGui::Separator();
+		ImGui::TableSetColumnIndex(2);
+		ImGui::Separator();
 
-			// Near
-			ImGui::TableNextRow();
-			ImGui::TableSetColumnIndex(0);
-			ImGui::Text("Near");
-			ImGui::TableSetColumnIndex(1);
-			ImGui::SetNextItemWidth(-1);
-			if (ImGui::SliderFloat("##FogDayNear", &settings.fogProperties["Day Near"], 0.0f, 50000.0f, "%.0f"))
-				changed = true;
-			ImGui::TableSetColumnIndex(2);
-			ImGui::SetNextItemWidth(-1);
-			if (ImGui::SliderFloat("##FogNightNear", &settings.fogProperties["Night Near"], 0.0f, 50000.0f, "%.0f"))
-				changed = true;
-
-			// Far
-			ImGui::TableNextRow();
-			ImGui::TableSetColumnIndex(0);
-			ImGui::Text("Far");
-			ImGui::TableSetColumnIndex(1);
-			ImGui::SetNextItemWidth(-1);
-			if (ImGui::SliderFloat("##FogDayFar", &settings.fogProperties["Day Far"], 0.0f, 50000.0f, "%.0f"))
-				changed = true;
-			ImGui::TableSetColumnIndex(2);
-			ImGui::SetNextItemWidth(-1);
-			if (ImGui::SliderFloat("##FogNightFar", &settings.fogProperties["Night Far"], 0.0f, 50000.0f, "%.0f"))
-				changed = true;
-
-			// Power
-			ImGui::TableNextRow();
-			ImGui::TableSetColumnIndex(0);
-			ImGui::Text("Power");
-			ImGui::TableSetColumnIndex(1);
-			ImGui::SetNextItemWidth(-1);
-			if (ImGui::SliderFloat("##FogDayPower", &settings.fogProperties["Day Power"], 0.0f, 50000.0f, "%.2f"))
-				changed = true;
-			ImGui::TableSetColumnIndex(2);
-			ImGui::SetNextItemWidth(-1);
-			if (ImGui::SliderFloat("##FogNightPower", &settings.fogProperties["Night Power"], 0.0f, 50000.0f, "%.2f"))
-				changed = true;
-
-			// Max
-			ImGui::TableNextRow();
-			ImGui::TableSetColumnIndex(0);
-			ImGui::Text("Max");
-			ImGui::TableSetColumnIndex(1);
-			ImGui::SetNextItemWidth(-1);
-			if (ImGui::SliderFloat("##FogDayMax", &settings.fogProperties["Day Max"], 0.0f, 50000.0f, "%.2f"))
-				changed = true;
-			ImGui::TableSetColumnIndex(2);
-			ImGui::SetNextItemWidth(-1);
-			if (ImGui::SliderFloat("##FogNightMax", &settings.fogProperties["Night Max"], 0.0f, 50000.0f, "%.2f"))
-				changed = true;
-
-			ImGui::EndTable();
+		// Near
+		ImGui::TableNextRow();
+		ImGui::TableSetColumnIndex(0);
+		if (hasParent) {
+			ImGui::PushStyleColor(ImGuiCol_FrameBg, ImVec4(0.15f, 0.15f, 0.15f, 1.0f));
+			ImGui::PushStyleColor(ImGuiCol_CheckMark, ImVec4(0.5f, 0.5f, 0.5f, 1.0f));
+			ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(2, 2));
+			ImGui::Checkbox("##FogNear", &settings.inheritFlags["Fog_Near"]);
+			if (settings.inheritFlags["Fog_Near"]) {
+				settings.fogProperties["Day Near"] = parentWidget->settings.fogProperties["Day Near"];
+				settings.fogProperties["Night Near"] = parentWidget->settings.fogProperties["Night Near"];
+			}
+			ImGui::PopStyleVar();
+			ImGui::PopStyleColor(2);
+			ImGui::SameLine();
 		}
+		ImGui::Text("Near");
+		ImGui::TableSetColumnIndex(1);
+		ImGui::SetNextItemWidth(-1);
+		if (ImGui::SliderFloat("##FogDayNear", &settings.fogProperties["Day Near"], 0.0f, 1000000.0f, "%.0f"))
+			changed = true;
+		ImGui::TableSetColumnIndex(2);
+		ImGui::SetNextItemWidth(-1);
+		if (ImGui::SliderFloat("##FogNightNear", &settings.fogProperties["Night Near"], 0.0f, 1000000.0f, "%.0f"))
+			changed = true;
 
-		if (changed && EditorWindow::GetSingleton()->settings.autoApplyChanges) {
-			ApplyChanges();
+		// Far
+		ImGui::TableNextRow();
+		ImGui::TableSetColumnIndex(0);
+		if (hasParent) {
+			ImGui::PushStyleColor(ImGuiCol_FrameBg, ImVec4(0.15f, 0.15f, 0.15f, 1.0f));
+			ImGui::PushStyleColor(ImGuiCol_CheckMark, ImVec4(0.5f, 0.5f, 0.5f, 1.0f));
+			ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(2, 2));
+			ImGui::Checkbox("##FogFar", &settings.inheritFlags["Fog_Far"]);
+			if (settings.inheritFlags["Fog_Far"]) {
+				settings.fogProperties["Day Far"] = parentWidget->settings.fogProperties["Day Far"];
+				settings.fogProperties["Night Far"] = parentWidget->settings.fogProperties["Night Far"];
+			}
+			ImGui::PopStyleVar();
+			ImGui::PopStyleColor(2);
+			ImGui::SameLine();
 		}
+		ImGui::Text("Far");
+		ImGui::TableSetColumnIndex(1);
+		ImGui::SetNextItemWidth(-1);
+		if (ImGui::SliderFloat("##FogDayFar", &settings.fogProperties["Day Far"], 0.0f, 1000000.0f, "%.0f"))
+			changed = true;
+		ImGui::TableSetColumnIndex(2);
+		ImGui::SetNextItemWidth(-1);
+		if (ImGui::SliderFloat("##FogNightFar", &settings.fogProperties["Night Far"], 0.0f, 1000000.0f, "%.0f"))
+			changed = true;
+
+		// Power
+		ImGui::TableNextRow();
+		ImGui::TableSetColumnIndex(0);
+		if (hasParent) {
+			ImGui::PushStyleColor(ImGuiCol_FrameBg, ImVec4(0.15f, 0.15f, 0.15f, 1.0f));
+			ImGui::PushStyleColor(ImGuiCol_CheckMark, ImVec4(0.5f, 0.5f, 0.5f, 1.0f));
+			ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(2, 2));
+			ImGui::Checkbox("##FogPower", &settings.inheritFlags["Fog_Power"]);
+			if (settings.inheritFlags["Fog_Power"]) {
+				settings.fogProperties["Day Power"] = parentWidget->settings.fogProperties["Day Power"];
+				settings.fogProperties["Night Power"] = parentWidget->settings.fogProperties["Night Power"];
+			}
+			ImGui::PopStyleVar();
+			ImGui::PopStyleColor(2);
+			ImGui::SameLine();
+		}
+		ImGui::Text("Power");
+		ImGui::TableSetColumnIndex(1);
+		ImGui::SetNextItemWidth(-1);
+		if (ImGui::SliderFloat("##FogDayPower", &settings.fogProperties["Day Power"], 0.0f, 10.0f, "%.3f"))
+			changed = true;
+		ImGui::TableSetColumnIndex(2);
+		ImGui::SetNextItemWidth(-1);
+		if (ImGui::SliderFloat("##FogNightPower", &settings.fogProperties["Night Power"], 0.0f, 10.0f, "%.3f"))
+			changed = true;
+
+		// Max
+		ImGui::TableNextRow();
+		ImGui::TableSetColumnIndex(0);
+		if (hasParent) {
+			ImGui::PushStyleColor(ImGuiCol_FrameBg, ImVec4(0.15f, 0.15f, 0.15f, 1.0f));
+			ImGui::PushStyleColor(ImGuiCol_CheckMark, ImVec4(0.5f, 0.5f, 0.5f, 1.0f));
+			ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(2, 2));
+			ImGui::Checkbox("##FogMax", &settings.inheritFlags["Fog_Max"]);
+			if (settings.inheritFlags["Fog_Max"]) {
+				settings.fogProperties["Day Max"] = parentWidget->settings.fogProperties["Day Max"];
+				settings.fogProperties["Night Max"] = parentWidget->settings.fogProperties["Night Max"];
+			}
+			ImGui::PopStyleVar();
+			ImGui::PopStyleColor(2);
+			ImGui::SameLine();
+		}
+		ImGui::Text("Max");
+		ImGui::TableSetColumnIndex(1);
+		ImGui::SetNextItemWidth(-1);
+		if (ImGui::SliderFloat("##FogDayMax", &settings.fogProperties["Day Max"], 0.0f, 1.0f, "%.3f"))
+			changed = true;
+		ImGui::TableSetColumnIndex(2);
+		ImGui::SetNextItemWidth(-1);
+		if (ImGui::SliderFloat("##FogNightMax", &settings.fogProperties["Night Max"], 0.0f, 1.0f, "%.3f"))
+			changed = true;
+
+		ImGui::EndTable();
+	}
+
+	if (changed && EditorWindow::GetSingleton()->settings.autoApplyChanges) {
+		ApplyChanges();
 	}
 }
 
 void WeatherWidget::DrawProperties(std::string category, std::map<std::string, int> properties)
 {
-	bool& doesInherit = settings.inheritance[category];
-	
 	// Check if any property matches search (only check if search is active)
 	bool hasMatchingProperty = false;
 	if (searchBuffer[0] != '\0') {
@@ -782,55 +1197,65 @@ void WeatherWidget::DrawProperties(std::string category, std::map<std::string, i
 		}
 	}
 	
-	ImGui::Checkbox(std::format("Inherit From Parent##{}", category).c_str(), &doesInherit);
+	ImGui::TextColored(ImVec4(0.7f, 0.9f, 1.0f, 1.0f), "%s", category.c_str());
 
-	if (doesInherit && HasParent()) {
-		for (auto& p : properties) {
-			InheritFromParent(p.first);
-		}
-	} else {
-		doesInherit = false;
-		bool changed = false;
+	bool changed = false;
+	auto* editorWindow = EditorWindow::GetSingleton();
+	bool hasParent = editorWindow->settings.enableInheritFromParent && HasParent();
 
-		for (auto& p : properties) {
-			// Filter individual properties based on search
-			if (searchBuffer[0] != '\0' && !MatchesSearch(p.first)) {
-				continue;
-			}
-			
-			// Apply highlight effect if this setting should be highlighted
-			if (ShouldHighlight(p.first)) {
-				float elapsed = static_cast<float>(ImGui::GetTime()) - highlightStartTime;
-				float alpha = 0.3f * (1.0f - std::abs(elapsed - 0.5f) * 2.0f); // Fade in/out over 1 second
-				ImGui::PushStyleColor(ImGuiCol_FrameBg, ImVec4(0.3f, 0.6f, 1.0f, alpha));
-				ImGui::PushStyleColor(ImGuiCol_FrameBgHovered, ImVec4(0.4f, 0.7f, 1.0f, alpha));
-			}
-			
-			switch (p.second) {
-			case 0:
-				if (DrawSliderInt8(p.first, settings.weatherProperties[p.first])) changed = true;
-				break;
-			case 1:
-				if (DrawColorEdit(p.first, settings.weatherColors[p.first])) changed = true;
-				break;
-			case 2:
-				if (DrawSliderUint8(p.first, settings.weatherProperties[p.first])) changed = true;
-				break;
-			case 3:
-				if (DrawSliderFloat(p.first, settings.fogProperties[p.first])) changed = true;
-				break;
-			default:
-				break;
-			}
-			
-			if (ShouldHighlight(p.first)) {
-				ImGui::PopStyleColor(2);
-			}
+	for (auto& p : properties) {
+		// Filter individual properties based on search
+		if (searchBuffer[0] != '\0' && !MatchesSearch(p.first)) {
+			continue;
 		}
+		
+		// Apply highlight effect if this setting should be highlighted
+		if (ShouldHighlight(p.first)) {
+			float elapsed = static_cast<float>(ImGui::GetTime()) - highlightStartTime;
+			float alpha = 0.3f * (1.0f - std::abs(elapsed - 0.5f) * 2.0f);
+			ImGui::PushStyleColor(ImGuiCol_FrameBg, ImVec4(0.3f, 0.6f, 1.0f, alpha));
+			ImGui::PushStyleColor(ImGuiCol_FrameBgHovered, ImVec4(0.4f, 0.7f, 1.0f, alpha));
+		}
+		
+		// Inherit checkbox
+		if (hasParent) {
+			bool& inheritFlag = settings.inheritFlags[p.first];
+			if (ImGui::Checkbox(("##inherit_" + p.first).c_str(), &inheritFlag)) {
+				if (inheritFlag) {
+					InheritFromParent(p.first);
+					changed = true;
+				}
+			}
+			if (ImGui::IsItemHovered()) {
+				ImGui::SetTooltip(inheritFlag ? "Inheriting from parent" : "Inherit from parent");
+			}
+			ImGui::SameLine();
+		}
+		
+		switch (p.second) {
+		case 0:
+			if (WeatherUtils::DrawSliderInt8(p.first, settings.weatherProperties[p.first])) changed = true;
+			break;
+		case 1:
+			if (WeatherUtils::DrawColorEdit(p.first, settings.weatherColors[p.first])) changed = true;
+			break;
+		case 2:
+			if (WeatherUtils::DrawSliderUint8(p.first, settings.weatherProperties[p.first])) changed = true;
+			break;
+		case 3:
+			if (WeatherUtils::DrawSliderFloat(p.first, settings.fogProperties[p.first])) changed = true;
+			break;
+		default:
+			break;
+		}
+		
+		if (ShouldHighlight(p.first)) {
+			ImGui::PopStyleColor(2);
+		}
+	}
 
-		if (changed && EditorWindow::GetSingleton()->settings.autoApplyChanges) {
-			ApplyChanges();
-		}
+	if (changed && EditorWindow::GetSingleton()->settings.autoApplyChanges) {
+		ApplyChanges();
 	}
 
 	ImGui::Spacing();
@@ -840,11 +1265,95 @@ void WeatherWidget::DrawProperties(std::string category, std::map<std::string, i
 
 void WeatherWidget::InheritFromParent(const std::string& property)
 {
+	if (!HasParent()) return;
+	
+	WeatherWidget* parentWidget = GetParent();
+	if (!parentWidget) return;
+	
 	if (settings.weatherProperties.find(property) != settings.weatherProperties.end()) {
-		settings.weatherProperties[property] = GetParent()->settings.weatherProperties[property];
+		settings.weatherProperties[property] = parentWidget->settings.weatherProperties[property];
 	} else if (settings.weatherColors.find(property) != settings.weatherColors.end()) {
-		settings.weatherColors[property] = GetParent()->settings.weatherColors[property];
+		settings.weatherColors[property] = parentWidget->settings.weatherColors[property];
+	} else if (settings.fogProperties.find(property) != settings.fogProperties.end()) {
+		settings.fogProperties[property] = parentWidget->settings.fogProperties[property];
 	}
+}
+
+void WeatherWidget::InheritAllFromParent()
+{
+	if (!HasParent()) return;
+	
+	WeatherWidget* parentWidget = GetParent();
+	if (!parentWidget) return;
+	
+	// Copy all weather properties
+	for (const auto& [key, value] : parentWidget->settings.weatherProperties) {
+		settings.weatherProperties[key] = value;
+	}
+	
+	// Copy all weather colors
+	for (const auto& [key, value] : parentWidget->settings.weatherColors) {
+		settings.weatherColors[key] = value;
+	}
+	
+	// Copy all fog properties
+	for (const auto& [key, value] : parentWidget->settings.fogProperties) {
+		settings.fogProperties[key] = value;
+	}
+	
+	// Copy atmosphere colors
+	for (int i = 0; i < ColorTypes::kTotal; i++) {
+		settings.atmosphereColors[i] = parentWidget->settings.atmosphereColors[i];
+	}
+	
+	// Copy DALC settings
+	for (int i = 0; i < ColorTimes::kTotal; i++) {
+		settings.dalc[i] = parentWidget->settings.dalc[i];
+	}
+	
+	// Copy cloud settings
+	for (int i = 0; i < TESWeather::kTotalLayers; i++) {
+		settings.clouds[i] = parentWidget->settings.clouds[i];
+	}
+	
+	// Set all inherit flags to true
+	settings.inheritFlags["DALC_Specular"] = true;
+	settings.inheritFlags["DALC_Fresnel"] = true;
+	settings.inheritFlags["DALC_DirXMax"] = true;
+	settings.inheritFlags["DALC_DirXMin"] = true;
+	settings.inheritFlags["DALC_DirYMax"] = true;
+	settings.inheritFlags["DALC_DirYMin"] = true;
+	settings.inheritFlags["DALC_DirZMax"] = true;
+	settings.inheritFlags["DALC_DirZMin"] = true;
+	
+	settings.inheritFlags["Fog_Near"] = true;
+	settings.inheritFlags["Fog_Far"] = true;
+	settings.inheritFlags["Fog_Power"] = true;
+	settings.inheritFlags["Fog_Max"] = true;
+	
+	// Atmosphere colors
+	static const int displayOrder[] = { 0, 7, 8, 1, 12, 3, 4, 5, 6, 9, 10, 11, 13, 14, 15, 16, 2 };
+	for (int idx = 0; idx < ColorTypes::kTotal; idx++) {
+		int i = displayOrder[idx];
+		std::string colorTypeLabel = ColorTypeLabel(i);
+		settings.inheritFlags["Atmosphere_" + colorTypeLabel] = true;
+	}
+	
+	// Cloud settings
+	for (int i = 0; i < TESWeather::kTotalLayers; i++) {
+		settings.inheritFlags[std::format("Cloud{}_Color", i)] = true;
+		settings.inheritFlags[std::format("Cloud{}_Alpha", i)] = true;
+	}
+	
+	// Apply the changes
+	if (EditorWindow::GetSingleton()->settings.autoApplyChanges) {
+		ApplyChanges();
+	}
+	
+	EditorWindow::GetSingleton()->ShowNotification(
+		std::format("Inherited all settings from {}", parentWidget->GetEditorID()),
+		ImVec4(0.0f, 1.0f, 0.5f, 1.0f),
+		3.0f);
 }
 
 void WeatherWidget::SaveFeatureSettings()
@@ -885,13 +1394,11 @@ void WeatherWidget::LoadFeatureSettings()
 void WeatherWidget::ApplyChanges()
 {
 	SetWeatherValues();
-	logger::info("Applied changes to weather: {}", GetEditorID());
 }
 
 void WeatherWidget::RevertChanges()
 {
 	LoadWeatherValues();
-	logger::info("Reverted changes for weather: {}", GetEditorID());
 }
 
 void WeatherWidget::DrawFeatureSettings()
@@ -951,256 +1458,6 @@ void WeatherWidget::DrawFeatureSettings()
 
 			ImGui::TreePop();
 		}
-	}
-}
-
-void WeatherWidget::DrawImageSpaceSettings()
-{
-	if (!weather) {
-		ImGui::TextColored({ 1.0f, 0.0f, 0.0f, 1.0f }, "Weather object is null!");
-		return;
-	}
-
-	ImGui::TextWrapped("Configure ImageSpace (post-processing) effects for different times of day.");
-	ImGui::Spacing();
-	ImGui::Separator();
-	ImGui::Spacing();
-
-	bool changed = false;
-
-	if (TOD::BeginTODTable("ImageSpace_TOD_Table")) {
-		TOD::RenderTODHeader();
-		ImGui::TableNextRow();
-		ImGui::TableSetColumnIndex(0);
-		ImGui::Separator();
-		ImGui::TableSetColumnIndex(1);
-		ImGui::Separator();
-
-		// Prepare arrays for TOD rendering
-		float hdrEyeAdaptSpeed[4];
-		float hdrBloomBlurRadius[4];
-		float hdrBloomThreshold[4];
-		float hdrBloomScale[4];
-		float hdrSunlightScale[4];
-		float hdrSkyScale[4];
-		float cinematicSaturation[4];
-		float cinematicBrightness[4];
-		float cinematicContrast[4];
-		float3 tintColor[4];
-		float tintAmount[4];
-		float dofStrength[4];
-		float dofDistance[4];
-		float dofRange[4];
-
-		for (int i = 0; i < ColorTimes::kTotal; i++) {
-			hdrEyeAdaptSpeed[i] = settings.imageSpaces[i].hdrEyeAdaptSpeed;
-			hdrBloomBlurRadius[i] = settings.imageSpaces[i].hdrBloomBlurRadius;
-			hdrBloomThreshold[i] = settings.imageSpaces[i].hdrBloomThreshold;
-			hdrBloomScale[i] = settings.imageSpaces[i].hdrBloomScale;
-			hdrSunlightScale[i] = settings.imageSpaces[i].hdrSunlightScale;
-			hdrSkyScale[i] = settings.imageSpaces[i].hdrSkyScale;
-			cinematicSaturation[i] = settings.imageSpaces[i].cinematicSaturation;
-			cinematicBrightness[i] = settings.imageSpaces[i].cinematicBrightness;
-			cinematicContrast[i] = settings.imageSpaces[i].cinematicContrast;
-			tintColor[i] = settings.imageSpaces[i].tintColor;
-			tintAmount[i] = settings.imageSpaces[i].tintAmount;
-			dofStrength[i] = settings.imageSpaces[i].dofStrength;
-			dofDistance[i] = settings.imageSpaces[i].dofDistance;
-			dofRange[i] = settings.imageSpaces[i].dofRange;
-		}
-
-		// HDR Settings
-		if (TOD::DrawTODSliderRow("Eye Adapt Speed", hdrEyeAdaptSpeed, 0.0f, 10.0f, "%.3f")) {
-			for (int i = 0; i < ColorTimes::kTotal; i++)
-				settings.imageSpaces[i].hdrEyeAdaptSpeed = hdrEyeAdaptSpeed[i];
-			changed = true;
-		}
-
-		if (TOD::DrawTODSliderRow("Bloom Blur Radius", hdrBloomBlurRadius, 0.0f, 10.0f, "%.3f")) {
-			for (int i = 0; i < ColorTimes::kTotal; i++)
-				settings.imageSpaces[i].hdrBloomBlurRadius = hdrBloomBlurRadius[i];
-			changed = true;
-		}
-
-		if (TOD::DrawTODSliderRow("Bloom Threshold", hdrBloomThreshold, 0.0f, 10.0f, "%.3f")) {
-			for (int i = 0; i < ColorTimes::kTotal; i++)
-				settings.imageSpaces[i].hdrBloomThreshold = hdrBloomThreshold[i];
-			changed = true;
-		}
-
-		if (TOD::DrawTODSliderRow("Bloom Scale", hdrBloomScale, 0.0f, 10.0f, "%.3f")) {
-			for (int i = 0; i < ColorTimes::kTotal; i++)
-				settings.imageSpaces[i].hdrBloomScale = hdrBloomScale[i];
-			changed = true;
-		}
-
-		if (TOD::DrawTODSliderRow("Sunlight Scale", hdrSunlightScale, 0.0f, 10.0f, "%.3f")) {
-			for (int i = 0; i < ColorTimes::kTotal; i++)
-				settings.imageSpaces[i].hdrSunlightScale = hdrSunlightScale[i];
-			changed = true;
-		}
-
-		if (TOD::DrawTODSliderRow("Sky Scale", hdrSkyScale, 0.0f, 10.0f, "%.3f")) {
-			for (int i = 0; i < ColorTimes::kTotal; i++)
-				settings.imageSpaces[i].hdrSkyScale = hdrSkyScale[i];
-			changed = true;
-		}
-
-		// Separator
-		ImGui::TableNextRow();
-		ImGui::TableSetColumnIndex(0);
-		ImGui::Separator();
-		ImGui::TableSetColumnIndex(1);
-		ImGui::Separator();
-
-		// Cinematic Settings
-		if (TOD::DrawTODSliderRow("Saturation", cinematicSaturation, 0.0f, 2.0f, "%.3f")) {
-			for (int i = 0; i < ColorTimes::kTotal; i++)
-				settings.imageSpaces[i].cinematicSaturation = cinematicSaturation[i];
-			changed = true;
-		}
-
-		if (TOD::DrawTODSliderRow("Brightness", cinematicBrightness, 0.0f, 2.0f, "%.3f")) {
-			for (int i = 0; i < ColorTimes::kTotal; i++)
-				settings.imageSpaces[i].cinematicBrightness = cinematicBrightness[i];
-			changed = true;
-		}
-
-		if (TOD::DrawTODSliderRow("Contrast", cinematicContrast, 0.0f, 2.0f, "%.3f")) {
-			for (int i = 0; i < ColorTimes::kTotal; i++)
-				settings.imageSpaces[i].cinematicContrast = cinematicContrast[i];
-			changed = true;
-		}
-
-		// Separator
-		ImGui::TableNextRow();
-		ImGui::TableSetColumnIndex(0);
-		ImGui::Separator();
-		ImGui::TableSetColumnIndex(1);
-		ImGui::Separator();
-
-		// Tint Settings
-		if (TOD::DrawTODColorRow("Tint Color", tintColor)) {
-			for (int i = 0; i < ColorTimes::kTotal; i++)
-				settings.imageSpaces[i].tintColor = tintColor[i];
-			changed = true;
-		}
-
-		if (TOD::DrawTODSliderRow("Tint Amount", tintAmount, 0.0f, 1.0f, "%.3f")) {
-			for (int i = 0; i < ColorTimes::kTotal; i++)
-				settings.imageSpaces[i].tintAmount = tintAmount[i];
-			changed = true;
-		}
-
-		// Separator
-		ImGui::TableNextRow();
-		ImGui::TableSetColumnIndex(0);
-		ImGui::Separator();
-		ImGui::TableSetColumnIndex(1);
-		ImGui::Separator();
-
-		// Depth of Field
-		if (TOD::DrawTODSliderRow("DOF Strength", dofStrength, 0.0f, 10.0f, "%.3f")) {
-			for (int i = 0; i < ColorTimes::kTotal; i++)
-				settings.imageSpaces[i].dofStrength = dofStrength[i];
-			changed = true;
-		}
-
-		if (TOD::DrawTODSliderRow("DOF Distance", dofDistance, 0.0f, 10000.0f, "%.1f")) {
-			for (int i = 0; i < ColorTimes::kTotal; i++)
-				settings.imageSpaces[i].dofDistance = dofDistance[i];
-			changed = true;
-		}
-
-		if (TOD::DrawTODSliderRow("DOF Range", dofRange, 0.0f, 10000.0f, "%.1f")) {
-			for (int i = 0; i < ColorTimes::kTotal; i++)
-				settings.imageSpaces[i].dofRange = dofRange[i];
-			changed = true;
-		}
-
-		TOD::EndTODTable();
-	}
-
-	if (changed && EditorWindow::GetSingleton()->settings.autoApplyChanges) {
-		SetImageSpaceValues();
-	}
-}
-
-void WeatherWidget::LoadImageSpaceValues()
-{
-	if (!weather)
-		return;
-
-	for (int timeIdx = 0; timeIdx < ColorTimes::kTotal; timeIdx++) {
-		RE::TESImageSpace* imageSpace = weather->imageSpaces[timeIdx];
-		if (!imageSpace)
-			continue;
-
-		auto& imgSettings = settings.imageSpaces[timeIdx];
-		auto& data = imageSpace->data;
-
-		// HDR
-		imgSettings.hdrEyeAdaptSpeed = data.hdr.eyeAdaptSpeed;
-		imgSettings.hdrBloomBlurRadius = data.hdr.bloomBlurRadius;
-		imgSettings.hdrBloomThreshold = data.hdr.bloomThreshold;
-		imgSettings.hdrBloomScale = data.hdr.bloomScale;
-		imgSettings.hdrSunlightScale = data.hdr.sunlightScale;
-		imgSettings.hdrSkyScale = data.hdr.skyScale;
-
-		// Cinematic
-		imgSettings.cinematicSaturation = data.cinematic.saturation;
-		imgSettings.cinematicBrightness = data.cinematic.brightness;
-		imgSettings.cinematicContrast = data.cinematic.contrast;
-
-		// Tint
-		imgSettings.tintColor.x = data.tint.color.red;
-		imgSettings.tintColor.y = data.tint.color.green;
-		imgSettings.tintColor.z = data.tint.color.blue;
-		imgSettings.tintAmount = data.tint.amount;
-
-		// Depth of Field
-		imgSettings.dofStrength = data.depthOfField.strength;
-		imgSettings.dofDistance = data.depthOfField.distance;
-		imgSettings.dofRange = data.depthOfField.range;
-	}
-}
-
-void WeatherWidget::SetImageSpaceValues()
-{
-	if (!weather)
-		return;
-
-	for (int timeIdx = 0; timeIdx < ColorTimes::kTotal; timeIdx++) {
-		RE::TESImageSpace* imageSpace = weather->imageSpaces[timeIdx];
-		if (!imageSpace)
-			continue;
-
-		auto& imgSettings = settings.imageSpaces[timeIdx];
-		auto& data = imageSpace->data;
-
-		// HDR
-		data.hdr.eyeAdaptSpeed = imgSettings.hdrEyeAdaptSpeed;
-		data.hdr.bloomBlurRadius = imgSettings.hdrBloomBlurRadius;
-		data.hdr.bloomThreshold = imgSettings.hdrBloomThreshold;
-		data.hdr.bloomScale = imgSettings.hdrBloomScale;
-		data.hdr.sunlightScale = imgSettings.hdrSunlightScale;
-		data.hdr.skyScale = imgSettings.hdrSkyScale;
-
-		// Cinematic
-		data.cinematic.saturation = imgSettings.cinematicSaturation;
-		data.cinematic.brightness = imgSettings.cinematicBrightness;
-		data.cinematic.contrast = imgSettings.cinematicContrast;
-
-		// Tint
-		data.tint.color.red = imgSettings.tintColor.x;
-		data.tint.color.green = imgSettings.tintColor.y;
-		data.tint.color.blue = imgSettings.tintColor.z;
-		data.tint.amount = imgSettings.tintAmount;
-
-		// Depth of Field
-		data.depthOfField.strength = imgSettings.dofStrength;
-		data.depthOfField.distance = imgSettings.dofDistance;
-		data.depthOfField.range = imgSettings.dofRange;
 	}
 }
 
@@ -1272,18 +1529,6 @@ void WeatherWidget::UpdateSearchResults()
 			searchResults.push_back({ std::format("Cloud {}", layer), "Clouds", layer });
 		}
 	}
-	
-	// Search in ImageSpace settings
-	std::vector<std::string> imageSpaceSettings = {
-		"Eye Adapt Speed", "Bloom Blur Radius", "Bloom Threshold", "Bloom Scale",
-		"Sunlight Scale", "Sky Scale", "Saturation", "Brightness", "Contrast",
-		"Tint Color", "Tint Amount", "DOF Strength", "DOF Distance", "DOF Range"
-	};
-	for (const auto& setting : imageSpaceSettings) {
-		if (ContainsStringIgnoreCase(setting, searchTerm)) {
-			searchResults.push_back({ setting, "ImageSpace", setting });
-		}
-	}
 }
 
 void WeatherWidget::NavigateToSetting(const SearchResult& result)
@@ -1301,4 +1546,36 @@ bool WeatherWidget::ShouldHighlight(const std::string& settingId) const
 	float elapsed = static_cast<float>(ImGui::GetTime()) - highlightStartTime;
 	return elapsed < 1.0f; // Highlight for 1 second
 }
+
+ID3D11ShaderResourceView* WeatherWidget::GetCloudTexture(int layerIndex)
+{
+	if (cloudTextureCache.contains(layerIndex)) {
+		return cloudTextureCache[layerIndex];
+	}
+
+	const auto& texturePath = settings.clouds[layerIndex].texturePath;
+	if (texturePath.empty()) {
+		return nullptr;
+	}
+
+	// Build resource path for BSA loading: Textures\path (relative to Data folder)
+	// Note: Skyrim texture paths don't include .dds extension, so we add it
+	std::string resourcePath = std::string("Textures\\") + texturePath;
+	
+	// Add .dds extension if not present
+	if (resourcePath.size() < 4 || resourcePath.substr(resourcePath.size() - 4) != ".dds") {
+		resourcePath += ".dds";
+	}
+	
+	ID3D11ShaderResourceView* srv = nullptr;
+	ImVec2 textureSize;
+	
+	if (Util::LoadDDSTextureFromFile(globals::d3d::device, resourcePath.c_str(), &srv, textureSize)) {
+		cloudTextureCache[layerIndex] = srv;
+		return srv;
+	}
+	
+	return nullptr;
+}
+
 

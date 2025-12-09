@@ -9,6 +9,10 @@ public:
 
 	ImageSpaceWidget(RE::TESImageSpace* a_imageSpace)
 	{
+		if (!a_imageSpace) {
+			logger::error("ImageSpaceWidget created with null pointer");
+			return;
+		}
 		form = a_imageSpace;
 		imageSpace = a_imageSpace;
 		LoadImageSpaceValues();

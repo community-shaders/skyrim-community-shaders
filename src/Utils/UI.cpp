@@ -9,6 +9,9 @@
 #include <dinput.h>
 #include <imgui.h>
 #include <imgui_internal.h>
+#include <DirectXTex.h>
+#include <DirectXTex.h>
+#include <wrl/client.h>
 
 #include "../Feature.h"
 #include "../Globals.h"
@@ -159,6 +162,85 @@ namespace Util
 		logger::debug("LoadTextureFromFile: Successfully loaded {} ({}x{})", filename, image_width, image_height);
 		return true;
 	}
+
+	bool LoadDDSTextureFromFile(ID3D11Device* device,
+		const char* filename,
+		ID3D11ShaderResourceView** out_srv,
+		ImVec2& out_size)
+	{
+		if (!device || !out_srv) {
+			logger::warn("LoadDDSTextureFromFile: Invalid parameters");
+			return false;
+		}
+
+		*out_srv = nullptr;
+
+		// Try to load from BSA using Skyrim's resource system
+		RE::BSResourceNiBinaryStream bsaStream(filename);
+		if (!bsaStream.good()) {
+			logger::warn("LoadDDSTextureFromFile: Failed to open resource: {}", filename);
+			return false;
+		}
+
+		// Read entire DDS file into memory
+		std::vector<uint8_t> ddsData;
+		auto size = bsaStream.stream->totalSize;
+		if (size == 0) {
+			logger::warn("LoadDDSTextureFromFile: Resource has zero size: {}", filename);
+			return false;
+		}
+
+		ddsData.resize(size);
+		bsaStream.read(reinterpret_cast<char*>(ddsData.data()), size);
+
+		// Load DDS from memory
+		DirectX::ScratchImage image;
+		try {
+			DX::ThrowIfFailed(DirectX::LoadFromDDSMemory(
+				ddsData.data(),
+				ddsData.size(),
+				DirectX::DDS_FLAGS_NONE,
+				nullptr,
+				image));
+		} catch (const DX::com_exception& e) {
+			logger::warn("LoadDDSTextureFromFile: Failed to load DDS data from {}: {}", filename, e.what());
+			return false;
+		}
+
+		ID3D11Resource* pResource = nullptr;
+		try {
+			DX::ThrowIfFailed(DirectX::CreateTexture(device,
+				image.GetImages(), image.GetImageCount(),
+				image.GetMetadata(), &pResource));
+		} catch (const DX::com_exception& e) {
+			logger::warn("LoadDDSTextureFromFile: Failed to create texture: {}", e.what());
+			return false;
+		}
+
+		ID3D11Texture2D* pTexture = reinterpret_cast<ID3D11Texture2D*>(pResource);
+		D3D11_TEXTURE2D_DESC desc;
+		pTexture->GetDesc(&desc);
+
+		D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc = {
+			.Format = desc.Format,
+			.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2D,
+			.Texture2D = {
+				.MostDetailedMip = 0,
+				.MipLevels = desc.MipLevels }
+		};
+
+		HRESULT hr = device->CreateShaderResourceView(pTexture, &srvDesc, out_srv);
+		pTexture->Release();
+
+		if (FAILED(hr) || !*out_srv) {
+			logger::warn("LoadDDSTextureFromFile: Failed to create SRV, HRESULT: 0x{:08X}", static_cast<uint32_t>(hr));
+			return false;
+		}
+
+		out_size = ImVec2((float)desc.Width, (float)desc.Height);
+		logger::debug("LoadDDSTextureFromFile: Successfully loaded {} ({}x{})", filename, desc.Width, desc.Height);
+		return true;
+	}
 	bool InitializeMenuIcons(Menu* menu)
 	{
 		if (!menu) {
@@ -264,7 +346,7 @@ namespace Util
 			loadIcon(path, icon.texture, icon.size);
 		}
 
-		logger::info("InitializeMenuIcons: Loaded {}/16 icons successfully", iconsLoaded);
+		logger::info("InitializeMenuIcons: {} icons successfully loaded", iconsLoaded);
 
 		return anyIconLoaded;
 	}
@@ -1550,3 +1632,4 @@ namespace Util
 	}
 
 }  // namespace Util
+

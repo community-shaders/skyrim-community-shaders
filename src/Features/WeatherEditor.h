@@ -22,22 +22,13 @@ public:
 		return {
 			"Development tool for editing weather, testing weather transitions, and managing weather-related feature settings.",
 			{ "Provides weather editing functionality",
-				"Includes dynamic saving and loading of imagespace, weather and lighting template settings.",
+				"Includes dynamic saving and loading of vanilla post processing and weather settings.",
 				"Real-time editing and previewing of effects" }
 		};
 	}
 
-	Texture2D* diffuseIBLTexture = nullptr;
-	ID3D11ComputeShader* diffuseIBLCS = nullptr;
-
-	void Bind();
-
 	virtual void DrawSettings() override;
-	virtual void Prepass() override;
-	virtual void SetupResources() override;
-	virtual void ClearShaderCache() override;
 
-	ID3D11ComputeShader* GetDiffuseIBLCS();
 	void LerpWeather(RE::TESWeather*, RE::TESWeather*, float);
 
 private:

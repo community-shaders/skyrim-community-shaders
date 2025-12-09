@@ -19,7 +19,6 @@ void Widget::Save()
 	const std::string filePath = std::format("{}\\{}", Util::PathHelpers::GetCommunityShaderPath().string(), GetFolderName());
 	const std::string file = std::format("{}\\{}.json", filePath, GetEditorID());
 
-	std::ofstream settingsFile(file);
 	if (!std::filesystem::exists(filePath) || !std::filesystem::is_directory(filePath)) {
 		try {
 			std::filesystem::create_directories(filePath);
@@ -29,6 +28,7 @@ void Widget::Save()
 		}
 	}
 
+	std::ofstream settingsFile(file);
 	if (!settingsFile.good() || !settingsFile.is_open()) {
 		logger::warn("Failed to open settings file: {}", file);
 		return;
@@ -47,10 +47,7 @@ void Widget::Save()
 			settingsFile.close();
 			return;
 		}
-
-		logger::info("{}: Saving settings file: {}", GetEditorID(), file);
 		
-		// Write with indentation for readability
 		settingsFile << js.dump(2);
 		settingsFile.flush();
 
@@ -61,7 +58,6 @@ void Widget::Save()
 		}
 
 		settingsFile.close();
-		logger::info("{}: Successfully saved settings", GetEditorID());
 		
 	} catch (const nlohmann::json::exception& e) {
 		logger::error("{}: JSON error while saving settings: {}", GetEditorID(), e.what());
@@ -77,8 +73,6 @@ void Widget::Load()
 	std::string filePath = std::format("{}\\{}\\{}.json", Util::PathHelpers::GetCommunityShaderPath().string(), GetFolderName(), GetEditorID());
 
 	if (!std::filesystem::exists(filePath)) {
-		// No saved file exists, reset to vanilla/default values
-		logger::info("{}: No settings file found, resetting to vanilla values", GetEditorID());
 		js = json();
 		LoadSettings();
 		
@@ -117,7 +111,6 @@ void Widget::Load()
 			return;
 		}
 		
-		logger::info("{}: Successfully loaded settings from file", GetEditorID());
 		LoadSettings();
 		
 		EditorWindow::GetSingleton()->ShowNotification(
@@ -154,15 +147,12 @@ void Widget::Delete()
 	std::string filePath = std::format("{}\\{}\\{}.json", Util::PathHelpers::GetCommunityShaderPath().string(), GetFolderName(), GetEditorID());
 
 	if (!std::filesystem::exists(filePath)) {
-		logger::info("Settings file does not exist, nothing to delete: {}", filePath);
 		return;
 	}
 
 	try {
 		std::filesystem::remove(filePath);
-		logger::info("Deleted settings file: {}", filePath);
 		
-		// Clear the in-memory JSON data
 		js = json();
 		
 		// Reload settings from vanilla/mod defaults
@@ -247,11 +237,21 @@ std::string Widget::GetFolderName()
 	case RE::FormType::Weather:
 		return "Weathers";
 	case RE::FormType::LightingMaster:
-		return "LightingTemplates";
+		return "Lighting Templates";
 	case RE::FormType::WorldSpace:
 		return "WorldSpaces";
+	case RE::FormType::ImageSpace:
+		return "ImageSpaces";
+	case RE::FormType::VolumetricLighting:
+		return "Volumetric Lighting";
+	case RE::FormType::ShaderParticleGeometryData:
+		return "Precipitation";
+	case RE::FormType::ReferenceEffect:
+		return "Visual Effects";
+	case RE::FormType::Cell:
+		return "Cell Lighting";
 	default:
-		return "Unknown";
+		return "Other Editor Widgets";
 	}
 }
 
@@ -262,10 +262,11 @@ void Widget::DrawWidgetHeader(const char* searchId, bool showApplyRevert, bool s
 	bool useIcons = !editorWindow->settings.useTextButtons && menu && menu->GetSettings().Theme.ShowActionIcons;
 
 	if (useIcons) {
-		const float iconSize = ImGui::GetFrameHeight();
+		const float iconSize = ImGui::GetFrameHeight() * 0.85f;
 		const ImVec2 buttonSize(iconSize, iconSize);
 
-		// Search bar first
+		ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(4.0f, ImGui::GetStyle().ItemSpacing.y));
+
 		ImGui::SetNextItemWidth(200.0f);
 		if (ImGui::InputTextWithHint(searchId, "Search settings (Ctrl+F)", searchBuffer, sizeof(searchBuffer))) {
 			searchActive = searchBuffer[0] != '\0';
@@ -367,7 +368,7 @@ void Widget::DrawWidgetHeader(const char* searchId, bool showApplyRevert, bool s
 		}
 
 		ImGui::PopStyleColor(2);
-		ImGui::PopStyleVar();
+		ImGui::PopStyleVar(2);
 	} else {
 		// Text button mode
 		const float buttonHeight = ImGui::GetFrameHeight();

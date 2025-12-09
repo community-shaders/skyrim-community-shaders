@@ -62,33 +62,33 @@ void LightingTemplateWidget::DrawBasicSettings()
 
 	if (ImGui::CollapsingHeader("Ambient & Directional", ImGuiTreeNodeFlags_DefaultOpen)) {
 		ImGui::Spacing();
-		if (MatchesSearch("Ambient Color") && DrawColorEdit("Ambient Color", settings.ambient)) changed = true;
+		if (MatchesSearch("Ambient Color") && WeatherUtils::DrawColorEdit("Ambient Color", settings.ambient)) changed = true;
 		if (MatchesSearch("Ambient Color")) ImGui::Spacing();
-		if (MatchesSearch("Directional Color") && DrawColorEdit("Directional Color", settings.directional)) changed = true;
+		if (MatchesSearch("Directional Color") && WeatherUtils::DrawColorEdit("Directional Color", settings.directional)) changed = true;
 		if (MatchesSearch("Directional Color")) ImGui::Spacing();
 	}
 
 	if (ImGui::CollapsingHeader("Directional Settings", ImGuiTreeNodeFlags_DefaultOpen)) {
 		ImGui::Spacing();
-		if (MatchesSearch("Directional XY") && DrawSliderFloat("Directional XY", settings.directionalXY)) changed = true;
+		if (MatchesSearch("Directional XY") && WeatherUtils::DrawSliderFloat("Directional XY", settings.directionalXY)) changed = true;
 		if (MatchesSearch("Directional XY")) ImGui::Spacing();
-		if (MatchesSearch("Directional Z") && DrawSliderFloat("Directional Z", settings.directionalZ)) changed = true;
+		if (MatchesSearch("Directional Z") && WeatherUtils::DrawSliderFloat("Directional Z", settings.directionalZ)) changed = true;
 		if (MatchesSearch("Directional Z")) ImGui::Spacing();
-		if (MatchesSearch("Directional Fade") && DrawSliderFloat("Directional Fade", settings.directionalFade)) changed = true;
+		if (MatchesSearch("Directional Fade") && WeatherUtils::DrawSliderFloat("Directional Fade", settings.directionalFade)) changed = true;
 		if (MatchesSearch("Directional Fade")) ImGui::Spacing();
 	}
 
 	if (ImGui::CollapsingHeader("Light Fade", ImGuiTreeNodeFlags_DefaultOpen)) {
 		ImGui::Spacing();
-		if (MatchesSearch("Light Fade Start") && DrawSliderFloat("Light Fade Start", settings.lightFadeStart)) changed = true;
+		if (MatchesSearch("Light Fade Start") && WeatherUtils::DrawSliderFloat("Light Fade Start", settings.lightFadeStart)) changed = true;
 		if (MatchesSearch("Light Fade Start")) ImGui::Spacing();
-		if (MatchesSearch("Light Fade End") && DrawSliderFloat("Light Fade End", settings.lightFadeEnd)) changed = true;
+		if (MatchesSearch("Light Fade End") && WeatherUtils::DrawSliderFloat("Light Fade End", settings.lightFadeEnd)) changed = true;
 		if (MatchesSearch("Light Fade End")) ImGui::Spacing();
 	}
 
 	if (ImGui::CollapsingHeader("Other", ImGuiTreeNodeFlags_DefaultOpen)) {
 		ImGui::Spacing();
-		if (MatchesSearch("Clip Distance") && DrawSliderFloat("Clip Distance", settings.clipDist)) changed = true;
+		if (MatchesSearch("Clip Distance") && WeatherUtils::DrawSliderFloat("Clip Distance", settings.clipDist)) changed = true;
 		if (MatchesSearch("Clip Distance")) ImGui::Spacing();
 	}
 
@@ -102,21 +102,21 @@ void LightingTemplateWidget::DrawFogSettings()
 	bool changed = false;
 
 	ImGui::Spacing();
-	if (MatchesSearch("Fog Color Near") && DrawColorEdit("Fog Color Near", settings.fogColorNear)) changed = true;
+	if (MatchesSearch("Fog Color Near") && WeatherUtils::DrawColorEdit("Fog Color Near", settings.fogColorNear)) changed = true;
 	if (MatchesSearch("Fog Color Near")) ImGui::Spacing();
-	if (MatchesSearch("Fog Color Far") && DrawColorEdit("Fog Color Far", settings.fogColorFar)) changed = true;
+	if (MatchesSearch("Fog Color Far") && WeatherUtils::DrawColorEdit("Fog Color Far", settings.fogColorFar)) changed = true;
 	if (MatchesSearch("Fog Color Far")) ImGui::Spacing();
 
 	ImGui::Spacing();
-	if (MatchesSearch("Fog Near") && DrawSliderFloat("Fog Near", settings.fogNear)) changed = true;
+	if (MatchesSearch("Fog Near") && WeatherUtils::DrawSliderFloat("Fog Near", settings.fogNear)) changed = true;
 	if (MatchesSearch("Fog Near")) ImGui::Spacing();
-	if (MatchesSearch("Fog Far") && DrawSliderFloat("Fog Far", settings.fogFar)) changed = true;
+	if (MatchesSearch("Fog Far") && WeatherUtils::DrawSliderFloat("Fog Far", settings.fogFar)) changed = true;
 	if (MatchesSearch("Fog Far")) ImGui::Spacing();
 
 	ImGui::Spacing();
-	if (MatchesSearch("Fog Power") && DrawSliderFloat("Fog Power", settings.fogPower)) changed = true;
+	if (MatchesSearch("Fog Power") && WeatherUtils::DrawSliderFloat("Fog Power", settings.fogPower)) changed = true;
 	if (MatchesSearch("Fog Power")) ImGui::Spacing();
-	if (MatchesSearch("Fog Clamp") && DrawSliderFloat("Fog Clamp", settings.fogClamp)) changed = true;
+	if (MatchesSearch("Fog Clamp") && WeatherUtils::DrawSliderFloat("Fog Clamp", settings.fogClamp)) changed = true;
 	if (MatchesSearch("Fog Clamp")) ImGui::Spacing();
 
 	if (changed && EditorWindow::GetSingleton()->settings.autoApplyChanges) {
@@ -130,9 +130,9 @@ void LightingTemplateWidget::DrawDALCSettings()
 
 	if (ImGui::CollapsingHeader("Basic DALC", ImGuiTreeNodeFlags_DefaultOpen)) {
 		ImGui::Spacing();
-		if (DrawColorEdit("Specular", settings.dalc.specular)) changed = true;
+		if (WeatherUtils::DrawColorEdit("Specular", settings.dalc.specular)) changed = true;
 		ImGui::Spacing();
-		if (DrawSliderFloat("Fresnel Power", settings.dalc.fresnelPower)) changed = true;
+		if (WeatherUtils::DrawSliderFloat("Fresnel Power", settings.dalc.fresnelPower)) changed = true;
 		ImGui::Spacing();
 	}
 
@@ -166,14 +166,14 @@ void LightingTemplateWidget::DrawDALCSettings()
 			maxColors[TOD::Night] = settings.dalc.directional[2].max;
 			minColors[TOD::Night] = settings.dalc.directional[2].min;
 
-			if (TOD::DrawTODColorRow("Max", maxColors)) {
+			if (TOD::DrawTODColorRow("Positive Direction (+)", maxColors)) {
 				settings.dalc.directional[0].max = maxColors[TOD::Sunrise];  // X from Sunrise
 				settings.dalc.directional[1].max = maxColors[TOD::Sunset];   // Y from Sunset
 				settings.dalc.directional[2].max = maxColors[TOD::Night];    // Z from Night
 				changed = true;
 			}
 
-			if (TOD::DrawTODColorRow("Min", minColors)) {
+			if (TOD::DrawTODColorRow("Negative Direction (-)", minColors)) {
 				settings.dalc.directional[0].min = minColors[TOD::Sunrise];  // X from Sunrise
 				settings.dalc.directional[1].min = minColors[TOD::Sunset];   // Y from Sunset
 				settings.dalc.directional[2].min = minColors[TOD::Night];    // Z from Night
@@ -236,6 +236,9 @@ void LightingTemplateWidget::SetLightingTemplateValues()
 
 void LightingTemplateWidget::LoadLightingTemplateValues()
 {
+	if (!lightingTemplate)
+		return;
+
 	auto& data = lightingTemplate->data;
 	auto& dalc = lightingTemplate->directionalAmbientLightingColors;
 

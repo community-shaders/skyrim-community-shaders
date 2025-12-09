@@ -4,9 +4,10 @@
 #include "Features/WeatherEditor.h"
 #include "Weather/LightingTemplateWidget.h"
 #include "WeatherUtils.h"
+#include "PaletteWindow.h"
 #include "imgui_internal.h"
 
-NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(EditorWindow::Settings, recordMarkers, markedRecords, autoApplyChanges, suppressDeleteWarning, useTextButtons, favoriteWidgets, recentWidgets, maxRecentWidgets, rememberOpenWidgets, lastOpenWidgets)
+NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(EditorWindow::Settings, recordMarkers, markedRecords, autoApplyChanges, suppressDeleteWarning, useTextButtons, enableInheritFromParent, editorUIScale, favoriteWidgets, recentWidgets, maxRecentWidgets, rememberOpenWidgets, lastOpenWidgets)
 
 void TextUnformattedDisabled(const char* a_text, const char* a_textEnd = nullptr)
 {
@@ -36,7 +37,7 @@ inline void HelpMarker(const char* a_desc)
 	AddTooltip(a_desc, ImGuiHoveredFlags_DelayShort);
 }
 
-void DrawIconStar(ImVec2 center, float radius, ImU32 color, bool filled)
+void DrawIconStar(ImVec2 center, float radius, ImU32 color, bool /*filled*/)
 {
 	auto* drawList = ImGui::GetWindowDrawList();
 	const int numPoints = 5;
@@ -49,19 +50,8 @@ void DrawIconStar(ImVec2 center, float radius, ImU32 color, bool filled)
 		points[i] = ImVec2(center.x + cosf(angle) * r, center.y + sinf(angle) * r);
 	}
 	
-	if (filled) {
-		// Draw filled star using triangles to avoid artifacts
-		for (int i = 0; i < numPoints; i++) {
-			int outerIdx1 = i * 2;
-			int innerIdx = (i * 2 + 1) % 10;
-			int outerIdx2 = (i * 2 + 2) % 10;
-			drawList->AddTriangleFilled(center, points[outerIdx1], points[innerIdx], color);
-			drawList->AddTriangleFilled(center, points[innerIdx], points[outerIdx2], color);
-		}
-	} else {
-		for (int i = 0; i < 10; i++) {
-			drawList->AddLine(points[i], points[(i + 1) % 10], color, 1.5f);
-		}
+	for (int i = 0; i < 10; i++) {
+		drawList->AddLine(points[i], points[(i + 1) % 10], color, 1.5f);
 	}
 }
 
@@ -164,26 +154,49 @@ void EditorWindow::ShowObjectsWindow()
 		ImGui::Text("Categories");
 		ImGui::Spacing();
 
-		// List of categories
-		const char* categories[] = { "Lighting Template", "Weather", "WorldSpace" };
-		for (int i = 0; i < IM_ARRAYSIZE(categories); ++i) {
-			// Highlight the selected category
-			if (ImGui::Selectable(categories[i], selectedCategory == categories[i])) {
-				selectedCategory = categories[i];  // Update selected category
+	// List of categories
+	const char* categories[] = { "Lighting Template", "Weather", "WorldSpace", "Cell Lighting", "ImageSpace", "Volumetric Lighting", "Shader Particle Geometry", "Lens Flare", "Visual Effect" };
+	for (int i = 0; i < IM_ARRAYSIZE(categories); ++i) {
+		// Highlight the selected category
+		if (ImGui::Selectable(categories[i], selectedCategory == categories[i])) {
+			selectedCategory = categories[i];  // Update selected category
+		}
+	}	// Right column: Objects
+	ImGui::TableSetColumnIndex(1);
+
+	// Display current active weather
+	auto sky = globals::game::sky;
+	if (sky && sky->currentWeather) {
+		auto currentWeather = sky->currentWeather;
+		ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.4f, 0.9f, 0.4f, 1.0f));
+		ImGui::Text("Current Active Weather:");
+		ImGui::PopStyleColor();
+		ImGui::SameLine();
+		ImGui::TextColored(ImVec4(0.9f, 0.9f, 0.9f, 1.0f), "%s", currentWeather->GetFormEditorID());
+		ImGui::SameLine();
+		ImGui::TextDisabled("(0x%08X)", currentWeather->GetFormID());
+		
+		// Add button to open the current weather
+		ImGui::SameLine();
+		if (ImGui::SmallButton("Open##CurrentWeather")) {
+			for (auto& widget : weatherWidgets) {
+				if (widget->form == currentWeather) {
+					widget->SetOpen(true);
+					break;
+				}
 			}
 		}
+		ImGui::Spacing();
+		ImGui::Separator();
+		ImGui::Spacing();
+	}
 
-		// Right column: Objects
-		ImGui::TableSetColumnIndex(1);
-
-		// Handle Ctrl+F to focus search bar
-		if (ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows)) {
-			if (ImGui::GetIO().KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_F, false)) {
-				ImGui::SetKeyboardFocusHere();
-			}
+	// Handle Ctrl+F to focus search bar
+	if (ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows)) {
+		if (ImGui::GetIO().KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_F, false)) {
+			ImGui::SetKeyboardFocusHere();
 		}
-
-		ImGui::InputTextWithHint("##ObjectFilter", "Filter... (Ctrl+F)", filterBuffer, sizeof(filterBuffer));
+	}		ImGui::InputTextWithHint("##ObjectFilter", "Filter... (Ctrl+F)", filterBuffer, sizeof(filterBuffer));
 
 		ImGui::SameLine();
 		HelpMarker("Type a part of an object name to filter the list.\nCtrl+F: Focus search\nEnter: Open selected");
@@ -207,38 +220,30 @@ void EditorWindow::ShowObjectsWindow()
 		ImGui::SameLine();
 		ImGui::Text("Flagged");
 
-		// Show recent widgets section if there are any
-		if (!settings.recentWidgets.empty()) {
+		// Show recent widgets section for current category
+		auto recentIt = settings.recentWidgets.find(selectedCategory);
+		if (recentIt != settings.recentWidgets.end() && !recentIt->second.empty()) {
 			ImGui::Spacing();
 			ImGui::TextColored(ImVec4(0.7f, 0.9f, 1.0f, 1.0f), "Recent:");
 			ImGui::SameLine();
-			for (size_t i = 0; i < std::min(size_t(5), settings.recentWidgets.size()); ++i) {
+			for (size_t i = 0; i < std::min(size_t(5), recentIt->second.size()); ++i) {
 				if (i > 0) ImGui::SameLine();
-				if (ImGui::SmallButton(settings.recentWidgets[i].c_str())) {
-					// Find and open widget in all collections
-					bool found = false;
-					for (auto* widget : weatherWidgets) {
-						if (widget->GetEditorID() == settings.recentWidgets[i]) {
+				if (ImGui::SmallButton(recentIt->second[i].c_str())) {
+					// Find and open widget in current category's collection
+					auto& widgets = selectedCategory == "Weather"                  ? weatherWidgets :
+					                selectedCategory == "WorldSpace"               ? worldSpaceWidgets :
+					                selectedCategory == "Lighting Template"        ? lightingTemplateWidgets :
+					                selectedCategory == "ImageSpace"               ? imageSpaceWidgets :
+					                selectedCategory == "Volumetric Lighting"      ? volumetricLightingWidgets :
+					                selectedCategory == "Shader Particle Geometry" ? precipitationWidgets :
+					                selectedCategory == "Lens Flare"               ? lensFlareWidgets :
+					                selectedCategory == "Visual Effect"            ? referenceEffectWidgets :
+					                                                                 weatherWidgets;
+					
+					for (auto& widget : widgets) {
+						if (widget->GetEditorID() == recentIt->second[i]) {
 							widget->SetOpen(true);
-							found = true;
 							break;
-						}
-					}
-					if (!found) {
-						for (auto* widget : worldSpaceWidgets) {
-							if (widget->GetEditorID() == settings.recentWidgets[i]) {
-								widget->SetOpen(true);
-								found = true;
-								break;
-							}
-						}
-					}
-					if (!found) {
-						for (auto* widget : lightingTemplateWidgets) {
-							if (widget->GetEditorID() == settings.recentWidgets[i]) {
-								widget->SetOpen(true);
-								break;
-							}
 						}
 					}
 				}
@@ -269,13 +274,23 @@ void EditorWindow::ShowObjectsWindow()
 				}
 			}
 
-		// Display objects based on the selected category
-		auto& widgets = selectedCategory == "Weather"    ? weatherWidgets :
-		                selectedCategory == "WorldSpace" ? worldSpaceWidgets :
-		                                                   lightingTemplateWidgets;
-
+	// Display objects based on the selected category
+	std::vector<std::unique_ptr<Widget>> emptyWidgets;
+	const auto& widgets = selectedCategory == "Weather"                  ? weatherWidgets :
+	                      selectedCategory == "WorldSpace"               ? worldSpaceWidgets :
+	                      selectedCategory == "Cell Lighting"            ? emptyWidgets :
+	                      selectedCategory == "ImageSpace"               ? imageSpaceWidgets :
+	                      selectedCategory == "Volumetric Lighting"      ? volumetricLightingWidgets :
+	                      selectedCategory == "Shader Particle Geometry" ? precipitationWidgets :
+	                      selectedCategory == "Lens Flare"               ? lensFlareWidgets :
+	                      selectedCategory == "Visual Effect"            ? referenceEffectWidgets :
+	                                                                       lightingTemplateWidgets;
 		// Sort widgets based on current sort column
-		std::vector<Widget*> sortedWidgets = widgets;
+		std::vector<Widget*> sortedWidgets;
+		sortedWidgets.reserve(widgets.size());
+		for (const auto& w : widgets) {
+			sortedWidgets.push_back(w.get());
+		}
 		if (currentSortColumn != SortColumn::None) {
 			std::sort(sortedWidgets.begin(), sortedWidgets.end(), [this](Widget* a, Widget* b) {
 				int comparison = 0;
@@ -302,6 +317,82 @@ void EditorWindow::ShowObjectsWindow()
 				}
 				return sortAscending ? (comparison < 0) : (comparison > 0);
 			});
+		}
+
+		// Special handling for Cell Lighting category
+		if (selectedCategory == "Cell Lighting") {
+			auto player = RE::PlayerCharacter::GetSingleton();
+			if (player && player->parentCell) {
+				auto cell = player->parentCell;
+				bool isInterior = cell->IsInteriorCell();
+				
+				if (isInterior) {
+					ImGui::TableNextRow();
+					ImGui::TableSetColumnIndex(0);
+					
+					// No favorite star for cell lighting (it's always the current cell)
+					ImGui::Dummy(ImVec2(24, 24));
+					
+					ImGui::TableNextColumn();
+					
+					// Display current cell name
+					const char* cellName = cell->GetName();
+					std::string displayName = cellName && cellName[0] ? cellName : "[Unnamed Cell]";
+					std::string label = std::format("[CURRENT CELL] {}", displayName);
+					
+					bool isOpen = currentCellLightingWidget && currentCellLightingWidget->IsOpen();
+					if (ImGui::Selectable(label.c_str(), isOpen, ImGuiSelectableFlags_SpanAllColumns | ImGuiSelectableFlags_AllowDoubleClick)) {
+						if (ImGui::IsMouseDoubleClicked(0)) {
+							// Open or reuse the cell lighting widget
+							if (currentCellLightingWidget && currentCellLightingWidget->cell == cell) {
+								currentCellLightingWidget->SetOpen(true);
+							} else {
+								currentCellLightingWidget = std::make_unique<CellLightingWidget>(cell);
+								currentCellLightingWidget->CacheFormData();
+								currentCellLightingWidget->Load();
+								currentCellLightingWidget->SetOpen(true);
+							}
+						}
+					}
+					
+					// Highlight current cell
+					ImGui::TableSetBgColor(ImGuiTableBgTarget_RowBg0, ImGui::ColorConvertFloat4ToU32(ImVec4(0.2f, 0.4f, 0.6f, 0.3f)));
+					ImGui::TableSetBgColor(ImGuiTableBgTarget_RowBg1, ImGui::ColorConvertFloat4ToU32(ImVec4(0.2f, 0.4f, 0.6f, 0.3f)));
+					
+					// Enter key to open
+					if (isOpen && ImGui::IsKeyPressed(ImGuiKey_Enter)) {
+						if (currentCellLightingWidget && currentCellLightingWidget->cell == cell) {
+							currentCellLightingWidget->SetOpen(true);
+						}
+					}
+					
+					// Form ID column
+					ImGui::TableNextColumn();
+					ImGui::Text("0x%08X", cell->GetFormID());
+					
+					// File column
+					ImGui::TableNextColumn();
+					auto file = cell->GetFile(0);
+					if (file) {
+						ImGui::Text("%s", file->fileName);
+					}
+					
+					// Status column
+					ImGui::TableNextColumn();
+					ImGui::Text("Interior Cell");
+				} else {
+					// Show message that cell lighting is only for interior cells
+					ImGui::TableNextRow();
+					ImGui::TableSetColumnIndex(1);
+					ImGui::TextColored(ImVec4(1.0f, 0.7f, 0.3f, 1.0f), "Cell Lighting is only available for interior cells.");
+					ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f), "You are currently in an exterior cell.");
+				}
+			} else {
+				// No player or cell
+				ImGui::TableNextRow();
+				ImGui::TableSetColumnIndex(1);
+				ImGui::TextColored(ImVec4(1.0f, 0.3f, 0.3f, 1.0f), "Player cell not available.");
+			}
 		}
 
 		// Get current cell's lighting template for prioritization
@@ -352,13 +443,44 @@ void EditorWindow::ShowObjectsWindow()
 				if (ImGui::Selectable(editorLabel.c_str(), isSelected, ImGuiSelectableFlags_SpanAllColumns | ImGuiSelectableFlags_AllowDoubleClick)) {
 					if (ImGui::IsMouseDoubleClicked(0)) {
 						sortedWidgets[i]->SetOpen(true);
-						AddToRecent(sortedWidgets[i]->GetEditorID());
+						AddToRecent(sortedWidgets[i]->GetEditorID(), selectedCategory);
 					}
 				}
+				
+				// Show ImageSpace and VolumetricLighting info for weather widgets
+				if (selectedCategory == "Weather" && ImGui::IsItemHovered()) {
+					auto* weatherWidget = dynamic_cast<WeatherWidget*>(sortedWidgets[i]);
+					if (weatherWidget && weatherWidget->weather) {
+						ImGui::BeginTooltip();
+						
+						// ImageSpace info
+						ImGui::TextColored(ImVec4(0.7f, 0.9f, 1.0f, 1.0f), "ImageSpace:");
+						for (int tod = 0; tod < 4; tod++) {
+							auto imgSpace = weatherWidget->weather->imageSpaces[tod];
+							ImGui::Text("  %s: %s", 
+								TOD::GetPeriodName(tod),
+								imgSpace ? imgSpace->GetFormEditorID() : "None");
+						}
+						
+						ImGui::Spacing();
+						
+						// VolumetricLighting info
+						ImGui::TextColored(ImVec4(0.7f, 0.9f, 1.0f, 1.0f), "Volumetric Lighting:");
+						for (int tod = 0; tod < 4; tod++) {
+							auto volLight = weatherWidget->weather->volumetricLighting[tod];
+							ImGui::Text("  %s: %s", 
+								TOD::GetPeriodName(tod),
+								volLight ? volLight->GetFormEditorID() : "None");
+						}
+						
+						ImGui::EndTooltip();
+					}
+				}
+				
 				// Enter key to open
 				if (isSelected && ImGui::IsKeyPressed(ImGuiKey_Enter)) {
 					sortedWidgets[i]->SetOpen(true);
-					AddToRecent(sortedWidgets[i]->GetEditorID());
+					AddToRecent(sortedWidgets[i]->GetEditorID(), selectedCategory);
 				}
 
 				// Context menu
@@ -439,13 +561,13 @@ void EditorWindow::ShowObjectsWindow()
 			if (ImGui::Selectable(editorLabel.c_str(), isSelected, ImGuiSelectableFlags_SpanAllColumns | ImGuiSelectableFlags_AllowDoubleClick)) {
 				if (ImGui::IsMouseDoubleClicked(0)) {
 					sortedWidgets[i]->SetOpen(true);
-					AddToRecent(sortedWidgets[i]->GetEditorID());
+					AddToRecent(sortedWidgets[i]->GetEditorID(), selectedCategory);
 				}
 			}
 			// Enter key to open
 			if (isSelected && ImGui::IsKeyPressed(ImGuiKey_Enter)) {
 				sortedWidgets[i]->SetOpen(true);
-				AddToRecent(sortedWidgets[i]->GetEditorID());
+				AddToRecent(sortedWidgets[i]->GetEditorID(), selectedCategory);
 			}
 
 			// Opens a context menu on right click to mark records by color
@@ -499,8 +621,12 @@ void EditorWindow::ShowViewportWindow()
 
 	// Top bar
 	auto calendar = RE::Calendar::GetSingleton();
-	if (calendar)
+	if (calendar && calendar->gameHour) {
 		ImGui::SliderFloat("##ViewportSlider", &calendar->gameHour->value, 0.0f, 23.99f, "Time: %.2f");
+		ImGui::SameLine();
+		int activePeriod = TOD::GetActivePeriod();
+		ImGui::Text("(%s)", TOD::GetPeriodName(activePeriod));
+	}
 
 	// The size of the image in ImGui																														   // Get the available space in the current window
 	ImVec2 availableSpace = ImGui::GetContentRegionAvail();
@@ -531,28 +657,56 @@ void EditorWindow::ShowWidgetWindow()
 	if (ImGui::GetIO().KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_W, false)) {
 		// Close the most recently focused widget
 		for (int i = 0; i < (int)weatherWidgets.size(); i++) {
-			auto widget = weatherWidgets[i];
+			auto& widget = weatherWidgets[i];
 			if (widget->IsOpen() && ImGui::IsWindowFocused(ImGuiFocusedFlags_AnyWindow)) {
 				widget->SetOpen(false);
 				break;
 			}
 		}
 		for (int i = 0; i < (int)worldSpaceWidgets.size(); i++) {
-			auto widget = worldSpaceWidgets[i];
+			auto& widget = worldSpaceWidgets[i];
 			if (widget->IsOpen() && ImGui::IsWindowFocused(ImGuiFocusedFlags_AnyWindow)) {
 				widget->SetOpen(false);
 				break;
 			}
 		}
 		for (int i = 0; i < (int)lightingTemplateWidgets.size(); i++) {
-			auto widget = lightingTemplateWidgets[i];
+			auto& widget = lightingTemplateWidgets[i];
 			if (widget->IsOpen() && ImGui::IsWindowFocused(ImGuiFocusedFlags_AnyWindow)) {
 				widget->SetOpen(false);
 				break;
 			}
 		}
 		for (int i = 0; i < (int)imageSpaceWidgets.size(); i++) {
-			auto widget = imageSpaceWidgets[i];
+			auto& widget = imageSpaceWidgets[i];
+			if (widget->IsOpen() && ImGui::IsWindowFocused(ImGuiFocusedFlags_AnyWindow)) {
+				widget->SetOpen(false);
+				break;
+			}
+		}
+		for (int i = 0; i < (int)volumetricLightingWidgets.size(); i++) {
+			auto& widget = volumetricLightingWidgets[i];
+			if (widget->IsOpen() && ImGui::IsWindowFocused(ImGuiFocusedFlags_AnyWindow)) {
+				widget->SetOpen(false);
+				break;
+			}
+		}
+		for (int i = 0; i < (int)precipitationWidgets.size(); i++) {
+			auto& widget = precipitationWidgets[i];
+			if (widget->IsOpen() && ImGui::IsWindowFocused(ImGuiFocusedFlags_AnyWindow)) {
+				widget->SetOpen(false);
+				break;
+			}
+		}
+		for (int i = 0; i < (int)lensFlareWidgets.size(); i++) {
+			auto& widget = lensFlareWidgets[i];
+			if (widget->IsOpen() && ImGui::IsWindowFocused(ImGuiFocusedFlags_AnyWindow)) {
+				widget->SetOpen(false);
+				break;
+			}
+		}
+		for (int i = 0; i < (int)referenceEffectWidgets.size(); i++) {
+			auto& widget = referenceEffectWidgets[i];
 			if (widget->IsOpen() && ImGui::IsWindowFocused(ImGuiFocusedFlags_AnyWindow)) {
 				widget->SetOpen(false);
 				break;
@@ -561,27 +715,56 @@ void EditorWindow::ShowWidgetWindow()
 	}
 
 	for (int i = 0; i < (int)weatherWidgets.size(); i++) {
-		auto widget = weatherWidgets[i];
+		auto& widget = weatherWidgets[i];
 		if (widget->IsOpen())
 			widget->DrawWidget();
 	}
 
 	for (int i = 0; i < (int)worldSpaceWidgets.size(); i++) {
-		auto widget = worldSpaceWidgets[i];
+		auto& widget = worldSpaceWidgets[i];
 		if (widget->IsOpen())
 			widget->DrawWidget();
 	}
 
 	for (int i = 0; i < (int)lightingTemplateWidgets.size(); i++) {
-		auto widget = lightingTemplateWidgets[i];
+		auto& widget = lightingTemplateWidgets[i];
 		if (widget->IsOpen())
 			widget->DrawWidget();
 	}
 
 	for (int i = 0; i < (int)imageSpaceWidgets.size(); i++) {
-		auto widget = imageSpaceWidgets[i];
+		auto& widget = imageSpaceWidgets[i];
 		if (widget->IsOpen())
 			widget->DrawWidget();
+	}
+
+	for (int i = 0; i < (int)volumetricLightingWidgets.size(); i++) {
+		auto& widget = volumetricLightingWidgets[i];
+		if (widget->IsOpen())
+			widget->DrawWidget();
+	}
+
+	for (int i = 0; i < (int)precipitationWidgets.size(); i++) {
+		auto& widget = precipitationWidgets[i];
+		if (widget->IsOpen())
+			widget->DrawWidget();
+	}
+
+	for (int i = 0; i < (int)lensFlareWidgets.size(); i++) {
+		auto& widget = lensFlareWidgets[i];
+		if (widget->IsOpen())
+			widget->DrawWidget();
+	}
+
+	for (int i = 0; i < (int)referenceEffectWidgets.size(); i++) {
+		auto& widget = referenceEffectWidgets[i];
+		if (widget->IsOpen())
+			widget->DrawWidget();
+	}
+
+	// Draw current cell lighting widget if open
+	if (currentCellLightingWidget && currentCellLightingWidget->IsOpen()) {
+		currentCellLightingWidget->DrawWidget();
 	}
 }
 
@@ -592,6 +775,11 @@ void EditorWindow::RenderUI()
 	auto& context = globals::d3d::context;
 
 	context->ClearRenderTargetView(framebuffer.RTV, (float*)&ImGui::GetStyle().Colors[ImGuiCol_WindowBg]);
+
+	// Apply editor UI scale
+	ImGuiIO& io = ImGui::GetIO();
+	float previousScale = io.FontGlobalScale;
+	io.FontGlobalScale = settings.editorUIScale;
 
 	// Increase background opacity for all editor windows
 	ImGui::PushStyleVar(ImGuiStyleVar_Alpha, 1.0f);
@@ -612,40 +800,40 @@ void EditorWindow::RenderUI()
 				bool hasOpenWidgets = false;
 				
 				// Weather widgets
-				for (auto* widget : weatherWidgets) {
+				for (auto& widget : weatherWidgets) {
 					if (widget->IsOpen()) {
 						hasOpenWidgets = true;
-						if (ImGui::MenuItem(std::format("Save Weather_{}", widget->GetEditorID()).c_str())) {
+						if (ImGui::MenuItem(std::format("Save {}", widget->GetEditorID()).c_str())) {
 							widget->Save();
 						}
 					}
 				}
 				
 				// WorldSpace widgets
-				for (auto* widget : worldSpaceWidgets) {
+				for (auto& widget : worldSpaceWidgets) {
 					if (widget->IsOpen()) {
 						hasOpenWidgets = true;
-						if (ImGui::MenuItem(std::format("Save WorldSpace_{}", widget->GetEditorID()).c_str())) {
+						if (ImGui::MenuItem(std::format("Save {}", widget->GetEditorID()).c_str())) {
 							widget->Save();
 						}
 					}
 				}
 				
 				// Lighting Template widgets
-				for (auto* widget : lightingTemplateWidgets) {
+				for (auto& widget : lightingTemplateWidgets) {
 					if (widget->IsOpen()) {
 						hasOpenWidgets = true;
-						if (ImGui::MenuItem(std::format("Save Lighting_{}", widget->GetEditorID()).c_str())) {
+						if (ImGui::MenuItem(std::format("Save {}", widget->GetEditorID()).c_str())) {
 							widget->Save();
 						}
 					}
 				}
 				
 				// ImageSpace widgets
-				for (auto* widget : imageSpaceWidgets) {
+				for (auto& widget : imageSpaceWidgets) {
 					if (widget->IsOpen()) {
 						hasOpenWidgets = true;
-						if (ImGui::MenuItem(std::format("Save ImageSpace_{}", widget->GetEditorID()).c_str())) {
+						if (ImGui::MenuItem(std::format("Save {}", widget->GetEditorID()).c_str())) {
 							widget->Save();
 						}
 					}
@@ -660,24 +848,60 @@ void EditorWindow::RenderUI()
 			
 			ImGui::Separator();
 			if (ImGui::MenuItem("Close All Weather Widgets")) {
-				for (auto* widget : weatherWidgets) widget->SetOpen(false);
+				for (auto& widget : weatherWidgets) widget->SetOpen(false);
 			}
 			if (ImGui::MenuItem("Close All WorldSpace Widgets")) {
-				for (auto* widget : worldSpaceWidgets) widget->SetOpen(false);
+				for (auto& widget : worldSpaceWidgets) widget->SetOpen(false);
 			}
 			if (ImGui::MenuItem("Close All Lighting Widgets")) {
-				for (auto* widget : lightingTemplateWidgets) widget->SetOpen(false);
+				for (auto& widget : lightingTemplateWidgets) widget->SetOpen(false);
 			}
 			if (ImGui::MenuItem("Close All ImageSpace Widgets")) {
-				for (auto* widget : imageSpaceWidgets) widget->SetOpen(false);
+				for (auto& widget : imageSpaceWidgets) widget->SetOpen(false);
 			}
 			ImGui::EndMenu();
 		}
 		if (ImGui::BeginMenu("Settings")) {
+			if (ImGui::MenuItem("General Settings")) {
+				showSettingsWindow = true;
+				settingsSelectedCategory = "General";
+			}
 			if (ImGui::MenuItem("Editor Flags")) {
-				showSettingsWindow = !showSettingsWindow;
+				showSettingsWindow = true;
+				settingsSelectedCategory = "Flags";
 			}
 			ImGui::Separator();
+			
+			// Current cell lighting
+			auto player = RE::PlayerCharacter::GetSingleton();
+			if (player && player->parentCell && player->parentCell->IsInteriorCell()) {
+				if (ImGui::MenuItem("Edit Current Cell Lighting")) {
+					// Check if widget already exists
+					bool found = false;
+					if (currentCellLightingWidget && currentCellLightingWidget->cell == player->parentCell) {
+						currentCellLightingWidget->SetOpen(true);
+						found = true;
+					}
+					
+					if (!found) {
+						// Create new widget for current cell
+						currentCellLightingWidget = std::make_unique<CellLightingWidget>(player->parentCell);
+						currentCellLightingWidget->CacheFormData();
+						currentCellLightingWidget->Load();
+						currentCellLightingWidget->SetOpen(true);
+					}
+				}
+			} else {
+				ImGui::BeginDisabled();
+				ImGui::MenuItem("Edit Current Cell Lighting");
+				ImGui::EndDisabled();
+				if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
+					ImGui::SetTooltip("Only available in interior cells");
+				}
+			}
+			
+			ImGui::Separator();
+			
 			if (ImGui::Checkbox("Auto-Apply Changes", &settings.autoApplyChanges)) {
 				Save();
 			}
@@ -690,14 +914,25 @@ void EditorWindow::RenderUI()
 			if (ImGui::IsItemHovered()) {
 				ImGui::SetTooltip("Restore previously open widgets when editor reopens");
 			}
+			if (ImGui::Checkbox("Enable Inherit From Parent", &settings.enableInheritFromParent)) {
+				Save();
+			}
+			if (ImGui::IsItemHovered()) {
+				ImGui::SetTooltip("Show inherit from parent options in weather widgets");
+			}
 			ImGui::EndMenu();
 		}
 		if (ImGui::BeginMenu("Window")) {
+			if (ImGui::MenuItem("Palette", nullptr, PaletteWindow::GetSingleton()->open)) {
+				PaletteWindow::GetSingleton()->open = !PaletteWindow::GetSingleton()->open;
+			}
+			
+			ImGui::Separator();
 			ImGui::Text("Open Widgets:");
 			ImGui::Separator();
 			
 			int openCount = 0;
-			for (auto* widget : weatherWidgets) {
+			for (auto& widget : weatherWidgets) {
 				if (widget->IsOpen()) {
 					openCount++;
 					if (ImGui::MenuItem(std::format("Weather: {}", widget->GetEditorID()).c_str())) {
@@ -705,7 +940,7 @@ void EditorWindow::RenderUI()
 					}
 				}
 			}
-			for (auto* widget : worldSpaceWidgets) {
+			for (auto& widget : worldSpaceWidgets) {
 				if (widget->IsOpen()) {
 					openCount++;
 					if (ImGui::MenuItem(std::format("WorldSpace: {}", widget->GetEditorID()).c_str())) {
@@ -713,7 +948,7 @@ void EditorWindow::RenderUI()
 					}
 				}
 			}
-			for (auto* widget : lightingTemplateWidgets) {
+			for (auto& widget : lightingTemplateWidgets) {
 				if (widget->IsOpen()) {
 					openCount++;
 					if (ImGui::MenuItem(std::format("Lighting: {}", widget->GetEditorID()).c_str())) {
@@ -721,7 +956,7 @@ void EditorWindow::RenderUI()
 					}
 				}
 			}
-			for (auto* widget : imageSpaceWidgets) {
+			for (auto& widget : imageSpaceWidgets) {
 				if (widget->IsOpen()) {
 					openCount++;
 					if (ImGui::MenuItem(std::format("ImageSpace: {}", widget->GetEditorID()).c_str())) {
@@ -761,7 +996,13 @@ void EditorWindow::RenderUI()
 			ImGui::BulletText("ImageSpaces: %d", (int)imageSpaceWidgets.size());
 			ImGui::Separator();
 			ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.2f, 1.0f), "Favorites: %d", (int)settings.favoriteWidgets.size());
-			ImGui::TextColored(ImVec4(0.7f, 1.0f, 0.7f, 1.0f), "Recent: %d", (int)settings.recentWidgets.size());
+			
+			// Count total recent widgets across all categories
+			int totalRecent = 0;
+			for (const auto& [category, widgets] : settings.recentWidgets) {
+				totalRecent += static_cast<int>(widgets.size());
+			}
+			ImGui::TextColored(ImVec4(0.7f, 1.0f, 0.7f, 1.0f), "Recent: %d", totalRecent);
 			ImGui::EndMenu();
 		}
 		
@@ -816,21 +1057,20 @@ void EditorWindow::RenderUI()
 			ImGui::PopStyleColor();
 		}
 		
-		// Close button on the right side
-		float menuBarHeight = ImGui::GetFrameHeight();
-		ImGui::SameLine(ImGui::GetWindowWidth() - menuBarHeight - 10.0f);
-		ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.8f, 0.2f, 0.2f, 1.0f));
-		ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(1.0f, 0.3f, 0.3f, 1.0f));
-		ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.7f, 0.1f, 0.1f, 1.0f));
-		if (ImGui::Button("X", ImVec2(menuBarHeight, menuBarHeight))) {
-			open = false;
-		}
-		ImGui::PopStyleColor(3);
-		if (ImGui::IsItemHovered()) {
-			ImGui::SetTooltip("Close Weather Editor (Esc)");
-		}
-		
-		ImGui::EndMainMenuBar();
+	// Close button on the right side
+	float menuBarHeight = ImGui::GetFrameHeight();
+	float closeButtonSize = menuBarHeight * 0.9f;  // 10% smaller than menu bar
+	ImGui::SameLine(ImGui::GetWindowWidth() - closeButtonSize - 10.0f);
+	ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.8f, 0.2f, 0.2f, 1.0f));
+	ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(1.0f, 0.3f, 0.3f, 1.0f));
+	ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.7f, 0.1f, 0.1f, 1.0f));
+	if (ImGui::Button("X", ImVec2(closeButtonSize, closeButtonSize))) {
+		open = false;
+	}
+	ImGui::PopStyleColor(3);
+	if (ImGui::IsItemHovered()) {
+		ImGui::SetTooltip("Close Weather Editor (Esc)");
+	}		ImGui::EndMainMenuBar();
 	}
 
 	auto width = ImGui::GetIO().DisplaySize.x;
@@ -852,12 +1092,33 @@ void EditorWindow::RenderUI()
 	}
 
 	ShowWidgetWindow();
+	
+	// Show palette window
+	PaletteWindow::GetSingleton()->Draw();
 
 	// Render notifications on top of everything
 	RenderNotifications();
 
 	// Pop the alpha style var
 	ImGui::PopStyleVar();
+	
+	// Restore previous font scale
+	io.FontGlobalScale = previousScale;
+}
+
+EditorWindow::~EditorWindow()
+{
+	delete tempTexture;
+	weatherWidgets.clear();
+	worldSpaceWidgets.clear();
+	lightingTemplateWidgets.clear();
+	imageSpaceWidgets.clear();
+	volumetricLightingWidgets.clear();
+	precipitationWidgets.clear();
+	referenceEffectWidgets.clear();
+	artObjectWidgets.clear();
+	effectShaderWidgets.clear();
+	currentCellLightingWidget.reset();
 }
 
 void EditorWindow::SetupResources()
@@ -866,35 +1127,94 @@ void EditorWindow::SetupResources()
 	auto& weatherArray = dataHandler->GetFormArray<RE::TESWeather>();
 
 	Load();
+	PaletteWindow::GetSingleton()->Load();
 
 	for (auto weather : weatherArray) {
-		auto widget = new WeatherWidget(weather);
+		auto widget = std::make_unique<WeatherWidget>(weather);
+		widget->CacheFormData();
 		widget->Load();
-		weatherWidgets.push_back(widget);
+		weatherWidgets.push_back(std::move(widget));
 	}
 
 	auto& worldSpaceArray = dataHandler->GetFormArray<RE::TESWorldSpace>();
 
 	for (auto worldSpace : worldSpaceArray) {
-		auto widget = new WorldSpaceWidget(worldSpace);
+		auto widget = std::make_unique<WorldSpaceWidget>(worldSpace);
+		widget->CacheFormData();
 		widget->Load();
-		worldSpaceWidgets.push_back(widget);
+		worldSpaceWidgets.push_back(std::move(widget));
 	}
 
 	auto& lightingTemplateArray = dataHandler->GetFormArray<RE::BGSLightingTemplate>();
 
 	for (auto lightingTemplate : lightingTemplateArray) {
-		auto widget = new LightingTemplateWidget(lightingTemplate);
+		auto widget = std::make_unique<LightingTemplateWidget>(lightingTemplate);
+		widget->CacheFormData();
 		widget->Load();
-		lightingTemplateWidgets.push_back(widget);
+		lightingTemplateWidgets.push_back(std::move(widget));
 	}
 
 	auto& imageSpaceArray = dataHandler->GetFormArray<RE::TESImageSpace>();
 
 	for (auto imageSpace : imageSpaceArray) {
-		auto widget = new ImageSpaceWidget(imageSpace);
+		auto widget = std::make_unique<ImageSpaceWidget>(imageSpace);
+		widget->CacheFormData();
 		widget->Load();
-		imageSpaceWidgets.push_back(widget);
+		imageSpaceWidgets.push_back(std::move(widget));
+	}
+
+	auto& volumetricLightingArray = dataHandler->GetFormArray<RE::BGSVolumetricLighting>();
+
+	for (auto volumetricLighting : volumetricLightingArray) {
+		auto widget = std::make_unique<VolumetricLightingWidget>(volumetricLighting);
+		widget->CacheFormData();
+		widget->Load();
+		volumetricLightingWidgets.push_back(std::move(widget));
+	}
+
+	auto& precipitationArray = dataHandler->GetFormArray<RE::BGSShaderParticleGeometryData>();
+
+	for (auto precipitation : precipitationArray) {
+		auto widget = std::make_unique<PrecipitationWidget>(precipitation);
+		widget->CacheFormData();
+		widget->Load();
+		precipitationWidgets.push_back(std::move(widget));
+	}
+
+	auto& lensFlareArray = dataHandler->GetFormArray<RE::BGSLensFlare>();
+
+	for (auto lensFlare : lensFlareArray) {
+		auto widget = std::make_unique<LensFlareWidget>(lensFlare);
+		widget->CacheFormData();
+		widget->Load();
+		lensFlareWidgets.push_back(std::move(widget));
+	}
+
+	auto& referenceEffectArray = dataHandler->GetFormArray<RE::BGSReferenceEffect>();
+
+	for (auto referenceEffect : referenceEffectArray) {
+		auto widget = std::make_unique<ReferenceEffectWidget>(referenceEffect);
+		widget->CacheFormData();
+		widget->Load();
+		referenceEffectWidgets.push_back(std::move(widget));
+	}
+
+	// Cache art objects for form picker performance
+	auto& artObjectArray = dataHandler->GetFormArray<RE::BGSArtObject>();
+	for (auto artObject : artObjectArray) {
+		auto widget = std::make_unique<SimpleFormWidget>();
+		widget->form = artObject;
+		widget->CacheFormData();
+		artObjectWidgets.push_back(std::move(widget));
+	}
+
+	// Cache effect shaders for form picker performance
+	auto& effectShaderArray = dataHandler->GetFormArray<RE::TESEffectShader>();
+	for (auto effectShader : effectShaderArray) {
+		auto widget = std::make_unique<SimpleFormWidget>();
+		widget->form = effectShader;
+		widget->CacheFormData();
+		effectShaderWidgets.push_back(std::move(widget));
 	}
 }
 
@@ -926,7 +1246,7 @@ void EditorWindow::Draw()
 	auto renderer = RE::BSGraphics::Renderer::GetSingleton();
 	auto& framebuffer = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kFRAMEBUFFER];
 
-	ID3D11Resource* resource;
+	ID3D11Resource* resource = nullptr;
 	framebuffer.SRV->GetResource(&resource);
 
 	if (!tempTexture) {
@@ -944,27 +1264,31 @@ void EditorWindow::Draw()
 
 	context->CopyResource(tempTexture->resource.get(), resource);
 
+	if (resource) {
+		resource->Release();
+	}
+
 	RenderUI();
 }
 
 void EditorWindow::SaveAll()
 {
-	for (auto weather : weatherWidgets) {
+	for (auto& weather : weatherWidgets) {
 		if (weather->IsOpen())
 			weather->Save();
 	}
 
-	for (auto worldspace : worldSpaceWidgets) {
+	for (auto& worldspace : worldSpaceWidgets) {
 		if (worldspace->IsOpen())
 			worldspace->Save();
 	}
 
-	for (auto lightingTemplate : lightingTemplateWidgets) {
+	for (auto& lightingTemplate : lightingTemplateWidgets) {
 		if (lightingTemplate->IsOpen())
 			lightingTemplate->Save();
 	}
 
-	for (auto imageSpace : imageSpaceWidgets) {
+	for (auto& imageSpace : imageSpaceWidgets) {
 		if (imageSpace->IsOpen())
 			imageSpace->Save();
 	}
@@ -987,31 +1311,23 @@ void EditorWindow::ShowSettingsWindow()
 {
 	ImGui::Begin("Settings", &showSettingsWindow);
 
-	// Static variable to track the selected category
-	static std::string selectedOption = "Flags";
-
-	// Create a table with two columns
 	if (ImGui::BeginTable("SettingsTable", 2, ImGuiTableFlags_Resizable | ImGuiTableFlags_BordersInner | ImGuiTableFlags_NoHostExtendX)) {
-		// Set up column widths
-		ImGui::TableSetupColumn("Options", ImGuiTableColumnFlags_WidthStretch, 0.3f);     // 30% width
-		ImGui::TableSetupColumn("##Settings", ImGuiTableColumnFlags_WidthStretch, 0.7f);  // 70% width
+		ImGui::TableSetupColumn("Options", ImGuiTableColumnFlags_WidthStretch, 0.3f);
+		ImGui::TableSetupColumn("##Settings", ImGuiTableColumnFlags_WidthStretch, 0.7f);
 
 		ImGui::TableNextRow();
 
-		// Left column: Options
 		ImGui::TableSetColumnIndex(0);
-		// List of options
 		const char* options[] = { "General", "Flags" };
 		for (int i = 0; i < IM_ARRAYSIZE(options); ++i) {
-			if (ImGui::Selectable(options[i], selectedOption == options[i])) {
-				selectedOption = options[i];  // Update selected option
+			if (ImGui::Selectable(options[i], settingsSelectedCategory == options[i])) {
+				settingsSelectedCategory = options[i];
 			}
 		}
 
-		// Right column: Option settings
 		ImGui::TableSetColumnIndex(1);
 
-		if (selectedOption == "General") {
+		if (settingsSelectedCategory == "General") {
 			ImGui::Checkbox("Auto-apply changes", &settings.autoApplyChanges);
 			AddTooltip("Automatically apply changes to weather/lighting when editing");
 			
@@ -1020,6 +1336,25 @@ void EditorWindow::ShowSettingsWindow()
 			
 			ImGui::Checkbox("Use text buttons instead of icons", &settings.useTextButtons);
 			AddTooltip("Display action buttons as text labels instead of icons");
+			
+			ImGui::Checkbox("Enable 'Inherit From Parent' feature", &settings.enableInheritFromParent);
+			AddTooltip("Show checkboxes to copy settings from parent weather (editor-only feature)");
+			
+			ImGui::Separator();
+			ImGui::TextUnformatted("UI Scale");
+			ImGui::Spacing();
+			
+			if (ImGui::SliderFloat("Editor UI Scale", &settings.editorUIScale, 0.5f, 2.0f, "%.2f")) {
+				Save();
+			}
+			AddTooltip("Scale the size of all editor UI elements (0.5 = 50%, 2.0 = 200%)");
+			
+			if (ImGui::Button("Reset to 1.0")) {
+				settings.editorUIScale = 1.0f;
+				Save();
+			}
+			ImGui::SameLine();
+			AddTooltip("Reset UI scale to default (100%)");
 			
 			ImGui::Separator();
 			ImGui::TextUnformatted("Session & History");
@@ -1041,7 +1376,7 @@ void EditorWindow::ShowSettingsWindow()
 				Save();
 			}
 			
-		} else if (selectedOption == "Flags") {
+		} else if (settingsSelectedCategory == "Flags") {
 			if (ImGui::BeginTable("FlagsTable", 3, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg)) {
 				ImGui::TableSetupColumn("Label", ImGuiTableColumnFlags_WidthStretch);
 				ImGui::TableSetupColumn("Colour", ImGuiTableColumnFlags_WidthStretch);
@@ -1340,20 +1675,22 @@ void EditorWindow::RenderNotifications()
 	}
 }
 
-void EditorWindow::AddToRecent(const std::string& widgetId)
+void EditorWindow::AddToRecent(const std::string& widgetId, const std::string& category)
 {
+	auto& categoryRecent = settings.recentWidgets[category];
+	
 	// Remove if already exists
-	auto it = std::find(settings.recentWidgets.begin(), settings.recentWidgets.end(), widgetId);
-	if (it != settings.recentWidgets.end()) {
-		settings.recentWidgets.erase(it);
+	auto it = std::find(categoryRecent.begin(), categoryRecent.end(), widgetId);
+	if (it != categoryRecent.end()) {
+		categoryRecent.erase(it);
 	}
 
 	// Add to front
-	settings.recentWidgets.insert(settings.recentWidgets.begin(), widgetId);
+	categoryRecent.insert(categoryRecent.begin(), widgetId);
 
 	// Limit size
-	if (settings.recentWidgets.size() > static_cast<size_t>(settings.maxRecentWidgets)) {
-		settings.recentWidgets.resize(settings.maxRecentWidgets);
+	if (categoryRecent.size() > static_cast<size_t>(settings.maxRecentWidgets)) {
+		categoryRecent.resize(settings.maxRecentWidgets);
 	}
 
 	SaveSettings();
@@ -1380,17 +1717,17 @@ void EditorWindow::SaveSessionWidgets()
 	settings.lastOpenWidgets.clear();
 	
 	// Save all currently open widgets
-	for (auto widget : weatherWidgets) {
+	for (auto& widget : weatherWidgets) {
 		if (widget->IsOpen()) {
 			settings.lastOpenWidgets.push_back(widget->GetEditorID());
 		}
 	}
-	for (auto widget : worldSpaceWidgets) {
+	for (auto& widget : worldSpaceWidgets) {
 		if (widget->IsOpen()) {
 			settings.lastOpenWidgets.push_back(widget->GetEditorID());
 		}
 	}
-	for (auto widget : lightingTemplateWidgets) {
+	for (auto& widget : lightingTemplateWidgets) {
 		if (widget->IsOpen()) {
 			settings.lastOpenWidgets.push_back(widget->GetEditorID());
 		}
@@ -1408,19 +1745,19 @@ void EditorWindow::RestoreSessionWidgets()
 	// Open widgets that were open in last session
 	for (const auto& widgetId : settings.lastOpenWidgets) {
 		// Search in all widget collections
-		for (auto widget : weatherWidgets) {
+		for (auto& widget : weatherWidgets) {
 			if (widget->GetEditorID() == widgetId) {
 				widget->SetOpen(true);
 				break;
 			}
 		}
-		for (auto widget : worldSpaceWidgets) {
+		for (auto& widget : worldSpaceWidgets) {
 			if (widget->GetEditorID() == widgetId) {
 				widget->SetOpen(true);
 				break;
 			}
 		}
-		for (auto widget : lightingTemplateWidgets) {
+		for (auto& widget : lightingTemplateWidgets) {
 			if (widget->GetEditorID() == widgetId) {
 				widget->SetOpen(true);
 				break;

@@ -15,6 +15,10 @@ public:
 
 	WeatherWidget(TESWeather* a_weather)
 	{
+		if (!a_weather) {
+			logger::error("WeatherWidget created with null pointer");
+			return;
+		}
 		form = a_weather;
 		weather = a_weather;
 		LoadWeatherValues();
@@ -46,6 +50,8 @@ public:
 		int cloudLayerSpeedX;
 		float3 color[ColorTimes::kTotal];
 		float cloudAlpha[ColorTimes::kTotal];
+		bool enabled = true;
+		std::string texturePath;
 	};
 
 	struct ImageSpaceSettings
@@ -76,7 +82,8 @@ public:
 	struct Settings
 	{
 		std::string parent = "None";
-		std::map<std::string, bool> inheritance;
+		// Per-parameter inheritance flags (one per parameter, not per TOD)
+		std::map<std::string, bool> inheritFlags;
 		std::map<std::string, int> weatherProperties;
 		std::map<std::string, float3> weatherColors;
 		std::map<std::string, float> fogProperties;
@@ -96,6 +103,9 @@ public:
 	// Cached original vanilla values for restoration
 	Settings vanillaSettings;
 
+	// Cloud texture cache (layer index -> SRV)
+	std::map<int, ID3D11ShaderResourceView*> cloudTextureCache;
+
 	~WeatherWidget();
 
 	virtual void DrawWidget() override;
@@ -113,16 +123,15 @@ public:
 	void SaveFeatureSettings();
 	void LoadFeatureSettings();
 
-	// ImageSpace methods
-	void LoadImageSpaceValues();
-	void SetImageSpaceValues();
-
 private:
 	void DrawDALCSettings();
 	void DrawWeatherColorSettings();
 	void DrawCloudSettings();
 	void DrawFogSettings();
 	void DrawFeatureSettings();
+	
+	// Cloud texture loading
+	ID3D11ShaderResourceView* GetCloudTexture(int layerIndex);
 	
 	// Search functionality
 	struct SearchResult {
@@ -137,7 +146,7 @@ private:
 	void UpdateSearchResults();
 	void NavigateToSetting(const SearchResult& result);
 	bool ShouldHighlight(const std::string& settingId) const;
-	void DrawImageSpaceSettings();
 	void DrawProperties(std::string category, std::map<std::string, int> properties);
 	void InheritFromParent(const std::string& property);
+	void InheritAllFromParent();
 };

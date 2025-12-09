@@ -92,13 +92,13 @@ namespace nlohmann
 	void from_json(const json& j, RE::TESWeather::FogData& fog)
 	{
 		std::array<float, 8> temp = j;
-		fog = { j[0],
-			j[1],
-			j[2],
-			j[3],
-			j[4],
-			j[5],
-			j[6],
-			j[7] };
+		fog = { temp[0],
+			temp[1],
+			temp[2],
+			temp[3],
+			temp[4],
+			temp[5],
+			temp[6],
+			temp[7] };
 	}
 }
