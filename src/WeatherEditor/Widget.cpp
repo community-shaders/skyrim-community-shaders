@@ -75,7 +75,7 @@ void Widget::Load()
 	if (!std::filesystem::exists(filePath)) {
 		js = json();
 		LoadSettings();
-		
+
 		EditorWindow::GetSingleton()->ShowNotification(
 			std::format("No saved file - reset {} to vanilla values", GetEditorID()),
 			ImVec4(0.3f, 0.8f, 1.0f, 1.0f),
@@ -98,7 +98,7 @@ void Widget::Load()
 	try {
 		settingsFile >> js;
 		settingsFile.close();
-		
+
 		// Validate that we loaded valid JSON
 		if (js.is_null()) {
 			logger::warn("{}: Loaded JSON is null, file may be empty or invalid", filePath);
@@ -112,12 +112,12 @@ void Widget::Load()
 		}
 		
 		LoadSettings();
-		
+
 		EditorWindow::GetSingleton()->ShowNotification(
 			std::format("Loaded saved settings for {}", GetEditorID()),
 			ImVec4(0.0f, 1.0f, 0.5f, 1.0f),
 			3.0f);
-			
+
 	} catch (const nlohmann::json::parse_error& e) {
 		logger::error("Error parsing settings for file ({}) : {}\n", filePath, e.what());
 		logger::error("Parse error at byte {}: {}", e.byte, e.what());
@@ -154,13 +154,13 @@ void Widget::Delete()
 		std::filesystem::remove(filePath);
 		
 		js = json();
-		
+
 		// Reload settings from vanilla/mod defaults
 		LoadSettings();
-		
+
 		// Apply the vanilla values to the game
 		ApplyChanges();
-		
+
 		EditorWindow::GetSingleton()->ShowNotification(
 			std::format("Deleted {} - reverted to vanilla values", GetEditorID()),
 			ImVec4(0.0f, 1.0f, 0.0f, 1.0f),
@@ -196,7 +196,7 @@ void Widget::DrawMenu()
 					ImGui::OpenPopup("ConfirmDelete");
 				}
 			}
-			
+
 			// Confirmation popup for delete
 			if (ImGui::BeginPopupModal("ConfirmDelete", NULL, ImGuiWindowFlags_AlwaysAutoResize)) {
 				ImGui::Text("Are you sure you want to delete this file?");
@@ -204,15 +204,15 @@ void Widget::DrawMenu()
 				ImGui::Spacing();
 				ImGui::Separator();
 				ImGui::Spacing();
-				
+
 				auto& settings = EditorWindow::GetSingleton()->settings;
 				if (ImGui::Checkbox("Don't show this warning again", &settings.suppressDeleteWarning)) {
 					// Save the preference immediately
 					EditorWindow::GetSingleton()->Save();
 				}
-				
+
 				ImGui::Spacing();
-				
+
 				if (ImGui::Button("Yes", ImVec2(120, 0))) {
 					Delete();
 					ImGui::CloseCurrentPopup();
@@ -224,7 +224,7 @@ void Widget::DrawMenu()
 				}
 				ImGui::EndPopup();
 			}
-			
+
 			ImGui::EndMenu();
 		}
 		ImGui::EndMenuBar();
@@ -271,7 +271,7 @@ void Widget::DrawWidgetHeader(const char* searchId, bool showApplyRevert, bool s
 		if (ImGui::InputTextWithHint(searchId, "Search settings (Ctrl+F)", searchBuffer, sizeof(searchBuffer))) {
 			searchActive = searchBuffer[0] != '\0';
 		}
-		
+
 		// Handle Ctrl+F to focus search
 		if (ImGui::GetIO().KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_F, false)) {
 			ImGui::SetKeyboardFocusHere(-1);
@@ -280,12 +280,12 @@ void Widget::DrawWidgetHeader(const char* searchId, bool showApplyRevert, bool s
 		// Force Weather button (Weather widget only)
 		if (showForceWeather && weather) {
 			ImGui::SameLine();
-			
+
 			bool isLocked = editorWindow->IsWeatherLocked() && editorWindow->GetLockedWeather() == weather;
 			const char* lockLabel = isLocked ? "Unlock" : "Force Weather";
 			ImVec2 lockTextSize = ImGui::CalcTextSize(lockLabel);
 			float lockButtonWidth = lockTextSize.x + ImGui::GetStyle().FramePadding.x * 2.0f;
-			
+
 			if (isLocked) {
 				ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.2f, 0.8f, 0.2f, 1.0f));
 				ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.3f, 0.9f, 0.3f, 1.0f));
@@ -378,7 +378,7 @@ void Widget::DrawWidgetHeader(const char* searchId, bool showApplyRevert, bool s
 		if (ImGui::InputTextWithHint(searchId, "Search settings (Ctrl+F)", searchBuffer, sizeof(searchBuffer))) {
 			searchActive = searchBuffer[0] != '\0';
 		}
-		
+
 		// Handle Ctrl+F to focus search
 		if (ImGui::GetIO().KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_F, false)) {
 			ImGui::SetKeyboardFocusHere(-1);
@@ -387,13 +387,13 @@ void Widget::DrawWidgetHeader(const char* searchId, bool showApplyRevert, bool s
 		// Force Weather button (Weather widget only)
 		if (showForceWeather && weather) {
 			ImGui::SameLine();
-			
+
 			bool isLocked = editorWindow->IsWeatherLocked() && editorWindow->GetLockedWeather() == weather;
 			const char* lockLabel = isLocked ? "Unlock" : "Force Weather";
 			ImVec2 lockSize = ImGui::CalcTextSize(lockLabel);
 			lockSize.x += ImGui::GetStyle().FramePadding.x * 2.0f;
 			lockSize.y = buttonHeight;
-			
+
 			if (isLocked) {
 				ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.2f, 0.8f, 0.2f, 1.0f));
 				ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.3f, 0.9f, 0.3f, 1.0f));
@@ -416,11 +416,11 @@ void Widget::DrawWidgetHeader(const char* searchId, bool showApplyRevert, bool s
 		// Apply/Revert buttons
 		if (showApplyRevert && !editorWindow->settings.autoApplyChanges) {
 			ImGui::SameLine();
-			
+
 			ImVec2 applySize = ImGui::CalcTextSize("Apply");
 			applySize.x += ImGui::GetStyle().FramePadding.x * 2.0f;
 			applySize.y = buttonHeight;
-			
+
 			ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.2f, 0.6f, 0.9f, 1.0f));
 			if (ImGui::Button("Apply", applySize)) {
 				ApplyChanges();
@@ -429,13 +429,13 @@ void Widget::DrawWidgetHeader(const char* searchId, bool showApplyRevert, bool s
 			if (ImGui::IsItemHovered()) {
 				ImGui::SetTooltip("Apply changes to the game");
 			}
-			
+
 			ImGui::SameLine();
-			
+
 			ImVec2 revertSize = ImGui::CalcTextSize("Revert");
 			revertSize.x += ImGui::GetStyle().FramePadding.x * 2.0f;
 			revertSize.y = buttonHeight;
-			
+
 			ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.7f, 0.3f, 0.2f, 1.0f));
 			if (ImGui::Button("Revert", revertSize)) {
 				RevertChanges();
@@ -449,38 +449,38 @@ void Widget::DrawWidgetHeader(const char* searchId, bool showApplyRevert, bool s
 		// Save/Load/Delete buttons
 		if (showSaveLoad) {
 			ImGui::SameLine();
-			
+
 			ImVec2 saveSize = ImGui::CalcTextSize("Save");
 			saveSize.x += ImGui::GetStyle().FramePadding.x * 2.0f;
 			saveSize.y = buttonHeight;
-			
+
 			if (ImGui::Button("Save", saveSize)) {
 				Save();
 			}
 			if (ImGui::IsItemHovered()) {
 				ImGui::SetTooltip("Save to file");
 			}
-			
+
 			ImGui::SameLine();
-			
+
 			ImVec2 loadSize = ImGui::CalcTextSize("Load");
 			loadSize.x += ImGui::GetStyle().FramePadding.x * 2.0f;
 			loadSize.y = buttonHeight;
-			
+
 			if (ImGui::Button("Load", loadSize)) {
 				Load();
 			}
 			if (ImGui::IsItemHovered()) {
 				ImGui::SetTooltip("Load saved file (or reset to vanilla if no file)");
 			}
-			
+
 			if (HasSavedFile()) {
 				ImGui::SameLine();
-				
+
 				ImVec2 deleteSize = ImGui::CalcTextSize("Delete");
 				deleteSize.x += ImGui::GetStyle().FramePadding.x * 2.0f;
 				deleteSize.y = buttonHeight;
-				
+
 				ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.7f, 0.3f, 0.2f, 1.0f));
 				ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.9f, 0.4f, 0.3f, 1.0f));
 				if (ImGui::Button("Delete", deleteSize)) {
@@ -505,13 +505,13 @@ void Widget::DrawWidgetHeader(const char* searchId, bool showApplyRevert, bool s
 		ImGui::Spacing();
 		ImGui::Separator();
 		ImGui::Spacing();
-		
+
 		if (ImGui::Checkbox("Don't show this warning again", &editorWindow->settings.suppressDeleteWarning)) {
 			editorWindow->Save();
 		}
-		
+
 		ImGui::Spacing();
-		
+
 		if (ImGui::Button("Yes", ImVec2(120, 0))) {
 			Delete();
 			ImGui::CloseCurrentPopup();
@@ -523,6 +523,6 @@ void Widget::DrawWidgetHeader(const char* searchId, bool showApplyRevert, bool s
 		}
 		ImGui::EndPopup();
 	}
-	
+
 	ImGui::Separator();
 }

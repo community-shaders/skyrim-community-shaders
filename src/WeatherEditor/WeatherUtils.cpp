@@ -6,7 +6,7 @@ bool ContainsStringIgnoreCase(const std::string_view a_string, const std::string
 {
 	if (a_substring.empty())
 		return true;
-	
+
 	const auto it = std::ranges::search(a_string, a_substring, [](const char a_a, const char a_b) {
 		return std::tolower(static_cast<unsigned char>(a_a)) == std::tolower(static_cast<unsigned char>(a_b));
 	});
@@ -358,7 +358,7 @@ namespace TOD
 			if (i > 0)
 				ImGui::SameLine();
 
-			ImGui::BeginChild(("##todheader_" + std::to_string(i)).c_str(), 
+			ImGui::BeginChild(("##todheader_" + std::to_string(i)).c_str(),
 				ImVec2(sliderWidth, ImGui::GetTextLineHeight()), false, ImGuiWindowFlags_NoScrollbar);
 
 			const char* name = GetPeriodName(i);
@@ -471,7 +471,7 @@ namespace TOD
 		float spacing = ImGui::GetStyle().ItemSpacing.x;
 		// Match the header calculation exactly
 		float columnWidth = (totalWidth - 3 * spacing) / 4.0f;
-		
+
 		// Use a fixed button size
 		const float buttonSize = ImGui::GetFrameHeight() * 1.5f;
 
@@ -940,31 +940,31 @@ bool BeginWidgetSearchBar(char* searchBuffer, size_t bufferSize, bool& searchAct
 {
 	// Check for Ctrl+F to activate search
 	if (ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows) &&
-	    ImGui::IsKeyPressed(ImGuiKey_F, false) && ImGui::GetIO().KeyCtrl) {
+		ImGui::IsKeyPressed(ImGuiKey_F, false) && ImGui::GetIO().KeyCtrl) {
 		searchActive = true;
 	}
 
 	ImGui::PushStyleColor(ImGuiCol_FrameBg, ImVec4(0.2f, 0.25f, 0.3f, 1.0f));
 	ImGui::SetNextItemWidth(-100.0f);
-	
+
 	if (searchActive) {
 		ImGui::SetKeyboardFocusHere();
 		searchActive = false;
 	}
-	
+
 	if (ImGui::InputTextWithHint("##WidgetSearch", "Search parameters... (Ctrl+F)", searchBuffer, bufferSize)) {
 		// Text changed
 	}
-	
+
 	// Clear button
 	ImGui::SameLine();
 	if (ImGui::Button("Clear", ImVec2(90, 0))) {
 		searchBuffer[0] = '\0';
 	}
-	
+
 	ImGui::PopStyleColor();
 	ImGui::Separator();
-	
+
 	return searchBuffer[0] != '\0';  // Return true if search is active
 }
 

@@ -134,7 +134,8 @@ private:
 	ID3D11ShaderResourceView* GetCloudTexture(int layerIndex);
 	
 	// Search functionality
-	struct SearchResult {
+	struct SearchResult
+	{
 		std::string displayName;
 		std::string tabName;
 		std::string settingId;

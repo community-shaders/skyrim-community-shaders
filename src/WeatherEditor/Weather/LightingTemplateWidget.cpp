@@ -30,7 +30,6 @@ void LightingTemplateWidget::DrawWidget()
 {
 	ImGui::SetNextWindowSizeConstraints(ImVec2(600, 0), ImVec2(FLT_MAX, FLT_MAX));
 	if (ImGui::Begin(GetEditorID().c_str(), &open, ImGuiWindowFlags_NoSavedSettings)) {
-
 		// Draw header with search and Save/Load/Delete buttons
 		DrawWidgetHeader("##LightingTemplateSearch", false, true, false, nullptr);
 
@@ -139,7 +138,7 @@ void LightingTemplateWidget::DrawDALCSettings()
 	if (ImGui::CollapsingHeader("Directional Colors (Time of Day)", ImGuiTreeNodeFlags_DefaultOpen)) {
 		// Note: The game engine uses X, Y, Z to represent time periods
 		// We map them to: X=Sunrise/Day, Y=Sunset, Z=Night for TOD display
-		
+
 		if (TOD::BeginTODTable("DALCDirectionalTable")) {
 			TOD::RenderTODHeader();
 			ImGui::TableNextRow();
@@ -151,17 +150,17 @@ void LightingTemplateWidget::DrawDALCSettings()
 			// Prepare arrays for TOD rendering (map X,Y,Z to Sunrise,Day,Sunset,Night)
 			float3 maxColors[4];
 			float3 minColors[4];
-			
+
 			// Map X (index 0) to Sunrise and Day
 			maxColors[TOD::Sunrise] = settings.dalc.directional[0].max;
 			maxColors[TOD::Day] = settings.dalc.directional[0].max;
 			minColors[TOD::Sunrise] = settings.dalc.directional[0].min;
 			minColors[TOD::Day] = settings.dalc.directional[0].min;
-			
+
 			// Map Y (index 1) to Sunset
 			maxColors[TOD::Sunset] = settings.dalc.directional[1].max;
 			minColors[TOD::Sunset] = settings.dalc.directional[1].min;
-			
+
 			// Map Z (index 2) to Night
 			maxColors[TOD::Night] = settings.dalc.directional[2].max;
 			minColors[TOD::Night] = settings.dalc.directional[2].min;
