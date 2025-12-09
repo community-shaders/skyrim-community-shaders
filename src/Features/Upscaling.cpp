@@ -1427,6 +1427,8 @@ void Upscaling::ApplySharpening()
 
 	if (!sharpenerTexture)
 		return;
+  	float currentSharpness = (-2.0f * settings.sharpness) + 2.0f;
+    currentSharpness = exp2(-currentSharpness);
 
 	auto context = globals::d3d::context;
 	auto renderer = globals::game::renderer;
