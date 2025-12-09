@@ -1,6 +1,6 @@
 #include "WeatherUtils.h"
-#include "PaletteWindow.h"
 #include "EditorWindow.h"
+#include "PaletteWindow.h"
 
 bool ContainsStringIgnoreCase(const std::string_view a_string, const std::string_view a_substring)
 {
@@ -151,13 +151,13 @@ namespace WeatherUtils
 		static std::map<std::string, int> pendingValues;
 		static std::map<std::string, double> lastChangeTime;
 		const double debounceDelay = 2.0;
-		
+
 		bool changed = ImGui::SliderInt(label.c_str(), &property, -128, 127);
 		if (changed) {
 			pendingValues[label] = property;
 			lastChangeTime[label] = ImGui::GetTime();
 		}
-		
+
 		// Check for any pending values that should be tracked
 		std::vector<std::string> toTrack;
 		for (const auto& [key, changeTime] : lastChangeTime) {
@@ -165,14 +165,14 @@ namespace WeatherUtils
 				toTrack.push_back(key);
 			}
 		}
-		
+
 		// Track and remove completed entries
 		for (const auto& key : toTrack) {
 			PaletteWindow::GetSingleton()->TrackValueUsage(key, static_cast<float>(pendingValues[key]));
 			pendingValues.erase(key);
 			lastChangeTime.erase(key);
 		}
-		
+
 		return changed;
 	}
 
@@ -181,11 +181,11 @@ namespace WeatherUtils
 		static std::map<std::string, float3> colorCache;
 		static std::string activeColorId;
 		static std::map<std::string, bool> wasPickerOpen;
-		
+
 		std::string cacheId = l;
 		bool isActive = ImGui::IsPopupOpen(l.c_str(), ImGuiPopupFlags_AnyPopupId);
 		bool wasActive = wasPickerOpen[cacheId];
-		
+
 		// Cache the original color when picker is first activated
 		if (isActive && activeColorId != cacheId) {
 			colorCache[cacheId] = property;
@@ -193,7 +193,7 @@ namespace WeatherUtils
 		} else if (!isActive && activeColorId == cacheId) {
 			activeColorId.clear();
 		}
-		
+
 		// Check for Ctrl+Z while picker is active
 		if (isActive && ImGui::IsKeyDown(ImGuiKey_LeftCtrl) && ImGui::IsKeyPressed(ImGuiKey_Z)) {
 			if (colorCache.contains(cacheId)) {
@@ -202,23 +202,23 @@ namespace WeatherUtils
 				return true;
 			}
 		}
-		
+
 		bool changed = ImGui::ColorEdit3(l.c_str(), (float*)&property);
-		
+
 		// Track color usage only when picker closes
 		if (wasActive && !isActive) {
 			PaletteWindow::GetSingleton()->TrackColorUsage(property);
 		}
-		
+
 		wasPickerOpen[cacheId] = isActive;
-		
+
 		// Drag-and-drop source
 		if (ImGui::BeginDragDropSource(ImGuiDragDropFlags_None)) {
 			ImGui::SetDragDropPayload("COLOR_DND", &property, sizeof(float3));
 			ImGui::ColorButton("##preview", ImVec4(property.x, property.y, property.z, 1.0f), ImGuiColorEditFlags_NoAlpha);
 			ImGui::EndDragDropSource();
 		}
-		
+
 		// Drag-and-drop target
 		if (ImGui::BeginDragDropTarget()) {
 			if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("COLOR_DND")) {
@@ -230,7 +230,7 @@ namespace WeatherUtils
 			}
 			ImGui::EndDragDropTarget();
 		}
-		
+
 		return changed;
 	}
 
@@ -244,13 +244,13 @@ namespace WeatherUtils
 		static std::map<std::string, float> pendingValues;
 		static std::map<std::string, double> lastChangeTime;
 		const double debounceDelay = 2.0;
-		
+
 		bool changed = ImGui::SliderFloat(label.c_str(), &property, min, max);
 		if (changed) {
 			pendingValues[label] = property;
 			lastChangeTime[label] = ImGui::GetTime();
 		}
-		
+
 		// Check for any pending values that should be tracked
 		std::vector<std::string> toTrack;
 		for (const auto& [key, changeTime] : lastChangeTime) {
@@ -258,14 +258,14 @@ namespace WeatherUtils
 				toTrack.push_back(key);
 			}
 		}
-		
+
 		// Track and remove completed entries
 		for (const auto& key : toTrack) {
 			PaletteWindow::GetSingleton()->TrackValueUsage(key, pendingValues[key]);
 			pendingValues.erase(key);
 			lastChangeTime.erase(key);
 		}
-		
+
 		return changed;
 	}
 }
@@ -385,7 +385,7 @@ namespace TOD
 		static std::map<std::string, float> pendingValues;
 		static std::map<std::string, double> lastChangeTime;
 		const double debounceDelay = 2.0;
-		
+
 		float factors[4];
 		GetTimeOfDayFactors(factors);
 		bool changed = false;
@@ -406,22 +406,23 @@ namespace TOD
 			if (!isActive)
 				ImGui::PushStyleVar(ImGuiStyleVar_Alpha, 0.5f);
 
-		ImGui::PushItemWidth(sliderWidth);
-		std::string id = std::string("##") + label + std::to_string(i);
-		if (ImGui::SliderFloat(id.c_str(), &values[i], minValue, maxValue, format)) {
-			changed = true;
-			std::string valueName = std::string(label) + " " + GetPeriodName(i);
-			pendingValues[valueName] = values[i];
-			lastChangeTime[valueName] = ImGui::GetTime();
-		}
+			ImGui::PushItemWidth(sliderWidth);
+			std::string id = std::string("##") + label + std::to_string(i);
+			if (ImGui::SliderFloat(id.c_str(), &values[i], minValue, maxValue, format)) {
+				changed = true;
+				std::string valueName = std::string(label) + " " + GetPeriodName(i);
+				pendingValues[valueName] = values[i];
+				lastChangeTime[valueName] = ImGui::GetTime();
+			}
 
-		if (ImGui::IsItemHovered())
-			ImGui::SetTooltip("%.0f%%", factors[i] * 100.0f);			ImGui::PopItemWidth();
+			if (ImGui::IsItemHovered())
+				ImGui::SetTooltip("%.0f%%", factors[i] * 100.0f);
+			ImGui::PopItemWidth();
 
 			if (!isActive)
 				ImGui::PopStyleVar();
 		}
-		
+
 		// Check for any pending values that should be tracked
 		std::vector<std::string> toTrack;
 		for (const auto& [key, changeTime] : lastChangeTime) {
@@ -429,7 +430,7 @@ namespace TOD
 				toTrack.push_back(key);
 			}
 		}
-		
+
 		// Track and remove completed entries
 		for (const auto& key : toTrack) {
 			PaletteWindow::GetSingleton()->TrackValueUsage(key, pendingValues[key]);
@@ -448,7 +449,7 @@ namespace TOD
 
 		ImGui::TableNextRow();
 		ImGui::TableSetColumnIndex(0);
-		
+
 		// Only highlight the title text based on active time of day
 		bool anyActive = false;
 		for (int i = 0; i < Count; ++i) {
@@ -459,12 +460,12 @@ namespace TOD
 		}
 		if (!anyActive)
 			ImGui::PushStyleVar(ImGuiStyleVar_Alpha, 0.5f);
-		
+
 		ImGui::Text("%s", label);
-		
+
 		if (!anyActive)
 			ImGui::PopStyleVar();
-		
+
 		ImGui::TableSetColumnIndex(1);
 
 		float totalWidth = ImGui::GetContentRegionAvail().x;
@@ -490,24 +491,24 @@ namespace TOD
 
 			std::string id = std::string("##") + label + std::to_string(i);
 			ImVec4 color = ImVec4(colors[i].x, colors[i].y, colors[i].z, 1.0f);
-			
+
 			static std::map<std::string, float3> colorCache;
 			static std::string activeColorId;
-			
+
 			// Use ColorButton with fixed size - no alpha styling on the button itself
 			if (ImGui::ColorButton(id.c_str(), color, ImGuiColorEditFlags_NoAlpha, ImVec2(buttonSize, buttonSize))) {
 				colorCache[id] = colors[i];
 				activeColorId = id;
 				ImGui::OpenPopup(id.c_str());
 			}
-			
+
 			// Drag-and-drop source
 			if (ImGui::BeginDragDropSource(ImGuiDragDropFlags_None)) {
 				ImGui::SetDragDropPayload("COLOR_DND", &colors[i], sizeof(float3));
 				ImGui::ColorButton("##preview", color, ImGuiColorEditFlags_NoAlpha);
 				ImGui::EndDragDropSource();
 			}
-			
+
 			// Drag-and-drop target
 			if (ImGui::BeginDragDropTarget()) {
 				if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("COLOR_DND")) {
@@ -519,12 +520,12 @@ namespace TOD
 				}
 				ImGui::EndDragDropTarget();
 			}
-			
+
 			// Color picker popup
 			static std::map<std::string, bool> wasPopupOpen;
 			bool isPopupOpen = ImGui::BeginPopup(id.c_str());
 			bool wasOpen = wasPopupOpen[id];
-			
+
 			if (isPopupOpen) {
 				// Check for Ctrl+Z while picker is active
 				if (ImGui::IsKeyDown(ImGuiKey_LeftCtrl) && ImGui::IsKeyPressed(ImGuiKey_Z)) {
@@ -533,7 +534,7 @@ namespace TOD
 						changed = true;
 					}
 				}
-				
+
 				if (ImGui::ColorPicker3((id + "_picker").c_str(), (float*)&colors[i], ImGuiColorEditFlags_NoAlpha)) {
 					changed = true;
 				}
@@ -541,12 +542,12 @@ namespace TOD
 			} else if (activeColorId == id) {
 				activeColorId.clear();
 			}
-			
+
 			// Track color usage only when popup closes
 			if (wasOpen && !isPopupOpen) {
 				PaletteWindow::GetSingleton()->TrackColorUsage(colors[i]);
 			}
-			
+
 			wasPopupOpen[id] = isPopupOpen;
 
 			if (ImGui::IsItemHovered())
@@ -563,27 +564,27 @@ namespace TOD
 		static std::map<std::string, float> pendingSliderValues;
 		static std::map<std::string, double> sliderLastChangeTime;
 		const double debounceDelay = 2.0;
-		
-	float factors[4];
-	GetTimeOfDayFactors(factors);
-	bool changed = false;
 
-	ImGui::TableNextRow();
-	ImGui::TableSetColumnIndex(0);
-	ImGui::Text("%s", label);
-	ImGui::TableSetColumnIndex(1);
+		float factors[4];
+		GetTimeOfDayFactors(factors);
+		bool changed = false;
 
-	float totalWidth = ImGui::GetContentRegionAvail().x;
-	float checkboxWidth = 20.0f;
-	float spacing = ImGui::GetStyle().ItemSpacing.x;
-	float sliderWidth = (totalWidth - (static_cast<int>(Count) - 1) * spacing - (parentValues ? static_cast<int>(Count) * checkboxWidth : 0)) / static_cast<float>(Count);
+		ImGui::TableNextRow();
+		ImGui::TableSetColumnIndex(0);
+		ImGui::Text("%s", label);
+		ImGui::TableSetColumnIndex(1);
 
-	for (int i = 0; i < Count; ++i) {
+		float totalWidth = ImGui::GetContentRegionAvail().x;
+		float checkboxWidth = 20.0f;
+		float spacing = ImGui::GetStyle().ItemSpacing.x;
+		float sliderWidth = (totalWidth - (static_cast<int>(Count) - 1) * spacing - (parentValues ? static_cast<int>(Count) * checkboxWidth : 0)) / static_cast<float>(Count);
+
+		for (int i = 0; i < Count; ++i) {
 			if (i > 0)
 				ImGui::SameLine();
 
 			ImGui::BeginGroup();
-			
+
 			// Per-column inherit checkbox
 			if (parentValues) {
 				ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(1, 1));
@@ -629,10 +630,10 @@ namespace TOD
 
 			if (!isActive || (inheritFlags && inheritFlags[i]))
 				ImGui::PopStyleVar();
-			
+
 			ImGui::EndGroup();
 		}
-		
+
 		// Check for any pending values that should be tracked
 		std::vector<std::string> toTrack;
 		for (const auto& [key, changeTime] : sliderLastChangeTime) {
@@ -640,7 +641,7 @@ namespace TOD
 				toTrack.push_back(key);
 			}
 		}
-		
+
 		// Track and remove completed entries
 		for (const auto& key : toTrack) {
 			PaletteWindow::GetSingleton()->TrackValueUsage(key, pendingSliderValues[key]);
@@ -659,7 +660,7 @@ namespace TOD
 
 		ImGui::TableNextRow();
 		ImGui::TableSetColumnIndex(0);
-		
+
 		bool anyActive = false;
 		for (int i = 0; i < Count; ++i) {
 			if (factors[i] > 0.0f) {
@@ -672,16 +673,16 @@ namespace TOD
 
 		// Draw label text
 		ImGui::Text("%s", label);
-		
+
 		// Draw inherit checkbox right under the label
 		if (parentColors) {
 			ImGui::SameLine();
 			ImGui::PushStyleColor(ImGuiCol_FrameBg, ImVec4(0.2f, 0.2f, 0.2f, 1.0f));
 			ImGui::PushStyleColor(ImGuiCol_CheckMark, ImVec4(0.6f, 0.6f, 0.6f, 1.0f));
 			ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(2, 2));
-			
-		std::string inheritId = std::string("##inherit_") + label;
-		if (ImGui::Checkbox(inheritId.c_str(), &inheritFlag)) {
+
+			std::string inheritId = std::string("##inherit_") + label;
+			if (ImGui::Checkbox(inheritId.c_str(), &inheritFlag)) {
 				if (inheritFlag) {
 					// Copy all parent values
 					for (int i = 0; i < Count; ++i) {
@@ -691,15 +692,15 @@ namespace TOD
 				}
 				// Allow unchecking
 			}
-			
+
 			ImGui::PopStyleVar();
 			ImGui::PopStyleColor(2);
-			
+
 			if (ImGui::IsItemHovered()) {
 				ImGui::SetTooltip("Inherit from parent weather");
 			}
 		}
-		
+
 		if (!anyActive)
 			ImGui::PopStyleVar();
 
@@ -806,7 +807,8 @@ namespace TOD
 		float columnWidth = (totalWidth - 3 * spacing) / 4.0f;
 
 		for (int i = 0; i < Count; ++i) {
-			if (i > 0) ImGui::SameLine();
+			if (i > 0)
+				ImGui::SameLine();
 			ImGui::PushID(i);
 			ImGui::SetNextItemWidth(columnWidth);
 			if (ImGui::SliderFloat("##value", &values[i], minValue, maxValue, format)) {
@@ -826,16 +828,16 @@ namespace TOD
 
 		ImGui::TableNextRow();
 		ImGui::TableSetColumnIndex(0);
-		
+
 		ImGui::Text("%s", label);
-		
+
 		// Draw inherit checkbox
 		if (parentValues) {
 			ImGui::SameLine();
 			ImGui::PushStyleColor(ImGuiCol_FrameBg, ImVec4(0.2f, 0.2f, 0.2f, 1.0f));
 			ImGui::PushStyleColor(ImGuiCol_CheckMark, ImVec4(0.6f, 0.6f, 0.6f, 1.0f));
 			ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(2, 2));
-			
+
 			std::string inheritId = std::string("##inherit_") + label;
 			if (ImGui::Checkbox(inheritId.c_str(), &inheritFlag)) {
 				if (inheritFlag) {
@@ -845,10 +847,10 @@ namespace TOD
 					changed = true;
 				}
 			}
-			
+
 			ImGui::PopStyleVar();
 			ImGui::PopStyleColor(2);
-			
+
 			if (ImGui::IsItemHovered()) {
 				ImGui::SetTooltip("Inherit from parent weather");
 			}
@@ -862,13 +864,14 @@ namespace TOD
 
 		ImGui::BeginDisabled(inheritFlag);
 		for (int i = 0; i < Count; ++i) {
-			if (i > 0) ImGui::SameLine();
-			
+			if (i > 0)
+				ImGui::SameLine();
+
 			// Apply inherited value if flag is set
 			if (inheritFlag && parentValues) {
 				values[i] = parentValues[i];
 			}
-			
+
 			ImGui::PushID(i);
 			ImGui::SetNextItemWidth(columnWidth);
 			if (ImGui::SliderFloat("##value", &values[i], minValue, maxValue, format)) {

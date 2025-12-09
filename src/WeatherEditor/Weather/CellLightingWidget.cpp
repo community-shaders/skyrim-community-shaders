@@ -27,49 +27,69 @@ void CellLightingWidget::DrawWidget()
 		if (ImGui::BeginTabBar("CellLightingTabs")) {
 			if (ImGui::BeginTabItem("Colors")) {
 				ImGui::SeparatorText("Ambient & Directional");
-				if (WeatherUtils::DrawColorEdit("Ambient Color", settings.ambient)) changed = true;
-				if (WeatherUtils::DrawColorEdit("Directional Color", settings.directional)) changed = true;
-				if (WeatherUtils::DrawSliderFloat("Directional Fade", settings.directionalFade, 0.0f, 1.0f)) changed = true;
+				if (WeatherUtils::DrawColorEdit("Ambient Color", settings.ambient))
+					changed = true;
+				if (WeatherUtils::DrawColorEdit("Directional Color", settings.directional))
+					changed = true;
+				if (WeatherUtils::DrawSliderFloat("Directional Fade", settings.directionalFade, 0.0f, 1.0f))
+					changed = true;
 
 				ImGui::SeparatorText("Fog Colors");
-				if (WeatherUtils::DrawColorEdit("Fog Near Color", settings.fogColorNear)) changed = true;
-				if (WeatherUtils::DrawColorEdit("Fog Far Color", settings.fogColorFar)) changed = true;
+				if (WeatherUtils::DrawColorEdit("Fog Near Color", settings.fogColorNear))
+					changed = true;
+				if (WeatherUtils::DrawColorEdit("Fog Far Color", settings.fogColorFar))
+					changed = true;
 
 				ImGui::EndTabItem();
 			}
 
 			if (ImGui::BeginTabItem("Fog")) {
 				ImGui::SeparatorText("Fog Distance");
-				if (WeatherUtils::DrawSliderFloat("Fog Near", settings.fogNear, 0.0f, 10000.0f)) changed = true;
-				if (WeatherUtils::DrawSliderFloat("Fog Far", settings.fogFar, 0.0f, 50000.0f)) changed = true;
-				
+				if (WeatherUtils::DrawSliderFloat("Fog Near", settings.fogNear, 0.0f, 10000.0f))
+					changed = true;
+				if (WeatherUtils::DrawSliderFloat("Fog Far", settings.fogFar, 0.0f, 50000.0f))
+					changed = true;
+
 				ImGui::SeparatorText("Fog Properties");
-				if (WeatherUtils::DrawSliderFloat("Fog Power", settings.fogPower, 0.0f, 10.0f)) changed = true;
-				if (WeatherUtils::DrawSliderFloat("Fog Clamp (Max)", settings.fogClamp, 0.0f, 1.0f)) changed = true;
+				if (WeatherUtils::DrawSliderFloat("Fog Power", settings.fogPower, 0.0f, 10.0f))
+					changed = true;
+				if (WeatherUtils::DrawSliderFloat("Fog Clamp (Max)", settings.fogClamp, 0.0f, 1.0f))
+					changed = true;
 
 				ImGui::EndTabItem();
 			}
 
 			if (ImGui::BeginTabItem("Directional Ambient")) {
 				ImGui::SeparatorText("Directional Ambient Lighting (DALC)");
-				
-				if (WeatherUtils::DrawColorEdit("X+ (Right)", settings.directionalXPlus)) changed = true;
-				if (WeatherUtils::DrawColorEdit("X- (Left)", settings.directionalXMinus)) changed = true;
-				if (WeatherUtils::DrawColorEdit("Y+ (Front)", settings.directionalYPlus)) changed = true;
-				if (WeatherUtils::DrawColorEdit("Y- (Back)", settings.directionalYMinus)) changed = true;
-				if (WeatherUtils::DrawColorEdit("Z+ (Up)", settings.directionalZPlus)) changed = true;
-				if (WeatherUtils::DrawColorEdit("Z- (Down)", settings.directionalZMinus)) changed = true;
-				if (WeatherUtils::DrawColorEdit("Specular", settings.directionalSpecular)) changed = true;
-				if (WeatherUtils::DrawSliderFloat("Fresnel Power", settings.fresnelPower, 0.0f, 10.0f)) changed = true;
+
+				if (WeatherUtils::DrawColorEdit("X+ (Right)", settings.directionalXPlus))
+					changed = true;
+				if (WeatherUtils::DrawColorEdit("X- (Left)", settings.directionalXMinus))
+					changed = true;
+				if (WeatherUtils::DrawColorEdit("Y+ (Front)", settings.directionalYPlus))
+					changed = true;
+				if (WeatherUtils::DrawColorEdit("Y- (Back)", settings.directionalYMinus))
+					changed = true;
+				if (WeatherUtils::DrawColorEdit("Z+ (Up)", settings.directionalZPlus))
+					changed = true;
+				if (WeatherUtils::DrawColorEdit("Z- (Down)", settings.directionalZMinus))
+					changed = true;
+				if (WeatherUtils::DrawColorEdit("Specular", settings.directionalSpecular))
+					changed = true;
+				if (WeatherUtils::DrawSliderFloat("Fresnel Power", settings.fresnelPower, 0.0f, 10.0f))
+					changed = true;
 
 				ImGui::EndTabItem();
 			}
 
 			if (ImGui::BeginTabItem("Advanced")) {
 				ImGui::SeparatorText("Light Fade Distances");
-				if (WeatherUtils::DrawSliderFloat("Light Fade Start", settings.lightFadeStart, 0.0f, 10000.0f)) changed = true;
-				if (WeatherUtils::DrawSliderFloat("Light Fade End", settings.lightFadeEnd, 0.0f, 20000.0f)) changed = true;
-				if (WeatherUtils::DrawSliderFloat("Clip Distance", settings.clipDist, 0.0f, 50000.0f)) changed = true;
+				if (WeatherUtils::DrawSliderFloat("Light Fade Start", settings.lightFadeStart, 0.0f, 10000.0f))
+					changed = true;
+				if (WeatherUtils::DrawSliderFloat("Light Fade End", settings.lightFadeEnd, 0.0f, 20000.0f))
+					changed = true;
+				if (WeatherUtils::DrawSliderFloat("Clip Distance", settings.clipDist, 0.0f, 50000.0f))
+					changed = true;
 
 				ImGui::SeparatorText("Directional Rotation");
 				int xyDegrees = settings.directionalXY;
@@ -90,17 +110,28 @@ void CellLightingWidget::DrawWidget()
 				ImGui::TextWrapped("These flags control which lighting properties are inherited from the cell's lighting template.");
 				ImGui::Separator();
 
-				if (ImGui::Checkbox("Inherit Ambient Color", &settings.inheritAmbientColor)) changed = true;
-				if (ImGui::Checkbox("Inherit Directional Color", &settings.inheritDirectionalColor)) changed = true;
-				if (ImGui::Checkbox("Inherit Fog Color", &settings.inheritFogColor)) changed = true;
-				if (ImGui::Checkbox("Inherit Fog Near", &settings.inheritFogNear)) changed = true;
-				if (ImGui::Checkbox("Inherit Fog Far", &settings.inheritFogFar)) changed = true;
-				if (ImGui::Checkbox("Inherit Directional Rotation", &settings.inheritDirectionalRotation)) changed = true;
-				if (ImGui::Checkbox("Inherit Directional Fade", &settings.inheritDirectionalFade)) changed = true;
-				if (ImGui::Checkbox("Inherit Clip Distance", &settings.inheritClipDistance)) changed = true;
-				if (ImGui::Checkbox("Inherit Fog Power", &settings.inheritFogPower)) changed = true;
-				if (ImGui::Checkbox("Inherit Fog Max (Clamp)", &settings.inheritFogMax)) changed = true;
-				if (ImGui::Checkbox("Inherit Light Fade Distances", &settings.inheritLightFadeDistances)) changed = true;
+				if (ImGui::Checkbox("Inherit Ambient Color", &settings.inheritAmbientColor))
+					changed = true;
+				if (ImGui::Checkbox("Inherit Directional Color", &settings.inheritDirectionalColor))
+					changed = true;
+				if (ImGui::Checkbox("Inherit Fog Color", &settings.inheritFogColor))
+					changed = true;
+				if (ImGui::Checkbox("Inherit Fog Near", &settings.inheritFogNear))
+					changed = true;
+				if (ImGui::Checkbox("Inherit Fog Far", &settings.inheritFogFar))
+					changed = true;
+				if (ImGui::Checkbox("Inherit Directional Rotation", &settings.inheritDirectionalRotation))
+					changed = true;
+				if (ImGui::Checkbox("Inherit Directional Fade", &settings.inheritDirectionalFade))
+					changed = true;
+				if (ImGui::Checkbox("Inherit Clip Distance", &settings.inheritClipDistance))
+					changed = true;
+				if (ImGui::Checkbox("Inherit Fog Power", &settings.inheritFogPower))
+					changed = true;
+				if (ImGui::Checkbox("Inherit Fog Max (Clamp)", &settings.inheritFogMax))
+					changed = true;
+				if (ImGui::Checkbox("Inherit Light Fade Distances", &settings.inheritLightFadeDistances))
+					changed = true;
 
 				ImGui::EndTabItem();
 			}
@@ -111,7 +142,7 @@ void CellLightingWidget::DrawWidget()
 		if (changed && EditorWindow::GetSingleton()->settings.autoApplyChanges) {
 			ApplyChanges();
 		}
-		
+
 		ImGui::End();
 	}
 }
@@ -152,17 +183,27 @@ void CellLightingWidget::LoadSettings()
 					settings.fogColorFar = { arr[0], arr[1], arr[2] };
 				}
 			}
-			if (js.contains("fogNear")) settings.fogNear = js["fogNear"];
-			if (js.contains("fogFar")) settings.fogFar = js["fogFar"];
-			if (js.contains("fogPower")) settings.fogPower = js["fogPower"];
-			if (js.contains("fogClamp")) settings.fogClamp = js["fogClamp"];
-			if (js.contains("directionalFade")) settings.directionalFade = js["directionalFade"];
-			if (js.contains("clipDist")) settings.clipDist = js["clipDist"];
-			if (js.contains("lightFadeStart")) settings.lightFadeStart = js["lightFadeStart"];
-			if (js.contains("lightFadeEnd")) settings.lightFadeEnd = js["lightFadeEnd"];
-			if (js.contains("directionalXY")) settings.directionalXY = js["directionalXY"];
-			if (js.contains("directionalZ")) settings.directionalZ = js["directionalZ"];
-			
+			if (js.contains("fogNear"))
+				settings.fogNear = js["fogNear"];
+			if (js.contains("fogFar"))
+				settings.fogFar = js["fogFar"];
+			if (js.contains("fogPower"))
+				settings.fogPower = js["fogPower"];
+			if (js.contains("fogClamp"))
+				settings.fogClamp = js["fogClamp"];
+			if (js.contains("directionalFade"))
+				settings.directionalFade = js["directionalFade"];
+			if (js.contains("clipDist"))
+				settings.clipDist = js["clipDist"];
+			if (js.contains("lightFadeStart"))
+				settings.lightFadeStart = js["lightFadeStart"];
+			if (js.contains("lightFadeEnd"))
+				settings.lightFadeEnd = js["lightFadeEnd"];
+			if (js.contains("directionalXY"))
+				settings.directionalXY = js["directionalXY"];
+			if (js.contains("directionalZ"))
+				settings.directionalZ = js["directionalZ"];
+
 			if (js.contains("dalc")) {
 				auto& dalc = js["dalc"];
 				if (dalc.contains("xPlus") && dalc["xPlus"].is_array() && dalc["xPlus"].size() == 3) {
@@ -186,24 +227,36 @@ void CellLightingWidget::LoadSettings()
 				if (dalc.contains("specular") && dalc["specular"].is_array() && dalc["specular"].size() == 3) {
 					settings.directionalSpecular = { dalc["specular"][0], dalc["specular"][1], dalc["specular"][2] };
 				}
-				if (dalc.contains("fresnelPower")) settings.fresnelPower = dalc["fresnelPower"];
+				if (dalc.contains("fresnelPower"))
+					settings.fresnelPower = dalc["fresnelPower"];
 			}
-			
+
 			if (js.contains("inherit")) {
 				auto& inherit = js["inherit"];
-				if (inherit.contains("ambientColor")) settings.inheritAmbientColor = inherit["ambientColor"];
-				if (inherit.contains("directionalColor")) settings.inheritDirectionalColor = inherit["directionalColor"];
-				if (inherit.contains("fogColor")) settings.inheritFogColor = inherit["fogColor"];
-				if (inherit.contains("fogNear")) settings.inheritFogNear = inherit["fogNear"];
-				if (inherit.contains("fogFar")) settings.inheritFogFar = inherit["fogFar"];
-				if (inherit.contains("directionalRotation")) settings.inheritDirectionalRotation = inherit["directionalRotation"];
-				if (inherit.contains("directionalFade")) settings.inheritDirectionalFade = inherit["directionalFade"];
-				if (inherit.contains("clipDistance")) settings.inheritClipDistance = inherit["clipDistance"];
-				if (inherit.contains("fogPower")) settings.inheritFogPower = inherit["fogPower"];
-				if (inherit.contains("fogMax")) settings.inheritFogMax = inherit["fogMax"];
-				if (inherit.contains("lightFadeDistances")) settings.inheritLightFadeDistances = inherit["lightFadeDistances"];
+				if (inherit.contains("ambientColor"))
+					settings.inheritAmbientColor = inherit["ambientColor"];
+				if (inherit.contains("directionalColor"))
+					settings.inheritDirectionalColor = inherit["directionalColor"];
+				if (inherit.contains("fogColor"))
+					settings.inheritFogColor = inherit["fogColor"];
+				if (inherit.contains("fogNear"))
+					settings.inheritFogNear = inherit["fogNear"];
+				if (inherit.contains("fogFar"))
+					settings.inheritFogFar = inherit["fogFar"];
+				if (inherit.contains("directionalRotation"))
+					settings.inheritDirectionalRotation = inherit["directionalRotation"];
+				if (inherit.contains("directionalFade"))
+					settings.inheritDirectionalFade = inherit["directionalFade"];
+				if (inherit.contains("clipDistance"))
+					settings.inheritClipDistance = inherit["clipDistance"];
+				if (inherit.contains("fogPower"))
+					settings.inheritFogPower = inherit["fogPower"];
+				if (inherit.contains("fogMax"))
+					settings.inheritFogMax = inherit["fogMax"];
+				if (inherit.contains("lightFadeDistances"))
+					settings.inheritLightFadeDistances = inherit["lightFadeDistances"];
 			}
-			
+
 		} catch (const std::exception& e) {
 			logger::error("CellLighting {}: Failed to load from JSON: {}", GetEditorID(), e.what());
 			// Fall through to load from form
@@ -270,7 +323,7 @@ void CellLightingWidget::SaveSettings()
 	js["lightFadeEnd"] = settings.lightFadeEnd;
 	js["directionalXY"] = settings.directionalXY;
 	js["directionalZ"] = settings.directionalZ;
-	
+
 	js["dalc"]["xPlus"] = { settings.directionalXPlus.x, settings.directionalXPlus.y, settings.directionalXPlus.z };
 	js["dalc"]["xMinus"] = { settings.directionalXMinus.x, settings.directionalXMinus.y, settings.directionalXMinus.z };
 	js["dalc"]["yPlus"] = { settings.directionalYPlus.x, settings.directionalYPlus.y, settings.directionalYPlus.z };

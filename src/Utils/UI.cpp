@@ -5,12 +5,11 @@
 #ifndef DIRECTINPUT_VERSION
 #	define DIRECTINPUT_VERSION 0x0800
 #endif
+#include <DirectXTex.h>
 #include <d3d11.h>
 #include <dinput.h>
 #include <imgui.h>
 #include <imgui_internal.h>
-#include <DirectXTex.h>
-#include <DirectXTex.h>
 #include <wrl/client.h>
 
 #include "../Feature.h"
@@ -1632,4 +1631,3 @@ namespace Util
 	}
 
 }  // namespace Util
-

@@ -11,10 +11,12 @@ void LensFlareWidget::DrawWidget()
 		bool changed = false;
 
 		ImGui::SeparatorText("Fade Distance");
-		if (ImGui::SliderFloat("Fade Dist Radius Scale", &settings.fadeDistRadiusScale, 0.0f, 10.0f)) changed = true;
+		if (ImGui::SliderFloat("Fade Dist Radius Scale", &settings.fadeDistRadiusScale, 0.0f, 10.0f))
+			changed = true;
 
 		ImGui::SeparatorText("Color");
-		if (ImGui::SliderFloat("Color Influence", &settings.colorInfluence, 0.0f, 1.0f)) changed = true;
+		if (ImGui::SliderFloat("Color Influence", &settings.colorInfluence, 0.0f, 1.0f))
+			changed = true;
 
 		if (changed && EditorWindow::GetSingleton()->settings.autoApplyChanges) {
 			ApplyChanges();
@@ -30,15 +32,18 @@ void LensFlareWidget::LoadSettings()
 
 	if (!js.empty()) {
 		try {
-			if (js.contains("fadeDistRadiusScale")) settings.fadeDistRadiusScale = js["fadeDistRadiusScale"];
-			if (js.contains("colorInfluence")) settings.colorInfluence = js["colorInfluence"];
-	} catch (const std::exception& e) {
-		logger::error("LensFlare {}: Failed to load from JSON: {}", GetEditorID(), e.what());
+			if (js.contains("fadeDistRadiusScale"))
+				settings.fadeDistRadiusScale = js["fadeDistRadiusScale"];
+			if (js.contains("colorInfluence"))
+				settings.colorInfluence = js["colorInfluence"];
+		} catch (const std::exception& e) {
+			logger::error("LensFlare {}: Failed to load from JSON: {}", GetEditorID(), e.what());
+		}
+	} else {
+		settings.fadeDistRadiusScale = lensFlare->fadeDistRadiusScale;
+		settings.colorInfluence = lensFlare->colorInfluence;
 	}
-} else {
-	settings.fadeDistRadiusScale = lensFlare->fadeDistRadiusScale;
-	settings.colorInfluence = lensFlare->colorInfluence;
-}	originalSettings = settings;
+	originalSettings = settings;
 }
 
 void LensFlareWidget::SaveSettings()

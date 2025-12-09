@@ -129,10 +129,10 @@ private:
 	void DrawCloudSettings();
 	void DrawFogSettings();
 	void DrawFeatureSettings();
-	
+
 	// Cloud texture loading
 	ID3D11ShaderResourceView* GetCloudTexture(int layerIndex);
-	
+
 	// Search functionality
 	struct SearchResult
 	{

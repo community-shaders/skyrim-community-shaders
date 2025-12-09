@@ -418,7 +418,6 @@ void Deferred::DeferredPasses()
 	auto& terrainBlending = globals::features::terrainBlending;
 	auto& ibl = globals::features::ibl;
 
-
 	// Deferred Composite
 	{
 		TracyD3D11Zone(globals::state->tracyCtx, "Deferred Composite");

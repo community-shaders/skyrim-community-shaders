@@ -61,34 +61,50 @@ void LightingTemplateWidget::DrawBasicSettings()
 
 	if (ImGui::CollapsingHeader("Ambient & Directional", ImGuiTreeNodeFlags_DefaultOpen)) {
 		ImGui::Spacing();
-		if (MatchesSearch("Ambient Color") && WeatherUtils::DrawColorEdit("Ambient Color", settings.ambient)) changed = true;
-		if (MatchesSearch("Ambient Color")) ImGui::Spacing();
-		if (MatchesSearch("Directional Color") && WeatherUtils::DrawColorEdit("Directional Color", settings.directional)) changed = true;
-		if (MatchesSearch("Directional Color")) ImGui::Spacing();
+		if (MatchesSearch("Ambient Color") && WeatherUtils::DrawColorEdit("Ambient Color", settings.ambient))
+			changed = true;
+		if (MatchesSearch("Ambient Color"))
+			ImGui::Spacing();
+		if (MatchesSearch("Directional Color") && WeatherUtils::DrawColorEdit("Directional Color", settings.directional))
+			changed = true;
+		if (MatchesSearch("Directional Color"))
+			ImGui::Spacing();
 	}
 
 	if (ImGui::CollapsingHeader("Directional Settings", ImGuiTreeNodeFlags_DefaultOpen)) {
 		ImGui::Spacing();
-		if (MatchesSearch("Directional XY") && WeatherUtils::DrawSliderFloat("Directional XY", settings.directionalXY)) changed = true;
-		if (MatchesSearch("Directional XY")) ImGui::Spacing();
-		if (MatchesSearch("Directional Z") && WeatherUtils::DrawSliderFloat("Directional Z", settings.directionalZ)) changed = true;
-		if (MatchesSearch("Directional Z")) ImGui::Spacing();
-		if (MatchesSearch("Directional Fade") && WeatherUtils::DrawSliderFloat("Directional Fade", settings.directionalFade)) changed = true;
-		if (MatchesSearch("Directional Fade")) ImGui::Spacing();
+		if (MatchesSearch("Directional XY") && WeatherUtils::DrawSliderFloat("Directional XY", settings.directionalXY))
+			changed = true;
+		if (MatchesSearch("Directional XY"))
+			ImGui::Spacing();
+		if (MatchesSearch("Directional Z") && WeatherUtils::DrawSliderFloat("Directional Z", settings.directionalZ))
+			changed = true;
+		if (MatchesSearch("Directional Z"))
+			ImGui::Spacing();
+		if (MatchesSearch("Directional Fade") && WeatherUtils::DrawSliderFloat("Directional Fade", settings.directionalFade))
+			changed = true;
+		if (MatchesSearch("Directional Fade"))
+			ImGui::Spacing();
 	}
 
 	if (ImGui::CollapsingHeader("Light Fade", ImGuiTreeNodeFlags_DefaultOpen)) {
 		ImGui::Spacing();
-		if (MatchesSearch("Light Fade Start") && WeatherUtils::DrawSliderFloat("Light Fade Start", settings.lightFadeStart)) changed = true;
-		if (MatchesSearch("Light Fade Start")) ImGui::Spacing();
-		if (MatchesSearch("Light Fade End") && WeatherUtils::DrawSliderFloat("Light Fade End", settings.lightFadeEnd)) changed = true;
-		if (MatchesSearch("Light Fade End")) ImGui::Spacing();
+		if (MatchesSearch("Light Fade Start") && WeatherUtils::DrawSliderFloat("Light Fade Start", settings.lightFadeStart))
+			changed = true;
+		if (MatchesSearch("Light Fade Start"))
+			ImGui::Spacing();
+		if (MatchesSearch("Light Fade End") && WeatherUtils::DrawSliderFloat("Light Fade End", settings.lightFadeEnd))
+			changed = true;
+		if (MatchesSearch("Light Fade End"))
+			ImGui::Spacing();
 	}
 
 	if (ImGui::CollapsingHeader("Other", ImGuiTreeNodeFlags_DefaultOpen)) {
 		ImGui::Spacing();
-		if (MatchesSearch("Clip Distance") && WeatherUtils::DrawSliderFloat("Clip Distance", settings.clipDist)) changed = true;
-		if (MatchesSearch("Clip Distance")) ImGui::Spacing();
+		if (MatchesSearch("Clip Distance") && WeatherUtils::DrawSliderFloat("Clip Distance", settings.clipDist))
+			changed = true;
+		if (MatchesSearch("Clip Distance"))
+			ImGui::Spacing();
 	}
 
 	if (changed && EditorWindow::GetSingleton()->settings.autoApplyChanges) {
@@ -101,22 +117,34 @@ void LightingTemplateWidget::DrawFogSettings()
 	bool changed = false;
 
 	ImGui::Spacing();
-	if (MatchesSearch("Fog Color Near") && WeatherUtils::DrawColorEdit("Fog Color Near", settings.fogColorNear)) changed = true;
-	if (MatchesSearch("Fog Color Near")) ImGui::Spacing();
-	if (MatchesSearch("Fog Color Far") && WeatherUtils::DrawColorEdit("Fog Color Far", settings.fogColorFar)) changed = true;
-	if (MatchesSearch("Fog Color Far")) ImGui::Spacing();
+	if (MatchesSearch("Fog Color Near") && WeatherUtils::DrawColorEdit("Fog Color Near", settings.fogColorNear))
+		changed = true;
+	if (MatchesSearch("Fog Color Near"))
+		ImGui::Spacing();
+	if (MatchesSearch("Fog Color Far") && WeatherUtils::DrawColorEdit("Fog Color Far", settings.fogColorFar))
+		changed = true;
+	if (MatchesSearch("Fog Color Far"))
+		ImGui::Spacing();
 
 	ImGui::Spacing();
-	if (MatchesSearch("Fog Near") && WeatherUtils::DrawSliderFloat("Fog Near", settings.fogNear)) changed = true;
-	if (MatchesSearch("Fog Near")) ImGui::Spacing();
-	if (MatchesSearch("Fog Far") && WeatherUtils::DrawSliderFloat("Fog Far", settings.fogFar)) changed = true;
-	if (MatchesSearch("Fog Far")) ImGui::Spacing();
+	if (MatchesSearch("Fog Near") && WeatherUtils::DrawSliderFloat("Fog Near", settings.fogNear))
+		changed = true;
+	if (MatchesSearch("Fog Near"))
+		ImGui::Spacing();
+	if (MatchesSearch("Fog Far") && WeatherUtils::DrawSliderFloat("Fog Far", settings.fogFar))
+		changed = true;
+	if (MatchesSearch("Fog Far"))
+		ImGui::Spacing();
 
 	ImGui::Spacing();
-	if (MatchesSearch("Fog Power") && WeatherUtils::DrawSliderFloat("Fog Power", settings.fogPower)) changed = true;
-	if (MatchesSearch("Fog Power")) ImGui::Spacing();
-	if (MatchesSearch("Fog Clamp") && WeatherUtils::DrawSliderFloat("Fog Clamp", settings.fogClamp)) changed = true;
-	if (MatchesSearch("Fog Clamp")) ImGui::Spacing();
+	if (MatchesSearch("Fog Power") && WeatherUtils::DrawSliderFloat("Fog Power", settings.fogPower))
+		changed = true;
+	if (MatchesSearch("Fog Power"))
+		ImGui::Spacing();
+	if (MatchesSearch("Fog Clamp") && WeatherUtils::DrawSliderFloat("Fog Clamp", settings.fogClamp))
+		changed = true;
+	if (MatchesSearch("Fog Clamp"))
+		ImGui::Spacing();
 
 	if (changed && EditorWindow::GetSingleton()->settings.autoApplyChanges) {
 		ApplyChanges();
@@ -129,9 +157,11 @@ void LightingTemplateWidget::DrawDALCSettings()
 
 	if (ImGui::CollapsingHeader("Basic DALC", ImGuiTreeNodeFlags_DefaultOpen)) {
 		ImGui::Spacing();
-		if (WeatherUtils::DrawColorEdit("Specular", settings.dalc.specular)) changed = true;
+		if (WeatherUtils::DrawColorEdit("Specular", settings.dalc.specular))
+			changed = true;
 		ImGui::Spacing();
-		if (WeatherUtils::DrawSliderFloat("Fresnel Power", settings.dalc.fresnelPower)) changed = true;
+		if (WeatherUtils::DrawSliderFloat("Fresnel Power", settings.dalc.fresnelPower))
+			changed = true;
 		ImGui::Spacing();
 	}
 
