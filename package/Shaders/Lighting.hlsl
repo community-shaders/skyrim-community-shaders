@@ -662,48 +662,6 @@ float ProcessSparkleColor(float color)
 }
 #	endif
 
-float3 GetLightSpecularInput(PS_INPUT input, float3 L, float3 V, float3 N, float3 lightColor, float shininess, float2 uv)
-{
-	float3 H = normalize(V + L);
-	float HdotN = 1.0;
-#	if defined(ANISO_LIGHTING)
-	float3 AN = normalize(N * 0.5 + float3(input.TBN0.z, input.TBN1.z, input.TBN2.z));
-	float LdotAN = dot(AN, L);
-	float HdotAN = dot(AN, H);
-	HdotN = 1 - min(1, abs(LdotAN - HdotAN));
-#	else
-	HdotN = saturate(dot(H, N));
-#	endif
-
-#	if defined(SPECULAR)
-	float lightColorMultiplier = exp2(shininess * log2(HdotN));
-
-#	elif defined(SPARKLE)
-	float lightColorMultiplier = 0;
-#	else
-	float lightColorMultiplier = HdotN;
-#	endif
-
-#	if defined(ANISO_LIGHTING)
-	lightColorMultiplier *= 0.7 * max(0, L.z);
-#	endif
-
-#	if defined(SPARKLE) && !defined(SNOW)
-	float3 sparkleUvScale = exp2(float3(1.3, 1.6, 1.9) * log2(abs(SparkleParams.x)).xxx);
-
-	float sparkleColor1 = TexProjDetail.Sample(SampProjDetailSampler, uv * sparkleUvScale.xx).z;
-	float sparkleColor2 = TexProjDetail.Sample(SampProjDetailSampler, uv * sparkleUvScale.yy).z;
-	float sparkleColor3 = TexProjDetail.Sample(SampProjDetailSampler, uv * sparkleUvScale.zz).z;
-	float sparkleColor = ProcessSparkleColor(sparkleColor1) + ProcessSparkleColor(sparkleColor2) + ProcessSparkleColor(sparkleColor3);
-	float VdotN = dot(V, N);
-	V += N * -(2 * VdotN);
-	float sparkleMultiplier = exp2(SparkleParams.w * log2(saturate(dot(V, -L)))) * (SparkleParams.z * sparkleColor);
-	sparkleMultiplier = sparkleMultiplier >= 0.5 ? 1 : 0;
-	lightColorMultiplier += sparkleMultiplier * HdotN;
-#	endif
-	return lightColor * lightColorMultiplier;
-}
-
 float3 TransformNormal(float3 normal)
 {
 	return normal * 2 + -1.0.xxx;
