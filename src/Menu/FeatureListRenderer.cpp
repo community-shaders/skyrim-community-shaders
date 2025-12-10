@@ -463,7 +463,7 @@ void FeatureListRenderer::DrawMenuVisitor::RenderFeatureSettingsTab(Feature* fea
 
 			float iconDimension = ImGui::GetFrameHeight() * 1.2f;
 			ImVec2 iconSize = ImVec2(iconDimension, iconDimension);
-      
+
 			float padding = 10.0f;
 			ImVec2 buttonPos = ImVec2(
 				windowPos.x + windowSize.x - iconSize.x - padding - scrollbarWidth,
