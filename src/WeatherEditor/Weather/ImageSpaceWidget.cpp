@@ -29,6 +29,7 @@ ImageSpaceWidget::~ImageSpaceWidget()
 
 void ImageSpaceWidget::DrawWidget()
 {
+	WeatherUtils::SetCurrentWidget(this);
 	auto editorWindow = EditorWindow::GetSingleton();
 
 	ImGui::SetNextWindowSizeConstraints(ImVec2(600, 0), ImVec2(FLT_MAX, FLT_MAX));
@@ -156,7 +157,7 @@ void ImageSpaceWidget::DrawWidget()
 				ImGui::Text("Tint Color");
 				ImGui::TableSetColumnIndex(1);
 				ImGui::SetNextItemWidth(-1);
-				if (ImGui::ColorEdit3("##TintColor", &settings.tintColor.x))
+				if (WeatherUtils::DrawColorEdit("Tint Color", settings.tintColor))
 					changed = true;
 			}
 

@@ -54,6 +54,7 @@ WeatherWidget::~WeatherWidget()
 
 void WeatherWidget::DrawWidget()
 {
+	WeatherUtils::SetCurrentWidget(this);
 	ImGui::SetNextWindowSizeConstraints(ImVec2(600, 0), ImVec2(FLT_MAX, FLT_MAX));
 	if (ImGui::Begin(GetEditorID().c_str(), &open, ImGuiWindowFlags_NoSavedSettings)) {
 		// Draw header with search and all buttons
@@ -943,10 +944,17 @@ void WeatherWidget::DrawCloudSettings()
 		
 		if (ImGui::Checkbox(std::format("Enable##{}", layer).c_str(), &layerEnabled)) {
 			settings.clouds[i].enabled = layerEnabled;
-			if (EditorWindow::GetSingleton()->settings.autoApplyChanges) {
-				EditorWindow::GetSingleton()->PushUndoState(this);
-				ApplyChanges();
+			// Always apply cloud enable/disable immediately for instant feedback
+			EditorWindow::GetSingleton()->PushUndoState(this);
+			ApplyChanges();
+			
+			// Force weather re-application if locked to make cloud changes visible immediately
+			if (editorWindow->IsWeatherLocked() && editorWindow->GetLockedWeather() == weather) {
+				if (auto sky = RE::Sky::GetSingleton()) {
+					sky->ForceWeather(weather, false);
+				}
 			}
+			
 			changed = true;
 		}
 		

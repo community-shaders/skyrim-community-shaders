@@ -4,6 +4,9 @@
 #include <cctype>
 #include <functional>
 
+// Forward declarations
+class Widget;
+
 // Case-insensitive substring search helper
 bool ContainsStringIgnoreCase(const std::string_view a_string, const std::string_view a_substring);
 
@@ -83,11 +86,14 @@ void EndWidgetSearchBar();
 
 namespace WeatherUtils
 {
+	// Set the current widget for undo tracking (should be called at start of widget Draw())
+	void SetCurrentWidget(Widget* widget);
+
 	// UI helper functions
 	bool DrawSliderInt8(const std::string& label, int& property);
-	bool DrawColorEdit(const std::string& l, float3& property);
+	bool DrawColorEdit(const std::string& l, float3& property, Widget* widget = nullptr);
 	bool DrawSliderUint8(const std::string& label, int& property);
-	bool DrawSliderFloat(const std::string& label, float& property, float min = 0.0f, float max = 50000.0f);
+	bool DrawSliderFloat(const std::string& label, float& property, float min = 0.0f, float max = 1.0f, Widget* widget = nullptr);
 
 	// Generic form picker combo box using cached widget EditorIDs for performance
 	// Returns true if selection changed

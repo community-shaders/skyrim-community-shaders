@@ -2,6 +2,9 @@
 #include "EditorWindow.h"
 #include "PaletteWindow.h"
 
+// Global widget context for undo tracking
+static Widget* g_currentWidget = nullptr;
+
 bool ContainsStringIgnoreCase(const std::string_view a_string, const std::string_view a_substring)
 {
 	if (a_substring.empty())
@@ -146,13 +149,46 @@ std::string ColorTypeLabel(const int i)
 
 namespace WeatherUtils
 {
+	void SetCurrentWidget(Widget* widget)
+	{
+		g_currentWidget = widget;
+	}
+
 	bool DrawSliderInt8(const std::string& label, int& property)
 	{
 		static std::map<std::string, int> pendingValues;
 		static std::map<std::string, double> lastChangeTime;
+		static std::map<std::string, bool> wasActive;
+		static std::map<std::string, bool> undoPushedForSession;
 		const double debounceDelay = 2.0;
 
+		// Check if item was active in previous frame
+		bool isPreviouslyActive = wasActive[label];
+
 		bool changed = ImGui::SliderInt(label.c_str(), &property, -128, 127);
+		
+		// Check if item is now active
+		bool isNowActive = ImGui::IsItemActive();
+		
+		// Push undo state only once when slider becomes active (not every frame while dragging)
+		if (isNowActive && !isPreviouslyActive && !undoPushedForSession[label]) {
+			if (g_currentWidget) {
+				EditorWindow::GetSingleton()->PushUndoState(g_currentWidget);
+				undoPushedForSession[label] = true;
+			}
+		}
+
+		// Reset undo flag when slider is completely released and idle for a while
+		if (!isNowActive && undoPushedForSession[label]) {
+			if (lastChangeTime.find(label) == lastChangeTime.end() || 
+			    ImGui::GetTime() - lastChangeTime[label] >= debounceDelay) {
+				undoPushedForSession[label] = false;
+			}
+		}
+
+		// Update active state for next frame
+		wasActive[label] = isNowActive;
+		
 		if (changed) {
 			pendingValues[label] = property;
 			lastChangeTime[label] = ImGui::GetTime();
@@ -176,7 +212,7 @@ namespace WeatherUtils
 		return changed;
 	}
 
-	bool DrawColorEdit(const std::string& l, float3& property)
+	bool DrawColorEdit(const std::string& l, float3& property, Widget* widget)
 	{
 		static std::map<std::string, float3> colorCache;
 		static std::string activeColorId;
@@ -186,10 +222,15 @@ namespace WeatherUtils
 		bool isActive = ImGui::IsPopupOpen(l.c_str(), ImGuiPopupFlags_AnyPopupId);
 		bool wasActive = wasPickerOpen[cacheId];
 
-		// Cache the original color when picker is first activated
+		// Cache the original color and push undo state when picker is first activated
 		if (isActive && activeColorId != cacheId) {
 			colorCache[cacheId] = property;
 			activeColorId = cacheId;
+			// Push undo state before change (prefer parameter, fallback to global)
+			Widget* w = widget ? widget : g_currentWidget;
+			if (w) {
+				EditorWindow::GetSingleton()->PushUndoState(w);
+			}
 		} else if (!isActive && activeColorId == cacheId) {
 			activeColorId.clear();
 		}
@@ -239,13 +280,44 @@ namespace WeatherUtils
 		return ImGui::SliderInt(label.c_str(), &property, 0, 255);
 	}
 
-	bool DrawSliderFloat(const std::string& label, float& property, float min, float max)
+	bool DrawSliderFloat(const std::string& label, float& property, float min, float max, Widget* widget)
 	{
 		static std::map<std::string, float> pendingValues;
 		static std::map<std::string, double> lastChangeTime;
+		static std::map<std::string, bool> wasActive;
+		static std::map<std::string, bool> undoPushedForSession;
 		const double debounceDelay = 2.0;
 
+		// Check if item was active in previous frame
+		bool isPreviouslyActive = wasActive[label];
+		
 		bool changed = ImGui::SliderFloat(label.c_str(), &property, min, max);
+		
+		// Check if item is now active
+		bool isNowActive = ImGui::IsItemActive();
+		
+		// Push undo state only once when slider becomes active (not every frame while dragging)
+		if (isNowActive && !isPreviouslyActive && !undoPushedForSession[label]) {
+			// Use parameter if provided, otherwise use global widget
+			Widget* w = widget ? widget : g_currentWidget;
+			if (w) {
+				EditorWindow::GetSingleton()->PushUndoState(w);
+				undoPushedForSession[label] = true;
+			}
+		}
+
+		// Reset undo flag when slider is completely released and idle for a while
+		if (!isNowActive && undoPushedForSession[label]) {
+			// Allow new undo push after slider has been released
+			if (lastChangeTime.find(label) == lastChangeTime.end() || 
+			    ImGui::GetTime() - lastChangeTime[label] >= debounceDelay) {
+				undoPushedForSession[label] = false;
+			}
+		}
+
+		// Update active state for next frame
+		wasActive[label] = isNowActive;
+		
 		if (changed) {
 			pendingValues[label] = property;
 			lastChangeTime[label] = ImGui::GetTime();
@@ -526,6 +598,13 @@ namespace TOD
 			bool isPopupOpen = ImGui::BeginPopup(id.c_str());
 			bool wasOpen = wasPopupOpen[id];
 
+			// Push undo state when popup first opens
+			if (isPopupOpen && !wasOpen) {
+				if (g_currentWidget) {
+					EditorWindow::GetSingleton()->PushUndoState(g_currentWidget);
+				}
+			}
+
 			if (isPopupOpen) {
 				// Check for Ctrl+Z while picker is active
 				if (ImGui::IsKeyDown(ImGuiKey_LeftCtrl) && ImGui::IsKeyPressed(ImGuiKey_Z)) {
@@ -563,6 +642,8 @@ namespace TOD
 	{
 		static std::map<std::string, float> pendingSliderValues;
 		static std::map<std::string, double> sliderLastChangeTime;
+		static std::map<std::string, bool> wasActiveInherit;
+		static std::map<std::string, bool> undoPushedInherit;
 		const double debounceDelay = 2.0;
 
 		float factors[4];
@@ -613,6 +694,9 @@ namespace TOD
 
 			ImGui::PushItemWidth(sliderWidth);
 			std::string id = std::string("##") + label + std::to_string(i);
+			std::string itemKey = std::string(label) + "_slider_" + std::to_string(i);
+			bool isPreviouslyActive = wasActiveInherit[itemKey];
+			
 			ImGui::BeginDisabled(inheritFlags && inheritFlags[i]);
 			if (ImGui::SliderFloat(id.c_str(), &values[i], minValue, maxValue, format)) {
 				changed = true;
@@ -622,6 +706,23 @@ namespace TOD
 				pendingSliderValues[valueName] = values[i];
 				sliderLastChangeTime[valueName] = ImGui::GetTime();
 			}
+			
+			// Push undo state only once when slider becomes active
+			bool isNowActive = ImGui::IsItemActive();
+			if (isNowActive && !isPreviouslyActive && !undoPushedInherit[itemKey]) {
+				if (g_currentWidget) {
+					EditorWindow::GetSingleton()->PushUndoState(g_currentWidget);
+					undoPushedInherit[itemKey] = true;
+				}
+			}
+			
+			// Reset undo flag when slider is released
+			if (!isNowActive && undoPushedInherit[itemKey]) {
+				undoPushedInherit[itemKey] = false;
+			}
+			
+			wasActiveInherit[itemKey] = isNowActive;
+			
 			ImGui::EndDisabled();
 
 			if (ImGui::IsItemHovered())
@@ -763,7 +864,18 @@ namespace TOD
 			}
 
 			// Color picker popup
-			if (ImGui::BeginPopup(id.c_str())) {
+			static std::map<std::string, bool> wasPopupOpenInherit;
+			bool isPopupOpen = ImGui::BeginPopup(id.c_str());
+			bool wasOpen = wasPopupOpenInherit[id];
+
+			// Push undo state when popup first opens
+			if (isPopupOpen && !wasOpen) {
+				if (g_currentWidget) {
+					EditorWindow::GetSingleton()->PushUndoState(g_currentWidget);
+				}
+			}
+
+			if (isPopupOpen) {
 				if (colorCache.find(id) == colorCache.end()) {
 					colorCache[id] = colors[i];
 				}
@@ -783,6 +895,8 @@ namespace TOD
 					activeColorId = "";
 				}
 			}
+
+			wasPopupOpenInherit[id] = isPopupOpen;
 			ImGui::EndDisabled();
 
 			ImGui::EndChild();
@@ -806,14 +920,38 @@ namespace TOD
 		float spacing = ImGui::GetStyle().ItemSpacing.x;
 		float columnWidth = (totalWidth - 3 * spacing) / 4.0f;
 
+		static std::map<std::string, bool> wasActiveMap;
+		static std::map<std::string, bool> undoPushedMap;
+		
 		for (int i = 0; i < Count; ++i) {
 			if (i > 0)
 				ImGui::SameLine();
 			ImGui::PushID(i);
+			
+			std::string itemId = std::string(label) + "_" + std::to_string(i);
+			bool isPreviouslyActive = wasActiveMap[itemId];
+			
 			ImGui::SetNextItemWidth(columnWidth);
 			if (ImGui::SliderFloat("##value", &values[i], minValue, maxValue, format)) {
 				changed = true;
 			}
+			
+			// Push undo state only once when slider becomes active
+			bool isNowActive = ImGui::IsItemActive();
+			if (isNowActive && !isPreviouslyActive && !undoPushedMap[itemId]) {
+				if (g_currentWidget) {
+					EditorWindow::GetSingleton()->PushUndoState(g_currentWidget);
+					undoPushedMap[itemId] = true;
+				}
+			}
+			
+			// Reset undo flag when slider is released
+			if (!isNowActive && undoPushedMap[itemId]) {
+				undoPushedMap[itemId] = false;
+			}
+			
+			wasActiveMap[itemId] = isNowActive;
+			
 			ImGui::PopID();
 		}
 
