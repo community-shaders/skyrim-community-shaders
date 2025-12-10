@@ -166,10 +166,10 @@ namespace WeatherUtils
 		bool isPreviouslyActive = wasActive[label];
 
 		bool changed = ImGui::SliderInt(label.c_str(), &property, -128, 127);
-		
+
 		// Check if item is now active
 		bool isNowActive = ImGui::IsItemActive();
-		
+
 		// Push undo state only once when slider becomes active (not every frame while dragging)
 		if (isNowActive && !isPreviouslyActive && !undoPushedForSession[label]) {
 			if (g_currentWidget) {
@@ -180,15 +180,15 @@ namespace WeatherUtils
 
 		// Reset undo flag when slider is completely released and idle for a while
 		if (!isNowActive && undoPushedForSession[label]) {
-			if (lastChangeTime.find(label) == lastChangeTime.end() || 
-			    ImGui::GetTime() - lastChangeTime[label] >= debounceDelay) {
+			if (lastChangeTime.find(label) == lastChangeTime.end() ||
+				ImGui::GetTime() - lastChangeTime[label] >= debounceDelay) {
 				undoPushedForSession[label] = false;
 			}
 		}
 
 		// Update active state for next frame
 		wasActive[label] = isNowActive;
-		
+
 		if (changed) {
 			pendingValues[label] = property;
 			lastChangeTime[label] = ImGui::GetTime();
@@ -290,12 +290,12 @@ namespace WeatherUtils
 
 		// Check if item was active in previous frame
 		bool isPreviouslyActive = wasActive[label];
-		
+
 		bool changed = ImGui::SliderFloat(label.c_str(), &property, min, max);
-		
+
 		// Check if item is now active
 		bool isNowActive = ImGui::IsItemActive();
-		
+
 		// Push undo state only once when slider becomes active (not every frame while dragging)
 		if (isNowActive && !isPreviouslyActive && !undoPushedForSession[label]) {
 			// Use parameter if provided, otherwise use global widget
@@ -309,15 +309,15 @@ namespace WeatherUtils
 		// Reset undo flag when slider is completely released and idle for a while
 		if (!isNowActive && undoPushedForSession[label]) {
 			// Allow new undo push after slider has been released
-			if (lastChangeTime.find(label) == lastChangeTime.end() || 
-			    ImGui::GetTime() - lastChangeTime[label] >= debounceDelay) {
+			if (lastChangeTime.find(label) == lastChangeTime.end() ||
+				ImGui::GetTime() - lastChangeTime[label] >= debounceDelay) {
 				undoPushedForSession[label] = false;
 			}
 		}
 
 		// Update active state for next frame
 		wasActive[label] = isNowActive;
-		
+
 		if (changed) {
 			pendingValues[label] = property;
 			lastChangeTime[label] = ImGui::GetTime();
@@ -696,7 +696,7 @@ namespace TOD
 			std::string id = std::string("##") + label + std::to_string(i);
 			std::string itemKey = std::string(label) + "_slider_" + std::to_string(i);
 			bool isPreviouslyActive = wasActiveInherit[itemKey];
-			
+
 			ImGui::BeginDisabled(inheritFlags && inheritFlags[i]);
 			if (ImGui::SliderFloat(id.c_str(), &values[i], minValue, maxValue, format)) {
 				changed = true;
@@ -706,7 +706,7 @@ namespace TOD
 				pendingSliderValues[valueName] = values[i];
 				sliderLastChangeTime[valueName] = ImGui::GetTime();
 			}
-			
+
 			// Push undo state only once when slider becomes active
 			bool isNowActive = ImGui::IsItemActive();
 			if (isNowActive && !isPreviouslyActive && !undoPushedInherit[itemKey]) {
@@ -715,14 +715,14 @@ namespace TOD
 					undoPushedInherit[itemKey] = true;
 				}
 			}
-			
+
 			// Reset undo flag when slider is released
 			if (!isNowActive && undoPushedInherit[itemKey]) {
 				undoPushedInherit[itemKey] = false;
 			}
-			
+
 			wasActiveInherit[itemKey] = isNowActive;
-			
+
 			ImGui::EndDisabled();
 
 			if (ImGui::IsItemHovered())
@@ -922,20 +922,20 @@ namespace TOD
 
 		static std::map<std::string, bool> wasActiveMap;
 		static std::map<std::string, bool> undoPushedMap;
-		
+
 		for (int i = 0; i < Count; ++i) {
 			if (i > 0)
 				ImGui::SameLine();
 			ImGui::PushID(i);
-			
+
 			std::string itemId = std::string(label) + "_" + std::to_string(i);
 			bool isPreviouslyActive = wasActiveMap[itemId];
-			
+
 			ImGui::SetNextItemWidth(columnWidth);
 			if (ImGui::SliderFloat("##value", &values[i], minValue, maxValue, format)) {
 				changed = true;
 			}
-			
+
 			// Push undo state only once when slider becomes active
 			bool isNowActive = ImGui::IsItemActive();
 			if (isNowActive && !isPreviouslyActive && !undoPushedMap[itemId]) {
@@ -944,14 +944,14 @@ namespace TOD
 					undoPushedMap[itemId] = true;
 				}
 			}
-			
+
 			// Reset undo flag when slider is released
 			if (!isNowActive && undoPushedMap[itemId]) {
 				undoPushedMap[itemId] = false;
 			}
-			
+
 			wasActiveMap[itemId] = isNowActive;
-			
+
 			ImGui::PopID();
 		}
 
