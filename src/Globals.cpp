@@ -134,6 +134,10 @@ namespace globals
 	Menu* menu = nullptr;
 	SIE::ShaderCache* shaderCache = nullptr;
 
+	namespace game {
+		RE::TES* tes = nullptr;
+	}
+
 	void OnInit()
 	{
 		shaderCache = &SIE::ShaderCache::Instance();
@@ -156,6 +160,7 @@ namespace globals
 			iniSettingCollection = RE::INISettingCollection::GetSingleton();
 			iniPrefSettingCollection = RE::INIPrefSettingCollection::GetSingleton();
 			gameSettingCollection = RE::GameSettingCollection::GetSingleton();
+			tes = RE::TES::GetSingleton();
 			cameraNear = (float*)(REL::RelocationID(517032, 403540).address() + 0x40);
 			cameraFar = (float*)(REL::RelocationID(517032, 403540).address() + 0x44);
 			deltaTime = (float*)REL::RelocationID(523660, 410199).address();
