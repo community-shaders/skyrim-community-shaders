@@ -174,6 +174,9 @@ private:
 	bool showSettingsWindow = false;
 	std::string settingsSelectedCategory = "Flags";
 
+	// Widget focus tracking for Ctrl+W
+	Widget* lastFocusedWidget = nullptr;
+
 	// Sorting state
 	enum class SortColumn
 	{

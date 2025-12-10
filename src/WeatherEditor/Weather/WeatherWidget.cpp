@@ -402,7 +402,8 @@ void WeatherWidget::DrawWidget()
 				ImGui::Spacing();
 			}
 
-			if (recordChanged) {
+			if (recordChanged && EditorWindow::GetSingleton()->settings.autoApplyChanges) {
+				ApplyChanges();
 			}
 
 			ImGui::EndTabItem();
@@ -655,7 +656,7 @@ void WeatherWidget::LoadWeatherValues()
 	for (size_t i = 0; i < ColorTimes::kTotal; i++) {
 		auto& dalc = weather->directionalAmbientLightingColors[i];
 		auto& settingsDalc = settings.dalc[i];
-		dalc.fresnelPower = settingsDalc.fresnelPower;
+		settingsDalc.fresnelPower = dalc.fresnelPower;
 
 		ColorToFloat3(dalc.specular, settingsDalc.specular);
 

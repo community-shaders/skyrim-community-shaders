@@ -666,116 +666,89 @@ void EditorWindow::ShowWidgetWindow()
 {
 	// Global shortcut for closing focused widget (Ctrl+W)
 	if (ImGui::GetIO().KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_W, false)) {
-		// Close the most recently focused widget
-		for (int i = 0; i < (int)weatherWidgets.size(); i++) {
-			auto& widget = weatherWidgets[i];
-			if (widget->IsOpen() && ImGui::IsWindowFocused(ImGuiFocusedFlags_AnyWindow)) {
-				widget->SetOpen(false);
-				break;
-			}
-		}
-		for (int i = 0; i < (int)worldSpaceWidgets.size(); i++) {
-			auto& widget = worldSpaceWidgets[i];
-			if (widget->IsOpen() && ImGui::IsWindowFocused(ImGuiFocusedFlags_AnyWindow)) {
-				widget->SetOpen(false);
-				break;
-			}
-		}
-		for (int i = 0; i < (int)lightingTemplateWidgets.size(); i++) {
-			auto& widget = lightingTemplateWidgets[i];
-			if (widget->IsOpen() && ImGui::IsWindowFocused(ImGuiFocusedFlags_AnyWindow)) {
-				widget->SetOpen(false);
-				break;
-			}
-		}
-		for (int i = 0; i < (int)imageSpaceWidgets.size(); i++) {
-			auto& widget = imageSpaceWidgets[i];
-			if (widget->IsOpen() && ImGui::IsWindowFocused(ImGuiFocusedFlags_AnyWindow)) {
-				widget->SetOpen(false);
-				break;
-			}
-		}
-		for (int i = 0; i < (int)volumetricLightingWidgets.size(); i++) {
-			auto& widget = volumetricLightingWidgets[i];
-			if (widget->IsOpen() && ImGui::IsWindowFocused(ImGuiFocusedFlags_AnyWindow)) {
-				widget->SetOpen(false);
-				break;
-			}
-		}
-		for (int i = 0; i < (int)precipitationWidgets.size(); i++) {
-			auto& widget = precipitationWidgets[i];
-			if (widget->IsOpen() && ImGui::IsWindowFocused(ImGuiFocusedFlags_AnyWindow)) {
-				widget->SetOpen(false);
-				break;
-			}
-		}
-		for (int i = 0; i < (int)lensFlareWidgets.size(); i++) {
-			auto& widget = lensFlareWidgets[i];
-			if (widget->IsOpen() && ImGui::IsWindowFocused(ImGuiFocusedFlags_AnyWindow)) {
-				widget->SetOpen(false);
-				break;
-			}
-		}
-		for (int i = 0; i < (int)referenceEffectWidgets.size(); i++) {
-			auto& widget = referenceEffectWidgets[i];
-			if (widget->IsOpen() && ImGui::IsWindowFocused(ImGuiFocusedFlags_AnyWindow)) {
-				widget->SetOpen(false);
-				break;
-			}
+		if (lastFocusedWidget && lastFocusedWidget->IsOpen()) {
+			lastFocusedWidget->SetOpen(false);
+			lastFocusedWidget = nullptr;
 		}
 	}
 
 	for (int i = 0; i < (int)weatherWidgets.size(); i++) {
 		auto& widget = weatherWidgets[i];
-		if (widget->IsOpen())
+		if (widget->IsOpen()) {
 			widget->DrawWidget();
+			if (ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows))
+				lastFocusedWidget = widget.get();
+		}
 	}
 
 	for (int i = 0; i < (int)worldSpaceWidgets.size(); i++) {
 		auto& widget = worldSpaceWidgets[i];
-		if (widget->IsOpen())
+		if (widget->IsOpen()) {
 			widget->DrawWidget();
+			if (ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows))
+				lastFocusedWidget = widget.get();
+		}
 	}
 
 	for (int i = 0; i < (int)lightingTemplateWidgets.size(); i++) {
 		auto& widget = lightingTemplateWidgets[i];
-		if (widget->IsOpen())
+		if (widget->IsOpen()) {
 			widget->DrawWidget();
+			if (ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows))
+				lastFocusedWidget = widget.get();
+		}
 	}
 
 	for (int i = 0; i < (int)imageSpaceWidgets.size(); i++) {
 		auto& widget = imageSpaceWidgets[i];
-		if (widget->IsOpen())
+		if (widget->IsOpen()) {
 			widget->DrawWidget();
+			if (ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows))
+				lastFocusedWidget = widget.get();
+		}
 	}
 
 	for (int i = 0; i < (int)volumetricLightingWidgets.size(); i++) {
 		auto& widget = volumetricLightingWidgets[i];
-		if (widget->IsOpen())
+		if (widget->IsOpen()) {
 			widget->DrawWidget();
+			if (ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows))
+				lastFocusedWidget = widget.get();
+		}
 	}
 
 	for (int i = 0; i < (int)precipitationWidgets.size(); i++) {
 		auto& widget = precipitationWidgets[i];
-		if (widget->IsOpen())
+		if (widget->IsOpen()) {
 			widget->DrawWidget();
+			if (ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows))
+				lastFocusedWidget = widget.get();
+		}
 	}
 
 	for (int i = 0; i < (int)lensFlareWidgets.size(); i++) {
 		auto& widget = lensFlareWidgets[i];
-		if (widget->IsOpen())
+		if (widget->IsOpen()) {
 			widget->DrawWidget();
+			if (ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows))
+				lastFocusedWidget = widget.get();
+		}
 	}
 
 	for (int i = 0; i < (int)referenceEffectWidgets.size(); i++) {
 		auto& widget = referenceEffectWidgets[i];
-		if (widget->IsOpen())
+		if (widget->IsOpen()) {
 			widget->DrawWidget();
+			if (ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows))
+				lastFocusedWidget = widget.get();
+		}
 	}
 
 	// Draw current cell lighting widget if open
 	if (currentCellLightingWidget && currentCellLightingWidget->IsOpen()) {
 		currentCellLightingWidget->DrawWidget();
+		if (ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows))
+			lastFocusedWidget = currentCellLightingWidget.get();
 	}
 }
 
