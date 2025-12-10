@@ -3,6 +3,7 @@
 #include <format>
 
 #include "../EditorWindow.h"
+#include "FeatureIssues.h"
 #include "State.h"
 #include "Utils/UI.h"
 #include "WeatherManager.h"
@@ -181,7 +182,7 @@ void WeatherWidget::DrawWidget()
 			}
 
 			if (ImGui::BeginTabItem("Basic", nullptr, basicFlags)) {
-				DrawProperties("Sun", { { "Sun Glare", INT8_SLIDER }, { "Sun Damage", INT8_SLIDER } });
+				DrawProperties("Sun", { { "Sun Damage", INT8_SLIDER } });
 				DrawProperties("Wind", { { "Wind Speed", UINT8_SLIDER }, { "Wind Direction", INT8_SLIDER }, { "Wind Direction Range", INT8_SLIDER } });
 				DrawProperties("Precipitation", { { "Precipitation Begin Fade In", INT8_SLIDER }, { "Precipitation Begin Fade Out", INT8_SLIDER } });
 				DrawProperties("Lightning", { { "Thunder Lightning Begin Fade In", INT8_SLIDER }, { "Thunder Lightning End Fade Out", INT8_SLIDER },
@@ -876,15 +877,15 @@ void WeatherWidget::DrawWeatherColorSettings()
 			12, // Fog Far
 			3,  // Ambient
 			4,  // Sunlight
+			15, // Sun Glare
 			5,  // Sun
 			6,  // Stars
+			16, // Moon Glare
 			9,  // Effect Lighting
 			10, // Cloud LOD Diffuse
 			11, // Cloud LOD Ambient
 			13, // Sky Statics
 			14, // Water Multiplier
-			15, // Sun Glare
-			16, // Moon Glare
 			2,  // Unknown
 		};
 
@@ -926,9 +927,8 @@ void WeatherWidget::DrawCloudSettings()
 	for (int i = 0; i < TESWeather::kTotalLayers; i++) {
 		std::string layer = std::format("Layer {}", i);
 		
-		// Default to open if this layer has a texture (is being used)
 		ImGuiTreeNodeFlags flags = ImGuiTreeNodeFlags_OpenOnArrow | ImGuiTreeNodeFlags_OpenOnDoubleClick;
-		if (!settings.clouds[i].texturePath.empty()) {
+		if (settings.clouds[i].enabled && !settings.clouds[i].texturePath.empty()) {
 			flags |= ImGuiTreeNodeFlags_DefaultOpen;
 		}
 
@@ -943,6 +943,10 @@ void WeatherWidget::DrawCloudSettings()
 		
 		if (ImGui::Checkbox(std::format("Enable##{}", layer).c_str(), &layerEnabled)) {
 			settings.clouds[i].enabled = layerEnabled;
+			if (EditorWindow::GetSingleton()->settings.autoApplyChanges) {
+				EditorWindow::GetSingleton()->PushUndoState(this);
+				ApplyChanges();
+			}
 			changed = true;
 		}
 		
@@ -1031,6 +1035,7 @@ void WeatherWidget::DrawCloudSettings()
 		}
 	}
 	if (changed && EditorWindow::GetSingleton()->settings.autoApplyChanges) {
+		EditorWindow::GetSingleton()->PushUndoState(this);
 		ApplyChanges();
 	}
 }
@@ -1371,6 +1376,66 @@ void WeatherWidget::LoadFeatureSettings()
 	auto* weatherManager = WeatherManager::GetSingleton();
 	auto* globalRegistry = WeatherVariables::GlobalWeatherRegistry::GetSingleton();
 
+	// First, validate that all feature settings in the JSON exist as loaded features.
+	// Prevents loading a .json that references features that aren't installed. (Will load only settings for installed features.)
+	// Should make it very obvious to users when they have not followed the correct installation instructions.
+	if (js.contains("featureSettings") && js["featureSettings"].is_object()) {
+		std::vector<std::string> missingFeatures;
+
+		for (const auto& [featureName, featureJson] : js["featureSettings"].items()) {
+			if (featureJson.empty()) {
+				continue;
+			}
+
+			// Check if this feature exists and is loaded
+			bool featureExists = false;
+			for (auto* feature : Feature::GetFeatureList()) {
+				if (feature && feature->loaded && feature->GetShortName() == featureName) {
+					featureExists = true;
+					break;
+				}
+			}
+
+			if (!featureExists) {
+				missingFeatures.push_back(featureName);
+			}
+		}
+
+		// If we found missing features, warn the user
+		if (!missingFeatures.empty()) {
+			std::string missingList;
+			for (size_t i = 0; i < missingFeatures.size(); ++i) {
+				if (i > 0) missingList += ", ";
+				missingList += missingFeatures[i];
+			}
+
+			// Show notification
+			EditorWindow::GetSingleton()->ShowNotification(
+				std::format("Warning: {} references missing feature(s): {}", GetEditorID(), missingList),
+				ImVec4(1.0f, 0.6f, 0.0f, 1.0f),
+				5.0f);
+
+			// Add to Feature Issues system for each missing feature
+			for (const auto& featureName : missingFeatures) {
+				FeatureIssues::FeatureFileInfo fileInfo;
+				fileInfo.featureName = featureName;
+
+				FeatureIssues::AddFeatureIssue(
+					featureName,
+					"",
+					std::format("Weather '{}' contains settings for this feature, but the feature is not loaded. "
+								"The weather-specific parameters will be ignored until the feature is installed and loaded.",
+						GetEditorID()),
+					FeatureIssues::FeatureIssueInfo::IssueType::UNKNOWN,
+					fileInfo,
+					"");
+			}
+
+			logger::warn("{}: JSON contains feature settings for features that are not loaded: {}", GetEditorID(), missingList);
+		}
+	}
+
+	// Now load settings for features that ARE loaded
 	for (auto* feature : Feature::GetFeatureList()) {
 		if (!feature || !feature->loaded) {
 			continue;
@@ -1472,7 +1537,7 @@ void WeatherWidget::UpdateSearchResults()
 
 	// Search in Basic tab properties
 	std::vector<std::pair<std::string, std::map<std::string, int>>> basicCategories = {
-		{ "Sun", { { "Sun Glare", 0 }, { "Sun Damage", 0 } } },
+		{ "Sun", { { "Sun Damage", 0 } } },
 		{ "Wind", { { "Wind Speed", 0 }, { "Wind Direction", 0 }, { "Wind Direction Range", 0 } } },
 		{ "Precipitation", { { "Precipitation Begin Fade In", 0 }, { "Precipitation Begin Fade Out", 0 } } },
 		{ "Lightning", { { "Thunder Lightning Begin Fade In", 0 }, { "Thunder Lightning End Fade Out", 0 },
@@ -1542,6 +1607,10 @@ bool WeatherWidget::ShouldHighlight(const std::string& settingId) const
 {
 	if (highlightedSetting != settingId)
 		return false;
+
+	float elapsed = static_cast<float>(ImGui::GetTime()) - highlightStartTime;
+	return elapsed < 2.0f;
+}
 
 ID3D11ShaderResourceView* WeatherWidget::GetCloudTexture(int layerIndex)
 {

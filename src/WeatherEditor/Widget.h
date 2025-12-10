@@ -139,8 +139,9 @@ public:
 
 	bool MatchesSearch(const std::string& text) const;
 
-protected:
 	json js = json();
+
+protected:
 	std::string cachedEditorID;
 	virtual void DrawMenu();
 	std::string GetFolderName();

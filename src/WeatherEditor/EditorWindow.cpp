@@ -396,33 +396,22 @@ void EditorWindow::ShowObjectsWindow()
 			}
 		}
 
-		// Get current cell's lighting template for prioritization
-		RE::BGSLightingTemplate* currentCellLightingTemplate = nullptr;
-		if (selectedCategory == "Lighting Template") {
-			auto player = RE::PlayerCharacter::GetSingleton();
-			if (player && player->parentCell) {
-				auto& cellData = player->parentCell->GetRuntimeData();
-				currentCellLightingTemplate = cellData.lightingTemplate;
-			}
+	// Get current cell's lighting template for prioritization
+	RE::BGSLightingTemplate* currentCellLightingTemplate = nullptr;
+	if (selectedCategory == "Lighting Template") {
+		auto player = RE::PlayerCharacter::GetSingleton();
+		if (player && player->parentCell) {
+			auto& cellData = player->parentCell->GetRuntimeData();
+			currentCellLightingTemplate = cellData.lightingTemplate;
+		}
+	}
 
-			// Get current cell's lighting template for prioritization
-			RE::BGSLightingTemplate* currentCellLightingTemplate = nullptr;
-			if (selectedCategory == "Lighting Template") {
-				auto player = RE::PlayerCharacter::GetSingleton();
-				if (player && player->parentCell) {
-					auto& cellData = player->parentCell->GetRuntimeData();
-					currentCellLightingTemplate = cellData.lightingTemplate;
-				}
-			}
-
-			// Filtered display of widgets - show current cell's lighting template first
-			if (currentCellLightingTemplate && selectedCategory == "Lighting Template") {
-				for (int i = 0; i < sortedWidgets.size(); ++i) {
-					auto* ltWidget = dynamic_cast<LightingTemplateWidget*>(sortedWidgets[i]);
-					if (!ltWidget || ltWidget->lightingTemplate != currentCellLightingTemplate)
-						continue;
-
-					if (!ContainsStringIgnoreCase(sortedWidgets[i]->GetEditorID(), filterBuffer))
+	// Filtered display of widgets - show current cell's lighting template first
+	if (currentCellLightingTemplate && selectedCategory == "Lighting Template") {
+		for (int i = 0; i < sortedWidgets.size(); ++i) {
+			auto* ltWidget = dynamic_cast<LightingTemplateWidget*>(sortedWidgets[i]);
+			if (!ltWidget || ltWidget->lightingTemplate != currentCellLightingTemplate)
+				continue;					if (!ContainsStringIgnoreCase(sortedWidgets[i]->GetEditorID(), filterBuffer))
 						continue;
 
 					// Apply quick filters
@@ -451,18 +440,16 @@ void EditorWindow::ShowObjectsWindow()
 					// Editor ID column with [CURRENT] prefix
 					bool isSelected = sortedWidgets[i]->IsOpen();
 					if (ImGui::Selectable(editorLabel.c_str(), isSelected, ImGuiSelectableFlags_SpanAllColumns | ImGuiSelectableFlags_AllowDoubleClick)) {
-						if (ImGui::IsMouseDoubleClicked(0)) {
-							sortedWidgets[i]->SetOpen(true);
-							AddToRecent(sortedWidgets[i]->GetEditorID());
-						}
-					}
-					// Enter key to open
-					if (isSelected && ImGui::IsKeyPressed(ImGuiKey_Enter)) {
-						sortedWidgets[i]->SetOpen(true);
-						AddToRecent(sortedWidgets[i]->GetEditorID());
-					}
-
-					// Context menu
+				if (ImGui::IsMouseDoubleClicked(0)) {
+					sortedWidgets[i]->SetOpen(true);
+					AddToRecent(sortedWidgets[i]->GetEditorID(), selectedCategory);
+				}
+			}
+			// Enter key to open
+			if (isSelected && ImGui::IsKeyPressed(ImGuiKey_Enter)) {
+				sortedWidgets[i]->SetOpen(true);
+				AddToRecent(sortedWidgets[i]->GetEditorID(), selectedCategory);
+			}					// Context menu
 					if (ImGui::BeginPopupContextItem(std::format("widget_context_menu##{}", sortedWidgets[i]->GetFormID()).c_str(), ImGuiPopupFlags_MouseButtonRight)) {
 						auto& markedRecords = settings.markedRecords;
 
@@ -889,6 +876,13 @@ void EditorWindow::RenderUI()
 		open = false;
 	}
 
+	// Check for Ctrl+Z to undo
+	if ((ImGui::IsKeyDown(ImGuiKey_LeftCtrl) || ImGui::IsKeyDown(ImGuiKey_RightCtrl)) && ImGui::IsKeyPressed(ImGuiKey_Z, false)) {
+		if (CanUndo()) {
+			PerformUndo();
+		}
+	}
+
 	if (ImGui::BeginMainMenuBar()) {
 		if (ImGui::BeginMenu("File")) {
 			if (ImGui::MenuItem("Save All Open Widgets", "Ctrl+S")) {
@@ -1088,6 +1082,7 @@ void EditorWindow::RenderUI()
 			ImGui::BulletText("Use quick filters for fast sorting");
 			ImGui::BulletText("Auto-Apply updates game live");
 			ImGui::BulletText("Lock weather to prevent changes");
+			ImGui::BulletText("Undo button reverts recent changes (Ctrl+Z)");
 			ImGui::Separator();
 			ImGui::Text("Total Objects:");
 			ImGui::BulletText("Weathers: %d", (int)weatherWidgets.size());
@@ -1132,15 +1127,48 @@ void EditorWindow::RenderUI()
 				}
 			}
 
-			ImGui::PopStyleColor(2);
-			ImGui::PopStyleVar();
+		ImGui::PopStyleColor(2);
+		ImGui::PopStyleVar();
 
-			if (ImGui::IsItemHovered()) {
-				ImGui::SetTooltip(isPaused ? "Resume Time" : "Pause Time");
-			}
+		if (ImGui::IsItemHovered()) {
+			ImGui::SetTooltip(isPaused ? "Resume Time" : "Pause Time");
+		}
+	}
+
+	// Undo button
+	if (menu && menu->uiIcons.undo.texture) {
+		bool canUndo = CanUndo();
+
+		ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 0.0f);
+		if (!canUndo) {
+			ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0));
+			ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.3f, 0.3f, 0.3f, 0.25f));
+			ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.5f, 0.5f, 0.5f, 0.5f));
+		} else {
+			ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0));
+			ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.8f, 0.8f, 0.8f, 0.25f));
+			ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 1.0f, 1.0f, 1.0f));
 		}
 
-		// Weather lock indicator
+		const float menuBarHeight = ImGui::GetFrameHeight();
+		const float buttonDim = menuBarHeight * 0.85f;
+		const ImVec2 buttonSize(buttonDim, buttonDim);
+
+		if (ImGui::ImageButton("##GlobalUndo", menu->uiIcons.undo.texture, buttonSize) && canUndo) {
+			PerformUndo();
+		}
+
+		ImGui::PopStyleColor(3);
+		ImGui::PopStyleVar();
+
+		if (ImGui::IsItemHovered()) {
+			if (canUndo) {
+				ImGui::SetTooltip("Undo (Ctrl+Z) - %d states", (int)undoStack.size());
+			} else {
+				ImGui::SetTooltip("Undo (Ctrl+Z) - No changes to undo");
+			}
+		}
+	}		// Weather lock indicator
 		if (weatherLockActive && lockedWeather) {
 			ImGui::SameLine();
 			ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.2f, 1.0f, 0.2f, 1.0f));
@@ -1712,7 +1740,7 @@ void EditorWindow::DisableVanityCamera()
 	}
 }
 
-void EditorWindow::RestoreVanityCamera()
+	void EditorWindow::RestoreVanityCamera()
 {
 	if (!vanityCameraDisabled)
 		return;
@@ -1722,6 +1750,67 @@ void EditorWindow::RestoreVanityCamera()
 		setting->data.f = savedVanityCameraDelay;
 		vanityCameraDisabled = false;
 		logger::info("Vanity camera restored (delay: {})", savedVanityCameraDelay);
+	}
+}
+
+void EditorWindow::PushUndoState(Widget* widget)
+{
+	if (!widget)
+		return;
+
+	UndoState state;
+	state.widget = widget;
+	state.widgetId = widget->GetEditorID();
+	state.settings = widget->js;
+
+	undoStack.push_back(state);
+
+	if (undoStack.size() > maxUndoStates) {
+		undoStack.erase(undoStack.begin());
+	}
+}
+
+void EditorWindow::PerformUndo()
+{
+	if (undoStack.empty())
+		return;
+
+	UndoState state = undoStack.back();
+	undoStack.pop_back();
+
+	if (!state.widget) {
+		for (auto& w : weatherWidgets) {
+			if (w->GetEditorID() == state.widgetId) {
+				state.widget = w.get();
+				break;
+			}
+		}
+		if (!state.widget) {
+			for (auto& w : imageSpaceWidgets) {
+				if (w->GetEditorID() == state.widgetId) {
+					state.widget = w.get();
+					break;
+				}
+			}
+		}
+		if (!state.widget) {
+			for (auto& w : lightingTemplateWidgets) {
+				if (w->GetEditorID() == state.widgetId) {
+					state.widget = w.get();
+					break;
+				}
+			}
+		}
+	}
+
+	if (state.widget) {
+		state.widget->js = state.settings;
+		state.widget->LoadSettings();
+		state.widget->ApplyChanges();
+		ShowNotification(
+			std::format("Undone changes to {}", state.widgetId),
+			ImVec4(0.3f, 0.8f, 1.0f, 1.0f),
+			2.0f);
 	}
 }
 

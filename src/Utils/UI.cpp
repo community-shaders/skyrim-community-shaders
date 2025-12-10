@@ -318,6 +318,7 @@ namespace Util
 		loadIconWithLogging(basePath + "Action Icons\\restore-settings.png", &menu->uiIcons.featureSettingRevert.texture, menu->uiIcons.featureSettingRevert.size, "restore-settings");
 		loadIconWithLogging(basePath + "Action Icons\\apply-to-game.png", &menu->uiIcons.applyToGame.texture, menu->uiIcons.applyToGame.size, "apply-to-game");
 		loadIconWithLogging(basePath + "Action Icons\\pause.png", &menu->uiIcons.pauseTime.texture, menu->uiIcons.pauseTime.size, "pause");
+		loadIconWithLogging(basePath + "Action Icons\\undo.png", &menu->uiIcons.undo.texture, menu->uiIcons.undo.size, "undo");
 		loadIconWithLogging(basePath + "Action Icons\\discord.png", &menu->uiIcons.discord.texture, menu->uiIcons.discord.size, "discord");
 
 		// Load category icons in a more compact way

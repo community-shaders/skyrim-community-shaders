@@ -182,6 +182,7 @@ Menu::~Menu()
 	uiIcons.featureSettingRevert.Release();
 	uiIcons.applyToGame.Release();
 	uiIcons.pauseTime.Release();
+	uiIcons.undo.Release();
 	uiIcons.discord.Release();
 	uiIcons.characters.Release();
 	uiIcons.display.Release();

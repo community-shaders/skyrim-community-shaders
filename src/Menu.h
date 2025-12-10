@@ -193,8 +193,9 @@ public:
 		UIIcon featureSettingRevert;  // Feature revert settings icon
 		UIIcon applyToGame;           // Apply changes to game icon (weather editor)
 		UIIcon pauseTime;             // Pause time icon (weather editor)
+		UIIcon undo;                  // Undo icon (weather editor)
 
-		// Social media/external link icons
+	// Social media/external link icons
 		UIIcon discord;
 
 		// Category icons

@@ -80,6 +80,20 @@ public:
 	void DisableVanityCamera();
 	void RestoreVanityCamera();
 
+	// Undo system
+	struct UndoState
+	{
+		Widget* widget;
+		json settings;
+		std::string widgetId;
+	};
+	std::vector<UndoState> undoStack;
+	static const size_t maxUndoStates = 50;
+
+	void PushUndoState(Widget* widget);
+	void PerformUndo();
+	bool CanUndo() const { return !undoStack.empty(); }
+
 	// Notification system
 	struct Notification
 	{
