@@ -1,7 +1,11 @@
 #ifndef MATERIAL_HLSI
 #define MATERIAL_HLSI
 
+#ifdef __cplusplus	
+struct MaterialData
+#else
 struct Material
+#endif
 {
 	half4 BaseColor;
 	half4 EffectColor;
@@ -20,7 +24,7 @@ struct Material
 };
 
 #ifdef __cplusplus
-static_assert(sizeof(Material) % 4 == 0);
+static_assert(sizeof(MaterialData) % 4 == 0);
 #endif
 
 #endif

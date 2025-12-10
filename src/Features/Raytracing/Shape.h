@@ -4,6 +4,7 @@
 
 #include "Features/Raytracing/Buffer.h"
 #include "Features/Raytracing/Utils.h"
+#include "Features/Raytracing/Allocator.h"
 
 #include <d3d12.h>
 #include <winrt/base.h>
@@ -27,8 +28,23 @@ DEFINE_ENUM_FLAG_OPERATORS(Flags);
 class Shape
 {
 public:
+	struct Material
+	{
+		half4 BaseColor;
+		half4 EffectColor;
+		half4 TexCoordOffsetScale;
+		eastl::shared_ptr<Allocation> BaseTexture;
+		eastl::shared_ptr<Allocation> EffectTexture;
+		//eastl::shared_ptr<Allocation> RmaosTexture;
+		RE::BSShader::Type ShaderType;
+
+		MaterialData GetData() {
+			return MaterialData(BaseColor, EffectColor, TexCoordOffsetScale, BaseTexture->GetIndex(), EffectTexture->GetIndex(), 0, static_cast<uint16_t>(ShaderType));
+		}
+	};
+
 	// The position of this meshes SRV in the register stack
-	uint16_t registerIndex;
+	eastl::unique_ptr<Allocation, AllocationDeleter> registerIndex;
 
 	uint vertexCount = 0;
 	uint triangleCount = 0;
@@ -46,17 +62,19 @@ public:
 	eastl::unique_ptr<DX12::StructuredBufferUpload<Skinning>> skinningBuffer = nullptr;
 	eastl::unique_ptr<DX12::StructuredBufferUpload<Triangle>> triangleBuffer = nullptr;
 
-	winrt::com_ptr<ID3D12Resource> blasBuffer = nullptr;
 	Material material;
-	eastl::vector<RE::BSTriShape*> instances;
 
 	Flags flags = Flags::None;
 
-	Shape(uint16_t registerIndex, Flags flags = Flags::None) :
-		registerIndex(registerIndex), flags(flags) {}
+	Shape(Allocation* registerIndex, Flags flags = Flags::None) :
+		registerIndex({ registerIndex, AllocationDeleter() }), flags(flags) {}
 
-	Shape(uint16_t registerIndex, RE::BSGeometry* geometry, Flags flags = Flags::None) :
-		registerIndex(registerIndex), geometry(geometry), flags(flags) {}
+	Shape(Allocation* registerIndex, RE::BSGeometry* geometry, Flags flags = Flags::None) :
+		registerIndex({ registerIndex, AllocationDeleter() }), geometry(geometry), flags(flags) {}
+
+	/*~Shape() {
+	
+	};*/
 
 	/*inline Shape Clone(uint16_t registerIndexIn, RE::BSGeometry* geometryIn) const
 	{

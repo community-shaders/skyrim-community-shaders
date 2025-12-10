@@ -132,7 +132,7 @@ static inline DXGI_FORMAT GetCompatibleFormat(DXGI_FORMAT format, bool recompres
 }
 
 template <typename T>
-static inline std::string GetFlags(auto value)
+static inline std::string GetFlagsString(auto value)
 {
 	using N = decltype(value);
 

@@ -9,7 +9,16 @@ void Shape::BuildMesh(RE::BSGraphics::TriShape* rendererData, const std::uint32_
 {
 	// Vertices
 	{
-		bool skinned = bonesPerVertex > 0;
+		bool dynamic = flags & Flags::Dynamic;
+		bool skinned = flags & Flags::Skinned;
+
+		if (dynamic) {
+			dynamicPosition.resize(vertexCountIn);
+
+			auto* pDynamicTriShape = netimmerse_cast<RE::BSDynamicTriShape*>(geometry);
+			const auto& dynTriShapeRuntime = pDynamicTriShape->GetDynamicTrishapeRuntimeData();
+			std::memcpy(dynamicPosition.data(), dynTriShapeRuntime.dynamicData, dynTriShapeRuntime.dataSize);
+		}
 
 		vertices.resize(vertexCountIn);
 
@@ -44,7 +53,11 @@ void Shape::BuildMesh(RE::BSGraphics::TriShape* rendererData, const std::uint32_
 
 			if (hasPosition) {
 				std::memcpy(&pos, vtx + posOffset, sizeof(float4));
+			} else if (dynamic) {
+				pos = dynamicPosition[i];
+			}
 
+			if (hasPosition || dynamic) {
 				vertexData.Position = float3::Transform({ pos.x, pos.y, pos.z }, transform);
 			}
 
@@ -137,9 +150,6 @@ void Shape::BuildMaterial(const RE::BSGeometry::GEOMETRY_RUNTIME_DATA& geometryR
 	float4 texCoordOffsetScale = { 0.0f, 0.0f, 1.0f, 1.0f };
 	float4 texCoord1OffsetScale = { 0.0f, 0.0f, 1.0f, 1.0f };
 
-	uint16_t baseTextureRegister = 0;
-	uint16_t effectTextureRegister = 0;
-	uint16_t rmaosTextureRegister = 0;
 	int effectType = 0;
 
 	RE::BSShader::Type shaderType = RE::BSShader::Type::None;
@@ -157,7 +167,7 @@ void Shape::BuildMaterial(const RE::BSGeometry::GEOMETRY_RUNTIME_DATA& geometryR
 
 		if (property; auto lightingShader = netimmerse_cast<RE::BSLightingShaderProperty*>(property)) {
 			if (auto& effectData = lightingShader->effectData) {
-				logger::info("[RT] CreateMaterial - Effect - Alpha: {}, Z Test Func: {}", effectData->alpha, magic_enum::enum_name(effectData->zTestFunc));
+				logger::info("[RT] BuildMaterial - Effect - Alpha: {}, Z Test Func: {}", effectData->alpha, magic_enum::enum_name(effectData->zTestFunc));
 			}
 		}
 
@@ -166,12 +176,12 @@ void Shape::BuildMaterial(const RE::BSGeometry::GEOMETRY_RUNTIME_DATA& geometryR
 		if (effect) {
 			auto lightingShader = netimmerse_cast<RE::BSLightingShaderProperty*>(effect);
 
-			logger::debug("[RT] CreateMaterial - BSLightingShaderProperty Flags: {}", GetFlags<EShaderPropertyFlag>(lightingShader->flags.underlying()));
+			logger::debug("[RT] BuildMaterial - BSLightingShaderProperty Flags: {}", GetFlagsString<EShaderPropertyFlag>(lightingShader->flags.underlying()));
 
 			if (lightingShader) {
 				// This is always nullptr :(
 				if (auto& effectData = lightingShader->effectData) {
-					logger::info("[RT] CreateMaterial - Effect - Alpha: {}, Z Test Func: {}", effectData->alpha, magic_enum::enum_name(effectData->zTestFunc));
+					logger::info("[RT] BuildMaterial - Effect - Alpha: {}, Z Test Func: {}", effectData->alpha, magic_enum::enum_name(effectData->zTestFunc));
 				}
 
 				shaderType = RE::BSShader::Type::Lighting;
@@ -183,7 +193,7 @@ void Shape::BuildMaterial(const RE::BSGeometry::GEOMETRY_RUNTIME_DATA& geometryR
 					lightingShader->emissiveMult
 				};
 
-				logger::debug("[RT] CreateMaterial - BSLightingShaderProperty Alpha: {}", lightingShader->alpha);
+				logger::debug("[RT] BuildMaterial - BSLightingShaderProperty Alpha: {}", lightingShader->alpha);
 
 				if (auto shaderMaterial = lightingShader->material) {
 					texCoordOffsetScale = {
@@ -201,7 +211,7 @@ void Shape::BuildMaterial(const RE::BSGeometry::GEOMETRY_RUNTIME_DATA& geometryR
 					if (lightingBaseMaterial) {
 						baseTexture = TryGetTexture(lightingBaseMaterial->diffuseTexture);
 
-						logger::debug("[RT] CreateMaterial - BSLightingShaderMaterialBase Alpha: {}", lightingBaseMaterial->materialAlpha);
+						logger::debug("[RT] BuildMaterial - BSLightingShaderMaterialBase Alpha: {}", lightingBaseMaterial->materialAlpha);
 
 						if (shaderMaterial->GetFeature() == Feature::kGlowMap) {
 							const auto* lightingGlowMaterial = static_cast<RE::BSLightingShaderMaterialGlowmap*>(shaderMaterial);
@@ -235,13 +245,16 @@ void Shape::BuildMaterial(const RE::BSGeometry::GEOMETRY_RUNTIME_DATA& geometryR
 	}
 
 	if (baseTexture == nullptr)
-		logger::warn("[RT] CreateMaterial {} - Base texture is nullptr", name);
+		logger::warn("[RT] BuildMaterial {} - Base texture is nullptr", name);
 
-	baseTextureRegister = rt.GetTextureRegister(baseTexture, true);
-	effectTextureRegister = rt.GetTextureRegister(effectTexture, false);
+	auto baseTextureRegister = rt.GetTextureRegister(baseTexture);
+	auto effectTextureRegister = rt.GetTextureRegister(effectTexture);
 
-	if (baseTexture && baseTextureRegister == 0)
-		logger::warn("[RT] CreateMaterial {} - Base texture [0x{:8X}] not shared", name, reinterpret_cast<uintptr_t>(baseTexture));
+	if (baseTexture && baseTextureRegister->GetIndex() == rt.defaultTexture->GetIndex())
+		logger::warn("[RT] BuildMaterial {} - Base texture [0x{:8X}] not shared", name, reinterpret_cast<uintptr_t>(baseTexture));
+
+	if (effectTexture && effectTextureRegister->GetIndex() == rt.defaultTexture->GetIndex())
+		logger::warn("[RT] BuildMaterial {} - Effect texture [0x{:8X}] not shared", name, reinterpret_cast<uintptr_t>(effectTexture));
 
 	material = Material(
 		baseColor,
@@ -249,8 +262,7 @@ void Shape::BuildMaterial(const RE::BSGeometry::GEOMETRY_RUNTIME_DATA& geometryR
 		texCoordOffsetScale,
 		baseTextureRegister,
 		effectTextureRegister,
-		rmaosTextureRegister,
-		static_cast<uint16_t>(shaderType));
+		shaderType);
 }
 
 void Shape::CreateBuffers(const std::wstring& name)
@@ -270,7 +282,7 @@ void Shape::CreateBuffers(const std::wstring& name)
 		dynamicPosition.resize(vertexCount);
 
 		dynamicPositionBuffer = eastl::make_unique<DX12::StructuredBufferUpload<float4>>(device, vertexCount);
-		dynamicPositionBuffer->CreateSRV(skinningHeap->CPUHandle(SkinningHeap::Slot::DynamicVertices, registerIndex));
+		dynamicPositionBuffer->CreateSRV(skinningHeap->CPUHandle(SkinningHeap::Slot::DynamicVertices, registerIndex->GetIndex()));
 	}
 
 	// Vertices
@@ -280,7 +292,7 @@ void Shape::CreateBuffers(const std::wstring& name)
 		vertexBuffer = eastl::make_unique<DX12::StructuredBufferUpload<Vertex>>(device, vertexCount, hasUAV);
 
 		vertexBuffer->UpdateList(vertices.data(), vertexCount);
-		DX::ThrowIfFailed(vertexBuffer->resource->SetName(std::format(L"Vertex Buffer [{}] - {}", registerIndex, name).c_str()));
+		DX::ThrowIfFailed(vertexBuffer->resource->SetName(std::format(L"Vertex Buffer [{}] - {}", registerIndex->GetIndex(), name).c_str()));
 
 		vertexBuffer->Upload(commandList);
 
@@ -294,7 +306,7 @@ void Shape::CreateBuffers(const std::wstring& name)
 			uavDesc.Buffer.StructureByteStride = sizeof(Vertex);
 			uavDesc.Buffer.Flags = D3D12_BUFFER_UAV_FLAG_NONE;
 
-			device->CreateUnorderedAccessView(vertexBuffer->resource.get(), nullptr, &uavDesc, skinningHeap->CPUHandle(SkinningHeap::Slot::Output, registerIndex));
+			device->CreateUnorderedAccessView(vertexBuffer->resource.get(), nullptr, &uavDesc, skinningHeap->CPUHandle(SkinningHeap::Slot::Output, registerIndex->GetIndex()));
 		}
 
 		// SRV
@@ -308,7 +320,7 @@ void Shape::CreateBuffers(const std::wstring& name)
 			vbDesc.Buffer.StructureByteStride = sizeof(Vertex);
 			vbDesc.Buffer.Flags = D3D12_BUFFER_SRV_FLAG_NONE;
 
-			device->CreateShaderResourceView(vertexBuffer->resource.get(), &vbDesc, giHeap->CPUHandle(GIHeap::Slot::Vertices, registerIndex));
+			device->CreateShaderResourceView(vertexBuffer->resource.get(), &vbDesc, giHeap->CPUHandle(GIHeap::Slot::Vertices, registerIndex->GetIndex()));
 		}
 	}
 
@@ -317,7 +329,7 @@ void Shape::CreateBuffers(const std::wstring& name)
 		skinningBuffer = eastl::make_unique<DX12::StructuredBufferUpload<Skinning>>(device, vertexCount);
 
 		skinningBuffer->UpdateList(skinning.data(), vertexCount);
-		DX::ThrowIfFailed(skinningBuffer->resource->SetName(std::format(L"Skinning Buffer [{}] - {}", registerIndex, name).c_str()));
+		DX::ThrowIfFailed(skinningBuffer->resource->SetName(std::format(L"Skinning Buffer [{}] - {}", registerIndex->GetIndex(), name).c_str()));
 
 		skinningBuffer->Upload(commandList);
 
@@ -332,7 +344,7 @@ void Shape::CreateBuffers(const std::wstring& name)
 			vbDesc.Buffer.StructureByteStride = sizeof(Skinning);
 			vbDesc.Buffer.Flags = D3D12_BUFFER_SRV_FLAG_NONE;
 
-			device->CreateShaderResourceView(skinningBuffer->resource.get(), &vbDesc, skinningHeap->CPUHandle(SkinningHeap::Slot::Skinning, registerIndex));
+			device->CreateShaderResourceView(skinningBuffer->resource.get(), &vbDesc, skinningHeap->CPUHandle(SkinningHeap::Slot::SkinningData, registerIndex->GetIndex()));
 		}
 	}
 
@@ -341,7 +353,7 @@ void Shape::CreateBuffers(const std::wstring& name)
 		triangleBuffer = eastl::make_unique<DX12::StructuredBufferUpload<Triangle>>(device, triangleCount);
 
 		triangleBuffer->UpdateList(triangles.data(), triangles.size());
-		DX::ThrowIfFailed(triangleBuffer->resource->SetName(std::format(L"Triangle Buffer [{}] - {}", registerIndex, name).c_str()));
+		DX::ThrowIfFailed(triangleBuffer->resource->SetName(std::format(L"Triangle Buffer [{}] - {}", registerIndex->GetIndex(), name).c_str()));
 
 		triangleBuffer->Upload(commandList);
 
@@ -356,10 +368,11 @@ void Shape::CreateBuffers(const std::wstring& name)
 			ibDesc.Buffer.StructureByteStride = sizeof(Triangle);
 			ibDesc.Buffer.Flags = D3D12_BUFFER_SRV_FLAG_NONE;
 
-			device->CreateShaderResourceView(triangleBuffer->resource.get(), &ibDesc, giHeap->CPUHandle(GIHeap::Slot::Triangles, registerIndex));
+			device->CreateShaderResourceView(triangleBuffer->resource.get(), &ibDesc, giHeap->CPUHandle(GIHeap::Slot::Triangles, registerIndex->GetIndex()));
 		}
 	}
 
 	// Material
-	materialBuffer->Update(&material, sizeof(Material), sizeof(Material) * registerIndex);
+	auto materialData = material.GetData();
+	materialBuffer->UpdateAt(&materialData, registerIndex->GetIndex());
 }

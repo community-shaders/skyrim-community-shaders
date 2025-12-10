@@ -93,7 +93,7 @@ void HitMesh(inout IndirectPayload payload, in BuiltInTriangleIntersectionAttrib
     payload.color += float4(GGXDirectD(worldPosition, worldNormal, viewDirection, albedo, DEFAULT_SPECULAR, roughness, Frame.Directional), 0.0f);
     
     #if defined(LAMBERT)
-    payload.color += LambertianDirect(worldPosition, worldNormal, albedo, instance.LightData, randomSeed);
+    payload.color += LambertianDirectP(worldPosition, worldNormal, albedo, instance.LightData, randomSeed);
     #else
     payload.color += float4(GGXDirectP(worldPosition, worldNormal, viewDirection, albedo, DEFAULT_SPECULAR, roughness, instance.LightData, randomSeed), 0.0f);
     #endif

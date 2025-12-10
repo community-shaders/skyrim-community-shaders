@@ -2,6 +2,7 @@
 
 #include "Features/Raytracing/Heap.h"
 #include "Features/Raytracing/ShaderBindingTable.h"
+#include "Features/Raytracing/Allocator.h"
 
 namespace DX12
 {
@@ -82,6 +83,11 @@ namespace DX12
 		CD3DX12_CPU_DESCRIPTOR_HANDLE CPUHandle(Slot item, uint offset = 0) const
 		{
 			return CD3DX12_CPU_DESCRIPTOR_HANDLE(descriptorHeap->GetCPUDescriptorHandleForHeapStart(), HeapType::GetSlotValue(item) + offset, descriptorIncrementSize);
+		}
+
+		CD3DX12_CPU_DESCRIPTOR_HANDLE CPUHandle(Slot item, Allocation* allocation) const
+		{
+			return CD3DX12_CPU_DESCRIPTOR_HANDLE(descriptorHeap->GetCPUDescriptorHandleForHeapStart(), HeapType::GetSlotValue(item) + allocation->GetIndex(), descriptorIncrementSize);
 		}
 
 		CD3DX12_GPU_DESCRIPTOR_HANDLE GPUHandle(Slot item, uint offset = 0) const

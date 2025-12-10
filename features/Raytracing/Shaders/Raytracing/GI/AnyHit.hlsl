@@ -10,7 +10,7 @@ void main(inout IndirectPayload payload, in BuiltInTriangleIntersectionAttribute
     Instance instance = GetInstance();
     uint meshID = GetMeshID();
    
-    Vertex v0, v1, v2;    
+    Vertex v0, v1, v2;
     GetVertices(meshID, v0, v1, v2);
     
     float3 uvw = GetBary(attribs);

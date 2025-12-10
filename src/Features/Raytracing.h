@@ -10,6 +10,9 @@
 #include <DirectXTex.h>
 #include <shared_mutex>
 #include <EASTL/deque.h>
+#include <D3D12MemAlloc.h>
+
+#include "State.h"
 
 #include "Features/Raytracing/Utils.h"
 #include "Features/Raytracing/Heap.h"
@@ -35,7 +38,7 @@
 
 #include <DXProgrammableCapture.h>
 
-//#define DLSS_RR
+#define DLSS_RR
 
 #ifdef DLSS_RR
 #	define NV_WINDOWS
@@ -53,11 +56,11 @@
 
 struct Raytracing : public Feature
 {
-	static constexpr uint MAX_TEXTURES = 512;
-	static constexpr uint MAX_MESHES = 1024;
-	static constexpr uint MAX_SUBMESHES = 2048;
-	static constexpr uint MAX_MATERIALS = MAX_SUBMESHES;
-	static constexpr uint MAX_INSTANCES = 2048;
+	static constexpr uint MAX_TEXTURES = 1024;
+	static constexpr uint MAX_MODELS = 2048;
+	static constexpr uint MAX_SHAPES = 2048;
+	static constexpr uint MAX_MATERIALS = MAX_SHAPES;
+	static constexpr uint MAX_INSTANCES = 4096;
 	
 	static constexpr uint MAX_LIGHTS = 255;
 
@@ -90,8 +93,8 @@ struct Raytracing : public Feature
 			Materials,
 			Instances,
 			Vertices,
-			Triangles = Vertices + Raytracing::MAX_SUBMESHES,
-			Textures = Triangles + Raytracing::MAX_SUBMESHES,
+			Triangles = Vertices + Raytracing::MAX_SHAPES,
+			Textures = Triangles + Raytracing::MAX_SHAPES,
 			NumDescriptors = Textures + Raytracing::MAX_TEXTURES,
 			None
 		};
@@ -104,21 +107,19 @@ struct Raytracing : public Feature
 		{
 			UAV,
 			SRV,
-			SkinningBuffer,
-			VertexBuffer,
-			DynamicBuffer
+			DynamicBuffer,
+			SkinningBuffer
 		};
 
 		enum class Slot
 		{
 			Output,
-			LocalToRoot,
+			LocalToRoot = Output + Raytracing::MAX_SHAPES,  // = Output + Raytracing::MAX_SHAPES
 			UpdateData,
 			BoneMatrices,
-			Skinning,
-			Vertices = Skinning + Raytracing::MAX_SUBMESHES,
-			DynamicVertices = Vertices + Raytracing::MAX_SUBMESHES,
-			NumDescriptors = DynamicVertices + Raytracing::MAX_SUBMESHES,
+			DynamicVertices,
+			SkinningData = DynamicVertices + Raytracing::MAX_SHAPES,
+			NumDescriptors = SkinningData + Raytracing::MAX_SHAPES,
 			None
 		};
 	};
@@ -213,6 +214,9 @@ struct Raytracing : public Feature
 
 	void UpdateInstances();
 	void UpdateShadowInstances();
+
+	void AddInstances();
+	void ClearInstances();
 
 	template <typename T>
 	void MakeAndCopy(const eastl::vector<T>& data, winrt::com_ptr<ID3D12Resource>& res);
@@ -392,78 +396,104 @@ struct Raytracing : public Feature
 	struct TextureReference
 	{
 		ID3D12Resource* resource = nullptr;
-		uint16_t registerIndex;
+		eastl::shared_ptr<Allocation> registerIndex;
 	};
 
 	// Creates a single BLAS for a collection of Shapes
-	void CommitGeometry(Model& geometryData);
+	// TODO: Move to Model struct
+	void CommitModel(Model& geometryData);
 
 	// Creates mesh buffers for all graph TriShapes, handles materials and builds a single BLAS for the node
 	void CreateModel(const char* path, RE::NiNode* pRoot);
 
-	uint16_t GetTextureRegister(ID3D11Texture2D* texture, bool whiteDefault = true);
+	// Removes the instance and optionally also releases the model and all its buffers if refCount reaches 0
+	void RemoveInstance(RE::NiNode* pRoot, bool releaseModel);
 
-	Allocator registers = Allocator(MAX_SUBMESHES);
+	// TODO: Move to Model struct
+	void UpdateModelBLAS(Model& geometryData);
+
+	eastl::shared_ptr<Allocation> GetTextureRegister(ID3D11Texture2D* texture);
+
+	Allocator shapeRegisters = Allocator(MAX_SHAPES);
 	Allocator textureRegisters = Allocator(MAX_TEXTURES);
 
+	eastl::shared_ptr<Allocation> defaultTexture = nullptr;
+
 	// We'll group trishapes by their parent nodes, hopefully trishapes don't move on their own
-	eastl::unordered_map<eastl::string, Model> geometry;
-	eastl::unordered_map<RE::NiNode*, eastl::string> inputPaths;
+	eastl::unordered_map<eastl::string, Model> models;
 
 	// Instance
 	struct Instance
 	{
 		eastl::string filename;
 		float3x4 transform;
-		Util::FrameChecker frameChecker;
+		Util::FrameChecker frameChecker;	
+		//bool hasUpdated = false;
 
-		void Update(RE::NiNode* pNiNode, Model& model)
+		bool Update(RE::NiNode* pNiNode, [[ maybe_unused ]] const eastl::pair<eastl::string, Model&>& modelPair)
 		{
-			if (frameChecker.IsNewFrame()) {
-				XMStoreFloat3x4(&transform, GetXMFromNiTransform(pNiNode->world));
+			// Instance was not changed by the game, so there is no need to update it
+			// This doesn't work at all for actors
+			/*if (pNiNode->lastUpdatedFrameCounter < globals::state->frameCount && hasUpdated)
+				return true;*/
 
-				if ((model.GetFlags() & Flags::Dynamic) || (model.GetFlags() & Flags::Skinned)) {
-					for (auto& shape : model.shapes) {
-						Flags updateFlags = Flags::None;
+			// Instance has already been updated this frame
+			if (!frameChecker.IsNewFrame())
+				return true;
 
-						// Updates Dynamic Vertex position (and Bitangent.x) buffer
-						// TODO: Test performance and stability of using a upload heap buffer and keeping it mapped to dynamicData
-						if ((shape.flags & Flags::Dynamic) && shape.geometry) {
-							auto* pDynamicTriShape = netimmerse_cast<RE::BSDynamicTriShape*>(shape.geometry);
-							const auto& dynTriShapeRuntime = pDynamicTriShape->GetDynamicTrishapeRuntimeData();
+			XMStoreFloat3x4(&transform, GetXMFromNiTransform(pNiNode->world));
 
-							// We'll test if dynamic data has changed before updating and uploading
-							// It does mean we have to memcpy twice, but I suppose the GPU bandwith we save makes up for it
-							if (std::memcmp(shape.dynamicPosition.data(), dynTriShapeRuntime.dynamicData, dynTriShapeRuntime.dataSize) != 0) {
-								std::memcpy(shape.dynamicPosition.data(), dynTriShapeRuntime.dynamicData, dynTriShapeRuntime.dataSize);
+			/*auto& [path, model] = modelPair;
 
-								shape.dynamicPositionBuffer->Update(dynTriShapeRuntime.dynamicData, dynTriShapeRuntime.dataSize);
+			if ((model.GetFlags() & Flags::Dynamic) || (model.GetFlags() & Flags::Skinned)) {
+				for (auto& shape : model.shapes) {
+					Flags updateFlags = Flags::None;
 
-								// We'll barrier and upload ourselfs in batch
-								//shape.dynamicPositionBuffer->Upload(commandList);
-								updateFlags |= Flags::Dynamic;
-							}
+					// Updates Dynamic Vertex position (and Bitangent.x) buffer
+					// TODO: Test performance and stability of using a upload heap buffer and keeping it mapped to dynamicData
+					if ((shape->flags & Flags::Dynamic) && shape->geometry) {
+						//auto* pDynamicTriShape = netimmerse_cast<RE::BSDynamicTriShape*>(shape->geometry);
+
+						auto* pDynamicTriShape = (RE::BSDynamicTriShape*)shape->geometry;
+						const auto& dynTriShapeRuntime = pDynamicTriShape->GetDynamicTrishapeRuntimeData();
+
+						// We'll test if dynamic data has changed before updating and uploading
+						// It does mean we have to memcpy twice, but I suppose the GPU bandwith we save makes up for it
+						if (dynTriShapeRuntime.dynamicData && std::memcmp(shape->dynamicPosition.data(), dynTriShapeRuntime.dynamicData, dynTriShapeRuntime.dataSize) != 0) {
+							std::memcpy(shape->dynamicPosition.data(), dynTriShapeRuntime.dynamicData, dynTriShapeRuntime.dataSize);
+
+							shape->dynamicPositionBuffer->Update(dynTriShapeRuntime.dynamicData, dynTriShapeRuntime.dataSize);
+
+							// We'll barrier and upload ourselfs in batch
+							//shape.dynamicPositionBuffer->Upload(commandList);
+							updateFlags |= Flags::Dynamic;
 						}
+					}
 
-						// TODO: Handle skinned meshes
-						if ((shape.flags & Flags::Skinned) && shape.geometry) {
-							// Restore pre-skinning vertices
-							//shape.vertexBuffer->Upload(commandList);
+					// TODO: Handle skinned meshes
+					if ((shape->flags & Flags::Skinned) && shape->geometry) {
+						// Restore pre-skinning vertices
+						//shape.vertexBuffer->Upload(commandList);
 
-							updateFlags |= Flags::Skinned;
-						}
+						updateFlags |= Flags::Skinned;
+					}
 
-						if (updateFlags & Flags::Dynamic || updateFlags & Flags::Skinned)
-							globals::features::raytracing.vertexUpdate.emplace_back(shape.registerIndex, updateFlags & Flags::Dynamic ? shape.dynamicPositionBuffer.get() : nullptr, shape.vertexBuffer.get(), shape.vertexCount, updateFlags);
+					if ((updateFlags & Flags::Dynamic) || (updateFlags & Flags::Skinned)) {
+						auto& rt = globals::features::raytracing;
+
+						rt.modelUpdate.emplace_back(path);
+						rt.vertexUpdate.emplace_back(shape->registerIndex->GetIndex(), updateFlags & Flags::Dynamic ? shape->dynamicPositionBuffer.get() : nullptr, shape->vertexBuffer.get(), shape->vertexCount, updateFlags);
 					}
 				}
-			}
+			}*/
+
+			return true;
 		}
 	};
 
 	eastl::unordered_map<RE::NiNode*, Instance> instances;
 
-	eastl::unique_ptr<DX12::StructuredBufferUpload<Material>> materialBuffer = nullptr;
+	eastl::unique_ptr<DX12::StructuredBufferUpload<MaterialData>> materialBuffer = nullptr;
 
 	// Instance buffer
 	struct InstanceData
@@ -538,6 +568,9 @@ struct Raytracing : public Feature
 
 	eastl::vector<VertexUpdate> vertexUpdate;
 	eastl::unique_ptr<DX12::StructuredBufferUpload<VertexUpdateData>> vertexUpdateBuffer = nullptr;
+
+	// Is this safe??
+	eastl::vector<eastl::string> modelUpdate;
 
 	// GI
 	winrt::com_ptr<ID3D12RootSignature> rootSignature = nullptr;
@@ -769,6 +802,7 @@ struct Raytracing : public Feature
 				ULONG refCount = func(This);
 
 				if (refCount == 0) {
+					logger::info("[RT] ID3D11Texture2D::Release: {}", reinterpret_cast<uintptr_t>(This));
 					globals::features::raytracing.sharedTextures.erase(This);
 				}
 
@@ -968,6 +1002,22 @@ struct Raytracing : public Feature
 		};
 
 		template <typename T>
+		struct Release3DRelatedData
+		{
+			static void thunk(T* oThis)
+			{
+				if (auto& rt = globals::features::raytracing; rt.Active()) {
+					if (auto* pNiAVObject = oThis->Get3D()) {
+						rt.RemoveInstance(netimmerse_cast<RE::NiNode*>(pNiAVObject), true);
+					}
+				}
+
+				func(oThis);
+			}
+			static inline REL::Relocation<decltype(thunk)> func;
+		};
+
+		template <typename T>
 		struct Clone3DBase
 		{
 			static RE::NiAVObject* thunk(T* oThis, bool a_backgroundLoading)
@@ -1043,16 +1093,34 @@ struct Raytracing : public Feature
 				return result;
 			}
 			static inline REL::Relocation<decltype(thunk)> func;
-		};	
+		};
 
+		template <typename T>
+		struct Destructor
+		{
+			static void thunk(T* oThis)
+			{
+				if (auto& rt = globals::features::raytracing; rt.Active()) {
+					rt.RemoveInstance(oThis, false);
+				}
+
+				func(oThis);
+			}
+			static inline REL::Relocation<decltype(thunk)> func;
+		};	
+		
 		static void Install()
 		{
 			stl::write_vfunc<0x6A, Load3D<RE::TESObjectREFR>>(RE::VTABLE_TESObjectREFR[0]);
+			stl::write_vfunc<0x6B, Release3DRelatedData<RE::TESObjectREFR>>(RE::VTABLE_TESObjectREFR[0]);
+
+			stl::write_vfunc<0x0, Destructor<RE::BSFadeNode>>(RE::VTABLE_BSFadeNode[0]); // Doesn't work that well (find out why)
+			//stl::write_vfunc<0x0, Destructor<RE::NiNode>>(RE::VTABLE_NiNode[0]);
 
 			stl::detour_thunk<Main_RenderWorld>(REL::RelocationID(100424, 107142));
 
 			stl::write_vfunc<0x6, BSShader_SetupGeometry<RE::BSShader::Type::Lighting>>(RE::VTABLE_BSLightingShader[0]);
-			stl::write_vfunc<0x6, BSShader_SetupGeometry<RE::BSShader::Type::Effect>>(RE::VTABLE_BSEffectShader[0]);
+			//stl::write_vfunc<0x6, BSShader_SetupGeometry<RE::BSShader::Type::Effect>>(RE::VTABLE_BSEffectShader[0]);
 			//stl::write_vfunc<0x6, BSSkyShader_SetupGeometry>(RE::VTABLE_BSSkyShader[0]);
 
 			stl::write_vfunc<0x35, BSCubeMapCamera_RenderCubemap>(RE::VTABLE_BSCubeMapCamera[0]);
