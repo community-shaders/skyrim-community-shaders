@@ -247,20 +247,27 @@ Uses nlohmann::json for type conversion. Built-in support for:
 ## Architecture Benefits
 
 ### Separation of Concerns
-- **Features**: Focus on rendering logic and effect implementation
-- **Weather System**: Handles persistence, interpolation, and state management
-- **UI Layer**: Automatically discovers registered variables for editor display
+
+-   **Features**: Focus on rendering logic and effect implementation
+-   **Weather System**: Handles persistence, interpolation, and state management
+-   **UI Layer**: Automatically discovers registered variables for editor display
 
 ### Future Enhancements
+
 The centralized registry enables:
-- Weather template inheritance (parent weather settings override children)
-- Automatic UI generation for weather variable editing
-- Bulk operations (reset all weathers to defaults, copy settings, etc.)
-- Variable validation and constraints
-- Change tracking and undo/redo support
+
+-   Weather template inheritance (parent weather settings override children)
+-   Automatic UI generation for weather variable editing
+-   Bulk operations (reset all weathers to defaults, copy settings, etc.)
+-   Variable validation and constraints
+-   Change tracking and undo/redo support
 
 ### Performance
-- Variables are directly modified in place (no copying)
-- Interpolation only happens during weather transitions
-- Registration is one-time during feature initialization
+
+-   Variables are directly modified in place (no copying)
+-   Interpolation only happens during weather transitions
+-   Registration is one-time during feature initialization
+
+```
+
 ```
