@@ -195,7 +195,7 @@ public:
 		UIIcon pauseTime;             // Pause time icon (weather editor)
 		UIIcon undo;                  // Undo icon (weather editor)
 
-	// Social media/external link icons
+		// Social media/external link icons
 		UIIcon discord;
 
 		// Category icons
