@@ -543,6 +543,22 @@ namespace Util
 	bool FeatureMatchesSearch(Feature* feat, const std::string& searchQuery);
 
 	/**
+	 * @brief Generic case-insensitive string matching for search functionality.
+	 * @param text The text to search in
+	 * @param searchQuery The search query string
+	 * @return True if the text matches the search query (case-insensitive)
+	 */
+	bool StringMatchesSearch(const std::string& text, const std::string& searchQuery);
+
+	/**
+	 * @brief Draws a search icon (magnifying glass) at the specified position.
+	 * @param position The screen position where the icon should be drawn
+	 * @param size The size of the icon (default: 20.0f)
+	 * @param alpha Alpha multiplier for the icon color (default: 0.7f for subtle appearance)
+	 */
+	void DrawSearchIcon(const ImVec2& position, float size = 20.0f, float alpha = 0.7f);
+
+	/**
 	 * @brief Draws the feature search bar with magnifying glass icon.
 	 * @param searchString Reference to the search string to modify
 	 * @param availableWidth The available width for the search bar
@@ -678,6 +694,73 @@ namespace Util
 	}
 
 	/**
+	 * @brief Renders a searchable combo box with case-insensitive filtering
+	 *
+	 * Provides a reusable ImGui combo box with built-in search functionality.
+	 * When opened, automatically focuses a search input that filters items as you type.
+	 * The search is case-insensitive and clears automatically on selection or close.
+	 *
+	 * @tparam T The value type stored in the map
+	 * @param label The label for the combo box
+	 * @param selectedName Reference to the currently selected item's name (will be updated on selection)
+	 * @param itemMap The map of items to display (key = item name, value = item data)
+	 * @return true if a new item was selected, false otherwise
+	 *
+	 * @note Uses a static search buffer, so only one SearchableCombo should be open at a time
+	 *
+	 * @example
+	 * @code
+	 * std::unordered_map<std::string, MyData> myItems;
+	 * std::string selectedName;
+	 * MyData* selectedItem = nullptr;
+	 *
+	 * if (Util::SearchableCombo("Choose Item", selectedName, myItems)) {
+	 *     selectedItem = &myItems[selectedName];
+	 * }
+	 * @endcode
+	 */
+	template <typename T>
+	bool SearchableCombo(const char* label, std::string& selectedName, std::unordered_map<std::string, T>& itemMap)
+	{
+		bool valueChanged = false;
+		static std::unordered_map<std::string, char[256]> searchBuffers;
+
+		std::string comboId = std::string(label);
+		auto& searchBuffer = searchBuffers[comboId];
+
+		if (ImGui::BeginCombo(label, selectedName.c_str())) {
+			ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(24.0f, ImGui::GetStyle().FramePadding.y));
+			ImGui::InputText("##search", searchBuffer, IM_ARRAYSIZE(searchBuffer));
+			ImGui::PopStyleVar();
+			ImVec2 iconPos = ImVec2(ImGui::GetItemRectMin().x + 5.0f, ImGui::GetItemRectMin().y + (ImGui::GetItemRectSize().y - 16.0f) * 0.5f);
+			DrawSearchIcon(iconPos, 16.0f, 0.5f);
+
+			ImGui::Separator();
+
+			// Filter and display items
+			for (auto& [itemName, item] : itemMap) {
+				// Simple case-insensitive search
+				if (searchBuffer[0] == '\0' ||
+					std::search(itemName.begin(), itemName.end(), searchBuffer, searchBuffer + strlen(searchBuffer),
+						[](char a, char b) { return std::tolower(a) == std::tolower(b); }) != itemName.end()) {
+					if (ImGui::Selectable(itemName.c_str(), itemName == selectedName)) {
+						selectedName = itemName;
+						valueChanged = true;
+						searchBuffer[0] = '\0';  // Clear search on selection
+					}
+				}
+			}
+
+			ImGui::EndCombo();
+		} else {
+			// Reset search when combo is closed
+			searchBuffer[0] = '\0';
+		}
+
+		return valueChanged;
+	}
+
+	/**
 	 * @brief Renders a table cell with automatic text highlighting and optional tooltip/fallback.
 	 * Convenience function for table cell renderers that combines text rendering with highlighting,
 	 * tooltips, and fallback text for empty content.
@@ -689,6 +772,7 @@ namespace Util
 	 * @param enableWrapping Whether to enable text wrapping for multi-line content (default: true)
 	 * @param textColor Optional text color override (default: use default text color)
 	 */
+
 	inline void RenderTableCell(const std::string& text, const std::string& filterText,
 		const std::string& tooltipText = "", const char* fallbackText = nullptr,
 		ImVec4 highlightColor = ImVec4(1.0f, 1.0f, 0.0f, 1.0f), bool enableWrapping = true,

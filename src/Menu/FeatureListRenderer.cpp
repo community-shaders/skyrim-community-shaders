@@ -456,10 +456,22 @@ void FeatureListRenderer::DrawMenuVisitor::RenderFeatureSettingsTab(Feature* fea
 		}
 
 		if (!isDisabled && isLoaded) {
-			ImVec2 childSize = ImGui::GetWindowSize();
+			// Position button in screen coordinates so it stays fixed in viewport when scrolling
+			ImVec2 windowPos = ImGui::GetWindowPos();
+			ImVec2 windowSize = ImGui::GetWindowSize();
+			float scrollbarWidth = ImGui::GetScrollMaxY() > 0 ? ImGui::GetStyle().ScrollbarSize : 0.0f;
+
 			float iconDimension = ImGui::GetFrameHeight() * 1.2f;
 			ImVec2 iconSize = ImVec2(iconDimension, iconDimension);
-			ImGui::SetCursorPos(ImVec2(childSize.x - iconSize.x - 10.0f, childSize.y - iconSize.y - 10.0f));
+      
+			float padding = 10.0f;
+			ImVec2 buttonPos = ImVec2(
+				windowPos.x + windowSize.x - iconSize.x - padding - scrollbarWidth,
+				windowPos.y + windowSize.y - iconSize.y - padding);
+			ImGui::SetCursorScreenPos(buttonPos);
+			auto& theme = globals::menu->GetTheme().Palette;
+			ImVec4 iconColor = theme.Text;
+			iconColor.w *= 0.7f;
 
 			ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.0f, 0.0f, 0.0f, 0.0f));
 			ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(1.0f, 1.0f, 1.0f, 0.3f));
