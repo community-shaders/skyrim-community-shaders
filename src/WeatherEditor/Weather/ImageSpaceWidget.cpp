@@ -12,6 +12,7 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	hdrBloomBlurRadius,
 	hdrBloomThreshold,
 	hdrBloomScale,
+	hdrWhite,
 	hdrSunlightScale,
 	hdrSkyScale,
 	cinematicSaturation,
@@ -82,6 +83,16 @@ void ImageSpaceWidget::DrawWidget()
 				ImGui::TableSetColumnIndex(1);
 				ImGui::SetNextItemWidth(-1);
 				if (ImGui::SliderFloat("##BloomScale", &settings.hdrBloomScale, 0.0f, 10.0f, "%.3f"))
+					changed = true;
+			}
+
+			if (MatchesSearch("White")) {
+				ImGui::TableNextRow();
+				ImGui::TableSetColumnIndex(0);
+				ImGui::Text("White");
+				ImGui::TableSetColumnIndex(1);
+				ImGui::SetNextItemWidth(-1);
+				if (ImGui::SliderFloat("##White", &settings.hdrWhite, 0.0f, 10.0f, "%.3f"))
 					changed = true;
 			}
 
@@ -250,6 +261,7 @@ void ImageSpaceWidget::SetImageSpaceValues()
 	data.hdr.bloomBlurRadius = settings.hdrBloomBlurRadius;
 	data.hdr.bloomThreshold = settings.hdrBloomThreshold;
 	data.hdr.bloomScale = settings.hdrBloomScale;
+	data.hdr.white = settings.hdrWhite;
 	data.hdr.sunlightScale = settings.hdrSunlightScale;
 	data.hdr.skyScale = settings.hdrSkyScale;
 
@@ -282,6 +294,7 @@ void ImageSpaceWidget::LoadImageSpaceValues()
 	settings.hdrBloomBlurRadius = data.hdr.bloomBlurRadius;
 	settings.hdrBloomThreshold = data.hdr.bloomThreshold;
 	settings.hdrBloomScale = data.hdr.bloomScale;
+	settings.hdrWhite = data.hdr.white;
 	settings.hdrSunlightScale = data.hdr.sunlightScale;
 	settings.hdrSkyScale = data.hdr.skyScale;
 

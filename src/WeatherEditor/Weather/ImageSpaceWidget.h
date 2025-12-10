@@ -25,9 +25,10 @@ public:
 		float hdrBloomBlurRadius = 0.0f;
 		float hdrBloomThreshold = 0.0f;
 		float hdrBloomScale = 0.0f;
+		float hdrWhite = 0.0f;
 		float hdrSunlightScale = 0.0f;
 		float hdrSkyScale = 0.0f;
-
+		
 		// Cinematic Settings
 		float cinematicSaturation = 0.0f;
 		float cinematicBrightness = 0.0f;
