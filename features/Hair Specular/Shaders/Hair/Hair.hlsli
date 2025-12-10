@@ -75,7 +75,7 @@ namespace Hair
 		// [Yibing Jiang 2016, "The Process of Creating Volumetric-based Materials in Uncharted 4"]
 		// https://advances.realtimerendering.com/s2016
 		dirDiffuse = saturate(oNdotL + wrapped) / (1 + wrapped);
-		float3 scatterColor = baseColor * baseColor;
+		float3 scatterColor = pow(baseColor, 0.5);
 		dirDiffuse = saturate(scatterColor + NdotL) * dirDiffuse * lightColor * SharedData::hairSpecularSettings.DiffuseMult;
 
 		float3 TshiftPrimary;
@@ -246,14 +246,11 @@ namespace Hair
 			lobeWeights.diffuse += GetHairDiffuseAttenuationKajiyaKay(T, V, L, 1, material.BaseColor) * Math::PI * SharedData::hairSpecularSettings.DiffuseIndirectMult;
 			return;
 		} else {
-			float3 L = normalize(V - T * dot(V, T));
-			float3 diffuseLobeWeight;
-			float3 specularLobeWeight;
-			float3 transmissionLobeWeight;
-
-			GetHairDirectLightScheuermann(diffuseLobeWeight, specularLobeWeight, transmissionLobeWeight, T, L, V, N, N, 1, material.Shininess * 0.75, 1, uv, material.BaseColor);
-			lobeWeights.diffuse = material.BaseColor * SharedData::hairSpecularSettings.DiffuseIndirectMult;
-			lobeWeights.diffuse += specularLobeWeight * SharedData::hairSpecularSettings.SpecularIndirectMult;
+			lobeWeights.diffuse = saturate(material.BaseColor * SharedData::hairSpecularSettings.DiffuseIndirectMult);
+			float2 hairBRDF = BRDF::EnvBRDF(material.Roughness, saturate(dot(N, V)));
+			float3 hairSpecularLobe = material.F0 * hairBRDF.x + hairBRDF.y;
+			lobeWeights.diffuse *= (1 - hairSpecularLobe);
+			lobeWeights.specular = saturate(hairSpecularLobe * SharedData::hairSpecularSettings.SpecularIndirectMult);
 		}
 	}
 

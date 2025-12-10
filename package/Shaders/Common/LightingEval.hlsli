@@ -107,7 +107,7 @@ void EvaluateLighting(DirectContext context, MaterialProperties material, float3
 	}
 #	endif
 	const float NdotL = dot(context.worldNormal, context.lightDir);
-    lightingOutput.diffuse = material.BaseColor * saturate(NdotL) * context.lightColor;
+    lightingOutput.diffuse = saturate(NdotL) * context.lightColor;
 #		if defined(SOFT_LIGHTING)
 	lightingOutput.diffuse += context.lightColor * GetSoftLightMultiplier(NdotL) * material.rimSoftLightColor;
 #		endif

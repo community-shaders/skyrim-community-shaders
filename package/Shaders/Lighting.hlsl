@@ -2174,7 +2174,11 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	if (SharedData::hairSpecularSettings.Enabled) {
 		material.Shininess = SharedData::hairSpecularSettings.HairGlossiness;
 		material.F0 = Hair::HairF0();
-		material.Roughness = 1;
+		if (SharedData::hairSpecularSettings.HairMode == 1) {
+			material.Roughness = 1;
+		} else {
+			material.Roughness = ShininessToRoughness(material.Shininess * 0.75);
+		}
 	}
 #	endif
 
@@ -2713,11 +2717,15 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	IndirectContext indirectContext = (IndirectContext)0;
 	IndirectLobeWeights indirectLobeWeights;
 
-	float3 ambientNormal = worldNormal;
+	float3 ambientNormal = worldNormal.xyz;
 #	if defined(HAIR) && defined(CS_HAIR)
-	if (SharedData::hairSpecularSettings.Enabled && SharedData::hairSpecularSettings.HairMode == 1)
-		ambientNormal = normalize(viewDirection - hairT * dot(viewDirection, hairT));
+	if (SharedData::hairSpecularSettings.Enabled) {
+		if (SharedData::hairSpecularSettings.HairMode == 1)
+			ambientNormal = normalize(viewDirection - hairT * dot(viewDirection, hairT));
+		else
+			ambientNormal = vertexNormal.xyz;
 		screenSpaceNormal = normalize(FrameBuffer::WorldToView(ambientNormal, false, eyeIndex));
+	}
 #	endif
 
 	float3 directionalAmbientColor = max(0, mul(DirectionalAmbient, float4(ambientNormal, 1.0)));
@@ -2791,6 +2799,10 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 
 #	if defined(HAIR)
 	float3 vertexColor = lerp(1, TintColor.xyz, input.Color.y);
+#		if defined(CS_HAIR)
+	if (SharedData::hairSpecularSettings.Enabled)
+		vertexColor = 1;
+#		endif
 #	elif defined(SKYLIGHTING)
 	float3 vertexColor = input.Color.xyz;
 	float vertexAO = max(max(vertexColor.r, vertexColor.g), vertexColor.b);
