@@ -3148,10 +3148,11 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	psout.Albedo = float4(outputAlbedo, psout.Diffuse.w);
 
 #		if defined(WETNESS_EFFECTS)
-	screenSpaceNormal = normalize(FrameBuffer::WorldToView(wetnessNormal, false, eyeIndex));
 	indirectLobeWeights.specular += wetnessReflectance;
-	if (waterRoughnessSpecular < 1)
+	if (waterRoughnessSpecular < 1) {
+		screenSpaceNormal = lerp(screenSpaceNormal, normalize(FrameBuffer::WorldToView(wetnessNormal, false, eyeIndex)), saturate(wetnessGlossinessSpecular));
 		material.Roughness = lerp(material.Roughness, waterRoughnessSpecular, wetnessReflectance);
+	}
 #		endif
 
 	psout.Reflectance = float4(indirectLobeWeights.specular, psout.Diffuse.w);
