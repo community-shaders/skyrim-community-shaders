@@ -547,25 +547,25 @@ namespace SIE
 
 		enum class WaterShaderTechniques
 		{
-			Underwater = 8,
-			Lod = 9,
-			Stencil = 10,
-			Simple = 11,
+			Underwater = 8, 			// 0x8
+			Lod = 9,					// 0x9
+			Stencil = 10, 				// 0xA
+			Simple = 11,				// 0xB
 		};
 
 		enum class WaterShaderFlags
 		{
-			Vc = 1 << 0,
-			NormalTexCoord = 1 << 1,
-			Reflections = 1 << 2,
-			Refractions = 1 << 3,
-			Depth = 1 << 4,
-			Interior = 1 << 5,
-			Wading = 1 << 6,
-			VertexAlphaDepth = 1 << 7,
-			Cubemap = 1 << 8,
-			Flowmap = 1 << 9,
-			BlendNormals = 1 << 10,
+			Vc = 1 << 0,				// 0x1
+			NormalTexCoord = 1 << 1,	// 0x2
+			Reflections = 1 << 2,		// 0x4
+			Refractions = 1 << 3,		// 0x8
+			Depth = 1 << 4,				// 0x10
+			Interior = 1 << 5,			// 0x20
+			Wading = 1 << 6,			// 0x40
+			VertexAlphaDepth = 1 << 7,	// 0x80
+			Cubemap = 1 << 8,			// 0x100
+			Flowmap = 1 << 9,			// 0x200
+			BlendNormals = 1 << 10,		// 0x400
 		};
 
 		enum class EffectShaderFlags

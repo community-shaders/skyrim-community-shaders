@@ -312,4 +312,15 @@ namespace Util
 		}
 		return true;
 	}
+
+	void WorldToCell(const RE::NiPoint2& worldPos, int32_t& x, int32_t& y)
+	{
+		x = static_cast<int32_t>(floor(worldPos.x / 4096.0f));
+		y = static_cast<int32_t>(floor(worldPos.y / 4096.0f));
+	}
+
+	void WorldToCell(const RE::NiPoint3& worldPos, int32_t& x, int32_t& y)
+	{
+		WorldToCell(RE::NiPoint2(worldPos.x, worldPos.y), x, y);
+	}
 }  // namespace Util

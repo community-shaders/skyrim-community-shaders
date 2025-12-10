@@ -2,7 +2,8 @@
 
 #include "State.h"
 #include "Utils/Format.h"
-
+#include <DDSTextureLoader.h>
+#include <DirectXTex.h>
 #include <d3dcompiler.h>
 #include <mutex>
 
@@ -400,6 +401,107 @@ namespace Util
 				(*outTex)->Release();
 				*outTex = nullptr;
 			}
+			return hr;
+		}
+
+		return S_OK;
+	}
+
+	HRESULT SaveTextureToFile(ID3D11Device* device, ID3D11DeviceContext* context, const std::filesystem::path& path, ID3D11Texture2D* tex)
+	{
+		// Input validation
+		if (!device) {
+			logger::error("SaveTextureToFile: device parameter is null");
+			return E_INVALIDARG;
+		}
+
+		if (!context) {
+			logger::error("SaveTextureToFile: context parameter is null");
+			return E_INVALIDARG;
+		}
+
+		if (!tex) {
+			logger::error("SaveTextureToFile: texture paramater is null");
+			return E_INVALIDARG;
+		}
+
+		if (path.empty()) {
+			logger::error("SaveTextureToFile: path parameter is empty");
+			return E_INVALIDARG;
+		}
+
+		namespace fs = std::filesystem;
+
+		DirectX::ScratchImage cpuImage;
+		if (const auto hr = CaptureTexture(device, context, tex, cpuImage); FAILED(hr))
+			return hr;
+
+		const auto parent = path.parent_path();
+		std::error_code ec;
+		if (!parent.empty() && !fs::exists(parent, ec)) {
+			if (!fs::create_directories(parent, ec)) {
+				logger::error("SaveTextureToFile: failed to create directories");
+				return HRESULT_FROM_WIN32(static_cast<DWORD>(ec.value()));
+			}
+		}
+
+		const std::wstring tmp = path.wstring().append(L".tmp");
+		if (const auto hr = SaveToDDSFile(cpuImage.GetImages(), cpuImage.GetImageCount(), cpuImage.GetMetadata(), DirectX::DDS_FLAGS_NONE, tmp.c_str()); FAILED(hr)) {
+			logger::error("SaveTextureToFile: failed to save to file");
+			fs::remove(tmp);
+			return hr;
+		}
+
+		fs::rename(tmp, path, ec);
+		if (ec) {
+			fs::remove(path, ec);
+			if (ec) {
+				logger::error("SaveTextureToFile: failed to remove existing file");
+				fs::remove(tmp);
+				return HRESULT_FROM_WIN32(static_cast<DWORD>(ec.value()));
+			}
+			fs::rename(tmp, path, ec);
+			if (ec) {
+				logger::error("SaveTextureToFile: failed to rename file");
+				fs::remove(tmp);
+				return HRESULT_FROM_WIN32(static_cast<DWORD>(ec.value()));
+			}
+		}
+
+		return S_OK;
+	}
+
+	HRESULT LoadTextureFromFile(ID3D11Device* device, const std::filesystem::path& path, ID3D11Texture2D** outTex, ID3D11ShaderResourceView** outSRV)
+	{
+		// Input validation
+		if (!device) {
+			logger::error("LoadTextureFromFile: device parameter is null");
+			return E_INVALIDARG;
+		}
+
+		if (path.empty()) {
+			logger::error("LoadTextureFromFile: path parameter is empty");
+			return E_INVALIDARG;
+		}
+
+		*outTex = nullptr;
+		*outSRV = nullptr;
+
+		ID3D11Resource* resource;
+		if (const auto hr = DirectX::CreateDDSTextureFromFile(device, path.wstring().c_str(), &resource, outSRV); FAILED(hr)) {
+			logger::error("LoadTextureFromFile: failed to load resource from file");
+			return hr;
+		}
+
+		const auto hr = resource->QueryInterface(__uuidof(ID3D11Texture2D), reinterpret_cast<void**>(outTex));
+		resource->Release();
+		resource = nullptr;
+
+		if (FAILED(hr)) {
+			logger::error("LoadTextureFromFile: failed to query texture interface");
+			(*outSRV)->Release();
+			*outSRV = nullptr;
+			*outTex = nullptr;
 			return hr;
 		}
 

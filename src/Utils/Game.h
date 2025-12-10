@@ -170,4 +170,12 @@ namespace Util
 
 	bool IsInterior();
 
+	void WorldToCell(const RE::NiPoint2& worldPos, int32_t& x, int32_t& y);
+
+	void WorldToCell(const RE::NiPoint3& worldPos, int32_t& x, int32_t& y);
+
+	constexpr uint32_t FCC(const char s[4]) noexcept
+	{
+		return s[0] | s[1] << 8 | s[2] << 16 | s[3] << 24;
+	}
 }  // namespace Util
