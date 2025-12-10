@@ -106,7 +106,7 @@ float3x3 ReconstructTBN(float3 worldPos, float3 worldNormal, float2 uv)
 	float3 bitangent = normalize(dFdy * dUVdx.x - dFdx * dUVdy.x);
 	tangent = normalize(tangent - worldNormal * dot(worldNormal, tangent));
 	bitangent = normalize(bitangent - worldNormal * dot(worldNormal, bitangent));
-	
+
 	return float3x3(tangent, bitangent, normalize(worldNormal));
 }
 #endif

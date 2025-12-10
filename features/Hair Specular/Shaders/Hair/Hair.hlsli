@@ -230,7 +230,7 @@ namespace Hair
 	void GetHairIndirectLobeWeights(out IndirectLobeWeights lobeWeights, IndirectContext context, MaterialProperties material, float2 uv)
 	{
 		lobeWeights = (IndirectLobeWeights)0;
-		
+
 		float3 T = normalize(context.worldNormal);
 		const float3 V = normalize(context.viewDir);
 		const float3 N = normalize(context.vertexNormal);
