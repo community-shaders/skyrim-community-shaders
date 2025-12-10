@@ -244,8 +244,6 @@ Uses nlohmann::json for type conversion. Built-in support for:
 -   Type mismatches caught by json exceptions
 -   Invalid weather files are logged but do not crash the system
 
-```
-
 ## Architecture Benefits
 
 ### Separation of Concerns
