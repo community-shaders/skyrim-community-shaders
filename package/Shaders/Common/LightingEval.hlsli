@@ -98,9 +98,6 @@ void EvaluateLighting(DirectContext context, MaterialProperties material, float3
 	lightingOutput = (DirectLightingOutput)0;
 #if defined(TRUE_PBR)
 	PBR::GetDirectLightInput(lightingOutput, context, material, tbnTr, uv);
-	lightingOutput.diffuse *= Color::PBRLightingScale;
-	lightingOutput.specular *= Color::PBRLightingScale;
-	lightingOutput.transmission *= Color::PBRLightingScale;
 #else
 #	if defined(HAIR) && defined(CS_HAIR)
 	if (SharedData::hairSpecularSettings.Enabled)
