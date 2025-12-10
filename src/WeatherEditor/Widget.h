@@ -43,13 +43,15 @@ public:
 
 	virtual std::string GetFormID() const
 	{
-		if (!form) return "00000000";
+		if (!form)
+			return "00000000";
 		return std::format("{:08X}", form->GetFormID());
 	}
 
 	virtual std::string GetFilename() const
 	{
-		if (!form) return "Invalid";
+		if (!form)
+			return "Invalid";
 		if (auto file = form->GetFile())
 			return std::format("{}", file->GetFilename());
 		return "Generated";

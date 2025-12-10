@@ -16,20 +16,25 @@ void ReferenceEffectWidget::DrawWidget()
 		if (editorWindow->artObjectWidgets.empty()) {
 			ImGui::TextDisabled("No Art Objects available");
 		} else {
-			if (WeatherUtils::DrawFormPickerCached("Art Object", settings.artObject, editorWindow->artObjectWidgets, false, true)) changed = true;
+			if (WeatherUtils::DrawFormPickerCached("Art Object", settings.artObject, editorWindow->artObjectWidgets, false, true))
+				changed = true;
 		}
 
 		ImGui::SeparatorText("Effect Shader");
 		if (editorWindow->effectShaderWidgets.empty()) {
 			ImGui::TextDisabled("No Effect Shaders available");
 		} else {
-			if (WeatherUtils::DrawFormPickerCached("Effect Shader", settings.effectShader, editorWindow->effectShaderWidgets, false, true)) changed = true;
+			if (WeatherUtils::DrawFormPickerCached("Effect Shader", settings.effectShader, editorWindow->effectShaderWidgets, false, true))
+				changed = true;
 		}
 
 		ImGui::SeparatorText("Flags");
-		if (ImGui::Checkbox("Face Target", &settings.faceTarget)) changed = true;
-		if (ImGui::Checkbox("Attach To Camera", &settings.attachToCamera)) changed = true;
-		if (ImGui::Checkbox("Inherit Rotation", &settings.inheritRotation)) changed = true;
+		if (ImGui::Checkbox("Face Target", &settings.faceTarget))
+			changed = true;
+		if (ImGui::Checkbox("Attach To Camera", &settings.attachToCamera))
+			changed = true;
+		if (ImGui::Checkbox("Inherit Rotation", &settings.inheritRotation))
+			changed = true;
 
 		if (changed && EditorWindow::GetSingleton()->settings.autoApplyChanges) {
 			ApplyChanges();
@@ -63,9 +68,12 @@ void ReferenceEffectWidget::LoadSettings()
 					settings.effectShader = nullptr;
 				}
 			}
-			if (js.contains("faceTarget")) settings.faceTarget = js["faceTarget"];
-			if (js.contains("attachToCamera")) settings.attachToCamera = js["attachToCamera"];
-			if (js.contains("inheritRotation")) settings.inheritRotation = js["inheritRotation"];
+			if (js.contains("faceTarget"))
+				settings.faceTarget = js["faceTarget"];
+			if (js.contains("attachToCamera"))
+				settings.attachToCamera = js["attachToCamera"];
+			if (js.contains("inheritRotation"))
+				settings.inheritRotation = js["inheritRotation"];
 		} catch (const std::exception& e) {
 			logger::error("ReferenceEffect {}: Failed to load from JSON: {}", GetEditorID(), e.what());
 		}
@@ -96,7 +104,7 @@ void ReferenceEffectWidget::ApplyChanges()
 
 	referenceEffect->data.artObject = settings.artObject;
 	referenceEffect->data.effectShader = settings.effectShader;
-	
+
 	referenceEffect->data.flags.reset();
 	if (settings.faceTarget)
 		referenceEffect->data.flags.set(RE::BGSReferenceEffect::Flag::kFaceTarget);

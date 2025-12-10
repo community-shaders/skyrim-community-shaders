@@ -56,7 +56,6 @@ void WeatherEditor::DrawSettings()
 	DrawWeatherStatusPanel();
 }
 
-
 void WeatherEditor::LerpWeather(RE::TESWeather* oldWeather, RE::TESWeather* newWeather, float currentWeatherPct)
 {
 	//// Precipitation

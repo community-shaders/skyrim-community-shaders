@@ -21,25 +21,34 @@ void PrecipitationWidget::DrawWidget()
 				}
 
 				ImGui::SeparatorText("Particle Size");
-				if (WeatherUtils::DrawSliderFloat("Size X", settings.particleSizeX, 0.0f, 10.0f)) changed = true;
-				if (WeatherUtils::DrawSliderFloat("Size Y", settings.particleSizeY, 0.0f, 10.0f)) changed = true;
+				if (WeatherUtils::DrawSliderFloat("Size X", settings.particleSizeX, 0.0f, 10.0f))
+					changed = true;
+				if (WeatherUtils::DrawSliderFloat("Size Y", settings.particleSizeY, 0.0f, 10.0f))
+					changed = true;
 
 				ImGui::SeparatorText("Velocity");
-				if (WeatherUtils::DrawSliderFloat("Gravity Velocity", settings.gravityVelocity, -100.0f, 100.0f)) changed = true;
-				if (WeatherUtils::DrawSliderFloat("Rotation Velocity", settings.rotationVelocity, -360.0f, 360.0f)) changed = true;
+				if (WeatherUtils::DrawSliderFloat("Gravity Velocity", settings.gravityVelocity, -100.0f, 100.0f))
+					changed = true;
+				if (WeatherUtils::DrawSliderFloat("Rotation Velocity", settings.rotationVelocity, -360.0f, 360.0f))
+					changed = true;
 
 				ImGui::EndTabItem();
 			}
 
 			if (ImGui::BeginTabItem("Position")) {
 				ImGui::SeparatorText("Offset");
-				if (WeatherUtils::DrawSliderFloat("Center Offset Min", settings.centerOffsetMin, -1000.0f, 1000.0f)) changed = true;
-				if (WeatherUtils::DrawSliderFloat("Center Offset Max", settings.centerOffsetMax, -1000.0f, 1000.0f)) changed = true;
-				if (WeatherUtils::DrawSliderFloat("Start Rotation Range", settings.startRotationRange, 0.0f, 360.0f)) changed = true;
+				if (WeatherUtils::DrawSliderFloat("Center Offset Min", settings.centerOffsetMin, -1000.0f, 1000.0f))
+					changed = true;
+				if (WeatherUtils::DrawSliderFloat("Center Offset Max", settings.centerOffsetMax, -1000.0f, 1000.0f))
+					changed = true;
+				if (WeatherUtils::DrawSliderFloat("Start Rotation Range", settings.startRotationRange, 0.0f, 360.0f))
+					changed = true;
 
 				ImGui::SeparatorText("Volume");
-				if (WeatherUtils::DrawSliderFloat("Box Size", settings.boxSize, 0.0f, 10000.0f)) changed = true;
-				if (WeatherUtils::DrawSliderFloat("Particle Density", settings.particleDensity, 0.0f, 10.0f)) changed = true;
+				if (WeatherUtils::DrawSliderFloat("Box Size", settings.boxSize, 0.0f, 10000.0f))
+					changed = true;
+				if (WeatherUtils::DrawSliderFloat("Particle Density", settings.particleDensity, 0.0f, 10.0f))
+					changed = true;
 
 				ImGui::EndTabItem();
 			}
@@ -85,25 +94,38 @@ void PrecipitationWidget::LoadSettings()
 
 	if (!js.empty()) {
 		try {
-			if (js.contains("gravityVelocity")) settings.gravityVelocity = js["gravityVelocity"];
-			if (js.contains("rotationVelocity")) settings.rotationVelocity = js["rotationVelocity"];
-			if (js.contains("particleSizeX")) settings.particleSizeX = js["particleSizeX"];
-			if (js.contains("particleSizeY")) settings.particleSizeY = js["particleSizeY"];
-			if (js.contains("centerOffsetMin")) settings.centerOffsetMin = js["centerOffsetMin"];
-			if (js.contains("centerOffsetMax")) settings.centerOffsetMax = js["centerOffsetMax"];
-			if (js.contains("startRotationRange")) settings.startRotationRange = js["startRotationRange"];
-			if (js.contains("numSubtexturesX")) settings.numSubtexturesX = js["numSubtexturesX"];
-			if (js.contains("numSubtexturesY")) settings.numSubtexturesY = js["numSubtexturesY"];
-			if (js.contains("particleType")) settings.particleType = js["particleType"];
-			if (js.contains("boxSize")) settings.boxSize = js["boxSize"];
-			if (js.contains("particleDensity")) settings.particleDensity = js["particleDensity"];
-			if (js.contains("particleTexture")) settings.particleTexture = js["particleTexture"].get<std::string>();
+			if (js.contains("gravityVelocity"))
+				settings.gravityVelocity = js["gravityVelocity"];
+			if (js.contains("rotationVelocity"))
+				settings.rotationVelocity = js["rotationVelocity"];
+			if (js.contains("particleSizeX"))
+				settings.particleSizeX = js["particleSizeX"];
+			if (js.contains("particleSizeY"))
+				settings.particleSizeY = js["particleSizeY"];
+			if (js.contains("centerOffsetMin"))
+				settings.centerOffsetMin = js["centerOffsetMin"];
+			if (js.contains("centerOffsetMax"))
+				settings.centerOffsetMax = js["centerOffsetMax"];
+			if (js.contains("startRotationRange"))
+				settings.startRotationRange = js["startRotationRange"];
+			if (js.contains("numSubtexturesX"))
+				settings.numSubtexturesX = js["numSubtexturesX"];
+			if (js.contains("numSubtexturesY"))
+				settings.numSubtexturesY = js["numSubtexturesY"];
+			if (js.contains("particleType"))
+				settings.particleType = js["particleType"];
+			if (js.contains("boxSize"))
+				settings.boxSize = js["boxSize"];
+			if (js.contains("particleDensity"))
+				settings.particleDensity = js["particleDensity"];
+			if (js.contains("particleTexture"))
+				settings.particleTexture = js["particleTexture"].get<std::string>();
 		} catch (const std::exception& e) {
 			logger::error("Precipitation {}: Failed to load from JSON: {}", GetEditorID(), e.what());
 		}
 	} else {
 		auto& runtime = precipitation->GetRuntimeData();
-		
+
 		settings.gravityVelocity = precipitation->GetSettingValue(RE::BGSShaderParticleGeometryData::DataID::kGravityVelocity).f;
 		settings.rotationVelocity = precipitation->GetSettingValue(RE::BGSShaderParticleGeometryData::DataID::kRotationVelocity).f;
 		settings.particleSizeX = precipitation->GetSettingValue(RE::BGSShaderParticleGeometryData::DataID::kParticleSizeX).f;

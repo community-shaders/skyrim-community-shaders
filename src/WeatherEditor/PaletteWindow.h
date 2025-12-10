@@ -39,11 +39,11 @@ public:
 private:
 	std::vector<ColorEntry> colorEntries;
 	std::vector<ValueEntry> valueEntries;
-	
+
 	// Favorites - fixed slots that users can drag colors into
 	static constexpr int maxFavoriteSlots = 10;
 	std::array<std::optional<float3>, maxFavoriteSlots> favoriteColors;
-	
+
 	// Clipboard
 	float3 copiedColor = { 0.0f, 0.0f, 0.0f };
 	float copiedValue = 0.0f;

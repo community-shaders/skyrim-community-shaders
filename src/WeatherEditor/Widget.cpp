@@ -47,7 +47,7 @@ void Widget::Save()
 			settingsFile.close();
 			return;
 		}
-		
+
 		settingsFile << js.dump(2);
 		settingsFile.flush();
 
@@ -58,7 +58,7 @@ void Widget::Save()
 		}
 
 		settingsFile.close();
-		
+
 	} catch (const nlohmann::json::exception& e) {
 		logger::error("{}: JSON error while saving settings: {}", GetEditorID(), e.what());
 		settingsFile.close();
@@ -110,7 +110,7 @@ void Widget::Load()
 			LoadSettings();
 			return;
 		}
-		
+
 		LoadSettings();
 
 		EditorWindow::GetSingleton()->ShowNotification(
@@ -152,7 +152,7 @@ void Widget::Delete()
 
 	try {
 		std::filesystem::remove(filePath);
-		
+
 		js = json();
 
 		// Reload settings from vanilla/mod defaults

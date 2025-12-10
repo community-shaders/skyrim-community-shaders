@@ -95,7 +95,7 @@ namespace WeatherUtils
 	bool DrawFormPickerCached(const char* label, T*& currentForm, const WidgetContainer& widgets, bool showFormID = true, bool allowNone = true, float width = 450.0f)
 	{
 		bool changed = false;
-		
+
 		std::string previewText;
 		if (currentForm) {
 			// Find the widget for current form
@@ -109,7 +109,7 @@ namespace WeatherUtils
 			if (editorID.empty()) {
 				editorID = std::format("{:08X}", currentForm->GetFormID());
 			}
-			
+
 			if (showFormID) {
 				previewText = std::format("{} (0x{:08X})", editorID, currentForm->GetFormID());
 			} else {
@@ -118,17 +118,17 @@ namespace WeatherUtils
 		} else {
 			previewText = "None";
 		}
-		
+
 		if (width > 0.0f) {
 			ImGui::SetNextItemWidth(width);
 		}
-		
+
 		if (ImGui::BeginCombo(label, previewText.c_str())) {
 			if (allowNone && ImGui::Selectable("None", currentForm == nullptr)) {
 				currentForm = nullptr;
 				changed = true;
 			}
-			
+
 			for (const auto& widget : widgets) {
 				if (widget && widget->form) {
 					T* form = static_cast<T*>(widget->form);
@@ -139,7 +139,7 @@ namespace WeatherUtils
 					} else {
 						comboLabel = editorID;
 					}
-					
+
 					bool isSelected = (currentForm == form);
 					if (ImGui::Selectable(comboLabel.c_str(), isSelected)) {
 						currentForm = form;
@@ -152,26 +152,27 @@ namespace WeatherUtils
 			}
 			ImGui::EndCombo();
 		}
-		
+
 		return changed;
 	}
-	
+
 	// Legacy form picker (slow - only use if widgets not available)
 	template <typename T, typename Container>
 	bool DrawFormPicker(const char* label, T*& currentForm, const Container& formArray, bool showFormID = true, bool allowNone = true, float width = 450.0f)
 	{
 		bool changed = false;
-		
+
 		auto GetFormEditorIDSafe = [](T* form) -> std::string {
-			if (!form) return "";
-			
+			if (!form)
+				return "";
+
 			const char* editorID = form->GetFormEditorID();
 			if (editorID && editorID[0] != '\0')
 				return std::string(editorID);
-			
+
 			return std::format("{:08X}", form->GetFormID());
 		};
-		
+
 		std::string previewText;
 		if (currentForm) {
 			std::string editorID = GetFormEditorIDSafe(currentForm);
@@ -183,17 +184,17 @@ namespace WeatherUtils
 		} else {
 			previewText = "None";
 		}
-		
+
 		if (width > 0.0f) {
 			ImGui::SetNextItemWidth(width);
 		}
-		
+
 		if (ImGui::BeginCombo(label, previewText.c_str())) {
 			if (allowNone && ImGui::Selectable("None", currentForm == nullptr)) {
 				currentForm = nullptr;
 				changed = true;
 			}
-			
+
 			for (auto form : formArray) {
 				if (form) {
 					std::string editorID = GetFormEditorIDSafe(form);
@@ -203,7 +204,7 @@ namespace WeatherUtils
 					} else {
 						comboLabel = editorID;
 					}
-					
+
 					bool isSelected = (currentForm == form);
 					if (ImGui::Selectable(comboLabel.c_str(), isSelected)) {
 						currentForm = form;
@@ -216,7 +217,7 @@ namespace WeatherUtils
 			}
 			ImGui::EndCombo();
 		}
-		
+
 		return changed;
 	}
 }

@@ -115,32 +115,35 @@ public:
 			{ "Complete", { 0.0f, 130.0f / 255.0f, 0.0f, 1.0f } }
 		};
 		std::map<std::string, std::string> markedRecords;
-	bool autoApplyChanges = true;
-	bool suppressDeleteWarning = false;
-	bool useTextButtons = false;
-	bool enableInheritFromParent = false;
-	float editorUIScale = 1.0f;
+		bool autoApplyChanges = true;
+		bool suppressDeleteWarning = false;
+		bool useTextButtons = false;
+		bool enableInheritFromParent = false;
+		float editorUIScale = 1.0f;
 		std::vector<std::string> favoriteWidgets;
 		std::map<std::string, std::vector<std::string>> recentWidgets;
 		int maxRecentWidgets = 10;
 		bool rememberOpenWidgets = true;
 		std::vector<std::string> lastOpenWidgets;
-		
+
 		// Palette settings
-		struct PaletteColorEntry {
+		struct PaletteColorEntry
+		{
 			float r, g, b;
 			int useCount = 0;
 			float lastUsedTime = 0.0f;
 			bool isFavorite = false;
 		};
-		struct PaletteValueEntry {
+		struct PaletteValueEntry
+		{
 			std::string name;
 			float value;
 			int useCount = 0;
 			float lastUsedTime = 0.0f;
 			bool isFavorite = false;
 		};
-		struct PaletteFavoriteColor {
+		struct PaletteFavoriteColor
+		{
 			bool hasValue = false;
 			float r = 0.0f, g = 0.0f, b = 0.0f;
 		};
@@ -170,7 +173,7 @@ private:
 	std::string settingsFilename = "EditorSettings";
 	bool showSettingsWindow = false;
 	std::string settingsSelectedCategory = "Flags";
-	
+
 	// Sorting state
 	enum class SortColumn
 	{

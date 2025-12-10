@@ -40,7 +40,7 @@ private:
 		float lightFadeEnd = 5000.0f;
 		uint32_t directionalXY = 0;
 		uint32_t directionalZ = 0;
-		
+
 		// Directional ambient lighting colors (DALC equivalent)
 		float3 directionalXPlus = { 1.0f, 1.0f, 1.0f };
 		float3 directionalXMinus = { 1.0f, 1.0f, 1.0f };
@@ -50,7 +50,7 @@ private:
 		float3 directionalZMinus = { 1.0f, 1.0f, 1.0f };
 		float3 directionalSpecular = { 1.0f, 1.0f, 1.0f };
 		float fresnelPower = 1.0f;
-		
+
 		// Inheritance flags
 		bool inheritAmbientColor = false;
 		bool inheritDirectionalColor = false;
