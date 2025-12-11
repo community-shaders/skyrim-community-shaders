@@ -948,10 +948,7 @@ float3 GetSunColor(float3 normal, float3 viewDirection)
 	if (Permutation::PixelShaderDescriptor & Permutation::WaterFlags::Interior)
 		return 0.0.xxx;
 
-	float3 reflectionDirection = reflect(viewDirection, normal);
-	float reflectionMul = exp2(VarAmounts.x * log2(saturate(dot(reflectionDirection, SunDir.xyz))));
-
-	return reflectionMul * SunColor.xyz * SunDir.w * DeepColor.w;
+	return WaterBRDF::GetSunSpecular(normal, viewDirection, SunDir, SunColor.xyz, VarAmounts.x, DeepColor.w);
 #			endif
 }
 #		endif
