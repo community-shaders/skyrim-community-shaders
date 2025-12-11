@@ -2970,7 +2970,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #		endif
 #	endif
 
-	float3 outputAlbedo = indirectLobeWeights.diffuse;
+	float3 outputAlbedo = indirectLobeWeights.diffuse * vertexColor.xyz;
 
 #	if defined(IBL) && defined(SKYLIGHTING)
 	directionalAmbientColor -= iblColor;
