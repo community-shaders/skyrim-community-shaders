@@ -12,12 +12,11 @@ struct UnifiedWater : OverlayFeature
 	virtual std::pair<std::string, std::vector<std::string>> GetFeatureSummary() override
 	{
 		return {
-			"TO DO.",
-			{ "TO DO",
-				"TO DO",
-				"TO DO",
-				"TO DO",
-				"TO DO" }
+			"Unified Water provides a comprehensive fix to water LOD mismatch by replacing distant water tiles with LOD0 (Close Water).",
+			{ "Unifies distant and close water appearance, streamlining all lighting visuals.",
+				"Completely and fundamentally resolves water LOD mismatch issues.",
+				"Provides background systems for water geometry rendering, allowing more advanced water effects.",
+				"Improves vanilla performance by using optimized water meshes for distant water." }
 		};
 	}
 	virtual inline bool HasShaderDefine(RE::BSShader::Type) override { return true; }
