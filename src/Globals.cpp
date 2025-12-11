@@ -134,7 +134,8 @@ namespace globals
 	Menu* menu = nullptr;
 	SIE::ShaderCache* shaderCache = nullptr;
 
-	namespace game {
+	namespace game
+	{
 		RE::TES* tes = nullptr;
 	}
 
