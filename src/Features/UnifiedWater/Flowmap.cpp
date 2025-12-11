@@ -324,13 +324,13 @@ bool Flowmap::GenerateFlowmap(bool useMips)
 		const auto filename = std::format(L"Tamriel-Flowmap.{}.{}.{}.{}.dds", width, height, offsetX, offsetY);
 		const auto path = Util::PathHelpers::GetDataPath() / "textures" / "water" / "flowmaps" / filename;
 		const auto hr = Util::SaveTextureToFile(dvc, ctx, path, flowmap.get());
-		
+
 		if (FAILED(hr)) {
 			logger::error("[Unified Water] [Flowmap] Failed to save flowmap to {}: hr={:08X}", path.string().c_str(), static_cast<uint32_t>(hr));
 			return false;
 		}
 	}
-	
+
 	multithread->Leave();
 	multithread->SetMultithreadProtected(FALSE);
 

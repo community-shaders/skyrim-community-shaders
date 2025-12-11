@@ -111,7 +111,7 @@ private:
 	float4* gDisplacementCellTexCoordOffset = nullptr;
 	RE::NiPoint2* gDisplacementMeshPos = nullptr;
 	RE::NiPoint2* gDisplacementMeshFlowCellOffset = nullptr;
-	
+
 	void SetFlowmapTex() const;
 	static bool LoadOrderChanged();
 };
