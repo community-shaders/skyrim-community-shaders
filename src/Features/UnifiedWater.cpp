@@ -42,6 +42,8 @@ void UnifiedWater::DrawSettings()
 
 		if (ImGui::Button("Regenerate Caches") && waterCache)
 			waterCache->RegenerateCaches();
+
+		ImGui::TreePop();
 	}
 }
 
