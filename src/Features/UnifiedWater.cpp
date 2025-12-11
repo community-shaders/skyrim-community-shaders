@@ -297,7 +297,10 @@ void UnifiedWater::BGSTerrainNode_UpdateWaterMeshSubVisibility::thunk(const RE::
 		return;
 
 	const auto tes = globals::game::tes;
-	const auto& gridCells = globals::game::tes->gridCells;
+	if (!tes || !tes->gridCells)
+		return;
+
+	const auto& gridCells = tes->gridCells;
 
 	const int32_t offsetX = tes->currentGridX - static_cast<int32_t>(gridCells->length >> 1);
 	const int32_t offsetY = tes->currentGridY - static_cast<int32_t>(gridCells->length >> 1);

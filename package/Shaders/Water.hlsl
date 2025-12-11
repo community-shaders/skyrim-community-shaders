@@ -189,10 +189,12 @@ VS_OUTPUT main(VS_INPUT input)
 	vsout.WorldPosition = worldPos;
 	vsout.PreviousWorldPosition = mul(PreviousWorld[eyeIndex], inputPosition);
 #		else
+#			if !defined(UNIFIED_WATER)
 	float fogColorParam = min(VSFogFarColor.w,
 		pow(saturate(length(worldViewPos.xyz) * VSFogParam.y - VSFogParam.x), NormalsScale.w));
 	vsout.FogParam.xyz = lerp(VSFogNearColor.xyz, VSFogFarColor.xyz, fogColorParam);
 	vsout.FogParam.w = fogColorParam;
+#			endif
 
 	vsout.WPosition.xyz = worldPos.xyz;
 	vsout.WPosition.w = length(worldPos.xyz);
@@ -555,9 +557,9 @@ float3 GetFlowmapNormal(PS_INPUT input, float2 uvShift, float multiplier, float 
  * @note Use this for effects that need to move with water current (ripples, debris, foam, etc.)
  *       For UV-space normal sampling, use GetFlowmapDataUV() instead
  */
-FlowmapData GetFlowmapDataWorldSpace(PS_INPUT input, float2 uvShift)
+FlowmapData GetFlowmapDataWorldSpace(PS_INPUT input, float2 uvShift, float distance)
 {
-	FlowmapData data = GetFlowmapDataTextureSpace(input, uvShift);
+	FlowmapData data = GetFlowmapDataTextureSpace(input, uvShift, distance);
 	float2 flowDirection = -(data.color.xy * 2 - 1);    // Decode direction with 180° correction
 	data.flowVector = data.flowVector * flowDirection;  // Transform to world space
 	return data;
@@ -624,10 +626,12 @@ WaterNormalData GetWaterNormal(PS_INPUT input, float distanceFactor, float norma
 	float2 normalMul = 0.5 + -(-0.5 + abs(frac(input.TexCoord2.zw * (64 * flowmapDimensions)) * 2 - 1));
 	float2 uvShift = 1 / (128 * flowmapDimensions);
 
-	float3 flowmapNormal0 = GetFlowmapNormal(input, uvShift, 9.92, 0);
-	float3 flowmapNormal1 = GetFlowmapNormal(input, float2(0, uvShift.y), 10.64, 0.27);
-	float3 flowmapNormal2 = GetFlowmapNormal(input, 0.0.xx, 8, 0);
-	float3 flowmapNormal3 = GetFlowmapNormal(input, float2(uvShift.x, 0), 8.48, 0.62);
+	// Use view distance for proper mip level selection
+	float viewDistance = length(input.WPosition.xyz);
+	float3 flowmapNormal0 = GetFlowmapNormal(input, uvShift, 9.92, 0, viewDistance);
+	float3 flowmapNormal1 = GetFlowmapNormal(input, float2(0, uvShift.y), 10.64, 0.27, viewDistance);
+	float3 flowmapNormal2 = GetFlowmapNormal(input, 0.0.xx, 8, 0, viewDistance);
+	float3 flowmapNormal3 = GetFlowmapNormal(input, float2(uvShift.x, 0), 8.48, 0.62, viewDistance);
 
 	float2 flowmapNormalWeighted =
 		normalMul.y * (normalMul.x * flowmapNormal2.xy + (1 - normalMul.x) * flowmapNormal3.xy) +
@@ -728,7 +732,8 @@ WaterNormalData GetWaterNormal(PS_INPUT input, float distanceFactor, float norma
 #				endif
 #				if defined(FLOWMAP)
 		// Flow-following ripple enhancement: Makes raindrops follow water current
-		FlowmapData worldFlowData = GetFlowmapDataWorldSpace(input, float2(0, 0));
+		float viewDistance = length(input.WPosition.xyz);
+		FlowmapData worldFlowData = GetFlowmapDataWorldSpace(input, float2(0, 0), viewDistance);
 
 		// Calculate flow-aware ripple offset using centralized timing logic
 		// Parameters: avgFlowmapMultiplier=9.26 (average of GetWaterNormal flowmap normal multipliers: 9.92, 10.64, 8, 8.48)
@@ -1010,7 +1015,9 @@ PS_OUTPUT main(PS_INPUT input)
 #		if defined(SIMPLE) || defined(UNDERWATER) || defined(LOD) || defined(SPECULAR)
 	float3 viewDirection = normalize(input.WPosition.xyz);
 
-	float distanceFactor = saturate(lerp(FrameBuffer::FrameParams.w, 1, (input.WPosition.w - 8192) / (WaterParams.x - 8192)));
+	// Use view space depth for more stable distance calculation
+	float viewDistance = length(input.WPosition.xyz);
+	float distanceFactor = saturate(lerp(FrameBuffer::FrameParams.w, 1, (viewDistance - 8192) / (WaterParams.x - 8192)));
 	float4 distanceMul = saturate(lerp(VarAmounts.z, 1, -(distanceFactor - 1))).xxxx;
 	float distanceBlendFactor = distanceFactor;
 #			if defined(UNIFIED_WATER)
@@ -1181,7 +1188,9 @@ PS_OUTPUT main(PS_INPUT input)
 	float fogDistanceFactor = input.FogParam.w;
 	float3 preFogColor = input.FogParam.xyz;
 #						else
-	float fogDistanceFactor = min(FogFarColor.w, pow(saturate(input.WPosition.w * FogParam.y - FogParam.x), FresnelRI.y));
+	// Use smoothed distance calculation to reduce flickering
+	float rawFogDistance = saturate(viewDistance * FogParam.y - FogParam.x);
+	float fogDistanceFactor = min(FogFarColor.w, pow(rawFogDistance, FresnelRI.y));
 	float3 preFogColor = lerp(FogNearColor.xyz, FogFarColor.xyz, fogDistanceFactor);
 #						endif
 #						if defined(IBL)
