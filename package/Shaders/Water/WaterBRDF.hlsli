@@ -69,10 +69,7 @@ namespace WaterBRDF
 		float a = NdotH * roughness;
 		float k = roughness / (1.0f - NdotH * NdotH + a * a);
 		float D = k * k * (1.0f / Math::PI);
-
-		// Clamp to prevent HDR blowout
-		// The sun has finite angular size (~0.5°), limiting peak intensity
-		return min(D, 15000.0f);
+		return D;
 	}
 
 	/**
