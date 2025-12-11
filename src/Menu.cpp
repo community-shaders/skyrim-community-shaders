@@ -134,7 +134,7 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	ShowFooter,
 	CenterHeader,
 	TooltipHoverDelay,
-	BackgroundBlur,
+	BackgroundBlurEnabled,
 	ScrollbarOpacity,
 	Palette,
 	StatusPalette,
