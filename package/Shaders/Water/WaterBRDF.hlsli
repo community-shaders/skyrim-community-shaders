@@ -169,7 +169,7 @@ namespace WaterBRDF
 	 * @param sunDir Sun direction (xyz) and intensity (w)
 	 * @param sunColor Sun color (xyz)
 	 * @param specPower Specular power parameter
-	 * @param turbidity Turbidity/scatter factor (higher = clearer water)
+	 * @param turbidity Turbidity/scatter factor
 	 * @return Sun specular color contribution
 	 */
 	float3 GetSunSpecular(float3 normal, float3 viewDirection, float4 sunDir, float3 sunColor, float specPower, float turbidity)
@@ -185,10 +185,6 @@ namespace WaterBRDF
 		// === Energy Conservation ===
 		// The specular BRDF should be multiplied by NdotL for the rendering equation
 		// L_out = f_r * L_in * NdotL
-		// 
-		// turbidity = scatter factor (mod authors control via .esp)
-		//             - Higher values = brighter specular (clearer water)
-		//             - Lower values = dimmer specular (murky/turbid water)
 		float3 sunSpecular = specularBRDF * sunColor * sunDir.w * turbidity * NdotL;
 
 		// Apply artistic energy boost
