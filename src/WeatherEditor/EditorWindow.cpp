@@ -1810,7 +1810,7 @@ void EditorWindow::AddToRecent(const std::string& widgetId, const std::string& c
 		categoryRecent.resize(settings.maxRecentWidgets);
 	}
 
-	SaveSettings();
+	Save();
 }
 
 void EditorWindow::ToggleFavorite(const std::string& widgetId)
@@ -1821,7 +1821,7 @@ void EditorWindow::ToggleFavorite(const std::string& widgetId)
 	} else {
 		settings.favoriteWidgets.push_back(widgetId);
 	}
-	SaveSettings();
+	Save();
 }
 
 bool EditorWindow::IsFavorite(const std::string& widgetId) const
@@ -1850,7 +1850,7 @@ void EditorWindow::SaveSessionWidgets()
 		}
 	}
 
-	SaveSettings();
+	Save();
 }
 
 void EditorWindow::RestoreSessionWidgets()

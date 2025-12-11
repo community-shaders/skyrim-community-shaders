@@ -1096,6 +1096,7 @@ void WeatherWidget::DrawFogSettings()
 			if (settings.inheritFlags["Fog_Near"]) {
 				settings.fogProperties["Day Near"] = parentWidget->settings.fogProperties["Day Near"];
 				settings.fogProperties["Night Near"] = parentWidget->settings.fogProperties["Night Near"];
+				changed = true;
 			}
 			ImGui::PopStyleVar();
 			ImGui::PopStyleColor(2);
@@ -1122,6 +1123,7 @@ void WeatherWidget::DrawFogSettings()
 			if (settings.inheritFlags["Fog_Far"]) {
 				settings.fogProperties["Day Far"] = parentWidget->settings.fogProperties["Day Far"];
 				settings.fogProperties["Night Far"] = parentWidget->settings.fogProperties["Night Far"];
+				changed = true;
 			}
 			ImGui::PopStyleVar();
 			ImGui::PopStyleColor(2);
@@ -1148,6 +1150,7 @@ void WeatherWidget::DrawFogSettings()
 			if (settings.inheritFlags["Fog_Power"]) {
 				settings.fogProperties["Day Power"] = parentWidget->settings.fogProperties["Day Power"];
 				settings.fogProperties["Night Power"] = parentWidget->settings.fogProperties["Night Power"];
+				changed = true;
 			}
 			ImGui::PopStyleVar();
 			ImGui::PopStyleColor(2);
@@ -1174,6 +1177,7 @@ void WeatherWidget::DrawFogSettings()
 			if (settings.inheritFlags["Fog_Max"]) {
 				settings.fogProperties["Day Max"] = parentWidget->settings.fogProperties["Day Max"];
 				settings.fogProperties["Night Max"] = parentWidget->settings.fogProperties["Night Max"];
+				changed = true;
 			}
 			ImGui::PopStyleVar();
 			ImGui::PopStyleColor(2);

@@ -173,10 +173,10 @@ namespace WeatherVariables
 	class FeatureWeatherRegistry
 	{
 	public:
-		template <typename T>
-		void RegisterVariable(std::shared_ptr<WeatherVariable<T>> var)
+		template <typename VarType, typename = std::enable_if_t<std::is_base_of_v<IWeatherVariable, VarType>>>
+		void RegisterVariable(std::shared_ptr<VarType> var)
 		{
-			variables.push_back(var);
+			variables.push_back(std::static_pointer_cast<IWeatherVariable>(var));
 		}
 
 		void LerpAllVariables(const json& from, const json& to, float factor)
