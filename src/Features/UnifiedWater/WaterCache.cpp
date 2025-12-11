@@ -307,12 +307,19 @@ bool WaterCache::BuildDiskCache(RE::TESWorldSpace* worldSpace, DiskCache& diskCa
 	const auto wsMax = worldSpace->maximumCoords;
 
 	if (editorID == "Tamriel") {
-		if (!TryReadCacheFromFile("Tamriel_precache.wpc", preCache.header, preCache.heights)) {
-			logger::error("[Unified Water] [Cache] Tamriel: Failed to load precache");
-			return false;
+		if (TryReadCacheFromFile("Tamriel_precache.wpc", preCache.header, preCache.heights)) {
+			diskCache.header = preCache.header;
+			hasPrecache = true;
+		} else {
+			logger::warn("[Unified Water] [Cache] Tamriel: Failed to load precache, falling back to generation");
+			Util::WorldToCell(wsMin, minX, minY);
+			Util::WorldToCell(wsMax, maxX, maxY);
+			maxX -= 1;
+			maxY -= 1;
+			hdr.width = maxX - minX + 1;
+			hdr.height = maxY - minY + 1;
+			hdr.dataCount = 0;
 		}
-		diskCache.header = preCache.header;
-		hasPrecache = true;
 	} else {
 		Util::WorldToCell(wsMin, minX, minY);
 		Util::WorldToCell(wsMax, maxX, maxY);
