@@ -443,7 +443,7 @@ struct Raytracing : public Feature
 
 			XMStoreFloat3x4(&transform, GetXMFromNiTransform(pNiNode->world));
 
-			/*auto& [path, model] = modelPair;
+			auto& [path, model] = modelPair;
 
 			if ((model.GetFlags() & Flags::Dynamic) || (model.GetFlags() & Flags::Skinned)) {
 				for (auto& shape : model.shapes) {
@@ -485,7 +485,7 @@ struct Raytracing : public Feature
 						rt.vertexUpdate.emplace_back(shape->registerIndex->GetIndex(), updateFlags & Flags::Dynamic ? shape->dynamicPositionBuffer.get() : nullptr, shape->vertexBuffer.get(), shape->vertexCount, updateFlags);
 					}
 				}
-			}*/
+			}
 
 			return true;
 		}

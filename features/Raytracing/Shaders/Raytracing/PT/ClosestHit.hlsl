@@ -81,9 +81,8 @@ void HitMesh(inout IndirectPayload payload, in BuiltInTriangleIntersectionAttrib
     
     const unorm float metalness = Scale01(DEFAULT_METALNESS, Frame.Metalness.x, Frame.Metalness.y);
     
-    const unorm float perceptualRoughness = DEFAULT_ROUGHNESS;
-    
-	const unorm float roughness = max(Scale01(perceptualRoughness * perceptualRoughness, Frame.Roughness.x, Frame.Roughness.y), MIN_ROUGHNESS);      
+    const unorm float perceptualRoughness =  max(Scale01(DEFAULT_ROUGHNESS, Frame.Roughness.x, Frame.Roughness.y), MIN_ROUGHNESS);
+	const unorm float roughness = perceptualRoughness * perceptualRoughness;     
     #endif
     
     uint randomSeed = payload.data.GetSeed();

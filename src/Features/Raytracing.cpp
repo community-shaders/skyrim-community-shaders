@@ -2902,11 +2902,11 @@ void Raytracing::CompileSkinningShaders()
 void Raytracing::CompileRTGIShaders()
 {
 	winrt::com_ptr<IDxcBlob> rayGenBlob;
-	ShaderUtils::CompileShader(rayGenBlob, L"Data/Shaders/Raytracing/PT/RayGeneration.hlsl");
+	ShaderUtils::CompileShader(rayGenBlob, L"Data/Shaders/Raytracing/GI/RayGeneration.hlsl");
 
 	winrt::com_ptr<IDxcBlob> missBlob, closestHitBlob, anyHitBlob;
 	ShaderUtils::CompileShader(missBlob, L"Data/Shaders/Raytracing/GI/Miss.hlsl");
-	ShaderUtils::CompileShader(closestHitBlob, L"Data/Shaders/Raytracing/PT/ClosestHit.hlsl");
+	ShaderUtils::CompileShader(closestHitBlob, L"Data/Shaders/Raytracing/GI/ClosestHit.hlsl");
 	ShaderUtils::CompileShader(anyHitBlob, L"Data/Shaders/Raytracing/GI/AnyHit.hlsl");
 
 	winrt::com_ptr<IDxcBlob> shadowMissBlob;
@@ -2933,7 +2933,7 @@ void Raytracing::CompileRTGIShaders()
 		// Shader + pipeline config
 		pipelineBuilder.AddShaderConfig(20, 8);
 		pipelineBuilder.AddGlobalRootSignature(rootSignature.get());
-		pipelineBuilder.AddPipelineConfig(4);
+		pipelineBuilder.AddPipelineConfig(2); // Max recursion depth
 
 		auto desc = pipelineBuilder.MakeStateObjectDesc();
 		HRESULT hr = d3d12Device->CreateStateObject(desc, IID_PPV_ARGS(&pipelineRT));

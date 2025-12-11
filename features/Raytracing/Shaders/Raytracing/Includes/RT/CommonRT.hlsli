@@ -6,7 +6,7 @@
 
 #include "Raytracing/Includes/Types.hlsli"
 
-#define MAX_DEPTH 2
+#define MAX_DEPTH 1
 #define SHADOW_MAX_DEPTH 1
 
 #define DIFFUSE_RAY_HITGROUP_IDX 0
@@ -140,6 +140,11 @@ float D_GGX(float NoH, float roughness) {
     float a = NoH * roughness;
     float k = roughness / (1.0 - NoH * NoH + a * a);
     return k * k * (1.0 / Math::PI);
+}
+
+float3 F0(float3 albedo, float metalness)
+{
+    return 0.16 * DEFAULT_SPECULARF0 * (1.0 - metalness) + albedo * metalness; 
 }
 
 float3 F_Schlick(float u, float3 f0) {

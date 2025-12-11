@@ -40,7 +40,9 @@ void main()
     }
 
 	const snorm float4 normalRoughness = NormalRoughnessTexture[idx];
-	const unorm float roughness = max(Scale01(normalRoughness.w, Frame.Roughness.x, Frame.Roughness.y), MIN_ROUGHNESS);    
+    
+	const unorm float perceptualRoughness = max(Scale01(normalRoughness.w, Frame.Roughness.x, Frame.Roughness.y), MIN_ROUGHNESS);  
+    const unorm float roughness = max(Scale01(perceptualRoughness * perceptualRoughness, Frame.Roughness.x, Frame.Roughness.y), MIN_ROUGHNESS);    
 
  	const float3 positionVS = ScreenToViewPosition(uv, depthView, Frame.NDCToView);
 	const float3 positionCS = ViewToWorldPosition(positionVS, Frame.ViewInverse);
@@ -50,8 +52,6 @@ void main()
 
     float3 albedo = Color::GammaToLinear(AlbedoTexture[idx].rgb);
     
-    float3 specular = DEFAULT_SPECULAR;
-    
     uint seed = InitRandomSeed(DispatchRaysIndex().xy, DispatchRaysDimensions().xy, Frame.FrameCount);
 
     // Let's raytrace straight from GBuffer, we save one ray per pixel
@@ -60,17 +60,20 @@ void main()
     #else
     float3 viewWS = normalize(-positionCS);
 
-    float4 result = GGXIndirect(positionWS, geometryNormalWS, normalWS, viewWS, albedo, specular, roughness, metalness, 0, seed);
+    float3 tangentWS, bitangetWS;
+    CreateOrthonormalBasis(normalWS, tangentWS, bitangetWS);
+    float3x3 TBN = float3x3(tangentWS, bitangetWS, normalWS);
     
+    float4 result = GGXIndirect(positionWS, geometryNormalWS, TBN, normalWS, viewWS, albedo, DEFAULT_SPECULAR, roughness, metalness, 0, seed);
+    
+    //OutputTexture[idx] = float4(normalWS * 0.5 + 0.5f, 0.0f);
     OutputTexture[idx] = MainTexture[idx] + float4(result.rgb, 0.0f);
     
-    float2 alpha = float2(roughness * roughness, roughness * roughness);
-      
-    float3 Ht = GGXSample(seed, alpha);
-    float3 H = TangentToWorld(normalWS, Ht);
-    float VdotH = max(dot(viewWS, H), EPSILON_DOT_CLAMP);
+    float3 h_tan = GGXSample(seed, roughness);
+    float3 h = normalize(mul(TBN, h_tan));
+    float VdotH = max(dot(viewWS, h), EPSILON_DOT_CLAMP);
     
-    ReflectanceTexture[idx] = float4(saturate(F_Schlick(specular, VdotH)), 0.0f);
+    ReflectanceTexture[idx] = float4(saturate(F_Schlick(VdotH, F0(albedo, metalness))), 0.0f);
     
     SpecularHitDist[idx] = result.a;
     #endif

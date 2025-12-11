@@ -83,7 +83,7 @@ float3 LambertianIndirect(float3 position, float3 normal, float3 albedo, uint de
     return bounceColor * albedo * Frame.Diffuse;
 }
 
-float3 GGXDirect(in float3 l, in float3 n, in float3 v, in float3 albedo, in float roughness, in float3 metalness)
+float3 GGXDirect(in float3 l, in float3 n, in float3 v, in float3 albedo, in float roughness, in float metalness)
 {
     float NoL = saturate(dot(n, l));
      
@@ -95,9 +95,8 @@ float3 GGXDirect(in float3 l, in float3 n, in float3 v, in float3 albedo, in flo
     float NoH = saturate(dot(n, h));
     float LoH = saturate(dot(l, h));
     float NoV = abs(dot(n, v)) + 1e-5;
-    
-    float3 f0 = 0.16 * DEFAULT_SPECULARF0 * (1.0 - metalness) + albedo * metalness;        
-    float3 F = F_Schlick(LoH, f0);
+     
+    float3 F = F_Schlick(LoH, F0(albedo, metalness));
         
     float D = D_GGX(NoH, roughness);
     float V = V_SmithGGXCorrelatedFast(NoV, NoL, roughness);
@@ -111,7 +110,7 @@ float3 GGXDirect(in float3 l, in float3 n, in float3 v, in float3 albedo, in flo
     return (Fd + Fr) * NoL;
 }
 
-float3 GGXDirectD(in float3 position, in float3 n, in float3 v, in float3 albedo, in float roughness, in float3 metalness, in Light light)
+float3 GGXDirectD(in float3 position, in float3 n, in float3 v, in float3 albedo, in float roughness, in float metalness, in Light light)
 {
     float3 l = light.Vector;
 
@@ -122,7 +121,7 @@ float3 GGXDirectD(in float3 position, in float3 n, in float3 v, in float3 albedo
     return diffuse * (light.Color * atten) * Frame.Diffuse;
 }
 
-float3 GGXDirectP(in float3 position, in float3 n, in float3 v, in float3 albedo, in float roughness, in float3 metalness, in LightData lightData, inout uint randomSeed)
+float3 GGXDirectP(in float3 position, in float3 n, in float3 v, in float3 albedo, in float roughness, in float metalness, in LightData lightData, inout uint randomSeed)
 {
     if (lightData.Count == 0) return float3(0, 0, 0);
     
@@ -157,7 +156,7 @@ float4 GGXIndirect(in float3 position, in float3 GN, float3x3 TBN, in float3 n, 
         float3 l = mul(TBN, tangentSample);
 
         if (dot(GN, l) <= 0.0f) 
-            return float4(0.0f, 0.0f, 0.0f, 0.0f);        
+            return float4(0.0f, 0.0f, 0.0f, 0.0f);
                
         float3 bounceColor = TraceRayIndirect(Scene, position, l, depth, randomSeed).rgb;
     
@@ -186,9 +185,8 @@ float4 GGXIndirect(in float3 position, in float3 GN, float3x3 TBN, in float3 n, 
         float LoH = saturate(dot(l, h));
         
         float4 bounceColor = TraceRayIndirect(Scene, position, l, depth, randomSeed);        
-          
-        float3 f0 = 0.16 * DEFAULT_SPECULARF0 * (1.0 - metalness) + albedo * metalness;        
-        float3 F = F_Schlick(LoH, f0);
+               
+        float3 F = F_Schlick(LoH, F0(albedo, metalness));
         
         float D = D_GGX(NoH, roughness);
         float V = V_SmithGGXCorrelatedFast(NoV, NoL, roughness);
