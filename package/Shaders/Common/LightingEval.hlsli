@@ -147,8 +147,6 @@ void GetIndirectLobeWeights(out IndirectLobeWeights lobeWeights, IndirectContext
 
 		float2 specularBRDF = BRDF::EnvBRDF(material.Roughness, NdotV);
 		lobeWeights.specular = material.F0 * specularBRDF.x + specularBRDF.y;
-
-		lobeWeights.diffuse *= (1 - lobeWeights.specular);
 		lobeWeights.specular *= 1 + material.F0 * (1 / (specularBRDF.x + specularBRDF.y) - 1);
 
 		// Horizon specular occlusion
