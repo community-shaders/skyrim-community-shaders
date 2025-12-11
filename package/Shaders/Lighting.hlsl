@@ -2866,7 +2866,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 
 #	if defined(TRUE_PBR)
 	{
-		float3 directLightsDiffuseInput = diffuseColor * baseColor.xyz;
+		float3 directLightsDiffuseInput = diffuseColor * material.BaseColor;
 		[branch] if ((PBRFlags & PBR::Flags::ColoredCoat) != 0)
 		{
 			directLightsDiffuseInput = lerp(directLightsDiffuseInput, material.CoatColor * coatLightsDiffuseColor, material.CoatStrength);
@@ -2904,7 +2904,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	color.xyz = lerp(color.xyz, diffuseColor * vertexColor * layerColor, mlpBlendFactor);
 
 #		if defined(DEFERRED)
-	baseColor.xyz *= 1.0 - mlpBlendFactor;
+	indirectLobeWeights.diffuse *= 1.0 - mlpBlendFactor;
 #		endif
 #	endif  // MULTI_LAYER_PARALLAX
 
