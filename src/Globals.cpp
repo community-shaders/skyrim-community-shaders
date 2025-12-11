@@ -94,6 +94,7 @@ namespace globals
 		RE::INISettingCollection* iniSettingCollection = nullptr;
 		RE::INIPrefSettingCollection* iniPrefSettingCollection = nullptr;
 		RE::GameSettingCollection* gameSettingCollection = nullptr;
+		RE::TES* tes = nullptr;
 		float* cameraNear = nullptr;
 		float* cameraFar = nullptr;
 		float* deltaTime = nullptr;
@@ -133,11 +134,6 @@ namespace globals
 	TruePBR* truePBR = nullptr;
 	Menu* menu = nullptr;
 	SIE::ShaderCache* shaderCache = nullptr;
-
-	namespace game
-	{
-		RE::TES* tes = nullptr;
-	}
 
 	void OnInit()
 	{

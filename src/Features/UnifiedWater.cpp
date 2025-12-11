@@ -103,8 +103,15 @@ void UnifiedWater::DataLoaded()
 		logger::error("[Unified Water] Failed to load water mesh");
 		return;
 	}
-	// TODO error check this properly
+	if (!nif || nif->GetChildren().empty() || !nif->GetChildren().front()->AsNode() || nif->GetChildren().front()->AsNode()->GetChildren().empty()) {
+		logger::error("[Unified Water] Invalid water mesh hierarchy");
+		return;
+	}
 	const auto waterShape = nif->GetChildren().front()->AsNode()->GetChildren().front()->AsTriShape();
+	if (!waterShape) {
+		logger::error("[Unified Water] Water mesh does not contain valid TriShape");
+		return;
+	}
 	waterMesh = RE::NiPointer(waterShape);
 	logger::debug("[Unified Water] Water mesh loaded");
 
@@ -112,8 +119,15 @@ void UnifiedWater::DataLoaded()
 		logger::error("[Unified Water] Failed to load optimised water mesh");
 		return;
 	}
-	// TODO error check this properly
+	if (!nif || nif->GetChildren().empty() || !nif->GetChildren().front()->AsNode() || nif->GetChildren().front()->AsNode()->GetChildren().empty()) {
+		logger::error("[Unified Water] Invalid optimised water mesh hierarchy");
+		return;
+	}
 	const auto optimisedWaterShape = nif->GetChildren().front()->AsNode()->GetChildren().front()->AsTriShape();
+	if (!optimisedWaterShape) {
+		logger::error("[Unified Water] Optimised water mesh does not contain valid TriShape");
+		return;
+	}
 	optimisedWaterMesh = RE::NiPointer(optimisedWaterShape);
 	logger::debug("[Unified Water] Optimised water mesh loaded");
 
@@ -195,6 +209,11 @@ void UnifiedWater::SetFlowmapTex() const
 	RE::NiPointer<RE::NiSourceTexture> tex;
 	if (!flowmap->TryGetFlowmap(tex))
 		return;
+
+	if (!gFlowMapSourceTex || !gFlowMapSize) {
+	logger::error("[Unified Water] Global pointers not initialized");
+	return;
+	}
 
 	*gFlowMapSourceTex = tex;
 	*gFlowMapSize = flowmap->GetWidth();
@@ -406,7 +425,9 @@ void UnifiedWater::BGSTerrainBlock_Attach::thunk(RE::BGSTerrainBlock* block)
 		}
 
 		// Remove from WaterSystem, will manage it ourselves
-		waterSystem->waterObjects.pop_back();
+		if (!waterSystem->waterObjects.empty()) {
+			waterSystem->waterObjects.pop_back();
+		}
 	}
 
 	(*singleton.gWaterLOD)->AttachChild(block->water, true);

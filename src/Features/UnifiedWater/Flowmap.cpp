@@ -1,5 +1,6 @@
 ﻿#include "Flowmap.h"
 
+#include <charconv>
 #include <DDSTextureLoader.h>
 #include <DirectXTex.h>
 
@@ -137,10 +138,21 @@ bool Flowmap::LoadFlowmap()
 
 	flowmapTex = RE::NiPointer(sourceTex);
 
-	width = std::stoi(tokens[1]);
-	height = std::stoi(tokens[2]);
-	offsetX = std::stoi(tokens[3]);
-	offsetY = std::stoi(tokens[4]);
+	auto parse_int = [&](const std::string& str, int32_t& out) -> bool {
+		int temp;
+		auto [ptr, ec] = std::from_chars(str.data(), str.data() + str.size(), temp);
+		if (ec != std::errc{} || ptr != str.data() + str.size()) {
+			logger::error("[Unified Water] [Flowmap] Failed to parse '{}' from filename", str);
+			return false;
+		}
+		out = temp;
+		return true;
+	};
+
+	if (!parse_int(tokens[1], width) || !parse_int(tokens[2], height) || !parse_int(tokens[3], offsetX) || !parse_int(tokens[4], offsetY)) {
+		return false;
+	}
+
 	invWidth = 1.0f / static_cast<float>(width);
 	invHeight = 1.0f / static_cast<float>(height);
 
@@ -170,6 +182,17 @@ bool Flowmap::GenerateFlowmap(bool useMips)
 	}
 
 	multithread->Enter();
+
+	struct MultithreadGuard {
+		winrt::com_ptr<REX::W32::ID3D11Multithread> mt;
+		MultithreadGuard(winrt::com_ptr<REX::W32::ID3D11Multithread> m) : mt(m) {}
+		~MultithreadGuard() {
+			if (mt) {
+				mt->Leave();
+				mt->SetMultithreadProtected(FALSE);
+			}
+		}
+	} guard(multithread);
 
 	const auto tamriel = RE::TESForm::LookupByEditorID<RE::TESWorldSpace>("Tamriel");
 	if (!tamriel) {
@@ -330,9 +353,6 @@ bool Flowmap::GenerateFlowmap(bool useMips)
 			return false;
 		}
 	}
-
-	multithread->Leave();
-	multithread->SetMultithreadProtected(FALSE);
 
 	const auto t1 = std::chrono::steady_clock::now();
 	const auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(t1 - t0).count();
