@@ -250,28 +250,6 @@ VS_OUTPUT main(VS_INPUT input)
 #				if defined(FLOWMAP)
 #					if !(((defined(SPECULAR) || NUM_SPECULAR_LIGHTS == 0) || (defined(UNDERWATER) && defined(REFRACTIONS))) && !defined(NORMAL_TEXCOORD))
 #						if defined(BLEND_NORMALS)
-							if defined(UNIFIED_WATER)
-	float2 baseScroll1 = NormalsScroll0.xy + scrollAdjust1;
-	float2 baseScroll2 = NormalsScroll0.zw + scrollAdjust2;
-	float2 baseScroll3 = NormalsScroll1.xy + scrollAdjust3;
-
-	float2 vanillaDir1 = normalize(NormalsScroll0.xy + float2(0.001f, 0.001f));
-	float vanillaMag1 = length(NormalsScroll0.xy);
-	float2 vanillaDir2 = normalize(NormalsScroll0.zw + float2(0.001f, 0.001f));
-	float vanillaMag2 = length(NormalsScroll0.zw);
-	float2 vanillaDir3 = normalize(NormalsScroll1.xy + float2(0.001f, 0.001f));
-	float vanillaMag3 = length(NormalsScroll1.xy);
-	float2 alignedDir1 = normalize(lerp(vanillaDir1, normalizedWaveDirVS, alignStrengthVS));
-	float2 alignedDir2 = normalize(lerp(vanillaDir2, waveDirForwardVS, alignStrengthVS));
-	float2 alignedDir3 = normalize(lerp(vanillaDir3, waveDirBackwardVS, alignStrengthVS));
-	baseScroll1 = alignedDir1 * vanillaMag1 + scrollAdjust1;
-	baseScroll2 = alignedDir2 * vanillaMag2 + scrollAdjust2;
-	baseScroll3 = alignedDir3 * vanillaMag3 + scrollAdjust3;
-
-	vsout.TexCoord1.xy = baseScroll1;
-	vsout.TexCoord1.zw = baseScroll2;
-	vsout.TexCoord2.xy = baseScroll3;
-#							else
 	vsout.TexCoord1.xy = NormalsScroll0.xy + scrollAdjust1;
 	vsout.TexCoord1.zw = NormalsScroll0.zw + scrollAdjust2;
 	vsout.TexCoord2.xy = NormalsScroll1.xy + scrollAdjust3;
