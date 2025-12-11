@@ -5,7 +5,7 @@ namespace WaterBRDF
 {
 	// ============================================================================
 	// PHYSICALLY-BASED WATER SPECULAR (Cook-Torrance Microfacet BRDF)
-	// Based on Google Filament's material system
+	// Based on maths from Google Filament's material system
 	// Reference: https://google.github.io/filament/Filament.md.html
 	//
 	// Standard Cook-Torrance specular BRDF:
@@ -51,7 +51,7 @@ namespace WaterBRDF
 	}
 
 	/**
-	 * GGX Normal Distribution Function (optimized Filament implementation)
+	 * GGX Normal Distribution Function
 	 * @param NdotH Dot product of normal and half-vector
 	 * @param roughness Roughness parameter (α)
 	 * @return Distribution value
@@ -61,11 +61,8 @@ namespace WaterBRDF
 		// ============================================================================
 		// D: GGX Normal Distribution Function
 		// ============================================================================
-		// Filament's optimized GGX implementation
 		// D_GGX(h,α) = α² / (π * ((n·h)² * (α² - 1) + 1)²)
-		//
-		// This can be rewritten for better numerical stability:
-		// D = (α² / π) * (1 / ((n·h)² * (α² - 1) + 1)²)
+
 		float a = NdotH * roughness;
 		float k = roughness / (1.0f - NdotH * NdotH + a * a);
 		float D = k * k * (1.0f / Math::PI);
@@ -73,7 +70,7 @@ namespace WaterBRDF
 	}
 
 	/**
-	 * Smith-GGX Height-Correlated Visibility Function (optimized Filament implementation)
+	 * Smith-GGX Height-Correlated Visibility Function
 	 * @param NdotV Dot product of normal and view direction
 	 * @param NdotL Dot product of normal and light direction
 	 * @param roughness Roughness parameter (α)
@@ -84,13 +81,8 @@ namespace WaterBRDF
 		// ============================================================================
 		// V: Smith-GGX Height-Correlated Visibility Function
 		// ============================================================================
-		// Filament's optimized approximation (accurate and fast):
 		// V(v,l,α) = 0.5 / (NdotL * (NdotV * (1-α) + α) + NdotV * (NdotL * (1-α) + α))
-		//
-		// This combines:
-		// - Geometric shadowing G(v,l,α)
-		// - Denominator normalization (4 * NdotV * NdotL)
-		// into a single "visibility" term for efficiency
+
 		float GGXV = NdotL * (NdotV * (1.0f - roughness) + roughness);
 		float GGXL = NdotV * (NdotL * (1.0f - roughness) + roughness);
 		return 0.5f / max(GGXV + GGXL, 1e-6f);
