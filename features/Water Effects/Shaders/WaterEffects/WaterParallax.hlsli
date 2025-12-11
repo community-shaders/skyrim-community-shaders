@@ -86,7 +86,7 @@ namespace WaterEffects
 
 		return parallaxOffsetTS.xy * parallaxAmount;
 	}
-	
+
 #if defined(FLOWMAP)
 	float GetFlowmapHeight(PS_INPUT input, float2 uvShift, float multiplier, float offset, float mipLevel)
 	{
@@ -101,53 +101,53 @@ namespace WaterEffects
 		float height1 = GetFlowmapHeight(input, float2(0, uvShift.y), 10.64, 0.27, mipLevel);
 		float height2 = GetFlowmapHeight(input, 0.0.xx, 8, 0, mipLevel);
 		float height3 = GetFlowmapHeight(input, float2(uvShift.x, 0), 8.48, 0.62, mipLevel);
-		
+
 		float blendedHeight =
 			normalMul.y * (normalMul.x * height2 + (1 - normalMul.x) * height3) +
 			(1 - normalMul.y) * (normalMul.x * height1 + (1 - normalMul.x) * height0);
-		
+
 		return blendedHeight;
 	}
 
 	float GetFlowmapParallaxAmount(PS_INPUT input, float2 flowmapDims, float3 viewDirection)
 	{
 		float viewDotUp = -viewDirection.z;
-		
+
 		if (viewDotUp < 0.05)
 			return 0.0;
-		
+
 		float2 parallaxDir = viewDirection.xy / -viewDirection.z;
 		parallaxDir.y = -parallaxDir.y;
-		
+
 		float parallaxScale = 0.008 * saturate(viewDotUp * 2.0);
 		parallaxDir *= parallaxScale;
-		
+
 		float2 uvShiftPx = 1 / (128 * flowmapDims);
-		
+
 		int numSteps = (int)lerp(32.0, 8.0, viewDotUp);
 		float stepSize = rcp((float)numSteps);
-		
+
 		float currBound = 0.0;
 		float currHeight = 1.0;
 		float prevHeight = 1.0;
-		
+
 		[loop] for (int i = 0; i < numSteps && currHeight > currBound; i++)
 		{
 			prevHeight = currHeight;
 			currBound += stepSize;
-			
+
 			PS_INPUT offsetInput = input;
 			offsetInput.TexCoord3.xy = input.TexCoord3.xy + currBound * parallaxDir;
-			
+
 			float2 cellBlend = 0.5 + -(-0.5 + abs(frac(offsetInput.TexCoord2.zw * (64 * flowmapDims)) * 2 - 1));
 			currHeight = 1.0 - GetFlowmapBlendedHeight(offsetInput, cellBlend, uvShiftPx, 0);
 		}
-		
+
 		float prevBound = currBound - stepSize;
 		float delta2 = prevBound - prevHeight;
 		float delta1 = currBound - currHeight;
 		float denominator = delta2 - delta1;
-		
+
 		return denominator != 0.0 ? (currBound * delta2 - prevBound * delta1) / denominator : currBound;
 	}
 
@@ -162,7 +162,7 @@ namespace WaterEffects
 	{
 		float2 parallaxOffsetTS = viewDirection.xy / -viewDirection.z;
 		parallaxOffsetTS *= 80.0;
-		
+
 		float2 textureDims;
 		Normals01Tex.GetDimensions(textureDims.x, textureDims.y);
 #if defined(VR)
@@ -181,25 +181,25 @@ namespace WaterEffects
 #else
 		mipLevel += 3;
 #endif
-		
+
 		float stepSize = rcp(16.0);
 		float currBound = 0.0;
 		float currHeight = 1.0;
 		float prevHeight = 1.0;
-		
+
 		[loop] while (currHeight > currBound)
 		{
 			prevHeight = currHeight;
 			currBound += stepSize;
 			currHeight = GetFlowmapParallaxHeight(input, currBound * parallaxOffsetTS.xy, normalScalesRcp, mipLevel);
 		}
-		
+
 		float prevBound = currBound - stepSize;
 		float delta2 = prevBound - prevHeight;
 		float delta1 = currBound - currHeight;
 		float denominator = delta2 - delta1;
 		float parallaxAmount = (currBound * delta2 - prevBound * delta1) / denominator;
-		
+
 		return parallaxOffsetTS.xy * parallaxAmount;
 	}
 

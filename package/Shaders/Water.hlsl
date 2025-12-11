@@ -493,7 +493,7 @@ FlowmapData GetFlowmapDataUV(PS_INPUT input, float2 uvShift)
 /**
  * Samples height from flowmap texture using the same 4-sample blend as flowmap normals
  * This ensures height transitions match the normal transitions exactly
- * 
+ *
  * @param input PS_INPUT for flowmap coordinate access
  * @param normalMul The blend weights from the flowmap system (same as used for normals)
  * @param uvShift The UV shift value (1 / (128 * flowmapDimensions))
@@ -503,32 +503,32 @@ float GetFlowmapHeightBlended(PS_INPUT input, float2 normalMul, float2 uvShift, 
 {
 	// Sample height using the EXACT same UV computation as GetFlowmapNormal
 	// This ensures the height blending matches the normal blending perfectly
-	
+
 	// Sample 0: uvShift, multiplier=9.92, offset=0
 	FlowmapData flowData0 = GetFlowmapDataUV(input, uvShift);
 	float2 uv0 = 0 + (flowData0.flowVector - float2(9.92 * ((0.001 * ReflectionColor.w) * flowData0.color.w), 0));
 	float height0 = FlowMapNormalsTex.SampleLevel(FlowMapNormalsSampler, uv0, mipLevel).w;
-	
+
 	// Sample 1: float2(0, uvShift.y), multiplier=10.64, offset=0.27
 	FlowmapData flowData1 = GetFlowmapDataUV(input, float2(0, uvShift.y));
 	float2 uv1 = 0.27 + (flowData1.flowVector - float2(10.64 * ((0.001 * ReflectionColor.w) * flowData1.color.w), 0));
 	float height1 = FlowMapNormalsTex.SampleLevel(FlowMapNormalsSampler, uv1, mipLevel).w;
-	
+
 	// Sample 2: 0.0.xx, multiplier=8, offset=0
 	FlowmapData flowData2 = GetFlowmapDataUV(input, 0.0.xx);
 	float2 uv2 = 0 + (flowData2.flowVector - float2(8 * ((0.001 * ReflectionColor.w) * flowData2.color.w), 0));
 	float height2 = FlowMapNormalsTex.SampleLevel(FlowMapNormalsSampler, uv2, mipLevel).w;
-	
+
 	// Sample 3: float2(uvShift.x, 0), multiplier=8.48, offset=0.62
 	FlowmapData flowData3 = GetFlowmapDataUV(input, float2(uvShift.x, 0));
 	float2 uv3 = 0.62 + (flowData3.flowVector - float2(8.48 * ((0.001 * ReflectionColor.w) * flowData3.color.w), 0));
 	float height3 = FlowMapNormalsTex.SampleLevel(FlowMapNormalsSampler, uv3, mipLevel).w;
-	
+
 	// Use the EXACT same blending formula as flowmap normals
 	float blendedHeight =
 		normalMul.y * (normalMul.x * height2 + (1 - normalMul.x) * height3) +
 		(1 - normalMul.y) * (normalMul.x * height1 + (1 - normalMul.x) * height0);
-	
+
 	return blendedHeight;
 }
 
@@ -546,13 +546,13 @@ float GetFlowmapMipLevel(float2 flowmapUV)
 {
 	float2 textureDims;
 	FlowMapNormalsTex.GetDimensions(textureDims.x, textureDims.y);
-	
+
 #if defined(VR)
 	textureDims /= 16.0;
 #else
 	textureDims /= 8.0;
 #endif
-	
+
 	float2 texCoordsPerSize = flowmapUV * textureDims;
 	float2 dxSize = ddx(texCoordsPerSize);
 	float2 dySize = ddy(texCoordsPerSize);
