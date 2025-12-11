@@ -211,8 +211,8 @@ void UnifiedWater::SetFlowmapTex() const
 		return;
 
 	if (!gFlowMapSourceTex || !gFlowMapSize) {
-	logger::error("[Unified Water] Global pointers not initialized");
-	return;
+		logger::error("[Unified Water] Global pointers not initialized");
+		return;
 	}
 
 	*gFlowMapSourceTex = tex;

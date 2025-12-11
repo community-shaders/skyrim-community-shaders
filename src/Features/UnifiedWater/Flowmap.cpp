@@ -1,8 +1,8 @@
 ﻿#include "Flowmap.h"
 
-#include <charconv>
 #include <DDSTextureLoader.h>
 #include <DirectXTex.h>
+#include <charconv>
 
 bool Flowmap::TryGetFlowmap(RE::NiPointer<RE::NiSourceTexture>& outFlowmapTex) const
 {
@@ -183,10 +183,13 @@ bool Flowmap::GenerateFlowmap(bool useMips)
 
 	multithread->Enter();
 
-	struct MultithreadGuard {
+	struct MultithreadGuard
+	{
 		winrt::com_ptr<REX::W32::ID3D11Multithread> mt;
-		MultithreadGuard(winrt::com_ptr<REX::W32::ID3D11Multithread> m) : mt(m) {}
-		~MultithreadGuard() {
+		MultithreadGuard(winrt::com_ptr<REX::W32::ID3D11Multithread> m) :
+			mt(m) {}
+		~MultithreadGuard()
+		{
 			if (mt) {
 				mt->Leave();
 				mt->SetMultithreadProtected(FALSE);
