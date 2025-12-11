@@ -82,7 +82,7 @@ struct VS_OUTPUT
 	float4 HPosition : SV_POSITION0;
 #   if !defined(UNIFIED_WATER)
 	float4 FogParam : COLOR0;
-#   endif
+#	endif
 	float4 WPosition : TEXCOORD0;
 	float4 TexCoord1 : TEXCOORD1;
 	float4 TexCoord2 : TEXCOORD2;
@@ -189,13 +189,13 @@ VS_OUTPUT main(VS_INPUT input)
 	vsout.WorldPosition = worldPos;
 	vsout.PreviousWorldPosition = mul(PreviousWorld[eyeIndex], inputPosition);
 #		else
-#			if !defined(UNIFIED_WATER)
-	float fogColorParam = min(VSFogFarColor.w,
-		pow(saturate(length(worldViewPos.xyz) * VSFogParam.y - VSFogParam.x), NormalsScale.w));
-	vsout.FogParam.xyz = lerp(VSFogNearColor.xyz, VSFogFarColor.xyz, fogColorParam);
-	vsout.FogParam.w = fogColorParam;
-#			endif
 
+#		if !defined(UNIFIED_WATER)
+	float fogDistanceFactor = min(VSFogFarColor.w, pow(saturate(length(worldViewPos.xyz) * VSFogParam.y - VSFogParam.x), NormalsScale.w));
+	vsout.FogParam.xyz = lerp(VSFogNearColor.xyz, VSFogFarColor.xyz, fogDistanceFactor);
+	vsout.FogParam.w = fogDistanceFactor;
+		#endif
+	
 	vsout.WPosition.xyz = worldPos.xyz;
 	vsout.WPosition.w = length(worldPos.xyz);
 
