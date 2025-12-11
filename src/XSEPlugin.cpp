@@ -110,7 +110,6 @@ void MessageHandler(SKSE::MessagingInterface::Message* message)
 				RE::DebugMessageBox(std::format("Community Shaders\n{}, will disable all hooks and features", errorMessage).c_str());
 			}
 
-
 			if (errors.empty()) {
 				globals::OnDataLoaded();
 				EngineFix::InstallOnDataLoadedFixes();
