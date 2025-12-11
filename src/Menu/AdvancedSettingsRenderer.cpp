@@ -548,5 +548,19 @@ void AdvancedSettingsRenderer::RenderDeveloperSection()
 	// Developer Mode Testing Section
 	if (globals::state->IsDeveloperMode()) {
 		FeatureIssues::Test::DrawDeveloperModeTestingUI();
+
+		ImGui::Spacing();
+		// Test Conditions button - runs a set of console commands to prepare the player for testing
+		if (ImGui::Button("Test Conditions", { -1, 0 })) {
+			if (auto ui = RE::UI::GetSingleton(); ui && !ui->menuStack.empty() && RE::PlayerCharacter::GetSingleton()) {
+				RE::Console::ExecuteCommand("player.setav speedmult 1000");
+				RE::Console::ExecuteCommand("tgm");
+				RE::Console::ExecuteCommand("tcl");
+				RE::Console::ExecuteCommand("set timescale to 0");
+				RE::Console::ExecuteCommand("set gamehour to 12");
+				RE::Console::ExecuteCommand("coc whiterun");
+				RE::Console::ExecuteCommand("fw 81a");
+			}
+		}
 	}
 }
