@@ -570,6 +570,8 @@ FlowmapData GetFlowmapDataWorldSpace(FlowmapData textureSpaceData)
 #				include "WetnessEffects/WetnessEffects.hlsli"
 #			endif
 
+#			include "Water/WaterBRDF.hlsli"
+
 // Structure to return both normal and ripple/splash color information
 struct WaterNormalData
 {
