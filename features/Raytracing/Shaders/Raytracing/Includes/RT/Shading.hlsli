@@ -166,7 +166,9 @@ float4 GGXIndirect(in float3 position, in float3 GN, float3x3 TBN, in float3 v, 
     
         float NoL = saturate(dot(n, l)); 
         
-        return float4((bounceColor * albedo * NoL/ diffuseProbability) * Frame.Diffuse, 0.0f);
+        float3 finalDiffuse = bounceColor * albedo * NoL / diffuseProbability;
+        
+        return float4(finalDiffuse * Frame.Diffuse, 0.0f);
     }
     else
     {
