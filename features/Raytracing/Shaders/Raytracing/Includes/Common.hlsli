@@ -32,7 +32,7 @@ float3 ViewToWorldVector(const float3 vec, const float4x4 invView)
 
 float Scale01(float x, float min, float max)
 {
-    return min + saturate(x) * (max - min);
+    return clamp(min + saturate(x) * (max - min), min, max);
 }
 
 half3 DecodeNormal(half2 f)

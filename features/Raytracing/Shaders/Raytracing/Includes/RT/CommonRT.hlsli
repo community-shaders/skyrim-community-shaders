@@ -200,4 +200,9 @@ float DiffuseProbability(float roughness, float metalness, float3 f0, float NoV)
     return clamp(diffuseEnergy, 0.05f, 0.95f);
 }
 
+float SpecularAO(float ao)
+{
+    return ao * 0.25f + 0.75f;
+}
+
 #endif // COMMONRT_HLSI

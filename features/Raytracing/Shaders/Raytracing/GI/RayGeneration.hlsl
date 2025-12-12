@@ -20,12 +20,14 @@ void main()
 
     float2 uv = (idx + 0.5f) / size;
     
-    const half4 normalMetalness = GNMXTexture[idx];  
+    const half4 normalMetalnessAO = GNMAOTexture[idx];  
     
- 	const half3 geometryNormalVS = DecodeNormal(normalMetalness.xy);
+ 	const half3 geometryNormalVS = DecodeNormal(normalMetalnessAO.xy);
 	const float3 geometryNormalWS = normalize(ViewToWorldVector(geometryNormalVS, Frame.ViewInverse));	      
 
-    const float metalness = Scale01(normalMetalness.z, Frame.Metalness.x, Frame.Metalness.y);
+    const float metalness = Scale01(normalMetalnessAO.z, Frame.Metalness.x, Frame.Metalness.y);
+    
+    const float ao = 1.0f - normalMetalnessAO.w;
     
 	const float depth = DepthTexture[idx];  
 
@@ -64,7 +66,7 @@ void main()
     CreateOrthonormalBasis(normalWS, tangentWS, bitangetWS);
     float3x3 TBN = float3x3(tangentWS, bitangetWS, normalWS);
     
-    float4 result = GGXIndirect(positionWS, geometryNormalWS, TBN, viewWS, albedo, roughness, metalness, 0, seed);
+    float4 result = GGXIndirect(positionWS, geometryNormalWS, TBN, viewWS, albedo, roughness, metalness, ao, 0, seed);
 
     OutputTexture[idx] = MainTexture[idx] + float4(result.rgb, 0.0f);
     

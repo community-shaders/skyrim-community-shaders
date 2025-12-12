@@ -46,6 +46,7 @@ void HitMesh(inout IndirectPayload payload, in BuiltInTriangleIntersectionAttrib
     
     unorm float roughnessSrc = DEFAULT_ROUGHNESS;   
     unorm float metalnessSrc = DEFAULT_METALNESS;    
+    unorm float ao = 1.0f;
     
     Texture2D baseTexture = Textures[NonUniformResourceIndex(material.BaseTexture)];
     Texture2D effectTexture = Textures[NonUniformResourceIndex(material.EffectTexture)];
@@ -73,8 +74,9 @@ void HitMesh(inout IndirectPayload payload, in BuiltInTriangleIntersectionAttrib
     TBN = float3x3(worldTangent, worldBitangent, worldNormal);
     
     // Roughness and Metalness from RMAOS
-    roughnessSrc = rmaos.x * material.roughness;
-    metalnessSrc = rmaos.y;
+    roughnessSrc = saturate(rmaos.x * material.roughness);
+    metalnessSrc = saturate(rmaos.y);
+    ao = saturate(1.0f - rmaos.z);
 #else
     float3 worldNormal = geomWorldNormal;      
 #endif
@@ -140,7 +142,7 @@ void HitMesh(inout IndirectPayload payload, in BuiltInTriangleIntersectionAttrib
 #if defined(LAMBERT)
             payload.color += float4(LambertianIndirect(worldPosition, worldNormal, albedo, currentDepth, randomSeed), 0.0f);
 #else
-            float4 indirect = GGXIndirect(worldPosition, geomWorldNormal, TBN, viewDirection, albedo, roughness, metalness, currentDepth, randomSeed);
+            float4 indirect = GGXIndirect(worldPosition, geomWorldNormal, TBN, viewDirection, albedo, roughness, metalness, ao, currentDepth, randomSeed);
             indirect.a = max(payload.color.a, RayTCurrent()); // * (1.0f - saturate(abs(currentDepth - 1.0f))); // 0,1,2,... to -1,0,1,... to 1,0,1 to 0, 1, 0
         
             payload.color += indirect;

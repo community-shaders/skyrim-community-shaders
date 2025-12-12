@@ -88,24 +88,23 @@ float3 GGXDirect(in float3 l, in float3 n, in float3 v, in float3 albedo, in flo
     float NoL = saturate(dot(n, l));
      
     if (NoL <= 0.0f) 
-        return float3(0.0f, 0.0f, 0.0f);          
+        return float3(0.0f, 0.0f, 0.0f);
         
     float3 h = normalize(v + l);
         
     float NoH = saturate(dot(n, h));
-    float LoH = saturate(dot(l, h));
-    float NoV = abs(dot(n, v)) + 1e-5;
-     
-    float3 F = F_Schlick(LoH, F0(albedo, metalness));
-        
+    float NoV = max(dot(n, v), 1e-5f);
+    float VoH = saturate(dot(v, h));
+
     float D = D_GGX(NoH, roughness);
     float V = V_SmithGGXCorrelatedFast(NoV, NoL, roughness);
-        
+    float3 F = F_Schlick(VoH, F0(albedo, metalness));
+    
     // specular BRDF
     float3 Fr = (D * V) * F;
 
     float3 diffuseColor = (1.0 - metalness) * albedo;
-    float3 Fd = diffuseColor * Fd_Lambert();
+    float3 Fd = diffuseColor * (1.0 - F) * Fd_Lambert();
 
     return (Fd + Fr) * NoL;
 }
@@ -143,13 +142,13 @@ float3 GGXDirectP(in float3 position, in float3 n, in float3 v, in float3 albedo
     return diffuse * (light.Color * atten) * float(lightData.Count) * Frame.Diffuse;
 }
 
-float4 GGXIndirect(in float3 position, in float3 GN, float3x3 TBN, in float3 v, in float3 albedo, in float roughness, in float metalness, in uint depth, inout uint randomSeed)
+float4 GGXIndirect(in float3 position, in float3 GN, float3x3 TBN, in float3 v, in float3 albedo, in float roughness, in float metalness, in float ao, in uint depth, inout uint randomSeed)
 {  
     float3 n = TBN[2];
     
     float3 f0 = F0(albedo, metalness);
   
-    float NoV = abs(dot(n, v)) + 1e-5;       
+    float NoV = max(dot(n, v), 1e-5f);      
     
     float diffuseProbability = DiffuseProbability(roughness, metalness, f0, NoV);
     bool chooseDiffuse = (Random(randomSeed) < diffuseProbability);
@@ -162,11 +161,13 @@ float4 GGXIndirect(in float3 position, in float3 GN, float3x3 TBN, in float3 v, 
         //if (dot(GN, l) <= 0.0f) 
         //    return float4(0.0f, 0.0f, 0.0f, 0.0f);
                
-        float3 bounceColor = TraceRayIndirect(Scene, position + (GN * GN_OFFSET), l, depth, randomSeed).rgb;
+        float3 bounceColor = TraceRayIndirect(Scene, position + (GN * GN_OFFSET), l, depth, randomSeed).rgb * ao;
     
         float NoL = saturate(dot(n, l)); 
         
-        float3 finalDiffuse = bounceColor * albedo * NoL / diffuseProbability;
+        float3 diffuseColor = (1.0f - metalness) * albedo;
+        
+        float3 finalDiffuse = bounceColor * diffuseColor * (1.0f - f0) * NoL / diffuseProbability;
         
         return float4(finalDiffuse * Frame.Diffuse, 0.0f);
     }
@@ -174,94 +175,25 @@ float4 GGXIndirect(in float3 position, in float3 GN, float3x3 TBN, in float3 v, 
     {
         float3 h_tan = SampleGGX(roughness, randomSeed);
         
-        float3 h = normalize(mul(TBN, h_tan));
+        float3 h = mul(TBN, h_tan);
         
-        float3 l = normalize(reflect(-v, h));        
+        float3 l = reflect(-v, h);        
         
         float NoL = saturate(dot(n, l));
      
         float NoH = saturate(dot(n, h));
-        float LoH = saturate(dot(l, h));
-        
-        float4 bounceColor = TraceRayIndirect(Scene, position + (GN * GN_OFFSET), l, depth, randomSeed);        
-                    
+        float VoH = saturate(dot(v, h));
+                        
         float D = D_GGX(NoH, roughness);
         float V = V_SmithGGXCorrelatedFast(NoV, NoL, roughness);
-        float3 F = F_Schlick(LoH, f0);
+        float3 F = F_Schlick(VoH, f0);
         
         // specular BRDF
         float3 Fr = (D * V) * F;
-
+        
+        float4 bounceColor = TraceRayIndirect(Scene, position + (GN * GN_OFFSET), l, depth, randomSeed) * SpecularAO(ao);
+        
         float3 finalSpecular = Fr * bounceColor.rgb * NoL / (1.0f - diffuseProbability);
-        
-        return float4(finalSpecular * Frame.Specular, bounceColor.a);
-    }
-}
-
-float4 GGXIndirect3(in float3 position, in float3 GN, float3x3 TBN, in float3 v, in float3 albedo, in float3 specular, in float roughness, in float metalness, in uint depth, inout uint randomSeed)
-{  
-    float3 n = TBN[2];
-    
-    float3 f0 = F0(albedo, metalness);
-  
-    float NoV = abs(dot(n, v)) + 1e-5;       
-    
-    float diffuseProbability = DiffuseProbability(roughness, metalness, f0, NoV);
-    bool chooseDiffuse = (Random(randomSeed) < diffuseProbability);
-    
-    if (chooseDiffuse)
-    {
-        float3 tangentSample = CosineSampleHemisphere(randomSeed);
-        float3 l = normalize(mul(TBN, tangentSample));
-
-        float NoL = saturate(dot(n, l));
-        //if (dot(GN, l) <= 0.0f) 
-        //    return float4(0.0f, 0.0f, 0.0f, 0.0f);
-               
-        float3 bounceColor = TraceRayIndirect(Scene, position + (GN * GN_OFFSET), l, depth, randomSeed).rgb;
-    
-        return float4((bounceColor * albedo * NoL / diffuseProbability) * Frame.Diffuse, 0.0f);
-    }
-    else
-    {
-       /* float3 v_tan = float3(
-            dot(v, TBN[0]),
-            dot(v, TBN[1]),
-            dot(v, TBN[2])
-        );
-        
-        float3 l_tan = SampleGGXVNDF_Direct(v_tan, randomSeed, roughness);
-        
-        float3 l = normalize(mul(TBN, l_tan));*/
-
-        float3 h_tan = GGXSample(randomSeed, roughness);
-        
-        float3 h = normalize(mul(TBN, h_tan));
-        
-        float3 l = normalize(reflect(v, h));        
-        
-        float NoL = saturate(dot(n, l));
-     
-        //if (NoL <= 0.0f) 
-        //    return float4(0.0f, 0.0f, 0.0f, 0.0f);          
-        
-        //float3 h = normalize(v + l);
-        
-        float NoH = saturate(dot(n, h));
-        float LoH = saturate(dot(l, h));
-        
-        float4 bounceColor = TraceRayIndirect(Scene, position + (GN * GN_OFFSET), l, depth, randomSeed);        
-                    
-        float D = D_GGX(NoH, roughness);
-        float V = V_SmithGGXCorrelatedFast(NoV, NoL, roughness);
-        float3 F = F_Schlick(LoH, f0);
-        
-        // specular BRDF
-        float3 Fr = (D * V) * F;
-
-        float specularWeight = 1.0f - diffuseProbability;
-        
-        float3 finalSpecular = Fr * bounceColor.rgb * NoL / specularWeight;
         
         return float4(finalSpecular * Frame.Specular, bounceColor.a);
     }
