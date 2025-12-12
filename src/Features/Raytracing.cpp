@@ -1355,10 +1355,11 @@ void Raytracing::CreateModel(const char* path, RE::NiNode* pRoot)
 
 		const auto& geometryRuntimeData = pGeometry->GetGeometryRuntimeData();
 
-		auto effect = geometryRuntimeData.properties[RE::BSGeometry::States::kEffect];
+		auto& effect = geometryRuntimeData.properties[RE::BSGeometry::States::kEffect];
 
-		auto lightingShader = netimmerse_cast<RE::BSLightingShaderProperty*>(effect.get());
+		auto* lightingShader = netimmerse_cast<RE::BSLightingShaderProperty*>(effect.get());
 
+		// Only lighting shader for now
 		if (!lightingShader) {
 			return RE::BSVisit::BSVisitControl::kContinue;
 		}
