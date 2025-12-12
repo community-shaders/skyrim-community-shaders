@@ -158,13 +158,15 @@ float4 GGXIndirect(in float3 position, in float3 GN, float3x3 TBN, in float3 v, 
         float3 l_tan = CosineSampleHemisphere(randomSeed);
         float3 l = normalize(mul(TBN, l_tan));
 
-        //if (dot(GN, l) <= 0.0f) 
-        //    return float4(0.0f, 0.0f, 0.0f, 0.0f);
-               
-        float3 bounceColor = TraceRayIndirect(Scene, position + (GN * GN_OFFSET), l, depth, randomSeed).rgb * ao;
-    
-        float NoL = saturate(dot(n, l)); 
+        float NoL = dot(n, l);
         
+        if (NoL <= 0.0f)
+            return float4(0.0f, 0.0f, 0.0f, 0.0f);
+        
+        NoL = saturate(NoL);
+        
+        float3 bounceColor = TraceRayIndirect(Scene, position + (GN * GN_OFFSET), l, depth, randomSeed).rgb * ao;
+
         float3 diffuseColor = (1.0f - metalness) * albedo;
         
         float3 finalDiffuse = bounceColor * diffuseColor * (1.0f - f0) * NoL / diffuseProbability;
@@ -179,7 +181,12 @@ float4 GGXIndirect(in float3 position, in float3 GN, float3x3 TBN, in float3 v, 
         
         float3 l = reflect(-v, h);        
         
-        float NoL = saturate(dot(n, l));
+        float NoL = dot(n, l);
+        
+        if (NoL <= 0.0f)
+            return float4(0.0f, 0.0f, 0.0f, 0.0f);
+        
+        NoL = saturate(NoL);
      
         float NoH = saturate(dot(n, h));
         float VoH = saturate(dot(v, h));
