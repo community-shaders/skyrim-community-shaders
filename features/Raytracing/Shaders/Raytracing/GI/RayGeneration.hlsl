@@ -29,7 +29,7 @@ void main()
     
     const float ao = 1.0f - normalMetalnessAO.w;
     
-	const float depth = DepthTexture[idx];  
+	const float depth = DepthTexture[idx] * 0.9998;  
 
 	const float depthView = ScreenToViewDepth(depth, Frame.CameraData);
 
@@ -70,9 +70,9 @@ void main()
 
     OutputTexture[idx] = MainTexture[idx] + float4(result.rgb, 0.0f);
     
-    float3 h_tan = GGXSample(seed, roughness);
-    float3 h = normalize(mul(TBN, h_tan));
-    float VdotH = max(dot(viewWS, h), EPSILON_DOT_CLAMP);
+    float3 h_tan = SampleGGX(roughness, seed);
+    float3 h = mul(TBN, h_tan);
+    float VdotH = saturate(dot(viewWS, h));
     
     ReflectanceTexture[idx] = float4(saturate(F_Schlick(VdotH, F0(albedo, metalness))), 0.0f);
     

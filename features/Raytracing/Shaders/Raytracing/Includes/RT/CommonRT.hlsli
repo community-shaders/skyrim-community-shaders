@@ -86,7 +86,7 @@ float3 CosineSampleHemisphere(inout uint seed)
     return float3(x, y, z);
 }
 
-float3 TangentSampleScaled(inout uint randomSeed, float roughness)
+float3 CosineSampleHemisphereScaled(inout uint randomSeed, float roughness)
 {
     float r1 = Random(randomSeed);
     float r2 = Random(randomSeed);
@@ -102,25 +102,6 @@ float3 TangentSampleScaled(inout uint randomSeed, float roughness)
         sin(phi) * sinTheta,
         cosTheta
     );
-}
-
-float3 GGXSample(inout uint randomSeed, float2 alpha)
-{
-    float r1 = Random(randomSeed);
-    float r2 = Random(randomSeed);
- 
-    float theta = atan(alpha.y * sqrt(r1) / sqrt(max(1e-6f, 1.0f - r1))); // Walter, Formula (35).
-    float phi = 2.0f * Math::PI * r2; // Walter, Formula (36).
-
-    float sinTheta = sin(theta);
-    float cosTheta = cos(theta);
-
-    // Heitz, Formula (77)
-    float x = cos(phi) * sinTheta * (alpha.x / alpha.y);
-    float y = sin(phi) * sinTheta;
-    float z = cosTheta;
-
-    return normalize(float3(x, y, z));
 }
 
 float3 SampleGGX(const float roughness, inout uint randomSeed)
@@ -170,7 +151,7 @@ float D_GGX(float NoH, float roughness) {
 
 float3 F0(float3 albedo, float metalness)
 {
-    return lerp(DEFAULT_SPECULARF0.xxx, albedo, metalness);
+    return saturate(lerp(DEFAULT_SPECULARF0.xxx, albedo, metalness));
 }
 
 float3 F_Schlick(float u, float3 f0) {
