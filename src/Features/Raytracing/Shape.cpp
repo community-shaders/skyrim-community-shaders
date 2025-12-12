@@ -20,9 +20,12 @@ void Shape::BuildMesh(RE::BSGraphics::TriShape* rendererData, const std::uint32_
 		if (dynamic) {
 			dynamicPosition.resize(vertexCountIn);
 
-			auto* pDynamicTriShape = netimmerse_cast<RE::BSDynamicTriShape*>(geometry);
-			const auto& dynTriShapeRuntime = pDynamicTriShape->GetDynamicTrishapeRuntimeData();
-			std::memcpy(dynamicPosition.data(), dynTriShapeRuntime.dynamicData, dynTriShapeRuntime.dataSize);
+			auto* pDynamicTriShape = skyrim_cast<RE::BSDynamicTriShape*>(geometry);
+
+			if (pDynamicTriShape) {
+				const auto& dynTriShapeRuntime = pDynamicTriShape->GetDynamicTrishapeRuntimeData();
+				std::memcpy(dynamicPosition.data(), dynTriShapeRuntime.dynamicData, dynTriShapeRuntime.dataSize);
+			}
 		}
 
 		vertices.resize(vertexCountIn);
@@ -179,7 +182,7 @@ void Shape::BuildMaterial(const RE::BSGeometry::GEOMETRY_RUNTIME_DATA& geometryR
 
 		if (property; auto lightingShader = netimmerse_cast<RE::BSLightingShaderProperty*>(property)) {
 			if (auto& effectData = lightingShader->effectData) {
-				logger::info("[RT] BuildMaterial - Effect - Alpha: {}, Z Test Func: {}", effectData->alpha, magic_enum::enum_name(effectData->zTestFunc));
+				logger::debug("[RT] BuildMaterial - Effect - Alpha: {}, Z Test Func: {}", effectData->alpha, magic_enum::enum_name(effectData->zTestFunc));
 			}
 		}
 
@@ -327,6 +330,9 @@ void Shape::CreateBuffers(const std::wstring& name)
 
 		vertexBuffer->UpdateList(vertices.data(), vertexCount);
 		DX::ThrowIfFailed(vertexBuffer->resource->SetName(std::format(L"Vertex Buffer [{}] - {}", registerIndex->GetIndex(), name).c_str()));
+
+		if (vertexCount != vertices.size())
+			logger::error("[RT] Shape::CreateBuffers - VertexCount: {}, Vertices Size: {}", vertexCount, vertices.size());
 
 		vertexBuffer->Upload(commandList);
 

@@ -309,7 +309,7 @@ void Raytracing::SetupResources()
 		uint8_t white[] = { 255u, 255u, 255u, 255u };
 		uint8_t normal[] = { 128u, 128u, 255u, 255u };
 		uint8_t black[] = { 0u, 0u, 0u, 0u };
-		uint8_t rmaos[] = { 128u, 0u, 0u, 10u };
+		uint8_t rmaos[] = { 128u, 0u, 255u, 10u };
 
 		defaultWhiteTexture = eastl::make_shared<DefaultTexture>(d3d12Device.get(), textureRegisters.Allocate(), white);
 		defaultNormalTexture = eastl::make_shared<DefaultTexture>(d3d12Device.get(), textureRegisters.Allocate(), normal);
@@ -1304,6 +1304,11 @@ void Raytracing::UpdateModelBLAS(Model& model)
 
 void Raytracing::CreateModel(const char* path, RE::NiNode* pRoot)
 {
+	if (!pRoot) {
+		logger::error("[RT] CreateModel \"{}\" - nullptr root", path);
+		return;
+	}
+
 	if (!path) {
 		logger::debug("[RT] CreateModel \"{}\" - Invalid Path", pRoot->name);
 		return;
@@ -2349,12 +2354,6 @@ void Raytracing::DrawRTGI()
 	ReleaseTempGPUData();
 
 	d3d11Context->CopyResource(main.texture, mainTexture->resource11);
-
-	// Clear specular for now, just so I can see the results better 
-	{
-		float clearColor[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
-		d3d11Context->ClearRenderTargetView(globals::game::renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kINDIRECT_DOWNSCALED].RTV, clearColor);
-	}
 }
 
 void Raytracing::UpdateShadowsFrameBuffer()

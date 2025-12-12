@@ -486,19 +486,22 @@ struct Raytracing : public Feature
 					if ((shape->flags & Flags::Dynamic) && shape->geometry) {
 						//auto* pDynamicTriShape = netimmerse_cast<RE::BSDynamicTriShape*>(shape->geometry);
 
-						auto* pDynamicTriShape = (RE::BSDynamicTriShape*)shape->geometry;
-						const auto& dynTriShapeRuntime = pDynamicTriShape->GetDynamicTrishapeRuntimeData();
+						auto* pDynamicTriShape = skyrim_cast<RE::BSDynamicTriShape*>(shape->geometry);
 
-						// We'll test if dynamic data has changed before updating and uploading
-						// It does mean we have to memcpy twice, but I suppose the GPU bandwith we save makes up for it
-						if (dynTriShapeRuntime.dynamicData && std::memcmp(shape->dynamicPosition.data(), dynTriShapeRuntime.dynamicData, dynTriShapeRuntime.dataSize) != 0) {
-							std::memcpy(shape->dynamicPosition.data(), dynTriShapeRuntime.dynamicData, dynTriShapeRuntime.dataSize);
+						if (pDynamicTriShape) {
+							const auto& dynTriShapeRuntime = pDynamicTriShape->GetDynamicTrishapeRuntimeData();
 
-							shape->dynamicPositionBuffer->Update(dynTriShapeRuntime.dynamicData, dynTriShapeRuntime.dataSize);
+							// We'll test if dynamic data has changed before updating and uploading
+							// It does mean we have to memcpy twice, but I suppose the GPU bandwith we save makes up for it
+							if (dynTriShapeRuntime.dynamicData && std::memcmp(shape->dynamicPosition.data(), dynTriShapeRuntime.dynamicData, dynTriShapeRuntime.dataSize) != 0) {
+								std::memcpy(shape->dynamicPosition.data(), dynTriShapeRuntime.dynamicData, dynTriShapeRuntime.dataSize);
 
-							// We'll barrier and upload ourselfs in batch
-							//shape.dynamicPositionBuffer->Upload(commandList);
-							updateFlags |= Flags::Dynamic;
+								shape->dynamicPositionBuffer->Update(dynTriShapeRuntime.dynamicData, dynTriShapeRuntime.dataSize);
+
+								// We'll barrier and upload ourselfs in batch
+								//shape.dynamicPositionBuffer->Upload(commandList);
+								updateFlags |= Flags::Dynamic;
+							}
 						}
 					}
 
@@ -538,9 +541,6 @@ struct Raytracing : public Feature
 	eastl::unique_ptr<DX12::StructuredBufferUpload<InstanceData>> instanceBuffer = nullptr;
 
 	Util::FrameChecker shadowFrameChecker;
-
-	// Textures
-	eastl::hash_set<eastl::string> texturesToShare;
 
 	// Textures that have been shared with DX12
 	eastl::unordered_map<ID3D11Texture2D*, winrt::com_ptr<ID3D12Resource>> sharedTextures;

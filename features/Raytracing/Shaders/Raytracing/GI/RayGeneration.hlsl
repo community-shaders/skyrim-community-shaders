@@ -27,9 +27,9 @@ void main()
 
     const float metalness = Scale01(normalMetalnessAO.z, Frame.Metalness.x, Frame.Metalness.y);
     
-    const float ao = 1.0f - normalMetalnessAO.w;
+    const float ao = normalMetalnessAO.w;
     
-	const float depth = DepthTexture[idx] * 0.9998;  
+	const float depth = DepthTexture[idx] * 0.99998;  
 
 	const float depthView = ScreenToViewDepth(depth, Frame.CameraData);
 
@@ -68,7 +68,7 @@ void main()
     
     float4 result = GGXIndirect(positionWS, geometryNormalWS, TBN, viewWS, albedo, roughness, metalness, ao, 0, seed);
 
-    OutputTexture[idx] = MainTexture[idx] + float4(result.rgb, 0.0f);
+    OutputTexture[idx] = MainTexture[idx] + float4(Color::LinearToGamma(result.rgb), 0.0f);
     
     float3 h_tan = SampleGGX(roughness, seed);
     float3 h = mul(TBN, h_tan);

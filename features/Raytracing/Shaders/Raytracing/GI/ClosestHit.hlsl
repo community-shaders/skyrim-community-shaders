@@ -76,7 +76,7 @@ void HitMesh(inout IndirectPayload payload, in BuiltInTriangleIntersectionAttrib
     // Roughness and Metalness from RMAOS
     roughnessSrc = saturate(rmaos.x * material.roughness);
     metalnessSrc = saturate(rmaos.y);
-    ao = saturate(1.0f - rmaos.z);
+    ao = rmaos.z;
 #else
     float3 worldNormal = geomWorldNormal;      
 #endif
