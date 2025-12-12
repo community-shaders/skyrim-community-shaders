@@ -309,7 +309,7 @@ void Raytracing::SetupResources()
 		uint8_t white[] = { 255u, 255u, 255u, 255u };
 		uint8_t normal[] = { 128u, 128u, 255u, 255u };
 		uint8_t black[] = { 0u, 0u, 0u, 0u };
-		uint8_t rmaos[] = { 128u, 0u, 255u, 10u };
+		uint8_t rmaos[] = { 128u, 0u, 0u, 10u };
 
 		defaultWhiteTexture = eastl::make_shared<DefaultTexture>(d3d12Device.get(), textureRegisters.Allocate(), white);
 		defaultNormalTexture = eastl::make_shared<DefaultTexture>(d3d12Device.get(), textureRegisters.Allocate(), normal);
