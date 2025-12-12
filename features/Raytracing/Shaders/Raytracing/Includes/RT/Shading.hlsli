@@ -192,9 +192,7 @@ float4 GGXIndirect(in float3 position, in float3 GN, float3x3 TBN, in float3 v, 
         // specular BRDF
         float3 Fr = (D * V) * F;
 
-        float specularWeight = 1.0f - diffuseProbability;
-        
-        float3 finalSpecular = Fr * bounceColor.rgb * NoL / specularWeight;
+        float3 finalSpecular = Fr * bounceColor.rgb * NoL / (1.0f - diffuseProbability);
         
         return float4(finalSpecular * Frame.Specular, bounceColor.a);
     }

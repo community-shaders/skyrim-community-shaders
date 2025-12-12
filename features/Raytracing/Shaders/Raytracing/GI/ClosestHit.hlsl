@@ -36,11 +36,11 @@ void HitMesh(inout IndirectPayload payload, in BuiltInTriangleIntersectionAttrib
     
     float3x3 objectToWorld3x3 = (float3x3) ObjectToWorld3x4();
     
-    float3 worldNormal = normalize(mul(objectToWorld3x3, Interpolate(v0.Normal, v1.Normal, v2.Normal, uvw)));
-    float3 worldTangent = normalize(mul(objectToWorld3x3, Interpolate(v0.Tangent, v1.Tangent, v2.Tangent, uvw)));
-    float3 worldBitangent = normalize(mul(objectToWorld3x3, Interpolate(v0.Bitangent, v1.Bitangent, v2.Bitangent, uvw)));
+    float3 geomWorldNormal = normalize(mul(objectToWorld3x3, Interpolate(v0.Normal, v1.Normal, v2.Normal, uvw)));
+    float3 geomWorldTangent = normalize(mul(objectToWorld3x3, Interpolate(v0.Tangent, v1.Tangent, v2.Tangent, uvw)));
+    float3 geomWorldBitangent = normalize(mul(objectToWorld3x3, Interpolate(v0.Bitangent, v1.Bitangent, v2.Bitangent, uvw)));
     
-    float3x3 TBN = float3x3(worldTangent, worldBitangent, worldNormal);
+    float3x3 TBN = float3x3(geomWorldTangent, geomWorldBitangent, geomWorldNormal);  
     
     float4 vertexColor = Interpolate(v0.Color.unpack(), v1.Color.unpack(), v2.Color.unpack(), uvw);
     
@@ -59,18 +59,24 @@ void HitMesh(inout IndirectPayload payload, in BuiltInTriangleIntersectionAttrib
     float3 effect = effectTexture.SampleLevel(BaseSampler, texCoord, 0).rgb;
     
 #ifdef PATH_TRACING
-    float3 normal = normalTexture.SampleLevel(BaseSampler, texCoord, 0).rgb;
+    float3 normal = normalTexture.SampleLevel(BaseSampler, texCoord, 0).rgb * 2.0f - 1.0f;  
     float4 rmaos = rmaosTexture.SampleLevel(BaseSampler, texCoord, 0);
     
-    float tangentSign = (dot(cross(worldNormal, worldTangent), worldBitangent) < 0.0f) ? -1.0f : 1.0f; 
+    // Normal mapping
+    float tangentSign = (dot(cross(geomWorldNormal, geomWorldTangent), geomWorldBitangent) < 0.0f) ? -1.0f : 1.0f; 
     
-    worldNormal = normalize(mul(normal, TBN));  
-    worldTangent = normalize(worldTangent - worldNormal * dot(worldTangent, worldNormal));
+    float3 worldNormal = normalize(mul(TBN, normal));  
+    float3 worldTangent = normalize(geomWorldTangent - worldNormal * dot(geomWorldTangent, worldNormal)); 
+    float3 worldBitangent = cross(worldNormal, worldTangent) * tangentSign;   
     
-    worldBitangent = cross(worldNormal, worldTangent) * tangentSign;   
+    // Normal mapped TBN
+    TBN = float3x3(worldTangent, worldBitangent, worldNormal);
     
+    // Roughness and Metalness from RMAOS
     roughnessSrc = rmaos.x * material.roughness;
     metalnessSrc = rmaos.y;
+#else
+    float3 worldNormal = geomWorldNormal;      
 #endif
     
     // Lighting Shader
@@ -134,7 +140,7 @@ void HitMesh(inout IndirectPayload payload, in BuiltInTriangleIntersectionAttrib
 #if defined(LAMBERT)
             payload.color += float4(LambertianIndirect(worldPosition, worldNormal, albedo, currentDepth, randomSeed), 0.0f);
 #else
-            float4 indirect = GGXIndirect(worldPosition, worldNormal, TBN, viewDirection, albedo, roughness, metalness, currentDepth, randomSeed);
+            float4 indirect = GGXIndirect(worldPosition, geomWorldNormal, TBN, viewDirection, albedo, roughness, metalness, currentDepth, randomSeed);
             indirect.a = max(payload.color.a, RayTCurrent()); // * (1.0f - saturate(abs(currentDepth - 1.0f))); // 0,1,2,... to -1,0,1,... to 1,0,1 to 0, 1, 0
         
             payload.color += indirect;
