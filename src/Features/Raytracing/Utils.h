@@ -2,6 +2,8 @@
 
 #include "PCH.h"
 #include <directxpackedvector.h>
+#include "TruePBR.h"
+#include "TruePBR/BSLightingShaderMaterialPBR.h"
 
 static inline uint PackUByte4(float4 unpacked)
 {
@@ -129,6 +131,28 @@ static inline DXGI_FORMAT GetCompatibleFormat(DXGI_FORMAT format, bool recompres
 		return format;
 		break;
 	}
+}
+
+static inline bool ShouldShareTexture(RE::BSTextureSet::Texture a_texture, bool pathTracing)
+{
+	if (a_texture == RE::BSTextureSet::Texture::kDiffuse)
+		return true;
+
+	if (pathTracing && a_texture == RE::BSTextureSet::Texture::kNormal)
+		return true;
+
+	if (globals::truePBR->currentTextureSet == nullptr) {
+		if (a_texture == RE::BSTextureSet::Texture::kGlowMap)
+			return true;
+	} else {
+		if (a_texture == BSLightingShaderMaterialPBR::EmissiveTexture)
+			return true;
+
+		if (pathTracing && a_texture == BSLightingShaderMaterialPBR::RmaosTexture)
+			return true;
+	}
+
+	return false;
 }
 
 template <typename T>

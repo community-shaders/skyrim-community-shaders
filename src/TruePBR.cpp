@@ -558,7 +558,7 @@ struct BSLightingShaderProperty_LoadBinary
 		bool isPbr = false;
 		{
 			RE::BSLightingShaderMaterialBase* material = nullptr;
-			if (property->flags.any(kMenuScreen)) {
+			if (property->flags.any(TruePBR::PBRFlag)) {
 				auto* pbrMaterial = BSLightingShaderMaterialPBR::Make();
 				pbrMaterial->inputFilePath = stream.inputFilePath;
 				pbrMaterial->loadedWithFeature = feature;

@@ -1,12 +1,17 @@
 #include "Shape.h"
 #include "Features/Raytracing.h"
 #include "Features/Raytracing/Heap.h"
+#include "TruePBR.h"
+#include "TruePBR/BSLightingShaderMaterialPBR.h"
 
 using GIHeap = Raytracing::GIHeap;
 using SkinningHeap = Raytracing::SkinningHeap;
 
 void Shape::BuildMesh(RE::BSGraphics::TriShape* rendererData, const std::uint32_t& vertexCountIn, const std::uint16_t& triangleCountIn, const std::uint16_t& bonesPerVertex, const float4x4& transform)
 {
+	bool hasNormal = vertexFlags & RE::BSGraphics::Vertex::VF_NORMAL;
+	bool hasTangent = vertexFlags & RE::BSGraphics::Vertex::VF_TANGENT;
+
 	// Vertices
 	{
 		bool dynamic = flags & Flags::Dynamic;
@@ -27,7 +32,7 @@ void Shape::BuildMesh(RE::BSGraphics::TriShape* rendererData, const std::uint32_
 
 		auto vertexDesc = rendererData->vertexDesc;
 
-		auto vertexFlags = vertexDesc.GetFlags();
+		vertexFlags = vertexDesc.GetFlags();
 		uint32_t stride = vertexDesc.GetSize();
 
 		bool hasPosition = vertexFlags & RE::BSGraphics::Vertex::VF_VERTEX;
@@ -133,6 +138,10 @@ void Shape::BuildMesh(RE::BSGraphics::TriShape* rendererData, const std::uint32_
 
 		triangleCount = triangleCountIn;
 	}
+
+	if (hasNormal || hasTangent) {
+		CalculateNTB(!hasNormal);
+	}
 }
 
 void Shape::BuildMaterial(const RE::BSGeometry::GEOMETRY_RUNTIME_DATA& geometryRuntimeData, [[maybe_unused]] const char* name)
@@ -150,13 +159,16 @@ void Shape::BuildMaterial(const RE::BSGeometry::GEOMETRY_RUNTIME_DATA& geometryR
 	float4 texCoordOffsetScale = { 0.0f, 0.0f, 1.0f, 1.0f };
 	float4 texCoord1OffsetScale = { 0.0f, 0.0f, 1.0f, 1.0f };
 
+	half roughness = 1.0f;
+
 	int effectType = 0;
 
 	RE::BSShader::Type shaderType = RE::BSShader::Type::None;
 
 	ID3D11Texture2D* baseTexture = nullptr;
+	ID3D11Texture2D* normalTexture = nullptr;
 	ID3D11Texture2D* effectTexture = nullptr;
-	//ID3D11Texture2D* rmaosTexture = nullptr; // Useful for path tracing, not much for GI
+	ID3D11Texture2D* rmaosTexture = nullptr;
 
 	{
 		auto* property = geometryRuntimeData.properties[State::kProperty].get();
@@ -201,25 +213,35 @@ void Shape::BuildMaterial(const RE::BSGeometry::GEOMETRY_RUNTIME_DATA& geometryR
 						shaderMaterial->texCoordScale[0].x, shaderMaterial->texCoordScale[0].y
 					};
 
-					/*texCoord1OffsetScale = {
-							material->texCoordOffset[1].x, material->texCoordOffset[1].y,
-							material->texCoordScale[1].x, material->texCoordScale[1].y
-						};*/
+					//texCoord1OffsetScale = {
+					//	material->texCoordOffset[1].x, material->texCoordOffset[1].y,
+					//	material->texCoordScale[1].x, material->texCoordScale[1].y
+					//};
 
-					const auto* lightingBaseMaterial = static_cast<RE::BSLightingShaderMaterialBase*>(shaderMaterial);
-
-					if (lightingBaseMaterial) {
-						baseTexture = TryGetTexture(lightingBaseMaterial->diffuseTexture);
-
+					if (const auto* lightingBaseMaterial = skyrim_cast<RE::BSLightingShaderMaterialBase*>(shaderMaterial)) {
 						logger::debug("[RT] BuildMaterial - BSLightingShaderMaterialBase Alpha: {}", lightingBaseMaterial->materialAlpha);
 
-						if (shaderMaterial->GetFeature() == Feature::kGlowMap) {
-							const auto* lightingGlowMaterial = static_cast<RE::BSLightingShaderMaterialGlowmap*>(shaderMaterial);
+						baseTexture = TryGetTexture(lightingBaseMaterial->diffuseTexture);
+						normalTexture = TryGetTexture(lightingBaseMaterial->normalTexture);
+					}
 
-							if (lightingGlowMaterial) {
+					// TrueBR
+					if (lightingShader->flags.any(TruePBR::PBRFlag)) {
+						if (const auto* lightingPBRMaterial = skyrim_cast<BSLightingShaderMaterialPBR*>(shaderMaterial)) {
+							logger::debug("[RT] BuildMaterial - BSLightingShaderMaterialPBR Alpha: {}", lightingPBRMaterial->materialAlpha);
+
+							effectTexture = TryGetTexture(lightingPBRMaterial->emissiveTexture);
+							rmaosTexture = TryGetTexture(lightingPBRMaterial->rmaosTexture);
+
+							roughness = lightingPBRMaterial->GetRoughnessScale();
+						}
+					} else  // Vanilla
+					{
+						if (shaderMaterial->GetFeature() == Feature::kGlowMap) {
+							if (const auto* lightingGlowMaterial = skyrim_cast<RE::BSLightingShaderMaterialGlowmap*>(shaderMaterial)) {
 								effectTexture = TryGetTexture(lightingGlowMaterial->glowTexture);
 							}
-						}
+						}						
 					}
 				}
 			}
@@ -230,9 +252,7 @@ void Shape::BuildMaterial(const RE::BSGeometry::GEOMETRY_RUNTIME_DATA& geometryR
 				shaderType = RE::BSShader::Type::Effect;
 
 				if (auto shaderMaterial = effectShader->material) {
-					auto effectMaterial = static_cast<RE::BSEffectShaderMaterial*>(shaderMaterial);
-
-					if (effectMaterial) {
+					if (auto effectMaterial = skyrim_cast<RE::BSEffectShaderMaterial*>(shaderMaterial)) {
 						effectType = 1;
 						effectColor = { effectMaterial->baseColor.red, effectMaterial->baseColor.green, effectMaterial->baseColor.blue, effectMaterial->baseColorScale };
 
@@ -247,21 +267,37 @@ void Shape::BuildMaterial(const RE::BSGeometry::GEOMETRY_RUNTIME_DATA& geometryR
 	if (baseTexture == nullptr)
 		logger::warn("[RT] BuildMaterial {} - Base texture is nullptr", name);
 
-	auto baseTextureRegister = rt.GetTextureRegister(baseTexture);
-	auto effectTextureRegister = rt.GetTextureRegister(effectTexture);
+	auto& defaultWhiteIndex = rt.defaultWhiteTexture->allocation;
+	auto& defaultNormalIndex = rt.defaultNormalTexture->allocation;
+	auto& defaultBlackIndex = rt.defaultBlackTexture->allocation;
+	auto& defaultRMAOSIndex = rt.defaultRMAOSTexture->allocation;
 
-	if (baseTexture && baseTextureRegister->GetIndex() == rt.defaultTexture->GetIndex())
+	auto baseTexReg = rt.GetTextureRegister(baseTexture, defaultWhiteIndex);
+	auto normalTexReg = rt.GetTextureRegister(normalTexture, defaultNormalIndex);
+	auto effectTexReg = rt.GetTextureRegister(effectTexture, defaultBlackIndex);
+	auto rmaosTexReg = rt.GetTextureRegister(rmaosTexture, defaultRMAOSIndex);
+
+	if (baseTexture && baseTexReg->GetIndex() == defaultWhiteIndex->GetIndex())
 		logger::warn("[RT] BuildMaterial {} - Base texture [0x{:8X}] not shared", name, reinterpret_cast<uintptr_t>(baseTexture));
 
-	if (effectTexture && effectTextureRegister->GetIndex() == rt.defaultTexture->GetIndex())
+	if (normalTexture && normalTexReg->GetIndex() == defaultNormalIndex->GetIndex())
+		logger::warn("[RT] BuildMaterial {} - Normal texture [0x{:8X}] not shared", name, reinterpret_cast<uintptr_t>(normalTexture));
+
+	if (effectTexture && effectTexReg->GetIndex() == defaultBlackIndex->GetIndex())
 		logger::warn("[RT] BuildMaterial {} - Effect texture [0x{:8X}] not shared", name, reinterpret_cast<uintptr_t>(effectTexture));
+
+	if (rmaosTexture && rmaosTexReg->GetIndex() == defaultRMAOSIndex->GetIndex())
+		logger::warn("[RT] BuildMaterial {} - RMAOS texture [0x{:8X}] not shared", name, reinterpret_cast<uintptr_t>(rmaosTexture));
 
 	material = Material(
 		baseColor,
 		effectColor,
 		texCoordOffsetScale,
-		baseTextureRegister,
-		effectTextureRegister,
+		roughness,
+		baseTexReg,
+		normalTexReg,
+		effectTexReg,
+		rmaosTexReg,
 		shaderType);
 }
 
@@ -375,4 +411,72 @@ void Shape::CreateBuffers(const std::wstring& name)
 	// Material
 	auto materialData = material.GetData();
 	materialBuffer->UpdateAt(&materialData, registerIndex->GetIndex());
+}
+
+void Shape::CalculateNTB(bool normals)
+{
+	// Loop over triangles
+	for (auto& t : triangles) {
+		Vertex& v0 = vertices[t.x];
+		Vertex& v1 = vertices[t.y];
+		Vertex& v2 = vertices[t.z];
+
+		float3 pos0 = v0.Position;
+		float3 pos1 = v1.Position;
+		float3 pos2 = v2.Position;
+
+		half2 uv0 = v0.Texcoord0;
+		half2 uv1 = v1.Texcoord0;
+		half2 uv2 = v2.Texcoord0;
+
+		float3 edge1 = pos1 - pos0;
+		float3 edge2 = pos2 - pos0;
+
+		// Optional: compute normals
+		if (normals) {
+			float3 faceNormal = edge1.Cross(edge2);
+			faceNormal.Normalize();
+			v0.Normal = v1.Normal = v2.Normal = faceNormal;
+		}
+
+		// Compute UV deltas
+		float2 deltaUV1 = uv1 - uv0;
+		float2 deltaUV2 = uv2 - uv0;
+
+		float f = deltaUV1.x * deltaUV2.y - deltaUV2.x * deltaUV1.y;
+		if (f == 0.0f)
+			f = 1.0f;
+		f = 1.0f / f;
+
+		// Compute tangent / bitangent
+		half3 tangent = half3(f * (deltaUV2.y * edge1 - deltaUV1.y * edge2));
+		half3 bitangent = half3(f * (-deltaUV2.x * edge1 + deltaUV1.x * edge2));
+
+		// Accumulate per-vertex
+		v0.Tangent += tangent;
+		v1.Tangent += tangent;
+		v2.Tangent += tangent;
+
+		v0.Bitangent += bitangent;
+		v1.Bitangent += bitangent;
+		v2.Bitangent += bitangent;
+	}
+
+	// Normalize and orthogonalize
+	for (auto& v : vertices) {
+		float3 n = v.Normal;
+		float3 t = float3(v.Tangent.x, v.Tangent.y, v.Tangent.z);
+		float3 b = float3(v.Bitangent.x, v.Bitangent.y, v.Bitangent.z);
+
+		// Gram-Schmidt orthogonalization
+		t = t - n * n.Dot(t);
+		t.Normalize();
+
+		// Recompute bitangent for right-handed tangent space
+		b = n.Cross(t);
+		b.Normalize();
+
+		v.Tangent = half3(t);
+		v.Bitangent = half3(b);
+	}
 }

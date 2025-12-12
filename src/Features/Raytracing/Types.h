@@ -19,6 +19,30 @@ struct half
 	{
 		return DirectX::PackedVector::XMConvertHalfToFloat(v);
 	}
+
+    half& operator+=(const half& rhs)
+	{
+		v = DirectX::PackedVector::XMConvertFloatToHalf(float(*this) + float(rhs));
+		return *this;
+	}
+
+	half& operator-=(const half& rhs)
+	{
+		v = DirectX::PackedVector::XMConvertFloatToHalf(float(*this) - float(rhs));
+		return *this;
+	}
+
+	half& operator*=(const half& rhs)
+	{
+		v = DirectX::PackedVector::XMConvertFloatToHalf(float(*this) * float(rhs));
+		return *this;
+	}
+
+	half& operator/=(const half& rhs)
+	{
+		v = DirectX::PackedVector::XMConvertFloatToHalf(float(*this) / float(rhs));
+		return *this;
+	}
 };
 static_assert(sizeof(half) == 2);
 
@@ -70,6 +94,14 @@ struct half3
 			static_cast<float>(x),
 			static_cast<float>(y),
 			static_cast<float>(z));
+	}
+
+	half3& operator+=(const half3& rhs)
+	{
+		x += rhs.x;
+		y += rhs.y;
+		z += rhs.z;
+		return *this;
 	}
 };
 static_assert(sizeof(half3) == 6);

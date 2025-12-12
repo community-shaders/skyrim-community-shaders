@@ -12,8 +12,10 @@ RWTexture2D<float> SpecularHitDist              : register(u2);
 Texture2D<float4> MainTexture                   : register(t0, space0);
 Texture2D<float> DepthTexture                   : register(t1, space0);
 Texture2D<float4> AlbedoTexture                 : register(t2, space0);
-Texture2D<snorm float4> NormalRoughnessTexture  : register(t3, space0);
-Texture2D<float4> GNMXTexture                   : register(t4, space0);
+// World normals and roughness - Processed from GBuffer encoded view normals and smoothness
+Texture2D<snorm float4> NormalRoughnessTexture   : register(t3, space0);
+// Geometry normals (Encoded) + metalness + a free channel
+Texture2D<half4> GNMXTexture                    : register(t4, space0);
 
 RaytracingAccelerationStructure Scene           : register(t5, space0);
 Texture2D<float3> SkyHemisphere                 : register(t6, space0);

@@ -275,8 +275,9 @@ struct Raytracing : public Feature
 		Output,
 		Reflectance,
 		SpecularHitDistance,
-		ReflectangeGBuffer,
-		RoughnessGBuffer,
+		NormalRoughnessGbuffer,
+		GeometryNormalMetalness,
+		ReflectanceGBuffer,
 		Passthrough
 	};
 
@@ -314,6 +315,7 @@ struct Raytracing : public Feature
 		bool PointFade = true;
 		bool GammaToLinear = false;
 		bool RaytracedShadows = true;
+		bool PathTracing = false;
 		bool CullShadows = true;
 		bool RecompressTextures = false;
 #ifdef DLSS_RR
@@ -328,7 +330,7 @@ struct Raytracing : public Feature
 #endif
 	} settings;
 
-	bool settingSharedTexture = false;
+	bool shareTexture = false;
 	bool renderingWorld = false;
 	bool lightsUpdated = false;
 
@@ -412,12 +414,42 @@ struct Raytracing : public Feature
 	// TODO: Move to Model struct
 	void UpdateModelBLAS(Model& geometryData);
 
-	eastl::shared_ptr<Allocation> GetTextureRegister(ID3D11Texture2D* texture);
+	eastl::shared_ptr<Allocation> GetTextureRegister(ID3D11Texture2D* texture, eastl::shared_ptr<Allocation> defaultTexture);
 
 	Allocator shapeRegisters = Allocator(MAX_SHAPES);
 	Allocator textureRegisters = Allocator(MAX_TEXTURES);
 
-	eastl::shared_ptr<Allocation> defaultTexture = nullptr;
+	struct DefaultTexture
+	{
+		eastl::shared_ptr<Allocation> allocation = nullptr;
+		eastl::unique_ptr<DX12::Texture2DUpload<uint8_t>> texture = nullptr;
+
+		DefaultTexture(ID3D12Device5* device, Allocation* allocation, uint8_t color[4]) :
+			allocation(allocation)
+		{
+			texture = eastl::make_unique<DX12::Texture2DUpload<uint8_t>>(device, 1, 1, DXGI_FORMAT_R8G8B8A8_UINT);
+			texture->Update(color, sizeof(uint8_t) * 4);
+		}
+
+		template <IsHeap HeapType>
+		void CreateSRV(DX12::DescriptorHeap<HeapType>* heap, HeapType::Slot item) const
+		{
+			auto handle = heap->CPUHandle(item, allocation.get());
+
+			texture->CreateSRV(handle);
+		}
+
+		uint16_t GetIndex() const
+		{
+			return allocation->GetIndex();
+		}
+
+	};
+
+	eastl::shared_ptr<DefaultTexture> defaultWhiteTexture = nullptr;
+	eastl::shared_ptr<DefaultTexture> defaultNormalTexture = nullptr;
+	eastl::shared_ptr<DefaultTexture> defaultBlackTexture = nullptr;
+	eastl::shared_ptr<DefaultTexture> defaultRMAOSTexture = nullptr;
 
 	// We'll group trishapes by their parent nodes, hopefully trishapes don't move on their own
 	eastl::unordered_map<eastl::string, Model> models;
@@ -680,7 +712,7 @@ struct Raytracing : public Feature
 				eastl::vector<D3D11_SUBRESOURCE_DATA> initialDataLocal;
 				eastl::vector<DirectX::ScratchImage> outputMips;
 
-				bool share = rt.settingSharedTexture || pDesc && IsShareableFormat(pDesc->Format);
+				bool share = rt.shareTexture || pDesc && IsShareableFormat(pDesc->Format);
 
 				if (rt.loaded && share && pDesc && pInitialData && pDesc->ArraySize == 1 && pDesc->Usage == D3D11_USAGE_DEFAULT && pDesc->BindFlags == D3D11_BIND_SHADER_RESOURCE && pDesc->MiscFlags == 0 && pDesc->CPUAccessFlags == 0) {
 					bool recompress = rt.settings.RecompressTextures;
@@ -802,7 +834,7 @@ struct Raytracing : public Feature
 				ULONG refCount = func(This);
 
 				if (refCount == 0) {
-					logger::info("[RT] ID3D11Texture2D::Release: {}", reinterpret_cast<uintptr_t>(This));
+					logger::trace("[RT] ID3D11Texture2D::Release: {}", reinterpret_cast<uintptr_t>(This));
 					globals::features::raytracing.sharedTextures.erase(This);
 				}
 
@@ -936,16 +968,11 @@ struct Raytracing : public Feature
 			static void thunk(RE::BGSTextureSet* oThis, RE::BSTextureSet::Texture a_texture, RE::NiSourceTexturePtr& a_srcTexture)
 			{
 				auto& rt = globals::features::raytracing;
-
-				// True PBR uses Displacement as kGlowMap, need a way to tell apart from vanilla material, maybe I could use BGSTextureSet::flags?
-				rt.settingSharedTexture = a_texture == RE::BSTextureSet::Texture::kDiffuse || a_texture == RE::BSTextureSet::Texture::kGlowMap;
-
-				if (rt.settingSharedTexture)
-					logger::debug(fmt::runtime("[RT] BGSTextureSet::SetTexture - Texture: {}"), magic_enum::enum_name(a_texture));
+				rt.shareTexture = ShouldShareTexture(a_texture, rt.settings.PathTracing);
 
 				func(oThis, a_texture, a_srcTexture);
 
-				rt.settingSharedTexture = false;
+				rt.shareTexture = false;
 			};
 			static inline REL::Relocation<decltype(thunk)> func;
 		};
@@ -956,11 +983,11 @@ struct Raytracing : public Feature
 			static void thunk(RE::BSShaderTextureSet* oThis, RE::BSTextureSet::Texture a_texture, RE::NiSourceTexturePtr& a_srcTexture)
 			{
 				auto& rt = globals::features::raytracing;
-				rt.settingSharedTexture = a_texture == RE::BSTextureSet::Texture::kDiffuse || a_texture == RE::BSTextureSet::Texture::kGlowMap;
+				rt.shareTexture = ShouldShareTexture(a_texture, rt.settings.PathTracing);
 
 				func(oThis, a_texture, a_srcTexture);
 
-				rt.settingSharedTexture = false;
+				rt.shareTexture = false;
 			};
 			static inline REL::Relocation<decltype(thunk)> func;
 		};
@@ -1137,7 +1164,7 @@ struct Raytracing : public Feature
 
 			stl::write_vfunc<0x29, BSShaderAccumulator_StartAccumulating>(RE::VTABLE_BSShaderAccumulator[0]);
 			stl::write_vfunc<0x2A, BSShaderAccumulator_FinishAccumulatingDispatch>(RE::VTABLE_BSShaderAccumulator[0]);
-
+			
 			stl::write_vfunc<0x26, BGSTextureSet_SetTexture>(RE::VTABLE_BGSTextureSet[1]);
 			stl::write_vfunc<0x26, BSShaderTextureSet_SetTexture>(RE::VTABLE_BSShaderTextureSet[0]);
 

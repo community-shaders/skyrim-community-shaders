@@ -344,7 +344,7 @@ struct PS_OUTPUT
 #	if defined(SNOW)
 	float4 Parameters : SV_Target7;
 #	else
-	float4 GeomNormalMetalnessDepth : SV_Target7;
+	float4 GeomNormalMetalness : SV_Target7;
 #	endif
 };
 #else
@@ -3398,7 +3398,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #				endif
 
 	float3 screenGeomNormal = normalize(FrameBuffer::WorldToView(worldGeomNormal, false, eyeIndex));
-	psout.GeomNormalMetalnessDepth = float4(GBuffer::EncodeNormal(screenGeomNormal), metallic, 1.0f);
+	psout.GeomNormalMetalness = float4(GBuffer::EncodeNormal(screenGeomNormal), metallic, 1.0f);
 #			endif // !defined(SNOW)
 #		endif // !defined(RTGI)
 #	endif // DEFERRED

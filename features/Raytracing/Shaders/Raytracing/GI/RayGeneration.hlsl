@@ -20,7 +20,7 @@ void main()
 
     float2 uv = (idx + 0.5f) / size;
     
-    const float4 normalMetalness = GNMXTexture[idx];  
+    const half4 normalMetalness = GNMXTexture[idx];  
     
  	const half3 geometryNormalVS = DecodeNormal(normalMetalness.xy);
 	const float3 geometryNormalWS = normalize(ViewToWorldVector(geometryNormalVS, Frame.ViewInverse));	      
@@ -39,16 +39,16 @@ void main()
         return;
     }
 
-	const snorm float4 normalRoughness = NormalRoughnessTexture[idx];
-    
-	const unorm float perceptualRoughness = max(Scale01(normalRoughness.w, Frame.Roughness.x, Frame.Roughness.y), MIN_ROUGHNESS);  
-    const unorm float roughness = max(Scale01(perceptualRoughness * perceptualRoughness, Frame.Roughness.x, Frame.Roughness.y), MIN_ROUGHNESS);    
+	const snorm half4 normalRoughness = (half4)NormalRoughnessTexture[idx];
+
+    const unorm float perceptualRoughness = clamp(Scale01(normalRoughness.w, Frame.Roughness.x, Frame.Roughness.y), MIN_ROUGHNESS, MAX_ROUGHNESS);
+    const unorm float roughness = perceptualRoughness * perceptualRoughness;    
 
  	const float3 positionVS = ScreenToViewPosition(uv, depthView, Frame.NDCToView);
 	const float3 positionCS = ViewToWorldPosition(positionVS, Frame.ViewInverse);
 	const float3 positionWS = positionCS + Frame.Position.xyz;
 
-	const snorm float3 normalWS = normalize(normalRoughness.xyz);
+	const snorm half3 normalWS = normalRoughness.xyz;
 
     float3 albedo = Color::GammaToLinear(AlbedoTexture[idx].rgb);
     
@@ -64,9 +64,8 @@ void main()
     CreateOrthonormalBasis(normalWS, tangentWS, bitangetWS);
     float3x3 TBN = float3x3(tangentWS, bitangetWS, normalWS);
     
-    float4 result = GGXIndirect(positionWS, geometryNormalWS, TBN, normalWS, viewWS, albedo, DEFAULT_SPECULAR, roughness, metalness, 0, seed);
-    
-    //OutputTexture[idx] = float4(normalWS * 0.5 + 0.5f, 0.0f);
+    float4 result = GGXIndirect(positionWS, geometryNormalWS, TBN, viewWS, albedo, roughness, metalness, 0, seed);
+
     OutputTexture[idx] = MainTexture[idx] + float4(result.rgb, 0.0f);
     
     float3 h_tan = GGXSample(seed, roughness);

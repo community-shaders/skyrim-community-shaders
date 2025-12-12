@@ -10,9 +10,12 @@ struct Material
 	half4 BaseColor;
 	half4 EffectColor;
 	half4 TexCoordOffsetScale;
+	half roughness;
+	//half specular;
 	uint16_t BaseTexture;
-	uint16_t EffectTexture;
-	uint16_t RmaosTexture;
+	uint16_t NormalTexture;
+	uint16_t EffectTexture;	
+	uint16_t RMAOSTexture;
 	uint16_t ShaderType;
 	
 #ifndef __cplusplus	

@@ -6,8 +6,19 @@
 
 #include "Raytracing/Includes/Types.hlsli"
 
-#define MAX_DEPTH 1
-#define SHADOW_MAX_DEPTH 1
+#ifndef MAX_DEPTH
+    #ifdef PATH_TRACING
+#define MAX_DEPTH (2)
+    #else
+#define MAX_DEPTH (1)
+    #endif
+#endif
+
+#ifndef SAMPLES
+#define SAMPLES (1)
+#endif
+
+#define SHADOW_MAX_DEPTH (1)
 
 #define DIFFUSE_RAY_HITGROUP_IDX 0
 #define DIFFUSE_RAY_MISS_IDX 0
@@ -24,7 +35,11 @@
 #define DEFAULT_ROUGHNESS 0.5
 
 #define MIN_DIELECTRICS_F0 0.04f
+
 #define MIN_ROUGHNESS 0.04f
+#define MAX_ROUGHNESS 1.0f
+
+#define GN_OFFSET (0.1f)
 
 uint InitRandomSeed(uint2 coord, uint2 size, uint frameCount)
 {
@@ -46,7 +61,6 @@ float Random(inout uint seed)
 
 void CreateOrthonormalBasis(in float3 normal, out float3 tangent, out float3 bitangent)
 {
-    //float sign = copysign(1.0f, normal.z);
     float sign = normal.z >= 0.0 ? 1.0 : -1.0;
     float a = -1.0 / (sign + normal.z);
     float b = normal.x * normal.y * a;
@@ -55,21 +69,19 @@ void CreateOrthonormalBasis(in float3 normal, out float3 tangent, out float3 bit
     bitangent = float3(b, sign + normal.y * normal.y * a, -normal.y);
 }
 
-float3 TangentSample(inout uint randomSeed)
+float3 CosineSampleHemisphere(inout uint seed)
 {
-    float r1 = Random(randomSeed);
-    float r2 = Random(randomSeed);
-    
-    float phi = 2.0 * Math::PI * r1;
-    
-    float cosTheta = sqrt(1.0 - r2);
-    float sinTheta = sqrt(r2);
+    float u1 = Random(seed);
+    float u2 = Random(seed);
 
-    return float3(
-        cos(phi) * sinTheta,
-        sin(phi) * sinTheta,
-        cosTheta
-    );
+    float r = sqrt(u1);
+    float theta = 2.0 * Math::PI * u2;
+
+    float x = r * cos(theta);
+    float y = r * sin(theta);
+    float z = sqrt(1.0 - u1);
+
+    return float3(x, y, z);
 }
 
 float3 TangentSampleScaled(inout uint randomSeed, float roughness)
@@ -109,6 +121,19 @@ float3 GGXSample(inout uint randomSeed, float2 alpha)
     return normalize(float3(x, y, z));
 }
 
+float3 SampleGGX(const float roughness, inout uint randomSeed)
+{
+    const float r1 = Random(randomSeed);
+    const float r2 = Random(randomSeed);
+    
+    const float a = max(0.001f, roughness);
+    const float phi = Math::PI * r1;
+    const float cos_theta = sqrt((1.0f - r2) / (1.0f + (a*a - 1.0f) * r2));
+    const float sin_theta = sqrt(1.0f - cos_theta * cos_theta);
+
+    return float3(cos(phi) * sin_theta, sin(phi) * sin_theta, cos_theta);
+}
+
 float3 SampleGGXVNDF_Direct(float3 V_tan, inout uint randomSeed, float roughness)
 {
     float r1 = Random(randomSeed);
@@ -120,9 +145,8 @@ float3 SampleGGXVNDF_Direct(float3 V_tan, inout uint randomSeed, float roughness
 
     float3 H_tan = float3(sinTheta * cos(phi), sinTheta * sin(phi), cosTheta);
 
-    float3 L_tan = normalize(2.0 * dot(V_tan, H_tan) * H_tan - V_tan);
-
-    return L_tan;
+    // L_Tan
+    return normalize(2.0 * dot(V_tan, H_tan) * H_tan - V_tan);
 }
 
 float3 TangentToWorld(float3 normal, float3 tangentSample)
@@ -144,7 +168,7 @@ float D_GGX(float NoH, float roughness) {
 
 float3 F0(float3 albedo, float metalness)
 {
-    return 0.16 * DEFAULT_SPECULARF0 * (1.0 - metalness) + albedo * metalness; 
+    return lerp(DEFAULT_SPECULARF0.xxx, albedo, metalness);
 }
 
 float3 F_Schlick(float u, float3 f0) {
@@ -163,21 +187,17 @@ float Fd_Lambert() {
     return 1.0 / Math::PI;
 }
 
-float Luminance(float3 rgb)
+float DiffuseProbability(float roughness, float metalness, float3 f0, float NoV)
 {
-    return dot(rgb, float3(0.2126, 0.7152, 0.0722));
-}
+    if (metalness >= 1.0f) return 0.0f;
 
-float DiffuseProbability(float3 albedo, float3 specular, float metalness, float roughness, float NdotV)
-{
-    if (metalness == 1.0f && roughness == 0.0f) return 0.0f;
-
-    float3 f0 = 0.16 * DEFAULT_SPECULARF0 * (1.0 - metalness) + albedo * metalness;        
-    float3 F = F_Schlick(NdotV, f0); // LoH
+    float3 F = F_Schlick(NoV, f0);
     
-    float specularEnergy = Luminance(F) * (1.0f - 0.5f * roughness);
+    float specularEnergy = (F.r + F.g + F.b) / 3.0f;
     
-    return clamp(1.0f - specularEnergy, 0.1f, 0.9f);
+    float diffuseEnergy = (1.0f - specularEnergy) * (1.0 - 0.2 * roughness);
+    
+    return clamp(diffuseEnergy, 0.05f, 0.95f);
 }
 
 #endif // COMMONRT_HLSI

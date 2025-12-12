@@ -72,6 +72,11 @@ namespace DX12
 			device->CreateUnorderedAccessView(resource.get(), counterResource, &uavDesc, handle);
 		}
 
+		virtual void CreateRTV(D3D12_RENDER_TARGET_VIEW_DESC rtvDesc, CD3DX12_CPU_DESCRIPTOR_HANDLE handle)
+		{
+			device->CreateRenderTargetView(resource.get(), &rtvDesc, handle);
+		}
+
 		virtual void CreateCBV(CD3DX12_CPU_DESCRIPTOR_HANDLE handle)
 		{
 			D3D12_CONSTANT_BUFFER_VIEW_DESC cbvDesc = {};
@@ -170,7 +175,7 @@ namespace DX12
 	public:
 		explicit Texture(
 			ID3D12Device5* device, 
-			D3D12_RESOURCE_DIMENSION dimension, UINT64 width, UINT height, DXGI_FORMAT format, D3D12_RESOURCE_FLAGS flags) :
+			D3D12_RESOURCE_DIMENSION dimension, UINT64 width, UINT height, DXGI_FORMAT format, D3D12_RESOURCE_FLAGS flags = D3D12_RESOURCE_FLAG_NONE) :
 			Resource(device, D3D12_HEAP_TYPE_DEFAULT, Desc(dimension, width, height, format, flags), D3D12_RESOURCE_STATE_COMMON) {}
 
 		virtual ~Texture() = default;
@@ -181,19 +186,115 @@ namespace DX12
 	public:
 		explicit Texture2D(
 			ID3D12Device5* device,
-			UINT64 width, UINT height, DXGI_FORMAT format, D3D12_RESOURCE_FLAGS flags) :
+			UINT64 width, UINT height, DXGI_FORMAT format, D3D12_RESOURCE_FLAGS flags = D3D12_RESOURCE_FLAG_NONE) :
 			Texture(device, D3D12_RESOURCE_DIMENSION_TEXTURE2D, width, height, format, flags) {}
 
 		virtual ~Texture2D() = default;
 
+		virtual void CreateSRV(CD3DX12_CPU_DESCRIPTOR_HANDLE handle)
+		{
+			D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
+			srvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
+			srvDesc.Format = desc.Format;
+			srvDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
+			srvDesc.Texture2D.MostDetailedMip = 0;
+			srvDesc.Texture2D.MipLevels = desc.MipLevels;
+			srvDesc.Texture2D.PlaneSlice = 0;
+			srvDesc.Texture2D.ResourceMinLODClamp = 0.0f;
+
+			Texture::CreateSRV(srvDesc, handle);
+		}
+
 		virtual void CreateUAV(CD3DX12_CPU_DESCRIPTOR_HANDLE handle)
 		{
 			D3D12_UNORDERED_ACCESS_VIEW_DESC uavDesc = {};
-			uavDesc.ViewDimension = D3D12_UAV_DIMENSION_TEXTURE2D;
 			uavDesc.Format = desc.Format;
+			uavDesc.ViewDimension = D3D12_UAV_DIMENSION_TEXTURE2D;
 
 			Texture::CreateUAV(uavDesc, handle);
 		}
+
+		virtual void CreateRTV(CD3DX12_CPU_DESCRIPTOR_HANDLE handle)
+		{
+			D3D12_RENDER_TARGET_VIEW_DESC rtvDesc = {};
+			rtvDesc.Format = desc.Format;
+			rtvDesc.ViewDimension = D3D12_RTV_DIMENSION_TEXTURE2D;
+
+			Texture::CreateRTV(rtvDesc, handle);
+		}
+	};
+
+	template <typename T>
+	class Texture2DUpload : public Texture2D
+	{
+	public:
+		explicit Texture2DUpload(
+			ID3D12Device5* device,
+			UINT64 width, UINT height, DXGI_FORMAT format, D3D12_RESOURCE_FLAGS flags = D3D12_RESOURCE_FLAG_NONE) :
+			Texture2D(device, width, height, format, flags)
+		{
+			const auto& uploadHeap = CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_UPLOAD);
+
+			D3D12_RESOURCE_DESC upDesc = Resource::desc;
+			upDesc.Flags = D3D12_RESOURCE_FLAG_NONE;
+
+			UINT64 uploadBufferSize;
+			device->GetCopyableFootprints(&upDesc, 0, 1, 0, nullptr, nullptr, nullptr, &uploadBufferSize);
+
+			const auto& uploadDesc = CD3DX12_RESOURCE_DESC::Buffer(uploadBufferSize);
+
+			DX::ThrowIfFailed(device->CreateCommittedResource(
+				&uploadHeap,
+				D3D12_HEAP_FLAG_NONE,
+				&uploadDesc,
+				D3D12_RESOURCE_STATE_GENERIC_READ,
+				nullptr,
+				IID_PPV_ARGS(&uploadResource)));		
+		}
+
+		void Update(void const* src_data, size_t data_size, size_t begin = 0)
+		{
+			void* pData;
+			DX::ThrowIfFailed(uploadResource->Map(0, &readRange, &pData));
+
+			uint8_t* dst = static_cast<uint8_t*>(pData) + begin;
+			memcpy(dst, src_data, data_size);
+
+			D3D12_RANGE writeRange = { begin, begin + data_size };
+			uploadResource->Unmap(0, &writeRange);
+		}
+
+		void UpdateAt(void const* src_data, size_t index = 0)
+		{
+			size_t begin = index * sizeof(T);
+
+			void* pData;
+			DX::ThrowIfFailed(uploadResource->Map(0, &readRange, &pData));
+
+			uint8_t* dst = static_cast<uint8_t*>(pData) + begin;
+			memcpy(dst, src_data, sizeof(T));
+
+			D3D12_RANGE writeRange = { begin, begin + sizeof(T) };
+			uploadResource->Unmap(0, &writeRange);
+		}
+
+		void UpdateList(T const* src_data, std::int64_t localCount)
+		{
+			Update(src_data, sizeof(T) * localCount);
+		}
+
+		void Upload(ID3D12GraphicsCommandList4* commandList)
+		{
+			this->TransitionBarrier(commandList, D3D12_RESOURCE_STATE_COPY_DEST);
+			commandList->CopyResource(this->resource.get(), uploadResource.get());
+			//commandList->CopyBufferRegion(this->resource.get(), 0, uploadResource.get(), 0, sizeof(T) * this->count);
+			this->TransitionBarrier(commandList, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+		}
+
+		winrt::com_ptr<ID3D12Resource> uploadResource = nullptr;
+
+	private:
+		D3D12_RANGE readRange = { 0, 0 };
 	};
 
 	template <typename T>

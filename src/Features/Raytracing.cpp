@@ -30,6 +30,7 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	PointFade,
 	GammaToLinear,
 	RaytracedShadows,
+	PathTracing,
 	CullShadows,
 	RecompressTextures,
 	DLSSRRQualityMode,
@@ -55,6 +56,7 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	PointFade,
 	GammaToLinear,
 	RaytracedShadows,
+	PathTracing,
 	CullShadows,
 	RecompressTextures,
 	DebugOutput,
@@ -159,7 +161,14 @@ void Raytracing::DrawSettings()
 			}
 
 			ImGui::Checkbox("Cull Shadows", &settings.CullShadows);
+
+			ImGui::TreePop();
 		}
+	}
+
+	ImGui::Checkbox("Path Tracing", &settings.PathTracing);
+	if (auto _tt = Util::HoverTooltipWrapper()) {
+		ImGui::Text("Experimental Path Tracing mode.\n");
 	}
 
 	ImGui::Checkbox("Recompress Textures", &settings.RecompressTextures);
@@ -223,8 +232,6 @@ void Raytracing::DrawSettings()
 				}
 
 				settings.PIXCaptureLocation = static_cast<PIXCaptureLocation>(pixCapLocation);
-
-				ImGui::TreePop();
 			}
 
 			if (ImGui::Button("Single Frame Capture")) {
@@ -247,6 +254,8 @@ void Raytracing::DrawSettings()
 				pixCaptureStarted = false;
 				pixTDR = true;
 			}
+
+			ImGui::TreePop();
 		}
 	}
 
@@ -280,8 +289,6 @@ void Raytracing::DrawSettings()
 
 void Raytracing::SetupResources()
 {
-	defaultTexture = { textureRegisters.Allocate(), AllocationDeleter() };
-
 	auto renderer = globals::game::renderer;
 	auto device = globals::d3d::device;
 
@@ -296,6 +303,29 @@ void Raytracing::SetupResources()
 	shadowHeap = eastl::make_unique<DX12::DescriptorHeap<ShadowsHeap>>(
 		d3d12Device.get(),
 		D3D12_DESCRIPTOR_HEAP_DESC(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, ShadowsHeap::NumDescriptors(), D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE));
+
+	// Setup default textures (this is a bit wordy...)
+	{
+		uint8_t white[] = { 255u, 255u, 255u, 255u };
+		uint8_t normal[] = { 128u, 128u, 255u, 255u };
+		uint8_t black[] = { 0u, 0u, 0u, 0u };
+		uint8_t rmaos[] = { 128u, 0u, 255u, 10u };
+
+		defaultWhiteTexture = eastl::make_shared<DefaultTexture>(d3d12Device.get(), textureRegisters.Allocate(), white);
+		defaultNormalTexture = eastl::make_shared<DefaultTexture>(d3d12Device.get(), textureRegisters.Allocate(), normal);
+		defaultBlackTexture = eastl::make_shared<DefaultTexture>(d3d12Device.get(), textureRegisters.Allocate(), black);
+		defaultRMAOSTexture = eastl::make_shared<DefaultTexture>(d3d12Device.get(), textureRegisters.Allocate(), rmaos);
+
+		defaultWhiteTexture->texture->Upload(commandList.get());
+		defaultNormalTexture->texture->Upload(commandList.get());
+		defaultBlackTexture->texture->Upload(commandList.get());
+		defaultRMAOSTexture->texture->Upload(commandList.get());
+
+		defaultWhiteTexture->CreateSRV<GIHeap>(giHeap.get(), GIHeapDef::Slot::Textures);
+		defaultNormalTexture->CreateSRV<GIHeap>(giHeap.get(), GIHeapDef::Slot::Textures);
+		defaultBlackTexture->CreateSRV<GIHeap>(giHeap.get(), GIHeapDef::Slot::Textures);
+		defaultRMAOSTexture->CreateSRV<GIHeap>(giHeap.get(), GIHeapDef::Slot::Textures);
+	}
 
 	auto mainTex = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMAIN];
 
@@ -1068,6 +1098,8 @@ void Raytracing::ConvertNormalGlossiness()
 
 	auto dispatchCount = Util::GetScreenDispatchCount();
 	context->Dispatch(dispatchCount.x, dispatchCount.y, 1);
+
+	//context->CSSetUnorderedAccessViews(0, 1, nullptr, nullptr);
 }
 
 void Raytracing::SkyCubeToHemi()
@@ -1088,6 +1120,8 @@ void Raytracing::SkyCubeToHemi()
 	uint dispatch = (uint)std::ceil(hemiResolution / 8.0f);
 
 	context->Dispatch(dispatch, dispatch, 1);
+
+	//context->CSSetUnorderedAccessViews(0, 1, nullptr, nullptr);
 }
 
 void Raytracing::Main_RenderWorld(bool a1)
@@ -1440,7 +1474,7 @@ void Raytracing::RemoveInstance(RE::NiNode* pRoot, bool releaseModel)
 	}
 }
 
-eastl::shared_ptr<Allocation> Raytracing::GetTextureRegister(ID3D11Texture2D* dx11Texture)
+eastl::shared_ptr<Allocation> Raytracing::GetTextureRegister(ID3D11Texture2D* dx11Texture, eastl::shared_ptr<Allocation> defaultTexture)
 {
 	// Search for texture in shared map
 	if (auto sharedIt = sharedTextures.find(dx11Texture); sharedIt != sharedTextures.end()) {
@@ -1477,7 +1511,7 @@ eastl::shared_ptr<Allocation> Raytracing::GetTextureRegister(ID3D11Texture2D* dx
 
 void Raytracing::AddInstance(RE::NiNode* pNiNode, eastl::string path)
 {
-	logger::info("[RT] AddInstance - {}, Path: {}", pNiNode->name, path);
+	logger::debug("[RT] AddInstance - {}, Path: {}", pNiNode->name, path);
 
 	//std::lock_guard lock{ geometryMutex };
 
@@ -2250,8 +2284,33 @@ void Raytracing::DrawRTGI()
 				specularHitDistanceTexture->TransitionBarrier(commandList.get(), D3D12_RESOURCE_STATE_COPY_SOURCE);
 				commandList->CopyResource(mainTexture->resource.get(), specularHitDistanceTexture->resource.get());
 				specularHitDistanceTexture->TransitionBarrier(commandList.get(), D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
-			}
+			} else if (settings.DebugOutput == DebugOutput::NormalRoughnessGbuffer) {
 
+				auto transitionCopy = CD3DX12_RESOURCE_BARRIER::Transition(normalRoughnessTexture->resource.get(), D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_COPY_SOURCE);
+				commandList->ResourceBarrier(1, &transitionCopy);
+
+				commandList->CopyResource(mainTexture->resource.get(), normalRoughnessTexture->resource.get());
+
+				auto transitionNonPixelRes = CD3DX12_RESOURCE_BARRIER::Transition(normalRoughnessTexture->resource.get(), D3D12_RESOURCE_STATE_COPY_SOURCE, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+				commandList->ResourceBarrier(1, &transitionNonPixelRes);
+			} else if (settings.DebugOutput == DebugOutput::GeometryNormalMetalness) {
+				auto transitionCopy = CD3DX12_RESOURCE_BARRIER::Transition(GNMDTexture.get(), D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_COPY_SOURCE);
+				commandList->ResourceBarrier(1, &transitionCopy);
+
+				commandList->CopyResource(mainTexture->resource.get(), GNMDTexture.get());
+
+				auto transitionNonPixelRes = CD3DX12_RESOURCE_BARRIER::Transition(GNMDTexture.get(), D3D12_RESOURCE_STATE_COPY_SOURCE, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+				commandList->ResourceBarrier(1, &transitionNonPixelRes);
+			} else if (settings.DebugOutput == DebugOutput::ReflectanceGBuffer) {
+
+				auto transitionCopy = CD3DX12_RESOURCE_BARRIER::Transition(gbufferReflectanceTexture.get(), D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_COPY_SOURCE);
+				commandList->ResourceBarrier(1, &transitionCopy);
+
+				commandList->CopyResource(mainTexture->resource.get(), gbufferReflectanceTexture.get());
+
+				auto transitionNonPixelRes = CD3DX12_RESOURCE_BARRIER::Transition(gbufferReflectanceTexture.get(), D3D12_RESOURCE_STATE_COPY_SOURCE, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+				commandList->ResourceBarrier(1, &transitionNonPixelRes);
+			}
 		}
 
 		DX::ThrowIfFailed(commandList->Close());
@@ -2898,16 +2957,31 @@ void Raytracing::CompileSkinningShaders()
 	DX::ThrowIfFailed(skinningPipeline->SetName(L"Compute Pipeline - Vertex Update"));
 }
 
-
 void Raytracing::CompileRTGIShaders()
 {
+	const auto modePath = settings.PathTracing ? L"PT" : L"GI";
+
+	const int bounces = settings.PathTracing ? settings.Bounces + 1 : settings.Bounces;
+
+	const auto bouncesWStr = std::to_wstring(bounces);
+	const auto samplesWStr = std::to_wstring(settings.SamplesPerPixel);
+
+	eastl::vector<DxcDefine> defines = { 
+		{ L"MAX_DEPTH", bouncesWStr.c_str() },
+		{ L"SAMPLES", samplesWStr.c_str() },
+	};
+
+	if (settings.PathTracing) {
+		defines.emplace_back(L"PATH_TRACING");
+	}
+
 	winrt::com_ptr<IDxcBlob> rayGenBlob;
-	ShaderUtils::CompileShader(rayGenBlob, L"Data/Shaders/Raytracing/GI/RayGeneration.hlsl");
+	ShaderUtils::CompileShader(rayGenBlob, std::format(L"Data/Shaders/Raytracing/{}/RayGeneration.hlsl", modePath).c_str(), defines);
 
 	winrt::com_ptr<IDxcBlob> missBlob, closestHitBlob, anyHitBlob;
-	ShaderUtils::CompileShader(missBlob, L"Data/Shaders/Raytracing/GI/Miss.hlsl");
-	ShaderUtils::CompileShader(closestHitBlob, L"Data/Shaders/Raytracing/GI/ClosestHit.hlsl");
-	ShaderUtils::CompileShader(anyHitBlob, L"Data/Shaders/Raytracing/GI/AnyHit.hlsl");
+	ShaderUtils::CompileShader(missBlob, L"Data/Shaders/Raytracing/GI/Miss.hlsl", defines);
+	ShaderUtils::CompileShader(closestHitBlob, L"Data/Shaders/Raytracing/GI/ClosestHit.hlsl", defines);
+	ShaderUtils::CompileShader(anyHitBlob, L"Data/Shaders/Raytracing/GI/AnyHit.hlsl", defines);
 
 	winrt::com_ptr<IDxcBlob> shadowMissBlob;
 	ShaderUtils::CompileShader(shadowMissBlob, L"Data/Shaders/Raytracing/GI/ShadowMiss.hlsl");
@@ -2933,7 +3007,7 @@ void Raytracing::CompileRTGIShaders()
 		// Shader + pipeline config
 		pipelineBuilder.AddShaderConfig(20, 8);
 		pipelineBuilder.AddGlobalRootSignature(rootSignature.get());
-		pipelineBuilder.AddPipelineConfig(2); // Max recursion depth
+		pipelineBuilder.AddPipelineConfig(settings.Bounces + (settings.PathTracing ? 2 : 1)); // Max recursion depth
 
 		auto desc = pipelineBuilder.MakeStateObjectDesc();
 		HRESULT hr = d3d12Device->CreateStateObject(desc, IID_PPV_ARGS(&pipelineRT));

@@ -33,13 +33,26 @@ public:
 		half4 BaseColor;
 		half4 EffectColor;
 		half4 TexCoordOffsetScale;
+
+		half roughnes;
+
 		eastl::shared_ptr<Allocation> BaseTexture;
+		eastl::shared_ptr<Allocation> NormalTexture;
 		eastl::shared_ptr<Allocation> EffectTexture;
-		//eastl::shared_ptr<Allocation> RmaosTexture;
+		eastl::shared_ptr<Allocation> RMAOSTexture;
+
 		RE::BSShader::Type ShaderType;
 
 		MaterialData GetData() {
-			return MaterialData(BaseColor, EffectColor, TexCoordOffsetScale, BaseTexture->GetIndex(), EffectTexture->GetIndex(), 0, static_cast<uint16_t>(ShaderType));
+			return MaterialData(
+				BaseColor, EffectColor, 
+				TexCoordOffsetScale,
+				roughnes,
+				BaseTexture->GetIndex(), 
+				NormalTexture->GetIndex(), 
+				EffectTexture->GetIndex(), 
+				RMAOSTexture->GetIndex(), 
+				static_cast<uint16_t>(ShaderType));
 		}
 	};
 
@@ -48,6 +61,7 @@ public:
 
 	uint vertexCount = 0;
 	uint triangleCount = 0;
+	RE::BSGraphics::Vertex::Flags vertexFlags;
 
 	// Reference to original geometry
 	RE::BSGeometry* geometry = nullptr;
@@ -97,4 +111,6 @@ public:
 	void BuildMaterial(const RE::BSGeometry::GEOMETRY_RUNTIME_DATA& geometryRuntimeData, [[maybe_unused]] const char* name);
 	
 	void CreateBuffers(const std::wstring& name);
+
+	void CalculateNTB(bool normals);
 };
