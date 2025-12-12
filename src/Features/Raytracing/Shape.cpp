@@ -70,14 +70,14 @@ void Shape::BuildMesh(RE::BSGraphics::TriShape* rendererData, const std::uint32_
 				std::memcpy(&vertexData.Texcoord0, vtx + uvOffset, sizeof(half2));
 			}
 
-			if (vertexFlags & RE::BSGraphics::Vertex::VF_NORMAL) {
+			if (hasNormal) {
 				uint32_t normalData;
 				std::memcpy(&normalData, vtx + normOffset, sizeof(uint32_t));
 				auto normalUnpacked = UnpackByte4(normalData);
 
 				vertexData.Normal = Normalize(float3::TransformNormal({ normalUnpacked.x, normalUnpacked.y, normalUnpacked.z }, transform));
 
-				if (vertexFlags & RE::BSGraphics::Vertex::VF_TANGENT) {
+				if (hasTangent) {
 					uint32_t tangentData;
 					std::memcpy(&tangentData, vtx + tangOffset, sizeof(uint32_t));
 					auto tangentUnpacked = UnpackByte4(tangentData);
@@ -186,28 +186,28 @@ void Shape::BuildMaterial(const RE::BSGeometry::GEOMETRY_RUNTIME_DATA& geometryR
 		auto* effect = geometryRuntimeData.properties[State::kEffect].get();
 
 		if (effect) {
-			auto lightingShader = netimmerse_cast<RE::BSLightingShaderProperty*>(effect);
+			auto lightingShaderProp = netimmerse_cast<RE::BSLightingShaderProperty*>(effect);
 
-			logger::debug("[RT] BuildMaterial - BSLightingShaderProperty Flags: {}", GetFlagsString<EShaderPropertyFlag>(lightingShader->flags.underlying()));
+			logger::debug("[RT] BuildMaterial - BSLightingShaderProperty Flags: {}", GetFlagsString<EShaderPropertyFlag>(lightingShaderProp->flags.underlying()));
 
-			if (lightingShader) {
+			if (lightingShaderProp) {
 				// This is always nullptr :(
-				if (auto& effectData = lightingShader->effectData) {
+				if (auto& effectData = lightingShaderProp->effectData) {
 					logger::info("[RT] BuildMaterial - Effect - Alpha: {}, Z Test Func: {}", effectData->alpha, magic_enum::enum_name(effectData->zTestFunc));
 				}
 
 				shaderType = RE::BSShader::Type::Lighting;
 
 				effectColor = {
-					lightingShader->emissiveColor->red,
-					lightingShader->emissiveColor->green,
-					lightingShader->emissiveColor->blue,
-					lightingShader->emissiveMult
+					lightingShaderProp->emissiveColor->red,
+					lightingShaderProp->emissiveColor->green,
+					lightingShaderProp->emissiveColor->blue,
+					lightingShaderProp->emissiveMult
 				};
 
-				logger::debug("[RT] BuildMaterial - BSLightingShaderProperty Alpha: {}", lightingShader->alpha);
+				logger::debug("[RT] BuildMaterial - BSLightingShaderProperty Alpha: {}", lightingShaderProp->alpha);
 
-				if (auto shaderMaterial = lightingShader->material) {
+				if (auto shaderMaterial = lightingShaderProp->material) {
 					texCoordOffsetScale = {
 						shaderMaterial->texCoordOffset[0].x, shaderMaterial->texCoordOffset[0].y,
 						shaderMaterial->texCoordScale[0].x, shaderMaterial->texCoordScale[0].y
@@ -226,10 +226,8 @@ void Shape::BuildMaterial(const RE::BSGeometry::GEOMETRY_RUNTIME_DATA& geometryR
 					}
 
 					// TrueBR
-					if (lightingShader->flags.any(TruePBR::PBRFlag)) {
+					if (lightingShaderProp->flags.any(TruePBR::PBRFlag)) {
 						if (const auto* lightingPBRMaterial = skyrim_cast<BSLightingShaderMaterialPBR*>(shaderMaterial)) {
-							logger::debug("[RT] BuildMaterial - BSLightingShaderMaterialPBR Alpha: {}", lightingPBRMaterial->materialAlpha);
-
 							effectTexture = TryGetTexture(lightingPBRMaterial->emissiveTexture);
 							rmaosTexture = TryGetTexture(lightingPBRMaterial->rmaosTexture);
 
