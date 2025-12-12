@@ -113,11 +113,12 @@ float3 GGXDirectD(in float3 position, in float3 n, in float3 v, in float3 albedo
 {
     float3 l = light.Vector;
 
-    float3 diffuse = GGXDirect(l, n, v, albedo, roughness, metalness);
+    float3 diffuse = GGXDirect(l, n, v, albedo, roughness, metalness) * light.Color;
 
-    float3 atten = TraceRayShadow(Scene, position, l);
+    if (any(diffuse > MIN_DIFFUSE_SHADOW))
+        diffuse *= TraceRayShadow(Scene, position, l);
 
-    return diffuse * (light.Color * atten) * Frame.Diffuse;
+    return diffuse * Frame.Diffuse;
 }
 
 float3 GGXDirectP(in float3 position, in float3 n, in float3 v, in float3 albedo, in float roughness, in float metalness, in LightData lightData, inout uint randomSeed)
@@ -134,12 +135,15 @@ float3 GGXDirectP(in float3 position, in float3 n, in float3 v, in float3 albedo
     float dist = length(l);      
     l /= dist;
     
-    float3 diffuse = GGXDirect(l, n, v, albedo, roughness, metalness);
-    
+    float atten = LinearAtten(dist, light.Range);
     //float atten = InverseSquareAtten(dist, light.Range); // This requires all lights to be ISL enabled
-    float atten = LinearAtten(dist, light.Range) * TraceRayShadowFinite(Scene, position, l, dist);    
+    
+    float3 diffuse = GGXDirect(l, n, v, albedo, roughness, metalness) * atten * light.Color;
 
-    return diffuse * (light.Color * atten) * float(lightData.Count) * Frame.Diffuse;
+    if (any(diffuse > MIN_DIFFUSE_SHADOW))
+        diffuse *= TraceRayShadowFinite(Scene, position, l, dist);
+    
+    return diffuse * float(lightData.Count) * Frame.Diffuse;
 }
 
 float4 GGXIndirect(in float3 position, in float3 GN, float3x3 TBN, in float3 v, in float3 albedo, in float roughness, in float metalness, in float ao, in uint depth, inout uint randomSeed)
