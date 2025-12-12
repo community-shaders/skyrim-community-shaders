@@ -862,8 +862,9 @@ struct Raytracing : public Feature
 
 				if (rt.Active()) {
 					rt.BSShader_SetupGeometry(This, Pass, RenderFlags);
-
-					if (rt.renderingCubemap)
+					
+					// If RT is on only sky goes into cubemaps
+					if (rt.renderingCubemap && ShaderType != RE::BSShader::Type::Sky)
 						return;
 				}
 
@@ -1146,8 +1147,11 @@ struct Raytracing : public Feature
 
 			stl::detour_thunk<Main_RenderWorld>(REL::RelocationID(100424, 107142));
 
+			// We use these to render only the sky to the cubemaps, maybe we it would be cleaner if we could override cubemap renderpass?
 			stl::write_vfunc<0x6, BSShader_SetupGeometry<RE::BSShader::Type::Lighting>>(RE::VTABLE_BSLightingShader[0]);
-			//stl::write_vfunc<0x6, BSShader_SetupGeometry<RE::BSShader::Type::Effect>>(RE::VTABLE_BSEffectShader[0]);
+			stl::write_vfunc<0x6, BSShader_SetupGeometry<RE::BSShader::Type::Effect>>(RE::VTABLE_BSEffectShader[0]);
+			stl::write_vfunc<0x6, BSShader_SetupGeometry<RE::BSShader::Type::DistantTree>>(RE::VTABLE_BSDistantTreeShader[0]);
+
 			//stl::write_vfunc<0x6, BSSkyShader_SetupGeometry>(RE::VTABLE_BSSkyShader[0]);
 
 			stl::write_vfunc<0x35, BSCubeMapCamera_RenderCubemap>(RE::VTABLE_BSCubeMapCamera[0]);
