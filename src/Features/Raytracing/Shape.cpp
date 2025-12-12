@@ -409,7 +409,7 @@ void Shape::CreateBuffers(const std::wstring& name)
 	}
 
 	// Material
-	auto materialData = material.GetData();
+	auto materialData = material.GetData(rt.settings.Emissive);
 	materialBuffer->UpdateAt(&materialData, registerIndex->GetIndex());
 }
 

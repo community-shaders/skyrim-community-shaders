@@ -60,7 +60,7 @@ void HitMesh(inout IndirectPayload payload, in BuiltInTriangleIntersectionAttrib
     
 #ifdef PATH_TRACING
     float3 normal = normalTexture.SampleLevel(BaseSampler, texCoord, 0).rgb;
-    float3 rmaos = rmaosTexture.SampleLevel(BaseSampler, texCoord, 0).rgb;
+    float4 rmaos = rmaosTexture.SampleLevel(BaseSampler, texCoord, 0);
     
     float tangentSign = (dot(cross(worldNormal, worldTangent), worldBitangent) < 0.0f) ? -1.0f : 1.0f; 
     
@@ -101,10 +101,10 @@ void HitMesh(inout IndirectPayload payload, in BuiltInTriangleIntersectionAttrib
 #if !defined(LAMBERT)
     float3 viewDirection = normalize(-WorldRayDirection());
     
-    const unorm float metalness = Scale01(metalnessSrc, Frame.Metalness.x, Frame.Metalness.y);
-    
     const unorm float perceptualRoughness = clamp(Scale01(roughnessSrc, Frame.Roughness.x, Frame.Roughness.y), MIN_ROUGHNESS, MAX_ROUGHNESS);
-    const unorm float roughness = perceptualRoughness * perceptualRoughness;
+    const unorm float roughness = perceptualRoughness * perceptualRoughness;    
+    
+    const unorm float metalness = Scale01(metalnessSrc, Frame.Metalness.x, Frame.Metalness.y);
 #endif
     
     uint randomSeed = payload.data.GetSeed();

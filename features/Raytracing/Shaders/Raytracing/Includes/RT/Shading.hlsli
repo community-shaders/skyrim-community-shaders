@@ -164,9 +164,9 @@ float4 GGXIndirect(in float3 position, in float3 GN, float3x3 TBN, in float3 v, 
                
         float3 bounceColor = TraceRayIndirect(Scene, position + (GN * GN_OFFSET), l, depth, randomSeed).rgb;
     
-        float NoV = abs(dot(n, v)) + 1e-5; 
+        float NoL = saturate(dot(n, l)); 
         
-        return float4((bounceColor * albedo * NoV/ diffuseProbability) * Frame.Diffuse, 0.0f);
+        return float4((bounceColor * albedo * NoL/ diffuseProbability) * Frame.Diffuse, 0.0f);
     }
     else
     {

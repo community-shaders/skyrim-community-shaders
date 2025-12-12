@@ -34,7 +34,7 @@ public:
 		half4 EffectColor;
 		half4 TexCoordOffsetScale;
 
-		half roughnes;
+		half roughness;
 
 		eastl::shared_ptr<Allocation> BaseTexture;
 		eastl::shared_ptr<Allocation> NormalTexture;
@@ -43,11 +43,11 @@ public:
 
 		RE::BSShader::Type ShaderType;
 
-		MaterialData GetData() {
+		MaterialData GetData(float emissivePower) {
 			return MaterialData(
-				BaseColor, EffectColor, 
+				BaseColor, EffectColor * half4(1.0f, 1.0f, 1.0f, emissivePower), 
 				TexCoordOffsetScale,
-				roughnes,
+				roughness,
 				BaseTexture->GetIndex(), 
 				NormalTexture->GetIndex(), 
 				EffectTexture->GetIndex(), 
