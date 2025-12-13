@@ -17,7 +17,7 @@ add_executable(MenuTests
     Menu/BackgroundBlurRemovalTests.cpp
 )
 
-target_link_libraries(MenuTests PRIVATE 
+target_link_libraries(MenuTests PRIVATE
     Catch2::Catch2WithMain
 )
 
@@ -37,7 +37,7 @@ add_executable(ShaderValidationTests
     Shaders/HairShaderRefactoringTests.cpp
 )
 
-target_link_libraries(ShaderValidationTests PRIVATE 
+target_link_libraries(ShaderValidationTests PRIVATE
     Catch2::Catch2WithMain
 )
 
