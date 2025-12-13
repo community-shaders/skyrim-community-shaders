@@ -15,7 +15,7 @@ Texture2D<float4> AlbedoTexture                 : register(t2, space0);
 // World normals and roughness - Processed from GBuffer encoded view normals and smoothness
 Texture2D<snorm float4> NormalRoughnessTexture  : register(t3, space0);
 // Geometry normals (Encoded) + metalness + AO
-Texture2D<half4> GNMAOTexture                   : register(t4, space0);
+Texture2D<unorm float4> GNMAOTexture            : register(t4, space0);
 
 RaytracingAccelerationStructure Scene           : register(t5, space0);
 Texture2D<float3> SkyHemisphere                 : register(t6, space0);

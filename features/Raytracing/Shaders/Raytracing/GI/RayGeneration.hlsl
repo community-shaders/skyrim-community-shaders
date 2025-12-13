@@ -15,23 +15,19 @@
 [shader("raygeneration")]
 void main()
 {
-    uint2 idx  = DispatchRaysIndex().xy;
+    uint2 idx = DispatchRaysIndex().xy;
     uint2 size = DispatchRaysDimensions().xy;
 
     float2 uv = (idx + 0.5f) / size;
     
-    const half4 normalMetalnessAO = GNMAOTexture[idx];  
+    const unorm float4 normalMetalnessAO = GNMAOTexture[idx];
     
- 	const half3 geometryNormalVS = DecodeNormal(normalMetalnessAO.xy);
-	const float3 geometryNormalWS = normalize(ViewToWorldVector(geometryNormalVS, Frame.ViewInverse));	      
+    const half3 geometryNormalVS = DecodeNormal(normalMetalnessAO.xy);
+    const float3 geometryNormalWS = normalize(ViewToWorldVector(geometryNormalVS, Frame.ViewInverse));
+    
+    const float depth = DepthTexture[idx];
 
-    const float metalness = Scale01(normalMetalnessAO.z, Frame.Metalness.x, Frame.Metalness.y);
-    
-    const float ao = normalMetalnessAO.w;
-    
-	const float depth = DepthTexture[idx] * 0.99998;  
-
-	const float depthView = ScreenToViewDepth(depth, Frame.CameraData);
+    const float depthView = ScreenToViewDepth(depth, Frame.CameraData);
 
     if (depthView < FP_Z || depth >= SKY_Z)
     {
@@ -41,25 +37,31 @@ void main()
         return;
     }
 
-	const snorm half4 normalRoughness = (half4)NormalRoughnessTexture[idx];
+    const snorm half4 normalRoughness = (half4) NormalRoughnessTexture[idx];
 
     const unorm float perceptualRoughness = clamp(Scale01(normalRoughness.w, Frame.Roughness.x, Frame.Roughness.y), MIN_ROUGHNESS, MAX_ROUGHNESS);
-    const unorm float roughness = perceptualRoughness * perceptualRoughness;    
+    const unorm float roughness = perceptualRoughness * perceptualRoughness;
 
- 	const float3 positionVS = ScreenToViewPosition(uv, depthView, Frame.NDCToView);
-	const float3 positionCS = ViewToWorldPosition(positionVS, Frame.ViewInverse);
-	const float3 positionWS = positionCS + Frame.Position.xyz;
+    uint metalnessAO = normalMetalnessAO.z * 65535.0;
+    
+    const float metalness = Scale01((metalnessAO & 0xFF) / 255.0f, Frame.Metalness.x, Frame.Metalness.y);
+    
+    const float ao = saturate(((metalnessAO >> 8) & 0xFF) / 255.0f);  
+    
+    const float3 positionVS = ScreenToViewPosition(uv, depthView, Frame.NDCToView);
+    const float3 positionCS = ViewToWorldPosition(positionVS, Frame.ViewInverse);
+    const float3 positionWS = positionCS + Frame.Position.xyz;
 
-	const snorm half3 normalWS = normalRoughness.xyz;
+    const snorm half3 normalWS = normalRoughness.xyz;
 
     float3 albedo = Color::GammaToLinear(AlbedoTexture[idx].rgb);
     
     uint seed = InitRandomSeed(DispatchRaysIndex().xy, DispatchRaysDimensions().xy, Frame.FrameCount);
 
     // Let's raytrace straight from GBuffer, we save one ray per pixel
-    #if defined(LAMBERT)
+#if defined(LAMBERT)
     OutputTexture[idx] = float4(LambertianIndirect(positionWS, normalWS, albedo, 0, seed), 0.0f);
-    #else
+#else
     float3 viewWS = normalize(-positionCS);
 
     float3 tangentWS, bitangetWS;
@@ -77,7 +79,7 @@ void main()
     ReflectanceTexture[idx] = float4(saturate(F_Schlick(VdotH, F0(albedo, metalness))), 0.0f);
     
     SpecularHitDist[idx] = result.a;
-    #endif
+#endif
     
     //SpecularOutputTexture[idx] = TraceRaySpecular(Scene, positionWS, reflectWS, 0, seed, Frame.Specular, roughness);
     

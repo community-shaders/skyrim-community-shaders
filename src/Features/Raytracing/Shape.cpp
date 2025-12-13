@@ -108,6 +108,8 @@ void Shape::BuildMesh(RE::BSGraphics::TriShape* rendererData, const std::uint32_
 
 			if (vertexFlags & RE::BSGraphics::Vertex::VF_COLORS) {
 				std::memcpy(&vertexData.Color, vtx + colorOffset, sizeof(uint32_t));
+			} else {
+				vertexData.Color.packed = PackUByte4({ 1.0f, 1.0f, 1.0f, 1.0f });
 			}
 
 			vertices[i] = vertexData;
@@ -142,7 +144,7 @@ void Shape::BuildMesh(RE::BSGraphics::TriShape* rendererData, const std::uint32_
 		triangleCount = triangleCountIn;
 	}
 
-	if (hasNormal || hasTangent) {
+	if (!hasNormal || !hasTangent) {
 		CalculateNTB(!hasNormal);
 	}
 }
@@ -156,7 +158,7 @@ void Shape::BuildMaterial(const RE::BSGeometry::GEOMETRY_RUNTIME_DATA& geometryR
 	auto& rt = globals::features::raytracing;
 
 	//Feature feature = Feature::kNone;
-	float4 baseColor = { 0.0f, 0.0f, 0.0f, 1.0f };
+	float4 baseColor = { 1.0f, 1.0f, 1.0f, 1.0f };
 	float4 effectColor = { 0.0f, 0.0f, 0.0f, 1.0f };
 
 	float4 texCoordOffsetScale = { 0.0f, 0.0f, 1.0f, 1.0f };
@@ -180,20 +182,24 @@ void Shape::BuildMaterial(const RE::BSGeometry::GEOMETRY_RUNTIME_DATA& geometryR
 			flags |= Flags::Alpha;
 		}
 
-		if (property; auto lightingShader = netimmerse_cast<RE::BSLightingShaderProperty*>(property)) {
-			if (auto& effectData = lightingShader->effectData) {
+		if (property; auto* lightingShaderProp = netimmerse_cast<RE::BSLightingShaderProperty*>(property)) {
+			logger::info("[RT] BuildMaterial - [Prop] BSLightingShaderProperty Flags: {}", GetFlagsString<EShaderPropertyFlag>(lightingShaderProp->flags.underlying()));
+
+			if (auto& effectData = lightingShaderProp->effectData) {
 				logger::debug("[RT] BuildMaterial - Effect - Alpha: {}, Z Test Func: {}", effectData->alpha, magic_enum::enum_name(effectData->zTestFunc));
 			}
 		}
 
+		logger::trace("[RT] BuildMaterial {}", name);
+
 		auto* effect = geometryRuntimeData.properties[State::kEffect].get();
 
+		logger::trace("[RT] BuildMaterial - Effect RTTI: {}", effect->GetRTTI()->GetName());
+		
 		if (effect) {
-			auto lightingShaderProp = netimmerse_cast<RE::BSLightingShaderProperty*>(effect);
+			if (auto* lightingShaderProp = skyrim_cast<RE::BSLightingShaderProperty*>(effect)) {
+				logger::debug("[RT] BuildMaterial - [Effect] BSLightingShaderProperty Flags: {}", GetFlagsString<EShaderPropertyFlag>(lightingShaderProp->flags.underlying()));
 
-			logger::debug("[RT] BuildMaterial - BSLightingShaderProperty Flags: {}", GetFlagsString<EShaderPropertyFlag>(lightingShaderProp->flags.underlying()));
-
-			if (lightingShaderProp) {
 				// This is always nullptr :(
 				if (auto& effectData = lightingShaderProp->effectData) {
 					logger::info("[RT] BuildMaterial - Effect - Alpha: {}, Z Test Func: {}", effectData->alpha, magic_enum::enum_name(effectData->zTestFunc));
@@ -211,6 +217,8 @@ void Shape::BuildMaterial(const RE::BSGeometry::GEOMETRY_RUNTIME_DATA& geometryR
 				logger::debug("[RT] BuildMaterial - BSLightingShaderProperty Alpha: {}", lightingShaderProp->alpha);
 
 				if (auto shaderMaterial = lightingShaderProp->material) {
+					//logger::info("[RT] BuildMaterial - Feature: {}, Type: {}", magic_enum::enum_name(shaderMaterial->GetFeature()), magic_enum::enum_name(shaderMaterial->GetType()));
+
 					texCoordOffsetScale = {
 						shaderMaterial->texCoordOffset[0].x, shaderMaterial->texCoordOffset[0].y,
 						shaderMaterial->texCoordScale[0].x, shaderMaterial->texCoordScale[0].y
@@ -221,35 +229,49 @@ void Shape::BuildMaterial(const RE::BSGeometry::GEOMETRY_RUNTIME_DATA& geometryR
 					//	material->texCoordScale[1].x, material->texCoordScale[1].y
 					//};
 
-					if (const auto* lightingBaseMaterial = skyrim_cast<RE::BSLightingShaderMaterialBase*>(shaderMaterial)) {
+					// Using static_cast so we still get diffuse and normal for PBR materials
+					if (const auto* lightingBaseMaterial = static_cast<RE::BSLightingShaderMaterialBase*>(shaderMaterial)) {
 						logger::debug("[RT] BuildMaterial - BSLightingShaderMaterialBase Alpha: {}", lightingBaseMaterial->materialAlpha);
 
 						baseTexture = TryGetTexture(lightingBaseMaterial->diffuseTexture);
 						normalTexture = TryGetTexture(lightingBaseMaterial->normalTexture);
 					}
 
-					// TrueBR
-					if (lightingShaderProp->flags.any(TruePBR::PBRFlag)) {
-						if (const auto* lightingPBRMaterial = skyrim_cast<BSLightingShaderMaterialPBR*>(shaderMaterial)) {
-							effectTexture = TryGetTexture(lightingPBRMaterial->emissiveTexture);
-							rmaosTexture = TryGetTexture(lightingPBRMaterial->rmaosTexture);
+					// TrueBR - Tried to check for 'lightingShaderProp->flags.any(TruePBR::PBRFlag)' 
+					// where 'TruePBR::PBRFlag = RE::BSShaderProperty::EShaderPropertyFlag::kMenuScreen' but it did not work at all
+					// skyrim_cast also doesn't work (no RTTI?)
+					if (typeid(*shaderMaterial) == typeid(BSLightingShaderMaterialPBR)) {
+						const auto* lightingPBRMaterial = static_cast<BSLightingShaderMaterialPBR*>(shaderMaterial);
 
-							roughness = lightingPBRMaterial->GetRoughnessScale();
-						}
-					} else  // Vanilla
-					{
-						if (shaderMaterial->GetFeature() == Feature::kGlowMap) {
-							if (const auto* lightingGlowMaterial = skyrim_cast<RE::BSLightingShaderMaterialGlowmap*>(shaderMaterial)) {
-								effectTexture = TryGetTexture(lightingGlowMaterial->glowTexture);
-							}
-						}						
+						logger::debug("[RT] BuildMaterial - BSLightingShaderMaterialPBR: [0x{:8X}]", reinterpret_cast<uintptr_t>(lightingPBRMaterial->diffuseTexture.get()));
+
+						effectTexture = TryGetTexture(lightingPBRMaterial->emissiveTexture);
+						rmaosTexture = TryGetTexture(lightingPBRMaterial->rmaosTexture);
+
+						roughness = lightingPBRMaterial->GetRoughnessScale();
 					}
+
+					// Glow
+					if (shaderMaterial->GetFeature() == Feature::kGlowMap) {
+						if (const auto* lightingGlowMaterial = skyrim_cast<RE::BSLightingShaderMaterialGlowmap*>(shaderMaterial)) {
+							effectTexture = TryGetTexture(lightingGlowMaterial->glowTexture);
+						}
+					}
+
+					// Hair
+					if (shaderMaterial->GetFeature() == Feature::kHairTint) {
+						if (const auto* lightingHairTintMaterial = skyrim_cast<RE::BSLightingShaderMaterialHairTint*>(shaderMaterial)) {
+							baseColor *= float4(lightingHairTintMaterial->tintColor.red, lightingHairTintMaterial->tintColor.green, lightingHairTintMaterial->tintColor.blue, 1.0f);
+						}
+					}
+				} else {
+					logger::warn("[RT] BuildMaterial - BSShaderMaterial is nullptr");
 				}
+			} else {
+				logger::warn("[RT] BuildMaterial - BSLightingShaderProperty is nullptr");
 			}
 
-			auto effectShader = netimmerse_cast<RE::BSEffectShaderProperty*>(effect);
-
-			if (effectShader) {
+			if (auto effectShader = netimmerse_cast<RE::BSEffectShaderProperty*>(effect)) {
 				shaderType = RE::BSShader::Type::Effect;
 
 				if (auto shaderMaterial = effectShader->material) {
@@ -262,6 +284,8 @@ void Shape::BuildMaterial(const RE::BSGeometry::GEOMETRY_RUNTIME_DATA& geometryR
 					}
 				}
 			}
+		} else {
+			logger::warn("[RT] BuildMaterial - Effect is nullptr");
 		}
 	}
 
@@ -413,7 +437,7 @@ void Shape::CreateBuffers(const std::wstring& name)
 	}
 
 	// Material
-	auto materialData = material.GetData(rt.settings.Emissive);
+	auto materialData = material.GetData();
 	materialBuffer->UpdateAt(&materialData, registerIndex->GetIndex());
 }
 

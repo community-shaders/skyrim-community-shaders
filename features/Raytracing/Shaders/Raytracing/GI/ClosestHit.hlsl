@@ -40,12 +40,12 @@ void HitMesh(inout IndirectPayload payload, in BuiltInTriangleIntersectionAttrib
     float3 geomWorldTangent = normalize(mul(objectToWorld3x3, Interpolate(v0.Tangent, v1.Tangent, v2.Tangent, uvw)));
     float3 geomWorldBitangent = normalize(mul(objectToWorld3x3, Interpolate(v0.Bitangent, v1.Bitangent, v2.Bitangent, uvw)));
     
-    float3x3 TBN = float3x3(geomWorldTangent, geomWorldBitangent, geomWorldNormal);  
+    float3x3 TBN = float3x3(geomWorldTangent, geomWorldBitangent, geomWorldNormal);
     
     float4 vertexColor = Interpolate(v0.Color.unpack(), v1.Color.unpack(), v2.Color.unpack(), uvw);
     
-    unorm float roughnessSrc = DEFAULT_ROUGHNESS;   
-    unorm float metalnessSrc = DEFAULT_METALNESS;    
+    unorm float roughnessSrc = DEFAULT_ROUGHNESS;
+    unorm float metalnessSrc = DEFAULT_METALNESS;
     unorm float ao = 1.0f;
     
     Texture2D baseTexture = Textures[NonUniformResourceIndex(material.BaseTexture)];
@@ -60,13 +60,13 @@ void HitMesh(inout IndirectPayload payload, in BuiltInTriangleIntersectionAttrib
     float3 effect = effectTexture.SampleLevel(BaseSampler, texCoord, 0).rgb;
     
 #ifdef PATH_TRACING
-    float3 normal = normalTexture.SampleLevel(BaseSampler, texCoord, 0).rgb * 2.0f - 1.0f;  
+    /*float3 normal = normalTexture.SampleLevel(BaseSampler, texCoord, 0).rgb * 2.0f - 1.0f;  
     float4 rmaos = rmaosTexture.SampleLevel(BaseSampler, texCoord, 0);
     
     // Normal mapping
     float tangentSign = (dot(cross(geomWorldNormal, geomWorldTangent), geomWorldBitangent) < 0.0f) ? -1.0f : 1.0f; 
     
-    float3 worldNormal = normalize(mul(TBN, normal));  
+    float3 worldNormal = normalize(mul(normal, TBN));  
     float3 worldTangent = normalize(geomWorldTangent - worldNormal * dot(geomWorldTangent, worldNormal)); 
     float3 worldBitangent = cross(worldNormal, worldTangent) * tangentSign;   
     
@@ -76,13 +76,17 @@ void HitMesh(inout IndirectPayload payload, in BuiltInTriangleIntersectionAttrib
     // Roughness and Metalness from RMAOS
     roughnessSrc = saturate(rmaos.x * material.roughness);
     metalnessSrc = saturate(rmaos.y);
-    ao = rmaos.z;
+    ao = rmaos.z;*/
+    
+    float3 worldNormal = geomWorldNormal;  
+    float3 worldTangent = geomWorldTangent; 
+    float3 worldBitangent = geomWorldBitangent;  
 #else
-    float3 worldNormal = geomWorldNormal;      
+    float3 worldNormal = geomWorldNormal;
 #endif
     
     // Lighting Shader
-    float3 lightingAlbedo = Color::GammaToLinear(base) * vertexColor.rgb;
+    float3 lightingAlbedo = Color::GammaToLinear(base) * material.BaseColor.rgb * vertexColor.rgb;
     float3 lightingEmissive = Color::GammaToLinear(effect) * material.EffectColor.rgb * material.EffectColor.a;
     
     // Effect Shader
@@ -110,25 +114,25 @@ void HitMesh(inout IndirectPayload payload, in BuiltInTriangleIntersectionAttrib
     float3 viewDirection = normalize(-WorldRayDirection());
     
     const unorm float perceptualRoughness = clamp(Scale01(roughnessSrc, Frame.Roughness.x, Frame.Roughness.y), MIN_ROUGHNESS, MAX_ROUGHNESS);
-    const unorm float roughness = perceptualRoughness * perceptualRoughness;    
+    const unorm float roughness = perceptualRoughness * perceptualRoughness;
     
     const unorm float metalness = Scale01(metalnessSrc, Frame.Metalness.x, Frame.Metalness.y);
 #endif
     
     uint randomSeed = payload.data.GetSeed();
 
-    payload.color += float4(emissive, 0.0f);
+    payload.color += float4(emissive * Frame.Emissive, 0.0f);
     
     // Directional Light
 #if defined(LAMBERT)
     payload.color += float4(LambertianDirectD(worldPosition, worldNormal, albedo, Frame.Directional), 0.0f);
 #else
     payload.color += float4(GGXDirectD(worldPosition, worldNormal, viewDirection, albedo, roughness, metalness, Frame.Directional), 0.0f);
-    #endif
+#endif
     
-    [unroll]
+    /*[unroll]
     for (uint i = 0; i < SAMPLES; i++)
-    {
+    {*/
 #if defined(LAMBERT)
         payload.color += float4(LambertianDirectP(worldPosition, worldNormal, albedo, instance.LightData, randomSeed), 0.0f);
 #else
@@ -146,7 +150,7 @@ void HitMesh(inout IndirectPayload payload, in BuiltInTriangleIntersectionAttrib
             indirect.a = max(payload.color.a, RayTCurrent()); // * (1.0f - saturate(abs(currentDepth - 1.0f))); // 0,1,2,... to -1,0,1,... to 1,0,1 to 0, 1, 0
         
             payload.color += indirect;
-#endif        
+#endif 
         }
-    }
+    //}
 }

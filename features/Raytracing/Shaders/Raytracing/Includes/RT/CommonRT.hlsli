@@ -3,6 +3,7 @@
 
 #include "Common/Game.hlsli"
 #include "Common/Math.hlsli"
+#include "Common/Color.hlsli"
 
 #include "Raytracing/Includes/Types.hlsli"
 
@@ -180,12 +181,28 @@ float DiffuseProbability(float roughness, float metalness, float3 f0, float NoV)
     
     float diffuseEnergy = (1.0f - specularEnergy) * (1.0 - 0.2 * roughness);
     
-    return clamp(diffuseEnergy, 0.05f, 0.95f);
+    return clamp(diffuseEnergy, 0.005f, 1.0f);
 }
 
-float SpecularAO(float ao)
+float3 DiffuseAO(float3 diffuseColor, float ao)
 {
-    return ao * 0.25f + 0.75f;
+	return Color::MultiBounceAO(diffuseColor, ao);
+}
+
+float3 SpecularAO(float NdotV, float roughness, float ao, float3 f0)
+{
+	float specularAO = Color::SpecularAOLagarde(NdotV, ao, roughness);
+	return Color::MultiBounceAO(f0, specularAO);
+}
+
+// Horizon specular occlusion
+// https://marmosetco.tumblr.com/post/81245981087
+float Horizon(float3 V, float3 N, float3 VN)
+{
+	float3 R = reflect(-V, N);
+	float horizon = min(1.0 + dot(R, VN), 1.0);
+    
+	return  horizon * horizon;
 }
 
 #endif // COMMONRT_HLSI

@@ -13,22 +13,22 @@ float3 GetBary(BuiltInTriangleIntersectionAttributes attribs)
     );
 }
 
-float2 Interpolate(half2 u, half2 v, half2 w, float3 uvw)
+inline float2 Interpolate(half2 u, half2 v, half2 w, float3 uvw)
 {
     return u * uvw.x + v * uvw.y + w * uvw.z;
 }
 
-float3 Interpolate(float3 u, float3 v, float3 w, float3 uvw)
+inline float3 Interpolate(float3 u, float3 v, float3 w, float3 uvw)
 {
     return u * uvw.x + v * uvw.y + w * uvw.z;
 }
 
-float3 Interpolate(half3 u, half3 v, half3 w, float3 uvw)
+inline float3 Interpolate(half3 u, half3 v, half3 w, float3 uvw)
 {
     return u * uvw.x + v * uvw.y + w * uvw.z;
 }
 
-float4 Interpolate(half4 u, half4 v, half4 w, float3 uvw)
+inline float4 Interpolate(half4 u, half4 v, half4 w, float3 uvw)
 {
     return u * uvw.x + v * uvw.y + w * uvw.z;
 }

@@ -2128,6 +2128,10 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	PBR::Glints::PrecomputeGlints(glintNoise, uvOriginal, ddx(uvOriginal), ddy(uvOriginal), pbrSurfaceProperties.GlintScreenSpaceScale, pbrSurfaceProperties.GlintCache);
 #		endif
 
+#	if defined(RTGI)
+	float3 trueBaseColor = baseColor.xyz;
+#	endif
+
 	baseColor.xyz *= 1 - pbrSurfaceProperties.Metallic;
 
 	pbrSurfaceProperties.BaseColor = baseColor.xyz;
@@ -2881,6 +2885,10 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 		}
 	}
 
+#	if defined(TRUE_PBR) && defined(RTGI)
+	envColor = 0.0f;
+#	endif
+
 #	endif  // defined (ENVMAP) || defined (MULTI_LAYER_PARALLAX) || defined(EYE)
 
 	float2 screenMotionVector = MotionBlur::GetSSMotionVector(input.WorldPosition, input.PreviousWorldPosition, eyeIndex);
@@ -3303,7 +3311,12 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 
 	psout.MotionVectors.zw = float2(0.0, psout.Diffuse.w);
 	psout.Specular = float4(specularColor, psout.Diffuse.w);
+
+#		if defined(TRUE_PBR) && defined(RTGI)
+	psout.Albedo = float4(trueBaseColor * vertexColor, psout.Diffuse.w);
+#		else
 	psout.Albedo = float4(outputAlbedo, psout.Diffuse.w);
+#		endif
 
 	float outGlossiness = saturate(glossiness * SSRParams.w);
 
@@ -3391,14 +3404,19 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	float3 worldGeomNormal = float3(0.0, 0.0, 1.0);	
 #				endif // !defined (SKINNED) && defined (MODELSPACENORMALS)
 
-#				if defined(TRUE_PBR)
-	float metallic = pbrSurfaceProperties.Metallic;
-#				else
-	float metallic = 0.0f;
-#				endif
-
 	float3 screenGeomNormal = normalize(FrameBuffer::WorldToView(worldGeomNormal, false, eyeIndex));
-	psout.GeomNormalMetalnessAO = float4(GBuffer::EncodeNormal(screenGeomNormal), metallic, rawRMAOS.z);
+
+    uint m = (uint)round(saturate(rawRMAOS.y) * 255.0);
+
+#	if defined(TRUE_PBR)
+    uint a = (uint)round(saturate(rawRMAOS.z) * 255.0);
+#	else
+	uint a = 255u;
+#	endif
+
+	uint packed = m | (a << 8);
+
+	psout.GeomNormalMetalnessAO = float4(GBuffer::EncodeNormal(screenGeomNormal), packed / 65535.0, psout.Diffuse.w);
 #			endif // !defined(SNOW)
 #		endif // !defined(RTGI)
 #	endif // DEFERRED

@@ -43,9 +43,9 @@ public:
 
 		RE::BSShader::Type ShaderType;
 
-		MaterialData GetData(float emissivePower) {
+		MaterialData GetData() {
 			return MaterialData(
-				BaseColor, EffectColor * half4(1.0f, 1.0f, 1.0f, emissivePower), 
+				BaseColor, EffectColor, 
 				TexCoordOffsetScale,
 				roughness,
 				BaseTexture->GetIndex(), 

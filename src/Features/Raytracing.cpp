@@ -436,7 +436,6 @@ void Raytracing::SetupResources()
 			outputTexture->TransitionBarrier(commandList.get(), D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
 
 			outputTexture->CreateUAV(giHeap->CPUHandle(GIHeap::Slot::Output));
-			//outputTexture->CreateUAV(computeHeap->CPUHandle(ComputeHeapSlot::DiffuseGI));
 		}
 
 		// u2 - Reflectance texture
@@ -447,7 +446,6 @@ void Raytracing::SetupResources()
 			reflectanceTexture->TransitionBarrier(commandList.get(), D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
 
 			reflectanceTexture->CreateUAV(giHeap->CPUHandle(GIHeap::Slot::Reflectance));
-			//reflectanceTexture->CreateUAV(computeHeap->CPUHandle(ComputeHeapSlot::SpecularGI));	
 		}
 
 		// u3 - Specular Hit Distance texture
@@ -455,8 +453,7 @@ void Raytracing::SetupResources()
 			specularHitDistanceTexture = eastl::make_unique<DX12::Texture2D>(d3d12Device.get(), mainDesc.Width, mainDesc.Height, DXGI_FORMAT_R16_FLOAT, D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS);
 			specularHitDistanceTexture->SetName(L"Specular Hit Distance Texture");
 
-			reflectanceTexture->CreateUAV(giHeap->CPUHandle(GIHeap::Slot::SpecularHitDist));
-			//specularHitDistanceTexture->CreateUAV(computeHeap->CPUHandle(ComputeHeapSlot::SpecHitDist));
+			specularHitDistanceTexture->CreateUAV(giHeap->CPUHandle(GIHeap::Slot::SpecularHitDist));
 		}
 
 		{
@@ -1717,7 +1714,6 @@ void Raytracing::UpdateInstances()
 			if (!camera->NodeInFrustum(pNiNode))
 				continue;
 		}*/
-
 
 		auto it = models.find(instance.filename);
 
