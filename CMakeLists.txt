@@ -717,6 +717,18 @@ if(ZIP_TO_DIST)
     endforeach()
 endif()
 
+
+# ########################################################################################################################
+# ## Testing Support
+# ########################################################################################################################
+option(BUILD_TESTS "Build unit tests" ON)
+message("\tBuild tests: ${BUILD_TESTS}")
+
+if(BUILD_TESTS)
+    enable_testing()
+    add_subdirectory(tests)
+endif()
+
 # Create a AIO zip for easier testing
 if(AIO_ZIP_TO_DIST)
     if(NOT ZIP_TO_DIST)
