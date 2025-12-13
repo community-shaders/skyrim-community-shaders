@@ -473,6 +473,19 @@ void DynamicCubemaps::Irradiance(bool a_reflections)
 void DynamicCubemaps::UpdateCubemap()
 {
 	TracyD3D11Zone(globals::state->tracyCtx, "Cubemap Update");
+
+	// Reset capture when game time jumps (wait menu, timescale changes, console commands)
+	if (auto calendar = RE::Calendar::GetSingleton()) {
+		float currentHoursPassed = calendar->GetHoursPassed();
+		float hoursPassedDiff = abs(currentHoursPassed - previousHoursPassed);
+		previousHoursPassed = currentHoursPassed;
+
+		if (hoursPassedDiff >= 0.01f) {  // ~36 seconds game time
+			resetCapture[0] = true;
+			resetCapture[1] = true;
+		}
+	}
+
 	if (recompileFlag) {
 		logger::debug("Recompiling for Dynamic Cubemaps");
 		auto shaderCache = globals::shaderCache;
