@@ -68,18 +68,6 @@ RWTexture2D<float4> Dest : register(u0);
 	float hG = h.g;
 	float hB = h.b;
 
-	// Luma times 2.
-	float bL = bB * 0.5 + (bR * 0.5 + bG);
-	float dL = dB * 0.5 + (dR * 0.5 + dG);
-	float eL = eB * 0.5 + (eR * 0.5 + eG);
-	float fL = fB * 0.5 + (fR * 0.5 + fG);
-	float hL = hB * 0.5 + (hR * 0.5 + hG);
-
-	// Noise detection.
-	float nz = 0.25 * bL + 0.25 * dL + 0.25 * fL + 0.25 * hL - eL;
-	nz = saturate(abs(nz) * rcp(max(max(max(bL, dL), max(eL, fL)), hL) - min(min(min(bL, dL), min(eL, fL)), hL)));
-	nz = -0.5 * nz + 1.0;
-
 	// Min and max of ring.
 	float mn4R = min(min(min(bR, dR), fR), hR);
 	float mn4G = min(min(min(bG, dG), fG), hG);
@@ -102,9 +90,6 @@ RWTexture2D<float4> Dest : register(u0);
 	float lobeG = max(-hitMinG, hitMaxG);
 	float lobeB = max(-hitMinB, hitMaxB);
 	float lobe = max(-FSR_RCAS_LIMIT, min(max(lobeR, max(lobeG, lobeB)), 0.0)) * sharpness;
-
-	// Apply noise removal.
-	lobe *= nz;
 
 	// Resolve, which needs the medium precision rcp approximation to avoid visible tonality changes.
 	float rcpL = rcp(4.0 * lobe + 1.0);
