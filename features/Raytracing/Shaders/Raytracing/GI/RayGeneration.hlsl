@@ -25,7 +25,7 @@ void main()
     const half3 geometryNormalVS = DecodeNormal(normalMetalnessAO.xy);
     const float3 geometryNormalWS = normalize(ViewToWorldVector(geometryNormalVS, Frame.ViewInverse));
     
-    const float depth = DepthTexture[idx];
+    const float depth = DepthTexture[idx] * 0.99998;
 
     const float depthView = ScreenToViewDepth(depth, Frame.CameraData);
 
@@ -73,10 +73,15 @@ void main()
     OutputTexture[idx] = MainTexture[idx] + float4(Color::LinearToGamma(result.rgb), 0.0f);
     
     float3 h_tan = SampleGGX(roughness, seed);
-    float3 h = mul(TBN, h_tan);
-    float VdotH = saturate(dot(viewWS, h));
+    float3 h = mul(h_tan, TBN);
+
+    float3 f0 = F0(albedo, metalness);
     
-    ReflectanceTexture[idx] = float4(saturate(F_Schlick(VdotH, F0(albedo, metalness))), 0.0f);
+    float3 F = F_Schlick(saturate(dot(viewWS, h)), f0);
+    //float D = D_GGX(saturate(dot(normalWS, h)), roughness);
+    float3 specAO = SpecularAO(saturate(dot(normalWS, viewWS)), roughness, ao, f0);
+    
+    ReflectanceTexture[idx] = float4(F * specAO * Frame.Specular, 0.0f);
     
     SpecularHitDist[idx] = result.a;
 #endif

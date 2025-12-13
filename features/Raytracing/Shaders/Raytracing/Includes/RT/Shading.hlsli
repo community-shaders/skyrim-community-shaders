@@ -160,7 +160,7 @@ float4 GGXIndirect(in float3 position, in float3 GN, float3x3 TBN, in float3 v, 
     if (chooseDiffuse)
     {
         float3 l_tan = CosineSampleHemisphere(randomSeed);
-        float3 l = mul(TBN, l_tan);
+        float3 l = mul(l_tan, TBN);
 
         float NoL = dot(n, l);
         
@@ -179,9 +179,8 @@ float4 GGXIndirect(in float3 position, in float3 GN, float3x3 TBN, in float3 v, 
     }
     else
     {
-        float3 h_tan = SampleGGX(roughness, randomSeed);
-        
-        float3 h = mul(TBN, h_tan);
+        float3 h_tan = SampleGGX(roughness, randomSeed);    
+        float3 h = mul(h_tan, TBN);
         
         float3 l = reflect(-v, h);        
         
@@ -204,9 +203,9 @@ float4 GGXIndirect(in float3 position, in float3 GN, float3x3 TBN, in float3 v, 
         
         float4 bounceColor = TraceRayIndirect(Scene, position, l, depth, randomSeed) * float4(SpecularAO(NoV, roughness, ao, f0), 1.0f);
         
-        float3 finalSpecular = Fr * bounceColor.rgb * NoL / (1.0f - diffuseProbability);
+        float3 finalSpecular = (Fr * bounceColor.rgb * NoL * Frame.Specular) / (1.0f - diffuseProbability);
         
-        return float4(finalSpecular * Frame.Specular, bounceColor.a);
+        return float4(finalSpecular, bounceColor.a);
     }
 }
 

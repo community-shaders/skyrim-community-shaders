@@ -64,12 +64,10 @@ float Random(inout uint seed)
 
 void CreateOrthonormalBasis(in float3 normal, out float3 tangent, out float3 bitangent)
 {
-    float sign = normal.z >= 0.0 ? 1.0 : -1.0;
-    float a = -1.0 / (sign + normal.z);
-    float b = normal.x * normal.y * a;
+    float3 up = abs(normal.z) < 0.999 ? float3(0, 0, 1) : float3(0, 1, 0);
     
-    tangent = float3(1.0 + sign * normal.x * normal.x * a, sign * b, -sign * normal.x);
-    bitangent = float3(b, sign + normal.y * normal.y * a, -normal.y);
+    tangent = normalize(cross(up, normal));
+    bitangent = cross(normal, tangent);
 }
 
 float3 CosineSampleHemisphere(inout uint seed)
