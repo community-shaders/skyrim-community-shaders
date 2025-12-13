@@ -477,7 +477,7 @@ void DynamicCubemaps::UpdateCubemap()
 	// Reset capture when game time jumps (wait menu, timescale changes, console commands)
 	if (auto calendar = RE::Calendar::GetSingleton()) {
 		float currentHoursPassed = calendar->GetHoursPassed();
-		float hoursPassedDiff = abs(currentHoursPassed - previousHoursPassed);
+		float hoursPassedDiff = std::abs(currentHoursPassed - previousHoursPassed);
 		previousHoursPassed = currentHoursPassed;
 
 		if (hoursPassedDiff >= 0.01f) {  // ~36 seconds game time
