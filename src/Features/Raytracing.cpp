@@ -1032,7 +1032,8 @@ void Raytracing::UpdateLights()
 			lights.emplace_back(data.positionWS[0].data, data.radius, GammaToLinear(data.color) * settings.Point, 0);
 		}
 
-		lightBuffer->UpdateList(lights.data(), lights.size());
+		if (!lights.empty())
+			lightBuffer->UpdateList(lights.data(), lights.size());
 	}
 
 	lightsUpdated = true;
