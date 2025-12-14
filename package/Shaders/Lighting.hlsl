@@ -1857,7 +1857,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	if (complexMaterial) {
 		complexSpecular = lerp(1.0, baseColor.xyz, complexMaterialColor.z);
 #		if defined(VANILLA_FRESNEL)
-		complexSpecular = saturate(complexSpecular * (SharedData::vanillaFresnelSettings.Enable ? SharedData::vanillaFresnelSettings.ComplexMaterialF0Multiplier / Math::PI : 1.0));
+		complexSpecular = saturate(complexSpecular * (SharedData::vanillaFresnelSettings.Enable ? SharedData::vanillaFresnelSettings.ComplexMaterialF0Multiplier : 1.0));
 #		endif
 		baseColor.xyz = lerp(baseColor.xyz, 0.0, complexMaterialColor.z);
 
@@ -2296,6 +2296,9 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 					material.F0 = max(lerp(baseF0, material.F0, envMask), SharedData::vanillaFresnelSettings.MinF0);
 #				else
 					material.F0 = max(lerp(0, material.F0, envMask), SharedData::vanillaFresnelSettings.MinF0);
+#				endif
+#				if defined(EMAT)
+					if (!complexMaterial)
 #				endif
 					material.Roughness = lerp(originRoughness, material.Roughness, envMask);
 				}
@@ -2915,6 +2918,9 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #		endif
 #	endif
 #	if defined(ENVMAP) || defined(MULTI_LAYER_PARALLAX) || defined(EYE)
+#		if defined(VANILLA_FRESNEL)
+	if (!enableVanillaFresnel)
+#		endif
 	indirectLobeWeights.specular *= envMask;
 #	endif
 

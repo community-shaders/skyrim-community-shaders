@@ -139,10 +139,10 @@ void EvaluateLighting(DirectContext context, MaterialProperties material, float3
 	lightingOutput.diffuse += context.lightColor * saturate(-NdotL) * material.backLightColor;
 #		endif
 
-#		if defined(VANILLA_SPECULAR)
+#		if defined(VANILLA_FRESNEL)
 	if (SharedData::vanillaFresnelSettings.Enable && SharedData::vanillaFresnelSettings.EnableGGX)
 	{
-		lightingOutput.specular = MicrofacetSpecular(context, material.F0, material.Roughness) * context.lightColor;
+		lightingOutput.specular = MicrofacetSpecular(context, material.F0, material.Roughness) * context.lightColor * Color::PBRLightingCompensation * Color::PBRLightingScale;
 
 		float2 specularBRDF = BRDF::EnvBRDF(material.Roughness, saturate(dot(context.worldNormal, context.viewDir)));
 		lightingOutput.specular *= 1 + material.F0 * (1 / (specularBRDF.x + specularBRDF.y) - 1);
@@ -222,7 +222,7 @@ void EvaluateWetnessLighting(float3 wetnessNormal, DirectContext context, float 
 	float3 wetnessSpecular = D * G * F * NdotL * lightColor;
 
 #if !defined(TRUE_PBR)
-	wetnessSpecular *= Math::PI * Color::PBRLightingScale;  // Compensate for GGX on traditional specular
+	wetnessSpecular *= Color::PBRLightingCompensation * Color::PBRLightingScale;  // Compensate for GGX on traditional specular
 #endif
 
 	lightingOutput.diffuse *= 1 - F;
