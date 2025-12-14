@@ -440,6 +440,7 @@ if(AUTO_PLUGIN_DEPLOYMENT OR AIO_ZIP_TO_DIST)
     add_custom_command(
         TARGET ${PROJECT_NAME}
         POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E make_directory "${AIO_DIR}/SKSE/Plugins"
         COMMAND
             ${CMAKE_COMMAND} -E copy_if_different
             "$<TARGET_FILE:${PROJECT_NAME}>"
