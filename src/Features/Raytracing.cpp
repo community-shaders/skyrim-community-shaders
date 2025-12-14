@@ -12,6 +12,10 @@
 #include <windows.h>
 #include "Deferred.h"
 
+#include "Utils/PerfUtils.h"
+
+#include "Menu.h"
+
 #ifdef DLSS_RR
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	Raytracing::Settings,
@@ -34,6 +38,7 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	CullShadows,
 	RecompressTextures,
 	DLSSRRQualityMode,
+	PerformanceOverlay,
 	DebugOutput,
 	EnablePIXCapture,
 	PIXCaptureLocation,
@@ -59,6 +64,7 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	PathTracing,
 	CullShadows,
 	RecompressTextures,
+	PerformanceOverlay,
 	DebugOutput,
 	EnablePIXCapture,
 	PIXCaptureLocation,
@@ -285,6 +291,52 @@ void Raytracing::DrawSettings()
 	}
 
 	//ImGui::Image(skyHemisphere->srv, { 64.0f, 64.0f });
+}
+
+void Raytracing::DrawOverlay()
+{
+	auto* menu = Menu::GetSingleton();
+
+	if (!globals::state || !menu)
+		return;
+
+	// Set window flags - no decoration and only movable when ShowBorder is true
+	ImGuiWindowFlags windowFlags = ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_AlwaysAutoResize;
+
+	// Only allow mouse interaction when the main menu is open
+	if (!menu->IsEnabled) {
+		windowFlags |= ImGuiWindowFlags_NoInputs;
+	}
+
+	ImGui::Begin("Raytracing Overlay", NULL, windowFlags);
+
+	auto DrawRow = [](const char* label, size_t instances, float ms, [[maybe_unused]] double frameTime = 0.0f) {
+		ImGui::TableNextRow();
+
+		ImGui::TableNextColumn();
+		ImGui::Text(label);
+
+		ImGui::TableNextColumn();
+		ImGui::Text("%d", instances);
+
+		ImGui::TableNextColumn();
+		ImGui::Text("%g ms", ms);
+	};
+	
+	if (ImGui::BeginTable("Effects", 3, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg)) {
+		if (settings.RaytracedShadows)
+			DrawRow("Shadows", blasShadowInstances.size(), shadowsTime);
+
+		// GI/PT
+		DrawRow(settings.PathTracing ? "Path Tracing" : "Global Illumination", blasInstances.size(), mainTime);
+
+		// Denoiser
+		//DrawRow(settings.PathTracing ? "Denoiser", blasInstances.size(), 0);
+
+		ImGui::EndTable();
+	}
+
+	ImGui::End();
 }
 
 void Raytracing::SetupResources()
@@ -1307,6 +1359,8 @@ void Raytracing::CreateModel(const char* path, RE::NiNode* pRoot)
 		return;
 	}
 
+	logger::info("[RT] CreateModel \"{}\"", typeid(*pRoot).name());
+
 	if (!path) {
 		logger::debug("[RT] CreateModel \"{}\" - Invalid Path", pRoot->name);
 		return;
@@ -1480,13 +1534,13 @@ void Raytracing::RemoveInstance(RE::NiNode* pRoot, bool releaseModel)
 
 eastl::shared_ptr<Allocation> Raytracing::GetTextureRegister(ID3D11Texture2D* dx11Texture, eastl::shared_ptr<Allocation> defaultTexture)
 {
+	// Texture already placed in heap, return allocation
+	if (auto refIt = textures.find(dx11Texture); refIt != textures.end()) {
+		return refIt->second.registerIndex;
+	} 
+
 	// Search for texture in shared map
 	if (auto sharedIt = sharedTextures.find(dx11Texture); sharedIt != sharedTextures.end()) {
-		// Texture already placed in heap, return allocation
-		if (auto refIt = textures.find(dx11Texture); refIt != textures.end()) {
-			return refIt->second.registerIndex;
-		} 
-		
 		// Texture not in heap, so create SRV at next available heap slot
 		auto dx12Texture = sharedIt->second.get();
 
@@ -2099,7 +2153,7 @@ void Raytracing::DrawRTGI()
 		logger::error("d3d11Fence is nullptr");
 	}
 
-	auto rendererRuntimeData = globals::game::renderer->GetRuntimeData();
+	auto& rendererRuntimeData = globals::game::renderer->GetRuntimeData();
 	auto main = rendererRuntimeData.renderTargets[RE::RENDER_TARGETS::kMAIN];
 
 	d3d11Context->CopyResource(mainTexture->resource11, main.texture);
@@ -2118,6 +2172,8 @@ void Raytracing::DrawRTGI()
 		DX::ThrowIfFailed(commandQueue->Wait(d3d12Fence.get(), fenceValue));
 		fenceValue++;
 	}
+
+	auto startTime = Util::GetNowSecs();
 
 	if (pixCapture && (!pixCaptureStarted || pixTDR) && settings.PIXCaptureLocation == PIXCaptureLocation::GlobalIllumination) {
 		pixCaptureStarted = true;
@@ -2330,6 +2386,8 @@ void Raytracing::DrawRTGI()
 		DX::ThrowIfFailed(d3d12Fence->SetEventOnCompletion(fenceValue, nullptr));
 	}
 
+	mainTime = static_cast<float>((Util::GetNowSecs() - startTime) * 1000.0);
+
 	if (pixCapture && pixCaptureStarted && !pixTDR && settings.PIXCaptureLocation == PIXCaptureLocation::GlobalIllumination) {
 		ga->EndCapture();
 		pixCapture = pixMultiFrame;
@@ -2351,6 +2409,13 @@ void Raytracing::DrawRTGI()
 	ReleaseTempGPUData();
 
 	d3d11Context->CopyResource(main.texture, mainTexture->resource11);
+
+	// Clear specular if Path Tracing is enabled
+	if (settings.PathTracing)
+	{
+		float clearColor[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
+		d3d11Context->ClearRenderTargetView(globals::game::renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kINDIRECT_DOWNSCALED].RTV, clearColor);
+	}
 }
 
 void Raytracing::UpdateShadowsFrameBuffer()
@@ -2400,6 +2465,8 @@ void Raytracing::RenderShadows()
 	DX::ThrowIfFailed(d3d11Context->Signal(d3d11Fence.get(), fenceValue));
 	DX::ThrowIfFailed(commandQueue->Wait(d3d12Fence.get(), fenceValue));
 	fenceValue++;
+
+	auto startTime = Util::GetNowSecs();
 
 	if (pixCapture && (!pixCaptureStarted || pixTDR) && settings.PIXCaptureLocation == PIXCaptureLocation::Shadows) {
 		pixCaptureStarted = true;
@@ -2485,6 +2552,8 @@ void Raytracing::RenderShadows()
 	if (d3d12Fence->GetCompletedValue() < fenceValue) {
 		DX::ThrowIfFailed(d3d12Fence->SetEventOnCompletion(fenceValue, nullptr));
 	}
+
+	shadowsTime = static_cast<float>((Util::GetNowSecs() - startTime) * 1000.0);
 
 	if (pixCapture && pixCaptureStarted && !pixTDR && settings.PIXCaptureLocation == PIXCaptureLocation::Shadows) {
 		ga->EndCapture();

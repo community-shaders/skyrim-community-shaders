@@ -1,6 +1,6 @@
 #pragma once
 
-#include "Feature.h"
+#include "OverlayFeature.h"
 #include <d3d12.h>
 #include <d3d11_4.h>
 #include <dxgi1_6.h>
@@ -34,6 +34,8 @@
 #include "Raytracing/Includes/Types/GIFrameData.hlsli"
 #include "Raytracing/Includes/Types/ShadowsFrameData.hlsli"
 
+#include "Raytracing/Denoiser/SVGF/SVGF.hlsli"
+
 #define NTDDI_VERSION NTDDI_WINBLUE
 
 #include <DXProgrammableCapture.h>
@@ -54,7 +56,7 @@
 #pragma warning(pop)
 #endif
 
-struct Raytracing : public Feature
+struct Raytracing : public OverlayFeature
 {
 	static constexpr uint MAX_TEXTURES = 1024;
 	static constexpr uint MAX_MODELS = 2048;
@@ -144,6 +146,25 @@ struct Raytracing : public Feature
 	};
 	using ShadowsHeap = Heap<ShadowsHeapDef::Table, ShadowsHeapDef::Slot>;
 
+	struct SVGFHeapDef
+	{
+		enum class Table
+		{
+			UAV,
+			SRV
+		};
+
+		enum class Slot
+		{
+			ShadowMask,
+			Depth,
+			TLAS,
+			NumDescriptors,
+			None
+		};
+	};
+	using SVGFHeap = Heap<SVGFHeapDef::Table, SVGFHeapDef::Slot>;
+
 	////////////////////////////////////////////////// Boilerplate
 	// Metadata
 	virtual inline std::string GetName() override { return "Raytracing"; }
@@ -172,8 +193,10 @@ struct Raytracing : public Feature
 	virtual void LoadSettings(json& o_json) override;
 	virtual void SaveSettings(json& o_json) override;
 	virtual void DrawSettings() override;
-
+	virtual void DrawOverlay() override;
 	virtual void PostPostLoad() override;
+
+	virtual bool IsOverlayVisible() const override { return settings.PerformanceOverlay; };
 
 	// Resources
 	virtual void SetupResources() override;
@@ -321,6 +344,7 @@ struct Raytracing : public Feature
 #ifdef DLSS_RR
 		DLSSRRQuality DLSSRRQualityMode = DLSSRRQuality::MaxQuality;
 #endif
+		bool PerformanceOverlay = false;
 		DebugOutput DebugOutput = DebugOutput::None;
 		bool EnablePIXCapture = false;
 		PIXCaptureLocation PIXCaptureLocation = PIXCaptureLocation::GlobalIllumination;
@@ -427,8 +451,8 @@ struct Raytracing : public Feature
 		DefaultTexture(ID3D12Device5* device, Allocation* allocation, uint8_t color[4]) :
 			allocation(allocation)
 		{
-			texture = eastl::make_unique<DX12::Texture2DUpload<uint8_t>>(device, 1, 1, DXGI_FORMAT_R8G8B8A8_UINT);
-			texture->Update(color, sizeof(uint8_t) * 4);
+			texture = eastl::make_unique<DX12::Texture2DUpload<uint8_t>>(device, 1, 1, DXGI_FORMAT_R8G8B8A8_UNORM);
+			texture->Update(&color, sizeof(uint8_t) * 4);
 		}
 
 		template <IsHeap HeapType>
@@ -575,6 +599,8 @@ struct Raytracing : public Feature
 	eastl::unique_ptr<DX12::StructuredBufferUpload<ShadowsFrameData>> shadowsCB = nullptr;
 	eastl::unique_ptr<ShadowsFrameData> shadowsCBData = nullptr;
 
+	// SVGF
+
 	// D3D12
 	winrt::com_ptr<ID3D12Device5> d3d12Device = nullptr;
 	winrt::com_ptr<ID3D12CommandQueue> commandQueue = nullptr;
@@ -601,7 +627,6 @@ struct Raytracing : public Feature
 	eastl::vector<VertexUpdate> vertexUpdate;
 	eastl::unique_ptr<DX12::StructuredBufferUpload<VertexUpdateData>> vertexUpdateBuffer = nullptr;
 
-	// Is this safe??
 	eastl::vector<eastl::string> modelUpdate;
 
 	// GI
@@ -661,6 +686,11 @@ struct Raytracing : public Feature
 	std::shared_mutex bufferMutex;
 	std::shared_mutex sharedTextureMutex;
 	std::shared_mutex renderMutex;
+
+	// Timings
+	float mainTime;
+	float shadowsTime;
+	float denoiserTime;
 
 #if defined(DLSS_RR)
 	HMODULE interposer = NULL;
@@ -762,14 +792,14 @@ struct Raytracing : public Feature
 
 				if (shareTexture) {
 					if (SUCCEEDED(hr)) {
-						if (!rt.releaseHooked) {
+						/*if (!rt.releaseHooked) {
 							std::lock_guard lock{ rt.sharedTextureMutex };
 
 							if (!rt.releaseHooked) {
 								rt.releaseHooked = true;
 								stl::detour_vfunc<2, ID3D11Texture2D_Release>(*ppTexture2D);
 							}
-						}
+						}*/
 
 						winrt::com_ptr<IDXGIResource1> dxgiResource = nullptr;
 						DX::ThrowIfFailed((*ppTexture2D)->QueryInterface(IID_PPV_ARGS(dxgiResource.put())));
@@ -827,6 +857,30 @@ struct Raytracing : public Feature
 			static inline REL::Relocation<decltype(thunk)> func;
 		};
 
+		struct NiSourceTexture_Destructor
+		{
+			static void thunk(RE::NiSourceTexture* oThis)
+			{
+				if (oThis && oThis->rendererTexture; auto texture = oThis->rendererTexture->texture) {					
+					auto& rt = globals::features::raytracing;
+
+					if (auto sharedIt = rt.sharedTextures.find(texture); sharedIt != rt.sharedTextures.end()) {
+						// TODO: proper fix - this is backwards, it should be handled safely by the material going out of scope after its shape and models are released
+						if (auto textureIt = rt.textures.find(texture); textureIt != rt.textures.end()) {
+							logger::info("[RT] NiSourceTexture::Destructor [0x{:8X}] - Register: {}", reinterpret_cast<uintptr_t>(texture), textureIt->second.registerIndex->GetIndex());
+						}
+
+						rt.sharedTextures.erase(sharedIt);
+					}
+				}
+
+				func(oThis);
+			}
+
+			static inline REL::Relocation<decltype(thunk)> func;
+		};
+
+
 		struct ID3D11Texture2D_Release
 		{
 			static ULONG WINAPI thunk(ID3D11Texture2D* This)
@@ -834,7 +888,7 @@ struct Raytracing : public Feature
 				ULONG refCount = func(This);
 
 				if (refCount == 0) {
-					logger::trace("[RT] ID3D11Texture2D::Release: {}", reinterpret_cast<uintptr_t>(This));
+					logger::info("[RT] ID3D11Texture2D::Release: [0x{:8X}]", reinterpret_cast<uintptr_t>(This));
 					globals::features::raytracing.sharedTextures.erase(This);
 				}
 
@@ -1142,9 +1196,17 @@ struct Raytracing : public Feature
 			stl::write_vfunc<0x6A, Load3D<RE::TESObjectREFR>>(RE::VTABLE_TESObjectREFR[0]);
 			stl::write_vfunc<0x6B, Release3DRelatedData<RE::TESObjectREFR>>(RE::VTABLE_TESObjectREFR[0]);
 
-			stl::write_vfunc<0x0, Destructor<RE::BSFadeNode>>(RE::VTABLE_BSFadeNode[0]); // Doesn't work that well (find out why)
-			//stl::write_vfunc<0x0, Destructor<RE::NiNode>>(RE::VTABLE_NiNode[0]);
+			// NiSourceTexture Destructor
+			stl::write_vfunc<0x0, NiSourceTexture_Destructor>(RE::VTABLE_NiSourceTexture[0]);
 
+			//NiSourceTexture
+
+			// Destructors to remove instances
+			stl::write_vfunc<0x0, Destructor<RE::NiNode>>(RE::VTABLE_NiNode[0]);
+			stl::write_vfunc<0x0, Destructor<RE::BSFadeNode>>(RE::VTABLE_BSFadeNode[0]);
+			stl::write_vfunc<0x0, Destructor<RE::BSFadeNode>>(RE::VTABLE_BSLeafAnimNode[0]);
+			//stl::write_vfunc<0x0, Destructor<RE::BSFadeNode>>(RE::VTABLE_BSTreeNode[0]);
+			
 			stl::detour_thunk<Main_RenderWorld>(REL::RelocationID(100424, 107142));
 
 			// We use these to render only the sky to the cubemaps, maybe we it would be cleaner if we could override cubemap renderpass?

@@ -229,7 +229,7 @@ void Shape::BuildMaterial(const RE::BSGeometry::GEOMETRY_RUNTIME_DATA& geometryR
 					//	material->texCoordScale[1].x, material->texCoordScale[1].y
 					//};
 
-					// Using static_cast so we still get diffuse and normal for PBR materials
+					// Using static_cast so we still get diffuse and normal for PBR materials as well
 					if (const auto* lightingBaseMaterial = static_cast<RE::BSLightingShaderMaterialBase*>(shaderMaterial)) {
 						logger::debug("[RT] BuildMaterial - BSLightingShaderMaterialBase Alpha: {}", lightingBaseMaterial->materialAlpha);
 
@@ -239,7 +239,7 @@ void Shape::BuildMaterial(const RE::BSGeometry::GEOMETRY_RUNTIME_DATA& geometryR
 
 					// TrueBR - Tried to check for 'lightingShaderProp->flags.any(TruePBR::PBRFlag)' 
 					// where 'TruePBR::PBRFlag = RE::BSShaderProperty::EShaderPropertyFlag::kMenuScreen' but it did not work at all
-					// skyrim_cast also doesn't work (no RTTI?)
+					// skyrim_cast is not safe (no RTTI?)
 					if (typeid(*shaderMaterial) == typeid(BSLightingShaderMaterialPBR)) {
 						const auto* lightingPBRMaterial = static_cast<BSLightingShaderMaterialPBR*>(shaderMaterial);
 
@@ -313,6 +313,17 @@ void Shape::BuildMaterial(const RE::BSGeometry::GEOMETRY_RUNTIME_DATA& geometryR
 
 	if (rmaosTexture && rmaosTexReg->GetIndex() == defaultRMAOSIndex->GetIndex())
 		logger::warn("[RT] BuildMaterial {} - RMAOS texture [0x{:8X}] not shared", name, reinterpret_cast<uintptr_t>(rmaosTexture));
+
+	auto LogTexture = [](const char* pName, ID3D11Texture2D* pTexture, uint16_t index) {
+		if (pTexture) {
+			logger::info("[RT] BuildMaterial - {} requested from [0x{:8X}], Index: {}", pName, reinterpret_cast<uintptr_t>(pTexture), index);
+		}
+	};
+
+	LogTexture("Base Texture", baseTexture, baseTexReg->GetIndex());
+	LogTexture("Normal Texture", normalTexture, normalTexReg->GetIndex());
+	LogTexture("Effect Texture", effectTexture, effectTexReg->GetIndex());
+	LogTexture("RMAOS Texture", rmaosTexture, rmaosTexReg->GetIndex());
 
 	material = Material(
 		baseColor,

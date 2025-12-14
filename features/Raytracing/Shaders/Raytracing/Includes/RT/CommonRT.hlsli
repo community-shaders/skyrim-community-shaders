@@ -70,7 +70,7 @@ void CreateOrthonormalBasis(in float3 normal, out float3 tangent, out float3 bit
     bitangent = cross(normal, tangent);
 }
 
-float3 CosineSampleHemisphere(inout uint seed)
+float3 SampleCosineHemisphere(inout uint seed)
 {
     float u1 = Random(seed);
     float u2 = Random(seed);
@@ -85,17 +85,23 @@ float3 CosineSampleHemisphere(inout uint seed)
     return float3(x, y, z);
 }
 
-float3 CosineSampleHemisphereScaled(inout uint randomSeed, float roughness)
+float3 SampleCosineHemisphereScaled(inout uint randomSeed, in float scale)
 {
+    // Generate two uniform random numbers
     float r1 = Random(randomSeed);
     float r2 = Random(randomSeed);
 
-    float phi = 2.0 * Math::PI * r1;
-    
-    float alpha = roughness * roughness;
-    float cosTheta = sqrt(max(0.0f, (1.0 - r2) / ((alpha - 1.0) * r2 + 1)));
-    float sinTheta = sqrt(max(0.0f, 1.0 - cosTheta * cosTheta));
+    // Azimuthal angle
+    float phi = 2.0f * Math::PI * r1;
 
+    // Maximum cone angle
+    float cosMax = cos(saturate(scale) * Math::PI / 2.0f);
+
+    // Cosine of polar angle within cone
+    float cosTheta = lerp(cosMax, 1.0f, sqrt(1.0f - r2)); // cosine-weighted
+    float sinTheta = sqrt(max(0.0f, 1.0f - cosTheta * cosTheta));
+
+    // Convert to Cartesian coordinates
     return float3(
         cos(phi) * sinTheta,
         sin(phi) * sinTheta,
@@ -103,32 +109,63 @@ float3 CosineSampleHemisphereScaled(inout uint randomSeed, float roughness)
     );
 }
 
-float3 SampleGGX(const float roughness, inout uint randomSeed)
+float calcLuminance(float3 color)
 {
-    const float r1 = Random(randomSeed);
-    const float r2 = Random(randomSeed);
-    
-    const float a = max(0.001f, roughness);
-    const float phi = Math::PI * r1;
-    const float cos_theta = sqrt((1.0f - r2) / (1.0f + (a*a - 1.0f) * r2));
-    const float sin_theta = sqrt(1.0f - cos_theta * cos_theta);
-
-    return float3(cos(phi) * sin_theta, sin(phi) * sin_theta, cos_theta);
+    return dot(color.xyz, float3(0.299f, 0.587f, 0.114f));
 }
 
-float3 SampleGGXVNDF_Direct(float3 V_tan, inout uint randomSeed, float roughness)
+float3 SampleGGX_VNDF(float3 Ve, float alpha, inout uint seed)
 {
-    float r1 = Random(randomSeed);
-    float r2 = Random(randomSeed);
+    float3 Vh = normalize(float3(alpha * Ve.x, alpha * Ve.y, Ve.z));
 
-    float phi = 2.0 * Math::PI * r1;
-    float cosTheta = sqrt((1.0 - r2) / (1.0 + (roughness*roughness - 1.0) * r2));
-    float sinTheta = sqrt(1.0 - cosTheta * cosTheta);
+    float lensq = Vh.x * Vh.x + Vh.y * Vh.y;
+    float3 T1 = lensq > 0.0 ? float3(-Vh.y, Vh.x, 0.0) / sqrt(lensq) : float3(1.0, 0.0, 0.0);
+    float3 T2 = cross(Vh, T1);
 
-    float3 H_tan = float3(sinTheta * cos(phi), sinTheta * sin(phi), cosTheta);
+    float r1 = Random(seed);
+    float r2 = Random(seed);   
+    
+    float r = sqrt(r1);
+    float phi = 2.0 * Math::PI * r2;
+    float t1 = r * cos(phi);
+    float t2 = r * sin(phi);
+    float s = 0.5 * (1.0 + Vh.z);
+    t2 = (1.0 - s) * sqrt(1.0 - t1 * t1) + s * t2;
 
-    // L_Tan
-    return normalize(2.0 * dot(V_tan, H_tan) * H_tan - V_tan);
+    float3 Nh = t1 * T1 + t2 * T2 + sqrt(max(0.0, 1.0 - (t1 * t1) - (t2 * t2))) * Vh;
+
+    // Tangent space H
+    return float3(alpha * Nh.x, alpha * Nh.y, max(0.0, Nh.z));
+}
+
+inline float square(float value)
+{
+    return value * value;
+}
+
+float ImportanceSampleGGX_VNDF_PDF(float alpha, float3 N, float3 V, float3 L)
+{
+    float3 H = normalize(L + V);
+    float NoH = saturate(dot(N, H));
+    float VoH = saturate(dot(V, H));
+
+    float D = square(alpha) / (Math::PI * square(square(NoH) * square(alpha) + (1 - square(NoH))));
+    return (VoH > 0.0) ? D / (4.0 * VoH) : 0.0;
+}
+
+float Schlick_Fresnel(float F0, float VdotH)
+{
+    return F0 + (1 - F0) * pow(max(1 - VdotH, 0), 5);
+}
+
+float3 Schlick_Fresnel(float3 F0, float VdotH)
+{
+    return F0 + (1 - F0) * pow(max(1 - VdotH, 0), 5);
+}
+
+float G1_Smith(float alpha, float NdotL)
+{
+    return 2.0 * NdotL / (NdotL + sqrt(square(alpha) + (1.0 - square(alpha)) * square(NdotL)));
 }
 
 float3 TangentToWorld(float3 normal, float3 tangentSample)
@@ -158,28 +195,10 @@ float3 F_Schlick(float u, float3 f0) {
     return f + f0 * (1.0 - f);
 }
 
-float V_SmithGGXCorrelatedFast(float NoV, float NoL, float roughness) {
-    float a = roughness;
+float V_SmithGGXCorrelatedFast(float NoV, float NoL, float a) {
     float GGXV = NoL * (NoV * (1.0 - a) + a);
     float GGXL = NoV * (NoL * (1.0 - a) + a);
     return 0.5 / (GGXV + GGXL);
-}
-
-float Fd_Lambert() {
-    return 1.0 / Math::PI;
-}
-
-float DiffuseProbability(float roughness, float metalness, float3 f0, float NoV)
-{
-    if (metalness >= 1.0f) return 0.0f;
-
-    float3 F = F_Schlick(NoV, f0);
-    
-    float specularEnergy = (F.r + F.g + F.b) / 3.0f;
-    
-    float diffuseEnergy = (1.0f - specularEnergy) * (1.0 - 0.2 * roughness);
-    
-    return clamp(diffuseEnergy, 0.005f, 1.0f);
 }
 
 float3 DiffuseAO(float3 diffuseColor, float ao)

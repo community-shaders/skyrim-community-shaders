@@ -27,7 +27,7 @@ void main()
     float4 view = mul(Frame.ProjInverse, clip);
     view /= view.w; 
 
-    float3 direction = normalize(mul((float3x3)Frame.ViewInverse, view.xyz));   	
+    float3 direction = normalize(mul((float3x3)Frame.ViewInverse, view.xyz));
     
     RayDesc ray;
     ray.Origin = origin;
@@ -36,5 +36,5 @@ void main()
     ray.TMax = 1e30;   
     
     uint seed = InitRandomSeed(idx, size, Frame.FrameCount);
-    OutputTexture[idx] = float4(TraceRayIndirect(Scene, origin, direction, 0, seed).rgb, 1.0f);
+    OutputTexture[idx] = float4(Color::TrueLinearToGamma(TraceRayIndirect(Scene, origin, direction, 0, seed).rgb), 1.0f);
 }

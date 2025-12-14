@@ -60,7 +60,7 @@ void HitMesh(inout IndirectPayload payload, in BuiltInTriangleIntersectionAttrib
     float3 effect = effectTexture.SampleLevel(BaseSampler, texCoord, 0).rgb;
     
 #ifdef PATH_TRACING
-    /*float3 normal = normalTexture.SampleLevel(BaseSampler, texCoord, 0).rgb * 2.0f - 1.0f;  
+    float3 normal = normalTexture.SampleLevel(BaseSampler, texCoord, 0).rgb * 2.0f - 1.0f;  
     float4 rmaos = rmaosTexture.SampleLevel(BaseSampler, texCoord, 0);
     
     // Normal mapping
@@ -76,11 +76,7 @@ void HitMesh(inout IndirectPayload payload, in BuiltInTriangleIntersectionAttrib
     // Roughness and Metalness from RMAOS
     roughnessSrc = saturate(rmaos.x * material.roughness);
     metalnessSrc = saturate(rmaos.y);
-    ao = rmaos.z;*/
-    
-    float3 worldNormal = geomWorldNormal;  
-    float3 worldTangent = geomWorldTangent; 
-    float3 worldBitangent = geomWorldBitangent;  
+    //ao = rmaos.z;
 #else
     float3 worldNormal = geomWorldNormal;
 #endif
@@ -130,9 +126,9 @@ void HitMesh(inout IndirectPayload payload, in BuiltInTriangleIntersectionAttrib
     payload.color += float4(GGXDirectD(worldPosition, worldNormal, viewDirection, albedo, roughness, metalness, Frame.Directional), 0.0f);
 #endif
     
-    /*[unroll]
+    [unroll]
     for (uint i = 0; i < SAMPLES; i++)
-    {*/
+    {
 #if defined(LAMBERT)
         payload.color += float4(LambertianDirectP(worldPosition, worldNormal, albedo, instance.LightData, randomSeed), 0.0f);
 #else
@@ -152,5 +148,5 @@ void HitMesh(inout IndirectPayload payload, in BuiltInTriangleIntersectionAttrib
             payload.color += indirect;
 #endif 
         }
-    //}
+    }
 }
