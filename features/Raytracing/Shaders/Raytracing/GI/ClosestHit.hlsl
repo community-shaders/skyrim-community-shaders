@@ -121,9 +121,9 @@ void HitMesh(inout IndirectPayload payload, in BuiltInTriangleIntersectionAttrib
     
     // Directional Light
 #if defined(LAMBERT)
-    payload.color += float4(LambertianDirectD(worldPosition, worldNormal, albedo, Frame.Directional), 0.0f);
+    payload.color += float4(LambertianDirectD(worldPosition, worldNormal, albedo, Frame.Directional, randomSeed), 0.0f);
 #else
-    payload.color += float4(GGXDirectD(worldPosition, worldNormal, viewDirection, albedo, roughness, metalness, Frame.Directional), 0.0f);
+    payload.color += float4(GGXDirectD(worldPosition, worldNormal, viewDirection, albedo, roughness, metalness, Frame.Directional, randomSeed), 0.0f);
 #endif
     
     [unroll]

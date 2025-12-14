@@ -41,7 +41,7 @@ float LinearAtten(float dist, float range)
     return saturate(1.0 - dist / range);
 }
 
-float3 LambertianDirectD(in float3 position, in float3 normal, in float3 albedo, in Light light)
+float3 LambertianDirectD(in float3 position, in float3 normal, in float3 albedo, in Light light, inout uint randomSeed)
 {
     float3 L = normalize(light.Vector);
  
@@ -109,7 +109,7 @@ float3 GGXDirect(in float3 l, in float3 n, in float3 v, in float3 albedo, in flo
     return (Fd + Fr) * NoL;
 }
 
-float3 GGXDirectD(in float3 position, in float3 n, in float3 v, in float3 albedo, in float roughness, in float metalness, in Light light)
+float3 GGXDirectD(in float3 position, in float3 n, in float3 v, in float3 albedo, in float roughness, in float metalness, in Light light, inout uint randomSeed)
 {
     float3 l = light.Vector;
 
@@ -117,8 +117,8 @@ float3 GGXDirectD(in float3 position, in float3 n, in float3 v, in float3 albedo
 
     if (any(direct > MIN_DIFFUSE_SHADOW))
     {
-        //float3 lr = TangentToWorld(l, SampleCosineHemisphereScaled(randomSeed, 0.25f));  
-        direct *= TraceRayShadow(Scene, position, l);
+        float3 lr = TangentToWorld(l, SampleCosineHemisphereScaled(randomSeed, 0.025f));  
+        direct *= TraceRayShadow(Scene, position, lr);
     }
 
     return direct;
