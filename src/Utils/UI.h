@@ -168,79 +168,6 @@ namespace Util
 		bool m_treeNodeOpened;
 	};
 
-	/**
-	 * Color utilities for contrast and readability
-	 */
-	namespace ColorUtils
-	{
-		/**
-		 * Calculates the relative luminance of a color according to WCAG guidelines
-		 * @param color ImVec4 color to calculate luminance for
-		 * @return Luminance value between 0.0 (darkest) and 1.0 (brightest)
-		 */
-		float CalculateLuminance(const ImVec4& color);
-
-		/**
-		 * Determines the appropriate text color (black or white) for maximum contrast
-		 * against the given background color
-		 * @param backgroundColor Background color to test against
-		 * @param threshold Luminance threshold for switching (default 0.5)
-		 * @return Black color for light backgrounds, white color for dark backgrounds
-		 */
-		ImVec4 GetContrastingTextColor(const ImVec4& backgroundColor, float threshold = 0.5f);
-
-		/**
-		 * Calculates contrast ratio between two colors according to WCAG guidelines
-		 * @param color1 First color
-		 * @param color2 Second color
-		 * @return Contrast ratio (1.0 = no contrast, 21.0 = maximum contrast)
-		 */
-		float CalculateContrastRatio(const ImVec4& color1, const ImVec4& color2);
-
-		/**
-		 * Adjusts a background color to ensure contrast with text
-		 * Darkens light backgrounds or lightens dark backgrounds to prevent same-color-on-same-color issues
-		 * @param backgroundColor Background color to adjust (modified in place)
-		 * @param textLuminance Luminance of the text color
-		 * @param luminanceThreshold Threshold for determining light vs dark (default 0.5)
-		 * @param darkenFactor Multiplier for darkening light backgrounds (default 0.4 = 60% darker)
-		 * @param lightenOffset Additive offset for lightening dark backgrounds (default 0.3 = 30% brighter)
-		 */
-		void AdjustBackgroundForTextContrast(ImVec4& backgroundColor, float textLuminance,
-			float luminanceThreshold = 0.5f, float darkenFactor = 0.4f, float lightenOffset = 0.3f);
-
-		/**
-		 * Adjusts a text color to ensure sufficient contrast against a background
-		 * @param textColor The desired text color (semantic color)
-		 * @param backgroundColor The background color to contrast against
-		 * @param minimumRatio Minimum acceptable contrast ratio (default 3.0)
-		 * @return Adjusted text color with sufficient contrast
-		 */
-		ImVec4 AdjustColorForContrast(const ImVec4& textColor, const ImVec4& backgroundColor, float minimumRatio = 3.0f);
-
-		/**
-		 * Creates a selectable item with automatic contrast-aware text coloring
-		 * @param label Text to display
-		 * @param selected Whether the item is currently selected
-		 * @param flags Selectable flags (optional)
-		 * @param size Size of the selectable area (optional)
-		 * @return True if the selectable was clicked
-		 */
-		bool ContrastSelectable(const char* label, bool selected, ImGuiSelectableFlags flags = 0, const ImVec2& size = ImVec2(0, 0));
-
-		/**
-		 * Creates a selectable item with contrast-adjusted semantic text coloring
-		 * Preserves the intent of semantic colors while ensuring adequate contrast
-		 * @param label Text to display
-		 * @param selected Whether the item is currently selected
-		 * @param semanticTextColor The desired semantic color (will be adjusted for contrast)
-		 * @param flags Selectable flags (optional)
-		 * @param size Size of the selectable area (optional)
-		 * @return True if the selectable was clicked
-		 */
-		bool ContrastSelectableWithColor(const char* label, bool selected, const ImVec4& semanticTextColor, ImGuiSelectableFlags flags = 0, const ImVec2& size = ImVec2(0, 0));
-	}
-
 	bool PercentageSlider(const char* label, float* data, float lb = 0.f, float ub = 100.f, const char* format = "%.1f %%");
 	ImVec2 GetNativeViewportSizeScaled(float scale);
 
@@ -255,7 +182,14 @@ namespace Util
 	// Text rendering helpers for clearer title text
 	// These functions modify ImGui rendering state and should be called within ImGui context
 	ImVec2 DrawSharpText(const char* text, bool alignToPixelGrid = true, float scale = 1.0f);
-	ImVec2 DrawAlignedTextWithLogo(ID3D11ShaderResourceView* logoTexture, const ImVec2& logoSize, const char* text, float textScale = DefaultHeaderTextScale);
+	ImVec2 DrawAlignedTextWithLogo(ID3D11ShaderResourceView* logoTexture, const ImVec2& logoSize, const char* text, float textScale = DefaultHeaderTextScale, ImU32 logoTint = IM_COL32_WHITE);
+
+	/**
+	 * Calculates the horizontal offset needed to center content within the full window width
+	 * @param contentWidth The width of the content to center
+	 * @return The offset to add to cursor X position to center the content
+	 */
+	float GetCenterOffsetForContent(float contentWidth);
 
 	/**
 	 * Draws a custom styled collapsible category header with lines extending from both sides
@@ -609,6 +543,22 @@ namespace Util
 	bool FeatureMatchesSearch(Feature* feat, const std::string& searchQuery);
 
 	/**
+	 * @brief Generic case-insensitive string matching for search functionality.
+	 * @param text The text to search in
+	 * @param searchQuery The search query string
+	 * @return True if the text matches the search query (case-insensitive)
+	 */
+	bool StringMatchesSearch(const std::string& text, const std::string& searchQuery);
+
+	/**
+	 * @brief Draws a search icon (magnifying glass) at the specified position.
+	 * @param position The screen position where the icon should be drawn
+	 * @param size The size of the icon (default: 20.0f)
+	 * @param alpha Alpha multiplier for the icon color (default: 0.7f for subtle appearance)
+	 */
+	void DrawSearchIcon(const ImVec2& position, float size = 20.0f, float alpha = 0.7f);
+
+	/**
 	 * @brief Draws the feature search bar with magnifying glass icon.
 	 * @param searchString Reference to the search string to modify
 	 * @param availableWidth The available width for the search bar
@@ -744,6 +694,73 @@ namespace Util
 	}
 
 	/**
+	 * @brief Renders a searchable combo box with case-insensitive filtering
+	 *
+	 * Provides a reusable ImGui combo box with built-in search functionality.
+	 * When opened, automatically focuses a search input that filters items as you type.
+	 * The search is case-insensitive and clears automatically on selection or close.
+	 *
+	 * @tparam T The value type stored in the map
+	 * @param label The label for the combo box
+	 * @param selectedName Reference to the currently selected item's name (will be updated on selection)
+	 * @param itemMap The map of items to display (key = item name, value = item data)
+	 * @return true if a new item was selected, false otherwise
+	 *
+	 * @note Uses a static search buffer, so only one SearchableCombo should be open at a time
+	 *
+	 * @example
+	 * @code
+	 * std::unordered_map<std::string, MyData> myItems;
+	 * std::string selectedName;
+	 * MyData* selectedItem = nullptr;
+	 *
+	 * if (Util::SearchableCombo("Choose Item", selectedName, myItems)) {
+	 *     selectedItem = &myItems[selectedName];
+	 * }
+	 * @endcode
+	 */
+	template <typename T>
+	bool SearchableCombo(const char* label, std::string& selectedName, std::unordered_map<std::string, T>& itemMap)
+	{
+		bool valueChanged = false;
+		static std::unordered_map<std::string, char[256]> searchBuffers;
+
+		std::string comboId = std::string(label);
+		auto& searchBuffer = searchBuffers[comboId];
+
+		if (ImGui::BeginCombo(label, selectedName.c_str())) {
+			ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(24.0f, ImGui::GetStyle().FramePadding.y));
+			ImGui::InputText("##search", searchBuffer, IM_ARRAYSIZE(searchBuffer));
+			ImGui::PopStyleVar();
+			ImVec2 iconPos = ImVec2(ImGui::GetItemRectMin().x + 5.0f, ImGui::GetItemRectMin().y + (ImGui::GetItemRectSize().y - 16.0f) * 0.5f);
+			DrawSearchIcon(iconPos, 16.0f, 0.5f);
+
+			ImGui::Separator();
+
+			// Filter and display items
+			for (auto& [itemName, item] : itemMap) {
+				// Simple case-insensitive search
+				if (searchBuffer[0] == '\0' ||
+					std::search(itemName.begin(), itemName.end(), searchBuffer, searchBuffer + strlen(searchBuffer),
+						[](char a, char b) { return std::tolower(a) == std::tolower(b); }) != itemName.end()) {
+					if (ImGui::Selectable(itemName.c_str(), itemName == selectedName)) {
+						selectedName = itemName;
+						valueChanged = true;
+						searchBuffer[0] = '\0';  // Clear search on selection
+					}
+				}
+			}
+
+			ImGui::EndCombo();
+		} else {
+			// Reset search when combo is closed
+			searchBuffer[0] = '\0';
+		}
+
+		return valueChanged;
+	}
+
+	/**
 	 * @brief Renders a table cell with automatic text highlighting and optional tooltip/fallback.
 	 * Convenience function for table cell renderers that combines text rendering with highlighting,
 	 * tooltips, and fallback text for empty content.
@@ -755,6 +772,7 @@ namespace Util
 	 * @param enableWrapping Whether to enable text wrapping for multi-line content (default: true)
 	 * @param textColor Optional text color override (default: use default text color)
 	 */
+
 	inline void RenderTableCell(const std::string& text, const std::string& filterText,
 		const std::string& tooltipText = "", const char* fallbackText = nullptr,
 		ImVec4 highlightColor = ImVec4(1.0f, 1.0f, 0.0f, 1.0f), bool enableWrapping = true,
