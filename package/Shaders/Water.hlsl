@@ -88,7 +88,7 @@ struct VS_OUTPUT
 	float4 TexCoord3 : TEXCOORD3;
 #		endif
 #		if defined(FLOWMAP)
-	nointerpolation float TexCoord4 : TEXCOORD4;
+	nointerpolation float2 TexCoord4 : TEXCOORD4;
 #		endif
 #		if NUM_SPECULAR_LIGHTS == 0
 	float4 MPosition : TEXCOORD5;
@@ -453,7 +453,7 @@ struct FlowmapData
 FlowmapData GetFlowmapDataTextureSpace(PS_INPUT input, float2 uvShift)
 {
 	FlowmapData data;
-	data.color = FlowMapTex.Sample(FlowMapSampler, input.TexCoord2.zw + uvShift);
+	data.color = FlowMapTex.SampleLevel(FlowMapSampler, input.TexCoord2.zw + uvShift, 0);
 	data.flowVector = (64 * input.TexCoord3.xy) * sqrt(1.01 - data.color.z);
 	// NOTE: flowVector is NOT transformed yet - this is the raw vector before rotation matrix
 	return data;
@@ -486,23 +486,90 @@ FlowmapData GetFlowmapDataUV(PS_INPUT input, float2 uvShift)
 	data.flowVector = mul(transpose(flowRotationMatrix), data.flowVector);
 	return data;
 }
+// ----------------------------------------------------------------
+// Flowmap Parallax Functions
+// ----------------------------------------------------------------
 
 /**
- * Generates flowmap-based normal perturbation for water surface
+ * Samples height from flowmap texture using the same 4-sample blend as flowmap normals
+ * This ensures height transitions match the normal transitions exactly
  *
- * @param input Pixel shader input containing texture coordinates and world position
- * @param uvShift UV offset for flowmap sampling (used for animation phases)
- * @param multiplier Intensity multiplier for the flow effect
- * @param offset Base UV offset for the normal texture sampling
- * @return float3 Normal perturbation (XY=normal offset, Z=flow strength mask)
- *
- * @details This function uses flowmap data to:
- *          - Calculate flow-displaced UV coordinates for normal texture sampling
- *          - Apply flow-based animation to water normal textures
- *          - Return both the normal perturbation and flow strength information
- *
- * @note The returned Z component contains the original flowmap strength value
- *       which can be used for blending between flow and non-flow normals
+ * @param input PS_INPUT for flowmap coordinate access
+ * @param normalMul The blend weights from the flowmap system (same as used for normals)
+ * @param uvShift The UV shift value (1 / (128 * flowmapDimensions))
+ * @param mipLevel Mip level for texture sampling
+ */
+float GetFlowmapHeightBlended(PS_INPUT input, float2 normalMul, float2 uvShift, float mipLevel)
+{
+	// Sample height using the EXACT same UV computation as GetFlowmapNormal
+	// This ensures the height blending matches the normal blending perfectly
+
+	// Sample 0: uvShift, multiplier=9.92, offset=0
+	FlowmapData flowData0 = GetFlowmapDataUV(input, uvShift);
+	float2 uv0 = 0 + (flowData0.flowVector - float2(9.92 * ((0.001 * ReflectionColor.w) * flowData0.color.w), 0));
+	float height0 = FlowMapNormalsTex.SampleLevel(FlowMapNormalsSampler, uv0, mipLevel).w;
+
+	// Sample 1: float2(0, uvShift.y), multiplier=10.64, offset=0.27
+	FlowmapData flowData1 = GetFlowmapDataUV(input, float2(0, uvShift.y));
+	float2 uv1 = 0.27 + (flowData1.flowVector - float2(10.64 * ((0.001 * ReflectionColor.w) * flowData1.color.w), 0));
+	float height1 = FlowMapNormalsTex.SampleLevel(FlowMapNormalsSampler, uv1, mipLevel).w;
+
+	// Sample 2: 0.0.xx, multiplier=8, offset=0
+	FlowmapData flowData2 = GetFlowmapDataUV(input, 0.0.xx);
+	float2 uv2 = 0 + (flowData2.flowVector - float2(8 * ((0.001 * ReflectionColor.w) * flowData2.color.w), 0));
+	float height2 = FlowMapNormalsTex.SampleLevel(FlowMapNormalsSampler, uv2, mipLevel).w;
+
+	// Sample 3: float2(uvShift.x, 0), multiplier=8.48, offset=0.62
+	FlowmapData flowData3 = GetFlowmapDataUV(input, float2(uvShift.x, 0));
+	float2 uv3 = 0.62 + (flowData3.flowVector - float2(8.48 * ((0.001 * ReflectionColor.w) * flowData3.color.w), 0));
+	float height3 = FlowMapNormalsTex.SampleLevel(FlowMapNormalsSampler, uv3, mipLevel).w;
+
+	// Use the EXACT same blending formula as flowmap normals
+	float blendedHeight =
+		normalMul.y * (normalMul.x * height2 + (1 - normalMul.x) * height3) +
+		(1 - normalMul.y) * (normalMul.x * height1 + (1 - normalMul.x) * height0);
+
+	return blendedHeight;
+}
+
+// Keep this for compatibility - just forwards to the proper function
+float GetFlowmapHeightBarycentric(PS_INPUT input, float2 flowmapDimensions, float2 baseUV, float mipLevel)
+{
+	// This is now unused - we use GetFlowmapHeightBlended directly
+	return FlowMapNormalsTex.SampleLevel(FlowMapNormalsSampler, baseUV, mipLevel).w;
+}
+
+/**
+ * Computes mip level for flowmap texture sampling
+ */
+float GetFlowmapMipLevel(float2 flowmapUV)
+{
+	float2 textureDims;
+	FlowMapNormalsTex.GetDimensions(textureDims.x, textureDims.y);
+
+#if defined(VR)
+	textureDims /= 16.0;
+#else
+	textureDims /= 8.0;
+#endif
+
+	float2 texCoordsPerSize = flowmapUV * textureDims;
+	float2 dxSize = ddx(texCoordsPerSize);
+	float2 dySize = ddy(texCoordsPerSize);
+	float2 dTexCoords = dxSize * dxSize + dySize * dySize;
+	float minTexCoordDelta = max(dTexCoords.x, dTexCoords.y);
+	return max(0.5 * log2(minTexCoordDelta), 0);
+}
+
+/**
+ * Samples height from flowmap texture (riverflow.dds alpha channel)
+ * Uses the same UV calculation as GetFlowmapNormal for consistency
+ */
+
+
+/**
+ * Generates flowmap-based normal (no parallax - flowmap normals are not parallax-shifted)
+ * Uses mip clamping to preserve detail at distance and prevent over-blurring
  */
 float3 GetFlowmapNormal(PS_INPUT input, float2 uvShift, float multiplier, float offset)
 {
@@ -588,14 +655,34 @@ WaterNormalData GetWaterNormal(PS_INPUT input, float distanceFactor, float norma
 #			endif
 
 #			if defined(FLOWMAP)
-	float2 normalMul =
-		0.5 + -(-0.5 + abs(frac(input.TexCoord2.zw * (64 * input.TexCoord4)) * 2 - 1));
-	float uvShift = 1 / (128 * input.TexCoord4);
+	#				if defined(UNIFIED_WATER)
+	float2 flowmapDimensions = input.TexCoord4.xy;
+#				else
+	float2 flowmapDimensions = input.TexCoord4.xx;
+#				endif
+	float2 uvShift = 1 / (128 * flowmapDimensions);
 
-	float3 flowmapNormal0 = GetFlowmapNormal(input, uvShift.xx, 9.92, 0);
-	float3 flowmapNormal1 = GetFlowmapNormal(input, float2(0, uvShift), 10.64, 0.27);
-	float3 flowmapNormal2 = GetFlowmapNormal(input, 0.0.xx, 8, 0);
-	float3 flowmapNormal3 = GetFlowmapNormal(input, float2(uvShift, 0), 8.48, 0.62);
+	// Compute flowmap parallax and create parallaxed input for normal sampling
+	PS_INPUT flowmapInput = input;
+	float2 flowmapParallaxOffset = float2(0, 0);
+#				if defined(WATER_PARALLAX) && !defined(LOD)
+	float parallaxAmount = WaterEffects::GetFlowmapParallaxAmount(input, flowmapDimensions, viewDirection);
+	float2 parallaxDir = viewDirection.xy / -viewDirection.z;
+	parallaxDir.y = -parallaxDir.y;
+	float viewDotUp = -viewDirection.z;
+	parallaxDir *= 0.008 * saturate(viewDotUp * 2.0);
+	flowmapInput.TexCoord3.xy = input.TexCoord3.xy + parallaxAmount * parallaxDir;
+	flowmapParallaxOffset = WaterEffects::GetFlowmapParallaxOffset(input, flowmapDimensions, viewDirection, normalScalesRcp);
+#				endif
+
+	// Calculate cell blend weights using parallaxed input
+	float2 normalMul = 0.5 + -(-0.5 + abs(frac(flowmapInput.TexCoord2.zw * (64 * flowmapDimensions)) * 2 - 1));
+
+	// Sample flowmap normals with parallax applied
+	float3 flowmapNormal0 = GetFlowmapNormal(flowmapInput, uvShift, 9.92, 0);
+	float3 flowmapNormal1 = GetFlowmapNormal(flowmapInput, float2(0, uvShift.y), 10.64, 0.27);
+	float3 flowmapNormal2 = GetFlowmapNormal(flowmapInput, 0.0.xx, 8, 0);
+	float3 flowmapNormal3 = GetFlowmapNormal(flowmapInput, float2(uvShift.x, 0), 8.48, 0.62);
 
 	float2 flowmapNormalWeighted =
 		normalMul.y * (normalMul.x * flowmapNormal2.xy + (1 - normalMul.x) * flowmapNormal3.xy) +
@@ -608,14 +695,21 @@ WaterNormalData GetWaterNormal(PS_INPUT input, float distanceFactor, float norma
 			0);
 	flowmapNormal.z =
 		sqrt(1 - flowmapNormal.x * flowmapNormal.x - flowmapNormal.y * flowmapNormal.y);
-#			endif
-
+	float2 baseNormalUv = input.TexCoord1.xy;
 #			if defined(WATER_PARALLAX)
-	float3 normals1 = Normals01Tex.SampleBias(Normals01Sampler, input.TexCoord1.xy + parallaxOffset.xy * normalScalesRcp.x, SharedData::MipBias).xyz * 2.0 + float3(-1, -1, -2);
-#			else
-	float3 normals1 = Normals01Tex.SampleBias(Normals01Sampler, input.TexCoord1.xy, SharedData::MipBias).xyz * 2.0 + float3(-1, -1, -2);
+	// Use flowmap-derived parallax offset for base normals
+	baseNormalUv += flowmapParallaxOffset.xy * normalScalesRcp.x;
 #			endif
+	float3 normals1 = Normals01Tex.SampleBias(Normals01Sampler, baseNormalUv, SharedData::MipBias).xyz * 2.0 + float3(-1, -1, -2);
+	#			endif  // End of FLOWMAP block
 
+	#			if !defined(FLOWMAP)
+	#				if defined(WATER_PARALLAX)
+		float3 normals1 = Normals01Tex.SampleBias(Normals01Sampler, input.TexCoord1.xy + parallaxOffset.xy * normalScalesRcp.x, SharedData::MipBias).xyz * 2.0 + float3(-1, -1, -2);
+	#				else
+		float3 normals1 = Normals01Tex.SampleBias(Normals01Sampler, input.TexCoord1.xy, SharedData::MipBias).xyz * 2.0 + float3(-1, -1, -2);
+	#				endif
+	#			endif  // End of !FLOWMAP block
 #			if defined(FLOWMAP) && !defined(BLEND_NORMALS)
 #				ifdef DISABLE_FLOWMAP_NORMALS
 	// FLOWMAP NORMALS DISABLED: Using only base normals (flow system still active for ripples/splashes)

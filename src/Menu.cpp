@@ -24,9 +24,11 @@
 #include "FeatureVersions.h"
 #include "Features/Upscaling.h"
 #include "Menu/AdvancedSettingsRenderer.h"
+#include "Menu/BackgroundBlur.h"
 #include "Menu/FeatureListRenderer.h"
 #include "Menu/Fonts.h"
 #include "Menu/HomePageRenderer.h"
+#include "Menu/IconLoader.h"
 #include "Menu/MenuHeaderRenderer.h"
 #include "Menu/OverlayRenderer.h"
 #include "Menu/SettingsTabRenderer.h"
@@ -127,7 +129,12 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	FontRoles,
 	UseSimplePalette,
 	ShowActionIcons,
+	UseMonochromeIcons,
+	UseMonochromeLogo,
+	ShowFooter,
+	CenterHeader,
 	TooltipHoverDelay,
+	BackgroundBlurEnabled,
 	ScrollbarOpacity,
 	Palette,
 	StatusPalette,
@@ -190,6 +197,9 @@ Menu::~Menu()
 	uiIcons.materials.Release();
 	uiIcons.postProcessing.Release();
 
+	// Clean up blur resources
+	BackgroundBlur::Cleanup();
+
 	ImGui_ImplDX11_Shutdown();
 	ImGui_ImplWin32_Shutdown();
 	ImGui::DestroyContext();
@@ -249,9 +259,11 @@ void Menu::LoadTheme(json& o_json)
 			settings.Theme.FontRoles[static_cast<size_t>(FontRole::Body)] = defaults;
 			settings.Theme.FontName = defaults.File;
 		}
+
+		// Apply background blur enabled state from theme
+		BackgroundBlur::SetEnabled(settings.Theme.BackgroundBlurEnabled);
 	}
 }
-
 void Menu::SaveTheme(json& o_json)
 {
 	settings.Theme.FontName = settings.Theme.FontRoles[static_cast<size_t>(FontRole::Body)].File;
@@ -289,27 +301,163 @@ bool Menu::LoadThemePreset(const std::string& themeName)
 	json themeSettings;
 
 	if (themeManager->LoadTheme(themeName, themeSettings)) {
-		bool hasFontRoles = themeSettings.contains("FontRoles");
-		settings.Theme = themeSettings;
-		MenuFonts::NormalizeFontRoles(settings.Theme, hasFontRoles);
-		auto& bodyRole = settings.Theme.FontRoles[static_cast<size_t>(FontRole::Body)];
-		if (!Util::ValidateFont(bodyRole.File)) {
-			const auto& defaults = Menu::GetDefaultFontRole(FontRole::Body);
-			logger::warn("Font '{}' from theme '{}' not found, falling back to default font '{}'",
-				bodyRole.File, themeName, defaults.File);
-			settings.Theme.FontRoles[static_cast<size_t>(FontRole::Body)] = defaults;
-			settings.Theme.FontName = defaults.File;
+		try {
+			// Create a backup of current theme in case loading fails
+			ThemeSettings backupTheme = settings.Theme;
+			ThemeSettings defaultTheme;  // For fallback values
+
+			bool hasFontRoles = themeSettings.contains("FontRoles");
+
+			// Attempt to load theme with protection against malformed data
+			try {
+				settings.Theme = themeSettings;
+			} catch (const json::out_of_range& e) {
+				// Most likely FullPalette array size mismatch
+				logger::warn("Theme '{}' has incomplete data ({}). Loading with defaults for missing fields.", themeName, e.what());
+
+				// Manually load fields that exist, use defaults for missing ones
+				if (themeSettings.contains("FontSize")) {
+					try {
+						settings.Theme.FontSize = themeSettings["FontSize"];
+					} catch (...) {}
+				}
+				if (themeSettings.contains("FontName")) {
+					try {
+						settings.Theme.FontName = themeSettings["FontName"];
+					} catch (...) {}
+				}
+				if (themeSettings.contains("GlobalScale")) {
+					try {
+						settings.Theme.GlobalScale = themeSettings["GlobalScale"];
+					} catch (...) {}
+				}
+				if (themeSettings.contains("FontRoles")) {
+					try {
+						settings.Theme.FontRoles = themeSettings["FontRoles"];
+					} catch (...) {}
+				}
+				if (themeSettings.contains("ShowActionIcons")) {
+					try {
+						settings.Theme.ShowActionIcons = themeSettings["ShowActionIcons"];
+					} catch (...) {}
+				}
+				if (themeSettings.contains("UseMonochromeIcons")) {
+					try {
+						settings.Theme.UseMonochromeIcons = themeSettings["UseMonochromeIcons"];
+					} catch (...) {}
+				}
+				if (themeSettings.contains("UseMonochromeLogo")) {
+					try {
+						settings.Theme.UseMonochromeLogo = themeSettings["UseMonochromeLogo"];
+					} catch (...) {}
+				}
+				if (themeSettings.contains("TooltipHoverDelay")) {
+					try {
+						settings.Theme.TooltipHoverDelay = themeSettings["TooltipHoverDelay"];
+					} catch (...) {}
+				}
+				if (themeSettings.contains("BackgroundBlurEnabled")) {
+					try {
+						settings.Theme.BackgroundBlurEnabled = themeSettings["BackgroundBlurEnabled"];
+					} catch (...) {}
+				}
+				if (themeSettings.contains("ScrollbarOpacity")) {
+					try {
+						settings.Theme.ScrollbarOpacity = themeSettings["ScrollbarOpacity"];
+					} catch (...) {}
+				}
+				if (themeSettings.contains("Palette")) {
+					try {
+						settings.Theme.Palette = themeSettings["Palette"];
+					} catch (...) {}
+				}
+				if (themeSettings.contains("StatusPalette")) {
+					try {
+						settings.Theme.StatusPalette = themeSettings["StatusPalette"];
+					} catch (...) {}
+				}
+				if (themeSettings.contains("FeatureHeading")) {
+					try {
+						settings.Theme.FeatureHeading = themeSettings["FeatureHeading"];
+					} catch (...) {}
+				}
+				if (themeSettings.contains("Style")) {
+					try {
+						settings.Theme.Style = themeSettings["Style"];
+					} catch (...) {}
+				}
+
+				// Handle FullPalette with extra care
+				if (themeSettings.contains("FullPalette") && themeSettings["FullPalette"].is_array()) {
+					const auto& paletteJson = themeSettings["FullPalette"];
+					size_t jsonSize = paletteJson.size();
+					size_t requiredSize = settings.Theme.FullPalette.size();  // Should be ImGuiCol_COUNT (55)
+
+					if (jsonSize < requiredSize) {
+						logger::warn("Theme '{}' FullPalette has {} elements, expected {}. Using defaults for missing colors.",
+							themeName, jsonSize, requiredSize);
+					}
+
+					// Load colors that exist, use defaults for the rest
+					for (size_t i = 0; i < requiredSize; ++i) {
+						if (i < jsonSize) {
+							try {
+								if (paletteJson[i].is_array() && paletteJson[i].size() >= 4) {
+									settings.Theme.FullPalette[i] = ImVec4(
+										paletteJson[i][0].get<float>(),
+										paletteJson[i][1].get<float>(),
+										paletteJson[i][2].get<float>(),
+										paletteJson[i][3].get<float>());
+								} else {
+									settings.Theme.FullPalette[i] = defaultTheme.FullPalette[i];
+								}
+							} catch (...) {
+								settings.Theme.FullPalette[i] = defaultTheme.FullPalette[i];
+							}
+						} else {
+							settings.Theme.FullPalette[i] = defaultTheme.FullPalette[i];
+						}
+					}
+				} else {
+					// FullPalette missing, use all defaults
+					logger::warn("Theme '{}' missing FullPalette array, using defaults", themeName);
+					settings.Theme.FullPalette = defaultTheme.FullPalette;
+				}
+			} catch (const std::exception& e) {
+				logger::error("Error loading theme '{}': {}. Using previous theme.", themeName, e.what());
+				settings.Theme = backupTheme;
+				return false;
+			}
+
+			MenuFonts::NormalizeFontRoles(settings.Theme, hasFontRoles);
+			auto& bodyRole = settings.Theme.FontRoles[static_cast<size_t>(FontRole::Body)];
+			if (!Util::ValidateFont(bodyRole.File)) {
+				const auto& defaults = Menu::GetDefaultFontRole(FontRole::Body);
+				logger::warn("Font '{}' from theme '{}' not found, falling back to default font '{}'",
+					bodyRole.File, themeName, defaults.File);
+				settings.Theme.FontRoles[static_cast<size_t>(FontRole::Body)] = defaults;
+				settings.Theme.FontName = defaults.File;
+			}
+
+			settings.SelectedThemePreset = themeName;
+
+			// Schedule deferred font reload if font has changed
+			if (settings.Theme.FontName != cachedFontName) {
+				pendingFontReload = true;
+			}
+
+			// Schedule deferred icon reload to apply theme-specific icon overrides
+			pendingIconReload = true;
+
+			// Apply background blur enabled state from theme
+			BackgroundBlur::SetEnabled(settings.Theme.BackgroundBlurEnabled);
+
+			logger::info("Loaded theme preset: {}", themeName);
+			return true;
+		} catch (const std::exception& e) {
+			logger::error("Fatal error loading theme '{}': {}.", themeName, e.what());
+			return false;
 		}
-
-		settings.SelectedThemePreset = themeName;
-
-		// Schedule deferred font reload if font has changed
-		if (settings.Theme.FontName != cachedFontName) {
-			pendingFontReload = true;
-		}
-
-		logger::info("Loaded theme preset: {}", themeName);
-		return true;
 	} else {
 		logger::warn("Failed to load theme preset: {}", themeName);
 		return false;
@@ -373,6 +521,11 @@ void Menu::Init()
 	// Load UI icons
 	if (!Util::InitializeMenuIcons(this)) {
 		logger::warn("Menu::Init() - Failed to load UI icons. Will fallback to text buttons");
+	}
+
+	// Initialize background blur system
+	if (!BackgroundBlur::Initialize()) {
+		logger::warn("Menu::Init() - Failed to initialize background blur system");
 	}
 
 	BuildCategoryCounts();
@@ -451,7 +604,9 @@ void Menu::DrawSettings()
 
 		// Main content starts here - no additional separator needed as it's already handled in the conditions above
 
-		float footer_height = ImGui::GetFrameHeightWithSpacing() + ImGui::GetStyle().ItemSpacing.y * 3 + 3.0f;  // text + separator
+		float footer_height = settings.Theme.ShowFooter ?
+		                          (ImGui::GetFrameHeightWithSpacing() + ImGui::GetStyle().ItemSpacing.y * 3 + 3.0f) :
+		                          0.0f;
 
 		// Static storage for menu state - must persist across frames
 		static size_t selectedMenu = 0;
@@ -467,11 +622,12 @@ void Menu::DrawSettings()
 			[&]() { DrawGeneralSettings(); },
 			[&]() { DrawAdvancedSettings(); });
 
-		ImGui::Spacing();
-		ImGui::SeparatorEx(ImGuiSeparatorFlags_Horizontal, ThemeManager::Constants::SEPARATOR_THICKNESS);
-		ImGui::Spacing();
-
-		DrawFooter();
+		if (settings.Theme.ShowFooter) {
+			ImGui::Spacing();
+			ImGui::SeparatorEx(ImGuiSeparatorFlags_Horizontal, ThemeManager::Constants::SEPARATOR_THICKNESS);
+			ImGui::Spacing();
+			DrawFooter();
+		}
 	}
 	ImGui::End();
 }
@@ -590,9 +746,13 @@ void Menu::DrawFooter()
  */
 void Menu::DrawOverlay()
 {
+	// Only process reloads when ImGui is NOT in an active frame
+	ImGuiContext* ctx = ImGui::GetCurrentContext();
+	bool canReload = ctx && !ctx->WithinFrameScope && !ctx->WithinEndChild;
+
 	// Process deferred font reload BEFORE any ImGui operations
 	// This is the safest place to do font atlas modifications
-	if (pendingFontReload) {
+	if (pendingFontReload && canReload) {
 		// Call ReloadFont first - only clear flag if it succeeds
 		if (ThemeManager::ReloadFont(*this, cachedFontSize)) {
 			// Reload completed successfully
@@ -600,6 +760,15 @@ void Menu::DrawOverlay()
 		} else {
 			// Reload failed - keep flag true to retry next frame
 			logger::warn("Menu::DrawOverlay() - Font reload failed, will retry next frame");
+		}
+	}
+
+	// Process deferred icon reload BEFORE rendering
+	if (pendingIconReload && canReload) {
+		if (Util::IconLoader::InitializeMenuIcons(this)) {
+			pendingIconReload = false;
+		} else {
+			logger::warn("Menu::DrawOverlay() - Icon reload failed, will retry next frame");
 		}
 	}
 
