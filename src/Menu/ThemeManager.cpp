@@ -298,6 +298,15 @@ bool ThemeManager::ReloadFont(const Menu& menu, float& cachedFontSize)
 					ImFontConfig cfg = font_config;
 					auto* font = io.Fonts->AddFontFromFileTTF(fontPath.string().c_str(), roundedSize, &cfg);
 					if (font) {
+						// add font awesome 5
+						static const ImWchar icons_ranges[] = { ICON_MIN_FA, ICON_MAX_FA, 0 };
+						ImFontConfig merge_config;
+						merge_config.MergeMode = true;
+						merge_config.PixelSnapH = true;
+						merge_config.DstFont = font;
+
+						io.Fonts->AddFontFromFileTTF("Data\\Interface\\CommunityShaders\\Fonts\\fa-solid-900.ttf", 24, &merge_config, icons_ranges);
+
 						atlasCache.emplace(cacheKey, font);
 						loadedFont = font;
 					}
@@ -366,15 +375,6 @@ bool ThemeManager::ReloadFont(const Menu& menu, float& cachedFontSize)
 	cachedFontSize = fontSize;
 	const_cast<Menu&>(menu).GetSettings().Theme.FontName = menu.cachedFontName;
 	const_cast<Menu&>(menu).cachedFontSignature = const_cast<Menu&>(menu).BuildFontSignature(fontSize);
-
-	// add font awesome 5
-	static const ImWchar icons_ranges[] = { ICON_MIN_FA, ICON_MAX_FA, 0 };
-	ImFontConfig icons_config;
-	icons_config.MergeMode = true;
-	icons_config.PixelSnapH = true;
-	icons_config.FontDataOwnedByAtlas = true;
-
-	io.Fonts->AddFontFromFileTTF("Data\\Interface\\CommunityShaders\\Fonts\\fa-solid-900.ttf", 24, &icons_config, icons_ranges);
 
 	// Build the font atlas - this bakes all fonts into the texture
 	if (!io.Fonts->Build()) {
