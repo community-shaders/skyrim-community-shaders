@@ -1,0 +1,132 @@
+{
+    "DisplayName": "Nordic Frost",
+    "Description": "Cool blue-white theme reflecting the harsh Nordic climate and icy mountain peaks",
+    "Version": "1.0.0",
+    "Author": "Community Shaders Team",
+    "Theme": {
+        "FontSize": 27.0,
+        "FontName": "Jost/Jost-Regular.ttf",
+        "GlobalScale": 0.0,
+        "FontRoles": [
+            {
+                "Family": "Crimson Pro",
+                "Style": "Light",
+                "File": "CrimsonPro/CrimsonPro-Light.ttf",
+                "SizeScale": 1.0
+            },
+            {
+                "Family": "Sovngarde",
+                "Style": "Bold",
+                "File": "Sovngarde/SovngardeBold.ttf",
+                "SizeScale": 1.0
+            },
+            {
+                "Family": "Sovngarde",
+                "Style": "Light",
+                "File": "Sovngarde/SovngardeLight.ttf",
+                "SizeScale": 1.0
+            },
+            {
+                "Family": "Crimson Pro",
+                "Style": "Regular",
+                "File": "CrimsonPro/CrimsonPro-Regular.ttf",
+                "SizeScale": 1.0
+            }
+        ],
+        "UseSimplePalette": false,
+        "ShowActionIcons": true,
+        "UseMonochromeIcons": true,
+        "TooltipHoverDelay": 0.5,
+        "BackgroundBlurEnabled": false,
+        "Palette": {
+            "Background": [0.05, 0.15, 0.25, 0.9],
+            "Text": [0.9, 0.95, 1.0, 1.0],
+            "WindowBorder": [0.7, 0.85, 0.9, 0.8],
+            "FrameBorder": [0.6, 0.75, 0.8, 0.7],
+            "Separator": [0.7, 0.85, 0.9, 0.6],
+            "ResizeGrip": [0.8, 0.9, 0.95, 0.8]
+        },
+        "StatusPalette": {
+            "Disable": [0.4, 0.45, 0.5, 1.0],
+            "Error": [1.0, 0.3, 0.4, 1.0],
+            "Warning": [1.0, 0.8, 0.3, 1.0],
+            "RestartNeeded": [0.7, 0.9, 0.4, 1.0],
+            "CurrentHotkey": [0.5, 0.8, 1.0, 1.0],
+            "SuccessColor": [0.4, 0.8, 0.6, 1.0],
+            "InfoColor": [0.6, 0.8, 0.9, 1.0]
+        },
+        "FeatureHeading": {
+            "ColorDefault": [0.7, 0.85, 0.95, 1.0],
+            "ColorHovered": [0.85, 0.95, 1.0, 1.0],
+            "MinimizedFactor": 0.6
+        },
+        "Style": {
+            "WindowBorderSize": 2.0,
+            "ChildBorderSize": 1.0,
+            "FrameBorderSize": 1.0,
+            "WindowPadding": [12.0, 10.0],
+            "WindowRounding": 8.0,
+            "IndentSpacing": 6.0,
+            "FramePadding": [6.0, 4.0],
+            "CellPadding": [10.0, 4.0],
+            "ItemSpacing": [6.0, 6.0]
+        },
+        "FullPalette": [
+            [0.9, 0.95, 1.0, 0.9],
+            [0.7, 0.8, 0.9, 1.0],
+            [0.05, 0.15, 0.25, 0.9],
+            [0.0, 0.0, 0.0, 0.0],
+            [0.04, 0.12, 0.2, 0.85],
+            [0.5, 0.65, 0.8, 0.65],
+            [0.0, 0.0, 0.0, 0.0],
+            [0.03, 0.08, 0.15, 1.0],
+            [0.25, 0.35, 0.5, 0.4],
+            [0.3, 0.4, 0.55, 0.45],
+            [0.03, 0.08, 0.15, 0.83],
+            [0.05, 0.1, 0.18, 0.87],
+            [0.15, 0.25, 0.4, 0.9],
+            [0.08, 0.18, 0.28, 0.9],
+            [0.2, 0.3, 0.45, 0.9],
+            [0.3, 0.4, 0.55, 1.0],
+            [0.4, 0.5, 0.65, 1.0],
+            [0.5, 0.6, 0.75, 1.0],
+            [0.9, 0.95, 1.0, 1.0],
+            [0.7, 0.8, 0.9, 1.0],
+            [0.25, 0.35, 0.5, 1.0],
+            [0.5, 0.7, 0.9, 0.4],
+            [0.15, 0.2, 0.3, 0.8],
+            [0.25, 0.35, 0.5, 1.0],
+            [0.6, 0.8, 1.0, 1.0],
+            [0.7, 0.85, 1.0, 1.0],
+            [0.8, 0.9, 1.0, 1.0],
+            [0.5, 0.65, 0.8, 1.0],
+            [0.6, 0.75, 0.9, 1.0],
+            [0.8, 0.9, 1.0, 1.0],
+            [0.9, 0.95, 1.0, 1.0],
+            [0.9, 0.95, 1.0, 0.6],
+            [0.9, 0.95, 1.0, 0.9],
+            [0.5, 0.7, 0.9, 0.31],
+            [0.6, 0.75, 0.95, 0.8],
+            [0.7, 0.85, 1.0, 1.0],
+            [0.04, 0.12, 0.2, 0.97],
+            [0.65, 0.8, 0.95, 1.0],
+            [0.5, 0.65, 0.8, 0.5],
+            [0.0, 0.0, 0.0, 0.0],
+            [0.9, 0.95, 1.0, 1.0],
+            [0.5, 0.8, 1.0, 1.0],
+            [0.5, 0.8, 1.0, 1.0],
+            [0.5, 0.8, 1.0, 1.0],
+            [0.5, 0.7, 0.9, 0.4],
+            [0.2, 0.3, 0.45, 1.0],
+            [0.15, 0.25, 0.35, 1.0],
+            [0.0, 0.0, 0.0, 0.0],
+            [0.9, 0.95, 1.0, 0.06],
+            [0.5, 0.7, 0.9, 0.35],
+            [0.6, 0.4, 0.8, 1.0],
+            [0.6, 0.75, 0.95, 1.0],
+            [0.3, 0.4, 0.55, 0.56],
+            [0.2, 0.3, 0.45, 0.35],
+            [0.2, 0.3, 0.45, 0.35]
+        ]
+    }
+}

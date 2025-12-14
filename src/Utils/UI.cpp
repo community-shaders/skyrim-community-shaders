@@ -1,6 +1,8 @@
 #include "UI.h"
 
+#include "FileSystem.h"
 #include "Menu.h"
+#include "Menu/IconLoader.h"
 
 #ifndef DIRECTINPUT_VERSION
 #	define DIRECTINPUT_VERSION 0x0800
@@ -74,194 +76,10 @@ namespace Util
 		const auto Size = ImGui::GetMainViewport()->Size;
 		return { Size.x * scale, Size.y * scale };
 	}
-	// Icon loading functions (moved from UIIconLoader)
-	bool LoadTextureFromFile(ID3D11Device* device,
-		const char* filename,
-		ID3D11ShaderResourceView** out_srv,
-		ImVec2& out_size)
-	{
-		// Validate input parameters
-		if (!device || !out_srv) {
-			logger::warn("LoadTextureFromFile: Invalid parameters - device: {}, out_srv: {}",
-				device ? "valid" : "null", out_srv ? "valid" : "null");
-			return false;
-		}
 
-		// Initialize output to nullptr
-		*out_srv = nullptr;
-
-		logger::debug("LoadTextureFromFile: Attempting to load {}", filename);
-
-		// Load from disk into a raw RGBA buffer
-		int image_width = 0;
-		int image_height = 0;
-		int channels_in_file;
-		unsigned char* image_data = stbi_load(filename, &image_width, &image_height, &channels_in_file, 4);
-		if (image_data == NULL) {
-			logger::warn("LoadTextureFromFile: Failed to load image data from {}", filename);
-			return false;
-		}
-		// Creates Textures for Icons with Mipmapping to support high DPI displays.
-		logger::debug("LoadTextureFromFile: Loaded image {}x{} with {} channels from {}",
-			image_width, image_height, channels_in_file, filename);
-		D3D11_TEXTURE2D_DESC desc;
-		ZeroMemory(&desc, sizeof(desc));
-		desc.Width = image_width;
-		desc.Height = image_height;
-		desc.MipLevels = 0;  // Let D3D11 calculate the full mipmap chain
-		desc.ArraySize = 1;
-		desc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
-		desc.SampleDesc.Count = 1;
-		desc.SampleDesc.Quality = 0;
-		desc.Usage = D3D11_USAGE_DEFAULT;
-		desc.BindFlags = D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_RENDER_TARGET;
-		desc.MiscFlags = D3D11_RESOURCE_MISC_GENERATE_MIPS;
-		desc.CPUAccessFlags = 0;
-
-		ID3D11Texture2D* pTexture = nullptr;
-		// Create texture without initial data to enable full mipmap chain
-		HRESULT hr = device->CreateTexture2D(&desc, nullptr, &pTexture);
-		if (FAILED(hr) || !pTexture) {
-			logger::warn("LoadTextureFromFile: Failed to create D3D11 texture, HRESULT: 0x{:08X}", static_cast<uint32_t>(hr));
-			stbi_image_free(image_data);
-			return false;
-		}
-
-		// Upload the base level data using UpdateSubresource
-		ID3D11DeviceContext* context = nullptr;
-		device->GetImmediateContext(&context);
-		if (context) {
-			context->UpdateSubresource(pTexture, 0, nullptr, image_data, image_width * 4, 0);
-		}
-
-		// Create simple shader resource view
-		hr = device->CreateShaderResourceView(pTexture, nullptr, out_srv);
-		if (FAILED(hr) || !*out_srv) {
-			logger::warn("LoadTextureFromFile: Failed to create shader resource view, HRESULT: 0x{:08X}", static_cast<uint32_t>(hr));
-			pTexture->Release();
-			stbi_image_free(image_data);
-			if (context)
-				context->Release();
-			*out_srv = nullptr;
-			return false;
-		}
-
-		// Generate mipmaps for better icon quality at different scales
-		if (context) {
-			context->GenerateMips(*out_srv);
-			context->Release();
-		}
-		// Success - clean up intermediate resources
-		pTexture->Release();
-		stbi_image_free(image_data);
-
-		out_size = ImVec2((float)image_width, (float)image_height);
-		logger::debug("LoadTextureFromFile: Successfully loaded {} ({}x{})", filename, image_width, image_height);
-		return true;
-	}
 	bool InitializeMenuIcons(Menu* menu)
 	{
-		if (!menu) {
-			logger::warn("InitializeMenuIcons: Menu pointer is null");
-			return false;
-		}
-
-		// Get the D3D device from globals
-		ID3D11Device* device = globals::d3d::device;
-		if (!device) {
-			logger::warn("InitializeMenuIcons: D3D device is null");
-			return false;
-		}
-		// Define path to icons
-		std::string basePath = Util::PathHelpers::GetIconsPath().string() + "\\";
-		logger::info("InitializeMenuIcons: Loading icons from base path: {}", basePath);
-
-		// Initialize all texture pointers to nullptr for safe cleanup
-		std::array<ID3D11ShaderResourceView**, 16> texturePointers = {
-			&menu->uiIcons.saveSettings.texture,
-			&menu->uiIcons.loadSettings.texture,
-			&menu->uiIcons.clearCache.texture,
-			&menu->uiIcons.logo.texture,
-			&menu->uiIcons.featureSettingRevert.texture,
-			&menu->uiIcons.discord.texture,
-			&menu->uiIcons.characters.texture,
-			&menu->uiIcons.display.texture,
-			&menu->uiIcons.grass.texture,
-			&menu->uiIcons.lighting.texture,
-			&menu->uiIcons.sky.texture,
-			&menu->uiIcons.landscape.texture,
-			&menu->uiIcons.water.texture,
-			&menu->uiIcons.debug.texture,
-			&menu->uiIcons.materials.texture,
-			&menu->uiIcons.postProcessing.texture
-		};
-
-		// Safely release existing textures
-		for (auto* texturePtr : texturePointers) {
-			if (*texturePtr) {
-				(*texturePtr)->Release();
-				*texturePtr = nullptr;
-			}
-		}
-
-		// Instead of failing completely if one icon fails, try to load each one individually
-		bool anyIconLoaded = false;
-		int iconsLoaded = 0;
-
-		// Helper function to load a single icon
-		auto loadIcon = [&](const std::string& path, ID3D11ShaderResourceView** texture, ImVec2& size) -> bool {
-			if (LoadTextureFromFile(device, path.c_str(), texture, size)) {
-				iconsLoaded++;
-				anyIconLoaded = true;
-				return true;
-			}
-			return false;
-		};
-
-		// Helper function to load icon with logging
-		auto loadIconWithLogging = [&](const std::string& path, ID3D11ShaderResourceView** texture, ImVec2& size, const std::string& name) {
-			if (!loadIcon(path, texture, size)) {
-				logger::warn("InitializeMenuIcons: Failed to load {} icon from: {}", name, path);
-			}
-		};
-
-		// Load action icons
-		loadIconWithLogging(basePath + "Action Icons\\save-settings.png", &menu->uiIcons.saveSettings.texture, menu->uiIcons.saveSettings.size, "save-settings");
-		loadIconWithLogging(basePath + "Action Icons\\load-settings.png", &menu->uiIcons.loadSettings.texture, menu->uiIcons.loadSettings.size, "load-settings");
-		loadIconWithLogging(basePath + "Action Icons\\clear-cache.png", &menu->uiIcons.clearCache.texture, menu->uiIcons.clearCache.size, "clear-cache");
-		loadIconWithLogging(basePath + "Community Shaders Logo\\cs-logo.png", &menu->uiIcons.logo.texture, menu->uiIcons.logo.size, "logo");
-		loadIconWithLogging(basePath + "Action Icons\\restore-settings.png", &menu->uiIcons.featureSettingRevert.texture, menu->uiIcons.featureSettingRevert.size, "restore-settings");
-		loadIconWithLogging(basePath + "Action Icons\\discord.png", &menu->uiIcons.discord.texture, menu->uiIcons.discord.size, "discord");
-
-		// Load category icons in a more compact way
-		struct CategoryIcon
-		{
-			const char* filename;
-			ID3D11ShaderResourceView** texture;
-			ImVec2& size;
-		};
-
-		std::vector<CategoryIcon> categoryIcons = {
-			{ "characters.png", &menu->uiIcons.characters.texture, menu->uiIcons.characters.size },
-			{ "display.png", &menu->uiIcons.display.texture, menu->uiIcons.display.size },
-			{ "grass.png", &menu->uiIcons.grass.texture, menu->uiIcons.grass.size },
-			{ "lighting.png", &menu->uiIcons.lighting.texture, menu->uiIcons.lighting.size },
-			{ "sky.png", &menu->uiIcons.sky.texture, menu->uiIcons.sky.size },
-			{ "landscape.png", &menu->uiIcons.landscape.texture, menu->uiIcons.landscape.size },
-			{ "water.png", &menu->uiIcons.water.texture, menu->uiIcons.water.size },
-			{ "debug.png", &menu->uiIcons.debug.texture, menu->uiIcons.debug.size },
-			{ "materials.png", &menu->uiIcons.materials.texture, menu->uiIcons.materials.size },
-			{ "post-processing.png", &menu->uiIcons.postProcessing.texture, menu->uiIcons.postProcessing.size }
-		};
-
-		for (const auto& icon : categoryIcons) {
-			std::string path = basePath + "Categories\\" + icon.filename;
-			loadIcon(path, icon.texture, icon.size);
-		}
-
-		logger::info("InitializeMenuIcons: Loaded {}/16 icons successfully", iconsLoaded);
-
-		return anyIconLoaded;
+		return IconLoader::InitializeMenuIcons(menu);
 	}
 
 	// Text rendering helpers
@@ -296,7 +114,7 @@ namespace Util
 		return ImVec2(endPos.x - startPos.x, endPos.y - startPos.y);
 	}
 
-	ImVec2 DrawAlignedTextWithLogo(ID3D11ShaderResourceView* logoTexture, const ImVec2& logoSize, const char* text, float textScale)
+	ImVec2 DrawAlignedTextWithLogo(ID3D11ShaderResourceView* logoTexture, const ImVec2& logoSize, const char* text, float textScale, ImU32 logoTint)
 	{
 		// Save current cursor position
 		ImVec2 startPos = ImGui::GetCursorPos();
@@ -311,8 +129,14 @@ namespace Util
 		// Position cursor for logo with vertical alignment
 		ImGui::SetCursorPos(ImVec2(startPos.x, startPos.y + verticalOffset));
 
-		// Render logo
-		ImGui::Image(logoTexture, logoSize);
+		// Render logo using draw list with tint color support
+		ImVec2 logoPos = ImGui::GetCursorScreenPos();
+		ImVec2 logoMin = logoPos;
+		ImVec2 logoMax = ImVec2(logoPos.x + logoSize.x, logoPos.y + logoSize.y);
+		ImGui::GetWindowDrawList()->AddImage(logoTexture, logoMin, logoMax, ImVec2(0, 0), ImVec2(1, 1), logoTint);
+
+		// Advance cursor past logo
+		ImGui::Dummy(logoSize);
 		ImGui::SameLine();
 
 		// Add consistent spacing between logo and text
@@ -334,6 +158,25 @@ namespace Util
 		ImVec2 endPos = ImGui::GetCursorPos();
 		return ImVec2(endPos.x - startPos.x, endPos.y - startPos.y);
 	}
+
+	float GetCenterOffsetForContent(float contentWidth)
+	{
+		// Get full window width for true centering
+		float fullWindowWidth = ImGui::GetWindowWidth();
+		float windowPaddingX = ImGui::GetStyle().WindowPadding.x;
+		float availableFullWidth = fullWindowWidth - (windowPaddingX * 2.0f);
+
+		// Calculate center position
+		float centerOffset = (availableFullWidth - contentWidth) * 0.5f;
+
+		// Adjust for current cursor position
+		float currentX = ImGui::GetCursorPosX();
+		float targetX = windowPaddingX + centerOffset;
+		float offset = targetX - currentX;
+
+		return offset > 0.0f ? offset : 0.0f;
+	}
+
 	// StyledButtonWrapper implementation
 	StyledButtonWrapper::StyledButtonWrapper(const ImVec4& normalColor, const ImVec4& hoveredColor, const ImVec4& activeColor) :
 		m_pushedStyles(0)
@@ -449,10 +292,12 @@ namespace Util
 		hovered = ImGui::IsItemHovered();
 
 		// Draw the lines and text using Menu theme colors
-		auto& palette = globals::menu->GetTheme().Palette;
+		auto& themeSettings = globals::menu->GetSettings().Theme;
+		auto& palette = themeSettings.Palette;
 
-		// Use theme text color for category headers to match other text elements
+		// Use theme text color
 		ImVec4 color = palette.Text;
+
 		// If minimized, apply reduced alpha
 		if (!isExpanded) {
 			color.w *= 0.7f;  // 70% alpha when minimized
@@ -461,9 +306,7 @@ namespace Util
 		if (hovered) {
 			color.w *= 0.8f;  // 80% alpha when hovered
 		}
-		ImU32 headerColor = ImGui::GetColorU32(color);
-
-		// Left line
+		ImU32 headerColor = ImGui::GetColorU32(color);  // Left line
 		if (lineLength > 0) {
 			drawList->AddLine(ImVec2(pos.x, lineY), ImVec2(pos.x + lineLength, lineY), headerColor, 1.0f);
 		}
@@ -1272,145 +1115,6 @@ namespace Util
 			return keyboard_keys_international[key];
 		}
 	}  // namespace Input
-
-	// Color utilities for contrast and readability
-	namespace ColorUtils
-	{
-		float CalculateLuminance(const ImVec4& color)
-		{
-			// Convert to linear RGB first (gamma correction)
-			auto toLinear = [](float c) {
-				return c <= 0.03928f ? c / 12.92f : std::pow((c + 0.055f) / 1.055f, 2.4f);
-			};
-
-			float r = toLinear(color.x);
-			float g = toLinear(color.y);
-			float b = toLinear(color.z);
-
-			// Calculate relative luminance using WCAG formula
-			return 0.2126f * r + 0.7152f * g + 0.0722f * b;
-		}
-
-		ImVec4 GetContrastingTextColor(const ImVec4& backgroundColor, float threshold)
-		{
-			float luminance = CalculateLuminance(backgroundColor);
-
-			// If background is bright (high luminance), use black text
-			// If background is dark (low luminance), use white text
-			if (luminance > threshold) {
-				return ImVec4(0.0f, 0.0f, 0.0f, 1.0f);  // Black
-			} else {
-				return ImVec4(1.0f, 1.0f, 1.0f, 1.0f);  // White
-			}
-		}
-
-		float CalculateContrastRatio(const ImVec4& color1, const ImVec4& color2)
-		{
-			float lum1 = CalculateLuminance(color1);
-			float lum2 = CalculateLuminance(color2);
-
-			// Ensure lighter color is in numerator
-			float lighter = (std::max)(lum1, lum2);
-			float darker = (std::min)(lum1, lum2);
-
-			return (lighter + 0.05f) / (darker + 0.05f);
-		}
-
-		void AdjustBackgroundForTextContrast(ImVec4& backgroundColor, float textLuminance,
-			float luminanceThreshold, float darkenFactor, float lightenOffset)
-		{
-			float bgLuminance = CalculateLuminance(backgroundColor);
-
-			if (bgLuminance > luminanceThreshold && textLuminance > luminanceThreshold) {
-				// Both background and text are light - darken the background
-				backgroundColor.x *= darkenFactor;
-				backgroundColor.y *= darkenFactor;
-				backgroundColor.z *= darkenFactor;
-			} else if (bgLuminance < luminanceThreshold && textLuminance < luminanceThreshold) {
-				// Both background and text are dark - lighten the background
-				backgroundColor.x = std::min(1.0f, backgroundColor.x + lightenOffset);
-				backgroundColor.y = std::min(1.0f, backgroundColor.y + lightenOffset);
-				backgroundColor.z = std::min(1.0f, backgroundColor.z + lightenOffset);
-			}
-		}
-
-		bool ContrastSelectable(const char* label, bool selected, ImGuiSelectableFlags flags, const ImVec2& size)
-		{
-			// Get current style colors for different states
-			ImGuiStyle& style = ImGui::GetStyle();
-
-			// We need to handle text color based on the selectable's background state
-			// For selected items, ImGui uses HeaderActive color which might be light
-			ImVec4 selectedBgColor = style.Colors[ImGuiCol_HeaderActive];
-			ImVec4 hoveredBgColor = style.Colors[ImGuiCol_HeaderHovered];
-
-			// Calculate text colors for each state
-			ImVec4 selectedTextColor = GetContrastingTextColor(selectedBgColor, 0.5f);
-			ImVec4 hoveredTextColor = GetContrastingTextColor(hoveredBgColor, 0.5f);
-			ImVec4 normalTextColor = style.Colors[ImGuiCol_Text];
-
-			// If the item is selected, we know it will have the selected background
-			if (selected) {
-				ImGui::PushStyleColor(ImGuiCol_Text, selectedTextColor);
-			} else {
-				// For non-selected items, we'll use normal text unless we detect high contrast issues
-				// Check if hover/active backgrounds would cause contrast issues
-				float hoveredContrast = CalculateContrastRatio(normalTextColor, hoveredBgColor);
-				if (hoveredContrast < 3.0f) {  // WCAG AA minimum is 4.5, but 3.0 for safety
-					ImGui::PushStyleColor(ImGuiCol_Text, hoveredTextColor);
-				} else {
-					ImGui::PushStyleColor(ImGuiCol_Text, normalTextColor);
-				}
-			}
-
-			// Create the selectable with the adjusted text color
-			bool result = ImGui::Selectable(label, selected, flags, size);
-
-			// Restore original text color
-			ImGui::PopStyleColor();
-
-			return result;
-		}
-
-		bool ContrastSelectableWithColor(const char* label, bool selected, const ImVec4& semanticTextColor, ImGuiSelectableFlags flags, const ImVec2& size)
-		{
-			// Get current style colors for different states
-			ImGuiStyle& style = ImGui::GetStyle();
-
-			// We need to handle text color based on the selectable's background state
-			// For selected items, ImGui uses HeaderActive color which might be light
-			ImVec4 selectedBgColor = style.Colors[ImGuiCol_HeaderActive];
-			ImVec4 hoveredBgColor = style.Colors[ImGuiCol_HeaderHovered];
-
-			// Use the provided semantic color but ensure it has good contrast
-			ImVec4 textColor = semanticTextColor;
-
-			// If the item is selected, we know it will have the selected background
-			if (selected) {
-				// Check contrast with selected background
-				float contrast = CalculateContrastRatio(semanticTextColor, selectedBgColor);
-				if (contrast < 3.0f) {
-					textColor = GetContrastingTextColor(selectedBgColor, 0.5f);
-				}
-			} else {
-				// Check contrast with potential hover background
-				float hoveredContrast = CalculateContrastRatio(semanticTextColor, hoveredBgColor);
-				if (hoveredContrast < 3.0f) {
-					textColor = GetContrastingTextColor(hoveredBgColor, 0.5f);
-				}
-			}
-
-			ImGui::PushStyleColor(ImGuiCol_Text, textColor);
-
-			// Create the selectable with the adjusted text color
-			bool result = ImGui::Selectable(label, selected, flags, size);
-
-			// Restore original text color
-			ImGui::PopStyleColor();
-
-			return result;
-		}
-	}  // namespace ColorUtils
 
 	bool ButtonWithFlash(const char* label, const ImVec2& size, int flashDurationMs)
 	{
