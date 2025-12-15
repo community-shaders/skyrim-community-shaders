@@ -70,13 +70,11 @@ void main()
     
     float4 result = GGXIndirect(positionWS, geometryNormalWS, TBN, viewWS, albedo, roughness, metalness, ao, 0, seed);
 
-    OutputTexture[idx] = MainTexture[idx] + float4(Color::LinearToGamma(result.rgb), 0.0f);
+    OutputTexture[idx] = MainTexture[idx] + float4(Color::TrueLinearToGamma(result.rgb), 0.0f);
 
     ReflectanceTexture[idx] = float4(EnvBRDFApprox2(F0(albedo, metalness), roughness, dot(normalWS, viewWS)), 0.0f);
     SpecularHitDist[idx] = result.a;
 #endif
-    
-    //SpecularOutputTexture[idx] = TraceRaySpecular(Scene, positionWS, reflectWS, 0, seed, Frame.Specular, roughness);
     
     /*HashGridParameters gridParameters;
     gridParameters.cameraPosition = Frame.Position;
