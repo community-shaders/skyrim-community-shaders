@@ -3204,6 +3204,17 @@ void Raytracing::CompileComputeShaders()
 		convertNormalGlossCS.attach(rawPtr);
 }
 
+RaytracingFD::FeatureData Raytracing::GetCommonBufferData()
+{
+	RaytracingFD::FeatureData featureData{
+		.InteriorDirectional = settings.GlobalIllumination ? 0.0f : 1.0f,
+		.Ambient = settings.GlobalIllumination ? 0.0f : 1.0f,
+		.EnvMap = settings.GlobalIllumination ? 0.0f : 1.0f
+	};
+
+	return featureData;
+}
+
 RE::BSEventNotifyControl Raytracing::MenuOpenCloseEventHandler::ProcessEvent(const RE::MenuOpenCloseEvent* a_event, RE::BSTEventSource<RE::MenuOpenCloseEvent>*)
 {
 	// When entering a loadscreen

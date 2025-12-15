@@ -25,6 +25,7 @@
 #include "Features/Raytracing/Shape.h"
 #include "Features/Raytracing/Model.h"
 
+#include "Raytracing/FeatureData.hlsli"
 #include "Raytracing/Includes/Types/VertexUpdate.hlsli"
 #include "Raytracing/Includes/Types/Vertex.hlsli"
 #include "Raytracing/Includes/Types/Skinning.hlsli"
@@ -601,6 +602,8 @@ struct Raytracing : public OverlayFeature
 
 	// SVGF
 
+	RaytracingFD::FeatureData GetCommonBufferData();
+
 	// D3D12
 	winrt::com_ptr<ID3D12Device5> d3d12Device = nullptr;
 	winrt::com_ptr<ID3D12CommandQueue> commandQueue = nullptr;
@@ -690,7 +693,6 @@ struct Raytracing : public OverlayFeature
 	// Timings
 	float mainTime;
 	float shadowsTime;
-	float denoiserTime;
 
 #if defined(DLSS_RR)
 	HMODULE interposer = NULL;

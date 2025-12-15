@@ -3,6 +3,7 @@
 
 #include "Common/FrameBuffer.hlsli"
 #include "Common/VR.hlsli"
+#include "Raytracing/FeatureData.hlsli"
 
 namespace SharedData
 {
@@ -213,6 +214,7 @@ namespace SharedData
 		TerrainVariationSettings terrainVariationSettings;
 		IBLSettings iblSettings;
 		ExtendedTranslucencySettings extendedTranslucencySettings;
+		RaytracingFB::FeatureData raytracingSettings;
 	};
 
 	Texture2D<float4> DepthTexture : register(t17);
