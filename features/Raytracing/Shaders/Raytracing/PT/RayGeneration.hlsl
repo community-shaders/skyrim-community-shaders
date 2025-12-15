@@ -35,6 +35,13 @@ void main()
     ray.TMin = 0.1f;
     ray.TMax = 1e30;   
     
+    
     uint seed = InitRandomSeed(idx, size, Frame.FrameCount);
-    OutputTexture[idx] = float4(Color::TrueLinearToGamma(TraceRayIndirect(Scene, origin, direction, 0, seed).rgb), 1.0f);
+    
+    float4 result = TraceRayIndirect(Scene, origin, direction, 0, seed);
+    
+    OutputTexture[idx] = float4(Color::TrueLinearToGamma(result.rgb), 1.0f);
+    
+    //ReflectanceTexture[idx] = float4(EnvBRDFApprox2(F0(albedo, metalness), roughness, dot(normalWS, viewWS)), 0.0f);
+    SpecularHitDist[idx] = result.a;
 }

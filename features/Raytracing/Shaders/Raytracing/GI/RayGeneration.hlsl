@@ -71,18 +71,8 @@ void main()
     float4 result = GGXIndirect(positionWS, geometryNormalWS, TBN, viewWS, albedo, roughness, metalness, ao, 0, seed);
 
     OutputTexture[idx] = MainTexture[idx] + float4(Color::LinearToGamma(result.rgb), 0.0f);
-    
-    float3 h_tan = SampleGGX(roughness, seed);
-    float3 h = mul(h_tan, TBN);
 
-    float3 f0 = F0(albedo, metalness);
-    
-    float3 F = F_Schlick(saturate(dot(viewWS, h)), f0);
-    //float D = D_GGX(saturate(dot(normalWS, h)), roughness);
-    float3 specAO = SpecularAO(saturate(dot(normalWS, viewWS)), roughness, ao, f0);
-    
-    ReflectanceTexture[idx] = float4(F * specAO * Frame.Specular, 0.0f);
-    
+    ReflectanceTexture[idx] = float4(EnvBRDFApprox2(F0(albedo, metalness), roughness, dot(normalWS, viewWS)), 0.0f);
     SpecularHitDist[idx] = result.a;
 #endif
     

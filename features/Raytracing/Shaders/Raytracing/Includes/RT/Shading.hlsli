@@ -12,18 +12,6 @@
 
 #include "Raytracing/Includes/RT/microfacetBRDFUtils.hlsli"
 
-float InverseSquareAtten2(float dist, float range)
-{
-    // Inverse square base
-    float atten = 1.0 / (dist * dist + 0.0001);
-
-    // Smooth fade to zero at range
-    float fade = saturate(1.0 - dist / range);
-    fade = fade * fade * (3.0 - 2.0 * fade);
-
-    return atten * fade;
-}
-
 float InverseSquareAtten(float dist, float range)
 {
     // Normalized inverse-square (scale-agnostic)
@@ -104,9 +92,9 @@ float3 GGXDirect(in float3 l, in float3 n, in float3 v, in float3 albedo, in flo
     float3 Fr = (D * V) * F;
 
     float3 diffuseAlbedo = (1.0 - metalness) * albedo;
-    float3 Fd = diffuseAlbedo / Math::PI;
+    //float3 Fd = diffuseAlbedo / Math::PI;
     
-    return (Fd + Fr) * NoL;
+    return (diffuseAlbedo + Fr) * NoL;
 }
 
 float3 GGXDirectD(in float3 position, in float3 n, in float3 v, in float3 albedo, in float roughness, in float metalness, in Light light, inout uint randomSeed)
@@ -195,8 +183,8 @@ float4 GGXIndirect(in float3 position, in float3 GN, float3x3 TBN, in float3 V, 
             diffuse_BRDF_over_PDF = 1.0;
         }
 
-        specular_PDF = saturate(calcLuminance(specular_BRDF_over_PDF) /
-            calcLuminance(specular_BRDF_over_PDF + diffuse_BRDF_over_PDF * diffuseAlbedo));
+        specular_PDF = saturate(CalcLuminance(specular_BRDF_over_PDF) /
+            CalcLuminance(specular_BRDF_over_PDF + diffuse_BRDF_over_PDF * diffuseAlbedo));
 
         isSpecularRay = Random(randomSeed) < specular_PDF;
 

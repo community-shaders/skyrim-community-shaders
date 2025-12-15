@@ -109,16 +109,24 @@ float3 SampleCosineHemisphereScaled(inout uint randomSeed, in float scale)
     );
 }
 
-float calcLuminance(float3 color)
+// The following functions bellow all come from NVidia
+float CalcLuminance(float3 color)
 {
     return dot(color.xyz, float3(0.299f, 0.587f, 0.114f));
 }
 
+inline float Square(float value)
+{
+    return value * value;
+}
+
+// https://github.com/NVIDIA-RTX/RTXDI/blob/main/Samples/FullSample/Shaders/HelperFunctions.hlsli
+// It's got a license :(
 float3 SampleGGX_VNDF(float3 Ve, float alpha, inout uint seed)
 {
     float3 Vh = normalize(float3(alpha * Ve.x, alpha * Ve.y, Ve.z));
 
-    float lensq = Vh.x * Vh.x + Vh.y * Vh.y;
+    float lensq = Square(Vh.x) + Square(Vh.y);
     float3 T1 = lensq > 0.0 ? float3(-Vh.y, Vh.x, 0.0) / sqrt(lensq) : float3(1.0, 0.0, 0.0);
     float3 T2 = cross(Vh, T1);
 
@@ -130,26 +138,23 @@ float3 SampleGGX_VNDF(float3 Ve, float alpha, inout uint seed)
     float t1 = r * cos(phi);
     float t2 = r * sin(phi);
     float s = 0.5 * (1.0 + Vh.z);
-    t2 = (1.0 - s) * sqrt(1.0 - t1 * t1) + s * t2;
+    t2 = (1.0 - s) * sqrt(1.0 - Square(t1)) + s * t2;
 
-    float3 Nh = t1 * T1 + t2 * T2 + sqrt(max(0.0, 1.0 - (t1 * t1) - (t2 * t2))) * Vh;
+    float3 Nh = t1 * T1 + t2 * T2 + sqrt(max(0.0, 1.0 - Square(t1) - Square(t2))) * Vh;
 
     // Tangent space H
     return float3(alpha * Nh.x, alpha * Nh.y, max(0.0, Nh.z));
 }
 
-inline float square(float value)
-{
-    return value * value;
-}
-
+// https://github.com/NVIDIA-RTX/Donut/blob/main/include/donut/shaders/brdf.hlsli
+// Also got a license, but a permissive one
 float ImportanceSampleGGX_VNDF_PDF(float alpha, float3 N, float3 V, float3 L)
 {
     float3 H = normalize(L + V);
     float NoH = saturate(dot(N, H));
     float VoH = saturate(dot(V, H));
 
-    float D = square(alpha) / (Math::PI * square(square(NoH) * square(alpha) + (1 - square(NoH))));
+    float D = Square(alpha) / (Math::PI * Square(Square(NoH) * Square(alpha) + (1 - Square(NoH))));
     return (VoH > 0.0) ? D / (4.0 * VoH) : 0.0;
 }
 
@@ -165,8 +170,34 @@ float3 Schlick_Fresnel(float3 F0, float VdotH)
 
 float G1_Smith(float alpha, float NdotL)
 {
-    return 2.0 * NdotL / (NdotL + sqrt(square(alpha) + (1.0 - square(alpha)) * square(NdotL)));
+    return 2.0 * NdotL / (NdotL + sqrt(Square(alpha) + (1.0 - Square(alpha)) * Square(NdotL)));
 }
+
+// https://github.com/NVIDIA-RTX/Streamline/blob/main/docs/ProgrammingGuideDLSS_RR.md#421-specular-albedo-generation
+float3 EnvBRDFApprox2(float3 SpecularColor, float alpha, float NoV) 
+{ 
+    NoV = abs(NoV); 
+    // [Ray Tracing Gems, Chapter 32]
+    float4 X; 
+    X.x = 1.f; 
+    X.y = NoV; 
+    X.z = NoV * NoV; 
+    X.w = NoV * X.z; 
+    float4 Y; 
+    Y.x = 1.f; 
+    Y.y = alpha; 
+    Y.z = alpha * alpha; 
+    Y.w = alpha * Y.z; 
+    float2x2 M1 = float2x2(0.99044f, -1.28514f, 1.29678f, -0.755907f); 
+    float3x3 M2 = float3x3(1.f, 2.92338f, 59.4188f, 20.3225f, -27.0302f, 222.592f, 121.563f, 626.13f, 316.627f); 
+    float2x2 M3 = float2x2(0.0365463f, 3.32707, 9.0632f, -9.04756); 
+    float3x3 M4 = float3x3(1.f, 3.59685f, -1.36772f, 9.04401f, -16.3174f, 9.22949f, 5.56589f, 19.7886f, -20.2123f); 
+    float bias = dot(mul(M1, X.xy), Y.xy) * rcp(dot(mul(M2, X.xyw), Y.xyw)); 
+    float scale = dot(mul(M3, X.xy), Y.xy) * rcp(dot(mul(M4, X.xzw), Y.xyw)); 
+    // This is a hack for specular reflectance of 0
+    bias *= saturate(SpecularColor.g * 50); 
+    return mad(SpecularColor, max(0, scale), max(0, bias)); 
+} 
 
 float3 TangentToWorld(float3 normal, float3 tangentSample)
 {   

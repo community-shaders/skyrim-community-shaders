@@ -76,7 +76,7 @@ void HitMesh(inout IndirectPayload payload, in BuiltInTriangleIntersectionAttrib
     // Roughness and Metalness from RMAOS
     roughnessSrc = saturate(rmaos.x * material.roughness);
     metalnessSrc = saturate(rmaos.y);
-    //ao = rmaos.z;
+    ao = rmaos.z;
 #else
     float3 worldNormal = geomWorldNormal;
 #endif
@@ -84,7 +84,7 @@ void HitMesh(inout IndirectPayload payload, in BuiltInTriangleIntersectionAttrib
     // Lighting Shader
     float3 lightingAlbedo = Color::GammaToLinear(base) * material.BaseColor.rgb * vertexColor.rgb;
     float3 lightingEmissive = Color::GammaToLinear(effect) * material.EffectColor.rgb * material.EffectColor.a;
-    
+ 
     // Effect Shader
     /*float3 baseColorMul = material.EffectColor.rgb * vertexColor.rgb;
     float3 baseColor = diffuse.rgb * baseColorMul;
