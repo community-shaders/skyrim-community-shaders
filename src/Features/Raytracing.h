@@ -449,11 +449,26 @@ struct Raytracing : public OverlayFeature
 		eastl::shared_ptr<Allocation> allocation = nullptr;
 		eastl::unique_ptr<DX12::Texture2DUpload<uint8_t>> texture = nullptr;
 
-		DefaultTexture(ID3D12Device5* device, Allocation* allocation, uint8_t color[4]) :
+		DefaultTexture(ID3D12Device5* device, Allocation* allocation) :
 			allocation(allocation)
 		{
 			texture = eastl::make_unique<DX12::Texture2DUpload<uint8_t>>(device, 1, 1, DXGI_FORMAT_R8G8B8A8_UNORM);
-			texture->Update(&color, sizeof(uint8_t) * 4);
+		}
+
+		void UpdateAndUpload(ID3D12GraphicsCommandList4* commandList, uint8_t* pixel) const
+		{
+			D3D12_SUBRESOURCE_DATA srcData = {
+				.pData = pixel,
+				.RowPitch = 4,
+				.SlicePitch = 4
+			};
+
+			UpdateSubresources(
+				commandList,
+				texture->resource.get(),
+				texture->uploadResource.get(),
+				0, 0, 1,
+				&srcData);
 		}
 
 		template <IsHeap HeapType>
