@@ -198,7 +198,6 @@ namespace SharedData
 		float Softness;      // [0, 2.0] The soft remap upper limit [0,2]
 		float Strength;      // [0, 1.0] The inverse blend weight of the effect
 	};
-
 	cbuffer FeatureData : register(b6)
 	{
 		GrassLightingSettings grassLightingSettings;
@@ -214,7 +213,7 @@ namespace SharedData
 		TerrainVariationSettings terrainVariationSettings;
 		IBLSettings iblSettings;
 		ExtendedTranslucencySettings extendedTranslucencySettings;
-		RaytracingFB::FeatureData raytracingSettings;
+		RaytracingSettings raytracingSettings;
 	};
 
 	Texture2D<float4> DepthTexture : register(t17);
