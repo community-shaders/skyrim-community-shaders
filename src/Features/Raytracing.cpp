@@ -1744,31 +1744,16 @@ void Raytracing::UpdateInstances()
 	blasInstances.clear();
 	blasInstances.reserve(instances.size());
 
-	/*auto* playerCamera = RE::PlayerCamera::GetSingleton();
+	auto* playerCamera = RE::PlayerCamera::GetSingleton();
 	auto* tesCamera = playerCamera->currentState->camera;
 
 	RE::NiCamera* camera = FindNiCamera(tesCamera->cameraRoot.get());
 
-	auto eye = Util::GetAverageEyePosition();*/
+	auto eye = Util::GetAverageEyePosition();
 
 	for (auto& [pNiNode, instance] : instances) {
 		if (blasInstances.size() > MAX_INSTANCES)
 			break;
-
-		/*auto worldBound = pNiNode->worldBound;
-
-		float worldBoundRadius= worldBound.radius;
-		float distanceToBounds = Util::Units::GameUnitsToMeters(eye.GetDistance(worldBound.center) - worldBoundRadius);
-
-		// Both may glow, if the object is a light source and behind the camera culling it will darken the visible scene (a better filter instead of shader types might be using their pixelDescriptor)
-		auto cullOutOfView = !geometryData.HasFeature(RE::BSShaderMaterial::Feature::kGlowMap) && !geometryData.HasShaderType(RE::BSShader::Type::Effect);
-
-		// We'll cull small models or very distant ones (that are outside the player view)
-		if ((cullOutOfView && Util::Units::GameUnitsToMeters(worldBoundRadius) < 1.0f) || distanceToBounds > 100.0f) {
-			//if (!RE::NiCamera::BoundInFrustum(worldBound, camera))
-			if (!camera->NodeInFrustum(pNiNode))
-				continue;
-		}*/
 
 		auto it = models.find(instance.filename);
 
@@ -1777,6 +1762,24 @@ void Raytracing::UpdateInstances()
 			continue;
 
 		auto& model = it->second;
+
+		auto worldBound = pNiNode->worldBound;
+
+		float worldBoundRadius = worldBound.radius;
+		float distanceToBounds = Util::Units::GameUnitsToMeters(eye.GetDistance(worldBound.center) - worldBoundRadius);
+
+		// TODO: Fix culling exclusion for emissive models
+		// Both may glow, if the object is a light source and behind the camera culling it will darken the visible scene (a better filter instead of shader types might be using their pixelDescriptor)
+		//auto cullOutOfView = !geometryData.HasFeature(RE::BSShaderMaterial::Feature::kGlowMap) && !geometryData.HasShaderType(RE::BSShader::Type::Effect);
+		
+		auto cullOutOfView = true;
+
+		// We'll cull small models or very distant ones (that are outside the player view)
+		if ((cullOutOfView && Util::Units::GameUnitsToMeters(worldBoundRadius) < 1.0f) || distanceToBounds > 100.0f) {
+			//if (!RE::NiCamera::BoundInFrustum(worldBound, camera))
+			if (!camera->NodeInFrustum(pNiNode))
+				continue;
+		}
 
 		if (!instance.Update(pNiNode, { it->first, model }))
 			return;
@@ -3049,8 +3052,9 @@ void Raytracing::CompileRTGIShaders()
 	ShaderUtils::CompileShader(closestHitBlob, L"Data/Shaders/Raytracing/GI/ClosestHit.hlsl", defines);
 	ShaderUtils::CompileShader(anyHitBlob, L"Data/Shaders/Raytracing/GI/AnyHit.hlsl", defines);
 
-	winrt::com_ptr<IDxcBlob> shadowMissBlob;
+	winrt::com_ptr<IDxcBlob> shadowMissBlob, shadowAnyHitBlob;
 	ShaderUtils::CompileShader(shadowMissBlob, L"Data/Shaders/Raytracing/GI/ShadowMiss.hlsl");
+	ShaderUtils::CompileShader(shadowAnyHitBlob, L"Data/Shaders/Raytracing/GI/ShadowAnyHit.hlsl");
 
 	DX12::RTPipelineBuilder pipelineBuilder;
 
@@ -3065,10 +3069,11 @@ void Raytracing::CompileRTGIShaders()
 		pipelineBuilder.AddHitLib(closestHitBlob.get(), L"IndirectClosestHit");
 
 		pipelineBuilder.AddAnyHitLib(anyHitBlob.get(), L"IndirectAnyHit");
-		
+		pipelineBuilder.AddAnyHitLib(shadowAnyHitBlob.get(), L"ShadowAnyHit");
+
 		// Hit groups
 		pipelineBuilder.AddHitGroup(L"IndirectHitGroup", L"IndirectClosestHit", L"IndirectAnyHit");
-		pipelineBuilder.AddHitGroup(L"ShadowHitGroup");
+		pipelineBuilder.AddHitGroup(L"ShadowHitGroup", L"", L"ShadowAnyHit");
 
 		// Shader + pipeline config
 		pipelineBuilder.AddShaderConfig(20, 8);
