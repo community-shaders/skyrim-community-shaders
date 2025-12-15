@@ -216,11 +216,8 @@ void Upscaling::DrawSettings()
 		} else if (upscaleMethod == UpscaleMethod::kDLSS) {
 			ImGui::SliderFloat("Sharpness", &settings.sharpnessDLSS, 0.0f, 1.0f, "%.1f");
 
-			// VR DLSS preset selection
-			if (globals::game::isVR) {
-				const char* presets[] = { "F (Fast)", "J (Quality)", "K (Ultra)" };
-				ImGui::SliderInt("DLSS Preset", (int*)&settings.DLSSPreset, 0, 2, presets[settings.DLSSPreset]);
-			}
+			const char* presets[] = { "F (Fast)", "J (Quality)", "K (Ultra)" };
+			ImGui::SliderInt("DLSS Preset", (int*)&settings.DLSSPreset, 0, 2, presets[settings.DLSSPreset]);
 		}
 	}
 
