@@ -22,9 +22,6 @@ float4 TraceRayIndirect(RaytracingAccelerationStructure scene, float3 origin, fl
 
 float TraceRayShadow(RaytracingAccelerationStructure scene, float3 origin, float3 direction)
 {
-    /*float3 randomSample = CosineSampleHemisphereScaled(randomSeed, 0.5f);
-    float3 randomDirection = SampleHemisphere(direction, randomSample);*/
-    
     RayDesc ray;
     ray.Origin = origin;
     ray.Direction = direction;
