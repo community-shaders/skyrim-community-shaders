@@ -3,7 +3,7 @@
 #   ifndef SHARC_COMMON_DEPENDENCY_HLSI
 #   define SHARC_COMMON_DEPENDENCY_HLSI
 
-    #include "Raytracing/Includes/RT/SHARC/SharcCommon.hlsli"
+    #include "Raytracing/Includes/RT/SHARC/SharcCommon.h"
 
 #   endif // SHARC_COMMON_DEPENDENCY_HLSI
 
