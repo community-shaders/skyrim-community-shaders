@@ -2,6 +2,7 @@
 #define GI_FRAMEDATA_HLSI
 
 #include "Raytracing/Includes/Types/Light.hlsli"
+#include "Raytracing/Includes/SharedData.hlsli"
 
 struct 
 #ifdef __cplusplus
@@ -15,7 +16,7 @@ alignas(16)
     float4 NDCToView;    
     Light Directional;
     float3 Position;
-    uint FrameCount; 
+    uint FrameCount;
 	float2 Roughness; 
  	float2 Metalness;   
     float Diffuse;
@@ -29,7 +30,9 @@ alignas(16)
     uint Pad0;
     #endif  
     uint Pad1;
-	uint Pad2;    
+	uint Pad2;
+    FeatureData Features;
+    float4 Pad3[11];
 };
 #ifdef __cplusplus
 static_assert(sizeof(GIFrameData) % 256 == 0);

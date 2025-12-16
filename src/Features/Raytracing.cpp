@@ -16,6 +16,12 @@
 
 #include "Menu.h"
 
+#include "Features/CloudShadows.h"
+#include "Features/ExtendedMaterials.h"
+#include "Features/ExtendedTranslucency.h"
+#include "Features/HairSpecular.h"
+#include "Features/WetnessEffects.h"
+
 #ifdef DLSS_RR
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	Raytracing::Settings,
@@ -2230,6 +2236,17 @@ void Raytracing::DrawRTGI()
 #ifdef SHARC
 		frameBufferData->SHARCScale = settings.SHARCScale / Util::Units::GAME_UNIT_TO_M;
 #endif
+
+		// Update Features
+		{
+			auto wetnessEffect = globals::features::wetnessEffects.GetCommonBufferData();
+
+			frameBufferData->Features.ExtendedMaterial = *reinterpret_cast<CPMSettings*>(&globals::features::extendedMaterials.settings);
+			frameBufferData->Features.WetnessEffects = *reinterpret_cast<WetnessEffectsSettings*>(&wetnessEffect);
+			frameBufferData->Features.CloudShadows = *reinterpret_cast<CloudShadowsSettings*>(&globals::features::cloudShadows.settings);
+			frameBufferData->Features.HairSpecular = *reinterpret_cast<HairSpecularSettings*>(&globals::features::hairSpecular.settings);
+			frameBufferData->Features.ExtendedTranslucency = *reinterpret_cast<ExtendedTranslucencySettings*>(&globals::features::extendedTranslucency.settings);
+		}
 
 		frameBuffer->Update(frameBufferData.get(), sizeof(GIFrameData));
 		frameBuffer->Upload(commandList.get());
