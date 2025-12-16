@@ -74,6 +74,10 @@ struct Raytracing : public OverlayFeature
 
 	static constexpr uint SKY_CUBEMAP_SIZE = 256;
 
+#ifdef SHARC
+	static constexpr size_t SHARC_ELEMENTS = 1ull << 22;
+#endif
+
 	struct GIHeapDef
 	{
 		enum class Table
@@ -90,6 +94,11 @@ struct Raytracing : public OverlayFeature
 			Output,
 			Reflectance,
 			SpecularHitDist,
+#ifdef SHARC
+			SHaRCHashEntries,
+			SHaRCAccumulation,
+			SHaRCResolved,
+#endif
 			Main,
 			Depth,
 			Albedo,

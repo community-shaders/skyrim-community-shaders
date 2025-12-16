@@ -491,7 +491,7 @@ void Raytracing::SetupResources()
 			DX::ThrowIfFailed(motionVectorsTexture->resource->SetName(L"Motion Vectors Texture"));
 		}
 
-		// u1 - Output texture
+		// u0 - Output texture
 		{
 			outputTexture = eastl::make_unique<DX12::Texture2D>(d3d12Device.get(), mainDesc.Width, mainDesc.Height, DXGI_FORMAT_R16G16B16A16_FLOAT, D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS);
 			outputTexture->SetName(L"Output texture");
@@ -501,7 +501,7 @@ void Raytracing::SetupResources()
 			outputTexture->CreateUAV(giHeap->CPUHandle(GIHeap::Slot::Output));
 		}
 
-		// u2 - Reflectance texture
+		// u1 - Reflectance texture
 		{				
 			reflectanceTexture = eastl::make_unique<DX12::Texture2D>(d3d12Device.get(), mainDesc.Width, mainDesc.Height, DXGI_FORMAT_R16G16B16A16_FLOAT, D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS);
 			reflectanceTexture->SetName(L"Reflectance Texture");
@@ -511,13 +511,39 @@ void Raytracing::SetupResources()
 			reflectanceTexture->CreateUAV(giHeap->CPUHandle(GIHeap::Slot::Reflectance));
 		}
 
-		// u3 - Specular Hit Distance texture
+		// u2 - Specular Hit Distance texture
 		{
 			specularHitDistanceTexture = eastl::make_unique<DX12::Texture2D>(d3d12Device.get(), mainDesc.Width, mainDesc.Height, DXGI_FORMAT_R16_FLOAT, D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS);
 			specularHitDistanceTexture->SetName(L"Specular Hit Distance Texture");
 
 			specularHitDistanceTexture->CreateUAV(giHeap->CPUHandle(GIHeap::Slot::SpecularHitDist));
 		}
+
+#ifdef SHARC
+		// u3 - Sharc HashEntries Buffer
+		{
+			sharcHashEntriesBuffer = eastl::make_unique<DX12::StructuredBuffer<uint64_t>>(d3d12Device.get(), SHARC_ELEMENTS, true);
+			sharcHashEntriesBuffer->SetName(L"SHaRC HashEntries Buffer");
+
+			sharcHashEntriesBuffer->CreateUAV(giHeap->CPUHandle(GIHeap::Slot::SHaRCHashEntries));
+		}
+
+		// u4 - Sharc Accumulation Buffer
+		{
+			sharcAccumulationBuffer = eastl::make_unique<DX12::StructuredBuffer<SharcAccumulationData>>(d3d12Device.get(), SHARC_ELEMENTS, true);
+			sharcAccumulationBuffer->SetName(L"SHaRC Accumulation Buffer");
+
+			sharcAccumulationBuffer->CreateUAV(giHeap->CPUHandle(GIHeap::Slot::SHaRCAccumulation));
+		}
+
+		// u5 - Sharc Resolved Buffer
+		{
+			sharcResolvedBuffer = eastl::make_unique<DX12::StructuredBuffer<SharcPackedData>>(d3d12Device.get(), SHARC_ELEMENTS, true);
+			sharcResolvedBuffer->SetName(L"SHaRC Resolved Buffer");
+
+			sharcResolvedBuffer->CreateUAV(giHeap->CPUHandle(GIHeap::Slot::SHaRCResolved));
+		}
+#endif
 
 		{
 			D3D11_TEXTURE2D_DESC texDesc{};
@@ -2820,7 +2846,10 @@ void Raytracing::CreateRootSignature()
 		{  
 			{ GIHeap::Slot::Output, 1 }, 
 			{ GIHeap::Slot::Reflectance, 1 }, 
-			{ GIHeap::Slot::SpecularHitDist, 1 }
+			{ GIHeap::Slot::SpecularHitDist, 1 },
+			{ GIHeap::Slot::SHaRCHashEntries, 1 },
+			{ GIHeap::Slot::SHaRCAccumulation, 1 },
+			{ GIHeap::Slot::SHaRCResolved, 1 }
 		});
 
 	// Fixed SRV ranges (NormalRoughness + GNMD + Scene + Lights + Index map)

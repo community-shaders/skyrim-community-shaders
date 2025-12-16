@@ -134,3 +134,15 @@ struct half4
 	}
 };
 static_assert(sizeof(half4) == 8);
+
+// These two are defined mostly to please SHaRC
+struct uint4
+{
+	uint x;
+	uint y;
+	uint z;
+	uint w;
+};
+static_assert(sizeof(uint4) == 16);
+
+typedef half4 float16_t4;
