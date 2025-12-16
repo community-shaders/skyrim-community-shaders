@@ -3231,7 +3231,8 @@ RaytracingFD::FeatureData Raytracing::GetCommonBufferData()
 	RaytracingFD::FeatureData featureData{
 		.InteriorDirectional = settings.GlobalIllumination ? 0.0f : 1.0f,
 		.Ambient = settings.GlobalIllumination ? 0.0f : 1.0f,
-		.EnvMap = settings.GlobalIllumination ? 0.0f : 1.0f
+		.EnvMap = settings.GlobalIllumination ? 0.0f : 1.0f,
+		.Albedo = settings.GlobalIllumination
 	};
 
 	return featureData;

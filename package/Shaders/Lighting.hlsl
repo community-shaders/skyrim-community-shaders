@@ -2097,6 +2097,10 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	Glints::PrecomputeGlints(glintNoise, uvOriginal, ddx(uvOriginal), ddy(uvOriginal), material.GlintScreenSpaceScale, material.GlintCache);
 #		endif
 
+#	if defined(RT)
+	float3 trueBaseColor = baseColor.xyz;
+#	endif
+
 	baseColor.xyz *= 1 - material.Metallic;
 
 	material.BaseColor = baseColor.xyz;
@@ -2263,6 +2267,10 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 		}
 	}
 
+#	if defined(RT)
+	envColor *= SharedData::raytracingSettings.EnvMap;
+#	endif
+
 #	endif  // defined (ENVMAP) || defined (MULTI_LAYER_PARALLAX) || defined(EYE)
 
 	float porosity = 1.0;
@@ -2371,8 +2379,8 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 
 	float3 dirLightColor = Color::Light(DirLightColor.xyz);
 	
-#	if defined(RTGI)	
-	float3 dirLightColorMultiplier = 1 - (int)SharedData::InInterior;
+#	if defined(RT)	
+	float3 dirLightColorMultiplier = SharedData::InInterior ? SharedData::raytracingSettings.InteriorDirectional : 1;
 # 	else
 	float3 dirLightColorMultiplier = 1;
 #	endif
@@ -2735,12 +2743,12 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	}
 #	endif
 
-#	if defined(RTGI)
-	float3 directionalAmbientColor = 0;
-#	else
 	float3 directionalAmbientColor = max(0, mul(DirectionalAmbient, float4(ambientNormal, 1.0)));
-#	endif
 	
+#	if defined(RT)
+	directionalAmbientColor *= SharedData::raytracingSettings.Ambient;
+#	endif
+
 #	if defined(IBL)
 	if (SharedData::iblSettings.EnableDiffuseIBL) {
 		if (SharedData::iblSettings.UseStaticIBL && !inWorld && !inReflection) {
@@ -3157,8 +3165,8 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	psout.MotionVectors.zw = float2(0.0, psout.Diffuse.w);
 	psout.Specular = float4(specularColor, psout.Diffuse.w);
 
-#		if defined(TRUE_PBR) && defined(RTGI)
-	psout.Albedo = float4(trueBaseColor * vertexColor, psout.Diffuse.w);
+#		if defined(TRUE_PBR) && defined(RT)
+	psout.Albedo = float4(SharedData::raytracingSettings.Albedo ? trueBaseColor * vertexColor : outputAlbedo, psout.Diffuse.w);
 #		else
 	psout.Albedo = float4(outputAlbedo, psout.Diffuse.w);
 #		endif
@@ -3193,7 +3201,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	float stochasticBlend = (screenNoise * screenNoise) < psout.Diffuse.w ? 1.0 : 0.0;
 	psout.NormalGlossiness.w = stochasticBlend;
 	
-#		if defined(RTGI)
+#		if defined(RT)
 #			if !defined(SNOW)
 #				if defined(SKINNED) || !defined(MODELSPACENORMALS)	
 	float3 worldGeomNormal = tbnTr[2];
@@ -3215,7 +3223,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 
 	psout.GeomNormalMetalnessAO = float4(GBuffer::EncodeNormal(screenGeomNormal), packed / 65535.0, psout.Diffuse.w);
 #			endif // !defined(SNOW)
-#		endif // !defined(RTGI)
+#		endif // !defined(RT)
 #	endif // DEFERRED
 
 	return psout;

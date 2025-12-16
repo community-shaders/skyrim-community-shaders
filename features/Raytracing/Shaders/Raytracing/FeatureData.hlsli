@@ -1,7 +1,6 @@
 #ifndef RT_FEATUREDATA_HLSI
 #define RT_FEATUREDATA_HLSI
 
- 
 #ifdef __cplusplus
 namespace RaytracingFD
 {
@@ -15,7 +14,7 @@ namespace RaytracingFD
         float InteriorDirectional;
         float Ambient;
         float EnvMap;
-        uint Pad;
+        uint Albedo;
     };
 #ifdef __cplusplus
     static_assert(sizeof(FeatureData) % 16 == 0);

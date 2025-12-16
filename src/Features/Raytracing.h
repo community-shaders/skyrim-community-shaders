@@ -186,7 +186,7 @@ struct Raytracing : public OverlayFeature
 
 	// Functionality
 	virtual bool inline SupportsVR() override { return false; }
-	virtual inline std::string_view GetShaderDefineName() override { return "RTGI"; }
+	virtual inline std::string_view GetShaderDefineName() override { return "RT"; }
 	virtual inline bool HasShaderDefine(RE::BSShader::Type t) override { return t == RE::BSShader::Type::Lighting; };
 
 	// Settings & UI
