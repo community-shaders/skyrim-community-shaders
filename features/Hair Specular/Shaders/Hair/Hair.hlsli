@@ -67,6 +67,7 @@ namespace Hair
 		const float NdotV = saturate(dot(N, V));
 		const float VNdotV = dot(VN, V);
 		const float VNdotL = dot(VN, L);
+		const float satVNdotL = saturate(VNdotL);
 		const float HdotV = saturate(dot(H, V));
 		const float HdotL = saturate(dot(H, L));
 		const float wrapped = 0.5;
@@ -74,7 +75,7 @@ namespace Hair
 		// [Yibing Jiang 2016, "The Process of Creating Volumetric-based Materials in Uncharted 4"]
 		// https://advances.realtimerendering.com/s2016
 		dirDiffuse = saturate(oNdotL + wrapped) / (1 + wrapped);
-		float3 scatterColor = lerp(float3(0.992, 0.808, 0.518), baseColor, 0.5);
+		float3 scatterColor = pow(baseColor, 0.5);
 		dirDiffuse = saturate(scatterColor + NdotL) * dirDiffuse * lightColor * SharedData::hairSpecularSettings.DiffuseMult;
 
 		float3 TshiftPrimary;
@@ -205,74 +206,51 @@ namespace Hair
 			T = ShiftTangent(T, N, shift);
 		}
 
-		const float cosThetaV = dot(VN, V);
-
 		float backlit = SharedData::hairSpecularSettings.Transmission;
 
 		dirTransmission += D_Marschner(L, V, T, roughness, baseColor, 0, backlit) * lightColor * SharedData::hairSpecularSettings.SpecularMult;
 		dirTransmission += GetHairDiffuseAttenuationKajiyaKay(T, V, L, selfShadow, baseColor) * lightColor * SharedData::hairSpecularSettings.DiffuseMult;
 	}
 
-	void GetHairDirectLight(out float3 dirDiffuse, out float3 dirSpecular, out float3 dirTransmission, float3 T, float3 L, float3 V, float3 N, float3 VN, float3 lightColor, float shininess, float selfShadow, float2 uv, float3 baseColor)
+	void GetHairDirectLight(out DirectLightingOutput lightingOutput, DirectContext context, MaterialProperties material, float3x3 tbnTr, float2 uv)
 	{
+		const float3 T = normalize(context.worldNormal);
+		const float3 V = normalize(context.viewDir);
+		const float3 N = normalize(context.vertexNormal);
+		const float3 VN = normalize(tbnTr[2]);
+		const float3 L = normalize(context.lightDir);
+
 		if (SharedData::hairSpecularSettings.HairMode == 0) {
-			GetHairDirectLightScheuermann(dirDiffuse, dirSpecular, dirTransmission, T, L, V, N, VN, lightColor, shininess, selfShadow, uv, baseColor);
+			GetHairDirectLightScheuermann(lightingOutput.diffuse, lightingOutput.specular, lightingOutput.transmission, T, L, V, N, VN, context.lightColor, material.Shininess, context.hairShadow, uv, material.BaseColor);
 		} else {
-			GetHairDirectLightMarschner(dirDiffuse, dirSpecular, dirTransmission, T, L, V, N, VN, lightColor, shininess, selfShadow, uv, baseColor);
+			GetHairDirectLightMarschner(lightingOutput.diffuse, lightingOutput.specular, lightingOutput.transmission, T, L, V, N, VN, context.lightColor, material.Shininess, context.hairShadow, uv, material.BaseColor);
 		}
 	}
 
-	void GetHairIndirectSpecularLobeWeights(out float3 diffuseLobeWeight, out float3 specularLobeWeightPrimary, out float3 specularLobeWeightSecondary, float3 T, float3 N, float3 V, float3 VN, float shininess, float2 uv, float3 baseColor)
+	void GetHairIndirectLobeWeights(out IndirectLobeWeights lobeWeights, IndirectContext context, MaterialProperties material, float2 uv)
 	{
-		const float roughnessPrimary = pow(abs(2.0 / (shininess + 2.0)), 0.25);
-		const float roughnessSecondary = pow(abs(2.0 / (shininess * 0.5 + 2.0)), 0.25);
-		const float NdotV = saturate(dot(N, V));
+		lobeWeights = (IndirectLobeWeights)0;
+
+		float3 T = normalize(context.worldNormal);
+		const float3 V = normalize(context.viewDir);
+		const float3 N = normalize(context.vertexNormal);
 
 		if (SharedData::hairSpecularSettings.HairMode == 1) {
-			specularLobeWeightPrimary = 0;
-			specularLobeWeightSecondary = 0;
-
 			if (SharedData::hairSpecularSettings.EnableTangentShift) {
 				const float shift = TexTangentShift.SampleLevel(SampColorSampler, uv, 0).x - 0.5;
 				T = ShiftTangent(T, N, shift);
 			}
 			float3 L = normalize(V - T * dot(V, T));
 
-			diffuseLobeWeight = D_Marschner(L, V, T, roughnessPrimary, baseColor, 0.2, 0) * Math::PI;
-			diffuseLobeWeight += GetHairDiffuseAttenuationKajiyaKay(T, V, L, 1, baseColor) * Math::PI;
+			lobeWeights.diffuse = D_Marschner(L, V, T, 1 - saturate(material.Shininess * 0.01), material.BaseColor, 0.2, 0) * Math::PI * SharedData::hairSpecularSettings.SpecularIndirectMult;
+			lobeWeights.diffuse += GetHairDiffuseAttenuationKajiyaKay(T, V, L, 1, material.BaseColor) * Math::PI * SharedData::hairSpecularSettings.DiffuseIndirectMult;
 			return;
 		} else {
-			float NdotVshifted = NdotV;
-			float NdotVshifted2 = NdotV;
-
-			if (SharedData::hairSpecularSettings.EnableTangentShift) {
-				const float shift = TexTangentShift.SampleLevel(SampColorSampler, uv, 0).x - 0.5;
-				NdotVshifted = saturate(dot(ShiftNormal(T, N, shift + SharedData::hairSpecularSettings.PrimaryTangentShift), V));
-				NdotVshifted2 = saturate(dot(ShiftNormal(T, N, shift + SharedData::hairSpecularSettings.SecondaryTangentShift), V));
-			}
-
-			diffuseLobeWeight = baseColor;
-			specularLobeWeightPrimary = 0;
-			specularLobeWeightSecondary = 0;
-
-			const float2 specularBRDFPrimary = BRDF::EnvBRDF(roughnessPrimary, NdotVshifted);
-			const float2 specularBRDFSecondary = BRDF::EnvBRDF(roughnessSecondary, NdotVshifted2);
-
-			const float3 F0 = HairF0();
-			specularLobeWeightPrimary = F0 * specularBRDFPrimary.x + specularBRDFPrimary.y;
-			diffuseLobeWeight *= (1 - specularLobeWeightPrimary);
-			diffuseLobeWeight = saturate(diffuseLobeWeight);
-			specularLobeWeightPrimary *= 1 + F0 * (1 / (specularBRDFPrimary.x + specularBRDFPrimary.y) - 1);
-
-			specularLobeWeightSecondary = F0 * specularBRDFSecondary.x + specularBRDFSecondary.y;
-			specularLobeWeightSecondary *= 1 + F0 * (1 / (specularBRDFSecondary.x + specularBRDFSecondary.y) - 1);
-			specularLobeWeightSecondary *= baseColor;
-
-			float3 R = reflect(-V, N);
-			float horizon = min(1.0 + dot(R, VN), 1.0);
-			horizon = horizon * horizon;
-			specularLobeWeightPrimary *= horizon;
-			specularLobeWeightSecondary *= horizon;
+			lobeWeights.diffuse = saturate(material.BaseColor * SharedData::hairSpecularSettings.DiffuseIndirectMult);
+			float2 hairBRDF = BRDF::EnvBRDF(material.Roughness, saturate(dot(N, V)));
+			float3 hairSpecularLobe = material.F0 * hairBRDF.x + hairBRDF.y;
+			lobeWeights.diffuse *= (1 - hairSpecularLobe);
+			lobeWeights.specular = saturate(hairSpecularLobe * SharedData::hairSpecularSettings.SpecularIndirectMult);
 		}
 	}
 
@@ -318,36 +296,5 @@ namespace Hair
 		}
 		return lerp(1.0, shadow, SharedData::hairSpecularSettings.SelfShadowStrength);
 	}
-
-#if defined(DYNAMIC_CUBEMAPS)
-#	if defined(SKYLIGHTING)
-	float3 GetHairDynamicCubemapSpecularIrradiance(float2 uv, float2 ScreenUV, float3 T, float3 N, float3 VN, float3 V, float glossiness, float3 specLobePrim, float3 specLobeSec, sh2 skylighting)
-#	else
-	float3 GetHairDynamicCubemapSpecularIrradiance(float2 uv, float2 ScreenUV, float3 T, float3 N, float3 VN, float3 V, float glossiness, float3 specLobePrim, float3 specLobeSec)
-#	endif
-	{
-		float3 SpecularIrradiance = 0;
-		float3 N1 = N;
-		float3 N2 = N;
-
-		const float roughnessPrimary = SharedData::hairSpecularSettings.HairMode == 1 ? 1.0 : pow(abs(2.0 / (glossiness + 2.0)), 0.25);
-		const float roughnessSecondary = pow(abs(2.0 / (glossiness * 0.5 + 2.0)), 0.25);
-
-		if (SharedData::hairSpecularSettings.EnableTangentShift) {
-			const float shift = TexTangentShift.SampleLevel(SampColorSampler, uv, 0).x - 0.5;
-			N1 = ShiftNormal(T, N, shift + (SharedData::hairSpecularSettings.HairMode == 1 ? 0.0 : SharedData::hairSpecularSettings.PrimaryTangentShift));
-			N2 = ShiftNormal(T, N, shift + SharedData::hairSpecularSettings.SecondaryTangentShift);
-		}
-
-#	if defined(SKYLIGHTING)
-		SpecularIrradiance += DynamicCubemaps::GetDynamicCubemapSpecularIrradiance(ScreenUV, N1, VN, V, roughnessPrimary, skylighting) * specLobePrim;
-		SpecularIrradiance += DynamicCubemaps::GetDynamicCubemapSpecularIrradiance(ScreenUV, N2, VN, V, roughnessSecondary, skylighting) * specLobeSec;
-#	else
-		SpecularIrradiance += DynamicCubemaps::GetDynamicCubemapSpecularIrradiance(ScreenUV, N1, VN, V, roughnessPrimary) * specLobePrim;
-		SpecularIrradiance += DynamicCubemaps::GetDynamicCubemapSpecularIrradiance(ScreenUV, N2, VN, V, roughnessSecondary) * specLobeSec;
-#	endif
-		return SpecularIrradiance;
-	}
-#endif
 }
 #endif  //__HAIR_DEPENDENCY_HLSL__

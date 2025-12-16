@@ -334,7 +334,8 @@ if(AUTO_PLUGIN_DEPLOYMENT OR AIO_ZIP_TO_DIST)
     # deploys from copying everything every build.
     set(_prepare_aio_cmds)
 
-    # Ensure SKSE/Plugins dir exists and copy built plugin files
+    # Ensure SKSE/Plugins dir exists
+    # Note: DLL and PDB are copied via POST_BUILD command to avoid race conditions
     list(
         APPEND
         _prepare_aio_cmds
@@ -343,26 +344,6 @@ if(AUTO_PLUGIN_DEPLOYMENT OR AIO_ZIP_TO_DIST)
         -E
         make_directory
         "${AIO_DIR}/SKSE/Plugins"
-    )
-    list(
-        APPEND
-        _prepare_aio_cmds
-        COMMAND
-        ${CMAKE_COMMAND}
-        -E
-        copy_if_different
-        $<TARGET_FILE:${PROJECT_NAME}>
-        "${AIO_DIR}/SKSE/Plugins/$<TARGET_FILE_NAME:${PROJECT_NAME}>"
-    )
-    list(
-        APPEND
-        _prepare_aio_cmds
-        COMMAND
-        ${CMAKE_COMMAND}
-        -E
-        copy_if_different
-        $<TARGET_PDB_FILE:${PROJECT_NAME}>
-        "${AIO_DIR}/SKSE/Plugins/$<TARGET_PDB_FILE_NAME:${PROJECT_NAME}>"
     )
 
     # Copy package files
@@ -454,6 +435,24 @@ if(AUTO_PLUGIN_DEPLOYMENT OR AIO_ZIP_TO_DIST)
         PREPARE_AIO
         ALL
         DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/prepare_aio.stamp
+    )
+
+    # Copy DLL and PDB using POST_BUILD to avoid race conditions with file locking
+    # This ensures the linker has fully released the files before we attempt to copy them
+    add_custom_command(
+        TARGET ${PROJECT_NAME}
+        POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E make_directory "${AIO_DIR}/SKSE/Plugins"
+        COMMAND
+            ${CMAKE_COMMAND} -E copy_if_different
+            "$<TARGET_FILE:${PROJECT_NAME}>"
+            "${AIO_DIR}/SKSE/Plugins/$<TARGET_FILE_NAME:${PROJECT_NAME}>"
+        COMMAND
+            ${CMAKE_COMMAND} -E copy_if_different
+            "$<TARGET_PDB_FILE:${PROJECT_NAME}>"
+            "${AIO_DIR}/SKSE/Plugins/$<TARGET_PDB_FILE_NAME:${PROJECT_NAME}>"
+        COMMENT "Copying built DLL and PDB to AIO package"
+        VERBATIM
     )
 
     # Only copy shaders when HLSL files change; copy individually so unchanged
@@ -848,9 +847,11 @@ set(AIO_PACKAGE "${DIST_PATH}/${PROJECT_NAME}_AIO-${UTC_NOW}.7z")
 add_custom_command(
     OUTPUT ${AIO_PACKAGE}
     DEPENDS ${CORE_SOURCES}
+    COMMAND ${CMAKE_COMMAND} -E make_directory ${AIO_DIR}
     COMMAND ${CMAKE_COMMAND} --install ${CMAKE_BINARY_DIR} --prefix ${AIO_DIR}
-    COMMAND ${CMAKE_COMMAND} -E tar cfv ${AIO_PACKAGE} --format=7zip -- .
-    WORKING_DIRECTORY ${AIO_DIR}
+    COMMAND
+        ${CMAKE_COMMAND} -E chdir ${AIO_DIR} ${CMAKE_COMMAND} -E tar cfv
+        ${AIO_PACKAGE} --format=7zip -- .
     COMMENT "Creating AIO zip package (manual)"
 )
 add_custom_target("Package-AIO-Manual" DEPENDS ${AIO_PACKAGE})
