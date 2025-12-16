@@ -38,6 +38,10 @@
 #include "Raytracing/Includes/Types/GIFrameData.hlsli"
 #include "Raytracing/Includes/Types/ShadowsFrameData.hlsli"
 
+#ifdef SHARC
+#include "Raytracing/Includes/RT/SHaRC/SharcTypes.h"
+#endif
+
 #include "Raytracing/Denoiser/SVGF/SVGF.hlsli"
 
 #define NTDDI_VERSION NTDDI_WINBLUE
@@ -690,6 +694,12 @@ struct Raytracing : public OverlayFeature
 	eastl::unique_ptr<DX12::Texture2D> outputTexture = nullptr;
 	eastl::unique_ptr<DX12::Texture2D> reflectanceTexture = nullptr;
 	eastl::unique_ptr<DX12::Texture2D> specularHitDistanceTexture = nullptr;
+
+#ifdef SHARC
+	eastl::unique_ptr<DX12::StructuredBuffer<uint64_t>> sharcHashEntriesBuffer = nullptr;
+	eastl::unique_ptr<DX12::StructuredBuffer<SharcAccumulationData>> sharcAccumulationBuffer = nullptr;
+	eastl::unique_ptr<DX12::StructuredBuffer<SharcPackedData>> sharcResolvedBuffer = nullptr;
+#endif
 
 	eastl::unique_ptr<WrappedResource> depthTexture = nullptr;
 	eastl::unique_ptr<WrappedResource> motionVectorsTexture = nullptr;

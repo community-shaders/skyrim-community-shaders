@@ -39,6 +39,10 @@
 #define HashGridIndex uint
 #define HashGridKey uint64_t
 
+#ifndef HASH_GRID_LOOP_ATTR
+#define HASH_GRID_LOOP_ATTR [loop]
+#endif
+
 struct HashGridParameters
 {
     float3 cameraPosition;
@@ -192,6 +196,7 @@ void HashMapAtomicCompareExchange(in HashMapData hashMapData, in uint dstOffset,
 bool HashMapInsert(in HashMapData hashMapData, const HashGridKey hashKey, out HashGridIndex cacheIndex)
 {
     const uint baseSlot = HashGridGetBaseSlot(hashKey, hashMapData.capacity);
+    HASH_GRID_LOOP_ATTR
     for (uint bucketOffset = 0; bucketOffset < HASH_GRID_HASH_MAP_BUCKET_SIZE; ++bucketOffset)
     {
         HashGridKey prevHashGridKey;
@@ -212,6 +217,7 @@ bool HashMapInsert(in HashMapData hashMapData, const HashGridKey hashKey, out Ha
 bool HashMapFind(in HashMapData hashMapData, const HashGridKey hashKey, inout HashGridIndex cacheIndex, out uint bucketOffset)
 {
     const uint baseSlot = HashGridGetBaseSlot(hashKey, hashMapData.capacity);
+    HASH_GRID_LOOP_ATTR
     for (bucketOffset = 0; bucketOffset < HASH_GRID_HASH_MAP_BUCKET_SIZE; ++bucketOffset)
     {
         HashGridKey storedHashKey = BUFFER_AT_OFFSET(hashMapData.hashEntriesBuffer, baseSlot + bucketOffset);
