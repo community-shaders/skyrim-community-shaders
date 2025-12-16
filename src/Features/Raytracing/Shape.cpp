@@ -157,7 +157,6 @@ void Shape::BuildMaterial(const RE::BSGeometry::GEOMETRY_RUNTIME_DATA& geometryR
 
 	auto& rt = globals::features::raytracing;
 
-	//Feature feature = Feature::kNone;
 	float4 baseColor = { 1.0f, 1.0f, 1.0f, 1.0f };
 	float4 effectColor = { 0.0f, 0.0f, 0.0f, 1.0f };
 
@@ -217,8 +216,6 @@ void Shape::BuildMaterial(const RE::BSGeometry::GEOMETRY_RUNTIME_DATA& geometryR
 				logger::debug("[RT] BuildMaterial - BSLightingShaderProperty Alpha: {}", lightingShaderProp->alpha);
 
 				if (auto shaderMaterial = lightingShaderProp->material) {
-					//logger::info("[RT] BuildMaterial - Feature: {}, Type: {}", magic_enum::enum_name(shaderMaterial->GetFeature()), magic_enum::enum_name(shaderMaterial->GetType()));
-
 					texCoordOffsetScale = {
 						shaderMaterial->texCoordOffset[0].x, shaderMaterial->texCoordOffset[0].y,
 						shaderMaterial->texCoordScale[0].x, shaderMaterial->texCoordScale[0].y
@@ -237,9 +234,8 @@ void Shape::BuildMaterial(const RE::BSGeometry::GEOMETRY_RUNTIME_DATA& geometryR
 						normalTexture = TryGetTexture(lightingBaseMaterial->normalTexture);
 					}
 
-					// TrueBR - Tried to check for 'lightingShaderProp->flags.any(TruePBR::PBRFlag)' 
-					// where 'TruePBR::PBRFlag = RE::BSShaderProperty::EShaderPropertyFlag::kMenuScreen' but it did not work at all
-					// skyrim_cast is not safe (no RTTI?)
+					// TrueBR - Tried to check for 'lightingShaderProp->flags.any(EShaderPropertyFlag::kMenuScreen)' 
+					// but it did not work at all, skyrim_cast is not safe and will cast even if not PBR material (no RTTI?)
 					if (typeid(*shaderMaterial) == typeid(BSLightingShaderMaterialPBR)) {
 						const auto* lightingPBRMaterial = static_cast<BSLightingShaderMaterialPBR*>(shaderMaterial);
 

@@ -4,7 +4,7 @@
 #include "Common/Color.hlsli"
 
 [shader("miss")]
-void main(inout IndirectPayload payload)
+void main(inout Payload payload)
 {
     float3 dir = normalize(WorldRayDirection());
     dir.z = max(dir.z, 0.0f);
@@ -15,6 +15,6 @@ void main(inout IndirectPayload payload)
     float2 disk = float2(r * cos(phi), r * sin(phi));
     float2 uv   = disk * 0.5f + 0.5f;   
 
-    payload.color = float4(Color::GammaToLinear(SkyHemisphere.SampleLevel(BaseSampler, uv, 0.0f)) * Frame.Sky, 0.0f);  
+    payload.color = float4(Color::GammaToLinear(SkyHemisphere.SampleLevel(BaseSampler, uv, 0.0f)) * Frame.Sky, -1.0f);  
     payload.data.SetMissed(true);
 }

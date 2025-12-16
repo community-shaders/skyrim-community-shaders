@@ -64,7 +64,7 @@ float3 LambertianIndirect(float3 position, float3 n, float3 albedo, uint depth, 
     float3 tangentSample = SampleCosineHemisphere(randomSeed);
     float3 direction = TangentToWorld(n, tangentSample);
             
-    float3 bounceColor = TraceRayIndirect(Scene, position, direction, depth, randomSeed).rgb;
+    float3 bounceColor = TraceRay(Scene, position, direction, depth, randomSeed).rgb;
     
     float NoL = saturate(dot(n, direction));    
     
@@ -209,7 +209,7 @@ float4 GGXIndirect(in float3 position, in float3 GN, float3x3 TBN, in float3 V, 
     if (dot(GN, direction) <= 0.0)
         return float4(0.0f, 0.0f, 0.0f, 0.0f);
 
-    float4 radiance = TraceRayIndirect(Scene, position, direction, depth, randomSeed);
+    float4 radiance = TraceRay(Scene, position, direction, depth, randomSeed);
     
     float3 diffuse = isSpecularRay ? 0.0 : radiance.rgb * BRDF_over_PDF * (DiffuseAO(diffuseAlbedo, ao) * Frame.Diffuse);
     float3 specular = isSpecularRay ? radiance.rgb * BRDF_over_PDF * (SpecularAO(NoV, roughness, ao, f0) * Frame.Specular): 0.0;    

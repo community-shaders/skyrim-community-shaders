@@ -4,7 +4,7 @@
 #include "Raytracing/Includes/Types.hlsli"
 #include "Raytracing/Includes/RT/CommonRT.hlsli"
 
-float4 TraceRayIndirect(RaytracingAccelerationStructure scene, float3 origin, float3 direction, uint currentDepth, inout uint randomSeed)
+float4 TraceRay(RaytracingAccelerationStructure scene, float3 origin, float3 direction, uint currentDepth, inout uint randomSeed)
 {
     RayDesc ray;
     ray.Origin = origin;
@@ -12,12 +12,12 @@ float4 TraceRayIndirect(RaytracingAccelerationStructure scene, float3 origin, fl
     ray.TMin = 0.01f;
     ray.TMax = 1e30;
     
-    IndirectPayload indirectPayload;
-    indirectPayload.color = float4(0, 0, 0, 0);
-    indirectPayload.data = PayloadData::Create(false, currentDepth + 1, randomSeed);
+    Payload payload;
+    payload.color = float4(0, 0, 0, 0);
+    payload.data = PayloadData::Create(false, currentDepth + 1, randomSeed);
 
-    TraceRay(scene, RAY_FLAG_NONE, 0xFF, DIFFUSE_RAY_HITGROUP_IDX, 0, DIFFUSE_RAY_MISS_IDX, ray, indirectPayload);
-    return indirectPayload.color;
+    TraceRay(scene, RAY_FLAG_NONE, 0xFF, DIFFUSE_RAY_HITGROUP_IDX, 0, DIFFUSE_RAY_MISS_IDX, ray, payload);
+    return payload.color;
 }
 
 float TraceRayShadow(RaytracingAccelerationStructure scene, float3 origin, float3 direction)

@@ -26,10 +26,11 @@ alignas(16)
 	float Sky;    
     #ifdef SHARC
     float SHaRCScale;
+    uint SHaRCCapacity;
     #else
     uint Pad0;
-    #endif  
     uint Pad1;
+    #endif      
 	uint Pad2;
     FeatureData Features;
     float4 Pad3[11];

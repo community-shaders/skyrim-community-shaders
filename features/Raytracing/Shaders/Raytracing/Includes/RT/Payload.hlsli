@@ -3,7 +3,8 @@
 
 struct PayloadData
 {
-    uint data;  // bit 0: missed, bits 1-4: depth (0-15), bits 5-31: seed (27 bits)
+    // bit 0: missed, bits 1-4: depth (0-15), bits 5-31: seed (27 bits)
+    uint data;
     
     // Create from components
     static PayloadData Create(bool missedFlag, uint depth, uint seed)
@@ -54,6 +55,7 @@ struct PayloadData
 
 struct Payload
 {
+    // RGB color and hit distance on A
     float4 color;
     PayloadData data;
 };

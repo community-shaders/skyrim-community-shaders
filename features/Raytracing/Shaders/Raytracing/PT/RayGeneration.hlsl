@@ -34,7 +34,7 @@ void main()
      
     uint seed = InitRandomSeed(idx, size, Frame.FrameCount);
     
-    float4 result = TraceRayIndirect(Scene, origin, direction, 0, seed);
+    float4 result = TraceRay(Scene, origin, direction, 0, seed);
     
     OutputTexture[idx] = float4(Color::TrueLinearToGamma(result.rgb), 1.0f);
     

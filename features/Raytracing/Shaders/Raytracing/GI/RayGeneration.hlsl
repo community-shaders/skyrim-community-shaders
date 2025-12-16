@@ -46,7 +46,7 @@ void main()
     
     const float metalness = Scale01((metalnessAO & 0xFF) / 255.0f, Frame.Metalness.x, Frame.Metalness.y);
     
-    const float ao = saturate(((metalnessAO >> 8) & 0xFF) / 255.0f);  
+    const float ao = saturate(((metalnessAO >> 8) & 0xFF) / 255.0f);
     
     const float3 positionVS = ScreenToViewPosition(uv, depthView, Frame.NDCToView);
     const float3 positionCS = ViewToWorldPosition(positionVS, Frame.ViewInverse);
@@ -69,6 +69,32 @@ void main()
     return;
 #endif
     
+#   if defined(SHARC)
+    SharcParameters sharcParameters;
+    {
+        sharcParameters.gridParameters.cameraPosition = Frame.Position;
+        sharcParameters.gridParameters.logarithmBase = SHARC_GRID_LOGARITHM_BASE * GAME_UNIT_TO_CM;
+        sharcParameters.gridParameters.sceneScale = Frame.SHaRCScale;    
+        sharcParameters.gridParameters.levelBias = SHARC_GRID_LEVEL_BIAS;
+
+        sharcParameters.hashMapData.capacity = Frame.SHaRCCapacity;
+        sharcParameters.hashMapData.hashEntriesBuffer = u_SharcHashEntriesBuffer;
+
+#if !SHARC_ENABLE_64_BIT_ATOMICS
+        sharcParameters.hashMapData.lockBuffer = u_HashCopyOffsetBuffer;
+#endif // !SHARC_ENABLE_64_BIT_ATOMICS
+
+        sharcParameters.radianceScale = 1e3f;
+        sharcParameters.enableAntiFireflyFilter = false;   
+    
+        sharcParameters.accumulationBuffer = u_SharcAccumulationBuffer;
+        sharcParameters.resolvedBuffer = u_SharcResolvedBuffer;
+    }    
+    
+    SharcState sharcState;
+    SharcInit(sharcState); 
+#   endif
+    
     // Let's raytrace straight from GBuffer, we save one ray per pixel
 #if defined(LAMBERT)
     OutputTexture[idx] = float4(LambertianIndirect(positionWS, normalWS, albedo, 0, seed), 0.0f);
@@ -80,10 +106,19 @@ void main()
     float3x3 TBN = float3x3(tangentWS, bitangetWS, normalWS);
     
     float4 result = GGXIndirect(positionWS, geometryNormalWS, TBN, viewWS, albedo, roughness, metalness, ao, 0, seed);
+    
+#   if defined(SHARC)
+    // Ray missed (Contains sky)
+    if (result.a < 0.0f) {
+        SharcUpdateMiss(sharcParameters, sharcState, result.rgb);
+    } else {
+        SharcUpdateHit(sharcParameters, sharcState, sharcHitData, result.rgb, Rand(rngState))
+    }
+#   endif
 
     OutputTexture[idx] = MainTexture[idx] + float4(Color::TrueLinearToGamma(result.rgb), 0.0f);
 
     ReflectanceTexture[idx] = float4(EnvBRDFApprox2(F0(albedo, metalness), roughness, dot(normalWS, viewWS)), 0.0f);
-    SpecularHitDist[idx] = result.a;
+    SpecularHitDist[idx] = max(0.0f, result.a);
 #endif
 }

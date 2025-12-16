@@ -10,15 +10,8 @@
 #include "Common/Game.hlsli"
 #include "Common/Color.hlsli"
 
-void HitMesh(inout IndirectPayload payload, in BuiltInTriangleIntersectionAttributes attribs);
-
 [shader("closesthit")]
-void main(inout IndirectPayload payload, in BuiltInTriangleIntersectionAttributes attribs)
-{
-    HitMesh(payload, attribs);
-}
-
-void HitMesh(inout IndirectPayload payload, in BuiltInTriangleIntersectionAttributes attribs)
+void main(inout Payload payload, in BuiltInTriangleIntersectionAttributes attribs)
 {
     float3 worldPosition = WorldRayOrigin() + WorldRayDirection() * RayTCurrent();
 

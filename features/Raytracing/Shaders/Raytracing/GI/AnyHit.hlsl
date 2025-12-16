@@ -5,7 +5,7 @@
 #include "Common/Color.hlsli"
 
 [shader("anyhit")]
-void main(inout IndirectPayload payload, in BuiltInTriangleIntersectionAttributes attribs)
+void main(inout Payload payload, in BuiltInTriangleIntersectionAttributes attribs)
 {
     Instance instance = GetInstance();
     uint meshID = GetMeshID();
