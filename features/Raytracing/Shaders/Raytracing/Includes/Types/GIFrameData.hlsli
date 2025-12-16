@@ -25,7 +25,7 @@ alignas(16)
 	float Effect;
 	float Sky;    
     #ifdef SHARC
-    float SHARCScale;
+    float SHaRCScale;
     #else
     uint Pad0;
     #endif  

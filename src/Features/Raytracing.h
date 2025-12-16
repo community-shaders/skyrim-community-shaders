@@ -1,5 +1,8 @@
 #pragma once
 
+#define SHARC
+#define DLSS_RR
+
 #include "OverlayFeature.h"
 #include <d3d12.h>
 #include <d3d11_4.h>
@@ -40,8 +43,6 @@
 #define NTDDI_VERSION NTDDI_WINBLUE
 
 #include <DXProgrammableCapture.h>
-
-#define DLSS_RR
 
 #ifdef DLSS_RR
 #	define NV_WINDOWS
@@ -351,7 +352,8 @@ struct Raytracing : public OverlayFeature
 		PIXCaptureLocation PIXCaptureLocation = PIXCaptureLocation::GlobalIllumination;
 		bool EnableDebugDevice = false;
 #ifdef SHARC
-		float SHARCScale = 1.0f;
+		bool SHaRC = true;
+		float SHaRCScale = 1.0f;
 #endif
 	} settings;
 

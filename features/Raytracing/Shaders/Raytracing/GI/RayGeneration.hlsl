@@ -1,14 +1,11 @@
 #include "Raytracing/Includes/Types.hlsli"
+#include "Raytracing/Includes/RT/Sharc.hlsli"
 #include "Raytracing/Includes/Registers.hlsli"
 
 #include "Raytracing/Includes/Common.hlsli"
 #include "Raytracing/Includes/RT/CommonRT.hlsli"
 #include "Raytracing/Includes/RT/Rays.hlsli"
 #include "Raytracing/Includes/RT/Shading.hlsli"
-
-#ifdef SHARC
-#include "Raytracing/Includes/RT/SHARC/SharcCommon.hlsli"
-#endif
 
 #include "Common/Color.hlsli"
 
@@ -37,11 +34,14 @@ void main()
         return;
     }
 
+    // Normal is pre-transformed into World-Space and Smoothness becomes Roughness when we copy the RT to DX12
     const snorm half4 normalRoughness = (half4) NormalRoughnessTexture[idx];
 
+    // We should also scale the GBuffer for DLSSRR
     const unorm float perceptualRoughness = clamp(Scale01(normalRoughness.w, Frame.Roughness.x, Frame.Roughness.y), MIN_ROUGHNESS, MAX_ROUGHNESS);
     const unorm float roughness = perceptualRoughness * perceptualRoughness;
 
+    // Metalness and AO packed in 16 bits
     uint metalnessAO = normalMetalnessAO.z * 65535.0;
     
     const float metalness = Scale01((metalnessAO & 0xFF) / 255.0f, Frame.Metalness.x, Frame.Metalness.y);
@@ -58,6 +58,17 @@ void main()
     
     uint seed = InitRandomSeed(DispatchRaysIndex().xy, DispatchRaysDimensions().xy, Frame.FrameCount);
 
+#if defined(SHARC) && defined(SHARC_DEBUG)
+    HashGridParameters gridParameters;
+    gridParameters.cameraPosition = Frame.Position;
+    gridParameters.logarithmBase = SHARC_GRID_LOGARITHM_BASE * GAME_UNIT_TO_CM;
+    gridParameters.sceneScale = Frame.SHaRCScale;
+    gridParameters.levelBias = SHARC_GRID_LEVEL_BIAS;    
+
+    OutputTexture[idx] = float4(HashGridDebugColoredHash(positionWS, geometryNormalWS, gridParameters), 1);
+    return;
+#endif
+    
     // Let's raytrace straight from GBuffer, we save one ray per pixel
 #if defined(LAMBERT)
     OutputTexture[idx] = float4(LambertianIndirect(positionWS, normalWS, albedo, 0, seed), 0.0f);
@@ -75,14 +86,4 @@ void main()
     ReflectanceTexture[idx] = float4(EnvBRDFApprox2(F0(albedo, metalness), roughness, dot(normalWS, viewWS)), 0.0f);
     SpecularHitDist[idx] = result.a;
 #endif
-    
-    /*HashGridParameters gridParameters;
-    gridParameters.cameraPosition = Frame.Position;
-    gridParameters.logarithmBase = SHARC_GRID_LOGARITHM_BASE * GAME_UNIT_TO_CM;
-    gridParameters.sceneScale = Frame.SHARCScale;
-    gridParameters.levelBias = SHARC_GRID_LEVEL_BIAS;    
-    
-    float3 color = HashGridDebugColoredHash(positionWS, meshNormalWS, gridParameters);
-    
-    Output[idx] = float4(color, 1);*/ 
 }

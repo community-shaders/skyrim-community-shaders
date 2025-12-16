@@ -1,14 +1,11 @@
 #include "Raytracing/Includes/Types.hlsli"
+#include "Raytracing/Includes/RT/Sharc.hlsli"
 #include "Raytracing/Includes/Registers.hlsli"
 
 #include "Raytracing/Includes/Common.hlsli"
 #include "Raytracing/Includes/RT/CommonRT.hlsli"
 #include "Raytracing/Includes/RT/Rays.hlsli"
 #include "Raytracing/Includes/RT/Shading.hlsli"
-
-#ifdef SHARC
-#include "Raytracing/Includes/RT/SHARC/SharcCommon.hlsli"
-#endif
 
 #include "Common/Color.hlsli"
 
@@ -34,8 +31,7 @@ void main()
     ray.Direction = direction;
     ray.TMin = 0.1f;
     ray.TMax = 1e30;   
-    
-    
+     
     uint seed = InitRandomSeed(idx, size, Frame.FrameCount);
     
     float4 result = TraceRayIndirect(Scene, origin, direction, 0, seed);

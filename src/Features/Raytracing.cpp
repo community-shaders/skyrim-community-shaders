@@ -205,8 +205,13 @@ void Raytracing::DrawSettings()
 	}
 
 #ifdef SHARC
-	ImGui::DragFloat("SHARC Scale", &settings.SHARCScale, 1.0f, 0.1f, 100.0f);
-	settings.SHARCScale = std::clamp(settings.SHARCScale, 0.1f, 100.0f);
+	ImGui::Checkbox("SHaRC", &settings.SHaRC);
+	if (auto _tt = Util::HoverTooltipWrapper()) {
+		ImGui::Text("Enables Spatially Hashed Radiance Cache, a technique aimed at improving signal quality and performance in the context of path tracing.");
+	}
+
+	ImGui::DragFloat("SHaRC Scale", &settings.SHaRCScale, 0.001f, 0.1f, 10.0f);
+	settings.SHaRCScale = std::clamp(settings.SHaRCScale, 0.1f, 10.0f);
 #endif
 
 #ifdef DLSS_RR
@@ -225,7 +230,7 @@ void Raytracing::DrawSettings()
 	}
 #endif
 
-	ImGui::Checkbox("Enabled PIX Capture", &settings.EnablePIXCapture);
+	ImGui::Checkbox("Enable PIX Capture", &settings.EnablePIXCapture);
 
 	if (settings.EnablePIXCapture)
 	{
@@ -2234,7 +2239,7 @@ void Raytracing::DrawRTGI()
 		frameBufferData->Sky = settings.Sky;
 
 #ifdef SHARC
-		frameBufferData->SHARCScale = settings.SHARCScale / Util::Units::GAME_UNIT_TO_M;
+		frameBufferData->SHaRCScale = settings.SHaRCScale / Util::Units::GAME_UNIT_TO_M;
 #endif
 
 		// Update Features
@@ -3056,6 +3061,12 @@ void Raytracing::CompileRTGIShaders()
 		{ L"MAX_DEPTH", bouncesWStr.c_str() },
 		{ L"SAMPLES", samplesWStr.c_str() },
 	};
+
+#ifdef SHARC
+	if (settings.SHaRC) {
+		defines.emplace_back(L"SHARC");
+	}
+#endif
 
 	if (settings.PathTracing) {
 		defines.emplace_back(L"PATH_TRACING");
