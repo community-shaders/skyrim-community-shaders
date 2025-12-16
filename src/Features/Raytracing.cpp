@@ -37,7 +37,7 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	Emissive,
 	Directional,
 	Point,
-	PointFade,
+	LodDimmer,
 	GammaToLinear,
 	RaytracedShadows,
 	PathTracing,
@@ -64,7 +64,7 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	Emissive,
 	Directional,
 	Point,
-	PointFade,
+	LodDimmer,
 	GammaToLinear,
 	RaytracedShadows,
 	PathTracing,
@@ -164,7 +164,7 @@ void Raytracing::DrawSettings()
 			if (ImGui::DragFloat("Point Strength", &settings.Point, 0.001f))
 				settings.Point = std::max(0.0f, settings.Point);
 
-			ImGui::Checkbox("Point Fade", &settings.PointFade);
+			ImGui::Checkbox("Lod Dimmer", &settings.LodDimmer);
 			ImGui::Checkbox("Gamma To Linear", &settings.GammaToLinear);
 			
 			ImGui::Checkbox("Raytraced Shadows", &settings.RaytracedShadows);
@@ -522,7 +522,7 @@ void Raytracing::SetupResources()
 #ifdef SHARC
 		// u3 - Sharc HashEntries Buffer
 		{
-			sharcHashEntriesBuffer = eastl::make_unique<DX12::StructuredBuffer<uint64_t>>(d3d12Device.get(), SHARC_ELEMENTS, true);
+			sharcHashEntriesBuffer = eastl::make_unique<DX12::StructuredBuffer<uint64_t>>(d3d12Device.get(), SHARC_CAPACITY, true);
 			sharcHashEntriesBuffer->SetName(L"SHaRC HashEntries Buffer");
 
 			sharcHashEntriesBuffer->CreateUAV(giHeap->CPUHandle(GIHeap::Slot::SHaRCHashEntries));
@@ -530,7 +530,7 @@ void Raytracing::SetupResources()
 
 		// u4 - Sharc Accumulation Buffer
 		{
-			sharcAccumulationBuffer = eastl::make_unique<DX12::StructuredBuffer<SharcAccumulationData>>(d3d12Device.get(), SHARC_ELEMENTS, true);
+			sharcAccumulationBuffer = eastl::make_unique<DX12::StructuredBuffer<SharcAccumulationData>>(d3d12Device.get(), SHARC_CAPACITY, true);
 			sharcAccumulationBuffer->SetName(L"SHaRC Accumulation Buffer");
 
 			sharcAccumulationBuffer->CreateUAV(giHeap->CPUHandle(GIHeap::Slot::SHaRCAccumulation));
@@ -538,7 +538,7 @@ void Raytracing::SetupResources()
 
 		// u5 - Sharc Resolved Buffer
 		{
-			sharcResolvedBuffer = eastl::make_unique<DX12::StructuredBuffer<SharcPackedData>>(d3d12Device.get(), SHARC_ELEMENTS, true);
+			sharcResolvedBuffer = eastl::make_unique<DX12::StructuredBuffer<SharcPackedData>>(d3d12Device.get(), SHARC_CAPACITY, true);
 			sharcResolvedBuffer->SetName(L"SHaRC Resolved Buffer");
 
 			sharcResolvedBuffer->CreateUAV(giHeap->CPUHandle(GIHeap::Slot::SHaRCResolved));
@@ -1022,7 +1022,7 @@ eastl::vector<LightLimitFix::LightData> Raytracing::GetPointLights()
 					auto& runtimeData = niLight->GetLightRuntimeData();
 
 					LightLimitFix::LightData light{};
-					light.color = { runtimeData.diffuse.red, runtimeData.diffuse.green, runtimeData.diffuse.blue };
+					light.color = { runtimeData.diffuse.red, runtimeData.diffuse.green, runtimeData.diffuse.blue } * runtimeData.fade;
 					light.lightFlags = std::bit_cast<LightLimitFix::LightFlags>(runtimeData.ambient.red);
 
 					/*if (isl.loaded) {
@@ -1030,16 +1030,14 @@ eastl::vector<LightLimitFix::LightData> Raytracing::GetPointLights()
 					} else {
 						light.radius = runtimeData.radius.x;
 
-						if (settings.PointFade)
+						if (settings.LodDimmer)
 							light.color *= runtimeData.fade;
 					}*/
 
 					light.radius = runtimeData.radius.x;
 
-					if (settings.PointFade)
-						light.color *= runtimeData.fade;
-
-					//light.color *= bsLight->lodDimmer;
+					if (settings.LodDimmer)
+						light.color *= bsLight->lodDimmer;
 
 					if (!IsGlobalLight(bsLight)) {
 						light.lightFlags.set(LightLimitFix::LightFlags::PortalStrict);
@@ -2266,6 +2264,7 @@ void Raytracing::DrawRTGI()
 
 #ifdef SHARC
 		frameBufferData->SHaRCScale = settings.SHaRCScale / Util::Units::GAME_UNIT_TO_M;
+		frameBufferData->SHaRCCapacity = SHARC_CAPACITY;
 #endif
 
 		// Update Features

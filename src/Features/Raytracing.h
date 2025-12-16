@@ -75,7 +75,7 @@ struct Raytracing : public OverlayFeature
 	static constexpr uint SKY_CUBEMAP_SIZE = 256;
 
 #ifdef SHARC
-	static constexpr size_t SHARC_ELEMENTS = 1ull << 22;
+	static constexpr size_t SHARC_CAPACITY = 1ull << 22;
 #endif
 
 	struct GIHeapDef
@@ -350,7 +350,7 @@ struct Raytracing : public OverlayFeature
 		float Sky = 1.0f;
 		float Directional = 1.0f;
 		float Point = 1.0f;
-		bool PointFade = true;
+		bool LodDimmer = true;
 		bool GammaToLinear = false;
 		bool RaytracedShadows = true;
 		bool PathTracing = false;
