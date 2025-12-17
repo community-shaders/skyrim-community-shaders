@@ -29,11 +29,19 @@ float LinearAtten(float dist, float range)
 
 float3 LambertianDirectD(in float3 position, in float3 normal, in float3 albedo, in Light light, inout uint randomSeed)
 {
-    float3 L = normalize(light.Vector);
+    float3 l = normalize(light.Vector);
  
-    float NdotL = saturate(dot(normal, L)) * TraceRayShadow(Scene, position, L);
+    float NdotL = saturate(dot(normal, l));
             
-    return NdotL * light.Color * albedo; 
+    float3 direct = NdotL * light.Color * albedo;
+    
+    if (any(direct > MIN_DIFFUSE_SHADOW))
+    {
+        float3 lr = TangentToWorld(l, SampleCosineHemisphereScaled(randomSeed, 0.025f));  
+        direct *= TraceRayShadow(Scene, position, lr);
+    }      
+    
+    return direct; 
 }
 
 float3 LambertianDirectP(in float3 position, in float3 n, in float3 albedo, in LightData lightData, inout uint randomSeed)
@@ -55,9 +63,16 @@ float3 LambertianDirectP(in float3 position, in float3 n, in float3 albedo, in L
     //float atten = InverseSquareAtten(dist, light.Range); // This requires all lights to be ISL enabled
             
     float NdotL = saturate(dot(n, l)) * atten;
-    NdotL *= float(lightData.Count) * TraceRayShadowFinite(Scene, position, l, dist);
-            
-    return NdotL * light.Color * albedo; // (albedo / Math::PI)
+
+    float3 direct  = NdotL * light.Color * albedo * float(lightData.Count);
+ 
+    if (any(direct > MIN_DIFFUSE_SHADOW))
+    {
+        float3 lr = TangentToWorld(l, SampleCosineHemisphereScaled(randomSeed, 0.05f));        
+        direct *= TraceRayShadowFinite(Scene, position, lr, dist);
+    }    
+    
+    return direct; // (albedo / Math::PI)
 }
 
 /*float3 LambertianIndirect(float3 position, float3 n, float3 albedo, uint depth, inout uint randomSeed)
@@ -115,7 +130,8 @@ float3 GGXDirectD(in float3 position, in float3 n, in float3 v, in float3 albedo
 
 float3 GGXDirectP(in float3 position, in float3 n, in float3 v, in float3 albedo, in float roughness, in float metalness, in LightData lightData, inout uint randomSeed)
 {
-    if (lightData.Count == 0) return float3(0, 0, 0);
+    if (lightData.Count == 0) 
+        return float3(0, 0, 0);
     
     uint lightIdx = min(uint(Random(randomSeed) * lightData.Count), lightData.Count - 1);
 
@@ -130,7 +146,7 @@ float3 GGXDirectP(in float3 position, in float3 n, in float3 v, in float3 albedo
     float atten = LinearAtten(dist, light.Range);
     //float atten = InverseSquareAtten(dist, light.Range); // This requires all lights to be ISL enabled
     
-    float3 direct = GGXDirect(l, n, v, albedo, roughness, metalness) * atten * light.Color;
+    float3 direct = GGXDirect(l, n, v, albedo, roughness, metalness) * atten * light.Color * float(lightData.Count);
 
     if (any(direct > MIN_DIFFUSE_SHADOW))
     {
@@ -138,7 +154,7 @@ float3 GGXDirectP(in float3 position, in float3 n, in float3 v, in float3 albedo
         direct *= TraceRayShadowFinite(Scene, position, lr, dist);
     }
     
-    return direct * float(lightData.Count);
+    return direct;
 }
 
 #endif // SHADING_HLSI
