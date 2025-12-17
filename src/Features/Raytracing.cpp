@@ -609,7 +609,7 @@ void Raytracing::SetupResources()
 
 	logger::debug("Creating constant buffer...");
 	{
-		frameBuffer = eastl::make_unique<DX12::StructuredBufferUpload<GIFrameData>>(d3d12Device.get(), 1);
+		frameBuffer = eastl::make_unique<DX12::StructuredBufferUpload<GIFrameData>>(d3d12Device.get(), 1, false, 2);
 		frameBuffer->TransitionBarrier(commandList.get(), D3D12_RESOURCE_STATE_VERTEX_AND_CONSTANT_BUFFER);
 		DX::ThrowIfFailed(frameBuffer->resource->SetName(L"Frame Buffer"));
 
@@ -1645,7 +1645,7 @@ void Raytracing::UpdateDynamicSkinning(ID3D12GraphicsCommandList4* pCommandList)
 
 			for (auto& item : vertexUpdate) {
 				if (item.flags & Flags::Skinned) {
-					pCommandList->CopyResource(item.vertexBuffer->resource.get(), item.vertexBuffer->uploadBuffer.get());				
+					pCommandList->CopyResource(item.vertexBuffer->resource.get(), item.vertexBuffer->uploadBuffer[0].get());				
 				}
 			}
 		}
@@ -2194,6 +2194,11 @@ void Raytracing::DrawRTGI()
 	auto& rendererRuntimeData = globals::game::renderer->GetRuntimeData();
 	auto main = rendererRuntimeData.renderTargets[RE::RENDER_TARGETS::kMAIN];
 
+	auto finalTexDesc = mainTexture->resource->GetDesc();
+
+	const auto width = static_cast<uint>(finalTexDesc.Width);
+	const auto height = finalTexDesc.Height;
+
 	d3d11Context->CopyResource(mainTexture->resource11, main.texture);
 	d3d11Context->CopyResource(motionVectorsTexture->resource11, rendererRuntimeData.renderTargets[RE::RENDER_TARGETS::kMOTION_VECTOR].texture);
 
@@ -2265,7 +2270,10 @@ void Raytracing::DrawRTGI()
 #ifdef SHARC
 		frameBufferData->SHaRCScale = settings.SHaRCScale / Util::Units::GAME_UNIT_TO_M;
 		frameBufferData->SHaRCCapacity = SHARC_CAPACITY;
+		frameBufferData->SHaRCUpdatePass = true;
 #endif
+
+		frameBufferData->DispatchSize = { width, height };
 
 		// Update Features
 		{
@@ -2278,9 +2286,12 @@ void Raytracing::DrawRTGI()
 			frameBufferData->Features.ExtendedTranslucency = *reinterpret_cast<ExtendedTranslucencySettings*>(&globals::features::extendedTranslucency.settings);
 		}
 
-		frameBuffer->Update(frameBufferData.get(), sizeof(GIFrameData));
+		frameBuffer->Update(frameBufferData.get(), sizeof(GIFrameData), 0, 0);
+
+		frameBufferData->SHaRCUpdatePass = false;
+		frameBuffer->Update(frameBufferData.get(), sizeof(GIFrameData), 0, 1);
+
 		frameBuffer->Upload(commandList.get());
-		frameBuffer->TransitionBarrier(commandList.get(), D3D12_RESOURCE_STATE_VERTEX_AND_CONSTANT_BUFFER);
 	}
 
 	BuildTLAS();
@@ -2313,24 +2324,41 @@ void Raytracing::DrawRTGI()
 			// Parameter 5: Constant buffer
 			commandList->SetComputeRootConstantBufferView(5, frameBuffer->resource->GetGPUVirtualAddress());
 
-			auto finalTexDesc = mainTexture->resource->GetDesc();
-			
 			D3D12_DISPATCH_RAYS_DESC dispatchDesc{};
-			dispatchDesc.Width = static_cast<uint>(finalTexDesc.Width);
-			dispatchDesc.Height = finalTexDesc.Height;
 			dispatchDesc.Depth = 1;
 
 			shaderBindingTable->FillDispatchShaderBindingTable(dispatchDesc, shaderBindingTableBuffer->resource->GetGPUVirtualAddress());
 
-			commandList->DispatchRays(&dispatchDesc);
+#ifdef SHARC
+			// SHaRC Update pass
+			{
+				const auto sharcWidth = (uint)ceil(width / 5.0f);
+				const auto sharcHeight = (uint)ceil(height / 5.0f);
 
-			CD3DX12_RESOURCE_BARRIER rtUAVBarrier[3] = {
-				CD3DX12_RESOURCE_BARRIER::UAV(outputTexture->resource.get()),
-				CD3DX12_RESOURCE_BARRIER::UAV(reflectanceTexture->resource.get()),
-				CD3DX12_RESOURCE_BARRIER::UAV(specularHitDistanceTexture->resource.get())
-			};
+				dispatchDesc.Width = sharcWidth;
+				dispatchDesc.Height = sharcHeight;
 
-			commandList->ResourceBarrier(_countof(rtUAVBarrier), rtUAVBarrier);
+				commandList->DispatchRays(&dispatchDesc);
+
+				// Update Frame Buffer for main RT pass
+				frameBuffer->UploadRegion(commandList.get(), sizeof(GIFrameData::SHaRCUpdatePass), offsetof(GIFrameData, SHaRCUpdatePass), 1);
+			}
+#endif
+			// Main pass
+			{
+				dispatchDesc.Width = width;
+				dispatchDesc.Height = height;
+
+				commandList->DispatchRays(&dispatchDesc);
+
+				CD3DX12_RESOURCE_BARRIER rtUAVBarrier[3] = {
+					CD3DX12_RESOURCE_BARRIER::UAV(outputTexture->resource.get()),
+					CD3DX12_RESOURCE_BARRIER::UAV(reflectanceTexture->resource.get()),
+					CD3DX12_RESOURCE_BARRIER::UAV(specularHitDistanceTexture->resource.get())
+				};
+
+				commandList->ResourceBarrier(_countof(rtUAVBarrier), rtUAVBarrier);
+			}
 		}
 
 		if (settings.DebugOutput == DebugOutput::None) {
@@ -2535,7 +2563,6 @@ void Raytracing::RenderShadows()
 	//UpdateDynamicSkinning(commandList.get());
 
 	shadowsCB->Upload(commandList.get());
-	shadowsCB->TransitionBarrier(commandList.get(), D3D12_RESOURCE_STATE_VERTEX_AND_CONSTANT_BUFFER);
 
 	BuildTLAS();
 	RebuildTLAS(commandList.get(), blasShadowInstances.size(), blasShadowInstanceBuffer->resource->GetGPUVirtualAddress());

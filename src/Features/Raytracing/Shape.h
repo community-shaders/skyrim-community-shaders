@@ -42,6 +42,7 @@ public:
 		eastl::shared_ptr<Allocation> RMAOSTexture;
 
 		RE::BSShader::Type ShaderType;
+		stl::enumeration<PBRShaderFlags, uint16_t> PBRShaderFlags;
 
 		MaterialData GetData() {
 			return MaterialData(
@@ -52,7 +53,8 @@ public:
 				NormalTexture->GetIndex(), 
 				EffectTexture->GetIndex(), 
 				RMAOSTexture->GetIndex(), 
-				static_cast<uint16_t>(ShaderType));
+				static_cast<uint16_t>(ShaderType),
+				PBRShaderFlags.underlying());
 		}
 	};
 
@@ -113,4 +115,7 @@ public:
 	void CreateBuffers(const std::wstring& name);
 
 	void CalculateNTB(bool normals);
+
+	// For PBR shader flags we need to copy exactly what TruePBR does 
+	static stl::enumeration<PBRShaderFlags, uint16_t> GetPBRShaderFlags(const BSLightingShaderMaterialPBR* pbrMaterial);
 };

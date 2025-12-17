@@ -27,6 +27,7 @@ alignas(16)
     #ifdef SHARC
     float SHaRCScale;
     uint SHaRCCapacity;
+    BOOL SHaRCUpdatePass;
     #else
     uint Pad0;
     uint Pad1;

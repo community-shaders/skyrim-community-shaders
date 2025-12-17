@@ -135,7 +135,13 @@ struct half4
 };
 static_assert(sizeof(half4) == 8);
 
-// These two are defined mostly to please SHaRC
+struct uint2
+{
+	uint x;
+	uint y;
+};
+static_assert(sizeof(uint2) == 8);
+
 struct uint4
 {
 	uint x;

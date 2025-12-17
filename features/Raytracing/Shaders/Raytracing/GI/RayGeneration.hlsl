@@ -15,6 +15,23 @@ void main()
     uint2 idx = DispatchRaysIndex().xy;
     uint2 size = DispatchRaysDimensions().xy;
 
+#if defined(SHARC) && defined(SHARC_UPDATE)
+    if (Frame.SHaRCUpdatePass)  {
+        uint startIndex = Hash(idx) % 25;
+
+        uint2 blockOrigin = idx * 5;
+    
+        uint pixelIndex = (startIndex + Frame.FrameCount) % 25;
+    
+        idx = blockOrigin + uint2(pixelIndex % 5, pixelIndex / 5);
+    
+        if (any(idx >= Frame.DispatchSize))
+            return;
+    
+        size = Frame.DispatchSize;
+    }
+#endif    
+    
     float2 uv = (idx + 0.5f) / size;
     
     const unorm float4 normalMetalnessAO = GNMAOTexture[idx];
@@ -28,6 +45,11 @@ void main()
 
     if (depthView < FP_Z || depth >= SKY_Z)
     {
+#if defined(SHARC) && defined(SHARC_UPDATE)
+        if (Frame.SHaRCUpdatePass)   
+            return;
+#endif
+        
         OutputTexture[idx] = MainTexture[idx];
         ReflectanceTexture[idx] = float4(0.0f, 0.0f, 0.0f, 0.0f);
         SpecularHitDist[idx] = 0.0f;
@@ -69,28 +91,7 @@ void main()
     return;
 #endif
     
-#   if defined(SHARC)
-    SharcParameters sharcParameters;
-    {
-        sharcParameters.gridParameters.cameraPosition = Frame.Position;
-        sharcParameters.gridParameters.logarithmBase = SHARC_GRID_LOGARITHM_BASE * GAME_UNIT_TO_CM;
-        sharcParameters.gridParameters.sceneScale = Frame.SHaRCScale;    
-        sharcParameters.gridParameters.levelBias = SHARC_GRID_LEVEL_BIAS;
-
-        sharcParameters.hashMapData.capacity = Frame.SHaRCCapacity;
-        sharcParameters.hashMapData.hashEntriesBuffer = u_SharcHashEntriesBuffer;
-
-#if !SHARC_ENABLE_64_BIT_ATOMICS
-        sharcParameters.hashMapData.lockBuffer = u_HashCopyOffsetBuffer;
-#endif // !SHARC_ENABLE_64_BIT_ATOMICS
-
-        sharcParameters.radianceScale = 1e3f;
-        sharcParameters.enableAntiFireflyFilter = false;   
-    
-        sharcParameters.accumulationBuffer = u_SharcAccumulationBuffer;
-        sharcParameters.resolvedBuffer = u_SharcResolvedBuffer;
-    }    
-    
+#if defined(SHARC)
     SharcState sharcState;
     SharcInit(sharcState); 
 #   endif

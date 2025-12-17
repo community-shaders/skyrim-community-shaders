@@ -1,6 +1,10 @@
 #ifndef TYPES_HLSI
 #define TYPES_HLSI
 
+#ifndef __cplusplus
+typedef bool BOOL;
+#endif
+
 #include "Raytracing/Includes/Types/Vertex.hlsli"
 #include "Raytracing/Includes/Types/Triangle.hlsli"
 #include "Raytracing/Includes/Types/Material.hlsli"

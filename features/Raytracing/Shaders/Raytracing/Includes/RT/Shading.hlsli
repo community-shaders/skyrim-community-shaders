@@ -80,7 +80,7 @@ float3 LambertianDirectP(in float3 position, in float3 n, in float3 albedo, in L
     float3 tangentSample = SampleCosineHemisphere(randomSeed);
     float3 direction = TangentToWorld(n, tangentSample);
             
-    float3 bounceColor = TraceRay(Scene, position, direction, depth, randomSeed).rgb;
+    float4 radiance = TraceRay(Scene, position, direction, depth, randomSeed);
     
     float NoL = saturate(dot(n, direction));    
     
