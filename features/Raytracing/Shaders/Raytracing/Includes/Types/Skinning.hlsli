@@ -1,5 +1,5 @@
-#ifndef SKINNING_HLSI
-#define SKINNING_HLSI
+#ifndef SKINNING_HLSL
+#define SKINNING_HLSL
 
 struct Skinning
 {

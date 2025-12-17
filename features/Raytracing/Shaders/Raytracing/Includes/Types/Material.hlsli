@@ -1,5 +1,5 @@
-#ifndef MATERIAL_HLSI
-#define MATERIAL_HLSI
+#ifndef MATERIAL_HLSL
+#define MATERIAL_HLSL
 
 #ifdef __cplusplus
 struct MaterialData

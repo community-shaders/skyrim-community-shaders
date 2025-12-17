@@ -1,5 +1,5 @@
-#ifndef REGISTERS_HLSI
-#define REGISTERS_HLSI
+#ifndef REGISTERS_HLSL
+#define REGISTERS_HLSL
 
 #include "Raytracing/Includes/Types.hlsli"
 #include "Raytracing/Includes/RT/Sharc.hlsli"

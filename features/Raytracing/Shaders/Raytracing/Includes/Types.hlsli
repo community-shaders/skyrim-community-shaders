@@ -1,5 +1,5 @@
-#ifndef TYPES_HLSI
-#define TYPES_HLSI
+#ifndef TYPES_HLSL
+#define TYPES_HLSL
 
 #ifndef __cplusplus
 typedef bool BOOL;

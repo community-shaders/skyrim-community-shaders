@@ -1,5 +1,5 @@
-#ifndef GI_FRAMEDATA_HLSI
-#define GI_FRAMEDATA_HLSI
+#ifndef GI_FRAMEDATA_HLSL
+#define GI_FRAMEDATA_HLSL
 
 #include "Raytracing/Includes/Types/Light.hlsli"
 #include "Raytracing/Includes/SharedData.hlsli"
@@ -24,6 +24,7 @@ alignas(16)
     float Emissive;
 	float Effect;
 	float Sky;
+    uint2 DispatchSize;
     #ifdef SHARC
     float SHaRCScale;
     uint SHaRCCapacity;
@@ -31,9 +32,9 @@ alignas(16)
     #else
     uint Pad0;
     uint Pad1;
+    uint Pad2;
     #endif      
-	uint Pad2;
-    float4 Pad3[11];
+    float4 Pad3[10];
     FeatureData Features;
 };
 #ifdef __cplusplus

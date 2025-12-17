@@ -1,5 +1,5 @@
-#ifndef TRIANGLE_HLSI
-#define TRIANGLE_HLSI
+#ifndef TRIANGLE_HLSL
+#define TRIANGLE_HLSL
 
 struct Triangle
 {

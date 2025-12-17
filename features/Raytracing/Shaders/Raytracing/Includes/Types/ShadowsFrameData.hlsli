@@ -1,5 +1,5 @@
-#ifndef SHADOW_FRAMEDATA_HLSI
-#define SHADOW_FRAMEDATA_HLSI
+#ifndef SHADOW_FRAMEDATA_HLSL
+#define SHADOW_FRAMEDATA_HLSL
 
 struct 
 #ifdef __cplusplus

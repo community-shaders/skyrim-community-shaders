@@ -1,5 +1,5 @@
-#ifndef PAYLOAD_HLSI
-#define PAYLOAD_HLSI
+#ifndef PAYLOAD_HLSL
+#define PAYLOAD_HLSL
 
 uint PackUnorm2x16(float2 v)
 {
@@ -48,4 +48,4 @@ struct Payload
     bool Hit() { return hitDistance > 0.0f; }
 };
 
-#endif // PAYLOAD_HLSI
+#endif // PAYLOAD_HLSL

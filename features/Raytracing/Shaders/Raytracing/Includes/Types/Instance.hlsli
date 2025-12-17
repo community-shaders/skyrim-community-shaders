@@ -1,5 +1,5 @@
-#ifndef INSTANCE_HLSI
-#define INSTANCE_HLSI
+#ifndef INSTANCE_HLSL
+#define INSTANCE_HLSL
 
 struct LightData
 {

@@ -1,7 +1,7 @@
 #ifdef SHARC
 
-#   ifndef SHARC_COMMON_DEPENDENCY_HLSI
-#   define SHARC_COMMON_DEPENDENCY_HLSI
+#   ifndef SHARC_COMMON_DEPENDENCY_HLSL
+#   define SHARC_COMMON_DEPENDENCY_HLSL
 
 #   define SHARC_ENABLE_64_BIT_ATOMICS 1
 #   define SHARC_UPDATE 1
@@ -39,6 +39,6 @@ SharcParameters GetSharcParameters()
     return sharcParameters;
 }
 
-#   endif // SHARC_COMMON_DEPENDENCY_HLSI
+#   endif // SHARC_COMMON_DEPENDENCY_HLSL
 
 #endif // SHARC

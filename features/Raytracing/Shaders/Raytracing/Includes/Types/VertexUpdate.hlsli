@@ -1,5 +1,5 @@
-#ifndef VERTEX_UPDATE_HLSI
-#define VERTEX_UPDATE_HLSI
+#ifndef VERTEX_UPDATE_HLSL
+#define VERTEX_UPDATE_HLSL
 
 struct VertexUpdateData
 {

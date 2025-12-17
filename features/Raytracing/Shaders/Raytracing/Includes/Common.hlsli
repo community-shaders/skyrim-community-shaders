@@ -1,5 +1,5 @@
-#ifndef COMMON_HLSI
-#define COMMON_HLSI
+#ifndef COMMON_HLSL
+#define COMMON_HLSL
 
 #define DEPTH_SCALE (0.99920h)
 #define FP_Z (16.5f)

@@ -1,9 +1,9 @@
-#ifndef SHADOWPAYLOAD_HLSI
-#define SHADOWPAYLOAD_HLSI
+#ifndef SHADOWPAYLOAD_HLSL
+#define SHADOWPAYLOAD_HLSL
 
 struct ShadowPayload
 {
     float missed;
 };
 
-#endif // #ifndef SHADOWPAYLOAD_HLSI
+#endif // SHADOWPAYLOAD_HLSL

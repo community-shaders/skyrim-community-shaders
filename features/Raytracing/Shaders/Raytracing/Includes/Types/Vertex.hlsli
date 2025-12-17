@@ -1,5 +1,5 @@
-#ifndef VERTEX_HLSI
-#define VERTEX_HLSI
+#ifndef VERTEX_HLSL
+#define VERTEX_HLSL
 
 #include "Raytracing/Includes/Types/byte4.hlsli"
 

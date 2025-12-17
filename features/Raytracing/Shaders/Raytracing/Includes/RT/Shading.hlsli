@@ -1,5 +1,5 @@
-#ifndef SHADING_HLSI
-#define SHADING_HLSI
+#ifndef SHADING_HLSL
+#define SHADING_HLSL
 
 #include "Common/Game.hlsli"
 #include "Common/BRDF.hlsli"
@@ -157,4 +157,4 @@ float3 GGXDirectP(in float3 position, in float3 n, in float3 v, in float3 albedo
     return direct;
 }
 
-#endif // SHADING_HLSI
+#endif // SHADING_HLSL

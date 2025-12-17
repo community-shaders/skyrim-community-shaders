@@ -1,5 +1,5 @@
-#ifndef COMMONRT_HLSI
-#define COMMONRT_HLSI
+#ifndef COMMONRT_HLSL
+#define COMMONRT_HLSL
 
 #include "Common/Game.hlsli"
 #include "Common/Math.hlsli"

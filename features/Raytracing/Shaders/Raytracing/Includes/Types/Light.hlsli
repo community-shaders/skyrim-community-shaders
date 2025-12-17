@@ -1,5 +1,5 @@
-#ifndef LIGHT_HLSI
-#define LIGHT_HLSI
+#ifndef LIGHT_HLSL
+#define LIGHT_HLSL
 
 struct 
 #ifdef __cplusplus

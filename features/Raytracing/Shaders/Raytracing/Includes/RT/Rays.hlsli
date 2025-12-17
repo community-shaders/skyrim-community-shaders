@@ -1,5 +1,5 @@
-#ifndef RAYS_HLSI
-#define RAYS_HLSI
+#ifndef RAYS_HLSL
+#define RAYS_HLSL
 
 #include "Raytracing/Includes/Types.hlsli"
 #include "Raytracing/Includes/RT/CommonRT.hlsli"
@@ -34,4 +34,4 @@ float TraceRayShadowFinite(RaytracingAccelerationStructure scene, float3 origin,
     return shadowPayload.missed;
 }
 
-#endif // RAYS_HLSI
+#endif // RAYS_HLSL

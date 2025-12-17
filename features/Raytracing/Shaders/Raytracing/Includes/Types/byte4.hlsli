@@ -1,5 +1,5 @@
-#ifndef BYTE4_HLSI
-#define BYTE4_HLSI
+#ifndef BYTE4_HLSL
+#define BYTE4_HLSL
 
 struct ubyte4f
 {

@@ -1,5 +1,5 @@
-#ifndef SHARED_DATA_HLSI
-#define SHARED_DATA_HLSI
+#ifndef SHARED_DATA_HLSL
+#define SHARED_DATA_HLSL
 // A lighter version of SharedData containing only the necessary structs for HLSL 6.0+ compatibility
 
 #ifndef __cplusplus

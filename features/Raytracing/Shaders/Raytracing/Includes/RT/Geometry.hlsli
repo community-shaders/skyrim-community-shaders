@@ -1,5 +1,5 @@
-#ifndef GEOMETRY_HLSI
-#define GEOMETRY_HLSI
+#ifndef GEOMETRY_HLSL
+#define GEOMETRY_HLSL
 
 #include "Raytracing/Includes/Registers.hlsli"
 #include "Raytracing/Includes/Types.hlsli"
@@ -70,4 +70,4 @@ void GetVertices(uint shapeIndex, uint primitiveIndex, out Vertex v0, out Vertex
     v2 = vertices[geomTriangle.z];  
 }
 
-#endif // GEOMETRY_HLSI
+#endif // GEOMETRY_HLSL
