@@ -4,6 +4,7 @@
 #include "Common/Game.hlsli"
 #include "Common/Math.hlsli"
 #include "Common/Color.hlsli"
+#include "Common/BRDF.hlsli"
 
 #include "Raytracing/Includes/Types.hlsli"
 
@@ -174,7 +175,7 @@ float G1_Smith(float alpha, float NdotL)
 }
 
 // https://github.com/NVIDIA-RTX/Streamline/blob/main/docs/ProgrammingGuideDLSS_RR.md#421-specular-albedo-generation
-float3 EnvBRDFApprox2(float3 SpecularColor, float alpha, float NoV) 
+float3 EnvBRDFApprox2(float3 SpecularColor, float Alpha, float NoV) 
 { 
     NoV = abs(NoV); 
     // [Ray Tracing Gems, Chapter 32]
@@ -185,9 +186,9 @@ float3 EnvBRDFApprox2(float3 SpecularColor, float alpha, float NoV)
     X.w = NoV * X.z; 
     float4 Y; 
     Y.x = 1.f; 
-    Y.y = alpha; 
-    Y.z = alpha * alpha; 
-    Y.w = alpha * Y.z; 
+    Y.y = Alpha; 
+    Y.z = Alpha * Alpha; 
+    Y.w = Alpha * Y.z; 
     float2x2 M1 = float2x2(0.99044f, -1.28514f, 1.29678f, -0.755907f); 
     float3x3 M2 = float3x3(1.f, 2.92338f, 59.4188f, 20.3225f, -27.0302f, 222.592f, 121.563f, 626.13f, 316.627f); 
     float2x2 M3 = float2x2(0.0365463f, 3.32707, 9.0632f, -9.04756); 
