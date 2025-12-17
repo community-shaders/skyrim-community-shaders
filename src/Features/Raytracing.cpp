@@ -767,18 +767,20 @@ void Raytracing::GetJitterOffset(float* outX, float* outY, int32_t index, int32_
 
 float2 Raytracing::GetInputResolutionScaleRR(uint32_t outputWidth, uint32_t outputHeight)
 {
-	sl::DLSSDOptions dlssdOptions{};
-	dlssdOptions.mode = GetDLSSMode();
-	dlssdOptions.outputWidth = outputWidth;
-	dlssdOptions.outputHeight = outputHeight;
+	auto currentMode = GetDLSSMode();
 
-	logger::debug("[DLSS RR] Getting input resolution scale for output {}x{} and quality mode {}", outputWidth, outputHeight, magic_enum::enum_name(dlssdOptions.mode));
+	if (dlssdOptions.mode != currentMode || dlssdOptions.outputWidth != outputWidth || dlssdOptions.outputHeight != outputHeight) {
+		dlssdOptions.mode = currentMode;
+		dlssdOptions.outputWidth = outputWidth;
+		dlssdOptions.outputHeight = outputHeight;
 
-	sl::DLSSDOptimalSettings optimalSettings{};
-	sl::Result result = slDLSSDGetOptimalSettings(dlssdOptions, optimalSettings);
-	if (result != sl::Result::eOk) {
-		logger::critical("[Streamline] Failed to get DLSS RR optimal settings, error code: {}", (int)result);
-		return { 1.0f, 1.0f };
+		logger::debug("[DLSS RR] Getting input resolution scale for output {}x{} and quality mode {}", outputWidth, outputHeight, magic_enum::enum_name(dlssdOptions.mode));
+
+		sl::Result result = slDLSSDGetOptimalSettings(dlssdOptions, optimalSettings);
+		if (result != sl::Result::eOk) {
+			logger::critical("[Streamline] Failed to get DLSS RR optimal settings, error code: {}", (int)result);
+			return { 1.0f, 1.0f };
+		}
 	}
 
 	float scaleX;
@@ -815,8 +817,6 @@ sl::DLSSMode Raytracing::GetDLSSMode()
 
 void Raytracing::SetDLSSRROptions()
 {
-	sl::DLSSDOptions dlssdOptions{};
-
 	dlssdOptions.mode = GetDLSSMode();
 
 	auto worldToCameraView = globals::game::frameBufferCached.GetCameraView().Transpose();
@@ -3132,7 +3132,7 @@ void Raytracing::CompileRTGIShaders()
 		pipelineBuilder.AddHitGroup(L"ShadowHitGroup", L"", L"ShadowAnyHit");
 
 		// Shader + pipeline config
-		pipelineBuilder.AddShaderConfig(24, 8);
+		pipelineBuilder.AddShaderConfig(16, 8);
 		pipelineBuilder.AddGlobalRootSignature(rootSignature.get());
 		pipelineBuilder.AddPipelineConfig(settings.Bounces + (settings.PathTracing ? 2 : 1)); // Max recursion depth
 

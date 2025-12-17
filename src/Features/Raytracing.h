@@ -696,6 +696,9 @@ struct Raytracing : public OverlayFeature
 	sl::FrameToken* frameToken = nullptr;
 
 	float2 jitter = { 0, 0 };
+
+	sl::DLSSDOptions dlssdOptions{};
+	sl::DLSSDOptimalSettings optimalSettings{};
 #endif
 
 	template <class T>
@@ -924,7 +927,6 @@ struct Raytracing : public OverlayFeature
 
 				rt.renderingCubemap = false;
 			}
-
 			static inline REL::Relocation<decltype(thunk)> func;
 		};
 
