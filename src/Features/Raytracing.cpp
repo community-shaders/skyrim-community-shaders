@@ -301,7 +301,6 @@ void Raytracing::DrawSettings()
 		ImGui::TreePop();
 	}
 
-	//ImGui::Image(skyHemisphere->srv, { 64.0f, 64.0f });
 }
 
 void Raytracing::DrawOverlay()
@@ -1836,7 +1835,8 @@ void Raytracing::UpdateInstances()
 
 		instanceBufferData.emplace_back(
 			firstShapeIndex, 
-			LightData(GatherInstanceLights(pNiNode))
+			LightData(GatherInstanceLights(pNiNode)),
+			instance.transform
 		);
 	}
 	
@@ -3132,7 +3132,7 @@ void Raytracing::CompileRTGIShaders()
 		pipelineBuilder.AddHitGroup(L"ShadowHitGroup", L"", L"ShadowAnyHit");
 
 		// Shader + pipeline config
-		pipelineBuilder.AddShaderConfig(20, 8);
+		pipelineBuilder.AddShaderConfig(16, 8);
 		pipelineBuilder.AddGlobalRootSignature(rootSignature.get());
 		pipelineBuilder.AddPipelineConfig(settings.Bounces + (settings.PathTracing ? 2 : 1)); // Max recursion depth
 

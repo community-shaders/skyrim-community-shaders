@@ -24,19 +24,49 @@ struct LightData
         return (Data[group] >> offset) & 0xFFu;
     }
 
-    void SetID(uint index, uint val)
-    {
-        uint group = GetGroup(index);
-        uint offset = GetOffset(index);      
-        uint mask   = ~(0xFFu << offset);
-        Data[group] = (Data[group] & mask) | ((val & 0xFFu) << offset);
-    }    
+#ifdef __cplusplus
+	LightData() = default;
+
+	LightData(const eastl::vector<size_t>& ids)
+	{
+		StoreIDs(ids);
+	}
+	
+	void SetID(uint index, uint val)
+	{
+		uint group = GetGroup(index);
+		uint offset = GetOffset(index);
+		uint mask = ~(0xFFu << offset);
+		Data[group] = (Data[group] & mask) | ((val & 0xFFu) << offset);
+	}
+
+	void StoreIDs(const eastl::vector<size_t>& ids)
+	{
+		size_t count = std::min(ids.size(), static_cast<size_t>(16));
+		Count = static_cast<uint32_t>(count);
+
+		for (size_t i = 0; i < count; ++i) {
+			uint32_t id = std::min(static_cast<uint32_t>(ids[i]), 255u);
+			SetID(static_cast<uint32_t>(i), id);
+		}
+	}
+#endif 
 };
 
+
+#ifdef __cplusplus
+struct InstanceData
+#else
 struct Instance
+#endif    
 {
 	uint FirstMeshID;
     LightData LightData;
+    float3x4 Transform;
 };
+
+#ifdef __cplusplus
+static_assert(sizeof(InstanceData) % 4 == 0);
+#endif
 
 #endif

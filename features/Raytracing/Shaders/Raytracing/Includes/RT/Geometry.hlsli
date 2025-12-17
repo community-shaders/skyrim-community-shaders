@@ -4,12 +4,12 @@
 #include "Raytracing/Includes/Registers.hlsli"
 #include "Raytracing/Includes/Types.hlsli"
 
-float3 GetBary(BuiltInTriangleIntersectionAttributes attribs)
+float3 GetBary(float2 barycentrics)
 {
     return float3(
-        1.0f - attribs.barycentrics.x - attribs.barycentrics.y, 
-        attribs.barycentrics.x, 
-        attribs.barycentrics.y
+        1.0f - barycentrics.x - barycentrics.y, 
+        barycentrics.x, 
+        barycentrics.y
     );
 }
 
@@ -33,33 +33,39 @@ inline float4 Interpolate(half4 u, half4 v, half4 w, float3 uvw)
     return u * uvw.x + v * uvw.y + w * uvw.z;
 }
 
-Instance GetInstance()
+Instance GetInstance(uint instanceIdx)
 {
-    return Instances[InstanceIndex()];
+    return Instances[instanceIdx];
 }
 
-uint GetMeshID()
+uint GetShapeIdx()
 {
     return InstanceID() + GeometryIndex();
 }
 
-Triangle GetTriangle(uint meshID)
+Triangle GetTriangle(uint shapeIdx, uint primitiveIdx)
 {
-    return Triangles[meshID][PrimitiveIndex()];
+    return Triangles[shapeIdx][primitiveIdx];
 }
 
-void GetVertices(uint meshID, out Vertex v0, out Vertex v1, out Vertex v2)
+void GetVertices(Payload payload, out Vertex v0, out Vertex v1, out Vertex v2)
 {
-    Triangle geomTriangle = GetTriangle(meshID);
+    Triangle geomTriangle = GetTriangle(payload.shapeIndex, payload.primitiveIndex);
     
-    StructuredBuffer<Vertex> geomVertices = Vertices[meshID];    
+    StructuredBuffer<Vertex> geomVertices = Vertices[payload.shapeIndex];    
     v0 = geomVertices[geomTriangle.x];
     v1 = geomVertices[geomTriangle.y];
-    v2 = geomVertices[geomTriangle.z];
+    v2 = geomVertices[geomTriangle.z];  
+}
+
+void GetVertices(uint shapeIndex, uint primitiveIndex, out Vertex v0, out Vertex v1, out Vertex v2)
+{
+    Triangle geomTriangle = GetTriangle(shapeIndex, primitiveIndex);
     
-    /*v0 = Vertices[meshID][geomTriangle.x];
-    v1 = Vertices[meshID][geomTriangle.y];
-    v2 = Vertices[meshID][geomTriangle.z];*/   
+    StructuredBuffer<Vertex> geomVertices = Vertices[shapeIndex];    
+    v0 = geomVertices[geomTriangle.x];
+    v1 = geomVertices[geomTriangle.y];
+    v2 = geomVertices[geomTriangle.z];  
 }
 
 #endif // GEOMETRY_HLSI

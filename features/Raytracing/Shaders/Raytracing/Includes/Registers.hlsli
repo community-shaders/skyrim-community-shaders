@@ -25,7 +25,7 @@ Texture2D<snorm float4> NormalRoughnessTexture  : register(t3, space0);
 Texture2D<unorm float4> GNMAOTexture            : register(t4, space0);
 
 RaytracingAccelerationStructure Scene           : register(t5, space0);
-Texture2D<float3> SkyHemisphere                 : register(t6, space0);
+Texture2D<float4> SkyHemisphere                 : register(t6, space0);
 StructuredBuffer<Light> Lights                  : register(t7, space0);
 StructuredBuffer<Material> Materials            : register(t8, space0);
 StructuredBuffer<Instance> Instances            : register(t9, space0);

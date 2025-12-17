@@ -33,6 +33,7 @@
 #include "Raytracing/Includes/Types/Vertex.hlsli"
 #include "Raytracing/Includes/Types/Skinning.hlsli"
 #include "Raytracing/Includes/Types/Triangle.hlsli"
+#include "Raytracing/Includes/Types/Instance.hlsli"
 #include "Raytracing/Includes/Types/Material.hlsli"
 #include "Raytracing/Includes/Types/Light.hlsli"
 #include "Raytracing/Includes/Types/GIFrameData.hlsli"
@@ -385,56 +386,6 @@ struct Raytracing : public OverlayFeature
 	bool releaseHooked = false;
 	HANDLE fenceEvent;
 
-	struct LightData
-	{
-		uint Count;
-		uint Data[4]; // Each byte stores the light ID from 0 to 255, with 16 bytes we get
-
-		LightData() = default;
-
-		LightData(const eastl::vector<size_t>& ids)
-		{
-			StoreIDs(ids);
-		}
-
-		uint GetGroup(uint index)
-		{
-			return index >> 2;
-		}
-
-		uint GetOffset(uint index)
-		{
-			return (index & 3) << 3;
-		}
-
-		uint GetID(uint index)
-		{
-			uint group = GetGroup(index);
-			uint offset = GetOffset(index);
-
-			return (Data[group] >> offset) & 0xFFu;
-		}
-
-		void SetID(uint index, uint val)
-		{
-			uint group = GetGroup(index);
-			uint offset = GetOffset(index);
-			uint mask = ~(0xFFu << offset);
-			Data[group] = (Data[group] & mask) | ((val & 0xFFu) << offset);
-		}
-
-		void StoreIDs(const eastl::vector<size_t>& ids)
-		{
-			size_t count = std::min(ids.size(), static_cast<size_t>(16));
-			Count = static_cast<uint32_t>(count);
-
-			for (size_t i = 0; i < count; ++i) {
-				uint32_t id = std::min(static_cast<uint32_t>(ids[i]), 255u);
-				SetID(static_cast<uint32_t>(i), id);
-			}
-		}
-	};
-
 	struct TextureReference
 	{
 		ID3D12Resource* resource = nullptr;
@@ -584,13 +535,6 @@ struct Raytracing : public OverlayFeature
 	eastl::unordered_map<RE::NiNode*, Instance> instances;
 
 	eastl::unique_ptr<DX12::StructuredBufferUpload<MaterialData>> materialBuffer = nullptr;
-
-	// Instance buffer
-	struct InstanceData
-	{
-		uint MeshID;
-		LightData LightData;
-	};
 
 	eastl::vector<InstanceData> instanceBufferData;
 	eastl::unique_ptr<DX12::StructuredBufferUpload<InstanceData>> instanceBuffer = nullptr;
@@ -953,11 +897,16 @@ struct Raytracing : public OverlayFeature
 				auto& rt = globals::features::raytracing;
 
 				if (rt.Active()) {
-					rt.BSShader_SetupGeometry(This, Pass, RenderFlags);
-					
-					// If RT is on only sky goes into cubemaps
-					if (rt.renderingCubemap && This->shaderType.none(RE::BSShader::Type::Sky))
-						return;
+					if (This->shaderType.get() == RE::BSShader::Type::Lighting) {
+						rt.BSShader_SetupGeometry(This, Pass, RenderFlags);
+					}
+
+					if (rt.renderingCubemap) {
+						if (This->shaderType.get() != RE::BSShader::Type::Sky) {
+							//Pass->geometry->CullGeometry(true);
+							return;
+						}
+					}
 				}
 
 				func(This, Pass, RenderFlags);
@@ -967,7 +916,7 @@ struct Raytracing : public OverlayFeature
 
 		struct BSCubeMapCamera_RenderCubemap
 		{
-			static void thunk(RE::NiAVObject* camera, int a2, bool a3, bool a4, bool a5)
+			static void thunk(RE::NiCamera* camera, int a2, bool a3, bool a4, bool a5)
 			{
 				auto& rt = globals::features::raytracing;
 
@@ -1229,6 +1178,53 @@ struct Raytracing : public OverlayFeature
 			static inline REL::Relocation<decltype(thunk)> func;
 		};	
 		
+		struct BSBatchRenderer_RenderBatches
+		{
+			static bool thunk(RE::BSBatchRenderer* oThis, uint32_t& technique, uint32_t& groupIndex, RE::BSSimpleList<uint32_t>*& passIndexList, uint32_t renderFlags)
+			{
+				auto& rt = globals::features::raytracing;
+
+				if (rt.Active() && rt.renderingCubemap) {
+					auto& renderPassMap = *reinterpret_cast<RE::BSTHashMap<uint32_t, uint32_t>*>(&oThis->unk020);
+
+					if (auto renderPass = renderPassMap.find(technique); renderPass != renderPassMap.end()) {
+						auto& renderPasses = *reinterpret_cast<RE::BSTArray<RE::BSBatchRenderer::PassGroup>*>(&oThis->unk008);
+
+						auto& group = renderPasses[renderPass->second];
+						auto currentPass = group.passes[groupIndex];
+
+						if (currentPass; auto shader = currentPass->shader) {
+							if (shader->shaderType.get() != RE::BSShader::Type::Sky) {
+								auto geometry = currentPass->geometry;
+
+								auto culled = geometry->GetAppCulled();
+
+								geometry->CullGeometry(true);
+
+								auto result = func(oThis, technique, groupIndex, passIndexList, renderFlags);	
+
+								geometry->CullGeometry(culled);
+
+								return result;
+							}
+						}
+					}
+				}
+
+				return func(oThis, technique, groupIndex, passIndexList, renderFlags);			
+			};
+			static inline REL::Relocation<decltype(thunk)> func;
+		};
+
+		struct BSShaderAccumulator_RenderPersistentPassList
+		{
+			static void thunk(RE::BSBatchRenderer::PersistentPassList* passList, uint32_t renderFlags)
+			{
+				func(passList, renderFlags);
+			};
+			static inline REL::Relocation<decltype(thunk)> func;
+		};
+
 		static void Install()
 		{
 			stl::write_vfunc<0x6A, Load3D<RE::TESObjectREFR>>(RE::VTABLE_TESObjectREFR[0]);
@@ -1247,10 +1243,13 @@ struct Raytracing : public OverlayFeature
 			
 			stl::detour_thunk<Main_RenderWorld>(REL::RelocationID(100424, 107142));
 
-			// We use these to render only the sky to the cubemaps, maybe it would be cleaner if we could override cubemap renderpass?
+			//stl::detour_thunk<BSBatchRenderer_RenderBatches>(REL::RelocationID(100852, 107642));
+			//stl::detour_thunk<BSShaderAccumulator_RenderPersistentPassList>(REL::RelocationID(100840, 107630));
+
+			// We use these to render only the sky to the cubemaps, maybe it would be cleaner if we could override cubemap renderpass?		
 			stl::write_vfunc<0x6, BSShader_SetupGeometry<RE::BSShader::Type::Lighting>>(RE::VTABLE_BSLightingShader[0]);
 			//stl::write_vfunc<0x6, BSShader_SetupGeometry<RE::BSShader::Type::Effect>>(RE::VTABLE_BSEffectShader[0]);
-			stl::write_vfunc<0x6, BSShader_SetupGeometry<RE::BSShader::Type::DistantTree>>(RE::VTABLE_BSDistantTreeShader[0]);
+			//stl::write_vfunc<0x6, BSShader_SetupGeometry<RE::BSShader::Type::DistantTree>>(RE::VTABLE_BSDistantTreeShader[0]);
 
 			//stl::write_vfunc<0x6, BSSkyShader_SetupGeometry>(RE::VTABLE_BSSkyShader[0]);
 

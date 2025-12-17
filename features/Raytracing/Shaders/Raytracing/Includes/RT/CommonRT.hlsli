@@ -253,4 +253,69 @@ float Horizon(float3 V, float3 N, float3 VN)
 	return  horizon * horizon;
 }
 
+bool GGXBRDF(float3x3 TBN, in float3 V, in float3 albedo, in float roughness, in float metalness, in float3 f0, inout uint randomSeed, out float3 direction, out float3 BRDF_over_PDF)
+{  
+    float3 N = TBN[2];
+    float3 T = TBN[0];
+    float3 B = TBN[1];
+    
+    float3 diffuseAlbedo = albedo;
+    
+    float NoV = saturate(dot(N, V));
+    
+    bool isSpecularRay = false;
+    const bool isDeltaSurface = roughness == 0;
+    float specular_PDF;
+    float overall_PDF;
+    
+    {
+        float3 specularDirection;
+        float3 specular_BRDF_over_PDF;
+        {
+            float3 Ve = float3(dot(V, T), dot(V, B), dot(V, N));
+
+            float3 He = SampleGGX_VNDF(Ve, roughness, randomSeed);
+            float3 H = isDeltaSurface ? N : mul(He, TBN);
+            specularDirection = reflect(-V, H);
+
+            float HoV = saturate(dot(H, V));           
+            float3 F = Schlick_Fresnel(f0, HoV);
+            float G1 = isDeltaSurface ? 1.0 : (NoV > 0) ? G1_Smith(roughness, NoV) : 0;
+            specular_BRDF_over_PDF = F * G1;
+        }
+
+        float3 diffuseDirection;
+        float diffuse_BRDF_over_PDF;
+        {
+            float3 localDirection = SampleCosineHemisphere(randomSeed);
+            diffuseDirection = mul(localDirection, TBN);
+            diffuse_BRDF_over_PDF = 1.0;
+        }
+
+        specular_PDF = saturate(CalcLuminance(specular_BRDF_over_PDF) /
+            CalcLuminance(specular_BRDF_over_PDF + diffuse_BRDF_over_PDF * diffuseAlbedo));
+
+        isSpecularRay = Random(randomSeed) < specular_PDF;
+
+        if (isSpecularRay)
+        {
+            direction = specularDirection;
+            BRDF_over_PDF = specular_BRDF_over_PDF / specular_PDF;
+        }
+        else
+        {
+            direction = diffuseDirection;
+            BRDF_over_PDF = diffuse_BRDF_over_PDF / (1.0 - specular_PDF);
+        }
+
+        /*const float specularLobe_PDF = ImportanceSampleGGX_VNDF_PDF(roughness, N, V, direction);
+        const float diffuseLobe_PDF = saturate(dot(direction, N)) / Math::PI;
+
+        // For delta surfaces, we only pass the diffuse lobe to ReSTIR GI, and this pdf is for that.
+        overall_PDF = isDeltaSurface ? diffuseLobe_PDF : lerp(diffuseLobe_PDF, specularLobe_PDF, specular_PDF);*/
+    }
+
+    return isSpecularRay;
+}
+
 #endif // COMMONRT_HLSI

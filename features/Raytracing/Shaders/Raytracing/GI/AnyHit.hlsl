@@ -7,15 +7,14 @@
 [shader("anyhit")]
 void main(inout Payload payload, in BuiltInTriangleIntersectionAttributes attribs)
 {
-    Instance instance = GetInstance();
-    uint meshID = GetMeshID();
+    uint shapeIdx = GetShapeIdx();
    
     Vertex v0, v1, v2;
-    GetVertices(meshID, v0, v1, v2);
+    GetVertices(shapeIdx, PrimitiveIndex(), v0, v1, v2);
     
-    float3 uvw = GetBary(attribs);
+    float3 uvw = GetBary(attribs.barycentrics);
     
-    Material material = Materials[meshID];
+    Material material = Materials[shapeIdx];
     
     float2 texCoord = material.TexCoord(Interpolate(v0.Texcoord0, v1.Texcoord0, v2.Texcoord0, uvw));
 
