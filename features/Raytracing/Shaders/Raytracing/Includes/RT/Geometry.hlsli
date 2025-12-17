@@ -50,22 +50,24 @@ Triangle GetTriangle(uint shapeIdx, uint primitiveIdx)
 
 void GetVertices(Payload payload, out Vertex v0, out Vertex v1, out Vertex v2)
 {
-    Triangle geomTriangle = GetTriangle(payload.shapeIndex, payload.primitiveIndex);
+    uint shapeIndex = payload.ShapeIndex();
     
-    StructuredBuffer<Vertex> geomVertices = Vertices[payload.shapeIndex];    
-    v0 = geomVertices[geomTriangle.x];
-    v1 = geomVertices[geomTriangle.y];
-    v2 = geomVertices[geomTriangle.z];  
+    Triangle geomTriangle = GetTriangle(shapeIndex, payload.primitiveIndex);
+    
+    StructuredBuffer<Vertex> vertices = Vertices[shapeIndex];    
+    v0 = vertices[geomTriangle.x];
+    v1 = vertices[geomTriangle.y];
+    v2 = vertices[geomTriangle.z];  
 }
 
 void GetVertices(uint shapeIndex, uint primitiveIndex, out Vertex v0, out Vertex v1, out Vertex v2)
 {
     Triangle geomTriangle = GetTriangle(shapeIndex, primitiveIndex);
     
-    StructuredBuffer<Vertex> geomVertices = Vertices[shapeIndex];    
-    v0 = geomVertices[geomTriangle.x];
-    v1 = geomVertices[geomTriangle.y];
-    v2 = geomVertices[geomTriangle.z];  
+    StructuredBuffer<Vertex> vertices = Vertices[shapeIndex];    
+    v0 = vertices[geomTriangle.x];
+    v1 = vertices[geomTriangle.y];
+    v2 = vertices[geomTriangle.z];  
 }
 
 #endif // GEOMETRY_HLSI

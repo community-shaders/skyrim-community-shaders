@@ -4,9 +4,8 @@
 [shader("closesthit")]
 void main(inout Payload payload, in BuiltInTriangleIntersectionAttributes attribs)
 {
-    payload.instanceIndex = InstanceIndex();
+    payload.hitDistance = RayTCurrent();    
     payload.primitiveIndex = PrimitiveIndex();
-    payload.shapeIndex = GetShapeIdx();
-    payload.barycentrics = attribs.barycentrics;
-    payload.hitDistance = RayTCurrent();
+    payload.PackBarycentrics(attribs.barycentrics);    
+    payload.PackInstanceShapeIndex(InstanceIndex(), GetShapeIdx());
 }

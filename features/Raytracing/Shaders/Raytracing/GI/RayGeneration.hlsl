@@ -139,10 +139,9 @@ void main()
     
             Payload payload;
             payload.hitDistance = -1.0f;
-            payload.instanceIndex = 0;
-            payload.primitiveIndex = 0;
-            payload.shapeIndex = 0;
-            payload.barycentrics = 0;
+            payload.primitiveIndex = 0;    
+            payload.PackBarycentrics(float2(0.0f, 0.0f));            
+            payload.PackInstanceShapeIndex(0, 0);
 
             TraceRay(Scene, RAY_FLAG_NONE, 0xFF, DIFFUSE_RAY_HITGROUP_IDX, 0, DIFFUSE_RAY_MISS_IDX, ray, payload);
             
@@ -163,14 +162,14 @@ void main()
             
             samplePosition += direction * payload.hitDistance;
             
-            Instance instance = GetInstance(payload.instanceIndex);
+            Instance instance = GetInstance(payload.InstanceIndex());
 
             Vertex v0, v1, v2;
             GetVertices(payload, v0, v1, v2);
 
-            float3 uvw = GetBary(payload.barycentrics);
+            float3 uvw = GetBary(payload.Barycentrics());
     
-            Material material = Materials[payload.shapeIndex];
+            Material material = Materials[payload.ShapeIndex()];
             
             float2 texCoord = material.TexCoord(Interpolate(v0.Texcoord0, v1.Texcoord0, v2.Texcoord0, uvw));
             
@@ -235,6 +234,7 @@ void main()
             // Recalculate F0, it will be used by the next GGXBRDF call as well
             sampleF0 = F0(sampleAlbedo, sampleMetalness);
             
+            // Local bounce radiance
             float3 localRadiance = sampleEmissive * Frame.Emissive;
             
             // Ideally we would call only one of these per bounce
