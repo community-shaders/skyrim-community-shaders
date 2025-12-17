@@ -12,6 +12,10 @@
 #include "Common/BRDF.hlsli"
 
 #include "Raytracing/Includes/RT/SHaRCCommon.hlsli"
+#include "Raytracing/Includes/Surface.hlsli"
+
+#include "Raytracing/Includes/BRDF.hlsli"
+#include "Raytracing/Includes/PBR.hlsli"
 
 [shader("raygeneration")]
 void main()
@@ -80,7 +84,11 @@ void main()
 
     const snorm half3 normalWS = normalRoughness.xyz;
 
-    float3 albedo = Color::GammaToLinear(AlbedoTexture[idx].rgb);
+    float3 albedo = Color::GammaToTrueLinear(AlbedoTexture[idx].rgb);
+    
+    Surface surface = Surface(positionWS, geometryNormalWS, normalWS, );
+    
+    float3 f0 = PBR::F0(albedo, metalness);
     
     uint randomSeed = InitRandomSeed(DispatchRaysIndex().xy, DispatchRaysDimensions().xy, Frame.FrameCount);
 
@@ -112,8 +120,6 @@ void main()
     float3 radiance = 0;
     bool isDiffusePath = true;
     float hitDistance = 0;    
-    
-    float3 f0 = F0(albedo, metalness);
     
     [unroll]
     for (uint i = 0; i < SAMPLES; i++)
@@ -233,8 +239,8 @@ void main()
             sampleMetalness = Scale01(sampleMetalness, Frame.Metalness.x, Frame.Metalness.y);
             
             // Lighting/PBR
-            sampleAlbedo = Color::GammaToLinear(base) * material.BaseColor.rgb * vertexColor.rgb;
-            float3 sampleEmissive = Color::GammaToLinear(effect) * material.EffectColor.rgb * material.EffectColor.a;
+            sampleAlbedo = Color::GammaToTrueLinear(base * material.BaseColor.rgb * vertexColor.rgb);
+            float3 sampleEmissive = Color::GammaToTrueLinear(effect * material.EffectColor.rgb * material.EffectColor.a);
             
             // Recalculate F0, it will be used by the next GGXBRDF call as well
             sampleF0 = F0(sampleAlbedo, sampleMetalness);
@@ -269,6 +275,9 @@ void main()
     }
 
     OutputTexture[idx] = MainTexture[idx] + float4(Color::TrueLinearToGamma(albedo * radiance), 0.0f);
-    SpecularAlbedo[idx] = float4(EnvBRDFApprox2(f0, roughness, dot(normalWS, viewWS)), 0.0f);
+    //SpecularAlbedo[idx] = float4(EnvBRDFApprox2(f0, roughness, dot(normalWS, viewWS)), 0.0f);
+    float2 envBRDF = max(0.0f, BRDF::EnvBRDFApproxLazarov(linearRoughness, abs(dot(normalWS, viewWS))));
+    SpecularAlbedo[idx] = float4(envBRDF.x * f0 + envBRDF.y, 0.0f);
+    
     SpecularHitDist[idx] = isDiffusePath ? 0.0f : max(0.0f, hitDistance);
 }

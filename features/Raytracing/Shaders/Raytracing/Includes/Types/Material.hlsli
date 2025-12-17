@@ -17,8 +17,8 @@ struct Material
 	uint16_t EffectTexture;	
 	uint16_t RMAOSTexture;
 	uint16_t ShaderType : 8;
-	uint16_t PBRFlags : 8;	
-	
+	uint16_t PBRFlags : 8;		
+
 #ifndef __cplusplus	
 	float2 TexCoord(float2 texCoord)
     {
