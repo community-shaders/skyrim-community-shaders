@@ -2731,11 +2731,13 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 
 #	if defined(IBL)
 	if (SharedData::iblSettings.EnableDiffuseIBL) {
+#		if !defined(WORLD_MAP)
 		if (SharedData::iblSettings.UseStaticIBL && !inWorld && !inReflection) {
 			directionalAmbientColor = ImageBasedLighting::GetStaticDiffuseIBL(ambientNormal, SampColorSampler);
 		} else if (!SharedData::InInterior || SharedData::iblSettings.EnableInterior) {
 			directionalAmbientColor *= SharedData::iblSettings.DALCAmount;
 		}
+#		endif  // !WORLD_MAP
 	}
 #	endif
 
@@ -2754,16 +2756,18 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #	if defined(IBL)
 	float3 iblColor = 0;
 	if (SharedData::iblSettings.EnableDiffuseIBL) {
+#		if !defined(WORLD_MAP)
 		if ((!SharedData::InInterior || SharedData::iblSettings.EnableInterior) && !(SharedData::iblSettings.UseStaticIBL && !inWorld && !inReflection))
 		{
-#		if defined(SKYLIGHTING)
+#			if defined(SKYLIGHTING)
 			iblColor += Color::Saturation(ImageBasedLighting::GetIBLColor(-ambientNormal, skylightingDiffuse), SharedData::iblSettings.IBLSaturation) * SharedData::iblSettings.DiffuseIBLScale;
-#		else
+#			else
 			iblColor += Color::Saturation(ImageBasedLighting::GetIBLColor(-ambientNormal), SharedData::iblSettings.IBLSaturation) * SharedData::iblSettings.DiffuseIBLScale;
-#		endif
+#			endif
 			iblColor = Color::LinearToGamma(iblColor);
 			directionalAmbientColor += iblColor;
 		}
+#		endif  // !WORLD_MAP
 	}
 #	endif
 
