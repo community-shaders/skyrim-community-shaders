@@ -2,7 +2,7 @@
 #define REGISTERS_HLSL
 
 #include "Raytracing/Includes/Types.hlsli"
-#include "Raytracing/Includes/RT/Sharc.hlsli"
+#include "Raytracing/Includes/RT/SHaRC.hlsli"
 
 ConstantBuffer<GIFrameData> Frame               : register(b0);
 
@@ -16,13 +16,11 @@ RWStructuredBuffer<SharcAccumulationData>   u_SharcAccumulationBuffer   : regist
 RWStructuredBuffer<SharcPackedData>         u_SharcResolvedBuffer       : register(u5);
 #endif
 
-Texture2D<float4> MainTexture                   : register(t0, space0);
-Texture2D<float> DepthTexture                   : register(t1, space0);
-Texture2D<float4> AlbedoTexture                 : register(t2, space0);
-// World normals and roughness - Processed from GBuffer encoded view normals and smoothness
-Texture2D<snorm float4> NormalRoughnessTexture  : register(t3, space0);
-// Geometry normals (Encoded) + metalness + AO
-Texture2D<unorm float4> GNMAOTexture            : register(t4, space0);
+Texture2D<float4> MainTexture                   : register(t0, space0); // RENDER_TARGETS::kMAIN
+Texture2D<float> DepthTexture                   : register(t1, space0); // RENDER_TARGETS_DEPTHSTENCIL::kMAIN - R32
+Texture2D<float4> AlbedoTexture                 : register(t2, space0); // ALBEDO - True albedo (not modulated by metalness)
+Texture2D<snorm float4> NormalRoughnessTexture  : register(t3, space0); // "NORMALROUGHNESS" - World normals and roughness - Processed from GBuffer encoded view normals and smoothness
+Texture2D<unorm float4> GNMAOTexture            : register(t4, space0); // MASKS2 - Geometry normals (Encoded) + metalness/AO (Packed)
 
 RaytracingAccelerationStructure Scene           : register(t5, space0);
 Texture2D<float4> SkyHemisphere                 : register(t6, space0);

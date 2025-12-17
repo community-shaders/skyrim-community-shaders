@@ -8,6 +8,10 @@
 #include "Raytracing/Includes/RT/Geometry.hlsli"
 
 #include "Common/Color.hlsli"
+#include "Common/Color.hlsli"
+#include "Common/BRDF.hlsli"
+
+#include "Raytracing/Includes/RT/SHaRCCommon.hlsli"
 
 [shader("raygeneration")]
 void main()
@@ -60,8 +64,8 @@ void main()
     const snorm half4 normalRoughness = (half4) NormalRoughnessTexture[idx];
 
     // We should also scale the GBuffer for DLSSRR
-    const unorm float perceptualRoughness = clamp(Scale01(normalRoughness.w, Frame.Roughness.x, Frame.Roughness.y), MIN_ROUGHNESS, MAX_ROUGHNESS);
-    const unorm float roughness = perceptualRoughness * perceptualRoughness;
+    const unorm float linearRoughness = clamp(Scale01(normalRoughness.w, Frame.Roughness.x, Frame.Roughness.y), MIN_ROUGHNESS, MAX_ROUGHNESS);
+    const unorm float roughness = linearRoughness * linearRoughness;
 
     // Metalness and AO packed in 16 bits
     uint metalnessAO = normalMetalnessAO.z * 65535.0;
@@ -184,9 +188,9 @@ void main()
     
             float4 vertexColor = Interpolate(v0.Color.unpack(), v1.Color.unpack(), v2.Color.unpack(), uvw);
     
-            float sampleRoughness = DEFAULT_ROUGHNESS;
-            float sampleMetalness = DEFAULT_METALNESS;
-            float sampleAO = 1.0f;
+            float localLinearRoughness = DEFAULT_ROUGHNESS;
+            float localMetalness = DEFAULT_METALNESS;
+            float localAO = 1.0f;
     
             Texture2D baseTexture = Textures[NonUniformResourceIndex(material.BaseTexture)];
             Texture2D effectTexture = Textures[NonUniformResourceIndex(material.EffectTexture)];
@@ -216,15 +220,15 @@ void main()
             // Roughness and Metalness from RMAOS
             sampleRoughness = saturate(rmaos.x * material.roughness);
             sampleMetalness = saturate(rmaos.y);
-            sampleAO = rmaos.z;
+            localAO = rmaos.z;
 #else
             float3 worldNormal = geomWorldNormal;
 #endif
 
             viewDirection = normalize(-direction);
 
-            const unorm float samplePerceptualRoughness = clamp(Scale01(sampleRoughness, Frame.Roughness.x, Frame.Roughness.y), MIN_ROUGHNESS, MAX_ROUGHNESS);
-            sampleRoughness = samplePerceptualRoughness * samplePerceptualRoughness;
+            localLinearRoughness = clamp(Scale01(localLinearRoughness, Frame.Roughness.x, Frame.Roughness.y), MIN_ROUGHNESS, MAX_ROUGHNESS);
+            sampleRoughness = localLinearRoughness * localLinearRoughness;
     
             sampleMetalness = Scale01(sampleMetalness, Frame.Metalness.x, Frame.Metalness.y);
             
@@ -249,8 +253,8 @@ void main()
             
             float NoV = saturate(dot(worldNormal, viewDirection));
             
-            float3 diffuse = isSpecular ? 0.0 : localRadiance.rgb * BRDF_over_PDF * (DiffuseAO(sampleAlbedo, sampleAO) * Frame.Diffuse);
-            float3 specular = isSpecular ? localRadiance.rgb * BRDF_over_PDF * (SpecularAO(NoV, sampleRoughness, sampleAO, sampleF0) * Frame.Specular): 0.0;    
+            float3 diffuse = isSpecular ? 0.0 : localRadiance.rgb * BRDF_over_PDF * (DiffuseAO(sampleAlbedo, localAO) * Frame.Diffuse);
+            float3 specular = isSpecular ? localRadiance.rgb * BRDF_over_PDF * (SpecularAO(NoV, sampleRoughness, localAO, sampleF0) * Frame.Specular): 0.0;    
     
             sampleRadiance += diffuse * sampleAlbedo + specular;       
     
