@@ -51,7 +51,7 @@ void main()
 #endif
         
         OutputTexture[idx] = MainTexture[idx];
-        ReflectanceTexture[idx] = float4(0.0f, 0.0f, 0.0f, 0.0f);
+        SpecularAlbedo[idx] = float4(0.5f, 0.5f, 0.5f, 0.0f);
         SpecularHitDist[idx] = 0.0f;
         return;
     }
@@ -265,6 +265,6 @@ void main()
     }
 
     OutputTexture[idx] = MainTexture[idx] + float4(Color::TrueLinearToGamma(albedo * radiance), 0.0f);
-    ReflectanceTexture[idx] = float4(EnvBRDFApprox2(f0, roughness, dot(normalWS, viewWS)), 0.0f);
+    SpecularAlbedo[idx] = float4(EnvBRDFApprox2(f0, roughness, dot(normalWS, viewWS)), 0.0f);
     SpecularHitDist[idx] = isDiffusePath ? 0.0f : max(0.0f, hitDistance);
 }

@@ -7,7 +7,7 @@
 ConstantBuffer<GIFrameData> Frame               : register(b0);
 
 RWTexture2D<float4> OutputTexture               : register(u0);
-RWTexture2D<float4> ReflectanceTexture          : register(u1);
+RWTexture2D<float4> SpecularAlbedo              : register(u1);
 RWTexture2D<float> SpecularHitDist              : register(u2);
 
 #ifdef SHARC
