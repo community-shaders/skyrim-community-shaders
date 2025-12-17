@@ -32,9 +32,9 @@ void main()
     ray.TMin = 0.1f;
     ray.TMax = 1e30;   
      
-    uint seed = InitRandomSeed(idx, size, Frame.FrameCount);
+    uint randomSeed = InitRandomSeed(idx, size, Frame.FrameCount);
     
-    float4 result = TraceRay(Scene, origin, direction, 0, seed);
+    float4 result = TraceRay(Scene, origin, direction, 0, randomSeed);
     
     OutputTexture[idx] = float4(Color::TrueLinearToGamma(result.rgb), 1.0f);
     

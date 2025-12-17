@@ -15,11 +15,28 @@ void main()
     uint2 idx = DispatchRaysIndex().xy;
     uint2 size = DispatchRaysDimensions().xy;
 
+#if defined(SHARC) && defined(SHARC_UPDATE)
+    if (Frame.SHaRCUpdatePass)  {
+        uint startIndex = Hash(idx) % 25;
+
+        uint2 blockOrigin = idx * 5;
+    
+        uint pixelIndex = (startIndex + Frame.FrameCount) % 25;
+    
+        idx = blockOrigin + uint2(pixelIndex % 5, pixelIndex / 5);
+    
+        if (any(idx >= Frame.DispatchSize))
+            return;
+    
+        size = Frame.DispatchSize;
+    }
+#endif    
+    
     float2 uv = (idx + 0.5f) / size;
     
     const unorm float4 normalMetalnessAO = GNMAOTexture[idx];
     
-    const half3 geometryNormalVS = DecodeNormal(normalMetalnessAO.xy);
+    const half3 geometryNormalVS = DecodeNormal((half2) normalMetalnessAO.xy);
     const float3 geometryNormalWS = normalize(ViewToWorldVector(geometryNormalVS, Frame.ViewInverse));
     
     const float depth = DepthTexture[idx] * 0.99998;
@@ -28,6 +45,11 @@ void main()
 
     if (depthView < FP_Z || depth >= SKY_Z)
     {
+#if defined(SHARC) && defined(SHARC_UPDATE)
+        if (Frame.SHaRCUpdatePass)   
+            return;
+#endif
+        
         OutputTexture[idx] = MainTexture[idx];
         ReflectanceTexture[idx] = float4(0.0f, 0.0f, 0.0f, 0.0f);
         SpecularHitDist[idx] = 0.0f;
@@ -56,7 +78,7 @@ void main()
 
     float3 albedo = Color::GammaToLinear(AlbedoTexture[idx].rgb);
     
-    uint seed = InitRandomSeed(DispatchRaysIndex().xy, DispatchRaysDimensions().xy, Frame.FrameCount);
+    uint randomSeed = InitRandomSeed(DispatchRaysIndex().xy, DispatchRaysDimensions().xy, Frame.FrameCount);
 
 #if defined(SHARC) && defined(SHARC_DEBUG)
     HashGridParameters gridParameters;
@@ -69,35 +91,14 @@ void main()
     return;
 #endif
     
-#   if defined(SHARC)
-    SharcParameters sharcParameters;
-    {
-        sharcParameters.gridParameters.cameraPosition = Frame.Position;
-        sharcParameters.gridParameters.logarithmBase = SHARC_GRID_LOGARITHM_BASE * GAME_UNIT_TO_CM;
-        sharcParameters.gridParameters.sceneScale = Frame.SHaRCScale;    
-        sharcParameters.gridParameters.levelBias = SHARC_GRID_LEVEL_BIAS;
-
-        sharcParameters.hashMapData.capacity = Frame.SHaRCCapacity;
-        sharcParameters.hashMapData.hashEntriesBuffer = u_SharcHashEntriesBuffer;
-
-#if !SHARC_ENABLE_64_BIT_ATOMICS
-        sharcParameters.hashMapData.lockBuffer = u_HashCopyOffsetBuffer;
-#endif // !SHARC_ENABLE_64_BIT_ATOMICS
-
-        sharcParameters.radianceScale = 1e3f;
-        sharcParameters.enableAntiFireflyFilter = false;   
-    
-        sharcParameters.accumulationBuffer = u_SharcAccumulationBuffer;
-        sharcParameters.resolvedBuffer = u_SharcResolvedBuffer;
-    }    
-    
+#if defined(SHARC)
     SharcState sharcState;
     SharcInit(sharcState); 
-#   endif
+#endif
     
     // Let's raytrace straight from GBuffer, we save one ray per pixel
 #if defined(LAMBERT)
-    OutputTexture[idx] = float4(LambertianIndirect(positionWS, normalWS, albedo, 0, seed), 0.0f);
+    float4 result = LambertianIndirect(positionWS, normalWS, albedo, 0, randomSeed);  
 #else
     float3 viewWS = normalize(-positionCS);
 
@@ -105,20 +106,18 @@ void main()
     CreateOrthonormalBasis(normalWS, tangentWS, bitangetWS);
     float3x3 TBN = float3x3(tangentWS, bitangetWS, normalWS);
     
-    float4 result = GGXIndirect(positionWS, geometryNormalWS, TBN, viewWS, albedo, roughness, metalness, ao, 0, seed);
+    float4 result = GGXIndirect(positionWS, geometryNormalWS, TBN, viewWS, albedo, roughness, metalness, ao, 0, randomSeed);
+#endif
+
+#if defined(SHARC) && defined(SHARC_UPDATE)
+    if (Frame.SHaRCUpdatePass)
+        return;
+#endif
     
-#   if defined(SHARC)
-    // Ray missed (Contains sky)
-    if (result.a < 0.0f) {
-        SharcUpdateMiss(sharcParameters, sharcState, result.rgb);
-    } else {
-        SharcUpdateHit(sharcParameters, sharcState, sharcHitData, result.rgb, Rand(rngState))
-    }
-#   endif
-
     OutputTexture[idx] = MainTexture[idx] + float4(Color::TrueLinearToGamma(result.rgb), 0.0f);
-
+    
+#if !defined(LAMBERT)
     ReflectanceTexture[idx] = float4(EnvBRDFApprox2(F0(albedo, metalness), roughness, dot(normalWS, viewWS)), 0.0f);
     SpecularHitDist[idx] = max(0.0f, result.a);
-#endif
+#endif    
 }

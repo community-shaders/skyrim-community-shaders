@@ -10,6 +10,11 @@
 #include "Common/Game.hlsli"
 #include "Common/Color.hlsli"
 
+#define TRUE_PBR
+#define TRUE_PBR
+
+#include "Common/PBR.hlsli"
+
 [shader("closesthit")]
 void main(inout Payload payload, in BuiltInTriangleIntersectionAttributes attribs)
 {
@@ -24,6 +29,10 @@ void main(inout Payload payload, in BuiltInTriangleIntersectionAttributes attrib
     float3 uvw = GetBary(attribs);
     
     Material material = Materials[meshID];
+    
+    if (material.PBRFlags & PBR::Flags::HasEmissive) {
+        
+    }
     
     float2 texCoord = material.TexCoord(Interpolate(v0.Texcoord0, v1.Texcoord0, v2.Texcoord0, uvw));
     
@@ -118,7 +127,8 @@ void main(inout Payload payload, in BuiltInTriangleIntersectionAttributes attrib
 #else
     payload.color += float4(GGXDirectD(worldPosition, worldNormal, viewDirection, albedo, roughness, metalness, Frame.Directional, randomSeed), 0.0f);
 #endif
-    
+
+    // TODO: SHaRC update should be 1 sample only
     [unroll]
     for (uint i = 0; i < SAMPLES; i++)
     {
@@ -133,13 +143,13 @@ void main(inout Payload payload, in BuiltInTriangleIntersectionAttributes attrib
         if (currentDepth < MAX_DEPTH)
         {
 #if defined(LAMBERT)
-            payload.color += float4(LambertianIndirect(worldPosition, worldNormal, albedo, currentDepth, randomSeed), 0.0f);
+            payload.color += LambertianIndirect(worldPosition, worldNormal, albedo, currentDepth + 1, randomSeed);
 #else
-            float4 indirect = GGXIndirect(worldPosition, geomWorldNormal, TBN, viewDirection, albedo, roughness, metalness, ao, currentDepth, randomSeed);
+            float4 indirect = GGXIndirect(worldPosition, geomWorldNormal, TBN, viewDirection, albedo, roughness, metalness, ao, currentDepth + 1, randomSeed);
             indirect.a = max(payload.color.a, RayTCurrent()); // * (1.0f - saturate(abs(currentDepth - 1.0f))); // 0,1,2,... to -1,0,1,... to 1,0,1 to 0, 1, 0
         
             payload.color += indirect;
 #endif 
-        }
-    }
+        }     
+    }   
 }

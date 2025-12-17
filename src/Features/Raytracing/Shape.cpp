@@ -168,6 +168,7 @@ void Shape::BuildMaterial(const RE::BSGeometry::GEOMETRY_RUNTIME_DATA& geometryR
 	int effectType = 0;
 
 	RE::BSShader::Type shaderType = RE::BSShader::Type::None;
+	stl::enumeration<PBRShaderFlags, uint16_t> pbrShaderFlags;
 
 	ID3D11Texture2D* baseTexture = nullptr;
 	ID3D11Texture2D* normalTexture = nullptr;
@@ -245,6 +246,8 @@ void Shape::BuildMaterial(const RE::BSGeometry::GEOMETRY_RUNTIME_DATA& geometryR
 						rmaosTexture = TryGetTexture(lightingPBRMaterial->rmaosTexture);
 
 						roughness = lightingPBRMaterial->GetRoughnessScale();
+
+						pbrShaderFlags = GetPBRShaderFlags(lightingPBRMaterial);
 					}
 
 					// Glow
@@ -330,7 +333,68 @@ void Shape::BuildMaterial(const RE::BSGeometry::GEOMETRY_RUNTIME_DATA& geometryR
 		normalTexReg,
 		effectTexReg,
 		rmaosTexReg,
-		shaderType);
+		shaderType,
+		pbrShaderFlags);
+}
+
+stl::enumeration<PBRShaderFlags, uint16_t> Shape::GetPBRShaderFlags(const BSLightingShaderMaterialPBR* pbrMaterial)
+{
+	auto graphicsState = globals::game::graphicsState;
+
+	stl::enumeration<PBRShaderFlags, uint16_t> shaderFlags;
+
+	if (pbrMaterial->pbrFlags.any(PBRFlags::TwoLayer)) {
+		shaderFlags.set(PBRShaderFlags::TwoLayer);
+		if (pbrMaterial->pbrFlags.any(PBRFlags::InterlayerParallax)) {
+			shaderFlags.set(PBRShaderFlags::InterlayerParallax);
+		}
+		if (pbrMaterial->pbrFlags.any(PBRFlags::CoatNormal)) {
+			shaderFlags.set(PBRShaderFlags::CoatNormal);
+		}
+		if (pbrMaterial->pbrFlags.any(PBRFlags::ColoredCoat)) {
+			shaderFlags.set(PBRShaderFlags::ColoredCoat);
+		}
+	} else if (pbrMaterial->pbrFlags.any(PBRFlags::HairMarschner)) {
+		shaderFlags.set(PBRShaderFlags::HairMarschner);
+	} else {
+		if (pbrMaterial->pbrFlags.any(PBRFlags::Subsurface)) {
+			shaderFlags.set(PBRShaderFlags::Subsurface);
+		}
+		if (pbrMaterial->pbrFlags.any(PBRFlags::Fuzz)) {
+			shaderFlags.set(PBRShaderFlags::Fuzz);
+		} else {
+			if (pbrMaterial->GetGlintParameters().enabled) {
+				shaderFlags.set(PBRShaderFlags::Glint);
+			}
+
+			// This is slimmed down because we don't have access to lightingFlags
+			if (pbrMaterial->GetProjectedMaterialGlintParameters().enabled) {
+				shaderFlags.set(PBRShaderFlags::ProjectedGlint);
+			}
+		}
+	}
+
+	const bool hasEmissive = pbrMaterial->emissiveTexture != nullptr && pbrMaterial->emissiveTexture != graphicsState->GetRuntimeData().defaultTextureBlack;
+	if (hasEmissive) {
+		shaderFlags.set(PBRShaderFlags::HasEmissive);
+	}
+
+	const bool hasDisplacement = pbrMaterial->displacementTexture != nullptr && pbrMaterial->displacementTexture != graphicsState->GetRuntimeData().defaultTextureBlack;
+	if (hasDisplacement) {
+		shaderFlags.set(PBRShaderFlags::HasDisplacement);
+	}
+
+	const bool hasFeaturesTexture0 = pbrMaterial->featuresTexture0 != nullptr && pbrMaterial->featuresTexture0 != graphicsState->GetRuntimeData().defaultTextureWhite;
+	if (hasFeaturesTexture0) {
+		shaderFlags.set(PBRShaderFlags::HasFeaturesTexture0);
+	}
+
+	const bool hasFeaturesTexture1 = pbrMaterial->featuresTexture1 != nullptr && pbrMaterial->featuresTexture1 != graphicsState->GetRuntimeData().defaultTextureWhite;
+	if (hasFeaturesTexture1) {
+		shaderFlags.set(PBRShaderFlags::HasFeaturesTexture1);
+	}
+
+	return shaderFlags;
 }
 
 void Shape::CreateBuffers(const std::wstring& name)

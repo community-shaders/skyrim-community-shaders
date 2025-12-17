@@ -10,8 +10,6 @@
 #include "Raytracing/Includes/RT/CommonRT.hlsli"
 #include "Raytracing/Includes/RT/Rays.hlsli"
 
-#include "Raytracing/Includes/RT/microfacetBRDFUtils.hlsli"
-
 float InverseSquareAtten(float dist, float range)
 {
     // Normalized inverse-square (scale-agnostic)
@@ -59,16 +57,16 @@ float3 LambertianDirectP(in float3 position, in float3 n, in float3 albedo, in L
     return NdotL * light.Color * albedo; // (albedo / Math::PI)
 }
 
-float3 LambertianIndirect(float3 position, float3 n, float3 albedo, uint depth, inout uint randomSeed)
+float4 LambertianIndirect(float3 position, float3 n, float3 albedo, uint depth, inout uint randomSeed)
 {
     float3 tangentSample = SampleCosineHemisphere(randomSeed);
     float3 direction = TangentToWorld(n, tangentSample);
             
-    float3 bounceColor = TraceRay(Scene, position, direction, depth, randomSeed).rgb;
+    float4 radiance = TraceRay(Scene, position, direction, depth, randomSeed);
     
     float NoL = saturate(dot(n, direction));    
     
-    return bounceColor * albedo * NoL * Frame.Diffuse;
+    return float4(radiance.rgb * albedo * NoL * Frame.Diffuse, radiance.a);
 }
 
 float3 GGXDirect(in float3 l, in float3 n, in float3 v, in float3 albedo, in float roughness, in float metalness)
@@ -140,7 +138,36 @@ float3 GGXDirectP(in float3 position, in float3 n, in float3 v, in float3 albedo
     return direct * float(lightData.Count);
 }
 
+float4 GetRadiance(in float3 position, in float3 direction, in uint depth, inout uint randomSeed)
+{
+#if defined(SHARC)
+    if (!Frame.SHaRCUpdatePass) {
+        SharcParameters sharcParameters = GetSharcParameters();
+        
+        SharcHitData sharcHitData;
+        {
+            sharcHitData.positionWorld = position;
+            sharcHitData.normalWorld = direction;
+        }       
+        
+        /*uint gridLevel = HashGridGetLevel(position, sharcParameters.gridParameters);
+        float voxelSize = HashGridGetVoxelSize(gridLevel, gridParameters);
+        
+        bool isValidHit = payload.hitDistance > voxelSize * sqrt(3.0f);*/
+        
+        float3 sharcRadiance;   
+        if (SharcGetCachedRadiance(sharcParameters, sharcHitData, sharcRadiance, false))
+            return sharcRadiance;
+    } 
+#endif
+    
+    return TraceRay(Scene, position, direction, depth, randomSeed);
+}
+#if defined(SHARC) && defined(SHARC_UPDATE)
+float4 GGXIndirect(in float3 position, in float3 GN, float3x3 TBN, in float3 V, in float3 albedo, in float roughness, in float metalness, in float ao, in uint depth, SharcState sharcState, inout uint randomSeed)
+#else
 float4 GGXIndirect(in float3 position, in float3 GN, float3x3 TBN, in float3 V, in float3 albedo, in float roughness, in float metalness, in float ao, in uint depth, inout uint randomSeed)
+#endif
 {  
     float3 N = TBN[2];
     float3 T = TBN[0];
@@ -199,17 +226,37 @@ float4 GGXIndirect(in float3 position, in float3 GN, float3x3 TBN, in float3 V, 
             BRDF_over_PDF = diffuse_BRDF_over_PDF / (1.0 - specular_PDF);
         }
 
-        const float specularLobe_PDF = ImportanceSampleGGX_VNDF_PDF(roughness, N, V, direction);
+        /*const float specularLobe_PDF = ImportanceSampleGGX_VNDF_PDF(roughness, N, V, direction);
         const float diffuseLobe_PDF = saturate(dot(direction, N)) / Math::PI;
 
         // For delta surfaces, we only pass the diffuse lobe to ReSTIR GI, and this pdf is for that.
-        overall_PDF = isDeltaSurface ? diffuseLobe_PDF : lerp(diffuseLobe_PDF, specularLobe_PDF, specular_PDF);
+        overall_PDF = isDeltaSurface ? diffuseLobe_PDF : lerp(diffuseLobe_PDF, specularLobe_PDF, specular_PDF);*/
     }
 
     if (dot(GN, direction) <= 0.0)
-        return float4(0.0f, 0.0f, 0.0f, 0.0f);
-
-    float4 radiance = TraceRay(Scene, position, direction, depth, randomSeed);
+        return float4(0f, 0f, 0f, 0f);   
+    
+    float4 radiance = GetRadiance(position, direction, depth, randomSeed);    
+    
+#if defined(SHARC) && defined(SHARC_UPDATE)
+    if (Frame.SHaRCUpdatePass) {
+        SharcParameters sharcParameters = GetSharcParameters();
+    
+        if (radiance.a < 0.0f) {
+            SharcUpdateMiss(sharcParameters, sharcState, radiance.rgb);
+        } else {
+            SharcHitData sharcHitData;
+            {
+                sharcHitData.positionWorld = position;
+                sharcHitData.normalWorld = GN;
+            }
+    
+            SharcUpdateHit(sharcParameters, sharcState, sharcHitData, radiance.rgb, Random(randomSeed));
+        } 
+    
+        return radiance;
+    }
+#endif  
     
     float3 diffuse = isSpecularRay ? 0.0 : radiance.rgb * BRDF_over_PDF * (DiffuseAO(diffuseAlbedo, ao) * Frame.Diffuse);
     float3 specular = isSpecularRay ? radiance.rgb * BRDF_over_PDF * (SpecularAO(NoV, roughness, ao, f0) * Frame.Specular): 0.0;    

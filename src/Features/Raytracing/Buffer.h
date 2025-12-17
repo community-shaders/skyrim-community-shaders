@@ -367,62 +367,77 @@ namespace DX12
 	class StructuredBufferUpload : public StructuredBuffer<T>
 	{
 	public:
-		explicit StructuredBufferUpload(ID3D12Device5* a_device, const uint64_t& a_count, bool uav = false) :
+		explicit StructuredBufferUpload(ID3D12Device5* a_device, const uint64_t& a_count, bool uav = false, uint uploadCount = 1) :
 			StructuredBuffer<T>(a_device, a_count, uav)
 		{
 			const auto& uploadHeap = CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_UPLOAD);
 			D3D12_RESOURCE_DESC desc = StructuredBuffer<T>::Desc(Resource::desc.Width);
 
-			DX::ThrowIfFailed(a_device->CreateCommittedResource(
-				&uploadHeap,
-				D3D12_HEAP_FLAG_NONE,
-				&desc,
-				D3D12_RESOURCE_STATE_GENERIC_READ,
-				nullptr,
-				IID_PPV_ARGS(&uploadBuffer)));
+			uploadBuffer.resize(uploadCount);
+
+			for (auto i = 0u; i < uploadCount; i++) {
+				DX::ThrowIfFailed(a_device->CreateCommittedResource(
+					&uploadHeap,
+					D3D12_HEAP_FLAG_NONE,
+					&desc,
+					D3D12_RESOURCE_STATE_GENERIC_READ,
+					nullptr,
+					IID_PPV_ARGS(&uploadBuffer[i])));
+			}
 		}
 
-		void Update(void const* src_data, size_t data_size, size_t begin = 0)
+		void Update(void const* srcData, size_t dataSize, size_t begin = 0, uint uploadIndex = 0)
 		{
 			void* pData;
-			//DX::ThrowIfFailed(uploadBuffer->Map(0, &readRange, &pData));
-			uploadBuffer->Map(0, &readRange, &pData);
+			DX::ThrowIfFailed(uploadBuffer[uploadIndex]->Map(0, &readRange, &pData));
 
 			uint8_t* dst = static_cast<uint8_t*>(pData) + begin;
-			memcpy(dst, src_data, data_size);
+			memcpy(dst, srcData, dataSize);
 
-			D3D12_RANGE writeRange = { begin, begin + data_size };
-			uploadBuffer->Unmap(0, &writeRange);
+			D3D12_RANGE writeRange = { begin, begin + dataSize };
+			uploadBuffer[uploadIndex]->Unmap(0, &writeRange);
 		}
 
-		void UpdateAt(void const* src_data, size_t index = 0)
+		void UpdateAt(T const* srcData, size_t index = 0, uint uploadIndex = 0)
 		{
 			size_t begin = index * sizeof(T);
 
 			void* pData;
-			DX::ThrowIfFailed(uploadBuffer->Map(0, &readRange, &pData));
+			DX::ThrowIfFailed(uploadBuffer[uploadIndex]->Map(0, &readRange, &pData));
 
 			uint8_t* dst = static_cast<uint8_t*>(pData) + begin;
-			memcpy(dst, src_data, sizeof(T));
+			memcpy(dst, srcData, sizeof(T));
 
 			D3D12_RANGE writeRange = { begin, begin + sizeof(T) };
-			uploadBuffer->Unmap(0, &writeRange);
+			uploadBuffer[0]->Unmap(0, &writeRange);
 		}
 
-		void UpdateList(T const* src_data, std::int64_t localCount)
+		void UpdateList(T const* srcData, uint64_t localCount, uint uploadIndex = 0)
 		{
-			Update(src_data, sizeof(T) * localCount);
+			Update(srcData, sizeof(T) * localCount, uploadIndex);
 		}
 
-		void Upload(ID3D12GraphicsCommandList4* commandList)
+		void Upload(ID3D12GraphicsCommandList4* commandList, uint uploadIndex = 0)
 		{
+			D3D12_RESOURCE_STATES state = this->state;
+
 			this->TransitionBarrier(commandList, D3D12_RESOURCE_STATE_COPY_DEST);
-			commandList->CopyResource(this->resource.get(), uploadBuffer.get());			
+			commandList->CopyResource(this->resource.get(), uploadBuffer[uploadIndex].get());			
 			//commandList->CopyBufferRegion(this->resource.get(), 0, uploadBuffer.get(), 0, sizeof(T) * this->count);
-			this->TransitionBarrier(commandList, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+			this->TransitionBarrier(commandList, state);
 		}
 
-		winrt::com_ptr<ID3D12Resource> uploadBuffer = nullptr;
+		// dataSize, offset arguments order to match Update function
+		void UploadRegion(ID3D12GraphicsCommandList4* commandList, uint64_t dataSize, uint64_t offset, uint uploadIndex = 0)
+		{
+			D3D12_RESOURCE_STATES state = this->state;
+
+			this->TransitionBarrier(commandList, D3D12_RESOURCE_STATE_COPY_DEST);
+			commandList->CopyBufferRegion(this->resource.get(), offset, uploadBuffer[uploadIndex].get(), offset, dataSize);
+			this->TransitionBarrier(commandList, state);
+		}
+
+		eastl::vector<winrt::com_ptr<ID3D12Resource>> uploadBuffer;
 
 	private:
 		D3D12_RANGE readRange = { 0, 0 };

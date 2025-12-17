@@ -27,13 +27,16 @@ alignas(16)
     #ifdef SHARC
     float SHaRCScale;
     uint SHaRCCapacity;
+    BOOL SHaRCUpdatePass;
     #else
     uint Pad0;
     uint Pad1;
-    #endif      
 	uint Pad2;
+    #endif
+    uint2 DispatchSize;
+    uint2 Pad3;
+    float4 Pad4[10];
     FeatureData Features;
-    float4 Pad3[11];
 };
 #ifdef __cplusplus
 static_assert(sizeof(GIFrameData) % 256 == 0);
