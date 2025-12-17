@@ -115,7 +115,7 @@ void main()
     {
         float3 samplePosition = positionWS;
         float3 viewDirection = viewWS;
-        float3 sampleAlbedo = 1.0f;
+        float3 sampleAlbedo = albedo;
         float sampleRoughness = roughness;
         float sampleMetalness = metalness;
         float3 sampleF0 = f0;
@@ -132,7 +132,7 @@ void main()
                 break;
             
             RayDesc ray;
-            ray.Origin = samplePosition;
+            ray.Origin = samplePosition + geomWorldNormal * 0.01f;
             ray.Direction = direction;
             ray.TMin = 0.01f;
             ray.TMax = 1e30;
@@ -238,25 +238,25 @@ void main()
             float3 localRadiance = sampleEmissive * Frame.Emissive;
             
             // Ideally we would call only one of these per bounce
-/*#if defined(LAMBERT)
+#if defined(LAMBERT)
             localRadiance += LambertianDirectD(samplePosition, worldNormal, sampleAlbedo, Frame.Directional, randomSeed);
             localRadiance += LambertianDirectP(samplePosition, worldNormal, sampleAlbedo, instance.LightData, randomSeed);
 #else
             localRadiance += GGXDirectD(samplePosition, worldNormal, viewDirection, sampleAlbedo, sampleRoughness, sampleMetalness, Frame.Directional, randomSeed);
             localRadiance += GGXDirectP(samplePosition, worldNormal, viewDirection, sampleAlbedo, sampleRoughness, sampleMetalness, instance.LightData, randomSeed);
-#endif*/  
+#endif
             
             float NoV = saturate(dot(worldNormal, viewDirection));
             
             float3 diffuse = isSpecular ? 0.0 : localRadiance.rgb * BRDF_over_PDF * (DiffuseAO(sampleAlbedo, sampleAO) * Frame.Diffuse);
             float3 specular = isSpecular ? localRadiance.rgb * BRDF_over_PDF * (SpecularAO(NoV, sampleRoughness, sampleAO, sampleF0) * Frame.Specular): 0.0;    
     
-            sampleRadiance += diffuse * sampleAlbedo + specular;         
-            
+            sampleRadiance += diffuse * sampleAlbedo + specular;       
+    
             if (j == 0)
             {
                 isDiffusePath = !isSpecular;
-                hitDistance = payload.hitDistance;
+                hitDistance = max(hitDistance, payload.hitDistance);
             }
         }
         

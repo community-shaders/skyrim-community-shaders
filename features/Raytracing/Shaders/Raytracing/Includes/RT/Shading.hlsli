@@ -10,8 +10,6 @@
 #include "Raytracing/Includes/RT/CommonRT.hlsli"
 #include "Raytracing/Includes/RT/Rays.hlsli"
 
-#include "Raytracing/Includes/RT/microfacetBRDFUtils.hlsli"
-
 float InverseSquareAtten(float dist, float range)
 {
     // Normalized inverse-square (scale-agnostic)
@@ -40,6 +38,9 @@ float3 LambertianDirectD(in float3 position, in float3 normal, in float3 albedo,
 
 float3 LambertianDirectP(in float3 position, in float3 n, in float3 albedo, in LightData lightData, inout uint randomSeed)
 {
+    if (lightData.Count == 0)
+        return 0;
+    
     uint lightIdx = min(uint(Random(randomSeed) * lightData.Count), lightData.Count - 1);
 
     uint lightID = lightData.GetID(lightIdx);
@@ -53,7 +54,7 @@ float3 LambertianDirectP(in float3 position, in float3 n, in float3 albedo, in L
     float atten = LinearAtten(dist, light.Range);
     //float atten = InverseSquareAtten(dist, light.Range); // This requires all lights to be ISL enabled
             
-    float NdotL= saturate(dot(n, l)) * atten;
+    float NdotL = saturate(dot(n, l)) * atten;
     NdotL *= float(lightData.Count) * TraceRayShadowFinite(Scene, position, l, dist);
             
     return NdotL * light.Color * albedo; // (albedo / Math::PI)
@@ -103,11 +104,11 @@ float3 GGXDirectD(in float3 position, in float3 n, in float3 v, in float3 albedo
 
     float3 direct = GGXDirect(l, n, v, albedo, roughness, metalness) * light.Color;
 
-    /*if (any(direct > MIN_DIFFUSE_SHADOW))
+    if (any(direct > MIN_DIFFUSE_SHADOW))
     {
         float3 lr = TangentToWorld(l, SampleCosineHemisphereScaled(randomSeed, 0.025f));  
         direct *= TraceRayShadow(Scene, position, lr);
-    }*/
+    }
 
     return direct;
 }

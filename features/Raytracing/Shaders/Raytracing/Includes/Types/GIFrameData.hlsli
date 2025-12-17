@@ -23,7 +23,7 @@ alignas(16)
     float Specular;
     float Emissive;
 	float Effect;
-	float Sky;    
+	float Sky;
     #ifdef SHARC
     float SHaRCScale;
     uint SHaRCCapacity;
@@ -32,8 +32,8 @@ alignas(16)
     uint Pad1;
     #endif      
 	uint Pad2;
-    FeatureData Features;
     float4 Pad3[11];
+    FeatureData Features;
 };
 #ifdef __cplusplus
 static_assert(sizeof(GIFrameData) % 256 == 0);

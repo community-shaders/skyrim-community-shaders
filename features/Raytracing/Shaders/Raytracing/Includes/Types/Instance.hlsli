@@ -60,9 +60,13 @@ struct InstanceData
 struct Instance
 #endif    
 {
-	uint FirstMeshID;
-    LightData LightData;
+#ifdef __cplusplus	
     float3x4 Transform;
+#else
+	row_major float3x4 Transform;
+#endif	
+    LightData LightData;
+	uint FirstMeshID;
 };
 
 #ifdef __cplusplus

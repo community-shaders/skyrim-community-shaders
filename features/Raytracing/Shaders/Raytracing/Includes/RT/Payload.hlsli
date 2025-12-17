@@ -5,9 +5,9 @@ struct Payload
 {   
     float hitDistance;
     uint primitiveIndex;
-    half2 barycentrics;
-    uint16_t instanceIndex;   
-    uint16_t shapeIndex;
+    float2 barycentrics;
+    uint instanceIndex;   
+    uint shapeIndex;
  
     bool Hit() { return hitDistance > 0.0f; }
 };

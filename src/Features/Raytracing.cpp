@@ -1834,9 +1834,9 @@ void Raytracing::UpdateInstances()
 		blasInstances.push_back(blasInstance);
 
 		instanceBufferData.emplace_back(
-			firstShapeIndex, 
+			instance.transform, 
 			LightData(GatherInstanceLights(pNiNode)),
-			instance.transform
+			firstShapeIndex
 		);
 	}
 	
@@ -3132,7 +3132,7 @@ void Raytracing::CompileRTGIShaders()
 		pipelineBuilder.AddHitGroup(L"ShadowHitGroup", L"", L"ShadowAnyHit");
 
 		// Shader + pipeline config
-		pipelineBuilder.AddShaderConfig(16, 8);
+		pipelineBuilder.AddShaderConfig(24, 8);
 		pipelineBuilder.AddGlobalRootSignature(rootSignature.get());
 		pipelineBuilder.AddPipelineConfig(settings.Bounces + (settings.PathTracing ? 2 : 1)); // Max recursion depth
 

@@ -897,9 +897,7 @@ struct Raytracing : public OverlayFeature
 				auto& rt = globals::features::raytracing;
 
 				if (rt.Active()) {
-					if (This->shaderType.get() == RE::BSShader::Type::Lighting) {
-						rt.BSShader_SetupGeometry(This, Pass, RenderFlags);
-					}
+					rt.BSShader_SetupGeometry(This, Pass, RenderFlags);
 
 					if (rt.renderingCubemap) {
 						if (This->shaderType.get() != RE::BSShader::Type::Sky) {
