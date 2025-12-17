@@ -263,7 +263,7 @@ void main()
         radiance += sampleRadiance;    
     }
 
-    OutputTexture[idx] = MainTexture[idx] + float4(Color::TrueLinearToGamma(radiance), 0.0f);
+    OutputTexture[idx] = MainTexture[idx] + float4(Color::TrueLinearToGamma(albedo * radiance), 0.0f);
     ReflectanceTexture[idx] = float4(EnvBRDFApprox2(f0, roughness, dot(normalWS, viewWS)), 0.0f);
     SpecularHitDist[idx] = isDiffusePath ? 0.0f : max(0.0f, hitDistance);
 }
