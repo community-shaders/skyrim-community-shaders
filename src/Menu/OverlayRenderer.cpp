@@ -1,14 +1,17 @@
 #include "OverlayRenderer.h"
+#include "BackgroundBlur.h"
 #include "HomePageRenderer.h"
 #include "ThemeManager.h"
 
 #include <imgui.h>
 #include <imgui_impl_dx11.h>
 #include <imgui_impl_win32.h>
+#include <winrt/base.h>
 
 #include "Feature.h"
 #include "FeatureIssues.h"
 #include "Features/RenderDoc.h"
+#include "Globals.h"
 #include "Menu.h"
 #include "ShaderCache.h"
 #include "State.h"
@@ -218,6 +221,9 @@ void OverlayRenderer::HandleABTesting()
 void OverlayRenderer::FinalizeImGuiFrame()
 {
 	ImGui::Render();
+
+	// Apply background blur behind ImGui windows before rendering them
+	BackgroundBlur::RenderBackgroundBlur();
 
 	ImGui_ImplDX11_RenderDrawData(ImGui::GetDrawData());
 

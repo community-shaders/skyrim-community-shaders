@@ -34,3 +34,4 @@ ci:
         Automated formatting by clang-format, prettier, and other hooks.
         See https://pre-commit.ci for details.
     autofix_prs: true
+    autoupdate_commit_msg: "build(deps): update pre-commit hooks"
