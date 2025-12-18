@@ -179,32 +179,35 @@ void main()
             brdfContext = BRDFContext(surface, -direction);
 
             // Local bounce radiance
-            float3 localRadiance = surface.Emissive * Frame.Emissive * throughput;
+            float3 localRadiance = surface.Emissive * Frame.Emissive;
             
             // Ideally we would call only one of these per bounce
 #if defined(LAMBERT)
-            localRadiance += LambertianDirectD(surface, Frame.Directional, randomSeed) * throughput;
-            localRadiance += LambertianDirectP(surface, instance.LightData, randomSeed) * throughput;
+            localRadiance += LambertianDirectD(surface, Frame.Directional, randomSeed);
+            localRadiance += LambertianDirectP(surface, instance.LightData, randomSeed);
 #else
-            localRadiance += GGXDirectD(surface, brdfContext, Frame.Directional, randomSeed) * throughput;
-            localRadiance += GGXDirectP(surface, brdfContext, instance.LightData, randomSeed) * throughput;
+            localRadiance += GGXDirectD(surface, brdfContext, Frame.Directional, randomSeed);
+            localRadiance += GGXDirectP(surface, brdfContext, instance.LightData, randomSeed);
 #endif
 
             float3 diffuseAO = BRDF::DiffuseAO(surface.Albedo, surface.AO);
             
 #if defined(LAMBERT)
-            float3 diffuse = localRadiance.rgb * saturate(dot(n, direction)) * diffuseAO * Frame.Diffuse;
+            float NdotD = saturate(dot(n, direction));
+            float3 diffuse = localRadiance.rgb * NdotD * diffuseAO * Frame.Diffuse;
             
-            sampleRadiance += surface.Albedo * diffuse;  
-#else         
-            throughput *= BRDF_over_PDF;
+            sampleRadiance += surface.Albedo * diffuse * throughput; 
             
+            throughput *= NdotD;
+#else                                
             float3 diffuse = isSpecular ? 0.0 : localRadiance.rgb * BRDF_over_PDF * diffuseAO * Frame.Diffuse;
             
             float3 specularAO = BRDF::SpecularAO(brdfContext.NdotV, surface.Roughness, surface.AO, surface.F0);
             float3 specular = isSpecular ? localRadiance.rgb * BRDF_over_PDF * (specularAO * Frame.Specular): 0.0;    
 
-            sampleRadiance += surface.Albedo * diffuse + specular;       
+            sampleRadiance += (surface.Albedo * diffuse + specular) * throughput;
+            
+            throughput *= BRDF_over_PDF;
  #endif          
             
             float rrProbability = min(0.95f, BRDF::CalcLuminance(throughput));
