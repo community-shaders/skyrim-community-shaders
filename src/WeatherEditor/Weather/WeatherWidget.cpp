@@ -153,7 +153,7 @@ void WeatherWidget::DrawWidget()
 
 			if (parent) {
 				ImGui::SameLine();
-				if (ImGui::Button("Inherit All")) {
+				if (Util::ButtonWithFlash("Inherit All")) {
 					InheritAllFromParent();
 				}
 				if (ImGui::IsItemHovered()) {
@@ -162,7 +162,7 @@ void WeatherWidget::DrawWidget()
 
 				if (!parent->IsOpen()) {
 					ImGui::SameLine();
-					if (ImGui::Button("Open"))
+					if (Util::ButtonWithFlash("Open"))
 						parent->SetOpen(true);
 				}
 			}
@@ -1525,11 +1525,11 @@ void WeatherWidget::DrawFeatureSettings()
 			if (hasSettings) {
 				ImGui::TextColored({ 0.0f, 1.0f, 0.0f, 1.0f }, "Has weather-specific settings");
 
-				if (ImGui::Button("Clear Settings")) {
+if (Util::ButtonWithFlash("Clear Settings")) {
 					settings.featureSettings[featureName] = json::object();
 				}
 				ImGui::SameLine();
-				if (ImGui::Button("View JSON")) {
+				if (Util::ButtonWithFlash("View JSON")) {
 					ImGui::OpenPopup("FeatureJSON");
 				}
 

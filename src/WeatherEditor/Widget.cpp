@@ -2,6 +2,7 @@
 #include "EditorWindow.h"
 #include "State.h"
 #include "Util.h"
+#include "Utils/UI.h"
 #include "WeatherUtils.h"
 
 bool Widget::MatchesSearch(const std::string& text) const
@@ -421,11 +422,15 @@ void Widget::DrawWidgetHeader(const char* searchId, bool showApplyRevert, bool s
 			applySize.x += ImGui::GetStyle().FramePadding.x * 2.0f;
 			applySize.y = buttonHeight;
 
-			ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.2f, 0.6f, 0.9f, 1.0f));
-			if (ImGui::Button("Apply", applySize)) {
-				ApplyChanges();
+			auto successColor = Menu::GetSingleton()->GetTheme().StatusPalette.SuccessColor;
+			auto successHover = successColor; successHover.w = 0.8f;
+			auto successActive = successColor; successActive.w = 1.0f;
+			{
+				auto styledButton = Util::StyledButtonWrapper(successColor, successHover, successActive);
+				if (ImGui::Button("Apply", applySize)) {
+					ApplyChanges();
+				}
 			}
-			ImGui::PopStyleColor();
 			if (ImGui::IsItemHovered()) {
 				ImGui::SetTooltip("Apply changes to the game");
 			}
@@ -436,11 +441,15 @@ void Widget::DrawWidgetHeader(const char* searchId, bool showApplyRevert, bool s
 			revertSize.x += ImGui::GetStyle().FramePadding.x * 2.0f;
 			revertSize.y = buttonHeight;
 
-			ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.7f, 0.3f, 0.2f, 1.0f));
-			if (ImGui::Button("Revert", revertSize)) {
-				RevertChanges();
+			auto warningColor = Menu::GetSingleton()->GetTheme().StatusPalette.Warning;
+			auto warningHover = warningColor; warningHover.w = 0.8f;
+			auto warningActive = warningColor; warningActive.w = 1.0f;
+			{
+				auto styledButton = Util::StyledButtonWrapper(warningColor, warningHover, warningActive);
+				if (ImGui::Button("Revert", revertSize)) {
+					RevertChanges();
+				}
 			}
-			ImGui::PopStyleColor();
 			if (ImGui::IsItemHovered()) {
 				ImGui::SetTooltip("Revert to saved values");
 			}
@@ -454,7 +463,7 @@ void Widget::DrawWidgetHeader(const char* searchId, bool showApplyRevert, bool s
 			saveSize.x += ImGui::GetStyle().FramePadding.x * 2.0f;
 			saveSize.y = buttonHeight;
 
-			if (ImGui::Button("Save", saveSize)) {
+			if (Util::ButtonWithFlash("Save", saveSize)) {
 				Save();
 			}
 			if (ImGui::IsItemHovered()) {
@@ -467,7 +476,7 @@ void Widget::DrawWidgetHeader(const char* searchId, bool showApplyRevert, bool s
 			loadSize.x += ImGui::GetStyle().FramePadding.x * 2.0f;
 			loadSize.y = buttonHeight;
 
-			if (ImGui::Button("Load", loadSize)) {
+			if (Util::ButtonWithFlash("Load", loadSize)) {
 				Load();
 			}
 			if (ImGui::IsItemHovered()) {
@@ -481,16 +490,19 @@ void Widget::DrawWidgetHeader(const char* searchId, bool showApplyRevert, bool s
 				deleteSize.x += ImGui::GetStyle().FramePadding.x * 2.0f;
 				deleteSize.y = buttonHeight;
 
-				ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.7f, 0.3f, 0.2f, 1.0f));
-				ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.9f, 0.4f, 0.3f, 1.0f));
-				if (ImGui::Button("Delete", deleteSize)) {
-					if (editorWindow->settings.suppressDeleteWarning) {
-						Delete();
-					} else {
-						ImGui::OpenPopup("ConfirmDelete");
+				auto errorColor = Menu::GetSingleton()->GetTheme().StatusPalette.Error;
+				auto errorHover = errorColor; errorHover.w = 0.8f;
+				auto errorActive = errorColor; errorActive.w = 1.0f;
+				{
+					auto styledButton = Util::StyledButtonWrapper(errorColor, errorHover, errorActive);
+					if (ImGui::Button("Delete", deleteSize)) {
+						if (editorWindow->settings.suppressDeleteWarning) {
+							Delete();
+						} else {
+							ImGui::OpenPopup("ConfirmDelete");
+						}
 					}
 				}
-				ImGui::PopStyleColor(2);
 				if (ImGui::IsItemHovered()) {
 					ImGui::SetTooltip("Delete saved file and revert to defaults");
 				}
@@ -512,13 +524,13 @@ void Widget::DrawWidgetHeader(const char* searchId, bool showApplyRevert, bool s
 
 		ImGui::Spacing();
 
-		if (ImGui::Button("Yes", ImVec2(120, 0))) {
+		if (Util::ButtonWithFlash("Yes", ImVec2(120, 0))) {
 			Delete();
 			ImGui::CloseCurrentPopup();
 		}
 		ImGui::SetItemDefaultFocus();
 		ImGui::SameLine();
-		if (ImGui::Button("No", ImVec2(120, 0))) {
+		if (Util::ButtonWithFlash("No", ImVec2(120, 0))) {
 			ImGui::CloseCurrentPopup();
 		}
 		ImGui::EndPopup();

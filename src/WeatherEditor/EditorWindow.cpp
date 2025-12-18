@@ -6,6 +6,7 @@
 #include "State.h"
 #include "Weather/LightingTemplateWidget.h"
 #include "WeatherUtils.h"
+#include "Utils/UI.h"
 #include "imgui_internal.h"
 
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(EditorWindow::Settings, recordMarkers, markedRecords, autoApplyChanges, suppressDeleteWarning, useTextButtons, enableInheritFromParent, editorUIScale, favoriteWidgets, recentWidgets, maxRecentWidgets, rememberOpenWidgets, lastOpenWidgets)
@@ -360,7 +361,7 @@ void EditorWindow::ShowObjectsWindow()
 						}
 
 						// Highlight current cell
-						auto highlightColor = Menu::GetSingleton()->GetSettings().Theme.StatusPalette.InfoColor;
+						auto highlightColor = Menu::GetSingleton()->GetTheme().StatusPalette.InfoColor;
 						highlightColor.w = 0.3f;
 						ImGui::TableSetBgColor(ImGuiTableBgTarget_RowBg0, ImGui::ColorConvertFloat4ToU32(highlightColor));
 						ImGui::TableSetBgColor(ImGuiTableBgTarget_RowBg1, ImGui::ColorConvertFloat4ToU32(highlightColor));
@@ -390,14 +391,14 @@ void EditorWindow::ShowObjectsWindow()
 						// Show message that cell lighting is only for interior cells
 						ImGui::TableNextRow();
 						ImGui::TableSetColumnIndex(1);
-						ImGui::TextColored(Menu::GetSingleton()->GetSettings().Theme.StatusPalette.Warning, "Cell Lighting is only available for interior cells.");
-						ImGui::TextColored(Menu::GetSingleton()->GetSettings().Theme.StatusPalette.Disable, "You are currently in an exterior cell.");
+						ImGui::TextColored(Menu::GetSingleton()->GetTheme().StatusPalette.Warning, "Cell Lighting is only available for interior cells.");
+						ImGui::TextColored(Menu::GetSingleton()->GetTheme().StatusPalette.Disable, "You are currently in an exterior cell.");
 					}
 				} else {
 					// No player or cell
 					ImGui::TableNextRow();
 					ImGui::TableSetColumnIndex(1);
-					ImGui::TextColored(Menu::GetSingleton()->GetSettings().Theme.StatusPalette.Error, "Player cell not available.");
+					ImGui::TextColored(Menu::GetSingleton()->GetTheme().StatusPalette.Error, "Player cell not available.");
 				}
 			}
 
@@ -550,7 +551,7 @@ void EditorWindow::ShowObjectsWindow()
 						ImGui::BeginTooltip();
 
 						// ImageSpace info
-						ImGui::TextColored(Menu::GetSingleton()->GetSettings().Theme.StatusPalette.InfoColor, "ImageSpace:");
+						ImGui::TextColored(Menu::GetSingleton()->GetTheme().StatusPalette.InfoColor, "ImageSpace:");
 						for (int tod = 0; tod < 4; tod++) {
 							auto imgSpace = weatherWidget->weather->imageSpaces[tod];
 							ImGui::Text("  %s: %s",
@@ -561,7 +562,7 @@ void EditorWindow::ShowObjectsWindow()
 						ImGui::Spacing();
 
 						// VolumetricLighting info
-						ImGui::TextColored(Menu::GetSingleton()->GetSettings().Theme.StatusPalette.InfoColor, "Volumetric Lighting:");
+						ImGui::TextColored(Menu::GetSingleton()->GetTheme().StatusPalette.InfoColor, "Volumetric Lighting:");
 						for (int tod = 0; tod < 4; tod++) {
 							auto volLight = weatherWidget->weather->volumetricLighting[tod];
 							ImGui::Text("  %s: %s",
@@ -1397,7 +1398,7 @@ void EditorWindow::ShowSettingsWindow()
 			}
 			AddTooltip("Scale the size of all editor UI elements (0.5 = 50%, 2.0 = 200%)");
 
-			if (ImGui::Button("Reset to 1.0")) {
+			if (Util::ButtonWithFlash("Reset to 1.0")) {
 				settings.editorUIScale = 1.0f;
 				Save();
 			}
@@ -1414,12 +1415,12 @@ void EditorWindow::ShowSettingsWindow()
 			ImGui::SliderInt("Max recent widgets", &settings.maxRecentWidgets, 5, 20);
 			AddTooltip("Maximum number of recent widgets to remember");
 
-			if (ImGui::Button("Clear Recent History")) {
+			if (Util::ButtonWithFlash("Clear Recent History")) {
 				settings.recentWidgets.clear();
 				Save();
 			}
 			ImGui::SameLine();
-			if (ImGui::Button("Clear Favorites")) {
+			if (Util::ButtonWithFlash("Clear Favorites")) {
 				settings.favoriteWidgets.clear();
 				Save();
 			}
@@ -1467,13 +1468,16 @@ void EditorWindow::ShowSettingsWindow()
 					}
 
 					ImGui::TableSetColumnIndex(2);
-					auto deleteColor = Menu::GetSingleton()->GetSettings().Theme.StatusPalette.Warning;
+					auto deleteColor = Menu::GetSingleton()->GetTheme().StatusPalette.Warning;
 					deleteColor.y = deleteColor.y * 0.5f;
-					ImGui::PushStyleColor(ImGuiCol_Button, deleteColor);
-					if (ImGui::Button(std::format("Delete##{}", recordMarker.first).c_str(), ImVec2(-1, 0))) {
-						markerToDelete = recordMarker.first;
+					auto deleteHovered = deleteColor; deleteHovered.w = 0.8f;
+					auto deleteActive = deleteColor; deleteActive.w = 1.0f;
+					{
+						auto styledButton = Util::StyledButtonWrapper(deleteColor, deleteHovered, deleteActive);
+						if (ImGui::Button(std::format("Delete##{}", recordMarker.first).c_str(), ImVec2(-1, 0))) {
+							markerToDelete = recordMarker.first;
+						}
 					}
-					ImGui::PopStyleColor();
 				}
 
 				// Process rename

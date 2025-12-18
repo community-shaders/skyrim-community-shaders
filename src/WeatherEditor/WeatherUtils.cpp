@@ -1,6 +1,7 @@
 #include "WeatherUtils.h"
 #include "EditorWindow.h"
 #include "PaletteWindow.h"
+#include "Utils/UI.h"
 
 // Global widget context for undo tracking
 static Widget* g_currentWidget = nullptr;
@@ -1099,7 +1100,7 @@ bool BeginWidgetSearchBar(char* searchBuffer, size_t bufferSize, bool& searchAct
 
 	// Clear button
 	ImGui::SameLine();
-	if (ImGui::Button("Clear", ImVec2(90, 0))) {
+	if (Util::ButtonWithFlash("Clear", ImVec2(90, 0))) {
 		searchBuffer[0] = '\0';
 	}
 
