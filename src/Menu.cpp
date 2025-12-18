@@ -903,8 +903,12 @@ void Menu::ProcessInputEventQueue()
 						}
 					}
 				}
-				if (key == VK_ESCAPE && IsEnabled && !EditorWindow::GetSingleton()->open) {
-					IsEnabled = false;
+				// Guard against a null EditorWindow singleton before accessing `open`.
+				{
+					auto* editorWindow = EditorWindow::GetSingleton();
+					if (key == VK_ESCAPE && IsEnabled && editorWindow && !editorWindow->open) {
+						IsEnabled = false;
+					}
 				}
 			}
 
