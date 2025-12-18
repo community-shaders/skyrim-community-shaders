@@ -67,13 +67,12 @@ void main()
     const snorm half4 normalRoughness = (half4) NormalRoughnessTexture[idx];
 
     // We should also scale the GBuffer for DLSSRR
-    const unorm float linearRoughness = clamp(Scale01(normalRoughness.w, Frame.Roughness.x, Frame.Roughness.y), MIN_ROUGHNESS, MAX_ROUGHNESS);
-    const unorm float roughness = linearRoughness * linearRoughness;
+    const unorm float linearRoughness = normalRoughness.w;
 
     // Metalness and AO packed in 16 bits
     uint metalnessAO = normalMetalnessAO.z * 65535.0;
     
-    const float metalness = Scale01((metalnessAO & 0xFF) / 255.0f, Frame.Metalness.x, Frame.Metalness.y);
+    const float metalness = (metalnessAO & 0xFF) / 255.0f;
     
     const float ao = saturate(((metalnessAO >> 8) & 0xFF) / 255.0f);
     
@@ -83,11 +82,13 @@ void main()
 
     const snorm half3 normalWS = normalRoughness.xyz;
 
+    float3 tangentWS, bitangetWS;
+    CreateOrthonormalBasis(normalWS, tangentWS, bitangetWS);
+    
     float3 albedo = Color::GammaToTrueLinear(AlbedoTexture[idx].rgb);
     
-    Surface surface = Surface(positionWS, geometryNormalWS, normalWS, );
-    
-    float3 f0 = PBR::F0(albedo, metalness);
+    Surface sourceSurface = Surface(positionWS, geometryNormalWS, normalWS, tangentWS, bitangetWS, albedo, linearRoughness, metalness, 0, ao);
+    BRDFContext sourceBRDFContext = BRDFContext(sourceSurface, normalize(-positionCS));    
     
     uint randomSeed = InitRandomSeed(DispatchRaysIndex().xy, DispatchRaysDimensions().xy, Frame.FrameCount);
 
@@ -107,12 +108,6 @@ void main()
     SharcInit(sharcState); 
 #   endif
 
-    float3 viewWS = normalize(-positionCS);
-
-    float3 tangentWS, bitangetWS;
-    CreateOrthonormalBasis(normalWS, tangentWS, bitangetWS);
-    float3x3 TBN = float3x3(tangentWS, bitangetWS, normalWS);
-
     float3 direction;
     float3 BRDF_over_PDF;
     
@@ -123,26 +118,24 @@ void main()
     [unroll]
     for (uint i = 0; i < SAMPLES; i++)
     {
-        float3 samplePosition = positionWS;
-        float3 viewDirection = viewWS;
-        float3 sampleAlbedo = albedo;
-        float sampleRoughness = roughness;
-        float sampleMetalness = metalness;
-        float3 sampleF0 = f0;
+        Surface surface = sourceSurface;
+        BRDFContext brdfContext = sourceBRDFContext;
+        
         float3 sampleRadiance = 0.0f;
-        float3x3 sampleTBN = TBN;
-        float3 geomWorldNormal = geometryNormalWS;
 
         [unroll]
         for (uint j = 0; j < MAX_DEPTH; j++)
         {
-            bool isSpecular = GGXBRDF(sampleTBN, viewDirection, sampleAlbedo, sampleRoughness, sampleMetalness, sampleF0, randomSeed, direction, BRDF_over_PDF);
-            
-            if (dot(geomWorldNormal, direction) <= 0.0)
+#if defined(LAMBERT)
+            direction = surface.Mul(SampleCosineHemisphere(randomSeed));        
+#else
+            const bool isSpecular = BRDF::GGXBRDF(surface, brdfContext, randomSeed, direction, BRDF_over_PDF);
+#endif            
+            if (dot(surface.GeomNormal, direction) <= 0.0)
                 break;
             
             RayDesc ray;
-            ray.Origin = samplePosition + geomWorldNormal * 0.01f;
+            ray.Origin = surface.Position + surface.GeomNormal * 0.01f;
             ray.Direction = direction;
             ray.TMin = 0.01f;
             ray.TMax = 1e30;
@@ -170,99 +163,38 @@ void main()
                 break;
             }
             
-            samplePosition += direction * payload.hitDistance;
+            Instance instance;
             
-            Instance instance = GetInstance(payload.InstanceIndex());
+            surface = Surface(direction * payload.hitDistance, payload, instance);
+            brdfContext = BRDFContext(surface, -direction);
 
-            Vertex v0, v1, v2;
-            GetVertices(payload, v0, v1, v2);
-
-            float3 uvw = GetBary(payload.Barycentrics());
-    
-            Material material = Materials[payload.ShapeIndex()];
-            
-            float2 texCoord = material.TexCoord(Interpolate(v0.Texcoord0, v1.Texcoord0, v2.Texcoord0, uvw));
-            
-            float3x3 objectToWorld3x3 = (float3x3) instance.Transform;
-    
-            geomWorldNormal = normalize(mul(objectToWorld3x3, Interpolate(v0.Normal, v1.Normal, v2.Normal, uvw)));
-            float3 geomWorldTangent = normalize(mul(objectToWorld3x3, Interpolate(v0.Tangent, v1.Tangent, v2.Tangent, uvw)));
-            float3 geomWorldBitangent = normalize(mul(objectToWorld3x3, Interpolate(v0.Bitangent, v1.Bitangent, v2.Bitangent, uvw)));
-            
-            sampleTBN = float3x3(geomWorldTangent, geomWorldBitangent, geomWorldNormal);
-    
-            float4 vertexColor = Interpolate(v0.Color.unpack(), v1.Color.unpack(), v2.Color.unpack(), uvw);
-    
-            float localLinearRoughness = DEFAULT_ROUGHNESS;
-            float localMetalness = DEFAULT_METALNESS;
-            float localAO = 1.0f;
-    
-            Texture2D baseTexture = Textures[NonUniformResourceIndex(material.BaseTexture)];
-            Texture2D effectTexture = Textures[NonUniformResourceIndex(material.EffectTexture)];
-            
-#ifdef PATH_TRACING     
-            Texture2D normalTexture = Textures[NonUniformResourceIndex(material.NormalTexture)];
-            Texture2D rmaosTexture = Textures[NonUniformResourceIndex(material.RMAOSTexture)];
-#endif            
-            
-            float3 base = baseTexture.SampleLevel(BaseSampler, texCoord, 0).rgb;
-            float3 effect = effectTexture.SampleLevel(BaseSampler, texCoord, 0).rgb;
-    
-#ifdef PATH_TRACING
-            float3 normal = normalTexture.SampleLevel(BaseSampler, texCoord, 0).rgb * 2.0f - 1.0f;  
-            float4 rmaos = rmaosTexture.SampleLevel(BaseSampler, texCoord, 0);
-    
-            // Normal mapping
-            float tangentSign = (dot(cross(geomWorldNormal, geomWorldTangent), geomWorldBitangent) < 0.0f) ? -1.0f : 1.0f; 
-    
-            float3 worldNormal = normalize(mul(normal, TBN));  
-            float3 worldTangent = normalize(geomWorldTangent - worldNormal * dot(geomWorldTangent, worldNormal)); 
-            float3 worldBitangent = cross(worldNormal, worldTangent) * tangentSign;   
-    
-            // Normal mapped TBN
-            TBN = float3x3(worldTangent, worldBitangent, worldNormal);
-    
-            // Roughness and Metalness from RMAOS
-            sampleRoughness = saturate(rmaos.x * material.roughness);
-            sampleMetalness = saturate(rmaos.y);
-            localAO = rmaos.z;
-#else
-            float3 worldNormal = geomWorldNormal;
-#endif
-
-            viewDirection = normalize(-direction);
-
-            localLinearRoughness = clamp(Scale01(localLinearRoughness, Frame.Roughness.x, Frame.Roughness.y), MIN_ROUGHNESS, MAX_ROUGHNESS);
-            sampleRoughness = localLinearRoughness * localLinearRoughness;
-    
-            sampleMetalness = Scale01(sampleMetalness, Frame.Metalness.x, Frame.Metalness.y);
-            
-            // Lighting/PBR
-            sampleAlbedo = Color::GammaToTrueLinear(base * material.BaseColor.rgb * vertexColor.rgb);
-            float3 sampleEmissive = Color::GammaToTrueLinear(effect * material.EffectColor.rgb * material.EffectColor.a);
-            
-            // Recalculate F0, it will be used by the next GGXBRDF call as well
-            sampleF0 = F0(sampleAlbedo, sampleMetalness);
-            
             // Local bounce radiance
-            float3 localRadiance = sampleEmissive * Frame.Emissive;
+            float3 localRadiance = surface.Emissive * Frame.Emissive;
             
             // Ideally we would call only one of these per bounce
 #if defined(LAMBERT)
-            localRadiance += LambertianDirectD(samplePosition, worldNormal, sampleAlbedo, Frame.Directional, randomSeed);
-            localRadiance += LambertianDirectP(samplePosition, worldNormal, sampleAlbedo, instance.LightData, randomSeed);
+            localRadiance += LambertianDirectD(surface, Frame.Directional, randomSeed);
+            localRadiance += LambertianDirectP(surface, instance.LightData, randomSeed);
 #else
-            localRadiance += GGXDirectD(samplePosition, worldNormal, viewDirection, sampleAlbedo, sampleRoughness, sampleMetalness, Frame.Directional, randomSeed);
-            localRadiance += GGXDirectP(samplePosition, worldNormal, viewDirection, sampleAlbedo, sampleRoughness, sampleMetalness, instance.LightData, randomSeed);
+            localRadiance += GGXDirectD(surface, brdfContext, Frame.Directional, randomSeed);
+            localRadiance += GGXDirectP(surface, brdfContext, instance.LightData, randomSeed);
 #endif
             
-            float NoV = saturate(dot(worldNormal, viewDirection));
+            float3 diffuseAO = BRDF::DiffuseAO(surface.Albedo, surface.AO);
             
-            float3 diffuse = isSpecular ? 0.0 : localRadiance.rgb * BRDF_over_PDF * (DiffuseAO(sampleAlbedo, localAO) * Frame.Diffuse);
-            float3 specular = isSpecular ? localRadiance.rgb * BRDF_over_PDF * (SpecularAO(NoV, sampleRoughness, localAO, sampleF0) * Frame.Specular): 0.0;    
+#if defined(LAMBERT)
+            float3 diffuse = localRadiance.rgb * saturate(dot(n, direction)) * diffuseAO * Frame.Diffuse;
+            
+            sampleRadiance += surface.Albedo * diffuse;  
+#else         
+            float3 diffuse = isSpecular ? 0.0 : localRadiance.rgb * BRDF_over_PDF * diffuseAO * Frame.Diffuse;
+            
+            float3 specularAO = BRDF::SpecularAO(brdfContext.NdotV, surface.Roughness, surface.AO, surface.F0);
+            float3 specular = isSpecular ? localRadiance.rgb * BRDF_over_PDF * (specularAO * Frame.Specular): 0.0;    
     
-            sampleRadiance += diffuse * sampleAlbedo + specular;       
-    
+            sampleRadiance += surface.Albedo * diffuse + specular;       
+ #endif
+            
             if (j == 0)
             {
                 isDiffusePath = !isSpecular;
@@ -274,9 +206,9 @@ void main()
     }
 
     OutputTexture[idx] = MainTexture[idx] + float4(Color::TrueLinearToGamma(albedo * radiance), 0.0f);
-    //SpecularAlbedo[idx] = float4(EnvBRDFApprox2(f0, roughness, dot(normalWS, viewWS)), 0.0f);
-    float2 envBRDF = max(0.0f, BRDF::EnvBRDFApproxLazarov(linearRoughness, abs(dot(normalWS, viewWS))));
-    SpecularAlbedo[idx] = float4(envBRDF.x * f0 + envBRDF.y, 0.0f);
+
+    float2 envBRDF = max(0.0f, BRDF::EnvBRDFApproxLazarov(linearRoughness, sourceBRDFContext.NdotV));
+    SpecularAlbedo[idx] = float4(envBRDF.x * sourceSurface.F0 + envBRDF.y, 0.0f);
     
     SpecularHitDist[idx] = isDiffusePath ? 0.0f : max(0.0f, hitDistance);
 }

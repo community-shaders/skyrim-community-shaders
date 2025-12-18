@@ -30,7 +30,7 @@ namespace PBR
     {
         static const float Roughness = 0.5f;
         static const float Metallic = 0.0f;
-        static const float3 F0 = float3(0.04f);
+        static const float3 F0 = float3(0.04f, 0.04f, 0.04f);
     }    
     
     namespace Constants

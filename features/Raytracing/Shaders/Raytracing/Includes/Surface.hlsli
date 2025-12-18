@@ -10,12 +10,13 @@
 #define Surface(...) static Surface ctor(__VA_ARGS__)
 struct Surface
 {   
-    float Position;
+    float3 Position;
     float3 GeomNormal;
     float3 Normal;
     float3 Tangent;
     float3 Bitangent;
     float3 Albedo;
+    float3 DiffuseAlbedo;
     float Roughness;
     float Metallic;
     float3 Emissive;
@@ -39,7 +40,14 @@ struct Surface
     float Noise;    
 #endif
 
-    Surface(float3 position, Payload payload)
+    float3 Mul(float3 tangentSample)
+    {   
+        return Tangent * tangentSample.x +
+               Bitangent * tangentSample.y +
+               Normal * tangentSample.z;
+    }    
+    
+    Surface(float3 position, Payload payload, out Instance instance)
     {
         Surface surface;
 
@@ -55,7 +63,7 @@ struct Surface
 
         float2 texCoord0 = material.TexCoord(Interpolate(v0.Texcoord0, v1.Texcoord0, v2.Texcoord0, uvw));
         
-        Instance instance = GetInstance(payload.InstanceIndex());
+        instance = GetInstance(payload.InstanceIndex());
         float3x3 objectToWorld3x3 = (float3x3) instance.Transform;
         
         surface.GeomNormal = normalize(mul(objectToWorld3x3, Interpolate(v0.Normal, v1.Normal, v2.Normal, uvw)));
@@ -102,6 +110,8 @@ struct Surface
         surface.Roughness = PBR::Roughness(surface.Roughness, Frame.Roughness.x, Frame.Roughness.y);
         surface.Metallic = Remap(surface.Metallic, Frame.Metalness.x, Frame.Metalness.y);
 
+        surface.DiffuseAlbedo = surface.Albedo * (1.0f - surface.Metallic);
+        
         surface.F0 = PBR::F0(surface.Albedo, surface.Metallic);
         
 #if defined(FULL_MATERIAL)
@@ -136,8 +146,11 @@ struct Surface
         
         surface.Albedo = albedo;
         
-        surface.Roughness = roughness;
-        surface.Metallic = metallic;
+        surface.Roughness = PBR::Roughness(roughness, Frame.Roughness.x, Frame.Roughness.y);
+        surface.Metallic = Remap(metallic, Frame.Metalness.x, Frame.Metalness.y);
+        
+        surface.DiffuseAlbedo = surface.Albedo * (1.0f - surface.Metallic);
+        
         surface.Emissive = emissive;      
         surface.AO = ao;        
         
@@ -163,5 +176,22 @@ struct Surface
     }    
 };
 #define Surface(...) Surface::ctor(__VA_ARGS__)
+
+#define BRDFContext(...) static BRDFContext ctor(__VA_ARGS__)
+struct BRDFContext {
+    float3 ViewDirection;
+    float NdotV;   
+    
+    BRDFContext(Surface surface, float3 viewDirection)
+    {
+        BRDFContext brdfContext;
+        
+        brdfContext.ViewDirection = viewDirection;
+        brdfContext.NdotV = saturate(dot(surface.Normal, viewDirection));
+        
+        return brdfContext;
+    }
+};
+#define BRDFContext(...) BRDFContext::ctor(__VA_ARGS__)
 
 #endif // SURFACE_HLSL

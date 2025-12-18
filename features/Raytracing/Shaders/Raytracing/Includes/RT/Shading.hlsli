@@ -9,10 +9,12 @@
 #include "Raytracing/Includes/Common.hlsli"
 #include "Raytracing/Includes/RT/CommonRT.hlsli"
 #include "Raytracing/Includes/RT/Rays.hlsli"
+#include "Raytracing/Includes/BRDF.hlsli"
+#include "Raytracing/Includes/Surface.hlsli"
 
 float InverseSquareAtten(float dist, float range)
 {
-    // Normalized inverse-square (scale-agnostic)
+    // Normalized inverse-square
     float atten = 1.0 / (1.0 + dist * dist);
 
     // Smooth fade to zero at range
@@ -27,24 +29,24 @@ float LinearAtten(float dist, float range)
     return saturate(1.0 - dist / range);
 }
 
-float3 LambertianDirectD(in float3 position, in float3 normal, in float3 albedo, in Light light, inout uint randomSeed)
+float3 LambertianDirectD(in Surface surface, in Light light, inout uint randomSeed)
 {
     float3 l = normalize(light.Vector);
  
-    float NdotL = saturate(dot(normal, l));
+    float NdotL = saturate(dot(surface.Normal, l));
             
-    float3 direct = NdotL * light.Color * albedo;
+    float3 direct = NdotL * light.Color * surface.Albedo;
     
     if (any(direct > MIN_DIFFUSE_SHADOW))
     {
         float3 lr = TangentToWorld(l, SampleCosineHemisphereScaled(randomSeed, 0.025f));  
-        direct *= TraceRayShadow(Scene, position, lr);
+        direct *= TraceRayShadow(Scene, surface.Position, lr);
     }      
     
     return direct; 
 }
 
-float3 LambertianDirectP(in float3 position, in float3 n, in float3 albedo, in LightData lightData, inout uint randomSeed)
+float3 LambertianDirectP(in Surface surface, in LightData lightData, inout uint randomSeed)
 {
     if (lightData.Count == 0)
         return 0;
@@ -55,80 +57,63 @@ float3 LambertianDirectP(in float3 position, in float3 n, in float3 albedo, in L
     
     Light light = Lights[lightID];
         
-    float3 l = (light.Vector - position);
+    float3 l = (light.Vector - surface.Position);
     float dist = length(l);      
     l /= dist;
     
     float atten = LinearAtten(dist, light.Range);
     //float atten = InverseSquareAtten(dist, light.Range); // This requires all lights to be ISL enabled
             
-    float NdotL = saturate(dot(n, l)) * atten;
+    float NdotL = saturate(dot(surface.Normal, l)) * atten;
 
-    float3 direct  = NdotL * light.Color * albedo * float(lightData.Count);
+    float3 direct  = NdotL * light.Color * surface.Albedo * float(lightData.Count);
  
     if (any(direct > MIN_DIFFUSE_SHADOW))
     {
         float3 lr = TangentToWorld(l, SampleCosineHemisphereScaled(randomSeed, 0.05f));        
-        direct *= TraceRayShadowFinite(Scene, position, lr, dist);
+        direct *= TraceRayShadowFinite(Scene, surface.Position, lr, dist);
     }    
     
     return direct; // (albedo / Math::PI)
 }
 
-/*float3 LambertianIndirect(float3 position, float3 n, float3 albedo, uint depth, inout uint randomSeed)
+float3 GGXDirect(in float3 l, in Surface surface, in BRDFContext brdfContext)
 {
-    float3 tangentSample = SampleCosineHemisphere(randomSeed);
-    float3 direction = TangentToWorld(n, tangentSample);
-            
-    float4 radiance = TraceRay(Scene, position, direction, depth, randomSeed);
-    
-    float NoL = saturate(dot(n, direction));    
-    
-    return bounceColor * albedo * NoL * Frame.Diffuse;
-}*/
-
-float3 GGXDirect(in float3 l, in float3 n, in float3 v, in float3 albedo, in float roughness, in float metalness)
-{
-    float NoL = saturate(dot(n, l));
+    float NoL = saturate(dot(surface.Normal, l));
      
     if (NoL <= 0.0f) 
         return float3(0.0f, 0.0f, 0.0f);
         
-    float3 h = normalize(v + l);
+    float3 h = normalize(brdfContext.ViewDirection + l);
         
-    float NoH = saturate(dot(n, h));
-    float NoV = clamp(dot(n, v), 1e-5f, 1.0f);
-    float VoH = clamp(dot(v, h), 1e-5f, 1.0f);
+    float NoH = saturate(dot(surface.Normal, h));
+    float VoH = clamp(dot(brdfContext.ViewDirection, h), 1e-5f, 1.0f);
 
-    float D = D_GGX(NoH, roughness);
-    float V = V_SmithGGXCorrelatedFast(NoV, NoL, roughness);
-    float3 F = F_Schlick(VoH, F0(albedo, metalness));
+    float D = BRDF::D_GGXAlpha(NoH, surface.Roughness);
+    float V = BRDF::V_SmithGGXCorrelatedFast(max(1e-5f, brdfContext.NdotV), NoL, surface.Roughness);
+    float3 F = BRDF::F_Schlick(surface.F0, VoH);
     
     // specular BRDF
     float3 Fr = (D * V) * F;
-
-    float3 diffuseAlbedo = (1.0 - metalness) * albedo;
-    //float3 Fd = diffuseAlbedo / Math::PI;
+    float3 Fd = surface.DiffuseAlbedo; // / Math::PI;
     
-    return (diffuseAlbedo + Fr) * NoL;
+    return (Fd + Fr) * NoL;
 }
 
-float3 GGXDirectD(in float3 position, in float3 n, in float3 v, in float3 albedo, in float roughness, in float metalness, in Light light, inout uint randomSeed)
+float3 GGXDirectD(in Surface surface, in BRDFContext brdfContext, in Light light, inout uint randomSeed)
 {
-    float3 l = light.Vector;
-
-    float3 direct = GGXDirect(l, n, v, albedo, roughness, metalness) * light.Color;
+    float3 direct = GGXDirect(light.Vector, surface, brdfContext) * light.Color;
 
     if (any(direct > MIN_DIFFUSE_SHADOW))
     {
-        float3 lr = TangentToWorld(l, SampleCosineHemisphereScaled(randomSeed, 0.025f));  
-        direct *= TraceRayShadow(Scene, position, lr);
+        float3 lr = TangentToWorld(light.Vector, SampleCosineHemisphereScaled(randomSeed, 0.025f));  
+        direct *= TraceRayShadow(Scene, surface.Position, lr);
     }
 
     return direct;
 }
 
-float3 GGXDirectP(in float3 position, in float3 n, in float3 v, in float3 albedo, in float roughness, in float metalness, in LightData lightData, inout uint randomSeed)
+float3 GGXDirectP(in Surface surface, in BRDFContext brdfContext, in LightData lightData, inout uint randomSeed)
 {
     if (lightData.Count == 0) 
         return float3(0, 0, 0);
@@ -139,19 +124,19 @@ float3 GGXDirectP(in float3 position, in float3 n, in float3 v, in float3 albedo
     
     Light light = Lights[lightID];
         
-    float3 l = (light.Vector - position);
+    float3 l = (light.Vector - surface.Position);
     float dist = length(l);      
     l /= dist;
     
     float atten = LinearAtten(dist, light.Range);
     //float atten = InverseSquareAtten(dist, light.Range); // This requires all lights to be ISL enabled
     
-    float3 direct = GGXDirect(l, n, v, albedo, roughness, metalness) * atten * light.Color * float(lightData.Count);
+    float3 direct = GGXDirect(l, surface, brdfContext) * atten * light.Color * float(lightData.Count);
 
     if (any(direct > MIN_DIFFUSE_SHADOW))
     {
         float3 lr = TangentToWorld(l, SampleCosineHemisphereScaled(randomSeed, 0.05f));        
-        direct *= TraceRayShadowFinite(Scene, position, lr, dist);
+        direct *= TraceRayShadowFinite(Scene, surface.Position, lr, dist);
     }
     
     return direct;

@@ -3,6 +3,7 @@
 
 #include "Common/Math.hlsli"
 #include "Raytracing/Includes/RT/CommonRT.hlsli"
+#include "Raytracing/Includes/Surface.hlsli"
 
 namespace BRDF
 { 
@@ -34,7 +35,7 @@ namespace BRDF
 
         float3 Nh = t1 * T1 + t2 * T2 + sqrt(max(0.0, 1.0 - Square(t1) - Square(t2))) * Vh;
 
-    // Tangent space H
+        // Tangent space H
         return float3(alpha * Nh.x, alpha * Nh.y, max(0.0, Nh.z));
     }
 
@@ -91,19 +92,13 @@ namespace BRDF
         return mad(SpecularColor, max(0, scale), max(0, bias));
     }
     
-    float D_GGX_Alpha(float NoH, float alpha)
+    float D_GGXAlpha(float NoH, float alpha)
     {
         float a = NoH * alpha;
         float k = alpha / (1.0 - NoH * NoH + a * a);
         return k * k * (1.0 / Math::PI);
     }
-
-    float3 F_Schlick(float u, float3 f0)
-    {
-        float f = pow(1.0 - u, 5.0);
-        return f + f0 * (1.0 - f);
-    }
-
+    
     float V_SmithGGXCorrelatedFast(float NoV, float NoL, float a)
     {
         float GGXV = NoL * (NoV * (1.0 - a) + a);
@@ -132,18 +127,11 @@ namespace BRDF
         return horizon * horizon;
     }
     
-    bool GGXBRDF(float3x3 TBN, in float3 V, in float3 albedo, in float roughness, in float metalness, in float3 f0, inout uint randomSeed, out float3 direction, out float3 BRDF_over_PDF)
+    // https://github.com/NVIDIA-RTX/RTXDI/blob/main/Samples/FullSample/Shaders/LightingPasses/BrdfRayTracing.hlsl
+    bool GGXBRDF(in Surface surface, in BRDFContext brdfContext, inout uint randomSeed, out float3 direction, out float3 BRDF_over_PDF)
     {
-        float3 N = TBN[2];
-        float3 T = TBN[0];
-        float3 B = TBN[1];
-    
-        float3 diffuseAlbedo = albedo;
-    
-        float NoV = saturate(dot(N, V));
-    
         bool isSpecularRay = false;
-        const bool isDeltaSurface = roughness == 0;
+        const bool isDeltaSurface = surface.Roughness == 0;
         float specular_PDF;
         float overall_PDF;
     
@@ -151,15 +139,19 @@ namespace BRDF
             float3 specularDirection;
             float3 specular_BRDF_over_PDF;
             {
-                float3 Ve = float3(dot(V, T), dot(V, B), dot(V, N));
+                float3 Ve = float3(
+                    dot(brdfContext.ViewDirection, surface.Tangent), 
+                    dot(brdfContext.ViewDirection, surface.Bitangent), 
+                    dot(brdfContext.ViewDirection, surface.Normal)
+                );
 
-                float3 He = SampleGGX_VNDF(Ve, roughness, randomSeed);
-                float3 H = isDeltaSurface ? N : mul(He, TBN);
-                specularDirection = reflect(-V, H);
+                float3 He = SampleGGX_VNDF(Ve, surface.Roughness, randomSeed);
+                float3 H = isDeltaSurface ? surface.Normal : surface.Mul(He);
+                specularDirection = reflect(-brdfContext.ViewDirection, H);
 
-                float HoV = saturate(dot(H, V));
-                float3 F = Schlick_Fresnel(f0, HoV);
-                float G1 = isDeltaSurface ? 1.0 : (NoV > 0) ? G1_Smith(roughness, NoV) : 0;
+                float HoV = saturate(dot(H, brdfContext.ViewDirection));
+                float3 F = Schlick_Fresnel(surface.F0, HoV);
+                float G1 = isDeltaSurface ? 1.0 : (brdfContext.NdotV > 0) ? G1_Smith(surface.Roughness, brdfContext.NdotV) : 0;
                 specular_BRDF_over_PDF = F * G1;
             }
 
@@ -167,12 +159,12 @@ namespace BRDF
             float diffuse_BRDF_over_PDF;
             {
                 float3 localDirection = SampleCosineHemisphere(randomSeed);
-                diffuseDirection = mul(localDirection, TBN);
+                diffuseDirection = surface.Mul(localDirection);
                 diffuse_BRDF_over_PDF = 1.0;
             }
 
             specular_PDF = saturate(CalcLuminance(specular_BRDF_over_PDF) /
-                CalcLuminance(specular_BRDF_over_PDF + diffuse_BRDF_over_PDF * diffuseAlbedo));
+                CalcLuminance(specular_BRDF_over_PDF + diffuse_BRDF_over_PDF * surface.DiffuseAlbedo));
 
             isSpecularRay = Random(randomSeed) < specular_PDF;
 
