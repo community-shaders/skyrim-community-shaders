@@ -423,8 +423,10 @@ void Widget::DrawWidgetHeader(const char* searchId, bool showApplyRevert, bool s
 			applySize.y = buttonHeight;
 
 			auto successColor = Menu::GetSingleton()->GetTheme().StatusPalette.SuccessColor;
-			auto successHover = successColor; successHover.w = 0.8f;
-			auto successActive = successColor; successActive.w = 1.0f;
+			auto successHover = successColor;
+			successHover.w = 0.8f;
+			auto successActive = successColor;
+			successActive.w = 1.0f;
 			{
 				auto styledButton = Util::StyledButtonWrapper(successColor, successHover, successActive);
 				if (ImGui::Button("Apply", applySize)) {
@@ -442,8 +444,10 @@ void Widget::DrawWidgetHeader(const char* searchId, bool showApplyRevert, bool s
 			revertSize.y = buttonHeight;
 
 			auto warningColor = Menu::GetSingleton()->GetTheme().StatusPalette.Warning;
-			auto warningHover = warningColor; warningHover.w = 0.8f;
-			auto warningActive = warningColor; warningActive.w = 1.0f;
+			auto warningHover = warningColor;
+			warningHover.w = 0.8f;
+			auto warningActive = warningColor;
+			warningActive.w = 1.0f;
 			{
 				auto styledButton = Util::StyledButtonWrapper(warningColor, warningHover, warningActive);
 				if (ImGui::Button("Revert", revertSize)) {
@@ -491,8 +495,10 @@ void Widget::DrawWidgetHeader(const char* searchId, bool showApplyRevert, bool s
 				deleteSize.y = buttonHeight;
 
 				auto errorColor = Menu::GetSingleton()->GetTheme().StatusPalette.Error;
-				auto errorHover = errorColor; errorHover.w = 0.8f;
-				auto errorActive = errorColor; errorActive.w = 1.0f;
+				auto errorHover = errorColor;
+				errorHover.w = 0.8f;
+				auto errorActive = errorColor;
+				errorActive.w = 1.0f;
 				{
 					auto styledButton = Util::StyledButtonWrapper(errorColor, errorHover, errorActive);
 					if (ImGui::Button("Delete", deleteSize)) {

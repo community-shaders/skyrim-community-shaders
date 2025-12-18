@@ -1525,7 +1525,7 @@ void WeatherWidget::DrawFeatureSettings()
 			if (hasSettings) {
 				ImGui::TextColored({ 0.0f, 1.0f, 0.0f, 1.0f }, "Has weather-specific settings");
 
-if (Util::ButtonWithFlash("Clear Settings")) {
+				if (Util::ButtonWithFlash("Clear Settings")) {
 					settings.featureSettings[featureName] = json::object();
 				}
 				ImGui::SameLine();
