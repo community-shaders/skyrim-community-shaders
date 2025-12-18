@@ -3114,8 +3114,6 @@ void Raytracing::CompileSkinningShaders()
 
 void Raytracing::CompileRTGIShaders()
 {
-	const auto modePath = settings.PathTracing ? L"PT" : L"GI";
-
 	const int bounces = settings.PathTracing ? settings.Bounces + 1 : settings.Bounces;
 
 	const auto bouncesWStr = std::to_wstring(bounces);
@@ -3137,7 +3135,7 @@ void Raytracing::CompileRTGIShaders()
 	}
 
 	winrt::com_ptr<IDxcBlob> rayGenBlob;
-	ShaderUtils::CompileShader(rayGenBlob, std::format(L"Data/Shaders/Raytracing/{}/RayGeneration.hlsl", modePath).c_str(), defines);
+	ShaderUtils::CompileShader(rayGenBlob, L"Data/Shaders/Raytracing/GI/RayGeneration.hlsl", defines);
 
 	winrt::com_ptr<IDxcBlob> missBlob, closestHitBlob, anyHitBlob;
 	ShaderUtils::CompileShader(missBlob, L"Data/Shaders/Raytracing/GI/Miss.hlsl", defines);
@@ -3170,7 +3168,7 @@ void Raytracing::CompileRTGIShaders()
 		// Shader + pipeline config
 		pipelineBuilder.AddShaderConfig(16, 8);
 		pipelineBuilder.AddGlobalRootSignature(rootSignature.get());
-		pipelineBuilder.AddPipelineConfig(settings.Bounces + (settings.PathTracing ? 2 : 1)); // Max recursion depth
+		pipelineBuilder.AddPipelineConfig(1); // Max recursion depth
 
 		auto desc = pipelineBuilder.MakeStateObjectDesc();
 		HRESULT hr = d3d12Device->CreateStateObject(desc, IID_PPV_ARGS(&pipelineRT));

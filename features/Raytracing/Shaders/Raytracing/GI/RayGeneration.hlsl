@@ -16,12 +16,46 @@
 #include "Raytracing/Includes/BRDF.hlsli"
 #include "Raytracing/Includes/PBR.hlsli"
 
+// Samples the sky hemisphere texture based on the given direction
+// Output is in true linear space
+float3 SampleSky(float3 dir)
+{
+    dir.z = max(dir.z, 0.0f);
+    
+    float r = sqrt(1.0f - dir.z);
+    float phi = atan2(dir.y, dir.x);
+    
+    float2 disk = float2(r * cos(phi), r * sin(phi));
+    float2 uv = disk * 0.5f + 0.5f;
+
+    return Color::GammaToTrueLinear(SkyHemisphere.SampleLevel(BaseSampler, uv, 0.0f).rgb);
+}
+
+// Samples the direct radiance at the given surface point
+float3 SampleRadiance(in Surface surface, in BRDFContext brdfContext, in Instance instance, in Material material, inout uint randomSeed)
+{
+    float3 radiance = surface.Emissive * Frame.Emissive;
+    
+    // Ideally we would call only one of these per bounce
+#if defined(LAMBERT)
+    radiance += LambertianDirectD(surface, Frame.Directional, randomSeed);
+    radiance += LambertianDirectP(surface, instance.LightData, randomSeed);
+#else
+    radiance += GGXDirectD(surface, brdfContext, Frame.Directional, randomSeed);
+    radiance += GGXDirectP(surface, brdfContext, instance.LightData, randomSeed);
+#endif    
+    
+    return radiance;
+}
+
 [shader("raygeneration")]
 void main()
 {
     uint2 idx = DispatchRaysIndex().xy;
     uint2 size = DispatchRaysDimensions().xy;
 
+    uint randomSeed = InitRandomSeed(idx, size, Frame.FrameCount);    
+    
 #if defined(SHARC) && defined(SHARC_UPDATE)
     if (Frame.SHaRCUpdatePass)  {
         uint startIndex = Hash(idx) % 25;
@@ -38,7 +72,52 @@ void main()
         size = Frame.DispatchSize;
     }
 #endif    
+
+#if defined(PATH_TRACING)
+    float2 uv = ((float2(idx) + 0.5f) / float2(size)) * 2.0f - 1.0f;
+    uv.y = -uv.y;
+
+    float4 clip = float4(uv, 1.0f, 1.0f);
+    float4 view = mul(Frame.ProjInverse, clip);
+    view /= view.w; 
+
+    float3 sourceDirection = normalize(mul((float3x3)Frame.ViewInverse, view.xyz));
     
+    RayDesc sourceRay;
+    sourceRay.Origin = Frame.Position.xyz;
+    sourceRay.Direction = sourceDirection;
+    sourceRay.TMin = 0.1f;
+    sourceRay.TMax = 1e30;
+    
+    Payload sourcePayload;
+    sourcePayload.hitDistance = -1.0f;
+    sourcePayload.primitiveIndex = 0;    
+    sourcePayload.PackBarycentrics(float2(0.0f, 0.0f));            
+    sourcePayload.PackInstanceShapeIndex(0, 0);
+    
+    TraceRay(Scene, RAY_FLAG_NONE, 0xFF, DIFFUSE_RAY_HITGROUP_IDX, 0, DIFFUSE_RAY_MISS_IDX, sourceRay, sourcePayload);
+    
+    if (!sourcePayload.Hit())
+    {
+        float3 skyIrradiance = SampleSky(sourceDirection) * Frame.Sky;
+
+        OutputTexture[idx] = float4(skyIrradiance, 0.0f);
+        SpecularAlbedo[idx] = float4(0.5f, 0.5f, 0.5f, 0.0f);
+        SpecularHitDist[idx] = 0.0f;    
+        return;
+    }    
+    
+    float3 sourcePosition = Frame.Position.xyz + sourceDirection * sourcePayload.hitDistance;
+    
+    Instance sourceInstance;
+    Material sourceMaterial;
+    
+    Surface sourceSurface = Surface(sourcePosition, sourcePayload, sourceInstance, sourceMaterial);
+    BRDFContext sourceBRDFContext = BRDFContext(sourceSurface, -sourceDirection);
+    
+    // Direct Light for PT
+    float3 direct = sourceSurface.Albedo * SampleRadiance(sourceSurface, sourceBRDFContext, sourceInstance, sourceMaterial, randomSeed);
+#else
     float2 uv = (idx + 0.5f) / size;
     
     const unorm float4 normalMetalnessAO = GNMAOTexture[idx];
@@ -89,8 +168,7 @@ void main()
     
     Surface sourceSurface = Surface(positionWS, geometryNormalWS, normalWS, tangentWS, bitangetWS, albedo, linearRoughness, metalness, 0, ao);
     BRDFContext sourceBRDFContext = BRDFContext(sourceSurface, normalize(-positionCS));    
-    
-    uint randomSeed = InitRandomSeed(DispatchRaysIndex().xy, DispatchRaysDimensions().xy, Frame.FrameCount);
+#endif
 
 #if defined(SHARC) && defined(SHARC_DEBUG)
     HashGridParameters gridParameters;
@@ -151,19 +229,8 @@ void main()
             
             if (!payload.Hit())
             {
-                float3 dir = normalize(direction);
-                dir.z = max(dir.z, 0.0f);
-    
-                float r = sqrt(1.0f - dir.z);
-                float phi = atan2(dir.y, dir.x);
-    
-                float2 disk = float2(r * cos(phi), r * sin(phi));
-                float2 uv = disk * 0.5f + 0.5f;
-
-                float3 skyIrradiance = Color::GammaToTrueLinear(SkyHemisphere.SampleLevel(BaseSampler, uv, 0.0f).rgb) * Frame.Sky;
-
-                sampleRadiance += skyIrradiance * throughput;
-                
+                float3 skyIrradiance = SampleSky(direction) * Frame.Sky;
+                sampleRadiance += skyIrradiance * throughput;                
                 break;
             }
             
@@ -173,22 +240,20 @@ void main()
                 hitDistance = max(hitDistance, payload.hitDistance);
             }            
             
-            Instance instance;
+            float3 localPosition = ray.Origin + direction * payload.hitDistance;
             
-            surface = Surface(direction * payload.hitDistance, payload, instance);
+            Instance instance;
+            Material material;
+            
+            surface = Surface(localPosition, payload, instance, material);
             brdfContext = BRDFContext(surface, -direction);
 
-            // Local bounce radiance
-            float3 localRadiance = surface.Emissive * Frame.Emissive;
+            /*if (material.PBRFlags & PBR::Flags::Subsurface)
+            {
+                // Do something expensive
+            }*/
             
-            // Ideally we would call only one of these per bounce
-#if defined(LAMBERT)
-            localRadiance += LambertianDirectD(surface, Frame.Directional, randomSeed);
-            localRadiance += LambertianDirectP(surface, instance.LightData, randomSeed);
-#else
-            localRadiance += GGXDirectD(surface, brdfContext, Frame.Directional, randomSeed);
-            localRadiance += GGXDirectP(surface, brdfContext, instance.LightData, randomSeed);
-#endif
+            float3 localRadiance = SampleRadiance(surface, brdfContext, instance, material, randomSeed);
 
             float3 diffuseAO = BRDF::DiffuseAO(surface.Albedo, surface.AO);
             
@@ -224,10 +289,17 @@ void main()
         radiance += sampleRadiance;    
     }
 
-    OutputTexture[idx] = MainTexture[idx] + float4(Color::TrueLinearToGamma(albedo * radiance), 0.0f);
-
-    float2 envBRDF = max(0.0f, BRDF::EnvBRDFApproxLazarov(linearRoughness, sourceBRDFContext.NdotV));
-    SpecularAlbedo[idx] = float4(envBRDF.x * sourceSurface.F0 + envBRDF.y, 0.0f);
+#if defined(PATH_TRACING)
+    OutputTexture[idx] = float4(Color::TrueLinearToGamma(direct + radiance), 0.0f);
+#else
+    OutputTexture[idx] = MainTexture[idx] + float4(Color::TrueLinearToGamma(sourceSurface.Albedo * radiance), 0.0f);
+#endif
     
+    // Needs linear and PT doesn't have linear :(
+    //float2 envBRDF = max(0.0f, BRDF::EnvBRDFApproxLazarov(linearRoughness, sourceBRDFContext.NdotV));
+    //SpecularAlbedo[idx] = float4(envBRDF.x * sourceSurface.F0 + envBRDF.y, 0.0f);
+    
+    SpecularAlbedo[idx] = float4(BRDF::EnvBRDFApprox2(sourceSurface.F0, sourceSurface.Roughness, sourceBRDFContext.NdotV), 0.0f);
+
     SpecularHitDist[idx] = isDiffusePath ? 0.0f : max(0.0f, hitDistance);
 }

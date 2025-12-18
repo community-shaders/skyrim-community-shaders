@@ -47,7 +47,7 @@ struct Surface
                Normal * tangentSample.z;
     }    
     
-    Surface(float3 position, Payload payload, out Instance instance)
+    Surface(float3 position, Payload payload, out Instance instance, out Material material)
     {
         Surface surface;
 
@@ -59,7 +59,7 @@ struct Surface
         
         float3 uvw = GetBary(payload.Barycentrics());
         
-        Material material = Materials[payload.ShapeIndex()];
+        material = Materials[payload.ShapeIndex()];
 
         float2 texCoord0 = material.TexCoord(Interpolate(v0.Texcoord0, v1.Texcoord0, v2.Texcoord0, uvw));
         
@@ -88,7 +88,7 @@ struct Surface
         
         NormalMap(
             normalTexture.SampleLevel(BaseSampler, texCoord0, 0).rgb, 
-            normalWS, tangentWS, bitangentWS, 
+            surface.GeomNormal, tangentWS, bitangentWS, 
             surface.Normal, surface.Tangent, surface.Bitangent
         );
         
