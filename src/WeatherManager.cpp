@@ -88,14 +88,14 @@ void WeatherManager::UpdateFeatures()
 				json currWeatherSettings;
 				json nextWeatherSettings;
 
-				// Load settings for current weather
-				if (currentWeathers.currentWeather) {
-					LoadSettingsFromWeather(currentWeathers.currentWeather, featureName, currWeatherSettings);
+				// Load settings for last weather (from)
+				if (currentWeathers.lastWeather && currentWeathers.lerpFactor < 1.0f) {
+					LoadSettingsFromWeather(currentWeathers.lastWeather, featureName, currWeatherSettings);
 				}
 
-				// Load settings for transitioning weather
-				if (currentWeathers.lastWeather && currentWeathers.lerpFactor < 1.0f) {
-					LoadSettingsFromWeather(currentWeathers.lastWeather, featureName, nextWeatherSettings);
+				// Load settings for current weather (to)
+				if (currentWeathers.currentWeather) {
+					LoadSettingsFromWeather(currentWeathers.currentWeather, featureName, nextWeatherSettings);
 				}
 
 				// Let the global registry handle variable interpolation
