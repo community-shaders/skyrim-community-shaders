@@ -4,9 +4,9 @@
 #include "Menu.h"
 #include "PaletteWindow.h"
 #include "State.h"
+#include "Utils/UI.h"
 #include "Weather/LightingTemplateWidget.h"
 #include "WeatherUtils.h"
-#include "Utils/UI.h"
 #include "imgui_internal.h"
 
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(EditorWindow::Settings, recordMarkers, markedRecords, autoApplyChanges, suppressDeleteWarning, useTextButtons, enableInheritFromParent, editorUIScale, favoriteWidgets, recentWidgets, maxRecentWidgets, rememberOpenWidgets, lastOpenWidgets)
@@ -1470,8 +1470,10 @@ void EditorWindow::ShowSettingsWindow()
 					ImGui::TableSetColumnIndex(2);
 					auto deleteColor = Menu::GetSingleton()->GetTheme().StatusPalette.Warning;
 					deleteColor.y = deleteColor.y * 0.5f;
-					auto deleteHovered = deleteColor; deleteHovered.w = 0.8f;
-					auto deleteActive = deleteColor; deleteActive.w = 1.0f;
+					auto deleteHovered = deleteColor;
+					deleteHovered.w = 0.8f;
+					auto deleteActive = deleteColor;
+					deleteActive.w = 1.0f;
 					{
 						auto styledButton = Util::StyledButtonWrapper(deleteColor, deleteHovered, deleteActive);
 						if (ImGui::Button(std::format("Delete##{}", recordMarker.first).c_str(), ImVec2(-1, 0))) {
