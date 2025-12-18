@@ -63,6 +63,11 @@ void WeatherEditor::DrawSettings()
 
 void WeatherEditor::LerpWeather(RE::TESWeather* oldWeather, RE::TESWeather* newWeather, float currentWeatherPct)
 {
+	if (!oldWeather || !newWeather) {
+		// Avoid dereferencing null pointers; nothing to lerp.
+		return;
+	}
+
 	//// Precipitation
 	newWeather->data.precipitationBeginFadeIn = LerpInt8_t(oldWeather->data.precipitationBeginFadeIn, newWeather->data.precipitationBeginFadeIn, currentWeatherPct);
 	newWeather->data.precipitationEndFadeOut = LerpInt8_t(oldWeather->data.precipitationEndFadeOut, newWeather->data.precipitationEndFadeOut, currentWeatherPct);

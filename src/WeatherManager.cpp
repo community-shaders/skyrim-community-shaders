@@ -115,8 +115,18 @@ void WeatherManager::SaveSettingsToWeather(RE::TESWeather* weather, const std::s
 
 	std::string weatherKey = GetWeatherKey(weather);
 
-	// Update cache
-	perWeatherSettingsCache[weatherKey][featureName] = settings;
+	// Update cache: if settings is empty, remove the feature entry; otherwise set it
+	if (settings.is_object() && settings.empty()) {
+		auto wkIt = perWeatherSettingsCache.find(weatherKey);
+		if (wkIt != perWeatherSettingsCache.end()) {
+			wkIt->second.erase(featureName);
+			if (wkIt->second.empty()) {
+				perWeatherSettingsCache.erase(wkIt);
+			}
+		}
+	} else {
+		perWeatherSettingsCache[weatherKey][featureName] = settings;
+	}
 
 	// Save to disk
 	const std::string weathersPath = std::format("{}\\Weathers", Util::PathHelpers::GetCommunityShaderPath().string());
@@ -147,10 +157,30 @@ void WeatherManager::SaveSettingsToWeather(RE::TESWeather* weather, const std::s
 		}
 	}
 
-	// Update with new feature settings
-	weatherData[featureName] = settings;
+	// Update with new feature settings or remove feature entry if settings empty
+	if (settings.is_object() && settings.empty()) {
+		// Remove feature entry from loaded JSON
+		if (weatherData.is_object()) {
+			weatherData.erase(featureName);
+		}
+	} else {
+		weatherData[featureName] = settings;
+	}
 
 	// Write back to disk
+	if (weatherData.is_object() && weatherData.empty()) {
+		// No features left for this weather — remove file if it exists
+		if (std::filesystem::exists(filePath)) {
+			try {
+				std::filesystem::remove(filePath);
+				logger::info("Removed weather settings file (no features remain): {}", filePath);
+			} catch (const std::filesystem::filesystem_error& e) {
+				logger::warn("Failed to remove empty weather settings file ({}): {}", filePath, e.what());
+			}
+		}
+		return;
+	}
+
 	std::ofstream settingsFile(filePath);
 	if (!settingsFile.good() || !settingsFile.is_open()) {
 		logger::warn("Failed to open weather settings file for writing: {}", filePath);

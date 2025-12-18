@@ -1393,9 +1393,8 @@ void WeatherWidget::SaveFeatureSettings()
 	auto* weatherManager = WeatherManager::GetSingleton();
 
 	for (const auto& [featureName, featureJson] : settings.featureSettings) {
-		if (!featureJson.empty()) {
-			weatherManager->SaveSettingsToWeather(weather, featureName, featureJson);
-		}
+		// Always call save so that empty objects are persisted as removals.
+		weatherManager->SaveSettingsToWeather(weather, featureName, featureJson);
 	}
 }
 
