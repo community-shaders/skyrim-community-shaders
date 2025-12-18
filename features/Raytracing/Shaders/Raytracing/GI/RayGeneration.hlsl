@@ -8,7 +8,6 @@
 #include "Raytracing/Includes/RT/Geometry.hlsli"
 
 #include "Common/Color.hlsli"
-#include "Common/Color.hlsli"
 #include "Common/BRDF.hlsli"
 
 #include "Raytracing/Includes/RT/SHaRCCommon.hlsli"

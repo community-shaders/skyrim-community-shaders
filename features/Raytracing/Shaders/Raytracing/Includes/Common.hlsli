@@ -30,10 +30,15 @@ float3 ViewToWorldVector(const float3 vec, const float4x4 invView)
 	return mul((float3x3)invView, vec);
 }
 
-float Scale01(float x, float min, float max)
+float Remap(float x, float min, float max)
 {
     return clamp(min + saturate(x) * (max - min), min, max);
 }
+
+inline float Square(float value)
+{
+    return value * value;
+}  
 
 half3 DecodeNormal(half2 f)
 {
@@ -47,6 +52,22 @@ half3 DecodeNormal(half2 f)
 	n.xy += n.xy >= 0.0 ? -t : t;	
 	#endif
 	return -normalize(n);
+}
+
+void NormalMap(float3 normalMap, float3 geomNormalWS, float3 geomTangentWS, float3 geomBitangentWS, out float3 normalWS, out float3 tangentWS, out float3 bitangentWS)
+{
+	float tangentSign = (dot(cross(geomNormalWS, geomTangentWS), geomTangentWS) < 0.0f) ? -1.0f : 1.0f;
+	
+	normalMap = normalMap * 2.0f - 1.0f;
+	
+    normalWS = normalize(
+		normalMap.x * geomTangentWS +
+		normalMap.y * geomBitangentWS +
+		normalMap.z * geomNormalWS
+	);
+
+    tangentWS = normalize(geomTangentWS - normalWS * dot(geomTangentWS, normalWS)); 
+    bitangentWS = cross(normalWS, tangentWS) * tangentSign;  
 }
 
 #endif

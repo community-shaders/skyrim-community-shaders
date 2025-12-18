@@ -1,8 +1,11 @@
 #ifndef SURFACE_HLSL
 #define SURFACE_HLSL
 
+#include "Raytracing/Includes/Common.hlsli"
 #include "Raytracing/Includes/PBR.hlsli"
-#include "Raytracing/Includes/Types/Material.hlsli"
+#include "Raytracing/Includes/BRDF.hlsli"
+#include "Raytracing/Includes/Types.hlsli"
+#include "Raytracing/Includes/RT/Geometry.hlsli"
 
 #define Surface(...) static Surface ctor(__VA_ARGS__)
 struct Surface
@@ -18,6 +21,7 @@ struct Surface
     float3 Emissive;
     float AO;
     float3 F0;
+    
 #if defined(FULL_MATERIAL)
     float3 SubsurfaceColor;
     float Thickness;
@@ -35,18 +39,106 @@ struct Surface
     float Noise;    
 #endif
 
-    Surface(float3 position, float3 geomNormal, float3 normal, float3 tangent, float3 bitangent, Material material) {
+    Surface(float3 position, Payload payload)
+    {
+        Surface surface;
+
+        surface.Position = position;
+        
+        // Loads all geometry releated data
+        Vertex v0, v1, v2;
+        GetVertices(payload, v0, v1, v2);
+        
+        float3 uvw = GetBary(payload.Barycentrics());
+        
+        Material material = Materials[payload.ShapeIndex()];
+
+        float2 texCoord0 = material.TexCoord(Interpolate(v0.Texcoord0, v1.Texcoord0, v2.Texcoord0, uvw));
+        
+        Instance instance = GetInstance(payload.InstanceIndex());
+        float3x3 objectToWorld3x3 = (float3x3) instance.Transform;
+        
+        surface.GeomNormal = normalize(mul(objectToWorld3x3, Interpolate(v0.Normal, v1.Normal, v2.Normal, uvw)));
+        float3 tangentWS = normalize(mul(objectToWorld3x3, Interpolate(v0.Tangent, v1.Tangent, v2.Tangent, uvw)));
+        float3 bitangentWS = normalize(mul(objectToWorld3x3, Interpolate(v0.Bitangent, v1.Bitangent, v2.Bitangent, uvw)));
+        
+        float4 vertexColor = Interpolate(v0.Color.unpack(), v1.Color.unpack(), v2.Color.unpack(), uvw);
+
+        Texture2D baseTexture = Textures[NonUniformResourceIndex(material.BaseTexture)];
+        Texture2D effectTexture = Textures[NonUniformResourceIndex(material.EffectTexture)];
+        
+        float3 base = baseTexture.SampleLevel(BaseSampler, texCoord0, 0).rgb;
+        float3 effect = effectTexture.SampleLevel(BaseSampler, texCoord0, 0).rgb;
+        
+        // Lighting/PBR
+        surface.Albedo = Color::GammaToTrueLinear(base * material.BaseColor.rgb * vertexColor.rgb);
+        surface.Emissive = Color::GammaToTrueLinear(effect * material.EffectColor.rgb * material.EffectColor.a);        
+        
+#ifdef PATH_TRACING        
+        Texture2D normalTexture = Textures[NonUniformResourceIndex(material.NormalTexture)];
+        Texture2D rmaosTexture = Textures[NonUniformResourceIndex(material.RMAOSTexture)];
+        
+        NormalMap(
+            normalTexture.SampleLevel(BaseSampler, texCoord0, 0).rgb, 
+            normalWS, tangentWS, bitangentWS, 
+            surface.Normal, surface.Tangent, surface.Bitangent
+        );
+        
+        float4 rmaos = rmaosTexture.SampleLevel(BaseSampler, texCoord0, 0);
+
+        surface.Roughness = saturate(rmaos.x * material.roughness);
+        surface.Metallic = saturate(rmaos.y);
+        surface.AO = rmaos.z;
+#else 
+        surface.Normal = surface.GeomNormal;
+        surface.Tangent = tangentWS;
+        surface.Bitangent = bitangentWS;
+        
+        surface.Roughness = PBR::Defaults::Roughness;
+        surface.Metallic = PBR::Defaults::Metallic;
+        surface.AO = 1.0f;        
+#endif  
+        
+        surface.Roughness = PBR::Roughness(surface.Roughness, Frame.Roughness.x, Frame.Roughness.y);
+        surface.Metallic = Remap(surface.Metallic, Frame.Metalness.x, Frame.Metalness.y);
+
+        surface.F0 = PBR::F0(surface.Albedo, surface.Metallic);
+        
+#if defined(FULL_MATERIAL)
+        surface.SubsurfaceColor = make_float3(0.0f, 0.0f, 0.0f);
+        surface.Thickness = 0.0f;
+        surface.CoatColor = make_float3(1.0f, 1.0f, 1.0f);
+        surface.CoatStrength = 0.0f;
+        surface.CoatRoughness = 0.0f;
+        surface.CoatF0 = make_float3(0.04f, 0.04f, 0.04f);
+        surface.FuzzColor = make_float3(0.0f, 0.0f, 0.0f);
+        surface.FuzzWeight = 0.0f;
+        surface.GlintScreenSpaceScale = 1.0f;
+        surface.GlintLogMicrofacetDensity = 0.0f;
+        surface.GlintMicrofacetRoughness = 0.0f;
+        surface.GlintDensityRandomization = 0.0f;
+        surface.Noise = 0.0f;
+#endif        
+        
+        return surface;
+    }
+    
+    Surface(float3 position, float3 geomNormal, float3 normal, float3 tangent, float3 bitangent, float3 albedo, float roughness, float metallic, float3 emissive, float ao) {
         Surface surface;
     
         surface.Position = position;
+        
         surface.GeomNormal = geomNormal;
+        
         surface.Normal = normal;
         surface.Tangent = tangent;
         surface.Bitangent = bitangent;
+        
         surface.Albedo = albedo;
+        
         surface.Roughness = roughness;
         surface.Metallic = metallic;
-        surface.Emissive = emissive;
+        surface.Emissive = emissive;      
         surface.AO = ao;        
         
         surface.F0 = PBR::F0(albedo, metallic);
@@ -69,72 +161,6 @@ struct Surface
         
         return surface;
     }    
-    
-    Surface(float3 position, float3 geomNormal, float3 normal, float3 tangent, float3 bitangent, float3 albedo, float roughness, float metallic, float3 emissive, float ao) {
-        Surface surface;
-    
-        surface.Position = position;
-        surface.GeomNormal = geomNormal;
-        surface.Normal = normal;
-        surface.Tangent = tangent;
-        surface.Bitangent = bitangent;
-        surface.Albedo = albedo;
-        surface.Roughness = roughness;
-        surface.Metallic = metallic;
-        surface.Emissive = emissive;
-        surface.AO = ao;        
-        
-        surface.F0 = PBR::F0(albedo, metallic);
-        
-#if defined(FULL_MATERIAL)
-        surface.SubsurfaceColor = make_float3(0.0f, 0.0f, 0.0f);
-        surface.Thickness = 0.0f;
-        surface.CoatColor = make_float3(1.0f, 1.0f, 1.0f);
-        surface.CoatStrength = 0.0f;
-        surface.CoatRoughness = 0.0f;
-        surface.CoatF0 = make_float3(0.04f, 0.04f, 0.04f);
-        surface.FuzzColor = make_float3(0.0f, 0.0f, 0.0f);
-        surface.FuzzWeight = 0.0f;
-        surface.GlintScreenSpaceScale = 1.0f;
-        surface.GlintLogMicrofacetDensity = 0.0f;
-        surface.GlintMicrofacetRoughness = 0.0f;
-        surface.GlintDensityRandomization = 0.0f;
-        surface.Noise = 0.0f;
-#endif        
-        
-        return surface;
-    }
-#if defined(FULL_MATERIAL)    
-    Surface(float3 position, float3 geomNormal, float3 normal, float3 tangent, float3 bitangent, float3 albedo, float roughness, float metallic, float3 emissive, float ao) {
-        Surface surface;
-    
-        surface.Position = position;
-        surface.GeomNormal = geomNormal;
-        surface.Normal = normal;
-        surface.Tangent = tangent;
-        surface.Bitangent = bitangent;
-        surface.Albedo = albedo;
-        surface.Roughness = roughness;
-        surface.Metallic = metallic;
-        surface.Emissive = emissive;
-        surface.AO = ao;
-        surface.SubsurfaceColor = make_float3(0.0f, 0.0f, 0.0f);
-        surface.Thickness = 0.0f;
-        surface.CoatColor = make_float3(1.0f, 1.0f, 1.0f);
-        surface.CoatStrength = 0.0f;
-        surface.CoatRoughness = 0.0f;
-        surface.CoatF0 = make_float3(0.04f, 0.04f, 0.04f);
-        surface.FuzzColor = make_float3(0.0f, 0.0f, 0.0f);
-        surface.FuzzWeight = 0.0f;
-        surface.GlintScreenSpaceScale = 1.0f;
-        surface.GlintLogMicrofacetDensity = 0.0f;
-        surface.GlintMicrofacetRoughness = 0.0f;
-        surface.GlintDensityRandomization = 0.0f;
-        surface.Noise = 0.0f;
-     
-        return surface;
-    }  
-#endif    
 };
 #define Surface(...) Surface::ctor(__VA_ARGS__)
 

@@ -10,12 +10,7 @@ namespace BRDF
     float CalcLuminance(float3 color)
     {
         return dot(color.xyz, float3(0.299f, 0.587f, 0.114f));
-    }
-
-    inline float Square(float value)
-    {
-        return value * value;
-    }    
+    }  
     
     // It's got a license :(    
     // https://github.com/NVIDIA-RTX/RTXDI/blob/main/Samples/FullSample/Shaders/HelperFunctions.hlsli

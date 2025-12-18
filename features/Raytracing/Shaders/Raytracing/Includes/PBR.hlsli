@@ -5,6 +5,8 @@
 #include "Common/Color.hlsli"
 #include "Common/Math.hlsli"
 
+#include "Raytracing/Includes/Common.hlsli"
+
 namespace PBR
 {
     namespace Flags
@@ -24,11 +26,15 @@ namespace PBR
         static const uint ProjectedGlint = (1 << 12);
     }
 
+    namespace Defaults
+    {
+        static const float Roughness = 0.5f;
+        static const float Metallic = 0.0f;
+        static const float3 F0 = float3(0.04f);
+    }    
+    
     namespace Constants
     {
-        static const float DefaultRoughness = 0.5f;
-        static const float DefaultMetallic = 0.0f;
-        static const float3 MinF0 = float3(0.04f);
         static const float MinRoughness = 0.04f;
         static const float MaxRoughness = 1.0f;
         static const float MinGlintDensity = 1.0f;
@@ -39,9 +45,14 @@ namespace PBR
         static const float MaxGlintDensityRandomization = 5.0f;
     }
     
+    float Roughness(float linearRoughness, float lower, float upper)
+    {
+        return Square(clamp(Remap(linearRoughness, lower, upper), Constants::MinRoughness, Constants::MaxRoughness));
+    } 
+    
     float3 F0(float3 albedo, float metalness)
     {
-        return saturate(lerp(Constants::MinF0, albedo, metalness));
+        return saturate(lerp(Defaults::F0, albedo, metalness));
     }    
 }
 
