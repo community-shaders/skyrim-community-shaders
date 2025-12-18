@@ -263,7 +263,7 @@ void main()
             
             sampleRadiance += surface.Albedo * diffuse * throughput; 
             
-            throughput *= NdotD;
+            throughput *= surface.Albedo;
 #else                                
             float3 diffuse = isSpecular ? 0.0 : localRadiance.rgb * BRDF_over_PDF * diffuseAO * Frame.Diffuse;
             
@@ -272,10 +272,10 @@ void main()
 
             sampleRadiance += (surface.Albedo * diffuse + specular) * throughput;
             
-            throughput *= BRDF_over_PDF;
- #endif          
+            throughput *= BRDF_over_PDF * (isSpecular ? 1.0 : surface.Albedo);
+#endif          
             
-            float rrProbability = min(0.95f, BRDF::CalcLuminance(throughput));
+            float rrProbability = j < RR_MIN_BOUNCE ? 1.0f : min(0.95f, BRDF::CalcLuminance(throughput));
             
             if (Frame.RussianRoulette && rrProbability < Random(randomSeed))
                 break;

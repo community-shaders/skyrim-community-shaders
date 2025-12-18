@@ -32,6 +32,7 @@
 
 #define MIN_DIFFUSE_SHADOW (0.001f)
 #define MIN_RADIANCE (0.01f)
+#define RR_MIN_BOUNCE (3)
 
 uint InitRandomSeed(uint2 coord, uint2 size, uint frameCount)
 {
