@@ -120,8 +120,9 @@ void main()
     {
         Surface surface = sourceSurface;
         BRDFContext brdfContext = sourceBRDFContext;
-        
-        float3 sampleRadiance = 0.0f;
+
+        float3 sampleRadiance = float3(0.0f, 0.0f, 0.0f);        
+        float3 throughput = float3(1.0f, 1.0f, 1.0f);
 
         [unroll]
         for (uint j = 0; j < MAX_DEPTH; j++)
@@ -159,9 +160,18 @@ void main()
                 float2 disk = float2(r * cos(phi), r * sin(phi));
                 float2 uv = disk * 0.5f + 0.5f;
 
-                sampleRadiance += Color::GammaToTrueLinear(SkyHemisphere.SampleLevel(BaseSampler, uv, 0.0f).rgb) * Frame.Sky;
+                float3 skyIrradiance = Color::GammaToTrueLinear(SkyHemisphere.SampleLevel(BaseSampler, uv, 0.0f).rgb) * Frame.Sky;
+
+                sampleRadiance += skyIrradiance * throughput;
+                
                 break;
             }
+            
+            if (j == 0)
+            {
+                isDiffusePath = !isSpecular;
+                hitDistance = max(hitDistance, payload.hitDistance);
+            }            
             
             Instance instance;
             
@@ -169,17 +179,17 @@ void main()
             brdfContext = BRDFContext(surface, -direction);
 
             // Local bounce radiance
-            float3 localRadiance = surface.Emissive * Frame.Emissive;
+            float3 localRadiance = surface.Emissive * Frame.Emissive * throughput;
             
             // Ideally we would call only one of these per bounce
 #if defined(LAMBERT)
-            localRadiance += LambertianDirectD(surface, Frame.Directional, randomSeed);
-            localRadiance += LambertianDirectP(surface, instance.LightData, randomSeed);
+            localRadiance += LambertianDirectD(surface, Frame.Directional, randomSeed) * throughput;
+            localRadiance += LambertianDirectP(surface, instance.LightData, randomSeed) * throughput;
 #else
-            localRadiance += GGXDirectD(surface, brdfContext, Frame.Directional, randomSeed);
-            localRadiance += GGXDirectP(surface, brdfContext, instance.LightData, randomSeed);
+            localRadiance += GGXDirectD(surface, brdfContext, Frame.Directional, randomSeed) * throughput;
+            localRadiance += GGXDirectP(surface, brdfContext, instance.LightData, randomSeed) * throughput;
 #endif
-            
+
             float3 diffuseAO = BRDF::DiffuseAO(surface.Albedo, surface.AO);
             
 #if defined(LAMBERT)
@@ -187,19 +197,25 @@ void main()
             
             sampleRadiance += surface.Albedo * diffuse;  
 #else         
+            throughput *= BRDF_over_PDF;
+            
             float3 diffuse = isSpecular ? 0.0 : localRadiance.rgb * BRDF_over_PDF * diffuseAO * Frame.Diffuse;
             
             float3 specularAO = BRDF::SpecularAO(brdfContext.NdotV, surface.Roughness, surface.AO, surface.F0);
             float3 specular = isSpecular ? localRadiance.rgb * BRDF_over_PDF * (specularAO * Frame.Specular): 0.0;    
-    
+
             sampleRadiance += surface.Albedo * diffuse + specular;       
- #endif
+ #endif          
             
-            if (j == 0)
-            {
-                isDiffusePath = !isSpecular;
-                hitDistance = max(hitDistance, payload.hitDistance);
-            }
+            float rrProbability = min(0.95f, BRDF::CalcLuminance(throughput));
+            
+            if (Frame.RussianRoulette && rrProbability < Random(randomSeed))
+                break;
+            else
+                throughput /= rrProbability;            
+            
+            if (any(sampleRadiance < MIN_RADIANCE))
+                break; // Ray was eaten by the surface :(
         }
         
         radiance += sampleRadiance;    

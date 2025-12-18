@@ -4,7 +4,7 @@
 #include "Raytracing/Includes/Types/Light.hlsli"
 #include "Raytracing/Includes/SharedData.hlsli"
 
-struct 
+struct
 #ifdef __cplusplus
 alignas(16)
 #endif   
@@ -13,28 +13,28 @@ alignas(16)
     float4x4 ViewInverse;
     float4x4 ProjInverse;
     float4 CameraData;
-    float4 NDCToView;    
+    float4 NDCToView;
     Light Directional;
     float3 Position;
     uint FrameCount;
-	float2 Roughness; 
- 	float2 Metalness;   
+    float2 Roughness;
+    float2 Metalness;
     float Diffuse;
     float Specular;
     float Emissive;
-	float Effect;
-	float Sky;
+    float Effect;
+    float Sky;
+    BOOL RussianRoulette;
     uint2 DispatchSize;
-    #ifdef SHARC
+#ifdef SHARC
     float SHaRCScale;
     uint SHaRCCapacity;
     BOOL SHaRCUpdatePass;
-    #else
-    uint Pad0;
-    uint Pad1;
-    uint Pad2;
-    #endif      
-    float4 Pad3[10];
+#else
+    uint3 Pad0;
+#endif
+    uint3 Pad1;
+    uint4 Pad2[9];
     FeatureData Features;
 };
 #ifdef __cplusplus

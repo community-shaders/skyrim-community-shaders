@@ -142,6 +142,14 @@ struct uint2
 };
 static_assert(sizeof(uint2) == 8);
 
+struct uint3
+{
+	uint x;
+	uint y;
+	uint z;
+};
+static_assert(sizeof(uint3) == 12);
+
 struct uint4
 {
 	uint x;

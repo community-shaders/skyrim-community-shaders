@@ -357,6 +357,7 @@ struct Raytracing : public OverlayFeature
 		bool PathTracing = false;
 		bool CullShadows = true;
 		bool RecompressTextures = false;
+		bool RussianRoulette = true;
 #ifdef DLSS_RR
 		DLSSRRQuality DLSSRRQualityMode = DLSSRRQuality::MaxQuality;
 #endif

@@ -31,6 +31,7 @@
 #define GN_OFFSET (0.1f)
 
 #define MIN_DIFFUSE_SHADOW (0.001f)
+#define MIN_RADIANCE (0.01f)
 
 uint InitRandomSeed(uint2 coord, uint2 size, uint frameCount)
 {
