@@ -77,7 +77,7 @@ float3 VanillaSpecular(DirectContext context, float shininess, float2 uv)
 	lightColorMultiplier *= 0.7 * max(0, L.z);
 #	endif
 
-#	if defined(SPARKLE) && !defined(SNOW)
+#	if defined(SPARKLE)
 	float3 sparkleUvScale = exp2(float3(1.3, 1.6, 1.9) * log2(abs(SparkleParams.x)).xxx);
 
 	float sparkleColor1 = TexProjDetail.Sample(SampProjDetailSampler, uv * sparkleUvScale.xx).z;

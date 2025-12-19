@@ -342,9 +342,6 @@ struct PS_OUTPUT
 	float4 Specular : SV_Target4;
 	float4 Reflectance : SV_Target5;
 	float4 Masks : SV_Target6;
-#	if defined(SNOW)
-	float4 Parameters : SV_Target7;
-#	endif
 };
 #else
 struct PS_OUTPUT
@@ -681,53 +678,6 @@ float GetLodLandBlendMultiplier(float parameter, float mask)
 {
 	return 0.8333333 * (parameter * (0.37 - mask) + mask) + 0.37;
 }
-
-float GetLandSnowMaskValue(float alpha)
-{
-#	if !defined(TRUE_PBR)
-	return alpha * LandscapeTexture5to6IsSnow.z + (1 + -LandscapeTexture5to6IsSnow.z);
-#	else
-	return 0;
-#	endif
-}
-
-float3 GetLandNormal(float landSnowMask, float3 normal, float2 uv, SamplerState sampNormal, Texture2D<float4> texNormal)
-{
-	float3 landNormal = TransformNormal(normal);
-#	if defined(SNOW) && !defined(TRUE_PBR)
-	if (landSnowMask > 1e-5 && LandscapeTexture5to6IsSnow.w != 1.0) {
-		float3 snowNormal =
-			float3(-1, -1, 1) *
-			TransformNormal(texNormal.Sample(sampNormal, LandscapeTexture5to6IsSnow.ww * uv).xyz);
-		landNormal.z += 1;
-		float normalProjection = dot(landNormal, snowNormal);
-		snowNormal = landNormal * normalProjection.xxx - snowNormal * landNormal.z;
-		return normalize(snowNormal);
-	} else {
-		return landNormal;
-	}
-#	else
-	return landNormal;
-#	endif
-}
-
-#	if defined(SNOW) && !defined(TRUE_PBR)
-float3 GetSnowSpecularColor(PS_INPUT input, float3 worldNormal, float3 viewDirection)
-{
-	if (SnowRimLightParameters.w > 1e-5) {
-#		if defined(MODELSPACENORMALS) && !defined(SKINNED)
-		float3 modelGeometryNormal = float3(0, 0, 1);
-#		else
-		float3 modelGeometryNormal = normalize(float3(input.TBN0.z, input.TBN1.z, input.TBN2.z));
-#		endif
-		float normalFactor = 1 - saturate(dot(worldNormal, viewDirection));
-		float geometryNormalFactor = 1 - saturate(dot(modelGeometryNormal, viewDirection));
-		return (SnowRimLightParameters.x * (exp2(SnowRimLightParameters.y * log2(geometryNormalFactor)) * exp2(SnowRimLightParameters.z * log2(normalFactor)))).xxx;
-	} else {
-		return 0.0.xxx;
-	}
-}
-#	endif
 
 #	if defined(FACEGEN)
 float3 GetFacegenBaseColor(float3 rawBaseColor, float2 uv)
@@ -1142,18 +1092,6 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 
 #	endif  // EMAT
 
-#	if defined(SNOW)
-	bool useSnowSpecular = true;
-#	else
-	bool useSnowSpecular = false;
-#	endif  // SNOW
-
-#	if defined(SPARKLE) || !defined(PROJECTED_UV)
-	bool useSnowDecalSpecular = true;
-#	else
-	bool useSnowDecalSpecular = false;
-#	endif  // defined(SPARKLE) || !defined(PROJECTED_UV)
-
 	float2 diffuseUv = uv;
 
 #	if defined(SPARKLE)
@@ -1279,15 +1217,6 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 
 	float4 glintParameters = 0;
 
-#	if defined(SNOW)  // Earlier snow definition for Terrain Variation rework.
-#		if !defined(TRUE_PBR)
-	float landSnowMask = 0.0;
-#			if defined(LANDSCAPE)
-	landSnowMask = GetLandSnowMaskValue(baseColor.w);
-#			endif
-#		endif
-#	endif
-
 #	if defined(LANDSCAPE)
 	// Layer 1 (LandBlendWeights1.x)
 	if (input.LandBlendWeights1.x > 0.01) {
@@ -1315,7 +1244,6 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 		}
 #		endif
 		float landAlpha1 = landColor1.a;
-		float landSnowMask1 = GetLandSnowMaskValue(landColor1.w);
 
 		// Sample normal texture for layer 1
 #		if defined(TERRAIN_VARIATION)
@@ -1333,9 +1261,6 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #		endif
 		float3 landNormalRGB1 = landNormal1.rgb;
 		float landNormalAlpha1 = landNormal1.a;
-#		if defined(SNOW) && !defined(TRUE_PBR)
-		landSnowMask += LandscapeTexture1to4IsSnow.x * input.LandBlendWeights1.x * landSnowMask1;
-#		endif  // SNOW
 
 		// Sample RMAOS texture for layer 1
 #		if defined(TRUE_PBR)
@@ -1396,7 +1321,6 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 		}
 #		endif
 		float landAlpha2 = landColor2.a;
-		float landSnowMask2 = GetLandSnowMaskValue(landColor2.w);
 
 		// Sample normal texture for layer 2
 #		if defined(TERRAIN_VARIATION)
@@ -1414,9 +1338,6 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #		endif
 		float3 landNormalRGB2 = landNormal2.rgb;
 		float landNormalAlpha2 = landNormal2.a;
-#		if defined(SNOW) && !defined(TRUE_PBR)
-		landSnowMask += LandscapeTexture1to4IsSnow.y * input.LandBlendWeights1.y * landSnowMask2;
-#		endif  // SNOW
 
 		// Sample RMAOS texture for layer 2
 #		if defined(TRUE_PBR)
@@ -1476,7 +1397,6 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 		}
 #		endif
 		float landAlpha3 = landColor3.a;
-		float landSnowMask3 = GetLandSnowMaskValue(landColor3.w);
 
 		// Sample normal texture for layer 3
 #		if defined(TERRAIN_VARIATION)
@@ -1494,9 +1414,6 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #		endif
 		float3 landNormalRGB3 = landNormal3.rgb;
 		float landNormalAlpha3 = landNormal3.a;
-#		if defined(SNOW) && !defined(TRUE_PBR)
-		landSnowMask += LandscapeTexture1to4IsSnow.z * input.LandBlendWeights1.z * landSnowMask3;
-#		endif  // SNOW
 
 		// Sample RMAOS texture for layer 3
 #		if defined(TRUE_PBR)
@@ -1556,7 +1473,6 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 		}
 #		endif
 		float landAlpha4 = landColor4.a;
-		float landSnowMask4 = GetLandSnowMaskValue(landColor4.w);
 
 		// Sample normal texture for layer 4
 #		if defined(TERRAIN_VARIATION)
@@ -1574,9 +1490,6 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #		endif
 		float3 landNormalRGB4 = landNormal4.rgb;
 		float landNormalAlpha4 = landNormal4.a;
-#		if defined(SNOW) && !defined(TRUE_PBR)
-		landSnowMask += LandscapeTexture1to4IsSnow.w * input.LandBlendWeights1.w * landSnowMask4;
-#		endif  // SNOW
 
 		// Sample RMAOS texture for layer 4
 #		if defined(TRUE_PBR)
@@ -1636,7 +1549,6 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 		}
 #		endif
 		float landAlpha5 = landColor5.a;
-		float landSnowMask5 = GetLandSnowMaskValue(landColor5.w);
 
 		// Sample normal texture for layer 5
 #		if defined(TERRAIN_VARIATION)
@@ -1654,10 +1566,6 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #		endif
 		float3 landNormalRGB5 = landNormal5.rgb;
 		float landNormalAlpha5 = landNormal5.a;
-
-#		if defined(SNOW) && !defined(TRUE_PBR)
-		landSnowMask += LandscapeTexture5to6IsSnow.x * input.LandBlendWeights2.x * landSnowMask5;
-#		endif  // SNOW
 
 		// Sample RMAOS texture for layer 5
 #		if defined(TRUE_PBR)
@@ -1717,7 +1625,6 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 		}
 #		endif
 		float landAlpha6 = landColor6.a;
-		float landSnowMask6 = GetLandSnowMaskValue(landColor6.w);
 
 		// Sample normal texture for layer 6
 #		if defined(TERRAIN_VARIATION)
@@ -1735,9 +1642,6 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #		endif
 		float3 landNormalRGB6 = landNormal6.rgb;
 		float landNormalAlpha6 = landNormal6.a;
-#		if defined(SNOW) && !defined(TRUE_PBR)
-		landSnowMask += LandscapeTexture5to6IsSnow.y * 	input.LandBlendWeights2.y * landSnowMask6;
-#		endif  // SNOW
 
 		// Sample RMAOS texture for layer 6
 #		if defined(TRUE_PBR)
@@ -1812,8 +1716,6 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #		endif
 #	endif  // LOD_BLENDING
 
-	float landSnowMask1 = GetLandSnowMaskValue(baseColor.w);
-
 #	if defined(MODELSPACENORMALS)
 #		if defined(LODLANDNOISE)
 	normal.xyz = normal.xzy - 0.5.xxx;
@@ -1833,9 +1735,6 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	normal.w = 1;
 	glossiness = TexSpecularSampler.Sample(SampSpecularSampler, uv).x;
 #		endif  // LODLANDNOISE
-#	elif (defined(SNOW) && defined(LANDSCAPE))
-	normal.xyz = GetLandNormal(landSnowMask1, normal.xyz, uv, SampNormalSampler, TexNormalSampler);
-	glossiness = normal.w;
 #	else
 	normal.xyz = TransformNormal(normal.xyz);
 	glossiness = normal.w;
@@ -1844,12 +1743,6 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #	if defined(WORLD_MAP)
 	normal.xyz = GetWorldMapNormal(input, normal.xyz, rawBaseColor.xyz);
 #	endif  // WORLD_MAP
-
-#	if defined(LANDSCAPE)
-#		if defined(SNOW) && !defined(TRUE_PBR)
-	landSnowMask = LandscapeTexture1to4IsSnow.x * input.LandBlendWeights1.x;
-#		endif  // SNOW
-#	endif  // LANDSCAPE
 
 #	if defined(EMAT_ENVMAP)
 	complexMaterial = complexMaterial && complexMaterialColor.y > (4.0 / 255.0);
@@ -1925,10 +1818,6 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #		endif
 #	endif  // LOD_LAND_BLEND
 
-#	if defined(SNOW) && !defined(TRUE_PBR)
-	useSnowSpecular = landSnowMask != 0.0;
-#	endif  // SNOW
-
 #	if defined(BACK_LIGHTING)
 	float4 backLightColor = TexBackLightSampler.Sample(SampBackLightSampler, uv);
 #		if defined(HAIR) && defined(CS_HAIR)
@@ -1987,9 +1876,6 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 		discard;
 
 	worldNormal.xyz = projectedNormal;
-#			if defined(SNOW)
-	psout.Parameters.y = 1;
-#			endif  // SNOW
 #		elif !defined(FACEGEN) && !defined(MULTI_LAYER_PARALLAX) && !defined(PARALLAX) && !defined(SPARKLE)
 	if (ProjectedUVParams3.w > 0.5) {
 		float2 projNormalDiffuseUv = ProjectedUVParams3.x * projNoiseUv;
@@ -2012,37 +1898,12 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #			endif  // TRUE_PBR
 		normal.xyz = lerp(normal.xyz, finalProjNormal, projectedMaterialWeight);
 		baseColor.xyz = lerp(baseColor.xyz, projBaseColor, projectedMaterialWeight);
-
-#			if defined(SNOW)
-		useSnowDecalSpecular = true;
-		psout.Parameters.y = GetSnowParameterY(projectedMaterialWeight, baseColor.w);
-#			endif  // SNOW
 	} else {
 		if (projWeight > 0) {
 			baseColor.xyz = ProjectedUVParams2.xyz;
-#			if defined(SNOW)
-			useSnowDecalSpecular = true;
-			psout.Parameters.y = GetSnowParameterY(projWeight, baseColor.w);
-#			endif  // SNOW
-		} else {
-#			if defined(SNOW)
-			psout.Parameters.y = 0;
-#			endif  // SNOW
 		}
 	}
-
-#			if defined(SPECULAR)
-	useSnowSpecular = useSnowDecalSpecular;
-#			endif  // SPECULAR
 #		endif      // SPARKLE
-
-#	elif defined(SNOW)
-#		if defined(LANDSCAPE)
-	psout.Parameters.y = landSnowMask;
-#		else
-	psout.Parameters.y = baseColor.w;
-#		endif  // LANDSCAPE
-#	endif      // SNOW
 
 #	if defined(WORLD_MAP)
 	baseColor.xyz = GetWorldMapBaseColor(rawBaseColor.xyz, baseColor.xyz, projWeight);
@@ -2908,11 +2769,6 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #		endif
 #	endif  // MULTI_LAYER_PARALLAX
 
-#	if defined(SNOW)
-	if (useSnowSpecular)
-		specularColor = 0;
-#	endif
-
 	specularColor = Color::GammaToLinear(specularColor);
 
 	diffuseColor = reflectionDiffuseColor;
@@ -3157,16 +3013,6 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 
 	psout.Reflectance = float4(indirectLobeWeights.specular, psout.Diffuse.w);
 	psout.NormalGlossiness = float4(GBuffer::EncodeNormal(screenSpaceNormal), saturate(1.0 - material.Roughness), psout.Diffuse.w);
-
-#		if defined(SNOW)
-#			if defined(TRUE_PBR)
-	psout.Parameters.x = Color::RGBToLuminanceAlternative(specularColor);
-	psout.Parameters.y = 0;
-#			else
-	psout.Parameters.x = Color::RGBToLuminanceAlternative(lightsSpecularColor);
-#			endif
-	psout.Parameters.w = psout.Diffuse.w;
-#		endif
 
 #		if defined(SSS) && defined(SKIN)
 	psout.Masks = float4(saturate(baseColor.a), !(Permutation::ExtraShaderDescriptor & Permutation::ExtraFlags::IsBeastRace), Color::RGBToYCoCg(directionalAmbientColor).x, psout.Diffuse.w);
