@@ -623,6 +623,9 @@ ID3D11ComputeShader* Deferred::GetComputeMainComposite()
 		if (globals::features::ibl.loaded)
 			defines.push_back({ "IBL", nullptr });
 
+		if (globals::features::raytracing.loaded)
+			defines.push_back({ "RT", nullptr });
+
 		if (REL::Module::IsVR())
 			defines.push_back({ "FRAMEBUFFER", nullptr });
 
@@ -647,6 +650,9 @@ ID3D11ComputeShader* Deferred::GetComputeMainCompositeInterior()
 
 		if (globals::features::ibl.loaded)
 			defines.push_back({ "IBL", nullptr });
+
+		if (globals::features::raytracing.loaded)
+			defines.push_back({ "RT", nullptr });
 
 		if (REL::Module::IsVR())
 			defines.push_back({ "FRAMEBUFFER", nullptr });

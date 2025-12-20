@@ -9,7 +9,7 @@
 #include "Raytracing/Includes/Common.hlsli"
 #include "Raytracing/Includes/RT/CommonRT.hlsli"
 #include "Raytracing/Includes/RT/Rays.hlsli"
-#include "Raytracing/Includes/BRDF.hlsli"
+#include "Raytracing/Includes/MonteCarlo.hlsli"
 #include "Raytracing/Includes/Surface.hlsli"
 
 float InverseSquareAtten(float dist, float range)
@@ -27,6 +27,11 @@ float InverseSquareAtten(float dist, float range)
 float LinearAtten(float dist, float range)
 {
     return saturate(1.0 - dist / range);
+}
+
+float VanillaSquaredAtten(float dist, float range)
+{
+    return saturate(1.0 - dist * dist / (range * range));
 }
 
 float3 LambertianDirectD(in Surface surface, in Light light, inout uint randomSeed)
@@ -61,7 +66,7 @@ float3 LambertianDirectP(in Surface surface, in LightData lightData, inout uint 
     float dist = length(l);      
     l /= dist;
     
-    float atten = LinearAtten(dist, light.Range);
+    float atten = VanillaSquaredAtten(dist, light.Range);
     //float atten = InverseSquareAtten(dist, light.Range); // This requires all lights to be ISL enabled
             
     float NdotL = saturate(dot(surface.Normal, l)) * atten;
@@ -77,32 +82,32 @@ float3 LambertianDirectP(in Surface surface, in LightData lightData, inout uint 
     return direct; // (albedo / Math::PI)
 }
 
-float3 GGXDirect(in float3 l, in Surface surface, in BRDFContext brdfContext)
+float3 EvalDefaultBRDF(in float3 l, in Surface surface, in BRDFContext brdfContext)
 {
     float NoL = saturate(dot(surface.Normal, l));
      
     if (NoL <= 0.0f) 
         return float3(0.0f, 0.0f, 0.0f);
         
-    float3 h = normalize(brdfContext.ViewDirection + l);
+    float3 H = normalize(brdfContext.ViewDirection + l);
         
-    float NoH = saturate(dot(surface.Normal, h));
-    float VoH = clamp(dot(brdfContext.ViewDirection, h), 1e-5f, 1.0f);
+    float NoH = saturate(dot(surface.Normal, H));
+    float VoH = clamp(dot(brdfContext.ViewDirection, H), 1e-5f, 1.0f);
 
-    float D = BRDF::D_GGXAlpha(NoH, surface.Roughness);
-    float V = BRDF::V_SmithGGXCorrelatedFast(max(1e-5f, brdfContext.NdotV), NoL, surface.Roughness);
+    float D = BRDF::D_GGX(surface.Roughness, NoH);
+    float Vis = BRDF::Vis_SmithJointApprox(surface.Roughness, max(1e-5f, brdfContext.NdotV), NoL);
     float3 F = BRDF::F_Schlick(surface.F0, VoH);
     
     // specular BRDF
-    float3 Fr = (D * V) * F;
-    float3 Fd = surface.DiffuseAlbedo; // / Math::PI;
+    float3 Fr = (D * Vis) * F;
+    float3 Fd = BRDF::Diffuse_Burley(surface.Roughness, brdfContext.NdotV, NoL, VoH) * surface.DiffuseAlbedo;
     
-    return (Fd + Fr) * NoL;
+    return (Fd + Fr) * NoL * Math::PI;
 }
 
-float3 GGXDirectD(in Surface surface, in BRDFContext brdfContext, in Light light, inout uint randomSeed)
+float3 EvalDirectionalLight(in Surface surface, in BRDFContext brdfContext, in Light light, inout uint randomSeed)
 {
-    float3 direct = GGXDirect(light.Vector, surface, brdfContext) * light.Color;
+    float3 direct = EvalDefaultBRDF(light.Vector, surface, brdfContext) * light.Color;
 
     if (any(direct > MIN_DIFFUSE_SHADOW))
     {
@@ -113,7 +118,7 @@ float3 GGXDirectD(in Surface surface, in BRDFContext brdfContext, in Light light
     return direct;
 }
 
-float3 GGXDirectP(in Surface surface, in BRDFContext brdfContext, in LightData lightData, inout uint randomSeed)
+float3 EvalPointLight(in Surface surface, in BRDFContext brdfContext, in LightData lightData, inout uint randomSeed)
 {
     if (lightData.Count == 0) 
         return float3(0, 0, 0);
@@ -128,10 +133,10 @@ float3 GGXDirectP(in Surface surface, in BRDFContext brdfContext, in LightData l
     float dist = length(l);      
     l /= dist;
     
-    float atten = LinearAtten(dist, light.Range);
+    float atten = VanillaSquaredAtten(dist, light.Range);
     //float atten = InverseSquareAtten(dist, light.Range); // This requires all lights to be ISL enabled
     
-    float3 direct = GGXDirect(l, surface, brdfContext) * atten * light.Color * float(lightData.Count);
+    float3 direct = EvalDefaultBRDF(l, surface, brdfContext) * atten * light.Color * float(lightData.Count);
 
     if (any(direct > MIN_DIFFUSE_SHADOW))
     {
@@ -140,6 +145,66 @@ float3 GGXDirectP(in Surface surface, in BRDFContext brdfContext, in LightData l
     }
     
     return direct;
+}
+
+void SampleDefaultBRDF(in Surface surface, in BRDFContext brdfContext, inout uint randomSeed, out float3 direction, out float3 brdfWeight)
+{
+    const float3 V = brdfContext.ViewDirection;
+    float3 L = 0;
+    float3 H = 0;
+    float NdotL = 0;
+
+    const float specularProb = MonteCarlo::GetSpecularBrdfProbability(surface, V, surface.Normal);
+    const bool isSpecular = Random(randomSeed) < specularProb;
+
+    float lobePDF = isSpecular ? specularProb : (1.0f - specularProb);
+
+    float3 brdf = 0.0f;
+    float brdfPdf = 0.0f;
+
+    if (!isSpecular)
+    {
+        float3 localDirection = SampleCosineHemisphere(randomSeed);
+        L = surface.Mul(localDirection);
+        H = normalize(V + L);
+        NdotL = saturate(dot(surface.Normal, L));
+        brdf = BRDF::Diffuse_Burley(surface.Roughness, brdfContext.NdotV, NdotL, saturate(dot(H, V))) * NdotL * surface.DiffuseAlbedo;
+        brdfPdf = NdotL / Math::PI;
+        brdfWeight = Frame.Diffuse * brdf / max(brdfPdf * lobePDF, 1e-7f);
+    }
+    else
+    {
+        float3 Ve = float3(
+                dot(brdfContext.ViewDirection, surface.Tangent), 
+                dot(brdfContext.ViewDirection, surface.Bitangent), 
+                dot(brdfContext.ViewDirection, surface.Normal)
+            );
+
+        const float alpha = surface.Roughness * surface.Roughness;
+        const float alpha2 = alpha * alpha;
+
+        float2 E = Get2D(randomSeed);
+        E.x = MonteCarlo::RescaleRandomNumber(E.x, specularProb, 1.0f);
+        // float2 Xi = MonteCarlo::Hammersley(0, 1, random2D);
+        // float3 He = MonteCarlo::SampleGGX_VNDF(Ve, alpha, randomSeed);
+        float4 HePDF = MonteCarlo::ImportanceSampleVisibleGGX(E, alpha, Ve);
+        float3 He = HePDF.xyz;
+        float3 Le = reflect(-Ve, He);
+        const float2 GGXResult = MonteCarlo::GGXEvalReflection(Le, Ve, He, alpha);
+        H = surface.Mul(He);
+        L = reflect(-V, H);
+
+        NdotL = saturate(dot(surface.Normal, L));
+        float VdotH = saturate(dot(H, V));
+        float NdotH = saturate(dot(surface.Normal, H));
+        float3 F = BRDF::F_Schlick(surface.F0, VdotH);
+
+        brdf = F * GGXResult.x;
+        brdfPdf = GGXResult.y;
+        brdfWeight = Frame.Specular * brdf / max(brdfPdf * lobePDF, 1e-7f);
+    }
+
+    direction = L;
 }
 
 #endif // SHADING_HLSL

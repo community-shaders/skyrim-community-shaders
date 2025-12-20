@@ -911,16 +911,18 @@ struct Raytracing : public OverlayFeature
 		{
 			static void thunk(RE::NiSourceTexture* oThis)
 			{
-				if (oThis && oThis->rendererTexture; auto texture = oThis->rendererTexture->texture) {					
-					auto& rt = globals::features::raytracing;
+				if (oThis && oThis->rendererTexture) {
+            		if (auto texture = oThis->rendererTexture->texture) {  				
+						auto& rt = globals::features::raytracing;
 
-					if (auto sharedIt = rt.sharedTextures.find(texture); sharedIt != rt.sharedTextures.end()) {
-						// TODO: proper fix - this is backwards, it should be handled safely by the material going out of scope after its shape and models are released
-						if (auto textureIt = rt.textures.find(texture); textureIt != rt.textures.end()) {
-							logger::info("[RT] NiSourceTexture::Destructor [0x{:8X}] - Register: {}", reinterpret_cast<uintptr_t>(texture), textureIt->second.registerIndex->GetIndex());
+						if (auto sharedIt = rt.sharedTextures.find(texture); sharedIt != rt.sharedTextures.end()) {
+							// TODO: proper fix - this is backwards, it should be handled safely by the material going out of scope after its shape and models are released
+							if (auto textureIt = rt.textures.find(texture); textureIt != rt.textures.end()) {
+								logger::info("[RT] NiSourceTexture::Destructor [0x{:8X}] - Register: {}", reinterpret_cast<uintptr_t>(texture), textureIt->second.registerIndex->GetIndex());
+							}
+
+							rt.sharedTextures.erase(sharedIt);
 						}
-
-						rt.sharedTextures.erase(sharedIt);
 					}
 				}
 
