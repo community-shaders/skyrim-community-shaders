@@ -154,11 +154,27 @@ void Raytracing::DrawSettings()
 		settings.Denoiser = static_cast<Denoiser>(denoiser);
 	}*/
 
-	if (ImGui::SliderInt("Bounces", &settings.Bounces, 1, 32))
-		settings.Bounces = std::clamp(settings.Bounces, 1, 32);
+	// Bounces
+	{
+		int bounces = settings.Bounces;
 
-	if (ImGui::SliderInt("Samples Per Pixel", &settings.SamplesPerPixel, 1, 32))
-		settings.SamplesPerPixel = std::clamp(settings.SamplesPerPixel, 1, 32);
+		if (ImGui::SliderInt("Bounces", &settings.Bounces, 1, 32))
+			settings.Bounces = std::clamp(settings.Bounces, 1, 32);
+
+		if (bounces != settings.Bounces)
+			recompileReason |= RecompileReason::Bounces;
+	}
+
+	// Samples Per Pixel
+	{
+		int samples = settings.SamplesPerPixel;
+
+		if (ImGui::SliderInt("Samples Per Pixel", &settings.SamplesPerPixel, 1, 32))
+			settings.SamplesPerPixel = std::clamp(settings.SamplesPerPixel, 1, 32);
+
+		if (samples != settings.SamplesPerPixel)
+			recompileReason |= RecompileReason::Samples;
+	}
 
 	/*if (ImGui::SliderInt("Bounces", &settings.Bounces, 1, 32))
 		settings.Bounces = std::clamp(settings.Bounces, 1, 32);*/
@@ -276,6 +292,10 @@ void Raytracing::DrawSettings()
 		}
 	}
 
+	if (recompileReason != RecompileReason::None) {
+		CompileRTGIShaders();
+		recompileReason = RecompileReason::None;
+	}
 }
 
 #ifdef SHARC
@@ -3183,14 +3203,12 @@ void Raytracing::CompileSkinningShaders()
 
 void Raytracing::CompileRTGIShaders()
 {
-	const int bounces = settings.PathTracing ? settings.Bounces + 1 : settings.Bounces;
-
-	const auto bouncesWStr = std::to_wstring(bounces);
+	const auto bouncesWStr = std::to_wstring(settings.Bounces);
 	const auto samplesWStr = std::to_wstring(settings.SamplesPerPixel);
 
 	eastl::vector<DxcDefine> defines = { 
-		{ L"MAX_DEPTH", bouncesWStr.c_str() },
-		{ L"SAMPLES", samplesWStr.c_str() },
+		{ L"MAX_BOUNCES", bouncesWStr.c_str() },
+		{ L"MAX_SAMPLES", samplesWStr.c_str() },
 	};
 
 #ifdef SHARC
@@ -3239,6 +3257,9 @@ void Raytracing::CompileRTGIShaders()
 		pipelineBuilder.AddGlobalRootSignature(rootSignature.get());
 		pipelineBuilder.AddPipelineConfig(1); // Max recursion depth
 
+		if (pipelineRT)
+			pipelineRT = nullptr;
+
 		auto desc = pipelineBuilder.MakeStateObjectDesc();
 		HRESULT hr = d3d12Device->CreateStateObject(desc, IID_PPV_ARGS(&pipelineRT));
 
@@ -3256,13 +3277,25 @@ void Raytracing::CompileRTGIShaders()
 		winrt::com_ptr<ID3D12StateObjectProperties> props;
 		pipelineRT->QueryInterface(props.put());
 
+		uint64_t shaderBindingTableSizePrev = shaderBindingTable ? shaderBindingTable->GetTotalSize() : 0;
+
+		if (shaderBindingTable)
+			shaderBindingTable.reset();
+
 		shaderBindingTable = eastl::make_unique<DX12::ShaderBindingTable>(pipelineBuilder.CreateShaderBindingTable(props.get()));
 
 		auto shaderBindingTableSize = shaderBindingTable->GetTotalSize();
 		logger::debug("[RT] GI SBT size: {}", shaderBindingTableSize);
 
-		shaderBindingTableBuffer = eastl::make_unique<DX12::ResourceUpload>(d3d12Device.get(), shaderBindingTableSize);
-		shaderBindingTableBuffer->SetName(L"GI SBT");
+		// Recreate buffer if necessary
+		if (!shaderBindingTableBuffer || shaderBindingTableSize > shaderBindingTableSizePrev) {
+
+			if (shaderBindingTableBuffer)
+				shaderBindingTableBuffer.reset();
+
+			shaderBindingTableBuffer = eastl::make_unique<DX12::ResourceUpload>(d3d12Device.get(), shaderBindingTableSize);
+			shaderBindingTableBuffer->SetName(L"RT Shader Binding Table Buffer");
+		}
 
 		std::vector<uint8_t> shaderBindingTableCPU(shaderBindingTableSize);
 		shaderBindingTable->Build(shaderBindingTableCPU.data());

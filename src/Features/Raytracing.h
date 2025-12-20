@@ -60,6 +60,8 @@
 #pragma warning(pop)
 #endif
 
+using namespace magic_enum::bitwise_operators;
+
 struct Raytracing : public OverlayFeature
 {
 	static constexpr uint MAX_TEXTURES = 1024;
@@ -174,25 +176,6 @@ struct Raytracing : public OverlayFeature
 		};
 	};
 	using SVGFHeap = Heap<SVGFHeapDef::Table, SVGFHeapDef::Slot>;
-
-#ifdef SHARC
-	struct SHaRCHeapDef
-	{
-		enum class Table
-		{
-			UAV
-		};
-
-		enum class Slot
-		{
-			SHaRCHashEntries,
-			SHaRCAccumulation,
-			SHaRCResolved,
-			None
-		};
-	};
-	using SHaRCHeap = Heap<SHaRCHeapDef::Table, SHaRCHeapDef::Slot>;
-#endif
 
 	////////////////////////////////////////////////// Boilerplate
 	// Metadata
@@ -435,6 +418,15 @@ struct Raytracing : public OverlayFeature
 		SHaRCSettings SHaRCSettings;
 #endif
 	} settings;
+
+	enum class RecompileReason : uint32_t
+	{
+		None = 0,
+		Bounces = 1 << 0,
+		Samples = 1 << 1
+	};
+
+	RecompileReason recompileReason = RecompileReason::None;
 
 	bool shareTexture = false;
 	bool renderingWorld = false;
