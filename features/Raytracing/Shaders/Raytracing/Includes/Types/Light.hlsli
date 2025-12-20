@@ -10,7 +10,8 @@ alignas(16)
 	float3 Vector;
 	float Range;
 	float3 Color;
-	uint Pad;
+	uint16_t Type;
+	uint16_t ISL;
 };
 #ifdef __cplusplus
 static_assert(sizeof(Light) % 16 == 0);

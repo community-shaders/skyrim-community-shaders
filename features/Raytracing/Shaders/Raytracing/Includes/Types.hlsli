@@ -11,6 +11,6 @@ typedef bool BOOL;
 #include "Raytracing/Includes/Types/Instance.hlsli"
 #include "Raytracing/Includes/Types/Light.hlsli"
 #include "Raytracing/Includes/RT.hlsli"
-#include "Raytracing/Includes/Types/GIFrameData.hlsli"
+#include "Raytracing/Includes/Types/FrameData.hlsli"
 
 #endif

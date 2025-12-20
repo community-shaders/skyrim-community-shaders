@@ -168,7 +168,8 @@ void Shape::BuildMaterial(const RE::BSGeometry::GEOMETRY_RUNTIME_DATA& geometryR
 	int effectType = 0;
 
 	RE::BSShader::Type shaderType = RE::BSShader::Type::None;
-	stl::enumeration<PBRShaderFlags, uint16_t> pbrShaderFlags;
+	RE::BSShaderMaterial::Feature feature = RE::BSShaderMaterial::Feature::kNone;
+	stl::enumeration<PBRShaderFlags, uint16_t> pbrFlags;
 
 	ID3D11Texture2D* baseTexture = nullptr;
 	ID3D11Texture2D* normalTexture = nullptr;
@@ -217,6 +218,8 @@ void Shape::BuildMaterial(const RE::BSGeometry::GEOMETRY_RUNTIME_DATA& geometryR
 				logger::debug("[RT] BuildMaterial - BSLightingShaderProperty Alpha: {}", lightingShaderProp->alpha);
 
 				if (auto shaderMaterial = lightingShaderProp->material) {
+					feature = shaderMaterial->GetFeature();
+
 					texCoordOffsetScale = {
 						shaderMaterial->texCoordOffset[0].x, shaderMaterial->texCoordOffset[0].y,
 						shaderMaterial->texCoordScale[0].x, shaderMaterial->texCoordScale[0].y
@@ -247,18 +250,18 @@ void Shape::BuildMaterial(const RE::BSGeometry::GEOMETRY_RUNTIME_DATA& geometryR
 
 						roughness = lightingPBRMaterial->GetRoughnessScale();
 
-						pbrShaderFlags = GetPBRShaderFlags(lightingPBRMaterial);
+						pbrFlags = GetPBRShaderFlags(lightingPBRMaterial);
 					}
 
 					// Glow
-					if (shaderMaterial->GetFeature() == Feature::kGlowMap) {
+					if (feature == Feature::kGlowMap) {
 						if (const auto* lightingGlowMaterial = skyrim_cast<RE::BSLightingShaderMaterialGlowmap*>(shaderMaterial)) {
 							effectTexture = TryGetTexture(lightingGlowMaterial->glowTexture);
 						}
 					}
 
 					// Hair
-					if (shaderMaterial->GetFeature() == Feature::kHairTint) {
+					if (feature == Feature::kHairTint) {
 						if (const auto* lightingHairTintMaterial = skyrim_cast<RE::BSLightingShaderMaterialHairTint*>(shaderMaterial)) {
 							baseColor *= float4(lightingHairTintMaterial->tintColor.red, lightingHairTintMaterial->tintColor.green, lightingHairTintMaterial->tintColor.blue, 1.0f);
 						}
@@ -334,67 +337,68 @@ void Shape::BuildMaterial(const RE::BSGeometry::GEOMETRY_RUNTIME_DATA& geometryR
 		effectTexReg,
 		rmaosTexReg,
 		shaderType,
-		pbrShaderFlags);
+		feature,
+		pbrFlags);
 }
 
 stl::enumeration<PBRShaderFlags, uint16_t> Shape::GetPBRShaderFlags(const BSLightingShaderMaterialPBR* pbrMaterial)
 {
 	auto graphicsState = globals::game::graphicsState;
 
-	stl::enumeration<PBRShaderFlags, uint16_t> shaderFlags;
+	stl::enumeration<PBRShaderFlags, uint16_t> pbrFlags;
 
 	if (pbrMaterial->pbrFlags.any(PBRFlags::TwoLayer)) {
-		shaderFlags.set(PBRShaderFlags::TwoLayer);
+		pbrFlags.set(PBRShaderFlags::TwoLayer);
 		if (pbrMaterial->pbrFlags.any(PBRFlags::InterlayerParallax)) {
-			shaderFlags.set(PBRShaderFlags::InterlayerParallax);
+			pbrFlags.set(PBRShaderFlags::InterlayerParallax);
 		}
 		if (pbrMaterial->pbrFlags.any(PBRFlags::CoatNormal)) {
-			shaderFlags.set(PBRShaderFlags::CoatNormal);
+			pbrFlags.set(PBRShaderFlags::CoatNormal);
 		}
 		if (pbrMaterial->pbrFlags.any(PBRFlags::ColoredCoat)) {
-			shaderFlags.set(PBRShaderFlags::ColoredCoat);
+			pbrFlags.set(PBRShaderFlags::ColoredCoat);
 		}
 	} else if (pbrMaterial->pbrFlags.any(PBRFlags::HairMarschner)) {
-		shaderFlags.set(PBRShaderFlags::HairMarschner);
+		pbrFlags.set(PBRShaderFlags::HairMarschner);
 	} else {
 		if (pbrMaterial->pbrFlags.any(PBRFlags::Subsurface)) {
-			shaderFlags.set(PBRShaderFlags::Subsurface);
+			pbrFlags.set(PBRShaderFlags::Subsurface);
 		}
 		if (pbrMaterial->pbrFlags.any(PBRFlags::Fuzz)) {
-			shaderFlags.set(PBRShaderFlags::Fuzz);
+			pbrFlags.set(PBRShaderFlags::Fuzz);
 		} else {
 			if (pbrMaterial->GetGlintParameters().enabled) {
-				shaderFlags.set(PBRShaderFlags::Glint);
+				pbrFlags.set(PBRShaderFlags::Glint);
 			}
 
 			// This is slimmed down because we don't have access to lightingFlags
 			if (pbrMaterial->GetProjectedMaterialGlintParameters().enabled) {
-				shaderFlags.set(PBRShaderFlags::ProjectedGlint);
+				pbrFlags.set(PBRShaderFlags::ProjectedGlint);
 			}
 		}
 	}
 
 	const bool hasEmissive = pbrMaterial->emissiveTexture != nullptr && pbrMaterial->emissiveTexture != graphicsState->GetRuntimeData().defaultTextureBlack;
 	if (hasEmissive) {
-		shaderFlags.set(PBRShaderFlags::HasEmissive);
+		pbrFlags.set(PBRShaderFlags::HasEmissive);
 	}
 
 	const bool hasDisplacement = pbrMaterial->displacementTexture != nullptr && pbrMaterial->displacementTexture != graphicsState->GetRuntimeData().defaultTextureBlack;
 	if (hasDisplacement) {
-		shaderFlags.set(PBRShaderFlags::HasDisplacement);
+		pbrFlags.set(PBRShaderFlags::HasDisplacement);
 	}
 
 	const bool hasFeaturesTexture0 = pbrMaterial->featuresTexture0 != nullptr && pbrMaterial->featuresTexture0 != graphicsState->GetRuntimeData().defaultTextureWhite;
 	if (hasFeaturesTexture0) {
-		shaderFlags.set(PBRShaderFlags::HasFeaturesTexture0);
+		pbrFlags.set(PBRShaderFlags::HasFeaturesTexture0);
 	}
 
 	const bool hasFeaturesTexture1 = pbrMaterial->featuresTexture1 != nullptr && pbrMaterial->featuresTexture1 != graphicsState->GetRuntimeData().defaultTextureWhite;
 	if (hasFeaturesTexture1) {
-		shaderFlags.set(PBRShaderFlags::HasFeaturesTexture1);
+		pbrFlags.set(PBRShaderFlags::HasFeaturesTexture1);
 	}
 
-	return shaderFlags;
+	return pbrFlags;
 }
 
 void Shape::CreateBuffers(const std::wstring& name)

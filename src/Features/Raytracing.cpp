@@ -106,6 +106,27 @@ void DrawFloat2(const char* label, float2& v, float min = 0.0f, float max = 1.0f
 	}
 }
 
+template <typename T>
+static void DrawEnumRadio(const char* label, T& variable) {
+	int denoiser = static_cast<int32_t>(variable);
+	ImGui::TextUnformatted(label);
+
+	ImGui::SameLine();
+	ImGui::Dummy(ImVec2(25, 0));
+
+	for (auto& [value, name] : magic_enum::enum_entries<T>()) {
+		ImGui::SameLine();
+		ImGui::RadioButton(name.data(), &denoiser, static_cast<int32_t>(value));
+
+		if (auto _tt = Util::HoverTooltipWrapper()) {
+			ImGui::Text("%s tooltip.", name.data());
+			//ImGui::Text("Enables Spatially Hashed Radiance Cache, a technique aimed at improving signal quality and performance in the context of path tracing.");
+		}
+	}
+
+	variable = static_cast<T>(denoiser);
+}
+
 void Raytracing::DrawSettings()
 {
 	ImGui::Checkbox("Enabled", &settings.Enabled);
@@ -115,8 +136,10 @@ void Raytracing::DrawSettings()
 
 	ImGui::Checkbox("Global Illumination", &settings.GlobalIllumination);
 
-	// Denoiser
-	{
+	DrawEnumRadio("Mode", settings.Mode);
+	DrawEnumRadio("Denoiser", settings.Denoiser);
+
+	/*{
 		int denoiser = static_cast<int32_t>(settings.Denoiser);
 		ImGui::TextUnformatted("Denoiser");
 
@@ -129,7 +152,7 @@ void Raytracing::DrawSettings()
 		}
 
 		settings.Denoiser = static_cast<Denoiser>(denoiser);
-	}
+	}*/
 
 	if (ImGui::SliderInt("Bounces", &settings.Bounces, 1, 32))
 		settings.Bounces = std::clamp(settings.Bounces, 1, 32);
@@ -143,42 +166,13 @@ void Raytracing::DrawSettings()
 	DrawFloat2("Roughness", settings.Roughness);
 	DrawFloat2("Metalness", settings.Metalness);
 
-	if (ImGui::DragFloat("Diffuse Strength", &settings.Diffuse, 0.001f))
-		settings.Diffuse = std::max(0.0f, settings.Diffuse);
+	DrawDenoiserSettings();
 
-	if (ImGui::DragFloat("Specular Strength", &settings.Specular, 0.001f))
-		settings.Specular = std::max(0.0f, settings.Specular);
+#ifdef SHARC
+	DrawSHaRCSettings();
+#endif
 
-	if (ImGui::DragFloat("Emissive Strength", &settings.Emissive, 0.001f))
-		settings.Emissive = std::max(0.0f, settings.Emissive);
-
-	if (ImGui::DragFloat("Effect Strength", &settings.Effect, 0.001f))
-		settings.Effect = std::max(0.0f, settings.Effect);
-
-	if (ImGui::DragFloat("Sky Strength", &settings.Sky, 0.001f))
-		settings.Sky = std::max(0.0f, settings.Sky);
-
-	if (ImGui::CollapsingHeader("Lights", ImGuiTreeNodeFlags_DefaultOpen)) {
-		if (ImGui::TreeNodeEx("Direct Lights", ImGuiTreeNodeFlags_DefaultOpen)) {
-			if(ImGui::DragFloat("Directional Strength", &settings.Directional, 0.001f))
-				settings.Directional = std::max(0.0f, settings.Directional);
-
-			if (ImGui::DragFloat("Point Strength", &settings.Point, 0.001f))
-				settings.Point = std::max(0.0f, settings.Point);
-
-			ImGui::Checkbox("Lod Dimmer", &settings.LodDimmer);
-			ImGui::Checkbox("Gamma To Linear", &settings.GammaToLinear);
-			
-			ImGui::Checkbox("Raytraced Shadows", &settings.RaytracedShadows);
-			if (auto _tt = Util::HoverTooltipWrapper()) {
-				ImGui::Text("Replaces directional light shadowmaps.\n");
-			}
-
-			ImGui::Checkbox("Cull Shadows", &settings.CullShadows);
-
-			ImGui::TreePop();
-		}
-	}
+	DrawLightingSettings();
 
 	ImGui::Checkbox("Path Tracing", &settings.PathTracing);
 	if (auto _tt = Util::HoverTooltipWrapper()) {
@@ -191,32 +185,6 @@ void Raytracing::DrawSettings()
 	}
 
 	ImGui::Checkbox("Russian Roulette", &settings.RussianRoulette);
-
-#ifdef SHARC
-	ImGui::Checkbox("SHaRC", &settings.SHaRC);
-	if (auto _tt = Util::HoverTooltipWrapper()) {
-		ImGui::Text("Enables Spatially Hashed Radiance Cache, a technique aimed at improving signal quality and performance in the context of path tracing.");
-	}
-
-	ImGui::DragFloat("SHaRC Scale", &settings.SHaRCScale, 0.001f, 0.1f, 10.0f);
-	settings.SHaRCScale = std::clamp(settings.SHaRCScale, 0.1f, 10.0f);
-#endif
-
-#ifdef DLSS_RR
-	if (ImGui::BeginCombo("DLSS RR Quality Mode", magic_enum::enum_name(settings.DLSSRRQualityMode).data())) {
-		for (auto& value : magic_enum::enum_values<DLSSRRQuality>()) {
-			bool isSelected = (settings.DLSSRRQualityMode == value);
-
-			if (ImGui::Selectable(magic_enum::enum_name(value).data(), isSelected))
-				settings.DLSSRRQualityMode = value;
-
-			if (isSelected)
-				ImGui::SetItemDefaultFocus();
-		}
-
-		ImGui::EndCombo();
-	}
-#endif
 
 	if (ImGui::CollapsingHeader("Debug", ImGuiTreeNodeFlags_DefaultOpen)) {
 
@@ -310,6 +278,100 @@ void Raytracing::DrawSettings()
 
 }
 
+#ifdef SHARC
+void Raytracing::DrawSHaRCSettings()
+{
+	if (ImGui::TreeNodeEx("SHaRC", ImGuiTreeNodeFlags_CollapsingHeader)) {
+		ImGui::BeginDisabled(settings.Mode != Mode::SHaRC);
+
+		auto& sharcSettings = settings.SHaRCSettings;
+
+		ImGui::DragFloat("Scale", &sharcSettings.SceneScale, 0.001f, 0.1f, 10.0f);
+		sharcSettings.SceneScale = std::clamp(sharcSettings.SceneScale, 0.1f, 10.0f);
+
+		ImGui::InputInt("Accumulation Frames", &sharcSettings.AccumFrameNum);
+		sharcSettings.AccumFrameNum = std::clamp(sharcSettings.AccumFrameNum, 5, 100);
+
+		ImGui::InputInt("Stale Frames", &sharcSettings.StaleFrameNum);
+		sharcSettings.StaleFrameNum = std::clamp(sharcSettings.StaleFrameNum, 32, 128);
+
+		ImGui::Checkbox("Antifirefly Filter", &sharcSettings.AntifireflyFilter);
+
+		ImGui::TreePop();
+	}
+}
+#endif
+
+void Raytracing::DrawDenoiserSettings()
+{
+#ifdef DLSS_RR
+	if (ImGui::BeginCombo("DLSS RR Quality Mode", magic_enum::enum_name(settings.DLSSRRQualityMode).data())) {
+		for (auto& value : magic_enum::enum_values<DLSSRRQuality>()) {
+			bool isSelected = (settings.DLSSRRQualityMode == value);
+
+			if (ImGui::Selectable(magic_enum::enum_name(value).data(), isSelected))
+				settings.DLSSRRQualityMode = value;
+
+			if (isSelected)
+				ImGui::SetItemDefaultFocus();
+		}
+
+		ImGui::EndCombo();
+	}
+#endif
+}
+
+void Raytracing::DrawLightingSettings()
+{
+	if (ImGui::TreeNodeEx("Lighting", ImGuiTreeNodeFlags_CollapsingHeader)) {
+		if (ImGui::DragFloat("Diffuse Strength", &settings.Diffuse, 0.001f))
+			settings.Diffuse = std::max(0.0f, settings.Diffuse);
+
+		if (ImGui::DragFloat("Specular Strength", &settings.Specular, 0.001f))
+			settings.Specular = std::max(0.0f, settings.Specular);
+
+		if (ImGui::DragFloat("Emissive Strength", &settings.Emissive, 0.001f))
+			settings.Emissive = std::max(0.0f, settings.Emissive);
+
+		if (ImGui::DragFloat("Effect Strength", &settings.Effect, 0.001f))
+			settings.Effect = std::max(0.0f, settings.Effect);
+
+		if (ImGui::DragFloat("Sky Strength", &settings.Sky, 0.001f))
+			settings.Sky = std::max(0.0f, settings.Sky);
+
+		DrawLightSettings();
+
+		ImGui::TreePop();
+	}
+}
+
+void Raytracing::DrawLightSettings()
+{
+	if (ImGui::TreeNodeEx("Lights", ImGuiTreeNodeFlags_CollapsingHeader)) {
+		if (ImGui::TreeNodeEx("Direct Lights", ImGuiTreeNodeFlags_DefaultOpen)) {
+			if (ImGui::DragFloat("Directional Strength", &settings.Directional, 0.001f))
+				settings.Directional = std::max(0.0f, settings.Directional);
+
+			if (ImGui::DragFloat("Point Strength", &settings.Point, 0.001f))
+				settings.Point = std::max(0.0f, settings.Point);
+
+			ImGui::Checkbox("Lod Dimmer", &settings.LodDimmer);
+			ImGui::Checkbox("Gamma To Linear", &settings.GammaToLinear);
+
+			ImGui::Checkbox("Raytraced Shadows", &settings.RaytracedShadows);
+			if (auto _tt = Util::HoverTooltipWrapper()) {
+				ImGui::Text("Replaces directional light shadowmaps.\n");
+			}
+
+			ImGui::Checkbox("Cull Shadows", &settings.CullShadows);
+
+			ImGui::TreePop();
+		}
+
+		ImGui::TreePop();
+	}
+}
+
 void Raytracing::DrawOverlay()
 {
 	auto* menu = Menu::GetSingleton();
@@ -356,22 +418,45 @@ void Raytracing::DrawOverlay()
 	ImGui::End();
 }
 
+void Raytracing::CreatePipelines()
+{
+	sharcPipeline = eastl::make_unique<SHaRCPipeline>();
+}
+
 void Raytracing::SetupResources()
 {
+	CreatePipelines();
+
 	auto renderer = globals::game::renderer;
 	auto device = globals::d3d::device;
 
+	auto device12 = d3d12Device.get();
+
 	skinningHeap = eastl::make_unique<DX12::DescriptorHeap<SkinningHeap>>(
-		d3d12Device.get(),
+		device12,
 		D3D12_DESCRIPTOR_HEAP_DESC(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, SkinningHeap::NumDescriptors(), D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE));
 
 	giHeap = eastl::make_unique<DX12::DescriptorHeap<GIHeap>>(
-		d3d12Device.get(), 
+		device12, 
 		D3D12_DESCRIPTOR_HEAP_DESC(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, GIHeap::NumDescriptors(), D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE));
 
 	shadowHeap = eastl::make_unique<DX12::DescriptorHeap<ShadowsHeap>>(
-		d3d12Device.get(),
+		device12,
 		D3D12_DESCRIPTOR_HEAP_DESC(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, ShadowsHeap::NumDescriptors(), D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE));
+
+	for (auto& pipeline : GetPipelines()) {
+		pipeline->CreateRootSignature(device12);
+		pipeline->CompileShaders(device12);
+		pipeline->SetupResources(device12);
+	}
+
+#ifdef SHARC
+	sharcPipeline->CreateUAVs(
+		giHeap->CPUHandle(GIHeap::Slot::SHaRCHashEntries),
+		giHeap->CPUHandle(GIHeap::Slot::SHaRCLock),
+		giHeap->CPUHandle(GIHeap::Slot::SHaRCAccumulation),
+		giHeap->CPUHandle(GIHeap::Slot::SHaRCResolved));
+#endif
 
 	// Setup default textures (this is a bit wordy...)
 	{
@@ -525,32 +610,6 @@ void Raytracing::SetupResources()
 			specularHitDistanceTexture->CreateUAV(giHeap->CPUHandle(GIHeap::Slot::SpecularHitDist));
 		}
 
-#ifdef SHARC
-		// u3 - Sharc HashEntries Buffer
-		{
-			sharcHashEntriesBuffer = eastl::make_unique<DX12::StructuredBuffer<uint64_t>>(d3d12Device.get(), SHARC_CAPACITY, true);
-			sharcHashEntriesBuffer->SetName(L"SHaRC HashEntries Buffer");
-
-			sharcHashEntriesBuffer->CreateUAV(giHeap->CPUHandle(GIHeap::Slot::SHaRCHashEntries));
-		}
-
-		// u4 - Sharc Accumulation Buffer
-		{
-			sharcAccumulationBuffer = eastl::make_unique<DX12::StructuredBuffer<SharcAccumulationData>>(d3d12Device.get(), SHARC_CAPACITY, true);
-			sharcAccumulationBuffer->SetName(L"SHaRC Accumulation Buffer");
-
-			sharcAccumulationBuffer->CreateUAV(giHeap->CPUHandle(GIHeap::Slot::SHaRCAccumulation));
-		}
-
-		// u5 - Sharc Resolved Buffer
-		{
-			sharcResolvedBuffer = eastl::make_unique<DX12::StructuredBuffer<SharcPackedData>>(d3d12Device.get(), SHARC_CAPACITY, true);
-			sharcResolvedBuffer->SetName(L"SHaRC Resolved Buffer");
-
-			sharcResolvedBuffer->CreateUAV(giHeap->CPUHandle(GIHeap::Slot::SHaRCResolved));
-		}
-#endif
-
 		{
 			D3D11_TEXTURE2D_DESC texDesc{};
 			texDesc.Width = mainDesc.Width;
@@ -616,11 +675,11 @@ void Raytracing::SetupResources()
 
 	logger::debug("Creating constant buffer...");
 	{
-		frameBuffer = eastl::make_unique<DX12::StructuredBufferUpload<GIFrameData>>(d3d12Device.get(), 1, false, 2);
+		frameBuffer = eastl::make_unique<DX12::StructuredBufferUpload<FrameData>>(d3d12Device.get(), 1, false, 2);
 		frameBuffer->TransitionBarrier(commandList.get(), D3D12_RESOURCE_STATE_VERTEX_AND_CONSTANT_BUFFER);
 		DX::ThrowIfFailed(frameBuffer->resource->SetName(L"Frame Buffer"));
 
-		frameBufferData = eastl::make_unique<GIFrameData>();
+		frameData = eastl::make_unique<FrameData>();
 
 		shadowsCB = eastl::make_unique<DX12::StructuredBufferUpload<ShadowsFrameData>>(d3d12Device.get(), 1);
 		shadowsCB->TransitionBarrier(commandList.get(), D3D12_RESOURCE_STATE_VERTEX_AND_CONSTANT_BUFFER);
@@ -1109,8 +1168,8 @@ void Raytracing::UpdateLights()
 
 		auto& diffuse = dirLight->GetLightRuntimeData().diffuse;
 
-		frameBufferData->Directional.Vector = -direction;
-		frameBufferData->Directional.Color = GammaToLinear(float3(diffuse.red, diffuse.green, diffuse.blue)) * settings.Directional;  // * ( Util::IsInterior() ? 0.0f : 1.0f );
+		frameData->Directional.Vector = -direction;
+		frameData->Directional.Color = GammaToLinear(float3(diffuse.red, diffuse.green, diffuse.blue)) * settings.Directional;  // * ( Util::IsInterior() ? 0.0f : 1.0f );
 	}
 
 	// Point lights
@@ -2250,56 +2309,61 @@ void Raytracing::DrawRTGI()
 
 	// Update framebuffer
 	{
-		frameBufferData->ViewInverse = globals::game::frameBufferCached.GetCameraViewInverse().Transpose();
-		frameBufferData->ProjInverse = globals::game::frameBufferCached.GetCameraProjInverse().Transpose();
+		frameData->ViewInverse = globals::game::frameBufferCached.GetCameraViewInverse().Transpose();
+		frameData->ProjInverse = globals::game::frameBufferCached.GetCameraProjInverse().Transpose();
 
-		float4 cameraPosition = globals::game::frameBufferCached.GetCameraPosAdjust();
-		frameBufferData->Position = float3(cameraPosition.x, cameraPosition.y, cameraPosition.z);
-		frameBufferData->FrameCount = globals::state->frameCount;
+		float4 position = globals::game::frameBufferCached.GetCameraPosAdjust();
+		frameData->Position = float3(position.x, position.y, position.z);
 
-		frameBufferData->CameraData = Util::GetCameraData();
+		float4 positionPrev = globals::game::frameBufferCached.GetCameraPreviousPosAdjust();
+		frameData->PositionPrev = float3(positionPrev.x, positionPrev.y, positionPrev.z);
+
+		frameData->FrameCount = globals::state->frameCount;
+
+		frameData->CameraData = Util::GetCameraData();
 
 		auto eye = Util::GetCameraData(0);
 		float2 ndcToViewMult = float2(2.0f / eye.projMat(0, 0), -2.0f / eye.projMat(1, 1));
 		float2 ndcToViewAdd = float2(-1.0f / eye.projMat(0, 0), 1.0f / eye.projMat(1, 1));
 
-		frameBufferData->NDCToView = float4(ndcToViewMult.x, ndcToViewMult.y, ndcToViewAdd.x, ndcToViewAdd.y);
+		frameData->NDCToView = float4(ndcToViewMult.x, ndcToViewMult.y, ndcToViewAdd.x, ndcToViewAdd.y);
 
-		frameBufferData->Roughness = settings.Roughness;
-		frameBufferData->Metalness = settings.Metalness;
+		frameData->Roughness = settings.Roughness;
+		frameData->Metalness = settings.Metalness;
 
-		frameBufferData->Diffuse = settings.Diffuse;
-		frameBufferData->Specular = settings.Specular;
-		frameBufferData->Emissive = settings.Emissive;
-		frameBufferData->Effect = settings.Effect;
-		frameBufferData->Sky = settings.Sky;
+		frameData->Diffuse = settings.Diffuse;
+		frameData->Specular = settings.Specular;
+		frameData->Emissive = settings.Emissive;
+		frameData->Effect = settings.Effect;
+		frameData->Sky = settings.Sky;
 
-		frameBufferData->RussianRoulette = settings.RussianRoulette;
+		frameData->RussianRoulette = settings.RussianRoulette;
 
 #ifdef SHARC
-		frameBufferData->SHaRCScale = settings.SHaRCScale / Util::Units::GAME_UNIT_TO_M;
-		frameBufferData->SHaRCCapacity = SHARC_CAPACITY;
-		frameBufferData->SHaRCUpdatePass = true;
+		frameData->SHaRC = settings.SHaRCSettings.GetFrameData(true);
 #endif
 
-		frameBufferData->DispatchSize = { width, height };
+		frameData->DispatchSize = { width, height };
 
 		// Update Features
 		{
 			auto wetnessEffect = globals::features::wetnessEffects.GetCommonBufferData();
 
-			frameBufferData->Features.ExtendedMaterial = *reinterpret_cast<CPMSettings*>(&globals::features::extendedMaterials.settings);
-			frameBufferData->Features.WetnessEffects = *reinterpret_cast<WetnessEffectsSettings*>(&wetnessEffect);
-			frameBufferData->Features.CloudShadows = *reinterpret_cast<CloudShadowsSettings*>(&globals::features::cloudShadows.settings);
-			frameBufferData->Features.HairSpecular = *reinterpret_cast<HairSpecularSettings*>(&globals::features::hairSpecular.settings);
-			frameBufferData->Features.ExtendedTranslucency = *reinterpret_cast<ExtendedTranslucencySettings*>(&globals::features::extendedTranslucency.settings);
+			frameData->Features.ExtendedMaterial = *reinterpret_cast<CPMSettings*>(&globals::features::extendedMaterials.settings);
+			frameData->Features.WetnessEffects = *reinterpret_cast<WetnessEffectsSettings*>(&wetnessEffect);
+			frameData->Features.CloudShadows = *reinterpret_cast<CloudShadowsSettings*>(&globals::features::cloudShadows.settings);
+			frameData->Features.HairSpecular = *reinterpret_cast<HairSpecularSettings*>(&globals::features::hairSpecular.settings);
+			frameData->Features.ExtendedTranslucency = *reinterpret_cast<ExtendedTranslucencySettings*>(&globals::features::extendedTranslucency.settings);
 		}
 
-		frameBuffer->Update(frameBufferData.get(), sizeof(GIFrameData), 0, 0);
+		// Upload buffer 0, for SHaRC resolve pass
+		frameBuffer->Update(frameData.get(), sizeof(FrameData), 0, 0);
 
-		frameBufferData->SHaRCUpdatePass = false;
-		frameBuffer->Update(frameBufferData.get(), sizeof(GIFrameData), 0, 1);
+		// Upload buffer 1, for main RT pass
+		frameData->SHaRC.UpdatePass = false;
+		frameBuffer->Update(frameData.get(), sizeof(FrameData), 0, 1);
 
+		// Upload buffer 0 to GPU
 		frameBuffer->Upload(commandList.get());
 	}
 
@@ -2349,8 +2413,11 @@ void Raytracing::DrawRTGI()
 
 				commandList->DispatchRays(&dispatchDesc);
 
-				// Update Frame Buffer for main RT pass
-				frameBuffer->UploadRegion(commandList.get(), sizeof(GIFrameData::SHaRCUpdatePass), offsetof(GIFrameData, SHaRCUpdatePass), 1);
+				sharcPipeline->Resolve(commandList.get());
+
+				// Update Frame Buffer for main RT pass, maybe we should use two buffers? 
+				// Using one GPU heap buffer with multiple upload buffers felt like a hack (but it works)
+				frameBuffer->UploadRegion(commandList.get(), sizeof(SHaRCFrameData::UpdatePass), offsetof(FrameData, SHaRC) + offsetof(SHaRCFrameData, UpdatePass), 1);
 			}
 #endif
 			// Main pass
@@ -2883,6 +2950,7 @@ void Raytracing::CreateRootSignature()
 			{ GIHeap::Slot::Reflectance, 1 }, 
 			{ GIHeap::Slot::SpecularHitDist, 1 },
 			{ GIHeap::Slot::SHaRCHashEntries, 1 },
+			{ GIHeap::Slot::SHaRCLock, 1 },
 			{ GIHeap::Slot::SHaRCAccumulation, 1 },
 			{ GIHeap::Slot::SHaRCResolved, 1 }
 		});
@@ -3125,7 +3193,7 @@ void Raytracing::CompileRTGIShaders()
 	};
 
 #ifdef SHARC
-	if (settings.SHaRC) {
+	if (settings.Mode == Mode::SHaRC) {
 		defines.emplace_back(L"SHARC");
 	}
 #endif

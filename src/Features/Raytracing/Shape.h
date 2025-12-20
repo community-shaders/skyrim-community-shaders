@@ -30,6 +30,41 @@ class Shape
 public:
 	struct Material
 	{
+		enum ShaderType : uint16_t
+		{
+			Grass = 0,
+			Sky = 1,
+			Water = 2,
+			BloodSplatter = 3,
+			Lighting = 4,
+			Effect = 5,
+			DistantTree = 6,
+			Particle = 7
+		};
+
+		// We have a limited number of bits and not all types are necessary
+		ShaderType SupportedType(RE::BSShader::Type type)
+		{
+			switch (type) {
+			case RE::BSShader::Type::Grass:
+				return ShaderType::Grass;
+			case RE::BSShader::Type::Sky:
+				return ShaderType::Sky;
+			case RE::BSShader::Type::Water:
+				return ShaderType::Water;
+			case RE::BSShader::Type::BloodSplatter:
+				return ShaderType::BloodSplatter;
+			case RE::BSShader::Type::Effect:
+				return ShaderType::Effect;
+			case RE::BSShader::Type::DistantTree:
+				return ShaderType::DistantTree;
+			case RE::BSShader::Type::Particle:
+				return ShaderType::Particle;
+			default:
+				return ShaderType::Lighting;
+			}
+		}
+
 		half4 BaseColor;
 		half4 EffectColor;
 		half4 TexCoordOffsetScale;
@@ -42,19 +77,23 @@ public:
 		eastl::shared_ptr<Allocation> RMAOSTexture;
 
 		RE::BSShader::Type ShaderType;
-		stl::enumeration<PBRShaderFlags, uint16_t> PBRShaderFlags;
+		RE::BSShaderMaterial::Feature Feature;
+		stl::enumeration<PBRShaderFlags, uint16_t> PBRFlags;
+
+		//stl::enumeration<RE::BSShaderProperty::EShaderPropertyFlag, uint64_t> ShaderFlags;
 
 		MaterialData GetData() {
 			return MaterialData(
-				BaseColor, EffectColor, 
+				BaseColor, EffectColor,
 				TexCoordOffsetScale,
 				roughness,
-				BaseTexture->GetIndex(), 
-				NormalTexture->GetIndex(), 
-				EffectTexture->GetIndex(), 
-				RMAOSTexture->GetIndex(), 
-				static_cast<uint16_t>(ShaderType),
-				PBRShaderFlags.underlying());
+				BaseTexture->GetIndex(),
+				NormalTexture->GetIndex(),
+				EffectTexture->GetIndex(),
+				RMAOSTexture->GetIndex(),
+				SupportedType(ShaderType),
+				static_cast<uint16_t>(Feature),
+				PBRFlags.underlying());
 		}
 	};
 

@@ -210,3 +210,8 @@ static inline bool ShareableTexture(const char* path)
 
 	return true;
 }
+
+static uint32_t DivideRoundUp(uint32_t x, uint32_t divisor)
+{
+	return (x + divisor - 1) / divisor;
+}

@@ -27,6 +27,7 @@
 #include "Features/Raytracing/Types.h"
 #include "Features/Raytracing/Shape.h"
 #include "Features/Raytracing/Model.h"
+#include "Features/Raytracing/Pipelines/SHaRCPipeline.h"
 
 #include "Raytracing/FeatureData.hlsli"
 #include "Raytracing/Includes/Types/VertexUpdate.hlsli"
@@ -36,12 +37,8 @@
 #include "Raytracing/Includes/Types/Instance.hlsli"
 #include "Raytracing/Includes/Types/Material.hlsli"
 #include "Raytracing/Includes/Types/Light.hlsli"
-#include "Raytracing/Includes/Types/GIFrameData.hlsli"
+#include "Raytracing/Includes/Types/FrameData.hlsli"
 #include "Raytracing/Includes/Types/ShadowsFrameData.hlsli"
-
-#ifdef SHARC
-#include "Raytracing/Includes/RT/SHaRC/SharcTypes.h"
-#endif
 
 #include "Raytracing/Denoiser/SVGF/SVGF.hlsli"
 
@@ -75,10 +72,6 @@ struct Raytracing : public OverlayFeature
 
 	static constexpr uint SKY_CUBEMAP_SIZE = 256;
 
-#ifdef SHARC
-	static constexpr size_t SHARC_CAPACITY = 1ull << 22;
-#endif
-
 	struct GIHeapDef
 	{
 		enum class Table
@@ -97,6 +90,7 @@ struct Raytracing : public OverlayFeature
 			SpecularHitDist,
 #ifdef SHARC
 			SHaRCHashEntries,
+			SHaRCLock,
 			SHaRCAccumulation,
 			SHaRCResolved,
 #endif
@@ -181,6 +175,25 @@ struct Raytracing : public OverlayFeature
 	};
 	using SVGFHeap = Heap<SVGFHeapDef::Table, SVGFHeapDef::Slot>;
 
+#ifdef SHARC
+	struct SHaRCHeapDef
+	{
+		enum class Table
+		{
+			UAV
+		};
+
+		enum class Slot
+		{
+			SHaRCHashEntries,
+			SHaRCAccumulation,
+			SHaRCResolved,
+			None
+		};
+	};
+	using SHaRCHeap = Heap<SHaRCHeapDef::Table, SHaRCHeapDef::Slot>;
+#endif
+
 	////////////////////////////////////////////////// Boilerplate
 	// Metadata
 	virtual inline std::string GetName() override { return "Raytracing"; }
@@ -209,6 +222,12 @@ struct Raytracing : public OverlayFeature
 	virtual void LoadSettings(json& o_json) override;
 	virtual void SaveSettings(json& o_json) override;
 	virtual void DrawSettings() override;
+
+	void DrawSHaRCSettings();
+	void DrawDenoiserSettings();
+	void DrawLightingSettings();
+	void DrawLightSettings();
+
 	virtual void DrawOverlay() override;
 	virtual void PostPostLoad() override;
 
@@ -229,6 +248,7 @@ struct Raytracing : public OverlayFeature
 
 	void Initialize();
 	void InitD3D12(ID3D11Device* ppDevice, ID3D11DeviceContext* pImmediateContext, IDXGIAdapter* a_adapter);
+	void CreatePipelines();
 	void CreateRootSignature();
 	void CreateShadowsRootSignature();
 	void CreateSkinningRootSignature();
@@ -286,6 +306,14 @@ struct Raytracing : public OverlayFeature
 		return loaded && settings.Enabled;
 	};
 
+	const std::vector<IPipeline*>& GetPipelines() {
+		static std::vector<IPipeline*> pipelines = {
+			sharcPipeline.get()
+		};
+
+		return pipelines;
+	};
+
 	static constexpr DXGI_SAMPLE_DESC NO_AA = { .Count = 1, .Quality = 0 };
 	static constexpr D3D12_HEAP_PROPERTIES UPLOAD_HEAP = { .Type = D3D12_HEAP_TYPE_UPLOAD };
 	static constexpr D3D12_HEAP_PROPERTIES DEFAULT_HEAP = { .Type = D3D12_HEAP_TYPE_DEFAULT };
@@ -334,11 +362,48 @@ struct Raytracing : public OverlayFeature
 		AO
 	};
 
+	enum struct Mode : int32_t
+	{
+		Reference,
+#ifdef SHARC
+		SHaRC
+#endif
+	};
+
+#ifdef SHARC
+	static constexpr Mode DefaultMode = Mode::SHaRC;
+#else
+	static constexpr Mode DefaultMode = Mode::Reference;
+#endif
+
+	struct SHaRCSettings
+	{
+		float SceneScale = 1.0f;
+		int AccumFrameNum = 10;
+		int StaleFrameNum = 64;
+		float RadianceScale = 1e3f;
+		bool AntifireflyFilter = true;
+
+		SHaRCFrameData GetFrameData(bool updatePass) const
+		{
+			return {
+				.SceneScale = SceneScale / Util::Units::GAME_UNIT_TO_M,
+				.AccumFrameNum = (uint)AccumFrameNum,
+				.StaleFrameNum = (uint)StaleFrameNum,
+				.RadianceScale = RadianceScale,
+				.AntifireflyFilter = AntifireflyFilter,
+				.Capacity = SHaRCPipeline::MAX_CAPACITY,
+				.UpdatePass = updatePass
+			};
+		}
+	};
+
 	////////////////////////////////////////////////// Feature Specific Data
 	struct Settings
 	{
 		bool Enabled = true;
 		bool GlobalIllumination = true;
+		Mode Mode = DefaultMode;
 		Denoiser Denoiser = Denoiser::Accumulation;
 		int Bounces = 2;
 		int SamplesPerPixel = 1;
@@ -367,8 +432,7 @@ struct Raytracing : public OverlayFeature
 		PIXCaptureLocation PIXCaptureLocation = PIXCaptureLocation::GlobalIllumination;
 		bool EnableDebugDevice = false;
 #ifdef SHARC
-		bool SHaRC = true;
-		float SHaRCScale = 1.0f;
+		SHaRCSettings SHaRCSettings;
 #endif
 	} settings;
 
@@ -563,8 +627,8 @@ struct Raytracing : public OverlayFeature
 	eastl::unique_ptr<DX12::StructuredBufferUpload<Light>> lightBuffer = nullptr;
 
 	// GI
-	eastl::unique_ptr<DX12::StructuredBufferUpload<GIFrameData>> frameBuffer = nullptr;
-	eastl::unique_ptr<GIFrameData> frameBufferData = nullptr;
+	eastl::unique_ptr<DX12::StructuredBufferUpload<FrameData>> frameBuffer = nullptr;
+	eastl::unique_ptr<FrameData> frameData = nullptr;
 
 	// Shadows
 	eastl::unique_ptr<DX12::StructuredBufferUpload<D3D12_RAYTRACING_INSTANCE_DESC>> blasShadowInstanceBuffer = nullptr;
@@ -592,6 +656,17 @@ struct Raytracing : public OverlayFeature
 	winrt::com_ptr<ID3D12RootSignature> skinningRS = nullptr;
 	winrt::com_ptr<ID3D12PipelineState> skinningPipeline = nullptr;
 	eastl::unique_ptr<DX12::DescriptorHeap<SkinningHeap>> skinningHeap = nullptr;
+
+	// TODO: Move other effects to their own pipelines as well
+	//	eastl::unique_ptr<SkinningPipeline> skinningPipeline = nullptr;
+	//	eastl::unique_ptr<RTPipeline> RTPipeline = nullptr;
+	//	eastl::unique_ptr<SVGFPipeline> svgfPipeline = nullptr;
+	//	eastl::unique_ptr<ShadowPipeline> shadowPipeline = nullptr;
+
+#ifdef SHARC
+	// SHaRC
+	eastl::unique_ptr<SHaRCPipeline> sharcPipeline = nullptr;
+#endif
 
 	struct VertexUpdate
 	{
@@ -648,12 +723,6 @@ struct Raytracing : public OverlayFeature
 	eastl::unique_ptr<DX12::Texture2D> outputTexture = nullptr;
 	eastl::unique_ptr<DX12::Texture2D> reflectanceTexture = nullptr;
 	eastl::unique_ptr<DX12::Texture2D> specularHitDistanceTexture = nullptr;
-
-#ifdef SHARC
-	eastl::unique_ptr<DX12::StructuredBuffer<uint64_t>> sharcHashEntriesBuffer = nullptr;
-	eastl::unique_ptr<DX12::StructuredBuffer<SharcAccumulationData>> sharcAccumulationBuffer = nullptr;
-	eastl::unique_ptr<DX12::StructuredBuffer<SharcPackedData>> sharcResolvedBuffer = nullptr;
-#endif
 
 	eastl::unique_ptr<WrappedResource> depthTexture = nullptr;
 	eastl::unique_ptr<WrappedResource> motionVectorsTexture = nullptr;

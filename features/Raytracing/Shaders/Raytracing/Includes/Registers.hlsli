@@ -4,7 +4,7 @@
 #include "Raytracing/Includes/Types.hlsli"
 #include "Raytracing/Includes/RT/SHaRC.hlsli"
 
-ConstantBuffer<GIFrameData> Frame               : register(b0);
+ConstantBuffer<FrameData> Frame                 : register(b0);
 
 RWTexture2D<float4> OutputTexture               : register(u0);
 RWTexture2D<float4> SpecularAlbedo              : register(u1);
@@ -12,8 +12,9 @@ RWTexture2D<float> SpecularHitDist              : register(u2);
 
 #ifdef SHARC
 RWStructuredBuffer<uint64_t>                u_SharcHashEntriesBuffer    : register(u3);
-RWStructuredBuffer<SharcAccumulationData>   u_SharcAccumulationBuffer   : register(u4);
-RWStructuredBuffer<SharcPackedData>         u_SharcResolvedBuffer       : register(u5);
+RWStructuredBuffer<uint>                    u_SharcLockBuffer           : register(u4);
+RWStructuredBuffer<SharcAccumulationData>   u_SharcAccumulationBuffer   : register(u5);
+RWStructuredBuffer<SharcPackedData>         u_SharcResolvedBuffer       : register(u6);
 #endif
 
 Texture2D<float4> MainTexture                   : register(t0, space0); // RENDER_TARGETS::kMAIN
