@@ -1,6 +1,7 @@
 #ifndef __BRDF_DEPENDENCY_HLSL__
 #define __BRDF_DEPENDENCY_HLSL__
 
+#include "Common/Color.hlsli"
 #include "Common/Math.hlsli"
 
 namespace BRDF
@@ -243,6 +244,14 @@ namespace BRDF
         return EnvBRDFApproxLazarov(roughness, NdotV);
 #   endif
 	}
+
+    float ShadowedF90(float3 F0) {
+        // This scaler value is somewhat arbitrary, Schuler used 60 in his article. In here, we derive it from MIN_DIELECTRICS_F0 so
+        // that it takes effect for any reflectance lower than least reflective dielectrics
+        //const float t = 60.0f;
+        const float t = (1.0f / 0.04f);
+        return min(1.0f, t * Color::RGBToLuminance(F0));
+    }
 }
 
 #endif  // __BRDF_DEPENDENCY_HLSL__

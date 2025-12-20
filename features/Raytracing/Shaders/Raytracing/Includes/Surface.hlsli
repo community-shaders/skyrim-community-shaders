@@ -3,7 +3,7 @@
 
 #include "Raytracing/Includes/Common.hlsli"
 #include "Raytracing/Includes/PBR.hlsli"
-#include "Raytracing/Includes/BRDF.hlsli"
+#include "Raytracing/Includes/MonteCarlo.hlsli"
 #include "Raytracing/Includes/Types.hlsli"
 #include "Raytracing/Includes/RT/Geometry.hlsli"
 
@@ -79,8 +79,8 @@ struct Surface
         float3 effect = effectTexture.SampleLevel(BaseSampler, texCoord0, 0).rgb;
         
         // Lighting/PBR
-        surface.Albedo = Color::GammaToTrueLinear(base * material.BaseColor.rgb * vertexColor.rgb);
-        surface.Emissive = Color::GammaToTrueLinear(effect * material.EffectColor.rgb * material.EffectColor.a);        
+        surface.Albedo = base * material.BaseColor.rgb * vertexColor.rgb;
+        surface.Emissive = effect * material.EffectColor.rgb * material.EffectColor.a;        
         
 #ifdef PATH_TRACING        
         Texture2D normalTexture = Textures[NonUniformResourceIndex(material.NormalTexture)];

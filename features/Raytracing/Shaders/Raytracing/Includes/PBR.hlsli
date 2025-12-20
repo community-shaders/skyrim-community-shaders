@@ -47,13 +47,13 @@ namespace PBR
     
     float Roughness(float linearRoughness, float lower, float upper)
     {
-        return Square(clamp(Remap(linearRoughness, lower, upper), Constants::MinRoughness, Constants::MaxRoughness));
-    } 
+        return clamp(Remap(linearRoughness, lower, upper), Constants::MinRoughness, Constants::MaxRoughness);
+    }
     
     float3 F0(float3 albedo, float metalness)
     {
         return saturate(lerp(Defaults::F0, albedo, metalness));
-    }    
+    }
 }
 
 #endif  // PBR_HLSL

@@ -70,4 +70,32 @@ void NormalMap(float3 normalMap, float3 geomNormalWS, float3 geomTangentWS, floa
     bitangentWS = cross(normalWS, tangentWS) * tangentSign;  
 }
 
+uint StrongIntegerHash(uint x)
+{
+	// From https://github.com/skeeto/hash-prospector
+	// Current best hash in this form: https://github.com/skeeto/hash-prospector/issues/19#issuecomment-1105792898
+	// bias = 0.10734781817103507
+	x ^= x >> 16;
+	x *= 0x21f0aaad;
+	x ^= x >> 15;
+	x *= 0xf35a2d97;
+	x ^= x >> 15;
+	return x;
+}
+
+uint4 SamplerCore(inout uint seed)
+{
+	uint4 result = uint4(StrongIntegerHash(seed + 0),
+						 StrongIntegerHash(seed + 1),
+						 StrongIntegerHash(seed + 2),
+						 StrongIntegerHash(seed + 3));
+	seed += 4;
+	return result;
+}
+
+float2 Get2D(uint seed)
+{
+	return (SamplerCore(seed).xy) * 5.96046447754e-08;
+}
+
 #endif
