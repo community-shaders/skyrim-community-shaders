@@ -8,16 +8,12 @@
 
 #include "Raytracing/Includes/Types.hlsli"
 
-#ifndef MAX_DEPTH
-    #ifdef PATH_TRACING
-#define MAX_DEPTH (2)
-    #else
-#define MAX_DEPTH (1)
-    #endif
+#ifndef MAX_BOUNCES
+#define     MAX_BOUNCES (1)
 #endif
 
-#ifndef SAMPLES
-#define SAMPLES (1)
+#ifndef MAX_SAMPLES
+#define     MAX_SAMPLES (1)
 #endif
 
 #define SHADOW_MAX_DEPTH (1)
