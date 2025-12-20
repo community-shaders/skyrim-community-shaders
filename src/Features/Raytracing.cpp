@@ -297,6 +297,7 @@ void Raytracing::DrawSHaRCSettings()
 
 		ImGui::Checkbox("Antifirefly Filter", &sharcSettings.AntifireflyFilter);
 
+		ImGui::EndDisabled();
 		ImGui::TreePop();
 	}
 }
