@@ -229,7 +229,8 @@ void main()
 #if defined(SHARC) && defined(SHARC_UPDATE)
                 if (Frame.SHaRC.UpdatePass)
                 {
-                    SharcUpdateMiss(sharcParameters, sharcState, skyIrradiance);
+                    SharcUpdateMiss(sharcParameters, sharcState, skyIrradiance * throughput);
+                    break;
                 }
 #endif                
 
@@ -314,8 +315,8 @@ void main()
                 else
                     throughput /= rrProbability;
             
-                if (any(sampleRadiance < MIN_RADIANCE))
-                    break; // Ray was eaten by the surface :(
+                //if (any(sampleRadiance < MIN_RADIANCE))
+                //    break; // Ray was eaten by the surface :(
             }
          
         }

@@ -16,7 +16,7 @@ SharcParameters GetSharcParameters()
     {
         sharcParameters.gridParameters.cameraPosition = Frame.Position;
         sharcParameters.gridParameters.sceneScale = Frame.SHaRC.SceneScale;
-        sharcParameters.gridParameters.logarithmBase = SHARC_GRID_LOGARITHM_BASE * GAME_UNIT_TO_CM;
+        sharcParameters.gridParameters.logarithmBase = SHARC_GRID_LOGARITHM_BASE;
         sharcParameters.gridParameters.levelBias = SHARC_GRID_LEVEL_BIAS;
 
         sharcParameters.hashMapData.capacity = Frame.SHaRC.Capacity;

@@ -231,8 +231,8 @@ float3 SampleRadiance(in Surface surface, in BRDFContext brdfContext, in Instanc
     radiance += LambertianDirectD(surface, Frame.Directional, randomSeed);
     radiance += LambertianDirectP(surface, instance.LightData, randomSeed);
 #else
-    radiance += GGXDirectD(surface, brdfContext, Frame.Directional, randomSeed);
-    radiance += GGXDirectP(surface, brdfContext, instance.LightData, randomSeed);
+    radiance += EvalDirectionalLight(surface, brdfContext, Frame.Directional, randomSeed);
+    radiance += EvalPointLight(surface, brdfContext, instance.LightData, randomSeed);
 #endif    
     
     return radiance;
@@ -243,13 +243,13 @@ float3 Composite(bool isDiffusePath, float3 radiance, Surface surface, BRDFConte
     [branch]
     if (isDiffusePath)
     {
-        float3 diffuseAO = BRDF::DiffuseAO(surface.Albedo, surface.AO);
+        float3 diffuseAO = MonteCarlo::DiffuseAO(surface.Albedo, surface.AO);
         float3 diffuse = radiance.rgb * diffuseAO * Frame.Diffuse;       
         return diffuse * surface.Albedo;      
     }
     else
     {
-        float3 specularAO = BRDF::SpecularAO(brdfContext.NdotV, surface.Roughness, surface.AO, surface.F0);
+        float3 specularAO = MonteCarlo::SpecularAO(brdfContext.NdotV, surface.Roughness, surface.AO, surface.F0);
         float3 specular = radiance.rgb * specularAO * Frame.Specular;       
         return specular;          
     }
