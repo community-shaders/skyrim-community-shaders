@@ -99,10 +99,10 @@ float3 EvalDefaultBRDF(in float3 l, in Surface surface, in BRDFContext brdfConte
     float3 F = BRDF::F_Schlick(surface.F0, VoH);
     
     // specular BRDF
-    float3 Fr = (D * Vis) * F;
-    float3 Fd = BRDF::Diffuse_Burley(surface.Roughness, brdfContext.NdotV, NoL, VoH) * surface.DiffuseAlbedo;
+    float3 Fr = (D * Vis) * F * Frame.Specular;
+    float3 Fd = BRDF::Diffuse_Burley(surface.Roughness, brdfContext.NdotV, NoL, VoH) * surface.DiffuseAlbedo * Frame.Diffuse;
     
-    return (Fd + Fr) * NoL * Math::PI;
+    return (Fd + Fr) * NoL;
 }
 
 float3 EvalDirectionalLight(in Surface surface, in BRDFContext brdfContext, in Light light, inout uint randomSeed)
@@ -133,8 +133,8 @@ float3 EvalPointLight(in Surface surface, in BRDFContext brdfContext, in LightDa
     float dist = length(l);      
     l /= dist;
     
-    float atten = VanillaSquaredAtten(dist, light.Range);
-    //float atten = InverseSquareAtten(dist, light.Range); // This requires all lights to be ISL enabled
+    // float atten = VanillaSquaredAtten(dist, light.Range);
+    float atten = InverseSquareAtten(dist, light.Range * 64) * 2560; // This requires all lights to be ISL enabled
     
     float3 direct = EvalDefaultBRDF(l, surface, brdfContext) * atten * light.Color * float(lightData.Count);
 
