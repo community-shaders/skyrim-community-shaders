@@ -335,7 +335,7 @@ void main()
     }
 
 #if defined(PATH_TRACING)
-    OutputTexture[idx] = float4(Color::TrueLinearToGamma(direct + radiance), 0.0f);
+    OutputTexture[idx] = float4(Color::TrueLinearToGamma(direct + Composite(isDiffusePath, radiance, sourceSurface, sourceBRDFContext)), 0.0f);
 #else
     OutputTexture[idx] = MainTexture[idx] + float4(Color::TrueLinearToGamma(Composite(isDiffusePath, radiance, sourceSurface, sourceBRDFContext)), 0.0f);
 #endif
