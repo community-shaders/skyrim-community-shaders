@@ -409,7 +409,6 @@ struct Raytracing : public OverlayFeature
 #ifdef DLSS_RR
 		DLSSRRQuality DLSSRRQualityMode = DLSSRRQuality::MaxQuality;
 #endif
-		bool UnrollLoops = false;
 		bool PerformanceOverlay = false;
 		DebugOutput DebugOutput = DebugOutput::None;
 		bool EnablePIXCapture = false;
