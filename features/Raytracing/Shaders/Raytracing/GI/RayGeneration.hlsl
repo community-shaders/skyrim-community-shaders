@@ -307,15 +307,15 @@ void main()
             } else 
 #endif              
             {
-                float rrProbability = j < RR_MIN_BOUNCE ? 1.0f : min(0.95f, BRDF::CalcLuminance(throughput));
+                float rrProbability = j < RR_MIN_BOUNCE ? 1.0f : min(0.95f, Color::RGBToLuminance(throughput));
             
-            if (Frame.RussianRoulette && rrProbability < Random(randomSeed))
-                break;
-            else
-                throughput /= rrProbability;
+                if (Frame.RussianRoulette && rrProbability < Random(randomSeed))
+                    break;
+                else
+                    throughput /= rrProbability;
             
-                //if (any(sampleRadiance < MIN_RADIANCE))
-                //    break; // Ray was eaten by the surface :(
+                if (any(sampleRadiance < MIN_RADIANCE))
+                    break; // Ray was eaten by the surface :(
             }
          
         }
@@ -330,12 +330,13 @@ void main()
         }
 #endif            
     }
+    
     radiance /= MAX_SAMPLES;
 
 #if defined(PATH_TRACING)
     OutputTexture[idx] = float4(Color::LinearToGamma(direct + radiance), 0.0f);
 #else
-    OutputTexture[idx] = MainTexture[idx] + float4(Color::TrueLinearToGamma(Composite(isDiffusePath, radiance, sourceSurface, sourceBRDFContext)), 0.0f);
+    OutputTexture[idx] = MainTexture[idx] + float4(Color::LinearToGamma(radiance), 0.0f);
 #endif
     
     // Needs linear and PT doesn't have linear :(
