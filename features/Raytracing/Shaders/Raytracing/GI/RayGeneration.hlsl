@@ -200,7 +200,7 @@ void main()
     float hitDistance = 0;    
     
     [unroll]
-    for (uint i = 0; i < SAMPLES; i++)
+    for (uint i = 0; i < MAX_SAMPLES; i++)
     {
 #if defined(SHARC)
         SharcState sharcState;
@@ -214,7 +214,7 @@ void main()
         float3 throughput = float3(1.0f, 1.0f, 1.0f);
 
         [unroll]
-        for (uint j = 0; j < MAX_DEPTH; j++)
+        for (uint j = 0; j < MAX_BOUNCES; j++)
         {
 #if defined(LAMBERT)
             direction = surface.Mul(SampleCosineHemisphere(randomSeed));        
