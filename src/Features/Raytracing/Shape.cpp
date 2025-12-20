@@ -199,14 +199,14 @@ void Shape::BuildMaterial(const RE::BSGeometry::GEOMETRY_RUNTIME_DATA& geometryR
 		
 		if (effect) {
 			if (auto* lightingShaderProp = skyrim_cast<RE::BSLightingShaderProperty*>(effect)) {
+				shaderType = RE::BSShader::Type::Lighting;
+
 				logger::debug("[RT] BuildMaterial - [Effect] BSLightingShaderProperty Flags: {}", GetFlagsString<EShaderPropertyFlag>(lightingShaderProp->flags.underlying()));
 
 				// This is always nullptr :(
 				if (auto& effectData = lightingShaderProp->effectData) {
 					logger::info("[RT] BuildMaterial - Effect - Alpha: {}, Z Test Func: {}", effectData->alpha, magic_enum::enum_name(effectData->zTestFunc));
 				}
-
-				shaderType = RE::BSShader::Type::Lighting;
 
 				effectColor = {
 					lightingShaderProp->emissiveColor->red,
