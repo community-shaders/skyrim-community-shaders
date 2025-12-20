@@ -410,6 +410,7 @@ struct Raytracing : public OverlayFeature
 		DLSSRRQuality DLSSRRQualityMode = DLSSRRQuality::MaxQuality;
 #endif
 		bool PerformanceOverlay = false;
+		std::string Defines = "";
 		DebugOutput DebugOutput = DebugOutput::None;
 		bool EnablePIXCapture = false;
 		PIXCaptureLocation PIXCaptureLocation = PIXCaptureLocation::GlobalIllumination;

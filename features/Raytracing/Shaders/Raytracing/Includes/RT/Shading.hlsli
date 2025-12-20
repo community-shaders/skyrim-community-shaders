@@ -142,4 +142,52 @@ float3 GGXDirectP(in Surface surface, in BRDFContext brdfContext, in LightData l
     return direct;
 }
 
+// Samples the sky hemisphere texture based on the given direction
+// Output is in true linear space
+float3 SampleSky(float3 dir)
+{
+    dir.z = max(dir.z, 0.0f);
+    
+    float r = sqrt(1.0f - dir.z);
+    float phi = atan2(dir.y, dir.x);
+    
+    float2 disk = float2(r * cos(phi), r * sin(phi));
+    float2 uv = disk * 0.5f + 0.5f;
+
+    return Color::GammaToTrueLinear(SkyHemisphere.SampleLevel(BaseSampler, uv, 0.0f).rgb);
+}
+
+// Samples the direct radiance at the given surface point
+float3 SampleRadiance(in Surface surface, in BRDFContext brdfContext, in Instance instance, in Material material, inout uint randomSeed)
+{
+    float3 radiance = surface.Emissive * Frame.Emissive;
+    
+#if defined(LAMBERT)
+    radiance += LambertianDirectD(surface, Frame.Directional, randomSeed);
+    radiance += LambertianDirectP(surface, instance.LightData, randomSeed);
+#else
+    radiance += GGXDirectD(surface, brdfContext, Frame.Directional, randomSeed);
+    radiance += GGXDirectP(surface, brdfContext, instance.LightData, randomSeed);
+#endif    
+    
+    return radiance;
+}
+
+float3 Composite(bool isDiffusePath, float3 radiance, Surface surface, BRDFContext brdfContext)
+{
+    [branch]
+    if (isDiffusePath)
+    {
+        float3 diffuseAO = BRDF::DiffuseAO(surface.Albedo, surface.AO);
+        float3 diffuse = radiance.rgb * diffuseAO * Frame.Diffuse;       
+        return diffuse * surface.Albedo;      
+    }
+    else
+    {
+        float3 specularAO = BRDF::SpecularAO(brdfContext.NdotV, surface.Roughness, surface.AO, surface.F0);
+        float3 specular = radiance.rgb * specularAO * Frame.Specular;       
+        return specular;          
+    }
+}
+
 #endif // SHADING_HLSL

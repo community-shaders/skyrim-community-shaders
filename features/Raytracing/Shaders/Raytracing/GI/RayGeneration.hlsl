@@ -17,42 +17,6 @@
 #include "Raytracing/Includes/BRDF.hlsli"
 #include "Raytracing/Includes/PBR.hlsli"
 
-// Samples the sky hemisphere texture based on the given direction
-// Output is in true linear space
-float3 SampleSky(float3 dir)
-{
-    dir.z = max(dir.z, 0.0f);
-    
-    float r = sqrt(1.0f - dir.z);
-    float phi = atan2(dir.y, dir.x);
-    
-    float2 disk = float2(r * cos(phi), r * sin(phi));
-    float2 uv = disk * 0.5f + 0.5f;
-
-    return Color::GammaToTrueLinear(SkyHemisphere.SampleLevel(BaseSampler, uv, 0.0f).rgb);
-}
-
-// Samples the direct radiance at the given surface point
-float3 SampleRadiance(in Surface surface, in BRDFContext brdfContext, in Instance instance, in Material material, inout uint randomSeed)
-{
-    float3 radiance = surface.Emissive * Frame.Emissive;
-    
-    if (any(Frame.Directional.Color > MIN_RADIANCE) && Random(randomSeed) < 0.5f)
-    {
-#if defined(LAMBERT)
-        radiance += LambertianDirectD(surface, Frame.Directional, randomSeed);
-     } else {
-        radiance += LambertianDirectP(surface, instance.LightData, randomSeed);
-#else
-        radiance += GGXDirectD(surface, brdfContext, Frame.Directional, randomSeed);
-    } else {
-        radiance += GGXDirectP(surface, brdfContext, instance.LightData, randomSeed);
-#endif    
-    }
-    
-    return radiance;
-}
-
 [shader("raygeneration")]
 void main()
 {
@@ -188,8 +152,8 @@ void main()
 #if defined(SHARC) && defined(SHARC_DEBUG)
     HashGridParameters gridParameters;
     gridParameters.cameraPosition = Frame.Position;
-    gridParameters.logarithmBase = SHARC_GRID_LOGARITHM_BASE * GAME_UNIT_TO_CM;
-    gridParameters.sceneScale = Frame.SHaRCScale;
+    gridParameters.sceneScale = Frame.SHaRC.SceneScale;
+    gridParameters.logarithmBase = SHARC_GRID_LOGARITHM_BASE * GAME_UNIT_TO_CM;    
     gridParameters.levelBias = SHARC_GRID_LEVEL_BIAS;    
 
     OutputTexture[idx] = float4(HashGridDebugColoredHash(positionWS, geometryNormalWS, gridParameters), 1);
@@ -203,16 +167,32 @@ void main()
     bool isDiffusePath = true;
     float hitDistance = 0;    
     
+    RayDesc ray;   
+    Payload payload;
+    
+    Instance instance;
+    Material material;    
+    
+    Surface surface;
+    BRDFContext brdfContext;
+ 
+#if defined(SHARC)    
+    SharcState sharcState;
+    SharcHitData sharcHitData;
+ #endif
+    
     [loop]
     for (uint i = 0; i < MAX_SAMPLES; i++)
     {
 #if defined(SHARC)
-        SharcState sharcState;
-        SharcInit(sharcState); 
+        if (Frame.SHaRC.UpdatePass)
+        {        
+            SharcInit(sharcState);
+        }
 #endif
         
-        Surface surface = sourceSurface;
-        BRDFContext brdfContext = sourceBRDFContext;
+        surface = sourceSurface;
+        brdfContext = sourceBRDFContext;
 
         float3 sampleRadiance = float3(0.0f, 0.0f, 0.0f);
         float3 throughput = float3(1.0f, 1.0f, 1.0f);
@@ -224,23 +204,27 @@ void main()
             direction = surface.Mul(SampleCosineHemisphere(randomSeed));        
 #else
             const bool isSpecular = BRDF::GGXBRDF(surface, brdfContext, randomSeed, direction, BRDF_over_PDF);
-#endif            
+#endif                       
             if (dot(surface.GeomNormal, direction) <= 0.0)
                 break;
             
-            RayDesc ray;
             ray.Origin = surface.Position + surface.GeomNormal * 0.01f;
             ray.Direction = direction;
             ray.TMin = 0.01f;
             ray.TMax = 1e30;
-    
-            Payload payload;
+
             payload.hitDistance = -1.0f;
             payload.primitiveIndex = 0;
             payload.PackBarycentrics(float2(0.0f, 0.0f));
             payload.PackInstanceShapeIndex(0, 0);
 
             TraceRay(Scene, RAY_FLAG_NONE, 0xFF, DIFFUSE_RAY_HITGROUP_IDX, 0, DIFFUSE_RAY_MISS_IDX, ray, payload);
+            
+            if (j == 0)
+            {
+                isDiffusePath = !isSpecular;
+                hitDistance = max(hitDistance, payload.hitDistance);
+            }                 
             
             if (!payload.Hit())
             {
@@ -257,21 +241,11 @@ void main()
                 break;
             }                  
    
-            if (j == 0)
-            {
-                isDiffusePath = !isSpecular;
-                hitDistance = max(hitDistance, payload.hitDistance);
-            }           
-          
             float3 localPosition = ray.Origin + direction * payload.hitDistance;             
-            
-            Instance instance;
-            Material material;
-            
+
             surface = Surface(localPosition, payload, instance, material);
             
-#if defined(SHARC)
-            SharcHitData sharcHitData;
+#if defined(SHARC)            
             sharcHitData.positionWorld = surface.Position;
             sharcHitData.normalWorld = surface.GeomNormal;
             
@@ -310,7 +284,7 @@ void main()
             float NdotD = saturate(dot(n, direction));
             float3 diffuse = localRadiance.rgb * NdotD * diffuseAO * Frame.Diffuse;
             
-            sampleRadiance += surface.Albedo * diffuse * throughput; 
+            sampleRadiance += surface.Albedo * diffuse; 
             
             throughput *= surface.Albedo;
 #else                                
@@ -319,10 +293,9 @@ void main()
             float3 specularAO = BRDF::SpecularAO(brdfContext.NdotV, surface.Roughness, surface.AO, surface.F0);
             float3 specular = isSpecular ? localRadiance.rgb * BRDF_over_PDF * (specularAO * Frame.Specular) : 0.0;
 
-            sampleRadiance += (surface.Albedo * diffuse + specular) * throughput;
+            sampleRadiance += (surface.Albedo * diffuse + specular);
                 
-            throughput *= BRDF_over_PDF * (isSpecular ? 1.0 : surface.Albedo);
-            
+            throughput *= BRDF_over_PDF * (isSpecular ? 1.0 : surface.Albedo);            
 #endif          
        
 #if defined(SHARC) && defined(SHARC_UPDATE)
@@ -330,22 +303,24 @@ void main()
             {
                 if (!SharcUpdateHit(sharcParameters, sharcState, sharcHitData, sampleRadiance, Random(randomSeed)))
                     break;
-            }
             
-            SharcSetThroughput(sharcState, throughput);
+                SharcSetThroughput(sharcState, throughput);
 
-            throughput = float3(0.0f, 0.0f, 0.0f);
-#else                    
-            float rrProbability = j < RR_MIN_BOUNCE ? 1.0f : min(0.95f, BRDF::CalcLuminance(throughput));
+                throughput = float3(1.0f, 1.0f, 1.0f);
+            } else 
+#endif              
+            {
+                float rrProbability = j < RR_MIN_BOUNCE ? 1.0f : min(0.95f, BRDF::CalcLuminance(throughput));
             
-            if (Frame.RussianRoulette && rrProbability < Random(randomSeed))
-                break;
-            else
-                throughput /= rrProbability;
+                if (Frame.RussianRoulette && rrProbability < Random(randomSeed))
+                    break;
+                else
+                    throughput /= rrProbability;
             
-            if (any(sampleRadiance < MIN_RADIANCE))
-                break; // Ray was eaten by the surface :(
-#endif            
+                //if (any(sampleRadiance < MIN_RADIANCE))
+                //    break; // Ray was eaten by the surface :(
+            }
+         
         }
         
         radiance += sampleRadiance;
@@ -362,7 +337,7 @@ void main()
 #if defined(PATH_TRACING)
     OutputTexture[idx] = float4(Color::TrueLinearToGamma(direct + radiance), 0.0f);
 #else
-    OutputTexture[idx] = MainTexture[idx] + float4(Color::TrueLinearToGamma(sourceSurface.Albedo * radiance), 0.0f);
+    OutputTexture[idx] = MainTexture[idx] + float4(Color::TrueLinearToGamma(Composite(isDiffusePath, radiance, sourceSurface, sourceBRDFContext)), 0.0f);
 #endif
     
     // Needs linear and PT doesn't have linear :(

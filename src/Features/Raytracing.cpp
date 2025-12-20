@@ -22,6 +22,8 @@
 #include "Features/HairSpecular.h"
 #include "Features/WetnessEffects.h"
 
+#include <imgui_stdlib.h>
+
 #ifdef DLSS_RR
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	Raytracing::Settings,
@@ -214,6 +216,13 @@ void Raytracing::DrawSettings()
 	ImGui::Checkbox("Russian Roulette", &settings.RussianRoulette);
 
 	if (ImGui::CollapsingHeader("Debug", ImGuiTreeNodeFlags_DefaultOpen)) {	
+		ImGui::InputText("Shader Defines", &settings.Defines);
+
+		ImGui::SameLine();
+
+		if (ImGui::Button("Recompile"))
+			recompileReason |= RecompileReason::Debug;
+
 		// Debug display mode
 		if (ImGui::BeginCombo("Debug Output", magic_enum::enum_name(settings.DebugOutput).data())) {
 			for (auto& value : magic_enum::enum_values<DebugOutput>()) {
@@ -1029,7 +1038,7 @@ void Raytracing::CheckFrameConstants()
 }
 #endif
 
-LPCWSTR StringViewToLPCWSTR(std::string_view sv)
+static std::wstring StringViewToWString(std::string_view sv)
 {
 	std::string str(sv);
 
@@ -1039,7 +1048,7 @@ LPCWSTR StringViewToLPCWSTR(std::string_view sv)
 
 	MultiByteToWideChar(CP_UTF8, 0, str.c_str(), -1, &wstr[0], size_needed);
 
-	return wstr.c_str();
+	return wstr;
 }
 
 void Raytracing::ShareRT(ID3D11Texture2D* pTexture2D, const GIHeap::Slot& target, const ShadowsHeap::Slot& cTarget, ID3D12Resource** ppResource) const
@@ -3233,6 +3242,12 @@ void Raytracing::CompileRTGIShaders()
 
 	if (settings.PathTracing)
 		defines.emplace_back(L"PATH_TRACING");
+
+	const auto definesWStr = StringViewToWString(std::string_view{ settings.Defines });
+
+	if (!settings.Defines.empty()) {
+		defines.emplace_back(definesWStr.c_str());
+	}
 
 	winrt::com_ptr<IDxcBlob> rayGenBlob;
 	ShaderUtils::CompileShader(rayGenBlob, L"Data/Shaders/Raytracing/GI/RayGeneration.hlsl", defines);

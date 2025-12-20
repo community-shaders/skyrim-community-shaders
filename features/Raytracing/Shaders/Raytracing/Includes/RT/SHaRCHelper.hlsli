@@ -3,6 +3,8 @@
 #   ifndef SHARC_HELPER_DEPENDENCY_HLSL
 #   define SHARC_HELPER_DEPENDENCY_HLSL
 
+#include "Common/Game.hlsli"
+
 uint Hash(uint2 idx)
 {
     return (idx.x * 73856093u) ^ (idx.y * 19349663u);
@@ -14,7 +16,7 @@ SharcParameters GetSharcParameters()
     {
         sharcParameters.gridParameters.cameraPosition = Frame.Position;
         sharcParameters.gridParameters.sceneScale = Frame.SHaRC.SceneScale;
-        sharcParameters.gridParameters.logarithmBase = SHARC_GRID_LOGARITHM_BASE;
+        sharcParameters.gridParameters.logarithmBase = SHARC_GRID_LOGARITHM_BASE * GAME_UNIT_TO_CM;
         sharcParameters.gridParameters.levelBias = SHARC_GRID_LEVEL_BIAS;
 
         sharcParameters.hashMapData.capacity = Frame.SHaRC.Capacity;
