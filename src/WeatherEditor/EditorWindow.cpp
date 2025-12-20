@@ -673,77 +673,15 @@ void EditorWindow::ShowWidgetWindow()
 		}
 	}
 
-	for (int i = 0; i < (int)weatherWidgets.size(); i++) {
-		auto& widget = weatherWidgets[i];
-		if (widget->IsOpen()) {
-			widget->DrawWidget();
-			if (ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows))
-				lastFocusedWidget = widget.get();
-		}
-	}
-
-	for (int i = 0; i < (int)worldSpaceWidgets.size(); i++) {
-		auto& widget = worldSpaceWidgets[i];
-		if (widget->IsOpen()) {
-			widget->DrawWidget();
-			if (ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows))
-				lastFocusedWidget = widget.get();
-		}
-	}
-
-	for (int i = 0; i < (int)lightingTemplateWidgets.size(); i++) {
-		auto& widget = lightingTemplateWidgets[i];
-		if (widget->IsOpen()) {
-			widget->DrawWidget();
-			if (ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows))
-				lastFocusedWidget = widget.get();
-		}
-	}
-
-	for (int i = 0; i < (int)imageSpaceWidgets.size(); i++) {
-		auto& widget = imageSpaceWidgets[i];
-		if (widget->IsOpen()) {
-			widget->DrawWidget();
-			if (ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows))
-				lastFocusedWidget = widget.get();
-		}
-	}
-
-	for (int i = 0; i < (int)volumetricLightingWidgets.size(); i++) {
-		auto& widget = volumetricLightingWidgets[i];
-		if (widget->IsOpen()) {
-			widget->DrawWidget();
-			if (ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows))
-				lastFocusedWidget = widget.get();
-		}
-	}
-
-	for (int i = 0; i < (int)precipitationWidgets.size(); i++) {
-		auto& widget = precipitationWidgets[i];
-		if (widget->IsOpen()) {
-			widget->DrawWidget();
-			if (ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows))
-				lastFocusedWidget = widget.get();
-		}
-	}
-
-	for (int i = 0; i < (int)lensFlareWidgets.size(); i++) {
-		auto& widget = lensFlareWidgets[i];
-		if (widget->IsOpen()) {
-			widget->DrawWidget();
-			if (ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows))
-				lastFocusedWidget = widget.get();
-		}
-	}
-
-	for (int i = 0; i < (int)referenceEffectWidgets.size(); i++) {
-		auto& widget = referenceEffectWidgets[i];
-		if (widget->IsOpen()) {
-			widget->DrawWidget();
-			if (ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows))
-				lastFocusedWidget = widget.get();
-		}
-	}
+	// Draw all open widgets using WidgetFactory template
+	WidgetFactory::DrawOpenWidgets(weatherWidgets, lastFocusedWidget);
+	WidgetFactory::DrawOpenWidgets(worldSpaceWidgets, lastFocusedWidget);
+	WidgetFactory::DrawOpenWidgets(lightingTemplateWidgets, lastFocusedWidget);
+	WidgetFactory::DrawOpenWidgets(imageSpaceWidgets, lastFocusedWidget);
+	WidgetFactory::DrawOpenWidgets(volumetricLightingWidgets, lastFocusedWidget);
+	WidgetFactory::DrawOpenWidgets(precipitationWidgets, lastFocusedWidget);
+	WidgetFactory::DrawOpenWidgets(lensFlareWidgets, lastFocusedWidget);
+	WidgetFactory::DrawOpenWidgets(referenceEffectWidgets, lastFocusedWidget);
 
 	// Draw current cell lighting widget if open
 	if (currentCellLightingWidget && currentCellLightingWidget->IsOpen()) {
@@ -1172,99 +1110,22 @@ EditorWindow::~EditorWindow()
 
 void EditorWindow::SetupResources()
 {
-	auto dataHandler = RE::TESDataHandler::GetSingleton();
-	auto& weatherArray = dataHandler->GetFormArray<RE::TESWeather>();
-
 	Load();
 	PaletteWindow::GetSingleton()->Load();
 
-	for (auto weather : weatherArray) {
-		auto widget = std::make_unique<WeatherWidget>(weather);
-		widget->CacheFormData();
-		widget->Load();
-		weatherWidgets.push_back(std::move(widget));
-	}
+	// Populate all widget collections using WidgetFactory templates
+	WidgetFactory::PopulateWidgets<WeatherWidget, RE::TESWeather>(weatherWidgets);
+	WidgetFactory::PopulateWidgets<WorldSpaceWidget, RE::TESWorldSpace>(worldSpaceWidgets);
+	WidgetFactory::PopulateWidgets<LightingTemplateWidget, RE::BGSLightingTemplate>(lightingTemplateWidgets);
+	WidgetFactory::PopulateWidgets<ImageSpaceWidget, RE::TESImageSpace>(imageSpaceWidgets);
+	WidgetFactory::PopulateWidgets<VolumetricLightingWidget, RE::BGSVolumetricLighting>(volumetricLightingWidgets);
+	WidgetFactory::PopulateWidgets<PrecipitationWidget, RE::BGSShaderParticleGeometryData>(precipitationWidgets);
+	WidgetFactory::PopulateWidgets<LensFlareWidget, RE::BGSLensFlare>(lensFlareWidgets);
+	WidgetFactory::PopulateWidgets<ReferenceEffectWidget, RE::BGSReferenceEffect>(referenceEffectWidgets);
 
-	auto& worldSpaceArray = dataHandler->GetFormArray<RE::TESWorldSpace>();
-
-	for (auto worldSpace : worldSpaceArray) {
-		auto widget = std::make_unique<WorldSpaceWidget>(worldSpace);
-		widget->CacheFormData();
-		widget->Load();
-		worldSpaceWidgets.push_back(std::move(widget));
-	}
-
-	auto& lightingTemplateArray = dataHandler->GetFormArray<RE::BGSLightingTemplate>();
-
-	for (auto lightingTemplate : lightingTemplateArray) {
-		auto widget = std::make_unique<LightingTemplateWidget>(lightingTemplate);
-		widget->CacheFormData();
-		widget->Load();
-		lightingTemplateWidgets.push_back(std::move(widget));
-	}
-
-	auto& imageSpaceArray = dataHandler->GetFormArray<RE::TESImageSpace>();
-
-	for (auto imageSpace : imageSpaceArray) {
-		auto widget = std::make_unique<ImageSpaceWidget>(imageSpace);
-		widget->CacheFormData();
-		widget->Load();
-		imageSpaceWidgets.push_back(std::move(widget));
-	}
-
-	auto& volumetricLightingArray = dataHandler->GetFormArray<RE::BGSVolumetricLighting>();
-
-	for (auto volumetricLighting : volumetricLightingArray) {
-		auto widget = std::make_unique<VolumetricLightingWidget>(volumetricLighting);
-		widget->CacheFormData();
-		widget->Load();
-		volumetricLightingWidgets.push_back(std::move(widget));
-	}
-
-	auto& precipitationArray = dataHandler->GetFormArray<RE::BGSShaderParticleGeometryData>();
-
-	for (auto precipitation : precipitationArray) {
-		auto widget = std::make_unique<PrecipitationWidget>(precipitation);
-		widget->CacheFormData();
-		widget->Load();
-		precipitationWidgets.push_back(std::move(widget));
-	}
-
-	auto& lensFlareArray = dataHandler->GetFormArray<RE::BGSLensFlare>();
-
-	for (auto lensFlare : lensFlareArray) {
-		auto widget = std::make_unique<LensFlareWidget>(lensFlare);
-		widget->CacheFormData();
-		widget->Load();
-		lensFlareWidgets.push_back(std::move(widget));
-	}
-
-	auto& referenceEffectArray = dataHandler->GetFormArray<RE::BGSReferenceEffect>();
-
-	for (auto referenceEffect : referenceEffectArray) {
-		auto widget = std::make_unique<ReferenceEffectWidget>(referenceEffect);
-		widget->CacheFormData();
-		widget->Load();
-		referenceEffectWidgets.push_back(std::move(widget));
-	}
-
-	// Cache art objects for form picker performance
-	auto& artObjectArray = dataHandler->GetFormArray<RE::BGSArtObject>();
-	for (auto artObject : artObjectArray) {
-		auto widget = std::make_unique<SimpleFormWidget>();
-		widget->form = artObject;
-		widget->CacheFormData();
-		artObjectWidgets.push_back(std::move(widget));
-	}
-
-	// Cache effect shaders for form picker performance
-	auto& effectShaderArray = dataHandler->GetFormArray<RE::TESEffectShader>();
-	for (auto effectShader : effectShaderArray) {
-		auto widget = std::make_unique<SimpleFormWidget>();
-		widget->form = effectShader;
-		widget->CacheFormData();
-		effectShaderWidgets.push_back(std::move(widget));
-	}
+	// Cache simple form widgets for form picker performance
+	WidgetFactory::PopulateSimpleWidgets<RE::BGSArtObject>(artObjectWidgets);
+	WidgetFactory::PopulateSimpleWidgets<RE::TESEffectShader>(effectShaderWidgets);
 }
 
 void EditorWindow::Draw()

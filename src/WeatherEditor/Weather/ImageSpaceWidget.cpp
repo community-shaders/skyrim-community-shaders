@@ -39,188 +39,40 @@ void ImageSpaceWidget::DrawWidget()
 		DrawWidgetHeader("##ImageSpaceSearch", false, true);
 
 		// Draw all settings in a unified table
-		if (ImGui::BeginTable("ImageSpaceSettings", 2, ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_SizingStretchProp)) {
-			ImGui::TableSetupColumn("Parameter", ImGuiTableColumnFlags_WidthFixed, 200.0f);
-			ImGui::TableSetupColumn("Value", ImGuiTableColumnFlags_WidthStretch);
-
+		if (PropertyDrawer::BeginTable("ImageSpaceSettings", 200.0f)) {
 			bool changed = false;
+			const char* search = searchBuffer[0] ? searchBuffer : nullptr;
 
 			// HDR Settings
-			if (MatchesSearch("Eye Adapt Speed")) {
-				ImGui::TableNextRow();
-				ImGui::TableSetColumnIndex(0);
-				ImGui::Text("Eye Adapt Speed");
-				ImGui::TableSetColumnIndex(1);
-				ImGui::SetNextItemWidth(-1);
-				if (ImGui::SliderFloat("##EyeAdaptSpeed", &settings.hdrEyeAdaptSpeed, 0.0f, 10.0f, "%.3f"))
-					changed = true;
-			}
+			changed |= PropertyDrawer::DrawFloat("Eye Adapt Speed", settings.hdrEyeAdaptSpeed, 0.0f, 10.0f, search);
+			changed |= PropertyDrawer::DrawFloat("Bloom Blur Radius", settings.hdrBloomBlurRadius, 0.0f, 10.0f, search);
+			changed |= PropertyDrawer::DrawFloat("Bloom Threshold", settings.hdrBloomThreshold, 0.0f, 10.0f, search);
+			changed |= PropertyDrawer::DrawFloat("Bloom Scale", settings.hdrBloomScale, 0.0f, 10.0f, search);
+			changed |= PropertyDrawer::DrawFloat("White", settings.hdrWhite, 0.0f, 10.0f, search);
+			changed |= PropertyDrawer::DrawFloat("Sunlight Scale", settings.hdrSunlightScale, 0.0f, 10.0f, search);
+			changed |= PropertyDrawer::DrawFloat("Sky Scale", settings.hdrSkyScale, 0.0f, 10.0f, search);
 
-			if (MatchesSearch("Bloom Blur Radius")) {
-				ImGui::TableNextRow();
-				ImGui::TableSetColumnIndex(0);
-				ImGui::Text("Bloom Blur Radius");
-				ImGui::TableSetColumnIndex(1);
-				ImGui::SetNextItemWidth(-1);
-				if (ImGui::SliderFloat("##BloomBlurRadius", &settings.hdrBloomBlurRadius, 0.0f, 10.0f, "%.3f"))
-					changed = true;
-			}
-
-			if (MatchesSearch("Bloom Threshold")) {
-				ImGui::TableNextRow();
-				ImGui::TableSetColumnIndex(0);
-				ImGui::Text("Bloom Threshold");
-				ImGui::TableSetColumnIndex(1);
-				ImGui::SetNextItemWidth(-1);
-				if (ImGui::SliderFloat("##BloomThreshold", &settings.hdrBloomThreshold, 0.0f, 10.0f, "%.3f"))
-					changed = true;
-			}
-
-			if (MatchesSearch("Bloom Scale")) {
-				ImGui::TableNextRow();
-				ImGui::TableSetColumnIndex(0);
-				ImGui::Text("Bloom Scale");
-				ImGui::TableSetColumnIndex(1);
-				ImGui::SetNextItemWidth(-1);
-				if (ImGui::SliderFloat("##BloomScale", &settings.hdrBloomScale, 0.0f, 10.0f, "%.3f"))
-					changed = true;
-			}
-
-			if (MatchesSearch("White")) {
-				ImGui::TableNextRow();
-				ImGui::TableSetColumnIndex(0);
-				ImGui::Text("White");
-				ImGui::TableSetColumnIndex(1);
-				ImGui::SetNextItemWidth(-1);
-				if (ImGui::SliderFloat("##White", &settings.hdrWhite, 0.0f, 10.0f, "%.3f"))
-					changed = true;
-			}
-
-			if (MatchesSearch("Sunlight Scale")) {
-				ImGui::TableNextRow();
-				ImGui::TableSetColumnIndex(0);
-				ImGui::Text("Sunlight Scale");
-				ImGui::TableSetColumnIndex(1);
-				ImGui::SetNextItemWidth(-1);
-				if (ImGui::SliderFloat("##SunlightScale", &settings.hdrSunlightScale, 0.0f, 10.0f, "%.3f"))
-					changed = true;
-			}
-
-			if (MatchesSearch("Sky Scale")) {
-				ImGui::TableNextRow();
-				ImGui::TableSetColumnIndex(0);
-				ImGui::Text("Sky Scale");
-				ImGui::TableSetColumnIndex(1);
-				ImGui::SetNextItemWidth(-1);
-				if (ImGui::SliderFloat("##SkyScale", &settings.hdrSkyScale, 0.0f, 10.0f, "%.3f"))
-					changed = true;
-			}
-
-			// Separator between sections
-			ImGui::TableNextRow();
-			ImGui::TableSetColumnIndex(0);
-			ImGui::Separator();
-			ImGui::TableSetColumnIndex(1);
-			ImGui::Separator();
+			PropertyDrawer::DrawSeparator();
 
 			// Cinematic Settings
-			if (MatchesSearch("Saturation")) {
-				ImGui::TableNextRow();
-				ImGui::TableSetColumnIndex(0);
-				ImGui::Text("Saturation");
-				ImGui::TableSetColumnIndex(1);
-				ImGui::SetNextItemWidth(-1);
-				if (ImGui::SliderFloat("##Saturation", &settings.cinematicSaturation, 0.0f, 2.0f, "%.3f"))
-					changed = true;
-			}
+			changed |= PropertyDrawer::DrawFloat("Saturation", settings.cinematicSaturation, 0.0f, 2.0f, search);
+			changed |= PropertyDrawer::DrawFloat("Brightness", settings.cinematicBrightness, 0.0f, 2.0f, search);
+			changed |= PropertyDrawer::DrawFloat("Contrast", settings.cinematicContrast, 0.0f, 2.0f, search);
 
-			if (MatchesSearch("Brightness")) {
-				ImGui::TableNextRow();
-				ImGui::TableSetColumnIndex(0);
-				ImGui::Text("Brightness");
-				ImGui::TableSetColumnIndex(1);
-				ImGui::SetNextItemWidth(-1);
-				if (ImGui::SliderFloat("##Brightness", &settings.cinematicBrightness, 0.0f, 2.0f, "%.3f"))
-					changed = true;
-			}
-
-			if (MatchesSearch("Contrast")) {
-				ImGui::TableNextRow();
-				ImGui::TableSetColumnIndex(0);
-				ImGui::Text("Contrast");
-				ImGui::TableSetColumnIndex(1);
-				ImGui::SetNextItemWidth(-1);
-				if (ImGui::SliderFloat("##Contrast", &settings.cinematicContrast, 0.0f, 2.0f, "%.3f"))
-					changed = true;
-			}
-
-			// Separator
-			ImGui::TableNextRow();
-			ImGui::TableSetColumnIndex(0);
-			ImGui::Separator();
-			ImGui::TableSetColumnIndex(1);
-			ImGui::Separator();
+			PropertyDrawer::DrawSeparator();
 
 			// Tint Settings
-			if (MatchesSearch("Tint Color")) {
-				ImGui::TableNextRow();
-				ImGui::TableSetColumnIndex(0);
-				ImGui::Text("Tint Color");
-				ImGui::TableSetColumnIndex(1);
-				ImGui::SetNextItemWidth(-1);
-				if (WeatherUtils::DrawColorEdit("Tint Color", settings.tintColor))
-					changed = true;
-			}
+			changed |= PropertyDrawer::DrawColor("Tint Color", settings.tintColor, search);
+			changed |= PropertyDrawer::DrawFloat("Tint Amount", settings.tintAmount, 0.0f, 1.0f, search);
 
-			if (MatchesSearch("Tint Amount")) {
-				ImGui::TableNextRow();
-				ImGui::TableSetColumnIndex(0);
-				ImGui::Text("Tint Amount");
-				ImGui::TableSetColumnIndex(1);
-				ImGui::SetNextItemWidth(-1);
-				if (ImGui::SliderFloat("##TintAmount", &settings.tintAmount, 0.0f, 1.0f, "%.3f"))
-					changed = true;
-			}
-
-			// Separator
-			ImGui::TableNextRow();
-			ImGui::TableSetColumnIndex(0);
-			ImGui::Separator();
-			ImGui::TableSetColumnIndex(1);
-			ImGui::Separator();
+			PropertyDrawer::DrawSeparator();
 
 			// Depth of Field
-			if (MatchesSearch("DOF Strength")) {
-				ImGui::TableNextRow();
-				ImGui::TableSetColumnIndex(0);
-				ImGui::Text("DOF Strength");
-				ImGui::TableSetColumnIndex(1);
-				ImGui::SetNextItemWidth(-1);
-				if (ImGui::SliderFloat("##DOFStrength", &settings.dofStrength, 0.0f, 10.0f, "%.3f"))
-					changed = true;
-			}
+			changed |= PropertyDrawer::DrawFloat("DOF Strength", settings.dofStrength, 0.0f, 10.0f, search);
+			changed |= PropertyDrawer::DrawFloat("DOF Distance", settings.dofDistance, 0.0f, 10000.0f, search, "%.1f");
+			changed |= PropertyDrawer::DrawFloat("DOF Range", settings.dofRange, 0.0f, 10000.0f, search, "%.1f");
 
-			if (MatchesSearch("DOF Distance")) {
-				ImGui::TableNextRow();
-				ImGui::TableSetColumnIndex(0);
-				ImGui::Text("DOF Distance");
-				ImGui::TableSetColumnIndex(1);
-				ImGui::SetNextItemWidth(-1);
-				if (ImGui::SliderFloat("##DOFDistance", &settings.dofDistance, 0.0f, 10000.0f, "%.1f"))
-					changed = true;
-			}
-
-			if (MatchesSearch("DOF Range")) {
-				ImGui::TableNextRow();
-				ImGui::TableSetColumnIndex(0);
-				ImGui::Text("DOF Range");
-				ImGui::TableSetColumnIndex(1);
-				ImGui::SetNextItemWidth(-1);
-				if (ImGui::SliderFloat("##DOFRange", &settings.dofRange, 0.0f, 10000.0f, "%.1f"))
-					changed = true;
-			}
-
-			ImGui::EndTable();
+			PropertyDrawer::EndTable();
 
 			if (changed && editorWindow->settings.autoApplyChanges) {
 				ApplyChanges();

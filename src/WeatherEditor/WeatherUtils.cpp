@@ -155,59 +155,33 @@ namespace WeatherUtils
 		g_currentWidget = widget;
 	}
 
+	// Static debounced trackers for undo and palette tracking
+	static DebouncedTracker<int> s_int8Tracker;
+	static DebouncedTracker<float> s_floatTracker;
+
 	bool DrawSliderInt8(const std::string& label, int& property)
 	{
-		static std::map<std::string, int> pendingValues;
-		static std::map<std::string, double> lastChangeTime;
-		static std::map<std::string, bool> wasActive;
-		static std::map<std::string, bool> undoPushedForSession;
 		const double debounceDelay = 2.0;
-
-		// Check if item was active in previous frame
-		bool isPreviouslyActive = wasActive[label];
+		double currentTime = ImGui::GetTime();
 
 		bool changed = ImGui::SliderInt(label.c_str(), &property, -128, 127);
-
-		// Check if item is now active
 		bool isNowActive = ImGui::IsItemActive();
 
-		// Push undo state only once when slider becomes active (not every frame while dragging)
-		if (isNowActive && !isPreviouslyActive && !undoPushedForSession[label]) {
+		// Push undo state when slider becomes active
+		if (s_int8Tracker.UpdateActiveState(label, isNowActive, currentTime, debounceDelay)) {
 			if (g_currentWidget) {
 				EditorWindow::GetSingleton()->PushUndoState(g_currentWidget);
-				undoPushedForSession[label] = true;
 			}
 		}
-
-		// Reset undo flag when slider is completely released and idle for a while
-		if (!isNowActive && undoPushedForSession[label]) {
-			if (lastChangeTime.find(label) == lastChangeTime.end() ||
-				ImGui::GetTime() - lastChangeTime[label] >= debounceDelay) {
-				undoPushedForSession[label] = false;
-			}
-		}
-
-		// Update active state for next frame
-		wasActive[label] = isNowActive;
 
 		if (changed) {
-			pendingValues[label] = property;
-			lastChangeTime[label] = ImGui::GetTime();
+			s_int8Tracker.OnValueChanged(label, property, currentTime);
 		}
 
-		// Check for any pending values that should be tracked
-		std::vector<std::string> toTrack;
-		for (const auto& [key, changeTime] : lastChangeTime) {
-			if (ImGui::GetTime() - changeTime >= debounceDelay) {
-				toTrack.push_back(key);
-			}
-		}
-
-		// Track and remove completed entries
-		for (const auto& key : toTrack) {
-			PaletteWindow::GetSingleton()->TrackValueUsage(key, static_cast<float>(pendingValues[key]));
-			pendingValues.erase(key);
-			lastChangeTime.erase(key);
+		// Track completed values to palette
+		auto completed = s_int8Tracker.GetCompletedEntries(currentTime, debounceDelay);
+		for (const auto& [key, value] : completed) {
+			PaletteWindow::GetSingleton()->TrackValueUsage(key, static_cast<float>(value));
 		}
 
 		return changed;
@@ -283,60 +257,28 @@ namespace WeatherUtils
 
 	bool DrawSliderFloat(const std::string& label, float& property, float min, float max, Widget* widget)
 	{
-		static std::map<std::string, float> pendingValues;
-		static std::map<std::string, double> lastChangeTime;
-		static std::map<std::string, bool> wasActive;
-		static std::map<std::string, bool> undoPushedForSession;
 		const double debounceDelay = 2.0;
-
-		// Check if item was active in previous frame
-		bool isPreviouslyActive = wasActive[label];
+		double currentTime = ImGui::GetTime();
 
 		bool changed = ImGui::SliderFloat(label.c_str(), &property, min, max);
-
-		// Check if item is now active
 		bool isNowActive = ImGui::IsItemActive();
 
-		// Push undo state only once when slider becomes active (not every frame while dragging)
-		if (isNowActive && !isPreviouslyActive && !undoPushedForSession[label]) {
-			// Use parameter if provided, otherwise use global widget
+		// Push undo state when slider becomes active
+		if (s_floatTracker.UpdateActiveState(label, isNowActive, currentTime, debounceDelay)) {
 			Widget* w = widget ? widget : g_currentWidget;
 			if (w) {
 				EditorWindow::GetSingleton()->PushUndoState(w);
-				undoPushedForSession[label] = true;
 			}
 		}
-
-		// Reset undo flag when slider is completely released and idle for a while
-		if (!isNowActive && undoPushedForSession[label]) {
-			// Allow new undo push after slider has been released
-			if (lastChangeTime.find(label) == lastChangeTime.end() ||
-				ImGui::GetTime() - lastChangeTime[label] >= debounceDelay) {
-				undoPushedForSession[label] = false;
-			}
-		}
-
-		// Update active state for next frame
-		wasActive[label] = isNowActive;
 
 		if (changed) {
-			pendingValues[label] = property;
-			lastChangeTime[label] = ImGui::GetTime();
+			s_floatTracker.OnValueChanged(label, property, currentTime);
 		}
 
-		// Check for any pending values that should be tracked
-		std::vector<std::string> toTrack;
-		for (const auto& [key, changeTime] : lastChangeTime) {
-			if (ImGui::GetTime() - changeTime >= debounceDelay) {
-				toTrack.push_back(key);
-			}
-		}
-
-		// Track and remove completed entries
-		for (const auto& key : toTrack) {
-			PaletteWindow::GetSingleton()->TrackValueUsage(key, pendingValues[key]);
-			pendingValues.erase(key);
-			lastChangeTime.erase(key);
+		// Track completed values to palette
+		auto completed = s_floatTracker.GetCompletedEntries(currentTime, debounceDelay);
+		for (const auto& [key, value] : completed) {
+			PaletteWindow::GetSingleton()->TrackValueUsage(key, value);
 		}
 
 		return changed;
@@ -453,11 +395,13 @@ namespace TOD
 		}
 	}
 
+	// Static debounced tracker for TOD slider rows
+	static DebouncedTracker<float> s_todSliderTracker;
+
 	bool DrawTODSliderRow(const char* label, float values[4], float minValue, float maxValue, const char* format)
 	{
-		static std::map<std::string, float> pendingValues;
-		static std::map<std::string, double> lastChangeTime;
 		const double debounceDelay = 2.0;
+		double currentTime = ImGui::GetTime();
 
 		float factors[4];
 		GetTimeOfDayFactors(factors);
@@ -481,11 +425,11 @@ namespace TOD
 
 			ImGui::PushItemWidth(sliderWidth);
 			std::string id = std::string("##") + label + std::to_string(i);
+			std::string valueName = std::string(label) + " " + GetPeriodName(i);
+
 			if (ImGui::SliderFloat(id.c_str(), &values[i], minValue, maxValue, format)) {
 				changed = true;
-				std::string valueName = std::string(label) + " " + GetPeriodName(i);
-				pendingValues[valueName] = values[i];
-				lastChangeTime[valueName] = ImGui::GetTime();
+				s_todSliderTracker.OnValueChanged(valueName, values[i], currentTime);
 			}
 
 			if (ImGui::IsItemHovered())
@@ -496,19 +440,9 @@ namespace TOD
 				ImGui::PopStyleVar();
 		}
 
-		// Check for any pending values that should be tracked
-		std::vector<std::string> toTrack;
-		for (const auto& [key, changeTime] : lastChangeTime) {
-			if (ImGui::GetTime() - changeTime >= debounceDelay) {
-				toTrack.push_back(key);
-			}
-		}
-
-		// Track and remove completed entries
-		for (const auto& key : toTrack) {
-			PaletteWindow::GetSingleton()->TrackValueUsage(key, pendingValues[key]);
-			pendingValues.erase(key);
-			lastChangeTime.erase(key);
+		// Track completed entries to palette
+		for (const auto& [key, value] : s_todSliderTracker.GetCompletedEntries(currentTime, debounceDelay)) {
+			PaletteWindow::GetSingleton()->TrackValueUsage(key, value);
 		}
 
 		return changed;
@@ -639,13 +573,13 @@ namespace TOD
 		return changed;
 	}
 
+	// Static debounced tracker for TOD slider rows with inheritance
+	static DebouncedTracker<float> s_todSliderInheritTracker;
+
 	bool DrawTODSliderRow(const char* label, float values[4], bool inheritFlags[4], const float parentValues[4], float minValue, float maxValue, const char* format)
 	{
-		static std::map<std::string, float> pendingSliderValues;
-		static std::map<std::string, double> sliderLastChangeTime;
-		static std::map<std::string, bool> wasActiveInherit;
-		static std::map<std::string, bool> undoPushedInherit;
 		const double debounceDelay = 2.0;
+		double currentTime = ImGui::GetTime();
 
 		float factors[4];
 		GetTimeOfDayFactors(factors);
@@ -696,7 +630,6 @@ namespace TOD
 			ImGui::PushItemWidth(sliderWidth);
 			std::string id = std::string("##") + label + std::to_string(i);
 			std::string itemKey = std::string(label) + "_slider_" + std::to_string(i);
-			bool isPreviouslyActive = wasActiveInherit[itemKey];
 
 			ImGui::BeginDisabled(inheritFlags && inheritFlags[i]);
 			if (ImGui::SliderFloat(id.c_str(), &values[i], minValue, maxValue, format)) {
@@ -704,25 +637,16 @@ namespace TOD
 				if (inheritFlags)
 					inheritFlags[i] = false;
 				std::string valueName = std::string(label) + " " + GetPeriodName(i);
-				pendingSliderValues[valueName] = values[i];
-				sliderLastChangeTime[valueName] = ImGui::GetTime();
+				s_todSliderInheritTracker.OnValueChanged(valueName, values[i], currentTime);
 			}
 
-			// Push undo state only once when slider becomes active
+			// Push undo state when slider becomes active
 			bool isNowActive = ImGui::IsItemActive();
-			if (isNowActive && !isPreviouslyActive && !undoPushedInherit[itemKey]) {
+			if (s_todSliderInheritTracker.UpdateActiveState(itemKey, isNowActive, currentTime, debounceDelay)) {
 				if (g_currentWidget) {
 					EditorWindow::GetSingleton()->PushUndoState(g_currentWidget);
-					undoPushedInherit[itemKey] = true;
 				}
 			}
-
-			// Reset undo flag when slider is released
-			if (!isNowActive && undoPushedInherit[itemKey]) {
-				undoPushedInherit[itemKey] = false;
-			}
-
-			wasActiveInherit[itemKey] = isNowActive;
 
 			ImGui::EndDisabled();
 
@@ -736,19 +660,9 @@ namespace TOD
 			ImGui::EndGroup();
 		}
 
-		// Check for any pending values that should be tracked
-		std::vector<std::string> toTrack;
-		for (const auto& [key, changeTime] : sliderLastChangeTime) {
-			if (ImGui::GetTime() - changeTime >= debounceDelay) {
-				toTrack.push_back(key);
-			}
-		}
-
-		// Track and remove completed entries
-		for (const auto& key : toTrack) {
-			PaletteWindow::GetSingleton()->TrackValueUsage(key, pendingSliderValues[key]);
-			pendingSliderValues.erase(key);
-			sliderLastChangeTime.erase(key);
+		// Track completed entries to palette
+		for (const auto& [key, value] : s_todSliderInheritTracker.GetCompletedEntries(currentTime, debounceDelay)) {
+			PaletteWindow::GetSingleton()->TrackValueUsage(key, value);
 		}
 
 		return changed;
@@ -906,8 +820,14 @@ namespace TOD
 		return changed;
 	}
 
+	// Static debounced tracker for TOD float rows
+	static DebouncedTracker<float> s_todFloatTracker;
+
 	bool DrawTODFloatRow(const char* label, float values[4], float minValue, float maxValue, const char* format)
 	{
+		const double debounceDelay = 2.0;
+		double currentTime = ImGui::GetTime();
+
 		float factors[4];
 		GetTimeOfDayFactors(factors);
 		bool changed = false;
@@ -921,37 +841,25 @@ namespace TOD
 		float spacing = ImGui::GetStyle().ItemSpacing.x;
 		float columnWidth = (totalWidth - 3 * spacing) / 4.0f;
 
-		static std::map<std::string, bool> wasActiveMap;
-		static std::map<std::string, bool> undoPushedMap;
-
 		for (int i = 0; i < Count; ++i) {
 			if (i > 0)
 				ImGui::SameLine();
 			ImGui::PushID(i);
 
 			std::string itemId = std::string(label) + "_" + std::to_string(i);
-			bool isPreviouslyActive = wasActiveMap[itemId];
 
 			ImGui::SetNextItemWidth(columnWidth);
 			if (ImGui::SliderFloat("##value", &values[i], minValue, maxValue, format)) {
 				changed = true;
 			}
 
-			// Push undo state only once when slider becomes active
+			// Push undo state when slider becomes active
 			bool isNowActive = ImGui::IsItemActive();
-			if (isNowActive && !isPreviouslyActive && !undoPushedMap[itemId]) {
+			if (s_todFloatTracker.UpdateActiveState(itemId, isNowActive, currentTime, debounceDelay)) {
 				if (g_currentWidget) {
 					EditorWindow::GetSingleton()->PushUndoState(g_currentWidget);
-					undoPushedMap[itemId] = true;
 				}
 			}
-
-			// Reset undo flag when slider is released
-			if (!isNowActive && undoPushedMap[itemId]) {
-				undoPushedMap[itemId] = false;
-			}
-
-			wasActiveMap[itemId] = isNowActive;
 
 			ImGui::PopID();
 		}
@@ -1076,6 +984,15 @@ namespace TOD
 	{
 		ImGui::EndTable();
 	}
+
+	void DrawTODSeparator()
+	{
+		ImGui::TableNextRow();
+		ImGui::TableSetColumnIndex(0);
+		ImGui::Separator();
+		ImGui::TableSetColumnIndex(1);
+		ImGui::Separator();
+	}
 }
 
 bool BeginWidgetSearchBar(char* searchBuffer, size_t bufferSize, bool& searchActive)
@@ -1114,3 +1031,100 @@ void EndWidgetSearchBar()
 {
 	// Currently no cleanup needed, but keeping for symmetry and future use
 }
+
+// ============================================================================
+// PropertyDrawer Implementation - Consolidates repeated table property drawing
+// ============================================================================
+namespace PropertyDrawer
+{
+	bool BeginTable(const char* tableId, float labelWidth)
+	{
+		if (ImGui::BeginTable(tableId, 2, ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_SizingStretchProp)) {
+			ImGui::TableSetupColumn("Parameter", ImGuiTableColumnFlags_WidthFixed, labelWidth);
+			ImGui::TableSetupColumn("Value", ImGuiTableColumnFlags_WidthStretch);
+			return true;
+		}
+		return false;
+	}
+
+	void EndTable()
+	{
+		ImGui::EndTable();
+	}
+
+	void DrawSeparator()
+	{
+		ImGui::TableNextRow();
+		ImGui::TableSetColumnIndex(0);
+		ImGui::Separator();
+		ImGui::TableSetColumnIndex(1);
+		ImGui::Separator();
+	}
+
+	bool MatchesSearch(const char* label, const char* searchBuffer)
+	{
+		if (!searchBuffer || searchBuffer[0] == '\0')
+			return true;
+		return ContainsStringIgnoreCase(label, searchBuffer);
+	}
+
+	bool DrawFloat(const char* label, float& value, float minVal, float maxVal,
+		const char* searchBuffer, const char* format)
+	{
+		if (!MatchesSearch(label, searchBuffer))
+			return false;
+
+		ImGui::TableNextRow();
+		ImGui::TableSetColumnIndex(0);
+		ImGui::Text("%s", label);
+		ImGui::TableSetColumnIndex(1);
+		ImGui::SetNextItemWidth(-1);
+
+		std::string id = std::string("##") + label;
+		return ImGui::SliderFloat(id.c_str(), &value, minVal, maxVal, format);
+	}
+
+	bool DrawInt(const char* label, int& value, int minVal, int maxVal, const char* searchBuffer)
+	{
+		if (!MatchesSearch(label, searchBuffer))
+			return false;
+
+		ImGui::TableNextRow();
+		ImGui::TableSetColumnIndex(0);
+		ImGui::Text("%s", label);
+		ImGui::TableSetColumnIndex(1);
+		ImGui::SetNextItemWidth(-1);
+
+		std::string id = std::string("##") + label;
+		return ImGui::SliderInt(id.c_str(), &value, minVal, maxVal);
+	}
+
+	bool DrawColor(const char* label, float3& value, const char* searchBuffer)
+	{
+		if (!MatchesSearch(label, searchBuffer))
+			return false;
+
+		ImGui::TableNextRow();
+		ImGui::TableSetColumnIndex(0);
+		ImGui::Text("%s", label);
+		ImGui::TableSetColumnIndex(1);
+		ImGui::SetNextItemWidth(-1);
+
+		return WeatherUtils::DrawColorEdit(label, value);
+	}
+
+	bool DrawCheckbox(const char* label, bool& value, const char* searchBuffer)
+	{
+		if (!MatchesSearch(label, searchBuffer))
+			return false;
+
+		ImGui::TableNextRow();
+		ImGui::TableSetColumnIndex(0);
+		ImGui::Text("%s", label);
+		ImGui::TableSetColumnIndex(1);
+
+		std::string id = std::string("##") + label;
+		return ImGui::Checkbox(id.c_str(), &value);
+	}
+}  // namespace PropertyDrawer
+}  // namespace PropertyDrawer

@@ -699,12 +699,7 @@ void WeatherWidget::DrawDALCSettings()
 
 	if (TOD::BeginTODTable("DALC_TOD_Table")) {
 		TOD::RenderTODHeader();
-
-		ImGui::TableNextRow();
-		ImGui::TableSetColumnIndex(0);
-		ImGui::Separator();
-		ImGui::TableSetColumnIndex(1);
-		ImGui::Separator();
+		TOD::DrawTODSeparator();
 
 		// Prepare arrays for TOD rendering
 		float3 specularColors[4];
@@ -769,11 +764,7 @@ void WeatherWidget::DrawDALCSettings()
 			}
 		}
 
-		ImGui::TableNextRow();
-		ImGui::TableSetColumnIndex(0);
-		ImGui::Separator();
-		ImGui::TableSetColumnIndex(1);
-		ImGui::Separator();
+		TOD::DrawTODSeparator();
 
 		// Directional colors with per-parameter inheritance
 		if (hasParent) {
@@ -867,12 +858,7 @@ void WeatherWidget::DrawWeatherColorSettings()
 
 	if (TOD::BeginTODTable("AtmosphereColors_Table")) {
 		TOD::RenderTODHeader();
-
-		ImGui::TableNextRow();
-		ImGui::TableSetColumnIndex(0);
-		ImGui::Separator();
-		ImGui::TableSetColumnIndex(1);
-		ImGui::Separator();
+		TOD::DrawTODSeparator();
 
 		// Organized display order: group related sky/fog/lighting properties
 		static const int displayOrder[] = {
@@ -1008,12 +994,7 @@ void WeatherWidget::DrawCloudSettings()
 			ImGui::Spacing();
 			if (TOD::BeginTODTable((layer + "_TOD_Table").c_str())) {
 				TOD::RenderTODHeader();
-
-				ImGui::TableNextRow();
-				ImGui::TableSetColumnIndex(0);
-				ImGui::Separator();
-				ImGui::TableSetColumnIndex(1);
-				ImGui::Separator();
+				TOD::DrawTODSeparator();
 
 				if (hasParent) {
 					float3 parentColors[4];

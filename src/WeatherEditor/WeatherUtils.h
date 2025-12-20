@@ -3,12 +3,187 @@
 #include "Util.h"
 #include <cctype>
 #include <functional>
+#include <map>
+#include <string>
+#include <vector>
 
 // Forward declarations
 class Widget;
+class EditorWindow;
 
 // Case-insensitive substring search helper
 bool ContainsStringIgnoreCase(const std::string_view a_string, const std::string_view a_substring);
+
+// ============================================================================
+// DebouncedTracker - Consolidates debounced value tracking with undo support
+// ============================================================================
+template <typename T>
+class DebouncedTracker
+{
+public:
+	static constexpr double DefaultDebounceDelay = 2.0;
+
+	// Call when a value changes. Returns true if this is a new interaction session.
+	bool OnValueChanged(const std::string& key, const T& value, double currentTime)
+	{
+		pendingValues[key] = value;
+		lastChangeTime[key] = currentTime;
+		return true;
+	}
+
+	// Call every frame with current item active state. Returns true if undo should be pushed.
+	bool UpdateActiveState(const std::string& key, bool isNowActive, double currentTime, double debounceDelay = DefaultDebounceDelay)
+	{
+		bool isPreviouslyActive = wasActive[key];
+		wasActive[key] = isNowActive;
+
+		// Push undo state only once when slider becomes active
+		if (isNowActive && !isPreviouslyActive && !undoPushedForSession[key]) {
+			undoPushedForSession[key] = true;
+			return true;  // Signal to push undo
+		}
+
+		// Reset undo flag when slider is released and idle
+		if (!isNowActive && undoPushedForSession[key]) {
+			auto it = lastChangeTime.find(key);
+			if (it == lastChangeTime.end() || currentTime - it->second >= debounceDelay) {
+				undoPushedForSession[key] = false;
+			}
+		}
+
+		return false;
+	}
+
+	// Get pending values that have been idle for debounceDelay and should be tracked
+	std::vector<std::pair<std::string, T>> GetCompletedEntries(double currentTime, double debounceDelay = DefaultDebounceDelay)
+	{
+		std::vector<std::pair<std::string, T>> completed;
+		std::vector<std::string> keysToRemove;
+
+		for (const auto& [key, changeTime] : lastChangeTime) {
+			if (currentTime - changeTime >= debounceDelay) {
+				auto it = pendingValues.find(key);
+				if (it != pendingValues.end()) {
+					completed.emplace_back(key, it->second);
+					keysToRemove.push_back(key);
+				}
+			}
+		}
+
+		for (const auto& key : keysToRemove) {
+			pendingValues.erase(key);
+			lastChangeTime.erase(key);
+		}
+
+		return completed;
+	}
+
+	void Clear()
+	{
+		pendingValues.clear();
+		lastChangeTime.clear();
+		wasActive.clear();
+		undoPushedForSession.clear();
+	}
+
+private:
+	std::map<std::string, T> pendingValues;
+	std::map<std::string, double> lastChangeTime;
+	std::map<std::string, bool> wasActive;
+	std::map<std::string, bool> undoPushedForSession;
+};
+
+// ============================================================================
+// PropertyDrawer - Unified table-based property drawing with search support
+// ============================================================================
+namespace PropertyDrawer
+{
+	// Begin a property table. Call before drawing properties.
+	bool BeginTable(const char* tableId, float labelWidth = 200.0f);
+	void EndTable();
+
+	// Draw a table separator row
+	void DrawSeparator();
+
+	// Draw properties with optional search filtering.
+	// searchBuffer can be nullptr to skip search filtering.
+	// Returns true if value was changed.
+	bool DrawFloat(const char* label, float& value, float minVal, float maxVal,
+		const char* searchBuffer = nullptr, const char* format = "%.3f");
+
+	bool DrawInt(const char* label, int& value, int minVal, int maxVal,
+		const char* searchBuffer = nullptr);
+
+	bool DrawColor(const char* label, float3& value, const char* searchBuffer = nullptr);
+
+	bool DrawCheckbox(const char* label, bool& value, const char* searchBuffer = nullptr);
+
+	// Check if a label matches the current search (convenience wrapper)
+	bool MatchesSearch(const char* label, const char* searchBuffer);
+}  // namespace PropertyDrawer
+
+// ============================================================================
+// WidgetFactory - Template-based widget creation for EditorWindow::SetupResources
+// ============================================================================
+namespace WidgetFactory
+{
+	// Populate a widget container from a form array
+	// WidgetType must have a constructor taking FormType*
+	template <typename WidgetType, typename FormType>
+	void PopulateWidgets(std::vector<std::unique_ptr<Widget>>& widgets)
+	{
+		auto dataHandler = RE::TESDataHandler::GetSingleton();
+		if (!dataHandler)
+			return;
+
+		auto& formArray = dataHandler->GetFormArray<FormType>();
+		widgets.reserve(widgets.size() + formArray.size());
+
+		for (auto form : formArray) {
+			if (form) {
+				auto widget = std::make_unique<WidgetType>(form);
+				widget->CacheFormData();
+				widget->Load();
+				widgets.push_back(std::move(widget));
+			}
+		}
+	}
+
+	// Populate a widget container with SimpleFormWidget for cache-only purposes
+	template <typename FormType>
+	void PopulateSimpleWidgets(std::vector<std::unique_ptr<Widget>>& widgets)
+	{
+		auto dataHandler = RE::TESDataHandler::GetSingleton();
+		if (!dataHandler)
+			return;
+
+		auto& formArray = dataHandler->GetFormArray<FormType>();
+		widgets.reserve(widgets.size() + formArray.size());
+
+		for (auto form : formArray) {
+			if (form) {
+				auto widget = std::make_unique<SimpleFormWidget>();
+				widget->form = form;
+				widget->CacheFormData();
+				widgets.push_back(std::move(widget));
+			}
+		}
+	}
+
+	// Draw all open widgets from a container, tracking focus
+	template <typename Container>
+	void DrawOpenWidgets(Container& widgets, Widget*& lastFocusedWidget)
+	{
+		for (auto& widget : widgets) {
+			if (widget->IsOpen()) {
+				widget->DrawWidget();
+				if (ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows)) {
+					lastFocusedWidget = widget.get();
+				}
+			}
+		}
+	}
+}  // namespace WidgetFactory
 
 void Float3ToColor(const float3& newColor, RE::Color& color);
 void Float3ToColor(const float3& newColor, RE::TESWeather::Data::Color3& color);
@@ -78,6 +253,9 @@ namespace TOD
 
 	// End the TOD table
 	void EndTODTable();
+
+	// Draw a separator row in a TOD table
+	void DrawTODSeparator();
 }  // namespace TOD
 
 // Widget search bar helpers

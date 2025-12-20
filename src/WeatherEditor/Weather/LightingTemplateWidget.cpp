@@ -172,11 +172,7 @@ void LightingTemplateWidget::DrawDALCSettings()
 
 		if (TOD::BeginTODTable("DALCDirectionalTable")) {
 			TOD::RenderTODHeader();
-			ImGui::TableNextRow();
-			ImGui::TableSetColumnIndex(0);
-			ImGui::Separator();
-			ImGui::TableSetColumnIndex(1);
-			ImGui::Separator();
+			TOD::DrawTODSeparator();
 
 			// Prepare arrays for TOD rendering (map X,Y,Z to Sunrise,Day,Sunset,Night)
 			float3 maxColors[4];
