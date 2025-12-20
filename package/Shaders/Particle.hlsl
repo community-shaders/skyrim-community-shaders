@@ -2,14 +2,6 @@
 #include "Common/VR.hlsli"
 #include "Common/SharedData.hlsli"
 
-#	if defined(LIGHT_LIMIT_FIX)
-#		include "LightLimitFix/LightLimitFix.hlsli"
-#	endif
-
-#	if defined(ISL) && defined(LIGHT_LIMIT_FIX)
-#		include "InverseSquareLighting/InverseSquareLighting.hlsli"
-#	endif
-
 struct VS_INPUT
 {
 	float4 Position : POSITION0;
@@ -121,7 +113,7 @@ VS_OUTPUT main(VS_INPUT input)
 	vsout.Position.xy = positionOffset + finalViewPosition.xy;
 	vsout.Position.zw = finalViewPosition.zw;
 
-	vsout.ViewPosition = finalViewPosition.xyz;
+	vsout.ViewPositionVS = finalViewPosition.xyz;
 
 	vsout.Color.xyz = 1.0.xxx;
 	vsout.Color.w = fVars1.w;
@@ -225,6 +217,15 @@ struct PS_OUTPUT
 };
 
 #ifdef PSHADER
+
+#	if defined(LIGHT_LIMIT_FIX)
+#		include "LightLimitFix/LightLimitFix.hlsli"
+#	endif
+
+#	if defined(ISL) && defined(LIGHT_LIMIT_FIX)
+#		include "InverseSquareLighting/InverseSquareLighting.hlsli"
+#	endif
+
 SamplerState SampSourceTexture : register(s0);
 #	if defined(GRAYSCALE_TO_COLOR) || defined(GRAYSCALE_TO_ALPHA)
 SamplerState SampGrayscaleTexture : register(s1);
@@ -293,7 +294,7 @@ PS_OUTPUT main(PS_INPUT input)
 	propertyColor += dirLightColor;
 	propertyColor += ambientColor;
 
-	float3 viewPosition = input.ViewPosition.xyz;
+	float3 viewPosition = input.ViewPositionVS.xyz;
 	float3 worldPosition = FrameBuffer::ViewToWorld(viewPosition);
 
 #	if defined(LIGHT_LIMIT_FIX)
