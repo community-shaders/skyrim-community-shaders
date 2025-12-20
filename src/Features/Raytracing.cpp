@@ -107,7 +107,9 @@ void DrawFloat2(const char* label, float2& v, float min = 0.0f, float max = 1.0f
 }
 
 template <typename T>
-static void DrawEnumRadio(const char* label, T& variable) {
+static bool DrawEnumRadio(const char* label, T& variable) {
+	auto variablePrev = variable;
+
 	int denoiser = static_cast<int32_t>(variable);
 	ImGui::TextUnformatted(label);
 
@@ -125,6 +127,8 @@ static void DrawEnumRadio(const char* label, T& variable) {
 	}
 
 	variable = static_cast<T>(denoiser);
+
+	return variable != variablePrev;
 }
 
 void Raytracing::DrawSettings()
@@ -136,7 +140,9 @@ void Raytracing::DrawSettings()
 
 	ImGui::Checkbox("Global Illumination", &settings.GlobalIllumination);
 
-	DrawEnumRadio("Mode", settings.Mode);
+	if (DrawEnumRadio("Mode", settings.Mode))
+		recompileReason |= RecompileReason::Mode;
+
 	DrawEnumRadio("Denoiser", settings.Denoiser);
 
 	/*{
@@ -190,7 +196,10 @@ void Raytracing::DrawSettings()
 
 	DrawLightingSettings();
 
-	ImGui::Checkbox("Path Tracing", &settings.PathTracing);
+	if (ImGui::Checkbox("Path Tracing", &settings.PathTracing)) {
+		recompileReason |= RecompileReason::GIPTMode;
+	}
+
 	if (auto _tt = Util::HoverTooltipWrapper()) {
 		ImGui::Text("Experimental Path Tracing mode.\n");
 	}
@@ -202,8 +211,7 @@ void Raytracing::DrawSettings()
 
 	ImGui::Checkbox("Russian Roulette", &settings.RussianRoulette);
 
-	if (ImGui::CollapsingHeader("Debug", ImGuiTreeNodeFlags_DefaultOpen)) {
-
+	if (ImGui::CollapsingHeader("Debug", ImGuiTreeNodeFlags_DefaultOpen)) {	
 		// Debug display mode
 		if (ImGui::BeginCombo("Debug Output", magic_enum::enum_name(settings.DebugOutput).data())) {
 			for (auto& value : magic_enum::enum_values<DebugOutput>()) {
@@ -2361,7 +2369,7 @@ void Raytracing::DrawRTGI()
 		frameData->RussianRoulette = settings.RussianRoulette;
 
 #ifdef SHARC
-		frameData->SHaRC = settings.SHaRCSettings.GetFrameData(true);
+		frameData->SHaRC = settings.SHaRCSettings.GetFrameData(settings.Mode == Mode::SHaRC);  // Sets UpdatePass to true if in SHaRC mode
 #endif
 
 		frameData->DispatchSize = { width, height };
@@ -2380,9 +2388,13 @@ void Raytracing::DrawRTGI()
 		// Upload buffer 0, for SHaRC resolve pass
 		frameBuffer->Update(frameData.get(), sizeof(FrameData), 0, 0);
 
-		// Upload buffer 1, for main RT pass
-		frameData->SHaRC.UpdatePass = false;
-		frameBuffer->Update(frameData.get(), sizeof(FrameData), 0, 1);
+#ifdef SHARC
+		if (settings.Mode == Mode::SHaRC) {
+			// Upload buffer 1, for main RT pass
+			frameData->SHaRC.UpdatePass = false;
+			frameBuffer->Update(frameData.get(), sizeof(FrameData), 0, 1);
+		}
+#endif
 
 		// Upload buffer 0 to GPU
 		frameBuffer->Upload(commandList.get());
@@ -2425,6 +2437,7 @@ void Raytracing::DrawRTGI()
 
 #ifdef SHARC
 			// SHaRC Update pass
+			if (settings.Mode == Mode::SHaRC)
 			{
 				const auto sharcWidth = (uint)ceil(width / 5.0f);
 				const auto sharcHeight = (uint)ceil(height / 5.0f);
@@ -3212,14 +3225,12 @@ void Raytracing::CompileRTGIShaders()
 	};
 
 #ifdef SHARC
-	if (settings.Mode == Mode::SHaRC) {
+	if (settings.Mode == Mode::SHaRC)
 		defines.emplace_back(L"SHARC");
-	}
 #endif
 
-	if (settings.PathTracing) {
+	if (settings.PathTracing)
 		defines.emplace_back(L"PATH_TRACING");
-	}
 
 	winrt::com_ptr<IDxcBlob> rayGenBlob;
 	ShaderUtils::CompileShader(rayGenBlob, L"Data/Shaders/Raytracing/GI/RayGeneration.hlsl", defines);

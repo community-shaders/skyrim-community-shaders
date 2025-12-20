@@ -37,14 +37,18 @@ float3 SampleRadiance(in Surface surface, in BRDFContext brdfContext, in Instanc
 {
     float3 radiance = surface.Emissive * Frame.Emissive;
     
-    // Ideally we would call only one of these per bounce
+    if (any(Frame.Directional.Color > MIN_RADIANCE) && Random(randomSeed) < 0.5f)
+    {
 #if defined(LAMBERT)
-    radiance += LambertianDirectD(surface, Frame.Directional, randomSeed);
-    radiance += LambertianDirectP(surface, instance.LightData, randomSeed);
+        radiance += LambertianDirectD(surface, Frame.Directional, randomSeed);
+     } else {
+        radiance += LambertianDirectP(surface, instance.LightData, randomSeed);
 #else
-    radiance += GGXDirectD(surface, brdfContext, Frame.Directional, randomSeed);
-    radiance += GGXDirectP(surface, brdfContext, instance.LightData, randomSeed);
+        radiance += GGXDirectD(surface, brdfContext, Frame.Directional, randomSeed);
+    } else {
+        radiance += GGXDirectP(surface, brdfContext, instance.LightData, randomSeed);
 #endif    
+    }
     
     return radiance;
 }
@@ -199,7 +203,7 @@ void main()
     bool isDiffusePath = true;
     float hitDistance = 0;    
     
-    [unroll]
+    [loop]
     for (uint i = 0; i < MAX_SAMPLES; i++)
     {
 #if defined(SHARC)
@@ -213,7 +217,7 @@ void main()
         float3 sampleRadiance = float3(0.0f, 0.0f, 0.0f);
         float3 throughput = float3(1.0f, 1.0f, 1.0f);
 
-        [unroll]
+        [loop]
         for (uint j = 0; j < MAX_BOUNCES; j++)
         {
 #if defined(LAMBERT)

@@ -10,6 +10,7 @@ alignas(16)
 #endif   
     SHaRCFrameData
 {
+    BOOL Enabled;
     float SceneScale;
     uint AccumFrameNum;
     uint StaleFrameNum;
@@ -17,7 +18,6 @@ alignas(16)
     BOOL AntifireflyFilter; 
     uint Capacity;
     BOOL UpdatePass;    
-    uint Pad;
 };
 #ifdef __cplusplus
 static_assert(sizeof(SHaRCFrameData) % 4 == 0);
