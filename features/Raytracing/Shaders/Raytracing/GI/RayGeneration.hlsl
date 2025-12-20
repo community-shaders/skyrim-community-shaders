@@ -355,11 +355,6 @@ void main()
 #endif            
     }
 
-#if defined(SHARC) && defined(SHARC_UPDATE)
-    if (Frame.SHaRC.UpdatePass)
-        return;
-#endif
-    
 #if defined(PATH_TRACING)
     OutputTexture[idx] = float4(Color::TrueLinearToGamma(direct + radiance), 0.0f);
 #else
