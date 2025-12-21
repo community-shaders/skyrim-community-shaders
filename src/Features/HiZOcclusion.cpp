@@ -1129,21 +1129,37 @@ void HiZOcclusion::ExecuteVisibilityTests()
 
     // Dispatch new test if we have geometry to process
     if (!pendingGeometry.empty()) {
-        numGeometry = static_cast<uint32_t>(pendingGeometry.size());
-        pendingGeometrySnapshot = pendingGeometry;
-
-        // Create the worldBound array for the remaining geometry
+        // Create the worldBound array, filtering out nullptrs and invalid radii
         geometryBounds.clear();
-        geometryBounds.resize(numGeometry);
-        for (uint32_t i = 0; i < numGeometry; i++) {
-            if (!pendingGeometry[i]) // remove nullptrs
+        pendingGeometrySnapshot.clear();
+        geometryBounds.reserve(pendingGeometry.size());
+        pendingGeometrySnapshot.reserve(pendingGeometry.size());
+        
+        const uint32_t cappedCount = std::min<uint32_t>(static_cast<uint32_t>(pendingGeometry.size()), maxGeometryCount);
+        uint32_t processed = 0;
+        
+        for (auto& geometry : pendingGeometry) {
+            if (!geometry || processed >= cappedCount) {
                 continue;
-            auto& worldBound = pendingGeometry[i]->worldBound;
-
-            geometryBounds[i] = DirectX::XMFLOAT4(worldBound.center.x, worldBound.center.y, worldBound.center.z, worldBound.radius);
+            }
+            
+            auto& worldBound = geometry->worldBound;
+            if (worldBound.radius <= 0.0f) {
+                continue;
+            }
+            
+            geometryBounds.emplace_back(worldBound.center.x, worldBound.center.y, worldBound.center.z, worldBound.radius);
+            pendingGeometrySnapshot.push_back(geometry);
+            ++processed;
         }
-
-        logger::debug("ExecuteVisibilityTests: Processing {} geometry objects from frame {}", geometryBounds.size(), globals::state->frameCount - 1);
+        
+        numGeometry = processed;
+        
+        if (numGeometry == 0) {
+            return;
+        }
+        
+        logger::debug("ExecuteVisibilityTests: Processing {} geometry objects from frame {}", numGeometry, globals::state->frameCount - 1);
 
         // Execute HiZ Tests for this frame
         DispatchComputeShader();
@@ -1211,37 +1227,8 @@ void HiZOcclusion::DispatchComputeShader()
         return;
     }
 
-    const uint32_t geometryCount = static_cast<uint32_t>(pendingGeometry.size());
-    if (geometryCount == 0) {
-        return;
-    }
-
-    const uint32_t cappedCount = std::min<uint32_t>(geometryCount, maxGeometryCount);
-    if (geometryCount > maxGeometryCount) {
-        logger::warn("DispatchComputeShader: truncating batch {} -> {}", geometryCount, cappedCount);
-    }
-
-    uint32_t processed = 0;
-    for (auto& geometry : pendingGeometry) {
-        if (!geometry || processed >= cappedCount) {
-            continue;
-        }
-
-        DirectX::XMFLOAT4 sphere{};
-        sphere.x = geometry->worldBound.center.x;
-        sphere.y = geometry->worldBound.center.y;
-        sphere.z = geometry->worldBound.center.z;
-        sphere.w = geometry->worldBound.radius;
-        if (sphere.w <= 0.0f) {
-            continue;
-        }
-
-        geometryBounds.push_back(sphere);
-        pendingGeometrySnapshot.push_back(geometry);
-        ++processed;
-    }
-
-    if (processed == 0) {
+    // geometryBounds and pendingGeometrySnapshot are already populated by ExecuteVisibilityTests()
+    if (numGeometry == 0 || geometryBounds.empty()) {
         return;
     }
 
