@@ -228,7 +228,7 @@ bool Load()
 	}
 
 	if (globals::flatWorldMapDetected) {
-		// Add shader define so WORLD_MAP permutations can conditionally disable IBL
+		// Add shader define so WORLD_MAP permutations can conditionally disable IBL/PP.
 		globals::state->SetDefines("FWMF_DETECTED");
 	}
 
