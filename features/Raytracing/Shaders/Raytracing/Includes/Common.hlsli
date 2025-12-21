@@ -107,4 +107,18 @@ void UnpackMAO(float packed, out float metalness, out float ao)
     ao = saturate(((metalnessAO >> 8) & 0xFF) / 255.0f);
 }
 
+float ShadowTerminatorTerm(float3 L, float3 N, float3 Ns)
+{
+	// Disney terminator softening:
+	// "Taming the Shadow Terminator"
+	// Matt Jen-Yuan Chiang, Yining Karl Li, and Brent Burley
+	// SIGGRAPH 2019 Talks
+	// https://www.yiningkarlli.com/projects/shadowterminator.html
+	const float NoL = saturate(dot(N, L));
+	const float NgoL = saturate(dot(Ns, L));
+	const float NgoN = saturate(dot(Ns, N));
+	const float G = saturate(NgoL / (NoL * NgoN + 1e-6));
+	return G + G * (G - G * G); // smooth
+}
+
 #endif

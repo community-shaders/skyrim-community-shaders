@@ -113,12 +113,12 @@ void SampleSSGISpecular(uint2 pixCoord, sh2 lobe, out float ao, out float3 il, i
 	float3 normalWS = normalize(mul(FrameBuffer::CameraViewInverse[eyeIndex], float4(normalVS, 0)).xyz);
 
 #if defined(SSGI)
-#	if defined(RT)
-	if (SharedData::raytracingSettings.Ambient > 0.0) {
-#	endif
 
 	float ssgiAo;
 	float3 ssgiIl;
+#	if defined(RT)
+	if (SharedData::raytracingSettings.Ambient > 0.0) {
+#	endif
 	SampleSSGI(dispatchID.xy, normalWS, ssgiAo, ssgiIl);
 
 	float3 directionalAmbientColor = max(0, mul(SharedData::DirectionalAmbient, float4(normalWS, 1.0)));

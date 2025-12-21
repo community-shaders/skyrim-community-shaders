@@ -249,6 +249,65 @@ namespace MonteCarlo
         return clamp(probability, 0.1f, 0.9f);
     }
 
+    // Helper functions for multiple importance sampling
+
+    // Multiple importance sampling balance heuristic
+    // [Veach 1997, "Robust Monte Carlo Methods for Light Transport Simulation"]
+    float MISWeightBalanced(float Pdf, float OtherPdf)
+    {
+        // The straightforward implementation is prone to numerical overflow, divisions by 0
+        // and does not work well with +inf inputs.
+        // return Pdf / (Pdf + OtherPdf);
+
+        // We want this function to have the following properties:
+        //  0 <= w(a,b) <= 1 for all possible positive floats a and b (including 0 and +inf)
+        //  w(a, b) + w(b, a) == 1.0
+
+        // The formulation below is much more stable across the range of all possible inputs
+        // and guarantees the sum always adds up to 1.0.
+
+        // Evaluate the expression using the ratio of the smaller value to the bigger one for greater
+        // numerical stability. The math would also work using the ratio of bigger to smaller value,
+        // which would underflow less but would make the weights asymmetric. Underflow to 0 is not a
+        // bad property to have in rendering application as it ensures more weights are exactly 0
+        // which allows some evaluations to be skipped.
+        float X = min(Pdf, OtherPdf) / max(Pdf, OtherPdf); // This ratio is guaranteed to be in [0,1]
+        float Y = Pdf == OtherPdf ? 1.0 : X; // Guard against NaNs from 0/0 and Inf/Inf
+        float M = rcp(1.0 + Y);
+        return Pdf > OtherPdf ? M : 1.0 - M; // This ensures exchanging arguments will produce values that add back up to 1.0 exactly
+    }
+
+    // Multiple importance sampling power heuristic of two functions with a power of two. 
+    // [Veach 1997, "Robust Monte Carlo Methods for Light Transport Simulation"]
+    float MISWeightPower(float Pdf, float OtherPdf)
+    {
+        // Naive code (which can overflow, divide by 0, etc ..)
+        // return Pdf * Pdf / (Pdf * Pdf + OtherPdf * OtherPdf);
+
+        // See function above for the explanation of how this works
+        float X = min(Pdf, OtherPdf) / max(Pdf, OtherPdf); // This ratio is guaranteed to be in [0,1]
+        float Y = Pdf == OtherPdf ? 1.0 : X; // Guard against NaNs from 0/0 and Inf/Inf
+        float M = rcp(1.0 + Y * Y);
+        return Pdf > OtherPdf ? M : 1.0 - M; // This ensures exchanging arguments will produce values that add back up to 1.0 exactly
+    }
+
+    // Takes as input the sample weight and pdf for a certain lobe of a mixed model, together with the probability of picking that lobe
+    // This function then updates a running total Weight and Pdf value that represents the overall contribution of the BxDF
+    // This function should be called when a BxDF is made up of multiple lobes combined with a sum to correctly account for the probability
+    // of sampling directions via all lobes.
+    // NOTE: this function also contains special logic to handle cases with infinite pdfs cleanly
+    void AddLobeWithMIS(inout float3 Weight, inout float Pdf, float3 LobeWeight, float LobePdf, float LobeProb)
+    {
+        const float MinLobeProb = 1.1754943508e-38; // smallest normal float
+        if (LobeProb > MinLobeProb)
+        {
+            LobePdf *= LobeProb;
+            LobeWeight *= rcp(LobeProb);
+            Weight = lerp(Weight, LobeWeight, MISWeightBalanced(LobePdf, Pdf));
+            Pdf += LobePdf;
+        }
+    }
+
     float3 DiffuseAO(float3 diffuseColor, float ao)
     {
         return Color::MultiBounceAO(diffuseColor, ao);
