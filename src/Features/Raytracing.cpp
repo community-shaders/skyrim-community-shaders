@@ -3227,7 +3227,7 @@ void Raytracing::CompileRTGIShaders()
 		{ L"MAX_SAMPLES", samplesWStr.c_str() },
 	};
 
-	if (settings.LightMode == LightMode::Simple)
+	if (settings.LightMode == LightMode::Diffuse)
 		defines.emplace_back(L"LAMBERT");
 
 #ifdef SHARC

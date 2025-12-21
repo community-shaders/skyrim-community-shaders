@@ -362,8 +362,8 @@ struct Raytracing : public OverlayFeature
 
 	enum struct LightMode : int32_t
 	{
-		Simple,
-		PBR
+		Diffuse,	// Lambert only
+		BRDF		// GGX BRDF with Specular		
 	};
 
 	enum struct TraceMode : int32_t
@@ -414,7 +414,7 @@ struct Raytracing : public OverlayFeature
 	{
 		bool Enabled = true;
 		bool GlobalIllumination = true;
-		LightMode LightMode = LightMode::PBR;
+		LightMode LightMode = LightMode::BRDF;
 		TraceMode TraceMode = DefaultMode;
 		Denoiser Denoiser = Denoiser::Accumulation;
 		int Bounces = 2;
