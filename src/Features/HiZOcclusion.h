@@ -10,6 +10,8 @@
 
 struct HiZOcclusion : OverlayFeature
 {
+    virtual ~HiZOcclusion();
+
     virtual inline std::string GetName() override { return "HiZ Occlusion Culling"; }
     virtual inline std::string GetShortName() override { return "HiZOcclusion"; }
     virtual inline std::string_view GetShaderDefineName() override { return "HIZ_OCCLUSION"; }

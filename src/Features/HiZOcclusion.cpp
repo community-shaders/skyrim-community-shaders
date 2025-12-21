@@ -43,6 +43,48 @@ namespace
     std::atomic<uint32_t> g_hiZ_setupgeometry_stats_valid{ 0 };
 }
 
+HiZOcclusion::~HiZOcclusion()
+{
+    // Release Hi-Z pyramid resources
+    if (hiZSRV) { hiZSRV->Release(); hiZSRV = nullptr; }
+    for (auto* v : hiZSRVsPerMip) { if (v) v->Release(); }
+    hiZSRVsPerMip.clear();
+    for (auto* u : hiZUAVs) { if (u) u->Release(); }
+    hiZUAVs.clear();
+    if (hiZTexture) { hiZTexture->Release(); hiZTexture = nullptr; }
+    
+    // Release compute shaders
+    if (hiZBuildLevel0CS) { hiZBuildLevel0CS->Release(); hiZBuildLevel0CS = nullptr; }
+    if (hiZDownsampleCS) { hiZDownsampleCS->Release(); hiZDownsampleCS = nullptr; }
+    if (hiZTestCS) { hiZTestCS->Release(); hiZTestCS = nullptr; }
+    
+    // Release GPU culling resources
+    if (geometryBoundsSRV) { geometryBoundsSRV->Release(); geometryBoundsSRV = nullptr; }
+    if (geometryBoundsBuffer) { geometryBoundsBuffer->Release(); geometryBoundsBuffer = nullptr; }
+    if (visibilityResultsUAV) { visibilityResultsUAV->Release(); visibilityResultsUAV = nullptr; }
+    if (visibilityResultsBuffer) { visibilityResultsBuffer->Release(); visibilityResultsBuffer = nullptr; }
+    if (hiZTestParamsBuffer) { hiZTestParamsBuffer->Release(); hiZTestParamsBuffer = nullptr; }
+    if (hiZSampler) { hiZSampler->Release(); hiZSampler = nullptr; }
+    
+    // Release async readback staging buffers
+    for (int i = 0; i < AsyncReadbackState::BUFFER_COUNT; ++i) {
+        if (readbackState.stagingBuffers[i]) {
+            readbackState.stagingBuffers[i]->Release();
+            readbackState.stagingBuffers[i] = nullptr;
+        }
+    }
+    
+    // Release debug buffers
+    ReleaseDebugBuffer();
+    
+    // Release bounds overlay resources
+    ReleaseBoundsOverlayResources();
+    
+    // Release readback buffers
+    if (debugReadbackBuffer) { debugReadbackBuffer->Release(); debugReadbackBuffer = nullptr; }
+    if (visibilityReadbackBuffer) { visibilityReadbackBuffer->Release(); visibilityReadbackBuffer = nullptr; }
+}
+
 bool HiZOcclusion::SetupBoundsOverlayResources(uint32_t width, uint32_t height) {
     auto device = globals::d3d::device;
     if (!device || width == 0 || height == 0) return false;
