@@ -2731,13 +2731,13 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 
 #	if defined(IBL)
 	if (SharedData::iblSettings.EnableDiffuseIBL) {
-#		if !defined(WORLD_MAP)
+#		if !defined(WORLD_MAP) || !defined(FWMF_DETECTED)
 		if (SharedData::iblSettings.UseStaticIBL && !inWorld && !inReflection) {
 			directionalAmbientColor = ImageBasedLighting::GetStaticDiffuseIBL(ambientNormal, SampColorSampler);
 		} else if (!SharedData::InInterior || SharedData::iblSettings.EnableInterior) {
 			directionalAmbientColor *= SharedData::iblSettings.DALCAmount;
 		}
-#		endif  // !WORLD_MAP
+#		endif  // !WORLD_MAP || !FWMF_DETECTED
 	}
 #	endif
 
@@ -2756,7 +2756,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #	if defined(IBL)
 	float3 iblColor = 0;
 	if (SharedData::iblSettings.EnableDiffuseIBL) {
-#		if !defined(WORLD_MAP)
+#		if !defined(WORLD_MAP) || !defined(FWMF_DETECTED)
 		if ((!SharedData::InInterior || SharedData::iblSettings.EnableInterior) && !(SharedData::iblSettings.UseStaticIBL && !inWorld && !inReflection))
 		{
 #			if defined(SKYLIGHTING)
@@ -2767,7 +2767,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 			iblColor = Color::LinearToGamma(iblColor);
 			directionalAmbientColor += iblColor;
 		}
-#		endif  // !WORLD_MAP
+#		endif  // !WORLD_MAP || !FWMF_DETECTED
 	}
 #	endif
 

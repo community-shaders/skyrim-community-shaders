@@ -45,6 +45,8 @@ namespace globals
 		IDXGISwapChain* swapChain = nullptr;
 	}
 
+	bool flatWorldMapDetected = false;
+
 	namespace features
 	{
 		CloudShadows cloudShadows{};

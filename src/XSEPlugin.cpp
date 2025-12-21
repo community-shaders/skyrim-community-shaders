@@ -203,6 +203,35 @@ bool Load()
 		}
 	}
 
+	/**
+	 * @brief Detect Flat World Map Framework DLLs at startup.
+	 *
+	 * Uses GetModuleHandleA() to avoid loading DLLs ourselves (consistent with
+	 * optional module detection pattern). When detected, features like IBL and
+	 * Post-Processing effects can avoid applying on world map to prevent
+	 * visual artifacts with FWMF's flat texture replacement.
+	 *
+	 * Future: expand to detect Post-Processing modules that also distort FWMF output.
+	 */
+	const char* fwmfDLLs[] = {
+		"BakaWorldMapSpeed.dll",
+		"BakaWorldMapFOV.dll",
+		"FlatMapMarkersSSE.dll"
+	};
+
+	for (const char* dllName : fwmfDLLs) {
+		if (GetModuleHandleA(dllName) != nullptr) {
+			logger::info("Detected Flat World Map Framework mod: {} - Imagespace effects will be disabled on world map", dllName);
+			globals::flatWorldMapDetected = true;
+			break;
+		}
+	}
+
+	if (globals::flatWorldMapDetected) {
+		// Add shader define so WORLD_MAP permutations can conditionally disable IBL
+		globals::state->SetDefines("FWMF_DETECTED");
+	}
+
 	if (errors.empty()) {
 		Hooks::InstallEarlyHooks();
 		logger::info("Calling feature Load methods");
