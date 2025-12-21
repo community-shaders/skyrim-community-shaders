@@ -98,4 +98,18 @@ float2 Get2D(uint seed)
 	return (SamplerCore(seed).xy) * 5.96046447754e-08;
 }
 
+float ShadowTerminatorTerm(float3 L, float3 N, float3 Ns)
+{
+	// Disney terminator softening:
+	// "Taming the Shadow Terminator"
+	// Matt Jen-Yuan Chiang, Yining Karl Li, and Brent Burley
+	// SIGGRAPH 2019 Talks
+	// https://www.yiningkarlli.com/projects/shadowterminator.html
+	const float NoL = saturate(dot(N, L));
+	const float NgoL = saturate(dot(Ns, L));
+	const float NgoN = saturate(dot(Ns, N));
+	const float G = saturate(NgoL / (NoL * NgoN + 1e-6));
+	return G + G * (G - G * G); // smooth
+}
+
 #endif

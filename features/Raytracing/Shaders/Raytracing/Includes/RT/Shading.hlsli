@@ -100,7 +100,7 @@ float3 EvalDefaultBRDF(in float3 l, in Surface surface, in BRDFContext brdfConte
     
     // specular BRDF
     float3 Fr = (D * Vis) * F * Frame.Specular;
-    float3 Fd = BRDF::Diffuse_Burley(surface.Roughness, brdfContext.NdotV, NoL, VoH) * surface.DiffuseAlbedo * Frame.Diffuse;
+    float3 Fd = BRDF::Diffuse_Burley(surface.Roughness, brdfContext.NdotV, NoL, VoH) * surface.DiffuseAlbedo * Frame.Diffuse * ShadowTerminatorTerm(l, surface.Normal, surface.GeomNormal);
     
     return (Fd + Fr) * NoL;
 }
@@ -134,7 +134,7 @@ float3 EvalPointLight(in Surface surface, in BRDFContext brdfContext, in LightDa
     l /= dist;
     
     // float atten = VanillaSquaredAtten(dist, light.Range);
-    float atten = InverseSquareAtten(dist, light.Range * 64) * 2560; // This requires all lights to be ISL enabled
+    float atten = InverseSquareAtten(dist, light.Range * 64) * 10000; // This is temporal
     
     float3 direct = EvalDefaultBRDF(l, surface, brdfContext) * atten * light.Color * float(lightData.Count);
 
@@ -151,58 +151,67 @@ void SampleDefaultBRDF(in Surface surface, in BRDFContext brdfContext, inout uin
 {
     const float3 V = brdfContext.ViewDirection;
     float3 L = 0;
-    float3 H = 0;
     float NdotL = 0;
+
+    brdfWeight = 0.0f;
 
     const float specularProb = MonteCarlo::GetSpecularBrdfProbability(surface, V, surface.Normal);
     const bool isSpecular = Random(randomSeed) < specularProb;
 
-    float lobePDF = isSpecular ? specularProb : (1.0f - specularProb);
-
     float3 brdf = 0.0f;
-    float brdfPdf = 0.0f;
+    float pdf = 0.0f;
+    float diffusePdf = 0.0f;
+    float specularPdf = 0.0f;
+
+    float3 Ve = float3(
+            dot(brdfContext.ViewDirection, surface.Tangent), 
+            dot(brdfContext.ViewDirection, surface.Bitangent), 
+            dot(brdfContext.ViewDirection, surface.Normal)
+        );
+    float3 Le = 0.0f;
+    float3 He = 0.0f;
+
+    const float alpha = surface.Roughness * surface.Roughness;
+    const float alpha2 = alpha * alpha;
 
     if (!isSpecular)
     {
-        float3 localDirection = SampleCosineHemisphere(randomSeed);
-        L = surface.Mul(localDirection);
-        H = normalize(V + L);
-        NdotL = saturate(dot(surface.Normal, L));
-        brdf = BRDF::Diffuse_Burley(surface.Roughness, brdfContext.NdotV, NdotL, saturate(dot(H, V))) * NdotL * surface.DiffuseAlbedo;
-        brdfPdf = NdotL / Math::PI;
-        brdfWeight = Frame.Diffuse * brdf / max(brdfPdf * lobePDF, 1e-7f);
+        Le = SampleCosineHemisphere(randomSeed);
+        He = normalize(Ve + Le);
     }
     else
     {
-        float3 Ve = float3(
-                dot(brdfContext.ViewDirection, surface.Tangent), 
-                dot(brdfContext.ViewDirection, surface.Bitangent), 
-                dot(brdfContext.ViewDirection, surface.Normal)
-            );
-
-        const float alpha = surface.Roughness * surface.Roughness;
-        const float alpha2 = alpha * alpha;
-
         float2 E = Get2D(randomSeed);
         E.x = MonteCarlo::RescaleRandomNumber(E.x, specularProb, 1.0f);
         // float2 Xi = MonteCarlo::Hammersley(0, 1, random2D);
         // float3 He = MonteCarlo::SampleGGX_VNDF(Ve, alpha, randomSeed);
-        float4 HePDF = MonteCarlo::ImportanceSampleVisibleGGX(E, alpha, Ve);
-        float3 He = HePDF.xyz;
-        float3 Le = reflect(-Ve, He);
-        const float2 GGXResult = MonteCarlo::GGXEvalReflection(Le, Ve, He, alpha);
-        H = surface.Mul(He);
-        L = reflect(-V, H);
-
-        NdotL = saturate(dot(surface.Normal, L));
-        float VdotH = saturate(dot(H, V));
-        float NdotH = saturate(dot(surface.Normal, H));
-        float3 F = BRDF::F_Schlick(surface.F0, VdotH);
-
-        brdf = F * GGXResult.x;
-        brdfPdf = GGXResult.y;
-        brdfWeight = Frame.Specular * brdf / max(brdfPdf * lobePDF, 1e-7f);
+        He = MonteCarlo::ImportanceSampleVisibleGGX(E, alpha, Ve).xyz;
+        Le = reflect(-Ve, He);
     }
+
+    L = surface.Mul(Le);
+    NdotL = saturate(dot(surface.Normal, L));
+    const float2 GGXResult = MonteCarlo::GGXEvalReflection(Le, Ve, He, alpha);
+    specularPdf = GGXResult.y;
+    diffusePdf = NdotL / Math::PI;
+
+    float VdotH = saturate(dot(He, Ve));
+
+    if (!isSpecular)
+    {
+        brdf = Frame.Diffuse * surface.DiffuseAlbedo * NdotL * BRDF::Diffuse_Burley(surface.Roughness, brdfContext.NdotV, NdotL, VdotH) * ShadowTerminatorTerm(L, surface.Normal, surface.GeomNormal);
+        MonteCarlo::AddLobeWithMIS(brdfWeight, pdf, brdf, diffusePdf, 1.0f - specularProb);
+        pdf += specularProb * specularPdf;
+    }
+    else
+    {
+        float3 F = BRDF::F_Schlick(surface.F0, VdotH);
+        brdf = Frame.Specular * F * GGXResult.x;
+        MonteCarlo::AddLobeWithMIS(brdfWeight, pdf, brdf, specularPdf, specularProb);
+        pdf += (1.0f - specularProb) * diffusePdf;
+    }
+
+    brdfWeight = brdfWeight / max(pdf, 1e-7f);
 
     direction = L;
 }
