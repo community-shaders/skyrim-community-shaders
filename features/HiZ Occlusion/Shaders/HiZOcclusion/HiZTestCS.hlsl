@@ -31,9 +31,6 @@ cbuffer HiZParams : register(b0)
     // Camera world position for proper distance calculations
     float3 CameraWorldPos;
     float pad0;
-    row_major float4x4 cameraViewMat;
-    row_major float4x4 cameraProjMat;
-    row_major float4x4 cameraViewProjMat;
     float2 BufferDim;      // screenWidth, screenHeight
     float2 BufferDimInv;   // 1/screenWidth, 1/screenHeight
 };

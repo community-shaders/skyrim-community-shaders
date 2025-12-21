@@ -247,15 +247,11 @@ struct HiZOcclusion : OverlayFeature
         DirectX::XMFLOAT4 overlayColorToggles; // 16 (8 bits per toggle: behind|invalid|centerOff|camInside|invalidDepth|nearestOff|visible|occluded)
     
         DirectX::XMFLOAT3 cameraWorldPos;      // 12
-        float              pad0 = 0.0f;        //  4 -> 32
-    
-        DirectX::XMFLOAT4X4 cameraViewMat;     // 64 -> 96
-        DirectX::XMFLOAT4X4 cameraProjMat;     // 64 -> 160
-        DirectX::XMFLOAT4X4 cameraViewProjMat; // 64 -> 224
+        float              pad0 = 0.0f;        //  4 -> 16
     
         DirectX::XMFLOAT2 bufferDim;           //  8
-        DirectX::XMFLOAT2 bufferDimInv;        //  8 -> 240
-        // Total: 240 + 16 (two XMFLOAT2) = 256 bytes (multiple of 16)
+        DirectX::XMFLOAT2 bufferDimInv;        //  8 -> 32
+        // Total: 48 + 16 (overlayColorToggles) + 16 (overlaySettings) + 16 (hiZParams) = 64 bytes (multiple of 16)
     };
     static_assert(sizeof(HiZSettings) % 16 == 0, "HiZSettings must be 16B-sized");
     static_assert(alignof(HiZSettings) <= 16,  "HiZSettings alignment should not exceed 16");
