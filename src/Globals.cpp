@@ -8,6 +8,7 @@
 #include "Features/GrassCollision.h"
 #include "Features/GrassLighting.h"
 #include "Features/HairSpecular.h"
+#include "Features/HiZOcclusion.h"
 #include "Features/IBL.h"
 #include "Features/InteriorSun.h"
 #include "Features/InverseSquareLighting.h"
@@ -56,6 +57,7 @@ namespace globals
 		LightLimitFix lightLimitFix{};
 		LODBlending lodBlending{};
 		HairSpecular hairSpecular{};
+		HiZOcclusion hiZOcclusion{};
 		InteriorSun interiorSun{};
 		InverseSquareLighting inverseSquareLighting{};
 		ScreenSpaceGI screenSpaceGI{};
