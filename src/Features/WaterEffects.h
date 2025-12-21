@@ -18,8 +18,7 @@ public:
 	virtual std::pair<std::string, std::vector<std::string>> GetFeatureSummary() override
 	{
 		return {
-			"Water Effects enhances water rendering with realistic caustics and underwater lighting effects.\n"
-			"This feature adds dynamic light patterns and improved water visual quality.",
+			"This feature implements basic water effects, including parallax, flow map parallax, caustics and lighting tweaks.",
 			{ "Realistic water caustics",
 				"Enhanced underwater lighting",
 				"Dynamic light patterns on water surfaces",
@@ -28,6 +27,8 @@ public:
 		};
 	}
 
+	virtual bool IsCore() const override { return true; }
+
 	bool HasShaderDefine(RE::BSShader::Type shaderType) override;
 
 	virtual void SetupResources() override;
@@ -35,4 +36,5 @@ public:
 	virtual void Prepass() override;
 
 	virtual bool SupportsVR() override { return true; };
-};
+
+	virtual void DrawSettings() override;

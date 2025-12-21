@@ -21,3 +21,8 @@ bool WaterEffects::HasShaderDefine(RE::BSShader::Type)
 {
 	return true;
 }
+
+void WaterEffects::DrawSettings()
+{
+	ImGui::Text("Parallax requires valid alpha channel data in water .dds textures (regular and flow map variants).");
+}
