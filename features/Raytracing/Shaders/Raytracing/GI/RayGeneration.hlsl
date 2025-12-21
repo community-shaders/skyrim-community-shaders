@@ -306,11 +306,12 @@ void main()
 
                 throughput = float3(1.0f, 1.0f, 1.0f);
             } else 
-#endif              
+#endif
+            if (Frame.RussianRoulette)
             {
                 float rrProbability = j < RR_MIN_BOUNCE ? 1.0f : min(0.95f, Color::RGBToLuminance(throughput));
             
-                if (Frame.RussianRoulette && rrProbability < Random(randomSeed))
+                if (rrProbability < Random(randomSeed))
                     break;
                 else
                     throughput /= rrProbability;

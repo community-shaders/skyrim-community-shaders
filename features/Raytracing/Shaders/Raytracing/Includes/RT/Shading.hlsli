@@ -134,7 +134,7 @@ float3 EvalPointLight(in Surface surface, in BRDFContext brdfContext, in LightDa
     l /= dist;
     
     // float atten = VanillaSquaredAtten(dist, light.Range);
-    float atten = InverseSquareAtten(dist, light.Range * 64) * 10000; // This is temporal
+    float atten = InverseSquareAtten(dist * GAME_UNIT_TO_M, light.Range * 64); // This is temporal
     
     float3 direct = EvalDefaultBRDF(l, surface, brdfContext) * atten * light.Color * float(lightData.Count);
 
@@ -181,21 +181,23 @@ void SampleDefaultBRDF(in Surface surface, in BRDFContext brdfContext, inout uin
     }
     else
     {
-        float2 E = Get2D(randomSeed);
-        E.x = MonteCarlo::RescaleRandomNumber(E.x, specularProb, 1.0f);
+        // float2 E = Get2D(randomSeed);
+        // E.x = MonteCarlo::RescaleRandomNumber(E.x, specularProb, 1.0f);
         // float2 Xi = MonteCarlo::Hammersley(0, 1, random2D);
-        // float3 He = MonteCarlo::SampleGGX_VNDF(Ve, alpha, randomSeed);
-        He = MonteCarlo::ImportanceSampleVisibleGGX(E, alpha, Ve).xyz;
+        He = MonteCarlo::SampleGGX_VNDF(Ve, alpha, randomSeed);
+        // He = MonteCarlo::ImportanceSampleVisibleGGX(E, alpha, Ve).xyz;
         Le = reflect(-Ve, He);
     }
 
     L = surface.Mul(Le);
+    float3 H = surface.Mul(He);
     NdotL = saturate(dot(surface.Normal, L));
-    const float2 GGXResult = MonteCarlo::GGXEvalReflection(Le, Ve, He, alpha);
-    specularPdf = GGXResult.y;
-    diffusePdf = NdotL / Math::PI;
-
     float VdotH = saturate(dot(He, Ve));
+    float NdotH = saturate(dot(surface.Normal, H));
+
+    // const float2 GGXResult = MonteCarlo::GGXEvalReflection(Le, Ve, He, alpha);
+    specularPdf = MonteCarlo::SampleGGXVNDFReflectionPdf(alpha, alpha2, NdotH, brdfContext.NdotV, VdotH);
+    diffusePdf = NdotL / Math::PI;
 
     if (!isSpecular)
     {
@@ -206,7 +208,7 @@ void SampleDefaultBRDF(in Surface surface, in BRDFContext brdfContext, inout uin
     else
     {
         float3 F = BRDF::F_Schlick(surface.F0, VdotH);
-        brdf = Frame.Specular * F * GGXResult.x;
+        brdf = Frame.Specular * F * MonteCarlo::SpecularSampleWeightGGXVNDF(alpha, alpha2, NdotL, brdfContext.NdotV, VdotH, NdotH) * specularPdf;
         MonteCarlo::AddLobeWithMIS(brdfWeight, pdf, brdf, specularPdf, specularProb);
         pdf += (1.0f - specularProb) * diffusePdf;
     }
