@@ -24,6 +24,9 @@
 #define SHADOW_RAY_HITGROUP_IDX 1
 #define SHADOW_RAY_MISS_IDX 1
 
+#define RAY_TMAX (1e10f)
+#define SHADOW_RAY_TMAX (1e5f)
+
 #define GN_OFFSET (0.1f)
 
 #define MIN_DIFFUSE_SHADOW (0.001f)

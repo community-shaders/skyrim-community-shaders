@@ -220,6 +220,8 @@ struct Raytracing : public OverlayFeature
 	virtual void SetupResources() override;
 	virtual void ClearShaderCache() override;
 
+	void SetupOutputRT();
+
 	void ShareRT(ID3D11Texture2D* pTexture2D, const GIHeap::Slot& target, const ShadowsHeap::Slot& cTarget, ID3D12Resource** ppResource) const;
 	void SetupSharedRT();
 	void CompileShaders();
@@ -240,14 +242,13 @@ struct Raytracing : public OverlayFeature
 	void UpdateShadowsFrameBuffer();
 	void RenderShadows();
 
-	float3 GammaToLinear(float3 color);
 	eastl::vector<LightLimitFix::LightData> GetPointLights();
 	void UpdateLights();
 
 	void Main_RenderWorld(bool a1);
 	void BSShader_SetupGeometry(RE::BSShader* This, RE::BSRenderPass* Pass, uint32_t RenderFlags);
 
-	void SkyCubeToHemi();
+	void SkyCubeToHemi() const;
 	void CheckResourcesSide(int side);
 
 	void AddInstance(RE::NiNode* pNiNode, eastl::string path);
@@ -266,22 +267,27 @@ struct Raytracing : public OverlayFeature
 	void DeviceRemovedHandler();
 
 	void CopyDepth();
-	void ConvertNormalGlossiness();
+	void ConvertTextures() const;
 
 	void ReleaseTempGPUData();
 
 	void BuildTLAS();
 	void RebuildTLAS(ID3D12GraphicsCommandList4* pCommandList, size_t numDescs, D3D12_GPU_VIRTUAL_ADDRESS instanceDescs);
 
+	uint2 GetScreenSize() const;
+	uint2 GetRenderSize();
+	bool UpdateRenderSize();
+
 #ifdef DLSS_RR
 	void InitRR();
 	void CheckFrameConstants();
-	sl::DLSSMode GetDLSSMode();
+	sl::DLSSMode GetDLSSMode() const;
+	sl::DLSSDOptions GetDLSSRROptions() const;
+	void GetDLSSRROptimal();
 	void SetDLSSRROptions();
 	int32_t GetJitterPhaseCount(int32_t renderWidth, int32_t displayWidth);
 	void GetJitterOffset(float* outX, float* outY, int32_t index, int32_t phaseCount);
 	float Halton(int32_t index, int32_t base);
-	float2 GetInputResolutionScaleRR(uint32_t outputWidth, uint32_t outputHeight);
 #endif
 
 	const bool Active() 
@@ -327,16 +333,25 @@ struct Raytracing : public OverlayFeature
 		SpecularHitDistance,
 		NormalRoughnessGbuffer,
 		GeometryNormalMetalness,
-		ReflectanceGBuffer,
+		Albedo,
+		Diffuse,
 		Passthrough
 	};
 
+#ifdef DLSS_RR
 	enum struct DLSSRRQuality : int32_t
 	{
 		MaxPerformance,	
 		Balanced,
 		MaxQuality		
 	};
+
+	enum struct DLSSRRPreset : int32_t
+	{
+		D,
+		E
+	};
+#endif
 
 	enum struct PIXCaptureLocation : int32_t
 	{
@@ -345,7 +360,13 @@ struct Raytracing : public OverlayFeature
 		AO
 	};
 
-	enum struct Mode : int32_t
+	enum struct LightMode : int32_t
+	{
+		Simple,
+		PBR
+	};
+
+	enum struct TraceMode : int32_t
 	{
 		Reference,
 #ifdef SHARC
@@ -354,9 +375,9 @@ struct Raytracing : public OverlayFeature
 	};
 
 #ifdef SHARC
-	static constexpr Mode DefaultMode = Mode::SHaRC;
+	static constexpr TraceMode DefaultMode = TraceMode::SHaRC;
 #else
-	static constexpr Mode DefaultMode = Mode::Reference;
+	static constexpr TraceMode DefaultMode = TraceMode::Reference;
 #endif
 
 	struct SHaRCSettings
@@ -366,6 +387,13 @@ struct Raytracing : public OverlayFeature
 		int StaleFrameNum = 64;
 		float RadianceScale = 1e3f;
 		bool AntifireflyFilter = true;
+
+		SHaRCSettings() = default;
+		SHaRCSettings(const SHaRCSettings&) = default;
+
+		SHaRCSettings& operator=(const SHaRCSettings&) = default;
+		bool operator==(const SHaRCSettings&) const = default;
+		bool operator!=(const SHaRCSettings&) const = default;
 
 		SHaRCFrameData GetFrameData(bool updatePass) const
 		{
@@ -386,7 +414,8 @@ struct Raytracing : public OverlayFeature
 	{
 		bool Enabled = true;
 		bool GlobalIllumination = true;
-		Mode Mode = DefaultMode;
+		LightMode LightMode = LightMode::PBR;
+		TraceMode TraceMode = DefaultMode;
 		Denoiser Denoiser = Denoiser::Accumulation;
 		int Bounces = 2;
 		int SamplesPerPixel = 1;
@@ -400,7 +429,6 @@ struct Raytracing : public OverlayFeature
 		float Directional = 1.0f;
 		float Point = 1.0f;
 		bool LodDimmer = true;
-		bool GammaToLinear = false;
 		bool RaytracedShadows = true;
 		bool PathTracing = false;
 		bool CullShadows = true;
@@ -408,6 +436,8 @@ struct Raytracing : public OverlayFeature
 		bool RussianRoulette = true;
 #ifdef DLSS_RR
 		DLSSRRQuality DLSSRRQualityMode = DLSSRRQuality::MaxQuality;
+		float DLSSRRSharpness = 0.0f;
+		DLSSRRPreset DLSSRRPreset = DLSSRRPreset::E;
 #endif
 		bool PerformanceOverlay = false;
 		std::string Defines = "";
@@ -425,9 +455,10 @@ struct Raytracing : public OverlayFeature
 		None = 0,
 		Bounces = 1 << 0,
 		Samples = 1 << 1,
-		Mode = 1 << 2,
-		GIPTMode = 1 << 3,
-		Debug = 1 << 4
+		LightMode = 1 << 2,
+		TraceMode = 1 << 3,
+		GIPTMode = 1 << 4,
+		Debug = 1 << 5
 	};
 
 	RecompileReason recompileReason = RecompileReason::None;
@@ -717,17 +748,23 @@ struct Raytracing : public OverlayFeature
 
 	// Resources
 	eastl::unique_ptr<DX12::Texture2D> outputTexture = nullptr;
-	eastl::unique_ptr<DX12::Texture2D> reflectanceTexture = nullptr;
+	eastl::unique_ptr<DX12::Texture2D> specularAlbedoTexture = nullptr;
 	eastl::unique_ptr<DX12::Texture2D> specularHitDistanceTexture = nullptr;
 
 	eastl::unique_ptr<WrappedResource> depthTexture = nullptr;
 	eastl::unique_ptr<WrappedResource> motionVectorsTexture = nullptr;
 
+	// True Albedo
 	winrt::com_ptr<ID3D12Resource> albedoTexture = nullptr;
-	eastl::unique_ptr<WrappedResource> normalRoughnessTexture = nullptr;
-	winrt::com_ptr<ID3D12Resource> GNMDTexture = nullptr;
 
-	winrt::com_ptr<ID3D12Resource> gbufferReflectanceTexture = nullptr;
+	// Metalness modulated albedo
+	eastl::unique_ptr<WrappedResource> diffuseAlbedoTexture = nullptr;
+
+	// World normal and roughness
+	eastl::unique_ptr<WrappedResource> normalRoughnessTexture = nullptr;
+
+	// Geometry normal, metalness and AO
+	winrt::com_ptr<ID3D12Resource> GNMDTexture = nullptr;
 
 	eastl::unique_ptr<WrappedResource> mainTexture = nullptr;
 
@@ -735,6 +772,8 @@ struct Raytracing : public OverlayFeature
 	std::shared_mutex bufferMutex;
 	std::shared_mutex sharedTextureMutex;
 	std::shared_mutex renderMutex;
+
+	uint2 renderSize;
 
 	// Timings
 	float mainTime;

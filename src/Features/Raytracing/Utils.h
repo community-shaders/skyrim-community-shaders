@@ -215,3 +215,8 @@ static uint32_t DivideRoundUp(uint32_t x, uint32_t divisor)
 {
 	return (x + divisor - 1) / divisor;
 }
+
+static uint32_t DivideRoundUp(uint32_t x, float divisor)
+{
+	return static_cast<uint32_t>(ceil(x / divisor));
+}

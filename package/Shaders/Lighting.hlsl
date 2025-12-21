@@ -2193,6 +2193,10 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #	if defined(ENVMAP) || defined(MULTI_LAYER_PARALLAX) || defined(EYE)
 	float envMask = EnvmapData.x * MaterialData.x;
 
+#	if defined(RT)
+	envMask *= SharedData::raytracingSettings.EnvMap;
+#	endif
+
 	float viewNormalAngle = dot(worldNormal.xyz, viewDirection);
 	float3 envSamplingPoint = (viewNormalAngle * 2) * worldNormal.xyz - viewDirection;
 
@@ -2266,11 +2270,6 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 			envColor = envColorBase.xyz * envMask;
 		}
 	}
-
-#	if defined(RT)
-	envColor *= SharedData::raytracingSettings.EnvMap;
-#	endif
-
 #	endif  // defined (ENVMAP) || defined (MULTI_LAYER_PARALLAX) || defined(EYE)
 
 	float porosity = 1.0;
@@ -3207,7 +3206,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	float3 worldGeomNormal = tbnTr[2];
 #				else
 	float3 worldGeomNormal = float3(0.0, 0.0, 1.0);	
-#				endif // !defined (SKINNED) && defined (MODELSPACENORMALS)
+#				endif // defined (SKINNED) || !defined (MODELSPACENORMALS)
 
 	float3 screenGeomNormal = normalize(FrameBuffer::WorldToView(worldGeomNormal, false, eyeIndex));
 

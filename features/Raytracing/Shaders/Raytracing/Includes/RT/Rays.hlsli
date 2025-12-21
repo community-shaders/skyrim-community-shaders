@@ -10,7 +10,7 @@ float TraceRayShadow(RaytracingAccelerationStructure scene, float3 origin, float
     ray.Origin = origin;
     ray.Direction = direction;
     ray.TMin = 0.01f;
-    ray.TMax = 1e30;
+    ray.TMax = SHADOW_RAY_TMAX;
 
     ShadowPayload shadowPayload;
     shadowPayload.missed = 0.0f;

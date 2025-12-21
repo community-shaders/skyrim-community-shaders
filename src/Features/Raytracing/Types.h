@@ -139,6 +139,9 @@ struct uint2
 {
 	uint x;
 	uint y;
+
+	bool operator==(const uint2&) const = default;
+	bool operator!=(const uint2&) const = default;
 };
 static_assert(sizeof(uint2) == 8);
 

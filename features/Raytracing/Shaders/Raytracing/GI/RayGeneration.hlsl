@@ -117,7 +117,7 @@ void main()
         
         OutputTexture[idx] = MainTexture[idx];
         SpecularAlbedo[idx] = float4(0.5f, 0.5f, 0.5f, 0.0f);
-        SpecularHitDist[idx] = 0.0f;
+        SpecularHitDist[idx] = RAY_TMAX;
         return;
     }
 
@@ -128,11 +128,8 @@ void main()
     const unorm float linearRoughness = normalRoughness.w;
 
     // Metalness and AO packed in 16 bits
-    uint metalnessAO = normalMetalnessAO.z * 65535.0;
-    
-    const float metalness = (metalnessAO & 0xFF) / 255.0f;
-    
-    const float ao = saturate(((metalnessAO >> 8) & 0xFF) / 255.0f);
+    float metalness, ao;
+    UnpackMAO(normalMetalnessAO.z, metalness, ao);
     
     const float3 positionVS = ScreenToViewPosition(uv, depthView, Frame.NDCToView);
     const float3 positionCS = ViewToWorldPosition(positionVS, Frame.ViewInverse);
@@ -213,7 +210,7 @@ void main()
             ray.Origin = surface.Position + surface.GeomNormal * 0.01f;
             ray.Direction = direction;
             ray.TMin = 0.01f;
-            ray.TMax = 1e30;
+            ray.TMax = RAY_TMAX;
 
             payload.hitDistance = -1.0f;
             payload.primitiveIndex = 0;
@@ -221,6 +218,11 @@ void main()
             payload.PackInstanceShapeIndex(0, 0);
 
             TraceRay(Scene, RAY_FLAG_NONE, 0xFF, DIFFUSE_RAY_HITGROUP_IDX, 0, DIFFUSE_RAY_MISS_IDX, ray, payload);
+              
+            if (j == 0)
+            {
+                hitDistance = max(hitDistance, payload.hitDistance);
+            }              
             
             if (!payload.Hit())
             {
@@ -237,12 +239,7 @@ void main()
                 sampleRadiance += skyIrradiance * throughput;
                 break;
             }                  
-   
-            if (j == 0)
-            {
-                hitDistance = max(hitDistance, payload.hitDistance);
-            }           
-          
+ 
             float3 localPosition = ray.Origin + direction * payload.hitDistance;             
 
             surface = Surface(localPosition, payload, instance, material);
@@ -347,5 +344,5 @@ void main()
     const float3 specularAlbedo = float3(sourceSurface.F0 * envBRDF.x + envBRDF.y);
     SpecularAlbedo[idx] = float4(specularAlbedo, 0.0f);
 
-    SpecularHitDist[idx] = max(0.0f, hitDistance);
+    SpecularHitDist[idx] = hitDistance;
 }
