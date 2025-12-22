@@ -1475,9 +1475,6 @@ void HiZOcclusion::ProcessVisibilityResults(uint32_t bufferIndex) {
 
     unCullNextFrame.clear();
     
-    // Clear previous occlusion state before processing new results
-    // This ensures we only cull based on the most recent valid readback
-    ClearOcclusionState();
     
     // Track when we received fresh results
     stats.lastResultFrame = globals::state->frameCount;
