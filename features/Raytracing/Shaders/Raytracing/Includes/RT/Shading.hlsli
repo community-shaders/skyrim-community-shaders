@@ -238,10 +238,15 @@ float3 SampleSky(float3 dir)
 float3 EvaluateRadiance(in Surface surface, in BRDFContext brdfContext, in Instance instance, in Material material, inout uint randomSeed)
 {
     float3 radiance = surface.Emissive * Frame.Emissive;
-
+        
     radiance += EvalDirectionalLight(surface, brdfContext, Frame.Directional, randomSeed);
-    radiance += EvalPointLight(surface, brdfContext, instance.LightData, randomSeed);
+    radiance += EvalPointLight(surface, brdfContext, instance.LightData, randomSeed);        
 
+    /*if (material.PBRFlags & PBR::Flags::Subsurface)
+    {
+        // Do something expensive
+    }*/    
+    
     return radiance;
 }
 

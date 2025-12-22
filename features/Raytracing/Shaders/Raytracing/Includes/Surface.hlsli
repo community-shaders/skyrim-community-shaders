@@ -73,18 +73,35 @@ struct Surface
         float4 vertexColor = Interpolate(v0.Color.unpack(), v1.Color.unpack(), v2.Color.unpack(), uvw);
 
         Texture2D baseTexture = Textures[NonUniformResourceIndex(material.BaseTexture)];
-        Texture2D effectTexture = Textures[NonUniformResourceIndex(material.EffectTexture)];
+        Texture2D effectTexture = Textures[NonUniformResourceIndex(material.EffectTexture)];        
         
-        float3 base = baseTexture.SampleLevel(BaseSampler, texCoord0, 0).rgb;
-        float3 effect = effectTexture.SampleLevel(BaseSampler, texCoord0, 0).rgb;
+        if (material.ShaderType == ShaderType::Effect)
+        {
+            float3 base = baseTexture.SampleLevel(BaseSampler, texCoord0, 0).rgb;
+            
+            float3 baseColorMul = material.EffectColor.rgb * vertexColor.rgb;
+            float3 baseColor = base * baseColorMul;
         
-#   ifdef DEBUG_WHITE_FURNACE
+            float baseColorScale = material.EffectColor.a;
+            float2 grayscaleToColorUv = float2(base.g, baseColorMul.x);
+        
+            baseColor = baseColorScale * effectTexture.SampleLevel(BaseSampler, grayscaleToColorUv, 0).rgb;
+        
+            surface.Albedo = Color::GammaToTrueLinear(baseColor.xyz);
+            surface.Emissive = baseColor * Frame.Effect;
+        }
+        else
+        {        
+            float3 base = baseTexture.SampleLevel(BaseSampler, texCoord0, 0).rgb;
+            float3 effect = effectTexture.SampleLevel(BaseSampler, texCoord0, 0).rgb;
+        
+            surface.Albedo = base * material.BaseColor.rgb * vertexColor.rgb;     
+            surface.Emissive = effect * material.EffectColor.rgb * material.EffectColor.a;
+        }
+    
+#ifdef DEBUG_WHITE_FURNACE
         surface.Albedo = float3(1.0f, 1.0f, 1.0f);
-#   else
-        surface.Albedo = base * material.BaseColor.rgb * vertexColor.rgb;
-#   endif
-        
-        surface.Emissive = effect * material.EffectColor.rgb * material.EffectColor.a;        
+#endif        
         
 #ifdef PATH_TRACING        
         Texture2D normalTexture = Textures[NonUniformResourceIndex(material.NormalTexture)];

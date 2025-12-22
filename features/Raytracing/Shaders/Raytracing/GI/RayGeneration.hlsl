@@ -29,6 +29,7 @@ void main()
     SharcParameters sharcParameters = GetSharcParameters();
 
 #    if defined(SHARC_UPDATE)
+    [branch]
     if (Frame.SHaRC.UpdatePass)  {
         uint startIndex = Hash(idx) % 25;
 
@@ -74,6 +75,7 @@ void main()
     if (!sourcePayload.Hit())
     {
 #if defined(SHARC) && defined(SHARC_UPDATE)
+        [branch]
         if (Frame.SHaRC.UpdatePass)   
             return;
 #endif
@@ -108,9 +110,11 @@ void main()
 
     const float depthView = ScreenToViewDepth(depth, Frame.CameraData);
 
+    [branch]
     if (depthView < FP_Z || depth >= SKY_Z)
     {
 #if defined(SHARC) && defined(SHARC_UPDATE)
+        [branch]
         if (Frame.SHaRC.UpdatePass)   
             return;
 #endif
@@ -182,6 +186,7 @@ void main()
     for (uint i = 0; i < MAX_SAMPLES; i++)
     {
 #if defined(SHARC)
+        [branch]
         if (Frame.SHaRC.UpdatePass)
         {        
             SharcInit(sharcState);
@@ -234,6 +239,7 @@ void main()
                 float3 skyIrradiance = SampleSky(direction) * Frame.Sky;
                 
 #if defined(SHARC) && defined(SHARC_UPDATE)
+                [branch]
                 if (Frame.SHaRC.UpdatePass)
                 {
                     SharcUpdateMiss(sharcParameters, sharcState, skyIrradiance * throughput);
@@ -253,6 +259,7 @@ void main()
             sharcHitData.positionWorld = surface.Position;
             sharcHitData.normalWorld = surface.GeomNormal;
             
+            [branch]
             if (!Frame.SHaRC.UpdatePass)
             {
                 uint gridLevel = HashGridGetLevel(surface.Position, sharcParameters.gridParameters);
@@ -275,14 +282,10 @@ void main()
             
             brdfContext = BRDFContext(surface, -direction);
 
-            /*if (material.PBRFlags & PBR::Flags::Subsurface)
-            {
-                // Do something expensive
-            }*/
-            
             sampleRadiance += EvaluateRadiance(surface, brdfContext, instance, material, randomSeed) * throughput;
 
 #if defined(SHARC) && defined(SHARC_UPDATE)
+            [branch]
             if (Frame.SHaRC.UpdatePass)
             {
                 if (!SharcUpdateHit(sharcParameters, sharcState, sharcHitData, sampleRadiance, Random(randomSeed)))
@@ -312,6 +315,7 @@ void main()
         
 #if defined(SHARC) && defined(SHARC_UPDATE)
         // SHaRC is single sample only and does not write to texture outputs
+        [branch]
         if (Frame.SHaRC.UpdatePass)
         {
             return;
