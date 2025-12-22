@@ -150,7 +150,7 @@ void SampleDefaultBRDF(in Surface surface, in BRDFContext brdfContext, inout uin
 
     brdfWeight = 0.0f;
 
-    const float specularProb = MonteCarlo::GetSpecularBrdfProbability(surface, V, surface.Normal);
+    const float specularProb = lerp(MonteCarlo::GetSpecularBrdfProbability(surface, V, surface.Normal), 1.0f, surface.Metallic);
     const bool isSpecular = Random(randomSeed) < specularProb;
 
     float3 brdf = 0.0f;
