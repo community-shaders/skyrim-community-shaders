@@ -34,7 +34,7 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	Raytracing::Settings,
 	Enabled,
 	GlobalIllumination,
-	LightMode,
+	AdvancedSettings,
 	TraceMode,
 	Denoiser,
 	Bounces,
@@ -59,7 +59,6 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	PIXCaptureLocation,
 	EnableDebugDevice,
 	RAYTRACING_EXTRA_FIELDS)
-
 
 ////////////////////////////////////////////////////////////////////////////////////
 
@@ -114,166 +113,12 @@ static bool DrawEnumRadio(const char* label, T& variable) {
 
 void Raytracing::DrawSettings()
 {
-	ImGui::Checkbox("Enabled", &settings.Enabled);
-	if (auto _tt = Util::HoverTooltipWrapper()) {
-		ImGui::Text("Enable Ray-Traced Global Illumination.");
-	}
+	if (ImGui::BeginTabBar("Settings")) {
+		DrawGeneralSettings();
+		DrawAdvancedSettings();
+		DrawDebugSettings();
 
-	ImGui::Checkbox("Global Illumination", &settings.GlobalIllumination);
-
-	if (DrawEnumRadio("LightMode", settings.LightMode))
-		recompileReason |= RecompileReason::LightMode;
-
-	if (DrawEnumRadio("TraceMode", settings.TraceMode))
-		recompileReason |= RecompileReason::TraceMode;
-
-	DrawEnumRadio("Denoiser", settings.Denoiser);
-
-	// Bounces
-	{
-		int bounces = settings.Bounces;
-
-		if (ImGui::SliderInt("Bounces", &settings.Bounces, 1, 32))
-			settings.Bounces = std::clamp(settings.Bounces, 1, 32);
-
-		if (bounces != settings.Bounces)
-			recompileReason |= RecompileReason::Bounces;
-	}
-
-	// Samples Per Pixel
-	{
-		int samples = settings.SamplesPerPixel;
-
-		if (ImGui::SliderInt("Samples Per Pixel", &settings.SamplesPerPixel, 1, 32))
-			settings.SamplesPerPixel = std::clamp(settings.SamplesPerPixel, 1, 32);
-
-		if (samples != settings.SamplesPerPixel)
-			recompileReason |= RecompileReason::Samples;
-	}
-
-	/*if (ImGui::SliderInt("Bounces", &settings.Bounces, 1, 32))
-		settings.Bounces = std::clamp(settings.Bounces, 1, 32);*/
-
-	DrawFloat2("Roughness", settings.Roughness);
-	DrawFloat2("Metalness", settings.Metalness);
-
-	DrawDenoiserSettings();
-
-#ifdef SHARC
-	DrawSHaRCSettings();
-#endif
-
-	DrawLightingSettings();
-
-	if (ImGui::Checkbox("Path Tracing", &settings.PathTracing)) {
-		recompileReason |= RecompileReason::GIPTMode;
-	}
-
-	if (auto _tt = Util::HoverTooltipWrapper()) {
-		ImGui::Text("Experimental Path Tracing mode.\n");
-	}
-
-	ImGui::Checkbox("Recompress Textures", &settings.RecompressTextures);
-	if (auto _tt = Util::HoverTooltipWrapper()) {
-		ImGui::Text("Some texture formats cannot be shared between APIs, enabling this option ensures they'll be recompressed in a lower quality yet compatible format.\n");
-	}
-
-	ImGui::Checkbox("Russian Roulette", &settings.RussianRoulette);
-
-	if (ImGui::CollapsingHeader("Debug", ImGuiTreeNodeFlags_DefaultOpen)) {	
-		ImGui::InputText("Shader Defines", &settings.Defines);
-
-		ImGui::SameLine();
-
-		if (ImGui::Button("Recompile"))
-			recompileReason |= RecompileReason::Debug;
-
-		// Debug display mode
-		if (ImGui::BeginCombo("Debug Output", magic_enum::enum_name(settings.DebugOutput).data())) {
-			for (auto& value : magic_enum::enum_values<DebugOutput>()) {
-				bool isSelected = (settings.DebugOutput == value);
-
-				if (ImGui::Selectable(magic_enum::enum_name(value).data(), isSelected))
-					settings.DebugOutput = value;
-
-				if (isSelected)
-					ImGui::SetItemDefaultFocus();
-			}
-
-			ImGui::EndCombo();
-		}
-
-		ImGui::Checkbox("Enable PIX Capture", &settings.EnablePIXCapture);
-		{
-			if (settings.EnablePIXCapture) {
-				if (ImGui::TreeNodeEx("Pix Capture", ImGuiTreeNodeFlags_DefaultOpen)) {
-					//Pix Capture Location
-					{
-						int pixCapLocation = static_cast<int32_t>(settings.PIXCaptureLocation);
-						ImGui::TextUnformatted("PIX Capture");
-
-						ImGui::SameLine();
-						ImGui::Dummy(ImVec2(25, 0));
-
-						for (auto& [value, name] : magic_enum::enum_entries<PIXCaptureLocation>()) {
-							ImGui::SameLine();
-							ImGui::RadioButton(name.data(), &pixCapLocation, static_cast<int32_t>(value));
-						}
-
-						settings.PIXCaptureLocation = static_cast<PIXCaptureLocation>(pixCapLocation);
-					}
-
-					if (ImGui::Button("Single Frame Capture")) {
-						pixCapture = true;
-						pixCaptureStarted = false;
-					}
-
-					if (ImGui::Button("Start MultiFrame Capture")) {
-						pixCapture = true;
-						pixCaptureStarted = false;
-						pixMultiFrame = true;
-					}
-
-					if (pixCapture && pixCaptureStarted && pixMultiFrame && ImGui::Button("End MultiFrame Capture")) {
-						pixMultiFrame = false;
-					}
-
-					if (ImGui::Button("Start TRD Capture")) {
-						pixCapture = true;
-						pixCaptureStarted = false;
-						pixTDR = true;
-					}
-
-					ImGui::TreePop();
-				}
-			}
-		}
-
-		ImGui::Checkbox("Enabled Debug Device", &settings.EnableDebugDevice);
-		{
-			if (ImGui::TreeNodeEx("Statistics", ImGuiTreeNodeFlags_DefaultOpen)) {
-				ImGui::Text(std::format("Lights: {}", lights.size()).c_str());
-
-				ImGui::Text(std::format("Used Textures: {}, Shared: {}", textureRegisters.UsedCount(), sharedTextures.size()).c_str());
-				ImGui::Text(std::format("Used Shapes: {}", shapeRegisters.UsedCount()).c_str());
-				ImGui::Text(std::format("Models: {}", models.size()).c_str());
-
-				auto instanceCount = instances.size();
-				ImGui::Text(std::format("Instances: {}", instanceCount).c_str());
-
-				if (settings.GlobalIllumination) {
-					auto blasInstancesCount = blasInstances.size();
-					ImGui::Text(std::format("GI Unculled: {}, Culled: {}", blasInstancesCount, instanceCount - blasInstancesCount).c_str());
-				}
-
-				if (settings.RaytracedShadows) {
-					auto blasInstancesCount = blasShadowInstances.size();
-					ImGui::Text(std::format("Shadow Unculled: {}, Culled: {}", blasInstancesCount, instanceCount - blasInstancesCount).c_str());
-				}
-
-				ImGui::TreePop();
-			}
-		}
+		ImGui::EndTabBar();
 	}
 
 	if (recompileReason != RecompileReason::None) {
@@ -374,6 +219,199 @@ void Raytracing::DrawLightSettings()
 
 		ImGui::TreePop();
 	}
+}
+
+void Raytracing::DrawGeneralSettings()
+{
+	if (!ImGui::BeginTabItem("General"))
+		return;
+
+	ImGui::Checkbox("Enabled", &settings.Enabled);
+	if (auto _tt = Util::HoverTooltipWrapper()) {
+		ImGui::Text("Enable Ray-Traced Global Illumination.");
+	}
+
+	ImGui::Checkbox("Global Illumination", &settings.GlobalIllumination);
+
+	if (DrawEnumRadio("TraceMode", settings.TraceMode))
+		recompileReason |= RecompileReason::General;
+
+	DrawEnumRadio("Denoiser", settings.Denoiser);
+
+	// Bounces
+	{
+		int bounces = settings.Bounces;
+
+		if (ImGui::SliderInt("Bounces", &settings.Bounces, 1, 32))
+			settings.Bounces = std::clamp(settings.Bounces, 1, 32);
+
+		if (bounces != settings.Bounces)
+			recompileReason |= RecompileReason::General;
+	}
+
+	// Samples Per Pixel
+	{
+		int samples = settings.SamplesPerPixel;
+
+		if (ImGui::SliderInt("Samples Per Pixel", &settings.SamplesPerPixel, 1, 32))
+			settings.SamplesPerPixel = std::clamp(settings.SamplesPerPixel, 1, 32);
+
+		if (samples != settings.SamplesPerPixel)
+			recompileReason |= RecompileReason::General;
+	}
+
+	/*if (ImGui::SliderInt("Bounces", &settings.Bounces, 1, 32))
+		settings.Bounces = std::clamp(settings.Bounces, 1, 32);*/
+
+	DrawFloat2("Roughness", settings.Roughness);
+	DrawFloat2("Metalness", settings.Metalness);
+
+	DrawDenoiserSettings();
+
+#ifdef SHARC
+	DrawSHaRCSettings();
+#endif
+
+	DrawLightingSettings();
+
+	if (ImGui::Checkbox("Path Tracing", &settings.PathTracing)) {
+		recompileReason |= RecompileReason::General;
+	}
+
+	if (auto _tt = Util::HoverTooltipWrapper()) {
+		ImGui::Text("Experimental Path Tracing mode.\n");
+	}
+
+	ImGui::Checkbox("Recompress Textures", &settings.RecompressTextures);
+	if (auto _tt = Util::HoverTooltipWrapper()) {
+		ImGui::Text("Some texture formats cannot be shared between APIs, enabling this option ensures they'll be recompressed in a lower quality yet compatible format.\n");
+	}
+
+	ImGui::Checkbox("Russian Roulette", &settings.RussianRoulette);
+
+	ImGui::EndTabItem();
+}
+
+void Raytracing::DrawAdvancedSettings()
+{
+	if (!ImGui::BeginTabItem("Advanced"))
+		return;
+
+	if (DrawEnumRadio("Lighting Mode", settings.AdvancedSettings.LightingMode))
+		recompileReason |= RecompileReason::Advanced;
+
+	if (DrawEnumRadio("Diffuse Mode", settings.AdvancedSettings.DiffuseMode))
+		recompileReason |= RecompileReason::Advanced;
+
+	if (DrawEnumRadio("Shading Mode", settings.AdvancedSettings.ShadingMode))
+		recompileReason |= RecompileReason::Advanced;
+
+	ImGui::EndTabItem();
+}
+
+void Raytracing::DrawDebugSettings()
+{
+	if (!ImGui::BeginTabItem("Debug"))
+		return;
+
+	ImGui::InputText("Shader Defines", &settings.Defines);
+
+	ImGui::SameLine();
+
+	if (ImGui::Button("Recompile"))
+		recompileReason |= RecompileReason::Debug;
+
+	if (ImGui::Checkbox("White Furnace", &settings.WhiteFurnace))
+		recompileReason |= RecompileReason::Debug;
+
+	// Debug display mode
+	if (ImGui::BeginCombo("Debug Output", magic_enum::enum_name(settings.DebugOutput).data())) {
+		for (auto& value : magic_enum::enum_values<DebugOutput>()) {
+			bool isSelected = (settings.DebugOutput == value);
+
+			if (ImGui::Selectable(magic_enum::enum_name(value).data(), isSelected))
+				settings.DebugOutput = value;
+
+			if (isSelected)
+				ImGui::SetItemDefaultFocus();
+		}
+
+		ImGui::EndCombo();
+	}
+
+	ImGui::Checkbox("Enable PIX Capture", &settings.EnablePIXCapture);
+	{
+		if (settings.EnablePIXCapture) {
+			if (ImGui::TreeNodeEx("Pix Capture", ImGuiTreeNodeFlags_DefaultOpen)) {
+				//Pix Capture Location
+				{
+					int pixCapLocation = static_cast<int32_t>(settings.PIXCaptureLocation);
+					ImGui::TextUnformatted("PIX Capture");
+
+					ImGui::SameLine();
+					ImGui::Dummy(ImVec2(25, 0));
+
+					for (auto& [value, name] : magic_enum::enum_entries<PIXCaptureLocation>()) {
+						ImGui::SameLine();
+						ImGui::RadioButton(name.data(), &pixCapLocation, static_cast<int32_t>(value));
+					}
+
+					settings.PIXCaptureLocation = static_cast<PIXCaptureLocation>(pixCapLocation);
+				}
+
+				if (ImGui::Button("Single Frame Capture")) {
+					pixCapture = true;
+					pixCaptureStarted = false;
+				}
+
+				if (ImGui::Button("Start MultiFrame Capture")) {
+					pixCapture = true;
+					pixCaptureStarted = false;
+					pixMultiFrame = true;
+				}
+
+				if (pixCapture && pixCaptureStarted && pixMultiFrame && ImGui::Button("End MultiFrame Capture")) {
+					pixMultiFrame = false;
+				}
+
+				if (ImGui::Button("Start TRD Capture")) {
+					pixCapture = true;
+					pixCaptureStarted = false;
+					pixTDR = true;
+				}
+
+				ImGui::TreePop();
+			}
+		}
+	}
+
+	ImGui::Checkbox("Enabled Debug Device", &settings.EnableDebugDevice);
+	{
+		if (ImGui::TreeNodeEx("Statistics", ImGuiTreeNodeFlags_DefaultOpen)) {
+			ImGui::Text(std::format("Lights: {}", lights.size()).c_str());
+
+			ImGui::Text(std::format("Used Textures: {}, Shared: {}", textureRegisters.UsedCount(), sharedTextures.size()).c_str());
+			ImGui::Text(std::format("Used Shapes: {}", shapeRegisters.UsedCount()).c_str());
+			ImGui::Text(std::format("Models: {}", models.size()).c_str());
+
+			auto instanceCount = instances.size();
+			ImGui::Text(std::format("Instances: {}", instanceCount).c_str());
+
+			if (settings.GlobalIllumination) {
+				auto blasInstancesCount = blasInstances.size();
+				ImGui::Text(std::format("GI Unculled: {}, Culled: {}", blasInstancesCount, instanceCount - blasInstancesCount).c_str());
+			}
+
+			if (settings.RaytracedShadows) {
+				auto blasInstancesCount = blasShadowInstances.size();
+				ImGui::Text(std::format("Shadow Unculled: {}, Culled: {}", blasInstancesCount, instanceCount - blasInstancesCount).c_str());
+			}
+
+			ImGui::TreePop();
+		}
+	}
+
+	ImGui::EndTabItem();
 }
 
 void Raytracing::DrawOverlay()
@@ -2295,6 +2333,11 @@ void Raytracing::DrawRTGI()
 	if (!settings.RaytracedShadows)
 		CopyDepth();
 
+	if (settings.WhiteFurnace) {
+		float clearColor[4] = { 1.0f, 1.0f, 1.0f, 1.0f };
+		d3d11Context->ClearRenderTargetView(rendererRuntimeData.renderTargets[ALBEDO].RTV, clearColor); 
+	}
+
 	ConvertTextures();
 
 	// Wait for D3D11 to finish
@@ -3222,13 +3265,24 @@ void Raytracing::CompileRTGIShaders()
 	const auto bouncesWStr = std::to_wstring(settings.Bounces);
 	const auto samplesWStr = std::to_wstring(settings.SamplesPerPixel);
 
-	eastl::vector<DxcDefine> defines = { 
+	eastl::vector<DxcDefine> defines = {
 		{ L"MAX_BOUNCES", bouncesWStr.c_str() },
 		{ L"MAX_SAMPLES", samplesWStr.c_str() },
 	};
 
-	if (settings.LightMode == LightMode::Diffuse)
-		defines.emplace_back(L"LAMBERT");
+	auto& advSettings = settings.AdvancedSettings;
+
+	const auto diffuseMode = std::to_wstring(static_cast<uint32_t>(advSettings.DiffuseMode));
+	defines.emplace_back(L"DIFFUSE_MODE", diffuseMode.c_str());
+
+	const auto shadingMode = std::to_wstring(static_cast<uint32_t>(advSettings.ShadingMode));
+	defines.emplace_back(L"SHADING_MODE", shadingMode.c_str());
+
+	const auto lightingMode = std::to_wstring(static_cast<uint32_t>(advSettings.LightingMode));
+	defines.emplace_back(L"LIGHTING_MODE", shadingMode.c_str());
+
+	if (settings.WhiteFurnace)
+		defines.emplace_back(L"DEBUG_WHITE_FURNACE");
 
 #ifdef SHARC
 	if (settings.TraceMode == TraceMode::SHaRC)

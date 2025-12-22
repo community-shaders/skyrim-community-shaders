@@ -95,7 +95,7 @@ void main()
     BRDFContext sourceBRDFContext = BRDFContext(sourceSurface, -sourceDirection);
     
     // Direct Light for PT
-    float3 direct = sourceSurface.Albedo * SampleRadiance(sourceSurface, sourceBRDFContext, sourceInstance, sourceMaterial, randomSeed);
+    float3 direct = sourceSurface.Albedo * EvaluateRadiance(sourceSurface, sourceBRDFContext, sourceInstance, sourceMaterial, randomSeed);
 #else
     float2 uv = (idx + 0.5f) / size;
     
@@ -275,7 +275,7 @@ void main()
                 // Do something expensive
             }*/
             
-            float3 localRadiance = SampleRadiance(surface, brdfContext, instance, material, randomSeed);
+            float3 localRadiance = EvaluateRadiance(surface, brdfContext, instance, material, randomSeed);
             
 #if defined(LAMBERT)
             float NdotD = saturate(dot(n, direction));

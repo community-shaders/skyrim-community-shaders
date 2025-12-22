@@ -211,6 +211,10 @@ struct Raytracing : public OverlayFeature
 	void DrawLightingSettings();
 	void DrawLightSettings();
 
+	void DrawGeneralSettings();
+	void DrawAdvancedSettings();
+	void DrawDebugSettings();
+
 	virtual void DrawOverlay() override;
 	virtual void PostPostLoad() override;
 
@@ -360,10 +364,25 @@ struct Raytracing : public OverlayFeature
 		AO
 	};
 
-	enum struct LightMode : int32_t
+	enum struct DiffuseMode : int32_t
 	{
-		Diffuse,	// Lambert only
-		BRDF		// GGX BRDF with Specular		
+		Lambert,
+		Burley,
+		OrenNayar,
+		Gotanda,
+		Chan
+	};
+
+	enum struct ShadingMode : int32_t
+	{
+		Default,
+		ShadowTerminator
+	};
+
+	enum struct LightingMode : int32_t
+	{
+		Diffuse,
+		PBR
 	};
 
 	enum struct TraceMode : int32_t
@@ -398,7 +417,7 @@ struct Raytracing : public OverlayFeature
 		SHaRCFrameData GetFrameData(bool updatePass) const
 		{
 			return {
-				.SceneScale = SceneScale / Util::Units::GAME_UNIT_TO_M,
+				.SceneScale = SceneScale * Util::Units::GAME_UNIT_TO_M,
 				.AccumFrameNum = (uint)AccumFrameNum,
 				.StaleFrameNum = (uint)StaleFrameNum,
 				.RadianceScale = RadianceScale,
@@ -407,6 +426,17 @@ struct Raytracing : public OverlayFeature
 				.UpdatePass = updatePass
 			};
 		}
+
+		NLOHMANN_DEFINE_TYPE_INTRUSIVE_WITH_DEFAULT(SHaRCSettings, SceneScale, AccumFrameNum, StaleFrameNum, RadianceScale, AntifireflyFilter)
+	};
+
+	struct AdvancedSettings
+	{
+		DiffuseMode DiffuseMode = DiffuseMode::Lambert;
+		ShadingMode ShadingMode = ShadingMode::Default;
+		LightingMode LightingMode = LightingMode::PBR;
+
+		NLOHMANN_DEFINE_TYPE_INTRUSIVE_WITH_DEFAULT(AdvancedSettings, DiffuseMode, ShadingMode, LightingMode)
 	};
 
 	////////////////////////////////////////////////// Feature Specific Data
@@ -414,7 +444,7 @@ struct Raytracing : public OverlayFeature
 	{
 		bool Enabled = true;
 		bool GlobalIllumination = true;
-		LightMode LightMode = LightMode::BRDF;
+		AdvancedSettings AdvancedSettings;
 		TraceMode TraceMode = DefaultMode;
 		Denoiser Denoiser = Denoiser::Accumulation;
 		int Bounces = 2;
@@ -445,6 +475,7 @@ struct Raytracing : public OverlayFeature
 		bool EnablePIXCapture = false;
 		PIXCaptureLocation PIXCaptureLocation = PIXCaptureLocation::GlobalIllumination;
 		bool EnableDebugDevice = false;
+		bool WhiteFurnace = false;
 #ifdef SHARC
 		SHaRCSettings SHaRCSettings;
 #endif
@@ -453,12 +484,9 @@ struct Raytracing : public OverlayFeature
 	enum class RecompileReason : uint32_t
 	{
 		None = 0,
-		Bounces = 1 << 0,
-		Samples = 1 << 1,
-		LightMode = 1 << 2,
-		TraceMode = 1 << 3,
-		GIPTMode = 1 << 4,
-		Debug = 1 << 5
+		General = 1 << 0,
+		Advanced = 1 << 1,
+		Debug = 1 << 2
 	};
 
 	RecompileReason recompileReason = RecompileReason::None;

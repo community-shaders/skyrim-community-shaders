@@ -78,8 +78,12 @@ struct Surface
         float3 base = baseTexture.SampleLevel(BaseSampler, texCoord0, 0).rgb;
         float3 effect = effectTexture.SampleLevel(BaseSampler, texCoord0, 0).rgb;
         
-        // Lighting/PBR
+#   ifdef DEBUG_WHITE_FURNACE
+        surface.Albedo = float3(1.0f, 1.0f, 1.0f);
+#   else
         surface.Albedo = base * material.BaseColor.rgb * vertexColor.rgb;
+#   endif
+        
         surface.Emissive = effect * material.EffectColor.rgb * material.EffectColor.a;        
         
 #ifdef PATH_TRACING        
@@ -113,7 +117,7 @@ struct Surface
         surface.DiffuseAlbedo = surface.Albedo * (1.0f - surface.Metallic);
         
         surface.F0 = PBR::F0(surface.Albedo, surface.Metallic);
-        
+
 #if defined(FULL_MATERIAL)
         surface.SubsurfaceColor = make_float3(0.0f, 0.0f, 0.0f);
         surface.Thickness = 0.0f;
@@ -144,18 +148,22 @@ struct Surface
         surface.Tangent = tangent;
         surface.Bitangent = bitangent;
         
+#   ifdef DEBUG_WHITE_FURNACE
+        surface.Albedo = float3(1.0f, 1.0f, 1.0f);
+#   else
         surface.Albedo = albedo;
+ #   endif
         
         surface.Roughness = PBR::Roughness(roughness, Frame.Roughness.x, Frame.Roughness.y);
         surface.Metallic = Remap(metallic, Frame.Metalness.x, Frame.Metalness.y);
         
-        surface.DiffuseAlbedo = surface.Albedo * (1.0f - surface.Metallic);
-        
         surface.Emissive = emissive;      
         surface.AO = ao;        
         
-        surface.F0 = PBR::F0(albedo, metallic);
+        surface.DiffuseAlbedo = surface.Albedo * (1.0f - surface.Metallic);
         
+        surface.F0 = PBR::F0(albedo, metallic);
+
 #if defined(FULL_MATERIAL)
         surface.SubsurfaceColor = make_float3(0.0f, 0.0f, 0.0f);
         surface.Thickness = 0.0f;
