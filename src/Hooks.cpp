@@ -720,6 +720,7 @@ struct BSBatchRenderer_RenderPassImmediately
 		{
 			// Collect valid geometry for next frame's testing
 			if (globals::features::hiZOcclusion.settings.enableHiZCulling && pass->geometry && pass->geometry->worldBound.radius > 0.0f) {
+				std::lock_guard<std::mutex> lock(globals::features::hiZOcclusion.pendingGeometryMutex);
 				// Fast O(1) check
 				if (globals::features::hiZOcclusion.pendingGeometrySet.insert(pass->geometry).second) {
 					// Was inserted (not duplicate), add to vector too

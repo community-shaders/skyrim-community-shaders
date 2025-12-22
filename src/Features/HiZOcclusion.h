@@ -1,12 +1,35 @@
 #pragma once
 
 #include "OverlayFeature.h"
-#include <vector>
-#include <string>
-#include <cstdint>
-#include <unordered_map>
-#include <chrono>
+
+#include <unordered_set>
+
 #include <RE/N/NiSmartPointer.h>
+
+// Operational states for HiZ occlusion system
+enum class HiZStatus : uint8_t {
+    Init,                    // Initial state, not yet set up
+    CompilingShaders,        // Shader compilation in progress
+    ShadersReady,            // Shaders compiled successfully
+    ResourcesReady,          // All resources initialized and valid
+    Running,                 // Actively processing occlusion tests
+    ValidationFailed,        // Resource validation failed
+    Error                    // Error state - check statusMessage for details
+};
+
+// Convert HiZStatus to display string
+inline const char* HiZStatusToString(HiZStatus status) {
+    switch (status) {
+        case HiZStatus::Init:              return "Initializing";
+        case HiZStatus::CompilingShaders:  return "Compiling Shaders";
+        case HiZStatus::ShadersReady:      return "Shaders Ready";
+        case HiZStatus::ResourcesReady:    return "Resources Ready";
+        case HiZStatus::Running:           return "Running";
+        case HiZStatus::ValidationFailed:  return "Validation Failed";
+        case HiZStatus::Error:             return "Error";
+        default:                           return "Unknown";
+    }
+}
 
 struct HiZOcclusion : OverlayFeature
 {
@@ -16,6 +39,20 @@ struct HiZOcclusion : OverlayFeature
     virtual inline std::string GetShortName() override { return "HiZOcclusion"; }
     virtual inline std::string_view GetShaderDefineName() override { return "HIZ_OCCLUSION"; }
     virtual std::string_view GetCategory() const override { return "Performance"; }
+    virtual std::pair<std::string, std::vector<std::string>> GetFeatureSummary() override
+    {
+        return {
+            "Implements Hierarchical-Z (Hi-Z) occlusion culling to improve rendering performance by testing object visibility against a GPU-generated depth pyramid before expensive rendering operations.",
+            {
+                "GPU-accelerated occlusion testing using hierarchical depth buffer",
+                "Reduces CPU overhead by culling invisible objects before draw calls",
+                "Conservative depth testing with configurable bias for robustness",
+                "Debug visualization tools for occlusion bounds and culling statistics",
+                "Triple-buffered async readback for optimal CPU-GPU synchronization",
+                "VR-compatible with per-eye occlusion testing support"
+            }
+        };
+    }
 
     virtual bool SupportsVR() override { return true; }
     virtual bool IsCore() const override { return false; }
@@ -49,7 +86,8 @@ struct HiZOcclusion : OverlayFeature
 
     uint32_t currentFrame = 0;
 
-	std::string status = "init";     // status message for debug display
+	HiZStatus status = HiZStatus::Init;      // Current operational state
+	std::string statusMessage;                // Detailed error/info message for debugging
 	bool resourcesSetup = false;    // whether resources have been initialized
 	bool resourcesValid = false;     // whether current resources are valid and safe to use
 
@@ -114,10 +152,18 @@ struct HiZOcclusion : OverlayFeature
 
     ID3D11SamplerState* hiZSampler = nullptr;                    // Sampler for Hi-Z sampling in CS
     uint32_t maxGeometryCount = 16384;                           // Maximum geometry objects per frame
-    ID3D11Buffer* nullCBs[1] = { nullptr };
-    ID3D11SamplerState* nullSamplers[1] = { nullptr };
-    ID3D11ShaderResourceView* nullSRVs[2] = { nullptr, nullptr };
-    ID3D11UnorderedAccessView* nullUAV = nullptr;
+
+    // GPU timestamp queries for accurate timing (triple-buffered for async readback)
+    static const uint32_t GPU_TIMING_BUFFER_COUNT = 3;
+    struct GPUTimingQueries {
+        ID3D11Query* disjointQuery = nullptr;
+        ID3D11Query* beginTimestamp = nullptr;
+        ID3D11Query* endTimestamp = nullptr;
+        bool pending = false;
+    };
+    GPUTimingQueries gpuTimingQueries[GPU_TIMING_BUFFER_COUNT];
+    uint32_t gpuTimingWriteIndex = 0;
+    uint32_t gpuTimingReadIndex = 0;
 
     // Bounds debug overlay resources (RGBA8, size = HiZ base dimensions)
     ID3D11Texture2D* boundsOverlayTex = nullptr;
@@ -217,6 +263,7 @@ struct HiZOcclusion : OverlayFeature
     struct AsyncReadbackState {
         static const int BUFFER_COUNT = 3;  // Triple buffering to handle GPU latency
         ID3D11Buffer* stagingBuffers[BUFFER_COUNT] = {};
+        ID3D11Query* completionQueries[BUFFER_COUNT] = {};  // Event queries to detect GPU completion
         D3D11_MAPPED_SUBRESOURCE mappedData[BUFFER_COUNT] = {};
         bool hasPendingRead[BUFFER_COUNT] = {};
         uint32_t pendingFrameIndex[BUFFER_COUNT] = {};
@@ -236,6 +283,7 @@ struct HiZOcclusion : OverlayFeature
     // Geometry batch for GPU culling
     std::vector<RE::NiPointer<RE::BSGeometry>> pendingGeometry;
     std::unordered_set<RE::BSGeometry*> pendingGeometrySet;  // For fast lookup
+    mutable std::mutex pendingGeometryMutex;  // Protects pendingGeometry and pendingGeometrySet from concurrent access
     std::vector<RE::NiPointer<RE::BSGeometry>> unCullNextFrame;
     std::vector<DirectX::XMFLOAT4> geometryBounds;  // xyz=center, w=radius
 

@@ -1,17 +1,12 @@
 #include "HiZOcclusion.h"
-#include <cmath>
-#include "Globals.h"
-#include "State.h"
-#include "Util.h"
-#include "ShaderCache.h"
-#include "Utils/UI.h"
-#include "Utils/Game.h"
-#include <imgui.h>
-#include <algorithm>
-#include <unordered_set>
-#include <DirectXMath.h>
-#include <RE/N/NiBound.h>
+
 #include "Features/Upscaling.h"
+#include "ShaderCache.h"
+#include "State.h"
+#include "Utils/Game.h"
+#include "Utils/UI.h"
+
+#include <RE/N/NiBound.h>
 
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
     HiZOcclusion::Settings,
@@ -33,15 +28,6 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 
 namespace
 {
-    static std::atomic<uint32_t> g_hiZ_last_print_frame{ std::numeric_limits<uint32_t>::max() };
-    constexpr uint32_t kMaxUserDataObjects = 1024;
-    static std::atomic<uint32_t> g_hiZ_userdata_write_idx{0};
-    static RE::NiAVObject* g_hiZ_userdata_objects[kMaxUserDataObjects] = {};
-
-    std::atomic<uint32_t> g_hiZ_setupgeometry_stats_null_visible{ 0 };
-    std::atomic<uint32_t> g_hiZ_setupgeometry_stats_invalid_bound{ 0 };
-    std::atomic<uint32_t> g_hiZ_setupgeometry_stats_valid{ 0 };
-}
 
 HiZOcclusion::~HiZOcclusion()
 {
@@ -72,6 +58,10 @@ HiZOcclusion::~HiZOcclusion()
             readbackState.stagingBuffers[i]->Release();
             readbackState.stagingBuffers[i] = nullptr;
         }
+        if (readbackState.completionQueries[i]) {
+            readbackState.completionQueries[i]->Release();
+            readbackState.completionQueries[i] = nullptr;
+        }
     }
     
     // Release debug buffers
@@ -83,6 +73,14 @@ HiZOcclusion::~HiZOcclusion()
     // Release readback buffers
     if (debugReadbackBuffer) { debugReadbackBuffer->Release(); debugReadbackBuffer = nullptr; }
     if (visibilityReadbackBuffer) { visibilityReadbackBuffer->Release(); visibilityReadbackBuffer = nullptr; }
+
+    // Release GPU timestamp queries
+    for (uint32_t i = 0; i < GPU_TIMING_BUFFER_COUNT; ++i) {
+        if (gpuTimingQueries[i].disjointQuery) { gpuTimingQueries[i].disjointQuery->Release(); gpuTimingQueries[i].disjointQuery = nullptr; }
+        if (gpuTimingQueries[i].beginTimestamp) { gpuTimingQueries[i].beginTimestamp->Release(); gpuTimingQueries[i].beginTimestamp = nullptr; }
+        if (gpuTimingQueries[i].endTimestamp) { gpuTimingQueries[i].endTimestamp->Release(); gpuTimingQueries[i].endTimestamp = nullptr; }
+        gpuTimingQueries[i].pending = false;
+    }
 }
 
 bool HiZOcclusion::SetupBoundsOverlayResources(uint32_t width, uint32_t height) {
@@ -228,7 +226,10 @@ void HiZOcclusion::DrawSettings()
         // Status line
         ImGui::Separator();
         ImGui::Text("Frame: %u", globals::state ? globals::state->frameCount : 0);
-		ImGui::Text("Status: %s", status.c_str());
+		ImGui::Text("Status: %s", HiZStatusToString(status));
+		if (!statusMessage.empty()) {
+			ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.0f, 1.0f), "  > %s", statusMessage.c_str());
+		}
         ImGui::Text("Geometry from frame %u: %u", globals::state->frameCount - 1, stats.geometryListSize);
         ImGui::Text("Total tested: %u", stats.totalTested);
         ImGui::Text("Culled: %u", stats.culledFrustum + stats.culledNoEarlyOut);
@@ -352,59 +353,77 @@ void HiZOcclusion::InitShaders()
     // Ensure we have a valid device before attempting shader compilation
     auto device = globals::d3d::device;
     if (!device) {
-        status = "no D3D device for shader compilation";
-        logger::error("{}", status);
+        status = HiZStatus::Error;
+        statusMessage = "No D3D device available";
+        logger::error("{}", statusMessage);
         return;
+    }
+    
+    status = HiZStatus::CompilingShaders;
+    statusMessage.clear();
+    
+    // Build defines for VR support
+    std::vector<std::pair<const char*, const char*>> shaderDefines;
+    if (REL::Module::IsVR()) {
+        shaderDefines.push_back({ "VR", nullptr });
+        shaderDefines.push_back({ "FRAMEBUFFER", nullptr });
     }
     
     // Compile Hi-Z build shaders with error handling
     if (!hiZBuildLevel0CS) {
         try {
-            hiZBuildLevel0CS = (ID3D11ComputeShader*)Util::CompileShader(L"Data\\Shaders\\HiZOcclusion\\HiZBuildLevel0CS.hlsl", {}, "cs_5_0");
+            hiZBuildLevel0CS = (ID3D11ComputeShader*)Util::CompileShader(L"Data\\Shaders\\HiZOcclusion\\HiZBuildLevel0CS.hlsl", shaderDefines, "cs_5_0");
             if (!hiZBuildLevel0CS) { 
-                status = "failed to compile HiZBuildLevel0CS"; 
-                logger::error("{}", status);
+                status = HiZStatus::Error;
+                statusMessage = "Failed to compile HiZBuildLevel0CS";
+                logger::error("{}", statusMessage);
                 return;
             }
         } catch (const std::exception& e) {
-            status = "exception during HiZBuildLevel0CS compilation";
-            logger::error("{}: {}", status, e.what());
+            status = HiZStatus::Error;
+            statusMessage = std::string("HiZBuildLevel0CS compilation exception: ") + e.what();
+            logger::error("{}", statusMessage);
             return;
         }
     }
     
     if (!hiZDownsampleCS) {
         try {
-            hiZDownsampleCS = (ID3D11ComputeShader*)Util::CompileShader(L"Data\\Shaders\\HiZOcclusion\\HiZDownsampleCS.hlsl", {}, "cs_5_0");
+            hiZDownsampleCS = (ID3D11ComputeShader*)Util::CompileShader(L"Data\\Shaders\\HiZOcclusion\\HiZDownsampleCS.hlsl", shaderDefines, "cs_5_0");
             if (!hiZDownsampleCS) { 
-                status = "failed to compile HiZDownsampleCS"; 
-                logger::error("{}", status);
+                status = HiZStatus::Error;
+                statusMessage = "Failed to compile HiZDownsampleCS";
+                logger::error("{}", statusMessage);
                 return;
             }
         } catch (const std::exception& e) {
-            status = "exception during HiZDownsampleCS compilation";
-            logger::error("{}: {}", status, e.what());
+            status = HiZStatus::Error;
+            statusMessage = std::string("HiZDownsampleCS compilation exception: ") + e.what();
+            logger::error("{}", statusMessage);
             return;
         }
     }
     
     if (!hiZTestCS) {
         try {
-            hiZTestCS = (ID3D11ComputeShader*)Util::CompileShader(L"Data\\Shaders\\HiZOcclusion\\HiZTestCS.hlsl", {}, "cs_5_0");
+            hiZTestCS = (ID3D11ComputeShader*)Util::CompileShader(L"Data\\Shaders\\HiZOcclusion\\HiZTestCS.hlsl", shaderDefines, "cs_5_0");
             if (!hiZTestCS) { 
-                status = "failed to compile HiZTestCS"; 
-                logger::error("{}", status);
+                status = HiZStatus::Error;
+                statusMessage = "Failed to compile HiZTestCS";
+                logger::error("{}", statusMessage);
                 return;
             }
         } catch (const std::exception& e) {
-            status = "exception during HiZTestCS compilation";
-            logger::error("{}: {}", status, e.what());
+            status = HiZStatus::Error;
+            statusMessage = std::string("HiZTestCS compilation exception: ") + e.what();
+            logger::error("{}", statusMessage);
             return;
         }
     }
     
     resourcesSetup = true;
-    status = "shaders_compiled";
+    status = HiZStatus::ShadersReady;
+    statusMessage.clear();
     
     // Skip resource validation for a few frames after shader compilation
     // to avoid crashes during device state transitions
@@ -431,9 +450,13 @@ void HiZOcclusion::Reset()
                 }
                 unCullNextFrame.clear();
             }
-            // Empty pending geometry list
-            if (!pendingGeometry.empty()) {
-                pendingGeometry.clear();
+            // Empty pending geometry list (with mutex protection)
+            {
+                std::lock_guard<std::mutex> lock(pendingGeometryMutex);
+                if (!pendingGeometry.empty()) {
+                    pendingGeometry.clear();
+                }
+                pendingGeometrySet.clear();
             }
             // Release and clear all resources
             ReleaseBoundsOverlayResources();
@@ -474,12 +497,11 @@ void HiZOcclusion::Prepass()
     if (!settings.enableHiZCulling) {
         return;
     }
-    status = "Resetting stats";
+    // Stats are reset each frame during active culling
     
     // Reset culling stats for new frame - always reset to avoid accumulation
     stats.frameIndex = currentFrame;
     stats.totalTested = 0;
-    stats.geometryListSize = (uint32_t)pendingGeometry.size();
     stats.resourceSetupDurationMS = 0.0f;
     stats.recreateDurationMS = 0.0f;
     stats.visTestPassed = 0;
@@ -503,15 +525,18 @@ void HiZOcclusion::Prepass()
     
     // Early return if shader compilation failed
     if (!resourcesSetup) {
-        status = "failed to compile Hi-Z shaders";
+        status = HiZStatus::Error;
+        statusMessage = "Shader compilation failed";
         return;
     }
 
-    status = "Building Hi-Z pyramid";
+    status = HiZStatus::ResourcesReady;
+    statusMessage.clear();
 
     if (!InitHiZResources()) {
         logger::error("HiZOcclusion::EarlyPrepass - failed to initialize Hi-Z resources");
-        status = "failed to initialize Hi-Z resources";
+        status = HiZStatus::Error;
+        statusMessage = "Resource initialization failed";
         return;
     }
     
@@ -519,10 +544,18 @@ void HiZOcclusion::Prepass()
     if (!geometryBoundsBuffer || !hiZTestParamsBuffer || !hiZSampler || !visibilityResultsBuffer) {
         if (!SetupGPUCullingResources()) {
             logger::error("HiZOcclusion::EarlyPrepass - failed to setup GPU culling resources");
-            status = "failed to setup GPU culling resources";
+            status = HiZStatus::Error;
+            statusMessage = "GPU culling resource setup failed";
             return;
         }
     }
+
+    // Lock mutex to safely access pendingGeometry and pendingGeometrySet
+    // This prevents race conditions with BSBatchRenderer_RenderPassImmediately hook
+    std::lock_guard<std::mutex> lock(pendingGeometryMutex);
+
+    // Update geometry list size stat now that we have the lock
+    stats.geometryListSize = static_cast<uint32_t>(pendingGeometry.size());
 
     // Reserve vector capacity
     if (pendingGeometry.capacity() < 16384) {
@@ -562,7 +595,8 @@ void HiZOcclusion::Prepass()
 
     UnbindD3DResources();
 
-    status = "HiZ Tests executed";
+    status = HiZStatus::Running;
+    statusMessage.clear();
 };
 
 bool HiZOcclusion::InitHiZResources()
@@ -573,7 +607,8 @@ bool HiZOcclusion::InitHiZResources()
     // Ensure resources are ready
     if (!renderer) {
 		logger::error("Renderer not ready");
-		status = "Renderer not ready";
+		status = HiZStatus::Error;
+		statusMessage = "Renderer not available";
         return false;
     }
 
@@ -581,7 +616,8 @@ bool HiZOcclusion::InitHiZResources()
     auto depth = renderer->GetDepthStencilData().depthStencils[RE::RENDER_TARGETS_DEPTHSTENCIL::kPOST_ZPREPASS_COPY];
     if (!depth.depthSRV) {
 		logger::error("no depth texture SRV");
-		status = "no depth texture SRV";
+		status = HiZStatus::Error;
+		statusMessage = "Depth texture SRV unavailable";
         return false;
     }
     
@@ -604,7 +640,8 @@ bool HiZOcclusion::InitHiZResources()
 
 	if (!depthDesc.Width || !depthDesc.Height) {
 		logger::error("depth texture has invalid dimensions");
-		status = "depth texture has invalid dimensions";
+		status = HiZStatus::Error;
+		statusMessage = "Invalid depth texture dimensions";
 		return false;
 	}
 
@@ -629,7 +666,8 @@ bool HiZOcclusion::InitHiZResources()
     auto device = globals::d3d::device;
     if (!device) {
         logger::error("no D3D device");
-        status = "no D3D device";
+        status = HiZStatus::Error;
+        statusMessage = "D3D device unavailable";
         return false;
     }
 
@@ -667,8 +705,9 @@ bool HiZOcclusion::InitHiZResources()
         tdesc.BindFlags = D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_UNORDERED_ACCESS;
         HRESULT hr = device->CreateTexture2D(&tdesc, nullptr, &newTexture);
         if (FAILED(hr) || !newTexture) {
-            status = "failed to create Hi-Z texture";
-            logger::error("{}", status);
+            status = HiZStatus::Error;
+            statusMessage = "Failed to create Hi-Z texture";
+            logger::error("{}", statusMessage);
             if (newTexture) newTexture->Release();
             return false;
         }
@@ -680,8 +719,9 @@ bool HiZOcclusion::InitHiZResources()
         sdesc.Texture2D.MipLevels = newMipCount;
         HRESULT srvResult = device->CreateShaderResourceView(newTexture, &sdesc, &newSRV);
         if (FAILED(srvResult) || !newSRV) {
-            status = "failed to create Hi-Z SRV";
-            logger::error("{}", status);
+            status = HiZStatus::Error;
+            statusMessage = "Failed to create Hi-Z SRV";
+            logger::error("{}", statusMessage);
             if (newSRV) newSRV->Release();
             if (newTexture) newTexture->Release();
             return false;
@@ -712,8 +752,9 @@ bool HiZOcclusion::InitHiZResources()
         }
 
         if (!perMipOk || newSRVsPerMip.size() != newMipCount || newUAVs.size() != newMipCount) {
-            status = "failed to create per-mip views";
-            logger::error("{}", status);
+            status = HiZStatus::Error;
+            statusMessage = "Failed to create per-mip views";
+            logger::error("{}", statusMessage);
             for (auto* v : newSRVsPerMip) { if (v) v->Release(); }
             for (auto* u : newUAVs) { if (u) u->Release(); }
             if (newSRV) newSRV->Release();
@@ -739,53 +780,22 @@ bool HiZOcclusion::InitHiZResources()
         resourceCreationFrame = globals::state->frameCount;
         resourcesValid = true;
 
-        // Validate all SRVs are non-null with safe validation
+        // Validate all SRVs are non-null
+        // Note: D3D11 COM calls return HRESULTs, they don't throw C++ exceptions,
+        // so we rely on null checks rather than try-catch blocks.
         bool allSRVsValid = true;
         for (uint32_t i = 0; i < hiZMipCount; ++i) {
             if (!hiZSRVsPerMip[i]) {
                 logger::error("SRV for mip {} is null!", i);
                 allSRVsValid = false;
-            } else {
-                // Safe validation: only check if pointer is non-null
-                // Avoid calling methods that could crash if resource is invalid
-                try {
-                    // Test reference count safely
-                    ULONG refCount = hiZSRVsPerMip[i]->AddRef();
-                    hiZSRVsPerMip[i]->Release();
-                    
-                    if (refCount <= 1) {
-                        logger::warn("SRV for mip {} has low reference count: {}", i, refCount - 1);
-                    }
-                    
-                    // Only call GetDesc if we're confident the SRV is valid
-                    // Skip this validation during shader compilation to avoid crashes
-                    if (refCount > 1) {
-                        D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc;
-                        // Use a simple validation approach without structured exception handling
-                        // to avoid C++ unwinding conflicts
-                        //HRESULT descResult = S_OK;
-                        bool descValid = true;
-                        
-                        // Attempt to get description - if this crashes, it indicates a deeper issue
-                        try {
-                            hiZSRVsPerMip[i]->GetDesc(&srvDesc);
-                        } catch (...) {
-                            logger::error("SRV for mip {} failed GetDesc validation - resource may be invalid", i);
-                            allSRVsValid = false;
-                            descValid = false;
-                        }
-                    }
-                } catch (...) {
-                    logger::error("Exception during SRV validation for mip {}", i);
-                    allSRVsValid = false;
-                }
             }
         }
         
         // If validation failed, mark resources as needing recreation
         if (!allSRVsValid) {
             logger::warn("SRV validation failed - resources may need recreation on next frame");
-            status = "validation_failed";
+            status = HiZStatus::ValidationFailed;
+            statusMessage = "SRV validation failed, will retry";
             resourcesValid = false;
             // Skip validation on next few frames to prevent repeated crashes
             skipValidationThisFrame = true;
@@ -800,13 +810,15 @@ bool HiZOcclusion::InitHiZResources()
         // Verify all required resources are valid before proceeding
         if (!hiZBuildLevel0CS) {
             logger::error("hiZBuildLevel0CS is null - cannot build Hi-Z pyramid");
-            status = "shader_null";
+            status = HiZStatus::Error;
+            statusMessage = "Build shader unavailable";
             return false;
         }
         
         if (hiZUAVs.empty() || !hiZUAVs[0]) {
             logger::error("hiZUAVs[0] is null - cannot build Hi-Z pyramid");
-            status = "uav_null";
+            status = HiZStatus::Error;
+            statusMessage = "UAV[0] unavailable";
             return false;
         }
         
@@ -839,19 +851,22 @@ bool HiZOcclusion::InitHiZResources()
 		// Safety checks for each mip level
 		if (mip >= hiZSRVsPerMip.size() || !hiZSRVsPerMip[mip]) {
 			logger::error("hiZSRVsPerMip[{}] is null - aborting pyramid build", mip);
-			status = "srv_null_during_build";
+			status = HiZStatus::Error;
+			statusMessage = "Null SRV at mip " + std::to_string(mip);
 			break;
 		}
 		
 		if (mip + 1 >= hiZUAVs.size() || !hiZUAVs[mip + 1]) {
 			logger::error("hiZUAVs[{}] is null - aborting pyramid build", mip + 1);
-			status = "uav_null_during_build";
+			status = HiZStatus::Error;
+			statusMessage = "Null UAV at mip " + std::to_string(mip + 1);
 			break;
 		}
 		
 		if (!hiZDownsampleCS) {
 			logger::error("hiZDownsampleCS is null - aborting pyramid build");
-			status = "downsample_shader_null";
+			status = HiZStatus::Error;
+			statusMessage = "Downsample shader unavailable";
 			break;
 		}
 
@@ -970,9 +985,25 @@ bool HiZOcclusion::SetupGPUCullingResources()
                     readbackState.stagingBuffers[j]->Release();
                     readbackState.stagingBuffers[j] = nullptr;
                 }
+                if (readbackState.completionQueries[j]) {
+                    readbackState.completionQueries[j]->Release();
+                    readbackState.completionQueries[j] = nullptr;
+                }
             }
             return false;
         }
+        
+        // Create event query for precise GPU completion detection
+        D3D11_QUERY_DESC queryDesc = {};
+        queryDesc.Query = D3D11_QUERY_EVENT;
+        queryDesc.MiscFlags = 0;
+        HRESULT queryHr = device->CreateQuery(&queryDesc, &readbackState.completionQueries[i]);
+        if (FAILED(queryHr)) {
+            logger::warn("Failed to create completion query {} - falling back to polling", i);
+            readbackState.completionQueries[i] = nullptr;
+            // Non-fatal: will fall back to DO_NOT_WAIT polling if query creation fails
+        }
+        
         readbackState.hasPendingRead[i] = false;
         readbackState.pendingFrameIndex[i] = 0;
     }
@@ -994,6 +1025,27 @@ bool HiZOcclusion::SetupGPUCullingResources()
         logger::error("Failed to create Hi-Z sampler");
         return false;
     }
+
+    // Create GPU timestamp queries for accurate timing (triple-buffered)
+    for (uint32_t i = 0; i < GPU_TIMING_BUFFER_COUNT; ++i) {
+        D3D11_QUERY_DESC timestampDesc = {};
+        timestampDesc.Query = D3D11_QUERY_TIMESTAMP;
+        timestampDesc.MiscFlags = 0;
+
+        D3D11_QUERY_DESC disjointDesc = {};
+        disjointDesc.Query = D3D11_QUERY_TIMESTAMP_DISJOINT;
+        disjointDesc.MiscFlags = 0;
+
+        if (FAILED(device->CreateQuery(&disjointDesc, &gpuTimingQueries[i].disjointQuery)) ||
+            FAILED(device->CreateQuery(&timestampDesc, &gpuTimingQueries[i].beginTimestamp)) ||
+            FAILED(device->CreateQuery(&timestampDesc, &gpuTimingQueries[i].endTimestamp))) {
+            logger::warn("Failed to create GPU timestamp queries for timing slot {}", i);
+            // Non-fatal: fall back to CPU timing
+        }
+        gpuTimingQueries[i].pending = false;
+    }
+    gpuTimingWriteIndex = 0;
+    gpuTimingReadIndex = 0;
 
     // Debug output buffers
     if (settings.debugMode || settings.enableBoundsViewer) {
@@ -1079,14 +1131,35 @@ void HiZOcclusion::ExecuteVisibilityTests()
             uint32_t bufferIdx = readbackState.readIndex;
             
             if (readbackState.hasPendingRead[bufferIdx]) {
-                auto mapStart = std::chrono::high_resolution_clock::now();
+                // Check if GPU has completed using event query (if available)
+                bool gpuComplete = false;
                 
-                HRESULT hr = context->Map(readbackState.stagingBuffers[bufferIdx], 0, 
-                    D3D11_MAP_READ, D3D11_MAP_FLAG_DO_NOT_WAIT, 
-                    &readbackState.mappedData[bufferIdx]);
+                if (readbackState.completionQueries[bufferIdx]) {
+                    // Use query for precise completion detection
+                    BOOL queryData = FALSE;
+                    HRESULT queryHr = context->GetData(readbackState.completionQueries[bufferIdx], 
+                                                        &queryData, sizeof(BOOL), D3D11_ASYNC_GETDATA_DONOTFLUSH);
+                    gpuComplete = (queryHr == S_OK && queryData);
+                    
+                    if (!gpuComplete && settings.debugMode && attempt == 0) {
+                        logger::debug("Frame {} - GPU work not yet complete for buffer {} (query)",
+                                    globals::state->frameCount, bufferIdx);
+                    }
+                } else {
+                    // Fallback to polling with DO_NOT_WAIT if query not available
+                    gpuComplete = false;  // Will attempt Map() below
+                }
                 
-                auto mapEnd = std::chrono::high_resolution_clock::now();
-                stats.mapTimeMs = static_cast<float>(std::chrono::duration_cast<std::chrono::duration<double, std::milli>>(mapEnd - mapStart).count());
+                if (gpuComplete || !readbackState.completionQueries[bufferIdx]) {
+                    auto mapStart = std::chrono::high_resolution_clock::now();
+                    
+                    UINT mapFlags = readbackState.completionQueries[bufferIdx] ? 0 : D3D11_MAP_FLAG_DO_NOT_WAIT;
+                    HRESULT hr = context->Map(readbackState.stagingBuffers[bufferIdx], 0, 
+                        D3D11_MAP_READ, mapFlags, 
+                        &readbackState.mappedData[bufferIdx]);
+                    
+                    auto mapEnd = std::chrono::high_resolution_clock::now();
+                    stats.mapTimeMs = static_cast<float>(std::chrono::duration_cast<std::chrono::duration<double, std::milli>>(mapEnd - mapStart).count());
                 
                 if (SUCCEEDED(hr)) {
                     auto copyStart = std::chrono::high_resolution_clock::now();
@@ -1182,6 +1255,12 @@ void HiZOcclusion::ExecuteVisibilityTests()
         
         auto copyStart = std::chrono::high_resolution_clock::now();
         context->CopyResource(readbackState.stagingBuffers[writeIdx], visibilityResultsBuffer);
+        
+        // Issue event query to detect when GPU copy completes
+        if (readbackState.completionQueries[writeIdx]) {
+            context->End(readbackState.completionQueries[writeIdx]);
+        }
+        
         auto copyEnd = std::chrono::high_resolution_clock::now();
         stats.copyTimeMs = static_cast<float>(std::chrono::duration_cast<std::chrono::duration<double, std::milli>>(copyEnd - copyStart).count());
 
@@ -1205,8 +1284,15 @@ void HiZOcclusion::ExecuteVisibilityTests()
 void HiZOcclusion::UnbindD3DResources()
 {
     auto context = globals::d3d::context;
+    
+    // Local null arrays for unbinding - avoids per-instance member overhead
+    ID3D11Buffer* nullCBs[1] = { nullptr };
+    ID3D11SamplerState* nullSamplers[1] = { nullptr };
+    ID3D11ShaderResourceView* nullSRVs[2] = { nullptr, nullptr };
+    ID3D11UnorderedAccessView* nullUAV[1] = { nullptr };
+    
     context->CSSetShaderResources(0, 2, nullSRVs); // t0 and t1
-    context->CSSetUnorderedAccessViews(0, 1, &nullUAV, nullptr);
+    context->CSSetUnorderedAccessViews(0, 1, nullUAV, nullptr);
     context->CSSetShader(nullptr, nullptr, 0);
     context->CSSetSamplers(0, 1, nullSamplers);
     context->CSSetConstantBuffers(0, 1, nullCBs);
@@ -1240,7 +1326,9 @@ void HiZOcclusion::DispatchComputeShader()
         D3D11_MAPPED_SUBRESOURCE mapped{};
         HiZSettings params{};
         params.hiZParams = DirectX::XMFLOAT4(static_cast<float>(hiZMipCount), settings.conservativeBias, static_cast<float>(numGeometry), static_cast<float>(settings.debugMode));
-        auto eyePos = Util::GetEyePosition(0);
+        // Use average eye position in VR for more accurate occlusion testing
+        // This ensures objects visible to either eye are not incorrectly culled
+        auto eyePos = REL::Module::IsVR() ? Util::GetAverageEyePosition() : Util::GetEyePosition(0);
         params.cameraWorldPos = DirectX::XMFLOAT3(eyePos.x, eyePos.y, eyePos.z);
         params.overlaySettings = DirectX::XMFLOAT4(
             settings.enableBoundsViewer ? 1.0f : 0.0f,
@@ -1300,17 +1388,49 @@ void HiZOcclusion::DispatchComputeShader()
         }
         context->CSSetShader(hiZTestCS, nullptr, 0);
 
-        // Dispatch for batch processing
+        // Dispatch for batch processing with GPU timestamp profiling
         {
             const uint32_t threadGroupSize = 256;
             uint32_t numGroups = (numGeometry + threadGroupSize - 1) / threadGroupSize;
-            // Profile the dispatch to GPU
-            auto startDispatch = std::chrono::high_resolution_clock::now();
+
+            // Try to read completed GPU timing from previous frames (async readback)
+            auto& readQuery = gpuTimingQueries[gpuTimingReadIndex];
+            if (readQuery.pending && readQuery.disjointQuery) {
+                D3D11_QUERY_DATA_TIMESTAMP_DISJOINT disjointData = {};
+                HRESULT disjointResult = context->GetData(readQuery.disjointQuery, &disjointData, sizeof(disjointData), D3D11_ASYNC_GETDATA_DONOTFLUSH);
+                if (disjointResult == S_OK) {
+                    UINT64 beginTimestamp = 0, endTimestamp = 0;
+                    HRESULT beginResult = context->GetData(readQuery.beginTimestamp, &beginTimestamp, sizeof(beginTimestamp), D3D11_ASYNC_GETDATA_DONOTFLUSH);
+                    HRESULT endResult = context->GetData(readQuery.endTimestamp, &endTimestamp, sizeof(endTimestamp), D3D11_ASYNC_GETDATA_DONOTFLUSH);
+                    
+                    if (beginResult == S_OK && endResult == S_OK && !disjointData.Disjoint && disjointData.Frequency > 0) {
+                        // Calculate GPU time in milliseconds
+                        double gpuTimeMs = static_cast<double>(endTimestamp - beginTimestamp) / static_cast<double>(disjointData.Frequency) * 1000.0;
+                        stats.gpuCullingTimeMs = static_cast<float>(gpuTimeMs);
+                    }
+                    readQuery.pending = false;
+                    gpuTimingReadIndex = (gpuTimingReadIndex + 1) % GPU_TIMING_BUFFER_COUNT;
+                }
+            }
+
+            // Start GPU timing for this frame's dispatch
+            auto& writeQuery = gpuTimingQueries[gpuTimingWriteIndex];
+            bool useGpuTiming = writeQuery.disjointQuery && writeQuery.beginTimestamp && writeQuery.endTimestamp && !writeQuery.pending;
+            
+            if (useGpuTiming) {
+                context->Begin(writeQuery.disjointQuery);
+                context->End(writeQuery.beginTimestamp);
+            }
+
             context->Dispatch(numGroups, 1, 1);
-            auto endDispatch = std::chrono::high_resolution_clock::now();
-            stats.gpuCullingTimeMs = static_cast<float>(
-                std::chrono::duration_cast<std::chrono::duration<double, std::milli>>(endDispatch - startDispatch).count()
-            );
+
+            if (useGpuTiming) {
+                context->End(writeQuery.endTimestamp);
+                context->End(writeQuery.disjointQuery);
+                writeQuery.pending = true;
+                gpuTimingWriteIndex = (gpuTimingWriteIndex + 1) % GPU_TIMING_BUFFER_COUNT;
+            }
+
             if (settings.enableBoundsViewer && boundsOverlayUAV) {
                 overlayUpdatedThisFrame = true;
             }
@@ -1346,32 +1466,32 @@ void HiZOcclusion::ProcessVisibilityResults(uint32_t bufferIndex) {
         const auto& testResults = visibilityData[i];
 
         switch (testResults.result) {
-            case -3: {// Not culled: Test passed
+            case static_cast<uint32_t>(-3): {// Not culled: Test passed
                 geo->GetFlags().reset(RE::NiAVObject::Flag::kHidden);
                 stats.visTestPassed++;
                 break;
             }
-            case -2: { // Not culled: Inside bounds
+            case static_cast<uint32_t>(-2): { // Not culled: Inside bounds
                 geo->GetFlags().reset(RE::NiAVObject::Flag::kHidden);
                 stats.visInsideBounds++;
                 break;
             }
-            case -1: { // Not culled: Invalid Radius
+            case static_cast<uint32_t>(-1): { // Not culled: Invalid Radius
                 geo->GetFlags().reset(RE::NiAVObject::Flag::kHidden);
                 stats.visInvalidRadius++;
                 break;
             }
-            case 0: { // default value
+            case 0u: { // default value
                 stats.defaultValue++;
                 break;
             }
-            case 1: { // Culled: Frustum
+            case 1u: { // Culled: Frustum
                 stats.culledFrustum++;
                 geo->GetFlags().set(RE::NiAVObject::Flag::kHidden);
                 unCullNextFrame.push_back(geo);
                 break;
             }
-            case 2: { // Culled: No early out
+            case 2u: { // Culled: No early out
                 stats.culledNoEarlyOut++;
                 geo->GetFlags().set(RE::NiAVObject::Flag::kHidden);
                 unCullNextFrame.push_back(geo);
