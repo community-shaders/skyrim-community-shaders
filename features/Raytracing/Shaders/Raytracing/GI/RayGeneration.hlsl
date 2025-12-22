@@ -203,7 +203,7 @@ void main()
             float NdotD = saturate(dot(surface.Normal, direction));
             
             throughput *= surface.AO;
-            throughput *= surface.Albedo * NdotD * Frame.Diffuse; // Is this actually correct?
+            throughput *= surface.Albedo * Frame.Diffuse; // Is this actually correct?
 #else
             SampleDefaultBRDF(surface, brdfContext, randomSeed, direction, brdfWeight);
             throughput *= surface.AO;
