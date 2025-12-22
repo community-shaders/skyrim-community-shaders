@@ -88,6 +88,8 @@ void DrawFloat2(const char* label, float2& v, float min = 0.0f, float max = 1.0f
 
 template <typename T>
 static bool DrawEnumRadio(const char* label, T& variable) {
+	ImGui::PushID(label);
+
 	auto variablePrev = variable;
 
 	int denoiser = static_cast<int32_t>(variable);
@@ -105,6 +107,8 @@ static bool DrawEnumRadio(const char* label, T& variable) {
 			//ImGui::Text("Enables Spatially Hashed Radiance Cache, a technique aimed at improving signal quality and performance in the context of path tracing.");
 		}
 	}
+
+	ImGui::PopID();
 
 	variable = static_cast<T>(denoiser);
 
