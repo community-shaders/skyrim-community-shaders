@@ -373,16 +373,16 @@ struct Raytracing : public OverlayFeature
 		Chan
 	};
 
-	enum struct ShadingMode : int32_t
-	{
-		Default,
-		ShadowTerminator
-	};
-
 	enum struct LightingMode : int32_t
 	{
 		Diffuse,
 		PBR
+	};
+
+	enum struct LightEvalMode : int32_t
+	{
+		Diffuse,
+		BRDF
 	};
 
 	enum struct TraceMode : int32_t
@@ -432,11 +432,11 @@ struct Raytracing : public OverlayFeature
 
 	struct AdvancedSettings
 	{
-		DiffuseMode DiffuseMode = DiffuseMode::Lambert;
-		ShadingMode ShadingMode = ShadingMode::Default;
+		DiffuseMode DiffuseMode = DiffuseMode::Burley;
+		LightEvalMode LightEvalMode = LightEvalMode::BRDF;
 		LightingMode LightingMode = LightingMode::PBR;
 
-		NLOHMANN_DEFINE_TYPE_INTRUSIVE_WITH_DEFAULT(AdvancedSettings, DiffuseMode, ShadingMode, LightingMode)
+		NLOHMANN_DEFINE_TYPE_INTRUSIVE_WITH_DEFAULT(AdvancedSettings, DiffuseMode, LightEvalMode, LightingMode)
 	};
 
 	////////////////////////////////////////////////// Feature Specific Data

@@ -197,8 +197,13 @@ void main()
         [loop]
         for (uint j = 0; j < MAX_BOUNCES; j++)
         {
-#if defined(LAMBERT)
-            direction = surface.Mul(SampleCosineHemisphere(randomSeed));        
+#if LIGHTING_MODE == LIGHTING_MODE_DIFFUSE
+            direction = surface.Mul(SampleCosineHemisphere(randomSeed));
+            
+            float NdotD = saturate(dot(n, direction));
+            
+            throughput *= surface.AO;
+            throughput *= NdotD * Frame.Diffuse; // Is this actually correct?
 #else
             SampleDefaultBRDF(surface, brdfContext, randomSeed, direction, brdfWeight);
             throughput *= surface.AO;
@@ -275,24 +280,8 @@ void main()
                 // Do something expensive
             }*/
             
-            float3 localRadiance = EvaluateRadiance(surface, brdfContext, instance, material, randomSeed);
-            
-#if defined(LAMBERT)
-            float NdotD = saturate(dot(n, direction));
-            float3 diffuse = localRadiance.rgb * NdotD * surface.AO * Frame.Diffuse;
-            
-            sampleRadiance += surface.Albedo * diffuse * throughput;
-            
-            throughput *= surface.Albedo;
-#else                                
-            // float3 diffuse = isSpecular ? 0.0 : localRadiance.rgb * BRDF_over_PDF * diffuseAO * Frame.Diffuse;
-            
-            // float3 specularAO = BRDF::SpecularAO(brdfContext.NdotV, surface.Roughness, surface.AO, surface.F0);
-            // float3 specular = isSpecular ? localRadiance.rgb * BRDF_over_PDF * (specularAO * Frame.Specular) : 0.0;
+            sampleRadiance += EvaluateRadiance(surface, brdfContext, instance, material, randomSeed) * throughput;
 
-            sampleRadiance += localRadiance * throughput;
-#endif     
-       
 #if defined(SHARC) && defined(SHARC_UPDATE)
             if (Frame.SHaRC.UpdatePass)
             {

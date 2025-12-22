@@ -297,13 +297,13 @@ void Raytracing::DrawAdvancedSettings()
 	if (!ImGui::BeginTabItem("Advanced"))
 		return;
 
-	if (DrawEnumRadio("Lighting Mode", settings.AdvancedSettings.LightingMode))
-		recompileReason |= RecompileReason::Advanced;
-
 	if (DrawEnumRadio("Diffuse Mode", settings.AdvancedSettings.DiffuseMode))
 		recompileReason |= RecompileReason::Advanced;
 
-	if (DrawEnumRadio("Shading Mode", settings.AdvancedSettings.ShadingMode))
+	if (DrawEnumRadio("Light Evaluation Mode", settings.AdvancedSettings.LightEvalMode))
+		recompileReason |= RecompileReason::Advanced;
+
+	if (DrawEnumRadio("Lighting Mode", settings.AdvancedSettings.LightingMode))
 		recompileReason |= RecompileReason::Advanced;
 
 	ImGui::EndTabItem();
@@ -3275,11 +3275,11 @@ void Raytracing::CompileRTGIShaders()
 	const auto diffuseMode = std::to_wstring(static_cast<uint32_t>(advSettings.DiffuseMode));
 	defines.emplace_back(L"DIFFUSE_MODE", diffuseMode.c_str());
 
-	const auto shadingMode = std::to_wstring(static_cast<uint32_t>(advSettings.ShadingMode));
-	defines.emplace_back(L"SHADING_MODE", shadingMode.c_str());
+	const auto lightEvalMode = std::to_wstring(static_cast<uint32_t>(advSettings.LightEvalMode));
+	defines.emplace_back(L"LIGHTEVAL_MODE", lightEvalMode.c_str());
 
 	const auto lightingMode = std::to_wstring(static_cast<uint32_t>(advSettings.LightingMode));
-	defines.emplace_back(L"LIGHTING_MODE", shadingMode.c_str());
+	defines.emplace_back(L"LIGHTING_MODE", lightingMode.c_str());
 
 	if (settings.WhiteFurnace)
 		defines.emplace_back(L"DEBUG_WHITE_FURNACE");

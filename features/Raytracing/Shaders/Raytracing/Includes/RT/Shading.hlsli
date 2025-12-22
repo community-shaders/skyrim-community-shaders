@@ -51,15 +51,6 @@ float3 Diffuse(float roughness, float3 N, float3 V, float3 L, float NdotV, float
 #endif
 }
 
-float Shading(float3 L, float3 N, float3 Ns)
-{
-#if SHADING_MODE == SHADING_MODE_SHADOWTERM
-    return ShadowTerminatorTerm(L, N, Ns); 
-#else
-    return 1.0f;
-#endif
-}
-
 float3 EvalDiffuse(in float3 l, in Surface surface, in BRDFContext brdfContext)
 {
     float NoL = saturate(dot(surface.Normal, l));
@@ -93,14 +84,14 @@ float3 EvalDefaultBRDF(in float3 l, in Surface surface, in BRDFContext brdfConte
     
     float3 Fd = surface.DiffuseAlbedo * Frame.Diffuse 
     * Diffuse(surface.Roughness, surface.Normal, brdfContext.ViewDirection, l, brdfContext.NdotV, NoL, VoH, VoL, NoH) 
-    * Shading(l, surface.Normal, surface.GeomNormal);
+    * ShadowTerminatorTerm(l, surface.Normal, surface.GeomNormal);
     
     return (Fd + Fr) * NoL;
 }
 
 float3 EvalLight(in float3 l, in Surface surface, in BRDFContext brdfContext)
 {
-#if LIGHTING_MODE == LIGHTING_MODE_DIFFUSE
+#if LIGHTEVAL_MODE == LIGHTEVAL_MODE_DIFFUSE
     return EvalDiffuse(l, surface, brdfContext); 
 #else
     return EvalDefaultBRDF(l, surface, brdfContext);
@@ -210,7 +201,7 @@ void SampleDefaultBRDF(in Surface surface, in BRDFContext brdfContext, inout uin
     {
         brdf = Frame.Diffuse * surface.DiffuseAlbedo * NdotL 
         * Diffuse(surface.Roughness, surface.Normal, V, L, brdfContext.NdotV, NdotL, VdotH, VdotL, NdotH) 
-        * Shading(L, surface.Normal, surface.GeomNormal);
+        * ShadowTerminatorTerm(L, surface.Normal, surface.GeomNormal);
         
         MonteCarlo::AddLobeWithMIS(brdfWeight, pdf, brdf, diffusePdf, 1.0f - specularProb);
         pdf += specularProb * specularPdf;

@@ -352,6 +352,15 @@ void Deferred::StartDeferred()
 
 void Deferred::DeferredPasses()
 {
+	auto& rt = globals::features::raytracing;
+
+	if (rt.Active() && rt.settings.GlobalIllumination) {
+		rt.DrawRTGI();
+
+		if (rt.settings.PathTracing)
+			return;
+	}
+
 	globals::features::upscaling.CheckFrameConstants();
 
 	ZoneScoped;
@@ -397,10 +406,6 @@ void Deferred::DeferredPasses()
 		ssgi.DrawSSGI();
 	auto [ssgi_ao, ssgi_y, ssgi_cocg, ssgi_gi_spec] = ssgi.GetOutputTextures();
 	bool ssgi_hq_spec = ssgi.settings.EnableExperimentalSpecularGI;
-
-	auto& rt = globals::features::raytracing;
-	if (rt.Active() && rt.settings.GlobalIllumination)
-		rt.DrawRTGI();
 
 	auto dispatchCount = Util::GetScreenDispatchCount(true);
 
