@@ -167,6 +167,8 @@ public:
 
 	bool inWorld = false;
 	bool activeReflections = false;
+	bool renderingShadowmaps = false;
+	bool renderingDepthPrepass = false;
 
 	void UpdateSharedData(bool a_inWorld, bool a_prepass);
 

@@ -4,36 +4,96 @@
 #include "Common/VR.hlsli"
 #endif
 
-// VERSION: 2.1 - Fixed camera-relative coordinate system, VR stereo support
-/* Notes: 
-- Skyrim uses left-handed coordinate system, because it uses Direct3D 
-- https://learn.microsoft.com/en-us/windows/win32/direct3d9/viewports-and-clipping
-- VR: Uses average eye position and eye 0 matrices for conservative culling
-*/
+// =============================================================================
+// HiZ Occlusion Test Compute Shader
+// =============================================================================
+// VERSION: 2.1
+//
+// PURPOSE:
+//   Tests geometry bounding spheres against a Hierarchical-Z depth pyramid to
+//   determine visibility. Objects fully occluded by closer geometry are culled
+//   to save rendering work.
+//
+// ALGORITHM OVERVIEW:
+//   1. Each thread tests one geometry's bounding sphere
+//   2. Transform sphere center from world space -> camera-relative -> view space
+//   3. Early-out if camera is inside sphere (always visible)
+//   4. Calculate appropriate mip level based on screen coverage
+//   5. Sample Hi-Z depth at multiple points on the sphere surface
+//   6. If ANY point passes depth test -> object is visible
+//   7. If ALL points fail -> object is occluded
+//
+// ASYNC READBACK ARCHITECTURE:
+//   Results are written to VisibilityResults buffer which is copied to a staging
+//   buffer for CPU readback. Due to GPU latency, results are typically read back
+//   2-3 frames later. This means:
+//   - Objects are always rendered at least once before being culled
+//   - Culled objects may take 2-3 frames to reappear when camera reveals them
+//   - This latency is the tradeoff for non-blocking GPU queries
+//
+// RESULT CODES (written to VisibilityResults):
+//   -3: Visible - depth test passed (at least one sample passed)
+//   -2: Visible - camera is inside bounding sphere
+//   -1: Visible - invalid radius (skip culling for safety)
+//    0: Default/unprocessed (should not remain after shader runs)
+//    1: Culled - frustum culled (all sample points behind camera)
+//    2: Culled - occluded (all depth tests failed)
+//
+// VR SUPPORT:
+//   - Uses average eye position (center between eyes) for camera position
+//   - Uses left eye (eye 0) matrices for view/projection transforms
+//   - Applies stereo UV conversion when sampling Hi-Z buffer
+//   - Conservative approach: slight over-rendering at periphery is acceptable
+//
+// REFERENCES:
+//   - https://www.nickdarnell.com/hierarchical-z-buffer-occlusion-culling/
+//   - Skyrim uses left-handed coordinate system (Direct3D convention)
+//   - https://learn.microsoft.com/en-us/windows/win32/direct3d9/viewports-and-clipping
+// =============================================================================
 
-// https://www.nickdarnell.com/hierarchical-z-buffer-occlusion-culling/
-
-Texture2D<float> HiZBuffer : register(t0);  // This is just the depth buffer
+Texture2D<float> HiZBuffer : register(t0);  // Hierarchical depth pyramid (mip 0 = full res)
 SamplerState HiZSampler : register(s0);
 
-// Input buffer of geometry bounds to test
-StructuredBuffer<float4> GeometryBounds : register(t1); // xyz=center, w=radius
+// Input: Bounding spheres for all geometry to test this frame
+// Format: xyz = world-space center, w = radius
+StructuredBuffer<float4> GeometryBounds : register(t1);
 
-// Output buffer of visibility results: x = fSphereDepth, y = fMaxSampledDepth
+// Output: Visibility result codes (see header for code meanings)
+// One uint per geometry object, indexed by SV_DispatchThreadID.x
 RWStructuredBuffer<uint> VisibilityResults : register(u0);
 
-// Hi-Z specific parameters
+// =============================================================================
+// Constant Buffer - Updated each frame from CPU
+// =============================================================================
 cbuffer HiZParams : register(b0)
 {
-    // x = mipCount, y = conservativeBias, z = geometryCount, w = debugMode
+    // HiZSettings components:
+    //   x = mipCount (number of mip levels in Hi-Z pyramid)
+    //   y = conservativeBias (depth bias to reduce false occlusion, e.g. 0.01 = 1%)
+    //   z = geometryCount (number of objects to test this dispatch)
+    //   w = debugMode (1 = enable debug output)
     float4 HiZSettings;
-    // x=overlayEnabled(0/1), y=maxObjectsToDraw, z=unused, w=unused
+    
+    // overlaySettings components:
+    //   x = overlayEnabled (0 or 1)
+    //   y = maxObjectsToDraw (limit overlay rendering for performance)
+    //   z,w = unused
     float4 overlaySettings;
-    // x contains packed bits for 8 toggles
+    
+    // overlayColorToggles: bit flags for filtering which result types to draw
+    //   bit 0: show visible (test passed)
+    //   bit 1: show visible (inside bounds)
+    //   bit 2: show visible (invalid radius)
+    //   bit 3: show culled (frustum)
+    //   bit 4: show culled (occluded)
     float4 overlayColorToggles;
-    // Camera world position for proper distance calculations
+    
+    // Camera world position - used to convert world coords to camera-relative
+    // In VR: This is the average position between both eyes
     float3 CameraWorldPos;
     float pad0;
+    
+    // Screen dimensions for debug overlay rendering
     float2 BufferDim;      // screenWidth, screenHeight
     float2 BufferDimInv;   // 1/screenWidth, 1/screenHeight
 };
@@ -57,16 +117,23 @@ static const float MIP_LEVEL_BIAS = 1.5;
 // VR Helper Functions
 // =============================================================================
 
-// Convert view-space position to Hi-Z buffer UV coordinates
-// In VR, this applies stereo UV conversion for the left eye (eye 0)
+/// Converts a view-space position to Hi-Z buffer UV coordinates.
+/// In VR mode, applies stereo UV conversion to sample from the left eye region.
+/// @param viewPos Position in view/camera space
+/// @return UV coordinates suitable for sampling HiZBuffer
 float2 ViewToHiZUV(float3 viewPos) {
     float2 uv = FrameBuffer::ViewToUV(viewPos, true, 0);
 #ifdef VR
-    // Convert to stereo UV for left eye region [0, 0.5]
+    // VR renders both eyes side-by-side: left eye = [0, 0.5], right eye = [0.5, 1]
+    // We test against left eye only for conservative culling
     uv = Stereo::ConvertToStereoUV(uv, 0);
 #endif
     return uv;
 }
+
+// =============================================================================
+// Debug Visualization (optional, controlled by overlaySettings)
+// =============================================================================
 
 // Debug output buffer - structured for comprehensive debugging
 struct DebugData {
@@ -238,7 +305,22 @@ void DrawBounds(uint geometryIndex, float3 centerVS, float radius) {
     DrawRectOutline(minTex0, maxTex0, baseW, baseH, color, thickness);
 }
 
-// Determines the appropriate mip level for a given object based on its screen coverage
+// =============================================================================
+// Mip Level Selection
+// =============================================================================
+
+/// Calculates the appropriate Hi-Z mip level to sample for a given object.
+/// 
+/// The mip level is chosen based on the object's screen-space size:
+/// - Larger objects (more pixels) -> higher mip level (coarser depth)
+/// - Smaller objects (fewer pixels) -> lower mip level (finer depth)
+/// 
+/// Using a mip level that roughly matches the object's screen coverage ensures
+/// we get a representative depth value without over-sampling.
+/// 
+/// @param centerVS Object center in view space
+/// @param radius Object bounding sphere radius
+/// @return Mip level to use for Hi-Z sampling (0 = full resolution)
 float GetMipLevel(float3 centerVS, float radius) {
     float depth = abs(centerVS.z);
     
@@ -260,21 +342,33 @@ float GetMipLevel(float3 centerVS, float radius) {
     // Diameter in pixels
     float screenSizePixels = screenRadiusPixels * 2.0;
     
-    // Subtract MIP_LEVEL_BIAS to use finer depth resolution
+    // Subtract MIP_LEVEL_BIAS to use finer depth resolution (reduces false occlusion)
     float mipLevel = max(0.0, log2(max(1.0, screenSizePixels)) - MIP_LEVEL_BIAS);
     
-    return clamp(mipLevel, 0.0, HiZSettings.x - 1.0);  // Also avoid highest mip
+    return clamp(mipLevel, 0.0, HiZSettings.x - 1.0);  // Clamp to valid mip range
 }
 
-/* 
- * Reports a geometry that has been determined visible as a result of a valid depth test
- * and draws it in the bounds overlay if enabled.
-*/
+// =============================================================================
+// Visibility Reporting
+// =============================================================================
+
+/// Reports a geometry as visible and optionally draws debug overlay.
+/// Called when depth test passes or early-out determines visibility.
+/// @param geometryIndex Index into GeometryBounds/VisibilityResults
+/// @param centerVS Object center in view space (for debug rendering)
+/// @param radius Object radius (for debug rendering)
 void ReportVisibleGeometry(int geometryIndex, float3 centerVS, float radius) {
     if (overlaySettings.x != 0 && geometryIndex < overlaySettings.y) {
         DrawBounds(geometryIndex, centerVS, radius);
     }
 }
+
+// =============================================================================
+// Main Entry Point
+// =============================================================================
+// Each thread tests one geometry object's bounding sphere against the Hi-Z pyramid.
+// Thread count = geometryCount, dispatched as (ceil(geometryCount/256), 1, 1)
+// =============================================================================
 
 [numthreads(256, 1, 1)]
 void main(uint3 dispatchThreadID : SV_DispatchThreadID)
@@ -284,56 +378,65 @@ void main(uint3 dispatchThreadID : SV_DispatchThreadID)
     if (geometryIndex >= geometryCount)
         return;
 
-    // Set default return value to unculled
+    // Initialize to "unprocessed" - this should be overwritten before shader exits
     VisibilityResults[geometryIndex] = 0;
 
+    // Load bounding sphere data
     float4 Bounds = GeometryBounds[geometryIndex];
     float3 centerWS = Bounds.xyz;
     float radius = Bounds.w;
 
-    // Skyrim uses camera-relative coordinates - subtract camera position before view transform
-    // Note: SOMETIMES, seemingingly only interior cells, some bounds follow the camera inverted.. needs investigation.
+    // =========================================================================
+    // COORDINATE TRANSFORM: World Space -> View Space
+    // =========================================================================
+    // Skyrim stores positions in camera-relative world coordinates.
+    // Subtract camera position to get true world-relative coords before view transform.
+    // NOTE: Some interior cell bounds appear to follow the camera inverted - needs investigation.
     float3 centerWSCameraRelative = centerWS - CameraWorldPos;
     float3 centerVS = mul(FrameBuffer::CameraView[0], float4(centerWSCameraRelative, 1)).xyz;
 
-    // Check for invalid radius
+    // =========================================================================
+    // EARLY OUT 1: Invalid radius -> mark visible (safety)
+    // =========================================================================
     if (radius <= 0.0) {
-        VisibilityResults[geometryIndex] = -1;
+        VisibilityResults[geometryIndex] = -1;  // Visible: invalid radius
         if (overlaySettings.x != 0 && geometryIndex < (uint)overlaySettings.y) {
             DrawBounds(geometryIndex, centerVS, radius);
         }
         return;
     }
 
-    /*
-     * Increase radius by percentage based on the conservative bias value
-     * This is to help reduce pop-in by conserving geometry which is just barely hidden.
-     * E.g. 0.001 = 1% increase, 0.01 = 10% increase, etc.
-    */
-    // float conservativeRadius = radius * (1.0 + HiZSettings.y * 100.0);
-    // this is problematic because increasing the radius can move some points off screen.
-    
-    // Check if the camera is inside the bounds
+    // =========================================================================
+    // EARLY OUT 2: Camera inside bounding sphere -> always visible
+    // =========================================================================
     float centerDist = length(centerVS);
     if (centerDist <= radius) {
-        VisibilityResults[geometryIndex] = -2;
+        VisibilityResults[geometryIndex] = -2;  // Visible: camera inside bounds
         if (overlaySettings.x != 0 && geometryIndex < (uint)overlaySettings.y) {
             DrawBounds(geometryIndex, centerVS, radius);
         }
         return;
     }
 
-    float mipLevel = 0.0;
-    {
-        // Choose appropriate mip based on screen coverage of object bounds
-        mipLevel = GetMipLevel(centerVS, radius);
-    }
-
+    // =========================================================================
+    // MIP LEVEL SELECTION
+    // =========================================================================
+    // Choose Hi-Z mip level based on object's screen coverage.
+    // Larger screen coverage -> coarser mip (faster, acceptable accuracy)
+    float mipLevel = GetMipLevel(centerVS, radius);
     float conservativeBias = HiZSettings.y;
 
-    // Bounding sphere test points in a hierarchical order:
-    // - 26 cube corners at 3 different scales (center, vertex, face, edge points)
-    // - Test coarse first (larger radius), then fine for early-out optimization
+    // =========================================================================
+    // HIERARCHICAL DEPTH TESTING
+    // =========================================================================
+    // Test multiple points on the bounding sphere surface against the Hi-Z depth.
+    // If ANY point passes the depth test, the object is considered visible.
+    // 
+    // Points are tested in hierarchical order (center first, then sphere surface)
+    // to maximize early-out opportunities for visible objects.
+    // 
+    // The 26 offset directions sample a cube's corners, edges, and face centers,
+    // providing good coverage of the sphere surface.
     static const float3 offsets[26] = {
         float3(-1, -1, -1), float3(-1, -1,  0), float3(-1, -1,  1),
         float3(-1,  0, -1), float3(-1,  0,  0), float3(-1,  0,  1),
@@ -348,7 +451,9 @@ void main(uint3 dispatchThreadID : SV_DispatchThreadID)
 
     bool anyPointOnScreen = false;
 
-    // Test center and nearest sphere point first (most likely to be visible)
+    // -------------------------------------------------------------------------
+    // Test 1: Center point and nearest sphere point (highest visibility probability)
+    // -------------------------------------------------------------------------
     if (centerVS.z > 0.0) {
         float2 centerUV = clamp(ViewToHiZUV(centerVS), float2(0.0, 0.0), float2(1.0, 1.0));
         float4 centerClip = mul(FrameBuffer::CameraProj[0], float4(centerVS, 1));
@@ -372,16 +477,22 @@ void main(uint3 dispatchThreadID : SV_DispatchThreadID)
             
             hiZDepth = HiZBuffer.SampleLevel(HiZSampler, nearestUV, mipLevel).r;
             if (nearestDepth <= hiZDepth + conservativeBias) {
-                VisibilityResults[geometryIndex] = -3;
+                VisibilityResults[geometryIndex] = -3;  // Visible: depth test passed
                 ReportVisibleGeometry(geometryIndex, centerVS, radius);
                 return;
             }
         }
     }
 
-    // Hierarchical testing: Test larger radius first (1.5x) for conservative culling
-    // This catches objects that are just barely hidden and reduces pop-in
-    // Scales: [1.5x, 1.0x, 0.5x] - coarse to fine with early-out
+    // -------------------------------------------------------------------------
+    // Test 2: Hierarchical sphere surface sampling
+    // -------------------------------------------------------------------------
+    // Test 26 points on the sphere surface at 3 different radius scales.
+    // Starting with larger radius (1.5x) provides conservative culling that
+    // helps reduce pop-in for objects that are just barely hidden.
+    // 
+    // The unrolled loop tests all 78 points (26 * 3) with early-out on first
+    // passing depth test - visible objects exit quickly.
     static const float radiusScales[3] = { 1.5, 1.0, 0.5 };
     
     [unroll]
@@ -407,24 +518,35 @@ void main(uint3 dispatchThreadID : SV_DispatchThreadID)
 
             float hiZDepth = HiZBuffer.SampleLevel(HiZSampler, pointUV, mipLevel).r;
             if (pointDepth <= hiZDepth + conservativeBias) {
-                VisibilityResults[geometryIndex] = -3;
+                VisibilityResults[geometryIndex] = -3;  // Visible: depth test passed
                 ReportVisibleGeometry(geometryIndex, centerVS, radius);
                 return;
             }
         }
     }
 
-    // If not a single point was on screen, frustum cull
+    // =========================================================================
+    // FRUSTUM CULLING: No points in front of camera
+    // =========================================================================
+    // If ALL tested points were behind the camera (z <= 0), the object is
+    // completely outside the view frustum and can be culled.
     if (!anyPointOnScreen) {
-        VisibilityResults[geometryIndex] = 1;
+        VisibilityResults[geometryIndex] = 1;  // Culled: frustum (behind camera)
         if (overlaySettings.x != 0 && geometryIndex < (uint)overlaySettings.y) {
             DrawBounds(geometryIndex, centerVS, radius);
         }
         return;
     }
 
-    // If we get to this point, this object has not been deemed visible, and thus shall be culled.
-    VisibilityResults[geometryIndex] = 2;
+    // =========================================================================
+    // OCCLUSION CULLING: All depth tests failed
+    // =========================================================================
+    // If we reach here, all tested points were on-screen but failed the depth test.
+    // The object is occluded by closer geometry and can be culled.
+    // 
+    // NOTE: This result will be read back by the CPU 2-3 frames later due to
+    // async GPU readback. The object will be re-tested each frame while culled.
+    VisibilityResults[geometryIndex] = 2;  // Culled: occluded (all depth tests failed)
     if (overlaySettings.x != 0 && geometryIndex < (uint)overlaySettings.y) {
         DrawBounds(geometryIndex, centerVS, radius);
     }

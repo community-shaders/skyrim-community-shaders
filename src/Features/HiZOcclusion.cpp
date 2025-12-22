@@ -1450,6 +1450,10 @@ void HiZOcclusion::DispatchComputeShader()
 void HiZOcclusion::ProcessVisibilityResults(uint32_t bufferIndex) {
 
     unCullNextFrame.clear();
+    
+    // Clear previous occlusion state before processing new results
+    // This ensures we only cull based on the most recent valid readback
+    ClearOcclusionState();
 
     // Read from the correct triple-buffered staging buffer
     const HiZOcclusion::OcclusionResult* visibilityData = static_cast<const HiZOcclusion::OcclusionResult*>(readbackState.mappedData[bufferIndex].pData);
@@ -1467,17 +1471,17 @@ void HiZOcclusion::ProcessVisibilityResults(uint32_t bufferIndex) {
 
         switch (testResults.result) {
             case static_cast<uint32_t>(-3): {// Not culled: Test passed
-                geo->GetFlags().reset(RE::NiAVObject::Flag::kHidden);
+                MarkGeometryVisible(geo.get());
                 stats.visTestPassed++;
                 break;
             }
             case static_cast<uint32_t>(-2): { // Not culled: Inside bounds
-                geo->GetFlags().reset(RE::NiAVObject::Flag::kHidden);
+                MarkGeometryVisible(geo.get());
                 stats.visInsideBounds++;
                 break;
             }
             case static_cast<uint32_t>(-1): { // Not culled: Invalid Radius
-                geo->GetFlags().reset(RE::NiAVObject::Flag::kHidden);
+                MarkGeometryVisible(geo.get());
                 stats.visInvalidRadius++;
                 break;
             }
@@ -1487,13 +1491,13 @@ void HiZOcclusion::ProcessVisibilityResults(uint32_t bufferIndex) {
             }
             case 1u: { // Culled: Frustum
                 stats.culledFrustum++;
-                geo->GetFlags().set(RE::NiAVObject::Flag::kHidden);
+                MarkGeometryOccluded(geo.get());
                 unCullNextFrame.push_back(geo);
                 break;
             }
             case 2u: { // Culled: No early out
                 stats.culledNoEarlyOut++;
-                geo->GetFlags().set(RE::NiAVObject::Flag::kHidden);
+                MarkGeometryOccluded(geo.get());
                 unCullNextFrame.push_back(geo);
                 break;
             }
@@ -1502,4 +1506,33 @@ void HiZOcclusion::ProcessVisibilityResults(uint32_t bufferIndex) {
             }
         }
     }
+}
+
+bool HiZOcclusion::IsGeometryOccluded(RE::BSGeometry* geometry) const
+{
+    if (!geometry) {
+        return false;
+    }
+    return occludedGeometry.find(geometry) != occludedGeometry.end();
+}
+
+void HiZOcclusion::MarkGeometryOccluded(RE::BSGeometry* geometry)
+{
+    if (!geometry) {
+        return;
+    }
+    occludedGeometry.insert(geometry);
+}
+
+void HiZOcclusion::MarkGeometryVisible(RE::BSGeometry* geometry)
+{
+    if (!geometry) {
+        return;
+    }
+    occludedGeometry.erase(geometry);
+}
+
+void HiZOcclusion::ClearOcclusionState()
+{
+    occludedGeometry.clear();
 }

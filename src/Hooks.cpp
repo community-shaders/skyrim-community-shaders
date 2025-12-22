@@ -719,7 +719,12 @@ struct BSBatchRenderer_RenderPassImmediately
 		static void thunk(RE::BSRenderPass* pass, uint32_t technique, bool alphaTest, uint32_t renderFlags)
 		{
 			// Collect valid geometry for next frame's testing
-			if (globals::features::hiZOcclusion.settings.enableHiZCulling && pass->geometry && pass->geometry->worldBound.radius > 0.0f) {
+			// Skip collection during shadow map and depth prepass rendering to avoid false positives
+			if (!globals::state->renderingShadowmaps && 
+			    !globals::state->renderingDepthPrepass &&
+			    globals::features::hiZOcclusion.settings.enableHiZCulling && 
+			    pass->geometry && 
+			    pass->geometry->worldBound.radius > 0.0f) {
 				std::lock_guard<std::mutex> lock(globals::features::hiZOcclusion.pendingGeometryMutex);
 				// Fast O(1) check
 				if (globals::features::hiZOcclusion.pendingGeometrySet.insert(pass->geometry).second) {
@@ -728,8 +733,31 @@ struct BSBatchRenderer_RenderPassImmediately
 					globals::features::hiZOcclusion.pendingGeometry.emplace_back(rawGeometry);
 				}
 			}
+			
+			// Skip rendering geometry that has been determined to be occluded
+			// Only skip for non-utility shaders (shadows, depth) to avoid breaking render passes
+			if (globals::features::hiZOcclusion.loaded && 
+			    globals::features::hiZOcclusion.settings.enableHiZCulling &&
+			    pass->shader && 
+			    pass->shader->shaderType != RE::BSShader::Type::Utility &&
+			    pass->geometry && 
+			    globals::features::hiZOcclusion.IsGeometryOccluded(pass->geometry)) {
+				return;  // Skip this draw call - geometry is occluded
+			}
 
 			func(pass, technique, alphaTest, renderFlags);
+		}
+		static inline REL::Relocation<decltype(thunk)> func;
+	};
+
+	// Hook for depth prepass rendering phase (AE only)
+	struct RenderWorldDepthPrepass
+	{
+		static void thunk(char a1, bool a2)
+		{
+			globals::state->renderingDepthPrepass = true;
+			func(a1, a2);
+			globals::state->renderingDepthPrepass = false;
 		}
 		static inline REL::Relocation<decltype(thunk)> func;
 	};
@@ -971,6 +999,12 @@ struct BSBatchRenderer_RenderPassImmediately
 
 		logger::info("Hooking BSBatchRenderer::RenderPassImmediately for Hi-Z culling");
 		stl::write_thunk_call<BSBatchRenderer_RenderPassImmediately>(REL::RelocationID(100852, 107642).address() + REL::Relocate(0x29E, 0x28F));
+		
+		// Hook depth prepass rendering to set state flag (AE only - address not available for SE)
+		if (REL::Module::IsAE()) {
+			logger::info("Hooking RenderWorldDepthPrepass for Hi-Z culling state tracking");
+			stl::write_thunk_call<RenderWorldDepthPrepass>(REL::RelocationID(0, 36559).address() + 0x395);
+		}
 		
 		stl::write_thunk_call<BSLightingShader_SetupGeometry_GeometrySetupConstantPointLights>(REL::RelocationID(100565, 107300).address() + REL::Relocate(0x523, 0xB0E, 0x5FE));
 	}

@@ -658,7 +658,9 @@ ID3D11ComputeShader* Deferred::GetComputeMainCompositeInterior()
 
 void Deferred::Hooks::Main_RenderShadowMaps::thunk()
 {
+	globals::state->renderingShadowmaps = true;
 	func();
+	globals::state->renderingShadowmaps = false;
 	globals::deferred->EarlyPrepasses();
 };
 

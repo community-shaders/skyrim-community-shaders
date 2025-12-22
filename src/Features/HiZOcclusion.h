@@ -286,6 +286,15 @@ struct HiZOcclusion : OverlayFeature
     mutable std::mutex pendingGeometryMutex;  // Protects pendingGeometry and pendingGeometrySet from concurrent access
     std::vector<RE::NiPointer<RE::BSGeometry>> unCullNextFrame;
     std::vector<DirectX::XMFLOAT4> geometryBounds;  // xyz=center, w=radius
+    
+    // Fast O(1) lookup for occluded geometry during render pass
+    std::unordered_set<RE::BSGeometry*> occludedGeometry;
+    
+    // Occlusion state management methods
+    [[nodiscard]] bool IsGeometryOccluded(RE::BSGeometry* geometry) const;
+    void MarkGeometryOccluded(RE::BSGeometry* geometry);
+    void MarkGeometryVisible(RE::BSGeometry* geometry);
+    void ClearOcclusionState();
 
     void ExecuteVisibilityTests();
 
