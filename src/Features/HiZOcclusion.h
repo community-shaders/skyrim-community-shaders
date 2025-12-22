@@ -230,6 +230,10 @@ struct HiZOcclusion : OverlayFeature
         uint32_t culledFrustum = 0;
         uint32_t culledNoEarlyOut = 0;
         
+        // Async readback tracking
+        uint32_t lastResultFrame = 0;          // frame when results were last updated
+        uint32_t staleFrameCount = 0;          // frames since last new result (0 = fresh data)
+        
         // Timing statistics (in milliseconds)
         float resourceSetupDurationMS = 0.0f;
         float recreateDurationMS = 0.0f;

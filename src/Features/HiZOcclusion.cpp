@@ -235,6 +235,16 @@ void HiZOcclusion::DrawSettings()
         ImGui::Text("Culled: %u", stats.culledFrustum + stats.culledNoEarlyOut);
         ImGui::Text("Visible: %u", stats.visTestPassed + stats.visInsideBounds + stats.visInvalidRadius);
         ImGui::Text("Unknown/Default: %u", stats.defaultValue);
+        
+        // Async readback status
+        ImGui::Text("Occluded set size: %zu", occludedGeometry.size());
+        if (stats.staleFrameCount > 0) {
+            ImGui::TextColored(ImVec4(1.0f, 1.0f, 0.0f, 1.0f), "Stale results: %u frames (from frame %u)", 
+                              stats.staleFrameCount, stats.lastResultFrame);
+        } else {
+            ImGui::Text("Results: Fresh (frame %u)", stats.lastResultFrame);
+        }
+        
         // Display profiling durations in micro seconds
         ImGui::Text("GPU time: %.2f us", stats.gpuCullingTimeMs * 1000);
         ImGui::Text("Copy results time: %.2f us", stats.copyTimeMs * 1000);
@@ -1121,6 +1131,9 @@ void HiZOcclusion::ExecuteVisibilityTests()
         return;
     }
     
+    // Track whether we got fresh results this frame
+    bool gotNewResults = false;
+    
     // Try to read results from any pending staging buffers (multi-buffered approach)
     if (readbackState.numPendingReads > 0) {
         auto readStart = std::chrono::high_resolution_clock::now();
@@ -1166,6 +1179,7 @@ void HiZOcclusion::ExecuteVisibilityTests()
                     
                     // Successfully mapped - process results using the geometry snapshot from this buffer
                     ProcessVisibilityResults(bufferIdx);
+                    gotNewResults = true;
                     
                     auto copyEnd = std::chrono::high_resolution_clock::now();
                     stats.copyDataTimeMs = static_cast<float>(std::chrono::duration_cast<std::chrono::duration<double, std::milli>>(copyEnd - copyStart).count());
@@ -1198,6 +1212,16 @@ void HiZOcclusion::ExecuteVisibilityTests()
         
         auto readEnd = std::chrono::high_resolution_clock::now();
         stats.readbackTimeMs = static_cast<float>(std::chrono::duration_cast<std::chrono::duration<double, std::milli>>(readEnd - readStart).count());
+    }
+    
+    // Track stale frame count when no new results were obtained
+    // The occludedGeometry set persists from the previous frame automatically
+    if (!gotNewResults && stats.lastResultFrame > 0) {
+        stats.staleFrameCount = globals::state->frameCount - stats.lastResultFrame;
+        if (settings.debugMode && stats.staleFrameCount > 0) {
+            logger::debug("Frame {} - Using cached occlusion results from frame {} ({} frames stale, {} geometry occluded)",
+                         globals::state->frameCount, stats.lastResultFrame, stats.staleFrameCount, occludedGeometry.size());
+        }
     }
 
     // Dispatch new test if we have geometry to process
@@ -1454,6 +1478,10 @@ void HiZOcclusion::ProcessVisibilityResults(uint32_t bufferIndex) {
     // Clear previous occlusion state before processing new results
     // This ensures we only cull based on the most recent valid readback
     ClearOcclusionState();
+    
+    // Track when we received fresh results
+    stats.lastResultFrame = globals::state->frameCount;
+    stats.staleFrameCount = 0;
 
     // Read from the correct triple-buffered staging buffer
     const HiZOcclusion::OcclusionResult* visibilityData = static_cast<const HiZOcclusion::OcclusionResult*>(readbackState.mappedData[bufferIndex].pData);
