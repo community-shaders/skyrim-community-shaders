@@ -59,7 +59,7 @@ float3 EvalDiffuse(in float3 l, in Surface surface, in BRDFContext brdfContext)
         return float3(0.0f, 0.0f, 0.0f);
         
     // Diffuse is meant to be very light (and used with DDGI), so I don't see much point in using a different diffuse or shading model here
-    return surface.DiffuseAlbedo * NoL * Frame.Diffuse;
+    return surface.DiffuseAlbedo * NoL * BRDF::Diffuse_Lambert() * Frame.Diffuse;
 }
 
 float3 EvalDefaultBRDF(in float3 l, in Surface surface, in BRDFContext brdfContext)

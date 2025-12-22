@@ -200,10 +200,10 @@ void main()
 #if LIGHTING_MODE == LIGHTING_MODE_DIFFUSE
             direction = surface.Mul(SampleCosineHemisphere(randomSeed));
             
-            float NdotD = saturate(dot(n, direction));
+            float NdotD = saturate(dot(surface.Normal, direction));
             
             throughput *= surface.AO;
-            throughput *= NdotD * Frame.Diffuse; // Is this actually correct?
+            throughput *= surface.Albedo * NdotD * Frame.Diffuse; // Is this actually correct?
 #else
             SampleDefaultBRDF(surface, brdfContext, randomSeed, direction, brdfWeight);
             throughput *= surface.AO;
