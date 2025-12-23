@@ -1969,11 +1969,11 @@ void Raytracing::UpdateInstances()
 		float worldBoundRadius = worldBound.radius;
 		float distanceToBounds = Util::Units::GameUnitsToMeters(eye.GetDistance(worldBound.center) - worldBoundRadius);
 
-		// TODO: Fix culling exclusion for emissive models
-		// Both may glow, if the object is a light source and behind the camera culling it will darken the visible scene (a better filter instead of shader types might be using their pixelDescriptor)
-		//auto cullOutOfView = !geometryData.HasFeature(RE::BSShaderMaterial::Feature::kGlowMap) && !geometryData.HasShaderType(RE::BSShader::Type::Effect);
-		
-		auto cullOutOfView = true;
+		auto shaderTypes = model.GetShaderTypes();
+		auto features = model.GetFeatures();
+
+		// We exclude emissive models from culling
+		auto cullOutOfView = !(shaderTypes & RE::BSShader::Type::Effect) && !(features & static_cast<int>(RE::BSShaderMaterial::Feature::kGlowMap));
 
 		// We'll cull small models or very distant ones (that are outside the player view)
 		if ((cullOutOfView && Util::Units::GameUnitsToMeters(worldBoundRadius) < 1.0f) || distanceToBounds > 100.0f) {

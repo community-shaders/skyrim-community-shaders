@@ -31,6 +31,8 @@ struct Model
 	{
 		for (auto& shape : this->shapes) {
 			flags |= shape->flags;
+			shaderTypes |= shape->material.ShaderType;
+			features |= static_cast<int>(shape->material.Feature);
 		}
 	}
 
@@ -39,13 +41,14 @@ struct Model
 		return flags;
 	}
 
-	bool HasShaderType(RE::BSShader::Type shaderType) const
+	uint32_t GetShaderTypes() const
 	{
-		for (auto& shape : shapes)
-			if (shape->material.ShaderType == shaderType)
-				return true;
+		return shaderTypes;
+	}
 
-		return false;
+	auto GetFeatures() const
+	{
+		return features;
 	}
 
 	void AddRef()
@@ -62,5 +65,7 @@ struct Model
 
 private:
 	Flags flags = Flags::None;
+	uint32_t shaderTypes = RE::BSShader::Type::None;
+	int features = static_cast<int>(RE::BSShaderMaterial::Feature::kNone);
 	uint refCount;
 };

@@ -165,8 +165,6 @@ void Shape::BuildMaterial(const RE::BSGeometry::GEOMETRY_RUNTIME_DATA& geometryR
 
 	half roughness = 1.0f;
 
-	int effectType = 0;
-
 	RE::BSShader::Type shaderType = RE::BSShader::Type::None;
 	RE::BSShaderMaterial::Feature feature = RE::BSShaderMaterial::Feature::kNone;
 	stl::enumeration<PBRShaderFlags, uint16_t> pbrFlags;
@@ -278,7 +276,6 @@ void Shape::BuildMaterial(const RE::BSGeometry::GEOMETRY_RUNTIME_DATA& geometryR
 
 				if (auto shaderMaterial = effectShader->material) {
 					if (auto effectMaterial = skyrim_cast<RE::BSEffectShaderMaterial*>(shaderMaterial)) {
-						effectType = 1;
 						effectColor = { effectMaterial->baseColor.red, effectMaterial->baseColor.green, effectMaterial->baseColor.blue, effectMaterial->baseColorScale };
 
 						baseTexture = TryGetTexture(effectMaterial->sourceTexture);
@@ -322,10 +319,10 @@ void Shape::BuildMaterial(const RE::BSGeometry::GEOMETRY_RUNTIME_DATA& geometryR
 		}
 	};
 
-	LogTexture("Base Texture", baseTexture, baseTexReg->GetIndex());
+	/*LogTexture("Base Texture", baseTexture, baseTexReg->GetIndex());
 	LogTexture("Normal Texture", normalTexture, normalTexReg->GetIndex());
 	LogTexture("Effect Texture", effectTexture, effectTexReg->GetIndex());
-	LogTexture("RMAOS Texture", rmaosTexture, rmaosTexReg->GetIndex());
+	LogTexture("RMAOS Texture", rmaosTexture, rmaosTexReg->GetIndex());*/
 
 	material = Material(
 		baseColor,
