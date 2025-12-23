@@ -510,10 +510,10 @@ struct Raytracing : public OverlayFeature
 		None = 0,
 		General = 1 << 0,
 		Advanced = 1 << 1,
-		Debug = 1 << 2
-	};
-
-	RecompileReason recompileReason = RecompileReason::None;
+		Debug = 1 << 2,
+		RestoreDefaultsSettings = 1 << 3,
+		LoadSettings = 1 << 4
+	} recompileReason = RecompileReason::None;
 
 	bool shareTexture = false;
 	bool renderingWorld = false;

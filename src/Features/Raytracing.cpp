@@ -63,11 +63,15 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 void Raytracing::RestoreDefaultSettings()
 {
 	settings = {};
+
+	recompileReason |= RecompileReason::RestoreDefaultsSettings;
 }
 
 void Raytracing::LoadSettings(json& o_json)
 {
 	settings = o_json;
+
+	recompileReason |= RecompileReason::LoadSettings;
 }
 
 void Raytracing::SaveSettings(json& o_json)
@@ -349,7 +353,8 @@ void Raytracing::DrawAdvancedSettings()
 
 	auto& advSettings = settings.AdvancedSettings;
 
-	ImGui::Checkbox("Enabled", &advSettings.GGXEnergyConservation);
+	if (ImGui::Checkbox("GGX Energy Conservation", &advSettings.GGXEnergyConservation))
+		recompileReason |= RecompileReason::Advanced;
 
 	if (DrawEnumCombo("Diffuse BRDF", advSettings.DiffuseBRDF))
 		recompileReason |= RecompileReason::Advanced;
