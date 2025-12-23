@@ -37,13 +37,13 @@ alignas(16)
     float3 Position;
     uint FrameCount;
     float3 PositionPrev;
+    BOOL RussianRoulette;
     float2 Roughness;
     float2 Metalness;
     uint2 DispatchSize;
     float Emissive;
     float Effect;
     float Sky;
-    BOOL RussianRoulette;
     uint3 Pad0;
     SHaRCFrameData SHaRC;
     FeatureData Features;
