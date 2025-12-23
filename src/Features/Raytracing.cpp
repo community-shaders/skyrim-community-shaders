@@ -99,8 +99,9 @@ static bool DrawEnumRadio(const char* label, T& variable, const char* tooltip = 
 	int denoiser = static_cast<int32_t>(variable);
 	ImGui::TextUnformatted(label);
 
-	if (tooltip; auto _tt = Util::HoverTooltipWrapper())
-		ImGui::Text("%s", tooltip);	
+	if (tooltip != nullptr)
+		if (auto _tt = Util::HoverTooltipWrapper())
+			ImGui::Text("%s", tooltip);	
 
 	ImGui::SameLine();
 	ImGui::Dummy(ImVec2(25, 0));
@@ -111,8 +112,9 @@ static bool DrawEnumRadio(const char* label, T& variable, const char* tooltip = 
 		ImGui::SameLine();
 		ImGui::RadioButton(name.data(), &denoiser, static_cast<int32_t>(value));
 
-		if (tooltips; auto _tt = Util::HoverTooltipWrapper())
-			ImGui::Text("%s", tooltips[i]);
+		if (tooltips != nullptr)
+			if (auto _tt = Util::HoverTooltipWrapper())
+				ImGui::Text("%s", tooltips[i]);
 
 		i++;
 	}
@@ -141,8 +143,9 @@ static bool DrawEnumCombo(const char* label, T& variable, const char* tooltip = 
 			if (ImGui::Selectable(magic_enum::enum_name(value).data(), isSelected))
 				variable = value;
 
-			if (tooltips; auto _tt = Util::HoverTooltipWrapper())
-				ImGui::Text("%s", tooltips[i]);
+			if (tooltips != nullptr)
+				if (auto _tt = Util::HoverTooltipWrapper())
+					ImGui::Text("%s", tooltips[i]);
 
 			if (isSelected)
 				ImGui::SetItemDefaultFocus();
@@ -151,8 +154,8 @@ static bool DrawEnumCombo(const char* label, T& variable, const char* tooltip = 
 		}
 
 		ImGui::EndCombo();
-	} else {
-		if (tooltip; auto _tt = Util::HoverTooltipWrapper())
+	} else if (tooltip != nullptr) {
+		if (auto _tt = Util::HoverTooltipWrapper())
 			ImGui::Text("%s", tooltip);	
 	}
 
@@ -309,9 +312,6 @@ void Raytracing::DrawGeneralSettings()
 		if (samples != settings.SamplesPerPixel)
 			recompileReason |= RecompileReason::General;
 	}
-
-	/*if (ImGui::SliderInt("Bounces", &settings.Bounces, 1, 32))
-		settings.Bounces = std::clamp(settings.Bounces, 1, 32);*/
 
 	DrawFloat2("Roughness", settings.Roughness);
 	DrawFloat2("Metalness", settings.Metalness);
