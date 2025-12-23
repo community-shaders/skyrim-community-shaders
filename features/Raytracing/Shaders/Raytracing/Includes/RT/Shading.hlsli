@@ -196,25 +196,22 @@ void SampleDefaultBRDF(in Surface surface, in BRDFContext brdfContext, inout uin
     specularPdf = MonteCarlo::SampleGGXVNDFReflectionPdf(alpha, alpha2, NdotH, brdfContext.NdotV, VdotH);
     diffusePdf = NdotL / Math::PI;
 
-    [branch]
-    if (!isSpecular)
-    {
-        brdf = Frame.Diffuse * surface.DiffuseAlbedo * NdotL 
+    float3 F = BRDF::F_Schlick(surface.F0, VdotH);
+
+    float3 Fd = Frame.Diffuse * surface.DiffuseAlbedo * NdotL 
         * Diffuse(surface.Roughness, surface.Normal, V, L, brdfContext.NdotV, NdotL, VdotH, VdotL, NdotH) 
         * ShadowTerminatorTerm(L, surface.Normal, surface.GeomNormal);
-        
-        MonteCarlo::AddLobeWithMIS(brdfWeight, pdf, brdf, diffusePdf, 1.0f - specularProb);
-        pdf += specularProb * specularPdf;
-    }
-    else
-    {
-        float3 F = BRDF::F_Schlick(surface.F0, VdotH);
-        brdf = Frame.Specular * F * MonteCarlo::SpecularSampleWeightGGXVNDF(alpha, alpha2, NdotL, brdfContext.NdotV, VdotH, NdotH) * specularPdf;
-        MonteCarlo::AddLobeWithMIS(brdfWeight, pdf, brdf, specularPdf, specularProb);
-        pdf += (1.0f - specularProb) * diffusePdf;
-    }
+    
+    float3 Fr = Frame.Specular * F * MonteCarlo::SpecularSampleWeightGGXVNDF(alpha, alpha2, NdotL, brdfContext.NdotV, VdotH, NdotH) * specularPdf;
+#if GGX_ENERGY_CONSERVATION
+    Fr *= BRDF::GGXEnergyConservationTerm(surface.F0, surface.Roughness, brdfContext.NdotV);
+#endif
 
-    brdfWeight = brdfWeight / max(pdf, 1e-7f);
+    pdf = (1.0f - specularProb) * diffusePdf + specularProb * specularPdf;
+
+    brdf = Fd + Fr;
+
+    brdfWeight = brdf / max(pdf, 1e-7f);
 
     direction = L;
 }

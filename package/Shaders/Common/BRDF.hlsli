@@ -252,6 +252,12 @@ namespace BRDF
         const float t = (1.0f / 0.04f);
         return min(1.0f, t * Color::RGBToLuminance(F0));
     }
+
+    float3 GGXEnergyConservationTerm(float3 F0, float roughness, float NdotV)
+    {
+        const float E = 1.0 - saturate(pow(roughness, NdotV / roughness) * ((roughness * NdotV + 0.0266916) / (NdotV + 0.466495)));
+        return 1 + F0 * ((1 - E) / E);
+    }
 }
 
 #endif  // __BRDF_DEPENDENCY_HLSL__
