@@ -37,22 +37,20 @@ alignas(16)
     float3 Position;
     uint FrameCount;
     float3 PositionPrev;
-    float Diffuse;    
     float2 Roughness;
     float2 Metalness;
-    uint2 DispatchSize;    
-    float Specular;
+    uint2 DispatchSize;
     float Emissive;
     float Effect;
     float Sky;
-    bool RussianRoulette;
-    uint Pad0;
+    BOOL RussianRoulette;
+    uint3 Pad0;
     SHaRCFrameData SHaRC;
     FeatureData Features;
     uint4 Pad1[8];
 };
 #ifdef __cplusplus
-static_assert(sizeof(FrameData) % 256 == 0);
+static_assert(sizeof(FrameData) == 768);
 #endif
 
 #endif

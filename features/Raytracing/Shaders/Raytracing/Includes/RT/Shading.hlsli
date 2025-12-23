@@ -59,7 +59,7 @@ float3 EvalDiffuse(in float3 l, in Surface surface, in BRDFContext brdfContext)
         return float3(0.0f, 0.0f, 0.0f);
         
     // Diffuse is meant to be very light (and used with DDGI), so I don't see much point in using a different diffuse or shading model here
-    return surface.DiffuseAlbedo * NoL * BRDF::Diffuse_Lambert() * Frame.Diffuse;
+    return surface.DiffuseAlbedo * NoL * BRDF::Diffuse_Lambert();
 }
 
 float3 EvalDefaultBRDF(in float3 l, in Surface surface, in BRDFContext brdfContext)
@@ -80,9 +80,9 @@ float3 EvalDefaultBRDF(in float3 l, in Surface surface, in BRDFContext brdfConte
     float3 F = BRDF::F_Schlick(surface.F0, VoH);
     
     // specular BRDF
-    float3 Fr = (D * Vis) * F * Frame.Specular;
+    float3 Fr = (D * Vis) * F;
     
-    float3 Fd = surface.DiffuseAlbedo * Frame.Diffuse 
+    float3 Fd = surface.DiffuseAlbedo
     * Diffuse(surface.Roughness, surface.Normal, brdfContext.ViewDirection, l, brdfContext.NdotV, NoL, VoH, VoL, NoH) 
     * ShadowTerminatorTerm(l, surface.Normal, surface.GeomNormal);
     
@@ -198,11 +198,11 @@ void SampleDefaultBRDF(in Surface surface, in BRDFContext brdfContext, inout uin
 
     float3 F = BRDF::F_Schlick(surface.F0, VdotH);
 
-    float3 Fd = Frame.Diffuse * surface.DiffuseAlbedo * NdotL 
+    float3 Fd = surface.DiffuseAlbedo * NdotL 
         * Diffuse(surface.Roughness, surface.Normal, V, L, brdfContext.NdotV, NdotL, VdotH, VdotL, NdotH) 
         * ShadowTerminatorTerm(L, surface.Normal, surface.GeomNormal);
     
-    float3 Fr = Frame.Specular * F * MonteCarlo::SpecularSampleWeightGGXVNDF(alpha, alpha2, NdotL, brdfContext.NdotV, VdotH, NdotH) * specularPdf;
+    float3 Fr = F * MonteCarlo::SpecularSampleWeightGGXVNDF(alpha, alpha2, NdotL, brdfContext.NdotV, VdotH, NdotH) * specularPdf;
 #if GGX_ENERGY_CONSERVATION
     Fr *= BRDF::GGXEnergyConservationTerm(surface.F0, surface.Roughness, brdfContext.NdotV);
 #endif
@@ -234,34 +234,29 @@ float3 SampleSky(float3 dir)
 // Samples the direct radiance at the given surface point
 float3 EvaluateRadiance(in Surface surface, in BRDFContext brdfContext, in Instance instance, in Material material, inout uint randomSeed)
 {
-    float3 radiance = surface.Emissive * Frame.Emissive;
-        
-    radiance += EvalDirectionalLight(surface, brdfContext, Frame.Directional, randomSeed);
-    radiance += EvalPointLight(surface, brdfContext, instance.LightData, randomSeed);        
-
-    /*if (material.PBRFlags & PBR::Flags::Subsurface)
-    {
-        // Do something expensive
-    }*/    
+    float3 radiance;
     
-    return radiance;
-}
-
-float3 Composite(bool isDiffusePath, float3 radiance, Surface surface, BRDFContext brdfContext)
-{
-    [branch]
-    if (isDiffusePath)
+    if (material.ShaderType == ShaderType::Lighting)
     {
-        float3 diffuseAO = MonteCarlo::DiffuseAO(surface.Albedo, surface.AO);
-        float3 diffuse = radiance.rgb * diffuseAO * Frame.Diffuse;       
-        return diffuse * surface.Albedo;      
+        radiance = surface.Emissive * Frame.Emissive;
+        
+        /*if (material.PBRFlags & PBR::Flags::Subsurface)
+        {
+            // Do something expensive
+        }*/          
+    } else if (material.ShaderType == ShaderType::Effect)
+    {
+        radiance = surface.Emissive * Frame.Effect * Frame.Emissive;
     }
     else
     {
-        float3 specularAO = MonteCarlo::SpecularAO(brdfContext.NdotV, surface.Roughness, surface.AO, surface.F0);
-        float3 specular = radiance.rgb * specularAO * Frame.Specular;       
-        return specular;          
+        radiance = surface.Emissive * Frame.Emissive;
     }
+    
+    radiance += EvalDirectionalLight(surface, brdfContext, Frame.Directional, randomSeed);
+    radiance += EvalPointLight(surface, brdfContext, instance.LightData, randomSeed);    
+    
+    return radiance;
 }
 
 #endif // SHADING_HLSL

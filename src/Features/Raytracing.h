@@ -370,7 +370,8 @@ struct Raytracing : public OverlayFeature
 		AO
 	};
 
-	enum struct DiffuseMode : int32_t
+	// TODO: Rename to ReflectanceModel?
+	enum struct DiffuseBRDF : int32_t
 	{
 		Lambert,
 		Burley,
@@ -379,17 +380,29 @@ struct Raytracing : public OverlayFeature
 		Chan
 	};
 
+	enum struct LightEvalMode : int32_t
+	{
+		Diffuse,
+		BRDF
+	};
+
+	static constexpr const char* LightEvalModeTooltips[] = {
+		"Diffuse only, no specular.",
+		"Diffuse and Specular with BRDF."
+	};
+	static_assert(_countof(LightEvalModeTooltips) == magic_enum::enum_count<LightEvalMode>());
+
 	enum struct LightingMode : int32_t
 	{
 		Diffuse,
 		PBR
 	};
 
-	enum struct LightEvalMode : int32_t
-	{
-		Diffuse,
-		BRDF
+	static constexpr const char* LightingModeTooltips[] = {
+		"Diffuse only, no reflections.",
+		"Physically Based Rendering mode with diffuse and reflections."
 	};
+	static_assert(_countof(LightingModeTooltips) == magic_enum::enum_count<LightingMode>());
 
 	enum struct TraceMode : int32_t
 	{
@@ -398,6 +411,12 @@ struct Raytracing : public OverlayFeature
 		SHaRC
 #endif
 	};
+
+	static constexpr const char* TraceModeTooltips[] = {
+		"Reference mode with no cache.",
+		"Enables Spatially Hashed Radiance Cache, a technique aimed at improving signal quality and performance."
+	};
+	static_assert(_countof(TraceModeTooltips) == magic_enum::enum_count<TraceMode>());
 
 #ifdef SHARC
 	static constexpr TraceMode DefaultMode = TraceMode::SHaRC;
@@ -438,11 +457,12 @@ struct Raytracing : public OverlayFeature
 
 	struct AdvancedSettings
 	{
-		DiffuseMode DiffuseMode = DiffuseMode::Burley;
+		bool GGXEnergyConservation = true;
+		DiffuseBRDF DiffuseBRDF = DiffuseBRDF::Burley;
 		LightEvalMode LightEvalMode = LightEvalMode::BRDF;
 		LightingMode LightingMode = LightingMode::PBR;
 
-		NLOHMANN_DEFINE_TYPE_INTRUSIVE_WITH_DEFAULT(AdvancedSettings, DiffuseMode, LightEvalMode, LightingMode)
+		NLOHMANN_DEFINE_TYPE_INTRUSIVE_WITH_DEFAULT(AdvancedSettings, GGXEnergyConservation, DiffuseBRDF, LightEvalMode, LightingMode)
 	};
 
 	////////////////////////////////////////////////// Feature Specific Data
@@ -457,8 +477,6 @@ struct Raytracing : public OverlayFeature
 		int SamplesPerPixel = 1;
 		float2 Roughness = {0.0f, 1.0f};
 		float2 Metalness = {0.0f, 1.0f};
-		float Diffuse = 1.0f;
-		float Specular = 1.0f;
 		float Emissive = 1.0f;
 		float Effect = 1.0f;
 		float Sky = 1.0f;

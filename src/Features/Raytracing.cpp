@@ -41,8 +41,6 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	SamplesPerPixel,
 	Roughness,
 	Metalness,
-	Diffuse,
-	Specular,
 	Emissive,
 	Directional,
 	Point,
@@ -87,7 +85,9 @@ void DrawFloat2(const char* label, float2& v, float min = 0.0f, float max = 1.0f
 }
 
 template <typename T>
-static bool DrawEnumRadio(const char* label, T& variable) {
+requires std::is_enum_v<T>
+static bool DrawEnumRadio(const char* label, T& variable, const char* tooltip = nullptr, const char* const* tooltips = nullptr)
+{
 	ImGui::PushID(label);
 
 	auto variablePrev = variable;
@@ -95,22 +95,64 @@ static bool DrawEnumRadio(const char* label, T& variable) {
 	int denoiser = static_cast<int32_t>(variable);
 	ImGui::TextUnformatted(label);
 
+	if (tooltip; auto _tt = Util::HoverTooltipWrapper())
+		ImGui::Text("%s", tooltip);	
+
 	ImGui::SameLine();
 	ImGui::Dummy(ImVec2(25, 0));
+
+	auto i = 0;
 
 	for (auto& [value, name] : magic_enum::enum_entries<T>()) {
 		ImGui::SameLine();
 		ImGui::RadioButton(name.data(), &denoiser, static_cast<int32_t>(value));
 
-		if (auto _tt = Util::HoverTooltipWrapper()) {
-			ImGui::Text("%s tooltip.", name.data());
-			//ImGui::Text("Enables Spatially Hashed Radiance Cache, a technique aimed at improving signal quality and performance in the context of path tracing.");
-		}
+		if (tooltips; auto _tt = Util::HoverTooltipWrapper())
+			ImGui::Text("%s", tooltips[i]);
+
+		i++;
 	}
 
 	ImGui::PopID();
 
 	variable = static_cast<T>(denoiser);
+
+	return variable != variablePrev;
+}
+
+template <typename T>
+requires std::is_enum_v<T>
+static bool DrawEnumCombo(const char* label, T& variable, const char* tooltip = nullptr, const char* const* tooltips = nullptr)
+{
+	ImGui::PushID(label);
+
+	auto variablePrev = variable;
+
+	if (ImGui::BeginCombo(label, magic_enum::enum_name(variable).data())) {
+		auto i = 0;
+
+		for (auto& value : magic_enum::enum_values<T>()) {
+			bool isSelected = (variable == value);
+
+			if (ImGui::Selectable(magic_enum::enum_name(value).data(), isSelected))
+				variable = value;
+
+			if (tooltips; auto _tt = Util::HoverTooltipWrapper())
+				ImGui::Text("%s", tooltips[i]);
+
+			if (isSelected)
+				ImGui::SetItemDefaultFocus();
+
+			i++;
+		}
+
+		ImGui::EndCombo();
+	} else {
+		if (tooltip; auto _tt = Util::HoverTooltipWrapper())
+			ImGui::Text("%s", tooltip);	
+	}
+
+	ImGui::PopID();
 
 	return variable != variablePrev;
 }
@@ -134,7 +176,7 @@ void Raytracing::DrawSettings()
 #ifdef SHARC
 void Raytracing::DrawSHaRCSettings()
 {
-	if (ImGui::TreeNodeEx("SHaRC", ImGuiTreeNodeFlags_CollapsingHeader)) {
+	if (ImGui::CollapsingHeader("SHaRC")) {
 		ImGui::BeginDisabled(settings.TraceMode != TraceMode::SHaRC);
 
 		auto& sharcSettings = settings.SHaRCSettings;
@@ -151,7 +193,6 @@ void Raytracing::DrawSHaRCSettings()
 		ImGui::Checkbox("Antifirefly Filter", &sharcSettings.AntifireflyFilter);
 
 		ImGui::EndDisabled();
-		ImGui::TreePop();
 	}
 }
 #endif
@@ -159,7 +200,7 @@ void Raytracing::DrawSHaRCSettings()
 void Raytracing::DrawDenoiserSettings()
 {
 #ifdef DLSS_RR
-	if (ImGui::BeginCombo("DLSS RR Quality TraceMode", magic_enum::enum_name(settings.DLSSRRQualityMode).data())) {
+	/*if (ImGui::BeginCombo("DLSS RR Quality TraceMode", magic_enum::enum_name(settings.DLSSRRQualityMode).data())) {
 		for (auto& value : magic_enum::enum_values<DLSSRRQuality>()) {
 			bool isSelected = (settings.DLSSRRQualityMode == value);
 
@@ -171,19 +212,20 @@ void Raytracing::DrawDenoiserSettings()
 		}
 
 		ImGui::EndCombo();
-	}
+	}*/
+
+	DrawEnumCombo("DLSS RR Quality Mode", settings.DLSSRRQualityMode);
+
+	ImGui::DragFloat("DLSS RR Sharpness", &settings.DLSSRRSharpness, 0.001f, 0.0f, 1.0f);
+	settings.DLSSRRSharpness = std::clamp(settings.DLSSRRSharpness, 0.0f, 1.0f);
+
+	DrawEnumRadio("DLSS RR Preset", settings.DLSSRRPreset);
 #endif
 }
 
 void Raytracing::DrawLightingSettings()
 {
-	if (ImGui::TreeNodeEx("Lighting", ImGuiTreeNodeFlags_CollapsingHeader)) {
-		if (ImGui::DragFloat("Diffuse Strength", &settings.Diffuse, 0.001f))
-			settings.Diffuse = std::max(0.0f, settings.Diffuse);
-
-		if (ImGui::DragFloat("Specular Strength", &settings.Specular, 0.001f))
-			settings.Specular = std::max(0.0f, settings.Specular);
-
+	if (ImGui::CollapsingHeader("Lighting")) {
 		if (ImGui::DragFloat("Emissive Strength", &settings.Emissive, 0.001f))
 			settings.Emissive = std::max(0.0f, settings.Emissive);
 
@@ -194,8 +236,6 @@ void Raytracing::DrawLightingSettings()
 			settings.Sky = std::max(0.0f, settings.Sky);
 
 		DrawLightSettings();
-
-		ImGui::TreePop();
 	}
 }
 
@@ -230,6 +270,8 @@ void Raytracing::DrawGeneralSettings()
 	if (!ImGui::BeginTabItem("General"))
 		return;
 
+	ImGui::PushID("GeneralSettings");
+
 	ImGui::Checkbox("Enabled", &settings.Enabled);
 	if (auto _tt = Util::HoverTooltipWrapper()) {
 		ImGui::Text("Enable Ray-Traced Global Illumination.");
@@ -237,7 +279,7 @@ void Raytracing::DrawGeneralSettings()
 
 	ImGui::Checkbox("Global Illumination", &settings.GlobalIllumination);
 
-	if (DrawEnumRadio("TraceMode", settings.TraceMode))
+	if (DrawEnumRadio("TraceMode", settings.TraceMode, nullptr, TraceModeTooltips))
 		recompileReason |= RecompileReason::General;
 
 	DrawEnumRadio("Denoiser", settings.Denoiser);
@@ -293,6 +335,8 @@ void Raytracing::DrawGeneralSettings()
 
 	ImGui::Checkbox("Russian Roulette", &settings.RussianRoulette);
 
+	ImGui::PopID();
+
 	ImGui::EndTabItem();
 }
 
@@ -301,14 +345,22 @@ void Raytracing::DrawAdvancedSettings()
 	if (!ImGui::BeginTabItem("Advanced"))
 		return;
 
-	if (DrawEnumRadio("Diffuse Mode", settings.AdvancedSettings.DiffuseMode))
+	ImGui::PushID("AdvancedSettings");
+
+	auto& advSettings = settings.AdvancedSettings;
+
+	ImGui::Checkbox("Enabled", &advSettings.GGXEnergyConservation);
+
+	if (DrawEnumCombo("Diffuse BRDF", advSettings.DiffuseBRDF))
 		recompileReason |= RecompileReason::Advanced;
 
-	if (DrawEnumRadio("Light Evaluation Mode", settings.AdvancedSettings.LightEvalMode))
+	if (DrawEnumRadio("Light Evaluation Mode", advSettings.LightEvalMode, nullptr, LightEvalModeTooltips))
 		recompileReason |= RecompileReason::Advanced;
 
-	if (DrawEnumRadio("Lighting Mode", settings.AdvancedSettings.LightingMode))
+	if (DrawEnumRadio("Lighting Mode", advSettings.LightingMode, nullptr, LightingModeTooltips))
 		recompileReason |= RecompileReason::Advanced;
+
+	ImGui::PopID();
 
 	ImGui::EndTabItem();
 }
@@ -317,6 +369,8 @@ void Raytracing::DrawDebugSettings()
 {
 	if (!ImGui::BeginTabItem("Debug"))
 		return;
+
+	ImGui::PushID("DebugSettings");
 
 	ImGui::InputText("Shader Defines", &settings.Defines);
 
@@ -414,6 +468,8 @@ void Raytracing::DrawDebugSettings()
 			ImGui::TreePop();
 		}
 	}
+
+	ImGui::PopID();
 
 	ImGui::EndTabItem();
 }
@@ -2416,8 +2472,6 @@ void Raytracing::DrawRTGI()
 		frameData->Roughness = settings.Roughness;
 		frameData->Metalness = settings.Metalness;
 
-		frameData->Diffuse = settings.Diffuse;
-		frameData->Specular = settings.Specular;
 		frameData->Emissive = settings.Emissive;
 		frameData->Effect = settings.Effect;
 		frameData->Sky = settings.Sky;
@@ -3286,7 +3340,10 @@ void Raytracing::CompileRTGIShaders()
 
 	auto& advSettings = settings.AdvancedSettings;
 
-	const auto diffuseMode = std::to_wstring(static_cast<uint32_t>(advSettings.DiffuseMode));
+	if (advSettings.GGXEnergyConservation)
+		defines.emplace_back(L"GGX_ENERGY_CONSERVATION");
+
+	const auto diffuseMode = std::to_wstring(static_cast<uint32_t>(advSettings.DiffuseBRDF));
 	defines.emplace_back(L"DIFFUSE_MODE", diffuseMode.c_str());
 
 	const auto lightEvalMode = std::to_wstring(static_cast<uint32_t>(advSettings.LightEvalMode));
