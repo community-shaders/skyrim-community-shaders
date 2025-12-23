@@ -1489,7 +1489,7 @@ void Raytracing::CreateModel(const char* path, RE::NiNode* pRoot)
 		return;
 	}
 
-	logger::info("[RT] CreateModel \"{}\"", typeid(*pRoot).name());
+	logger::trace("[RT] CreateModel \"{}\"", typeid(*pRoot).name());
 
 	if (!path) {
 		logger::debug("[RT] CreateModel \"{}\" - Invalid Path", pRoot->name);
@@ -1507,7 +1507,7 @@ void Raytracing::CreateModel(const char* path, RE::NiNode* pRoot)
 		if (static_cast<int32_t>(bsxFlags->value) & static_cast<int32_t>(RE::BSXFlags::Flag::kEditorMarker))
 			return;
 		
-		//logger::info("[RT] CreateModel - BSX Flags [0x{:x}]: {}", bsxFlags->value, GetFlagsString<RE::BSXFlags::Flag>(static_cast<uint32_t>(bsxFlags->value)));
+		logger::debug("[RT] CreateModel - BSX Flags [0x{:x}]: {}", bsxFlags->value, GetFlagsString<RE::BSXFlags::Flag>(bsxFlags->value));
 	}
 
 	// We only need one buffer per model
@@ -1542,16 +1542,26 @@ void Raytracing::CreateModel(const char* path, RE::NiNode* pRoot)
 
 		const auto& geometryRuntimeData = pGeometry->GetGeometryRuntimeData();
 
-		auto& effect = geometryRuntimeData.properties[RE::BSGeometry::States::kEffect];
+		auto* effect = geometryRuntimeData.properties[RE::BSGeometry::States::kEffect].get();
 
-		auto* lightingShader = netimmerse_cast<RE::BSLightingShaderProperty*>(effect.get());
-
-		// Only lighting shader for now
-		if (!lightingShader) {
+		if (!effect) {
+			logger::warn("\t\t[RT] CreateModel::TraverseScenegraphGeometries - No Effect");
 			return RE::BSVisit::BSVisitControl::kContinue;
 		}
 
-		bool skinned = lightingShader->flags.any(RE::BSShaderProperty::EShaderPropertyFlag::kSkinned);
+		bool isLightingShader = netimmerse_cast<RE::BSLightingShaderProperty*>(effect) != nullptr;	
+		bool isEffectShader = netimmerse_cast<RE::BSEffectShaderProperty*>(effect) != nullptr;	
+		
+		// && !isEffectShader
+		// Only lighting and effect shader for now
+		if (!isLightingShader && !isEffectShader) {
+			logger::warn("\t\t[RT] CreateModel::TraverseScenegraphGeometries - Unsupported shader type: {}", effect->GetRTTI()->name);
+			return RE::BSVisit::BSVisitControl::kContinue;
+		}
+
+		auto shaderProperty = netimmerse_cast<RE::BSShaderProperty*>(effect);
+
+		bool skinned = shaderProperty && shaderProperty->flags.any(RE::BSShaderProperty::EShaderPropertyFlag::kSkinned);
 
 		auto& geomFlags = pGeometry->GetFlags();
 

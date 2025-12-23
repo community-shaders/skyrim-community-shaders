@@ -74,6 +74,12 @@ struct Raytracing : public OverlayFeature
 
 	static constexpr uint SKY_CUBEMAP_SIZE = 256;
 
+	enum MarkerFlags : uint32_t
+	{
+		MapMarker = 1 << 22,
+		HeadingMarker = 1 << 23
+	};
+
 	struct GIHeapDef
 	{
 		enum class Table
@@ -1195,7 +1201,22 @@ struct Raytracing : public OverlayFeature
 				auto* result = func(oThis, a_backgroundLoading);
 
 				if (auto& rt = globals::features::raytracing; rt.Active()) {
-					if (auto model = oThis->GetBaseObject()->As<RE::TESModel>()) {
+					auto* baseObject = oThis->GetBaseObject();
+
+					auto flags = baseObject->GetFormFlags();
+					RE::FormType type = baseObject->GetFormType();
+
+					if (type == RE::FormType::IdleMarker)
+						return result;
+
+					if (flags & MarkerFlags::MapMarker || flags & MarkerFlags::HeadingMarker)
+						return result;
+
+					/*RE::FormID id = baseObject->GetFormID();
+					logger::info("[RT] Load3DA - Name: {}, Flags [0x{:8X}]: {}", typeid(*baseObject).name(), flags, GetFlagsString<RE::TESObjectREFR::RecordFlags::RecordFlag>(flags));
+					logger::info("[RT] Load3DA - FormID: [0x{:8X}], FormType: {}", id, magic_enum::enum_name(type));*/
+
+					if (auto* model = baseObject->As<RE::TESModel>()) {
 						rt.CreateModel(model->GetModel(), netimmerse_cast<RE::NiNode*>(result));
 					}
 				}
