@@ -1,0 +1,122 @@
+name: Shader Unit Tests
+
+on:
+    pull_request:
+        paths:
+            - "**.hlsl"
+            - "**.hlsli"
+            - "tests/shaders/**"
+            - ".github/workflows/shader-unit-tests.yaml"
+    push:
+        branches: [main, dev]
+    workflow_dispatch:
+
+permissions:
+    contents: read
+
+concurrency:
+    group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+    cancel-in-progress: true
+
+jobs:
+    shader-unit-tests:
+        name: Run Shader Unit Tests
+        runs-on: windows-2022
+
+        steps:
+            - name: Checkout code
+              uses: actions/checkout@v4
+              with:
+                  submodules: recursive
+
+            - name: Setup MSVC environment
+              uses: ilammy/msvc-dev-cmd@v1
+              with:
+                  arch: x64
+
+            - name: Get MSVC version
+              id: msvc_version
+              shell: pwsh
+              run: |
+                  "int main() { return 0; }" | Out-File -FilePath "dummy.cpp" -Encoding ASCII
+                  $output = & cl.exe /Bv dummy.cpp 2>&1
+                  if ($output -match 'Version ([0-9]+\.[0-9]+\.[0-9]+)') {
+                      $version = $Matches[1]
+                      Write-Host "MSVC version: $version"
+                      Add-Content -Path $env:GITHUB_OUTPUT -Value "version=$version" -Encoding UTF8
+                  } elseif ($output -match '([0-9]+\.[0-9]+\.[0-9]+)') {
+                      $version = $Matches[1]
+                      Write-Host "MSVC version: $version"
+                      Add-Content -Path $env:GITHUB_OUTPUT -Value "version=$version" -Encoding UTF8
+                  } else {
+                      throw "MSVC version not found"
+                  }
+                  Remove-Item "dummy.cpp" -ErrorAction SilentlyContinue
+
+            - name: Verify Graphics Tools (for D3D12 debug layer)
+              shell: pwsh
+              run: |
+                  # Use environment variable for Windows directory (works on any drive)
+                  $windowsDir = if ($env:SystemRoot) { $env:SystemRoot } else { "C:\Windows" }
+                  $dll = "$windowsDir\System32\d3d12SDKLayers.dll"
+                  if (Test-Path $dll) {
+                      Write-Host "✅ Graphics Tools detected: $dll"
+                  } else {
+                      Write-Host "❌ Graphics Tools NOT found. Tests may fail."
+                      Write-Host "Note: GitHub windows-2022 runners should have Graphics Tools pre-installed."
+                      exit 1
+                  }
+
+            - name: Setup vcpkg
+              uses: lukka/run-vcpkg@v11.5
+              with:
+                  vcpkgJsonGlob: vcpkg.json
+
+            - name: Cache CMake build output
+              uses: actions/cache@v4
+              with:
+                  path: build/ALL
+                  key: ${{ runner.os }}-shader-tests-msvc-${{ steps.msvc_version.outputs.version }}-${{ hashFiles('.gitmodules', 'extern/**', 'CMakePresets.json', 'vcpkg.json', 'tests/shaders/**') }}
+                  restore-keys: |
+                      ${{ runner.os }}-shader-tests-msvc-${{ steps.msvc_version.outputs.version }}-
+                      ${{ runner.os }}-cmake-msvc-${{ steps.msvc_version.outputs.version }}-
+
+            - name: Remove stale CMake cache if drive letter changed
+              shell: pwsh
+              run: |
+                  $cacheFile = "build/ALL/CMakeCache.txt"
+                  if (Test-Path $cacheFile) {
+                    $expected = (Resolve-Path .).Path.Substring(0,1)
+                    $content = Get-Content $cacheFile -Raw
+                    if ($content -match 'CMAKE_HOME_DIRECTORY:INTERNAL=([A-Z]):') {
+                      $actual = $Matches[1]
+                      if ($actual -ne $expected) {
+                        Write-Host "❌ Cache drive mismatch. Removing stale build/ALL directory."
+                        Remove-Item -Recurse -Force "build/ALL"
+                      } else {
+                        Write-Host "✅ Cache path matches. Keeping build/ALL."
+                      }
+                    }
+                  }
+
+            - name: Configure CMake with shader tests
+              run: |
+                  cmake --preset ALL -DBUILD_SHADER_TESTS=ON
+
+            - name: Build shader tests
+              run: |
+                  cmake --build build/ALL --target shader_tests --config Release
+
+            - name: Run shader unit tests
+              run: |
+                  ctest --test-dir build/ALL -C Release --output-on-failure -R ShaderTests
+
+            - name: Upload test results on failure
+              if: failure()
+              uses: actions/upload-artifact@v4
+              with:
+                  name: shader-test-results
+                  path: |
+                      build/ALL/Testing/**
+                  retention-days: 7
+                  if-no-files-found: ignore
