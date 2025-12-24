@@ -235,6 +235,7 @@ jobs:
               uses: lukka/run-cmake@v10
               with:
                   configurePreset: ALL
+                  configurePresetAdditionalArgs: "['-DBUILD_SHADER_TESTS=OFF']"
                   buildPreset: ALL
 
             - name: Extract version from CMake
@@ -462,6 +463,7 @@ jobs:
               uses: lukka/run-cmake@v10
               with:
                   configurePreset: ALL
+                  configurePresetAdditionalArgs: "['-DBUILD_SHADER_TESTS=OFF']"
                   buildPreset: ALL
                   buildPresetAdditionalArgs: "['--target prepare_shaders']"
 
@@ -511,6 +513,9 @@ jobs:
         permissions:
             contents: read
         steps:
+            - name: Enable Git Long Paths
+              run: git config --system core.longpaths true
+
             - name: Check if HLSL tests needed
               id: check-hlsl
               run: |
