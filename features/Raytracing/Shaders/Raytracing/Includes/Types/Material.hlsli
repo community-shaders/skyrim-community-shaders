@@ -14,6 +14,18 @@ namespace ShaderType
     static const uint16_t Particle = 7; 
 }
 
+namespace ShaderFlags
+{
+    static const uint16_t kTempRefraction = (1 << 0);
+    static const uint16_t kVertexAlpha = (1 << 1);
+    static const uint16_t kGrayscaleToPaletteColor = (1 << 2);
+    static const uint16_t kGrayscaleToPaletteAlpha = (1 << 3);
+    static const uint16_t kFalloff = (1 << 4);
+    static const uint16_t kRefraction = (1 << 5);
+    static const uint16_t kProjectedUV = (1 << 6);
+    static const uint16_t kVertexColors = (1 << 7);
+}
+
 namespace Feature
 {
 	static const uint16_t kDefault = 0;
@@ -47,15 +59,16 @@ struct Material
 	half4 BaseColor;
 	half4 EffectColor;
 	half4 TexCoordOffsetScale;
-	half roughness;
-	//half specular;
+	half RoughnessScale;
+	half SpecularLevel;
 	uint16_t BaseTexture;
 	uint16_t NormalTexture;
 	uint16_t EffectTexture;	
 	uint16_t RMAOSTexture;
-    uint16_t ShaderType: 3; // 8 types
-    uint16_t Feature: 5;    // Max 32 features
-    uint16_t PBRFlags: 8;   // Max 16 flags
+    uint16_t ShaderType: 3;		// 8 types
+    uint16_t ShaderFlags: 8;	// Max 8 flags	
+    uint16_t Feature: 5;		// Max 32 features
+    uint16_t PBRFlags;			// Max 16 flags
 
 #ifndef __cplusplus	
 	float2 TexCoord(float2 texCoord)

@@ -68,7 +68,7 @@ void main()
     sourcePayload.hitDistance = -1.0f;
     sourcePayload.primitiveIndex = 0;    
     sourcePayload.PackBarycentrics(float2(0.0f, 0.0f));            
-    sourcePayload.PackInstanceShapeIndex(0, 0);
+    sourcePayload.PackInstanceGeometryIndex(0, 0);
     
     TraceRay(Scene, RAY_FLAG_NONE, 0xFF, DIFFUSE_RAY_HITGROUP_IDX, 0, DIFFUSE_RAY_MISS_IDX, sourceRay, sourcePayload);
     
@@ -225,7 +225,7 @@ void main()
             payload.hitDistance = -1.0f;
             payload.primitiveIndex = 0;
             payload.PackBarycentrics(float2(0.0f, 0.0f));
-            payload.PackInstanceShapeIndex(0, 0);
+            payload.PackInstanceGeometryIndex(0, 0);
 
             TraceRay(Scene, RAY_FLAG_NONE, 0xFF, DIFFUSE_RAY_HITGROUP_IDX, 0, DIFFUSE_RAY_MISS_IDX, ray, payload);
               

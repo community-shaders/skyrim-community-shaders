@@ -16,6 +16,8 @@
 #include "Raytracing/Includes/Types/Triangle.hlsli"
 #include "Raytracing/Includes/Types/Material.hlsli"
 
+using namespace magic_enum::bitwise_operators;
+
 enum Flags : uint8_t
 {
 	None = 0,
@@ -43,9 +45,9 @@ public:
 		};
 
 		// We have a limited number of bits and not all types are necessary
-		ShaderType SupportedType(RE::BSShader::Type type)
+		ShaderType GetShaderType()
 		{
-			switch (type) {
+			switch (shaderType) {
 			case RE::BSShader::Type::Grass:
 				return ShaderType::Grass;
 			case RE::BSShader::Type::Sky:
@@ -65,40 +67,73 @@ public:
 			}
 		}
 
+		enum ShaderFlags : uint16_t
+		{
+			None = 0,
+			kTempRefraction = 1 << 0,
+			kVertexAlpha = 1 << 1,
+			kGrayscaleToPaletteColor = 1 << 2,
+			kGrayscaleToPaletteAlpha = 1 << 3,
+			kFalloff = 1 << 4,
+			kRefraction = 1 << 5,
+			kProjectedUV = 1 << 6,
+			kVertexColors = 1 << 7
+		};
+
+		ShaderFlags GetShaderFlags() const
+		{
+			auto shaderFlagsLocal = ShaderFlags::None;
+
+			const auto& entries = magic_enum::enum_entries<ShaderFlags>();
+			const auto& originalEntries = magic_enum::enum_entries<RE::BSShaderProperty::EShaderPropertyFlag>();
+
+			for (const auto& [flag, name] : entries) {
+				for (const auto& [originalFlag, originalName] : originalEntries) {
+					if ((shaderFlags & originalFlag) && name == originalName) {
+						shaderFlagsLocal |= flag;
+						break;
+					}
+				}
+			}
+
+			return shaderFlagsLocal;
+		}
+
 		half4 BaseColor;
 		half4 EffectColor;
 		half4 TexCoordOffsetScale;
 
-		half roughness;
+		half RoughnessScale;
+		half SpecularLevel;
 
 		eastl::shared_ptr<Allocation> BaseTexture;
 		eastl::shared_ptr<Allocation> NormalTexture;
 		eastl::shared_ptr<Allocation> EffectTexture;
 		eastl::shared_ptr<Allocation> RMAOSTexture;
 
-		RE::BSShader::Type ShaderType;
+		RE::BSShader::Type shaderType;
+		stl::enumeration<RE::BSShaderProperty::EShaderPropertyFlag, uint64_t> shaderFlags;
 		RE::BSShaderMaterial::Feature Feature;
 		stl::enumeration<PBRShaderFlags, uint16_t> PBRFlags;
-
-		//stl::enumeration<RE::BSShaderProperty::EShaderPropertyFlag, uint64_t> ShaderFlags;
 
 		MaterialData GetData() {
 			return MaterialData(
 				BaseColor, EffectColor,
 				TexCoordOffsetScale,
-				roughness,
+				RoughnessScale, SpecularLevel,
 				BaseTexture->GetIndex(),
 				NormalTexture->GetIndex(),
 				EffectTexture->GetIndex(),
 				RMAOSTexture->GetIndex(),
-				SupportedType(ShaderType),
+				GetShaderType(),
+				GetShaderFlags(),
 				static_cast<uint16_t>(Feature),
 				PBRFlags.underlying());
 		}
 	};
 
 	// The position of this meshes SRV in the register stack
-	eastl::unique_ptr<Allocation, AllocationDeleter> registerIndex;
+	eastl::unique_ptr<Allocation, AllocationDeleter> allocation;
 
 	uint vertexCount = 0;
 	uint triangleCount = 0;
@@ -121,11 +156,13 @@ public:
 
 	Flags flags = Flags::None;
 
-	Shape(Allocation* registerIndex, Flags flags = Flags::None) :
-		registerIndex({ registerIndex, AllocationDeleter() }), flags(flags) {}
+	/*Shape(Allocation* allocation, Flags flags = Flags::None) :
+		allocation({ allocation, AllocationDeleter() }), flags(flags) {}*/
 
-	Shape(Allocation* registerIndex, RE::BSGeometry* geometry, Flags flags = Flags::None) :
-		registerIndex({ registerIndex, AllocationDeleter() }), geometry(geometry), flags(flags) {}
+	Shape(Allocation* allocation, RE::BSGeometry* geometry, Flags flags = Flags::None) :
+		allocation({ allocation, AllocationDeleter() }), geometry(geometry), flags(flags) {
+		//logger::info("[RT] Shape {} at Index {}", geometry->name, allocation->GetIndex());
+	}
 
 	/*~Shape() {
 	

@@ -7,5 +7,5 @@ void main(inout Payload payload, in BuiltInTriangleIntersectionAttributes attrib
     payload.hitDistance = RayTCurrent();    
     payload.primitiveIndex = PrimitiveIndex();
     payload.PackBarycentrics(attribs.barycentrics);    
-    payload.PackInstanceShapeIndex(InstanceIndex(), GetShapeIdx());
+    payload.PackInstanceGeometryIndex(InstanceIndex(), GeometryIndex());
 }

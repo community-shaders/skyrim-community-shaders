@@ -7,8 +7,8 @@
 [shader("anyhit")]
 void main(inout Payload payload, in BuiltInTriangleIntersectionAttributes attribs)
 {
-    uint shapeIdx = GetShapeIdx();
-   
+    uint shapeIdx = GetShapeIdx(InstanceIndex(), GeometryIndex());
+    
     Vertex v0, v1, v2;
     GetVertices(shapeIdx, PrimitiveIndex(), v0, v1, v2);
     

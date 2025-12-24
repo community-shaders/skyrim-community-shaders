@@ -54,6 +54,11 @@ namespace PBR
     {
         return saturate(lerp(Defaults::F0, albedo, metalness));
     }
+    
+    float3 F0(float3 specularLevel, float3 albedo, float metalness)
+    {
+        return saturate(lerp(specularLevel, albedo, metalness));
+    }    
 }
 
 #endif  // PBR_HLSL

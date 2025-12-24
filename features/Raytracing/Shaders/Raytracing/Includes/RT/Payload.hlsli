@@ -18,7 +18,7 @@ struct Payload
     float hitDistance;
     uint primitiveIndex;
     uint barycentricsPacked;
-    uint instanceShapeIndexPacked;
+    uint instanceGeometryIndexPacked;
     
     void PackBarycentrics(float2 barycentrics)
     {
@@ -30,19 +30,19 @@ struct Payload
         return UnpackUnorm2x16(barycentricsPacked);
     }        
     
-    void PackInstanceShapeIndex(uint instanceIndex, uint shapeIndex)
+    void PackInstanceGeometryIndex(uint instanceIndex, uint geometryIndex)
     {
-        instanceShapeIndexPacked = (instanceIndex & 0xFFFF) | ((shapeIndex & 0xFFFF) << 16);
+        instanceGeometryIndexPacked = (instanceIndex & 0xFFFF) | ((geometryIndex & 0xFFFF) << 16);
     }    
     
     uint InstanceIndex()
     {
-        return instanceShapeIndexPacked & 0xFFFF;
+        return instanceGeometryIndexPacked & 0xFFFF;
     }
 
-    uint ShapeIndex()
+    uint GeometryIndex()
     {
-        return instanceShapeIndexPacked >> 16;
+        return instanceGeometryIndexPacked >> 16;
     }    
     
     bool Hit() { return hitDistance > 0.0f; }

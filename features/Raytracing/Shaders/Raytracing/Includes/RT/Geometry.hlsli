@@ -38,29 +38,24 @@ Instance GetInstance(uint instanceIdx)
     return Instances[instanceIdx];
 }
 
-uint GetShapeIdx()
+uint GetShapeIdx(in Payload payload, out Instance instance)
 {
-    return InstanceID() + GeometryIndex();
+    instance = GetInstance(payload.InstanceIndex());   
+    return Indirection.Load((instance.FirstGeometryID + payload.GeometryIndex()) * 4);
 }
 
-Triangle GetTriangle(uint shapeIdx, uint primitiveIdx)
+uint GetShapeIdx(in uint instanceIndex, in uint geometryIndex)
+{
+    Instance instance = GetInstance(instanceIndex);   
+    return Indirection.Load((instance.FirstGeometryID + geometryIndex) * 4);
+}
+
+Triangle GetTriangle(in uint shapeIdx, in uint primitiveIdx)
 {
     return Triangles[shapeIdx][primitiveIdx];
 }
 
-void GetVertices(Payload payload, out Vertex v0, out Vertex v1, out Vertex v2)
-{
-    uint shapeIndex = payload.ShapeIndex();
-    
-    Triangle geomTriangle = GetTriangle(shapeIndex, payload.primitiveIndex);
-    
-    StructuredBuffer<Vertex> vertices = Vertices[shapeIndex];    
-    v0 = vertices[geomTriangle.x];
-    v1 = vertices[geomTriangle.y];
-    v2 = vertices[geomTriangle.z];  
-}
-
-void GetVertices(uint shapeIndex, uint primitiveIndex, out Vertex v0, out Vertex v1, out Vertex v2)
+void GetVertices(in uint shapeIndex, in uint primitiveIndex, out Vertex v0, out Vertex v1, out Vertex v2)
 {
     Triangle geomTriangle = GetTriangle(shapeIndex, primitiveIndex);
     

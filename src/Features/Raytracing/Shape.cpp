@@ -163,9 +163,11 @@ void Shape::BuildMaterial(const RE::BSGeometry::GEOMETRY_RUNTIME_DATA& geometryR
 	float4 texCoordOffsetScale = { 0.0f, 0.0f, 1.0f, 1.0f };
 	float4 texCoord1OffsetScale = { 0.0f, 0.0f, 1.0f, 1.0f };
 
-	half roughness = 1.0f;
+	half roughnessScale = 1.0f;
+	half specularLevel = 0.04f;
 
 	RE::BSShader::Type shaderType = RE::BSShader::Type::None;
+	stl::enumeration<RE::BSShaderProperty::EShaderPropertyFlag, uint64_t> shaderFlags;
 	RE::BSShaderMaterial::Feature feature = RE::BSShaderMaterial::Feature::kNone;
 	stl::enumeration<PBRShaderFlags, uint16_t> pbrFlags;
 
@@ -196,6 +198,10 @@ void Shape::BuildMaterial(const RE::BSGeometry::GEOMETRY_RUNTIME_DATA& geometryR
 		logger::trace("[RT] BuildMaterial - Effect RTTI: {}", effect->GetRTTI()->GetName());
 		
 		if (effect) {
+			if (auto shaderProp = netimmerse_cast<RE::BSShaderProperty*>(effect)) {
+				shaderFlags = shaderProp->flags;
+			}
+
 			if (auto* lightingShaderProp = skyrim_cast<RE::BSLightingShaderProperty*>(effect)) {
 				shaderType = RE::BSShader::Type::Lighting;
 
@@ -246,7 +252,8 @@ void Shape::BuildMaterial(const RE::BSGeometry::GEOMETRY_RUNTIME_DATA& geometryR
 						effectTexture = TryGetTexture(lightingPBRMaterial->emissiveTexture);
 						rmaosTexture = TryGetTexture(lightingPBRMaterial->rmaosTexture);
 
-						roughness = lightingPBRMaterial->GetRoughnessScale();
+						roughnessScale = lightingPBRMaterial->GetRoughnessScale();
+						specularLevel = lightingPBRMaterial->GetSpecularLevel();
 
 						pbrFlags = GetPBRShaderFlags(lightingPBRMaterial);
 					}
@@ -271,17 +278,20 @@ void Shape::BuildMaterial(const RE::BSGeometry::GEOMETRY_RUNTIME_DATA& geometryR
 				logger::warn("[RT] BuildMaterial - BSLightingShaderProperty is nullptr");
 			}
 
-			if (auto effectShader = netimmerse_cast<RE::BSEffectShaderProperty*>(effect)) {
+			if (auto effectShaderProp = netimmerse_cast<RE::BSEffectShaderProperty*>(effect)) {
 				shaderType = RE::BSShader::Type::Effect;
 
-				if (auto shaderMaterial = effectShader->material) {
-					if (auto effectMaterial = skyrim_cast<RE::BSEffectShaderMaterial*>(shaderMaterial)) {
+				logger::info("[RT] BuildMaterial - BSEffectShaderProperty: {}", name);
+				logger::info("[RT] BuildMaterial - Flags: {}", GetFlagsString<RE::BSShaderProperty::EShaderPropertyFlag>(effectShaderProp->flags.underlying()));
+
+				//if (effectShaderProp->material) {
+				if (auto effectMaterial = skyrim_cast<RE::BSEffectShaderMaterial*>(effectShaderProp->material)) {
 						effectColor = { effectMaterial->baseColor.red, effectMaterial->baseColor.green, effectMaterial->baseColor.blue, effectMaterial->baseColorScale };
 
 						baseTexture = TryGetTexture(effectMaterial->sourceTexture);
 						effectTexture = TryGetTexture(effectMaterial->greyscaleTexture);
 					}
-				}
+				//}
 			}
 		} else {
 			logger::warn("[RT] BuildMaterial - Effect is nullptr");
@@ -301,7 +311,7 @@ void Shape::BuildMaterial(const RE::BSGeometry::GEOMETRY_RUNTIME_DATA& geometryR
 	auto effectTexReg = rt.GetTextureRegister(effectTexture, defaultBlackIndex);
 	auto rmaosTexReg = rt.GetTextureRegister(rmaosTexture, defaultRMAOSIndex);
 
-	if (baseTexture && baseTexReg->GetIndex() == defaultWhiteIndex->GetIndex())
+	/*if (baseTexture && baseTexReg->GetIndex() == defaultWhiteIndex->GetIndex())
 		logger::warn("[RT] BuildMaterial {} - Base texture [0x{:8X}] not shared", name, reinterpret_cast<uintptr_t>(baseTexture));
 
 	if (normalTexture && normalTexReg->GetIndex() == defaultNormalIndex->GetIndex())
@@ -319,7 +329,7 @@ void Shape::BuildMaterial(const RE::BSGeometry::GEOMETRY_RUNTIME_DATA& geometryR
 		}
 	};
 
-	/*LogTexture("Base Texture", baseTexture, baseTexReg->GetIndex());
+	LogTexture("Base Texture", baseTexture, baseTexReg->GetIndex());
 	LogTexture("Normal Texture", normalTexture, normalTexReg->GetIndex());
 	LogTexture("Effect Texture", effectTexture, effectTexReg->GetIndex());
 	LogTexture("RMAOS Texture", rmaosTexture, rmaosTexReg->GetIndex());*/
@@ -328,12 +338,14 @@ void Shape::BuildMaterial(const RE::BSGeometry::GEOMETRY_RUNTIME_DATA& geometryR
 		baseColor,
 		effectColor,
 		texCoordOffsetScale,
-		roughness,
+		roughnessScale,
+		specularLevel,
 		baseTexReg,
 		normalTexReg,
 		effectTexReg,
 		rmaosTexReg,
 		shaderType,
+		shaderFlags,
 		feature,
 		pbrFlags);
 }
@@ -415,7 +427,7 @@ void Shape::CreateBuffers(const std::wstring& name)
 		dynamicPosition.resize(vertexCount);
 
 		dynamicPositionBuffer = eastl::make_unique<DX12::StructuredBufferUpload<float4>>(device, vertexCount);
-		dynamicPositionBuffer->CreateSRV(skinningHeap->CPUHandle(SkinningHeap::Slot::DynamicVertices, registerIndex->GetIndex()));
+		dynamicPositionBuffer->CreateSRV(skinningHeap->CPUHandle(SkinningHeap::Slot::DynamicVertices, allocation->GetIndex()));
 	}
 
 	// Vertices
@@ -425,7 +437,7 @@ void Shape::CreateBuffers(const std::wstring& name)
 		vertexBuffer = eastl::make_unique<DX12::StructuredBufferUpload<Vertex>>(device, vertexCount, hasUAV);
 
 		vertexBuffer->UpdateList(vertices.data(), vertexCount);
-		DX::ThrowIfFailed(vertexBuffer->resource->SetName(std::format(L"Vertex Buffer [{}] - {}", registerIndex->GetIndex(), name).c_str()));
+		DX::ThrowIfFailed(vertexBuffer->resource->SetName(std::format(L"Vertex Buffer [{}] - {}", allocation->GetIndex(), name).c_str()));
 
 		if (vertexCount != vertices.size())
 			logger::error("[RT] Shape::CreateBuffers - VertexCount: {}, Vertices Size: {}", vertexCount, vertices.size());
@@ -442,7 +454,7 @@ void Shape::CreateBuffers(const std::wstring& name)
 			uavDesc.Buffer.StructureByteStride = sizeof(Vertex);
 			uavDesc.Buffer.Flags = D3D12_BUFFER_UAV_FLAG_NONE;
 
-			device->CreateUnorderedAccessView(vertexBuffer->resource.get(), nullptr, &uavDesc, skinningHeap->CPUHandle(SkinningHeap::Slot::Output, registerIndex->GetIndex()));
+			device->CreateUnorderedAccessView(vertexBuffer->resource.get(), nullptr, &uavDesc, skinningHeap->CPUHandle(SkinningHeap::Slot::Output, allocation->GetIndex()));
 		}
 
 		// SRV
@@ -456,7 +468,7 @@ void Shape::CreateBuffers(const std::wstring& name)
 			vbDesc.Buffer.StructureByteStride = sizeof(Vertex);
 			vbDesc.Buffer.Flags = D3D12_BUFFER_SRV_FLAG_NONE;
 
-			device->CreateShaderResourceView(vertexBuffer->resource.get(), &vbDesc, giHeap->CPUHandle(GIHeap::Slot::Vertices, registerIndex->GetIndex()));
+			device->CreateShaderResourceView(vertexBuffer->resource.get(), &vbDesc, giHeap->CPUHandle(GIHeap::Slot::Vertices, allocation->GetIndex()));
 		}
 	}
 
@@ -465,7 +477,7 @@ void Shape::CreateBuffers(const std::wstring& name)
 		skinningBuffer = eastl::make_unique<DX12::StructuredBufferUpload<Skinning>>(device, vertexCount);
 
 		skinningBuffer->UpdateList(skinning.data(), vertexCount);
-		DX::ThrowIfFailed(skinningBuffer->resource->SetName(std::format(L"Skinning Buffer [{}] - {}", registerIndex->GetIndex(), name).c_str()));
+		DX::ThrowIfFailed(skinningBuffer->resource->SetName(std::format(L"Skinning Buffer [{}] - {}", allocation->GetIndex(), name).c_str()));
 
 		skinningBuffer->Upload(commandList);
 
@@ -480,7 +492,7 @@ void Shape::CreateBuffers(const std::wstring& name)
 			vbDesc.Buffer.StructureByteStride = sizeof(Skinning);
 			vbDesc.Buffer.Flags = D3D12_BUFFER_SRV_FLAG_NONE;
 
-			device->CreateShaderResourceView(skinningBuffer->resource.get(), &vbDesc, skinningHeap->CPUHandle(SkinningHeap::Slot::SkinningData, registerIndex->GetIndex()));
+			device->CreateShaderResourceView(skinningBuffer->resource.get(), &vbDesc, skinningHeap->CPUHandle(SkinningHeap::Slot::SkinningData, allocation->GetIndex()));
 		}
 	}
 
@@ -489,7 +501,7 @@ void Shape::CreateBuffers(const std::wstring& name)
 		triangleBuffer = eastl::make_unique<DX12::StructuredBufferUpload<Triangle>>(device, triangleCount);
 
 		triangleBuffer->UpdateList(triangles.data(), triangles.size());
-		DX::ThrowIfFailed(triangleBuffer->resource->SetName(std::format(L"Triangle Buffer [{}] - {}", registerIndex->GetIndex(), name).c_str()));
+		DX::ThrowIfFailed(triangleBuffer->resource->SetName(std::format(L"Triangle Buffer [{}] - {}", allocation->GetIndex(), name).c_str()));
 
 		triangleBuffer->Upload(commandList);
 
@@ -504,13 +516,13 @@ void Shape::CreateBuffers(const std::wstring& name)
 			ibDesc.Buffer.StructureByteStride = sizeof(Triangle);
 			ibDesc.Buffer.Flags = D3D12_BUFFER_SRV_FLAG_NONE;
 
-			device->CreateShaderResourceView(triangleBuffer->resource.get(), &ibDesc, giHeap->CPUHandle(GIHeap::Slot::Triangles, registerIndex->GetIndex()));
+			device->CreateShaderResourceView(triangleBuffer->resource.get(), &ibDesc, giHeap->CPUHandle(GIHeap::Slot::Triangles, allocation->GetIndex()));
 		}
 	}
 
 	// Material
 	auto materialData = material.GetData();
-	materialBuffer->UpdateAt(&materialData, registerIndex->GetIndex());
+	materialBuffer->UpdateAt(&materialData, allocation->GetIndex());
 }
 
 void Shape::CalculateNTB(bool normals)

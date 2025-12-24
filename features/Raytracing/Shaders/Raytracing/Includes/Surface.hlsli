@@ -52,18 +52,19 @@ struct Surface
         Surface surface;
 
         surface.Position = position;
-        
+             
+        uint shapeIndex = GetShapeIdx(payload, instance);
+
         // Loads all geometry releated data
         Vertex v0, v1, v2;
-        GetVertices(payload, v0, v1, v2);
+        GetVertices(shapeIndex, payload.primitiveIndex, v0, v1, v2);
         
         float3 uvw = GetBary(payload.Barycentrics());
         
-        material = Materials[payload.ShapeIndex()];
+        material = Materials[shapeIndex];
 
         float2 texCoord0 = material.TexCoord(Interpolate(v0.Texcoord0, v1.Texcoord0, v2.Texcoord0, uvw));
         
-        instance = GetInstance(payload.InstanceIndex());
         float3x3 objectToWorld3x3 = (float3x3) instance.Transform;
         
         surface.GeomNormal = normalize(mul(objectToWorld3x3, Interpolate(v0.Normal, v1.Normal, v2.Normal, uvw)));
@@ -77,18 +78,35 @@ struct Surface
         
         if (material.ShaderType == ShaderType::Effect)
         {
-            float3 base = baseTexture.SampleLevel(BaseSampler, texCoord0, 0).rgb;
+            float3 base = float3(1, 1, 1);
             
-            float3 baseColorMul = material.EffectColor.rgb * vertexColor.rgb;
+            if (material.ShaderFlags & ShaderFlags::kGrayscaleToPaletteColor)
+            {
+                base *= baseTexture.SampleLevel(BaseSampler, texCoord0, 0).rgb;
+            }
+            
+            float3 baseColorMul = material.EffectColor.rgb;
+            
+            if (material.ShaderFlags & ShaderFlags::kVertexColors && !(material.ShaderFlags & ShaderFlags::kProjectedUV))
+            {
+                base *= vertexColor.rgb;
+            }
+            
             float3 baseColor = base * baseColorMul;
         
             float baseColorScale = material.EffectColor.a;
-            float2 grayscaleToColorUv = float2(base.g, baseColorMul.x);
+            
+            if (material.ShaderFlags & ShaderFlags::kGrayscaleToPaletteColor)
+            {
+                float2 grayscaleToColorUv = float2(base.g, baseColorMul.x);
         
-            baseColor = baseColorScale * effectTexture.SampleLevel(BaseSampler, grayscaleToColorUv, 0).rgb;
-        
-            surface.Albedo = Color::GammaToTrueLinear(baseColor.xyz);
-            surface.Emissive = baseColor * Frame.Effect;
+                baseColor = baseColorScale * effectTexture.SampleLevel(BaseSampler, grayscaleToColorUv, 0).rgb;
+            }
+            
+            float3 baseColorLinear = Color::GammaToTrueLinear(baseColor);
+            
+            surface.Albedo = baseColorLinear;
+            surface.Emissive = baseColorLinear * Frame.Effect;
         }
         else
         {        
@@ -115,7 +133,7 @@ struct Surface
         
         float4 rmaos = rmaosTexture.SampleLevel(BaseSampler, texCoord0, 0);
 
-        surface.Roughness = saturate(rmaos.x * material.roughness);
+        surface.Roughness = saturate(rmaos.x * material.RoughnessScale);
         surface.Metallic = saturate(rmaos.y);
         surface.AO = rmaos.z;
 #else 
@@ -123,7 +141,7 @@ struct Surface
         surface.Tangent = tangentWS;
         surface.Bitangent = bitangentWS;
         
-        surface.Roughness = PBR::Defaults::Roughness;
+        surface.Roughness = PBR::Defaults::Roughness * material.RoughnessScale;
         surface.Metallic = PBR::Defaults::Metallic;
         surface.AO = 1.0f;        
 #endif  
@@ -133,16 +151,16 @@ struct Surface
 
         surface.DiffuseAlbedo = surface.Albedo * (1.0f - surface.Metallic);
         
-        surface.F0 = PBR::F0(surface.Albedo, surface.Metallic);
+        surface.F0 = PBR::F0(material.SpecularLevel.xxx, surface.Albedo, surface.Metallic);
 
 #if defined(FULL_MATERIAL)
-        surface.SubsurfaceColor = make_float3(0.0f, 0.0f, 0.0f);
+        surface.SubsurfaceColor = float3(0.0f, 0.0f, 0.0f);
         surface.Thickness = 0.0f;
-        surface.CoatColor = make_float3(1.0f, 1.0f, 1.0f);
+        surface.CoatColor = float3(1.0f, 1.0f, 1.0f);
         surface.CoatStrength = 0.0f;
         surface.CoatRoughness = 0.0f;
-        surface.CoatF0 = make_float3(0.04f, 0.04f, 0.04f);
-        surface.FuzzColor = make_float3(0.0f, 0.0f, 0.0f);
+        surface.CoatF0 = float3(0.04f, 0.04f, 0.04f);
+        surface.FuzzColor = float3(0.0f, 0.0f, 0.0f);
         surface.FuzzWeight = 0.0f;
         surface.GlintScreenSpaceScale = 1.0f;
         surface.GlintLogMicrofacetDensity = 0.0f;
@@ -182,13 +200,13 @@ struct Surface
         surface.F0 = PBR::F0(albedo, metallic);
 
 #if defined(FULL_MATERIAL)
-        surface.SubsurfaceColor = make_float3(0.0f, 0.0f, 0.0f);
+        surface.SubsurfaceColor = float3(0.0f, 0.0f, 0.0f);
         surface.Thickness = 0.0f;
-        surface.CoatColor = make_float3(1.0f, 1.0f, 1.0f);
+        surface.CoatColor = float3(1.0f, 1.0f, 1.0f);
         surface.CoatStrength = 0.0f;
         surface.CoatRoughness = 0.0f;
-        surface.CoatF0 = make_float3(0.04f, 0.04f, 0.04f);
-        surface.FuzzColor = make_float3(0.0f, 0.0f, 0.0f);
+        surface.CoatF0 = float3(0.04f, 0.04f, 0.04f);
+        surface.FuzzColor = float3(0.0f, 0.0f, 0.0f);
         surface.FuzzWeight = 0.0f;
         surface.GlintScreenSpaceScale = 1.0f;
         surface.GlintLogMicrofacetDensity = 0.0f;

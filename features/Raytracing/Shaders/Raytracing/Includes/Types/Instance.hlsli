@@ -66,7 +66,7 @@ struct Instance
 	row_major float3x4 Transform;
 #endif	
     LightData LightData;
-	uint FirstMeshID;
+	uint FirstGeometryID;
 };
 
 #ifdef __cplusplus

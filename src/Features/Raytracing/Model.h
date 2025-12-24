@@ -17,6 +17,8 @@
 #include "Features/Raytracing/Shape.h"
 #include "Features/Raytracing/Utils.h"
 
+#include <shared_mutex>
+
 struct Model
 {
 	eastl::vector<eastl::unique_ptr<Shape>> shapes;
@@ -24,14 +26,12 @@ struct Model
 	winrt::com_ptr<ID3D12Resource> blasBuffer = nullptr;
 	winrt::com_ptr<ID3D12Resource> blasScratchBuffer = nullptr;
 
-	Model() = default;
-
 	Model(eastl::vector<eastl::unique_ptr<Shape>>& shapes) :
 		shapes(eastl::move(shapes))
 	{
 		for (auto& shape : this->shapes) {
 			flags |= shape->flags;
-			shaderTypes |= shape->material.ShaderType;
+			shaderTypes |= shape->material.shaderType;
 			features |= static_cast<int>(shape->material.Feature);
 		}
 	}
@@ -56,16 +56,20 @@ struct Model
 		refCount++;
 	}
 
-	// Returns true if refCount reaches zero
-	bool Release()
+	// Returns refCount
+	int Release()
 	{
+		//std::lock_guard lock{ releaseMutex };
+
 		refCount--;
-		return refCount <= 0;
+		return refCount;
 	}
 
 private:
 	Flags flags = Flags::None;
 	uint32_t shaderTypes = RE::BSShader::Type::None;
 	int features = static_cast<int>(RE::BSShaderMaterial::Feature::kNone);
-	uint refCount;
+	int refCount = 0;
+
+	//std::shared_mutex releaseMutex;
 };

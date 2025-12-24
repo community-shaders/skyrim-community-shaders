@@ -788,6 +788,24 @@ void Raytracing::SetupResources()
 		instanceBuffer->CreateSRV(giHeap->CPUHandle(GIHeap::Slot::Instances));
 	}
 
+	// t6 - Indirection buffer
+	{
+		// Could probably fit in 16 bits but indexing would be awkward 
+		indirectionBuffer = eastl::make_unique<DX12::ResourceUpload>(d3d12Device.get(), sizeof(uint32_t) * MAX_SHAPES);
+		DX::ThrowIfFailed(indirectionBuffer->resource->SetName(L"Indirection Buffer"));
+
+		D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
+		srvDesc.ViewDimension = D3D12_SRV_DIMENSION_BUFFER;
+		srvDesc.Format = DXGI_FORMAT_R32_TYPELESS;
+		srvDesc.Buffer.FirstElement = 0;
+		srvDesc.Buffer.NumElements = MAX_SHAPES;
+		srvDesc.Buffer.StructureByteStride = 0;
+		srvDesc.Buffer.Flags = D3D12_BUFFER_SRV_FLAG_RAW;
+		srvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
+
+		indirectionBuffer->CreateSRV(srvDesc, giHeap->CPUHandle(GIHeap::Slot::Indirection));
+	}
+
 	// Create instance buffer for BLAS
 	{
 		blasInstanceBuffer = eastl::make_unique<DX12::StructuredBufferUpload<D3D12_RAYTRACING_INSTANCE_DESC>>(d3d12Device.get(), MAX_INSTANCES);
@@ -1543,7 +1561,7 @@ void Raytracing::UpdateModelBLAS(Model& model)
 	commandList->BuildRaytracingAccelerationStructure(&buildDesc, 0, nullptr);
 }
 
-void Raytracing::CreateModel(const char* path, RE::NiNode* pRoot)
+void Raytracing::CreateModel(RE::TESObjectREFR* refr, const char* path, RE::NiNode* pRoot)
 {
 	if (!pRoot) {
 		logger::error("[RT] CreateModel \"{}\" - nullptr root", path);
@@ -1571,15 +1589,17 @@ void Raytracing::CreateModel(const char* path, RE::NiNode* pRoot)
 		logger::debug("[RT] CreateModel - BSX Flags [0x{:x}]: {}", bsxFlags->value, GetFlagsString<RE::BSXFlags::Flag>(bsxFlags->value));
 	}
 
+	auto formID = refr->GetRawFormID();
+
 	// We only need one buffer per model
 	if (models.find(path) != models.end()) {
-		AddInstance(pRoot, path);
+		AddInstance(formID, pRoot, path);
 		return;
 	}
 
 	//std::lock_guard lock{ renderMutex };
 
-	logger::debug("[RT] CreateModel - Path: {}, NiNode [0x{:X}]: {}", path, reinterpret_cast<uintptr_t>(pRoot), pRoot->name);
+	logger::debug("[RT] CreateModel - Path: {}, FormID [0x{:08X}], NiNode [0x{:08X}]: {}", path, formID, reinterpret_cast<uintptr_t>(pRoot), pRoot->name);
 
 	auto rootWorldInverse = pRoot->world.Invert();
 
@@ -1606,14 +1626,13 @@ void Raytracing::CreateModel(const char* path, RE::NiNode* pRoot)
 		auto* effect = geometryRuntimeData.properties[RE::BSGeometry::States::kEffect].get();
 
 		if (!effect) {
-			logger::warn("\t\t[RT] CreateModel::TraverseScenegraphGeometries - No Effect");
+			logger::debug("\t\t[RT] CreateModel::TraverseScenegraphGeometries - No Effect");
 			return RE::BSVisit::BSVisitControl::kContinue;
 		}
 
 		bool isLightingShader = netimmerse_cast<RE::BSLightingShaderProperty*>(effect) != nullptr;	
 		bool isEffectShader = netimmerse_cast<RE::BSEffectShaderProperty*>(effect) != nullptr;	
-		
-		// && !isEffectShader
+
 		// Only lighting and effect shader for now
 		if (!isLightingShader && !isEffectShader) {
 			logger::warn("\t\t[RT] CreateModel::TraverseScenegraphGeometries - Unsupported shader type: {}", effect->GetRTTI()->name);
@@ -1621,7 +1640,6 @@ void Raytracing::CreateModel(const char* path, RE::NiNode* pRoot)
 		}
 
 		auto shaderProperty = netimmerse_cast<RE::BSShaderProperty*>(effect);
-
 		bool skinned = shaderProperty && shaderProperty->flags.any(RE::BSShaderProperty::EShaderPropertyFlag::kSkinned);
 
 		auto& geomFlags = pGeometry->GetFlags();
@@ -1694,13 +1712,13 @@ void Raytracing::CreateModel(const char* path, RE::NiNode* pRoot)
 
 		// Models with these flags cannot be instanced directly
 		if ((model.GetFlags() & Flags::Dynamic) || (model.GetFlags() & Flags::Skinned))
-			modelKey.append(std::format("_{:8X}", reinterpret_cast<uintptr_t>(pRoot)).c_str());
+			modelKey.append(std::format("_{:08X}", reinterpret_cast<uintptr_t>(pRoot)).c_str());
 
 		auto [it, emplaced] = models.emplace(modelKey, eastl::move(model));
 
 		if (emplaced) {
 			CommitModel(it->second);
-			AddInstance(pRoot, modelKey);
+			AddInstance(formID, pRoot, modelKey);
 
 			logger::debug("[RT] CreateModel - Commited {} TriShapes", shapeCount);
 		} else {
@@ -1711,33 +1729,55 @@ void Raytracing::CreateModel(const char* path, RE::NiNode* pRoot)
 	}
 }
 
-void Raytracing::RemoveInstance(RE::NiNode* pRoot, bool releaseModel)
+bool Raytracing::RemoveInstance(RE::NiNode* pRoot, bool releaseModel)
 {
 	if (auto instanceIt = instances.find(pRoot); instanceIt != instances.end())
 	{
 		auto& instance = instanceIt->second;
 
+		logger::debug("[RT] RemoveInstance - \"{}\", \"{}\"", pRoot->name, instance.filename);
+
 		if (auto modelIt = models.find(instance.filename); modelIt != models.end()) {
 			auto& model = modelIt->second;
 
+			auto refCount = model.Release();
+
+			logger::debug("[RT] RemoveInstance - RefCount: {}", refCount);
+
 			// If this is the last Instance of the model, remove it
-			if (model.Release() && releaseModel) {
+			if (refCount <= 0 && releaseModel) {
 				logger::debug("[RT] RemoveInstance - No refs, erasing from collection");
 				models.erase(modelIt);
 			}
 		}
 
-		logger::debug("[RT] RemoveInstance - {}", pRoot->name);
-
 		instances.erase(instanceIt);
+
+		return true;
 	}
+
+	return false;
+}
+
+bool Raytracing::RemoveInstance(RE::FormID formID, bool releaseModel)
+{
+	bool removed = false;
+
+	if (auto nodesIt = formIDNodes.find(formID); nodesIt != formIDNodes.end()) {
+		removed = RemoveInstance(nodesIt->second, releaseModel);
+
+		if (removed)
+			formIDNodes.erase(nodesIt);
+	}
+
+	return removed;
 }
 
 eastl::shared_ptr<Allocation> Raytracing::GetTextureRegister(ID3D11Texture2D* dx11Texture, eastl::shared_ptr<Allocation> defaultTexture)
 {
 	// Texture already placed in heap, return allocation
 	if (auto refIt = textures.find(dx11Texture); refIt != textures.end()) {
-		return refIt->second.registerIndex;
+		return refIt->second.allocation;
 	} 
 
 	// Search for texture in shared map
@@ -1758,9 +1798,9 @@ eastl::shared_ptr<Allocation> Raytracing::GetTextureRegister(ID3D11Texture2D* dx
 
 		auto [it, emplaced] = textures.emplace(dx11Texture, TextureReference(dx12Texture, { textureRegisters.Allocate(), AllocationDeleter() }));
 
-		d3d12Device->CreateShaderResourceView(dx12Texture, &texSrvDesc, giHeap->CPUHandle(GIHeap::Slot::Textures, it->second.registerIndex->GetIndex()));
+		d3d12Device->CreateShaderResourceView(dx12Texture, &texSrvDesc, giHeap->CPUHandle(GIHeap::Slot::Textures, it->second.allocation->GetIndex()));
 
-		return it->second.registerIndex;
+		return it->second.allocation;
 	}
 
 	logger::debug("[RT] GetTextureRegister - Source texture not found");
@@ -1768,9 +1808,9 @@ eastl::shared_ptr<Allocation> Raytracing::GetTextureRegister(ID3D11Texture2D* dx
 	return defaultTexture;
 }
 
-void Raytracing::AddInstance(RE::NiNode* pNiNode, eastl::string path)
+void Raytracing::AddInstance(RE::FormID formID, RE::NiNode* pNiNode, eastl::string path)
 {
-	logger::debug("[RT] AddInstance - {}, Path: {}", pNiNode->name, path);
+	logger::debug("[RT] AddInstance [0x{:08X}] - {}, Path: {}", formID, pNiNode->name, path);
 
 	//std::lock_guard lock{ geometryMutex };
 
@@ -1779,8 +1819,10 @@ void Raytracing::AddInstance(RE::NiNode* pNiNode, eastl::string path)
 			
 			auto [it, emplaced] = instances.try_emplace(pNiNode, Instance(path));
 
-			if (emplaced)
+			if (emplaced) {
+				formIDNodes.try_emplace(formID, pNiNode);
 				modelIt->second.AddRef();
+			}
 		}
 	}
 }
@@ -1800,7 +1842,7 @@ void Raytracing::UpdateDynamicSkinning(ID3D12GraphicsCommandList4* pCommandList)
 		barriers.reserve(updateCount);
 
 		for (auto& item : vertexUpdate) {
-			vertexUpdateData.emplace_back(item.registerIndex, item.flags, item.vertexCount, 0);
+			vertexUpdateData.emplace_back(item.allocatedIndex, item.flags, item.vertexCount, 0);
 
 			if (item.flags & Flags::Skinned) {
 				barriers.push_back(item.vertexBuffer->GetTransitionBarrier(true, D3D12_RESOURCE_STATE_COPY_DEST));
@@ -1952,6 +1994,13 @@ void Raytracing::UpdateInstances()
 
 	auto eye = Util::GetAverageEyePosition();
 
+	uint32_t totalShapeCount = 0;
+
+	// We'll manually map once, copy all data sequentially, then unmap and upload
+	D3D12_RANGE readRange = { 0, 0 };
+	uint32_t* pIndirectionData = nullptr;
+	DX::ThrowIfFailed(indirectionBuffer->uploadResource->Map(0, &readRange, reinterpret_cast<void**>(&pIndirectionData)));
+
 	for (auto& [pNiNode, instance] : instances) {
 		if (blasInstances.size() > MAX_INSTANCES)
 			break;
@@ -1985,12 +2034,21 @@ void Raytracing::UpdateInstances()
 		if (!instance.Update(pNiNode, { it->first, model }))
 			return;
 
-		auto firstShapeIndex = model.shapes[0]->registerIndex->GetIndex();
+		// This is temporary while I think of a better place to fit this (probably on instance.Update?)
+		auto firstShapeIndex = totalShapeCount;
+		auto shapeCount = model.shapes.size();
 
-		//logger::info("[RT] UpdateInstances - InstanceID: {}", firstShapeIndex);
+		if (totalShapeCount + shapeCount > MAX_SHAPES)
+			break;
+
+		totalShapeCount += static_cast<uint32_t>(shapeCount);
+
+		for (size_t i = 0; i < shapeCount; i++) {
+			pIndirectionData[firstShapeIndex + i] = static_cast<uint32_t>(model.shapes[i]->allocation->GetIndex());
+		}
 
 		D3D12_RAYTRACING_INSTANCE_DESC blasInstance = {
-			.InstanceID = firstShapeIndex,
+			.InstanceID = 0, // We don't really use this, instances are an unordered_map, so yeah unordered...
 			.InstanceMask = 1,
 			.AccelerationStructure = model.blasBuffer->GetGPUVirtualAddress()
 		};
@@ -2006,7 +2064,13 @@ void Raytracing::UpdateInstances()
 			firstShapeIndex
 		);
 	}
-	
+
+	logger::trace("[RT] UpdateInstances - Total Shape Count: {}", totalShapeCount);
+
+	// Unmap indirection buffer
+	D3D12_RANGE writeRange = { 0, std::min(totalShapeCount, MAX_SHAPES) * sizeof(uint32_t) };
+	indirectionBuffer->uploadResource->Unmap(0, &writeRange);
+
 	blasInstanceBuffer->UpdateList(blasInstances.data(), std::min(blasInstances.size(), (size_t)MAX_INSTANCES));
 	blasInstanceBuffer->Upload(commandList.get());
 
@@ -2014,6 +2078,8 @@ void Raytracing::UpdateInstances()
 	instanceBuffer->Upload(commandList.get());
 
 	materialBuffer->Upload(commandList.get());
+
+	indirectionBuffer->Upload(commandList.get());
 }
 
 auto GetFrustumCorners2(const RE::NiFrustum& frustum)
@@ -3108,7 +3174,7 @@ void Raytracing::CreateRootSignature()
 			{ GIHeap::Slot::SHaRCResolved, 1 }
 		});
 
-	// Fixed SRV ranges (NormalRoughness + GNMD + Scene + Lights + Index map)
+	// Fixed SRV ranges
 	giHeap->CreateTable(
 		GIHeap::Table::SRV, 
 		D3D12_DESCRIPTOR_RANGE_TYPE_SRV,
@@ -3122,7 +3188,8 @@ void Raytracing::CreateRootSignature()
 			{ GIHeap::Slot::SkyHemisphere, 1 },
 			{ GIHeap::Slot::Lights, 1 },
 			{ GIHeap::Slot::Materials, 1 },	
-			{ GIHeap::Slot::Instances, 1 }		
+			{ GIHeap::Slot::Instances, 1 },
+			{ GIHeap::Slot::Indirection, 1 }			
 		});
 
 
@@ -3600,6 +3667,18 @@ RE::BSEventNotifyControl Raytracing::TESObjectLoadedEventHandler::ProcessEvent(c
 
 	auto* eventRef = RE::TESForm::LookupByID<RE::TESObjectREFR>(a_event->formID);
 
+	if (!a_event->loaded) {
+		auto formID = eventRef->GetRawFormID();
+
+		logger::info("[RT] TESObjectLoadedEventHandler - Unloading Name: {}, FormID [0x{:08X}]", eventRef->GetName(), formID);
+
+		bool removed = globals::features::raytracing.RemoveInstance(formID, true);
+
+		logger::info("[RT] TESObjectLoadedEventHandler - Unloadeded {}", removed);
+
+		return RE::BSEventNotifyControl::kContinue;
+	}
+
 	//if (eventRef->formType.none(RE::FormType::NPC, RE::FormType::LeveledNPC, RE::FormType::ActorCharacter))
 	if (eventRef->formType.none(RE::FormType::ActorCharacter))
 		return RE::BSEventNotifyControl::kContinue;
@@ -3625,7 +3704,7 @@ RE::BSEventNotifyControl Raytracing::TESObjectLoadedEventHandler::ProcessEvent(c
 	if (!pNiAVObject)
 		return RE::BSEventNotifyControl::kContinue;
 
-	globals::features::raytracing.CreateModel(actor->GetName(), netimmerse_cast<RE::NiNode*>(pNiAVObject));
+	globals::features::raytracing.CreateModel(eventRef, actor->GetName(), netimmerse_cast<RE::NiNode*>(pNiAVObject));
 
 	return RE::BSEventNotifyControl::kContinue;
 }

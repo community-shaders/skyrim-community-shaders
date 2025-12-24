@@ -64,12 +64,12 @@ using namespace magic_enum::bitwise_operators;
 
 struct Raytracing : public OverlayFeature
 {
+	// DX12 will not like if we don't respect these numbers and try to write over the resource end
 	static constexpr uint MAX_TEXTURES = 1024;
-	static constexpr uint MAX_MODELS = 2048;
-	static constexpr uint MAX_SHAPES = 2048;
+	static constexpr uint MAX_MODELS = 1024;
+	static constexpr uint MAX_SHAPES = MAX_MODELS * 8;
 	static constexpr uint MAX_MATERIALS = MAX_SHAPES;
 	static constexpr uint MAX_INSTANCES = 4096;
-	
 	static constexpr uint MAX_LIGHTS = 255;
 
 	static constexpr uint SKY_CUBEMAP_SIZE = 256;
@@ -112,6 +112,7 @@ struct Raytracing : public OverlayFeature
 			Lights,
 			Materials,
 			Instances,
+			Indirection,
 			Vertices,
 			Triangles = Vertices + Raytracing::MAX_SHAPES,
 			Textures = Triangles + Raytracing::MAX_SHAPES,
@@ -261,7 +262,7 @@ struct Raytracing : public OverlayFeature
 	void SkyCubeToHemi() const;
 	void CheckResourcesSide(int side);
 
-	void AddInstance(RE::NiNode* pNiNode, eastl::string path);
+	void AddInstance(RE::FormID formID, RE::NiNode* pNiNode, eastl::string path);
 
 	eastl::vector<size_t> GatherInstanceLights(RE::NiNode* pNiNode);
 
@@ -533,7 +534,7 @@ struct Raytracing : public OverlayFeature
 	struct TextureReference
 	{
 		ID3D12Resource* resource = nullptr;
-		eastl::shared_ptr<Allocation> registerIndex;
+		eastl::shared_ptr<Allocation> allocation;
 	};
 
 	// Creates a single BLAS for a collection of Shapes
@@ -541,10 +542,11 @@ struct Raytracing : public OverlayFeature
 	void CommitModel(Model& geometryData);
 
 	// Creates mesh buffers for all graph TriShapes, handles materials and builds a single BLAS for the node
-	void CreateModel(const char* path, RE::NiNode* pRoot);
+	void CreateModel(RE::TESObjectREFR* refr, const char* path, RE::NiNode* pRoot);
 
 	// Removes the instance and optionally also releases the model and all its buffers if refCount reaches 0
-	void RemoveInstance(RE::NiNode* pRoot, bool releaseModel);
+	bool RemoveInstance(RE::NiNode* pRoot, bool releaseModel);
+	bool RemoveInstance(RE::FormID formID, bool releaseModel);
 
 	// TODO: Move to Model struct
 	void UpdateModelBLAS(Model& geometryData);
@@ -667,7 +669,7 @@ struct Raytracing : public OverlayFeature
 						auto& rt = globals::features::raytracing;
 
 						rt.modelUpdate.emplace_back(path);
-						rt.vertexUpdate.emplace_back(shape->registerIndex->GetIndex(), updateFlags & Flags::Dynamic ? shape->dynamicPositionBuffer.get() : nullptr, shape->vertexBuffer.get(), shape->vertexCount, updateFlags);
+						rt.vertexUpdate.emplace_back(shape->allocation->GetIndex(), updateFlags & Flags::Dynamic ? shape->dynamicPositionBuffer.get() : nullptr, shape->vertexBuffer.get(), shape->vertexCount, updateFlags);
 					}
 				}
 			}
@@ -677,11 +679,15 @@ struct Raytracing : public OverlayFeature
 	};
 
 	eastl::unordered_map<RE::NiNode*, Instance> instances;
+	eastl::unordered_map<RE::FormID, RE::NiNode*> formIDNodes;
 
 	eastl::unique_ptr<DX12::StructuredBufferUpload<MaterialData>> materialBuffer = nullptr;
 
 	eastl::vector<InstanceData> instanceBufferData;
 	eastl::unique_ptr<DX12::StructuredBufferUpload<InstanceData>> instanceBuffer = nullptr;
+
+	// Maps geometry to their actual buffer SRV
+	eastl::unique_ptr<DX12::ResourceUpload> indirectionBuffer = nullptr;
 
 	Util::FrameChecker shadowFrameChecker;
 
@@ -749,7 +755,7 @@ struct Raytracing : public OverlayFeature
 
 	struct VertexUpdate
 	{
-		uint16_t registerIndex;
+		uint16_t allocatedIndex;
 		DX12::StructuredBufferUpload<float4>* dynamicPositionBuffer = nullptr;
 		DX12::StructuredBufferUpload<Vertex>* vertexBuffer = nullptr;
 		uint16_t vertexCount;
@@ -1010,7 +1016,19 @@ struct Raytracing : public OverlayFeature
 						if (auto sharedIt = rt.sharedTextures.find(texture); sharedIt != rt.sharedTextures.end()) {
 							// TODO: proper fix - this is backwards, it should be handled safely by the material going out of scope after its shape and models are released
 							if (auto textureIt = rt.textures.find(texture); textureIt != rt.textures.end()) {
-								logger::info("[RT] NiSourceTexture::Destructor [0x{:8X}] - Register: {}", reinterpret_cast<uintptr_t>(texture), textureIt->second.registerIndex->GetIndex());
+								auto index = textureIt->second.allocation->GetIndex();
+
+								//logger::info("[RT] NiSourceTexture::Destructor [0x{:8X}] - Register: {}", reinterpret_cast<uintptr_t>(texture), index);
+
+								// I imagine this isn't fast but I'll keep this in until I'm sure everything has been fixed
+								for (auto& [key, model]: rt.models) {
+									for (auto& shape: model.shapes) {
+										auto& material = shape->material;
+
+										if (index == material.BaseTexture->GetIndex())
+											logger::error("[RT]\t\t NiSourceTexture::Destructor - Found in: {}", key);
+									}
+								}
 							}
 
 							rt.sharedTextures.erase(sharedIt);
@@ -1193,7 +1211,7 @@ struct Raytracing : public OverlayFeature
 			static inline REL::Relocation<decltype(thunk)> func;
 		};
 
-		template <typename T>
+		/*template <typename T>
 		struct Load3DBase
 		{
 			static RE::NiAVObject* thunk(T* oThis, bool a_backgroundLoading)
@@ -1209,7 +1227,7 @@ struct Raytracing : public OverlayFeature
 				return result;
 			}
 			static inline REL::Relocation<decltype(thunk)> func;
-		};
+		};*/
 
 		template <typename T>
 		struct Load3D
@@ -1235,7 +1253,7 @@ struct Raytracing : public OverlayFeature
 					logger::info("[RT] Load3DA - FormID: [0x{:8X}], FormType: {}", id, magic_enum::enum_name(type));*/
 
 					if (auto* model = baseObject->As<RE::TESModel>()) {
-						rt.CreateModel(model->GetModel(), netimmerse_cast<RE::NiNode*>(result));
+						rt.CreateModel(oThis, model->GetModel(), netimmerse_cast<RE::NiNode*>(result));
 					}
 				}
 
@@ -1260,6 +1278,40 @@ struct Raytracing : public OverlayFeature
 			static inline REL::Relocation<decltype(thunk)> func;
 		};
 
+		struct TESObjectREFR_Enable
+		{
+			static void thunk(RE::TESObjectREFR* oThis, bool a_resetInventory)
+			{
+				if (auto& rt = globals::features::raytracing; rt.Active()) {
+					auto* baseObject = oThis->GetBaseObject();
+
+					if (auto* model = baseObject->As<RE::TESModel>()) {
+						logger::info("[RT] TESObjectREFR::Enable: {}", model->GetModel());
+					}
+				}
+
+				func(oThis, a_resetInventory);
+			}
+			static inline REL::Relocation<decltype(thunk)> func;
+		};
+
+		struct TESObjectREFR_Disable
+		{
+			static void thunk(RE::TESObjectREFR* oThis)
+			{
+				if (auto& rt = globals::features::raytracing; rt.Active()) {
+					auto* baseObject = oThis->GetBaseObject();
+
+					if (auto* model = baseObject->As<RE::TESModel>()) {
+						logger::info("[RT] TESObjectREFR::Disable: {}", model->GetModel());
+					}
+				}
+
+				func(oThis);
+			}
+			static inline REL::Relocation<decltype(thunk)> func;
+		};
+		
 		template <typename T>
 		struct Clone3DBase
 		{
@@ -1404,10 +1456,11 @@ struct Raytracing : public OverlayFeature
 			stl::write_vfunc<0x6A, Load3D<RE::TESObjectREFR>>(RE::VTABLE_TESObjectREFR[0]);
 			stl::write_vfunc<0x6B, Release3DRelatedData<RE::TESObjectREFR>>(RE::VTABLE_TESObjectREFR[0]);
 
+			//stl::detour_thunk<TESObjectREFR_Enable>(REL::RelocationID(19373, 19800));
+			//stl::write_vfunc<0x89, TESObjectREFR_Disable>(RE::VTABLE_TESObjectREFR[0]);
+
 			// NiSourceTexture Destructor
 			stl::write_vfunc<0x0, NiSourceTexture_Destructor>(RE::VTABLE_NiSourceTexture[0]);
-
-			//NiSourceTexture
 
 			// Destructors to remove instances
 			stl::write_vfunc<0x0, Destructor<RE::NiNode>>(RE::VTABLE_NiNode[0]);

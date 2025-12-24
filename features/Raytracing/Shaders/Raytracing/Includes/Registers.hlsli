@@ -28,6 +28,7 @@ Texture2D<float4> SkyHemisphere                 : register(t6, space0);
 StructuredBuffer<Light> Lights                  : register(t7, space0);
 StructuredBuffer<Material> Materials            : register(t8, space0);
 StructuredBuffer<Instance> Instances            : register(t9, space0);
+ByteAddressBuffer Indirection                   : register(t10, space0);
 
 StructuredBuffer<Vertex> Vertices[]             : register(t0, space1);
 StructuredBuffer<Triangle> Triangles[]          : register(t0, space2);
