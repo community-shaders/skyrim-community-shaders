@@ -1,5 +1,10 @@
 name: "Check for HLSL Changes"
 description: "Determines if HLSL-related jobs should be skipped based on event type and file changes"
+inputs:
+    hlsl-should-build:
+        description: "Output from check-changes job indicating if HLSL files changed"
+        required: false
+        default: "true"
 outputs:
     skip:
         description: "True if the subsequent steps should be skipped"
@@ -19,7 +24,7 @@ runs:
               fi
 
               # For PR events, check if any relevant files have changed.
-              if [ "${{ needs.check-changes.outputs.hlsl-should-build || 'true' }}" != "true" ]; then
+              if [ "${{ inputs.hlsl-should-build }}" != "true" ]; then
                 echo "No HLSL-related changes detected, skipping job."
                 echo "skip=true" >> $GITHUB_OUTPUT
               else
