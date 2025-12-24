@@ -291,6 +291,27 @@ struct PS_OUTPUT
 	float4 Color : SV_Target0;
 };
 
+// FrameCount-independent shadow filtering functions
+// Eliminates temporal jitter by using position-based stable hashing
+uint StableShadowHash(uint x, uint y, uint z, uint w)
+{
+	// Jenkins-like mix function for stable shadow rotation
+	uint h = x * 0x27d4eb2dU;
+	h ^= y + 0x7feb352dU + (h << 6) + (h >> 2);
+	h ^= z + 0x9e3779b9U + (h << 6) + (h >> 2);
+	h ^= w + 0x85ebca6bU + (h << 6) + (h >> 2);
+	return h;
+}
+
+float StableShadowAngle(float3 worldPos, uint lightIndex, uint cascadeIndex)
+{
+	// Quantize world position to ~6cm precision (conservative to eliminate jitter)
+	int3 quantizedPos = int3(floor(worldPos * 16.0));
+	uint hash = StableShadowHash(asuint(quantizedPos.x), asuint(quantizedPos.y), lightIndex, cascadeIndex);
+	// Map hash to [0, TAU) for rotation angle
+	return Math::TAU * ((hash & 0x00FFFFFFu) / 16777216.0f);
+}
+
 #ifdef PSHADER
 
 SamplerState SampBaseSampler : register(s0);
@@ -375,7 +396,8 @@ float GetPoissonDiskFilteredShadowVisibility(uint3 seed, Texture2DArray<float4> 
 	float alphaTestOffset = -AlphaTestRef.y;
 	float sampleRadius = ShadowSampleParam.z * 2048.0;
 	float seedNormalized = seed.x * (1.0 / 4294967295.0); // Use only x component for efficiency
-	uint frameOffset = SharedData::FrameCount * sampleCount;
+	uint stableOffset = (uint)(positionMS.x * 1000.0) + (uint)(positionMS.y * 100.0) + (uint)(positionMS.z * 10.0);
+	uint frameOffset = stableOffset * sampleCount; // Use stable to minimize temporal jitter
 
 	// Pre-compute constants
 	const float3 positionOffsetUp = float3(0, 0, 1);
@@ -399,6 +421,11 @@ float GetPoissonDiskFilteredShadowVisibility(uint3 seed, Texture2DArray<float4> 
 		// Fast length calculation and compare value
 		float positionLength = length(positionLS);
 		float compareValue = saturate(positionLength * rcpShadowLightParam) + alphaTestOffset;
+
+		// Handle driver precision differences
+		#ifdef CS_PLATFORM_VULKAN
+			compareValue += 0.0015;
+		#endif
 
 		// Optimized hemisphere calculation
 		bool lowerHalf = positionLS.z < 0;
@@ -432,6 +459,11 @@ float GetPoissonDiskFilteredShadowVisibility(uint3 seed, Texture2DArray<float4> 
 
 		float positionLength = length(positionLS);
 		float compareValue = saturate(positionLength * rcpShadowLightParam) + alphaTestOffset;
+
+		// Handle driver precision differences
+		#ifdef CS_PLATFORM_VULKAN
+			compareValue += 0.0015;
+		#endif
 
 		bool lowerHalf = positionLS.z < 0;
 		float3 normalizedPos = positionLS * rcp(positionLength);
@@ -616,10 +648,10 @@ PS_OUTPUT main(PS_INPUT input)
 	float fadeFactor = input.Alpha.x;
 #		endif
 
-	float noise = Random::InterleavedGradientNoise(input.PositionCS.xy, SharedData::FrameCount);
-
+	float noise = Random::InterleavedGradientNoise(input.PositionCS.xy, 0);
+	precise float stableAngle = StableShadowAngle(positionMS.xyz, 0, 0);
 	float2 rotation;
-	sincos(Math::TAU * noise, rotation.y, rotation.x);
+	sincos(stableAngle, rotation.y, rotation.x); // Use stable to minimize temporal jitter
 	float2x2 rotationMatrix = float2x2(rotation.x, rotation.y, -rotation.y, rotation.x);
 
 	noise = noise * 2.0 - 1.0;
