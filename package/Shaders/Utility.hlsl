@@ -638,8 +638,17 @@ PS_OUTPUT main(PS_INPUT input)
 	float fadeFactor = input.Alpha.x;
 #		endif
 
+	uint cascadeIndex = 0;
+#		if defined(RENDER_SHADOWMASK)
+	if (2.5 < EndSplitDistances.w && EndSplitDistances.y < shadowMapDepth) {
+		cascadeIndex = 2;
+	} else if (EndSplitDistances.x < shadowMapDepth) {
+		cascadeIndex = 1;
+	}
+#		endif
+
 	float noise = Random::InterleavedGradientNoise(input.PositionCS.xy, 0);
-	precise float stableAngle = StableShadowAngle(positionMS.xyz, 0, 0);
+	precise float stableAngle = StableShadowAngle(positionMS.xyz, 0, cascadeIndex);
 	float2 rotation;
 	sincos(stableAngle, rotation.y, rotation.x); // Use stable to minimize temporal jitter
 	float2x2 rotationMatrix = float2x2(rotation.x, rotation.y, -rotation.y, rotation.x);
@@ -652,15 +661,12 @@ PS_OUTPUT main(PS_INPUT input)
 	if (EndSplitDistances.z >= shadowMapDepth) {
 		float4x3 lightProjectionMatrix = ShadowMapProj[eyeIndex][0];
 		float shadowMapThreshold = AlphaTestRef.y;
-		float cascadeIndex = 0;
 		if (2.5 < EndSplitDistances.w && EndSplitDistances.y < shadowMapDepth) {
 			lightProjectionMatrix = ShadowMapProj[eyeIndex][2];
 			shadowMapThreshold = AlphaTestRef.z;
-			cascadeIndex = 2;
 		} else if (EndSplitDistances.x < shadowMapDepth) {
 			lightProjectionMatrix = ShadowMapProj[eyeIndex][1];
 			shadowMapThreshold = AlphaTestRef.z;
-			cascadeIndex = 1;
 		}
 
 		float shadowVisibility = 0;
