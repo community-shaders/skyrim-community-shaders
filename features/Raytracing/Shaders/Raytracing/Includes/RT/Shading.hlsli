@@ -53,54 +53,93 @@ float3 Diffuse(float roughness, float3 N, float3 V, float3 L, float NdotV, float
 
 float3 EvalDiffuse(in float3 l, in Surface surface, in BRDFContext brdfContext)
 {
-    float NoL = saturate(dot(surface.Normal, l));
+    float NdotL = saturate(dot(surface.Normal, l));
      
-    if (NoL <= 0.0f) 
+    if (NdotL <= 0.0f) 
         return float3(0.0f, 0.0f, 0.0f);
         
     // Diffuse is meant to be very light (and used with DDGI), so I don't see much point in using a different diffuse or shading model here
-    return surface.DiffuseAlbedo * NoL * BRDF::Diffuse_Lambert();
+    return surface.DiffuseAlbedo * NdotL * BRDF::Diffuse_Lambert();
 }
 
-float3 EvalDefaultBRDF(in float3 l, in Surface surface, in BRDFContext brdfContext)
+float3 EvalDefaultBSDF(in float3 l, in Surface surface, in BRDFContext brdfContext)
 {
-    float NoL = saturate(dot(surface.Normal, l));
+    float NdotL = saturate(dot(surface.Normal, l));
      
-    if (NoL <= 0.0f) 
+    if (NdotL <= 0.0f) 
         return float3(0.0f, 0.0f, 0.0f);
         
     float3 H = normalize(brdfContext.ViewDirection + l);
         
-    float NoH = saturate(dot(surface.Normal, H));
-    float VoH = clamp(dot(brdfContext.ViewDirection, H), 1e-5f, 1.0f);
-    float VoL = saturate(dot(brdfContext.ViewDirection, l));
+    float NdotH = saturate(dot(surface.Normal, H));
+    float VdotH = clamp(dot(brdfContext.ViewDirection, H), 1e-5f, 1.0f);
+    float VdotL = saturate(dot(brdfContext.ViewDirection, l));
     
-    float D = BRDF::D_GGX(surface.Roughness, NoH);
-    float Vis = BRDF::Vis_SmithJointApprox(surface.Roughness, max(1e-5f, brdfContext.NdotV), NoL);
-    float3 F = BRDF::F_Schlick(surface.F0, VoH);
+    float D = BRDF::D_GGX(surface.Roughness, NdotH);
+    float Vis = BRDF::Vis_SmithJointApprox(surface.Roughness, max(1e-5f, brdfContext.NdotV), NdotL);
+    float3 F = BRDF::F_Schlick(surface.F0, VdotH);
     
     // specular BRDF
     float3 Fr = (D * Vis) * F;
     
     float3 Fd = surface.DiffuseAlbedo
-    * Diffuse(surface.Roughness, surface.Normal, brdfContext.ViewDirection, l, brdfContext.NdotV, NoL, VoH, VoL, NoH) 
+    * Diffuse(surface.Roughness, surface.Normal, brdfContext.ViewDirection, l, brdfContext.NdotV, NdotL, VdotH, VdotL, NdotH) 
     * ShadowTerminatorTerm(l, surface.Normal, surface.GeomNormal);
     
-    return (Fd + Fr) * NoL;
+    return (Fd + Fr) * NdotL;
 }
 
-float3 EvalLight(in float3 l, in Surface surface, in BRDFContext brdfContext)
+#if defined(FULL_MATERIAL)
+float3 EvalFuzzBSDF(in float3 l, in Surface surface, in BRDFContext brdfContext)
+{
+    float NdotL = saturate(dot(surface.Normal, l));
+     
+    if (NdotL <= 0.0f) 
+        return float3(0.0f, 0.0f, 0.0f);
+        
+    float3 H = normalize(brdfContext.ViewDirection + l);
+        
+    float NdotH = saturate(dot(surface.Normal, H));
+    float VdotH = clamp(dot(brdfContext.ViewDirection, H), 1e-5f, 1.0f);
+    float VdotL = saturate(dot(brdfContext.ViewDirection, l));
+    
+    float D = BRDF::D_GGX(surface.Roughness, NdotH);
+    float Vis = BRDF::Vis_SmithJointApprox(surface.Roughness, max(1e-5f, brdfContext.NdotV), NdotL);
+    float3 F = BRDF::F_Schlick(surface.F0, VdotH);
+    
+    // specular BRDF
+    float3 Fr = (D * Vis) * F;
+    
+    float3 Fd = surface.DiffuseAlbedo
+    * Diffuse(surface.Roughness, surface.Normal, brdfContext.ViewDirection, l, brdfContext.NdotV, NdotL, VdotH, VdotL, NdotH) 
+    * ShadowTerminatorTerm(l, surface.Normal, surface.GeomNormal);
+
+    float Efuzz = (0.526422 / ((-0.227114 + surface.Roughness) * (-0.968835 + surface.Roughness) * ((5.38869 - 20.2835 * brdfContext.NdotV) * surface.Roughness) - (-1.18761 - ((2.58744 - brdfContext.NdotV) * brdfContext.NdotV)))) + 0.0615456;
+    float Dfuzz = BRDF::D_Charlie(surface.Roughness, NdotH);
+    float Gfuzz = BRDF::Vis_Neubelt(brdfContext.NdotV, NdotL);
+    float3 Ffuzz = surface.FuzzColor * Dfuzz * Gfuzz;
+
+    return ((Fd + Fr) * lerp(1, 1 - Efuzz, surface.FuzzWeight) + Ffuzz * surface.FuzzWeight) * NdotL;
+}
+#endif
+
+float3 EvalLight(in float3 l, in Surface surface, in BRDFContext brdfContext, in Material material)
 {
 #if LIGHTEVAL_MODE == LIGHTEVAL_MODE_DIFFUSE
     return EvalDiffuse(l, surface, brdfContext); 
 #else
-    return EvalDefaultBRDF(l, surface, brdfContext);
+#   if defined(FULL_MATERIAL)
+    if ((material.PBRFlags & PBR::Flags::Fuzz) != 0)
+        return EvalFuzzBSDF(l, surface, brdfContext);
+    else
+#   endif
+    return EvalDefaultBSDF(l, surface, brdfContext);
 #endif
 }
 
-float3 EvalDirectionalLight(in Surface surface, in BRDFContext brdfContext, in Light light, inout uint randomSeed)
+float3 EvalDirectionalLight(in Surface surface, in BRDFContext brdfContext, in Light light, in Material material, inout uint randomSeed)
 {
-    float3 direct = EvalLight(light.Vector, surface, brdfContext) * light.Color;
+    float3 direct = EvalLight(light.Vector, surface, brdfContext, material) * light.Color;
 
     [branch]
     if (any(direct > MIN_DIFFUSE_SHADOW))
@@ -112,7 +151,7 @@ float3 EvalDirectionalLight(in Surface surface, in BRDFContext brdfContext, in L
     return direct;
 }
 
-float3 EvalPointLight(in Surface surface, in BRDFContext brdfContext, in LightData lightData, inout uint randomSeed)
+float3 EvalPointLight(in Surface surface, in BRDFContext brdfContext, in LightData lightData, in Material material, inout uint randomSeed)
 {
     if (lightData.Count == 0) 
         return float3(0, 0, 0);
@@ -130,7 +169,7 @@ float3 EvalPointLight(in Surface surface, in BRDFContext brdfContext, in LightDa
     // float atten = VanillaSquaredAtten(dist, light.Range);
     float atten = InverseSquareAtten(dist * GAME_UNIT_TO_M, light.Range * 64); // This is temporal
     
-    float3 direct = EvalLight(l, surface, brdfContext) * atten * light.Color * float(lightData.Count);
+    float3 direct = EvalLight(l, surface, brdfContext, material) * atten * light.Color * float(lightData.Count);
 
     [branch]
     if (any(direct > MIN_DIFFUSE_SHADOW))
@@ -142,7 +181,7 @@ float3 EvalPointLight(in Surface surface, in BRDFContext brdfContext, in LightDa
     return direct;
 }
 
-void SampleDefaultBRDF(in Surface surface, in BRDFContext brdfContext, inout uint randomSeed, out float3 direction, out float3 brdfWeight)
+void SampleDefaultBSDF(in Surface surface, in BRDFContext brdfContext, inout uint randomSeed, out float3 direction, out float3 brdfWeight)
 {
     const float3 V = brdfContext.ViewDirection;
     float3 L = 0;
@@ -216,16 +255,98 @@ void SampleDefaultBRDF(in Surface surface, in BRDFContext brdfContext, inout uin
     direction = L;
 }
 
+#if defined(FULL_MATERIAL)
+void SampleFuzzBSDF(in Surface surface, in BRDFContext brdfContext, inout uint randomSeed, out float3 direction, out float3 brdfWeight)
+{
+    const float3 V = brdfContext.ViewDirection;
+    float3 L = 0;
+    float NdotL = 0;
+
+    brdfWeight = 0.0f;
+
+    float specularProb = lerp(MonteCarlo::GetSpecularBrdfProbability(surface, V, surface.Normal), 1.0f, surface.Metallic);
+    float Efuzz = (0.526422 / ((-0.227114 + surface.Roughness) * (-0.968835 + surface.Roughness) * ((5.38869 - 20.2835 * brdfContext.NdotV) * surface.Roughness) - (-1.18761 - ((2.58744 - brdfContext.NdotV) * brdfContext.NdotV)))) + 0.0615456;
+    float fuzzProb = Efuzz * surface.FuzzWeight;
+    specularProb *= 1 - fuzzProb;
+    const float lobeRand = Random(randomSeed);
+
+    float3 brdf = 0.0f;
+    float pdf = 0.0f;
+    float diffusePdf = 0.0f;
+    float specularPdf = 0.0f;
+    float fuzzPdf = 0.0f;
+
+    float3 Ve = float3(
+            dot(brdfContext.ViewDirection, surface.Tangent), 
+            dot(brdfContext.ViewDirection, surface.Bitangent), 
+            dot(brdfContext.ViewDirection, surface.Normal)
+        );
+    float3 Le = 0.0f;
+    float3 He = 0.0f;
+
+    const float alpha = surface.Roughness * surface.Roughness;
+    const float alpha2 = alpha * alpha;
+
+    [branch]
+    if (lobeRand < specularProb)
+    {
+        He = MonteCarlo::SampleGGX_VNDF(Ve, alpha, randomSeed);
+        Le = reflect(-Ve, He);
+    }
+    else
+    {
+        Le = SampleCosineHemisphere(randomSeed);
+        He = normalize(Ve + Le);
+    }
+
+    L = surface.Mul(Le);
+    float3 H = surface.Mul(He);
+    NdotL = saturate(dot(surface.Normal, L));
+    float VdotH = saturate(dot(He, Ve));
+    float NdotH = saturate(dot(surface.Normal, H));
+    float VdotL = saturate(dot(Ve, Le));
+    
+    // const float2 GGXResult = MonteCarlo::GGXEvalReflection(Le, Ve, He, alpha);
+    specularPdf = MonteCarlo::SampleGGXVNDFReflectionPdf(alpha, alpha2, NdotH, brdfContext.NdotV, VdotH);
+    diffusePdf = NdotL / Math::PI;
+    fuzzPdf = diffusePdf;
+
+    float3 F = BRDF::F_Schlick(surface.F0, VdotH);
+
+    float3 Fd = surface.DiffuseAlbedo * NdotL 
+        * Diffuse(surface.Roughness, surface.Normal, V, L, brdfContext.NdotV, NdotL, VdotH, VdotL, NdotH) 
+        * ShadowTerminatorTerm(L, surface.Normal, surface.GeomNormal);
+    
+    float3 Fr = F * MonteCarlo::SpecularSampleWeightGGXVNDF(alpha, alpha2, NdotL, brdfContext.NdotV, VdotH, NdotH) * specularPdf;
+#if GGX_ENERGY_CONSERVATION
+    Fr *= BRDF::GGXEnergyConservationTerm(surface.F0, surface.Roughness, brdfContext.NdotV);
+#endif
+
+    // Fuzz
+    const float Dfuzz = BRDF::D_Charlie(surface.Roughness, NdotH);
+    const float Gfuzz = BRDF::Vis_Neubelt(NdotV, NdotL);
+    float3 Ffuzz = surface.FuzzColor * Dfuzz * Gfuzz * NdotL;
+
+    pdf = (1.0f - fuzzProb - specularProb) * diffusePdf + specularProb * specularPdf + fuzzProb * fuzzPdf;
+
+    brdf = (Fd + Fr) * lerp(1, 1 - Efuzz, surface.FuzzWeight) + Ffuzz * surface.FuzzWeight;
+
+    brdfWeight = brdf / max(pdf, 1e-7f);
+
+    direction = L;
+}
+#endif
+
 // Samples the sky hemisphere texture based on the given direction
 // Output is in true linear space
 float3 SampleSky(float3 dir)
 {
     dir.z = max(dir.z, 0.0f);
     
-    float r = sqrt(1.0f - dir.z);
+    float surface.Roughness = sqrt(1.0f - dir.z);
     float phi = atan2(dir.y, dir.x);
     
-    float2 disk = float2(r * cos(phi), r * sin(phi));
+    float2 disk = float2(surface.Roughness * cos(phi), surface.Roughness * sin(phi));
     float2 uv = disk * 0.5f + 0.5f;
 
     return Color::GammaToTrueLinear(SkyHemisphere.SampleLevel(BaseSampler, uv, 0.0f).rgb);
@@ -253,8 +374,8 @@ float3 EvaluateRadiance(in Surface surface, in BRDFContext brdfContext, in Insta
         radiance = surface.Emissive * Frame.Emissive;
     }
     
-    radiance += EvalDirectionalLight(surface, brdfContext, Frame.Directional, randomSeed);
-    radiance += EvalPointLight(surface, brdfContext, instance.LightData, randomSeed);    
+    radiance += EvalDirectionalLight(surface, brdfContext, Frame.Directional, material, randomSeed);
+    radiance += EvalPointLight(surface, brdfContext, instance.LightData, material, randomSeed);    
     
     return radiance;
 }
