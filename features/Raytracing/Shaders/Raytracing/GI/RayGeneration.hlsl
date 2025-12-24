@@ -210,7 +210,12 @@ void main()
             throughput *= surface.AO;
             throughput *= surface.Albedo;
 #else
-            SampleDefaultBRDF(surface, brdfContext, randomSeed, direction, brdfWeight);
+#   if defined(FULL_MATERIAL)
+            if ((material.PBRFlags & PBR::Flags::Fuzz) != 0)
+                SampleFuzzBSDF(surface, brdfContext, randomSeed, direction, brdfWeight);
+            else
+#   endif
+            SampleDefaultBSDF(surface, brdfContext, randomSeed, direction, brdfWeight);
             throughput *= surface.AO;
             throughput *= brdfWeight;
 #endif            
