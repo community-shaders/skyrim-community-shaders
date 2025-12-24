@@ -497,10 +497,131 @@ jobs:
                   retention-days: 7
                   if-no-files-found: ignore
 
+    shader-unit-tests:
+        name: Run Shader Unit Tests
+        needs: [check-changes]
+        if: >
+            always() && !cancelled() &&
+            ((github.event_name == 'pull_request_target' &&
+              !github.event.pull_request.draft) ||
+             (github.event_name == 'workflow_dispatch' &&
+              github.event.inputs.validate-shaders == 'true') ||
+             (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')))
+        runs-on: windows-2022
+        permissions:
+            contents: read
+        steps:
+            - name: Check if HLSL tests needed
+              id: check-hlsl
+              run: |
+                  # For non-PR events, always run tests
+                  if [ "${{ github.event_name }}" != "pull_request_target" ]; then
+                    echo "Non-PR event detected, proceeding with tests"
+                    echo "skip=false" >> $GITHUB_OUTPUT
+                  else
+                    # Only check for changes on PR events
+                    if [ "${{ needs.check-changes.outputs.hlsl-should-build }}" != "true" ]; then
+                      echo "No HLSL changes detected, skipping tests"
+                      echo "skip=true" >> $GITHUB_OUTPUT
+                    else
+                      echo "HLSL changes detected, proceeding with tests"
+                      echo "skip=false" >> $GITHUB_OUTPUT
+                    fi
+                  fi
+              shell: bash
+
+            - name: Checkout code
+              if: steps.check-hlsl.outputs.skip != 'true'
+              uses: actions/checkout@v4
+              with:
+                  ref: ${{ github.event.pull_request.head.ref || github.ref }}
+                  repository: ${{ github.event.pull_request.head.repo.full_name || github.repository }}
+                  submodules: recursive
+
+            - name: Setup MSVC environment
+              if: steps.check-hlsl.outputs.skip != 'true'
+              uses: ilammy/msvc-dev-cmd@v1
+              with:
+                  arch: x64
+
+            - name: Verify Graphics Tools (for D3D12 debug layer)
+              if: steps.check-hlsl.outputs.skip != 'true'
+              shell: pwsh
+              run: |
+                  $windowsDir = if ($env:SystemRoot) { $env:SystemRoot } else { "C:\Windows" }
+                  $dll = "$windowsDir\System32\d3d12SDKLayers.dll"
+                  if (Test-Path $dll) {
+                      Write-Host "✅ Graphics Tools detected: $dll"
+                  } else {
+                      Write-Host "❌ Graphics Tools NOT found. Tests may fail."
+                      Write-Host "Note: GitHub windows-2022 runners should have Graphics Tools pre-installed."
+                      exit 1
+                  }
+
+            - name: Setup vcpkg
+              if: steps.check-hlsl.outputs.skip != 'true'
+              uses: lukka/run-vcpkg@v11.5
+              with:
+                  vcpkgJsonGlob: vcpkg.json
+
+            - name: Cache CMake build output
+              if: steps.check-hlsl.outputs.skip != 'true'
+              uses: actions/cache@v4
+              with:
+                  path: build/ALL
+                  key: ${{ runner.os }}-shader-tests-${{ hashFiles('.gitmodules', 'extern/**', 'CMakePresets.json', 'vcpkg.json', 'tests/shaders/**') }}
+                  restore-keys: |
+                      ${{ runner.os }}-shader-tests-
+                      ${{ runner.os }}-cmake-
+
+            - name: Remove stale CMake cache if drive letter changed
+              if: steps.check-hlsl.outputs.skip != 'true'
+              shell: pwsh
+              run: |
+                  $cacheFile = "build/ALL/CMakeCache.txt"
+                  if (Test-Path $cacheFile) {
+                    $expected = (Resolve-Path .).Path.Substring(0,1)
+                    $content = Get-Content $cacheFile -Raw
+                    if ($content -match 'CMAKE_HOME_DIRECTORY:INTERNAL=([A-Z]):') {
+                      $actual = $Matches[1]
+                      if ($actual -ne $expected) {
+                        Write-Host "❌ Cache drive mismatch. Removing stale build/ALL directory."
+                        Remove-Item -Recurse -Force "build/ALL"
+                      } else {
+                        Write-Host "✅ Cache path matches. Keeping build/ALL."
+                      }
+                    }
+                  }
+
+            - name: Configure CMake with shader tests
+              if: steps.check-hlsl.outputs.skip != 'true'
+              run: |
+                  cmake --preset ALL -DBUILD_SHADER_TESTS=ON
+
+            - name: Build shader tests
+              if: steps.check-hlsl.outputs.skip != 'true'
+              run: |
+                  cmake --build build/ALL --target shader_tests --config Release
+
+            - name: Run shader unit tests
+              if: steps.check-hlsl.outputs.skip != 'true'
+              run: |
+                  ctest --test-dir build/ALL -C Release --output-on-failure -R ShaderTests
+
+            - name: Upload test results on failure
+              if: failure() && steps.check-hlsl.outputs.skip != 'true'
+              uses: actions/upload-artifact@v4
+              with:
+                  name: shader-test-results
+                  path: |
+                      build/ALL/Testing/**
+                  retention-days: 7
+                  if-no-files-found: ignore
+
     prerelease:
         name: Post Prerelease from PR
         if: github.event_name == 'pull_request_target'
-        needs: [cpp-build, shader-validation]
+        needs: [cpp-build, shader-validation, shader-unit-tests]
         runs-on: windows-2022
         permissions:
             contents: write
@@ -664,7 +785,7 @@ jobs:
 
     release:
         name: Post Release for Draft, Manual Run, or Tag
-        needs: [cpp-build, shader-validation, feature-audit]
+        needs: [cpp-build, shader-validation, shader-unit-tests, feature-audit]
         if: >
             github.event_name == 'workflow_dispatch' ||
             startsWith(github.ref, 'refs/tags/v') ||

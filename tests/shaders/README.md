@@ -160,7 +160,7 @@ These tests run automatically in GitHub Actions on:
 -   Pull requests that modify `.hlsl` or `.hlsli` files
 -   Pushes to `main` and `dev` branches
 
-See `.github/workflows/shader-unit-tests.yaml` for CI configuration.
+See `.github/workflows/_reusable-shader-unit-tests.yaml` for the reusable workflow and `.github/workflows/build.yaml` for CI integration.
 
 ## Troubleshooting
 

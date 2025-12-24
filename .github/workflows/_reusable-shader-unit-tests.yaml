@@ -1,57 +1,42 @@
-name: Shader Unit Tests
+name: Reusable Shader Unit Tests
 
 on:
-    pull_request:
-        paths:
-            - "**.hlsl"
-            - "**.hlsli"
-            - "tests/shaders/**"
-            - ".github/workflows/shader-unit-tests.yaml"
-    push:
-        branches: [main, dev]
-    workflow_dispatch:
-
-permissions:
-    contents: read
-
-concurrency:
-    group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
-    cancel-in-progress: true
+    workflow_call:
+        inputs:
+            skip-tests:
+                description: "Skip running the tests (for conditional execution)"
+                type: boolean
+                required: false
+                default: false
+            ref:
+                description: "Git ref to checkout"
+                type: string
+                required: false
+                default: ""
+            repository:
+                description: "Repository to checkout"
+                type: string
+                required: false
+                default: ""
 
 jobs:
     shader-unit-tests:
         name: Run Shader Unit Tests
         runs-on: windows-2022
+        if: ${{ !inputs.skip-tests }}
 
         steps:
             - name: Checkout code
               uses: actions/checkout@v4
               with:
+                  ref: ${{ inputs.ref || github.ref }}
+                  repository: ${{ inputs.repository || github.repository }}
                   submodules: recursive
 
             - name: Setup MSVC environment
               uses: ilammy/msvc-dev-cmd@v1
               with:
                   arch: x64
-
-            - name: Get MSVC version
-              id: msvc_version
-              shell: pwsh
-              run: |
-                  "int main() { return 0; }" | Out-File -FilePath "dummy.cpp" -Encoding ASCII
-                  $output = & cl.exe /Bv dummy.cpp 2>&1
-                  if ($output -match 'Version ([0-9]+\.[0-9]+\.[0-9]+)') {
-                      $version = $Matches[1]
-                      Write-Host "MSVC version: $version"
-                      Add-Content -Path $env:GITHUB_OUTPUT -Value "version=$version" -Encoding UTF8
-                  } elseif ($output -match '([0-9]+\.[0-9]+\.[0-9]+)') {
-                      $version = $Matches[1]
-                      Write-Host "MSVC version: $version"
-                      Add-Content -Path $env:GITHUB_OUTPUT -Value "version=$version" -Encoding UTF8
-                  } else {
-                      throw "MSVC version not found"
-                  }
-                  Remove-Item "dummy.cpp" -ErrorAction SilentlyContinue
 
             - name: Verify Graphics Tools (for D3D12 debug layer)
               shell: pwsh
@@ -76,10 +61,10 @@ jobs:
               uses: actions/cache@v4
               with:
                   path: build/ALL
-                  key: ${{ runner.os }}-shader-tests-msvc-${{ steps.msvc_version.outputs.version }}-${{ hashFiles('.gitmodules', 'extern/**', 'CMakePresets.json', 'vcpkg.json', 'tests/shaders/**') }}
+                  key: ${{ runner.os }}-shader-tests-${{ hashFiles('.gitmodules', 'extern/**', 'CMakePresets.json', 'vcpkg.json', 'tests/shaders/**') }}
                   restore-keys: |
-                      ${{ runner.os }}-shader-tests-msvc-${{ steps.msvc_version.outputs.version }}-
-                      ${{ runner.os }}-cmake-msvc-${{ steps.msvc_version.outputs.version }}-
+                      ${{ runner.os }}-shader-tests-
+                      ${{ runner.os }}-cmake-
 
             - name: Remove stale CMake cache if drive letter changed
               shell: pwsh
