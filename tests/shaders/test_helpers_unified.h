@@ -83,12 +83,14 @@ struct ShaderTestEntry
 template <size_t N>
 inline void GenerateShaderTests(const char* shaderPath, const ShaderTestEntry (&entries)[N])
 {
+	auto shaderDir = (ShaderTest::GetExecutableDirectory() / "Shaders").wstring();
 	for (const auto& entry : entries) {
 		DYNAMIC_SECTION(entry.testName)
 		{
 			stf::ShaderTestFixture fixture(ShaderTest::GetFixtureDesc());
 			auto result = fixture.RunTest(stf::ShaderTestFixture::RuntimeTestDesc{
-				.CompilationEnv{ .Source = std::filesystem::path(shaderPath) },
+				.CompilationEnv{ .Source = std::filesystem::path(shaderPath),
+					.CompilationFlags = { L"-I", shaderDir } },
 				.TestName = entry.hlslFunction,
 				.ThreadGroupCount{ entry.threadX, entry.threadY, entry.threadZ } });
 			REQUIRE(result);

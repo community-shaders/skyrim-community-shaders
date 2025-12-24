@@ -18,7 +18,6 @@ if(WIN32)
 
     # Check for D3D12 SDK Layers DLL (primary indicator)
     set(D3D12_SDK_LAYERS_DLL_64 "${WINDOWS_DIR}/System32/d3d12SDKLayers.dll")
-    set(DXGI_DEBUG_DLL "${WINDOWS_DIR}/System32/dxgidebug.dll")
 
     if(EXISTS "${D3D12_SDK_LAYERS_DLL_64}")
         message(STATUS "Graphics Tools detected: ${D3D12_SDK_LAYERS_DLL_64}")
