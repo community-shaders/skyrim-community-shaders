@@ -502,13 +502,7 @@ jobs:
     shader-unit-tests:
         name: Run Shader Unit Tests
         needs: [check-changes]
-        if: >
-            always() && !cancelled() &&
-            ((github.event_name == 'pull_request_target' &&
-              !github.event.pull_request.draft) ||
-             (github.event_name == 'workflow_dispatch' &&
-              github.event.inputs.validate-shaders == 'true') ||
-             (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')))
+        if: true
         runs-on: windows-2022
         permissions:
             contents: read
