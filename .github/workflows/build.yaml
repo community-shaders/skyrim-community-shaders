@@ -56,6 +56,7 @@ jobs:
         outputs:
             should-build: ${{ steps.changed-files.outputs.build_any_changed == 'true' || steps.changed-files.outputs.cpp_any_changed == 'true' || steps.changed-files.conclusion == 'failure' }}
             hlsl-should-build: ${{ steps.changed-files.outputs.hlsl_any_changed == 'true' || steps.changed-files.outputs.cmake_any_changed == 'true' || steps.changed-files.outputs.ci_any_changed == 'true' || steps.changed-files.conclusion == 'failure' }}
+            shader-tests-should-build: ${{ steps.changed-files.outputs.shader_tests_any_changed == 'true' || steps.changed-files.outputs.hlsl_any_changed == 'true' || steps.changed-files.outputs.cmake_any_changed == 'true' || steps.changed-files.outputs.ci_any_changed == 'true' || steps.changed-files.conclusion == 'failure' }}
         steps:
             - uses: actions/checkout@v4
               with:
@@ -82,6 +83,7 @@ jobs:
                         - 'include/**'
                         - '!**.hlsl'
                         - '!**.hlsli'
+                        - '!tests/shaders/**'
                       build:
                         - 'CMakeLists.txt'
                         - 'CMakePresets.json'
@@ -101,6 +103,8 @@ jobs:
                         - '**.hlsli'
                         - 'package/Shaders/**'
                         - 'features/**/Shaders/**'
+                      shader_tests:
+                        - 'tests/shaders/**'
                   base_sha: ${{ github.event.pull_request.base.sha }}
                   sha: ${{ github.event.pull_request.head.sha }}
 
@@ -302,7 +306,7 @@ jobs:
               id: check-hlsl
               uses: ./.github/actions/check-hlsl-changes
               with:
-                  hlsl-should-build: ${{ needs.check-changes.outputs.hlsl-should-build }}
+                  hlsl-should-build: ${{ needs.check-changes.outputs.shader-tests-should-build }}
             - name: Setup Build Environment
               id: setup
               if: steps.check-hlsl.outputs.skip != 'true'
