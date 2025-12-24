@@ -130,6 +130,13 @@ jobs:
         outputs:
             version: ${{ steps.get_version.outputs.version }}
         steps:
+            - name: Checkout code
+              uses: actions/checkout@v4
+              with:
+                  ref: ${{ github.event.pull_request.head.ref || github.ref }}
+                  repository: ${{ github.event.pull_request.head.repo.full_name || github.repository }}
+                  submodules: recursive
+
             - name: Setup Build Environment
               id: setup
               uses: ./.github/actions/setup-build-environment
@@ -207,6 +214,10 @@ jobs:
         steps:
             - name: Checkout code
               uses: actions/checkout@v4
+              with:
+                  ref: ${{ github.event.pull_request.head.ref || github.ref }}
+                  repository: ${{ github.event.pull_request.head.repo.full_name || github.repository }}
+                  submodules: recursive
 
             - name: Check for HLSL Changes
               id: check-hlsl
@@ -307,6 +318,10 @@ jobs:
         steps:
             - name: Checkout code
               uses: actions/checkout@v4
+              with:
+                  ref: ${{ github.event.pull_request.head.ref || github.ref }}
+                  repository: ${{ github.event.pull_request.head.repo.full_name || github.repository }}
+                  submodules: recursive
 
             - name: Check for HLSL Changes
               id: check-hlsl

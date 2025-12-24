@@ -1,5 +1,5 @@
 name: "Setup Build Environment"
-description: "Checks out code, sets up MSVC, vcpkg, and caching for build jobs"
+description: "Sets up MSVC, vcpkg, and caching for build jobs. Requires code to be checked out first."
 inputs:
     cache-key-suffix:
         description: "A suffix to make the cache key unique (e.g., validation, tests)"
@@ -14,13 +14,6 @@ runs:
         - name: Enable Git Long Paths
           run: git config --system core.longpaths true
           shell: bash
-
-        - name: Checkout code
-          uses: actions/checkout@v4
-          with:
-              ref: ${{ github.event.pull_request.head.ref || github.ref }}
-              repository: ${{ github.event.pull_request.head.repo.full_name || github.repository }}
-              submodules: recursive
 
         - name: Setup MSVC environment
           uses: ilammy/msvc-dev-cmd@v1
