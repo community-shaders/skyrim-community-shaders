@@ -343,10 +343,10 @@ float3 SampleSky(float3 dir)
 {
     dir.z = max(dir.z, 0.0f);
     
-    float surface.Roughness = sqrt(1.0f - dir.z);
+    float r = sqrt(1.0f - dir.z);
     float phi = atan2(dir.y, dir.x);
     
-    float2 disk = float2(surface.Roughness * cos(phi), surface.Roughness * sin(phi));
+    float2 disk = float2(r * cos(phi), r * sin(phi));
     float2 uv = disk * 0.5f + 0.5f;
 
     return Color::GammaToTrueLinear(SkyHemisphere.SampleLevel(BaseSampler, uv, 0.0f).rgb);
