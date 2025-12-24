@@ -422,11 +422,6 @@ float GetPoissonDiskFilteredShadowVisibility(uint3 seed, Texture2DArray<float4> 
 		float positionLength = length(positionLS);
 		float compareValue = saturate(positionLength * rcpShadowLightParam) + alphaTestOffset;
 
-		// Handle driver precision differences
-		#ifdef CS_PLATFORM_VULKAN
-			compareValue += 0.0015;
-		#endif
-
 		// Optimized hemisphere calculation
 		bool lowerHalf = positionLS.z < 0;
 		float3 normalizedPos = positionLS * rcp(positionLength); // Avoid second normalize
@@ -459,11 +454,6 @@ float GetPoissonDiskFilteredShadowVisibility(uint3 seed, Texture2DArray<float4> 
 
 		float positionLength = length(positionLS);
 		float compareValue = saturate(positionLength * rcpShadowLightParam) + alphaTestOffset;
-
-		// Handle driver precision differences
-		#ifdef CS_PLATFORM_VULKAN
-			compareValue += 0.0015;
-		#endif
 
 		bool lowerHalf = positionLS.z < 0;
 		float3 normalizedPos = positionLS * rcp(positionLength);
