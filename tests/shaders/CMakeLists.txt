@@ -17,7 +17,9 @@ include(FetchContent)
 FetchContent_Declare(
     ShaderTestFramework
     GIT_REPOSITORY https://github.com/KStocky/ShaderTestFramework.git
-    GIT_TAG main
+    # Pinned to specific commit for build reproducibility (Dec 14, 2025)
+    GIT_TAG 447807eaabcedb55635d763623f6263ca8e23aec
+    GIT_CONFIG core.longpaths=true  # Enable long path support for Windows
 )
 
 FetchContent_MakeAvailable(ShaderTestFramework)
