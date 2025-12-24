@@ -201,25 +201,9 @@ jobs:
                       file: ".github/configs/shader-validation-vr.yaml"
             fail-fast: false # Let both configs run to completion for full output
         steps:
-            - name: Check if HLSL validation needed
+            - name: Check for HLSL Changes
               id: check-hlsl
-              run: |
-                  # For release events and non-PR events, always run validation
-                  if [ "${{ github.event_name }}" = "release" ] || [ "${{ github.event_name }}" != "pull_request_target" ]; then
-                    echo "Non-PR event detected, proceeding with validation"
-                    echo "skip=false" >> $GITHUB_OUTPUT
-                  else
-                    # Only check for changes on PR events
-                    if [ "${{ needs.check-changes.outputs.hlsl-should-build }}" != "true" ]; then
-                      echo "No HLSL changes detected, skipping validation steps"
-                      echo "skip=true" >> $GITHUB_OUTPUT
-                    else
-                      echo "HLSL changes detected, proceeding with validation"
-                      echo "skip=false" >> $GITHUB_OUTPUT
-                    fi
-                  fi
-              shell: bash
-
+              uses: ./.github/actions/check-hlsl-changes
             - name: Setup Build Environment
               id: setup
               if: steps.check-hlsl.outputs.skip != 'true'
@@ -301,33 +285,24 @@ jobs:
     shader-unit-tests:
         name: Run Shader Unit Tests
         needs: [check-changes]
-        if: true
-        permissions:
-            contents: read
+        if: >
+            always() && !cancelled() &&
+            ((github.event_name == 'pull_request_target' &&
+              !github.event.pull_request.draft) ||
+             (github.event_name == 'workflow_dispatch' &&
+              github.event.inputs.validate-shaders == 'true') ||
+             (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')))
         strategy:
             matrix:
                 config: ["default"] # Use a matrix to match shader-validation's structure
         runs-on: windows-2022
+        permissions:
+            contents: read
+        outputs: {} # Add empty outputs to match structure of other jobs
         steps:
-            - name: Check if HLSL tests needed
+            - name: Check for HLSL Changes
               id: check-hlsl
-              run: |
-                  # For non-PR events, always run tests
-                  if [ "${{ github.event_name }}" != "pull_request_target" ]; then
-                    echo "Non-PR event detected, proceeding with tests"
-                    echo "skip=false" >> $GITHUB_OUTPUT
-                  else
-                    # Only check for changes on PR events
-                    if [ "${{ needs.check-changes.outputs.hlsl-should-build }}" != "true" ]; then
-                      echo "No HLSL changes detected, skipping tests"
-                      echo "skip=true" >> $GITHUB_OUTPUT
-                    else
-                      echo "HLSL changes detected, proceeding with tests"
-                      echo "skip=false" >> $GITHUB_OUTPUT
-                    fi
-                  fi
-              shell: bash
-
+              uses: ./.github/actions/check-hlsl-changes
             - name: Setup Build Environment
               id: setup
               if: steps.check-hlsl.outputs.skip != 'true'
