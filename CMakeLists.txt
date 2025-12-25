@@ -75,6 +75,7 @@ find_package(efsw CONFIG REQUIRED)
 find_package(Tracy CONFIG REQUIRED)
 find_package(directx-headers CONFIG REQUIRED)
 find_package(directx-dxc CONFIG REQUIRED)
+find_package(D3D12MemoryAllocator CONFIG REQUIRED)
 add_subdirectory(${CMAKE_SOURCE_DIR}/cmake/Streamline)
 
 find_path(DETOURS_INCLUDE_DIRS "detours/detours.h")
@@ -127,6 +128,7 @@ target_link_libraries(
         d3d12.lib
         Microsoft::DirectX-Headers
         Microsoft::DirectXShaderCompiler
+        GPUOpen::D3D12MemoryAllocator
         ${DETOURS_LIBRARY}
 )
 
