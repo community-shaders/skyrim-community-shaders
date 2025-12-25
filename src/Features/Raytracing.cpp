@@ -1827,6 +1827,8 @@ eastl::shared_ptr<Allocation> Raytracing::GetTextureRegister(ID3D11Texture2D* dx
 
 	// Search for texture in shared map
 	if (auto sharedIt = sharedTextures.find(dx11Texture); sharedIt != sharedTextures.end()) {
+		std::lock_guard lock{ renderMutex };
+
 		// Texture not in heap, so create SRV at next available heap slot
 		auto dx12Texture = sharedIt->second.get();
 
