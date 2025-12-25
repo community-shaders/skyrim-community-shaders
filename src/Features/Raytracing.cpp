@@ -42,6 +42,8 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	Roughness,
 	Metalness,
 	Emissive,
+	Effect,
+	Sky,
 	Directional,
 	Point,
 	LodDimmer,
@@ -1399,7 +1401,7 @@ void Raytracing::Main_RenderWorld(bool a1)
 	}
 }
 
-RE::BSFadeNode* FindBSFadeNode(RE::NiNode* a_niNode)
+static RE::BSFadeNode* FindBSFadeNode(RE::NiNode* a_niNode)
 {
 	if (auto fadeNode = a_niNode->AsFadeNode()) {
 		return fadeNode;
@@ -1436,6 +1438,8 @@ inline std::wstring ToWide(const std::string& str)
 
 void Raytracing::CommitModel(Model& model)
 {
+	std::lock_guard lock{ renderMutex };
+
 	auto& shapes = model.shapes;
 	auto meshCount = shapes.size();
 
@@ -1561,6 +1565,45 @@ void Raytracing::UpdateModelBLAS(Model& model)
 	commandList->BuildRaytracingAccelerationStructure(&buildDesc, 0, nullptr);
 }
 
+// A custom visit controller built to ignore billboard/particle geometry
+static RE::BSVisit::BSVisitControl TraverseScenegraphRTGeometries(RE::NiAVObject* a_object, std::function<RE::BSVisit::BSVisitControl(RE::BSGeometry*)> a_func)
+{
+	auto result = RE::BSVisit::BSVisitControl::kContinue;
+
+	if (!a_object) {
+		return result;
+	}
+
+	auto geom = a_object->AsGeometry();
+	if (geom) {
+		return a_func(geom);
+	}
+
+	// Doodlum sez this is faster
+	auto rtti = a_object->GetRTTI();
+
+	static REL::Relocation<const RE::NiRTTI*> billboardRTTI{ RE::NiBillboardNode::Ni_RTTI };
+	if (rtti == billboardRTTI.get())
+		return result;
+
+	// Might break vegetation
+	static REL::Relocation<const RE::NiRTTI*> orderedRTTI{ RE::BSOrderedNode::Ni_RTTI };
+	if (rtti == orderedRTTI.get())
+		return result;
+
+	auto node = a_object->AsNode();
+	if (node) {
+		for (auto& child : node->GetChildren()) {
+			result = TraverseScenegraphRTGeometries(child.get(), a_func);
+			if (result == RE::BSVisit::BSVisitControl::kStop) {
+				break;
+			}
+		}
+	}
+
+	return result;
+}
+
 void Raytracing::CreateModel(RE::TESObjectREFR* refr, const char* path, RE::NiNode* pRoot)
 {
 	if (!pRoot) {
@@ -1589,7 +1632,8 @@ void Raytracing::CreateModel(RE::TESObjectREFR* refr, const char* path, RE::NiNo
 		logger::debug("[RT] CreateModel - BSX Flags [0x{:x}]: {}", bsxFlags->value, GetFlagsString<RE::BSXFlags::Flag>(bsxFlags->value));
 	}
 
-	auto formID = refr->GetRawFormID();
+	auto formID = refr->GetFormID();
+	auto baseFormID = refr->GetBaseObject()->GetFormID();
 
 	// We only need one buffer per model
 	if (models.find(path) != models.end()) {
@@ -1597,15 +1641,13 @@ void Raytracing::CreateModel(RE::TESObjectREFR* refr, const char* path, RE::NiNo
 		return;
 	}
 
-	//std::lock_guard lock{ renderMutex };
-
-	logger::debug("[RT] CreateModel - Path: {}, FormID [0x{:08X}], NiNode [0x{:08X}]: {}", path, formID, reinterpret_cast<uintptr_t>(pRoot), pRoot->name);
+	logger::info("[RT] CreateModel - Path: {}, Base FormID [0x{:08X}], FormID [0x{:08X}], NiNode [0x{:08X}]: {}", path, baseFormID, formID, reinterpret_cast<uintptr_t>(pRoot), pRoot->name);
 
 	auto rootWorldInverse = pRoot->world.Invert();
 
 	eastl::vector<eastl::unique_ptr<Shape>> shapes;
 
-	RE::BSVisit::TraverseScenegraphGeometries(pRoot, [&](RE::BSGeometry* pGeometry) -> RE::BSVisit::BSVisitControl {
+	TraverseScenegraphRTGeometries(pRoot, [&](RE::BSGeometry* pGeometry) -> RE::BSVisit::BSVisitControl {
 		const char* name = pGeometry->name.c_str();
 
 		const auto& geometryType = pGeometry->GetType();
@@ -1746,6 +1788,9 @@ bool Raytracing::RemoveInstance(RE::NiNode* pRoot, bool releaseModel)
 
 			// If this is the last Instance of the model, remove it
 			if (refCount <= 0 && releaseModel) {
+				// Not sure if its necesary to mutex here, but when the model goes out of scope the buffers are destroyed so I assume it is
+				std::lock_guard lock{ renderMutex };
+
 				logger::debug("[RT] RemoveInstance - No refs, erasing from collection");
 				models.erase(modelIt);
 			}
@@ -1811,8 +1856,6 @@ eastl::shared_ptr<Allocation> Raytracing::GetTextureRegister(ID3D11Texture2D* dx
 void Raytracing::AddInstance(RE::FormID formID, RE::NiNode* pNiNode, eastl::string path)
 {
 	logger::debug("[RT] AddInstance [0x{:08X}] - {}, Path: {}", formID, pNiNode->name, path);
-
-	//std::lock_guard lock{ geometryMutex };
 
 	if (auto instanceIt = instances.find(pNiNode); instanceIt == instances.end()) {
 		if (auto modelIt = models.find(path); modelIt != models.end()) {
@@ -2455,7 +2498,8 @@ bool Raytracing::UpdateRenderSize()
 
 void Raytracing::DrawRTGI()
 {
-	//std::lock_guard lock{ renderMutex };
+	// We mutex here to prevent changes to resources while the command list is in flight, we could just queue everything maybe?
+	std::lock_guard lock{ renderMutex };
 
 	if (!d3d11Context) {
 		logger::error("d3d11Context is nullptr");
@@ -3667,14 +3711,15 @@ RE::BSEventNotifyControl Raytracing::TESObjectLoadedEventHandler::ProcessEvent(c
 
 	auto* eventRef = RE::TESForm::LookupByID<RE::TESObjectREFR>(a_event->formID);
 
+	// Unloaded
 	if (!a_event->loaded) {
-		auto formID = eventRef->GetRawFormID();
+		auto formID = eventRef->GetFormID();
 
 		logger::info("[RT] TESObjectLoadedEventHandler - Unloading Name: {}, FormID [0x{:08X}]", eventRef->GetName(), formID);
 
 		bool removed = globals::features::raytracing.RemoveInstance(formID, true);
 
-		logger::info("[RT] TESObjectLoadedEventHandler - Unloadeded {}", removed);
+		logger::info("[RT] TESObjectLoadedEventHandler - Unloaded {}", removed);
 
 		return RE::BSEventNotifyControl::kContinue;
 	}

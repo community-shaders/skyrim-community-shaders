@@ -219,7 +219,7 @@ void Shape::BuildMaterial(const RE::BSGeometry::GEOMETRY_RUNTIME_DATA& geometryR
 					lightingShaderProp->emissiveMult
 				};
 
-				logger::debug("[RT] BuildMaterial - BSLightingShaderProperty Alpha: {}", lightingShaderProp->alpha);
+				//logger::debug("[RT] BuildMaterial - BSLightingShaderProperty Alpha: {}", lightingShaderProp->alpha);
 
 				if (auto shaderMaterial = lightingShaderProp->material) {
 					feature = shaderMaterial->GetFeature();
@@ -236,7 +236,7 @@ void Shape::BuildMaterial(const RE::BSGeometry::GEOMETRY_RUNTIME_DATA& geometryR
 
 					// Using static_cast so we still get diffuse and normal for PBR materials as well
 					if (const auto* lightingBaseMaterial = static_cast<RE::BSLightingShaderMaterialBase*>(shaderMaterial)) {
-						logger::debug("[RT] BuildMaterial - BSLightingShaderMaterialBase Alpha: {}", lightingBaseMaterial->materialAlpha);
+						//logger::debug("[RT] BuildMaterial - BSLightingShaderMaterialBase Alpha: {}", lightingBaseMaterial->materialAlpha);
 
 						baseTexture = TryGetTexture(lightingBaseMaterial->diffuseTexture);
 						normalTexture = TryGetTexture(lightingBaseMaterial->normalTexture);
@@ -246,8 +246,6 @@ void Shape::BuildMaterial(const RE::BSGeometry::GEOMETRY_RUNTIME_DATA& geometryR
 					// but it did not work at all, skyrim_cast is not safe and will cast even if not PBR material (no RTTI?)
 					if (typeid(*shaderMaterial) == typeid(BSLightingShaderMaterialPBR)) {
 						const auto* lightingPBRMaterial = static_cast<BSLightingShaderMaterialPBR*>(shaderMaterial);
-
-						logger::debug("[RT] BuildMaterial - BSLightingShaderMaterialPBR: [0x{:8X}]", reinterpret_cast<uintptr_t>(lightingPBRMaterial->diffuseTexture.get()));
 
 						effectTexture = TryGetTexture(lightingPBRMaterial->emissiveTexture);
 						rmaosTexture = TryGetTexture(lightingPBRMaterial->rmaosTexture);
@@ -274,8 +272,6 @@ void Shape::BuildMaterial(const RE::BSGeometry::GEOMETRY_RUNTIME_DATA& geometryR
 				} else {
 					logger::warn("[RT] BuildMaterial - BSShaderMaterial is nullptr");
 				}
-			} else {
-				logger::warn("[RT] BuildMaterial - BSLightingShaderProperty is nullptr");
 			}
 
 			if (auto effectShaderProp = netimmerse_cast<RE::BSEffectShaderProperty*>(effect)) {
@@ -293,8 +289,6 @@ void Shape::BuildMaterial(const RE::BSGeometry::GEOMETRY_RUNTIME_DATA& geometryR
 					}
 				//}
 			}
-		} else {
-			logger::warn("[RT] BuildMaterial - Effect is nullptr");
 		}
 	}
 
@@ -420,6 +414,8 @@ void Shape::CreateBuffers(const std::wstring& name)
 	auto* giHeap = rt.giHeap.get();
 
 	auto* materialBuffer = rt.materialBuffer.get();
+
+	std::lock_guard lock{ rt.renderMutex };
 
 	// Dynamic
 	if (flags & Flags::Dynamic) {

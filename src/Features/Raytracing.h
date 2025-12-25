@@ -1014,11 +1014,10 @@ struct Raytracing : public OverlayFeature
 						auto& rt = globals::features::raytracing;
 
 						if (auto sharedIt = rt.sharedTextures.find(texture); sharedIt != rt.sharedTextures.end()) {
-							// TODO: proper fix - this is backwards, it should be handled safely by the material going out of scope after its shape and models are released
 							if (auto textureIt = rt.textures.find(texture); textureIt != rt.textures.end()) {
 								auto index = textureIt->second.allocation->GetIndex();
 
-								//logger::info("[RT] NiSourceTexture::Destructor [0x{:8X}] - Register: {}", reinterpret_cast<uintptr_t>(texture), index);
+								logger::debug("[RT] NiSourceTexture::Destructor [0x{:8X}] - Register: {}", reinterpret_cast<uintptr_t>(texture), index);
 
 								// I imagine this isn't fast but I'll keep this in until I'm sure everything has been fixed
 								for (auto& [key, model]: rt.models) {
