@@ -23,8 +23,8 @@ struct Model
 {
 	eastl::vector<eastl::unique_ptr<Shape>> shapes;
 
-	winrt::com_ptr<ID3D12Resource> blasBuffer = nullptr;
-	winrt::com_ptr<ID3D12Resource> blasScratchBuffer = nullptr;
+	winrt::com_ptr<D3D12MA::Allocation> blasBuffer = nullptr;
+	winrt::com_ptr<D3D12MA::Allocation> blasScratchBuffer = nullptr;
 
 	Model(eastl::vector<eastl::unique_ptr<Shape>>& shapes) :
 		shapes(eastl::move(shapes))

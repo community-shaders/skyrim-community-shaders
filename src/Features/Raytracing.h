@@ -327,6 +327,8 @@ struct Raytracing : public OverlayFeature
 		.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR
 	};
 
+	static constexpr D3D12MA::ALLOCATION_DESC DEFAULT_HEAP_MA = { .HeapType = D3D12_HEAP_TYPE_DEFAULT };
+
 	enum struct Denoiser : int32_t
 	{
 		None,
@@ -786,7 +788,7 @@ struct Raytracing : public OverlayFeature
 
 	struct TempGPUData
 	{
-		winrt::com_ptr<ID3D12Resource> scratchBuffers;
+		winrt::com_ptr<D3D12MA::Allocation> scratchBuffers;
 		uint64_t fenceValue;
 	};
 

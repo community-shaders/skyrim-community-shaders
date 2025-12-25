@@ -1494,21 +1494,21 @@ void Raytracing::CommitModel(Model& model)
 		.Flags = D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS
 	};
 
-	winrt::com_ptr<ID3D12Resource> scratch = nullptr;
-	DX::ThrowIfFailed(d3d12Device->CreateCommittedResource(&DEFAULT_HEAP, D3D12_HEAP_FLAG_NONE, &desc, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, nullptr, IID_PPV_ARGS(&scratch)));
+	winrt::com_ptr<D3D12MA::Allocation> scratch = nullptr;
+	DX::ThrowIfFailed(allocator->CreateResource(&DEFAULT_HEAP_MA, &desc, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, nullptr, scratch.put(), IID_NULL, NULL));
 
 	desc.Width = prebuildInfo.ResultDataMaxSizeInBytes;
-	DX::ThrowIfFailed(d3d12Device->CreateCommittedResource(&DEFAULT_HEAP, D3D12_HEAP_FLAG_NONE, &desc, D3D12_RESOURCE_STATE_RAYTRACING_ACCELERATION_STRUCTURE, nullptr, IID_PPV_ARGS(&model.blasBuffer)));
+	DX::ThrowIfFailed(allocator->CreateResource(&DEFAULT_HEAP_MA, &desc, D3D12_RESOURCE_STATE_RAYTRACING_ACCELERATION_STRUCTURE, nullptr, model.blasBuffer.put(), IID_NULL, NULL));
 
 	D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_DESC buildDesc = {
-		.DestAccelerationStructureData = model.blasBuffer->GetGPUVirtualAddress(),
+		.DestAccelerationStructureData = model.blasBuffer->GetResource()->GetGPUVirtualAddress(),
 		.Inputs = inputs,
-		.ScratchAccelerationStructureData = scratch->GetGPUVirtualAddress() 
+		.ScratchAccelerationStructureData = scratch->GetResource()->GetGPUVirtualAddress() 
 	};
 
 	commandList->BuildRaytracingAccelerationStructure(&buildDesc, 0, nullptr);
 
-	const auto& asBarrier = CD3DX12_RESOURCE_BARRIER::UAV(model.blasBuffer.get());
+	const auto& asBarrier = CD3DX12_RESOURCE_BARRIER::UAV(model.blasBuffer->GetResource());
 	commandList->ResourceBarrier(1, &asBarrier);
 
 	if (updatable)
@@ -1556,10 +1556,10 @@ void Raytracing::UpdateModelBLAS(Model& model)
 
 
 	D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_DESC buildDesc = {
-		.DestAccelerationStructureData = model.blasBuffer->GetGPUVirtualAddress(),
+		.DestAccelerationStructureData = model.blasBuffer->GetResource()->GetGPUVirtualAddress(),
 		.Inputs = inputs,
-		.SourceAccelerationStructureData = model.blasBuffer->GetGPUVirtualAddress(),
-		.ScratchAccelerationStructureData = model.blasScratchBuffer->GetGPUVirtualAddress()
+		.SourceAccelerationStructureData = model.blasBuffer->GetResource()->GetGPUVirtualAddress(),
+		.ScratchAccelerationStructureData = model.blasScratchBuffer->GetResource()->GetGPUVirtualAddress()
 	};
 
 	commandList->BuildRaytracingAccelerationStructure(&buildDesc, 0, nullptr);
@@ -1962,7 +1962,7 @@ void Raytracing::UpdateDynamicSkinning(ID3D12GraphicsCommandList4* pCommandList)
 
 			UpdateModelBLAS(model);
 
-			uavBarriers.push_back(CD3DX12_RESOURCE_BARRIER::UAV(model.blasBuffer.get()));
+			uavBarriers.push_back(CD3DX12_RESOURCE_BARRIER::UAV(model.blasBuffer->GetResource()));
 		}
 	}
 
@@ -2093,7 +2093,7 @@ void Raytracing::UpdateInstances()
 		D3D12_RAYTRACING_INSTANCE_DESC blasInstance = {
 			.InstanceID = 0, // We don't really use this, instances are an unordered_map, so yeah unordered...
 			.InstanceMask = 1,
-			.AccelerationStructure = model.blasBuffer->GetGPUVirtualAddress()
+			.AccelerationStructure = model.blasBuffer->GetResource()->GetGPUVirtualAddress()
 		};
 
 		// Copy transform matrix from Instance to DX12 BLAS instance
@@ -2353,7 +2353,7 @@ void Raytracing::UpdateShadowInstances()
 		D3D12_RAYTRACING_INSTANCE_DESC blasShadowInstance = { 
 			.InstanceID = static_cast<uint>(blasShadowInstances.size()),
 			.InstanceMask = 1,
-			.AccelerationStructure = model.blasBuffer->GetGPUVirtualAddress() 
+			.AccelerationStructure = model.blasBuffer->GetResource()->GetGPUVirtualAddress() 
 		};
 
 		memcpy(blasShadowInstance.Transform, instance.transform.m, sizeof(blasShadowInstance.Transform));
