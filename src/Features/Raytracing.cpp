@@ -3190,6 +3190,16 @@ void Raytracing::InitD3D12(ID3D11Device* ppDevice, ID3D11DeviceContext* pImmedia
 		CloseHandle(sharedFenceHandle);
 	}
 
+	// D3D12 Memory Allocator
+	{
+		D3D12MA::ALLOCATOR_DESC allocatorDesc = {};
+		allocatorDesc.pDevice = d3d12Device.get();
+		allocatorDesc.pAdapter = a_adapter;
+		allocatorDesc.Flags = D3D12MA_RECOMMENDED_ALLOCATOR_FLAGS;
+
+		DX::ThrowIfFailed(D3D12MA::CreateAllocator(&allocatorDesc, allocator.put()));	
+	}
+
 	if (settings.EnableDebugDevice || settings.EnablePIXCapture)
 	{
 		HANDLE disconnectEvent = CreateEvent(nullptr, FALSE, FALSE, nullptr);

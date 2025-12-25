@@ -678,6 +678,8 @@ struct Raytracing : public OverlayFeature
 		}
 	};
 
+	winrt::com_ptr<D3D12MA::Allocator> allocator = nullptr;
+
 	eastl::unordered_map<RE::NiNode*, Instance> instances;
 	eastl::unordered_map<RE::FormID, RE::NiNode*> formIDNodes;
 
