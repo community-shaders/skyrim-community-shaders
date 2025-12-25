@@ -3,6 +3,7 @@
 #include "/Shaders/Common/GBuffer.hlsli"
 #include "/Test/STF/ShaderTestFramework.hlsli"
 
+/// @tags gbuffer, normal, encoding
 [numthreads(1, 1, 1)]
 void TestNormalEncodingRoundtrip()
 {
@@ -33,6 +34,7 @@ void TestNormalEncodingRoundtrip()
     }
 }
 
+/// @tags gbuffer, normal, encoding
 [numthreads(1, 1, 1)]
 void TestNormalEncodingAngledNormals()
 {
@@ -62,6 +64,7 @@ void TestNormalEncodingAngledNormals()
     }
 }
 
+/// @tags gbuffer, normal, encoding
 [numthreads(1, 1, 1)]
 void TestOctWrap()
 {
@@ -87,6 +90,7 @@ void TestOctWrap()
     ASSERT(IsTrue, wrapped3.y >= -1.0h && wrapped3.y <= 1.0h);
 }
 
+/// @tags gbuffer, normal, encoding
 [numthreads(1, 1, 1)]
 void TestVanillaNormalEncoding()
 {

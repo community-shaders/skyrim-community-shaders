@@ -22,130 +22,107 @@ Tests focus on pure math functions (no DX12-specific features), so compiler diff
 
 ## Writing New Tests
 
-See existing tests (`test_math.cpp`, `test_brdf.cpp`) for examples. Pattern:
+Tests are automatically discovered at runtime by scanning HLSL files in `package/Shaders/Tests/Test*.hlsl`.
 
-**C++ test harness** (`test_*.cpp`):
-
-```cpp
-TEST_CASE("MyShader - MyFunction", "[myshader]")
-{
-    stf::ShaderTestFixture fixture(...);
-    auto result = fixture.RunTest(...);
-    REQUIRE(result);
-}
-```
-
-**HLSL test** (`Tests/Test*.hlsl`):
+**Create a test file** (`Tests/TestMyModule.hlsl`):
 
 ```hlsl
 #include "Common/MyShader.hlsli"
 #include "/Test/STF/ShaderTestFramework.hlsli"
 
+/// @tags math, utility
+/// Test description (optional)
 [numthreads(1, 1, 1)]
 void TestMyFunction()
 {
     ASSERT(IsTrue, MyFunction(1.0f) > 0.0f);
 }
+
+/// @tag performance
+[numthreads(1, 1, 1)]
+void TestMyFunctionPerformance()
+{
+    // Performance test
+    ASSERT(IsTrue, MyFunction(100.0f) > 0.0f);
+}
 ```
 
-### Test Organization
+### Organizing Tests with Tags
 
-Use Catch2 tags to organize tests:
+Use doxygen-style `@tag` or `@tags` comments before test functions to organize them:
 
--   `[math]` - Mathematical operations
--   `[color]` - Color space operations
--   `[pbr]` - PBR material functions
--   `[lighting]` - Lighting calculations
--   `[utility]` - Utility functions
+```hlsl
+/// @tags brdf, specular
+[numthreads(1, 1, 1)]
+void TestFresnelSchlick() { ... }
+
+/// @tag color, @tag gamma
+[numthreads(1, 1, 1)]
+void TestGammaConversion() { ... }
+```
+
+**Tag format:**
+
+-   `/// @tag tagname` - Single tag
+-   `/// @tags tag1, tag2, tag3` - Multiple tags (comma-separated)
+-   Multiple comment lines are combined
+-   Tags are optional; tests without tags will have no tag filtering available
 
 ### Running Specific Tests
 
 ```bash
-# Run only math tests
-shader_tests.exe "[math]"
+# Run all tests
+shader_tests.exe
 
-# Run only color tests
-shader_tests.exe "[color]"
+# Run tests with specific tag
+shader_tests.exe "[brdf]"
 
-# Run a specific test case
-shader_tests.exe "Math.hlsli - Constants"
+# Run multiple tags
+shader_tests.exe "[math][color]"
+
+# Run a specific test by name
+shader_tests.exe "BRDF - Fresnel Schlick"
+
+# List all available tags
+shader_tests.exe --list-tags
 ```
 
-## Current Test Coverage
+## Test Coverage
 
-### ✅ GPU-Executed Unit Tests (63 test cases, 268 GPU assertions)
+Tests are automatically discovered from HLSL files in `package/Shaders/Tests/`. Run `shader_tests.exe` to see the current test count and results.
 
--   ✅ **Math.hlsli** (3 tests)
+**Test modules currently available:**
 
-    -   Math constants (PI, HALF_PI, TAU) with relationship validation
-    -   Epsilon constants (exact values + ordering)
-    -   Identity matrix structure
+-   `TestMath.hlsl` - Mathematical constants, matrices, and operations
+-   `TestColor.hlsl` - Color space conversions and operations
+-   `TestBRDF.hlsl` - BRDF functions (diffuse, specular, Fresnel, GGX, etc.)
+-   `TestRandom.hlsl` - Random number generators and noise functions
+-   `TestFastMath.hlsl` - Fast approximations for math operations
+-   `TestDisplayMapping.hlsl` - HDR/PQ encoding and color space transforms
+-   `TestLightingCommon.hlsl` - Lighting utility functions
+-   `TestGBuffer.hlsl` - GBuffer encoding/decoding
 
--   ✅ **Color.hlsli** (6 tests)
+**To see detailed test information:**
 
-    -   RGB to Luminance conversion
-    -   RGB/YCoCg color space roundtrip
-    -   Saturation adjustment
-    -   Gamma ↔ Linear conversion roundtrip
-    -   Multi-bounce AO
-    -   Specular AO Lagarde
+```bash
+# List all test cases with their tags
+shader_tests.exe --list-tests
 
--   ✅ **BRDF.hlsli** (8 tests)
+# List all available tags
+shader_tests.exe --list-tags
 
-    -   Diffuse Lambert
-    -   Fresnel Schlick (boundary conditions)
-    -   GGX Distribution (roughness variations)
-    -   Smith Joint Visibility
-    -   Neubelt Visibility (symmetry)
-    -   Environment BRDF Lazarov
-    -   Charlie Distribution (sheen)
-    -   Anisotropic GGX
+# Show test count and run results
+shader_tests.exe
+```
 
--   ✅ **Random.hlsli** (14 tests)
+### Adding New Test Coverage
 
-    -   PCG random number generator (determinism, uniqueness)
-    -   Float generators (f1, f2, f3 range validation)
-    -   PCG 2D/3D hashing
-    -   Interleaved Gradient Noise
-    -   R1/R2/R3 quasirandom sequences
-    -   Murmur3 hash
-    -   Perlin noise (range, continuity)
+To add tests for a new shader module:
 
--   ✅ **FastMath.hlsli** (16 tests)
-
-    -   Fast reciprocal sqrt (NR0, NR1, NR2 iterations - error bounds)
-    -   Fast sqrt (NR0, NR1, NR2 iterations - error bounds)
-    -   Fast reciprocal (NR0, NR1, NR2 iterations - error bounds)
-    -   Fast trig functions (acos, asin, atan variants)
-    -   Optimized trig (ACos, ASin, ATan, ATanPos)
-    -   Accuracy validation vs standard library functions
-
--   ✅ **DisplayMapping.hlsli** (11 tests)
-
-    -   Range compression (single, threshold, float3)
-    -   PQ (Perceptual Quantizer) encoding/decoding roundtrips
-    -   RGB ↔ XYZ color space conversions
-    -   XYZ ↔ LMS conversions
-    -   RGB ↔ ICtCp conversions (HDR color space)
-    -   PQ constants validation
-    -   White point and black point accuracy
-
--   ✅ **LightingCommon.hlsli** (1 test)
-    -   ShininessToRoughness conversion (known values, monotonicity, range)
-
-### Coverage Summary
-
-**Files Covered**: 7/21 (33% of all files, ~70% of easily testable files)
-**Total Tests**: 63 test functions
-**Total Assertions**: 268 GPU-executed assertions
-
-### ⏳ Not Easily Testable
-
--   ⏳ PBR material functions
--   ⏳ BRDF calculations
--   ⏳ Lighting computations
--   ⏳ Shadow sampling
--   ⏳ Frame buffer operations
+1. Create `Tests/TestYourModule.hlsl`
+2. Add test functions with `[numthreads(1,1,1)]` attribute
+3. Use `/// @tags` comments to organize tests
+4. Tests are automatically discovered and run
 
 ## Dependencies
 

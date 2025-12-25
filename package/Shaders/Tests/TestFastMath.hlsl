@@ -8,6 +8,7 @@ float RelativeError(float approx, float exact)
     return abs((approx - exact) / exact);
 }
 
+/// @tags fastmath, sqrt, reciprocal
 [numthreads(1, 1, 1)]
 void TestFastRcpSqrtNR0()
 {
@@ -29,6 +30,7 @@ void TestFastRcpSqrtNR0()
     }
 }
 
+/// @tags fastmath, sqrt, reciprocal
 [numthreads(1, 1, 1)]
 void TestFastRcpSqrtNR1()
 {
@@ -47,6 +49,7 @@ void TestFastRcpSqrtNR1()
     }
 }
 
+/// @tags fastmath, sqrt, reciprocal
 [numthreads(1, 1, 1)]
 void TestFastRcpSqrtNR2()
 {
@@ -65,6 +68,7 @@ void TestFastRcpSqrtNR2()
     }
 }
 
+/// @tags fastmath, sqrt
 [numthreads(1, 1, 1)]
 void TestFastSqrtNR0()
 {
@@ -85,6 +89,7 @@ void TestFastSqrtNR0()
     }
 }
 
+/// @tags fastmath, sqrt
 [numthreads(1, 1, 1)]
 void TestFastSqrtNR1()
 {
@@ -102,6 +107,7 @@ void TestFastSqrtNR1()
     }
 }
 
+/// @tags fastmath, sqrt
 [numthreads(1, 1, 1)]
 void TestFastSqrtNR2()
 {
@@ -119,6 +125,7 @@ void TestFastSqrtNR2()
     }
 }
 
+/// @tags fastmath, reciprocal
 [numthreads(1, 1, 1)]
 void TestFastRcpNR0()
 {
@@ -145,6 +152,7 @@ void TestFastRcpNR0()
     }
 }
 
+/// @tags fastmath, reciprocal
 [numthreads(1, 1, 1)]
 void TestFastRcpNR1()
 {
@@ -163,6 +171,7 @@ void TestFastRcpNR1()
     }
 }
 
+/// @tags fastmath, reciprocal
 [numthreads(1, 1, 1)]
 void TestFastRcpNR2()
 {
@@ -180,6 +189,7 @@ void TestFastRcpNR2()
     }
 }
 
+/// @tags fastmath, trig
 [numthreads(1, 1, 1)]
 void TestAcosFast4()
 {
@@ -206,6 +216,7 @@ void TestAcosFast4()
     }
 }
 
+/// @tags fastmath, trig
 [numthreads(1, 1, 1)]
 void TestAsinFast4()
 {
@@ -231,6 +242,7 @@ void TestAsinFast4()
     }
 }
 
+/// @tags fastmath, trig
 [numthreads(1, 1, 1)]
 void TestAtanFast4()
 {
@@ -251,6 +263,7 @@ void TestAtanFast4()
     }
 }
 
+/// @tags fastmath, trig
 [numthreads(1, 1, 1)]
 void TestACos()
 {
@@ -278,6 +291,7 @@ void TestACos()
     }
 }
 
+/// @tags fastmath, trig
 [numthreads(1, 1, 1)]
 void TestASin()
 {
@@ -305,6 +319,7 @@ void TestASin()
     }
 }
 
+/// @tags fastmath, trig
 [numthreads(1, 1, 1)]
 void TestATanPos()
 {
@@ -325,6 +340,7 @@ void TestATanPos()
     }
 }
 
+/// @tags fastmath, trig
 [numthreads(1, 1, 1)]
 void TestATan()
 {

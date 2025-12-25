@@ -7,6 +7,7 @@ static const float4 Param = { 0, 0, 0, 0 };
 #include "/Shaders/Common/DisplayMapping.hlsli"
 #include "/Test/STF/ShaderTestFramework.hlsli"
 
+/// @tags hdr, tonemapping
 [numthreads(1, 1, 1)]
 void TestRangeCompressSingle()
 {
@@ -34,6 +35,7 @@ void TestRangeCompressSingle()
     ASSERT(IsTrue, result_10 < 1.0f);
 }
 
+/// @tags hdr, tonemapping
 [numthreads(1, 1, 1)]
 void TestRangeCompressThreshold()
 {
@@ -55,6 +57,7 @@ void TestRangeCompressThreshold()
     ASSERT(IsTrue, result_high >= threshold);
 }
 
+/// @tags hdr, tonemapping
 [numthreads(1, 1, 1)]
 void TestRangeCompressFloat3()
 {
@@ -74,6 +77,7 @@ void TestRangeCompressFloat3()
     ASSERT(IsTrue, result.z >= 0.0f && result.z < 1.0f);
 }
 
+/// @tags hdr, pq, colorspace
 [numthreads(1, 1, 1)]
 void TestLinearToPQRoundtrip()
 {
@@ -100,6 +104,7 @@ void TestLinearToPQRoundtrip()
     }
 }
 
+/// @tags hdr, colorspace
 [numthreads(1, 1, 1)]
 void TestRGBToXYZRoundtrip()
 {
@@ -123,6 +128,7 @@ void TestRGBToXYZRoundtrip()
     }
 }
 
+/// @tags hdr, colorspace
 [numthreads(1, 1, 1)]
 void TestXYZToLMSRoundtrip()
 {
@@ -145,6 +151,7 @@ void TestXYZToLMSRoundtrip()
     }
 }
 
+/// @tags hdr, colorspace, ictcp
 [numthreads(1, 1, 1)]
 void TestRGBToICtCpRoundtrip()
 {
@@ -169,6 +176,7 @@ void TestRGBToICtCpRoundtrip()
     }
 }
 
+/// @tags hdr, luminance, ictcp
 [numthreads(1, 1, 1)]
 void TestICtCpLuminance()
 {
@@ -185,6 +193,7 @@ void TestICtCpLuminance()
     ASSERT(IsTrue, ictcp_bright.x > ictcp_dark.x);
 }
 
+/// @tags hdr, pq
 [numthreads(1, 1, 1)]
 void TestPQConstants()
 {
@@ -202,6 +211,7 @@ void TestPQConstants()
     ASSERT(IsTrue, DisplayMapping::PQ_constant_N < 0.17f);
 }
 
+/// @tags hdr, colorspace
 [numthreads(1, 1, 1)]
 void TestRGBToXYZWhitePoint()
 {
@@ -219,6 +229,7 @@ void TestRGBToXYZWhitePoint()
     ASSERT(IsTrue, xyz.z > 1.0f && xyz.z < 1.15f);
 }
 
+/// @tags hdr, colorspace
 [numthreads(1, 1, 1)]
 void TestRGBToXYZBlack()
 {

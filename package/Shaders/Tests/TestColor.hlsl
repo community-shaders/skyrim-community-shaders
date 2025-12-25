@@ -2,6 +2,7 @@
 #include "/Shaders/Common/Color.hlsli"
 #include "/Test/STF/ShaderTestFramework.hlsli"
 
+/// @tags color, luminance
 [numthreads(1, 1, 1)]
 void TestRGBToLuminance()
 {
@@ -41,6 +42,7 @@ void TestRGBToLuminance()
     ASSERT(IsTrue, mixedLum <= 1.0f);
 }
 
+/// @tags color, colorspace
 [numthreads(1, 1, 1)]
 void TestRGBYCoCgRoundtrip()
 {
@@ -66,6 +68,7 @@ void TestRGBYCoCgRoundtrip()
     }
 }
 
+/// @tags color
 [numthreads(1, 1, 1)]
 void TestSaturation()
 {
@@ -91,6 +94,7 @@ void TestSaturation()
     ASSERT(IsTrue, overSat.b >= 0.0f);
 }
 
+/// @tags color, gamma, colorspace
 [numthreads(1, 1, 1)]
 void TestGammaConversionRoundtrip()
 {
@@ -122,6 +126,7 @@ void TestGammaConversionRoundtrip()
     }
 }
 
+/// @tags color, ao, lighting
 [numthreads(1, 1, 1)]
 void TestMultiBounceAO()
 {
@@ -146,6 +151,7 @@ void TestMultiBounceAO()
     ASSERT(IsTrue, partialLum < fullLum);
 }
 
+/// @tags color, ao, specular, lighting
 [numthreads(1, 1, 1)]
 void TestSpecularAOLagarde()
 {
@@ -165,6 +171,7 @@ void TestSpecularAOLagarde()
     ASSERT(AreEqual, fullAOResult, 1.0f);
 }
 
+/// @tags color, luminance
 [numthreads(1, 1, 1)]
 void TestRGBToLuminanceVariants()
 {
@@ -182,6 +189,7 @@ void TestRGBToLuminanceVariants()
     ASSERT(IsTrue, abs(lum1 - lum3) < 0.2f);
 }
 
+/// @tags color, lighting
 [numthreads(1, 1, 1)]
 void TestDiffuseAndLight()
 {

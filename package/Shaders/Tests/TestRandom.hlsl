@@ -2,6 +2,7 @@
 #include "/Shaders/Common/Random.hlsli"
 #include "/Test/STF/ShaderTestFramework.hlsli"
 
+/// @tags random, pcg, rng
 [numthreads(1, 1, 1)]
 void TestPCGBasicProperties()
 {
@@ -25,6 +26,7 @@ void TestPCGBasicProperties()
     ASSERT(IsTrue, state != 12345u);  // State should have changed after calls
 }
 
+/// @tags random, pcg, rng
 [numthreads(1, 1, 1)]
 void TestPCGDeterministic()
 {
@@ -41,6 +43,7 @@ void TestPCGDeterministic()
     ASSERT(AreEqual, r2a, r2b);
 }
 
+/// @tags random, rng
 [numthreads(1, 1, 1)]
 void TestF1Range()
 {
@@ -77,6 +80,7 @@ void TestF1Range()
     ASSERT(IsTrue, (maxVal - minVal) > 0.1f);
 }
 
+/// @tags random, rng
 [numthreads(1, 1, 1)]
 void TestF2Range()
 {
@@ -100,6 +104,7 @@ void TestF2Range()
     }
 }
 
+/// @tags random, rng
 [numthreads(1, 1, 1)]
 void TestF3Range()
 {
@@ -113,6 +118,7 @@ void TestF3Range()
     ASSERT(IsTrue, r.z >= 0.0f && r.z < 1.0f);
 }
 
+/// @tags random, pcg, hash
 [numthreads(1, 1, 1)]
 void TestPCG2D()
 {
@@ -132,6 +138,7 @@ void TestPCG2D()
     ASSERT(IsTrue, r1.x != r3.x || r1.y != r3.y);
 }
 
+/// @tags random, pcg, hash
 [numthreads(1, 1, 1)]
 void TestPCG3D()
 {
@@ -150,6 +157,7 @@ void TestPCG3D()
     ASSERT(IsTrue, r1.x != 0u || r1.y != 0u || r1.z != 0u);
 }
 
+/// @tags random, noise
 [numthreads(1, 1, 1)]
 void TestInterleavedGradientNoise()
 {
@@ -174,6 +182,7 @@ void TestInterleavedGradientNoise()
     ASSERT(IsTrue, noise3 < 1.0f);
 }
 
+/// @tags random, quasirandom, sequence
 [numthreads(1, 1, 1)]
 void TestR1Sequence()
 {
@@ -191,6 +200,7 @@ void TestR1Sequence()
     ASSERT(IsTrue, abs(r1 - r2) > 0.001f);
 }
 
+/// @tags random, quasirandom, sequence
 [numthreads(1, 1, 1)]
 void TestR2Sequence()
 {
@@ -207,6 +217,7 @@ void TestR2Sequence()
     ASSERT(IsTrue, abs(r0.x - r1.x) > 0.001f || abs(r0.y - r1.y) > 0.001f);
 }
 
+/// @tags random, quasirandom, sequence
 [numthreads(1, 1, 1)]
 void TestR3Sequence()
 {
@@ -218,6 +229,7 @@ void TestR3Sequence()
     ASSERT(IsTrue, r.z >= 0.0f && r.z < 1.0f);
 }
 
+/// @tags random, hash
 [numthreads(1, 1, 1)]
 void TestMurmur3Hash()
 {
@@ -241,6 +253,7 @@ void TestMurmur3Hash()
     ASSERT(IsTrue, hash1 != 0u);
 }
 
+/// @tags random, noise, perlin
 [numthreads(1, 1, 1)]
 void TestPerlinNoiseRange()
 {
@@ -255,6 +268,7 @@ void TestPerlinNoiseRange()
     ASSERT(IsTrue, noise2 <= 1.0f);
 }
 
+/// @tags random, noise, perlin
 [numthreads(1, 1, 1)]
 void TestPerlinNoiseContinuity()
 {

@@ -8,6 +8,7 @@
 #include <fstream>
 #include <regex>
 #include <set>
+#include <sstream>
 #include <string>
 #include <vector>
 
@@ -71,63 +72,30 @@ namespace HLSLTestDiscovery
 		return moduleName + " - " + name;
 	}
 
-	// Infer tags from function name
-	inline std::vector<std::string> inferTags(const std::string& functionName)
+	// Parse tags from doxygen-style comments
+	// Supports: /// @tag tagname or /// @tags tag1, tag2, tag3
+	inline std::vector<std::string> parseDoxygenTags(const std::vector<std::string>& commentLines)
 	{
 		std::vector<std::string> tags;
-		std::string lower = functionName;
-		std::transform(lower.begin(), lower.end(), lower.begin(),
-			[](unsigned char c) { return static_cast<char>(std::tolower(c)); });
-
-		struct TagRule
-		{
-			const char* keyword;
-			const char* tag;
-		};
-
-		static const TagRule rules[] = {
-			{ "fresnel", "fresnel" },
-			{ "diffuse", "diffuse" },
-			{ "specular", "specular" },
-			{ "lambert", "diffuse" },
-			{ "burley", "diffuse" },
-			{ "ggx", "ggx" },
-			{ "beckmann", "beckmann" },
-			{ "charlie", "sheen" },
-			{ "visibility", "visibility" },
-			{ "distribution", "ndf" },
-			{ "brdf", "brdf" },
-			{ "sqrt", "sqrt" },
-			{ "rcp", "reciprocal" },
-			{ "atan", "trig" },
-			{ "asin", "trig" },
-			{ "acos", "trig" },
-			{ "sin", "trig" },
-			{ "cos", "trig" },
-			{ "tan", "trig" },
-			{ "fastmath", "fastmath" },
-			{ "pcg", "pcg" },
-			{ "random", "random" },
-			{ "noise", "noise" },
-			{ "perlin", "noise" },
-			{ "hash", "hash" },
-			{ "murmur", "hash" },
-			{ "color", "color" },
-			{ "luminance", "luminance" },
-			{ "gamma", "gamma" },
-			{ "displaymapping", "displaymapping" },
-			{ "math", "math" },
-			{ "matrix", "matrix" },
-			{ "gbuffer", "gbuffer" },
-			{ "normal", "normal" },
-			{ "anisotropic", "anisotropic" },
-			{ "lightingcommon", "lightingcommon" }
-		};
-
 		std::set<std::string> uniqueTags;
-		for (const auto& rule : rules) {
-			if (lower.find(rule.keyword) != std::string::npos) {
-				uniqueTags.insert(rule.tag);
+
+		std::regex tagPattern(R"(@tags?\s+([a-zA-Z0-9_,\s-]+))");
+
+		for (const auto& line : commentLines) {
+			std::smatch match;
+			if (std::regex_search(line, match, tagPattern)) {
+				std::string tagList = match[1].str();
+				// Split by comma
+				std::stringstream ss(tagList);
+				std::string tag;
+				while (std::getline(ss, tag, ',')) {
+					// Trim whitespace
+					tag.erase(0, tag.find_first_not_of(" \t"));
+					tag.erase(tag.find_last_not_of(" \t") + 1);
+					if (!tag.empty()) {
+						uniqueTags.insert(tag);
+					}
+				}
 			}
 		}
 
@@ -150,9 +118,19 @@ namespace HLSLTestDiscovery
 		std::string moduleName = extractModuleName(filePath.filename().string());
 		std::regex numthreadsPattern(R"(\[numthreads\s*\(\s*1\s*,\s*1\s*,\s*1\s*\)\s*\])");
 		std::regex functionPattern(R"(void\s+(\w+)\s*\(\s*\))");
+		std::regex commentPattern(R"(^\s*///)");  // Doxygen-style triple-slash comments
 
 		std::string line;
+		std::vector<std::string> precedingComments;
+
 		while (std::getline(file, line)) {
+			// Collect doxygen-style comments
+			if (std::regex_search(line, commentPattern)) {
+				precedingComments.push_back(line);
+				continue;
+			}
+
+			// Look for [numthreads(1,1,1)] attribute
 			if (std::regex_search(line, numthreadsPattern)) {
 				std::string nextLine;
 				if (std::getline(file, nextLine)) {
@@ -162,10 +140,17 @@ namespace HLSLTestDiscovery
 						test.name = match[1].str();
 						test.filePath = "/Shaders/Tests/" + filePath.filename().string();
 						test.displayName = generateDisplayName(test.name, moduleName);
-						test.tags = inferTags(test.name);
+
+						// Parse tags from doxygen comments
+						test.tags = parseDoxygenTags(precedingComments);
+
 						tests.push_back(test);
 					}
 				}
+				precedingComments.clear();
+			} else if (!line.empty() && line.find_first_not_of(" \t\r\n") != std::string::npos) {
+				// Non-empty, non-comment line - reset comment collection
+				precedingComments.clear();
 			}
 		}
 

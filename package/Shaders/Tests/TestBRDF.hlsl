@@ -2,6 +2,7 @@
 #include "/Shaders/Common/BRDF.hlsli"
 #include "/Test/STF/ShaderTestFramework.hlsli"
 
+/// @tags brdf, diffuse
 [numthreads(1, 1, 1)]
 void TestDiffuseLambert()
 {
@@ -16,6 +17,7 @@ void TestDiffuseLambert()
     ASSERT(AreEqual, lambert, lambert2);
 }
 
+/// @tags brdf, fresnel, specular
 [numthreads(1, 1, 1)]
 void TestFresnelSchlick()
 {
@@ -53,6 +55,7 @@ void TestFresnelSchlick()
     ASSERT(IsTrue, abs(fresnel_metal.b - F0_metal.b) < 0.001f);
 }
 
+/// @tags brdf, ggx, ndf, specular
 [numthreads(1, 1, 1)]
 void TestDistributionGGX()
 {
@@ -80,6 +83,7 @@ void TestDistributionGGX()
     ASSERT(IsTrue, d_smooth > d_rough);
 }
 
+/// @tags brdf, visibility, specular
 [numthreads(1, 1, 1)]
 void TestVisibilitySmithJoint()
 {
@@ -113,6 +117,7 @@ void TestVisibilitySmithJoint()
     ASSERT(IsTrue, vis_rough < vis_smooth);
 }
 
+/// @tags brdf, visibility, specular
 [numthreads(1, 1, 1)]
 void TestVisibilityNeubelt()
 {
@@ -130,6 +135,7 @@ void TestVisibilityNeubelt()
     ASSERT(AreEqual, vis_a, vis_b);
 }
 
+/// @tags brdf, ibl, specular
 [numthreads(1, 1, 1)]
 void TestEnvBRDFLazarov()
 {
@@ -151,6 +157,7 @@ void TestEnvBRDFLazarov()
     ASSERT(IsTrue, brdf_normal.x >= 0.0f);
 }
 
+/// @tags brdf, sheen, ndf
 [numthreads(1, 1, 1)]
 void TestDCharlie()
 {
@@ -170,6 +177,7 @@ void TestDCharlie()
     ASSERT(IsTrue, d_normal >= 0.0f);
 }
 
+/// @tags brdf, anisotropic, ggx, ndf, specular
 [numthreads(1, 1, 1)]
 void TestAnisotropicGGX()
 {
@@ -189,6 +197,7 @@ void TestAnisotropicGGX()
     ASSERT(IsTrue, d_iso > 0.0f);
 }
 
+/// @tags brdf, diffuse
 [numthreads(1, 1, 1)]
 void TestDiffuseBurley()
 {
@@ -211,6 +220,7 @@ void TestDiffuseBurley()
     ASSERT(IsTrue, diffuse.x < 1.0f);
 }
 
+/// @tags brdf, beckmann, ndf, specular
 [numthreads(1, 1, 1)]
 void TestDBeckmann()
 {
@@ -227,6 +237,7 @@ void TestDBeckmann()
     ASSERT(IsTrue, d_peak >= d);
 }
 
+/// @tags brdf, visibility, specular
 [numthreads(1, 1, 1)]
 void TestVisSmith()
 {
@@ -246,6 +257,7 @@ void TestVisSmith()
     ASSERT(IsTrue, vis_approx > 0.0f);
 }
 
+/// @tags brdf, ibl, specular
 [numthreads(1, 1, 1)]
 void TestEnvBRDFHirvonen()
 {

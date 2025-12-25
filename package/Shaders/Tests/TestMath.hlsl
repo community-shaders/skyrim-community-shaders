@@ -2,6 +2,7 @@
 #include "/Shaders/Common/Math.hlsli"
 #include "/Test/STF/ShaderTestFramework.hlsli"
 
+/// @tags math, constants
 [numthreads(1, 1, 1)]
 void TestMathConstants()
 {
@@ -25,6 +26,7 @@ void TestMathConstants()
     ASSERT(IsTrue, Math::HALF_PI > 0.0f);
 }
 
+/// @tags math, constants
 [numthreads(1, 1, 1)]
 void TestEpsilonConstants()
 {
@@ -48,6 +50,7 @@ void TestEpsilonConstants()
     ASSERT(IsTrue, EPSILON_DOT_CLAMP < EPSILON_SSS_ALBEDO);
 }
 
+/// @tags math, matrix
 [numthreads(1, 1, 1)]
 void TestIdentityMatrix()
 {

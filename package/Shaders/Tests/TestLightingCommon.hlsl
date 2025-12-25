@@ -2,6 +2,7 @@
 #include "/Shaders/Common/LightingCommon.hlsli"
 #include "/Test/STF/ShaderTestFramework.hlsli"
 
+/// @tags lighting, material
 [numthreads(1, 1, 1)]
 void TestShininessToRoughness()
 {
