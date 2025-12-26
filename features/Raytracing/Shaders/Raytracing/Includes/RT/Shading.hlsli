@@ -151,16 +151,58 @@ float3 EvalDirectionalLight(in Surface surface, in BRDFContext brdfContext, in L
     return direct;
 }
 
+float GetLightSampleWeight(Surface surface, Light light)
+{
+    float3 l = (light.Vector - surface.Position);
+    float dist = length(l) * GAME_UNIT_TO_M;
+    float atten = 1.0 / (1.0 + dist * dist);
+    float intensity = max(light.Color.r, max(light.Color.g, light.Color.b));
+    return atten * intensity;
+}
+
 float3 EvalPointLight(in Surface surface, in BRDFContext brdfContext, in LightData lightData, in Material material, inout uint randomSeed)
 {
     if (lightData.Count == 0) 
         return float3(0, 0, 0);
+
+    float lightWeight = float(lightData.Count);
+
+#if defined(RIS)
+    const uint candidateCount = 4;
+    uint selectedLightID = 0;
+    float totalWeight = 0.0f;
+    float selectedWeight = 0.0f;
+
+    for (uint i = 0; i < candidateCount; i++)
+    {
+        uint lightIdx = min(uint(Random(randomSeed) * lightData.Count), lightData.Count - 1);
+        uint lightID = lightData.GetID(lightIdx);
+        Light testLight = Lights[lightID];
+        float weight = GetLightSampleWeight(surface, testLight);
+        totalWeight += weight;
+
+        if (Random(randomSeed) * totalWeight < weight)
+        {
+            selectedLightID = lightID;
+            selectedWeight = weight;
+        }
+    }
+    if (totalWeight == 0.0f)
+        return float3(0, 0, 0);
+
+    float risWeight = (totalWeight / max(selectedWeight, 1e-7f)) / float(candidateCount);
+
+    lightWeight *= risWeight;
+
+    Light light = Lights[selectedLightID];
+#else
     
     uint lightIdx = min(uint(Random(randomSeed) * lightData.Count), lightData.Count - 1);
 
     uint lightID = lightData.GetID(lightIdx);
     
     Light light = Lights[lightID];
+#endif
         
     float3 l = (light.Vector - surface.Position);
     float dist = length(l);      
@@ -169,7 +211,7 @@ float3 EvalPointLight(in Surface surface, in BRDFContext brdfContext, in LightDa
     // float atten = VanillaSquaredAtten(dist, light.Range);
     float atten = InverseSquareAtten(dist * GAME_UNIT_TO_M, light.Range * 64); // This is temporal
     
-    float3 direct = EvalLight(l, surface, brdfContext, material) * atten * light.Color * float(lightData.Count);
+    float3 direct = EvalLight(l, surface, brdfContext, material) * atten * light.Color * lightWeight;
 
     [branch]
     if (any(direct > MIN_DIFFUSE_SHADOW))
