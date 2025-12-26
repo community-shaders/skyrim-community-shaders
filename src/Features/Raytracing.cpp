@@ -355,6 +355,11 @@ void Raytracing::DrawAdvancedSettings()
 
 	auto& advSettings = settings.AdvancedSettings;
 
+	if (ImGui::Checkbox("Resampled Importance Sampling", &advSettings.ResampledImportanceSampling))
+		recompileReason |= RecompileReason::Advanced;
+
+	ImGui::SliderInt("RIS Max Candidates", &advSettings.RISMaxCandidates, 2, 16);
+
 	if (ImGui::Checkbox("GGX Energy Conservation", &advSettings.GGXEnergyConservation))
 		recompileReason |= RecompileReason::Advanced;
 
@@ -3467,6 +3472,13 @@ void Raytracing::CompileRTGIShaders()
 	};
 
 	auto& advSettings = settings.AdvancedSettings;
+
+	if (advSettings.ResampledImportanceSampling) {
+		defines.emplace_back(L"RIS");
+
+		const auto risMaxCandidates = std::to_wstring(static_cast<uint32_t>(advSettings.RISMaxCandidates));
+		defines.emplace_back(L"RIS_MAX_CANDIDATES", risMaxCandidates.c_str());
+	}
 
 	if (advSettings.GGXEnergyConservation)
 		defines.emplace_back(L"GGX_ENERGY_CONSERVATION");

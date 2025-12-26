@@ -168,7 +168,7 @@ float3 EvalPointLight(in Surface surface, in BRDFContext brdfContext, in LightDa
     float lightWeight = float(lightData.Count);
 
 #if defined(RIS)
-    const uint candidateCount = 4;
+    const uint candidateCount = min(RIS_MAX_CANDIDATES, lightData.Count);
     uint selectedLightID = 0;
     float totalWeight = 0.0f;
     float selectedWeight = 0.0f;
@@ -209,7 +209,7 @@ float3 EvalPointLight(in Surface surface, in BRDFContext brdfContext, in LightDa
     l /= dist;
     
     // float atten = VanillaSquaredAtten(dist, light.Range);
-    float atten = InverseSquareAtten(dist * GAME_UNIT_TO_M, light.Range * 64); // This is temporal
+    float atten = InverseSquareAtten(dist * GAME_UNIT_TO_M, light.Range * GAME_UNIT_TO_M);
     
     float3 direct = EvalLight(l, surface, brdfContext, material) * atten * light.Color * lightWeight;
 

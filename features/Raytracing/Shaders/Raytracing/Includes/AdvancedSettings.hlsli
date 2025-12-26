@@ -13,4 +13,8 @@
 #define LIGHTING_MODE_DIFFUSE    0
 #define LIGHTING_MODE_PBR        1
 
+#ifndef RIS_MAX_CANDIDATES
+#define RIS_MAX_CANDIDATES 4
+#endif
+
 #endif // ADVANCED_SETTINGS_HLSL
