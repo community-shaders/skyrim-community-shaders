@@ -1499,11 +1499,17 @@ void Raytracing::CommitModel(Model& model)
 		.Flags = D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS
 	};
 
+	auto blasScratchDesc = DEFAULT_HEAP_MA;
+	blasScratchDesc.CustomPool = blasScratchPool.get();
+
 	winrt::com_ptr<D3D12MA::Allocation> scratch = nullptr;
-	DX::ThrowIfFailed(allocator->CreateResource(&DEFAULT_HEAP_MA, &desc, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, nullptr, scratch.put(), IID_NULL, NULL));
+	DX::ThrowIfFailed(allocator->CreateResource(&blasScratchDesc, &desc, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, nullptr, scratch.put(), IID_NULL, NULL));
+
+	auto blasDesc = DEFAULT_HEAP_MA;
+	blasDesc.CustomPool = blasPool.get();
 
 	desc.Width = prebuildInfo.ResultDataMaxSizeInBytes;
-	DX::ThrowIfFailed(allocator->CreateResource(&DEFAULT_HEAP_MA, &desc, D3D12_RESOURCE_STATE_RAYTRACING_ACCELERATION_STRUCTURE, nullptr, model.blasBuffer.put(), IID_NULL, NULL));
+	DX::ThrowIfFailed(allocator->CreateResource(&blasDesc, &desc, D3D12_RESOURCE_STATE_RAYTRACING_ACCELERATION_STRUCTURE, nullptr, model.blasBuffer.put(), IID_NULL, NULL));
 
 	D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_DESC buildDesc = {
 		.DestAccelerationStructureData = model.blasBuffer->GetResource()->GetGPUVirtualAddress(),
@@ -1904,7 +1910,7 @@ void Raytracing::UpdateDynamicSkinning(ID3D12GraphicsCommandList4* pCommandList)
 
 			for (auto& item : vertexUpdate) {
 				if (item.flags & Flags::Skinned) {
-					pCommandList->CopyResource(item.vertexBuffer->resource.get(), item.vertexBuffer->uploadBuffer[0].get());				
+					pCommandList->CopyResource(item.vertexBuffer->resource.get(), item.vertexBuffer->uploadResource[0].get());				
 				}
 			}
 		}
@@ -3204,7 +3210,36 @@ void Raytracing::InitD3D12(ID3D11Device* ppDevice, ID3D11DeviceContext* pImmedia
 		allocatorDesc.pAdapter = a_adapter;
 		allocatorDesc.Flags = D3D12MA_RECOMMENDED_ALLOCATOR_FLAGS;
 
-		DX::ThrowIfFailed(D3D12MA::CreateAllocator(&allocatorDesc, allocator.put()));	
+		DX::ThrowIfFailed(D3D12MA::CreateAllocator(&allocatorDesc, allocator.put()));
+	}
+
+	// D3D12MA Pools
+	{
+		// Upload pool
+		{
+			D3D12MA::POOL_DESC poolDesc = {};
+			poolDesc.HeapProperties.Type = D3D12_HEAP_TYPE_UPLOAD;
+			poolDesc.Flags = D3D12MA_RECOMMENDED_POOL_FLAGS;
+			poolDesc.HeapFlags = D3D12MA_RECOMMENDED_HEAP_FLAGS | D3D12_HEAP_FLAG_ALLOW_ONLY_BUFFERS;
+
+			DX::ThrowIfFailed(allocator->CreatePool(&poolDesc, uploadPool.put()));
+		}
+
+		// Default pools
+		{
+			D3D12MA::POOL_DESC poolDesc = {};
+			poolDesc.HeapProperties.Type = D3D12_HEAP_TYPE_DEFAULT;
+			poolDesc.Flags = D3D12MA_RECOMMENDED_POOL_FLAGS;
+			poolDesc.HeapFlags = D3D12MA_RECOMMENDED_HEAP_FLAGS | D3D12_HEAP_FLAG_ALLOW_ONLY_BUFFERS;
+
+			DX::ThrowIfFailed(allocator->CreatePool(&poolDesc, dynamicVertexPool.put()));
+			DX::ThrowIfFailed(allocator->CreatePool(&poolDesc, vertexPool.put()));
+			DX::ThrowIfFailed(allocator->CreatePool(&poolDesc, skinningPool.put()));
+			DX::ThrowIfFailed(allocator->CreatePool(&poolDesc, trianglePool.put()));
+			
+			DX::ThrowIfFailed(allocator->CreatePool(&poolDesc, blasScratchPool.put()));
+			DX::ThrowIfFailed(allocator->CreatePool(&poolDesc, blasPool.put()));
+		}
 	}
 
 	if (settings.EnableDebugDevice || settings.EnablePIXCapture)

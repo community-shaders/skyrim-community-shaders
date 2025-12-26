@@ -2,7 +2,7 @@
 
 #include "PCH.h"
 
-#include "Features/Raytracing/Buffer.h"
+#include "Features/Raytracing/BufferMA.h"
 #include "Features/Raytracing/Utils.h"
 #include "Features/Raytracing/Allocator.h"
 
@@ -148,10 +148,10 @@ public:
 	eastl::vector<Skinning> skinning;
 	eastl::vector<Triangle> triangles;
 
-	eastl::unique_ptr<DX12::StructuredBufferUpload<float4>> dynamicPositionBuffer = nullptr;
-	eastl::unique_ptr<DX12::StructuredBufferUpload<Vertex>> vertexBuffer = nullptr;
-	eastl::unique_ptr<DX12::StructuredBufferUpload<Skinning>> skinningBuffer = nullptr;
-	eastl::unique_ptr<DX12::StructuredBufferUpload<Triangle>> triangleBuffer = nullptr;
+	eastl::unique_ptr<DX12::StructuredBufferUploadMA<float4>> dynamicPositionBuffer = nullptr;
+	eastl::unique_ptr<DX12::StructuredBufferUploadMA<Vertex>> vertexBuffer = nullptr;
+	eastl::unique_ptr<DX12::StructuredBufferUploadMA<Skinning>> skinningBuffer = nullptr;
+	eastl::unique_ptr<DX12::StructuredBufferUploadMA<Triangle>> triangleBuffer = nullptr;
 
 	Material material;
 

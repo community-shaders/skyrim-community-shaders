@@ -418,6 +418,13 @@ void Shape::CreateBuffers(const std::wstring& name)
 
 	auto* materialBuffer = rt.materialBuffer.get();
 
+	D3D12MA::ALLOCATION_DESC allocDesc = { .HeapType = D3D12_HEAP_TYPE_DEFAULT };
+
+	D3D12MA::ALLOCATION_DESC uploadAllocDesc = { .HeapType = D3D12_HEAP_TYPE_UPLOAD };
+	uploadAllocDesc.CustomPool = rt.uploadPool.get();
+
+	auto allocator = rt.allocator.get();
+
 	std::lock_guard lock{ rt.renderMutex };
 
 	// Dynamic
@@ -425,7 +432,9 @@ void Shape::CreateBuffers(const std::wstring& name)
 		// Not really a buffer but we need to initialize it somewhere
 		dynamicPosition.resize(vertexCount);
 
-		dynamicPositionBuffer = eastl::make_unique<DX12::StructuredBufferUpload<float4>>(device, vertexCount);
+		allocDesc.CustomPool = rt.dynamicVertexPool.get();
+		dynamicPositionBuffer = eastl::make_unique<DX12::StructuredBufferUploadMA<float4>>(device, allocator, allocDesc, uploadAllocDesc, vertexCount);
+
 		dynamicPositionBuffer->CreateSRV(skinningHeap->CPUHandle(SkinningHeap::Slot::DynamicVertices, allocation->GetIndex()));
 	}
 
@@ -433,7 +442,8 @@ void Shape::CreateBuffers(const std::wstring& name)
 	{
 		bool hasUAV = (flags & Flags::Dynamic) || (flags & Flags::Skinned);
 
-		vertexBuffer = eastl::make_unique<DX12::StructuredBufferUpload<Vertex>>(device, vertexCount, hasUAV);
+		allocDesc.CustomPool = rt.vertexPool.get();
+		vertexBuffer = eastl::make_unique<DX12::StructuredBufferUploadMA<Vertex>>(device, allocator, allocDesc, uploadAllocDesc, vertexCount, hasUAV);
 
 		vertexBuffer->UpdateList(vertices.data(), vertexCount);
 		DX::ThrowIfFailed(vertexBuffer->resource->SetName(std::format(L"Vertex Buffer [{}] - {}", allocation->GetIndex(), name).c_str()));
@@ -473,7 +483,8 @@ void Shape::CreateBuffers(const std::wstring& name)
 
 	// Skinning
 	if (flags & Flags::Skinned) {
-		skinningBuffer = eastl::make_unique<DX12::StructuredBufferUpload<Skinning>>(device, vertexCount);
+		allocDesc.CustomPool = rt.skinningPool.get();
+		skinningBuffer = eastl::make_unique<DX12::StructuredBufferUploadMA<Skinning>>(device, allocator, allocDesc, uploadAllocDesc, vertexCount);
 
 		skinningBuffer->UpdateList(skinning.data(), vertexCount);
 		DX::ThrowIfFailed(skinningBuffer->resource->SetName(std::format(L"Skinning Buffer [{}] - {}", allocation->GetIndex(), name).c_str()));
@@ -497,7 +508,8 @@ void Shape::CreateBuffers(const std::wstring& name)
 
 	// Triangles
 	{
-		triangleBuffer = eastl::make_unique<DX12::StructuredBufferUpload<Triangle>>(device, triangleCount);
+		allocDesc.CustomPool = rt.trianglePool.get();
+		triangleBuffer = eastl::make_unique<DX12::StructuredBufferUploadMA<Triangle>>(device, allocator, allocDesc, uploadAllocDesc, triangleCount);
 
 		triangleBuffer->UpdateList(triangles.data(), triangles.size());
 		DX::ThrowIfFailed(triangleBuffer->resource->SetName(std::format(L"Triangle Buffer [{}] - {}", allocation->GetIndex(), name).c_str()));

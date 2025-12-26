@@ -20,6 +20,7 @@
 #include "Features/Raytracing/Utils.h"
 #include "Features/Raytracing/Heap.h"
 #include "Features/Raytracing/Buffer.h"
+#include "Features/Raytracing/BufferMA.h"
 #include "Features/Raytracing/Allocator.h"
 #include "Features/Raytracing/HeapManager.h"
 #include "Features/Raytracing/RTPipelineBuilder.h"
@@ -327,6 +328,7 @@ struct Raytracing : public OverlayFeature
 		.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR
 	};
 
+	static constexpr D3D12MA::ALLOCATION_DESC UPLOAD_HEAP_MA = { .HeapType = D3D12_HEAP_TYPE_UPLOAD };
 	static constexpr D3D12MA::ALLOCATION_DESC DEFAULT_HEAP_MA = { .HeapType = D3D12_HEAP_TYPE_DEFAULT };
 
 	enum struct Denoiser : int32_t
@@ -686,6 +688,16 @@ struct Raytracing : public OverlayFeature
 
 	winrt::com_ptr<D3D12MA::Allocator> allocator = nullptr;
 
+	winrt::com_ptr<D3D12MA::Pool> uploadPool = nullptr;
+
+	winrt::com_ptr<D3D12MA::Pool> dynamicVertexPool = nullptr;
+	winrt::com_ptr<D3D12MA::Pool> vertexPool = nullptr;
+	winrt::com_ptr<D3D12MA::Pool> skinningPool = nullptr;
+	winrt::com_ptr<D3D12MA::Pool> trianglePool = nullptr;
+
+	winrt::com_ptr<D3D12MA::Pool> blasScratchPool = nullptr;
+	winrt::com_ptr<D3D12MA::Pool> blasPool = nullptr;
+
 	eastl::unordered_map<RE::NiNode*, Instance> instances;
 	eastl::unordered_map<RE::FormID, RE::NiNode*> formIDNodes;
 
@@ -764,8 +776,8 @@ struct Raytracing : public OverlayFeature
 	struct VertexUpdate
 	{
 		uint16_t allocatedIndex;
-		DX12::StructuredBufferUpload<float4>* dynamicPositionBuffer = nullptr;
-		DX12::StructuredBufferUpload<Vertex>* vertexBuffer = nullptr;
+		DX12::StructuredBufferUploadMA<float4>* dynamicPositionBuffer = nullptr;
+		DX12::StructuredBufferUploadMA<Vertex>* vertexBuffer = nullptr;
 		uint16_t vertexCount;
 		Flags flags;
 	};
