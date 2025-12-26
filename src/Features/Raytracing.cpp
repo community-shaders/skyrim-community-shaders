@@ -3473,12 +3473,11 @@ void Raytracing::CompileRTGIShaders()
 
 	auto& advSettings = settings.AdvancedSettings;
 
-	if (advSettings.ResampledImportanceSampling) {
+	if (advSettings.ResampledImportanceSampling)
 		defines.emplace_back(L"RIS");
 
-		const auto risMaxCandidates = std::to_wstring(static_cast<uint32_t>(advSettings.RISMaxCandidates));
-		defines.emplace_back(L"RIS_MAX_CANDIDATES", risMaxCandidates.c_str());
-	}
+	const auto risMaxCandidates = std::to_wstring(static_cast<uint32_t>(advSettings.RISMaxCandidates));
+	defines.emplace_back(L"RIS_MAX_CANDIDATES", risMaxCandidates.c_str());
 
 	if (advSettings.GGXEnergyConservation)
 		defines.emplace_back(L"GGX_ENERGY_CONSERVATION");
