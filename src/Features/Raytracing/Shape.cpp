@@ -254,6 +254,9 @@ void Shape::BuildMaterial(const RE::BSGeometry::GEOMETRY_RUNTIME_DATA& geometryR
 						specularLevel = lightingPBRMaterial->GetSpecularLevel();
 
 						pbrFlags = GetPBRShaderFlags(lightingPBRMaterial);
+
+						// Enforce TruePBR flag
+						shaderFlags.set(true, RE::BSShaderProperty::EShaderPropertyFlag::kMenuScreen);
 					}
 
 					// Glow

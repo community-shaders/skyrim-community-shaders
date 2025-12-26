@@ -34,24 +34,25 @@ public:
 	{
 		enum ShaderType : uint16_t
 		{
-			Grass = 0,
-			Sky = 1,
-			Water = 2,
-			BloodSplatter = 3,
-			Lighting = 4,
-			Effect = 5,
+			TruePBR = 0,
+			Lighting = 1,
+			Effect = 2,
+			Grass = 3,
+			Water = 4,
+			BloodSplatter = 5,
 			DistantTree = 6,
 			Particle = 7
 		};
 
 		// We have a limited number of bits and not all types are necessary
-		ShaderType GetShaderType()
+		ShaderType GetShaderType() const
 		{
+			if (shaderFlags.any(RE::BSShaderProperty::EShaderPropertyFlag::kMenuScreen))
+				return ShaderType::TruePBR;
+
 			switch (shaderType) {
 			case RE::BSShader::Type::Grass:
 				return ShaderType::Grass;
-			case RE::BSShader::Type::Sky:
-				return ShaderType::Sky;
 			case RE::BSShader::Type::Water:
 				return ShaderType::Water;
 			case RE::BSShader::Type::BloodSplatter:

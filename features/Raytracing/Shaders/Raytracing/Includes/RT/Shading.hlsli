@@ -399,7 +399,8 @@ float3 EvaluateRadiance(in Surface surface, in BRDFContext brdfContext, in Insta
 {
     float3 radiance;
     
-    if (material.ShaderType == ShaderType::Lighting)
+    [branch]
+    if (material.ShaderType == ShaderType::TruePBR)
     {
         radiance = surface.Emissive * Frame.Emissive;
         
@@ -407,7 +408,12 @@ float3 EvaluateRadiance(in Surface surface, in BRDFContext brdfContext, in Insta
         {
             // Do something expensive
         }*/          
-    } else if (material.ShaderType == ShaderType::Effect)
+    }
+    else if (material.ShaderType == ShaderType::Lighting)
+    {
+        radiance = surface.Emissive * Frame.Emissive;
+    }
+    else if (material.ShaderType == ShaderType::Effect)
     {
         radiance = surface.Emissive * Frame.Effect * Frame.Emissive;
     }
@@ -417,7 +423,7 @@ float3 EvaluateRadiance(in Surface surface, in BRDFContext brdfContext, in Insta
     }
     
     radiance += EvalDirectionalLight(surface, brdfContext, Frame.Directional, material, randomSeed);
-    radiance += EvalPointLight(surface, brdfContext, instance.LightData, material, randomSeed);    
+    radiance += EvalPointLight(surface, brdfContext, instance.LightData, material, randomSeed);
     
     return radiance;
 }

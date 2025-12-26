@@ -4,13 +4,13 @@
 #ifndef __cplusplus
 namespace ShaderType
 {
-    static const uint16_t Grass = 0;
-    static const uint16_t Sky = 1;
-    static const uint16_t Water = 2;
-    static const uint16_t BloodSplatter = 3;
-    static const uint16_t Lighting = 4;
-    static const uint16_t Effect = 5;
-    static const uint16_t DistantTree = 6;
+    static const uint16_t TruePBR = 0;		
+    static const uint16_t Lighting = 1;	
+    static const uint16_t Effect = 2;	
+    static const uint16_t Grass = 3;
+    static const uint16_t Water = 4;
+    static const uint16_t BloodSplatter = 5;	
+    static const uint16_t DistantTree = 6;	
     static const uint16_t Particle = 7; 
 }
 

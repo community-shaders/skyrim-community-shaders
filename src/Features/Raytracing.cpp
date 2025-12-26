@@ -2117,7 +2117,7 @@ void Raytracing::UpdateInstances()
 
 	logger::trace("[RT] UpdateInstances - Total Shape Count: {}", totalShapeCount);
 
-	// Unmap indirection buffer
+	// Unmap indirection table
 	D3D12_RANGE writeRange = { 0, std::min(totalShapeCount, MAX_SHAPES) * sizeof(uint32_t) };
 	indirectionBuffer->uploadResource->Unmap(0, &writeRange);
 
@@ -3008,7 +3008,7 @@ void Raytracing::PostPostLoad()
 	//MenuOpenCloseEventHandler::Register();
 	//TESLoadGameEventHandler::Register();
 
-	TESObjectLoadedEventHandler::Register();
+	//TESObjectLoadedEventHandler::Register();
 }
 
 /*void Raytracing::RTProcessor::PostCreate(const RE::BSModelDB::DBTraits::ArgsType& a_args, const char* modelName, RE::NiPointer<RE::NiNode>& a_root, std::uint32_t& typeOut)
