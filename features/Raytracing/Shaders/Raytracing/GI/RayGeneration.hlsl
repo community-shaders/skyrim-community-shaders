@@ -166,7 +166,7 @@ void main()
     
     float3 radiance = 0;
     bool isSpecular = false;
-    float4 specDirHitDist = 0;    
+    float specHitDist = 0;    
     
     RayDesc ray;   
     Payload payload;
@@ -238,7 +238,8 @@ void main()
             if (j == 0)
             {
                 if (isSpecular)
-                    specDirHitDist = float4(direction, max(specDirHitDist.a, payload.hitDistance));
+                    specHitDist = max(specHitDist, payload.hitDistance);
+                    //specDirHitDist = float4(direction, max(specDirHitDist.a, payload.hitDistance));
             }              
             
             if (!payload.Hit())
@@ -345,5 +346,5 @@ void main()
     const float3 specularAlbedo = float3(sourceSurface.F0 * envBRDF.x + envBRDF.y);
     SpecularAlbedo[idx] = float4(specularAlbedo, 0.0f);
 
-    SpecularHitDist[idx] = specDirHitDist;
+    SpecularHitDist[idx] = specHitDist;
 }
