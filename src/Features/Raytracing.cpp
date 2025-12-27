@@ -558,7 +558,7 @@ void Raytracing::SetupOutputRT()
 	createRT(specularAlbedoTexture, DXGI_FORMAT_R16G16B16A16_FLOAT, GIHeap::Slot::Reflectance, L"Reflectance texture");
 
 	// u2 - Specular Hit Distance texture
-	createRT(specularHitDistanceTexture, DXGI_FORMAT_R16_FLOAT, GIHeap::Slot::SpecularHitDist, L"Specular Hit Distance texture");
+	createRT(specularHitDistanceTexture, DXGI_FORMAT_R16G16B16A16_FLOAT, GIHeap::Slot::SpecularHitDist, L"Specular Hit Distance texture");
 
 	// Motion vector
 	{
