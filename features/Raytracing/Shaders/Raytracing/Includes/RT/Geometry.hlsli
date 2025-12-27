@@ -13,6 +13,11 @@ float3 GetBary(float2 barycentrics)
     );
 }
 
+inline float Interpolate(half u, half v, half w, float3 uvw)
+{
+    return u * uvw.x + v * uvw.y + w * uvw.z;
+}
+
 inline float2 Interpolate(half2 u, half2 v, half2 w, float3 uvw)
 {
     return u * uvw.x + v * uvw.y + w * uvw.z;

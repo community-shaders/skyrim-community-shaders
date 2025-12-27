@@ -90,7 +90,7 @@ public:
 
 			for (const auto& [flag, name] : entries) {
 				for (const auto& [originalFlag, originalName] : originalEntries) {
-					if ((shaderFlags & originalFlag) && name == originalName) {
+					if (shaderFlags.any(originalFlag) && name == originalName) {
 						shaderFlagsLocal |= flag;
 						break;
 					}
@@ -113,7 +113,7 @@ public:
 		eastl::shared_ptr<Allocation> RMAOSTexture;
 
 		RE::BSShader::Type shaderType;
-		stl::enumeration<RE::BSShaderProperty::EShaderPropertyFlag, uint64_t> shaderFlags;
+		REX::EnumSet<RE::BSShaderProperty::EShaderPropertyFlag, std::uint64_t> shaderFlags;
 		RE::BSShaderMaterial::Feature Feature;
 		stl::enumeration<PBRShaderFlags, uint16_t> PBRFlags;
 
@@ -191,7 +191,7 @@ public:
 	
 	void CreateBuffers(const std::wstring& name);
 
-	void CalculateNTB(bool normals);
+	void CalculateVectors(bool calculateNormal);
 
 	// For PBR shader flags we need to copy exactly what TruePBR does 
 	static stl::enumeration<PBRShaderFlags, uint16_t> GetPBRShaderFlags(const BSLightingShaderMaterialPBR* pbrMaterial);

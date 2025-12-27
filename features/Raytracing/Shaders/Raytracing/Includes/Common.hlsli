@@ -54,10 +54,8 @@ half3 DecodeNormal(half2 f)
 	return -normalize(n);
 }
 
-void NormalMap(float3 normalMap, float3 geomNormalWS, float3 geomTangentWS, float3 geomBitangentWS, out float3 normalWS, out float3 tangentWS, out float3 bitangentWS)
+void NormalMap(float3 normalMap, float handedness, float3 geomNormalWS, float3 geomTangentWS, float3 geomBitangentWS, out float3 normalWS, out float3 tangentWS, out float3 bitangentWS)
 {
-	float tangentSign = (dot(cross(geomNormalWS, geomTangentWS), geomTangentWS) < 0.0f) ? -1.0f : 1.0f;
-	
 	normalMap = normalMap * 2.0f - 1.0f;
 	
     normalWS = normalize(
@@ -67,7 +65,7 @@ void NormalMap(float3 normalMap, float3 geomNormalWS, float3 geomTangentWS, floa
 	);
 
     tangentWS = normalize(geomTangentWS - normalWS * dot(geomTangentWS, normalWS)); 
-    bitangentWS = cross(normalWS, tangentWS) * tangentSign;  
+    bitangentWS = cross(normalWS, tangentWS) * handedness;  
 }
 
 uint StrongIntegerHash(uint x)

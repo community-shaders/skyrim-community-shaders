@@ -9,8 +9,12 @@ using SkinningHeap = Raytracing::SkinningHeap;
 
 void Shape::BuildMesh(RE::BSGraphics::TriShape* rendererData, const std::uint32_t& vertexCountIn, const std::uint16_t& triangleCountIn, const std::uint16_t& bonesPerVertex, const float4x4& transform)
 {
+	auto vertexDesc = rendererData->vertexDesc;
+
+	vertexFlags = vertexDesc.GetFlags();
+
 	bool hasNormal = vertexFlags & RE::BSGraphics::Vertex::VF_NORMAL;
-	bool hasTangent = vertexFlags & RE::BSGraphics::Vertex::VF_TANGENT;
+	bool hasBitangent = vertexFlags & RE::BSGraphics::Vertex::VF_TANGENT;
 
 	// Vertices
 	{
@@ -33,9 +37,6 @@ void Shape::BuildMesh(RE::BSGraphics::TriShape* rendererData, const std::uint32_
 		if (skinned)
 			skinning.resize(vertexCountIn);
 
-		auto vertexDesc = rendererData->vertexDesc;
-
-		vertexFlags = vertexDesc.GetFlags();
 		uint32_t stride = vertexDesc.GetSize();
 
 		bool hasPosition = vertexFlags & RE::BSGraphics::Vertex::VF_VERTEX;
@@ -80,15 +81,15 @@ void Shape::BuildMesh(RE::BSGraphics::TriShape* rendererData, const std::uint32_
 
 				vertexData.Normal = Normalize(float3::TransformNormal({ normalUnpacked.x, normalUnpacked.y, normalUnpacked.z }, transform));
 
-				if (hasTangent) {
-					uint32_t tangentData;
-					std::memcpy(&tangentData, vtx + tangOffset, sizeof(uint32_t));
-					auto tangentUnpacked = UnpackByte4(tangentData);
+				if (hasBitangent) {
+					uint32_t bitangentData;
+					std::memcpy(&bitangentData, vtx + tangOffset, sizeof(uint32_t));
+					auto bitangentUnpacked = UnpackByte4(bitangentData);
 
-					vertexData.Tangent = Normalize(float3::TransformNormal({ tangentUnpacked.x, tangentUnpacked.y, tangentUnpacked.z }, transform));
+					vertexData.Bitangent = Normalize(float3::TransformNormal({ bitangentUnpacked.x, bitangentUnpacked.y, bitangentUnpacked.z }, transform));
 
-					float3 bitangent = { pos.w, normalUnpacked.w, tangentUnpacked.w };
-					vertexData.Bitangent = hasPosition ? Normalize(float3::TransformNormal(bitangent, transform)) : bitangent;
+					float3 tangent = { pos.w, normalUnpacked.w, bitangentUnpacked.w };
+					vertexData.Tangent = hasPosition ? Normalize(float3::TransformNormal(tangent, transform)) : tangent;
 				}
 			}
 
@@ -144,8 +145,8 @@ void Shape::BuildMesh(RE::BSGraphics::TriShape* rendererData, const std::uint32_
 		triangleCount = triangleCountIn;
 	}
 
-	if (!hasNormal || !hasTangent) {
-		CalculateNTB(!hasNormal);
+	if (!hasNormal || !hasBitangent) {
+		CalculateVectors(!hasNormal);
 	}
 }
 
@@ -167,7 +168,7 @@ void Shape::BuildMaterial(const RE::BSGeometry::GEOMETRY_RUNTIME_DATA& geometryR
 	half specularLevel = 0.04f;
 
 	RE::BSShader::Type shaderType = RE::BSShader::Type::None;
-	stl::enumeration<RE::BSShaderProperty::EShaderPropertyFlag, uint64_t> shaderFlags;
+	REX::EnumSet<EShaderPropertyFlag, std::uint64_t> shaderFlags;
 	RE::BSShaderMaterial::Feature feature = RE::BSShaderMaterial::Feature::kNone;
 	stl::enumeration<PBRShaderFlags, uint16_t> pbrFlags;
 
@@ -199,7 +200,7 @@ void Shape::BuildMaterial(const RE::BSGeometry::GEOMETRY_RUNTIME_DATA& geometryR
 		
 		if (effect) {
 			if (auto shaderProp = netimmerse_cast<RE::BSShaderProperty*>(effect)) {
-				shaderFlags = shaderProp->flags;
+				shaderFlags = shaderProp->flags.get();
 			}
 
 			if (auto* lightingShaderProp = skyrim_cast<RE::BSLightingShaderProperty*>(effect)) {
@@ -256,7 +257,7 @@ void Shape::BuildMaterial(const RE::BSGeometry::GEOMETRY_RUNTIME_DATA& geometryR
 						pbrFlags = GetPBRShaderFlags(lightingPBRMaterial);
 
 						// Enforce TruePBR flag
-						shaderFlags.set(true, RE::BSShaderProperty::EShaderPropertyFlag::kMenuScreen);
+						shaderFlags.set(RE::BSShaderProperty::EShaderPropertyFlag::kMenuScreen);
 					}
 
 					// Glow
@@ -536,8 +537,16 @@ void Shape::CreateBuffers(const std::wstring& name)
 	materialBuffer->UpdateAt(&materialData, allocation->GetIndex());
 }
 
-void Shape::CalculateNTB(bool normals)
+void Shape::CalculateVectors(bool calculateNormal)
 {
+	eastl::vector<float3> normals;
+
+	if (calculateNormal)
+		normals.resize(vertexCount);
+
+	eastl::vector<float3> tangents(vertexCount);
+	eastl::vector<float3> bitangents(vertexCount);
+
 	// Loop over triangles
 	for (auto& t : triangles) {
 		Vertex& v0 = vertices[t.x];
@@ -555,11 +564,13 @@ void Shape::CalculateNTB(bool normals)
 		float3 edge1 = pos1 - pos0;
 		float3 edge2 = pos2 - pos0;
 
-		// Optional: compute normals
-		if (normals) {
+		// Optionaly compute normals
+		if (calculateNormal) {
 			float3 faceNormal = edge1.Cross(edge2);
-			faceNormal.Normalize();
-			v0.Normal = v1.Normal = v2.Normal = faceNormal;
+
+			normals[t.x] += faceNormal;
+			normals[t.y] += faceNormal;
+			normals[t.z] += faceNormal;
 		}
 
 		// Compute UV deltas
@@ -567,8 +578,10 @@ void Shape::CalculateNTB(bool normals)
 		float2 deltaUV2 = uv2 - uv0;
 
 		float f = deltaUV1.x * deltaUV2.y - deltaUV2.x * deltaUV1.y;
+
 		if (f == 0.0f)
 			f = 1.0f;
+
 		f = 1.0f / f;
 
 		// Compute tangent / bitangent
@@ -576,30 +589,44 @@ void Shape::CalculateNTB(bool normals)
 		half3 bitangent = half3(f * (-deltaUV2.x * edge1 + deltaUV1.x * edge2));
 
 		// Accumulate per-vertex
-		v0.Tangent += tangent;
-		v1.Tangent += tangent;
-		v2.Tangent += tangent;
+		tangents[t.x] += tangent;
+		tangents[t.y] += tangent;
+		tangents[t.z] += tangent;
 
-		v0.Bitangent += bitangent;
-		v1.Bitangent += bitangent;
-		v2.Bitangent += bitangent;
+		bitangents[t.x] += bitangent;
+		bitangents[t.y] += bitangent;
+		bitangents[t.z] += bitangent;
 	}
 
 	// Normalize and orthogonalize
-	for (auto& v : vertices) {
-		float3 n = v.Normal;
-		float3 t = float3(v.Tangent.x, v.Tangent.y, v.Tangent.z);
-		float3 b = float3(v.Bitangent.x, v.Bitangent.y, v.Bitangent.z);
+	for (size_t i = 0; i < vertexCount; i++) {
+		auto& v = vertices[i];
 
-		// Gram-Schmidt orthogonalization
-		t = t - n * n.Dot(t);
+		float3 n = calculateNormal ? normals[i] : float3(v.Normal);
+		float3 t = tangents[i];
+		float3 b = bitangents[i];
+
+		n.Normalize();
+
+		// Handle missing tangents (planar / degenerate UVs)
+		if (t.Length() < 1e-6f) {
+			float3 up = (fabs(n.z) < 0.999f) ? float3(0, 0, 1) : float3(0, 1, 0);
+			t = up.Cross(n);
+		} else {
+			// Gram-Schmidt orthogonalization
+			t = t - n * n.Dot(t);
+		}
+
 		t.Normalize();
 
-		// Recompute bitangent for right-handed tangent space
-		b = n.Cross(t);
+		float handedness = (n.Cross(t).Dot(b) < 0.0f) ? -1.0f : 1.0f;
+
+		// Recompute bitangent
+		b = n.Cross(t) * handedness;
 		b.Normalize();
 
-		v.Tangent = half3(t);
-		v.Bitangent = half3(b);
+		v.Normal = n;
+		v.Tangent = t;
+		v.Bitangent = b;
 	}
 }

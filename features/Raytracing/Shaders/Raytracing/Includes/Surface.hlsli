@@ -67,7 +67,7 @@ struct Surface
         
         float3x3 objectToWorld3x3 = (float3x3) instance.Transform;
         
-        surface.GeomNormal = normalize(mul(objectToWorld3x3, Interpolate(v0.Normal, v1.Normal, v2.Normal, uvw)));
+        float3 normalWS = normalize(mul(objectToWorld3x3, Interpolate(v0.Normal, v1.Normal, v2.Normal, uvw)));
         float3 tangentWS = normalize(mul(objectToWorld3x3, Interpolate(v0.Tangent, v1.Tangent, v2.Tangent, uvw)));
         float3 bitangentWS = normalize(mul(objectToWorld3x3, Interpolate(v0.Bitangent, v1.Bitangent, v2.Bitangent, uvw)));
         
@@ -76,6 +76,7 @@ struct Surface
         Texture2D baseTexture = Textures[NonUniformResourceIndex(material.BaseTexture)];
         Texture2D effectTexture = Textures[NonUniformResourceIndex(material.EffectTexture)];        
         
+        [branch]
         if (material.ShaderType == ShaderType::Effect)
         {
             float3 base = float3(1, 1, 1);
@@ -121,13 +122,18 @@ struct Surface
         surface.Albedo = float3(1.0f, 1.0f, 1.0f);
 #endif        
         
+        surface.GeomNormal = normalWS;
+        
 #ifdef PATH_TRACING        
         Texture2D normalTexture = Textures[NonUniformResourceIndex(material.NormalTexture)];
         Texture2D rmaosTexture = Textures[NonUniformResourceIndex(material.RMAOSTexture)];
         
+        float handedness = (dot(cross(normalWS, tangentWS), tangentWS) < 0.0f) ? -1.0f : 1.0f;
+        
         NormalMap(
-            normalTexture.SampleLevel(BaseSampler, texCoord0, 0).rgb, 
-            surface.GeomNormal, tangentWS, bitangentWS, 
+            normalTexture.SampleLevel(BaseSampler, texCoord0, 0).rgb,
+            handedness,
+            normalWS, tangentWS, bitangentWS, 
             surface.Normal, surface.Tangent, surface.Bitangent
         );
         
@@ -137,7 +143,7 @@ struct Surface
         surface.Metallic = saturate(rmaos.y);
         surface.AO = rmaos.z;
 #else 
-        surface.Normal = surface.GeomNormal;
+        surface.Normal = normalWS;
         surface.Tangent = tangentWS;
         surface.Bitangent = bitangentWS;
         

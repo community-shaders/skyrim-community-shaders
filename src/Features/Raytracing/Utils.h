@@ -165,7 +165,7 @@ static inline std::string GetFlagsString(auto value)
 	std::string flags;
 
 	for (const auto& [flag, name] : entries) {
-		if (static_cast<N>(value) & static_cast<N>(flag)) {
+		if (value & static_cast<N>(flag)) {
 			flags += fmt::format("{} ", name);
 		}
 	}
