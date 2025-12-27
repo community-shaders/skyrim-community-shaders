@@ -462,6 +462,8 @@ if(AUTO_PLUGIN_DEPLOYMENT OR AIO_ZIP_TO_DIST)
         LIST_DIRECTORIES FALSE
         "${CMAKE_SOURCE_DIR}/package/Shaders/*"
     )
+    # Exclude test files from production packages
+    list(FILTER _package_shaders EXCLUDE REGEX "/Tests/")
     set(_shader_copy_cmds)
     foreach(_src IN LISTS _package_shaders)
         file(RELATIVE_PATH _rel "${CMAKE_SOURCE_DIR}/package/Shaders" "${_src}")
