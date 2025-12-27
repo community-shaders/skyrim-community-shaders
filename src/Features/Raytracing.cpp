@@ -560,6 +560,34 @@ void Raytracing::SetupOutputRT()
 	// u2 - Specular Hit Distance texture
 	createRT(specularHitDistanceTexture, DXGI_FORMAT_R16G16B16A16_FLOAT, GIHeap::Slot::SpecularHitDist, L"Specular Hit Distance texture");
 
+	// Depth
+	{
+		D3D11_TEXTURE2D_DESC texDesc{};
+		texDesc.Width = renderSize.x;
+		texDesc.Height = renderSize.y;
+		texDesc.MipLevels = 1;
+		texDesc.ArraySize = 1;
+		texDesc.Format = DXGI_FORMAT_R32_FLOAT;
+		texDesc.SampleDesc.Count = 1;
+		texDesc.SampleDesc.Quality = 0;
+		texDesc.BindFlags = D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_UNORDERED_ACCESS;
+
+		depthTexture = eastl::make_unique<WrappedResource>(texDesc, d3d11Device.get(), d3d12Device.get());
+		DX::ThrowIfFailed(depthTexture->resource->SetName(L"Depth texture"));
+
+		D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
+		srvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
+		srvDesc.Format = texDesc.Format;
+		srvDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
+		srvDesc.Texture2D.MostDetailedMip = 0;
+		srvDesc.Texture2D.MipLevels = texDesc.MipLevels;
+		srvDesc.Texture2D.PlaneSlice = 0;
+		srvDesc.Texture2D.ResourceMinLODClamp = 0.0f;
+
+		d3d12Device->CreateShaderResourceView(depthTexture->resource.get(), &srvDesc, giHeap->CPUHandle(GIHeap::Slot::Depth));
+		d3d12Device->CreateShaderResourceView(depthTexture->resource.get(), &srvDesc, shadowHeap->CPUHandle(ShadowsHeap::Slot::Depth));
+	}
+
 	// Motion vector
 	{
 		D3D11_TEXTURE2D_DESC texDesc{};
@@ -686,34 +714,6 @@ void Raytracing::SetupResources()
 
 	D3D11_TEXTURE2D_DESC mainDesc;
 	mainTex.texture->GetDesc(&mainDesc);
-
-	// Depth
-	{
-		D3D11_TEXTURE2D_DESC texDesc{};
-		texDesc.Width = mainDesc.Width;
-		texDesc.Height = mainDesc.Height;
-		texDesc.MipLevels = 1;
-		texDesc.ArraySize = 1;
-		texDesc.Format = DXGI_FORMAT_R32_FLOAT;
-		texDesc.SampleDesc.Count = 1;
-		texDesc.SampleDesc.Quality = 0;
-		texDesc.BindFlags = D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_UNORDERED_ACCESS;
-
-		depthTexture = eastl::make_unique<WrappedResource>(texDesc, d3d11Device.get(), d3d12Device.get());
-		DX::ThrowIfFailed(depthTexture->resource->SetName(L"Depth texture"));
-
-		D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
-		srvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
-		srvDesc.Format = texDesc.Format;
-		srvDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
-		srvDesc.Texture2D.MostDetailedMip = 0;
-		srvDesc.Texture2D.MipLevels = texDesc.MipLevels;
-		srvDesc.Texture2D.PlaneSlice = 0;
-		srvDesc.Texture2D.ResourceMinLODClamp = 0.0f;
-
-		d3d12Device->CreateShaderResourceView(depthTexture->resource.get(), &srvDesc, giHeap->CPUHandle(GIHeap::Slot::Depth));
-		d3d12Device->CreateShaderResourceView(depthTexture->resource.get(), &srvDesc, shadowHeap->CPUHandle(ShadowsHeap::Slot::Depth));	
-	}
 
 	// Shadow mask
 	{
@@ -1330,9 +1330,13 @@ void Raytracing::CopyDepth()
 
 		context->CSSetShaderResources(0, 1, &depth.depthSRV);
 
+		auto sampler = samplerState.get();
+		context->CSSetSamplers(0, 1, &sampler);
+
 		context->CSSetUnorderedAccessViews(0, 1, &depthTexture->uav, nullptr);
 
-		auto dispatchCount = Util::GetScreenDispatchCount();
+		//auto dispatchCount = Util::GetScreenDispatchCount(true);
+		uint2 dispatchCount = { DivideRoundUp(renderSize.x, 8u), DivideRoundUp(renderSize.y, 8u) };
 		context->Dispatch(dispatchCount.x, dispatchCount.y, 1);
 
 		context->CSSetUnorderedAccessViews(0, 1, nullptr, nullptr);
@@ -2717,7 +2721,7 @@ void Raytracing::DrawRTGI()
 					auto screenSize = GetScreenSize();
 
 					sl::Extent inputExtent{ 0, 0, renderSize.x, renderSize.y };
-					sl::Extent inputScreenExtent{ 0, 0, screenSize.x, screenSize.y };
+					//sl::Extent inputScreenExtent{ 0, 0, screenSize.x, screenSize.y };
 					sl::Extent outputExtent{ 0, 0, screenSize.x, screenSize.y };
 
 					sl::Resource colorIn = { sl::ResourceType::eTex2d, outputTexture->resource.get(), D3D12_RESOURCE_STATE_UNORDERED_ACCESS };
@@ -2731,7 +2735,7 @@ void Raytracing::DrawRTGI()
 
 					sl::ResourceTag colorInTag = sl::ResourceTag{ &colorIn, sl::kBufferTypeScalingInputColor, sl::ResourceLifecycle::eOnlyValidNow, &inputExtent };
 					sl::ResourceTag colorOutTag = sl::ResourceTag{ &colorOut, sl::kBufferTypeScalingOutputColor, sl::ResourceLifecycle::eOnlyValidNow, &outputExtent };
-					sl::ResourceTag depthTag = sl::ResourceTag{ &depth, sl::kBufferTypeDepth, sl::ResourceLifecycle::eValidUntilPresent, &inputScreenExtent };
+					sl::ResourceTag depthTag = sl::ResourceTag{ &depth, sl::kBufferTypeDepth, sl::ResourceLifecycle::eValidUntilPresent, &inputExtent };
 					sl::ResourceTag mvecTag = sl::ResourceTag{ &mvec, sl::kBufferTypeMotionVectors, sl::ResourceLifecycle::eValidUntilPresent, &inputExtent };
 					sl::ResourceTag diffuseAlbedoTag = sl::ResourceTag{ &diffuseAlbedo, sl::kBufferTypeAlbedo, sl::ResourceLifecycle::eValidUntilPresent, &inputExtent };
 					sl::ResourceTag specularAlbedoTag = sl::ResourceTag{ &specularAlbedo, sl::kBufferTypeSpecularAlbedo, sl::ResourceLifecycle::eValidUntilPresent, &inputExtent };
