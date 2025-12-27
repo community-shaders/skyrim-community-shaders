@@ -497,6 +497,7 @@ struct Raytracing : public OverlayFeature
 		bool CullShadows = true;
 		bool RecompressTextures = false;
 		bool RussianRoulette = true;
+		bool ConvertToGamma = false;
 #ifdef DLSS_RR
 		DLSSRRQuality DLSSRRQualityMode = DLSSRRQuality::MaxQuality;
 		float DLSSRRSharpness = 0.0f;

@@ -52,6 +52,7 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	CullShadows,
 	RecompressTextures,
 	RussianRoulette,
+	ConvertToGamma,
 	PerformanceOverlay,
 	Defines,
 	DebugOutput,
@@ -340,6 +341,14 @@ void Raytracing::DrawGeneralSettings()
 	}
 
 	ImGui::Checkbox("Russian Roulette", &settings.RussianRoulette);
+	if (auto _tt = Util::HoverTooltipWrapper()) {
+		ImGui::Text("Enable Russian Roulette termination for ray paths to improve performance at the cost of some variance.\n");
+	}
+
+	ImGui::Checkbox("Convert To Gamma", &settings.ConvertToGamma);
+	if (auto _tt = Util::HoverTooltipWrapper()) {
+		ImGui::Text("Convert the final raytraced output to gamma space.\n");
+	}
 
 	ImGui::PopID();
 
@@ -2839,6 +2848,7 @@ void Raytracing::DrawRTGI()
 	ReleaseTempGPUData();
 
 	// True Linear to Gamma
+	if (settings.ConvertToGamma)
 	{
 		d3d11Context->CSSetShader(trueLinearToGammaCS.get(), nullptr, 0);
 
