@@ -223,7 +223,7 @@ float3 EvalPointLight(in Surface surface, in BRDFContext brdfContext, in LightDa
     return direct;
 }
 
-void SampleDefaultBSDF(in Surface surface, in BRDFContext brdfContext, inout uint randomSeed, out float3 direction, out float3 brdfWeight)
+bool SampleDefaultBSDF(in Surface surface, in BRDFContext brdfContext, inout uint randomSeed, out float3 direction, out float3 brdfWeight)
 {
     const float3 V = brdfContext.ViewDirection;
     float3 L = 0;
@@ -295,6 +295,8 @@ void SampleDefaultBSDF(in Surface surface, in BRDFContext brdfContext, inout uin
     brdfWeight = brdf / max(pdf, 1e-7f);
 
     direction = L;
+    
+    return isSpecular;
 }
 
 #if defined(FULL_MATERIAL)

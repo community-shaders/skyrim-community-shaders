@@ -165,8 +165,8 @@ void main()
     float3 brdfWeight;
     
     float3 radiance = 0;
-    bool isDiffusePath = true;
-    float hitDistance = 0;    
+    bool isSpecular = false;
+    float4 specDirHitDist = 0;    
     
     RayDesc ray;   
     Payload payload;
@@ -215,7 +215,8 @@ void main()
                 SampleFuzzBSDF(surface, brdfContext, randomSeed, direction, brdfWeight);
             else
 #   endif
-            SampleDefaultBSDF(surface, brdfContext, randomSeed, direction, brdfWeight);
+            isSpecular = SampleDefaultBSDF(surface, brdfContext, randomSeed, direction, brdfWeight);
+            
             throughput *= surface.AO;
             throughput *= brdfWeight;
 #endif            
@@ -236,7 +237,8 @@ void main()
               
             if (j == 0)
             {
-                hitDistance = max(hitDistance, payload.hitDistance);
+                if (isSpecular)
+                    specDirHitDist = float4(direction, max(specDirHitDist.a, payload.hitDistance));
             }              
             
             if (!payload.Hit())
@@ -271,10 +273,10 @@ void main()
                 float voxelSize = HashGridGetVoxelSize(gridLevel, sharcParameters.gridParameters);
                 bool isValidHit = payload.hitDistance > voxelSize * sqrt(3.0f);
             
-                if (isValidHit) {
+                /*if (isValidHit) {
                     float footprint = payload.hitDistance * sqrt(0.5f * surface.Roughness / (1.0f - surface.Roughness));
                     isValidHit &= footprint > voxelSize;      
-                }
+                }*/
             
                 float3 sharcRadiance;
                 if (isValidHit && SharcGetCachedRadiance(sharcParameters, sharcHitData, sharcRadiance, false))
@@ -343,5 +345,5 @@ void main()
     const float3 specularAlbedo = float3(sourceSurface.F0 * envBRDF.x + envBRDF.y);
     SpecularAlbedo[idx] = float4(specularAlbedo, 0.0f);
 
-    SpecularHitDist[idx] = hitDistance;
+    SpecularHitDist[idx] = specDirHitDist;
 }

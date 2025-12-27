@@ -5,18 +5,39 @@
 Texture2D<unorm half4> NormalGlossiness     : register(t0);
 Texture2D<unorm half4> Albedo               : register(t1);
 Texture2D<unorm half4> GNMAO                : register(t2);
+Texture2D<unorm half4> MotionVectors        : register(t3);
 
 RWTexture2D<snorm half4> NormalRoughness    : register(u0);
 RWTexture2D<unorm half4> Diffuse            : register(u1);
+RWTexture2D<unorm half4> MotionVectorsOut   : register(u2);
+
+#ifndef RES_X
+#define RES_X (1280.0f)
+#endif
+
+#ifndef RES_Y
+#define RES_Y (720.0f)
+#endif
+
+const float2 res = float2(RES_X, RES_Y);
+
+SamplerState Sampler : register(s0);
 
 [numthreads(8, 8, 1)]
 void main(uint2 id : SV_DispatchThreadID)
 {
-    const unorm half3 normalGlossiness = NormalGlossiness[id].xyz;
+    if (any(id > res))
+        return;
+    
+    float2 uv = (id.xy + 0.5f) / res;
+
+    const unorm half3 normalGlossiness = NormalGlossiness.SampleLevel(Sampler, uv, 0).xyz;
     const snorm half3 normalWS = normalize(ViewToWorldVector(GBuffer::DecodeNormal(normalGlossiness.xy), FrameBuffer::CameraViewInverse[0]));	
     NormalRoughness[id] = half4(normalWS, 1.0f - normalGlossiness.z);
     
     float metallic, ao;
-    UnpackMAO(GNMAO[id].z, metallic, ao);
-    Diffuse[id] = Albedo[id] * (1.0f - metallic);
+    UnpackMAO(GNMAO.SampleLevel(Sampler, uv, 0).z, metallic, ao);
+    Diffuse[id] = Albedo.SampleLevel(Sampler, uv, 0) * (1.0f - metallic);
+    
+    MotionVectorsOut[id] = MotionVectors.SampleLevel(Sampler, uv, 0);
 }
