@@ -8,7 +8,7 @@ ConstantBuffer<FrameData> Frame                 : register(b0);
 
 RWTexture2D<float4> OutputTexture               : register(u0);
 RWTexture2D<float4> SpecularAlbedo              : register(u1);
-RWTexture2D<float> SpecularHitDist              : register(u2);
+RWTexture2D<float4> SpecularHitDist             : register(u2);
 
 #ifdef SHARC
 RWStructuredBuffer<uint64_t>                u_SharcHashEntriesBuffer    : register(u3);
