@@ -2858,9 +2858,9 @@ void Raytracing::DrawRTGI()
 
 		auto dispatchCount = Util::GetScreenDispatchCount();
 		d3d11Context->Dispatch(dispatchCount.x, dispatchCount.y, 1);
+	} else {
+		d3d11Context->CopyResource(main.texture, mainTexture->resource11);
 	}
-
-	//d3d11Context->CopyResource(main.texture, mainTexture->resource11);
 
 	// Clear specular if Path Tracing is enabled
 	if (settings.PathTracing)
