@@ -2838,7 +2838,19 @@ void Raytracing::DrawRTGI()
 
 	ReleaseTempGPUData();
 
-	d3d11Context->CopyResource(main.texture, mainTexture->resource11);
+	// True Linear to Gamma
+	{
+		d3d11Context->CSSetShader(trueLinearToGammaCS.get(), nullptr, 0);
+
+		d3d11Context->CSSetShaderResources(0, 1, &mainTexture->srv);
+
+		d3d11Context->CSSetUnorderedAccessViews(0, 1, &main.UAV, nullptr);
+
+		auto dispatchCount = Util::GetScreenDispatchCount();
+		d3d11Context->Dispatch(dispatchCount.x, dispatchCount.y, 1);
+	}
+
+	//d3d11Context->CopyResource(main.texture, mainTexture->resource11);
 
 	// Clear specular if Path Tracing is enabled
 	if (settings.PathTracing)
@@ -3721,6 +3733,9 @@ void Raytracing::CompileComputeShaders()
 
 	if (auto rawPtr = reinterpret_cast<ID3D11ComputeShader*>(Util::CompileShader(L"Data\\Shaders\\Raytracing\\ConvertNormalGlossCS.hlsl", { { "DX11", "" } }, "cs_5_0")); rawPtr)
 		convertNormalGlossCS.attach(rawPtr);
+
+	if (auto rawPtr = reinterpret_cast<ID3D11ComputeShader*>(Util::CompileShader(L"Data\\Shaders\\Raytracing\\TrueLinearToGammaCS.hlsl", { { "DX11", "" } }, "cs_5_0")); rawPtr)
+		trueLinearToGammaCS.attach(rawPtr);
 }
 
 RaytracingFD::FeatureData Raytracing::GetCommonBufferData()

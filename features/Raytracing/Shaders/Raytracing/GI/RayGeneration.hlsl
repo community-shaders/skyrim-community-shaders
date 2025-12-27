@@ -334,9 +334,9 @@ void main()
     radiance /= MAX_SAMPLES;
 
 #if defined(PATH_TRACING)
-    OutputTexture[idx] = float4(Color::TrueLinearToGamma(direct + radiance), 0.0f);
+    OutputTexture[idx] = float4(direct + radiance, 0.0f);
 #else
-    OutputTexture[idx] = MainTexture[idx] + float4(Color::TrueLinearToGamma(radiance), 0.0f);
+    OutputTexture[idx] = float4(Color::GammaToTrueLinear(MainTexture[idx].rgb) + radiance, 1.0f);
 #endif
     
     // Needs linear and PT doesn't have linear :(

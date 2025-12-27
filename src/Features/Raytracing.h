@@ -720,7 +720,8 @@ struct Raytracing : public OverlayFeature
 	winrt::com_ptr<ID3D11SamplerState> samplerState = nullptr;
 	winrt::com_ptr<ID3D11ComputeShader> copyDepthCS = nullptr;
 	winrt::com_ptr<ID3D11ComputeShader> convertNormalGlossCS = nullptr;
-
+	winrt::com_ptr<ID3D11ComputeShader> trueLinearToGammaCS = nullptr;
+	
 	eastl::unique_ptr<DX12::StructuredBufferUpload<D3D12_RAYTRACING_INSTANCE_DESC>> blasInstanceBuffer = nullptr;	
 	eastl::vector<D3D12_RAYTRACING_INSTANCE_DESC> blasInstances;
 
