@@ -11,7 +11,7 @@ public:
 	Allocation(uint16_t slot, Allocator* allocator) :
 		index(slot), allocator(allocator) {}
 
-    Allocation(const Allocation&) = delete;
+	Allocation(const Allocation&) = delete;
 	Allocation& operator=(const Allocation&) = delete;
 
 	Allocation(Allocation&&) = default;

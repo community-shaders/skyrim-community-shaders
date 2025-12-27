@@ -7,8 +7,8 @@
 float3 GetBary(float2 barycentrics)
 {
     return float3(
-        1.0f - barycentrics.x - barycentrics.y, 
-        barycentrics.x, 
+        1.0f - barycentrics.x - barycentrics.y,
+        barycentrics.x,
         barycentrics.y
     );
 }
@@ -45,13 +45,13 @@ Instance GetInstance(uint instanceIdx)
 
 uint GetShapeIdx(in Payload payload, out Instance instance)
 {
-    instance = GetInstance(payload.InstanceIndex());   
+    instance = GetInstance(payload.InstanceIndex());
     return Indirection.Load((instance.FirstGeometryID + payload.GeometryIndex()) * 4);
 }
 
 uint GetShapeIdx(in uint instanceIndex, in uint geometryIndex)
 {
-    Instance instance = GetInstance(instanceIndex);   
+    Instance instance = GetInstance(instanceIndex);
     return Indirection.Load((instance.FirstGeometryID + geometryIndex) * 4);
 }
 
@@ -63,11 +63,11 @@ Triangle GetTriangle(in uint shapeIdx, in uint primitiveIdx)
 void GetVertices(in uint shapeIndex, in uint primitiveIndex, out Vertex v0, out Vertex v1, out Vertex v2)
 {
     Triangle geomTriangle = GetTriangle(shapeIndex, primitiveIndex);
-    
-    StructuredBuffer<Vertex> vertices = Vertices[shapeIndex];    
+
+    StructuredBuffer<Vertex> vertices = Vertices[shapeIndex];
     v0 = vertices[geomTriangle.x];
     v1 = vertices[geomTriangle.y];
-    v2 = vertices[geomTriangle.z];  
+    v2 = vertices[geomTriangle.z];
 }
 
 #endif // GEOMETRY_HLSL

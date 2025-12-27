@@ -3,43 +3,43 @@
 #define SHARC
 #define DLSS_RR
 
-#include "OverlayFeature.h"
-#include <d3d12.h>
-#include <d3d11_4.h>
-#include <dxgi1_6.h>
 #include "Features/Upscaling/DX12SwapChain.h"
-#include <dxcapi.h>
 #include "LightLimitFix.h"
-#include <DirectXTex.h>
-#include <shared_mutex>
-#include <EASTL/deque.h>
+#include "OverlayFeature.h"
 #include <D3D12MemAlloc.h>
+#include <DirectXTex.h>
+#include <EASTL/deque.h>
+#include <d3d11_4.h>
+#include <d3d12.h>
+#include <dxcapi.h>
+#include <dxgi1_6.h>
+#include <shared_mutex>
 
 #include "State.h"
 
-#include "Features/Raytracing/Utils.h"
-#include "Features/Raytracing/Heap.h"
+#include "Features/Raytracing/Allocator.h"
 #include "Features/Raytracing/Buffer.h"
 #include "Features/Raytracing/BufferMA.h"
-#include "Features/Raytracing/Allocator.h"
+#include "Features/Raytracing/Heap.h"
 #include "Features/Raytracing/HeapManager.h"
-#include "Features/Raytracing/RTPipelineBuilder.h"
-#include "Features/Raytracing/ShaderBindingTable.h"
-#include "Features/Raytracing/Types.h"
-#include "Features/Raytracing/Shape.h"
 #include "Features/Raytracing/Model.h"
 #include "Features/Raytracing/Pipelines/SHaRCPipeline.h"
+#include "Features/Raytracing/RTPipelineBuilder.h"
+#include "Features/Raytracing/ShaderBindingTable.h"
+#include "Features/Raytracing/Shape.h"
+#include "Features/Raytracing/Types.h"
+#include "Features/Raytracing/Utils.h"
 
 #include "Raytracing/FeatureData.hlsli"
-#include "Raytracing/Includes/Types/VertexUpdate.hlsli"
-#include "Raytracing/Includes/Types/Vertex.hlsli"
+#include "Raytracing/Includes/Types/FrameData.hlsli"
+#include "Raytracing/Includes/Types/Instance.hlsli"
+#include "Raytracing/Includes/Types/Light.hlsli"
+#include "Raytracing/Includes/Types/Material.hlsli"
+#include "Raytracing/Includes/Types/ShadowsFrameData.hlsli"
 #include "Raytracing/Includes/Types/Skinning.hlsli"
 #include "Raytracing/Includes/Types/Triangle.hlsli"
-#include "Raytracing/Includes/Types/Instance.hlsli"
-#include "Raytracing/Includes/Types/Material.hlsli"
-#include "Raytracing/Includes/Types/Light.hlsli"
-#include "Raytracing/Includes/Types/FrameData.hlsli"
-#include "Raytracing/Includes/Types/ShadowsFrameData.hlsli"
+#include "Raytracing/Includes/Types/Vertex.hlsli"
+#include "Raytracing/Includes/Types/VertexUpdate.hlsli"
 
 #include "Raytracing/Denoiser/SVGF/SVGF.hlsli"
 
@@ -49,16 +49,16 @@
 
 #ifdef DLSS_RR
 #	define NV_WINDOWS
-#pragma warning(push)
-#pragma warning(disable: 4471)
-#include <sl.h>
-#include <sl_consts.h>
-#include <sl_dlss.h>
-#include <sl_dlss_d.h>
-#include <sl_matrix_helpers.h>
-#include <sl_nis.h>
-#include <sl_version.h>
-#pragma warning(pop)
+#	pragma warning(push)
+#	pragma warning(disable: 4471)
+#	include <sl.h>
+#	include <sl_consts.h>
+#	include <sl_dlss.h>
+#	include <sl_dlss_d.h>
+#	include <sl_matrix_helpers.h>
+#	include <sl_nis.h>
+#	include <sl_version.h>
+#	pragma warning(pop)
 #endif
 
 using namespace magic_enum::bitwise_operators;
@@ -302,12 +302,13 @@ struct Raytracing : public OverlayFeature
 	float Halton(int32_t index, int32_t base);
 #endif
 
-	const bool Active() 
+	const bool Active()
 	{
 		return loaded && settings.Enabled;
 	};
 
-	const std::vector<IPipeline*>& GetPipelines() {
+	const std::vector<IPipeline*>& GetPipelines()
+	{
 		static std::vector<IPipeline*> pipelines = {
 			sharcPipeline.get()
 		};
@@ -337,7 +338,7 @@ struct Raytracing : public OverlayFeature
 		Accumulation,
 #ifdef DLSS_RR
 		DLSSRR
-#endif	
+#endif
 	};
 
 	enum struct DebugOutput : int32_t
@@ -356,9 +357,9 @@ struct Raytracing : public OverlayFeature
 #ifdef DLSS_RR
 	enum struct DLSSRRQuality : int32_t
 	{
-		MaxPerformance,	
+		MaxPerformance,
 		Balanced,
-		MaxQuality		
+		MaxQuality
 	};
 
 	enum struct DLSSRRPreset : int32_t
@@ -484,8 +485,8 @@ struct Raytracing : public OverlayFeature
 		Denoiser Denoiser = Denoiser::Accumulation;
 		int Bounces = 2;
 		int SamplesPerPixel = 1;
-		float2 Roughness = {0.0f, 1.0f};
-		float2 Metalness = {0.0f, 1.0f};
+		float2 Roughness = { 0.0f, 1.0f };
+		float2 Metalness = { 0.0f, 1.0f };
 		float Emissive = 1.0f;
 		float Effect = 1.0f;
 		float Sky = 1.0f;
@@ -604,7 +605,6 @@ struct Raytracing : public OverlayFeature
 		{
 			return allocation->GetIndex();
 		}
-
 	};
 
 	eastl::shared_ptr<DefaultTexture> defaultWhiteTexture = nullptr;
@@ -620,10 +620,10 @@ struct Raytracing : public OverlayFeature
 	{
 		eastl::string filename;
 		float3x4 transform;
-		Util::FrameChecker frameChecker;	
+		Util::FrameChecker frameChecker;
 		//bool hasUpdated = false;
 
-		bool Update(RE::NiNode* pNiNode, [[ maybe_unused ]] const eastl::pair<eastl::string, Model&>& modelPair)
+		bool Update(RE::NiNode* pNiNode, [[maybe_unused]] const eastl::pair<eastl::string, Model&>& modelPair)
 		{
 			// Instance was not changed by the game, so there is no need to update it
 			// This doesn't work at all for actors
@@ -722,8 +722,8 @@ struct Raytracing : public OverlayFeature
 	winrt::com_ptr<ID3D11ComputeShader> copyDepthCS = nullptr;
 	winrt::com_ptr<ID3D11ComputeShader> convertNormalGlossCS = nullptr;
 	winrt::com_ptr<ID3D11ComputeShader> trueLinearToGammaCS = nullptr;
-	
-	eastl::unique_ptr<DX12::StructuredBufferUpload<D3D12_RAYTRACING_INSTANCE_DESC>> blasInstanceBuffer = nullptr;	
+
+	eastl::unique_ptr<DX12::StructuredBufferUpload<D3D12_RAYTRACING_INSTANCE_DESC>> blasInstanceBuffer = nullptr;
 	eastl::vector<D3D12_RAYTRACING_INSTANCE_DESC> blasInstances;
 
 	winrt::com_ptr<ID3D12Resource> tlas = nullptr;
@@ -792,9 +792,9 @@ struct Raytracing : public OverlayFeature
 	// GI
 	winrt::com_ptr<ID3D12RootSignature> rootSignature = nullptr;
 	winrt::com_ptr<ID3D12StateObject> pipelineRT = nullptr;
-	eastl::unique_ptr<DX12::ShaderBindingTable> shaderBindingTable = nullptr;	
+	eastl::unique_ptr<DX12::ShaderBindingTable> shaderBindingTable = nullptr;
 	eastl::unique_ptr<DX12::ResourceUpload> shaderBindingTableBuffer = nullptr;
-	eastl::unique_ptr<DX12::DescriptorHeap<GIHeap>> giHeap = nullptr;	
+	eastl::unique_ptr<DX12::DescriptorHeap<GIHeap>> giHeap = nullptr;
 
 	// Shadows
 	winrt::com_ptr<ID3D12RootSignature> shadowRS = nullptr;
@@ -821,7 +821,7 @@ struct Raytracing : public OverlayFeature
 
 	eastl::unique_ptr<WrappedResource> skyHemisphere = nullptr;
 	winrt::com_ptr<ID3D11ComputeShader> cubeToHemiCS = nullptr;
-	
+
 	// Shadow maps
 	bool renderingShadowmap = false;
 	eastl::unique_ptr<WrappedResource> shadowMaskTexture = nullptr;
@@ -918,7 +918,7 @@ struct Raytracing : public OverlayFeature
 					bool recompress = rt.settings.RecompressTextures;
 
 					descCopy.Format = GetCompatibleFormat(pDesc->Format, recompress);
-	
+
 					logger::trace("[RT] ID3D11Device::CreateTexture2D - Sharing Texture - Original Format: {}, Target Format: {}", magic_enum::enum_name(pDesc->Format), magic_enum::enum_name(descCopy.Format));
 
 					if (pDesc->Format != descCopy.Format) {
@@ -948,7 +948,7 @@ struct Raytracing : public OverlayFeature
 							const DirectX::Image* img = recompress ? outputMips[mip].GetImage(0, 0, 0) : decompressed;
 							initialDataLocal[mip].pSysMem = img->pixels;
 							initialDataLocal[mip].SysMemPitch = static_cast<UINT>(img->rowPitch);
-							initialDataLocal[mip].SysMemSlicePitch = static_cast<UINT>(img->slicePitch);							
+							initialDataLocal[mip].SysMemSlicePitch = static_cast<UINT>(img->slicePitch);
 						});
 
 						initialDataCopy = initialDataLocal.data();
@@ -1032,7 +1032,7 @@ struct Raytracing : public OverlayFeature
 			static void thunk(RE::NiSourceTexture* oThis)
 			{
 				if (oThis && oThis->rendererTexture) {
-            		if (auto texture = oThis->rendererTexture->texture) {  				
+					if (auto texture = oThis->rendererTexture->texture) {
 						auto& rt = globals::features::raytracing;
 
 						if (auto sharedIt = rt.sharedTextures.find(texture); sharedIt != rt.sharedTextures.end()) {
@@ -1042,8 +1042,8 @@ struct Raytracing : public OverlayFeature
 								logger::debug("[RT] NiSourceTexture::Destructor [0x{:8X}] - Register: {}", reinterpret_cast<uintptr_t>(texture), index);
 
 								// I imagine this isn't fast but I'll keep this in until I'm sure everything has been fixed
-								for (auto& [key, model]: rt.models) {
-									for (auto& shape: model.shapes) {
+								for (auto& [key, model] : rt.models) {
+									for (auto& shape : model.shapes) {
 										auto& material = shape->material;
 
 										if (index == material.BaseTexture->GetIndex())
@@ -1063,11 +1063,10 @@ struct Raytracing : public OverlayFeature
 			static inline REL::Relocation<decltype(thunk)> func;
 		};
 
-
 		struct ID3D11Texture2D_Release
 		{
 			static ULONG WINAPI thunk(ID3D11Texture2D* This)
-			{			
+			{
 				ULONG refCount = func(This);
 
 				if (refCount == 0) {
@@ -1169,7 +1168,7 @@ struct Raytracing : public OverlayFeature
 
 				// Bypassing this alone does absolutely nothing.
 				if (!rt.Active() || !rt.renderingShadowmap || !rt.settings.RaytracedShadows)
-					func(shaderAccumulator, camera);			
+					func(shaderAccumulator, camera);
 			}
 
 			static inline REL::Relocation<decltype(thunk)> func;
@@ -1332,7 +1331,7 @@ struct Raytracing : public OverlayFeature
 			}
 			static inline REL::Relocation<decltype(thunk)> func;
 		};
-		
+
 		template <typename T>
 		struct Clone3DBase
 		{
@@ -1381,7 +1380,7 @@ struct Raytracing : public OverlayFeature
 				return result;
 			}
 			static inline REL::Relocation<decltype(thunk)> func;
-		};	
+		};
 
 		//__int64 __fastcall sub_7FF62400F840(__int64 a1, __int64 a2, char* a3, __int64 a4, int a5)
 
@@ -1396,7 +1395,7 @@ struct Raytracing : public OverlayFeature
 				return result;
 			}
 			static inline REL::Relocation<decltype(thunk)> func;
-		};	
+		};
 
 		struct sub_7FF62400F3D0
 		{
@@ -1423,8 +1422,8 @@ struct Raytracing : public OverlayFeature
 				func(oThis);
 			}
 			static inline REL::Relocation<decltype(thunk)> func;
-		};	
-		
+		};
+
 		struct BSBatchRenderer_RenderBatches
 		{
 			static bool thunk(RE::BSBatchRenderer* oThis, uint32_t& technique, uint32_t& groupIndex, RE::BSSimpleList<uint32_t>*& passIndexList, uint32_t renderFlags)
@@ -1448,7 +1447,7 @@ struct Raytracing : public OverlayFeature
 
 								geometry->CullGeometry(true);
 
-								auto result = func(oThis, technique, groupIndex, passIndexList, renderFlags);	
+								auto result = func(oThis, technique, groupIndex, passIndexList, renderFlags);
 
 								geometry->CullGeometry(culled);
 
@@ -1458,7 +1457,7 @@ struct Raytracing : public OverlayFeature
 					}
 				}
 
-				return func(oThis, technique, groupIndex, passIndexList, renderFlags);			
+				return func(oThis, technique, groupIndex, passIndexList, renderFlags);
 			};
 			static inline REL::Relocation<decltype(thunk)> func;
 		};
@@ -1488,13 +1487,13 @@ struct Raytracing : public OverlayFeature
 			stl::write_vfunc<0x0, Destructor<RE::BSFadeNode>>(RE::VTABLE_BSFadeNode[0]);
 			stl::write_vfunc<0x0, Destructor<RE::BSFadeNode>>(RE::VTABLE_BSLeafAnimNode[0]);
 			//stl::write_vfunc<0x0, Destructor<RE::BSFadeNode>>(RE::VTABLE_BSTreeNode[0]);
-			
+
 			stl::detour_thunk<Main_RenderWorld>(REL::RelocationID(100424, 107142));
 
 			//stl::detour_thunk<BSBatchRenderer_RenderBatches>(REL::RelocationID(100852, 107642));
 			//stl::detour_thunk<BSShaderAccumulator_RenderPersistentPassList>(REL::RelocationID(100840, 107630));
 
-			// We use these to render only the sky to the cubemaps, maybe it would be cleaner if we could override cubemap renderpass?		
+			// We use these to render only the sky to the cubemaps, maybe it would be cleaner if we could override cubemap renderpass?
 			stl::write_vfunc<0x6, BSShader_SetupGeometry<RE::BSShader::Type::Lighting>>(RE::VTABLE_BSLightingShader[0]);
 			//stl::write_vfunc<0x6, BSShader_SetupGeometry<RE::BSShader::Type::Effect>>(RE::VTABLE_BSEffectShader[0]);
 			//stl::write_vfunc<0x6, BSShader_SetupGeometry<RE::BSShader::Type::DistantTree>>(RE::VTABLE_BSDistantTreeShader[0]);
@@ -1515,7 +1514,7 @@ struct Raytracing : public OverlayFeature
 
 			stl::write_vfunc<0x29, BSShaderAccumulator_StartAccumulating>(RE::VTABLE_BSShaderAccumulator[0]);
 			stl::write_vfunc<0x2A, BSShaderAccumulator_FinishAccumulatingDispatch>(RE::VTABLE_BSShaderAccumulator[0]);
-			
+
 			stl::write_vfunc<0x26, BGSTextureSet_SetTexture>(RE::VTABLE_BGSTextureSet[1]);
 			stl::write_vfunc<0x26, BSShaderTextureSet_SetTexture>(RE::VTABLE_BSShaderTextureSet[0]);
 
@@ -1563,7 +1562,7 @@ struct Raytracing : public OverlayFeature
 		{
 			static TESLoadGameEventHandler singleton;
 
-            auto scriptEventSourceHolder = RE::ScriptEventSourceHolder::GetSingleton();
+			auto scriptEventSourceHolder = RE::ScriptEventSourceHolder::GetSingleton();
 			scriptEventSourceHolder->GetEventSource<RE::TESLoadGameEvent>()->AddEventSink(&singleton);
 
 			logger::info("Registered {}", typeid(singleton).name());

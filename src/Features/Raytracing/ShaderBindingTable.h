@@ -246,7 +246,7 @@ namespace DX12
 					baseAddr + m_callOffset,
 					Callable.SectionSize(),
 					Callable.RecordSize()
-				};				
+				};
 			}
 		}
 

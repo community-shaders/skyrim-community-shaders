@@ -1,8 +1,8 @@
 #pragma once
 
+#include <D3D12MemAlloc.h>
 #include <d3d12.h>
 #include <directx/d3dx12.h>
-#include <D3D12MemAlloc.h>
 
 namespace DX12
 {
@@ -82,6 +82,7 @@ namespace DX12
 
 		winrt::com_ptr<D3D12MA::Allocation> allocation = nullptr;
 		winrt::com_ptr<ID3D12Resource> resource = nullptr;
+
 	protected:
 		ID3D12Device5* device;
 		D3D12MA::Allocator* allocator;
@@ -89,7 +90,6 @@ namespace DX12
 		D3D12_RESOURCE_STATES state;
 		D3D12_RESOURCE_DESC desc;
 	};
-
 
 	class ResourceUploadMA : public ResourceMA
 	{
@@ -204,6 +204,7 @@ namespace DX12
 		{
 			StructuredBufferMA::CreateUAV(nullptr, handle);
 		}
+
 	protected:
 		uint64_t count;
 	};
@@ -261,7 +262,7 @@ namespace DX12
 			D3D12_RESOURCE_STATES state = this->state;
 
 			this->TransitionBarrier(commandList, D3D12_RESOURCE_STATE_COPY_DEST);
-			commandList->CopyResource(this->resource.get(), uploadResource[uploadIndex].get());			
+			commandList->CopyResource(this->resource.get(), uploadResource[uploadIndex].get());
 			//commandList->CopyBufferRegion(this->resource.get(), 0, uploadBuffer.get(), 0, sizeof(T) * this->count);
 			this->TransitionBarrier(commandList, state);
 		}

@@ -1,9 +1,9 @@
 #pragma once
 
 #include "PCH.h"
-#include <directxpackedvector.h>
 #include "TruePBR.h"
 #include "TruePBR/BSLightingShaderMaterialPBR.h"
+#include <directxpackedvector.h>
 
 static inline uint PackUByte4(float4 unpacked)
 {

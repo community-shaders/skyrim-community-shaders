@@ -7,13 +7,13 @@
 #include "Raytracing/Includes/Surface.hlsli"
 
 namespace MonteCarlo
-{ 
+{
     // The following functions bellow all come from NVidia
     float CalcLuminance(float3 color)
     {
         return dot(color.xyz, float3(0.299f, 0.587f, 0.114f));
     }
-    
+
     float2 Hammersley( uint Index, uint NumSamples, uint2 Random )
     {
         float E1 = frac( (float)Index / NumSamples + float( Random.x & 0xffff ) / (1<<16) );
@@ -27,8 +27,8 @@ namespace MonteCarlo
         float E2 = float( ( reversebits(Index) >> 16 ) ^ Random.y ) * (1.0 / 65536.0);
         return float2( E1, E2 );
     }
-    
-    // It's got a license :(    
+
+    // It's got a license :(
     // https://github.com/NVIDIA-RTX/RTXDI/blob/main/Samples/FullSample/Shaders/HelperFunctions.hlsli
     float3 SampleGGX_VNDF(float3 Ve, float alpha, inout uint seed)
     {
@@ -40,7 +40,7 @@ namespace MonteCarlo
 
         float r1 = Random(seed);
         float r2 = Random(seed);
-    
+
         float r = sqrt(r1);
         float phi = 2.0 * Math::PI * r2;
         float t1 = r * cos(phi);
@@ -54,8 +54,8 @@ namespace MonteCarlo
         return normalize(float3(alpha * Nh.x, alpha * Nh.y, max(0.0, Nh.z)));
     }
 
-    // Also got a license, but a permissive one    
-    // https://github.com/NVIDIA-RTX/Donut/blob/main/include/donut/shaders/brdf.hlsli   
+    // Also got a license, but a permissive one
+    // https://github.com/NVIDIA-RTX/Donut/blob/main/include/donut/shaders/brdf.hlsli
     float ImportanceSampleGGX_VNDF_PDF(float alpha, float3 N, float3 V, float3 L)
     {
         float3 H = normalize(L + V);
@@ -78,7 +78,7 @@ namespace MonteCarlo
     }
 
     // PDF of sampling a reflection vector L using 'sampleGGXVNDF'.
-    // Note that PDF of sampling given microfacet normal is (G1 * D) when vectors are in local space (in the hemisphere around shading normal). 
+    // Note that PDF of sampling given microfacet normal is (G1 * D) when vectors are in local space (in the hemisphere around shading normal).
     // Remaining terms (1.0f / (4.0f * NdotV)) are specific for reflection case, and come from multiplying PDF by jacobian of reflection operator
     float SampleGGXVNDFReflectionPdf(float alpha, float alphaSquared, float NdotH, float NdotV, float LdotH) {
         NdotH = max(0.00001f, NdotH);
@@ -182,7 +182,7 @@ namespace MonteCarlo
             }
             const float Weight = NoL * (LenV + k * NoV) / (NoV * LenL + NoL * LenV);
             const float Pdf = 0.5 * D * rcp(LenV + k * NoV);
-            
+
             return float2(Weight, Pdf);
         }
         return 0;
@@ -213,14 +213,14 @@ namespace MonteCarlo
         bias *= saturate(SpecularColor.g * 50);
         return mad(SpecularColor, max(0, scale), max(0, bias));
     }
-    
+
     float D_GGXAlpha(float NoH, float alpha)
     {
         float a = NoH * alpha;
         float k = alpha / (1.0 - NoH * NoH + a * a);
         return k * k * (1.0 / Math::PI);
     }
-    
+
     float V_SmithGGXCorrelatedFast(float NoV, float NoL, float a)
     {
         float GGXV = NoL * (NoV * (1.0 - a) + a);
@@ -277,7 +277,7 @@ namespace MonteCarlo
         return Pdf > OtherPdf ? M : 1.0 - M; // This ensures exchanging arguments will produce values that add back up to 1.0 exactly
     }
 
-    // Multiple importance sampling power heuristic of two functions with a power of two. 
+    // Multiple importance sampling power heuristic of two functions with a power of two.
     // [Veach 1997, "Robust Monte Carlo Methods for Light Transport Simulation"]
     float MISWeightPower(float Pdf, float OtherPdf)
     {
@@ -325,10 +325,10 @@ namespace MonteCarlo
     {
         float3 R = reflect(-V, N);
         float horizon = min(1.0 + dot(R, VN), 1.0);
-    
+
         return horizon * horizon;
     }
-    
+
     // https://github.com/NVIDIA-RTX/RTXDI/blob/main/Samples/FullSample/Shaders/LightingPasses/BrdfRayTracing.hlsl
     bool GGXBRDF(in Surface surface, in BRDFContext brdfContext, inout uint randomSeed, out float3 direction, out float3 BRDF_over_PDF)
     {
@@ -336,14 +336,14 @@ namespace MonteCarlo
         const bool isDeltaSurface = surface.Roughness == 0;
         float specular_PDF;
         float overall_PDF;
-    
+
         {
             float3 specularDirection;
             float3 specular_BRDF_over_PDF;
             {
                 float3 Ve = float3(
-                    dot(brdfContext.ViewDirection, surface.Tangent), 
-                    dot(brdfContext.ViewDirection, surface.Bitangent), 
+                    dot(brdfContext.ViewDirection, surface.Tangent),
+                    dot(brdfContext.ViewDirection, surface.Bitangent),
                     dot(brdfContext.ViewDirection, surface.Normal)
                 );
 

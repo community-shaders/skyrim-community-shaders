@@ -4,7 +4,7 @@
 #include <dxcapi.h>
 #include <shlwapi.h>
 
-namespace ShaderUtils 
+namespace ShaderUtils
 {
 	void CompileShader(winrt::com_ptr<IDxcBlob>& shader, const wchar_t* FilePath, eastl::vector<DxcDefine> defines, const wchar_t* Target, const wchar_t* EntryPoint)
 	{
@@ -51,10 +51,13 @@ namespace ShaderUtils
 
 		LPCWSTR args[] = {
 			FilePath,
-			L"-E", EntryPoint,
+			L"-E",
+			EntryPoint,
 			L"-enable-16bit-types",
-			L"-T", Target,
-			L"-I", L"Data\\Shaders",
+			L"-T",
+			Target,
+			L"-I",
+			L"Data\\Shaders",
 			L"-Zi",
 			L"-Qstrip_reflect",
 			L"-O3",
@@ -79,8 +82,8 @@ namespace ShaderUtils
 			}
 		} else {
 			logger::error("Failed to get compilation errors");
-			return;		
-		} 
+			return;
+		}
 
 		if (FAILED(result->GetOutput(DXC_OUT_OBJECT, IID_PPV_ARGS(&shader), nullptr))) {
 			logger::error("Failed to get compiled shader");

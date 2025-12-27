@@ -20,7 +20,7 @@ struct half
 		return DirectX::PackedVector::XMConvertHalfToFloat(v);
 	}
 
-    half& operator+=(const half& rhs)
+	half& operator+=(const half& rhs)
 	{
 		v = DirectX::PackedVector::XMConvertFloatToHalf(float(*this) + float(rhs));
 		return *this;

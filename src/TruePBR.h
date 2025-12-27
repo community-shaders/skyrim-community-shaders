@@ -19,7 +19,7 @@ public:
 		static TruePBR singleton;
 		return &singleton;
 	}
-	
+
 	static constexpr auto PBRFlag = RE::BSShaderProperty::EShaderPropertyFlag::kMenuScreen;
 
 	inline std::string GetShortName() { return "TruePBR"; }

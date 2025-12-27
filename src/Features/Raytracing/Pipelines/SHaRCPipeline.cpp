@@ -11,11 +11,9 @@ void SHaRCPipeline::CreateRootSignature(ID3D12Device5* device)
 	heap->CreateTable(
 		SHaRCHeap::Table::UAV,
 		D3D12_DESCRIPTOR_RANGE_TYPE_UAV,
-		{ 
-			{ SHaRCHeap::Slot::SHaRCHashEntries, 1 },
+		{ { SHaRCHeap::Slot::SHaRCHashEntries, 1 },
 			{ SHaRCHeap::Slot::SHaRCAccumulation, 1 },
-			{ SHaRCHeap::Slot::SHaRCResolved, 1 }
-		});
+			{ SHaRCHeap::Slot::SHaRCResolved, 1 } });
 
 	auto rootParameters = heap->GetRootParameters();
 

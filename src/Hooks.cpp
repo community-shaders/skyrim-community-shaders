@@ -12,11 +12,11 @@
 
 #include "Features/InteriorSun.h"
 #include "Features/LightLimitFix.h"
+#include "Features/Raytracing.h"
 #include "Features/TerrainHelper.h"
 #include "Features/Upscaling.h"
 #include "Features/VR.h"
 #include "Features/VolumetricLighting.h"
-#include "Features/Raytracing.h"
 
 #include "ShaderTools/BSShaderHooks.h"
 

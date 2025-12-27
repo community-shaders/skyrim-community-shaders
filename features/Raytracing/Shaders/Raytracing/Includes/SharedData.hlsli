@@ -24,8 +24,8 @@ static_assert(sizeof(CPMSettings) % 16 == 0);
 struct WetnessEffectsSettings
 {
     #ifndef __cplusplus
-    row_major 
-    #endif    
+    row_major
+    #endif
     float4x4 OcclusionViewProj;
 
     float Time;
@@ -102,7 +102,7 @@ struct HairSpecularSettings
     uint HairMode; // 0: Kajiya-Kay, 1: Marschner
     uint pad0;
     uint pad1;
-    uint pad2;    
+    uint pad2;
 };
 #ifdef __cplusplus
 static_assert(sizeof(HairSpecularSettings) % 16 == 0);

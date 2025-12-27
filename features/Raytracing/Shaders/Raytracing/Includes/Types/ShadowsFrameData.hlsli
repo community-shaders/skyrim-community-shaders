@@ -1,7 +1,7 @@
 #ifndef SHADOW_FRAMEDATA_HLSL
 #define SHADOW_FRAMEDATA_HLSL
 
-struct 
+struct
 #ifdef __cplusplus
 alignas(16)
 #endif
@@ -13,7 +13,7 @@ alignas(16)
     float4 Position;
     float4 Direction;
 	float4x4 Pad0;
-	float4x4 Pad1;    
+	float4x4 Pad1;
 };
 #ifdef __cplusplus
 static_assert(sizeof(ShadowsFrameData) % 256 == 0);

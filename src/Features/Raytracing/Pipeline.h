@@ -1,18 +1,18 @@
 #pragma once
 
-#include <d3d12.h>
-#include <dxcapi.h>
 #include "Features/Raytracing/Buffer.h"
 #include "Features/Raytracing/Heap.h"
 #include "Features/Raytracing/HeapManager.h"
 #include "Features/Raytracing/ShaderUtils.h"
 #include "Features/Raytracing/Utils.h"
+#include <d3d12.h>
+#include <dxcapi.h>
 
 struct IPipeline
 {
 	virtual ~IPipeline() = default;
 
-    virtual void CreateRootSignature(ID3D12Device5* device) = 0;
+	virtual void CreateRootSignature(ID3D12Device5* device) = 0;
 	virtual void CompileShaders(ID3D12Device5* device) = 0;
 	virtual void SetupResources(ID3D12Device5* device) = 0;
 };

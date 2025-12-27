@@ -5,8 +5,8 @@ typedef unsigned int uint32_t;
 template <typename TableEnum, typename SlotEnum>
 struct Heap
 {
-    using Table = TableEnum;
-    using Slot  = SlotEnum;
+	using Table = TableEnum;
+	using Slot = SlotEnum;
 
 	static uint32_t GetTableValue(Table table)
 	{

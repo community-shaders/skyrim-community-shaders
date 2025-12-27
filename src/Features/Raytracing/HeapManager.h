@@ -1,8 +1,8 @@
 #pragma once
 
+#include "Features/Raytracing/Allocator.h"
 #include "Features/Raytracing/Heap.h"
 #include "Features/Raytracing/ShaderBindingTable.h"
-#include "Features/Raytracing/Allocator.h"
 
 namespace DX12
 {

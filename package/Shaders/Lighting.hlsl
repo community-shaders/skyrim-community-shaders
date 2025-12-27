@@ -2377,8 +2377,8 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #	endif
 
 	float3 dirLightColor = Color::Light(DirLightColor.xyz);
-	
-#	if defined(RT)	
+
+#	if defined(RT)
 	float3 dirLightColorMultiplier = SharedData::InInterior ? SharedData::raytracingSettings.InteriorDirectional : 1;
 # 	else
 	float3 dirLightColorMultiplier = 1;
@@ -2743,7 +2743,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #	endif
 
 	float3 directionalAmbientColor = max(0, mul(DirectionalAmbient, float4(ambientNormal, 1.0)));
-	
+
 #	if defined(RT)
 	directionalAmbientColor *= SharedData::raytracingSettings.Ambient;
 #	endif
@@ -3199,7 +3199,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 
 	float stochasticBlend = (screenNoise * screenNoise) < psout.Diffuse.w ? 1.0 : 0.0;
 	psout.NormalGlossiness.w = stochasticBlend;
-	
+
 #		if defined(RT)
 #			if !defined(SNOW)
 

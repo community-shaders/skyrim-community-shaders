@@ -54,7 +54,7 @@ float Random(inout uint seed)
 void CreateOrthonormalBasis(in float3 normal, out float3 tangent, out float3 bitangent)
 {
     float3 up = abs(normal.z) < 0.999 ? float3(0, 0, 1) : float3(0, 1, 0);
-    
+
     tangent = normalize(cross(up, normal));
     bitangent = cross(normal, tangent);
 }
@@ -99,7 +99,7 @@ float3 SampleCosineHemisphereScaled(inout uint randomSeed, in float scale)
 }
 
 float3 TangentToWorld(float3 normal, float3 tangentSample)
-{   
+{
     float3 tangent;
     float3 bitangent;
     CreateOrthonormalBasis(normal, tangent, bitangent);

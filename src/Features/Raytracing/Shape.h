@@ -2,19 +2,19 @@
 
 #include "PCH.h"
 
+#include "Features/Raytracing/Allocator.h"
 #include "Features/Raytracing/BufferMA.h"
 #include "Features/Raytracing/Utils.h"
-#include "Features/Raytracing/Allocator.h"
 
 #include <d3d12.h>
 #include <winrt/base.h>
 
 #include "Features/Raytracing/Types.h"
 
-#include "Raytracing/Includes/Types/Vertex.hlsli"
+#include "Raytracing/Includes/Types/Material.hlsli"
 #include "Raytracing/Includes/Types/Skinning.hlsli"
 #include "Raytracing/Includes/Types/Triangle.hlsli"
-#include "Raytracing/Includes/Types/Material.hlsli"
+#include "Raytracing/Includes/Types/Vertex.hlsli"
 
 using namespace magic_enum::bitwise_operators;
 
@@ -117,7 +117,8 @@ public:
 		RE::BSShaderMaterial::Feature Feature;
 		stl::enumeration<PBRShaderFlags, uint16_t> PBRFlags;
 
-		MaterialData GetData() {
+		MaterialData GetData()
+		{
 			return MaterialData(
 				BaseColor, EffectColor,
 				TexCoordOffsetScale,
@@ -161,12 +162,13 @@ public:
 		allocation({ allocation, AllocationDeleter() }), flags(flags) {}*/
 
 	Shape(Allocation* allocation, RE::BSGeometry* geometry, Flags flags = Flags::None) :
-		allocation({ allocation, AllocationDeleter() }), geometry(geometry), flags(flags) {
+		allocation({ allocation, AllocationDeleter() }), geometry(geometry), flags(flags)
+	{
 		//logger::info("[RT] Shape {} at Index {}", geometry->name, allocation->GetIndex());
 	}
 
 	/*~Shape() {
-	
+
 	};*/
 
 	/*inline Shape Clone(uint16_t registerIndexIn, RE::BSGeometry* geometryIn) const
@@ -188,11 +190,11 @@ public:
 	void BuildMesh(RE::BSGraphics::TriShape* rendererData, const std::uint32_t& vertexCountIn, const std::uint16_t& triangleCountIn, const std::uint16_t& bonesPerVertex, const float4x4& transform);
 
 	void BuildMaterial(const RE::BSGeometry::GEOMETRY_RUNTIME_DATA& geometryRuntimeData, [[maybe_unused]] const char* name);
-	
+
 	void CreateBuffers(const std::wstring& name);
 
 	void CalculateVectors(bool calculateNormal);
 
-	// For PBR shader flags we need to copy exactly what TruePBR does 
+	// For PBR shader flags we need to copy exactly what TruePBR does
 	static stl::enumeration<PBRShaderFlags, uint16_t> GetPBRShaderFlags(const BSLightingShaderMaterialPBR* pbrMaterial);
 };

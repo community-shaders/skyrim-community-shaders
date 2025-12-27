@@ -3,24 +3,24 @@
 
 struct LightData
 {
-	uint Count; 
+	uint Count;
 	uint Data[4];
 
-    uint GetGroup(uint index) 
+    uint GetGroup(uint index)
     {
-        return index >> 2;   
-    }        
-    
-    uint GetOffset(uint index) 
+        return index >> 2;
+    }
+
+    uint GetOffset(uint index)
     {
-        return (index & 3) << 3;    
-    }    
-    
+        return (index & 3) << 3;
+    }
+
     uint GetID(uint index)
     {
         uint group = GetGroup(index);
         uint offset = GetOffset(index);
-        
+
         return (Data[group] >> offset) & 0xFFu;
     }
 
@@ -31,7 +31,7 @@ struct LightData
 	{
 		StoreIDs(ids);
 	}
-	
+
 	void SetID(uint index, uint val)
 	{
 		uint group = GetGroup(index);
@@ -50,7 +50,7 @@ struct LightData
 			SetID(static_cast<uint32_t>(i), id);
 		}
 	}
-#endif 
+#endif
 };
 
 
@@ -58,13 +58,13 @@ struct LightData
 struct InstanceData
 #else
 struct Instance
-#endif    
+#endif
 {
-#ifdef __cplusplus	
+#ifdef __cplusplus
     float3x4 Transform;
 #else
 	row_major float3x4 Transform;
-#endif	
+#endif
     LightData LightData;
 	uint FirstGeometryID;
 };

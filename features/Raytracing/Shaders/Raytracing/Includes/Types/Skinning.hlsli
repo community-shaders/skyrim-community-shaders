@@ -4,14 +4,14 @@
 struct Skinning
 {
 	half weight[4];
-	
+
 #ifdef __cplusplus
 	uint8_t bone[4];
 #else
 	uint bone;
 #endif
-	
-#ifdef __cplusplus	
+
+#ifdef __cplusplus
 	Skinning() = default;
 
 	Skinning(eastl::vector<half> weights, eastl::vector<uint8_t> boneIds)
@@ -29,7 +29,7 @@ struct Skinning
 	{
 		uint shift = idx * 8;
 		return (bone >> shift) & 0xFF;
-	}	
+	}
 #endif
 };
 

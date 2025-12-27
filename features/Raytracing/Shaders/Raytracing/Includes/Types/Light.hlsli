@@ -1,10 +1,10 @@
 #ifndef LIGHT_HLSL
 #define LIGHT_HLSL
 
-struct 
+struct
 #ifdef __cplusplus
 alignas(16)
-#endif	
+#endif
 	Light
 {
 	float3 Vector;

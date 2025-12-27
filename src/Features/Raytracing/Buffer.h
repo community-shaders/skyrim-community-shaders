@@ -94,7 +94,6 @@ namespace DX12
 		D3D12_RESOURCE_DESC desc;
 	};
 
-
 	class ResourceUpload : public Resource
 	{
 		static D3D12_RESOURCE_DESC Desc(UINT64 size, D3D12_RESOURCE_FLAGS flags)
@@ -174,7 +173,7 @@ namespace DX12
 
 	public:
 		explicit Texture(
-			ID3D12Device5* device, 
+			ID3D12Device5* device,
 			D3D12_RESOURCE_DIMENSION dimension, UINT64 width, UINT height, DXGI_FORMAT format, D3D12_RESOURCE_FLAGS flags = D3D12_RESOURCE_FLAG_NONE) :
 			Resource(device, D3D12_HEAP_TYPE_DEFAULT, Desc(dimension, width, height, format, flags), D3D12_RESOURCE_STATE_COMMON) {}
 
@@ -249,7 +248,7 @@ namespace DX12
 				&uploadDesc,
 				D3D12_RESOURCE_STATE_GENERIC_READ,
 				nullptr,
-				IID_PPV_ARGS(&uploadResource)));		
+				IID_PPV_ARGS(&uploadResource)));
 		}
 
 		void Update(void const* src_data, size_t data_size, size_t begin = 0)
@@ -359,6 +358,7 @@ namespace DX12
 		{
 			StructuredBuffer::CreateUAV(nullptr, handle);
 		}
+
 	protected:
 		uint64_t count;
 	};
@@ -422,7 +422,7 @@ namespace DX12
 			D3D12_RESOURCE_STATES state = this->state;
 
 			this->TransitionBarrier(commandList, D3D12_RESOURCE_STATE_COPY_DEST);
-			commandList->CopyResource(this->resource.get(), uploadBuffer[uploadIndex].get());			
+			commandList->CopyResource(this->resource.get(), uploadBuffer[uploadIndex].get());
 			//commandList->CopyBufferRegion(this->resource.get(), 0, uploadBuffer.get(), 0, sizeof(T) * this->count);
 			this->TransitionBarrier(commandList, state);
 		}

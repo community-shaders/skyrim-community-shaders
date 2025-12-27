@@ -1,13 +1,13 @@
 #pragma once
 
+#include "Features/Raytracing/HeapManager.h"
+#include "Features/Raytracing/ShaderBindingTable.h"
 #include <EASTL/memory.h>
 #include <EASTL/string.h>
 #include <EASTL/vector.h>
 #include <cstring>
 #include <d3d12.h>
 #include <dxcapi.h>
-#include "Features/Raytracing/HeapManager.h"
-#include "Features/Raytracing/ShaderBindingTable.h"
 
 namespace DX12
 {
@@ -58,8 +58,7 @@ namespace DX12
 			dxilExportStorage.emplace_back(eastl::make_unique<D3D12_EXPORT_DESC>(
 				exportedNames.back()->c_str(),
 				renameFrom.empty() ? nullptr : renameFromNames.back()->c_str(),
-				D3D12_EXPORT_FLAG_NONE
-			));
+				D3D12_EXPORT_FLAG_NONE));
 
 			// Store DXIL library descriptor
 			dxilLibStorage.emplace_back(eastl::make_unique<D3D12_DXIL_LIBRARY_DESC>(
@@ -68,14 +67,11 @@ namespace DX12
 					shaderBlob->GetBufferSize(),
 				},
 				1,
-				dxilExportStorage.back().get() 
-			));
+				dxilExportStorage.back().get()));
 
 			// Subobject
-			subobjects.push_back({
-				.Type = D3D12_STATE_SUBOBJECT_TYPE_DXIL_LIBRARY,
-				.pDesc = dxilLibStorage.back().get() 
-			});
+			subobjects.push_back({ .Type = D3D12_STATE_SUBOBJECT_TYPE_DXIL_LIBRARY,
+				.pDesc = dxilLibStorage.back().get() });
 		}
 
 		// Add a hit group
@@ -98,13 +94,10 @@ namespace DX12
 				D3D12_HIT_GROUP_TYPE_TRIANGLES,
 				anyHit.empty() ? nullptr : anyHitNames.back().c_str(),
 				closestHit.empty() ? nullptr : closestHitNames.back().c_str(),
-				intersection.empty() ? nullptr : intersectionNames.back().c_str()
-			));
+				intersection.empty() ? nullptr : intersectionNames.back().c_str()));
 
-			subobjects.push_back({
-				.Type = D3D12_STATE_SUBOBJECT_TYPE_HIT_GROUP,
-				.pDesc = hitGroupStorage.back().get() 
-			});
+			subobjects.push_back({ .Type = D3D12_STATE_SUBOBJECT_TYPE_HIT_GROUP,
+				.pDesc = hitGroupStorage.back().get() });
 		}
 
 		// Shader config
@@ -112,10 +105,8 @@ namespace DX12
 		{
 			shaderConfigStorage.emplace_back(eastl::make_unique<D3D12_RAYTRACING_SHADER_CONFIG>(maxPayloadSizeInBytes, maxAttributeSizeInBytes));
 
-			subobjects.push_back({
-				.Type = D3D12_STATE_SUBOBJECT_TYPE_RAYTRACING_SHADER_CONFIG,
-				.pDesc = shaderConfigStorage.back().get() 
-			});
+			subobjects.push_back({ .Type = D3D12_STATE_SUBOBJECT_TYPE_RAYTRACING_SHADER_CONFIG,
+				.pDesc = shaderConfigStorage.back().get() });
 		}
 
 		// Global root signature
@@ -123,10 +114,8 @@ namespace DX12
 		{
 			globalRootStorage.emplace_back(eastl::make_unique<D3D12_GLOBAL_ROOT_SIGNATURE>(rootSignature));
 
-			subobjects.push_back({
-				.Type = D3D12_STATE_SUBOBJECT_TYPE_GLOBAL_ROOT_SIGNATURE,
-				.pDesc = globalRootStorage.back().get() 
-			});
+			subobjects.push_back({ .Type = D3D12_STATE_SUBOBJECT_TYPE_GLOBAL_ROOT_SIGNATURE,
+				.pDesc = globalRootStorage.back().get() });
 		}
 
 		// Pipeline config
@@ -134,10 +123,8 @@ namespace DX12
 		{
 			pipelineConfigStorage.emplace_back(eastl::make_unique<D3D12_RAYTRACING_PIPELINE_CONFIG>(maxRecursion));
 
-			subobjects.push_back({
-				.Type = D3D12_STATE_SUBOBJECT_TYPE_RAYTRACING_PIPELINE_CONFIG,
-				.pDesc = pipelineConfigStorage.back().get() 
-			});
+			subobjects.push_back({ .Type = D3D12_STATE_SUBOBJECT_TYPE_RAYTRACING_PIPELINE_CONFIG,
+				.pDesc = pipelineConfigStorage.back().get() });
 		}
 
 		// Build final state object descriptor
@@ -146,8 +133,7 @@ namespace DX12
 			stateObjectDesc = eastl::make_unique<D3D12_STATE_OBJECT_DESC>(
 				type,
 				static_cast<UINT>(subobjects.size()),
-				subobjects.data()
-			);
+				subobjects.data());
 
 			return stateObjectDesc.get();
 		}

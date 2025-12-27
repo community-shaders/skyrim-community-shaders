@@ -13,26 +13,26 @@
 
 struct SharcAccumulationData
 {
-    uint4 data;
+	uint4 data;
 };
 
 struct SharcPackedData
 {
-    float16_t4 radianceData;
-    uint sampleData;
-    uint luminanceM2;
+	float16_t4 radianceData;
+	uint sampleData;
+	uint luminanceM2;
 };
 
 #if SHARC_ENABLE_GLSL
 layout(buffer_reference, std430, buffer_reference_align = 16) buffer RWStructuredBuffer_SharcAccumulationData
 {
-    SharcAccumulationData data[];
+	SharcAccumulationData data[];
 };
 
 layout(buffer_reference, std430, buffer_reference_align = 16) buffer RWStructuredBuffer_SharcPackedData
 {
-    SharcPackedData data[];
+	SharcPackedData data[];
 };
-#endif // SHARC_ENABLE_GLSL
+#endif  // SHARC_ENABLE_GLSL
 
-#endif // SHARC_TYPES_H
+#endif  // SHARC_TYPES_H
