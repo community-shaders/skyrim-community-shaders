@@ -223,7 +223,7 @@ float3 EvalPointLight(in Surface surface, in BRDFContext brdfContext, in LightDa
     return direct;
 }
 
-void SampleDefaultBSDF(in Surface surface, in BRDFContext brdfContext, inout uint randomSeed, out float3 direction, out float3 brdfWeight)
+bool SampleDefaultBSDF(in Surface surface, in BRDFContext brdfContext, inout uint randomSeed, out float3 direction, out float3 brdfWeight)
 {
     const float3 V = brdfContext.ViewDirection;
     float3 L = 0;
@@ -295,10 +295,12 @@ void SampleDefaultBSDF(in Surface surface, in BRDFContext brdfContext, inout uin
     brdfWeight = brdf / max(pdf, 1e-7f);
 
     direction = L;
+    
+    return isSpecular;
 }
 
 #if defined(FULL_MATERIAL)
-void SampleFuzzBSDF(in Surface surface, in BRDFContext brdfContext, inout uint randomSeed, out float3 direction, out float3 brdfWeight)
+bool SampleFuzzBSDF(in Surface surface, in BRDFContext brdfContext, inout uint randomSeed, out float3 direction, out float3 brdfWeight)
 {
     const float3 V = brdfContext.ViewDirection;
     float3 L = 0;
@@ -310,7 +312,6 @@ void SampleFuzzBSDF(in Surface surface, in BRDFContext brdfContext, inout uint r
     float Efuzz = (0.526422 / ((-0.227114 + surface.Roughness) * (-0.968835 + surface.Roughness) * ((5.38869 - 20.2835 * brdfContext.NdotV) * surface.Roughness) - (-1.18761 - ((2.58744 - brdfContext.NdotV) * brdfContext.NdotV)))) + 0.0615456;
     float fuzzProb = Efuzz * surface.FuzzWeight;
     specularProb *= 1 - fuzzProb;
-    const float lobeRand = Random(randomSeed);
 
     float3 brdf = 0.0f;
     float pdf = 0.0f;
@@ -329,8 +330,10 @@ void SampleFuzzBSDF(in Surface surface, in BRDFContext brdfContext, inout uint r
     const float alpha = surface.Roughness * surface.Roughness;
     const float alpha2 = alpha * alpha;
 
+    const bool isSpecular = Random(randomSeed) < specularProb;
+
     [branch]
-    if (lobeRand < specularProb)
+    if (isSpecular)
     {
         He = MonteCarlo::SampleGGX_VNDF(Ve, alpha, randomSeed);
         Le = reflect(-Ve, He);
@@ -376,6 +379,8 @@ void SampleFuzzBSDF(in Surface surface, in BRDFContext brdfContext, inout uint r
     brdfWeight = brdf / max(pdf, 1e-7f);
 
     direction = L;
+
+    return isSpecular;
 }
 #endif
 

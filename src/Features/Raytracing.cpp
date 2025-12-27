@@ -558,7 +558,7 @@ void Raytracing::SetupOutputRT()
 	createRT(specularAlbedoTexture, DXGI_FORMAT_R16G16B16A16_FLOAT, GIHeap::Slot::Reflectance, L"Reflectance texture");
 
 	// u2 - Specular Hit Distance texture
-	createRT(specularHitDistanceTexture, DXGI_FORMAT_R16_FLOAT, GIHeap::Slot::SpecularHitDist, L"Specular Hit Distance texture");
+	createRT(specularHitDistanceTexture, DXGI_FORMAT_R16G16B16A16_FLOAT, GIHeap::Slot::SpecularHitDist, L"Specular Hit Distance texture");
 }
 
 void Raytracing::SetupResources()
@@ -2731,7 +2731,7 @@ void Raytracing::DrawRTGI()
 					sl::ResourceTag diffuseAlbedoTag = sl::ResourceTag{ &diffuseAlbedo, sl::kBufferTypeAlbedo, sl::ResourceLifecycle::eValidUntilPresent, &inputExtent };
 					sl::ResourceTag specularAlbedoTag = sl::ResourceTag{ &specularAlbedo, sl::kBufferTypeSpecularAlbedo, sl::ResourceLifecycle::eValidUntilPresent, &inputExtent };
 					sl::ResourceTag normalRoughnessTag = sl::ResourceTag{ &normalRoughness, sl::kBufferTypeNormalRoughness, sl::ResourceLifecycle::eValidUntilPresent, &inputExtent };
-					sl::ResourceTag specHitDistanceTag = sl::ResourceTag{ &specHitDistance, sl::kBufferTypeSpecularHitDistance, sl::ResourceLifecycle::eValidUntilPresent, &inputExtent };
+					sl::ResourceTag specHitDistanceTag = sl::ResourceTag{ &specHitDistance, sl::kBufferTypeSpecularRayDirectionHitDistance, sl::ResourceLifecycle::eValidUntilPresent, &inputExtent };
 
 					sl::ResourceTag resourceTags[] = { colorInTag, colorOutTag, depthTag, mvecTag, diffuseAlbedoTag, specularAlbedoTag, normalRoughnessTag, specHitDistanceTag };
 					if (SL_FAILED(result, slSetTag(slViewportHandle, resourceTags, _countof(resourceTags), commandList.get()))) {
