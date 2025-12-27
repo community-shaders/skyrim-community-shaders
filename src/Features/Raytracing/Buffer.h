@@ -409,7 +409,7 @@ namespace DX12
 			memcpy(dst, srcData, sizeof(T));
 
 			D3D12_RANGE writeRange = { begin, begin + sizeof(T) };
-			uploadBuffer[0]->Unmap(0, &writeRange);
+			uploadBuffer[uploadIndex]->Unmap(0, &writeRange);
 		}
 
 		void UpdateList(T const* srcData, uint64_t localCount, uint uploadIndex = 0)
