@@ -236,9 +236,6 @@ void main()
                     break;
                 else
                     throughput /= rrProbability;
-
-                //if (any(sampleRadiance < MIN_RADIANCE))
-                //    break; // Ray was eaten by the surface :(
             }
 
             ray.Origin = surface.Position + surface.GeomNormal * 0.01f;
@@ -350,9 +347,6 @@ void main()
     OutputTexture[idx] = float4(Color::GammaToTrueLinear(mainColor.rgb) + radiance, 1.0f);
 #endif
 
-    // Needs linear and PT doesn't have linear :(
-    //float2 envBRDF = max(0.0f, BRDF::EnvBRDFApproxLazarov(linearRoughness, sourceBRDFContext.NdotV));
-    //SpecularAlbedo[idx] = float4(envBRDF.x * sourceSurface.F0 + envBRDF.y, 0.0f);
     const float2 envBRDF = BRDF::EnvBRDFApproxHirvonen(sourceSurface.Roughness, sourceBRDFContext.NdotV);
     const float3 specularAlbedo = float3(sourceSurface.F0 * envBRDF.x + envBRDF.y);
     SpecularAlbedo[idx] = float4(specularAlbedo, 0.0f);
