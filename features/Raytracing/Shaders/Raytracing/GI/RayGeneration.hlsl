@@ -225,7 +225,7 @@ void main()
             [branch]
             if (Frame.SHaRC.UpdatePass)
             {
-                SharcSetThroughput(sharcState, throughput);     
+                SharcSetThroughput(sharcState, throughput);
             } else
 #endif
             if (Frame.RussianRoulette)
@@ -239,8 +239,8 @@ void main()
 
                 //if (any(sampleRadiance < MIN_RADIANCE))
                 //    break; // Ray was eaten by the surface :(
-            }  
-            
+            }
+
             ray.Origin = surface.Position + surface.GeomNormal * 0.01f;
             ray.Direction = direction;
             ray.TMin = 0.01f;
@@ -326,7 +326,7 @@ void main()
             } else
 #endif
             {
-                sampleRadiance += surface.Emissive * throughput;                             
+                sampleRadiance += surface.Emissive * throughput;
             }
         }
 
