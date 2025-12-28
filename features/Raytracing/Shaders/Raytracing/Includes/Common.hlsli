@@ -91,7 +91,7 @@ uint4 SamplerCore(inout uint seed)
 	return result;
 }
 
-float2 Get2D(uint seed)
+float2 Get2D(inout uint seed)
 {
 	return (SamplerCore(seed).xy) * 5.96046447754e-08;
 }
