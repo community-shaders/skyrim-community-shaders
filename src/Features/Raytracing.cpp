@@ -2601,7 +2601,7 @@ void Raytracing::DrawRTGI()
 		frameData->Effect = settings.Effect;
 		frameData->Sky = settings.Sky;
 
-		frameData->Lights = lights.size();
+		frameData->Lights = static_cast<uint>(lights.size());
 
 		frameData->RussianRoulette = settings.RussianRoulette;
 
