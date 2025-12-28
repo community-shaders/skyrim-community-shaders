@@ -155,13 +155,10 @@ CMake will automatically detect if Graphics Tools are missing and display instal
 **Quick Install:**
 
 ```powershell
-# Option 1: Automated script (opens settings or auto-installs)
-.\tools\install_graphics_tools.ps1
-
-# Option 2: Direct PowerShell command (requires admin)
+# Option 1: Direct PowerShell command (requires admin)
 Enable-WindowsOptionalFeature -Online -FeatureName GraphicsTools -All
 
-# Option 3: Manual via Settings
+# Option 2: Manual via Settings
 # Windows Settings → Apps → Optional Features → Add "Graphics Tools"
 ```
 
