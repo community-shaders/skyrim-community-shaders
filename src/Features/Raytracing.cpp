@@ -2601,6 +2601,8 @@ void Raytracing::DrawRTGI()
 		frameData->Effect = settings.Effect;
 		frameData->Sky = settings.Sky;
 
+		frameData->Lights = lights.size();
+
 		frameData->RussianRoulette = settings.RussianRoulette;
 
 #ifdef SHARC

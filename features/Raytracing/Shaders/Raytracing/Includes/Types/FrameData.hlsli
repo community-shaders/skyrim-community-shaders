@@ -44,7 +44,8 @@ alignas(16)
     float Emissive;
     float Effect;
     float Sky;
-    uint3 Pad0;
+    uint Lights;
+    uint2 Pad0;
     SHaRCFrameData SHaRC;
     FeatureData Features;
     uint4 Pad1[8];
