@@ -97,7 +97,7 @@ void main()
     BRDFContext sourceBRDFContext = BRDFContext(sourceSurface, -sourceDirection);
 
     // Direct Light for PT
-    float3 direct = sourceSurface.Albedo * EvaluateRadiance(sourceSurface, sourceBRDFContext, sourceInstance, sourceMaterial, randomSeed);
+    float3 direct = EvaluateRadiance(sourceSurface, sourceBRDFContext, sourceInstance, sourceMaterial, randomSeed);
 #else
     float2 uv = (idx + 0.5f) / size;
 
