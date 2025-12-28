@@ -178,7 +178,7 @@ void main()
 #if defined(SHARC)
     SharcState sharcState;
     SharcHitData sharcHitData;
- #endif
+#endif
 
     [loop]
     for (uint i = 0; i < MAX_SAMPLES; i++)

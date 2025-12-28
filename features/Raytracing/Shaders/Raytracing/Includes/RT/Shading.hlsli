@@ -369,7 +369,7 @@ bool SampleFuzzBSDF(in Surface surface, in BRDFContext brdfContext, inout uint r
 
     // Fuzz
     const float Dfuzz = BRDF::D_Charlie(surface.Roughness, NdotH);
-    const float Gfuzz = BRDF::Vis_Neubelt(NdotV, NdotL);
+    const float Gfuzz = BRDF::Vis_Neubelt(brdfContext.NdotV, NdotL);
     float3 Ffuzz = surface.FuzzColor * Dfuzz * Gfuzz * NdotL;
 
     pdf = (1.0f - fuzzProb - specularProb) * diffusePdf + specularProb * specularPdf + fuzzProb * fuzzPdf;
