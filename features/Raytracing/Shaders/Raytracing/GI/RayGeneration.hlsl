@@ -154,7 +154,7 @@ void main()
 
 #if defined(SHARC) && defined(SHARC_DEBUG)
     HashGridParameters gridParameters = GetSharcGridParameters();
-    
+
     OutputTexture[idx] = float4(HashGridDebugColoredHash(positionWS, geometryNormalWS, gridParameters), 1);
     return;
 #endif
@@ -225,9 +225,9 @@ void main()
             [branch]
             if (Frame.SHaRC.UpdatePass)
             {
-                SharcSetThroughput(sharcState, throughput);     
+                SharcSetThroughput(sharcState, throughput);
             }
-#endif                      
+#endif
             ray.Origin = surface.Position + surface.GeomNormal * 0.01f;
             ray.Direction = direction;
             ray.TMin = 0.01f;
@@ -270,11 +270,11 @@ void main()
 #if defined(SHARC)
             sharcHitData.positionWorld = surface.Position;
             sharcHitData.normalWorld = surface.GeomNormal;
-            
+
 #   if SHARC_SEPARATE_EMISSIVE
             sharcHitData.emissive = surface.Emissive;
 #   endif // SHARC_SEPARATE_EMISSIVE
-            
+
             [branch]
             if (!Frame.SHaRC.UpdatePass)
             {
@@ -293,12 +293,12 @@ void main()
                     sampleRadiance += sharcRadiance * throughput; // We probably have to apply BRDF here
                     break;
                 }
-            
+
             }
 #endif
 
             brdfContext = BRDFContext(surface, -direction);
-            
+
             float3 directRadiance = EvaluateDirectRadiance(surface, brdfContext, instance, material, randomSeed);
             sampleRadiance += directRadiance * throughput;
 
@@ -314,7 +314,7 @@ void main()
 #endif
             {
                 sampleRadiance += surface.Emissive * throughput;
-                
+
                 if (Frame.RussianRoulette)
                 {
                     float rrProbability = j < RR_MIN_BOUNCE ? 1.0f : min(0.95f, Color::RGBToLuminance(throughput));
@@ -326,7 +326,7 @@ void main()
 
                     //if (any(sampleRadiance < MIN_RADIANCE))
                     //    break; // Ray was eaten by the surface :(
-                }                
+                }
             }
         }
 
