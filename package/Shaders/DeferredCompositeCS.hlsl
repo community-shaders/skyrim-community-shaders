@@ -116,9 +116,6 @@ void SampleSSGISpecular(uint2 pixCoord, sh2 lobe, out float ao, out float3 il, i
 
 	float ssgiAo;
 	float3 ssgiIl;
-#	if defined(RT)
-	if (SharedData::raytracingSettings.Ambient > 0.0) {
-#	endif
 	SampleSSGI(dispatchID.xy, normalWS, ssgiAo, ssgiIl);
 
 	float3 directionalAmbientColor = max(0, mul(SharedData::DirectionalAmbient, float4(normalWS, 1.0)));
@@ -138,10 +135,6 @@ void SampleSSGISpecular(uint2 pixCoord, sh2 lobe, out float ao, out float3 il, i
 		maxScale = min(maxScale, diffuseColor.z / directionalAmbientColor.z);
 	directionalAmbientColor *= maxScale;
 
-#	if defined(RT)
-	directionalAmbientColor *= SharedData::raytracingSettings.Ambient;
-#	endif
-
 	diffuseColor = max(0.0, diffuseColor - directionalAmbientColor);
 
 	linDiffuseColor = Color::GammaToLinear(diffuseColor);
@@ -158,9 +151,6 @@ void SampleSSGISpecular(uint2 pixCoord, sh2 lobe, out float ao, out float3 il, i
 
 	linDiffuseColor = Color::GammaToLinear(diffuseColor);
 
-#	if defined(RT)
-	}
-#	endif
 	linDiffuseColor += ssgiIl * linAlbedo;
 #endif
 
@@ -170,9 +160,6 @@ void SampleSSGISpecular(uint2 pixCoord, sh2 lobe, out float ao, out float3 il, i
 
 	float3 reflectance = ReflectanceTexture[dispatchID.xy];
 
-#	if defined(RT)
-	reflectance *= SharedData::raytracingSettings.EnvMap;
-#	endif
 	if (reflectance.x > 0.0 || reflectance.y > 0.0 || reflectance.z > 0.0) {
 		float3 V = normalize(positionWS.xyz);
 		float3 R = reflect(V, normalWS);
