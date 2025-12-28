@@ -42,6 +42,6 @@ struct SHaRCPipeline : ComputePipeline<SHaRCHeap>
 	void CreateRootSignature(ID3D12Device5* device) override;
 	void CompileShaders(ID3D12Device5* device) override;
 	void SetupResources(ID3D12Device5* device) override;
-	void Resolve(ID3D12GraphicsCommandList4* commandList);
+	void Resolve(ID3D12GraphicsCommandList4* commandList, ID3D12Resource* frameBuffer);
 	void CreateUAVs(CD3DX12_CPU_DESCRIPTOR_HANDLE hashEntries, CD3DX12_CPU_DESCRIPTOR_HANDLE lock, CD3DX12_CPU_DESCRIPTOR_HANDLE accumulation, CD3DX12_CPU_DESCRIPTOR_HANDLE resolved);
 };

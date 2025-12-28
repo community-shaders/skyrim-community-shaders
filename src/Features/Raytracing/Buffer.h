@@ -423,11 +423,9 @@ namespace DX12
 
 			this->TransitionBarrier(commandList, D3D12_RESOURCE_STATE_COPY_DEST);
 			commandList->CopyResource(this->resource.get(), uploadBuffer[uploadIndex].get());
-			//commandList->CopyBufferRegion(this->resource.get(), 0, uploadBuffer.get(), 0, sizeof(T) * this->count);
 			this->TransitionBarrier(commandList, state);
 		}
 
-		// dataSize, offset arguments order to match Update function
 		void UploadRegion(ID3D12GraphicsCommandList4* commandList, uint64_t dataSize, uint64_t offset, uint uploadIndex = 0)
 		{
 			D3D12_RESOURCE_STATES state = this->state;

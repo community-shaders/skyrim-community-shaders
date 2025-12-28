@@ -1,6 +1,8 @@
 #ifndef COMMON_HLSL
 #define COMMON_HLSL
 
+#include "Common/Game.hlsli"
+
 #define DEPTH_SCALE (0.99920h)
 #define FP_Z (16.5f)
 #define SKY_Z (0.9999f)

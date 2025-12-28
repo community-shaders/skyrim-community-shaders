@@ -448,7 +448,7 @@ struct Raytracing : public OverlayFeature
 		SHaRCFrameData GetFrameData(bool updatePass) const
 		{
 			return {
-				.SceneScale = SceneScale * Util::Units::GAME_UNIT_TO_M,
+				.SceneScale = SceneScale,
 				.AccumFrameNum = (uint)AccumFrameNum,
 				.StaleFrameNum = (uint)StaleFrameNum,
 				.RadianceScale = RadianceScale,
@@ -792,6 +792,9 @@ struct Raytracing : public OverlayFeature
 	// GI
 	winrt::com_ptr<ID3D12RootSignature> rootSignature = nullptr;
 	winrt::com_ptr<ID3D12StateObject> pipelineRT = nullptr;
+#if defined(SHARC)
+	winrt::com_ptr<ID3D12StateObject> pipelineSHaRCRT = nullptr;
+#endif
 	eastl::unique_ptr<DX12::ShaderBindingTable> shaderBindingTable = nullptr;
 	eastl::unique_ptr<DX12::ResourceUpload> shaderBindingTableBuffer = nullptr;
 	eastl::unique_ptr<DX12::DescriptorHeap<GIHeap>> giHeap = nullptr;
