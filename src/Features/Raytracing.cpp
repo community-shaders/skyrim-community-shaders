@@ -1349,7 +1349,7 @@ void Raytracing::ConvertTextures() const
 	auto context = globals::d3d::context;
 	auto renderer = globals::game::renderer;
 
-	context->CSSetShader(convertNormalGlossCS.get(), nullptr, 0);
+	context->CSSetShader(convertTexturesCS.get(), nullptr, 0);
 
 	ID3D11Buffer* cb[1] = { *globals::game::perFrame.get() };
 	context->CSSetConstantBuffers(12, 1, cb);
@@ -3684,8 +3684,8 @@ void Raytracing::CompileComputeShaders()
 	if (auto rawPtr = reinterpret_cast<ID3D11ComputeShader*>(Util::CompileShader(L"Data\\Shaders\\Raytracing\\CubeToHemiCS.hlsl", { { "DX11", "" } }, "cs_5_0")); rawPtr)
 		cubeToHemiCS.attach(rawPtr);
 
-	if (auto rawPtr = reinterpret_cast<ID3D11ComputeShader*>(Util::CompileShader(L"Data\\Shaders\\Raytracing\\ConvertNormalGlossCS.hlsl", { { "DX11", "" } }, "cs_5_0")); rawPtr)
-		convertNormalGlossCS.attach(rawPtr);
+	if (auto rawPtr = reinterpret_cast<ID3D11ComputeShader*>(Util::CompileShader(L"Data\\Shaders\\Raytracing\\ConvertTexturesCS.hlsl", { { "DX11", "" } }, "cs_5_0")); rawPtr)
+		convertTexturesCS.attach(rawPtr);
 
 	if (auto rawPtr = reinterpret_cast<ID3D11ComputeShader*>(Util::CompileShader(L"Data\\Shaders\\Raytracing\\TrueLinearToGammaCS.hlsl", { { "DX11", "" } }, "cs_5_0")); rawPtr)
 		trueLinearToGammaCS.attach(rawPtr);
