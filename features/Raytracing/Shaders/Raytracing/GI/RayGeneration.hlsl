@@ -300,7 +300,7 @@ void main()
                 float3 sharcRadiance;
                 if (isValidHit && SharcGetCachedRadiance(sharcParameters, sharcHitData, sharcRadiance, false))
                 {
-                    sampleRadiance += sharcRadiance * throughput; // We probably have to apply BRDF here
+                    sampleRadiance += sharcRadiance * throughput;
                     break;
                 }
 
