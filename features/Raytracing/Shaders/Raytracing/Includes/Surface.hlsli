@@ -106,7 +106,8 @@ struct Surface
 
             float3 baseColorLinear = Color::GammaToTrueLinear(baseColor);
 
-            surface.Albedo = baseColorLinear;
+            //surface.Albedo = baseColorLinear; // This breaks sharc
+            surface.Albedo = 0;
             surface.Emissive = baseColorLinear * Frame.Effect;
         }
         else
