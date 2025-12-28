@@ -119,7 +119,7 @@ void main()
             return;
 #endif
 
-        OutputTexture[idx] = MainTexture[idx];
+        OutputTexture[idx] = Color::GammaToTrueLinear(MainTexture[idx].rgb);
         SpecularAlbedo[idx] = float4(0.5f, 0.5f, 0.5f, 0.0f);
         SpecularHitDist[idx] = RAY_TMAX;
         return;
@@ -144,7 +144,7 @@ void main()
     float3 tangentWS, bitangetWS;
     CreateOrthonormalBasis(normalWS, tangentWS, bitangetWS);
 
-    float3 albedo = Color::GammaToTrueLinear(AlbedoTexture[idx].rgb);
+    float3 albedo = AlbedoTexture[idx].rgb;
 
     Surface sourceSurface = Surface(positionWS, geometryNormalWS, normalWS, tangentWS, bitangetWS, albedo, linearRoughness, metalness, 0, ao);
     BRDFContext sourceBRDFContext = BRDFContext(sourceSurface, normalize(-positionCS));
