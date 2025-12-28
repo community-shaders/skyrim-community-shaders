@@ -4,20 +4,31 @@
 #   define SHARC_HELPER_DEPENDENCY_HLSL
 
 #include "Common/Game.hlsli"
+#include "Raytracing/Includes/Common.hlsli"
 
 uint Hash(uint2 idx)
 {
     return (idx.x * 73856093u) ^ (idx.y * 19349663u);
 }
 
+HashGridParameters GetSharcGridParameters()
+{
+    HashGridParameters gridParameters;
+    {
+        gridParameters.cameraPosition = Frame.Position;
+        gridParameters.sceneScale = Frame.SHaRC.SceneScale * M_TO_GAME_UNIT;
+        gridParameters.logarithmBase = SHARC_GRID_LOGARITHM_BASE;
+        gridParameters.levelBias = SHARC_GRID_LEVEL_BIAS;
+    }
+
+    return gridParameters;
+}
+
 SharcParameters GetSharcParameters()
 {
     SharcParameters sharcParameters;
     {
-        sharcParameters.gridParameters.cameraPosition = Frame.Position;
-        sharcParameters.gridParameters.sceneScale = Frame.SHaRC.SceneScale;
-        sharcParameters.gridParameters.logarithmBase = SHARC_GRID_LOGARITHM_BASE;
-        sharcParameters.gridParameters.levelBias = SHARC_GRID_LEVEL_BIAS;
+        sharcParameters.gridParameters = GetSharcGridParameters();
 
         sharcParameters.hashMapData.capacity = Frame.SHaRC.Capacity;
         sharcParameters.hashMapData.hashEntriesBuffer = u_SharcHashEntriesBuffer;

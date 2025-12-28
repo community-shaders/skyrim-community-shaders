@@ -11,6 +11,8 @@
 #           define SHARC_RESOLVE 0
 #       endif
 
+#       define SHARC_SEPARATE_EMISSIVE 1
+
 #       include "Raytracing/Includes/RT/SHARC/SharcCommon.h"
 
 #   endif // SHARC_DEPENDENCY_HLSL

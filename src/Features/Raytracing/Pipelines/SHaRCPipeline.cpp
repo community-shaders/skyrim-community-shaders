@@ -79,10 +79,17 @@ void SHaRCPipeline::CreateUAVs(CD3DX12_CPU_DESCRIPTOR_HANDLE hashEntries, CD3DX1
 	sharcResolvedBuffer->CreateUAV(resolved);
 }
 
-void SHaRCPipeline::Resolve(ID3D12GraphicsCommandList4* commandList)
+void SHaRCPipeline::Resolve(ID3D12GraphicsCommandList4* commandList, ID3D12Resource* frameBuffer)
 {
 	commandList->SetPipelineState(pipelineState.get());
 	commandList->SetComputeRootSignature(rootSignature.get());
+
+	auto* pHeap = heap->Heap();
+	commandList->SetDescriptorHeaps(1, &pHeap);
+
+	commandList->SetComputeRootDescriptorTable(0, heap->TableGPUHandle(SHaRCHeap::Table::UAV));
+
+	commandList->SetComputeRootConstantBufferView(1, frameBuffer->GetGPUVirtualAddress());
 
 	CD3DX12_RESOURCE_BARRIER uavBarrier[3] = {
 		CD3DX12_RESOURCE_BARRIER::UAV(sharcHashEntriesBuffer->resource.get()),

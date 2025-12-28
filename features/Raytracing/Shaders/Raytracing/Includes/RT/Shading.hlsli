@@ -399,35 +399,9 @@ float3 SampleSky(float3 dir)
     return Color::GammaToTrueLinear(SkyHemisphere.SampleLevel(BaseSampler, uv, 0.0f).rgb);
 }
 
-// Samples the direct radiance at the given surface point
-float3 EvaluateRadiance(in Surface surface, in BRDFContext brdfContext, in Instance instance, in Material material, inout uint randomSeed)
+float3 EvaluateDirectRadiance(in Surface surface, in BRDFContext brdfContext, in Instance instance, in Material material, inout uint randomSeed)
 {
-    float3 radiance;
-
-    [branch]
-    if (material.ShaderType == ShaderType::TruePBR)
-    {
-        radiance = surface.Emissive * Frame.Emissive;
-
-        /*if (material.PBRFlags & PBR::Flags::Subsurface)
-        {
-            // Do something expensive
-        }*/
-    }
-    else if (material.ShaderType == ShaderType::Lighting)
-    {
-        radiance = surface.Emissive * Frame.Emissive;
-    }
-    else if (material.ShaderType == ShaderType::Effect)
-    {
-        radiance = surface.Emissive * Frame.Effect * Frame.Emissive;
-    }
-    else
-    {
-        radiance = surface.Emissive * Frame.Emissive;
-    }
-
-    radiance += EvalDirectionalLight(surface, brdfContext, Frame.Directional, material, randomSeed);
+    float3 radiance = EvalDirectionalLight(surface, brdfContext, Frame.Directional, material, randomSeed);
     radiance += EvalPointLight(surface, brdfContext, instance.LightData, material, randomSeed);
 
     return radiance;

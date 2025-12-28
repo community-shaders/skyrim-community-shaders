@@ -115,7 +115,7 @@ struct Surface
             float3 effect = effectTexture.SampleLevel(BaseSampler, texCoord0, 0).rgb;
 
             surface.Albedo = base * material.BaseColor.rgb * vertexColor.rgb;
-            surface.Emissive = effect * material.EffectColor.rgb * material.EffectColor.a;
+            surface.Emissive = effect * material.EffectColor.rgb * material.EffectColor.a * Frame.Emissive;
         }
 
 #ifdef DEBUG_WHITE_FURNACE
@@ -198,7 +198,7 @@ struct Surface
         surface.Roughness = PBR::Roughness(roughness, Frame.Roughness.x, Frame.Roughness.y);
         surface.Metallic = Remap(metallic, Frame.Metalness.x, Frame.Metalness.y);
 
-        surface.Emissive = emissive;
+        surface.Emissive = emissive * Frame.Emissive;
         surface.AO = ao;
 
         surface.DiffuseAlbedo = surface.Albedo * (1.0f - surface.Metallic);

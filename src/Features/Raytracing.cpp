@@ -2639,7 +2639,13 @@ void Raytracing::DrawRTGI()
 	RebuildTLAS(commandList.get(), blasInstances.size(), blasInstanceBuffer->resource->GetGPUVirtualAddress());
 
 	{
-		auto setDescriptorTables = [&]() {
+		auto setupRTPipeline = [&]() {
+			commandList->SetPipelineState1(pipelineRT.get());
+			commandList->SetComputeRootSignature(rootSignature.get());
+
+			auto* pHeap = giHeap->Heap();
+			commandList->SetDescriptorHeaps(1, &pHeap);
+
 			// Parameter 0: UAV table
 			commandList->SetComputeRootDescriptorTable(0, giHeap->TableGPUHandle(GIHeap::Table::UAV));
 
@@ -2661,13 +2667,7 @@ void Raytracing::DrawRTGI()
 
 		// Raytracing
 		{
-			commandList->SetPipelineState1(pipelineRT.get());
-			commandList->SetComputeRootSignature(rootSignature.get());
-
-			auto commonHeapPtr = giHeap->Heap();
-			commandList->SetDescriptorHeaps(1, &commonHeapPtr);
-
-			setDescriptorTables();
+			setupRTPipeline();
 
 			D3D12_DISPATCH_RAYS_DESC dispatchDesc{};
 			dispatchDesc.Depth = 1;
@@ -2682,18 +2682,21 @@ void Raytracing::DrawRTGI()
 
 				commandList->DispatchRays(&dispatchDesc);
 
-				sharcPipeline->Resolve(commandList.get());
+				sharcPipeline->Resolve(commandList.get(), frameBuffer->resource.get());
 
 				// Restore RT pipeline
 				commandList->SetPipelineState1(pipelineRT.get());
 				commandList->SetComputeRootSignature(rootSignature.get());
 
-				// Restore Descriptor Tables
-				setDescriptorTables();
+				// Restore RT pipeline
+				setupRTPipeline();
 
 				// Update Frame Buffer for main RT pass, maybe we should use two buffers?
 				// Using one GPU heap buffer with multiple upload buffers felt like a hack (but it works)
-				frameBuffer->UploadRegion(commandList.get(), sizeof(SHaRCFrameData::UpdatePass), offsetof(FrameData, SHaRC) + offsetof(SHaRCFrameData, UpdatePass), 1);
+				frameBuffer->Upload(commandList.get(), 1);
+				//const auto offset = offsetof(FrameData, SHaRC) + offsetof(SHaRCFrameData, UpdatePass);
+				//static_assert(offset == 300);
+				//frameBuffer->UploadRegion(commandList.get(), sizeof(SHaRCFrameData::UpdatePass), offset, 1);
 			}
 #endif
 			// Main pass
@@ -3524,6 +3527,11 @@ void Raytracing::CompileRTGIShaders()
 	winrt::com_ptr<IDxcBlob> rayGenBlob;
 	ShaderUtils::CompileShader(rayGenBlob, L"Data/Shaders/Raytracing/GI/RayGeneration.hlsl", defines);
 
+#if defined(SHARC)
+	winrt::com_ptr<IDxcBlob> rayGenSHaRCBlob;
+	ShaderUtils::CompileShader(rayGenSHaRCBlob, L"Data/Shaders/Raytracing/GI/RayGeneration.hlsl", defines);
+#endif
+
 	winrt::com_ptr<IDxcBlob> missBlob, closestHitBlob, anyHitBlob;
 	ShaderUtils::CompileShader(missBlob, L"Data/Shaders/Raytracing/GI/Miss.hlsl", defines);
 	ShaderUtils::CompileShader(closestHitBlob, L"Data/Shaders/Raytracing/GI/ClosestHit.hlsl", defines);
@@ -3557,19 +3565,28 @@ void Raytracing::CompileRTGIShaders()
 		pipelineBuilder.AddGlobalRootSignature(rootSignature.get());
 		pipelineBuilder.AddPipelineConfig(1);  // Max recursion depth
 
-		if (pipelineRT)
-			pipelineRT = nullptr;
-
 		auto desc = pipelineBuilder.MakeStateObjectDesc();
-		HRESULT hr = d3d12Device->CreateStateObject(desc, IID_PPV_ARGS(&pipelineRT));
 
-		if (FAILED(hr)) {
-			logger::error("CreateStateObject failed: {}", hr);
-		}
+		auto createPipeline = [&](winrt::com_ptr<ID3D12StateObject>& pipeline, LPCWSTR name) {
+			if (pipeline)
+				pipeline = nullptr;
 
-		DX::ThrowIfFailed(hr);
+			HRESULT hr = d3d12Device->CreateStateObject(desc, IID_PPV_ARGS(&pipeline));
 
-		DX::ThrowIfFailed(pipelineRT->SetName(L"RT Pipeline"));
+			if (FAILED(hr)) {
+				logger::critical("CreateStateObject failed: {}", hr);
+			}
+
+			DX::ThrowIfFailed(hr);
+
+			DX::ThrowIfFailed(pipeline->SetName(std::format(L"{} Pipeline", name).c_str()));
+		};
+
+		createPipeline(pipelineRT, L"RT");
+
+#if defined(SHARC)
+		createPipeline(pipelineSHaRCRT, L"SHaRC RT");
+#endif
 	}
 
 	// Init shader tables
