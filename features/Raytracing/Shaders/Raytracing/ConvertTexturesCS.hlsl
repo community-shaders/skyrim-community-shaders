@@ -1,3 +1,4 @@
+#include "Common/Color.hlsli"
 #include "Raytracing/Includes/Common.hlsli"
 #include "Common/FrameBuffer.hlsli"
 #include "Common/GBuffer.hlsli"
@@ -18,5 +19,5 @@ void main(uint2 id : SV_DispatchThreadID)
 
     float metallic, ao;
     UnpackMAO(GNMAO[id].z, metallic, ao);
-    Diffuse[id] = Albedo[id] * (1.0f - metallic);
+    Diffuse[id] = float4(Color::GammaToTrueLinear(Albedo[id].rgb) * (1.0f - metallic), 1.0f);
 }
