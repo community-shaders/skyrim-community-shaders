@@ -81,6 +81,9 @@ void SHaRCPipeline::CreateUAVs(CD3DX12_CPU_DESCRIPTOR_HANDLE hashEntries, CD3DX1
 
 void SHaRCPipeline::Resolve(ID3D12GraphicsCommandList4* commandList)
 {
+	commandList->SetPipelineState(pipelineState.get());
+	commandList->SetComputeRootSignature(rootSignature.get());
+
 	CD3DX12_RESOURCE_BARRIER uavBarrier[3] = {
 		CD3DX12_RESOURCE_BARRIER::UAV(sharcHashEntriesBuffer->resource.get()),
 		CD3DX12_RESOURCE_BARRIER::UAV(sharcAccumulationBuffer->resource.get()),

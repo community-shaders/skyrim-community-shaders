@@ -2639,14 +2639,7 @@ void Raytracing::DrawRTGI()
 	RebuildTLAS(commandList.get(), blasInstances.size(), blasInstanceBuffer->resource->GetGPUVirtualAddress());
 
 	{
-		// Raytracing
-		{
-			commandList->SetPipelineState1(pipelineRT.get());
-			commandList->SetComputeRootSignature(rootSignature.get());
-
-			auto commonHeapPtr = giHeap->Heap();
-			commandList->SetDescriptorHeaps(1, &commonHeapPtr);
-
+		auto setDescriptorTables = [&]() {
 			// Parameter 0: UAV table
 			commandList->SetComputeRootDescriptorTable(0, giHeap->TableGPUHandle(GIHeap::Table::UAV));
 
@@ -2664,6 +2657,17 @@ void Raytracing::DrawRTGI()
 
 			// Parameter 5: Constant buffer
 			commandList->SetComputeRootConstantBufferView(5, frameBuffer->resource->GetGPUVirtualAddress());
+		};
+
+		// Raytracing
+		{
+			commandList->SetPipelineState1(pipelineRT.get());
+			commandList->SetComputeRootSignature(rootSignature.get());
+
+			auto commonHeapPtr = giHeap->Heap();
+			commandList->SetDescriptorHeaps(1, &commonHeapPtr);
+
+			setDescriptorTables();
 
 			D3D12_DISPATCH_RAYS_DESC dispatchDesc{};
 			dispatchDesc.Depth = 1;
@@ -2679,6 +2683,13 @@ void Raytracing::DrawRTGI()
 				commandList->DispatchRays(&dispatchDesc);
 
 				sharcPipeline->Resolve(commandList.get());
+
+				// Restore RT pipeline
+				commandList->SetPipelineState1(pipelineRT.get());
+				commandList->SetComputeRootSignature(rootSignature.get());
+
+				// Restore Descriptor Tables
+				setDescriptorTables();
 
 				// Update Frame Buffer for main RT pass, maybe we should use two buffers?
 				// Using one GPU heap buffer with multiple upload buffers felt like a hack (but it works)
