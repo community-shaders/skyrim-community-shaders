@@ -225,9 +225,22 @@ void main()
             [branch]
             if (Frame.SHaRC.UpdatePass)
             {
-                SharcSetThroughput(sharcState, throughput);
-            }
+                SharcSetThroughput(sharcState, throughput);     
+            } else
 #endif
+            if (Frame.RussianRoulette)
+            {
+                float rrProbability = j < RR_MIN_BOUNCE ? 1.0f : min(0.95f, Color::RGBToLuminance(throughput));
+
+                if (rrProbability < Random(randomSeed))
+                    break;
+                else
+                    throughput /= rrProbability;
+
+                //if (any(sampleRadiance < MIN_RADIANCE))
+                //    break; // Ray was eaten by the surface :(
+            }  
+            
             ray.Origin = surface.Position + surface.GeomNormal * 0.01f;
             ray.Direction = direction;
             ray.TMin = 0.01f;
@@ -313,20 +326,7 @@ void main()
             } else
 #endif
             {
-                sampleRadiance += surface.Emissive * throughput;
-
-                if (Frame.RussianRoulette)
-                {
-                    float rrProbability = j < RR_MIN_BOUNCE ? 1.0f : min(0.95f, Color::RGBToLuminance(throughput));
-
-                    if (rrProbability < Random(randomSeed))
-                        break;
-                    else
-                        throughput /= rrProbability;
-
-                    //if (any(sampleRadiance < MIN_RADIANCE))
-                    //    break; // Ray was eaten by the surface :(
-                }
+                sampleRadiance += surface.Emissive * throughput;                             
             }
         }
 
