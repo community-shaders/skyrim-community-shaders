@@ -344,7 +344,7 @@ struct PS_OUTPUT
 	float4 Masks : SV_Target6;
 #	if defined(SNOW)
 	float4 Parameters : SV_Target7;
-#	else
+#	elif defined(RT)
 	float4 GeomNormalMetalnessAO : SV_Target7;
 #	endif
 };
