@@ -136,8 +136,8 @@ void Shape::BuildMesh(RE::BSGraphics::TriShape* rendererData, const std::uint32_
 			uint16_t v1 = indices[i + 1u];
 			uint16_t v2 = indices[i + 2u];
 
-			if (v0 > vertexCount || v1 > vertexCount || v2 > vertexCount)
-				logger::critical("[RT] Triangle {} vertice overflow: [{}, {}, {}]", t, v0, v1, v2);
+			if (v0 >= vertexCount || v1 >= vertexCount || v2 >= vertexCount)
+				logger::critical("[RT] Triangle {} vertex overflow: [{}, {}, {}]", t, v0, v1, v2);
 
 			triangles[t] = Triangle(v0, v1, v2);
 		}
