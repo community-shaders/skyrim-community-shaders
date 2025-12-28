@@ -110,6 +110,8 @@ void main()
 
     const float depthView = ScreenToViewDepth(depth, Frame.CameraData);
 
+    const float4 mainColor = MainTexture[idx];
+    
     [branch]
     if (depthView < FP_Z || depth >= SKY_Z)
     {
@@ -119,7 +121,7 @@ void main()
             return;
 #endif
 
-        OutputTexture[idx] = Color::GammaToTrueLinear(MainTexture[idx].rgb);
+        OutputTexture[idx] = float4(Color::GammaToTrueLinear(mainColor.rgb), mainColor.a);
         SpecularAlbedo[idx] = float4(0.5f, 0.5f, 0.5f, 0.0f);
         SpecularHitDist[idx] = RAY_TMAX;
         return;
@@ -336,7 +338,7 @@ void main()
 #if defined(PATH_TRACING)
     OutputTexture[idx] = float4(direct + radiance, 0.0f);
 #else
-    OutputTexture[idx] = float4(Color::GammaToTrueLinear(MainTexture[idx].rgb) + radiance, 1.0f);
+    OutputTexture[idx] = float4(Color::GammaToTrueLinear(mainColor.rgb) + radiance, mainColor.a);
 #endif
 
     // Needs linear and PT doesn't have linear :(
