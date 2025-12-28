@@ -35,12 +35,32 @@ jobs:
 
             - name: Scan buffer usage
               run: |
-                  cd build/ALL/aio/Shaders
-                  hlslkit-buffer-scan > ../../../../wiki-content/Buffers.md
+                  set -euo pipefail
+                  
+                  SHADER_DIR="build/ALL/aio/Shaders"
+                  OUTPUT_REL_PATH="wiki-content/Buffers.md"
+                  OUTPUT_PATH="../../../../${OUTPUT_REL_PATH}"
+                  
+                  if [ ! -d "${SHADER_DIR}" ]; then
+                      echo "Error: Shader directory '${SHADER_DIR}' does not exist." >&2
+                      exit 1
+                  fi
+                  
+                  cd "${SHADER_DIR}"
+                  
+                  if ! hlslkit-buffer-scan > "${OUTPUT_PATH}"; then
+                      echo "Error: hlslkit-buffer-scan failed to complete successfully." >&2
+                      exit 1
+                  fi
+                  
+                  if [ ! -s "${OUTPUT_PATH}" ]; then
+                      echo "Error: Buffer scan produced no output at '${OUTPUT_PATH}'." >&2
+                      exit 1
+                  fi
               shell: bash
 
             - name: Upload to Wiki
-              uses: Andrew-Chen-Wang/github-wiki-action@v4
+              uses: Andrew-Chen-Wang/github-wiki-action@v5
               with:
                   path: wiki-content/
                   token: ${{ secrets.GITHUB_TOKEN }}
