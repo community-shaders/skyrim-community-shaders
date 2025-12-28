@@ -111,7 +111,7 @@ void main()
     const float depthView = ScreenToViewDepth(depth, Frame.CameraData);
 
     const float4 mainColor = MainTexture[idx];
-    
+
     [branch]
     if (depthView < FP_Z || depth >= SKY_Z)
     {
