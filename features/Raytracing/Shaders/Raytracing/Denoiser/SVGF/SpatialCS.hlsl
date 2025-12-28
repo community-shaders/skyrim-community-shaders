@@ -23,9 +23,9 @@ float GaussianBlur(uint2 id)
         { 1.0 / 4.0, 1.0 / 8.0 },
         { 1.0 / 8.0, 1.0 / 16.0 }
     };
-    
+
     const int radius = 1;
-    
+
     for (int y = -radius; y <= radius; y++)
     {
         for (int x = -radius; x <= radius; x++)
