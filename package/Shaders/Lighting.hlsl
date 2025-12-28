@@ -2709,7 +2709,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	}
 #	endif
 
-#	if defined(EYE)
+#	if defined(EYE) && defined(VANILLA_EYE_NORMAL)
 	worldNormal.xyz = input.EyeNormal;
 #	endif  // EYE
 
