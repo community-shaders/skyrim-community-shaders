@@ -1,6 +1,7 @@
 #include "Raytracing/Includes/Common.hlsli"
 #include "Common/FrameBuffer.hlsli"
 #include "Common/GBuffer.hlsli"
+#include "Common/Color.hlsli"
 
 Texture2D<unorm half4> NormalGlossiness     : register(t0);
 Texture2D<unorm half4> Albedo               : register(t1);
@@ -18,5 +19,6 @@ void main(uint2 id : SV_DispatchThreadID)
 
     float metallic, ao;
     UnpackMAO(GNMAO[id].z, metallic, ao);
-    Diffuse[id] = Albedo[id] * (1.0f - metallic);
+    const float4 albedo = Albedo[id];
+    Diffuse[id] = float4(Color::GammaToTrueLinear(albedo.rgb) * (1.0f - metallic), albedo.a);
 }

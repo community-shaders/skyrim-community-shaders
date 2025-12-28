@@ -146,7 +146,7 @@ void main()
     float3 tangentWS, bitangetWS;
     CreateOrthonormalBasis(normalWS, tangentWS, bitangetWS);
 
-    float3 albedo = AlbedoTexture[idx].rgb;
+    float3 albedo = Color::GammaToTrueLinear(AlbedoTexture[idx].rgb);
 
     Surface sourceSurface = Surface(positionWS, geometryNormalWS, normalWS, tangentWS, bitangetWS, albedo, linearRoughness, metalness, 0, ao);
     BRDFContext sourceBRDFContext = BRDFContext(sourceSurface, normalize(-positionCS));
