@@ -11,7 +11,6 @@ void SVGFVariance::CreateRootSignature(ID3D12Device5* device)
 		D3D12_DESCRIPTOR_RANGE_TYPE_UAV,
 		{ { SVGFVarianceHeap::Slot::Variance, 1 } });
 
-
 	heap->CreateTable(
 		SVGFVarianceHeap::Table::SRV,
 		D3D12_DESCRIPTOR_RANGE_TYPE_SRV,
