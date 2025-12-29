@@ -1,5 +1,3 @@
-#pragma once
-
 #include "SHaRCPipeline.h"
 
 void SHaRCPipeline::CreateRootSignature(ID3D12Device5* device)
