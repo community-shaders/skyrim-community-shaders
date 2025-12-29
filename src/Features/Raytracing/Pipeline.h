@@ -24,6 +24,11 @@ struct Pipeline : IPipeline
 	eastl::unique_ptr<DX12::DescriptorHeap<HeapType>> heap = nullptr;
 };
 
+struct MasterPipeline : IPipeline
+{
+	std::vector<eastl::unique_ptr<IPipeline>> subPipelines;
+};
+
 template <IsHeap HeapType>
 struct RaytracingPipeline : Pipeline<HeapType>
 {
