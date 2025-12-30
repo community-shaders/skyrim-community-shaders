@@ -11,7 +11,6 @@ void SVGFSpatial::CreateRootSignature(ID3D12Device5* device)
 		D3D12_DESCRIPTOR_RANGE_TYPE_UAV,
 		{ { SVGFSpatialHeap::Slot::ColorVariance, 1 } });
 
-
 	heap->CreateTable(
 		SVGFSpatialHeap::Table::SRV,
 		D3D12_DESCRIPTOR_RANGE_TYPE_SRV,

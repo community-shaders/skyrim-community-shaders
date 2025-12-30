@@ -12,7 +12,6 @@ void SVGFTemporal::CreateRootSignature(ID3D12Device5* device)
 		{ { SVGFTemporalHeap::Slot::Temporal, 1 },
 			{ SVGFTemporalHeap::Slot::Moments, 1 } });
 
-
 	heap->CreateTable(
 		SVGFTemporalHeap::Table::SRV,
 		D3D12_DESCRIPTOR_RANGE_TYPE_SRV,

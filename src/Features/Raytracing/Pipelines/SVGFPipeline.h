@@ -8,10 +8,10 @@
 #include "PCH.h"
 #include <d3d12.h>
 
-#include "Features/Raytracing/Types.h"
+#include "Features/Raytracing/Pipelines/SVGFPipeline/SVGFSpatial.h"
 #include "Features/Raytracing/Pipelines/SVGFPipeline/SVGFTemporal.h"
 #include "Features/Raytracing/Pipelines/SVGFPipeline/SVGFVariance.h"
-#include "Features/Raytracing/Pipelines/SVGFPipeline/SVGFSpatial.h"
+#include "Features/Raytracing/Types.h"
 
 struct SVGFPipeline : IPipeline
 {

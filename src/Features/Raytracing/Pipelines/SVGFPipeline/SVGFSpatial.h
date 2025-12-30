@@ -36,5 +36,5 @@ struct SVGFSpatial : ComputePipeline<SVGFSpatialHeap>
 {
 	void CreateRootSignature(ID3D12Device5* device) override;
 	void CompileShaders(ID3D12Device5* device) override;
-	void Dispatch(ID3D12GraphicsCommandList4* commandList, ID3D12Resource* frameBuffer);	
+	void Dispatch(ID3D12GraphicsCommandList4* commandList, ID3D12Resource* frameBuffer);
 };
