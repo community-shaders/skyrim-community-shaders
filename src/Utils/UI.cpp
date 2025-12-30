@@ -242,7 +242,7 @@ namespace Util
 			categoryIcon = menu.grass.texture;
 		} else if (strcmp(categoryName, "Lighting") == 0) {
 			categoryIcon = menu.lighting.texture;
-		} else if (strcmp(categoryName, "Sky & Weather") == 0) {
+		} else if (strcmp(categoryName, "Sky") == 0) {
 			categoryIcon = menu.sky.texture;
 		} else if (strcmp(categoryName, "Landscape & Textures") == 0) {
 			categoryIcon = menu.landscape.texture;

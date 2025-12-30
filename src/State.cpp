@@ -11,6 +11,7 @@
 #include "Features/TerrainBlending.h"
 #include "Features/TerrainHelper.h"
 #include "Features/Upscaling.h"
+#include "Features/WeatherEditor.h"
 #include "Menu.h"
 #include "SettingsOverrideManager.h"
 #include "ShaderCache.h"
@@ -25,13 +26,14 @@ void State::Draw()
 	auto& terrainBlending = globals::features::terrainBlending;
 	auto& terrainHelper = globals::features::terrainHelper;
 	auto& cloudShadows = globals::features::cloudShadows;
+	auto& weatherEditor = globals::features::weatherEditor;
 	auto truePBR = globals::truePBR;
 	auto context = globals::d3d::context;
 
-	// Update weather-based feature settings
-	WeatherManager::GetSingleton()->UpdateFeatures();
-
 	if (shaderCache->IsEnabled()) {
+		if (weatherEditor.loaded)
+			WeatherManager::GetSingleton()->UpdateFeatures();
+
 		if (terrainBlending.loaded)
 			terrainBlending.TerrainShaderHacks();
 

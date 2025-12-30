@@ -16,7 +16,7 @@ public:
 	virtual inline std::string GetName() override { return "Weather Editor"; }
 	virtual inline std::string GetShortName() override { return "WeatherEditor"; }
 	virtual inline std::string_view GetShaderDefineName() override { return "WEATHER"; }
-	virtual inline std::string_view GetCategory() const override { return "Sky & Weather"; }
+	virtual inline std::string_view GetCategory() const override { return "Sky"; }
 	virtual inline std::pair<std::string, std::vector<std::string>> GetFeatureSummary() override
 	{
 		return {

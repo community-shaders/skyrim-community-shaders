@@ -1127,4 +1127,3 @@ namespace PropertyDrawer
 		return ImGui::Checkbox(id.c_str(), &value);
 	}
 }  // namespace PropertyDrawer
-}  // namespace PropertyDrawer
