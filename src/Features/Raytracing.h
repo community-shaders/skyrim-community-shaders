@@ -887,6 +887,7 @@ struct Raytracing : public OverlayFeature
 	std::shared_mutex renderMutex;
 
 	uint2 renderSize;
+	float2 dynamicResolutionRatio;
 
 	// Timings
 	float mainTime;
@@ -1504,8 +1505,70 @@ struct Raytracing : public OverlayFeature
 			static inline REL::Relocation<decltype(thunk)> func;
 		};
 
+		struct Main_UpdateJitter
+		{
+			static void thunk(RE::BSGraphics::State* a_viewport)
+			{
+				func(a_viewport);
+
+				auto& rt = globals::features::raytracing;
+
+				auto& runtimeData = a_viewport->GetRuntimeData();
+
+				auto screenSize = rt.GetScreenSize();
+
+				float2 resolutionScale = float2(
+					rt.renderSize.x / static_cast<float>(screenSize.x), 
+					rt.renderSize.y / static_cast<float>(screenSize.y)
+				);
+
+				runtimeData.dynamicResolutionPreviousWidthRatio = rt.dynamicResolutionRatio.x;
+				runtimeData.dynamicResolutionPreviousHeightRatio = rt.dynamicResolutionRatio.y;
+
+				runtimeData.dynamicResolutionWidthRatio = resolutionScale.x;
+				runtimeData.dynamicResolutionHeightRatio = resolutionScale.y;
+
+				rt.dynamicResolutionRatio = resolutionScale;
+
+				if (!globals::game::isVR)
+					runtimeData.dynamicResolutionLock = 1;
+			};
+
+			static inline REL::Relocation<decltype(thunk)> func;
+		};
+
+		struct SetScissorRect
+		{
+			static void thunk(RE::BSGraphics::Renderer* This, int a_left, int a_top, int a_right, int a_bottom) 
+			{
+				auto viewport = globals::game::graphicsState;
+				auto& runtimeData = viewport->GetRuntimeData();
+
+				if (!runtimeData.dynamicResolutionLock) {
+					a_left = static_cast<int>(a_left * runtimeData.dynamicResolutionWidthRatio);
+					a_right = static_cast<int>(a_right * runtimeData.dynamicResolutionWidthRatio);
+
+					a_top = static_cast<int>(a_top * runtimeData.dynamicResolutionHeightRatio);
+					a_bottom = static_cast<int>(a_bottom * runtimeData.dynamicResolutionHeightRatio);
+				}
+
+				func(This, a_left, a_top, a_right, a_bottom);			
+			}
+			static inline REL::Relocation<decltype(thunk)> func;
+		};
+
 		static void Install()
 		{
+			bool isGOG = !GetModuleHandle(L"steam_api64.dll");
+			stl::write_thunk_call<Main_UpdateJitter>(REL::RelocationID(75460, 77245).address() + REL::Relocate(0xE5, isGOG ? 0x133 : 0xE2, 0x104));
+
+			REL::safe_write(REL::RelocationID(35556, 36555).address() + REL::Relocate(0x2D, 0x2D, 0x25), REL::NOP5, sizeof(REL::NOP5));
+
+			// Patches RSSetScissorRect calls to use dynamic resolution
+			// This is a PC-specific function hence it was missing
+			if (!globals::game::isVR)
+				stl::detour_thunk<SetScissorRect>(REL::RelocationID(75564, 77365));
+
 			stl::write_vfunc<0x6A, Load3D<RE::TESObjectREFR>>(RE::VTABLE_TESObjectREFR[0]);
 			stl::write_vfunc<0x6B, Release3DRelatedData<RE::TESObjectREFR>>(RE::VTABLE_TESObjectREFR[0]);
 

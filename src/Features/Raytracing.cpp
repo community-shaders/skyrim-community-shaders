@@ -551,6 +551,78 @@ void Raytracing::SetupOutputRT()
 	createRT(specularAlbedoTexture, DXGI_FORMAT_R16G16B16A16_FLOAT, GIHeap::Slot::Reflectance, L"Reflectance texture");
 
 	// u2 - Specular Hit Distance texture
+	createRT(specularHitDistanceTexture, DXGI_FORMAT_R16G16B16A16_FLOAT, GIHeap::Slot::SpecularHitDist, L"Specular Hit Distance texture");
+
+	// Depth
+	{
+		D3D11_TEXTURE2D_DESC texDesc{};
+		texDesc.Width = renderSize.x;
+		texDesc.Height = renderSize.y;
+		texDesc.MipLevels = 1;
+		texDesc.ArraySize = 1;
+		texDesc.Format = DXGI_FORMAT_R32_FLOAT;
+		texDesc.SampleDesc.Count = 1;
+		texDesc.SampleDesc.Quality = 0;
+		texDesc.BindFlags = D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_UNORDERED_ACCESS;
+
+		depthTexture = eastl::make_unique<WrappedResource>(texDesc, d3d11Device.get(), d3d12Device.get());
+		DX::ThrowIfFailed(depthTexture->resource->SetName(L"Depth texture"));
+
+		D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
+		srvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
+		srvDesc.Format = texDesc.Format;
+		srvDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
+		srvDesc.Texture2D.MostDetailedMip = 0;
+		srvDesc.Texture2D.MipLevels = texDesc.MipLevels;
+		srvDesc.Texture2D.PlaneSlice = 0;
+		srvDesc.Texture2D.ResourceMinLODClamp = 0.0f;
+
+		d3d12Device->CreateShaderResourceView(depthTexture->resource.get(), &srvDesc, giHeap->CPUHandle(GIHeap::Slot::Depth));
+		d3d12Device->CreateShaderResourceView(depthTexture->resource.get(), &srvDesc, shadowHeap->CPUHandle(ShadowsHeap::Slot::Depth));
+	}
+
+	// Motion vector
+	{
+		D3D11_TEXTURE2D_DESC texDesc{};
+		texDesc.Width = renderSize.x;
+		texDesc.Height = renderSize.y;
+		texDesc.MipLevels = 1;
+		texDesc.ArraySize = 1;
+		texDesc.Format = DXGI_FORMAT_R16G16_FLOAT;
+		texDesc.SampleDesc.Count = 1;
+		texDesc.SampleDesc.Quality = 0;
+		texDesc.BindFlags = D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_UNORDERED_ACCESS;
+
+		motionVectorsTexture = eastl::make_unique<WrappedResource>(texDesc, d3d11Device.get(), d3d12Device.get());
+		DX::ThrowIfFailed(motionVectorsTexture->resource->SetName(L"Motion Vectors Texture"));
+	}
+
+	// Normal Roughness
+	{
+		D3D11_TEXTURE2D_DESC texDesc{};
+		texDesc.Width = renderSize.x;
+		texDesc.Height = renderSize.y;
+		texDesc.MipLevels = 1;
+		texDesc.ArraySize = 1;
+		texDesc.Format = DXGI_FORMAT_R16G16B16A16_SNORM;
+		texDesc.SampleDesc.Count = 1;
+		texDesc.SampleDesc.Quality = 0;
+		texDesc.BindFlags = D3D11_BIND_UNORDERED_ACCESS;
+
+		normalRoughnessTexture = eastl::make_unique<WrappedResource>(texDesc, d3d11Device.get(), d3d12Device.get());
+		DX::ThrowIfFailed(normalRoughnessTexture->resource->SetName(L"Normal Roughness Texture"));
+
+		D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
+		srvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
+		srvDesc.Format = texDesc.Format;
+		srvDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
+		srvDesc.Texture2D.MostDetailedMip = 0;
+		srvDesc.Texture2D.MipLevels = texDesc.MipLevels;
+		srvDesc.Texture2D.PlaneSlice = 0;
+		srvDesc.Texture2D.ResourceMinLODClamp = 0.0f;
+
+		d3d12Device->CreateShaderResourceView(normalRoughnessTexture->resource.get(), &srvDesc, giHeap->CPUHandle(GIHeap::Slot::NormalRoughness));
+	}
 	createRT(specularHitDistanceTexture, DXGI_FORMAT_R32_FLOAT, GIHeap::Slot::SpecularHitDist, L"Specular Hit Distance texture");
 
 	svgfPipeline->SetupTextureResources(
@@ -560,6 +632,23 @@ void Raytracing::SetupOutputRT()
 		motionVectorsTexture->resource.get(),
 		normalRoughnessTexture->resource.get(),
 		outputTexture->resource.get());
+}
+
+	// Diffuse (Metallic modulated albedo)
+	{
+		D3D11_TEXTURE2D_DESC texDesc{};
+		texDesc.Width = renderSize.x;
+		texDesc.Height = renderSize.y;
+		texDesc.MipLevels = 1;
+		texDesc.ArraySize = 1;
+		texDesc.Format = DXGI_FORMAT_R16G16B16A16_FLOAT;
+		texDesc.SampleDesc.Count = 1;
+		texDesc.SampleDesc.Quality = 0;
+		texDesc.BindFlags = D3D11_BIND_UNORDERED_ACCESS;
+
+		diffuseAlbedoTexture = eastl::make_unique<WrappedResource>(texDesc, d3d11Device.get(), d3d12Device.get());
+		DX::ThrowIfFailed(diffuseAlbedoTexture->resource->SetName(L"Diffuse Texture Texture"));
+	}
 }
 
 void Raytracing::SetupResources()
@@ -650,7 +739,7 @@ void Raytracing::SetupResources()
 		srvDesc.Texture2D.ResourceMinLODClamp = 0.0f;
 
 		d3d12Device->CreateShaderResourceView(depthTexture->resource.get(), &srvDesc, giHeap->CPUHandle(GIHeap::Slot::Depth));
-		d3d12Device->CreateShaderResourceView(depthTexture->resource.get(), &srvDesc, shadowHeap->CPUHandle(ShadowsHeap::Slot::Depth));
+		d3d12Device->CreateShaderResourceView(depthTexture->resource.get(), &srvDesc, shadowHeap->CPUHandle(ShadowsHeap::Slot::Depth));	
 	}
 
 	// Shadow mask
@@ -706,65 +795,6 @@ void Raytracing::SetupResources()
 			uavDesc.Format = texDesc.Format;
 
 			d3d12Device->CreateUnorderedAccessView(mainTexture->resource.get(), nullptr, &uavDesc, giHeap->CPUHandle(GIHeap::Slot::Main));
-		}
-
-		// Motion vector
-		{
-			D3D11_TEXTURE2D_DESC texDesc{};
-			texDesc.Width = mainDesc.Width;
-			texDesc.Height = mainDesc.Height;
-			texDesc.MipLevels = 1;
-			texDesc.ArraySize = 1;
-			texDesc.Format = DXGI_FORMAT_R16G16_FLOAT;
-			texDesc.SampleDesc.Count = 1;
-			texDesc.SampleDesc.Quality = 0;
-			texDesc.BindFlags = D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_UNORDERED_ACCESS;
-
-			motionVectorsTexture = eastl::make_unique<WrappedResource>(texDesc, d3d11Device.get(), d3d12Device.get());
-			DX::ThrowIfFailed(motionVectorsTexture->resource->SetName(L"Motion Vectors Texture"));
-		}
-
-		// Normal Roughness
-		{
-			D3D11_TEXTURE2D_DESC texDesc{};
-			texDesc.Width = mainDesc.Width;
-			texDesc.Height = mainDesc.Height;
-			texDesc.MipLevels = 1;
-			texDesc.ArraySize = 1;
-			texDesc.Format = DXGI_FORMAT_R16G16B16A16_SNORM;
-			texDesc.SampleDesc.Count = 1;
-			texDesc.SampleDesc.Quality = 0;
-			texDesc.BindFlags = D3D11_BIND_UNORDERED_ACCESS;
-
-			normalRoughnessTexture = eastl::make_unique<WrappedResource>(texDesc, d3d11Device.get(), d3d12Device.get());
-			DX::ThrowIfFailed(normalRoughnessTexture->resource->SetName(L"Normal Roughness Texture"));
-
-			D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
-			srvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
-			srvDesc.Format = texDesc.Format;
-			srvDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
-			srvDesc.Texture2D.MostDetailedMip = 0;
-			srvDesc.Texture2D.MipLevels = texDesc.MipLevels;
-			srvDesc.Texture2D.PlaneSlice = 0;
-			srvDesc.Texture2D.ResourceMinLODClamp = 0.0f;
-
-			d3d12Device->CreateShaderResourceView(normalRoughnessTexture->resource.get(), &srvDesc, giHeap->CPUHandle(GIHeap::Slot::NormalRoughness));
-		}
-
-		// Diffuse (Metallic modulated albedo)
-		{
-			D3D11_TEXTURE2D_DESC texDesc{};
-			texDesc.Width = mainDesc.Width;
-			texDesc.Height = mainDesc.Height;
-			texDesc.MipLevels = 1;
-			texDesc.ArraySize = 1;
-			texDesc.Format = DXGI_FORMAT_R16G16B16A16_FLOAT;
-			texDesc.SampleDesc.Count = 1;
-			texDesc.SampleDesc.Quality = 0;
-			texDesc.BindFlags = D3D11_BIND_UNORDERED_ACCESS;
-
-			diffuseAlbedoTexture = eastl::make_unique<WrappedResource>(texDesc, d3d11Device.get(), d3d12Device.get());
-			DX::ThrowIfFailed(diffuseAlbedoTexture->resource->SetName(L"Diffuse Texture Texture"));
 		}
 	}
 
@@ -1322,9 +1352,13 @@ void Raytracing::CopyDepth()
 
 		context->CSSetShaderResources(0, 1, &depth.depthSRV);
 
+		auto sampler = samplerState.get();
+		context->CSSetSamplers(0, 1, &sampler);
+
 		context->CSSetUnorderedAccessViews(0, 1, &depthTexture->uav, nullptr);
 
-		auto dispatchCount = Util::GetScreenDispatchCount();
+		//auto dispatchCount = Util::GetScreenDispatchCount(true);
+		uint2 dispatchCount = { DivideRoundUp(renderSize.x, 8u), DivideRoundUp(renderSize.y, 8u) };
 		context->Dispatch(dispatchCount.x, dispatchCount.y, 1);
 
 		context->CSSetUnorderedAccessViews(0, 1, nullptr, nullptr);
@@ -1341,20 +1375,27 @@ void Raytracing::ConvertTextures() const
 	ID3D11Buffer* cb[1] = { *globals::game::perFrame.get() };
 	context->CSSetConstantBuffers(12, 1, cb);
 
-	ID3D11ShaderResourceView* srvs[3] = {
+	ID3D11ShaderResourceView* srvs[4] = {
 		renderer->GetRuntimeData().renderTargets[NORMALROUGHNESS].SRV,
 		renderer->GetRuntimeData().renderTargets[ALBEDO].SRV,
-		renderer->GetRuntimeData().renderTargets[MASKS2].SRV
+		renderer->GetRuntimeData().renderTargets[MASKS2].SRV,
+		renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMOTION_VECTOR].SRV
 	};
+
 	context->CSSetShaderResources(0, _countof(srvs), srvs);
 
-	ID3D11UnorderedAccessView* uavs[2] = {
-		normalRoughnessTexture->uav,
-		diffuseAlbedoTexture->uav
+	auto sampler = samplerState.get();
+	context->CSSetSamplers(0, 1, &sampler);
+
+	ID3D11UnorderedAccessView* uavs[3] = { 
+		normalRoughnessTexture->uav, 
+		diffuseAlbedoTexture->uav,
+		motionVectorsTexture->uav
 	};
+
 	context->CSSetUnorderedAccessViews(0, _countof(uavs), uavs, nullptr);
 
-	auto dispatchCount = Util::GetScreenDispatchCount();
+	uint2 dispatchCount = { DivideRoundUp(renderSize.x, 8u), DivideRoundUp(renderSize.y, 8u) };
 	context->Dispatch(dispatchCount.x, dispatchCount.y, 1);
 
 	//context->CSSetUnorderedAccessViews(0, 1, nullptr, nullptr);
@@ -2510,7 +2551,6 @@ void Raytracing::DrawRTGI()
 	auto main = rendererRuntimeData.renderTargets[RE::RENDER_TARGETS::kMAIN];
 
 	d3d11Context->CopyResource(mainTexture->resource11, main.texture);
-	d3d11Context->CopyResource(motionVectorsTexture->resource11, rendererRuntimeData.renderTargets[RE::RENDER_TARGETS::kMOTION_VECTOR].texture);
 
 	if (!settings.RaytracedShadows)
 		CopyDepth();
@@ -2710,6 +2750,7 @@ void Raytracing::DrawRTGI()
 					auto screenSize = GetScreenSize();
 
 					sl::Extent inputExtent{ 0, 0, renderSize.x, renderSize.y };
+					//sl::Extent inputScreenExtent{ 0, 0, screenSize.x, screenSize.y };
 					sl::Extent outputExtent{ 0, 0, screenSize.x, screenSize.y };
 
 					sl::Resource colorIn = { sl::ResourceType::eTex2d, outputTexture->resource.get(), D3D12_RESOURCE_STATE_UNORDERED_ACCESS };
