@@ -35,6 +35,27 @@ void SVGFPipeline::SetupResources(ID3D12Device5* device)
 	spatialPipeline->SetupResources(device);*/
 }
 
+void SVGFPipeline::SetupTextureResources(ID3D12Device5* device, uint2 size, ID3D12Resource* depthResource, ID3D12Resource* motionVectorResource, ID3D12Resource* normalRoughnessResource, ID3D12Resource* colorResource)
+{
+	temporalTexture = eastl::make_unique<DX12::Texture2D>(device, size.x, size.y, DXGI_FORMAT_R16G16B16A16_FLOAT, D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS);
+
+	momentsTexture = eastl::make_unique<DX12::Texture2D>(device, size.x, size.y, DXGI_FORMAT_R16G16B16A16_FLOAT, D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS);
+
+	varianceTexture = eastl::make_unique<DX12::Texture2D>(device, size.x, size.y, DXGI_FORMAT_R16G16B16A16_FLOAT, D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS);
+
+	historyMomentsTexture = eastl::make_unique<DX12::Texture2D>(device, size.x, size.y, DXGI_FORMAT_R16G16B16A16_FLOAT, D3D12_RESOURCE_FLAG_NONE);
+
+	historyNormalsTexture = eastl::make_unique<DX12::Texture2D>(device, size.x, size.y, DXGI_FORMAT_R16G16B16A16_FLOAT, D3D12_RESOURCE_FLAG_NONE);
+
+	historyTexture = eastl::make_unique<DX12::Texture2D>(device, size.x, size.y, DXGI_FORMAT_R16G16B16A16_FLOAT, D3D12_RESOURCE_FLAG_NONE);
+
+	RegisterResources(device, depthResource, motionVectorResource, normalRoughnessResource, colorResource);
+
+	/*temporalPipeline->SetupResources(device);
+	variancePipeline->SetupResources(device);
+	spatialPipeline->SetupResources(device);*/
+}
+
 void SVGFPipeline::RegisterResources(ID3D12Device5* device, ID3D12Resource* depthResource, ID3D12Resource* motionVectorResource, ID3D12Resource* normalRoughnessResource, ID3D12Resource* colorResource) const
 {
 	temporalPipeline->RegisterResources(device,

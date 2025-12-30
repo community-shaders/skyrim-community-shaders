@@ -24,11 +24,13 @@
 #include "Features/Raytracing/HeapManager.h"
 #include "Features/Raytracing/Model.h"
 #include "Features/Raytracing/Pipelines/SHaRCPipeline.h"
+#include "Features/Raytracing/Pipelines/SVGFPipeline.h"
 #include "Features/Raytracing/RTPipelineBuilder.h"
 #include "Features/Raytracing/ShaderBindingTable.h"
 #include "Features/Raytracing/Shape.h"
 #include "Features/Raytracing/Types.h"
 #include "Features/Raytracing/Utils.h"
+
 
 #include "Raytracing/FeatureData.hlsli"
 #include "Raytracing/Includes/Types/FrameData.hlsli"
@@ -97,12 +99,10 @@ struct Raytracing : public OverlayFeature
 			Output,
 			Reflectance,
 			SpecularHitDist,
-#ifdef SHARC
 			SHaRCHashEntries,
 			SHaRCLock,
 			SHaRCAccumulation,
 			SHaRCResolved,
-#endif
 			Main,
 			Depth,
 			Albedo,
@@ -214,8 +214,11 @@ struct Raytracing : public OverlayFeature
 	virtual void SaveSettings(json& o_json) override;
 	virtual void DrawSettings() override;
 
-	void DrawSHaRCSettings();
+#ifdef DLSS_RR
+	void DrawDLSSRRSettings();
+#endif
 	void DrawDenoiserSettings();
+	void DrawSHaRCSettings();
 	void DrawLightingSettings();
 	void DrawLightSettings();
 
@@ -245,7 +248,6 @@ struct Raytracing : public OverlayFeature
 
 	void Initialize();
 	void InitD3D12(ID3D11Device* ppDevice, ID3D11DeviceContext* pImmediateContext, IDXGIAdapter* a_adapter);
-	void CreatePipelines();
 	void CreateRootSignature();
 	void CreateShadowsRootSignature();
 	void CreateSkinningRootSignature();
@@ -307,10 +309,17 @@ struct Raytracing : public OverlayFeature
 		return loaded && settings.Enabled;
 	};
 
-	const std::vector<IPipeline*>& GetPipelines()
+	const auto& GetPipelines()
 	{
-		static std::vector<IPipeline*> pipelines = {
-			sharcPipeline.get()
+		if (!sharcPipeline)
+			sharcPipeline = eastl::make_unique<SHaRCPipeline>();
+
+		if (!svgfPipeline)
+			svgfPipeline = eastl::make_unique<SVGFPipeline>();
+
+		static eastl::array<IPipeline*, 2> pipelines = {
+			sharcPipeline.get(),
+			svgfPipeline.get()
 		};
 
 		return pipelines;
@@ -335,7 +344,7 @@ struct Raytracing : public OverlayFeature
 	enum struct Denoiser : int32_t
 	{
 		None,
-		Accumulation,
+		SVGF,
 #ifdef DLSS_RR
 		DLSSRR
 #endif
@@ -413,9 +422,7 @@ struct Raytracing : public OverlayFeature
 	enum struct TraceMode : int32_t
 	{
 		Reference,
-#ifdef SHARC
 		SHaRC
-#endif
 	};
 
 	static constexpr const char* TraceModeTooltips[] = {
@@ -424,10 +431,10 @@ struct Raytracing : public OverlayFeature
 	};
 	static_assert(_countof(TraceModeTooltips) == magic_enum::enum_count<TraceMode>());
 
-#ifdef SHARC
-	static constexpr TraceMode DefaultMode = TraceMode::SHaRC;
+#ifdef DLSS_RR
+	static constexpr Denoiser DefaultDenoiser = Denoiser::DLSSRR;
 #else
-	static constexpr TraceMode DefaultMode = TraceMode::Reference;
+	static constexpr Denoiser DefaultDenoiser = Denoiser::SVGF;
 #endif
 
 	struct SHaRCSettings
@@ -461,10 +468,37 @@ struct Raytracing : public OverlayFeature
 		NLOHMANN_DEFINE_TYPE_INTRUSIVE_WITH_DEFAULT(SHaRCSettings, SceneScale, AccumFrameNum, StaleFrameNum, RadianceScale, AntifireflyFilter)
 	};
 
+#ifdef DLSS_RR
+	struct DLSSSettings
+	{
+		DLSSRRQuality QualityMode = DLSSRRQuality::MaxQuality;
+		DLSSRRPreset Preset = DLSSRRPreset::E;
+
+		NLOHMANN_DEFINE_TYPE_INTRUSIVE_WITH_DEFAULT(DLSSSettings, QualityMode, Preset)
+	};
+#endif
+
+	// Resampled Importance Sampling
+	struct RISSettings
+	{
+		bool Enabled = true;
+		int MaxCandidates = 4;
+
+		NLOHMANN_DEFINE_TYPE_INTRUSIVE_WITH_DEFAULT(RISSettings, Enabled, MaxCandidates)
+	};
+
+	// Reservoir-based Spatiotemporal Importance Resampling
+	struct ReSTIRSettings
+	{
+		bool ReSTIRDI = true;
+
+		NLOHMANN_DEFINE_TYPE_INTRUSIVE_WITH_DEFAULT(ReSTIRSettings, ReSTIRDI)
+	};
+
 	struct AdvancedSettings
 	{
-		bool ResampledImportanceSampling = true;
-		int RISMaxCandidates = 4;
+		RISSettings RIS;
+		ReSTIRSettings ReSTIR;
 
 		bool GGXEnergyConservation = true;
 
@@ -472,7 +506,7 @@ struct Raytracing : public OverlayFeature
 		LightEvalMode LightEvalMode = LightEvalMode::BRDF;
 		LightingMode LightingMode = LightingMode::PBR;
 
-		NLOHMANN_DEFINE_TYPE_INTRUSIVE_WITH_DEFAULT(AdvancedSettings, ResampledImportanceSampling, RISMaxCandidates, GGXEnergyConservation, DiffuseBRDF, LightEvalMode, LightingMode)
+		NLOHMANN_DEFINE_TYPE_INTRUSIVE_WITH_DEFAULT(AdvancedSettings, RIS, ReSTIR, GGXEnergyConservation, DiffuseBRDF, LightEvalMode, LightingMode)
 	};
 
 	////////////////////////////////////////////////// Feature Specific Data
@@ -481,8 +515,8 @@ struct Raytracing : public OverlayFeature
 		bool Enabled = true;
 		bool GlobalIllumination = true;
 		AdvancedSettings AdvancedSettings;
-		TraceMode TraceMode = DefaultMode;
-		Denoiser Denoiser = Denoiser::Accumulation;
+		TraceMode TraceMode = TraceMode::SHaRC;
+		Denoiser Denoiser = DefaultDenoiser;
 		int Bounces = 2;
 		int SamplesPerPixel = 1;
 		float2 Roughness = { 0.0f, 1.0f };
@@ -500,9 +534,7 @@ struct Raytracing : public OverlayFeature
 		bool RussianRoulette = true;
 		bool ConvertToGamma = true;
 #ifdef DLSS_RR
-		DLSSRRQuality DLSSRRQualityMode = DLSSRRQuality::MaxQuality;
-		float DLSSRRSharpness = 0.0f;
-		DLSSRRPreset DLSSRRPreset = DLSSRRPreset::E;
+		DLSSSettings DLSSRR;
 #endif
 		bool PerformanceOverlay = false;
 		std::string Defines = "";
@@ -511,9 +543,7 @@ struct Raytracing : public OverlayFeature
 		PIXCaptureLocation PIXCaptureLocation = PIXCaptureLocation::GlobalIllumination;
 		bool EnableDebugDevice = false;
 		bool WhiteFurnace = false;
-#ifdef SHARC
-		SHaRCSettings SHaRCSettings;
-#endif
+		SHaRCSettings SHaRC;
 	} settings;
 
 	enum class RecompileReason : uint32_t
@@ -767,13 +797,13 @@ struct Raytracing : public OverlayFeature
 	// TODO: Move other effects to their own pipelines as well
 	//	eastl::unique_ptr<SkinningPipeline> skinningPipeline = nullptr;
 	//	eastl::unique_ptr<RTPipeline> RTPipeline = nullptr;
-	//	eastl::unique_ptr<SVGFPipeline> svgfPipeline = nullptr;
 	//	eastl::unique_ptr<ShadowPipeline> shadowPipeline = nullptr;
 
-#ifdef SHARC
-	// SHaRC
+	// SVGF (denoiser)
+	eastl::unique_ptr<SVGFPipeline> svgfPipeline = nullptr;
+
+	// SHaRC (Radiance cache)
 	eastl::unique_ptr<SHaRCPipeline> sharcPipeline = nullptr;
-#endif
 
 	struct VertexUpdate
 	{

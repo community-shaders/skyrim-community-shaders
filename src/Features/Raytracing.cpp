@@ -25,7 +25,7 @@
 #include <imgui_stdlib.h>
 
 #ifdef DLSS_RR
-#	define RAYTRACING_EXTRA_FIELDS DLSSRRQualityMode, DLSSRRSharpness, DLSSRRPreset
+#	define RAYTRACING_EXTRA_FIELDS DLSSRR
 #else
 #	define RAYTRACING_EXTRA_FIELDS
 #endif
@@ -183,13 +183,35 @@ void Raytracing::DrawSettings()
 	}
 }
 
-#ifdef SHARC
+#ifdef DLSS_RR
+void Raytracing::DrawDLSSRRSettings()
+{
+	if (settings.Denoiser != Denoiser::DLSSRR)
+		return;
+
+	if (ImGui::CollapsingHeader("DLSS RR")) {
+		auto& dlssrrSettings = settings.DLSSRR;
+
+		DrawEnumCombo("Quality Mode", dlssrrSettings.QualityMode);
+		DrawEnumRadio("Preset", dlssrrSettings.Preset);
+	}
+}
+#endif
+
+void Raytracing::DrawDenoiserSettings()
+{
+#ifdef DLSS_RR
+	DrawDLSSRRSettings();
+#endif
+}
+
 void Raytracing::DrawSHaRCSettings()
 {
-	if (ImGui::CollapsingHeader("SHaRC")) {
-		ImGui::BeginDisabled(settings.TraceMode != TraceMode::SHaRC);
+	if (settings.TraceMode != TraceMode::SHaRC)
+		return;
 
-		auto& sharcSettings = settings.SHaRCSettings;
+	if (ImGui::CollapsingHeader("SHaRC")) {
+		auto& sharcSettings = settings.SHaRC;
 
 		ImGui::DragFloat("Scale", &sharcSettings.SceneScale, 0.001f, 0.1f, 10.0f);
 		sharcSettings.SceneScale = std::clamp(sharcSettings.SceneScale, 0.1f, 10.0f);
@@ -201,36 +223,7 @@ void Raytracing::DrawSHaRCSettings()
 		sharcSettings.StaleFrameNum = std::clamp(sharcSettings.StaleFrameNum, 8, 128);
 
 		ImGui::Checkbox("Antifirefly Filter", &sharcSettings.AntifireflyFilter);
-
-		ImGui::EndDisabled();
 	}
-}
-#endif
-
-void Raytracing::DrawDenoiserSettings()
-{
-#ifdef DLSS_RR
-	/*if (ImGui::BeginCombo("DLSS RR Quality TraceMode", magic_enum::enum_name(settings.DLSSRRQualityMode).data())) {
-		for (auto& value : magic_enum::enum_values<DLSSRRQuality>()) {
-			bool isSelected = (settings.DLSSRRQualityMode == value);
-
-			if (ImGui::Selectable(magic_enum::enum_name(value).data(), isSelected))
-				settings.DLSSRRQualityMode = value;
-
-			if (isSelected)
-				ImGui::SetItemDefaultFocus();
-		}
-
-		ImGui::EndCombo();
-	}*/
-
-	DrawEnumCombo("DLSS RR Quality Mode", settings.DLSSRRQualityMode);
-
-	ImGui::DragFloat("DLSS RR Sharpness", &settings.DLSSRRSharpness, 0.001f, 0.0f, 1.0f);
-	settings.DLSSRRSharpness = std::clamp(settings.DLSSRRSharpness, 0.0f, 1.0f);
-
-	DrawEnumRadio("DLSS RR Preset", settings.DLSSRRPreset);
-#endif
 }
 
 void Raytracing::DrawLightingSettings()
@@ -321,9 +314,7 @@ void Raytracing::DrawGeneralSettings()
 
 	DrawDenoiserSettings();
 
-#ifdef SHARC
 	DrawSHaRCSettings();
-#endif
 
 	DrawLightingSettings();
 
@@ -364,10 +355,10 @@ void Raytracing::DrawAdvancedSettings()
 
 	auto& advSettings = settings.AdvancedSettings;
 
-	if (ImGui::Checkbox("Resampled Importance Sampling", &advSettings.ResampledImportanceSampling))
+	if (ImGui::Checkbox("Resampled Importance Sampling", &advSettings.RIS.Enabled))
 		recompileReason |= RecompileReason::Advanced;
 
-	ImGui::SliderInt("RIS Max Candidates", &advSettings.RISMaxCandidates, 2, 16);
+	ImGui::SliderInt("RIS Max Candidates", &advSettings.RIS.MaxCandidates, 2, 16);
 
 	if (ImGui::Checkbox("GGX Energy Conservation", &advSettings.GGXEnergyConservation))
 		recompileReason |= RecompileReason::Advanced;
@@ -541,12 +532,6 @@ void Raytracing::DrawOverlay()
 	ImGui::End();
 }
 
-void Raytracing::CreatePipelines()
-{
-	if (!sharcPipeline)
-		sharcPipeline = eastl::make_unique<SHaRCPipeline>();
-}
-
 void Raytracing::SetupOutputRT()
 {
 	auto createRT = [&](eastl::unique_ptr<DX12::Texture2D>& texture, DXGI_FORMAT format, GIHeapDef::Slot slot, LPCWSTR name) {
@@ -567,6 +552,14 @@ void Raytracing::SetupOutputRT()
 
 	// u2 - Specular Hit Distance texture
 	createRT(specularHitDistanceTexture, DXGI_FORMAT_R32_FLOAT, GIHeap::Slot::SpecularHitDist, L"Specular Hit Distance texture");
+
+	svgfPipeline->SetupTextureResources(
+		d3d12Device.get(),
+		renderSize,
+		depthTexture->resource.get(),
+		motionVectorsTexture->resource.get(),
+		normalRoughnessTexture->resource.get(),
+		outputTexture->resource.get());
 }
 
 void Raytracing::SetupResources()
@@ -574,8 +567,6 @@ void Raytracing::SetupResources()
 #if defined(DLSS_RR)
 	InitRR();
 #endif
-
-	CreatePipelines();
 
 	auto renderer = globals::game::renderer;
 	auto device = globals::d3d::device;
@@ -600,13 +591,11 @@ void Raytracing::SetupResources()
 		pipeline->SetupResources(device12);
 	}
 
-#ifdef SHARC
 	sharcPipeline->CreateUAVs(
 		giHeap->CPUHandle(GIHeap::Slot::SHaRCHashEntries),
 		giHeap->CPUHandle(GIHeap::Slot::SHaRCLock),
 		giHeap->CPUHandle(GIHeap::Slot::SHaRCAccumulation),
 		giHeap->CPUHandle(GIHeap::Slot::SHaRCResolved));
-#endif
 
 	// Setup default textures (this is a bit wordy...)
 	{
@@ -989,7 +978,7 @@ void Raytracing::GetJitterOffset(float* outX, float* outY, int32_t index, int32_
 
 sl::DLSSMode Raytracing::GetDLSSMode() const
 {
-	switch (settings.DLSSRRQualityMode) {
+	switch (settings.DLSSRR.QualityMode) {
 	case DLSSRRQuality::MaxPerformance:
 		return sl::DLSSMode::eMaxPerformance;
 		break;
@@ -1032,7 +1021,7 @@ sl::DLSSDOptions Raytracing::GetDLSSRROptions() const
 	dlssdOptionsOut.normalRoughnessMode = sl::DLSSDNormalRoughnessMode::ePacked;
 	dlssdOptionsOut.alphaUpscalingEnabled = sl::Boolean::eFalse;
 
-	auto preset = (settings.DLSSRRPreset == DLSSRRPreset::D) ? sl::DLSSDPreset::ePresetD : sl::DLSSDPreset::ePresetE;
+	auto preset = (settings.DLSSRR.Preset == DLSSRRPreset::D) ? sl::DLSSDPreset::ePresetD : sl::DLSSDPreset::ePresetE;
 
 	dlssdOptionsOut.dlaaPreset = preset;
 	dlssdOptionsOut.qualityPreset = preset;
@@ -1045,8 +1034,6 @@ sl::DLSSDOptions Raytracing::GetDLSSRROptions() const
 
 void Raytracing::SetDLSSRROptions()
 {
-	dlssdOptions.sharpness = settings.DLSSRRSharpness;
-
 	auto worldToCameraView = globals::game::frameBufferCached.GetCameraView().Transpose();
 	auto cameraViewToWorld = globals::game::frameBufferCached.GetCameraViewInverse().Transpose();
 
@@ -2605,9 +2592,7 @@ void Raytracing::DrawRTGI()
 
 		frameData->RussianRoulette = settings.RussianRoulette;
 
-#ifdef SHARC
-		frameData->SHaRC = settings.SHaRCSettings.GetFrameData(settings.TraceMode == TraceMode::SHaRC);  // Sets UpdatePass to true if in SHaRC mode
-#endif
+		frameData->SHaRC = settings.SHaRC.GetFrameData(settings.TraceMode == TraceMode::SHaRC);  // Sets UpdatePass to true if in SHaRC mode
 
 		frameData->DispatchSize = renderSize;
 
@@ -2625,13 +2610,11 @@ void Raytracing::DrawRTGI()
 		// Upload buffer 0, for SHaRC resolve pass
 		frameBuffer->Update(frameData.get(), sizeof(FrameData), 0, 0);
 
-#ifdef SHARC
 		if (settings.TraceMode == TraceMode::SHaRC) {
 			// Upload buffer 1, for main RT pass
 			frameData->SHaRC.UpdatePass = false;
 			frameBuffer->Update(frameData.get(), sizeof(FrameData), 0, 1);
 		}
-#endif
 
 		// Upload buffer 0 to GPU
 		frameBuffer->Upload(commandList.get());
@@ -2676,7 +2659,6 @@ void Raytracing::DrawRTGI()
 
 			shaderBindingTable->FillDispatchShaderBindingTable(dispatchDesc, shaderBindingTableBuffer->resource->GetGPUVirtualAddress());
 
-#ifdef SHARC
 			// SHaRC Update pass
 			if (settings.TraceMode == TraceMode::SHaRC) {
 				dispatchDesc.Width = DivideRoundUp(renderSize.x, 5.0f);
@@ -2696,11 +2678,11 @@ void Raytracing::DrawRTGI()
 				// Update Frame Buffer for main RT pass, maybe we should use two buffers?
 				// Using one GPU heap buffer with multiple upload buffers felt like a hack (but it works)
 				frameBuffer->Upload(commandList.get(), 1);
-				//const auto offset = offsetof(FrameData, SHaRC) + offsetof(SHaRCFrameData, UpdatePass);
-				//static_assert(offset == 300);
-				//frameBuffer->UploadRegion(commandList.get(), sizeof(SHaRCFrameData::UpdatePass), offset, 1);
+
+				// This function uses CopyBufferRegion to upload only the UpdatePass variable, but it failed to work...
+				//frameBuffer->UploadRegion(commandList.get(), sizeof(SHaRCFrameData::UpdatePass),  offsetof(FrameData, SHaRC) + offsetof(SHaRCFrameData, UpdatePass), 1);
 			}
-#endif
+
 			// Main pass
 			{
 				dispatchDesc.Width = renderSize.x;
@@ -2719,8 +2701,11 @@ void Raytracing::DrawRTGI()
 		}
 
 		if (settings.DebugOutput == DebugOutput::None) {
+			if (settings.Denoiser == Denoiser::SVGF) {
+				svgfPipeline->Denoise(commandList.get());
+			}
 #ifdef DLSS_RR
-			if (settings.Denoiser == Denoiser::DLSSRR) {
+			else if (settings.Denoiser == Denoiser::DLSSRR) {
 				{
 					auto screenSize = GetScreenSize();
 
@@ -2757,12 +2742,13 @@ void Raytracing::DrawRTGI()
 				if (SL_FAILED(result, slEvaluateFeature(sl::kFeatureDLSS_RR, *frameToken, inputs, _countof(inputs), commandList.get()))) {
 					logger::error("[DLSS RR] Failed to evaluate DLSS RR feature, error: {}", magic_enum::enum_name(result));
 				}
-			} else {
+			} else 
+#endif
+			{
 				outputTexture->TransitionBarrier(commandList.get(), D3D12_RESOURCE_STATE_COPY_SOURCE);
 				commandList->CopyResource(mainTexture->resource.get(), outputTexture->resource.get());
 				outputTexture->TransitionBarrier(commandList.get(), D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
 			}
-#endif
 		} else {
 			if (settings.DebugOutput == DebugOutput::Output) {
 				outputTexture->TransitionBarrier(commandList.get(), D3D12_RESOURCE_STATE_COPY_SOURCE);
@@ -3491,10 +3477,10 @@ void Raytracing::CompileRTGIShaders()
 
 	auto& advSettings = settings.AdvancedSettings;
 
-	if (advSettings.ResampledImportanceSampling)
+	if (advSettings.RIS.Enabled)
 		defines.emplace_back(L"RIS");
 
-	const auto risMaxCandidates = std::to_wstring(static_cast<uint32_t>(advSettings.RISMaxCandidates));
+	const auto risMaxCandidates = std::to_wstring(static_cast<uint32_t>(advSettings.RIS.MaxCandidates));
 	defines.emplace_back(L"RIS_MAX_CANDIDATES", risMaxCandidates.c_str());
 
 	if (advSettings.GGXEnergyConservation)
@@ -3512,10 +3498,8 @@ void Raytracing::CompileRTGIShaders()
 	if (settings.WhiteFurnace)
 		defines.emplace_back(L"DEBUG_WHITE_FURNACE");
 
-#ifdef SHARC
 	if (settings.TraceMode == TraceMode::SHaRC)
 		defines.emplace_back(L"SHARC");
-#endif
 
 	if (settings.PathTracing)
 		defines.emplace_back(L"PATH_TRACING");
