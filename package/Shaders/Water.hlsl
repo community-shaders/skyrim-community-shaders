@@ -929,7 +929,7 @@ float3 GetWaterSpecularColor(PS_INPUT input, float3 normal, float3 viewDirection
 			reflectionColor = CubeMapTex.SampleLevel(CubeMapSampler, R, 0).xyz;
 #			endif
 		} else {
-#			if NUM_SPECULAR_LIGHTS == 0
+#			if !defined(LOD) && NUM_SPECULAR_LIGHTS == 0
 			float4 reflectionNormalRaw = float4((VarAmounts.w * refractionsDepthFactor) * normal.xy + input.MPosition.xy, input.MPosition.z, 1);
 #			else
 			float4 reflectionNormalRaw = float4(VarAmounts.w * normal.xy, 0, 1);
@@ -939,7 +939,7 @@ float3 GetWaterSpecularColor(PS_INPUT input, float3 normal, float3 viewDirection
 			reflectionColor = ReflectionTex.SampleLevel(ReflectionSampler, reflectionNormal.xy / reflectionNormal.ww, 0).xyz;
 		}
 
-#			if NUM_SPECULAR_LIGHTS == 0
+#			if !defined(LOD) && NUM_SPECULAR_LIGHTS == 0
 		if (Permutation::PixelShaderDescriptor & Permutation::WaterFlags::Cubemap) {
 			float pointingDirection = dot(viewDirection, R);
 			float pointingAlignment = dot(reflect(viewDirection, float3(0, 0, 1)), R);
