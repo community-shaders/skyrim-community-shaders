@@ -506,7 +506,6 @@ void WeatherPicker::RenderWeatherControls(RE::Sky* sky)
 		}
 		ImGui::EndCombo();
 	}
-
 }
 
 void WeatherPicker::RenderWeatherInformationDisplay(RE::Sky* sky, bool showInteractiveElements)
