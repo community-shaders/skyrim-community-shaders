@@ -12,9 +12,10 @@ struct IPipeline
 {
 	virtual ~IPipeline() = default;
 
-	virtual void CreateRootSignature(ID3D12Device5* device) = 0;
-	virtual void CompileShaders(ID3D12Device5* device) = 0;
-	virtual void SetupResources(ID3D12Device5* device) = 0;
+	virtual void Initialize() {}
+	virtual void CreateRootSignature([[maybe_unused]] ID3D12Device5* device) {}
+	virtual void CompileShaders([[maybe_unused]] ID3D12Device5* device) {}
+	virtual void SetupResources([[maybe_unused]] ID3D12Device5* device) {}
 };
 
 template <IsHeap HeapType>

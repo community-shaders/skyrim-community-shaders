@@ -3,12 +3,15 @@
 
 struct SVGF
 {
-	half Alpha;
-	half MomentsAlpha;
-	half PhiColor;
-	half PhiNormal;
-	uint16_t StepSize;
-	uint16_t PerformModulation;
+    float InvMaxAccumulatedFrames;
+    uint AtrousIterations;
+    float ColorPhi;
+    float NormalPhi;
+    uint2 Resolution;
+    float2 ResolutionRcp;
+    float4x4 CameraProjUnjitteredInverse;
+    float4x4 CameraViewInverse;
+    float4x4 CameraPreviousViewProjUnjittered;
 };
 
 #endif // SVGF_HLSI

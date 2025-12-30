@@ -368,7 +368,9 @@ struct Raytracing : public OverlayFeature
 	{
 		MaxPerformance,
 		Balanced,
-		MaxQuality
+		MaxQuality,
+		NativeRes,
+		DLAA
 	};
 
 	enum struct DLSSRRPreset : int32_t
@@ -469,12 +471,12 @@ struct Raytracing : public OverlayFeature
 	};
 
 #ifdef DLSS_RR
-	struct DLSSSettings
+	struct DLSSRRSettings
 	{
 		DLSSRRQuality QualityMode = DLSSRRQuality::MaxQuality;
 		DLSSRRPreset Preset = DLSSRRPreset::E;
 
-		NLOHMANN_DEFINE_TYPE_INTRUSIVE_WITH_DEFAULT(DLSSSettings, QualityMode, Preset)
+		NLOHMANN_DEFINE_TYPE_INTRUSIVE_WITH_DEFAULT(DLSSRRSettings, QualityMode, Preset)
 	};
 #endif
 
@@ -534,7 +536,7 @@ struct Raytracing : public OverlayFeature
 		bool RussianRoulette = true;
 		bool ConvertToGamma = true;
 #ifdef DLSS_RR
-		DLSSSettings DLSSRR;
+		DLSSRRSettings DLSSRR;
 #endif
 		bool PerformanceOverlay = false;
 		std::string Defines = "";
@@ -848,6 +850,15 @@ struct Raytracing : public OverlayFeature
 	// D3D11
 	winrt::com_ptr<ID3D11Device5> d3d11Device = nullptr;
 	winrt::com_ptr<ID3D11DeviceContext4> d3d11Context = nullptr;
+
+	struct alignas(16) RenderResData
+	{
+		uint2 RenderRes;
+		float2 RenderResRcp;
+	};
+
+	eastl::unique_ptr<RenderResData> renderResData = nullptr;
+	eastl::unique_ptr<ConstantBuffer> renderResCB = nullptr;
 
 	// Sky Cubemap
 	bool renderingCubemap = false;

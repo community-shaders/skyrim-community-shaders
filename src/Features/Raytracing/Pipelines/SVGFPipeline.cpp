@@ -1,5 +1,12 @@
 #include "SVGFPipeline.h"
 
+void SVGFPipeline::Initialize()
+{
+	temporalPipeline = eastl::make_unique<SVGFTemporal>();
+	variancePipeline = eastl::make_unique<SVGFVariance>();
+	spatialPipeline = eastl::make_unique<SVGFSpatial>();
+}
+
 void SVGFPipeline::CreateRootSignature(ID3D12Device5* device)
 {
 	temporalPipeline->CreateRootSignature(device);
@@ -12,27 +19,6 @@ void SVGFPipeline::CompileShaders(ID3D12Device5* device)
 	temporalPipeline->CompileShaders(device);
 	variancePipeline->CompileShaders(device);
 	spatialPipeline->CompileShaders(device);
-}
-
-void SVGFPipeline::SetupResources(ID3D12Device5* device)
-{
-	uint2 size = uint2(1920, 1080);
-
-	temporalTexture = eastl::make_unique<DX12::Texture2D>(device, size.x, size.y, DXGI_FORMAT_R16G16B16A16_FLOAT, D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS);
-
-	momentsTexture = eastl::make_unique<DX12::Texture2D>(device, size.x, size.y, DXGI_FORMAT_R16G16B16A16_FLOAT, D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS);
-
-	varianceTexture = eastl::make_unique<DX12::Texture2D>(device, size.x, size.y, DXGI_FORMAT_R16G16B16A16_FLOAT, D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS);
-
-	historyMomentsTexture = eastl::make_unique<DX12::Texture2D>(device, size.x, size.y, DXGI_FORMAT_R16G16B16A16_FLOAT, D3D12_RESOURCE_FLAG_NONE);
-
-	historyNormalsTexture = eastl::make_unique<DX12::Texture2D>(device, size.x, size.y, DXGI_FORMAT_R16G16B16A16_FLOAT, D3D12_RESOURCE_FLAG_NONE);
-
-	historyTexture = eastl::make_unique<DX12::Texture2D>(device, size.x, size.y, DXGI_FORMAT_R16G16B16A16_FLOAT, D3D12_RESOURCE_FLAG_NONE);
-
-	/*temporalPipeline->SetupResources(device);
-	variancePipeline->SetupResources(device);
-	spatialPipeline->SetupResources(device);*/
 }
 
 void SVGFPipeline::SetupTextureResources(ID3D12Device5* device, uint2 size, ID3D12Resource* depthResource, ID3D12Resource* motionVectorResource, ID3D12Resource* normalRoughnessResource, ID3D12Resource* colorResource)

@@ -29,12 +29,14 @@ void SVGFTemporal::CreateRootSignature(ID3D12Device5* device)
 	constantRootParam.InitAsConstantBufferView(0, 0);
 	rootParameters.push_back(constantRootParam);
 
+	CD3DX12_STATIC_SAMPLER_DESC staticSampler(0);
+
 	CD3DX12_VERSIONED_ROOT_SIGNATURE_DESC rootSigDesc;
 	rootSigDesc.Init_1_1(
 		static_cast<uint>(rootParameters.size()),
 		rootParameters.data(),
-		0,
-		nullptr,
+		1,
+		&staticSampler,
 		D3D12_ROOT_SIGNATURE_FLAG_NONE);
 
 	winrt::com_ptr<ID3DBlob> serializedRootSig = nullptr;

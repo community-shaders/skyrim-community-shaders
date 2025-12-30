@@ -12,17 +12,34 @@ RWTexture2D<snorm half4> NormalRoughness    : register(u0);
 RWTexture2D<unorm half4> Diffuse            : register(u1);
 RWTexture2D<unorm half4> MotionVectorsOut   : register(u2);
 
-#ifndef RES_X
-#define RES_X (1280.0f)
-#endif
-
-#ifndef RES_Y
-#define RES_Y (720.0f)
-#endif
-
-const float2 res = float2(RES_X, RES_Y);
+cbuffer RenderResCB : register(b0)
+{
+    uint2 RenderRes;
+    float2 RenderResRcp;
+};
 
 SamplerState Sampler : register(s0);
+
+[numthreads(8, 8, 1)]
+void main(uint2 id : SV_DispatchThreadID)
+{
+    if (any(id >= RenderRes))
+        return;
+    
+    const float2 uv = float2(id.xy + 0.5f) * RenderResRcp;
+
+    const unorm half3 normalGlossiness = NormalGlossiness.SampleLevel(Sampler, uv, 0).xyz;
+    const snorm half3 normalWS = normalize(ViewToWorldVector(GBuffer::DecodeNormal(normalGlossiness.xy), FrameBuffer::CameraViewInverse[0]));	
+    NormalRoughness[id] = half4(normalWS, 1.0f - normalGlossiness.z);
+    
+    float metallic, ao;
+    UnpackMAO(GNMAO.SampleLevel(Sampler, uv, 0).z, metallic, ao);
+    
+    const float4 albedo = Albedo.SampleLevel(Sampler, uv, 0);
+    Diffuse[id] = float4(Color::GammaToTrueLinear(albedo.rgb) * (1.0f - metallic), albedo.a);
+    
+    MotionVectorsOut[id] = MotionVectors.SampleLevel(Sampler, uv, 0);
+}
 
 [numthreads(8, 8, 1)]
 void main2(uint2 id : SV_DispatchThreadID)
@@ -36,25 +53,4 @@ void main2(uint2 id : SV_DispatchThreadID)
     Diffuse[id] = Albedo[id] * (1.0f - metallic);
     
     MotionVectorsOut[id] = MotionVectors[id];
-}
-
-[numthreads(8, 8, 1)]
-void main(uint2 id : SV_DispatchThreadID)
-{
-    if (any(id > res))
-        return;
-    
-    float2 uv = (id.xy + 0.5f) / res;
-
-    const unorm half3 normalGlossiness = NormalGlossiness.SampleLevel(Sampler, uv, 0).xyz;
-    const snorm half3 normalWS = normalize(ViewToWorldVector(GBuffer::DecodeNormal(normalGlossiness.xy), FrameBuffer::CameraViewInverse[0]));	
-    NormalRoughness[id] = half4(normalWS, 1.0f - normalGlossiness.z);
-    
-    float metallic, ao;
-    UnpackMAO(GNMAO.SampleLevel(Sampler, uv, 0).z, metallic, ao);
-    
-    const float4 albedo = Albedo.SampleLevel(Sampler, uv, 0);
-    Diffuse[id] = float4(Color::GammaToTrueLinear(albedo.rgb) * (1.0f - metallic), albedo.a);
-    
-    MotionVectorsOut[id] = MotionVectors.SampleLevel(Sampler, uv, 0);
 }

@@ -99,18 +99,18 @@ void main()
     // Direct Light for PT
     float3 direct = EvaluateDirectRadiance(sourceSurface, sourceBRDFContext, sourceInstance, sourceMaterial, randomSeed) + sourceSurface.Emissive;
 #else
-    float2 uv = (idx + 0.5f) / size;
+    const float2 uv = float2(idx + 0.5f) / size;
 
-    const unorm float4 normalMetalnessAO = GNMAOTexture[idx];
+    const unorm float4 normalMetalnessAO = GNMAOTexture.SampleLevel(BaseSampler, uv, 0);
 
     const half3 geometryNormalVS = DecodeNormal((half2)normalMetalnessAO.xy);
     const float3 geometryNormalWS = normalize(ViewToWorldVector(geometryNormalVS, Frame.ViewInverse));
 
-    const float depth = DepthTexture[idx] * 0.99998;
+    const float depth = DepthTexture.SampleLevel(BaseSampler, uv, 0) * 0.99998;
 
     const float depthView = ScreenToViewDepth(depth, Frame.CameraData);
 
-    const float4 mainColor = MainTexture[idx];
+    const float4 mainColor = MainTexture.SampleLevel(BaseSampler, uv, 0);
 
     [branch]
     if (depthView < FP_Z || depth >= SKY_Z)
@@ -146,7 +146,7 @@ void main()
     float3 tangentWS, bitangetWS;
     CreateOrthonormalBasis(normalWS, tangentWS, bitangetWS);
 
-    float3 albedo = Color::GammaToTrueLinear(AlbedoTexture[idx].rgb);
+    float3 albedo = Color::GammaToTrueLinear(AlbedoTexture.SampleLevel(BaseSampler, uv, 0).rgb);
 
     Surface sourceSurface = Surface(positionWS, geometryNormalWS, normalWS, tangentWS, bitangetWS, albedo, linearRoughness, metalness, 0, ao);
     BRDFContext sourceBRDFContext = BRDFContext(sourceSurface, normalize(-positionCS));

@@ -534,6 +534,8 @@ void Raytracing::DrawOverlay()
 
 void Raytracing::SetupOutputRT()
 {
+	logger::info("[RT] SetupOutputRT - RenderSize: {}x{}", renderSize.x, renderSize.y);
+
 	auto createRT = [&](eastl::unique_ptr<DX12::Texture2D>& texture, DXGI_FORMAT format, GIHeapDef::Slot slot, LPCWSTR name) {
 		if (texture)
 			texture.reset();
@@ -551,35 +553,7 @@ void Raytracing::SetupOutputRT()
 	createRT(specularAlbedoTexture, DXGI_FORMAT_R16G16B16A16_FLOAT, GIHeap::Slot::Reflectance, L"Reflectance texture");
 
 	// u2 - Specular Hit Distance texture
-	createRT(specularHitDistanceTexture, DXGI_FORMAT_R16G16B16A16_FLOAT, GIHeap::Slot::SpecularHitDist, L"Specular Hit Distance texture");
-
-	// Depth
-	{
-		D3D11_TEXTURE2D_DESC texDesc{};
-		texDesc.Width = renderSize.x;
-		texDesc.Height = renderSize.y;
-		texDesc.MipLevels = 1;
-		texDesc.ArraySize = 1;
-		texDesc.Format = DXGI_FORMAT_R32_FLOAT;
-		texDesc.SampleDesc.Count = 1;
-		texDesc.SampleDesc.Quality = 0;
-		texDesc.BindFlags = D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_UNORDERED_ACCESS;
-
-		depthTexture = eastl::make_unique<WrappedResource>(texDesc, d3d11Device.get(), d3d12Device.get());
-		DX::ThrowIfFailed(depthTexture->resource->SetName(L"Depth texture"));
-
-		D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
-		srvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
-		srvDesc.Format = texDesc.Format;
-		srvDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
-		srvDesc.Texture2D.MostDetailedMip = 0;
-		srvDesc.Texture2D.MipLevels = texDesc.MipLevels;
-		srvDesc.Texture2D.PlaneSlice = 0;
-		srvDesc.Texture2D.ResourceMinLODClamp = 0.0f;
-
-		d3d12Device->CreateShaderResourceView(depthTexture->resource.get(), &srvDesc, giHeap->CPUHandle(GIHeap::Slot::Depth));
-		d3d12Device->CreateShaderResourceView(depthTexture->resource.get(), &srvDesc, shadowHeap->CPUHandle(ShadowsHeap::Slot::Depth));
-	}
+	createRT(specularHitDistanceTexture, DXGI_FORMAT_R32_FLOAT, GIHeap::Slot::SpecularHitDist, L"Specular Hit Distance texture");
 
 	// Motion vector
 	{
@@ -623,16 +597,6 @@ void Raytracing::SetupOutputRT()
 
 		d3d12Device->CreateShaderResourceView(normalRoughnessTexture->resource.get(), &srvDesc, giHeap->CPUHandle(GIHeap::Slot::NormalRoughness));
 	}
-	createRT(specularHitDistanceTexture, DXGI_FORMAT_R32_FLOAT, GIHeap::Slot::SpecularHitDist, L"Specular Hit Distance texture");
-
-	svgfPipeline->SetupTextureResources(
-		d3d12Device.get(),
-		renderSize,
-		depthTexture->resource.get(),
-		motionVectorsTexture->resource.get(),
-		normalRoughnessTexture->resource.get(),
-		outputTexture->resource.get());
-}
 
 	// Diffuse (Metallic modulated albedo)
 	{
@@ -649,6 +613,19 @@ void Raytracing::SetupOutputRT()
 		diffuseAlbedoTexture = eastl::make_unique<WrappedResource>(texDesc, d3d11Device.get(), d3d12Device.get());
 		DX::ThrowIfFailed(diffuseAlbedoTexture->resource->SetName(L"Diffuse Texture Texture"));
 	}
+
+	svgfPipeline->SetupTextureResources(
+		d3d12Device.get(),
+		renderSize,
+		depthTexture->resource.get(),
+		motionVectorsTexture->resource.get(),
+		normalRoughnessTexture->resource.get(),
+		outputTexture->resource.get());
+
+	renderResData->RenderRes = renderSize;
+	renderResData->RenderResRcp = float2(1.0f / static_cast<float>(renderSize.x), 1.0f / static_cast<float>(renderSize.y));
+
+	renderResCB->Update(renderResData.get(), sizeof(RenderResData));
 }
 
 void Raytracing::SetupResources()
@@ -675,6 +652,7 @@ void Raytracing::SetupResources()
 		D3D12_DESCRIPTOR_HEAP_DESC(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, ShadowsHeap::NumDescriptors(), D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE));
 
 	for (auto& pipeline : GetPipelines()) {
+		pipeline->Initialize();
 		pipeline->CreateRootSignature(device12);
 		pipeline->CompileShaders(device12);
 		pipeline->SetupResources(device12);
@@ -685,6 +663,12 @@ void Raytracing::SetupResources()
 		giHeap->CPUHandle(GIHeap::Slot::SHaRCLock),
 		giHeap->CPUHandle(GIHeap::Slot::SHaRCAccumulation),
 		giHeap->CPUHandle(GIHeap::Slot::SHaRCResolved));
+
+	renderResData = eastl::make_unique<RenderResData>();
+
+	// Constant buffers
+	auto cbDesc = ConstantBufferDesc<RenderResData>();
+	renderResCB = eastl::make_unique<ConstantBuffer>(cbDesc);
 
 	// Setup default textures (this is a bit wordy...)
 	{
@@ -1013,7 +997,11 @@ sl::DLSSMode Raytracing::GetDLSSMode() const
 		return sl::DLSSMode::eMaxPerformance;
 		break;
 	case DLSSRRQuality::MaxQuality:
+	case DLSSRRQuality::NativeRes:
 		return sl::DLSSMode::eMaxQuality;
+		break;
+	case DLSSRRQuality::DLAA:
+		return sl::DLSSMode::eDLAA;
 		break;
 	default:
 		return sl::DLSSMode::eBalanced;
@@ -1025,7 +1013,7 @@ void Raytracing::GetDLSSRROptimal()
 {
 	auto dlssdOptionsNew = GetDLSSRROptions();
 
-	if (dlssdOptions.mode != dlssdOptionsNew.mode || dlssdOptions.outputWidth != dlssdOptionsNew.outputWidth || dlssdOptions.outputHeight != dlssdOptionsNew.outputHeight) {
+	if (dlssdOptions.mode != dlssdOptionsNew.mode || dlssdOptions.qualityPreset != dlssdOptionsNew.qualityPreset || dlssdOptions.outputWidth != dlssdOptionsNew.outputWidth || dlssdOptions.outputHeight != dlssdOptionsNew.outputHeight) {
 		dlssdOptions = dlssdOptionsNew;
 
 		sl::Result result = slDLSSDGetOptimalSettings(dlssdOptions, optimalSettings);
@@ -1350,18 +1338,21 @@ void Raytracing::CopyDepth()
 
 		context->CSSetShader(copyDepthCS.get(), nullptr, 0);
 
+		//auto* renderSizeCB = renderResCB->CB();
+		//context->CSSetConstantBuffers(0, 1, &renderSizeCB);
+
 		context->CSSetShaderResources(0, 1, &depth.depthSRV);
 
-		auto sampler = samplerState.get();
-		context->CSSetSamplers(0, 1, &sampler);
+		//auto sampler = samplerState.get();
+		//context->CSSetSamplers(0, 1, &sampler);
 
 		context->CSSetUnorderedAccessViews(0, 1, &depthTexture->uav, nullptr);
 
-		//auto dispatchCount = Util::GetScreenDispatchCount(true);
-		uint2 dispatchCount = { DivideRoundUp(renderSize.x, 8u), DivideRoundUp(renderSize.y, 8u) };
+		uint2 screenSize = GetScreenSize();
+		uint2 dispatchCount = { DivideRoundUp(screenSize.x, 8u), DivideRoundUp(screenSize.y, 8u) };
 		context->Dispatch(dispatchCount.x, dispatchCount.y, 1);
 
-		context->CSSetUnorderedAccessViews(0, 1, nullptr, nullptr);
+		//context->CSSetUnorderedAccessViews(0, 1, nullptr, nullptr);
 	}
 }
 
@@ -1372,8 +1363,11 @@ void Raytracing::ConvertTextures() const
 
 	context->CSSetShader(convertTexturesCS.get(), nullptr, 0);
 
-	ID3D11Buffer* cb[1] = { *globals::game::perFrame.get() };
-	context->CSSetConstantBuffers(12, 1, cb);
+	auto* renderSizeCB = renderResCB->CB();
+	context->CSSetConstantBuffers(0, 1, &renderSizeCB);
+
+	auto* frameBufferCB = *globals::game::perFrame.get();
+	context->CSSetConstantBuffers(12, 1, &frameBufferCB);
 
 	ID3D11ShaderResourceView* srvs[4] = {
 		renderer->GetRuntimeData().renderTargets[NORMALROUGHNESS].SRV,
@@ -2508,15 +2502,16 @@ uint2 Raytracing::GetRenderSize()
 	auto renderSizeOut = GetScreenSize();
 
 	// This is borked because all RTs need to share the same size
-	/*
+
 #if defined(DLSS_RR)
 	if (settings.Denoiser == Denoiser::DLSSRR) {
 		GetDLSSRROptimal();
 
-		renderSizeOut = { optimalSettings.optimalRenderWidth, optimalSettings.optimalRenderHeight };
+		if (settings.DLSSRR.QualityMode != DLSSRRQuality::NativeRes) {
+			renderSizeOut = { optimalSettings.optimalRenderWidth, optimalSettings.optimalRenderHeight };
+		}
 	}
 #endif
-*/
 
 	return renderSizeOut;
 }
@@ -2594,7 +2589,7 @@ void Raytracing::DrawRTGI()
 
 #ifdef DLSS_RR
 	if (settings.Denoiser == Denoiser::DLSSRR) {
-		GetDLSSRROptimal();  // TODO: Remove this once we can handle dynamic resolution changes properly
+		//GetDLSSRROptimal();  // TODO: Remove this once we can handle dynamic resolution changes properly
 		SetDLSSRROptions();
 		CheckFrameConstants();
 	}
@@ -2750,7 +2745,7 @@ void Raytracing::DrawRTGI()
 					auto screenSize = GetScreenSize();
 
 					sl::Extent inputExtent{ 0, 0, renderSize.x, renderSize.y };
-					//sl::Extent inputScreenExtent{ 0, 0, screenSize.x, screenSize.y };
+					sl::Extent inputNativeExtent{ 0, 0, screenSize.x, screenSize.y };
 					sl::Extent outputExtent{ 0, 0, screenSize.x, screenSize.y };
 
 					sl::Resource colorIn = { sl::ResourceType::eTex2d, outputTexture->resource.get(), D3D12_RESOURCE_STATE_UNORDERED_ACCESS };
@@ -2764,7 +2759,7 @@ void Raytracing::DrawRTGI()
 
 					sl::ResourceTag colorInTag = sl::ResourceTag{ &colorIn, sl::kBufferTypeScalingInputColor, sl::ResourceLifecycle::eOnlyValidNow, &inputExtent };
 					sl::ResourceTag colorOutTag = sl::ResourceTag{ &colorOut, sl::kBufferTypeScalingOutputColor, sl::ResourceLifecycle::eOnlyValidNow, &outputExtent };
-					sl::ResourceTag depthTag = sl::ResourceTag{ &depth, sl::kBufferTypeDepth, sl::ResourceLifecycle::eValidUntilPresent, &inputExtent };
+					sl::ResourceTag depthTag = sl::ResourceTag{ &depth, sl::kBufferTypeDepth, sl::ResourceLifecycle::eValidUntilPresent, &inputNativeExtent };
 					sl::ResourceTag mvecTag = sl::ResourceTag{ &mvec, sl::kBufferTypeMotionVectors, sl::ResourceLifecycle::eValidUntilPresent, &inputExtent };
 					sl::ResourceTag diffuseAlbedoTag = sl::ResourceTag{ &diffuseAlbedo, sl::kBufferTypeAlbedo, sl::ResourceLifecycle::eValidUntilPresent, &inputExtent };
 					sl::ResourceTag specularAlbedoTag = sl::ResourceTag{ &specularAlbedo, sl::kBufferTypeSpecularAlbedo, sl::ResourceLifecycle::eValidUntilPresent, &inputExtent };
