@@ -1,6 +1,5 @@
 #pragma once
 
-#define SHARC
 #define DLSS_RR
 
 #include "Features/Upscaling/DX12SwapChain.h"
@@ -214,11 +213,12 @@ struct Raytracing : public OverlayFeature
 	virtual void SaveSettings(json& o_json) override;
 	virtual void DrawSettings() override;
 
+	void DrawSHaRCSettings();
+	void DrawSVGFSettings();
 #ifdef DLSS_RR
 	void DrawDLSSRRSettings();
 #endif
 	void DrawDenoiserSettings();
-	void DrawSHaRCSettings();
 	void DrawLightingSettings();
 	void DrawLightSettings();
 
@@ -538,6 +538,7 @@ struct Raytracing : public OverlayFeature
 #ifdef DLSS_RR
 		DLSSRRSettings DLSSRR;
 #endif
+		SVGFPipeline::Settings SVGF;
 		bool PerformanceOverlay = false;
 		std::string Defines = "";
 		DebugOutput DebugOutput = DebugOutput::None;

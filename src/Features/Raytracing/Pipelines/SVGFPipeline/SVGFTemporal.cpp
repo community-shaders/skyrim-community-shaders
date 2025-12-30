@@ -85,7 +85,7 @@ void SVGFTemporal::RegisterResources(ID3D12Device5* device,
 	historyNormalsTexture->CreateSRV(heap->CPUHandle(SVGFTemporalHeap::Slot::HistoryNormals));
 }
 
-void SVGFTemporal::Dispatch(ID3D12GraphicsCommandList4* commandList, ID3D12Resource* frameBuffer)
+void SVGFTemporal::Dispatch(ID3D12GraphicsCommandList4* commandList, uint2 dispatchCount, ID3D12Resource* frameBuffer)
 {
 	commandList->SetPipelineState(pipelineState.get());
 	commandList->SetComputeRootSignature(rootSignature.get());
@@ -99,6 +99,5 @@ void SVGFTemporal::Dispatch(ID3D12GraphicsCommandList4* commandList, ID3D12Resou
 
 	commandList->SetComputeRootConstantBufferView(2, frameBuffer->GetGPUVirtualAddress());
 
-	const auto dispatchCount = Util::GetScreenDispatchCount();
 	commandList->Dispatch(dispatchCount.x, dispatchCount.y, 1);
 }

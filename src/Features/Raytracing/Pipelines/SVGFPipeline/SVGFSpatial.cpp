@@ -55,7 +55,27 @@ void SVGFSpatial::CompileShaders(ID3D12Device5* device)
 	DX::ThrowIfFailed(pipelineState->SetName(L"Compute Pipeline - SVGF Spatial"));
 }
 
-void SVGFSpatial::Dispatch(ID3D12GraphicsCommandList4* commandList, ID3D12Resource* frameBuffer)
+void SVGFSpatial::RegisterResources(ID3D12Device5* device,
+	ID3D12Resource* colorResource,
+	DX12::Texture2D* historyTexture,
+	ID3D12Resource* motionVectorResource,
+	ID3D12Resource* normalRoughnessResource,
+	DX12::Texture2D* varianceTexture,
+	ID3D12Resource* depthResource)
+{
+	CreateTexture2DUAV(device, colorResource, heap->CPUHandle(SVGFSpatialHeap::Slot::ColorVariance));
+
+	historyTexture->CreateSRV(heap->CPUHandle(SVGFSpatialHeap::Slot::History));
+
+	CreateTexture2DSRV(device, motionVectorResource, heap->CPUHandle(SVGFSpatialHeap::Slot::MotionVectors));
+	CreateTexture2DSRV(device, normalRoughnessResource, heap->CPUHandle(SVGFSpatialHeap::Slot::NormalRoughness));
+
+	varianceTexture->CreateSRV(heap->CPUHandle(SVGFSpatialHeap::Slot::VarianceColor));
+
+	CreateTexture2DSRV(device, depthResource, heap->CPUHandle(SVGFSpatialHeap::Slot::Depth));
+}
+
+void SVGFSpatial::Dispatch(ID3D12GraphicsCommandList4* commandList, uint atrousIterations, uint2 dispatchCount, DX12::StructuredBufferUpload<SVGF>* frameBuffer, ID3D12Resource* colorResource, ID3D12Resource* varianceResource)
 {
 	commandList->SetPipelineState(pipelineState.get());
 	commandList->SetComputeRootSignature(rootSignature.get());
@@ -67,8 +87,30 @@ void SVGFSpatial::Dispatch(ID3D12GraphicsCommandList4* commandList, ID3D12Resour
 
 	commandList->SetComputeRootDescriptorTable(1, heap->TableGPUHandle(SVGFSpatialHeap::Table::SRV));
 
-	commandList->SetComputeRootConstantBufferView(2, frameBuffer->GetGPUVirtualAddress());
+	commandList->SetComputeRootConstantBufferView(2, frameBuffer->resource->GetGPUVirtualAddress());
 
-	const auto dispatchCount = Util::GetScreenDispatchCount();
-	commandList->Dispatch(dispatchCount.x, dispatchCount.y, 1);
+    for (uint i = 0; i < atrousIterations; i++) {
+		frameBuffer->Upload(commandList, i + 1);
+
+		bool even = (i % 2 == 0);
+
+		commandList->Dispatch(dispatchCount.x, dispatchCount.y, 1);
+
+		CD3DX12_RESOURCE_BARRIER spatialUAVBarrier[] = {
+			CD3DX12_RESOURCE_BARRIER::UAV(even ? colorResource : varianceResource)
+		};
+
+		commandList->ResourceBarrier(_countof(spatialUAVBarrier), spatialUAVBarrier);
+
+		// We will use CopyResource to simulate swapping
+		if (even) {
+			commandList->CopyResource(varianceResource, colorResource);
+		} else {
+			commandList->CopyResource(colorResource, varianceResource);
+		}
+	}
+
+	/*if (atrousIterations % 2 == 0) {
+		commandList->CopyResource(colorTexture, varianceTexture);
+	}*/
 }

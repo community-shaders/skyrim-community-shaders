@@ -183,28 +183,6 @@ void Raytracing::DrawSettings()
 	}
 }
 
-#ifdef DLSS_RR
-void Raytracing::DrawDLSSRRSettings()
-{
-	if (settings.Denoiser != Denoiser::DLSSRR)
-		return;
-
-	if (ImGui::CollapsingHeader("DLSS RR")) {
-		auto& dlssrrSettings = settings.DLSSRR;
-
-		DrawEnumCombo("Quality Mode", dlssrrSettings.QualityMode);
-		DrawEnumRadio("Preset", dlssrrSettings.Preset);
-	}
-}
-#endif
-
-void Raytracing::DrawDenoiserSettings()
-{
-#ifdef DLSS_RR
-	DrawDLSSRRSettings();
-#endif
-}
-
 void Raytracing::DrawSHaRCSettings()
 {
 	if (settings.TraceMode != TraceMode::SHaRC)
@@ -226,6 +204,55 @@ void Raytracing::DrawSHaRCSettings()
 	}
 }
 
+
+void Raytracing::DrawSVGFSettings()
+{
+	if (settings.Denoiser != Denoiser::SVGF)
+		return;
+
+	// Shameless word by word copy of jiaye's settings
+	if (ImGui::CollapsingHeader("SVGF")) {
+		auto& svgfSettings = settings.SVGF;
+
+        ImGui::SliderInt("Max Accumulated Frames", (int*)&svgfSettings.MaxAccumulatedFrames, 1, 64, "%d", ImGuiSliderFlags_AlwaysClamp);
+		
+		ImGui::SliderInt("À Trous Iterations", (int*)&svgfSettings.AtrousIterations, 1, SVGFPipeline::MAX_ATROUS_ITERATIONS, "%d", ImGuiSliderFlags_AlwaysClamp);
+		if (auto _tt = Util::HoverTooltipWrapper())
+			ImGui::Text("Number of À Trous wavelet filter iterations. More iterations yield smoother results but may blur details and have a higher computational cost.");
+		
+		ImGui::SliderFloat("Color Phi", &svgfSettings.ColorPhi, 0.01f, 32.0f, "%.2f");
+		if (auto _tt = Util::HoverTooltipWrapper())
+			ImGui::Text("Controls sensitivity to color differences in the À Trous filter. Lower values preserve more detail but may retain noise.");
+		
+		ImGui::SliderFloat("Normal Phi", &svgfSettings.NormalPhi, 1.0f, 1024.0f, "%.2f");
+		if (auto _tt = Util::HoverTooltipWrapper())
+			ImGui::Text("Controls sensitivity to normal differences in the À Trous filter. Higher values preserve more detail but may retain noise.");
+	}
+}
+
+#ifdef DLSS_RR
+void Raytracing::DrawDLSSRRSettings()
+{
+	if (settings.Denoiser != Denoiser::DLSSRR)
+		return;
+
+	if (ImGui::CollapsingHeader("DLSS RR")) {
+		auto& dlssrrSettings = settings.DLSSRR;
+
+		DrawEnumCombo("Quality Mode", dlssrrSettings.QualityMode);
+		DrawEnumRadio("Preset", dlssrrSettings.Preset);
+	}
+}
+#endif
+
+void Raytracing::DrawDenoiserSettings()
+{
+	DrawSVGFSettings();
+#ifdef DLSS_RR
+	DrawDLSSRRSettings();
+#endif
+}
+
 void Raytracing::DrawLightingSettings()
 {
 	if (ImGui::CollapsingHeader("Lighting")) {
@@ -244,7 +271,7 @@ void Raytracing::DrawLightingSettings()
 
 void Raytracing::DrawLightSettings()
 {
-	if (ImGui::TreeNodeEx("Lights", ImGuiTreeNodeFlags_CollapsingHeader)) {
+	if (ImGui::CollapsingHeader("Lights")) {
 		if (ImGui::TreeNodeEx("Direct Lights", ImGuiTreeNodeFlags_DefaultOpen)) {
 			if (ImGui::DragFloat("Directional Strength", &settings.Directional, 0.001f))
 				settings.Directional = std::max(0.0f, settings.Directional);
@@ -263,8 +290,6 @@ void Raytracing::DrawLightSettings()
 
 			ImGui::TreePop();
 		}
-
-		ImGui::TreePop();
 	}
 }
 
@@ -312,9 +337,9 @@ void Raytracing::DrawGeneralSettings()
 	DrawFloat2("Roughness", settings.Roughness);
 	DrawFloat2("Metalness", settings.Metalness);
 
-	DrawDenoiserSettings();
-
 	DrawSHaRCSettings();
+
+	DrawDenoiserSettings();
 
 	DrawLightingSettings();
 
@@ -2737,7 +2762,10 @@ void Raytracing::DrawRTGI()
 
 		if (settings.DebugOutput == DebugOutput::None) {
 			if (settings.Denoiser == Denoiser::SVGF) {
-				svgfPipeline->Denoise(commandList.get());
+				svgfPipeline->Denoise(commandList.get(), renderSize, settings.SVGF, outputTexture->resource.get());
+
+				// TODO: Proper compositing
+				commandList->CopyResource(mainTexture->resource.get(), outputTexture->resource.get());
 			}
 #ifdef DLSS_RR
 			else if (settings.Denoiser == Denoiser::DLSSRR) {

@@ -55,7 +55,27 @@ void SVGFVariance::CompileShaders(ID3D12Device5* device)
 	DX::ThrowIfFailed(pipelineState->SetName(L"Compute Pipeline - SVGF Variance"));
 }
 
-void SVGFVariance::Dispatch(ID3D12GraphicsCommandList4* commandList, ID3D12Resource* frameBuffer)
+void SVGFVariance::RegisterResources(ID3D12Device5* device,
+	DX12::Texture2D* varianceTexture,
+	DX12::Texture2D* historyTexture,
+	DX12::Texture2D* momentsTexture,
+	ID3D12Resource* normalRoughnessResource,
+	DX12::Texture2D* temporalTexture,
+	ID3D12Resource* depthResource)
+{
+	varianceTexture->CreateUAV(heap->CPUHandle(SVGFVarianceHeap::Slot::Variance));
+
+	historyTexture->CreateSRV(heap->CPUHandle(SVGFVarianceHeap::Slot::History));
+	momentsTexture->CreateSRV(heap->CPUHandle(SVGFVarianceHeap::Slot::Moments));
+
+	CreateTexture2DSRV(device, normalRoughnessResource, heap->CPUHandle(SVGFVarianceHeap::Slot::NormalRoughness));
+
+	temporalTexture->CreateSRV(heap->CPUHandle(SVGFVarianceHeap::Slot::Temporal));
+
+	CreateTexture2DSRV(device, depthResource, heap->CPUHandle(SVGFVarianceHeap::Slot::Depth));
+}
+
+void SVGFVariance::Dispatch(ID3D12GraphicsCommandList4* commandList, uint2 dispatchCount, ID3D12Resource* frameBuffer)
 {
 	commandList->SetPipelineState(pipelineState.get());
 	commandList->SetComputeRootSignature(rootSignature.get());
@@ -69,6 +89,5 @@ void SVGFVariance::Dispatch(ID3D12GraphicsCommandList4* commandList, ID3D12Resou
 
 	commandList->SetComputeRootConstantBufferView(2, frameBuffer->GetGPUVirtualAddress());
 
-	const auto dispatchCount = Util::GetScreenDispatchCount();
 	commandList->Dispatch(dispatchCount.x, dispatchCount.y, 1);
 }

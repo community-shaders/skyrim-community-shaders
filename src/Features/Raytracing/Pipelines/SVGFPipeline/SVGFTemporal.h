@@ -39,7 +39,7 @@ struct SVGFTemporal : ComputePipeline<SVGFTemporalHeap>
 {
 	void CreateRootSignature(ID3D12Device5* device) override;
 	void CompileShaders(ID3D12Device5* device) override;
-	void Dispatch(ID3D12GraphicsCommandList4* commandList, ID3D12Resource* frameBuffer);
+	void Dispatch(ID3D12GraphicsCommandList4* commandList, uint2 dispatchCount, ID3D12Resource* frameBuffer);
 	void RegisterResources(ID3D12Device5* device,
 		DX12::Texture2D* temporalTexture,
 		DX12::Texture2D* momentsTexture,

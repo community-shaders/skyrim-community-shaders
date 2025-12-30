@@ -36,5 +36,12 @@ struct SVGFVariance : ComputePipeline<SVGFVarianceHeap>
 {
 	void CreateRootSignature(ID3D12Device5* device) override;
 	void CompileShaders(ID3D12Device5* device) override;
-	void Dispatch(ID3D12GraphicsCommandList4* commandList, ID3D12Resource* frameBuffer);
+	void Dispatch(ID3D12GraphicsCommandList4* commandList, uint2 dispatchCount, ID3D12Resource* frameBuffer);
+	void RegisterResources(ID3D12Device5* device,
+		DX12::Texture2D* varianceTexture,
+		DX12::Texture2D* historyTexture,
+		DX12::Texture2D* momentsTexture,
+		ID3D12Resource* normalRoughnessResource,
+		DX12::Texture2D* temporalTexture,
+		ID3D12Resource* depthResource);
 };
