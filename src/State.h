@@ -15,7 +15,7 @@ using json = nlohmann::json;
 
 /**
  * @brief Represents an incompatible mod that requires conditional shader compilation.
- * 
+ *
  * Detects problematic DLLs at startup and sets shader defines for conditional compilation.
  * Configured via IncompatibleMods array in settings file.
  */
@@ -119,11 +119,11 @@ public:
 
 	/**
 	 * @brief Detect incompatible mods from configuration and set shader defines.
-	 * 
+	 *
 	 * Scans for configured DLLs using GetModuleHandleA() and sets shader defines
 	 * for conditional compilation. Shaders can check defines like FWMF_DETECTED to
 	 * conditionally disable features.
-	 * 
+	 *
 	 * Called during plugin initialization in XSEPlugin.cpp.
 	 */
 	void DetectIncompatibleMods();

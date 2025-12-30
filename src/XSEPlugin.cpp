@@ -206,8 +206,8 @@ bool Load()
 	/**
 	 * @brief Detect incompatible mods at startup using GetModuleHandleA().
 	 *
-	 * Checks for configured .dll files (e.g., Flat World Map Framework) and sets shader 
-	 * defines for conditional compilation. DLL names are read from IncompatibleMods array 
+	 * Checks for configured .dll files (e.g., Flat World Map Framework) and sets shader
+	 * defines for conditional compilation. DLL names are read from IncompatibleMods array
 	 * in CommunityShaders.json (prepopulated in default config, user-extensible).
 	 *
 	 * Each detected mod can trigger shader defines and optionally disable specific features.
