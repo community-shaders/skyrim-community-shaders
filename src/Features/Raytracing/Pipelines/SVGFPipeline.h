@@ -28,8 +28,8 @@ struct SVGFPipeline : IPipeline
 
 	void CreateRootSignature(ID3D12Device5* device) override;
 	void CompileShaders(ID3D12Device5* device) override;
-	void SetupResources(ID3D12Device5* device) override;	
-	void Denoise(ID3D12GraphicsCommandList4* commandList);	
+	void SetupResources(ID3D12Device5* device) override;
+	void Denoise(ID3D12GraphicsCommandList4* commandList);
 	void SetupTextureResources(ID3D12Device5* device, uint2 size, ID3D12Resource* depthResource, ID3D12Resource* motionVectorResource, ID3D12Resource* normalRoughnessResource, ID3D12Resource* colorResource);
 	void RegisterResources(ID3D12Device5* device, ID3D12Resource* depthResource, ID3D12Resource* motionVectorResource, ID3D12Resource* normalRoughnessResource, ID3D12Resource* colorResource) const;
 };

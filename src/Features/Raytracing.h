@@ -31,7 +31,6 @@
 #include "Features/Raytracing/Types.h"
 #include "Features/Raytracing/Utils.h"
 
-
 #include "Raytracing/FeatureData.hlsli"
 #include "Raytracing/Includes/Types/FrameData.hlsli"
 #include "Raytracing/Includes/Types/Instance.hlsli"
