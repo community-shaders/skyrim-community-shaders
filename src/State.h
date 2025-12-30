@@ -13,6 +13,30 @@ using json = nlohmann::json;
 #include <Hooks.h>
 #include <mutex>
 
+/**
+ * @brief Represents an incompatible mod that requires conditional shader compilation.
+ * 
+ * Detects problematic DLLs at startup and sets shader defines for conditional compilation.
+ * Configured via IncompatibleMods array in settings file.
+ */
+struct IncompatibleMod
+{
+	/**
+	 * @brief DLL filename(s) to detect (e.g., "BakaWorldMapSpeed.dll")
+	 */
+	std::vector<std::string> dllNames;
+
+	/**
+	 * @brief Shader define to set when detected (e.g., "FWMF_DETECTED")
+	 */
+	std::string shaderDefine;
+
+	/**
+	 * @brief Runtime flag indicating if this mod was detected
+	 */
+	bool detected = false;
+};
+
 class State
 {
 public:
@@ -92,6 +116,35 @@ public:
 
 	void SetDefines(std::string defines);
 	std::vector<std::pair<std::string, std::string>>* GetDefines();
+
+	/**
+	 * @brief Detect incompatible mods from configuration and set shader defines.
+	 * 
+	 * Scans for configured DLLs using GetModuleHandleA() and sets shader defines
+	 * for conditional compilation. Shaders can check defines like FWMF_DETECTED to
+	 * conditionally disable features.
+	 * 
+	 * Called during plugin initialization in XSEPlugin.cpp.
+	 */
+	void DetectIncompatibleMods();
+
+	/**
+	 * @brief Get list of all detected incompatible mods.
+	 * @return Vector of detected mod shader defines (e.g., "FWMF_DETECTED")
+	 */
+	std::vector<std::string> GetDetectedIncompatibleMods() const;
+
+	/**
+	 * @brief Check if a specific shader define is active from incompatible mod detection.
+	 * @param define The define name to check (e.g., "FWMF_DETECTED")
+	 * @return True if the define is active
+	 */
+	bool HasIncompatibleModDefine(const std::string& define) const;
+
+	/**
+	 * @brief Incompatible mods configuration loaded from settings
+	 */
+	std::vector<IncompatibleMod> incompatibleMods;
 
 	/*
      * Whether a_type is currently enabled in Community Shaders

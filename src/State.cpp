@@ -286,6 +286,34 @@ void State::Load(ConfigMode a_configMode, bool a_allowReload)
 				frameAnnotations = advanced["Frame Annotations"];
 		}
 
+		// Load incompatible mods configuration
+		if (settings["IncompatibleMods"].is_array()) {
+			incompatibleMods.clear();
+			int validCount = 0;
+			for (auto& modConfig : settings["IncompatibleMods"]) {
+				try {
+					IncompatibleMod mod;
+					if (modConfig["DLLNames"].is_array()) {
+						for (auto& dllName : modConfig["DLLNames"]) {
+							if (dllName.is_string())
+								mod.dllNames.push_back(dllName.get<std::string>());
+						}
+					}
+					if (modConfig["ShaderDefine"].is_string())
+						mod.shaderDefine = modConfig["ShaderDefine"].get<std::string>();
+					if (!mod.dllNames.empty() && !mod.shaderDefine.empty()) {
+						incompatibleMods.push_back(mod);
+						validCount++;
+					}
+				} catch (...) {
+					// Skip malformed entries silently
+				}
+			}
+			if (validCount > 0) {
+				logger::info("Loaded {} incompatible mod configuration(s)", validCount);
+			}
+		}
+
 		if (settings["General"].is_object()) {
 			logger::info("Loading 'General' settings");
 			json& general = settings["General"];
@@ -435,6 +463,14 @@ void State::Save(ConfigMode a_configMode)
 
 	settings["General"] = general;
 
+	// Initialize default incompatible mods configuration when saving DEFAULT config
+	if (a_configMode == ConfigMode::DEFAULT && incompatibleMods.empty()) {
+		IncompatibleMod fwmf;
+		fwmf.dllNames = { "BakaWorldMapSpeed.dll", "BakaWorldMapFOV.dll", "FlatMapMarkersSSE.dll" };
+		fwmf.shaderDefine = "FWMF_DETECTED";
+		incompatibleMods.push_back(fwmf);
+	}
+
 	auto& upscaling = globals::features::upscaling;
 	auto& upscalingJson = settings[upscaling.GetShortName()];
 	upscaling.SaveSettings(upscalingJson);
@@ -450,6 +486,18 @@ void State::Save(ConfigMode a_configMode)
 		disabledFeaturesJson[featureName] = isDisabled;
 	}
 	settings["Disable at Boot"] = disabledFeaturesJson;
+
+	// Save incompatible mods configuration
+	if (!incompatibleMods.empty()) {
+		json incompatModsJson = json::array();
+		for (const auto& mod : incompatibleMods) {
+			json modConfig;
+			modConfig["DLLNames"] = mod.dllNames;
+			modConfig["ShaderDefine"] = mod.shaderDefine;
+			incompatModsJson.push_back(modConfig);
+		}
+		settings["IncompatibleMods"] = incompatModsJson;
+	}
 
 	settings["Version"] = Plugin::VERSION.string();
 
@@ -831,6 +879,47 @@ std::unordered_map<std::string, bool>& State::GetDisabledFeatures()
 float State::GetTotalSmoothedDrawCalls() const
 {
 	return static_cast<float>(smoothDrawCalls[magic_enum::enum_integer(RE::BSShader::Type::Total)]);
+}
+
+void State::DetectIncompatibleMods()
+{
+	int detectedCount = 0;
+	for (auto& mod : incompatibleMods) {
+		for (const auto& dllName : mod.dllNames) {
+			if (GetModuleHandleA(dllName.c_str()) != nullptr) {
+				mod.detected = true;
+				if (!mod.shaderDefine.empty()) {
+					SetDefines(mod.shaderDefine);
+				}
+				detectedCount++;
+				break;
+			}
+		}
+	}
+	if (detectedCount > 0) {
+		logger::info("Detected {} incompatible mod(s)", detectedCount);
+	}
+}
+
+std::vector<std::string> State::GetDetectedIncompatibleMods() const
+{
+	std::vector<std::string> detected;
+	for (const auto& mod : incompatibleMods) {
+		if (mod.detected) {
+			detected.push_back(mod.shaderDefine);
+		}
+	}
+	return detected;
+}
+
+bool State::HasIncompatibleModDefine(const std::string& define) const
+{
+	for (const auto& mod : incompatibleMods) {
+		if (mod.detected && mod.shaderDefine == define) {
+			return true;
+		}
+	}
+	return false;
 }
 
 void State::LoadTheme()

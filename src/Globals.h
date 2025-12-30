@@ -240,15 +240,6 @@ namespace globals
 	extern Menu* menu;
 	extern SIE::ShaderCache* shaderCache;
 
-	/**
-	 * @brief Runtime flag indicating detection of Flat World Map Framework (FWMF) DLLs.
-	 *
-	 * When true, features like IBL and future Post-Processing effects will avoid
-	 * applying on the world map to prevent visual artifacts with FWMF's flat texture maps.
-	 * Detected at startup in XSEPlugin.cpp using GetModuleHandleA().
-	 */
-	extern bool flatWorldMapDetected;
-
 	void OnInit();
 	void ReInit();
 	void OnDataLoaded();
