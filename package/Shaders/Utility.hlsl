@@ -375,7 +375,7 @@ float GetPoissonDiskFilteredShadowVisibility(uint3 seed, Texture2DArray<float4> 
 	float alphaTestOffset = -AlphaTestRef.y;
 	float sampleRadius = ShadowSampleParam.z * 2048.0;
 	float seedNormalized = seed.x * (1.0 / 4294967295.0); // Use only x component for efficiency
-	
+
 	// On Linux/Proton/DXVK, use position-based offset instead of frame-based to avoid temporal jitter
 	uint frameOffset;
 	if (SharedData::IsNotNativeD3D11) {

@@ -707,11 +707,11 @@ void State::SetAdapterDescription(const std::wstring& description)
 {
 	std::wstring_convert<std::codecvt_utf8<wchar_t>> converter;
 	adapterDescription = converter.to_bytes(description);
-	
+
 	// Detect Linux/Proton/DXVK by checking adapter description
 	std::string lowerDesc = adapterDescription;
 	std::transform(lowerDesc.begin(), lowerDesc.end(), lowerDesc.begin(), ::tolower);
-	isRunningOnDXVK = (lowerDesc.find("dxvk") != std::string::npos) || 
+	isRunningOnDXVK = (lowerDesc.find("dxvk") != std::string::npos) ||
 	                  (lowerDesc.find("wine") != std::string::npos) ||
 	                  (lowerDesc.find("llvmpipe") != std::string::npos);
 	if (isRunningOnDXVK) {
