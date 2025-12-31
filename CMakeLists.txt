@@ -46,10 +46,16 @@ option(
     ON
 )
 option(TRACY_SUPPORT "Enable support for tracy profiler" OFF)
+option(
+    BUILD_SHADER_TESTS
+    "Build shader unit tests (runs automatically before packaging)"
+    ON
+)
 message("\tAuto plugin deployment: ${AUTO_PLUGIN_DEPLOYMENT}")
 message("\tZip to dist: ${ZIP_TO_DIST}")
 message("\tAIO Zip to dist: ${AIO_ZIP_TO_DIST}")
 message("\tTracy profiler: ${TRACY_SUPPORT}")
+message("\tShader tests: ${BUILD_SHADER_TESTS}")
 
 # #######################################################################################################################
 # # Add CMake features
@@ -460,6 +466,8 @@ if(AUTO_PLUGIN_DEPLOYMENT OR AIO_ZIP_TO_DIST)
         LIST_DIRECTORIES FALSE
         "${CMAKE_SOURCE_DIR}/package/Shaders/*"
     )
+    # Exclude test files from production packages
+    list(FILTER _package_shaders EXCLUDE REGEX "/Tests/")
     set(_shader_copy_cmds)
     foreach(_src IN LISTS _package_shaders)
         file(RELATIVE_PATH _rel "${CMAKE_SOURCE_DIR}/package/Shaders" "${_src}")
@@ -854,6 +862,52 @@ add_custom_command(
 )
 add_custom_target("Package-AIO-Manual" DEPENDS ${AIO_PACKAGE})
 
+# #######################################################################################################################
+# # Shader Unit Tests
+# #######################################################################################################################
+if(BUILD_SHADER_TESTS)
+    message(STATUS "Adding shader tests subdirectory")
+    enable_testing() # Enable CTest integration for shader tests
+    add_subdirectory(tests/shaders)
+
+    # Add a custom target that runs the shader tests
+    # Users can run this manually with: cmake --build <build-dir> --target run_shader_tests
+    # Runs the test executable directly (not via CTest) to show discovery count
+    add_custom_target(
+        run_shader_tests
+        COMMAND $<TARGET_FILE:shader_tests> --reporter compact
+        DEPENDS shader_tests
+        WORKING_DIRECTORY $<TARGET_FILE_DIR:shader_tests>
+        COMMENT "Running shader unit tests..."
+        VERBATIM
+    )
+
+    # Make all package targets depend on shader tests passing
+    add_dependencies("Package-Core" run_shader_tests)
+    add_dependencies("Package-AIO-Manual" run_shader_tests)
+    foreach(FEATURE_PATH ${FEATURE_PATHS})
+        get_filename_component(FEATURE ${FEATURE_PATH} NAME)
+        string(REPLACE " " "" FEATURE ${FEATURE})
+        string(REPLACE "-" "" FEATURE ${FEATURE})
+        if(TARGET "Package-${FEATURE}")
+            add_dependencies("Package-${FEATURE}" run_shader_tests)
+        endif()
+    endforeach()
+
+    # Make shader deployment targets depend on tests passing
+    if(TARGET prepare_shaders)
+        add_dependencies(prepare_shaders run_shader_tests)
+    endif()
+    if(TARGET COPY_SHADERS)
+        add_dependencies(COPY_SHADERS run_shader_tests)
+    endif()
+
+    message(
+        STATUS
+        "Package and shader deployment targets will automatically run shader tests before deploying"
+    )
+endif()
+
 message("*************************************************************")
 message("Community Shaders configuration complete")
 message("To prepare a ZIP package of AIO, Core, or Features")
@@ -863,5 +917,11 @@ message("    - Package-AIO-Manual: AIO package (manual)")
 message("    - Package-<Feature>: Individual feature packages")
 message("  Or use cmake --install for custom deployment:")
 message("    cmake --install ./build/ALL --prefix <TARGET_DIR>")
+if(BUILD_SHADER_TESTS)
+    message("To run shader tests manually:")
+    message(
+        "  cmake --build build/<preset> --config <Debug|Release> --target run_shader_tests"
+    )
+endif()
 message("Try switching to build preset 'Dev' for faster iteration time")
 message("*************************************************************")
