@@ -93,6 +93,9 @@ void GrassCollision::UpdateCollisions(PerFrame& perFrameData)
 				return RE::BSVisit::BSVisitControl::kContinue;
 			});
 
+			if (collisionShapesCount == 0)
+				continue;
+
 			std::sort(collisionShapes.begin(), collisionShapes.begin() + collisionShapesCount, [](const float4& a, const float4& b) {
 				return a.w > b.w;
 			});
