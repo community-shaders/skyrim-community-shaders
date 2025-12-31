@@ -1,12 +1,21 @@
 #ifndef SVGF_COMMON_HLSI
 #define SVGF_COMMON_HLSI
 
+#include "Common/FrameBuffer.hlsli"
 #include "Common/Color.hlsli"
 #include "Raytracing/Denoiser/SVGF/SVGF.hlsli"
 
-ConstantBuffer<SVGF> Frame : register(b0);
+cbuffer RenderResCB : register(b0)
+{
+    uint2 Resolution;
+    float2 ResolutionRcp;
+};
 
-Texture2D<snorm float4> NormalRoughnessTexture  : register(t2);
+ConstantBuffer<SVGF>	Frame					: register(b1);
+
+Texture2D<float4>		NormalRoughnessTexture  : register(t2);
+Texture2D<float4>		SSRColorTexture			: register(t3);
+Texture2D<float>		DepthTexture			: register(t4);
 
 void GetNormalRoughness(uint2 dtid, out float3 normal, out float roughness)
 {
@@ -43,19 +52,19 @@ float CalculateWeight(float depthCenter, float depthP, float phiD, float3 normal
 	return weight;
 }
 
-void ReprojectHit(Texture2D MotionTexture, SamplerState s, float3 hitUVz, out float2 outPrevUV)
+void ReprojectHit(Texture2D<float2> MotionTexture, SamplerState s, float3 hitUVz, uint eyeIndex, out float2 outPrevUV)
 {
 	// Camera motion for pixel (in ScreenPos space).
 	float2 thisScreen = (hitUVz.xy - 0.5f) * float2(2.0f, -2.0f);
 	float4 thisClip = float4(thisScreen, hitUVz.z, 1);
-    float4 thisView = mul(Frame.CameraProjUnjitteredInverse, thisClip);
+    float4 thisView = mul(FrameBuffer::CameraProjUnjitteredInverse[eyeIndex], thisClip);
     thisView.xyz = thisView.xyz / thisView.w;
-    float4 thisWorld = mul(Frame.CameraViewInverse, float4(thisView.xyz, 1.0f));
+    float4 thisWorld = mul(FrameBuffer::CameraViewInverse[eyeIndex], float4(thisView.xyz, 1.0f));
     thisWorld.xyz = thisWorld.xyz / thisWorld.w;
-	float4 prevClip = mul(Frame.CameraPreviousViewProjUnjittered, float4(thisWorld.xyz, 1.0f));
+	float4 prevClip = mul(FrameBuffer::CameraPreviousViewProjUnjittered[eyeIndex], float4(thisWorld.xyz, 1.0f));
 	float2 prevScreen = prevClip.xy / prevClip.w;
 
-	float2 velocity = MotionTexture.SampleLevel(s, hitUVz.xy, 0).xy;
+	float2 velocity = MotionTexture.SampleLevel(s, hitUVz.xy * FrameBuffer::DynamicResolutionParams1.xy, 0).xy;
 
 	prevScreen = thisClip.xy + velocity * float2(2.f, -2.f);
 

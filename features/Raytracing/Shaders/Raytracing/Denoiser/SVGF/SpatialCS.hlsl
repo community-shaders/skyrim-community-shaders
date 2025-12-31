@@ -1,8 +1,6 @@
 #include "Raytracing/Denoiser/SVGF/Common.hlsli"
 
 Texture2D<float4> HistoryTexture    : register(t0);
-Texture2D<float4> SSRColorTexture   : register(t3);
-Texture2D<float> DepthTexture       : register(t4);
 
 RWTexture2D<float4> FilteredOutput  : register(u0);
 
@@ -44,11 +42,11 @@ static const float kernelWeights[3] = { 1.0, 2.0 / 3.0, 1.0 / 6.0 };
 // Spatiotemporal Variance-Guided Filter
 [numthreads(8, 8, 1)] void main(uint3 DTid : SV_DispatchThreadID)
 {
-    const uint2 screenSize = Frame.Resolution;
+    const uint2 screenSize = Resolution;
     if (DTid.x >= screenSize.x || DTid.y >= screenSize.y)
         return;
 
-    const float2 uv = float2(DTid.xy + 0.5) * Frame.ResolutionRcp;
+    const float2 uv = float2(DTid.xy + 0.5) * ResolutionRcp;
 
     float3 blendedColor = 0;
     float4 historyColor = HistoryTexture[DTid.xy];

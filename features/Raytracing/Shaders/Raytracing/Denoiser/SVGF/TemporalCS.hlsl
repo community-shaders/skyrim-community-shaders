@@ -1,20 +1,18 @@
 #include "Raytracing/Denoiser/SVGF/Common.hlsli"
 
-Texture2D<float4> HistoryTexture : register(t0);
-Texture2D<float4> MotionVectorTexture : register(t1);
-Texture2D<float4> SSRColorTexture : register(t3);
-Texture2D<float> DepthTexture : register(t4);
-Texture2D<float4> HistoryMomentsTexture : register(t5); // moments in RG, frame count in B
-Texture2D<float4> HistoryNormalsTexture : register(t6);
+Texture2D<float4>   HistoryTexture          : register(t0);
+Texture2D<float2>   MotionVectorTexture     : register(t1);
+Texture2D<float4>   HistoryMomentsTexture   : register(t5); // moments in RG, frame count in B
+Texture2D<float4>   HistoryNormalsTexture   : register(t6);
 
-RWTexture2D<float4> FilteredOutput : register(u0);
-RWTexture2D<float4> MomentsOutput : register(u1);
+RWTexture2D<float4> FilteredOutput          : register(u0);
+RWTexture2D<float4> MomentsOutput           : register(u1);
 
-SamplerState LinearSampler : register(s0);
+SamplerState        LinearSampler           : register(s0);
 
 bool IsValidHistory(uint2 pixel, float2 uv, float3 currNormalWS)
 {
-    const uint2 screenSize = Frame.Resolution;
+    const uint2 screenSize = Resolution;
     if (uv.x < 0 || uv.x > 1 || uv.y < 0 || uv.y > 1)
         return false;
 
@@ -33,11 +31,11 @@ bool IsValidHistory(uint2 pixel, float2 uv, float3 currNormalWS)
 
 [numthreads(8, 8, 1)] void main(uint3 DTid : SV_DispatchThreadID)
 {
-    const uint2 screenSize = Frame.Resolution;
+    const uint2 screenSize = Resolution;
     if (DTid.x >= screenSize.x || DTid.y >= screenSize.y)
         return;
 
-    float2 uv = float2(DTid.xy + 0.5) * Frame.ResolutionRcp;
+    const float2 uv = float2(DTid.xy + 0.5) * ResolutionRcp;
 
     float3 blendedColor = 0;
     float4 ssrColor = SSRColorTexture[DTid.xy];
@@ -52,7 +50,7 @@ bool IsValidHistory(uint2 pixel, float2 uv, float3 currNormalWS)
 
     // Reproject UVs using motion vectors
     float2 prevUV = uv;
-    ReprojectHit(MotionVectorTexture, LinearSampler, float3(uv, depthCenter), prevUV);
+    ReprojectHit(MotionVectorTexture, LinearSampler, float3(uv, depthCenter), 0u, prevUV);
 
     float4 prevColor = 0.f;
     float prevAccumFrames = 0.f;

@@ -2,16 +2,16 @@
 
 void SVGFPipeline::CompileShaders()
 {
-	if (auto rawPtr = reinterpret_cast<ID3D11ComputeShader*>(Util::CompileShader(L"Data\\Shaders\\Raytracing\\Denoiser\\SVGF\\TemporalCS.hlsl", { { "DX11", "" } }, "cs_5_0")); rawPtr)
+	if (auto rawPtr = reinterpret_cast<ID3D11ComputeShader*>(Util::CompileShader(L"Data\\Shaders\\Raytracing\\Denoiser\\SVGF\\TemporalCS.hlsl", { { "DX11", "" } }, "cs_5_1")); rawPtr)
 		temporalCS.attach(rawPtr);
 
-	if (auto rawPtr = reinterpret_cast<ID3D11ComputeShader*>(Util::CompileShader(L"Data\\Shaders\\Raytracing\\Denoiser\\SVGF\\VarianceCS.hlsl", { { "DX11", "" } }, "cs_5_0")); rawPtr)
+	if (auto rawPtr = reinterpret_cast<ID3D11ComputeShader*>(Util::CompileShader(L"Data\\Shaders\\Raytracing\\Denoiser\\SVGF\\VarianceCS.hlsl", { { "DX11", "" } }, "cs_5_1")); rawPtr)
 		varianceCS.attach(rawPtr);
 
-	if (auto rawPtr = reinterpret_cast<ID3D11ComputeShader*>(Util::CompileShader(L"Data\\Shaders\\Raytracing\\Denoiser\\SVGF\\SpatialCS.hlsl", { { "DX11", "" } }, "cs_5_0")); rawPtr)
+	if (auto rawPtr = reinterpret_cast<ID3D11ComputeShader*>(Util::CompileShader(L"Data\\Shaders\\Raytracing\\Denoiser\\SVGF\\SpatialCS.hlsl", { { "DX11", "" } }, "cs_5_1")); rawPtr)
 		spatialDiffuseCS.attach(rawPtr);
 
-	if (auto rawPtr = reinterpret_cast<ID3D11ComputeShader*>(Util::CompileShader(L"Data\\Shaders\\Raytracing\\Denoiser\\SVGF\\SpatialCS.hlsl", { { "DX11", "" }, { "SSRT_SPECULAR", "" } }, "cs_5_0")); rawPtr)
+	if (auto rawPtr = reinterpret_cast<ID3D11ComputeShader*>(Util::CompileShader(L"Data\\Shaders\\Raytracing\\Denoiser\\SVGF\\SpatialCS.hlsl", { { "DX11", "" }, { "SSRT_SPECULAR", "" } }, "cs_5_1")); rawPtr)
 		spatialSpecularCS.attach(rawPtr);
 }
 
@@ -21,6 +21,8 @@ void SVGFPipeline::SetupResources()
 
 	auto cbDesc = ConstantBufferDesc<SVGF>();
 	frameBuffer = eastl::make_unique<ConstantBuffer>(cbDesc);
+
+	CompileShaders();
 }
 
 void SVGFPipeline::SetupTextureResources(uint2 size)
@@ -75,32 +77,25 @@ void SVGFPipeline::Denoise(ID3D11DeviceContext4* context, uint2 renderSize, Sett
 {
 	const uint2 dispatchCount = { DivideRoundUp(renderSize.x, 8u), DivideRoundUp(renderSize.y, 8u) };
 
-	frameData->InvMaxAccumulatedFrames = 1.0f / (settings.MaxAccumulatedFrames + 1.0f);
+	frameData->InvMaxAccumulatedFrames = 1.0f / (static_cast<float>(settings.MaxAccumulatedFrames) + 1.0f);
 	frameData->AtrousIterations = settings.AtrousIterations;
 	frameData->ColorPhi = settings.ColorPhi;
 	frameData->NormalPhi = settings.NormalPhi;
 
-	frameData->Resolution = renderSize;
-	frameData->ResolutionRcp = float2(1.0f / static_cast<float>(renderSize.x), 1.0f / static_cast<float>(renderSize.y));
-
-	frameData->CameraProjUnjitteredInverse = globals::game::frameBufferCached.GetCameraProjUnjitteredInverse().Transpose();
-	frameData->CameraViewInverse = globals::game::frameBufferCached.GetCameraViewInverse().Transpose();
-	frameData->CameraPreviousViewProjUnjittered = globals::game::frameBufferCached.GetCameraPreviousViewProjUnjittered().Transpose();
-
 	frameBuffer->Update(frameData.get(), sizeof(SVGF));
 
 	auto cb = frameBuffer->CB();
-	context->CSSetConstantBuffers(0, 1, &cb);
+	context->CSSetConstantBuffers(1, 1, &cb);
 
     std::array<ID3D11ShaderResourceView*, 7> srvs = { nullptr };
 	std::array<ID3D11UnorderedAccessView*, 2> uavs = { nullptr };
 
-    auto resetViews = [&](uint srvCount, uint uavCount) {
+    auto resetViews = [&]() {
 		srvs.fill(nullptr);
 		uavs.fill(nullptr);
 
-		context->CSSetShaderResources(0, srvCount, srvs.data());
-		context->CSSetUnorderedAccessViews(0, uavCount, uavs.data(), nullptr);
+		context->CSSetShaderResources(0, (uint)srvs.size(), srvs.data());
+		context->CSSetUnorderedAccessViews(0, (uint)srvs.size(), uavs.data(), nullptr);
 	};
 
 	auto renderer = globals::game::renderer;
@@ -123,7 +118,7 @@ void SVGFPipeline::Denoise(ID3D11DeviceContext4* context, uint2 renderSize, Sett
 	context->CSSetShader(temporalCS.get(), nullptr, 0);
 
 	context->Dispatch((uint)dispatchCount.x, (uint)dispatchCount.y, 1);
-	resetViews(2, 7);
+	resetViews();
 
 	context->CopyResource(historyMomentsTexture->resource.get(), momentsTexture->resource.get());
 
@@ -140,15 +135,15 @@ void SVGFPipeline::Denoise(ID3D11DeviceContext4* context, uint2 renderSize, Sett
 	context->CSSetShader(varianceCS.get(), nullptr, 0);
 
 	context->Dispatch((uint)dispatchCount.x, (uint)dispatchCount.y, 1);
-	resetViews(1, 5);
+	resetViews();
 
 	// spatial filter
-	for (int i = 0; i < (int)settings.AtrousIterations; ++i) {
+	for (uint i = 0; i < settings.AtrousIterations; ++i) {
 		frameData->AtrousIterations = i;
 		frameBuffer->Update(frameData.get(), sizeof(SVGF));
 
 		cb = frameBuffer->CB();
-		context->CSSetConstantBuffers(0, 1, &cb);
+		context->CSSetConstantBuffers(1, 1, &cb);
 
 		uavs.at(0) = (i % 2 == 0) ? colorResource->uav : varianceTexture->uav.get();
 		srvs.at(0) = historyTexture->srv.get();
@@ -163,10 +158,16 @@ void SVGFPipeline::Denoise(ID3D11DeviceContext4* context, uint2 renderSize, Sett
 
 		context->Dispatch((uint)dispatchCount.x, (uint)dispatchCount.y, 1);
 
-		resetViews(1, 5);
+		resetViews();
 	}
 
 	if (settings.AtrousIterations % 2 == 0) {
 		context->CopyResource(colorResource->resource11, varianceTexture->resource.get());
 	}
+
+    context->CopyResource(historyNormalsTexture->resource.get(), normalRoughness->resource11);
+	//context->CopyResource(texOutput->resource.get(), texSSRColor->resource.get());
+	context->CopyResource(historyTexture->resource.get(), colorResource->resource11);
+
+	context->CSSetShader(nullptr, nullptr, 0);
 }

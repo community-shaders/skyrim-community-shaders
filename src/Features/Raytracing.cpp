@@ -310,7 +310,8 @@ void Raytracing::DrawGeneralSettings()
 	if (DrawEnumRadio("TraceMode", settings.TraceMode, nullptr, TraceModeTooltips))
 		recompileReason |= RecompileReason::General;
 
-	DrawEnumRadio("Denoiser", settings.Denoiser);
+	if (DrawEnumRadio("Denoiser", settings.Denoiser))
+		recompileReason |= RecompileReason::General;
 
 	// Bounces
 	{
@@ -606,7 +607,7 @@ void Raytracing::SetupOutputRT()
 		texDesc.Format = DXGI_FORMAT_R16G16B16A16_SNORM;
 		texDesc.SampleDesc.Count = 1;
 		texDesc.SampleDesc.Quality = 0;
-		texDesc.BindFlags = D3D11_BIND_UNORDERED_ACCESS;
+		texDesc.BindFlags = D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_UNORDERED_ACCESS;
 
 		normalRoughnessTexture = eastl::make_unique<WrappedResource>(texDesc, d3d11Device.get(), d3d12Device.get());
 		DX::ThrowIfFailed(normalRoughnessTexture->resource->SetName(L"Normal Roughness Texture"));
@@ -682,6 +683,10 @@ void Raytracing::SetupResources()
 		giHeap->CPUHandle(GIHeap::Slot::SHaRCLock),
 		giHeap->CPUHandle(GIHeap::Slot::SHaRCAccumulation),
 		giHeap->CPUHandle(GIHeap::Slot::SHaRCResolved));
+
+
+	svgfDenoiser = eastl::make_unique<SVGFPipeline>();
+	svgfDenoiser->SetupResources();
 
 	renderResData = eastl::make_unique<RenderResData>();
 
@@ -2891,6 +2896,12 @@ void Raytracing::DrawRTGI()
 			auto sampler = samplerState.get();
 			d3d11Context->CSSetSamplers(0, 1, &sampler);
 
+			auto* renderSizeCB = renderResCB->CB();
+			d3d11Context->CSSetConstantBuffers(0, 1, &renderSizeCB);
+
+			auto* frameBufferCB = *globals::game::perFrame.get();
+			d3d11Context->CSSetConstantBuffers(12, 1, &frameBufferCB);
+
 			svgfDenoiser->Denoise(d3d11Context.get(), renderSize, settings.SVGF, normalRoughnessTexture.get(), mainTexture.get());
 		}
 	}
@@ -3564,6 +3575,9 @@ void Raytracing::CompileRTGIShaders()
 
 	if (settings.PathTracing)
 		defines.emplace_back(L"PATH_TRACING");
+
+	if (settings.Denoiser == Denoiser::SVGF)
+		defines.emplace_back(L"OUTPUT_RADIANCE");
 
 	const auto definesWStr = StringViewToWString(std::string_view{ settings.Defines });
 
