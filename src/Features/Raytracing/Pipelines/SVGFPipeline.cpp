@@ -87,10 +87,10 @@ void SVGFPipeline::Denoise(ID3D11DeviceContext4* context, uint2 renderSize, Sett
 	auto cb = frameBuffer->CB();
 	context->CSSetConstantBuffers(1, 1, &cb);
 
-    std::array<ID3D11ShaderResourceView*, 7> srvs = { nullptr };
+	std::array<ID3D11ShaderResourceView*, 7> srvs = { nullptr };
 	std::array<ID3D11UnorderedAccessView*, 2> uavs = { nullptr };
 
-    auto resetViews = [&]() {
+	auto resetViews = [&]() {
 		srvs.fill(nullptr);
 		uavs.fill(nullptr);
 
@@ -99,7 +99,7 @@ void SVGFPipeline::Denoise(ID3D11DeviceContext4* context, uint2 renderSize, Sett
 	};
 
 	auto renderer = globals::game::renderer;
-    auto depth = renderer->GetDepthStencilData().depthStencils[RE::RENDER_TARGETS_DEPTHSTENCIL::kPOST_ZPREPASS_COPY];
+	auto depth = renderer->GetDepthStencilData().depthStencils[RE::RENDER_TARGETS_DEPTHSTENCIL::kPOST_ZPREPASS_COPY];
 	auto motion = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMOTION_VECTOR];
 
 	// temporal filter
@@ -122,7 +122,7 @@ void SVGFPipeline::Denoise(ID3D11DeviceContext4* context, uint2 renderSize, Sett
 
 	context->CopyResource(historyMomentsTexture->resource.get(), momentsTexture->resource.get());
 
-    // variance filter
+	// variance filter
 	uavs.at(0) = varianceTexture->uav.get();
 	srvs.at(0) = historyTexture->srv.get();
 	srvs.at(1) = momentsTexture->srv.get();
@@ -165,7 +165,7 @@ void SVGFPipeline::Denoise(ID3D11DeviceContext4* context, uint2 renderSize, Sett
 		context->CopyResource(colorResource->resource11, varianceTexture->resource.get());
 	}
 
-    context->CopyResource(historyNormalsTexture->resource.get(), normalRoughness->resource11);
+	context->CopyResource(historyNormalsTexture->resource.get(), normalRoughness->resource11);
 	//context->CopyResource(texOutput->resource.get(), texSSRColor->resource.get());
 	context->CopyResource(historyTexture->resource.get(), colorResource->resource11);
 

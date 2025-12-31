@@ -1,10 +1,10 @@
 #ifndef SVGF_HLSI
 #define SVGF_HLSI
 
-struct 
+struct
 #ifdef __cplusplus
 alignas(16)
-#endif    
+#endif
     SVGF
 {
     float InvMaxAccumulatedFrames;

@@ -204,7 +204,6 @@ void Raytracing::DrawSHaRCSettings()
 	}
 }
 
-
 void Raytracing::DrawSVGFSettings()
 {
 	if (settings.Denoiser != Denoiser::SVGF)
@@ -214,16 +213,16 @@ void Raytracing::DrawSVGFSettings()
 	if (ImGui::CollapsingHeader("SVGF")) {
 		auto& svgfSettings = settings.SVGF;
 
-        ImGui::SliderInt("Max Accumulated Frames", (int*)&svgfSettings.MaxAccumulatedFrames, 1, 64, "%d", ImGuiSliderFlags_AlwaysClamp);
-		
+		ImGui::SliderInt("Max Accumulated Frames", (int*)&svgfSettings.MaxAccumulatedFrames, 1, 64, "%d", ImGuiSliderFlags_AlwaysClamp);
+
 		ImGui::SliderInt("À Trous Iterations", (int*)&svgfSettings.AtrousIterations, 1, 5, "%d", ImGuiSliderFlags_AlwaysClamp);
 		if (auto _tt = Util::HoverTooltipWrapper())
 			ImGui::Text("Number of À Trous wavelet filter iterations. More iterations yield smoother results but may blur details and have a higher computational cost.");
-		
+
 		ImGui::SliderFloat("Color Phi", &svgfSettings.ColorPhi, 0.01f, 32.0f, "%.2f");
 		if (auto _tt = Util::HoverTooltipWrapper())
 			ImGui::Text("Controls sensitivity to color differences in the À Trous filter. Lower values preserve more detail but may retain noise.");
-		
+
 		ImGui::SliderFloat("Normal Phi", &svgfSettings.NormalPhi, 1.0f, 1024.0f, "%.2f");
 		if (auto _tt = Util::HoverTooltipWrapper())
 			ImGui::Text("Controls sensitivity to normal differences in the À Trous filter. Higher values preserve more detail but may retain noise.");
@@ -684,7 +683,6 @@ void Raytracing::SetupResources()
 		giHeap->CPUHandle(GIHeap::Slot::SHaRCAccumulation),
 		giHeap->CPUHandle(GIHeap::Slot::SHaRCResolved));
 
-
 	svgfDenoiser = eastl::make_unique<SVGFPipeline>();
 	svgfDenoiser->SetupResources();
 
@@ -747,7 +745,7 @@ void Raytracing::SetupResources()
 		srvDesc.Texture2D.ResourceMinLODClamp = 0.0f;
 
 		d3d12Device->CreateShaderResourceView(depthTexture->resource.get(), &srvDesc, giHeap->CPUHandle(GIHeap::Slot::Depth));
-		d3d12Device->CreateShaderResourceView(depthTexture->resource.get(), &srvDesc, shadowHeap->CPUHandle(ShadowsHeap::Slot::Depth));	
+		d3d12Device->CreateShaderResourceView(depthTexture->resource.get(), &srvDesc, shadowHeap->CPUHandle(ShadowsHeap::Slot::Depth));
 	}
 
 	// Shadow mask
@@ -1405,8 +1403,8 @@ void Raytracing::ConvertTextures() const
 	auto sampler = samplerState.get();
 	context->CSSetSamplers(0, 1, &sampler);
 
-	ID3D11UnorderedAccessView* uavs[3] = { 
-		normalRoughnessTexture->uav, 
+	ID3D11UnorderedAccessView* uavs[3] = {
+		normalRoughnessTexture->uav,
 		diffuseAlbedoTexture->uav,
 		motionVectorsTexture->uav
 	};

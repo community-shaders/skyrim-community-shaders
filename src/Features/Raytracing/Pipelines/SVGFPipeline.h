@@ -48,6 +48,6 @@ struct SVGFPipeline
 
 	void CompileShaders();
 	void SetupResources();
-	void Denoise(ID3D11DeviceContext4* context, uint2 renderSize, Settings settings, WrappedResource* normalRoughness, WrappedResource* colorResource, const bool diffuse = true) const;	
+	void Denoise(ID3D11DeviceContext4* context, uint2 renderSize, Settings settings, WrappedResource* normalRoughness, WrappedResource* colorResource, const bool diffuse = true) const;
 	void SetupTextureResources(uint2 size);
 };

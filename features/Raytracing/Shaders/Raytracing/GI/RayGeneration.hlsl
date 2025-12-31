@@ -344,11 +344,11 @@ void main()
 #if defined(PATH_TRACING)
     OutputTexture[idx] = float4(direct + radiance, 0.0f);
 #else
-#   if defined(OUTPUT_RADIANCE)    
+#   if defined(OUTPUT_RADIANCE)
     OutputTexture[idx] = float4(radiance, 1.0f);
 #   else
-    OutputTexture[idx] = float4(Color::GammaToTrueLinear(mainColor.rgb) + radiance, 1.0f);    
-#   endif    
+    OutputTexture[idx] = float4(Color::GammaToTrueLinear(mainColor.rgb) + radiance, 1.0f);
+#   endif
 #endif
 
     const float2 envBRDF = BRDF::EnvBRDFApproxHirvonen(sourceSurface.Roughness, sourceBRDFContext.NdotV);

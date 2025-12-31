@@ -1525,9 +1525,8 @@ struct Raytracing : public OverlayFeature
 				auto screenSize = rt.GetScreenSize();
 
 				float2 resolutionScale = float2(
-					rt.renderSize.x / static_cast<float>(screenSize.x), 
-					rt.renderSize.y / static_cast<float>(screenSize.y)
-				);
+					rt.renderSize.x / static_cast<float>(screenSize.x),
+					rt.renderSize.y / static_cast<float>(screenSize.y));
 
 				runtimeData.dynamicResolutionPreviousWidthRatio = rt.dynamicResolutionRatio.x;
 				runtimeData.dynamicResolutionPreviousHeightRatio = rt.dynamicResolutionRatio.y;
@@ -1546,7 +1545,7 @@ struct Raytracing : public OverlayFeature
 
 		struct SetScissorRect
 		{
-			static void thunk(RE::BSGraphics::Renderer* This, int a_left, int a_top, int a_right, int a_bottom) 
+			static void thunk(RE::BSGraphics::Renderer* This, int a_left, int a_top, int a_right, int a_bottom)
 			{
 				auto viewport = globals::game::graphicsState;
 				auto& runtimeData = viewport->GetRuntimeData();
@@ -1559,7 +1558,7 @@ struct Raytracing : public OverlayFeature
 					a_bottom = static_cast<int>(a_bottom * runtimeData.dynamicResolutionHeightRatio);
 				}
 
-				func(This, a_left, a_top, a_right, a_bottom);			
+				func(This, a_left, a_top, a_right, a_bottom);
 			}
 			static inline REL::Relocation<decltype(thunk)> func;
 		};

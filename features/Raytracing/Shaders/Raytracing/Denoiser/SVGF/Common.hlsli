@@ -19,7 +19,7 @@ Texture2D<float>		DepthTexture			: register(t4);
 
 void GetNormalRoughness(uint2 dtid, out float3 normal, out float roughness)
 {
-    float4 normalRoughness = NormalRoughnessTexture[dtid];	
+    float4 normalRoughness = NormalRoughnessTexture[dtid];
     // Normal is in world space
     normal = normalRoughness.xyz;
     roughness = normalRoughness.w;
@@ -69,7 +69,7 @@ void ReprojectHit(Texture2D<float2> MotionTexture, SamplerState s, float3 hitUVz
 	prevScreen = thisClip.xy + velocity * float2(2.f, -2.f);
 
 	float2 prevUV = prevScreen.xy * float2(0.5f, -0.5f) + 0.5f;
-	
+
 	outPrevUV = prevUV;
 }
 

@@ -32,7 +32,7 @@ RWTexture2D<float4> VarianceOutput : register(u0);
 
         const float normalPhi = Frame.NormalPhi;
         const float colorPhi = Frame.ColorPhi;
-        
+
         const int radius = 3;
         for (int y = -radius; y <= radius; y++)
         {

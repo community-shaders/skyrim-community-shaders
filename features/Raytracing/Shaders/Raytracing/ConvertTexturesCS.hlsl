@@ -25,19 +25,19 @@ void main(uint2 id : SV_DispatchThreadID)
 {
     if (any(id >= RenderRes))
         return;
-    
+
     const float2 uv = float2(id.xy + 0.5f) * RenderResRcp;
 
     const unorm half3 normalGlossiness = NormalGlossiness.SampleLevel(Sampler, uv, 0).xyz;
-    const snorm half3 normalWS = normalize(ViewToWorldVector(GBuffer::DecodeNormal(normalGlossiness.xy), FrameBuffer::CameraViewInverse[0]));	
+    const snorm half3 normalWS = normalize(ViewToWorldVector(GBuffer::DecodeNormal(normalGlossiness.xy), FrameBuffer::CameraViewInverse[0]));
     NormalRoughness[id] = half4(normalWS, 1.0f - normalGlossiness.z);
-    
+
     float metallic, ao;
     UnpackMAO(GNMAO.SampleLevel(Sampler, uv, 0).z, metallic, ao);
-    
+
     const float4 albedo = Albedo.SampleLevel(Sampler, uv, 0);
     Diffuse[id] = float4(Color::GammaToTrueLinear(albedo.rgb) * (1.0f - metallic), albedo.a);
-    
+
     MotionVectorsOut[id] = MotionVectors.SampleLevel(Sampler, uv, 0);
 }
 
@@ -51,6 +51,6 @@ void main2(uint2 id : SV_DispatchThreadID)
     float metallic, ao;
     UnpackMAO(GNMAO[id].z, metallic, ao);
     Diffuse[id] = Albedo[id] * (1.0f - metallic);
-    
+
     MotionVectorsOut[id] = MotionVectors[id];
 }

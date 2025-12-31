@@ -6,9 +6,9 @@ void main(uint2 id : SV_DispatchThreadID)
 {
     uint width, height;
     DepthIn.GetDimensions(width, height);
-    
+
     if (id.x >= width || id.y >= height)
         return;
-    
+
     DepthOut[id] = DepthIn[id];
 }
