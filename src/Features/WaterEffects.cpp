@@ -20,7 +20,7 @@ void WaterEffects::Prepass()
 bool WaterEffects::HasShaderDefine(RE::BSShader::Type)
 {
 	return true;
-bool WaterEffects::HasShaderDefine(RE::BSShader::Type)
-{
-	return true;
-}
+	bool WaterEffects::HasShaderDefine(RE::BSShader::Type)
+	{
+		return true;
+	}
