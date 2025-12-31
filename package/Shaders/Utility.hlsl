@@ -375,7 +375,15 @@ float GetPoissonDiskFilteredShadowVisibility(uint3 seed, Texture2DArray<float4> 
 	float alphaTestOffset = -AlphaTestRef.y;
 	float sampleRadius = ShadowSampleParam.z * 2048.0;
 	float seedNormalized = seed.x * (1.0 / 4294967295.0); // Use only x component for efficiency
-	uint frameOffset = SharedData::FrameCount * sampleCount;
+	
+	// On Linux/Proton/DXVK, use position-based offset instead of frame-based to avoid temporal jitter
+	uint frameOffset;
+	if (SharedData::IsNotNativeD3D11) {
+		int3 quantizedPos = int3(floor(positionMS.xyz * 8.0));
+		frameOffset = Random::murmur3(uint3(quantizedPos));
+	} else {
+		frameOffset = SharedData::FrameCount * sampleCount;
+	}
 
 	// Pre-compute constants
 	const float3 positionOffsetUp = float3(0, 0, 1);
@@ -616,7 +624,15 @@ PS_OUTPUT main(PS_INPUT input)
 	float fadeFactor = input.Alpha.x;
 #		endif
 
-	float noise = Random::InterleavedGradientNoise(input.PositionCS.xy, SharedData::FrameCount);
+	// On Linux/Proton/DXVK, use spatial noise based on world position instead of frame-based temporal noise to stop shimmering
+	float noise;
+	if (SharedData::IsNotNativeD3D11) {
+		int3 quantizedPos = int3(floor(positionMS.xyz * 8.0));
+		uint posHash = Random::murmur3(uint3(quantizedPos));
+		noise = float(posHash) / 4294967295.0;
+	} else {
+		noise = Random::InterleavedGradientNoise(input.PositionCS.xy, SharedData::FrameCount);
+	}
 
 	float2 rotation;
 	sincos(Math::TAU * noise, rotation.y, rotation.x);

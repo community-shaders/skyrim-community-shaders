@@ -23,6 +23,7 @@ namespace SharedData
 		bool InMapMenu;   // If the world/local map is open (note that the renderer is still deferred here)
 		bool HideSky;     // HideSky flag in WorldSpace, e.g. Blackreach
 		float MipBias;    // Offset to mip level for TAA sharpness#
+		uint IsNotNativeD3D11;  // Linux/Proton/DXVK detected - use spatial shadow denoising
 	};
 
 	struct GrassLightingSettings

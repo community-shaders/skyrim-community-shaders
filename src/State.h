@@ -45,6 +45,7 @@ public:
 	bool settingCustomShader = false;
 	RE::BSShader* currentShader = nullptr;
 	std::string adapterDescription = "";
+	bool isRunningOnDXVK = false;  // Detected via adapter description
 
 	uint32_t currentVertexDescriptor = 0;
 	uint32_t currentPixelDescriptor = 0;
@@ -203,7 +204,7 @@ public:
 		uint InMapMenu;
 		uint HideSky;
 		float MipBias;
-		float pad0;
+		uint IsNotNativeD3D11;  // True on DXVK/Wine - use spatial denoising instead of temporal
 	};
 	STATIC_ASSERT_ALIGNAS_16(SharedDataCB);
 
