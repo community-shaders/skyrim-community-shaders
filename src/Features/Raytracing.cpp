@@ -183,28 +183,6 @@ void Raytracing::DrawSettings()
 	}
 }
 
-#ifdef DLSS_RR
-void Raytracing::DrawDLSSRRSettings()
-{
-	if (settings.Denoiser != Denoiser::DLSSRR)
-		return;
-
-	if (ImGui::CollapsingHeader("DLSS RR")) {
-		auto& dlssrrSettings = settings.DLSSRR;
-
-		DrawEnumCombo("Quality Mode", dlssrrSettings.QualityMode);
-		DrawEnumRadio("Preset", dlssrrSettings.Preset);
-	}
-}
-#endif
-
-void Raytracing::DrawDenoiserSettings()
-{
-#ifdef DLSS_RR
-	DrawDLSSRRSettings();
-#endif
-}
-
 void Raytracing::DrawSHaRCSettings()
 {
 	if (settings.TraceMode != TraceMode::SHaRC)
@@ -226,6 +204,55 @@ void Raytracing::DrawSHaRCSettings()
 	}
 }
 
+
+void Raytracing::DrawSVGFSettings()
+{
+	if (settings.Denoiser != Denoiser::SVGF)
+		return;
+
+	// Shameless word by word copy of jiaye's settings
+	if (ImGui::CollapsingHeader("SVGF")) {
+		auto& svgfSettings = settings.SVGF;
+
+        ImGui::SliderInt("Max Accumulated Frames", (int*)&svgfSettings.MaxAccumulatedFrames, 1, 64, "%d", ImGuiSliderFlags_AlwaysClamp);
+		
+		ImGui::SliderInt("À Trous Iterations", (int*)&svgfSettings.AtrousIterations, 1, 5, "%d", ImGuiSliderFlags_AlwaysClamp);
+		if (auto _tt = Util::HoverTooltipWrapper())
+			ImGui::Text("Number of À Trous wavelet filter iterations. More iterations yield smoother results but may blur details and have a higher computational cost.");
+		
+		ImGui::SliderFloat("Color Phi", &svgfSettings.ColorPhi, 0.01f, 32.0f, "%.2f");
+		if (auto _tt = Util::HoverTooltipWrapper())
+			ImGui::Text("Controls sensitivity to color differences in the À Trous filter. Lower values preserve more detail but may retain noise.");
+		
+		ImGui::SliderFloat("Normal Phi", &svgfSettings.NormalPhi, 1.0f, 1024.0f, "%.2f");
+		if (auto _tt = Util::HoverTooltipWrapper())
+			ImGui::Text("Controls sensitivity to normal differences in the À Trous filter. Higher values preserve more detail but may retain noise.");
+	}
+}
+
+#ifdef DLSS_RR
+void Raytracing::DrawDLSSRRSettings()
+{
+	if (settings.Denoiser != Denoiser::DLSSRR)
+		return;
+
+	if (ImGui::CollapsingHeader("DLSS RR")) {
+		auto& dlssrrSettings = settings.DLSSRR;
+
+		DrawEnumCombo("Quality Mode", dlssrrSettings.QualityMode);
+		DrawEnumRadio("Preset", dlssrrSettings.Preset);
+	}
+}
+#endif
+
+void Raytracing::DrawDenoiserSettings()
+{
+	DrawSVGFSettings();
+#ifdef DLSS_RR
+	DrawDLSSRRSettings();
+#endif
+}
+
 void Raytracing::DrawLightingSettings()
 {
 	if (ImGui::CollapsingHeader("Lighting")) {
@@ -244,7 +271,7 @@ void Raytracing::DrawLightingSettings()
 
 void Raytracing::DrawLightSettings()
 {
-	if (ImGui::TreeNodeEx("Lights", ImGuiTreeNodeFlags_CollapsingHeader)) {
+	if (ImGui::CollapsingHeader("Lights")) {
 		if (ImGui::TreeNodeEx("Direct Lights", ImGuiTreeNodeFlags_DefaultOpen)) {
 			if (ImGui::DragFloat("Directional Strength", &settings.Directional, 0.001f))
 				settings.Directional = std::max(0.0f, settings.Directional);
@@ -263,8 +290,6 @@ void Raytracing::DrawLightSettings()
 
 			ImGui::TreePop();
 		}
-
-		ImGui::TreePop();
 	}
 }
 
@@ -285,7 +310,8 @@ void Raytracing::DrawGeneralSettings()
 	if (DrawEnumRadio("TraceMode", settings.TraceMode, nullptr, TraceModeTooltips))
 		recompileReason |= RecompileReason::General;
 
-	DrawEnumRadio("Denoiser", settings.Denoiser);
+	if (DrawEnumRadio("Denoiser", settings.Denoiser))
+		recompileReason |= RecompileReason::General;
 
 	// Bounces
 	{
@@ -312,9 +338,9 @@ void Raytracing::DrawGeneralSettings()
 	DrawFloat2("Roughness", settings.Roughness);
 	DrawFloat2("Metalness", settings.Metalness);
 
-	DrawDenoiserSettings();
-
 	DrawSHaRCSettings();
+
+	DrawDenoiserSettings();
 
 	DrawLightingSettings();
 
@@ -534,6 +560,8 @@ void Raytracing::DrawOverlay()
 
 void Raytracing::SetupOutputRT()
 {
+	logger::info("[RT] SetupOutputRT - RenderSize: {}x{}", renderSize.x, renderSize.y);
+
 	auto createRT = [&](eastl::unique_ptr<DX12::Texture2D>& texture, DXGI_FORMAT format, GIHeapDef::Slot slot, LPCWSTR name) {
 		if (texture)
 			texture.reset();
@@ -553,13 +581,71 @@ void Raytracing::SetupOutputRT()
 	// u2 - Specular Hit Distance texture
 	createRT(specularHitDistanceTexture, DXGI_FORMAT_R32_FLOAT, GIHeap::Slot::SpecularHitDist, L"Specular Hit Distance texture");
 
-	svgfPipeline->SetupTextureResources(
-		d3d12Device.get(),
-		renderSize,
-		depthTexture->resource.get(),
-		motionVectorsTexture->resource.get(),
-		normalRoughnessTexture->resource.get(),
-		outputTexture->resource.get());
+	// Motion vector
+	{
+		D3D11_TEXTURE2D_DESC texDesc{};
+		texDesc.Width = renderSize.x;
+		texDesc.Height = renderSize.y;
+		texDesc.MipLevels = 1;
+		texDesc.ArraySize = 1;
+		texDesc.Format = DXGI_FORMAT_R16G16_FLOAT;
+		texDesc.SampleDesc.Count = 1;
+		texDesc.SampleDesc.Quality = 0;
+		texDesc.BindFlags = D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_UNORDERED_ACCESS;
+
+		motionVectorsTexture = eastl::make_unique<WrappedResource>(texDesc, d3d11Device.get(), d3d12Device.get());
+		DX::ThrowIfFailed(motionVectorsTexture->resource->SetName(L"Motion Vectors Texture"));
+	}
+
+	// Normal Roughness
+	{
+		D3D11_TEXTURE2D_DESC texDesc{};
+		texDesc.Width = renderSize.x;
+		texDesc.Height = renderSize.y;
+		texDesc.MipLevels = 1;
+		texDesc.ArraySize = 1;
+		texDesc.Format = DXGI_FORMAT_R16G16B16A16_SNORM;
+		texDesc.SampleDesc.Count = 1;
+		texDesc.SampleDesc.Quality = 0;
+		texDesc.BindFlags = D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_UNORDERED_ACCESS;
+
+		normalRoughnessTexture = eastl::make_unique<WrappedResource>(texDesc, d3d11Device.get(), d3d12Device.get());
+		DX::ThrowIfFailed(normalRoughnessTexture->resource->SetName(L"Normal Roughness Texture"));
+
+		D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
+		srvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
+		srvDesc.Format = texDesc.Format;
+		srvDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
+		srvDesc.Texture2D.MostDetailedMip = 0;
+		srvDesc.Texture2D.MipLevels = texDesc.MipLevels;
+		srvDesc.Texture2D.PlaneSlice = 0;
+		srvDesc.Texture2D.ResourceMinLODClamp = 0.0f;
+
+		d3d12Device->CreateShaderResourceView(normalRoughnessTexture->resource.get(), &srvDesc, giHeap->CPUHandle(GIHeap::Slot::NormalRoughness));
+	}
+
+	// Diffuse (Metallic modulated albedo)
+	{
+		D3D11_TEXTURE2D_DESC texDesc{};
+		texDesc.Width = renderSize.x;
+		texDesc.Height = renderSize.y;
+		texDesc.MipLevels = 1;
+		texDesc.ArraySize = 1;
+		texDesc.Format = DXGI_FORMAT_R16G16B16A16_FLOAT;
+		texDesc.SampleDesc.Count = 1;
+		texDesc.SampleDesc.Quality = 0;
+		texDesc.BindFlags = D3D11_BIND_UNORDERED_ACCESS;
+
+		diffuseAlbedoTexture = eastl::make_unique<WrappedResource>(texDesc, d3d11Device.get(), d3d12Device.get());
+		DX::ThrowIfFailed(diffuseAlbedoTexture->resource->SetName(L"Diffuse Texture Texture"));
+	}
+
+	svgfDenoiser->SetupTextureResources(renderSize);
+
+	renderResData->RenderRes = renderSize;
+	renderResData->RenderResRcp = float2(1.0f / static_cast<float>(renderSize.x), 1.0f / static_cast<float>(renderSize.y));
+
+	renderResCB->Update(renderResData.get(), sizeof(RenderResData));
 }
 
 void Raytracing::SetupResources()
@@ -586,6 +672,7 @@ void Raytracing::SetupResources()
 		D3D12_DESCRIPTOR_HEAP_DESC(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, ShadowsHeap::NumDescriptors(), D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE));
 
 	for (auto& pipeline : GetPipelines()) {
+		pipeline->Initialize();
 		pipeline->CreateRootSignature(device12);
 		pipeline->CompileShaders(device12);
 		pipeline->SetupResources(device12);
@@ -596,6 +683,16 @@ void Raytracing::SetupResources()
 		giHeap->CPUHandle(GIHeap::Slot::SHaRCLock),
 		giHeap->CPUHandle(GIHeap::Slot::SHaRCAccumulation),
 		giHeap->CPUHandle(GIHeap::Slot::SHaRCResolved));
+
+
+	svgfDenoiser = eastl::make_unique<SVGFPipeline>();
+	svgfDenoiser->SetupResources();
+
+	renderResData = eastl::make_unique<RenderResData>();
+
+	// Constant buffers
+	auto cbDesc = ConstantBufferDesc<RenderResData>();
+	renderResCB = eastl::make_unique<ConstantBuffer>(cbDesc);
 
 	// Setup default textures (this is a bit wordy...)
 	{
@@ -650,7 +747,7 @@ void Raytracing::SetupResources()
 		srvDesc.Texture2D.ResourceMinLODClamp = 0.0f;
 
 		d3d12Device->CreateShaderResourceView(depthTexture->resource.get(), &srvDesc, giHeap->CPUHandle(GIHeap::Slot::Depth));
-		d3d12Device->CreateShaderResourceView(depthTexture->resource.get(), &srvDesc, shadowHeap->CPUHandle(ShadowsHeap::Slot::Depth));
+		d3d12Device->CreateShaderResourceView(depthTexture->resource.get(), &srvDesc, shadowHeap->CPUHandle(ShadowsHeap::Slot::Depth));	
 	}
 
 	// Shadow mask
@@ -706,65 +803,6 @@ void Raytracing::SetupResources()
 			uavDesc.Format = texDesc.Format;
 
 			d3d12Device->CreateUnorderedAccessView(mainTexture->resource.get(), nullptr, &uavDesc, giHeap->CPUHandle(GIHeap::Slot::Main));
-		}
-
-		// Motion vector
-		{
-			D3D11_TEXTURE2D_DESC texDesc{};
-			texDesc.Width = mainDesc.Width;
-			texDesc.Height = mainDesc.Height;
-			texDesc.MipLevels = 1;
-			texDesc.ArraySize = 1;
-			texDesc.Format = DXGI_FORMAT_R16G16_FLOAT;
-			texDesc.SampleDesc.Count = 1;
-			texDesc.SampleDesc.Quality = 0;
-			texDesc.BindFlags = D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_UNORDERED_ACCESS;
-
-			motionVectorsTexture = eastl::make_unique<WrappedResource>(texDesc, d3d11Device.get(), d3d12Device.get());
-			DX::ThrowIfFailed(motionVectorsTexture->resource->SetName(L"Motion Vectors Texture"));
-		}
-
-		// Normal Roughness
-		{
-			D3D11_TEXTURE2D_DESC texDesc{};
-			texDesc.Width = mainDesc.Width;
-			texDesc.Height = mainDesc.Height;
-			texDesc.MipLevels = 1;
-			texDesc.ArraySize = 1;
-			texDesc.Format = DXGI_FORMAT_R16G16B16A16_SNORM;
-			texDesc.SampleDesc.Count = 1;
-			texDesc.SampleDesc.Quality = 0;
-			texDesc.BindFlags = D3D11_BIND_UNORDERED_ACCESS;
-
-			normalRoughnessTexture = eastl::make_unique<WrappedResource>(texDesc, d3d11Device.get(), d3d12Device.get());
-			DX::ThrowIfFailed(normalRoughnessTexture->resource->SetName(L"Normal Roughness Texture"));
-
-			D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
-			srvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
-			srvDesc.Format = texDesc.Format;
-			srvDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
-			srvDesc.Texture2D.MostDetailedMip = 0;
-			srvDesc.Texture2D.MipLevels = texDesc.MipLevels;
-			srvDesc.Texture2D.PlaneSlice = 0;
-			srvDesc.Texture2D.ResourceMinLODClamp = 0.0f;
-
-			d3d12Device->CreateShaderResourceView(normalRoughnessTexture->resource.get(), &srvDesc, giHeap->CPUHandle(GIHeap::Slot::NormalRoughness));
-		}
-
-		// Diffuse (Metallic modulated albedo)
-		{
-			D3D11_TEXTURE2D_DESC texDesc{};
-			texDesc.Width = mainDesc.Width;
-			texDesc.Height = mainDesc.Height;
-			texDesc.MipLevels = 1;
-			texDesc.ArraySize = 1;
-			texDesc.Format = DXGI_FORMAT_R16G16B16A16_FLOAT;
-			texDesc.SampleDesc.Count = 1;
-			texDesc.SampleDesc.Quality = 0;
-			texDesc.BindFlags = D3D11_BIND_UNORDERED_ACCESS;
-
-			diffuseAlbedoTexture = eastl::make_unique<WrappedResource>(texDesc, d3d11Device.get(), d3d12Device.get());
-			DX::ThrowIfFailed(diffuseAlbedoTexture->resource->SetName(L"Diffuse Texture Texture"));
 		}
 	}
 
@@ -983,7 +1021,11 @@ sl::DLSSMode Raytracing::GetDLSSMode() const
 		return sl::DLSSMode::eMaxPerformance;
 		break;
 	case DLSSRRQuality::MaxQuality:
+	case DLSSRRQuality::NativeRes:
 		return sl::DLSSMode::eMaxQuality;
+		break;
+	case DLSSRRQuality::DLAA:
+		return sl::DLSSMode::eDLAA;
 		break;
 	default:
 		return sl::DLSSMode::eBalanced;
@@ -995,7 +1037,7 @@ void Raytracing::GetDLSSRROptimal()
 {
 	auto dlssdOptionsNew = GetDLSSRROptions();
 
-	if (dlssdOptions.mode != dlssdOptionsNew.mode || dlssdOptions.outputWidth != dlssdOptionsNew.outputWidth || dlssdOptions.outputHeight != dlssdOptionsNew.outputHeight) {
+	if (dlssdOptions.mode != dlssdOptionsNew.mode || dlssdOptions.qualityPreset != dlssdOptionsNew.qualityPreset || dlssdOptions.outputWidth != dlssdOptionsNew.outputWidth || dlssdOptions.outputHeight != dlssdOptionsNew.outputHeight) {
 		dlssdOptions = dlssdOptionsNew;
 
 		sl::Result result = slDLSSDGetOptimalSettings(dlssdOptions, optimalSettings);
@@ -1320,14 +1362,21 @@ void Raytracing::CopyDepth()
 
 		context->CSSetShader(copyDepthCS.get(), nullptr, 0);
 
+		//auto* renderSizeCB = renderResCB->CB();
+		//context->CSSetConstantBuffers(0, 1, &renderSizeCB);
+
 		context->CSSetShaderResources(0, 1, &depth.depthSRV);
+
+		//auto sampler = samplerState.get();
+		//context->CSSetSamplers(0, 1, &sampler);
 
 		context->CSSetUnorderedAccessViews(0, 1, &depthTexture->uav, nullptr);
 
-		auto dispatchCount = Util::GetScreenDispatchCount();
+		uint2 screenSize = GetScreenSize();
+		uint2 dispatchCount = { DivideRoundUp(screenSize.x, 8u), DivideRoundUp(screenSize.y, 8u) };
 		context->Dispatch(dispatchCount.x, dispatchCount.y, 1);
 
-		context->CSSetUnorderedAccessViews(0, 1, nullptr, nullptr);
+		//context->CSSetUnorderedAccessViews(0, 1, nullptr, nullptr);
 	}
 }
 
@@ -1338,23 +1387,33 @@ void Raytracing::ConvertTextures() const
 
 	context->CSSetShader(convertTexturesCS.get(), nullptr, 0);
 
-	ID3D11Buffer* cb[1] = { *globals::game::perFrame.get() };
-	context->CSSetConstantBuffers(12, 1, cb);
+	auto* renderSizeCB = renderResCB->CB();
+	context->CSSetConstantBuffers(0, 1, &renderSizeCB);
 
-	ID3D11ShaderResourceView* srvs[3] = {
+	auto* frameBufferCB = *globals::game::perFrame.get();
+	context->CSSetConstantBuffers(12, 1, &frameBufferCB);
+
+	ID3D11ShaderResourceView* srvs[4] = {
 		renderer->GetRuntimeData().renderTargets[NORMALROUGHNESS].SRV,
 		renderer->GetRuntimeData().renderTargets[ALBEDO].SRV,
-		renderer->GetRuntimeData().renderTargets[MASKS2].SRV
+		renderer->GetRuntimeData().renderTargets[MASKS2].SRV,
+		renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMOTION_VECTOR].SRV
 	};
+
 	context->CSSetShaderResources(0, _countof(srvs), srvs);
 
-	ID3D11UnorderedAccessView* uavs[2] = {
-		normalRoughnessTexture->uav,
-		diffuseAlbedoTexture->uav
+	auto sampler = samplerState.get();
+	context->CSSetSamplers(0, 1, &sampler);
+
+	ID3D11UnorderedAccessView* uavs[3] = { 
+		normalRoughnessTexture->uav, 
+		diffuseAlbedoTexture->uav,
+		motionVectorsTexture->uav
 	};
+
 	context->CSSetUnorderedAccessViews(0, _countof(uavs), uavs, nullptr);
 
-	auto dispatchCount = Util::GetScreenDispatchCount();
+	uint2 dispatchCount = { DivideRoundUp(renderSize.x, 8u), DivideRoundUp(renderSize.y, 8u) };
 	context->Dispatch(dispatchCount.x, dispatchCount.y, 1);
 
 	//context->CSSetUnorderedAccessViews(0, 1, nullptr, nullptr);
@@ -2467,15 +2526,16 @@ uint2 Raytracing::GetRenderSize()
 	auto renderSizeOut = GetScreenSize();
 
 	// This is borked because all RTs need to share the same size
-	/*
+
 #if defined(DLSS_RR)
 	if (settings.Denoiser == Denoiser::DLSSRR) {
 		GetDLSSRROptimal();
 
-		renderSizeOut = { optimalSettings.optimalRenderWidth, optimalSettings.optimalRenderHeight };
+		if (settings.DLSSRR.QualityMode != DLSSRRQuality::NativeRes) {
+			renderSizeOut = { optimalSettings.optimalRenderWidth, optimalSettings.optimalRenderHeight };
+		}
 	}
 #endif
-*/
 
 	return renderSizeOut;
 }
@@ -2510,7 +2570,6 @@ void Raytracing::DrawRTGI()
 	auto main = rendererRuntimeData.renderTargets[RE::RENDER_TARGETS::kMAIN];
 
 	d3d11Context->CopyResource(mainTexture->resource11, main.texture);
-	d3d11Context->CopyResource(motionVectorsTexture->resource11, rendererRuntimeData.renderTargets[RE::RENDER_TARGETS::kMOTION_VECTOR].texture);
 
 	if (!settings.RaytracedShadows)
 		CopyDepth();
@@ -2554,7 +2613,7 @@ void Raytracing::DrawRTGI()
 
 #ifdef DLSS_RR
 	if (settings.Denoiser == Denoiser::DLSSRR) {
-		GetDLSSRROptimal();  // TODO: Remove this once we can handle dynamic resolution changes properly
+		//GetDLSSRROptimal();  // TODO: Remove this once we can handle dynamic resolution changes properly
 		SetDLSSRROptions();
 		CheckFrameConstants();
 	}
@@ -2701,15 +2760,13 @@ void Raytracing::DrawRTGI()
 		}
 
 		if (settings.DebugOutput == DebugOutput::None) {
-			if (settings.Denoiser == Denoiser::SVGF) {
-				svgfPipeline->Denoise(commandList.get());
-			}
 #ifdef DLSS_RR
-			else if (settings.Denoiser == Denoiser::DLSSRR) {
+			if (settings.Denoiser == Denoiser::DLSSRR) {
 				{
 					auto screenSize = GetScreenSize();
 
 					sl::Extent inputExtent{ 0, 0, renderSize.x, renderSize.y };
+					sl::Extent inputNativeExtent{ 0, 0, screenSize.x, screenSize.y };
 					sl::Extent outputExtent{ 0, 0, screenSize.x, screenSize.y };
 
 					sl::Resource colorIn = { sl::ResourceType::eTex2d, outputTexture->resource.get(), D3D12_RESOURCE_STATE_UNORDERED_ACCESS };
@@ -2723,7 +2780,7 @@ void Raytracing::DrawRTGI()
 
 					sl::ResourceTag colorInTag = sl::ResourceTag{ &colorIn, sl::kBufferTypeScalingInputColor, sl::ResourceLifecycle::eOnlyValidNow, &inputExtent };
 					sl::ResourceTag colorOutTag = sl::ResourceTag{ &colorOut, sl::kBufferTypeScalingOutputColor, sl::ResourceLifecycle::eOnlyValidNow, &outputExtent };
-					sl::ResourceTag depthTag = sl::ResourceTag{ &depth, sl::kBufferTypeDepth, sl::ResourceLifecycle::eValidUntilPresent, &inputExtent };
+					sl::ResourceTag depthTag = sl::ResourceTag{ &depth, sl::kBufferTypeDepth, sl::ResourceLifecycle::eValidUntilPresent, &inputNativeExtent };
 					sl::ResourceTag mvecTag = sl::ResourceTag{ &mvec, sl::kBufferTypeMotionVectors, sl::ResourceLifecycle::eValidUntilPresent, &inputExtent };
 					sl::ResourceTag diffuseAlbedoTag = sl::ResourceTag{ &diffuseAlbedo, sl::kBufferTypeAlbedo, sl::ResourceLifecycle::eValidUntilPresent, &inputExtent };
 					sl::ResourceTag specularAlbedoTag = sl::ResourceTag{ &specularAlbedo, sl::kBufferTypeSpecularAlbedo, sl::ResourceLifecycle::eValidUntilPresent, &inputExtent };
@@ -2833,6 +2890,21 @@ void Raytracing::DrawRTGI()
 	}*/
 
 	ReleaseTempGPUData();
+
+	if (settings.DebugOutput == DebugOutput::None) {
+		if (settings.Denoiser == Denoiser::SVGF) {
+			auto sampler = samplerState.get();
+			d3d11Context->CSSetSamplers(0, 1, &sampler);
+
+			auto* renderSizeCB = renderResCB->CB();
+			d3d11Context->CSSetConstantBuffers(0, 1, &renderSizeCB);
+
+			auto* frameBufferCB = *globals::game::perFrame.get();
+			d3d11Context->CSSetConstantBuffers(12, 1, &frameBufferCB);
+
+			svgfDenoiser->Denoise(d3d11Context.get(), renderSize, settings.SVGF, normalRoughnessTexture.get(), mainTexture.get());
+		}
+	}
 
 	// True Linear to Gamma
 	if (settings.ConvertToGamma) {
@@ -3503,6 +3575,9 @@ void Raytracing::CompileRTGIShaders()
 
 	if (settings.PathTracing)
 		defines.emplace_back(L"PATH_TRACING");
+
+	if (settings.Denoiser == Denoiser::SVGF)
+		defines.emplace_back(L"OUTPUT_RADIANCE");
 
 	const auto definesWStr = StringViewToWString(std::string_view{ settings.Defines });
 

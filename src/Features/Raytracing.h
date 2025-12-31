@@ -1,6 +1,5 @@
 #pragma once
 
-#define SHARC
 #define DLSS_RR
 
 #include "Features/Upscaling/DX12SwapChain.h"
@@ -213,11 +212,12 @@ struct Raytracing : public OverlayFeature
 	virtual void SaveSettings(json& o_json) override;
 	virtual void DrawSettings() override;
 
+	void DrawSHaRCSettings();
+	void DrawSVGFSettings();
 #ifdef DLSS_RR
 	void DrawDLSSRRSettings();
 #endif
 	void DrawDenoiserSettings();
-	void DrawSHaRCSettings();
 	void DrawLightingSettings();
 	void DrawLightSettings();
 
@@ -313,12 +313,8 @@ struct Raytracing : public OverlayFeature
 		if (!sharcPipeline)
 			sharcPipeline = eastl::make_unique<SHaRCPipeline>();
 
-		if (!svgfPipeline)
-			svgfPipeline = eastl::make_unique<SVGFPipeline>();
-
-		static eastl::array<IPipeline*, 2> pipelines = {
-			sharcPipeline.get(),
-			svgfPipeline.get()
+		static eastl::array<IPipeline*, 1> pipelines = {
+			sharcPipeline.get()
 		};
 
 		return pipelines;
@@ -367,7 +363,9 @@ struct Raytracing : public OverlayFeature
 	{
 		MaxPerformance,
 		Balanced,
-		MaxQuality
+		MaxQuality,
+		NativeRes,
+		DLAA
 	};
 
 	enum struct DLSSRRPreset : int32_t
@@ -468,12 +466,12 @@ struct Raytracing : public OverlayFeature
 	};
 
 #ifdef DLSS_RR
-	struct DLSSSettings
+	struct DLSSRRSettings
 	{
 		DLSSRRQuality QualityMode = DLSSRRQuality::MaxQuality;
 		DLSSRRPreset Preset = DLSSRRPreset::E;
 
-		NLOHMANN_DEFINE_TYPE_INTRUSIVE_WITH_DEFAULT(DLSSSettings, QualityMode, Preset)
+		NLOHMANN_DEFINE_TYPE_INTRUSIVE_WITH_DEFAULT(DLSSRRSettings, QualityMode, Preset)
 	};
 #endif
 
@@ -533,8 +531,9 @@ struct Raytracing : public OverlayFeature
 		bool RussianRoulette = true;
 		bool ConvertToGamma = true;
 #ifdef DLSS_RR
-		DLSSSettings DLSSRR;
+		DLSSRRSettings DLSSRR;
 #endif
+		SVGFPipeline::Settings SVGF;
 		bool PerformanceOverlay = false;
 		std::string Defines = "";
 		DebugOutput DebugOutput = DebugOutput::None;
@@ -798,11 +797,11 @@ struct Raytracing : public OverlayFeature
 	//	eastl::unique_ptr<RTPipeline> RTPipeline = nullptr;
 	//	eastl::unique_ptr<ShadowPipeline> shadowPipeline = nullptr;
 
-	// SVGF (denoiser)
-	eastl::unique_ptr<SVGFPipeline> svgfPipeline = nullptr;
-
 	// SHaRC (Radiance cache)
 	eastl::unique_ptr<SHaRCPipeline> sharcPipeline = nullptr;
+
+	// SVGF (denoiser)
+	eastl::unique_ptr<SVGFPipeline> svgfDenoiser = nullptr;
 
 	struct VertexUpdate
 	{
@@ -848,6 +847,15 @@ struct Raytracing : public OverlayFeature
 	winrt::com_ptr<ID3D11Device5> d3d11Device = nullptr;
 	winrt::com_ptr<ID3D11DeviceContext4> d3d11Context = nullptr;
 
+	struct alignas(16) RenderResData
+	{
+		uint2 RenderRes;
+		float2 RenderResRcp;
+	};
+
+	eastl::unique_ptr<RenderResData> renderResData = nullptr;
+	eastl::unique_ptr<ConstantBuffer> renderResCB = nullptr;
+
 	// Sky Cubemap
 	bool renderingCubemap = false;
 
@@ -886,6 +894,7 @@ struct Raytracing : public OverlayFeature
 	std::shared_mutex renderMutex;
 
 	uint2 renderSize;
+	float2 dynamicResolutionRatio;
 
 	// Timings
 	float mainTime;
@@ -1503,8 +1512,70 @@ struct Raytracing : public OverlayFeature
 			static inline REL::Relocation<decltype(thunk)> func;
 		};
 
+		struct Main_UpdateJitter
+		{
+			static void thunk(RE::BSGraphics::State* a_viewport)
+			{
+				func(a_viewport);
+
+				auto& rt = globals::features::raytracing;
+
+				auto& runtimeData = a_viewport->GetRuntimeData();
+
+				auto screenSize = rt.GetScreenSize();
+
+				float2 resolutionScale = float2(
+					rt.renderSize.x / static_cast<float>(screenSize.x), 
+					rt.renderSize.y / static_cast<float>(screenSize.y)
+				);
+
+				runtimeData.dynamicResolutionPreviousWidthRatio = rt.dynamicResolutionRatio.x;
+				runtimeData.dynamicResolutionPreviousHeightRatio = rt.dynamicResolutionRatio.y;
+
+				runtimeData.dynamicResolutionWidthRatio = resolutionScale.x;
+				runtimeData.dynamicResolutionHeightRatio = resolutionScale.y;
+
+				rt.dynamicResolutionRatio = resolutionScale;
+
+				if (!globals::game::isVR)
+					runtimeData.dynamicResolutionLock = 1;
+			};
+
+			static inline REL::Relocation<decltype(thunk)> func;
+		};
+
+		struct SetScissorRect
+		{
+			static void thunk(RE::BSGraphics::Renderer* This, int a_left, int a_top, int a_right, int a_bottom) 
+			{
+				auto viewport = globals::game::graphicsState;
+				auto& runtimeData = viewport->GetRuntimeData();
+
+				if (!runtimeData.dynamicResolutionLock) {
+					a_left = static_cast<int>(a_left * runtimeData.dynamicResolutionWidthRatio);
+					a_right = static_cast<int>(a_right * runtimeData.dynamicResolutionWidthRatio);
+
+					a_top = static_cast<int>(a_top * runtimeData.dynamicResolutionHeightRatio);
+					a_bottom = static_cast<int>(a_bottom * runtimeData.dynamicResolutionHeightRatio);
+				}
+
+				func(This, a_left, a_top, a_right, a_bottom);			
+			}
+			static inline REL::Relocation<decltype(thunk)> func;
+		};
+
 		static void Install()
 		{
+			bool isGOG = !GetModuleHandle(L"steam_api64.dll");
+			stl::write_thunk_call<Main_UpdateJitter>(REL::RelocationID(75460, 77245).address() + REL::Relocate(0xE5, isGOG ? 0x133 : 0xE2, 0x104));
+
+			REL::safe_write(REL::RelocationID(35556, 36555).address() + REL::Relocate(0x2D, 0x2D, 0x25), REL::NOP5, sizeof(REL::NOP5));
+
+			// Patches RSSetScissorRect calls to use dynamic resolution
+			// This is a PC-specific function hence it was missing
+			if (!globals::game::isVR)
+				stl::detour_thunk<SetScissorRect>(REL::RelocationID(75564, 77365));
+
 			stl::write_vfunc<0x6A, Load3D<RE::TESObjectREFR>>(RE::VTABLE_TESObjectREFR[0]);
 			stl::write_vfunc<0x6B, Release3DRelatedData<RE::TESObjectREFR>>(RE::VTABLE_TESObjectREFR[0]);
 

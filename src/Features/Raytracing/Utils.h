@@ -221,6 +221,17 @@ static uint32_t DivideRoundUp(uint32_t x, float divisor)
 	return static_cast<uint32_t>(ceil(x / divisor));
 }
 
+static void CreateTexture2DUAV(ID3D12Device5* device, ID3D12Resource* resource, CD3DX12_CPU_DESCRIPTOR_HANDLE handle)
+{
+	auto desc = resource->GetDesc();
+
+	D3D12_UNORDERED_ACCESS_VIEW_DESC uavDesc = {};
+	uavDesc.ViewDimension = D3D12_UAV_DIMENSION_TEXTURE2D;
+	uavDesc.Format = desc.Format;
+
+	device->CreateUnorderedAccessView(resource, nullptr, &uavDesc, handle);
+}
+
 static void CreateTexture2DSRV(ID3D12Device5* device, ID3D12Resource* resource, CD3DX12_CPU_DESCRIPTOR_HANDLE handle)
 {
 	auto desc = resource->GetDesc();

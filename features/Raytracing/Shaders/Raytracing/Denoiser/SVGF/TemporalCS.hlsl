@@ -1,36 +1,28 @@
-#include "ScreenSpaceRayTracing/ssrt_common.hlsli"
+#include "Raytracing/Denoiser/SVGF/Common.hlsli"
 
-Texture2D<float4> HistoryTexture : register(t0);
-Texture2D<float4> MotionVectorTexture : register(t1);
-Texture2D<float4> SSRColorTexture : register(t3);
-Texture2D<float> DepthTexture : register(t4);
-Texture2D<float4> HistoryMomentsTexture : register(t5); // moments in RG, frame count in B
-Texture2D<float4> HistoryNormalsTexture : register(t6);
+Texture2D<float4>   HistoryTexture          : register(t0);
+Texture2D<float2>   MotionVectorTexture     : register(t1);
+Texture2D<float4>   HistoryMomentsTexture   : register(t5); // moments in RG, frame count in B
+Texture2D<float4>   HistoryNormalsTexture   : register(t6);
 
-RWTexture2D<float4> FilteredOutput : register(u0);
-RWTexture2D<float4> MomentsOutput : register(u1);
+RWTexture2D<float4> FilteredOutput          : register(u0);
+RWTexture2D<float4> MomentsOutput           : register(u1);
 
-cbuffer DenoiserCB : register(b2)
+SamplerState        LinearSampler           : register(s0);
+
+bool IsValidHistory(uint2 pixel, float2 uv, float3 currNormalWS)
 {
-    float invMaxAccumulatedFrames;
-    uint atrousIterations;
-    float colorPhi;
-    float normalPhi;
-};
-
-bool IsValidHistory(uint2 pixel, float2 uv, float3 currNormalVS)
-{
-    uint2 screen_size = SharedData::BufferDim.xy * FrameBuffer::DynamicResolutionParams1.xy;
+    const uint2 screenSize = Resolution;
     if (uv.x < 0 || uv.x > 1 || uv.y < 0 || uv.y > 1)
         return false;
 
-    if (pixel.x >= screen_size.x || pixel.y >= screen_size.y)
+    if (pixel.x >= screenSize.x || pixel.y >= screenSize.y)
         return false;
 
-    float3 prevNormalVS;
+    float3 prevNormalWS;
     float roughness;
-    GetNormalRoughness(HistoryNormalsTexture, pixel, prevNormalVS, roughness);
-    float normalDiff = dot(currNormalVS, prevNormalVS);
+    GetNormalRoughness(HistoryNormalsTexture, pixel, prevNormalWS, roughness);
+    float normalDiff = dot(currNormalWS, prevNormalWS);
     if (normalDiff < 0.866f) // cos 30
         return false;
 
@@ -39,35 +31,34 @@ bool IsValidHistory(uint2 pixel, float2 uv, float3 currNormalVS)
 
 [numthreads(8, 8, 1)] void main(uint3 DTid : SV_DispatchThreadID)
 {
-    uint2 screen_size = SharedData::BufferDim.xy * FrameBuffer::DynamicResolutionParams1.xy;
-    if (DTid.x >= screen_size.x || DTid.y >= screen_size.y)
+    const uint2 screenSize = Resolution;
+    if (DTid.x >= screenSize.x || DTid.y >= screenSize.y)
         return;
 
-    float2 uv = float2(DTid.xy + 0.5) * SharedData::BufferDim.zw * FrameBuffer::DynamicResolutionParams2.xy;
-    uint eyeIndex = Stereo::GetEyeIndexFromTexCoord(uv);
+    const float2 uv = float2(DTid.xy + 0.5) * ResolutionRcp;
 
     float3 blendedColor = 0;
     float4 ssrColor = SSRColorTexture[DTid.xy];
     float depthCenter = DepthTexture[DTid.xy];
 
-    float3 normalVS;
+    float3 normalWS;
     float roughness;
-    GetNormalRoughness(DTid.xy, normalVS, roughness);
+    GetNormalRoughness(DTid.xy, normalWS, roughness);
 
     float luminance = Color::RGBToLuminance(ssrColor.rgb);
     float2 curMoment = float2(luminance, luminance * luminance) * 0.5;
 
     // Reproject UVs using motion vectors
     float2 prevUV = uv;
-    ReprojectHit(MotionVectorTexture, LinearSampler, float3(uv, depthCenter), eyeIndex, prevUV);
+    ReprojectHit(MotionVectorTexture, LinearSampler, float3(uv, depthCenter), 0u, prevUV);
 
     float4 prevColor = 0.f;
     float prevAccumFrames = 0.f;
     float2 prevMoments = float2(0.f, 0.f);
-    uint2 prevPixel = uint2(prevUV * screen_size);
+    uint2 prevPixel = uint2(prevUV * screenSize);
     bool valid = false;
 
-    if (IsValidHistory(prevPixel, prevUV, normalVS))
+    if (IsValidHistory(prevPixel, prevUV, normalWS))
     {
         prevColor = HistoryTexture[prevPixel];
         prevAccumFrames = HistoryMomentsTexture[prevPixel].z;
@@ -83,7 +74,7 @@ bool IsValidHistory(uint2 pixel, float2 uv, float3 currNormalVS)
         for (int i = 0; i < 4; i++)
         {
             int2 neighborPixel = int2(prevPixel) + bilinOffset[i];
-            if (IsValidHistory(uint2(neighborPixel), prevUV, normalVS))
+            if (IsValidHistory(uint2(neighborPixel), prevUV, normalWS))
             {
                 float4 neighborColor = HistoryTexture[uint2(neighborPixel)];
                 float neighborAccumFrames = HistoryMomentsTexture[uint2(neighborPixel)].z;
@@ -126,7 +117,7 @@ bool IsValidHistory(uint2 pixel, float2 uv, float3 currNormalVS)
         for (int i = 0; i < 8; i++)
         {
             int2 neighborPixel = int2(prevPixel) + offsets[i];
-            if (IsValidHistory(uint2(neighborPixel), prevUV, normalVS))
+            if (IsValidHistory(uint2(neighborPixel), prevUV, normalWS))
             {
                 float4 neighborColor = HistoryTexture[uint2(neighborPixel)];
                 float neighborAccumFrames = HistoryMomentsTexture[uint2(neighborPixel)].z;
@@ -150,13 +141,13 @@ bool IsValidHistory(uint2 pixel, float2 uv, float3 currNormalVS)
 
     if (valid)
     {
-        float alpha = max(1.0f / (prevAccumFrames + 1.0f), invMaxAccumulatedFrames);
+        float alpha = max(1.0f / (prevAccumFrames + 1.0f), Frame.InvMaxAccumulatedFrames);
         blendedColor = lerp(prevColor.rgb, ssrColor.rgb, alpha);
 
         float prevLuminance = Color::RGBToLuminance(prevColor.rgb);
         float2 prevMoment = float2(prevLuminance, prevLuminance * prevLuminance);
 
-        float momentAlpha = max(1.0f / (prevAccumFrames + 1.0f), invMaxAccumulatedFrames);
+        float momentAlpha = max(1.0f / (prevAccumFrames + 1.0f), Frame.InvMaxAccumulatedFrames);
         float2 moment = lerp(prevMoment, curMoment, momentAlpha);
         float variance = moment.y - (moment.x * moment.x);
         variance = max(variance, 0.f);

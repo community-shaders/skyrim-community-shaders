@@ -1,14 +1,19 @@
 #ifndef SVGF_HLSI
 #define SVGF_HLSI
 
-struct SVGF
+struct 
+#ifdef __cplusplus
+alignas(16)
+#endif    
+    SVGF
 {
-	half Alpha;
-	half MomentsAlpha;
-	half PhiColor;
-	half PhiNormal;
-	uint16_t StepSize;
-	uint16_t PerformModulation;
+    float InvMaxAccumulatedFrames;
+    uint AtrousIterations;
+    float ColorPhi;
+    float NormalPhi;
 };
+#ifdef __cplusplus
+static_assert(sizeof(SVGF) % 16 == 0);
+#endif
 
 #endif // SVGF_HLSI
