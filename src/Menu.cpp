@@ -235,6 +235,16 @@ void Menu::Load(json& o_json)
 		} else {
 			logger::warn("Failed to load Default Dark theme on first launch");
 		}
+	} else if (!settings.SelectedThemePreset.empty()) {
+		// Load the previously selected theme preset (including custom themes)
+		if (LoadThemePreset(settings.SelectedThemePreset)) {
+			logger::info("Loaded saved theme preset: {}", settings.SelectedThemePreset);
+		} else {
+			logger::warn("Failed to load saved theme preset '{}', falling back to Default", settings.SelectedThemePreset);
+			if (LoadThemePreset("Default")) {
+				settings.SelectedThemePreset = "Default";
+			}
+		}
 	}
 }
 
