@@ -15,7 +15,14 @@ BSLightingShaderMaterialPBRLandscape::~BSLightingShaderMaterialPBRLandscape()
 
 BSLightingShaderMaterialPBRLandscape* BSLightingShaderMaterialPBRLandscape::Make()
 {
-	return new BSLightingShaderMaterialPBRLandscape;
+	// Use Skyrim's memory manager to allocate the material, matching how vanilla
+	// materials are created. This ensures proper deallocation through RE::free()
+	// when the material's reference count reaches zero.
+	auto* material = RE::malloc<BSLightingShaderMaterialPBRLandscape>();
+	if (material) {
+		new (material) BSLightingShaderMaterialPBRLandscape();
+	}
+	return material;
 }
 
 RE::BSShaderMaterial* BSLightingShaderMaterialPBRLandscape::Create()

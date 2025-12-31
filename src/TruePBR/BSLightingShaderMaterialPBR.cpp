@@ -9,7 +9,14 @@ BSLightingShaderMaterialPBR::~BSLightingShaderMaterialPBR()
 
 BSLightingShaderMaterialPBR* BSLightingShaderMaterialPBR::Make()
 {
-	return new BSLightingShaderMaterialPBR;
+	// Use Skyrim's memory manager to allocate the material, matching how vanilla
+	// materials are created. This ensures proper deallocation through RE::free()
+	// when the material's reference count reaches zero.
+	auto* material = RE::malloc<BSLightingShaderMaterialPBR>();
+	if (material) {
+		new (material) BSLightingShaderMaterialPBR();
+	}
+	return material;
 }
 
 RE::BSShaderMaterial* BSLightingShaderMaterialPBR::Create()
