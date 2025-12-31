@@ -314,12 +314,8 @@ struct Raytracing : public OverlayFeature
 		if (!sharcPipeline)
 			sharcPipeline = eastl::make_unique<SHaRCPipeline>();
 
-		if (!svgfPipeline)
-			svgfPipeline = eastl::make_unique<SVGFPipeline>();
-
-		static eastl::array<IPipeline*, 2> pipelines = {
-			sharcPipeline.get(),
-			svgfPipeline.get()
+		static eastl::array<IPipeline*, 1> pipelines = {
+			sharcPipeline.get()
 		};
 
 		return pipelines;
@@ -802,11 +798,11 @@ struct Raytracing : public OverlayFeature
 	//	eastl::unique_ptr<RTPipeline> RTPipeline = nullptr;
 	//	eastl::unique_ptr<ShadowPipeline> shadowPipeline = nullptr;
 
-	// SVGF (denoiser)
-	eastl::unique_ptr<SVGFPipeline> svgfPipeline = nullptr;
-
 	// SHaRC (Radiance cache)
 	eastl::unique_ptr<SHaRCPipeline> sharcPipeline = nullptr;
+
+	// SVGF (denoiser)
+	eastl::unique_ptr<SVGFPipeline> svgfDenoiser = nullptr;
 
 	struct VertexUpdate
 	{

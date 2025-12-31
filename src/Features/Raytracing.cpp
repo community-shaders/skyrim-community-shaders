@@ -216,7 +216,7 @@ void Raytracing::DrawSVGFSettings()
 
         ImGui::SliderInt("Max Accumulated Frames", (int*)&svgfSettings.MaxAccumulatedFrames, 1, 64, "%d", ImGuiSliderFlags_AlwaysClamp);
 		
-		ImGui::SliderInt("À Trous Iterations", (int*)&svgfSettings.AtrousIterations, 1, SVGFPipeline::MAX_ATROUS_ITERATIONS, "%d", ImGuiSliderFlags_AlwaysClamp);
+		ImGui::SliderInt("À Trous Iterations", (int*)&svgfSettings.AtrousIterations, 1, 5, "%d", ImGuiSliderFlags_AlwaysClamp);
 		if (auto _tt = Util::HoverTooltipWrapper())
 			ImGui::Text("Number of À Trous wavelet filter iterations. More iterations yield smoother results but may blur details and have a higher computational cost.");
 		
@@ -639,13 +639,7 @@ void Raytracing::SetupOutputRT()
 		DX::ThrowIfFailed(diffuseAlbedoTexture->resource->SetName(L"Diffuse Texture Texture"));
 	}
 
-	svgfPipeline->SetupTextureResources(
-		d3d12Device.get(),
-		renderSize,
-		depthTexture->resource.get(),
-		motionVectorsTexture->resource.get(),
-		normalRoughnessTexture->resource.get(),
-		outputTexture->resource.get());
+	svgfDenoiser->SetupTextureResources(renderSize);
 
 	renderResData->RenderRes = renderSize;
 	renderResData->RenderResRcp = float2(1.0f / static_cast<float>(renderSize.x), 1.0f / static_cast<float>(renderSize.y));
@@ -2761,14 +2755,8 @@ void Raytracing::DrawRTGI()
 		}
 
 		if (settings.DebugOutput == DebugOutput::None) {
-			if (settings.Denoiser == Denoiser::SVGF) {
-				svgfPipeline->Denoise(commandList.get(), renderSize, settings.SVGF, outputTexture->resource.get());
-
-				// TODO: Proper compositing
-				commandList->CopyResource(mainTexture->resource.get(), outputTexture->resource.get());
-			}
 #ifdef DLSS_RR
-			else if (settings.Denoiser == Denoiser::DLSSRR) {
+			if (settings.Denoiser == Denoiser::DLSSRR) {
 				{
 					auto screenSize = GetScreenSize();
 
@@ -2897,6 +2885,15 @@ void Raytracing::DrawRTGI()
 	}*/
 
 	ReleaseTempGPUData();
+
+	if (settings.DebugOutput == DebugOutput::None) {
+		if (settings.Denoiser == Denoiser::SVGF) {
+			auto sampler = samplerState.get();
+			d3d11Context->CSSetSamplers(0, 1, &sampler);
+
+			svgfDenoiser->Denoise(d3d11Context.get(), renderSize, settings.SVGF, normalRoughnessTexture.get(), mainTexture.get());
+		}
+	}
 
 	// True Linear to Gamma
 	if (settings.ConvertToGamma) {

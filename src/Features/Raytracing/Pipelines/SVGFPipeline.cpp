@@ -1,81 +1,80 @@
 #include "SVGFPipeline.h"
 
-void SVGFPipeline::Initialize()
+void SVGFPipeline::CompileShaders()
 {
-	temporalPipeline = eastl::make_unique<SVGFTemporal>();
-	variancePipeline = eastl::make_unique<SVGFVariance>();
-	spatialPipeline = eastl::make_unique<SVGFSpatial>();
+	if (auto rawPtr = reinterpret_cast<ID3D11ComputeShader*>(Util::CompileShader(L"Data\\Shaders\\Raytracing\\Denoiser\\SVGF\\TemporalCS.hlsl", { { "DX11", "" } }, "cs_5_0")); rawPtr)
+		temporalCS.attach(rawPtr);
+
+	if (auto rawPtr = reinterpret_cast<ID3D11ComputeShader*>(Util::CompileShader(L"Data\\Shaders\\Raytracing\\Denoiser\\SVGF\\VarianceCS.hlsl", { { "DX11", "" } }, "cs_5_0")); rawPtr)
+		varianceCS.attach(rawPtr);
+
+	if (auto rawPtr = reinterpret_cast<ID3D11ComputeShader*>(Util::CompileShader(L"Data\\Shaders\\Raytracing\\Denoiser\\SVGF\\SpatialCS.hlsl", { { "DX11", "" } }, "cs_5_0")); rawPtr)
+		spatialDiffuseCS.attach(rawPtr);
+
+	if (auto rawPtr = reinterpret_cast<ID3D11ComputeShader*>(Util::CompileShader(L"Data\\Shaders\\Raytracing\\Denoiser\\SVGF\\SpatialCS.hlsl", { { "DX11", "" }, { "SSRT_SPECULAR", "" } }, "cs_5_0")); rawPtr)
+		spatialSpecularCS.attach(rawPtr);
 }
 
-void SVGFPipeline::CreateRootSignature(ID3D12Device5* device)
-{
-	temporalPipeline->CreateRootSignature(device);
-	variancePipeline->CreateRootSignature(device);
-	spatialPipeline->CreateRootSignature(device);
-}
-
-void SVGFPipeline::CompileShaders(ID3D12Device5* device)
-{
-	temporalPipeline->CompileShaders(device);
-	variancePipeline->CompileShaders(device);
-	spatialPipeline->CompileShaders(device);
-}
-
-void SVGFPipeline::SetupResources(ID3D12Device5* device)
+void SVGFPipeline::SetupResources()
 {
 	frameData = eastl::make_unique<SVGF>();
-	frameBuffer = eastl::make_unique<DX12::StructuredBufferUpload<SVGF>>(device, 1, false, MAX_ATROUS_ITERATIONS + 1);
+
+	auto cbDesc = ConstantBufferDesc<SVGF>();
+	frameBuffer = eastl::make_unique<ConstantBuffer>(cbDesc);
 }
 
-void SVGFPipeline::SetupTextureResources(ID3D12Device5* device, uint2 size, ID3D12Resource* depthResource, ID3D12Resource* motionVectorResource, ID3D12Resource* normalRoughnessResource, ID3D12Resource* colorResource)
+void SVGFPipeline::SetupTextureResources(uint2 size)
 {
-	temporalTexture = eastl::make_unique<DX12::Texture2D>(device, size.x, size.y, DXGI_FORMAT_R16G16B16A16_FLOAT, D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS);
+	auto createTexture2D = [&](DXGI_FORMAT format, uint bindFlags) {
+		D3D11_TEXTURE2D_DESC texDesc{};
+		texDesc.Width = size.x;
+		texDesc.Height = size.y;
+		texDesc.MipLevels = 1;
+		texDesc.ArraySize = 1;
+		texDesc.Format = format;
+		texDesc.SampleDesc.Count = 1;
+		texDesc.SampleDesc.Quality = 0;
+		texDesc.BindFlags = bindFlags;
 
-	momentsTexture = eastl::make_unique<DX12::Texture2D>(device, size.x, size.y, DXGI_FORMAT_R16G16B16A16_FLOAT, D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS);
+		D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc = {
+			.Format = format,
+			.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2D,
+			.Texture2D = {
+				.MostDetailedMip = 0,
+				.MipLevels = texDesc.MipLevels }
+		};
 
-	varianceTexture = eastl::make_unique<DX12::Texture2D>(device, size.x, size.y, DXGI_FORMAT_R16G16B16A16_FLOAT, D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS);
+		D3D11_UNORDERED_ACCESS_VIEW_DESC uavDesc = {
+			.Format = format,
+			.ViewDimension = D3D11_UAV_DIMENSION_TEXTURE2D,
+			.Texture2D = { .MipSlice = 0 }
+		};
 
-	historyMomentsTexture = eastl::make_unique<DX12::Texture2D>(device, size.x, size.y, DXGI_FORMAT_R16G16B16A16_FLOAT, D3D12_RESOURCE_FLAG_NONE);
+		auto texture2D = eastl::make_unique<Texture2D>(texDesc);
 
-	historyNormalsTexture = eastl::make_unique<DX12::Texture2D>(device, size.x, size.y, DXGI_FORMAT_R16G16B16A16_FLOAT, D3D12_RESOURCE_FLAG_NONE);
+		if (bindFlags & D3D11_BIND_SHADER_RESOURCE)
+			texture2D->CreateSRV(srvDesc);
 
-	historyTexture = eastl::make_unique<DX12::Texture2D>(device, size.x, size.y, DXGI_FORMAT_R16G16B16A16_FLOAT, D3D12_RESOURCE_FLAG_NONE);
+		if (bindFlags & D3D11_BIND_UNORDERED_ACCESS)
+			texture2D->CreateUAV(uavDesc);
 
-	RegisterResources(device, depthResource, motionVectorResource, normalRoughnessResource, colorResource);
+		return texture2D;
+	};
+
+	temporalTexture = createTexture2D(DXGI_FORMAT_R16G16B16A16_FLOAT, D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_UNORDERED_ACCESS);
+	historyTexture = createTexture2D(DXGI_FORMAT_R16G16B16A16_FLOAT, D3D11_BIND_SHADER_RESOURCE);
+	varianceTexture = createTexture2D(DXGI_FORMAT_R16G16B16A16_FLOAT, D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_UNORDERED_ACCESS);
+
+	momentsTexture = createTexture2D(DXGI_FORMAT_R11G11B10_FLOAT, D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_UNORDERED_ACCESS);
+	historyMomentsTexture = createTexture2D(DXGI_FORMAT_R11G11B10_FLOAT, D3D11_BIND_SHADER_RESOURCE);
+
+	historyNormalsTexture = createTexture2D(DXGI_FORMAT_R16G16B16A16_SNORM, D3D11_BIND_SHADER_RESOURCE);
 }
 
-void SVGFPipeline::RegisterResources(ID3D12Device5* device, ID3D12Resource* depthResource, ID3D12Resource* motionVectorResource, ID3D12Resource* normalRoughnessResource, ID3D12Resource* colorResource) const
+void SVGFPipeline::Denoise(ID3D11DeviceContext4* context, uint2 renderSize, Settings settings, WrappedResource* normalRoughness, WrappedResource* colorResource, const bool diffuse) const
 {
-	temporalPipeline->RegisterResources(device,
-		temporalTexture.get(),
-		momentsTexture.get(),
-		historyTexture.get(),
-		motionVectorResource,
-		normalRoughnessResource,
-		colorResource,
-		depthResource,
-		historyMomentsTexture.get(),
-		historyNormalsTexture.get());
+	const uint2 dispatchCount = { DivideRoundUp(renderSize.x, 8u), DivideRoundUp(renderSize.y, 8u) };
 
-	variancePipeline->RegisterResources(device,
-		varianceTexture.get(),
-		historyTexture.get(),
-		momentsTexture.get(),
-		normalRoughnessResource,
-		temporalTexture.get(),
-		depthResource);
-
-	spatialPipeline->RegisterResources(device,
-		colorResource,
-		historyTexture.get(),
-		motionVectorResource,
-		normalRoughnessResource,
-		varianceTexture.get(),
-		depthResource);
-}
-
-void SVGFPipeline::Denoise(ID3D12GraphicsCommandList4* commandList, uint2 renderSize, Settings settings, ID3D12Resource* colorTexture) const
-{
 	frameData->InvMaxAccumulatedFrames = 1.0f / (settings.MaxAccumulatedFrames + 1.0f);
 	frameData->AtrousIterations = settings.AtrousIterations;
 	frameData->ColorPhi = settings.ColorPhi;
@@ -88,33 +87,86 @@ void SVGFPipeline::Denoise(ID3D12GraphicsCommandList4* commandList, uint2 render
 	frameData->CameraViewInverse = globals::game::frameBufferCached.GetCameraViewInverse().Transpose();
 	frameData->CameraPreviousViewProjUnjittered = globals::game::frameBufferCached.GetCameraPreviousViewProjUnjittered().Transpose();
 
-	for (uint i = 0; i < settings.AtrousIterations + 1; i++) {
-		if (i > 0) {
-			frameData->AtrousIterations = i - 1;
-		}
+	frameBuffer->Update(frameData.get(), sizeof(SVGF));
 
-		frameBuffer->Update(frameData.get(), sizeof(SVGF), i);
+	auto cb = frameBuffer->CB();
+	context->CSSetConstantBuffers(0, 1, &cb);
+
+    std::array<ID3D11ShaderResourceView*, 7> srvs = { nullptr };
+	std::array<ID3D11UnorderedAccessView*, 2> uavs = { nullptr };
+
+    auto resetViews = [&](uint srvCount, uint uavCount) {
+		srvs.fill(nullptr);
+		uavs.fill(nullptr);
+
+		context->CSSetShaderResources(0, srvCount, srvs.data());
+		context->CSSetUnorderedAccessViews(0, uavCount, uavs.data(), nullptr);
+	};
+
+	auto renderer = globals::game::renderer;
+    auto depth = renderer->GetDepthStencilData().depthStencils[RE::RENDER_TARGETS_DEPTHSTENCIL::kPOST_ZPREPASS_COPY];
+	auto motion = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMOTION_VECTOR];
+
+	// temporal filter
+	uavs.at(0) = temporalTexture->uav.get();
+	uavs.at(1) = momentsTexture->uav.get();
+	srvs.at(0) = historyTexture->srv.get();
+	srvs.at(1) = motion.SRV;
+	srvs.at(2) = normalRoughness->srv;
+	srvs.at(3) = colorResource->srv;
+	srvs.at(4) = depth.depthSRV;
+	srvs.at(5) = historyMomentsTexture->srv.get();
+	srvs.at(6) = historyNormalsTexture->srv.get();
+
+	context->CSSetShaderResources(0, 7, srvs.data());
+	context->CSSetUnorderedAccessViews(0, 2, uavs.data(), nullptr);
+	context->CSSetShader(temporalCS.get(), nullptr, 0);
+
+	context->Dispatch((uint)dispatchCount.x, (uint)dispatchCount.y, 1);
+	resetViews(2, 7);
+
+	context->CopyResource(historyMomentsTexture->resource.get(), momentsTexture->resource.get());
+
+    // variance filter
+	uavs.at(0) = varianceTexture->uav.get();
+	srvs.at(0) = historyTexture->srv.get();
+	srvs.at(1) = momentsTexture->srv.get();
+	srvs.at(2) = normalRoughness->srv;
+	srvs.at(3) = temporalTexture->srv.get();
+	srvs.at(4) = depth.depthSRV;
+
+	context->CSSetShaderResources(0, 5, srvs.data());
+	context->CSSetUnorderedAccessViews(0, 1, uavs.data(), nullptr);
+	context->CSSetShader(varianceCS.get(), nullptr, 0);
+
+	context->Dispatch((uint)dispatchCount.x, (uint)dispatchCount.y, 1);
+	resetViews(1, 5);
+
+	// spatial filter
+	for (int i = 0; i < (int)settings.AtrousIterations; ++i) {
+		frameData->AtrousIterations = i;
+		frameBuffer->Update(frameData.get(), sizeof(SVGF));
+
+		cb = frameBuffer->CB();
+		context->CSSetConstantBuffers(0, 1, &cb);
+
+		uavs.at(0) = (i % 2 == 0) ? colorResource->uav : varianceTexture->uav.get();
+		srvs.at(0) = historyTexture->srv.get();
+		srvs.at(1) = motion.SRV;
+		srvs.at(2) = normalRoughness->srv;
+		srvs.at(3) = (i % 2 == 0) ? varianceTexture->srv.get() : colorResource->srv;
+		srvs.at(4) = depth.depthSRV;
+
+		context->CSSetShaderResources(0, 5, srvs.data());
+		context->CSSetUnorderedAccessViews(0, 1, uavs.data(), nullptr);
+		context->CSSetShader(diffuse ? spatialDiffuseCS.get() : spatialSpecularCS.get(), nullptr, 0);
+
+		context->Dispatch((uint)dispatchCount.x, (uint)dispatchCount.y, 1);
+
+		resetViews(1, 5);
 	}
-	
-	frameBuffer->Upload(commandList);
 
-	uint2 dispatchCount = { DivideRoundUp(renderSize.x, 8u), DivideRoundUp(renderSize.y, 8u) };
-	auto* frameResource = frameBuffer->resource.get();
-
-	temporalPipeline->Dispatch(commandList, dispatchCount, frameResource);
-
-	CD3DX12_RESOURCE_BARRIER temporalUAVBarrier[] = {
-		CD3DX12_RESOURCE_BARRIER::UAV(temporalTexture->resource.get()),
-		CD3DX12_RESOURCE_BARRIER::UAV(momentsTexture->resource.get())
-	};
-	commandList->ResourceBarrier(_countof(temporalUAVBarrier), temporalUAVBarrier);
-
-	variancePipeline->Dispatch(commandList, dispatchCount, frameResource);
-
-	CD3DX12_RESOURCE_BARRIER varianceUAVBarrier[] = {
-		CD3DX12_RESOURCE_BARRIER::UAV(varianceTexture->resource.get())
-	};
-	commandList->ResourceBarrier(_countof(varianceUAVBarrier), varianceUAVBarrier);
-
-	spatialPipeline->Dispatch(commandList, settings.AtrousIterations, dispatchCount, frameBuffer.get(), varianceTexture->resource.get(), colorTexture);
+	if (settings.AtrousIterations % 2 == 0) {
+		context->CopyResource(colorResource->resource11, varianceTexture->resource.get());
+	}
 }
