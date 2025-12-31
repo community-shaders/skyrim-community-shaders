@@ -667,7 +667,10 @@ void ScreenSpaceGI::DrawSSGI()
 	bool* enableSSAO = reinterpret_cast<bool*>(reinterpret_cast<uintptr_t>(BSImagespaceShaderISSAOBlurH.get()) + 0x50LL);
 	*enableSSAO = false;
 
-	if (!(settings.Enabled && ShadersOK())) {
+	// Skip during loading screens to prevent GPU stalls during cell transitions
+	bool isLoading = globals::game::ui && globals::game::ui->IsMenuOpen(RE::LoadingMenu::MENU_NAME);
+
+	if (!(settings.Enabled && ShadersOK()) || isLoading) {
 		FLOAT clr[4] = { 0.f, 0.f, 0.f, 0.f };
 		context->ClearUnorderedAccessViewFloat(texAo[outputAoIdx]->uav.get(), clr);
 		context->ClearUnorderedAccessViewFloat(texIlY[outputIlIdx]->uav.get(), clr);
