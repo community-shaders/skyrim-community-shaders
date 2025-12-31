@@ -213,8 +213,7 @@ void GrassCollision::Update()
 
 		auto context = globals::d3d::context;
 
-		ID3D11Buffer* buffers[1];
-		buffers[0] = perFrame->CB();
+		ID3D11Buffer* buffers[] = { perFrame->CB() };
 		context->VSSetConstantBuffers(5, ARRAYSIZE(buffers), buffers);
 
 		ID3D11ShaderResourceView* srvs[] = { collisionTexture->srv.get() };
