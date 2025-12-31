@@ -51,12 +51,10 @@ void GrassCollision::UpdateCollisions(PerFrame& perFrameData)
 		return distA < distB;
 	});
 
-	eastl::vector<BoundingBoxPacked> boundingBoxData{};
-	boundingBoxData.reserve(MAX_BOUNDING_BOXES);
+	std::array<BoundingBoxPacked, MAX_BOUNDING_BOXES> boundingBoxData{};
+	uint boundingBoxCount = 0;
 
-	eastl::vector<float4> collisionsData{};
-	collisionsData.reserve(MAX_COLLISIONS);
-
+	std::array<float4, MAX_COLLISIONS> collisionsData{};
 	uint collisionIndexExtent = 0;
 
 	for (const auto actor : actorList) {
@@ -69,7 +67,8 @@ void GrassCollision::UpdateCollisions(PerFrame& perFrameData)
 			if (distance > 2048.0f)
 				continue;
 
-			eastl::vector<float4> collisionShapes{};
+			std::array<float4, MAX_COLLISIONS_PER_BOUNDING_BOX> collisionShapes{};
+			uint collisionShapesCount = 0;
 
 			RE::BSVisit::TraverseScenegraphCollision(root, [&](RE::bhkNiCollisionObject* a_object) -> RE::BSVisit::BSVisitControl {
 				RE::NiPoint3 centerPos;
@@ -87,12 +86,14 @@ void GrassCollision::UpdateCollisions(PerFrame& perFrameData)
 					data.z = centerPos.z;
 					data.w = radius;
 
-					collisionShapes.push_back(data);
+					if (collisionShapesCount < MAX_COLLISIONS_PER_BOUNDING_BOX) {
+						collisionShapes[collisionShapesCount++] = data;
+					}
 				}
 				return RE::BSVisit::BSVisitControl::kContinue;
 			});
 
-			std::sort(collisionShapes.begin(), collisionShapes.end(), [](const float4& a, const float4& b) {
+			std::sort(collisionShapes.begin(), collisionShapes.begin() + collisionShapesCount, [](const float4& a, const float4& b) {
 				return a.w > b.w;
 			});
 
@@ -103,8 +104,13 @@ void GrassCollision::UpdateCollisions(PerFrame& perFrameData)
 
 			uint boundingBoxCollisions = 0;
 
-			for (const auto& data : collisionShapes) {
-				collisionsData.push_back(data);
+			for (uint i = 0; i < collisionShapesCount; i++) {
+				const auto& data = collisionShapes[i];
+
+				if (collisionIndexExtent >= MAX_COLLISIONS)
+					break;
+
+				collisionsData[collisionIndexExtent++] = data;
 
 				float2 pointMin(data.x - data.w, data.y - data.w);
 				float2 pointMax(data.x + data.w, data.y + data.w);
@@ -123,14 +129,15 @@ void GrassCollision::UpdateCollisions(PerFrame& perFrameData)
 					break;
 			}
 
-			if (boundingBox.IndexStart != boundingBox.IndexEnd)
-				boundingBoxData.push_back(boundingBox);
-
-			collisionIndexExtent = boundingBox.IndexEnd;
+			if (boundingBox.IndexStart != boundingBox.IndexEnd) {
+				if (boundingBoxCount < MAX_BOUNDING_BOXES) {
+					boundingBoxData[boundingBoxCount++] = boundingBox;
+				}
+			}
 		}
 	}
 
-	perFrameData.BoundingBoxCount = std::min((uint)boundingBoxData.size(), MAX_BOUNDING_BOXES);
+	perFrameData.BoundingBoxCount = boundingBoxCount;
 
 	auto context = globals::d3d::context;
 
