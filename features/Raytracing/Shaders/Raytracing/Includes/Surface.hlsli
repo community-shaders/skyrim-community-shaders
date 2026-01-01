@@ -151,6 +151,7 @@ struct Surface
             F0 *= rmaos.w;
         } else if (material.ShaderType == ShaderType::Lighting) {
             surface.Albedo = Color::GammaToTrueLinear(surface.Albedo);
+            F0 = 0.04f;
 
             if (material.ShaderFlags & ShaderFlags::kSpecular) {
                 Texture2D specularTexture = Textures[NonUniformResourceIndex(material.SpecularTexture)];
@@ -158,7 +159,7 @@ struct Surface
                 surface.Metallic = 0.0f;
                 surface.AO = 1.0f;
                 float3 specularColor = specularTexture.SampleLevel(BaseSampler, texCoord0, 0).r * material.SpecularColor.rgb * material.SpecularColor.a;
-                F0 = 0.08f * specularColor;
+                F0 = clamp(0.08f * specularColor, 0.01f, 1.0f);
             }
             else {
                 surface.Roughness = 1.0f;
