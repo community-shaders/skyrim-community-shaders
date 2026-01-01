@@ -627,6 +627,9 @@ PS_OUTPUT main(PS_INPUT input)
 	uint3 seed = Random::pcg3d(uint3(input.PositionCS.xy, input.PositionCS.x * Math::PI));
 
 #		if defined(RENDER_SHADOWMASK)
+	if(SharedData::InInterior)
+		shadowColor = float4(0,0,0,0);
+
 	if (EndSplitDistances.z >= shadowMapDepth) {
 		float4x3 lightProjectionMatrix = ShadowMapProj[eyeIndex][0];
 		float shadowMapThreshold = AlphaTestRef.y;
@@ -645,15 +648,29 @@ PS_OUTPUT main(PS_INPUT input)
 
 		float3 positionLS = mul(transpose(lightProjectionMatrix), float4(positionMS.xyz, 1)).xyz;
 
+		uint3 shadowMapResolution;
+		TexShadowMapSamplerComp.GetDimensions(shadowMapResolution.x, shadowMapResolution.y, shadowMapResolution.z);
+
+		float cascadeSplitL0 = FrameBuffer::CameraProj[eyeIndex][2][3] / (EndSplitDistances[0] - FrameBuffer::CameraProj[eyeIndex][2][2]);
+		float cascadeSplitL1 = FrameBuffer::CameraProj[eyeIndex][2][3] / (EndSplitDistances[1] - FrameBuffer::CameraProj[eyeIndex][2][2]);
+		float cascadeCoverage = (cascadeIndex == 0) ? cascadeSplitL0 : cascadeSplitL1 - cascadeSplitL0;
+
+		float cascadeTexelSize = cascadeCoverage / shadowMapResolution.x;
+
+		float bias = (SharedData::InInterior) ? 0.00001 : 0.001; // Interiors seem to handle self shadowing better
+		float slope = min(max(abs(ddx(positionLS.z)), abs(ddy(positionLS.z))), 0.001);
+		float slopeBias = bias + slope * cascadeTexelSize;
+		float cascadeSurfaceZ = positionLS.z - slopeBias;
+
 #			if SHADOWFILTER == 0
 		float shadowMapValue = TexShadowMapSampler.Sample(SampShadowMapSampler, float3(positionLS.xy, cascadeIndex)).x;
-		if (shadowMapValue >= positionLS.z - shadowMapThreshold) {
+		if (shadowMapValue >= cascadeSurfaceZ) {
 			shadowVisibility = 1;
 		}
 #			elif SHADOWFILTER == 1
-		shadowVisibility = TexShadowMapSamplerComp.SampleCmpLevelZero(SampShadowMapSamplerComp, float3(positionLS.xy, cascadeIndex), positionLS.z - shadowMapThreshold).x;
+		shadowVisibility = TexShadowMapSamplerComp.SampleCmpLevelZero(SampShadowMapSamplerComp, float3(positionLS.xy, cascadeIndex), cascadeSurfaceZ).x;
 #			elif SHADOWFILTER == 3
-		shadowVisibility = GetPoissonDiskFilteredShadowVisibility(noise, rotationMatrix, TexShadowMapSamplerComp, SampShadowMapSamplerComp, positionLS.xy, cascadeIndex, positionLS.z - shadowMapThreshold, false);
+		shadowVisibility = GetPoissonDiskFilteredShadowVisibility(noise, rotationMatrix, TexShadowMapSamplerComp, SampShadowMapSamplerComp, positionLS.xy, cascadeIndex, cascadeSurfaceZ, false);
 #			endif
 
 		if (cascadeIndex < 1 && StartSplitDistances.y < shadowMapDepth) {
@@ -661,15 +678,20 @@ PS_OUTPUT main(PS_INPUT input)
 
 			float3 cascade1PositionLS = mul(transpose(ShadowMapProj[eyeIndex][1]), float4(positionMS.xyz, 1)).xyz;
 
+			cascadeTexelSize = (cascadeSplitL1 - cascadeSplitL0) / shadowMapResolution.x;
+			slope = min(max(abs(ddx(cascade1PositionLS.z)), abs(ddy(cascade1PositionLS.z))), 0.001);
+			slopeBias = bias + slope * cascadeTexelSize;
+			cascadeSurfaceZ = cascade1PositionLS.z - slopeBias;
+
 #			if SHADOWFILTER == 0
 			float cascade1ShadowMapValue = TexShadowMapSampler.Sample(SampShadowMapSampler, float3(cascade1PositionLS.xy, 1)).x;
-			if (cascade1ShadowMapValue >= cascade1PositionLS.z - AlphaTestRef.z) {
+			if (cascade1ShadowMapValue >= cascadeSurfaceZ) {
 				cascade1ShadowVisibility = 1;
 			}
 #			elif SHADOWFILTER == 1
-			cascade1ShadowVisibility = TexShadowMapSamplerComp.SampleCmpLevelZero(SampShadowMapSamplerComp, float3(cascade1PositionLS.xy, 1), cascade1PositionLS.z - AlphaTestRef.z).x;
+			cascade1ShadowVisibility = TexShadowMapSamplerComp.SampleCmpLevelZero(SampShadowMapSamplerComp, float3(cascade1PositionLS.xy, 1), cascadeSurfaceZ).x;
 #			elif SHADOWFILTER == 3
-			cascade1ShadowVisibility = GetPoissonDiskFilteredShadowVisibility(noise, rotationMatrix, TexShadowMapSamplerComp, SampShadowMapSamplerComp, cascade1PositionLS.xy, 1, cascade1PositionLS.z - AlphaTestRef.z, false);
+			cascade1ShadowVisibility = GetPoissonDiskFilteredShadowVisibility(noise, rotationMatrix, TexShadowMapSamplerComp, SampShadowMapSamplerComp, cascade1PositionLS.xy, 1, cascadeSurfaceZ, false);
 #			endif
 
 			float cascade1BlendFactor = smoothstep(0, 1, (shadowMapDepth - StartSplitDistances.y) / (EndSplitDistances.x - StartSplitDistances.y));
@@ -692,7 +714,7 @@ PS_OUTPUT main(PS_INPUT input)
 			shadowVisibility = min(shadowVisibility, lerp(1, focusShadowVisibility, focusShadowFade));
 		}
 
-		shadowColor.xyzw = fadeFactor * (shadowVisibility - 1) + 1;
+		shadowColor.xyzw = lerp(1.0 * !SharedData::InInterior, shadowVisibility, fadeFactor);
 	}
 #		elif defined(RENDER_SHADOWMASKSPOT)
 	float4 positionLS = mul(transpose(ShadowMapProj[eyeIndex][0]), float4(positionMS.xyz, 1));
