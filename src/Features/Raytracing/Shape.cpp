@@ -167,6 +167,8 @@ void Shape::BuildMaterial(const RE::BSGeometry::GEOMETRY_RUNTIME_DATA& geometryR
 	half roughnessScale = 1.0f;
 	half specularLevel = 0.04f;
 
+	half4 specularColor = { 0.0f, 0.0f, 0.0f, 1.0f };
+
 	RE::BSShader::Type shaderType = RE::BSShader::Type::None;
 	REX::EnumSet<EShaderPropertyFlag, std::uint64_t> shaderFlags;
 	RE::BSShaderMaterial::Feature feature = RE::BSShaderMaterial::Feature::kNone;
@@ -176,6 +178,10 @@ void Shape::BuildMaterial(const RE::BSGeometry::GEOMETRY_RUNTIME_DATA& geometryR
 	ID3D11Texture2D* normalTexture = nullptr;
 	ID3D11Texture2D* effectTexture = nullptr;
 	ID3D11Texture2D* rmaosTexture = nullptr;
+
+	ID3D11Texture2D* specularTexture = nullptr;
+	ID3D11Texture2D* envTexture = nullptr;
+	ID3D11Texture2D* envMaskTexture = nullptr;
 
 	{
 		auto* property = geometryRuntimeData.properties[State::kProperty].get();
@@ -258,6 +264,28 @@ void Shape::BuildMaterial(const RE::BSGeometry::GEOMETRY_RUNTIME_DATA& geometryR
 
 						// Enforce TruePBR flag
 						shaderFlags.set(RE::BSShaderProperty::EShaderPropertyFlag::kMenuScreen);
+					} else {
+						// Vanilla Materials
+						if (const auto* lightingVanillaMaterial = skyrim_cast<RE::BSLightingShaderMaterialBase*>(shaderMaterial)) {
+							if (shaderFlags.any(RE::BSShaderProperty::EShaderPropertyFlag::kSpecular)) {
+								specularTexture = TryGetTexture(lightingVanillaMaterial->specularBackLightingTexture);
+								specularColor = {
+									lightingVanillaMaterial->specularColor.red,
+									lightingVanillaMaterial->specularColor.green,
+									lightingVanillaMaterial->specularColor.blue,
+									lightingVanillaMaterial->specularColorScale
+								};
+								roughnessScale = ShininessToRoughness(lightingVanillaMaterial->specularPower);
+							}
+						}
+					}
+
+					// Envmap
+					if (feature == Feature::kEnvironmentMap || feature == Feature::kEye) {
+						if (const auto* lightingEnvmapMaterial = skyrim_cast<RE::BSLightingShaderMaterialEnvmap*>(shaderMaterial)) {
+							envTexture = TryGetTexture(lightingEnvmapMaterial->envTexture);
+							envMaskTexture = TryGetTexture(lightingEnvmapMaterial->envMaskTexture);
+						}
 					}
 
 					// Glow
@@ -303,11 +331,17 @@ void Shape::BuildMaterial(const RE::BSGeometry::GEOMETRY_RUNTIME_DATA& geometryR
 	auto& defaultNormalIndex = rt.defaultNormalTexture->allocation;
 	auto& defaultBlackIndex = rt.defaultBlackTexture->allocation;
 	auto& defaultRMAOSIndex = rt.defaultRMAOSTexture->allocation;
+	auto& defaultSpecularIndex = rt.defaultSpecularTexture->allocation;
+	auto& defaultEnvIndex = rt.defaultEnvTexture->allocation;
+	auto& defaultEnvMaskIndex = rt.defaultEnvMaskTexture->allocation;
 
 	auto baseTexReg = rt.GetTextureRegister(baseTexture, defaultWhiteIndex);
 	auto normalTexReg = rt.GetTextureRegister(normalTexture, defaultNormalIndex);
 	auto effectTexReg = rt.GetTextureRegister(effectTexture, defaultBlackIndex);
 	auto rmaosTexReg = rt.GetTextureRegister(rmaosTexture, defaultRMAOSIndex);
+	auto specularTexReg = rt.GetTextureRegister(specularTexture, defaultSpecularIndex);
+	auto envTexReg = rt.GetTextureRegister(envTexture, defaultEnvIndex);
+	auto envMaskTexReg = rt.GetTextureRegister(envMaskTexture, defaultEnvMaskIndex);
 
 	/*if (baseTexture && baseTexReg->GetIndex() == defaultWhiteIndex->GetIndex())
 		logger::warn("[RT] BuildMaterial {} - Base texture [0x{:8X}] not shared", name, reinterpret_cast<uintptr_t>(baseTexture));
@@ -338,10 +372,14 @@ void Shape::BuildMaterial(const RE::BSGeometry::GEOMETRY_RUNTIME_DATA& geometryR
 		texCoordOffsetScale,
 		roughnessScale,
 		specularLevel,
+		specularColor,
 		baseTexReg,
 		normalTexReg,
 		effectTexReg,
 		rmaosTexReg,
+		specularTexReg,
+		envTexReg,
+		envMaskTexReg,
 		shaderType,
 		shaderFlags,
 		feature,

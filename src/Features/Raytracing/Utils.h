@@ -247,3 +247,8 @@ static void CreateTexture2DSRV(ID3D12Device5* device, ID3D12Resource* resource, 
 
 	device->CreateShaderResourceView(resource, &srvDesc, handle);
 }
+
+static inline float ShininessToRoughness(float shininess)
+{
+	return sqrtf(2.0f / (shininess + 2.0f));
+}

@@ -16,14 +16,15 @@ namespace ShaderType
 
 namespace ShaderFlags
 {
-    static const uint16_t kTempRefraction = (1 << 0);
-    static const uint16_t kVertexAlpha = (1 << 1);
-    static const uint16_t kGrayscaleToPaletteColor = (1 << 2);
-    static const uint16_t kGrayscaleToPaletteAlpha = (1 << 3);
-    static const uint16_t kFalloff = (1 << 4);
-    static const uint16_t kRefraction = (1 << 5);
-    static const uint16_t kProjectedUV = (1 << 6);
-    static const uint16_t kVertexColors = (1 << 7);
+	static const uint16_t kSpecular = (1 << 0);
+    static const uint16_t kTempRefraction = (1 << 1);
+    static const uint16_t kVertexAlpha = (1 << 2);
+    static const uint16_t kGrayscaleToPaletteColor = (1 << 3);
+    static const uint16_t kGrayscaleToPaletteAlpha = (1 << 4);
+    static const uint16_t kFalloff = (1 << 5);
+    static const uint16_t kRefraction = (1 << 6);
+    static const uint16_t kProjectedUV = (1 << 7);
+    static const uint16_t kVertexColors = (1 << 8);
 }
 
 namespace Feature
@@ -61,12 +62,16 @@ struct Material
 	half4 TexCoordOffsetScale;
 	half RoughnessScale;
 	half SpecularLevel;
+	half4 SpecularColor;
 	uint16_t BaseTexture;
 	uint16_t NormalTexture;
 	uint16_t EffectTexture;
 	uint16_t RMAOSTexture;
+	uint16_t SpecularTexture;
+	uint16_t EnvTexture;
+	uint16_t EnvMaskTexture;
     uint16_t ShaderType: 3;		// 8 types
-    uint16_t ShaderFlags: 8;	// Max 8 flags
+    uint16_t ShaderFlags: 9;	// Max 9 flags
     uint16_t Feature: 5;		// Max 32 features
     uint16_t PBRFlags;			// Max 16 flags
 

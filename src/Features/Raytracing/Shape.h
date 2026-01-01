@@ -71,14 +71,15 @@ public:
 		enum ShaderFlags : uint16_t
 		{
 			None = 0,
-			kTempRefraction = 1 << 0,
-			kVertexAlpha = 1 << 1,
-			kGrayscaleToPaletteColor = 1 << 2,
-			kGrayscaleToPaletteAlpha = 1 << 3,
-			kFalloff = 1 << 4,
-			kRefraction = 1 << 5,
-			kProjectedUV = 1 << 6,
-			kVertexColors = 1 << 7
+			kSpecular = 1 << 0,
+			kTempRefraction = 1 << 1,
+			kVertexAlpha = 1 << 2,
+			kGrayscaleToPaletteColor = 1 << 3,
+			kGrayscaleToPaletteAlpha = 1 << 4,
+			kFalloff = 1 << 5,
+			kRefraction = 1 << 6,
+			kProjectedUV = 1 << 7,
+			kVertexColors = 1 << 8
 		};
 
 		ShaderFlags GetShaderFlags() const
@@ -107,10 +108,18 @@ public:
 		half RoughnessScale;
 		half SpecularLevel;
 
+		// Vanilla Material Colors
+		half4 SpecularColor;
+
 		eastl::shared_ptr<Allocation> BaseTexture;
 		eastl::shared_ptr<Allocation> NormalTexture;
 		eastl::shared_ptr<Allocation> EffectTexture;
 		eastl::shared_ptr<Allocation> RMAOSTexture;
+
+		// Vanilla Material Textures
+		eastl::shared_ptr<Allocation> SpecularTexture;
+		eastl::shared_ptr<Allocation> EnvTexture;
+		eastl::shared_ptr<Allocation> EnvMaskTexture;
 
 		RE::BSShader::Type shaderType;
 		REX::EnumSet<RE::BSShaderProperty::EShaderPropertyFlag, std::uint64_t> shaderFlags;
@@ -123,10 +132,14 @@ public:
 				BaseColor, EffectColor,
 				TexCoordOffsetScale,
 				RoughnessScale, SpecularLevel,
+				SpecularColor,
 				BaseTexture->GetIndex(),
 				NormalTexture->GetIndex(),
 				EffectTexture->GetIndex(),
 				RMAOSTexture->GetIndex(),
+				SpecularTexture->GetIndex(),
+				EnvTexture->GetIndex(),
+				EnvMaskTexture->GetIndex(),
 				GetShaderType(),
 				GetShaderFlags(),
 				static_cast<uint16_t>(Feature),

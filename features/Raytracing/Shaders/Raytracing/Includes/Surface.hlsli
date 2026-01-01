@@ -125,9 +125,10 @@ struct Surface
 
         surface.GeomNormal = normalWS;
 
+        float3 F0 = material.SpecularLevel.xxx;
+
 #ifdef PATH_TRACING
         Texture2D normalTexture = Textures[NonUniformResourceIndex(material.NormalTexture)];
-        Texture2D rmaosTexture = Textures[NonUniformResourceIndex(material.RMAOSTexture)];
 
         float handedness = (dot(cross(normalWS, tangentWS), tangentWS) < 0.0f) ? -1.0f : 1.0f;
 
@@ -138,11 +139,44 @@ struct Surface
             surface.Normal, surface.Tangent, surface.Bitangent
         );
 
-        float4 rmaos = rmaosTexture.SampleLevel(BaseSampler, texCoord0, 0);
+        [branch]
+        if (material.ShaderType == ShaderType::TruePBR)
+        {
+            Texture2D rmaosTexture = Textures[NonUniformResourceIndex(material.RMAOSTexture)];
+            float4 rmaos = rmaosTexture.SampleLevel(BaseSampler, texCoord0, 0);
 
-        surface.Roughness = saturate(rmaos.x * material.RoughnessScale);
-        surface.Metallic = saturate(rmaos.y);
-        surface.AO = rmaos.z;
+            surface.Roughness = saturate(rmaos.x * material.RoughnessScale);
+            surface.Metallic = saturate(rmaos.y);
+            surface.AO = rmaos.z;
+            F0 *= rmaos.w;
+        } else if (material.ShaderType == ShaderType::Lighting) {
+            surface.Albedo = Color::GammaToTrueLinear(surface.Albedo);
+
+            if (material.ShaderFlags & ShaderFlags::kSpecular) {
+                Texture2D specularTexture = Textures[NonUniformResourceIndex(material.SpecularTexture)];
+                surface.Roughness = material.RoughnessScale;
+                surface.Metallic = 0.0f;
+                surface.AO = 1.0f;
+                float3 specularColor = specularTexture.SampleLevel(BaseSampler, texCoord0, 0).r * material.SpecularColor.rgb * material.SpecularColor.a;
+                F0 = 0.08f * specularColor;
+            }
+            else {
+                surface.Roughness = 1.0f;
+                surface.Metallic = 0.0f;
+                surface.AO = 1.0f;
+                F0 = 0.04f;
+            }
+
+            [branch]
+            if (material.Feature & Feature::kEnvironmentMap || material.Feature & Feature::kEye) {
+                Texture2D envTexture = Textures[NonUniformResourceIndex(material.EnvTexture)];
+                Texture2D envMaskTexture = Textures[NonUniformResourceIndex(material.EnvMaskTexture)];
+                float3 envColor = Color::GammaToTrueLinear(envTexture.SampleLevel(BaseSampler, texCoord0, 15).rgb);
+                float envMask = envMaskTexture.SampleLevel(BaseSampler, texCoord0, 0).r;
+                surface.Metallic = envMask;
+                surface.Albedo = lerp(surface.Albedo, envColor, envMask);
+            }
+        }
 #else
         surface.Normal = normalWS;
         surface.Tangent = tangentWS;
@@ -158,7 +192,7 @@ struct Surface
 
         surface.DiffuseAlbedo = surface.Albedo * (1.0f - surface.Metallic);
 
-        surface.F0 = PBR::F0(material.SpecularLevel.xxx, surface.Albedo, surface.Metallic);
+        surface.F0 = PBR::F0(F0, surface.Albedo, surface.Metallic);
 
 #if defined(FULL_MATERIAL)
         surface.SubsurfaceColor = float3(0.0f, 0.0f, 0.0f);
