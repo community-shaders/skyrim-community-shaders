@@ -11,19 +11,19 @@ namespace PBR
 {
     namespace Flags
     {
-        static const uint16_t HasEmissive = (1 << 0);
-        static const uint16_t HasDisplacement = (1 << 1);
-        static const uint16_t HasFeatureTexture0 = (1 << 2);
-        static const uint16_t HasFeatureTexture1 = (1 << 3);
-        static const uint16_t Subsurface = (1 << 4);
-        static const uint16_t TwoLayer = (1 << 5);
-        static const uint16_t ColoredCoat = (1 << 6);
-        static const uint16_t InterlayerParallax = (1 << 7);
-        static const uint16_t CoatNormal = (1 << 8);
-        static const uint16_t Fuzz = (1 << 9);
-        static const uint16_t HairMarschner = (1 << 10);
-        static const uint16_t Glint = (1 << 11);
-        static const uint16_t ProjectedGlint = (1 << 12);
+        static const uint32_t HasEmissive = (1 << 0);
+        static const uint32_t HasDisplacement = (1 << 1);
+        static const uint32_t HasFeatureTexture0 = (1 << 2);
+        static const uint32_t HasFeatureTexture1 = (1 << 3);
+        static const uint32_t Subsurface = (1 << 4);
+        static const uint32_t TwoLayer = (1 << 5);
+        static const uint32_t ColoredCoat = (1 << 6);
+        static const uint32_t InterlayerParallax = (1 << 7);
+        static const uint32_t CoatNormal = (1 << 8);
+        static const uint32_t Fuzz = (1 << 9);
+        static const uint32_t HairMarschner = (1 << 10);
+        static const uint32_t Glint = (1 << 11);
+        static const uint32_t ProjectedGlint = (1 << 12);
     }
 
     namespace Defaults

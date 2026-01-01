@@ -172,7 +172,7 @@ void Shape::BuildMaterial(const RE::BSGeometry::GEOMETRY_RUNTIME_DATA& geometryR
 	RE::BSShader::Type shaderType = RE::BSShader::Type::None;
 	REX::EnumSet<EShaderPropertyFlag, std::uint64_t> shaderFlags;
 	RE::BSShaderMaterial::Feature feature = RE::BSShaderMaterial::Feature::kNone;
-	stl::enumeration<PBRShaderFlags, uint16_t> pbrFlags;
+	stl::enumeration<PBRShaderFlags, uint32_t> pbrFlags;
 
 	ID3D11Texture2D* baseTexture = nullptr;
 	ID3D11Texture2D* normalTexture = nullptr;
@@ -386,11 +386,11 @@ void Shape::BuildMaterial(const RE::BSGeometry::GEOMETRY_RUNTIME_DATA& geometryR
 		pbrFlags);
 }
 
-stl::enumeration<PBRShaderFlags, uint16_t> Shape::GetPBRShaderFlags(const BSLightingShaderMaterialPBR* pbrMaterial)
+stl::enumeration<PBRShaderFlags, uint32_t> Shape::GetPBRShaderFlags(const BSLightingShaderMaterialPBR* pbrMaterial)
 {
 	auto graphicsState = globals::game::graphicsState;
 
-	stl::enumeration<PBRShaderFlags, uint16_t> pbrFlags;
+	stl::enumeration<PBRShaderFlags, uint32_t> pbrFlags;
 
 	if (pbrMaterial->pbrFlags.any(PBRFlags::TwoLayer)) {
 		pbrFlags.set(PBRShaderFlags::TwoLayer);
