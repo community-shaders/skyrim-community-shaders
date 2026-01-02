@@ -25,9 +25,9 @@ namespace DX12
 
 		virtual ~Resource() = default;
 
-		void SetName(LPCWSTR name)
+		void SetName(LPCWSTR name) const
 		{
-			DX::ThrowIfFailed(device->SetName(name));
+			DX::ThrowIfFailed(resource->SetName(name));
 		}
 
 		virtual CD3DX12_RESOURCE_BARRIER GetTransitionBarrier(bool setState, D3D12_RESOURCE_STATES stateAfter, UINT subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES)
