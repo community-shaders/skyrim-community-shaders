@@ -10,7 +10,7 @@ namespace DX12
 	{
 	public:
 		explicit ResourceMA(ID3D12Device5* device, D3D12MA::Allocator* allocator, D3D12MA::ALLOCATION_DESC allocDesc, const D3D12_RESOURCE_DESC& desc, D3D12_RESOURCE_STATES initialState) :
-			device(device), allocator(allocator), pool(pool), desc(desc)
+			device(device), allocator(allocator), desc(desc)
 		{
 			DX::ThrowIfFailed(allocator->CreateResource(&allocDesc, &desc, initialState, nullptr, allocation.put(), IID_PPV_ARGS(&resource)));
 
@@ -86,7 +86,6 @@ namespace DX12
 	protected:
 		ID3D12Device5* device;
 		D3D12MA::Allocator* allocator;
-		D3D12MA::Pool* pool;
 		D3D12_RESOURCE_STATES state;
 		D3D12_RESOURCE_DESC desc;
 	};
