@@ -3,7 +3,6 @@
 
 #include "Raytracing/Includes/Common.hlsli"
 #include "Raytracing/Includes/PBR.hlsli"
-#include "Raytracing/Includes/MonteCarlo.hlsli"
 #include "Raytracing/Includes/Types.hlsli"
 #include "Raytracing/Includes/RT/Geometry.hlsli"
 
