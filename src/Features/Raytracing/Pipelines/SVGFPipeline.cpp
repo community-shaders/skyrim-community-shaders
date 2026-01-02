@@ -95,7 +95,7 @@ void SVGFPipeline::Denoise(ID3D11DeviceContext4* context, uint2 renderSize, Sett
 		uavs.fill(nullptr);
 
 		context->CSSetShaderResources(0, (uint)srvs.size(), srvs.data());
-		context->CSSetUnorderedAccessViews(0, (uint)srvs.size(), uavs.data(), nullptr);
+		context->CSSetUnorderedAccessViews(0, (uint)uavs.size(), uavs.data(), nullptr);
 	};
 
 	auto renderer = globals::game::renderer;
@@ -166,7 +166,6 @@ void SVGFPipeline::Denoise(ID3D11DeviceContext4* context, uint2 renderSize, Sett
 	}
 
 	context->CopyResource(historyNormalsTexture->resource.get(), normalRoughness->resource11);
-	//context->CopyResource(texOutput->resource.get(), texSSRColor->resource.get());
 	context->CopyResource(historyTexture->resource.get(), colorResource->resource11);
 
 	context->CSSetShader(nullptr, nullptr, 0);
