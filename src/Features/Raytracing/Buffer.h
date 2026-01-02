@@ -318,8 +318,8 @@ namespace DX12
 			return desc;
 		}
 
-		explicit StructuredBuffer(ID3D12Device5* device, const uint64_t& a_count, bool uav = false) :
-			Resource(device, D3D12_HEAP_TYPE_DEFAULT, Desc(sizeof(T) * a_count, uav), D3D12_RESOURCE_STATE_COPY_DEST), count(a_count) {}
+		explicit StructuredBuffer(ID3D12Device5* device, const uint64_t& a_count, bool uav = false, D3D12_RESOURCE_STATES state = D3D12_RESOURCE_STATE_COPY_DEST) :
+			Resource(device, D3D12_HEAP_TYPE_DEFAULT, Desc(sizeof(T) * a_count, uav), state), count(a_count) {}
 
 		virtual ~StructuredBuffer() = default;
 
