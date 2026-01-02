@@ -250,5 +250,5 @@ static void CreateTexture2DSRV(ID3D12Device5* device, ID3D12Resource* resource, 
 
 static inline float ShininessToRoughness(float shininess)
 {
-	return sqrtf(2.0f / (shininess + 2.0f));
+	return std::pow(2.0f / (shininess + 2.0f), 0.25f);
 }
