@@ -25,7 +25,7 @@
 #include <imgui_stdlib.h>
 
 #ifdef DLSS_RR
-#	define RAYTRACING_EXTRA_FIELDS ,DLSSRR
+#	define RAYTRACING_EXTRA_FIELDS , DLSSRR
 #else
 #	define RAYTRACING_EXTRA_FIELDS
 #endif
@@ -59,7 +59,7 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	EnablePIXCapture,
 	PIXCaptureLocation,
 	EnableDebugDevice
-	RAYTRACING_EXTRA_FIELDS)
+		RAYTRACING_EXTRA_FIELDS)
 
 ////////////////////////////////////////////////////////////////////////////////////
 
