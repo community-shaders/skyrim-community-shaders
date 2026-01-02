@@ -50,16 +50,16 @@ void SHaRCPipeline::CompileShaders(ID3D12Device5* device)
 
 void SHaRCPipeline::SetupResources(ID3D12Device5* device)
 {
-	sharcHashEntriesBuffer = eastl::make_unique<DX12::StructuredBuffer<uint64_t>>(device, MAX_CAPACITY, true);
+	sharcHashEntriesBuffer = eastl::make_unique<DX12::StructuredBuffer<uint64_t>>(device, MAX_CAPACITY, true, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
 	sharcHashEntriesBuffer->SetName(L"SHaRC HashEntries Buffer");
 
-	sharcLockBuffer = eastl::make_unique<DX12::StructuredBuffer<uint>>(device, MAX_CAPACITY, true);
+	sharcLockBuffer = eastl::make_unique<DX12::StructuredBuffer<uint>>(device, MAX_CAPACITY, true, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
 	sharcLockBuffer->SetName(L"SHaRC Lock Buffer");
 
-	sharcAccumulationBuffer = eastl::make_unique<DX12::StructuredBuffer<SharcAccumulationData>>(device, MAX_CAPACITY, true);
+	sharcAccumulationBuffer = eastl::make_unique<DX12::StructuredBuffer<SharcAccumulationData>>(device, MAX_CAPACITY, true, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
 	sharcAccumulationBuffer->SetName(L"SHaRC Accumulation Buffer");
 
-	sharcResolvedBuffer = eastl::make_unique<DX12::StructuredBuffer<SharcPackedData>>(device, MAX_CAPACITY, true);
+	sharcResolvedBuffer = eastl::make_unique<DX12::StructuredBuffer<SharcPackedData>>(device, MAX_CAPACITY, true, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
 	sharcResolvedBuffer->SetName(L"SHaRC Resolved Buffer");
 }
 

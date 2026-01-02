@@ -454,6 +454,8 @@ void Shape::CreateBuffers(const std::wstring& name)
 
 		vertexBuffer->Upload(commandList);
 
+		vertexBuffer->TransitionBarrier(commandList, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+
 		// UAV
 		if (hasUAV) {
 			D3D12_UNORDERED_ACCESS_VIEW_DESC uavDesc = {};
@@ -516,6 +518,8 @@ void Shape::CreateBuffers(const std::wstring& name)
 		DX::ThrowIfFailed(triangleBuffer->resource->SetName(std::format(L"Triangle Buffer [{}] - {}", allocation->GetIndex(), name).c_str()));
 
 		triangleBuffer->Upload(commandList);
+
+		triangleBuffer->TransitionBarrier(commandList, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
 
 		// SRV
 		{

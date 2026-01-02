@@ -25,7 +25,7 @@
 #include <imgui_stdlib.h>
 
 #ifdef DLSS_RR
-#	define RAYTRACING_EXTRA_FIELDS DLSSRR
+#	define RAYTRACING_EXTRA_FIELDS ,DLSSRR
 #else
 #	define RAYTRACING_EXTRA_FIELDS
 #endif
@@ -58,7 +58,7 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	DebugOutput,
 	EnablePIXCapture,
 	PIXCaptureLocation,
-	EnableDebugDevice,
+	EnableDebugDevice
 	RAYTRACING_EXTRA_FIELDS)
 
 ////////////////////////////////////////////////////////////////////////////////////
@@ -849,12 +849,14 @@ void Raytracing::SetupResources()
 	// Create instance buffer for BLAS
 	{
 		blasInstanceBuffer = eastl::make_unique<DX12::StructuredBufferUpload<D3D12_RAYTRACING_INSTANCE_DESC>>(d3d12Device.get(), MAX_INSTANCES);
+		blasInstanceBuffer->TransitionBarrier(commandList.get(), D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
 		DX::ThrowIfFailed(blasInstanceBuffer->resource->SetName(L"BLAS Instance Buffer"));
 	}
 
 	// Create shadow instance buffer for BLAS
 	{
 		blasShadowInstanceBuffer = eastl::make_unique<DX12::StructuredBufferUpload<D3D12_RAYTRACING_INSTANCE_DESC>>(d3d12Device.get(), MAX_INSTANCES);
+		blasShadowInstanceBuffer->TransitionBarrier(commandList.get(), D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
 		DX::ThrowIfFailed(blasShadowInstanceBuffer->resource->SetName(L"BLAS Instance Buffer"));
 	}
 
@@ -960,6 +962,8 @@ void Raytracing::InitRR()
 	pref.renderAPI = sl::RenderAPI::eD3D12;
 	pref.flags = sl::PreferenceFlags::eUseManualHooking;
 	//sl::PreferenceFlags::eUseFrameBasedResourceTagging;
+
+	pref.logLevel = sl::LogLevel::eOff;
 
 	slInit = (PFun_slInit*)GetProcAddress(interposer, "slInit");
 	slGetNewFrameToken = (PFun_slGetNewFrameToken*)GetProcAddress(interposer, "slGetNewFrameToken");
@@ -2772,9 +2776,9 @@ void Raytracing::DrawRTGI()
 					sl::Resource depth = { sl::ResourceType::eTex2d, depthTexture->resource.get(), D3D12_RESOURCE_STATE_COMMON };
 					sl::Resource mvec = { sl::ResourceType::eTex2d, motionVectorsTexture->resource.get(), 0 };
 					sl::Resource diffuseAlbedo = { sl::ResourceType::eTex2d, diffuseAlbedoTexture->resource.get(), D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE };
-					sl::Resource specularAlbedo = { sl::ResourceType::eTex2d, specularAlbedoTexture->resource.get(), D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE };
+					sl::Resource specularAlbedo = { sl::ResourceType::eTex2d, specularAlbedoTexture->resource.get(), D3D12_RESOURCE_STATE_UNORDERED_ACCESS };
 					sl::Resource normalRoughness = { sl::ResourceType::eTex2d, normalRoughnessTexture->resource.get(), D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE };
-					sl::Resource specHitDistance = { sl::ResourceType::eTex2d, specularHitDistanceTexture->resource.get(), D3D12_RESOURCE_STATE_COMMON };
+					sl::Resource specHitDistance = { sl::ResourceType::eTex2d, specularHitDistanceTexture->resource.get(), D3D12_RESOURCE_STATE_UNORDERED_ACCESS };
 
 					sl::ResourceTag colorInTag = sl::ResourceTag{ &colorIn, sl::kBufferTypeScalingInputColor, sl::ResourceLifecycle::eOnlyValidNow, &inputExtent };
 					sl::ResourceTag colorOutTag = sl::ResourceTag{ &colorOut, sl::kBufferTypeScalingOutputColor, sl::ResourceLifecycle::eOnlyValidNow, &outputExtent };
@@ -3207,12 +3211,16 @@ void Raytracing::InitD3D12(ID3D11Device* ppDevice, ID3D11DeviceContext* pImmedia
 	// Set Context Device
 	DX::ThrowIfFailed(pImmediateContext->QueryInterface(IID_PPV_ARGS(&d3d11Context)));
 
+	bool debugDevice = !settings.EnablePIXCapture && settings.EnableDebugDevice;
+
 	// Create debug device
-	if (!settings.EnablePIXCapture && settings.EnableDebugDevice) {
-		winrt::com_ptr<ID3D12Debug6> debugController;
+	if (debugDevice) {
+		winrt::com_ptr<ID3D12Debug3> debugController;
 		if (SUCCEEDED(D3D12GetDebugInterface(IID_PPV_ARGS(&debugController)))) {
 			debugController->EnableDebugLayer();
 			debugController->SetEnableGPUBasedValidation(TRUE);
+		} else {
+			logger::critical("[RT] Debug layer creation failed.");
 		}
 
 		winrt::com_ptr<ID3D12DeviceRemovedExtendedDataSettings1> pDredSettings;
@@ -3259,6 +3267,17 @@ void Raytracing::InitD3D12(ID3D11Device* ppDevice, ID3D11DeviceContext* pImmedia
 		DX::ThrowIfFailed(commandAllocator->Reset());
 		DX::ThrowIfFailed(commandList->Reset(commandAllocator.get(), nullptr));
 		//DX::ThrowIfFailed(commandList->Close());
+	}
+
+	if (debugDevice) {
+		winrt::com_ptr<ID3D12InfoQueue> infoQueue;
+		if (SUCCEEDED(d3d12Device->QueryInterface(IID_PPV_ARGS(&infoQueue)))) {
+			infoQueue->SetBreakOnSeverity(D3D12_MESSAGE_SEVERITY_CORRUPTION, TRUE);
+			infoQueue->SetBreakOnSeverity(D3D12_MESSAGE_SEVERITY_ERROR, TRUE);
+			infoQueue->SetBreakOnSeverity(D3D12_MESSAGE_SEVERITY_WARNING, TRUE);
+		} else {
+			logger::critical("[RT] Debug break creation failed.");
+		}
 	}
 
 	// Create Interop
@@ -3322,6 +3341,8 @@ void Raytracing::InitD3D12(ID3D11Device* ppDevice, ID3D11DeviceContext* pImmedia
 
 void Raytracing::CreateRootSignature()
 {
+	auto unboundTableFlags = D3D12_DESCRIPTOR_RANGE_FLAG_DATA_VOLATILE | D3D12_DESCRIPTOR_RANGE_FLAG_DESCRIPTORS_VOLATILE;  // D3D12_DESCRIPTOR_RANGE_FLAG_DATA_VOLATILE
+
 	// UAV range
 	giHeap->CreateTable(
 		GIHeap::Table::UAV,
@@ -3338,43 +3359,49 @@ void Raytracing::CreateRootSignature()
 	giHeap->CreateTable(
 		GIHeap::Table::SRV,
 		D3D12_DESCRIPTOR_RANGE_TYPE_SRV,
-		{ { GIHeap::Slot::Main, 1 },
-			{ GIHeap::Slot::Depth, 1 },
-			{ GIHeap::Slot::Albedo, 1 },
-			{ GIHeap::Slot::NormalRoughness, 1 },
-			{ GIHeap::Slot::GNMD, 1 },
-			{ GIHeap::Slot::TLAS, 1 },
-			{ GIHeap::Slot::SkyHemisphere, 1 },
-			{ GIHeap::Slot::Lights, 1 },
-			{ GIHeap::Slot::Materials, 1 },
-			{ GIHeap::Slot::Instances, 1 },
-			{ GIHeap::Slot::Indirection, 1 } });
+		{ { GIHeap::Slot::Main, 1, 0, D3D12_DESCRIPTOR_RANGE_FLAG_DESCRIPTORS_VOLATILE },
+			{ GIHeap::Slot::Depth, 1, 0, D3D12_DESCRIPTOR_RANGE_FLAG_DESCRIPTORS_VOLATILE },
+			{ GIHeap::Slot::Albedo, 1, 0, D3D12_DESCRIPTOR_RANGE_FLAG_DESCRIPTORS_VOLATILE },
+			{ GIHeap::Slot::NormalRoughness, 1, 0, D3D12_DESCRIPTOR_RANGE_FLAG_DESCRIPTORS_VOLATILE },
+			{ GIHeap::Slot::GNMD, 1, 0, D3D12_DESCRIPTOR_RANGE_FLAG_DESCRIPTORS_VOLATILE },
+			{ GIHeap::Slot::TLAS, 1, 0, D3D12_DESCRIPTOR_RANGE_FLAG_DESCRIPTORS_VOLATILE },
+			{ GIHeap::Slot::SkyHemisphere, 1, 0, D3D12_DESCRIPTOR_RANGE_FLAG_DESCRIPTORS_VOLATILE },
+			{ GIHeap::Slot::Lights, 1, 0, D3D12_DESCRIPTOR_RANGE_FLAG_DESCRIPTORS_VOLATILE },
+			{ GIHeap::Slot::Materials, 1, 0, D3D12_DESCRIPTOR_RANGE_FLAG_DATA_VOLATILE | D3D12_DESCRIPTOR_RANGE_FLAG_DESCRIPTORS_VOLATILE },
+			{ GIHeap::Slot::Instances, 1, 0, D3D12_DESCRIPTOR_RANGE_FLAG_DATA_VOLATILE | D3D12_DESCRIPTOR_RANGE_FLAG_DESCRIPTORS_VOLATILE },
+			{ GIHeap::Slot::Indirection, 1, 0, D3D12_DESCRIPTOR_RANGE_FLAG_DATA_VOLATILE | D3D12_DESCRIPTOR_RANGE_FLAG_DESCRIPTORS_VOLATILE } });
 
 	// Vertex buffers (unbounded)
 	giHeap->CreateTable(
 		GIHeap::Table::VertexBuffer,
 		D3D12_DESCRIPTOR_RANGE_TYPE_SRV,
-		{ { GIHeap::Slot::Vertices, UINT_MAX, 1, D3D12_DESCRIPTOR_RANGE_FLAG_DESCRIPTORS_VOLATILE } });
+		{ { GIHeap::Slot::Vertices, UINT_MAX, 1, unboundTableFlags } });
 
 	// Triangle buffers (unbounded)
 	giHeap->CreateTable(
 		GIHeap::Table::TriangleBuffer,
 		D3D12_DESCRIPTOR_RANGE_TYPE_SRV,
-		{ { GIHeap::Slot::Triangles, UINT_MAX, 2, D3D12_DESCRIPTOR_RANGE_FLAG_DESCRIPTORS_VOLATILE } });
+		{ { GIHeap::Slot::Triangles, UINT_MAX, 2, unboundTableFlags } });
 
 	// Textures (unbounded)
 	giHeap->CreateTable(
 		GIHeap::Table::Textures,
 		D3D12_DESCRIPTOR_RANGE_TYPE_SRV,
-		{ { GIHeap::Slot::Textures, UINT_MAX, 3, D3D12_DESCRIPTOR_RANGE_FLAG_DESCRIPTORS_VOLATILE } });
+		{ { GIHeap::Slot::Textures, UINT_MAX, 3, unboundTableFlags } });
 
 	auto rootParameters = giHeap->GetRootParameters();
 
 	CD3DX12_ROOT_PARAMETER1 constantRootParam;
-	constantRootParam.InitAsConstantBufferView(0, 0);
+	constantRootParam.InitAsConstantBufferView(0, 0, D3D12_ROOT_DESCRIPTOR_FLAG_DATA_VOLATILE);
 	rootParameters.push_back(constantRootParam);
 
 	CD3DX12_STATIC_SAMPLER_DESC staticSampler(0);  // register s0
+
+	auto flags = D3D12_ROOT_SIGNATURE_FLAG_DENY_VERTEX_SHADER_ROOT_ACCESS |
+	             D3D12_ROOT_SIGNATURE_FLAG_DENY_HULL_SHADER_ROOT_ACCESS |
+	             D3D12_ROOT_SIGNATURE_FLAG_DENY_DOMAIN_SHADER_ROOT_ACCESS |
+	             D3D12_ROOT_SIGNATURE_FLAG_DENY_GEOMETRY_SHADER_ROOT_ACCESS |
+	             D3D12_ROOT_SIGNATURE_FLAG_DENY_PIXEL_SHADER_ROOT_ACCESS;
 
 	// Create root signature
 	CD3DX12_VERSIONED_ROOT_SIGNATURE_DESC rootSigDesc;
@@ -3383,7 +3410,7 @@ void Raytracing::CreateRootSignature()
 		rootParameters.data(),
 		1,
 		&staticSampler,
-		D3D12_ROOT_SIGNATURE_FLAG_NONE);
+		flags);
 
 	winrt::com_ptr<ID3DBlob> signature;
 	winrt::com_ptr<ID3DBlob> error;
