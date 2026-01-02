@@ -643,7 +643,7 @@ struct Raytracing : public OverlayFeature
 	eastl::shared_ptr<DefaultTexture> defaultRMAOSTexture = nullptr;
 
 	// We'll group trishapes by their parent nodes, hopefully trishapes don't move on their own
-	eastl::unordered_map < eastl::string, eastl::unique_ptr<Model>> models;
+	eastl::unordered_map<eastl::string, eastl::unique_ptr<Model>> models;
 
 	// Instance
 	struct Instance
