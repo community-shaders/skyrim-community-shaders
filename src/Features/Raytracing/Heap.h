@@ -1,7 +1,7 @@
 #pragma once
 
-#include <cstdint>
 #include <concepts>
+#include <cstdint>
 
 template <typename TableEnum, typename SlotEnum>
 struct Heap
