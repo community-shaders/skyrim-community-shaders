@@ -648,17 +648,20 @@ PS_OUTPUT main(PS_INPUT input)
 
 		float3 positionLS = mul(transpose(lightProjectionMatrix), float4(positionMS.xyz, 1)).xyz;
 
+		// Calculate derivative based slope estimation and scale by cascade texel world space size to control self-shadowing and peter panning
 		uint3 shadowMapResolution;
 		TexShadowMapSamplerComp.GetDimensions(shadowMapResolution.x, shadowMapResolution.y, shadowMapResolution.z);
 
+		// Convert split distance from NDC to VS
 		float cascadeSplitL0 = FrameBuffer::CameraProj[eyeIndex][2][3] / (EndSplitDistances[0] - FrameBuffer::CameraProj[eyeIndex][2][2]);
 		float cascadeSplitL1 = FrameBuffer::CameraProj[eyeIndex][2][3] / (EndSplitDistances[1] - FrameBuffer::CameraProj[eyeIndex][2][2]);
 		float cascadeCoverage = (cascadeIndex == 0) ? cascadeSplitL0 : cascadeSplitL1 - cascadeSplitL0;
 
 		float cascadeTexelSize = cascadeCoverage / shadowMapResolution.x;
 
+		//Note: higher bias reduces peter panning, lower bias leads to more self-shadowing(shadow acne)
 		float bias = (SharedData::InInterior) ? 0.00001 : 0.001; // Interiors seem to handle self shadowing better
-		float slope = min(max(abs(ddx(positionLS.z)), abs(ddy(positionLS.z))), 0.001);
+		float slope = min(max(abs(ddx(positionLS.z)), abs(ddy(positionLS.z))), 0.001); // Limit to avoid outline aliasing
 		float slopeBias = bias + slope * cascadeTexelSize;
 		float cascadeSurfaceZ = positionLS.z - slopeBias;
 
