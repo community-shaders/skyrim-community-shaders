@@ -253,7 +253,7 @@ namespace DX12
 
 		void UpdateList(T const* srcData, uint64_t localCount, uint uploadIndex = 0)
 		{
-			Update(srcData, sizeof(T) * localCount, uploadIndex);
+			Update(srcData, sizeof(T) * localCount, 0, uploadIndex);
 		}
 
 		void Upload(ID3D12GraphicsCommandList4* commandList, uint uploadIndex = 0)
