@@ -436,37 +436,6 @@ struct Raytracing : public OverlayFeature
 	static constexpr Denoiser DefaultDenoiser = Denoiser::SVGF;
 #endif
 
-	struct SHaRCSettings
-	{
-		float SceneScale = 1.0f;
-		int AccumFrameNum = 10;
-		int StaleFrameNum = 64;
-		float RadianceScale = 1e3f;
-		bool AntifireflyFilter = true;
-
-		SHaRCSettings() = default;
-		SHaRCSettings(const SHaRCSettings&) = default;
-
-		SHaRCSettings& operator=(const SHaRCSettings&) = default;
-		bool operator==(const SHaRCSettings&) const = default;
-		bool operator!=(const SHaRCSettings&) const = default;
-
-		SHaRCFrameData GetFrameData(bool updatePass) const
-		{
-			return {
-				.SceneScale = SceneScale,
-				.AccumFrameNum = (uint)AccumFrameNum,
-				.StaleFrameNum = (uint)StaleFrameNum,
-				.RadianceScale = RadianceScale,
-				.AntifireflyFilter = AntifireflyFilter,
-				.Capacity = SHaRCPipeline::MAX_CAPACITY,
-				.UpdatePass = updatePass
-			};
-		}
-
-		NLOHMANN_DEFINE_TYPE_INTRUSIVE_WITH_DEFAULT(SHaRCSettings, SceneScale, AccumFrameNum, StaleFrameNum, RadianceScale, AntifireflyFilter)
-	};
-
 #ifdef DLSS_RR
 	struct DLSSRRSettings
 	{
@@ -543,7 +512,7 @@ struct Raytracing : public OverlayFeature
 		PIXCaptureLocation PIXCaptureLocation = PIXCaptureLocation::GlobalIllumination;
 		bool EnableDebugDevice = false;
 		bool WhiteFurnace = false;
-		SHaRCSettings SHaRC;
+		SHaRCPipeline::Settings SHaRC;
 	} settings;
 
 	enum class RecompileReason : uint32_t

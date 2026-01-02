@@ -58,7 +58,8 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	DebugOutput,
 	EnablePIXCapture,
 	PIXCaptureLocation,
-	EnableDebugDevice
+	EnableDebugDevice,
+	SHaRC
 		RAYTRACING_EXTRA_FIELDS)
 
 ////////////////////////////////////////////////////////////////////////////////////
