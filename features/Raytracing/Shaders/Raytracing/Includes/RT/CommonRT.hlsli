@@ -27,11 +27,13 @@
 #define RAY_TMAX (1e10f)
 #define SHADOW_RAY_TMAX (1e5f)
 
-#define GN_OFFSET (0.1f)
+#define GN_BIAS (0.01f)
 
 #define MIN_DIFFUSE_SHADOW (0.001f)
 #define MIN_RADIANCE (0.01f)
 #define RR_MIN_BOUNCE (3)
+
+#define DIV_EPSILON (1e-4f)
 
 uint InitRandomSeed(uint2 coord, uint2 size, uint frameCount)
 {

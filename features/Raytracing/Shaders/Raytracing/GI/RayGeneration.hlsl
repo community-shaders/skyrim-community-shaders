@@ -84,7 +84,7 @@ void main()
 
         OutputTexture[idx] = float4(skyIrradiance, 0.0f);
         SpecularAlbedo[idx] = float4(0.5f, 0.5f, 0.5f, 0.0f);
-        SpecularHitDist[idx] = 0.0f;
+        SpecularHitDist[idx] = RAY_TMAX;
         return;
     }
 
@@ -238,7 +238,7 @@ void main()
                     throughput /= rrProbability;
             }
 
-            ray.Origin = surface.Position + surface.GeomNormal * 0.01f;
+            ray.Origin = surface.Position + surface.GeomNormal * GN_BIAS;
             ray.Direction = direction;
             ray.TMin = 0.01f;
             ray.TMax = RAY_TMAX;
@@ -293,7 +293,7 @@ void main()
                 bool isValidHit = payload.hitDistance > voxelSize * sqrt(3.0f);
 
                 if (isValidHit) {
-                    float footprint = payload.hitDistance * sqrt(0.5f * surface.Roughness / (1.0f - surface.Roughness));
+                    float footprint = payload.hitDistance * sqrt(0.5f * surface.Roughness / max(1.0f - surface.Roughness, DIV_EPSILON));
                     isValidHit &= footprint > voxelSize;
                 }
 

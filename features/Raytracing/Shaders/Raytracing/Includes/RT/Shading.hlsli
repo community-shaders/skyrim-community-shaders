@@ -145,7 +145,7 @@ float3 EvalDirectionalLight(in Surface surface, in BRDFContext brdfContext, in L
     if (any(direct > MIN_DIFFUSE_SHADOW))
     {
         float3 lr = TangentToWorld(light.Vector, SampleCosineHemisphereScaled(randomSeed, 0.025f));
-        direct *= TraceRayShadow(Scene, surface.Position, lr);
+        direct *= TraceRayShadow(Scene, surface, lr);
     }
 
     return direct;
@@ -217,7 +217,7 @@ float3 EvalPointLight(in Surface surface, in BRDFContext brdfContext, in LightDa
     if (any(direct > MIN_DIFFUSE_SHADOW))
     {
         float3 lr = TangentToWorld(l, SampleCosineHemisphereScaled(randomSeed, 0.05f));
-        direct *= TraceRayShadowFinite(Scene, surface.Position, lr, dist);
+        direct *= TraceRayShadowFinite(Scene, surface, lr, dist);
     }
 
     return direct;

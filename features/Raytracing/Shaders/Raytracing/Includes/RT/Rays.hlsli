@@ -2,12 +2,13 @@
 #define RAYS_HLSL
 
 #include "Raytracing/Includes/Types.hlsli"
+#include "Raytracing/Includes/Surface.hlsli"
 #include "Raytracing/Includes/RT/CommonRT.hlsli"
 
-float TraceRayShadow(RaytracingAccelerationStructure scene, float3 origin, float3 direction)
+float TraceRayShadow(RaytracingAccelerationStructure scene, Surface surface, float3 direction)
 {
     RayDesc ray;
-    ray.Origin = origin;
+    ray.Origin = surface.Position + surface.GeomNormal * GN_BIAS;
     ray.Direction = direction;
     ray.TMin = 0.01f;
     ray.TMax = SHADOW_RAY_TMAX;
@@ -19,10 +20,10 @@ float TraceRayShadow(RaytracingAccelerationStructure scene, float3 origin, float
     return shadowPayload.missed;
 }
 
-float TraceRayShadowFinite(RaytracingAccelerationStructure scene, float3 origin, float3 direction, float tmax)
+float TraceRayShadowFinite(RaytracingAccelerationStructure scene, Surface surface, float3 direction, float tmax)
 {
     RayDesc ray;
-    ray.Origin = origin;
+    ray.Origin = surface.Position + surface.GeomNormal * GN_BIAS;
     ray.Direction = direction;
     ray.TMin = 0.01f;
     ray.TMax = tmax;
