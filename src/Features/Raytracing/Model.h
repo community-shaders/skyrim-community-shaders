@@ -17,8 +17,6 @@
 #include "Features/Raytracing/Shape.h"
 #include "Features/Raytracing/Utils.h"
 
-#include <shared_mutex>
-
 struct Model
 {
 	eastl::vector<eastl::unique_ptr<Shape>> shapes;
@@ -53,23 +51,18 @@ struct Model
 
 	void AddRef()
 	{
-		refCount++;
+		refCount.fetch_add(1, eastl::memory_order_relaxed);
 	}
 
 	// Returns refCount
 	int Release()
 	{
-		//std::lock_guard lock{ releaseMutex };
-
-		refCount--;
-		return refCount;
+		return refCount.fetch_sub(1, eastl::memory_order_acq_rel) - 1;
 	}
 
 private:
 	Flags flags = Flags::None;
 	uint32_t shaderTypes = RE::BSShader::Type::None;
 	int features = static_cast<int>(RE::BSShaderMaterial::Feature::kNone);
-	int refCount = 0;
-
-	//std::shared_mutex releaseMutex;
+	eastl::atomic<int> refCount{ 0 };
 };

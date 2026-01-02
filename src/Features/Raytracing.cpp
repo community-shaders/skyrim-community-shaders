@@ -1499,11 +1499,11 @@ inline std::wstring ToWide(const std::string& str)
 	return wstr;
 }
 
-void Raytracing::CommitModel(Model& model)
+void Raytracing::CommitModel(Model* model)
 {
 	std::lock_guard lock{ renderMutex };
 
-	auto& shapes = model.shapes;
+	auto& shapes = model->shapes;
 	auto meshCount = shapes.size();
 
 	eastl::vector<D3D12_RAYTRACING_GEOMETRY_DESC> geometryDescs(meshCount);
@@ -1565,28 +1565,28 @@ void Raytracing::CommitModel(Model& model)
 	blasDesc.CustomPool = blasPool.get();
 
 	desc.Width = prebuildInfo.ResultDataMaxSizeInBytes;
-	DX::ThrowIfFailed(allocator->CreateResource(&blasDesc, &desc, D3D12_RESOURCE_STATE_RAYTRACING_ACCELERATION_STRUCTURE, nullptr, model.blasBuffer.put(), IID_NULL, NULL));
+	DX::ThrowIfFailed(allocator->CreateResource(&blasDesc, &desc, D3D12_RESOURCE_STATE_RAYTRACING_ACCELERATION_STRUCTURE, nullptr, model->blasBuffer.put(), IID_NULL, NULL));
 
 	D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_DESC buildDesc = {
-		.DestAccelerationStructureData = model.blasBuffer->GetResource()->GetGPUVirtualAddress(),
+		.DestAccelerationStructureData = model->blasBuffer->GetResource()->GetGPUVirtualAddress(),
 		.Inputs = inputs,
 		.ScratchAccelerationStructureData = scratch->GetResource()->GetGPUVirtualAddress()
 	};
 
 	commandList->BuildRaytracingAccelerationStructure(&buildDesc, 0, nullptr);
 
-	const auto& asBarrier = CD3DX12_RESOURCE_BARRIER::UAV(model.blasBuffer->GetResource());
+	const auto& asBarrier = CD3DX12_RESOURCE_BARRIER::UAV(model->blasBuffer->GetResource());
 	commandList->ResourceBarrier(1, &asBarrier);
 
 	if (updatable)
-		model.blasScratchBuffer = std::move(scratch);
+		model->blasScratchBuffer = std::move(scratch);
 	else
 		tempGPUData.emplace_back(std::move(scratch), fenceValue);
 }
 
-void Raytracing::UpdateModelBLAS(Model& model)
+void Raytracing::UpdateModelBLAS(Model* model) const
 {
-	auto& shapes = model.shapes;
+	auto& shapes = model->shapes;
 	auto shapeCount = shapes.size();
 
 	eastl::vector<D3D12_RAYTRACING_GEOMETRY_DESC> geometryDescs(shapeCount);
@@ -1619,10 +1619,10 @@ void Raytracing::UpdateModelBLAS(Model& model)
 	};
 
 	D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_DESC buildDesc = {
-		.DestAccelerationStructureData = model.blasBuffer->GetResource()->GetGPUVirtualAddress(),
+		.DestAccelerationStructureData = model->blasBuffer->GetResource()->GetGPUVirtualAddress(),
 		.Inputs = inputs,
-		.SourceAccelerationStructureData = model.blasBuffer->GetResource()->GetGPUVirtualAddress(),
-		.ScratchAccelerationStructureData = model.blasScratchBuffer->GetResource()->GetGPUVirtualAddress()
+		.SourceAccelerationStructureData = model->blasBuffer->GetResource()->GetGPUVirtualAddress(),
+		.ScratchAccelerationStructureData = model->blasScratchBuffer->GetResource()->GetGPUVirtualAddress()
 	};
 
 	commandList->BuildRaytracingAccelerationStructure(&buildDesc, 0, nullptr);
@@ -1813,16 +1813,16 @@ void Raytracing::CreateModel(RE::TESObjectREFR* refr, const char* path, RE::NiNo
 	if (auto shapeCount = shapes.size(); shapeCount > 0) {
 		eastl::string modelKey = path;
 
-		auto model = Model(shapes);
+		auto model = eastl::make_unique<Model>(shapes);
 
 		// Models with these flags cannot be instanced directly
-		if ((model.GetFlags() & Flags::Dynamic) || (model.GetFlags() & Flags::Skinned))
+		if ((model->GetFlags() & Flags::Dynamic) || (model->GetFlags() & Flags::Skinned))
 			modelKey.append(std::format("_{:08X}", reinterpret_cast<uintptr_t>(pRoot)).c_str());
 
 		auto [it, emplaced] = models.emplace(modelKey, eastl::move(model));
 
 		if (emplaced) {
-			CommitModel(it->second);
+			CommitModel(it->second.get());
 			AddInstance(formID, pRoot, modelKey);
 
 			logger::debug("[RT] CreateModel - Commited {} TriShapes", shapeCount);
@@ -1844,7 +1844,7 @@ bool Raytracing::RemoveInstance(RE::NiNode* pRoot, bool releaseModel)
 		if (auto modelIt = models.find(instance.filename); modelIt != models.end()) {
 			auto& model = modelIt->second;
 
-			auto refCount = model.Release();
+			auto refCount = model->Release();
 
 			logger::debug("[RT] RemoveInstance - RefCount: {}", refCount);
 
@@ -1927,7 +1927,7 @@ void Raytracing::AddInstance(RE::FormID formID, RE::NiNode* pNiNode, eastl::stri
 
 			if (emplaced) {
 				formIDNodes.try_emplace(formID, pNiNode);
-				modelIt->second.AddRef();
+				modelIt->second->AddRef();
 			}
 		}
 	}
@@ -2024,9 +2024,9 @@ void Raytracing::UpdateDynamicSkinning(ID3D12GraphicsCommandList4* pCommandList)
 		if (auto modelIt = models.find(path); modelIt != models.end()) {
 			auto& model = modelIt->second;
 
-			UpdateModelBLAS(model);
+			UpdateModelBLAS(model.get());
 
-			uavBarriers.push_back(CD3DX12_RESOURCE_BARRIER::UAV(model.blasBuffer->GetResource()));
+			uavBarriers.push_back(CD3DX12_RESOURCE_BARRIER::UAV(model->blasBuffer->GetResource()));
 		}
 	}
 
@@ -2125,8 +2125,8 @@ void Raytracing::UpdateInstances()
 		float worldBoundRadius = worldBound.radius;
 		float distanceToBounds = Util::Units::GameUnitsToMeters(eye.GetDistance(worldBound.center) - worldBoundRadius);
 
-		auto shaderTypes = model.GetShaderTypes();
-		auto features = model.GetFeatures();
+		auto shaderTypes = model->GetShaderTypes();
+		auto features = model->GetFeatures();
 
 		// We exclude emissive models from culling
 		auto cullOutOfView = !(shaderTypes & RE::BSShader::Type::Effect) && !(features & static_cast<int>(RE::BSShaderMaterial::Feature::kGlowMap));
@@ -2138,12 +2138,12 @@ void Raytracing::UpdateInstances()
 				continue;
 		}
 
-		if (!instance.Update(pNiNode, { it->first, model }))
+		if (!instance.Update(pNiNode, { it->first, model.get() }))
 			return;
 
 		// This is temporary while I think of a better place to fit this (probably on instance.Update?)
 		auto firstShapeIndex = totalShapeCount;
-		auto shapeCount = model.shapes.size();
+		auto shapeCount = model->shapes.size();
 
 		if (totalShapeCount + shapeCount > MAX_SHAPES)
 			break;
@@ -2151,13 +2151,13 @@ void Raytracing::UpdateInstances()
 		totalShapeCount += static_cast<uint32_t>(shapeCount);
 
 		for (size_t i = 0; i < shapeCount; i++) {
-			pIndirectionData[firstShapeIndex + i] = static_cast<uint32_t>(model.shapes[i]->allocation->GetIndex());
+			pIndirectionData[firstShapeIndex + i] = static_cast<uint32_t>(model->shapes[i]->allocation->GetIndex());
 		}
 
 		D3D12_RAYTRACING_INSTANCE_DESC blasInstance = {
 			.InstanceID = 0,  // We don't really use this, instances are an unordered_map, so yeah unordered...
 			.InstanceMask = 1,
-			.AccelerationStructure = model.blasBuffer->GetResource()->GetGPUVirtualAddress()
+			.AccelerationStructure = model->blasBuffer->GetResource()->GetGPUVirtualAddress()
 		};
 
 		// Copy transform matrix from Instance to DX12 BLAS instance
@@ -2410,13 +2410,13 @@ void Raytracing::UpdateShadowInstances()
 
 		auto& model = it->second;
 
-		if (!instance.Update(pNiNode, { it->first, model }))
+		if (!instance.Update(pNiNode, { it->first, model.get() }))
 			return;
 
 		D3D12_RAYTRACING_INSTANCE_DESC blasShadowInstance = {
 			.InstanceID = static_cast<uint>(blasShadowInstances.size()),
 			.InstanceMask = 1,
-			.AccelerationStructure = model.blasBuffer->GetResource()->GetGPUVirtualAddress()
+			.AccelerationStructure = model->blasBuffer->GetResource()->GetGPUVirtualAddress()
 		};
 
 		memcpy(blasShadowInstance.Transform, instance.transform.m, sizeof(blasShadowInstance.Transform));
