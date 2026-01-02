@@ -129,7 +129,7 @@ struct Surface
         Texture2D normalTexture = Textures[NonUniformResourceIndex(material.NormalTexture)];
         Texture2D rmaosTexture = Textures[NonUniformResourceIndex(material.RMAOSTexture)];
 
-        float handedness = (dot(cross(normalWS, tangentWS), tangentWS) < 0.0f) ? -1.0f : 1.0f;
+        float handedness = (dot(cross(normalWS, tangentWS), bitangentWS) < 0.0f) ? -1.0f : 1.0f;
 
         NormalMap(
             normalTexture.SampleLevel(BaseSampler, texCoord0, 0).rgb,
