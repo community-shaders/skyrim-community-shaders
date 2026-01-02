@@ -6,11 +6,11 @@
 Texture2D<unorm half4> NormalGlossiness     : register(t0);
 Texture2D<unorm half4> Albedo               : register(t1);
 Texture2D<unorm half4> GNMAO                : register(t2);
-Texture2D<snorm half2> MotionVectors        : register(t3);
+Texture2D<half2> MotionVectors        : register(t3);
 
 RWTexture2D<snorm half4> NormalRoughness    : register(u0);
-RWTexture2D<unorm half4> Diffuse            : register(u1);
-RWTexture2D<snorm half2> MotionVectorsOut   : register(u2);
+RWTexture2D<half4> Diffuse            : register(u1);
+RWTexture2D<half2> MotionVectorsOut   : register(u2);
 
 cbuffer RenderResCB : register(b0)
 {

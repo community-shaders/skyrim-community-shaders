@@ -896,7 +896,7 @@ void Raytracing::SetupResources()
 		texDesc.Height = SKY_CUBEMAP_SIZE * 2;
 		texDesc.MipLevels = 1;
 		texDesc.ArraySize = 1;
-		texDesc.Format = DXGI_FORMAT_R11G11B10_FLOAT;
+		texDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
 		texDesc.SampleDesc.Count = 1;
 		texDesc.SampleDesc.Quality = 0;
 		texDesc.BindFlags = D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_UNORDERED_ACCESS;
@@ -1418,7 +1418,11 @@ void Raytracing::ConvertTextures() const
 	uint2 dispatchCount = { DivideRoundUp(renderSize.x, 8u), DivideRoundUp(renderSize.y, 8u) };
 	context->Dispatch(dispatchCount.x, dispatchCount.y, 1);
 
-	//context->CSSetUnorderedAccessViews(0, 1, nullptr, nullptr);
+
+	uavs[0] = nullptr;
+	uavs[1] = nullptr;
+	uavs[2] = nullptr;
+	context->CSSetUnorderedAccessViews(0, _countof(uavs), uavs, nullptr);
 }
 
 void Raytracing::SkyCubeToHemi() const
@@ -1433,14 +1437,16 @@ void Raytracing::SkyCubeToHemi() const
 	auto sampler = samplerState.get();
 	context->CSSetSamplers(0, 1, &sampler);
 
-	context->CSSetUnorderedAccessViews(0, 1, &skyHemisphere->uav, nullptr);
+	ID3D11UnorderedAccessView* uav = skyHemisphere->uav;
+	context->CSSetUnorderedAccessViews(0, 1, &uav, nullptr);
 
 	float hemiResolution = SKY_CUBEMAP_SIZE * 2.0f;
 	uint dispatch = (uint)std::ceil(hemiResolution / 8.0f);
 
 	context->Dispatch(dispatch, dispatch, 1);
 
-	//context->CSSetUnorderedAccessViews(0, 1, nullptr, nullptr);
+	uav = nullptr;
+	context->CSSetUnorderedAccessViews(0, 1, &uav, nullptr);
 }
 
 void Raytracing::Main_RenderWorld(bool a1)
