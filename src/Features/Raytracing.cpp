@@ -1418,7 +1418,6 @@ void Raytracing::ConvertTextures() const
 	uint2 dispatchCount = { DivideRoundUp(renderSize.x, 8u), DivideRoundUp(renderSize.y, 8u) };
 	context->Dispatch(dispatchCount.x, dispatchCount.y, 1);
 
-
 	uavs[0] = nullptr;
 	uavs[1] = nullptr;
 	uavs[2] = nullptr;
