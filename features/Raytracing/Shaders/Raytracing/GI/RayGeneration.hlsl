@@ -238,7 +238,7 @@ void main()
                     throughput /= rrProbability;
             }
 
-            ray.Origin = surface.Position + surface.GeomNormal * GN_BIAS;
+            ray.Origin = OffsetRay(surface.Position, surface.GeomNormal, direction);
             ray.Direction = direction;
             ray.TMin = 0.01f;
             ray.TMax = RAY_TMAX;
