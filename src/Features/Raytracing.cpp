@@ -83,7 +83,7 @@ void Raytracing::SaveSettings(json& o_json)
 	o_json = settings;
 }
 
-void DrawFloat2(const char* label, float2& v, float min = 0.0f, float max = 1.0f)
+static void DrawFloat2(const char* label, float2& v, float min = 0.0f, float max = 1.0f)
 {
 	float floats[2] = { v.x, v.y };
 	if (ImGui::SliderFloat2(label, floats, min, max)) {
