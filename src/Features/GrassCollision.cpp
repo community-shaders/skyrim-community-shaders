@@ -22,7 +22,7 @@ void GrassCollision::DrawSettings()
 
 void GrassCollision::UpdateCollisions(PerFrame& perFrameData)
 {
-	eastl::vector<RE::Actor*> actorList{};
+	std::vector<RE::Actor*> actorList{};
 
 	// Actor query code from po3 under MIT
 	// https://github.com/powerof3/PapyrusExtenderSSE/blob/7a73b47bc87331bec4e16f5f42f2dbc98b66c3a7/include/Papyrus/Functions/Faction.h#L24C7-L46
@@ -51,10 +51,10 @@ void GrassCollision::UpdateCollisions(PerFrame& perFrameData)
 		return distA < distB;
 	});
 
-	eastl::vector<BoundingBoxPacked> boundingBoxData{};
+	std::vector<BoundingBoxPacked> boundingBoxData{};
 	boundingBoxData.reserve(MAX_BOUNDING_BOXES);
 
-	eastl::vector<float4> collisionsData{};
+	std::vector<float4> collisionsData{};
 	collisionsData.reserve(MAX_COLLISIONS);
 
 	uint collisionIndexExtent = 0;
@@ -69,7 +69,7 @@ void GrassCollision::UpdateCollisions(PerFrame& perFrameData)
 			if (distance > 2048.0f)
 				continue;
 
-			eastl::vector<float4> collisionShapes{};
+			std::vector<float4> collisionShapes{};
 
 			RE::BSVisit::TraverseScenegraphCollision(root, [&](RE::bhkNiCollisionObject* a_object) -> RE::BSVisit::BSVisitControl {
 				RE::NiPoint3 centerPos;
