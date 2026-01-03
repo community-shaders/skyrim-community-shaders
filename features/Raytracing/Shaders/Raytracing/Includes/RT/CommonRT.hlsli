@@ -27,7 +27,7 @@
 #define RAY_TMAX (1e10f)
 #define SHADOW_RAY_TMAX (1e5f)
 
-#define GN_BIAS_MAX (0.1f)
+#define GN_BIAS_MAX (0.5f)
 
 #define MIN_DIFFUSE_SHADOW (0.001f)
 #define MIN_RADIANCE (0.01f)
