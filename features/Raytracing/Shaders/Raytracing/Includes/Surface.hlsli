@@ -109,6 +109,11 @@ struct Surface
             //surface.Albedo = baseColorLinear; // This breaks sharc
             surface.Albedo = 0;
             surface.Emissive = baseColorLinear * Frame.Effect;
+
+            surface.Roughness = 1.0f;
+            surface.Metallic = 0.0f;
+            surface.AO = 1.0f;
+            surface.F0 = 0.04f;
         }
         else
         {
@@ -155,7 +160,7 @@ struct Surface
 
             if (material.ShaderFlags & ShaderFlags::kSpecular) {
                 Texture2D specularTexture = Textures[NonUniformResourceIndex(material.SpecularTexture)];
-                surface.Roughness = material.RoughnessScale;
+                surface.Roughness = material.RoughnessScale >= 0.0f ? saturate(material.RoughnessScale) : 1.0f;
                 surface.Metallic = 0.0f;
                 surface.AO = 1.0f;
                 float3 specularColor = specularTexture.SampleLevel(BaseSampler, texCoord0, 0).r * material.SpecularColor.rgb * material.SpecularColor.a;

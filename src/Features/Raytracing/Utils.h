@@ -250,5 +250,9 @@ static void CreateTexture2DSRV(ID3D12Device5* device, ID3D12Resource* resource, 
 
 static inline float ShininessToRoughness(float shininess)
 {
+	// make sure shininess within valid range (0 - 1023), otherwise set to 1.0f
+	if (shininess <= 0.0f || shininess > 1023.0f) {
+		return 1.0f;
+	}
 	return std::pow(2.0f / (shininess + 2.0f), 0.25f);
 }
