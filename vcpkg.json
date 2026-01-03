@@ -37,6 +37,10 @@
             "version": "3.5.0"
         },
         {
+            "name": "eastl",
+            "version": "3.27.01"
+        },
+        {
             "name": "imgui",
             "version": "1.90"
         },
