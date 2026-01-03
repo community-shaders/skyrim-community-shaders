@@ -116,7 +116,7 @@ float3 OffsetRay(float3 p, float3 n, float3 l)
 	const float MinBias = 0.01f;
 	const float MaxBias = GN_BIAS_MAX;
 	const float NormalBias = lerp(MaxBias, MinBias, saturate(dot(n, l)));
-	p += l * NormalBias;
+	p += n * NormalBias;
 	return p;
 }
 
