@@ -83,6 +83,8 @@ void main()
         float3 skyIrradiance = SampleSky(sourceDirection) * Frame.Sky;
 
         OutputTexture[idx] = float4(skyIrradiance, 0.0f);
+        DiffuseAlbedoPathTracing[idx] = float4(0.0f, 0.0f, 0.0f, 1.0f);
+        NormalRoughnessPathTracing[idx] = float4(0.0f, 0.0f, 0.0f, 1.0f);
         SpecularAlbedo[idx] = float4(0.5f, 0.5f, 0.5f, 0.0f);
         SpecularHitDist[idx] = RAY_TMAX;
         return;
@@ -343,6 +345,8 @@ void main()
 
 #if defined(PATH_TRACING)
     OutputTexture[idx] = float4(direct + radiance, 0.0f);
+    DiffuseAlbedoPathTracing[idx] = float4(sourceSurface.DiffuseAlbedo, 1.0f);
+    NormalRoughnessPathTracing[idx] = float4(sourceSurface.Normal, sourceSurface.Roughness);
 #else
 #   if defined(OUTPUT_RADIANCE)
     OutputTexture[idx] = float4(radiance, 1.0f);

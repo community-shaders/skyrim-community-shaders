@@ -7,14 +7,16 @@
 ConstantBuffer<FrameData> Frame                 : register(b0);
 
 RWTexture2D<float4> OutputTexture               : register(u0);
-RWTexture2D<float4> SpecularAlbedo              : register(u1);
-RWTexture2D<float> SpecularHitDist              : register(u2);
+RWTexture2D<float4> DiffuseAlbedoPathTracing    : register(u1);
+RWTexture2D<float4> NormalRoughnessPathTracing  : register(u2);
+RWTexture2D<float4> SpecularAlbedo              : register(u3);
+RWTexture2D<float> SpecularHitDist              : register(u4);
 
 #ifdef SHARC
-RWStructuredBuffer<uint64_t>                u_SharcHashEntriesBuffer    : register(u3);
-RWStructuredBuffer<uint>                    u_SharcLockBuffer           : register(u4);
-RWStructuredBuffer<SharcAccumulationData>   u_SharcAccumulationBuffer   : register(u5);
-RWStructuredBuffer<SharcPackedData>         u_SharcResolvedBuffer       : register(u6);
+RWStructuredBuffer<uint64_t>                u_SharcHashEntriesBuffer    : register(u5);
+RWStructuredBuffer<uint>                    u_SharcLockBuffer           : register(u6);
+RWStructuredBuffer<SharcAccumulationData>   u_SharcAccumulationBuffer   : register(u7);
+RWStructuredBuffer<SharcPackedData>         u_SharcResolvedBuffer       : register(u8);
 #endif
 
 Texture2D<float4> MainTexture                   : register(t0, space0); // RENDER_TARGETS::kMAIN

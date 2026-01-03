@@ -97,6 +97,8 @@ struct Raytracing : public OverlayFeature
 		enum class Slot
 		{
 			Output,
+			DiffuseAlbedoPathTracing,
+			NormalRoughnessPathTracing,
 			Reflectance,
 			SpecularHitDist,
 			SHaRCHashEntries,
@@ -839,6 +841,8 @@ struct Raytracing : public OverlayFeature
 
 	// Resources
 	eastl::unique_ptr<DX12::Texture2D> outputTexture = nullptr;
+	eastl::unique_ptr<DX12::Texture2D> diffuseAlbedoPathTracingTexture = nullptr;
+	eastl::unique_ptr<DX12::Texture2D> normalRoughnessPathTracingTexture = nullptr;
 	eastl::unique_ptr<DX12::Texture2D> specularAlbedoTexture = nullptr;
 	eastl::unique_ptr<DX12::Texture2D> specularHitDistanceTexture = nullptr;
 
