@@ -1,0 +1,16 @@
+{
+    "default-registry": {
+        "kind": "git",
+        "repository": "https://github.com/microsoft/vcpkg",
+        "baseline": "a62ce77d56ee07513b4b67de1ec2daeaebfae51a"
+    },
+    "registries": [
+        {
+            "kind": "git",
+            "repository": "https://github.com/alandtse/vcpkg",
+            "baseline": "a62ce77d56ee07513b4b67de1ec2daeaebfae51a",
+            "reference": "eastl-3.27.01",
+            "packages": ["eastl"]
+        }
+    ]
+}
