@@ -389,7 +389,7 @@ void Upscaling::DataLoaded()
 {
 	// Fix screenshots fix from Engine Fixes
 	RE::GetINISetting("bUseTAA:Display")->data.b = false;
-	
+
 	// The game defaults this to a non-zero value
 	static auto fDRClampOffset = RE::GetINISetting("fDRClampOffset:Display");
 	fDRClampOffset->data.f = 0.0f;
