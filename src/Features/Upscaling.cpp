@@ -720,7 +720,7 @@ void Upscaling::ConfigureUpscaling(RE::BSGraphics::State* a_viewport)
 	CheckResources(upscaleMethod);
 
 	// The game defaults this to a non-zero value
-	auto fDRClampOffset = RE::GetINISetting("fDRClampOffset:Display");
+	static auto fDRClampOffset = RE::GetINISetting("fDRClampOffset:Display");
 	fDRClampOffset->data.f = 0.0f;
 
 	// Cache original TAA values for UI
