@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Util.h"
+#include "Widget.h"
 #include <cctype>
 #include <functional>
 #include <map>
@@ -8,7 +9,6 @@
 #include <vector>
 
 // Forward declarations
-class Widget;
 class EditorWindow;
 
 // Case-insensitive substring search helper
