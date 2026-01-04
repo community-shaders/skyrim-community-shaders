@@ -197,15 +197,19 @@ TerrainShadows::PerFrame TerrainShadows::GetCommonBufferData()
 
 void TerrainShadows::LoadHeightmap()
 {
-	auto tes = RE::TES::GetSingleton();
-	if (!tes)
-		return;
-	auto worldspace = tes->GetRuntimeData2().worldSpace;
+	static auto tes = RE::TES::GetSingleton();
+
+	auto world = tes->GetRuntimeData2().worldSpace;
+	while (world && world->parentWorld && world->parentUseFlags.any(ParentUseFlag::kUseLandData))
+		world = world->parentWorld;
+	
 	if (!worldspace)
 		return;
+
 	std::string worldspace_name = worldspace->GetFormEditorID();
 	if (!heightmaps.contains(worldspace_name))  // no height map for that, but we don't remove cache
 		return;
+		
 	if (cachedHeightmap && cachedHeightmap->worldspace == worldspace_name)  // already cached
 		return;
 
@@ -309,7 +313,7 @@ void TerrainShadows::UpdateShadow()
 		return;
 
 	// don't forget to change NTHREADS in shader!
-	constexpr uint updateLength = 128u;
+	constexpr uint updateLength = 256u;
 	constexpr uint logUpdateLength = std::bit_width(128u) - 1;  // integer log2, https://stackoverflow.com/questions/994593/how-to-do-an-integer-log2-in-c
 
 	auto context = globals::d3d::context;
