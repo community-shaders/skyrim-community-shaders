@@ -22,7 +22,13 @@ namespace TerrainShadows
 		if (SharedData::terraOccSettings.EnableTerrainShadow) {
 			float2 terraOccUV = GetTerrainShadowUV(worldPos.xy);
 			float2 shadowHeight = GetTerrainZ(ShadowHeightTexture.SampleLevel(samp, terraOccUV, 0));
+#if defined(DEFERRED)
+			// Sharp shadows
+			float shadowFraction = saturate(10.0 * (worldPos.z - shadowHeight.y) / (shadowHeight.x - shadowHeight.y));
+#else
+			// Blurry shadows to simulate scattering
 			float shadowFraction = saturate((worldPos.z - shadowHeight.y) / (shadowHeight.x - shadowHeight.y));
+#endif
 			return shadowFraction;
 		}
 

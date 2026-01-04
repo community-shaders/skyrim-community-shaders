@@ -313,7 +313,7 @@ void TerrainShadows::UpdateShadow()
 		return;
 
 	// don't forget to change NTHREADS in shader!
-	constexpr uint updateLength = 256u;
+	constexpr uint updateLength = 1024u;
 	constexpr uint logUpdateLength = std::bit_width(128u) - 1;  // integer log2, https://stackoverflow.com/questions/994593/how-to-do-an-integer-log2-in-c
 
 	auto context = globals::d3d::context;
