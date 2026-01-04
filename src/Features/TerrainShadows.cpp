@@ -27,16 +27,21 @@ void TerrainShadows::DrawSettings()
 	if (ImGui::CollapsingHeader("Debug")) {
 		std::string curr_worldspace = "N/A";
 		std::string curr_worldspace_name = "N/A";
+		bool isInteriorLike = false;
 		auto tes = RE::TES::GetSingleton();
 		if (tes) {
 			auto worldspace = tes->GetRuntimeData2().worldSpace;
 			if (worldspace) {
 				curr_worldspace = worldspace->GetFormEditorID();
 				curr_worldspace_name = worldspace->GetName();
+				isInteriorLike = worldspace->flags.any(RE::TESWorldSpace::Flag::kNoSky, RE::TESWorldSpace::Flag::kFixedDimensions);
 			}
 		}
 		ImGui::Text(fmt::format("Current worldspace: {} ({})", curr_worldspace, curr_worldspace_name).c_str());
 		ImGui::Text(fmt::format("Has height map: {}", heightmaps.contains(curr_worldspace)).c_str());
+		ImGui::Text(fmt::format("Interior-like worldspace: {}", isInteriorLike).c_str());
+		ImGui::Text(fmt::format("Cached heightmap: {}", cachedHeightmap ? cachedHeightmap->worldspace : "none").c_str());
+		ImGui::Text(fmt::format("Heightmap ready: {}", IsHeightMapReady()).c_str());
 
 		ImGui::Separator();
 
@@ -201,11 +206,33 @@ void TerrainShadows::LoadHeightmap()
 	if (!tes)
 		return;
 	auto worldspace = tes->GetRuntimeData2().worldSpace;
-	if (!worldspace)
+	if (!worldspace) {
+		// No worldspace, clear cache
+		if (cachedHeightmap) {
+			logger::debug("Clearing heightmap cache - no worldspace");
+			cachedHeightmap = nullptr;
+			texHeightMap.reset();
+			texShadowHeight.reset();
+		}
 		return;
+	}
 	std::string worldspace_name = worldspace->GetFormEditorID();
-	if (!heightmaps.contains(worldspace_name))  // no height map for that, but we don't remove cache
+
+	// Check for interior-like worldspaces (those with kNoSky or kFixedDimensions flags)
+	// These should not use terrain shadows even if a heightmap exists
+	bool isInteriorLike = worldspace->flags.any(RE::TESWorldSpace::Flag::kNoSky, RE::TESWorldSpace::Flag::kFixedDimensions);
+
+	if (!heightmaps.contains(worldspace_name) || isInteriorLike) {
+		// No heightmap for this worldspace or it's an interior-like space
+		// Clear the cache to prevent using stale data from previous worldspace
+		if (cachedHeightmap) {
+			logger::debug("Clearing heightmap cache - no heightmap for worldspace {} (interior-like: {})", worldspace_name, isInteriorLike);
+			cachedHeightmap = nullptr;
+			texHeightMap.reset();
+			texShadowHeight.reset();
+		}
 		return;
+	}
 	if (cachedHeightmap && cachedHeightmap->worldspace == worldspace_name)  // already cached
 		return;
 
