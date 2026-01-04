@@ -1,0 +1,84 @@
+name: "Setup Build Environment"
+description: "Sets up MSVC, vcpkg, and caching for build jobs. Requires code to be checked out first."
+inputs:
+    cache-key-suffix:
+        description: "A suffix to make the cache key unique (e.g., validation, tests)"
+        required: true
+outputs:
+    msvc-version:
+        description: "The detected MSVC compiler version"
+        value: ${{ steps.msvc_version.outputs.version }}
+runs:
+    using: "composite"
+    steps:
+        - name: Enable Git Long Paths
+          run: git config --system core.longpaths true
+          shell: bash
+
+        - name: Setup MSVC environment
+          uses: ilammy/msvc-dev-cmd@v1
+          with:
+              arch: x64
+
+        - name: Get MSVC version
+          id: msvc_version
+          shell: pwsh
+          run: |
+              "int main() { return 0; }" | Out-File -FilePath "dummy.cpp" -Encoding ASCII
+              $output = & cl.exe /Bv dummy.cpp 2>&1
+              $version = $null
+              $lines = $output -split "`n|`r"
+              foreach ($line in $lines) {
+                  if ($line -match 'Version ([0-9]+\.[0-9]+\.[0-9]+)') {
+                      $version = $Matches[1]
+                      break
+                  }
+                  elseif ($line -match '([0-9]+\.[0-9]+\.[0-9]+)') {
+                      $version = $Matches[1]
+                      break
+                  }
+              }
+              if (-not $version) {
+                  if ($output -match 'Version ([0-9]+\.[0-9]+\.[0-9]+)') {
+                      $version = $Matches[1]
+                  }
+                  elseif ($output -match '([0-9]+\.[0-9]+\.[0-9]+)') {
+                      $version = $Matches[1]
+                  }
+              }
+              if ($version) {
+                  Add-Content -Path $env:GITHUB_OUTPUT -Value "version=$version" -Encoding UTF8
+              } else {
+                  throw "MSVC version not found"
+              }
+              Remove-Item "dummy.cpp" -ErrorAction SilentlyContinue
+
+        - name: Setup vcpkg
+          uses: lukka/run-vcpkg@v11.5
+          with:
+              vcpkgJsonGlob: vcpkg.json
+
+        - name: Cache CMake build output
+          uses: actions/cache@v4
+          with:
+              path: build/ALL
+              key: ${{ runner.os }}-cmake-msvc-${{ steps.msvc_version.outputs.version }}-${{ inputs.cache-key-suffix }}-${{ github.event.inputs.cache-key-suffix || 'default' }}-${{ hashFiles('.gitmodules', 'extern/**', 'CMakePresets.json', 'vcpkg.json', 'vcpkg-configuration.json') }}
+              restore-keys: |
+                  ${{ runner.os }}-cmake-msvc-${{ steps.msvc_version.outputs.version }}-${{ inputs.cache-key-suffix }}-${{ github.event.inputs.cache-key-suffix || 'default' }}-
+                  ${{ runner.os }}-cmake-msvc-${{ steps.msvc_version.outputs.version }}-${{ inputs.cache-key-suffix }}-
+
+        - name: Remove stale CMake cache if drive letter changed
+          shell: pwsh
+          run: |
+              $cacheFile = "build/ALL/CMakeCache.txt"
+              if (Test-Path $cacheFile) {
+                $expected = (Resolve-Path .).Path.Substring(0,1)
+                $content = Get-Content $cacheFile -Raw
+                if ($content -match 'CMAKE_HOME_DIRECTORY:INTERNAL=([A-Z]):') {
+                  $actual = $Matches[1]
+                  if ($actual -ne $expected) {
+                    Write-Host "❌ Cache drive mismatch. Removing stale build/ALL directory."
+                    Remove-Item -Recurse -Force "build/ALL"
+                  }
+                }
+              }
