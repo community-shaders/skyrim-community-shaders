@@ -202,14 +202,14 @@ void TerrainShadows::LoadHeightmap()
 	auto world = tes->GetRuntimeData2().worldSpace;
 	while (world && world->parentWorld && world->parentUseFlags.any(ParentUseFlag::kUseLandData))
 		world = world->parentWorld;
-	
+
 	if (!worldspace)
 		return;
 
 	std::string worldspace_name = worldspace->GetFormEditorID();
 	if (!heightmaps.contains(worldspace_name))  // no height map for that, but we don't remove cache
 		return;
-		
+
 	if (cachedHeightmap && cachedHeightmap->worldspace == worldspace_name)  // already cached
 		return;
 
