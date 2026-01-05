@@ -2,16 +2,16 @@
 
 void SVGFPipeline::CompileShaders()
 {
-	if (auto rawPtr = reinterpret_cast<ID3D11ComputeShader*>(Util::CompileShader(L"Data\\Shaders\\Raytracing\\Denoiser\\SVGF\\TemporalCS.hlsl", { { "DX11", "" } }, "cs_5_1")); rawPtr)
+	if (auto rawPtr = reinterpret_cast<ID3D11ComputeShader*>(Util::CompileShader(L"Data\\Shaders\\Raytracing\\Denoiser\\SVGF\\TemporalCS.hlsl", { { "DX11", "" } }, "cs_5_0")); rawPtr)
 		temporalCS.attach(rawPtr);
 
-	if (auto rawPtr = reinterpret_cast<ID3D11ComputeShader*>(Util::CompileShader(L"Data\\Shaders\\Raytracing\\Denoiser\\SVGF\\VarianceCS.hlsl", { { "DX11", "" } }, "cs_5_1")); rawPtr)
+	if (auto rawPtr = reinterpret_cast<ID3D11ComputeShader*>(Util::CompileShader(L"Data\\Shaders\\Raytracing\\Denoiser\\SVGF\\VarianceCS.hlsl", { { "DX11", "" } }, "cs_5_0")); rawPtr)
 		varianceCS.attach(rawPtr);
 
-	if (auto rawPtr = reinterpret_cast<ID3D11ComputeShader*>(Util::CompileShader(L"Data\\Shaders\\Raytracing\\Denoiser\\SVGF\\SpatialCS.hlsl", { { "DX11", "" } }, "cs_5_1")); rawPtr)
+	if (auto rawPtr = reinterpret_cast<ID3D11ComputeShader*>(Util::CompileShader(L"Data\\Shaders\\Raytracing\\Denoiser\\SVGF\\SpatialCS.hlsl", { { "DX11", "" } }, "cs_5_0")); rawPtr)
 		spatialDiffuseCS.attach(rawPtr);
 
-	if (auto rawPtr = reinterpret_cast<ID3D11ComputeShader*>(Util::CompileShader(L"Data\\Shaders\\Raytracing\\Denoiser\\SVGF\\SpatialCS.hlsl", { { "DX11", "" }, { "SSRT_SPECULAR", "" } }, "cs_5_1")); rawPtr)
+	if (auto rawPtr = reinterpret_cast<ID3D11ComputeShader*>(Util::CompileShader(L"Data\\Shaders\\Raytracing\\Denoiser\\SVGF\\SpatialCS.hlsl", { { "DX11", "" }, { "SSRT_SPECULAR", "" } }, "cs_5_0")); rawPtr)
 		spatialSpecularCS.attach(rawPtr);
 }
 

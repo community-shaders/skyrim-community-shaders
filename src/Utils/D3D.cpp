@@ -5,6 +5,7 @@
 
 #include <d3dcompiler.h>
 #include <mutex>
+#include <d3d11_4.h>
 
 namespace Util
 {
@@ -152,22 +153,37 @@ namespace Util
 			for (unsigned int i = 0; i < shaderDefines->size(); i++)
 				macros.push_back({ shaderDefines->at(i).first.c_str(), shaderDefines->at(i).second.c_str() });
 		}
-		if (!_stricmp(ProgramType, "ps_5_0"))
-			macros.push_back({ "PSHADER", "" });
-		else if (!_stricmp(ProgramType, "vs_5_0"))
-			macros.push_back({ "VSHADER", "" });
-		else if (!_stricmp(ProgramType, "hs_5_0"))
-			macros.push_back({ "HULLSHADER", "" });
-		else if (!_stricmp(ProgramType, "ds_5_0"))
-			macros.push_back({ "DOMAINSHADER", "" });
-		else if (!_stricmp(ProgramType, "cs_5_0"))
-			macros.push_back({ "COMPUTESHADER", "" });
-		else if (!_stricmp(ProgramType, "cs_4_0"))
-			macros.push_back({ "COMPUTESHADER", "" });
-		else if (!_stricmp(ProgramType, "cs_5_1"))
-			macros.push_back({ "COMPUTESHADER", "" });
-		else
+
+		D3D11_SHADER_VERSION_TYPE shaderType;
+		if (!_strnicmp(ProgramType, "ps_", 3)) {
+			shaderType = D3D11_SHVER_PIXEL_SHADER;
+		} else if (!_strnicmp(ProgramType, "vs_", 3)) {
+			shaderType = D3D11_SHVER_VERTEX_SHADER;
+		} else if (!_strnicmp(ProgramType, "gs_", 3)) {
+			shaderType = D3D11_SHVER_GEOMETRY_SHADER;
+		} else if (!_strnicmp(ProgramType, "hs_", 3)) {
+			shaderType = D3D11_SHVER_HULL_SHADER;
+		} else if (!_strnicmp(ProgramType, "ds_", 3)) {
+			shaderType = D3D11_SHVER_DOMAIN_SHADER;
+		} else if (!_strnicmp(ProgramType, "cs_", 3)) {
+			shaderType = D3D11_SHVER_COMPUTE_SHADER;
+		} else {
+			logger::error("Invalid ProgramType: {}", ProgramType);
 			return nullptr;
+		}
+
+		if (shaderType == D3D11_SHVER_PIXEL_SHADER)
+			macros.push_back({ "PSHADER", "" });
+		else if (shaderType == D3D11_SHVER_VERTEX_SHADER)
+			macros.push_back({ "VSHADER", "" });
+		else if (shaderType == D3D11_SHVER_GEOMETRY_SHADER)
+			macros.push_back({ "GEOMETRYSHADER", "" });
+		else if (shaderType == D3D11_SHVER_HULL_SHADER)
+			macros.push_back({ "HULLSHADER", "" });
+		else if (shaderType == D3D11_SHVER_DOMAIN_SHADER)
+			macros.push_back({ "DOMAINSHADER", "" });
+		else if (shaderType == D3D11_SHVER_COMPUTE_SHADER)
+			macros.push_back({ "COMPUTESHADER", "" });
 
 		// Add null terminating entry
 		macros.push_back({ "WINPC", "" });
@@ -191,31 +207,32 @@ namespace Util
 		}
 		if (shaderErrors)
 			logger::debug("Shader logs:\n{}", static_cast<char*>(shaderErrors->GetBufferPointer()));
-		if (!_stricmp(ProgramType, "ps_5_0")) {
+
+		if (shaderType == D3D11_SHVER_PIXEL_SHADER) {
 			ID3D11PixelShader* regShader;
 			device->CreatePixelShader(shaderBlob->GetBufferPointer(), shaderBlob->GetBufferSize(), nullptr, &regShader);
 			return regShader;
-		} else if (!_stricmp(ProgramType, "vs_5_0")) {
+		} else if (shaderType == D3D11_SHVER_VERTEX_SHADER) {
 			ID3D11VertexShader* regShader;
 			device->CreateVertexShader(shaderBlob->GetBufferPointer(), shaderBlob->GetBufferSize(), nullptr, &regShader);
 			return regShader;
-		} else if (!_stricmp(ProgramType, "hs_5_0")) {
+		} else if (shaderType == D3D11_SHVER_GEOMETRY_SHADER) {
+			ID3D11GeometryShader* regShader;
+			device->CreateGeometryShader(shaderBlob->GetBufferPointer(), shaderBlob->GetBufferSize(), nullptr, &regShader);
+			return regShader;
+		} else if (shaderType == D3D11_SHVER_HULL_SHADER) {
 			ID3D11HullShader* regShader;
 			device->CreateHullShader(shaderBlob->GetBufferPointer(), shaderBlob->GetBufferSize(), nullptr, &regShader);
 			return regShader;
-		} else if (!_stricmp(ProgramType, "ds_5_0")) {
+		} else if (shaderType == D3D11_SHVER_DOMAIN_SHADER) {
 			ID3D11DomainShader* regShader;
 			device->CreateDomainShader(shaderBlob->GetBufferPointer(), shaderBlob->GetBufferSize(), nullptr, &regShader);
 			return regShader;
-		} else if (!_stricmp(ProgramType, "cs_5_0")) {
+		} else if (shaderType == D3D11_SHVER_COMPUTE_SHADER) {
 			ID3D11ComputeShader* regShader;
 			DX::ThrowIfFailed(device->CreateComputeShader(shaderBlob->GetBufferPointer(), shaderBlob->GetBufferSize(), nullptr, &regShader));
 			return regShader;
-		} else if (!_stricmp(ProgramType, "cs_4_0")) {
-			ID3D11ComputeShader* regShader;
-			DX::ThrowIfFailed(device->CreateComputeShader(shaderBlob->GetBufferPointer(), shaderBlob->GetBufferSize(), nullptr, &regShader));
-			return regShader;
-		}
+		};
 
 		return nullptr;
 	}
