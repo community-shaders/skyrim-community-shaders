@@ -648,7 +648,7 @@ PS_OUTPUT main(PS_INPUT input)
 
 		float3 positionLS = mul(transpose(lightProjectionMatrix), float4(positionMS.xyz, 1)).xyz;
 
-		// Calculate derivative based slope estimation and scale by cascade texel world space size to control self-shadowing and peter panning
+		// This is a fix for peter panning issues wrt Interior Sun
 		uint3 shadowMapResolution;
 		TexShadowMapSamplerComp.GetDimensions(shadowMapResolution.x, shadowMapResolution.y, shadowMapResolution.z);
 
@@ -656,14 +656,12 @@ PS_OUTPUT main(PS_INPUT input)
 		float cascadeSplitL0 = FrameBuffer::CameraProj[eyeIndex][2][3] / (EndSplitDistances[0] - FrameBuffer::CameraProj[eyeIndex][2][2]);
 		float cascadeSplitL1 = FrameBuffer::CameraProj[eyeIndex][2][3] / (EndSplitDistances[1] - FrameBuffer::CameraProj[eyeIndex][2][2]);
 		float cascadeCoverage = (cascadeIndex == 0) ? cascadeSplitL0 : cascadeSplitL1 - cascadeSplitL0;
-
 		float cascadeTexelSize = cascadeCoverage / shadowMapResolution.x;
 
-		//Note: higher bias reduces peter panning, lower bias leads to more self-shadowing(shadow acne)
-		float bias = (SharedData::InInterior) ? 0.00001 : 0.001; // Interiors seem to handle self shadowing better
-		float slope = min(max(abs(ddx(positionLS.z)), abs(ddy(positionLS.z))), 0.001); // Limit to avoid outline aliasing
-		float slopeBias = bias + slope * cascadeTexelSize;
-		float cascadeSurfaceZ = positionLS.z - slopeBias;
+		// With a shadowMapThreshold = 0.005 this gives a bias around 0.0025, 0.0013 @ 4k, 8000wsu max depth in interiors
+		// Note: lower bias reduces peter panning but also leads to more self-shadowing(shadow acne)
+		float receiverDepthBias = (SharedData::InInterior) ? shadowMapThreshold * rcp(cascadeTexelSize * 2.5) : shadowMapThreshold;
+		float cascadeSurfaceZ = positionLS.z - receiverDepthBias;
 
 #			if SHADOWFILTER == 0
 		float shadowMapValue = TexShadowMapSampler.Sample(SampShadowMapSampler, float3(positionLS.xy, cascadeIndex)).x;
@@ -682,9 +680,8 @@ PS_OUTPUT main(PS_INPUT input)
 			float3 cascade1PositionLS = mul(transpose(ShadowMapProj[eyeIndex][1]), float4(positionMS.xyz, 1)).xyz;
 
 			cascadeTexelSize = (cascadeSplitL1 - cascadeSplitL0) / shadowMapResolution.x;
-			slope = min(max(abs(ddx(cascade1PositionLS.z)), abs(ddy(cascade1PositionLS.z))), 0.001);
-			slopeBias = bias + slope * cascadeTexelSize;
-			cascadeSurfaceZ = cascade1PositionLS.z - slopeBias;
+			receiverDepthBias = (SharedData::InInterior) ? AlphaTestRef.z * rcp(cascadeTexelSize * 2.5) : AlphaTestRef.z;
+			cascadeSurfaceZ = cascade1PositionLS.z - receiverDepthBias;
 
 #			if SHADOWFILTER == 0
 			float cascade1ShadowMapValue = TexShadowMapSampler.Sample(SampShadowMapSampler, float3(cascade1PositionLS.xy, 1)).x;
