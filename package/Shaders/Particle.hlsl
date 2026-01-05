@@ -289,7 +289,7 @@ PS_OUTPUT main(PS_INPUT input)
 	float3 propertyColor = 0.0;
 
 	float3 dirLightColor = SharedData::DirLightColor.xyz * 0.5;
-	float3 ambientColor = max(0, mul(SharedData::DirectionalAmbient, float4(0, 0, 1, 1)));
+	float3 ambientColor = max(0, mul(SharedData::DirectionalAmbient, float4(0, 0, 1, 1)).xyz);
 
 	propertyColor += dirLightColor;
 	propertyColor += ambientColor;
