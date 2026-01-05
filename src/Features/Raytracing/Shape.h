@@ -32,7 +32,7 @@ class Shape
 public:
 	struct Material
 	{
-		enum ShaderType : uint32_t
+		enum ShaderType : uint16_t
 		{
 			TruePBR = 0,
 			Lighting = 1,
@@ -124,7 +124,7 @@ public:
 		RE::BSShader::Type shaderType;
 		REX::EnumSet<RE::BSShaderProperty::EShaderPropertyFlag, std::uint64_t> shaderFlags;
 		RE::BSShaderMaterial::Feature Feature;
-		stl::enumeration<PBRShaderFlags, uint32_t> PBRFlags;
+		stl::enumeration<PBRShaderFlags, uint16_t> PBRFlags;
 
 		MaterialData GetData()
 		{
@@ -142,7 +142,7 @@ public:
 				EnvMaskTexture->GetIndex(),
 				GetShaderType(),
 				GetShaderFlags(),
-				static_cast<uint32_t>(Feature),
+				static_cast<uint16_t>(Feature),
 				PBRFlags.underlying());
 		}
 	};

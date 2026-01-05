@@ -4,14 +4,14 @@
 #ifndef __cplusplus
 namespace ShaderType
 {
-    static const uint32_t TruePBR = 0;
-    static const uint32_t Lighting = 1;
-    static const uint32_t Effect = 2;
-    static const uint32_t Grass = 3;
-    static const uint32_t Water = 4;
-    static const uint32_t BloodSplatter = 5;
-    static const uint32_t DistantTree = 6;
-    static const uint32_t Particle = 7;
+    static const uint16_t TruePBR = 0;
+    static const uint16_t Lighting = 1;
+    static const uint16_t Effect = 2;
+    static const uint16_t Grass = 3;
+    static const uint16_t Water = 4;
+    static const uint16_t BloodSplatter = 5;
+    static const uint16_t DistantTree = 6;
+    static const uint16_t Particle = 7;
 }
 
 namespace ShaderFlags
@@ -29,25 +29,25 @@ namespace ShaderFlags
 
 namespace Feature
 {
-	static const uint32_t kDefault = 0;
-	static const uint32_t kEnvironmentMap = 1;
-	static const uint32_t kGlowMap = 2;
-	static const uint32_t kParallax = 3;
-	static const uint32_t kFaceGen = 4;
-	static const uint32_t kFaceGenRGBTint = 5;
-	static const uint32_t kHairTint = 6;
-	static const uint32_t kParallaxOcc = 7;
-	static const uint32_t kMultiTexLand = 8;
-	static const uint32_t kLODLand = 9;
-	static const uint32_t kUnknown = 10;
-	static const uint32_t kMultilayerParallax = 11;
-	static const uint32_t kTreeAnim = 12;
-	static const uint32_t kMultiIndexTriShapeSnow = 14;
-	static const uint32_t kLODObjectsHD = 15;
-	static const uint32_t kEye = 16;
-	static const uint32_t kCloud = 17;
-	static const uint32_t kLODLandNoise = 18;
-	static const uint32_t kMultiTexLandLODBlend = 19;
+	static const uint16_t kDefault = 0;
+	static const uint16_t kEnvironmentMap = 1;
+	static const uint16_t kGlowMap = 2;
+	static const uint16_t kParallax = 3;
+	static const uint16_t kFaceGen = 4;
+	static const uint16_t kFaceGenRGBTint = 5;
+	static const uint16_t kHairTint = 6;
+	static const uint16_t kParallaxOcc = 7;
+	static const uint16_t kMultiTexLand = 8;
+	static const uint16_t kLODLand = 9;
+	static const uint16_t kUnknown = 10;
+	static const uint16_t kMultilayerParallax = 11;
+	static const uint16_t kTreeAnim = 12;
+	static const uint16_t kMultiIndexTriShapeSnow = 14;
+	static const uint16_t kLODObjectsHD = 15;
+	static const uint16_t kEye = 16;
+	static const uint16_t kCloud = 17;
+	static const uint16_t kLODLandNoise = 18;
+	static const uint16_t kMultiTexLandLODBlend = 19;
 }
 #endif
 
@@ -70,10 +70,10 @@ struct Material
 	uint16_t SpecularTexture;
 	uint16_t EnvTexture;
 	uint16_t EnvMaskTexture;
-    uint32_t ShaderType: 3;		// 8 types
-    uint32_t ShaderFlags: 9;	// Max 9 flags
-    uint32_t Feature: 5;		// Max 32 features
-    uint32_t PBRFlags: 15;			// Max 15 flags
+    uint16_t ShaderType;
+    uint32_t ShaderFlags;		// Max 32 flags
+    uint16_t Feature;
+    uint16_t PBRFlags;
 
 #ifndef __cplusplus
 	float2 TexCoord(float2 texCoord)
