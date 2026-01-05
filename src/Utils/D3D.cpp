@@ -3,9 +3,9 @@
 #include "State.h"
 #include "Utils/Format.h"
 
+#include <d3d11_4.h>
 #include <d3dcompiler.h>
 #include <mutex>
-#include <d3d11_4.h>
 
 namespace Util
 {
