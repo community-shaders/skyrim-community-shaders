@@ -1,4 +1,4 @@
-// Runtime-discovered HLSL tests
+﻿// Runtime-discovered HLSL tests
 // This file discovers and runs all HLSL tests at runtime - no code generation needed!
 
 #include "runtime_test_discovery.h"
@@ -34,7 +34,7 @@ TEST_CASE("Auto-discovered HLSL tests", "[autodiscovery]")
 				FAIL("Test failed: " << errorMsg);
 			}
 
-			INFO("✓ " << test.displayName);
+			INFO("√ " << test.displayName);
 		}
 	}
 }
