@@ -4,17 +4,33 @@
 #include "Common/Color.hlsli"
 #include "Common/Math.hlsli"
 
+/**
+ * @namespace BRDF
+ * @brief Bidirectional Reflectance Distribution Function utilities
+ *
+ * BRDF (Bidirectional Reflectance Distribution Function) describes how light reflects
+ * off a surface. It defines the ratio of reflected radiance to incoming irradiance for
+ * a given pair of incoming and outgoing directions.
+ *
+ * This namespace contains fundamental physically-based rendering (PBR) utilities:
+ * - Diffuse BRDFs: Lambert, Burley, Oren-Nayar, Gotanda, Chan
+ * - Specular components: Fresnel (F), Distribution (D), Visibility (Vis)
+ * - Microfacet models: GGX, Beckmann, Charlie (for sheen/microflakes)
+ * - Helper functions: IOR conversions, environment BRDF approximations
+ *
+ * Naming conventions:
+ *   N   = Normal of the macro surface
+ *   H   = Normal of the micro surface (halfway vector between L and V)
+ *   L   = Light direction from surface point to light
+ *   V   = View direction from surface point to camera
+ *   D   = Distribution (Microfacet NDF - Normal Distribution Function)
+ *   F   = Fresnel (reflectance based on viewing angle)
+ *   Vis = Visibility (geometric self-shadowing and masking)
+ *
+ * Specular BRDF formula: D * Vis * F
+ */
 namespace BRDF
 {
-    // N = Normal of the macro surface
-    // H = Normal of the micro surface (halfway vector between L and V)
-    // L = Light direction from surface point to light
-    // V = View direction from surface point to camera
-
-    // D = Distribution (Microfacet NDF)
-    // F = Fresnel
-    // Vis = Visibility (Self-shadowing and masking)
-    // Specular BRDF = D * Vis * F
 
     // Diffuse BRDFs
     float Diffuse_Lambert()
