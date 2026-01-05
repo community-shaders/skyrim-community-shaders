@@ -201,8 +201,8 @@ void main()
 
 #if defined(RAW_RADIANCE)
         float3 throughputMod = float3(1.0f, 1.0f, 1.0f);
-#endif         
-        
+#endif
+
         [loop]
         for (uint j = 0; j < MAX_BOUNCES; j++)
         {
@@ -222,28 +222,28 @@ void main()
             isSpecular = SampleDefaultBSDF(surface, brdfContext, randomSeed, direction, brdfWeight);
 
             throughput *= surface.AO;
-            
+
 #   if defined(RAW_RADIANCE)
             float3 brdfWeightOriginal = brdfWeight.diffuse * surface.DiffuseAlbedo + brdfWeight.specular;
-            
+
 #if defined(SHARC) && defined(SHARC_UPDATE)
             const bool sharcUpdatePass = Frame.SHaRC.UpdatePass;
 #else
-            const bool sharcUpdatePass = false;            
-#endif            
-            
+            const bool sharcUpdatePass = false;
+#endif
+
             if (j > 0 || sharcUpdatePass) {
-                throughput *= brdfWeightOriginal; 
+                throughput *= brdfWeightOriginal;
             } else {
                 float3 brdWeightRaw = brdfWeight.diffuse + brdfWeight.specular;
-            
+
                 throughputMod = brdfWeightOriginal / brdWeightRaw;
-            
+
                 throughput *= brdWeightRaw;
             }
-#   else    
+#   else
             throughput *= brdfWeight.diffuse + brdfWeight.specular;
-#   endif            
+#   endif
 #endif
             if (dot(surface.GeomNormal, direction) <= 0.0)
                 break;
@@ -257,14 +257,14 @@ void main()
 #endif
             if (Frame.RussianRoulette)
             {
-                float3 throughputColor;               
-           
+                float3 throughputColor;
+
 #if defined(RAW_RADIANCE)
                 throughputColor = throughput * throughputMod;
-#else    
+#else
                 throughputColor = throughput;
 #endif
-                
+
                 float rrProbability = j < RR_MIN_BOUNCE ? 1.0f : min(0.95f, Color::RGBToLuminance(throughputColor));
 
                 if (rrProbability < Random(randomSeed))

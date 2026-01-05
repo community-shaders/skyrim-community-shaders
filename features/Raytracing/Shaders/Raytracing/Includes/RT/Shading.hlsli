@@ -231,10 +231,10 @@ bool SampleDefaultBSDF(in Surface surface, in BRDFContext brdfContext, inout uin
 
     brdfWeight.diffuse = 0.0f;
     brdfWeight.specular = 0.0f;
-    
+
     const float specularProb = lerp(MonteCarlo::GetSpecularBrdfProbability(surface, V, surface.Normal), 1.0f, surface.Metallic);
     const bool isSpecular = Random(randomSeed) < specularProb;
-    
+
     float pdf = 0.0f;
     float diffusePdf = 0.0f;
     float specularPdf = 0.0f;
@@ -284,7 +284,7 @@ bool SampleDefaultBSDF(in Surface surface, in BRDFContext brdfContext, inout uin
 #else
     float3 diffuseAlbedo = surface.DiffuseAlbedo;
 #endif
-    
+
     float3 Fd = diffuseAlbedo * NdotL
         * Diffuse(surface.Roughness, surface.Normal, V, L, brdfContext.NdotV, NdotL, VdotH, VdotL, NdotH)
         * ShadowTerminatorTerm(L, surface.Normal, surface.GeomNormal);
@@ -297,10 +297,10 @@ bool SampleDefaultBSDF(in Surface surface, in BRDFContext brdfContext, inout uin
     pdf = (1.0f - specularProb) * diffusePdf + specularProb * specularPdf;
 
     float pdfRCP = 1.0f / max(pdf, 1e-7f);
-    
+
     brdfWeight.diffuse = Fd * pdfRCP;
     brdfWeight.specular = Fr * pdfRCP;
-    
+
     direction = L;
 
     return isSpecular;
@@ -388,7 +388,7 @@ bool SampleFuzzBSDF(in Surface surface, in BRDFContext brdfContext, inout uint r
     pdf = (1.0f - fuzzProb - specularProb) * diffusePdf + specularProb * specularPdf + fuzzProb * fuzzPdf;
 
     float pdfRCP = 1.0f / max(pdf, 1e-7f);
-    
+
     float fuzzMult = lerp(1, 1 - Efuzz, surface.FuzzWeight);
     float fuzzSum = Ffuzz * surface.FuzzWeight;
 
