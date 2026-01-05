@@ -8,6 +8,12 @@
 
 namespace MonteCarlo
 {
+    struct BRDFWeight
+    {
+        float3 diffuse;
+        float3 specular;
+    };
+    
     // The following functions bellow all come from NVidia
     float CalcLuminance(float3 color)
     {

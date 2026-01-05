@@ -162,7 +162,7 @@ void main()
 #endif
 
     float3 direction;
-    float3 brdfWeight;
+    MonteCarlo::BRDFWeight brdfWeight;
 
     float3 radiance = 0;
     bool isSpecular = false;
@@ -185,7 +185,7 @@ void main()
     [loop]
     for (uint i = 0; i < MAX_SAMPLES; i++)
     {
-#if defined(SHARC)
+#if defined(SHARC) && defined(SHARC_UPDATE)
         [branch]
         if (Frame.SHaRC.UpdatePass)
         {
@@ -199,6 +199,10 @@ void main()
         float3 sampleRadiance = float3(0.0f, 0.0f, 0.0f);
         float3 throughput = float3(1.0f, 1.0f, 1.0f);
 
+#if defined(RAW_RADIANCE)
+        float3 throughputMod = float3(1.0f, 1.0f, 1.0f);
+#endif         
+        
         [loop]
         for (uint j = 0; j < MAX_BOUNCES; j++)
         {
@@ -212,13 +216,34 @@ void main()
 #else
 #   if defined(FULL_MATERIAL)
             if ((material.PBRFlags & PBR::Flags::Fuzz) != 0)
-                SampleFuzzBSDF(surface, brdfContext, randomSeed, direction, brdfWeight);
+                isSpecular = SampleFuzzBSDF(surface, brdfContext, randomSeed, direction, brdfWeight);
             else
 #   endif
             isSpecular = SampleDefaultBSDF(surface, brdfContext, randomSeed, direction, brdfWeight);
 
             throughput *= surface.AO;
-            throughput *= brdfWeight;
+            
+#   if defined(RAW_RADIANCE)
+            float3 brdfWeightOriginal = brdfWeight.diffuse * surface.DiffuseAlbedo + brdfWeight.specular;
+            
+#if defined(SHARC) && defined(SHARC_UPDATE)
+            const bool sharcUpdatePass = Frame.SHaRC.UpdatePass;
+#else
+            const bool sharcUpdatePass = false;            
+#endif            
+            
+            if (j > 0 || sharcUpdatePass) {
+                throughput *= brdfWeightOriginal; 
+            } else {
+                float3 brdWeightRaw = brdfWeight.diffuse + brdfWeight.specular;
+            
+                throughputMod = brdfWeightOriginal / brdWeightRaw;
+            
+                throughput *= brdWeightRaw;
+            }
+#   else    
+            throughput *= brdfWeight.diffuse + brdfWeight.specular;
+#   endif            
 #endif
             if (dot(surface.GeomNormal, direction) <= 0.0)
                 break;
@@ -232,7 +257,15 @@ void main()
 #endif
             if (Frame.RussianRoulette)
             {
-                float rrProbability = j < RR_MIN_BOUNCE ? 1.0f : min(0.95f, Color::RGBToLuminance(throughput));
+                float3 throughputColor;               
+           
+#if defined(RAW_RADIANCE)
+                throughputColor = throughput * throughputMod;
+#else    
+                throughputColor = throughput;
+#endif
+                
+                float rrProbability = j < RR_MIN_BOUNCE ? 1.0f : min(0.95f, Color::RGBToLuminance(throughputColor));
 
                 if (rrProbability < Random(randomSeed))
                     break;
@@ -348,7 +381,7 @@ void main()
     DiffuseAlbedoPathTracing[idx] = float4(sourceSurface.DiffuseAlbedo, 1.0f);
     NormalRoughnessPathTracing[idx] = float4(sourceSurface.Normal, sourceSurface.Roughness);
 #else
-#   if defined(OUTPUT_RADIANCE)
+#   if defined(RAW_RADIANCE)
     OutputTexture[idx] = float4(radiance, 1.0f);
 #   else
     OutputTexture[idx] = float4(Color::GammaToTrueLinear(mainColor.rgb) + radiance, 1.0f);

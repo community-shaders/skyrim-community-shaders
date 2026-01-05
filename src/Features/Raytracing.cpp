@@ -2602,7 +2602,8 @@ void Raytracing::DrawRTGI()
 		d3d11Context->ClearRenderTargetView(rendererRuntimeData.renderTargets[ALBEDO].RTV, clearColor);
 	}
 
-	ConvertTextures();
+	if (!settings.PathTracing)
+		ConvertTextures();
 
 	// Wait for D3D11 to finish
 	{
@@ -3638,7 +3639,7 @@ void Raytracing::CompileRTGIShaders()
 		defines.emplace_back(L"PATH_TRACING");
 
 	if (settings.Denoiser == Denoiser::SVGF)
-		defines.emplace_back(L"OUTPUT_RADIANCE");
+		defines.emplace_back(L"RAW_RADIANCE");
 
 	const auto definesWStr = StringViewToWString(std::string_view{ settings.Defines });
 

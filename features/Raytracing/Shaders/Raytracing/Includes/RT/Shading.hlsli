@@ -223,18 +223,18 @@ float3 EvalPointLight(in Surface surface, in BRDFContext brdfContext, in LightDa
     return direct;
 }
 
-bool SampleDefaultBSDF(in Surface surface, in BRDFContext brdfContext, inout uint randomSeed, out float3 direction, out float3 brdfWeight)
+bool SampleDefaultBSDF(in Surface surface, in BRDFContext brdfContext, inout uint randomSeed, out float3 direction, out MonteCarlo::BRDFWeight brdfWeight)
 {
     const float3 V = brdfContext.ViewDirection;
     float3 L = 0;
     float NdotL = 0;
 
-    brdfWeight = 0.0f;
-
+    brdfWeight.diffuse = 0.0f;
+    brdfWeight.specular = 0.0f;
+    
     const float specularProb = lerp(MonteCarlo::GetSpecularBrdfProbability(surface, V, surface.Normal), 1.0f, surface.Metallic);
     const bool isSpecular = Random(randomSeed) < specularProb;
-
-    float3 brdf = 0.0f;
+    
     float pdf = 0.0f;
     float diffusePdf = 0.0f;
     float specularPdf = 0.0f;
@@ -279,7 +279,13 @@ bool SampleDefaultBSDF(in Surface surface, in BRDFContext brdfContext, inout uin
 
     float3 F = BRDF::F_Schlick(surface.F0, VdotH);
 
-    float3 Fd = surface.DiffuseAlbedo * NdotL
+#if defined(RAW_RADIANCE)
+    float diffuseAlbedo = 1.0f;
+#else
+    float3 diffuseAlbedo = surface.DiffuseAlbedo;
+#endif
+    
+    float3 Fd = diffuseAlbedo * NdotL
         * Diffuse(surface.Roughness, surface.Normal, V, L, brdfContext.NdotV, NdotL, VdotH, VdotL, NdotH)
         * ShadowTerminatorTerm(L, surface.Normal, surface.GeomNormal);
 
@@ -290,30 +296,31 @@ bool SampleDefaultBSDF(in Surface surface, in BRDFContext brdfContext, inout uin
 
     pdf = (1.0f - specularProb) * diffusePdf + specularProb * specularPdf;
 
-    brdf = Fd + Fr;
-
-    brdfWeight = brdf / max(pdf, 1e-7f);
-
+    float pdfRCP = 1.0f / max(pdf, 1e-7f);
+    
+    brdfWeight.diffuse = Fd * pdfRCP;
+    brdfWeight.specular = Fr * pdfRCP;
+    
     direction = L;
 
     return isSpecular;
 }
 
 #if defined(FULL_MATERIAL)
-bool SampleFuzzBSDF(in Surface surface, in BRDFContext brdfContext, inout uint randomSeed, out float3 direction, out float3 brdfWeight)
+bool SampleFuzzBSDF(in Surface surface, in BRDFContext brdfContext, inout uint randomSeed, out float3 direction, out MonteCarlo::BRDFWeight brdfWeight)
 {
     const float3 V = brdfContext.ViewDirection;
     float3 L = 0;
     float NdotL = 0;
 
-    brdfWeight = 0.0f;
+    brdfWeight.diffuse = 0.0f;
+    brdfWeight.specular = 0.0f;
 
     float specularProb = lerp(MonteCarlo::GetSpecularBrdfProbability(surface, V, surface.Normal), 1.0f, surface.Metallic);
     float Efuzz = (0.526422 / ((-0.227114 + surface.Roughness) * (-0.968835 + surface.Roughness) * ((5.38869 - 20.2835 * brdfContext.NdotV) * surface.Roughness) - (-1.18761 - ((2.58744 - brdfContext.NdotV) * brdfContext.NdotV)))) + 0.0615456;
     float fuzzProb = Efuzz * surface.FuzzWeight;
     specularProb *= 1 - fuzzProb;
 
-    float3 brdf = 0.0f;
     float pdf = 0.0f;
     float diffusePdf = 0.0f;
     float specularPdf = 0.0f;
@@ -358,7 +365,13 @@ bool SampleFuzzBSDF(in Surface surface, in BRDFContext brdfContext, inout uint r
 
     float3 F = BRDF::F_Schlick(surface.F0, VdotH);
 
-    float3 Fd = surface.DiffuseAlbedo * NdotL
+#if defined(RAW_RADIANCE)
+    float diffuseAlbedo = 1.0f;
+#else
+    float3 diffuseAlbedo = surface.DiffuseAlbedo;
+#endif
+
+    float3 Fd = diffuseAlbedo * NdotL
         * Diffuse(surface.Roughness, surface.Normal, V, L, brdfContext.NdotV, NdotL, VdotH, VdotL, NdotH)
         * ShadowTerminatorTerm(L, surface.Normal, surface.GeomNormal);
 
@@ -374,9 +387,13 @@ bool SampleFuzzBSDF(in Surface surface, in BRDFContext brdfContext, inout uint r
 
     pdf = (1.0f - fuzzProb - specularProb) * diffusePdf + specularProb * specularPdf + fuzzProb * fuzzPdf;
 
-    brdf = (Fd + Fr) * lerp(1, 1 - Efuzz, surface.FuzzWeight) + Ffuzz * surface.FuzzWeight;
+    float pdfRCP = 1.0f / max(pdf, 1e-7f);
+    
+    float fuzzMult = lerp(1, 1 - Efuzz, surface.FuzzWeight);
+    float fuzzSum = Ffuzz * surface.FuzzWeight;
 
-    brdfWeight = brdf / max(pdf, 1e-7f);
+    brdfWeight.diffuse = (Fd * fuzzMult + fuzzSum) * pdfRCP;
+    brdfWeight.specular = (Fr * fuzzMult + fuzzSum) * pdfRCP;
 
     direction = L;
 
@@ -393,7 +410,7 @@ float3 SampleSky(float3 dir)
     float r = sqrt(1.0f - dir.z);
     float phi = atan2(dir.y, dir.x);
 
-    float2 disk = float2(r * cos(phi), r * sin(phi));
+    float2 disk = float2(cos(phi), sin(phi)) * r;
     float2 uv = disk * 0.5f + 0.5f;
 
     return Color::GammaToTrueLinear(SkyHemisphere.SampleLevel(BaseSampler, uv, 0.0f).rgb);
