@@ -1,4 +1,13 @@
 cmake_minimum_required(VERSION 3.21)
+cmake_policy(SET CMP0116 NEW)
+set(CMAKE_POLICY_WARNING_CMP0116 OFF)
+
+if(CMAKE_VERSION VERSION_GREATER_EQUAL "4.0.0")
+    message(
+        ERROR
+        "EASTL will fail to install with vcpkg using cmake 4.0+, remove this line if the port get fixed."
+    )
+endif()
 
 project(
     # gersemi: ignore
@@ -6,6 +15,14 @@ project(
     VERSION 1.4.6
     LANGUAGES CXX
 )
+
+# default install path
+if(CMAKE_INSTALL_PREFIX_INITIALIZED_TO_DEFAULT)
+    set_property(
+        CACHE CMAKE_INSTALL_PREFIX
+        PROPERTY VALUE "${CMAKE_CURRENT_BINARY_DIR}/aio"
+    )
+endif()
 
 list(APPEND CMAKE_MODULE_PATH "${PROJECT_SOURCE_DIR}/cmake")
 
@@ -29,10 +46,16 @@ option(
     ON
 )
 option(TRACY_SUPPORT "Enable support for tracy profiler" OFF)
+option(
+    BUILD_SHADER_TESTS
+    "Build shader unit tests (runs automatically before packaging)"
+    ON
+)
 message("\tAuto plugin deployment: ${AUTO_PLUGIN_DEPLOYMENT}")
 message("\tZip to dist: ${ZIP_TO_DIST}")
 message("\tAIO Zip to dist: ${AIO_ZIP_TO_DIST}")
 message("\tTracy profiler: ${TRACY_SUPPORT}")
+message("\tShader tests: ${BUILD_SHADER_TESTS}")
 
 # #######################################################################################################################
 # # Add CMake features
@@ -58,7 +81,6 @@ find_package(efsw CONFIG REQUIRED)
 find_package(Tracy CONFIG REQUIRED)
 find_package(directx-headers CONFIG REQUIRED)
 add_subdirectory(${CMAKE_SOURCE_DIR}/cmake/Streamline)
-include(XeSS-SDK)
 
 find_path(DETOURS_INCLUDE_DIRS "detours/detours.h")
 find_library(DETOURS_LIBRARY detours REQUIRED)
@@ -219,6 +241,27 @@ if(CLANG_FORMAT_PATH)
 endif()
 
 # #######################################################################################################################
+# # HLSL additional include directories for VS intellisense
+# #######################################################################################################################
+
+set(HLSL_INCLUDE_DIRS ${FEATURE_SHADER_DIRS} "package/Shaders")
+
+set(HLSL_INCLUDE_JSON "")
+foreach(dir IN LISTS HLSL_INCLUDE_DIRS)
+    if(HLSL_INCLUDE_JSON STREQUAL "")
+        set(HLSL_INCLUDE_JSON "    \"${dir}\"")
+    else()
+        set(HLSL_INCLUDE_JSON "${HLSL_INCLUDE_JSON},\n    \"${dir}\"")
+    endif()
+endforeach()
+
+configure_file(
+    "${CMAKE_CURRENT_SOURCE_DIR}/cmake/shadertoolsconfig.json.in"
+    "${CMAKE_CURRENT_SOURCE_DIR}/shadertoolsconfig.json"
+    @ONLY
+)
+
+# #######################################################################################################################
 # # Shader validation config generation
 # #######################################################################################################################
 
@@ -244,8 +287,38 @@ endif()
 file(GLOB FEATURE_PATHS LIST_DIRECTORIES true ${CMAKE_SOURCE_DIR}/features/*)
 string(TIMESTAMP UTC_NOW "%Y-%m-%dT%H-%MZ" UTC)
 
+# Set AIO directory path used by multiple targets below
+set(AIO_DIR "${CMAKE_CURRENT_BINARY_DIR}/aio")
+
+# #######################################################################################################################
+# # CMake install() infrastructure for manual packaging
+# #######################################################################################################################
+
+# Append a '/' to the end of each feature path for installation all its contents but not itself
+set(FEATURE_PATHS_SLASH ${FEATURE_PATHS})
+list(TRANSFORM FEATURE_PATHS_SLASH APPEND /)
+
+# Install logic for AIO package
+# To copy AIO package at a folder do `${CMAKE_COMMAND} --install ${CMAKE_BINARY_DIR} --prefix ${AIO_DIR}`
+install(CODE "file(REMOVE_RECURSE \${CMAKE_INSTALL_PREFIX})")
+install(TARGETS ${PROJECT_NAME} RUNTIME DESTINATION SKSE/Plugins COMPONENT SKSE)
+install(
+    FILES $<TARGET_PDB_FILE:${PROJECT_NAME}>
+    DESTINATION SKSE/Plugins
+    COMPONENT SKSE
+)
+install(
+    DIRECTORY ${CMAKE_SOURCE_DIR}/package/ ${FEATURE_PATHS_SLASH}
+    DESTINATION .
+    COMPONENT Shaders
+)
+install(CODE "file(REMOVE \${CMAKE_INSTALL_PREFIX}/Core)" COMPONENT Shaders)
+
+# #######################################################################################################################
+# # Automatic AIO preparation (incremental copy system)
+# #######################################################################################################################
+
 if(AUTO_PLUGIN_DEPLOYMENT OR AIO_ZIP_TO_DIST)
-    set(AIO_DIR "${CMAKE_CURRENT_BINARY_DIR}/aio")
     message("Preparing AIO package in ${AIO_DIR}")
 
     # Prepare AIO only when sources change. Gather package + feature files as
@@ -265,7 +338,8 @@ if(AUTO_PLUGIN_DEPLOYMENT OR AIO_ZIP_TO_DIST)
     # deploys from copying everything every build.
     set(_prepare_aio_cmds)
 
-    # Ensure SKSE/Plugins dir exists and copy built plugin files
+    # Ensure SKSE/Plugins dir exists
+    # Note: DLL and PDB are copied via POST_BUILD command to avoid race conditions
     list(
         APPEND
         _prepare_aio_cmds
@@ -274,26 +348,6 @@ if(AUTO_PLUGIN_DEPLOYMENT OR AIO_ZIP_TO_DIST)
         -E
         make_directory
         "${AIO_DIR}/SKSE/Plugins"
-    )
-    list(
-        APPEND
-        _prepare_aio_cmds
-        COMMAND
-        ${CMAKE_COMMAND}
-        -E
-        copy_if_different
-        $<TARGET_FILE:${PROJECT_NAME}>
-        "${AIO_DIR}/SKSE/Plugins/$<TARGET_FILE_NAME:${PROJECT_NAME}>"
-    )
-    list(
-        APPEND
-        _prepare_aio_cmds
-        COMMAND
-        ${CMAKE_COMMAND}
-        -E
-        copy_if_different
-        $<TARGET_PDB_FILE:${PROJECT_NAME}>
-        "${AIO_DIR}/SKSE/Plugins/$<TARGET_PDB_FILE_NAME:${PROJECT_NAME}>"
     )
 
     # Copy package files
@@ -387,6 +441,24 @@ if(AUTO_PLUGIN_DEPLOYMENT OR AIO_ZIP_TO_DIST)
         DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/prepare_aio.stamp
     )
 
+    # Copy DLL and PDB using POST_BUILD to avoid race conditions with file locking
+    # This ensures the linker has fully released the files before we attempt to copy them
+    add_custom_command(
+        TARGET ${PROJECT_NAME}
+        POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E make_directory "${AIO_DIR}/SKSE/Plugins"
+        COMMAND
+            ${CMAKE_COMMAND} -E copy_if_different
+            "$<TARGET_FILE:${PROJECT_NAME}>"
+            "${AIO_DIR}/SKSE/Plugins/$<TARGET_FILE_NAME:${PROJECT_NAME}>"
+        COMMAND
+            ${CMAKE_COMMAND} -E copy_if_different
+            "$<TARGET_PDB_FILE:${PROJECT_NAME}>"
+            "${AIO_DIR}/SKSE/Plugins/$<TARGET_PDB_FILE_NAME:${PROJECT_NAME}>"
+        COMMENT "Copying built DLL and PDB to AIO package"
+        VERBATIM
+    )
+
     # Only copy shaders when HLSL files change; copy individually so unchanged
     # files do not get their timestamps updated.
     file(
@@ -394,6 +466,8 @@ if(AUTO_PLUGIN_DEPLOYMENT OR AIO_ZIP_TO_DIST)
         LIST_DIRECTORIES FALSE
         "${CMAKE_SOURCE_DIR}/package/Shaders/*"
     )
+    # Exclude test files from production packages
+    list(FILTER _package_shaders EXCLUDE REGEX "/Tests/")
     set(_shader_copy_cmds)
     foreach(_src IN LISTS _package_shaders)
         file(RELATIVE_PATH _rel "${CMAKE_SOURCE_DIR}/package/Shaders" "${_src}")
@@ -426,7 +500,9 @@ if(AUTO_PLUGIN_DEPLOYMENT OR AIO_ZIP_TO_DIST)
             get_filename_component(_feat_name "${_fpath}" NAME)
             foreach(_src IN LISTS _feat_shaders)
                 file(RELATIVE_PATH _rel "${_fpath}/Shaders" "${_src}")
-                set(_dst "${AIO_DIR}/Shaders/${_feat_name}/${_rel}")
+                # Place feature shader files directly under AIO_DIR/Shaders to preserve expected include paths
+                # This matches the package shader layout and ensures includes like "TerrainShadows/..." resolve correctly
+                set(_dst "${AIO_DIR}/Shaders/${_rel}")
                 get_filename_component(_dst_dir "${_dst}" DIRECTORY)
                 list(
                     APPEND
@@ -660,14 +736,192 @@ if(AIO_ZIP_TO_DIST)
         )
     endif()
 
+    # Create a stamp-producing custom command for the AIO archive so CMake
+    # only rebuilds the archive when its inputs change. The archive filename
+    # keeps the UTC timestamp as before, but the command writes a stable
+    # stamp file that CMake can track as OUTPUT.
     set(TARGET_AIO_ZIP "${PROJECT_NAME}_AIO-${UTC_NOW}.7z")
-    message("Zipping ${AIO_DIR} to ${CMAKE_SOURCE_DIR}/dist/${TARGET_AIO_ZIP}")
+    set(AIO_ARCHIVE "${CMAKE_SOURCE_DIR}/dist/${TARGET_AIO_ZIP}")
+    set(AIO_ZIP_STAMP "${CMAKE_CURRENT_BINARY_DIR}/aio_package.stamp")
+
+    message("Zipping ${AIO_DIR} to ${AIO_ARCHIVE}")
+
     add_custom_command(
-        TARGET ${PROJECT_NAME}
-        POST_BUILD
-        COMMAND
-            ${CMAKE_COMMAND} -E tar cf
-            ${CMAKE_SOURCE_DIR}/dist/${TARGET_AIO_ZIP} --format=7zip -- .
+        OUTPUT ${AIO_ZIP_STAMP}
+        COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_SOURCE_DIR}/dist"
+        COMMAND ${CMAKE_COMMAND} -E tar cf ${AIO_ARCHIVE} --format=7zip -- .
+        COMMAND ${CMAKE_COMMAND} -E touch ${AIO_ZIP_STAMP}
         WORKING_DIRECTORY ${AIO_DIR}
+        DEPENDS PREPARE_AIO
+        COMMENT "Creating AIO archive ${AIO_ARCHIVE}"
+    )
+
+    add_custom_target(AIO_ZIP_PACKAGE ALL DEPENDS ${AIO_ZIP_STAMP})
+endif()
+
+if(NOT DEFINED ENV{CommunityShadersOutputDir})
+    message(
+        "When using AUTO_PLUGIN_DEPLOYMENT option, you need to set environment variable 'CommunityShadersOutputDir'"
     )
 endif()
+
+# #######################################################################################################################
+# # Manual packaging targets (Package-XXX)
+# #######################################################################################################################
+
+set(DIST_PATH "${CMAKE_SOURCE_DIR}/dist")
+file(MAKE_DIRECTORY "${CMAKE_SOURCE_DIR}/dist")
+
+set(CORE_PACKAGE "${DIST_PATH}/${PROJECT_NAME}-${UTC_NOW}.7z")
+
+# CORE_SOURCES = all content copied to the AIO directory + the SKSE plugin dll
+file(
+    GLOB_RECURSE CORE_SOURCES
+    CONFIGURE_DEPENDS
+    "${CMAKE_SOURCE_DIR}/package/*"
+)
+# Add SKSE plugin dll as dependency (use target-file generator expression so CMake
+# knows the actual output path of the target at build time)
+list(APPEND CORE_SOURCES "$<TARGET_FILE:${PROJECT_NAME}>")
+
+set(CORE_FEATURE_PATHS "${CMAKE_SOURCE_DIR}/package/")
+
+foreach(FEATURE_PATH ${FEATURE_PATHS})
+    if(EXISTS "${FEATURE_PATH}/CORE")
+        list(APPEND CORE_FEATURE_PATHS "${FEATURE_PATH}/")
+        file(GLOB_RECURSE FEATURE_SOURCES CONFIGURE_DEPENDS "${FEATURE_PATH}/*")
+        list(APPEND CORE_SOURCES ${FEATURE_SOURCES})
+    endif()
+endforeach()
+
+# Core package
+set(FEATURE_PATH "${CMAKE_BINARY_DIR}/Core")
+file(MAKE_DIRECTORY ${FEATURE_PATH})
+add_custom_command(
+    OUTPUT ${CORE_PACKAGE}
+    DEPENDS ${CORE_SOURCES}
+    COMMAND
+        ${CMAKE_COMMAND} --install ${CMAKE_BINARY_DIR} --prefix ${FEATURE_PATH}
+        --component SKSE
+    COMMAND
+        ${CMAKE_COMMAND} -E copy_directory ${CORE_FEATURE_PATHS} ${FEATURE_PATH}
+    COMMAND ${CMAKE_COMMAND} -E rm -f -- ${FEATURE_PATH}/Core
+    COMMAND ${CMAKE_COMMAND} -E tar cfv ${CORE_PACKAGE} --format=7zip -- .
+    WORKING_DIRECTORY ${FEATURE_PATH}
+    COMMENT "Creating Core zip package"
+)
+add_custom_target("Package-Core" DEPENDS ${CORE_PACKAGE})
+
+# Feature packages
+foreach(FEATURE_PATH ${FEATURE_PATHS})
+    if(EXISTS "${FEATURE_PATH}/CORE")
+        continue()
+    endif()
+
+    list(APPEND CORE_FEATURE_PATHS "${FEATURE_PATH}/")
+    file(GLOB_RECURSE FEATURE_SOURCES CONFIGURE_DEPENDS "${FEATURE_PATH}/*")
+    list(APPEND CORE_SOURCES ${FEATURE_SOURCES})
+
+    get_filename_component(FEATURE ${FEATURE_PATH} NAME)
+    set(FEATURE_PACKAGE "${DIST_PATH}/${FEATURE}-${UTC_NOW}.7z")
+
+    add_custom_command(
+        OUTPUT ${FEATURE_PACKAGE}
+        COMMAND
+            ${CMAKE_COMMAND} -E tar cfv ${FEATURE_PACKAGE} --format=7zip -- .
+        WORKING_DIRECTORY "${FEATURE_PATH}"
+        DEPENDS ${FEATURE_SOURCES}
+        COMMENT "Creating ${FEATURE} zip package"
+    )
+
+    string(REPLACE " " "" FEATURE ${FEATURE})
+    string(REPLACE "-" "" FEATURE ${FEATURE})
+    add_custom_target("Package-${FEATURE}" DEPENDS ${FEATURE_PACKAGE})
+endforeach()
+
+# AIO Folder target
+add_custom_command(
+    OUTPUT ${AIO_DIR}/SKSE/Plugins/${PROJECT_NAME}.dll
+    DEPENDS ${CORE_SOURCES}
+    COMMAND ${CMAKE_COMMAND} --install ${CMAKE_BINARY_DIR} --prefix ${AIO_DIR}
+    COMMENT "Installing to AIO folder"
+)
+add_custom_target("AIO" DEPENDS ${AIO_DIR}/SKSE/Plugins/${PROJECT_NAME}.dll)
+
+# Manual AIO package target
+set(AIO_PACKAGE "${DIST_PATH}/${PROJECT_NAME}_AIO-${UTC_NOW}.7z")
+add_custom_command(
+    OUTPUT ${AIO_PACKAGE}
+    DEPENDS ${CORE_SOURCES}
+    COMMAND ${CMAKE_COMMAND} -E make_directory ${AIO_DIR}
+    COMMAND ${CMAKE_COMMAND} --install ${CMAKE_BINARY_DIR} --prefix ${AIO_DIR}
+    COMMAND
+        ${CMAKE_COMMAND} -E chdir ${AIO_DIR} ${CMAKE_COMMAND} -E tar cfv
+        ${AIO_PACKAGE} --format=7zip -- .
+    COMMENT "Creating AIO zip package (manual)"
+)
+add_custom_target("Package-AIO-Manual" DEPENDS ${AIO_PACKAGE})
+
+# #######################################################################################################################
+# # Shader Unit Tests
+# #######################################################################################################################
+if(BUILD_SHADER_TESTS)
+    message(STATUS "Adding shader tests subdirectory")
+    enable_testing() # Enable CTest integration for shader tests
+    add_subdirectory(tests/shaders)
+
+    # Add a custom target that runs the shader tests
+    # Users can run this manually with: cmake --build <build-dir> --target run_shader_tests
+    # Runs the test executable directly (not via CTest) to show discovery count
+    add_custom_target(
+        run_shader_tests
+        COMMAND $<TARGET_FILE:shader_tests> --reporter compact
+        DEPENDS shader_tests
+        WORKING_DIRECTORY $<TARGET_FILE_DIR:shader_tests>
+        COMMENT "Running shader unit tests..."
+        VERBATIM
+    )
+
+    # Make all package targets depend on shader tests passing
+    add_dependencies("Package-Core" run_shader_tests)
+    add_dependencies("Package-AIO-Manual" run_shader_tests)
+    foreach(FEATURE_PATH ${FEATURE_PATHS})
+        get_filename_component(FEATURE ${FEATURE_PATH} NAME)
+        string(REPLACE " " "" FEATURE ${FEATURE})
+        string(REPLACE "-" "" FEATURE ${FEATURE})
+        if(TARGET "Package-${FEATURE}")
+            add_dependencies("Package-${FEATURE}" run_shader_tests)
+        endif()
+    endforeach()
+
+    # Make shader deployment targets depend on tests passing
+    if(TARGET prepare_shaders)
+        add_dependencies(prepare_shaders run_shader_tests)
+    endif()
+    if(TARGET COPY_SHADERS)
+        add_dependencies(COPY_SHADERS run_shader_tests)
+    endif()
+
+    message(
+        STATUS
+        "Package and shader deployment targets will automatically run shader tests before deploying"
+    )
+endif()
+
+message("*************************************************************")
+message("Community Shaders configuration complete")
+message("To prepare a ZIP package of AIO, Core, or Features")
+message("  Build cmake targets:")
+message("    - Package-Core: Core package")
+message("    - Package-AIO-Manual: AIO package (manual)")
+message("    - Package-<Feature>: Individual feature packages")
+message("  Or use cmake --install for custom deployment:")
+message("    cmake --install ./build/ALL --prefix <TARGET_DIR>")
+if(BUILD_SHADER_TESTS)
+    message("To run shader tests manually:")
+    message(
+        "  cmake --build build/<preset> --config <Debug|Release> --target run_shader_tests"
+    )
+endif()
+message("Try switching to build preset 'Dev' for faster iteration time")
+message("*************************************************************")

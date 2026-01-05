@@ -25,6 +25,10 @@ struct LODBlending : Feature
 		float LODObjectBrightness = 1;
 		float LODObjectSnowBrightness = 1;
 		uint DisableTerrainVertexColors = false;
+		float LODTerrainGamma = 1;
+		float LODObjectGamma = 1;
+		float LODObjectSnowGamma = 1;
+		float pad;
 	};
 
 	Settings settings;

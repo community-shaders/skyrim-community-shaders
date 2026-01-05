@@ -23,11 +23,23 @@ SKSE core plugin for community-driven advanced graphics modifications.
 -   Any terminal of your choice (e.g., PowerShell)
 -   [Visual Studio Community 2022](https://visualstudio.microsoft.com/)
     -   Desktop development with C++
--   [CMake](https://cmake.org/)
-    -   Edit the `PATH` environment variable and add the cmake.exe install path as a new value
-    -   Instructions for finding and editing the `PATH` environment variable can be found [here](https://www.java.com/en/download/help/path.html)
+    -   CMake Tools for Windows
+    -   HLSL Tools
 -   [Git](https://git-scm.com/downloads)
     -   Edit the `PATH` environment variable and add the Git.exe install path as a new value
+
+## Optional Requirements
+
+```
+CMake & Vcpkg comes with Visual Studio in Developer Command Prompts already.
+Install them manually only if you want them in everywhere.
+```
+
+-   [CMake](https://cmake.org/)
+    -   No need to install manually if you have Visual Studio CMake Tools installed
+    -   CMake 4.0+ is **not** supported right now
+    -   Edit the `PATH` environment variable and add the cmake.exe install path as a new value
+    -   Instructions for finding and editing the `PATH` environment variable can be found [here](https://www.java.com/en/download/help/path.html)
 -   [Vcpkg](https://github.com/microsoft/vcpkg)
     -   Install vcpkg using the directions in vcpkg's [Quick Start Guide](https://github.com/microsoft/vcpkg#quick-start-windows)
     -   After install, add a new environment variable named `VCPKG_ROOT` with the value as the path to the folder containing vcpkg
@@ -40,29 +52,74 @@ SKSE core plugin for community-driven advanced graphics modifications.
 -   [VR Address Library for SKSEVR](https://www.nexusmods.com/skyrimspecialedition/mods/58101)
     -   Needed for VR
 
-## Register Visual Studio as a Generator
+## Build Instructions
 
--   Open `x64 Native Tools Command Prompt`
--   Run `cmake`
--   Close the cmd window
+### Clone the Repository with submodules
 
-Or, in powershell run:
+To clone the repository with all submodules, run the following command in your terminal:
 
-```pwsh
-& "C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Auxiliary\Build\vcvarsall.bat" amd64
-```
-
-## Clone and Build
-
-Open terminal (e.g., PowerShell) and run the following commands:
-
-```
+```bash
 git clone https://github.com/doodlum/skyrim-community-shaders.git --recursive
 cd skyrim-community-shaders
-.\BuildRelease.bat
 ```
 
-### CMAKE Options (optional)
+### Visual Studio build
+
+To build the project, just open `./skyrim-community-shaders` with Visual Studio's "Open Folder" feature. (Ensure you have `CMake Tools for Windows` selected when installing VS)
+
+Follow the prompts to `Configure` and `Build` the project.
+It should generate the AIO package in the `./build/ALL/aio` folder by default.
+
+#### Zip package & Optional targets
+
+If you change the `Solution Explorer` into `CMake Targets View`, you can find optional targets to create zip packages for each feature.
+Right click on the target and select `Build` to create the zip package in `./dist/`.
+
+### Advanced build with CMake in command line
+
+Open the "Developer PowerShell for VS 2022" or the "x64 Native Tools Command Prompt" (these set up the Visual Studio toolchain for you).
+
+Then from the repository root run:
+
+```pwsh
+# Generate the build files (uses the ALL preset)
+cmake --preset ALL
+
+# Build using the preset
+cmake --build --preset ALL
+
+# Install an AIO package somewhere, e.g. $MOD_FOLDER
+cmake --install --preset ALL -- --prefix $MOD_FOLDER
+```
+
+# Notes
+
+-   If you prefer to run the VC environment manually, launch Developer PowerShell or the x64 Native Tools prompt instead of calling vcvarsall.bat directly from PowerShell.
+-   The convenience wrapper `BuildRelease.bat` also captures these steps.
+
+#### Build a zip package
+
+You can build zip packages for optional cmake targets.
+Currently support `AIO_ZIP_PACKAGE`, `Package-AIO-Manual`, `Package-Core`, and `Package-<Feature>`:
+
+```pwsh
+# Create a AIO package in ./dist/
+# Automated AIO zip (requires AIO_ZIP_TO_DIST=ON)
+cmake --build ./build/ALL --config Release --target AIO_ZIP_PACKAGE
+
+# Manual AIO package (install + tar)
+cmake --build ./build/ALL --config Release --target Package-AIO-Manual
+
+# Create a CommunityShaders core package in ./dist/
+cmake --build ./build/ALL --config Release --target Package-Core
+
+# Create a feature package in ./dist/ (example: GrassLighting)
+cmake --build ./build/ALL --config Release --target Package-GrassLighting
+```
+
+For more details about packaging targets, options, and the difference between automated and manual packaging, see the "Manual packaging targets (detailed)" section in `.claude/CLAUDE.md`.
+
+#### CMAKE Options (optional)
 
 If you want an example CMakeUserPreset to start off with you can copy the `CMakeUserPresets.json.template` -> `CMakeUserPresets.json`
 
@@ -71,19 +128,6 @@ If you want an example CMakeUserPreset to start off with you can copy the `CMake
 -   This option is default `"OFF"`
 -   Make sure `"AUTO_PLUGIN_DEPLOYMENT"` is set to `"ON"` in `CMakeUserPresets.json`
 -   Change the `"CommunityShadersOutputDir"` value to match your desired outputs, if you want multiple folders you can separate them by `;` is shown in the template example
-
-#### AIO_ZIP_TO_DIST
-
--   This option is default `"ON"`
--   Make sure `"AIO_ZIP_TO_DIST"` is set to `"ON"` in `CMakeUserPresets.json`
--   This will create a `CommunityShaders_AIO.7z` archive in /dist containing all features and base mod
-
-#### ZIP_TO_DIST
-
--   This option is default `"ON"`
--   Make sure `"ZIP_TO_DIST"` is set to `"ON"` in `CMakeUserPresets.json`
--   This will create a zip for each feature and one for the base Community shaders in /dist
--   If having a file with name `CORE` in the root of the features folder it will instead be merged into the core zip
 
 #### TRACY_SUPPORT
 
@@ -124,6 +168,31 @@ If you run into `Access violation` build errors during step 3, you can try addin
 docker run -it --rm --isolation=process -v .:C:/skyrim-community-shaders skyrim-community-shaders:latest
 ```
 
+## Debugging
+
+### Launching MO2-SKSE-Skyrim from commandline
+
+1. Open Steam
+2. Close ModOrganizer GUI
+3. Add `ModOrganizer.exe` (MO2 Folder) to your PATH, or use the path of it
+4. Run the commands:
+
+```pwsh
+# Change Working Directory
+cd "C:/Program Files (x86)/Steam/steamapps/common/Skyrim Special Edition"
+# Launch SKSE with MO2
+ModOrganizer.exe --log run "C:\Program Files (x86)\Steam\steamapps\common\Skyrim Special Edition\skse64_loader.exe"
+```
+
+### Capture with RenderDoc
+
+In Launch Application Menu, use the following settings:
+
+-   Executable Path: `PATH/TO/ModOrganizer.exe`
+-   Working Directory: `C:/Program Files (x86)/Steam/steamapps/common/Skyrim Special Edition`
+-   Command-line Arguments: `--log run "C:\Program Files (x86)\Steam\steamapps\common\Skyrim Special Edition\skse64_loader.exe"`
+-   [x] **Capture Child Process**
+
 ## License
 
 ### Default
@@ -132,7 +201,7 @@ docker run -it --rm --isolation=process -v .:C:/skyrim-community-shaders skyrim-
 Specifically, the Modded Code includes:
 
 -   Skyrim (and its variants)
--   Hardware drivers to enable additional functionality provided via proprietary SDKs, such as [Nvidia DLSS](https://developer.nvidia.com/rtx/dlss/get-started), [AMD FidelityFX FSR3](https://gpuopen.com/fidelityfx-super-resolution-3/), and [Intel XeSS](https://github.com/intel/xess)
+-   Hardware drivers to enable additional functionality provided via proprietary SDKs, such as [Nvidia DLSS](https://developer.nvidia.com/rtx/dlss/get-started) and [AMD FidelityFX FSR3](https://gpuopen.com/fidelityfx-super-resolution-3/)
 
 The Modding Libraries include:
 

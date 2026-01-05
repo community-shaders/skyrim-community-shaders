@@ -1,0 +1,21 @@
+name: "Prepare Shaders"
+description: "Prepare shaders for validation or analysis (requires setup-build-environment to be called first)"
+
+runs:
+    using: "composite"
+    steps:
+        - name: Prepare shaders
+          uses: lukka/run-cmake@v10
+          with:
+              configurePreset: ALL
+              buildPreset: ALL
+              buildPresetAdditionalArgs: "['--target prepare_shaders']"
+
+        - name: Setup Python
+          uses: actions/setup-python@v5
+          with:
+              python-version: "3.11"
+
+        - name: Install hlslkit
+          run: pip install git+https://github.com/alandtse/hlslkit.git
+          shell: bash

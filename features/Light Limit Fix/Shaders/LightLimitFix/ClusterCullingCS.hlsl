@@ -3,9 +3,9 @@
 
 cbuffer PerFrame : register(b0)
 {
-    uint LightCount;
-    uint3 pad;
-    uint4 ClusterSize;
+	uint LightCount;
+	uint3 pad0;  // Padding for 16-byte alignment: 4 -> 16 bytes
+	uint4 ClusterSize;
 }
 
 //references
