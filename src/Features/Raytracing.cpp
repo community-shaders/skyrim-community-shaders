@@ -2787,7 +2787,7 @@ void Raytracing::DrawRTGI()
 						CD3DX12_RESOURCE_BARRIER::UAV(normalRoughnessPathTracingTexture->resource.get())
 					};
 
-					commandList->ResourceBarrier(_countof(ptUAVBarrier), ptUAVBarrier);			
+					commandList->ResourceBarrier(_countof(ptUAVBarrier), ptUAVBarrier);
 				}
 			}
 		}
