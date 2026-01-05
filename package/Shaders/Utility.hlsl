@@ -660,7 +660,7 @@ PS_OUTPUT main(PS_INPUT input)
 
 		// With a shadowMapThreshold = 0.005 this gives a bias around 0.0025, 0.0013 @ 4k, 8000wsu max depth in interiors
 		// Note: lower bias reduces peter panning but also leads to more self-shadowing(shadow acne)
-		float receiverDepthBias = (SharedData::InInterior) ? shadowMapThreshold * rcp(cascadeTexelSize * 2.5) : shadowMapThreshold;
+		float receiverDepthBias = (SharedData::InInterior) ? shadowMapThreshold * rcp(max(cascadeTexelSize, 0.6) * 2.5) : shadowMapThreshold;
 		float cascadeSurfaceZ = positionLS.z - receiverDepthBias;
 
 #			if SHADOWFILTER == 0
@@ -680,7 +680,7 @@ PS_OUTPUT main(PS_INPUT input)
 			float3 cascade1PositionLS = mul(transpose(ShadowMapProj[eyeIndex][1]), float4(positionMS.xyz, 1)).xyz;
 
 			cascadeTexelSize = (cascadeSplitL1 - cascadeSplitL0) / shadowMapResolution.x;
-			receiverDepthBias = (SharedData::InInterior) ? AlphaTestRef.z * rcp(cascadeTexelSize * 2.5) : AlphaTestRef.z;
+			receiverDepthBias = (SharedData::InInterior) ? AlphaTestRef.z * rcp(max(cascadeTexelSize, 0.6) * 2.5) : AlphaTestRef.z;
 			cascadeSurfaceZ = cascade1PositionLS.z - receiverDepthBias;
 
 #			if SHADOWFILTER == 0
