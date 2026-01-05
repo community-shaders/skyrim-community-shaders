@@ -113,7 +113,19 @@ VS_OUTPUT main(VS_INPUT input)
 	vsout.Position.xy = positionOffset + finalViewPosition.xy;
 	vsout.Position.zw = finalViewPosition.zw;
 
-	vsout.ViewPositionVS = finalViewPosition.xyz;
+    // Compute view-space for precipitation motion blend
+#	if defined(ENVCUBE)
+#  		if defined(RAIN)
+    float3 viewVS             = mul(WorldView[eyeIndex], msPosition).xyz;
+    float3 adjustedViewVS     = mul(WorldView[eyeIndex], adjustedMsPosition).xyz;
+    float3 finalViewPositionVS = lerp(adjustedViewVS, viewVS, positionBlendParam);
+    vsout.ViewPositionVS = finalViewPositionVS;
+#  		else
+    vsout.ViewPositionVS = mul(WorldView[eyeIndex], msPosition).xyz;
+#  		endif
+#	else
+    vsout.ViewPositionVS = mul(WorldView[eyeIndex], msPosition).xyz;
+#	endif
 
 	vsout.Color.xyz = 1.0.xxx;
 	vsout.Color.w = fVars1.w;
