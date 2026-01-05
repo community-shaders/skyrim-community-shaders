@@ -11,7 +11,10 @@ cbuffer RenderResCB : register(b0)
     float2 ResolutionRcp;
 };
 
-ConstantBuffer<SVGF>	Frame					: register(b1);
+cbuffer SVGFCB : register(b1)
+{
+    SVGF Frame;
+};
 
 Texture2D<float4>		NormalRoughnessTexture  : register(t2);
 Texture2D<float4>		SSRColorTexture			: register(t3);
@@ -46,7 +49,7 @@ float CalculateWeight(float depthCenter, float depthP, float phiD, float3 normal
 	float weightNormal = pow(max(0.f, dot(normalCenter, normalP)), phiN);
 
 	// Luminance weight
-	float weightLuminance = abs(luminanceCenter - luminanceP) / phiL;
+	float weightLuminance = abs(luminanceCenter - luminanceP) / max(phiL, 1e-4f);
 
 	float weight = exp(-weightDepth - weightLuminance) * weightNormal;
 	return weight;
