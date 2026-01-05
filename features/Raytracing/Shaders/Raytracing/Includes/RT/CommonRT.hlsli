@@ -27,7 +27,7 @@
 #define RAY_TMAX (1e10f)
 #define SHADOW_RAY_TMAX (1e5f)
 
-#define GN_BIAS (0.01f)
+#define GN_BIAS_MAX (0.5f)
 
 #define MIN_DIFFUSE_SHADOW (0.001f)
 #define MIN_RADIANCE (0.01f)
@@ -111,4 +111,13 @@ float3 TangentToWorld(float3 normal, float3 tangentSample)
            normal * tangentSample.z;
 }
 
-#endif // COMMONRT_HLSI
+float3 OffsetRay(float3 p, float3 n, float3 l)
+{
+	const float MinBias = 0.01f;
+	const float MaxBias = GN_BIAS_MAX;
+	const float NormalBias = lerp(MaxBias, MinBias, saturate(dot(n, l)));
+	p += n * NormalBias;
+	return p;
+}
+
+#endif // COMMONRT_HLSL

@@ -8,7 +8,7 @@
 float TraceRayShadow(RaytracingAccelerationStructure scene, Surface surface, float3 direction)
 {
     RayDesc ray;
-    ray.Origin = surface.Position + surface.GeomNormal * GN_BIAS;
+    ray.Origin = OffsetRay(surface.Position, surface.GeomNormal, direction);
     ray.Direction = direction;
     ray.TMin = 0.01f;
     ray.TMax = SHADOW_RAY_TMAX;
@@ -23,7 +23,7 @@ float TraceRayShadow(RaytracingAccelerationStructure scene, Surface surface, flo
 float TraceRayShadowFinite(RaytracingAccelerationStructure scene, Surface surface, float3 direction, float tmax)
 {
     RayDesc ray;
-    ray.Origin = surface.Position + surface.GeomNormal * GN_BIAS;
+    ray.Origin = OffsetRay(surface.Position, surface.GeomNormal, direction);
     ray.Direction = direction;
     ray.TMin = 0.01f;
     ray.TMax = tmax;

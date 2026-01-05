@@ -575,10 +575,16 @@ void Raytracing::SetupOutputRT()
 	// u0 - Output texture
 	createRT(outputTexture, DXGI_FORMAT_R16G16B16A16_FLOAT, GIHeap::Slot::Output, L"Output texture");
 
-	// u1 - Reflectance texture
+	// u1 - Diffuse Albedo Path Tracing texture
+	createRT(diffuseAlbedoPathTracingTexture, DXGI_FORMAT_R8G8B8A8_UNORM, GIHeap::Slot::DiffuseAlbedoPathTracing, L"Diffuse Albedo Path Tracing texture");
+
+	// u2 - Normal Roughness Path Tracing texture
+	createRT(normalRoughnessPathTracingTexture, DXGI_FORMAT_R16G16B16A16_SNORM, GIHeap::Slot::NormalRoughnessPathTracing, L"Normal Roughness Path Tracing texture");
+
+	// u3 - Reflectance texture
 	createRT(specularAlbedoTexture, DXGI_FORMAT_R16G16B16A16_FLOAT, GIHeap::Slot::Reflectance, L"Reflectance texture");
 
-	// u2 - Specular Hit Distance texture
+	// u4 - Specular Hit Distance texture
 	createRT(specularHitDistanceTexture, DXGI_FORMAT_R32_FLOAT, GIHeap::Slot::SpecularHitDist, L"Specular Hit Distance texture");
 
 	// Motion vector
@@ -2757,8 +2763,10 @@ void Raytracing::DrawRTGI()
 
 				commandList->DispatchRays(&dispatchDesc);
 
-				CD3DX12_RESOURCE_BARRIER rtUAVBarrier[3] = {
+				CD3DX12_RESOURCE_BARRIER rtUAVBarrier[5] = {
 					CD3DX12_RESOURCE_BARRIER::UAV(outputTexture->resource.get()),
+					CD3DX12_RESOURCE_BARRIER::UAV(diffuseAlbedoPathTracingTexture->resource.get()),
+					CD3DX12_RESOURCE_BARRIER::UAV(normalRoughnessPathTracingTexture->resource.get()),
 					CD3DX12_RESOURCE_BARRIER::UAV(specularAlbedoTexture->resource.get()),
 					CD3DX12_RESOURCE_BARRIER::UAV(specularHitDistanceTexture->resource.get())
 				};
@@ -2781,9 +2789,9 @@ void Raytracing::DrawRTGI()
 					sl::Resource colorOut = { sl::ResourceType::eTex2d, mainTexture->resource.get(), D3D12_RESOURCE_STATE_UNORDERED_ACCESS };
 					sl::Resource depth = { sl::ResourceType::eTex2d, depthTexture->resource.get(), D3D12_RESOURCE_STATE_COMMON };
 					sl::Resource mvec = { sl::ResourceType::eTex2d, motionVectorsTexture->resource.get(), 0 };
-					sl::Resource diffuseAlbedo = { sl::ResourceType::eTex2d, diffuseAlbedoTexture->resource.get(), D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE };
+					sl::Resource diffuseAlbedo = { sl::ResourceType::eTex2d, settings.PathTracing ? diffuseAlbedoPathTracingTexture->resource.get() : diffuseAlbedoTexture->resource.get(), D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE };
 					sl::Resource specularAlbedo = { sl::ResourceType::eTex2d, specularAlbedoTexture->resource.get(), D3D12_RESOURCE_STATE_UNORDERED_ACCESS };
-					sl::Resource normalRoughness = { sl::ResourceType::eTex2d, normalRoughnessTexture->resource.get(), D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE };
+					sl::Resource normalRoughness = { sl::ResourceType::eTex2d, settings.PathTracing ? normalRoughnessPathTracingTexture->resource.get() : normalRoughnessTexture->resource.get(), D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE };
 					sl::Resource specHitDistance = { sl::ResourceType::eTex2d, specularHitDistanceTexture->resource.get(), D3D12_RESOURCE_STATE_UNORDERED_ACCESS };
 
 					sl::ResourceTag colorInTag = sl::ResourceTag{ &colorIn, sl::kBufferTypeScalingInputColor, sl::ResourceLifecycle::eOnlyValidNow, &inputExtent };
@@ -2829,12 +2837,13 @@ void Raytracing::DrawRTGI()
 				commandList->CopyResource(mainTexture->resource.get(), specularHitDistanceTexture->resource.get());
 				specularHitDistanceTexture->TransitionBarrier(commandList.get(), D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
 			} else if (settings.DebugOutput == DebugOutput::NormalRoughnessGbuffer) {
-				auto transitionCopy = CD3DX12_RESOURCE_BARRIER::Transition(normalRoughnessTexture->resource.get(), D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_COPY_SOURCE);
+				auto normalRoughnessProxy = settings.PathTracing ? normalRoughnessPathTracingTexture->resource.get() : normalRoughnessTexture->resource.get();
+				auto transitionCopy = CD3DX12_RESOURCE_BARRIER::Transition(normalRoughnessProxy, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_COPY_SOURCE);
 				commandList->ResourceBarrier(1, &transitionCopy);
 
-				commandList->CopyResource(mainTexture->resource.get(), normalRoughnessTexture->resource.get());
+				commandList->CopyResource(mainTexture->resource.get(), normalRoughnessProxy);
 
-				auto transitionNonPixelRes = CD3DX12_RESOURCE_BARRIER::Transition(normalRoughnessTexture->resource.get(), D3D12_RESOURCE_STATE_COPY_SOURCE, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+				auto transitionNonPixelRes = CD3DX12_RESOURCE_BARRIER::Transition(normalRoughnessProxy, D3D12_RESOURCE_STATE_COPY_SOURCE, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
 				commandList->ResourceBarrier(1, &transitionNonPixelRes);
 			} else if (settings.DebugOutput == DebugOutput::GeometryNormalMetalness) {
 				auto transitionCopy = CD3DX12_RESOURCE_BARRIER::Transition(GNMDTexture.get(), D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_COPY_SOURCE);
@@ -2853,12 +2862,13 @@ void Raytracing::DrawRTGI()
 				auto transitionNonPixelRes = CD3DX12_RESOURCE_BARRIER::Transition(albedoTexture.get(), D3D12_RESOURCE_STATE_COPY_SOURCE, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
 				commandList->ResourceBarrier(1, &transitionNonPixelRes);
 			} else if (settings.DebugOutput == DebugOutput::Diffuse) {
-				auto transitionCopy = CD3DX12_RESOURCE_BARRIER::Transition(diffuseAlbedoTexture->resource.get(), D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_COPY_SOURCE);
+				auto diffuseAlbedoProxy = settings.PathTracing ? diffuseAlbedoPathTracingTexture->resource.get() : diffuseAlbedoTexture->resource.get();
+				auto transitionCopy = CD3DX12_RESOURCE_BARRIER::Transition(diffuseAlbedoProxy, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_COPY_SOURCE);
 				commandList->ResourceBarrier(1, &transitionCopy);
 
-				commandList->CopyResource(mainTexture->resource.get(), diffuseAlbedoTexture->resource.get());
+				commandList->CopyResource(mainTexture->resource.get(), diffuseAlbedoProxy);
 
-				auto transitionNonPixelRes = CD3DX12_RESOURCE_BARRIER::Transition(diffuseAlbedoTexture->resource.get(), D3D12_RESOURCE_STATE_COPY_SOURCE, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+				auto transitionNonPixelRes = CD3DX12_RESOURCE_BARRIER::Transition(diffuseAlbedoProxy, D3D12_RESOURCE_STATE_COPY_SOURCE, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
 				commandList->ResourceBarrier(1, &transitionNonPixelRes);
 			}
 		}
@@ -3354,6 +3364,8 @@ void Raytracing::CreateRootSignature()
 		GIHeap::Table::UAV,
 		D3D12_DESCRIPTOR_RANGE_TYPE_UAV,
 		{ { GIHeap::Slot::Output, 1 },
+			{ GIHeap::Slot::DiffuseAlbedoPathTracing, 1 },
+			{ GIHeap::Slot::NormalRoughnessPathTracing, 1 },
 			{ GIHeap::Slot::Reflectance, 1 },
 			{ GIHeap::Slot::SpecularHitDist, 1 },
 			{ GIHeap::Slot::SHaRCHashEntries, 1 },
