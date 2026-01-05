@@ -710,16 +710,25 @@ void Raytracing::SetupResources()
 		defaultNormalTexture = eastl::make_shared<DefaultTexture>(d3d12Device.get(), textureRegisters.Allocate());
 		defaultBlackTexture = eastl::make_shared<DefaultTexture>(d3d12Device.get(), textureRegisters.Allocate());
 		defaultRMAOSTexture = eastl::make_shared<DefaultTexture>(d3d12Device.get(), textureRegisters.Allocate());
+		defaultSpecularTexture = eastl::make_shared<DefaultTexture>(d3d12Device.get(), textureRegisters.Allocate());
+		defaultEnvTexture = eastl::make_shared<DefaultTexture>(d3d12Device.get(), textureRegisters.Allocate());
+		defaultEnvMaskTexture = eastl::make_shared<DefaultTexture>(d3d12Device.get(), textureRegisters.Allocate());
 
 		defaultWhiteTexture->CreateSRV<GIHeap>(giHeap.get(), GIHeapDef::Slot::Textures);
 		defaultNormalTexture->CreateSRV<GIHeap>(giHeap.get(), GIHeapDef::Slot::Textures);
 		defaultBlackTexture->CreateSRV<GIHeap>(giHeap.get(), GIHeapDef::Slot::Textures);
 		defaultRMAOSTexture->CreateSRV<GIHeap>(giHeap.get(), GIHeapDef::Slot::Textures);
+		defaultSpecularTexture->CreateSRV<GIHeap>(giHeap.get(), GIHeapDef::Slot::Textures);
+		defaultEnvTexture->CreateSRV<GIHeap>(giHeap.get(), GIHeapDef::Slot::Textures);
+		defaultEnvMaskTexture->CreateSRV<GIHeap>(giHeap.get(), GIHeapDef::Slot::Textures);
 
 		defaultWhiteTexture->UpdateAndUpload(commandList.get(), white);
 		defaultNormalTexture->UpdateAndUpload(commandList.get(), normal);
 		defaultBlackTexture->UpdateAndUpload(commandList.get(), black);
 		defaultRMAOSTexture->UpdateAndUpload(commandList.get(), rmaos);
+		defaultSpecularTexture->UpdateAndUpload(commandList.get(), black);
+		defaultEnvTexture->UpdateAndUpload(commandList.get(), black);
+		defaultEnvMaskTexture->UpdateAndUpload(commandList.get(), black);
 	}
 
 	auto mainTex = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMAIN];
