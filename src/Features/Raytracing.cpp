@@ -2772,15 +2772,22 @@ void Raytracing::DrawRTGI()
 
 				commandList->DispatchRays(&dispatchDesc);
 
-				CD3DX12_RESOURCE_BARRIER rtUAVBarrier[5] = {
+				CD3DX12_RESOURCE_BARRIER rtUAVBarrier[3] = {
 					CD3DX12_RESOURCE_BARRIER::UAV(outputTexture->resource.get()),
-					CD3DX12_RESOURCE_BARRIER::UAV(diffuseAlbedoPathTracingTexture->resource.get()),
-					CD3DX12_RESOURCE_BARRIER::UAV(normalRoughnessPathTracingTexture->resource.get()),
 					CD3DX12_RESOURCE_BARRIER::UAV(specularAlbedoTexture->resource.get()),
 					CD3DX12_RESOURCE_BARRIER::UAV(specularHitDistanceTexture->resource.get())
 				};
 
 				commandList->ResourceBarrier(_countof(rtUAVBarrier), rtUAVBarrier);
+
+				if (settings.PathTracing) {
+					CD3DX12_RESOURCE_BARRIER ptUAVBarrier[2] = {
+						CD3DX12_RESOURCE_BARRIER::UAV(diffuseAlbedoPathTracingTexture->resource.get()),
+						CD3DX12_RESOURCE_BARRIER::UAV(normalRoughnessPathTracingTexture->resource.get())
+					};
+
+					commandList->ResourceBarrier(_countof(ptUAVBarrier), ptUAVBarrier);			
+				}
 			}
 		}
 
@@ -2794,13 +2801,15 @@ void Raytracing::DrawRTGI()
 					sl::Extent inputNativeExtent{ 0, 0, screenSize.x, screenSize.y };
 					sl::Extent outputExtent{ 0, 0, screenSize.x, screenSize.y };
 
+					uint32_t state = settings.PathTracing ? D3D12_RESOURCE_STATE_UNORDERED_ACCESS : D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE;
+
 					sl::Resource colorIn = { sl::ResourceType::eTex2d, outputTexture->resource.get(), D3D12_RESOURCE_STATE_UNORDERED_ACCESS };
 					sl::Resource colorOut = { sl::ResourceType::eTex2d, mainTexture->resource.get(), D3D12_RESOURCE_STATE_UNORDERED_ACCESS };
 					sl::Resource depth = { sl::ResourceType::eTex2d, depthTexture->resource.get(), D3D12_RESOURCE_STATE_COMMON };
 					sl::Resource mvec = { sl::ResourceType::eTex2d, motionVectorsTexture->resource.get(), 0 };
-					sl::Resource diffuseAlbedo = { sl::ResourceType::eTex2d, settings.PathTracing ? diffuseAlbedoPathTracingTexture->resource.get() : diffuseAlbedoTexture->resource.get(), D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE };
+					sl::Resource diffuseAlbedo = { sl::ResourceType::eTex2d, settings.PathTracing ? diffuseAlbedoPathTracingTexture->resource.get() : diffuseAlbedoTexture->resource.get(), state };
 					sl::Resource specularAlbedo = { sl::ResourceType::eTex2d, specularAlbedoTexture->resource.get(), D3D12_RESOURCE_STATE_UNORDERED_ACCESS };
-					sl::Resource normalRoughness = { sl::ResourceType::eTex2d, settings.PathTracing ? normalRoughnessPathTracingTexture->resource.get() : normalRoughnessTexture->resource.get(), D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE };
+					sl::Resource normalRoughness = { sl::ResourceType::eTex2d, settings.PathTracing ? normalRoughnessPathTracingTexture->resource.get() : normalRoughnessTexture->resource.get(), state };
 					sl::Resource specHitDistance = { sl::ResourceType::eTex2d, specularHitDistanceTexture->resource.get(), D3D12_RESOURCE_STATE_UNORDERED_ACCESS };
 
 					sl::ResourceTag colorInTag = sl::ResourceTag{ &colorIn, sl::kBufferTypeScalingInputColor, sl::ResourceLifecycle::eOnlyValidNow, &inputExtent };
