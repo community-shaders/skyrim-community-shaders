@@ -79,7 +79,7 @@ cbuffer PerTechnique : register(b0)
 		{ 0.001, 0.001, 0.001 }
 	};
 
-	float3 normalizedCoordinates = float3(dispatchID.xy + 0.5, max(dispatchID.z - 1, 0.0)) * rcp(TextureDimensions.xyz);
+	float3 normalizedCoordinates = float3(dispatchID.xy + 0.5, max(dispatchID.z - 1.0, 0.0)) * rcp(TextureDimensions.xyz);
 	uint eyeIndex = Stereo::GetEyeIndexFromTexCoord(normalizedCoordinates.xy);
 	float3 depthUv = Stereo::ConvertFromStereoUV(normalizedCoordinates, eyeIndex) + StepCoefficients[IterationIndex];
 	float depth = InverseRepartitionTex.SampleLevel(InverseRepartitionSampler, depthUv.z, 0);
