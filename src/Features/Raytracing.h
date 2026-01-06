@@ -31,6 +31,7 @@
 #include "Features/Raytracing/Shape.h"
 #include "Features/Raytracing/Types.h"
 #include "Features/Raytracing/Utils.h"
+#include "Features/Raytracing/TextureSharing.h"
 
 #include "Raytracing/FeatureData.hlsli"
 #include "Raytracing/Includes/Types/FrameData.hlsli"
@@ -531,6 +532,8 @@ struct Raytracing : public OverlayFeature
 	bool renderingWorld = false;
 	bool lightsUpdated = false;
 
+	eastl::hash_set<eastl::string> shareableTextures;
+
 	winrt::com_ptr<IDXGraphicsAnalysis> ga = nullptr;
 
 	bool pixCapture = false;
@@ -871,6 +874,8 @@ struct Raytracing : public OverlayFeature
 	std::shared_mutex sharedTextureMutex;
 	std::shared_mutex renderMutex;
 
+	std::recursive_mutex shareTextureMutex;
+
 	uint2 renderSize;
 	float2 dynamicResolutionRatio;
 
@@ -905,96 +910,36 @@ struct Raytracing : public OverlayFeature
 	sl::DLSSDOptimalSettings optimalSettings{};
 #endif
 
-	template <class T>
-	void detour_thunk(size_t offset)
-	{
-		T::func = REL::Module::get().base() + offset;
-		DetourTransactionBegin();
-		DetourUpdateThread(GetCurrentThread());
-		DetourAttach(reinterpret_cast<PVOID*>(&T::func), reinterpret_cast<PVOID>(T::thunk));
-		DetourTransactionCommit();
-	}
-
 	struct Hooks
 	{
 		struct ID3D11Device_CreateTexture2D
 		{
 			static HRESULT WINAPI thunk(ID3D11Device* This, const D3D11_TEXTURE2D_DESC* pDesc, const D3D11_SUBRESOURCE_DATA* pInitialData, ID3D11Texture2D** ppTexture2D)
 			{
+				if (!pDesc)
+					return func(This, pDesc, pInitialData, ppTexture2D);
+
 				D3D11_TEXTURE2D_DESC descCopy = *pDesc;
-				const D3D11_SUBRESOURCE_DATA* initialDataCopy = pInitialData;
 
-				auto& rt = globals::features::raytracing;
+				const bool shareTexture = descCopy.SampleDesc.Count & TextureSharing::FLAG_MASK;
+				descCopy.SampleDesc.Count = ~TextureSharing::FLAG_MASK;
 
-				bool shareTexture = false;
+				logger::info("[RT] ID3D11Device_CreateTexture2D - SampleDesc.Count: {} - {}, Share: {}", pDesc->SampleDesc.Count, descCopy.SampleDesc.Count, shareTexture);
 
-				eastl::vector<D3D11_SUBRESOURCE_DATA> initialDataLocal;
-				eastl::vector<DirectX::ScratchImage> outputMips;
-
-				bool share = rt.shareTexture || pDesc && IsShareableFormat(pDesc->Format);
-
-				if (rt.loaded && share && pDesc && pInitialData && pDesc->ArraySize == 1 && pDesc->Usage == D3D11_USAGE_DEFAULT && pDesc->BindFlags == D3D11_BIND_SHADER_RESOURCE && pDesc->MiscFlags == 0 && pDesc->CPUAccessFlags == 0) {
-					bool recompress = rt.settings.RecompressTextures;
-
-					descCopy.Format = GetCompatibleFormat(pDesc->Format, recompress);
-
-					logger::trace("[RT] ID3D11Device::CreateTexture2D - Sharing Texture - Original Format: {}, Target Format: {}", magic_enum::enum_name(pDesc->Format), magic_enum::enum_name(descCopy.Format));
-
-					if (pDesc->Format != descCopy.Format) {
-						initialDataLocal.resize(pDesc->MipLevels);
-						outputMips.resize(pDesc->MipLevels);
-
-						auto range = std::views::iota(0u, pDesc->MipLevels);
-
-						auto decompressedFormat = GetCompatibleFormat(pDesc->Format, false);
-
-						std::for_each(std::execution::par, range.begin(), range.end(), [&](uint mip) {
-							DirectX::Image src;
-							src.width = std::max(1u, pDesc->Width >> mip);
-							src.height = std::max(1u, pDesc->Height >> mip);
-							src.format = pDesc->Format;
-							src.rowPitch = pInitialData[mip].SysMemPitch;
-							src.slicePitch = pInitialData[mip].SysMemSlicePitch;
-							src.pixels = (uint8_t*)pInitialData[mip].pSysMem;
-
-							DirectX::ScratchImage decompressedScratch;
-							DX::ThrowIfFailed(DirectX::Decompress(src, decompressedFormat, recompress ? decompressedScratch : outputMips[mip]));
-							const DirectX::Image* decompressed = (recompress ? decompressedScratch : outputMips[mip]).GetImage(0, 0, 0);
-
-							if (recompress)
-								DX::ThrowIfFailed(DirectX::Compress(*decompressed, descCopy.Format, DirectX::TEX_COMPRESS_DEFAULT, 0.5f, outputMips[mip]));
-
-							const DirectX::Image* img = recompress ? outputMips[mip].GetImage(0, 0, 0) : decompressed;
-							initialDataLocal[mip].pSysMem = img->pixels;
-							initialDataLocal[mip].SysMemPitch = static_cast<UINT>(img->rowPitch);
-							initialDataLocal[mip].SysMemSlicePitch = static_cast<UINT>(img->slicePitch);
-						});
-
-						initialDataCopy = initialDataLocal.data();
-					}
-
+				if (shareTexture)
 					descCopy.MiscFlags |= D3D11_RESOURCE_MISC_SHARED | D3D11_RESOURCE_MISC_SHARED_NTHANDLE;
-					shareTexture = true;
-				}
 
-				HRESULT hr = func(This, &descCopy, initialDataCopy, ppTexture2D);
+				HRESULT hr = func(This, &descCopy, pInitialData, ppTexture2D);
 
 				if (shareTexture) {
 					if (SUCCEEDED(hr)) {
-						/*if (!rt.releaseHooked) {
-							std::lock_guard lock{ rt.sharedTextureMutex };
-
-							if (!rt.releaseHooked) {
-								rt.releaseHooked = true;
-								stl::detour_vfunc<2, ID3D11Texture2D_Release>(*ppTexture2D);
-							}
-						}*/
-
 						winrt::com_ptr<IDXGIResource1> dxgiResource = nullptr;
 						DX::ThrowIfFailed((*ppTexture2D)->QueryInterface(IID_PPV_ARGS(dxgiResource.put())));
 
 						HANDLE sharedHandle = nullptr;
 						DX::ThrowIfFailed(dxgiResource->CreateSharedHandle(nullptr, DXGI_SHARED_RESOURCE_READ, nullptr, &sharedHandle));
+
+						auto& rt = globals::features::raytracing;
 
 						winrt::com_ptr<ID3D12Resource> resource = nullptr;
 						HRESULT hrOSH = rt.d3d12Device->OpenSharedHandle(sharedHandle, IID_PPV_ARGS(resource.put()));
@@ -1013,6 +958,7 @@ struct Raytracing : public OverlayFeature
 
 				return hr;
 			}
+
 			static inline REL::Relocation<decltype(thunk)> func;
 		};
 
@@ -1220,32 +1166,79 @@ struct Raytracing : public OverlayFeature
 			static inline REL::Relocation<decltype(thunk)> func;
 		};
 
-		// Land
-		struct BGSTextureSet_SetTexture
+		template <typename T>
+		struct BSTextureSet_GetTexturePath
 		{
-			static void thunk(RE::BGSTextureSet* oThis, RE::BSTextureSet::Texture a_texture, RE::NiSourceTexturePtr& a_srcTexture)
-			{
+			static const char* thunk(T* oThis, RE::BSTextureSet::Texture a_texture)
+			{				
+				const char* texturePath = func(oThis, a_texture);
+
+				logger::info("[RT] BSTextureSet::GetTexturePath {}", texturePath);
+
 				auto& rt = globals::features::raytracing;
-				rt.shareTexture = ShouldShareTexture(a_texture, rt.settings.PathTracing);
+				if (texturePath && ShouldShareTexture(a_texture, rt.settings.PathTracing)) {
+					rt.shareableTextures.emplace(eastl::string(texturePath)); // TODO: add "Data\" to path
+					rt.shareableTextures.emplace(std::format("Data\\Textures\\{}", texturePath).c_str());
+				}
 
-				func(oThis, a_texture, a_srcTexture);
-
-				rt.shareTexture = false;
+				return texturePath;
 			};
 			static inline REL::Relocation<decltype(thunk)> func;
 		};
 
-		// Actors and the rest
-		struct BSShaderTextureSet_SetTexture
+		struct BSShaderManager_GetTexture
 		{
-			static void thunk(RE::BSShaderTextureSet* oThis, RE::BSTextureSet::Texture a_texture, RE::NiSourceTexturePtr& a_srcTexture)
+			static void thunk(const char* a_path, bool a_demand, RE::NiPointer<RE::NiTexture>& a_textureOut, bool a_isHeightMap)
 			{
 				auto& rt = globals::features::raytracing;
-				rt.shareTexture = ShouldShareTexture(a_texture, rt.settings.PathTracing);
 
-				func(oThis, a_texture, a_srcTexture);
+				//std::unique_lock<std::recursive_mutex> lock(rt.shareTextureMutex, std::defer_lock);
+				//std::lock_guard<std::recursive_mutex> lock(rt.shareTextureMutex);
+
+				bool foundTexture = (rt.shareableTextures.find(eastl::string(a_path)) != rt.shareableTextures.end());
+
+				logger::info("[RT] BSShaderManager::GetTexture {} - Found: {}", a_path, foundTexture);
+
+				/*if (shareTexture) {
+					lock.lock();
+				}*/
+
+				rt.shareTexture = true;
+
+				func(a_path, a_demand, a_textureOut, a_isHeightMap);
 
 				rt.shareTexture = false;
+
+				logger::info("[RT] BSShaderManager::GetTexture - End");
+			};
+			static inline REL::Relocation<decltype(thunk)> func;
+		};
+
+		struct BSShaderResourceManager_LoadTexture
+		{
+			static void thunk(void* oThis, RE::NiTexture* texture)
+			{
+				logger::info("[RT] BSShaderResourceManager::LoadTexture - Name: {}", texture->name);
+
+				func(oThis, texture);
+			};
+
+			static inline REL::Relocation<decltype(thunk)> func;
+		};
+
+		template <typename T>
+		struct BSTextureSet_SetTexturePath
+		{
+			static void thunk(T* oThis, RE::BSTextureSet::Texture a_texture, const char* a_path)
+			{
+				logger::info("[RT] BSTextureSet::SetTexturePath {}", a_path);
+
+				auto& rt = globals::features::raytracing;
+				if (a_path && ShouldShareTexture(a_texture, rt.settings.PathTracing)) {
+					rt.shareableTextures.emplace(eastl::string(a_path));
+				}
+
+				func(oThis, a_texture, a_path);
 			};
 			static inline REL::Relocation<decltype(thunk)> func;
 		};
@@ -1489,70 +1482,213 @@ struct Raytracing : public OverlayFeature
 			};
 			static inline REL::Relocation<decltype(thunk)> func;
 		};
-
-		struct Main_UpdateJitter
+		
+		template <typename T>
+		struct BSTextureSet_SetTexture
 		{
-			static void thunk(RE::BSGraphics::State* a_viewport)
+			static void thunk(T* oThis, RE::BSTextureSet::Texture a_texture, RE::NiSourceTexturePtr& a_srcTexture)
 			{
-				func(a_viewport);
+				if (oThis) {
+					const char* path = oThis->GetTexturePath(a_texture);
 
-				auto& rt = globals::features::raytracing;
-
-				auto& runtimeData = a_viewport->GetRuntimeData();
-
-				auto screenSize = rt.GetScreenSize();
-
-				float2 resolutionScale = float2(
-					rt.renderSize.x / static_cast<float>(screenSize.x),
-					rt.renderSize.y / static_cast<float>(screenSize.y));
-
-				runtimeData.dynamicResolutionPreviousWidthRatio = rt.dynamicResolutionRatio.x;
-				runtimeData.dynamicResolutionPreviousHeightRatio = rt.dynamicResolutionRatio.y;
-
-				runtimeData.dynamicResolutionWidthRatio = resolutionScale.x;
-				runtimeData.dynamicResolutionHeightRatio = resolutionScale.y;
-
-				rt.dynamicResolutionRatio = resolutionScale;
-
-				if (!globals::game::isVR)
-					runtimeData.dynamicResolutionLock = 1;
-			};
-
-			static inline REL::Relocation<decltype(thunk)> func;
-		};
-
-		struct SetScissorRect
-		{
-			static void thunk(RE::BSGraphics::Renderer* This, int a_left, int a_top, int a_right, int a_bottom)
-			{
-				auto viewport = globals::game::graphicsState;
-				auto& runtimeData = viewport->GetRuntimeData();
-
-				if (!runtimeData.dynamicResolutionLock) {
-					a_left = static_cast<int>(a_left * runtimeData.dynamicResolutionWidthRatio);
-					a_right = static_cast<int>(a_right * runtimeData.dynamicResolutionWidthRatio);
-
-					a_top = static_cast<int>(a_top * runtimeData.dynamicResolutionHeightRatio);
-					a_bottom = static_cast<int>(a_bottom * runtimeData.dynamicResolutionHeightRatio);
+					auto& rt = globals::features::raytracing;
+					if (path && ShouldShareTexture(a_texture, rt.settings.PathTracing)) {
+						rt.shareableTextures.emplace(eastl::string(path));
+					}
 				}
 
-				func(This, a_left, a_top, a_right, a_bottom);
-			}
+				func(oThis, a_texture, a_srcTexture);
+			};
 			static inline REL::Relocation<decltype(thunk)> func;
 		};
 
+		struct BSShaderTextureSet_LoadBinary
+		{
+			static void thunk(RE::BSShaderTextureSet* oThis, RE::NiStream& a_stream)
+			{
+				func(oThis, a_stream);
+
+				auto diffusePath = oThis->GetTexturePath(RE::BSTextureSet::Texture::kDiffuse);
+
+				logger::info("[RT] BSShaderTextureSet::LoadBinary - {}", diffusePath);
+			};
+			static inline REL::Relocation<decltype(thunk)> func;		
+		};
+
+		struct BSLightingShaderProperty_LoadBinary
+		{
+			static void thunk(RE::BSLightingShaderProperty* oThis, RE::NiStream& a_stream)
+			{
+				func(oThis, a_stream);
+
+				// Material should, at the very least, be a BSLightingShaderMaterialBase
+				if (auto material = reinterpret_cast<RE::BSLightingShaderMaterialBase*>(oThis->material)) {
+					logger::info("[RT] BSLightingShaderProperty::LoadBinary - Material {}", typeid(*material).name());
+
+					if (auto textureSet = material->textureSet.get()) {
+						auto diffusePath = textureSet->GetTexturePath(RE::BSTextureSet::Texture::kDiffuse);
+						logger::info("[RT] BSLightingShaderProperty::LoadBinary - {}", diffusePath);				
+					}
+				}
+
+
+				//logger::info("[RT] BSShaderTextureSet::LoadBinary - Material {}", typeid(*material).name());
+
+				/*material->get
+
+				auto node = skyrim_cast<RE::NiNode*>(oThis);
+
+				for (auto& child : node->GetChildren()) {
+					if (child) {
+						logger::info("[RT] BSShaderTextureSet::LoadBinary - Child {}", typeid(child).name());
+
+						auto rtti = child->GetRTTI();
+
+						static REL::Relocation<const RE::NiRTTI*> billboardRTTI{ RE::BSShaderTextureSet::Ni_RTTI };
+
+						if (rtti == billboardRTTI.get()) {
+							auto test = skyrim_cast<RE::BSShaderTextureSet*>(child.get());
+							auto diffusePath = test->GetTexturePath(RE::BSTextureSet::Texture::kDiffuse);
+
+							logger::info("[RT] BSShaderTextureSet::LoadBinary - {}", diffusePath);
+						}
+					}
+				}*/
+
+				//auto diffusePath = oThis->GetTexturePath(RE::BSTextureSet::Texture::kDiffuse);
+
+				//logger::info("[RT] BSShaderTextureSet::LoadBinary - {}", diffusePath);
+			};
+			static inline REL::Relocation<decltype(thunk)> func;
+		};
+
+		template <typename T>
+		struct OnLoadTextureSet
+		{
+			static void thunk(T* oThis, std::uint64_t a_arg1, RE::BSTextureSet* a_textureSet)
+			{
+				auto diffusePath = a_textureSet->GetTexturePath(RE::BSTextureSet::Texture::kDiffuse);
+
+				logger::info("[RT] {} - Path: {}", typeid(*oThis).name(), diffusePath);
+
+				func(oThis, a_arg1, a_textureSet);
+
+				logger::info("[RT] {} - Path: {}", typeid(*oThis).name(), diffusePath);
+			};
+			static inline REL::Relocation<decltype(thunk)> func;
+		};
+
+		struct BGSTextureSet_Load
+		{
+			static bool thunk(RE::BGSTextureSet* oThis, RE::TESFile* a_mod)
+			{
+				bool result = func(oThis, a_mod);
+
+				logger::info("[RT] BGSTextureSet::Load - {}", oThis->textures[0].textureName.c_str());
+
+				return result;
+			};
+			static inline REL::Relocation<decltype(thunk)> func;
+		};
+
+		struct CreateTextureFromDDS
+		{
+			static RE::NiSourceTexture* thunk(RE::BSResource::CompressedArchiveStream* a1, char* path, ID3D11ShaderResourceView* srv, char a4, bool a5)
+			{
+				//bool foundTexture = path && rt.shareableTextures.find(eastl::string(path)) != rt.shareableTextures.end();
+
+				auto& rt = globals::features::raytracing;
+				rt.shareTexture = TextureSharing::ShouldShareTexture(path, rt.settings.PathTracing);
+
+				logger::info("[RT] CreateTextureFromDDS {} - Share: {}", path ? path : "nullptr", rt.shareTexture);
+
+				auto* result =  func(a1, path, srv, a4, a5);
+
+				rt.shareTexture = false;
+
+				return result;
+			};
+			static inline REL::Relocation<decltype(thunk)> func;
+		};
+
+		struct CreateTextureAndSRV
+		{
+			static HRESULT thunk(ID3D11Device* pDevice,
+				D3D11_RESOURCE_DIMENSION dimension,
+				UINT width,
+				UINT height,
+				UINT arraySize,
+				UINT mipLevels,
+				DXGI_SAMPLE_DESC sampleDesc,
+				DXGI_FORMAT format,
+				unsigned __int8 a9,
+				const D3D11_SUBRESOURCE_DATA* pInitialData,
+				ID3D11Texture2D*** pppTexture2D)
+			{
+				auto& rt = globals::features::raytracing;
+
+				//if (rt.shareTexture) {
+				//logger::info("[RT] CreateTextureAndSRV - {}, {}, {}, {}, {}, {}, {}, {}, {}", magic_enum::enum_name(dimension), width, height, arraySize, mipLevels, sampleDesc.Count, sampleDesc.Quality, magic_enum::enum_name(format), a9);
+				//}
+
+				logger::info("[RT] CreateTextureAndSRV - {}, {}, {}, Shared: {}", width, height, magic_enum::enum_name(format), rt.shareTexture);
+
+				// This means we gotta recompress, else the texture cannot be shared hooraaay!
+				if (rt.shareTexture && dimension == D3D11_RESOURCE_DIMENSION_TEXTURE2D) {
+					DXGI_SAMPLE_DESC sampleDescLocal = sampleDesc;
+
+					sampleDescLocal.Count |= rt.shareTexture ? TextureSharing::FLAG_MASK : 0;
+
+					auto shareableFormat = GetCompatibleFormat(format, true);
+
+					if (format != shareableFormat) {
+						eastl::vector<D3D11_SUBRESOURCE_DATA> initialDataLocal(mipLevels);
+						eastl::vector<eastl::vector<uint8_t>> mipStorage(mipLevels);
+
+						// The decompressed format
+						auto intermediaryFormat = GetCompatibleFormat(format, false);
+
+						auto range = std::views::iota(0u, mipLevels);
+						std::for_each(std::execution::seq, range.begin(), range.end(), [&](uint mip) {
+							// Load source mip
+							DirectX::Image src;
+							src.width = std::max(1u, width >> mip);
+							src.height = std::max(1u, height >> mip);
+							src.format = format;
+							src.rowPitch = pInitialData[mip].SysMemPitch;
+							src.slicePitch = pInitialData[mip].SysMemSlicePitch;
+							src.pixels = (uint8_t*)pInitialData[mip].pSysMem;
+
+							// Decompress to the intermediate format
+							DirectX::ScratchImage decompressedScratch;
+							DX::ThrowIfFailed(DirectX::Decompress(src, intermediaryFormat, decompressedScratch));
+
+							// Recompress
+							const DirectX::Image* decompressed = decompressedScratch.GetImage(0, 0, 0);
+							DirectX::ScratchImage outputScratch;
+							DX::ThrowIfFailed(DirectX::Compress(*decompressed, shareableFormat, DirectX::TEX_COMPRESS_DEFAULT | DirectX::TEX_COMPRESS_PARALLEL, DirectX::TEX_THRESHOLD_DEFAULT, outputScratch));
+							const DirectX::Image* outputImage = outputScratch.GetImage(0, 0, 0);
+
+							// Copy pixel data into safe storage
+							mipStorage[mip].resize(outputImage->slicePitch);
+							std::memcpy(mipStorage[mip].data(), outputImage->pixels, outputImage->slicePitch);
+
+							initialDataLocal[mip].pSysMem = mipStorage[mip].data();
+							initialDataLocal[mip].SysMemPitch = static_cast<UINT>(outputImage->rowPitch);
+							initialDataLocal[mip].SysMemSlicePitch = static_cast<UINT>(outputImage->slicePitch);
+						});
+
+						return func(pDevice, dimension, width, height, arraySize, mipLevels, sampleDescLocal, shareableFormat, a9, initialDataLocal.data(), pppTexture2D);
+					}
+				}
+
+				return func(pDevice, dimension, width, height, arraySize, mipLevels, sampleDesc, format, a9, pInitialData, pppTexture2D);
+			};
+			static inline REL::Relocation<decltype(thunk)> func;
+		};
+		
 		static void Install()
 		{
-			bool isGOG = !GetModuleHandle(L"steam_api64.dll");
-			stl::write_thunk_call<Main_UpdateJitter>(REL::RelocationID(75460, 77245).address() + REL::Relocate(0xE5, isGOG ? 0x133 : 0xE2, 0x104));
-
-			REL::safe_write(REL::RelocationID(35556, 36555).address() + REL::Relocate(0x2D, 0x2D, 0x25), REL::NOP5, sizeof(REL::NOP5));
-
-			// Patches RSSetScissorRect calls to use dynamic resolution
-			// This is a PC-specific function hence it was missing
-			if (!globals::game::isVR)
-				stl::detour_thunk<SetScissorRect>(REL::RelocationID(75564, 77365));
-
 			stl::write_vfunc<0x6A, Load3D<RE::TESObjectREFR>>(RE::VTABLE_TESObjectREFR[0]);
 			stl::write_vfunc<0x6B, Release3DRelatedData<RE::TESObjectREFR>>(RE::VTABLE_TESObjectREFR[0]);
 
@@ -1595,8 +1731,32 @@ struct Raytracing : public OverlayFeature
 			stl::write_vfunc<0x29, BSShaderAccumulator_StartAccumulating>(RE::VTABLE_BSShaderAccumulator[0]);
 			stl::write_vfunc<0x2A, BSShaderAccumulator_FinishAccumulatingDispatch>(RE::VTABLE_BSShaderAccumulator[0]);
 
-			stl::write_vfunc<0x26, BGSTextureSet_SetTexture>(RE::VTABLE_BGSTextureSet[1]);
-			stl::write_vfunc<0x26, BSShaderTextureSet_SetTexture>(RE::VTABLE_BSShaderTextureSet[0]);
+			//stl::write_vfunc<0x25, BSTextureSet_GetTexturePath<RE::BGSTextureSet>>(RE::VTABLE_BGSTextureSet[1]);
+			//stl::write_vfunc<0x25, BSTextureSet_GetTexturePath<RE::BSShaderTextureSet>>(RE::VTABLE_BSShaderTextureSet[0]);
+
+			//stl::write_vfunc<0x26, BSTextureSet_SetTexture<RE::BSTextureSet>>(RE::VTABLE_BGSTextureSet[1]);
+			//stl::write_vfunc<0x26, BSTextureSet_SetTexture<RE::BSShaderTextureSet>>(RE::VTABLE_BSShaderTextureSet[0]);
+
+			//stl::write_vfunc<0x27, BSTextureSet_SetTexturePath<RE::BGSTextureSet>>(RE::VTABLE_BGSTextureSet[1]);
+			//stl::write_vfunc<0x27, BSTextureSet_SetTexturePath<RE::BSShaderTextureSet>>(RE::VTABLE_BSShaderTextureSet[0]);
+			
+			//stl::detour_thunk<BSShaderManager_GetTexture>(REL::RelocationID(98986, 105640));		
+
+			//stl::write_vfunc<0x26, BSShaderResourceManager_LoadTexture>(RE::VTABLE_BSShaderResourceManager[0]);
+
+			//detour_thunk<BSShaderResourceManager_LoadTexture>(0x1515854);
+
+			//stl::write_vfunc<0x18, BSLightingShaderProperty_LoadBinary>(RE::VTABLE_BSLightingShaderProperty[0]);
+			//stl::write_vfunc<0x18, BSShaderTextureSet_LoadBinary>(RE::VTABLE_BSShaderTextureSet[0]);
+
+			//stl::write_vfunc<0x08, OnLoadTextureSet<RE::BSLightingShaderMaterialBase>>(RE::VTABLE_BSLightingShaderMaterialBase[0]);
+
+			//stl::write_vfunc<0x06, BGSTextureSet_Load>(RE::VTABLE_BGSTextureSet[0]);
+
+			detour_thunk<CreateTextureFromDDS>(0xd2ef80);
+			detour_thunk<CreateTextureAndSRV>(0xe598c0);
+
+			//logger::info("[RT] Base: [0x{:8X}]", REL::Module::get().base());
 
 			logger::info("[RT] Installed hooks");
 		}
@@ -1604,7 +1764,7 @@ struct Raytracing : public OverlayFeature
 		static void InstallD3D11Hooks(ID3D11Device* pDevice)
 		{
 			stl::detour_vfunc<5, ID3D11Device_CreateTexture2D>(pDevice);
-			stl::detour_vfunc<7, ID3D11Device_CreateShaderResourceView>(pDevice);
+			//stl::detour_vfunc<7, ID3D11Device_CreateShaderResourceView>(pDevice);
 
 			logger::info("[RT] Installed D3D11 hooks - {}", reinterpret_cast<uintptr_t>(pDevice));
 		}

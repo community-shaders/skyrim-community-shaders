@@ -155,24 +155,6 @@ static inline bool ShouldShareTexture(RE::BSTextureSet::Texture a_texture, bool 
 	return false;
 }
 
-template <typename T>
-static inline std::string GetFlagsString(auto value)
-{
-	using N = decltype(value);
-
-	const auto& entries = magic_enum::enum_entries<T>();
-
-	std::string flags;
-
-	for (const auto& [flag, name] : entries) {
-		if (value & static_cast<N>(flag)) {
-			flags += fmt::format("{} ", name);
-		}
-	}
-
-	return flags;
-};
-
 static inline std::string ToLower(std::string s)
 {
 	std::transform(s.begin(), s.end(), s.begin(),
@@ -210,6 +192,24 @@ static inline bool ShareableTexture(const char* path)
 
 	return true;
 }
+
+template <typename T>
+static inline std::string GetFlagsString(auto value)
+{
+	using N = decltype(value);
+
+	const auto& entries = magic_enum::enum_entries<T>();
+
+	std::string flags;
+
+	for (const auto& [flag, name] : entries) {
+		if (value & static_cast<N>(flag)) {
+			flags += fmt::format("{} ", name);
+		}
+	}
+
+	return flags;
+};
 
 static uint32_t DivideRoundUp(uint32_t x, uint32_t divisor)
 {
@@ -255,4 +255,14 @@ static inline float ShininessToRoughness(float shininess)
 		return 1.0f;
 	}
 	return std::pow(2.0f / (shininess + 2.0f), 0.25f);
+}
+
+template <class T>
+static void detour_thunk(size_t offset)
+{
+	T::func = REL::Module::get().base() + offset;
+	DetourTransactionBegin();
+	DetourUpdateThread(GetCurrentThread());
+	DetourAttach(reinterpret_cast<PVOID*>(&T::func), reinterpret_cast<PVOID>(T::thunk));
+	DetourTransactionCommit();
 }
