@@ -179,7 +179,7 @@ VS_OUTPUT main(VS_INPUT input)
 	vsout.Position.xy = positionOffset * ScaleAdjust + viewPosition.xy;
 	vsout.Position.zw = viewPosition.zw;
 
-    vsout.ViewPositionVS = mul(WorldView[eyeIndex], msPosition);
+    vsout.ViewPositionVS = mul(WorldView[eyeIndex], msPosition).xyz;
 
 	float4 color1, color2;
 	float colorTmp1, colorTmp2;
