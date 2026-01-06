@@ -50,7 +50,7 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	RaytracedShadows,
 	PathTracing,
 	CullShadows,
-	RecompressTextures,
+	DebugShare,
 	RussianRoulette,
 	ConvertToGamma,
 	PerformanceOverlay,
@@ -352,10 +352,10 @@ void Raytracing::DrawGeneralSettings()
 		ImGui::Text("Experimental Path Tracing mode.\n");
 	}
 
-	ImGui::Checkbox("Recompress Textures", &settings.RecompressTextures);
+	/*ImGui::Checkbox("Recompress Textures", &settings.DebugShare);
 	if (auto _tt = Util::HoverTooltipWrapper()) {
 		ImGui::Text("Some texture formats cannot be shared between APIs, enabling this option ensures they'll be recompressed in a lower quality yet compatible format.\n");
-	}
+	}*/
 
 	ImGui::Checkbox("Russian Roulette", &settings.RussianRoulette);
 	if (auto _tt = Util::HoverTooltipWrapper()) {
@@ -419,6 +419,8 @@ void Raytracing::DrawDebugSettings()
 
 	if (ImGui::Checkbox("White Furnace", &settings.WhiteFurnace))
 		recompileReason |= RecompileReason::Debug;
+
+	ImGui::Checkbox("Share Textures", &settings.DebugShare);
 
 	// Debug display mode
 	if (ImGui::BeginCombo("Debug Output", magic_enum::enum_name(settings.DebugOutput).data())) {

@@ -501,7 +501,6 @@ struct Raytracing : public OverlayFeature
 		bool RaytracedShadows = true;
 		bool PathTracing = false;
 		bool CullShadows = true;
-		bool RecompressTextures = true;
 		bool RussianRoulette = true;
 		bool ConvertToGamma = true;
 #ifdef DLSS_RR
@@ -516,6 +515,7 @@ struct Raytracing : public OverlayFeature
 		bool EnableDebugDevice = false;
 		bool WhiteFurnace = false;
 		SHaRCPipeline::Settings SHaRC;
+		bool DebugShare = true;
 	} settings;
 
 	enum class RecompileReason : uint32_t
@@ -531,8 +531,6 @@ struct Raytracing : public OverlayFeature
 	bool shareTexture = false;
 	bool renderingWorld = false;
 	bool lightsUpdated = false;
-
-	eastl::hash_set<eastl::string> shareableTextures;
 
 	winrt::com_ptr<IDXGraphicsAnalysis> ga = nullptr;
 
@@ -916,30 +914,33 @@ struct Raytracing : public OverlayFeature
 		{
 			static HRESULT WINAPI thunk(ID3D11Device* This, const D3D11_TEXTURE2D_DESC* pDesc, const D3D11_SUBRESOURCE_DATA* pInitialData, ID3D11Texture2D** ppTexture2D)
 			{
-				if (!pDesc)
+				if (!pDesc || !pInitialData)
 					return func(This, pDesc, pInitialData, ppTexture2D);
+
+				auto& rt = globals::features::raytracing;
+				std::lock_guard<std::recursive_mutex> lock(rt.shareTextureMutex);
+
+				const bool shareTexture = rt.shareTexture;
 
 				D3D11_TEXTURE2D_DESC descCopy = *pDesc;
 
-				const bool shareTexture = descCopy.SampleDesc.Count & TextureSharing::FLAG_MASK;
-				descCopy.SampleDesc.Count = ~TextureSharing::FLAG_MASK;
-
-				logger::info("[RT] ID3D11Device_CreateTexture2D - SampleDesc.Count: {} - {}, Share: {}", pDesc->SampleDesc.Count, descCopy.SampleDesc.Count, shareTexture);
-
-				if (shareTexture)
-					descCopy.MiscFlags |= D3D11_RESOURCE_MISC_SHARED | D3D11_RESOURCE_MISC_SHARED_NTHANDLE;
+				if (shareTexture) {
+					//logger::info("[RT] ID3D11Device_CreateTexture2D - {}", magic_enum::enum_name(pDesc->Format));
+					descCopy.MiscFlags |= D3D11_RESOURCE_MISC_SHARED;// | D3D11_RESOURCE_MISC_SHARED_NTHANDLE;
+				}
 
 				HRESULT hr = func(This, &descCopy, pInitialData, ppTexture2D);
 
-				if (shareTexture) {
+				if (shareTexture && rt.settings.DebugShare) {
 					if (SUCCEEDED(hr)) {
 						winrt::com_ptr<IDXGIResource1> dxgiResource = nullptr;
 						DX::ThrowIfFailed((*ppTexture2D)->QueryInterface(IID_PPV_ARGS(dxgiResource.put())));
 
-						HANDLE sharedHandle = nullptr;
-						DX::ThrowIfFailed(dxgiResource->CreateSharedHandle(nullptr, DXGI_SHARED_RESOURCE_READ, nullptr, &sharedHandle));
+						/*HANDLE sharedHandle = nullptr;
+						DX::ThrowIfFailed(dxgiResource->CreateSharedHandle(nullptr, DXGI_SHARED_RESOURCE_READ, nullptr, &sharedHandle));*/
 
-						auto& rt = globals::features::raytracing;
+						HANDLE sharedHandle = nullptr;
+						DX::ThrowIfFailed(dxgiResource->GetSharedHandle(&sharedHandle));
 
 						winrt::com_ptr<ID3D12Resource> resource = nullptr;
 						HRESULT hrOSH = rt.d3d12Device->OpenSharedHandle(sharedHandle, IID_PPV_ARGS(resource.put()));
@@ -957,36 +958,6 @@ struct Raytracing : public OverlayFeature
 				}
 
 				return hr;
-			}
-
-			static inline REL::Relocation<decltype(thunk)> func;
-		};
-
-		struct ID3D11Device_CreateShaderResourceView
-		{
-			static HRESULT WINAPI thunk(ID3D11Device* This, ID3D11Resource* pResource, const D3D11_SHADER_RESOURCE_VIEW_DESC* pDesc, ID3D11ShaderResourceView** ppSRV)
-			{
-				D3D11_SHADER_RESOURCE_VIEW_DESC descCopy = {};
-				const D3D11_SHADER_RESOURCE_VIEW_DESC* descPtr = pDesc;
-
-				if (pDesc)
-					descCopy = *pDesc;
-
-				if (pResource && ppSRV && pDesc && pDesc->ViewDimension == D3D11_SRV_DIMENSION_TEXTURE2D) {
-					auto& rt = globals::features::raytracing;
-
-					std::lock_guard lock{ rt.sharedTextureMutex };
-
-					descCopy.Format = GetCompatibleFormat(pDesc->Format, rt.settings.RecompressTextures);
-
-					if (pDesc->Format != descCopy.Format) {
-						if (rt.sharedTextures.find(static_cast<ID3D11Texture2D*>(pResource)) != rt.sharedTextures.end()) {
-							descPtr = &descCopy;
-						}
-					}
-				}
-
-				return func(This, pResource, descPtr, ppSRV);
 			}
 
 			static inline REL::Relocation<decltype(thunk)> func;
@@ -1162,83 +1133,6 @@ struct Raytracing : public OverlayFeature
 					rt.RenderShadows();
 				else
 					func(a1);
-			};
-			static inline REL::Relocation<decltype(thunk)> func;
-		};
-
-		template <typename T>
-		struct BSTextureSet_GetTexturePath
-		{
-			static const char* thunk(T* oThis, RE::BSTextureSet::Texture a_texture)
-			{				
-				const char* texturePath = func(oThis, a_texture);
-
-				logger::info("[RT] BSTextureSet::GetTexturePath {}", texturePath);
-
-				auto& rt = globals::features::raytracing;
-				if (texturePath && ShouldShareTexture(a_texture, rt.settings.PathTracing)) {
-					rt.shareableTextures.emplace(eastl::string(texturePath)); // TODO: add "Data\" to path
-					rt.shareableTextures.emplace(std::format("Data\\Textures\\{}", texturePath).c_str());
-				}
-
-				return texturePath;
-			};
-			static inline REL::Relocation<decltype(thunk)> func;
-		};
-
-		struct BSShaderManager_GetTexture
-		{
-			static void thunk(const char* a_path, bool a_demand, RE::NiPointer<RE::NiTexture>& a_textureOut, bool a_isHeightMap)
-			{
-				auto& rt = globals::features::raytracing;
-
-				//std::unique_lock<std::recursive_mutex> lock(rt.shareTextureMutex, std::defer_lock);
-				//std::lock_guard<std::recursive_mutex> lock(rt.shareTextureMutex);
-
-				bool foundTexture = (rt.shareableTextures.find(eastl::string(a_path)) != rt.shareableTextures.end());
-
-				logger::info("[RT] BSShaderManager::GetTexture {} - Found: {}", a_path, foundTexture);
-
-				/*if (shareTexture) {
-					lock.lock();
-				}*/
-
-				rt.shareTexture = true;
-
-				func(a_path, a_demand, a_textureOut, a_isHeightMap);
-
-				rt.shareTexture = false;
-
-				logger::info("[RT] BSShaderManager::GetTexture - End");
-			};
-			static inline REL::Relocation<decltype(thunk)> func;
-		};
-
-		struct BSShaderResourceManager_LoadTexture
-		{
-			static void thunk(void* oThis, RE::NiTexture* texture)
-			{
-				logger::info("[RT] BSShaderResourceManager::LoadTexture - Name: {}", texture->name);
-
-				func(oThis, texture);
-			};
-
-			static inline REL::Relocation<decltype(thunk)> func;
-		};
-
-		template <typename T>
-		struct BSTextureSet_SetTexturePath
-		{
-			static void thunk(T* oThis, RE::BSTextureSet::Texture a_texture, const char* a_path)
-			{
-				logger::info("[RT] BSTextureSet::SetTexturePath {}", a_path);
-
-				auto& rt = globals::features::raytracing;
-				if (a_path && ShouldShareTexture(a_texture, rt.settings.PathTracing)) {
-					rt.shareableTextures.emplace(eastl::string(a_path));
-				}
-
-				func(oThis, a_texture, a_path);
 			};
 			static inline REL::Relocation<decltype(thunk)> func;
 		};
@@ -1483,124 +1377,18 @@ struct Raytracing : public OverlayFeature
 			static inline REL::Relocation<decltype(thunk)> func;
 		};
 		
-		template <typename T>
-		struct BSTextureSet_SetTexture
-		{
-			static void thunk(T* oThis, RE::BSTextureSet::Texture a_texture, RE::NiSourceTexturePtr& a_srcTexture)
-			{
-				if (oThis) {
-					const char* path = oThis->GetTexturePath(a_texture);
-
-					auto& rt = globals::features::raytracing;
-					if (path && ShouldShareTexture(a_texture, rt.settings.PathTracing)) {
-						rt.shareableTextures.emplace(eastl::string(path));
-					}
-				}
-
-				func(oThis, a_texture, a_srcTexture);
-			};
-			static inline REL::Relocation<decltype(thunk)> func;
-		};
-
-		struct BSShaderTextureSet_LoadBinary
-		{
-			static void thunk(RE::BSShaderTextureSet* oThis, RE::NiStream& a_stream)
-			{
-				func(oThis, a_stream);
-
-				auto diffusePath = oThis->GetTexturePath(RE::BSTextureSet::Texture::kDiffuse);
-
-				logger::info("[RT] BSShaderTextureSet::LoadBinary - {}", diffusePath);
-			};
-			static inline REL::Relocation<decltype(thunk)> func;		
-		};
-
-		struct BSLightingShaderProperty_LoadBinary
-		{
-			static void thunk(RE::BSLightingShaderProperty* oThis, RE::NiStream& a_stream)
-			{
-				func(oThis, a_stream);
-
-				// Material should, at the very least, be a BSLightingShaderMaterialBase
-				if (auto material = reinterpret_cast<RE::BSLightingShaderMaterialBase*>(oThis->material)) {
-					logger::info("[RT] BSLightingShaderProperty::LoadBinary - Material {}", typeid(*material).name());
-
-					if (auto textureSet = material->textureSet.get()) {
-						auto diffusePath = textureSet->GetTexturePath(RE::BSTextureSet::Texture::kDiffuse);
-						logger::info("[RT] BSLightingShaderProperty::LoadBinary - {}", diffusePath);				
-					}
-				}
-
-
-				//logger::info("[RT] BSShaderTextureSet::LoadBinary - Material {}", typeid(*material).name());
-
-				/*material->get
-
-				auto node = skyrim_cast<RE::NiNode*>(oThis);
-
-				for (auto& child : node->GetChildren()) {
-					if (child) {
-						logger::info("[RT] BSShaderTextureSet::LoadBinary - Child {}", typeid(child).name());
-
-						auto rtti = child->GetRTTI();
-
-						static REL::Relocation<const RE::NiRTTI*> billboardRTTI{ RE::BSShaderTextureSet::Ni_RTTI };
-
-						if (rtti == billboardRTTI.get()) {
-							auto test = skyrim_cast<RE::BSShaderTextureSet*>(child.get());
-							auto diffusePath = test->GetTexturePath(RE::BSTextureSet::Texture::kDiffuse);
-
-							logger::info("[RT] BSShaderTextureSet::LoadBinary - {}", diffusePath);
-						}
-					}
-				}*/
-
-				//auto diffusePath = oThis->GetTexturePath(RE::BSTextureSet::Texture::kDiffuse);
-
-				//logger::info("[RT] BSShaderTextureSet::LoadBinary - {}", diffusePath);
-			};
-			static inline REL::Relocation<decltype(thunk)> func;
-		};
-
-		template <typename T>
-		struct OnLoadTextureSet
-		{
-			static void thunk(T* oThis, std::uint64_t a_arg1, RE::BSTextureSet* a_textureSet)
-			{
-				auto diffusePath = a_textureSet->GetTexturePath(RE::BSTextureSet::Texture::kDiffuse);
-
-				logger::info("[RT] {} - Path: {}", typeid(*oThis).name(), diffusePath);
-
-				func(oThis, a_arg1, a_textureSet);
-
-				logger::info("[RT] {} - Path: {}", typeid(*oThis).name(), diffusePath);
-			};
-			static inline REL::Relocation<decltype(thunk)> func;
-		};
-
-		struct BGSTextureSet_Load
-		{
-			static bool thunk(RE::BGSTextureSet* oThis, RE::TESFile* a_mod)
-			{
-				bool result = func(oThis, a_mod);
-
-				logger::info("[RT] BGSTextureSet::Load - {}", oThis->textures[0].textureName.c_str());
-
-				return result;
-			};
-			static inline REL::Relocation<decltype(thunk)> func;
-		};
-
 		struct CreateTextureFromDDS
 		{
 			static RE::NiSourceTexture* thunk(RE::BSResource::CompressedArchiveStream* a1, char* path, ID3D11ShaderResourceView* srv, char a4, bool a5)
 			{
-				//bool foundTexture = path && rt.shareableTextures.find(eastl::string(path)) != rt.shareableTextures.end();
-
 				auto& rt = globals::features::raytracing;
+
+				std::lock_guard<std::recursive_mutex> lock(rt.shareTextureMutex);
+
 				rt.shareTexture = TextureSharing::ShouldShareTexture(path, rt.settings.PathTracing);
 
-				logger::info("[RT] CreateTextureFromDDS {} - Share: {}", path ? path : "nullptr", rt.shareTexture);
+				//if (rt.shareTexture)
+				//	logger::info("[RT] CreateTextureFromDDS {}", path ? path : "nullptr");
 
 				auto* result =  func(a1, path, srv, a4, a5);
 
@@ -1623,7 +1411,7 @@ struct Raytracing : public OverlayFeature
 				DXGI_FORMAT format,
 				unsigned __int8 a9,
 				const D3D11_SUBRESOURCE_DATA* pInitialData,
-				ID3D11Texture2D*** pppTexture2D)
+				ID3D11Texture2D* pTexture2D)
 			{
 				auto& rt = globals::features::raytracing;
 
@@ -1631,16 +1419,14 @@ struct Raytracing : public OverlayFeature
 				//logger::info("[RT] CreateTextureAndSRV - {}, {}, {}, {}, {}, {}, {}, {}, {}", magic_enum::enum_name(dimension), width, height, arraySize, mipLevels, sampleDesc.Count, sampleDesc.Quality, magic_enum::enum_name(format), a9);
 				//}
 
-				logger::info("[RT] CreateTextureAndSRV - {}, {}, {}, Shared: {}", width, height, magic_enum::enum_name(format), rt.shareTexture);
+				std::lock_guard<std::recursive_mutex> lock(rt.shareTextureMutex);
 
-				// This means we gotta recompress, else the texture cannot be shared hooraaay!
 				if (rt.shareTexture && dimension == D3D11_RESOURCE_DIMENSION_TEXTURE2D) {
-					DXGI_SAMPLE_DESC sampleDescLocal = sampleDesc;
-
-					sampleDescLocal.Count |= rt.shareTexture ? TextureSharing::FLAG_MASK : 0;
-
 					auto shareableFormat = GetCompatibleFormat(format, true);
 
+					//logger::info("[RT] CreateTextureAndSRV - {}, {}, {}, Recompress: {}", width, height, magic_enum::enum_name(format), format != shareableFormat);
+
+					// This means we gotta recompress, else the texture cannot be shared hooraaay!
 					if (format != shareableFormat) {
 						eastl::vector<D3D11_SUBRESOURCE_DATA> initialDataLocal(mipLevels);
 						eastl::vector<eastl::vector<uint8_t>> mipStorage(mipLevels);
@@ -1678,11 +1464,11 @@ struct Raytracing : public OverlayFeature
 							initialDataLocal[mip].SysMemSlicePitch = static_cast<UINT>(outputImage->slicePitch);
 						});
 
-						return func(pDevice, dimension, width, height, arraySize, mipLevels, sampleDescLocal, shareableFormat, a9, initialDataLocal.data(), pppTexture2D);
+						return func(pDevice, dimension, width, height, arraySize, mipLevels, sampleDesc, shareableFormat, a9, initialDataLocal.data(), pTexture2D);
 					}
 				}
 
-				return func(pDevice, dimension, width, height, arraySize, mipLevels, sampleDesc, format, a9, pInitialData, pppTexture2D);
+				return func(pDevice, dimension, width, height, arraySize, mipLevels, sampleDesc, format, a9, pInitialData, pTexture2D);
 			};
 			static inline REL::Relocation<decltype(thunk)> func;
 		};
@@ -1730,28 +1516,6 @@ struct Raytracing : public OverlayFeature
 
 			stl::write_vfunc<0x29, BSShaderAccumulator_StartAccumulating>(RE::VTABLE_BSShaderAccumulator[0]);
 			stl::write_vfunc<0x2A, BSShaderAccumulator_FinishAccumulatingDispatch>(RE::VTABLE_BSShaderAccumulator[0]);
-
-			//stl::write_vfunc<0x25, BSTextureSet_GetTexturePath<RE::BGSTextureSet>>(RE::VTABLE_BGSTextureSet[1]);
-			//stl::write_vfunc<0x25, BSTextureSet_GetTexturePath<RE::BSShaderTextureSet>>(RE::VTABLE_BSShaderTextureSet[0]);
-
-			//stl::write_vfunc<0x26, BSTextureSet_SetTexture<RE::BSTextureSet>>(RE::VTABLE_BGSTextureSet[1]);
-			//stl::write_vfunc<0x26, BSTextureSet_SetTexture<RE::BSShaderTextureSet>>(RE::VTABLE_BSShaderTextureSet[0]);
-
-			//stl::write_vfunc<0x27, BSTextureSet_SetTexturePath<RE::BGSTextureSet>>(RE::VTABLE_BGSTextureSet[1]);
-			//stl::write_vfunc<0x27, BSTextureSet_SetTexturePath<RE::BSShaderTextureSet>>(RE::VTABLE_BSShaderTextureSet[0]);
-			
-			//stl::detour_thunk<BSShaderManager_GetTexture>(REL::RelocationID(98986, 105640));		
-
-			//stl::write_vfunc<0x26, BSShaderResourceManager_LoadTexture>(RE::VTABLE_BSShaderResourceManager[0]);
-
-			//detour_thunk<BSShaderResourceManager_LoadTexture>(0x1515854);
-
-			//stl::write_vfunc<0x18, BSLightingShaderProperty_LoadBinary>(RE::VTABLE_BSLightingShaderProperty[0]);
-			//stl::write_vfunc<0x18, BSShaderTextureSet_LoadBinary>(RE::VTABLE_BSShaderTextureSet[0]);
-
-			//stl::write_vfunc<0x08, OnLoadTextureSet<RE::BSLightingShaderMaterialBase>>(RE::VTABLE_BSLightingShaderMaterialBase[0]);
-
-			//stl::write_vfunc<0x06, BGSTextureSet_Load>(RE::VTABLE_BGSTextureSet[0]);
 
 			detour_thunk<CreateTextureFromDDS>(0xd2ef80);
 			detour_thunk<CreateTextureAndSRV>(0xe598c0);

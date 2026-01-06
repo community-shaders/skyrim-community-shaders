@@ -140,7 +140,9 @@ namespace TextureSharing
 		auto type = GetTextureType(path);
 
 		switch (type) {
+		case TextureSharing::None:
 		case TextureSharing::Diffuse:
+			return true;
 		case TextureSharing::Normal:
 		case TextureSharing::Specular:
 		case TextureSharing::Glow:
@@ -151,6 +153,8 @@ namespace TextureSharing
 		default:
 			break;
 		}
+
+		logger::info("[RT] ShouldShareTexture {}", magic_enum::enum_name(type));
 
 		return false;
 	}
