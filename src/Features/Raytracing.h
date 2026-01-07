@@ -25,6 +25,7 @@
 #include "Features/Raytracing/HeapManager.h"
 #include "Features/Raytracing/Model.h"
 #include "Features/Raytracing/Pipelines/SHaRCPipeline.h"
+#include "Features/Raytracing/Pipelines/SkinningPipeline.h"
 #include "Features/Raytracing/Pipelines/SVGFPipeline.h"
 #include "Features/Raytracing/RTPipelineBuilder.h"
 #include "Features/Raytracing/ShaderBindingTable.h"
@@ -127,30 +128,6 @@ struct Raytracing : public OverlayFeature
 	};
 	using GIHeap = Heap<GIHeapDef::Table, GIHeapDef::Slot>;
 
-	struct SkinningHeapDef
-	{
-		enum class Table
-		{
-			UAV,
-			SRV,
-			DynamicBuffer,
-			SkinningBuffer
-		};
-
-		enum class Slot
-		{
-			Output,
-			LocalToRoot = Output + Raytracing::MAX_SHAPES,  // = Output + Raytracing::MAX_SHAPES
-			UpdateData,
-			BoneMatrices,
-			DynamicVertices,
-			SkinningData = DynamicVertices + Raytracing::MAX_SHAPES,
-			NumDescriptors = SkinningData + Raytracing::MAX_SHAPES,
-			None
-		};
-	};
-	using SkinningHeap = Heap<SkinningHeapDef::Table, SkinningHeapDef::Slot>;
-
 	struct ShadowsHeapDef
 	{
 		enum class Table
@@ -247,7 +224,6 @@ struct Raytracing : public OverlayFeature
 	void CompileShaders();
 	void CompileComputeShaders();
 
-	void CompileSkinningShaders();
 	void CompileRTGIShaders();
 	void CompileRTShadowsShaders();
 
@@ -255,7 +231,6 @@ struct Raytracing : public OverlayFeature
 	void InitD3D12(ID3D11Device* ppDevice, ID3D11DeviceContext* pImmediateContext, IDXGIAdapter* a_adapter);
 	void CreateRootSignature();
 	void CreateShadowsRootSignature();
-	void CreateSkinningRootSignature();
 	void UpdateDynamicSkinning(ID3D12GraphicsCommandList4* pCommandList);
 	void DrawRTGI();
 	void UpdateShadowsFrameBuffer();
@@ -316,10 +291,14 @@ struct Raytracing : public OverlayFeature
 
 	const auto& GetPipelines()
 	{
+		if (!skinningPipeline)
+			skinningPipeline = eastl::make_unique<SkinningPipeline>();
+
 		if (!sharcPipeline)
 			sharcPipeline = eastl::make_unique<SHaRCPipeline>();
 
-		static eastl::array<IPipeline*, 1> pipelines = {
+		static eastl::array<IPipeline*, 2> pipelines = {
+			skinningPipeline.get(),
 			sharcPipeline.get()
 		};
 
@@ -685,8 +664,7 @@ struct Raytracing : public OverlayFeature
 					if ((updateFlags & Flags::Dynamic) || (updateFlags & Flags::Skinned)) {
 						auto& rt = globals::features::raytracing;
 
-						rt.modelUpdate.emplace_back(path);
-						rt.vertexUpdate.emplace_back(shape->allocation->GetIndex(), updateFlags & Flags::Dynamic ? shape->dynamicPositionBuffer.get() : nullptr, shape->vertexBuffer.get(), shape->vertexCount, updateFlags);
+						rt.skinningPipeline->QueueUpdate(updateFlags, path, shape.get());
 					}
 				}
 			}
@@ -765,15 +743,8 @@ struct Raytracing : public OverlayFeature
 	winrt::com_ptr<ID3D11Fence> d3d11Fence = nullptr;
 	winrt::com_ptr<ID3D12Fence> d3d12Fence = nullptr;
 
-	// Skinning
-	winrt::com_ptr<ID3D12RootSignature> skinningRS = nullptr;
-	winrt::com_ptr<ID3D12PipelineState> skinningPipeline = nullptr;
-	eastl::unique_ptr<DX12::DescriptorHeap<SkinningHeap>> skinningHeap = nullptr;
-
-	// TODO: Move other effects to their own pipelines as well
-	//	eastl::unique_ptr<SkinningPipeline> skinningPipeline = nullptr;
-	//	eastl::unique_ptr<RTPipeline> RTPipeline = nullptr;
-	//	eastl::unique_ptr<ShadowPipeline> shadowPipeline = nullptr;
+	// Skinning (and dynamic TriShapes)
+	eastl::unique_ptr<SkinningPipeline> skinningPipeline = nullptr;
 
 	// SHaRC (Radiance cache)
 	eastl::unique_ptr<SHaRCPipeline> sharcPipeline = nullptr;
@@ -781,19 +752,9 @@ struct Raytracing : public OverlayFeature
 	// SVGF (denoiser)
 	eastl::unique_ptr<SVGFPipeline> svgfDenoiser = nullptr;
 
-	struct VertexUpdate
-	{
-		uint16_t allocatedIndex;
-		DX12::StructuredBufferUploadMA<float4>* dynamicPositionBuffer = nullptr;
-		DX12::StructuredBufferUploadMA<Vertex>* vertexBuffer = nullptr;
-		uint16_t vertexCount;
-		Flags flags;
-	};
-
-	eastl::vector<VertexUpdate> vertexUpdate;
-	eastl::unique_ptr<DX12::StructuredBufferUpload<VertexUpdateData>> vertexUpdateBuffer = nullptr;
-
-	eastl::vector<eastl::string> modelUpdate;
+	// TODO: Move other effects to their own pipelines as well
+	//	eastl::unique_ptr<RTPipeline> RTPipeline = nullptr;
+	//	eastl::unique_ptr<ShadowPipeline> shadowPipeline = nullptr;
 
 	// GI
 	winrt::com_ptr<ID3D12RootSignature> rootSignature = nullptr;

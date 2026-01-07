@@ -24,7 +24,7 @@ StructuredBuffer<Skinning> MeshSkinning[]               : register(t0, space2);
 #define DYNAMIC (1 << 1)
 #define SKINNED (1 << 2)
 
-[numthreads(8, 8, 1)]
+[numthreads(THREAD_SIZE, THREAD_SIZE, 1)]
 void main(uint2 id : SV_DispatchThreadID)
 {
     if (id.y >= ModelCount)
