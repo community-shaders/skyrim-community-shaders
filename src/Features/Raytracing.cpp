@@ -1446,7 +1446,14 @@ void Raytracing::SkyCubeToHemi() const
 	context->CSSetShader(cubeToHemiCS.get(), nullptr, 0);
 
 	auto reflections = globals::game::renderer->GetRendererData().cubemapRenderTargets[RE::RENDER_TARGET_CUBEMAP::kREFLECTIONS];
-	context->CSSetShaderResources(0, 1, &reflections.SRV);
+	auto reflectionOcc = globals::features::cloudShadows.loaded ? globals::features::cloudShadows.texCubemapCloudOcc->srv.get() : nullptr;
+
+	//globals::features::cloudShadows.texCubemapCloudOcc
+	eastl::array<ID3D11ShaderResourceView*, 2> srvs = {
+		reflections.SRV,
+		reflectionOcc
+	};
+	context->CSSetShaderResources(0, (UINT)srvs.size(), srvs.data());
 
 	auto sampler = samplerState.get();
 	context->CSSetSamplers(0, 1, &sampler);

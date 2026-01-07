@@ -1,4 +1,6 @@
 TextureCube<float4> CubeMap       : register(t0);
+TextureCube<float> OcclusionMap   : register(t1);
+
 SamplerState Sampler              : register(s0);
 
 RWTexture2D<float4> HemisphereOut : register(u0);
@@ -22,5 +24,8 @@ void main(uint2 id : SV_DispatchThreadID)
 
     const float3 dir = float3(k * cos(phi), k * sin(phi), z);
 
-    HemisphereOut[id.xy] = CubeMap.SampleLevel(Sampler, dir, 0.0f);
+    const float3 color = CubeMap.SampleLevel(Sampler, dir, 0.0f).rgb;
+    const float occlusion = OcclusionMap.SampleLevel(Sampler, dir, 0.0f);
+    
+    HemisphereOut[id.xy] = float4(color, occlusion);
 }

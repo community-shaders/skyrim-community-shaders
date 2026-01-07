@@ -401,9 +401,7 @@ bool SampleFuzzBSDF(in Surface surface, in BRDFContext brdfContext, inout uint r
 }
 #endif
 
-// Samples the sky hemisphere texture based on the given direction
-// Output is in true linear space
-float3 SampleSky(float3 dir)
+float2 EvalHemiUV(float3 dir)
 {
     dir.z = max(dir.z, 0.0f);
 
@@ -411,16 +409,30 @@ float3 SampleSky(float3 dir)
     float phi = atan2(dir.y, dir.x);
 
     float2 disk = float2(cos(phi), sin(phi)) * r;
-    float2 uv = disk * 0.5f + 0.5f;
+    return disk * 0.5f + 0.5f;
+}
 
+// Samples the sky hemisphere texture based on the given direction
+// Output is in true linear space
+float3 SampleSky(float3 dir)
+{
+    float2 uv = EvalHemiUV(dir);
+    
     float3 color = SkyHemisphere.SampleLevel(BaseSampler, uv, 0.0f).rgb;
     
     return Color::GammaToTrueLinear(color);
 }
 
+float EvalSkyOcclusion(float3 dir)
+{
+    float2 uv = EvalHemiUV(dir);
+    
+    return 1.0F - SkyHemisphere.SampleLevel(BaseSampler, uv, 0.0f).a;
+}
+
 float3 EvaluateDirectRadiance(in Surface surface, in BRDFContext brdfContext, in Instance instance, in Material material, inout uint randomSeed)
 {
-    float3 radiance = EvalDirectionalLight(surface, brdfContext, Frame.Directional, material, randomSeed);
+    float3 radiance = EvalDirectionalLight(surface, brdfContext, Frame.Directional, material, randomSeed) * EvalSkyOcclusion(Frame.Directional.Vector);
     radiance += EvalPointLight(surface, brdfContext, instance.LightData, material, randomSeed);
 
     return radiance;
