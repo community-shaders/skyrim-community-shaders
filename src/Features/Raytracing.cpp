@@ -1897,35 +1897,71 @@ bool Raytracing::RemoveInstance(RE::FormID formID, bool releaseModel)
 
 eastl::shared_ptr<Allocation> Raytracing::GetTextureRegister(ID3D11Texture2D* dx11Texture, eastl::shared_ptr<Allocation> defaultTexture)
 {
+	std::lock_guard lock{ textureRegisterMutex };
+
+	if (!dx11Texture)
+		return defaultTexture;
+
 	// Texture already placed in heap, return allocation
 	if (auto refIt = textures.find(dx11Texture); refIt != textures.end()) {
 		return refIt->second.allocation;
 	}
 
+	// std::lock_guard lock{ renderMutex };
+
+	ID3D12Resource* dx12Texture = nullptr;
+
 	// Search for texture in shared map
 	if (auto sharedIt = sharedTextures.find(dx11Texture); sharedIt != sharedTextures.end()) {
-		std::lock_guard lock{ renderMutex };
+		dx12Texture = sharedIt->second.get();
+	} else {
+		winrt::com_ptr<IDXGIResource> dxgiResource;
+		HRESULT hr = dx11Texture->QueryInterface(IID_PPV_ARGS(dxgiResource.put()));
 
-		// Texture not in heap, so create SRV at next available heap slot
-		auto dx12Texture = sharedIt->second.get();
+		if (FAILED(hr))
+			return defaultTexture;
 
-		D3D12_RESOURCE_DESC texResDesc = dx12Texture->GetDesc();
+		HANDLE sharedHandle = nullptr;
+		hr = dxgiResource->GetSharedHandle(&sharedHandle);
 
-		D3D12_SHADER_RESOURCE_VIEW_DESC texSrvDesc = {};
-		texSrvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
-		texSrvDesc.Format = texResDesc.Format;
-		texSrvDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
-		texSrvDesc.Texture2D.MostDetailedMip = 0;
-		texSrvDesc.Texture2D.MipLevels = texResDesc.MipLevels;
-		texSrvDesc.Texture2D.PlaneSlice = 0;
-		texSrvDesc.Texture2D.ResourceMinLODClamp = 0.0f;
+		if (FAILED(hr) || !sharedHandle)
+			return defaultTexture;
 
-		auto [it, emplaced] = textures.emplace(dx11Texture, TextureReference(dx12Texture, { textureRegisters.Allocate(), AllocationDeleter() }));
+		winrt::com_ptr<ID3D12Resource> resource;
+		hr = d3d12Device->OpenSharedHandle(sharedHandle, IID_PPV_ARGS(resource.put()));
 
-		d3d12Device->CreateShaderResourceView(dx12Texture, &texSrvDesc, giHeap->CPUHandle(GIHeap::Slot::Textures, it->second.allocation->GetIndex()));
+		CloseHandle(sharedHandle);
 
-		return it->second.allocation;
+		if (FAILED(hr))
+			return defaultTexture;
+
+		auto [it, emplaced] = sharedTextures.emplace(dx11Texture, std::move(resource));
+
+		if (emplaced)
+			dx12Texture = it->second.get();
 	}
+
+	if (!dx12Texture) {
+		logger::error("[RT] GetTextureRegister - failed to adquire DX12 texture.");
+		return defaultTexture;
+	}
+
+	D3D12_RESOURCE_DESC texResDesc = dx12Texture->GetDesc();
+
+	D3D12_SHADER_RESOURCE_VIEW_DESC texSrvDesc = {};
+	texSrvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
+	texSrvDesc.Format = texResDesc.Format;
+	texSrvDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
+	texSrvDesc.Texture2D.MostDetailedMip = 0;
+	texSrvDesc.Texture2D.MipLevels = texResDesc.MipLevels;
+	texSrvDesc.Texture2D.PlaneSlice = 0;
+	texSrvDesc.Texture2D.ResourceMinLODClamp = 0.0f;
+
+	auto [it, emplaced] = textures.emplace(dx11Texture, TextureReference(dx12Texture, { textureRegisters.Allocate(), AllocationDeleter() }));
+
+	d3d12Device->CreateShaderResourceView(dx12Texture, &texSrvDesc, giHeap->CPUHandle(GIHeap::Slot::Textures, it->second.allocation->GetIndex()));
+
+	return it->second.allocation;
 
 	logger::debug("[RT] GetTextureRegister - Source texture not found");
 

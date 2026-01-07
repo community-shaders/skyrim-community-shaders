@@ -870,6 +870,7 @@ struct Raytracing : public OverlayFeature
 	std::shared_mutex bufferMutex;
 	std::shared_mutex renderMutex;
 
+	std::shared_mutex textureRegisterMutex;
 	std::recursive_mutex shareTextureMutex;
 
 	uint2 renderSize;
