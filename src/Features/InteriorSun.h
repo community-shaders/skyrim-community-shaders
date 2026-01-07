@@ -41,7 +41,7 @@ public:
 
 	Settings settings;
 
-	bool isInteriorWithSun = false;
+	std::atomic<bool> isInteriorWithSun = false;
 
 	struct GetWorldSpace
 	{
