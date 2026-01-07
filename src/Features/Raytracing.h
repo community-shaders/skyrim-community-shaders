@@ -76,7 +76,8 @@ struct Raytracing : public OverlayFeature
 	static constexpr uint MAX_INSTANCES = 4096;
 	static constexpr uint MAX_LIGHTS = 255;
 
-	static constexpr uint SKY_CUBEMAP_SIZE = 256;
+	static constexpr uint SKY_CUBEMAP_SIZE = 512;
+	static constexpr uint SKY_HEMI_SIZE = SKY_CUBEMAP_SIZE * 2;
 
 	enum MarkerFlags : uint32_t
 	{
@@ -987,6 +988,7 @@ struct Raytracing : public OverlayFeature
 
 					if (rt.renderingCubemap) {
 						if (This->shaderType.get() != RE::BSShader::Type::Sky) {
+							This->RestoreGeometry(Pass, RenderFlags);
 							//Pass->geometry->CullGeometry(true);
 							return;
 						}
@@ -1274,8 +1276,6 @@ struct Raytracing : public OverlayFeature
 
 			// We use these to render only the sky to the cubemaps, maybe it would be cleaner if we could override cubemap renderpass?
 			stl::write_vfunc<0x6, BSShader_SetupGeometry<RE::BSShader::Type::Lighting>>(RE::VTABLE_BSLightingShader[0]);
-			//stl::write_vfunc<0x6, BSShader_SetupGeometry<RE::BSShader::Type::Effect>>(RE::VTABLE_BSEffectShader[0]);
-			//stl::write_vfunc<0x6, BSShader_SetupGeometry<RE::BSShader::Type::DistantTree>>(RE::VTABLE_BSDistantTreeShader[0]);
 
 			//stl::write_vfunc<0x6, BSSkyShader_SetupGeometry>(RE::VTABLE_BSSkyShader[0]);
 

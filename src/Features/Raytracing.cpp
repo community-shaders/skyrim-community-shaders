@@ -907,8 +907,8 @@ void Raytracing::SetupResources()
 	// Sky Hemisphere
 	{
 		D3D11_TEXTURE2D_DESC texDesc{};
-		texDesc.Width = SKY_CUBEMAP_SIZE * 2;
-		texDesc.Height = SKY_CUBEMAP_SIZE * 2;
+		texDesc.Width = SKY_HEMI_SIZE;
+		texDesc.Height = SKY_HEMI_SIZE;
 		texDesc.MipLevels = 1;
 		texDesc.ArraySize = 1;
 		texDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
@@ -1454,7 +1454,7 @@ void Raytracing::SkyCubeToHemi() const
 	ID3D11UnorderedAccessView* uav = skyHemisphere->uav;
 	context->CSSetUnorderedAccessViews(0, 1, &uav, nullptr);
 
-	float hemiResolution = SKY_CUBEMAP_SIZE * 2.0f;
+	float hemiResolution = SKY_HEMI_SIZE;
 	uint dispatch = (uint)std::ceil(hemiResolution / 8.0f);
 
 	context->Dispatch(dispatch, dispatch, 1);
@@ -3864,19 +3864,20 @@ void Raytracing::CompileRTShadowsShaders()
 
 void Raytracing::CompileComputeShaders()
 {
-	if (auto rawPtr = reinterpret_cast<ID3D11ComputeShader*>(Util::CompileShader(L"Data\\Shaders\\Raytracing\\CopyDepthCS.hlsl", { { "DX11", "" } }, "cs_5_0")); rawPtr)
+	if (auto rawPtr = reinterpret_cast<ID3D11ComputeShader*>(Util::CompileShader(L"Data\\Shaders\\Raytracing\\CopyDepthCS.hlsl", {}, "cs_5_0")); rawPtr)
 		copyDepthCS.attach(rawPtr);
 
-	if (auto rawPtr = reinterpret_cast<ID3D11ComputeShader*>(Util::CompileShader(L"Data\\Shaders\\Raytracing\\CubeToHemiCS.hlsl", { { "DX11", "" } }, "cs_5_0")); rawPtr)
+	const auto skyHemiSize = std::to_string(SKY_HEMI_SIZE);
+	if (auto rawPtr = reinterpret_cast<ID3D11ComputeShader*>(Util::CompileShader(L"Data\\Shaders\\Raytracing\\CubeToHemiCS.hlsl", { { "RESOLUTION", skyHemiSize.c_str() } }, "cs_5_0")); rawPtr)
 		cubeToHemiCS.attach(rawPtr);
 
-	if (auto rawPtr = reinterpret_cast<ID3D11ComputeShader*>(Util::CompileShader(L"Data\\Shaders\\Raytracing\\ConvertTexturesCS.hlsl", { { "DX11", "" } }, "cs_5_0")); rawPtr)
+	if (auto rawPtr = reinterpret_cast<ID3D11ComputeShader*>(Util::CompileShader(L"Data\\Shaders\\Raytracing\\ConvertTexturesCS.hlsl", {}, "cs_5_0")); rawPtr)
 		convertTexturesCS.attach(rawPtr);
 
-	if (auto rawPtr = reinterpret_cast<ID3D11ComputeShader*>(Util::CompileShader(L"Data\\Shaders\\Raytracing\\ConvertTexturesCS.hlsl", { { "DX11", "" }, { "PT", "" } }, "cs_5_0")); rawPtr)
+	if (auto rawPtr = reinterpret_cast<ID3D11ComputeShader*>(Util::CompileShader(L"Data\\Shaders\\Raytracing\\ConvertTexturesCS.hlsl", { { "PT", "" } }, "cs_5_0")); rawPtr)
 		convertTexturesPTCS.attach(rawPtr);
 
-	if (auto rawPtr = reinterpret_cast<ID3D11ComputeShader*>(Util::CompileShader(L"Data\\Shaders\\Raytracing\\TrueLinearToGammaCS.hlsl", { { "DX11", "" } }, "cs_5_0")); rawPtr)
+	if (auto rawPtr = reinterpret_cast<ID3D11ComputeShader*>(Util::CompileShader(L"Data\\Shaders\\Raytracing\\TrueLinearToGammaCS.hlsl", { }, "cs_5_0")); rawPtr)
 		trueLinearToGammaCS.attach(rawPtr);
 }
 

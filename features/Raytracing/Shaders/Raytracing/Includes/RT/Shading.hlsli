@@ -413,7 +413,9 @@ float3 SampleSky(float3 dir)
     float2 disk = float2(cos(phi), sin(phi)) * r;
     float2 uv = disk * 0.5f + 0.5f;
 
-    return Color::GammaToTrueLinear(SkyHemisphere.SampleLevel(BaseSampler, uv, 0.0f).rgb);
+    float3 color = SkyHemisphere.SampleLevel(BaseSampler, uv, 0.0f).rgb;
+    
+    return Color::GammaToTrueLinear(color);
 }
 
 float3 EvaluateDirectRadiance(in Surface surface, in BRDFContext brdfContext, in Instance instance, in Material material, inout uint randomSeed)
