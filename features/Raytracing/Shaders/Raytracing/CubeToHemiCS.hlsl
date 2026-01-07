@@ -26,6 +26,6 @@ void main(uint2 id : SV_DispatchThreadID)
 
     const float3 color = CubeMap.SampleLevel(Sampler, dir, 0.0f).rgb;
     const float occlusion = OcclusionMap.SampleLevel(Sampler, dir, 0.0f);
-    
+
     HemisphereOut[id.xy] = float4(color, occlusion);
 }
