@@ -23,7 +23,8 @@ enum Flags : uint8_t
 	None = 0,
 	Alpha = 1 << 0,
 	Dynamic = 1 << 1,
-	Skinned = 1 << 2
+	Skinned = 1 << 2,
+	Landscape = 1 << 3
 };
 DEFINE_ENUM_FLAG_OPERATORS(Flags);
 
