@@ -3157,7 +3157,7 @@ void Raytracing::PostPostLoad()
 	//MenuOpenCloseEventHandler::Register();
 	//TESLoadGameEventHandler::Register();
 
-	//TESObjectLoadedEventHandler::Register();
+	TESObjectLoadedEventHandler::Register();
 }
 
 /*void Raytracing::RTProcessor::PostCreate(const RE::BSModelDB::DBTraits::ArgsType& a_args, const char* modelName, RE::NiPointer<RE::NiNode>& a_root, std::uint32_t& typeOut)
