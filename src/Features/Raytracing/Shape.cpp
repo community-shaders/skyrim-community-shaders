@@ -309,8 +309,8 @@ void Shape::BuildMaterial(const RE::BSGeometry::GEOMETRY_RUNTIME_DATA& geometryR
 			if (auto effectShaderProp = netimmerse_cast<RE::BSEffectShaderProperty*>(effect)) {
 				shaderType = RE::BSShader::Type::Effect;
 
-				logger::info("[RT] BuildMaterial - BSEffectShaderProperty: {}", name);
-				logger::info("[RT] BuildMaterial - Flags: {}", GetFlagsString<RE::BSShaderProperty::EShaderPropertyFlag>(effectShaderProp->flags.underlying()));
+				logger::debug("[RT] BuildMaterial - BSEffectShaderProperty: {}", name);
+				logger::debug("[RT] BuildMaterial - Flags: {}", GetFlagsString<RE::BSShaderProperty::EShaderPropertyFlag>(effectShaderProp->flags.underlying()));
 
 				//if (effectShaderProp->material) {
 				if (auto effectMaterial = skyrim_cast<RE::BSEffectShaderMaterial*>(effectShaderProp->material)) {

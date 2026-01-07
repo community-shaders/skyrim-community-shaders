@@ -1689,7 +1689,7 @@ static RE::BSVisit::BSVisitControl TraverseScenegraphRTGeometries(RE::NiAVObject
 	return result;
 }
 
-void Raytracing::CreateModel(RE::TESObjectREFR* refr, const char* path, RE::NiNode* pRoot)
+void Raytracing::CreateModel(RE::TESForm* refr, const char* path, RE::NiNode* pRoot)
 {
 	if (!pRoot) {
 		logger::error("[RT] CreateModel \"{}\" - nullptr root", path);
@@ -1718,7 +1718,7 @@ void Raytracing::CreateModel(RE::TESObjectREFR* refr, const char* path, RE::NiNo
 	}
 
 	auto formID = refr->GetFormID();
-	auto baseFormID = refr->GetBaseObject()->GetFormID();
+	//auto baseFormID = refr->GetBaseObject()->GetFormID();
 
 	// We only need one buffer per model
 	if (models.find(path) != models.end()) {
@@ -1726,7 +1726,7 @@ void Raytracing::CreateModel(RE::TESObjectREFR* refr, const char* path, RE::NiNo
 		return;
 	}
 
-	logger::info("[RT] CreateModel - Path: {}, Base FormID [0x{:08X}], FormID [0x{:08X}], NiNode [0x{:08X}]: {}", path, baseFormID, formID, reinterpret_cast<uintptr_t>(pRoot), pRoot->name);
+	//logger::debug("[RT] CreateModel - Path: {}, Base FormID [0x{:08X}], FormID [0x{:08X}], NiNode [0x{:08X}]: {}", path, baseFormID, formID, reinterpret_cast<uintptr_t>(pRoot), pRoot->name);
 
 	auto rootWorldInverse = pRoot->world.Invert();
 
@@ -1743,10 +1743,10 @@ void Raytracing::CreateModel(RE::TESObjectREFR* refr, const char* path, RE::NiNo
 		}
 
 		// Early workaround since Land cause(ed?)s DX12 Device removal (why?)
-		if (strcmp(name, "Land") == 0) {
+		/*if (strcmp(name, "Land") == 0) {
 			logger::warn("\t\t[RT] CreateModel::TraverseScenegraphGeometries - Is Land");
 			return RE::BSVisit::BSVisitControl::kContinue;
-		}
+		}*/
 
 		const auto& geometryRuntimeData = pGeometry->GetGeometryRuntimeData();
 
@@ -1929,7 +1929,7 @@ eastl::shared_ptr<Allocation> Raytracing::GetTextureRegister(ID3D11Texture2D* dx
 	hr = dxgiResource->GetSharedHandle(&sharedHandle);
 
 	if (FAILED(hr) || !sharedHandle) {
-		logger::error("[RT] GetTextureRegister - Failed to get shared handle.");
+		logger::debug("[RT] GetTextureRegister - Failed to get shared handle.");
 		return defaultTexture;
 	}
 
@@ -3165,6 +3165,8 @@ void Raytracing::PostPostLoad()
 	//TESLoadGameEventHandler::Register();
 
 	TESObjectLoadedEventHandler::Register();
+	//TESCellAttachDetachEventHandler::Register();
+	TESCellFullyLoadedEventHandler::Register();	
 }
 
 /*void Raytracing::RTProcessor::PostCreate(const RE::BSModelDB::DBTraits::ArgsType& a_args, const char* modelName, RE::NiPointer<RE::NiNode>& a_root, std::uint32_t& typeOut)
@@ -3934,18 +3936,20 @@ RE::BSEventNotifyControl Raytracing::TESObjectLoadedEventHandler::ProcessEvent(c
 
 	auto* eventRef = RE::TESForm::LookupByID<RE::TESObjectREFR>(a_event->formID);
 
+	/*auto* base = eventRef->GetBaseObject();
+
+	logger::info("TESObjectLoadedEventHandler::ProcessEvent {} {}", magic_enum::enum_name(eventRef->formType.get()), magic_enum::enum_name(base->formType.get()));*/
+
 	// Unloaded
 	if (!a_event->loaded) {
 		auto formID = eventRef->GetFormID();
 
-		logger::info("[RT] TESObjectLoadedEventHandler - Unloading Name: {}, FormID [0x{:08X}]", eventRef->GetName(), formID);
-
-		bool removed = globals::features::raytracing.RemoveInstance(formID, true);
-
-		logger::info("[RT] TESObjectLoadedEventHandler - Unloaded {}", removed);
+		globals::features::raytracing.RemoveInstance(formID, true);
 
 		return RE::BSEventNotifyControl::kContinue;
 	}
+
+	//logger::info("[RT] TESObjectLoadedEvent - Name: {}", typeid(*eventRef).name());
 
 	//if (eventRef->formType.none(RE::FormType::NPC, RE::FormType::LeveledNPC, RE::FormType::ActorCharacter))
 	if (eventRef->formType.none(RE::FormType::ActorCharacter))
@@ -3973,6 +3977,70 @@ RE::BSEventNotifyControl Raytracing::TESObjectLoadedEventHandler::ProcessEvent(c
 		return RE::BSEventNotifyControl::kContinue;
 
 	globals::features::raytracing.CreateModel(eventRef, actor->GetName(), netimmerse_cast<RE::NiNode*>(pNiAVObject));
+
+	return RE::BSEventNotifyControl::kContinue;
+}
+
+// This might be usefull for instance management
+RE::BSEventNotifyControl Raytracing::TESCellAttachDetachEventHandler::ProcessEvent(const RE::TESCellAttachDetachEvent* a_event, RE::BSTEventSource<RE::TESCellAttachDetachEvent>*)
+{
+	if (!a_event)
+		return RE::BSEventNotifyControl::kContinue;
+
+	auto* refr = a_event->reference.get();
+
+	auto* base = refr->GetBaseObject();
+
+	logger::info("TESCellAttachDetachEventHandler::ProcessEvent {} {}", magic_enum::enum_name(refr->formType.get()), magic_enum::enum_name(base->formType.get()));
+
+	return RE::BSEventNotifyControl::kContinue;
+}
+
+RE::BSEventNotifyControl Raytracing::TESCellFullyLoadedEventHandler::ProcessEvent(const RE::TESCellFullyLoadedEvent* a_event, RE::BSTEventSource<RE::TESCellFullyLoadedEvent>*)
+{
+	if (!a_event)
+		return RE::BSEventNotifyControl::kContinue;
+
+	auto* cell = a_event->cell;
+
+	if (!cell->IsExteriorCell())
+		return RE::BSEventNotifyControl::kContinue;
+
+	auto& runtimeData = cell->GetRuntimeData();
+
+	auto* land = runtimeData.cellLand;
+
+	if (!land)
+		return RE::BSEventNotifyControl::kContinue;
+
+	auto* exteriorData = runtimeData.cellData.exterior;
+
+	//auto* worldSpace = runtimeData.worldSpace;
+
+	//logger::info("TESCellFullyLoadedEvent::ProcessEvent {} - {} {}", worldSpace->GetName(), exteriorData->cellX, exteriorData->cellY);
+
+	auto* loadedData = land->loadedData;
+
+	if (!loadedData || !loadedData->mesh)
+		return RE::BSEventNotifyControl::kContinue;
+
+	for (uint i = 0; i < 4; i++) {
+		auto mesh = loadedData->mesh[i];
+
+		if (!mesh)
+			continue;
+
+		globals::features::raytracing.CreateModel(cell, std::format("Landscape_{}_{}_Quad_{}", exteriorData->cellX, exteriorData->cellY, i).c_str(), mesh);
+		//logger::info("[RT] Mesh [{}] - {}", i, mesh->name.c_str());
+	}
+
+	//logger::info("TESCellFullyLoadedEvent::ProcessEvent {} - {} {}", cell->GetFullName(), magic_enum::enum_name(cell->formType.get()), land != nullptr);
+	
+	/*auto* refr = a_event->reference.get();
+
+	auto* base = refr->GetBaseObject();
+
+	/logger::info("TESCellFullyLoadedEvent::ProcessEvent {} {}", magic_enum::enum_name(refr->formType.get()), magic_enum::enum_name(base->formType.get()));*/
 
 	return RE::BSEventNotifyControl::kContinue;
 }

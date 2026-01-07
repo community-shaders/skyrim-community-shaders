@@ -557,7 +557,7 @@ struct Raytracing : public OverlayFeature
 	void CommitModel(Model* model);
 
 	// Creates mesh buffers for all graph TriShapes, handles materials and builds a single BLAS for the node
-	void CreateModel(RE::TESObjectREFR* refr, const char* path, RE::NiNode* pRoot);
+	void CreateModel(RE::TESForm* refr, const char* path, RE::NiNode* pRoot);
 
 	// Removes the instance and optionally also releases the model and all its buffers if refCount reaches 0
 	bool RemoveInstance(RE::NiNode* pRoot, bool releaseModel);
@@ -1090,6 +1090,40 @@ struct Raytracing : public OverlayFeature
 		};
 
 		template <typename T>
+		struct Load
+		{
+			static bool thunk(RE::TESObjectLAND* oThis, RE::TESFile* a_mod)
+			{
+				bool result = func(oThis, a_mod);
+
+				if (auto& rt = globals::features::raytracing; rt.Active()) {
+					logger::info("[RT] {}::Load", typeid(*oThis).name());
+
+					RE::TESObjectLAND::LoadedLandData* loadedLandData = oThis->loadedData;
+
+					if (loadedLandData) {
+						logger::info("[RT] LoadedLandData");
+
+						if (loadedLandData->mesh) {
+							for (uint i = 0; i < 4; i++) {
+								auto mesh = loadedLandData->mesh[i];
+
+								if (mesh) {
+									logger::info("[RT] Mesh [{}]", i);
+								}
+							}
+						}
+						
+					}
+				}
+
+				return result;
+			}
+			static inline REL::Relocation<decltype(thunk)> func;
+		};
+
+
+		template <typename T>
 		struct Load3D
 		{
 			static RE::NiAVObject* thunk(T* oThis, bool a_backgroundLoading)
@@ -1108,12 +1142,18 @@ struct Raytracing : public OverlayFeature
 					if (flags & MarkerFlags::MapMarker || flags & MarkerFlags::HeadingMarker)
 						return result;
 
+					//logger::info("[RT] Load3D - Name: {}", typeid(*baseObject).name());
+
 					/*RE::FormID id = baseObject->GetFormID();
 					logger::info("[RT] Load3DA - Name: {}, Flags [0x{:8X}]: {}", typeid(*baseObject).name(), flags, GetFlagsString<RE::TESObjectREFR::RecordFlags::RecordFlag>(flags));
 					logger::info("[RT] Load3DA - FormID: [0x{:8X}], FormType: {}", id, magic_enum::enum_name(type));*/
 
 					if (auto* model = baseObject->As<RE::TESModel>()) {
 						rt.CreateModel(oThis, model->GetModel(), netimmerse_cast<RE::NiNode*>(result));
+					} else if (auto* land = baseObject->As<RE::TESObjectLAND>()) {
+						logger::info("[RT] Load3D - Land {}", land->GetName());
+					} else if (auto* world = baseObject->As<RE::TESWorldSpace>()) {
+						logger::info("[RT] WorldSpace - Land {}", world->GetName());
 					}
 				}
 
@@ -1260,6 +1300,8 @@ struct Raytracing : public OverlayFeature
 			stl::write_vfunc<0x6A, Load3D<RE::TESObjectREFR>>(RE::VTABLE_TESObjectREFR[0]);
 			stl::write_vfunc<0x6B, Release3DRelatedData<RE::TESObjectREFR>>(RE::VTABLE_TESObjectREFR[0]);
 
+			//stl::write_vfunc<0x06, Load<RE::TESObjectLAND>>(RE::VTABLE_TESObjectLAND[0]);
+
 			//stl::detour_thunk<TESObjectREFR_Enable>(REL::RelocationID(19373, 19800));
 			//stl::write_vfunc<0x89, TESObjectREFR_Disable>(RE::VTABLE_TESObjectREFR[0]);
 
@@ -1362,6 +1404,42 @@ struct Raytracing : public OverlayFeature
 
 			auto scriptEventSourceHolder = RE::ScriptEventSourceHolder::GetSingleton();
 			scriptEventSourceHolder->GetEventSource<RE::TESObjectLoadedEvent>()->AddEventSink(&singleton);
+
+			logger::info("Registered {}", typeid(singleton).name());
+
+			return true;
+		}
+	};
+
+	class TESCellAttachDetachEventHandler : public RE::BSTEventSink<RE::TESCellAttachDetachEvent>
+	{
+	public:
+		virtual RE::BSEventNotifyControl ProcessEvent(const RE::TESCellAttachDetachEvent* a_event, RE::BSTEventSource<RE::TESCellAttachDetachEvent>*);
+
+		static bool Register()
+		{
+			static TESCellAttachDetachEventHandler singleton;
+
+			auto scriptEventSourceHolder = RE::ScriptEventSourceHolder::GetSingleton();
+			scriptEventSourceHolder->GetEventSource<RE::TESCellAttachDetachEvent>()->AddEventSink(&singleton);
+
+			logger::info("Registered {}", typeid(singleton).name());
+
+			return true;
+		}
+	};
+
+	class TESCellFullyLoadedEventHandler : public RE::BSTEventSink<RE::TESCellFullyLoadedEvent>
+	{
+	public:
+		virtual RE::BSEventNotifyControl ProcessEvent(const RE::TESCellFullyLoadedEvent* a_event, RE::BSTEventSource<RE::TESCellFullyLoadedEvent>*);
+
+		static bool Register()
+		{
+			static TESCellFullyLoadedEventHandler singleton;
+
+			auto scriptEventSourceHolder = RE::ScriptEventSourceHolder::GetSingleton();
+			scriptEventSourceHolder->GetEventSource<RE::TESCellFullyLoadedEvent>()->AddEventSink(&singleton);
 
 			logger::info("Registered {}", typeid(singleton).name());
 
