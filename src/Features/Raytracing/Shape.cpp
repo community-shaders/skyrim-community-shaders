@@ -343,7 +343,7 @@ void Shape::BuildMaterial(const RE::BSGeometry::GEOMETRY_RUNTIME_DATA& geometryR
 	auto envTexReg = rt.GetTextureRegister(envTexture, defaultEnvIndex);
 	auto envMaskTexReg = rt.GetTextureRegister(envMaskTexture, defaultEnvMaskIndex);
 
-	if (baseTexture && baseTexReg->GetIndex() == defaultWhiteIndex->GetIndex())
+	/*if (baseTexture && baseTexReg->GetIndex() == defaultWhiteIndex->GetIndex())
 		logger::warn("[RT] BuildMaterial {} - Base texture [0x{:8X}] not shared", name, reinterpret_cast<uintptr_t>(baseTexture));
 
 	if (normalTexture && normalTexReg->GetIndex() == defaultNormalIndex->GetIndex())
@@ -353,7 +353,7 @@ void Shape::BuildMaterial(const RE::BSGeometry::GEOMETRY_RUNTIME_DATA& geometryR
 		logger::warn("[RT] BuildMaterial {} - Effect texture [0x{:8X}] not shared", name, reinterpret_cast<uintptr_t>(effectTexture));
 
 	if (rmaosTexture && rmaosTexReg->GetIndex() == defaultRMAOSIndex->GetIndex())
-		logger::warn("[RT] BuildMaterial {} - RMAOS texture [0x{:8X}] not shared", name, reinterpret_cast<uintptr_t>(rmaosTexture));
+		logger::warn("[RT] BuildMaterial {} - RMAOS texture [0x{:8X}] not shared", name, reinterpret_cast<uintptr_t>(rmaosTexture));*/
 
 	/*auto LogTexture = [](const char* pName, ID3D11Texture2D* pTexture, uint16_t index) {
 		if (pTexture) {

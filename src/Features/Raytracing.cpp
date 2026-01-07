@@ -485,7 +485,7 @@ void Raytracing::DrawDebugSettings()
 		if (ImGui::TreeNodeEx("Statistics", ImGuiTreeNodeFlags_DefaultOpen)) {
 			ImGui::Text(std::format("Lights: {}", lights.size()).c_str());
 
-			ImGui::Text(std::format("Used Textures: {}, Shared: {}", textureRegisters.UsedCount(), sharedTextures.size()).c_str());
+			ImGui::Text(std::format("Used Textures: {}, Shared: {}, Misc: {}", textureRegisters.UsedCount(), sharedTextures.size(), textures.size()).c_str());
 			ImGui::Text(std::format("Used Shapes: {}", shapeRegisters.UsedCount()).c_str());
 			ImGui::Text(std::format("Models: {}", models.size()).c_str());
 
@@ -1937,8 +1937,11 @@ eastl::shared_ptr<Allocation> Raytracing::GetTextureRegister(ID3D11Texture2D* dx
 
 		auto [it, emplaced] = sharedTextures.emplace(dx11Texture, std::move(resource));
 
-		if (emplaced)
+		if (emplaced) {
 			dx12Texture = it->second.get();
+		} else {
+			logger::error("[RT] GetTextureRegister - ID3D12Resource emplace failed.");
+		}
 	}
 
 	if (!dx12Texture) {
@@ -1957,11 +1960,15 @@ eastl::shared_ptr<Allocation> Raytracing::GetTextureRegister(ID3D11Texture2D* dx
 	texSrvDesc.Texture2D.PlaneSlice = 0;
 	texSrvDesc.Texture2D.ResourceMinLODClamp = 0.0f;
 
-	auto [it, emplaced] = textures.emplace(dx11Texture, TextureReference(dx12Texture, { textureRegisters.Allocate(), AllocationDeleter() }));
+	auto [it, emplaced] = textures.try_emplace(dx11Texture, TextureReference(dx12Texture, { textureRegisters.Allocate(), AllocationDeleter() }));
 
-	d3d12Device->CreateShaderResourceView(dx12Texture, &texSrvDesc, giHeap->CPUHandle(GIHeap::Slot::Textures, it->second.allocation->GetIndex()));
+	if (emplaced) {
+		d3d12Device->CreateShaderResourceView(dx12Texture, &texSrvDesc, giHeap->CPUHandle(GIHeap::Slot::Textures, it->second.allocation->GetIndex()));
 
-	return it->second.allocation;
+		return it->second.allocation;
+	} else {
+		logger::error("[RT] GetTextureRegister - TextureReference emplace failed.");
+	}
 
 	logger::debug("[RT] GetTextureRegister - Source texture not found");
 
