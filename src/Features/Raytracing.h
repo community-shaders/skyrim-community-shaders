@@ -29,9 +29,9 @@
 #include "Features/Raytracing/RTPipelineBuilder.h"
 #include "Features/Raytracing/ShaderBindingTable.h"
 #include "Features/Raytracing/Shape.h"
+#include "Features/Raytracing/TextureSharing.h"
 #include "Features/Raytracing/Types.h"
 #include "Features/Raytracing/Utils.h"
-#include "Features/Raytracing/TextureSharing.h"
 
 #include "Raytracing/FeatureData.hlsli"
 #include "Raytracing/Includes/Types/FrameData.hlsli"
@@ -1232,7 +1232,7 @@ struct Raytracing : public OverlayFeature
 			}
 			static inline REL::Relocation<decltype(thunk)> func;
 		};
-		
+
 		struct CreateTextureFromDDS
 		{
 			static RE::NiSourceTexture* thunk(RE::BSResource::CompressedArchiveStream* a1, char* path, ID3D11ShaderResourceView* srv, char a4, bool a5)
@@ -1243,7 +1243,7 @@ struct Raytracing : public OverlayFeature
 
 				rt.shareTexture = true;
 
-				auto* result =  func(a1, path, srv, a4, a5);
+				auto* result = func(a1, path, srv, a4, a5);
 
 				rt.shareTexture = false;
 
@@ -1251,7 +1251,7 @@ struct Raytracing : public OverlayFeature
 			};
 			static inline REL::Relocation<decltype(thunk)> func;
 		};
-		
+
 		static void Install()
 		{
 			stl::write_vfunc<0x6A, Load3D<RE::TESObjectREFR>>(RE::VTABLE_TESObjectREFR[0]);
