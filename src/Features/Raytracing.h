@@ -544,8 +544,11 @@ struct Raytracing : public OverlayFeature
 
 	struct TextureReference
 	{
-		ID3D12Resource* resource = nullptr;
+		winrt::com_ptr<ID3D12Resource> resource;
 		eastl::shared_ptr<Allocation> allocation;
+
+		TextureReference(winrt::com_ptr<ID3D12Resource>&& res, eastl::shared_ptr<Allocation>&& alloc) :
+			resource(eastl::move(res)), allocation(eastl::move(alloc)) {}
 	};
 
 	// Creates a single BLAS for a collection of Shapes
@@ -716,11 +719,8 @@ struct Raytracing : public OverlayFeature
 
 	Util::FrameChecker shadowFrameChecker;
 
-	// Textures that have been shared with DX12
-	eastl::unordered_map<ID3D11Texture2D*, winrt::com_ptr<ID3D12Resource>> sharedTextures;
-
-	// Textures we have actually placed in a heap as SRV
-	eastl::unordered_map<ID3D11Texture2D*, TextureReference> textures;
+	// Textures that have been shared with DX12 and placed in a heap as SRV
+	eastl::unordered_map<ID3D11Texture2D*, eastl::unique_ptr<TextureReference>> textures;
 
 	winrt::com_ptr<ID3D11SamplerState> samplerState = nullptr;
 	winrt::com_ptr<ID3D11ComputeShader> copyDepthCS = nullptr;
@@ -939,24 +939,22 @@ struct Raytracing : public OverlayFeature
 					if (auto texture = oThis->rendererTexture->texture) {
 						auto& rt = globals::features::raytracing;
 
-						if (auto sharedIt = rt.sharedTextures.find(texture); sharedIt != rt.sharedTextures.end()) {
-							if (auto textureIt = rt.textures.find(texture); textureIt != rt.textures.end()) {
-								auto index = textureIt->second.allocation->GetIndex();
+						if (auto it = rt.textures.find(texture); it != rt.textures.end()) {
+							auto index = it->second->allocation->GetIndex();
 
-								logger::debug("[RT] NiSourceTexture::Destructor [0x{:8X}] - Register: {}", reinterpret_cast<uintptr_t>(texture), index);
+							logger::debug("[RT] NiSourceTexture::Destructor [0x{:8X}] - Register: {}", reinterpret_cast<uintptr_t>(texture), index);
 
-								// I imagine this isn't fast but I'll keep this in until I'm sure everything has been fixed
-								for (auto& [key, model] : rt.models) {
-									for (auto& shape : model->shapes) {
-										auto& material = shape->material;
+							// I imagine this isn't fast but I'll keep this in until I'm sure everything has been fixed
+							for (auto& [key, model] : rt.models) {
+								for (auto& shape : model->shapes) {
+									auto& material = shape->material;
 
-										if (index == material.BaseTexture->GetIndex())
-											logger::error("[RT]\t\t NiSourceTexture::Destructor - Found in: {}", key);
-									}
+									if (index == material.BaseTexture->GetIndex())
+										logger::error("[RT]\t\t NiSourceTexture::Destructor - Found in: {}", key);
 								}
 							}
 
-							rt.sharedTextures.erase(sharedIt);
+							rt.textures.erase(it);
 						}
 					}
 				}

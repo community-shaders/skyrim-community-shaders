@@ -485,7 +485,7 @@ void Raytracing::DrawDebugSettings()
 		if (ImGui::TreeNodeEx("Statistics", ImGuiTreeNodeFlags_DefaultOpen)) {
 			ImGui::Text(std::format("Lights: {}", lights.size()).c_str());
 
-			ImGui::Text(std::format("Used Textures: {}, Shared: {}, Misc: {}", textureRegisters.UsedCount(), sharedTextures.size(), textures.size()).c_str());
+			ImGui::Text(std::format("Used Textures: {}, Shared: {}", textureRegisters.UsedCount(), textures.size()).c_str());
 			ImGui::Text(std::format("Used Shapes: {}", shapeRegisters.UsedCount()).c_str());
 			ImGui::Text(std::format("Models: {}", models.size()).c_str());
 
@@ -1904,48 +1904,40 @@ eastl::shared_ptr<Allocation> Raytracing::GetTextureRegister(ID3D11Texture2D* dx
 
 	// Texture already placed in heap, return allocation
 	if (auto refIt = textures.find(dx11Texture); refIt != textures.end()) {
-		return refIt->second.allocation;
+		return refIt->second->allocation;
 	}
 
 	// std::lock_guard lock{ renderMutex };
 
-	ID3D12Resource* dx12Texture = nullptr;
-
 	// Search for texture in shared map
-	if (auto sharedIt = sharedTextures.find(dx11Texture); sharedIt != sharedTextures.end()) {
-		dx12Texture = sharedIt->second.get();
-	} else {
-		winrt::com_ptr<IDXGIResource> dxgiResource;
-		HRESULT hr = dx11Texture->QueryInterface(IID_PPV_ARGS(dxgiResource.put()));
+	winrt::com_ptr<IDXGIResource> dxgiResource;
+	HRESULT hr = dx11Texture->QueryInterface(IID_PPV_ARGS(dxgiResource.put()));
 
-		if (FAILED(hr))
-			return defaultTexture;
+	if (FAILED(hr)) {
+		logger::error("[RT] GetTextureRegister - Failed to query interface.");
+		return defaultTexture;
+	}
 
-		HANDLE sharedHandle = nullptr;
-		hr = dxgiResource->GetSharedHandle(&sharedHandle);
+	HANDLE sharedHandle = nullptr;
+	hr = dxgiResource->GetSharedHandle(&sharedHandle);
 
-		if (FAILED(hr) || !sharedHandle)
-			return defaultTexture;
+	if (FAILED(hr) || !sharedHandle) {
+		logger::error("[RT] GetTextureRegister - Failed to get shared handle.");
+		return defaultTexture;
+	}
 
-		winrt::com_ptr<ID3D12Resource> resource;
-		hr = d3d12Device->OpenSharedHandle(sharedHandle, IID_PPV_ARGS(resource.put()));
+	winrt::com_ptr<ID3D12Resource> dx12Texture;
+	hr = d3d12Device->OpenSharedHandle(sharedHandle, IID_PPV_ARGS(dx12Texture.put()));
 
-		CloseHandle(sharedHandle);
+	CloseHandle(sharedHandle);
 
-		if (FAILED(hr))
-			return defaultTexture;
-
-		auto [it, emplaced] = sharedTextures.emplace(dx11Texture, std::move(resource));
-
-		if (emplaced) {
-			dx12Texture = it->second.get();
-		} else {
-			logger::error("[RT] GetTextureRegister - ID3D12Resource emplace failed.");
-		}
+	if (FAILED(hr)) {
+		logger::error("[RT] GetTextureRegister - Failed to open shared handle.");
+		return defaultTexture;
 	}
 
 	if (!dx12Texture) {
-		logger::error("[RT] GetTextureRegister - failed to adquire DX12 texture.");
+		logger::error("[RT] GetTextureRegister - Failed to adquire DX12 texture.");
 		return defaultTexture;
 	}
 
@@ -1960,12 +1952,14 @@ eastl::shared_ptr<Allocation> Raytracing::GetTextureRegister(ID3D11Texture2D* dx
 	texSrvDesc.Texture2D.PlaneSlice = 0;
 	texSrvDesc.Texture2D.ResourceMinLODClamp = 0.0f;
 
-	auto [it, emplaced] = textures.try_emplace(dx11Texture, TextureReference(dx12Texture, { textureRegisters.Allocate(), AllocationDeleter() }));
+	auto [it, emplaced] = textures.try_emplace(dx11Texture, nullptr);
 
 	if (emplaced) {
-		d3d12Device->CreateShaderResourceView(dx12Texture, &texSrvDesc, giHeap->CPUHandle(GIHeap::Slot::Textures, it->second.allocation->GetIndex()));
+		it->second = eastl::make_unique<TextureReference>(std::move(dx12Texture), eastl::shared_ptr<Allocation>(textureRegisters.Allocate(), AllocationDeleter()));
 
-		return it->second.allocation;
+		d3d12Device->CreateShaderResourceView(it->second->resource.get(), &texSrvDesc, giHeap->CPUHandle(GIHeap::Slot::Textures, it->second->allocation->GetIndex()));
+
+		return it->second->allocation;
 	} else {
 		logger::error("[RT] GetTextureRegister - TextureReference emplace failed.");
 	}
