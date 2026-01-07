@@ -50,7 +50,6 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	RaytracedShadows,
 	PathTracing,
 	CullShadows,
-	DebugShare,
 	RussianRoulette,
 	ConvertToGamma,
 	PerformanceOverlay,
@@ -419,8 +418,6 @@ void Raytracing::DrawDebugSettings()
 
 	if (ImGui::Checkbox("White Furnace", &settings.WhiteFurnace))
 		recompileReason |= RecompileReason::Debug;
-
-	ImGui::Checkbox("Share Textures", &settings.DebugShare);
 
 	// Debug display mode
 	if (ImGui::BeginCombo("Debug Output", magic_enum::enum_name(settings.DebugOutput).data())) {

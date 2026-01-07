@@ -154,7 +154,7 @@ namespace TextureSharing
 			break;
 		}
 
-		logger::info("[RT] ShouldShareTexture {}", magic_enum::enum_name(type));
+		logger::trace("[RT] ShouldShareTexture {}", magic_enum::enum_name(type));
 
 		return false;
 	}
