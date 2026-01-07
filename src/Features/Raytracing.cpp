@@ -1402,7 +1402,7 @@ void Raytracing::ConvertTextures() const
 	auto context = globals::d3d::context;
 	auto renderer = globals::game::renderer;
 
-	context->CSSetShader(convertTexturesCS.get(), nullptr, 0);
+	context->CSSetShader(settings.PathTracing ? convertTexturesPTCS.get() : convertTexturesCS.get(), nullptr, 0);
 
 	auto* renderSizeCB = renderResCB->CB();
 	context->CSSetConstantBuffers(0, 1, &renderSizeCB);
@@ -2638,8 +2638,7 @@ void Raytracing::DrawRTGI()
 		d3d11Context->ClearRenderTargetView(rendererRuntimeData.renderTargets[ALBEDO].RTV, clearColor);
 	}
 
-	if (!settings.PathTracing)
-		ConvertTextures();
+	ConvertTextures();
 
 	// Wait for D3D11 to finish
 	{
@@ -3873,6 +3872,9 @@ void Raytracing::CompileComputeShaders()
 
 	if (auto rawPtr = reinterpret_cast<ID3D11ComputeShader*>(Util::CompileShader(L"Data\\Shaders\\Raytracing\\ConvertTexturesCS.hlsl", { { "DX11", "" } }, "cs_5_0")); rawPtr)
 		convertTexturesCS.attach(rawPtr);
+
+	if (auto rawPtr = reinterpret_cast<ID3D11ComputeShader*>(Util::CompileShader(L"Data\\Shaders\\Raytracing\\ConvertTexturesCS.hlsl", { { "DX11", "" }, { "PT", "" } }, "cs_5_0")); rawPtr)
+		convertTexturesPTCS.attach(rawPtr);
 
 	if (auto rawPtr = reinterpret_cast<ID3D11ComputeShader*>(Util::CompileShader(L"Data\\Shaders\\Raytracing\\TrueLinearToGammaCS.hlsl", { { "DX11", "" } }, "cs_5_0")); rawPtr)
 		trueLinearToGammaCS.attach(rawPtr);

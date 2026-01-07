@@ -27,7 +27,7 @@ void main(uint2 id : SV_DispatchThreadID)
         return;
 
     const float2 uv = float2(id.xy + 0.5f) * RenderResRcp;
-
+#ifndef PT
     const unorm half3 normalGlossiness = NormalGlossiness.SampleLevel(Sampler, uv, 0).xyz;
     const snorm half3 normalWS = normalize(ViewToWorldVector(GBuffer::DecodeNormal(normalGlossiness.xy), FrameBuffer::CameraViewInverse[0]));
     NormalRoughness[id] = half4(normalWS, 1.0f - normalGlossiness.z);
@@ -37,7 +37,7 @@ void main(uint2 id : SV_DispatchThreadID)
 
     const float4 albedo = Albedo.SampleLevel(Sampler, uv, 0);
     Diffuse[id] = float4(Color::GammaToTrueLinear(albedo.rgb) * (1.0f - metallic), albedo.a);
-
+#endif
     MotionVectorsOut[id] = MotionVectors.SampleLevel(Sampler, uv, 0);
 }
 
