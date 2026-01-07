@@ -389,6 +389,10 @@ void Upscaling::DataLoaded()
 {
 	// Fix screenshots fix from Engine Fixes
 	RE::GetINISetting("bUseTAA:Display")->data.b = false;
+
+	// The game defaults this to a non-zero value
+	static auto fDRClampOffset = RE::GetINISetting("fDRClampOffset:Display");
+	fDRClampOffset->data.f = 0.0f;
 }
 
 void Upscaling::Load()
@@ -718,10 +722,6 @@ void Upscaling::ConfigureUpscaling(RE::BSGraphics::State* a_viewport)
 
 	// Delete or create resources as necessary
 	CheckResources(upscaleMethod);
-
-	// The game defaults this to a non-zero value
-	auto fDRClampOffset = RE::GetINISetting("fDRClampOffset:Display");
-	fDRClampOffset->data.f = 0.0f;
 
 	// Cache original TAA values for UI
 	projectionPosScaleX = a_viewport->projectionPosScaleX;

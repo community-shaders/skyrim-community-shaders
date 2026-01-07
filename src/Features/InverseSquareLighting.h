@@ -56,6 +56,7 @@ public:
 		static float thunk(RE::BSLight* bsLight, RE::NiPoint3* targetPosition, RE::NiLight* refLight);
 		static inline REL::Relocation<decltype(thunk)> func;
 	};
+	virtual bool IsCore() const override { return true; };
 
 private:
 	LightEditor editor = LightEditor();

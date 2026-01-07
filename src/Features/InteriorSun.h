@@ -72,6 +72,7 @@ public:
 	}
 
 	static bool IsInteriorWithSun(const RE::TESObjectCELL* cell);
+	virtual bool IsCore() const override { return true; };
 
 private:
 	enum class CellFlagExt : uint16_t
