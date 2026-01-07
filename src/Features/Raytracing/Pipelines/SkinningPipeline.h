@@ -12,6 +12,7 @@
 
 #include "Raytracing/Includes/RT/SHaRC/SharcTypes.h"
 #include "Raytracing/Includes/Types/FrameData.hlsli"
+#include "Raytracing/Includes/Types/VertexUpdate.hlsli"
 
 struct SkinningHeapDef
 {

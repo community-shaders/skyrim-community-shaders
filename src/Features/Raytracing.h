@@ -43,7 +43,6 @@
 #include "Raytracing/Includes/Types/Skinning.hlsli"
 #include "Raytracing/Includes/Types/Triangle.hlsli"
 #include "Raytracing/Includes/Types/Vertex.hlsli"
-#include "Raytracing/Includes/Types/VertexUpdate.hlsli"
 
 #include "Raytracing/Denoiser/SVGF/SVGF.hlsli"
 

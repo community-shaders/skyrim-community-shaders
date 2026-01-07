@@ -77,7 +77,7 @@ void SkinningPipeline::SetupResources(ID3D12Device5* device)
 	constantBufferData = eastl::make_unique<FrameData>();
 
 	constantBuffer = eastl::make_unique<DX12::StructuredBufferUpload<FrameData>>(device, 1);
-	constantBuffer->TransitionBarrier(commandList.get(), D3D12_RESOURCE_STATE_VERTEX_AND_CONSTANT_BUFFER);
+	//constantBuffer->TransitionBarrier(commandList.get(), D3D12_RESOURCE_STATE_VERTEX_AND_CONSTANT_BUFFER);
 	DX::ThrowIfFailed(constantBuffer->resource->SetName(L"Skinning Constant Buffer"));
 }
 
@@ -97,7 +97,7 @@ bool SkinningPipeline::PrepareResources(uint& count)
 	if (queueModels.empty())
 		return false;
 
-	count = queueModels.size();
+	count = (uint)queueModels.size();
 
 	constantBufferData->Count = count;
 	constantBuffer->Update(constantBufferData.get(), sizeof(FrameData));
