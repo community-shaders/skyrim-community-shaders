@@ -918,40 +918,13 @@ struct Raytracing : public OverlayFeature
 				auto& rt = globals::features::raytracing;
 				std::lock_guard<std::recursive_mutex> lock(rt.shareTextureMutex);
 
-				const bool shareTexture = rt.shareTexture && !(pDesc->MiscFlags & D3D11_RESOURCE_MISC_TEXTURECUBE);
-
 				D3D11_TEXTURE2D_DESC descCopy = *pDesc;
 
-				if (shareTexture) {
+				if (rt.shareTexture && !(pDesc->MiscFlags & D3D11_RESOURCE_MISC_TEXTURECUBE)) {
 					descCopy.MiscFlags |= D3D11_RESOURCE_MISC_SHARED;
 				}
 
-				HRESULT hr = func(This, &descCopy, pInitialData, ppTexture2D);
-
-				if (shareTexture) {
-					if (SUCCEEDED(hr)) {
-						winrt::com_ptr<IDXGIResource> dxgiResource = nullptr;
-						DX::ThrowIfFailed((*ppTexture2D)->QueryInterface(IID_PPV_ARGS(dxgiResource.put())));
-
-						HANDLE sharedHandle = nullptr;
-						DX::ThrowIfFailed(dxgiResource->GetSharedHandle(&sharedHandle));
-
-						winrt::com_ptr<ID3D12Resource> resource = nullptr;
-						HRESULT hrOSH = rt.d3d12Device->OpenSharedHandle(sharedHandle, IID_PPV_ARGS(resource.put()));
-
-						CloseHandle(sharedHandle);
-
-						if (SUCCEEDED(hrOSH)) {
-							rt.sharedTextures.emplace(*ppTexture2D, std::move(resource));
-						} else {
-							logger::warn("[RT] Error opening shared handle - [0x{:x}], Format: {}, Dimension: ({}, {}), MipLevels: {}", hrOSH, magic_enum::enum_name(pDesc->Format), pDesc->Width, pDesc->Height, pDesc->MipLevels);
-						}
-					} else {
-						logger::warn("[RT] Error creating shareable texture - [0x{:x}], Format: {}, Dimension: ({}, {}), MipLevels: {}", hr, magic_enum::enum_name(pDesc->Format), pDesc->Width, pDesc->Height, pDesc->MipLevels);
-					}
-				}
-
-				return hr;
+				return func(This, &descCopy, pInitialData, ppTexture2D);
 			}
 
 			static inline REL::Relocation<decltype(thunk)> func;
@@ -1269,7 +1242,7 @@ struct Raytracing : public OverlayFeature
 
 				std::lock_guard<std::recursive_mutex> lock(rt.shareTextureMutex);
 
-				rt.shareTexture = TextureSharing::ShouldShareTexture(path, rt.settings.PathTracing);
+				rt.shareTexture = true;
 
 				auto* result =  func(a1, path, srv, a4, a5);
 
