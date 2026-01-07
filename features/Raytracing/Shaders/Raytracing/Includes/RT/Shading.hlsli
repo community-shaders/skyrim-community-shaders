@@ -414,7 +414,7 @@ float3 SampleSky(float3 dir)
     float2 uv = disk * 0.5f + 0.5f;
 
     float3 color = SkyHemisphere.SampleLevel(BaseSampler, uv, 0.0f).rgb;
-    
+
     return Color::GammaToTrueLinear(color);
 }
 

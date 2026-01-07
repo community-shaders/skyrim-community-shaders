@@ -3877,7 +3877,7 @@ void Raytracing::CompileComputeShaders()
 	if (auto rawPtr = reinterpret_cast<ID3D11ComputeShader*>(Util::CompileShader(L"Data\\Shaders\\Raytracing\\ConvertTexturesCS.hlsl", { { "PT", "" } }, "cs_5_0")); rawPtr)
 		convertTexturesPTCS.attach(rawPtr);
 
-	if (auto rawPtr = reinterpret_cast<ID3D11ComputeShader*>(Util::CompileShader(L"Data\\Shaders\\Raytracing\\TrueLinearToGammaCS.hlsl", { }, "cs_5_0")); rawPtr)
+	if (auto rawPtr = reinterpret_cast<ID3D11ComputeShader*>(Util::CompileShader(L"Data\\Shaders\\Raytracing\\TrueLinearToGammaCS.hlsl", {}, "cs_5_0")); rawPtr)
 		trueLinearToGammaCS.attach(rawPtr);
 }
 
