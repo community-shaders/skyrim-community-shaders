@@ -8,7 +8,7 @@ RWTexture2D<float4> HemisphereOut : register(u0);
 [numthreads(8, 8, 1)]
 void main(uint2 id : SV_DispatchThreadID)
 {
-    
+
     if (id.x >= RESOLUTION || id.y >= RESOLUTION)
         return;
 
