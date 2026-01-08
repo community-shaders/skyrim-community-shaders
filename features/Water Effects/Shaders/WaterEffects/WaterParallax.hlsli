@@ -7,46 +7,47 @@ namespace WaterEffects
 	// http://www.diva-portal.org/smash/get/diva2:831762/FULLTEXT01.pdf
 	// https://bartwronski.files.wordpress.com/2014/03/ac4_gdc.pdf
 
-	float GetMipLevel(float2 coords, Texture2D<float4> tex)
-	{
-		// Compute the current gradients:
-		float2 textureDims;
-		tex.GetDimensions(textureDims.x, textureDims.y);
+float GetMipLevel(float2 coords, Texture2D<float4> tex)
+{
+    // Get actual texture dimensions
+    float2 actualTextureDims;
+    tex.GetDimensions(actualTextureDims.x, actualTextureDims.y);
+    
+    // Use hardcoded 512x512 for mip calculation
+    float2 textureDims = float2(512.0, 512.0);
 
-#if defined(VR)
-		textureDims /= 16.0;
-#else
-		textureDims /= 8.0;
-#endif
+    float2 texCoordsPerSize = coords;
+    
+    float2 dxSize = ddx(texCoordsPerSize);
+    float2 dySize = ddy(texCoordsPerSize);
+    
+    // Find min of change in u and v across quad: compute du and dv magnitude across quad
+    float2 dTexCoords = dxSize * dxSize + dySize * dySize;
+    
+    // Standard mipmapping uses max here
+    float minTexCoordDelta = max(dTexCoords.x, dTexCoords.y);
+    
+    // Compute the current mip level
+    float mipLevel = max(0.5 * log2(minTexCoordDelta), 0.0);
+    
+    // Offset mip level to sample as if texture were 512x512
+    float mipOffset = log2(actualTextureDims.x / 512.0);
+ 
+    return mipLevel + mipOffset;
+}
 
-		float2 texCoordsPerSize = coords * textureDims;
-
-		float2 dxSize = ddx(texCoordsPerSize);
-		float2 dySize = ddy(texCoordsPerSize);
-
-		// Find min of change in u and v across quad: compute du and dv magnitude across quad
-		float2 dTexCoords = dxSize * dxSize + dySize * dySize;
-
-		// Standard mipmapping uses max here
-		float minTexCoordDelta = max(dTexCoords.x, dTexCoords.y);
-
-		// Compute the current mip level  (* 0.5 is effectively computing a square root before )
-		float mipLevel = max(0.5 * log2(minTexCoordDelta), 0);
-
-		return mipLevel;
-	}
-
-	float GetHeight(PS_INPUT input, float2 currentOffset, float3 normalScalesRcp, float3 mipLevels)
+	float GetHeight(PS_INPUT input, float2 currentOffset, float3 normalsAmplitude, float3 normalScalesRcp, float3 mipLevels)
 	{
 		float3 heights;
 		heights.x = Normals01Tex.SampleLevel(Normals01Sampler, input.TexCoord1.xy + currentOffset * normalScalesRcp.x, mipLevels.x).w;
 		heights.y = Normals02Tex.SampleLevel(Normals02Sampler, input.TexCoord1.zw + currentOffset * normalScalesRcp.y, mipLevels.y).w;
 		heights.z = Normals03Tex.SampleLevel(Normals03Sampler, input.TexCoord2.xy + currentOffset * normalScalesRcp.z, mipLevels.z).w;
-		heights *= NormalsAmplitude.xyz;
-		return 1.0 - (heights.x + heights.y + heights.z);
+		heights = 1.0 - heights;
+		heights *= normalsAmplitude;
+		return heights.x + heights.y + heights.z;
 	}
 
-	float2 GetParallaxOffset(PS_INPUT input, float3 normalScalesRcp)
+	float2 GetParallaxOffset(PS_INPUT input, float3 normalsAmplitude, float3 normalScalesRcp)
 	{
 		float3 viewDirection = normalize(input.WPosition.xyz);
 		float2 parallaxOffsetTS = viewDirection.xy / -viewDirection.z;
@@ -59,12 +60,6 @@ namespace WaterEffects
 		mipLevels.y = GetMipLevel(input.TexCoord1.zw, Normals02Tex);
 		mipLevels.z = GetMipLevel(input.TexCoord2.xy, Normals03Tex);
 
-#if defined(VR)
-		mipLevels = mipLevels + 4;
-#else
-		mipLevels = mipLevels + 3;
-#endif
-
 		float stepSize = rcp(16.0);
 		float currBound = 0.0;
 		float currHeight = 1.0;
@@ -74,7 +69,7 @@ namespace WaterEffects
 		{
 			prevHeight = currHeight;
 			currBound += stepSize;
-			currHeight = GetHeight(input, currBound * parallaxOffsetTS.xy, normalScalesRcp, mipLevels);
+			currHeight = GetHeight(input, currBound * parallaxOffsetTS.xy, normalsAmplitude, normalScalesRcp, mipLevels);
 		}
 
 		float prevBound = currBound - stepSize;

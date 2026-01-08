@@ -554,8 +554,13 @@ float3 GetLightingColor(float3 msPosition, float3 worldPosition, float4 screenPo
 		float3 ambientColor = max(0, mul(SharedData::DirectionalAmbient, float4(0, 0, 1, 1)));
 
 #		if defined(IBL)
-		if (SharedData::iblSettings.EnableDiffuseIBL && (!SharedData::InInterior || SharedData::iblSettings.EnableInterior)) {
-			ambientColor *= SharedData::iblSettings.DALCAmount;
+		if (SharedData::iblSettings.EnableDiffuseIBL && !SharedData::enbSettings.EnableImageBasedLighting) {
+#			if defined(SKYLIGHTING)
+			float3 iblColor = Color::Saturation(ImageBasedLighting::GetIBLColor(float3(0, 0, -1), 1.0), SharedData::iblSettings.IBLSaturation) * SharedData::iblSettings.DiffuseIBLScale;
+#			else
+			float3 iblColor = Color::Saturation(ImageBasedLighting::GetIBLColor(float3(0, 0, -1)), SharedData::iblSettings.IBLSaturation) * SharedData::iblSettings.DiffuseIBLScale;
+#			endif
+			ambientColor += Color::LinearToGamma(iblColor);
 		}
 #		endif
 
@@ -577,21 +582,6 @@ float3 GetLightingColor(float3 msPosition, float3 worldPosition, float4 screenPo
 		color = Color::GammaToLinear(color);
 		color *= skylightingDiffuse;
 		color = Color::LinearToGamma(color);
-#		endif
-
-#		if defined(IBL)
-		float3 iblColor = 0;
-		if (SharedData::iblSettings.EnableDiffuseIBL) {
-			if (!SharedData::InInterior || SharedData::iblSettings.EnableInterior)
-			{
-#			if defined(SKYLIGHTING)
-				iblColor += Color::Saturation(ImageBasedLighting::GetIBLColor(float3(0, 0, -1), skylightingDiffuse), SharedData::iblSettings.IBLSaturation) * SharedData::iblSettings.DiffuseIBLScale;
-#			else
-				iblColor += Color::Saturation(ImageBasedLighting::GetIBLColor(float3(0, 0, -1)), SharedData::iblSettings.IBLSaturation) * SharedData::iblSettings.DiffuseIBLScale;
-#			endif
-				color += Color::LinearToGamma(iblColor);
-			}
-		}
 #		endif
 
 		if (!SharedData::InInterior){
@@ -828,11 +818,6 @@ PS_OUTPUT main(PS_INPUT input)
 	float3 blendedColor = lerp(lightColor, 1.0.xxx, saturate(1.5 * input.FogParam.w).xxx);
 #		else
 	float3 fogColor = input.FogParam.xyz;
-#			if defined(IBL)
-	if (SharedData::iblSettings.EnableDiffuseIBL && !SharedData::InInterior) {
-		fogColor = ImageBasedLighting::GetFogIBLColor(fogColor);
-	}
-#			endif
 	float3 blendedColor = lerp(lightColor, fogColor, input.FogParam.www);
 #		endif
 #	else

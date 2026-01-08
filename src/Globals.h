@@ -28,6 +28,7 @@ struct PerformanceOverlay;
 struct WetnessEffects;
 struct ExtendedTranslucency;
 struct Upscaling;
+struct ENBPostProcessing;
 
 class State;
 class Deferred;
@@ -79,6 +80,7 @@ namespace globals
 		extern WetnessEffects wetnessEffects;
 		extern ExtendedTranslucency extendedTranslucency;
 		extern Upscaling upscaling;
+		extern ENBPostProcessing enbPostProcessing;
 		extern RenderDoc renderDoc;
 
 		namespace llf

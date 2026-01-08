@@ -75,7 +75,6 @@ void IBL::Prepass()
 	auto& dynamicCubemaps = globals::features::dynamicCubemaps;
 
 	auto& envTexture = dynamicCubemaps.envTexture;
-	auto& envReflectionsTexture = dynamicCubemaps.envReflectionsTexture;
 
 	// Unset PS shader resource
 	{
@@ -87,6 +86,9 @@ void IBL::Prepass()
 	std::array<ID3D11ShaderResourceView*, 1> srvs = { (dynamicCubemaps.loaded && envTexture) ? envTexture->srv.get() : nullptr };
 	std::array<ID3D11UnorderedAccessView*, 1> uavs = { diffuseIBLTexture->uav.get() };
 	std::array<ID3D11SamplerState*, 1> samplers = { Deferred::GetSingleton()->linearSampler };
+
+	auto renderer = globals::game::renderer;
+	auto& cubemap = renderer->GetRendererData().cubemapRenderTargets[RE::RENDER_TARGETS_CUBEMAP::kREFLECTIONS];
 
 	// IBL
 	{
@@ -101,7 +103,7 @@ void IBL::Prepass()
 
 	// IBL with sky
 	{
-		srvs.at(0) = (dynamicCubemaps.loaded && envReflectionsTexture) ? envReflectionsTexture->srv.get() : nullptr;
+		srvs.at(0) = cubemap.SRV;
 		uavs.at(0) = diffuseSkyIBLTexture->uav.get();
 
 		context->CSSetShaderResources(0, (uint)srvs.size(), srvs.data());

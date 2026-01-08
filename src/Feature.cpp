@@ -4,6 +4,7 @@
 #include "FeatureVersions.h"
 #include "Features/CloudShadows.h"
 #include "Features/DynamicCubemaps.h"
+#include "Features/ENBPostProcessing.h"
 #include "Features/ExtendedMaterials.h"
 #include "Features/ExtendedTranslucency.h"
 #include "Features/GrassCollision.h"
@@ -31,6 +32,7 @@
 #include "Features/WaterEffects.h"
 #include "Features/WeatherPicker.h"
 #include "Features/WetnessEffects.h"
+
 #include "Menu.h"
 #include "SettingsOverrideManager.h"
 #include "Utils/Format.h"
@@ -227,6 +229,7 @@ const std::vector<Feature*>& Feature::GetFeatureList()
 		&globals::features::ibl,
 		&globals::features::extendedTranslucency,
 		&globals::features::upscaling,
+		&globals::features::enbPostProcessing,
 		&globals::features::renderDoc
 	};
 

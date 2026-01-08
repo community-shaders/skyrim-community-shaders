@@ -6,14 +6,18 @@
 
 namespace SharedData
 {
-
-#if defined(PSHADER) || defined(CSHADER) || defined(COMPUTESHADER)
 	cbuffer SharedData : register(b5)
 	{
 		float4 WaterData[25];
 		row_major float3x4 DirectionalAmbient;
 		float4 DirLightDirection;
 		float4 DirLightColor;
+		float4 SunDirection;
+		float4 SunColor;
+		float4 MasserDirection;
+		float4 MasserColor;
+		float4 SecundaDirection;
+		float4 SecundaColor;
 		float4 CameraData;
 		float4 BufferDim;
 		float Timer;
@@ -198,6 +202,83 @@ namespace SharedData
 		float Strength;      // [0, 1.0] The inverse blend weight of the effect
 	};
 
+	struct ENBSettings
+	{
+		uint Enable;
+		uint EnableProceduralSun;
+		uint EnableImageBasedLighting;
+		uint EnableWater;
+
+		uint EnableSky;
+		float3 pad00;
+
+		float GradientIntensity;
+		float GradientDesaturation;
+		float GradientTopIntensity;
+		float GradientTopCurve;
+
+		float3 GradientTopColorFilter;
+		float pad0;
+
+		float GradientMiddleIntensity;
+		float GradientMiddleCurve;
+		float2 pad1;
+
+		float3 GradientMiddleColorFilter;
+		float pad2;
+
+		float GradientHorizonIntensity;
+		float GradientHorizonCurve;
+		float2 pad3;
+
+		float3 GradientHorizonColorFilter;
+		float pad4;
+
+		float CloudsIntensity;
+		float CloudsCurve;
+		float CloudsDesaturation;
+		float CloudsOpacity;
+
+		float3 CloudsColorFilter;
+		float CloudsVertexAlphaBoost;
+
+		float CloudsEdgeClamp;
+		float CloudsEdgeIntensity;
+		float CloudsEdgeFadeRange;
+		float CloudsEdgeMoonMultiplier;
+
+		float ColorPow;
+		float3 pad8;
+
+		float IBLAdditiveAmount;
+		float IBLMultiplicativeAmount;
+		float IBLReflectiveAmount;
+		float pad9;
+
+		float VolumetricRaysIntensity;
+		float VolumetricRaysRangeFactor;
+		float VolumetricRaysDesaturation;
+		float pad12;
+
+		float3 VolumetricRaysColorFilter;
+		float pad13;
+
+		float ProceduralSunSize;
+		float ProceduralSunEdgeSoftness;
+		float ProceduralSunGlowIntensity;
+		float ProceduralSunGlowCurve;
+		
+		float WaterWavesAmplitude;
+		float WaterMuddiness;
+		float WaterSunLightingMultiplier;
+		float WaterSunSpecularMultiplier;
+
+		float WaterFresnelMin;
+		float WaterFresnelMax;
+		float WaterFresnelMultiplier;
+		float WaterReflectionAmount;
+	};
+
 	cbuffer FeatureData : register(b6)
 	{
 		GrassLightingSettings grassLightingSettings;
@@ -213,6 +294,7 @@ namespace SharedData
 		TerrainVariationSettings terrainVariationSettings;
 		IBLSettings iblSettings;
 		ExtendedTranslucencySettings extendedTranslucencySettings;
+		ENBSettings enbSettings;
 	};
 
 	Texture2D<float4> DepthTexture : register(t17);
@@ -266,7 +348,5 @@ namespace SharedData
 			waterData = WaterData[waterTile];
 		return waterData;
 	}
-
-#endif  // PSHADER
 }
 #endif  // __SHARED_DATA_DEPENDENCY_HLSL__

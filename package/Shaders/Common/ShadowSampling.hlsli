@@ -91,7 +91,7 @@ namespace ShadowSampling
 		float visibility = 0.0;
 
 #if defined(WATER)
-		sampleOffsetScale *= 2.0;
+		sampleOffsetScale *= 16.0;
 #endif
 
 		for (uint sampleIndex = 0; sampleIndex < sampleCount; ++sampleIndex) {

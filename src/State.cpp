@@ -147,6 +147,11 @@ void State::Reset()
 
 void State::Setup()
 {
+	// Detect Moon and Stars mod for compatibility adjustments
+	moonAndStarsLoaded = GetModuleHandle(L"po3_MoonMod.dll") != nullptr;
+	if (moonAndStarsLoaded)
+		logger::info("Moon and Stars detected, compatibility enabled");
+
 	globals::truePBR->SetupResources();
 	SetupResources();
 	for (auto* feature : Feature::GetFeatureList())
@@ -776,6 +781,34 @@ void State::UpdateSharedData([[maybe_unused]] bool a_inWorld, [[maybe_unused]] b
 			}
 		} else {
 			data.MipBias = 0;
+		}
+
+		if (auto sky = globals::game::sky) {
+			// Process sun
+			if (auto sun = sky->sun) {
+				float3 sunDirection = { sun->root->local.translate.x, sun->root->local.translate.y, sun->root->local.translate.z };
+				sunDirection.Normalize();
+				data.SunDirection = { sunDirection.x, sunDirection.y, sunDirection.z, 0.0f };
+
+				auto& sunColor = sky->skyColor[(uint)RE::TESWeather::ColorTypes::kSun];
+				data.SunColor = { sunColor.red, sunColor.green, sunColor.blue, 0.0f };
+			}
+
+			// Process moons using shared utility
+			auto& moonGlareColor = sky->skyColor[(uint)RE::TESWeather::ColorTypes::kMoonGlare];
+			const float4 glareColor = { moonGlareColor.red, moonGlareColor.green, moonGlareColor.blue, 0.0f };
+
+			if (auto masser = sky->masser) {
+				auto [dir, color] = Util::Moon::ProcessMoon(masser, glareColor, Util::Moon::MasserBaseColor, 1.0f, moonAndStarsLoaded);
+				data.MasserDirection = dir;
+				data.MasserColor = color;
+			}
+
+			if (auto secunda = sky->secunda) {
+				auto [dir, color] = Util::Moon::ProcessMoon(secunda, glareColor, Util::Moon::SecundaBaseColor, 1.0f, moonAndStarsLoaded);
+				data.SecundaDirection = dir;
+				data.SecundaColor = color;
+			}
 		}
 
 		sharedDataCB->Update(data);
