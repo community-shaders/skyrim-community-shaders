@@ -735,14 +735,21 @@ struct BSBatchRenderer_RenderPassImmediately
 			}
 			
 			// Skip rendering geometry that has been determined to be occluded
-			// Only skip for non-utility shaders (shadows, depth) to avoid breaking render passes
 			if (globals::features::hiZOcclusion.loaded && 
 			    globals::features::hiZOcclusion.settings.enableHiZCulling &&
 			    pass->shader && 
-			    pass->shader->shaderType != RE::BSShader::Type::Utility &&
-			    pass->geometry && 
-			    globals::features::hiZOcclusion.IsGeometryOccluded(pass->geometry)) {
-				return;  // Skip this draw call - geometry is occluded
+			    pass->geometry) {
+				// Handle Utility shaders separately with shadow-caster awareness
+				if (pass->shader->shaderType == RE::BSShader::Type::Utility) {
+					if (globals::features::hiZOcclusion.ShouldCullUtilityShader(pass)) {
+						return;  // Safe to cull this utility call
+					}
+				} else {
+					// Non-utility shaders: standard occlusion check
+					if (globals::features::hiZOcclusion.IsGeometryOccluded(pass->geometry)) {
+						return;  // Skip this draw call - geometry is occluded
+					}
+				}
 			}
 
 			func(pass, technique, alphaTest, renderFlags);

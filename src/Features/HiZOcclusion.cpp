@@ -23,7 +23,8 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
     showVisInsideBounds,
     showVisInvalidRadius,
     showCulledFrustum,
-    showCulledNoEarlyOut
+    showCulledNoEarlyOut,
+    utilityCullingMode
 )
 
 HiZOcclusion::~HiZOcclusion()
@@ -265,6 +266,31 @@ void HiZOcclusion::DrawSettings()
         if (auto _tt = Util::HoverTooltipWrapper()) {
             ImGui::SetTooltip("Conservative bias for Hi-Z Culling. \nHigher values are more conservative, lower values are more aggressive.");
         }
+        
+        ImGui::Separator();
+        
+        const char* utilityModeNames[] = { "Disabled (Safe)", "Non-Shadow-Casters Only", "All Occluded (Aggressive)" };
+        int utilityMode = static_cast<int>(settings.utilityCullingMode);
+        if (ImGui::Combo("Utility Shader Culling", &utilityMode, utilityModeNames, 3)) {
+            settings.utilityCullingMode = static_cast<uint32_t>(utilityMode);
+        }
+        if (auto _tt = Util::HoverTooltipWrapper()) {
+            Util::DrawMultiLineTooltip({
+                "Controls culling of Utility shader calls (shadows, depth prepass).",
+                "",
+                "Disabled: Never cull Utility shaders. Safest option, no shadow issues.",
+                "Non-Shadow-Casters Only: Cull Utility calls for occluded geometry that",
+                "  does NOT have the CastShadows flag. Moderate performance gain.",
+                "All Occluded: Cull ALL Utility calls for occluded geometry. Most aggressive",
+                "  but may cause shadow pop-in or missing shadows for culled objects."
+            });
+        }
+        
+        if (settings.utilityCullingMode > 0) {
+            ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.0f, 1.0f), "Utility calls: %u total, %u culled, %u kept (shadow-casters)", 
+                              stats.utilityCallsTotal, stats.utilityCallsCulled, stats.utilityCallsSkipped);
+        }
+        
         ImGui::TreePop();
     }
 
@@ -479,6 +505,9 @@ void HiZOcclusion::Reset()
             stats.defaultValue = 0;
             stats.culledFrustum = 0;
             stats.culledNoEarlyOut = 0;
+            stats.utilityCallsTotal = 0;
+            stats.utilityCallsCulled = 0;
+            stats.utilityCallsSkipped = 0;
             stats.resourceSetupDurationMS = 0.0f;
             stats.recreateDurationMS = 0.0f;
             wasEnabled = false;
@@ -517,6 +546,9 @@ void HiZOcclusion::Prepass()
     stats.defaultValue = 0;
     stats.culledFrustum = 0;
     stats.culledNoEarlyOut = 0;
+    stats.utilityCallsTotal = 0;
+    stats.utilityCallsCulled = 0;
+    stats.utilityCallsSkipped = 0;
 
     if (settings.enableBoundsViewer && boundsOverlayUAV) {
         overlayUpdatedThisFrame = false;
@@ -1558,4 +1590,53 @@ void HiZOcclusion::MarkGeometryVisible(RE::BSGeometry* geometry)
 void HiZOcclusion::ClearOcclusionState()
 {
     occludedGeometry.clear();
+}
+
+bool HiZOcclusion::ShouldCullUtilityShader(RE::BSRenderPass* pass)
+{
+    if (!pass || !pass->geometry || !pass->shader) {
+        return false;
+    }
+    
+    // Only process Utility shaders
+    if (pass->shader->shaderType != RE::BSShader::Type::Utility) {
+        return false;
+    }
+    
+    stats.utilityCallsTotal++;
+    
+    // Check if utility culling is enabled
+    if (settings.utilityCullingMode == 0) {
+        stats.utilityCallsSkipped++;
+        return false;
+    }
+    
+    // Check if geometry is even occluded
+    if (!IsGeometryOccluded(pass->geometry)) {
+        stats.utilityCallsSkipped++;
+        return false;
+    }
+    
+    // Mode 2: Aggressive - cull all utility calls for occluded geometry
+    if (settings.utilityCullingMode == 2) {
+        stats.utilityCallsCulled++;
+        return true;
+    }
+    
+    // Mode 1: Non-shadow-casters only
+    // Check if the geometry can cast shadows via its shader property
+    if (pass->shaderProperty) {
+        auto flags = pass->shaderProperty->flags;
+        bool castsShadows = flags.any(RE::BSShaderProperty::EShaderPropertyFlag::kCastShadows);
+        
+        if (castsShadows) {
+            // This geometry casts shadows, don't cull its utility calls
+            stats.utilityCallsSkipped++;
+            return false;
+        }
+    }
+    
+    // Non-shadow-caster and occluded - safe to cull
+    stats.utilityCallsCulled++;
+    return true;
 }
