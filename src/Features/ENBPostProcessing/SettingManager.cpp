@@ -173,8 +173,14 @@ void SettingManager::SetValue(const std::string& key, const std::string& categor
 
 		uint32_t targetWeatherID = (weatherBlendFactor > 0.5f) ? currentWeatherID : lastWeatherID;
 		std::string settingKey = category + "::" + key;
-		weatherData[targetWeatherID][settingKey] = value;
 
+		// Only write to weather data if the weather already has loaded settings
+		auto weatherIt = weatherData.find(targetWeatherID);
+		if (weatherIt != weatherData.end()) {
+			weatherIt->second[settingKey] = value;
+		} else {
+			setting.currentValue = value;
+		}
 		return;
 	}
 
