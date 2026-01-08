@@ -18,12 +18,14 @@ void main(inout ShadowPayload payload, in BuiltInTriangleIntersectionAttributes 
 
     float alpha = Textures[NonUniformResourceIndex(material.BaseTexture())].SampleLevel(BaseSampler, texCoord, 0).a;
 
+    [branch]
     if (alpha < 0.5f)
     {
         IgnoreHit();
-        return;
     }
-
-    AcceptHitAndEndSearch();
+    else
+    {
+        AcceptHitAndEndSearch();
+    }
 }
 

@@ -20,6 +20,7 @@ void main(inout Payload payload, in BuiltInTriangleIntersectionAttributes attrib
 
     float alpha = Textures[NonUniformResourceIndex(material.BaseTexture())].SampleLevel(BaseSampler, texCoord, 0).a;
 
+    [branch]
     if (alpha < 0.5f)
     {
         IgnoreHit();
