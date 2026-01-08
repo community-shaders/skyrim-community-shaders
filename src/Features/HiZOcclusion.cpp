@@ -26,9 +26,6 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
     showCulledNoEarlyOut
 )
 
-namespace
-{
-
 HiZOcclusion::~HiZOcclusion()
 {
     // Release Hi-Z pyramid resources
