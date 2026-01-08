@@ -1201,6 +1201,7 @@ void HiZOcclusion::ExecuteVisibilityTests()
                                      bufferIdx, readbackState.pendingFrameIndex[bufferIdx]);
                     }
                 }
+                }
             } else {
                 // This buffer has no pending read, advance
                 readbackState.readIndex = (readbackState.readIndex + 1) % AsyncReadbackState::BUFFER_COUNT;
