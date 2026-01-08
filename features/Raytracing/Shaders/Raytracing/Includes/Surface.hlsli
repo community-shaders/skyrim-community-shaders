@@ -186,15 +186,20 @@ struct Surface
         float4 landBlend1 = Interpolate(v0.LandBlend1.unpack(), v1.LandBlend1.unpack(), v2.LandBlend1.unpack(), uvw);  
     
         Albedo = baseTexture0.SampleLevel(BaseSampler, texCoord0, 0).rgb;
-        Emissive = 0;
-    
+
         Normal = normalWS;
         Tangent = tangentWS;
         Bitangent = bitangentWS;
 
-        Roughness = PBR::Defaults::Roughness;
-        Metallic = PBR::Defaults::Metallic;
-        AO = 1.0f;    
+        [branch]
+        if (material.ShaderType == ShaderType::TruePBR)
+        {
+            Texture2D rmaosTexture0 = Textures[NonUniformResourceIndex(material.Texture5)];
+            Texture2D rmaosTexture1 = Textures[NonUniformResourceIndex(material.Texture6)];
+            Texture2D rmaosTexture2 = Textures[NonUniformResourceIndex(material.Texture7)];
+            Texture2D rmaosTexture3 = Textures[NonUniformResourceIndex(material.Texture8)];
+            Texture2D rmaosTexture4 = Textures[NonUniformResourceIndex(material.Texture9)];          
+        } 
     }     
     
     Surface(float3 position, Payload payload, out Instance instance, out Material material)
@@ -224,15 +229,19 @@ struct Surface
         surface.GeomNormal = normalWS;    
         
         surface.Albedo = float3(1.0f, 1.0f, 1.0f);
-        surface.Emissive = float3(0.0f, 0.0f, 0.0f);        
+        surface.Emissive = float3(0.0f, 0.0f, 0.0f);
         surface.Roughness = PBR::Defaults::Roughness;
         surface.Metallic = PBR::Defaults::Metallic;
         surface.AO = 1.0f;
         surface.F0 = PBR::Defaults::F0;         
         
-        if (material.ShaderFlags & ShaderFlags::kMultiTextureLandscape)
+        if (material.Feature == Feature::kMultiTexLandLODBlend)
         {
+#if defined(DEBUG_A)            
+            surface.Albedo = float3(1.0f, 0.0f, 0.0f);
+#else
             surface.LandMaterial(v0, v1, v2, uvw, normalWS, tangentWS, bitangentWS, material);
+#endif            
         }
         else
         {

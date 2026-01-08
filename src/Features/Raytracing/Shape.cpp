@@ -117,10 +117,6 @@ void Shape::BuildMesh(RE::BSGraphics::TriShape* rendererData, const std::uint32_
 			skinning.resize(vertexCountIn);
 
 		auto vertexSize = GetVertexSize(vertexFlags);
-		/*auto vertexSize = vertexDesc.GetSize();
-
-		if ((flags & Flags::Landscape) && (vertexFlags & RE::BSGraphics::Vertex::VF_LANDDATA))
-			vertexSize += 8;*/
 
 		bool hasPosition = vertexFlags & RE::BSGraphics::Vertex::VF_VERTEX;
 
@@ -231,16 +227,16 @@ void Shape::BuildMesh(RE::BSGraphics::TriShape* rendererData, const std::uint32_
 						logger::critical("[RT] Quad {} {} vertex overflow: [{}, {}, {}]", x, y, v0, v1, v2);
 
 					// First triangle
-					triangles.emplace_back(v0, v2, v1);
+					triangles.emplace_back(v0, v1, v2);
 
 					// Second triangle
-					triangles.emplace_back(v1, v2, v3);
+					triangles.emplace_back(v1, v3, v2);
 				}
 			}
 		} else {
 			triangles.resize(triangleCountIn);
 
-			auto indexCount = triangleCountIn * 3;
+			const auto indexCount = triangleCountIn * 3;
 
 			eastl::vector<uint16_t> indices(indexCount);
 			std::memcpy(indices.data(), rendererData->rawIndexData, sizeof(uint16_t) * indexCount);
@@ -299,7 +295,7 @@ void Shape::BuildMaterial(const RE::BSGeometry::GEOMETRY_RUNTIME_DATA& geometryR
 		float4(0.0f, 0.0f, 1.0f, 1.0f)
 	};
 
-	eastl::array<eastl::shared_ptr<Allocation>, 12> textures;
+	eastl::array<eastl::shared_ptr<Allocation>, 20> textures;
 	textures.fill(blackTexture);
 
 	RE::BSShader::Type shaderType = RE::BSShader::Type::None;
@@ -350,8 +346,6 @@ void Shape::BuildMaterial(const RE::BSGeometry::GEOMETRY_RUNTIME_DATA& geometryR
 					lightingShaderProp->emissiveMult
 				};
 
-				//logger::debug("[RT] BuildMaterial - BSLightingShaderProperty Alpha: {}", lightingShaderProp->alpha);
-
 				if (auto shaderMaterial = lightingShaderProp->material) {
 					feature = shaderMaterial->GetFeature();
 
@@ -363,10 +357,25 @@ void Shape::BuildMaterial(const RE::BSGeometry::GEOMETRY_RUNTIME_DATA& geometryR
 					}
 
 					// Landscape
-					if (const auto* lightingVanillaMaterial = skyrim_cast<RE::BSLightingShaderMaterialLandscape*>(shaderMaterial)) {
-	
-					} else if (typeid(*shaderMaterial) == typeid(BSLightingShaderMaterialPBRLandscape)) {
+					if (const auto* lightingBaseMaterialLand = skyrim_cast<RE::BSLightingShaderMaterialLandscape*>(shaderMaterial)) {
+						for (uint i = 0; i < std::min(lightingBaseMaterialLand->numLandscapeTextures, Material::MAX_LAND_TEXTURES); i++) {
+							textures[i] = TextureRegister(lightingBaseMaterialLand->landscapeDiffuseTexture[i], whiteTexture);
+							textures[Material::MAX_PBRLAND_TEXTURES + i] = TextureRegister(lightingBaseMaterialLand->landscapeNormalTexture[i], normalTexture);
+						}
 
+						textures[Material::MAX_PBRLAND_TEXTURES * 3] = TextureRegister(lightingBaseMaterialLand->terrainOverlayTexture, blackTexture);
+						textures[Material::MAX_PBRLAND_TEXTURES * 3 + 1] = TextureRegister(lightingBaseMaterialLand->terrainNoiseTexture, blackTexture);
+					} else if (typeid(*shaderMaterial) == typeid(BSLightingShaderMaterialPBRLandscape)) {
+						const auto* lightingPBRMaterialLand = static_cast<BSLightingShaderMaterialPBRLandscape*>(shaderMaterial);
+
+						for (uint i = 0; i < std::min(lightingPBRMaterialLand->numLandscapeTextures, Material::MAX_PBRLAND_TEXTURES); i++) {
+							textures[i] = TextureRegister(lightingPBRMaterialLand->landscapeBaseColorTextures[i], whiteTexture);
+							textures[Material::MAX_PBRLAND_TEXTURES + i] = TextureRegister(lightingPBRMaterialLand->landscapeNormalTextures[i], normalTexture);
+							textures[Material::MAX_PBRLAND_TEXTURES * 2 + i] = TextureRegister(lightingPBRMaterialLand->landscapeRMAOSTextures[i], rmaosTexture);
+						}
+						
+						textures[Material::MAX_PBRLAND_TEXTURES * 3] = TextureRegister(lightingPBRMaterialLand->terrainOverlayTexture, blackTexture);
+						textures[Material::MAX_PBRLAND_TEXTURES * 3 + 1] = TextureRegister(lightingPBRMaterialLand->terrainNoiseTexture, blackTexture);
 					} else if (typeid(*shaderMaterial) == typeid(BSLightingShaderMaterialPBR)) {
 						// TrueBR - Tried to check for 'lightingShaderProp->flags.any(EShaderPropertyFlag::kMenuScreen)'
 						// but it did not work at all, skyrim_cast is not safe and will cast even if not PBR material (no RTTI?)

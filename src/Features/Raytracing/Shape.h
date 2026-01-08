@@ -33,6 +33,9 @@ class Shape
 public:
 	struct Material
 	{
+		static constexpr uint MAX_LAND_TEXTURES = 5u;
+		static constexpr uint MAX_PBRLAND_TEXTURES = 6u;
+
 		enum ShaderType : uint16_t
 		{
 			TruePBR = 0,
@@ -116,7 +119,7 @@ public:
 
 		eastl::array<half4, 2> TexCoordOffsetScale;
 
-		eastl::array<eastl::shared_ptr<Allocation>, 12> Textures;
+		eastl::array<eastl::shared_ptr<Allocation>, 20> Textures;
 
 		MaterialData GetData()
 		{
@@ -135,7 +138,15 @@ public:
 				Textures[8]->GetIndex(),
 				Textures[9]->GetIndex(),
 				Textures[10]->GetIndex(),
-				Textures[11]->GetIndex(),		
+				Textures[11]->GetIndex(),
+				Textures[12]->GetIndex(),
+				Textures[13]->GetIndex(),
+				Textures[14]->GetIndex(),
+				Textures[15]->GetIndex(),
+				Textures[16]->GetIndex(),
+				Textures[17]->GetIndex(),
+				Textures[18]->GetIndex(),
+				Textures[19]->GetIndex(),
 				GetShaderType(),
 				static_cast<uint16_t>(Feature),
 				PBRFlags.underlying(),

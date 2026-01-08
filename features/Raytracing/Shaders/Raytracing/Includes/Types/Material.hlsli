@@ -51,11 +51,11 @@ namespace Feature
 	static const uint16_t kEye = 16;
 	static const uint16_t kCloud = 17;
 	static const uint16_t kLODLandNoise = 18;
-	static const uint16_t kMultiTexLandLODBlend = 19;
+	static const uint16_t kMultiTexLandLODBlend = 19;	
 }
 #endif
 
-// DirectX 12 is very picky about buffer alignment, make sure all variable boundaries properly are aligned
+// DirectX 12 is very picky about buffer alignment, make sure all variable boundaries are properly aligned
 // https://maraneshi.github.io/HLSL-ConstantBufferLayoutVisualizer/
 #ifdef __cplusplus
 struct MaterialData
@@ -80,12 +80,23 @@ struct Material
 	uint16_t Texture3;
 	uint16_t Texture4;
 	uint16_t Texture5;
+	
 	uint16_t Texture6;
 	uint16_t Texture7;
 	uint16_t Texture8;
 	uint16_t Texture9;	
 	uint16_t Texture10;
 	uint16_t Texture11;
+	
+	uint16_t Texture12;
+	uint16_t Texture13;
+	uint16_t Texture14;
+	uint16_t Texture15;	
+	uint16_t Texture16;	
+	uint16_t Texture17;
+	
+	uint16_t Texture18;
+	uint16_t Texture19;
 	
     uint16_t ShaderType;
     uint16_t Feature;
@@ -162,12 +173,12 @@ struct Material
 	
     uint16_t OverlayTexture()
     {
-		return Texture10;
+		return Texture18;
 	}
 	
     uint16_t NoiseTexture()
     {
-		return Texture11;
+		return Texture19;
 	}	
 	
 	// True PBR	
