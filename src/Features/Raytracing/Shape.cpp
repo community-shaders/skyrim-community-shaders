@@ -358,9 +358,12 @@ void Shape::BuildMaterial(const RE::BSGeometry::GEOMETRY_RUNTIME_DATA& geometryR
 
 					// Landscape
 					if (const auto* lightingBaseMaterialLand = skyrim_cast<RE::BSLightingShaderMaterialLandscape*>(shaderMaterial)) {
+						textures[0] = TextureRegister(lightingBaseMaterialLand->diffuseTexture, whiteTexture);
+						textures[Material::MAX_PBRLAND_TEXTURES] = TextureRegister(lightingBaseMaterialLand->normalTexture, whiteTexture);
+
 						for (uint i = 0; i < std::min(lightingBaseMaterialLand->numLandscapeTextures, Material::MAX_LAND_TEXTURES); i++) {
-							textures[i] = TextureRegister(lightingBaseMaterialLand->landscapeDiffuseTexture[i], whiteTexture);
-							textures[Material::MAX_PBRLAND_TEXTURES + i] = TextureRegister(lightingBaseMaterialLand->landscapeNormalTexture[i], normalTexture);
+							textures[i + 1] = TextureRegister(lightingBaseMaterialLand->landscapeDiffuseTexture[i], whiteTexture);
+							textures[Material::MAX_PBRLAND_TEXTURES + i + 1] = TextureRegister(lightingBaseMaterialLand->landscapeNormalTexture[i], normalTexture);
 						}
 
 						textures[Material::MAX_PBRLAND_TEXTURES * 3] = TextureRegister(lightingBaseMaterialLand->terrainOverlayTexture, blackTexture);

@@ -35,6 +35,8 @@
 
 #define DIV_EPSILON (1e-4f)
 
+#define LAND_MIN_WEIGHT (0.01f)
+
 uint InitRandomSeed(uint2 coord, uint2 size, uint frameCount)
 {
     return coord.x + coord.y * size.x + frameCount * 719393;

@@ -5,6 +5,7 @@
 #include "Raytracing/Includes/PBR.hlsli"
 #include "Raytracing/Includes/Types.hlsli"
 #include "Raytracing/Includes/RT/Geometry.hlsli"
+#include "Raytracing/Includes/RT/CommonRT.hlsli"
 
 #define Surface(...) static Surface ctor(__VA_ARGS__)
 struct Surface
@@ -55,7 +56,7 @@ struct Surface
         Texture2D effectTexture = Textures[NonUniformResourceIndex(material.EffectTexture())];
     
         float4 vertexColor = Interpolate(v0.Color.unpack(), v1.Color.unpack(), v2.Color.unpack(), uvw);   
-		//vertexColor = vertexColor / max(max(vertexColor.r, vertexColor.g), vertexColor.b);      
+		vertexColor = vertexColor / max(max(vertexColor.r, vertexColor.g), vertexColor.b);      
         
         float handedness = (dot(cross(normalWS, tangentWS), bitangentWS) < 0.0f) ? -1.0f : 1.0f;
         
@@ -70,8 +71,6 @@ struct Surface
         } else {
             Albedo = float3(1.0f, 1.0f, 1.0f);
         }
-        
-        Emissive = 0;
 #else
         [branch]
         if (material.ShaderType == ShaderType::TruePBR)
@@ -150,7 +149,11 @@ struct Surface
             //Albedo = baseColorLinear; // This breaks sharc
             Albedo = 0;
             Emissive = baseColorLinear * Frame.Effect;
-        }         
+        }
+        else
+        {
+            Albedo = float3(1.0f, 0.0f, 1.0f);
+        }
 #endif
         
         NormalMap(
@@ -161,45 +164,82 @@ struct Surface
         );
     }
     
+    float4 BlendLandTexture(uint16_t textureIndex, float2 texcoord, float weight)
+    {
+        if (weight > LAND_MIN_WEIGHT)
+        {
+            Texture2D texture = Textures[NonUniformResourceIndex(textureIndex)];
+            return texture.SampleLevel(BaseSampler, texcoord, 0) * weight;
+        }
+        else
+        {
+            return float4(0.0f, 0.0f, 0.0f, 0.0f);
+        }
+    } 
+    
     void LandMaterial(in Vertex v0, in Vertex v1, in Vertex v2, float3 uvw, float3 normalWS, float3 tangentWS, float3 bitangentWS, in Material material)
     {
         float2 texCoord0 = material.TexCoord(Interpolate(v0.Texcoord0, v1.Texcoord0, v2.Texcoord0, uvw));
     
-        Texture2D baseTexture0 = Textures[NonUniformResourceIndex(material.Texture0)];
-        Texture2D baseTexture1 = Textures[NonUniformResourceIndex(material.Texture1)];
-        Texture2D baseTexture2 = Textures[NonUniformResourceIndex(material.Texture2)];
-        Texture2D baseTexture3 = Textures[NonUniformResourceIndex(material.Texture3)];
-        Texture2D baseTexture4 = Textures[NonUniformResourceIndex(material.Texture4)];
-    
-        Texture2D normalTexture0 = Textures[NonUniformResourceIndex(material.Texture5)];
-        Texture2D normalTexture1 = Textures[NonUniformResourceIndex(material.Texture6)];
-        Texture2D normalTexture2 = Textures[NonUniformResourceIndex(material.Texture7)];
-        Texture2D normalTexture3 = Textures[NonUniformResourceIndex(material.Texture8)];
-        Texture2D normalTexture4 = Textures[NonUniformResourceIndex(material.Texture9)];
-    
+        Texture2D normalTexture0 = Textures[NonUniformResourceIndex(material.Texture6)];
+        Texture2D normalTexture1 = Textures[NonUniformResourceIndex(material.Texture7)];
+        Texture2D normalTexture2 = Textures[NonUniformResourceIndex(material.Texture8)];
+        Texture2D normalTexture3 = Textures[NonUniformResourceIndex(material.Texture9)];
+        Texture2D normalTexture4 = Textures[NonUniformResourceIndex(material.Texture10)];
+        Texture2D normalTexture5 = Textures[NonUniformResourceIndex(material.Texture11)];
+        
         Texture2D overlayTexture = Textures[NonUniformResourceIndex(material.OverlayTexture())];
         Texture2D noiseTexture = Textures[NonUniformResourceIndex(material.NoiseTexture())];   
     
         float4 vertexColor = Interpolate(v0.Color.unpack(), v1.Color.unpack(), v2.Color.unpack(), uvw);   
     
+        float handedness = (dot(cross(normalWS, tangentWS), bitangentWS) < 0.0f) ? -1.0f : 1.0f;        
+        
         float4 landBlend0 = Interpolate(v0.LandBlend0.unpack(), v1.LandBlend0.unpack(), v2.LandBlend0.unpack(), uvw);   
         float4 landBlend1 = Interpolate(v0.LandBlend1.unpack(), v1.LandBlend1.unpack(), v2.LandBlend1.unpack(), uvw);  
     
-        Albedo = baseTexture0.SampleLevel(BaseSampler, texCoord0, 0).rgb;
+	    // Normalise blend weights
+	    float totalWeight = landBlend0.x + landBlend0.y + landBlend0.z +
+	                        landBlend0.w + landBlend1.x + landBlend1.y;
 
-        Normal = normalWS;
-        Tangent = tangentWS;
-        Bitangent = bitangentWS;
+		landBlend0 /= totalWeight;
+		landBlend1.xy /= totalWeight;
+        
+        float3 baseColor = BlendLandTexture(material.Texture0, texCoord0, landBlend0.x).rgb + BlendLandTexture(material.Texture1, texCoord0, landBlend0.y).rgb + 
+                           BlendLandTexture(material.Texture2, texCoord0, landBlend0.z).rgb + BlendLandTexture(material.Texture3, texCoord0, landBlend0.w).rgb + 
+                           BlendLandTexture(material.Texture4, texCoord0, landBlend1.x).rgb + BlendLandTexture(material.Texture5, texCoord0, landBlend1.y).rgb;
 
+        baseColor *= vertexColor.rgb;
+        
         [branch]
         if (material.ShaderType == ShaderType::TruePBR)
         {
-            Texture2D rmaosTexture0 = Textures[NonUniformResourceIndex(material.Texture5)];
-            Texture2D rmaosTexture1 = Textures[NonUniformResourceIndex(material.Texture6)];
-            Texture2D rmaosTexture2 = Textures[NonUniformResourceIndex(material.Texture7)];
-            Texture2D rmaosTexture3 = Textures[NonUniformResourceIndex(material.Texture8)];
-            Texture2D rmaosTexture4 = Textures[NonUniformResourceIndex(material.Texture9)];          
-        } 
+            Albedo = baseColor;
+            
+            float4 rmaos = BlendLandTexture(material.Texture12, texCoord0, landBlend0.x) + BlendLandTexture(material.Texture13, texCoord0, landBlend0.y) + 
+                           BlendLandTexture(material.Texture14, texCoord0, landBlend0.z) + BlendLandTexture(material.Texture15, texCoord0, landBlend0.w) + 
+                           BlendLandTexture(material.Texture16, texCoord0, landBlend1.x) + BlendLandTexture(material.Texture17, texCoord0, landBlend1.y);
+            
+            Roughness = saturate(rmaos.x * 1.0f); // material.RoughnessScale()
+            Metallic = saturate(rmaos.y);
+            AO = rmaos.z;
+            F0 = PBR::Defaults::F0 * rmaos.w; //material.SpecularLevel()            
+        }
+        else if (material.ShaderType == ShaderType::Lighting)
+        {
+            Albedo = Color::GammaToTrueLinear(baseColor);
+        }
+        
+        float3 normal = BlendLandTexture(material.Texture6, texCoord0, landBlend0.x).rgb + BlendLandTexture(material.Texture7, texCoord0, landBlend0.y).rgb + 
+                        BlendLandTexture(material.Texture8, texCoord0, landBlend0.z).rgb + BlendLandTexture(material.Texture9, texCoord0, landBlend0.w).rgb + 
+                        BlendLandTexture(material.Texture10, texCoord0, landBlend1.x).rgb + BlendLandTexture(material.Texture11, texCoord0, landBlend1.y).rgb; 
+        
+        NormalMap(
+            normal,
+            handedness,
+            normalWS, tangentWS, bitangentWS,
+            Normal, Tangent, Bitangent
+        );        
     }     
     
     Surface(float3 position, Payload payload, out Instance instance, out Material material)
