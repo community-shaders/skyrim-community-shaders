@@ -3,6 +3,7 @@
 #include "ENBPostProcessing/EffectManager.h"
 #include "ENBPostProcessing/MenuManager.h"
 #include "ENBPostProcessing/SettingManager.h"
+#include "ENBPostProcessing/WeatherManager.h"
 
 #include "State.h"
 
@@ -299,15 +300,16 @@ void ENBPostProcessing::CheckCommonData()
 	if (checker.IsNewFrame()) {
 		auto& settingManager = SettingManager::GetSingleton();
 		auto& effectManager = EffectManager::GetSingleton();
+		auto& weatherManager = WeatherManager::GetSingleton();
 
 		effectManager.UpdateCommonData();
 
 		const auto& commonData = effectManager.GetCommonData();
 		settingManager.SetTimeOfDayData(commonData.timeOfDay1, commonData.timeOfDay2, commonData.eInteriorFactor);
-		settingManager.SetWeatherBlendFactors(
-			static_cast<uint32_t>(commonData.weather[0]),
-			static_cast<uint32_t>(commonData.weather[1]),
-			commonData.weather[2]);
+
+		uint32_t currentWeatherID = weatherManager.GetEffectiveWeatherID(static_cast<uint32_t>(commonData.weather[0]));
+		uint32_t lastWeatherID = weatherManager.GetEffectiveWeatherID(static_cast<uint32_t>(commonData.weather[1]));
+		settingManager.SetWeatherBlendFactors(currentWeatherID, lastWeatherID, commonData.weather[2]);
 
 		auto ui = globals::game::ui;
 		bool isMenuOpen = ui->IsMenuOpen(RE::MainMenu::MENU_NAME) || ui->IsMenuOpen(RE::LoadingMenu::MENU_NAME) || ui->IsMenuOpen(RE::MapMenu::MENU_NAME);

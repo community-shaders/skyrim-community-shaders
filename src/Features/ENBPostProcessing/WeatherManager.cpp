@@ -1,5 +1,5 @@
 #include "WeatherManager.h"
-#include "PCH.h"
+
 #include "SettingManager.h"
 #include <Windows.h>
 #include <filesystem>
@@ -14,6 +14,7 @@ WeatherManager& WeatherManager::GetSingleton()
 void WeatherManager::Initialize()
 {
 	LoadWeatherList();
+	LoadLocationWeather();
 }
 
 void WeatherManager::LoadWeatherList()
@@ -136,4 +137,120 @@ uint32_t WeatherManager::ParseHexID(const std::string& hexStr)
 	}
 
 	return static_cast<uint32_t>(std::stoul(hexStr, nullptr, 16));
+}
+
+void WeatherManager::LoadLocationWeather()
+{
+	std::filesystem::path locationWeatherPath = "enbseries/_locationweather.ini";
+
+	if (!std::filesystem::exists(locationWeatherPath)) {
+		logger::info("[WeatherManager] _locationweather.ini not found, location weather disabled");
+		return;
+	}
+
+	locationWeatherMap.clear();
+
+	std::string pathStr = locationWeatherPath.string();
+
+	constexpr DWORD bufferSize = 32768;
+	std::vector<char> buffer(bufferSize);
+	DWORD result = GetPrivateProfileSectionNamesA(buffer.data(), bufferSize, pathStr.c_str());
+
+	if (result == 0 || result == bufferSize - 2) {
+		logger::error("[WeatherManager] Failed to read sections from _locationweather.ini");
+		return;
+	}
+
+	const char* ptr = buffer.data();
+	while (*ptr != '\0') {
+		std::string sectionName = ptr;
+		ptr += sectionName.length() + 1;
+
+		uint32_t worldSpaceID = 0;
+		try {
+			worldSpaceID = ParseHexID(sectionName);
+		} catch (...) {
+			continue;
+		}
+
+		std::vector<char> sectionBuffer(bufferSize);
+		DWORD sectionResult = GetPrivateProfileSectionA(sectionName.c_str(), sectionBuffer.data(), bufferSize, pathStr.c_str());
+
+		if (sectionResult == 0 || sectionResult == bufferSize - 2) {
+			continue;
+		}
+
+		const char* entryPtr = sectionBuffer.data();
+		while (*entryPtr != '\0') {
+			std::string entry = entryPtr;
+			entryPtr += entry.length() + 1;
+
+			if (entry.empty() || entry[0] == '/' || entry[0] == ';') {
+				continue;
+			}
+
+			size_t eqPos = entry.find('=');
+			if (eqPos == std::string::npos) {
+				continue;
+			}
+
+			std::string locationStr = entry.substr(0, eqPos);
+			std::string weatherStr = entry.substr(eqPos + 1);
+
+			try {
+				uint32_t locationID = ParseHexID(locationStr);
+				uint32_t fakeWeatherID = ParseHexID(weatherStr);
+				if (locationID != 0 && fakeWeatherID != 0) {
+					locationWeatherMap[worldSpaceID][locationID] = fakeWeatherID;
+				}
+			} catch (...) {
+				continue;
+			}
+		}
+	}
+
+	logger::info("[WeatherManager] Loaded location weather for {} worldspaces", locationWeatherMap.size());
+}
+
+uint32_t WeatherManager::GetEffectiveWeatherID(uint32_t actualWeatherID)
+{
+	if (locationWeatherMap.empty()) {
+		return actualWeatherID;
+	}
+
+	auto player = RE::PlayerCharacter::GetSingleton();
+	if (!player) {
+		return actualWeatherID;
+	}
+
+	RE::TESObjectCELL* parentCell = player->GetParentCell();
+	if (!parentCell) {
+		return actualWeatherID;
+	}
+
+	uint32_t worldSpaceID = 0;
+	if (auto worldSpace = parentCell->GetRuntimeData().worldSpace) {
+		worldSpaceID = worldSpace->GetFormID() & 0x00FFFFFF;
+	}
+
+	uint32_t locationID = 0;
+	if (auto location = parentCell->GetLocation()) {
+		locationID = location->GetFormID() & 0x00FFFFFF;
+	}
+
+	if (locationID == 0) {
+		return actualWeatherID;
+	}
+
+	auto worldIt = locationWeatherMap.find(worldSpaceID);
+	if (worldIt == locationWeatherMap.end()) {
+		return actualWeatherID;
+	}
+
+	auto locIt = worldIt->second.find(locationID);
+	if (locIt != worldIt->second.end()) {
+		return locIt->second;
+	}
+
+	return actualWeatherID;
 }
