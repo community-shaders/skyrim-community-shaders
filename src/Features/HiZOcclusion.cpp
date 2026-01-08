@@ -23,8 +23,7 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
     showVisInsideBounds,
     showVisInvalidRadius,
     showCulledFrustum,
-    showCulledNoEarlyOut,
-    utilityCullingMode
+    showCulledNoEarlyOut
 )
 
 HiZOcclusion::~HiZOcclusion()
@@ -267,28 +266,15 @@ void HiZOcclusion::DrawSettings()
             ImGui::SetTooltip("Conservative bias for Hi-Z Culling. \nHigher values are more conservative, lower values are more aggressive.");
         }
         
-        ImGui::Separator();
-        
-        const char* utilityModeNames[] = { "Disabled (Safe)", "Non-Shadow-Casters Only", "All Occluded (Aggressive)" };
-        int utilityMode = static_cast<int>(settings.utilityCullingMode);
-        if (ImGui::Combo("Utility Shader Culling", &utilityMode, utilityModeNames, 3)) {
-            settings.utilityCullingMode = static_cast<uint32_t>(utilityMode);
-        }
-        if (auto _tt = Util::HoverTooltipWrapper()) {
-            Util::DrawMultiLineTooltip({
-                "Controls culling of Utility shader calls (shadows, depth prepass).",
-                "",
-                "Disabled: Never cull Utility shaders. Safest option, no shadow issues.",
-                "Non-Shadow-Casters Only: Cull Utility calls for occluded geometry that",
-                "  does NOT have the CastShadows flag. Moderate performance gain.",
-                "All Occluded: Cull ALL Utility calls for occluded geometry. Most aggressive",
-                "  but may cause shadow pop-in or missing shadows for culled objects."
-            });
-        }
-        
-        if (settings.utilityCullingMode > 0) {
-            ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.0f, 1.0f), "Utility calls: %u total, %u culled, %u kept (shadow-casters)", 
-                              stats.utilityCallsTotal, stats.utilityCallsCulled, stats.utilityCallsSkipped);
+        // Show combined culling stats
+        uint32_t totalCulled = displayStats.utilityCallsCulled + displayStats.particleCallsCulled + displayStats.otherCallsCulled;
+        uint32_t totalCalls = displayStats.utilityCallsTotal + displayStats.particleCallsTotal + displayStats.otherCallsTotal;
+        if (totalCalls > 0) {
+            ImGui::Separator();
+            ImGui::TextColored(ImVec4(0.5f, 1.0f, 0.5f, 1.0f), "Additional draw calls culled: %u / %u", totalCulled, totalCalls);
+            ImGui::Text("  Shadow/Depth/Mask: %u / %u", displayStats.utilityCallsCulled, displayStats.utilityCallsTotal);
+            ImGui::Text("  Particle/Effect: %u / %u", displayStats.particleCallsCulled, displayStats.particleCallsTotal);
+            ImGui::Text("  Lighting/Tree/Blood: %u / %u", displayStats.otherCallsCulled, displayStats.otherCallsTotal);
         }
         
         ImGui::TreePop();
@@ -507,7 +493,8 @@ void HiZOcclusion::Reset()
             stats.culledNoEarlyOut = 0;
             stats.utilityCallsTotal = 0;
             stats.utilityCallsCulled = 0;
-            stats.utilityCallsSkipped = 0;
+            stats.particleCallsTotal = 0;
+            stats.particleCallsCulled = 0;
             stats.resourceSetupDurationMS = 0.0f;
             stats.recreateDurationMS = 0.0f;
             wasEnabled = false;
@@ -535,6 +522,9 @@ void HiZOcclusion::Prepass()
     }
     // Stats are reset each frame during active culling
     
+    // Copy current stats to displayStats for UI before resetting
+    displayStats = stats;
+    
     // Reset culling stats for new frame - always reset to avoid accumulation
     stats.frameIndex = currentFrame;
     stats.totalTested = 0;
@@ -548,7 +538,10 @@ void HiZOcclusion::Prepass()
     stats.culledNoEarlyOut = 0;
     stats.utilityCallsTotal = 0;
     stats.utilityCallsCulled = 0;
-    stats.utilityCallsSkipped = 0;
+    stats.particleCallsTotal = 0;
+    stats.particleCallsCulled = 0;
+    stats.otherCallsTotal = 0;
+    stats.otherCallsCulled = 0;
 
     if (settings.enableBoundsViewer && boundsOverlayUAV) {
         overlayUpdatedThisFrame = false;
@@ -1592,7 +1585,7 @@ void HiZOcclusion::ClearOcclusionState()
     occludedGeometry.clear();
 }
 
-bool HiZOcclusion::ShouldCullUtilityShader(RE::BSRenderPass* pass)
+bool HiZOcclusion::ShouldCullUtilityShader(RE::BSRenderPass* pass, uint32_t technique)
 {
     if (!pass || !pass->geometry || !pass->shader) {
         return false;
@@ -1603,40 +1596,58 @@ bool HiZOcclusion::ShouldCullUtilityShader(RE::BSRenderPass* pass)
         return false;
     }
     
+    // Utility shader technique flags
+    constexpr uint32_t RenderDepth = 1 << 13;
+    constexpr uint32_t RenderShadowmap = 1 << 14;
+    constexpr uint32_t RenderShadowmapClamped = 1 << 15;
+    constexpr uint32_t RenderShadowmapPb = 1 << 16;
+    constexpr uint32_t DepthWriteDecals = 1 << 17;
+    constexpr uint32_t RenderShadowmask = 1 << 21;
+    constexpr uint32_t RenderShadowmaskSpot = 1 << 22;
+    constexpr uint32_t RenderShadowmaskPb = 1 << 23;
+    constexpr uint32_t RenderShadowmaskDpb = 1 << 24;
+    
+    constexpr uint32_t shadowMask = RenderShadowmap | RenderShadowmapClamped | RenderShadowmapPb;
+    constexpr uint32_t shadowMaskMask = RenderShadowmask | RenderShadowmaskSpot | RenderShadowmaskPb | RenderShadowmaskDpb;
+    constexpr uint32_t depthMask = RenderDepth | DepthWriteDecals;
+    constexpr uint32_t cullableMask = shadowMask | shadowMaskMask | depthMask;
+    
+    // Only process shadow and depth passes
+    if ((technique & cullableMask) == 0) {
+        return false;
+    }
+    
     stats.utilityCallsTotal++;
     
-    // Check if utility culling is enabled
-    if (settings.utilityCullingMode == 0) {
-        stats.utilityCallsSkipped++;
-        return false;
-    }
-    
-    // Check if geometry is even occluded
+    // Check if geometry is occluded
     if (!IsGeometryOccluded(pass->geometry)) {
-        stats.utilityCallsSkipped++;
         return false;
     }
     
-    // Mode 2: Aggressive - cull all utility calls for occluded geometry
-    if (settings.utilityCullingMode == 2) {
-        stats.utilityCallsCulled++;
-        return true;
-    }
-    
-    // Mode 1: Non-shadow-casters only
-    // Check if the geometry can cast shadows via its shader property
-    if (pass->shaderProperty) {
-        auto flags = pass->shaderProperty->flags;
-        bool castsShadows = flags.any(RE::BSShaderProperty::EShaderPropertyFlag::kCastShadows);
-        
-        if (castsShadows) {
-            // This geometry casts shadows, don't cull its utility calls
-            stats.utilityCallsSkipped++;
-            return false;
-        }
-    }
-    
-    // Non-shadow-caster and occluded - safe to cull
     stats.utilityCallsCulled++;
+    return true;
+}
+
+bool HiZOcclusion::ShouldCullParticleShader(RE::BSRenderPass* pass)
+{
+    if (!pass || !pass->geometry || !pass->shader) {
+        return false;
+    }
+    
+    // Only process Particle and Effect shaders
+    auto shaderType = pass->shader->shaderType;
+    if (shaderType != RE::BSShader::Type::Particle && shaderType != RE::BSShader::Type::Effect) {
+        return false;
+    }
+    
+    stats.particleCallsTotal++;
+    
+    // Check if geometry is occluded
+    if (!IsGeometryOccluded(pass->geometry)) {
+        return false;
+    }
+    
+    // Particle/Effect shaders don't cast shadows, safe to cull when occluded
+    stats.particleCallsCulled++;
     return true;
 }

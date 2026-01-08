@@ -719,9 +719,10 @@ struct BSBatchRenderer_RenderPassImmediately
 		static void thunk(RE::BSRenderPass* pass, uint32_t technique, bool alphaTest, uint32_t renderFlags)
 		{
 			// Collect valid geometry for next frame's testing
-			// Skip collection during shadow map and depth prepass rendering to avoid false positives
+			// Skip collection during shadow map, depth prepass, and reflection rendering to avoid false positives
 			if (!globals::state->renderingShadowmaps && 
 			    !globals::state->renderingDepthPrepass &&
+			    !globals::state->activeReflections &&
 			    globals::features::hiZOcclusion.settings.enableHiZCulling && 
 			    pass->geometry && 
 			    pass->geometry->worldBound.radius > 0.0f) {
@@ -735,20 +736,30 @@ struct BSBatchRenderer_RenderPassImmediately
 			}
 			
 			// Skip rendering geometry that has been determined to be occluded
+			// Never cull during reflection rendering - reflections need all visible geometry
 			if (globals::features::hiZOcclusion.loaded && 
 			    globals::features::hiZOcclusion.settings.enableHiZCulling &&
+			    !globals::state->activeReflections &&
 			    pass->shader && 
 			    pass->geometry) {
-				// Handle Utility shaders separately with shadow-caster awareness
-				if (pass->shader->shaderType == RE::BSShader::Type::Utility) {
-					if (globals::features::hiZOcclusion.ShouldCullUtilityShader(pass)) {
-						return;  // Safe to cull this utility call
-					}
-				} else {
-					// Non-utility shaders: standard occlusion check
-					if (globals::features::hiZOcclusion.IsGeometryOccluded(pass->geometry)) {
-						return;  // Skip this draw call - geometry is occluded
-					}
+				auto& hiz = globals::features::hiZOcclusion;
+				switch (pass->shader->shaderType.get()) {
+					case RE::BSShader::Type::Grass:
+					case RE::BSShader::Type::Sky:
+					case RE::BSShader::Type::Water:
+					case RE::BSShader::Type::Utility:
+						break;  // Never cull: batched/infinite/reflections/shadows
+					case RE::BSShader::Type::Particle:
+					case RE::BSShader::Type::Effect:
+						if (hiz.ShouldCullParticleShader(pass)) return;
+						break;
+					default:  // Lighting, DistantTree, BloodSplatter
+						hiz.stats.otherCallsTotal++;
+						if (hiz.IsGeometryOccluded(pass->geometry)) {
+							hiz.stats.otherCallsCulled++;
+							return;
+						}
+						break;
 				}
 			}
 
@@ -768,18 +779,6 @@ struct BSBatchRenderer_RenderPassImmediately
 		}
 		static inline REL::Relocation<decltype(thunk)> func;
 	};
-
-#ifdef TRACY_ENABLE
-	struct Main_Update
-	{
-		static void thunk(RE::Main* a_this, float a2)
-		{
-			func(a_this, a2);
-			FrameMark;
-		}
-		static inline REL::Relocation<decltype(thunk)> func;
-	};
-#endif
 
 	namespace CSShadersSupport
 	{

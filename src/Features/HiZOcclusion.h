@@ -110,12 +110,6 @@ struct HiZOcclusion : OverlayFeature
         bool enableHiZCulling = true;     // enable Hi-Z occlusion culling
         float conservativeBias = 0.010f;   // depth bias for conservative testing (0.01 = 1% bias)
         bool showCullingStats = false;    // show Hi-Z culling statistics in UI
-        
-        // Utility shader culling (experimental)
-        // Mode 0: Never cull Utility shaders (safest, default)
-        // Mode 1: Cull Utility shaders only for non-shadow-casters
-        // Mode 2: Cull all Utility shaders for occluded geometry (aggressive, may break shadows)
-        uint32_t utilityCullingMode = 0;
 
         // Bounds overlay viewer (draw tested bounds and closest point)
         bool enableBoundsViewer = false;  // enable per-object bounds debug overlay
@@ -199,7 +193,11 @@ struct HiZOcclusion : OverlayFeature
     
     // Check if a Utility shader call should be culled for the given render pass
     // Returns true if the call should be culled, false otherwise
-    bool ShouldCullUtilityShader(RE::BSRenderPass* pass);
+    bool ShouldCullUtilityShader(RE::BSRenderPass* pass, uint32_t technique);
+    
+    // Check if a Particle/Effect shader call should be culled for the given render pass
+    // Returns true if the call should be culled, false otherwise
+    bool ShouldCullParticleShader(RE::BSRenderPass* pass);
     
     // Accessors for culling step
     inline ID3D11ShaderResourceView* GetHiZSRV() const { return hiZSRV; }
@@ -240,10 +238,17 @@ struct HiZOcclusion : OverlayFeature
         uint32_t culledFrustum = 0;
         uint32_t culledNoEarlyOut = 0;
         
-        // Utility shader culling stats
+        // Shadow/Utility shader culling stats
         uint32_t utilityCallsTotal = 0;      // total utility shader calls this frame
-        uint32_t utilityCallsCulled = 0;     // utility calls culled (non-shadow-casters)
-        uint32_t utilityCallsSkipped = 0;    // utility calls not culled (shadow-casters)
+        uint32_t utilityCallsCulled = 0;     // utility calls culled
+        
+        // Particle/Effect shader culling stats
+        uint32_t particleCallsTotal = 0;     // total particle/effect shader calls this frame
+        uint32_t particleCallsCulled = 0;    // particle/effect calls culled
+        
+        // Lighting/DistantTree/BloodSplatter shader culling stats (Sky, Water, Grass excluded)
+        uint32_t otherCallsTotal = 0;        // total other shader calls checked this frame
+        uint32_t otherCallsCulled = 0;       // other shader calls culled
         
         // Async readback tracking
         uint32_t lastResultFrame = 0;          // frame when results were last updated
@@ -278,6 +283,7 @@ struct HiZOcclusion : OverlayFeature
         uint32_t maxHistoryFrames = 60;
     };
     CullingStats stats;
+    CullingStats displayStats;  // Copy of stats from previous frame for UI display
 
     struct AsyncReadbackState {
         static const int BUFFER_COUNT = 3;  // Triple buffering to handle GPU latency
