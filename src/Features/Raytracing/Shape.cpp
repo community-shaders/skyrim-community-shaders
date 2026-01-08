@@ -7,6 +7,84 @@
 using GIHeap = Raytracing::GIHeap;
 using SkinningHeap = Raytracing::SkinningHeap;
 
+static std::uint32_t GetVertexSize(RE::BSGraphics::Vertex::Flags flags)
+{
+	using RE::BSGraphics::Vertex;
+
+	std::uint32_t vertexSize = 0;
+
+	if (flags & Vertex::VF_VERTEX) {
+		vertexSize += sizeof(float) * 4;
+	}
+	if (flags & Vertex::VF_UV) {
+		vertexSize += sizeof(std::uint16_t) * 2;
+	}
+	if (flags & Vertex::VF_UV_2) {
+		vertexSize += sizeof(std::uint16_t) * 2;
+	}
+	if (flags & Vertex::VF_NORMAL) {
+		vertexSize += sizeof(std::uint16_t) * 2;
+		if (flags & Vertex::VF_TANGENT) {
+			vertexSize += sizeof(std::uint16_t) * 2;
+		}
+	}
+	if (flags & Vertex::VF_COLORS) {
+		vertexSize += sizeof(std::uint8_t) * 4;
+	}
+	if (flags & Vertex::VF_SKINNED) {
+		vertexSize += sizeof(std::uint16_t) * 4 + sizeof(std::uint8_t) * 4;
+	}
+	if (flags & Vertex::VF_EYEDATA) {
+		vertexSize += sizeof(float);
+	}	
+	if (flags & Vertex::VF_LANDDATA) {
+		vertexSize += sizeof(uint32_t) * 2;
+	}
+
+	return vertexSize;
+}
+
+static std::string PrintVertexFlags(uint16_t value)
+{
+	using RE::BSGraphics::Vertex;
+
+	std::string result;
+	if (value & Vertex::Flags::VF_VERTEX)
+		result += "VF_VERTEX ";
+
+	if (value & Vertex::Flags::VF_UV)
+		result += "VF_UV ";
+
+	if (value & Vertex::Flags::VF_UV_2)
+		result += "VF_UV_2 ";
+
+	if (value & Vertex::Flags::VF_NORMAL)
+		result += "VF_NORMAL ";
+
+	if (value & Vertex::Flags::VF_TANGENT)
+		result += "VF_TANGENT ";
+
+	if (value & Vertex::Flags::VF_COLORS)
+		result += "VF_COLORS ";
+
+	if (value & Vertex::Flags::VF_SKINNED)
+		result += "VF_SKINNED ";
+
+	if (value & Vertex::Flags::VF_LANDDATA)
+		result += "VF_LANDDATA ";
+
+	if (value & Vertex::Flags::VF_EYEDATA)
+		result += "VF_EYEDATA ";
+
+	if (value & Vertex::Flags::VF_INSTANCEDATA)
+		result += "VF_INSTANCEDATA ";
+
+	if (value & Vertex::Flags::VF_FULLPREC)
+		result += "VF_FULLPREC ";
+
+	return result;
+}
+
 void Shape::BuildMesh(RE::BSGraphics::TriShape* rendererData, const std::uint32_t& vertexCountIn, const std::uint16_t& triangleCountIn, const std::uint16_t& bonesPerVertex, const float4x4& transform)
 {
 	auto vertexDesc = rendererData->vertexDesc;
@@ -37,7 +115,7 @@ void Shape::BuildMesh(RE::BSGraphics::TriShape* rendererData, const std::uint32_
 		if (skinned)
 			skinning.resize(vertexCountIn);
 
-		uint32_t stride = vertexDesc.GetSize();
+		auto vertexSize = GetVertexSize(vertexFlags);
 
 		bool hasPosition = vertexFlags & RE::BSGraphics::Vertex::VF_VERTEX;
 
@@ -47,6 +125,7 @@ void Shape::BuildMesh(RE::BSGraphics::TriShape* rendererData, const std::uint32_
 		uint32_t tangOffset = vertexDesc.GetAttributeOffset(RE::BSGraphics::Vertex::VA_BINORMAL);
 		uint32_t colorOffset = vertexDesc.GetAttributeOffset(RE::BSGraphics::Vertex::VA_COLOR);
 		uint32_t skinOffset = vertexDesc.GetAttributeOffset(RE::BSGraphics::Vertex::VA_SKINNING);
+		uint32_t landOffset = vertexDesc.GetAttributeOffset(RE::BSGraphics::Vertex::VA_LANDDATA);
 
 		uint32_t boneIDOffset = sizeof(uint16_t) * bonesPerVertex;
 
@@ -54,7 +133,7 @@ void Shape::BuildMesh(RE::BSGraphics::TriShape* rendererData, const std::uint32_
 		eastl::vector<uint8_t> boneIds(bonesPerVertex);
 
 		for (uint16_t i = 0; i < vertexCountIn; i++) {
-			uint8_t* vtx = rendererData->rawVertexData + i * stride;
+			uint8_t* vtx = rendererData->rawVertexData + i * vertexSize;
 
 			Vertex vertexData{};
 
@@ -107,6 +186,11 @@ void Shape::BuildMesh(RE::BSGraphics::TriShape* rendererData, const std::uint32_
 				}
 			}
 
+			if (vertexFlags & RE::BSGraphics::Vertex::VF_LANDDATA) {
+				std::memcpy(&vertexData.LandBlend1, vtx + landOffset, sizeof(uint32_t));
+				std::memcpy(&vertexData.LandBlend2, vtx + landOffset + sizeof(uint32_t), sizeof(uint32_t));
+			}
+
 			if (vertexFlags & RE::BSGraphics::Vertex::VF_COLORS) {
 				std::memcpy(&vertexData.Color, vtx + colorOffset, sizeof(uint32_t));
 			} else {
@@ -124,22 +208,50 @@ void Shape::BuildMesh(RE::BSGraphics::TriShape* rendererData, const std::uint32_
 
 	// Triangles
 	{
-		triangles.resize(triangleCountIn);
+		// Landscape contains no triangles, so we build them ourselves
+		if (flags & Flags::Landscape) {
+			triangles.reserve(triangleCountIn);
 
-		eastl::vector<uint16_t> indices(triangleCountIn * 3);
-		std::memcpy(indices.data(), rendererData->rawIndexData, sizeof(uint16_t) * triangleCountIn * 3);
+			constexpr uint16_t GRID_SIZE = 16;
+			constexpr uint16_t VERTICES = GRID_SIZE + 1;
 
-		for (uint16_t t = 0; t < triangleCountIn; ++t) {
-			uint16_t i = t * 3u;
+			for (uint16_t y = 0; y < GRID_SIZE; y++) {
+				for (uint16_t x = 0; x < GRID_SIZE; x++) {
+					uint16_t v0 = y * VERTICES + x;
+					uint16_t v1 = v0 + 1;
+					uint16_t v2 = v0 + VERTICES;
+					uint16_t v3 = v2 + 1;
 
-			uint16_t v0 = indices[i];
-			uint16_t v1 = indices[i + 1u];
-			uint16_t v2 = indices[i + 2u];
+					if (v0 >= vertexCount || v1 >= vertexCount || v2 >= vertexCount)
+						logger::critical("[RT] Quad {} {} vertex overflow: [{}, {}, {}]", x, y, v0, v1, v2);
 
-			if (v0 >= vertexCount || v1 >= vertexCount || v2 >= vertexCount)
-				logger::critical("[RT] Triangle {} vertex overflow: [{}, {}, {}]", t, v0, v1, v2);
+					// First triangle
+					triangles.emplace_back(v0, v2, v1);
 
-			triangles[t] = Triangle(v0, v1, v2);
+					// Second triangle
+					triangles.emplace_back(v1, v2, v3);
+				}
+			}
+		} else {
+			triangles.resize(triangleCountIn);
+
+			auto indexCount = triangleCountIn * 3;
+
+			eastl::vector<uint16_t> indices(indexCount);
+			std::memcpy(indices.data(), rendererData->rawIndexData, sizeof(uint16_t) * indexCount);
+
+			for (uint16_t t = 0; t < triangleCountIn; ++t) {
+				uint16_t i = t * 3u;
+
+				uint16_t v0 = indices[i];
+				uint16_t v1 = indices[i + 1u];
+				uint16_t v2 = indices[i + 2u];
+
+				if (v0 >= vertexCount || v1 >= vertexCount || v2 >= vertexCount)
+					logger::critical("[RT] Triangle {} vertex overflow: [{}, {}, {}]", t, v0, v1, v2);
+
+				triangles[t] = Triangle(v0, v1, v2);
+			}
 		}
 
 		triangleCount = triangleCountIn;

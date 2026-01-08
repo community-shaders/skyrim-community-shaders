@@ -1689,7 +1689,7 @@ static RE::BSVisit::BSVisitControl TraverseScenegraphRTGeometries(RE::NiAVObject
 	return result;
 }
 
-void Raytracing::CreateModel(RE::TESForm* refr, const char* path, RE::NiNode* pRoot)
+void Raytracing::CreateModel(RE::TESForm* form, const char* path, RE::NiNode* pRoot)
 {
 	if (!pRoot) {
 		logger::error("[RT] CreateModel \"{}\" - nullptr root", path);
@@ -1717,8 +1717,7 @@ void Raytracing::CreateModel(RE::TESForm* refr, const char* path, RE::NiNode* pR
 		logger::debug("[RT] CreateModel - BSX Flags [0x{:x}]: {}", bsxFlags->value, GetFlagsString<RE::BSXFlags::Flag>(bsxFlags->value));
 	}
 
-	auto formID = refr->GetFormID();
-	//auto baseFormID = refr->GetBaseObject()->GetFormID();
+	auto formID = form->GetFormID();
 
 	// We only need one buffer per model
 	if (models.find(path) != models.end()) {
@@ -1727,6 +1726,8 @@ void Raytracing::CreateModel(RE::TESForm* refr, const char* path, RE::NiNode* pR
 	}
 
 	//logger::debug("[RT] CreateModel - Path: {}, Base FormID [0x{:08X}], FormID [0x{:08X}], NiNode [0x{:08X}]: {}", path, baseFormID, formID, reinterpret_cast<uintptr_t>(pRoot), pRoot->name);
+
+	auto formType = form->GetFormType();
 
 	auto rootWorldInverse = pRoot->world.Invert();
 
@@ -1741,12 +1742,6 @@ void Raytracing::CreateModel(RE::TESForm* refr, const char* path, RE::NiNode* pR
 			logger::warn("\t\t[RT] CreateModel::TraverseScenegraphGeometries - Unsupported Geometry: {} for {}", magic_enum::enum_name(geometryType.get()), name);
 			return RE::BSVisit::BSVisitControl::kContinue;
 		}
-
-		// Early workaround since Land cause(ed?)s DX12 Device removal (why?)
-		/*if (strcmp(name, "Land") == 0) {
-			logger::warn("\t\t[RT] CreateModel::TraverseScenegraphGeometries - Is Land");
-			return RE::BSVisit::BSVisitControl::kContinue;
-		}*/
 
 		const auto& geometryRuntimeData = pGeometry->GetGeometryRuntimeData();
 
@@ -1777,6 +1772,10 @@ void Raytracing::CreateModel(RE::TESForm* refr, const char* path, RE::NiNode* pR
 		}
 
 		auto flags = Flags::None;
+
+		// Landscape needs special handling of triangles
+		if (formType == RE::FormType::Land)
+			flags |= Flags::Landscape;
 
 		if (geometryType.all(RE::BSGeometry::Type::kDynamicTriShape))
 			flags |= Flags::Dynamic;
@@ -3166,7 +3165,7 @@ void Raytracing::PostPostLoad()
 
 	TESObjectLoadedEventHandler::Register();
 	//TESCellAttachDetachEventHandler::Register();
-	TESCellFullyLoadedEventHandler::Register();	
+	//TESCellFullyLoadedEventHandler::Register();	
 }
 
 /*void Raytracing::RTProcessor::PostCreate(const RE::BSModelDB::DBTraits::ArgsType& a_args, const char* modelName, RE::NiPointer<RE::NiNode>& a_root, std::uint32_t& typeOut)
@@ -4030,7 +4029,7 @@ RE::BSEventNotifyControl Raytracing::TESCellFullyLoadedEventHandler::ProcessEven
 		if (!mesh)
 			continue;
 
-		globals::features::raytracing.CreateModel(cell, std::format("Landscape_{}_{}_Quad_{}", exteriorData->cellX, exteriorData->cellY, i).c_str(), mesh);
+		globals::features::raytracing.CreateModel(land, std::format("Landscape_{}_{}_Quad_{}", exteriorData->cellX, exteriorData->cellY, i).c_str(), mesh);
 		//logger::info("[RT] Mesh [{}] - {}", i, mesh->name.c_str());
 	}
 

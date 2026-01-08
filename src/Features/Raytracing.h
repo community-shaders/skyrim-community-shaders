@@ -1295,6 +1295,43 @@ struct Raytracing : public OverlayFeature
 			static inline REL::Relocation<decltype(thunk)> func;
 		};
 
+		struct TESObjectLAND_Attach3D
+		{
+			static void thunk(RE::TESObjectLAND* oThis, char a2)
+			{
+				func(oThis, a2);
+
+				logger::info("[RT] TESObjectLAND_Attach3D");
+
+				if (!oThis)
+					return;
+
+				auto* cell = oThis->parentCell;
+
+				if (!cell->IsExteriorCell())
+					return;
+
+				auto& runtimeData = cell->GetRuntimeData();
+
+				auto* exteriorData = runtimeData.cellData.exterior;
+
+				auto* loadedData = oThis->loadedData;
+
+				if (!loadedData || !loadedData->mesh)
+					return;
+
+				for (uint i = 0; i < 4; i++) {
+					auto mesh = loadedData->mesh[i];
+
+					if (!mesh)
+						continue;
+
+					globals::features::raytracing.CreateModel(oThis, std::format("Landscape_{}_{}_Quad_{}", exteriorData->cellX, exteriorData->cellY, i).c_str(), mesh);
+				}
+			};
+			static inline REL::Relocation<decltype(thunk)> func;
+		};
+		
 		static void Install()
 		{
 			stl::write_vfunc<0x6A, Load3D<RE::TESObjectREFR>>(RE::VTABLE_TESObjectREFR[0]);
@@ -1337,8 +1374,9 @@ struct Raytracing : public OverlayFeature
 			stl::write_vfunc<0x2A, BSShaderAccumulator_FinishAccumulatingDispatch>(RE::VTABLE_BSShaderAccumulator[0]);
 
 			detour_thunk<CreateTextureFromDDS>(0xd2ef80);
-
-			//logger::info("[RT] Base: [0x{:8X}]", REL::Module::get().base());
+			detour_thunk<TESObjectLAND_Attach3D>(0x2a8b00);
+			
+			logger::info("[RT] Base: [0x{:8X}]", REL::Module::get().base());
 
 			logger::info("[RT] Installed hooks");
 		}

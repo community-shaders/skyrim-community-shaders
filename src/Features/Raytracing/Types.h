@@ -2,6 +2,18 @@
 
 #include <directxpackedvector.h>
 
+#define FMT_STRUCT(name, ...)                                                        \
+	template <>                                                                      \
+	struct fmt::formatter<name>                                                      \
+	{                                                                                \
+		constexpr auto parse(fmt::format_parse_context& ctx) { return ctx.begin(); } \
+		template <typename FormatContext>                                            \
+		auto format(const name& s, FormatContext& ctx) const                         \
+		{                                                                            \
+			return fmt::format_to(ctx.out(), "{}", s.to_string());					 \
+		}                                                                            \
+	};
+
 struct half
 {
 	DirectX::PackedVector::HALF v;
@@ -68,8 +80,15 @@ struct half2
 			static_cast<float>(x),
 			static_cast<float>(y));
 	}
+
+    std::string to_string() const
+	{
+		return "[" + std::to_string(x) + ", " + std::to_string(y) + "]";
+	}
 };
 static_assert(sizeof(half2) == 4);
+
+FMT_STRUCT(half2, s.x, s.y)
 
 struct half3
 {
@@ -103,8 +122,15 @@ struct half3
 		z += rhs.z;
 		return *this;
 	}
+
+    std::string to_string() const
+	{
+		return "[" + std::to_string(x) + ", " + std::to_string(y) + ", " + std::to_string(z) + "]";
+	}
 };
 static_assert(sizeof(half3) == 6);
+
+FMT_STRUCT(half3, s.x, s.y, s.z)
 
 struct half4
 {
@@ -132,8 +158,15 @@ struct half4
 			static_cast<float>(z),
 			static_cast<float>(w));
 	}
+
+    std::string to_string() const
+	{
+		return "[" + std::to_string(x) + ", " + std::to_string(y) + ", " + std::to_string(z) + ", " + std::to_string(w) + "]";
+	}
 };
 static_assert(sizeof(half4) == 8);
+
+FMT_STRUCT(half4, s.x, s.y, s.z, s.w)
 
 struct uint2
 {
