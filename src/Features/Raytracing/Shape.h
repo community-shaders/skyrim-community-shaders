@@ -80,7 +80,8 @@ public:
 			kFalloff = 1 << 5,
 			kRefraction = 1 << 6,
 			kProjectedUV = 1 << 7,
-			kVertexColors = 1 << 8
+			kVertexColors = 1 << 8,
+			kMultiTextureLandscape = 1 << 9
 		};
 
 		ShaderFlags GetShaderFlags() const

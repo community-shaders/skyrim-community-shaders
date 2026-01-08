@@ -3,6 +3,7 @@
 #include "Features/Raytracing/Heap.h"
 #include "TruePBR.h"
 #include "TruePBR/BSLightingShaderMaterialPBR.h"
+#include "TruePBR/BSLightingShaderMaterialPBRLandscape.h"
 
 using GIHeap = Raytracing::GIHeap;
 using SkinningHeap = Raytracing::SkinningHeap;
@@ -353,64 +354,77 @@ void Shape::BuildMaterial(const RE::BSGeometry::GEOMETRY_RUNTIME_DATA& geometryR
 					//	material->texCoordScale[1].x, material->texCoordScale[1].y
 					//};
 
-					// Using static_cast so we still get diffuse and normal for PBR materials as well
-					if (const auto* lightingBaseMaterial = static_cast<RE::BSLightingShaderMaterialBase*>(shaderMaterial)) {
-						//logger::debug("[RT] BuildMaterial - BSLightingShaderMaterialBase Alpha: {}", lightingBaseMaterial->materialAlpha);
+					if (const auto* lightingVanillaMaterial = skyrim_cast<RE::BSLightingShaderMaterialLandscape*>(shaderMaterial)) {
+						if (shaderFlags.any(RE::BSShaderProperty::EShaderPropertyFlag::kSpecular)) {
+							specularTexture = TryGetTexture(lightingVanillaMaterial->specularBackLightingTexture);
+							specularColor = {
+								lightingVanillaMaterial->specularColor.red,
+								lightingVanillaMaterial->specularColor.green,
+								lightingVanillaMaterial->specularColor.blue,
+								lightingVanillaMaterial->specularColorScale
+							};
+							roughnessScale = ShininessToRoughness(lightingVanillaMaterial->specularPower);
+						}
+					} else if (typeid(*shaderMaterial) == typeid(BSLightingShaderMaterialPBRLandscape)) {
 
-						baseTexture = TryGetTexture(lightingBaseMaterial->diffuseTexture);
-						normalTexture = TryGetTexture(lightingBaseMaterial->normalTexture);
-					}
-
-					// TrueBR - Tried to check for 'lightingShaderProp->flags.any(EShaderPropertyFlag::kMenuScreen)'
-					// but it did not work at all, skyrim_cast is not safe and will cast even if not PBR material (no RTTI?)
-					if (typeid(*shaderMaterial) == typeid(BSLightingShaderMaterialPBR)) {
-						const auto* lightingPBRMaterial = static_cast<BSLightingShaderMaterialPBR*>(shaderMaterial);
-
-						effectTexture = TryGetTexture(lightingPBRMaterial->emissiveTexture);
-						rmaosTexture = TryGetTexture(lightingPBRMaterial->rmaosTexture);
-
-						roughnessScale = lightingPBRMaterial->GetRoughnessScale();
-						specularLevel = lightingPBRMaterial->GetSpecularLevel();
-
-						pbrFlags = GetPBRShaderFlags(lightingPBRMaterial);
-
-						// Enforce TruePBR flag
-						shaderFlags.set(RE::BSShaderProperty::EShaderPropertyFlag::kMenuScreen);
 					} else {
-						// Vanilla Materials
-						if (const auto* lightingVanillaMaterial = skyrim_cast<RE::BSLightingShaderMaterialBase*>(shaderMaterial)) {
-							if (shaderFlags.any(RE::BSShaderProperty::EShaderPropertyFlag::kSpecular)) {
-								specularTexture = TryGetTexture(lightingVanillaMaterial->specularBackLightingTexture);
-								specularColor = {
-									lightingVanillaMaterial->specularColor.red,
-									lightingVanillaMaterial->specularColor.green,
-									lightingVanillaMaterial->specularColor.blue,
-									lightingVanillaMaterial->specularColorScale
-								};
-								roughnessScale = ShininessToRoughness(lightingVanillaMaterial->specularPower);
+						// Using static_cast so we still get diffuse and normal for PBR materials as well
+						if (const auto* lightingBaseMaterial = static_cast<RE::BSLightingShaderMaterialBase*>(shaderMaterial)) {
+							baseTexture = TryGetTexture(lightingBaseMaterial->diffuseTexture);
+							normalTexture = TryGetTexture(lightingBaseMaterial->normalTexture);
+						}
+
+						// TrueBR - Tried to check for 'lightingShaderProp->flags.any(EShaderPropertyFlag::kMenuScreen)'
+						// but it did not work at all, skyrim_cast is not safe and will cast even if not PBR material (no RTTI?)
+						if (typeid(*shaderMaterial) == typeid(BSLightingShaderMaterialPBR)) {
+							const auto* lightingPBRMaterial = static_cast<BSLightingShaderMaterialPBR*>(shaderMaterial);
+
+							effectTexture = TryGetTexture(lightingPBRMaterial->emissiveTexture);
+							rmaosTexture = TryGetTexture(lightingPBRMaterial->rmaosTexture);
+
+							roughnessScale = lightingPBRMaterial->GetRoughnessScale();
+							specularLevel = lightingPBRMaterial->GetSpecularLevel();
+
+							pbrFlags = GetPBRShaderFlags(lightingPBRMaterial);
+
+							// Enforce TruePBR flag
+							shaderFlags.set(RE::BSShaderProperty::EShaderPropertyFlag::kMenuScreen);
+						} else {
+							// Vanilla Materials
+							if (const auto* lightingVanillaMaterial = skyrim_cast<RE::BSLightingShaderMaterialBase*>(shaderMaterial)) {
+								if (shaderFlags.any(RE::BSShaderProperty::EShaderPropertyFlag::kSpecular)) {
+									specularTexture = TryGetTexture(lightingVanillaMaterial->specularBackLightingTexture);
+									specularColor = {
+										lightingVanillaMaterial->specularColor.red,
+										lightingVanillaMaterial->specularColor.green,
+										lightingVanillaMaterial->specularColor.blue,
+										lightingVanillaMaterial->specularColorScale
+									};
+									roughnessScale = ShininessToRoughness(lightingVanillaMaterial->specularPower);
+								}
 							}
 						}
-					}
 
-					// Envmap
-					if (feature == Feature::kEnvironmentMap || feature == Feature::kEye) {
-						if (const auto* lightingEnvmapMaterial = skyrim_cast<RE::BSLightingShaderMaterialEnvmap*>(shaderMaterial)) {
-							envTexture = TryGetTexture(lightingEnvmapMaterial->envTexture);
-							envMaskTexture = TryGetTexture(lightingEnvmapMaterial->envMaskTexture);
+						// Envmap
+						if (feature == Feature::kEnvironmentMap || feature == Feature::kEye) {
+							if (const auto* lightingEnvmapMaterial = skyrim_cast<RE::BSLightingShaderMaterialEnvmap*>(shaderMaterial)) {
+								envTexture = TryGetTexture(lightingEnvmapMaterial->envTexture);
+								envMaskTexture = TryGetTexture(lightingEnvmapMaterial->envMaskTexture);
+							}
 						}
-					}
 
-					// Glow
-					if (feature == Feature::kGlowMap) {
-						if (const auto* lightingGlowMaterial = skyrim_cast<RE::BSLightingShaderMaterialGlowmap*>(shaderMaterial)) {
-							effectTexture = TryGetTexture(lightingGlowMaterial->glowTexture);
+						// Glow
+						if (feature == Feature::kGlowMap) {
+							if (const auto* lightingGlowMaterial = skyrim_cast<RE::BSLightingShaderMaterialGlowmap*>(shaderMaterial)) {
+								effectTexture = TryGetTexture(lightingGlowMaterial->glowTexture);
+							}
 						}
-					}
 
-					// Hair
-					if (feature == Feature::kHairTint) {
-						if (const auto* lightingHairTintMaterial = skyrim_cast<RE::BSLightingShaderMaterialHairTint*>(shaderMaterial)) {
-							baseColor *= float4(lightingHairTintMaterial->tintColor.red, lightingHairTintMaterial->tintColor.green, lightingHairTintMaterial->tintColor.blue, 1.0f);
+						// Hair
+						if (feature == Feature::kHairTint) {
+							if (const auto* lightingHairTintMaterial = skyrim_cast<RE::BSLightingShaderMaterialHairTint*>(shaderMaterial)) {
+								baseColor *= float4(lightingHairTintMaterial->tintColor.red, lightingHairTintMaterial->tintColor.green, lightingHairTintMaterial->tintColor.blue, 1.0f);
+							}
 						}
 					}
 				} else {
