@@ -78,10 +78,13 @@ public:
 			kGrayscaleToPaletteColor = 1 << 3,
 			kGrayscaleToPaletteAlpha = 1 << 4,
 			kFalloff = 1 << 5,
-			kRefraction = 1 << 6,
-			kProjectedUV = 1 << 7,
-			kVertexColors = 1 << 8,
-			kMultiTextureLandscape = 1 << 9
+			kEnvMap = 1 << 6,
+			kRefraction = 1 << 7,
+			kProjectedUV = 1 << 8,
+			kVertexColors = 1 << 9,
+			kMultiTextureLandscape = 1 << 10,
+			kEyeReflect = 1 << 11,
+			kHairTint = 1 << 12
 		};
 
 		ShaderFlags GetShaderFlags() const
@@ -103,6 +106,11 @@ public:
 			return shaderFlagsLocal;
 		}
 
+		REX::EnumSet<RE::BSShaderProperty::EShaderPropertyFlag, std::uint64_t> shaderFlags;
+		RE::BSShader::Type shaderType;
+		RE::BSShaderMaterial::Feature Feature;
+		stl::enumeration<PBRShaderFlags, uint16_t> PBRFlags;
+
 		eastl::array<half4,2> Colors;
 		eastl::array<half, 3> Scalars;
 
@@ -110,21 +118,12 @@ public:
 
 		eastl::array<eastl::shared_ptr<Allocation>, 12> Textures;
 
-		RE::BSShader::Type shaderType;
-		REX::EnumSet<RE::BSShaderProperty::EShaderPropertyFlag, std::uint64_t> shaderFlags;
-		RE::BSShaderMaterial::Feature Feature;
-		stl::enumeration<PBRShaderFlags, uint16_t> PBRFlags;
-
 		MaterialData GetData()
 		{
 			return MaterialData(
-				GetShaderFlags(),
-				GetShaderType(),
-				static_cast<uint16_t>(Feature),
-				PBRFlags.underlying(),
+				TexCoordOffsetScale[0], TexCoordOffsetScale[1],
 				Colors[0], Colors[1],
 				Scalars[0], Scalars[1], Scalars[2],
-				TexCoordOffsetScale[0], TexCoordOffsetScale[1],
 				Textures[0]->GetIndex(),
 				Textures[1]->GetIndex(),
 				Textures[2]->GetIndex(),
@@ -136,7 +135,11 @@ public:
 				Textures[8]->GetIndex(),
 				Textures[9]->GetIndex(),
 				Textures[10]->GetIndex(),
-				Textures[11]->GetIndex());
+				Textures[11]->GetIndex(),		
+				GetShaderType(),
+				static_cast<uint16_t>(Feature),
+				PBRFlags.underlying(),
+				GetShaderFlags());
 		}
 	};
 

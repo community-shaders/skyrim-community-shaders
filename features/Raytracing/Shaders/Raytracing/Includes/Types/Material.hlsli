@@ -22,10 +22,13 @@ namespace ShaderFlags
     static const uint32_t kGrayscaleToPaletteColor = (1 << 3);
     static const uint32_t kGrayscaleToPaletteAlpha = (1 << 4);
     static const uint32_t kFalloff = (1 << 5);
-    static const uint32_t kRefraction = (1 << 6);
-    static const uint32_t kProjectedUV = (1 << 7);
-    static const uint32_t kVertexColors = (1 << 8);
-    static const uint32_t kMultiTextureLandscape = (1 << 9);	
+    static const uint32_t kEnvMap = (1 << 6);	
+    static const uint32_t kRefraction = (1 << 7);
+    static const uint32_t kProjectedUV = (1 << 8);
+    static const uint32_t kVertexColors = (1 << 9);
+    static const uint32_t kMultiTextureLandscape = (1 << 10);	
+    static const uint32_t kEyeReflect = (1 << 11);	
+    static const uint32_t kHairTint = (1 << 12);		
 }
 
 namespace Feature
@@ -52,16 +55,16 @@ namespace Feature
 }
 #endif
 
+// DirectX 12 is very picky about buffer alignment, make sure all variable boundaries properly are aligned
+// https://maraneshi.github.io/HLSL-ConstantBufferLayoutVisualizer/
 #ifdef __cplusplus
 struct MaterialData
 #else
 struct Material
 #endif
 {
-    uint32_t ShaderFlags;		// Max 32 flags	
-    uint16_t ShaderType;
-    uint16_t Feature;
-    uint16_t PBRFlags;
+	half4 TexCoordOffsetScale0;
+	half4 TexCoordOffsetScale1;		
 	
 	half4 Color0;
 	half4 Color1;	
@@ -69,9 +72,6 @@ struct Material
 	half Scalar0;
 	half Scalar1;
 	half Scalar2;
-	
-	half4 TexCoordOffsetScale0;
-	half4 TexCoordOffsetScale1;	
 	
 	// Textures
 	uint16_t Texture0;
@@ -86,6 +86,11 @@ struct Material
 	uint16_t Texture9;	
 	uint16_t Texture10;
 	uint16_t Texture11;
+	
+    uint16_t ShaderType;
+    uint16_t Feature;
+    uint16_t PBRFlags;	
+    uint32_t ShaderFlags;		// Max 32 flags		
 	
 	// Shared	
     half4 BaseColor()
@@ -128,6 +133,11 @@ struct Material
     {
 		return Texture3;
 	}	
+	
+    uint16_t EnvTexture()
+    {
+		return Texture4;
+	}		
 	
     uint16_t EnvMaskTexture()
     {

@@ -16,7 +16,7 @@ void main(inout ShadowPayload payload, in BuiltInTriangleIntersectionAttributes 
 
     float2 texCoord = material.TexCoord(Interpolate(v0.Texcoord0, v1.Texcoord0, v2.Texcoord0, uvw));
 
-    float alpha = Textures[NonUniformResourceIndex(material.BaseTexture)].SampleLevel(BaseSampler, texCoord, 0).a;
+    float alpha = Textures[NonUniformResourceIndex(material.BaseTexture())].SampleLevel(BaseSampler, texCoord, 0).a;
 
     if (alpha < 0.5f)
     {
