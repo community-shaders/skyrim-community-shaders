@@ -5,6 +5,7 @@
 #include "Raytracing/Includes/PBR.hlsli"
 #include "Raytracing/Includes/Types.hlsli"
 #include "Raytracing/Includes/RT/Geometry.hlsli"
+#include "Raytracing/Includes/SurfaceHelper.hlsli"
 
 #define Surface(...) static Surface ctor(__VA_ARGS__)
 struct Surface
@@ -70,126 +71,20 @@ struct Surface
         float3 tangentWS = normalize(mul(objectToWorld3x3, Interpolate(v0.Tangent, v1.Tangent, v2.Tangent, uvw)));
         float3 bitangentWS = normalize(mul(objectToWorld3x3, Interpolate(v0.Bitangent, v1.Bitangent, v2.Bitangent, uvw)));
 
-        float4 vertexColor = Interpolate(v0.Color.unpack(), v1.Color.unpack(), v2.Color.unpack(), uvw);
-
-        Texture2D baseTexture = Textures[NonUniformResourceIndex(material.BaseTexture)];
-        Texture2D effectTexture = Textures[NonUniformResourceIndex(material.EffectTexture)];
-
-        [branch]
-        if (material.ShaderType == ShaderType::Effect)
+        if (material.ShaderFlags & ShaderFlags::kMultiTextureLandscape)
         {
-            float3 base = float3(1, 1, 1);
-
-            if (material.ShaderFlags & ShaderFlags::kGrayscaleToPaletteColor)
-            {
-                base *= baseTexture.SampleLevel(BaseSampler, texCoord0, 0).rgb;
-            }
-
-            float3 baseColorMul = material.EffectColor.rgb;
-
-            if (material.ShaderFlags & ShaderFlags::kVertexColors && !(material.ShaderFlags & ShaderFlags::kProjectedUV))
-            {
-                base *= vertexColor.rgb;
-            }
-
-            float3 baseColor = base * baseColorMul;
-
-            float baseColorScale = material.EffectColor.a;
-
-            if (material.ShaderFlags & ShaderFlags::kGrayscaleToPaletteColor)
-            {
-                float2 grayscaleToColorUv = float2(base.g, baseColorMul.x);
-
-                baseColor = baseColorScale * effectTexture.SampleLevel(BaseSampler, grayscaleToColorUv, 0).rgb;
-            }
-
-            float3 baseColorLinear = Color::GammaToTrueLinear(baseColor);
-
-            //surface.Albedo = baseColorLinear; // This breaks sharc
-            surface.Albedo = 0;
-            surface.Emissive = baseColorLinear * Frame.Effect;
-
-            surface.Roughness = 1.0f;
-            surface.Metallic = 0.0f;
-            surface.AO = 1.0f;
-            surface.F0 = 0.04f;
+            LandMaterial(v0, v1, v2, uvw, normalWS, tangentWS, bitangentWS, material, surface);
         }
         else
         {
-            float3 base = baseTexture.SampleLevel(BaseSampler, texCoord0, 0).rgb;
-            float3 effect = effectTexture.SampleLevel(BaseSampler, texCoord0, 0).rgb;
-
-            surface.Albedo = base * material.BaseColor.rgb * vertexColor.rgb;
-            surface.Emissive = effect * material.EffectColor.rgb * material.EffectColor.a * Frame.Emissive;
+            DefaultMaterial(v0, v1, v2, uvw, normalWS, tangentWS, bitangentWS, material, surface);
         }
-
+        
 #ifdef DEBUG_WHITE_FURNACE
         surface.Albedo = float3(1.0f, 1.0f, 1.0f);
 #endif
 
         surface.GeomNormal = normalWS;
-
-        float3 F0 = material.SpecularLevel.xxx;
-
-#ifdef PATH_TRACING
-        Texture2D normalTexture = Textures[NonUniformResourceIndex(material.NormalTexture)];
-
-        float handedness = (dot(cross(normalWS, tangentWS), bitangentWS) < 0.0f) ? -1.0f : 1.0f;
-
-        NormalMap(
-            normalTexture.SampleLevel(BaseSampler, texCoord0, 0).rgb,
-            handedness,
-            normalWS, tangentWS, bitangentWS,
-            surface.Normal, surface.Tangent, surface.Bitangent
-        );
-
-        [branch]
-        if (material.ShaderType == ShaderType::TruePBR)
-        {
-            Texture2D rmaosTexture = Textures[NonUniformResourceIndex(material.RMAOSTexture)];
-            float4 rmaos = rmaosTexture.SampleLevel(BaseSampler, texCoord0, 0);
-
-            surface.Roughness = saturate(rmaos.x * material.RoughnessScale);
-            surface.Metallic = saturate(rmaos.y);
-            surface.AO = rmaos.z;
-            F0 *= rmaos.w;
-        } else if (material.ShaderType == ShaderType::Lighting) {
-            surface.Albedo = Color::GammaToTrueLinear(surface.Albedo);
-            F0 = 0.04f;
-
-            if (material.ShaderFlags & ShaderFlags::kSpecular) {
-                Texture2D specularTexture = Textures[NonUniformResourceIndex(material.SpecularTexture)];
-                surface.Roughness = material.RoughnessScale >= 0.0f ? saturate(material.RoughnessScale) : 1.0f;
-                surface.Metallic = 0.0f;
-                surface.AO = 1.0f;
-                float3 specularColor = specularTexture.SampleLevel(BaseSampler, texCoord0, 0).r * material.SpecularColor.rgb * material.SpecularColor.a;
-                F0 = clamp(0.08f * specularColor, 0.02f, 0.08f);
-            } else {
-                surface.Roughness = 1.0f;
-                surface.Metallic = 0.0f;
-                surface.AO = 1.0f;
-                F0 = 0.04f;
-            }
-
-            [branch]
-            if (material.Feature & Feature::kEnvironmentMap || material.Feature & Feature::kEye) {
-                Texture2D envTexture = Textures[NonUniformResourceIndex(material.EnvTexture)];
-                Texture2D envMaskTexture = Textures[NonUniformResourceIndex(material.EnvMaskTexture)];
-                float3 envColor = Color::GammaToTrueLinear(envTexture.SampleLevel(BaseSampler, texCoord0, 15).rgb);
-                float envMask = envMaskTexture.SampleLevel(BaseSampler, texCoord0, 0).r;
-                surface.Metallic = envMask;
-                surface.Albedo = lerp(surface.Albedo, envColor, envMask);
-            }
-        }
-#else
-        surface.Normal = normalWS;
-        surface.Tangent = tangentWS;
-        surface.Bitangent = bitangentWS;
-
-        surface.Roughness = PBR::Defaults::Roughness * material.RoughnessScale;
-        surface.Metallic = PBR::Defaults::Metallic;
-        surface.AO = 1.0f;
-#endif
 
         surface.Roughness = PBR::Roughness(surface.Roughness, Frame.Roughness.x, Frame.Roughness.y);
         surface.Metallic = Remap(surface.Metallic, Frame.Metalness.x, Frame.Metalness.y);

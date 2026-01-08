@@ -103,25 +103,12 @@ public:
 			return shaderFlagsLocal;
 		}
 
-		half4 BaseColor;
-		half4 EffectColor;
-		half4 TexCoordOffsetScale;
+		eastl::array<half4,2> Colors;
+		eastl::array<half, 3> Scalars;
 
-		half RoughnessScale;
-		half SpecularLevel;
+		eastl::array<half4, 2> TexCoordOffsetScale;
 
-		// Vanilla Material Colors
-		half4 SpecularColor;
-
-		eastl::shared_ptr<Allocation> BaseTexture;
-		eastl::shared_ptr<Allocation> NormalTexture;
-		eastl::shared_ptr<Allocation> EffectTexture;
-		eastl::shared_ptr<Allocation> RMAOSTexture;
-
-		// Vanilla Material Textures
-		eastl::shared_ptr<Allocation> SpecularTexture;
-		eastl::shared_ptr<Allocation> EnvTexture;
-		eastl::shared_ptr<Allocation> EnvMaskTexture;
+		eastl::array<eastl::shared_ptr<Allocation>, 12> Textures;
 
 		RE::BSShader::Type shaderType;
 		REX::EnumSet<RE::BSShaderProperty::EShaderPropertyFlag, std::uint64_t> shaderFlags;
@@ -131,21 +118,25 @@ public:
 		MaterialData GetData()
 		{
 			return MaterialData(
-				BaseColor, EffectColor,
-				TexCoordOffsetScale,
-				RoughnessScale, SpecularLevel,
-				SpecularColor,
-				BaseTexture->GetIndex(),
-				NormalTexture->GetIndex(),
-				EffectTexture->GetIndex(),
-				RMAOSTexture->GetIndex(),
-				SpecularTexture->GetIndex(),
-				EnvTexture->GetIndex(),
-				EnvMaskTexture->GetIndex(),
-				GetShaderType(),
 				GetShaderFlags(),
+				GetShaderType(),
 				static_cast<uint16_t>(Feature),
-				PBRFlags.underlying());
+				PBRFlags.underlying(),
+				Colors[0], Colors[1],
+				Scalars[0], Scalars[1], Scalars[2],
+				TexCoordOffsetScale[0], TexCoordOffsetScale[1],
+				Textures[0]->GetIndex(),
+				Textures[1]->GetIndex(),
+				Textures[2]->GetIndex(),
+				Textures[3]->GetIndex(),
+				Textures[4]->GetIndex(),
+				Textures[5]->GetIndex(),
+				Textures[6]->GetIndex(),
+				Textures[7]->GetIndex(),
+				Textures[8]->GetIndex(),
+				Textures[9]->GetIndex(),
+				Textures[10]->GetIndex(),
+				Textures[11]->GetIndex());
 		}
 	};
 

@@ -12,8 +12,8 @@ struct Vertex
 	ubyte4f Color; // Color before bitangent fixes alignment
 	half3 Bitangent;
 	uint16_t Pad; // Padding to 4-byte boundary else things break	
+	ubyte4f LandBlend0;
 	ubyte4f LandBlend1;
-	ubyte4f LandBlend2;
 };
 #ifdef __cplusplus
 static_assert(sizeof(Vertex) % 4 == 0);

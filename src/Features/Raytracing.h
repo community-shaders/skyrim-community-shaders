@@ -951,8 +951,10 @@ struct Raytracing : public OverlayFeature
 								for (auto& shape : model->shapes) {
 									auto& material = shape->material;
 
-									if (index == material.BaseTexture->GetIndex())
-										logger::error("[RT]\t\t NiSourceTexture::Destructor - Found in: {}", key);
+									for (auto& materialTexture : material.Textures) {
+										if (index == materialTexture->GetIndex())
+											logger::critical("[RT]\t\t NiSourceTexture::Destructor - Found in: {}", key);
+									}
 								}
 							}
 

@@ -188,8 +188,8 @@ void Shape::BuildMesh(RE::BSGraphics::TriShape* rendererData, const std::uint32_
 			}
 
 			if (vertexFlags & RE::BSGraphics::Vertex::VF_LANDDATA) {
-				std::memcpy(&vertexData.LandBlend1, vtx + landOffset, sizeof(uint32_t));
-				std::memcpy(&vertexData.LandBlend2, vtx + landOffset + sizeof(uint32_t), sizeof(uint32_t));
+				std::memcpy(&vertexData.LandBlend0, vtx + landOffset, sizeof(uint32_t));
+				std::memcpy(&vertexData.LandBlend1, vtx + landOffset + sizeof(uint32_t), sizeof(uint32_t));
 			}
 
 			if (vertexFlags & RE::BSGraphics::Vertex::VF_COLORS) {
@@ -275,7 +275,7 @@ void Shape::BuildMaterial(const RE::BSGeometry::GEOMETRY_RUNTIME_DATA& geometryR
 	float4 effectColor = { 0.0f, 0.0f, 0.0f, 1.0f };
 
 	float4 texCoordOffsetScale = { 0.0f, 0.0f, 1.0f, 1.0f };
-	float4 texCoord1OffsetScale = { 0.0f, 0.0f, 1.0f, 1.0f };
+	float4 texCoordOffsetScale2 = { 0.0f, 0.0f, 1.0f, 1.0f };
 
 	half roughnessScale = 1.0f;
 	half specularLevel = 0.04f;
@@ -493,9 +493,9 @@ void Shape::BuildMaterial(const RE::BSGeometry::GEOMETRY_RUNTIME_DATA& geometryR
 	LogTexture("RMAOS Texture", rmaosTexture, rmaosTexReg->GetIndex());*/
 
 	material = Material(
-		baseColor,
-		effectColor,
-		texCoordOffsetScale,
+		{ baseColor, effectColor },
+		{},
+		{texCoordOffsetScale, texCoordOffsetScale2},
 		roughnessScale,
 		specularLevel,
 		specularColor,
@@ -506,8 +506,8 @@ void Shape::BuildMaterial(const RE::BSGeometry::GEOMETRY_RUNTIME_DATA& geometryR
 		specularTexReg,
 		envTexReg,
 		envMaskTexReg,
-		shaderType,
 		shaderFlags,
+		shaderType,
 		feature,
 		pbrFlags);
 }
