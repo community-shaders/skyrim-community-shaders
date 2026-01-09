@@ -382,7 +382,7 @@ void main()
     NormalRoughnessPathTracing[idx] = float4(sourceSurface.Normal, sourceSurface.Roughness);
 #else
 #   if defined(RAW_RADIANCE)
-    OutputTexture[idx] = float4(max(radiance, 0.0f), 1.0f);
+    OutputTexture[idx] = float4(radiance, 1.0f);
 #   else
     OutputTexture[idx] = float4(Color::GammaToTrueLinear(mainColor.rgb) + radiance, 1.0f);
 #   endif
