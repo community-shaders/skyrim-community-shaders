@@ -613,6 +613,7 @@ struct Raytracing : public OverlayFeature
 	};
 
 	eastl::shared_ptr<DefaultTexture> defaultWhiteTexture = nullptr;
+	eastl::shared_ptr<DefaultTexture> defaultGrayTexture = nullptr;
 	eastl::shared_ptr<DefaultTexture> defaultNormalTexture = nullptr;
 	eastl::shared_ptr<DefaultTexture> defaultBlackTexture = nullptr;
 	eastl::shared_ptr<DefaultTexture> defaultRMAOSTexture = nullptr;
