@@ -455,7 +455,8 @@ void FeatureListRenderer::DrawMenuVisitor::RenderFeatureSettingsTab(Feature* fea
 			ImGui::TextColored(themeSettings.StatusPalette.Error, feat->failedLoadedMessage.c_str());
 		}
 
-		if (!isDisabled && isLoaded) {
+		/// Disable reset button for ENBPostProcessing (not implemented)
+		if (!isDisabled && isLoaded && feat->GetShortName() != "ENBPostProcessing") {
 			// Position button in screen coordinates so it stays fixed in viewport when scrolling
 			ImVec2 windowPos = ImGui::GetWindowPos();
 			ImVec2 windowSize = ImGui::GetWindowSize();
