@@ -179,6 +179,7 @@ void Raytracing::DrawSettings()
 
 	if (recompileReason != RecompileReason::None) {
 		CompileRTGIShaders();
+		CompileCompositeShader();
 		recompileReason = RecompileReason::None;
 	}
 }
@@ -2981,10 +2982,17 @@ void Raytracing::DrawRTGI()
 	}
 
 	// True Linear to Gamma
-	if (settings.ConvertToGamma) {
-		d3d11Context->CSSetShader(trueLinearToGammaCS.get(), nullptr, 0);
+	if (settings.ConvertToGamma || !settings.PathTracing && settings.Denoiser == Denoiser::SVGF) {
+		d3d11Context->CSSetShader(compositeCS.get(), nullptr, 0);
 
-		d3d11Context->CSSetShaderResources(0, 1, &mainTexture->srv);
+		d3d11Context->CopyResource(main.textureCopy, main.texture);
+
+		eastl::array<ID3D11ShaderResourceView*, 3> srvs = {
+			main.SRVCopy,
+			diffuseAlbedoTexture->srv,
+			mainTexture->srv
+		};
+		d3d11Context->CSSetShaderResources(0, (uint)srvs.size(), srvs.data());
 
 		d3d11Context->CSSetUnorderedAccessViews(0, 1, &main.UAV, nullptr);
 
@@ -3881,8 +3889,24 @@ void Raytracing::CompileComputeShaders()
 	if (auto rawPtr = reinterpret_cast<ID3D11ComputeShader*>(Util::CompileShader(L"Data\\Shaders\\Raytracing\\ConvertTexturesCS.hlsl", { { "PT", "" } }, "cs_5_0")); rawPtr)
 		convertTexturesPTCS.attach(rawPtr);
 
-	if (auto rawPtr = reinterpret_cast<ID3D11ComputeShader*>(Util::CompileShader(L"Data\\Shaders\\Raytracing\\TrueLinearToGammaCS.hlsl", {}, "cs_5_0")); rawPtr)
-		trueLinearToGammaCS.attach(rawPtr);
+	CompileCompositeShader();
+}
+
+void Raytracing::CompileCompositeShader()
+{
+	std::vector<std::pair<const char*, const char*>> defines;
+
+	if (settings.ConvertToGamma) {
+		defines.emplace_back("GAMMA_OUTPUT", "");
+	}
+
+	if (!settings.PathTracing && settings.Denoiser == Denoiser::SVGF) {
+		defines.emplace_back("COMPOSITE", "");
+		defines.emplace_back("DIFFUSE", "");
+	}
+
+	if (auto rawPtr = reinterpret_cast<ID3D11ComputeShader*>(Util::CompileShader(L"Data\\Shaders\\Raytracing\\CompositeCS.hlsl", defines, "cs_5_0")); rawPtr)
+		compositeCS.attach(rawPtr);
 }
 
 RaytracingFD::FeatureData Raytracing::GetCommonBufferData()

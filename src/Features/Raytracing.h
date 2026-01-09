@@ -246,6 +246,7 @@ struct Raytracing : public OverlayFeature
 	void SetupSharedRT();
 	void CompileShaders();
 	void CompileComputeShaders();
+	void CompileCompositeShader();
 
 	void CompileSkinningShaders();
 	void CompileRTGIShaders();
@@ -725,7 +726,7 @@ struct Raytracing : public OverlayFeature
 	winrt::com_ptr<ID3D11ComputeShader> copyDepthCS = nullptr;
 	winrt::com_ptr<ID3D11ComputeShader> convertTexturesCS = nullptr;
 	winrt::com_ptr<ID3D11ComputeShader> convertTexturesPTCS = nullptr;
-	winrt::com_ptr<ID3D11ComputeShader> trueLinearToGammaCS = nullptr;
+	winrt::com_ptr<ID3D11ComputeShader> compositeCS = nullptr;
 
 	eastl::unique_ptr<DX12::StructuredBufferUpload<D3D12_RAYTRACING_INSTANCE_DESC>> blasInstanceBuffer = nullptr;
 	eastl::vector<D3D12_RAYTRACING_INSTANCE_DESC> blasInstances;
