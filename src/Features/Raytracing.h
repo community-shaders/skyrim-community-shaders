@@ -1030,8 +1030,16 @@ struct Raytracing : public OverlayFeature
 				auto& rt = globals::features::raytracing;
 				rt.renderingShadowmap = true;
 
-				if (rt.Active() && rt.settings.RaytracedShadows)
+				if (rt.Active() && rt.settings.RaytracedShadows) {
 					rt.UpdateShadowsFrameBuffer();
+
+					auto& runtimeData = light->GetShadowDirectionalLightRuntimeData();
+					for (size_t i = 0; i < 3; i++) {
+						runtimeData.startSplitDistances[i] = 0;
+						runtimeData.endSplitDistances[i] = 0;
+					}
+					
+				}
 
 				// This is effectively bypassed (removing the call freezes the game...)
 				func(light, a2);
@@ -1040,7 +1048,6 @@ struct Raytracing : public OverlayFeature
 
 				if (rt.Active() && rt.settings.RaytracedShadows) {
 					rt.shadowLight = light;
-					//rt.UpdateShadowInstances();
 				}
 			}
 
@@ -1369,8 +1376,8 @@ struct Raytracing : public OverlayFeature
 
 			stl::write_vfunc<0xA, BSShadowDirectionalLight_RenderShadowmaps>(RE::VTABLE_BSShadowDirectionalLight[0]);
 
-			stl::write_vfunc<0x29, BSShaderAccumulator_StartAccumulating>(RE::VTABLE_BSShaderAccumulator[0]);
-			stl::write_vfunc<0x2A, BSShaderAccumulator_FinishAccumulatingDispatch>(RE::VTABLE_BSShaderAccumulator[0]);
+			//stl::write_vfunc<0x29, BSShaderAccumulator_StartAccumulating>(RE::VTABLE_BSShaderAccumulator[0]);
+			//stl::write_vfunc<0x2A, BSShaderAccumulator_FinishAccumulatingDispatch>(RE::VTABLE_BSShaderAccumulator[0]);
 
 			detour_thunk<CreateTextureFromDDS>(0xd2ef80);
 			detour_thunk<TESObjectLAND_Attach3D>(0x2a8b00);

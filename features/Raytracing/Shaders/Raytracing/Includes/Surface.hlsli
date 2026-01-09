@@ -180,14 +180,7 @@ struct Surface
     void LandMaterial(in Vertex v0, in Vertex v1, in Vertex v2, float3 uvw, float3 normalWS, float3 tangentWS, float3 bitangentWS, in Material material)
     {
         float2 texCoord0 = material.TexCoord(Interpolate(v0.Texcoord0, v1.Texcoord0, v2.Texcoord0, uvw));
-    
-        Texture2D normalTexture0 = Textures[NonUniformResourceIndex(material.Texture6)];
-        Texture2D normalTexture1 = Textures[NonUniformResourceIndex(material.Texture7)];
-        Texture2D normalTexture2 = Textures[NonUniformResourceIndex(material.Texture8)];
-        Texture2D normalTexture3 = Textures[NonUniformResourceIndex(material.Texture9)];
-        Texture2D normalTexture4 = Textures[NonUniformResourceIndex(material.Texture10)];
-        Texture2D normalTexture5 = Textures[NonUniformResourceIndex(material.Texture11)];
-        
+
         Texture2D overlayTexture = Textures[NonUniformResourceIndex(material.OverlayTexture())];
         Texture2D noiseTexture = Textures[NonUniformResourceIndex(material.NoiseTexture())];   
     
@@ -227,7 +220,7 @@ struct Surface
         }
         else if (material.ShaderType == ShaderType::Lighting)
         {
-            Albedo = Color::GammaToTrueLinear(baseColor);
+            Albedo = baseColor; // GammaToTrueLinear looks wonky
         }
         
         float3 normal = BlendLandTexture(material.Texture6, texCoord0, landBlend0.x).rgb + BlendLandTexture(material.Texture7, texCoord0, landBlend0.y).rgb + 
