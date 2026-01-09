@@ -13,20 +13,20 @@ void main(uint2 id : SV_DispatchThreadID)
 #if defined(COMPOSITE)
     float3 outputColor = Color::GammaToTrueLinear(MainInputTexture[id].rgb);
     
-#   if defined(DIFFUSE)    
+#   if defined(DIFFUSE)
     outputColor += DiffuseAlbedoTexture[id].rgb * DiffuseGITexture[id].rgb;
 #   endif // DIFFUSE
     
-#   if defined(SPECULAR)      
+#   if defined(SPECULAR)
     outputColor += SpecularGITexture[id].rgb;
 #   endif // SPECULAR
 #else
     float3 outputColor = DiffuseGITexture[id].rgb;
 #endif // COMPOSITE
-    
+
 #if defined(GAMMA_OUTPUT)
     outputColor = Color::TrueLinearToGamma(outputColor);
 #endif // GAMMA_OUTPUT
-    
+
     MainOutputTexture[id] = float4(outputColor, 1.0f);
 }
