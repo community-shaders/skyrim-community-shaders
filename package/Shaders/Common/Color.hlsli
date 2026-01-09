@@ -309,6 +309,24 @@ namespace Color
 	{
 		return ENABLE_LL ? SharedData::linearLightingSettings.vanillaDiffuseColorMult : 1.0f;
 	}
+#else
+	float3 Diffuse(float3 color)
+	{
+#	if defined(TRUE_PBR)
+		return TrueLinearToGamma(color);
+#	else
+		return color;
+#	endif
+	}
+
+	float3 Light(float3 color)
+	{
+#	if defined(TRUE_PBR)
+		return color * Math::PI;  // Compensate for traditional Lambertian diffuse
+#	else
+		return color;
+#	endif
+	}
 #endif
 }
 
