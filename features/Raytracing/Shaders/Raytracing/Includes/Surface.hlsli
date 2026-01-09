@@ -235,6 +235,16 @@ struct Surface
         );        
     }     
     
+
+    void TestMaterial(in Vertex v0, in Vertex v1, in Vertex v2, in float3 uvw, in float3 normalWS, in float3 tangentWS, in float3 bitangentWS, in Material material)
+    {
+        Albedo = 0.5f;
+        
+        Normal = normalWS;
+        Tangent = tangentWS;        
+        Bitangent = bitangentWS;
+    }    
+    
     Surface(float3 position, Payload payload, out Instance instance, out Material material)
     {
         Surface surface;
@@ -267,19 +277,24 @@ struct Surface
         surface.Metallic = PBR::Defaults::Metallic;
         surface.AO = 1.0f;
         surface.F0 = PBR::Defaults::F0;         
+  
         
+#if defined(DEBUG_TESTMAT)
+        surface.TestMaterial(v0, v1, v2, uvw, normalWS, tangentWS, bitangentWS, material);
+#else
         if (material.Feature == Feature::kMultiTexLandLODBlend)
         {
-#if defined(DEBUG_A)            
+#   if defined(DEBUG_LAND)            
             surface.Albedo = float3(1.0f, 0.0f, 0.0f);
-#else
+#   else
             surface.LandMaterial(v0, v1, v2, uvw, normalWS, tangentWS, bitangentWS, material);
-#endif            
+#   endif            
         }
         else
         {
             surface.DefaultMaterial(v0, v1, v2, uvw, normalWS, tangentWS, bitangentWS, material);
         }
+#endif  
         
 #ifdef DEBUG_WHITE_FURNACE
         surface.Albedo = float3(1.0f, 1.0f, 1.0f);
