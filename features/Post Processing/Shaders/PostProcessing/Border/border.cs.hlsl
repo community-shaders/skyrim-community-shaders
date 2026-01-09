@@ -4,6 +4,7 @@ Texture2D <float4> InputTexture : register(t0);
 Texture2D <float> DepthTexture : register(t1);
 
 RWTexture2D <float4> OutputTexture : register(u0);
+RWTexture2D <float4> MotionTexture : register(u1);
 
 cbuffer BorderCB : register(b1)
 {
@@ -22,6 +23,7 @@ cbuffer BorderCB : register(b1)
         if (uv.y < Scale.x || uv.y > (1 - Scale.y) || uv.x < Scale.z || uv.x > (1 - Scale.w))
         {
             OutputTexture[DTid.xy] = float4(borderColor, 1.0);
+            MotionTexture[DTid.xy] = float4(0.0, 0.0, 0.0, 1.0);
         }
         else
         {

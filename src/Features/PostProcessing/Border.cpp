@@ -1,5 +1,6 @@
 #include "Border.h"
 
+#include "Deferred.h"
 #include "State.h"
 #include "Util.h"
 
@@ -131,10 +132,11 @@ void Border::Draw(TextureInfo& inout_tex)
 	borderCB->Update(data);
 
     auto depth = renderer->GetDepthStencilData().depthStencils[RE::RENDER_TARGETS_DEPTHSTENCIL::kMAIN];
+    auto motion = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMOTION_VECTOR];
     ID3D11ShaderResourceView* srvs[2] = { inout_tex.srv, depth.depthSRV };
     context->CSSetShaderResources(0, 2, srvs);
-    ID3D11UnorderedAccessView* uav = texOutput->uav.get();
-    context->CSSetUnorderedAccessViews(0, 1, &uav, nullptr);
+    ID3D11UnorderedAccessView* uavs[2] = { texOutput->uav.get(), motion.UAV };
+    context->CSSetUnorderedAccessViews(0, 2, uavs, nullptr);
     ID3D11Buffer* cb = borderCB->CB();
     context->CSSetConstantBuffers(1, 1, &cb);
     context->CSSetShader(borderCS.get(), nullptr, 0);   
@@ -143,9 +145,10 @@ void Border::Draw(TextureInfo& inout_tex)
 
     srvs[0] = nullptr;
     srvs[1] = nullptr;
-	uav = nullptr;
+	uavs[0] = nullptr;
+	uavs[1] = nullptr;
 	cb = nullptr;
-	context->CSSetUnorderedAccessViews(0, 1, &uav, nullptr);
+	context->CSSetUnorderedAccessViews(0, 2, uavs, nullptr);
 	context->CSSetShaderResources(0, 2, srvs);
 	context->CSSetConstantBuffers(0, 1, &cb);
 	context->CSSetShader(nullptr, nullptr, 0);

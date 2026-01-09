@@ -187,7 +187,7 @@ float3 WhiteBalance(float3 linearColor)
 	float2 srcWhiteDaylight = IlluminantChromaticity(temp);
 	float2 srcWhitePlankian = PlanckianLocusChromaticity(temp);
 
-	float2 srcWhite = exposureTemperatureTint.y < 4000 ? srcWhitePlankian : srcWhiteDaylight;
+	float2 srcWhite = temp < 4000 ? srcWhitePlankian : srcWhiteDaylight;
 	float2 d65White = float2(0.31270, 0.32900);
 
 	float2 isothermal = PlanckianIsothermal(temp, tint) - srcWhitePlankian;
