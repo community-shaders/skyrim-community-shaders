@@ -118,7 +118,7 @@ bool Effect::Apply()
 	// Call virtual texture creation function
 	CreateEffectTextures();
 
-	logger::info("[ENBPP] Successfully applied effect '{}'", GetName());
+	logger::debug("[ENBPP] Successfully applied effect '{}'", GetName());
 	return true;
 }
 
@@ -137,7 +137,7 @@ void Effect::Unload()
 
 	errors.clear();
 
-	logger::info("[ENBPP] Unloaded effect '{}'", GetName());
+	logger::debug("[ENBPP] Unloaded effect '{}'", GetName());
 }
 
 bool Effect::LoadFXFile()
@@ -162,7 +162,9 @@ bool Effect::LoadFXFile()
 		std::string errorMsg = "Compilation failed";
 		if (errorBlob) {
 			errorMsg = std::string(static_cast<const char*>(errorBlob->GetBufferPointer()));
-			logger::error("[ENBPP] Effect compilation failed: {}", errorMsg);
+			logger::error("[ENBPP] Effect compilation failed for '{}': {}", filePath.string(), errorMsg);
+		} else {
+			logger::error("[ENBPP] Effect compilation failed for '{}': HRESULT 0x{:08X}", filePath.string(), static_cast<unsigned int>(hr));
 		}
 		errors.push_back(errorMsg);
 		return false;
@@ -174,6 +176,8 @@ bool Effect::LoadFXFile()
 	SetupCustomTextures();
 	LoadTechniques();
 	LoadUITechniques();
+
+	logger::debug("[ENBPP] Effect '{}' compiled successfully with {} UI techniques", GetName(), uiTechniques.size());
 
 	// Populate available techniques for UI selection
 	availableTechniques = GetBaseTechniqueNames();
@@ -200,18 +204,16 @@ void Effect::ExecuteTechniqueSequence(const std::string& a_baseTechniqueName, ID
 	// Check if the technique sequence exists
 	auto sequenceIt = techniques.find(a_baseTechniqueName);
 	if (sequenceIt == techniques.end()) {
-		logger::trace("[ENBPP] Technique sequence '{}' not found", a_baseTechniqueName);
+		logger::debug("[ENBPP] Technique sequence '{}' not found", a_baseTechniqueName);
 		return;
 	}
 
 	const auto& sequence = sequenceIt->second;
 
 	if (sequence.empty()) {
-		logger::trace("[ENBPP] Technique sequence '{}' is empty", a_baseTechniqueName);
+		logger::debug("[ENBPP] Technique sequence '{}' is empty", a_baseTechniqueName);
 		return;
 	}
-
-	logger::trace("[ENBPP] Executing technique sequence '{}' with {} techniques", a_baseTechniqueName, sequence.size());
 
 	auto sourceTexture = effect->GetVariableByName("TextureColor")->AsShaderResource();
 
@@ -225,8 +227,6 @@ void Effect::ExecuteTechniqueSequence(const std::string& a_baseTechniqueName, ID
 			logger::warn("[ENBPP] Technique {} in sequence '{}' is null, skipping", i, a_baseTechniqueName);
 			continue;
 		}
-
-		logger::trace("[ENBPP] Executing technique {} in sequence '{}'", i, a_baseTechniqueName);
 
 		D3DX11_TECHNIQUE_DESC techDesc;
 		techniqueInfo.technique->GetDesc(&techDesc);
@@ -317,11 +317,9 @@ void Effect::ExecuteTechnique(const std::string& techniqueName, TextureManager::
 	// Find the technique
 	auto technique = effect->GetTechniqueByName(techniqueName.c_str());
 	if (!technique || !technique->IsValid()) {
-		logger::trace("[ENBPP] Technique '{}' not found or invalid", techniqueName);
+		logger::debug("[ENBPP] Technique '{}' not found or invalid", techniqueName);
 		return;
 	}
-
-	logger::trace("[ENBPP] Executing single technique '{}'", techniqueName);
 
 	// Set output render target
 	ID3D11RenderTargetView* rtvArray[] = { output.rtv.get() };
@@ -358,7 +356,7 @@ void Effect::SetupCustomTextures()
 		std::string resourceName = GetResourceNameFromVariable(effectVar.get());
 
 		if (!resourceName.empty()) {
-			logger::info("[ENBPP] Loading texture for variable '{}': {}", varName, resourceName);
+			logger::debug("[ENBPP] Loading texture for variable '{}': {}", varName, resourceName);
 
 			// Load the texture
 			auto srv = LoadTextureFromFile(resourceName);
@@ -367,7 +365,7 @@ void Effect::SetupCustomTextures()
 				auto shaderResourceVar = effectVar->AsShaderResource();
 				if (shaderResourceVar && shaderResourceVar->IsValid()) {
 					shaderResourceVar->SetResource(srv);
-					logger::info("[ENBPP] Successfully bound texture '{}' to variable '{}'", resourceName, varName);
+					logger::debug("[ENBPP] Successfully bound texture '{}' to variable '{}'", resourceName, varName);
 				}
 			} else {
 				logger::warn("[ENBPP] Failed to load texture '{}' for variable '{}'", resourceName, varName);
@@ -409,7 +407,7 @@ ID3D11ShaderResourceView* Effect::LoadTextureFromFile(const std::string& filenam
 	// Cache the loaded texture
 	customTextureCache[filename] = srv;
 
-	logger::info("[ENBPP] Successfully loaded texture: {}", fileString);
+	logger::debug("[ENBPP] Successfully loaded texture: {}", fileString);
 	return srv.get();
 }
 
@@ -519,7 +517,7 @@ void Effect::LoadTechniques()
 
 	// Log the technique sequences found
 	for (const auto& [baseName, sequence] : techniques) {
-		logger::info("[ENBPP] Technique sequence '{}' has {} techniques", baseName, sequence.size());
+		logger::debug("[ENBPP] Technique sequence '{}' has {} techniques", baseName, sequence.size());
 	}
 }
 
@@ -574,7 +572,7 @@ void Effect::LoadUITechniques()
 		}
 	}
 
-	logger::info("[ENBPP] Loaded {} UI techniques", uiTechniques.size());
+	logger::debug("[ENBPP] Loaded {} UI techniques", uiTechniques.size());
 }
 
 std::string Effect::GetRenderTargetFromTechnique(ID3DX11EffectTechnique* technique)
@@ -807,7 +805,7 @@ void Effect::LoadUIVariables()
 		}
 	}
 
-	logger::info("[ENBPP] Loaded {} UI variables", uiVariables.size());
+	logger::debug("[ENBPP] Loaded {} UI variables", uiVariables.size());
 }
 
 std::string Effect::GetUIAnnotation(ID3DX11EffectVariable* variable, const std::string& annotationName)
@@ -1132,7 +1130,7 @@ void Effect::EnumerateAllVariables()
 		logger::debug("[ENBPP] Enumerated variable: {}", varName);
 	}
 
-	logger::info("[ENBPP] Enumerated {} effect variables", variables.size());
+	logger::debug("[ENBPP] Enumerated {} effect variables", variables.size());
 }
 
 bool Effect::SetShaderResourceVariable(const std::string& variableName, ID3D11ShaderResourceView* resource)
