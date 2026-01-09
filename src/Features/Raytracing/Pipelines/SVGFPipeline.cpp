@@ -87,6 +87,9 @@ void SVGFPipeline::Denoise(ID3D11DeviceContext4* context, uint2 renderSize, Sett
 	auto cb = frameBuffer->CB();
 	context->CSSetConstantBuffers(1, 1, &cb);
 
+	cb = *globals::game::perFrame.get();
+	context->CSSetConstantBuffers(12, 1, &cb);
+
 	std::array<ID3D11ShaderResourceView*, 7> srvs = { nullptr };
 	std::array<ID3D11UnorderedAccessView*, 2> uavs = { nullptr };
 
