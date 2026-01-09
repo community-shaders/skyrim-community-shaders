@@ -722,7 +722,8 @@ void Raytracing::SetupResources()
 		defaultGrayTexture->UpdateAndUpload(commandList.get(), gray);
 		defaultNormalTexture->UpdateAndUpload(commandList.get(), normal);
 		defaultBlackTexture->UpdateAndUpload(commandList.get(), black);
-		defaultRMAOSTexture->UpdateAndUpload(commandList.get(), rmaos);;
+		defaultRMAOSTexture->UpdateAndUpload(commandList.get(), rmaos);
+		;
 	}
 
 	auto mainTex = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMAIN];
@@ -3160,7 +3161,7 @@ void Raytracing::PostPostLoad()
 
 	TESObjectLoadedEventHandler::Register();
 	//TESCellAttachDetachEventHandler::Register();
-	//TESCellFullyLoadedEventHandler::Register();	
+	//TESCellFullyLoadedEventHandler::Register();
 }
 
 /*void Raytracing::RTProcessor::PostCreate(const RE::BSModelDB::DBTraits::ArgsType& a_args, const char* modelName, RE::NiPointer<RE::NiNode>& a_root, std::uint32_t& typeOut)
