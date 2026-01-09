@@ -61,7 +61,7 @@ namespace ENBHelper
 		// Update time info
 		if (const auto* calendar = RE::Calendar::GetSingleton()) {
 			cachedTime.gameHour = calendar->GetHour();
-			cachedTime.dayOfYear = calendar->GetDayOfYear();
+			cachedTime.dayOfYear = calendar->GetDay() + (calendar->GetMonth() - 1) * 30.0f;  // Approximate (GetDayOfYear() is not available)
 		}
 
 		// Update location info
