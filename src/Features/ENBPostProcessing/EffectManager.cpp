@@ -6,6 +6,9 @@
 #include "TextureManager.h"
 #include "WeatherManager.h"
 
+#include "Features/DynamicCubemaps.h"
+#include "Features/IBL.h"
+
 #include <d3dcompiler.h>
 #include <vector>
 
@@ -808,7 +811,9 @@ void EffectManager::UpdateCommonVariablesForEffect(ID3DX11Effect* effect)
 	if (globals::features::dynamicCubemaps.loaded && globals::features::dynamicCubemaps.envTexture) {
 		auto& cubemaps = globals::features::dynamicCubemaps;
 		auto* envTex = cubemaps.activeReflections ? cubemaps.envReflectionsTexture : cubemaps.envTexture;
-		Effect::SetShaderResourceVariable(effect, "TextureReflectionCube", envTex->srv.get());
+		if (envTex) {
+			Effect::SetShaderResourceVariable(effect, "TextureReflectionCube", envTex->srv.get());
+		}
 	}
 
 	// Set vector variables
