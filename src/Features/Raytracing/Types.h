@@ -10,7 +10,7 @@
 		template <typename FormatContext>                                            \
 		auto format(const name& s, FormatContext& ctx) const                         \
 		{                                                                            \
-			return fmt::format_to(ctx.out(), "{}", s.to_string());					 \
+			return fmt::format_to(ctx.out(), "{}", s.to_string());                   \
 		}                                                                            \
 	};
 
@@ -81,7 +81,7 @@ struct half2
 			static_cast<float>(y));
 	}
 
-    std::string to_string() const
+	std::string to_string() const
 	{
 		return "[" + std::to_string(x) + ", " + std::to_string(y) + "]";
 	}
@@ -123,7 +123,7 @@ struct half3
 		return *this;
 	}
 
-    std::string to_string() const
+	std::string to_string() const
 	{
 		return "[" + std::to_string(x) + ", " + std::to_string(y) + ", " + std::to_string(z) + "]";
 	}
@@ -159,7 +159,7 @@ struct half4
 			static_cast<float>(w));
 	}
 
-    std::string to_string() const
+	std::string to_string() const
 	{
 		return "[" + std::to_string(x) + ", " + std::to_string(y) + ", " + std::to_string(z) + ", " + std::to_string(w) + "]";
 	}

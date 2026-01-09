@@ -37,7 +37,7 @@ static std::uint32_t GetVertexSize(RE::BSGraphics::Vertex::Flags flags)
 	}
 	if (flags & Vertex::VF_EYEDATA) {
 		vertexSize += sizeof(float);
-	}	
+	}
 	if (flags & Vertex::VF_LANDDATA) {
 		vertexSize += sizeof(uint32_t) * 2;
 	}
@@ -284,9 +284,10 @@ void Shape::BuildMaterial(const RE::BSGeometry::GEOMETRY_RUNTIME_DATA& geometryR
 	using Feature = RE::BSShaderMaterial::Feature;
 	using EShaderPropertyFlag = RE::BSShaderProperty::EShaderPropertyFlag;
 
-	eastl::array<half4, 2> colors = { 
-		float4(1.0f, 1.0f, 1.0f, 1.0f), 
-		float4(0.0f, 0.0f, 0.0f, 0.0f) };
+	eastl::array<half4, 2> colors = {
+		float4(1.0f, 1.0f, 1.0f, 1.0f),
+		float4(0.0f, 0.0f, 0.0f, 0.0f)
+	};
 
 	eastl::array<half, 3> scalars;
 	scalars.fill(0.0f);
@@ -377,7 +378,7 @@ void Shape::BuildMaterial(const RE::BSGeometry::GEOMETRY_RUNTIME_DATA& geometryR
 							textures[Material::MAX_PBRLAND_TEXTURES + i] = TextureRegister(lightingPBRMaterialLand->landscapeNormalTextures[i], normalTexture);
 							textures[Material::MAX_PBRLAND_TEXTURES * 2 + i] = TextureRegister(lightingPBRMaterialLand->landscapeRMAOSTextures[i], rmaosTexture);
 						}
-						
+
 						textures[Material::MAX_PBRLAND_TEXTURES * 3] = TextureRegister(lightingPBRMaterialLand->terrainOverlayTexture, blackTexture);
 						textures[Material::MAX_PBRLAND_TEXTURES * 3 + 1] = TextureRegister(lightingPBRMaterialLand->terrainNoiseTexture, blackTexture);
 					} else if (typeid(*shaderMaterial) == typeid(BSLightingShaderMaterialPBR)) {
@@ -449,7 +450,7 @@ void Shape::BuildMaterial(const RE::BSGeometry::GEOMETRY_RUNTIME_DATA& geometryR
 									};
 								}
 							}
-						}						
+						}
 					}
 				} else {
 					logger::warn("[RT] BuildMaterial - BSShaderMaterial is nullptr");
@@ -464,10 +465,10 @@ void Shape::BuildMaterial(const RE::BSGeometry::GEOMETRY_RUNTIME_DATA& geometryR
 
 				if (auto effectMaterial = skyrim_cast<RE::BSEffectShaderMaterial*>(effectShaderProp->material)) {
 					colors[1] = {
-						effectMaterial->baseColor.red, 
-						effectMaterial->baseColor.green, 
-						effectMaterial->baseColor.blue, 
-						effectMaterial->baseColorScale 
+						effectMaterial->baseColor.red,
+						effectMaterial->baseColor.green,
+						effectMaterial->baseColor.blue,
+						effectMaterial->baseColorScale
 					};
 
 					textures[0] = TextureRegister(effectMaterial->sourceTexture, blackTexture);
@@ -484,7 +485,7 @@ void Shape::BuildMaterial(const RE::BSGeometry::GEOMETRY_RUNTIME_DATA& geometryR
 		pbrFlags,
 		colors,
 		scalars,
-		texCoordOffsetScales,	
+		texCoordOffsetScales,
 		textures);
 }
 

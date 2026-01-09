@@ -1039,7 +1039,6 @@ struct Raytracing : public OverlayFeature
 						runtimeData.startSplitDistances[i] = 0;
 						runtimeData.endSplitDistances[i] = 0;
 					}
-					
 				}
 
 				// This is effectively bypassed (removing the call freezes the game...)
@@ -1120,7 +1119,6 @@ struct Raytracing : public OverlayFeature
 								}
 							}
 						}
-						
 					}
 				}
 
@@ -1128,7 +1126,6 @@ struct Raytracing : public OverlayFeature
 			}
 			static inline REL::Relocation<decltype(thunk)> func;
 		};
-
 
 		template <typename T>
 		struct Load3D
@@ -1338,7 +1335,7 @@ struct Raytracing : public OverlayFeature
 			};
 			static inline REL::Relocation<decltype(thunk)> func;
 		};
-		
+
 		static void Install()
 		{
 			stl::write_vfunc<0x6A, Load3D<RE::TESObjectREFR>>(RE::VTABLE_TESObjectREFR[0]);
@@ -1382,7 +1379,7 @@ struct Raytracing : public OverlayFeature
 
 			detour_thunk<CreateTextureFromDDS>(0xd2ef80);
 			detour_thunk<TESObjectLAND_Attach3D>(0x2a8b00);
-			
+
 			logger::info("[RT] Base: [0x{:8X}]", REL::Module::get().base());
 
 			logger::info("[RT] Installed hooks");

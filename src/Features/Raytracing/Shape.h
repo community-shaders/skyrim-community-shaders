@@ -114,7 +114,7 @@ public:
 		RE::BSShaderMaterial::Feature Feature;
 		stl::enumeration<PBRShaderFlags, uint16_t> PBRFlags;
 
-		eastl::array<half4,2> Colors;
+		eastl::array<half4, 2> Colors;
 		eastl::array<half, 3> Scalars;
 
 		eastl::array<half4, 2> TexCoordOffsetScale;
