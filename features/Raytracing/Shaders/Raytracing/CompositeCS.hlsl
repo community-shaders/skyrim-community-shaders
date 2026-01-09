@@ -10,16 +10,18 @@ RWTexture2D<float4> MainOutputTexture   : register(u0);
 [numthreads(8, 8, 1)]
 void main(uint2 id : SV_DispatchThreadID)
 {
-    float3 outputColor = MainInputTexture[id].rgb;
-    
 #if defined(COMPOSITE)
+    float3 outputColor = Color::GammaToTrueLinear(MainInputTexture[id].rgb);
+    
 #   if defined(DIFFUSE)    
     outputColor += DiffuseAlbedoTexture[id].rgb * DiffuseGITexture[id].rgb;
 #   endif // DIFFUSE
     
-#   if defined(SPECULAR)    
+#   if defined(SPECULAR)      
     outputColor += SpecularGITexture[id].rgb;
 #   endif // SPECULAR
+#else
+    float3 outputColor = DiffuseGITexture[id].rgb;
 #endif // COMPOSITE
     
 #if defined(GAMMA_OUTPUT)
