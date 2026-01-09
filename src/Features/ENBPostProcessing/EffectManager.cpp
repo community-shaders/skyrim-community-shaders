@@ -228,6 +228,10 @@ void EffectManager::ExecuteEffects()
 
 	auto textureOriginal = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMAIN];
 
+	/// Unbind CS IBL PS resources before ENB PP to prevent resource hazards
+	ID3D11ShaderResourceView* nullSRVs[4] = { nullptr };
+	context->PSSetShaderResources(76, 4, nullSRVs);
+
 	// Set our render state
 	context->RSSetState(rasterizerState.get());
 	context->OMSetBlendState(blendState.get(), nullptr, 0xFFFFFFFF);
@@ -302,6 +306,18 @@ void EffectManager::ExecuteEffects()
 	CopyTexture(textureSDRTemp->srv.get(), textureFramebuffer1.RTV);
 	CopyTexture(textureSDRTemp->srv.get(), textureFramebuffer2.RTV);
 	CopyTexture(textureSDRTemp->srv.get(), textureFramebuffer3.RTV);
+
+	/// Rebind CS IBL PS resources after ENB PP completes
+	if (globals::features::ibl.loaded) {
+		auto& ibl = globals::features::ibl;
+		ID3D11ShaderResourceView* srvs[4] = {
+			ibl.diffuseIBLTexture ? ibl.diffuseIBLTexture->srv.get() : nullptr,
+			ibl.diffuseSkyIBLTexture ? ibl.diffuseSkyIBLTexture->srv.get() : nullptr,
+			ibl.staticDiffuseIBLTexture ? ibl.staticDiffuseIBLTexture->srv.get() : nullptr,
+			ibl.staticSpecularIBLTexture ? ibl.staticSpecularIBLTexture->srv.get() : nullptr
+		};
+		context->PSSetShaderResources(76, 4, srvs);
+	}
 }
 
 void EffectManager::ExecutePostPass()
