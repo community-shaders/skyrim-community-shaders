@@ -1,6 +1,7 @@
 #include "ENBPostProcessing.h"
 
 #include "ENBPostProcessing/EffectManager.h"
+#include "ENBPostProcessing/ENBHelper.h"
 #include "ENBPostProcessing/MenuManager.h"
 #include "ENBPostProcessing/SettingManager.h"
 #include "ENBPostProcessing/WeatherManager.h"
@@ -298,6 +299,8 @@ void ENBPostProcessing::CheckCommonData()
 {
 	static Util::FrameChecker checker;
 	if (checker.IsNewFrame()) {
+		ENBHelper::Update();
+
 		auto& settingManager = SettingManager::GetSingleton();
 		auto& effectManager = EffectManager::GetSingleton();
 		auto& weatherManager = WeatherManager::GetSingleton();
