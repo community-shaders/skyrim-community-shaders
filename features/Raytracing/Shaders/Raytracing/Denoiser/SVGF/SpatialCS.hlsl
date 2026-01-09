@@ -10,13 +10,13 @@ static const float gaussianKernel[3][3] =
     { 1, 2, 1 },
     { 2, 4, 2 },
     { 1, 2, 1 }
-};    
+};
 
 float GaussianBlur(uint2 id, uint2 screenSize)
 {
     float sum = 0.f;
     float kernelSum = 0.f;
-    
+
     const int radius = 1;
 
     for (int y = -radius; y <= radius; y++)
@@ -64,8 +64,8 @@ static const float kernelWeights[5] = {
     {
         FilteredOutput[DTid.xy] = inputColor;
         return;
-    }    
-    
+    }
+
     float3 normalWS;
     float roughness;
     GetNormalRoughness(DTid.xy, normalWS, roughness);
@@ -76,17 +76,17 @@ static const float kernelWeights[5] = {
 
     float phiLuminance = max(Frame.ColorPhi * sqrt(abs(variance) + VAR_EPSILON), VAR_EPSILON);
     float phiNormal = Frame.NormalPhi;
-    
+
 #if defined(SSRT_SPECULAR)
     // Trying to reduce blurriness on glossy surfaces
     phiLuminance /= max(roughness, 0.05f);
     phiNormal *= roughness;
 #endif
-    
+
     float phiDepth = (Frame.AtrousIterations + 1);
     float weightSum = 0.f;
     float3 blendedColor = 0;
-        
+
     for (int ky = -2; ky <= 2; ky++)
     {
         for (int kx = -2; kx <= 2; kx++)

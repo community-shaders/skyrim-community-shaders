@@ -24,8 +24,8 @@ bool IsValidHistory(uint2 pixel, float2 uv, float3 currNormalWS)
     float3 prevNormalWS;
     float roughness;
     GetNormalRoughness(HistoryNormalsTexture, pixel, prevNormalWS, roughness);
-    
-    float normalDiff = dot(currNormalWS, prevNormalWS);  
+
+    float normalDiff = dot(currNormalWS, prevNormalWS);
     if (normalDiff < 0.707f) // cos 30
         return false;
 
@@ -33,7 +33,7 @@ bool IsValidHistory(uint2 pixel, float2 uv, float3 currNormalWS)
     float depthDiff = abs(currDepth - prevDepth) / currDepth;
     if (depthDiff > 0.1f) // 10% depth difference threshold
         return false;*/
-    
+
     return true;
 }
 
@@ -82,12 +82,12 @@ bool IsValidHistory(uint2 pixel, float2 uv, float3 currNormalWS)
         for (int i = 0; i < 4; i++)
         {
             int2 neighborPixel = int2(prevPixel) + bilinOffset[i];
-            
+
             if (any(neighborPixel < 0) || any(neighborPixel >= screenSize))
-                continue;            
-            
+                continue;
+
             float2 neighborUV = float2(neighborPixel  + 0.5f) * ResolutionRcp;
-            
+
             if (IsValidHistory(uint2(neighborPixel), neighborUV, normalWS))
             {
                 float4 neighborColor = HistoryTexture[uint2(neighborPixel)];
@@ -131,12 +131,12 @@ bool IsValidHistory(uint2 pixel, float2 uv, float3 currNormalWS)
         for (int i = 0; i < 8; i++)
         {
             int2 neighborPixel = int2(prevPixel) + offsets[i];
-            
+
             if (any(neighborPixel < 0) || any(neighborPixel >= screenSize))
-                continue;            
-            
-            float2 neighborUV = float2(neighborPixel  + 0.5f) * ResolutionRcp;           
-            
+                continue;
+
+            float2 neighborUV = float2(neighborPixel  + 0.5f) * ResolutionRcp;
+
             if (IsValidHistory(uint2(neighborPixel), neighborUV, normalWS))
             {
                 float4 neighborColor = HistoryTexture[uint2(neighborPixel)];

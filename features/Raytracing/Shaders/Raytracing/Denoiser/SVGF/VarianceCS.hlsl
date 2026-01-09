@@ -24,7 +24,7 @@ RWTexture2D<float4> VarianceOutput : register(u0);
         VarianceOutput[DTid.xy] = temporalColor;
         return;
     }*/
-    
+
     float history = MomentsTexture[DTid.xy].z;
 
     if (history <= 2) {
@@ -79,6 +79,6 @@ RWTexture2D<float4> VarianceOutput : register(u0);
     }
     else
     {
-        VarianceOutput[DTid.xy] = temporalColor;    
+        VarianceOutput[DTid.xy] = temporalColor;
     }
 }
