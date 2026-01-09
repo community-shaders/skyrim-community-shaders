@@ -3,9 +3,88 @@
 #include "Features/Raytracing/Heap.h"
 #include "TruePBR.h"
 #include "TruePBR/BSLightingShaderMaterialPBR.h"
+#include "TruePBR/BSLightingShaderMaterialPBRLandscape.h"
 
 using GIHeap = Raytracing::GIHeap;
 using SkinningHeap = Raytracing::SkinningHeap;
+
+static std::uint32_t GetVertexSize(RE::BSGraphics::Vertex::Flags flags)
+{
+	using RE::BSGraphics::Vertex;
+
+	std::uint32_t vertexSize = 0;
+
+	if (flags & Vertex::VF_VERTEX) {
+		vertexSize += sizeof(float) * 4;
+	}
+	if (flags & Vertex::VF_UV) {
+		vertexSize += sizeof(std::uint16_t) * 2;
+	}
+	if (flags & Vertex::VF_UV_2) {
+		vertexSize += sizeof(std::uint16_t) * 2;
+	}
+	if (flags & Vertex::VF_NORMAL) {
+		vertexSize += sizeof(std::uint16_t) * 2;
+		if (flags & Vertex::VF_TANGENT) {
+			vertexSize += sizeof(std::uint16_t) * 2;
+		}
+	}
+	if (flags & Vertex::VF_COLORS) {
+		vertexSize += sizeof(std::uint8_t) * 4;
+	}
+	if (flags & Vertex::VF_SKINNED) {
+		vertexSize += sizeof(std::uint16_t) * 4 + sizeof(std::uint8_t) * 4;
+	}
+	if (flags & Vertex::VF_EYEDATA) {
+		vertexSize += sizeof(float);
+	}	
+	if (flags & Vertex::VF_LANDDATA) {
+		vertexSize += sizeof(uint32_t) * 2;
+	}
+
+	return vertexSize;
+}
+
+static std::string PrintVertexFlags(uint16_t value)
+{
+	using RE::BSGraphics::Vertex;
+
+	std::string result;
+	if (value & Vertex::Flags::VF_VERTEX)
+		result += "VF_VERTEX ";
+
+	if (value & Vertex::Flags::VF_UV)
+		result += "VF_UV ";
+
+	if (value & Vertex::Flags::VF_UV_2)
+		result += "VF_UV_2 ";
+
+	if (value & Vertex::Flags::VF_NORMAL)
+		result += "VF_NORMAL ";
+
+	if (value & Vertex::Flags::VF_TANGENT)
+		result += "VF_TANGENT ";
+
+	if (value & Vertex::Flags::VF_COLORS)
+		result += "VF_COLORS ";
+
+	if (value & Vertex::Flags::VF_SKINNED)
+		result += "VF_SKINNED ";
+
+	if (value & Vertex::Flags::VF_LANDDATA)
+		result += "VF_LANDDATA ";
+
+	if (value & Vertex::Flags::VF_EYEDATA)
+		result += "VF_EYEDATA ";
+
+	if (value & Vertex::Flags::VF_INSTANCEDATA)
+		result += "VF_INSTANCEDATA ";
+
+	if (value & Vertex::Flags::VF_FULLPREC)
+		result += "VF_FULLPREC ";
+
+	return result;
+}
 
 void Shape::BuildMesh(RE::BSGraphics::TriShape* rendererData, const std::uint32_t& vertexCountIn, const std::uint16_t& triangleCountIn, const std::uint16_t& bonesPerVertex, const float4x4& transform)
 {
@@ -37,7 +116,7 @@ void Shape::BuildMesh(RE::BSGraphics::TriShape* rendererData, const std::uint32_
 		if (skinned)
 			skinning.resize(vertexCountIn);
 
-		uint32_t stride = vertexDesc.GetSize();
+		auto vertexSize = GetVertexSize(vertexFlags);
 
 		bool hasPosition = vertexFlags & RE::BSGraphics::Vertex::VF_VERTEX;
 
@@ -47,6 +126,7 @@ void Shape::BuildMesh(RE::BSGraphics::TriShape* rendererData, const std::uint32_
 		uint32_t tangOffset = vertexDesc.GetAttributeOffset(RE::BSGraphics::Vertex::VA_BINORMAL);
 		uint32_t colorOffset = vertexDesc.GetAttributeOffset(RE::BSGraphics::Vertex::VA_COLOR);
 		uint32_t skinOffset = vertexDesc.GetAttributeOffset(RE::BSGraphics::Vertex::VA_SKINNING);
+		uint32_t landOffset = vertexDesc.GetAttributeOffset(RE::BSGraphics::Vertex::VA_LANDDATA);
 
 		uint32_t boneIDOffset = sizeof(uint16_t) * bonesPerVertex;
 
@@ -54,7 +134,7 @@ void Shape::BuildMesh(RE::BSGraphics::TriShape* rendererData, const std::uint32_
 		eastl::vector<uint8_t> boneIds(bonesPerVertex);
 
 		for (uint16_t i = 0; i < vertexCountIn; i++) {
-			uint8_t* vtx = rendererData->rawVertexData + i * stride;
+			uint8_t* vtx = rendererData->rawVertexData + i * vertexSize;
 
 			Vertex vertexData{};
 
@@ -107,6 +187,11 @@ void Shape::BuildMesh(RE::BSGraphics::TriShape* rendererData, const std::uint32_
 				}
 			}
 
+			if (vertexFlags & RE::BSGraphics::Vertex::VF_LANDDATA) {
+				std::memcpy(&vertexData.LandBlend0, vtx + landOffset, sizeof(uint32_t));
+				std::memcpy(&vertexData.LandBlend1, vtx + landOffset + sizeof(uint32_t), sizeof(uint32_t));
+			}
+
 			if (vertexFlags & RE::BSGraphics::Vertex::VF_COLORS) {
 				std::memcpy(&vertexData.Color, vtx + colorOffset, sizeof(uint32_t));
 			} else {
@@ -124,22 +209,50 @@ void Shape::BuildMesh(RE::BSGraphics::TriShape* rendererData, const std::uint32_
 
 	// Triangles
 	{
-		triangles.resize(triangleCountIn);
+		// Landscape contains no triangles, so we build them ourselves
+		if (flags & Flags::Landscape) {
+			triangles.reserve(triangleCountIn);
 
-		eastl::vector<uint16_t> indices(triangleCountIn * 3);
-		std::memcpy(indices.data(), rendererData->rawIndexData, sizeof(uint16_t) * triangleCountIn * 3);
+			constexpr uint16_t GRID_SIZE = 16;
+			constexpr uint16_t VERTICES = GRID_SIZE + 1;
 
-		for (uint16_t t = 0; t < triangleCountIn; ++t) {
-			uint16_t i = t * 3u;
+			for (uint16_t y = 0; y < GRID_SIZE; y++) {
+				for (uint16_t x = 0; x < GRID_SIZE; x++) {
+					uint16_t v0 = y * VERTICES + x;
+					uint16_t v1 = v0 + 1;
+					uint16_t v2 = v0 + VERTICES;
+					uint16_t v3 = v2 + 1;
 
-			uint16_t v0 = indices[i];
-			uint16_t v1 = indices[i + 1u];
-			uint16_t v2 = indices[i + 2u];
+					if (v0 >= vertexCount || v1 >= vertexCount || v2 >= vertexCount)
+						logger::critical("[RT] Quad {} {} vertex overflow: [{}, {}, {}]", x, y, v0, v1, v2);
 
-			if (v0 >= vertexCount || v1 >= vertexCount || v2 >= vertexCount)
-				logger::critical("[RT] Triangle {} vertex overflow: [{}, {}, {}]", t, v0, v1, v2);
+					// First triangle
+					triangles.emplace_back(v0, v1, v2);
 
-			triangles[t] = Triangle(v0, v1, v2);
+					// Second triangle
+					triangles.emplace_back(v1, v3, v2);
+				}
+			}
+		} else {
+			triangles.resize(triangleCountIn);
+
+			const auto indexCount = triangleCountIn * 3;
+
+			eastl::vector<uint16_t> indices(indexCount);
+			std::memcpy(indices.data(), rendererData->rawIndexData, sizeof(uint16_t) * indexCount);
+
+			for (uint16_t t = 0; t < triangleCountIn; ++t) {
+				uint16_t i = t * 3u;
+
+				uint16_t v0 = indices[i];
+				uint16_t v1 = indices[i + 1u];
+				uint16_t v2 = indices[i + 2u];
+
+				if (v0 >= vertexCount || v1 >= vertexCount || v2 >= vertexCount)
+					logger::critical("[RT] Triangle {} vertex overflow: [{}, {}, {}]", t, v0, v1, v2);
+
+				triangles[t] = Triangle(v0, v1, v2);
+			}
 		}
 
 		triangleCount = triangleCountIn;
@@ -150,38 +263,46 @@ void Shape::BuildMesh(RE::BSGraphics::TriShape* rendererData, const std::uint32_
 	}
 }
 
+static eastl::shared_ptr<Allocation> TextureRegister(const RE::NiPointer<RE::NiSourceTexture> niPointer, eastl::shared_ptr<Allocation> defaultTexture)
+{
+	if (!niPointer || !niPointer->rendererTexture)
+		return defaultTexture;
+
+	return globals::features::raytracing.GetTextureRegister(niPointer->rendererTexture->texture, defaultTexture);
+}
+
 void Shape::BuildMaterial(const RE::BSGeometry::GEOMETRY_RUNTIME_DATA& geometryRuntimeData, [[maybe_unused]] const char* name)
 {
+	auto& rt = globals::features::raytracing;
+	//auto& whiteTexture = rt.defaultWhiteTexture->allocation;
+	auto& grayTexture = rt.defaultGrayTexture->allocation;
+	auto& normalTexture = rt.defaultNormalTexture->allocation;
+	auto& blackTexture = rt.defaultBlackTexture->allocation;
+	auto& rmaosTexture = rt.defaultRMAOSTexture->allocation;
+
 	using State = RE::BSGeometry::States;
 	using Feature = RE::BSShaderMaterial::Feature;
 	using EShaderPropertyFlag = RE::BSShaderProperty::EShaderPropertyFlag;
 
-	auto& rt = globals::features::raytracing;
+	eastl::array<half4, 2> colors = { 
+		float4(1.0f, 1.0f, 1.0f, 1.0f), 
+		float4(0.0f, 0.0f, 0.0f, 0.0f) };
 
-	float4 baseColor = { 1.0f, 1.0f, 1.0f, 1.0f };
-	float4 effectColor = { 0.0f, 0.0f, 0.0f, 1.0f };
+	eastl::array<half, 3> scalars;
+	scalars.fill(0.0f);
 
-	float4 texCoordOffsetScale = { 0.0f, 0.0f, 1.0f, 1.0f };
-	float4 texCoord1OffsetScale = { 0.0f, 0.0f, 1.0f, 1.0f };
+	eastl::array<half4, 2> texCoordOffsetScales = {
+		float4(0.0f, 0.0f, 1.0f, 1.0f),
+		float4(0.0f, 0.0f, 1.0f, 1.0f)
+	};
 
-	half roughnessScale = 1.0f;
-	half specularLevel = 0.04f;
-
-	half4 specularColor = { 0.0f, 0.0f, 0.0f, 1.0f };
+	eastl::array<eastl::shared_ptr<Allocation>, 20> textures;
+	textures.fill(blackTexture);
 
 	RE::BSShader::Type shaderType = RE::BSShader::Type::None;
 	REX::EnumSet<EShaderPropertyFlag, std::uint64_t> shaderFlags;
 	RE::BSShaderMaterial::Feature feature = RE::BSShaderMaterial::Feature::kNone;
 	stl::enumeration<PBRShaderFlags, uint32_t> pbrFlags;
-
-	ID3D11Texture2D* baseTexture = nullptr;
-	ID3D11Texture2D* normalTexture = nullptr;
-	ID3D11Texture2D* effectTexture = nullptr;
-	ID3D11Texture2D* rmaosTexture = nullptr;
-
-	ID3D11Texture2D* specularTexture = nullptr;
-	ID3D11Texture2D* envTexture = nullptr;
-	ID3D11Texture2D* envMaskTexture = nullptr;
 
 	{
 		auto* property = geometryRuntimeData.properties[State::kProperty].get();
@@ -219,87 +340,116 @@ void Shape::BuildMaterial(const RE::BSGeometry::GEOMETRY_RUNTIME_DATA& geometryR
 					logger::info("[RT] BuildMaterial - Effect - Alpha: {}, Z Test Func: {}", effectData->alpha, magic_enum::enum_name(effectData->zTestFunc));
 				}
 
-				effectColor = {
+				colors[1] = {
 					lightingShaderProp->emissiveColor->red,
 					lightingShaderProp->emissiveColor->green,
 					lightingShaderProp->emissiveColor->blue,
 					lightingShaderProp->emissiveMult
 				};
 
-				//logger::debug("[RT] BuildMaterial - BSLightingShaderProperty Alpha: {}", lightingShaderProp->alpha);
-
 				if (auto shaderMaterial = lightingShaderProp->material) {
 					feature = shaderMaterial->GetFeature();
 
-					texCoordOffsetScale = {
-						shaderMaterial->texCoordOffset[0].x, shaderMaterial->texCoordOffset[0].y,
-						shaderMaterial->texCoordScale[0].x, shaderMaterial->texCoordScale[0].y
-					};
-
-					//texCoord1OffsetScale = {
-					//	material->texCoordOffset[1].x, material->texCoordOffset[1].y,
-					//	material->texCoordScale[1].x, material->texCoordScale[1].y
-					//};
-
-					// Using static_cast so we still get diffuse and normal for PBR materials as well
-					if (const auto* lightingBaseMaterial = static_cast<RE::BSLightingShaderMaterialBase*>(shaderMaterial)) {
-						//logger::debug("[RT] BuildMaterial - BSLightingShaderMaterialBase Alpha: {}", lightingBaseMaterial->materialAlpha);
-
-						baseTexture = TryGetTexture(lightingBaseMaterial->diffuseTexture);
-						normalTexture = TryGetTexture(lightingBaseMaterial->normalTexture);
+					for (size_t i = 0; i < 2; i++) {
+						texCoordOffsetScales[i] = {
+							shaderMaterial->texCoordOffset[i].x, shaderMaterial->texCoordOffset[i].y,
+							shaderMaterial->texCoordScale[i].x, shaderMaterial->texCoordScale[i].y
+						};
 					}
 
-					// TrueBR - Tried to check for 'lightingShaderProp->flags.any(EShaderPropertyFlag::kMenuScreen)'
-					// but it did not work at all, skyrim_cast is not safe and will cast even if not PBR material (no RTTI?)
-					if (typeid(*shaderMaterial) == typeid(BSLightingShaderMaterialPBR)) {
+					// Landscape
+					if (const auto* lightingBaseMaterialLand = skyrim_cast<RE::BSLightingShaderMaterialLandscape*>(shaderMaterial)) {
+						textures[0] = TextureRegister(lightingBaseMaterialLand->diffuseTexture, grayTexture);
+						textures[Material::MAX_PBRLAND_TEXTURES] = TextureRegister(lightingBaseMaterialLand->normalTexture, normalTexture);
+
+						for (uint i = 0; i < std::min(lightingBaseMaterialLand->numLandscapeTextures, Material::MAX_LAND_TEXTURES); i++) {
+							textures[i + 1] = TextureRegister(lightingBaseMaterialLand->landscapeDiffuseTexture[i], grayTexture);
+							textures[Material::MAX_PBRLAND_TEXTURES + i + 1] = TextureRegister(lightingBaseMaterialLand->landscapeNormalTexture[i], normalTexture);
+						}
+
+						textures[Material::MAX_PBRLAND_TEXTURES * 3] = TextureRegister(lightingBaseMaterialLand->terrainOverlayTexture, blackTexture);
+						textures[Material::MAX_PBRLAND_TEXTURES * 3 + 1] = TextureRegister(lightingBaseMaterialLand->terrainNoiseTexture, blackTexture);
+					} else if (typeid(*shaderMaterial) == typeid(BSLightingShaderMaterialPBRLandscape)) {
+						const auto* lightingPBRMaterialLand = static_cast<BSLightingShaderMaterialPBRLandscape*>(shaderMaterial);
+
+						for (uint i = 0; i < std::min(lightingPBRMaterialLand->numLandscapeTextures, Material::MAX_PBRLAND_TEXTURES); i++) {
+							textures[i] = TextureRegister(lightingPBRMaterialLand->landscapeBaseColorTextures[i], grayTexture);
+							textures[Material::MAX_PBRLAND_TEXTURES + i] = TextureRegister(lightingPBRMaterialLand->landscapeNormalTextures[i], normalTexture);
+							textures[Material::MAX_PBRLAND_TEXTURES * 2 + i] = TextureRegister(lightingPBRMaterialLand->landscapeRMAOSTextures[i], rmaosTexture);
+						}
+						
+						textures[Material::MAX_PBRLAND_TEXTURES * 3] = TextureRegister(lightingPBRMaterialLand->terrainOverlayTexture, blackTexture);
+						textures[Material::MAX_PBRLAND_TEXTURES * 3 + 1] = TextureRegister(lightingPBRMaterialLand->terrainNoiseTexture, blackTexture);
+					} else if (typeid(*shaderMaterial) == typeid(BSLightingShaderMaterialPBR)) {
+						// TrueBR - Tried to check for 'lightingShaderProp->flags.any(EShaderPropertyFlag::kMenuScreen)'
+						// but it did not work at all, skyrim_cast is not safe and will cast even if not PBR material (no RTTI?)
+
 						const auto* lightingPBRMaterial = static_cast<BSLightingShaderMaterialPBR*>(shaderMaterial);
 
-						effectTexture = TryGetTexture(lightingPBRMaterial->emissiveTexture);
-						rmaosTexture = TryGetTexture(lightingPBRMaterial->rmaosTexture);
+						textures[0] = TextureRegister(lightingPBRMaterial->diffuseTexture, grayTexture);
+						textures[1] = TextureRegister(lightingPBRMaterial->normalTexture, normalTexture);
+						textures[2] = TextureRegister(lightingPBRMaterial->emissiveTexture, blackTexture);
+						textures[3] = TextureRegister(lightingPBRMaterial->rmaosTexture, rmaosTexture);
 
-						roughnessScale = lightingPBRMaterial->GetRoughnessScale();
-						specularLevel = lightingPBRMaterial->GetSpecularLevel();
+						scalars[0] = lightingPBRMaterial->GetRoughnessScale();
+						scalars[1] = lightingPBRMaterial->GetSpecularLevel();
 
 						pbrFlags = GetPBRShaderFlags(lightingPBRMaterial);
 
 						// Enforce TruePBR flag
 						shaderFlags.set(RE::BSShaderProperty::EShaderPropertyFlag::kMenuScreen);
 					} else {
+						// Roughness Scale
+						scalars[0] = 1.0f;
+
+						// Specular Level
+						scalars[1] = 0.04f;
+
 						// Vanilla Materials
-						if (const auto* lightingVanillaMaterial = skyrim_cast<RE::BSLightingShaderMaterialBase*>(shaderMaterial)) {
+						if (const auto* lightingBaseMaterial = skyrim_cast<RE::BSLightingShaderMaterialBase*>(shaderMaterial)) {
+							textures[0] = TextureRegister(lightingBaseMaterial->diffuseTexture, grayTexture);
+							textures[1] = TextureRegister(lightingBaseMaterial->normalTexture, normalTexture);
+
 							if (shaderFlags.any(RE::BSShaderProperty::EShaderPropertyFlag::kSpecular)) {
-								specularTexture = TryGetTexture(lightingVanillaMaterial->specularBackLightingTexture);
-								specularColor = {
-									lightingVanillaMaterial->specularColor.red,
-									lightingVanillaMaterial->specularColor.green,
-									lightingVanillaMaterial->specularColor.blue,
-									lightingVanillaMaterial->specularColorScale
+								textures[3] = TextureRegister(lightingBaseMaterial->specularBackLightingTexture, blackTexture);
+
+								colors[1] = {
+									lightingBaseMaterial->specularColor.red,
+									lightingBaseMaterial->specularColor.green,
+									lightingBaseMaterial->specularColor.blue,
+									lightingBaseMaterial->specularColorScale
 								};
-								roughnessScale = ShininessToRoughness(lightingVanillaMaterial->specularPower);
+
+								scalars[0] = ShininessToRoughness(lightingBaseMaterial->specularPower);
 							}
-						}
-					}
 
-					// Envmap
-					if (feature == Feature::kEnvironmentMap || feature == Feature::kEye) {
-						if (const auto* lightingEnvmapMaterial = skyrim_cast<RE::BSLightingShaderMaterialEnvmap*>(shaderMaterial)) {
-							envTexture = TryGetTexture(lightingEnvmapMaterial->envTexture);
-							envMaskTexture = TryGetTexture(lightingEnvmapMaterial->envMaskTexture);
-						}
-					}
+							// Envmap
+							if (feature == Feature::kEnvironmentMap || feature == Feature::kEye) {
+								if (const auto* lightingEnvmapMaterial = skyrim_cast<RE::BSLightingShaderMaterialEnvmap*>(shaderMaterial)) {
+									textures[4] = TextureRegister(lightingEnvmapMaterial->envTexture, blackTexture);
+									textures[5] = TextureRegister(lightingEnvmapMaterial->envMaskTexture, blackTexture);
+								}
+							}
 
-					// Glow
-					if (feature == Feature::kGlowMap) {
-						if (const auto* lightingGlowMaterial = skyrim_cast<RE::BSLightingShaderMaterialGlowmap*>(shaderMaterial)) {
-							effectTexture = TryGetTexture(lightingGlowMaterial->glowTexture);
-						}
-					}
+							// Glow
+							if (feature == Feature::kGlowMap) {
+								if (const auto* lightingGlowMaterial = skyrim_cast<RE::BSLightingShaderMaterialGlowmap*>(shaderMaterial)) {
+									textures[2] = TextureRegister(lightingGlowMaterial->glowTexture, blackTexture);
+								}
+							}
 
-					// Hair
-					if (feature == Feature::kHairTint) {
-						if (const auto* lightingHairTintMaterial = skyrim_cast<RE::BSLightingShaderMaterialHairTint*>(shaderMaterial)) {
-							baseColor *= float4(lightingHairTintMaterial->tintColor.red, lightingHairTintMaterial->tintColor.green, lightingHairTintMaterial->tintColor.blue, 1.0f);
-						}
+							// Hair
+							if (feature == Feature::kHairTint) {
+								if (const auto* lightingHairTintMaterial = skyrim_cast<RE::BSLightingShaderMaterialHairTint*>(shaderMaterial)) {
+									colors[0] = {
+										lightingHairTintMaterial->tintColor.red,
+										lightingHairTintMaterial->tintColor.green,
+										lightingHairTintMaterial->tintColor.blue,
+										1.0f
+									};
+								}
+							}
+						}						
 					}
 				} else {
 					logger::warn("[RT] BuildMaterial - BSShaderMaterial is nullptr");
@@ -309,81 +459,33 @@ void Shape::BuildMaterial(const RE::BSGeometry::GEOMETRY_RUNTIME_DATA& geometryR
 			if (auto effectShaderProp = netimmerse_cast<RE::BSEffectShaderProperty*>(effect)) {
 				shaderType = RE::BSShader::Type::Effect;
 
-				logger::info("[RT] BuildMaterial - BSEffectShaderProperty: {}", name);
-				logger::info("[RT] BuildMaterial - Flags: {}", GetFlagsString<RE::BSShaderProperty::EShaderPropertyFlag>(effectShaderProp->flags.underlying()));
+				logger::debug("[RT] BuildMaterial - BSEffectShaderProperty: {}", name);
+				logger::debug("[RT] BuildMaterial - Flags: {}", GetFlagsString<RE::BSShaderProperty::EShaderPropertyFlag>(effectShaderProp->flags.underlying()));
 
-				//if (effectShaderProp->material) {
 				if (auto effectMaterial = skyrim_cast<RE::BSEffectShaderMaterial*>(effectShaderProp->material)) {
-					effectColor = { effectMaterial->baseColor.red, effectMaterial->baseColor.green, effectMaterial->baseColor.blue, effectMaterial->baseColorScale };
+					colors[1] = {
+						effectMaterial->baseColor.red, 
+						effectMaterial->baseColor.green, 
+						effectMaterial->baseColor.blue, 
+						effectMaterial->baseColorScale 
+					};
 
-					baseTexture = TryGetTexture(effectMaterial->sourceTexture);
-					effectTexture = TryGetTexture(effectMaterial->greyscaleTexture);
+					textures[0] = TextureRegister(effectMaterial->sourceTexture, blackTexture);
+					textures[2] = TextureRegister(effectMaterial->greyscaleTexture, blackTexture);
 				}
-				//}
 			}
 		}
 	}
 
-	if (baseTexture == nullptr)
-		logger::warn("[RT] BuildMaterial {} - Base texture is nullptr", name);
-
-	auto& defaultWhiteIndex = rt.defaultWhiteTexture->allocation;
-	auto& defaultNormalIndex = rt.defaultNormalTexture->allocation;
-	auto& defaultBlackIndex = rt.defaultBlackTexture->allocation;
-	auto& defaultRMAOSIndex = rt.defaultRMAOSTexture->allocation;
-	auto& defaultSpecularIndex = rt.defaultSpecularTexture->allocation;
-	auto& defaultEnvIndex = rt.defaultEnvTexture->allocation;
-	auto& defaultEnvMaskIndex = rt.defaultEnvMaskTexture->allocation;
-
-	auto baseTexReg = rt.GetTextureRegister(baseTexture, defaultWhiteIndex);
-	auto normalTexReg = rt.GetTextureRegister(normalTexture, defaultNormalIndex);
-	auto effectTexReg = rt.GetTextureRegister(effectTexture, defaultBlackIndex);
-	auto rmaosTexReg = rt.GetTextureRegister(rmaosTexture, defaultRMAOSIndex);
-	auto specularTexReg = rt.GetTextureRegister(specularTexture, defaultSpecularIndex);
-	auto envTexReg = rt.GetTextureRegister(envTexture, defaultEnvIndex);
-	auto envMaskTexReg = rt.GetTextureRegister(envMaskTexture, defaultEnvMaskIndex);
-
-	/*if (baseTexture && baseTexReg->GetIndex() == defaultWhiteIndex->GetIndex())
-		logger::warn("[RT] BuildMaterial {} - Base texture [0x{:8X}] not shared", name, reinterpret_cast<uintptr_t>(baseTexture));
-
-	if (normalTexture && normalTexReg->GetIndex() == defaultNormalIndex->GetIndex())
-		logger::warn("[RT] BuildMaterial {} - Normal texture [0x{:8X}] not shared", name, reinterpret_cast<uintptr_t>(normalTexture));
-
-	if (effectTexture && effectTexReg->GetIndex() == defaultBlackIndex->GetIndex())
-		logger::warn("[RT] BuildMaterial {} - Effect texture [0x{:8X}] not shared", name, reinterpret_cast<uintptr_t>(effectTexture));
-
-	if (rmaosTexture && rmaosTexReg->GetIndex() == defaultRMAOSIndex->GetIndex())
-		logger::warn("[RT] BuildMaterial {} - RMAOS texture [0x{:8X}] not shared", name, reinterpret_cast<uintptr_t>(rmaosTexture));*/
-
-	/*auto LogTexture = [](const char* pName, ID3D11Texture2D* pTexture, uint16_t index) {
-		if (pTexture) {
-			logger::info("[RT] BuildMaterial - {} requested from [0x{:8X}], Index: {}", pName, reinterpret_cast<uintptr_t>(pTexture), index);
-		}
-	};
-
-	LogTexture("Base Texture", baseTexture, baseTexReg->GetIndex());
-	LogTexture("Normal Texture", normalTexture, normalTexReg->GetIndex());
-	LogTexture("Effect Texture", effectTexture, effectTexReg->GetIndex());
-	LogTexture("RMAOS Texture", rmaosTexture, rmaosTexReg->GetIndex());*/
-
 	material = Material(
-		baseColor,
-		effectColor,
-		texCoordOffsetScale,
-		roughnessScale,
-		specularLevel,
-		specularColor,
-		baseTexReg,
-		normalTexReg,
-		effectTexReg,
-		rmaosTexReg,
-		specularTexReg,
-		envTexReg,
-		envMaskTexReg,
-		shaderType,
 		shaderFlags,
+		shaderType,
 		feature,
-		pbrFlags);
+		pbrFlags,
+		colors,
+		scalars,
+		texCoordOffsetScales,	
+		textures);
 }
 
 stl::enumeration<PBRShaderFlags, uint32_t> Shape::GetPBRShaderFlags(const BSLightingShaderMaterialPBR* pbrMaterial)

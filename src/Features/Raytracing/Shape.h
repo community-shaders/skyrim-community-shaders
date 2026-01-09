@@ -23,7 +23,8 @@ enum Flags : uint8_t
 	None = 0,
 	Alpha = 1 << 0,
 	Dynamic = 1 << 1,
-	Skinned = 1 << 2
+	Skinned = 1 << 2,
+	Landscape = 1 << 3
 };
 DEFINE_ENUM_FLAG_OPERATORS(Flags);
 
@@ -32,6 +33,9 @@ class Shape
 public:
 	struct Material
 	{
+		static constexpr uint MAX_LAND_TEXTURES = 5u;
+		static constexpr uint MAX_PBRLAND_TEXTURES = 6u;
+
 		enum ShaderType : uint16_t
 		{
 			TruePBR = 0,
@@ -77,9 +81,13 @@ public:
 			kGrayscaleToPaletteColor = 1 << 3,
 			kGrayscaleToPaletteAlpha = 1 << 4,
 			kFalloff = 1 << 5,
-			kRefraction = 1 << 6,
-			kProjectedUV = 1 << 7,
-			kVertexColors = 1 << 8
+			kEnvMap = 1 << 6,
+			kRefraction = 1 << 7,
+			kProjectedUV = 1 << 8,
+			kVertexColors = 1 << 9,
+			kMultiTextureLandscape = 1 << 10,
+			kEyeReflect = 1 << 11,
+			kHairTint = 1 << 12
 		};
 
 		ShaderFlags GetShaderFlags() const
@@ -101,49 +109,48 @@ public:
 			return shaderFlagsLocal;
 		}
 
-		half4 BaseColor;
-		half4 EffectColor;
-		half4 TexCoordOffsetScale;
-
-		half RoughnessScale;
-		half SpecularLevel;
-
-		// Vanilla Material Colors
-		half4 SpecularColor;
-
-		eastl::shared_ptr<Allocation> BaseTexture;
-		eastl::shared_ptr<Allocation> NormalTexture;
-		eastl::shared_ptr<Allocation> EffectTexture;
-		eastl::shared_ptr<Allocation> RMAOSTexture;
-
-		// Vanilla Material Textures
-		eastl::shared_ptr<Allocation> SpecularTexture;
-		eastl::shared_ptr<Allocation> EnvTexture;
-		eastl::shared_ptr<Allocation> EnvMaskTexture;
-
-		RE::BSShader::Type shaderType;
 		REX::EnumSet<RE::BSShaderProperty::EShaderPropertyFlag, std::uint64_t> shaderFlags;
+		RE::BSShader::Type shaderType;
 		RE::BSShaderMaterial::Feature Feature;
 		stl::enumeration<PBRShaderFlags, uint16_t> PBRFlags;
+
+		eastl::array<half4,2> Colors;
+		eastl::array<half, 3> Scalars;
+
+		eastl::array<half4, 2> TexCoordOffsetScale;
+
+		eastl::array<eastl::shared_ptr<Allocation>, 20> Textures;
 
 		MaterialData GetData()
 		{
 			return MaterialData(
-				BaseColor, EffectColor,
-				TexCoordOffsetScale,
-				RoughnessScale, SpecularLevel,
-				SpecularColor,
-				BaseTexture->GetIndex(),
-				NormalTexture->GetIndex(),
-				EffectTexture->GetIndex(),
-				RMAOSTexture->GetIndex(),
-				SpecularTexture->GetIndex(),
-				EnvTexture->GetIndex(),
-				EnvMaskTexture->GetIndex(),
+				TexCoordOffsetScale[0], TexCoordOffsetScale[1],
+				Colors[0], Colors[1],
+				Scalars[0], Scalars[1], Scalars[2],
+				Textures[0]->GetIndex(),
+				Textures[1]->GetIndex(),
+				Textures[2]->GetIndex(),
+				Textures[3]->GetIndex(),
+				Textures[4]->GetIndex(),
+				Textures[5]->GetIndex(),
+				Textures[6]->GetIndex(),
+				Textures[7]->GetIndex(),
+				Textures[8]->GetIndex(),
+				Textures[9]->GetIndex(),
+				Textures[10]->GetIndex(),
+				Textures[11]->GetIndex(),
+				Textures[12]->GetIndex(),
+				Textures[13]->GetIndex(),
+				Textures[14]->GetIndex(),
+				Textures[15]->GetIndex(),
+				Textures[16]->GetIndex(),
+				Textures[17]->GetIndex(),
+				Textures[18]->GetIndex(),
+				Textures[19]->GetIndex(),
 				GetShaderType(),
-				GetShaderFlags(),
 				static_cast<uint16_t>(Feature),
-				PBRFlags.underlying());
+				PBRFlags.underlying(),
+				GetShaderFlags());
 		}
 	};
 
