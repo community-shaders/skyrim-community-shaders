@@ -804,6 +804,13 @@ void EffectManager::UpdateCommonVariablesForEffect(ID3DX11Effect* effect)
 		}
 	}
 
+	/// Bind dynamic cubemap environment texture for ENB effects
+	if (globals::features::dynamicCubemaps.loaded && globals::features::dynamicCubemaps.envTexture) {
+		auto& cubemaps = globals::features::dynamicCubemaps;
+		auto* envTex = cubemaps.activeReflections ? cubemaps.envReflectionsTexture : cubemaps.envTexture;
+		Effect::SetShaderResourceVariable(effect, "TextureReflectionCube", envTex->srv.get());
+	}
+
 	// Set vector variables
 	Effect::SetVectorVariable(effect, "Timer", commonData.timer, sizeof(commonData.timer));
 	Effect::SetVectorVariable(effect, "ScreenSize", commonData.screenSize, sizeof(commonData.screenSize));
