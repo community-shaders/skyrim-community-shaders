@@ -260,7 +260,7 @@ PS_OUTPUT main(PS_INPUT input)
 	baseColor = PParams.xxxx * (-baseColor + blendColor) + baseColor;
 #		endif
 
-	if ((Permutation::ExtraShaderDescriptor & Permutation::ExtraFlags::IsSun)) {
+	if ((Permutation::ExtraShaderDescriptor & Permutation::ExtraFlags::IsSun) && SharedData::enbSettings.EnableProceduralSun) {
 		float distanceFromCenter = length(input.TexCoord0.xy * 2.0 - 1.0);
 
 		float sun = smoothstep(SharedData::enbSettings.ProceduralSunSize,
