@@ -12,27 +12,27 @@ float GetMipLevel(float2 coords, Texture2D<float4> tex)
     // Get actual texture dimensions
     float2 actualTextureDims;
     tex.GetDimensions(actualTextureDims.x, actualTextureDims.y);
-    
+
     // Use hardcoded 512x512 for mip calculation
     float2 textureDims = float2(512.0, 512.0);
 
     float2 texCoordsPerSize = coords;
-    
+
     float2 dxSize = ddx(texCoordsPerSize);
     float2 dySize = ddy(texCoordsPerSize);
-    
+
     // Find min of change in u and v across quad: compute du and dv magnitude across quad
     float2 dTexCoords = dxSize * dxSize + dySize * dySize;
-    
+
     // Standard mipmapping uses max here
     float minTexCoordDelta = max(dTexCoords.x, dTexCoords.y);
-    
+
     // Compute the current mip level
     float mipLevel = max(0.5 * log2(minTexCoordDelta), 0.0);
-    
+
     // Offset mip level to sample as if texture were 512x512
     float mipOffset = log2(actualTextureDims.x / 512.0);
- 
+
     return mipLevel + mipOffset;
 }
 

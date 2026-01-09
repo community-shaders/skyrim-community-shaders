@@ -957,13 +957,13 @@ float GetFresnelValue(float3 normal, float3 viewDirection)
 	float3 actualNormal = normal;
 #			endif
 	float viewAngle = 1 - saturate(dot(-viewDirection, actualNormal));
-	
+
 	if (SharedData::enbSettings.Enable){
 		float fresnelRI = pow(FresnelRI.x, SharedData::enbSettings.WaterFresnelMultiplier);
-		float fresnel = (1 - fresnelRI) * pow(viewAngle, 5) + fresnelRI;	
+		float fresnel = (1 - fresnelRI) * pow(viewAngle, 5) + fresnelRI;
 		fresnel = lerp(SharedData::enbSettings.WaterFresnelMin, SharedData::enbSettings.WaterFresnelMax, fresnel);
 		return fresnel * SharedData::enbSettings.WaterReflectionAmount;
-	} 
+	}
 
 	return (1 - FresnelRI.x) * pow(viewAngle, 5) + FresnelRI.x;
 }
@@ -1228,7 +1228,7 @@ PS_OUTPUT main(PS_INPUT input)
 	if (!(Permutation::PixelShaderDescriptor & Permutation::WaterFlags::Interior)) {
 		float waterShadow = ShadowSampling::GetWaterShadow(screenNoise, input.WPosition.xyz, eyeIndex);
 		float3 dirScatter = saturate(dot(normal.xyz, SharedData::DirLightDirection) * 0.5 + 0.5) * saturate(dot(viewDirection.xyz, SharedData::DirLightDirection) * 0.5 + 0.5) * SharedData::DirLightColor;
-		
+
 		if (SharedData::enbSettings.Enable){
 			diffuseOutput.refractionDiffuseColor += DeepColor.xyz * dirScatter * waterShadow * SharedData::enbSettings.WaterSunLightingMultiplier;
 			sunColor *= SharedData::enbSettings.WaterSunSpecularMultiplier;
