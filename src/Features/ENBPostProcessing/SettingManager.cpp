@@ -425,7 +425,8 @@ void SettingManager::LoadSettingFromFile(const std::string& filePath, const std:
 			for (int i = 0; i < 8; ++i) {
 				std::string fullKey = key + timeOfDayNames[i];
 				char buffer[256];
-				GetPrivateProfileStringA(section.c_str(), fullKey.c_str(), "0.0", buffer, sizeof(buffer), filePath.c_str());
+				std::string defaultStr = std::to_string(timeOfDayValue.values[i]);
+				GetPrivateProfileStringA(section.c_str(), fullKey.c_str(), defaultStr.c_str(), buffer, sizeof(buffer), filePath.c_str());
 				std::string valueStr = buffer;
 				timeOfDayValue.values[i] = static_cast<float>(atof(valueStr.c_str()));
 			}

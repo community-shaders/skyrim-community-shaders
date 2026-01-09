@@ -1,9 +1,12 @@
 ﻿#include "Effect.h"
 #include <d3dcompiler.h>
+#include <fstream>
+#include <sstream>
 
 #include <DirectXTK/DDSTextureLoader.h>
 #include <DirectXTK/WICTextureLoader.h>
 
+#include "../ENBExtender.h"
 #include "../TextureManager.h"
 #include "State.h"
 
@@ -145,27 +148,78 @@ bool Effect::LoadFXFile()
 	auto filePath = std::filesystem::path("enbseries");
 	filePath /= GetName();
 
+	// Read main effect file
+	std::ifstream mainFile(filePath, std::ios::binary | std::ios::ate);
+	if (!mainFile.is_open()) {
+		errors.push_back("Failed to open effect file: " + filePath.string());
+		logger::error("[ENBPP] Failed to open effect file: {}", filePath.string());
+		return false;
+	}
+
+	std::streamsize size = mainFile.tellg();
+	mainFile.seekg(0, std::ios::beg);
+	std::string sourceCode(size, '\0');
+	if (!mainFile.read(sourceCode.data(), size)) {
+		errors.push_back("Failed to read effect file: " + filePath.string());
+		logger::error("[ENBPP] Failed to read effect file: {}", filePath.string());
+		return false;
+	}
+	mainFile.close();
+
+	// Preprocess main source code for ENB Extender compatibility
+	sourceCode = ENBExtender::PreprocessSource(sourceCode);
+
+	// Create custom include handler for ENB Extender compatibility
+	ENBExtender::IncludeHandler includeHandler(std::filesystem::path("enbseries"));
+
 	winrt::com_ptr<ID3DBlob> compiledShader;
 	winrt::com_ptr<ID3DBlob> errorBlob;
 
-	HRESULT hr = D3DX11CompileEffectFromFile(
-		filePath.c_str(),
+	// Compile the effect with custom include handler
+	HRESULT hr = D3DCompile(
+		sourceCode.c_str(),
+		sourceCode.size(),
+		filePath.string().c_str(),
 		nullptr,
-		D3D_COMPILE_STANDARD_FILE_INCLUDE,
-		NULL,
-		NULL,
-		globals::d3d::device,
-		effect.put(),
+		&includeHandler,
+		nullptr,
+		"fx_5_0",
+		0,
+		0,
+		compiledShader.put(),
 		errorBlob.put());
 
 	if (FAILED(hr)) {
 		std::string errorMsg = "Compilation failed";
 		if (errorBlob) {
 			errorMsg = std::string(static_cast<const char*>(errorBlob->GetBufferPointer()));
-			logger::error("[ENBPP] Effect compilation failed for '{}': {}", filePath.string(), errorMsg);
+			logger::error("[ENBPP] Effect compilation failed for '{}'", filePath.string());
+			// Log each line of the error separately for better readability in log file
+			std::istringstream errorStream(errorMsg);
+			std::string errorLine;
+			while (std::getline(errorStream, errorLine)) {
+				if (!errorLine.empty()) {
+					logger::error("[ENBPP]   {}", errorLine);
+				}
+			}
 		} else {
 			logger::error("[ENBPP] Effect compilation failed for '{}': HRESULT 0x{:08X}", filePath.string(), static_cast<unsigned int>(hr));
 		}
+		errors.push_back(errorMsg);
+		return false;
+	}
+
+	// Create effect from compiled shader
+	hr = D3DX11CreateEffectFromMemory(
+		compiledShader->GetBufferPointer(),
+		compiledShader->GetBufferSize(),
+		0,
+		globals::d3d::device,
+		effect.put());
+
+	if (FAILED(hr)) {
+		std::string errorMsg = "Failed to create effect from compiled shader";
+		logger::error("[ENBPP] {} for '{}': HRESULT 0x{:08X}", errorMsg, filePath.string(), static_cast<unsigned int>(hr));
 		errors.push_back(errorMsg);
 		return false;
 	}
