@@ -17,8 +17,6 @@ cbuffer SVGFCB : register(b1)
 };
 
 Texture2D<float4>		NormalRoughnessTexture  : register(t2);
-Texture2D<float4>		SSRColorTexture			: register(t3);
-Texture2D<float>		DepthTexture			: register(t4);
 
 void GetNormalRoughness(uint2 dtid, out float3 normal, out float roughness)
 {

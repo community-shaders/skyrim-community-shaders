@@ -146,10 +146,9 @@ void SVGFPipeline::Denoise(ID3D11DeviceContext4* context, uint2 renderSize, Sett
 		context->CSSetConstantBuffers(1, 1, &cb);
 
 		uavs.at(0) = (i % 2 == 0) ? colorResource->uav : varianceTexture->uav.get();
-		srvs.at(0) = historyTexture->srv.get();
-		srvs.at(1) = motion.SRV;
+
+		srvs.at(0) = (i % 2 == 0) ? varianceTexture->srv.get() : colorResource->srv;
 		srvs.at(2) = normalRoughness->srv;
-		srvs.at(3) = (i % 2 == 0) ? varianceTexture->srv.get() : colorResource->srv;
 		srvs.at(4) = depth.depthSRV;
 
 		context->CSSetShaderResources(0, 5, srvs.data());

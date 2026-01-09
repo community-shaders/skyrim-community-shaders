@@ -10,7 +10,7 @@ RWTexture2D<float4> MainOutputTexture   : register(u0);
 [numthreads(8, 8, 1)]
 void main(uint2 id : SV_DispatchThreadID)
 {
-#if defined(COMPOSITE)
+#if defined(COMPOSITE_2)
     float3 outputColor = Color::GammaToTrueLinear(MainInputTexture[id].rgb);
     
 #   if defined(DIFFUSE)

@@ -2,6 +2,8 @@
 
 Texture2D<float4>   HistoryTexture          : register(t0);
 Texture2D<float2>   MotionVectorTexture     : register(t1);
+Texture2D<float4>	SSRColorTexture			: register(t3);
+Texture2D<float>	DepthTexture			: register(t4);
 Texture2D<float4>   HistoryMomentsTexture   : register(t5); // moments in RG, frame count in B
 Texture2D<float4>   HistoryNormalsTexture   : register(t6);
 
@@ -13,19 +15,25 @@ SamplerState        LinearSampler           : register(s0);
 bool IsValidHistory(uint2 pixel, float2 uv, float3 currNormalWS)
 {
     const uint2 screenSize = Resolution;
-    if (uv.x < 0 || uv.x > 1 || uv.y < 0 || uv.y > 1)
+    if (any(uv < 0.0f) || any(uv > 1.0f))
         return false;
 
-    if (pixel.x >= screenSize.x || pixel.y >= screenSize.y)
+    if (any(pixel >= screenSize))
         return false;
 
     float3 prevNormalWS;
     float roughness;
     GetNormalRoughness(HistoryNormalsTexture, pixel, prevNormalWS, roughness);
-    float normalDiff = dot(currNormalWS, prevNormalWS);
-    if (normalDiff < 0.866f) // cos 30
+    
+    float normalDiff = dot(currNormalWS, prevNormalWS);  
+    if (normalDiff < 0.707f) // cos 30
         return false;
 
+    /*float prevDepth = DepthTexture[pixel]; // Or use a history depth texture if you have one
+    float depthDiff = abs(currDepth - prevDepth) / currDepth;
+    if (depthDiff > 0.1f) // 10% depth difference threshold
+        return false;*/
+    
     return true;
 }
 
@@ -46,7 +54,7 @@ bool IsValidHistory(uint2 pixel, float2 uv, float3 currNormalWS)
     GetNormalRoughness(DTid.xy, normalWS, roughness);
 
     float luminance = Color::RGBToLuminance(ssrColor.rgb);
-    float2 curMoment = float2(luminance, luminance * luminance) * 0.5;
+    float2 curMoment = float2(luminance, luminance * luminance);
 
     // Reproject UVs using motion vectors
     float2 prevUV = uv;
@@ -74,7 +82,13 @@ bool IsValidHistory(uint2 pixel, float2 uv, float3 currNormalWS)
         for (int i = 0; i < 4; i++)
         {
             int2 neighborPixel = int2(prevPixel) + bilinOffset[i];
-            if (IsValidHistory(uint2(neighborPixel), prevUV, normalWS))
+            
+            if (any(neighborPixel < 0) || any(neighborPixel >= screenSize))
+                continue;            
+            
+            float2 neighborUV = float2(neighborPixel  + 0.5f) * ResolutionRcp;
+            
+            if (IsValidHistory(uint2(neighborPixel), neighborUV, normalWS))
             {
                 float4 neighborColor = HistoryTexture[uint2(neighborPixel)];
                 float neighborAccumFrames = HistoryMomentsTexture[uint2(neighborPixel)].z;
@@ -117,7 +131,13 @@ bool IsValidHistory(uint2 pixel, float2 uv, float3 currNormalWS)
         for (int i = 0; i < 8; i++)
         {
             int2 neighborPixel = int2(prevPixel) + offsets[i];
-            if (IsValidHistory(uint2(neighborPixel), prevUV, normalWS))
+            
+            if (any(neighborPixel < 0) || any(neighborPixel >= screenSize))
+                continue;            
+            
+            float2 neighborUV = float2(neighborPixel  + 0.5f) * ResolutionRcp;           
+            
+            if (IsValidHistory(uint2(neighborPixel), neighborUV, normalWS))
             {
                 float4 neighborColor = HistoryTexture[uint2(neighborPixel)];
                 float neighborAccumFrames = HistoryMomentsTexture[uint2(neighborPixel)].z;
@@ -144,17 +164,14 @@ bool IsValidHistory(uint2 pixel, float2 uv, float3 currNormalWS)
         float alpha = max(1.0f / (prevAccumFrames + 1.0f), Frame.InvMaxAccumulatedFrames);
         blendedColor = lerp(prevColor.rgb, ssrColor.rgb, alpha);
 
-        float prevLuminance = Color::RGBToLuminance(prevColor.rgb);
-        float2 prevMoment = float2(prevLuminance, prevLuminance * prevLuminance);
-
         float momentAlpha = max(1.0f / (prevAccumFrames + 1.0f), Frame.InvMaxAccumulatedFrames);
-        float2 moment = lerp(prevMoment, curMoment, momentAlpha);
-        float variance = moment.y - (moment.x * moment.x);
+        float2 moment = lerp(prevMoments, curMoment, momentAlpha);
+        float variance = max(moment.y - moment.x * moment.x, 0.0f); // Use blended moment
         variance = max(variance, 0.f);
         FilteredOutput[DTid.xy] = float4(blendedColor, variance);
         MomentsOutput[DTid.xy] = float4(moment, prevAccumFrames + 1.0f, 0.f);
         return;
     }
     MomentsOutput[DTid.xy] = float4(curMoment, 1.0f, 0.f);
-    FilteredOutput[DTid.xy] = float4(ssrColor.rgb, abs(curMoment.y - (curMoment.x * curMoment.x)));
+    FilteredOutput[DTid.xy] = float4(ssrColor.rgb, max(curMoment.y - curMoment.x * curMoment.x, 0.0f));
 }

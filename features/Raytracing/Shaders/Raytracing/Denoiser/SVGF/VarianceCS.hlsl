@@ -1,7 +1,9 @@
 #include "Raytracing/Denoiser/SVGF/Common.hlsli"
 
-Texture2D<float4>   HistoryTexture : register(t0);
-Texture2D<float4>   MomentsTexture : register(t1);
+Texture2D<float4>   HistoryTexture  : register(t0);
+Texture2D<float4>   MomentsTexture  : register(t1);
+Texture2D<float4>	TemporalTexture : register(t3);
+Texture2D<float>	DepthTexture    : register(t4);
 
 RWTexture2D<float4> VarianceOutput : register(u0);
 
@@ -13,11 +15,16 @@ RWTexture2D<float4> VarianceOutput : register(u0);
 
     float2 uv = float2(DTid.xy + 0.5) * ResolutionRcp;
 
-    float4 ssrColor = SSRColorTexture[DTid.xy];
-    float3 blendedColor = ssrColor.xyz;
+    float4 temporalColor = TemporalTexture[DTid.xy];
+    float3 blendedColor = temporalColor.xyz;
     float depthCenter = DepthTexture[DTid.xy];
-    VarianceOutput[DTid.xy] = ssrColor;
 
+    /*if (depthCenter <= 0.0f || depthCenter >= 1.0f)
+    {
+        VarianceOutput[DTid.xy] = temporalColor;
+        return;
+    }*/
+    
     float history = MomentsTexture[DTid.xy].z;
 
     if (history <= 2) {
@@ -25,9 +32,9 @@ RWTexture2D<float4> VarianceOutput : register(u0);
         float roughness;
         GetNormalRoughness(DTid.xy, normalWS, roughness);
 
-        float luminanceCenter = Color::RGBToLuminance(ssrColor.xyz);
+        float luminanceCenter = Color::RGBToLuminance(temporalColor.xyz);
         float weightedColor = 1.f;
-        float3 colorSum = ssrColor.xyz;
+        float3 colorSum = temporalColor.xyz;
         float2 momentsSum = MomentsTexture[DTid.xy].xy;
 
         const float normalPhi = Frame.NormalPhi;
@@ -46,17 +53,17 @@ RWTexture2D<float4> VarianceOutput : register(u0);
 
                 if (inside)
                 {
-                    float4 neighborSSRColor = SSRColorTexture[p];
+                    float4 neighborTemporalColor = TemporalTexture[p];
                     float3 neighborNormalWS;
                     float neighborRoughness;
                     GetNormalRoughness(p, neighborNormalWS, neighborRoughness);
-                    float neighborLuminance = Color::RGBToLuminance(neighborSSRColor.xyz);
+                    float neighborLuminance = Color::RGBToLuminance(neighborTemporalColor.xyz);
                     float depthNeighbor = DepthTexture[p];
 
                     float weight = CalculateWeight(depthCenter, depthNeighbor, length(float2(x, y)), normalWS, neighborNormalWS, normalPhi, luminanceCenter, neighborLuminance, colorPhi);
 
                     weightedColor += weight;
-                    colorSum += neighborSSRColor.xyz * weight;
+                    colorSum += neighborTemporalColor.xyz * weight;
                     momentsSum += MomentsTexture[p].xy * weight;
                 }
             }
@@ -66,8 +73,12 @@ RWTexture2D<float4> VarianceOutput : register(u0);
         blendedColor = colorSum / weightedColor;
         momentsSum /= weightedColor;
 
-        float variance = momentsSum.y - (momentsSum.x * momentsSum.x);
-        variance *= 2 / history;
+        float variance = max(momentsSum.y - momentsSum.x * momentsSum.x, 0.0f);
+        variance *= 2 / max(history, 1e-5f);
         VarianceOutput[DTid.xy] = float4(blendedColor, variance);
+    }
+    else
+    {
+        VarianceOutput[DTid.xy] = temporalColor;    
     }
 }

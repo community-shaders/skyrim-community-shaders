@@ -200,7 +200,7 @@ void main()
         float3 throughput = float3(1.0f, 1.0f, 1.0f);
 
 #if defined(RAW_RADIANCE)
-        float3 throughputMod = float3(1.0f, 1.0f, 1.0f);
+        float3 throughputDelta = float3(1.0f, 1.0f, 1.0f);
 #endif
 
         [loop]
@@ -237,7 +237,7 @@ void main()
             } else {
                 float3 brdWeightRaw = brdfWeight.diffuse + brdfWeight.specular;
 
-                throughputMod = brdfWeightOriginal / brdWeightRaw;
+                throughputDelta = brdfWeightOriginal / brdWeightRaw;
 
                 throughput *= brdWeightRaw;
             }
@@ -260,7 +260,7 @@ void main()
                 float3 throughputColor;
 
 #if defined(RAW_RADIANCE)
-                throughputColor = throughput * throughputMod;
+                throughputColor = throughput * throughputDelta;
 #else
                 throughputColor = throughput;
 #endif
@@ -382,7 +382,7 @@ void main()
     NormalRoughnessPathTracing[idx] = float4(sourceSurface.Normal, sourceSurface.Roughness);
 #else
 #   if defined(RAW_RADIANCE)
-    OutputTexture[idx] = float4(radiance, 1.0f);
+    OutputTexture[idx] = float4(max(radiance, 0.0f), 1.0f);
 #   else
     OutputTexture[idx] = float4(Color::GammaToTrueLinear(mainColor.rgb) + radiance, 1.0f);
 #   endif
