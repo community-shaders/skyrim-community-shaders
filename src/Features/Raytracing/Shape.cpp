@@ -8,7 +8,7 @@
 using GIHeap = Raytracing::GIHeap;
 using SkinningHeap = Raytracing::SkinningHeap;
 
-static std::uint32_t GetVertexSize(RE::BSGraphics::Vertex::Flags flags, bool land)
+static std::uint32_t GetVertexSize(RE::BSGraphics::Vertex::Flags flags)
 {
 	using RE::BSGraphics::Vertex;
 
@@ -116,7 +116,7 @@ void Shape::BuildMesh(RE::BSGraphics::TriShape* rendererData, const std::uint32_
 		if (skinned)
 			skinning.resize(vertexCountIn);
 
-		auto vertexSize = GetVertexSize(vertexFlags, flags & Flags::Landscape);
+		auto vertexSize = GetVertexSize(vertexFlags);
 
 		bool hasPosition = vertexFlags & RE::BSGraphics::Vertex::VF_VERTEX;
 
@@ -210,7 +210,7 @@ void Shape::BuildMesh(RE::BSGraphics::TriShape* rendererData, const std::uint32_
 	// Triangles
 	{
 		// Landscape contains no triangles, so we build them ourselves
-		if (flags & Flags::Landscape && !rendererData->rawIndexData) {
+		if (flags & Flags::Landscape) {
 			triangles.reserve(triangleCountIn);
 
 			constexpr uint16_t GRID_SIZE = 16;
@@ -274,7 +274,8 @@ static eastl::shared_ptr<Allocation> TextureRegister(const RE::NiPointer<RE::NiS
 void Shape::BuildMaterial(const RE::BSGeometry::GEOMETRY_RUNTIME_DATA& geometryRuntimeData, [[maybe_unused]] const char* name)
 {
 	auto& rt = globals::features::raytracing;
-	auto& whiteTexture = rt.defaultWhiteTexture->allocation;
+	//auto& whiteTexture = rt.defaultWhiteTexture->allocation;
+	auto& grayTexture = rt.defaultGrayTexture->allocation;
 	auto& normalTexture = rt.defaultNormalTexture->allocation;
 	auto& blackTexture = rt.defaultBlackTexture->allocation;
 	auto& rmaosTexture = rt.defaultRMAOSTexture->allocation;
@@ -359,11 +360,11 @@ void Shape::BuildMaterial(const RE::BSGeometry::GEOMETRY_RUNTIME_DATA& geometryR
 
 					// Landscape
 					if (const auto* lightingBaseMaterialLand = skyrim_cast<RE::BSLightingShaderMaterialLandscape*>(shaderMaterial)) {
-						textures[0] = TextureRegister(lightingBaseMaterialLand->diffuseTexture, whiteTexture);
-						textures[Material::MAX_PBRLAND_TEXTURES] = TextureRegister(lightingBaseMaterialLand->normalTexture, whiteTexture);
+						textures[0] = TextureRegister(lightingBaseMaterialLand->diffuseTexture, grayTexture);
+						textures[Material::MAX_PBRLAND_TEXTURES] = TextureRegister(lightingBaseMaterialLand->normalTexture, normalTexture);
 
 						for (uint i = 0; i < std::min(lightingBaseMaterialLand->numLandscapeTextures, Material::MAX_LAND_TEXTURES); i++) {
-							textures[i + 1] = TextureRegister(lightingBaseMaterialLand->landscapeDiffuseTexture[i], whiteTexture);
+							textures[i + 1] = TextureRegister(lightingBaseMaterialLand->landscapeDiffuseTexture[i], grayTexture);
 							textures[Material::MAX_PBRLAND_TEXTURES + i + 1] = TextureRegister(lightingBaseMaterialLand->landscapeNormalTexture[i], normalTexture);
 						}
 
@@ -373,7 +374,7 @@ void Shape::BuildMaterial(const RE::BSGeometry::GEOMETRY_RUNTIME_DATA& geometryR
 						const auto* lightingPBRMaterialLand = static_cast<BSLightingShaderMaterialPBRLandscape*>(shaderMaterial);
 
 						for (uint i = 0; i < std::min(lightingPBRMaterialLand->numLandscapeTextures, Material::MAX_PBRLAND_TEXTURES); i++) {
-							textures[i] = TextureRegister(lightingPBRMaterialLand->landscapeBaseColorTextures[i], whiteTexture);
+							textures[i] = TextureRegister(lightingPBRMaterialLand->landscapeBaseColorTextures[i], grayTexture);
 							textures[Material::MAX_PBRLAND_TEXTURES + i] = TextureRegister(lightingPBRMaterialLand->landscapeNormalTextures[i], normalTexture);
 							textures[Material::MAX_PBRLAND_TEXTURES * 2 + i] = TextureRegister(lightingPBRMaterialLand->landscapeRMAOSTextures[i], rmaosTexture);
 						}
@@ -386,10 +387,8 @@ void Shape::BuildMaterial(const RE::BSGeometry::GEOMETRY_RUNTIME_DATA& geometryR
 
 						const auto* lightingPBRMaterial = static_cast<BSLightingShaderMaterialPBR*>(shaderMaterial);
 
-						// Does this work?
-						textures[0] = TextureRegister(lightingPBRMaterial->diffuseTexture, whiteTexture);
+						textures[0] = TextureRegister(lightingPBRMaterial->diffuseTexture, grayTexture);
 						textures[1] = TextureRegister(lightingPBRMaterial->normalTexture, normalTexture);
-
 						textures[2] = TextureRegister(lightingPBRMaterial->emissiveTexture, blackTexture);
 						textures[3] = TextureRegister(lightingPBRMaterial->rmaosTexture, rmaosTexture);
 
@@ -409,9 +408,10 @@ void Shape::BuildMaterial(const RE::BSGeometry::GEOMETRY_RUNTIME_DATA& geometryR
 
 						// Vanilla Materials
 						if (const auto* lightingBaseMaterial = skyrim_cast<RE::BSLightingShaderMaterialBase*>(shaderMaterial)) {
+							textures[0] = TextureRegister(lightingBaseMaterial->diffuseTexture, grayTexture);
+							textures[1] = TextureRegister(lightingBaseMaterial->normalTexture, normalTexture);
+
 							if (shaderFlags.any(RE::BSShaderProperty::EShaderPropertyFlag::kSpecular)) {
-								textures[0] = TextureRegister(lightingBaseMaterial->diffuseTexture, whiteTexture);
-								textures[1] = TextureRegister(lightingBaseMaterial->normalTexture, normalTexture);
 								textures[3] = TextureRegister(lightingBaseMaterial->specularBackLightingTexture, blackTexture);
 
 								colors[1] = {
@@ -423,27 +423,32 @@ void Shape::BuildMaterial(const RE::BSGeometry::GEOMETRY_RUNTIME_DATA& geometryR
 
 								scalars[0] = ShininessToRoughness(lightingBaseMaterial->specularPower);
 							}
-						}
 
-						// Envmap
-						if (feature == Feature::kEnvironmentMap || feature == Feature::kEye) {
-							if (const auto* lightingEnvmapMaterial = skyrim_cast<RE::BSLightingShaderMaterialEnvmap*>(shaderMaterial)) {
-								textures[4] = TextureRegister(lightingEnvmapMaterial->envTexture, blackTexture);
-								textures[5] = TextureRegister(lightingEnvmapMaterial->envMaskTexture, blackTexture);
+							// Envmap
+							if (feature == Feature::kEnvironmentMap || feature == Feature::kEye) {
+								if (const auto* lightingEnvmapMaterial = skyrim_cast<RE::BSLightingShaderMaterialEnvmap*>(shaderMaterial)) {
+									textures[4] = TextureRegister(lightingEnvmapMaterial->envTexture, blackTexture);
+									textures[5] = TextureRegister(lightingEnvmapMaterial->envMaskTexture, blackTexture);
+								}
 							}
-						}
 
-						// Glow
-						if (feature == Feature::kGlowMap) {
-							if (const auto* lightingGlowMaterial = skyrim_cast<RE::BSLightingShaderMaterialGlowmap*>(shaderMaterial)) {
-								textures[2] = TextureRegister(lightingGlowMaterial->glowTexture, blackTexture);
+							// Glow
+							if (feature == Feature::kGlowMap) {
+								if (const auto* lightingGlowMaterial = skyrim_cast<RE::BSLightingShaderMaterialGlowmap*>(shaderMaterial)) {
+									textures[2] = TextureRegister(lightingGlowMaterial->glowTexture, blackTexture);
+								}
 							}
-						}
 
-						// Hair
-						if (feature == Feature::kHairTint) {
-							if (const auto* lightingHairTintMaterial = skyrim_cast<RE::BSLightingShaderMaterialHairTint*>(shaderMaterial)) {
-								colors[0] = float4(lightingHairTintMaterial->tintColor.red, lightingHairTintMaterial->tintColor.green, lightingHairTintMaterial->tintColor.blue, 1.0f);
+							// Hair
+							if (feature == Feature::kHairTint) {
+								if (const auto* lightingHairTintMaterial = skyrim_cast<RE::BSLightingShaderMaterialHairTint*>(shaderMaterial)) {
+									colors[0] = {
+										lightingHairTintMaterial->tintColor.red,
+										lightingHairTintMaterial->tintColor.green,
+										lightingHairTintMaterial->tintColor.blue,
+										1.0f
+									};
+								}
 							}
 						}
 					}
