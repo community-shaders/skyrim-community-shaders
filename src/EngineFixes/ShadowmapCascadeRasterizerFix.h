@@ -43,4 +43,3 @@ struct ShadowmapRasterizerFix : EngineFix
 		static inline REL::Relocation<decltype(thunk)> func;
 	};
 };
-#pragma once
