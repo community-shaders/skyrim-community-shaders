@@ -232,8 +232,23 @@ float3 ApplyUncharted2HDR(float3 untonemapped)
 	float3 sdrColor = Color::LinearToGammaSafe(tonemapped);
 	HDROutput[dispatchID.xy] = float4(sdrColor, framebuffer.w);
 #else
-	float3 bt2020Color = Color::BT709ToBT2020(tonemapped);
-	float3 pqColor = Color::pq::Encode(bt2020Color, parameters0.y);
+	// HDR10 output encoding:
+	// 1. tonemapped is in linear BT.709, range 0-1 (SDR normalized)
+	// 2. Convert color space from BT.709 to BT.2020 (in linear space)
+	// 3. PQ encode where 1.0 input = paperWhite nits output
+	
+	float paperWhiteNits = parameters0.y;
+	
+	// Clamp to valid range before color space conversion to avoid negative values
+	float3 linearClamped = max(tonemapped, 0.0);
+	
+	// Convert to BT.2020 color space (still in linear, normalized 0-1)
+	float3 bt2020Linear = Color::BT709ToBT2020(linearClamped);
+	
+	// PQ encode: scaling parameter means "1.0 input = scaling nits"
+	// So with paperWhiteNits, an input of 1.0 (white) will be displayed at paperWhiteNits brightness
+	float3 pqColor = Color::pq::Encode(bt2020Linear, paperWhiteNits);
+	
 	HDROutput[dispatchID.xy] = float4(pqColor, framebuffer.w);
 #endif
 }

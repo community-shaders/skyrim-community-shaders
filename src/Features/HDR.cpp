@@ -3,9 +3,11 @@
 #include "PCH.h"
 
 #include "Buffer.h"
+#include "Globals.h"
 #include "State.h"
 #include "Upscaling.h"
 #include "Util.h"
+#include <dxgi1_4.h>
 #include <dxgi1_6.h>
 #include <imgui.h>
 
@@ -83,6 +85,10 @@ void HDR::DrawSettings()
 		ImGui::TextColored({ 0, 1, 0, 1 }, "HDR display detected");
 		if (ImGui::Checkbox("HDR Enabled", &settings.enableHDR)) {
 			enabledSaveLater = settings.enableHDR;
+			// Update swap chain color space when HDR setting changes
+			if (!globals::features::upscaling.d3d12SwapChainActive) {
+				SetSwapChainColorSpace(settings.enableHDR);
+			}
 		}
 	} else {
 		ImGui::TextColored({ 1, 0.5f, 0, 1 }, "No HDR display detected - using SDR tonemapping");
@@ -157,6 +163,76 @@ void HDR::RestoreDefaultSettings()
 	settings = {};
 }
 
+bool HDR::SetSwapChainColorSpace(bool enableHDR)
+{
+	auto swapChain = globals::d3d::swapChain;
+	if (!swapChain) {
+		logger::warn("HDR: No swap chain available");
+		return false;
+	}
+
+	Microsoft::WRL::ComPtr<IDXGISwapChain3> swapChain3;
+	HRESULT hr = swapChain->QueryInterface(IID_PPV_ARGS(&swapChain3));
+	if (FAILED(hr) || !swapChain3) {
+		logger::warn("HDR: Failed to get IDXGISwapChain3 interface (hr=0x{:08X})", static_cast<unsigned>(hr));
+		return false;
+	}
+
+	DXGI_COLOR_SPACE_TYPE colorSpace = enableHDR ? 
+		DXGI_COLOR_SPACE_RGB_FULL_G2084_NONE_P2020 :  // HDR10: PQ transfer, BT.2020 primaries
+		DXGI_COLOR_SPACE_RGB_FULL_G22_NONE_P709;       // SDR: sRGB gamma, BT.709 primaries
+
+	// Try to set color space directly - skip CheckColorSpaceSupport as it can crash with Streamline
+	hr = swapChain3->SetColorSpace1(colorSpace);
+	if (FAILED(hr)) {
+		logger::warn("HDR: Failed to set color space (hr=0x{:08X}), trying fallback", static_cast<unsigned>(hr));
+		// If HDR fails, try SDR as fallback
+		if (enableHDR) {
+			hr = swapChain3->SetColorSpace1(DXGI_COLOR_SPACE_RGB_FULL_G22_NONE_P709);
+			if (SUCCEEDED(hr)) {
+				logger::info("HDR: Fell back to SDR color space");
+				return false;
+			}
+		}
+		return false;
+	}
+
+	logger::info("HDR: Set swap chain color space to {}", enableHDR ? "HDR10 (PQ/BT.2020)" : "SDR (sRGB/BT.709)");
+	return true;
+}
+
+void HDR::BeginUIRendering()
+{
+	if (!hdrDisplayDetected || !settings.enableHDR)
+		return;
+		
+	auto swapChain = globals::d3d::swapChain;
+	if (!swapChain)
+		return;
+
+	Microsoft::WRL::ComPtr<IDXGISwapChain3> swapChain3;
+	if (FAILED(swapChain->QueryInterface(IID_PPV_ARGS(&swapChain3))) || !swapChain3)
+		return;
+
+	swapChain3->SetColorSpace1(DXGI_COLOR_SPACE_RGB_FULL_G22_NONE_P709);
+}
+
+void HDR::EndUIRendering()
+{
+	if (!hdrDisplayDetected || !settings.enableHDR)
+		return;
+		
+	auto swapChain = globals::d3d::swapChain;
+	if (!swapChain)
+		return;
+
+	Microsoft::WRL::ComPtr<IDXGISwapChain3> swapChain3;
+	if (FAILED(swapChain->QueryInterface(IID_PPV_ARGS(&swapChain3))) || !swapChain3)
+		return;
+
+	swapChain3->SetColorSpace1(DXGI_COLOR_SPACE_RGB_FULL_G2084_NONE_P2020);
+}
+
 void HDR::SetupResources()
 {
 	logger::info("HDR: SetupResources called");
@@ -164,8 +240,21 @@ void HDR::SetupResources()
 	if (!hdrDisplayDetected) {
 		hdrDisplayDetected = DetectHDRDisplay();
 	}
+	
+	auto& upscaling = globals::features::upscaling;
+	
 	if (hdrDisplayDetected) {
 		logger::info("HDR display detected");
+		
+		// Set color space based on user preference
+		// For D3D12 proxy (frame generation), color space was already set during swap chain creation
+		// For D3D11 path, we need to set it here
+		if (!upscaling.d3d12SwapChainActive) {
+			// D3D11 path - safe to call SetSwapChainColorSpace
+			SetSwapChainColorSpace(settings.enableHDR);
+		} else {
+			logger::info("HDR: D3D12 proxy active, color space set during swap chain creation");
+		}
 	} else {
 		logger::info("No HDR display detected - SDR tonemapping available");
 	}

@@ -10,6 +10,7 @@
 #include "TruePBR.h"
 #include "Util.h"
 
+#include "Features/HDR.h"
 #include "Features/InteriorSun.h"
 #include "Features/LightLimitFix.h"
 #include "Features/TerrainHelper.h"
@@ -253,7 +254,11 @@ struct IDXGISwapChain_Present
 		auto state = globals::state;
 		auto menu = globals::menu;
 		state->Reset();
+		
+		auto hdr = HDR::GetSingleton();
+		hdr->BeginUIRendering();
 		menu->DrawOverlay();
+		hdr->EndUIRendering();
 
 		HRESULT retval = func(This, SyncInterval, Flags);
 

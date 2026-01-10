@@ -3,6 +3,7 @@
 #include <FidelityFX/api/include/dx12/ffx_api_dx12.hpp>
 #include <dxgi1_6.h>
 
+#include "../HDR.h"
 #include "../Upscaling.h"
 #include "FidelityFX.h"
 #include "Streamline.h"
@@ -33,10 +34,13 @@ void DX12SwapChain::CreateSwapChain(IDXGIAdapter* adapter, DXGI_SWAP_CHAIN_DESC 
 	IDXGIFactory4* dxgiFactory;
 	DX::ThrowIfFailed(adapter->GetParent(IID_PPV_ARGS(&dxgiFactory)));
 
+	auto hdr = HDR::GetSingleton();
+	bool useHDR = hdr && hdr->hdrDisplayDetected && hdr->settings.enableHDR;
+
 	swapChainDesc = {};
 	swapChainDesc.Width = a_swapChainDesc.BufferDesc.Width;
 	swapChainDesc.Height = a_swapChainDesc.BufferDesc.Height;
-	swapChainDesc.Format = a_swapChainDesc.BufferDesc.Format;
+	swapChainDesc.Format = useHDR ? DXGI_FORMAT_R10G10B10A2_UNORM : a_swapChainDesc.BufferDesc.Format;
 	swapChainDesc.SampleDesc.Count = 1;
 	swapChainDesc.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
 	swapChainDesc.BufferCount = 2;
@@ -62,6 +66,28 @@ void DX12SwapChain::CreateSwapChain(IDXGIAdapter* adapter, DXGI_SWAP_CHAIN_DESC 
 	DX::ThrowIfFailed(swapChain->GetBuffer(1, IID_PPV_ARGS(&swapChainBuffers[1])));
 
 	frameIndex = swapChain->GetCurrentBackBufferIndex();
+
+	if (useHDR) {
+		DX::ThrowIfFailed(swapChain->SetColorSpace1(DXGI_COLOR_SPACE_RGB_FULL_G2084_NONE_P2020));
+		logger::info("[DX12SwapChain] Set swap chain color space to HDR10 (PQ/BT.2020)");
+
+		DXGI_HDR_METADATA_HDR10 hdrMetadata = {};
+		hdrMetadata.RedPrimary[0] = 34000;
+		hdrMetadata.RedPrimary[1] = 16000;
+		hdrMetadata.GreenPrimary[0] = 13250;
+		hdrMetadata.GreenPrimary[1] = 34500;
+		hdrMetadata.BluePrimary[0] = 7500;
+		hdrMetadata.BluePrimary[1] = 3000;
+		hdrMetadata.WhitePoint[0] = 15635;
+		hdrMetadata.WhitePoint[1] = 16450;
+		hdrMetadata.MaxMasteringLuminance = 1000 * 10000;
+		hdrMetadata.MinMasteringLuminance = 100;
+		hdrMetadata.MaxContentLightLevel = 1000;
+		hdrMetadata.MaxFrameAverageLightLevel = 400;
+
+		DX::ThrowIfFailed(swapChain->SetHDRMetaData(DXGI_HDR_METADATA_TYPE_HDR10, sizeof(hdrMetadata), &hdrMetadata));
+		logger::info("[DX12SwapChain] Set HDR10 metadata");
+	}
 
 	fidelityFX.SetupFrameGeneration();
 }

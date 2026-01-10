@@ -54,6 +54,9 @@ public:
 
 	void SetupResources();
 	void UpdateHDRData() const;
+	bool SetSwapChainColorSpace(bool enableHDR);
+	void BeginUIRendering();  // Switch to SDR color space for UI
+	void EndUIRendering();    // Switch back to HDR color space
 
 	void ApplyHDR();
 
