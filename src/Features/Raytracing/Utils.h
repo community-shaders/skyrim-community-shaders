@@ -1,6 +1,9 @@
 #pragma once
 
 #include "PCH.h"
+
+#include "Features/Raytracing/Types.h"
+
 #include "TruePBR.h"
 #include "TruePBR/BSLightingShaderMaterialPBR.h"
 #include <directxpackedvector.h>
@@ -220,6 +223,43 @@ static uint32_t DivideRoundUp(uint32_t x, float divisor)
 {
 	return static_cast<uint32_t>(ceil(x / divisor));
 }
+
+static eastl::unique_ptr<Texture2D> CreateTexture2D(uint2 size, DXGI_FORMAT format, uint bindFlags, DXGI_FORMAT srvFormat = DXGI_FORMAT_UNKNOWN, DXGI_FORMAT uavFormat = DXGI_FORMAT_UNKNOWN)
+{
+	D3D11_TEXTURE2D_DESC texDesc{};
+	texDesc.Width = size.x;
+	texDesc.Height = size.y;
+	texDesc.MipLevels = 1;
+	texDesc.ArraySize = 1;
+	texDesc.Format = format;
+	texDesc.SampleDesc.Count = 1;
+	texDesc.SampleDesc.Quality = 0;
+	texDesc.BindFlags = bindFlags;
+
+	D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc = {
+		.Format = srvFormat != DXGI_FORMAT_UNKNOWN ? srvFormat : format,
+		.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2D,
+		.Texture2D = {
+			.MostDetailedMip = 0,
+			.MipLevels = texDesc.MipLevels }
+	};
+
+	D3D11_UNORDERED_ACCESS_VIEW_DESC uavDesc = {
+		.Format = uavFormat != DXGI_FORMAT_UNKNOWN ? uavFormat : format,
+		.ViewDimension = D3D11_UAV_DIMENSION_TEXTURE2D,
+		.Texture2D = { .MipSlice = 0 }
+	};
+
+	auto texture2D = eastl::make_unique<Texture2D>(texDesc);
+
+	if (bindFlags & D3D11_BIND_SHADER_RESOURCE)
+		texture2D->CreateSRV(srvDesc);
+
+	if (bindFlags & D3D11_BIND_UNORDERED_ACCESS)
+		texture2D->CreateUAV(uavDesc);
+
+	return texture2D;
+};
 
 static void CreateTexture2DUAV(ID3D12Device5* device, ID3D12Resource* resource, CD3DX12_CPU_DESCRIPTOR_HANDLE handle)
 {

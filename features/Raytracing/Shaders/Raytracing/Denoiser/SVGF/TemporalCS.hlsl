@@ -2,19 +2,20 @@
 
 Texture2D<float4>   HistoryTexture          : register(t0);
 Texture2D<float2>   MotionVectorTexture     : register(t1);
-Texture2D<float4>	SSRColorTexture			: register(t3);
-Texture2D<float>	DepthTexture			: register(t4);
-Texture2D<float4>   HistoryMomentsTexture   : register(t5); // moments in RG, frame count in B
+Texture2D<float4>	NoisyInputTexture		: register(t3);
+Texture2D<float4>   HistoryMomentsTexture   : register(t4); // moments in RG, frame count in B
+Texture2D<float4>   HistoryDepthTexture     : register(t5);
 Texture2D<float4>   HistoryNormalsTexture   : register(t6);
+//Texture2D<float>    DepthTexture            : register(t7);
 
 RWTexture2D<float4> FilteredOutput          : register(u0);
 RWTexture2D<float4> MomentsOutput           : register(u1);
+RWTexture2D<float2> DepthOutput             : register(u2); // Screen Depth in R, Viewspace Depth in G
 
-SamplerState        LinearSampler           : register(s0);
-
-bool IsValidHistory(uint2 pixel, float2 uv, float3 currNormalWS)
+bool IsValidHistory(in uint2 pixel, in float2 uv, in float currDepth, in float3 currNormalWS)
 {
     const uint2 screenSize = Resolution;
+    
     if (any(uv < 0.0f) || any(uv > 1.0f))
         return false;
 
@@ -25,153 +26,83 @@ bool IsValidHistory(uint2 pixel, float2 uv, float3 currNormalWS)
     float roughness;
     GetNormalRoughness(HistoryNormalsTexture, pixel, prevNormalWS, roughness);
 
-    float normalDiff = dot(currNormalWS, prevNormalWS);
-    if (normalDiff < 0.707f) // cos 30
+    if (dot(currNormalWS, prevNormalWS) < Frame.NormalThreshold) // cos
         return false;
 
-    /*float prevDepth = DepthTexture[pixel]; // Or use a history depth texture if you have one
+    float prevDepth = HistoryDepthTexture[pixel].x;
     float depthDiff = abs(currDepth - prevDepth) / currDepth;
-    if (depthDiff > 0.1f) // 10% depth difference threshold
-        return false;*/
+    
+    if (depthDiff > Frame.DepthThreshold) // difference %
+        return false;
 
     return true;
 }
 
-[numthreads(8, 8, 1)] void main(uint3 DTid : SV_DispatchThreadID)
+[numthreads(8, 8, 1)] 
+void main(uint2 id : SV_DispatchThreadID)
 {
     const uint2 screenSize = Resolution;
-    if (DTid.x >= screenSize.x || DTid.y >= screenSize.y)
+    if (any(id.xy >= screenSize))
         return;
 
-    const float2 uv = float2(DTid.xy + 0.5) * ResolutionRcp;
-
-    float3 blendedColor = 0;
-    float4 ssrColor = SSRColorTexture[DTid.xy];
-    float depthCenter = DepthTexture[DTid.xy];
-
+    const float2 uv = float2(id.xy + 0.5) * ResolutionRcp;
+    
+    const float4 inputColor = NoisyInputTexture[id.xy];
+    const float2 depth = DepthOutput[id.xy].xy;
+    
+    float depthCenter = depth.x;  
+    //float depthCenter = DepthTexture[id.xy];
+    
     float3 normalWS;
     float roughness;
-    GetNormalRoughness(DTid.xy, normalWS, roughness);
-
-    float luminance = Color::RGBToLuminance(ssrColor.rgb);
-    float2 curMoment = float2(luminance, luminance * luminance);
+    GetNormalRoughness(id.xy, normalWS, roughness);
 
     // Reproject UVs using motion vectors
-    float2 prevUV = uv;
-    ReprojectHit(MotionVectorTexture, LinearSampler, float3(uv, depthCenter), 0u, prevUV);
-
+    float2 prevUV = ReprojectUVSimple(MotionVectorTexture, uv);
+    //float2 prevUV = ReprojectUV(MotionVectorTexture, uv, depthCenter, 0u);
+    
     float4 prevColor = 0.f;
     float prevAccumFrames = 0.f;
     float2 prevMoments = float2(0.f, 0.f);
     uint2 prevPixel = uint2(prevUV * screenSize);
-    bool valid = false;
-
-    if (IsValidHistory(prevPixel, prevUV, normalWS))
-    {
-        prevColor = HistoryTexture[prevPixel];
-        prevAccumFrames = HistoryMomentsTexture[prevPixel].z;
-        prevMoments = HistoryMomentsTexture[prevPixel].xy;
-        valid = true;
-    }
-
-    if (!valid)
-    {
-        int2 bilinOffset[4] = { int2(-1, 0), int2(1, 0), int2(0, -1), int2(0, 1) };
-        float weightSum = 0.f;
-        [unroll(4)]
-        for (int i = 0; i < 4; i++)
-        {
-            int2 neighborPixel = int2(prevPixel) + bilinOffset[i];
-
-            if (any(neighborPixel < 0) || any(neighborPixel >= screenSize))
-                continue;
-
-            float2 neighborUV = float2(neighborPixel  + 0.5f) * ResolutionRcp;
-
-            if (IsValidHistory(uint2(neighborPixel), neighborUV, normalWS))
-            {
-                float4 neighborColor = HistoryTexture[uint2(neighborPixel)];
-                float neighborAccumFrames = HistoryMomentsTexture[uint2(neighborPixel)].z;
-                if (neighborAccumFrames > 0.f)
-                {
-                    prevColor += neighborColor;
-                    prevAccumFrames += neighborAccumFrames;
-                    prevMoments += HistoryMomentsTexture[uint2(neighborPixel)].xy;
-                    weightSum += 1.f;
-                }
-            }
-        }
-
-        if (weightSum > 0.f)
-        {
-            prevColor /= weightSum;
-            prevAccumFrames /= weightSum;
-            prevMoments /= weightSum;
-            valid = true;
-        }
-    }
-
-    if (!valid)
-    {
-        float weightSum = 0.f;
-
-        int2 offsets[8] =
-        {
-            int2(0, 2),
-            int2(0, -2),
-            int2(1, 1),
-            int2(1, -1),
-            int2(-1, 1),
-            int2(-1, -1),
-            int2(2, 0),
-            int2(-2, 0)
-        };
-
-        [unroll(8)]
-        for (int i = 0; i < 8; i++)
-        {
-            int2 neighborPixel = int2(prevPixel) + offsets[i];
-
-            if (any(neighborPixel < 0) || any(neighborPixel >= screenSize))
-                continue;
-
-            float2 neighborUV = float2(neighborPixel  + 0.5f) * ResolutionRcp;
-
-            if (IsValidHistory(uint2(neighborPixel), neighborUV, normalWS))
-            {
-                float4 neighborColor = HistoryTexture[uint2(neighborPixel)];
-                float neighborAccumFrames = HistoryMomentsTexture[uint2(neighborPixel)].z;
-                if (neighborAccumFrames > 0.f)
-                {
-                    prevColor += neighborColor;
-                    prevAccumFrames += neighborAccumFrames;
-                    prevMoments += HistoryMomentsTexture[uint2(neighborPixel)].xy;
-                    weightSum += 1.f;
-                }
-            }
-        }
-        if (weightSum > 0.f)
-        {
-            prevColor /= weightSum;
-            prevAccumFrames /= weightSum;
-            prevMoments /= weightSum;
-            valid = true;
-        }
-    }
+    
+    bool valid = IsValidHistory(prevPixel, prevUV, depthCenter, normalWS);
 
     if (valid)
     {
-        float alpha = max(1.0f / (prevAccumFrames + 1.0f), Frame.InvMaxAccumulatedFrames);
-        blendedColor = lerp(prevColor.rgb, ssrColor.rgb, alpha);
-
-        float momentAlpha = max(1.0f / (prevAccumFrames + 1.0f), Frame.InvMaxAccumulatedFrames);
-        float2 moment = lerp(prevMoments, curMoment, momentAlpha);
-        float variance = max(moment.y - moment.x * moment.x, 0.0f); // Use blended moment
-        variance = max(variance, 0.f);
-        FilteredOutput[DTid.xy] = float4(blendedColor, variance);
-        MomentsOutput[DTid.xy] = float4(moment, prevAccumFrames + 1.0f, 0.f);
-        return;
+        prevColor = HistoryTexture[prevPixel];
+        
+        const float3 historyMoments = HistoryMomentsTexture[prevPixel].xyz;     
+        prevAccumFrames = historyMoments.z;
+        prevMoments = historyMoments.xy;
     }
-    MomentsOutput[DTid.xy] = float4(curMoment, 1.0f, 0.f);
-    FilteredOutput[DTid.xy] = float4(ssrColor.rgb, max(curMoment.y - curMoment.x * curMoment.x, 0.0f));
+
+    float curAccumFrames = min(64.0f, valid ? prevAccumFrames + 1.0f : 1.0f);
+    
+    float invPrevAccumFrames = 1.0f / curAccumFrames;
+    
+    float alpha = valid ? max(Frame.Alpha, invPrevAccumFrames) : 1.0f;
+    float momentAlpha = valid ? max(Frame.MomentsAlpha, invPrevAccumFrames) : 1.0f;
+        
+    float luminance = Color::RGBToLuminance(inputColor.rgb);
+    float2 curMoment = float2(luminance, luminance * luminance);      
+    
+    float3 blendedColor = lerp(prevColor.rgb, inputColor.rgb, alpha);     
+    float2 blendedMoment = lerp(prevMoments, curMoment, momentAlpha);
+    
+    float variance = max(0.0f, blendedMoment.y - blendedMoment.x * blendedMoment.x);
+                   
+    FilteredOutput[id.xy] = float4(blendedColor, variance); 
+    MomentsOutput[id.xy] = float4(blendedMoment, curAccumFrames, 0.f);   
+    
+    // Build depth width
+    float depthL = DepthOutput[id.xy + int2(-1, 0)].x;
+    float depthR = DepthOutput[id.xy + int2(1, 0)].x;
+    
+    float depthU = DepthOutput[id.xy + int2(0, 1)].x;
+    float depthD = DepthOutput[id.xy + int2(0, -1)].x;
+    
+    float depthW = abs(depthCenter - depthL) + abs(depthCenter - depthL) + abs(depthCenter - depthU) + abs(depthCenter - depthD);    
+    
+    DepthOutput[id.xy] = float2(depthCenter, depthW * 0.5f);
 }

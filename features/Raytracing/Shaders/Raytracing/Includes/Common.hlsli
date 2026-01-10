@@ -4,8 +4,12 @@
 #include "Common/Game.hlsli"
 
 #define DEPTH_SCALE (0.99920h)
-#define FP_Z (16.5f)
+
+#define FP_Z (0.001f)
 #define SKY_Z (0.9999f)
+
+#define FP_VIEW_Z (16.5f)
+
 #define M_TO_GAME_UNIT (1.0f / (GAME_UNIT_TO_M))
 
 float ScreenToViewDepth(const float screenDepth, float4 cameraData)

@@ -115,7 +115,7 @@ void main()
     const float4 mainColor = MainTexture.SampleLevel(BaseSampler, uv, 0);
 
     [branch]
-    if (depthView < FP_Z || depth >= SKY_Z)
+    if (depthView < FP_VIEW_Z || depth >= SKY_Z)
     {
 #if defined(SHARC) && defined(SHARC_UPDATE)
         [branch]
@@ -382,15 +382,21 @@ void main()
     NormalRoughnessPathTracing[idx] = float4(sourceSurface.Normal, sourceSurface.Roughness);
 #else
 #   if defined(RAW_RADIANCE)
-    OutputTexture[idx] = float4(radiance, 1.0f);
+    // Diffuse Output
+    OutputTexture[idx] = float4(isSpecular ? 0.0f : radiance, 1.0f);
+    
+    // Specular Output (Reused texture from DLSS RR)
+    SpecularAlbedo[idx] = float4(isSpecular ? radiance : 0.0f, specHitDist);
 #   else
     OutputTexture[idx] = float4(Color::GammaToTrueLinear(mainColor.rgb) + radiance, 1.0f);
 #   endif
 #endif
-
+    
+#if !defined(RAW_RADIANCE)
     const float2 envBRDF = BRDF::EnvBRDFApproxHirvonen(sourceSurface.Roughness, sourceBRDFContext.NdotV);
     const float3 specularAlbedo = float3(sourceSurface.F0 * envBRDF.x + envBRDF.y);
     SpecularAlbedo[idx] = float4(specularAlbedo, 0.0f);
 
     SpecularHitDist[idx] = specHitDist;
+#endif
 }

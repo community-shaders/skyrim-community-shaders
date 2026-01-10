@@ -62,7 +62,7 @@ struct Surface
         } else {
             Albedo = float3(1.0f, 1.0f, 1.0f);
         }
-#elif defined(DEBUG_NEUTRAL)       
+#elif defined(DEBUG_NOSAMPLING)       
         Albedo = float3(0.5f, 0.5f, 0.5f);
 #else
         Texture2D baseTexture = Textures[NonUniformResourceIndex(material.BaseTexture())];
@@ -157,7 +157,7 @@ struct Surface
         }
 #endif
 
-#if defined(DEBUG_GEOMNORMAL)
+#if defined(DEBUG_NONORMALMAP)
         Normal = normalWS;
         Tangent = tangentWS;
         Bitangent = bitangentWS;

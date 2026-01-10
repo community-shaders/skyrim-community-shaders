@@ -68,7 +68,7 @@ struct SHaRCPipeline : ComputePipeline<SHaRCHeap>
 			};
 		}
 
-		NLOHMANN_DEFINE_TYPE_INTRUSIVE_WITH_DEFAULT(Settings, SceneScale, AccumFrameNum, StaleFrameNum, RadianceScale, AntifireflyFilter)
+		NLOHMANN_DEFINE_TYPE_INTRUSIVE_WITH_DEFAULT(Settings, SceneScale, AccumFrameNum, StaleFrameNum, AntifireflyFilter)
 	};
 
 	void CreateRootSignature(ID3D12Device5* device) override;

@@ -3,79 +3,87 @@
 Texture2D<float4>   HistoryTexture  : register(t0);
 Texture2D<float4>   MomentsTexture  : register(t1);
 Texture2D<float4>	TemporalTexture : register(t3);
-Texture2D<float>	DepthTexture    : register(t4);
+Texture2D<float2>   DepthTexture	: register(t4); // Viewspace Depth in R, Depth Width in G
 
-RWTexture2D<float4> VarianceOutput : register(u0);
+RWTexture2D<float4> VarianceOutput  : register(u0);
 
-[numthreads(8, 8, 1)] void main(uint3 DTid : SV_DispatchThreadID)
+#define RADIUS (3)
+
+[numthreads(8, 8, 1)] void main(uint2 DTid : SV_DispatchThreadID)
 {
     const uint2 screenSize = Resolution;
-    if (DTid.x >= screenSize.x || DTid.y >= screenSize.y)
+    
+    if (any(DTid.xy >= screenSize))
         return;
 
     float2 uv = float2(DTid.xy + 0.5) * ResolutionRcp;
 
-    float4 temporalColor = TemporalTexture[DTid.xy];
-    float3 blendedColor = temporalColor.xyz;
-    float depthCenter = DepthTexture[DTid.xy];
+    const float4 temporalColor = TemporalTexture[DTid.xy];
+    const float2 depthWidthCenter = DepthTexture[DTid.xy].xy;
 
-    /*if (depthCenter <= 0.0f || depthCenter >= 1.0f)
+    /*if (depthCenter <= FP_Z || depthCenter > SKY_Z)
     {
         VarianceOutput[DTid.xy] = temporalColor;
         return;
     }*/
+    
+    const float3 moments = MomentsTexture[DTid.xy].xyz;
+    const float history = moments.z;
 
-    float history = MomentsTexture[DTid.xy].z;
-
-    if (history <= 2) {
+    const float historyThreshold = float(Frame.HistoryThreshold);
+    
+    if (history <= historyThreshold) {
         float3 normalWS;
         float roughness;
         GetNormalRoughness(DTid.xy, normalWS, roughness);
 
         float luminanceCenter = Color::RGBToLuminance(temporalColor.xyz);
-        float weightedColor = 1.f;
+        
+        float weightSum = 0.f;
         float3 colorSum = temporalColor.xyz;
-        float2 momentsSum = MomentsTexture[DTid.xy].xy;
+        float2 momentsSum = moments.xy;
 
         const float normalPhi = Frame.NormalPhi;
         const float colorPhi = Frame.ColorPhi;
-
-        const int radius = 3;
-        for (int y = -radius; y <= radius; y++)
+        const float phiDepth = depthWidthCenter.y * RADIUS;
+        
+        for (int y = -RADIUS; y <= RADIUS; y++)
         {
-            for (int x = -radius; x <= radius; x++)
+            for (int x = -RADIUS; x <= RADIUS; x++)
             {
-                if (x == 0 && y == 0)
-                    continue;
+                /*if (x == 0 && y == 0)
+                    continue;*/
 
-                const int2 p = int2(DTid.xy) + int2(x, y);
-                const bool inside = (p.x >= 0 && p.y >= 0) && (p.x < screenSize.x && p.y < screenSize.y);
+                const int2 samplePos = int2(DTid.xy) + int2(x, y);
 
-                if (inside)
+                if (all(samplePos >= 0) && all(samplePos < screenSize))
                 {
-                    float4 neighborTemporalColor = TemporalTexture[p];
+                    float4 neighborTemporalColor = TemporalTexture[samplePos];
+                    
                     float3 neighborNormalWS;
                     float neighborRoughness;
-                    GetNormalRoughness(p, neighborNormalWS, neighborRoughness);
+                    GetNormalRoughness(samplePos, neighborNormalWS, neighborRoughness);
                     float neighborLuminance = Color::RGBToLuminance(neighborTemporalColor.xyz);
-                    float depthNeighbor = DepthTexture[p];
+                    float depthNeighbor = DepthTexture[samplePos].x;
 
-                    float weight = CalculateWeight(depthCenter, depthNeighbor, length(float2(x, y)), normalWS, neighborNormalWS, normalPhi, luminanceCenter, neighborLuminance, colorPhi);
+                    float weight = CalculateWeight(depthWidthCenter.x, depthNeighbor, phiDepth, normalWS, neighborNormalWS, normalPhi, luminanceCenter, neighborLuminance, colorPhi);
 
-                    weightedColor += weight;
+                    weightSum += weight;
                     colorSum += neighborTemporalColor.xyz * weight;
-                    momentsSum += MomentsTexture[p].xy * weight;
+                    momentsSum += MomentsTexture[samplePos].xy * weight;
                 }
             }
         }
 
-        weightedColor = max(weightedColor, 1e-5f);
-        blendedColor = colorSum / weightedColor;
-        momentsSum /= weightedColor;
+        weightSum = max(weightSum, VAR_EPSILON);
+        
+        colorSum /= weightSum;
+        momentsSum /= weightSum;
 
         float variance = max(momentsSum.y - momentsSum.x * momentsSum.x, 0.0f);
-        variance *= 2 / max(history, 1e-5f);
-        VarianceOutput[DTid.xy] = float4(blendedColor, variance);
+        variance *= historyThreshold / max(history, 1.0f);
+        
+        VarianceOutput[DTid.xy] = float4(colorSum, variance);
     }
     else
     {
