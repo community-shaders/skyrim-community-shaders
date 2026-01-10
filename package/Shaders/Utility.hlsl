@@ -627,6 +627,9 @@ PS_OUTPUT main(PS_INPUT input)
 	uint3 seed = Random::pcg3d(uint3(input.PositionCS.xy, input.PositionCS.x * Math::PI));
 
 #		if defined(RENDER_SHADOWMASK)
+	if(SharedData::InInterior)
+		shadowColor = float4(0,0,0,0);
+
 	if (EndSplitDistances.z >= shadowMapDepth) {
 		float4x3 lightProjectionMatrix = ShadowMapProj[eyeIndex][0];
 		float shadowMapThreshold = AlphaTestRef.y;
@@ -692,7 +695,7 @@ PS_OUTPUT main(PS_INPUT input)
 			shadowVisibility = min(shadowVisibility, lerp(1, focusShadowVisibility, focusShadowFade));
 		}
 
-		shadowColor.xyzw = fadeFactor * (shadowVisibility - 1) + 1;
+		shadowColor.xyzw = lerp(1.0 * !SharedData::InInterior, shadowVisibility, fadeFactor);
 	}
 #		elif defined(RENDER_SHADOWMASKSPOT)
 	float4 positionLS = mul(transpose(ShadowMapProj[eyeIndex][0]), float4(positionMS.xyz, 1));
