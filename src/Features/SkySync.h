@@ -31,6 +31,11 @@ public:
 		int32_t MoonLightSource = 0;
 		int32_t SunPath = 0;
 		float CustomAngle = -35.0f;
+		float SunriseBeginOffset = 0.0f;
+		float SunriseEndOffset = 0.0f;
+		float SunsetBeginOffset = 0.0f;
+		float SunsetEndOffset = 0.0f;
+		float MinShadowElevation = 0.25f;
 	};
 
 	Settings settings;
