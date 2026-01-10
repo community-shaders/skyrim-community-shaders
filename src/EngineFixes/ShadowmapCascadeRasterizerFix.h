@@ -33,8 +33,8 @@ struct ShadowmapRasterizerFix : EngineFix
 	static void GetUpdatedRasterDesc(D3D11_RASTERIZER_DESC& outputDesc, ShadowMapRasterizerDescriptor desc);
 
 	static constexpr ShadowMapRasterizerDescriptor cascadeDescriptors[numCascades] = {
-		{ 0, firstCascadeDepthBiasClamp, firstCascadeSlopeScaleBias },
-		{ 0, secondCascadeDepthBiasClamp, secondCascadeSlopeScaleBias }
+		{ firstCascadeDepthBias, firstCascadeDepthBiasClamp, firstCascadeSlopeScaleBias },
+		{ secondCascadeDepthBias, secondCascadeDepthBiasClamp, secondCascadeSlopeScaleBias }
 	};
 
 	struct BSShadowDirectionalLight_RenderShadowmaps_RenderCascade
