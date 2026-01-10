@@ -6,7 +6,12 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	UseAlternateSunPath,
 	MoonLightSource,
 	SunPath,
-	CustomAngle)
+	CustomAngle,
+	SunriseBeginOffset,
+	SunriseEndOffset,
+	SunsetBeginOffset,
+	SunsetEndOffset,
+	MinShadowElevation)
 
 void SkySync::DrawSettings()
 {
@@ -22,9 +27,14 @@ void SkySync::DrawSettings()
 			if (ImGui::SliderFloat("Custom angle", &settings.CustomAngle, -90.0f, 90.0f, "%.0f", ImGuiSliderFlags_AlwaysClamp))
 				SetSunAngle();
 		}
+		ImGui::SliderFloat("Sunrise Begin (Hours)", &settings.SunriseBeginOffset, -5.0f, 5.0f, "%.1f");
+		ImGui::SliderFloat("Sunrise End (Hours)", &settings.SunriseEndOffset, -5.0f, 5.0f, "%.1f");
+		ImGui::SliderFloat("Sunset Begin (Hours)", &settings.SunsetBeginOffset, -5.0f, 5.0f, "%.1f");
+		ImGui::SliderFloat("Sunset End (Hours)", &settings.SunsetEndOffset, -5.0f, 5.0f, "%.1f");
 	}
-
 	ImGui::SliderInt("Moon light source", &settings.MoonLightSource, 0, static_cast<uint8_t>(MoonLightSource::Count) - 1, MoonLightSourceNames[settings.MoonLightSource], ImGuiSliderFlags_AlwaysClamp);
+	ImGui::SliderFloat("Min Shadow Elevation", &settings.MinShadowElevation, 0.0f, 45.0f, "%.01f deg");
+	ImGui::Text("The minimum angle sunlight will set to. Caps shadow length. Higher = shorter shadows at sunset/sunrise.");	
 }
 
 void SkySync::LoadSettings(json& o_json)
@@ -394,7 +404,9 @@ void SkySync::ShadowFader::SetLighting(const RE::Sun* sun, RE::NiPoint3 dir, flo
 
 inline void SkySync::ShadowFader::ClampDirection(RE::NiPoint3& dir)
 {
-	constexpr float minElev = DirectX::XMConvertToRadians(MinElevation);
+	float minDegrees = globals::features::skySync.settings.MinShadowElevation;
+
+	float minElev = DirectX::XMConvertToRadians(minDegrees);
 	const float elev = DirectX::XMScalarASinEst(dir.z);
 	if (elev >= minElev)
 		return;
@@ -419,10 +431,15 @@ SkySync::VolumetricLightingDescriptor* SkySync::ApplyVolumetricLighting_Volumetr
 
 void SkySync::ClimateTimings::Update(const RE::TESClimate* climate)
 {
-	sunriseBegin = climate->timing.sunrise.begin / 6.0f;
-	sunriseEnd = climate->timing.sunrise.end / 6.0f;
-	sunsetBegin = climate->timing.sunset.begin / 6.0f;
-	sunsetEnd = climate->timing.sunset.end / 6.0f;
+	float srbegin = globals::features::skySync.settings.SunriseBeginOffset;
+	float srend = globals::features::skySync.settings.SunriseEndOffset;
+	float ssbegin = globals::features::skySync.settings.SunsetBeginOffset;
+	float ssend = globals::features::skySync.settings.SunsetEndOffset;
+
+	sunriseBegin = (climate->timing.sunrise.begin / 6.0f) + srbegin;
+	sunriseEnd = (climate->timing.sunrise.end / 6.0f) + srend;
+	sunsetBegin = (climate->timing.sunset.begin / 6.0f) + ssbegin;
+	sunsetEnd = (climate->timing.sunset.end / 6.0f) + ssend;
 	sunrise = (sunriseBegin + sunriseEnd) * 0.5f - 0.25f;
 	sunset = (sunsetBegin + sunsetEnd) * 0.5f + 0.25f;
 	sunriseFadeOutMoonStart = sunriseBegin - 0.5f;
