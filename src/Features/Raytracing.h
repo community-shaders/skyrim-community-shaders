@@ -1055,33 +1055,6 @@ struct Raytracing : public OverlayFeature
 			static inline REL::Relocation<decltype(thunk)> func;
 		};
 
-		struct BSShaderAccumulator_StartAccumulating
-		{
-			static void thunk(RE::BSGraphics::BSShaderAccumulator* shaderAccumulator, RE::NiCamera const* camera)
-			{
-				auto& rt = globals::features::raytracing;
-
-				// Bypassing this alone does absolutely nothing.
-				if (!rt.Active() || !rt.renderingShadowmap || !rt.settings.RaytracedShadows)
-					func(shaderAccumulator, camera);
-			}
-
-			static inline REL::Relocation<decltype(thunk)> func;
-		};
-
-		struct BSShaderAccumulator_FinishAccumulatingDispatch
-		{
-			static void thunk(RE::BSGraphics::BSShaderAccumulator* shaderAccumulator, uint32_t renderFlags)
-			{
-				auto& rt = globals::features::raytracing;
-
-				if (!rt.Active() || !rt.renderingShadowmap || !rt.settings.RaytracedShadows)
-					func(shaderAccumulator, renderFlags);
-			}
-
-			static inline REL::Relocation<decltype(thunk)> func;
-		};
-
 		struct Main_RenderShadowmasks
 		{
 			static void thunk(bool a1)
@@ -1375,13 +1348,8 @@ struct Raytracing : public OverlayFeature
 
 			stl::write_vfunc<0xA, BSShadowDirectionalLight_RenderShadowmaps>(RE::VTABLE_BSShadowDirectionalLight[0]);
 
-			//stl::write_vfunc<0x29, BSShaderAccumulator_StartAccumulating>(RE::VTABLE_BSShaderAccumulator[0]);
-			//stl::write_vfunc<0x2A, BSShaderAccumulator_FinishAccumulatingDispatch>(RE::VTABLE_BSShaderAccumulator[0]);
-
-			detour_thunk<CreateTextureFromDDS>(0xd2ef80);
-			detour_thunk<TESObjectLAND_Attach3D>(0x2a8b00);
-
-			logger::info("[RT] Base: [0x{:8X}]", REL::Module::get().base());
+			stl::detour_thunk<CreateTextureFromDDS>(REL::RelocationID(69334, 70716));
+			stl::detour_thunk<TESObjectLAND_Attach3D>(REL::RelocationID(18334, 18750));
 
 			logger::info("[RT] Installed hooks");
 		}
