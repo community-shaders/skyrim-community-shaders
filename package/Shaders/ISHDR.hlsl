@@ -1,6 +1,7 @@
 #include "Common/Color.hlsli"
 #include "Common/DummyVSTexCoord.hlsl"
 #include "Common/FrameBuffer.hlsli"
+#include "Common/SharedData.hlsli"
 
 typedef VS_OUTPUT PS_INPUT;
 
@@ -141,9 +142,21 @@ PS_OUTPUT main(PS_INPUT input)
 	outputColor = ppColor;
 #	endif
 
+	float3 srgbColor = ppColor;
+
+#		if defined(FADE)
+	srgbColor = lerp(srgbColor, Fade.xyz, Fade.w);
+#		endif
+
+	if (SharedData::linearLightingSettings.enableLinearLighting && SharedData::linearLightingSettings.enableGammaCorrection) {
+		srgbColor = Color::TrueLinearToGamma(srgbColor);
+	}
+	srgbColor = FrameBuffer::ToSRGBColor(srgbColor);
+
 #	if defined(FADE)
 	outputColor = lerp(outputColor, Fade.xyz, Fade.w);
 #	endif
+
 
 #	if defined(HDR_OUTPUT)
 	// HDR mode: output is linear, no gamma correction needed

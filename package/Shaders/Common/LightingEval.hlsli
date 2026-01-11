@@ -107,19 +107,19 @@ void EvaluateLighting(DirectContext context, MaterialProperties material, float3
 	}
 #	endif
 	const float NdotL = dot(context.worldNormal, context.lightDir);
-    lightingOutput.diffuse = saturate(NdotL) * context.lightColor;
+    lightingOutput.diffuse = saturate(NdotL) * context.lightColor * Color::VanillaDiffuseMult();
 #		if defined(SOFT_LIGHTING)
-	lightingOutput.diffuse += context.lightColor * GetSoftLightMultiplier(NdotL) * material.rimSoftLightColor;
+	lightingOutput.diffuse += context.lightColor * GetSoftLightMultiplier(NdotL) * material.rimSoftLightColor * Color::VanillaDiffuseMult();
 #		endif
 
 #		if defined(RIM_LIGHTING)
-	lightingOutput.diffuse += context.lightColor * GetRimLightMultiplier(context.lightDir, context.viewDir, context.worldNormal) * material.rimSoftLightColor;
+	lightingOutput.diffuse += context.lightColor * GetRimLightMultiplier(context.lightDir, context.viewDir, context.worldNormal) * material.rimSoftLightColor * Color::VanillaDiffuseMult();
 #		endif
 
 #		if defined(BACK_LIGHTING)
-	lightingOutput.diffuse += context.lightColor * saturate(-NdotL) * material.backLightColor;
+	lightingOutput.diffuse += context.lightColor * saturate(-NdotL) * material.backLightColor * Color::VanillaDiffuseMult();
 #		endif
-    lightingOutput.specular = VanillaSpecular(context, material.Shininess, uv) * material.SpecularColor * material.Glossiness * context.lightColor;
+    lightingOutput.specular = VanillaSpecular(context, material.Shininess, uv) * material.SpecularColor * material.Glossiness * context.lightColor * Color::VanillaSpecularMult();
 #endif
 }
 
@@ -191,7 +191,7 @@ void EvaluateWetnessLighting(float3 wetnessNormal, DirectContext context, float 
 	float3 wetnessSpecular = D * G * F * NdotL * lightColor;
 
 #if !defined(TRUE_PBR)
-	wetnessSpecular *= Math::PI * Color::PBRLightingScale;  // Compensate for GGX on traditional specular
+	wetnessSpecular *= Color::PBRLightingCompensation * Color::PBRLightingScale;  // Compensate for GGX on traditional specular
 #endif
 
 	lightingOutput.diffuse *= 1 - F;

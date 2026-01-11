@@ -199,6 +199,42 @@ namespace SharedData
 		float Strength;      // [0, 1.0] The inverse blend weight of the effect
 	};
 
+	struct LinearLightingSettings
+	{
+		uint enableLinearLighting;
+		uint enableGammaCorrection;
+		uint isDirLightLinear;
+		float dirLightMult;
+		float lightGamma;
+		float colorGamma;
+		float emitColorGamma;
+		float glowmapGamma;
+		float ambientGamma;
+		float fogGamma;
+		float fogAlphaGamma;
+		float effectGamma;
+		float effectAlphaGamma;
+		float skyGamma;
+		float waterGamma;
+		float vlGamma;
+		float vanillaDiffuseMult;
+		float vanillaSpecularMult;
+		float grassDiffuseMult;
+		float grassSpecularMult;
+		float vanillaDiffuseColorMult;
+		float lightMult;
+		float directionalLightMult;
+		float pointLightMult;
+		float emitColorMult;
+		float glowmapMult;
+		float effectLightingMult;
+		float membraneEffectMult;
+		float bloodEffectMult;
+		float projectedEffectMult;
+		float deferredEffectMult;
+		float otherEffectMult;
+	};
+
 	cbuffer FeatureData : register(b6)
 	{
 		GrassLightingSettings grassLightingSettings;
@@ -214,6 +250,7 @@ namespace SharedData
 		TerrainVariationSettings terrainVariationSettings;
 		IBLSettings iblSettings;
 		ExtendedTranslucencySettings extendedTranslucencySettings;
+		LinearLightingSettings linearLightingSettings;
 	};
 
 	Texture2D<float4> DepthTexture : register(t17);

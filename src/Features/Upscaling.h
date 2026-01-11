@@ -57,7 +57,6 @@ public:
 		uint streamlineLogLevel = 0;  // 0=Off, 1=Default, 2=Verbose
 		float sharpnessFSR = 1.0f;
 		float sharpnessDLSS = 1.0f;
-		uint DLSSPreset = 2;  // VR-specific DLSS preset: 0=F, 1=J, 2=K
 	};
 
 	Settings settings;
