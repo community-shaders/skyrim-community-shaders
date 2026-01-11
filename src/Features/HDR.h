@@ -29,6 +29,7 @@ public:
 		bool enableHDR = false;
 		bool vanillaEyeAdaptation = true;
 		bool vanillaBloom = true;
+		bool bypassTonemapping = false;
 
 		float exposure = 1.0f;
 		float highlights = 1.0f;
@@ -85,6 +86,10 @@ public:
 		// parameters2.z = vanillaEyeAdaptation (1.0 = enabled)
 		// parameters2.w = vanillaBloom (1.0 = enabled)
 		DirectX::XMVECTOR parameters2;
+		// parameters3.x = bypassTonemapping (1.0 = enabled)
+		// parameters3.y = hdrMode (1.0 = HDR display detected)
+		// parameters3.zw = unused
+		DirectX::XMVECTOR parameters3;
 	};
 
 	static_assert((sizeof(HDRDataCB) % 16) == 0, "CB size not padded correctly");

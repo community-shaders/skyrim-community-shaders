@@ -502,6 +502,9 @@ namespace Hooks
 		{
 			globals::state->ModifyRenderTarget(a_target, a_properties);
 			auto hdr = HDR::GetSingleton();
+			// Upgrade kMAIN to HDR format if HDR display is detected (hardware capability)
+			// The enableHDR setting controls whether we use the HDR pipeline, but the format
+			// should be set based on what the display supports for maximum quality
 			if (hdr && hdr->hdrDisplayDetected) {
 				a_properties->format = HDR::BSGraphics_HDR_Format;
 				logger::info("HDR: Upgrading kMAIN render target to R16G16B16A16_FLOAT");

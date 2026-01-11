@@ -145,10 +145,13 @@ PS_OUTPUT main(PS_INPUT input)
 	outputColor = lerp(outputColor, Fade.xyz, Fade.w);
 #	endif
 
-	// Always output gamma-encoded sRGB so UI blending is correct
-	// HDROutputCS will convert gamma->linear->PQ for HDR displays
-	outputColor = FrameBuffer::ToSRGBColor(outputColor);
+#	if defined(HDR_OUTPUT)
+	// HDR mode: output is linear, no gamma correction needed
 	psout.Color = float4(outputColor, 1.0);
+#	else
+	// SDR mode: tonemappers already output gamma space (HejlBurgessDawson has pow(x, 2.2) baked in)
+	psout.Color = float4(outputColor, 1.0);
+#	endif
 
 #	endif
 
