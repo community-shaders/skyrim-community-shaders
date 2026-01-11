@@ -4,6 +4,7 @@
 
 #include "Buffer.h"
 #include "Globals.h"
+#include "ShaderCache.h"
 #include "State.h"
 #include "Upscaling.h"
 #include "Util.h"
@@ -73,15 +74,16 @@ void HDR::DrawSettings()
 		ImGui::TextColored({ 0, 1, 0, 1 }, "HDR display detected");
 		if (ImGui::Checkbox("HDR Enabled", &settings.enableHDR)) {
 			enabledSaveLater = settings.enableHDR;
-			// Update swap chain color space when HDR setting changes
 			if (!globals::features::upscaling.d3d12SwapChainActive) {
 				SetSwapChainColorSpace(settings.enableHDR);
 			}
+			globals::shaderCache->Clear(RE::BSShader::Type::ImageSpace);
 		}
 	} else {
 		ImGui::TextColored({ 1, 0.5f, 0, 1 }, "No HDR display detected");
 		if (ImGui::Checkbox("Enable HDR Processing", &settings.enableHDR)) {
 			enabledSaveLater = settings.enableHDR;
+			globals::shaderCache->Clear(RE::BSShader::Type::ImageSpace);
 		}
 	}
 
@@ -189,32 +191,118 @@ void HDR::BeginUIRendering()
 {
 	if (!hdrDisplayDetected || !settings.enableHDR)
 		return;
-		
-	auto swapChain = globals::d3d::swapChain;
-	if (!swapChain)
+	
+	// Skip if D3D12 frame gen is active - it has its own UI buffer handling
+	if (globals::features::upscaling.d3d12SwapChainActive)
 		return;
-
-	Microsoft::WRL::ComPtr<IDXGISwapChain3> swapChain3;
-	if (FAILED(swapChain->QueryInterface(IID_PPV_ARGS(&swapChain3))) || !swapChain3)
+	
+	if (!uiTexture || !uiTexture->rtv)
 		return;
-
-	swapChain3->SetColorSpace1(DXGI_COLOR_SPACE_RGB_FULL_G22_NONE_P709);
+	
+	auto context = globals::d3d::context;
+	
+	// Save current render target
+	context->OMGetRenderTargets(1, &savedRTV, &savedDSV);
+	
+	// Clear UI texture with transparent black
+	float clearColor[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
+	context->ClearRenderTargetView(uiTexture->rtv.get(), clearColor);
+	
+	// Set UI texture as render target
+	ID3D11RenderTargetView* rtv = uiTexture->rtv.get();
+	context->OMSetRenderTargets(1, &rtv, nullptr);
+	
+	renderingUI = true;
 }
 
 void HDR::EndUIRendering()
 {
 	if (!hdrDisplayDetected || !settings.enableHDR)
 		return;
-		
-	auto swapChain = globals::d3d::swapChain;
-	if (!swapChain)
+	
+	// Skip if D3D12 frame gen is active
+	if (globals::features::upscaling.d3d12SwapChainActive)
 		return;
-
-	Microsoft::WRL::ComPtr<IDXGISwapChain3> swapChain3;
-	if (FAILED(swapChain->QueryInterface(IID_PPV_ARGS(&swapChain3))) || !swapChain3)
+	
+	if (!renderingUI)
 		return;
+	
+	auto context = globals::d3d::context;
+	
+	// Restore original render target
+	context->OMSetRenderTargets(1, &savedRTV, savedDSV);
+	
+	if (savedRTV) {
+		savedRTV->Release();
+		savedRTV = nullptr;
+	}
+	if (savedDSV) {
+		savedDSV->Release();
+		savedDSV = nullptr;
+	}
+	
+	renderingUI = false;
+}
 
-	swapChain3->SetColorSpace1(DXGI_COLOR_SPACE_RGB_FULL_G2084_NONE_P2020);
+void HDR::CompositeUI()
+{
+	if (!hdrDisplayDetected || !settings.enableHDR)
+		return;
+	
+	// Skip if D3D12 frame gen is active - FidelityFX handles UI compositing
+	if (globals::features::upscaling.d3d12SwapChainActive)
+		return;
+	
+	if (!uiTexture || !hdrDataCB)
+		return;
+	
+	auto context = globals::d3d::context;
+	auto state = globals::state;
+	auto renderer = globals::game::renderer;
+	
+	state->BeginPerfEvent("HDR UI Composite");
+	
+	// Read from kMAIN which has the linear HDR scene (pre-tonemapping)
+	// We skip ISHDR's output (which goes to clamped kFRAMEBUFFER) and handle exposure ourselves
+	auto& sceneRT = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMAIN];
+	
+	auto dispatchCount = Util::GetScreenDispatchCount(false);
+	
+	// Bind inputs: HDR scene (pre-tonemapping from kMAIN) and UI buffer
+	ID3D11ShaderResourceView* views[2] = { sceneRT.SRV, uiTexture->srv.get() };
+	context->CSSetShaderResources(0, ARRAYSIZE(views), views);
+	
+	// Output to hdrTexture (intermediate)
+	ID3D11UnorderedAccessView* uavs[1] = { hdrTexture->uav.get() };
+	context->CSSetUnorderedAccessViews(0, ARRAYSIZE(uavs), uavs, nullptr);
+	
+	ID3D11Buffer* cbs[1] = { hdrDataCB->CB() };
+	context->CSSetConstantBuffers(0, ARRAYSIZE(cbs), cbs);
+	
+	auto compositeShader = GetUICompositeCS();
+	if (!compositeShader) {
+		logger::error("HDR: Failed to get UI composite shader");
+		state->EndPerfEvent();
+		return;
+	}
+	
+	context->CSSetShader(compositeShader, nullptr, 0);
+	context->Dispatch(dispatchCount.x, dispatchCount.y, 1);
+	
+	// Cleanup
+	views[0] = nullptr;
+	views[1] = nullptr;
+	context->CSSetShaderResources(0, ARRAYSIZE(views), views);
+	
+	uavs[0] = nullptr;
+	context->CSSetUnorderedAccessViews(0, ARRAYSIZE(uavs), uavs, nullptr);
+	
+	cbs[0] = nullptr;
+	context->CSSetConstantBuffers(0, ARRAYSIZE(cbs), cbs);
+	
+	context->CSSetShader(nullptr, nullptr, 0);
+	
+	state->EndPerfEvent();
 }
 
 void HDR::SetupResources()
@@ -276,10 +364,32 @@ void HDR::SetupResources()
 	outputTexture->CreateSRV(srvDesc);
 	outputTexture->CreateUAV(uavDesc);
 
+	// UI texture for separate UI rendering (sRGB format for proper UI authoring)
+	D3D11_TEXTURE2D_DESC uiTexDesc = texDesc;
+	uiTexDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+	uiTexDesc.BindFlags = D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_UNORDERED_ACCESS;
+	
+	D3D11_SHADER_RESOURCE_VIEW_DESC uiSrvDesc = srvDesc;
+	uiSrvDesc.Format = uiTexDesc.Format;
+	
+	D3D11_UNORDERED_ACCESS_VIEW_DESC uiUavDesc = uavDesc;
+	uiUavDesc.Format = uiTexDesc.Format;
+	
+	uiTexture = new Texture2D(uiTexDesc);
+	uiTexture->CreateSRV(uiSrvDesc);
+	uiTexture->CreateUAV(uiUavDesc);
+	
+	// Create RTV for UI texture
+	D3D11_RENDER_TARGET_VIEW_DESC rtvDesc{};
+	rtvDesc.Format = uiTexDesc.Format;
+	rtvDesc.ViewDimension = D3D11_RTV_DIMENSION_TEXTURE2D;
+	rtvDesc.Texture2D.MipSlice = 0;
+	uiTexture->CreateRTV(rtvDesc);
+
 	hdrDataCB = new ConstantBuffer(ConstantBufferDesc<HDRDataCB>());
 
-	logger::info("HDR: Resources created - hdrTexture format: {}, outputTexture format: {}, mainFormat: {}",
-		(int)DXGI_FORMAT_R16G16B16A16_FLOAT, (int)texDesc.Format, (int)mainFormat);
+	logger::info("HDR: Resources created - hdrTexture format: {}, outputTexture format: {}, uiTexture format: {}, mainFormat: {}",
+		(int)DXGI_FORMAT_R16G16B16A16_FLOAT, (int)texDesc.Format, (int)uiTexDesc.Format, (int)mainFormat);
 
 	UpdateHDRData();
 }
@@ -289,6 +399,13 @@ void HDR::ApplyHDR()
 	std::lock_guard<std::mutex> lock(settingsMutex);
 
 	if (!settings.enableHDR)
+		return;
+	
+	auto& upscaling = globals::features::upscaling;
+	
+	// When frame gen is active, FidelityFX handles the final output
+	// The swap chain is already set to HDR10 format in DX12SwapChain
+	if (upscaling.d3d12SwapChainActive)
 		return;
 
 	if (!hdrDataCB || !hdrTexture || !outputTexture) {
@@ -301,18 +418,19 @@ void HDR::ApplyHDR()
 	auto state = globals::state;
 	auto renderer = globals::game::renderer;
 
-	state->BeginPerfEvent(hdrDisplayDetected ? "HDR" : "HDR Processing");
-
 	// Update constant buffer before applying HDR
 	UpdateHDRData();
+	
+	// Composite UI onto HDR scene (result in hdrTexture)
+	CompositeUI();
 
-	auto& inputRT = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMAIN];
+	state->BeginPerfEvent(hdrDisplayDetected ? "HDR Output" : "HDR Processing");
 
 	{
 		auto dispatchCount = Util::GetScreenDispatchCount(false);
 
-		// Read directly from kMAIN's SRV - no format conversion needed
-		ID3D11ShaderResourceView* views[1] = { inputRT.SRV };
+		// Read from hdrTexture which now contains composited HDR scene + UI
+		ID3D11ShaderResourceView* views[1] = { hdrTexture->srv.get() };
 		context->CSSetShaderResources(0, ARRAYSIZE(views), views);
 
 		ID3D11UnorderedAccessView* uavs[1] = { outputTexture->uav.get() };
@@ -367,6 +485,14 @@ void HDR::DestroyResources() const
 	outputTexture->uav = nullptr;
 	outputTexture->resource = nullptr;
 	delete outputTexture;
+	
+	if (uiTexture) {
+		uiTexture->srv = nullptr;
+		uiTexture->uav = nullptr;
+		uiTexture->rtv = nullptr;
+		uiTexture->resource = nullptr;
+		delete uiTexture;
+	}
 }
 
 void HDR::ClearShaderCache()
@@ -379,6 +505,10 @@ void HDR::ClearShaderCache()
 		sdrOutputCS->Release();
 		sdrOutputCS = nullptr;
 	}
+	if (uiCompositeCS) {
+		uiCompositeCS->Release();
+		uiCompositeCS = nullptr;
+	}
 }
 
 ID3D11ComputeShader* HDR::GetHDROutputCS()
@@ -386,9 +516,8 @@ ID3D11ComputeShader* HDR::GetHDROutputCS()
 	if (!hdrOutputCS) {
 		logger::debug("Compiling HDROutputCS.hlsl");
 		std::vector<std::pair<const char*, const char*>> defines;
-		if (hdrDisplayDetected) {
-			defines.push_back({ "HDR_INPUT", "" });
-		}
+		// Always use HDR_INPUT since we read from composited hdrTexture (linear R16G16B16A16_FLOAT)
+		defines.push_back({ "HDR_INPUT", "" });
 		hdrOutputCS = static_cast<ID3D11ComputeShader*>(Util::CompileShader(L"Data\\Shaders\\HDROutputCS.hlsl", defines, "cs_5_0"));
 		if (!hdrOutputCS) {
 			logger::error("HDR: Failed to compile HDROutputCS.hlsl");
@@ -402,15 +531,27 @@ ID3D11ComputeShader* HDR::GetSDROutputCS()
 	if (!sdrOutputCS) {
 		logger::debug("Compiling HDROutputCS.hlsl (SDR mode)");
 		std::vector<std::pair<const char*, const char*>> defines = { { "SDR_OUTPUT", "" } };
-		if (hdrDisplayDetected) {
-			defines.push_back({ "HDR_INPUT", "" });
-		}
+		// Always use HDR_INPUT since we read from composited hdrTexture (linear R16G16B16A16_FLOAT)
+		defines.push_back({ "HDR_INPUT", "" });
 		sdrOutputCS = static_cast<ID3D11ComputeShader*>(Util::CompileShader(L"Data\\Shaders\\HDROutputCS.hlsl", defines, "cs_5_0"));
 		if (!sdrOutputCS) {
 			logger::error("HDR: Failed to compile HDROutputCS.hlsl (SDR mode)");
 		}
 	}
 	return sdrOutputCS;
+}
+
+ID3D11ComputeShader* HDR::GetUICompositeCS()
+{
+	if (!uiCompositeCS) {
+		logger::debug("Compiling UICompositeCS.hlsl");
+		std::vector<std::pair<const char*, const char*>> defines;
+		uiCompositeCS = static_cast<ID3D11ComputeShader*>(Util::CompileShader(L"Data\\Shaders\\UICompositeCS.hlsl", defines, "cs_5_0"));
+		if (!uiCompositeCS) {
+			logger::error("HDR: Failed to compile UICompositeCS.hlsl");
+		}
+	}
+	return uiCompositeCS;
 }
 
 void HDR::UpdateHDRData() const

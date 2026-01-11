@@ -53,8 +53,12 @@ public:
 	void SetupResources();
 	void UpdateHDRData() const;
 	bool SetSwapChainColorSpace(bool enableHDR);
-	void BeginUIRendering();  // Switch to SDR color space for UI
-	void EndUIRendering();    // Switch back to HDR color space
+	
+	// UI rendering in HDR - redirects UI to separate target for proper compositing
+	void BeginUIRendering();
+	void EndUIRendering();
+	void CompositeUI();  // Composites UI onto HDR scene in linear space
+	bool IsRenderingUI() const { return renderingUI; }
 
 	void ApplyHDR();
 
@@ -87,11 +91,19 @@ public:
 
 	Texture2D* hdrTexture = nullptr;
 	Texture2D* outputTexture = nullptr;
+	Texture2D* uiTexture = nullptr;  // Separate UI render target for HDR compositing
 
 	ID3D11ComputeShader* hdrOutputCS = nullptr;
 	ID3D11ComputeShader* sdrOutputCS = nullptr;
+	ID3D11ComputeShader* uiCompositeCS = nullptr;
 	ID3D11ComputeShader* GetHDROutputCS();
 	ID3D11ComputeShader* GetSDROutputCS();
+	ID3D11ComputeShader* GetUICompositeCS();
+
+	// Saved state for UI rendering redirection
+	bool renderingUI = false;
+	ID3D11RenderTargetView* savedRTV = nullptr;
+	ID3D11DepthStencilView* savedDSV = nullptr;
 
 	// Format constants to be used elsewhere
 	static constexpr auto BSGraphics_HDR_Format = RE::BSGraphics::Format::kR16G16B16A16_FLOAT;

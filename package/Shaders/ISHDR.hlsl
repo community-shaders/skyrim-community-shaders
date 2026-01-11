@@ -95,7 +95,17 @@ PS_OUTPUT main(PS_INPUT input)
 
 	float2 avgValue = AvgTex.Sample(AvgSampler, input.TexCoord.xy).xy;
 
-	// Vanilla tonemapping and post-processing
+	float3 outputColor = 0.0;
+
+#	if defined(HDR_OUTPUT)
+	// HDR pass-through: apply exposure only, skip tonemapping
+	if (avgValue.x != 0 && avgValue.y != 0)
+		inputColor *= avgValue.y / avgValue.x;
+	inputColor = max(0, inputColor);
+	inputColor += bloomColor;
+	outputColor = inputColor;
+#	else
+	// SDR tonemapping and post-processing
 	float3 gameSdrColor = 0.0;
 	float3 ppColor = 0.0;
 	{
@@ -128,20 +138,17 @@ PS_OUTPUT main(PS_INPUT input)
 
 		ppColor = max(0, linearColor);
 	}
+	outputColor = ppColor;
+#	endif
 
-	float3 srgbColor = ppColor;
+#	if defined(FADE)
+	outputColor = lerp(outputColor, Fade.xyz, Fade.w);
+#	endif
 
-#		if defined(FADE)
-	srgbColor = lerp(srgbColor, Fade.xyz, Fade.w);
-#		endif
-
-#		if defined(HDR_OUTPUT)
-	// HDR output: keep linear values for HDR display pipeline
-	psout.Color = float4(srgbColor, 1.0);
-#		else
-	srgbColor = FrameBuffer::ToSRGBColor(srgbColor);
-	psout.Color = float4(srgbColor, 1.0);
-#		endif
+	// Always output gamma-encoded sRGB so UI blending is correct
+	// HDROutputCS will convert gamma->linear->PQ for HDR displays
+	outputColor = FrameBuffer::ToSRGBColor(outputColor);
+	psout.Color = float4(outputColor, 1.0);
 
 #	endif
 

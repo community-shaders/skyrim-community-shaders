@@ -255,9 +255,17 @@ struct IDXGISwapChain_Present
 		auto menu = globals::menu;
 		state->Reset();
 		
-		menu->DrawOverlay();
-
 		auto hdr = HDR::GetSingleton();
+		bool hdrActive = hdr && hdr->hdrDisplayDetected && hdr->settings.enableHDR;
+		
+		// ImGui renders to the same UI texture that vanilla UI uses
+		// (UI redirection started in MenuManagerDrawInterfaceStartHook)
+		menu->DrawOverlay();
+		
+		// End UI redirection after all UI (vanilla + ImGui) has rendered
+		if (hdrActive && hdr->IsRenderingUI())
+			hdr->EndUIRendering();
+
 		if (hdr && hdr->settings.enableHDR)
 			hdr->ApplyHDR();
 
