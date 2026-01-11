@@ -10,11 +10,12 @@ struct ShadowmapRasterizerFix : EngineFix
 
 	static void CloneRasterStates(RasterStateArray* inputArray, int cascade);
 
-	static constexpr uint numCascades = 2;
+	static constexpr uint maxCascades = 3;
+	static uint numCascades = 0;
 
 	static inline RasterStateArray* gRasterStates = nullptr;
 	static inline RasterStateArray backupGameRasterStates = {};
-	static inline RasterStateArray shadowmapRasterStates[numCascades] = {};
+	static inline RasterStateArray shadowmapRasterStates[maxCascades] = {};
 
 	static constexpr int firstCascadeDepthBias = 160;
 	static constexpr float firstCascadeDepthBiasClamp = 0.004f;
@@ -24,6 +25,10 @@ struct ShadowmapRasterizerFix : EngineFix
 	static constexpr float secondCascadeDepthBiasClamp = 0.005f;
 	static constexpr float secondCascadeSlopeScaleBias = 3.8f;
 
+	static constexpr int thirdCascadeDepthBias = 0;
+	static constexpr float thirdCascadeDepthBiasClamp = 0.005f;
+	static constexpr float thirdCascadeSlopeScaleBias = 3.8f;
+
 	struct ShadowMapRasterizerDescriptor
 	{
 		int rasterDepthBias;
@@ -32,9 +37,10 @@ struct ShadowmapRasterizerFix : EngineFix
 	};
 	static void GetUpdatedRasterDesc(D3D11_RASTERIZER_DESC& outputDesc, ShadowMapRasterizerDescriptor desc);
 
-	static constexpr ShadowMapRasterizerDescriptor cascadeDescriptors[numCascades] = {
+	static constexpr ShadowMapRasterizerDescriptor cascadeDescriptors[maxCascades] = {
 		{ firstCascadeDepthBias, firstCascadeDepthBiasClamp, firstCascadeSlopeScaleBias },
-		{ secondCascadeDepthBias, secondCascadeDepthBiasClamp, secondCascadeSlopeScaleBias }
+		{ secondCascadeDepthBias, secondCascadeDepthBiasClamp, secondCascadeSlopeScaleBias },
+		{ thirdCascadeDepthBias, thirdCascadeDepthBiasClamp, thirdCascadeSlopeScaleBias }
 	};
 
 	struct BSShadowDirectionalLight_RenderShadowmaps_RenderCascade

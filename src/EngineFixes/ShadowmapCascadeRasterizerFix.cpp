@@ -14,12 +14,14 @@ void ShadowmapRasterizerFix::BSShadowDirectionalLight_RenderShadowmaps_RenderCas
 
 	static bool initialized = false;
 	if (!initialized) {
+		//Backup
+		if (cascade == 0) {
+			std::memcpy(backupGameRasterStates, *gRasterStates, sizeof(RasterStateArray));
+			numCascades = RE::GetINISetting("iNumSplits:Display")->data.u;
+		}
+
 		//Clone
 		CloneRasterStates(gRasterStates, cascade);
-
-		//Backup
-		if (cascade == 0)
-			std::memcpy(backupGameRasterStates, *gRasterStates, sizeof(RasterStateArray));
 
 		initialized = cascade == numCascades - 1;
 	}
