@@ -28,8 +28,6 @@ public:
 	{
 		bool enableHDR = false;
 
-		uint tonemapOperator = 0;
-
 		float exposure = 1.0f;
 		float highlights = 1.0f;
 		float shadows = 1.0f;
@@ -66,10 +64,10 @@ public:
 	XM_ALIGNED_STRUCT(16)
 	HDRDataCB
 	{
-		// parameters0.x = tonemapOperator
-		// parameters0.y = paperWhite
-		// parameters0.z = peakNits
-		// parameters0.w = exposure
+		// parameters0.x = paperWhite
+		// parameters0.y = peakNits
+		// parameters0.z = exposure
+		// parameters0.w = unused
 		DirectX::XMVECTOR parameters0;
 		// parameters1.x = highlights
 		// parameters1.y = shadows

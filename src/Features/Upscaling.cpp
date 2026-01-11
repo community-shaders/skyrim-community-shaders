@@ -1499,10 +1499,6 @@ void Upscaling::Main_PostProcessing::thunk(RE::ImageSpaceManager* a_this, uint32
 	func(a_this, a3, a_target, a_4, a_5);
 
 	BSImagespaceShaderISTemporalAA->taaEnabled = false;
-
-	auto hdr = HDR::GetSingleton();
-	if (hdr && hdr->settings.enableHDR)
-		hdr->ApplyHDR();
 }
 
 void Upscaling::SetScissorRect::thunk(RE::BSGraphics::Renderer* This, int a_left, int a_top, int a_right, int a_bottom)

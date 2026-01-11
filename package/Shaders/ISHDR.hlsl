@@ -135,9 +135,13 @@ PS_OUTPUT main(PS_INPUT input)
 	srgbColor = lerp(srgbColor, Fade.xyz, Fade.w);
 #		endif
 
-	srgbColor = FrameBuffer::ToSRGBColor(srgbColor);
-
+#		if defined(HDR_OUTPUT)
+	// HDR output: keep linear values for HDR display pipeline
 	psout.Color = float4(srgbColor, 1.0);
+#		else
+	srgbColor = FrameBuffer::ToSRGBColor(srgbColor);
+	psout.Color = float4(srgbColor, 1.0);
+#		endif
 
 #	endif
 

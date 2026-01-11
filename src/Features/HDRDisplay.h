@@ -11,6 +11,13 @@ struct HDRDisplay : public Feature
 	virtual inline bool SupportsVR() override { return true; }
 	virtual inline bool IsCore() const override { return true; }
 
+	virtual inline std::string_view GetShaderDefineName() override { return "HDR_OUTPUT"; }
+	virtual inline bool HasShaderDefine(RE::BSShader::Type shaderType) override
+	{
+		auto* hdrSingleton = HDR::GetSingleton();
+		return hdrSingleton && hdrSingleton->hdrDisplayDetected && shaderType == RE::BSShader::Type::ImageSpace;
+	}
+
 	virtual std::pair<std::string, std::vector<std::string>> GetFeatureSummary() override
 	{
 		return {

@@ -255,10 +255,11 @@ struct IDXGISwapChain_Present
 		auto menu = globals::menu;
 		state->Reset();
 		
-		auto hdr = HDR::GetSingleton();
-		hdr->BeginUIRendering();
 		menu->DrawOverlay();
-		hdr->EndUIRendering();
+
+		auto hdr = HDR::GetSingleton();
+		if (hdr && hdr->settings.enableHDR)
+			hdr->ApplyHDR();
 
 		HRESULT retval = func(This, SyncInterval, Flags);
 
@@ -492,6 +493,11 @@ namespace Hooks
 		static void thunk(RE::BSGraphics::Renderer* This, RE::RENDER_TARGETS::RENDER_TARGET a_target, RE::BSGraphics::RenderTargetProperties* a_properties)
 		{
 			globals::state->ModifyRenderTarget(a_target, a_properties);
+			auto hdr = HDR::GetSingleton();
+			if (hdr && hdr->hdrDisplayDetected) {
+				a_properties->format = HDR::BSGraphics_HDR_Format;
+				logger::info("HDR: Upgrading kMAIN render target to R16G16B16A16_FLOAT");
+			}
 			func(This, a_target, a_properties);
 		}
 		static inline REL::Relocation<decltype(thunk)> func;

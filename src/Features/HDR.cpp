@@ -57,7 +57,6 @@ bool HDR::DetectHDRDisplay()
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	HDR::Settings,
 	enableHDR,
-	tonemapOperator,
 	exposure,
 	highlights,
 	shadows,
@@ -70,17 +69,6 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 
 void HDR::DrawSettings()
 {
-	const char* operators[] = {
-		"None",
-		"Saturate",
-		"Frostbite",
-		"Reinhard-Jodie",
-		"ACES",
-		"Uncharted 2",
-		"DICE Plus",
-		"RenoDRT"
-	};
-
 	if (hdrDisplayDetected) {
 		ImGui::TextColored({ 0, 1, 0, 1 }, "HDR display detected");
 		if (ImGui::Checkbox("HDR Enabled", &settings.enableHDR)) {
@@ -91,15 +79,13 @@ void HDR::DrawSettings()
 			}
 		}
 	} else {
-		ImGui::TextColored({ 1, 0.5f, 0, 1 }, "No HDR display detected - using SDR tonemapping");
-		if (ImGui::Checkbox("Enable Tonemapping", &settings.enableHDR)) {
+		ImGui::TextColored({ 1, 0.5f, 0, 1 }, "No HDR display detected");
+		if (ImGui::Checkbox("Enable HDR Processing", &settings.enableHDR)) {
 			enabledSaveLater = settings.enableHDR;
 		}
 	}
 
 	if (ImGui::Button("Reset HDR Settings", { -1, 0 })) {
-		settings.tonemapOperator = 0;
-
 		settings.exposure = 1.0f;
 		settings.highlights = 1.0f;
 		settings.shadows = 1.0f;
@@ -119,8 +105,6 @@ void HDR::DrawSettings()
 		else
 			GetSDROutputCS();
 	}
-
-	ImGui::SliderInt("Tonemap Operator", reinterpret_cast<int*>(&settings.tonemapOperator), 0, 7, std::format("{}", operators[settings.tonemapOperator]).c_str());
 
 	if (hdrDisplayDetected) {
 		ImGui::SliderInt("Paper White (nits)", reinterpret_cast<int*>(&settings.paperWhite), 1, 500);
@@ -256,7 +240,7 @@ void HDR::SetupResources()
 			logger::info("HDR: D3D12 proxy active, color space set during swap chain creation");
 		}
 	} else {
-		logger::info("No HDR display detected - SDR tonemapping available");
+		logger::info("No HDR display detected");
 	}
 
 	auto renderer = globals::game::renderer;
@@ -317,7 +301,7 @@ void HDR::ApplyHDR()
 	auto state = globals::state;
 	auto renderer = globals::game::renderer;
 
-	state->BeginPerfEvent(hdrDisplayDetected ? "HDR" : "Tonemapping");
+	state->BeginPerfEvent(hdrDisplayDetected ? "HDR" : "HDR Processing");
 
 	// Update constant buffer before applying HDR
 	UpdateHDRData();
@@ -401,7 +385,11 @@ ID3D11ComputeShader* HDR::GetHDROutputCS()
 {
 	if (!hdrOutputCS) {
 		logger::debug("Compiling HDROutputCS.hlsl");
-		hdrOutputCS = static_cast<ID3D11ComputeShader*>(Util::CompileShader(L"Data\\Shaders\\HDROutputCS.hlsl", {}, "cs_5_0"));
+		std::vector<std::pair<const char*, const char*>> defines;
+		if (hdrDisplayDetected) {
+			defines.push_back({ "HDR_INPUT", "" });
+		}
+		hdrOutputCS = static_cast<ID3D11ComputeShader*>(Util::CompileShader(L"Data\\Shaders\\HDROutputCS.hlsl", defines, "cs_5_0"));
 		if (!hdrOutputCS) {
 			logger::error("HDR: Failed to compile HDROutputCS.hlsl");
 		}
@@ -413,7 +401,11 @@ ID3D11ComputeShader* HDR::GetSDROutputCS()
 {
 	if (!sdrOutputCS) {
 		logger::debug("Compiling HDROutputCS.hlsl (SDR mode)");
-		sdrOutputCS = static_cast<ID3D11ComputeShader*>(Util::CompileShader(L"Data\\Shaders\\HDROutputCS.hlsl", { { "SDR_OUTPUT", "" } }, "cs_5_0"));
+		std::vector<std::pair<const char*, const char*>> defines = { { "SDR_OUTPUT", "" } };
+		if (hdrDisplayDetected) {
+			defines.push_back({ "HDR_INPUT", "" });
+		}
+		sdrOutputCS = static_cast<ID3D11ComputeShader*>(Util::CompileShader(L"Data\\Shaders\\HDROutputCS.hlsl", defines, "cs_5_0"));
 		if (!sdrOutputCS) {
 			logger::error("HDR: Failed to compile HDROutputCS.hlsl (SDR mode)");
 		}
@@ -428,7 +420,7 @@ void HDR::UpdateHDRData() const
 
 	HDRDataCB data;
 
-	data.parameters0 = DirectX::XMVectorSet(static_cast<float>(settings.tonemapOperator), static_cast<float>(settings.paperWhite), static_cast<float>(settings.peakNits), settings.exposure);
+	data.parameters0 = DirectX::XMVectorSet(static_cast<float>(settings.paperWhite), static_cast<float>(settings.peakNits), settings.exposure, 0.f);
 	data.parameters1 = DirectX::XMVectorSet(settings.highlights, settings.shadows, settings.contrast, settings.saturation);
 	data.parameters2 = DirectX::XMVectorSet(settings.dechroma, settings.hueCorrectionStrength, 0.f, 0.f);
 
