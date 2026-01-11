@@ -1,5 +1,4 @@
 #include "Common/Color.hlsli"
-#include "Common/GT7ToneMapping.hlsli"
 
 SamplerState LinearSampler : register(s0);
 
@@ -55,8 +54,15 @@ float3 ApplyHueCorrection(float3 color, float3 originalColor, float strength)
 
 float3 HDRTonemap(float3 color, float peakNits, float paperWhiteNits)
 {
-	// Use Gran Turismo 7 physically-based tone mapper
-	return GT7ToneMappingHDR(color, peakNits);
+	// Use vanilla HejlBurgessDawson curve without clamping, linear output
+	// Scale input to prevent crushing blacks, then scale output to HDR range
+	float3 x = max(0.0, color);
+	float3 numerator = (x * 6.2 + 0.5) * x;
+	float3 denominator = max(1e-6, x * (x * 6.2 + 1.7) + 0.06);
+	float3 result = numerator / denominator;
+	
+	// Scale to paper white brightness for HDR display
+	return result * paperWhiteNits / 80.0;
 }
 
 float3 ApplyColorGrading(float3 color, float3 originalColor, float highlights, float shadows, float contrast, float saturation, float dechroma, float hueCorrectionStrength)
@@ -151,16 +157,6 @@ float3 ApplyColorGrading(float3 color, float3 originalColor, float highlights, f
 	}
 
 	float3 bt2020Linear = Color::BT709ToBT2020(outputColor);
-	float3 pqColor = Color::pq::Encode(bt2020Linear, paperWhiteNits);
-	
-	// Composite UI after tonemapping - UI is in sRGB, convert to PQ space
-	if (ui.a > 0.0) {
-		// Convert UI from sRGB to linear, then to BT.2020 and encode to PQ
-		float3 uiLinear = Color::GammaToLinearSafe(ui.rgb);
-		float3 uiBT2020 = Color::BT709ToBT2020(uiLinear);
-		float3 uiPQ = Color::pq::Encode(uiBT2020, paperWhiteNits);
-		pqColor = lerp(pqColor, uiPQ, ui.a);
-	}
 	
 	HDROutput[dispatchID.xy] = float4(pqColor, scene.w);
 #endif

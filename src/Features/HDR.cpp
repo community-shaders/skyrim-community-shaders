@@ -438,19 +438,14 @@ void HDR::ApplyHDR()
 	// If HDR display not detected, vanilla ISHDR output is fine
 	if (!hdrDisplayDetected)
 		return;
-	
-	auto& upscaling = globals::features::upscaling;
-	
-	// When frame gen is active, FidelityFX handles the final output
-	// The swap chain is already set to HDR10 format in DX12SwapChain
-	if (upscaling.d3d12SwapChainActive)
-		return;
 
 	if (!hdrDataCB || !hdrTexture || !outputTexture) {
 		logger::warn("HDR: Resources not initialized - hdrDataCB:{} hdrTexture:{} outputTexture:{}", 
 			(void*)hdrDataCB, (void*)hdrTexture, (void*)outputTexture);
 		return;
 	}
+	
+	auto& upscaling = globals::features::upscaling;
 
 	auto context = globals::d3d::context;
 	auto state = globals::state;
@@ -464,12 +459,26 @@ void HDR::ApplyHDR()
 	{
 		auto dispatchCount = Util::GetScreenDispatchCount(false);
 
-		// Read directly from kMAIN scene, UI, bloom, and adaptation
-		auto& sceneRT = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMAIN];
 		auto& bloomRT = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kHDR_BLOOM];
 		auto& adaptRT = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kHDR_DOWNSAMPLE13];
 		
-		ID3D11ShaderResourceView* views[4] = { sceneRT.SRV, uiTexture->srv.get(), bloomRT.SRV, adaptRT.SRV };
+		ID3D11ShaderResourceView* sceneSRV;
+		
+		// When Frame Gen is active, ISHDR has already rendered to FRAMEBUFFER
+		// We need to copy it to hdrTexture first to avoid read/write conflict
+		if (upscaling.d3d12SwapChainActive) {
+			auto& frameBufferRT = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kFRAMEBUFFER];
+			ID3D11Resource* frameBufferResource;
+			frameBufferRT.SRV->GetResource(&frameBufferResource);
+			context->CopyResource(hdrTexture->resource.get(), frameBufferResource);
+			sceneSRV = hdrTexture->srv.get();
+		} else {
+			// Normal path: read directly from kMAIN
+			auto& mainRT = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMAIN];
+			sceneSRV = mainRT.SRV;
+		}
+		
+		ID3D11ShaderResourceView* views[4] = { sceneSRV, uiTexture->srv.get(), bloomRT.SRV, adaptRT.SRV };
 		context->CSSetShaderResources(0, ARRAYSIZE(views), views);
 		
 		// Sampler for adaptation texture
@@ -514,10 +523,18 @@ void HDR::ApplyHDR()
 		context->CSSetShader(shader, nullptr, 0);
 	}
 
-	// Copy result back to framebuffer
+	// Copy result to appropriate destination
+	// When Frame Gen is active, copy to the D3D12 swap chain buffer
+	// Otherwise copy to the regular framebuffer (D3D11 swap chain path)
 	ID3D11Resource* outputTextureResource;
-	auto& outputRT = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGET::kFRAMEBUFFER];
-	outputRT.SRV->GetResource(&outputTextureResource);
+	if (upscaling.d3d12SwapChainActive) {
+		// Frame Gen path: copy to D3D12 swap chain wrapped buffer
+		outputTextureResource = upscaling.dx12SwapChain.swapChainBufferWrapped->resource11;
+	} else {
+		// Normal path: copy to D3D11 framebuffer
+		auto& outputRT = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGET::kFRAMEBUFFER];
+		outputRT.SRV->GetResource(&outputTextureResource);
+	}
 	context->CopyResource(outputTextureResource, outputTexture->resource.get());
 
 	state->EndPerfEvent();
