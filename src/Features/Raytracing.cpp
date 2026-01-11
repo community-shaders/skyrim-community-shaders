@@ -61,6 +61,7 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	PIXCaptureLocation,
 	EnableDebugDevice,
 	SHaRC,
+	SVGF,
 	RAYTRACING_EXTRA_FIELDS
 	)
 
@@ -237,13 +238,13 @@ void Raytracing::DrawSVGFSettings()
 		if (auto _tt = Util::HoverTooltipWrapper())
 			ImGui::Text("Controls sensitivity to normal differences in the À Trous filter. Higher values preserve more detail but may retain noise.");
 
-		ImGui::SliderFloat("Depth Phi", &svgfSettings.DepthPhi, 0.01f, 2.0f, "%.2f");
+		ImGui::SliderFloat("Depth Phi", &svgfSettings.DepthPhi, 0.001f, 0.2f, "%.3f");
 		if (auto _tt = Util::HoverTooltipWrapper())
 			ImGui::Text("Controls sensitivity to depth differences in the À Trous filter. Higher values preserve more detail but may retain noise.");
 
-		ImGui::SliderInt("Depth Threshold", (int*)&svgfSettings.DepthThreshold, 0, 99, "%d%", ImGuiSliderFlags_AlwaysClamp);
+		ImGui::SliderFloat("Depth Threshold", &svgfSettings.DepthThreshold, 0.0f, 1.0f, "%.3f");
 		if (auto _tt = Util::HoverTooltipWrapper())
-			ImGui::Text("Depth rejection difference in percent. Lower values are more agressive.");
+			ImGui::Text("Depth rejection difference. Lower values are more agressive.");
 
 		ImGui::SliderInt("Normal Threshold", (int*)&svgfSettings.NormalThreshold, 0, 90, "%dº", ImGuiSliderFlags_AlwaysClamp);
 		if (auto _tt = Util::HoverTooltipWrapper())

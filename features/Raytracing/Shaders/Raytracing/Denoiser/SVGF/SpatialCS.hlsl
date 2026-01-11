@@ -66,9 +66,10 @@ float GaussianBlur(int2 id, uint2 screenSize)
     float luminanceCenter = Color::RGBToLuminance(inputColor.rgb);
     float variance = GaussianBlur(sDTid.xy, screenSize);
 
-    float phiLuminance = max(Frame.ColorPhi * sqrt(abs(variance) + VAR_EPSILON), VAR_EPSILON);
+    float phiLuminance = Frame.ColorPhi * sqrt(max(VAR_EPSILON, variance));
     float phiNormal = Frame.NormalPhi;
-
+    float phiDepth = Frame.AtrousIterations * depthWidthCenter.y * Frame.DepthPhi;
+    
 #if defined(SSRT_SPECULAR)
     // Trying to reduce blurriness on glossy surfaces
     phiLuminance *= roughness;
@@ -99,14 +100,13 @@ float GaussianBlur(int2 id, uint2 screenSize)
                     float3 sampleNormalWS;
                     float sampleRoughness;
                     GetNormalRoughness(samplePos, sampleNormalWS, sampleRoughness);
-
-                    float phiDepth = depthWidthCenter.y * Frame.DepthPhi * Frame.AtrousIterations;
-                    
+    
                     float luminanceP = Color::RGBToLuminance(sampleColor.rgb);
                     
                     float weight = CalculateWeight(depthWidthCenter.x, sampleDepth, phiDepth, normalWS, sampleNormalWS, phiNormal, luminanceCenter, luminanceP, phiLuminance);
 
                     float kernel = kernelWeights[abs(x)] * kernelWeights[abs(y)];
+                    weight *= kernel;
                     
                     blendedColor += sampleColor.rgb * weight;
                     weightSum += weight;

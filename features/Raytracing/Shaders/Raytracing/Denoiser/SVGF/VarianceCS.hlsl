@@ -45,7 +45,7 @@ RWTexture2D<float4> VarianceOutput  : register(u0);
 
         const float normalPhi = Frame.NormalPhi;
         const float colorPhi = Frame.ColorPhi;
-        const float phiDepth = depthWidthCenter.y * RADIUS;
+        const float phiDepth = RADIUS * depthWidthCenter.y * Frame.DepthPhi;
         
         for (int y = -RADIUS; y <= RADIUS; y++)
         {
@@ -80,7 +80,7 @@ RWTexture2D<float4> VarianceOutput  : register(u0);
         colorSum /= weightSum;
         momentsSum /= weightSum;
 
-        float variance = max(momentsSum.y - momentsSum.x * momentsSum.x, 0.0f);
+        float variance = max(0.0f, momentsSum.y - momentsSum.x * momentsSum.x);
         variance *= historyThreshold / max(history, 1.0f);
         
         VarianceOutput[DTid.xy] = float4(colorSum, variance);

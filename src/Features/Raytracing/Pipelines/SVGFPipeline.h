@@ -43,15 +43,15 @@ struct SVGFPipeline
 	{
 		uint AlphaFrames = 20;
 		uint MomentsAlphaFrames = 10;
-		uint AtrousIterations = 3;
+		uint AtrousIterations = 2;
 		float ColorPhi = 0.5f;
-		float NormalPhi = 512.0f;
+		float NormalPhi = 256.0f;
 		float DepthPhi = 0.05f;
-		uint DepthThreshold = 10;
+		float DepthThreshold = 0.1f;
 		uint NormalThreshold = 30;
 		uint HistoryThreshold = 2;
-		bool Variance = false;
-		bool Spatial = false;
+		bool Variance = true;
+		bool Spatial = true;
 
 		NLOHMANN_DEFINE_TYPE_INTRUSIVE_WITH_DEFAULT(Settings, AlphaFrames, MomentsAlphaFrames, AtrousIterations, ColorPhi, NormalPhi, DepthPhi, DepthThreshold, NormalThreshold, HistoryThreshold)
 	};
