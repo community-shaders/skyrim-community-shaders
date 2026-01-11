@@ -1,8 +1,11 @@
 #include "Common/Color.hlsli"
 
+SamplerState LinearSampler : register(s0);
+
 Texture2D<float4> HDRScene : register(t0);
 Texture2D<float4> UIBuffer : register(t1);
 Texture2D<float4> BloomTex : register(t2);
+Texture2D<float4> AdaptTex : register(t3);
 RWTexture2D<float4> Output : register(u0);
 
 cbuffer PerFrame : register(b0)
@@ -15,17 +18,28 @@ cbuffer PerFrame : register(b0)
 [numthreads(8, 8, 1)]
 void main(uint3 dispatchID : SV_DispatchThreadID)
 {
+	uint2 dims;
+	Output.GetDimensions(dims.x, dims.y);
+	float2 uv = (float2(dispatchID.xy) + 0.5) / float2(dims);
+	
 	float4 scene = HDRScene[dispatchID.xy];
 	float4 ui = UIBuffer[dispatchID.xy];
 	float3 bloom = BloomTex[dispatchID.xy].rgb;
+	float2 adaptValue = AdaptTex.SampleLevel(LinearSampler, uv, 0).xy;
 	
 	float paperWhite = parameters0.x;
 	float exposure = parameters0.z;
 	
-	// Apply bloom to scene (additive, same as vanilla ISHDR)
-	float3 sceneWithBloom = scene.rgb + bloom;
+	// Apply eye adaptation (same formula as vanilla ISHDR)
+	float3 adaptedScene = scene.rgb;
+	if (adaptValue.x > 0.0 && adaptValue.y > 0.0)
+		adaptedScene *= adaptValue.y / adaptValue.x;
+	adaptedScene = max(0.0, adaptedScene);
 	
-	// Apply user exposure
+	// Apply bloom (additive, same as vanilla ISHDR)
+	float3 sceneWithBloom = adaptedScene + bloom;
+	
+	// Apply user exposure on top of eye adaptation
 	float3 exposedScene = sceneWithBloom * exposure;
 	
 	// Convert UI from gamma to linear space

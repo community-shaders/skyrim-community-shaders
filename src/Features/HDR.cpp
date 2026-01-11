@@ -3,6 +3,7 @@
 #include "PCH.h"
 
 #include "Buffer.h"
+#include "Deferred.h"
 #include "Globals.h"
 #include "ShaderCache.h"
 #include "State.h"
@@ -266,12 +267,17 @@ void HDR::CompositeUI()
 	// We skip ISHDR's output (which goes to clamped kFRAMEBUFFER) and handle exposure + bloom ourselves
 	auto& sceneRT = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMAIN];
 	auto& bloomRT = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kHDR_BLOOM];
+	auto& adaptRT = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kHDR_DOWNSAMPLE13];
 	
 	auto dispatchCount = Util::GetScreenDispatchCount(false);
 	
-	// Bind inputs: HDR scene, UI buffer, and bloom
-	ID3D11ShaderResourceView* views[3] = { sceneRT.SRV, uiTexture->srv.get(), bloomRT.SRV };
+	// Bind inputs: HDR scene, UI buffer, bloom, and eye adaptation
+	ID3D11ShaderResourceView* views[4] = { sceneRT.SRV, uiTexture->srv.get(), bloomRT.SRV, adaptRT.SRV };
 	context->CSSetShaderResources(0, ARRAYSIZE(views), views);
+	
+	// Sampler for adaptation texture (it's a small texture, needs bilinear sampling)
+	auto linearSampler = Deferred::GetSingleton()->linearSampler;
+	context->CSSetSamplers(0, 1, &linearSampler);
 	
 	// Output to hdrTexture (intermediate)
 	ID3D11UnorderedAccessView* uavs[1] = { hdrTexture->uav.get() };
@@ -294,6 +300,7 @@ void HDR::CompositeUI()
 	views[0] = nullptr;
 	views[1] = nullptr;
 	views[2] = nullptr;
+	views[3] = nullptr;
 	context->CSSetShaderResources(0, ARRAYSIZE(views), views);
 	
 	uavs[0] = nullptr;
@@ -301,6 +308,9 @@ void HDR::CompositeUI()
 	
 	cbs[0] = nullptr;
 	context->CSSetConstantBuffers(0, ARRAYSIZE(cbs), cbs);
+	
+	ID3D11SamplerState* nullSampler = nullptr;
+	context->CSSetSamplers(0, 1, &nullSampler);
 	
 	context->CSSetShader(nullptr, nullptr, 0);
 	
