@@ -61,7 +61,8 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	PIXCaptureLocation,
 	EnableDebugDevice,
 	SHaRC,
-	SVGF,
+	SVGFDiffuse,
+	SVGFSpecular,
 	RAYTRACING_EXTRA_FIELDS
 	)
 
@@ -208,6 +209,9 @@ void Raytracing::DrawSHaRCSettings()
 		ImGui::Checkbox("Antifirefly Filter", &sharcSettings.AntifireflyFilter);
 	}
 }
+//SVGFDiffuse
+
+
 
 void Raytracing::DrawSVGFSettings()
 {
@@ -216,8 +220,18 @@ void Raytracing::DrawSVGFSettings()
 
 	// Shameless word by word copy of jiaye's settings
 	if (ImGui::CollapsingHeader("SVGF")) {
-		auto& svgfSettings = settings.SVGF;
+		if (ImGui::BeginTabBar("svgf_tabbar")) {
+			DrawSVGFInternalSettings("Diffuse", settings.SVGFDiffuse);
+			DrawSVGFInternalSettings("Specular", settings.SVGFSpecular);
 
+			ImGui::EndTabBar();
+		}
+	}
+}
+
+void Raytracing::DrawSVGFInternalSettings(const char* name, SVGFPipeline::Settings& svgfSettings)
+{
+	if (ImGui::BeginTabItem(name)) {
 		ImGui::SliderInt("Alpha Frames", (int*)&svgfSettings.AlphaFrames, 1, 64, "%d", ImGuiSliderFlags_AlwaysClamp);
 		if (auto _tt = Util::HoverTooltipWrapper())
 			ImGui::Text("Temporal feedback frames for color.");
@@ -257,6 +271,8 @@ void Raytracing::DrawSVGFSettings()
 		ImGui::Checkbox("Variance", &svgfSettings.Variance);
 
 		ImGui::Checkbox("Spatial", &svgfSettings.Spatial);
+
+		ImGui::EndTabItem();
 	}
 }
 
@@ -3081,10 +3097,10 @@ void Raytracing::DrawRTGI()
 			d3d11Context->CSSetConstantBuffers(12, 1, &frameBufferCB);
 
 			// Diffuse
-			svgfDenoiser->Denoise(d3d11Context.get(), renderSize, settings.SVGF, normalRoughnessTexture.get(), mainTexture.get(), true);
+			svgfDenoiser->Denoise(d3d11Context.get(), renderSize, settings.SVGFDiffuse, normalRoughnessTexture.get(), mainTexture.get(), true);
 
 			// Specular
-			svgfDenoiser->Denoise(d3d11Context.get(), renderSize, settings.SVGF, normalRoughnessTexture.get(), specularAlbedoTexture.get(), false);
+			svgfDenoiser->Denoise(d3d11Context.get(), renderSize, settings.SVGFSpecular, normalRoughnessTexture.get(), specularAlbedoTexture.get(), false);
 		}
 	}
 
@@ -4011,6 +4027,7 @@ void Raytracing::CompileCompositeShader()
 	if (!settings.PathTracing && settings.Denoiser == Denoiser::SVGF) {
 		defines.emplace_back("COMPOSITE", "");
 		defines.emplace_back("DIFFUSE", "");
+		defines.emplace_back("SPECULAR", "");	
 	}
 
 	if (auto rawPtr = reinterpret_cast<ID3D11ComputeShader*>(Util::CompileShader(L"Data\\Shaders\\Raytracing\\CompositeCS.hlsl", defines, "cs_5_0")); rawPtr)

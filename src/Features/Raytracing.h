@@ -173,25 +173,6 @@ struct Raytracing : public OverlayFeature
 	};
 	using ShadowsHeap = Heap<ShadowsHeapDef::Table, ShadowsHeapDef::Slot>;
 
-	struct SVGFHeapDef
-	{
-		enum class Table
-		{
-			UAV,
-			SRV
-		};
-
-		enum class Slot
-		{
-			ShadowMask,
-			Depth,
-			TLAS,
-			NumDescriptors,
-			None
-		};
-	};
-	using SVGFHeap = Heap<SVGFHeapDef::Table, SVGFHeapDef::Slot>;
-
 	////////////////////////////////////////////////// Boilerplate
 	// Metadata
 	virtual inline std::string GetName() override { return "Raytracing"; }
@@ -223,6 +204,7 @@ struct Raytracing : public OverlayFeature
 
 	void DrawSHaRCSettings();
 	void DrawSVGFSettings();
+	void DrawSVGFInternalSettings(const char* name, SVGFPipeline::Settings& svgfSettings);
 #ifdef DLSS_RR
 	void DrawDLSSRRSettings();
 #endif
@@ -521,7 +503,8 @@ struct Raytracing : public OverlayFeature
 #ifdef DLSS_RR
 		DLSSRRSettings DLSSRR;
 #endif
-		SVGFPipeline::Settings SVGF;
+		SVGFPipeline::Settings SVGFDiffuse;
+		SVGFPipeline::Settings SVGFSpecular;
 		bool PerformanceOverlay = false;
 		std::string Defines = "";
 		DebugOutput DebugOutput = DebugOutput::None;

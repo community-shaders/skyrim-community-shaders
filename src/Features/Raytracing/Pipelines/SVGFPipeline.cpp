@@ -68,7 +68,7 @@ void SVGFPipeline::Denoise(ID3D11DeviceContext4* context, uint2 renderSize, Sett
 
 	frameData->ColorPhi = settings.ColorPhi;
 	frameData->NormalPhi = settings.NormalPhi;
-	frameData->DepthPhi = settings.DepthPhi;
+	frameData->DepthPhi = settings.DepthPhi / Util::Units::GAME_UNIT_TO_M;
 
 	frameData->DepthThreshold = settings.DepthThreshold / Util::Units::GAME_UNIT_TO_M;
 	frameData->NormalThreshold = std::cosf(static_cast<float>(settings.NormalThreshold));

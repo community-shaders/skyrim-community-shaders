@@ -44,7 +44,7 @@ struct SVGFPipeline
 		uint AlphaFrames = 20;
 		uint MomentsAlphaFrames = 10;
 		uint AtrousIterations = 2;
-		float ColorPhi = 0.5f;
+		float ColorPhi = 1.0f;
 		float NormalPhi = 256.0f;
 		float DepthPhi = 0.05f;
 		float DepthThreshold = 0.1f;
@@ -53,7 +53,7 @@ struct SVGFPipeline
 		bool Variance = true;
 		bool Spatial = true;
 
-		NLOHMANN_DEFINE_TYPE_INTRUSIVE_WITH_DEFAULT(Settings, AlphaFrames, MomentsAlphaFrames, AtrousIterations, ColorPhi, NormalPhi, DepthPhi, DepthThreshold, NormalThreshold, HistoryThreshold)
+		NLOHMANN_DEFINE_TYPE_INTRUSIVE_WITH_DEFAULT(Settings, AlphaFrames, MomentsAlphaFrames, AtrousIterations, ColorPhi, NormalPhi, DepthPhi, DepthThreshold, NormalThreshold, HistoryThreshold, Variance, Spatial)
 	};
 
 	void CompileShaders();
