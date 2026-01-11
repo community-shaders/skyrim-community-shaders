@@ -421,7 +421,6 @@ inline void SkySync::ShadowFader::ClampDirection(RE::NiPoint3& dir)
 {
 	const float minDegrees = globals::features::skySync.settings.MinShadowElevation;
 	const float minElev = DirectX::XMConvertToRadians(minDegrees);
-	const float minElev = DirectX::XMConvertToRadians(minDegrees);
 	const float elev = DirectX::XMScalarASinEst(dir.z);
 	if (elev >= minElev)
 		return;
