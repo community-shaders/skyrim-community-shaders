@@ -11,11 +11,13 @@
 #include "Features/TerrainBlending.h"
 #include "Features/TerrainHelper.h"
 #include "Features/Upscaling.h"
+#include "Features/WeatherEditor.h"
 #include "Menu.h"
 #include "SettingsOverrideManager.h"
 #include "ShaderCache.h"
 #include "TruePBR.h"
 #include "Utils/FileSystem.h"
+#include "WeatherManager.h"
 
 void State::Draw()
 {
@@ -24,10 +26,14 @@ void State::Draw()
 	auto& terrainBlending = globals::features::terrainBlending;
 	auto& terrainHelper = globals::features::terrainHelper;
 	auto& cloudShadows = globals::features::cloudShadows;
+	auto& weatherEditor = globals::features::weatherEditor;
 	auto truePBR = globals::truePBR;
 	auto context = globals::d3d::context;
 
 	if (shaderCache->IsEnabled()) {
+		if (weatherEditor.loaded)
+			WeatherManager::GetSingleton()->UpdateFeatures();
+
 		if (terrainBlending.loaded)
 			terrainBlending.TerrainShaderHacks();
 
@@ -153,6 +159,9 @@ void State::Setup()
 		if (feature->loaded)
 			feature->SetupResources();
 	globals::deferred->SetupResources();
+
+	// Load per-weather settings after features are setup
+	WeatherManager::GetSingleton()->LoadPerWeatherSettingsFromDisk();
 }
 
 static std::string GetConfigPath(State::ConfigMode a_configMode)
@@ -342,6 +351,9 @@ void State::Load(ConfigMode a_configMode, bool a_allowReload)
 
 					// Load base feature settings from merged config (default + user)
 					feature->Load(settings);
+
+					// Register weather variables (features opt-in by implementing this)
+					feature->RegisterWeatherVariables();
 
 					// Apply new/changed feature-specific overrides if any
 					if (overridesDiscovered > 0) {

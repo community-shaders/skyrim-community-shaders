@@ -44,6 +44,7 @@
 #include "Features/PerformanceOverlay/ABTesting/ABTesting.h"
 #include "Features/VR.h"
 #include "Features/WeatherPicker.h"
+#include "WeatherEditor/EditorWindow.h"
 
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	Menu::ThemeSettings::PaletteColors,
@@ -182,9 +183,13 @@ Menu::~Menu()
 {  // Release icon textures if loaded
 	uiIcons.saveSettings.Release();
 	uiIcons.loadSettings.Release();
+	uiIcons.deleteSettings.Release();
 	uiIcons.clearCache.Release();
 	uiIcons.logo.Release();
 	uiIcons.featureSettingRevert.Release();
+	uiIcons.applyToGame.Release();
+	uiIcons.pauseTime.Release();
+	uiIcons.undo.Release();
 	uiIcons.discord.Release();
 	uiIcons.characters.Release();
 	uiIcons.display.Release();
@@ -566,6 +571,11 @@ void Menu::DrawSettings()
 	ImGui::SetNextWindowSize(Util::GetNativeViewportSizeScaled(0.8f), ImGuiCond_FirstUseEver);
 	auto title = std::format("Community Shaders {}", Util::GetFormattedVersion(Plugin::VERSION));
 
+	if (EditorWindow::GetSingleton()->open) {
+		EditorWindow::GetSingleton()->Draw();
+		return;
+	}
+
 	// Determine window flags based on docking state
 	ImGuiWindowFlags windowFlags = ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoScrollbar;
 	// Check if this will be docked (we need to peek at the docking state)
@@ -893,8 +903,12 @@ void Menu::ProcessInputEventQueue()
 						}
 					}
 				}
-				if (key == VK_ESCAPE && IsEnabled) {
-					IsEnabled = false;
+				// Guard against a null EditorWindow singleton before accessing `open`.
+				{
+					auto* editorWindow = EditorWindow::GetSingleton();
+					if (key == VK_ESCAPE && IsEnabled && editorWindow && !editorWindow->open) {
+						IsEnabled = false;
+					}
 				}
 			}
 
