@@ -43,9 +43,6 @@ void SkySync::DrawSettings()
 		ImGui::SliderFloat("Sunset Begin (Hours)", &settings.SunsetBeginOffset, -5.0f, 5.0f, "%.1f");
 		ImGui::SliderFloat("Sunset End (Hours)", &settings.SunsetEndOffset, -5.0f, 5.0f, "%.1f");
 	}
-	ImGui::Spacing();
-	ImGui::Spacing();
-	ImGui::TreePop();
 }
 
 void SkySync::LoadSettings(json& o_json)
