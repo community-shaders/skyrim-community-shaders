@@ -91,17 +91,17 @@ void HDR::SetupResources()
 	D3D11_TEXTURE2D_DESC uiTexDesc = texDesc;
 	uiTexDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
 	uiTexDesc.BindFlags = D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_UNORDERED_ACCESS;
-	
+
 	D3D11_SHADER_RESOURCE_VIEW_DESC uiSrvDesc = srvDesc;
 	uiSrvDesc.Format = uiTexDesc.Format;
-	
+
 	D3D11_UNORDERED_ACCESS_VIEW_DESC uiUavDesc = uavDesc;
 	uiUavDesc.Format = uiTexDesc.Format;
-	
+
 	uiTexture = new Texture2D(uiTexDesc);
 	uiTexture->CreateSRV(uiSrvDesc);
 	uiTexture->CreateUAV(uiUavDesc);
-	
+
 	// Create RTV for UI texture
 	D3D11_RENDER_TARGET_VIEW_DESC rtvDesc{};
 	rtvDesc.Format = uiTexDesc.Format;
@@ -119,23 +119,23 @@ void HDR::BeginUIRendering()
 	// Skip if D3D12 frame gen is active - it has its own UI buffer handling
 	if (globals::features::upscaling.d3d12SwapChainActive)
 		return;
-	
+
 	if (!uiTexture || !uiTexture->rtv)
 		return;
-	
+
 	auto context = globals::d3d::context;
-	
+
 	// Save current render target
 	context->OMGetRenderTargets(1, &savedRTV, &savedDSV);
-	
+
 	// Clear UI texture with transparent black
 	float clearColor[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
 	context->ClearRenderTargetView(uiTexture->rtv.get(), clearColor);
-	
+
 	// Set UI texture as render target
 	ID3D11RenderTargetView* rtv = uiTexture->rtv.get();
 	context->OMSetRenderTargets(1, &rtv, nullptr);
-	
+
 	renderingUI = true;
 }
 
@@ -144,15 +144,15 @@ void HDR::EndUIRendering()
 	// Skip if D3D12 frame gen is active
 	if (globals::features::upscaling.d3d12SwapChainActive)
 		return;
-	
+
 	if (!renderingUI)
 		return;
-	
+
 	auto context = globals::d3d::context;
-	
+
 	// Restore original render target
 	context->OMSetRenderTargets(1, &savedRTV, savedDSV);
-	
+
 	if (savedRTV) {
 		savedRTV->Release();
 		savedRTV = nullptr;
@@ -161,7 +161,7 @@ void HDR::EndUIRendering()
 		savedDSV->Release();
 		savedDSV = nullptr;
 	}
-	
+
 	renderingUI = false;
 }
 
@@ -171,7 +171,7 @@ void HDR::ApplyHDR()
 
 	if (!hdrDataCB || !hdrTexture || !outputTexture)
 		return;
-	
+
 	auto& upscaling = globals::features::upscaling;
 
 	auto context = globals::d3d::context;
@@ -187,7 +187,7 @@ void HDR::ApplyHDR()
 		auto dispatchCount = Util::GetScreenDispatchCount(false);
 
 		ID3D11ShaderResourceView* sceneSRV;
-		
+
 		// When Frame Gen is active, ISHDR has already rendered to FRAMEBUFFER
 		// We need to copy it to hdrTexture first to avoid read/write conflict
 		if (upscaling.d3d12SwapChainActive) {
@@ -201,7 +201,7 @@ void HDR::ApplyHDR()
 			auto& mainRT = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMAIN];
 			sceneSRV = mainRT.SRV;
 		}
-		
+
 		ID3D11ShaderResourceView* views[2] = { sceneSRV, uiTexture->srv.get() };
 		context->CSSetShaderResources(0, ARRAYSIZE(views), views);
 
@@ -266,7 +266,7 @@ void HDR::DestroyResources() const
 	outputTexture->uav = nullptr;
 	outputTexture->resource = nullptr;
 	delete outputTexture;
-	
+
 	if (uiTexture) {
 		uiTexture->srv = nullptr;
 		uiTexture->uav = nullptr;

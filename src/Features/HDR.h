@@ -37,7 +37,7 @@ public:
 
 	void SetupResources();
 	void UpdateHDRData() const;
-	
+
 	// UI rendering - redirects UI to separate target for proper compositing
 	void BeginUIRendering();
 	void EndUIRendering();

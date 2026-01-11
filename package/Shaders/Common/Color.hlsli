@@ -398,7 +398,7 @@ float3 GammaToLinearSafe(float3 color)
 #	endif
 	}
 #endif
-	
+
 	namespace Correct
 	{
 		static const float3x3 BT709_2_OKLABLMS = {
@@ -526,5 +526,5 @@ float3 GammaToLinearSafe(float3 color)
 
 	}  // namespace Correct
 }
-	
+
 #endif  //__COLOR_DEPENDENCY_HLSL__

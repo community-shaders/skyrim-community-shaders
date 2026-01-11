@@ -1463,12 +1463,12 @@ void Upscaling::Main_UpdateJitter::thunk(RE::BSGraphics::State* a_state)
 void Upscaling::MenuManagerDrawInterfaceStartHook::thunk(int64_t a1)
 {
 	globals::features::upscaling.PostDisplay();
-	
+
 	// Begin UI redirection for HDR compositing
 	auto hdr = HDR::GetSingleton();
 	if (hdr)
 		hdr->BeginUIRendering();
-	
+
 	func(a1);
 }
 

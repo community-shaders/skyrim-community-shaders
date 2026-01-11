@@ -14,24 +14,24 @@ cbuffer PerFrame : register(b0)
 {
 	float4 scene = SceneTex[dispatchID.xy];
 	float4 ui = UIBuffer[dispatchID.xy];
-	
+
 	float paperWhiteNits = parameters0.x;
 	float peakNits = parameters0.y;
 	bool tonemapToSDR = parameters0.z > 0.5;
 
 	// Vanilla ISHDR outputs linear HDR to kMAIN - always process as HDR
 	float3 linearScene = scene.rgb;
-	
+
 	// Composite UI (UI is in gamma space, convert to linear)
 	float3 uiLinear = Color::GammaToLinearSafe(ui.rgb);
 	float3 composited = lerp(linearScene, uiLinear, ui.a);
-	
+
 	float3 finalColor;
-	
+
 	if (tonemapToSDR) {
 		// Apply Reinhard tonemap to SDR (0-1 range for standard displays)
 		finalColor = renodx::tonemap::Reinhard(composited);
-		
+
 		// Convert to gamma space for SDR display
 		finalColor = Color::LinearToGamma(finalColor);
 	} else {
@@ -40,6 +40,6 @@ cbuffer PerFrame : register(b0)
 		float3 bt2020Linear = Color::BT709ToBT2020(tonemapped);
 		finalColor = Color::pq::Encode(bt2020Linear, peakNits);
 	}
-	
+
 	HDROutput[dispatchID.xy] = float4(finalColor, scene.w);
 }
