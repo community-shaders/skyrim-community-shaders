@@ -183,64 +183,6 @@ float3 GammaToLinearSafe(float3 color)
 		return mul(BT2020_2_BT709, color);
 	}
 
-	static const float3x3 BT709_2_OKLABLMS = {
-		0.4122214708f, 0.5363325363f, 0.0514459929f,
-		0.2119034982f, 0.6806995451f, 0.1073969566f,
-		0.0883024619f, 0.2817188376f, 0.6299787005f
-	};
-	static const float3x3 OKLABLMS_2_OKLAB = {
-		0.2104542553f, 0.7936177850f, -0.0040720468f,
-		1.9779984951f, -2.4285922050f, 0.4505937099f,
-		0.0259040371f, 0.7827717662f, -0.8086757660f
-	};
-	float3 BT709ToOKLab(float3 bt709)
-	{
-		float3 lms = mul(BT709_2_OKLABLMS, bt709);
-		lms = pow(abs(lms), 1.0 / 3.0) * sign(lms);
-
-		return mul(OKLABLMS_2_OKLAB, lms);
-	}
-
-	static const float3x3 OKLAB_2_OKLABLMS = {
-		1.f, 0.3963377774f, 0.2158037573f,
-		1.f, -0.1055613458f, -0.0638541728f,
-		1.f, -0.0894841775f, -1.2914855480f
-	};
-	static const float3x3 OKLABLMS_2_BT709 = {
-		4.0767416621f, -3.3077115913f, 0.2309699292f,
-		-1.2684380046f, 2.6097574011f, -0.3413193965f,
-		-0.0041960863f, -0.7034186147f, 1.7076147010f
-	};
-	float3 OkLabToBT709(float3 oklab)
-	{
-		float3 lms = mul(OKLAB_2_OKLABLMS, oklab);
-		lms = lms * lms * lms;
-
-		return mul(OKLABLMS_2_BT709, lms);
-	}
-
-	float3 OkLabToOkLCh(float3 oklab)
-	{
-		float l = oklab.x;
-		float a = oklab.y;
-		float b = oklab.z;
-		return float3(l, sqrt((a * a) + (b * b)), atan2(b, a));
-	}
-
-	float3 OkLChToOkLab(float3 oklch)
-	{
-		float l = oklch.x;
-		float c = oklch.y;
-		float h = oklch.z;
-		return float3(l, c * cos(h), c * sin(h));
-	}
-
-	float3 OkLChToBT709(float3 oklch)
-	{
-		float3 oklab = OkLChToOkLab(oklch);
-		return OkLabToBT709(oklab);
-	}
-
 	namespace pq
 	{
 		static const float M1 = 2610.f / 16384.f;           // 0.1593017578125f;
@@ -448,6 +390,62 @@ float3 GammaToLinearSafe(float3 color)
 	
 	namespace Correct
 	{
+		static const float3x3 BT709_2_OKLABLMS = {
+			0.4122214708f, 0.5363325363f, 0.0514459929f,
+			0.2119034982f, 0.6806995451f, 0.1073969566f,
+			0.0883024619f, 0.2817188376f, 0.6299787005f
+		};
+		static const float3x3 OKLABLMS_2_OKLAB = {
+			0.2104542553f, 0.7936177850f, -0.0040720468f,
+			1.9779984951f, -2.4285922050f, 0.4505937099f,
+			0.0259040371f, 0.7827717662f, -0.8086757660f
+		};
+		float3 BT709ToOKLab(float3 bt709)
+		{
+			float3 lms = mul(BT709_2_OKLABLMS, bt709);
+			lms = pow(abs(lms), 1.0 / 3.0) * sign(lms);
+			return mul(OKLABLMS_2_OKLAB, lms);
+		}
+
+		static const float3x3 OKLAB_2_OKLABLMS = {
+			1.f, 0.3963377774f, 0.2158037573f,
+			1.f, -0.1055613458f, -0.0638541728f,
+			1.f, -0.0894841775f, -1.2914855480f
+		};
+		static const float3x3 OKLABLMS_2_BT709 = {
+			4.0767416621f, -3.3077115913f, 0.2309699292f,
+			-1.2684380046f, 2.6097574011f, -0.3413193965f,
+			-0.0041960863f, -0.7034186147f, 1.7076147010f
+		};
+		float3 OkLabToBT709(float3 oklab)
+		{
+			float3 lms = mul(OKLAB_2_OKLABLMS, oklab);
+			lms = lms * lms * lms;
+			return mul(OKLABLMS_2_BT709, lms);
+		}
+
+		float3 OkLabToOkLCh(float3 oklab)
+		{
+			float l = oklab.x;
+			float a = oklab.y;
+			float b = oklab.z;
+			return float3(l, sqrt((a * a) + (b * b)), atan2(b, a));
+		}
+
+		float3 OkLChToOkLab(float3 oklch)
+		{
+			float l = oklch.x;
+			float c = oklch.y;
+			float h = oklch.z;
+			return float3(l, c * cos(h), c * sin(h));
+		}
+
+		float3 OkLChToBT709(float3 oklch)
+		{
+			float3 oklab = OkLChToOkLab(oklch);
+			return OkLabToBT709(oklab);
+		}
+
 		float3 returncolor(float3 color)
 		{
 			return color;
@@ -495,22 +493,22 @@ float3 GammaToLinearSafe(float3 color)
 			if (strength == 0.f)
 				return incorrect_color;
 
-			float3 correct_lab = Color::BT709ToOKLab(correct_color);
-			float3 correct_lch = Color::OkLabToOkLCh(correct_lab);
+			float3 correct_lab = BT709ToOKLab(correct_color);
+			float3 correct_lch = OkLabToOkLCh(correct_lab);
 
-			float3 incorrect_lab = Color::BT709ToOKLab(incorrect_color);
-			float3 incorrect_lch = Color::OkLabToOkLCh(incorrect_lab);
+			float3 incorrect_lab = BT709ToOKLab(incorrect_color);
+			float3 incorrect_lch = OkLabToOkLCh(incorrect_lab);
 			if (strength == 1.f) {
 				incorrect_lch[2] = correct_lch[2];
 			} else {
 				float old_chroma = incorrect_lch[1];
 
 				incorrect_lab.yz = lerp(incorrect_lab.yz, correct_lab.yz, strength);
-				incorrect_lch = Color::OkLabToOkLCh(incorrect_lab);
+				incorrect_lch = OkLabToOkLCh(incorrect_lab);
 				incorrect_lch[1] = old_chroma;
 			}
 
-			float3 color = Color::OkLChToBT709(incorrect_lch);
+			float3 color = OkLChToBT709(incorrect_lch);
 
 			return color;
 		}
