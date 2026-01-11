@@ -1,8 +1,9 @@
 #pragma once
 
 #include "Buffer.h"
+#include "OverlayFeature.h"
 
-struct LightLimitFix : Feature
+struct LightLimitFix : OverlayFeature
 {
 private:
 	static constexpr std::string_view MOD_ID = "99548";
@@ -155,6 +156,8 @@ public:
 	virtual void RestoreDefaultSettings() override;
 
 	virtual void DrawSettings() override;
+	virtual void DrawOverlay() override;
+	virtual bool IsOverlayVisible() const override { return settings.EnableLightsVisualisation; }
 
 	virtual void PostPostLoad() override;
 	virtual void DataLoaded() override;
