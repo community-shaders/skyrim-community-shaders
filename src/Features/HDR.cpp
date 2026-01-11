@@ -293,77 +293,7 @@ void HDR::EndUIRendering()
 	renderingUI = false;
 }
 
-void HDR::CompositeUI()
-{
-	if (!hdrDisplayDetected || !settings.enableHDR)
-		return;
-	
-	// Skip if D3D12 frame gen is active - FidelityFX handles UI compositing
-	if (globals::features::upscaling.d3d12SwapChainActive)
-		return;
-	
-	if (!uiTexture || !hdrDataCB)
-		return;
-	
-	auto context = globals::d3d::context;
-	auto state = globals::state;
-	auto renderer = globals::game::renderer;
-	
-	state->BeginPerfEvent("HDR UI Composite");
-	
-	// Read from kMAIN which has the linear HDR scene (pre-tonemapping)
-	// We skip ISHDR's output (which goes to clamped kFRAMEBUFFER) and handle exposure + bloom ourselves
-	auto& sceneRT = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMAIN];
-	auto& bloomRT = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kHDR_BLOOM];
-	auto& adaptRT = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kHDR_DOWNSAMPLE13];
-	
-	auto dispatchCount = Util::GetScreenDispatchCount(false);
-	
-	// Bind inputs: HDR scene, UI buffer, bloom, and eye adaptation
-	ID3D11ShaderResourceView* views[4] = { sceneRT.SRV, uiTexture->srv.get(), bloomRT.SRV, adaptRT.SRV };
-	context->CSSetShaderResources(0, ARRAYSIZE(views), views);
-	
-	// Sampler for adaptation texture (it's a small texture, needs bilinear sampling)
-	auto linearSampler = Deferred::GetSingleton()->linearSampler;
-	context->CSSetSamplers(0, 1, &linearSampler);
-	
-	// Output to hdrTexture (intermediate)
-	ID3D11UnorderedAccessView* uavs[1] = { hdrTexture->uav.get() };
-	context->CSSetUnorderedAccessViews(0, ARRAYSIZE(uavs), uavs, nullptr);
-	
-	ID3D11Buffer* cbs[1] = { hdrDataCB->CB() };
-	context->CSSetConstantBuffers(0, ARRAYSIZE(cbs), cbs);
-	
-	auto compositeShader = GetUICompositeCS();
-	if (!compositeShader) {
-		logger::error("HDR: Failed to get UI composite shader");
-		state->EndPerfEvent();
-		return;
-	}
-	
-	context->CSSetShader(compositeShader, nullptr, 0);
-	context->Dispatch(dispatchCount.x, dispatchCount.y, 1);
-	
-	// Cleanup
-	views[0] = nullptr;
-	views[1] = nullptr;
-	views[2] = nullptr;
-	views[3] = nullptr;
-	context->CSSetShaderResources(0, ARRAYSIZE(views), views);
-	
-	uavs[0] = nullptr;
-	context->CSSetUnorderedAccessViews(0, ARRAYSIZE(uavs), uavs, nullptr);
-	
-	cbs[0] = nullptr;
-	context->CSSetConstantBuffers(0, ARRAYSIZE(cbs), cbs);
-	
-	ID3D11SamplerState* nullSampler = nullptr;
-	context->CSSetSamplers(0, 1, &nullSampler);
-	
-	context->CSSetShader(nullptr, nullptr, 0);
-	
-	state->EndPerfEvent();
-}
+
 
 void HDR::SetupResources()
 {
@@ -576,10 +506,7 @@ void HDR::ClearShaderCache()
 		sdrOutputCS->Release();
 		sdrOutputCS = nullptr;
 	}
-	if (uiCompositeCS) {
-		uiCompositeCS->Release();
-		uiCompositeCS = nullptr;
-	}
+
 }
 
 ID3D11ComputeShader* HDR::GetHDROutputCS()
@@ -608,20 +535,7 @@ ID3D11ComputeShader* HDR::GetSDROutputCS()
 	return sdrOutputCS;
 }
 
-ID3D11ComputeShader* HDR::GetUICompositeCS()
-{
-	if (!uiCompositeCS) {
-		std::vector<std::pair<const char*, const char*>> defines;
-		if (hdrDisplayDetected) {
-			defines.push_back({ "HDR_INPUT", "" });
-		}
-		uiCompositeCS = static_cast<ID3D11ComputeShader*>(Util::CompileShader(L"Data\\Shaders\\UICompositeCS.hlsl", defines, "cs_5_0"));
-		if (!uiCompositeCS) {
-			logger::error("HDR: Failed to compile UICompositeCS.hlsl");
-		}
-	}
-	return uiCompositeCS;
-}
+
 
 void HDR::UpdateHDRData() const
 {

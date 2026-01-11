@@ -62,7 +62,6 @@ public:
 	// UI rendering in HDR - redirects UI to separate target for proper compositing
 	void BeginUIRendering();
 	void EndUIRendering();
-	void CompositeUI();  // Composites UI onto HDR scene in linear space
 	bool IsRenderingUI() const { return renderingUI; }
 
 	void ApplyHDR();
@@ -104,10 +103,8 @@ public:
 
 	ID3D11ComputeShader* hdrOutputCS = nullptr;
 	ID3D11ComputeShader* sdrOutputCS = nullptr;
-	ID3D11ComputeShader* uiCompositeCS = nullptr;
 	ID3D11ComputeShader* GetHDROutputCS();
 	ID3D11ComputeShader* GetSDROutputCS();
-	ID3D11ComputeShader* GetUICompositeCS();
 
 	// Saved state for UI rendering redirection
 	bool renderingUI = false;
