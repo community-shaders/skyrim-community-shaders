@@ -2,6 +2,17 @@
 #define __COLOR_DEPENDENCY_HLSL__
 
 #include "Common/Math.hlsli"
+#include "Common/SharedData.hlsli"
+
+#define ENABLE_LL SharedData::linearLightingSettings.enableLinearLighting
+
+#if defined(PSHADER) && defined(LIGHTING)
+cbuffer LLPerGeometry : register(b8)
+{
+	float emissiveMult;
+	float3 pad0;
+};
+#endif
 
 #include "Common/SharedData.hlsli"
 
