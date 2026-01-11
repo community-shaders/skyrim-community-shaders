@@ -3,7 +3,6 @@
 #include "PCH.h"
 
 #include "Buffer.h"
-#include "Deferred.h"
 #include "Globals.h"
 #include "ShaderCache.h"
 #include "State.h"
@@ -90,6 +89,8 @@ void HDR::DrawSettings()
 
 	if (ImGui::Button("Reset HDR Settings", { -1, 0 })) {
 		settings.exposure = 1.0f;
+		settings.vanillaEyeAdaptation = true;
+		settings.vanillaBloom = true;
 		settings.highlights = 1.0f;
 		settings.shadows = 1.0f;
 		settings.contrast = 1.0f;
@@ -122,6 +123,17 @@ void HDR::DrawSettings()
 	}
 
 	ImGui::SliderFloat("Exposure", &settings.exposure, 0.f, 2.f);
+	
+	ImGui::Checkbox("Vanilla Eye Adaptation", &settings.vanillaEyeAdaptation);
+	if (auto _tt = Util::HoverTooltipWrapper()) {
+		ImGui::Text("Enable the game's automatic eye adaptation. Disable if using external post-processing.");
+	}
+	
+	ImGui::Checkbox("Vanilla Bloom", &settings.vanillaBloom);
+	if (auto _tt = Util::HoverTooltipWrapper()) {
+		ImGui::Text("Enable the game's bloom effect. Disable if using external post-processing bloom.");
+	}
+	
 	ImGui::SliderFloat("Highlights", &settings.highlights, 0.f, 2.f);
 	ImGui::SliderFloat("Shadows", &settings.shadows, 0.f, 2.f);
 	ImGui::SliderFloat("Contrast", &settings.contrast, 0.f, 2.f);
@@ -263,21 +275,15 @@ void HDR::CompositeUI()
 	
 	state->BeginPerfEvent("HDR UI Composite");
 	
-	// Read from kMAIN which has the linear HDR scene (pre-tonemapping)
-	// We skip ISHDR's output (which goes to clamped kFRAMEBUFFER) and handle exposure + bloom ourselves
-	auto& sceneRT = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMAIN];
-	auto& bloomRT = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kHDR_BLOOM];
-	auto& adaptRT = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kHDR_DOWNSAMPLE13];
+	// Read from kFRAMEBUFFER which has ISHDR's output (exposure, bloom, adaptation already applied)
+	// Note: Values >1 may be clamped due to R10G10B10A2 format, but this is the processed scene
+	auto& sceneRT = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kFRAMEBUFFER];
 	
 	auto dispatchCount = Util::GetScreenDispatchCount(false);
 	
-	// Bind inputs: HDR scene, UI buffer, bloom, and eye adaptation
-	ID3D11ShaderResourceView* views[4] = { sceneRT.SRV, uiTexture->srv.get(), bloomRT.SRV, adaptRT.SRV };
+	// Bind inputs: HDR scene and UI buffer
+	ID3D11ShaderResourceView* views[2] = { sceneRT.SRV, uiTexture->srv.get() };
 	context->CSSetShaderResources(0, ARRAYSIZE(views), views);
-	
-	// Sampler for adaptation texture (it's a small texture, needs bilinear sampling)
-	auto linearSampler = Deferred::GetSingleton()->linearSampler;
-	context->CSSetSamplers(0, 1, &linearSampler);
 	
 	// Output to hdrTexture (intermediate)
 	ID3D11UnorderedAccessView* uavs[1] = { hdrTexture->uav.get() };
@@ -299,8 +305,6 @@ void HDR::CompositeUI()
 	// Cleanup
 	views[0] = nullptr;
 	views[1] = nullptr;
-	views[2] = nullptr;
-	views[3] = nullptr;
 	context->CSSetShaderResources(0, ARRAYSIZE(views), views);
 	
 	uavs[0] = nullptr;
@@ -308,9 +312,6 @@ void HDR::CompositeUI()
 	
 	cbs[0] = nullptr;
 	context->CSSetConstantBuffers(0, ARRAYSIZE(cbs), cbs);
-	
-	ID3D11SamplerState* nullSampler = nullptr;
-	context->CSSetSamplers(0, 1, &nullSampler);
 	
 	context->CSSetShader(nullptr, nullptr, 0);
 	
@@ -575,7 +576,7 @@ void HDR::UpdateHDRData() const
 
 	data.parameters0 = DirectX::XMVectorSet(static_cast<float>(settings.paperWhite), static_cast<float>(settings.peakNits), settings.exposure, 0.f);
 	data.parameters1 = DirectX::XMVectorSet(settings.highlights, settings.shadows, settings.contrast, settings.saturation);
-	data.parameters2 = DirectX::XMVectorSet(settings.dechroma, settings.hueCorrectionStrength, 0.f, 0.f);
+	data.parameters2 = DirectX::XMVectorSet(settings.dechroma, settings.hueCorrectionStrength, settings.vanillaEyeAdaptation ? 1.f : 0.f, settings.vanillaBloom ? 1.f : 0.f);
 
 	hdrDataCB->Update(data);
 }

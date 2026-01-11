@@ -27,6 +27,8 @@ public:
 	struct Settings
 	{
 		bool enableHDR = false;
+		bool vanillaEyeAdaptation = true;
+		bool vanillaBloom = true;
 
 		float exposure = 1.0f;
 		float highlights = 1.0f;
@@ -36,7 +38,7 @@ public:
 		float dechroma = 0.0f;
 		float hueCorrectionStrength = 0.0f;
 
-		uint paperWhite = 1000;
+		uint paperWhite = 400;
 		uint peakNits = 10000;
 	};
 
@@ -80,8 +82,8 @@ public:
 		DirectX::XMVECTOR parameters1;
 		// parameters2.x = dechroma
 		// parameters2.y = hueCorrectionStrength
-		// parameters2.z = 0.f // Currently unused
-		// parameters2.w = 0.f // Currently unused
+		// parameters2.z = vanillaEyeAdaptation (1.0 = enabled)
+		// parameters2.w = vanillaBloom (1.0 = enabled)
 		DirectX::XMVECTOR parameters2;
 	};
 

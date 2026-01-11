@@ -12,7 +12,7 @@ cbuffer PerFrame : register(b0)
 {
 	float4 parameters0 : packoffset(c0);  // .x = paperWhite, .y = peakNits, .z = exposure
 	float4 parameters1 : packoffset(c1);
-	float4 parameters2 : packoffset(c2);
+	float4 parameters2 : packoffset(c2);  // .z = vanillaEyeAdaptation, .w = vanillaBloom
 }
 
 [numthreads(8, 8, 1)]
@@ -27,28 +27,19 @@ void main(uint3 dispatchID : SV_DispatchThreadID)
 	float3 bloom = BloomTex[dispatchID.xy].rgb;
 	float2 adaptValue = AdaptTex.SampleLevel(LinearSampler, uv, 0).xy;
 	
-	float paperWhite = parameters0.x;
 	float exposure = parameters0.z;
+	bool useVanillaAdaptation = parameters2.z > 0.5;
+	bool useVanillaBloom = parameters2.w > 0.5;
 	
-	// Apply eye adaptation (same formula as vanilla ISHDR)
 	float3 adaptedScene = scene.rgb;
-	if (adaptValue.x > 0.0 && adaptValue.y > 0.0)
+	if (useVanillaAdaptation && adaptValue.x > 0.0 && adaptValue.y > 0.0)
 		adaptedScene *= adaptValue.y / adaptValue.x;
 	adaptedScene = max(0.0, adaptedScene);
 	
-	// Apply bloom (additive, same as vanilla ISHDR)
-	float3 sceneWithBloom = adaptedScene + bloom;
-	
-	// Apply user exposure on top of eye adaptation
+	float3 sceneWithBloom = useVanillaBloom ? (adaptedScene + bloom) : adaptedScene;
 	float3 exposedScene = sceneWithBloom * exposure;
 	
-	// Convert UI from gamma to linear space
 	float3 uiLinear = Color::GammaToLinearSafe(ui.rgb);
-	
-	// Scale UI to paper white level (SDR UI is authored for 80 nits reference)
-	uiLinear *= paperWhite / 80.0;
-	
-	// Premultiplied alpha blend: src * alpha + dst * (1 - alpha)
 	float3 composited = uiLinear * ui.a + exposedScene * (1.0 - ui.a);
 	
 	Output[dispatchID.xy] = float4(composited, scene.a);
