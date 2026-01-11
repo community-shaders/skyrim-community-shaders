@@ -37,11 +37,12 @@ void SkySync::DrawSettings()
 	ImGui::Spacing();
 	ImGui::Spacing();
 	if (ImGui::TreeNodeEx("Sun Position Offsets", ImGuiTreeNodeFlags_DefaultOpen)) {
-		ImGui::TextWrapped("Moves sun height during sunrise/sunset. Reset weather to see changes.");
-		ImGui::SliderFloat("Sunrise Begin (Hours)", &settings.SunriseBeginOffset, -5.0f, 5.0f, "%.1f");
-		ImGui::SliderFloat("Sunrise End (Hours)", &settings.SunriseEndOffset, -5.0f, 5.0f, "%.1f");
-		ImGui::SliderFloat("Sunset Begin (Hours)", &settings.SunsetBeginOffset, -5.0f, 5.0f, "%.1f");
-		ImGui::SliderFloat("Sunset End (Hours)", &settings.SunsetEndOffset, -5.0f, 5.0f, "%.1f");
+			ImGui::TextWrapped("Moves sun height during sunrise/sunset. Reset weather to see changes.");
+			ImGui::SliderFloat("Sunrise Begin (Hours)", &settings.SunriseBeginOffset, -5.0f, 5.0f, "%.1f", ImGuiSliderFlags_AlwaysClamp);
+			ImGui::SliderFloat("Sunrise End (Hours)", &settings.SunriseEndOffset, -5.0f, 5.0f, "%.1f", ImGuiSliderFlags_AlwaysClamp);
+			ImGui::SliderFloat("Sunset Begin (Hours)", &settings.SunsetBeginOffset, -5.0f, 5.0f, "%.1f", ImGuiSliderFlags_AlwaysClamp);
+			ImGui::SliderFloat("Sunset End (Hours)", &settings.SunsetEndOffset, -5.0f, 5.0f, "%.1f", ImGuiSliderFlags_AlwaysClamp);
+			ImGui::TreePop();
 	}
 }
 
@@ -50,12 +51,13 @@ void SkySync::LoadSettings(json& o_json)
 	settings = o_json;
 	settings.MoonLightSource = std::clamp(settings.MoonLightSource, static_cast<int32_t>(MoonLightSource::Brightest), static_cast<int32_t>(MoonLightSource::Secunda));
 	settings.SunPath = std::clamp(settings.SunPath, static_cast<int32_t>(SunPath::Southern), static_cast<int32_t>(SunPath::Custom));
-	SetSunAngle();
+	settings.CustomAngle = std::clamp(settings.CustomAngle, -90.0f, 90.0f);
 	settings.SunriseBeginOffset = std::clamp(settings.SunriseBeginOffset, -5.0f, 5.0f);
 	settings.SunriseEndOffset = std::clamp(settings.SunriseEndOffset, -5.0f, 5.0f);
 	settings.SunsetBeginOffset = std::clamp(settings.SunsetBeginOffset, -5.0f, 5.0f);
 	settings.SunsetEndOffset = std::clamp(settings.SunsetEndOffset, -5.0f, 5.0f);
 	settings.MinShadowElevation = std::clamp(settings.MinShadowElevation, 0.0f, 45.0f);
+	SetSunAngle();
 }
 
 void SkySync::SaveSettings(json& o_json)
@@ -417,9 +419,8 @@ void SkySync::ShadowFader::SetLighting(const RE::Sun* sun, RE::NiPoint3 dir, flo
 
 inline void SkySync::ShadowFader::ClampDirection(RE::NiPoint3& dir)
 {
-	float minDegrees = globals::features::skySync.settings.MinShadowElevation;
-
-	float minElev = DirectX::XMConvertToRadians(minDegrees);
+	const float minDegrees = std::clamp(globals::features::skySync.settings.MinShadowElevation, 0.0f, 45.0f);
+	const float minElev = DirectX::XMConvertToRadians(minDegrees);
 	const float elev = DirectX::XMScalarASinEst(dir.z);
 	if (elev >= minElev)
 		return;
@@ -444,15 +445,21 @@ SkySync::VolumetricLightingDescriptor* SkySync::ApplyVolumetricLighting_Volumetr
 
 void SkySync::ClimateTimings::Update(const RE::TESClimate* climate)
 {
-	float srbegin = globals::features::skySync.settings.SunriseBeginOffset;
-	float srend = globals::features::skySync.settings.SunriseEndOffset;
-	float ssbegin = globals::features::skySync.settings.SunsetBeginOffset;
-	float ssend = globals::features::skySync.settings.SunsetEndOffset;
+	const float SunriseBeginOffset = globals::features::skySync.settings.SunriseBeginOffset;
+	const float SunriseEndOffset = globals::features::skySync.settings.SunriseEndOffset;
+	const float SunsetBeginOffset = globals::features::skySync.settings.SunsetBeginOffset;
+	const float SunsetEndOffset = globals::features::skySync.settings.SunsetEndOffset;
 
-	sunriseBegin = (climate->timing.sunrise.begin / 6.0f) + srbegin;
-	sunriseEnd = (climate->timing.sunrise.end / 6.0f) + srend;
-	sunsetBegin = (climate->timing.sunset.begin / 6.0f) + ssbegin;
-	sunsetEnd = (climate->timing.sunset.end / 6.0f) + ssend;
+	sunriseBegin = (climate->timing.sunrise.begin / 6.0f) + SunriseBeginOffset;
+	sunriseEnd = (climate->timing.sunrise.end / 6.0f) + SunriseEndOffset;
+	sunsetBegin = (climate->timing.sunset.begin / 6.0f) + SunsetBeginOffset;
+	sunsetEnd = (climate->timing.sunset.end / 6.0f) + SunsetEndOffset;
+	// Basic ordering guarantees (prevents divide-by-zero / negative duration paths).
+	constexpr float kMinGapHours = 0.1f;
+	if (sunriseEnd <= sunriseBegin)	sunriseEnd = sunriseBegin + kMinGapHours;
+	if (sunsetEnd <= sunsetBegin)	sunsetEnd = sunsetBegin + kMinGapHours;
+	if (sunsetBegin <= sunriseEnd)	sunsetBegin = sunriseEnd + kMinGapHours;
+	if (sunsetEnd <= sunsetBegin)	sunsetEnd = sunsetBegin + kMinGapHours;
 	sunrise = (sunriseBegin + sunriseEnd) * 0.5f - 0.25f;
 	sunset = (sunsetBegin + sunsetEnd) * 0.5f + 0.25f;
 	sunriseFadeOutMoonStart = sunriseBegin - 0.5f;
