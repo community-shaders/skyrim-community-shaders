@@ -5,7 +5,8 @@ struct ISLCommon
 {
 	enum class TES_LIGHT_FLAGS_EXT
 	{
-		kInverseSquare = 1 << 14
+		kInverseSquare = 1 << 14,
+		kLinear = 1 << 15
 	};
 
 	struct RuntimeLightDataExt
