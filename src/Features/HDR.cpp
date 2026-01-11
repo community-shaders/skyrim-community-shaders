@@ -72,12 +72,85 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 
 void HDR::DrawSettings()
 {
+	// HDR Debug Status Panel
+	if (ImGui::CollapsingHeader("HDR Status Debug", ImGuiTreeNodeFlags_DefaultOpen)) {
+		ImGui::BeginChild("HDRDebugPanel", ImVec2(0, 180), true);
+		
+		// HDR state
+		ImGui::Text("HDR State:");
+		ImGui::Indent();
+		ImGui::Text("HDR Enabled: %s", settings.enableHDR ? "YES" : "NO");
+		ImGui::Text("Display Detected: %s", hdrDisplayDetected ? "YES" : "NO");
+		if (globals::features::upscaling.d3d12SwapChainActive) {
+			ImGui::TextColored({ 1, 1, 0, 1 }, "Mode: D3D12 (Frame Generation)");
+			ImGui::TextColored({ 1, 1, 0, 1 }, "Colorspace managed by Streamline");
+		} else {
+			ImGui::Text("Mode: D3D11");
+		}
+		ImGui::Unindent();
+		
+		// Output settings
+		ImGui::Text("Output Configuration:");
+		ImGui::Indent();
+		ImGui::Text("Paper White: %u nits", settings.paperWhite);
+		ImGui::Text("Peak Brightness: %u nits", settings.peakNits);
+		ImGui::Text("Exposure: %.2f", settings.exposure);
+		ImGui::Unindent();
+		
+		// Only query swapchain if NOT using D3D12/Streamline (causes crash)
+		if (!globals::features::upscaling.d3d12SwapChainActive) {
+			auto swapChain = globals::d3d::swapChain;
+			
+			ImGui::Text("Swapchain Info:");
+			ImGui::Indent();
+			if (swapChain) {
+				Microsoft::WRL::ComPtr<IDXGISwapChain3> swapChain3;
+				if (SUCCEEDED(swapChain->QueryInterface(IID_PPV_ARGS(&swapChain3)))) {
+					DXGI_SWAP_CHAIN_DESC1 desc;
+					if (SUCCEEDED(swapChain3->GetDesc1(&desc))) {
+						ImGui::Text("Format: %s", 
+							desc.Format == DXGI_FORMAT_R10G10B10A2_UNORM ? "R10G10B10A2_UNORM" :
+							desc.Format == DXGI_FORMAT_R16G16B16A16_FLOAT ? "R16G16B16A16_FLOAT" :
+							desc.Format == DXGI_FORMAT_R8G8B8A8_UNORM ? "R8G8B8A8_UNORM" : "Unknown");
+						ImGui::Text("Resolution: %ux%u", desc.Width, desc.Height);
+						
+						// Show expected colorspace
+						DXGI_COLOR_SPACE_TYPE currentCS = GetCurrentColorSpace();
+						ImGui::Text("Expected Colorspace: %s", GetColorSpaceName(currentCS));
+						
+						if (settings.enableHDR && hdrDisplayDetected && 
+						    currentCS != DXGI_COLOR_SPACE_RGB_FULL_G2084_NONE_P2020) {
+							ImGui::Separator();
+							ImGui::TextColored({ 1, 0, 0, 1 }, "Not in HDR mode!");
+							if (ImGui::Button("Set HDR Colorspace", { -1, 0 })) {
+								logger::info("=== USER MANUAL COLORSPACE SET ===");
+								bool result = SetSwapChainColorSpace(true);
+								logger::info("=== Result: {} ===", result ? "SUCCESS" : "FAILED");
+							}
+						}
+					}
+				}
+			} else {
+				ImGui::Text("Swapchain: NULL");
+			}
+			ImGui::Unindent();
+		}
+		
+		ImGui::EndChild();
+	}
+	
+	ImGui::Separator();
 	if (hdrDisplayDetected) {
 		ImGui::TextColored({ 0, 1, 0, 1 }, "HDR display detected");
 		if (ImGui::Checkbox("HDR Enabled", &settings.enableHDR)) {
 			enabledSaveLater = settings.enableHDR;
+			logger::info("HDR checkbox toggled to: {}", settings.enableHDR);
 			if (!globals::features::upscaling.d3d12SwapChainActive) {
-				SetSwapChainColorSpace(settings.enableHDR);
+				logger::info("Calling SetSwapChainColorSpace({})...", settings.enableHDR);
+				bool result = SetSwapChainColorSpace(settings.enableHDR);
+				logger::info("SetSwapChainColorSpace result: {}", result);
+			} else {
+				logger::info("D3D12 swap chain active, skipping SetSwapChainColorSpace");
 			}
 			// Clear both in-memory cache and disk cache for ISHDR to ensure HDR_OUTPUT define change takes effect
 			globals::shaderCache->Clear("Data\\Shaders\\ISHDR.hlsl");
@@ -175,6 +248,38 @@ void HDR::RestoreDefaultSettings()
 	settings = {};
 }
 
+const char* HDR::GetColorSpaceName(DXGI_COLOR_SPACE_TYPE colorSpace)
+{
+	switch (colorSpace) {
+		case DXGI_COLOR_SPACE_RGB_FULL_G22_NONE_P709: return "sRGB/BT.709 (SDR)";
+		case DXGI_COLOR_SPACE_RGB_FULL_G2084_NONE_P2020: return "HDR10 PQ/BT.2020";
+		case DXGI_COLOR_SPACE_RGB_FULL_G10_NONE_P709: return "Linear BT.709";
+		case DXGI_COLOR_SPACE_RGB_STUDIO_G22_NONE_P709: return "Studio sRGB/BT.709";
+		case DXGI_COLOR_SPACE_RGB_STUDIO_G2084_NONE_P2020: return "Studio HDR10";
+		default: return "Unknown";
+	}
+}
+
+DXGI_COLOR_SPACE_TYPE HDR::GetCurrentColorSpace()
+{
+	auto swapChain = globals::d3d::swapChain;
+	if (!swapChain) {
+		return DXGI_COLOR_SPACE_RGB_FULL_G22_NONE_P709;
+	}
+
+	Microsoft::WRL::ComPtr<IDXGISwapChain3> swapChain3;
+	if (FAILED(swapChain->QueryInterface(IID_PPV_ARGS(&swapChain3)))) {
+		return DXGI_COLOR_SPACE_RGB_FULL_G22_NONE_P709;
+	}
+
+	// Unfortunately, there's no direct API to query the current colorspace
+	// Return what we think it should be based on our settings
+	if (settings.enableHDR && hdrDisplayDetected) {
+		return DXGI_COLOR_SPACE_RGB_FULL_G2084_NONE_P2020;
+	}
+	return DXGI_COLOR_SPACE_RGB_FULL_G22_NONE_P709;
+}
+
 bool HDR::SetSwapChainColorSpace(bool enableHDR)
 {
 	auto swapChain = globals::d3d::swapChain;
@@ -194,22 +299,19 @@ bool HDR::SetSwapChainColorSpace(bool enableHDR)
 		DXGI_COLOR_SPACE_RGB_FULL_G2084_NONE_P2020 :  // HDR10: PQ transfer, BT.2020 primaries
 		DXGI_COLOR_SPACE_RGB_FULL_G22_NONE_P709;       // SDR: sRGB gamma, BT.709 primaries
 
-	// Try to set color space directly - skip CheckColorSpaceSupport as it can crash with Streamline
+	logger::info("HDR: SetColorSpace1({}) [{}]", static_cast<int>(colorSpace), GetColorSpaceName(colorSpace));
+
 	hr = swapChain3->SetColorSpace1(colorSpace);
+	
+	logger::info("HDR: SetColorSpace1 returned hr=0x{:08X} ({})", 
+		static_cast<unsigned>(hr), SUCCEEDED(hr) ? "SUCCESS" : "FAILED");
+
 	if (FAILED(hr)) {
-		logger::warn("HDR: Failed to set color space (hr=0x{:08X}), trying fallback", static_cast<unsigned>(hr));
-		// If HDR fails, try SDR as fallback
-		if (enableHDR) {
-			hr = swapChain3->SetColorSpace1(DXGI_COLOR_SPACE_RGB_FULL_G22_NONE_P709);
-			if (SUCCEEDED(hr)) {
-				logger::info("HDR: Fell back to SDR color space");
-				return false;
-			}
-		}
+		logger::error("HDR: SetColorSpace1 FAILED - colorspace NOT changed!");
 		return false;
 	}
 
-	logger::info("HDR: Set swap chain color space to {}", enableHDR ? "HDR10 (PQ/BT.2020)" : "SDR (sRGB/BT.709)");
+	logger::info("HDR: Successfully set swap chain colorspace to {}", GetColorSpaceName(colorSpace));
 	return true;
 }
 
@@ -356,13 +458,15 @@ void HDR::SetupResources()
 		logger::info("HDR display detected");
 		
 		// Set color space based on user preference
-		// For D3D12 proxy (frame generation), color space was already set during swap chain creation
-		// For D3D11 path, we need to set it here
+		// For D3D12 proxy (frame generation), color space is set during swap chain creation in DX12SwapChain.cpp
+		// For D3D11 path, we set it here dynamically
 		if (!upscaling.d3d12SwapChainActive) {
 			// D3D11 path - safe to call SetSwapChainColorSpace
-			SetSwapChainColorSpace(settings.enableHDR);
+			logger::info("HDR: SetupResources calling SetSwapChainColorSpace({})...", settings.enableHDR);
+			bool result = SetSwapChainColorSpace(settings.enableHDR);
+			logger::info("HDR: SetupResources SetSwapChainColorSpace result: {}", result);
 		} else {
-			logger::info("HDR: D3D12 proxy active, color space set during swap chain creation");
+			logger::info("HDR: D3D12 proxy active - colorspace was configured in DX12SwapChain::CreateSwapChain");
 		}
 	} else {
 		logger::info("No HDR display detected");

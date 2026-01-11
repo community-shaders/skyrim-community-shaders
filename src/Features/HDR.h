@@ -56,6 +56,8 @@ public:
 	void SetupResources();
 	void UpdateHDRData() const;
 	bool SetSwapChainColorSpace(bool enableHDR);
+	DXGI_COLOR_SPACE_TYPE GetCurrentColorSpace();
+	static const char* GetColorSpaceName(DXGI_COLOR_SPACE_TYPE colorSpace);
 	
 	// UI rendering in HDR - redirects UI to separate target for proper compositing
 	void BeginUIRendering();
