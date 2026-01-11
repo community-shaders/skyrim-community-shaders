@@ -7,6 +7,8 @@
 #include "Common/SharedData.hlsli"
 #include "Common/Permutation.hlsli"
 
+#define DEFERRED
+
 #ifdef GRASS_LIGHTING
 #	define GRASS
 #endif  // GRASS_LIGHTING
