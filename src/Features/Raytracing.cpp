@@ -312,9 +312,8 @@ void Raytracing::DrawResolutionSettings()
 	}
 #endif
 
-	if (disabled) {
+	if (disabled)
 		ImGui::BeginDisabled();
-	}
 
 	DrawEnumRadio("Resolution", settings.Resolution, "Controls the Ray Tracing resolution. Lower resolutions cast fewer rays, which improves performance but greatly reduces detail and clarity.");
 
