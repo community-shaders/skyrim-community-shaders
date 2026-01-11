@@ -3,7 +3,6 @@
 #include "PCH.h"
 
 #include "Buffer.h"
-#include "Deferred.h"
 #include "Globals.h"
 #include "ShaderCache.h"
 #include "State.h"
@@ -59,14 +58,6 @@ bool HDR::DetectHDRDisplay()
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	HDR::Settings,
 	enableHDR,
-	exposure,
-	highlights,
-	shadows,
-	contrast,
-	saturation,
-	dechroma,
-	hueCorrectionStrength,
-	bypassTonemapping,
 	paperWhite,
 	peakNits);
 
@@ -79,80 +70,26 @@ void HDR::DrawSettings()
 			if (!globals::features::upscaling.d3d12SwapChainActive) {
 				SetSwapChainColorSpace(settings.enableHDR);
 			}
-			// Clear both in-memory cache and disk cache for ISHDR to ensure HDR_OUTPUT define change takes effect
 			globals::shaderCache->Clear("Data\\Shaders\\ISHDR.hlsl");
 			globals::shaderCache->Clear(RE::BSShader::Type::ImageSpace);
+		}
+
+		if (settings.enableHDR) {
+			ImGui::Spacing();
+			ImGui::SliderInt("Paper White (nits)", reinterpret_cast<int*>(&settings.paperWhite), 80, 500);
+			if (auto _tt = Util::HoverTooltipWrapper()) {
+				ImGui::Text("Reference white brightness for SDR content.");
+			}
+
+			ImGui::SliderInt("Peak Brightness (nits)", reinterpret_cast<int*>(&settings.peakNits), 400, 10000);
+			if (auto _tt = Util::HoverTooltipWrapper()) {
+				ImGui::Text("Maximum brightness for HDR highlights.");
+			}
 		}
 	} else {
 		ImGui::TextColored({ 1, 0.5f, 0, 1 }, "No HDR display detected");
-		if (ImGui::Checkbox("Enable HDR Processing", &settings.enableHDR)) {
-			enabledSaveLater = settings.enableHDR;
-			globals::shaderCache->Clear("Data\\Shaders\\ISHDR.hlsl");
-			globals::shaderCache->Clear(RE::BSShader::Type::ImageSpace);
-		}
+		ImGui::TextWrapped("HDR requires a compatible display and Windows HDR enabled.");
 	}
-
-	if (ImGui::Button("Reset HDR Settings", { -1, 0 })) {
-		settings.exposure = 1.0f;
-		settings.vanillaEyeAdaptation = true;
-		settings.vanillaBloom = true;
-		settings.bypassTonemapping = false;
-		settings.highlights = 1.0f;
-		settings.shadows = 1.0f;
-		settings.contrast = 1.0f;
-		settings.saturation = 1.0f;
-		settings.dechroma = 0.0f;
-		settings.hueCorrectionStrength = 0.0f;
-
-		settings.paperWhite = 400;
-		settings.peakNits = 10000;
-	}
-
-	if (ImGui::Button("Reload HDR shaders", { -1, 0 })) {
-		ClearShaderCache();
-		if (hdrDisplayDetected)
-			GetHDROutputCS();
-		else
-			GetSDROutputCS();
-	}
-
-	if (hdrDisplayDetected) {
-		ImGui::SliderInt("Paper White (nits)", reinterpret_cast<int*>(&settings.paperWhite), 1, 500);
-		if (auto _tt = Util::HoverTooltipWrapper()) {
-			ImGui::Text("Paper White sets the game's reference white brightness.");
-		}
-
-		ImGui::SliderInt("Peak Brightness (nits)", reinterpret_cast<int*>(&settings.peakNits), 1, 10000);
-		if (auto _tt = Util::HoverTooltipWrapper()) {
-			ImGui::Text("Peak Brightness defines the maximum brightness level.");
-		}
-	}
-
-	ImGui::SliderFloat("Exposure", &settings.exposure, 0.f, 2.f);
-	
-	ImGui::Checkbox("Vanilla Eye Adaptation", &settings.vanillaEyeAdaptation);
-	if (auto _tt = Util::HoverTooltipWrapper()) {
-		ImGui::Text("Enable the game's automatic eye adaptation. Disable if using external post-processing.");
-	}
-	
-	ImGui::Checkbox("Vanilla Bloom", &settings.vanillaBloom);
-	if (auto _tt = Util::HoverTooltipWrapper()) {
-		ImGui::Text("Enable the game's bloom effect. Disable if using external post-processing bloom.");
-	}
-	
-	if (hdrDisplayDetected && settings.enableHDR) {
-		ImGui::Checkbox("Bypass Tonemapping", &settings.bypassTonemapping);
-		if (auto _tt = Util::HoverTooltipWrapper()) {
-			ImGui::Text("Skip internal tonemapping for external post-processing. Outputs linear HDR data.");
-		}
-	}
-	
-	ImGui::SliderFloat("Highlights", &settings.highlights, 0.f, 2.f);
-	ImGui::SliderFloat("Shadows", &settings.shadows, 0.f, 2.f);
-	ImGui::SliderFloat("Contrast", &settings.contrast, 0.f, 2.f);
-	ImGui::SliderFloat("Saturation", &settings.saturation, 0.f, 2.f);
-	ImGui::SliderFloat("Dechroma", &settings.dechroma, 0.f, 2.f);
-	ImGui::SliderFloat("Hue Correction Strength", &settings.hueCorrectionStrength, 0.f, 2.f);
 }
 
 void HDR::SaveSettings(json& o_json)
@@ -293,8 +230,6 @@ void HDR::EndUIRendering()
 	renderingUI = false;
 }
 
-
-
 void HDR::SetupResources()
 {
 	if (!hdrDisplayDetected) {
@@ -322,6 +257,7 @@ void HDR::SetupResources()
 
 	DXGI_FORMAT mainFormat = texDesc.Format;
 
+	// Intermediate texture for HDR processing
 	texDesc.Format = DXGI_FORMAT_R16G16B16A16_FLOAT;
 	srvDesc.Format = texDesc.Format;
 	uavDesc.Format = texDesc.Format;
@@ -330,6 +266,7 @@ void HDR::SetupResources()
 	hdrTexture->CreateSRV(srvDesc);
 	hdrTexture->CreateUAV(uavDesc);
 
+	// Output texture format: R10G10B10A2 for HDR displays, native format for SDR
 	if (hdrDisplayDetected) {
 		texDesc.Format = DXGI_FORMAT_R10G10B10A2_UNORM;
 	} else {
@@ -394,9 +331,6 @@ void HDR::ApplyHDR()
 	{
 		auto dispatchCount = Util::GetScreenDispatchCount(false);
 
-		auto& bloomRT = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kHDR_BLOOM];
-		auto& adaptRT = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kHDR_DOWNSAMPLE13];
-		
 		ID3D11ShaderResourceView* sceneSRV;
 		
 		// When Frame Gen is active, ISHDR has already rendered to FRAMEBUFFER
@@ -413,12 +347,8 @@ void HDR::ApplyHDR()
 			sceneSRV = mainRT.SRV;
 		}
 		
-		ID3D11ShaderResourceView* views[4] = { sceneSRV, uiTexture->srv.get(), bloomRT.SRV, adaptRT.SRV };
+		ID3D11ShaderResourceView* views[2] = { sceneSRV, uiTexture->srv.get() };
 		context->CSSetShaderResources(0, ARRAYSIZE(views), views);
-		
-		// Sampler for adaptation texture
-		auto linearSampler = Deferred::GetSingleton()->linearSampler;
-		context->CSSetSamplers(0, 1, &linearSampler);
 
 		ID3D11UnorderedAccessView* uavs[1] = { outputTexture->uav.get() };
 		context->CSSetUnorderedAccessViews(0, ARRAYSIZE(uavs), uavs, nullptr);
@@ -441,12 +371,7 @@ void HDR::ApplyHDR()
 		// Cleanup
 		views[0] = nullptr;
 		views[1] = nullptr;
-		views[2] = nullptr;
-		views[3] = nullptr;
 		context->CSSetShaderResources(0, ARRAYSIZE(views), views);
-		
-		ID3D11SamplerState* nullSampler = nullptr;
-		context->CSSetSamplers(0, 1, &nullSampler);
 
 		uavs[0] = { nullptr };
 		context->CSSetUnorderedAccessViews(0, ARRAYSIZE(uavs), uavs, nullptr);
@@ -506,14 +431,12 @@ void HDR::ClearShaderCache()
 		sdrOutputCS->Release();
 		sdrOutputCS = nullptr;
 	}
-
 }
 
 ID3D11ComputeShader* HDR::GetHDROutputCS()
 {
 	if (!hdrOutputCS) {
 		std::vector<std::pair<const char*, const char*>> defines;
-		// HDR mode - no defines needed, uses #else path
 		hdrOutputCS = static_cast<ID3D11ComputeShader*>(Util::CompileShader(L"Data\\Shaders\\HDROutputCS.hlsl", defines, "cs_5_0"));
 		if (!hdrOutputCS) {
 			logger::error("HDR: Failed to compile HDROutputCS.hlsl");
@@ -526,7 +449,6 @@ ID3D11ComputeShader* HDR::GetSDROutputCS()
 {
 	if (!sdrOutputCS) {
 		std::vector<std::pair<const char*, const char*>> defines = { { "SDR_OUTPUT", "" } };
-		// SDR mode - stays in gamma space, no linear conversion
 		sdrOutputCS = static_cast<ID3D11ComputeShader*>(Util::CompileShader(L"Data\\Shaders\\HDROutputCS.hlsl", defines, "cs_5_0"));
 		if (!sdrOutputCS) {
 			logger::error("HDR: Failed to compile HDROutputCS.hlsl (SDR mode)");
@@ -535,19 +457,12 @@ ID3D11ComputeShader* HDR::GetSDROutputCS()
 	return sdrOutputCS;
 }
 
-
-
 void HDR::UpdateHDRData() const
 {
 	if (!hdrDataCB)
 		return;
 
 	HDRDataCB data;
-
-	data.parameters0 = DirectX::XMVectorSet(static_cast<float>(settings.paperWhite), static_cast<float>(settings.peakNits), settings.exposure, 0.f);
-	data.parameters1 = DirectX::XMVectorSet(settings.highlights, settings.shadows, settings.contrast, settings.saturation);
-	data.parameters2 = DirectX::XMVectorSet(settings.dechroma, settings.hueCorrectionStrength, settings.vanillaEyeAdaptation ? 1.f : 0.f, settings.vanillaBloom ? 1.f : 0.f);
-	data.parameters3 = DirectX::XMVectorSet(settings.bypassTonemapping ? 1.f : 0.f, hdrDisplayDetected ? 1.f : 0.f, 0.f, 0.f);
-
+	data.parameters0 = DirectX::XMVectorSet(static_cast<float>(settings.paperWhite), static_cast<float>(settings.peakNits), hdrDisplayDetected ? 1.f : 0.f, 0.f);
 	hdrDataCB->Update(data);
 }

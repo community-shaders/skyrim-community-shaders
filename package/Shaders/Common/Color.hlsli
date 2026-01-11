@@ -495,22 +495,22 @@ float3 GammaToLinearSafe(float3 color)
 			if (strength == 0.f)
 				return incorrect_color;
 
-			float3 correct_lab = BT709ToOKLab(correct_color);
-			float3 correct_lch = OkLabToOkLCh(correct_lab);
+			float3 correct_lab = Color::BT709ToOKLab(correct_color);
+			float3 correct_lch = Color::OkLabToOkLCh(correct_lab);
 
-			float3 incorrect_lab = BT709ToOKLab(incorrect_color);
-			float3 incorrect_lch = OkLabToOkLCh(incorrect_lab);
+			float3 incorrect_lab = Color::BT709ToOKLab(incorrect_color);
+			float3 incorrect_lch = Color::OkLabToOkLCh(incorrect_lab);
 			if (strength == 1.f) {
 				incorrect_lch[2] = correct_lch[2];
 			} else {
 				float old_chroma = incorrect_lch[1];
 
 				incorrect_lab.yz = lerp(incorrect_lab.yz, correct_lab.yz, strength);
-				incorrect_lch = OkLabToOkLCh(incorrect_lab);
+				incorrect_lch = Color::OkLabToOkLCh(incorrect_lab);
 				incorrect_lch[1] = old_chroma;
 			}
 
-			float3 color = OkLChToBT709(incorrect_lch);
+			float3 color = Color::OkLChToBT709(incorrect_lch);
 
 			return color;
 		}

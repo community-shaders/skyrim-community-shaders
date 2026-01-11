@@ -27,18 +27,6 @@ public:
 	struct Settings
 	{
 		bool enableHDR = false;
-		bool vanillaEyeAdaptation = true;
-		bool vanillaBloom = true;
-		bool bypassTonemapping = false;
-
-		float exposure = 1.0f;
-		float highlights = 1.0f;
-		float shadows = 1.0f;
-		float contrast = 1.0f;
-		float saturation = 1.0f;
-		float dechroma = 0.0f;
-		float hueCorrectionStrength = 0.0f;
-
 		uint paperWhite = 400;
 		uint peakNits = 10000;
 	};
@@ -74,23 +62,9 @@ public:
 	{
 		// parameters0.x = paperWhite
 		// parameters0.y = peakNits
-		// parameters0.z = exposure
+		// parameters0.z = hdrMode (1.0 = HDR display detected)
 		// parameters0.w = unused
 		DirectX::XMVECTOR parameters0;
-		// parameters1.x = highlights
-		// parameters1.y = shadows
-		// parameters1.z = contrast
-		// parameters1.w = saturation
-		DirectX::XMVECTOR parameters1;
-		// parameters2.x = dechroma
-		// parameters2.y = hueCorrectionStrength
-		// parameters2.z = vanillaEyeAdaptation (1.0 = enabled)
-		// parameters2.w = vanillaBloom (1.0 = enabled)
-		DirectX::XMVECTOR parameters2;
-		// parameters3.x = bypassTonemapping (1.0 = enabled)
-		// parameters3.y = hdrMode (1.0 = HDR display detected)
-		// parameters3.zw = unused
-		DirectX::XMVECTOR parameters3;
 	};
 
 	static_assert((sizeof(HDRDataCB) % 16) == 0, "CB size not padded correctly");
