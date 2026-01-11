@@ -381,6 +381,8 @@ void Raytracing::DrawGeneralSettings()
 	if (DrawEnumRadio("Denoiser", settings.Denoiser))
 		recompileReason |= RecompileReason::General;
 
+	DrawResolutionSettings();
+
 	// Bounces
 	{
 		int bounces = settings.Bounces;
@@ -409,8 +411,6 @@ void Raytracing::DrawGeneralSettings()
 	DrawSHaRCSettings();
 
 	DrawDenoiserSettings();
-
-	DrawResolutionSettings();
 
 	DrawLightingSettings();
 
