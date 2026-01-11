@@ -1,4 +1,4 @@
-﻿#include "SkySync.h"
+#include "SkySync.h"
 
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	SkySync::Settings,
@@ -27,14 +27,25 @@ void SkySync::DrawSettings()
 			if (ImGui::SliderFloat("Custom angle", &settings.CustomAngle, -90.0f, 90.0f, "%.0f", ImGuiSliderFlags_AlwaysClamp))
 				SetSunAngle();
 		}
-		ImGui::SliderFloat("Sunrise Begin (Hours)", &settings.SunriseBeginOffset, -5.0f, 5.0f, "%.1f");
-		ImGui::SliderFloat("Sunrise End (Hours)", &settings.SunriseEndOffset, -5.0f, 5.0f, "%.1f");
-		ImGui::SliderFloat("Sunset Begin (Hours)", &settings.SunsetBeginOffset, -5.0f, 5.0f, "%.1f");
-		ImGui::SliderFloat("Sunset End (Hours)", &settings.SunsetEndOffset, -5.0f, 5.0f, "%.1f");
 	}
+
 	ImGui::SliderInt("Moon light source", &settings.MoonLightSource, 0, static_cast<uint8_t>(MoonLightSource::Count) - 1, MoonLightSourceNames[settings.MoonLightSource], ImGuiSliderFlags_AlwaysClamp);
-	ImGui::SliderFloat("Min Shadow Elevation", &settings.MinShadowElevation, 0.0f, 45.0f, "%.01f deg");
-	ImGui::Text("The minimum angle sunlight will set to. Caps shadow length. Higher = shorter shadows at sunset/sunrise.");
+	ImGui::SliderFloat("Min Shadow Elevation", &settings.MinShadowElevation, 0.0f, 45.0f, "%.1f deg");
+	if (auto _tt = Util::HoverTooltipWrapper()) {
+		ImGui::Text("The minimum angle sunlight will set to. Caps shadow length. Higher = shorter shadows at sunset/sunrise.");
+	}
+	ImGui::Spacing();
+	ImGui::Spacing();
+	if (ImGui::TreeNodeEx("Sun Position Offsets", ImGuiTreeNodeFlags_DefaultOpen)) {
+			ImGui::TextWrapped("Moves sun height during sunrise/sunset. Reset weather to see changes.");
+			ImGui::SliderFloat("Sunrise Begin (Hours)", &settings.SunriseBeginOffset, -5.0f, 5.0f, "%.1f");
+			ImGui::SliderFloat("Sunrise End (Hours)", &settings.SunriseEndOffset, -5.0f, 5.0f, "%.1f");
+			ImGui::SliderFloat("Sunset Begin (Hours)", &settings.SunsetBeginOffset, -5.0f, 5.0f, "%.1f");
+			ImGui::SliderFloat("Sunset End (Hours)", &settings.SunsetEndOffset, -5.0f, 5.0f, "%.1f");
+		}
+		ImGui::Spacing();
+		ImGui::Spacing();
+		ImGui::TreePop();
 }
 
 void SkySync::LoadSettings(json& o_json)
@@ -43,6 +54,11 @@ void SkySync::LoadSettings(json& o_json)
 	settings.MoonLightSource = std::clamp(settings.MoonLightSource, static_cast<int32_t>(MoonLightSource::Brightest), static_cast<int32_t>(MoonLightSource::Secunda));
 	settings.SunPath = std::clamp(settings.SunPath, static_cast<int32_t>(SunPath::Southern), static_cast<int32_t>(SunPath::Custom));
 	SetSunAngle();
+	settings.SunriseBeginOffset = std::clamp(settings.SunriseBeginOffset, -5.0f, 5.0f);
+	settings.SunriseEndOffset = std::clamp(settings.SunriseEndOffset, -5.0f, 5.0f);
+	settings.SunsetBeginOffset = std::clamp(settings.SunsetBeginOffset, -5.0f, 5.0f);
+	settings.SunsetEndOffset = std::clamp(settings.SunsetEndOffset, -5.0f, 5.0f);
+	settings.MinShadowElevation = std::clamp(settings.MinShadowElevation, 0.0f, 45.0f);
 }
 
 void SkySync::SaveSettings(json& o_json)
@@ -431,6 +447,7 @@ SkySync::VolumetricLightingDescriptor* SkySync::ApplyVolumetricLighting_Volumetr
 
 void SkySync::ClimateTimings::Update(const RE::TESClimate* climate)
 {
+
 	float srbegin = globals::features::skySync.settings.SunriseBeginOffset;
 	float srend = globals::features::skySync.settings.SunriseEndOffset;
 	float ssbegin = globals::features::skySync.settings.SunsetBeginOffset;
