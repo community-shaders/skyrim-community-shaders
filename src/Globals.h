@@ -8,6 +8,7 @@ struct GrassLighting;
 struct HairSpecular;
 struct IBL;
 struct LightLimitFix;
+struct LinearLighting;
 struct LODBlending;
 struct InteriorSun;
 struct InverseSquareLighting;
@@ -60,6 +61,7 @@ namespace globals
 		extern HairSpecular hairSpecular;
 		extern IBL ibl;
 		extern LightLimitFix lightLimitFix;
+		extern LinearLighting linearLighting;
 		extern LODBlending lodBlending;
 		extern InteriorSun interiorSun;
 		extern InverseSquareLighting inverseSquareLighting;

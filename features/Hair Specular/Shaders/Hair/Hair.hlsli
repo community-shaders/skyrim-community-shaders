@@ -2,10 +2,9 @@
 #define __HAIR_DEPENDENCY_HLSL__
 
 #include "Common/BRDF.hlsli"
+#include "Common/Color.hlsli"
 #include "Common/Game.hlsli"
 #include "Common/Math.hlsli"
-
-#define HAIR_LIGHTING_MULTIPLIER Math::PI  // Compensating to adapt to vanilla lighting model
 
 namespace Hair
 {
@@ -195,7 +194,7 @@ namespace Hair
 
 	void GetHairDirectLightMarschner(out float3 dirDiffuse, out float3 dirSpecular, out float3 dirTransmission, float3 T, float3 L, float3 V, float3 N, float3 VN, float3 lightColor, float shininess, float selfShadow, float2 uv, float3 baseColor)
 	{
-		lightColor *= HAIR_LIGHTING_MULTIPLIER * selfShadow;
+		lightColor *= Color::PBRLightingCompensation * selfShadow;
 		dirDiffuse = 0;
 		dirSpecular = 0;
 		dirTransmission = 0;

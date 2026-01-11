@@ -1,0 +1,11 @@
+{
+    "registries": [
+        {
+            "kind": "git",
+            "repository": "https://github.com/alandtse/vcpkg",
+            "baseline": "0793c0ffb30cccd574f7804ac367d028c39b72ec",
+            "reference": "eastl-3.27.01",
+            "packages": ["eastl", "eabase"]
+        }
+    ]
+}

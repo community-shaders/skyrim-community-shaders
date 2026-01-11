@@ -197,15 +197,19 @@ TerrainShadows::PerFrame TerrainShadows::GetCommonBufferData()
 
 void TerrainShadows::LoadHeightmap()
 {
-	auto tes = RE::TES::GetSingleton();
-	if (!tes)
-		return;
+	static auto tes = RE::TES::GetSingleton();
+
 	auto worldspace = tes->GetRuntimeData2().worldSpace;
+	while (worldspace && worldspace->parentWorld && worldspace->parentUseFlags.any(RE::TESWorldSpace::ParentUseFlag::kUseLandData))
+		worldspace = worldspace->parentWorld;
+
 	if (!worldspace)
 		return;
+
 	std::string worldspace_name = worldspace->GetFormEditorID();
 	if (!heightmaps.contains(worldspace_name))  // no height map for that, but we don't remove cache
 		return;
+
 	if (cachedHeightmap && cachedHeightmap->worldspace == worldspace_name)  // already cached
 		return;
 
