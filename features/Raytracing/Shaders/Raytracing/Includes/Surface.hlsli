@@ -66,16 +66,16 @@ struct Surface
         Albedo = float3(0.5f, 0.5f, 0.5f);
 #else
         Texture2D baseTexture = Textures[NonUniformResourceIndex(material.BaseTexture())];
-        
+
         float4 vertexColor = Interpolate(v0.Color.unpack(), v1.Color.unpack(), v2.Color.unpack(), uvw);
 		vertexColor = saturate(vertexColor / max(max(vertexColor.r, vertexColor.g), vertexColor.b));
-        
+
         [branch]
         if (material.ShaderType == ShaderType::TruePBR)
-        {           
+        {
             Texture2D rmaosTexture = Textures[NonUniformResourceIndex(material.RMAOSTexture())];
             Texture2D emissiveTexture = Textures[NonUniformResourceIndex(material.EmissiveTexture())];
-            
+
             float3 albedo = baseTexture.SampleLevel(BaseSampler, texCoord0, 0).rgb;
             float4 rmaos = rmaosTexture.SampleLevel(BaseSampler, texCoord0, 0);
             float3 emissive = emissiveTexture.SampleLevel(BaseSampler, texCoord0, 0).rgb;
@@ -138,8 +138,8 @@ struct Surface
 
             if (material.ShaderFlags & ShaderFlags::kGrayscaleToPaletteColor)
             {
-                Texture2D effectTexture = Textures[NonUniformResourceIndex(material.EffectTexture())];  
-                
+                Texture2D effectTexture = Textures[NonUniformResourceIndex(material.EffectTexture())];
+
                 float2 grayscaleToColorUv = float2(base.g, baseColorMul.x);
 
                 baseColor = baseColorScale * effectTexture.SampleLevel(BaseSampler, grayscaleToColorUv, 0).rgb;
@@ -163,16 +163,16 @@ struct Surface
         Bitangent = bitangentWS;
 #else
         Texture2D normalTexture = Textures[NonUniformResourceIndex(material.NormalTexture())];
-        
+
         float handedness = (dot(cross(normalWS, tangentWS), bitangentWS) < 0.0f) ? -1.0f : 1.0f;
-        
+
         NormalMap(
             normalTexture.SampleLevel(BaseSampler, texCoord0, 0).rgb,
             handedness,
             normalWS, tangentWS, bitangentWS,
             Normal, Tangent, Bitangent
         );
-#endif       
+#endif
     }
 
     float4 BlendLandTexture(uint16_t textureIndex, float2 texcoord, float weight)
