@@ -1,12 +1,13 @@
 #include "Shape.h"
 #include "Features/Raytracing.h"
 #include "Features/Raytracing/Heap.h"
+#include "Features/Raytracing/Pipelines/SkinningPipeline.h"
+
 #include "TruePBR.h"
 #include "TruePBR/BSLightingShaderMaterialPBR.h"
 #include "TruePBR/BSLightingShaderMaterialPBRLandscape.h"
 
 using GIHeap = Raytracing::GIHeap;
-using SkinningHeap = Raytracing::SkinningHeap;
 
 static std::uint32_t GetVertexSize(RE::BSGraphics::Vertex::Flags flags)
 {
@@ -555,7 +556,7 @@ void Shape::CreateBuffers(const std::wstring& name)
 	auto* device = rt.d3d12Device.get();
 	auto* commandList = rt.commandList.get();
 
-	auto* skinningHeap = rt.skinningHeap.get();
+	auto* skinningHeap = rt.skinningPipeline->heap.get();
 	auto* giHeap = rt.giHeap.get();
 
 	auto* materialBuffer = rt.materialBuffer.get();
@@ -575,11 +576,9 @@ void Shape::CreateBuffers(const std::wstring& name)
 		dynamicPosition.resize(vertexCount);
 
 		allocDesc.CustomPool = rt.dynamicVertexPool.get();
-		dynamicPositionBuffer = eastl::make_unique<DX12::StructuredBufferUploadMA<float4>>(device, allocator, allocDesc, uploadAllocDesc, vertexCount);
+		dynamicPositionBuffer = eastl::make_unique<DX12::StructuredBufferUploadMA<float4>>(device, allocator, allocDesc, uploadAllocDesc, vertexCount, false, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
 
 		dynamicPositionBuffer->CreateSRV(skinningHeap->CPUHandle(SkinningHeap::Slot::DynamicVertices, allocation->GetIndex()));
-
-		dynamicPositionBuffer->TransitionBarrier(commandList, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
 	}
 
 	// Vertices
@@ -587,7 +586,7 @@ void Shape::CreateBuffers(const std::wstring& name)
 		bool hasUAV = (flags & Flags::Dynamic) || (flags & Flags::Skinned);
 
 		allocDesc.CustomPool = rt.vertexPool.get();
-		vertexBuffer = eastl::make_unique<DX12::StructuredBufferUploadMA<Vertex>>(device, allocator, allocDesc, uploadAllocDesc, vertexCount, hasUAV);
+		vertexBuffer = eastl::make_unique<DX12::StructuredBufferUploadMA<Vertex>>(device, allocator, allocDesc, uploadAllocDesc, vertexCount, hasUAV, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
 
 		vertexBuffer->UpdateList(vertices.data(), vertexCount);
 		DX::ThrowIfFailed(vertexBuffer->resource->SetName(std::format(L"Vertex Buffer [{}] - {}", allocation->GetIndex(), name).c_str()));
@@ -596,8 +595,6 @@ void Shape::CreateBuffers(const std::wstring& name)
 			logger::error("[RT] Shape::CreateBuffers - VertexCount: {}, Vertices Size: {}", vertexCount, vertices.size());
 
 		vertexBuffer->Upload(commandList);
-
-		vertexBuffer->TransitionBarrier(commandList, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
 
 		// UAV
 		if (hasUAV) {
@@ -630,7 +627,7 @@ void Shape::CreateBuffers(const std::wstring& name)
 	// Skinning
 	if (flags & Flags::Skinned) {
 		allocDesc.CustomPool = rt.skinningPool.get();
-		skinningBuffer = eastl::make_unique<DX12::StructuredBufferUploadMA<Skinning>>(device, allocator, allocDesc, uploadAllocDesc, vertexCount);
+		skinningBuffer = eastl::make_unique<DX12::StructuredBufferUploadMA<Skinning>>(device, allocator, allocDesc, uploadAllocDesc, vertexCount, false, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
 
 		skinningBuffer->UpdateList(skinning.data(), vertexCount);
 		DX::ThrowIfFailed(skinningBuffer->resource->SetName(std::format(L"Skinning Buffer [{}] - {}", allocation->GetIndex(), name).c_str()));
@@ -655,14 +652,12 @@ void Shape::CreateBuffers(const std::wstring& name)
 	// Triangles
 	{
 		allocDesc.CustomPool = rt.trianglePool.get();
-		triangleBuffer = eastl::make_unique<DX12::StructuredBufferUploadMA<Triangle>>(device, allocator, allocDesc, uploadAllocDesc, triangleCount);
+		triangleBuffer = eastl::make_unique<DX12::StructuredBufferUploadMA<Triangle>>(device, allocator, allocDesc, uploadAllocDesc, triangleCount, false, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
 
 		triangleBuffer->UpdateList(triangles.data(), triangles.size());
 		DX::ThrowIfFailed(triangleBuffer->resource->SetName(std::format(L"Triangle Buffer [{}] - {}", allocation->GetIndex(), name).c_str()));
 
 		triangleBuffer->Upload(commandList);
-
-		triangleBuffer->TransitionBarrier(commandList, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
 
 		// SRV
 		{

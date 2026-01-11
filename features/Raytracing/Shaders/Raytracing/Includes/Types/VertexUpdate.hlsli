@@ -9,4 +9,9 @@ struct VertexUpdateData
 	uint16_t bones;
 };
 
+#ifdef __cplusplus
+static_assert(sizeof(VertexUpdateData) % 4 == 0);
+#endif
+
+
 #endif

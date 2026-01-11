@@ -1,11 +1,13 @@
 #pragma once
 
-#include "Features/Raytracing.h"
+#include "PCH.h"
+
+#include "Features/Raytracing/RTConstants.h"
 #include "Features/Raytracing/Buffer.h"
 #include "Features/Raytracing/Heap.h"
 #include "Features/Raytracing/HeapManager.h"
 #include "Features/Raytracing/Pipeline.h"
-#include "PCH.h"
+#include "Features/Raytracing/Shape.h"
 #include <d3d12.h>
 
 #include "Features/Raytracing/Types.h"
@@ -27,12 +29,12 @@ struct SkinningHeapDef
 	enum class Slot
 	{
 		Output,
-		LocalToRoot = Output + Raytracing::MAX_SHAPES,
+		LocalToRoot = Output + RTConstants::MAX_SHAPES,
 		UpdateData,
 		BoneMatrices,
 		DynamicVertices,
-		SkinningData = DynamicVertices + Raytracing::MAX_SHAPES,
-		NumDescriptors = SkinningData + Raytracing::MAX_SHAPES,
+		SkinningData = DynamicVertices + RTConstants::MAX_SHAPES,
+		NumDescriptors = SkinningData + RTConstants::MAX_SHAPES,
 		None
 	};
 };
@@ -68,6 +70,7 @@ struct SkinningPipeline : ComputePipeline<SkinningHeap>
 	void CompileShaders(ID3D12Device5* device) override;
 	void SetupResources(ID3D12Device5* device) override;
 	void QueueUpdate(Flags updateFlags, eastl::string name, Shape* shape);
-	bool PrepareResources(uint& count);
+	bool PrepareResources(ID3D12GraphicsCommandList4* commandList, uint& count, uint& vertexCount);
+	void RestoreResources(ID3D12GraphicsCommandList4* commandList);
 	void Dispatch(ID3D12GraphicsCommandList4* commandList);
 };

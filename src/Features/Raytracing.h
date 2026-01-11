@@ -18,6 +18,7 @@
 
 #include "State.h"
 
+#include "Features/Raytracing/RTConstants.h"
 #include "Features/Raytracing/Allocator.h"
 #include "Features/Raytracing/Buffer.h"
 #include "Features/Raytracing/BufferMA.h"
@@ -71,17 +72,6 @@ using namespace magic_enum::bitwise_operators;
 
 struct Raytracing : public OverlayFeature
 {
-	// DX12 will not like if we don't respect these numbers and try to write over the resource end
-	static constexpr uint MAX_TEXTURES = 1024;
-	static constexpr uint MAX_MODELS = 1024;
-	static constexpr uint MAX_SHAPES = MAX_MODELS * 6;
-	static constexpr uint MAX_MATERIALS = MAX_SHAPES;
-	static constexpr uint MAX_INSTANCES = 4096;
-	static constexpr uint MAX_LIGHTS = 255;
-
-	static constexpr uint SKY_CUBEMAP_SIZE = 512;
-	static constexpr uint SKY_HEMI_SIZE = SKY_CUBEMAP_SIZE * 2;
-
 	enum MarkerFlags : uint32_t
 	{
 		MapMarker = 1 << 22,
@@ -122,9 +112,9 @@ struct Raytracing : public OverlayFeature
 			Instances,
 			Indirection,
 			Vertices,
-			Triangles = Vertices + Raytracing::MAX_SHAPES,
-			Textures = Triangles + Raytracing::MAX_SHAPES,
-			NumDescriptors = Textures + Raytracing::MAX_TEXTURES,
+			Triangles = Vertices + RTConstants::MAX_SHAPES,
+			Textures = Triangles + RTConstants::MAX_SHAPES,
+			NumDescriptors = Textures + RTConstants::MAX_TEXTURES,
 			None
 		};
 	};
@@ -217,7 +207,6 @@ struct Raytracing : public OverlayFeature
 	void InitD3D12(ID3D11Device* ppDevice, ID3D11DeviceContext* pImmediateContext, IDXGIAdapter* a_adapter);
 	void CreateRootSignature();
 	void CreateShadowsRootSignature();
-	void UpdateDynamicSkinning(ID3D12GraphicsCommandList4* pCommandList);
 	void DrawRTGI();
 	void UpdateShadowsFrameBuffer();
 	void RenderShadows();
@@ -484,7 +473,6 @@ struct Raytracing : public OverlayFeature
 		SVGFPipeline::Settings SVGFDiffuse;
 		SVGFPipeline::Settings SVGFSpecular;
 		bool PerformanceOverlay = false;
-		std::string Defines = "";
 		DebugOutput DebugOutput = DebugOutput::None;
 		bool EnablePIXCapture = false;
 		PIXCaptureLocation PIXCaptureLocation = PIXCaptureLocation::GlobalIllumination;
@@ -492,6 +480,10 @@ struct Raytracing : public OverlayFeature
 		bool WhiteFurnace = false;
 		SHaRCPipeline::Settings SHaRC;
 	} settings;
+
+	// Debug variables
+	std::string debugDefines = "";
+	bool debugUpdateTriShapes = true;
 
 	enum class RecompileReason : uint32_t
 	{
@@ -543,8 +535,8 @@ struct Raytracing : public OverlayFeature
 
 	eastl::shared_ptr<Allocation> GetTextureRegister(ID3D11Texture2D* texture, eastl::shared_ptr<Allocation> defaultTexture);
 
-	Allocator shapeRegisters = Allocator(MAX_SHAPES);
-	Allocator textureRegisters = Allocator(MAX_TEXTURES);
+	Allocator shapeRegisters = Allocator(RTConstants::MAX_SHAPES);
+	Allocator textureRegisters = Allocator(RTConstants::MAX_TEXTURES);
 
 	struct DefaultTexture
 	{
@@ -753,9 +745,6 @@ struct Raytracing : public OverlayFeature
 	// GI
 	winrt::com_ptr<ID3D12RootSignature> rootSignature = nullptr;
 	winrt::com_ptr<ID3D12StateObject> pipelineRT = nullptr;
-#if defined(SHARC)
-	winrt::com_ptr<ID3D12StateObject> pipelineSHaRCRT = nullptr;
-#endif
 	eastl::unique_ptr<DX12::ShaderBindingTable> shaderBindingTable = nullptr;
 	eastl::unique_ptr<DX12::ResourceUpload> shaderBindingTableBuffer = nullptr;
 	eastl::unique_ptr<DX12::DescriptorHeap<GIHeap>> giHeap = nullptr;

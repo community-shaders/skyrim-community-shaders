@@ -55,7 +55,6 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	RussianRoulette,
 	ConvertToGamma,
 	PerformanceOverlay,
-	Defines,
 	DebugOutput,
 	EnablePIXCapture,
 	PIXCaptureLocation,
@@ -480,7 +479,9 @@ void Raytracing::DrawDebugSettings()
 
 	ImGui::PushID("DebugSettings");
 
-	ImGui::InputText("Shader Defines", &settings.Defines);
+	ImGui::Checkbox("Update TriShapes", &debugUpdateTriShapes);
+
+	ImGui::InputText("Shader Defines", &debugDefines);
 
 	ImGui::SameLine();
 
@@ -759,10 +760,6 @@ void Raytracing::SetupResources()
 
 	auto device12 = d3d12Device.get();
 
-	skinningHeap = eastl::make_unique<DX12::DescriptorHeap<SkinningHeap>>(
-		device12,
-		D3D12_DESCRIPTOR_HEAP_DESC(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, SkinningHeap::NumDescriptors(), D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE));
-
 	giHeap = eastl::make_unique<DX12::DescriptorHeap<GIHeap>>(
 		device12,
 		D3D12_DESCRIPTOR_HEAP_DESC(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, GIHeap::NumDescriptors(), D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE));
@@ -912,7 +909,7 @@ void Raytracing::SetupResources()
 
 	// t3 - Light buffer
 	{
-		lightBuffer = eastl::make_unique<DX12::StructuredBufferUpload<Light>>(d3d12Device.get(), MAX_LIGHTS);
+		lightBuffer = eastl::make_unique<DX12::StructuredBufferUpload<Light>>(d3d12Device.get(), RTConstants::MAX_LIGHTS);
 		DX::ThrowIfFailed(lightBuffer->resource->SetName(L"Light Buffer"));
 
 		lightBuffer->CreateSRV(giHeap->CPUHandle(GIHeap::Slot::Lights));
@@ -920,7 +917,7 @@ void Raytracing::SetupResources()
 
 	// t4 - Material buffer
 	{
-		materialBuffer = eastl::make_unique<DX12::StructuredBufferUpload<MaterialData>>(d3d12Device.get(), MAX_MATERIALS);
+		materialBuffer = eastl::make_unique<DX12::StructuredBufferUpload<MaterialData>>(d3d12Device.get(), RTConstants::MAX_MATERIALS);
 		DX::ThrowIfFailed(materialBuffer->resource->SetName(L"Material Buffer"));
 
 		materialBuffer->CreateSRV(giHeap->CPUHandle(GIHeap::Slot::Materials));
@@ -928,7 +925,7 @@ void Raytracing::SetupResources()
 
 	// t5 - Instance buffer
 	{
-		instanceBuffer = eastl::make_unique<DX12::StructuredBufferUpload<InstanceData>>(d3d12Device.get(), MAX_INSTANCES);
+		instanceBuffer = eastl::make_unique<DX12::StructuredBufferUpload<InstanceData>>(d3d12Device.get(), RTConstants::MAX_INSTANCES);
 		DX::ThrowIfFailed(instanceBuffer->resource->SetName(L"Instance Buffer"));
 
 		instanceBuffer->CreateSRV(giHeap->CPUHandle(GIHeap::Slot::Instances));
@@ -937,14 +934,14 @@ void Raytracing::SetupResources()
 	// t6 - Indirection buffer
 	{
 		// Could probably fit in 16 bits but indexing would be awkward
-		indirectionBuffer = eastl::make_unique<DX12::ResourceUpload>(d3d12Device.get(), sizeof(uint32_t) * MAX_SHAPES);
+		indirectionBuffer = eastl::make_unique<DX12::ResourceUpload>(d3d12Device.get(), sizeof(uint32_t) * RTConstants::MAX_SHAPES);
 		DX::ThrowIfFailed(indirectionBuffer->resource->SetName(L"Indirection Buffer"));
 
 		D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
 		srvDesc.ViewDimension = D3D12_SRV_DIMENSION_BUFFER;
 		srvDesc.Format = DXGI_FORMAT_R32_TYPELESS;
 		srvDesc.Buffer.FirstElement = 0;
-		srvDesc.Buffer.NumElements = MAX_SHAPES;
+		srvDesc.Buffer.NumElements = RTConstants::MAX_SHAPES;
 		srvDesc.Buffer.StructureByteStride = 0;
 		srvDesc.Buffer.Flags = D3D12_BUFFER_SRV_FLAG_RAW;
 		srvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
@@ -954,28 +951,24 @@ void Raytracing::SetupResources()
 
 	// Create instance buffer for BLAS
 	{
-		blasInstanceBuffer = eastl::make_unique<DX12::StructuredBufferUpload<D3D12_RAYTRACING_INSTANCE_DESC>>(d3d12Device.get(), MAX_INSTANCES);
-		blasInstanceBuffer->TransitionBarrier(commandList.get(), D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+		blasInstanceBuffer = eastl::make_unique<DX12::StructuredBufferUpload<D3D12_RAYTRACING_INSTANCE_DESC>>(d3d12Device.get(), RTConstants::MAX_INSTANCES, false, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
 		DX::ThrowIfFailed(blasInstanceBuffer->resource->SetName(L"BLAS Instance Buffer"));
 	}
 
 	// Create shadow instance buffer for BLAS
 	{
-		blasShadowInstanceBuffer = eastl::make_unique<DX12::StructuredBufferUpload<D3D12_RAYTRACING_INSTANCE_DESC>>(d3d12Device.get(), MAX_INSTANCES);
-		blasShadowInstanceBuffer->TransitionBarrier(commandList.get(), D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+		blasShadowInstanceBuffer = eastl::make_unique<DX12::StructuredBufferUpload<D3D12_RAYTRACING_INSTANCE_DESC>>(d3d12Device.get(), RTConstants::MAX_INSTANCES, false, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
 		DX::ThrowIfFailed(blasShadowInstanceBuffer->resource->SetName(L"BLAS Instance Buffer"));
 	}
 
 	logger::debug("Creating constant buffer...");
 	{
-		frameBuffer = eastl::make_unique<DX12::StructuredBufferUpload<FrameData>>(d3d12Device.get(), 1, false, 2);
-		frameBuffer->TransitionBarrier(commandList.get(), D3D12_RESOURCE_STATE_VERTEX_AND_CONSTANT_BUFFER);
+		frameBuffer = eastl::make_unique<DX12::StructuredBufferUpload<FrameData>>(d3d12Device.get(), 1, false, D3D12_RESOURCE_STATE_VERTEX_AND_CONSTANT_BUFFER, 2);
 		DX::ThrowIfFailed(frameBuffer->resource->SetName(L"Frame Buffer"));
 
 		frameData = eastl::make_unique<FrameData>();
 
-		shadowsCB = eastl::make_unique<DX12::StructuredBufferUpload<ShadowsFrameData>>(d3d12Device.get(), 1);
-		shadowsCB->TransitionBarrier(commandList.get(), D3D12_RESOURCE_STATE_VERTEX_AND_CONSTANT_BUFFER);
+		shadowsCB = eastl::make_unique<DX12::StructuredBufferUpload<ShadowsFrameData>>(d3d12Device.get(), 1, false, D3D12_RESOURCE_STATE_VERTEX_AND_CONSTANT_BUFFER);
 		DX::ThrowIfFailed(shadowsCB->resource->SetName(L"Shadows Constant Buffer"));
 
 		shadowsCBData = eastl::make_unique<ShadowsFrameData>();
@@ -998,8 +991,8 @@ void Raytracing::SetupResources()
 	// Sky Hemisphere
 	{
 		D3D11_TEXTURE2D_DESC texDesc{};
-		texDesc.Width = SKY_HEMI_SIZE;
-		texDesc.Height = SKY_HEMI_SIZE;
+		texDesc.Width = RTConstants::SKY_HEMI_SIZE;
+		texDesc.Height = RTConstants::SKY_HEMI_SIZE;
 		texDesc.MipLevels = 1;
 		texDesc.ArraySize = 1;
 		texDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
@@ -1420,10 +1413,10 @@ void Raytracing::UpdateLights()
 	// Point lights
 	{
 		lights.clear();
-		lights.reserve(MAX_LIGHTS);
+		lights.reserve(RTConstants::MAX_LIGHTS);
 
 		for (auto data : GetPointLights()) {
-			if (lights.size() >= MAX_LIGHTS)
+			if (lights.size() >= RTConstants::MAX_LIGHTS)
 				break;
 
 			lights.emplace_back(data.positionWS[0].data, data.radius, data.color * settings.Point, 0);
@@ -1547,7 +1540,7 @@ void Raytracing::SkyCubeToHemi() const
 	ID3D11UnorderedAccessView* uav = skyHemisphere->uav;
 	context->CSSetUnorderedAccessViews(0, 1, &uav, nullptr);
 
-	float hemiResolution = SKY_HEMI_SIZE;
+	float hemiResolution = RTConstants::SKY_HEMI_SIZE;
 	uint dispatch = (uint)std::ceil(hemiResolution / 8.0f);
 
 	context->Dispatch(dispatch, dispatch, 1);
@@ -2150,7 +2143,7 @@ void Raytracing::UpdateInstances()
 	DX::ThrowIfFailed(indirectionBuffer->uploadResource->Map(0, &readRange, reinterpret_cast<void**>(&pIndirectionData)));
 
 	for (auto& [pNiNode, instance] : instances) {
-		if (blasInstances.size() > MAX_INSTANCES)
+		if (blasInstances.size() > RTConstants::MAX_INSTANCES)
 			break;
 
 		auto it = models.find(instance.filename);
@@ -2186,7 +2179,7 @@ void Raytracing::UpdateInstances()
 		auto firstShapeIndex = totalShapeCount;
 		auto shapeCount = model->shapes.size();
 
-		if (totalShapeCount + shapeCount > MAX_SHAPES)
+		if (totalShapeCount + shapeCount > RTConstants::MAX_SHAPES)
 			break;
 
 		totalShapeCount += static_cast<uint32_t>(shapeCount);
@@ -2215,13 +2208,13 @@ void Raytracing::UpdateInstances()
 	logger::trace("[RT] UpdateInstances - Total Shape Count: {}", totalShapeCount);
 
 	// Unmap indirection table
-	D3D12_RANGE writeRange = { 0, std::min(totalShapeCount, MAX_SHAPES) * sizeof(uint32_t) };
+	D3D12_RANGE writeRange = { 0, std::min(totalShapeCount, RTConstants::MAX_SHAPES) * sizeof(uint32_t) };
 	indirectionBuffer->uploadResource->Unmap(0, &writeRange);
 
-	blasInstanceBuffer->UpdateList(blasInstances.data(), std::min(blasInstances.size(), (size_t)MAX_INSTANCES));
+	blasInstanceBuffer->UpdateList(blasInstances.data(), std::min(blasInstances.size(), (size_t)RTConstants::MAX_INSTANCES));
 	blasInstanceBuffer->Upload(commandList.get());
 
-	instanceBuffer->UpdateList(instanceBufferData.data(), std::min(instanceBufferData.size(), (size_t)MAX_INSTANCES));
+	instanceBuffer->UpdateList(instanceBufferData.data(), std::min(instanceBufferData.size(), (size_t)RTConstants::MAX_INSTANCES));
 	instanceBuffer->Upload(commandList.get());
 
 	materialBuffer->Upload(commandList.get());
@@ -2430,7 +2423,7 @@ void Raytracing::UpdateShadowInstances()
 	}
 
 	for (auto& [pNiNode, instance] : instances) {
-		if (blasShadowInstances.size() > MAX_INSTANCES)
+		if (blasShadowInstances.size() > RTConstants::MAX_INSTANCES)
 			break;
 
 		if (settings.CullShadows) {
@@ -2465,7 +2458,7 @@ void Raytracing::UpdateShadowInstances()
 		blasShadowInstances.push_back(blasShadowInstance);
 	}
 
-	blasShadowInstanceBuffer->UpdateList(blasShadowInstances.data(), std::min(blasShadowInstances.size(), (size_t)MAX_INSTANCES));
+	blasShadowInstanceBuffer->UpdateList(blasShadowInstances.data(), std::min(blasShadowInstances.size(), (size_t)RTConstants::MAX_INSTANCES));
 	blasShadowInstanceBuffer->Upload(commandList.get());
 }
 
@@ -2492,7 +2485,7 @@ void Raytracing::BuildTLAS()
 	D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_INPUTS inputs = {
 		.Type = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL,
 		.Flags = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_PREFER_FAST_TRACE,
-		.NumDescs = MAX_INSTANCES,
+		.NumDescs = RTConstants::MAX_INSTANCES,
 		.DescsLayout = D3D12_ELEMENTS_LAYOUT_ARRAY,
 		.InstanceDescs = blasInstanceBuffer->resource->GetGPUVirtualAddress()
 	};
@@ -2670,7 +2663,8 @@ void Raytracing::DrawRTGI()
 
 	UpdateInstances();
 
-	UpdateDynamicSkinning(commandList.get());
+	if (debugUpdateTriShapes)
+		skinningPipeline->Dispatch(commandList.get());
 
 	// Upload buffers
 	lightBuffer->Upload(commandList.get());
@@ -3638,19 +3632,14 @@ void Raytracing::CompileRTGIShaders()
 	if (settings.Denoiser == Denoiser::SVGF)
 		defines.emplace_back(L"RAW_RADIANCE");
 
-	const auto definesWStr = StringViewToWString(std::string_view{ settings.Defines });
+	const auto definesWStr = StringViewToWString(std::string_view{ debugDefines });
 
-	if (!settings.Defines.empty()) {
+	if (!debugDefines.empty()) {
 		defines.emplace_back(definesWStr.c_str());
 	}
 
 	winrt::com_ptr<IDxcBlob> rayGenBlob;
 	ShaderUtils::CompileShader(rayGenBlob, L"Data/Shaders/Raytracing/GI/RayGeneration.hlsl", defines);
-
-#if defined(SHARC)
-	winrt::com_ptr<IDxcBlob> rayGenSHaRCBlob;
-	ShaderUtils::CompileShader(rayGenSHaRCBlob, L"Data/Shaders/Raytracing/GI/RayGeneration.hlsl", defines);
-#endif
 
 	winrt::com_ptr<IDxcBlob> missBlob, closestHitBlob, anyHitBlob;
 	ShaderUtils::CompileShader(missBlob, L"Data/Shaders/Raytracing/GI/Miss.hlsl", defines);
@@ -3703,10 +3692,6 @@ void Raytracing::CompileRTGIShaders()
 		};
 
 		createPipeline(pipelineRT, L"RT");
-
-#if defined(SHARC)
-		createPipeline(pipelineSHaRCRT, L"SHaRC RT");
-#endif
 	}
 
 	// Init shader tables
@@ -3829,7 +3814,7 @@ void Raytracing::CompileComputeShaders()
 	if (auto rawPtr = reinterpret_cast<ID3D11ComputeShader*>(Util::CompileShader(L"Data\\Shaders\\Raytracing\\CopyDepthCS.hlsl", {}, "cs_5_0")); rawPtr)
 		copyDepthCS.attach(rawPtr);
 
-	const auto skyHemiSize = std::to_string(SKY_HEMI_SIZE);
+	const auto skyHemiSize = std::to_string(RTConstants::SKY_HEMI_SIZE);
 	if (auto rawPtr = reinterpret_cast<ID3D11ComputeShader*>(Util::CompileShader(L"Data\\Shaders\\Raytracing\\CubeToHemiCS.hlsl", { { "RESOLUTION", skyHemiSize.c_str() } }, "cs_5_0")); rawPtr)
 		cubeToHemiCS.attach(rawPtr);
 

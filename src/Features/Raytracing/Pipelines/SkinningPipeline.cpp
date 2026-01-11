@@ -7,6 +7,7 @@ void SkinningPipeline::CreateRootSignature(ID3D12Device5* device)
 		D3D12_DESCRIPTOR_HEAP_DESC(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, SkinningHeap::NumDescriptors(), D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE));
 
 	auto unboundTableFlags = D3D12_DESCRIPTOR_RANGE_FLAG_DATA_VOLATILE | D3D12_DESCRIPTOR_RANGE_FLAG_DESCRIPTORS_VOLATILE;
+	auto dynamicFlags = D3D12_DESCRIPTOR_RANGE_FLAG_DATA_VOLATILE | D3D12_DESCRIPTOR_RANGE_FLAG_DESCRIPTORS_VOLATILE;
 
 	heap->CreateTable(
 		SkinningHeap::Table::UAV,
@@ -16,9 +17,9 @@ void SkinningPipeline::CreateRootSignature(ID3D12Device5* device)
 	heap->CreateTable(
 		SkinningHeap::Table::SRV,
 		D3D12_DESCRIPTOR_RANGE_TYPE_SRV,
-		{ { SkinningHeap::Slot::LocalToRoot, 1, 0, D3D12_DESCRIPTOR_RANGE_FLAG_DESCRIPTORS_VOLATILE },
-			{ SkinningHeap::Slot::UpdateData, 1, 0, D3D12_DESCRIPTOR_RANGE_FLAG_DESCRIPTORS_VOLATILE },
-			{ SkinningHeap::Slot::BoneMatrices, 1, 0, D3D12_DESCRIPTOR_RANGE_FLAG_DESCRIPTORS_VOLATILE } });
+		{ { SkinningHeap::Slot::LocalToRoot, 1, 0, dynamicFlags },
+			{ SkinningHeap::Slot::UpdateData, 1, 0, dynamicFlags },
+			{ SkinningHeap::Slot::BoneMatrices, 1, 0, dynamicFlags } });
 
 	heap->CreateTable(
 		SkinningHeap::Table::DynamicBuffer,
@@ -57,34 +58,33 @@ void SkinningPipeline::CompileShaders(ID3D12Device5* device)
 	const auto threadSizeWStr = std::to_wstring(THREAD_SIZE);
 
 	winrt::com_ptr<IDxcBlob> shaderBlob;
-	ShaderUtils::CompileShader(shaderBlob, L"Data/Shaders/Raytracing/SkinningCS.hlsl", { L"THREAD_SIZE", threadSizeWStr }, L"cs_6_5");
+	ShaderUtils::CompileShader(shaderBlob, L"Data/Shaders/Raytracing/SkinningCS.hlsl", { { L"THREAD_SIZE", threadSizeWStr.c_str() } }, L"cs_6_5");
 
 	D3D12_COMPUTE_PIPELINE_STATE_DESC computeDesc = {};
 	computeDesc.pRootSignature = rootSignature.get();
 	computeDesc.CS = { shaderBlob->GetBufferPointer(), shaderBlob->GetBufferSize() };
 
 	DX::ThrowIfFailed(device->CreateComputePipelineState(&computeDesc, IID_PPV_ARGS(pipelineState.put())));
-	DX::ThrowIfFailed(skinningPipeline->SetName(L"Compute Pipeline - Vertex Update"));
+	DX::ThrowIfFailed(pipelineState->SetName(L"Compute Pipeline - Vertex Update"));
 }
 
 void SkinningPipeline::SetupResources(ID3D12Device5* device)
 {
-	vertexUpdateBuffer = eastl::make_unique<DX12::StructuredBufferUpload<VertexUpdateData>>(device, Raytracing::MAX_MODELS);
+	vertexUpdateBuffer = eastl::make_unique<DX12::StructuredBufferUpload<VertexUpdateData>>(device, RTConstants::MAX_MODELS, false, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
 	DX::ThrowIfFailed(vertexUpdateBuffer->resource->SetName(L"Vertex Update Buffer"));
 
 	vertexUpdateBuffer->CreateSRV(heap->CPUHandle(SkinningHeap::Slot::UpdateData));
 
 	constantBufferData = eastl::make_unique<FrameData>();
 
-	constantBuffer = eastl::make_unique<DX12::StructuredBufferUpload<FrameData>>(device, 1);
-	//constantBuffer->TransitionBarrier(commandList.get(), D3D12_RESOURCE_STATE_VERTEX_AND_CONSTANT_BUFFER);
+	constantBuffer = eastl::make_unique<DX12::StructuredBufferUpload<FrameData>>(device, 1, false, D3D12_RESOURCE_STATE_VERTEX_AND_CONSTANT_BUFFER);
 	DX::ThrowIfFailed(constantBuffer->resource->SetName(L"Skinning Constant Buffer"));
 }
 
 void SkinningPipeline::QueueUpdate(Flags updateFlags, eastl::string name, Shape* shape)
 {
 	queueModels.emplace_back(
-		path, 
+		name, 
 		shape->allocation->GetIndex(), 
 		updateFlags & Flags::Dynamic ? shape->dynamicPositionBuffer.get() : nullptr, 
 		shape->vertexBuffer.get(), 
@@ -92,24 +92,72 @@ void SkinningPipeline::QueueUpdate(Flags updateFlags, eastl::string name, Shape*
 		updateFlags);
 }
 
-bool SkinningPipeline::PrepareResources(uint& count)
+bool SkinningPipeline::PrepareResources(ID3D12GraphicsCommandList4* commandList, uint& count, uint& vertexCount)
 {
 	if (queueModels.empty())
 		return false;
 
-	count = (uint)queueModels.size();
+	auto queueSize = queueModels.size();
+
+	eastl::vector<VertexUpdateData> vertexUpdateData;
+	vertexUpdateData.reserve(queueSize);
+
+	// Barrier to UAV state
+	eastl::vector<CD3DX12_RESOURCE_BARRIER> barriers;
+	barriers.reserve(queueSize);
+
+	for (auto& model : queueModels) {
+		vertexCount = std::max(vertexCount, (uint)model.vertexCount);
+		vertexUpdateData.emplace_back(model.allocatedIndex, model.flags, model.vertexCount, 0);
+
+		CD3DX12_RESOURCE_BARRIER barrier;
+		if (model.vertexBuffer->GetTransitionBarrier(D3D12_RESOURCE_STATE_UNORDERED_ACCESS, barrier))
+			barriers.push_back(barrier);
+	}
+
+	uint barrierCount = (uint)barriers.size();
+
+	if (barrierCount > 0)
+		commandList->ResourceBarrier(barrierCount, barriers.data());
+
+	count = (uint)vertexUpdateData.size();
 
 	constantBufferData->Count = count;
 	constantBuffer->Update(constantBufferData.get(), sizeof(FrameData));
+	constantBuffer->Upload(commandList);
 
-	eastl::vector<VertexUpdateData> vertexUpdateData;
-	vertexUpdateData.reserve(count);
+	vertexUpdateBuffer->Update(vertexUpdateData.data(), vertexUpdateData.size());
+	vertexUpdateBuffer->Upload(commandList);
+
+	return true;
+}
+
+void SkinningPipeline::RestoreResources(ID3D12GraphicsCommandList4* commandList)
+{
+	// Barrier to NPSR state
+	eastl::vector<CD3DX12_RESOURCE_BARRIER> barriers;
+	barriers.reserve(queueModels.size());
+
+	for (auto& model : queueModels) {
+		CD3DX12_RESOURCE_BARRIER barrier;
+		if (model.vertexBuffer->GetTransitionBarrier(D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, barrier))
+			barriers.push_back(barrier);
+	}
+
+	uint barrierCount = (uint)barriers.size();
+
+	if (barrierCount > 0)
+		commandList->ResourceBarrier(barrierCount, barriers.data());
+
+	queueModels.clear();
 }
 
 void SkinningPipeline::Dispatch(ID3D12GraphicsCommandList4* commandList)
 {
-	uint count;
-	if (!PrepareResources(count))
+	uint count = 0;
+	uint vertexCount = 0;
+
+	if (!PrepareResources(commandList, count, vertexCount))
 		return;
 
 	commandList->SetPipelineState(pipelineState.get());
@@ -129,18 +177,20 @@ void SkinningPipeline::Dispatch(ID3D12GraphicsCommandList4* commandList)
 	commandList->SetComputeRootConstantBufferView(4, constantBuffer->resource->GetGPUVirtualAddress());
 
 
-	CD3DX12_RESOURCE_BARRIER uavBarrier[3] = {
+	/*CD3DX12_RESOURCE_BARRIER uavBarrier[3] = {
 		CD3DX12_RESOURCE_BARRIER::UAV(sharcHashEntriesBuffer->resource.get()),
 		CD3DX12_RESOURCE_BARRIER::UAV(sharcAccumulationBuffer->resource.get()),
 		CD3DX12_RESOURCE_BARRIER::UAV(sharcResolvedBuffer->resource.get())
 	};
 
-	commandList->ResourceBarrier(_countof(uavBarrier), uavBarrier);
+	commandList->ResourceBarrier(_countof(uavBarrier), uavBarrier);*/
 
-	const uint dispatchSize = DivideRoundUp(count, THREAD_SIZE);
-	commandList->Dispatch(dispatchSize, 1, 1);
+	const uint vertexDispatchSize = DivideRoundUp(vertexCount, THREAD_SIZE);
+	commandList->Dispatch(count, vertexDispatchSize, 1);
 
-	commandList->ResourceBarrier(_countof(uavBarrier), uavBarrier);
+	//commandList->ResourceBarrier(_countof(uavBarrier), uavBarrier);
+
+	RestoreResources(commandList);
 }
 
 /*void Raytracing::UpdateDynamicSkinning(ID3D12GraphicsCommandList4* pCommandList)

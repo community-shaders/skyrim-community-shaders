@@ -33,4 +33,8 @@ struct Skinning
 #endif
 };
 
+#ifdef __cplusplus
+static_assert(sizeof(Skinning) % 4 == 0);
+#endif
+
 #endif
