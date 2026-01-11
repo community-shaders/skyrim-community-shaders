@@ -3,7 +3,7 @@
 void ShadowmapRasterizerFix::Install()
 {
 	// This function is called once per cascade to begin the updating and rendering process
-	stl::write_thunk_call<BSShadowDirectionalLight_RenderShadowmaps_RenderCascade>(REL::RelocationID(108489, 108489).address() + REL::Relocate(0xC6, 0xC6, 0xC6));
+	stl::write_thunk_call<BSShadowDirectionalLight_RenderShadowmaps_RenderCascade>(REL::RelocationID(101495, 108489).address() + REL::Relocate(0xC6, 0xC6, 0xC6));
 
 	gRasterStates = reinterpret_cast<RasterStateArray*>(REL::RelocationID(524748, 411363).address());
 }
