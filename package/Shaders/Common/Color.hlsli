@@ -515,5 +515,5 @@ float3 GammaToLinearSafe(float3 color)
 
 	}  // namespace Correct
 }
-
+	
 #endif  //__COLOR_DEPENDENCY_HLSL__

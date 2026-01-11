@@ -34,12 +34,8 @@ void DX12SwapChain::CreateSwapChain(IDXGIAdapter* adapter, DXGI_SWAP_CHAIN_DESC 
 	IDXGIFactory4* dxgiFactory;
 	DX::ThrowIfFailed(adapter->GetParent(IID_PPV_ARGS(&dxgiFactory)));
 
-	auto hdr = HDR::GetSingleton();
-	// Use HDR if display is detected - settings may not be loaded yet at swap chain creation time
-	bool useHDR = hdr && hdr->hdrDisplayDetected;
-	
-	logger::info("[DX12SwapChain] HDR check: hdr={}, displayDetected={}, enableHDR={}, useHDR={}", 
-		hdr != nullptr, hdr ? hdr->hdrDisplayDetected : false, hdr ? hdr->settings.enableHDR : false, useHDR);
+	// Always use HDR format for swap chain since we always render in HDR internally
+	bool useHDR = true;
 
 	swapChainDesc = {};
 	swapChainDesc.Width = a_swapChainDesc.BufferDesc.Width;

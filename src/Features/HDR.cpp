@@ -12,99 +12,41 @@
 #include <dxgi1_6.h>
 #include <imgui.h>
 
-bool HDR::DetectHDRDisplayEarly(IDXGIAdapter* adapter)
-{
-	if (!adapter)
-		return false;
-
-	Microsoft::WRL::ComPtr<IDXGIOutput> output;
-	if (FAILED(adapter->EnumOutputs(0, &output)))
-		return false;
-
-	Microsoft::WRL::ComPtr<IDXGIOutput6> output6;
-	if (FAILED(output.As(&output6)))
-		return false;
-
-	DXGI_OUTPUT_DESC1 desc1{};
-	if (FAILED(output6->GetDesc1(&desc1)))
-		return false;
-
-	bool detected = desc1.ColorSpace == DXGI_COLOR_SPACE_RGB_FULL_G2084_NONE_P2020;
-	GetSingleton()->hdrDisplayDetected = detected;
-	return detected;
-}
-
-bool HDR::DetectHDRDisplay()
-{
-	auto swapChain = globals::d3d::swapChain;
-	if (!swapChain)
-		return false;
-
-	Microsoft::WRL::ComPtr<IDXGIOutput> output;
-	if (FAILED(swapChain->GetContainingOutput(&output)))
-		return false;
-
-	Microsoft::WRL::ComPtr<IDXGIOutput6> output6;
-	if (FAILED(output.As(&output6)))
-		return false;
-
-	DXGI_OUTPUT_DESC1 desc1{};
-	if (FAILED(output6->GetDesc1(&desc1)))
-		return false;
-
-	return desc1.ColorSpace == DXGI_COLOR_SPACE_RGB_FULL_G2084_NONE_P2020;
-}
-
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	HDR::Settings,
-	enableHDR,
+	tonemapToSDR,
 	paperWhite,
 	peakNits);
 
 void HDR::DrawSettings()
 {
-	if (hdrDisplayDetected) {
-		ImGui::TextColored({ 0, 1, 0, 1 }, "HDR display detected");
-		if (ImGui::Checkbox("HDR Enabled", &settings.enableHDR)) {
-			enabledSaveLater = settings.enableHDR;
-			if (!globals::features::upscaling.d3d12SwapChainActive) {
-				SetSwapChainColorSpace(settings.enableHDR);
-			}
-			globals::shaderCache->Clear("Data\\Shaders\\ISHDR.hlsl");
-			globals::shaderCache->Clear(RE::BSShader::Type::ImageSpace);
-		}
+	ImGui::Checkbox("Tonemap to SDR", &settings.tonemapToSDR);
+	if (auto _tt = Util::HoverTooltipWrapper()) {
+		ImGui::Text("Apply SDR tonemapping for SDR displays. Disable for HDR displays.");
+	}
 
-		if (settings.enableHDR) {
-			ImGui::Spacing();
-			ImGui::SliderInt("Paper White (nits)", reinterpret_cast<int*>(&settings.paperWhite), 80, 500);
-			if (auto _tt = Util::HoverTooltipWrapper()) {
-				ImGui::Text("Reference white brightness for SDR content.");
-			}
+	ImGui::Spacing();
+	ImGui::SliderInt("Paper White (nits)", reinterpret_cast<int*>(&settings.paperWhite), 80, 500);
+	if (auto _tt = Util::HoverTooltipWrapper()) {
+		ImGui::Text("Reference white brightness for SDR content.");
+	}
 
-			ImGui::SliderInt("Peak Brightness (nits)", reinterpret_cast<int*>(&settings.peakNits), 400, 10000);
-			if (auto _tt = Util::HoverTooltipWrapper()) {
-				ImGui::Text("Maximum brightness for HDR highlights.");
-			}
-		}
-	} else {
-		ImGui::TextColored({ 1, 0.5f, 0, 1 }, "No HDR display detected");
-		ImGui::TextWrapped("HDR requires a compatible display and Windows HDR enabled.");
+	ImGui::SliderInt("Peak Brightness (nits)", reinterpret_cast<int*>(&settings.peakNits), 400, 10000);
+	if (auto _tt = Util::HoverTooltipWrapper()) {
+		ImGui::Text("Maximum brightness for HDR highlights.");
 	}
 }
 
 void HDR::SaveSettings(json& o_json)
 {
 	std::lock_guard<std::mutex> lock(settingsMutex);
-	auto settingsCopy = settings;
-	settingsCopy.enableHDR = enabledSaveLater;
-	o_json = settingsCopy;
+	o_json = settings;
 }
 
 void HDR::LoadSettings(json& o_json)
 {
 	std::lock_guard<std::mutex> lock(settingsMutex);
 	settings = o_json;
-	enabledSaveLater = settings.enableHDR;
 }
 
 void HDR::RestoreDefaultSettings()
@@ -112,138 +54,8 @@ void HDR::RestoreDefaultSettings()
 	settings = {};
 }
 
-const char* HDR::GetColorSpaceName(DXGI_COLOR_SPACE_TYPE colorSpace)
-{
-	switch (colorSpace) {
-		case DXGI_COLOR_SPACE_RGB_FULL_G22_NONE_P709: return "sRGB/BT.709 (SDR)";
-		case DXGI_COLOR_SPACE_RGB_FULL_G2084_NONE_P2020: return "HDR10 PQ/BT.2020";
-		case DXGI_COLOR_SPACE_RGB_FULL_G10_NONE_P709: return "Linear BT.709";
-		case DXGI_COLOR_SPACE_RGB_STUDIO_G22_NONE_P709: return "Studio sRGB/BT.709";
-		case DXGI_COLOR_SPACE_RGB_STUDIO_G2084_NONE_P2020: return "Studio HDR10";
-		default: return "Unknown";
-	}
-}
-
-DXGI_COLOR_SPACE_TYPE HDR::GetCurrentColorSpace()
-{
-	auto swapChain = globals::d3d::swapChain;
-	if (!swapChain) {
-		return DXGI_COLOR_SPACE_RGB_FULL_G22_NONE_P709;
-	}
-
-	Microsoft::WRL::ComPtr<IDXGISwapChain3> swapChain3;
-	if (FAILED(swapChain->QueryInterface(IID_PPV_ARGS(&swapChain3)))) {
-		return DXGI_COLOR_SPACE_RGB_FULL_G22_NONE_P709;
-	}
-
-	// Unfortunately, there's no direct API to query the current colorspace
-	// Return what we think it should be based on our settings
-	if (settings.enableHDR && hdrDisplayDetected) {
-		return DXGI_COLOR_SPACE_RGB_FULL_G2084_NONE_P2020;
-	}
-	return DXGI_COLOR_SPACE_RGB_FULL_G22_NONE_P709;
-}
-
-bool HDR::SetSwapChainColorSpace(bool enableHDR)
-{
-	auto swapChain = globals::d3d::swapChain;
-	if (!swapChain) {
-		logger::warn("HDR: No swap chain available");
-		return false;
-	}
-
-	Microsoft::WRL::ComPtr<IDXGISwapChain3> swapChain3;
-	HRESULT hr = swapChain->QueryInterface(IID_PPV_ARGS(&swapChain3));
-	if (FAILED(hr) || !swapChain3) {
-		logger::warn("HDR: Failed to get IDXGISwapChain3 interface (hr=0x{:08X})", static_cast<unsigned>(hr));
-		return false;
-	}
-
-	DXGI_COLOR_SPACE_TYPE colorSpace = enableHDR ? 
-		DXGI_COLOR_SPACE_RGB_FULL_G2084_NONE_P2020 :  // HDR10: PQ transfer, BT.2020 primaries
-		DXGI_COLOR_SPACE_RGB_FULL_G22_NONE_P709;       // SDR: sRGB gamma, BT.709 primaries
-
-	hr = swapChain3->SetColorSpace1(colorSpace);
-
-	if (FAILED(hr)) {
-		logger::error("HDR: Failed to set colorspace");
-		return false;
-	}
-
-	return true;
-}
-
-void HDR::BeginUIRendering()
-{
-	if (!hdrDisplayDetected || !settings.enableHDR)
-		return;
-	
-	// Skip if D3D12 frame gen is active - it has its own UI buffer handling
-	if (globals::features::upscaling.d3d12SwapChainActive)
-		return;
-	
-	if (!uiTexture || !uiTexture->rtv)
-		return;
-	
-	auto context = globals::d3d::context;
-	
-	// Save current render target
-	context->OMGetRenderTargets(1, &savedRTV, &savedDSV);
-	
-	// Clear UI texture with transparent black
-	float clearColor[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
-	context->ClearRenderTargetView(uiTexture->rtv.get(), clearColor);
-	
-	// Set UI texture as render target
-	ID3D11RenderTargetView* rtv = uiTexture->rtv.get();
-	context->OMSetRenderTargets(1, &rtv, nullptr);
-	
-	renderingUI = true;
-}
-
-void HDR::EndUIRendering()
-{
-	if (!hdrDisplayDetected || !settings.enableHDR)
-		return;
-	
-	// Skip if D3D12 frame gen is active
-	if (globals::features::upscaling.d3d12SwapChainActive)
-		return;
-	
-	if (!renderingUI)
-		return;
-	
-	auto context = globals::d3d::context;
-	
-	// Restore original render target
-	context->OMSetRenderTargets(1, &savedRTV, savedDSV);
-	
-	if (savedRTV) {
-		savedRTV->Release();
-		savedRTV = nullptr;
-	}
-	if (savedDSV) {
-		savedDSV->Release();
-		savedDSV = nullptr;
-	}
-	
-	renderingUI = false;
-}
-
 void HDR::SetupResources()
 {
-	if (!hdrDisplayDetected) {
-		hdrDisplayDetected = DetectHDRDisplay();
-	}
-	
-	auto& upscaling = globals::features::upscaling;
-	
-	if (hdrDisplayDetected) {
-		if (!upscaling.d3d12SwapChainActive) {
-			SetSwapChainColorSpace(settings.enableHDR);
-		}
-	}
-
 	auto renderer = globals::game::renderer;
 	auto& main = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMAIN];
 
@@ -266,12 +78,8 @@ void HDR::SetupResources()
 	hdrTexture->CreateSRV(srvDesc);
 	hdrTexture->CreateUAV(uavDesc);
 
-	// Output texture format: R10G10B10A2 for HDR displays, native format for SDR
-	if (hdrDisplayDetected) {
-		texDesc.Format = DXGI_FORMAT_R10G10B10A2_UNORM;
-	} else {
-		texDesc.Format = mainFormat;
-	}
+	// Output texture - always use main format (will be R8G8B8A8 or R10G10B10A2 depending on display)
+	texDesc.Format = mainFormat;
 	srvDesc.Format = texDesc.Format;
 	uavDesc.Format = texDesc.Format;
 
@@ -279,7 +87,7 @@ void HDR::SetupResources()
 	outputTexture->CreateSRV(srvDesc);
 	outputTexture->CreateUAV(uavDesc);
 
-	// UI texture for separate UI rendering (sRGB format for proper UI authoring)
+	// UI texture for separate UI rendering
 	D3D11_TEXTURE2D_DESC uiTexDesc = texDesc;
 	uiTexDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
 	uiTexDesc.BindFlags = D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_UNORDERED_ACCESS;
@@ -306,13 +114,60 @@ void HDR::SetupResources()
 	UpdateHDRData();
 }
 
+void HDR::BeginUIRendering()
+{
+	// Skip if D3D12 frame gen is active - it has its own UI buffer handling
+	if (globals::features::upscaling.d3d12SwapChainActive)
+		return;
+	
+	if (!uiTexture || !uiTexture->rtv)
+		return;
+	
+	auto context = globals::d3d::context;
+	
+	// Save current render target
+	context->OMGetRenderTargets(1, &savedRTV, &savedDSV);
+	
+	// Clear UI texture with transparent black
+	float clearColor[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
+	context->ClearRenderTargetView(uiTexture->rtv.get(), clearColor);
+	
+	// Set UI texture as render target
+	ID3D11RenderTargetView* rtv = uiTexture->rtv.get();
+	context->OMSetRenderTargets(1, &rtv, nullptr);
+	
+	renderingUI = true;
+}
+
+void HDR::EndUIRendering()
+{
+	// Skip if D3D12 frame gen is active
+	if (globals::features::upscaling.d3d12SwapChainActive)
+		return;
+	
+	if (!renderingUI)
+		return;
+	
+	auto context = globals::d3d::context;
+	
+	// Restore original render target
+	context->OMSetRenderTargets(1, &savedRTV, savedDSV);
+	
+	if (savedRTV) {
+		savedRTV->Release();
+		savedRTV = nullptr;
+	}
+	if (savedDSV) {
+		savedDSV->Release();
+		savedDSV = nullptr;
+	}
+	
+	renderingUI = false;
+}
+
 void HDR::ApplyHDR()
 {
 	std::lock_guard<std::mutex> lock(settingsMutex);
-
-	// If HDR display not detected, vanilla ISHDR output is fine
-	if (!hdrDisplayDetected)
-		return;
 
 	if (!hdrDataCB || !hdrTexture || !outputTexture)
 		return;
@@ -326,7 +181,7 @@ void HDR::ApplyHDR()
 	// Update constant buffer before applying HDR
 	UpdateHDRData();
 
-	state->BeginPerfEvent(hdrDisplayDetected ? "HDR Output" : "SDR Processing");
+	state->BeginPerfEvent("HDR Processing");
 
 	{
 		auto dispatchCount = Util::GetScreenDispatchCount(false);
@@ -357,7 +212,7 @@ void HDR::ApplyHDR()
 
 		context->CSSetConstantBuffers(0, ARRAYSIZE(cbs), cbs);
 
-		auto computeShader = hdrDisplayDetected ? GetHDROutputCS() : GetSDROutputCS();
+		auto computeShader = GetHDROutputCS();
 		if (!computeShader) {
 			logger::error("HDR: Failed to get compute shader");
 			state->EndPerfEvent();
@@ -427,10 +282,6 @@ void HDR::ClearShaderCache()
 		hdrOutputCS->Release();
 		hdrOutputCS = nullptr;
 	}
-	if (sdrOutputCS) {
-		sdrOutputCS->Release();
-		sdrOutputCS = nullptr;
-	}
 }
 
 ID3D11ComputeShader* HDR::GetHDROutputCS()
@@ -445,24 +296,12 @@ ID3D11ComputeShader* HDR::GetHDROutputCS()
 	return hdrOutputCS;
 }
 
-ID3D11ComputeShader* HDR::GetSDROutputCS()
-{
-	if (!sdrOutputCS) {
-		std::vector<std::pair<const char*, const char*>> defines = { { "SDR_OUTPUT", "" } };
-		sdrOutputCS = static_cast<ID3D11ComputeShader*>(Util::CompileShader(L"Data\\Shaders\\HDROutputCS.hlsl", defines, "cs_5_0"));
-		if (!sdrOutputCS) {
-			logger::error("HDR: Failed to compile HDROutputCS.hlsl (SDR mode)");
-		}
-	}
-	return sdrOutputCS;
-}
-
 void HDR::UpdateHDRData() const
 {
 	if (!hdrDataCB)
 		return;
 
 	HDRDataCB data;
-	data.parameters0 = DirectX::XMVectorSet(static_cast<float>(settings.paperWhite), static_cast<float>(settings.peakNits), hdrDisplayDetected ? 1.f : 0.f, 0.f);
+	data.parameters0 = DirectX::XMVectorSet(static_cast<float>(settings.paperWhite), static_cast<float>(settings.peakNits), settings.tonemapToSDR ? 1.f : 0.f, 0.f);
 	hdrDataCB->Update(data);
 }

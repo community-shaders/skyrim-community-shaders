@@ -97,6 +97,7 @@ PS_OUTPUT main(PS_INPUT input)
 	float2 avgValue = AvgTex.Sample(AvgSampler, input.TexCoord.xy).xy;
 
 	float3 outputColor = 0.0;
+	float3 ppColor = 0.0;
 
 #	if defined(HDR_OUTPUT)
 	// HDR pass-through: apply exposure only, skip tonemapping
@@ -105,10 +106,10 @@ PS_OUTPUT main(PS_INPUT input)
 	inputColor = max(0, inputColor);
 	inputColor += bloomColor;
 	outputColor = inputColor;
+	ppColor = inputColor;
 #	else
 	// SDR tonemapping and post-processing
 	float3 gameSdrColor = 0.0;
-	float3 ppColor = 0.0;
 	{
 		if (avgValue.x != 0 && avgValue.y != 0)
 			inputColor *= avgValue.y / avgValue.x;

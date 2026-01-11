@@ -20,18 +20,12 @@ public:
 
 	static std::string GetShortName() { return "High Dynamic Range"; }
 
-	bool hdrDisplayDetected = false;
-	static bool DetectHDRDisplayEarly(IDXGIAdapter* adapter);
-	static bool DetectHDRDisplay();
-
 	struct Settings
 	{
-		bool enableHDR = false;
+		bool tonemapToSDR = true;
 		uint paperWhite = 400;
 		uint peakNits = 10000;
 	};
-
-	bool enabledSaveLater = false;
 
 	Settings settings;
 	std::mutex settingsMutex;
@@ -43,11 +37,8 @@ public:
 
 	void SetupResources();
 	void UpdateHDRData() const;
-	bool SetSwapChainColorSpace(bool enableHDR);
-	DXGI_COLOR_SPACE_TYPE GetCurrentColorSpace();
-	static const char* GetColorSpaceName(DXGI_COLOR_SPACE_TYPE colorSpace);
 	
-	// UI rendering in HDR - redirects UI to separate target for proper compositing
+	// UI rendering - redirects UI to separate target for proper compositing
 	void BeginUIRendering();
 	void EndUIRendering();
 	bool IsRenderingUI() const { return renderingUI; }
@@ -62,7 +53,7 @@ public:
 	{
 		// parameters0.x = paperWhite
 		// parameters0.y = peakNits
-		// parameters0.z = hdrMode (1.0 = HDR display detected)
+		// parameters0.z = tonemapToSDR (1.0 = tonemap to SDR, 0.0 = output HDR)
 		// parameters0.w = unused
 		DirectX::XMVECTOR parameters0;
 	};
@@ -73,12 +64,10 @@ public:
 
 	Texture2D* hdrTexture = nullptr;
 	Texture2D* outputTexture = nullptr;
-	Texture2D* uiTexture = nullptr;  // Separate UI render target for HDR compositing
+	Texture2D* uiTexture = nullptr;  // Separate UI render target for proper compositing
 
 	ID3D11ComputeShader* hdrOutputCS = nullptr;
-	ID3D11ComputeShader* sdrOutputCS = nullptr;
 	ID3D11ComputeShader* GetHDROutputCS();
-	ID3D11ComputeShader* GetSDROutputCS();
 
 	// Saved state for UI rendering redirection
 	bool renderingUI = false;
