@@ -37,12 +37,12 @@ void SkySync::DrawSettings()
 	ImGui::Spacing();
 	ImGui::Spacing();
 	if (ImGui::TreeNodeEx("Sun Position Offsets", ImGuiTreeNodeFlags_DefaultOpen)) {
-			ImGui::TextWrapped("Moves sun height during sunrise/sunset. Reset weather to see changes.");
-			ImGui::SliderFloat("Sunrise Begin (Hours)", &settings.SunriseBeginOffset, -5.0f, 5.0f, "%.1f", ImGuiSliderFlags_AlwaysClamp);
-			ImGui::SliderFloat("Sunrise End (Hours)", &settings.SunriseEndOffset, -5.0f, 5.0f, "%.1f", ImGuiSliderFlags_AlwaysClamp);
-			ImGui::SliderFloat("Sunset Begin (Hours)", &settings.SunsetBeginOffset, -5.0f, 5.0f, "%.1f", ImGuiSliderFlags_AlwaysClamp);
-			ImGui::SliderFloat("Sunset End (Hours)", &settings.SunsetEndOffset, -5.0f, 5.0f, "%.1f", ImGuiSliderFlags_AlwaysClamp);
-			ImGui::TreePop();
+		ImGui::TextWrapped("Moves sun height during sunrise/sunset. Reset weather to see changes.");
+		ImGui::SliderFloat("Sunrise Begin (Hours)", &settings.SunriseBeginOffset, -5.0f, 5.0f, "%.1f", ImGuiSliderFlags_AlwaysClamp);
+		ImGui::SliderFloat("Sunrise End (Hours)", &settings.SunriseEndOffset, -5.0f, 5.0f, "%.1f", ImGuiSliderFlags_AlwaysClamp);
+		ImGui::SliderFloat("Sunset Begin (Hours)", &settings.SunsetBeginOffset, -5.0f, 5.0f, "%.1f", ImGuiSliderFlags_AlwaysClamp);
+		ImGui::SliderFloat("Sunset End (Hours)", &settings.SunsetEndOffset, -5.0f, 5.0f, "%.1f", ImGuiSliderFlags_AlwaysClamp);
+		ImGui::TreePop();
 	}
 }
 
@@ -456,10 +456,14 @@ void SkySync::ClimateTimings::Update(const RE::TESClimate* climate)
 	sunsetEnd = (climate->timing.sunset.end / 6.0f) + SunsetEndOffset;
 	// Basic ordering guarantees (prevents divide-by-zero / negative duration paths).
 	constexpr float kMinGapHours = 0.1f;
-	if (sunriseEnd <= sunriseBegin)	sunriseEnd = sunriseBegin + kMinGapHours;
-	if (sunsetEnd <= sunsetBegin)	sunsetEnd = sunsetBegin + kMinGapHours;
-	if (sunsetBegin <= sunriseEnd)	sunsetBegin = sunriseEnd + kMinGapHours;
-	if (sunsetEnd <= sunsetBegin)	sunsetEnd = sunsetBegin + kMinGapHours;
+	if (sunriseEnd <= sunriseBegin)
+		sunriseEnd = sunriseBegin + kMinGapHours;
+	if (sunsetEnd <= sunsetBegin)
+		sunsetEnd = sunsetBegin + kMinGapHours;
+	if (sunsetBegin <= sunriseEnd)
+		sunsetBegin = sunriseEnd + kMinGapHours;
+	if (sunsetEnd <= sunsetBegin)
+		sunsetEnd = sunsetBegin + kMinGapHours;
 	sunrise = (sunriseBegin + sunriseEnd) * 0.5f - 0.25f;
 	sunset = (sunsetBegin + sunsetEnd) * 0.5f + 0.25f;
 	sunriseFadeOutMoonStart = sunriseBegin - 0.5f;
