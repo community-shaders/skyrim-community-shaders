@@ -37,15 +37,15 @@ void SkySync::DrawSettings()
 	ImGui::Spacing();
 	ImGui::Spacing();
 	if (ImGui::TreeNodeEx("Sun Position Offsets", ImGuiTreeNodeFlags_DefaultOpen)) {
-			ImGui::TextWrapped("Moves sun height during sunrise/sunset. Reset weather to see changes.");
-			ImGui::SliderFloat("Sunrise Begin (Hours)", &settings.SunriseBeginOffset, -5.0f, 5.0f, "%.1f");
-			ImGui::SliderFloat("Sunrise End (Hours)", &settings.SunriseEndOffset, -5.0f, 5.0f, "%.1f");
-			ImGui::SliderFloat("Sunset Begin (Hours)", &settings.SunsetBeginOffset, -5.0f, 5.0f, "%.1f");
-			ImGui::SliderFloat("Sunset End (Hours)", &settings.SunsetEndOffset, -5.0f, 5.0f, "%.1f");
-		}
-		ImGui::Spacing();
-		ImGui::Spacing();
-		ImGui::TreePop();
+		ImGui::TextWrapped("Moves sun height during sunrise/sunset. Reset weather to see changes.");
+		ImGui::SliderFloat("Sunrise Begin (Hours)", &settings.SunriseBeginOffset, -5.0f, 5.0f, "%.1f");
+		ImGui::SliderFloat("Sunrise End (Hours)", &settings.SunriseEndOffset, -5.0f, 5.0f, "%.1f");
+		ImGui::SliderFloat("Sunset Begin (Hours)", &settings.SunsetBeginOffset, -5.0f, 5.0f, "%.1f");
+		ImGui::SliderFloat("Sunset End (Hours)", &settings.SunsetEndOffset, -5.0f, 5.0f, "%.1f");
+	}
+	ImGui::Spacing();
+	ImGui::Spacing();
+	ImGui::TreePop();
 }
 
 void SkySync::LoadSettings(json& o_json)
@@ -447,7 +447,6 @@ SkySync::VolumetricLightingDescriptor* SkySync::ApplyVolumetricLighting_Volumetr
 
 void SkySync::ClimateTimings::Update(const RE::TESClimate* climate)
 {
-
 	float srbegin = globals::features::skySync.settings.SunriseBeginOffset;
 	float srend = globals::features::skySync.settings.SunriseEndOffset;
 	float ssbegin = globals::features::skySync.settings.SunsetBeginOffset;
