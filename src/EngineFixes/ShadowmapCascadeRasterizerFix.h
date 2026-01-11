@@ -11,7 +11,7 @@ struct ShadowmapRasterizerFix : EngineFix
 	static void CloneRasterStates(RasterStateArray* inputArray, int cascade);
 
 	static constexpr uint maxCascades = 3;
-	static uint numCascades = 0;
+	static inline uint numCascades = 0;
 
 	static inline RasterStateArray* gRasterStates = nullptr;
 	static inline RasterStateArray backupGameRasterStates = {};
