@@ -22,9 +22,13 @@ namespace ShaderFlags
     static const uint32_t kGrayscaleToPaletteColor = (1 << 3);
     static const uint32_t kGrayscaleToPaletteAlpha = (1 << 4);
     static const uint32_t kFalloff = (1 << 5);
-    static const uint32_t kRefraction = (1 << 6);
-    static const uint32_t kProjectedUV = (1 << 7);
-    static const uint32_t kVertexColors = (1 << 8);
+    static const uint32_t kEnvMap = (1 << 6);
+    static const uint32_t kRefraction = (1 << 7);
+    static const uint32_t kProjectedUV = (1 << 8);
+    static const uint32_t kVertexColors = (1 << 9);
+    static const uint32_t kMultiTextureLandscape = (1 << 10);
+    static const uint32_t kEyeReflect = (1 << 11);
+    static const uint32_t kHairTint = (1 << 12);
 }
 
 namespace Feature
@@ -51,34 +55,157 @@ namespace Feature
 }
 #endif
 
+// DirectX 12 is very picky about buffer alignment, make sure all variable boundaries are properly aligned
+// https://maraneshi.github.io/HLSL-ConstantBufferLayoutVisualizer/
 #ifdef __cplusplus
 struct MaterialData
 #else
 struct Material
 #endif
 {
-	half4 BaseColor;
-	half4 EffectColor;
-	half4 TexCoordOffsetScale;
-	half RoughnessScale;
-	half SpecularLevel;
-	half4 SpecularColor;
-	uint16_t BaseTexture;
-	uint16_t NormalTexture;
-	uint16_t EffectTexture;
-	uint16_t RMAOSTexture;
-	uint16_t SpecularTexture;
-	uint16_t EnvTexture;
-	uint16_t EnvMaskTexture;
+	half4 TexCoordOffsetScale0;
+	half4 TexCoordOffsetScale1;
+
+	half4 Color0;
+	half4 Color1;
+
+	half Scalar0;
+	half Scalar1;
+	half Scalar2;
+
+	// Textures
+	uint16_t Texture0;
+	uint16_t Texture1;
+	uint16_t Texture2;
+	uint16_t Texture3;
+	uint16_t Texture4;
+	uint16_t Texture5;
+
+	uint16_t Texture6;
+	uint16_t Texture7;
+	uint16_t Texture8;
+	uint16_t Texture9;
+	uint16_t Texture10;
+	uint16_t Texture11;
+
+	uint16_t Texture12;
+	uint16_t Texture13;
+	uint16_t Texture14;
+	uint16_t Texture15;
+	uint16_t Texture16;
+	uint16_t Texture17;
+
+	uint16_t Texture18;
+	uint16_t Texture19;
+
     uint16_t ShaderType;
-    uint32_t ShaderFlags;		// Max 32 flags
     uint16_t Feature;
     uint16_t PBRFlags;
+    uint32_t ShaderFlags;		// Max 32 flags
+
+	// Shared
+    half4 BaseColor()
+    {
+		return Color0;
+	}
+
+    half4 EffectColor()
+    {
+		return Color1;
+	}
+
+    uint16_t BaseTexture()
+    {
+		return Texture0;
+	}
+
+    uint16_t NormalTexture()
+    {
+		return Texture1;
+	}
+
+	uint16_t EffectTexture()
+    {
+		return Texture2;
+	}
+
+	// Vanilla
+    half4 SpecularColor()
+    {
+		return Color1;
+	}
+
+    uint16_t GlowTexture()
+    {
+		return Texture2;
+	}
+
+    uint16_t SpecularTexture()
+    {
+		return Texture3;
+	}
+
+    uint16_t EnvTexture()
+    {
+		return Texture4;
+	}
+
+    uint16_t EnvMaskTexture()
+    {
+		return Texture4;
+	}
+
+	// Landscape
+	half2 TexOffset()
+    {
+		return half2(Scalar0, Scalar1);
+	}
+
+    half TexFade()
+    {
+		return Scalar2;
+	}
+
+	half4 BlendParams()
+    {
+		return Color0;
+	}
+
+    uint16_t OverlayTexture()
+    {
+		return Texture18;
+	}
+
+    uint16_t NoiseTexture()
+    {
+		return Texture19;
+	}
+
+	// True PBR
+    half RoughnessScale()
+    {
+		return Scalar0;
+	}
+
+    half SpecularLevel()
+    {
+		return Scalar1;
+	}
+
+    uint16_t EmissiveTexture()
+    {
+		return Texture2;
+	}
+
+    uint16_t RMAOSTexture()
+    {
+		return Texture3;
+	}
 
 #ifndef __cplusplus
 	float2 TexCoord(float2 texCoord)
     {
-		return texCoord * TexCoordOffsetScale.zw + TexCoordOffsetScale.xy;
+		return texCoord * TexCoordOffsetScale0.zw + TexCoordOffsetScale0.xy;
 	}
 #endif
 };

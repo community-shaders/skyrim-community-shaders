@@ -240,6 +240,11 @@ PS_OUTPUT main(PS_INPUT input)
 	float3 normal = -normalize(cross(ddx, ddy));
 
 	float3 directionalAmbientColor = max(0, mul(SharedData::DirectionalAmbient, float4(normal, 1.0)));
+
+#	if defined(RT)
+	directionalAmbientColor *= SharedData::raytracingSettings.Ambient;
+#	endif
+
 #			if defined(IBL)
 	float3 iblColor = 0;
 	if (SharedData::iblSettings.EnableDiffuseIBL) {

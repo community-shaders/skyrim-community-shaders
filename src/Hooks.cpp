@@ -292,6 +292,8 @@ HRESULT WINAPI hk_D3D11CreateDeviceAndSwapChain(
 	pAdapter->GetDesc(&adapterDesc);
 	globals::state->SetAdapterDescription(adapterDesc.Description);
 
+	//Flags |= D3D11_CREATE_DEVICE_DEBUG;
+
 	const D3D_FEATURE_LEVEL featureLevel = D3D_FEATURE_LEVEL_11_1;
 
 	auto ret = ptrD3D11CreateDeviceAndSwapChain(pAdapter,

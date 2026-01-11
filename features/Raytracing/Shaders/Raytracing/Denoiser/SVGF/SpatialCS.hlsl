@@ -1,33 +1,35 @@
 #include "Raytracing/Denoiser/SVGF/Common.hlsli"
 
-Texture2D<float4> HistoryTexture    : register(t0);
+Texture2D<float4>   InputTexture    : register(t0);
+Texture2D<float2>   DepthTexture	: register(t4); // Viewspace Depth in R, Depth Width in G
 
 RWTexture2D<float4> FilteredOutput  : register(u0);
 
-float GaussianBlur(uint2 id, uint2 screenSize)
+#define GAUSSIAN_RADIUS (1)
+#define SPATIAL_RADIUS (2)
+
+float GaussianBlur(int2 id, uint2 screenSize)
 {
     float sum = 0.f;
     float kernelSum = 0.f;
+    
     const float kernel[2][2] =
     {
         { 1.0 / 4.0, 1.0 / 8.0 },
         { 1.0 / 8.0, 1.0 / 16.0 }
     };
-
-    const int radius = 1;
-
-    for (int y = -radius; y <= radius; y++)
+    
+    for (int y = -GAUSSIAN_RADIUS; y <= GAUSSIAN_RADIUS; y++)
     {
-        for (int x = -radius; x <= radius; x++)
+        for (int x = -GAUSSIAN_RADIUS; x <= GAUSSIAN_RADIUS; x++)
         {
             const int2 p = id + int2(x, y);
-            const bool inside = (p.x >= 0 && p.y >= 0) && (p.x < screenSize.x && p.y < screenSize.y);
-
-            if (inside)
+            
+            if (all(p >= 0) && all(p < screenSize))
             {
                 const float k = kernel[abs(x)][abs(y)];
-                kernelSum += k;
-                sum += SSRColorTexture[p].w * k;
+                sum += InputTexture[p].w * k;
+                kernelSum += k;                
             }
         }
     }
@@ -35,12 +37,8 @@ float GaussianBlur(uint2 id, uint2 screenSize)
     return sum / kernelSum;
 }
 
-static const float kernelWeights[3] = { 1.0, 2.0 / 3.0, 1.0 / 6.0 };
-
-#define VAR_EPSILON 0.00001f
-
 // Spatiotemporal Variance-Guided Filter
-[numthreads(8, 8, 1)] void main(uint3 DTid : SV_DispatchThreadID)
+[numthreads(8, 8, 1)] void main(uint2 DTid : SV_DispatchThreadID)
 {
     const uint2 screenSize = Resolution;
     if (DTid.x >= screenSize.x || DTid.y >= screenSize.y)
@@ -48,66 +46,83 @@ static const float kernelWeights[3] = { 1.0, 2.0 / 3.0, 1.0 / 6.0 };
 
     const float2 uv = float2(DTid.xy + 0.5) * ResolutionRcp;
 
-    float3 blendedColor = 0;
-    float4 historyColor = HistoryTexture[DTid.xy];
-    float4 ssrColor = SSRColorTexture[DTid.xy];
-    float depthCenter = DepthTexture[DTid.xy];
+    const float4 inputColor = InputTexture[DTid.xy];
+    
+    const float2 depthWidthCenter = DepthTexture[DTid.xy].xy;
 
+    /*if (depthCenter <= 0.0f || depthCenter >= 1.0f)
+    {
+        FilteredOutput[DTid.xy] = inputColor;
+        return;
+    }*/
+
+    const int2 sDTid = int2(DTid.xy);
+    
     float3 normalWS;
     float roughness;
     GetNormalRoughness(DTid.xy, normalWS, roughness);
     roughness = clamp(roughness, 0.001f, 1.0f);
 
-    float luminanceCenter = Color::RGBToLuminance(ssrColor.rgb);
-    float variance = GaussianBlur(DTid.xy, screenSize);
+    float luminanceCenter = Color::RGBToLuminance(inputColor.rgb);
+    float variance = GaussianBlur(sDTid.xy, screenSize);
 
-    if (depthCenter > 0)
-    {
-        float phiLuminance = max(Frame.ColorPhi * sqrt(abs(variance) + VAR_EPSILON), VAR_EPSILON);
-        float phiNormal = Frame.NormalPhi;
+    float phiLuminance = Frame.ColorPhi * sqrt(max(VAR_EPSILON, variance));
+    float phiNormal = Frame.NormalPhi;
+    float phiDepth = Frame.AtrousIterations * depthWidthCenter.y * Frame.DepthPhi;
+    
 #if defined(SSRT_SPECULAR)
-        // Trying to reduce blurriness on glossy surfaces
-        phiLuminance *= roughness;
-        phiNormal /= roughness;
+    // Trying to reduce blurriness on glossy surfaces
+    phiLuminance *= roughness;
+    phiNormal /= max(roughness, 0.05f);
 #endif
-        float phiDepth = (Frame.AtrousIterations + 1);
-        float weightSum = 0.f;
 
-        for (int ky = -2; ky <= 2; ky++)
+    float weightSum = 0.f;
+    float3 blendedColor = 0;
+    
+    const float kernelWeights[3] = { 1.0, 2.0 / 3.0, 1.0 / 6.0 };  
+    
+    for (int y = -SPATIAL_RADIUS; y <= SPATIAL_RADIUS; y++)
+    {
+        for (int x = -SPATIAL_RADIUS; x <= SPATIAL_RADIUS; x++)
         {
-            for (int kx = -2; kx <= 2; kx++)
+            if (x == 0 && y == 0) continue;
+            
+            // A-Trous sampling
+            int2 samplePos = sDTid + int2(x, y) * Frame.AtrousIterations;
+
+            if (all(samplePos >= 0) && all(samplePos < screenSize))
             {
-                // A-Trous sampling
-                int2 samplePos = int2(DTid.xy) + int2(kx, ky) * (Frame.AtrousIterations + 1);
-                bool inside = (samplePos.x >= 0 && samplePos.y >= 0) && (samplePos.x < screenSize.x && samplePos.y < screenSize.y);
-                if (inside)
+                float4 sampleColor = InputTexture[samplePos];
+                float sampleDepth = DepthTexture[samplePos].x;
+                
+                if (sampleDepth > 0)
                 {
-                    float4 sampleSSRColor = SSRColorTexture[samplePos];
-                    float sampleDepth = DepthTexture[samplePos];
-                    if (sampleDepth > 0)
-                    {
-                        float3 sampleNormalWS;
-                        float sampleRoughness;
-                        GetNormalRoughness(samplePos, sampleNormalWS, sampleRoughness);
+                    float3 sampleNormalWS;
+                    float sampleRoughness;
+                    GetNormalRoughness(samplePos, sampleNormalWS, sampleRoughness);
+    
+                    float luminanceP = Color::RGBToLuminance(sampleColor.rgb);
+                    
+                    float weight = CalculateWeight(depthWidthCenter.x, sampleDepth, phiDepth, normalWS, sampleNormalWS, phiNormal, luminanceCenter, luminanceP, phiLuminance);
 
-                        float luminanceP = Color::RGBToLuminance(sampleSSRColor.rgb);
-                        float weight = CalculateWeight(depthCenter, sampleDepth, phiDepth, normalWS, sampleNormalWS, phiNormal, luminanceCenter, luminanceP, phiLuminance) * kernelWeights[abs(kx)] * kernelWeights[abs(ky)];
-
-                        blendedColor += sampleSSRColor.rgb * weight;
-                        weightSum += weight;
-                    }
+                    float kernel = kernelWeights[abs(x)] * kernelWeights[abs(y)];
+                    weight *= kernel;
+                    
+                    blendedColor += sampleColor.rgb * weight;
+                    weightSum += weight;
                 }
             }
         }
-        if (weightSum > 0.f)
-        {
-            blendedColor /= weightSum;
-        }
-        else
-        {
-            blendedColor = ssrColor.rgb;
-        }
+    }
+    
+    if (weightSum > 0.f)
+    {
+        blendedColor /= weightSum;
+    }
+    else
+    {
+        blendedColor = inputColor.rgb;
     }
 
-    FilteredOutput[DTid.xy] = float4(blendedColor, 1.0);
+    FilteredOutput[DTid.xy] = float4(blendedColor, variance);
 }

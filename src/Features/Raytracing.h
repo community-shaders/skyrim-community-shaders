@@ -66,6 +66,9 @@
 
 using namespace magic_enum::bitwise_operators;
 
+#define STATIC_ASSERT_ENUM_COUNT(EnumType, Array) \
+	static_assert(_countof(Array) == magic_enum::enum_count<EnumType>(), "Array size must match enum count");
+
 struct Raytracing : public OverlayFeature
 {
 	// DX12 will not like if we don't respect these numbers and try to write over the resource end
@@ -146,25 +149,6 @@ struct Raytracing : public OverlayFeature
 	};
 	using ShadowsHeap = Heap<ShadowsHeapDef::Table, ShadowsHeapDef::Slot>;
 
-	struct SVGFHeapDef
-	{
-		enum class Table
-		{
-			UAV,
-			SRV
-		};
-
-		enum class Slot
-		{
-			ShadowMask,
-			Depth,
-			TLAS,
-			NumDescriptors,
-			None
-		};
-	};
-	using SVGFHeap = Heap<SVGFHeapDef::Table, SVGFHeapDef::Slot>;
-
 	////////////////////////////////////////////////// Boilerplate
 	// Metadata
 	virtual inline std::string GetName() override { return "Raytracing"; }
@@ -196,10 +180,12 @@ struct Raytracing : public OverlayFeature
 
 	void DrawSHaRCSettings();
 	void DrawSVGFSettings();
+	void DrawSVGFInternalSettings(const char* name, SVGFPipeline::Settings& svgfSettings);
 #ifdef DLSS_RR
 	void DrawDLSSRRSettings();
 #endif
 	void DrawDenoiserSettings();
+	void DrawResolutionSettings();
 	void DrawLightingSettings();
 	void DrawLightSettings();
 
@@ -222,6 +208,7 @@ struct Raytracing : public OverlayFeature
 	void SetupSharedRT();
 	void CompileShaders();
 	void CompileComputeShaders();
+	void CompileCompositeShader();
 
 	void CompileRTGIShaders();
 	void CompileRTShadowsShaders();
@@ -386,7 +373,7 @@ struct Raytracing : public OverlayFeature
 		"Diffuse only, no specular.",
 		"Diffuse and Specular with BRDF."
 	};
-	static_assert(_countof(LightEvalModeTooltips) == magic_enum::enum_count<LightEvalMode>());
+	STATIC_ASSERT_ENUM_COUNT(LightEvalMode, LightEvalModeTooltips);
 
 	enum struct LightingMode : int32_t
 	{
@@ -398,7 +385,7 @@ struct Raytracing : public OverlayFeature
 		"Diffuse only, no reflections.",
 		"Physically Based Rendering mode with diffuse and reflections."
 	};
-	static_assert(_countof(LightingModeTooltips) == magic_enum::enum_count<LightingMode>());
+	STATIC_ASSERT_ENUM_COUNT(LightingMode, LightingModeTooltips);
 
 	enum struct TraceMode : int32_t
 	{
@@ -410,7 +397,15 @@ struct Raytracing : public OverlayFeature
 		"Reference mode with no cache.",
 		"Enables Spatially Hashed Radiance Cache, a technique aimed at improving signal quality and performance."
 	};
-	static_assert(_countof(TraceModeTooltips) == magic_enum::enum_count<TraceMode>());
+	STATIC_ASSERT_ENUM_COUNT(TraceMode, TraceModeTooltips);
+
+	enum struct Resolution : int32_t
+	{
+		Full,
+		Half,
+		Quarter,
+		Eighth
+	};
 
 #ifdef DLSS_RR
 	static constexpr Denoiser DefaultDenoiser = Denoiser::DLSSRR;
@@ -467,6 +462,7 @@ struct Raytracing : public OverlayFeature
 		AdvancedSettings AdvancedSettings;
 		TraceMode TraceMode = TraceMode::SHaRC;
 		Denoiser Denoiser = DefaultDenoiser;
+		Resolution Resolution = Resolution::Full;
 		int Bounces = 2;
 		int SamplesPerPixel = 1;
 		float2 Roughness = { 0.0f, 1.0f };
@@ -485,7 +481,8 @@ struct Raytracing : public OverlayFeature
 #ifdef DLSS_RR
 		DLSSRRSettings DLSSRR;
 #endif
-		SVGFPipeline::Settings SVGF;
+		SVGFPipeline::Settings SVGFDiffuse;
+		SVGFPipeline::Settings SVGFSpecular;
 		bool PerformanceOverlay = false;
 		std::string Defines = "";
 		DebugOutput DebugOutput = DebugOutput::None;
@@ -535,7 +532,7 @@ struct Raytracing : public OverlayFeature
 	void CommitModel(Model* model);
 
 	// Creates mesh buffers for all graph TriShapes, handles materials and builds a single BLAS for the node
-	void CreateModel(RE::TESObjectREFR* refr, const char* path, RE::NiNode* pRoot);
+	void CreateModel(RE::TESForm* refr, const char* path, RE::NiNode* pRoot);
 
 	// Removes the instance and optionally also releases the model and all its buffers if refCount reaches 0
 	bool RemoveInstance(RE::NiNode* pRoot, bool releaseModel);
@@ -591,12 +588,10 @@ struct Raytracing : public OverlayFeature
 	};
 
 	eastl::shared_ptr<DefaultTexture> defaultWhiteTexture = nullptr;
+	eastl::shared_ptr<DefaultTexture> defaultGrayTexture = nullptr;
 	eastl::shared_ptr<DefaultTexture> defaultNormalTexture = nullptr;
 	eastl::shared_ptr<DefaultTexture> defaultBlackTexture = nullptr;
 	eastl::shared_ptr<DefaultTexture> defaultRMAOSTexture = nullptr;
-	eastl::shared_ptr<DefaultTexture> defaultSpecularTexture = nullptr;
-	eastl::shared_ptr<DefaultTexture> defaultEnvTexture = nullptr;
-	eastl::shared_ptr<DefaultTexture> defaultEnvMaskTexture = nullptr;
 
 	// We'll group trishapes by their parent nodes, hopefully trishapes don't move on their own
 	eastl::unordered_map<eastl::string, eastl::unique_ptr<Model>> models;
@@ -704,7 +699,7 @@ struct Raytracing : public OverlayFeature
 	winrt::com_ptr<ID3D11ComputeShader> copyDepthCS = nullptr;
 	winrt::com_ptr<ID3D11ComputeShader> convertTexturesCS = nullptr;
 	winrt::com_ptr<ID3D11ComputeShader> convertTexturesPTCS = nullptr;
-	winrt::com_ptr<ID3D11ComputeShader> trueLinearToGammaCS = nullptr;
+	winrt::com_ptr<ID3D11ComputeShader> compositeCS = nullptr;
 
 	eastl::unique_ptr<DX12::StructuredBufferUpload<D3D12_RAYTRACING_INSTANCE_DESC>> blasInstanceBuffer = nullptr;
 	eastl::vector<D3D12_RAYTRACING_INSTANCE_DESC> blasInstances;
@@ -808,7 +803,7 @@ struct Raytracing : public OverlayFeature
 	eastl::unique_ptr<DX12::Texture2D> outputTexture = nullptr;
 	eastl::unique_ptr<DX12::Texture2D> diffuseAlbedoPathTracingTexture = nullptr;
 	eastl::unique_ptr<DX12::Texture2D> normalRoughnessPathTracingTexture = nullptr;
-	eastl::unique_ptr<DX12::Texture2D> specularAlbedoTexture = nullptr;
+	eastl::unique_ptr<WrappedResource> specularAlbedoTexture = nullptr;
 	eastl::unique_ptr<DX12::Texture2D> specularHitDistanceTexture = nullptr;
 
 	eastl::unique_ptr<WrappedResource> depthTexture = nullptr;
@@ -911,8 +906,10 @@ struct Raytracing : public OverlayFeature
 								for (auto& shape : model->shapes) {
 									auto& material = shape->material;
 
-									if (index == material.BaseTexture->GetIndex())
-										logger::error("[RT]\t\t NiSourceTexture::Destructor - Found in: {}", key);
+									for (auto& materialTexture : material.Textures) {
+										if (index == materialTexture->GetIndex())
+											logger::critical("[RT]\t\t NiSourceTexture::Destructor - Found in: {}", key);
+									}
 								}
 							}
 
@@ -991,8 +988,15 @@ struct Raytracing : public OverlayFeature
 				auto& rt = globals::features::raytracing;
 				rt.renderingShadowmap = true;
 
-				if (rt.Active() && rt.settings.RaytracedShadows)
+				if (rt.Active() && rt.settings.RaytracedShadows) {
 					rt.UpdateShadowsFrameBuffer();
+
+					auto& runtimeData = light->GetShadowDirectionalLightRuntimeData();
+					for (size_t i = 0; i < 3; i++) {
+						runtimeData.startSplitDistances[i] = 0;
+						runtimeData.endSplitDistances[i] = 0;
+					}
+				}
 
 				// This is effectively bypassed (removing the call freezes the game...)
 				func(light, a2);
@@ -1001,35 +1005,7 @@ struct Raytracing : public OverlayFeature
 
 				if (rt.Active() && rt.settings.RaytracedShadows) {
 					rt.shadowLight = light;
-					//rt.UpdateShadowInstances();
 				}
-			}
-
-			static inline REL::Relocation<decltype(thunk)> func;
-		};
-
-		struct BSShaderAccumulator_StartAccumulating
-		{
-			static void thunk(RE::BSGraphics::BSShaderAccumulator* shaderAccumulator, RE::NiCamera const* camera)
-			{
-				auto& rt = globals::features::raytracing;
-
-				// Bypassing this alone does absolutely nothing.
-				if (!rt.Active() || !rt.renderingShadowmap || !rt.settings.RaytracedShadows)
-					func(shaderAccumulator, camera);
-			}
-
-			static inline REL::Relocation<decltype(thunk)> func;
-		};
-
-		struct BSShaderAccumulator_FinishAccumulatingDispatch
-		{
-			static void thunk(RE::BSGraphics::BSShaderAccumulator* shaderAccumulator, uint32_t renderFlags)
-			{
-				auto& rt = globals::features::raytracing;
-
-				if (!rt.Active() || !rt.renderingShadowmap || !rt.settings.RaytracedShadows)
-					func(shaderAccumulator, renderFlags);
 			}
 
 			static inline REL::Relocation<decltype(thunk)> func;
@@ -1046,6 +1022,38 @@ struct Raytracing : public OverlayFeature
 				else
 					func(a1);
 			};
+			static inline REL::Relocation<decltype(thunk)> func;
+		};
+
+		template <typename T>
+		struct Load
+		{
+			static bool thunk(RE::TESObjectLAND* oThis, RE::TESFile* a_mod)
+			{
+				bool result = func(oThis, a_mod);
+
+				if (auto& rt = globals::features::raytracing; rt.Active()) {
+					logger::info("[RT] {}::Load", typeid(*oThis).name());
+
+					RE::TESObjectLAND::LoadedLandData* loadedLandData = oThis->loadedData;
+
+					if (loadedLandData) {
+						logger::info("[RT] LoadedLandData");
+
+						if (loadedLandData->mesh) {
+							for (uint i = 0; i < 4; i++) {
+								auto mesh = loadedLandData->mesh[i];
+
+								if (mesh) {
+									logger::info("[RT] Mesh [{}]", i);
+								}
+							}
+						}
+					}
+				}
+
+				return result;
+			}
 			static inline REL::Relocation<decltype(thunk)> func;
 		};
 
@@ -1068,12 +1076,18 @@ struct Raytracing : public OverlayFeature
 					if (flags & MarkerFlags::MapMarker || flags & MarkerFlags::HeadingMarker)
 						return result;
 
+					logger::info("[RT] Load3D - Name: {} - FullLodRef: {}", typeid(*baseObject).name(), oThis->GetFullLODRef());
+
 					/*RE::FormID id = baseObject->GetFormID();
 					logger::info("[RT] Load3DA - Name: {}, Flags [0x{:8X}]: {}", typeid(*baseObject).name(), flags, GetFlagsString<RE::TESObjectREFR::RecordFlags::RecordFlag>(flags));
 					logger::info("[RT] Load3DA - FormID: [0x{:8X}], FormType: {}", id, magic_enum::enum_name(type));*/
 
 					if (auto* model = baseObject->As<RE::TESModel>()) {
 						rt.CreateModel(oThis, model->GetModel(), netimmerse_cast<RE::NiNode*>(result));
+					} else if (auto* land = baseObject->As<RE::TESObjectLAND>()) {
+						logger::info("[RT] Load3D - Land {}", land->GetName());
+					} else if (auto* world = baseObject->As<RE::TESWorldSpace>()) {
+						logger::info("[RT] WorldSpace - Land {}", world->GetName());
 					}
 				}
 
@@ -1215,10 +1229,49 @@ struct Raytracing : public OverlayFeature
 			static inline REL::Relocation<decltype(thunk)> func;
 		};
 
+		struct TESObjectLAND_Attach3D
+		{
+			static void thunk(RE::TESObjectLAND* oThis, char a2)
+			{
+				func(oThis, a2);
+
+				logger::info("[RT] TESObjectLAND_Attach3D - IsLODLand: {}", oThis->QIsLODLandObject());
+
+				if (!oThis)
+					return;
+
+				auto* cell = oThis->parentCell;
+
+				if (!cell->IsExteriorCell())
+					return;
+
+				auto& runtimeData = cell->GetRuntimeData();
+
+				auto* exteriorData = runtimeData.cellData.exterior;
+
+				auto* loadedData = oThis->loadedData;
+
+				if (!loadedData || !loadedData->mesh)
+					return;
+
+				for (uint i = 0; i < 4; i++) {
+					auto mesh = loadedData->mesh[i];
+
+					if (!mesh)
+						continue;
+
+					globals::features::raytracing.CreateModel(oThis, std::format("Landscape_{}_{}_Quad_{}", exteriorData->cellX, exteriorData->cellY, i).c_str(), mesh);
+				}
+			};
+			static inline REL::Relocation<decltype(thunk)> func;
+		};
+
 		static void Install()
 		{
 			stl::write_vfunc<0x6A, Load3D<RE::TESObjectREFR>>(RE::VTABLE_TESObjectREFR[0]);
 			stl::write_vfunc<0x6B, Release3DRelatedData<RE::TESObjectREFR>>(RE::VTABLE_TESObjectREFR[0]);
+
+			//stl::write_vfunc<0x06, Load<RE::TESObjectLAND>>(RE::VTABLE_TESObjectLAND[0]);
 
 			//stl::detour_thunk<TESObjectREFR_Enable>(REL::RelocationID(19373, 19800));
 			//stl::write_vfunc<0x89, TESObjectREFR_Disable>(RE::VTABLE_TESObjectREFR[0]);
@@ -1251,12 +1304,8 @@ struct Raytracing : public OverlayFeature
 
 			stl::write_vfunc<0xA, BSShadowDirectionalLight_RenderShadowmaps>(RE::VTABLE_BSShadowDirectionalLight[0]);
 
-			stl::write_vfunc<0x29, BSShaderAccumulator_StartAccumulating>(RE::VTABLE_BSShaderAccumulator[0]);
-			stl::write_vfunc<0x2A, BSShaderAccumulator_FinishAccumulatingDispatch>(RE::VTABLE_BSShaderAccumulator[0]);
-
-			detour_thunk<CreateTextureFromDDS>(0xd2ef80);
-
-			//logger::info("[RT] Base: [0x{:8X}]", REL::Module::get().base());
+			stl::detour_thunk<CreateTextureFromDDS>(REL::RelocationID(69334, 70716));
+			stl::detour_thunk<TESObjectLAND_Attach3D>(REL::RelocationID(18334, 18750));
 
 			logger::info("[RT] Installed hooks");
 		}
@@ -1322,6 +1371,42 @@ struct Raytracing : public OverlayFeature
 
 			auto scriptEventSourceHolder = RE::ScriptEventSourceHolder::GetSingleton();
 			scriptEventSourceHolder->GetEventSource<RE::TESObjectLoadedEvent>()->AddEventSink(&singleton);
+
+			logger::info("Registered {}", typeid(singleton).name());
+
+			return true;
+		}
+	};
+
+	class TESCellAttachDetachEventHandler : public RE::BSTEventSink<RE::TESCellAttachDetachEvent>
+	{
+	public:
+		virtual RE::BSEventNotifyControl ProcessEvent(const RE::TESCellAttachDetachEvent* a_event, RE::BSTEventSource<RE::TESCellAttachDetachEvent>*);
+
+		static bool Register()
+		{
+			static TESCellAttachDetachEventHandler singleton;
+
+			auto scriptEventSourceHolder = RE::ScriptEventSourceHolder::GetSingleton();
+			scriptEventSourceHolder->GetEventSource<RE::TESCellAttachDetachEvent>()->AddEventSink(&singleton);
+
+			logger::info("Registered {}", typeid(singleton).name());
+
+			return true;
+		}
+	};
+
+	class TESCellFullyLoadedEventHandler : public RE::BSTEventSink<RE::TESCellFullyLoadedEvent>
+	{
+	public:
+		virtual RE::BSEventNotifyControl ProcessEvent(const RE::TESCellFullyLoadedEvent* a_event, RE::BSTEventSource<RE::TESCellFullyLoadedEvent>*);
+
+		static bool Register()
+		{
+			static TESCellFullyLoadedEventHandler singleton;
+
+			auto scriptEventSourceHolder = RE::ScriptEventSourceHolder::GetSingleton();
+			scriptEventSourceHolder->GetEventSource<RE::TESCellFullyLoadedEvent>()->AddEventSink(&singleton);
 
 			logger::info("Registered {}", typeid(singleton).name());
 

@@ -417,7 +417,7 @@ float2 EvalHemiUV(float3 dir)
 float3 SampleSky(float3 dir)
 {
     float2 uv = EvalHemiUV(dir);
-    
+
     float3 color = SkyHemisphere.SampleLevel(BaseSampler, uv, 0.0f).rgb;
 
     return Color::GammaToTrueLinear(color);
@@ -426,7 +426,7 @@ float3 SampleSky(float3 dir)
 float EvalSkyOcclusion(float3 dir)
 {
     float2 uv = EvalHemiUV(dir);
-    
+
     return 1.0F - SkyHemisphere.SampleLevel(BaseSampler, uv, 0.0f).a;
 }
 

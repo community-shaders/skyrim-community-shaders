@@ -719,7 +719,16 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 
 #			if defined(TRUE_PBR)
 	float3 indirectDiffuseLobeWeight, indirectSpecularLobeWeight;
+
+#				if defined(RT)
+	if (SharedData::raytracingSettings.Albedo)
+	{
+		indirectDiffuseLobeWeight = baseColor.xyz;
+		indirectSpecularLobeWeight = 0;
+	} else
+#				else
 	PBR::GetIndirectLobeWeights(indirectDiffuseLobeWeight, indirectSpecularLobeWeight, normal, normal, viewDirection, baseColor.xyz, pbrSurfaceProperties);
+#				endif
 
 	diffuseColor.xyz += transmissionColor;
 	specularColor.xyz += specularColorPBR;
@@ -728,6 +737,10 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #			else
 
 	float3 directionalAmbientColor = max(0, mul(SharedData::DirectionalAmbient, float4(normal, 1.0)));
+
+#	if defined(RT)
+	directionalAmbientColor *= SharedData::raytracingSettings.Ambient;
+#	endif
 
 #				if defined(IBL)
 	if (SharedData::iblSettings.EnableDiffuseIBL && (!SharedData::InInterior || SharedData::iblSettings.EnableInterior)) {

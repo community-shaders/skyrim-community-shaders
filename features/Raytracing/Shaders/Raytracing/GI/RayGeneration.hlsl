@@ -115,7 +115,7 @@ void main()
     const float4 mainColor = MainTexture.SampleLevel(BaseSampler, uv, 0);
 
     [branch]
-    if (depthView < FP_Z || depth >= SKY_Z)
+    if (depthView < FP_VIEW_Z || depth >= SKY_Z)
     {
 #if defined(SHARC) && defined(SHARC_UPDATE)
         [branch]
@@ -123,9 +123,14 @@ void main()
             return;
 #endif
 
+#if defined(RAW_RADIANCE)
+        OutputTexture[idx] = float4(0.0f, 0.0f, 0.0f, 0.0f);
+        SpecularAlbedo[idx] = float4(0.0f, 0.0f, 0.0f, 0.0f);
+#else     
         OutputTexture[idx] = float4(Color::GammaToTrueLinear(mainColor.rgb), mainColor.a);
         SpecularAlbedo[idx] = float4(0.5f, 0.5f, 0.5f, 0.0f);
         SpecularHitDist[idx] = RAY_TMAX;
+#endif
         return;
     }
 
@@ -200,7 +205,7 @@ void main()
         float3 throughput = float3(1.0f, 1.0f, 1.0f);
 
 #if defined(RAW_RADIANCE)
-        float3 throughputMod = float3(1.0f, 1.0f, 1.0f);
+        float3 throughputDelta = float3(1.0f, 1.0f, 1.0f);
 #endif
 
         [loop]
@@ -237,7 +242,7 @@ void main()
             } else {
                 float3 brdWeightRaw = brdfWeight.diffuse + brdfWeight.specular;
 
-                throughputMod = brdfWeightOriginal / brdWeightRaw;
+                throughputDelta = brdfWeightOriginal / brdWeightRaw;
 
                 throughput *= brdWeightRaw;
             }
@@ -260,7 +265,7 @@ void main()
                 float3 throughputColor;
 
 #if defined(RAW_RADIANCE)
-                throughputColor = throughput * throughputMod;
+                throughputColor = throughput * throughputDelta;
 #else
                 throughputColor = throughput;
 #endif
@@ -376,21 +381,28 @@ void main()
 
     radiance /= MAX_SAMPLES;
 
+    const float2 envBRDF = BRDF::EnvBRDFApproxHirvonen(sourceSurface.Roughness, sourceBRDFContext.NdotV);
+    const float3 specularAlbedo = float3(sourceSurface.F0 * envBRDF.x + envBRDF.y);    
+    
 #if defined(PATH_TRACING)
     OutputTexture[idx] = float4(direct + radiance, 0.0f);
     DiffuseAlbedoPathTracing[idx] = float4(sourceSurface.DiffuseAlbedo, 1.0f);
     NormalRoughnessPathTracing[idx] = float4(sourceSurface.Normal, sourceSurface.Roughness);
 #else
 #   if defined(RAW_RADIANCE)
-    OutputTexture[idx] = float4(radiance, 1.0f);
+    // Diffuse Output
+    OutputTexture[idx] = float4(isSpecular ? 0.0f : radiance, 1.0f);
+    
+    // Specular Output (Reused texture from DLSS RR)
+    SpecularAlbedo[idx] = float4(isSpecular ? radiance * specularAlbedo : 0.0f, specHitDist);
 #   else
     OutputTexture[idx] = float4(Color::GammaToTrueLinear(mainColor.rgb) + radiance, 1.0f);
 #   endif
 #endif
-
-    const float2 envBRDF = BRDF::EnvBRDFApproxHirvonen(sourceSurface.Roughness, sourceBRDFContext.NdotV);
-    const float3 specularAlbedo = float3(sourceSurface.F0 * envBRDF.x + envBRDF.y);
+    
+#if !defined(RAW_RADIANCE)    
     SpecularAlbedo[idx] = float4(specularAlbedo, 0.0f);
 
     SpecularHitDist[idx] = specHitDist;
+#endif
 }
