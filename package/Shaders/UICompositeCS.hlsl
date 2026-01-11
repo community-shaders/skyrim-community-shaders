@@ -2,6 +2,7 @@
 
 Texture2D<float4> HDRScene : register(t0);
 Texture2D<float4> UIBuffer : register(t1);
+Texture2D<float4> BloomTex : register(t2);
 RWTexture2D<float4> Output : register(u0);
 
 cbuffer PerFrame : register(b0)
@@ -16,12 +17,16 @@ void main(uint3 dispatchID : SV_DispatchThreadID)
 {
 	float4 scene = HDRScene[dispatchID.xy];
 	float4 ui = UIBuffer[dispatchID.xy];
+	float3 bloom = BloomTex[dispatchID.xy].rgb;
 	
 	float paperWhite = parameters0.x;
 	float exposure = parameters0.z;
 	
-	// Apply user exposure to scene (we read from kMAIN, skipping ISHDR's auto-exposure)
-	float3 exposedScene = scene.rgb * exposure;
+	// Apply bloom to scene (additive, same as vanilla ISHDR)
+	float3 sceneWithBloom = scene.rgb + bloom;
+	
+	// Apply user exposure
+	float3 exposedScene = sceneWithBloom * exposure;
 	
 	// Convert UI from gamma to linear space
 	float3 uiLinear = Color::GammaToLinearSafe(ui.rgb);

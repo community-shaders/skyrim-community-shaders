@@ -263,13 +263,14 @@ void HDR::CompositeUI()
 	state->BeginPerfEvent("HDR UI Composite");
 	
 	// Read from kMAIN which has the linear HDR scene (pre-tonemapping)
-	// We skip ISHDR's output (which goes to clamped kFRAMEBUFFER) and handle exposure ourselves
+	// We skip ISHDR's output (which goes to clamped kFRAMEBUFFER) and handle exposure + bloom ourselves
 	auto& sceneRT = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMAIN];
+	auto& bloomRT = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kHDR_BLOOM];
 	
 	auto dispatchCount = Util::GetScreenDispatchCount(false);
 	
-	// Bind inputs: HDR scene (pre-tonemapping from kMAIN) and UI buffer
-	ID3D11ShaderResourceView* views[2] = { sceneRT.SRV, uiTexture->srv.get() };
+	// Bind inputs: HDR scene, UI buffer, and bloom
+	ID3D11ShaderResourceView* views[3] = { sceneRT.SRV, uiTexture->srv.get(), bloomRT.SRV };
 	context->CSSetShaderResources(0, ARRAYSIZE(views), views);
 	
 	// Output to hdrTexture (intermediate)
@@ -292,6 +293,7 @@ void HDR::CompositeUI()
 	// Cleanup
 	views[0] = nullptr;
 	views[1] = nullptr;
+	views[2] = nullptr;
 	context->CSSetShaderResources(0, ARRAYSIZE(views), views);
 	
 	uavs[0] = nullptr;
