@@ -25,9 +25,9 @@
 #include <imgui_stdlib.h>
 
 // WhiteFurnace here just so 'else' RAYTRACING_EXTRA_FIELDS is not empty
-#ifdef DLSS_RR 
+#ifdef DLSS_RR
 #	define RAYTRACING_EXTRA_FIELDS WhiteFurnace, DLSSRR
-#else 
+#else
 #	define RAYTRACING_EXTRA_FIELDS WhiteFurnace
 #endif
 
@@ -63,8 +63,7 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	SHaRC,
 	SVGFDiffuse,
 	SVGFSpecular,
-	RAYTRACING_EXTRA_FIELDS
-	)
+	RAYTRACING_EXTRA_FIELDS)
 
 ////////////////////////////////////////////////////////////////////////////////////
 
@@ -211,8 +210,6 @@ void Raytracing::DrawSHaRCSettings()
 }
 //SVGFDiffuse
 
-
-
 void Raytracing::DrawSVGFSettings()
 {
 	if (settings.Denoiser != Denoiser::SVGF)
@@ -304,10 +301,10 @@ void Raytracing::DrawResolutionSettings()
 {
 	bool disabled = false;
 
-	// DLSS RR manages RT resolution itself 
+	// DLSS RR manages RT resolution itself
 #ifdef DLSS_RR
 	if (settings.Denoiser == Denoiser::DLSSRR) {
-		ImGui::TextColored({1.0f, 0.0f, 0.0f, 1.0f}, "*DLSS Ray Reconstruction manages resolution via the 'Quality Mode' setting*");
+		ImGui::TextColored({ 1.0f, 0.0f, 0.0f, 1.0f }, "*DLSS Ray Reconstruction manages resolution via the 'Quality Mode' setting*");
 		disabled |= true;
 	}
 #endif
@@ -1477,7 +1474,7 @@ void Raytracing::CopyDepth()
 	//auto sampler = samplerState.get();
 	//context->CSSetSamplers(0, 1, &sampler);
 
-	eastl::array<ID3D11UnorderedAccessView*, 2> uavs = { 
+	eastl::array<ID3D11UnorderedAccessView*, 2> uavs = {
 		depthTexture->uav,
 		svgfDenoiser->depthLinearTexture->uav.get()
 	};
@@ -2706,8 +2703,8 @@ uint2 Raytracing::GetRenderSize()
 		case (Resolution::Eighth):
 			resolutionFactor = 8;
 			break;
-		default:			
-			break;		
+		default:
+			break;
 		}
 
 		renderSizeOut = { renderSizeOut.x / resolutionFactor, renderSizeOut.y / resolutionFactor };
@@ -4026,7 +4023,7 @@ void Raytracing::CompileCompositeShader()
 	if (!settings.PathTracing && settings.Denoiser == Denoiser::SVGF) {
 		defines.emplace_back("COMPOSITE", "");
 		defines.emplace_back("DIFFUSE", "");
-		defines.emplace_back("SPECULAR", "");	
+		defines.emplace_back("SPECULAR", "");
 	}
 
 	if (auto rawPtr = reinterpret_cast<ID3D11ComputeShader*>(Util::CompileShader(L"Data\\Shaders\\Raytracing\\CompositeCS.hlsl", defines, "cs_5_0")); rawPtr)

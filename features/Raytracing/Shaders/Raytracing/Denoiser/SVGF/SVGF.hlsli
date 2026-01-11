@@ -7,12 +7,12 @@ alignas(16)
 #endif
     SVGF
 {
-    uint AtrousIterations;    
+    uint AtrousIterations;
     float Alpha;
     float MomentsAlpha;
     float ColorPhi;
     float NormalPhi;
-    float DepthPhi;    
+    float DepthPhi;
     float DepthThreshold;
     float NormalThreshold;
     uint HistoryThreshold;

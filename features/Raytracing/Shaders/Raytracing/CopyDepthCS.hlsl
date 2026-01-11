@@ -16,7 +16,7 @@ void main(uint2 id : SV_DispatchThreadID)
 
     const float depthScreen = DepthIn[id];
     DepthOut[id] = depthScreen;
-    
+
     float depthLinear = ScreenToViewDepth(depthScreen, SharedData::CameraData);
     DepthViewOut[id] = float2(depthLinear, 0.0f);
 }

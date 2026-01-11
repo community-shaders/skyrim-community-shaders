@@ -57,17 +57,17 @@ float2 ReprojectUV(Texture2D<float2> MotionTexture, in float2 uv, in float depth
 {
 	// Camera motion for pixel (in ScreenPos space).
 	float2 thisScreen = (uv.xy - 0.5f) * float2(2.0f, -2.0f);
-	
+
 	float4 thisClip = float4(thisScreen, depth, 1);
-	
+
     float4 thisView = mul(FrameBuffer::CameraProjUnjitteredInverse[eyeIndex], thisClip);
     thisView.xyz = thisView.xyz / thisView.w;
-	
+
     float4 thisWorld = mul(FrameBuffer::CameraViewInverse[eyeIndex], float4(thisView.xyz, 1.0f));
     thisWorld.xyz = (thisWorld.xyz / thisWorld.w) + FrameBuffer::CameraPosAdjust[eyeIndex].xyz;
-	
+
 	float4 prevClip = mul(FrameBuffer::CameraPreviousViewProjUnjittered[eyeIndex], float4(thisWorld.xyz, 1.0f));
-	
+
 	float2 prevScreen = prevClip.xy / prevClip.w;
 
 	float2 velocity = MotionTexture.SampleLevel(LinearSampler, uv.xy * FrameBuffer::DynamicResolutionParams1.xy, 0).xy;

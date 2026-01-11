@@ -53,7 +53,6 @@ void SVGFPipeline::SetupTextureResources(uint2 size)
 
 	// RGBA16 SNORM
 	historyNormalsTexture = CreateTexture2D(size, DXGI_FORMAT_R16G16B16A16_SNORM, D3D11_BIND_SHADER_RESOURCE);
-
 }
 
 void SVGFPipeline::Denoise(ID3D11DeviceContext4* context, uint2 renderSize, Settings settings, WrappedResource* normalRoughness, WrappedResource* color, const bool diffuse) const

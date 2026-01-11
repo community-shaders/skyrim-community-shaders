@@ -12,7 +12,7 @@ RWTexture2D<float4> VarianceOutput  : register(u0);
 [numthreads(8, 8, 1)] void main(uint2 DTid : SV_DispatchThreadID)
 {
     const uint2 screenSize = Resolution;
-    
+
     if (any(DTid.xy >= screenSize))
         return;
 
@@ -26,19 +26,19 @@ RWTexture2D<float4> VarianceOutput  : register(u0);
         VarianceOutput[DTid.xy] = temporalColor;
         return;
     }*/
-    
+
     const float3 moments = MomentsTexture[DTid.xy].xyz;
     const float history = moments.z;
 
     const float historyThreshold = float(Frame.HistoryThreshold);
-    
+
     if (history <= historyThreshold) {
         float3 normalWS;
         float roughness;
         GetNormalRoughness(DTid.xy, normalWS, roughness);
 
         float luminanceCenter = Color::RGBToLuminance(temporalColor.xyz);
-        
+
         float weightSum = 0.f;
         float3 colorSum = temporalColor.xyz;
         float2 momentsSum = moments.xy;
@@ -46,7 +46,7 @@ RWTexture2D<float4> VarianceOutput  : register(u0);
         const float normalPhi = Frame.NormalPhi;
         const float colorPhi = Frame.ColorPhi;
         const float phiDepth = RADIUS * depthWidthCenter.y * Frame.DepthPhi;
-        
+
         for (int y = -RADIUS; y <= RADIUS; y++)
         {
             for (int x = -RADIUS; x <= RADIUS; x++)
@@ -59,7 +59,7 @@ RWTexture2D<float4> VarianceOutput  : register(u0);
                 if (all(samplePos >= 0) && all(samplePos < screenSize))
                 {
                     float4 neighborTemporalColor = TemporalTexture[samplePos];
-                    
+
                     float3 neighborNormalWS;
                     float neighborRoughness;
                     GetNormalRoughness(samplePos, neighborNormalWS, neighborRoughness);
@@ -76,13 +76,13 @@ RWTexture2D<float4> VarianceOutput  : register(u0);
         }
 
         weightSum = max(weightSum, VAR_EPSILON);
-        
+
         colorSum /= weightSum;
         momentsSum /= weightSum;
 
         float variance = max(0.0f, momentsSum.y - momentsSum.x * momentsSum.x);
         variance *= historyThreshold / max(history, 1.0f);
-        
+
         VarianceOutput[DTid.xy] = float4(colorSum, variance);
     }
     else
