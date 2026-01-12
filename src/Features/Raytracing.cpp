@@ -1678,6 +1678,8 @@ void Raytracing::CommitModel(Model* model)
 
 	commandList->BuildRaytracingAccelerationStructure(&buildDesc, 0, nullptr);
 
+	destASFrame.emplace(model->blasBuffer->GetResource()->GetGPUVirtualAddress());
+
 	const auto& asBarrier = CD3DX12_RESOURCE_BARRIER::UAV(model->blasBuffer->GetResource());
 	commandList->ResourceBarrier(1, &asBarrier);
 
@@ -1687,8 +1689,13 @@ void Raytracing::CommitModel(Model* model)
 		tempGPUData.emplace_back(std::move(scratch), fenceValue);
 }
 
-void Raytracing::UpdateModelBLAS(Model* model) const
+void Raytracing::UpdateModelBLAS(Model* model)
 {
+	auto gpuVirtualAddr = model->blasBuffer->GetResource()->GetGPUVirtualAddress();
+
+	if (destASFrame.find(gpuVirtualAddr) != destASFrame.end())
+		return;
+
 	auto& shapes = model->shapes;
 	auto shapeCount = shapes.size();
 
@@ -1722,13 +1729,15 @@ void Raytracing::UpdateModelBLAS(Model* model) const
 	};
 
 	D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_DESC buildDesc = {
-		.DestAccelerationStructureData = model->blasBuffer->GetResource()->GetGPUVirtualAddress(),
+		.DestAccelerationStructureData = gpuVirtualAddr,
 		.Inputs = inputs,
-		.SourceAccelerationStructureData = model->blasBuffer->GetResource()->GetGPUVirtualAddress(),
+		.SourceAccelerationStructureData = gpuVirtualAddr,
 		.ScratchAccelerationStructureData = model->blasScratchBuffer->GetResource()->GetGPUVirtualAddress()
 	};
 
 	commandList->BuildRaytracingAccelerationStructure(&buildDesc, 0, nullptr);
+
+	destASFrame.emplace(model->blasBuffer->GetResource()->GetGPUVirtualAddress());
 }
 
 // A custom visit controller built to ignore billboard/particle geometry
@@ -2464,11 +2473,13 @@ void Raytracing::UpdateShadowInstances()
 	blasShadowInstanceBuffer->Upload(commandList.get());
 }
 
-void Raytracing::ReleaseTempGPUData()
+void Raytracing::PostRaytraceCleanup()
 {
 	while (!tempGPUData.empty() && tempGPUData.front().fenceValue <= fenceValue) {
 		tempGPUData.pop_front();
 	}
+
+	destASFrame.clear();
 }
 
 void Raytracing::BSShader_SetupGeometry([[maybe_unused]] RE::BSShader* oThis, [[maybe_unused]] RE::BSRenderPass* pPass, [[maybe_unused]] uint32_t renderFlags)
@@ -2969,7 +2980,7 @@ void Raytracing::DrawRTGI()
 		ga->BeginCapture();
 	}*/
 
-	ReleaseTempGPUData();
+	PostRaytraceCleanup();
 
 	if (settings.DebugOutput == DebugOutput::None) {
 		if (settings.Denoiser == Denoiser::SVGF) {
@@ -3163,7 +3174,7 @@ void Raytracing::RenderShadows()
 	DX::ThrowIfFailed(commandAllocator->Reset());
 	DX::ThrowIfFailed(commandList->Reset(commandAllocator.get(), nullptr));
 
-	ReleaseTempGPUData();
+	PostRaytraceCleanup();
 
 	d3d11Context->CopyResource(shadowMask.texture, shadowMaskTexture->resource11);
 }

@@ -137,8 +137,6 @@ void SkinningPipeline::RestoreResources(ID3D12GraphicsCommandList4* commandList)
 
 	if (barrierCount > 0)
 		commandList->ResourceBarrier(barrierCount, barriers.data());
-
-	queueModels.clear();
 }
 
 void SkinningPipeline::UpdateBLASES(ID3D12GraphicsCommandList4* commandList)
@@ -162,6 +160,11 @@ void SkinningPipeline::UpdateBLASES(ID3D12GraphicsCommandList4* commandList)
 
 	if (blasUpdateCount > 0)
 		commandList->ResourceBarrier(blasUpdateCount, uavBarriers.data());
+}
+
+void SkinningPipeline::ClearQueue()
+{
+	queueModels.clear();
 }
 
 void SkinningPipeline::Dispatch(ID3D12GraphicsCommandList4* commandList)
@@ -202,6 +205,8 @@ void SkinningPipeline::Dispatch(ID3D12GraphicsCommandList4* commandList)
 	RestoreResources(commandList);
 
 	UpdateBLASES(commandList);
+
+	ClearQueue();
 }
 
 /*void Raytracing::UpdateDynamicSkinning(ID3D12GraphicsCommandList4* pCommandList)

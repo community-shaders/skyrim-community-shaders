@@ -238,7 +238,7 @@ struct Raytracing : public OverlayFeature
 	void CopyDepth();
 	void ConvertTextures() const;
 
-	void ReleaseTempGPUData();
+	void PostRaytraceCleanup();
 
 	void BuildTLAS();
 	void RebuildTLAS(ID3D12GraphicsCommandList4* pCommandList, size_t numDescs, D3D12_GPU_VIRTUAL_ADDRESS instanceDescs);
@@ -531,7 +531,7 @@ struct Raytracing : public OverlayFeature
 	bool RemoveInstance(RE::FormID formID, bool releaseModel);
 
 	// TODO: Move to Model struct
-	void UpdateModelBLAS(Model* model) const;
+	void UpdateModelBLAS(Model* model);
 
 	eastl::shared_ptr<Allocation> GetTextureRegister(ID3D11Texture2D* texture, eastl::shared_ptr<Allocation> defaultTexture);
 
@@ -602,6 +602,9 @@ struct Raytracing : public OverlayFeature
 			// This doesn't work at all for actors
 			/*if (pNiNode->lastUpdatedFrameCounter < globals::state->frameCount && hasUpdated)
 				return true;*/
+
+			if (pNiNode->GetAppCulled())
+				return true;
 
 			// Instance has already been updated this frame
 			if (!frameChecker.IsNewFrame())
@@ -764,6 +767,9 @@ struct Raytracing : public OverlayFeature
 	};
 
 	eastl::deque<TempGPUData> tempGPUData;
+
+	// All 'DestAccelerationStructureData' written with 'BuildRaytracingAccelerationStructure' this frame
+	eastl::hash_set<D3D12_GPU_VIRTUAL_ADDRESS> destASFrame;
 
 	// D3D11
 	winrt::com_ptr<ID3D11Device5> d3d11Device = nullptr;

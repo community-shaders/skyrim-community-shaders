@@ -43,6 +43,7 @@ using SkinningHeap = Heap<SkinningHeapDef::Table, SkinningHeapDef::Slot>;
 struct SkinningPipeline : ComputePipeline<SkinningHeap>
 {
 	static constexpr uint THREAD_SIZE = 64;
+	static constexpr uint MAX_BATCHES = 4;
 
 	struct ModelUpdate
 	{
@@ -64,5 +65,6 @@ struct SkinningPipeline : ComputePipeline<SkinningHeap>
 	bool PrepareResources(ID3D12GraphicsCommandList4* commandList, uint& count, uint& vertexCount);
 	void UpdateBLASES(ID3D12GraphicsCommandList4* commandList);
 	void RestoreResources(ID3D12GraphicsCommandList4* commandList);
+	void ClearQueue();
 	void Dispatch(ID3D12GraphicsCommandList4* commandList);
 };
