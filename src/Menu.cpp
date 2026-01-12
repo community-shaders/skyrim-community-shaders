@@ -484,9 +484,6 @@ bool Menu::LoadThemePreset(const std::string& themeName)
 			// Apply background blur enabled state from theme
 			BackgroundBlur::SetEnabled(settings.Theme.BackgroundBlurEnabled);
 
-			// Mark preset as selected on successful load
-			settings.SelectedThemePreset = themeName;
-
 			logger::info("Applied theme preset: {}", themeName);
 			return true;
 		} catch (const std::exception& e) {
@@ -501,10 +498,8 @@ bool Menu::LoadThemePreset(const std::string& themeName)
 	}
 }
 
-// ... rest of the code remains the same ...
 void Menu::CreateDefaultThemes()
 {
-	// Use ThemeManager to create default theme files
 	auto themeManager = ThemeManager::GetSingleton();
 	themeManager->CreateDefaultThemeFiles();
 }
