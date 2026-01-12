@@ -256,7 +256,7 @@ struct IDXGISwapChain_Present
 		state->Reset();
 
 		auto hdr = HDR::GetSingleton();
-		bool hdrActive = hdr && hdr->uiTexture && hdr->uiTexture->rtv && hdr->uiTexture->resource && 
+		bool hdrActive = hdr && hdr->uiTexture && hdr->uiTexture->rtv && hdr->uiTexture->resource &&
 		                 hdr->hdrDataCB && hdr->outputTexture;
 
 		if (hdrActive) {
@@ -279,7 +279,7 @@ struct IDXGISwapChain_Present
 		menu->DrawOverlay();
 
 		if (hdrActive) {
-			// Unbind render target before ApplyHDR to avoid resource hazard 
+			// Unbind render target before ApplyHDR to avoid resource hazard
 			// (uiTexture was RTV, now needs to be SRV)
 			ID3D11RenderTargetView* nullRTV = nullptr;
 			globals::d3d::context->OMSetRenderTargets(1, &nullRTV, nullptr);

@@ -64,12 +64,12 @@ void HDR::DrawSettings()
 
 	ImGui::Spacing();
 	ImGui::Separator();
-	
+
 	if (ImGui::CollapsingHeader("HDR10 Display Metadata")) {
 		bool metadataChanged = false;
 
 		ImGui::Text("Color Primaries (CIE 1931 xy coordinates)");
-		
+
 		uint oldRedX = settings.redPrimaryX;
 		uint oldRedY = settings.redPrimaryY;
 		ImGui::SliderInt("Red Primary X", reinterpret_cast<int*>(&settings.redPrimaryX), 0, 50000);
@@ -93,7 +93,7 @@ void HDR::DrawSettings()
 
 		ImGui::Spacing();
 		ImGui::Text("White Point");
-		
+
 		uint oldWhiteX = settings.whitePointX;
 		uint oldWhiteY = settings.whitePointY;
 		ImGui::SliderInt("White Point X", reinterpret_cast<int*>(&settings.whitePointX), 0, 50000);
@@ -103,7 +103,7 @@ void HDR::DrawSettings()
 
 		ImGui::Spacing();
 		ImGui::Text("Luminance");
-		
+
 		uint oldMaxMaster = settings.maxMasteringLuminance;
 		ImGui::SliderInt("Max Mastering Luminance (nits)", reinterpret_cast<int*>(&settings.maxMasteringLuminance), 400, 10000);
 		if (oldMaxMaster != settings.maxMasteringLuminance)
@@ -166,7 +166,7 @@ void HDR::RestoreDefaultSettings()
 void HDR::SetupResources()
 {
 	logger::info("[HDR] SetupResources called");
-	
+
 	auto renderer = globals::game::renderer;
 	auto& main = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMAIN];
 
@@ -229,7 +229,7 @@ void HDR::SetupResources()
 	hdrDataCB = new ConstantBuffer(ConstantBufferDesc<HDRDataCB>());
 
 	UpdateHDRData();
-	
+
 	// Set up HDR on D3D11 swap chain (when not using Frame Gen)
 	auto& upscaling = globals::features::upscaling;
 	if (!upscaling.d3d12SwapChainActive) {
@@ -238,7 +238,7 @@ void HDR::SetupResources()
 			HRESULT hr = swapChain4->SetColorSpace1(DXGI_COLOR_SPACE_RGB_FULL_G2084_NONE_P2020);
 			if (SUCCEEDED(hr)) {
 				logger::info("[HDR] Set D3D11 swap chain color space to HDR10 (PQ/BT.2020)");
-				
+
 				DXGI_HDR_METADATA_HDR10 hdrMetadata = {};
 				hdrMetadata.RedPrimary[0] = static_cast<UINT16>(settings.redPrimaryX);
 				hdrMetadata.RedPrimary[1] = static_cast<UINT16>(settings.redPrimaryY);
@@ -252,7 +252,7 @@ void HDR::SetupResources()
 				hdrMetadata.MinMasteringLuminance = settings.minMasteringLuminance;
 				hdrMetadata.MaxContentLightLevel = static_cast<UINT16>(settings.maxContentLightLevel);
 				hdrMetadata.MaxFrameAverageLightLevel = static_cast<UINT16>(settings.maxFrameAverageLightLevel);
-				
+
 				swapChain4->SetHDRMetaData(DXGI_HDR_METADATA_TYPE_HDR10, sizeof(hdrMetadata), &hdrMetadata);
 				logger::info("[HDR] Set D3D11 swap chain HDR10 metadata");
 			} else {
@@ -263,8 +263,8 @@ void HDR::SetupResources()
 			logger::warn("[HDR] D3D11 swap chain does not support IDXGISwapChain4");
 		}
 	}
-	
-	logger::info("[HDR] SetupResources complete - hdrDataCB={}, hdrTexture={}, outputTexture={}", 
+
+	logger::info("[HDR] SetupResources complete - hdrDataCB={}, hdrTexture={}, outputTexture={}",
 		hdrDataCB ? "valid" : "NULL",
 		hdrTexture ? "valid" : "NULL",
 		outputTexture ? "valid" : "NULL");
@@ -285,7 +285,7 @@ void HDR::BeginUIRendering()
 	if (!uiTexture || !uiTexture->rtv) {
 		static bool loggedOnce = false;
 		if (!loggedOnce) {
-			logger::warn("[HDR] BeginUIRendering skipped - uiTexture={}, rtv={}", 
+			logger::warn("[HDR] BeginUIRendering skipped - uiTexture={}, rtv={}",
 				uiTexture ? "valid" : "NULL",
 				(uiTexture && uiTexture->rtv) ? "valid" : "NULL");
 			loggedOnce = true;
@@ -373,16 +373,16 @@ void HDR::SetUIBuffer()
 	// Follow Frame Gen approach: redirect kFRAMEBUFFER.RTV to our UI texture
 	// This way vanilla Skyrim UI renders to our texture
 	auto& data = globals::game::renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGET::kFRAMEBUFFER];
-	
+
 	// Save original RTV for restoration after Present
 	if (!savedFramebufferRTV) {
 		savedFramebufferRTV = data.RTV;
 	}
-	
+
 	// Clear UI texture before vanilla UI renders (just like Frame Gen does after Present)
 	float clearColor[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
 	globals::d3d::context->ClearRenderTargetView(uiTexture->rtv.get(), clearColor);
-	
+
 	// Redirect to our UI texture
 	data.RTV = uiTexture->rtv.get();
 	globals::d3d::context->OMSetRenderTargets(1, &data.RTV, nullptr);
@@ -422,9 +422,9 @@ void HDR::ApplyHDR()
 	if (!hdrDataCB || !hdrTexture || !outputTexture) {
 		static bool loggedOnce = false;
 		if (!loggedOnce) {
-			logger::warn("[HDR] ApplyHDR early return: hdrDataCB={}, hdrTexture={}, outputTexture={}", 
+			logger::warn("[HDR] ApplyHDR early return: hdrDataCB={}, hdrTexture={}, outputTexture={}",
 				hdrDataCB ? "valid" : "NULL",
-				hdrTexture ? "valid" : "NULL", 
+				hdrTexture ? "valid" : "NULL",
 				outputTexture ? "valid" : "NULL");
 			loggedOnce = true;
 		}
@@ -445,7 +445,7 @@ void HDR::ApplyHDR()
 	static bool loggedDispatch = false;
 	if (!loggedDispatch) {
 		logger::info("[HDR] ApplyHDR running - dispatching compute shader");
-		logger::info("[HDR] uiTexture={}, uiTexture->srv={}", 
+		logger::info("[HDR] uiTexture={}, uiTexture->srv={}",
 			uiTexture ? "valid" : "NULL",
 			(uiTexture && uiTexture->srv) ? "valid" : "NULL");
 		loggedDispatch = true;

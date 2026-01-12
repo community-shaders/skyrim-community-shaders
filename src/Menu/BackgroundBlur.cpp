@@ -3,9 +3,9 @@
 // License: MIT License
 
 #include "BackgroundBlur.h"
+#include "../Features/HDR.h"
 #include "../Globals.h"
 #include "../Util.h"
-#include "../Features/HDR.h"
 
 #include <algorithm>
 #include <cmath>

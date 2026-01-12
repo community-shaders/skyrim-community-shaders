@@ -35,26 +35,26 @@ float3 ReinhardExtended(float3 color, float whitePoint)
 		// SDR Path: Tonemap, convert to gamma space, blend UI, clamp to BT.709
 		float3 tonemapped = Reinhard(linearScene);
 		float3 gammaScene = Color::TrueLinearToGamma(tonemapped);
-		
+
 		// UI is already in gamma space (RGBA8 UNORM), blend over gamma scene
 		float3 blended = lerp(gammaScene, ui.rgb, ui.a);
-		
+
 		// Clamp to BT.709 range (0-1) for SDR output
 		finalColor = saturate(blended);
 	} else {
 		// HDR Path: Tonemap, blend UI in gamma space, output linear HDR
 		float whitePoint = peakNits / paperWhiteNits;
 		float3 tonemapped = ReinhardExtended(linearScene, whitePoint);
-		
+
 		// Convert to gamma space for UI blending
 		float3 gammaScene = Color::TrueLinearToGamma(tonemapped);
-		
+
 		// UI is in gamma space, blend over gamma scene
 		float3 blended = lerp(gammaScene, ui.rgb, ui.a);
-		
+
 		// Convert back to linear for HDR output
 		float3 linearBlended = Color::GammaToTrueLinear(blended);
-		
+
 		// Scale to paper white nits and convert to BT.2020 PQ for HDR10 output
 		float3 scaledLinear = linearBlended * (paperWhiteNits / 80.0);
 		float3 bt2020 = Color::BT709ToBT2020(scaledLinear);
