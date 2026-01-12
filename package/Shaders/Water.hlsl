@@ -1310,7 +1310,7 @@ float3 finalColor = lerp(finalColorPreFog, fogColor * PosAdjust[eyeIndex].w, Col
 #					else
 	float specularFraction = lerp(1, fresnel, distanceBlendFactor);
 	float3 finalColorPreFog = lerp(diffuseOutput.refractionDiffuseColor, specularColor, specularFraction) + sunColor * depthControl.w;
-  
+
 #						if !defined(UNIFIED_WATER)
     float fogDistanceFactor = input.FogParam.w;
     float3 preFogColor = Color::Fog(input.FogParam.xyz);
