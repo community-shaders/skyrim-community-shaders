@@ -1,5 +1,7 @@
 #include "ExponentialHeightFog.h"
 
+#include "WeatherVariableRegistry.h"
+
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
     ExponentialHeightFog::Settings,
     enabled,
@@ -41,4 +43,70 @@ void ExponentialHeightFog::DrawSettings()
     ImGui::ColorEdit3("Inscattering Cubemap Tint", (float*)&settings.inscatteringTint);
     ImGui::SliderFloat("Inscattering Cubemap Tint Alpha", &settings.inscatteringTint.w, 0.0f, 1.0f, "%.2f");
     ImGui::SliderFloat("Cubemap Mip Level", &settings.cubemapMipLevel, 1.0f, 7.0f, "%.1f");
+}
+
+void ExponentialHeightFog::RegisterWeatherVariables()
+{
+    auto* registry = WeatherVariables::GlobalWeatherRegistry::GetSingleton()->GetOrCreateFeatureRegistry(GetShortName());
+    registry->RegisterVariable(std::make_shared<WeatherVariables::FloatVariable>(
+        "Start Distance",
+		"startDistance",
+		"Start distance of the fog, from the camera",
+		&settings.startDistance,
+		0.0f,
+		0.0f, 100000.0f
+		));
+
+    registry->RegisterVariable(std::make_shared<WeatherVariables::FloatVariable>(
+        "Fog Height",
+        "fogHeight",
+        "Base height of the fog effect",
+        &settings.fogHeight,
+        0.0f,
+        -22000.0f, 22000.0f
+        ));
+
+    registry->RegisterVariable(std::make_shared<WeatherVariables::FloatVariable>(
+        "Fog Height Falloff",
+        "fogHeightFalloff",
+        "Height density factor controls how the density increases as height decreases",
+        &settings.fogHeightFalloff,
+        0.2f,
+        0.001f, 2.0f
+        ));
+
+    registry->RegisterVariable(std::make_shared<WeatherVariables::FloatVariable>(
+        "Fog Density",
+        "fogDensity",
+        "Overall density of the fog",
+        &settings.fogDensity,
+        0.02f,
+        0.0f, 1.0f
+        ));
+
+    registry->RegisterVariable(std::make_shared<WeatherVariables::FloatVariable>(
+        "Directional Inscattering Multiplier",
+        "directionalInscatteringMultiplier",
+        "Multiplier for directional light inscattering",
+        &settings.directionalInscatteringMultiplier,
+        1.0f,
+        0.0f, 10.0f
+        ));
+
+    registry->RegisterVariable(std::make_shared<WeatherVariables::FloatVariable>(
+        "Directional Inscattering Exponent",
+        "directionalInscatteringExponent",
+        "Controls the size of the directional inscattering cone",
+        &settings.directionalInscatteringExponent,
+        4.0f,
+        1.0f, 128.0f
+        ));
+
+    registry->RegisterVariable(std::make_shared<WeatherVariables::Float4Variable>(
+        "Inscattering Tint",
+        "inscatteringTint",
+        "RGB tint for the inscattering cubemap with alpha for intensity",
+        &settings.inscatteringTint,
+        float4{ 1.0f, 1.0f, 1.0f, 1.0f }
+        ));
 }
