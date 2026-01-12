@@ -21,12 +21,10 @@ struct HDRDisplay : public Feature
 	virtual std::pair<std::string, std::vector<std::string>> GetFeatureSummary() override
 	{
 		return {
-			"High Dynamic Range output for HDR displays",
+			"Real High Dynamic Range output for HDR displays. ",
 			{
 				"HDR10 output support (R10G10B10A2_UNORM)",
-				"Multiple tonemapper options",
 				"Configurable paper white and peak brightness",
-				"HDR color grading controls",
 			}
 		};
 	}
