@@ -36,11 +36,11 @@ cbuffer PerFrame : register(b0)
 	float peakLinear = peakNits / paperWhiteRef;
 	float3 tonemapped = renodx::tonemap::ReinhardExtended(color, peakLinear, 1.0, 0.0);
 	color = lerp(color, tonemapped, enableTonemapping);
-	
+
 	float3 pqEncoded = Color::pq::Encode(color, peakNits);
 	float3 gammaEncoded = Color::TrueLinearToGamma(color);
 	color = lerp(pqEncoded, gammaEncoded, convertToGamma);
-	
+
 	// Simply alpha-blend the gamma UI onto the gamma-encoded scene
 	color = color * (1.0 - ui.a) + ui.rgb;
 
