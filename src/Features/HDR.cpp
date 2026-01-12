@@ -202,8 +202,7 @@ void HDR::SetupResources()
 	outputTexture->CreateSRV(srvDesc);
 	outputTexture->CreateUAV(uavDesc);
 
-	// UI texture for separate UI rendering - use sRGB format for gamma-correct blending
-	// This ensures ImGui's alpha blending produces correct anti-aliased text edges
+	// UI texture for separate UI rendering
 	D3D11_TEXTURE2D_DESC uiTexDesc = texDesc;
 	uiTexDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
 	uiTexDesc.BindFlags = D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_UNORDERED_ACCESS;
@@ -218,9 +217,9 @@ void HDR::SetupResources()
 	uiTexture->CreateSRV(uiSrvDesc);
 	uiTexture->CreateUAV(uiUavDesc);
 
-	// Create RTV for UI texture - use SRGB view for gamma-correct blending during ImGui render
+	// Create RTV for UI texture
 	D3D11_RENDER_TARGET_VIEW_DESC rtvDesc{};
-	rtvDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM_SRGB;
+	rtvDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
 	rtvDesc.ViewDimension = D3D11_RTV_DIMENSION_TEXTURE2D;
 	rtvDesc.Texture2D.MipSlice = 0;
 	uiTexture->CreateRTV(rtvDesc);
