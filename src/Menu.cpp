@@ -217,18 +217,18 @@ void Menu::Load(json& o_json)
 {
 	// Store current Theme state before loading config
 	auto currentTheme = settings.Theme;
-	
+
 	settings = o_json;
-	
+
 	// Restore Theme - don't load it from config, only from theme preset files
 	settings.Theme = currentTheme;
-	
+
 	// Legacy support: If old config has Theme data and no SelectedThemePreset, load it
 	if (o_json.contains("Theme") && o_json["Theme"].is_object() && settings.SelectedThemePreset.empty()) {
 		bool hasFontRoles = o_json["Theme"].contains("FontRoles");
 		settings.Theme = o_json["Theme"];
 		MenuFonts::NormalizeFontRoles(settings.Theme, hasFontRoles);
-		
+
 		auto& bodyRole = settings.Theme.FontRoles[static_cast<size_t>(FontRole::Body)];
 		if (!Util::ValidateFont(bodyRole.File)) {
 			const auto& defaults = Menu::GetDefaultFontRole(FontRole::Body);
@@ -268,11 +268,11 @@ void Menu::Load(json& o_json)
 void Menu::Save(json& o_json)
 {
 	settings.Theme.FontName = settings.Theme.FontRoles[static_cast<size_t>(FontRole::Body)].File;
-	
+
 	// Save all settings except Theme values
 	// Theme values should only be saved in theme preset files, not in the main config
 	o_json = settings;
-	
+
 	// Remove Theme object from config, only keep SelectedThemePreset
 	o_json.erase("Theme");
 }

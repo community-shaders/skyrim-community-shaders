@@ -331,10 +331,11 @@ void SettingsTabRenderer::RenderThemesTab()
 		static char newThemeDisplayName[128] = "";
 		static char newThemeDescription[256] = "";
 		static bool showValidationError = false;
-	
+
 		// Update feedback tracking
 		static bool showUpdateFeedback = false;
-		struct ChangedSetting {
+		struct ChangedSetting
+		{
 			std::string path;
 			std::string oldValue;
 			std::string newValue;
@@ -466,10 +467,10 @@ void SettingsTabRenderer::RenderThemesTab()
 						// Get current settings
 						json currentThemeJson;
 						globals::menu->SaveTheme(currentThemeJson);
-						
+
 						// Get saved theme settings for comparison
 						json savedThemeJson = currentThemeInfo->themeData["Theme"];
-						
+
 						// Compare and collect changed settings (with old/new values)
 						changedSettings.clear();
 						std::function<void(const std::string&, const json&, const json&)> diffWalker;
@@ -490,16 +491,14 @@ void SettingsTabRenderer::RenderThemesTab()
 
 							// For arrays or primitives, record if different
 							if (oldVal != newVal) {
-								changedSettings.push_back({
-									path.empty() ? "<root>" : path,
+								changedSettings.push_back({ path.empty() ? "<root>" : path,
 									oldVal.is_null() ? "null" : oldVal.dump(),
-									newVal.is_null() ? "null" : newVal.dump()
-								});
+									newVal.is_null() ? "null" : newVal.dump() });
 							}
 						};
 
 						diffWalker("", savedThemeJson, currentThemeJson["Theme"]);
-						
+
 						logger::info("Attempting to update theme: '{}'", currentThemePreset);
 
 						// Overwrite the current theme with updated settings
@@ -535,7 +534,7 @@ void SettingsTabRenderer::RenderThemesTab()
 		if (showUpdateFeedback) {
 			ImGui::Spacing();
 			ImGui::Separator();
-			
+
 			if (updateSuccess) {
 				if (changedSettings.empty()) {
 					ImGui::TextColored(themeSettings.StatusPalette.SuccessColor, "Theme updated successfully - no changes detected");
@@ -550,7 +549,7 @@ void SettingsTabRenderer::RenderThemesTab()
 			} else {
 				ImGui::TextColored(themeSettings.StatusPalette.Error, "Failed to update theme");
 			}
-			
+
 			ImGui::Separator();
 		}
 
