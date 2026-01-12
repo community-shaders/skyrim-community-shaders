@@ -25,6 +25,20 @@ public:
 		bool tonemapToSDR = true;
 		uint paperWhite = 400;
 		uint peakNits = 10000;
+
+		// HDR10 display metadata (values in 0.00002 units for chromaticity)
+		uint redPrimaryX = 34000;    // 0.680
+		uint redPrimaryY = 16000;    // 0.320
+		uint greenPrimaryX = 13250;  // 0.265
+		uint greenPrimaryY = 34500;  // 0.690
+		uint bluePrimaryX = 7500;    // 0.150
+		uint bluePrimaryY = 3000;    // 0.060
+		uint whitePointX = 15635;    // 0.3127
+		uint whitePointY = 16450;    // 0.3290
+		uint maxMasteringLuminance = 1000;  // In nits (multiplied by 10000 for API)
+		uint minMasteringLuminance = 100;   // In 0.0001 nits
+		uint maxContentLightLevel = 1000;   // In nits
+		uint maxFrameAverageLightLevel = 400;  // In nits
 	};
 
 	Settings settings;
@@ -37,6 +51,7 @@ public:
 
 	void SetupResources();
 	void UpdateHDRData() const;
+	void UpdateHDRMetadata() const;
 
 	// UI rendering - redirects UI to separate target for proper compositing
 	void BeginUIRendering();

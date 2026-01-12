@@ -255,17 +255,18 @@ struct IDXGISwapChain_Present
 		auto menu = globals::menu;
 		state->Reset();
 
+		// Capture UI to separate texture for proper HDR compositing
 		auto hdr = HDR::GetSingleton();
+		if (hdr)
+			hdr->BeginUIRendering();
 
-		// ImGui renders to the same UI texture that vanilla UI uses
-		// (UI redirection started in MenuManagerDrawInterfaceStartHook)
+		// ImGui overlay renders to UI texture (or back buffer if HDR unavailable)
 		menu->DrawOverlay();
 
-		// End UI redirection after all UI (vanilla + ImGui) has rendered
-		if (hdr && hdr->IsRenderingUI())
+		if (hdr)
 			hdr->EndUIRendering();
 
-		// Always apply HDR processing pipeline
+		// Apply HDR processing pipeline - reads kMAIN + UI texture, outputs to back buffer
 		if (hdr)
 			hdr->ApplyHDR();
 
@@ -307,6 +308,11 @@ HRESULT WINAPI hk_D3D11CreateDeviceAndSwapChain(
 
 	const D3D_FEATURE_LEVEL featureLevel = D3D_FEATURE_LEVEL_11_1;
 
+	// Upgrade swap chain to HDR10 format (R10G10B10A2_UNORM)
+	DXGI_SWAP_CHAIN_DESC modifiedDesc = *pSwapChainDesc;
+	modifiedDesc.BufferDesc.Format = DXGI_FORMAT_R10G10B10A2_UNORM;
+	logger::info("[HDR] Upgrading D3D11 swap chain format from {} to R10G10B10A2_UNORM (24)", static_cast<int>(pSwapChainDesc->BufferDesc.Format));
+
 	auto ret = ptrD3D11CreateDeviceAndSwapChain(pAdapter,
 		DriverType,
 		Software,
@@ -314,7 +320,7 @@ HRESULT WINAPI hk_D3D11CreateDeviceAndSwapChain(
 		&featureLevel,
 		1,
 		SDKVersion,
-		pSwapChainDesc,
+		&modifiedDesc,
 		ppSwapChain,
 		ppDevice,
 		pFeatureLevel,

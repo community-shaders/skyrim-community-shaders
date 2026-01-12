@@ -16,16 +16,6 @@ cbuffer LLPerGeometry : register(b8)
 
 #include "Common/SharedData.hlsli"
 
-#define ENABLE_LL SharedData::linearLightingSettings.enableLinearLighting
-
-#if defined(PSHADER) && defined(LIGHTING)
-cbuffer LLPerGeometry : register(b8)
-{
-	float emissiveMult;
-	float3 pad0;
-};
-#endif
-
 #define FLT_MIN asfloat(0x00800000) // 1.175494351e-38f
 
 namespace Color

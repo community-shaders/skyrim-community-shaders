@@ -61,8 +61,10 @@ HRESULT WINAPI hk_D3D11CreateDeviceAndSwapChainUpscaling(
 	// Use better swap effect to prevent tearing and improve performance
 	pSwapChainDesc->SwapEffect = DXGI_SWAP_EFFECT_FLIP_DISCARD;
 
-	// HDR format set by display capabilities if available
-	logger::info("[Upscaling] Swap chain format: {}", static_cast<int>(pSwapChainDesc->BufferDesc.Format));
+	// Upgrade swap chain format to HDR10 (R10G10B10A2_UNORM) for HDR output
+	logger::info("[Upscaling] Original swap chain format: {}", static_cast<int>(pSwapChainDesc->BufferDesc.Format));
+	pSwapChainDesc->BufferDesc.Format = DXGI_FORMAT_R10G10B10A2_UNORM;
+	logger::info("[Upscaling] Upgraded swap chain format to: {}", static_cast<int>(pSwapChainDesc->BufferDesc.Format));
 
 	bool shouldProxy = !globals::game::isVR;
 	if (shouldProxy)
@@ -1463,11 +1465,6 @@ void Upscaling::Main_UpdateJitter::thunk(RE::BSGraphics::State* a_state)
 void Upscaling::MenuManagerDrawInterfaceStartHook::thunk(int64_t a1)
 {
 	globals::features::upscaling.PostDisplay();
-
-	// Begin UI redirection for HDR compositing
-	auto hdr = HDR::GetSingleton();
-	if (hdr)
-		hdr->BeginUIRendering();
 
 	func(a1);
 }
