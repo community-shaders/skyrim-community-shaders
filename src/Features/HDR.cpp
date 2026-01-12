@@ -71,9 +71,9 @@ void HDR::DrawSettings()
 	ImGui::Spacing();
 	ImGui::TextWrapped("Note: All options OFF = Raw linear HDR output for further post-processing.");
 	ImGui::Spacing();
-	
+
 	ImGui::Text("Output Mode");
-	
+
 	bool oldSdrMode = settings.sdrMode;
 	ImGui::Checkbox("SDR Mode (Clamp to 0-1)", &settings.sdrMode);
 	if (oldSdrMode != settings.sdrMode) {
@@ -106,10 +106,10 @@ void HDR::DrawSettings()
 
 	ImGui::Spacing();
 	ImGui::Separator();
-	
+
 	if (!settings.sdrMode) {
 		ImGui::Text("HDR Settings");
-		
+
 		uint oldPaperWhite = settings.hdrPaperWhite;
 		ImGui::SliderInt("HDR Paper White (nits)", reinterpret_cast<int*>(&settings.hdrPaperWhite), 80, 500);
 		if (oldPaperWhite != settings.hdrPaperWhite) {
@@ -162,7 +162,7 @@ void HDR::RestoreDefaultSettings()
 void HDR::SetupResources()
 {
 	logger::info("[HDR] SetupResources called");
-	
+
 	auto renderer = globals::game::renderer;
 	auto& main = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMAIN];
 
@@ -226,7 +226,7 @@ void HDR::SetupResources()
 	hdrDataCB = new ConstantBuffer(ConstantBufferDesc<HDRDataCB>());
 
 	UpdateHDRData();
-	
+
 	// Set up HDR on D3D11 swap chain (when not using Frame Gen)
 	auto& upscaling = globals::features::upscaling;
 	if (!upscaling.d3d12SwapChainActive) {
@@ -235,7 +235,7 @@ void HDR::SetupResources()
 			HRESULT hr = swapChain4->SetColorSpace1(DXGI_COLOR_SPACE_RGB_FULL_G2084_NONE_P2020);
 			if (SUCCEEDED(hr)) {
 				logger::info("[HDR] Set D3D11 swap chain color space to HDR10 (PQ/BT.2020)");
-				
+
 				DXGI_HDR_METADATA_HDR10 hdrMetadata = {};
 				// BT.2020 color primaries (hardcoded)
 				hdrMetadata.RedPrimary[0] = 34000;    // 0.708 * 50000
@@ -261,8 +261,8 @@ void HDR::SetupResources()
 			logger::warn("[HDR] D3D11 swap chain does not support IDXGISwapChain4");
 		}
 	}
-	
-	logger::info("[HDR] SetupResources complete - hdrDataCB={}, hdrTexture={}, outputTexture={}", 
+
+	logger::info("[HDR] SetupResources complete - hdrDataCB={}, hdrTexture={}, outputTexture={}",
 		hdrDataCB ? "valid" : "NULL",
 		hdrTexture ? "valid" : "NULL",
 		outputTexture ? "valid" : "NULL");
@@ -283,7 +283,7 @@ void HDR::BeginUIRendering()
 	if (!uiTexture || !uiTexture->rtv) {
 		static bool loggedOnce = false;
 		if (!loggedOnce) {
-			logger::warn("[HDR] BeginUIRendering skipped - uiTexture={}, rtv={}", 
+			logger::warn("[HDR] BeginUIRendering skipped - uiTexture={}, rtv={}",
 				uiTexture ? "valid" : "NULL",
 				(uiTexture && uiTexture->rtv) ? "valid" : "NULL");
 			loggedOnce = true;
@@ -371,16 +371,16 @@ void HDR::SetUIBuffer()
 	// Follow Frame Gen approach: redirect kFRAMEBUFFER.RTV to our UI texture
 	// This way vanilla Skyrim UI renders to our texture
 	auto& data = globals::game::renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGET::kFRAMEBUFFER];
-	
+
 	// Save original RTV for restoration after Present
 	if (!savedFramebufferRTV) {
 		savedFramebufferRTV = data.RTV;
 	}
-	
+
 	// Clear UI texture before vanilla UI renders (just like Frame Gen does after Present)
 	float clearColor[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
 	globals::d3d::context->ClearRenderTargetView(uiTexture->rtv.get(), clearColor);
-	
+
 	// Redirect to our UI texture
 	data.RTV = uiTexture->rtv.get();
 	globals::d3d::context->OMSetRenderTargets(1, &data.RTV, nullptr);
@@ -420,9 +420,9 @@ void HDR::ApplyHDR()
 	if (!hdrDataCB || !hdrTexture || !outputTexture) {
 		static bool loggedOnce = false;
 		if (!loggedOnce) {
-			logger::warn("[HDR] ApplyHDR early return: hdrDataCB={}, hdrTexture={}, outputTexture={}", 
+			logger::warn("[HDR] ApplyHDR early return: hdrDataCB={}, hdrTexture={}, outputTexture={}",
 				hdrDataCB ? "valid" : "NULL",
-				hdrTexture ? "valid" : "NULL", 
+				hdrTexture ? "valid" : "NULL",
 				outputTexture ? "valid" : "NULL");
 			loggedOnce = true;
 		}
@@ -443,7 +443,7 @@ void HDR::ApplyHDR()
 	static bool loggedDispatch = false;
 	if (!loggedDispatch) {
 		logger::info("[HDR] ApplyHDR running - dispatching compute shader");
-		logger::info("[HDR] uiTexture={}, uiTexture->srv={}", 
+		logger::info("[HDR] uiTexture={}, uiTexture->srv={}",
 			uiTexture ? "valid" : "NULL",
 			(uiTexture && uiTexture->srv) ? "valid" : "NULL");
 		loggedDispatch = true;
@@ -583,10 +583,10 @@ void HDR::UpdateHDRData() const
 	}
 
 	HDRDataCB data;
-	
+
 	data.parameters0 = DirectX::XMVectorSet(
-		settings.sdrMode ? 1.f : 0.f, 
-		settings.convertToGamma ? 1.f : 0.f, 
+		settings.sdrMode ? 1.f : 0.f,
+		settings.convertToGamma ? 1.f : 0.f,
 		settings.enableTonemapping ? 1.f : 0.f,
 		static_cast<float>(settings.hdrPeakNits));
 	data.parameters1 = DirectX::XMVectorSet(

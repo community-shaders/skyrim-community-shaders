@@ -22,10 +22,10 @@ public:
 
 	struct Settings
 	{
-		bool sdrMode = true;           // true = Clamped Linear SDR, false = Linear HDR
-		bool convertToGamma = true;    // Apply TrueLinearToGamma conversion
-		bool enableTonemapping = false; // Apply Reinhard tonemapping
-		
+		bool sdrMode = true;             // true = Clamped Linear SDR, false = Linear HDR
+		bool convertToGamma = true;      // Apply TrueLinearToGamma conversion
+		bool enableTonemapping = false;  // Apply Reinhard tonemapping
+
 		uint hdrPaperWhite = 250;
 		uint hdrPeakNits = 800;
 	};
