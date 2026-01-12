@@ -38,14 +38,13 @@ void HDR::DrawSettings()
 	}
 
 	bool oldConvertToGamma = settings.convertToGamma;
-	ImGui::Checkbox("Output sRGB Gamma (for ENB/ReShade)", &settings.convertToGamma);
+	ImGui::Checkbox("Convert to Gamma", &settings.convertToGamma);
 	if (oldConvertToGamma != settings.convertToGamma) {
 		logger::info("HDR: convertToGamma changed to: {}", settings.convertToGamma);
 		UpdateHDRData();
 	}
 	if (auto _tt = Util::HoverTooltipWrapper()) {
-		ImGui::Text("OFF = PQ encoding for native HDR10 displays.");
-		ImGui::Text("ON = sRGB gamma for ENB/ReShade post-processing.");
+		ImGui::Text("Apply gamma curve to match Vanilla Skyrim. OFF = Linear output.");
 	}
 
 	bool oldEnableTonemapping = settings.enableTonemapping;
