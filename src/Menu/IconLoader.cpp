@@ -98,9 +98,14 @@ namespace Util::IconLoader
 			{ std::string(iconFolder) + "\\save-settings.png", &menu->uiIcons.saveSettings.texture, &menu->uiIcons.saveSettings.size },
 			{ std::string(iconFolder) + "\\load-settings.png", &menu->uiIcons.loadSettings.texture, &menu->uiIcons.loadSettings.size },
 			{ std::string(iconFolder) + "\\clear-cache.png", &menu->uiIcons.clearCache.texture, &menu->uiIcons.clearCache.size },
+			{ std::string(iconFolder) + "\\delete.png", &menu->uiIcons.deleteSettings.texture, &menu->uiIcons.deleteSettings.size },
 			{ logoPath, &menu->uiIcons.logo.texture, &menu->uiIcons.logo.size },
 			{ std::string(iconFolder) + "\\restore-settings.png", &menu->uiIcons.featureSettingRevert.texture, &menu->uiIcons.featureSettingRevert.size },
 			{ std::string(iconFolder) + "\\discord.png", &menu->uiIcons.discord.texture, &menu->uiIcons.discord.size },
+			{ std::string(iconFolder) + "\\apply-to-game.png", &menu->uiIcons.applyToGame.texture, &menu->uiIcons.applyToGame.size },
+			{ std::string(iconFolder) + "\\pause.png", &menu->uiIcons.pauseTime.texture, &menu->uiIcons.pauseTime.size },
+			{ std::string(iconFolder) + "\\undo.png", &menu->uiIcons.undo.texture, &menu->uiIcons.undo.size },
+
 			{ "Categories\\characters.png", &menu->uiIcons.characters.texture, &menu->uiIcons.characters.size },
 			{ "Categories\\display.png", &menu->uiIcons.display.texture, &menu->uiIcons.display.size },
 			{ "Categories\\grass.png", &menu->uiIcons.grass.texture, &menu->uiIcons.grass.size },
@@ -190,8 +195,9 @@ namespace Util::IconLoader
 		auto iconDefs = GetIconDefinitions(menu);
 
 		for (auto* texturePtr : { &menu->uiIcons.saveSettings.texture, &menu->uiIcons.loadSettings.texture,
-				 &menu->uiIcons.clearCache.texture, &menu->uiIcons.logo.texture,
-				 &menu->uiIcons.featureSettingRevert.texture, &menu->uiIcons.discord.texture,
+				 &menu->uiIcons.clearCache.texture, &menu->uiIcons.deleteSettings.texture, &menu->uiIcons.logo.texture,
+				 &menu->uiIcons.featureSettingRevert.texture, &menu->uiIcons.applyToGame.texture, &menu->uiIcons.pauseTime.texture,
+				 &menu->uiIcons.undo.texture, &menu->uiIcons.search.texture, &menu->uiIcons.discord.texture,
 				 &menu->uiIcons.characters.texture, &menu->uiIcons.display.texture,
 				 &menu->uiIcons.grass.texture, &menu->uiIcons.lighting.texture,
 				 &menu->uiIcons.sky.texture, &menu->uiIcons.landscape.texture,

@@ -1,8 +1,9 @@
 #pragma once
 
 #include "Buffer.h"
+#include "OverlayFeature.h"
 
-struct LightLimitFix : Feature
+struct LightLimitFix : OverlayFeature
 {
 private:
 	static constexpr std::string_view MOD_ID = "99548";
@@ -38,6 +39,7 @@ public:
 		Initialised = (1 << 8),
 		Disabled = (1 << 9),
 		InverseSquare = (1 << 10),
+		Linear = (1 << 11),
 	};
 
 	struct PositionOpt
@@ -49,7 +51,7 @@ public:
 	struct alignas(16) LightData
 	{
 		float3 color;
-		float fade;
+		float fade = 1.0f;
 		float radius;
 		float invRadius;
 		float fadeZone;
@@ -155,6 +157,8 @@ public:
 	virtual void RestoreDefaultSettings() override;
 
 	virtual void DrawSettings() override;
+	virtual void DrawOverlay() override;
+	virtual bool IsOverlayVisible() const override { return settings.EnableLightsVisualisation; }
 
 	virtual void PostPostLoad() override;
 	virtual void DataLoaded() override;

@@ -54,17 +54,17 @@ namespace Random
 	uint fmix(uint h)
 	{
 		h ^= h >> 16;
-		h *= 0x85ebca6bu;
+		h *= 2246822507u;  // 0x85ebca6b
 		h ^= h >> 13;
-		h *= 0xc2b2ae35u;
+		h *= 3266489917u;  // 0xc2b2ae35
 		h ^= h >> 16;
 		return h;
 	}
 
 	uint murmur3(uint3 x, uint seed = 0)
 	{
-		static const uint c1 = 0xcc9e2d51u;
-		static const uint c2 = 0x1b873593u;
+		static const uint c1 = 3432918353u;  // 0xcc9e2d51
+		static const uint c2 = 461845907u;   // 0x1b873593
 
 		uint h = seed;
 		uint k = x.x;
@@ -75,7 +75,7 @@ namespace Random
 
 		h ^= k;
 		h = rotl(h, 13u);
-		h = h * 5u + 0xe6546b64u;
+		h = h * 5u + 3864292196u;  // 0xe6546b64
 
 		k = x.y;
 
@@ -85,7 +85,7 @@ namespace Random
 
 		h ^= k;
 		h = rotl(h, 13u);
-		h = h * 5u + 0xe6546b64u;
+		h = h * 5u + 3864292196u;  // 0xe6546b64
 
 		k = x.z;
 
@@ -95,7 +95,7 @@ namespace Random
 
 		h ^= k;
 		h = rotl(h, 13u);
-		h = h * 5u + 0xe6546b64u;
+		h = h * 5u + 3864292196u;  // 0xe6546b64
 
 		h ^= 12u;
 
@@ -155,7 +155,7 @@ namespace Random
 	float f1(inout uint state, out uint randBits)
 	{
 		randBits = pcg(state);
-		uint bits = randBits & 0x007FFFFFu | 0x3F800000u;
+		uint bits = (randBits & 0x007FFFFFu) | 0x3F800000u;
 		return asfloat(bits) - 1.0f;
 	}
 
@@ -168,8 +168,8 @@ namespace Random
 	float2 f2(inout uint state, out uint randBits)
 	{
 		randBits = pcg(state);
-		uint bits0 = randBits & 0x007FFFFFu | 0x3F800000u;
-		uint bits1 = randBits >> 9 | 0x3F800000u;
+		uint bits0 = (randBits & 0x007FFFFFu) | 0x3F800000u;
+		uint bits1 = (randBits >> 9) | 0x3F800000u;
 		return float2(asfloat(bits0), asfloat(bits1)) - 1.0f;
 	}
 
@@ -182,9 +182,9 @@ namespace Random
 	float3 f3(inout uint state, out uint randBits)
 	{
 		randBits = pcg(state);
-		uint bits0 = randBits & 0x007FFFFFu | 0x3F800000u;
-		uint bits1 = (randBits << 22 | randBits >> 10) & 0x007FFFFFu | 0x3F800000u;
-		uint bits2 = (randBits << 11 | randBits >> 21) & 0x007FFFFFu | 0x3F800000u;
+		uint bits0 = (randBits & 0x007FFFFFu) | 0x3F800000u;
+		uint bits1 = ((randBits << 22 | randBits >> 10) & 0x007FFFFFu) | 0x3F800000u;
+		uint bits2 = ((randBits << 11 | randBits >> 21) & 0x007FFFFFu) | 0x3F800000u;
 		return float3(asfloat(bits0), asfloat(bits1), asfloat(bits2)) - 1.0f;
 	}
 
@@ -197,10 +197,10 @@ namespace Random
 	float4 f4(inout uint state, out uint randBits)
 	{
 		randBits = pcg(state);
-		uint bits0 = randBits & 0x007FFFFFu | 0x3F800000u;
-		uint bits1 = (randBits << 24 | randBits >> 8) & 0x007FFFFFu | 0x3F800000u;
-		uint bits2 = (randBits << 16 | randBits >> 16) & 0x007FFFFFu | 0x3F800000u;
-		uint bits3 = (randBits << 8 | randBits >> 24) & 0x007FFFFFu | 0x3F800000u;
+		uint bits0 = (randBits & 0x007FFFFFu) | 0x3F800000u;
+		uint bits1 = ((randBits << 24 | randBits >> 8) & 0x007FFFFFu) | 0x3F800000u;
+		uint bits2 = ((randBits << 16 | randBits >> 16) & 0x007FFFFFu) | 0x3F800000u;
+		uint bits3 = ((randBits << 8 | randBits >> 24) & 0x007FFFFFu) | 0x3F800000u;
 		return float4(asfloat(bits0), asfloat(bits1), asfloat(bits2), asfloat(bits3)) - 1.0f;
 	}
 
@@ -270,7 +270,7 @@ namespace Random
 	// https://www.shadertoy.com/view/slB3z3
 	float3 perlinGradient(uint hash)
 	{
-		switch (int(hash) & 15) {  // look at the last four bits to pick a gradient direction
+		switch (hash & 15u) {  // look at the last four bits to pick a gradient direction
 		case 0:
 			return float3(1, 1, 0);
 		case 1:
@@ -303,6 +303,8 @@ namespace Random
 			return float3(0, -1, 1);
 		case 15:
 			return float3(0, -1, -1);
+		default:
+			return float3(0, 0, 0);  // Should never reach here
 		}
 	}
 

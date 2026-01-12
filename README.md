@@ -17,6 +17,7 @@
 SKSE core plugin for community-driven advanced graphics modifications.
 
 [Nexus](https://www.nexusmods.com/skyrimspecialedition/mods/86492)
+[User Wiki](https://modding.wiki/en/skyrim/developers/community-shaders)
 
 ## Requirements
 
