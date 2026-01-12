@@ -257,18 +257,18 @@ struct IDXGISwapChain_Present
 
 		auto hdr = HDR::GetSingleton();
 		auto& upscaling = globals::features::upscaling;
-		
+
 		bool frameGenActive = upscaling.d3d12SwapChainActive;
-		
+
 		// Determine if HDR resources are ready
 		bool hdrReady = hdr && hdr->hdrDataCB && hdr->outputTexture;
-		
+
 		// For ImGui rendering, we need to render to the appropriate UI texture
 		// Frame Gen: uses uiBufferWrapped, Non-Frame Gen: uses our uiTexture
 		if (hdrReady) {
 			ID3D11RenderTargetView* uiRTV = nullptr;
 			D3D11_TEXTURE2D_DESC texDesc = {};
-			
+
 			if (frameGenActive && upscaling.dx12SwapChain.uiBufferWrapped) {
 				uiRTV = upscaling.dx12SwapChain.uiBufferWrapped->rtv;
 				if (upscaling.dx12SwapChain.uiBufferWrapped->resource11) {
@@ -278,10 +278,10 @@ struct IDXGISwapChain_Present
 				uiRTV = hdr->uiTexture->rtv.get();
 				hdr->uiTexture->resource->GetDesc(&texDesc);
 			}
-			
+
 			if (uiRTV && texDesc.Width > 0) {
 				globals::d3d::context->OMSetRenderTargets(1, &uiRTV, nullptr);
-				
+
 				D3D11_VIEWPORT viewport = {};
 				viewport.Width = static_cast<float>(texDesc.Width);
 				viewport.Height = static_cast<float>(texDesc.Height);
@@ -294,7 +294,7 @@ struct IDXGISwapChain_Present
 		menu->DrawOverlay();
 
 		if (hdrReady) {
-			// Unbind render target before ApplyHDR to avoid resource hazard 
+			// Unbind render target before ApplyHDR to avoid resource hazard
 			ID3D11RenderTargetView* nullRTV = nullptr;
 			globals::d3d::context->OMSetRenderTargets(1, &nullRTV, nullptr);
 
