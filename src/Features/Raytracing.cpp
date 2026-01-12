@@ -1816,7 +1816,7 @@ void Raytracing::CreateModel(RE::TESForm* form, const char* path, RE::NiNode* pR
 		return;
 	}
 
-	//logger::debug("[RT] CreateModel - Path: {}, Base FormID [0x{:08X}], FormID [0x{:08X}], NiNode [0x{:08X}]: {}", path, baseFormID, formID, reinterpret_cast<uintptr_t>(pRoot), pRoot->name);
+	logger::trace("[RT] CreateModel - Path: {}, FormID [0x{:08X}], NiNode [0x{:08X}]: {}", path, formID, reinterpret_cast<uintptr_t>(pRoot), pRoot->name);
 
 	auto formType = form->GetFormType();
 
@@ -1878,6 +1878,16 @@ void Raytracing::CreateModel(RE::TESForm* form, const char* path, RE::NiNode* pR
 
 			const auto& triShapeRuntime = pTriShape->GetTrishapeRuntimeData();
 
+			if (triShapeRuntime.vertexCount == 0) {
+				logger::error("\t\t[RT] CreateModel::TraverseScenegraphGeometries - Vertex count of 0 for {}: {}", path ? path : "N/A", name ? name : "N/A");
+				return RE::BSVisit::BSVisitControl::kContinue;
+			}
+
+			if (triShapeRuntime.triangleCount == 0) {
+				logger::error("\t\t[RT] CreateModel::TraverseScenegraphGeometries - Triangle count of 0 for {}: {}", path ? path : "N/A", name ? name : "N/A");
+				return RE::BSVisit::BSVisitControl::kContinue;
+			}
+
 			auto meshData = eastl::make_unique<Shape>(shapeRegisters.Allocate(), pGeometry, flags);
 
 			meshData->BuildMesh(triShapeRD, triShapeRuntime.vertexCount, triShapeRuntime.triangleCount, 0, localToRoot);
@@ -1899,9 +1909,19 @@ void Raytracing::CreateModel(RE::TESForm* form, const char* path, RE::NiNode* pR
 				return RE::BSVisit::BSVisitControl::kContinue;
 			}
 
+			if (skinPartition->vertexCount == 0) {
+				logger::error("\t\t[RT] CreateModel::TraverseScenegraphGeometries - Vertex count of 0 for {}: {}", path ? path : "N/A", name ? name : "N/A");
+				return RE::BSVisit::BSVisitControl::kContinue;
+			}
+
 			logger::debug("\t\t[RT] CreateModel::TraverseScenegraphGeometries - Partitions: {}, VertexCount: {}, Unk24: [0x{:X}]", skinPartition->numPartitions, skinPartition->vertexCount, skinPartition->unk24);
 
 			for (auto& partition : skinPartition->partitions) {
+				if (partition.triangles == 0) {
+					logger::error("\t\t[RT] CreateModel::TraverseScenegraphGeometries - Triangle count of 0 for {}: {}", path ? path : "N/A", name ? name : "N/A");
+					continue;
+				}
+
 				auto meshData = eastl::make_unique<Shape>(shapeRegisters.Allocate(), pGeometry, flags | Flags::Skinned);
 
 				meshData->BuildMesh(partition.buffData, skinPartition->vertexCount, partition.triangles, partition.bonesPerVertex, localToRoot);
