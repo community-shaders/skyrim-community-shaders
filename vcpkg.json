@@ -38,11 +38,11 @@
         },
         {
             "name": "eabase",
-            "version": "2025-08-03"
+            "version": "2025-08-01"
         },
         {
             "name": "eastl",
-            "version": "3.27.01"
+            "version": "3.27.1"
         },
         {
             "name": "imgui",
@@ -57,5 +57,5 @@
             "version": "1.606.4"
         }
     ],
-    "builtin-baseline": "a62ce77d56ee07513b4b67de1ec2daeaebfae51a"
+    "builtin-baseline": "2e1caaee2dd0d06b100ae751b6bf309ea95a13b1"
 }
