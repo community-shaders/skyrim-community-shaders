@@ -69,18 +69,19 @@ void DX12SwapChain::CreateSwapChain(IDXGIAdapter* adapter, DXGI_SWAP_CHAIN_DESC 
 
 	auto hdr = HDR::GetSingleton();
 	DXGI_HDR_METADATA_HDR10 hdrMetadata = {};
-	hdrMetadata.RedPrimary[0] = static_cast<UINT16>(hdr->settings.redPrimaryX);
-	hdrMetadata.RedPrimary[1] = static_cast<UINT16>(hdr->settings.redPrimaryY);
-	hdrMetadata.GreenPrimary[0] = static_cast<UINT16>(hdr->settings.greenPrimaryX);
-	hdrMetadata.GreenPrimary[1] = static_cast<UINT16>(hdr->settings.greenPrimaryY);
-	hdrMetadata.BluePrimary[0] = static_cast<UINT16>(hdr->settings.bluePrimaryX);
-	hdrMetadata.BluePrimary[1] = static_cast<UINT16>(hdr->settings.bluePrimaryY);
-	hdrMetadata.WhitePoint[0] = static_cast<UINT16>(hdr->settings.whitePointX);
-	hdrMetadata.WhitePoint[1] = static_cast<UINT16>(hdr->settings.whitePointY);
-	hdrMetadata.MaxMasteringLuminance = hdr->settings.maxMasteringLuminance * 10000;
-	hdrMetadata.MinMasteringLuminance = hdr->settings.minMasteringLuminance;
-	hdrMetadata.MaxContentLightLevel = static_cast<UINT16>(hdr->settings.maxContentLightLevel);
-	hdrMetadata.MaxFrameAverageLightLevel = static_cast<UINT16>(hdr->settings.maxFrameAverageLightLevel);
+	// BT.2020 color primaries (hardcoded)
+	hdrMetadata.RedPrimary[0] = 34000;    // 0.708 * 50000
+	hdrMetadata.RedPrimary[1] = 16000;    // 0.292 * 50000
+	hdrMetadata.GreenPrimary[0] = 8500;   // 0.170 * 50000
+	hdrMetadata.GreenPrimary[1] = 39850;  // 0.797 * 50000
+	hdrMetadata.BluePrimary[0] = 6550;    // 0.131 * 50000
+	hdrMetadata.BluePrimary[1] = 2300;    // 0.046 * 50000
+	hdrMetadata.WhitePoint[0] = 15635;    // D65: 0.3127 * 50000
+	hdrMetadata.WhitePoint[1] = 16450;    // D65: 0.3290 * 50000
+	hdrMetadata.MaxMasteringLuminance = hdr->settings.hdrPeakNits * 10000;
+	hdrMetadata.MinMasteringLuminance = 1;
+	hdrMetadata.MaxContentLightLevel = static_cast<UINT16>(hdr->settings.hdrPeakNits);
+	hdrMetadata.MaxFrameAverageLightLevel = static_cast<UINT16>(hdr->settings.hdrPaperWhite);
 
 	DX::ThrowIfFailed(swapChain->SetHDRMetaData(DXGI_HDR_METADATA_TYPE_HDR10, sizeof(hdrMetadata), &hdrMetadata));
 	logger::info("[DX12SwapChain] Set HDR10 metadata");

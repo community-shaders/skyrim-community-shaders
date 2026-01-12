@@ -79,6 +79,9 @@ public:
 	ID3D11ComputeShader* hdrOutputCS = nullptr;
 	ID3D11ComputeShader* GetHDROutputCS();
 
+	static bool DetectHDRDisplay();
+	static bool isHDRMonitor;
+
 	// Saved state for UI rendering redirection
 	bool renderingUI = false;
 	ID3D11RenderTargetView* savedRTV = nullptr;

@@ -12,6 +12,47 @@
 #include <dxgi1_6.h>
 #include <imgui.h>
 
+bool HDR::isHDRMonitor = false;
+
+bool HDR::DetectHDRDisplay()
+{
+	IDXGIFactory1* factory = nullptr;
+	if (FAILED(CreateDXGIFactory1(IID_PPV_ARGS(&factory)))) {
+		logger::warn("[HDR] Failed to create DXGI factory for HDR detection");
+		return false;
+	}
+
+	bool hdrSupported = false;
+	IDXGIAdapter1* adapter = nullptr;
+	
+	for (UINT i = 0; factory->EnumAdapters1(i, &adapter) != DXGI_ERROR_NOT_FOUND; ++i) {
+		IDXGIOutput* output = nullptr;
+		for (UINT j = 0; adapter->EnumOutputs(j, &output) != DXGI_ERROR_NOT_FOUND; ++j) {
+			IDXGIOutput6* output6 = nullptr;
+			if (SUCCEEDED(output->QueryInterface(IID_PPV_ARGS(&output6)))) {
+				DXGI_OUTPUT_DESC1 desc;
+				if (SUCCEEDED(output6->GetDesc1(&desc))) {
+					if (desc.ColorSpace == DXGI_COLOR_SPACE_RGB_FULL_G2084_NONE_P2020) {
+						hdrSupported = true;
+						logger::info("[HDR] Detected HDR display (Max Luminance: {} nits)", desc.MaxLuminance);
+					}
+				}
+				output6->Release();
+			}
+			output->Release();
+			if (hdrSupported) break;
+		}
+		adapter->Release();
+		if (hdrSupported) break;
+	}
+	
+	factory->Release();
+	
+	isHDRMonitor = hdrSupported;
+	logger::info("[HDR] HDR display detection result: {}", hdrSupported ? "HDR supported" : "SDR only");
+	return hdrSupported;
+}
+
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	HDR::Settings,
 	sdrMode,
@@ -22,6 +63,12 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 
 void HDR::DrawSettings()
 {
+	if (isHDRMonitor) {
+		ImGui::TextColored(ImVec4(0.2f, 1.0f, 0.2f, 1.0f), "HDR Display Detected");
+	} else {
+		ImGui::TextColored(ImVec4(1.0f, 0.6f, 0.2f, 1.0f), "SDR Display (HDR not detected)");
+	}
+	ImGui::Spacing();
 	ImGui::TextWrapped("Note: All options OFF = Raw linear HDR output for further post-processing.");
 	ImGui::Spacing();
 	
@@ -97,7 +144,19 @@ void HDR::LoadSettings(json& o_json)
 
 void HDR::RestoreDefaultSettings()
 {
-	settings = {};
+	bool hdrMonitor = DetectHDRDisplay();
+	
+	if (hdrMonitor) {
+		settings.sdrMode = false;
+		settings.convertToGamma = true;
+		settings.enableTonemapping = true;
+		settings.hdrPaperWhite = 80;
+		settings.hdrPeakNits = 600;
+	} else {
+		settings.sdrMode = true;
+		settings.convertToGamma = true;
+		settings.enableTonemapping = true;
+	}
 }
 
 void HDR::SetupResources()
@@ -141,9 +200,10 @@ void HDR::SetupResources()
 	outputTexture->CreateSRV(srvDesc);
 	outputTexture->CreateUAV(uavDesc);
 
-	// UI texture for separate UI rendering - use float format for HDR UI support
+	// UI texture for separate UI rendering - use sRGB format for gamma-correct blending
+	// This ensures ImGui's alpha blending produces correct anti-aliased text edges
 	D3D11_TEXTURE2D_DESC uiTexDesc = texDesc;
-	uiTexDesc.Format = DXGI_FORMAT_R16G16B16A16_FLOAT; // HDR target for ImGUI to prevent colour and text fringing
+	uiTexDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
 	uiTexDesc.BindFlags = D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_UNORDERED_ACCESS;
 
 	D3D11_SHADER_RESOURCE_VIEW_DESC uiSrvDesc = srvDesc;
@@ -156,9 +216,9 @@ void HDR::SetupResources()
 	uiTexture->CreateSRV(uiSrvDesc);
 	uiTexture->CreateUAV(uiUavDesc);
 
-	// Create RTV for UI texture
+	// Create RTV for UI texture - use SRGB view for gamma-correct blending during ImGui render
 	D3D11_RENDER_TARGET_VIEW_DESC rtvDesc{};
-	rtvDesc.Format = uiTexDesc.Format;
+	rtvDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM_SRGB;
 	rtvDesc.ViewDimension = D3D11_RTV_DIMENSION_TEXTURE2D;
 	rtvDesc.Texture2D.MipSlice = 0;
 	uiTexture->CreateRTV(rtvDesc);
@@ -177,18 +237,19 @@ void HDR::SetupResources()
 				logger::info("[HDR] Set D3D11 swap chain color space to HDR10 (PQ/BT.2020)");
 				
 				DXGI_HDR_METADATA_HDR10 hdrMetadata = {};
-				hdrMetadata.RedPrimary[0] = static_cast<UINT16>(settings.redPrimaryX);
-				hdrMetadata.RedPrimary[1] = static_cast<UINT16>(settings.redPrimaryY);
-				hdrMetadata.GreenPrimary[0] = static_cast<UINT16>(settings.greenPrimaryX);
-				hdrMetadata.GreenPrimary[1] = static_cast<UINT16>(settings.greenPrimaryY);
-				hdrMetadata.BluePrimary[0] = static_cast<UINT16>(settings.bluePrimaryX);
-				hdrMetadata.BluePrimary[1] = static_cast<UINT16>(settings.bluePrimaryY);
-				hdrMetadata.WhitePoint[0] = static_cast<UINT16>(settings.whitePointX);
-				hdrMetadata.WhitePoint[1] = static_cast<UINT16>(settings.whitePointY);
-				hdrMetadata.MaxMasteringLuminance = settings.maxMasteringLuminance * 10000;
-				hdrMetadata.MinMasteringLuminance = settings.minMasteringLuminance;
-				hdrMetadata.MaxContentLightLevel = static_cast<UINT16>(settings.maxContentLightLevel);
-				hdrMetadata.MaxFrameAverageLightLevel = static_cast<UINT16>(settings.maxFrameAverageLightLevel);
+				// BT.2020 color primaries (hardcoded)
+				hdrMetadata.RedPrimary[0] = 34000;    // 0.708 * 50000
+				hdrMetadata.RedPrimary[1] = 16000;    // 0.292 * 50000
+				hdrMetadata.GreenPrimary[0] = 8500;   // 0.170 * 50000
+				hdrMetadata.GreenPrimary[1] = 39850;  // 0.797 * 50000
+				hdrMetadata.BluePrimary[0] = 6550;    // 0.131 * 50000
+				hdrMetadata.BluePrimary[1] = 2300;    // 0.046 * 50000
+				hdrMetadata.WhitePoint[0] = 15635;    // D65: 0.3127 * 50000
+				hdrMetadata.WhitePoint[1] = 16450;    // D65: 0.3290 * 50000
+				hdrMetadata.MaxMasteringLuminance = settings.hdrPeakNits * 10000;
+				hdrMetadata.MinMasteringLuminance = 1;
+				hdrMetadata.MaxContentLightLevel = static_cast<UINT16>(settings.hdrPeakNits);
+				hdrMetadata.MaxFrameAverageLightLevel = static_cast<UINT16>(settings.hdrPaperWhite);
 				
 				swapChain4->SetHDRMetaData(DXGI_HDR_METADATA_TYPE_HDR10, sizeof(hdrMetadata), &hdrMetadata);
 				logger::info("[HDR] Set D3D11 swap chain HDR10 metadata");
