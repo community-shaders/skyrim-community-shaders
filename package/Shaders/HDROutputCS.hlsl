@@ -37,20 +37,12 @@ cbuffer PerFrame : register(b0)
 	float3 tonemapped = renodx::tonemap::ReinhardExtended(color, peakLinear, 1.0, 0.0);
 	color = lerp(color, tonemapped, enableTonemapping);
 	
-	// UI compositing - ImGui renders in sRGB gamma space to float target
-	float3 uiLinear = Color::GammaToTrueLinear(ui.rgb);
-	
-	// Scale UI to paper white level for consistent brightness in HDR
-	float uiHdrScale = lerp(hdrScaling, 1.0, sdrMode);
-	uiLinear *= uiHdrScale;
-	
-	// Proper alpha blend in linear space for crisp edges
-	color = color * (1.0 - ui.a) + uiLinear;
-	
-	// Output encoding
 	float3 pqEncoded = Color::pq::Encode(color, peakNits);
 	float3 gammaEncoded = Color::TrueLinearToGamma(color);
 	color = lerp(pqEncoded, gammaEncoded, convertToGamma);
+	
+	// Simply alpha-blend the gamma UI onto the gamma-encoded scene
+	color = color * (1.0 - ui.a) + ui.rgb;
 
 	HDROutput[dispatchID.xy] = float4(color, 1.0);
 }
