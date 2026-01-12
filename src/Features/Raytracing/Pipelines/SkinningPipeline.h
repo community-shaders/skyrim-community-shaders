@@ -42,7 +42,7 @@ using SkinningHeap = Heap<SkinningHeapDef::Table, SkinningHeapDef::Slot>;
 
 struct SkinningPipeline : ComputePipeline<SkinningHeap>
 {
-	static constexpr uint THREAD_SIZE = 16;
+	static constexpr uint THREAD_SIZE = 64;
 
 	struct ModelUpdate
 	{
@@ -57,20 +57,12 @@ struct SkinningPipeline : ComputePipeline<SkinningHeap>
 	eastl::vector<ModelUpdate> queueModels;
 	eastl::unique_ptr<DX12::StructuredBufferUpload<VertexUpdateData>> vertexUpdateBuffer = nullptr;
 
-	struct alignas(16) FrameData
-	{
-		uint Count;
-		uint3 Pad;
-	};
-
-	eastl::unique_ptr<FrameData> constantBufferData = nullptr;
-	eastl::unique_ptr<DX12::StructuredBufferUpload<FrameData>> constantBuffer = nullptr;
-
 	void CreateRootSignature(ID3D12Device5* device) override;
 	void CompileShaders(ID3D12Device5* device) override;
 	void SetupResources(ID3D12Device5* device) override;
 	void QueueUpdate(Flags updateFlags, eastl::string name, Shape* shape);
 	bool PrepareResources(ID3D12GraphicsCommandList4* commandList, uint& count, uint& vertexCount);
+	void UpdateBLASES(ID3D12GraphicsCommandList4* commandList);
 	void RestoreResources(ID3D12GraphicsCommandList4* commandList);
 	void Dispatch(ID3D12GraphicsCommandList4* commandList);
 };

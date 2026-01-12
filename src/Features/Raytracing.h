@@ -338,8 +338,7 @@ struct Raytracing : public OverlayFeature
 	enum struct PIXCaptureLocation : int32_t
 	{
 		GlobalIllumination,
-		Shadows,
-		AO
+		Shadows		
 	};
 
 	// TODO: Rename to ReflectanceModel?
@@ -483,7 +482,8 @@ struct Raytracing : public OverlayFeature
 
 	// Debug variables
 	std::string debugDefines = "";
-	bool debugUpdateTriShapes = true;
+	bool debugDisableTriShapesUpdate = false;
+	bool debugDisableTextureSharing = false;
 
 	enum class RecompileReason : uint32_t
 	{
@@ -1207,7 +1207,7 @@ struct Raytracing : public OverlayFeature
 
 				std::lock_guard<std::recursive_mutex> lock(rt.shareTextureMutex);
 
-				rt.shareTexture = true;
+				rt.shareTexture = !rt.debugDisableTextureSharing;
 
 				auto* result = func(a1, path, srv, a4, a5);
 

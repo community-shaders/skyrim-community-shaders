@@ -1,5 +1,7 @@
 #include "SkinningPipeline.h"
 
+#include "Features/Raytracing.h"
+
 void SkinningPipeline::CreateRootSignature(ID3D12Device5* device)
 {
 	heap = eastl::make_unique<DX12::DescriptorHeap<SkinningHeap>>(
@@ -33,10 +35,6 @@ void SkinningPipeline::CreateRootSignature(ID3D12Device5* device)
 
 	auto rootParameters = heap->GetRootParameters();
 
-	CD3DX12_ROOT_PARAMETER1 constantRootParam;
-	constantRootParam.InitAsConstantBufferView(0, 0);
-	rootParameters.push_back(constantRootParam);
-
 	CD3DX12_VERSIONED_ROOT_SIGNATURE_DESC rootSigDesc;
 	rootSigDesc.Init_1_1(
 		static_cast<uint>(rootParameters.size()),
@@ -65,7 +63,7 @@ void SkinningPipeline::CompileShaders(ID3D12Device5* device)
 	computeDesc.CS = { shaderBlob->GetBufferPointer(), shaderBlob->GetBufferSize() };
 
 	DX::ThrowIfFailed(device->CreateComputePipelineState(&computeDesc, IID_PPV_ARGS(pipelineState.put())));
-	DX::ThrowIfFailed(pipelineState->SetName(L"Compute Pipeline - Vertex Update"));
+	DX::ThrowIfFailed(pipelineState->SetName(L"Compute Pipeline - Skinning"));
 }
 
 void SkinningPipeline::SetupResources(ID3D12Device5* device)
@@ -74,11 +72,6 @@ void SkinningPipeline::SetupResources(ID3D12Device5* device)
 	DX::ThrowIfFailed(vertexUpdateBuffer->resource->SetName(L"Vertex Update Buffer"));
 
 	vertexUpdateBuffer->CreateSRV(heap->CPUHandle(SkinningHeap::Slot::UpdateData));
-
-	constantBufferData = eastl::make_unique<FrameData>();
-
-	constantBuffer = eastl::make_unique<DX12::StructuredBufferUpload<FrameData>>(device, 1, false, D3D12_RESOURCE_STATE_VERTEX_AND_CONSTANT_BUFFER);
-	DX::ThrowIfFailed(constantBuffer->resource->SetName(L"Skinning Constant Buffer"));
 }
 
 void SkinningPipeline::QueueUpdate(Flags updateFlags, eastl::string name, Shape* shape)
@@ -122,11 +115,7 @@ bool SkinningPipeline::PrepareResources(ID3D12GraphicsCommandList4* commandList,
 
 	count = (uint)vertexUpdateData.size();
 
-	constantBufferData->Count = count;
-	constantBuffer->Update(constantBufferData.get(), sizeof(FrameData));
-	constantBuffer->Upload(commandList);
-
-	vertexUpdateBuffer->Update(vertexUpdateData.data(), vertexUpdateData.size());
+	vertexUpdateBuffer->UpdateList(vertexUpdateData.data(), vertexUpdateData.size());
 	vertexUpdateBuffer->Upload(commandList);
 
 	return true;
@@ -152,6 +141,29 @@ void SkinningPipeline::RestoreResources(ID3D12GraphicsCommandList4* commandList)
 	queueModels.clear();
 }
 
+void SkinningPipeline::UpdateBLASES(ID3D12GraphicsCommandList4* commandList)
+{
+	eastl::vector<CD3DX12_RESOURCE_BARRIER> uavBarriers;
+	uavBarriers.reserve(queueModels.size());
+
+	auto& rt = globals::features::raytracing;
+
+	for (auto& queuedModel : queueModels) {
+		if (auto it = rt.models.find(queuedModel.name); it != rt.models.end()) {
+			auto& model = it->second;
+
+			rt.UpdateModelBLAS(model.get());
+
+			uavBarriers.push_back(CD3DX12_RESOURCE_BARRIER::UAV(model->blasBuffer->GetResource()));
+		}
+	}
+
+	uint blasUpdateCount = (uint)uavBarriers.size();
+
+	if (blasUpdateCount > 0)
+		commandList->ResourceBarrier(blasUpdateCount, uavBarriers.data());
+}
+
 void SkinningPipeline::Dispatch(ID3D12GraphicsCommandList4* commandList)
 {
 	uint count = 0;
@@ -174,9 +186,6 @@ void SkinningPipeline::Dispatch(ID3D12GraphicsCommandList4* commandList)
 
 	commandList->SetComputeRootDescriptorTable(3, heap->TableGPUHandle(SkinningHeap::Table::SkinningBuffer));
 
-	commandList->SetComputeRootConstantBufferView(4, constantBuffer->resource->GetGPUVirtualAddress());
-
-
 	/*CD3DX12_RESOURCE_BARRIER uavBarrier[3] = {
 		CD3DX12_RESOURCE_BARRIER::UAV(sharcHashEntriesBuffer->resource.get()),
 		CD3DX12_RESOURCE_BARRIER::UAV(sharcAccumulationBuffer->resource.get()),
@@ -191,6 +200,8 @@ void SkinningPipeline::Dispatch(ID3D12GraphicsCommandList4* commandList)
 	//commandList->ResourceBarrier(_countof(uavBarrier), uavBarrier);
 
 	RestoreResources(commandList);
+
+	UpdateBLASES(commandList);
 }
 
 /*void Raytracing::UpdateDynamicSkinning(ID3D12GraphicsCommandList4* pCommandList)

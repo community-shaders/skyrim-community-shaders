@@ -5,12 +5,6 @@
 
 #define MAX_BONES (255)
 
-cbuffer FrameData : register(b0)
-{
-    uint Count;
-    uint3 Pad;
-};
-
 RWStructuredBuffer<Vertex> OutputVertices[]             : register(u0);
 
 //StructuredBuffer<float3x4> LocalToRoot                  : register(t0, space0);
@@ -22,17 +16,17 @@ StructuredBuffer<float4> DynamicVertices[]              : register(t0, space1);
 StructuredBuffer<Skinning> MeshSkinning[]               : register(t0, space2);
 //StructuredBuffer<Vertex> Vertices[]                     : register(t0, space2);
 
-#define DYNAMIC (1 << 1)
-#define SKINNED (1 << 2)
+namespace Flags
+{
+    static const uint16_t Dynamic = (1 << 1);
+    static const uint16_t Skinned = (1 << 2); 
+}
 
 [numthreads(1, THREAD_SIZE, 1)]
 void main(uint2 id : SV_DispatchThreadID)
 {
     const uint modelIndex = id.x;
     const uint vertexIndex = id.y;
-    
-    if (modelIndex >= Count)
-        return;
 
     //float3x4 localToRoot = LocalToRoot[modelIndex];
     //float3x3 localToRootRot = (float3x3)localToRoot;
@@ -46,23 +40,19 @@ void main(uint2 id : SV_DispatchThreadID)
 
     //StructuredBuffer<Vertex> vertices = Vertices[shapeIndex];
 
-    RWStructuredBuffer<Vertex> outputVertices = OutputVertices[shapeIndex];
-
     // This contains the original uploaded vertex
-    Vertex vertex = outputVertices[vertexIndex];
+    Vertex vertex = OutputVertices[shapeIndex][vertexIndex];
 
-    if (updateData.flags & DYNAMIC)
+    if (updateData.flags & Flags::Dynamic)
     {
-        StructuredBuffer<float4> dynamicVertices = DynamicVertices[shapeIndex];
-        
-        float4 dynamicVertex = dynamicVertices[modelIndex];      
+        float4 dynamicVertex = DynamicVertices[shapeIndex][vertexIndex];      
         
         //vertex.Position = mul(localToRoot, float4(dynamicVertex.xyz, 1.0f));
         vertex.Position = dynamicVertex.xyz;
         //vertex.Bitangent = (half3) mul(localToRootRot, half3(dynamicVertex.w, vertex.Bitangent.yz));
     }
-
-    /*if (updateData.flags & SKINNED)
+    
+    /*if (updateData.flags & Flags::Skinned)
     {
         StructuredBuffer<Skinning> skinning = MeshSkinning[shapeIndex];
     
@@ -89,5 +79,5 @@ void main(uint2 id : SV_DispatchThreadID)
         vertex.Bitangent = (half3)mul(boneMatrixRot, vertex.Bitangent);
     }*/
 
-    outputVertices[vertexIndex] = vertex;
+    OutputVertices[shapeIndex][vertexIndex] = vertex;
 }

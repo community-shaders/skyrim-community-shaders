@@ -479,7 +479,9 @@ void Raytracing::DrawDebugSettings()
 
 	ImGui::PushID("DebugSettings");
 
-	ImGui::Checkbox("Update TriShapes", &debugUpdateTriShapes);
+	ImGui::Checkbox("Disable TriShapes Update", &debugDisableTriShapesUpdate);
+
+	ImGui::Checkbox("Disable Texture Sharing", &debugDisableTextureSharing);
 
 	ImGui::InputText("Shader Defines", &debugDefines);
 
@@ -2663,7 +2665,7 @@ void Raytracing::DrawRTGI()
 
 	UpdateInstances();
 
-	if (debugUpdateTriShapes)
+	if (!debugDisableTriShapesUpdate)
 		skinningPipeline->Dispatch(commandList.get());
 
 	// Upload buffers
@@ -3079,6 +3081,9 @@ void Raytracing::RenderShadows()
 
 	// Do DX12 work...
 	UpdateShadowInstances();
+
+	if (!debugDisableTriShapesUpdate)
+		skinningPipeline->Dispatch(commandList.get());
 
 	//UpdateDynamicSkinning(commandList.get());
 
