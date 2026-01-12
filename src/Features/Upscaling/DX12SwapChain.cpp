@@ -414,11 +414,14 @@ HRESULT STDMETHODCALLTYPE DXGISwapChainProxy::GetLastPresentCount(_Out_ UINT* pL
 
 void DX12SwapChain::SetUIBuffer()
 {
-	if (!globals::game::ui->GameIsPaused()) {
-		auto& data = globals::game::renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGET::kFRAMEBUFFER];
-		data.RTV = uiBufferWrapped->rtv;
-		d3d11Context->OMSetRenderTargets(1, &data.RTV, nullptr);
-	}
+	// Clear UI buffer before vanilla UI renders (matches non-FG HDR::SetUIBuffer behavior)
+	float clearColor[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
+	d3d11Context->ClearRenderTargetView(uiBufferWrapped->rtv, clearColor);
+
+	// Redirect kFRAMEBUFFER.RTV to our UI texture so vanilla UI renders to it
+	auto& data = globals::game::renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGET::kFRAMEBUFFER];
+	data.RTV = uiBufferWrapped->rtv;
+	d3d11Context->OMSetRenderTargets(1, &data.RTV, nullptr);
 }
 
 void DX12SwapChain::CreateSharedResources()

@@ -100,13 +100,9 @@ PS_OUTPUT main(PS_INPUT input)
 	float3 ppColor = 0.0;
 
 #	if defined(HDR_OUTPUT)
-	// HDR pass-through: apply exposure only, skip tonemapping
-	if (avgValue.x != 0 && avgValue.y != 0)
-		inputColor *= avgValue.y / avgValue.x;
-	inputColor = max(0, inputColor);
-	inputColor += bloomColor;
-	outputColor = inputColor;
-	ppColor = inputColor;
+	// HDR pass-through: raw linear output, HDROutputCS handles everything
+	outputColor = max(0, inputColor);
+	ppColor = outputColor;
 #	else
 	// SDR tonemapping and post-processing
 	float3 gameSdrColor = 0.0;
@@ -143,29 +139,11 @@ PS_OUTPUT main(PS_INPUT input)
 	outputColor = ppColor;
 #	endif
 
-	float3 srgbColor = ppColor;
-
-#		if defined(FADE)
-	srgbColor = lerp(srgbColor, Fade.xyz, Fade.w);
-#		endif
-
-	if (SharedData::linearLightingSettings.enableLinearLighting && SharedData::linearLightingSettings.enableGammaCorrection) {
-		srgbColor = Color::TrueLinearToGamma(srgbColor);
-	}
-	srgbColor = FrameBuffer::ToSRGBColor(srgbColor);
-
 #	if defined(FADE)
 	outputColor = lerp(outputColor, Fade.xyz, Fade.w);
 #	endif
 
-
-#	if defined(HDR_OUTPUT)
-	// HDR mode: output is linear, no gamma correction needed
 	psout.Color = float4(outputColor, 1.0);
-#	else
-	// SDR mode: tonemappers already output gamma space (HejlBurgessDawson has pow(x, 2.2) baked in)
-	psout.Color = float4(outputColor, 1.0);
-#	endif
 
 #	endif
 

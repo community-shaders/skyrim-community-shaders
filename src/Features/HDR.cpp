@@ -14,134 +14,72 @@
 
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	HDR::Settings,
-	tonemapToSDR,
-	paperWhite,
-	peakNits,
-	redPrimaryX,
-	redPrimaryY,
-	greenPrimaryX,
-	greenPrimaryY,
-	bluePrimaryX,
-	bluePrimaryY,
-	whitePointX,
-	whitePointY,
-	maxMasteringLuminance,
-	minMasteringLuminance,
-	maxContentLightLevel,
-	maxFrameAverageLightLevel);
+	sdrMode,
+	convertToGamma,
+	enableTonemapping,
+	hdrPaperWhite,
+	hdrPeakNits);
 
 void HDR::DrawSettings()
 {
-	bool oldTonemapToSDR = settings.tonemapToSDR;
-	ImGui::Checkbox("Tonemap to SDR", &settings.tonemapToSDR);
-	if (oldTonemapToSDR != settings.tonemapToSDR) {
-		logger::info("HDR: tonemapToSDR changed to: {}", settings.tonemapToSDR);
-		logger::info("HDR: hdrDataCB = {}", hdrDataCB ? "valid" : "NULL");
-		UpdateHDRData();
-	}
-	if (auto _tt = Util::HoverTooltipWrapper()) {
-		ImGui::Text("Apply SDR tonemapping for SDR displays. Disable for HDR displays.");
-	}
-
+	ImGui::TextWrapped("Note: All options OFF = Raw linear HDR output for further post-processing.");
 	ImGui::Spacing();
-	uint oldPaperWhite = settings.paperWhite;
-	ImGui::SliderInt("Paper White (nits)", reinterpret_cast<int*>(&settings.paperWhite), 80, 500);
-	if (oldPaperWhite != settings.paperWhite) {
+	
+	ImGui::Text("Output Mode");
+	
+	bool oldSdrMode = settings.sdrMode;
+	ImGui::Checkbox("SDR Mode (Clamp to 0-1)", &settings.sdrMode);
+	if (oldSdrMode != settings.sdrMode) {
+		logger::info("HDR: sdrMode changed to: {}", settings.sdrMode);
 		UpdateHDRData();
 	}
 	if (auto _tt = Util::HoverTooltipWrapper()) {
-		ImGui::Text("Reference white brightness for SDR content.");
+		ImGui::Text("OFF = Linear HDR passthrough. ON = Compress to SDR range.");
 	}
 
-	uint oldPeakNits = settings.peakNits;
-	ImGui::SliderInt("Peak Brightness (nits)", reinterpret_cast<int*>(&settings.peakNits), 400, 10000);
-	if (oldPeakNits != settings.peakNits) {
+	bool oldConvertToGamma = settings.convertToGamma;
+	ImGui::Checkbox("Output sRGB Gamma (for ENB/ReShade)", &settings.convertToGamma);
+	if (oldConvertToGamma != settings.convertToGamma) {
+		logger::info("HDR: convertToGamma changed to: {}", settings.convertToGamma);
 		UpdateHDRData();
 	}
 	if (auto _tt = Util::HoverTooltipWrapper()) {
-		ImGui::Text("Maximum brightness for HDR highlights.");
+		ImGui::Text("OFF = PQ encoding for native HDR10 displays.");
+		ImGui::Text("ON = sRGB gamma for ENB/ReShade post-processing.");
+	}
+
+	bool oldEnableTonemapping = settings.enableTonemapping;
+	ImGui::Checkbox("Enable Tonemapping", &settings.enableTonemapping);
+	if (oldEnableTonemapping != settings.enableTonemapping) {
+		logger::info("HDR: enableTonemapping changed to: {}", settings.enableTonemapping);
+		UpdateHDRData();
+	}
+	if (auto _tt = Util::HoverTooltipWrapper()) {
+		ImGui::Text("Apply Reinhard tonemapping to compress HDR highlights.");
 	}
 
 	ImGui::Spacing();
 	ImGui::Separator();
 	
-	if (ImGui::CollapsingHeader("HDR10 Display Metadata")) {
-		bool metadataChanged = false;
-
-		ImGui::Text("Color Primaries (CIE 1931 xy coordinates)");
+	if (!settings.sdrMode) {
+		ImGui::Text("HDR Settings");
 		
-		uint oldRedX = settings.redPrimaryX;
-		uint oldRedY = settings.redPrimaryY;
-		ImGui::SliderInt("Red Primary X", reinterpret_cast<int*>(&settings.redPrimaryX), 0, 50000);
-		ImGui::SliderInt("Red Primary Y", reinterpret_cast<int*>(&settings.redPrimaryY), 0, 50000);
-		if (oldRedX != settings.redPrimaryX || oldRedY != settings.redPrimaryY)
-			metadataChanged = true;
-
-		uint oldGreenX = settings.greenPrimaryX;
-		uint oldGreenY = settings.greenPrimaryY;
-		ImGui::SliderInt("Green Primary X", reinterpret_cast<int*>(&settings.greenPrimaryX), 0, 50000);
-		ImGui::SliderInt("Green Primary Y", reinterpret_cast<int*>(&settings.greenPrimaryY), 0, 50000);
-		if (oldGreenX != settings.greenPrimaryX || oldGreenY != settings.greenPrimaryY)
-			metadataChanged = true;
-
-		uint oldBlueX = settings.bluePrimaryX;
-		uint oldBlueY = settings.bluePrimaryY;
-		ImGui::SliderInt("Blue Primary X", reinterpret_cast<int*>(&settings.bluePrimaryX), 0, 50000);
-		ImGui::SliderInt("Blue Primary Y", reinterpret_cast<int*>(&settings.bluePrimaryY), 0, 50000);
-		if (oldBlueX != settings.bluePrimaryX || oldBlueY != settings.bluePrimaryY)
-			metadataChanged = true;
-
-		ImGui::Spacing();
-		ImGui::Text("White Point");
-		
-		uint oldWhiteX = settings.whitePointX;
-		uint oldWhiteY = settings.whitePointY;
-		ImGui::SliderInt("White Point X", reinterpret_cast<int*>(&settings.whitePointX), 0, 50000);
-		ImGui::SliderInt("White Point Y", reinterpret_cast<int*>(&settings.whitePointY), 0, 50000);
-		if (oldWhiteX != settings.whitePointX || oldWhiteY != settings.whitePointY)
-			metadataChanged = true;
-
-		ImGui::Spacing();
-		ImGui::Text("Luminance");
-		
-		uint oldMaxMaster = settings.maxMasteringLuminance;
-		ImGui::SliderInt("Max Mastering Luminance (nits)", reinterpret_cast<int*>(&settings.maxMasteringLuminance), 400, 10000);
-		if (oldMaxMaster != settings.maxMasteringLuminance)
-			metadataChanged = true;
-
-		uint oldMinMaster = settings.minMasteringLuminance;
-		ImGui::SliderInt("Min Mastering Luminance (0.0001 nits)", reinterpret_cast<int*>(&settings.minMasteringLuminance), 1, 1000);
-		if (oldMinMaster != settings.minMasteringLuminance)
-			metadataChanged = true;
-
-		uint oldMaxCLL = settings.maxContentLightLevel;
-		ImGui::SliderInt("Max Content Light Level (nits)", reinterpret_cast<int*>(&settings.maxContentLightLevel), 400, 10000);
-		if (oldMaxCLL != settings.maxContentLightLevel)
-			metadataChanged = true;
-
-		uint oldMaxFALL = settings.maxFrameAverageLightLevel;
-		ImGui::SliderInt("Max Frame Average Light Level (nits)", reinterpret_cast<int*>(&settings.maxFrameAverageLightLevel), 100, 4000);
-		if (oldMaxFALL != settings.maxFrameAverageLightLevel)
-			metadataChanged = true;
-
-		if (metadataChanged) {
-			UpdateHDRMetadata();
+		uint oldPaperWhite = settings.hdrPaperWhite;
+		ImGui::SliderInt("HDR Paper White (nits)", reinterpret_cast<int*>(&settings.hdrPaperWhite), 80, 500);
+		if (oldPaperWhite != settings.hdrPaperWhite) {
+			UpdateHDRData();
+		}
+		if (auto _tt = Util::HoverTooltipWrapper()) {
+			ImGui::Text("Reference white brightness for HDR content.");
 		}
 
-		if (ImGui::Button("Reset to BT.2020 Defaults")) {
-			settings.redPrimaryX = 34000;
-			settings.redPrimaryY = 16000;
-			settings.greenPrimaryX = 13250;
-			settings.greenPrimaryY = 34500;
-			settings.bluePrimaryX = 7500;
-			settings.bluePrimaryY = 3000;
-			settings.whitePointX = 15635;
-			settings.whitePointY = 16450;
-			settings.maxMasteringLuminance = 1000;
-			settings.minMasteringLuminance = 100;
-			settings.maxContentLightLevel = 1000;
-			settings.maxFrameAverageLightLevel = 400;
-			UpdateHDRMetadata();
+		uint oldPeakNits = settings.hdrPeakNits;
+		ImGui::SliderInt("HDR Peak Brightness (nits)", reinterpret_cast<int*>(&settings.hdrPeakNits), 400, 10000);
+		if (oldPeakNits != settings.hdrPeakNits) {
+			UpdateHDRData();
+		}
+		if (auto _tt = Util::HoverTooltipWrapper()) {
+			ImGui::Text("Maximum brightness for HDR highlights.");
 		}
 	}
 }
@@ -204,9 +142,9 @@ void HDR::SetupResources()
 	outputTexture->CreateSRV(srvDesc);
 	outputTexture->CreateUAV(uavDesc);
 
-	// UI texture for separate UI rendering
+	// UI texture for separate UI rendering - use float format for HDR UI support
 	D3D11_TEXTURE2D_DESC uiTexDesc = texDesc;
-	uiTexDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+	uiTexDesc.Format = DXGI_FORMAT_R16G16B16A16_FLOAT; // HDR target for ImGUI to prevent colour and text fringing
 	uiTexDesc.BindFlags = D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_UNORDERED_ACCESS;
 
 	D3D11_SHADER_RESOURCE_VIEW_DESC uiSrvDesc = srvDesc;
@@ -585,25 +523,34 @@ void HDR::UpdateHDRData() const
 	}
 
 	HDRDataCB data;
-	data.parameters0 = DirectX::XMVectorSet(static_cast<float>(settings.paperWhite), static_cast<float>(settings.peakNits), settings.tonemapToSDR ? 1.f : 0.f, 0.f);
+	
+	data.parameters0 = DirectX::XMVectorSet(
+		settings.sdrMode ? 1.f : 0.f, 
+		settings.convertToGamma ? 1.f : 0.f, 
+		settings.enableTonemapping ? 1.f : 0.f,
+		static_cast<float>(settings.hdrPeakNits));
+	data.parameters1 = DirectX::XMVectorSet(
+		static_cast<float>(settings.hdrPaperWhite),
+		0.f, 0.f, 0.f);
 	hdrDataCB->Update(data);
 }
 
 void HDR::UpdateHDRMetadata() const
 {
+	// Hardcoded BT.2020 color primaries and D65 white point
 	DXGI_HDR_METADATA_HDR10 hdrMetadata = {};
-	hdrMetadata.RedPrimary[0] = static_cast<UINT16>(settings.redPrimaryX);
-	hdrMetadata.RedPrimary[1] = static_cast<UINT16>(settings.redPrimaryY);
-	hdrMetadata.GreenPrimary[0] = static_cast<UINT16>(settings.greenPrimaryX);
-	hdrMetadata.GreenPrimary[1] = static_cast<UINT16>(settings.greenPrimaryY);
-	hdrMetadata.BluePrimary[0] = static_cast<UINT16>(settings.bluePrimaryX);
-	hdrMetadata.BluePrimary[1] = static_cast<UINT16>(settings.bluePrimaryY);
-	hdrMetadata.WhitePoint[0] = static_cast<UINT16>(settings.whitePointX);
-	hdrMetadata.WhitePoint[1] = static_cast<UINT16>(settings.whitePointY);
-	hdrMetadata.MaxMasteringLuminance = settings.maxMasteringLuminance * 10000;
-	hdrMetadata.MinMasteringLuminance = settings.minMasteringLuminance;
-	hdrMetadata.MaxContentLightLevel = static_cast<UINT16>(settings.maxContentLightLevel);
-	hdrMetadata.MaxFrameAverageLightLevel = static_cast<UINT16>(settings.maxFrameAverageLightLevel);
+	hdrMetadata.RedPrimary[0] = 34000;    // 0.680
+	hdrMetadata.RedPrimary[1] = 16000;    // 0.320
+	hdrMetadata.GreenPrimary[0] = 13250;  // 0.265
+	hdrMetadata.GreenPrimary[1] = 34500;  // 0.690
+	hdrMetadata.BluePrimary[0] = 7500;    // 0.150
+	hdrMetadata.BluePrimary[1] = 3000;    // 0.060
+	hdrMetadata.WhitePoint[0] = 15635;    // 0.3127
+	hdrMetadata.WhitePoint[1] = 16450;    // 0.3290
+	hdrMetadata.MaxMasteringLuminance = 1000 * 10000;
+	hdrMetadata.MinMasteringLuminance = 100;
+	hdrMetadata.MaxContentLightLevel = 1000;
+	hdrMetadata.MaxFrameAverageLightLevel = 400;
 
 	auto& upscaling = globals::features::upscaling;
 
