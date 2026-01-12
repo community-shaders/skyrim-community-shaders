@@ -1,6 +1,9 @@
 #pragma once
 
-struct LightLimitFix : Feature
+#include "Buffer.h"
+#include "OverlayFeature.h"
+
+struct LightLimitFix : OverlayFeature
 {
 private:
 	static constexpr std::string_view MOD_ID = "99548";
@@ -36,6 +39,7 @@ public:
 		Initialised = (1 << 8),
 		Disabled = (1 << 9),
 		InverseSquare = (1 << 10),
+		Linear = (1 << 11),
 	};
 
 	struct PositionOpt
@@ -47,7 +51,7 @@ public:
 	struct alignas(16) LightData
 	{
 		float3 color;
-		float fade;
+		float fade = 1.0f;
 		float radius;
 		float invRadius;
 		float fadeZone;
@@ -59,6 +63,7 @@ public:
 		uint pad0;
 		uint pad1;
 	};
+	STATIC_ASSERT_ALIGNAS_16(LightData);
 
 	struct ClusterAABB
 	{
@@ -72,6 +77,7 @@ public:
 		uint lightCount;
 		uint pad0[2];
 	};
+	STATIC_ASSERT_ALIGNAS_16(LightGrid);
 
 	struct alignas(16) LightBuildingCB
 	{
@@ -80,6 +86,7 @@ public:
 		uint pad0[2];
 		uint ClusterSize[4];
 	};
+	STATIC_ASSERT_ALIGNAS_16(LightBuildingCB);
 
 	struct alignas(16) LightCullingCB
 	{
@@ -87,6 +94,7 @@ public:
 		uint pad[3];
 		uint ClusterSize[4];
 	};
+	STATIC_ASSERT_ALIGNAS_16(LightCullingCB);
 
 	struct alignas(16) PerFrame
 	{
@@ -95,6 +103,7 @@ public:
 		float pad0[2];
 		uint ClusterSize[4];
 	};
+	STATIC_ASSERT_ALIGNAS_16(PerFrame);
 
 	PerFrame GetCommonBufferData();
 
@@ -106,6 +115,7 @@ public:
 		uint pad0;
 		LightData StrictLights[15];
 	};
+	STATIC_ASSERT_ALIGNAS_16(StrictLightDataCB);
 
 	StrictLightDataCB strictLightDataTemp;
 
@@ -147,6 +157,8 @@ public:
 	virtual void RestoreDefaultSettings() override;
 
 	virtual void DrawSettings() override;
+	virtual void DrawOverlay() override;
+	virtual bool IsOverlayVisible() const override { return settings.EnableLightsVisualisation; }
 
 	virtual void PostPostLoad() override;
 	virtual void DataLoaded() override;

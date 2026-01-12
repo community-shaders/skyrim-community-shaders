@@ -131,7 +131,7 @@ void VR::PostPostLoad()
 void VR::DataLoaded()
 {
 	// Initialize occlusion culling based on settings, but force-disable if an external
-	// upscaler is active (FSR/XeSS/DLSS) since upscalers may modify the depth buffer.
+	// upscaler is active (FSR/DLSS) since upscalers may modify the depth buffer.
 	bool desired = settings.EnableDepthBufferCullingExterior;
 	UpdateDepthBufferCulling(desired);
 
@@ -590,7 +590,7 @@ namespace
 			// If an upscaler is active that rewrites or repurposes the depth buffer,
 			// depth-buffer-culling must be disabled to avoid incorrect occlusion tests
 			// (which are especially problematic in VR). Query the Upscaling feature
-			// to see whether we're running FSR, XeSS or DLSS.
+			// to see whether we're running FSR or DLSS.
 			// Determine if an external upscaler is active by reading the numeric
 			// setting value directly. Avoid referencing Upscaling types here to
 			// prevent header/type collisions in this translation unit.
@@ -603,7 +603,7 @@ namespace
 			ImGui::Checkbox("Enable Depth Buffer Culling in Exteriors", &settings.EnableDepthBufferCullingExterior);
 			if (upscalingActive) {
 				if (auto _tt = Util::HoverTooltipWrapper()) {
-					ImGui::Text("Disabled while an external upscaler is active (FSR/XeSS/DLSS) because upscalers may modify depth.\nThis prevents incorrect occlusion in VR.");
+					ImGui::Text("Disabled while an external upscaler is active (FSR/DLSS) because upscalers may modify depth.\nThis prevents incorrect occlusion in VR.");
 				}
 				ImGui::EndDisabled();
 			} else {
@@ -618,7 +618,7 @@ namespace
 			ImGui::Checkbox("Enable Depth Buffer Culling in Interiors", &settings.EnableDepthBufferCullingInterior);
 			if (upscalingActive) {
 				if (auto _tt = Util::HoverTooltipWrapper()) {
-					ImGui::Text("Disabled while an external upscaler is active (FSR/XeSS/DLSS) because upscalers may modify depth.\nThis prevents incorrect occlusion in VR.");
+					ImGui::Text("Disabled while an external upscaler is active (FSR/DLSS) because upscalers may modify depth.\nThis prevents incorrect occlusion in VR.");
 				}
 				ImGui::EndDisabled();
 			} else {

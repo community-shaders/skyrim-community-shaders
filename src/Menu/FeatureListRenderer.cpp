@@ -263,6 +263,8 @@ void FeatureListRenderer::RenderRightColumn(
 
 void FeatureListRenderer::ListMenuVisitor::operator()(const BuiltInMenu& menu)
 {
+	MenuFonts::FontRoleGuard fontGuard(Menu::FontRole::Subheading);
+
 	// Use error color for Feature Issues menu item
 	bool isFeatureIssues = (menu.name == "Feature Issues");
 	if (isFeatureIssues) {
@@ -274,8 +276,7 @@ void FeatureListRenderer::ListMenuVisitor::operator()(const BuiltInMenu& menu)
 
 		ImGui::PopStyleColor();
 	} else {
-		// Use contrast-aware selectable for better text visibility
-		if (Util::ColorUtils::ContrastSelectable(fmt::format(" {} ", menu.name).c_str(), selectedMenuRef == listId, ImGuiSelectableFlags_SpanAllColumns, ImVec2(0, 0)))
+		if (ImGui::Selectable(fmt::format(" {} ", menu.name).c_str(), selectedMenuRef == listId, ImGuiSelectableFlags_SpanAllColumns))
 			selectedMenuRef = listId;
 	}
 }
@@ -297,8 +298,12 @@ void FeatureListRenderer::ListMenuVisitor::operator()(const CategoryHeader& head
 	bool isExpanded = categoryExpansionStates[header.name];
 
 	// Draw category header with custom styling using util:UI function
-	int count = Menu::categoryCounts[std::string(header.name)];
-	Util::DrawCategoryHeader(header.name.c_str(), isExpanded, count);
+	// Use Heading font for category headers
+	{
+		MenuFonts::FontRoleGuard fontGuard(Menu::FontRole::Heading);
+		int count = Menu::categoryCounts[std::string(header.name)];
+		Util::DrawCategoryHeader(header.name.c_str(), isExpanded, count);
+	}
 
 	// Update expansion state
 	categoryExpansionStates[header.name] = isExpanded;
@@ -306,6 +311,8 @@ void FeatureListRenderer::ListMenuVisitor::operator()(const CategoryHeader& head
 
 void FeatureListRenderer::ListMenuVisitor::operator()(Feature* feat)
 {
+	MenuFonts::FontRoleGuard fontGuard(Menu::FontRole::Subheading);
+
 	const auto featureName = feat->GetShortName();
 	bool isDisabled = globals::state->IsFeatureDisabled(featureName);
 	bool isLoaded = feat->loaded;
@@ -332,10 +339,12 @@ void FeatureListRenderer::ListMenuVisitor::operator()(Feature* feat)
 		}
 	}
 
-	// Create selectable item with contrast-adjusted semantic color
-	if (Util::ColorUtils::ContrastSelectableWithColor(fmt::format(" {} ", feat->GetName()).c_str(), selectedMenuRef == listId, textColor, ImGuiSelectableFlags_SpanAllColumns, ImVec2(0, 0))) {
+	// Create selectable item with semantic color
+	ImGui::PushStyleColor(ImGuiCol_Text, textColor);
+	if (ImGui::Selectable(fmt::format(" {} ", feat->GetName()).c_str(), selectedMenuRef == listId, ImGuiSelectableFlags_SpanAllColumns)) {
 		selectedMenuRef = listId;
 	}
+	ImGui::PopStyleColor();
 
 	// Display version if loaded
 	if (isLoaded) {
@@ -376,6 +385,7 @@ void FeatureListRenderer::DrawMenuVisitor::operator()(Feature* feat)
 	float buttonPadding = ThemeManager::Constants::BUTTON_PADDING;
 	float buttonSpacing = ThemeManager::Constants::BUTTON_SPACING;
 
+	MenuFonts::TabBarPaddingGuard tabPaddingGuard(Menu::FontRole::Subheading);
 	if (ImGui::BeginTabBar("##FeatureTabs", ImGuiTabBarFlags_Reorderable)) {
 		// Render Settings and About tabs
 		RenderFeatureSettingsTab(feat, isDisabled, isLoaded, hasFailedMessage);
@@ -446,21 +456,30 @@ void FeatureListRenderer::DrawMenuVisitor::RenderFeatureSettingsTab(Feature* fea
 		}
 
 		if (!isDisabled && isLoaded) {
-			ImVec2 childSize = ImGui::GetWindowSize();
+			// Position button in screen coordinates so it stays fixed in viewport when scrolling
+			ImVec2 windowPos = ImGui::GetWindowPos();
+			ImVec2 windowSize = ImGui::GetWindowSize();
+			float scrollbarWidth = ImGui::GetScrollMaxY() > 0 ? ImGui::GetStyle().ScrollbarSize : 0.0f;
+
 			float iconDimension = ImGui::GetFrameHeight() * 1.2f;
 			ImVec2 iconSize = ImVec2(iconDimension, iconDimension);
-			ImGui::SetCursorPos(ImVec2(childSize.x - iconSize.x - 10.0f, childSize.y - iconSize.y - 10.0f));
+
+			float padding = 10.0f;
+			ImVec2 buttonPos = ImVec2(
+				windowPos.x + windowSize.x - iconSize.x - padding - scrollbarWidth,
+				windowPos.y + windowSize.y - iconSize.y - padding);
+			ImGui::SetCursorScreenPos(buttonPos);
 			auto& theme = globals::menu->GetTheme().Palette;
 			ImVec4 iconColor = theme.Text;
 			iconColor.w *= 0.7f;
 
 			ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.0f, 0.0f, 0.0f, 0.0f));
-			ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(iconColor.x, iconColor.y, iconColor.z, 0.3f));
-			ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(iconColor.x, iconColor.y, iconColor.z, 0.5f));
+			ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(1.0f, 1.0f, 1.0f, 0.3f));
+			ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(1.0f, 1.0f, 1.0f, 0.5f));
 
 			auto& menu = *globals::menu;
 			if (menu.uiIcons.featureSettingRevert.texture) {
-				if (ImGui::ImageButton("##RestoreDefaults", menu.uiIcons.featureSettingRevert.texture, iconSize, ImVec2(0, 0), ImVec2(1, 1), ImVec4(0, 0, 0, 0), iconColor)) {
+				if (ImGui::ImageButton("##RestoreDefaults", menu.uiIcons.featureSettingRevert.texture, iconSize)) {
 					feat->RestoreDefaultSettings();
 				}
 			} else {

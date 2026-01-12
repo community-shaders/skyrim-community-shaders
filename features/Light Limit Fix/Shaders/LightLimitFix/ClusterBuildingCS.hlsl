@@ -4,10 +4,10 @@
 
 cbuffer PerFrame : register(b0)
 {
-    float LightsNear;
-    float LightsFar;
-    uint2 pad0;
-    uint4 ClusterSize;
+	float LightsNear;
+	float LightsFar;
+	uint2 pad0;  // Padding for 16-byte alignment: 8 -> 16 bytes
+	uint4 ClusterSize;
 }
 
 float3 GetPositionVS(float2 texcoord, float depth, int eyeIndex = 0)

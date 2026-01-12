@@ -1,5 +1,7 @@
 #pragma once
 
+#include "Buffer.h"
+
 #define ALBEDO RE::RENDER_TARGETS::kINDIRECT
 #define SPECULAR RE::RENDER_TARGETS::kINDIRECT_DOWNSCALED
 #define REFLECTANCE RE::RENDER_TARGETS::kRAWINDIRECT
@@ -62,6 +64,7 @@ public:
 		DirectX::XMFLOAT4X3 ShadowMapProj[2][3];
 		DirectX::XMFLOAT4X3 CameraViewProjInverse[2];
 	};
+	STATIC_ASSERT_ALIGNAS_16(PerGeometry);
 
 	ID3D11ComputeShader* copyShadowCS = nullptr;
 	Buffer* perShadow = nullptr;

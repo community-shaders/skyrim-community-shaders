@@ -1,5 +1,7 @@
 #pragma once
 
+#include "Buffer.h"
+
 struct WetnessEffects : Feature
 {
 private:
@@ -69,6 +71,7 @@ public:
 		Settings settings;
 		uint pad0;
 	};
+	STATIC_ASSERT_ALIGNAS_16(PerFrame);
 
 	struct DebugSettings
 	{

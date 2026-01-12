@@ -1,5 +1,6 @@
 #pragma once
 
+#include "Buffer.h"
 #include <filesystem>
 
 struct TerrainShadows : public Feature
@@ -65,6 +66,7 @@ public:
 		float2 ZRange;
 		float2 Offset;
 	};
+	STATIC_ASSERT_ALIGNAS_16(PerFrame);
 
 	PerFrame GetCommonBufferData();
 
@@ -94,4 +96,5 @@ public:
 	virtual inline void RestoreDefaultSettings() override { settings = {}; }
 	virtual void ClearShaderCache() override;
 	virtual bool SupportsVR() override { return true; };
+	virtual bool IsCore() const override { return true; };
 };

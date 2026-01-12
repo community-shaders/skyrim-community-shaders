@@ -26,6 +26,26 @@ SKSE plugin providing advanced DirectX 11 graphics modifications for Skyrim SE/A
 -   **Shader Test**: `hlslkit-compile --shader-dir [target]` (install via pip first)
 -   **Feature Access**: `globals::features::*` namespace
 
+### Build Options
+
+**Runtime Presets**: `ALL` (universal), `SE`, `AE`, `VR`, `PRE-AE`, `FLATRIM`, `ALL-TRACY`
+
+**CMake Options** (set in user preset):
+
+-   `AUTO_PLUGIN_DEPLOYMENT=ON` - Auto-copy to `CommunityShadersOutputDir`
+-   `ZIP_TO_DIST=ON` (default) - Create individual feature 7z packages
+-   `AIO_ZIP_TO_DIST=ON` (default) - Create all-in-one 7z package
+-   `TRACY_SUPPORT=ON` - Enable Tracy profiler integration
+
+### Custom CMake Targets
+
+**Quick targets** (common):
+
+-   `PREPARE_AIO`, `prepare_shaders`, `COPY_SHADERS`, `AIO_ZIP_PACKAGE`
+-   `FORMAT_CODE`, `generate_shader_configs`
+
+For full details about manual packaging targets (Package-Core, Package-AIO-Manual, Package-<Feature>, AIO) and example workflows, see the "Manual packaging targets (detailed)" section in `.claude/CLAUDE.md` to avoid duplication.
+
 ### AI Assistant Role
 
 **Act as an experienced graphics programming and Skyrim modding expert.**

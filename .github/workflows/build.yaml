@@ -36,6 +36,9 @@ on:
             - "vcpkg-configuration.json"
             - ".gitmodules"
             - "extern/**"
+            - "cmake/**"
+            - ".github/workflows/**"
+            - ".github/configs/**"
 
 permissions:
     contents: read
@@ -52,7 +55,8 @@ jobs:
         if: ${{ github.event_name == 'pull_request_target' }}
         outputs:
             should-build: ${{ steps.changed-files.outputs.build_any_changed == 'true' || steps.changed-files.outputs.cpp_any_changed == 'true' || steps.changed-files.conclusion == 'failure' }}
-            hlsl-should-build: ${{ steps.changed-files.outputs.hlsl_any_changed == 'true' || steps.changed-files.conclusion == 'failure' }}
+            hlsl-should-build: ${{ steps.changed-files.outputs.hlsl_any_changed == 'true' || steps.changed-files.outputs.cmake_any_changed == 'true' || steps.changed-files.outputs.ci_any_changed == 'true' || steps.changed-files.conclusion == 'failure' }}
+            shader-tests-should-build: ${{ steps.changed-files.outputs.shader_tests_any_changed == 'true' || steps.changed-files.outputs.hlsl_any_changed == 'true' || steps.changed-files.outputs.cmake_any_changed == 'true' || steps.changed-files.outputs.ci_any_changed == 'true' || steps.changed-files.conclusion == 'failure' }}
         steps:
             - uses: actions/checkout@v4
               with:
@@ -79,6 +83,7 @@ jobs:
                         - 'include/**'
                         - '!**.hlsl'
                         - '!**.hlsli'
+                        - '!tests/shaders/**'
                       build:
                         - 'CMakeLists.txt'
                         - 'CMakePresets.json'
@@ -86,11 +91,20 @@ jobs:
                         - 'vcpkg-configuration.json'
                         - '.gitmodules'
                         - 'extern/**'
+                      cmake:
+                        - 'CMakeLists.txt'
+                        - 'CMakePresets.json'
+                        - 'cmake/**'
+                      ci:
+                        - '.github/workflows/**'
+                        - '.github/configs/**'
                       hlsl:
                         - '**.hlsl'
                         - '**.hlsli'
                         - 'package/Shaders/**'
                         - 'features/**/Shaders/**'
+                      shader_tests:
+                        - 'tests/shaders/**'
                   base_sha: ${{ github.event.pull_request.base.sha }}
                   sha: ${{ github.event.pull_request.head.sha }}
 
@@ -123,108 +137,17 @@ jobs:
                   repository: ${{ github.event.pull_request.head.repo.full_name || github.repository }}
                   submodules: recursive
 
-            - name: Setup MSVC environment (VS2022)
-              uses: ilammy/msvc-dev-cmd@v1
+            - name: Setup Build Environment
+              id: setup
+              uses: ./.github/actions/setup-build-environment
               with:
-                  arch: x64
-
-            - name: Get MSVC version
-              id: msvc_version
-              shell: pwsh
-              run: |
-                  # Create a dummy source file for cl.exe /Bv
-                  "int main() { return 0; }" | Out-File -FilePath "dummy.cpp" -Encoding ASCII
-
-                  $output = & cl.exe /Bv dummy.cpp 2>&1
-                  Write-Host "Raw cl.exe output:"
-                  Write-Host $output
-
-                  # More robust version extraction
-                  $version = $null
-
-                  # Split output into lines and search for version patterns
-                  $lines = $output -split "`n|`r"
-                  Write-Host "Number of lines: $($lines.Count)"
-
-                  foreach ($line in $lines) {
-                      Write-Host "Processing line: '$line'"
-
-                      # Try different patterns on each line
-                      if ($line -match 'Version ([0-9]+\.[0-9]+\.[0-9]+)') {
-                          $version = $Matches[1]
-                          Write-Host "Found version in line: $version"
-                          break
-                      }
-                      elseif ($line -match '([0-9]+\.[0-9]+\.[0-9]+)') {
-                          $version = $Matches[1]
-                          Write-Host "Found generic version in line: $version"
-                          break
-                      }
-                  }
-
-                  # If still no version, try the whole output as a single string
-                  if (-not $version) {
-                      Write-Host "Trying whole output as single string..."
-                      if ($output -match 'Version ([0-9]+\.[0-9]+\.[0-9]+)') {
-                          $version = $Matches[1]
-                          Write-Host "Found version in whole output: $version"
-                      }
-                      elseif ($output -match '([0-9]+\.[0-9]+\.[0-9]+)') {
-                          $version = $Matches[1]
-                          Write-Host "Found generic version in whole output: $version"
-                      }
-                  }
-
-                  Write-Host "Final version result: $version"
-
-                  if ($version) {
-                      Write-Host "MSVC version: $version"
-                      Add-Content -Path $env:GITHUB_OUTPUT -Value "version=$version" -Encoding UTF8
-                  } else {
-                      Write-Host "Failed to extract MSVC version from output:"
-                      Write-Host $output
-                      throw "MSVC version not found in output"
-                  }
-
-                  # Clean up dummy file
-                  Remove-Item "dummy.cpp" -ErrorAction SilentlyContinue
-
-            - name: Setup vcpkg
-              uses: lukka/run-vcpkg@v11.5
-              with:
-                  vcpkgJsonGlob: vcpkg.json
-
-            - name: Cache CMake build output
-              uses: actions/cache@v4
-              with:
-                  path: build/ALL
-                  key: ${{ runner.os }}-cmake-msvc-${{ steps.msvc_version.outputs.version }}-${{ github.event.inputs.cache-key-suffix || 'default' }}-${{ hashFiles('.gitmodules', 'extern/**', 'CMakePresets.json', 'vcpkg.json', 'vcpkg-configuration.json') }}
-                  restore-keys: |
-                      ${{ runner.os }}-cmake-msvc-${{ steps.msvc_version.outputs.version }}-${{ github.event.inputs.cache-key-suffix || 'default' }}-
-                      ${{ runner.os }}-cmake-msvc-${{ steps.msvc_version.outputs.version }}-
-
-            - name: Remove stale CMake cache if drive letter changed
-              shell: pwsh
-              run: |
-                  $cacheFile = "build/ALL/CMakeCache.txt"
-                  if (Test-Path $cacheFile) {
-                    $expected = (Resolve-Path .).Path.Substring(0,1)  # C or D
-                    $content = Get-Content $cacheFile -Raw
-                    if ($content -match 'CMAKE_HOME_DIRECTORY:INTERNAL=([A-Z]):') {
-                      $actual = $Matches[1]
-                      if ($actual -ne $expected) {
-                        Write-Host "❌ Cache drive mismatch. Removing stale build/ALL directory."
-                        Remove-Item -Recurse -Force "build/ALL"
-                      } else {
-                        Write-Host "✅ Cache path matches. Keeping build/ALL."
-                      }
-                    }
-                  }
+                  cache-key-suffix: "cpp"
 
             - name: Build using run-cmake
               uses: lukka/run-cmake@v10
               with:
                   configurePreset: ALL
+                  configurePresetAdditionalArgs: "['-DBUILD_SHADER_TESTS=OFF']"
                   buildPreset: ALL
 
             - name: Extract version from CMake
@@ -289,155 +212,66 @@ jobs:
                       file: ".github/configs/shader-validation-vr.yaml"
             fail-fast: false # Let both configs run to completion for full output
         steps:
-            - name: Check if HLSL validation needed
-              id: check-hlsl
-              run: |
-                  # For release events and non-PR events, always run validation
-                  if [ "${{ github.event_name }}" = "release" ] || [ "${{ github.event_name }}" != "pull_request_target" ]; then
-                    echo "Non-PR event detected, proceeding with validation"
-                    echo "skip=false" >> $GITHUB_OUTPUT
-                  else
-                    # Only check for changes on PR events
-                    if [ "${{ needs.check-changes.outputs.hlsl-should-build }}" != "true" ]; then
-                      echo "No HLSL changes detected, skipping validation steps"
-                      echo "skip=true" >> $GITHUB_OUTPUT
-                    else
-                      echo "HLSL changes detected, proceeding with validation"
-                      echo "skip=false" >> $GITHUB_OUTPUT
-                    fi
-                  fi
-              shell: bash
-
             - name: Checkout code
-              if: steps.check-hlsl.outputs.skip != 'true'
               uses: actions/checkout@v4
               with:
                   ref: ${{ github.event.pull_request.head.ref || github.ref }}
                   repository: ${{ github.event.pull_request.head.repo.full_name || github.repository }}
                   submodules: recursive
 
-            - uses: ilammy/msvc-dev-cmd@v1
+            - name: Check for HLSL Changes
+              id: check-hlsl
+              uses: ./.github/actions/check-hlsl-changes
+              with:
+                  hlsl-should-build: ${{ needs.check-changes.outputs.hlsl-should-build }}
+            - name: Setup Build Environment
+              id: setup
               if: steps.check-hlsl.outputs.skip != 'true'
-
-            - name: Get MSVC version
+              uses: ./.github/actions/setup-build-environment
+              with:
+                  cache-key-suffix: "validation-${{ matrix.config.name }}"
+            - name: Prepare shaders
               if: steps.check-hlsl.outputs.skip != 'true'
-              id: msvc_version
+              uses: ./.github/actions/prepare-shaders
+            - name: Locate fxc.exe
+              if: steps.check-hlsl.outputs.skip != 'true'
+              id: find_fxc
               shell: pwsh
               run: |
-                  # Create a dummy source file for cl.exe /Bv
-                  "int main() { return 0; }" | Out-File -FilePath "dummy.cpp" -Encoding ASCII
-
-                  $output = & cl.exe /Bv dummy.cpp 2>&1
-                  Write-Host "Raw cl.exe output:"
-                  Write-Host $output
-
-                  # More robust version extraction
-                  $version = $null
-
-                  # Split output into lines and search for version patterns
-                  $lines = $output -split "`n|`r"
-                  Write-Host "Number of lines: $($lines.Count)"
-
-                  foreach ($line in $lines) {
-                      Write-Host "Processing line: '$line'"
-
-                      # Try different patterns on each line
-                      if ($line -match 'Version ([0-9]+\.[0-9]+\.[0-9]+)') {
-                          $version = $Matches[1]
-                          Write-Host "Found version in line: $version"
-                          break
-                      }
-                      elseif ($line -match '([0-9]+\.[0-9]+\.[0-9]+)') {
-                          $version = $Matches[1]
-                          Write-Host "Found generic version in line: $version"
-                          break
-                      }
-                  }
-
-                  # If still no version, try the whole output as a single string
-                  if (-not $version) {
-                      Write-Host "Trying whole output as single string..."
-                      if ($output -match 'Version ([0-9]+\.[0-9]+\.[0-9]+)') {
-                          $version = $Matches[1]
-                          Write-Host "Found version in whole output: $version"
-                      }
-                      elseif ($output -match '([0-9]+\.[0-9]+\.[0-9]+)') {
-                          $version = $Matches[1]
-                          Write-Host "Found generic version in whole output: $version"
-                      }
-                  }
-
-                  Write-Host "Final version result: $version"
-
-                  if ($version) {
-                      Write-Host "MSVC version: $version"
-                      Add-Content -Path $env:GITHUB_OUTPUT -Value "version=$version" -Encoding UTF8
+                  # Try to find fxc.exe on PATH first
+                  $fxcCmd = Get-Command -Name fxc.exe -ErrorAction SilentlyContinue
+                  if ($fxcCmd) {
+                    $fxcPath = $fxcCmd.Source
+                    Write-Host "Found fxc.exe at $fxcPath"
+                    Add-Content -Path $env:GITHUB_OUTPUT -Value "fxc_path=$fxcPath"
                   } else {
-                      Write-Host "Failed to extract MSVC version from output:"
-                      Write-Host $output
-                      throw "MSVC version not found in output"
-                  }
-
-                  # Clean up dummy file
-                  Remove-Item "dummy.cpp" -ErrorAction SilentlyContinue
-
-            - name: Setup vcpkg
-              if: steps.check-hlsl.outputs.skip != 'true'
-              uses: lukka/run-vcpkg@v11.5
-              with:
-                  vcpkgJsonGlob: vcpkg.json
-
-            - name: Cache CMake build output
-              if: steps.check-hlsl.outputs.skip != 'true'
-              uses: actions/cache@v4
-              with:
-                  path: build/ALL
-                  key: ${{ runner.os }}-cmake-msvc-${{ steps.msvc_version.outputs.version }}-${{ matrix.config.name }}-${{ github.event.inputs.cache-key-suffix || 'default' }}-${{ hashFiles('.gitmodules', 'extern/**', 'CMakePresets.json', 'vcpkg.json', 'vcpkg-configuration.json') }}
-                  restore-keys: |
-                      ${{ runner.os }}-cmake-msvc-${{ steps.msvc_version.outputs.version }}-${{ matrix.config.name }}-${{ github.event.inputs.cache-key-suffix || 'default' }}-
-                      ${{ runner.os }}-cmake-msvc-${{ steps.msvc_version.outputs.version }}-${{ matrix.config.name }}-
-
-            - name: Remove stale CMake cache if drive letter changed
-              if: steps.check-hlsl.outputs.skip != 'true'
-              shell: pwsh
-              run: |
-                  $cacheFile = "build/ALL/CMakeCache.txt"
-                  if (Test-Path $cacheFile) {
-                    $expected = (Resolve-Path .).Path.Substring(0,1)  # C or D
-                    $content = Get-Content $cacheFile -Raw
-                    if ($content -match 'CMAKE_HOME_DIRECTORY:INTERNAL=([A-Z]):') {
-                      $actual = $Matches[1]
-                      if ($actual -ne $expected) {
-                        Write-Host "❌ Cache drive mismatch. Removing stale build/ALL directory."
-                        Remove-Item -Recurse -Force "build/ALL"
-                      } else {
-                        Write-Host "✅ Cache path matches. Keeping build/ALL."
+                    # Try known Windows SDK locations (x64)
+                    $fxcPath = ''
+                    $sdkRoot = 'C:\Program Files (x86)\Windows Kits\10\bin'
+                    if (Test-Path $sdkRoot) {
+                      $versions = Get-ChildItem -Path $sdkRoot -Directory | Sort-Object -Descending
+                      foreach ($v in $versions) {
+                        $candidate = Join-Path $v.FullName 'x64\fxc.exe'
+                        if (Test-Path $candidate) { $fxcPath = $candidate; break }
                       }
+                    }
+                    if ($fxcPath -ne '') {
+                      Write-Host "Found fxc.exe at $fxcPath"
+                      Add-Content -Path $env:GITHUB_OUTPUT -Value "fxc_path=$fxcPath"
+                    } else {
+                      Write-Warning "fxc.exe not found in PATH or common SDK locations"
+                      Add-Content -Path $env:GITHUB_OUTPUT -Value "fxc_path="
                     }
                   }
 
-            - name: Prepare shaders for validation
-              if: steps.check-hlsl.outputs.skip != 'true'
-              uses: lukka/run-cmake@v10
-              with:
-                  configurePreset: ALL
-                  buildPreset: ALL
-                  buildPresetAdditionalArgs: "['--target prepare_shaders']"
-
-            - name: Setup Python
-              if: steps.check-hlsl.outputs.skip != 'true'
-              uses: actions/setup-python@v5
-              with:
-                  python-version: "3.11"
-
-            - name: Install hlslkit
-              if: steps.check-hlsl.outputs.skip != 'true'
-              run: pip install git+https://github.com/alandtse/hlslkit.git
-              shell: bash
-
             - name: Validate shader compilation (${{ matrix.config.name }})
               if: steps.check-hlsl.outputs.skip != 'true'
-              run: hlslkit-compile --shader-dir build/ALL/aio/Shaders --output-dir build/ShaderCache --config ${{ matrix.config.file }} --max-warnings 0 --suppress-warnings X1519
+              run: |
+                  if [ -z "${{ steps.find_fxc.outputs.fxc_path }}" ]; then
+                    echo "fxc.exe not found - shader validation requires fxc.exe. Set --fxc to a valid path or ensure fxc.exe is in PATH." >&2
+                    exit 1
+                  fi
+                  hlslkit-compile --fxc "${{ steps.find_fxc.outputs.fxc_path }}" --shader-dir build/ALL/aio/Shaders --output-dir build/ShaderCache --config ${{ matrix.config.file }} --max-warnings 0 --suppress-warnings X1519
               shell: bash
 
             - name: Upload shader validation logs
@@ -451,10 +285,67 @@ jobs:
                   retention-days: 7
                   if-no-files-found: ignore
 
+    shader-unit-tests:
+        name: Run Shader Unit Tests
+        needs: [check-changes]
+        if: >
+            always() && !cancelled() &&
+            ((github.event_name == 'pull_request_target' &&
+              !github.event.pull_request.draft) ||
+             (github.event_name == 'workflow_dispatch' &&
+              github.event.inputs.validate-shaders == 'true') ||
+             (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')))
+        runs-on: windows-2022
+        permissions:
+            contents: read
+        steps:
+            - name: Checkout code
+              uses: actions/checkout@v4
+              with:
+                  ref: ${{ github.event.pull_request.head.ref || github.ref }}
+                  repository: ${{ github.event.pull_request.head.repo.full_name || github.repository }}
+                  submodules: recursive
+
+            - name: Check for HLSL Changes
+              id: check-hlsl
+              uses: ./.github/actions/check-hlsl-changes
+              with:
+                  hlsl-should-build: ${{ needs.check-changes.outputs.shader-tests-should-build }}
+            - name: Setup Build Environment
+              id: setup
+              if: steps.check-hlsl.outputs.skip != 'true'
+              uses: ./.github/actions/setup-build-environment
+              with:
+                  cache-key-suffix: "tests"
+
+            - name: Build shader tests
+              if: steps.check-hlsl.outputs.skip != 'true'
+              uses: lukka/run-cmake@v10
+              with:
+                  configurePreset: ALL
+                  configurePresetAdditionalArgs: "['-DBUILD_SHADER_TESTS=ON']"
+                  buildPreset: ALL
+                  buildPresetAdditionalArgs: "['--target shader_tests']"
+
+            - name: Run shader unit tests
+              if: steps.check-hlsl.outputs.skip != 'true'
+              run: |
+                  ctest --test-dir build/ALL -C Release --output-on-failure -R ShaderTests --timeout 300
+
+            - name: Upload test results on failure
+              if: failure() && steps.check-hlsl.outputs.skip != 'true'
+              uses: actions/upload-artifact@v4
+              with:
+                  name: shader-test-results
+                  path: |
+                      build/ALL/Testing/**
+                  retention-days: 7
+                  if-no-files-found: ignore
+
     prerelease:
         name: Post Prerelease from PR
         if: github.event_name == 'pull_request_target'
-        needs: [cpp-build, shader-validation]
+        needs: [cpp-build, shader-validation, shader-unit-tests]
         runs-on: windows-2022
         permissions:
             contents: write
@@ -618,7 +509,7 @@ jobs:
 
     release:
         name: Post Release for Draft, Manual Run, or Tag
-        needs: [cpp-build, shader-validation, feature-audit]
+        needs: [cpp-build, shader-validation, shader-unit-tests, feature-audit]
         if: >
             github.event_name == 'workflow_dispatch' ||
             startsWith(github.ref, 'refs/tags/v') ||
