@@ -58,6 +58,10 @@ public:
 	void EndUIRendering();
 	bool IsRenderingUI() const { return renderingUI; }
 
+	// Frame Gen style UI buffer - redirects kFRAMEBUFFER.RTV for vanilla UI capture
+	void SetUIBuffer();
+	void ClearUIBuffer();
+
 	void ApplyHDR();
 
 	void DestroyResources() const;
@@ -88,6 +92,7 @@ public:
 	bool renderingUI = false;
 	ID3D11RenderTargetView* savedRTV = nullptr;
 	ID3D11DepthStencilView* savedDSV = nullptr;
+	ID3D11RenderTargetView* savedFramebufferRTV = nullptr;  // Original kFRAMEBUFFER.RTV for restoration
 
 	// Format constants to be used elsewhere
 	static constexpr auto BSGraphics_HDR_Format = RE::BSGraphics::Format::kR16G16B16A16_FLOAT;

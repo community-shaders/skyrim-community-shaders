@@ -295,20 +295,17 @@ void HDR::BeginUIRendering()
 
 	static bool loggedOnce = false;
 	if (!loggedOnce) {
-		logger::info("[HDR] BeginUIRendering - redirecting UI to uiTexture");
+		logger::info("[HDR] BeginUIRendering - setting uiTexture as render target for ImGui");
 		loggedOnce = true;
 	}
 
 	auto context = globals::d3d::context;
 
-	// Save current render target
+	// Save current render target so we can restore after ImGui
 	context->OMGetRenderTargets(1, &savedRTV, &savedDSV);
 
-	// Clear UI texture with transparent black
-	float clearColor[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
-	context->ClearRenderTargetView(uiTexture->rtv.get(), clearColor);
-
-	// Set UI texture as render target
+	// Do NOT clear - vanilla UI has already rendered to uiTexture via SetUIBuffer()
+	// Just ensure ImGui also renders to the same texture
 	ID3D11RenderTargetView* rtv = uiTexture->rtv.get();
 	context->OMSetRenderTargets(1, &rtv, nullptr);
 
@@ -351,6 +348,71 @@ void HDR::EndUIRendering()
 	}
 
 	renderingUI = false;
+}
+
+void HDR::SetUIBuffer()
+{
+	// Skip if D3D12 frame gen is active - it has its own UI buffer handling
+	if (globals::features::upscaling.d3d12SwapChainActive)
+		return;
+
+	// Skip if resources aren't ready
+	if (!uiTexture || !uiTexture->rtv || !hdrDataCB || !outputTexture) {
+		static bool loggedOnce = false;
+		if (!loggedOnce) {
+			logger::warn("[HDR] SetUIBuffer skipped - resources not ready: uiTexture={}, rtv={}, hdrDataCB={}, outputTexture={}",
+				uiTexture ? "valid" : "NULL",
+				(uiTexture && uiTexture->rtv) ? "valid" : "NULL",
+				hdrDataCB ? "valid" : "NULL",
+				outputTexture ? "valid" : "NULL");
+			loggedOnce = true;
+		}
+		return;
+	}
+
+	// Follow Frame Gen approach: redirect kFRAMEBUFFER.RTV to our UI texture
+	// This way vanilla Skyrim UI renders to our texture
+	auto& data = globals::game::renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGET::kFRAMEBUFFER];
+	
+	// Save original RTV for restoration after Present
+	if (!savedFramebufferRTV) {
+		savedFramebufferRTV = data.RTV;
+	}
+	
+	// Clear UI texture before vanilla UI renders (just like Frame Gen does after Present)
+	float clearColor[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
+	globals::d3d::context->ClearRenderTargetView(uiTexture->rtv.get(), clearColor);
+	
+	// Redirect to our UI texture
+	data.RTV = uiTexture->rtv.get();
+	globals::d3d::context->OMSetRenderTargets(1, &data.RTV, nullptr);
+
+	static bool loggedOnce = false;
+	if (!loggedOnce) {
+		logger::info("[HDR] SetUIBuffer - redirected kFRAMEBUFFER.RTV to uiTexture");
+		loggedOnce = true;
+	}
+}
+
+void HDR::ClearUIBuffer()
+{
+	// Skip if D3D12 frame gen is active
+	if (globals::features::upscaling.d3d12SwapChainActive)
+		return;
+
+	if (!uiTexture || !uiTexture->rtv)
+		return;
+
+	// Clear UI buffer with transparent black for next frame
+	float clearColor[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
+	globals::d3d::context->ClearRenderTargetView(uiTexture->rtv.get(), clearColor);
+
+	// Restore original framebuffer RTV
+	if (savedFramebufferRTV) {
+		auto& data = globals::game::renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGET::kFRAMEBUFFER];
+		data.RTV = savedFramebufferRTV;
+		savedFramebufferRTV = nullptr;
+	}
 }
 
 void HDR::ApplyHDR()

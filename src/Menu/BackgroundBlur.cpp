@@ -5,6 +5,7 @@
 #include "BackgroundBlur.h"
 #include "../Globals.h"
 #include "../Util.h"
+#include "../Features/HDR.h"
 
 #include <algorithm>
 #include <cmath>
@@ -533,6 +534,14 @@ namespace BackgroundBlur
 		}
 
 		if (!initialized || initializationFailed) {
+			return;
+		}
+
+		// Skip blur when HDR is active - UI is rendered to a separate texture
+		// and composited by the HDR compute shader, blur would read UI texture not scene
+		auto hdr = HDR::GetSingleton();
+		bool hdrActive = hdr && hdr->uiTexture && hdr->uiTexture->rtv && hdr->hdrDataCB && hdr->outputTexture;
+		if (hdrActive) {
 			return;
 		}
 

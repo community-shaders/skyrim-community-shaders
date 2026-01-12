@@ -255,22 +255,44 @@ struct IDXGISwapChain_Present
 		auto menu = globals::menu;
 		state->Reset();
 
-		// Capture UI to separate texture for proper HDR compositing
 		auto hdr = HDR::GetSingleton();
-		if (hdr)
-			hdr->BeginUIRendering();
+		bool hdrActive = hdr && hdr->uiTexture && hdr->uiTexture->rtv && hdr->uiTexture->resource && 
+		                 hdr->hdrDataCB && hdr->outputTexture;
 
-		// ImGui overlay renders to UI texture (or back buffer if HDR unavailable)
+		if (hdrActive) {
+			// Vanilla UI has already been rendered to uiTexture via SetUIBuffer() in MenuManagerDrawInterfaceStartHook
+			// Now render ImGui overlay to the same uiTexture so both UIs are composited in gamma space
+			ID3D11RenderTargetView* rtv = hdr->uiTexture->rtv.get();
+			globals::d3d::context->OMSetRenderTargets(1, &rtv, nullptr);
+
+			// Set viewport to match uiTexture dimensions for ImGui rendering
+			D3D11_TEXTURE2D_DESC texDesc;
+			hdr->uiTexture->resource->GetDesc(&texDesc);
+			D3D11_VIEWPORT viewport = {};
+			viewport.Width = static_cast<float>(texDesc.Width);
+			viewport.Height = static_cast<float>(texDesc.Height);
+			viewport.MinDepth = 0.0f;
+			viewport.MaxDepth = 1.0f;
+			globals::d3d::context->RSSetViewports(1, &viewport);
+		}
+
 		menu->DrawOverlay();
 
-		if (hdr)
-			hdr->EndUIRendering();
+		if (hdrActive) {
+			// Unbind render target before ApplyHDR to avoid resource hazard 
+			// (uiTexture was RTV, now needs to be SRV)
+			ID3D11RenderTargetView* nullRTV = nullptr;
+			globals::d3d::context->OMSetRenderTargets(1, &nullRTV, nullptr);
 
-		// Apply HDR processing pipeline - reads kMAIN + UI texture, outputs to back buffer
-		if (hdr)
+			// Apply HDR processing pipeline - reads kMAIN + UI texture (with both UIs), outputs to back buffer
 			hdr->ApplyHDR();
+		}
 
 		HRESULT retval = func(This, SyncInterval, Flags);
+
+		// Clear UI buffer and restore original kFRAMEBUFFER.RTV for next frame
+		if (hdrActive)
+			hdr->ClearUIBuffer();
 
 		TracyD3D11Collect(state->tracyCtx);
 
