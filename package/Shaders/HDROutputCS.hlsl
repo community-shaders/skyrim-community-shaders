@@ -25,14 +25,14 @@ cbuffer PerFrame : register(b0)
 	const static float paperWhiteRef = 80.0;
 
 	float3 color = scene.rgb;
-	
+
 	float sdrPeakLinear = peakLuminance / paperWhiteRef;
 	float hdrScaling = paperWhite / paperWhiteRef;
-	
+
 	float3 sdrCompressed = renodx::tonemap::ReinhardExtended(color, sdrPeakLinear * 2.0, 1.0, 0.0);
 	float3 hdrScaled = color * hdrScaling;
 	color = lerp(hdrScaled, sdrCompressed, sdrMode);
-	
+
 	float peakLinear = peakNits / paperWhiteRef;
 	float3 tonemapped = renodx::tonemap::ReinhardExtended(color, peakLinear, 1.0, 0.0);
 	color = lerp(color, tonemapped, enableTonemapping);
