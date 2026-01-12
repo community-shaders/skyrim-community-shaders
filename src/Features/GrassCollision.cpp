@@ -209,6 +209,11 @@ void GrassCollision::Update()
 
 		ID3D11ShaderResourceView* srvs[] = { collisionTexture->srv.get() };
 		context->VSSetShaderResources(100, ARRAYSIZE(srvs), srvs);
+
+				
+		context->PSSetConstantBuffers(10, ARRAYSIZE(buffers), buffers);
+		context->PSSetShaderResources(112, ARRAYSIZE(srvs), srvs);
+
 	}
 }
 

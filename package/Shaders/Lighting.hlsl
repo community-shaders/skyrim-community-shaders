@@ -938,6 +938,137 @@ float GetSnowParameterY(float texProjTmp, float alpha)
 
 #	include "Common/LightingEval.hlsli"
 
+	Texture2D<float4> Collision : register(t112);
+
+	cbuffer GrassCollisionPerFrame : register(b10)
+	{
+		float2 PosOffset;  // cell origin in camera space
+		uint2 ArrayOrigin; // xy: array origin (clipmap wrapping)
+
+		int2 ValidMargin;
+		float TimeDelta;
+		uint BoundingBoxCount;
+
+		float CameraHeightDelta;
+	}
+
+	const static uint TEXTURE_SIZE = 512;
+	const static float WORLD_SIZE = 4096;
+	const static float CELL_SIZE = WORLD_SIZE / TEXTURE_SIZE;
+	const static float2 ZRANGE = float2(2048.0, -2048.0);
+
+	float ProceduralAnimation(float x, float distanceFromCenter) {
+		float fadeRate = 250;
+		x /= fadeRate;
+		x *= 100;
+		float frequency = 4 * Math::PI;
+		return cos(x * frequency) * exp(-x * 4);
+	}
+
+	void GetCollision(float3 worldPosition, float maximumDepth, float distanceFromCenter, out float collisionHeights, out float previousCollisionHeights)
+	{
+		float2 positionMSAdjusted = worldPosition.xy - PosOffset.xy;
+		float2 uv = positionMSAdjusted / WORLD_SIZE + .5;
+
+		float2 cellVxCoord = uv * TEXTURE_SIZE;
+		int2 cell000 = floor(cellVxCoord - 0.5);
+		float2 bilinearPos = cellVxCoord - 0.5 - cell000;
+
+		int2 cellID = cell000;
+
+		collisionHeights = 0.0;
+		previousCollisionHeights = 0.0;
+
+		float wsum = 0;
+
+		for (int i = 0; i < 2; i++)
+			for (int j = 0; j < 2; j++)
+		{
+			int2 offset = int2(i, j);
+			int2 cellID = cell000 + offset;
+
+			if (any(cellID < 0) || any((uint2)cellID >= TEXTURE_SIZE))
+				continue;
+
+			float2 cellCentreMS = cellID + 0.5 - TEXTURE_SIZE / 2;
+			cellCentreMS = cellCentreMS * CELL_SIZE;
+
+			float2 bilinearWeights = 1 - abs(offset - bilinearPos);
+			float w = bilinearWeights.x * bilinearWeights.y;
+
+			uint2 cellTexID = (cellID + ArrayOrigin.xy) % TEXTURE_SIZE;
+
+			float4 collisionSample = Collision[cellTexID];
+			collisionSample = lerp(ZRANGE.x, ZRANGE.y, collisionSample);
+
+			collisionHeights += collisionSample.x * w;
+
+			previousCollisionHeights += collisionSample.z * w;
+
+			wsum += w;
+		}
+
+		if (wsum > 0.0){
+			collisionHeights /= wsum;
+			previousCollisionHeights /= wsum;
+		} else {
+			collisionHeights = TEXTURE_SIZE;
+			previousCollisionHeights = TEXTURE_SIZE;
+		}
+
+		collisionHeights = min(collisionHeights, worldPosition.z + 20);
+		previousCollisionHeights = min(previousCollisionHeights, worldPosition.z + 20);
+	}
+
+	float3 ComputeNormalFromHeights(float h0, float hX, float hY, float delta)
+	{
+		float3 tangentX = float3(delta, 0, hX - h0);
+		float3 tangentY = float3(0, delta, hY - h0);
+		float3 crossProd = cross(tangentX, tangentY) * float3(1.0, 1.0, 0.1);
+
+		float lenSq = dot(crossProd, crossProd);
+		return lenSq > 1e-12 ? -crossProd * rsqrt(lenSq) : float3(0, 0, -1);
+	}
+
+	void ComputeCollision(float3 worldPosition, float maximumDepth, float distanceFromCenter, float delta, out float3 collision, out float3 previousCollision)
+	{
+		// Sample collision at three points forming a small triangle
+		float collisionCenter;
+		float collisionX;
+		float collisionY;
+
+		float previousCollisionCenter;
+		float previousCollisionX;
+		float previousCollisionY;
+
+		GetCollision(worldPosition + float3(-delta, -delta, 0), maximumDepth, distanceFromCenter, collisionCenter, previousCollisionCenter);
+		GetCollision(worldPosition + float3(delta, 0, 0), maximumDepth, distanceFromCenter, collisionX, previousCollisionX);
+		GetCollision(worldPosition + float3(0, delta, 0), maximumDepth, distanceFromCenter, collisionY, previousCollisionY);
+
+		// Process current collision
+		collision = ComputeNormalFromHeights(collisionCenter, collisionX, collisionY, delta);
+
+		// Process previous collision
+		previousCollision = ComputeNormalFromHeights(previousCollisionCenter, previousCollisionX, previousCollisionY, delta);
+	}
+
+	void GetDisplacedPosition(PS_INPUT input, out float3 displacement, out float3 previousDisplacement)
+	{
+		float nearFactor = smoothstep(2048.0, 0.0, length(input.WorldPosition.xyz));
+
+		if (nearFactor > 0.0) {
+			// Return base collision
+			float3 collision, previousCollision;
+			ComputeCollision(input.WorldPosition.xyz, input.WorldPosition.z, 0.0, CELL_SIZE, collision, previousCollision);
+
+			displacement = collision;
+			previousDisplacement  = previousCollision;
+		} else {
+			displacement = 0.0;
+			previousDisplacement = 0.0;
+		}
+	}
+
 PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 {
 	PS_OUTPUT psout;
@@ -1950,6 +2081,13 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	float3x3 tbnTr = ReconstructTBN(input.WorldPosition.xyz, worldNormal, screenUV);
 #	else
 	float3 worldNormal = normalize(mul(tbn, normal.xyz));
+
+#if defined(LANDSCAPE)
+	float3 displacement;
+	float3 previousDisplacement;
+	GetDisplacedPosition(input, displacement, previousDisplacement);
+	worldNormal.xyz = normalize(lerp(worldNormal.xyz, WetnessEffects::ReorientNormal(normal.xyz, -displacement), 0.5));
+#endif
 
 #		if defined(SPARKLE)
 	float3 projectedNormal = normalize(mul(tbn, float3(ProjectedUVParams2.xx * normal.xy, normal.z)));
