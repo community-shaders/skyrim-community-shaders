@@ -26,8 +26,8 @@ public:
 		bool convertToGamma = true;    // Apply TrueLinearToGamma conversion
 		bool enableTonemapping = false; // Apply Reinhard tonemapping
 		
-		uint hdrPaperWhite = 400;
-		uint hdrPeakNits = 10000;
+		uint hdrPaperWhite = 250;
+		uint hdrPeakNits = 800;
 	};
 
 	Settings settings;
