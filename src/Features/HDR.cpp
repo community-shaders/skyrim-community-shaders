@@ -24,7 +24,7 @@ bool HDR::DetectHDRDisplay()
 
 	bool hdrSupported = false;
 	IDXGIAdapter1* adapter = nullptr;
-	
+
 	for (UINT i = 0; factory->EnumAdapters1(i, &adapter) != DXGI_ERROR_NOT_FOUND; ++i) {
 		IDXGIOutput* output = nullptr;
 		for (UINT j = 0; adapter->EnumOutputs(j, &output) != DXGI_ERROR_NOT_FOUND; ++j) {
@@ -40,14 +40,16 @@ bool HDR::DetectHDRDisplay()
 				output6->Release();
 			}
 			output->Release();
-			if (hdrSupported) break;
+			if (hdrSupported)
+				break;
 		}
 		adapter->Release();
-		if (hdrSupported) break;
+		if (hdrSupported)
+			break;
 	}
-	
+
 	factory->Release();
-	
+
 	isHDRMonitor = hdrSupported;
 	logger::info("[HDR] HDR display detection result: {}", hdrSupported ? "HDR supported" : "SDR only");
 	return hdrSupported;
@@ -145,7 +147,7 @@ void HDR::LoadSettings(json& o_json)
 void HDR::RestoreDefaultSettings()
 {
 	bool hdrMonitor = DetectHDRDisplay();
-	
+
 	if (hdrMonitor) {
 		settings.sdrMode = false;
 		settings.convertToGamma = true;
@@ -250,7 +252,7 @@ void HDR::SetupResources()
 				hdrMetadata.MinMasteringLuminance = 1;
 				hdrMetadata.MaxContentLightLevel = static_cast<UINT16>(settings.hdrPeakNits);
 				hdrMetadata.MaxFrameAverageLightLevel = static_cast<UINT16>(settings.hdrPaperWhite);
-				
+
 				swapChain4->SetHDRMetaData(DXGI_HDR_METADATA_TYPE_HDR10, sizeof(hdrMetadata), &hdrMetadata);
 				logger::info("[HDR] Set D3D11 swap chain HDR10 metadata");
 			} else {
