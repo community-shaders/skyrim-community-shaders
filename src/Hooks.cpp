@@ -256,42 +256,56 @@ struct IDXGISwapChain_Present
 		state->Reset();
 
 		auto hdr = HDR::GetSingleton();
-		bool hdrActive = hdr && hdr->uiTexture && hdr->uiTexture->rtv && hdr->uiTexture->resource && 
-		                 hdr->hdrDataCB && hdr->outputTexture;
-
-		if (hdrActive) {
-			// Vanilla UI has already been rendered to uiTexture via SetUIBuffer() in MenuManagerDrawInterfaceStartHook
-			// Now render ImGui overlay to the same uiTexture so both UIs are composited in gamma space
-			ID3D11RenderTargetView* rtv = hdr->uiTexture->rtv.get();
-			globals::d3d::context->OMSetRenderTargets(1, &rtv, nullptr);
-
-			// Set viewport to match uiTexture dimensions for ImGui rendering
-			D3D11_TEXTURE2D_DESC texDesc;
-			hdr->uiTexture->resource->GetDesc(&texDesc);
-			D3D11_VIEWPORT viewport = {};
-			viewport.Width = static_cast<float>(texDesc.Width);
-			viewport.Height = static_cast<float>(texDesc.Height);
-			viewport.MinDepth = 0.0f;
-			viewport.MaxDepth = 1.0f;
-			globals::d3d::context->RSSetViewports(1, &viewport);
+		auto& upscaling = globals::features::upscaling;
+		
+		bool frameGenActive = upscaling.d3d12SwapChainActive;
+		
+		// Determine if HDR resources are ready
+		bool hdrReady = hdr && hdr->hdrDataCB && hdr->outputTexture;
+		
+		// For ImGui rendering, we need to render to the appropriate UI texture
+		// Frame Gen: uses uiBufferWrapped, Non-Frame Gen: uses our uiTexture
+		if (hdrReady) {
+			ID3D11RenderTargetView* uiRTV = nullptr;
+			D3D11_TEXTURE2D_DESC texDesc = {};
+			
+			if (frameGenActive && upscaling.dx12SwapChain.uiBufferWrapped) {
+				uiRTV = upscaling.dx12SwapChain.uiBufferWrapped->rtv;
+				if (upscaling.dx12SwapChain.uiBufferWrapped->resource11) {
+					upscaling.dx12SwapChain.uiBufferWrapped->resource11->GetDesc(&texDesc);
+				}
+			} else if (hdr->uiTexture && hdr->uiTexture->rtv && hdr->uiTexture->resource) {
+				uiRTV = hdr->uiTexture->rtv.get();
+				hdr->uiTexture->resource->GetDesc(&texDesc);
+			}
+			
+			if (uiRTV && texDesc.Width > 0) {
+				globals::d3d::context->OMSetRenderTargets(1, &uiRTV, nullptr);
+				
+				D3D11_VIEWPORT viewport = {};
+				viewport.Width = static_cast<float>(texDesc.Width);
+				viewport.Height = static_cast<float>(texDesc.Height);
+				viewport.MinDepth = 0.0f;
+				viewport.MaxDepth = 1.0f;
+				globals::d3d::context->RSSetViewports(1, &viewport);
+			}
 		}
 
 		menu->DrawOverlay();
 
-		if (hdrActive) {
+		if (hdrReady) {
 			// Unbind render target before ApplyHDR to avoid resource hazard 
-			// (uiTexture was RTV, now needs to be SRV)
 			ID3D11RenderTargetView* nullRTV = nullptr;
 			globals::d3d::context->OMSetRenderTargets(1, &nullRTV, nullptr);
 
-			// Apply HDR processing pipeline - reads kMAIN + UI texture (with both UIs), outputs to back buffer
+			// Apply HDR processing pipeline - uses appropriate UI texture based on Frame Gen state
 			hdr->ApplyHDR();
 		}
 
 		HRESULT retval = func(This, SyncInterval, Flags);
 
-		// Clear UI buffer and restore original kFRAMEBUFFER.RTV for next frame
-		if (hdrActive)
+		// Clear UI buffer and restore original kFRAMEBUFFER.RTV for next frame (non-Frame Gen only)
+		if (hdrReady && !frameGenActive)
 			hdr->ClearUIBuffer();
 
 		TracyD3D11Collect(state->tracyCtx);

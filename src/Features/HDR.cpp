@@ -454,24 +454,18 @@ void HDR::ApplyHDR()
 	{
 		auto dispatchCount = Util::GetScreenDispatchCount(false);
 
-		ID3D11ShaderResourceView* sceneSRV;
-
-		// When Frame Gen is active, ISHDR has already rendered to FRAMEBUFFER
-		// We need to copy it to hdrTexture first to avoid read/write conflict
-		if (upscaling.d3d12SwapChainActive) {
-			auto& frameBufferRT = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kFRAMEBUFFER];
-			ID3D11Resource* frameBufferResource;
-			frameBufferRT.SRV->GetResource(&frameBufferResource);
-			context->CopyResource(hdrTexture->resource.get(), frameBufferResource);
-			sceneSRV = hdrTexture->srv.get();
-		} else {
-			// Normal path: read directly from kMAIN
-			auto& mainRT = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMAIN];
-			sceneSRV = mainRT.SRV;
-		}
+		// Both Frame Gen and non-Frame Gen paths read from kMAIN for consistent behavior
+		auto& mainRT = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMAIN];
+		ID3D11ShaderResourceView* sceneSRV = mainRT.SRV;
 
 		// Bind scene texture (t0) and UI texture (t1)
-		ID3D11ShaderResourceView* uiSRV = (uiTexture && uiTexture->srv) ? uiTexture->srv.get() : nullptr;
+		// Use Frame Gen's uiBufferWrapped when active, otherwise our uiTexture
+		ID3D11ShaderResourceView* uiSRV = nullptr;
+		if (upscaling.d3d12SwapChainActive && upscaling.dx12SwapChain.uiBufferWrapped) {
+			uiSRV = upscaling.dx12SwapChain.uiBufferWrapped->srv;
+		} else if (uiTexture && uiTexture->srv) {
+			uiSRV = uiTexture->srv.get();
+		}
 		ID3D11ShaderResourceView* views[2] = { sceneSRV, uiSRV };
 		context->CSSetShaderResources(0, ARRAYSIZE(views), views);
 

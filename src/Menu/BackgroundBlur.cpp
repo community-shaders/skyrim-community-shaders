@@ -537,10 +537,10 @@ namespace BackgroundBlur
 			return;
 		}
 
-		// Skip blur when HDR is active - UI is rendered to a separate texture
-		// and composited by the HDR compute shader, blur would read UI texture not scene
+		// Skip blur when HDR processing is active - UI is rendered to a separate texture
+		// and composited by the HDR compute shader. This applies to both Frame Gen and non-Frame Gen paths.
 		auto hdr = HDR::GetSingleton();
-		bool hdrActive = hdr && hdr->uiTexture && hdr->uiTexture->rtv && hdr->hdrDataCB && hdr->outputTexture;
+		bool hdrActive = hdr && hdr->hdrDataCB && hdr->outputTexture;
 		if (hdrActive) {
 			return;
 		}
