@@ -9,8 +9,8 @@ BSLightingShaderMaterialPBR::~BSLightingShaderMaterialPBR()
 
 BSLightingShaderMaterialPBR* BSLightingShaderMaterialPBR::Make()
 {
-	static auto scrapHeap = RE::MemoryManager::GetSingleton()->GetThreadScrapHeap();
-	auto material = static_cast<BSLightingShaderMaterialPBR*>(scrapHeap->Allocate(sizeof(BSLightingShaderMaterialPBR), 8));
+	static auto memoryManager = RE::MemoryManager::GetSingleton();
+	auto material = static_cast<BSLightingShaderMaterialPBR*>(memoryManager->GetThreadScrapHeap()->Allocate(sizeof(BSLightingShaderMaterialPBR), 8));
 	return material;
 }
 
