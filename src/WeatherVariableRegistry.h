@@ -230,7 +230,7 @@ namespace WeatherVariables
 					size_t maxSize = std::max(from.size(), to.size());
 					std::vector<T> result;
 					result.reserve(maxSize);
-					
+
 					for (size_t i = 0; i < maxSize; ++i) {
 						T fromVal = (i < from.size()) ? from[i] : T{};
 						T toVal = (i < to.size()) ? to[i] : T{};
