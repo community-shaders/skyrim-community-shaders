@@ -103,29 +103,31 @@ For weather-controlled settings, use the `Util::WeatherUI` helpers instead of di
 void MyFeature::DrawSettings()
 {
     // Weather-aware slider (will be disabled if current weather overrides it)
-    Util::WeatherUI::SliderFloat("Effect Intensity", this, "Intensity", 
+    Util::WeatherUI::SliderFloat("Effect Intensity", this, "Intensity",
         &settings.intensity, 0.0f, 2.0f, "%.2f");
-    
+
     // Weather-aware color picker
-    Util::WeatherUI::ColorEdit3("Effect Color", this, "Color", 
+    Util::WeatherUI::ColorEdit3("Effect Color", this, "Color",
         (float*)&settings.color);
-    
+
     // Regular checkbox (not weather-controlled in this example)
     ImGui::Checkbox("Enable Effect", (bool*)&settings.enabled);
 }
 ```
 
 **Available Weather-Aware Helpers:**
-- `Util::WeatherUI::SliderFloat()` - Float slider with min/max
-- `Util::WeatherUI::Checkbox()` - Boolean checkbox
-- `Util::WeatherUI::ColorEdit3()` - RGB color picker
-- `Util::WeatherUI::ColorEdit4()` - RGBA color picker with alpha
+
+-   `Util::WeatherUI::SliderFloat()` - Float slider with min/max
+-   `Util::WeatherUI::Checkbox()` - Boolean checkbox
+-   `Util::WeatherUI::ColorEdit3()` - RGB color picker
+-   `Util::WeatherUI::ColorEdit4()` - RGBA color picker with alpha
 
 **Why Use These?**
-- Automatically detects if the current weather has overridden the setting
-- Disables and greys out the control to show it's weather-controlled
-- Shows tooltip: "Weather Override Active - This setting is controlled by the current weather (WeatherName)"
-- Prevents confusion when editing global settings that are overridden by weather
+
+-   Automatically detects if the current weather has overridden the setting
+-   Disables and greys out the control to show it's weather-controlled
+-   Shows tooltip: "Weather Override Active - This setting is controlled by the current weather (WeatherName)"
+-   Prevents confusion when editing global settings that are overridden by weather
 
 #### Step 4: Implementation Complete
 

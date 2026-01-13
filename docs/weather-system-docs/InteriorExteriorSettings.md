@@ -6,10 +6,10 @@ This document explores different approaches for managing per-weather feature set
 
 ## Use Cases
 
-- **Image-Based Lighting (IBL)**: Strong exterior lighting during sunny weather should be reduced indoors
-- **Screen Space Effects**: Full-strength exterior effects may be too intense in small interior spaces
-- **Weather-Dependent Effects**: Rain/storm settings for exterior shouldn't fully apply to covered interiors
-- **Performance**: Different quality settings for interior vs exterior environments
+-   **Image-Based Lighting (IBL)**: Strong exterior lighting during sunny weather should be reduced indoors
+-   **Screen Space Effects**: Full-strength exterior effects may be too intense in small interior spaces
+-   **Weather-Dependent Effects**: Rain/storm settings for exterior shouldn't fully apply to covered interiors
+-   **Performance**: Different quality settings for interior vs exterior environments
 
 ---
 
@@ -20,12 +20,12 @@ This document explores different approaches for managing per-weather feature set
 ```
 [Feature Name (e.g., IBL)]
   [Button: Using Weather-Specific Settings ✓]
-  
+
   Exterior Settings (always shown when weather overrides enabled)
   ├─ DiffuseIBLScale: [slider: 5.0]
   ├─ IBLSaturation: [slider: 1.2]
   └─ ...
-  
+
   Interior Overrides
   ├─ [Button: Override for Interiors ✓/✗]
   └─ (If enabled:)
@@ -38,52 +38,55 @@ This document explores different approaches for managing per-weather feature set
 
 ```json
 {
-  "IBL": {
-    "__enabled": true,
-    "DiffuseIBLScale": 5.0,
-    "IBLSaturation": 1.2,
-    "__interior_overrides": {
-      "__enabled": true,
-      "DiffuseIBLScale": 0.3
-      // Other values inherit from exterior
+    "IBL": {
+        "__enabled": true,
+        "DiffuseIBLScale": 5.0,
+        "IBLSaturation": 1.2,
+        "__interior_overrides": {
+            "__enabled": true,
+            "DiffuseIBLScale": 0.3
+            // Other values inherit from exterior
+        }
     }
-  }
 }
 ```
 
 ### Implementation Overview
 
 **1. UI Changes (WeatherWidget.cpp):**
-- After exterior sliders, add collapsible "Interior Overrides" section
-- Second toggle button for `__interior_overrides.__enabled`
-- Show sliders with exterior value in tooltip when not overridden
-- "Use Exterior Value" context menu option for individual settings
+
+-   After exterior sliders, add collapsible "Interior Overrides" section
+-   Second toggle button for `__interior_overrides.__enabled`
+-   Show sliders with exterior value in tooltip when not overridden
+-   "Use Exterior Value" context menu option for individual settings
 
 **2. WeatherManager Changes:**
-- Add `IsPlayerInInterior()` check using Skyrim's player location data
-- When loading settings, detect if player is indoors
-- If interior and overrides enabled, merge `__interior_overrides` over base values
-- Priority: Interior override > Exterior weather > Global feature settings
+
+-   Add `IsPlayerInInterior()` check using Skyrim's player location data
+-   When loading settings, detect if player is indoors
+-   If interior and overrides enabled, merge `__interior_overrides` over base values
+-   Priority: Interior override > Exterior weather > Global feature settings
 
 **3. Variable Registration (no changes needed):**
-- Same variables work for both contexts
-- Registry doesn't need to know about interior/exterior distinction
+
+-   Same variables work for both contexts
+-   Registry doesn't need to know about interior/exterior distinction
 
 ### Pros
 
-- ✅ Intuitive hierarchy (global → weather → exterior → interior)
-- ✅ Only override what differs (efficient storage)
-- ✅ Easy to see what's different between interior/exterior
-- ✅ Follows existing `__enabled` pattern
-- ✅ Supports per-variable granularity
-- ✅ Authors can disable all interior overrides with one toggle
-- ✅ Values inherit naturally (set once, override selectively)
+-   ✅ Intuitive hierarchy (global → weather → exterior → interior)
+-   ✅ Only override what differs (efficient storage)
+-   ✅ Easy to see what's different between interior/exterior
+-   ✅ Follows existing `__enabled` pattern
+-   ✅ Supports per-variable granularity
+-   ✅ Authors can disable all interior overrides with one toggle
+-   ✅ Values inherit naturally (set once, override selectively)
 
 ### Cons
 
-- ❌ Adds UI complexity with nested sections
-- ❌ Requires interior/exterior detection in WeatherManager
-- ❌ More clicks to set up initially
+-   ❌ Adds UI complexity with nested sections
+-   ❌ Requires interior/exterior detection in WeatherManager
+-   ❌ More clicks to set up initially
 
 ---
 
@@ -95,7 +98,7 @@ This document explores different approaches for managing per-weather feature set
 [Feature Name]
   [Button: Using Weather-Specific Settings]
   [Button: Enable Interior Differences]
-  
+
   Setting Name          | Exterior  | Interior
   ─────────────────────────────────────────
   DiffuseIBLScale      | [5.0]     | [0.3]
@@ -107,33 +110,33 @@ This document explores different approaches for managing per-weather feature set
 
 ```json
 {
-  "IBL": {
-    "__enabled": true,
-    "exterior": {
-      "DiffuseIBLScale": 5.0,
-      "IBLSaturation": 1.2
-    },
-    "interior": {
-      "DiffuseIBLScale": 0.3,
-      "IBLSaturation": 1.2
+    "IBL": {
+        "__enabled": true,
+        "exterior": {
+            "DiffuseIBLScale": 5.0,
+            "IBLSaturation": 1.2
+        },
+        "interior": {
+            "DiffuseIBLScale": 0.3,
+            "IBLSaturation": 1.2
+        }
     }
-  }
 }
 ```
 
 ### Pros
 
-- ✅ Easy to compare values at a glance
-- ✅ Compact vertical space
-- ✅ Clear what differs between interior/exterior
-- ✅ No nested sections
+-   ✅ Easy to compare values at a glance
+-   ✅ Compact vertical space
+-   ✅ Clear what differs between interior/exterior
+-   ✅ No nested sections
 
 ### Cons
 
-- ❌ Wide UI (may not fit in editor panel)
-- ❌ Redundant storage (must set all values for both)
-- ❌ Less intuitive for "most settings are the same" use case
-- ❌ Harder to implement with ImGui's layout system
+-   ❌ Wide UI (may not fit in editor panel)
+-   ❌ Redundant storage (must set all values for both)
+-   ❌ Less intuitive for "most settings are the same" use case
+-   ❌ Harder to implement with ImGui's layout system
 
 ---
 
@@ -144,7 +147,7 @@ This document explores different approaches for managing per-weather feature set
 ```
 [Feature Name]
   [Button: Using Weather-Specific Settings]
-  
+
   DiffuseIBLScale: [5.0]  [✓ Interior Mult: 0.1x]
   IBLSaturation:   [1.2]  [✗ Interior Mult: 1.0x]
   DALCAmount:      [0.5]  [✓ Interior Mult: 0.8x]
@@ -154,31 +157,31 @@ This document explores different approaches for managing per-weather feature set
 
 ```json
 {
-  "IBL": {
-    "__enabled": true,
-    "DiffuseIBLScale": 5.0,
-    "DiffuseIBLScale_InteriorMult": 0.1,  // Effective value: 0.5 indoors
-    "IBLSaturation": 1.2,
-    "IBLSaturation_InteriorMult": 1.0,    // No change indoors
-    "DALCAmount": 0.5,
-    "DALCAmount_InteriorMult": 0.8        // Effective value: 0.4 indoors
-  }
+    "IBL": {
+        "__enabled": true,
+        "DiffuseIBLScale": 5.0,
+        "DiffuseIBLScale_InteriorMult": 0.1, // Effective value: 0.5 indoors
+        "IBLSaturation": 1.2,
+        "IBLSaturation_InteriorMult": 1.0, // No change indoors
+        "DALCAmount": 0.5,
+        "DALCAmount_InteriorMult": 0.8 // Effective value: 0.4 indoors
+    }
 }
 ```
 
 ### Pros
 
-- ✅ Compact UI (one line per setting)
-- ✅ Easy to understand relationship (0.5x = half strength)
-- ✅ Simple implementation
-- ✅ No nested structures
+-   ✅ Compact UI (one line per setting)
+-   ✅ Easy to understand relationship (0.5x = half strength)
+-   ✅ Simple implementation
+-   ✅ No nested structures
 
 ### Cons
 
-- ❌ Less flexible (can't set completely independent values)
-- ❌ Multipliers may not make sense for all value types (colors, toggles)
-- ❌ Can't disable specific settings for interiors
-- ❌ Awkward for settings where interior should be higher than exterior
+-   ❌ Less flexible (can't set completely independent values)
+-   ❌ Multipliers may not make sense for all value types (colors, toggles)
+-   ❌ Can't disable specific settings for interiors
+-   ❌ Awkward for settings where interior should be higher than exterior
 
 ---
 
@@ -197,7 +200,7 @@ Exterior Tab:
     ├─ [Using Weather-Specific Settings ✓]
     ├─ DiffuseIBLScale: [5.0]
     └─ ...
-  
+
   [ScreenSpaceGI Feature]
     └─ ...
 
@@ -206,7 +209,7 @@ Interior Tab:
     ├─ [○ Use Exterior Settings | ● Override]
     ├─ DiffuseIBLScale: [0.3]
     └─ ...
-  
+
   [ScreenSpaceGI Feature]
     └─ [● Use Exterior Settings]
 ```
@@ -215,37 +218,37 @@ Interior Tab:
 
 ```json
 {
-  "exterior": {
-    "IBL": {
-      "__enabled": true,
-      "DiffuseIBLScale": 5.0
-    }
-  },
-  "interior": {
-    "IBL": {
-      "__enabled": true,
-      "DiffuseIBLScale": 0.3
+    "exterior": {
+        "IBL": {
+            "__enabled": true,
+            "DiffuseIBLScale": 5.0
+        }
     },
-    "ScreenSpaceGI": {
-      "__use_exterior": true
+    "interior": {
+        "IBL": {
+            "__enabled": true,
+            "DiffuseIBLScale": 0.3
+        },
+        "ScreenSpaceGI": {
+            "__use_exterior": true
+        }
     }
-  }
 }
 ```
 
 ### Pros
 
-- ✅ Clean separation of concerns
-- ✅ Entire set of interior settings in one place
-- ✅ Can bulk "use exterior for all features"
-- ✅ Tab-based approach is familiar
+-   ✅ Clean separation of concerns
+-   ✅ Entire set of interior settings in one place
+-   ✅ Can bulk "use exterior for all features"
+-   ✅ Tab-based approach is familiar
 
 ### Cons
 
-- ❌ Must switch tabs to compare values
-- ❌ More clicking to set up
-- ❌ Harder to see what's overridden at a glance
-- ❌ Duplicates feature tree structure
+-   ❌ Must switch tabs to compare values
+-   ❌ More clicking to set up
+-   ❌ Harder to see what's overridden at a glance
+-   ❌ Duplicates feature tree structure
 
 ---
 
@@ -262,17 +265,20 @@ Interior Tab:
 ### Implementation Plan
 
 #### Phase 1: Core Infrastructure
+
 1. Add interior detection utility function
 2. Extend WeatherManager to handle `__interior_overrides` JSON key
 3. Update LoadSettingsFromWeather to merge interior overrides when appropriate
 
 #### Phase 2: UI
+
 1. Add collapsible "Interior Overrides" section in DrawFeatureSettings
 2. Add toggle button for `__interior_overrides.__enabled`
 3. Implement control rendering with inheritance indicators
 4. Add "Copy from Exterior" and "Reset to Exterior" context menu options
 
 #### Phase 3: Polish
+
 1. Add visual indicators showing which values differ from exterior
 2. Add bulk operations (copy all, clear all interior overrides)
 3. Update documentation with interior override examples
@@ -309,25 +315,29 @@ A: The system is opt-in. If a feature doesn't need interior overrides, authors s
 ## Future Enhancements
 
 ### Conditional Overrides
-- **Dungeon Interiors**: Different settings for caves/dungeons vs buildings
-- **Underwater**: Special handling for underwater environments
-- **Location-Specific**: Override for specific interior cells (Dragonsreach vs Bannered Mare)
+
+-   **Dungeon Interiors**: Different settings for caves/dungeons vs buildings
+-   **Underwater**: Special handling for underwater environments
+-   **Location-Specific**: Override for specific interior cells (Dragonsreach vs Bannered Mare)
 
 ### Visual Indicators
-- Color-code sliders: Green = exterior only, Blue = has interior override
-- Show diff values in tooltips: "Exterior: 5.0 → Interior: 0.8"
-- Icons indicating inheritance status
+
+-   Color-code sliders: Green = exterior only, Blue = has interior override
+-   Show diff values in tooltips: "Exterior: 5.0 → Interior: 0.8"
+-   Icons indicating inheritance status
 
 ### Bulk Operations
-- "Copy All Exterior to Interior"
-- "Clear All Interior Overrides"
-- "Invert Interior/Exterior" (swap values)
-- "Apply Interior Multiplier to All" (global 0.5x reduction)
+
+-   "Copy All Exterior to Interior"
+-   "Clear All Interior Overrides"
+-   "Invert Interior/Exterior" (swap values)
+-   "Apply Interior Multiplier to All" (global 0.5x reduction)
 
 ### Testing Tools
-- "Preview Interior" toggle in editor (shows what values would be with interior overrides)
-- "Toggle Interior/Exterior" hotkey for quick testing
-- Log window showing which override is active
+
+-   "Preview Interior" toggle in editor (shows what values would be with interior overrides)
+-   "Toggle Interior/Exterior" hotkey for quick testing
+-   Log window showing which override is active
 
 ---
 
