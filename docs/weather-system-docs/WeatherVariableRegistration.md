@@ -95,14 +95,47 @@ void MyFeature::RegisterWeatherVariables() override
 }
 ```
 
-#### Step 3: Implementation Complete
+#### Step 3: Update DrawSettings() to Use Weather-Aware UI Controls
+
+For weather-controlled settings, use the `Util::WeatherUI` helpers instead of direct ImGui calls. This automatically greys out controls when a per-weather override is active and displays tooltips:
+
+```cpp
+void MyFeature::DrawSettings()
+{
+    // Weather-aware slider (will be disabled if current weather overrides it)
+    Util::WeatherUI::SliderFloat("Effect Intensity", this, "Intensity", 
+        &settings.intensity, 0.0f, 2.0f, "%.2f");
+    
+    // Weather-aware color picker
+    Util::WeatherUI::ColorEdit3("Effect Color", this, "Color", 
+        (float*)&settings.color);
+    
+    // Regular checkbox (not weather-controlled in this example)
+    ImGui::Checkbox("Enable Effect", (bool*)&settings.enabled);
+}
+```
+
+**Available Weather-Aware Helpers:**
+- `Util::WeatherUI::SliderFloat()` - Float slider with min/max
+- `Util::WeatherUI::Checkbox()` - Boolean checkbox
+- `Util::WeatherUI::ColorEdit3()` - RGB color picker
+- `Util::WeatherUI::ColorEdit4()` - RGBA color picker with alpha
+
+**Why Use These?**
+- Automatically detects if the current weather has overridden the setting
+- Disables and greys out the control to show it's weather-controlled
+- Shows tooltip: "Weather Override Active - This setting is controlled by the current weather (WeatherName)"
+- Prevents confusion when editing global settings that are overridden by weather
+
+#### Step 4: Implementation Complete
 
 The system now automatically:
 
 -   Saves/loads weather-specific settings to JSON
 -   Interpolates variables during weather transitions
--   Appears in the weather editor UI
--   Handles default values and missing dataanced Usage
+-   Appears in the weather editor UI with per-weather toggle buttons
+-   Handles default values and missing data
+-   Shows weather-controlled status in feature settings UI
 
 ### Custom Variable Types
 
