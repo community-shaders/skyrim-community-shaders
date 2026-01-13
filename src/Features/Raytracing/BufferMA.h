@@ -24,6 +24,11 @@ namespace DX12
 			allocation->SetName(name);
 		}
 
+		D3D12_RESOURCE_STATES GetState() const
+		{
+			return state;
+		}
+
 		virtual CD3DX12_RESOURCE_BARRIER GetTransitionBarrier(bool setState, D3D12_RESOURCE_STATES stateAfter, UINT subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES)
 		{
 			D3D12_RESOURCE_STATES stateBefore = state;
@@ -32,6 +37,18 @@ namespace DX12
 				state = stateAfter;
 
 			return CD3DX12_RESOURCE_BARRIER::Transition(resource.get(), stateBefore, stateAfter, subresource);
+		}
+
+		virtual bool GetTransitionBarrier(D3D12_RESOURCE_STATES stateAfter, CD3DX12_RESOURCE_BARRIER& barrier, UINT subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES)
+		{
+			if (state == stateAfter)
+				return false;
+
+			barrier = CD3DX12_RESOURCE_BARRIER::Transition(resource.get(), state, stateAfter, subresource);
+
+			state = stateAfter;
+
+			return true;
 		}
 
 		virtual void TransitionBarrier(ID3D12GraphicsCommandList4* commandList, D3D12_RESOURCE_STATES stateAfter, UINT subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES)
@@ -163,8 +180,8 @@ namespace DX12
 			return desc;
 		}
 
-		explicit StructuredBufferMA(ID3D12Device5* device, D3D12MA::Allocator* allocator, D3D12MA::ALLOCATION_DESC allocDesc, const uint64_t& a_count, bool uav = false) :
-			ResourceMA(device, allocator, allocDesc, Desc(sizeof(T) * a_count, uav), D3D12_RESOURCE_STATE_COPY_DEST), count(a_count) {}
+		explicit StructuredBufferMA(ID3D12Device5* device, D3D12MA::Allocator* allocator, D3D12MA::ALLOCATION_DESC allocDesc, const uint64_t& a_count, bool uav = false, D3D12_RESOURCE_STATES state = D3D12_RESOURCE_STATE_COPY_DEST) :
+			ResourceMA(device, allocator, allocDesc, Desc(sizeof(T) * a_count, uav), state), count(a_count) {}
 
 		virtual ~StructuredBufferMA() = default;
 
@@ -212,8 +229,8 @@ namespace DX12
 	class StructuredBufferUploadMA : public StructuredBufferMA<T>
 	{
 	public:
-		explicit StructuredBufferUploadMA(ID3D12Device5* a_device, D3D12MA::Allocator* allocator, D3D12MA::ALLOCATION_DESC allocDesc, D3D12MA::ALLOCATION_DESC uploadAllocDesc, const uint64_t& a_count, bool uav = false, uint uploadCount = 1) :
-			StructuredBufferMA<T>(a_device, allocator, allocDesc, a_count, uav)
+		explicit StructuredBufferUploadMA(ID3D12Device5* a_device, D3D12MA::Allocator* allocator, D3D12MA::ALLOCATION_DESC allocDesc, D3D12MA::ALLOCATION_DESC uploadAllocDesc, const uint64_t& a_count, bool uav = false, D3D12_RESOURCE_STATES state = D3D12_RESOURCE_STATE_COPY_DEST, uint uploadCount = 1) :
+			StructuredBufferMA<T>(a_device, allocator, allocDesc, a_count, uav, state)
 		{
 			D3D12_RESOURCE_DESC desc = StructuredBufferMA<T>::Desc(ResourceMA::desc.Width);
 

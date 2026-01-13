@@ -18,17 +18,21 @@
 
 #include "State.h"
 
+#include "Features/Raytracing/Core/Shape.h"
+#include "Features/Raytracing/Core/Model.h"
+#include "Features/Raytracing/Core/Instance.h"
+
+#include "Features/Raytracing/RTConstants.h"
 #include "Features/Raytracing/Allocator.h"
 #include "Features/Raytracing/Buffer.h"
 #include "Features/Raytracing/BufferMA.h"
 #include "Features/Raytracing/Heap.h"
 #include "Features/Raytracing/HeapManager.h"
-#include "Features/Raytracing/Model.h"
 #include "Features/Raytracing/Pipelines/SHaRCPipeline.h"
+#include "Features/Raytracing/Pipelines/SkinningPipeline.h"
 #include "Features/Raytracing/Pipelines/SVGFPipeline.h"
 #include "Features/Raytracing/RTPipelineBuilder.h"
 #include "Features/Raytracing/ShaderBindingTable.h"
-#include "Features/Raytracing/Shape.h"
 #include "Features/Raytracing/TextureSharing.h"
 #include "Features/Raytracing/Types.h"
 #include "Features/Raytracing/Utils.h"
@@ -42,7 +46,6 @@
 #include "Raytracing/Includes/Types/Skinning.hlsli"
 #include "Raytracing/Includes/Types/Triangle.hlsli"
 #include "Raytracing/Includes/Types/Vertex.hlsli"
-#include "Raytracing/Includes/Types/VertexUpdate.hlsli"
 
 #include "Raytracing/Denoiser/SVGF/SVGF.hlsli"
 
@@ -71,17 +74,6 @@ using namespace magic_enum::bitwise_operators;
 
 struct Raytracing : public OverlayFeature
 {
-	// DX12 will not like if we don't respect these numbers and try to write over the resource end
-	static constexpr uint MAX_TEXTURES = 1024;
-	static constexpr uint MAX_MODELS = 1024;
-	static constexpr uint MAX_SHAPES = MAX_MODELS * 6;
-	static constexpr uint MAX_MATERIALS = MAX_SHAPES;
-	static constexpr uint MAX_INSTANCES = 4096;
-	static constexpr uint MAX_LIGHTS = 255;
-
-	static constexpr uint SKY_CUBEMAP_SIZE = 512;
-	static constexpr uint SKY_HEMI_SIZE = SKY_CUBEMAP_SIZE * 2;
-
 	enum MarkerFlags : uint32_t
 	{
 		MapMarker = 1 << 22,
@@ -122,37 +114,13 @@ struct Raytracing : public OverlayFeature
 			Instances,
 			Indirection,
 			Vertices,
-			Triangles = Vertices + Raytracing::MAX_SHAPES,
-			Textures = Triangles + Raytracing::MAX_SHAPES,
-			NumDescriptors = Textures + Raytracing::MAX_TEXTURES,
+			Triangles = Vertices + RTConstants::MAX_SHAPES,
+			Textures = Triangles + RTConstants::MAX_SHAPES,
+			NumDescriptors = Textures + RTConstants::MAX_TEXTURES,
 			None
 		};
 	};
 	using GIHeap = Heap<GIHeapDef::Table, GIHeapDef::Slot>;
-
-	struct SkinningHeapDef
-	{
-		enum class Table
-		{
-			UAV,
-			SRV,
-			DynamicBuffer,
-			SkinningBuffer
-		};
-
-		enum class Slot
-		{
-			Output,
-			LocalToRoot = Output + Raytracing::MAX_SHAPES,  // = Output + Raytracing::MAX_SHAPES
-			UpdateData,
-			BoneMatrices,
-			DynamicVertices,
-			SkinningData = DynamicVertices + Raytracing::MAX_SHAPES,
-			NumDescriptors = SkinningData + Raytracing::MAX_SHAPES,
-			None
-		};
-	};
-	using SkinningHeap = Heap<SkinningHeapDef::Table, SkinningHeapDef::Slot>;
 
 	struct ShadowsHeapDef
 	{
@@ -234,7 +202,6 @@ struct Raytracing : public OverlayFeature
 	void CompileComputeShaders();
 	void CompileCompositeShader();
 
-	void CompileSkinningShaders();
 	void CompileRTGIShaders();
 	void CompileRTShadowsShaders();
 
@@ -242,8 +209,6 @@ struct Raytracing : public OverlayFeature
 	void InitD3D12(ID3D11Device* ppDevice, ID3D11DeviceContext* pImmediateContext, IDXGIAdapter* a_adapter);
 	void CreateRootSignature();
 	void CreateShadowsRootSignature();
-	void CreateSkinningRootSignature();
-	void UpdateDynamicSkinning(ID3D12GraphicsCommandList4* pCommandList);
 	void DrawRTGI();
 	void UpdateShadowsFrameBuffer();
 	void RenderShadows();
@@ -275,7 +240,7 @@ struct Raytracing : public OverlayFeature
 	void CopyDepth();
 	void ConvertTextures() const;
 
-	void ReleaseTempGPUData();
+	void PostRaytraceCleanup();
 
 	void BuildTLAS();
 	void RebuildTLAS(ID3D12GraphicsCommandList4* pCommandList, size_t numDescs, D3D12_GPU_VIRTUAL_ADDRESS instanceDescs);
@@ -303,10 +268,14 @@ struct Raytracing : public OverlayFeature
 
 	const auto& GetPipelines()
 	{
+		if (!skinningPipeline)
+			skinningPipeline = eastl::make_unique<SkinningPipeline>();
+
 		if (!sharcPipeline)
 			sharcPipeline = eastl::make_unique<SHaRCPipeline>();
 
-		static eastl::array<IPipeline*, 1> pipelines = {
+		static eastl::array<IPipeline*, 2> pipelines = {
+			skinningPipeline.get(),
 			sharcPipeline.get()
 		};
 
@@ -337,6 +306,12 @@ struct Raytracing : public OverlayFeature
 		DLSSRR
 #endif
 	};
+
+#ifdef DLSS_RR
+	static constexpr Denoiser DefaultDenoiser = Denoiser::DLSSRR;
+#else
+	static constexpr Denoiser DefaultDenoiser = Denoiser::SVGF;
+#endif
 
 	enum struct DebugOutput : int32_t
 	{
@@ -371,8 +346,7 @@ struct Raytracing : public OverlayFeature
 	enum struct PIXCaptureLocation : int32_t
 	{
 		GlobalIllumination,
-		Shadows,
-		AO
+		Shadows		
 	};
 
 	// TODO: Rename to ReflectanceModel?
@@ -429,11 +403,31 @@ struct Raytracing : public OverlayFeature
 		Eighth
 	};
 
-#ifdef DLSS_RR
-	static constexpr Denoiser DefaultDenoiser = Denoiser::DLSSRR;
-#else
-	static constexpr Denoiser DefaultDenoiser = Denoiser::SVGF;
-#endif
+	enum struct CullingMode : int32_t
+	{
+		None,
+		Smart,
+		Skyrim
+	};
+
+	static constexpr const char* CullingModeTooltips[] = {
+		"Disables culling altogether.",
+		"Configurable culling made for Ray Tracing.",
+		"Relies on Skyrim's culling, will create light leaks from culled nodes behind the player."
+	};
+	STATIC_ASSERT_ENUM_COUNT(CullingMode, CullingModeTooltips);
+
+	enum struct CullingDistanceMode : int32_t
+	{
+		Minimal,
+		Ratio
+	};
+
+	static constexpr const char* CullingDistanceModeTooltips[] = {
+		"Culls all geometry outside the view if distance is greater than 'Minimal Distance', regardless of their radius.",
+		"When distance is greater than 'Start Distance' modulates 'Minimal Radius' by relative distance and ratio."
+	};
+	STATIC_ASSERT_ENUM_COUNT(CullingDistanceMode, CullingDistanceModeTooltips);
 
 #ifdef DLSS_RR
 	struct DLSSRRSettings
@@ -444,6 +438,21 @@ struct Raytracing : public OverlayFeature
 		NLOHMANN_DEFINE_TYPE_INTRUSIVE_WITH_DEFAULT(DLSSRRSettings, QualityMode, Preset)
 	};
 #endif
+
+	struct CullingSettings
+	{
+		CullingMode Mode = CullingMode::Smart;
+		int MinRadius = 1;
+
+		CullingDistanceMode DistanceMode = CullingDistanceMode::Ratio;
+
+		int MinDistance = 100;
+
+		int StartDistance = 10;
+		float DistanceRatio = 1.0f;
+
+		NLOHMANN_DEFINE_TYPE_INTRUSIVE_WITH_DEFAULT(CullingSettings, Mode, MinRadius, DistanceMode, MinDistance, StartDistance, DistanceRatio)
+	};
 
 	// Resampled Importance Sampling
 	struct RISSettings
@@ -464,6 +473,8 @@ struct Raytracing : public OverlayFeature
 
 	struct AdvancedSettings
 	{
+		CullingSettings Culling;
+
 		RISSettings RIS;
 		ReSTIRSettings ReSTIR;
 
@@ -473,7 +484,7 @@ struct Raytracing : public OverlayFeature
 		LightEvalMode LightEvalMode = LightEvalMode::BRDF;
 		LightingMode LightingMode = LightingMode::PBR;
 
-		NLOHMANN_DEFINE_TYPE_INTRUSIVE_WITH_DEFAULT(AdvancedSettings, RIS, ReSTIR, GGXEnergyConservation, DiffuseBRDF, LightEvalMode, LightingMode)
+		NLOHMANN_DEFINE_TYPE_INTRUSIVE_WITH_DEFAULT(AdvancedSettings, Culling, RIS, ReSTIR, GGXEnergyConservation, DiffuseBRDF, LightEvalMode, LightingMode)
 	};
 
 	////////////////////////////////////////////////// Feature Specific Data
@@ -506,7 +517,6 @@ struct Raytracing : public OverlayFeature
 		SVGFPipeline::Settings SVGFDiffuse;
 		SVGFPipeline::Settings SVGFSpecular;
 		bool PerformanceOverlay = false;
-		std::string Defines = "";
 		DebugOutput DebugOutput = DebugOutput::None;
 		bool EnablePIXCapture = false;
 		PIXCaptureLocation PIXCaptureLocation = PIXCaptureLocation::GlobalIllumination;
@@ -514,6 +524,11 @@ struct Raytracing : public OverlayFeature
 		bool WhiteFurnace = false;
 		SHaRCPipeline::Settings SHaRC;
 	} settings;
+
+	// Debug variables
+	std::string debugDefines = "";
+	bool debugDisableTriShapesUpdate = false;
+	bool debugDisableTextureSharing = false;
 
 	enum class RecompileReason : uint32_t
 	{
@@ -561,12 +576,12 @@ struct Raytracing : public OverlayFeature
 	bool RemoveInstance(RE::FormID formID, bool releaseModel);
 
 	// TODO: Move to Model struct
-	void UpdateModelBLAS(Model* model) const;
+	void UpdateModelBLAS(Model* model);
 
 	eastl::shared_ptr<Allocation> GetTextureRegister(ID3D11Texture2D* texture, eastl::shared_ptr<Allocation> defaultTexture);
 
-	Allocator shapeRegisters = Allocator(MAX_SHAPES);
-	Allocator textureRegisters = Allocator(MAX_TEXTURES);
+	Allocator shapeRegisters = Allocator(RTConstants::MAX_SHAPES);
+	Allocator textureRegisters = Allocator(RTConstants::MAX_TEXTURES);
 
 	struct DefaultTexture
 	{
@@ -617,78 +632,6 @@ struct Raytracing : public OverlayFeature
 
 	// We'll group trishapes by their parent nodes, hopefully trishapes don't move on their own
 	eastl::unordered_map<eastl::string, eastl::unique_ptr<Model>> models;
-
-	// Instance
-	struct Instance
-	{
-		eastl::string filename;
-		float3x4 transform;
-		Util::FrameChecker frameChecker;
-		//bool hasUpdated = false;
-
-		bool Update(RE::NiNode* pNiNode, [[maybe_unused]] const eastl::pair<eastl::string, Model*>& modelPair)
-		{
-			// Instance was not changed by the game, so there is no need to update it
-			// This doesn't work at all for actors
-			/*if (pNiNode->lastUpdatedFrameCounter < globals::state->frameCount && hasUpdated)
-				return true;*/
-
-			// Instance has already been updated this frame
-			if (!frameChecker.IsNewFrame())
-				return true;
-
-			XMStoreFloat3x4(&transform, GetXMFromNiTransform(pNiNode->world));
-
-			auto& [path, model] = modelPair;
-
-			if ((model->GetFlags() & Flags::Dynamic) || (model->GetFlags() & Flags::Skinned)) {
-				for (auto& shape : model->shapes) {
-					Flags updateFlags = Flags::None;
-
-					// Updates Dynamic Vertex position (and Bitangent.x) buffer
-					// TODO: Test performance and stability of using a upload heap buffer and keeping it mapped to dynamicData
-					if ((shape->flags & Flags::Dynamic) && shape->geometry) {
-						//auto* pDynamicTriShape = netimmerse_cast<RE::BSDynamicTriShape*>(shape->geometry);
-
-						auto* pDynamicTriShape = skyrim_cast<RE::BSDynamicTriShape*>(shape->geometry);
-
-						if (pDynamicTriShape) {
-							const auto& dynTriShapeRuntime = pDynamicTriShape->GetDynamicTrishapeRuntimeData();
-
-							// We'll test if dynamic data has changed before updating and uploading
-							// It does mean we have to memcpy twice, but I suppose the GPU bandwith we save makes up for it
-							if (dynTriShapeRuntime.dynamicData && std::memcmp(shape->dynamicPosition.data(), dynTriShapeRuntime.dynamicData, dynTriShapeRuntime.dataSize) != 0) {
-								std::memcpy(shape->dynamicPosition.data(), dynTriShapeRuntime.dynamicData, dynTriShapeRuntime.dataSize);
-
-								shape->dynamicPositionBuffer->Update(dynTriShapeRuntime.dynamicData, dynTriShapeRuntime.dataSize);
-
-								// We'll barrier and upload ourselfs in batch
-								//shape.dynamicPositionBuffer->Upload(commandList);
-								updateFlags |= Flags::Dynamic;
-							}
-						}
-					}
-
-					// TODO: Handle skinned meshes
-					if ((shape->flags & Flags::Skinned) && shape->geometry) {
-						// Restore pre-skinning vertices
-						//shape.vertexBuffer->Upload(commandList);
-
-						updateFlags |= Flags::Skinned;
-					}
-
-					if ((updateFlags & Flags::Dynamic) || (updateFlags & Flags::Skinned)) {
-						auto& rt = globals::features::raytracing;
-
-						rt.modelUpdate.emplace_back(path);
-						rt.vertexUpdate.emplace_back(shape->allocation->GetIndex(), updateFlags & Flags::Dynamic ? shape->dynamicPositionBuffer.get() : nullptr, shape->vertexBuffer.get(), shape->vertexCount, updateFlags);
-					}
-				}
-			}
-
-			return true;
-		}
-	};
 
 	winrt::com_ptr<D3D12MA::Allocator> allocator = nullptr;
 
@@ -760,15 +703,8 @@ struct Raytracing : public OverlayFeature
 	winrt::com_ptr<ID3D11Fence> d3d11Fence = nullptr;
 	winrt::com_ptr<ID3D12Fence> d3d12Fence = nullptr;
 
-	// Skinning
-	winrt::com_ptr<ID3D12RootSignature> skinningRS = nullptr;
-	winrt::com_ptr<ID3D12PipelineState> skinningPipeline = nullptr;
-	eastl::unique_ptr<DX12::DescriptorHeap<SkinningHeap>> skinningHeap = nullptr;
-
-	// TODO: Move other effects to their own pipelines as well
-	//	eastl::unique_ptr<SkinningPipeline> skinningPipeline = nullptr;
-	//	eastl::unique_ptr<RTPipeline> RTPipeline = nullptr;
-	//	eastl::unique_ptr<ShadowPipeline> shadowPipeline = nullptr;
+	// Skinning (and dynamic TriShapes)
+	eastl::unique_ptr<SkinningPipeline> skinningPipeline = nullptr;
 
 	// SHaRC (Radiance cache)
 	eastl::unique_ptr<SHaRCPipeline> sharcPipeline = nullptr;
@@ -776,26 +712,13 @@ struct Raytracing : public OverlayFeature
 	// SVGF (denoiser)
 	eastl::unique_ptr<SVGFPipeline> svgfDenoiser = nullptr;
 
-	struct VertexUpdate
-	{
-		uint16_t allocatedIndex;
-		DX12::StructuredBufferUploadMA<float4>* dynamicPositionBuffer = nullptr;
-		DX12::StructuredBufferUploadMA<Vertex>* vertexBuffer = nullptr;
-		uint16_t vertexCount;
-		Flags flags;
-	};
-
-	eastl::vector<VertexUpdate> vertexUpdate;
-	eastl::unique_ptr<DX12::StructuredBufferUpload<VertexUpdateData>> vertexUpdateBuffer = nullptr;
-
-	eastl::vector<eastl::string> modelUpdate;
+	// TODO: Move other effects to their own pipelines as well
+	//	eastl::unique_ptr<RTPipeline> RTPipeline = nullptr;
+	//	eastl::unique_ptr<ShadowPipeline> shadowPipeline = nullptr;
 
 	// GI
 	winrt::com_ptr<ID3D12RootSignature> rootSignature = nullptr;
 	winrt::com_ptr<ID3D12StateObject> pipelineRT = nullptr;
-#if defined(SHARC)
-	winrt::com_ptr<ID3D12StateObject> pipelineSHaRCRT = nullptr;
-#endif
 	eastl::unique_ptr<DX12::ShaderBindingTable> shaderBindingTable = nullptr;
 	eastl::unique_ptr<DX12::ResourceUpload> shaderBindingTableBuffer = nullptr;
 	eastl::unique_ptr<DX12::DescriptorHeap<GIHeap>> giHeap = nullptr;
@@ -815,6 +738,9 @@ struct Raytracing : public OverlayFeature
 	};
 
 	eastl::deque<TempGPUData> tempGPUData;
+
+	// All 'DestAccelerationStructureData' written with 'BuildRaytracingAccelerationStructure' this frame
+	eastl::hash_set<D3D12_GPU_VIRTUAL_ADDRESS> destASFrame;
 
 	// D3D11
 	winrt::com_ptr<ID3D11Device5> d3d11Device = nullptr;
@@ -1258,7 +1184,7 @@ struct Raytracing : public OverlayFeature
 
 				std::lock_guard<std::recursive_mutex> lock(rt.shareTextureMutex);
 
-				rt.shareTexture = true;
+				rt.shareTexture = !rt.debugDisableTextureSharing;
 
 				auto* result = func(a1, path, srv, a4, a5);
 

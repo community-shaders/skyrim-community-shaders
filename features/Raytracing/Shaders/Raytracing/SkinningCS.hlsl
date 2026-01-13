@@ -5,61 +5,64 @@
 
 #define MAX_BONES (255)
 
-cbuffer FrameData : register(b0)
-{
-    uint ModelCount;
-};
-
 RWStructuredBuffer<Vertex> OutputVertices[]             : register(u0);
 
-StructuredBuffer<float3x4> LocalToRoot                  : register(t0, space0);
+//StructuredBuffer<float3x4> LocalToRoot                  : register(t0, space0);
 StructuredBuffer<VertexUpdateData> UpdateData           : register(t1, space0);
-StructuredBuffer<float3x4> BoneMatrices                 : register(t2, space0);
+//StructuredBuffer<float3x4> BoneMatrices                 : register(t2, space0);
 
 //StructuredBuffer<BoneMatrices> MeshBoneMatrices[]     : register(t0, space1);
 StructuredBuffer<float4> DynamicVertices[]              : register(t0, space1);
 StructuredBuffer<Skinning> MeshSkinning[]               : register(t0, space2);
 //StructuredBuffer<Vertex> Vertices[]                     : register(t0, space2);
 
-#define DYNAMIC (1 << 1)
-#define SKINNED (1 << 2)
-
-[numthreads(8, 8, 1)]
-void main(uint2 id : SV_DispatchThreadID)
+namespace Flags
 {
-    if (id.y >= ModelCount)
-        return;
+    static const uint16_t Dynamic = (1 << 1);
+    static const uint16_t Skinned = (1 << 2); 
+}
 
-    float3x4 localToRoot = LocalToRoot[id.y];
-    float3x3 localToRootRot = (float3x3)localToRoot;
+#if defined(OPTIMIZED_MAPPING)
+[numthreads(THREAD_GROUP_SIZE, 1, 1)]
+void main(uint3 DTid : SV_DispatchThreadID, uint3 GTid : SV_GroupThreadID, uint3 GID : SV_GroupID)
+{
+    const uint modelIndex = GID.x;
+    const uint vertexIndex = GID.y * THREAD_GROUP_SIZE + GTid.x; 
+#else
+[numthreads(1, THREAD_GROUP_SIZE, 1)]
+void main(uint3 DTid : SV_DispatchThreadID)
+{
+    const uint modelIndex = DTid.x;
+    const uint vertexIndex = DTid.y;    
+#endif 
+    
+    //float3x4 localToRoot = LocalToRoot[modelIndex];
+    //float3x3 localToRootRot = (float3x3)localToRoot;
 
-    VertexUpdateData updateData = UpdateData[id.y];
+    VertexUpdateData updateData = UpdateData[modelIndex];
 
-    if (id.x >= updateData.vertexCount)
+    if (vertexIndex >= uint(updateData.vertexCount))
         return;
 
     uint shapeIndex = NonUniformResourceIndex(updateData.index);
 
-    StructuredBuffer<Skinning> skinning = MeshSkinning[shapeIndex];
     //StructuredBuffer<Vertex> vertices = Vertices[shapeIndex];
-    StructuredBuffer<float4> dynamicVertices = DynamicVertices[shapeIndex];
-
-    RWStructuredBuffer<Vertex> outputVertices = OutputVertices[shapeIndex];
-
-    float4 dynamicVertex = dynamicVertices[id.x];
 
     // This contains the original uploaded vertex
-    Vertex vertex = outputVertices[id.x];
+    Vertex vertex = OutputVertices[shapeIndex][vertexIndex];
 
-    if (updateData.flags & DYNAMIC)
+    if (updateData.flags & Flags::Dynamic)
     {
-        //vertex.Position = mul(localToRoot, float4(dynamicVertex.xyz, 1.0f));
-        vertex.Position = dynamicVertex.xyz;
-        vertex.Bitangent = (half3) mul(localToRootRot, half3(dynamicVertex.w, vertex.Bitangent.yz));
+        float4 dynamicVertex = DynamicVertices[shapeIndex][vertexIndex];      
+        
+        vertex.Position = mul(updateData.localToRoot, float4(dynamicVertex.xyz, 1.0f));
+        //vertex.Bitangent = (half3) mul(localToRootRot, half3(dynamicVertex.w, vertex.Bitangent.yz));
     }
-
-    /*if (updateData.flags & SKINNED)
+    
+    /*if (updateData.flags & Flags::Skinned)
     {
+        StructuredBuffer<Skinning> skinning = MeshSkinning[shapeIndex];
+    
         Skinning vertSkinning = skinning[v];
 
         float3x4 boneMatrix;
@@ -83,5 +86,5 @@ void main(uint2 id : SV_DispatchThreadID)
         vertex.Bitangent = (half3)mul(boneMatrixRot, vertex.Bitangent);
     }*/
 
-    outputVertices[id.x] = vertex;
+    OutputVertices[shapeIndex][vertexIndex] = vertex;
 }

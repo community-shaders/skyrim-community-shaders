@@ -1,12 +1,13 @@
 #include "Shape.h"
 #include "Features/Raytracing.h"
 #include "Features/Raytracing/Heap.h"
+#include "Features/Raytracing/Pipelines/SkinningPipeline.h"
+
 #include "TruePBR.h"
 #include "TruePBR/BSLightingShaderMaterialPBR.h"
 #include "TruePBR/BSLightingShaderMaterialPBRLandscape.h"
 
 using GIHeap = Raytracing::GIHeap;
-using SkinningHeap = Raytracing::SkinningHeap;
 
 static std::uint32_t GetVertexSize(RE::BSGraphics::Vertex::Flags flags)
 {
@@ -97,18 +98,31 @@ void Shape::BuildMesh(RE::BSGraphics::TriShape* rendererData, const std::uint32_
 
 	// Vertices
 	{
-		bool dynamic = flags & Flags::Dynamic;
+		bool dynamic = false;
 		bool skinned = flags & Flags::Skinned;
 
-		if (dynamic) {
+		if (flags & Flags::Dynamic) {
 			dynamicPosition.resize(vertexCountIn);
 
-			auto* pDynamicTriShape = skyrim_cast<RE::BSDynamicTriShape*>(geometry);
+			auto rtti = geometry->GetRTTI();
 
-			if (pDynamicTriShape) {
-				const auto& dynTriShapeRuntime = pDynamicTriShape->GetDynamicTrishapeRuntimeData();
-				std::memcpy(dynamicPosition.data(), dynTriShapeRuntime.dynamicData, dynTriShapeRuntime.dataSize);
+			static REL::Relocation<const RE::NiRTTI*> dynamicTriShapeRTTI{ RE::BSDynamicTriShape::Ni_RTTI };
+
+			if (rtti == dynamicTriShapeRTTI.get()) {
+				auto* pDynamicTriShape = reinterpret_cast<RE::BSDynamicTriShape*>(geometry);
+
+				if (pDynamicTriShape) {
+					const auto& dynTriShapeRuntime = pDynamicTriShape->GetDynamicTrishapeRuntimeData();
+					std::memcpy(dynamicPosition.data(), dynTriShapeRuntime.dynamicData, dynTriShapeRuntime.dataSize);
+
+					dynamic = true;
+				}
 			}
+
+			// Clear Dynamic flag if geometry is not a valid BSDynamicTriShape.
+			// Enforces the invariant that when Flags::Dynamic is set, geometry is always a BSDynamicTriShape.
+			if (!dynamic)
+				flags &= ~Flags::Dynamic;
 		}
 
 		vertices.resize(vertexCountIn);
@@ -555,7 +569,7 @@ void Shape::CreateBuffers(const std::wstring& name)
 	auto* device = rt.d3d12Device.get();
 	auto* commandList = rt.commandList.get();
 
-	auto* skinningHeap = rt.skinningHeap.get();
+	auto* skinningHeap = rt.skinningPipeline->heap.get();
 	auto* giHeap = rt.giHeap.get();
 
 	auto* materialBuffer = rt.materialBuffer.get();
@@ -571,11 +585,8 @@ void Shape::CreateBuffers(const std::wstring& name)
 
 	// Dynamic
 	if (flags & Flags::Dynamic) {
-		// Not really a buffer but we need to initialize it somewhere
-		dynamicPosition.resize(vertexCount);
-
 		allocDesc.CustomPool = rt.dynamicVertexPool.get();
-		dynamicPositionBuffer = eastl::make_unique<DX12::StructuredBufferUploadMA<float4>>(device, allocator, allocDesc, uploadAllocDesc, vertexCount);
+		dynamicPositionBuffer = eastl::make_unique<DX12::StructuredBufferUploadMA<float4>>(device, allocator, allocDesc, uploadAllocDesc, vertexCount, false, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
 
 		dynamicPositionBuffer->CreateSRV(skinningHeap->CPUHandle(SkinningHeap::Slot::DynamicVertices, allocation->GetIndex()));
 	}
@@ -585,7 +596,7 @@ void Shape::CreateBuffers(const std::wstring& name)
 		bool hasUAV = (flags & Flags::Dynamic) || (flags & Flags::Skinned);
 
 		allocDesc.CustomPool = rt.vertexPool.get();
-		vertexBuffer = eastl::make_unique<DX12::StructuredBufferUploadMA<Vertex>>(device, allocator, allocDesc, uploadAllocDesc, vertexCount, hasUAV);
+		vertexBuffer = eastl::make_unique<DX12::StructuredBufferUploadMA<Vertex>>(device, allocator, allocDesc, uploadAllocDesc, vertexCount, hasUAV, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
 
 		vertexBuffer->UpdateList(vertices.data(), vertexCount);
 		DX::ThrowIfFailed(vertexBuffer->resource->SetName(std::format(L"Vertex Buffer [{}] - {}", allocation->GetIndex(), name).c_str()));
@@ -594,8 +605,6 @@ void Shape::CreateBuffers(const std::wstring& name)
 			logger::error("[RT] Shape::CreateBuffers - VertexCount: {}, Vertices Size: {}", vertexCount, vertices.size());
 
 		vertexBuffer->Upload(commandList);
-
-		vertexBuffer->TransitionBarrier(commandList, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
 
 		// UAV
 		if (hasUAV) {
@@ -628,7 +637,7 @@ void Shape::CreateBuffers(const std::wstring& name)
 	// Skinning
 	if (flags & Flags::Skinned) {
 		allocDesc.CustomPool = rt.skinningPool.get();
-		skinningBuffer = eastl::make_unique<DX12::StructuredBufferUploadMA<Skinning>>(device, allocator, allocDesc, uploadAllocDesc, vertexCount);
+		skinningBuffer = eastl::make_unique<DX12::StructuredBufferUploadMA<Skinning>>(device, allocator, allocDesc, uploadAllocDesc, vertexCount, false, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
 
 		skinningBuffer->UpdateList(skinning.data(), vertexCount);
 		DX::ThrowIfFailed(skinningBuffer->resource->SetName(std::format(L"Skinning Buffer [{}] - {}", allocation->GetIndex(), name).c_str()));
@@ -653,14 +662,12 @@ void Shape::CreateBuffers(const std::wstring& name)
 	// Triangles
 	{
 		allocDesc.CustomPool = rt.trianglePool.get();
-		triangleBuffer = eastl::make_unique<DX12::StructuredBufferUploadMA<Triangle>>(device, allocator, allocDesc, uploadAllocDesc, triangleCount);
+		triangleBuffer = eastl::make_unique<DX12::StructuredBufferUploadMA<Triangle>>(device, allocator, allocDesc, uploadAllocDesc, triangleCount, false, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
 
 		triangleBuffer->UpdateList(triangles.data(), triangles.size());
 		DX::ThrowIfFailed(triangleBuffer->resource->SetName(std::format(L"Triangle Buffer [{}] - {}", allocation->GetIndex(), name).c_str()));
 
 		triangleBuffer->Upload(commandList);
-
-		triangleBuffer->TransitionBarrier(commandList, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
 
 		// SRV
 		{
@@ -774,4 +781,58 @@ void Shape::CalculateVectors(bool calculateNormal)
 		v.Tangent = t;
 		v.Bitangent = b;
 	}
+}
+
+// Updates Dynamic Vertex position (and Bitangent.x) buffer
+// TODO: Test performance and stability of using a upload heap buffer and keeping it mapped to dynamicData
+bool Shape::UpdateDynamicPosition()
+{
+	if ((flags & Flags::Dynamic) != Flags::Dynamic)
+		return false;
+
+	if (!geometry)
+		return false;
+
+	auto* dynamicTriShape = reinterpret_cast<RE::BSDynamicTriShape*>(geometry);
+
+	const auto& runtimeData = dynamicTriShape->GetDynamicTrishapeRuntimeData();
+
+	auto* dynamicData = runtimeData.dynamicData;
+
+	if (!dynamicData)
+		return false;
+
+	auto dataSize = runtimeData.dataSize;
+
+	// Is this even a possibility?
+	if (dataSize == 0)
+		return false;
+
+	// Has dynamic position changed?
+	if (std::memcmp(dynamicPosition.data(), dynamicData, dataSize) == 0)
+		return false;
+
+	std::memcpy(dynamicPosition.data(), dynamicData, dataSize);
+
+	return true;
+}
+
+// Updates 'dynamicPositionBuffer' with dynamicPosition.data() and uploads the buffer to the GPU using the command list
+void Shape::UpdateUploadDynamicBuffers(ID3D12GraphicsCommandList4* commandList)
+{
+	if ((flags & Flags::Dynamic) != Flags::Dynamic)
+		return;
+
+	dynamicPositionBuffer->UpdateList(dynamicPosition.data(), dynamicPosition.size());
+	dynamicPositionBuffer->Upload(commandList);
+}
+
+bool Shape::UpdateSkinning()
+{
+	if ((flags & Flags::Skinned) != Flags::Skinned)
+		return false;
+
+	// TODO: Handle lazy skinned meshes update
+
+	return false;
 }

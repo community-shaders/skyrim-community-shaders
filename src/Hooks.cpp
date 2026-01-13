@@ -967,7 +967,7 @@ namespace Hooks
 		auto& rt = globals::features::raytracing;
 
 		if (rt.loaded) {
-			return rt.SKY_CUBEMAP_SIZE;
+			return RTConstants::SKY_CUBEMAP_SIZE;
 		} else {
 			return 128;
 		}

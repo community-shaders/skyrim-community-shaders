@@ -2,14 +2,13 @@
 
 #include "PCH.h"
 
-#include "Features/Raytracing/Allocator.h"
-#include "Features/Raytracing/BufferMA.h"
-#include "Features/Raytracing/Utils.h"
-
 #include <d3d12.h>
 #include <winrt/base.h>
 
+#include "Features/Raytracing/Allocator.h"
+#include "Features/Raytracing/BufferMA.h"
 #include "Features/Raytracing/Types.h"
+#include "Features/Raytracing/Utils.h"
 
 #include "Raytracing/Includes/Types/Material.hlsli"
 #include "Raytracing/Includes/Types/Skinning.hlsli"
@@ -164,6 +163,7 @@ public:
 	// Reference to original geometry
 	RE::BSGeometry* geometry = nullptr;
 
+	// We could copy straight to buffer and save some (minimal) ram, but keeping a copy allows using memcmp to detect changes
 	eastl::vector<float4> dynamicPosition;
 	eastl::vector<Vertex> vertices;
 	eastl::vector<Skinning> skinning;
@@ -178,18 +178,11 @@ public:
 
 	Flags flags = Flags::None;
 
-	/*Shape(Allocation* allocation, Flags flags = Flags::None) :
-		allocation({ allocation, AllocationDeleter() }), flags(flags) {}*/
-
 	Shape(Allocation* allocation, RE::BSGeometry* geometry, Flags flags = Flags::None) :
 		allocation({ allocation, AllocationDeleter() }), geometry(geometry), flags(flags)
 	{
 		//logger::info("[RT] Shape {} at Index {}", geometry->name, allocation->GetIndex());
 	}
-
-	/*~Shape() {
-
-	};*/
 
 	/*inline Shape Clone(uint16_t registerIndexIn, RE::BSGeometry* geometryIn) const
 	{
@@ -214,6 +207,12 @@ public:
 	void CreateBuffers(const std::wstring& name);
 
 	void CalculateVectors(bool calculateNormal);
+
+	bool UpdateDynamicPosition();
+
+	void UpdateUploadDynamicBuffers(ID3D12GraphicsCommandList4* commandList);
+
+	bool UpdateSkinning();
 
 	// For PBR shader flags we need to copy exactly what TruePBR does
 	static stl::enumeration<PBRShaderFlags, uint32_t> GetPBRShaderFlags(const BSLightingShaderMaterialPBR* pbrMaterial);
