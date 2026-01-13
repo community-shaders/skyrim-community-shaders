@@ -126,6 +126,91 @@ public:
 };
 ```
 
+### Array and Vector Types
+
+The weather system supports `std::array` and `std::vector` for complex data structures:
+
+#### Using ArrayVariable for Fixed-Size Arrays
+
+```cpp
+void RegisterWeatherVariables() override
+{
+    auto* registry = WeatherVariables::GlobalWeatherRegistry::GetSingleton()
+        ->GetOrCreateFeatureRegistry(GetShortName());
+
+    // Array of primitive types (floats)
+    registry->RegisterVariable(std::make_shared<WeatherVariables::ArrayVariable<float, 8>>(
+        "weights",
+        "Weight Values",
+        "Array of weight coefficients",
+        &settings.weights,
+        std::array<float, 8>{ 1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f }
+        // elementLerpFunc optional for float types - uses default std::lerp
+    ));
+
+    // Array of complex types with custom interpolation
+    registry->RegisterVariable(std::make_shared<WeatherVariables::ArrayVariable<ColorProfile, 8>>(
+        "profiles",
+        "Color Profiles",
+        "Array of color profile configurations",
+        &settings.profiles,
+        defaultProfiles,
+        [](const ColorProfile& from, const ColorProfile& to, float factor) {
+            ColorProfile result;
+            result.hue = std::lerp(from.hue, to.hue, factor);
+            result.saturation = std::lerp(from.saturation, to.saturation, factor);
+            result.brightness = std::lerp(from.brightness, to.brightness, factor);
+            // interpolate other fields...
+            return result;
+        }
+    ));
+}
+```
+
+#### Using VectorVariable for Dynamic Arrays
+
+```cpp
+void RegisterWeatherVariables() override
+{
+    auto* registry = WeatherVariables::GlobalWeatherRegistry::GetSingleton()
+        ->GetOrCreateFeatureRegistry(GetShortName());
+
+    // Vector of floats with default interpolation
+    registry->RegisterVariable(std::make_shared<WeatherVariables::VectorVariable<float>>(
+        "coefficients",
+        "Dynamic Coefficients",
+        "Variable-length coefficient array",
+        &settings.coefficients,
+        std::vector<float>{ 1.0f, 0.5f, 0.25f }
+    ));
+
+    // Vector of complex types with custom interpolation
+    registry->RegisterVariable(std::make_shared<WeatherVariables::VectorVariable<LightConfig>>(
+        "lights",
+        "Light Configurations",
+        "Dynamic array of light settings",
+        &settings.lights,
+        defaultLights,
+        [](const LightConfig& from, const LightConfig& to, float factor) {
+            LightConfig result;
+            result.intensity = std::lerp(from.intensity, to.intensity, factor);
+            result.color = float3{
+                std::lerp(from.color.x, to.color.x, factor),
+                std::lerp(from.color.y, to.color.y, factor),
+                std::lerp(from.color.z, to.color.z, factor)
+            };
+            return result;
+        }
+    ));
+}
+```
+
+**Notes on Vector Interpolation:**
+
+-   When vectors have different sizes, interpolation uses the maximum size
+-   Missing elements from shorter vectors are default-initialized (T{})
+-   This allows smooth transitions when adding/removing elements between weathers
+
 ## System Integration
 
 ### How Weather Manager Uses the Registry
@@ -236,7 +321,25 @@ Uses nlohmann::json for type conversion. Built-in support for:
 
 -   Primitive types (float, int, bool)
 -   float2, float3, float4 (see `Utils/Serialize.h`)
--   Custom types require NLOHMANN*DEFINE_TYPE*\* macros
+-   **std::array<T, N>** - Fixed-size arrays serialized as JSON arrays
+-   **std::vector<T>** - Dynamic arrays serialized as JSON arrays
+-   Custom types require NLOHMANN*DEFINE_TYPE*\* macros or custom serialization functions
+
+Example JSON with array/vector types:
+
+```json
+{
+    "MyFeature": {
+        "intensity": 1.5,
+        "weights": [1.0, 0.8, 0.6, 0.4, 0.2, 0.1, 0.05, 0.025],
+        "coefficients": [1.0, 0.5, 0.25],
+        "profiles": [
+            { "hue": 0.5, "saturation": 1.0, "brightness": 1.0 },
+            { "hue": 0.7, "saturation": 0.8, "brightness": 0.9 }
+        ]
+    }
+}
+```
 
 ### Error Handling
 
