@@ -100,7 +100,6 @@ namespace globals
 		RE::INISettingCollection* iniSettingCollection = nullptr;
 		RE::INIPrefSettingCollection* iniPrefSettingCollection = nullptr;
 		RE::GameSettingCollection* gameSettingCollection = nullptr;
-		RE::TES* tes = nullptr;
 		float* cameraNear = nullptr;
 		float* cameraFar = nullptr;
 		float* deltaTime = nullptr;
