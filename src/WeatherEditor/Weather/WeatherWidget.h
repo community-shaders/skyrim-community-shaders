@@ -123,6 +123,11 @@ public:
 	void SaveFeatureSettings();
 	void LoadFeatureSettings();
 
+	// Navigation state for opening specific features
+	std::string pendingFeatureNavigation = "";
+	std::string pendingSettingHighlight = "";
+	void NavigateToFeatureSetting(const std::string& featureName, const std::string& settingName);
+
 private:
 	void DrawDALCSettings();
 	void DrawWeatherColorSettings();
