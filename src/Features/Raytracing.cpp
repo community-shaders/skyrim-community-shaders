@@ -450,6 +450,33 @@ void Raytracing::DrawAdvancedSettings()
 
 	auto& advSettings = settings.AdvancedSettings;
 
+	if (ImGui::TreeNodeEx("Culling", ImGuiTreeNodeFlags_DefaultOpen)) {
+		DrawEnumRadio("Culling", advSettings.Culling.Mode, nullptr, CullingModeTooltips);
+
+		ImGui::SliderInt("Minimal Radius", &advSettings.Culling.MinRadius, 0, 10, "%d", ImGuiSliderFlags_AlwaysClamp);
+		if (auto _tt = Util::HoverTooltipWrapper()) {
+			ImGui::Text("Nodes with a radius lower than this value are culled when outside the view.\n");
+		}
+
+		DrawEnumRadio("Distance Culling Mode", advSettings.Culling.DistanceMode, nullptr, CullingDistanceModeTooltips);
+
+		if (advSettings.Culling.DistanceMode == CullingDistanceMode::Minimal) {
+			ImGui::InputInt("Minimal Distance", &advSettings.Culling.MinDistance);
+			if (auto _tt = Util::HoverTooltipWrapper()) {
+				ImGui::Text("Distance to cull when outside the view regardless of radius.\n");
+			}
+		} else {
+			ImGui::InputInt("Starting Distance", &advSettings.Culling.StartDistance);
+			if (auto _tt = Util::HoverTooltipWrapper()) {
+				ImGui::Text("Minimal distance to start modulating radius.\n");
+			}
+
+			ImGui::SliderFloat("Distance Ratio", &advSettings.Culling.DistanceRatio, 0.1f, 1.0f, "%.2f", ImGuiSliderFlags_AlwaysClamp);
+		}
+
+		ImGui::TreePop();
+	}
+
 	if (ImGui::Checkbox("Resampled Importance Sampling", &advSettings.RIS.Enabled))
 		recompileReason |= RecompileReason::Advanced;
 
@@ -479,7 +506,24 @@ void Raytracing::DrawDebugSettings()
 
 	ImGui::PushID("DebugSettings");
 
-	ImGui::Checkbox("Disable TriShapes Update", &debugDisableTriShapesUpdate);
+
+	if (ImGui::TreeNodeEx("Skinning and DynamicTriShapes", ImGuiTreeNodeFlags_DefaultOpen)) {
+		ImGui::Checkbox("Disable Updates", &debugDisableTriShapesUpdate);
+
+		if (ImGui::Checkbox("Use Optimized Mapping", &skinningPipeline->settings.OptimizedMapping))
+			skinningPipeline->recompile = true;
+
+		if (ImGui::SliderInt("Thread Group Size", (int*)&skinningPipeline->settings.ThreadGroupSize,
+				SkinningPipeline::MIN_THREAD_GROUP_SIZE, SkinningPipeline::MAX_THREAD_GROUP_SIZE, "%d", ImGuiSliderFlags_AlwaysClamp))
+			skinningPipeline->recompile = true;
+
+
+		ImGui::Checkbox("Dispatch", &skinningPipeline->settings.Dispatch);	
+		
+		ImGui::Checkbox("Update BLAS", &skinningPipeline->settings.UpdateBLAS);
+
+		ImGui::TreePop();
+	}
 
 	ImGui::Checkbox("Disable Texture Sharing", &debugDisableTextureSharing);
 
@@ -1611,12 +1655,8 @@ void Raytracing::CommitModel(Model* model)
 
 	eastl::vector<D3D12_RAYTRACING_GEOMETRY_DESC> geometryDescs(meshCount);
 
-	auto flags = Flags::None;
-
 	for (auto i = 0; i < meshCount; i++) {
 		auto& shape = shapes[i];
-
-		flags |= shape->flags;
 
 		geometryDescs[i] = {
 			.Type = D3D12_RAYTRACING_GEOMETRY_TYPE_TRIANGLES,
@@ -1634,11 +1674,20 @@ void Raytracing::CommitModel(Model* model)
 		};
 	}
 
-	bool updatable = (flags & Flags::Skinned) || (flags & Flags::Dynamic);
+	auto modelFlags = model->GetFlags();
+
+	bool updatable = (modelFlags & Flags::Skinned) || (modelFlags & Flags::Dynamic);
+
+	D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAGS buildFlags = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_NONE;
+
+	if (updatable)
+		buildFlags = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_ALLOW_UPDATE | D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_PREFER_FAST_BUILD;
+	else
+		buildFlags = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_ALLOW_COMPACTION | D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_PREFER_FAST_TRACE;
 
 	D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_INPUTS inputs = {
 		.Type = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL,
-		.Flags = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_PREFER_FAST_TRACE | (updatable ? D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_ALLOW_UPDATE : D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_ALLOW_COMPACTION),
+		.Flags = buildFlags,
 		.NumDescs = static_cast<uint>(geometryDescs.size()),
 		.DescsLayout = D3D12_ELEMENTS_LAYOUT_ARRAY,
 		.pGeometryDescs = geometryDescs.data()
@@ -1722,7 +1771,7 @@ void Raytracing::UpdateModelBLAS(Model* model)
 
 	D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_INPUTS inputs = {
 		.Type = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL,
-		.Flags = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_PERFORM_UPDATE | D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_PREFER_FAST_TRACE,
+		.Flags = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_PREFER_FAST_BUILD | D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_PERFORM_UPDATE,
 		.NumDescs = static_cast<uint>(geometryDescs.size()),
 		.DescsLayout = D3D12_ELEMENTS_LAYOUT_ARRAY,
 		.pGeometryDescs = geometryDescs.data()
@@ -2107,7 +2156,7 @@ static RE::NiCamera* FindNiCamera(RE::NiAVObject* object)
 	if (!node)
 		return nullptr;
 
-	for (auto child : node->GetChildren()) {
+	for (auto& child : node->GetChildren()) {
 		if (child) {
 			if (auto* res = FindNiCamera(child.get()))
 				return res;
@@ -2139,10 +2188,15 @@ void Raytracing::UpdateInstances()
 	blasInstances.clear();
 	blasInstances.reserve(instances.size());
 
-	auto* playerCamera = RE::PlayerCamera::GetSingleton();
-	auto* tesCamera = playerCamera->currentState->camera;
+	const auto& cullingSettings = settings.AdvancedSettings.Culling;
 
-	RE::NiCamera* camera = FindNiCamera(tesCamera->cameraRoot.get());
+	RE::NiCamera* camera = nullptr;
+
+	if (cullingSettings.Mode == CullingMode::Smart) {
+		auto* tesCamera = RE::PlayerCamera::GetSingleton()->currentState->camera;
+
+		camera = FindNiCamera(tesCamera->cameraRoot.get());
+	}
 
 	auto eye = Util::GetAverageEyePosition();
 
@@ -2159,32 +2213,51 @@ void Raytracing::UpdateInstances()
 
 		auto it = models.find(instance.filename);
 
-		// Model was erased but not the instance
+		// Model was erased but not its (this) instance
 		if (it == models.end())
 			continue;
 
 		auto& model = it->second;
 
-		auto worldBound = pNiNode->worldBound;
+		if (cullingSettings.Mode == CullingMode::Smart) {
+			auto worldBound = pNiNode->worldBound;
 
-		float worldBoundRadius = worldBound.radius;
-		float distanceToBounds = Util::Units::GameUnitsToMeters(eye.GetDistance(worldBound.center) - worldBoundRadius);
+			float worldBoundRadius = Util::Units::GameUnitsToMeters(worldBound.radius);
+			float distanceToBounds = Util::Units::GameUnitsToMeters(eye.GetDistance(worldBound.center)) - worldBoundRadius;
 
-		auto shaderTypes = model->GetShaderTypes();
-		auto features = model->GetFeatures();
+			auto shaderTypes = model->GetShaderTypes();
+			auto features = model->GetFeatures();
 
-		// We exclude emissive models from culling
-		auto cullOutOfView = !(shaderTypes & RE::BSShader::Type::Effect) && !(features & static_cast<int>(RE::BSShaderMaterial::Feature::kGlowMap));
+			bool frustumCull = false;
 
-		// We'll cull small models or very distant ones (that are outside the player view)
-		if ((cullOutOfView && Util::Units::GameUnitsToMeters(worldBoundRadius) < 1.0f) || distanceToBounds > 100.0f) {
-			//if (!RE::NiCamera::BoundInFrustum(worldBound, camera))
-			if (!camera->NodeInFrustum(pNiNode))
+			// Culls small models outside of the player's view
+			if (cullingSettings.MinRadius > 0) {
+				// We'll exclude emissive models from radius frustum culling
+				bool frustumCullable = !(shaderTypes & RE::BSShader::Type::Effect) && !(features & static_cast<int>(RE::BSShaderMaterial::Feature::kGlowMap));
+				frustumCull |= frustumCullable && (worldBoundRadius < cullingSettings.MinRadius);
+			}
+
+			//float minDistance = cullingSettings.MinDistance;			
+
+			// Culls all models outside of the player's view, must satisfy condition
+			if (cullingSettings.DistanceMode == CullingDistanceMode::Minimal) {
+				frustumCull |= distanceToBounds > cullingSettings.MinDistance;
+			} else if (cullingSettings.DistanceMode == CullingDistanceMode::Ratio) {
+				float distanceToStart = std::max(0.0f, distanceToBounds - cullingSettings.StartDistance);
+				float adaptativeRadius = distanceToStart * cullingSettings.DistanceRatio;
+				frustumCull |= worldBoundRadius < adaptativeRadius;
+			}
+
+			// We'll cull small models or very distant ones (that are outside the player view)
+			if (frustumCull && !camera->NodeInFrustum(pNiNode))
+				continue;
+
+		} else if (cullingSettings.Mode == CullingMode::Skyrim) {
+			if (pNiNode->GetAppCulled())
 				continue;
 		}
 
-		if (!instance.Update(pNiNode, { it->first, model.get() }))
-			return;
+		instance.Update(pNiNode, { it->first, model.get() }, skinningPipeline.get());
 
 		// This is temporary while I think of a better place to fit this (probably on instance.Update?)
 		auto firstShapeIndex = totalShapeCount;
@@ -2455,8 +2528,7 @@ void Raytracing::UpdateShadowInstances()
 
 		auto& model = it->second;
 
-		if (!instance.Update(pNiNode, { it->first, model.get() }))
-			return;
+		instance.Update(pNiNode, { it->first, model.get() }, skinningPipeline.get());
 
 		D3D12_RAYTRACING_INSTANCE_DESC blasShadowInstance = {
 			.InstanceID = static_cast<uint>(blasShadowInstances.size()),
@@ -2677,7 +2749,9 @@ void Raytracing::DrawRTGI()
 	UpdateInstances();
 
 	if (!debugDisableTriShapesUpdate)
-		skinningPipeline->Dispatch(commandList.get());
+		skinningPipeline->Dispatch(commandList.get(), d3d12Device.get());
+	else
+		skinningPipeline->ClearQueue();
 
 	// Upload buffers
 	lightBuffer->Upload(commandList.get());
@@ -3025,8 +3099,10 @@ void Raytracing::DrawRTGI()
 
 	// Clear specular if Path Tracing is enabled
 	if (settings.PathTracing) {
+		auto renderer = globals::game::renderer;
+
 		float clearColor[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
-		d3d11Context->ClearRenderTargetView(globals::game::renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kINDIRECT_DOWNSCALED].RTV, clearColor);
+		d3d11Context->ClearRenderTargetView(renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kINDIRECT_DOWNSCALED].RTV, clearColor);
 	}
 }
 
@@ -3094,7 +3170,9 @@ void Raytracing::RenderShadows()
 	UpdateShadowInstances();
 
 	if (!debugDisableTriShapesUpdate)
-		skinningPipeline->Dispatch(commandList.get());
+		skinningPipeline->Dispatch(commandList.get(), d3d12Device.get());
+	else
+		skinningPipeline->ClearQueue();
 
 	//UpdateDynamicSkinning(commandList.get());
 

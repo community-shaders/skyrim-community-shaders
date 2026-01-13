@@ -22,12 +22,20 @@ namespace Flags
     static const uint16_t Skinned = (1 << 2); 
 }
 
-[numthreads(1, THREAD_SIZE, 1)]
-void main(uint2 id : SV_DispatchThreadID)
+#if defined(OPTIMIZED_MAPPING)
+[numthreads(THREAD_GROUP_SIZE, 1, 1)]
+void main(uint3 DTid : SV_DispatchThreadID, uint3 GTid : SV_GroupThreadID, uint3 GID : SV_GroupID)
 {
-    const uint modelIndex = id.x;
-    const uint vertexIndex = id.y;
-
+    const uint modelIndex = GID.x;
+    const uint vertexIndex = GID.y * THREAD_GROUP_SIZE + GTid.x; 
+#else
+[numthreads(1, THREAD_GROUP_SIZE, 1)]
+void main(uint3 DTid : SV_DispatchThreadID)
+{
+    const uint modelIndex = DTid.x;
+    const uint vertexIndex = DTid.y;    
+#endif 
+    
     //float3x4 localToRoot = LocalToRoot[modelIndex];
     //float3x3 localToRootRot = (float3x3)localToRoot;
 
@@ -47,8 +55,7 @@ void main(uint2 id : SV_DispatchThreadID)
     {
         float4 dynamicVertex = DynamicVertices[shapeIndex][vertexIndex];      
         
-        //vertex.Position = mul(localToRoot, float4(dynamicVertex.xyz, 1.0f));
-        vertex.Position = dynamicVertex.xyz;
+        vertex.Position = mul(updateData.localToRoot, float4(dynamicVertex.xyz, 1.0f));
         //vertex.Bitangent = (half3) mul(localToRootRot, half3(dynamicVertex.w, vertex.Bitangent.yz));
     }
     

@@ -53,10 +53,11 @@ void SkinningPipeline::CreateRootSignature(ID3D12Device5* device)
 
 void SkinningPipeline::CompileShaders(ID3D12Device5* device)
 {
-	const auto threadSizeWStr = std::to_wstring(THREAD_SIZE);
+	const auto threadSizeWStr = std::to_wstring(settings.ThreadGroupSize);
+	auto mapping = settings.OptimizedMapping ? L"OPTIMIZED_MAPPING" : L"STANDARD_MAPPING";
 
 	winrt::com_ptr<IDxcBlob> shaderBlob;
-	ShaderUtils::CompileShader(shaderBlob, L"Data/Shaders/Raytracing/SkinningCS.hlsl", { { L"THREAD_SIZE", threadSizeWStr.c_str() } }, L"cs_6_5");
+	ShaderUtils::CompileShader(shaderBlob, L"Data/Shaders/Raytracing/SkinningCS.hlsl", { { L"THREAD_GROUP_SIZE", threadSizeWStr.c_str() }, { mapping, L"" } }, L"cs_6_5");
 
 	D3D12_COMPUTE_PIPELINE_STATE_DESC computeDesc = {};
 	computeDesc.pRootSignature = rootSignature.get();
@@ -64,6 +65,8 @@ void SkinningPipeline::CompileShaders(ID3D12Device5* device)
 
 	DX::ThrowIfFailed(device->CreateComputePipelineState(&computeDesc, IID_PPV_ARGS(pipelineState.put())));
 	DX::ThrowIfFailed(pipelineState->SetName(L"Compute Pipeline - Skinning"));
+
+	recompile = false;
 }
 
 void SkinningPipeline::SetupResources(ID3D12Device5* device)
@@ -74,23 +77,21 @@ void SkinningPipeline::SetupResources(ID3D12Device5* device)
 	vertexUpdateBuffer->CreateSRV(heap->CPUHandle(SkinningHeap::Slot::UpdateData));
 }
 
-void SkinningPipeline::QueueUpdate(Flags updateFlags, eastl::string name, Shape* shape)
+void SkinningPipeline::QueueUpdate(Flags updateFlags, eastl::string path, Shape* shape, const float3x4& localToRoot)
 {
-	queueModels.emplace_back(
-		name, 
-		shape->allocation->GetIndex(), 
-		updateFlags & Flags::Dynamic ? shape->dynamicPositionBuffer.get() : nullptr, 
-		shape->vertexBuffer.get(), 
-		shape->vertexCount, 
-		updateFlags);
+	queuedShapes.emplace_back(
+		updateFlags,
+		path, 
+		shape, 
+		localToRoot);
 }
 
 bool SkinningPipeline::PrepareResources(ID3D12GraphicsCommandList4* commandList, uint& count, uint& vertexCount)
 {
-	if (queueModels.empty())
+	if (queuedShapes.empty())
 		return false;
 
-	auto queueSize = queueModels.size();
+	auto queueSize = queuedShapes.size();
 
 	eastl::vector<VertexUpdateData> vertexUpdateData;
 	vertexUpdateData.reserve(queueSize);
@@ -99,12 +100,16 @@ bool SkinningPipeline::PrepareResources(ID3D12GraphicsCommandList4* commandList,
 	eastl::vector<CD3DX12_RESOURCE_BARRIER> barriers;
 	barriers.reserve(queueSize);
 
-	for (auto& model : queueModels) {
-		vertexCount = std::max(vertexCount, (uint)model.vertexCount);
-		vertexUpdateData.emplace_back(model.allocatedIndex, model.flags, model.vertexCount, 0);
+	for (auto& queuedShape : queuedShapes) {
+		Shape* shape = queuedShape.shape;
+
+		vertexCount = std::max(vertexCount, (uint)shape->vertexCount);
+		vertexUpdateData.emplace_back(shape->allocation->GetIndex(), queuedShape.updateFlags, shape->vertexCount, 0, queuedShape.localToRoot);
+
+		shape->UpdateUploadDynamicBuffers(commandList);
 
 		CD3DX12_RESOURCE_BARRIER barrier;
-		if (model.vertexBuffer->GetTransitionBarrier(D3D12_RESOURCE_STATE_UNORDERED_ACCESS, barrier))
+		if (shape->vertexBuffer->GetTransitionBarrier(D3D12_RESOURCE_STATE_UNORDERED_ACCESS, barrier))
 			barriers.push_back(barrier);
 	}
 
@@ -115,7 +120,7 @@ bool SkinningPipeline::PrepareResources(ID3D12GraphicsCommandList4* commandList,
 
 	count = (uint)vertexUpdateData.size();
 
-	vertexUpdateBuffer->UpdateList(vertexUpdateData.data(), vertexUpdateData.size());
+	vertexUpdateBuffer->UpdateList(vertexUpdateData.data(), count);
 	vertexUpdateBuffer->Upload(commandList);
 
 	return true;
@@ -125,11 +130,13 @@ void SkinningPipeline::RestoreResources(ID3D12GraphicsCommandList4* commandList)
 {
 	// Barrier to NPSR state
 	eastl::vector<CD3DX12_RESOURCE_BARRIER> barriers;
-	barriers.reserve(queueModels.size());
+	barriers.reserve(queuedShapes.size());
 
-	for (auto& model : queueModels) {
+	for (auto& queuedShape : queuedShapes) {
+		Shape* shape = queuedShape.shape;
+
 		CD3DX12_RESOURCE_BARRIER barrier;
-		if (model.vertexBuffer->GetTransitionBarrier(D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, barrier))
+		if (shape->vertexBuffer->GetTransitionBarrier(D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, barrier))
 			barriers.push_back(barrier);
 	}
 
@@ -141,13 +148,20 @@ void SkinningPipeline::RestoreResources(ID3D12GraphicsCommandList4* commandList)
 
 void SkinningPipeline::UpdateBLASES(ID3D12GraphicsCommandList4* commandList)
 {
-	eastl::vector<CD3DX12_RESOURCE_BARRIER> uavBarriers;
-	uavBarriers.reserve(queueModels.size());
-
 	auto& rt = globals::features::raytracing;
 
-	for (auto& queuedModel : queueModels) {
-		if (auto it = rt.models.find(queuedModel.name); it != rt.models.end()) {
+	eastl::vector<CD3DX12_RESOURCE_BARRIER> uavBarriers;
+	uavBarriers.reserve(queuedShapes.size());
+	
+	// One model contains multiple shapes, lets make a unique list of all updated model
+	eastl::hash_set<eastl::string> paths;
+	for (auto& queuedShape : queuedShapes) {
+		paths.emplace(queuedShape.path);
+	}
+
+	// Lets update all models which had at least one updated shape
+	for (auto& path : paths) {
+		if (auto it = rt.models.find(path); it != rt.models.end()) {
 			auto& model = it->second;
 
 			rt.UpdateModelBLAS(model.get());
@@ -164,11 +178,17 @@ void SkinningPipeline::UpdateBLASES(ID3D12GraphicsCommandList4* commandList)
 
 void SkinningPipeline::ClearQueue()
 {
-	queueModels.clear();
+	queuedShapes.clear();
 }
 
-void SkinningPipeline::Dispatch(ID3D12GraphicsCommandList4* commandList)
+void SkinningPipeline::Dispatch(ID3D12GraphicsCommandList4* commandList, ID3D12Device5* device)
 {
+	if (recompile)
+		CompileShaders(device);
+
+	if (!frameChecker.IsNewFrame())
+		return;
+
 	uint count = 0;
 	uint vertexCount = 0;
 
@@ -189,22 +209,15 @@ void SkinningPipeline::Dispatch(ID3D12GraphicsCommandList4* commandList)
 
 	commandList->SetComputeRootDescriptorTable(3, heap->TableGPUHandle(SkinningHeap::Table::SkinningBuffer));
 
-	/*CD3DX12_RESOURCE_BARRIER uavBarrier[3] = {
-		CD3DX12_RESOURCE_BARRIER::UAV(sharcHashEntriesBuffer->resource.get()),
-		CD3DX12_RESOURCE_BARRIER::UAV(sharcAccumulationBuffer->resource.get()),
-		CD3DX12_RESOURCE_BARRIER::UAV(sharcResolvedBuffer->resource.get())
-	};
-
-	commandList->ResourceBarrier(_countof(uavBarrier), uavBarrier);*/
-
-	const uint vertexDispatchSize = DivideRoundUp(vertexCount, THREAD_SIZE);
-	commandList->Dispatch(count, vertexDispatchSize, 1);
-
-	//commandList->ResourceBarrier(_countof(uavBarrier), uavBarrier);
+	if (settings.Dispatch) {
+		const uint vertexDispatchSize = DivideRoundUp(vertexCount, settings.ThreadGroupSize);
+		commandList->Dispatch(count, vertexDispatchSize, 1);
+	}
 
 	RestoreResources(commandList);
 
-	UpdateBLASES(commandList);
+	if (settings.UpdateBLAS)
+		UpdateBLASES(commandList);
 
 	ClearQueue();
 }

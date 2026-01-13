@@ -18,19 +18,21 @@
 
 #include "State.h"
 
+#include "Features/Raytracing/Core/Shape.h"
+#include "Features/Raytracing/Core/Model.h"
+#include "Features/Raytracing/Core/Instance.h"
+
 #include "Features/Raytracing/RTConstants.h"
 #include "Features/Raytracing/Allocator.h"
 #include "Features/Raytracing/Buffer.h"
 #include "Features/Raytracing/BufferMA.h"
 #include "Features/Raytracing/Heap.h"
 #include "Features/Raytracing/HeapManager.h"
-#include "Features/Raytracing/Model.h"
 #include "Features/Raytracing/Pipelines/SHaRCPipeline.h"
 #include "Features/Raytracing/Pipelines/SkinningPipeline.h"
 #include "Features/Raytracing/Pipelines/SVGFPipeline.h"
 #include "Features/Raytracing/RTPipelineBuilder.h"
 #include "Features/Raytracing/ShaderBindingTable.h"
-#include "Features/Raytracing/Shape.h"
 #include "Features/Raytracing/TextureSharing.h"
 #include "Features/Raytracing/Types.h"
 #include "Features/Raytracing/Utils.h"
@@ -305,6 +307,12 @@ struct Raytracing : public OverlayFeature
 #endif
 	};
 
+#ifdef DLSS_RR
+	static constexpr Denoiser DefaultDenoiser = Denoiser::DLSSRR;
+#else
+	static constexpr Denoiser DefaultDenoiser = Denoiser::SVGF;
+#endif
+
 	enum struct DebugOutput : int32_t
 	{
 		None,
@@ -395,11 +403,31 @@ struct Raytracing : public OverlayFeature
 		Eighth
 	};
 
-#ifdef DLSS_RR
-	static constexpr Denoiser DefaultDenoiser = Denoiser::DLSSRR;
-#else
-	static constexpr Denoiser DefaultDenoiser = Denoiser::SVGF;
-#endif
+	enum struct CullingMode : int32_t
+	{
+		None,
+		Smart,
+		Skyrim
+	};
+
+	static constexpr const char* CullingModeTooltips[] = {
+		"Disables culling altogether.",
+		"Configurable culling made for Ray Tracing.",
+		"Relies on Skyrim's culling, will create light leaks from culled nodes behind the player."
+	};
+	STATIC_ASSERT_ENUM_COUNT(CullingMode, CullingModeTooltips);
+
+	enum struct CullingDistanceMode : int32_t
+	{
+		Minimal,
+		Ratio
+	};
+
+	static constexpr const char* CullingDistanceModeTooltips[] = {
+		"Culls all geometry outside the view if distance is greater than 'Minimal Distance', regardless of their radius.",
+		"When distance is greater than 'Start Distance' modulates 'Minimal Radius' by relative distance and ratio."
+	};
+	STATIC_ASSERT_ENUM_COUNT(CullingDistanceMode, CullingDistanceModeTooltips);
 
 #ifdef DLSS_RR
 	struct DLSSRRSettings
@@ -410,6 +438,21 @@ struct Raytracing : public OverlayFeature
 		NLOHMANN_DEFINE_TYPE_INTRUSIVE_WITH_DEFAULT(DLSSRRSettings, QualityMode, Preset)
 	};
 #endif
+
+	struct CullingSettings
+	{
+		CullingMode Mode = CullingMode::Smart;
+		int MinRadius = 1;
+
+		CullingDistanceMode DistanceMode = CullingDistanceMode::Ratio;
+
+		int MinDistance = 100;
+
+		int StartDistance = 10;
+		float DistanceRatio = 1.0f;
+
+		NLOHMANN_DEFINE_TYPE_INTRUSIVE_WITH_DEFAULT(CullingSettings, Mode, MinRadius, DistanceMode, MinDistance, StartDistance, DistanceRatio)
+	};
 
 	// Resampled Importance Sampling
 	struct RISSettings
@@ -430,6 +473,8 @@ struct Raytracing : public OverlayFeature
 
 	struct AdvancedSettings
 	{
+		CullingSettings Culling;
+
 		RISSettings RIS;
 		ReSTIRSettings ReSTIR;
 
@@ -439,7 +484,7 @@ struct Raytracing : public OverlayFeature
 		LightEvalMode LightEvalMode = LightEvalMode::BRDF;
 		LightingMode LightingMode = LightingMode::PBR;
 
-		NLOHMANN_DEFINE_TYPE_INTRUSIVE_WITH_DEFAULT(AdvancedSettings, RIS, ReSTIR, GGXEnergyConservation, DiffuseBRDF, LightEvalMode, LightingMode)
+		NLOHMANN_DEFINE_TYPE_INTRUSIVE_WITH_DEFAULT(AdvancedSettings, Culling, RIS, ReSTIR, GGXEnergyConservation, DiffuseBRDF, LightEvalMode, LightingMode)
 	};
 
 	////////////////////////////////////////////////// Feature Specific Data
@@ -587,80 +632,6 @@ struct Raytracing : public OverlayFeature
 
 	// We'll group trishapes by their parent nodes, hopefully trishapes don't move on their own
 	eastl::unordered_map<eastl::string, eastl::unique_ptr<Model>> models;
-
-	// Instance
-	struct Instance
-	{
-		eastl::string filename;
-		float3x4 transform;
-		Util::FrameChecker frameChecker;
-		//bool hasUpdated = false;
-
-		bool Update(RE::NiNode* pNiNode, [[maybe_unused]] const eastl::pair<eastl::string, Model*>& modelPair)
-		{
-			// Instance was not changed by the game, so there is no need to update it
-			// This doesn't work at all for actors
-			/*if (pNiNode->lastUpdatedFrameCounter < globals::state->frameCount && hasUpdated)
-				return true;*/
-
-			if (pNiNode->GetAppCulled())
-				return true;
-
-			// Instance has already been updated this frame
-			if (!frameChecker.IsNewFrame())
-				return true;
-
-			XMStoreFloat3x4(&transform, GetXMFromNiTransform(pNiNode->world));
-
-			auto& [path, model] = modelPair;
-
-			if ((model->GetFlags() & Flags::Dynamic) || (model->GetFlags() & Flags::Skinned)) {
-				for (auto& shape : model->shapes) {
-					Flags updateFlags = Flags::None;
-
-					// Updates Dynamic Vertex position (and Bitangent.x) buffer
-					// TODO: Test performance and stability of using a upload heap buffer and keeping it mapped to dynamicData
-					if ((shape->flags & Flags::Dynamic) && shape->geometry) {
-						//auto* pDynamicTriShape = netimmerse_cast<RE::BSDynamicTriShape*>(shape->geometry);
-
-						auto* pDynamicTriShape = skyrim_cast<RE::BSDynamicTriShape*>(shape->geometry);
-
-						if (pDynamicTriShape) {
-							const auto& dynTriShapeRuntime = pDynamicTriShape->GetDynamicTrishapeRuntimeData();
-
-							// We'll test if dynamic data has changed before updating and uploading
-							// It does mean we have to memcpy twice, but I suppose the GPU bandwith we save makes up for it
-							if (dynTriShapeRuntime.dynamicData && std::memcmp(shape->dynamicPosition.data(), dynTriShapeRuntime.dynamicData, dynTriShapeRuntime.dataSize) != 0) {
-								std::memcpy(shape->dynamicPosition.data(), dynTriShapeRuntime.dynamicData, dynTriShapeRuntime.dataSize);
-
-								shape->dynamicPositionBuffer->Update(dynTriShapeRuntime.dynamicData, dynTriShapeRuntime.dataSize);
-
-								// We'll barrier and upload ourselfs in batch
-								//shape.dynamicPositionBuffer->Upload(commandList);
-								updateFlags |= Flags::Dynamic;
-							}
-						}
-					}
-
-					// TODO: Handle skinned meshes
-					if ((shape->flags & Flags::Skinned) && shape->geometry) {
-						// Restore pre-skinning vertices
-						//shape.vertexBuffer->Upload(commandList);
-
-						updateFlags |= Flags::Skinned;
-					}
-
-					if ((updateFlags & Flags::Dynamic) || (updateFlags & Flags::Skinned)) {
-						auto& rt = globals::features::raytracing;
-
-						rt.skinningPipeline->QueueUpdate(updateFlags, path, shape.get());
-					}
-				}
-			}
-
-			return true;
-		}
-	};
 
 	winrt::com_ptr<D3D12MA::Allocator> allocator = nullptr;
 

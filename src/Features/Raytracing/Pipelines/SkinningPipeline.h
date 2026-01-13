@@ -2,15 +2,16 @@
 
 #include "PCH.h"
 
-#include "Features/Raytracing/RTConstants.h"
+#include <d3d12.h>
+
 #include "Features/Raytracing/Buffer.h"
 #include "Features/Raytracing/Heap.h"
 #include "Features/Raytracing/HeapManager.h"
 #include "Features/Raytracing/Pipeline.h"
-#include "Features/Raytracing/Shape.h"
-#include <d3d12.h>
-
+#include "Features/Raytracing/RTConstants.h"
 #include "Features/Raytracing/Types.h"
+
+#include "Features/Raytracing/Core/Shape.h"
 
 #include "Raytracing/Includes/RT/SHaRC/SharcTypes.h"
 #include "Raytracing/Includes/Types/FrameData.hlsli"
@@ -42,29 +43,42 @@ using SkinningHeap = Heap<SkinningHeapDef::Table, SkinningHeapDef::Slot>;
 
 struct SkinningPipeline : ComputePipeline<SkinningHeap>
 {
-	static constexpr uint THREAD_SIZE = 64;
+	static constexpr uint MIN_THREAD_GROUP_SIZE = 4;
+	static constexpr uint MAX_THREAD_GROUP_SIZE = 64;
+
 	static constexpr uint MAX_BATCHES = 4;
 
-	struct ModelUpdate
+	struct Settings
 	{
-		eastl::string name;
-		uint16_t allocatedIndex;
-		DX12::StructuredBufferUploadMA<float4>* dynamicPositionBuffer = nullptr;
-		DX12::StructuredBufferUploadMA<Vertex>* vertexBuffer = nullptr;
-		uint16_t vertexCount;
-		Flags flags;
+		bool OptimizedMapping = false;
+		uint ThreadGroupSize = 32;
+		bool Dispatch = true;
+		bool UpdateBLAS = true;
+	} settings;
+
+	struct QueuedShape
+	{
+		// Model path, where Model = collection of Shapes
+		Flags updateFlags;
+		eastl::string path;
+		Shape* shape;
+		float3x4 localToRoot;
 	};
 
-	eastl::vector<ModelUpdate> queueModels;
+	eastl::vector<QueuedShape> queuedShapes;
 	eastl::unique_ptr<DX12::StructuredBufferUpload<VertexUpdateData>> vertexUpdateBuffer = nullptr;
+
+	Util::FrameChecker frameChecker;
+
+	bool recompile;
 
 	void CreateRootSignature(ID3D12Device5* device) override;
 	void CompileShaders(ID3D12Device5* device) override;
 	void SetupResources(ID3D12Device5* device) override;
-	void QueueUpdate(Flags updateFlags, eastl::string name, Shape* shape);
+	void QueueUpdate(Flags updateFlags, eastl::string name, Shape* shape, const float3x4& localToRoot);
 	bool PrepareResources(ID3D12GraphicsCommandList4* commandList, uint& count, uint& vertexCount);
 	void UpdateBLASES(ID3D12GraphicsCommandList4* commandList);
 	void RestoreResources(ID3D12GraphicsCommandList4* commandList);
 	void ClearQueue();
-	void Dispatch(ID3D12GraphicsCommandList4* commandList);
+	void Dispatch(ID3D12GraphicsCommandList4* commandList, ID3D12Device5* device);
 };
