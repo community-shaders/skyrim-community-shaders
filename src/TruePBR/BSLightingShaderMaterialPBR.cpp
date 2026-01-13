@@ -10,7 +10,7 @@ BSLightingShaderMaterialPBR::~BSLightingShaderMaterialPBR()
 BSLightingShaderMaterialPBR* BSLightingShaderMaterialPBR::Make()
 {
 	static auto memoryManager = RE::MemoryManager::GetSingleton();
-	auto memory = static_cast<BSLightingShaderMaterialPBR*>(memoryManager->GetThreadScrapHeap()->Allocate(sizeof(BSLightingShaderMaterialPBR), 8));
+	auto memory = static_cast<BSLightingShaderMaterialPBR*>(memoryManager->GetThreadScrapHeap()->Allocate(sizeof(BSLightingShaderMaterialPBR), alignof(BSLightingShaderMaterialPBR)));
 	return new (memory) BSLightingShaderMaterialPBR();
 }
 

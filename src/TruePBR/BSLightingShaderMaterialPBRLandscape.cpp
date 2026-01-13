@@ -16,7 +16,7 @@ BSLightingShaderMaterialPBRLandscape::~BSLightingShaderMaterialPBRLandscape()
 BSLightingShaderMaterialPBRLandscape* BSLightingShaderMaterialPBRLandscape::Make()
 {
 	static auto memoryManager = RE::MemoryManager::GetSingleton();
-	auto memory = static_cast<BSLightingShaderMaterialPBRLandscape*>(memoryManagerr->GetThreadScrapHeap()->Allocate(sizeof(BSLightingShaderMaterialPBRLandscape), 8));
+	auto memory = static_cast<BSLightingShaderMaterialPBRLandscape*>(memoryManager->GetThreadScrapHeap()->Allocate(sizeof(BSLightingShaderMaterialPBRLandscape), alignof(BSLightingShaderMaterialPBRLandscape)));
 	return new (memory) BSLightingShaderMaterialPBRLandscape();
 }
 
