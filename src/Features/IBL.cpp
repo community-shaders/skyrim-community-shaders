@@ -53,7 +53,7 @@ void IBL::RestoreDefaultSettings()
 void IBL::RegisterWeatherVariables()
 {
 	auto* registry = WeatherVariables::GlobalWeatherRegistry::GetSingleton()
-		->GetOrCreateFeatureRegistry(GetShortName());
+	                     ->GetOrCreateFeatureRegistry(GetShortName());
 	// Register enable diffuse IBL toggle
 	registry->RegisterVariable(std::make_shared<WeatherVariables::WeatherVariable<bool>>(
 		"EnableDiffuseIBL",
