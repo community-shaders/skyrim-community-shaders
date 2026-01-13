@@ -161,6 +161,9 @@ public:
 	void SaveSessionWidgets();
 	void RestoreSessionWidgets();
 
+	// Navigation helpers for weather-controlled settings
+	void OpenWeatherFeatureSetting(RE::TESWeather* weather, const std::string& featureName, const std::string& settingName);
+
 	~EditorWindow();
 
 private:
