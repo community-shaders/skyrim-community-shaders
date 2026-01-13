@@ -81,19 +81,28 @@ public:
 			kGrayscaleToPaletteAlpha = 1 << 4,
 			kFalloff = 1 << 5,
 			kEnvMap = 1 << 6,
-			kRefraction = 1 << 7,
-			kProjectedUV = 1 << 8,
-			kVertexColors = 1 << 9,
-			kMultiTextureLandscape = 1 << 10,
-			kEyeReflect = 1 << 11,
-			kHairTint = 1 << 12
+			kFace = 1 << 7,
+			kModelSpaceNormals = 1 << 8,
+			kRefraction = 1 << 9,
+			kProjectedUV = 1 << 10,
+			kVertexColors = 1 << 11,
+			kMultiTextureLandscape = 1 << 12,
+			kEyeReflect = 1 << 13,
+			kHairTint = 1 << 14
 		};
+
+		auto magic_enum_define_range_adl(ShaderFlags)
+		{
+			return magic_enum::customize::adl_info().flag<true>();
+		}
 
 		ShaderFlags GetShaderFlags() const
 		{
+			using EShaderPropertyFlag = RE::BSShaderProperty::EShaderPropertyFlag;
+
 			auto shaderFlagsLocal = ShaderFlags::None;
 
-			const auto& entries = magic_enum::enum_entries<ShaderFlags>();
+			/*const auto& entries = magic_enum::enum_entries<ShaderFlags>();
 			const auto& originalEntries = magic_enum::enum_entries<RE::BSShaderProperty::EShaderPropertyFlag>();
 
 			for (const auto& [flag, name] : entries) {
@@ -103,6 +112,66 @@ public:
 						break;
 					}
 				}
+			}*/
+
+			if (shaderFlags.any(EShaderPropertyFlag::kSpecular)) {
+				shaderFlagsLocal |= ShaderFlags::kSpecular;
+			}
+
+			if (shaderFlags.any(EShaderPropertyFlag::kTempRefraction)) {
+				shaderFlagsLocal |= ShaderFlags::kTempRefraction;
+			}
+
+			if (shaderFlags.any(EShaderPropertyFlag::kVertexAlpha)) {
+				shaderFlagsLocal |= ShaderFlags::kVertexAlpha;
+			}
+
+			if (shaderFlags.any(EShaderPropertyFlag::kGrayscaleToPaletteColor)) {
+				shaderFlagsLocal |= ShaderFlags::kGrayscaleToPaletteColor;
+			}
+
+			if (shaderFlags.any(EShaderPropertyFlag::kGrayscaleToPaletteAlpha)) {
+				shaderFlagsLocal |= ShaderFlags::kGrayscaleToPaletteAlpha;
+			}
+
+			if (shaderFlags.any(EShaderPropertyFlag::kFalloff)) {
+				shaderFlagsLocal |= ShaderFlags::kFalloff;
+			}
+
+			if (shaderFlags.any(EShaderPropertyFlag::kEnvMap)) {
+				shaderFlagsLocal |= ShaderFlags::kEnvMap;
+			}
+
+			if (shaderFlags.any(EShaderPropertyFlag::kFace)) {
+				shaderFlagsLocal |= ShaderFlags::kFace;
+			}
+
+			if (shaderFlags.any(EShaderPropertyFlag::kModelSpaceNormals)) {
+				shaderFlagsLocal |= ShaderFlags::kModelSpaceNormals;
+			}
+
+			if (shaderFlags.any(EShaderPropertyFlag::kRefraction)) {
+				shaderFlagsLocal |= ShaderFlags::kRefraction;
+			}
+
+			if (shaderFlags.any(EShaderPropertyFlag::kProjectedUV)) {
+				shaderFlagsLocal |= ShaderFlags::kProjectedUV;
+			}
+
+			if (shaderFlags.any(EShaderPropertyFlag::kVertexColors)) {
+				shaderFlagsLocal |= ShaderFlags::kVertexColors;
+			}
+
+			if (shaderFlags.any(EShaderPropertyFlag::kMultiTextureLandscape)) {
+				shaderFlagsLocal |= ShaderFlags::kMultiTextureLandscape;
+			}
+
+			if (shaderFlags.any(EShaderPropertyFlag::kEyeReflect)) {
+				shaderFlagsLocal |= ShaderFlags::kEyeReflect;
+			}
+
+			if (shaderFlags.any(EShaderPropertyFlag::kHairTint)) {
+				shaderFlagsLocal |= ShaderFlags::kHairTint;
 			}
 
 			return shaderFlagsLocal;
@@ -149,7 +218,7 @@ public:
 				GetShaderType(),
 				static_cast<uint16_t>(Feature),
 				PBRFlags.underlying(),
-				GetShaderFlags());
+				static_cast<uint32_t>(GetShaderFlags()));
 		}
 	};
 

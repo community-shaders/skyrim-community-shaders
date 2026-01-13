@@ -16,19 +16,21 @@ namespace ShaderType
 
 namespace ShaderFlags
 {
-	static const uint32_t kSpecular = (1 << 0);
-    static const uint32_t kTempRefraction = (1 << 1);
-    static const uint32_t kVertexAlpha = (1 << 2);
-    static const uint32_t kGrayscaleToPaletteColor = (1 << 3);
-    static const uint32_t kGrayscaleToPaletteAlpha = (1 << 4);
-    static const uint32_t kFalloff = (1 << 5);
-    static const uint32_t kEnvMap = (1 << 6);
-    static const uint32_t kRefraction = (1 << 7);
-    static const uint32_t kProjectedUV = (1 << 8);
-    static const uint32_t kVertexColors = (1 << 9);
-    static const uint32_t kMultiTextureLandscape = (1 << 10);
-    static const uint32_t kEyeReflect = (1 << 11);
-    static const uint32_t kHairTint = (1 << 12);
+	static const uint kSpecular = (1 << 0);
+    static const uint kTempRefraction = (1 << 1);
+    static const uint kVertexAlpha = (1 << 2);
+    static const uint kGrayscaleToPaletteColor = (1 << 3);
+    static const uint kGrayscaleToPaletteAlpha = (1 << 4);
+    static const uint kFalloff = (1 << 5);
+    static const uint kEnvMap = (1 << 6);
+	static const uint kFace = (1 << 7);
+	static const uint kModelSpaceNormals = (1 << 8);	
+    static const uint kRefraction = (1 << 9);
+    static const uint kProjectedUV = (1 << 10);
+    static const uint kVertexColors = (1 << 11);
+    static const uint kMultiTextureLandscape = (1 << 12);
+    static const uint kEyeReflect = (1 << 13);
+    static const uint kHairTint = (1 << 14);
 }
 
 namespace Feature
