@@ -847,61 +847,35 @@ float State::GetTotalSmoothedDrawCalls() const
 
 void State::LoadTheme()
 {
-	// Don't override if a theme preset is already selected (e.g., first-time Default Dark setup)
-	if (!globals::menu->GetSettings().SelectedThemePreset.empty()) {
-		logger::info("Theme preset '{}' already selected, skipping SettingsTheme.json load", globals::menu->GetSettings().SelectedThemePreset);
+	// Load the active preset from SettingsUser.json (already read during State::Load)
+	auto presetName = globals::menu->GetSettings().SelectedThemePreset;
+	if (presetName.empty()) {
+		logger::info("No active theme preset set; skipping preset load");
 		return;
 	}
 
-	auto themeConfigPath = Util::PathHelpers::GetSettingsThemePath();
-
-	if (!std::filesystem::exists(themeConfigPath)) {
-		logger::info("No theme config file found at: {}", themeConfigPath.string());
-		return;
+	// Ensure default themes exist and theme manager has discovered themes
+	globals::menu->CreateDefaultThemes();
+	auto themeManager = ThemeManager::GetSingleton();
+	if (themeManager && !themeManager->IsDiscovered()) {
+		themeManager->DiscoverThemes();
 	}
 
-	try {
-		std::ifstream themeFile(themeConfigPath);
-		if (!themeFile.is_open()) {
-			logger::warn("Unable to open theme config file: {}", themeConfigPath.string());
-			return;
+	logger::info("Loading active theme preset: '{}'", presetName);
+	if (!globals::menu->LoadThemePreset(presetName)) {
+		logger::warn("Failed to load preset '{}', attempting to fall back to 'Default'", presetName);
+		if (globals::menu->LoadThemePreset("Default")) {
+			globals::menu->GetSettings().SelectedThemePreset = "Default";
+			logger::info("Fallback to 'Default' theme succeeded");
+		} else {
+			logger::warn("Fallback to 'Default' theme failed");
 		}
-
-		json themeSettings;
-		themeFile >> themeSettings;
-		themeFile.close();
-
-		if (themeSettings["Menu"].is_object()) {
-			logger::info("Loading theme settings from: {}", themeConfigPath.string());
-			globals::menu->LoadTheme(themeSettings["Menu"]);
-		}
-	} catch (const std::exception& e) {
-		logger::warn("Error loading theme config file: {}", e.what());
 	}
 }
 
 void State::SaveTheme()
 {
-	auto themeConfigPath = Util::PathHelpers::GetSettingsThemePath();
-
-	try {
-		std::filesystem::create_directories(themeConfigPath.parent_path());
-	} catch (const std::filesystem::filesystem_error& e) {
-		logger::warn("Error creating directory during SaveTheme: {}", e.what());
-		return;
-	}
-
-	std::ofstream themeFile(themeConfigPath);
-	if (!themeFile.is_open()) {
-		logger::warn("Failed to open theme config file for saving: {}", themeConfigPath.string());
-		return;
-	}
-
-	json themeSettings;
-	globals::menu->SaveTheme(themeSettings["Menu"]);
-
-	themeFile << std::setw(4) << themeSettings << std::endl;
-	themeFile.close();
-
-	logger::info("Theme settings saved to: {}", themeConfigPath.string());
+	// SelectedThemePreset is now persisted via SettingsUser.json (State::Save)
+	// Keep this function as a no-op for backward compatibility and to avoid writing separate theme files.
+	logger::info("SaveTheme() no longer writes SettingsTheme.json; SelectedThemePreset is saved with SettingsUser.json");
 }
