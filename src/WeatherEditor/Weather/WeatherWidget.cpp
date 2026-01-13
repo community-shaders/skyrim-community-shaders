@@ -1476,7 +1476,8 @@ void WeatherWidget::RevertChanges()
 
 void WeatherWidget::DrawFeatureSettings()
 {
-	ImGui::TextWrapped("Configure feature-specific settings that will be applied when this weather is active.");
+	ImGui::TextWrapped("Configure feature-specific settings that will be applied when this weather is active. "
+	                   "These override the feature's global settings for this weather only.");
 	ImGui::Spacing();
 
 	auto* globalRegistry = WeatherVariables::GlobalWeatherRegistry::GetSingleton();
@@ -1487,48 +1488,185 @@ void WeatherWidget::DrawFeatureSettings()
 		}
 
 		std::string featureName = feature->GetShortName();
+		auto* featureRegistry = globalRegistry->GetFeatureRegistry(featureName);
 
 		// Check if feature has registered weather variables
-		if (!globalRegistry->HasWeatherSupport(featureName)) {
+		if (!featureRegistry) {
 			continue;
 		}
 
 		std::string displayName = feature->GetName();
 
+		// Get or initialize feature settings for this weather
+		if (settings.featureSettings.find(featureName) == settings.featureSettings.end()) {
+			settings.featureSettings[featureName] = json::object();
+		}
+		auto& featureJson = settings.featureSettings[featureName];
+
 		if (ImGui::TreeNode(displayName.c_str())) {
-			ImGui::Text("Feature: %s", featureName.c_str());
-			ImGui::Spacing();
+			bool hasAnySettings = !featureJson.empty();
 
-			// Show if settings exist for this feature
-			bool hasSettings = settings.featureSettings.find(featureName) != settings.featureSettings.end() &&
-			                   !settings.featureSettings[featureName].empty();
-
-			if (hasSettings) {
-				ImGui::TextColored({ 0.0f, 1.0f, 0.0f, 1.0f }, "Has weather-specific settings");
-
-				if (Util::ButtonWithFlash("Clear Settings")) {
-					settings.featureSettings[featureName] = json::object();
+			// Header buttons
+			if (hasAnySettings) {
+				if (Util::ButtonWithFlash("Reset to Global")) {
+					featureJson = json::object();
+					EditorWindow::GetSingleton()->PushUndoState(this);
 				}
-				ImGui::SameLine();
-				if (Util::ButtonWithFlash("View JSON")) {
-					ImGui::OpenPopup("FeatureJSON");
+				if (auto _tt = Util::HoverTooltipWrapper()) {
+					ImGui::Text("Remove all weather-specific overrides and use global feature settings");
 				}
-
-				if (ImGui::BeginPopup("FeatureJSON")) {
-					ImGui::Text("Settings JSON:");
-					ImGui::Separator();
-					std::string jsonStr = settings.featureSettings[featureName].dump(2);
-					ImGui::TextWrapped("%s", jsonStr.c_str());
-					ImGui::EndPopup();
-				}
-			} else {
-				ImGui::TextColored({ 0.7f, 0.7f, 0.7f, 1.0f }, "No weather-specific settings");
 			}
 
 			ImGui::Spacing();
-			ImGui::TextWrapped(
-				"Note: Feature settings should be configured through the feature's own settings panel. "
-				"This section shows which features have per-weather overrides.");
+			ImGui::Separator();
+			ImGui::Spacing();
+
+			// Draw UI for each registered variable
+			const auto& variables = featureRegistry->GetVariables();
+			bool modified = false;
+
+			for (const auto& var : variables) {
+				std::string varName = var->GetName();
+				std::string varDisplayName = var->GetDisplayName();
+				std::string tooltip = var->GetTooltip();
+
+				ImGui::PushID(varName.c_str());
+
+				// Check if this variable has a weather-specific value
+				bool hasOverride = featureJson.contains(varName);
+
+				// Get the current value (from weather JSON if exists, otherwise from feature's live value)
+				json currentValue;
+				if (hasOverride) {
+					currentValue = featureJson[varName];
+				} else {
+					// Save current feature value to temporary JSON and extract the value
+					json tempJson;
+					var->SaveToJson(tempJson);
+					currentValue = tempJson[varName];
+				}
+
+				// Try to detect variable type and render appropriate control
+				// Check if it's a FloatVariable (most common case)
+				if (auto* floatVar = dynamic_cast<WeatherVariables::FloatVariable*>(var.get())) {
+					float value = currentValue.get<float>();
+					float minVal = floatVar->GetMin();
+					float maxVal = floatVar->GetMax();
+
+					if (!hasOverride) {
+						ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.6f, 0.6f, 0.6f, 1.0f));
+					}
+
+					if (ImGui::SliderFloat(varDisplayName.c_str(), &value, minVal, maxVal, "%.3f")) {
+						featureJson[varName] = value;
+						modified = true;
+					}
+
+					if (!hasOverride) {
+						ImGui::PopStyleColor();
+					}
+
+					if (auto _tt = Util::HoverTooltipWrapper()) {
+						ImGui::Text("%s", tooltip.c_str());
+						if (!hasOverride) {
+							ImGui::Separator();
+							ImGui::TextColored({ 0.7f, 0.7f, 0.7f, 1.0f }, "Using global default");
+							ImGui::Text("Click and drag to set weather-specific value");
+						}
+					}
+
+					// Right-click context menu to reset individual values
+					if (hasOverride && ImGui::BeginPopupContextItem()) {
+						if (ImGui::MenuItem("Reset to Global")) {
+							featureJson.erase(varName);
+							modified = true;
+						}
+						ImGui::EndPopup();
+					}
+
+				} else if (auto* float3Var = dynamic_cast<WeatherVariables::Float3Variable*>(var.get())) {
+					// Handle float3 (color) variables
+					float3 value = currentValue.get<float3>();
+					float colorArray[3] = { value.x, value.y, value.z };
+
+					if (!hasOverride) {
+						ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.6f, 0.6f, 0.6f, 1.0f));
+					}
+
+					if (ImGui::ColorEdit3(varDisplayName.c_str(), colorArray)) {
+						featureJson[varName] = json{ colorArray[0], colorArray[1], colorArray[2] };
+						modified = true;
+					}
+
+					if (!hasOverride) {
+						ImGui::PopStyleColor();
+					}
+
+					if (auto _tt = Util::HoverTooltipWrapper()) {
+						ImGui::Text("%s", tooltip.c_str());
+						if (!hasOverride) {
+							ImGui::Separator();
+							ImGui::TextColored({ 0.7f, 0.7f, 0.7f, 1.0f }, "Using global default");
+						}
+					}
+
+					if (hasOverride && ImGui::BeginPopupContextItem()) {
+						if (ImGui::MenuItem("Reset to Global")) {
+							featureJson.erase(varName);
+							modified = true;
+						}
+						ImGui::EndPopup();
+					}
+
+				} else if (auto* float4Var = dynamic_cast<WeatherVariables::Float4Variable*>(var.get())) {
+					// Handle float4 (color with alpha) variables
+					float4 value = currentValue.get<float4>();
+					float colorArray[4] = { value.x, value.y, value.z, value.w };
+
+					if (!hasOverride) {
+						ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.6f, 0.6f, 0.6f, 1.0f));
+					}
+
+					if (ImGui::ColorEdit4(varDisplayName.c_str(), colorArray)) {
+						featureJson[varName] = json{ colorArray[0], colorArray[1], colorArray[2], colorArray[3] };
+						modified = true;
+					}
+
+					if (!hasOverride) {
+						ImGui::PopStyleColor();
+					}
+
+					if (auto _tt = Util::HoverTooltipWrapper()) {
+						ImGui::Text("%s", tooltip.c_str());
+						if (!hasOverride) {
+							ImGui::Separator();
+							ImGui::TextColored({ 0.7f, 0.7f, 0.7f, 1.0f }, "Using global default");
+						}
+					}
+
+					if (hasOverride && ImGui::BeginPopupContextItem()) {
+						if (ImGui::MenuItem("Reset to Global")) {
+							featureJson.erase(varName);
+							modified = true;
+						}
+						ImGui::EndPopup();
+					}
+
+				} else {
+					// Generic handling for other types
+					ImGui::Text("%s: %s", varDisplayName.c_str(), currentValue.dump().c_str());
+					if (auto _tt = Util::HoverTooltipWrapper()) {
+						ImGui::Text("%s", tooltip.c_str());
+						ImGui::Text("(Generic display - type-specific UI not implemented)");
+					}
+				}
+
+				ImGui::PopID();
+			}
+
+			if (modified) {
+				EditorWindow::GetSingleton()->PushUndoState(this);
+			}
 
 			ImGui::TreePop();
 		}
