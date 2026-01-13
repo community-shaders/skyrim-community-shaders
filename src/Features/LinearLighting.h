@@ -29,14 +29,14 @@ struct LinearLighting : Feature
 		uint enableLinearLighting = true;
 		uint enableGammaCorrection = true;
 		float lightGamma = 1.8f;
-		float colorGamma = 2.2f;
-		float emitColorGamma = 2.2f;
-		float glowmapGamma = 2.2f;
+		float colorGamma = 1.8f;
+		float emitColorGamma = 1.8f;
+		float glowmapGamma = 1.8f;
 		float ambientGamma = 1.8f;
-		float fogGamma = 2.2f;
-		float fogAlphaGamma = 1.0f;
-		float effectGamma = 1.8f;
-		float effectAlphaGamma = 1.0f;
+		float fogGamma = 1.97f;
+		float fogAlphaGamma = 1.8f;
+		float effectGamma = 1.4f;
+		float effectAlphaGamma = 1.55f;
 		float skyGamma = 1.8f;
 		float waterGamma = 1.8f;
 		float vlGamma = 1.8f;
@@ -51,7 +51,7 @@ struct LinearLighting : Feature
 		float directionalLightMult = 1.0f;
 		float pointLightMult = 1.0f;
 		float emitColorMult = 1.0f;
-		float glowmapMult = 1.0f;
+		float glowmapMult = 0.5f;
 
 		// Effect multipliers
 		float effectLightingMult = 0.32f;

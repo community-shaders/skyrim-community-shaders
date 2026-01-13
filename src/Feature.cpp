@@ -36,6 +36,8 @@
 #include "Menu.h"
 #include "SettingsOverrideManager.h"
 #include "Utils/Format.h"
+#include "WeatherManager.h"
+#include "WeatherVariableRegistry.h"
 
 #include "State.h"
 
