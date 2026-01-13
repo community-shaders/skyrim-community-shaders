@@ -10,6 +10,23 @@
 using json = nlohmann::json;
 
 // Weather variable system - features register variables which are automatically handled by weather system
+// Supports primitive types (float, float3, float4), std::array, and std::vector
+//
+// Usage examples:
+//   - FloatVariable: Single float values with min/max bounds
+//   - Float3Variable/Float4Variable: Vector types (colors, positions, etc.)
+//   - ArrayVariable: Fixed-size arrays (e.g., std::array<ColorProfile, 8>)
+//   - VectorVariable: Dynamic arrays (e.g., std::vector<float>)
+//
+// Custom element types require providing an element lerp function:
+//   auto arrayVar = std::make_shared<ArrayVariable<ColorProfile, 8>>(
+//       "profiles", "Color Profiles", "Array of color profiles",
+//       &settings.profiles, defaultProfiles,
+//       [](const ColorProfile& from, const ColorProfile& to, float factor) {
+//           ColorProfile result;
+//           // Implement per-field interpolation
+//           return result;
+//       });
 namespace WeatherVariables
 {
 	// Base class for weather-controllable variables
@@ -164,6 +181,73 @@ namespace WeatherVariables
 						std::lerp(from.z, to.z, factor),
 						std::lerp(from.w, to.w, factor)
 					};
+				})
+		{
+		}
+	};
+
+	// Specialized weather variable for std::array types
+	template <typename T, size_t N>
+	class ArrayVariable : public WeatherVariable<std::array<T, N>>
+	{
+	public:
+		ArrayVariable(const std::string& name, const std::string& displayName, const std::string& tooltip,
+			std::array<T, N>* valuePtr, std::array<T, N> defaultValue,
+			std::function<T(const T&, const T&, float)> elementLerpFunc) :
+			WeatherVariable<std::array<T, N>>(name, displayName, tooltip, valuePtr, defaultValue,
+				[elementLerpFunc](const std::array<T, N>& from, const std::array<T, N>& to, float factor) {
+					std::array<T, N> result;
+					for (size_t i = 0; i < N; ++i) {
+						result[i] = elementLerpFunc(from[i], to[i], factor);
+					}
+					return result;
+				})
+		{
+		}
+
+		// Helper constructor for float element types with default lerp
+		template <typename U = T, typename = std::enable_if_t<std::is_floating_point_v<U>>>
+		ArrayVariable(const std::string& name, const std::string& displayName, const std::string& tooltip,
+			std::array<T, N>* valuePtr, std::array<T, N> defaultValue) :
+			ArrayVariable(name, displayName, tooltip, valuePtr, defaultValue,
+				[](const T& from, const T& to, float factor) {
+					return static_cast<T>(std::lerp(from, to, factor));
+				})
+		{
+		}
+	};
+
+	// Specialized weather variable for std::vector types
+	template <typename T>
+	class VectorVariable : public WeatherVariable<std::vector<T>>
+	{
+	public:
+		VectorVariable(const std::string& name, const std::string& displayName, const std::string& tooltip,
+			std::vector<T>* valuePtr, std::vector<T> defaultValue,
+			std::function<T(const T&, const T&, float)> elementLerpFunc) :
+			WeatherVariable<std::vector<T>>(name, displayName, tooltip, valuePtr, defaultValue,
+				[elementLerpFunc](const std::vector<T>& from, const std::vector<T>& to, float factor) {
+					size_t maxSize = std::max(from.size(), to.size());
+					std::vector<T> result;
+					result.reserve(maxSize);
+					
+					for (size_t i = 0; i < maxSize; ++i) {
+						T fromVal = (i < from.size()) ? from[i] : T{};
+						T toVal = (i < to.size()) ? to[i] : T{};
+						result.push_back(elementLerpFunc(fromVal, toVal, factor));
+					}
+					return result;
+				})
+		{
+		}
+
+		// Helper constructor for float element types with default lerp
+		template <typename U = T, typename = std::enable_if_t<std::is_floating_point_v<U>>>
+		VectorVariable(const std::string& name, const std::string& displayName, const std::string& tooltip,
+			std::vector<T>* valuePtr, std::vector<T> defaultValue) :
+			VectorVariable(name, displayName, tooltip, valuePtr, defaultValue,
+				[](const T& from, const T& to, float factor) {
+					return static_cast<T>(std::lerp(from, to, factor));
 				})
 		{
 		}
