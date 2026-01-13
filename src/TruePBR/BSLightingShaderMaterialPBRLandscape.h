@@ -17,6 +17,9 @@ public:
 	BSLightingShaderMaterialPBRLandscape();
 	~BSLightingShaderMaterialPBRLandscape();
 
+	// Placement delete to match inherited placement new from BSIntrusiveRefCounted
+	static void operator delete(void* ptr, void*) noexcept { RE::free(ptr); }
+
 	// override (BSLightingShaderMaterialBase)
 	RE::BSShaderMaterial* Create() override;                                                                                      // 01
 	void CopyMembers(RE::BSShaderMaterial* that) override;                                                                        // 02
