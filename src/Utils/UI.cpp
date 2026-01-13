@@ -1,11 +1,11 @@
 #include "UI.h"
 
+#include "../WeatherEditor/EditorWindow.h"
 #include "FileSystem.h"
 #include "Menu.h"
 #include "Menu/IconLoader.h"
 #include "WeatherManager.h"
 #include "WeatherVariableRegistry.h"
-#include "../WeatherEditor/EditorWindow.h"
 
 #ifndef DIRECTINPUT_VERSION
 #	define DIRECTINPUT_VERSION 0x0800
@@ -1372,7 +1372,7 @@ namespace Util
 			if (isControlled) {
 				auto* weatherManager = WeatherManager::GetSingleton();
 				auto currentWeathers = weatherManager->GetCurrentWeathers();
-				
+
 				// Make it look like a clickable button when weather-controlled
 				ImGui::PushStyleColor(ImGuiCol_FrameBg, ImVec4(0.3f, 0.3f, 0.4f, 0.8f));
 				ImGui::PushStyleColor(ImGuiCol_FrameBgHovered, ImVec4(0.4f, 0.4f, 0.5f, 0.9f));
@@ -1392,13 +1392,12 @@ namespace Util
 					auto* weatherManager = WeatherManager::GetSingleton();
 					auto* editorWindow = EditorWindow::GetSingleton();
 					auto currentWeathers = weatherManager->GetCurrentWeathers();
-					
+
 					if (currentWeathers.currentWeather && editorWindow) {
 						editorWindow->OpenWeatherFeatureSetting(
 							currentWeathers.currentWeather,
 							feature->GetShortName(),
-							settingName
-						);
+							settingName);
 					}
 				}
 
@@ -1429,7 +1428,7 @@ namespace Util
 			if (isControlled) {
 				auto* weatherManager = WeatherManager::GetSingleton();
 				auto currentWeathers = weatherManager->GetCurrentWeathers();
-				
+
 				ImGui::PushStyleColor(ImGuiCol_FrameBg, ImVec4(0.3f, 0.3f, 0.4f, 0.8f));
 				ImGui::PushStyleColor(ImGuiCol_FrameBgHovered, ImVec4(0.4f, 0.4f, 0.5f, 0.9f));
 				ImGui::PushStyleVar(ImGuiStyleVar_Alpha, ImGui::GetStyle().Alpha * 0.7f);
@@ -1447,13 +1446,12 @@ namespace Util
 					auto* weatherManager = WeatherManager::GetSingleton();
 					auto* editorWindow = EditorWindow::GetSingleton();
 					auto currentWeathers = weatherManager->GetCurrentWeathers();
-					
+
 					if (currentWeathers.currentWeather && editorWindow) {
 						editorWindow->OpenWeatherFeatureSetting(
 							currentWeathers.currentWeather,
 							feature->GetShortName(),
-							settingName
-						);
+							settingName);
 					}
 				}
 
@@ -1484,7 +1482,7 @@ namespace Util
 			if (isControlled) {
 				auto* weatherManager = WeatherManager::GetSingleton();
 				auto currentWeathers = weatherManager->GetCurrentWeathers();
-				
+
 				ImGui::PushStyleVar(ImGuiStyleVar_Alpha, ImGui::GetStyle().Alpha * 0.7f);
 				ImGui::PushItemFlag(ImGuiItemFlags_Disabled, true);
 			}
@@ -1499,13 +1497,12 @@ namespace Util
 					auto* weatherManager = WeatherManager::GetSingleton();
 					auto* editorWindow = EditorWindow::GetSingleton();
 					auto currentWeathers = weatherManager->GetCurrentWeathers();
-					
+
 					if (currentWeathers.currentWeather && editorWindow) {
 						editorWindow->OpenWeatherFeatureSetting(
 							currentWeathers.currentWeather,
 							feature->GetShortName(),
-							settingName
-						);
+							settingName);
 					}
 				}
 
@@ -1536,7 +1533,7 @@ namespace Util
 			if (isControlled) {
 				auto* weatherManager = WeatherManager::GetSingleton();
 				auto currentWeathers = weatherManager->GetCurrentWeathers();
-				
+
 				ImGui::PushStyleVar(ImGuiStyleVar_Alpha, ImGui::GetStyle().Alpha * 0.7f);
 				ImGui::PushItemFlag(ImGuiItemFlags_Disabled, true);
 			}
@@ -1551,13 +1548,12 @@ namespace Util
 					auto* weatherManager = WeatherManager::GetSingleton();
 					auto* editorWindow = EditorWindow::GetSingleton();
 					auto currentWeathers = weatherManager->GetCurrentWeathers();
-					
+
 					if (currentWeathers.currentWeather && editorWindow) {
 						editorWindow->OpenWeatherFeatureSetting(
 							currentWeathers.currentWeather,
 							feature->GetShortName(),
-							settingName
-						);
+							settingName);
 					}
 				}
 

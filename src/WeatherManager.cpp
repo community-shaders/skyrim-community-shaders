@@ -210,14 +210,14 @@ bool WeatherManager::LoadSettingsFromWeather(RE::TESWeather* weather, const std:
 		auto featureIt = weatherIt->second.find(featureName);
 		if (featureIt != weatherIt->second.end()) {
 			const json& featureJson = featureIt->second;
-			
+
 			// Check if weather-specific overrides are enabled
 			bool enabled = featureJson.value("__enabled", false);
 			if (!enabled) {
 				// Settings exist but are disabled, return empty
 				return false;
 			}
-			
+
 			// Copy all settings except the __enabled flag
 			o_json = json::object();
 			for (auto it = featureJson.begin(); it != featureJson.end(); ++it) {
