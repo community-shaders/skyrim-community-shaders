@@ -42,12 +42,12 @@ public:
 
 	struct Settings
 	{
-		uint EnableDiffuseIBL = 1;
+		uint EnableDiffuseIBL = 0;
 		uint PreserveFogLuminance = 0;
 		uint UseStaticIBL = 1;
 		uint EnableInterior = 0;
 		float DiffuseIBLScale = 1.0f;
-		float DALCAmount = 0.33f;
+		float DALCAmount = 1.0f;
 		float IBLSaturation = 1.0f;
 		float FogAmount = 0.0f;
 	} settings;
