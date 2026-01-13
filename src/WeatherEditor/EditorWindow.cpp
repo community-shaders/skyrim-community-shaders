@@ -1093,6 +1093,37 @@ void EditorWindow::RenderUI()
 	io.FontGlobalScale = previousScale;
 }
 
+void EditorWindow::OpenWeatherFeatureSetting(RE::TESWeather* weather, const std::string& featureName, const std::string& settingName)
+{
+	if (!weather) {
+		return;
+	}
+
+	// Open the editor if it's not already open
+	if (!open) {
+		open = true;
+	}
+
+	// Find the weather widget
+	for (auto& widget : weatherWidgets) {
+		auto* weatherWidget = dynamic_cast<WeatherWidget*>(widget.get());
+		if (weatherWidget && weatherWidget->weather == weather) {
+			// Open the widget if it's not already open
+			if (!weatherWidget->open) {
+				weatherWidget->open = true;
+			}
+
+			// Set up navigation to the specific feature/setting
+			weatherWidget->NavigateToFeatureSetting(featureName, settingName);
+
+			// Focus the widget window
+			std::string windowName = std::format("{}###widget_{}", weatherWidget->GetEditorID(), (void*)weatherWidget);
+			ImGui::SetWindowFocus(windowName.c_str());
+			break;
+		}
+	}
+}
+
 EditorWindow::~EditorWindow()
 {
 	delete tempTexture;
