@@ -47,7 +47,7 @@ struct Surface
                Normal * tangentSample.z;
     }
 
-    void DefaultMaterial(in Vertex v0, in Vertex v1, in Vertex v2, in float3 uvw, in float3 normalWS, in float3 tangentWS, in float3 bitangentWS, in Material material)
+    void DefaultMaterial(in Vertex v0, in Vertex v1, in Vertex v2, in float3 uvw, in float3 normalWS, in float3 tangentWS, in float3 bitangentWS, float3x3 objectToWorld3x3, in Material material)
     {
         float2 texCoord0 = material.TexCoord(Interpolate(v0.Texcoord0, v1.Texcoord0, v2.Texcoord0, uvw));
 
@@ -120,6 +120,7 @@ struct Surface
         } else if (material.ShaderType == ShaderType::Effect) {
             float3 base = float3(1, 1, 1);
 
+            [branch]
             if (material.ShaderFlags & ShaderFlags::kGrayscaleToPaletteColor)
             {
                 base *= baseTexture.SampleLevel(BaseSampler, texCoord0, 0).rgb;
@@ -127,6 +128,7 @@ struct Surface
 
             float3 baseColorMul = material.EffectColor().rgb;
 
+            [branch]
             if (material.ShaderFlags & ShaderFlags::kVertexColors && !(material.ShaderFlags & ShaderFlags::kProjectedUV))
             {
                 base *= vertexColor.rgb;
@@ -136,6 +138,7 @@ struct Surface
 
             float baseColorScale = material.EffectColor().a;
 
+            [branch]
             if (material.ShaderFlags & ShaderFlags::kGrayscaleToPaletteColor)
             {
                 Texture2D effectTexture = Textures[NonUniformResourceIndex(material.EffectTexture())];
@@ -163,15 +166,23 @@ struct Surface
         Bitangent = bitangentWS;
 #else
         Texture2D normalTexture = Textures[NonUniformResourceIndex(material.NormalTexture())];
-
+        float3 normal = normalTexture.SampleLevel(BaseSampler, texCoord0, 0).xyz * 2.0f - 1.0f;
+        
         float handedness = (dot(cross(normalWS, tangentWS), bitangentWS) < 0.0f) ? -1.0f : 1.0f;
-
-        NormalMap(
-            normalTexture.SampleLevel(BaseSampler, texCoord0, 0).rgb,
-            handedness,
-            normalWS, tangentWS, bitangentWS,
-            Normal, Tangent, Bitangent
-        );
+        
+        [branch]
+        if (material.ShaderFlags & ShaderFlags::kModelSpaceNormals) {
+            ModelSpaceNormalMap(normal, handedness, objectToWorld3x3, tangentWS, Normal, Tangent, Bitangent);
+        }
+        else
+        {
+            NormalMap(
+                normal,
+                handedness,
+                normalWS, tangentWS, bitangentWS,
+                Normal, Tangent, Bitangent
+            );
+        }
 #endif
     }
 
@@ -303,7 +314,7 @@ struct Surface
         }
         else
         {
-            surface.DefaultMaterial(v0, v1, v2, uvw, normalWS, tangentWS, bitangentWS, material);
+            surface.DefaultMaterial(v0, v1, v2, uvw, normalWS, tangentWS, bitangentWS, objectToWorld3x3, material);
         }
 #endif
 

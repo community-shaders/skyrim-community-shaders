@@ -158,7 +158,27 @@ void main()
     Surface sourceSurface = Surface(positionWS, geometryNormalWS, normalWS, tangentWS, bitangetWS, albedo, linearRoughness, metalness, 0, ao);
     BRDFContext sourceBRDFContext = BRDFContext(sourceSurface, normalize(-positionCS));
 #endif
-
+    
+#if defined(DEBUG_MODELSPACE)   
+    [branch]
+    if (sourceMaterial.ShaderFlags & ShaderFlags::kModelSpaceNormals) {
+        OutputTexture[idx] = float4(1.0f, 0.0f, 0.0f, 1.0f);
+    } else {
+        OutputTexture[idx] = float4(0.0f, 0.0f, 0.5f, 1.0f);
+    }
+    
+    SpecularAlbedo[idx] = float4(0.5f, 0.5f, 0.5f, 0.0f);
+    SpecularHitDist[idx] = RAY_TMAX;
+    return;
+#endif    
+    
+#if defined(DEBUG_NORMALOUT)    
+    OutputTexture[idx] = float4(sourceSurface.Normal * 0.5f + 0.5f, 1.0f);
+    SpecularAlbedo[idx] = float4(0.5f, 0.5f, 0.5f, 0.0f);
+    SpecularHitDist[idx] = RAY_TMAX;
+    return;
+#endif    
+    
 #if defined(SHARC) && defined(SHARC_DEBUG)
     HashGridParameters gridParameters = GetSharcGridParameters();
 

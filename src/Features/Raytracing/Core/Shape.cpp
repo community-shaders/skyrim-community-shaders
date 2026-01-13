@@ -341,11 +341,13 @@ void Shape::BuildMaterial(const RE::BSGeometry::GEOMETRY_RUNTIME_DATA& geometryR
 		logger::trace("[RT] BuildMaterial - Effect RTTI: {}", effect->GetRTTI()->GetName());
 
 		if (effect) {
-			if (auto shaderProp = netimmerse_cast<RE::BSShaderProperty*>(effect)) {
+			if (RE::BSShaderProperty* shaderProp = netimmerse_cast<RE::BSShaderProperty*>(effect)) {
 				shaderFlags = shaderProp->flags.get();
+
+				logger::debug("[RT] BuildMaterial - [Effect] BSLightingShaderProperty Flags: {}", GetFlagsString<EShaderPropertyFlag>(shaderFlags.underlying()));
 			}
 
-			if (auto* lightingShaderProp = skyrim_cast<RE::BSLightingShaderProperty*>(effect)) {
+			if (RE::BSLightingShaderProperty* lightingShaderProp = skyrim_cast<RE::BSLightingShaderProperty*>(effect)) {
 				shaderType = RE::BSShader::Type::Lighting;
 
 				logger::debug("[RT] BuildMaterial - [Effect] BSLightingShaderProperty Flags: {}", GetFlagsString<EShaderPropertyFlag>(lightingShaderProp->flags.underlying()));
@@ -412,7 +414,7 @@ void Shape::BuildMaterial(const RE::BSGeometry::GEOMETRY_RUNTIME_DATA& geometryR
 						pbrFlags = GetPBRShaderFlags(lightingPBRMaterial);
 
 						// Enforce TruePBR flag
-						shaderFlags.set(RE::BSShaderProperty::EShaderPropertyFlag::kMenuScreen);
+						shaderFlags.set(EShaderPropertyFlag::kMenuScreen);
 					} else {
 						// Roughness Scale
 						scalars[0] = 1.0f;
@@ -421,11 +423,11 @@ void Shape::BuildMaterial(const RE::BSGeometry::GEOMETRY_RUNTIME_DATA& geometryR
 						scalars[1] = 0.04f;
 
 						// Vanilla Materials
-						if (const auto* lightingBaseMaterial = skyrim_cast<RE::BSLightingShaderMaterialBase*>(shaderMaterial)) {
+						if (const RE::BSLightingShaderMaterialBase* lightingBaseMaterial = skyrim_cast<RE::BSLightingShaderMaterialBase*>(shaderMaterial)) {
 							textures[0] = TextureRegister(lightingBaseMaterial->diffuseTexture, grayTexture);
 							textures[1] = TextureRegister(lightingBaseMaterial->normalTexture, normalTexture);
 
-							if (shaderFlags.any(RE::BSShaderProperty::EShaderPropertyFlag::kSpecular)) {
+							if (shaderFlags.any(EShaderPropertyFlag::kSpecular)) {
 								textures[3] = TextureRegister(lightingBaseMaterial->specularBackLightingTexture, blackTexture);
 
 								colors[1] = {
