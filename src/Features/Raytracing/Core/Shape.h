@@ -91,11 +91,6 @@ public:
 			kHairTint = 1 << 14
 		};
 
-		auto magic_enum_define_range_adl(ShaderFlags)
-		{
-			return magic_enum::customize::adl_info().flag<true>();
-		}
-
 		ShaderFlags GetShaderFlags() const
 		{
 			using EShaderPropertyFlag = RE::BSShaderProperty::EShaderPropertyFlag;
