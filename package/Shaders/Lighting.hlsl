@@ -2009,19 +2009,22 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 		float2 projDetailNormalUv = ProjectedUVParams3.y * projNoiseUv;
 		float3 projDetailNormal = TexProjDetail.Sample(SampProjDetailSampler, projDetailNormalUv).xyz;
 		float3 finalProjNormal = normalize(TransformNormal(projDetailNormal) * float3(1, 1, projNormal.z) + float3(projNormal.xy, 0));
-		float3 projBaseColor = Color::ColorToLinear(TexProjDiffuseSampler.Sample(SampProjDiffuseSampler, projNormalDiffuseUv).xyz) * ProjectedUVParams2.xyz;
+		float3 projBaseColor = Color::ColorToLinear(TexProjDiffuseSampler.Sample(SampProjDiffuseSampler, projNormalDiffuseUv).xyz) * Color::ColorToLinear(ProjectedUVParams2.xyz);
 		projectedMaterialWeight = smoothstep(0, 1, 5 * (0.1 + projWeight));
 #			if defined(TRUE_PBR)
-		projBaseColor = saturate(Color::ColorToLinear(EnvmapData.xyz) * projBaseColor);
+		projBaseColor = saturate(EnvmapData.xyz * projBaseColor);
 		rawRMAOS.xyw = lerp(rawRMAOS.xyw, float3(ParallaxOccData.x, 0, ParallaxOccData.y), projectedMaterialWeight);
 		float4 projectedGlintParameters = 0;
 		if ((PBRFlags & PBR::Flags::ProjectedGlint) != 0) {
 			projectedGlintParameters = SparkleParams;
 		}
 		glintParameters = lerp(glintParameters, projectedGlintParameters, projectedMaterialWeight);
-#			elif defined(LOD_BLENDING) && (defined(LODOBJECTS) || defined(LODOBJECTSHD))
-		projBaseColor.xyz = pow(abs(projBaseColor.xyz), SharedData::lodBlendingSettings.LODObjectSnowGamma) * SharedData::lodBlendingSettings.LODObjectSnowBrightness;
+#			else
+		projBaseColor *= Color::VanillaDiffuseColorMult();
 #			endif  // TRUE_PBR
+#			if defined(LOD_BLENDING) && (defined(LODOBJECTS) || defined(LODOBJECTSHD))
+		projBaseColor.xyz = pow(abs(projBaseColor.xyz), SharedData::lodBlendingSettings.LODObjectSnowGamma) * SharedData::lodBlendingSettings.LODObjectSnowBrightness;
+#			endif  // LOD_BLENDING
 		normal.xyz = lerp(normal.xyz, finalProjNormal, projectedMaterialWeight);
 		baseColor.xyz = lerp(baseColor.xyz, projBaseColor, projectedMaterialWeight);
 
@@ -2031,7 +2034,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #			endif  // SNOW
 	} else {
 		if (projWeight > 0) {
-			baseColor.xyz = Color::ColorToLinear(ProjectedUVParams2.xyz);
+			baseColor.xyz = Color::Diffuse(ProjectedUVParams2.xyz);
 #			if defined(SNOW)
 			useSnowDecalSpecular = true;
 			psout.Parameters.y = GetSnowParameterY(projWeight, baseColor.w);
