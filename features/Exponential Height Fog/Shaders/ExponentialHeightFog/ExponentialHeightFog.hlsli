@@ -93,7 +93,7 @@ namespace ExponentialHeightFog
         }
         else
         {
-            return 0.0f; 
+            return 0.0f;
         }
 
         return saturate(exp2(-exponentialHeightLineIntegral));
