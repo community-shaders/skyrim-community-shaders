@@ -3,7 +3,6 @@
 
 #include "Common/FrameBuffer.hlsli"
 #include "Common/VR.hlsli"
-#include "Raytracing/FeatureData.hlsli"
 
 namespace SharedData
 {
@@ -234,6 +233,15 @@ namespace SharedData
 		float deferredEffectMult;
 		float otherEffectMult;
 	};
+
+	struct RaytracingSettings
+    {
+        float InteriorDirectional;
+        float Ambient;
+        float EnvMap;
+        uint Albedo;
+    }; // had to add this here to pass test
+
 	cbuffer FeatureData : register(b6)
 	{
 		GrassLightingSettings grassLightingSettings;
