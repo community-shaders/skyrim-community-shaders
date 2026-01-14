@@ -180,7 +180,7 @@ const static float DepthOffsets[16] = {
 #	endif
 
 #	if defined(EXP_HEIGHT_FOG)
-#		define SampColorSampler SampShadowMaskSampler
+#		define SampColorSampler SampDiffuse
 #		include "ExponentialHeightFog/ExponentialHeightFog.hlsli"
 #	endif
 
