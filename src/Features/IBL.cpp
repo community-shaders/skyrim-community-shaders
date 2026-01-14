@@ -120,6 +120,13 @@ void IBL::EarlyPrepass()
 	}
 }
 
+void IBL::ReflectionsPrepass()
+{
+	// Ensure IBL textures are bound for reflection rendering pass
+	// Without this, water LOD reflections would not have proper ambient lighting
+	EarlyPrepass();
+}
+
 void IBL::Prepass()
 {
 	auto context = globals::d3d::context;
