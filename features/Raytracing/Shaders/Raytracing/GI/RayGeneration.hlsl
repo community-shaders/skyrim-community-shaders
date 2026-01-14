@@ -81,7 +81,7 @@ void main()
             return;
 #endif
 
-        float3 skyIrradiance = SampleSky(sourceDirection);
+        float3 skyIrradiance = SampleSky(sourceDirection) * Frame.Sky;
 
         OutputTexture[idx] = float4(skyIrradiance, 0.0f);
         DiffuseAlbedoPathTracing[idx] = float4(0.0f, 0.0f, 0.0f, 1.0f);
