@@ -9,6 +9,7 @@
 #include "Raytracing/Includes/Types.hlsli"
 #include "Raytracing/Includes/Registers.hlsli"
 #include "Raytracing/Includes/Common.hlsli"
+#include "Raytracing/Includes/ColorConversions.hlsli"
 #include "Raytracing/Includes/RT/CommonRT.hlsli"
 #include "Raytracing/Includes/RT/Rays.hlsli"
 #include "Raytracing/Includes/MonteCarlo.hlsli"
@@ -139,6 +140,7 @@ float3 EvalLight(in float3 l, in Surface surface, in BRDFContext brdfContext, in
 
 float3 EvalDirectionalLight(in Surface surface, in BRDFContext brdfContext, in Light light, in Material material, inout uint randomSeed)
 {
+    light.Color = DirLightToLinear(light.Color);
     float3 direct = EvalLight(light.Vector, surface, brdfContext, material) * light.Color;
 
     [branch]
@@ -178,6 +180,8 @@ float3 EvalPointLight(in Surface surface, in BRDFContext brdfContext, in LightDa
         uint lightIdx = min(uint(Random(randomSeed) * lightData.Count), lightData.Count - 1);
         uint lightID = lightData.GetID(lightIdx);
         Light testLight = Lights[lightID];
+        const bool isTestLinear = (testLight.Flags & LightFlags::LinearLight) != 0;
+        testLight.Color = PointLightToLinear(testLight.Color, isTestLinear);
         float weight = GetLightSampleWeight(surface, testLight);
         totalWeight += weight;
 
@@ -203,6 +207,9 @@ float3 EvalPointLight(in Surface surface, in BRDFContext brdfContext, in LightDa
 
     Light light = Lights[lightID];
 #endif
+
+    const bool isLinear = (light.Flags & LightFlags::LinearLight) != 0;
+    light.Color = PointLightToLinear(light.Color, isLinear);
 
     float3 l = (light.Vector - surface.Position);
     float dist = length(l);
@@ -420,7 +427,7 @@ float3 SampleSky(float3 dir)
 
     float3 color = SkyHemisphere.SampleLevel(BaseSampler, uv, 0.0f).rgb;
 
-    return Color::GammaToTrueLinear(color);
+    return LLGammaToTrueLinear(color);
 }
 
 float EvalSkyOcclusion(float3 dir)

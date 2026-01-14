@@ -5,6 +5,7 @@
 #include "Raytracing/Includes/RT/SHaRCHelper.hlsli"
 
 #include "Raytracing/Includes/Common.hlsli"
+#include "Raytracing/Includes/ColorConversions.hlsli"
 #include "Raytracing/Includes/RT/CommonRT.hlsli"
 #include "Raytracing/Includes/RT/Shading.hlsli"
 #include "Raytracing/Includes/RT/Geometry.hlsli"
@@ -127,7 +128,7 @@ void main()
         OutputTexture[idx] = float4(0.0f, 0.0f, 0.0f, 0.0f);
         SpecularAlbedo[idx] = float4(0.0f, 0.0f, 0.0f, 0.0f);
 #else
-        OutputTexture[idx] = float4(Color::GammaToTrueLinear(mainColor.rgb), mainColor.a);
+        OutputTexture[idx] = float4(LLGammaToTrueLinear(mainColor.rgb), mainColor.a);
         SpecularAlbedo[idx] = float4(0.5f, 0.5f, 0.5f, 0.0f);
         SpecularHitDist[idx] = RAY_TMAX;
 #endif
@@ -153,7 +154,7 @@ void main()
     float3 tangentWS, bitangetWS;
     CreateOrthonormalBasis(normalWS, tangentWS, bitangetWS);
 
-    float3 albedo = Color::GammaToTrueLinear(AlbedoTexture.SampleLevel(BaseSampler, uv, 0).rgb);
+    float3 albedo = LLGammaToTrueLinear(AlbedoTexture.SampleLevel(BaseSampler, uv, 0).rgb);
 
     Surface sourceSurface = Surface(positionWS, geometryNormalWS, normalWS, tangentWS, bitangetWS, albedo, linearRoughness, metalness, 0, ao);
     BRDFContext sourceBRDFContext = BRDFContext(sourceSurface, normalize(-positionCS));
@@ -416,7 +417,7 @@ void main()
     // Specular Output (Reused texture from DLSS RR)
     SpecularAlbedo[idx] = float4(isSpecular ? radiance * specularAlbedo : 0.0f, specHitDist);
 #   else
-    OutputTexture[idx] = float4(Color::GammaToTrueLinear(mainColor.rgb) + radiance, 1.0f);
+    OutputTexture[idx] = float4(LLGammaToTrueLinear(mainColor.rgb) + radiance, 1.0f);
 #   endif
 #endif
 
