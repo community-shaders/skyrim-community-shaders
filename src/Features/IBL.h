@@ -41,6 +41,8 @@ public:
 	virtual void SetupResources() override;
 	virtual void ClearShaderCache() override;
 
+	void SetShaderResourcesPS();
+
 	struct Settings
 	{
 		uint EnableDiffuseIBL = 1;
