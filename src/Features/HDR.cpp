@@ -57,9 +57,7 @@ bool HDR::DetectHDRDisplay()
 
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	HDR::Settings,
-	sdrMode,
-	convertToGamma,
-	enableTonemapping,
+	enableHDR,
 	hdrPaperWhite,
 	hdrPeakNits);
 
@@ -71,63 +69,38 @@ void HDR::DrawSettings()
 		ImGui::TextColored(ImVec4(1.0f, 0.6f, 0.2f, 1.0f), "SDR Display (HDR not detected)");
 	}
 	ImGui::Spacing();
-	ImGui::TextWrapped("Note: All options OFF = Raw linear HDR output for further post-processing.");
-	ImGui::Spacing();
 
-	ImGui::Text("Output Mode");
-
-	bool oldSdrMode = settings.sdrMode;
-	ImGui::Checkbox("SDR Mode (Clamp to 0-1)", &settings.sdrMode);
-	if (oldSdrMode != settings.sdrMode) {
-		logger::info("HDR: sdrMode changed to: {}", settings.sdrMode);
+	bool oldEnableHDR = settings.enableHDR;
+	ImGui::Checkbox("Enable HDR", &settings.enableHDR);
+	if (oldEnableHDR != settings.enableHDR) {
+		logger::info("HDR: enableHDR changed to: {}", settings.enableHDR);
 		UpdateHDRData();
+		UpdateSwapChainColorSpace();
 	}
 	if (auto _tt = Util::HoverTooltipWrapper()) {
-		ImGui::Text("OFF = Linear HDR passthrough. ON = Compress to SDR range.");
+		ImGui::Text("Enable HDR output. Matches vanilla visuals with extended dynamic range.");
 	}
 
-	bool oldConvertToGamma = settings.convertToGamma;
-	ImGui::Checkbox("Convert to Gamma", &settings.convertToGamma);
-	if (oldConvertToGamma != settings.convertToGamma) {
-		logger::info("HDR: convertToGamma changed to: {}", settings.convertToGamma);
-		UpdateHDRData();
-	}
-	if (auto _tt = Util::HoverTooltipWrapper()) {
-		ImGui::Text("Apply gamma curve to match Vanilla Skyrim. OFF = Linear output.");
-	}
-
-	bool oldEnableTonemapping = settings.enableTonemapping;
-	ImGui::Checkbox("Enable Tonemapping", &settings.enableTonemapping);
-	if (oldEnableTonemapping != settings.enableTonemapping) {
-		logger::info("HDR: enableTonemapping changed to: {}", settings.enableTonemapping);
-		UpdateHDRData();
-	}
-	if (auto _tt = Util::HoverTooltipWrapper()) {
-		ImGui::Text("Apply Reinhard tonemapping to compress HDR highlights.");
-	}
-
-	ImGui::Spacing();
-	ImGui::Separator();
-
-	if (!settings.sdrMode) {
-		ImGui::Text("HDR Settings");
+	if (settings.enableHDR) {
+		ImGui::Spacing();
 
 		uint oldPaperWhite = settings.hdrPaperWhite;
-		ImGui::SliderInt("HDR Paper White (nits)", reinterpret_cast<int*>(&settings.hdrPaperWhite), 80, 500);
+		ImGui::SliderInt("Paper White (nits)", reinterpret_cast<int*>(&settings.hdrPaperWhite), 80, 400);
 		if (oldPaperWhite != settings.hdrPaperWhite) {
 			UpdateHDRData();
 		}
 		if (auto _tt = Util::HoverTooltipWrapper()) {
-			ImGui::Text("Reference white brightness for HDR content.");
+			ImGui::Text("Brightness of reference white. Adjust to match your display.");
 		}
 
 		uint oldPeakNits = settings.hdrPeakNits;
-		ImGui::SliderInt("HDR Peak Brightness (nits)", reinterpret_cast<int*>(&settings.hdrPeakNits), 400, 10000);
+		ImGui::SliderInt("Peak Brightness (nits)", reinterpret_cast<int*>(&settings.hdrPeakNits), 400, 5000);
 		if (oldPeakNits != settings.hdrPeakNits) {
 			UpdateHDRData();
+			UpdateHDRMetadata();
 		}
 		if (auto _tt = Util::HoverTooltipWrapper()) {
-			ImGui::Text("Maximum brightness for HDR highlights.");
+			ImGui::Text("Maximum display brightness. Set to your display's peak capability.");
 		}
 	}
 }
@@ -147,18 +120,9 @@ void HDR::LoadSettings(json& o_json)
 void HDR::RestoreDefaultSettings()
 {
 	bool hdrMonitor = DetectHDRDisplay();
-
-	if (hdrMonitor) {
-		settings.sdrMode = false;
-		settings.convertToGamma = true;
-		settings.enableTonemapping = true;
-		settings.hdrPaperWhite = 80;
-		settings.hdrPeakNits = 600;
-	} else {
-		settings.sdrMode = true;
-		settings.convertToGamma = true;
-		settings.enableTonemapping = true;
-	}
+	settings.enableHDR = hdrMonitor;
+	settings.hdrPaperWhite = 80;
+	settings.hdrPeakNits = 800;
 }
 
 void HDR::SetupResources()
@@ -228,40 +192,8 @@ void HDR::SetupResources()
 
 	UpdateHDRData();
 
-	// Set up HDR on D3D11 swap chain (when not using Frame Gen)
-	auto& upscaling = globals::features::upscaling;
-	if (!upscaling.d3d12SwapChainActive) {
-		IDXGISwapChain4* swapChain4 = nullptr;
-		if (SUCCEEDED(globals::d3d::swapChain->QueryInterface(IID_PPV_ARGS(&swapChain4)))) {
-			HRESULT hr = swapChain4->SetColorSpace1(DXGI_COLOR_SPACE_RGB_FULL_G2084_NONE_P2020);
-			if (SUCCEEDED(hr)) {
-				logger::info("[HDR] Set D3D11 swap chain color space to HDR10 (PQ/BT.2020)");
-
-				DXGI_HDR_METADATA_HDR10 hdrMetadata = {};
-				// BT.2020 color primaries (hardcoded)
-				hdrMetadata.RedPrimary[0] = 34000;    // 0.708 * 50000
-				hdrMetadata.RedPrimary[1] = 16000;    // 0.292 * 50000
-				hdrMetadata.GreenPrimary[0] = 8500;   // 0.170 * 50000
-				hdrMetadata.GreenPrimary[1] = 39850;  // 0.797 * 50000
-				hdrMetadata.BluePrimary[0] = 6550;    // 0.131 * 50000
-				hdrMetadata.BluePrimary[1] = 2300;    // 0.046 * 50000
-				hdrMetadata.WhitePoint[0] = 15635;    // D65: 0.3127 * 50000
-				hdrMetadata.WhitePoint[1] = 16450;    // D65: 0.3290 * 50000
-				hdrMetadata.MaxMasteringLuminance = settings.hdrPeakNits * 10000;
-				hdrMetadata.MinMasteringLuminance = 1;
-				hdrMetadata.MaxContentLightLevel = static_cast<UINT16>(settings.hdrPeakNits);
-				hdrMetadata.MaxFrameAverageLightLevel = static_cast<UINT16>(settings.hdrPaperWhite);
-
-				swapChain4->SetHDRMetaData(DXGI_HDR_METADATA_TYPE_HDR10, sizeof(hdrMetadata), &hdrMetadata);
-				logger::info("[HDR] Set D3D11 swap chain HDR10 metadata");
-			} else {
-				logger::warn("[HDR] Failed to set D3D11 swap chain color space (HDR not supported by display?)");
-			}
-			swapChain4->Release();
-		} else {
-			logger::warn("[HDR] D3D11 swap chain does not support IDXGISwapChain4");
-		}
-	}
+	// Set up color space on D3D11 swap chain based on enableHDR setting (when not using Frame Gen)
+	UpdateSwapChainColorSpace();
 
 	logger::info("[HDR] SetupResources complete - hdrDataCB={}, hdrTexture={}, outputTexture={}",
 		hdrDataCB ? "valid" : "NULL",
@@ -586,14 +518,63 @@ void HDR::UpdateHDRData() const
 	HDRDataCB data;
 
 	data.parameters0 = DirectX::XMVectorSet(
-		settings.sdrMode ? 1.f : 0.f,
-		settings.convertToGamma ? 1.f : 0.f,
-		settings.enableTonemapping ? 1.f : 0.f,
-		static_cast<float>(settings.hdrPeakNits));
-	data.parameters1 = DirectX::XMVectorSet(
+		settings.enableHDR ? 1.f : 0.f,
 		static_cast<float>(settings.hdrPaperWhite),
-		0.f, 0.f, 0.f);
+		static_cast<float>(settings.hdrPeakNits),
+		0.f);
 	hdrDataCB->Update(data);
+}
+
+void HDR::UpdateSwapChainColorSpace() const
+{
+	auto& upscaling = globals::features::upscaling;
+
+	IDXGISwapChain4* swapChain4 = nullptr;
+
+	if (upscaling.d3d12SwapChainActive && upscaling.dx12SwapChain.swapChain) {
+		swapChain4 = upscaling.dx12SwapChain.swapChain;
+		swapChain4->AddRef();
+	} else if (globals::d3d::swapChain) {
+		globals::d3d::swapChain->QueryInterface(IID_PPV_ARGS(&swapChain4));
+	}
+
+	if (!swapChain4)
+		return;
+
+	if (settings.enableHDR) {
+		HRESULT hr = swapChain4->SetColorSpace1(DXGI_COLOR_SPACE_RGB_FULL_G2084_NONE_P2020);
+		if (SUCCEEDED(hr)) {
+			logger::info("[HDR] Set swap chain color space to HDR10 (PQ/BT.2020)");
+
+			DXGI_HDR_METADATA_HDR10 hdrMetadata = {};
+			hdrMetadata.RedPrimary[0] = 34000;
+			hdrMetadata.RedPrimary[1] = 16000;
+			hdrMetadata.GreenPrimary[0] = 8500;
+			hdrMetadata.GreenPrimary[1] = 39850;
+			hdrMetadata.BluePrimary[0] = 6550;
+			hdrMetadata.BluePrimary[1] = 2300;
+			hdrMetadata.WhitePoint[0] = 15635;
+			hdrMetadata.WhitePoint[1] = 16450;
+			hdrMetadata.MaxMasteringLuminance = settings.hdrPeakNits * 10000;
+			hdrMetadata.MinMasteringLuminance = 1;
+			hdrMetadata.MaxContentLightLevel = static_cast<UINT16>(settings.hdrPeakNits);
+			hdrMetadata.MaxFrameAverageLightLevel = static_cast<UINT16>(settings.hdrPaperWhite);
+
+			swapChain4->SetHDRMetaData(DXGI_HDR_METADATA_TYPE_HDR10, sizeof(hdrMetadata), &hdrMetadata);
+		} else {
+			logger::warn("[HDR] Failed to set HDR10 color space");
+		}
+	} else {
+		HRESULT hr = swapChain4->SetColorSpace1(DXGI_COLOR_SPACE_RGB_FULL_G22_NONE_P709);
+		if (SUCCEEDED(hr)) {
+			logger::info("[HDR] Set swap chain color space to SDR (sRGB)");
+			swapChain4->SetHDRMetaData(DXGI_HDR_METADATA_TYPE_NONE, 0, nullptr);
+		} else {
+			logger::warn("[HDR] Failed to set SDR color space");
+		}
+	}
+
+	swapChain4->Release();
 }
 
 void HDR::UpdateHDRMetadata() const

@@ -22,12 +22,9 @@ public:
 
 	struct Settings
 	{
-		bool sdrMode = true;             // true = Clamped Linear SDR, false = Linear HDR
-		bool convertToGamma = true;      // Apply TrueLinearToGamma conversion
-		bool enableTonemapping = false;  // Apply Reinhard tonemapping
-
-		uint hdrPaperWhite = 250;
-		uint hdrPeakNits = 800;
+		bool enableHDR = false;      // false = vanilla SDR, true = HDR output
+		uint hdrPaperWhite = 80;    // Reference white brightness in nits for HDR
+		uint hdrPeakNits = 800;     // Maximum display brightness in nits for HDR
 	};
 
 	Settings settings;
@@ -41,6 +38,7 @@ public:
 	void SetupResources();
 	void UpdateHDRData() const;
 	void UpdateHDRMetadata() const;
+	void UpdateSwapChainColorSpace() const;
 
 	// UI rendering - redirects UI to separate target for proper compositing
 	void BeginUIRendering();
@@ -59,13 +57,11 @@ public:
 	XM_ALIGNED_STRUCT(16)
 	HDRDataCB
 	{
-		// parameters0.x = sdrMode (1.0 = clamp to SDR, 0.0 = linear HDR passthrough)
-		// parameters0.y = convertToGamma (1.0 = apply gamma, 0.0 = keep linear)
-		// parameters0.z = enableTonemapping (1.0 = apply Reinhard, 0.0 = no tonemap)
-		// parameters0.w = peakNits (for tonemapping clip point)
+		// parameters0.x = enableHDR (0.0 = SDR output, 1.0 = HDR10 output)
+		// parameters0.y = paperWhite (reference white brightness in nits)
+		// parameters0.z = peakNits (maximum display brightness in nits)
+		// parameters0.w = reserved
 		DirectX::XMVECTOR parameters0;
-		// parameters1.x = paperWhite (reference white brightness in nits)
-		DirectX::XMVECTOR parameters1;
 	};
 
 	static_assert((sizeof(HDRDataCB) % 16) == 0, "CB size not padded correctly");

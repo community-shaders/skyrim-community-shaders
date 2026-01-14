@@ -99,13 +99,8 @@ PS_OUTPUT main(PS_INPUT input)
 	float3 outputColor = 0.0;
 	float3 ppColor = 0.0;
 
-#	if defined(HDR_OUTPUT)
-	// HDR pass-through: raw linear output, HDROutputCS handles everything
-	outputColor = max(0, inputColor);
-	ppColor = outputColor;
-#	else
-	// SDR tonemapping and post-processing
-	float3 gameSdrColor = 0.0;
+	// Apply vanilla tonemapping for both SDR and HDR paths
+	// HDR path outputs gamma-encoded result, SDR path does the same
 	{
 		if (avgValue.x != 0 && avgValue.y != 0)
 			inputColor *= avgValue.y / avgValue.x;
@@ -126,8 +121,6 @@ PS_OUTPUT main(PS_INPUT input)
 			blendedColor += saturate(Param.x - blendedColor) * bloomColor;
 		}
 
-		gameSdrColor = blendedColor;
-
 		float blendedLuminance = Color::RGBToLuminance(blendedColor);
 
 		float3 linearColor = Cinematic.w * lerp(lerp(blendedLuminance, blendedColor, Cinematic.x), blendedLuminance * Tint.xyz, Tint.w).xyz;
@@ -137,7 +130,6 @@ PS_OUTPUT main(PS_INPUT input)
 		ppColor = max(0, linearColor);
 	}
 	outputColor = ppColor;
-#	endif
 
 #	if defined(FADE)
 	outputColor = lerp(outputColor, Fade.xyz, Fade.w);
