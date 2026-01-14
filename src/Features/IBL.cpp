@@ -102,7 +102,7 @@ void IBL::RegisterWeatherVariables()
 		0.0f, 1.0f));
 }
 
-void IBL::EarlyPrepass()
+void IBL::SetShaderResourcesPS()
 {
 	if (loaded) {
 		auto context = globals::d3d::context;
@@ -120,11 +120,16 @@ void IBL::EarlyPrepass()
 	}
 }
 
+void IBL::EarlyPrepass()
+{
+	SetShaderResourcesPS();
+}
+
 void IBL::ReflectionsPrepass()
 {
 	// Ensure IBL textures are bound for reflection rendering pass
 	// Without this, water LOD reflections would not have proper ambient lighting
-	EarlyPrepass();
+	SetShaderResourcesPS();
 }
 
 void IBL::Prepass()
