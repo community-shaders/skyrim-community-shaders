@@ -14,6 +14,7 @@
 #include "Features/InverseSquareLighting.h"
 #include "Features/LODBlending.h"
 #include "Features/LightLimitFix.h"
+#include "Features/LinearLighting.h"
 #include "Features/PerformanceOverlay.h"
 #include "Features/Raytracing.h"
 #include "Features/RenderDoc.h"
@@ -30,11 +31,14 @@
 #include "Features/VR.h"
 #include "Features/VolumetricLighting.h"
 #include "Features/WaterEffects.h"
+#include "Features/WeatherEditor.h"
 #include "Features/WeatherPicker.h"
 #include "Features/WetnessEffects.h"
 #include "Menu.h"
 #include "SettingsOverrideManager.h"
 #include "Utils/Format.h"
+#include "WeatherManager.h"
+#include "WeatherVariableRegistry.h"
 
 #include "State.h"
 
@@ -229,6 +233,8 @@ const std::vector<Feature*>& Feature::GetFeatureList()
 		&globals::features::extendedTranslucency,
 		&globals::features::upscaling,
 		&globals::features::renderDoc,
+		&globals::features::weatherEditor,
+		&globals::features::linearLighting,
 		&globals::features::raytracing
 	};
 

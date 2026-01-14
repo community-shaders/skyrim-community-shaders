@@ -99,7 +99,7 @@ float smoothbumpstep(float edge0, float edge1, float x)
 			color /= weight;
 
 			float4 positionFinal = float4(position.xyz * 0.001, length(position) < (4096.0 * 2.5));
-			float4 colorFinal = float4(Color::GammaToLinear(color), 1.0);
+			float4 colorFinal = float4(Color::IrradianceToLinear(color), 1.0);
 
 			float lerpFactor = 0.5;
 
