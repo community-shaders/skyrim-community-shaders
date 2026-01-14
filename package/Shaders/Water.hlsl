@@ -1231,20 +1231,19 @@ PS_OUTPUT main(PS_INPUT input)
 	float3 fogColor = Color::Fog(input.FogParam.xyz);
 	float fogFactor = Color::FogAlpha(input.FogParam.w);
 #						if defined(IBL)
-	if (SharedData::iblSettings.EnableDiffuseIBL && !SharedData::InInterior) {
-		fogColor = ImageBasedLighting::GetFogIBLColor(fogColor);
-	}
+		if (SharedData::iblSettings.EnableDiffuseIBL && !SharedData::InInterior) {
+			fogColor = ImageBasedLighting::GetFogIBLColor(fogColor);
+		}
 #						endif
+		fogColor *= PosAdjust[eyeIndex].w;
 #						if defined(EXP_HEIGHT_FOG)
-	if (SharedData::exponentialHeightFogSettings.enabled)
-	{
-		float4 exponentialHeightFog = ExponentialHeightFog::GetExponentialHeightFog(input.WPosition.xyz, FrameBuffer::CameraPosAdjust[eyeIndex].xyz, fogColor);
-		fogColor = exponentialHeightFog.xyz;
-		fogFactor = exponentialHeightFog.w;
-	}
-	else
+		if (SharedData::exponentialHeightFogSettings.enabled)
+		{
+			float4 exponentialHeightFog = ExponentialHeightFog::GetExponentialHeightFog(input.WPosition.xyz, FrameBuffer::CameraPosAdjust[eyeIndex].xyz, fogColor);
+			fogColor = exponentialHeightFog.xyz;
+			fogFactor = exponentialHeightFog.w;
+		}
 #						endif
-	fogColor *= PosAdjust[eyeIndex].w;
 
 	float3 finalColor = lerp(finalColorPreFog, fogColor, fogFactor);
 #						if defined(WETNESS_EFFECTS) && defined(DEBUG_WETNESS_EFFECTS)
