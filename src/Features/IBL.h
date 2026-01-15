@@ -4,7 +4,7 @@ struct IBL : Feature
 {
 public:
 	virtual bool SupportsVR() override { return true; };
-	virtual bool IsCore() const override { return false; };
+	virtual bool IsCore() const override { return true; };
 
 	virtual inline std::string GetName() override { return "Image Based Lighting"; }
 	virtual inline std::string GetShortName() override { return "ImageBasedLighting"; }
@@ -33,6 +33,7 @@ public:
 
 	virtual void LoadSettings(json& o_json) override;
 	virtual void SaveSettings(json& o_json) override;
+	virtual void RegisterWeatherVariables() override;
 
 	virtual void EarlyPrepass() override;
 	virtual void Prepass() override;
@@ -41,12 +42,12 @@ public:
 
 	struct Settings
 	{
-		uint EnableDiffuseIBL = 1;
+		uint EnableDiffuseIBL = 0;
 		uint PreserveFogLuminance = 0;
 		uint UseStaticIBL = 1;
 		uint EnableInterior = 0;
 		float DiffuseIBLScale = 1.0f;
-		float DALCAmount = 0.33f;
+		float DALCAmount = 1.0f;
 		float IBLSaturation = 1.0f;
 		float FogAmount = 0.0f;
 	} settings;

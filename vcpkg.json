@@ -37,6 +37,14 @@
             "version": "3.5.0"
         },
         {
+            "name": "eabase",
+            "version": "2025-08-01"
+        },
+        {
+            "name": "eastl",
+            "version": "3.27.1"
+        },
+        {
             "name": "imgui",
             "version": "1.90"
         },
@@ -49,5 +57,5 @@
             "version": "1.606.4"
         }
     ],
-    "builtin-baseline": "a62ce77d56ee07513b4b67de1ec2daeaebfae51a"
+    "builtin-baseline": "7a6bb52bfd8eba088f8bf5cae70ca8d81503e42e"
 }

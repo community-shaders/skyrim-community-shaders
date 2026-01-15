@@ -7,6 +7,8 @@
 #include "Common/SharedData.hlsli"
 #include "Common/Permutation.hlsli"
 
+#define DEFERRED
+
 #ifdef GRASS_LIGHTING
 #	define GRASS
 #endif  // GRASS_LIGHTING
@@ -496,6 +498,8 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 		baseColor = TexBaseSampler.SampleBias(SampBaseSampler, input.TexCoord.xy, SharedData::MipBias);
 	}
 
+	baseColor.xyz = Color::Diffuse(baseColor.xyz);
+
 #		if defined(RENDER_DEPTH)
 	float diffuseAlpha = input.VertexColor.w * baseColor.w;
 	if ((diffuseAlpha - AlphaTestRefRS) < 0) {
@@ -578,7 +582,8 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	float3 transmissionColor = 0;
 #			endif  // TRUE_PBR
 
-	float3 dirLightColor = SharedData::DirLightColor.xyz;
+	float llDirLightMult = (SharedData::linearLightingSettings.enableLinearLighting && !SharedData::linearLightingSettings.isDirLightLinear) ? SharedData::linearLightingSettings.dirLightMult : 1.0f;
+	float3 dirLightColor = Color::DirectionalLight(SharedData::DirLightColor.xyz / max(llDirLightMult, 1e-5), SharedData::linearLightingSettings.isDirLightLinear) * llDirLightMult;
 	float3 dirLightColorMultiplier = 1;
 
 	float dirLightAngle = dot(normal, SharedData::DirLightDirection.xyz);
@@ -624,7 +629,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	dirLightColor *= dirShadow;
 	dirLightColor *= dirDetailShadow;
 
-	lightsDiffuseColor += dirLightColor * saturate(dirLightAngle);
+	lightsDiffuseColor += dirLightColor * saturate(dirLightAngle) * Color::GrassDiffuseMult();
 
 	float3 vertexColor = input.VertexColor.xyz;
 
@@ -636,13 +641,13 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	}
 #				endif
 
-	float3 albedo = max(0, baseColor.xyz * vertexColor);
+	float3 albedo = max(0, baseColor.xyz * Color::ColorToLinear(vertexColor));
 
 	float3 subsurfaceColor = lerp(dot(albedo, 1.0 / 3.0), albedo, 2.0) * saturate(input.VertexNormal.w * 10.0);
-	float3 sss = dirLightColor * saturate(-dirLightAngle);
+	float3 sss = dirLightColor * saturate(-dirLightAngle) * Color::GrassDiffuseMult();
 
 	if (complex)
-		lightsSpecularColor += GrassLighting::GetLightSpecularInput(SharedData::DirLightDirection.xyz, viewDirection, normal, dirLightColor, SharedData::grassLightingSettings.Glossiness);
+		lightsSpecularColor += GrassLighting::GetLightSpecularInput(SharedData::DirLightDirection.xyz, viewDirection, normal, dirLightColor, SharedData::grassLightingSettings.Glossiness) * Color::GrassSpecularMult();
 #			endif
 
 #			if defined(LIGHT_LIMIT_FIX)
@@ -674,8 +679,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 				float intensityMultiplier = 1 - intensityFactor * intensityFactor;
 #				endif
 
-				float3 lightColor = light.color.xyz * intensityMultiplier;
-
+				float3 lightColor = Color::PointLight(light.color.xyz) * intensityMultiplier * light.fade;
 				float lightShadow = 1.0;
 
 				float shadowComponent = 1.0;
@@ -705,10 +709,10 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 
 				sss += lightColor * saturate(-lightAngle);
 
-				lightsDiffuseColor += lightDiffuseColor;
+				lightsDiffuseColor += lightDiffuseColor * Color::GrassDiffuseMult();
 
 				if (complex)
-					lightsSpecularColor += GrassLighting::GetLightSpecularInput(normalizedLightDirection, viewDirection, normal, lightColor, SharedData::grassLightingSettings.Glossiness) * intensityMultiplier;
+					lightsSpecularColor += GrassLighting::GetLightSpecularInput(normalizedLightDirection, viewDirection, normal, lightColor, SharedData::grassLightingSettings.Glossiness) * Color::GrassSpecularMult();
 #				endif
 			}
 		}
@@ -723,11 +727,11 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 
 	diffuseColor.xyz += transmissionColor;
 	specularColor.xyz += specularColorPBR;
-	specularColor.xyz = Color::LinearToGamma(specularColor.xyz);
-	diffuseColor.xyz = Color::LinearToGamma(diffuseColor.xyz);
+	specularColor.xyz = Color::IrradianceToGamma(specularColor.xyz);
+	diffuseColor.xyz = Color::IrradianceToGamma(diffuseColor.xyz);
 #			else
 
-	float3 directionalAmbientColor = max(0, mul(SharedData::DirectionalAmbient, float4(normal, 1.0)));
+	float3 directionalAmbientColor = Color::Ambient(max(0, mul(SharedData::DirectionalAmbient, float4(normal, 1.0))));
 
 #				if defined(IBL)
 	if (SharedData::iblSettings.EnableDiffuseIBL && (!SharedData::InInterior || SharedData::iblSettings.EnableInterior)) {
@@ -761,7 +765,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #					else
 			iblColor += Color::Saturation(ImageBasedLighting::GetIBLColor(-normal), SharedData::iblSettings.IBLSaturation) * SharedData::iblSettings.DiffuseIBLScale;
 #					endif
-			iblColor = Color::LinearToGamma(iblColor);
+			iblColor = Color::IrradianceToGamma(iblColor);
 			directionalAmbientColor += iblColor;
 		}
 	}
@@ -787,7 +791,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 
 	specularColor += lightsSpecularColor;
 	specularColor *= specColor.w * SharedData::grassLightingSettings.SpecularStrength;
-	specularColor = Color::GammaToLinear(specularColor);
+	specularColor = Color::IrradianceToLinear(specularColor);
 #			endif
 
 #			if defined(LIGHT_LIMIT_FIX) && defined(LLFDEBUG)
@@ -808,7 +812,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 
 	float3 normalVS = normalize(FrameBuffer::WorldToView(normal, false, eyeIndex));
 #			if defined(TRUE_PBR)
-	psout.Albedo = float4(Color::LinearToGamma(indirectDiffuseLobeWeight), 1);
+	psout.Albedo = float4(Color::IrradianceToGamma(indirectDiffuseLobeWeight), 1);
 	psout.NormalGlossiness = float4(GBuffer::EncodeNormal(normalVS), 1 - pbrSurfaceProperties.Roughness, 1);
 	psout.Reflectance = float4(indirectSpecularLobeWeight, 1);
 	psout.Parameters = float4(0, 0, 1, 1);
@@ -870,7 +874,8 @@ PS_OUTPUT main(PS_INPUT input)
 #			endif
 	}
 
-	float3 diffuseColor = SharedData::DirLightColor.xyz * dirShadow * dirDetailShadow * 0.5;
+	float llDirLightMult = (SharedData::linearLightingSettings.enableLinearLighting && !SharedData::linearLightingSettings.isDirLightLinear) ? SharedData::linearLightingSettings.dirLightMult : 1.0f;
+	float3 diffuseColor = Color::DirectionalLight(SharedData::DirLightColor.xyz / max(llDirLightMult, 1e-5), SharedData::linearLightingSettings.isDirLightLinear) * dirShadow * dirDetailShadow * 0.5 * llDirLightMult;
 
 #			if defined(LIGHT_LIMIT_FIX)
 	uint clusterIndex = 0;
@@ -901,7 +906,8 @@ PS_OUTPUT main(PS_INPUT input)
 				float intensityMultiplier = 1 - intensityFactor * intensityFactor;
 #				endif
 
-				float3 lightColor = light.color.xyz * intensityMultiplier;
+				const bool isPointLightLinear = light.lightFlags & LightLimitFix::LightFlags::Linear;
+				float3 lightColor = Color::PointLight(light.color.xyz, isPointLightLinear) * intensityMultiplier * light.fade;
 
 				float lightShadow = 1.0;
 
@@ -935,7 +941,7 @@ PS_OUTPUT main(PS_INPUT input)
 	}
 #			endif
 
-	float3 directionalAmbientColor = max(0, mul(SharedData::DirectionalAmbient, float4(normal, 1.0)));
+	float3 directionalAmbientColor = Color::Ambient(max(0, mul(SharedData::DirectionalAmbient, float4(normal, 1.0))));
 
 #			if defined(IBL)
 	if (SharedData::iblSettings.EnableDiffuseIBL && (!SharedData::InInterior || SharedData::iblSettings.EnableInterior)) {
@@ -969,7 +975,7 @@ PS_OUTPUT main(PS_INPUT input)
 #					else
 			iblColor += Color::Saturation(ImageBasedLighting::GetIBLColor(-normal), SharedData::iblSettings.IBLSaturation) * SharedData::iblSettings.DiffuseIBLScale;
 #					endif
-			iblColor = Color::LinearToGamma(iblColor);
+			iblColor = Color::IrradianceToGamma(iblColor);
 			directionalAmbientColor += iblColor;
 		}
 	}

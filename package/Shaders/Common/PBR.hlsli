@@ -6,60 +6,10 @@
 #include "Common/Color.hlsli"
 #include "Common/Math.hlsli"
 #include "Common/SharedData.hlsli"
+#include "Common/PBRMath.hlsli"
 
 namespace PBR
 {
-	namespace Flags
-	{
-		static const uint HasEmissive = (1 << 0);
-		static const uint HasDisplacement = (1 << 1);
-		static const uint HasFeatureTexture0 = (1 << 2);
-		static const uint HasFeatureTexture1 = (1 << 3);
-		static const uint Subsurface = (1 << 4);
-		static const uint TwoLayer = (1 << 5);
-		static const uint ColoredCoat = (1 << 6);
-		static const uint InterlayerParallax = (1 << 7);
-		static const uint CoatNormal = (1 << 8);
-		static const uint Fuzz = (1 << 9);
-		static const uint HairMarschner = (1 << 10);
-		static const uint Glint = (1 << 11);
-		static const uint ProjectedGlint = (1 << 12);
-	}
-
-	namespace TerrainFlags
-	{
-		static const uint LandTile0PBR = (1 << 0);
-		static const uint LandTile1PBR = (1 << 1);
-		static const uint LandTile2PBR = (1 << 2);
-		static const uint LandTile3PBR = (1 << 3);
-		static const uint LandTile4PBR = (1 << 4);
-		static const uint LandTile5PBR = (1 << 5);
-		static const uint LandTile0HasDisplacement = (1 << 6);
-		static const uint LandTile1HasDisplacement = (1 << 7);
-		static const uint LandTile2HasDisplacement = (1 << 8);
-		static const uint LandTile3HasDisplacement = (1 << 9);
-		static const uint LandTile4HasDisplacement = (1 << 10);
-		static const uint LandTile5HasDisplacement = (1 << 11);
-		static const uint LandTile0HasGlint = (1 << 12);
-		static const uint LandTile1HasGlint = (1 << 13);
-		static const uint LandTile2HasGlint = (1 << 14);
-		static const uint LandTile3HasGlint = (1 << 15);
-		static const uint LandTile4HasGlint = (1 << 16);
-		static const uint LandTile5HasGlint = (1 << 17);
-	}
-
-	namespace Constants
-	{
-		static const float MinRoughness = 0.04f;
-		static const float MaxRoughness = 1.0f;
-		static const float MinGlintDensity = 1.0f;
-		static const float MaxGlintDensity = 40.0f;
-		static const float MinGlintRoughness = 0.005f;
-		static const float MaxGlintRoughness = 0.3f;
-		static const float MinGlintDensityRandomization = 0.0f;
-		static const float MaxGlintDensityRandomization = 5.0f;
-	}
-
 #if defined(GLINT)
 	float3 GetSpecularDirectLightMultiplierMicrofacetWithGlint(float noise, float roughness, float3 specularColor, float NdotL, float NdotV, float NdotH, float VdotH, float glintH,
 		float logDensity, float microfacetRoughness, float densityRandomization, Glints::GlintCachedVars glintCache,
@@ -77,44 +27,6 @@ namespace PBR
 		return D * G * F;
 	}
 #endif
-
-	float3 GetSpecularDirectLightMultiplierMicrofacet(float roughness, float3 specularColor, float NdotL, float NdotV, float NdotH, float VdotH, out float3 F)
-	{
-		float D = BRDF::D_GGX(roughness, NdotH);
-		float G = BRDF::Vis_SmithJointApprox(roughness, NdotV, NdotL);
-		F = BRDF::F_Schlick(specularColor, VdotH);
-
-		return D * G * F;
-	}
-
-	float3 GetSpecularDirectLightMultiplierMicroflakes(float roughness, float3 specularColor, float NdotL, float NdotV, float NdotH, float VdotH)
-	{
-		float D = BRDF::D_Charlie(roughness, NdotH);
-		float G = BRDF::Vis_Neubelt(NdotV, NdotL);
-		float3 F = BRDF::F_Schlick(specularColor, VdotH);
-
-		return D * G * F;
-	}
-
-	float HairIOR()
-	{
-		const float n = 1.55;
-		const float a = 1;
-
-		float ior1 = 2 * (n - 1) * (a * a) - n + 2;
-		float ior2 = 2 * (n - 1) / (a * a) - n + 2;
-		return 0.5f * ((ior1 + ior2) + 0.5f * (ior1 - ior2));  //assume cos2PhiH = 0.5f
-	}
-
-	float IORToF0(float IOF)
-	{
-		return pow((1 - IOF) / (1 + IOF), 2);
-	}
-
-	inline float HairGaussian(float B, float Theta)
-	{
-		return exp(-0.5 * Theta * Theta / (B * B)) / (sqrt(Math::TAU) * B);
-	}
 
 	float3 GetHairDiffuseColorMarschner(float3 N, float3 V, float3 L, float NdotL, float NdotV, float VdotL, float backlit, float area, MaterialProperties material)
 	{
@@ -296,23 +208,6 @@ namespace PBR
 		}
 	}
 
-	float3 GetWetnessDirectLightSpecularInput(float3 N, float3 V, float3 L, float3 lightColor, float roughness)
-	{
-		const float wetnessStrength = 1;
-		const float wetnessF0 = 0.02;
-
-		float3 H = normalize(V + L);
-		float NdotL = clamp(dot(N, L), EPSILON_DOT_CLAMP, 1);
-		float NdotV = saturate(abs(dot(N, V)) + EPSILON_DOT_CLAMP);
-		float NdotH = saturate(dot(N, H));
-		float VdotH = saturate(dot(V, H));
-
-		float3 wetnessF;
-		float3 wetnessSpecular = GetSpecularDirectLightMultiplierMicrofacet(roughness, wetnessF0, NdotL, NdotV, NdotH, VdotH, wetnessF) * lightColor * NdotL;
-
-		return wetnessSpecular * wetnessStrength;
-	}
-
 	void GetIndirectLobeWeights(out IndirectLobeWeights lobeWeights, IndirectContext context, MaterialProperties material)
 	{
 		lobeWeights = (IndirectLobeWeights)0;
@@ -391,25 +286,6 @@ namespace PBR
 
 		lobeWeights.diffuse *= diffuseAO;
 		lobeWeights.specular *= specularAO;
-	}
-
-	float3 GetWetnessIndirectSpecularLobeWeight(float3 N, float3 V, float3 VN, float roughness)
-	{
-		const float wetnessStrength = 1;
-		const float wetnessF0 = 0.02;
-
-		float NdotV = saturate(abs(dot(N, V)) + EPSILON_DOT_CLAMP);
-		float2 specularBRDF = BRDF::EnvBRDF(roughness, NdotV);
-		float3 specularLobeWeight = wetnessF0 * specularBRDF.x + specularBRDF.y;
-
-		// Horizon specular occlusion
-		// https://marmosetco.tumblr.com/post/81245981087
-		float3 R = reflect(-V, N);
-		float horizon = min(1.0 + dot(R, VN), 1.0);
-		horizon = horizon * horizon;
-		specularLobeWeight *= horizon;
-
-		return specularLobeWeight * wetnessStrength;
 	}
 }
 

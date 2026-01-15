@@ -4,6 +4,7 @@
 #include "DynamicCubemaps.h"
 #include "Shadercache.h"
 #include "State.h"
+#include "WeatherVariableRegistry.h"
 
 #include <DDSTextureLoader.h>
 #include <DirectXTex.h>
@@ -21,16 +22,16 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 
 void IBL::DrawSettings()
 {
-	ImGui::Checkbox("Enable Diffuse IBL", (bool*)&settings.EnableDiffuseIBL);
-	ImGui::SliderFloat("Diffuse IBL Scale", &settings.DiffuseIBLScale, 0.0f, 10.0f, "%.2f");
-	ImGui::SliderFloat("Diffuse IBL Saturation", &settings.IBLSaturation, 0.0f, 2.0f, "%.2f");
-	ImGui::SliderFloat("DALC Amount", &settings.DALCAmount, 0.0f, 1.0f, "%.2f");
+	Util::WeatherUI::Checkbox("Enable Diffuse IBL", this, "EnableDiffuseIBL", (bool*)&settings.EnableDiffuseIBL);
+	Util::WeatherUI::SliderFloat("Diffuse IBL Scale", this, "DiffuseIBLScale", &settings.DiffuseIBLScale, 0.0f, 10.0f, "%.2f");
+	Util::WeatherUI::SliderFloat("Diffuse IBL Saturation", this, "IBLSaturation", &settings.IBLSaturation, 0.0f, 2.0f, "%.2f");
+	Util::WeatherUI::SliderFloat("DALC Amount", this, "DALCAmount", &settings.DALCAmount, 0.0f, 1.0f, "%.2f");
 	ImGui::Checkbox("Enable Interior", (bool*)&settings.EnableInterior);
 	ImGui::Checkbox("Use Static IBL For Out-of-World Objects", (bool*)&settings.UseStaticIBL);
 	if (auto _tt = Util::HoverTooltipWrapper()) {
 		ImGui::Text("Enables the use of static IBL textures for objects that are not in the world (e.g. inventory items).");
 	}
-	ImGui::SliderFloat("Fog Mix", &settings.FogAmount, 0.0f, 1.0f, "%.2f");
+	Util::WeatherUI::SliderFloat("Fog Mix", this, "FogAmount", &settings.FogAmount, 0.0f, 1.0f, "%.2f");
 	ImGui::Checkbox("Preserve Fog Luminance", (bool*)&settings.PreserveFogLuminance);
 }
 
@@ -47,6 +48,58 @@ void IBL::SaveSettings(json& o_json)
 void IBL::RestoreDefaultSettings()
 {
 	settings = {};
+}
+
+void IBL::RegisterWeatherVariables()
+{
+	auto* registry = WeatherVariables::GlobalWeatherRegistry::GetSingleton()
+	                     ->GetOrCreateFeatureRegistry(GetShortName());
+	// Register enable diffuse IBL toggle
+	registry->RegisterVariable(std::make_shared<WeatherVariables::WeatherVariable<bool>>(
+		"EnableDiffuseIBL",
+		"Enable Diffuse IBL",
+		"Enable or disable diffuse IBL for this weather",
+		(bool*)&settings.EnableDiffuseIBL,
+		true,
+		[](const bool& from, const bool& to, float factor) {
+			return factor > 0.5f ? to : from;  // Switch at transition midpoint
+		}));
+
+	// Register diffuse IBL scale - controls the overall intensity of diffuse IBL
+	registry->RegisterVariable(std::make_shared<WeatherVariables::FloatVariable>(
+		"DiffuseIBLScale",
+		"Diffuse IBL Scale",
+		"Controls the overall intensity of diffuse IBL lighting",
+		&settings.DiffuseIBLScale,
+		1.0f,
+		0.0f, 10.0f));
+
+	// Register IBL saturation - controls color saturation of IBL
+	registry->RegisterVariable(std::make_shared<WeatherVariables::FloatVariable>(
+		"IBLSaturation",
+		"IBL Saturation",
+		"Controls the color saturation of IBL lighting",
+		&settings.IBLSaturation,
+		1.0f,
+		0.0f, 2.0f));
+
+	// Register DALC amount - controls mixing with Directional Ambient Light Color
+	registry->RegisterVariable(std::make_shared<WeatherVariables::FloatVariable>(
+		"DALCAmount",
+		"DALC Amount",
+		"Amount of DALC (Directional Ambient Light Color) mixing",
+		&settings.DALCAmount,
+		0.33f,
+		0.0f, 1.0f));
+
+	// Register fog amount - controls fog mixing
+	registry->RegisterVariable(std::make_shared<WeatherVariables::FloatVariable>(
+		"FogAmount",
+		"Fog Mix",
+		"Amount of fog mixed into IBL",
+		&settings.FogAmount,
+		0.0f,
+		0.0f, 1.0f));
 }
 
 void IBL::EarlyPrepass()
