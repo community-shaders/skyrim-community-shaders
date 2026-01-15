@@ -258,8 +258,8 @@ namespace globals
 	 * @brief Hooked implementation of ID3D11DeviceContext::ClearRenderTargetView for linear lighting support.
 	 *
 	 * When linear lighting is enabled, converts the clear color from gamma space to linear space
-	 * for the MAIN render target and reflections cubemap. This ensures the background color is 
-	 * properly represented in linear color space, which is visible in areas where the sky 
+	 * for the MAIN render target and reflections cubemap. This ensures the background color is
+	 * properly represented in linear color space, which is visible in areas where the sky
 	 * doesn't cover (e.g., worldspace edges) and in water reflections.
 	 */
 	struct ID3D11DeviceContext_ClearRenderTargetView
@@ -272,29 +272,29 @@ namespace globals
 			}
 
 			auto& linearLighting = features::linearLighting;
-			
+
 			// Check if linear lighting is enabled (matching the same menu check as LinearLighting::Prepass)
 			bool isMainLoadingMenu = game::ui && (game::ui->IsMenuOpen(RE::MainMenu::MENU_NAME) || game::ui->IsMenuOpen(RE::LoadingMenu::MENU_NAME));
-			
+
 			if (linearLighting.settings.enableLinearLighting && !isMainLoadingMenu && game::renderer) {
 				// Get the resource associated with this RTV to compare by texture instead of RTV pointer
 				// (multiple RTVs can be created for the same texture)
 				ID3D11Resource* rtvResource = nullptr;
 				pRenderTargetView->GetResource(&rtvResource);
-				
+
 				bool needsConversion = false;
 				auto mainTexture = game::renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMAIN].texture;
 				auto& reflectionsCubemap = game::renderer->GetRendererData().cubemapRenderTargets[RE::RENDER_TARGET_CUBEMAP::kREFLECTIONS];
-				
+
 				if (rtvResource == mainTexture || rtvResource == reflectionsCubemap.texture) {
 					needsConversion = true;
 				}
-				
+
 				// Release the resource reference we obtained
 				if (rtvResource) {
 					rtvResource->Release();
 				}
-				
+
 				if (needsConversion) {
 					// Convert clear color from gamma space to linear space
 					float gamma = linearLighting.settings.clearRenderGamma;
@@ -308,7 +308,7 @@ namespace globals
 					return;
 				}
 			}
-			
+
 			func(This, pRenderTargetView, ColorRGBA);
 		}
 		static inline REL::Relocation<decltype(thunk)> func;
