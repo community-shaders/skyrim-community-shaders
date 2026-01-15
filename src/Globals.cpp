@@ -266,6 +266,11 @@ namespace globals
 	{
 		static void thunk(ID3D11DeviceContext* This, ID3D11RenderTargetView* pRenderTargetView, const FLOAT ColorRGBA[4])
 		{
+			if (!pRenderTargetView) {
+				func(This, pRenderTargetView, ColorRGBA);
+				return;
+			}
+
 			auto& linearLighting = features::linearLighting;
 			
 			// Check if linear lighting is enabled (matching the same menu check as LinearLighting::Prepass)
