@@ -30,8 +30,7 @@ struct SkinningHeapDef
 	enum class Slot
 	{
 		Output,
-		LocalToRoot = Output + RTConstants::MAX_SHAPES,
-		UpdateData,
+		UpdateData = Output + RTConstants::MAX_SHAPES,
 		BoneMatrices,
 		DynamicVertices,
 		SkinningData = DynamicVertices + RTConstants::MAX_SHAPES,
@@ -48,6 +47,10 @@ struct SkinningPipeline : ComputePipeline<SkinningHeap>
 
 	static constexpr uint MAX_BATCHES = 4;
 
+	static constexpr uint MAX_BONES = 255;
+
+	static constexpr uint MAX_BONE_MATRICES = MAX_BONES * 512;
+
 	struct Settings
 	{
 		bool OptimizedMapping = false;
@@ -63,10 +66,13 @@ struct SkinningPipeline : ComputePipeline<SkinningHeap>
 		eastl::string path;
 		Shape* shape;
 		float3x4 localToRoot;
+		float3x4 worldToLocal;
 	};
 
 	eastl::vector<QueuedShape> queuedShapes;
+
 	eastl::unique_ptr<DX12::StructuredBufferUpload<VertexUpdateData>> vertexUpdateBuffer = nullptr;
+	eastl::unique_ptr<DX12::StructuredBufferUpload<float3x4>> boneMatricesBuffer = nullptr;
 
 	Util::FrameChecker frameChecker;
 
@@ -75,7 +81,7 @@ struct SkinningPipeline : ComputePipeline<SkinningHeap>
 	void CreateRootSignature(ID3D12Device5* device) override;
 	void CompileShaders(ID3D12Device5* device) override;
 	void SetupResources(ID3D12Device5* device) override;
-	void QueueUpdate(Flags updateFlags, eastl::string name, Shape* shape, const float3x4& localToRoot);
+	void QueueUpdate(Flags updateFlags, eastl::string name, Shape* shape, const float3x4& localToRoot, const float3x4& worldToLocal);
 	bool PrepareResources(ID3D12GraphicsCommandList4* commandList, uint& count, uint& vertexCount);
 	void UpdateBLASES(ID3D12GraphicsCommandList4* commandList);
 	void RestoreResources(ID3D12GraphicsCommandList4* commandList);

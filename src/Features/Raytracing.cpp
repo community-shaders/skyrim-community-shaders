@@ -2191,14 +2191,17 @@ void Raytracing::UpdateInstances()
 	const auto& cullingSettings = settings.AdvancedSettings.Culling;
 
 	RE::NiCamera* camera = nullptr;
+	RE::NiPoint3 position;
 
 	if (cullingSettings.Mode == CullingMode::Smart) {
 		auto* tesCamera = RE::PlayerCamera::GetSingleton()->currentState->camera;
 
 		camera = FindNiCamera(tesCamera->cameraRoot.get());
+		position = camera->world.translate;
 	}
 
-	auto eye = Util::GetAverageEyePosition();
+	//auto eye = Util::GetAverageEyePosition();
+	//float4 cameraPos = globals::game::frameBufferCached.GetCameraPosAdjust();
 
 	uint32_t totalShapeCount = 0;
 
@@ -2223,7 +2226,7 @@ void Raytracing::UpdateInstances()
 			auto worldBound = pNiNode->worldBound;
 
 			float worldBoundRadius = Util::Units::GameUnitsToMeters(worldBound.radius);
-			float distanceToBounds = Util::Units::GameUnitsToMeters(eye.GetDistance(worldBound.center)) - worldBoundRadius;
+			float distanceToBounds = Util::Units::GameUnitsToMeters(position.GetDistance(worldBound.center)) - worldBoundRadius;
 
 			auto shaderTypes = model->GetShaderTypes();
 			auto features = model->GetFeatures();

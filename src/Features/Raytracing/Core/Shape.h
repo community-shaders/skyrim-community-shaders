@@ -278,6 +278,8 @@ public:
 
 	bool UpdateSkinning();
 
+	eastl::vector<float3x4> GetBoneMatrices();
+
 	// For PBR shader flags we need to copy exactly what TruePBR does
 	static stl::enumeration<PBRShaderFlags, uint32_t> GetPBRShaderFlags(const BSLightingShaderMaterialPBR* pbrMaterial);
 };

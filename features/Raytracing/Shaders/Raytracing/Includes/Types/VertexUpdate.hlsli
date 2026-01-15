@@ -3,14 +3,20 @@
 
 struct VertexUpdateData
 {
-	uint16_t index;
-	uint16_t flags;
-	uint16_t vertexCount;
-	uint16_t bones;
+	uint index;
+	uint flags;
+	uint vertexCount;
+    uint boneOffset;
 #ifndef __cplusplus	
 	row_major 
 #endif
 	float3x4 localToRoot;
+	float3 bonePivot;
+	uint pad;
+#ifndef __cplusplus	
+	row_major 
+#endif	
+	float3x4 worldToLocal; 
 };
 
 #ifdef __cplusplus
