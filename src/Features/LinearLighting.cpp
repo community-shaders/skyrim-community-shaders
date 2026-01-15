@@ -4,6 +4,7 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	LinearLighting::Settings,
 	enableLinearLighting,
 	enableGammaCorrection,
+	clearRenderGamma,
 	lightGamma,
 	colorGamma,
 	emitColorGamma,
@@ -48,6 +49,7 @@ void LinearLighting::DrawSettings()
 	ImGui::SliderFloat("Effect Gamma", &settings.effectGamma, 0.1f, 3.0f, "%.2f");
 	ImGui::SliderFloat("Effect Transparency Gamma", &settings.effectAlphaGamma, 0.1f, 3.0f, "%.2f");
 	ImGui::SliderFloat("Sky Gamma", &settings.skyGamma, 0.1f, 3.0f, "%.2f");
+	ImGui::SliderFloat("Clear Render Gamma", &settings.clearRenderGamma, 0.1f, 3.0f, "%.2f");
 	ImGui::SliderFloat("Water Gamma", &settings.waterGamma, 0.1f, 3.0f, "%.2f");
 	ImGui::SliderFloat("Volumetric Lighting Gamma", &settings.vlGamma, 0.1f, 3.0f, "%.2f");
 

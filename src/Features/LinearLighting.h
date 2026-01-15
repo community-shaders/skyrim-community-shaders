@@ -28,6 +28,7 @@ struct LinearLighting : Feature
 	{
 		uint enableLinearLighting = false;
 		uint enableGammaCorrection = true;
+		float clearRenderGamma = 1.62f;
 		float lightGamma = 1.8f;
 		float colorGamma = 1.8f;
 		float emitColorGamma = 1.8f;
