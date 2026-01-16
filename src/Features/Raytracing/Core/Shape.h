@@ -280,6 +280,8 @@ public:
 
 	bool UpdateSkinning();
 
+	eastl::shared_ptr<Allocation> TextureRegister(const RE::NiPointer<RE::NiSourceTexture> niPointer, eastl::shared_ptr<Allocation> defaultTexture, bool modelSpaceNormalMap);
+
 	//eastl::vector<float3x4> GetBoneMatrices();
 
 	// For PBR shader flags we need to copy exactly what TruePBR does

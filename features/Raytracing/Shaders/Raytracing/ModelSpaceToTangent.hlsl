@@ -6,8 +6,6 @@ struct VS_INPUT
 	float4 Tangent				: TANGENT0;
 	float4 Color				: COLOR0;
 	float4 Bitangent			: BINORMAL0;
-	float4 LandBlendWeights1	: TEXCOORD1;
-	float4 LandBlendWeights2	: TEXCOORD2;
 };
 
 struct VS_OUTPUT

@@ -18,19 +18,21 @@
 
 #include "State.h"
 
-#include "Features/Raytracing/Core/Instance.h"
-#include "Features/Raytracing/Core/Model.h"
 #include "Features/Raytracing/Core/Shape.h"
+#include "Features/Raytracing/Core/Model.h"
+#include "Features/Raytracing/Core/Instance.h"
 
+#include "Features/Raytracing/Helpers/ModelSpaceToTangent.h"
+
+#include "Features/Raytracing/RTConstants.h"
 #include "Features/Raytracing/Allocator.h"
 #include "Features/Raytracing/Buffer.h"
 #include "Features/Raytracing/BufferMA.h"
 #include "Features/Raytracing/Heap.h"
 #include "Features/Raytracing/HeapManager.h"
 #include "Features/Raytracing/Pipelines/SHaRCPipeline.h"
-#include "Features/Raytracing/Pipelines/SVGFPipeline.h"
 #include "Features/Raytracing/Pipelines/SkinningPipeline.h"
-#include "Features/Raytracing/RTConstants.h"
+#include "Features/Raytracing/Pipelines/SVGFPipeline.h"
 #include "Features/Raytracing/RTPipelineBuilder.h"
 #include "Features/Raytracing/ShaderBindingTable.h"
 #include "Features/Raytracing/TextureSharing.h"
@@ -346,7 +348,7 @@ struct Raytracing : public OverlayFeature
 	enum struct PIXCaptureLocation : int32_t
 	{
 		GlobalIllumination,
-		Shadows
+		Shadows		
 	};
 
 	// TODO: Rename to ReflectanceModel?
@@ -579,6 +581,7 @@ struct Raytracing : public OverlayFeature
 	void UpdateModelBLAS(Model* model);
 
 	eastl::shared_ptr<Allocation> GetTextureRegister(ID3D11Texture2D* texture, eastl::shared_ptr<Allocation> defaultTexture);
+	eastl::shared_ptr<Allocation> GetMSNormalMapRegister(Shape* shape, RE::BSGraphics::Texture* texture, eastl::shared_ptr<Allocation> defaultTexture);
 
 	Allocator shapeRegisters = Allocator(RTConstants::MAX_SHAPES);
 	Allocator textureRegisters = Allocator(RTConstants::MAX_TEXTURES);
@@ -660,6 +663,14 @@ struct Raytracing : public OverlayFeature
 
 	// Textures that have been shared with DX12 and placed in a heap as SRV
 	eastl::unordered_map<ID3D11Texture2D*, eastl::unique_ptr<TextureReference>> textures;
+
+	struct ConvertedNormalMap
+	{
+		eastl::unique_ptr<TextureReference> Reference;
+		eastl::unique_ptr<Texture2D> Texture;
+	};
+
+	eastl::unordered_map<ID3D11Texture2D*, eastl::unique_ptr<ConvertedNormalMap>> normalMaps;
 
 	winrt::com_ptr<ID3D11SamplerState> samplerState = nullptr;
 	winrt::com_ptr<ID3D11ComputeShader> copyDepthCS = nullptr;
@@ -754,6 +765,8 @@ struct Raytracing : public OverlayFeature
 
 	eastl::unique_ptr<RenderResData> renderResData = nullptr;
 	eastl::unique_ptr<ConstantBuffer> renderResCB = nullptr;
+
+	eastl::unique_ptr<ModelSpaceToTangent> normalMapConverter;
 
 	// Sky Cubemap
 	bool renderingCubemap = false;

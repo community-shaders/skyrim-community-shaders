@@ -204,6 +204,22 @@ void Shape::BuildMesh(RE::BSGraphics::TriShape* rendererData, const std::uint32_
 				if (vertexFlags & RE::BSGraphics::Vertex::VF_SKINNED) {
 					std::memcpy(weights.data(), vtx + skinOffset, sizeof(half) * bonesPerVertex);
 					std::memcpy(boneIds.data(), vtx + skinOffset + boneIDOffset, sizeof(uint8_t) * bonesPerVertex);
+
+					// Normalize weights
+					float sum = 0.0f;
+					for (float w : weights) {
+						sum += w;
+					}
+
+					if (sum > eastl::numeric_limits<float>::epsilon()) {
+						float sumRcp = 1.0f / sum;
+
+						for (half& w : weights) {
+							w *= sumRcp;
+						}
+					} else {
+						weights = { 1.0f, 0.0f, 0.0f, 0.0f };
+					}
 				} else {
 					weights = { 0.0f, 0.0f, 0.0f, 0.0f };
 					boneIds = { 0, 0, 0, 0 };
@@ -285,17 +301,23 @@ void Shape::BuildMesh(RE::BSGraphics::TriShape* rendererData, const std::uint32_
 	}
 }
 
-static eastl::shared_ptr<Allocation> TextureRegister(const RE::NiPointer<RE::NiSourceTexture> niPointer, eastl::shared_ptr<Allocation> defaultTexture)
+eastl::shared_ptr<Allocation> Shape::TextureRegister(const RE::NiPointer<RE::NiSourceTexture> niPointer, eastl::shared_ptr<Allocation> defaultTexture, bool modelSpaceNormalMap = false)
 {
 	if (!niPointer || !niPointer->rendererTexture)
 		return defaultTexture;
 
-	return globals::features::raytracing.GetTextureRegister(niPointer->rendererTexture->texture, defaultTexture);
+	auto& rt = globals::features::raytracing;
+	
+	if (modelSpaceNormalMap)
+		return rt.GetMSNormalMapRegister(this, niPointer->rendererTexture, defaultTexture);
+	else 
+		return rt.GetTextureRegister(niPointer->rendererTexture->texture, defaultTexture);
 }
 
 void Shape::BuildMaterial(const RE::BSGeometry::GEOMETRY_RUNTIME_DATA& geometryRuntimeData, [[maybe_unused]] const char* name)
 {
 	auto& rt = globals::features::raytracing;
+
 	//auto& whiteTexture = rt.defaultWhiteTexture->allocation;
 	auto& grayTexture = rt.defaultGrayTexture->allocation;
 	auto& normalTexture = rt.defaultNormalTexture->allocation;
@@ -433,8 +455,8 @@ void Shape::BuildMaterial(const RE::BSGeometry::GEOMETRY_RUNTIME_DATA& geometryR
 						// Vanilla Materials
 						if (const RE::BSLightingShaderMaterialBase* lightingBaseMaterial = skyrim_cast<RE::BSLightingShaderMaterialBase*>(shaderMaterial)) {
 							textures[0] = TextureRegister(lightingBaseMaterial->diffuseTexture, grayTexture);
-							textures[1] = TextureRegister(lightingBaseMaterial->normalTexture, normalTexture);
-
+							textures[1] = TextureRegister(lightingBaseMaterial->normalTexture, normalTexture, false); // shaderFlags.any(EShaderPropertyFlag::kModelSpaceNormals)
+		
 							if (shaderFlags.any(EShaderPropertyFlag::kSpecular)) {
 								textures[3] = TextureRegister(lightingBaseMaterial->specularBackLightingTexture, blackTexture);
 

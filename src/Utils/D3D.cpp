@@ -124,7 +124,7 @@ namespace Util
 		}
 	};
 
-	ID3D11DeviceChild* CompileShader(const wchar_t* FilePath, const std::vector<std::pair<const char*, const char*>>& Defines, const char* ProgramType, const char* Program)
+	ID3D11DeviceChild* CompileShader(const wchar_t* FilePath, const std::vector<std::pair<const char*, const char*>>& Defines, const char* ProgramType, const char* Program, const std::vector<D3D11_INPUT_ELEMENT_DESC>& InputDesc, ID3D11InputLayout** InputLayout)
 	{
 		auto device = globals::d3d::device;
 
@@ -205,6 +205,12 @@ namespace Util
 			logger::warn("Shader compilation failed:\n\n{}", shaderErrors ? static_cast<char*>(shaderErrors->GetBufferPointer()) : "Unknown error");
 			return nullptr;
 		}
+
+		auto inputCount = InputDesc.size();
+		if (inputCount > 0 && InputLayout) {
+			device->CreateInputLayout(InputDesc.data(), static_cast<uint>(inputCount), shaderBlob->GetBufferPointer(), shaderBlob->GetBufferSize(), InputLayout);
+		}
+
 		if (shaderErrors)
 			logger::debug("Shader logs:\n{}", static_cast<char*>(shaderErrors->GetBufferPointer()));
 

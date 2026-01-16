@@ -10,7 +10,7 @@ namespace Util
 	std::string GetNameFromRTV(ID3D11RenderTargetView* a_rtv);
 	void SetResourceName(ID3D11DeviceChild* Resource, const char* Format, ...);
 
-	ID3D11DeviceChild* CompileShader(const wchar_t* FilePath, const std::vector<std::pair<const char*, const char*>>& Defines, const char* ProgramType, const char* Program = "main");
+	ID3D11DeviceChild* CompileShader(const wchar_t* FilePath, const std::vector<std::pair<const char*, const char*>>& Defines, const char* ProgramType, const char* Program = "main", const std::vector<D3D11_INPUT_ELEMENT_DESC>& InputDesc = {}, ID3D11InputLayout** InputLayout = nullptr);
 
 	// Texture manipulation utilities
 	void ApplyHighlightTintToTexture(ID3D11Texture2D* texture, bool isHighlighted, const std::array<float, 4>& highlightColor = { 1.0f, 0.5f, 0.0f, 0.3f });

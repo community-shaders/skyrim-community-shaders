@@ -800,6 +800,8 @@ void Raytracing::SetupResources()
 	auto renderer = globals::game::renderer;
 	auto device = globals::d3d::device;
 
+	normalMapConverter = eastl::make_unique<ModelSpaceToTangent>();
+
 	auto device12 = d3d12Device.get();
 
 	giHeap = eastl::make_unique<DX12::DescriptorHeap<GIHeap>>(
@@ -2126,6 +2128,30 @@ eastl::shared_ptr<Allocation> Raytracing::GetTextureRegister(ID3D11Texture2D* dx
 	}
 
 	logger::debug("[RT] GetTextureRegister - Source texture not found");
+
+	return defaultTexture;
+}
+
+eastl::shared_ptr<Allocation> Raytracing::GetMSNormalMapRegister([[maybe_unused]] Shape* shape, RE::BSGraphics::Texture* texture, eastl::shared_ptr<Allocation> defaultTexture)
+{
+	std::lock_guard lock{ textureRegisterMutex };
+
+	ConvertedNormalMap* normalMap = nullptr;
+
+	if (auto refIt = normalMaps.find(texture->texture); refIt != normalMaps.end()) {
+		normalMap = refIt->second.get();
+	} else {
+		auto [it, emplaced] = normalMaps.emplace(texture->texture, eastl::make_unique<ConvertedNormalMap>());
+
+		normalMap = it->second.get();
+
+		D3D11_TEXTURE2D_DESC desc;
+		texture->texture->GetDesc(&desc);
+		desc.BindFlags |= D3D11_BIND_RENDER_TARGET;
+		normalMap->Texture = eastl::make_unique<Texture2D>(desc);	
+	}
+
+	//normalMapConverter->Convert(geometryRuntimeData, runtimeData.rendererData->indexBuffer, shape->vertexCount, shape->triangleCount, texture, normalMap->Texture.rtv.get());
 
 	return defaultTexture;
 }
