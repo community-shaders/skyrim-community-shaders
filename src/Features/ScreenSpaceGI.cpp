@@ -670,8 +670,7 @@ void ScreenSpaceGI::DrawSSGI()
 	GET_INSTANCE_MEMBER(BSImagespaceShaderISSAOBlurH, imageSpaceManager);
 
 	// Disable vanilla SSAO
-	if (auto* ssaoBlur = BSImagespaceShaderISSAOBlurH.get())
-	{
+	if (auto* ssaoBlur = BSImagespaceShaderISSAOBlurH.get()) {
 		auto* enableSSAO = reinterpret_cast<bool*>(reinterpret_cast<uintptr_t>(ssaoBlur) + 0x50LL);
 		*enableSSAO = settings.EnableVanillaSSAO;
 	}
