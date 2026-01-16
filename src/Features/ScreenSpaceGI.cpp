@@ -11,6 +11,7 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	Enabled,
 	EnableGI,
 	EnableExperimentalSpecularGI,
+	EnableVanillaSSAO,
 	NumSlices,
 	NumSteps,
 	ResolutionMode,
@@ -64,6 +65,10 @@ void ScreenSpaceGI::DrawSettings()
 			recompileFlag |= ImGui::Checkbox("Indirect Lighting (IL)", &settings.EnableGI);
 		}
 		ImGui::TableNextColumn();
+		ImGui::Checkbox("Vanilla SSAO", &settings.EnableVanillaSSAO);
+		if (auto _tt = Util::HoverTooltipWrapper()) {
+			ImGui::Text("Enable Skyrim's built-in SSAO. Usually disabled when using SSGI to avoid double-darkening.");
+		}
 		if (showAdvanced) {
 			recompileFlag |= ImGui::Checkbox("(Experimental) HQ Specular IL", &settings.EnableExperimentalSpecularGI);
 			if (auto _tt = Util::HoverTooltipWrapper())
@@ -665,7 +670,9 @@ void ScreenSpaceGI::DrawSSGI()
 
 	// Disable vanilla SSAO
 	bool* enableSSAO = reinterpret_cast<bool*>(reinterpret_cast<uintptr_t>(BSImagespaceShaderISSAOBlurH.get()) + 0x50LL);
-	*enableSSAO = false;
+	if (enableSSAO) {
+		*enableSSAO = settings.EnableVanillaSSAO;
+	}
 
 	if (!(settings.Enabled && ShadersOK())) {
 		FLOAT clr[4] = { 0.f, 0.f, 0.f, 0.f };
