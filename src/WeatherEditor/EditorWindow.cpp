@@ -157,7 +157,7 @@ void EditorWindow::ShowObjectsWindow()
 		ImGui::Spacing();
 
 		// List of categories
-		const char* categories[] = { "Weather", "Lighting Template", "WorldSpace", "Cell Lighting", "ImageSpace", "Volumetric Lighting", "Shader Particle Geometry", "Lens Flare", "Visual Effect" };
+		const char* categories[] = { "Weather", "ImageSpace", "WorldSpace", "Lighting Template", "Cell Lighting", "Volumetric Lighting", "Shader Particle Geometry", "Lens Flare", "Visual Effect" };
 		for (int i = 0; i < IM_ARRAYSIZE(categories); ++i) {
 			// Highlight the selected category
 			if (ImGui::Selectable(categories[i], selectedCategory == categories[i])) {
