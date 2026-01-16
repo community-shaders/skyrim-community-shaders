@@ -52,7 +52,7 @@ void ScreenSpaceGI::DrawSettings()
 
 	ImGui::Checkbox("Show Advanced Options", &showAdvanced);
 
-	if (ImGui::BeginTable("Toggles", 3)) {
+	if (ImGui::BeginTable("Toggles", 4)) {
 		ImGui::TableNextColumn();
 		ImGui::Checkbox("Enabled", &settings.Enabled);
 		if (auto _tt = Util::HoverTooltipWrapper()) {
@@ -69,6 +69,7 @@ void ScreenSpaceGI::DrawSettings()
 		if (auto _tt = Util::HoverTooltipWrapper()) {
 			ImGui::Text("Enable Skyrim's built-in SSAO. Usually disabled when using SSGI to avoid double-darkening.");
 		}
+		ImGui::TableNextColumn();
 		if (showAdvanced) {
 			recompileFlag |= ImGui::Checkbox("(Experimental) HQ Specular IL", &settings.EnableExperimentalSpecularGI);
 			if (auto _tt = Util::HoverTooltipWrapper())
@@ -669,8 +670,9 @@ void ScreenSpaceGI::DrawSSGI()
 	GET_INSTANCE_MEMBER(BSImagespaceShaderISSAOBlurH, imageSpaceManager);
 
 	// Disable vanilla SSAO
-	bool* enableSSAO = reinterpret_cast<bool*>(reinterpret_cast<uintptr_t>(BSImagespaceShaderISSAOBlurH.get()) + 0x50LL);
-	if (enableSSAO) {
+	if (auto* ssaoBlur = BSImagespaceShaderISSAOBlurH.get())
+	{
+		auto* enableSSAO = reinterpret_cast<bool*>(reinterpret_cast<uintptr_t>(ssaoBlur) + 0x50LL);
 		*enableSSAO = settings.EnableVanillaSSAO;
 	}
 
