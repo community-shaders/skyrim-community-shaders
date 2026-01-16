@@ -13,7 +13,7 @@ struct BoneMatrix
 RWStructuredBuffer<Vertex> OutputVertices[]             : register(u0);
 
 StructuredBuffer<VertexUpdateData> UpdateData           : register(t0, space0);
-StructuredBuffer<BoneMatrix> BoneMatrices                 : register(t1, space0);
+StructuredBuffer<BoneMatrix> BoneMatrices               : register(t1, space0);
 
 StructuredBuffer<float4> DynamicVertices[]              : register(t0, space1);
 

@@ -38,6 +38,11 @@ struct Instance
 		auto worldInverse = pNiNode->world.Invert();
 		auto worldToRoot = GetXMFromNiTransform(worldInverse);
 
+		float4 cameraPos = globals::game::frameBufferCached.GetCameraPosAdjust();
+		cameraPos.w = 0.0f;
+
+		//logger::info("Update - CameraPosition: {}, WorldToRoot [{}, {}, {}, {}]", cameraPos, float4(worldToRoot.r[0]), float4(worldToRoot.r[1]), float4(worldToRoot.r[2]), float4(worldToRoot.r[3]));
+
 		boneMatrices.clear();
 
 		auto& [path, model] = modelPair;
@@ -57,15 +62,35 @@ struct Instance
 				if (updateFlags & Flags::Skinned) {
 					auto& skinInstance = shape->geometry->GetGeometryRuntimeData().skinInstance;
 
+					shape->boneMatrices.clear();
+					shape->boneMatrices.resize(skinInstance->numMatrices);
+
 					float3x4* boneMatricesArray = reinterpret_cast<float3x4*>(skinInstance->boneMatrices);
 
 					for (uint i = 0; i < skinInstance->numMatrices; i++) {
 						auto* bone = skinInstance->bones[i];
 
-						if (boneMatrices.find(bone) != boneMatrices.end()) {
-							boneMatrices.try_emplace(bone, worldToRoot * XMLoadFloat3x4(&boneMatricesArray[i]));
-						}
+						if (auto it = boneMatrices.find(bone); it != boneMatrices.end()) {
+							shape->boneMatrices[i] = it->second;
+						} else {
+							auto oBoneMatrix = XMLoadFloat3x4(&boneMatricesArray[i]);
 
+							//oBoneMatrix.r[3] -= cameraPos;
+
+							auto rBoneMatrix = XMMatrixMultiply(oBoneMatrix, worldToRoot);
+
+							float3x4 rBoneMatrix3x4;
+							XMStoreFloat3x4(&rBoneMatrix3x4, rBoneMatrix);
+
+							/*logger::info("Update - \nOBoneMatrix3X4 [{}, {}, {}], \nOBoneMatrix [{}, {}, {}, {}], \nRBoneMatrix [{}, {}, {}, {}], \nRBoneMatrix3x4 [{}, {}, {}]",
+								float4(boneMatricesArray[i].m[0]), float4(boneMatricesArray[i].m[1]), float4(boneMatricesArray[i].m[2]),
+								float4(oBoneMatrix.r[0]), float4(oBoneMatrix.r[1]), float4(oBoneMatrix.r[2]), float4(oBoneMatrix.r[3]),
+								float4(rBoneMatrix.r[0]), float4(rBoneMatrix.r[1]), float4(rBoneMatrix.r[2]), float4(rBoneMatrix.r[3]),
+								float4(rBoneMatrix3x4.m[0]), float4(rBoneMatrix3x4.m[1]), float4(rBoneMatrix3x4.m[2]));*/
+
+							shape->boneMatrices[i] = rBoneMatrix3x4;
+							boneMatrices.try_emplace(bone, rBoneMatrix3x4);
+						}
 					}
 				}
 
@@ -81,7 +106,7 @@ struct Instance
 					float3x4 localToRoot;
 					XMStoreFloat3x4(&localToRoot, localToRootXM);
 	
-					skinningPipeline->QueueUpdate(updateFlags, path, shape.get(), localToRoot, localToRoot);
+					skinningPipeline->QueueUpdate(updateFlags, path, shape.get(), localToRoot);
 				}
 			}
 		}

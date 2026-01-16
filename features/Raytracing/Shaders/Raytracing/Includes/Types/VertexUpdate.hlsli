@@ -13,10 +13,6 @@ struct VertexUpdateData
 	float3x4 localToRoot;
 	float3 bonePivot;
 	uint pad;
-#ifndef __cplusplus	
-	row_major 
-#endif	
-	float3x4 worldToLocal; 
 };
 
 #ifdef __cplusplus

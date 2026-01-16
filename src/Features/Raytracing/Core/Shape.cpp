@@ -871,7 +871,7 @@ bool Shape::UpdateSkinning()
 	return true;
 }
 
-eastl::vector<float3x4> Shape::GetBoneMatrices()
+/*eastl::vector<float3x4> Shape::GetBoneMatrices()
 {
 	eastl::vector<float3x4> boneMatrices;
 
@@ -884,4 +884,4 @@ eastl::vector<float3x4> Shape::GetBoneMatrices()
 	std::memcpy(boneMatrices.data(), skinInstance->boneMatrices, skinInstance->allocatedSize);
 
 	return boneMatrices;
-}
+}*/
