@@ -205,12 +205,11 @@ void Shape::BuildMesh(RE::BSGraphics::TriShape* rendererData, const std::uint32_
 					std::memcpy(weights.data(), vtx + skinOffset, sizeof(half) * bonesPerVertex);
 					std::memcpy(boneIds.data(), vtx + skinOffset + boneIDOffset, sizeof(uint8_t) * bonesPerVertex);
 				} else {
-					weights.clear();
-					weights.resize(bonesPerVertex);
-
-					boneIds.clear();
-					boneIds.resize(bonesPerVertex);
+					weights = { 0.0f, 0.0f, 0.0f, 0.0f };
+					boneIds = { 0, 0, 0, 0 };
 				}
+
+				skinning[i] = Skinning(weights, boneIds);
 			}
 
 			if (vertexFlags & RE::BSGraphics::Vertex::VF_LANDDATA) {
@@ -225,9 +224,6 @@ void Shape::BuildMesh(RE::BSGraphics::TriShape* rendererData, const std::uint32_
 			}
 
 			vertices[i] = vertexData;
-
-			if (skinned)
-				skinning[i] = Skinning(weights, boneIds);
 		}
 
 		vertexCount = vertexCountIn;

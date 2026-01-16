@@ -108,8 +108,10 @@ bool SkinningPipeline::PrepareResources(ID3D12GraphicsCommandList4* commandList,
 	eastl::vector<CD3DX12_RESOURCE_BARRIER> barriers;
 	barriers.reserve(queueSize);
 
-	float4 cameraPosF4 = globals::game::frameBufferCached.GetCameraPosAdjust();
-	float3 cameraPos = float3(cameraPosF4.x, cameraPosF4.y, cameraPosF4.z);
+	float4 cameraPosition = globals::game::frameBufferCached.GetCameraPosAdjust();
+	auto eye = Util::GetEyePosition(0);
+
+	float3 bonePivot = float3(cameraPosition.x - eye.x, cameraPosition.y - eye.y, cameraPosition.z - eye.z);
 
 	for (auto& queuedShape : queuedShapes) {
 		Shape* shape = queuedShape.shape;
@@ -117,7 +119,7 @@ bool SkinningPipeline::PrepareResources(ID3D12GraphicsCommandList4* commandList,
 		uint boneOffset = (uint)boneMatricesData.size();
 
 		vertexCount = std::max(vertexCount, (uint)shape->vertexCount);
-		vertexUpdateData.emplace_back(shape->allocation->GetIndex(), queuedShape.updateFlags, shape->vertexCount, boneOffset, queuedShape.localToRoot, cameraPos, 0);
+		vertexUpdateData.emplace_back(shape->allocation->GetIndex(), queuedShape.updateFlags, shape->vertexCount, boneOffset, queuedShape.localToRoot, bonePivot, 0);
 
 		// Dynamic TriShapes
 		shape->UpdateUploadDynamicBuffers(commandList);

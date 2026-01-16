@@ -101,22 +101,13 @@ void main(uint3 DTid : SV_DispatchThreadID)
     {
         Skinning skinning = MeshSkinning[shapeIndex][vertexIndex];
 
-        float3x4 boneMatrixWS = GetBoneTransformMatrix(skinning, updateData.bonePivot, updateData.boneOffset);
-        //float3x4 boneMatrixWS = GetBoneTransformMatrix(skinning, updateData.bonePivot, updateData.boneOffset);        
-        //float3x4 boneMatrix = RemoveWorldFromBone(boneMatrixWS, updateData.localToRoot);
-        
-        // This is probably wrong
-        float3x3 boneMatrixRot = (float3x3)boneMatrixWS;
+        float3x4 boneMatrix = GetBoneTransformMatrix(skinning, updateData.bonePivot, updateData.boneOffset);
+        float3x3 boneMatrixRot = (float3x3)boneMatrix;
 
-        vertex.Position = mul(float4(vertex.Position, 1.0f), transpose(boneMatrixWS)); // Skins from object space to world
-        //vertex.Position = mul(float4(vertex.Position, 1.0f), transpose(updateData.worldToLocal)); // Transform from world back to object space
-
-        //float4x3 skinToObject = MulAffine(boneMatrixWS, updateData.worldToLocal);
-        //vertex.Position = mul(float4(vertex.Position, 1.0f), skinToObject);
-        
-        vertex.Normal = (half3)mul(vertex.Normal, boneMatrixRot);
-        vertex.Tangent = (half3)mul(vertex.Tangent, boneMatrixRot);
-        vertex.Bitangent = (half3)mul(vertex.Bitangent, boneMatrixRot);
+        vertex.Position = mul(boneMatrix, float4(vertex.Position, 1.0f));
+        vertex.Normal = (half3)mul(boneMatrixRot, vertex.Normal);
+        vertex.Tangent = (half3)mul(boneMatrixRot, vertex.Tangent);
+        vertex.Bitangent = (half3)mul(boneMatrixRot, vertex.Bitangent);
     } 
     
     OutputVertices[shapeIndex][vertexIndex] = vertex;
