@@ -426,8 +426,9 @@ void FeatureListRenderer::DrawMenuVisitor::RenderFeatureSettingsTab(Feature* fea
 						weatherRegistry->SetFeaturePaused(feat->GetShortName(), paused);
 					}
 					if (auto _tt = Util::HoverTooltipWrapper()) {
-						ImGui::Text("Temporarily disable weather-based setting adjustments for this feature.\n"
-									"This state is not saved.");
+						ImGui::Text(
+							"Temporarily disable weather-based setting adjustments for this feature.\n"
+							"This state is not saved.");
 					}
 					ImGui::Separator();
 				}
