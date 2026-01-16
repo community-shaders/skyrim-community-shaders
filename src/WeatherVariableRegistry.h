@@ -74,7 +74,6 @@ namespace WeatherVariables
 			bool hasToOverride = !to.is_null();
 
 			// If neither weather overrides this setting, don't modify the current value
-			// This preserves user settings when weather changes without overrides
 			if (!hasFromOverride && !hasToOverride) {
 				return;
 			}
@@ -100,11 +99,11 @@ namespace WeatherVariables
 				}
 			}
 
-			// If only one weather has an override, use current value as the other endpoint
+			// If only one weather has an override, lerp to/from the default (UserSettings.json) value
 			if (hasFromOverride && !hasToOverride) {
-				toVal = *valuePtr;
+				toVal = defaultValue;
 			} else if (!hasFromOverride && hasToOverride) {
-				fromVal = *valuePtr;
+				fromVal = defaultValue;
 			}
 
 			*valuePtr = lerpFunc(fromVal, toVal, factor);
