@@ -629,14 +629,14 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	dirLightColor *= dirShadow;
 	dirLightColor *= dirDetailShadow;
 
-		if (SharedData::grassLightingSettings.EnableWrappedLighting)
+		if (SharedData::grassLightingSettings.EnableWrappedLighting) 
     {
         // Old Wrapped Model
-        float wrapAmount = saturate(input.VertexNormal.w * 10.0)* 0.5 * !complex;;
+        float wrapAmount = saturate(input.VertexNormal.w * 10.0)* 0.5 * (!complex);
         float wrappedDirLight = saturate(dirLightAngle + wrapAmount) / (1.0 + wrapAmount);
-        lightsDiffuseColor += dirLightColor * saturate(wrappedDirLight) * dirDetailShadow;
+        lightsDiffuseColor += dirLightColor * saturate(wrappedDirLight) * Color::GrassDiffuseMult();
     }
-			else
+			else 
     {
         // Original Standard Model
         lightsDiffuseColor += dirLightColor * saturate(dirLightAngle) * Color::GrassDiffuseMult();
@@ -644,7 +644,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 
 	float3 vertexColor = input.VertexColor.xyz;
 
-#				if defined(SKYLIGHTING)
+#if defined(SKYLIGHTING)
 	float skylightingFadeOutFactor = 1.0;
 	if (!SharedData::InInterior) {
 		skylightingFadeOutFactor = Skylighting::getFadeOutFactor(input.WorldPosition.xyz);
