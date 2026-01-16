@@ -99,13 +99,6 @@ namespace WeatherVariables
 				}
 			}
 
-			// If only one weather has an override, lerp to/from the default (UserSettings.json) value
-			if (hasFromOverride && !hasToOverride) {
-				toVal = defaultValue;
-			} else if (!hasFromOverride && hasToOverride) {
-				fromVal = defaultValue;
-			}
-
 			*valuePtr = lerpFunc(fromVal, toVal, factor);
 		}
 
