@@ -6,7 +6,8 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	SpecularStrength,
 	SubsurfaceScatteringAmount,
 	OverrideComplexGrassSettings,
-	BasicGrassBrightness)
+	BasicGrassBrightness,
+	EnableWrappedLighting)
 
 void GrassLighting::DrawSettings()
 {
@@ -43,6 +44,12 @@ void GrassLighting::DrawSettings()
 	}
 
 	if (ImGui::TreeNodeEx("Lighting", ImGuiTreeNodeFlags_DefaultOpen)) {
+		ImGui::Checkbox("Enable Wrapped Lighting", (bool*)&settings.EnableWrappedLighting);
+		if (auto _tt = Util::HoverTooltipWrapper()) {
+			ImGui::Text("Old wrapped lighting model from CS 1.3.");
+		}
+		ImGui::Spacing();
+		ImGui::Spacing();
 		ImGui::Checkbox("Override Complex Grass Lighting Settings", (bool*)&settings.OverrideComplexGrassSettings);
 		if (auto _tt = Util::HoverTooltipWrapper()) {
 			ImGui::Text(
