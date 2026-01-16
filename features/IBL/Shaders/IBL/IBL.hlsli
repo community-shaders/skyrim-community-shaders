@@ -71,7 +71,7 @@ namespace ImageBasedLighting
 
 	float3 GetFogIBLColor(float3 fogColor)
 	{
-		float3 directionalAmbientColor = max(0, mul(SharedData::DirectionalAmbient, float4(float3(0, 0, 0), 1.0))).xyz;
+		float3 directionalAmbientColor = max(0, SharedData::GetAmbient(float3(0, 0, 0))).xyz;
 		float3 iblColor = directionalAmbientColor * SharedData::iblSettings.DALCAmount + Color::Saturation(GetSkyDiffuseIBL(float3(0, 0, 0)), SharedData::iblSettings.IBLSaturation) * SharedData::iblSettings.DiffuseIBLScale;
 		if (SharedData::iblSettings.PreserveFogLuminance) {
 			const float fogLuminance = Color::RGBToLuminance(fogColor);

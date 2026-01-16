@@ -3,6 +3,7 @@
 
 #include "Common/FrameBuffer.hlsli"
 #include "Common/VR.hlsli"
+#include "Common/Spherical Harmonics/SphericalHarmonics.hlsli"
 
 namespace SharedData
 {
@@ -327,6 +328,11 @@ namespace SharedData
 		[flatten] if (cellInt.x < 5 && cellInt.x >= 0 && cellInt.y < 5 && cellInt.y >= 0)
 			waterData = WaterData[waterTile];
 		return waterData;
+	}
+
+	float3 GetAmbient(float3 normal)
+	{
+		return SphericalHarmonics::Unproject(AmbientSHR, AmbientSHG, AmbientSHB, normal);
 	}
 
 #endif  // PSHADER
