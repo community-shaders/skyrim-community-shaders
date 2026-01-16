@@ -33,7 +33,8 @@ namespace SharedData
 		bool OverrideComplexGrassSettings;
 
 		float BasicGrassBrightness;
-		float3 pad0;
+		bool EnableWrappedLighting;
+		float2 pad0;
 	};
 
 	struct CPMSettings
