@@ -18,19 +18,19 @@
 
 #include "State.h"
 
-#include "Features/Raytracing/Core/Shape.h"
-#include "Features/Raytracing/Core/Model.h"
 #include "Features/Raytracing/Core/Instance.h"
+#include "Features/Raytracing/Core/Model.h"
+#include "Features/Raytracing/Core/Shape.h"
 
-#include "Features/Raytracing/RTConstants.h"
 #include "Features/Raytracing/Allocator.h"
 #include "Features/Raytracing/Buffer.h"
 #include "Features/Raytracing/BufferMA.h"
 #include "Features/Raytracing/Heap.h"
 #include "Features/Raytracing/HeapManager.h"
 #include "Features/Raytracing/Pipelines/SHaRCPipeline.h"
-#include "Features/Raytracing/Pipelines/SkinningPipeline.h"
 #include "Features/Raytracing/Pipelines/SVGFPipeline.h"
+#include "Features/Raytracing/Pipelines/SkinningPipeline.h"
+#include "Features/Raytracing/RTConstants.h"
 #include "Features/Raytracing/RTPipelineBuilder.h"
 #include "Features/Raytracing/ShaderBindingTable.h"
 #include "Features/Raytracing/TextureSharing.h"
@@ -346,7 +346,7 @@ struct Raytracing : public OverlayFeature
 	enum struct PIXCaptureLocation : int32_t
 	{
 		GlobalIllumination,
-		Shadows		
+		Shadows
 	};
 
 	// TODO: Rename to ReflectanceModel?

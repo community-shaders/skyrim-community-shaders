@@ -24,7 +24,7 @@ StructuredBuffer<Skinning> MeshSkinning[]               : register(t0, space2);
 namespace Flags
 {
     static const uint Dynamic = (1 << 1);
-    static const uint Skinned = (1 << 2); 
+    static const uint Skinned = (1 << 2);
 }
 
 float3x4 GetBoneTransformMatrix(Skinning skinning, uint boneOffset)
@@ -43,7 +43,7 @@ float3x4 GetBoneTransformMatrix(Skinning skinning, uint boneOffset)
 float3x4 GetBoneTransformMatrix(Skinning skinning, float3 pivot, uint boneOffset)
 {
     float3x4 pivotMatrix = transpose(float4x3(0.0.xxx, 0.0.xxx, 0.0.xxx, pivot));
-    
+
 	float3x4 boneMatrix1 = BoneMatrices[boneOffset + skinning.GetBone(0)].World;
 	float3x4 boneMatrix2 = BoneMatrices[boneOffset + skinning.GetBone(1)].World;
 	float3x4 boneMatrix3 = BoneMatrices[boneOffset + skinning.GetBone(2)].World;
@@ -66,14 +66,14 @@ float3x4 GetBoneTransformMatrix(Skinning skinning, float3 pivot, uint boneOffset
 void main(uint3 DTid : SV_DispatchThreadID, uint3 GTid : SV_GroupThreadID, uint3 GID : SV_GroupID)
 {
     const uint modelIndex = GID.x;
-    const uint vertexIndex = GID.y * THREAD_GROUP_SIZE + GTid.x; 
+    const uint vertexIndex = GID.y * THREAD_GROUP_SIZE + GTid.x;
 #else
 [numthreads(1, THREAD_GROUP_SIZE, 1)]
 void main(uint3 DTid : SV_DispatchThreadID)
 {
     const uint modelIndex = DTid.x;
-    const uint vertexIndex = DTid.y;    
-#endif 
+    const uint vertexIndex = DTid.y;
+#endif
 
     VertexUpdateData updateData = UpdateData[modelIndex];
 
@@ -88,15 +88,15 @@ void main(uint3 DTid : SV_DispatchThreadID)
     if (updateData.flags & Flags::Dynamic)
     {
         float4 dynamicVertex = DynamicVertices[shapeIndex][vertexIndex];
-        
+
         if (updateData.flags & Flags::Skinned)
             vertex.Position = dynamicVertex.xyz;
         else
             vertex.Position = mul(updateData.localToRoot, float4(dynamicVertex.xyz, 1.0f));
-        
+
         //vertex.Bitangent = (half3) mul(localToRootRot, half3(dynamicVertex.w, vertex.Bitangent.yz));
     }
-    
+
     if (updateData.flags & Flags::Skinned)
     {
         Skinning skinning = MeshSkinning[shapeIndex][vertexIndex];
@@ -108,7 +108,7 @@ void main(uint3 DTid : SV_DispatchThreadID)
         vertex.Normal = (half3)mul(boneMatrixRot, vertex.Normal);
         vertex.Tangent = (half3)mul(boneMatrixRot, vertex.Tangent);
         vertex.Bitangent = (half3)mul(boneMatrixRot, vertex.Bitangent);
-    } 
-    
+    }
+
     OutputVertices[shapeIndex][vertexIndex] = vertex;
 }

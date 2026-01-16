@@ -6,8 +6,8 @@
 
 #include "Features/Raytracing.h"
 
-#include "Features/Raytracing/Types.h"
 #include "Features/Raytracing/Buffer.h"
+#include "Features/Raytracing/Types.h"
 
 #include "Features/Raytracing/Core/Shape.h"
 
@@ -15,7 +15,6 @@
 #include "Raytracing/Includes/Types/Skinning.hlsli"
 #include "Raytracing/Includes/Types/Triangle.hlsli"
 #include "Raytracing/Includes/Types/Vertex.hlsli"
-
 
 struct Model
 {

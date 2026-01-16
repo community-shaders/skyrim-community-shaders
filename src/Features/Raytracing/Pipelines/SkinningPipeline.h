@@ -64,7 +64,7 @@ struct SkinningPipeline : ComputePipeline<SkinningHeap>
 		Flags updateFlags;
 		eastl::string path;
 		Shape* shape;
-		float3x4 localToRoot;	
+		float3x4 localToRoot;
 	};
 
 	eastl::vector<QueuedShape> queuedShapes;

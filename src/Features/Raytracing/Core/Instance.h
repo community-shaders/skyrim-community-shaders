@@ -4,8 +4,8 @@
 
 #include <d3d12.h>
 
-#include "Features/Raytracing/Core/Shape.h"
 #include "Features/Raytracing/Core/Model.h"
+#include "Features/Raytracing/Core/Shape.h"
 
 #include "Features/Raytracing/Pipelines/SkinningPipeline.h"
 
@@ -75,7 +75,6 @@ struct Instance
 				}
 
 				if ((updateFlags & Flags::Dynamic) || (updateFlags & Flags::Skinned)) {
-
 					DirectX::XMMATRIX localToRootXM;
 					if (shape->geometry->parent == pNiNode) {
 						localToRootXM = GetXMFromNiTransform(shape->geometry->local);
@@ -85,7 +84,7 @@ struct Instance
 
 					float3x4 localToRoot;
 					XMStoreFloat3x4(&localToRoot, localToRootXM);
-	
+
 					skinningPipeline->QueueUpdate(updateFlags, path, shape.get(), localToRoot);
 				}
 			}
