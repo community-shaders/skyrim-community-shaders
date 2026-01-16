@@ -79,15 +79,14 @@ void SkinningPipeline::SetupResources(ID3D12Device5* device)
 	DX::ThrowIfFailed(boneMatricesBuffer->resource->SetName(L"Bone Matrices Buffer"));
 
 	boneMatricesBuffer->CreateSRV(heap->CPUHandle(SkinningHeap::Slot::BoneMatrices));
-
 }
 
 void SkinningPipeline::QueueUpdate(Flags updateFlags, eastl::string path, Shape* shape, const float3x4& localToRoot)
 {
 	queuedShapes.emplace_back(
 		updateFlags,
-		path, 
-		shape, 
+		path,
+		shape,
 		localToRoot);
 }
 
@@ -126,7 +125,7 @@ bool SkinningPipeline::PrepareResources(ID3D12GraphicsCommandList4* commandList,
 
 		// Skinning - This is a bit more involved
 		if (queuedShape.updateFlags & Flags::Skinned) {
-			// Reset vertices, maybe we should keep a copy of this buffer already bound to our shaders? 
+			// Reset vertices, maybe we should keep a copy of this buffer already bound to our shaders?
 			// That way instead of barrier -> copy -> barrier we just read the initial vertices from the srv
 			if (!(queuedShape.updateFlags & Flags::Dynamic)) {
 				shape->vertexBuffer->Upload(commandList);
@@ -184,7 +183,7 @@ void SkinningPipeline::UpdateBLASES(ID3D12GraphicsCommandList4* commandList)
 
 	eastl::vector<CD3DX12_RESOURCE_BARRIER> uavBarriers;
 	uavBarriers.reserve(queuedShapes.size());
-	
+
 	// One model contains multiple shapes, lets make a unique list of all updated model
 	eastl::hash_set<eastl::string> paths;
 	for (auto& queuedShape : queuedShapes) {

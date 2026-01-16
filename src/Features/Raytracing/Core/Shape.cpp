@@ -175,7 +175,7 @@ void Shape::BuildMesh(RE::BSGraphics::TriShape* rendererData, const std::uint32_
 				uint32_t normalData;
 				std::memcpy(&normalData, vtx + normOffset, sizeof(uint32_t));
 				auto normalUnpacked = UnpackByte4(normalData);
-				
+
 				if (skinned)
 					vertexData.Normal = Normalize({ normalUnpacked.x, normalUnpacked.y, normalUnpacked.z });
 				else

@@ -7,8 +7,8 @@ struct VertexUpdateData
 	uint flags;
 	uint vertexCount;
     uint boneOffset;
-#ifndef __cplusplus	
-	row_major 
+#ifndef __cplusplus
+	row_major
 #endif
 	float3x4 localToRoot;
 	float3 bonePivot;

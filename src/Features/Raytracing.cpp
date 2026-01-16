@@ -20,8 +20,8 @@
 #include "Features/ExtendedMaterials.h"
 #include "Features/ExtendedTranslucency.h"
 #include "Features/HairSpecular.h"
-#include "Features/WetnessEffects.h"
 #include "Features/LinearLighting.h"
+#include "Features/WetnessEffects.h"
 
 #include <imgui_stdlib.h>
 
@@ -504,7 +504,6 @@ void Raytracing::DrawDebugSettings()
 
 	ImGui::PushID("DebugSettings");
 
-
 	if (ImGui::TreeNodeEx("Skinning and DynamicTriShapes", ImGuiTreeNodeFlags_DefaultOpen)) {
 		ImGui::Checkbox("Disable Updates", &debugDisableTriShapesUpdate);
 
@@ -515,9 +514,8 @@ void Raytracing::DrawDebugSettings()
 				SkinningPipeline::MIN_THREAD_GROUP_SIZE, SkinningPipeline::MAX_THREAD_GROUP_SIZE, "%d", ImGuiSliderFlags_AlwaysClamp))
 			skinningPipeline->recompile = true;
 
+		ImGui::Checkbox("Dispatch", &skinningPipeline->settings.Dispatch);
 
-		ImGui::Checkbox("Dispatch", &skinningPipeline->settings.Dispatch);	
-		
 		ImGui::Checkbox("Update BLAS", &skinningPipeline->settings.UpdateBLAS);
 
 		ImGui::TreePop();
@@ -2258,7 +2256,7 @@ void Raytracing::UpdateInstances()
 				frustumCull |= frustumCullable && (worldBoundRadius < cullingSettings.MinRadius);
 			}
 
-			//float minDistance = cullingSettings.MinDistance;			
+			//float minDistance = cullingSettings.MinDistance;
 
 			// Culls all models outside of the player's view, must satisfy condition
 			if (cullingSettings.DistanceMode == CullingDistanceMode::Minimal) {

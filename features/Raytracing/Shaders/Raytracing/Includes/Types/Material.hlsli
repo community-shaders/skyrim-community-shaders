@@ -24,7 +24,7 @@ namespace ShaderFlags
     static const uint kFalloff = (1 << 5);
     static const uint kEnvMap = (1 << 6);
 	static const uint kFace = (1 << 7);
-	static const uint kModelSpaceNormals = (1 << 8);	
+	static const uint kModelSpaceNormals = (1 << 8);
     static const uint kRefraction = (1 << 9);
     static const uint kProjectedUV = (1 << 10);
     static const uint kVertexColors = (1 << 11);
@@ -166,8 +166,8 @@ struct Material
     uint16_t DetailTexture()
     {
 		return Texture5;
-	}	
-	
+	}
+
 	// Landscape
 	half2 TexOffset()
     {
