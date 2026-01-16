@@ -331,10 +331,28 @@ namespace WeatherVariables
 
 		void UpdateFeatureFromWeathers(const std::string& featureName, const json& currWeather, const json& nextWeather, float lerpFactor)
 		{
+			if (IsFeaturePaused(featureName)) {
+				return;
+			}
+
 			auto* registry = GetFeatureRegistry(featureName);
 			if (registry) {
 				registry->LerpAllVariables(currWeather, nextWeather, lerpFactor);
 			}
+		}
+
+		bool IsFeaturePaused(const std::string& featureName)
+		{
+			auto it = pausedFeatures.find(featureName);
+			if (it != pausedFeatures.end()) {
+				return it->second;
+			}
+			return false;
+		}
+
+		void SetFeaturePaused(const std::string& featureName, bool paused)
+		{
+			pausedFeatures[featureName] = paused;
 		}
 
 		void SaveFeatureToJson(const std::string& featureName, json& j) const
@@ -360,5 +378,6 @@ namespace WeatherVariables
 		GlobalWeatherRegistry& operator=(const GlobalWeatherRegistry&) = delete;
 
 		std::map<std::string, std::unique_ptr<FeatureWeatherRegistry>> featureRegistries;
+		std::map<std::string, bool> pausedFeatures;
 	};
 }
