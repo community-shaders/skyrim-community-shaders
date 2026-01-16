@@ -157,6 +157,17 @@ struct Material
 		return Texture4;
 	}
 
+	// Vanilla - FaceGen
+    uint16_t TintTexture()
+    {
+		return Texture4;
+	}
+
+    uint16_t DetailTexture()
+    {
+		return Texture5;
+	}	
+	
 	// Landscape
 	half2 TexOffset()
     {

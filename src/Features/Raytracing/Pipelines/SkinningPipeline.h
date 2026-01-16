@@ -30,8 +30,7 @@ struct SkinningHeapDef
 	enum class Slot
 	{
 		Output,
-		LocalToRoot = Output + RTConstants::MAX_SHAPES,
-		UpdateData,
+		UpdateData = Output + RTConstants::MAX_SHAPES,
 		BoneMatrices,
 		DynamicVertices,
 		SkinningData = DynamicVertices + RTConstants::MAX_SHAPES,
@@ -48,6 +47,10 @@ struct SkinningPipeline : ComputePipeline<SkinningHeap>
 
 	static constexpr uint MAX_BATCHES = 4;
 
+	static constexpr uint MAX_BONES = 255;
+
+	static constexpr uint MAX_BONE_MATRICES = MAX_BONES * 512;
+
 	struct Settings
 	{
 		bool OptimizedMapping = false;
@@ -58,15 +61,16 @@ struct SkinningPipeline : ComputePipeline<SkinningHeap>
 
 	struct QueuedShape
 	{
-		// Model path, where Model = collection of Shapes
 		Flags updateFlags;
 		eastl::string path;
 		Shape* shape;
-		float3x4 localToRoot;
+		float3x4 localToRoot;	
 	};
 
 	eastl::vector<QueuedShape> queuedShapes;
+
 	eastl::unique_ptr<DX12::StructuredBufferUpload<VertexUpdateData>> vertexUpdateBuffer = nullptr;
+	eastl::unique_ptr<DX12::StructuredBufferUpload<float3x4>> boneMatricesBuffer = nullptr;
 
 	Util::FrameChecker frameChecker;
 

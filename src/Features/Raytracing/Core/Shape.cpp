@@ -161,7 +161,10 @@ void Shape::BuildMesh(RE::BSGraphics::TriShape* rendererData, const std::uint32_
 			}
 
 			if (hasPosition || dynamic) {
-				vertexData.Position = float3::Transform({ pos.x, pos.y, pos.z }, transform);
+				if (skinned)
+					vertexData.Position = { pos.x, pos.y, pos.z };
+				else
+					vertexData.Position = float3::Transform({ pos.x, pos.y, pos.z }, transform);
 			}
 
 			if (vertexFlags & RE::BSGraphics::Vertex::VF_UV) {
@@ -172,18 +175,28 @@ void Shape::BuildMesh(RE::BSGraphics::TriShape* rendererData, const std::uint32_
 				uint32_t normalData;
 				std::memcpy(&normalData, vtx + normOffset, sizeof(uint32_t));
 				auto normalUnpacked = UnpackByte4(normalData);
-
-				vertexData.Normal = Normalize(float3::TransformNormal({ normalUnpacked.x, normalUnpacked.y, normalUnpacked.z }, transform));
+				
+				if (skinned)
+					vertexData.Normal = Normalize({ normalUnpacked.x, normalUnpacked.y, normalUnpacked.z });
+				else
+					vertexData.Normal = Normalize(float3::TransformNormal({ normalUnpacked.x, normalUnpacked.y, normalUnpacked.z }, transform));
 
 				if (hasBitangent) {
 					uint32_t bitangentData;
 					std::memcpy(&bitangentData, vtx + tangOffset, sizeof(uint32_t));
 					auto bitangentUnpacked = UnpackByte4(bitangentData);
 
-					vertexData.Bitangent = Normalize(float3::TransformNormal({ bitangentUnpacked.x, bitangentUnpacked.y, bitangentUnpacked.z }, transform));
+					if (skinned)
+						vertexData.Bitangent = Normalize({ bitangentUnpacked.x, bitangentUnpacked.y, bitangentUnpacked.z });
+					else
+						vertexData.Bitangent = Normalize(float3::TransformNormal({ bitangentUnpacked.x, bitangentUnpacked.y, bitangentUnpacked.z }, transform));
 
 					float3 tangent = { pos.w, normalUnpacked.w, bitangentUnpacked.w };
-					vertexData.Tangent = hasPosition ? Normalize(float3::TransformNormal(tangent, transform)) : tangent;
+
+					if (skinned)
+						vertexData.Tangent = hasPosition ? Normalize(tangent) : tangent;
+					else
+						vertexData.Tangent = hasPosition ? Normalize(float3::TransformNormal(tangent, transform)) : tangent;
 				}
 			}
 
@@ -191,14 +204,12 @@ void Shape::BuildMesh(RE::BSGraphics::TriShape* rendererData, const std::uint32_
 				if (vertexFlags & RE::BSGraphics::Vertex::VF_SKINNED) {
 					std::memcpy(weights.data(), vtx + skinOffset, sizeof(half) * bonesPerVertex);
 					std::memcpy(boneIds.data(), vtx + skinOffset + boneIDOffset, sizeof(uint8_t) * bonesPerVertex);
-
 				} else {
-					weights.clear();
-					weights.resize(bonesPerVertex);
-
-					boneIds.clear();
-					boneIds.resize(bonesPerVertex);
+					weights = { 0.0f, 0.0f, 0.0f, 0.0f };
+					boneIds = { 0, 0, 0, 0 };
 				}
+
+				skinning[i] = Skinning(weights, boneIds);
 			}
 
 			if (vertexFlags & RE::BSGraphics::Vertex::VF_LANDDATA) {
@@ -213,9 +224,6 @@ void Shape::BuildMesh(RE::BSGraphics::TriShape* rendererData, const std::uint32_
 			}
 
 			vertices[i] = vertexData;
-
-			if (skinned)
-				skinning[i] = Skinning(weights, boneIds);
 		}
 
 		vertexCount = vertexCountIn;
@@ -462,6 +470,26 @@ void Shape::BuildMaterial(const RE::BSGeometry::GEOMETRY_RUNTIME_DATA& geometryR
 										lightingHairTintMaterial->tintColor.red,
 										lightingHairTintMaterial->tintColor.green,
 										lightingHairTintMaterial->tintColor.blue,
+										1.0f
+									};
+								}
+							}
+
+							// FaceGen
+							if (feature == Feature::kFaceGen) {
+								if (const auto* lightingFacegenMaterial = skyrim_cast<RE::BSLightingShaderMaterialFacegen*>(shaderMaterial)) {
+									textures[4] = TextureRegister(lightingFacegenMaterial->tintTexture, blackTexture);
+									textures[5] = TextureRegister(lightingFacegenMaterial->detailTexture, blackTexture);
+								}
+							}
+
+							// FaceGen RGB Tint
+							if (feature == Feature::kFaceGenRGBTint) {
+								if (const auto* lightingFacegenTintMaterial = skyrim_cast<RE::BSLightingShaderMaterialFacegenTint*>(shaderMaterial)) {
+									colors[0] = {
+										lightingFacegenTintMaterial->tintColor.red,
+										lightingFacegenTintMaterial->tintColor.green,
+										lightingFacegenTintMaterial->tintColor.blue,
 										1.0f
 									};
 								}
@@ -836,5 +864,20 @@ bool Shape::UpdateSkinning()
 
 	// TODO: Handle lazy skinned meshes update
 
-	return false;
+	return true;
 }
+
+/*eastl::vector<float3x4> Shape::GetBoneMatrices()
+{
+	eastl::vector<float3x4> boneMatrices;
+
+	if ((flags & Flags::Skinned) != Flags::Skinned)
+		return boneMatrices;
+
+	auto& skinInstance = geometry->GetGeometryRuntimeData().skinInstance;
+
+	boneMatrices.resize(skinInstance->numMatrices);
+	std::memcpy(boneMatrices.data(), skinInstance->boneMatrices, skinInstance->allocatedSize);
+
+	return boneMatrices;
+}*/

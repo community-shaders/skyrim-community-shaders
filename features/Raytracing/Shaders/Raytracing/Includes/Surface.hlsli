@@ -89,7 +89,7 @@ struct Surface
         } else if (material.ShaderType == ShaderType::Lighting) {
             float3 diffuse = baseTexture.SampleLevel(BaseSampler, texCoord0, 0).rgb;
 
-            Albedo = Color::GammaToTrueLinear(diffuse * material.BaseColor().rgb * vertexColor.rgb);
+            Albedo = Color::GammaToTrueLinear(diffuse * vertexColor.rgb);
 
             [branch]
             if (material.ShaderFlags & ShaderFlags::kSpecular) {
@@ -117,6 +117,26 @@ struct Surface
                 Texture2D glowTexture = Textures[NonUniformResourceIndex(material.GlowTexture())];
                 Emissive = glowTexture.SampleLevel(BaseSampler, texCoord0, 0).rgb * material.EffectColor().rgb * material.EffectColor().a * Frame.Emissive;
             }
+
+            [branch]
+            if (material.Feature == Feature::kFaceGen) {
+                Texture2D detailTexture = Textures[NonUniformResourceIndex(material.DetailTexture())];
+	            float3 detailColor = detailTexture.SampleLevel(BaseSampler, texCoord0, 0).rgb;
+	            detailColor = float3(3.984375, 3.984375, 3.984375) * (float3(0.00392156886, 0, 0.00392156886) + detailColor);
+                
+                Texture2D tintTexture = Textures[NonUniformResourceIndex(material.TintTexture())];
+	            float3 tintColor = tintTexture.SampleLevel(BaseSampler, texCoord0, 0).rgb;
+	            tintColor = tintColor * Albedo * 2.0f;
+	            tintColor = tintColor - tintColor * Albedo;
+	            Albedo = (Albedo * Albedo + tintColor) * detailColor;
+            } 
+            
+            [branch]
+            if (material.Feature == Feature::kFaceGenRGBTint) {
+	            float3 tintColor = material.BaseColor().rgb * Albedo * 2.0f;
+	            tintColor = tintColor - tintColor * Albedo;
+	            Albedo = float3(1.01171875f, 0.99609375f, 1.01171875f) * (Albedo * Albedo + tintColor);
+            }           
         } else if (material.ShaderType == ShaderType::Effect) {
             float3 base = float3(1, 1, 1);
 

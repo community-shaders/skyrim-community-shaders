@@ -19,8 +19,7 @@ void SkinningPipeline::CreateRootSignature(ID3D12Device5* device)
 	heap->CreateTable(
 		SkinningHeap::Table::SRV,
 		D3D12_DESCRIPTOR_RANGE_TYPE_SRV,
-		{ { SkinningHeap::Slot::LocalToRoot, 1, 0, dynamicFlags },
-			{ SkinningHeap::Slot::UpdateData, 1, 0, dynamicFlags },
+		{ { SkinningHeap::Slot::UpdateData, 1, 0, dynamicFlags },
 			{ SkinningHeap::Slot::BoneMatrices, 1, 0, dynamicFlags } });
 
 	heap->CreateTable(
@@ -75,6 +74,12 @@ void SkinningPipeline::SetupResources(ID3D12Device5* device)
 	DX::ThrowIfFailed(vertexUpdateBuffer->resource->SetName(L"Vertex Update Buffer"));
 
 	vertexUpdateBuffer->CreateSRV(heap->CPUHandle(SkinningHeap::Slot::UpdateData));
+
+	boneMatricesBuffer = eastl::make_unique<DX12::StructuredBufferUpload<float3x4>>(device, MAX_BONE_MATRICES, false, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+	DX::ThrowIfFailed(boneMatricesBuffer->resource->SetName(L"Bone Matrices Buffer"));
+
+	boneMatricesBuffer->CreateSRV(heap->CPUHandle(SkinningHeap::Slot::BoneMatrices));
+
 }
 
 void SkinningPipeline::QueueUpdate(Flags updateFlags, eastl::string path, Shape* shape, const float3x4& localToRoot)
@@ -96,17 +101,41 @@ bool SkinningPipeline::PrepareResources(ID3D12GraphicsCommandList4* commandList,
 	eastl::vector<VertexUpdateData> vertexUpdateData;
 	vertexUpdateData.reserve(queueSize);
 
+	eastl::vector<float3x4> boneMatricesData;
+	boneMatricesData.reserve(queueSize);
+
 	// Barrier to UAV state
 	eastl::vector<CD3DX12_RESOURCE_BARRIER> barriers;
 	barriers.reserve(queueSize);
 
+	float4 cameraPosition = globals::game::frameBufferCached.GetCameraPosAdjust();
+	auto eye = Util::GetEyePosition(0);
+
+	float3 bonePivot = float3(cameraPosition.x - eye.x, cameraPosition.y - eye.y, cameraPosition.z - eye.z);
+
 	for (auto& queuedShape : queuedShapes) {
 		Shape* shape = queuedShape.shape;
 
-		vertexCount = std::max(vertexCount, (uint)shape->vertexCount);
-		vertexUpdateData.emplace_back(shape->allocation->GetIndex(), queuedShape.updateFlags, shape->vertexCount, 0, queuedShape.localToRoot);
+		uint boneOffset = (uint)boneMatricesData.size();
 
+		vertexCount = std::max(vertexCount, (uint)shape->vertexCount);
+		vertexUpdateData.emplace_back(shape->allocation->GetIndex(), queuedShape.updateFlags, shape->vertexCount, boneOffset, queuedShape.localToRoot, bonePivot, 0);
+
+		// Dynamic TriShapes
 		shape->UpdateUploadDynamicBuffers(commandList);
+
+		// Skinning - This is a bit more involved
+		if (queuedShape.updateFlags & Flags::Skinned) {
+			// Reset vertices, maybe we should keep a copy of this buffer already bound to our shaders? 
+			// That way instead of barrier -> copy -> barrier we just read the initial vertices from the srv
+			if (!(queuedShape.updateFlags & Flags::Dynamic)) {
+				shape->vertexBuffer->Upload(commandList);
+			}
+
+			boneMatricesData.insert(boneMatricesData.end(),
+				eastl::make_move_iterator(shape->boneMatrices.begin()),
+				eastl::make_move_iterator(shape->boneMatrices.end()));
+		}
 
 		CD3DX12_RESOURCE_BARRIER barrier;
 		if (shape->vertexBuffer->GetTransitionBarrier(D3D12_RESOURCE_STATE_UNORDERED_ACCESS, barrier))
@@ -122,6 +151,9 @@ bool SkinningPipeline::PrepareResources(ID3D12GraphicsCommandList4* commandList,
 
 	vertexUpdateBuffer->UpdateList(vertexUpdateData.data(), count);
 	vertexUpdateBuffer->Upload(commandList);
+
+	boneMatricesBuffer->UpdateList(boneMatricesData.data(), boneMatricesData.size());
+	boneMatricesBuffer->Upload(commandList);
 
 	return true;
 }

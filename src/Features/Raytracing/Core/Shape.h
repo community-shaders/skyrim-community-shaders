@@ -238,6 +238,8 @@ public:
 	eastl::unique_ptr<DX12::StructuredBufferUploadMA<Skinning>> skinningBuffer = nullptr;
 	eastl::unique_ptr<DX12::StructuredBufferUploadMA<Triangle>> triangleBuffer = nullptr;
 
+	eastl::vector<float3x4> boneMatrices;
+
 	Material material;
 
 	Flags flags = Flags::None;
@@ -277,6 +279,8 @@ public:
 	void UpdateUploadDynamicBuffers(ID3D12GraphicsCommandList4* commandList);
 
 	bool UpdateSkinning();
+
+	//eastl::vector<float3x4> GetBoneMatrices();
 
 	// For PBR shader flags we need to copy exactly what TruePBR does
 	static stl::enumeration<PBRShaderFlags, uint32_t> GetPBRShaderFlags(const BSLightingShaderMaterialPBR* pbrMaterial);

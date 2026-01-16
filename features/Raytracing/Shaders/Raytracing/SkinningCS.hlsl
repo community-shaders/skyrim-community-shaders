@@ -5,21 +5,60 @@
 
 #define MAX_BONES (255)
 
+struct BoneMatrix
+{
+    row_major float3x4 World;
+};
+
 RWStructuredBuffer<Vertex> OutputVertices[]             : register(u0);
 
-//StructuredBuffer<float3x4> LocalToRoot                  : register(t0, space0);
-StructuredBuffer<VertexUpdateData> UpdateData           : register(t1, space0);
-//StructuredBuffer<float3x4> BoneMatrices                 : register(t2, space0);
+StructuredBuffer<VertexUpdateData> UpdateData           : register(t0, space0);
+StructuredBuffer<BoneMatrix> BoneMatrices               : register(t1, space0);
 
-//StructuredBuffer<BoneMatrices> MeshBoneMatrices[]     : register(t0, space1);
 StructuredBuffer<float4> DynamicVertices[]              : register(t0, space1);
+
 StructuredBuffer<Skinning> MeshSkinning[]               : register(t0, space2);
+
 //StructuredBuffer<Vertex> Vertices[]                     : register(t0, space2);
 
 namespace Flags
 {
-    static const uint16_t Dynamic = (1 << 1);
-    static const uint16_t Skinned = (1 << 2); 
+    static const uint Dynamic = (1 << 1);
+    static const uint Skinned = (1 << 2); 
+}
+
+float3x4 GetBoneTransformMatrix(Skinning skinning, uint boneOffset)
+{
+	float3x4 boneMatrix1 = BoneMatrices[boneOffset + skinning.GetBone(0)].World;
+	float3x4 boneMatrix2 = BoneMatrices[boneOffset + skinning.GetBone(1)].World;
+	float3x4 boneMatrix3 = BoneMatrices[boneOffset + skinning.GetBone(2)].World;
+	float3x4 boneMatrix4 = BoneMatrices[boneOffset + skinning.GetBone(3)].World;
+
+	return boneMatrix1 * skinning.weight[0] +
+		    boneMatrix2 * skinning.weight[1] +
+		    boneMatrix3 * skinning.weight[2] +
+		    boneMatrix4 * skinning.weight[3];
+}
+
+float3x4 GetBoneTransformMatrix(Skinning skinning, float3 pivot, uint boneOffset)
+{
+    float3x4 pivotMatrix = transpose(float4x3(0.0.xxx, 0.0.xxx, 0.0.xxx, pivot));
+    
+	float3x4 boneMatrix1 = BoneMatrices[boneOffset + skinning.GetBone(0)].World;
+	float3x4 boneMatrix2 = BoneMatrices[boneOffset + skinning.GetBone(1)].World;
+	float3x4 boneMatrix3 = BoneMatrices[boneOffset + skinning.GetBone(2)].World;
+	float3x4 boneMatrix4 = BoneMatrices[boneOffset + skinning.GetBone(3)].World;
+
+	float3x4 unitMatrix = float3x4(1.0.xxxx, 1.0.xxxx, 1.0.xxxx);
+	float3x4 weightMatrix1 = unitMatrix * skinning.weight[0];
+	float3x4 weightMatrix2 = unitMatrix * skinning.weight[1];
+	float3x4 weightMatrix3 = unitMatrix * skinning.weight[2];
+	float3x4 weightMatrix4 = unitMatrix * skinning.weight[3];
+
+	return (boneMatrix1 - pivotMatrix) * weightMatrix1 +
+		    (boneMatrix2 - pivotMatrix) * weightMatrix2 +
+		    (boneMatrix3 - pivotMatrix) * weightMatrix3 +
+		    (boneMatrix4 - pivotMatrix) * weightMatrix4;
 }
 
 #if defined(OPTIMIZED_MAPPING)
@@ -35,56 +74,41 @@ void main(uint3 DTid : SV_DispatchThreadID)
     const uint modelIndex = DTid.x;
     const uint vertexIndex = DTid.y;    
 #endif 
-    
-    //float3x4 localToRoot = LocalToRoot[modelIndex];
-    //float3x3 localToRootRot = (float3x3)localToRoot;
 
     VertexUpdateData updateData = UpdateData[modelIndex];
 
-    if (vertexIndex >= uint(updateData.vertexCount))
+    if (vertexIndex >= updateData.vertexCount)
         return;
 
     uint shapeIndex = NonUniformResourceIndex(updateData.index);
-
-    //StructuredBuffer<Vertex> vertices = Vertices[shapeIndex];
 
     // This contains the original uploaded vertex
     Vertex vertex = OutputVertices[shapeIndex][vertexIndex];
 
     if (updateData.flags & Flags::Dynamic)
     {
-        float4 dynamicVertex = DynamicVertices[shapeIndex][vertexIndex];      
+        float4 dynamicVertex = DynamicVertices[shapeIndex][vertexIndex];
         
-        vertex.Position = mul(updateData.localToRoot, float4(dynamicVertex.xyz, 1.0f));
+        if (updateData.flags & Flags::Skinned)
+            vertex.Position = dynamicVertex.xyz;
+        else
+            vertex.Position = mul(updateData.localToRoot, float4(dynamicVertex.xyz, 1.0f));
+        
         //vertex.Bitangent = (half3) mul(localToRootRot, half3(dynamicVertex.w, vertex.Bitangent.yz));
     }
     
-    /*if (updateData.flags & Flags::Skinned)
+    if (updateData.flags & Flags::Skinned)
     {
-        StructuredBuffer<Skinning> skinning = MeshSkinning[shapeIndex];
-    
-        Skinning vertSkinning = skinning[v];
+        Skinning skinning = MeshSkinning[shapeIndex][vertexIndex];
 
-        float3x4 boneMatrix;
-
-        uint boneMatrixBase = id.y * MAX_BONES;
-
-        [unroll]
-        for (uint b = 0; b < 4; b++)
-        {
-            half weight = vertSkinning.weight[b];
-            uint bone = vertSkinning.GetBone(b);
-
-            boneMatrix += BoneMatrices[boneMatrixBase + bone] * weight;
-        }
-
+        float3x4 boneMatrix = GetBoneTransformMatrix(skinning, updateData.bonePivot, updateData.boneOffset);
         float3x3 boneMatrixRot = (float3x3)boneMatrix;
 
         vertex.Position = mul(boneMatrix, float4(vertex.Position, 1.0f));
         vertex.Normal = (half3)mul(boneMatrixRot, vertex.Normal);
         vertex.Tangent = (half3)mul(boneMatrixRot, vertex.Tangent);
         vertex.Bitangent = (half3)mul(boneMatrixRot, vertex.Bitangent);
-    }*/
-
+    } 
+    
     OutputVertices[shapeIndex][vertexIndex] = vertex;
 }

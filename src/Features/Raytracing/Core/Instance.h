@@ -15,6 +15,8 @@ struct Instance
 	float3x4 transform;
 	Util::FrameChecker frameChecker;
 
+	eastl::unordered_map<RE::NiAVObject*, float3x4> boneMatrices;
+
 	// Checks for skinned and dynamic trishapes update
 	void Update(RE::NiNode* pNiNode, const eastl::pair<eastl::string, Model*>& modelPair, SkinningPipeline* skinningPipeline)
 	{
@@ -34,6 +36,9 @@ struct Instance
 		XMStoreFloat3x4(&transform, world);
 
 		auto worldInverse = pNiNode->world.Invert();
+		auto worldToRoot = GetXMFromNiTransform(worldInverse);
+
+		boneMatrices.clear();
 
 		auto& [path, model] = modelPair;
 
@@ -47,6 +52,26 @@ struct Instance
 
 				if (shape->UpdateSkinning()) {
 					updateFlags |= Flags::Skinned;
+				}
+
+				if (updateFlags & Flags::Skinned) {
+					auto& skinInstance = shape->geometry->GetGeometryRuntimeData().skinInstance;
+
+					shape->boneMatrices.clear();
+					shape->boneMatrices.resize(skinInstance->numMatrices);
+
+					float3x4* boneMatricesArray = reinterpret_cast<float3x4*>(skinInstance->boneMatrices);
+
+					for (uint i = 0; i < skinInstance->numMatrices; i++) {
+						auto* bone = skinInstance->bones[i];
+
+						if (auto it = boneMatrices.find(bone); it != boneMatrices.end()) {
+							shape->boneMatrices[i] = it->second;
+						} else {
+							XMStoreFloat3x4(&shape->boneMatrices[i], XMMatrixMultiply(XMLoadFloat3x4(&boneMatricesArray[i]), worldToRoot));
+							boneMatrices.try_emplace(bone, shape->boneMatrices[i]);
+						}
+					}
 				}
 
 				if ((updateFlags & Flags::Dynamic) || (updateFlags & Flags::Skinned)) {
