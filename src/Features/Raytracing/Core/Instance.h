@@ -38,17 +38,6 @@ struct Instance
 		auto worldInverse = pNiNode->world.Invert();
 		auto worldToRoot = GetXMFromNiTransform(worldInverse);
 
-
-		/*float4 cameraPos = globals::game::frameBufferCached.GetCameraPosAdjust();
-		auto cameraVector = XMVectorSelect(
-			DirectX::g_XMZero, 
-			XMVector3TransformCoord(
-				DirectX::XMVectorSet(cameraPos.x, cameraPos.y, cameraPos.z, 1.0f), 
-				worldToRoot), 
-			DirectX::g_XMSelect1110);*/
-
-		//logger::info("Update - CameraPosition: {}, WorldToRoot [{}, {}, {}, {}]", cameraPos, float4(worldToRoot.r[0]), float4(worldToRoot.r[1]), float4(worldToRoot.r[2]), float4(worldToRoot.r[3]));
-
 		boneMatrices.clear();
 
 		auto& [path, model] = modelPair;
@@ -79,19 +68,8 @@ struct Instance
 						if (auto it = boneMatrices.find(bone); it != boneMatrices.end()) {
 							shape->boneMatrices[i] = it->second;
 						} else {
-							auto oBoneMatrix = XMLoadFloat3x4(&boneMatricesArray[i]);
-
-							// Pivot
-							//oBoneMatrix.r[3] = DirectX::XMVectorSubtract(oBoneMatrix.r[3], cameraVector);
-
-							// Transforms from world to root
-							auto rBoneMatrix = XMMatrixMultiply(oBoneMatrix, worldToRoot);
-
-							float3x4 rBoneMatrix3x4;
-							XMStoreFloat3x4(&rBoneMatrix3x4, rBoneMatrix);
-
-							shape->boneMatrices[i] = rBoneMatrix3x4;
-							boneMatrices.try_emplace(bone, rBoneMatrix3x4);
+							XMStoreFloat3x4(&shape->boneMatrices[i], XMMatrixMultiply(XMLoadFloat3x4(&boneMatricesArray[i]), worldToRoot));
+							boneMatrices.try_emplace(bone, shape->boneMatrices[i]);
 						}
 					}
 				}
