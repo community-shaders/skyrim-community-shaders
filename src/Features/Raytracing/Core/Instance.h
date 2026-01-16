@@ -62,14 +62,24 @@ struct Instance
 
 					float3x4* boneMatricesArray = reinterpret_cast<float3x4*>(skinInstance->boneMatrices);
 
+					auto calcBoneMatrix = [&](uint i) {
+						float3x4 boneMatrix;
+						XMStoreFloat3x4(&boneMatrix, XMMatrixMultiply(XMLoadFloat3x4(&boneMatricesArray[i]), worldToRoot));
+						return boneMatrix;
+					};
+
 					for (uint i = 0; i < skinInstance->numMatrices; i++) {
 						auto* bone = skinInstance->bones[i];
 
-						if (auto it = boneMatrices.find(bone); it != boneMatrices.end()) {
-							shape->boneMatrices[i] = it->second;
+						if (bone) {
+							if (auto it = boneMatrices.find(bone); it != boneMatrices.end()) {
+								shape->boneMatrices[i] = it->second;
+							} else {
+								shape->boneMatrices[i] = calcBoneMatrix(i);
+								boneMatrices.try_emplace(bone, shape->boneMatrices[i]);
+							}
 						} else {
-							XMStoreFloat3x4(&shape->boneMatrices[i], XMMatrixMultiply(XMLoadFloat3x4(&boneMatricesArray[i]), worldToRoot));
-							boneMatrices.try_emplace(bone, shape->boneMatrices[i]);
+							shape->boneMatrices[i] = calcBoneMatrix(i);
 						}
 					}
 				}
