@@ -21,6 +21,7 @@
 #include "Features/ExtendedTranslucency.h"
 #include "Features/HairSpecular.h"
 #include "Features/WetnessEffects.h"
+#include "Features/LinearLighting.h"
 
 #include <imgui_stdlib.h>
 
@@ -2826,12 +2827,14 @@ void Raytracing::DrawRTGI()
 		// Update Features
 		{
 			auto wetnessEffect = globals::features::wetnessEffects.GetCommonBufferData();
+			auto linearLighting = globals::features::linearLighting.GetCommonBufferData();
 
 			frameData->Features.ExtendedMaterial = *reinterpret_cast<CPMSettings*>(&globals::features::extendedMaterials.settings);
 			frameData->Features.WetnessEffects = *reinterpret_cast<WetnessEffectsSettings*>(&wetnessEffect);
 			frameData->Features.CloudShadows = *reinterpret_cast<CloudShadowsSettings*>(&globals::features::cloudShadows.settings);
 			frameData->Features.HairSpecular = *reinterpret_cast<HairSpecularSettings*>(&globals::features::hairSpecular.settings);
 			frameData->Features.ExtendedTranslucency = *reinterpret_cast<ExtendedTranslucencySettings*>(&globals::features::extendedTranslucency.settings);
+			frameData->Features.LinearLighting = *reinterpret_cast<LinearLightingSettings*>(&linearLighting);
 		}
 
 		// Upload buffer 0, for SHaRC resolve pass

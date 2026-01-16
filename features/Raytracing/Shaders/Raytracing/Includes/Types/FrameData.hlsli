@@ -48,7 +48,6 @@ alignas(16)
     uint2 Pad0;
     SHaRCFrameData SHaRC;
     FeatureData Features;
-    uint4 Pad1[8];
 };
 #ifdef __cplusplus
 static_assert(sizeof(FrameData) == 768);

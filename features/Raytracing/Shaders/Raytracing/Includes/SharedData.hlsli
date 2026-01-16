@@ -119,6 +119,45 @@ struct ExtendedTranslucencySettings
 static_assert(sizeof(ExtendedTranslucencySettings) % 16 == 0);
 #endif
 
+struct LinearLightingSettings
+{
+    uint enableLinearLighting;
+    uint enableGammaCorrection;
+    uint isDirLightLinear;
+    float dirLightMult;
+    float lightGamma;
+    float colorGamma;
+    float emitColorGamma;
+    float glowmapGamma;
+    float ambientGamma;
+    float fogGamma;
+    float fogAlphaGamma;
+    float effectGamma;
+    float effectAlphaGamma;
+    float skyGamma;
+    float waterGamma;
+    float vlGamma;
+    float vanillaDiffuseMult;
+    float vanillaSpecularMult;
+    float grassDiffuseMult;
+    float grassSpecularMult;
+    float vanillaDiffuseColorMult;
+    float lightMult;
+    float directionalLightMult;
+    float pointLightMult;
+    float emitColorMult;
+    float glowmapMult;
+    float effectLightingMult;
+    float membraneEffectMult;
+    float bloodEffectMult;
+    float projectedEffectMult;
+    float deferredEffectMult;
+    float otherEffectMult;
+};
+#ifdef __cplusplus
+static_assert(sizeof(LinearLightingSettings) % 16 == 0);
+#endif
+
 struct FeatureData
 {
     CPMSettings ExtendedMaterial;
@@ -126,6 +165,7 @@ struct FeatureData
     CloudShadowsSettings CloudShadows;
     HairSpecularSettings HairSpecular;
     ExtendedTranslucencySettings ExtendedTranslucency;
+    LinearLightingSettings LinearLighting;
 };
 #ifdef __cplusplus
 static_assert(sizeof(FeatureData) % 16 == 0);
