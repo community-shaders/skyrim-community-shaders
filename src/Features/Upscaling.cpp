@@ -12,6 +12,26 @@
 #include <directx/d3dx12.h>
 #include <format>
 
+// Extended structure definition for BSImagespaceShaderISTemporalAA
+// TODO: Contribute this structure extension to alandtse/CommonLibVR
+// This extends RE::ImageSpaceManager::UNK_BSImagespaceShaderISTemporalAA with additional members
+namespace
+{
+	struct ExtendedTemporalAAStruct
+	{
+		RE::BSImagespaceShaderISTemporalAA* shader;                                // 00 - Main TAA shader
+		RE::BSImagespaceShader*             BSImagespaceShaderISTemporalAA_UI;     // 08 - TAA for UI elements
+		RE::BSImagespaceShader*             BSImagespaceShaderISTemporalAA_Water;  // 10 - TAA for water
+		bool                                taaEnabled;                            // 18 - Global TAA enable flag
+		std::uint8_t                        pad19[7];                              // 19 - Padding for alignment
+		std::uint64_t                       unk20;                                 // 20 - Unknown (needs further RE)
+		std::uint64_t                       unk28;                                 // 28 - Unknown (needs further RE)
+		std::uint64_t                       unk30;                                 // 30 - Unknown (needs further RE)
+		bool                                enableWaterTAA;                        // 38 - Water TAA enable flag
+	};
+	static_assert(sizeof(ExtendedTemporalAAStruct) == 0x40, "ExtendedTemporalAAStruct must be 0x40 bytes");
+}
+
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	Upscaling::Settings,
 	upscaleMethod,
@@ -701,11 +721,15 @@ void Upscaling::ConfigureTAA()
 	auto imageSpaceManager = RE::ImageSpaceManager::GetSingleton();
 	GET_INSTANCE_MEMBER(BSImagespaceShaderISTemporalAA, imageSpaceManager);
 
+	// Cast to extended structure to access enableWaterTAA
+	// This structure extension should be contributed to CommonLibVR upstream
+	auto* extendedStruct = reinterpret_cast<ExtendedTemporalAAStruct*>(BSImagespaceShaderISTemporalAA);
+
 	// Disable water TAA when upscaling is enabled
-	BSImagespaceShaderISTemporalAA->enableWaterTAA = upscaleMethod == UpscaleMethod::kNONE || upscaleMethod == UpscaleMethod::kTAA;
+	extendedStruct->enableWaterTAA = upscaleMethod == UpscaleMethod::kNONE || upscaleMethod == UpscaleMethod::kTAA;
 
 	// Force enable TAA if needed
-	BSImagespaceShaderISTemporalAA->taaEnabled = upscaleMethod != UpscaleMethod::kNONE;
+	extendedStruct->taaEnabled = upscaleMethod != UpscaleMethod::kNONE;
 }
 
 void Upscaling::ConfigureUpscaling(RE::BSGraphics::State* a_viewport)
