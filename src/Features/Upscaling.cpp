@@ -1497,11 +1497,14 @@ void Upscaling::Main_PostProcessing::thunk(RE::ImageSpaceManager* a_this, uint32
 	auto imageSpaceManager = RE::ImageSpaceManager::GetSingleton();
 	GET_INSTANCE_MEMBER(BSImagespaceShaderISTemporalAA, imageSpaceManager);
 
-	BSImagespaceShaderISTemporalAA->taaEnabled = upscaleMethod == UpscaleMethod::kTAA;
+	// Cast to extended structure for consistent access pattern
+	auto* extendedStruct = reinterpret_cast<ExtendedTemporalAAStruct*>(BSImagespaceShaderISTemporalAA);
+
+	extendedStruct->taaEnabled = upscaleMethod == UpscaleMethod::kTAA;
 
 	func(a_this, a3, a_target, a_4, a_5);
 
-	BSImagespaceShaderISTemporalAA->taaEnabled = false;
+	extendedStruct->taaEnabled = false;
 }
 
 void Upscaling::SetScissorRect::thunk(RE::BSGraphics::Renderer* This, int a_left, int a_top, int a_right, int a_bottom)
