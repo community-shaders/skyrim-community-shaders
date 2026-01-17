@@ -34,9 +34,8 @@ public:
 		std::string description;
 		bool enabled = true;
 
-		// Tracking for first-time application
-		std::string fileHash;          // Hash of override file content for change detection
-		std::time_t firstApplied = 0;  // Timestamp when first applied
+		// Hash for change detection
+		std::string fileHash;
 	};
 
 	static SettingsOverrideManager* GetSingleton()
@@ -52,29 +51,12 @@ public:
 	size_t DiscoverOverrides();
 
 	/**
-	 * @brief Applies overrides to settings JSON, respecting applied override tracking
-	 * @param baseSettings The default settings to start with
-	 * @param appliedOverrides Reference to tracking data for applied overrides
-	 * @return Modified settings with overrides applied (only new/changed overrides)
-	 */
-	size_t ApplyNewOverrides(json& baseSettings, json& appliedOverrides);
-
-	/**
 	 * @brief Applies overrides to a specific feature's settings JSON
 	 * @param featureName The short name of the feature
 	 * @param featureJson The feature's JSON settings to modify
 	 * @return Number of overrides applied
 	 */
 	size_t ApplyOverrides(const std::string& featureName, json& featureJson);
-
-	/**
-	 * @brief Applies feature-specific overrides respecting applied override tracking
-	 * @param featureName The short name of the feature
-	 * @param featureJson The feature's JSON settings to modify
-	 * @param appliedOverrides Reference to tracking data for applied overrides
-	 * @return Number of new overrides applied
-	 */
-	size_t ApplyNewFeatureOverrides(const std::string& featureName, json& featureJson, json& appliedOverrides);
 
 	/**
 	 * @brief Applies global overrides to the main settings JSON
@@ -163,6 +145,67 @@ public:
 	 * @param errorMessage Description of the failure
 	 */
 	void ReportOverrideFailure(const std::string& modName, const std::string& featureName, const std::string& errorMessage);
+
+	// === NEW: User Override System ===
+
+	/**
+	 * @brief Gets the user overrides directory path (Overrides/User/)
+	 */
+	std::filesystem::path GetUserOverridesDirectory() const;
+
+	/**
+	 * @brief Loads user override file for a feature if it exists
+	 * @param featureName The short name of the feature (or "Global")
+	 * @param featureJson JSON to merge user overrides into
+	 * @return True if user override was loaded and applied
+	 */
+	bool LoadUserOverride(const std::string& featureName, json& featureJson);
+
+	/**
+	 * @brief Saves user modifications to the user override file
+	 * Only saves if current settings differ from the merged override state
+	 * @param featureName The short name of the feature (or "Global")
+	 * @param currentSettings Current settings to compare and potentially save
+	 * @param overrideSettings The base override settings (after all overrides applied)
+	 * @return True if user override file was created/updated, false if no changes needed
+	 */
+	bool SaveUserOverride(const std::string& featureName, const json& currentSettings, const json& overrideSettings);
+
+	/**
+	 * @brief Checks if a feature has user modifications on top of overrides
+	 * @param featureName The short name of the feature (or "Global")
+	 * @return True if a .user file exists for this feature
+	 */
+	bool HasUserOverride(const std::string& featureName) const;
+
+	/**
+	 * @brief Deletes user override file for a feature (used by "Apply Override" button)
+	 * @param featureName The short name of the feature (or "Global")
+	 * @return True if file was deleted or didn't exist
+	 */
+	bool DeleteUserOverride(const std::string& featureName);
+
+	/**
+	 * @brief Computes combined hash of all override files for a feature
+	 * Used to detect when overrides have changed (mod update/reinstall)
+	 * @param featureName The short name of the feature
+	 * @return Combined hash string, empty if no overrides
+	 */
+	std::string GetCombinedOverrideHash(const std::string& featureName) const;
+
+	/**
+	 * @brief Validates and cleans up user override files
+	 * Deletes .user files whose corresponding override hashes have changed
+	 */
+	void CleanupStaleUserOverrides();
+
+	/**
+	 * @brief Gets the merged override settings for a feature (all overrides applied, no user modifications)
+	 * @param featureName The short name of the feature
+	 * @param baseSettings The base settings to start with
+	 * @return Settings with all overrides applied
+	 */
+	json GetMergedOverrideSettings(const std::string& featureName, const json& baseSettings);
 
 private:
 	SettingsOverrideManager() = default;

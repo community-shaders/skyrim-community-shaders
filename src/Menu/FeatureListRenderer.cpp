@@ -647,9 +647,9 @@ void FeatureListRenderer::DrawMenuVisitor::RenderFeatureActionButtons(Feature* f
 
 		if (auto _tt = Util::HoverTooltipWrapper()) {
 			ImGui::Text(
-				"Reapplies override settings from mod override JSON files. "
-				"This will overwrite current settings with override values. "
-				"You will still need to Save Settings to make these changes permanent.");
+				"Restores original override settings from mod files.\n"
+				"This will discard your customizations and revert to\n"
+				"the mod author's recommended settings.");
 		}
 	}
 }
