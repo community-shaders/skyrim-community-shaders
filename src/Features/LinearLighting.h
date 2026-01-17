@@ -48,7 +48,8 @@ struct LinearLighting : Feature
 		float grassSpecularMult = 0.32f;
 		float vanillaDiffuseColorMult = 1.5f;
 		float lightMult = 1.0f;
-		float directionalLightMult = 1.0f;
+		float directionalLightMultExterior = 1.0f;
+		float directionalLightMultInterior = 1.0f;
 		float pointLightMult = 1.0f;
 		float emitColorMult = 1.0f;
 		float glowmapMult = 0.5f;
@@ -86,7 +87,7 @@ struct LinearLighting : Feature
 		float grassSpecularMult;
 		float vanillaDiffuseColorMult;
 		float lightMult;
-		float directionalLightMult;
+		float directionalLightMult;  // Computed based on interior/exterior
 		float pointLightMult;
 		float emitColorMult;
 		float glowmapMult;
