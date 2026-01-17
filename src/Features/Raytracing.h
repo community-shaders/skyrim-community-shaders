@@ -268,7 +268,7 @@ struct Raytracing : public OverlayFeature
 		return loaded && settings.Enabled;
 	};
 
-	const bool RaytracedShadows() 
+	const bool RaytracedShadows()
 	{
 		return settings.RaytracedShadows && !settings.PathTracing;
 	}
