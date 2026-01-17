@@ -1036,7 +1036,7 @@ DiffuseOutput GetWaterDiffuseColor(PS_INPUT input, float3 normal, float3 viewDir
 #			endif
 }
 
-float3 GetSunColor(float3 normal, float3 viewDirection, float3 worldPosition)
+float3 GetSunColor(float3 normal, float3 viewDirection, float3 worldPosition, uint eyeIndex)
 {
 #			if defined(UNDERWATER)
 	return 0.0.xxx;
@@ -1051,7 +1051,7 @@ float3 GetSunColor(float3 normal, float3 viewDirection, float3 worldPosition)
 	float3 sunColor = Color::DirectionalLight(SunColor.xyz / max(llDirLightMult, 1e-5), SharedData::linearLightingSettings.isDirLightLinear) * SunDir.w * DeepColor.w * llDirLightMult;
 #			if defined(EXP_HEIGHT_FOG)
 	if (SharedData::exponentialHeightFogSettings.enabled) {
-		sunColor *= ExponentialHeightFog::GetSunlightFogAttenuation(worldPosition.xyz, FrameBuffer::CameraPosAdjust[0].xyz);
+		sunColor *= ExponentialHeightFog::GetSunlightFogAttenuation(worldPosition.xyz, FrameBuffer::CameraPosAdjust[eyeIndex].xyz);
 	}
 #			endif
 	return reflectionMul * sunColor;
@@ -1219,7 +1219,7 @@ PS_OUTPUT main(PS_INPUT input)
 	}
 #					endif
 #				else
-	float3 sunColor = GetSunColor(normal, viewDirection, input.WPosition.xyz);
+	float3 sunColor = GetSunColor(normal, viewDirection, input.WPosition.xyz, eyeIndex);
 
 	if (!(Permutation::PixelShaderDescriptor & Permutation::WaterFlags::Interior) && any(sunColor > 0.0)) {
 		sunColor *= ShadowSampling::GetWaterShadow(screenNoise, input.WPosition.xyz, eyeIndex);

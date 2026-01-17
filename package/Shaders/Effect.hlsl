@@ -837,6 +837,8 @@ PS_OUTPUT main(PS_INPUT input)
 	}
 #	endif
 
+	lightColor = Color::EffectMult(lightColor);
+
 #	if !defined(MOTIONVECTORS_NORMALS)
 	float fogFactor = Color::FogAlpha(input.FogParam.w);
 	float3 fogColor = Color::Fog(input.FogParam.xyz);
@@ -848,9 +850,13 @@ PS_OUTPUT main(PS_INPUT input)
 #		if defined(EXP_HEIGHT_FOG)
 	if (SharedData::exponentialHeightFogSettings.enabled) {
 		float4 exponentialHeightFog = ExponentialHeightFog::GetExponentialHeightFog(input.WorldPosition.xyz, FrameBuffer::CameraPosAdjust[eyeIndex].xyz, fogColor);
+#			if defined(ADDBLEND) || defined(MULTBLEND) || defined(MULTBLEND_DECAL)
 		fogColor = exponentialHeightFog.xyz;
 		fogFactor = exponentialHeightFog.w;
-		fogMul = 1;
+#			else
+		fogColor = lightColor;
+		alpha *= 1 - exponentialHeightFog.w;
+#			endif
 	}
 #		endif
 #		if defined(ADDBLEND)
@@ -864,9 +870,7 @@ PS_OUTPUT main(PS_INPUT input)
 	float3 blendedColor = lightColor.xyz;
 #	endif
 
-	alpha = Color::EffectAlpha(alpha);
-
-	float4 finalColor = float4(Color::EffectMult(blendedColor), alpha);
+	float4 finalColor = float4(blendedColor, alpha);
 #	if defined(MULTBLEND_DECAL)
 	finalColor.xyz *= alpha;
 #	else
