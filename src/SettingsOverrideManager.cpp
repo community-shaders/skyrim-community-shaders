@@ -1050,6 +1050,14 @@ bool SettingsOverrideManager::SaveUserOverride(const std::string& featureName, c
 		}
 
 		file << currentSettings.dump(1);
+		file.flush();
+
+		if (file.fail()) {
+			logger::info("Failed to write user override file: {}", userFilePath.string());
+			file.close();
+			return false;
+		}
+
 		file.close();
 
 		// Store the current override hash so we can detect if overrides change later
@@ -1182,7 +1190,7 @@ void SettingsOverrideManager::CleanupStaleUserOverrides()
 			std::string currentHash = GetCombinedOverrideHash(featureName);
 			std::string trackingKey = featureName + "_hash";
 
-			if (tracking.contains(trackingKey)) {
+			if (tracking.contains(trackingKey) && tracking[trackingKey].is_string()) {
 				std::string storedHash = tracking[trackingKey].get<std::string>();
 				if (storedHash != currentHash) {
 					// Override file changed, delete user customizations
@@ -1193,7 +1201,7 @@ void SettingsOverrideManager::CleanupStaleUserOverrides()
 					tracking[trackingKey] = currentHash;
 				}
 			} else {
-				// First time tracking this feature's hash
+				// First time tracking or invalid entry, set the hash
 				tracking[trackingKey] = currentHash;
 			}
 		}
