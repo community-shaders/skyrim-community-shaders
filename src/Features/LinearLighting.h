@@ -110,6 +110,8 @@ struct LinearLighting : Feature
 	uint isDirLightLinear = false;
 	float dirLightMult = 1.0f;
 	float lastConvertedClearColor[3] = { -1.0f, -1.0f, -1.0f };  // Track to avoid double conversion
+	float lastOriginalClearColor[3] = { -1.0f, -1.0f, -1.0f };   // Source gamma-space color
+	float lastConvertedClearGamma = -1.0f;
 
 	virtual void DrawSettings() override;
 

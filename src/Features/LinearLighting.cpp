@@ -117,24 +117,36 @@ void LinearLighting::ConvertClearColor()
 	if (renderer) {
 		auto& rendererData = renderer->GetRendererData();
 
-		// Check if we've already converted this exact color (avoid double conversion)
-		// This handles the case where cubemap and main pass both call us without engine reset
-		if (rendererData.clearColor[0] == lastConvertedClearColor[0] &&
+		const bool isAlreadyConverted =
+			rendererData.clearColor[0] == lastConvertedClearColor[0] &&
 			rendererData.clearColor[1] == lastConvertedClearColor[1] &&
-			rendererData.clearColor[2] == lastConvertedClearColor[2]) {
+			rendererData.clearColor[2] == lastConvertedClearColor[2];
+
+		// Only refresh the source color when the engine has changed it
+		if (!isAlreadyConverted &&
+			(rendererData.clearColor[0] != lastOriginalClearColor[0] ||
+				rendererData.clearColor[1] != lastOriginalClearColor[1] ||
+				rendererData.clearColor[2] != lastOriginalClearColor[2])) {
+			lastOriginalClearColor[0] = rendererData.clearColor[0];
+			lastOriginalClearColor[1] = rendererData.clearColor[1];
+			lastOriginalClearColor[2] = rendererData.clearColor[2];
+		}
+
+		float gamma = std::clamp(settings.clearRenderGamma, 0.1f, 3.0f);
+		if (isAlreadyConverted && gamma == lastConvertedClearGamma) {
 			return;
 		}
 
-		float gamma = settings.clearRenderGamma;
-		rendererData.clearColor[0] = std::pow(rendererData.clearColor[0], gamma);
-		rendererData.clearColor[1] = std::pow(rendererData.clearColor[1], gamma);
-		rendererData.clearColor[2] = std::pow(rendererData.clearColor[2], gamma);
+		rendererData.clearColor[0] = std::pow(lastOriginalClearColor[0], gamma);
+		rendererData.clearColor[1] = std::pow(lastOriginalClearColor[1], gamma);
+		rendererData.clearColor[2] = std::pow(lastOriginalClearColor[2], gamma);
 		// Alpha (clearColor[3]) typically doesn't need gamma correction
 
 		// Remember what we converted to
 		lastConvertedClearColor[0] = rendererData.clearColor[0];
 		lastConvertedClearColor[1] = rendererData.clearColor[1];
 		lastConvertedClearColor[2] = rendererData.clearColor[2];
+		lastConvertedClearGamma = gamma;
 	}
 }
 
