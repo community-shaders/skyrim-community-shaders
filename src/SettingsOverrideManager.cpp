@@ -1010,9 +1010,9 @@ bool SettingsOverrideManager::SaveUserOverride(const std::string& featureName, c
 		if (!currentSettings.contains(key)) {
 			continue;
 		}
-		
+
 		const auto& currentValue = currentSettings[key];
-		
+
 		// For numeric values, compare with tolerance to handle float32/float64 precision differences
 		// JSON stores floats as float64, but C++ features often use float32, causing precision loss
 		if (currentValue.is_number() && overrideValue.is_number()) {
@@ -1209,4 +1209,5 @@ json SettingsOverrideManager::GetMergedOverrideSettings(const std::string& featu
 {
 	json merged = baseSettings;
 	ApplyOverrides(featureName, merged);
-	return merged;}
+	return merged;
+}
