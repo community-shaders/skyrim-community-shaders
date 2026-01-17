@@ -97,12 +97,17 @@ void main(uint3 DTid : SV_DispatchThreadID)
         Skinning skinning = MeshSkinning[shapeIndex][vertexIndex];
 
         float3x4 boneMatrix = GetBoneTransformMatrix(skinning, updateData.bonePivot, updateData.boneOffset);
-        float3x3 boneMatrixRot = (float3x3)boneMatrix;
-
+        
         vertex.Position = mul(boneMatrix, float4(vertex.Position, 1.0f));
-        vertex.Normal = (half3)normalize(mul(boneMatrixRot, vertex.Normal));
-        vertex.Tangent = (half3)normalize(mul(boneMatrixRot, vertex.Tangent));
-        vertex.Bitangent = (half3)normalize(mul(boneMatrixRot, vertex.Bitangent));
+        
+        if ((updateData.flags & Flags::Dynamic) == 0)
+        {
+            float3x3 boneMatrixRot = (float3x3)boneMatrix;
+            
+            vertex.Normal = (half3) normalize(mul(boneMatrixRot, vertex.Normal));
+            vertex.Tangent = (half3) normalize(mul(boneMatrixRot, vertex.Tangent));
+            vertex.Bitangent = (half3) normalize(mul(boneMatrixRot, vertex.Bitangent));
+        }
     }
 
     OutputVertices[shapeIndex][vertexIndex] = vertex;

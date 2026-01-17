@@ -71,24 +71,7 @@ struct Instance
 				}
 
 				if ((updateFlags & Flags::Dynamic) || (updateFlags & Flags::Skinned)) {
-					DirectX::XMMATRIX localToRootXM;
-
-					if (updateFlags & Flags::Skinned) {
-						//auto& skinInstance = shape->geometry->GetGeometryRuntimeData().skinInstance;
-
-						localToRootXM = GetXMFromNiTransform(shape->geometry->local);  // skinInstance->skinData->rootParentToSkin.Invert()
-					} else {
-						if (shape->geometry->parent == pNiNode) {
-							localToRootXM = GetXMFromNiTransform(shape->geometry->local);
-						} else {
-							localToRootXM = GetXMFromNiTransform(worldInverse * shape->geometry->world);
-						}
-					}
-
-					float3x4 localToRoot;
-					XMStoreFloat3x4(&localToRoot, localToRootXM);
-
-					skinningPipeline->QueueUpdate(updateFlags, path, shape.get(), localToRoot);
+					skinningPipeline->QueueUpdate(updateFlags, path, shape.get());
 				}
 			}
 		}

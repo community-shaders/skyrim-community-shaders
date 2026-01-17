@@ -85,13 +85,12 @@ void SkinningPipeline::SetupResources(ID3D12Device5* device)
 	boneMatricesBuffer->CreateSRV(heap->CPUHandle(SkinningHeap::Slot::BoneMatrices));
 }
 
-void SkinningPipeline::QueueUpdate(Flags updateFlags, eastl::string path, Shape* shape, const float3x4& localToRoot)
+void SkinningPipeline::QueueUpdate(Flags updateFlags, eastl::string path, Shape* shape)
 {
 	queuedShapes.emplace_back(
 		updateFlags,
 		path,
-		shape,
-		localToRoot);
+		shape);
 }
 
 bool SkinningPipeline::PrepareResources(ID3D12GraphicsCommandList4* commandList, uint& count, uint& vertexCount)
@@ -122,7 +121,7 @@ bool SkinningPipeline::PrepareResources(ID3D12GraphicsCommandList4* commandList,
 		uint boneOffset = (uint)boneMatricesData.size();
 
 		vertexCount = std::max(vertexCount, (uint)shape->vertexCount);
-		vertexUpdateData.emplace_back(shape->allocation->GetIndex(), queuedShape.updateFlags, shape->vertexCount, boneOffset, queuedShape.localToRoot, bonePivot, 0);
+		vertexUpdateData.emplace_back(shape->allocation->GetIndex(), queuedShape.updateFlags, shape->vertexCount, boneOffset, bonePivot, 0);
 
 		// Dynamic TriShapes
 		shape->UpdateUploadDynamicBuffers(commandList);

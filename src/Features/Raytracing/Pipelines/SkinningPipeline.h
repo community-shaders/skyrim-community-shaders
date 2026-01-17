@@ -64,7 +64,6 @@ struct SkinningPipeline : ComputePipeline<SkinningHeap>
 		Flags updateFlags;
 		eastl::string path;
 		Shape* shape;
-		float3x4 localToRoot;
 	};
 
 	eastl::vector<QueuedShape> queuedShapes;
@@ -79,7 +78,7 @@ struct SkinningPipeline : ComputePipeline<SkinningHeap>
 	void CreateRootSignature(ID3D12Device5* device) override;
 	void CompileShaders(ID3D12Device5* device) override;
 	void SetupResources(ID3D12Device5* device) override;
-	void QueueUpdate(Flags updateFlags, eastl::string name, Shape* shape, const float3x4& localToRoot);
+	void QueueUpdate(Flags updateFlags, eastl::string name, Shape* shape);
 	bool PrepareResources(ID3D12GraphicsCommandList4* commandList, uint& count, uint& vertexCount);
 	void UpdateBLASES(ID3D12GraphicsCommandList4* commandList);
 	void RestoreResources(ID3D12GraphicsCommandList4* commandList);
