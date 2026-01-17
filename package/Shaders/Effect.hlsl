@@ -870,6 +870,8 @@ PS_OUTPUT main(PS_INPUT input)
 	float3 blendedColor = lightColor.xyz;
 #	endif
 
+	alpha = Color::EffectAlpha(alpha);
+
 	float4 finalColor = float4(blendedColor, alpha);
 #	if defined(MULTBLEND_DECAL)
 	finalColor.xyz *= alpha;
