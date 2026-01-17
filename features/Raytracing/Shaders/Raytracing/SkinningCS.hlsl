@@ -93,8 +93,6 @@ void main(uint3 DTid : SV_DispatchThreadID)
         //vertex.Tangent = (half3)normalize(float3(dynamicVertex.w, vertex.Tangent.yz));
     } 
 
-    //            vertex.Position = mul(updateData.localToRoot, float4(vertex.Position, 1.0f));   
-    
     if (updateData.flags & Flags::Skinned)
     {
         Skinning skinning = MeshSkinning[shapeIndex][vertexIndex];
