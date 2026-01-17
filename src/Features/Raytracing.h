@@ -813,8 +813,11 @@ struct Raytracing : public OverlayFeature
 	float2 dynamicResolutionRatio;
 
 	// Timings
-	float mainTime;
-	float shadowsTime;
+	float mainCPUTime;
+	float mainGPUTime;
+
+	float shadowsCPUTime;
+	float shadowsGPUTime;
 
 #if defined(DLSS_RR)
 	HMODULE interposer = NULL;
