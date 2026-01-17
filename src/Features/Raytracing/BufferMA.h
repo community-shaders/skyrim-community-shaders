@@ -277,7 +277,6 @@ namespace DX12
 		{
 			D3D12_RESOURCE_STATES state = this->state;
 
-
 			// D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE
 
 			this->TransitionBarrier(commandList, D3D12_RESOURCE_STATE_COPY_DEST);

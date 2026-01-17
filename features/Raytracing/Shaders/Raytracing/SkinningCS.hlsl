@@ -91,10 +91,10 @@ void main(uint3 DTid : SV_DispatchThreadID)
 
         vertex.Position = dynamicVertex.xyz;
         //vertex.Tangent = (half3)normalize(float3(dynamicVertex.w, vertex.Tangent.yz));
-    } 
+    }
 
-    //            vertex.Position = mul(updateData.localToRoot, float4(vertex.Position, 1.0f));   
-    
+    //            vertex.Position = mul(updateData.localToRoot, float4(vertex.Position, 1.0f));
+
     if (updateData.flags & Flags::Skinned)
     {
         Skinning skinning = MeshSkinning[shapeIndex][vertexIndex];
@@ -106,9 +106,9 @@ void main(uint3 DTid : SV_DispatchThreadID)
         vertex.Normal = (half3)normalize(mul(boneMatrixRot, vertex.Normal));
         //vertex.Tangent = (half3)normalize(mul(boneMatrixRot, vertex.Tangent));
         vertex.Bitangent = (half3)normalize(mul(boneMatrixRot, vertex.Bitangent));
-        
+
         vertex.Tangent = (half3)normalize(cross(vertex.Bitangent, vertex.Normal));
-    }  
-    
+    }
+
     OutputVertices[shapeIndex][vertexIndex] = vertex;
 }

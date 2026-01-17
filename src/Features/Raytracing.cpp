@@ -1005,8 +1005,8 @@ void Raytracing::SetupResources()
 	{
 		blasShadowInstanceBuffer = eastl::make_unique<DX12::StructuredBufferUpload<D3D12_RAYTRACING_INSTANCE_DESC>>(d3d12Device.get(), RTConstants::MAX_INSTANCES, false);
 		DX::ThrowIfFailed(blasShadowInstanceBuffer->resource->SetName(L"BLAS Instance Buffer"));
-		
-		blasShadowInstanceBuffer->TransitionBarrier(commandList.get(), D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);	
+
+		blasShadowInstanceBuffer->TransitionBarrier(commandList.get(), D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
 	}
 
 	logger::debug("Creating constant buffer...");
@@ -1014,14 +1014,14 @@ void Raytracing::SetupResources()
 		frameBuffer = eastl::make_unique<DX12::StructuredBufferUpload<FrameData>>(d3d12Device.get(), 1, false, 2);
 		DX::ThrowIfFailed(frameBuffer->resource->SetName(L"Frame Buffer"));
 
-		frameBuffer->TransitionBarrier(commandList.get(), D3D12_RESOURCE_STATE_VERTEX_AND_CONSTANT_BUFFER);	
+		frameBuffer->TransitionBarrier(commandList.get(), D3D12_RESOURCE_STATE_VERTEX_AND_CONSTANT_BUFFER);
 
 		frameData = eastl::make_unique<FrameData>();
 
 		shadowsCB = eastl::make_unique<DX12::StructuredBufferUpload<ShadowsFrameData>>(d3d12Device.get(), 1, false);
 		DX::ThrowIfFailed(shadowsCB->resource->SetName(L"Shadows Constant Buffer"));
 
-		shadowsCB->TransitionBarrier(commandList.get(), D3D12_RESOURCE_STATE_VERTEX_AND_CONSTANT_BUFFER);	
+		shadowsCB->TransitionBarrier(commandList.get(), D3D12_RESOURCE_STATE_VERTEX_AND_CONSTANT_BUFFER);
 
 		shadowsCBData = eastl::make_unique<ShadowsFrameData>();
 	}
@@ -2156,7 +2156,7 @@ eastl::shared_ptr<Allocation> Raytracing::GetMSNormalMapRegister([[maybe_unused]
 		D3D11_TEXTURE2D_DESC desc;
 		texture->texture->GetDesc(&desc);
 		desc.BindFlags |= D3D11_BIND_RENDER_TARGET;
-		normalMap->Texture = eastl::make_unique<Texture2D>(desc);	
+		normalMap->Texture = eastl::make_unique<Texture2D>(desc);
 	}
 
 	//normalMapConverter->Convert(geometryRuntimeData, runtimeData.rendererData->indexBuffer, shape->vertexCount, shape->triangleCount, texture, normalMap->Texture.rtv.get());
