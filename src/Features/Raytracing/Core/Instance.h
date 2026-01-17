@@ -68,10 +68,12 @@ struct Instance
 						return boneMatrix;
 					};
 
-					for (uint i = 0; i < skinInstance->numMatrices; i++) {
-						auto* bone = skinInstance->bones[i];
+					auto skinRootInverse = GetXMFromNiTransform(skinInstance->rootParent->world.Invert());
 
-						if (bone) {
+					for (uint i = 0; i < skinInstance->numMatrices; i++) {
+						//auto* bone = skinInstance->bones[i];
+
+						/*if (bone) {
 							if (auto it = boneMatrices.find(bone); it != boneMatrices.end()) {
 								shape->boneMatrices[i] = it->second;
 							} else {
@@ -80,16 +82,25 @@ struct Instance
 							}
 						} else {
 							shape->boneMatrices[i] = calcBoneMatrix(i);
-						}
+						}*/
+
+						XMStoreFloat3x4(&shape->boneMatrices[i], XMMatrixMultiply(XMLoadFloat3x4(&boneMatricesArray[i]), skinRootInverse));
 					}
 				}
 
 				if ((updateFlags & Flags::Dynamic) || (updateFlags & Flags::Skinned)) {
 					DirectX::XMMATRIX localToRootXM;
-					if (shape->geometry->parent == pNiNode) {
-						localToRootXM = GetXMFromNiTransform(shape->geometry->local);
+
+					if (updateFlags & Flags::Skinned) {
+						//auto& skinInstance = shape->geometry->GetGeometryRuntimeData().skinInstance;
+
+						localToRootXM = GetXMFromNiTransform(shape->geometry->local);  // skinInstance->skinData->rootParentToSkin.Invert()
 					} else {
-						localToRootXM = GetXMFromNiTransform(worldInverse * shape->geometry->world);
+						if (shape->geometry->parent == pNiNode) {
+							localToRootXM = GetXMFromNiTransform(shape->geometry->local);
+						} else {
+							localToRootXM = GetXMFromNiTransform(worldInverse * shape->geometry->world);
+						}
 					}
 
 					float3x4 localToRoot;

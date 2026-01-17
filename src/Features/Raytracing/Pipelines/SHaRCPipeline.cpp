@@ -1,4 +1,5 @@
 #include "SHaRCPipeline.h"
+#include "Features/Raytracing.h"
 
 void SHaRCPipeline::CreateRootSignature(ID3D12Device5* device)
 {
@@ -50,17 +51,23 @@ void SHaRCPipeline::CompileShaders(ID3D12Device5* device)
 
 void SHaRCPipeline::SetupResources(ID3D12Device5* device)
 {
-	sharcHashEntriesBuffer = eastl::make_unique<DX12::StructuredBuffer<uint64_t>>(device, MAX_CAPACITY, true, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+	auto* commandList = globals::features::raytracing.commandList.get();
+
+	sharcHashEntriesBuffer = eastl::make_unique<DX12::StructuredBuffer<uint64_t>>(device, MAX_CAPACITY, true);
 	sharcHashEntriesBuffer->SetName(L"SHaRC HashEntries Buffer");
+	sharcHashEntriesBuffer->TransitionBarrier(commandList, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
 
-	sharcLockBuffer = eastl::make_unique<DX12::StructuredBuffer<uint>>(device, MAX_CAPACITY, true, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+	sharcLockBuffer = eastl::make_unique<DX12::StructuredBuffer<uint>>(device, MAX_CAPACITY, true);
 	sharcLockBuffer->SetName(L"SHaRC Lock Buffer");
+	sharcLockBuffer->TransitionBarrier(commandList, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
 
-	sharcAccumulationBuffer = eastl::make_unique<DX12::StructuredBuffer<SharcAccumulationData>>(device, MAX_CAPACITY, true, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+	sharcAccumulationBuffer = eastl::make_unique<DX12::StructuredBuffer<SharcAccumulationData>>(device, MAX_CAPACITY, true);
 	sharcAccumulationBuffer->SetName(L"SHaRC Accumulation Buffer");
+	sharcAccumulationBuffer->TransitionBarrier(commandList, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
 
-	sharcResolvedBuffer = eastl::make_unique<DX12::StructuredBuffer<SharcPackedData>>(device, MAX_CAPACITY, true, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+	sharcResolvedBuffer = eastl::make_unique<DX12::StructuredBuffer<SharcPackedData>>(device, MAX_CAPACITY, true);
 	sharcResolvedBuffer->SetName(L"SHaRC Resolved Buffer");
+	sharcResolvedBuffer->TransitionBarrier(commandList, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
 }
 
 void SHaRCPipeline::CreateUAVs(CD3DX12_CPU_DESCRIPTOR_HANDLE hashEntries, CD3DX12_CPU_DESCRIPTOR_HANDLE lock, CD3DX12_CPU_DESCRIPTOR_HANDLE accumulation, CD3DX12_CPU_DESCRIPTOR_HANDLE resolved)

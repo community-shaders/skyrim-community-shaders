@@ -180,8 +180,8 @@ namespace DX12
 			return desc;
 		}
 
-		explicit StructuredBufferMA(ID3D12Device5* device, D3D12MA::Allocator* allocator, D3D12MA::ALLOCATION_DESC allocDesc, const uint64_t& a_count, bool uav = false, D3D12_RESOURCE_STATES state = D3D12_RESOURCE_STATE_COPY_DEST) :
-			ResourceMA(device, allocator, allocDesc, Desc(sizeof(T) * a_count, uav), state), count(a_count) {}
+		explicit StructuredBufferMA(ID3D12Device5* device, D3D12MA::Allocator* allocator, D3D12MA::ALLOCATION_DESC allocDesc, const uint64_t& a_count, bool uav = false) :
+			ResourceMA(device, allocator, allocDesc, Desc(sizeof(T) * a_count, uav), D3D12_RESOURCE_STATE_COPY_DEST), count(a_count) {}
 
 		virtual ~StructuredBufferMA() = default;
 
@@ -229,8 +229,8 @@ namespace DX12
 	class StructuredBufferUploadMA : public StructuredBufferMA<T>
 	{
 	public:
-		explicit StructuredBufferUploadMA(ID3D12Device5* a_device, D3D12MA::Allocator* allocator, D3D12MA::ALLOCATION_DESC allocDesc, D3D12MA::ALLOCATION_DESC uploadAllocDesc, const uint64_t& a_count, bool uav = false, D3D12_RESOURCE_STATES state = D3D12_RESOURCE_STATE_COPY_DEST, uint uploadCount = 1) :
-			StructuredBufferMA<T>(a_device, allocator, allocDesc, a_count, uav, state)
+		explicit StructuredBufferUploadMA(ID3D12Device5* a_device, D3D12MA::Allocator* allocator, D3D12MA::ALLOCATION_DESC allocDesc, D3D12MA::ALLOCATION_DESC uploadAllocDesc, const uint64_t& a_count, bool uav = false, uint uploadCount = 1) :
+			StructuredBufferMA<T>(a_device, allocator, allocDesc, a_count, uav)
 		{
 			D3D12_RESOURCE_DESC desc = StructuredBufferMA<T>::Desc(ResourceMA::desc.Width);
 
@@ -273,14 +273,17 @@ namespace DX12
 			Update(srcData, sizeof(T) * localCount, 0, uploadIndex);
 		}
 
-		void Upload(ID3D12GraphicsCommandList4* commandList, uint uploadIndex = 0)
+		void Upload(ID3D12GraphicsCommandList4* commandList, uint uploadIndex = 0, D3D12_RESOURCE_STATES finalState = D3D12_RESOURCE_STATE_COMMON)
 		{
 			D3D12_RESOURCE_STATES state = this->state;
+
+
+			// D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE
 
 			this->TransitionBarrier(commandList, D3D12_RESOURCE_STATE_COPY_DEST);
 			commandList->CopyResource(this->resource.get(), uploadResource[uploadIndex].get());
 			//commandList->CopyBufferRegion(this->resource.get(), 0, uploadBuffer.get(), 0, sizeof(T) * this->count);
-			this->TransitionBarrier(commandList, state);
+			this->TransitionBarrier(commandList, finalState != D3D12_RESOURCE_STATE_COMMON ? finalState : state);
 		}
 
 		// dataSize, offset arguments order to match Update function
