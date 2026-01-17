@@ -193,7 +193,7 @@ struct Surface
 
         [branch]
         if (material.ShaderFlags & ShaderFlags::kModelSpaceNormals) {
-            ModelSpaceNormalMap(normal, handedness, objectToWorld3x3, tangentWS, Normal, Tangent, Bitangent);          
+            ModelSpaceNormalMap(normal, handedness, objectToWorld3x3, tangentWS, Normal, Tangent, Bitangent);
         }
         else
         {
