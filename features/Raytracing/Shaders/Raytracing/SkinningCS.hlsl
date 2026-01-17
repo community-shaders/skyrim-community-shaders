@@ -27,38 +27,37 @@ namespace Flags
     static const uint Skinned = (1 << 2);
 }
 
-float3x4 GetBoneTransformMatrix(Skinning skinning, uint boneOffset)
-{
-	float3x4 boneMatrix1 = BoneMatrices[boneOffset + skinning.GetBone(0)].World;
-	float3x4 boneMatrix2 = BoneMatrices[boneOffset + skinning.GetBone(1)].World;
-	float3x4 boneMatrix3 = BoneMatrices[boneOffset + skinning.GetBone(2)].World;
-	float3x4 boneMatrix4 = BoneMatrices[boneOffset + skinning.GetBone(3)].World;
-
-	return boneMatrix1 * skinning.weight[0] +
-		    boneMatrix2 * skinning.weight[1] +
-		    boneMatrix3 * skinning.weight[2] +
-		    boneMatrix4 * skinning.weight[3];
-}
-
 float3x4 GetBoneTransformMatrix(Skinning skinning, float3 pivot, uint boneOffset)
 {
     float3x4 pivotMatrix = transpose(float4x3(0.0.xxx, 0.0.xxx, 0.0.xxx, pivot));
-
+    
 	float3x4 boneMatrix1 = BoneMatrices[boneOffset + skinning.GetBone(0)].World;
 	float3x4 boneMatrix2 = BoneMatrices[boneOffset + skinning.GetBone(1)].World;
 	float3x4 boneMatrix3 = BoneMatrices[boneOffset + skinning.GetBone(2)].World;
 	float3x4 boneMatrix4 = BoneMatrices[boneOffset + skinning.GetBone(3)].World;
 
-	float3x4 unitMatrix = float3x4(1.0.xxxx, 1.0.xxxx, 1.0.xxxx);
-	float3x4 weightMatrix1 = unitMatrix * skinning.weight[0];
-	float3x4 weightMatrix2 = unitMatrix * skinning.weight[1];
-	float3x4 weightMatrix3 = unitMatrix * skinning.weight[2];
-	float3x4 weightMatrix4 = unitMatrix * skinning.weight[3];
+	return (boneMatrix1 - pivotMatrix) * skinning.weight[0] +
+		    (boneMatrix2 - pivotMatrix) * skinning.weight[1] +
+		    (boneMatrix3 - pivotMatrix) * skinning.weight[2] +
+		    (boneMatrix4 - pivotMatrix) * skinning.weight[3];
+}
 
-	return (boneMatrix1 - pivotMatrix) * weightMatrix1 +
-		    (boneMatrix2 - pivotMatrix) * weightMatrix2 +
-		    (boneMatrix3 - pivotMatrix) * weightMatrix3 +
-		    (boneMatrix4 - pivotMatrix) * weightMatrix4;
+float3x3 GetBoneRSMatrix(Skinning skinning, uint boneOffset)
+{
+    float3x4 boneMatrix1 = BoneMatrices[boneOffset + skinning.GetBone(0)].World;
+    float3x4 boneMatrix2 = BoneMatrices[boneOffset + skinning.GetBone(1)].World;
+    float3x4 boneMatrix3 = BoneMatrices[boneOffset + skinning.GetBone(2)].World;
+    float3x4 boneMatrix4 = BoneMatrices[boneOffset + skinning.GetBone(3)].World;
+
+    float3x3 rs1 = (float3x3)boneMatrix1;
+    float3x3 rs2 = (float3x3)boneMatrix2;
+    float3x3 rs3 = (float3x3)boneMatrix3;
+    float3x3 rs4 = (float3x3)boneMatrix4;
+
+    return rs1 * skinning.weight[0] +
+           rs2 * skinning.weight[1] +
+           rs3 * skinning.weight[2] +
+           rs4 * skinning.weight[3];
 }
 
 #if defined(OPTIMIZED_MAPPING)
@@ -93,8 +92,6 @@ void main(uint3 DTid : SV_DispatchThreadID)
         //vertex.Tangent = (half3)normalize(float3(dynamicVertex.w, vertex.Tangent.yz));
     }
 
-    //            vertex.Position = mul(updateData.localToRoot, float4(vertex.Position, 1.0f));
-
     if (updateData.flags & Flags::Skinned)
     {
         Skinning skinning = MeshSkinning[shapeIndex][vertexIndex];
@@ -104,10 +101,8 @@ void main(uint3 DTid : SV_DispatchThreadID)
 
         vertex.Position = mul(boneMatrix, float4(vertex.Position, 1.0f));
         vertex.Normal = (half3)normalize(mul(boneMatrixRot, vertex.Normal));
-        //vertex.Tangent = (half3)normalize(mul(boneMatrixRot, vertex.Tangent));
+        vertex.Tangent = (half3)normalize(mul(boneMatrixRot, vertex.Tangent));
         vertex.Bitangent = (half3)normalize(mul(boneMatrixRot, vertex.Bitangent));
-
-        vertex.Tangent = (half3)normalize(cross(vertex.Bitangent, vertex.Normal));
     }
 
     OutputVertices[shapeIndex][vertexIndex] = vertex;
