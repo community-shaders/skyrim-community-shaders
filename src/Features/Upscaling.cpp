@@ -28,6 +28,7 @@ namespace
 		std::uint64_t                       unk28;                                 // 28 - Unknown (needs further RE)
 		std::uint64_t                       unk30;                                 // 30 - Unknown (needs further RE)
 		bool                                enableWaterTAA;                        // 38 - Water TAA enable flag
+		std::uint8_t                        pad39[7];                              // 39 - Padding to 0x40
 	};
 	static_assert(sizeof(ExtendedTemporalAAStruct) == 0x40, "ExtendedTemporalAAStruct must be 0x40 bytes");
 }
