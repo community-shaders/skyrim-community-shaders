@@ -100,6 +100,12 @@ using json = nlohmann::json;
  * Each role can have different font family, style, and size scale.
  * Fonts must exist in Data\SKSE\Plugins\CommunityShaders\Fonts\
  *
+ * BLUR SHADER SYSTEM:
+ * ===================
+ * Separable Gaussian blur (horizontal + vertical passes) rendered at eighth resolution.
+ * Hardcoded intensity (0.04) for consistent appearance. Toggle via BackgroundBlurEnabled.
+ * Based on Unrimp rendering engine: https://github.com/cofenberg/unrimp
+ *
  * MIGRATION FROM OLD CONFIGS:
  * ===========================
  * Legacy "FontName" field still supported for backward compatibility.
@@ -133,8 +139,8 @@ public:
 
 	// Static UI helper methods
 	static void SetupImGuiStyle(const class Menu& menu);
-	static bool ReloadFont(const class Menu& menu, float& cachedFontSize);  // Returns true on success
-	static void ForceApplyDefaultTheme();                                   // Force Default.json colors to ImGui (bypass hardcoded defaults)
+	static bool ReloadFont(const class Menu& menu, float& cachedFontSize);
+	static void ForceApplyDefaultTheme();  // Force Default.json colors to ImGui (bypass hardcoded defaults)
 
 	struct Constants
 	{
@@ -156,9 +162,9 @@ public:
 
 		// Header rendering constants
 		static constexpr float HEADER_BASE_TEXT_SCALE = 1.7f;
-		static constexpr float HEADER_BASE_ICON_MULTIPLIER = 1.5f;
+		static constexpr float HEADER_BASE_ICON_MULTIPLIER = 1.85f;
 		static constexpr float HEADER_FALLBACK_TEXT_SCALE = 1.5f;
-		static constexpr float DOCKED_ICON_SIZE_MULTIPLIER = 1.25f;
+		static constexpr float DOCKED_ICON_SIZE_MULTIPLIER = 1.5f;
 		static constexpr float DOCKED_ICON_SPACING = 8.0f;
 		static constexpr float DOCKED_RIGHT_MARGIN = 45.0f;
 		static constexpr float WATERMARK_HEIGHT_PERCENT = 0.50f;

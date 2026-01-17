@@ -14,6 +14,7 @@
 #include "Features/SubsurfaceScattering.h"
 #include "Features/TerrainBlending.h"
 #include "Features/Upscaling.h"
+#include "Features/WeatherEditor.h"
 
 #include "Hooks.h"
 
@@ -299,6 +300,8 @@ void Deferred::PrepassPasses()
 
 void Deferred::StartDeferred()
 {
+	if (!globals::state->inWorld)
+		return;
 	globals::state->UpdateSharedData(true, false);
 
 	auto shadowState = globals::game::shadowState;
@@ -418,7 +421,6 @@ void Deferred::DeferredPasses()
 		dynamicCubemaps.UpdateCubemap();
 
 	auto& terrainBlending = globals::features::terrainBlending;
-
 	auto& ibl = globals::features::ibl;
 
 	if (ssrt.loaded && ssrt.settings.EnableSpecular)

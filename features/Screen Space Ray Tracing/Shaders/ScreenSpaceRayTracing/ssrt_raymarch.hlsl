@@ -568,7 +568,7 @@ bool ShouldProcessPixel(uint2 GroupThreadID, uint FrameCount)
             // ReprojectHit(MotionVectorTexture, LinearSampler, hit, eyeIndex, projUV);
 
             sampleColor = ScreenColorTextureMips.SampleLevel(LinearSampler, hit.xy * FrameBuffer::DynamicResolutionParams1.xy, 0).xyz;
-            sampleColor = Color::GammaToLinear(sampleColor);
+            sampleColor = Color::IrradianceToLinear(sampleColor);
 #if !defined(SSRT_SPECULAR)
             sampleColor *= SharedData::ssrtSettings.DiffuseMult;
 #else
@@ -623,7 +623,7 @@ bool ShouldProcessPixel(uint2 GroupThreadID, uint FrameCount)
             envLuminance = Color::RGBToLuminance(EnvReflectionsTexture.SampleLevel(LinearSampler, world_space_reflected_direction, 15).xyz);
             envColor = lerp(envColor, envColor * (directionalAmbientLuminance / max(envLuminance, 1e-4)), CubemapNormalization);
 #   endif
-            envColor = Color::GammaToLinear(envColor);
+            envColor = Color::IrradianceToLinear(envColor);
             float ao = lerp(1.0, occlusion, OcclusionStrength);
 #   if defined(SSGI)
             ao *= 1 - saturate(SsgiAoTexture[coords.xy].x);

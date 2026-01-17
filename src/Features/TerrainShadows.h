@@ -96,4 +96,5 @@ public:
 	virtual inline void RestoreDefaultSettings() override { settings = {}; }
 	virtual void ClearShaderCache() override;
 	virtual bool SupportsVR() override { return true; };
+	virtual bool IsCore() const override { return true; };
 };

@@ -119,7 +119,7 @@ Texture2D<float4> SSRTexture : register(t16);
 
 	float glossiness = normalGlossiness.z;
 
-	float3 linDiffuseColor = Color::GammaToLinear(diffuseColor);
+	float3 linDiffuseColor = Color::IrradianceToLinear(diffuseColor);
 	float3 normalWS = normalize(mul(FrameBuffer::CameraViewInverse[eyeIndex], float4(normalVS, 0)).xyz);
 
 #if defined(SSGI)
@@ -128,7 +128,7 @@ Texture2D<float4> SSRTexture : register(t16);
 	float3 ssgiIl;
 	SampleSSGI(dispatchID.xy, normalWS, ssgiAo, ssgiIl);
 
-	float3 directionalAmbientColor = max(0, mul(SharedData::DirectionalAmbient, float4(normalWS, 1.0)));
+	float3 directionalAmbientColor = Color::Ambient(max(0, mul(SharedData::DirectionalAmbient, float4(normalWS, 1.0))));
 	directionalAmbientColor *= albedo;
 
 	directionalAmbientColor = Color::RGBToYCoCg(directionalAmbientColor);
@@ -147,19 +147,19 @@ Texture2D<float4> SSRTexture : register(t16);
 
 	diffuseColor = max(0.0, diffuseColor - directionalAmbientColor);
 
-	linDiffuseColor = Color::GammaToLinear(diffuseColor);
+	linDiffuseColor = Color::IrradianceToLinear(diffuseColor);
 
-	float3 linAlbedo = Color::GammaToLinear(albedo / Color::PBRLightingScale);
+	float3 linAlbedo = Color::IrradianceToLinear(albedo / Color::PBRLightingScale);
 
 	float3 multiBounceAO = Color::MultiBounceAO(linAlbedo, ssgiAo);
 
 	linDiffuseColor *= sqrt(multiBounceAO);
 
-	diffuseColor = Color::LinearToGamma(linDiffuseColor);
+	diffuseColor = Color::IrradianceToGamma(linDiffuseColor);
 
-	diffuseColor += Color::LinearToGamma(Color::GammaToLinear(directionalAmbientColor) * multiBounceAO);
+	diffuseColor += Color::IrradianceToGamma(Color::IrradianceToLinear(directionalAmbientColor) * multiBounceAO);
 
-	linDiffuseColor = Color::GammaToLinear(diffuseColor);
+	linDiffuseColor = Color::IrradianceToLinear(diffuseColor);
 
 	linDiffuseColor += ssgiIl * linAlbedo;
 #endif
@@ -181,7 +181,7 @@ Texture2D<float4> SSRTexture : register(t16);
 
 		float3 finalIrradiance = 0;
 
-        float directionalAmbientColorSpecular = Color::RGBToLuminance(max(0, mul(SharedData::DirectionalAmbient, float4(R, 1.0)))) * Color::ReflectionNormalisationScale;
+        float directionalAmbientColorSpecular = Color::RGBToLuminance(Color::Ambient(max(0, mul(SharedData::DirectionalAmbient, float4(R, 1.0))))) * Color::ReflectionNormalisationScale;
 
 #	if defined(INTERIOR)
 		float3 specularIrradiance = EnvTexture.SampleLevel(LinearSampler, R, level);
@@ -193,13 +193,13 @@ Texture2D<float4> SSRTexture : register(t16);
 		if (SharedData::iblSettings.EnableDiffuseIBL && SharedData::iblSettings.EnableInterior) {
 			directionalAmbientColorSpecular *= SharedData::iblSettings.DALCAmount;
 			iblColor += Color::Saturation(ImageBasedLighting::GetIBLColor(-R), SharedData::iblSettings.IBLSaturation) * SharedData::iblSettings.DiffuseIBLScale;
-			float iblColorLuminance = Color::RGBToLuminance(Color::LinearToGamma(iblColor));
+			float iblColorLuminance = Color::RGBToLuminance(Color::IrradianceToGamma(iblColor));
 			directionalAmbientColorSpecular += iblColorLuminance;
 		}
 #		endif
         specularIrradiance = (specularIrradiance / max(specularIrradianceLuminance, 0.001)) * directionalAmbientColorSpecular;
 
-        finalIrradiance = Color::GammaToLinear(specularIrradiance);
+        finalIrradiance = Color::IrradianceToLinear(specularIrradiance);
 #	elif defined(SKYLIGHTING)
 #		if defined(VR)
 		float3 positionMS = positionWS.xyz + FrameBuffer::CameraPosAdjust[eyeIndex].xyz - FrameBuffer::CameraPosAdjust[0].xyz;
@@ -218,7 +218,7 @@ Texture2D<float4> SSRTexture : register(t16);
 		if (SharedData::iblSettings.EnableDiffuseIBL) {
 			directionalAmbientColorSpecular *= SharedData::iblSettings.DALCAmount;
 			iblColor += Color::Saturation(ImageBasedLighting::GetIBLColor(-R, skylightingSpecular), SharedData::iblSettings.IBLSaturation) * SharedData::iblSettings.DiffuseIBLScale;
-			float iblColorLuminance = Color::RGBToLuminance(Color::LinearToGamma(iblColor));
+			float iblColorLuminance = Color::RGBToLuminance(Color::IrradianceToGamma(iblColor));
 			directionalAmbientColorSpecular += iblColorLuminance;
 		}
 #		endif
@@ -232,7 +232,7 @@ Texture2D<float4> SSRTexture : register(t16);
 
 			specularIrradianceReflections = (specularIrradianceReflections / max(specularIrradianceLuminance, 0.001)) * directionalAmbientColorSpecular;
 
-			specularIrradianceReflections = Color::GammaToLinear(specularIrradianceReflections);
+			specularIrradianceReflections = Color::IrradianceToLinear(specularIrradianceReflections);
 
 		}
 
@@ -243,13 +243,13 @@ Texture2D<float4> SSRTexture : register(t16);
 
 			float specularIrradianceLuminance = Color::RGBToLuminance(EnvTexture.SampleLevel(LinearSampler, R, 15));
 
-			directionalAmbientColorSpecular = Color::GammaToLinear(directionalAmbientColorSpecular);
+			directionalAmbientColorSpecular = Color::IrradianceToLinear(directionalAmbientColorSpecular);
 			directionalAmbientColorSpecular *= skylightingSpecular;
-			directionalAmbientColorSpecular = Color::LinearToGamma(directionalAmbientColorSpecular);
+			directionalAmbientColorSpecular = Color::IrradianceToGamma(directionalAmbientColorSpecular);
 
 			specularIrradiance = (specularIrradiance / max(specularIrradianceLuminance, 0.001)) * directionalAmbientColorSpecular;
 
-			specularIrradiance = Color::GammaToLinear(specularIrradiance);
+			specularIrradiance = Color::IrradianceToLinear(specularIrradiance);
 		}
 
 		finalIrradiance = lerp(specularIrradiance, specularIrradianceReflections, skylightingSpecular);
@@ -259,7 +259,7 @@ Texture2D<float4> SSRTexture : register(t16);
 		if (SharedData::iblSettings.EnableDiffuseIBL) {
 			directionalAmbientColorSpecular *= SharedData::iblSettings.DALCAmount;
 			iblColor += Color::Saturation(ImageBasedLighting::GetIBLColor(-R), SharedData::iblSettings.IBLSaturation) * SharedData::iblSettings.DiffuseIBLScale;
-			float iblColorLuminance = Color::RGBToLuminance(Color::LinearToGamma(iblColor));
+			float iblColorLuminance = Color::RGBToLuminance(Color::IrradianceToGamma(iblColor));
 			directionalAmbientColorSpecular += iblColorLuminance;
 		}
 #		endif
@@ -269,7 +269,7 @@ Texture2D<float4> SSRTexture : register(t16);
 
 	    specularIrradianceReflections = (specularIrradianceReflections / max(specularIrradianceReflectionsLuminance, 0.001)) * directionalAmbientColorSpecular;
 
-		finalIrradiance = Color::GammaToLinear(specularIrradianceReflections);
+		finalIrradiance = Color::IrradianceToLinear(specularIrradianceReflections);
 #	endif
 
 #	if defined(SSGI)
@@ -297,7 +297,7 @@ Texture2D<float4> SSRTexture : register(t16);
 
 #endif
 
-	color = Color::LinearToGamma(color);
+	color = Color::IrradianceToGamma(color);
 
 #if defined(DEBUG)
 

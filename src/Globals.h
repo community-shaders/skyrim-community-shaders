@@ -8,6 +8,7 @@ struct GrassLighting;
 struct HairSpecular;
 struct IBL;
 struct LightLimitFix;
+struct LinearLighting;
 struct LODBlending;
 struct InteriorSun;
 struct InverseSquareLighting;
@@ -29,6 +30,7 @@ struct PerformanceOverlay;
 struct WetnessEffects;
 struct ExtendedTranslucency;
 struct Upscaling;
+struct WeatherEditor;
 
 class State;
 class Deferred;
@@ -60,6 +62,7 @@ namespace globals
 		extern HairSpecular hairSpecular;
 		extern IBL ibl;
 		extern LightLimitFix lightLimitFix;
+		extern LinearLighting linearLighting;
 		extern LODBlending lodBlending;
 		extern InteriorSun interiorSun;
 		extern InverseSquareLighting inverseSquareLighting;
@@ -82,6 +85,7 @@ namespace globals
 		extern ExtendedTranslucency extendedTranslucency;
 		extern Upscaling upscaling;
 		extern RenderDoc renderDoc;
+		extern WeatherEditor weatherEditor;
 
 		namespace llf
 		{
@@ -201,7 +205,9 @@ namespace globals
 		extern RE::BSGraphics::State* graphicsState;
 		extern RE::BSGraphics::Renderer* renderer;
 		extern RE::BSShaderManager::State* smState;
+		extern RE::TES* tes;
 		extern bool isVR;
+		extern RE::MemoryManager* memoryManager;
 		extern RE::INISettingCollection* iniSettingCollection;
 		extern RE::INIPrefSettingCollection* iniPrefSettingCollection;
 		extern RE::GameSettingCollection* gameSettingCollection;

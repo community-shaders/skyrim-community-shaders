@@ -1,6 +1,7 @@
 #include "ThemeManager.h"
 #include "../Menu.h"
 
+#include "BackgroundBlur.h"
 #include "Fonts.h"
 
 #include <algorithm>
@@ -13,6 +14,7 @@
 #include <fstream>
 #include <iomanip>
 #include <numeric>
+#include <thread>
 #include <unordered_map>
 #include <vector>
 
@@ -29,22 +31,6 @@
 
 using namespace SKSE;
 
-/**
- * THEME MANAGER IMPLEMENTATION NOTES
- * ===================================
- *
- * FONT ATLAS REBUILDING:
- * ----------------------
- * Font changes require rebuilding ImGui's texture atlas, which invalidates GPU resources.
- * Must flush GPU pipeline before invalidation to prevent use-after-free crashes.
- * Emergency fallback loads Default.json if user font fails validation.
- *
- * THREAD SAFETY:
- * --------------
- * - Font reloading uses atomic flag with compare_exchange_strong to prevent re-entry
- * - Theme discovery caches are protected per-access basis
- */
-
 namespace
 {
 	// Theme System Constants
@@ -59,20 +45,6 @@ namespace
 	// Resize grip hover alpha: Subtle hover effect to avoid visual clutter
 	// Low value maintains minimalist aesthetic while providing hover feedback
 	constexpr float RESIZE_GRIP_HOVER_ALPHA = 0.1f;  // 10% opacity for hover state
-
-	// Contrast Adjustment Constants
-	// ------------------------------
-	// Luminance threshold for background/text contrast (sRGB middle gray)
-	// 0.5 represents perceptual midpoint between black and white
-	constexpr float LUMINANCE_THRESHOLD = 0.5f;
-
-	// Background darkening factor for light-on-light contrast issues
-	// Multiplies RGB by 0.4 = 60% darker, prevents white text on white background
-	constexpr float CONTRAST_DARKEN_FACTOR = 0.4f;
-
-	// Background lightening offset for dark-on-dark contrast issues
-	// Adds 0.3 to RGB = 30% brighter, prevents black text on black background
-	constexpr float CONTRAST_LIGHTEN_OFFSET = 0.3f;
 
 	/**
 	 * @brief Gets file modification time
@@ -158,38 +130,6 @@ void ThemeManager::SetupImGuiStyle(const Menu& menu)
 	resizeGripHovered.w = RESIZE_GRIP_HOVER_ALPHA;
 	colors[ImGuiCol_ResizeGripHovered] = resizeGripHovered;
 	colors[ImGuiCol_ResizeGripActive] = resizeGripHovered;
-
-	// Auto-adjust text colors for better contrast on selection backgrounds
-	// This fixes white-on-white text issues in high contrast themes
-	// Use centralized color utilities from Utils/UI.h instead of duplicating logic
-
-	// Apply contrast-aware adjustments for headers and tabs
-	float textLum = Util::ColorUtils::CalculateLuminance(colors[ImGuiCol_Text]);
-
-	// Apply contrast adjustments for all header and tab backgrounds using unified logic
-	Util::ColorUtils::AdjustBackgroundForTextContrast(colors[ImGuiCol_Header], textLum,
-		LUMINANCE_THRESHOLD, CONTRAST_DARKEN_FACTOR, CONTRAST_LIGHTEN_OFFSET);
-	Util::ColorUtils::AdjustBackgroundForTextContrast(colors[ImGuiCol_HeaderHovered], textLum,
-		LUMINANCE_THRESHOLD, CONTRAST_DARKEN_FACTOR, CONTRAST_LIGHTEN_OFFSET);
-	Util::ColorUtils::AdjustBackgroundForTextContrast(colors[ImGuiCol_HeaderActive], textLum,
-		LUMINANCE_THRESHOLD, CONTRAST_DARKEN_FACTOR, CONTRAST_LIGHTEN_OFFSET);
-	Util::ColorUtils::AdjustBackgroundForTextContrast(colors[ImGuiCol_Tab], textLum,
-		LUMINANCE_THRESHOLD, CONTRAST_DARKEN_FACTOR, CONTRAST_LIGHTEN_OFFSET);
-	Util::ColorUtils::AdjustBackgroundForTextContrast(colors[ImGuiCol_TabActive], textLum,
-		LUMINANCE_THRESHOLD, CONTRAST_DARKEN_FACTOR, CONTRAST_LIGHTEN_OFFSET);
-	Util::ColorUtils::AdjustBackgroundForTextContrast(colors[ImGuiCol_TabHovered], textLum,
-		LUMINANCE_THRESHOLD, CONTRAST_DARKEN_FACTOR, CONTRAST_LIGHTEN_OFFSET);
-
-	// Apply semi-transparent tint for text selection background
-	// TextSelectedBg should be a tinted overlay, not opaque, so underlying text remains visible
-	float selectionLum = Util::ColorUtils::CalculateLuminance(colors[ImGuiCol_HeaderActive]);
-	if (selectionLum > LUMINANCE_THRESHOLD) {
-		// Light selection background - use semi-transparent dark tint
-		colors[ImGuiCol_TextSelectedBg] = ImVec4(0.0f, 0.0f, 0.0f, 0.25f);
-	} else {
-		// Dark selection background - use semi-transparent light tint
-		colors[ImGuiCol_TextSelectedBg] = ImVec4(1.0f, 1.0f, 1.0f, 0.25f);
-	}
 
 	// Apply scrollbar opacity settings
 	colors[ImGuiCol_ScrollbarBg].w = themeSettings.ScrollbarOpacity.Background;
@@ -445,8 +385,18 @@ bool ThemeManager::ReloadFont(const Menu& menu, float& cachedFontSize)
 	// Recreate device objects - this is where crashes can occur
 	// Must be done between frames with no active rendering state
 
-	// Flush any pending GPU operations before invalidating
+	// Flush and wait for GPU idle before invalidating resources
 	context->Flush();
+
+	winrt::com_ptr<ID3D11Query> eventQuery;
+	D3D11_QUERY_DESC queryDesc = { D3D11_QUERY_EVENT, 0 };
+	if (SUCCEEDED(device->CreateQuery(&queryDesc, eventQuery.put()))) {
+		context->End(eventQuery.get());
+		BOOL queryData = FALSE;
+		for (int i = 0; i < 1000 && context->GetData(eventQuery.get(), &queryData, sizeof(BOOL), 0) != S_OK; i++) {
+			std::this_thread::sleep_for(std::chrono::milliseconds(1));
+		}
+	}
 
 	ImGui_ImplDX11_InvalidateDeviceObjects();
 
@@ -506,42 +456,76 @@ size_t ThemeManager::DiscoverThemes()
 
 	themes.clear();
 
+	// Collect all theme directories to search
+	std::vector<std::filesystem::path> searchPaths;
+
+	// Primary themes directory (always check this first)
 	auto themesDir = GetThemesDirectory();
-	if (!std::filesystem::exists(themesDir)) {
-		logger::info("Themes directory does not exist: {}", themesDir.string());
+	logger::info("Checking base themes directory: {}", themesDir.string());
+	if (std::filesystem::exists(themesDir)) {
+		searchPaths.push_back(themesDir);
+		logger::info("Base themes directory exists, added to search paths");
+	} else {
+		logger::warn("Base themes directory does not exist: {}", themesDir.string());
+	}
+
+	// Check for MO2 Overwrite directory
+	auto dataPath = Util::PathHelpers::GetDataPath();
+	auto parentPath = dataPath.parent_path();  // Go up from Data to game root or MO2 instance
+
+	logger::info("Data path: {}", dataPath.string());
+	logger::info("Parent path: {}", parentPath.string());
+
+	// MO2 Overwrite path: <MO2 instance>/overwrite/SKSE/Plugins/CommunityShaders/Themes
+	auto mo2OverwritePath = parentPath / "overwrite" / "SKSE" / "Plugins" / "CommunityShaders" / "Themes";
+	logger::info("Checking MO2 Overwrite path: {}", mo2OverwritePath.string());
+	if (std::filesystem::exists(mo2OverwritePath)) {
+		searchPaths.push_back(mo2OverwritePath);
+		logger::info("Found MO2 Overwrite themes directory");
+	} else {
+		logger::info("MO2 Overwrite themes directory does not exist");
+	}
+
+	if (searchPaths.empty()) {
+		logger::info("No theme directories found");
 		discovered = true;
 		return 0;
 	}
 
-	logger::info("Discovering themes in: {}", themesDir.string());
+	logger::info("Discovering themes in {} directories", searchPaths.size());
 
-	try {
-		for (const auto& entry : std::filesystem::directory_iterator(themesDir)) {
-			if (!entry.is_regular_file() || entry.path().extension() != ".json") {
-				continue;
-			}
+	// Search all paths for theme files
+	for (const auto& searchPath : searchPaths) {
+		logger::info("Searching for themes in: {}", searchPath.string());
 
-			// Check file size
-			auto fileSize = entry.file_size();
-			if (fileSize > MAX_FILE_SIZE) {
-				logger::warn("Theme file too large, skipping: {} ({}MB)",
-					entry.path().filename().string(), fileSize / (1024 * 1024));
-				continue;
-			}
+		try {
+			for (const auto& entry : std::filesystem::directory_iterator(searchPath)) {
+				if (!entry.is_regular_file() || entry.path().extension() != ".json") {
+					continue;
+				}
 
-			if (themes.size() >= MAX_THEMES) {
-				logger::warn("Maximum number of themes ({}) reached, skipping remaining files", MAX_THEMES);
-				break;
-			}
+				// Check file size
+				auto fileSize = entry.file_size();
+				if (fileSize > MAX_FILE_SIZE) {
+					logger::warn("Theme file too large, skipping: {} ({}MB)",
+						entry.path().filename().string(), fileSize / (1024 * 1024));
+					continue;
+				}
 
-			auto themeInfo = LoadThemeFile(entry.path());
-			if (themeInfo && themeInfo->isValid) {
-				themes.push_back(std::move(*themeInfo));
-				logger::info("Discovered theme: {} ({})", themes.back().name, themes.back().displayName);
+				if (themes.size() >= MAX_THEMES) {
+					logger::warn("Maximum number of themes ({}) reached, skipping remaining files", MAX_THEMES);
+					break;
+				}
+
+				auto themeInfo = LoadThemeFile(entry.path());
+				if (themeInfo && themeInfo->isValid) {
+					themes.push_back(std::move(*themeInfo));
+					logger::info("Discovered theme: {} ({})", themes.back().name, themes.back().displayName);
+				}
 			}
+		} catch (const std::filesystem::filesystem_error& e) {
+			logger::warn("Error discovering themes in {}: {}", searchPath.string(), e.what());
 		}
-	} catch (const std::filesystem::filesystem_error& e) {
-		logger::warn("Error discovering themes: {}", e.what());
 	}
 
 	// Sort themes alphabetically by display name
@@ -629,9 +613,13 @@ bool ThemeManager::SaveTheme(const std::string& themeName, const json& themeSett
 	auto themesDir = GetThemesDirectory();
 	auto filePath = themesDir / (safeFileName + ".json");
 
+	logger::info("SaveTheme: Saving theme '{}' to file: {}", themeName, filePath.string());
+	logger::debug("SaveTheme: Theme has {} top-level keys", fullTheme.size());
+
 	try {
 		// Ensure themes directory exists
 		std::filesystem::create_directories(themesDir);
+		logger::debug("SaveTheme: Themes directory ensured: {}", themesDir.string());
 
 		// Write the theme file
 		std::ofstream file(filePath);
@@ -746,13 +734,6 @@ std::unique_ptr<ThemeManager::ThemeInfo> ThemeManager::LoadThemeFile(const std::
 	themeInfo->lastModified = GetFileModTime(filePath);
 
 	try {
-		// Security: Verify path is within themes directory
-		auto themesDir = GetThemesDirectory();
-		if (!Util::IsPathWithinDirectory(themesDir, filePath)) {
-			logger::error("Security: Theme file outside allowed directory: {}", filePath.string());
-			return themeInfo;
-		}
-
 		std::ifstream file(filePath);
 		if (!file.is_open()) {
 			logger::warn("Failed to open theme file: {}", filePath.string());

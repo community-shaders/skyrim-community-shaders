@@ -68,6 +68,7 @@ public:
 
 	bool resetCapture[2] = { true, true };
 	bool recompileFlag = false;
+	float previousHoursPassed = 0.0f;
 
 	enum class NextTask
 	{

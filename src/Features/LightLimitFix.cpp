@@ -1,5 +1,6 @@
 #include "LightLimitFix.h"
 #include "InverseSquareLighting.h"
+#include "LinearLighting.h"
 
 #include "Shadercache.h"
 #include "State.h"
@@ -10,14 +11,22 @@ static constexpr uint MAX_LIGHTS = 1024;
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	LightLimitFix::Settings,
 	EnableContactShadows,
-	EnableLightsVisualisation,
 	LightsVisualisationMode)
 
 void LightLimitFix::DrawSettings()
 {
 	auto shaderCache = globals::shaderCache;
 
-	if (ImGui::TreeNodeEx("Light Limit Visualization", ImGuiTreeNodeFlags_DefaultOpen)) {
+	if (ImGui::TreeNodeEx("Statistics", ImGuiTreeNodeFlags_DefaultOpen)) {
+		ImGui::Text(std::format("Clustered Light Count : {}", lightCount).c_str());
+
+		ImGui::TreePop();
+	}
+
+	///////////////////////////////
+	ImGui::SeparatorText("Debug");
+
+	if (ImGui::TreeNode("Light Limit Visualization")) {
 		ImGui::Checkbox("Enable Lights Visualisation", &settings.EnableLightsVisualisation);
 		if (auto _tt = Util::HoverTooltipWrapper()) {
 			ImGui::Text("Enables visualization of the light limit\n");
@@ -43,12 +52,16 @@ void LightLimitFix::DrawSettings()
 
 		ImGui::TreePop();
 	}
+}
 
-	if (ImGui::TreeNodeEx("Statistics", ImGuiTreeNodeFlags_DefaultOpen)) {
-		ImGui::Text(std::format("Clustered Light Count : {}", lightCount).c_str());
-
-		ImGui::TreePop();
-	}
+void LightLimitFix::DrawOverlay()
+{
+	if (!settings.EnableLightsVisualisation)
+		return;
+	ImGui::SetNextWindowPos(ImVec2(10, 10), ImGuiCond_Always);
+	ImGui::Begin("##LLFDebug", nullptr, ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoSavedSettings);
+	ImGui::TextColored(ImVec4(1.0f, 0.3f, 0.3f, 1.0f), "DEBUG FEATURE - LIGHT LIMIT VISUALISATION ENABLED");
+	ImGui::End();
 }
 
 LightLimitFix::PerFrame LightLimitFix::GetCommonBufferData()
@@ -232,11 +245,11 @@ void LightLimitFix::BSLightingShader_SetupGeometry_GeometrySetupConstantPointLig
 			isl.ProcessLight(light, bsLight, niLight);
 		} else {
 			light.radius = runtimeData.radius.x;
-			light.color *= runtimeData.fade;
+			// light.color *= runtimeData.fade;
 			light.fade = runtimeData.fade;
 		}
 
-		light.color *= bsLight->lodDimmer;
+		light.fade *= bsLight->lodDimmer;
 
 		SetLightPosition(light, niLight->world.translate, inWorld);
 
@@ -414,10 +427,11 @@ void LightLimitFix::UpdateLights()
 						isl.ProcessLight(light, bsLight, niLight);
 					} else {
 						light.radius = runtimeData.radius.x;
-						light.color *= runtimeData.fade;
+						// light.color *= runtimeData.fade;
+						light.fade = runtimeData.fade;
 					}
 
-					light.color *= bsLight->lodDimmer;
+					light.fade *= bsLight->lodDimmer;
 
 					if (!IsGlobalLight(bsLight)) {
 						// List of BSMultiBoundRooms affected by a light
@@ -442,7 +456,7 @@ void LightLimitFix::UpdateLights()
 					if (light.shadowMaskIndex != 255) {
 						SetLightPosition(light, niLight->world.translate);
 
-						if ((light.color.x + light.color.y + light.color.z) > 1e-4 && light.radius > 1e-4) {
+						if ((light.color.x + light.color.y + light.color.z) * light.fade > 1e-4 && light.radius > 1e-4) {
 							lightsData.push_back(light);
 						}
 					}
