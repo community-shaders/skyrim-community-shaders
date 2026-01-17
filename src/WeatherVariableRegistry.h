@@ -69,10 +69,19 @@ namespace WeatherVariables
 			if (!valuePtr || !lerpFunc)
 				return;
 
+			// Check if either weather actually has an override for this setting
+			bool hasFromOverride = !from.is_null();
+			bool hasToOverride = !to.is_null();
+
+			// If neither weather overrides this setting, don't modify the current value
+			if (!hasFromOverride && !hasToOverride) {
+				return;
+			}
+
 			T fromVal = defaultValue;
 			T toVal = defaultValue;
 
-			if (!from.is_null()) {
+			if (hasFromOverride) {
 				try {
 					fromVal = from.get<T>();
 				} catch (const nlohmann::json::type_error& e) {
@@ -81,7 +90,7 @@ namespace WeatherVariables
 				}
 			}
 
-			if (!to.is_null()) {
+			if (hasToOverride) {
 				try {
 					toVal = to.get<T>();
 				} catch (const nlohmann::json::type_error& e) {
