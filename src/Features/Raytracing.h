@@ -1268,6 +1268,19 @@ struct Raytracing : public OverlayFeature
 			static inline REL::Relocation<decltype(thunk)> func;
 		};
 
+		struct TESObjectLAND_Detach3D
+		{
+			static void thunk(RE::TESObjectLAND* oThis)
+			{
+				if (auto& rt = globals::features::raytracing; rt.Active()) {
+					rt.RemoveInstance(oThis->formID, true);
+				}
+
+				func(oThis);
+			}
+			static inline REL::Relocation<decltype(thunk)> func;
+		};
+
 		static void Install()
 		{
 			stl::write_vfunc<0x6A, Load3D<RE::TESObjectREFR>>(RE::VTABLE_TESObjectREFR[0]);
@@ -1307,7 +1320,9 @@ struct Raytracing : public OverlayFeature
 			stl::write_vfunc<0xA, BSShadowDirectionalLight_RenderShadowmaps>(RE::VTABLE_BSShadowDirectionalLight[0]);
 
 			stl::detour_thunk<CreateTextureFromDDS>(REL::RelocationID(69334, 70716));
+
 			stl::detour_thunk<TESObjectLAND_Attach3D>(REL::RelocationID(18334, 18750));
+			stl::detour_thunk<TESObjectLAND_Detach3D>(REL::RelocationID(18394, 18823));
 
 			logger::info("[RT] Installed hooks");
 		}
