@@ -2,8 +2,8 @@
 
 #include "PCH.h"
 
-#include <d3d11_4.h>
 #include "Utils/D3D.h"
+#include <d3d11_4.h>
 
 /*float4 Position : POSITION0;
 float2 TexCoord0 : TEXCOORD0;
@@ -20,10 +20,10 @@ struct ModelSpaceToTangent
 	winrt::com_ptr<ID3D11PixelShader> pixelShader = nullptr;
 
 	winrt::com_ptr<ID3D11InputLayout> inputLayout = nullptr;
-	
+
 	ModelSpaceToTangent()
 	{
-		std::vector<D3D11_INPUT_ELEMENT_DESC> inputDesc = { 
+		std::vector<D3D11_INPUT_ELEMENT_DESC> inputDesc = {
 			{ "POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 0, D3D11_INPUT_PER_VERTEX_DATA, 0 },
 			{ "TEXCOORD", 0, DXGI_FORMAT_R16G16_FLOAT, 0, 12, D3D11_INPUT_PER_VERTEX_DATA, 0 },
 			{ "NORMAL", 0, DXGI_FORMAT_R16G16B16A16_FLOAT, 0, 14, D3D11_INPUT_PER_VERTEX_DATA, 0 },
@@ -34,7 +34,7 @@ struct ModelSpaceToTangent
 
 		if (auto rawPtr = reinterpret_cast<ID3D11VertexShader*>(Util::CompileShader(L"Data\\Shaders\\Raytracing\\ModelSpaceToTangent.hlsl", {}, "vs_5_0", "vertex", inputDesc, inputLayout.put())); rawPtr)
 			vertexShader.attach(rawPtr);
-		
+
 		if (auto rawPtr = reinterpret_cast<ID3D11PixelShader*>(Util::CompileShader(L"Data\\Shaders\\Raytracing\\ModelSpaceToTangent.hlsl", {}, "ps_5_0", "pixel")); rawPtr)
 			pixelShader.attach(rawPtr);
 	}

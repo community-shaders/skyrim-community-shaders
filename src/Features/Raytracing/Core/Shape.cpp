@@ -136,7 +136,7 @@ void Shape::BuildMesh(RE::BSGraphics::TriShape* rendererData, const std::uint32_
 			skinning.resize(vertexCountIn);
 
 		auto vertexSize = GetVertexSize(vertexFlags);
-		
+
 		bool hasPosition = vertexFlags & RE::BSGraphics::Vertex::VF_VERTEX;
 
 		//bool isFullPrec = vertexFlags & RE::BSGraphics::Vertex::VF_FULLPREC;
@@ -212,7 +212,7 @@ void Shape::BuildMesh(RE::BSGraphics::TriShape* rendererData, const std::uint32_
 			if (skinned) {
 				if (vertexFlags & RE::BSGraphics::Vertex::VF_SKINNED) {
 					std::memcpy(weights.data(), vtx + skinOffset, sizeof(half) * bonesPerVertex);
-					std::memcpy(boneIds.data(), vtx + skinOffset + boneIDOffset, sizeof(uint8_t) * bonesPerVertex);	
+					std::memcpy(boneIds.data(), vtx + skinOffset + boneIDOffset, sizeof(uint8_t) * bonesPerVertex);
 
 					float sum = 0.0f;
 					for (float w : weights) {
@@ -318,10 +318,10 @@ eastl::shared_ptr<Allocation> Shape::TextureRegister(const RE::NiPointer<RE::NiS
 		return defaultTexture;
 
 	auto& rt = globals::features::raytracing;
-	
+
 	if (modelSpaceNormalMap)
 		return rt.GetMSNormalMapRegister(this, niPointer->rendererTexture, defaultTexture);
-	else 
+	else
 		return rt.GetTextureRegister(niPointer->rendererTexture->texture, defaultTexture);
 }
 
@@ -466,8 +466,8 @@ void Shape::BuildMaterial(const RE::BSGeometry::GEOMETRY_RUNTIME_DATA& geometryR
 						// Vanilla Materials
 						if (const RE::BSLightingShaderMaterialBase* lightingBaseMaterial = skyrim_cast<RE::BSLightingShaderMaterialBase*>(shaderMaterial)) {
 							textures[0] = TextureRegister(lightingBaseMaterial->diffuseTexture, grayTexture);
-							textures[1] = TextureRegister(lightingBaseMaterial->normalTexture, normalTexture, false); // shaderFlags.any(EShaderPropertyFlag::kModelSpaceNormals)
-		
+							textures[1] = TextureRegister(lightingBaseMaterial->normalTexture, normalTexture, false);  // shaderFlags.any(EShaderPropertyFlag::kModelSpaceNormals)
+
 							if (shaderFlags.any(EShaderPropertyFlag::kSpecular)) {
 								textures[3] = TextureRegister(lightingBaseMaterial->specularBackLightingTexture, blackTexture);
 
