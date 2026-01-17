@@ -109,6 +109,7 @@ struct LinearLighting : Feature
 
 	uint isDirLightLinear = false;
 	float dirLightMult = 1.0f;
+	float lastConvertedClearColor[3] = { -1.0f, -1.0f, -1.0f };  // Track to avoid double conversion
 
 	virtual void DrawSettings() override;
 
@@ -117,6 +118,8 @@ struct LinearLighting : Feature
 
 	virtual void RestoreDefaultSettings() override;
 
+	virtual void EarlyPrepass() override;
+	virtual void ReflectionsPrepass() override;
 	virtual void Prepass() override;
 	virtual void PostPostLoad() override;
 
@@ -127,6 +130,8 @@ struct LinearLighting : Feature
 	RE::NiColor ColorToLinear(RE::NiColor inColor, float gamma);
 
 	void BSLightingShader_SetupGeometry(RE::BSRenderPass* a_pass);
+
+	void ConvertClearColor();
 
 	struct Hooks;
 };

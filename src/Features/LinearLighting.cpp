@@ -95,6 +95,49 @@ void LinearLighting::SetupResources()
 	PerGeometryCB = new ConstantBuffer(ConstantBufferDesc<PerGeometryData>());
 }
 
+void LinearLighting::EarlyPrepass()
+{
+	ConvertClearColor();
+}
+
+void LinearLighting::ReflectionsPrepass()
+{
+	ConvertClearColor();
+}
+
+void LinearLighting::ConvertClearColor()
+{
+	bool isMainLoadingMenu = globals::game::ui && (globals::game::ui->IsMenuOpen(RE::MainMenu::MENU_NAME) || globals::game::ui->IsMenuOpen(RE::LoadingMenu::MENU_NAME));
+	if (!settings.enableLinearLighting || isMainLoadingMenu)
+		return;
+
+	// Convert clear color from gamma space to linear space at the source
+	// This affects the background color visible at worldspace edges and in water reflections
+	auto renderer = globals::game::renderer;
+	if (renderer) {
+		auto& rendererData = renderer->GetRendererData();
+
+		// Check if we've already converted this exact color (avoid double conversion)
+		// This handles the case where cubemap and main pass both call us without engine reset
+		if (rendererData.clearColor[0] == lastConvertedClearColor[0] &&
+			rendererData.clearColor[1] == lastConvertedClearColor[1] &&
+			rendererData.clearColor[2] == lastConvertedClearColor[2]) {
+			return;
+		}
+
+		float gamma = settings.clearRenderGamma;
+		rendererData.clearColor[0] = std::pow(rendererData.clearColor[0], gamma);
+		rendererData.clearColor[1] = std::pow(rendererData.clearColor[1], gamma);
+		rendererData.clearColor[2] = std::pow(rendererData.clearColor[2], gamma);
+		// Alpha (clearColor[3]) typically doesn't need gamma correction
+
+		// Remember what we converted to
+		lastConvertedClearColor[0] = rendererData.clearColor[0];
+		lastConvertedClearColor[1] = rendererData.clearColor[1];
+		lastConvertedClearColor[2] = rendererData.clearColor[2];
+	}
+}
+
 void LinearLighting::Prepass()
 {
 	bool isMainLoadingMenu = globals::game::ui && (globals::game::ui->IsMenuOpen(RE::MainMenu::MENU_NAME) || globals::game::ui->IsMenuOpen(RE::LoadingMenu::MENU_NAME));

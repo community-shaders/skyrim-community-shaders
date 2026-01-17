@@ -255,66 +255,6 @@ namespace globals
 	};
 
 	/**
-	 * @brief Hooked implementation of ID3D11DeviceContext::ClearRenderTargetView for linear lighting support.
-	 *
-	 * When linear lighting is enabled, converts the clear color from gamma space to linear space
-	 * for the MAIN render target and reflections cubemap. This ensures the background color is
-	 * properly represented in linear color space, which is visible in areas where the sky
-	 * doesn't cover (e.g., worldspace edges) and in water reflections.
-	 */
-	struct ID3D11DeviceContext_ClearRenderTargetView
-	{
-		static void thunk(ID3D11DeviceContext* This, ID3D11RenderTargetView* pRenderTargetView, const FLOAT ColorRGBA[4])
-		{
-			if (!pRenderTargetView) {
-				func(This, pRenderTargetView, ColorRGBA);
-				return;
-			}
-
-			auto& linearLighting = features::linearLighting;
-
-			// Check if linear lighting is enabled (matching the same menu check as LinearLighting::Prepass)
-			bool isMainLoadingMenu = game::ui && (game::ui->IsMenuOpen(RE::MainMenu::MENU_NAME) || game::ui->IsMenuOpen(RE::LoadingMenu::MENU_NAME));
-
-			if (linearLighting.settings.enableLinearLighting && !isMainLoadingMenu && game::renderer) {
-				// Get the resource associated with this RTV to compare by texture instead of RTV pointer
-				// (multiple RTVs can be created for the same texture)
-				ID3D11Resource* rtvResource = nullptr;
-				pRenderTargetView->GetResource(&rtvResource);
-
-				bool needsConversion = false;
-				auto mainTexture = game::renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMAIN].texture;
-				auto& reflectionsCubemap = game::renderer->GetRendererData().cubemapRenderTargets[RE::RENDER_TARGET_CUBEMAP::kREFLECTIONS];
-
-				if (rtvResource == mainTexture || rtvResource == reflectionsCubemap.texture) {
-					needsConversion = true;
-				}
-
-				// Release the resource reference we obtained
-				if (rtvResource) {
-					rtvResource->Release();
-				}
-
-				if (needsConversion) {
-					// Convert clear color from gamma space to linear space
-					float gamma = linearLighting.settings.clearRenderGamma;
-					float linearColor[4] = {
-						std::pow(ColorRGBA[0], gamma),
-						std::pow(ColorRGBA[1], gamma),
-						std::pow(ColorRGBA[2], gamma),
-						ColorRGBA[3]  // Alpha typically doesn't need gamma correction
-					};
-					func(This, pRenderTargetView, linearColor);
-					return;
-				}
-			}
-
-			func(This, pRenderTargetView, ColorRGBA);
-		}
-		static inline REL::Relocation<decltype(thunk)> func;
-	};
-
-	/**
  * @brief Installs hooks on the Map and Unmap methods of the provided D3D11 device context.
  *
  * This enables interception of resource mapping and unmapping operations for frame buffer caching.
@@ -323,6 +263,5 @@ namespace globals
 	{
 		stl::detour_vfunc<14, ID3D11DeviceContext_Map>(a_context);
 		stl::detour_vfunc<15, ID3D11DeviceContext_Unmap>(a_context);
-		stl::detour_vfunc<50, ID3D11DeviceContext_ClearRenderTargetView>(a_context);
 	}
 }
