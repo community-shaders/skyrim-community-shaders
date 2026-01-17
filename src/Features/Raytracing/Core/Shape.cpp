@@ -202,10 +202,22 @@ void Shape::BuildMesh(RE::BSGraphics::TriShape* rendererData, const std::uint32_
 
 					float3 tangent = { pos.w, normalUnpacked.w, bitangentUnpacked.w };
 
+					if (!hasPosition) {
+						tangent.x = std::sqrt(std::max(0.0f, 1.0f - tangent.y * tangent.y - tangent.z * tangent.z));
+
+						float handedness = (tangent.x * (vertexData.Bitangent.y * vertexData.Normal.z - vertexData.Bitangent.z * vertexData.Normal.y) +
+											   tangent.y * (vertexData.Bitangent.z * vertexData.Normal.x - vertexData.Bitangent.x * vertexData.Normal.z) +
+											   tangent.z * (vertexData.Bitangent.x * vertexData.Normal.y - vertexData.Bitangent.y * vertexData.Normal.x)) < 0 ?
+						                       -1.0f :
+						                       1.0f;
+
+						tangent.x *= handedness;
+					}
+
 					if (skinned)
-						vertexData.Tangent = hasPosition ? Normalize(tangent) : tangent;
+						vertexData.Tangent = Normalize(tangent);
 					else
-						vertexData.Tangent = hasPosition ? Normalize(float3::TransformNormal(tangent, transform)) : tangent;
+						vertexData.Tangent = Normalize(float3::TransformNormal(tangent, transform));
 				}
 			}
 

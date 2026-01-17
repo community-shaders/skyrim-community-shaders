@@ -611,7 +611,7 @@ void Raytracing::DrawDebugSettings()
 				ImGui::Text(std::format("GI Unculled: {}, Culled: {}", blasInstancesCount, instanceCount - blasInstancesCount).c_str());
 			}
 
-			if (settings.RaytracedShadows) {
+			if (RaytracedShadows()) {
 				auto blasInstancesCount = blasShadowInstances.size();
 				ImGui::Text(std::format("Shadow Unculled: {}, Culled: {}", blasInstancesCount, instanceCount - blasInstancesCount).c_str());
 			}
@@ -658,16 +658,14 @@ void Raytracing::DrawOverlay()
 		ImGui::Text("%g ms", gpums);
 	};
 
-	if (ImGui::BeginTable("Effects", 3, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg)) {
+	if (ImGui::BeginTable("Effects", 4, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg)) {
 		ImGui::TableSetupColumn("Effect");
 		ImGui::TableSetupColumn("Instances");
 		ImGui::TableSetupColumn("CPU");
 		ImGui::TableSetupColumn("GPU");
-		ImGui::TableSetupColumn("Total");
+		ImGui::TableHeadersRow();
 
-		ImGui::TableHeadersRow();  // <-- title/header row
-
-		if (settings.RaytracedShadows)
+		if (RaytracedShadows())
 			DrawRow("Shadows", blasShadowInstances.size(), shadowsCPUTime, shadowsGPUTime);
 
 		// GI/PT
@@ -2778,7 +2776,7 @@ void Raytracing::DrawRTGI()
 
 	d3d11Context->CopyResource(mainTexture->resource11, main.texture);
 
-	if (!settings.RaytracedShadows)
+	if (!RaytracedShadows())
 		CopyDepth();
 
 	if (settings.WhiteFurnace) {
@@ -2798,6 +2796,7 @@ void Raytracing::DrawRTGI()
 	}
 
 	auto startTime = Util::GetNowSecs();
+	UpdateMeasureTime(startTime);
 
 	if (pixCapture && (!pixCaptureStarted || pixTDR) && settings.PIXCaptureLocation == PIXCaptureLocation::GlobalIllumination) {
 		pixCaptureStarted = true;
@@ -3088,8 +3087,10 @@ void Raytracing::DrawRTGI()
 
 		DX::ThrowIfFailed(commandList->Close());
 
-		mainCPUTime = static_cast<float>((Util::GetNowSecs() - startTime) * 1000.0);
-		startTime = Util::GetNowSecs();
+		if (canMeasure) {
+			mainCPUTime = static_cast<float>((Util::GetNowSecs() - startTime) * 1000.0);
+			startTime = Util::GetNowSecs();
+		}
 
 		ID3D12CommandList* commandListPtr = commandList.get();
 		commandQueue->ExecuteCommandLists(1, &commandListPtr);
@@ -3103,7 +3104,8 @@ void Raytracing::DrawRTGI()
 		DX::ThrowIfFailed(d3d12Fence->SetEventOnCompletion(fenceValue, nullptr));
 	}
 
-	mainGPUTime = static_cast<float>((Util::GetNowSecs() - startTime) * 1000.0);
+	if (canMeasure)
+		mainGPUTime = static_cast<float>((Util::GetNowSecs() - startTime) * 1000.0);
 
 	if (pixCapture && pixCaptureStarted && !pixTDR && settings.PIXCaptureLocation == PIXCaptureLocation::GlobalIllumination) {
 		ga->EndCapture();
@@ -3223,6 +3225,7 @@ void Raytracing::RenderShadows()
 	fenceValue++;
 
 	auto startTime = Util::GetNowSecs();
+	UpdateMeasureTime(startTime);
 
 	if (pixCapture && (!pixCaptureStarted || pixTDR) && settings.PIXCaptureLocation == PIXCaptureLocation::Shadows) {
 		pixCaptureStarted = true;
@@ -3295,8 +3298,10 @@ void Raytracing::RenderShadows()
 
 	DX::ThrowIfFailed(commandList->Close());
 
-	shadowsCPUTime = static_cast<float>((Util::GetNowSecs() - startTime) * 1000.0);
-	startTime = Util::GetNowSecs();
+	if (canMeasure) {
+		shadowsCPUTime = static_cast<float>((Util::GetNowSecs() - startTime) * 1000.0);
+		startTime = Util::GetNowSecs();
+	}
 
 	ID3D12CommandList* commandListPtr = commandList.get();
 	commandQueue->ExecuteCommandLists(1, &commandListPtr);
@@ -3309,7 +3314,8 @@ void Raytracing::RenderShadows()
 		DX::ThrowIfFailed(d3d12Fence->SetEventOnCompletion(fenceValue, nullptr));
 	}
 
-	shadowsGPUTime = static_cast<float>((Util::GetNowSecs() - startTime) * 1000.0);
+	if (canMeasure)
+		shadowsGPUTime = static_cast<float>((Util::GetNowSecs() - startTime) * 1000.0);
 
 	if (pixCapture && pixCaptureStarted && !pixTDR && settings.PIXCaptureLocation == PIXCaptureLocation::Shadows) {
 		ga->EndCapture();

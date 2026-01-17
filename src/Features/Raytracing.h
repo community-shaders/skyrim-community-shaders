@@ -268,6 +268,11 @@ struct Raytracing : public OverlayFeature
 		return loaded && settings.Enabled;
 	};
 
+	const bool RaytracedShadows() 
+	{
+		return settings.RaytracedShadows && !settings.PathTracing;
+	}
+
 	const auto& GetPipelines()
 	{
 		if (!skinningPipeline)
@@ -813,6 +818,21 @@ struct Raytracing : public OverlayFeature
 	float2 dynamicResolutionRatio;
 
 	// Timings
+	double captureInterval = 0.1;
+	double lastTime = 0;
+	bool canMeasure = false;
+
+	void UpdateMeasureTime(double currentTime)
+	{
+		double delta = currentTime - lastTime;
+
+		if (delta > captureInterval) {
+			lastTime = currentTime;
+			canMeasure = true;
+		} else
+			canMeasure = false;
+	}
+
 	float mainCPUTime;
 	float mainGPUTime;
 
@@ -970,7 +990,7 @@ struct Raytracing : public OverlayFeature
 				auto& rt = globals::features::raytracing;
 				rt.renderingShadowmap = true;
 
-				if (rt.Active() && rt.settings.RaytracedShadows) {
+				if (rt.Active() && rt.RaytracedShadows()) {
 					rt.UpdateShadowsFrameBuffer();
 
 					auto& runtimeData = light->GetShadowDirectionalLightRuntimeData();
@@ -985,7 +1005,7 @@ struct Raytracing : public OverlayFeature
 
 				rt.renderingShadowmap = false;
 
-				if (rt.Active() && rt.settings.RaytracedShadows) {
+				if (rt.Active() && rt.RaytracedShadows()) {
 					rt.shadowLight = light;
 				}
 			}
@@ -999,7 +1019,7 @@ struct Raytracing : public OverlayFeature
 			{
 				auto& rt = globals::features::raytracing;
 
-				if (rt.Active() && rt.settings.RaytracedShadows)
+				if (rt.Active() && rt.RaytracedShadows())
 					rt.RenderShadows();
 				else
 					func(a1);
