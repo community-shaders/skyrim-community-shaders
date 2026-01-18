@@ -2097,7 +2097,7 @@ bool Raytracing::RemoveInstance(RE::FormID formID, bool releaseModel)
 	if (auto nodesIt = formIDNodes.find(formID); nodesIt != formIDNodes.end()) {
 		for (auto& rootNode : nodesIt->second) {
 			removed = RemoveInstance(rootNode, releaseModel);
-		}		
+		}
 
 		formIDNodes.erase(nodesIt);
 	}
@@ -2217,7 +2217,7 @@ void Raytracing::AddInstance(RE::FormID formID, RE::NiAVObject* pNiNode, eastl::
 				} else {
 					formIDNodes.try_emplace(formID, eastl::vector<RE::NiAVObject*>{ pNiNode });
 				}
-				
+
 				modelIt->second->AddRef();
 			}
 		}
