@@ -943,8 +943,6 @@ void SettingsOverrideManager::ReportOverrideFailure(const std::string& modName, 
 		fileInfo);
 }
 
-// === NEW: User Override System Implementation ===
-
 std::filesystem::path SettingsOverrideManager::GetUserOverridesDirectory() const
 {
 	return Util::PathHelpers::GetUserOverridesPath();

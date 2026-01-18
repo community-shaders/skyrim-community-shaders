@@ -146,8 +146,6 @@ public:
 	 */
 	void ReportOverrideFailure(const std::string& modName, const std::string& featureName, const std::string& errorMessage);
 
-	// === NEW: User Override System ===
-
 	/**
 	 * @brief Gets the user overrides directory path (Overrides/User/)
 	 */
