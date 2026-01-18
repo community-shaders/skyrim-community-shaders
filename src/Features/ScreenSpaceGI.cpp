@@ -669,11 +669,9 @@ void ScreenSpaceGI::DrawSSGI()
 	auto imageSpaceManager = RE::ImageSpaceManager::GetSingleton();
 	GET_INSTANCE_MEMBER(BSImagespaceShaderISSAOBlurH, imageSpaceManager);
 
-	// Disable vanilla SSAO
-	if (auto* ssaoBlur = BSImagespaceShaderISSAOBlurH.get()) {
-		auto* enableSSAO = reinterpret_cast<bool*>(reinterpret_cast<uintptr_t>(ssaoBlur) + 0x50LL);
+	// Toggle vanilla SSAO
+	static bool* enableSSAO = reinterpret_cast<bool*>(reinterpret_cast<uintptr_t>(BSImagespaceShaderISSAOBlurH.get()) + 0x50LL);
 		*enableSSAO = settings.EnableVanillaSSAO;
-	}
 
 	if (!(settings.Enabled && ShadersOK())) {
 		FLOAT clr[4] = { 0.f, 0.f, 0.f, 0.f };
