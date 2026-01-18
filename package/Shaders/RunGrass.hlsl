@@ -628,11 +628,12 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	dirLightColor *= dirLightColorMultiplier;
 	dirLightColor *= dirShadow;
 	dirLightColor *= dirDetailShadow;
-
+	
+    float wrapAmount = saturate(input.VertexNormal.w * 10.0)* 0.5 * (!complex);
+	
 		if (SharedData::grassLightingSettings.EnableWrappedLighting)
     {
         // Old Wrapped Model
-        float wrapAmount = saturate(input.VertexNormal.w * 10.0)* 0.5 * (!complex);
         float wrappedDirLight = saturate(dirLightAngle + wrapAmount) / (1.0 + wrapAmount);
         lightsDiffuseColor += dirLightColor * saturate(wrappedDirLight) * Color::GrassDiffuseMult();
     }
@@ -719,7 +720,6 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 
 				if (SharedData::grassLightingSettings.EnableWrappedLighting)
 				{
-					float wrapAmount = saturate(input.VertexNormal.w * 10.0)* 0.5 * (!complex);
                     float wrappedLight = saturate(lightAngle + wrapAmount) / (1.0 + wrapAmount);
 					lightDiffuseColor = lightColor * wrappedLight;
 				}
