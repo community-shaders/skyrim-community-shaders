@@ -173,8 +173,17 @@ void main()
     return;
 #endif
 
-#if defined(DEBUG_NORMALOUT)
-    OutputTexture[idx] = float4(sourceSurface.Normal * 0.5f + 0.5f, 1.0f);
+#if defined(DEBUG_NORMALOUT) || defined(DEBUG_TANGENTOUT) || defined(DEBUG_BITANGENTOUT)
+    
+#if defined(DEBUG_NORMALOUT)   
+    float3 output = sourceSurface.Normal;
+#elif defined(DEBUG_TANGENTOUT)
+    float3 output = sourceSurface.Tangent;
+#else
+    float3 output = sourceSurface.Bitangent; 
+#endif
+    
+    OutputTexture[idx] = float4(output * 0.5f + 0.5f, 1.0f);
     SpecularAlbedo[idx] = float4(0.5f, 0.5f, 0.5f, 0.0f);
     SpecularHitDist[idx] = RAY_TMAX;
     return;
