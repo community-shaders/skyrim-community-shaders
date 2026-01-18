@@ -12,6 +12,6 @@ namespace RTConstants
 	static constexpr uint MAX_INSTANCES = 4096;
 	static constexpr uint MAX_LIGHTS = 255;
 
-	static constexpr uint SKY_CUBEMAP_SIZE = 512;
+	static constexpr uint SKY_CUBEMAP_SIZE = 256;
 	static constexpr uint SKY_HEMI_SIZE = SKY_CUBEMAP_SIZE * 2;
 }

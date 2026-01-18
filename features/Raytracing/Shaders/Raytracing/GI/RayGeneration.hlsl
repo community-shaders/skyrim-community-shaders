@@ -50,10 +50,12 @@ void main()
 #endif
 
 #if defined(PATH_TRACING)
-    float2 uv = ((float2(idx) + 0.5f) / float2(size)) * 2.0f - 1.0f;
-    uv.y = -uv.y;
+    const float2 uv = float2(idx + 0.5f) / size;
+    
+    float2 screenPos = uv * 2.0f - 1.0f;
+    screenPos.y = -screenPos.y;
 
-    float4 clip = float4(uv, 1.0f, 1.0f);
+    const float4 clip = float4(screenPos, 1.0f, 1.0f);
     float4 view = mul(Frame.ProjInverse, clip);
     view /= view.w;
 
@@ -81,9 +83,9 @@ void main()
             return;
 #endif
 
-        float3 skyIrradiance = SampleSky(sourceDirection) * Frame.Sky;
-
-        OutputTexture[idx] = float4(skyIrradiance, 0.0f);
+        const float4 mainColor = MainTexture.SampleLevel(BaseSampler, uv, 0);
+    
+        OutputTexture[idx] = float4(LLGammaToTrueLinear(mainColor.rgb), 0.0f);
         DiffuseAlbedoPathTracing[idx] = float4(0.0f, 0.0f, 0.0f, 1.0f);
         NormalRoughnessPathTracing[idx] = float4(0.0f, 0.0f, 0.0f, 1.0f);
         SpecularAlbedo[idx] = float4(0.5f, 0.5f, 0.5f, 0.0f);
