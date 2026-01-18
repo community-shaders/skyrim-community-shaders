@@ -1403,10 +1403,10 @@ eastl::vector<LightLimitFix::LightData> Raytracing::GetPointLights()
 						isl.ProcessLight(light, bsLight, niLight);
 					} else {
 						light.radius = runtimeData.radius.x;
+						light.fade = runtimeData.fade;
 
 						if (settings.LodDimmer)
-							light.color *= runtimeData.lodDimmer;
-						light.fade = runtimeData.fade;
+							light.fade *= bsLight->lodDimmer;
 					}
 
 					if (!IsGlobalLight(bsLight)) {
