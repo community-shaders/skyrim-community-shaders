@@ -1843,7 +1843,36 @@ static RE::BSVisit::BSVisitControl TraverseScenegraphRTGeometries(RE::NiAVObject
 	return result;
 }
 
-void Raytracing::CreateModel(RE::TESForm* form, const char* path, RE::NiNode* pRoot)
+void Raytracing::CreateModel(RE::TESForm* form, const char* model, RE::NiAVObject* root)
+{
+	auto* controller = root->GetController<RE::NiControllerManager>();
+
+	// TESObjectCONT and TESObjectDOOR
+	if (controller) {
+		logger::info("[RT] Load3D - NiControllerManager {}", model);
+
+		auto* nextController = netimmerse_cast<RE::NiMultiTargetTransformController*>(controller->GetNext());
+
+		if (nextController) {
+			for (uint16_t i = 0; i < nextController->numInterps; i++) {
+				auto* target = nextController->targets[i];
+
+				if (!target)
+					continue;
+
+				logger::info("[RT] Load3D - NiMultiTargetTransformController {}", target->name.c_str());
+
+				CreateModelInternal(form, std::format("{}_{}", model, target->name.c_str()).c_str(), root);
+			}
+
+			return;
+		}
+	}
+
+	CreateModelInternal(form, model, root);
+}
+
+void Raytracing::CreateModelInternal(RE::TESForm* form, const char* path, RE::NiAVObject* pRoot)
 {
 	if (!pRoot) {
 		logger::error("[RT] CreateModel \"{}\" - nullptr root", path);
@@ -2029,7 +2058,7 @@ void Raytracing::CreateModel(RE::TESForm* form, const char* path, RE::NiNode* pR
 	}
 }
 
-bool Raytracing::RemoveInstance(RE::NiNode* pRoot, bool releaseModel)
+bool Raytracing::RemoveInstance(RE::NiAVObject* pRoot, bool releaseModel)
 {
 	if (auto instanceIt = instances.find(pRoot); instanceIt != instances.end()) {
 		auto& instance = instanceIt->second;
@@ -2174,7 +2203,7 @@ eastl::shared_ptr<Allocation> Raytracing::GetMSNormalMapRegister([[maybe_unused]
 	return defaultTexture;
 }
 
-void Raytracing::AddInstance(RE::FormID formID, RE::NiNode* pNiNode, eastl::string path)
+void Raytracing::AddInstance(RE::FormID formID, RE::NiAVObject* pNiNode, eastl::string path)
 {
 	logger::debug("[RT] AddInstance [0x{:08X}] - {}, Path: {}", formID, pNiNode->name, path);
 
@@ -2186,7 +2215,7 @@ void Raytracing::AddInstance(RE::FormID formID, RE::NiNode* pNiNode, eastl::stri
 				if (auto nodesIt = formIDNodes.find(formID); nodesIt != formIDNodes.end()) {
 					nodesIt->second.push_back(pNiNode);
 				} else {
-					formIDNodes.try_emplace(formID, eastl::vector<RE::NiNode*>{ pNiNode });
+					formIDNodes.try_emplace(formID, eastl::vector<RE::NiAVObject*>{ pNiNode });
 				}
 				
 				modelIt->second->AddRef();
@@ -2195,7 +2224,7 @@ void Raytracing::AddInstance(RE::FormID formID, RE::NiNode* pNiNode, eastl::stri
 	}
 }
 
-eastl::vector<size_t> Raytracing::GatherInstanceLights(RE::NiNode* pNiNode)
+eastl::vector<size_t> Raytracing::GatherInstanceLights(RE::NiAVObject* pNiNode)
 {
 	eastl::vector<size_t> instanceLights;
 
@@ -4109,7 +4138,7 @@ RE::BSEventNotifyControl Raytracing::TESObjectLoadedEventHandler::ProcessEvent(c
 	if (!pNiAVObject)
 		return RE::BSEventNotifyControl::kContinue;
 
-	globals::features::raytracing.CreateModel(eventRef, actor->GetName(), netimmerse_cast<RE::NiNode*>(pNiAVObject));
+	globals::features::raytracing.CreateModelInternal(eventRef, actor->GetName(), netimmerse_cast<RE::NiNode*>(pNiAVObject));
 
 	return RE::BSEventNotifyControl::kContinue;
 }

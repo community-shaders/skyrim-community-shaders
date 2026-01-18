@@ -21,7 +21,7 @@ struct Instance
 	Util::FrameChecker frameChecker;
 
 	// Checks for skinned and dynamic trishapes update
-	void Update(RE::NiNode* pNiNode, const eastl::pair<eastl::string, Model*>& modelPair, SkinningPipeline* skinningPipeline)
+	void Update(RE::NiAVObject* pNiNode, const eastl::pair<eastl::string, Model*>& modelPair, SkinningPipeline* skinningPipeline)
 	{
 		// Instance was not changed by the game, so there is no need to update it
 		// This doesn't work at all for actors

@@ -224,9 +224,9 @@ struct Raytracing : public OverlayFeature
 	void SkyCubeToHemi() const;
 	void CheckResourcesSide(int side);
 
-	void AddInstance(RE::FormID formID, RE::NiNode* pNiNode, eastl::string path);
+	void AddInstance(RE::FormID formID, RE::NiAVObject* pNiNode, eastl::string path);
 
-	eastl::vector<size_t> GatherInstanceLights(RE::NiNode* pNiNode);
+	eastl::vector<size_t> GatherInstanceLights(RE::NiAVObject* pNiNode);
 
 	void UpdateInstances();
 	void UpdateShadowInstances();
@@ -576,10 +576,11 @@ struct Raytracing : public OverlayFeature
 	void CommitModel(Model* model);
 
 	// Creates mesh buffers for all graph TriShapes, handles materials and builds a single BLAS for the node
-	void CreateModel(RE::TESForm* refr, const char* path, RE::NiNode* pRoot);
+	void CreateModel(RE::TESForm* form, const char* model, RE::NiAVObject* root);
+	void CreateModelInternal(RE::TESForm* refr, const char* path, RE::NiAVObject* pRoot);
 
 	// Removes the instance and optionally also releases the model and all its buffers if refCount reaches 0
-	bool RemoveInstance(RE::NiNode* pRoot, bool releaseModel);
+	bool RemoveInstance(RE::NiAVObject* pRoot, bool releaseModel);
 	bool RemoveInstance(RE::FormID formID, bool releaseModel);
 
 	// TODO: Move to Model struct
@@ -653,8 +654,8 @@ struct Raytracing : public OverlayFeature
 	winrt::com_ptr<D3D12MA::Pool> blasScratchPool = nullptr;
 	winrt::com_ptr<D3D12MA::Pool> blasPool = nullptr;
 
-	eastl::unordered_map<RE::NiNode*, Instance> instances;
-	eastl::unordered_map<RE::FormID, eastl::vector<RE::NiNode*>> formIDNodes;
+	eastl::unordered_map<RE::NiAVObject*, Instance> instances;
+	eastl::unordered_map<RE::FormID, eastl::vector<RE::NiAVObject*>> formIDNodes;
 
 	eastl::unique_ptr<DX12::StructuredBufferUpload<MaterialData>> materialBuffer = nullptr;
 
@@ -1064,7 +1065,7 @@ struct Raytracing : public OverlayFeature
 		{
 			static RE::NiAVObject* thunk(T* oThis, bool a_backgroundLoading)
 			{
-				auto* result = func(oThis, a_backgroundLoading);
+				RE::NiAVObject* result = func(oThis, a_backgroundLoading);
 
 				if (auto& rt = globals::features::raytracing; rt.Active()) {
 					auto* baseObject = oThis->GetBaseObject();
@@ -1080,12 +1081,8 @@ struct Raytracing : public OverlayFeature
 
 					logger::info("[RT] Load3D - {} Name: {} - FullLodRef: {}", typeid(*baseObject).name(), oThis->GetName(), oThis->GetFullLODRef());
 
-					/*RE::FormID id = baseObject->GetFormID();
-					logger::info("[RT] Load3DA - Name: {}, Flags [0x{:8X}]: {}", typeid(*baseObject).name(), flags, GetFlagsString<RE::TESObjectREFR::RecordFlags::RecordFlag>(flags));
-					logger::info("[RT] Load3DA - FormID: [0x{:8X}], FormType: {}", id, magic_enum::enum_name(type));*/
-
 					if (auto* model = baseObject->As<RE::TESModel>()) {
-						rt.CreateModel(oThis, model->GetModel(), netimmerse_cast<RE::NiNode*>(result));
+						rt.CreateModel(oThis, model->GetModel(), result);
 					}
 				}
 
@@ -1101,7 +1098,7 @@ struct Raytracing : public OverlayFeature
 			{
 				if (auto& rt = globals::features::raytracing; rt.Active()) {
 					if (auto* pNiAVObject = oThis->Get3D()) {
-						rt.RemoveInstance(netimmerse_cast<RE::NiNode*>(pNiAVObject), true);
+						rt.RemoveInstance(pNiAVObject, true);
 					}
 				}
 
@@ -1258,7 +1255,7 @@ struct Raytracing : public OverlayFeature
 					if (!mesh)
 						continue;
 
-					globals::features::raytracing.CreateModel(oThis, std::format("Landscape_{}_{}_Quad_{}", exteriorData->cellX, exteriorData->cellY, i).c_str(), mesh);
+					globals::features::raytracing.CreateModelInternal(oThis, std::format("Landscape_{}_{}_Quad_{}", exteriorData->cellX, exteriorData->cellY, i).c_str(), mesh);
 				}
 			};
 			static inline REL::Relocation<decltype(thunk)> func;
