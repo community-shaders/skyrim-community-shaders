@@ -50,4 +50,14 @@ float3 LLTrueLinearToGamma(float3 color)
 {
     return LLON ? color : pow(abs(color), 1.0f / 2.2f);
 }
+
+float3 EmitColorToLinear(float3 color)
+{
+    return LLON ? (pow(abs(color), LLSETTINGS.emitColorGamma)) : color;
+}
+
+float EmitColorMult()
+{
+    return LLON ? LLSETTINGS.emitColorMult : 1.0f;
+}
 #endif
