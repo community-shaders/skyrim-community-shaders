@@ -33,7 +33,7 @@ alignas(16)
     float4x4 ProjInverse;
     float4 CameraData;
     float4 NDCToView;
-    Light Directional;
+    DirectionalLight Directional;
     float3 Position;
     uint FrameCount;
     float3 PositionPrev;

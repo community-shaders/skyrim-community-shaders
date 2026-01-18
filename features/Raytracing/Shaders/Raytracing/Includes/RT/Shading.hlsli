@@ -15,6 +15,11 @@
 #include "Raytracing/Includes/MonteCarlo.hlsli"
 #include "Raytracing/Includes/Surface.hlsli"
 
+static const float ISL_SCALE = 0.8f;
+static const float ISL_METRES_TO_UNITS = 70.f;
+static const float ISL_METRES_TO_UNITS_SQ = ISL_METRES_TO_UNITS * ISL_METRES_TO_UNITS;
+static const float ISL_SCALED_UNITS_SQ = ISL_SCALE * ISL_METRES_TO_UNITS_SQ;
+
 float InverseSquareAtten(float dist, float range)
 {
     // Normalized inverse-square
@@ -138,7 +143,7 @@ float3 EvalLight(in float3 l, in Surface surface, in BRDFContext brdfContext, in
 #endif
 }
 
-float3 EvalDirectionalLight(in Surface surface, in BRDFContext brdfContext, in Light light, in Material material, inout uint randomSeed)
+float3 EvalDirectionalLight(in Surface surface, in BRDFContext brdfContext, in DirectionalLight light, in Material material, inout uint randomSeed)
 {
     light.Color = DirLightToLinear(light.Color);
     float3 direct = EvalLight(light.Vector, surface, brdfContext, material) * light.Color;
@@ -215,8 +220,22 @@ float3 EvalPointLight(in Surface surface, in BRDFContext brdfContext, in LightDa
     float dist = length(l);
     l /= dist;
 
-    // float atten = VanillaSquaredAtten(dist, light.Range);
-    float atten = InverseSquareAtten(dist * GAME_UNIT_TO_M, light.Range * GAME_UNIT_TO_M);
+    // float atten = VanillaSquaredAtten(dist, light.Radius);
+    // float atten = InverseSquareAtten(dist * GAME_UNIT_TO_M, light.Radius * GAME_UNIT_TO_M);
+
+	float atten = 0.0f;
+	if ((light.Flags & LightFlags::ISL) != 0)
+	{
+		float invSq = ISL_SCALED_UNITS_SQ * rcp(dist * dist + light.SizeBias);
+		float t = saturate((light.Radius - dist) * light.FadeZone);
+		float fastSmoothstep = t * t * (3.0f - 2.0f * t);
+		atten = invSq * fastSmoothstep;
+	}
+	else
+	{
+		float intensityFactor = saturate(dist * light.InvRadius);
+		atten = 1.0f - intensityFactor * intensityFactor;
+	}
 
     float3 direct = EvalLight(l, surface, brdfContext, material) * atten * light.Color * lightWeight;
 

@@ -1387,7 +1387,7 @@ eastl::vector<LightLimitFix::LightData> Raytracing::GetPointLights()
 	auto accumulator = *globals::game::currentAccumulator.get();
 	const auto activeShadowSceneNode = accumulator->GetRuntimeData().activeShadowSceneNode;
 
-	//auto& isl = globals::features::inverseSquareLighting;
+	auto& isl = globals::features::inverseSquareLighting;
 
 	auto addLight = [&](const RE::NiPointer<RE::BSLight>& e) {
 		if (auto bsLight = e.get()) {
@@ -1399,19 +1399,14 @@ eastl::vector<LightLimitFix::LightData> Raytracing::GetPointLights()
 					light.color = float3(runtimeData.diffuse.red, runtimeData.diffuse.green, runtimeData.diffuse.blue) * runtimeData.fade;
 					light.lightFlags = std::bit_cast<LightLimitFix::LightFlags>(runtimeData.ambient.red);
 
-					/*if (isl.loaded) {
+					if (isl.loaded) {
 						isl.ProcessLight(light, bsLight, niLight);
 					} else {
 						light.radius = runtimeData.radius.x;
 
 						if (settings.LodDimmer)
 							light.color *= runtimeData.fade;
-					}*/
-
-					light.radius = runtimeData.radius.x;
-
-					if (settings.LodDimmer)
-						light.color *= bsLight->lodDimmer;
+					}
 
 					if (!IsGlobalLight(bsLight)) {
 						light.lightFlags.set(LightLimitFix::LightFlags::PortalStrict);
@@ -1480,7 +1475,28 @@ void Raytracing::UpdateLights()
 			if (lights.size() >= RTConstants::MAX_LIGHTS)
 				break;
 
-			lights.emplace_back(data.positionWS[0].data, data.radius, data.color * settings.Point, 0);
+			if (data.lightFlags.any(LightLimitFix::LightFlags::Disabled))
+				continue;
+
+			Light light;
+			light.Vector = data.positionWS[0].data;
+			light.Radius = data.radius;
+			light.Color = data.color * settings.Point;
+			light.InvRadius = data.invRadius;
+			light.FadeZone = data.fadeZone;
+			light.SizeBias = data.sizeBias;
+			light.Type = 0;
+			light.Flags = 0;
+
+			if (data.lightFlags.any(LightLimitFix::LightFlags::InverseSquare))
+				light.Flags |= (1 << 0);
+
+			if (data.lightFlags.any(LightLimitFix::LightFlags::Linear))
+				light.Flags |= (1 << 1);
+
+			light.Pad0 = 0.0f;
+
+			lights.push_back(light);
 		}
 
 		if (!lights.empty())
@@ -2199,7 +2215,7 @@ eastl::vector<size_t> Raytracing::GatherInstanceLights(RE::NiNode* pNiNode)
 	for (size_t i = 0; i < lights.size(); i++) {
 		const Light& light = lights[i];
 
-		if ((center - light.Vector).Length() <= radius + light.Range)
+		if ((center - light.Vector).Length() <= radius + light.Radius)
 			instanceLights.push_back(i);
 	}
 

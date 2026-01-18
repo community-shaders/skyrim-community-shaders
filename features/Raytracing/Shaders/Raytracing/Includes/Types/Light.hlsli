@@ -16,13 +16,32 @@ alignas(16)
 	Light
 {
 	float3 Vector;
-	float Range;
+	float Radius;
 	float3 Color;
+	float InvRadius;
+	float FadeZone;
+	float SizeBias;
+	float Pad0;
 	uint16_t Type;
 	uint16_t Flags;
 };
 #ifdef __cplusplus
 static_assert(sizeof(Light) % 16 == 0);
+#endif
+
+struct
+#ifdef __cplusplus
+alignas(16)
+#endif
+	DirectionalLight
+{
+	float3 Vector;
+	float Pad0;
+	float3 Color;
+	float Pad1;
+};
+#ifdef __cplusplus
+static_assert(sizeof(DirectionalLight) % 16 == 0);
 #endif
 
 #endif
