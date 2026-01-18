@@ -92,6 +92,11 @@ struct Surface
 
             Albedo = VanillaDiffuseColor(diffuse * vertexColor.rgb);
 
+            if (material.Feature == Feature::kHairTint) {
+                float3 hairTint = material.BaseColor().rgb;
+                Albedo *= VanillaDiffuseColor(hairTint);
+            }
+
             [branch]
             if (material.ShaderFlags & ShaderFlags::kSpecular) {
                 Texture2D specularTexture = Textures[NonUniformResourceIndex(material.SpecularTexture())];
