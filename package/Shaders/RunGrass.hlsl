@@ -628,9 +628,9 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	dirLightColor *= dirLightColorMultiplier;
 	dirLightColor *= dirShadow;
 	dirLightColor *= dirDetailShadow;
-	
+
     float wrapAmount = saturate(input.VertexNormal.w * 10.0)* 0.5 * (!complex);
-	
+
 		if (SharedData::grassLightingSettings.EnableWrappedLighting)
     {
         // Old Wrapped Model
