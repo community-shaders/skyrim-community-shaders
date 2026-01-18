@@ -222,6 +222,7 @@ float3 EvalPointLight(in Surface surface, in BRDFContext brdfContext, in LightDa
 
     // float atten = VanillaSquaredAtten(dist, light.Radius);
     // float atten = InverseSquareAtten(dist * GAME_UNIT_TO_M, light.Radius * GAME_UNIT_TO_M);
+    float lightSourceAngle = 0.05f;
 
 	float atten = 0.0f;
 	if ((light.Flags & LightFlags::ISL) != 0)
@@ -230,6 +231,8 @@ float3 EvalPointLight(in Surface surface, in BRDFContext brdfContext, in LightDa
 		float t = saturate((light.Radius - dist) * light.FadeZone);
 		float fastSmoothstep = t * t * (3.0f - 2.0f * t);
 		atten = invSq * fastSmoothstep;
+        float size = sqrt((light.SizeBias * 2.0f) / (0.8 * 4900));
+        lightSourceAngle = atan2(size, dist);
 	}
 	else
 	{
@@ -242,7 +245,7 @@ float3 EvalPointLight(in Surface surface, in BRDFContext brdfContext, in LightDa
     [branch]
     if (any(direct > MIN_DIFFUSE_SHADOW))
     {
-        float3 lr = TangentToWorld(l, SampleCosineHemisphereScaled(randomSeed, 0.05f));
+        float3 lr = TangentToWorld(l, SampleCosineHemisphereScaled(randomSeed, lightSourceAngle));
         direct *= TraceRayShadowFinite(Scene, surface, lr, dist);
     }
 
