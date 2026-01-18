@@ -2066,10 +2066,11 @@ bool Raytracing::RemoveInstance(RE::FormID formID, bool releaseModel)
 	bool removed = false;
 
 	if (auto nodesIt = formIDNodes.find(formID); nodesIt != formIDNodes.end()) {
-		removed = RemoveInstance(nodesIt->second, releaseModel);
+		for (auto& rootNode : nodesIt->second) {
+			removed = RemoveInstance(rootNode, releaseModel);
+		}		
 
-		if (removed)
-			formIDNodes.erase(nodesIt);
+		formIDNodes.erase(nodesIt);
 	}
 
 	return removed;
@@ -2182,7 +2183,12 @@ void Raytracing::AddInstance(RE::FormID formID, RE::NiNode* pNiNode, eastl::stri
 			auto [it, emplaced] = instances.try_emplace(pNiNode, Instance(path));
 
 			if (emplaced) {
-				formIDNodes.try_emplace(formID, pNiNode);
+				if (auto nodesIt = formIDNodes.find(formID); nodesIt != formIDNodes.end()) {
+					nodesIt->second.push_back(pNiNode);
+				} else {
+					formIDNodes.try_emplace(formID, eastl::vector<RE::NiNode*>{ pNiNode });
+				}
+				
 				modelIt->second->AddRef();
 			}
 		}
@@ -4076,7 +4082,7 @@ RE::BSEventNotifyControl Raytracing::TESObjectLoadedEventHandler::ProcessEvent(c
 		return RE::BSEventNotifyControl::kContinue;
 	}
 
-	logger::info("[RT] TESObjectLoadedEvent - Name: {} - FullLodRef: {}", typeid(*eventRef).name(), eventRef->GetFullLODRef());
+	logger::info("[RT] TESObjectLoadedEvent - {} Name: {} - FullLodRef: {}", typeid(*eventRef).name(), eventRef->GetName(), eventRef->GetFullLODRef());
 
 	//if (eventRef->formType.none(RE::FormType::NPC, RE::FormType::LeveledNPC, RE::FormType::ActorCharacter))
 	if (eventRef->formType.none(RE::FormType::ActorCharacter))

@@ -654,7 +654,7 @@ struct Raytracing : public OverlayFeature
 	winrt::com_ptr<D3D12MA::Pool> blasPool = nullptr;
 
 	eastl::unordered_map<RE::NiNode*, Instance> instances;
-	eastl::unordered_map<RE::FormID, RE::NiNode*> formIDNodes;
+	eastl::unordered_map<RE::FormID, eastl::vector<RE::NiNode*>> formIDNodes;
 
 	eastl::unique_ptr<DX12::StructuredBufferUpload<MaterialData>> materialBuffer = nullptr;
 
@@ -1078,7 +1078,7 @@ struct Raytracing : public OverlayFeature
 					if (flags & MarkerFlags::MapMarker || flags & MarkerFlags::HeadingMarker)
 						return result;
 
-					logger::info("[RT] Load3D - Name: {} - FullLodRef: {}", typeid(*baseObject).name(), oThis->GetFullLODRef());
+					logger::info("[RT] Load3D - {} Name: {} - FullLodRef: {}", typeid(*baseObject).name(), oThis->GetName(), oThis->GetFullLODRef());
 
 					/*RE::FormID id = baseObject->GetFormID();
 					logger::info("[RT] Load3DA - Name: {}, Flags [0x{:8X}]: {}", typeid(*baseObject).name(), flags, GetFlagsString<RE::TESObjectREFR::RecordFlags::RecordFlag>(flags));
@@ -1086,10 +1086,6 @@ struct Raytracing : public OverlayFeature
 
 					if (auto* model = baseObject->As<RE::TESModel>()) {
 						rt.CreateModel(oThis, model->GetModel(), netimmerse_cast<RE::NiNode*>(result));
-					} else if (auto* land = baseObject->As<RE::TESObjectLAND>()) {
-						logger::info("[RT] Load3D - Land {}", land->GetName());
-					} else if (auto* world = baseObject->As<RE::TESWorldSpace>()) {
-						logger::info("[RT] WorldSpace - Land {}", world->GetName());
 					}
 				}
 
@@ -1272,21 +1268,8 @@ struct Raytracing : public OverlayFeature
 		{
 			static void thunk(RE::TESObjectLAND* oThis)
 			{
-				auto* loadedData = oThis->loadedData;
+				globals::features::raytracing.RemoveInstance(oThis->GetFormID(), true);
 
-				if (!loadedData || !loadedData->mesh)
-					return;
-
-				for (uint i = 0; i < 4; i++) {
-					auto mesh = loadedData->mesh[i];
-
-					if (!mesh)
-						continue;
-
-					// Make sure to remove instance by root node and not by formid, since each TESObjectLAND has up to 4 geometries/instances/root nodes
-					globals::features::raytracing.RemoveInstance(mesh, true);
-				}
-	
 				func(oThis);
 			}
 			static inline REL::Relocation<decltype(thunk)> func;
