@@ -1864,7 +1864,7 @@ static RE::BSVisit::BSVisitControl TraverseScenegraphRTGeometries(RE::NiAVObject
 
 void Raytracing::CreateModel(RE::TESForm* form, const char* model, RE::NiAVObject* root)
 {
-	auto formType = form->GetFormType();
+	/*auto formType = form->GetFormType();
 
 	if (formType == RE::FormType::Reference)
 		formType = form->As<RE::TESObjectREFR>()->GetBaseObject()->GetFormType();
@@ -1876,6 +1876,42 @@ void Raytracing::CreateModel(RE::TESForm* form, const char* model, RE::NiAVObjec
 			}
 		}
 		return;
+	}*/
+
+	auto* controller = root->GetController<RE::NiControllerManager>();
+
+	if (controller) {
+		logger::info("[RT] Load3D - NiControllerManager {}", model);
+
+		auto* nextController = netimmerse_cast<RE::NiMultiTargetTransformController*>(controller->GetNext());
+
+		if (nextController) {
+			eastl::hash_set<RE::NiNode*> parents;
+			eastl::hash_set<RE::NiAVObject*> targets;
+
+			for (uint16_t i = 0; i < nextController->numInterps; i++) {
+				auto* target = nextController->targets[i];
+
+				if (!target)
+					continue;
+
+				targets.emplace(target);
+				parents.emplace(target->parent);
+
+				CreateModelInternal(form, std::format("{}_{}", model, target->name.c_str()).c_str(), target);
+			}
+
+			for (auto* parent : parents) {
+				for (auto& child : parent->GetChildren()) {
+					if (targets.find(child.get()) != targets.end())
+						continue;
+
+					CreateModelInternal(form, std::format("{}_{}_{}", model, child->name.c_str(), child->parentIndex).c_str(), child.get());
+				}
+			}
+
+			return;
+		}
 	}
 
 	CreateModelInternal(form, model, root);
@@ -2902,12 +2938,16 @@ void Raytracing::DrawRTGI()
 
 		frameData->RussianRoulette = settings.RussianRoulette;
 
-		const auto* sky = RE::Sky::GetSingleton();
+		if (Util::IsInterior()) {
+			frameData->EmittanceColor = float3::One;
+		} else {
+			const auto* sky = RE::Sky::GetSingleton();
 
-		if (sky && sky->region)
-			frameData->EmittanceColor = Float3(sky->region->emittanceColor);
-		else
-			frameData->EmittanceColor = float3::One; // I assume no sky = interior (except for blackreach I guess?)
+			if (sky && sky->region)
+				frameData->EmittanceColor = Float3(sky->region->emittanceColor);
+			else
+				frameData->EmittanceColor = float3::One;  // I assume no sky = interior (except for blackreach I guess?)
+		}
 
 		frameData->SHaRC = settings.SHaRC.GetFrameData(settings.TraceMode == TraceMode::SHaRC);  // Sets UpdatePass to true if in SHaRC mode
 
