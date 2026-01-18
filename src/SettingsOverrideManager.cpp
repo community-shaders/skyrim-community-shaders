@@ -294,20 +294,14 @@ json SettingsOverrideManager::LoadAppliedOverridesTracking() const
 					logger::info("Applied overrides tracking file contains invalid data structure, resetting");
 					appliedOverrides = json::object();
 				} else {
-					// Validate each tracking entry - allow both old format (objects) and new format (strings)
+					// Validate each tracking entry - must be string hash with "_hash" key suffix
 					auto it = appliedOverrides.begin();
 					while (it != appliedOverrides.end()) {
 						const std::string& key = it.key();
 						const auto& value = it.value();
 
-						// New format: simple string hash for "_hash" keys
+						// Valid format: simple string hash for "_hash" keys
 						if (key.ends_with("_hash") && value.is_string()) {
-							++it;
-							continue;
-						}
-
-						// Old format: object with hash and firstApplied (kept for compatibility)
-						if (value.is_object() && value.contains("hash") && value["hash"].is_string()) {
 							++it;
 							continue;
 						}
