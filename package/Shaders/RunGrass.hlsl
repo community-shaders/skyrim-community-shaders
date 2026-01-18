@@ -629,14 +629,14 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	dirLightColor *= dirShadow;
 	dirLightColor *= dirDetailShadow;
 
-		if (SharedData::grassLightingSettings.EnableWrappedLighting)
+		if (SharedData::grassLightingSettings.EnableWrappedLighting) 
     {
         // Old Wrapped Model
         float wrapAmount = saturate(input.VertexNormal.w * 10.0)* 0.5 * (!complex);
         float wrappedDirLight = saturate(dirLightAngle + wrapAmount) / (1.0 + wrapAmount);
         lightsDiffuseColor += dirLightColor * saturate(wrappedDirLight) * Color::GrassDiffuseMult();
     }
-			else
+			else 
     {
         // Original Standard Model
         lightsDiffuseColor += dirLightColor * saturate(dirLightAngle) * Color::GrassDiffuseMult();
@@ -715,8 +715,18 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 
 				float lightAngle = dot(normal, normalizedLightDirection);
 				float lightNoL = dot(normalizedLightDirection.xyz, viewDirection);
+				float3 lightDiffuseColor;
 
-				float3 lightDiffuseColor = lightColor * saturate(lightAngle);
+				if (SharedData::grassLightingSettings.EnableWrappedLighting) 
+				{
+					float wrapAmount = saturate(input.VertexNormal.w * 10.0)* 0.5 * (!complex);
+                    float wrappedLight = saturate(lightAngle + wrapAmount) / (1.0 + wrapAmount);
+					lightDiffuseColor = lightColor * wrappedLight;
+				}
+                else 
+                {
+                    lightDiffuseColor = lightColor * saturate(lightAngle);
+                }
 
 				sss += lightColor * saturate(-lightAngle);
 
@@ -724,7 +734,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 
 				if (complex)
 					lightsSpecularColor += GrassLighting::GetLightSpecularInput(normalizedLightDirection, viewDirection, normal, lightColor, SharedData::grassLightingSettings.Glossiness) * Color::GrassSpecularMult();
-#				endif
+#endif
 			}
 		}
 	}
