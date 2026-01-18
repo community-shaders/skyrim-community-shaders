@@ -179,6 +179,11 @@ struct Surface
         {
             Albedo = float3(1.0f, 0.0f, 1.0f);
         }
+        
+        [branch]
+        if (material.ShaderFlags & ShaderFlags::kExternalEmittance) {
+            Emissive *= Frame.EmittanceColor;
+        }       
 #endif
 
 #if defined(DEBUG_NONORMALMAP)

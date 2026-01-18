@@ -1098,7 +1098,7 @@ struct Raytracing : public OverlayFeature
 			{
 				if (auto& rt = globals::features::raytracing; rt.Active()) {
 					if (auto* pNiAVObject = oThis->Get3D()) {
-						rt.RemoveInstance(pNiAVObject, true);
+						rt.RemoveInstance(oThis->GetFormID(), true);
 					}
 				}
 

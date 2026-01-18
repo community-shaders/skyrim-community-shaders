@@ -97,6 +97,12 @@ static inline float3 Float3(const RE::NiPoint3& point3)
 	return float3(point3.x, point3.y, point3.z);
 }
 
+static inline float3 Float3(const RE::NiColor& color)
+{
+	return float3(color.red, color.green, color.blue);
+}
+
+
 static inline bool IsShareableFormat(DXGI_FORMAT format)
 {
 	switch (format) {

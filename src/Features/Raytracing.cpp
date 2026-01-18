@@ -2899,6 +2899,13 @@ void Raytracing::DrawRTGI()
 
 		frameData->RussianRoulette = settings.RussianRoulette;
 
+		const auto* sky = RE::Sky::GetSingleton();
+
+		if (sky && sky->region)
+			frameData->EmittanceColor = Float3(sky->region->emittanceColor);
+		else
+			frameData->EmittanceColor = float3::Zero;
+
 		frameData->SHaRC = settings.SHaRC.GetFrameData(settings.TraceMode == TraceMode::SHaRC);  // Sets UpdatePass to true if in SHaRC mode
 
 		frameData->DispatchSize = renderSize;

@@ -27,10 +27,11 @@ namespace ShaderFlags
 	static const uint kModelSpaceNormals = (1 << 8);
     static const uint kRefraction = (1 << 9);
     static const uint kProjectedUV = (1 << 10);
-    static const uint kVertexColors = (1 << 11);
-    static const uint kMultiTextureLandscape = (1 << 12);
-    static const uint kEyeReflect = (1 << 13);
-    static const uint kHairTint = (1 << 14);
+    static const uint kExternalEmittance = (1 << 11);	
+    static const uint kVertexColors = (1 << 12);
+    static const uint kMultiTextureLandscape = (1 << 13);
+    static const uint kEyeReflect = (1 << 14);
+    static const uint kHairTint = (1 << 15);
 }
 
 namespace Feature
