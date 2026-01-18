@@ -1845,28 +1845,18 @@ static RE::BSVisit::BSVisitControl TraverseScenegraphRTGeometries(RE::NiAVObject
 
 void Raytracing::CreateModel(RE::TESForm* form, const char* model, RE::NiAVObject* root)
 {
-	auto* controller = root->GetController<RE::NiControllerManager>();
+	auto formType = form->GetFormType();
 
-	// TESObjectCONT and TESObjectDOOR
-	if (controller) {
-		logger::info("[RT] Load3D - NiControllerManager {}", model);
+	if (formType == RE::FormType::Reference)
+		formType = form->As<RE::TESObjectREFR>()->GetBaseObject()->GetFormType();
 
-		auto* nextController = netimmerse_cast<RE::NiMultiTargetTransformController*>(controller->GetNext());
-
-		if (nextController) {
-			for (uint16_t i = 0; i < nextController->numInterps; i++) {
-				auto* target = nextController->targets[i];
-
-				if (!target)
-					continue;
-
-				logger::info("[RT] Load3D - NiMultiTargetTransformController {}", target->name.c_str());
-
-				CreateModelInternal(form, std::format("{}_{}", model, target->name.c_str()).c_str(), root);
+	if (formType == RE::FormType::Container || formType == RE::FormType::Door) {
+		if (auto* fadeNode = netimmerse_cast<RE::NiNode*>(root)) {
+			for (auto& child : fadeNode->GetChildren()) {
+				CreateModelInternal(form, std::format("{}_{}_{}", model, child->name.c_str(), child->parentIndex).c_str(), child.get());
 			}
-
-			return;
 		}
+		return;
 	}
 
 	CreateModelInternal(form, model, root);
@@ -2334,8 +2324,6 @@ void Raytracing::UpdateInstances()
 				frustumCull |= frustumCullable && (worldBoundRadius < cullingSettings.MinRadius);
 			}
 
-			//float minDistance = cullingSettings.MinDistance;
-
 			// Culls all models outside of the player's view, must satisfy condition
 			if (cullingSettings.DistanceMode == CullingDistanceMode::Minimal) {
 				frustumCull |= distanceToBounds > cullingSettings.MinDistance;
@@ -2385,8 +2373,6 @@ void Raytracing::UpdateInstances()
 			LightData(GatherInstanceLights(pNiNode)),
 			firstShapeIndex);
 	}
-
-	logger::trace("[RT] UpdateInstances - Total Shape Count: {}", totalShapeCount);
 
 	// Unmap indirection table
 	D3D12_RANGE writeRange = { 0, std::min(totalShapeCount, RTConstants::MAX_SHAPES) * sizeof(uint32_t) };

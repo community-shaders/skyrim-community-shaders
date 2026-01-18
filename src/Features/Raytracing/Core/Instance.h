@@ -42,8 +42,6 @@ struct Instance
 		auto& [path, model] = modelPair;
 
 		if ((model->GetFlags() & Flags::Dynamic) || (model->GetFlags() & Flags::Skinned)) {
-			auto worldInverse = pNiNode->world.Invert();
-
 			for (auto& shape : model->shapes) {
 				Flags updateFlags = Flags::None;
 
