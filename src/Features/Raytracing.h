@@ -1286,7 +1286,7 @@ struct Raytracing : public OverlayFeature
 					// Make sure to remove instance by root node and not by formid, since each TESObjectLAND has up to 4 geometries/instances/root nodes
 					globals::features::raytracing.RemoveInstance(mesh, true);
 				}
-	
+
 				func(oThis);
 			}
 			static inline REL::Relocation<decltype(thunk)> func;
