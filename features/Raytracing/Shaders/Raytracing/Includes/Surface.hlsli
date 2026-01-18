@@ -82,7 +82,7 @@ struct Surface
             float3 emissive = emissiveTexture.SampleLevel(BaseSampler, texCoord0, 0).rgb;
 
             Albedo = albedo * material.BaseColor().rgb * vertexColor.rgb;
-            Emissive = emissive * material.EffectColor().rgb * material.EffectColor().a * Frame.Emissive;
+            Emissive = emissive * EmitColorToLinear(material.EffectColor().rgb) * material.EffectColor().a * Frame.Emissive * EmitColorMult();
             Roughness = saturate(rmaos.x * material.RoughnessScale());
             Metallic = saturate(rmaos.y);
             AO = rmaos.z;
@@ -116,7 +116,7 @@ struct Surface
             [branch]
             if (material.Feature == Feature::kGlowMap) {
                 Texture2D glowTexture = Textures[NonUniformResourceIndex(material.GlowTexture())];
-                Emissive = GlowToLinear(glowTexture.SampleLevel(BaseSampler, texCoord0, 0).rgb) * material.EffectColor().rgb * material.EffectColor().a * Frame.Emissive;
+                Emissive = GlowToLinear(glowTexture.SampleLevel(BaseSampler, texCoord0, 0).rgb) * EmitColorToLinear(material.EffectColor().rgb) * material.EffectColor().a * Frame.Emissive * EmitColorMult();
             }
 
             [branch]

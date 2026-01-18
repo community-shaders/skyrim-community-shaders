@@ -21,7 +21,7 @@ alignas(16)
 	float InvRadius;
 	float FadeZone;
 	float SizeBias;
-	float Pad0;
+	float Fade;
 	uint16_t Type;
 	uint16_t Flags;
 };

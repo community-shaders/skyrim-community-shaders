@@ -1399,16 +1399,17 @@ eastl::vector<LightLimitFix::LightData> Raytracing::GetPointLights()
 					auto& runtimeData = niLight->GetLightRuntimeData();
 
 					LightLimitFix::LightData light{};
-					light.color = float3(runtimeData.diffuse.red, runtimeData.diffuse.green, runtimeData.diffuse.blue) * runtimeData.fade;
+					light.color = float3(runtimeData.diffuse.red, runtimeData.diffuse.green, runtimeData.diffuse.blue);
 					light.lightFlags = std::bit_cast<LightLimitFix::LightFlags>(runtimeData.ambient.red);
 
 					if (isl.loaded) {
 						isl.ProcessLight(light, bsLight, niLight);
 					} else {
 						light.radius = runtimeData.radius.x;
+						light.fade = runtimeData.fade;
 
 						if (settings.LodDimmer)
-							light.color *= runtimeData.fade;
+							light.fade *= bsLight->lodDimmer;
 					}
 
 					if (!IsGlobalLight(bsLight)) {
@@ -1488,6 +1489,7 @@ void Raytracing::UpdateLights()
 			light.InvRadius = data.invRadius;
 			light.FadeZone = data.fadeZone;
 			light.SizeBias = data.sizeBias;
+			light.Fade = data.fade;
 			light.Type = 0;
 			light.Flags = 0;
 
@@ -1496,8 +1498,6 @@ void Raytracing::UpdateLights()
 
 			if (data.lightFlags.any(LightLimitFix::LightFlags::Linear))
 				light.Flags |= (1 << 1);
-
-			light.Pad0 = 0.0f;
 
 			lights.push_back(light);
 		}

@@ -163,7 +163,7 @@ float GetLightSampleWeight(Surface surface, Light light)
     float3 l = (light.Vector - surface.Position);
     float dist = length(l) * GAME_UNIT_TO_M;
     float atten = 1.0 / (1.0 + dist * dist);
-    float intensity = max(light.Color.r, max(light.Color.g, light.Color.b));
+    float intensity = max(light.Color.r, max(light.Color.g, light.Color.b)) * light.Fade;
     return atten * intensity;
 }
 
@@ -222,6 +222,7 @@ float3 EvalPointLight(in Surface surface, in BRDFContext brdfContext, in LightDa
 
     // float atten = VanillaSquaredAtten(dist, light.Radius);
     // float atten = InverseSquareAtten(dist * GAME_UNIT_TO_M, light.Radius * GAME_UNIT_TO_M);
+    float lightSourceAngle = 0.05f;
 
 	float atten = 0.0f;
 	if ((light.Flags & LightFlags::ISL) != 0)
@@ -230,6 +231,8 @@ float3 EvalPointLight(in Surface surface, in BRDFContext brdfContext, in LightDa
 		float t = saturate((light.Radius - dist) * light.FadeZone);
 		float fastSmoothstep = t * t * (3.0f - 2.0f * t);
 		atten = invSq * fastSmoothstep;
+        float size = sqrt((light.SizeBias * 2.0f) / (0.8 * 4900));
+        lightSourceAngle = atan2(size, dist);
 	}
 	else
 	{
@@ -237,12 +240,12 @@ float3 EvalPointLight(in Surface surface, in BRDFContext brdfContext, in LightDa
 		atten = 1.0f - intensityFactor * intensityFactor;
 	}
 
-    float3 direct = EvalLight(l, surface, brdfContext, material) * atten * light.Color * lightWeight;
+    float3 direct = EvalLight(l, surface, brdfContext, material) * atten * light.Color * light.Fade * lightWeight;
 
     [branch]
     if (any(direct > MIN_DIFFUSE_SHADOW))
     {
-        float3 lr = TangentToWorld(l, SampleCosineHemisphereScaled(randomSeed, 0.05f));
+        float3 lr = TangentToWorld(l, SampleCosineHemisphereScaled(randomSeed, lightSourceAngle));
         direct *= TraceRayShadowFinite(Scene, surface, lr, dist);
     }
 
