@@ -1233,7 +1233,7 @@ struct Raytracing : public OverlayFeature
 
 		struct TESObjectLAND_Attach3D
 		{
-			static void thunk(RE::TESObjectLAND* oThis, char a2)
+			static void thunk(RE::TESObjectLAND* oThis, bool a2)
 			{
 				func(oThis, a2);
 
@@ -1272,10 +1272,21 @@ struct Raytracing : public OverlayFeature
 		{
 			static void thunk(RE::TESObjectLAND* oThis)
 			{
-				if (auto& rt = globals::features::raytracing; rt.Active()) {
-					rt.RemoveInstance(oThis->formID, true);
-				}
+				auto* loadedData = oThis->loadedData;
 
+				if (!loadedData || !loadedData->mesh)
+					return;
+
+				for (uint i = 0; i < 4; i++) {
+					auto mesh = loadedData->mesh[i];
+
+					if (!mesh)
+						continue;
+
+					// Make sure to remove instance by root node and not by formid, since each TESObjectLAND has up to 4 geometries/instances/root nodes
+					globals::features::raytracing.RemoveInstance(mesh, true);
+				}
+	
 				func(oThis);
 			}
 			static inline REL::Relocation<decltype(thunk)> func;
@@ -1285,8 +1296,6 @@ struct Raytracing : public OverlayFeature
 		{
 			stl::write_vfunc<0x6A, Load3D<RE::TESObjectREFR>>(RE::VTABLE_TESObjectREFR[0]);
 			stl::write_vfunc<0x6B, Release3DRelatedData<RE::TESObjectREFR>>(RE::VTABLE_TESObjectREFR[0]);
-
-			//stl::write_vfunc<0x06, Load<RE::TESObjectLAND>>(RE::VTABLE_TESObjectLAND[0]);
 
 			//stl::detour_thunk<TESObjectREFR_Enable>(REL::RelocationID(19373, 19800));
 			//stl::write_vfunc<0x89, TESObjectREFR_Disable>(RE::VTABLE_TESObjectREFR[0]);
@@ -1322,7 +1331,7 @@ struct Raytracing : public OverlayFeature
 			stl::detour_thunk<CreateTextureFromDDS>(REL::RelocationID(69334, 70716));
 
 			stl::detour_thunk<TESObjectLAND_Attach3D>(REL::RelocationID(18334, 18750));
-			stl::detour_thunk<TESObjectLAND_Detach3D>(REL::RelocationID(18394, 18823));
+			stl::detour_thunk<TESObjectLAND_Detach3D>(REL::RelocationID(18333, 18749));
 
 			logger::info("[RT] Installed hooks");
 		}

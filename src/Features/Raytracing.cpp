@@ -4118,7 +4118,7 @@ RE::BSEventNotifyControl Raytracing::TESCellAttachDetachEventHandler::ProcessEve
 
 	auto* base = refr->GetBaseObject();
 
-	logger::info("TESCellAttachDetachEventHandler::ProcessEvent {} {}", magic_enum::enum_name(refr->formType.get()), magic_enum::enum_name(base->formType.get()));
+	logger::info("TESCellAttachDetachEventHandler::ProcessEvent {} {} {}", a_event->attached, magic_enum::enum_name(refr->formType.get()), magic_enum::enum_name(base->formType.get()));
 
 	return RE::BSEventNotifyControl::kContinue;
 }
