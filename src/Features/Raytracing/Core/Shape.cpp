@@ -346,7 +346,8 @@ void Shape::BuildMaterial(const RE::BSGeometry::GEOMETRY_RUNTIME_DATA& geometryR
 	auto& normalTexture = rt.defaultNormalTexture->allocation;
 	auto& blackTexture = rt.defaultBlackTexture->allocation;
 	auto& rmaosTexture = rt.defaultRMAOSTexture->allocation;
-
+	auto& detailTexture = rt.defaultDetailTexture->allocation;
+	
 	using State = RE::BSGeometry::States;
 	using Feature = RE::BSShaderMaterial::Feature;
 	using EShaderPropertyFlag = RE::BSShaderProperty::EShaderPropertyFlag;
@@ -523,8 +524,8 @@ void Shape::BuildMaterial(const RE::BSGeometry::GEOMETRY_RUNTIME_DATA& geometryR
 							// FaceGen
 							if (feature == Feature::kFaceGen) {
 								if (const auto* lightingFacegenMaterial = skyrim_cast<RE::BSLightingShaderMaterialFacegen*>(shaderMaterial)) {
-									textures[4] = TextureRegister(lightingFacegenMaterial->tintTexture, blackTexture);
-									textures[5] = TextureRegister(lightingFacegenMaterial->detailTexture, blackTexture);
+									textures[4] = TextureRegister(lightingFacegenMaterial->tintTexture, grayTexture);
+									textures[5] = TextureRegister(lightingFacegenMaterial->detailTexture, detailTexture);
 								}
 							}
 
