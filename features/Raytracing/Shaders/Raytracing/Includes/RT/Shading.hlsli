@@ -163,7 +163,7 @@ float GetLightSampleWeight(Surface surface, Light light)
     float3 l = (light.Vector - surface.Position);
     float dist = length(l) * GAME_UNIT_TO_M;
     float atten = 1.0 / (1.0 + dist * dist);
-    float intensity = max(light.Color.r, max(light.Color.g, light.Color.b));
+    float intensity = max(light.Color.r, max(light.Color.g, light.Color.b)) * light.Fade;
     return atten * intensity;
 }
 
@@ -237,7 +237,7 @@ float3 EvalPointLight(in Surface surface, in BRDFContext brdfContext, in LightDa
 		atten = 1.0f - intensityFactor * intensityFactor;
 	}
 
-    float3 direct = EvalLight(l, surface, brdfContext, material) * atten * light.Color * lightWeight;
+    float3 direct = EvalLight(l, surface, brdfContext, material) * atten * light.Color * light.Fade * lightWeight;
 
     [branch]
     if (any(direct > MIN_DIFFUSE_SHADOW))
