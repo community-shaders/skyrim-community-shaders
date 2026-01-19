@@ -6,9 +6,6 @@
 #include "TextureManager.h"
 #include "WeatherManager.h"
 
-#include "Features/DynamicCubemaps.h"
-#include "Features/IBL.h"
-
 #include <d3dcompiler.h>
 #include <vector>
 
@@ -28,16 +25,12 @@ void EffectManager::Initialize()
 
 void EffectManager::Apply()
 {
-	initialized.store(false, std::memory_order_release);
-
 	enbDepthOfField.Apply();
 	enbBloom.Apply();
 	enbLens.Apply();
 	enbAdaptation.Apply();
 	enbEffect.Apply();
 	enbEffectPostPass.Apply();
-
-	initialized.store(true, std::memory_order_release);
 }
 
 void EffectManager::Load()
@@ -231,10 +224,6 @@ void EffectManager::ExecuteEffects()
 
 	auto textureOriginal = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMAIN];
 
-	/// Unbind CS IBL PS resources before ENB PP to prevent resource hazards
-	ID3D11ShaderResourceView* nullSRVs[4] = { nullptr };
-	context->PSSetShaderResources(76, 4, nullSRVs);
-
 	// Set our render state
 	context->RSSetState(rasterizerState.get());
 	context->OMSetBlendState(blendState.get(), nullptr, 0xFFFFFFFF);
@@ -298,72 +287,18 @@ void EffectManager::ExecuteEffects()
 		state->EndPerfEvent();
 	}
 
+	if (enbEffectPostPass.IsCompiled() && settingManager.GetValue<bool>("EnablePostPassShader", "EFFECT")) {
+		state->BeginPerfEvent(enbEffectPostPass.GetName());
+		UpdateCommonVariablesForEffect(enbEffectPostPass.GetEffect());
+		enbEffectPostPass.UpdateEffectVariables();
+		enbEffectPostPass.Execute();
+		state->EndPerfEvent();
+	}
+
 	textureManager.IncrementTextureSwap();
 
 	// Copy final render target to framebuffers
 	auto textureSDRTemp = TextureManager::GetSingleton().GetCommonTexture("TextureSDRTemp");
-	auto textureFramebuffer1 = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kFRAMEBUFFER];
-	auto textureFramebuffer2 = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kIMAGESPACE_TEMP_COPY];
-	auto textureFramebuffer3 = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kIMAGESPACE_TEMP_COPY2];
-
-	CopyTexture(textureSDRTemp->srv.get(), textureFramebuffer1.RTV);
-	CopyTexture(textureSDRTemp->srv.get(), textureFramebuffer2.RTV);
-	CopyTexture(textureSDRTemp->srv.get(), textureFramebuffer3.RTV);
-
-	/// Rebind CS IBL PS resources after ENB PP completes
-	if (globals::features::ibl.loaded) {
-		auto& ibl = globals::features::ibl;
-		ID3D11ShaderResourceView* srvs[4] = {
-			ibl.diffuseIBLTexture ? ibl.diffuseIBLTexture->srv.get() : nullptr,
-			ibl.diffuseSkyIBLTexture ? ibl.diffuseSkyIBLTexture->srv.get() : nullptr,
-			ibl.staticDiffuseIBLTexture ? ibl.staticDiffuseIBLTexture->srv.get() : nullptr,
-			ibl.staticSpecularIBLTexture ? ibl.staticSpecularIBLTexture->srv.get() : nullptr
-		};
-		context->PSSetShaderResources(76, 4, srvs);
-	}
-}
-
-void EffectManager::ExecutePostPass()
-{
-	if (!IsReady())
-		return;
-
-	auto& settingManager = SettingManager::GetSingleton();
-
-	if (!enbEffectPostPass.IsCompiled() || !settingManager.GetValue<bool>("EnablePostPassShader", "EFFECT"))
-		return;
-
-	if (!rasterizerState || !blendState || !quadVertexBuffer || !inputLayout)
-		return;
-
-	auto context = globals::d3d::context;
-	auto renderer = globals::game::renderer;
-	auto state = globals::state;
-
-	auto& textureManager = TextureManager::GetSingleton();
-	auto textureSDRTemp = textureManager.GetCommonTexture("TextureSDRTemp");
-	auto textureFramebuffer = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kFRAMEBUFFER];
-
-	context->RSSetState(rasterizerState.get());
-	context->OMSetBlendState(blendState.get(), nullptr, 0xFFFFFFFF);
-	context->OMSetDepthStencilState(nullptr, 0);
-
-	UINT stride = sizeof(float) * 5;
-	UINT offset = 0;
-	ID3D11Buffer* vertexBuffers[] = { quadVertexBuffer.get() };
-	context->IASetVertexBuffers(0, 1, vertexBuffers, &stride, &offset);
-	context->IASetInputLayout(inputLayout.get());
-	context->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLESTRIP);
-
-	// Copy current framebuffer to TextureSDRTemp before running post-pass
-	CopyTexture(textureFramebuffer.SRV, textureSDRTemp->rtv.get());
-
-	state->BeginPerfEvent(enbEffectPostPass.GetName());
-	UpdateCommonVariablesForEffect(enbEffectPostPass.GetEffect());
-	enbEffectPostPass.UpdateEffectVariables();
-	enbEffectPostPass.Execute();
-	state->EndPerfEvent();
-
 	auto textureFramebuffer1 = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kFRAMEBUFFER];
 	auto textureFramebuffer2 = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kIMAGESPACE_TEMP_COPY];
 	auto textureFramebuffer3 = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kIMAGESPACE_TEMP_COPY2];
@@ -807,15 +742,6 @@ void EffectManager::UpdateCommonVariablesForEffect(ID3DX11Effect* effect)
 		}
 	}
 
-	/// Bind dynamic cubemap environment texture for ENB effects
-	if (globals::features::dynamicCubemaps.loaded && globals::features::dynamicCubemaps.envTexture) {
-		auto& cubemaps = globals::features::dynamicCubemaps;
-		auto* envTex = cubemaps.activeReflections ? cubemaps.envReflectionsTexture : cubemaps.envTexture;
-		if (envTex) {
-			Effect::SetShaderResourceVariable(effect, "TextureReflectionCube", envTex->srv.get());
-		}
-	}
-
 	// Set vector variables
 	Effect::SetVectorVariable(effect, "Timer", commonData.timer, sizeof(commonData.timer));
 	Effect::SetVectorVariable(effect, "ScreenSize", commonData.screenSize, sizeof(commonData.screenSize));
@@ -836,23 +762,6 @@ void EffectManager::CopyTexture(ID3D11ShaderResourceView* a_source, ID3D11Render
 
 	auto context = globals::d3d::context;
 
-	// Get destination texture dimensions for viewport
-	winrt::com_ptr<ID3D11Resource> destResource;
-	a_dest->GetResource(destResource.put());
-	winrt::com_ptr<ID3D11Texture2D> destTexture;
-	destResource->QueryInterface(IID_PPV_ARGS(destTexture.put()));
-	D3D11_TEXTURE2D_DESC texDesc;
-	destTexture->GetDesc(&texDesc);
-
-	D3D11_VIEWPORT viewport = {};
-	viewport.TopLeftX = 0.0f;
-	viewport.TopLeftY = 0.0f;
-	viewport.Width = static_cast<float>(texDesc.Width);
-	viewport.Height = static_cast<float>(texDesc.Height);
-	viewport.MinDepth = 0.0f;
-	viewport.MaxDepth = 1.0f;
-	context->RSSetViewports(1, &viewport);
-
 	// Set up for copy operation
 	context->OMSetRenderTargets(1, &a_dest, nullptr);
 	context->OMSetDepthStencilState(nullptr, 0);
@@ -866,12 +775,6 @@ void EffectManager::CopyTexture(ID3D11ShaderResourceView* a_source, ID3D11Render
 
 	// Draw fullscreen quad
 	context->Draw(4, 0);
-
-	// Unbind render target and SRV to avoid resource hazards
-	ID3D11RenderTargetView* nullRTV = nullptr;
-	context->OMSetRenderTargets(1, &nullRTV, nullptr);
-	ID3D11ShaderResourceView* nullSRV = nullptr;
-	context->PSSetShaderResources(0, 1, &nullSRV);
 }
 
 void EffectManager::ApplyColorCorrection(ID3D11UnorderedAccessView* textureUAV)
