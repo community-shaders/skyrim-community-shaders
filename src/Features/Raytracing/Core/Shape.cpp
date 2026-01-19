@@ -153,8 +153,13 @@ void Shape::BuildMesh(RE::BSGraphics::TriShape* rendererData, const std::uint32_
 
 		uint32_t boneIDOffset = sizeof(uint16_t) * bonesPerVertex;
 
-		eastl::vector<half> weights(bonesPerVertex);
-		eastl::vector<uint8_t> boneIds(bonesPerVertex);
+		eastl::vector<half> weights;
+		eastl::vector<uint8_t> boneIds;
+
+		if (skinned) {
+			weights.resize(bonesPerVertex);
+			boneIds.resize(bonesPerVertex);	
+		}
 
 		for (uint16_t i = 0; i < vertexCountIn; i++) {
 			uint8_t* vtx = rendererData->rawVertexData + i * vertexSize;
@@ -240,13 +245,23 @@ void Shape::BuildMesh(RE::BSGraphics::TriShape* rendererData, const std::uint32_
 							w *= sumRcp;
 						}
 					} else {
-						weights = { 1.0f, 0.0f, 0.0f, 0.0f };
+						weights = { 1.0f };
 					}
-
 				} else {
-					weights = { 1.0f, 0.0f, 0.0f, 0.0f };
-					boneIds = { 0, 0, 0, 0 };
+					weights = { 1.0f };
+					boneIds = { 0 };
 				}
+
+				auto fillSkinningData = []<typename T>(eastl::vector<T>& vector) {
+					auto currSize = vector.size();
+
+					if (currSize < 4) {
+						vector.insert(vector.end(), 4 - currSize, 0);
+					}
+				};
+
+				fillSkinningData(weights);
+				fillSkinningData(boneIds);
 
 				skinning[i] = Skinning(weights, boneIds);
 			}

@@ -1878,40 +1878,40 @@ void Raytracing::CreateModel(RE::TESForm* form, const char* model, RE::NiAVObjec
 		return;
 	}*/
 
-	auto* controller = root->GetController<RE::NiControllerManager>();
+	if (!root)
+		return;
+
+	const REL::Relocation<const RE::NiRTTI*> rtti{ RE::NiMultiTargetTransformController::Ni_RTTI };
+	auto* controller = reinterpret_cast<RE::NiMultiTargetTransformController*>(root->GetController(rtti.get()));
 
 	if (controller) {
-		logger::info("[RT] Load3D - NiControllerManager {}", model);
+		logger::info("[RT] Load3D - NiMultiTargetTransformController {}", model);
 
-		auto* nextController = netimmerse_cast<RE::NiMultiTargetTransformController*>(controller->GetNext());
+		eastl::hash_set<RE::NiNode*> parents;
+		eastl::hash_set<RE::NiAVObject*> targets;
 
-		if (nextController) {
-			eastl::hash_set<RE::NiNode*> parents;
-			eastl::hash_set<RE::NiAVObject*> targets;
+		for (uint16_t i = 0; i < controller->numInterps; i++) {
+			auto* target = controller->targets[i];
 
-			for (uint16_t i = 0; i < nextController->numInterps; i++) {
-				auto* target = nextController->targets[i];
+			if (!target)
+				continue;
 
-				if (!target)
+			targets.emplace(target);
+			parents.emplace(target->parent);
+
+			CreateModelInternal(form, std::format("{}_{}", model, target->name.c_str()).c_str(), target);
+		}
+
+		for (auto* parent : parents) {
+			for (auto& child : parent->GetChildren()) {
+				if (targets.find(child.get()) != targets.end())
 					continue;
 
-				targets.emplace(target);
-				parents.emplace(target->parent);
-
-				CreateModelInternal(form, std::format("{}_{}", model, target->name.c_str()).c_str(), target);
+				CreateModelInternal(form, std::format("{}_{}_{}", model, child->name.c_str(), child->parentIndex).c_str(), child.get());
 			}
-
-			for (auto* parent : parents) {
-				for (auto& child : parent->GetChildren()) {
-					if (targets.find(child.get()) != targets.end())
-						continue;
-
-					CreateModelInternal(form, std::format("{}_{}_{}", model, child->name.c_str(), child->parentIndex).c_str(), child.get());
-				}
-			}
-
-			return;
 		}
+
+		return;
 	}
 
 	CreateModelInternal(form, model, root);
@@ -2054,12 +2054,17 @@ void Raytracing::CreateModelInternal(RE::TESForm* form, const char* path, RE::Ni
 			logger::debug("\t\t[RT] CreateModel::TraverseScenegraphGeometries - Partitions: {}, VertexCount: {}, Unk24: [0x{:X}]", skinPartition->numPartitions, skinPartition->vertexCount, skinPartition->unk24);
 
 			for (auto& partition : skinPartition->partitions) {
+				// Fix for modded geometry
 				if (partition.triangles == 0) {
 					logger::error("\t\t[RT] CreateModel::TraverseScenegraphGeometries - Triangle count of 0 for {}: {}", path ? path : "N/A", name ? name : "N/A");
 					continue;
 				}
 
-				auto meshData = eastl::make_unique<Shape>(shapeRegisters.Allocate(), pGeometry, flags | Flags::Skinned);
+				// Fix for modded geometry
+				if (partition.bonesPerVertex > 0)
+					flags |= Flags::Skinned;
+
+				auto meshData = eastl::make_unique<Shape>(shapeRegisters.Allocate(), pGeometry, flags);
 
 				meshData->BuildMesh(partition.buffData, skinPartition->vertexCount, partition.triangles, partition.bonesPerVertex, localToRoot);
 				meshData->BuildMaterial(geometryRuntimeData, name);
