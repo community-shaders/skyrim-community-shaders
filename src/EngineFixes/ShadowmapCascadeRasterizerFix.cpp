@@ -26,7 +26,7 @@ void ShadowmapRasterizerFix::BSShadowDirectionalLight_RenderShadowmaps_RenderCas
 		initialized = cascade == numCascades - 1;
 	}
 
-	//Implace
+	//Emplace
 	std::memcpy(*gRasterStates, shadowmapRasterStates[cascade], sizeof(RasterStateArray));
 
 	func(light, arg1, arg2, flags);
