@@ -1,3 +1,4 @@
+#include "Common/Color.hlsli"
 #include "Common/FrameBuffer.hlsli"
 #include "Common/VR.hlsli"
 #include "Common/Math.hlsli"
@@ -236,6 +237,7 @@ Texture2D<float> TexDepthSampler : register(t17);
 PS_OUTPUT main(PS_INPUT input)
 {
 	PS_OUTPUT psout;
+	float3 yyy = Color::Sky(PParams.yyy);
 #	if !defined(VR)
 	uint eyeIndex = 0;
 #	else
@@ -251,12 +253,15 @@ PS_OUTPUT main(PS_INPUT input)
 #	ifndef OCCLUSION
 #		ifndef TEXLERP
 	float4 baseColor = TexBaseSampler.Sample(SampBaseSampler, input.TexCoord0.xy);
+	baseColor.xyz = Color::Sky(baseColor.xyz);
 #			ifdef TEXFADE
 	baseColor.w *= PParams.x;
 #			endif
 #		else
 	float4 blendColor = TexBlendSampler.Sample(SampBlendSampler, input.TexCoord1.xy);
 	float4 baseColor = TexBaseSampler.Sample(SampBaseSampler, input.TexCoord0.xy);
+	blendColor.xyz = Color::Sky(blendColor.xyz);
+	baseColor.xyz = Color::Sky(baseColor.xyz);
 	baseColor = PParams.xxxx * (-baseColor + blendColor) + baseColor;
 #		endif
 
@@ -290,10 +295,11 @@ PS_OUTPUT main(PS_INPUT input)
 		TexNoiseGradSampler.Sample(SampNoiseGradSampler, noiseGradUv).x * 0.03125 + -0.0078125;
 
 #			ifdef TEX
-	psout.Color.xyz = (input.Color.xyz * baseColor.xyz + skyBoost) + noiseGrad;
+	psout.Color.xyz = (Color::Sky(input.Color.xyz) * baseColor.xyz + yyy) + noiseGrad;
 	psout.Color.w = baseColor.w * input.Color.w;
 #			else
-	psout.Color.xyz = (skyBoost + input.Color.xyz) + noiseGrad;
+	psout.Color.xyz = (yyy + Color::Sky(input.Color.xyz)) + noiseGrad;
+
 	psout.Color.w = input.Color.w;
 #			endif  // TEX
 
@@ -305,11 +311,12 @@ PS_OUTPUT main(PS_INPUT input)
 	}
 
 #		elif defined(HORIZFADE)
-	psout.Color.xyz = float3(1.5, 1.5, 1.5) * (input.Color.xyz * baseColor.xyz + skyBoost);
+	psout.Color.xyz = float3(1.5, 1.5, 1.5) * (Color::Sky(input.Color.xyz) * baseColor.xyz + skyBoost);
 	psout.Color.w = input.TexCoord2.x * (baseColor.w * input.Color.w);
 #		else
 	psout.Color.w = input.Color.w * baseColor.w;
-	psout.Color.xyz = input.Color.xyz * baseColor.xyz + skyBoost;
+	psout.Color.xyz = Color::Sky(input.Color.xyz) * baseColor.xyz + skyBoost;
+
 #		endif
 
 #	else

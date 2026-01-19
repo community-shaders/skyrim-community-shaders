@@ -2,11 +2,7 @@
 
 #include <algorithm>
 #include <cctype>
-#include <cstring>
-#include <filesystem>
-#include <format>
-#include <imgui.h>
-#include <imgui_internal.h>
+#include <set>
 #include <string>
 #include <windows.h>
 
@@ -334,6 +330,18 @@ void SettingsTabRenderer::RenderThemesTab()
 		static char newThemeName[128] = "";
 		static char newThemeDisplayName[128] = "";
 		static char newThemeDescription[256] = "";
+		static bool showValidationError = false;
+
+		// Update feedback tracking
+		static bool showUpdateFeedback = false;
+		struct ChangedSetting
+		{
+			std::string path;
+			std::string oldValue;
+			std::string newValue;
+		};
+		static std::vector<ChangedSetting> changedSettings;
+		static bool updateSuccess = false;
 
 		// Theme Preset Selection
 		SeparatorTextWithFont("Theme Preset", Menu::FontRole::Subheading);
@@ -456,9 +464,40 @@ void SettingsTabRenderer::RenderThemesTab()
 					// Update existing theme
 					const auto* currentThemeInfo = themeManager->GetThemeInfo(currentThemePreset);
 					if (currentThemeInfo) {
-						// Use the existing SaveTheme method to serialize the theme settings
+						// Get current settings
 						json currentThemeJson;
 						globals::menu->SaveTheme(currentThemeJson);
+
+						// Get saved theme settings for comparison
+						json savedThemeJson = currentThemeInfo->themeData["Theme"];
+
+						// Compare and collect changed settings (with old/new values)
+						changedSettings.clear();
+						std::function<void(const std::string&, const json&, const json&)> diffWalker;
+						diffWalker = [&](const std::string& path, const json& oldVal, const json& newVal) {
+							// Handle objects by recursing through union of keys
+							if (oldVal.is_object() && newVal.is_object()) {
+								std::set<std::string> keys;
+								for (auto& [k, _] : oldVal.items()) keys.insert(k);
+								for (auto& [k, _] : newVal.items()) keys.insert(k);
+								for (const auto& k : keys) {
+									auto nextPath = path.empty() ? k : path + "." + k;
+									const json& oldChild = oldVal.contains(k) ? oldVal[k] : json();
+									const json& newChild = newVal.contains(k) ? newVal[k] : json();
+									diffWalker(nextPath, oldChild, newChild);
+								}
+								return;
+							}
+
+							// For arrays or primitives, record if different
+							if (oldVal != newVal) {
+								changedSettings.push_back({ path.empty() ? "<root>" : path,
+									oldVal.is_null() ? "null" : oldVal.dump(),
+									newVal.is_null() ? "null" : newVal.dump() });
+							}
+						};
+
+						diffWalker("", savedThemeJson, currentThemeJson["Theme"]);
 
 						logger::info("Attempting to update theme: '{}'", currentThemePreset);
 
@@ -466,11 +505,19 @@ void SettingsTabRenderer::RenderThemesTab()
 						if (themeManager->SaveTheme(currentThemePreset, currentThemeJson["Theme"],
 								currentThemeInfo->displayName, currentThemeInfo->description)) {
 							logger::info("Theme '{}' updated successfully", currentThemePreset);
+							updateSuccess = true;
+							showUpdateFeedback = true;
 						} else {
 							logger::error("Failed to update theme: '{}'", currentThemePreset);
+							updateSuccess = false;
+							showUpdateFeedback = true;
+							changedSettings.clear();
 						}
 					} else {
 						logger::warn("Cannot update theme '{}' - theme info not found", currentThemePreset);
+						updateSuccess = false;
+						showUpdateFeedback = true;
+						changedSettings.clear();
 					}
 				}
 			}
@@ -483,6 +530,29 @@ void SettingsTabRenderer::RenderThemesTab()
 			}
 		}
 
+		// Display update feedback below the buttons
+		if (showUpdateFeedback) {
+			ImGui::Spacing();
+			ImGui::Separator();
+
+			if (updateSuccess) {
+				if (changedSettings.empty()) {
+					ImGui::TextColored(themeSettings.StatusPalette.SuccessColor, "Theme updated successfully - no changes detected");
+				} else {
+					ImGui::TextColored(themeSettings.StatusPalette.SuccessColor, "Theme updated successfully! Changed settings:");
+					ImGui::Indent();
+					for (const auto& change : changedSettings) {
+						ImGui::BulletText("%s: %s -> %s", change.path.c_str(), change.oldValue.c_str(), change.newValue.c_str());
+					}
+					ImGui::Unindent();
+				}
+			} else {
+				ImGui::TextColored(themeSettings.StatusPalette.Error, "Failed to update theme");
+			}
+
+			ImGui::Separator();
+		}
+
 		// Create Theme Popup
 		if (showCreateThemePopup) {
 			ImGui::OpenPopup("Create New Theme");
@@ -493,7 +563,26 @@ void SettingsTabRenderer::RenderThemesTab()
 			ImGui::Text("Create a new theme with your current settings:");
 			ImGui::Separator();
 
+			bool isThemeNameEmpty = strlen(newThemeName) == 0;
+
+			// Highlight the input field if invalid and validation error is shown
+			if (isThemeNameEmpty && showValidationError) {
+				ImGui::PushStyleColor(ImGuiCol_Border, themeSettings.StatusPalette.Error);
+				ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 2.0f);
+			}
+
 			ImGui::InputText("Theme Name", newThemeName, sizeof(newThemeName));
+
+			if (isThemeNameEmpty && showValidationError) {
+				ImGui::PopStyleVar();
+				ImGui::PopStyleColor();
+			}
+
+			// Show inline error message
+			if (isThemeNameEmpty && showValidationError) {
+				ImGui::TextColored(themeSettings.StatusPalette.Error, "Theme name is required");
+			}
+
 			if (auto _tt = Util::HoverTooltipWrapper()) {
 				ImGui::Text("File name for the theme (without .json extension)");
 			}
@@ -511,25 +600,33 @@ void SettingsTabRenderer::RenderThemesTab()
 			ImGui::Separator();
 
 			// Buttons
-			if (Util::ButtonWithFlash("Create Theme") && strlen(newThemeName) > 0) {
-				// Use the existing SaveTheme method to serialize the theme settings
-				json currentThemeJson;
-				globals::menu->SaveTheme(currentThemeJson);
+			if (Util::ButtonWithFlash("Create Theme")) {
+				if (strlen(newThemeName) > 0) {
+					// Valid theme name, reset error state and proceed
+					showValidationError = false;
 
-				std::string displayName = strlen(newThemeDisplayName) > 0 ? std::string(newThemeDisplayName) : std::string(newThemeName);
-				std::string description = strlen(newThemeDescription) > 0 ? std::string(newThemeDescription) : "";
+					// Use the existing SaveTheme method to serialize the theme settings
+					json currentThemeJson;
+					globals::menu->SaveTheme(currentThemeJson);
 
-				logger::info("Attempting to save new theme: '{}' with display name: '{}'", newThemeName, displayName);
+					std::string displayName = strlen(newThemeDisplayName) > 0 ? std::string(newThemeDisplayName) : std::string(newThemeName);
+					std::string description = strlen(newThemeDescription) > 0 ? std::string(newThemeDescription) : "";
 
-				if (themeManager->SaveTheme(std::string(newThemeName), currentThemeJson["Theme"], displayName, description)) {
-					logger::info("Theme saved successfully. Loading theme preset: '{}'", newThemeName);
-					// Theme created successfully, load it and exit create mode
-					globals::menu->LoadThemePreset(std::string(newThemeName));
-					isCreatingNewTheme = false;
-					showCreateThemePopup = false;
-					logger::info("Theme creation complete. Total themes: {}", themeManager->GetThemes().size());
+					logger::info("Attempting to save new theme: '{}' with display name: '{}'", newThemeName, displayName);
+
+					if (themeManager->SaveTheme(std::string(newThemeName), currentThemeJson["Theme"], displayName, description)) {
+						logger::info("Theme saved successfully. Loading theme preset: '{}'", newThemeName);
+						// Theme created successfully, load it and exit create mode
+						globals::menu->LoadThemePreset(std::string(newThemeName));
+						isCreatingNewTheme = false;
+						showCreateThemePopup = false;
+						logger::info("Theme creation complete. Total themes: {}", themeManager->GetThemes().size());
+					} else {
+						logger::error("Failed to save theme: '{}'", newThemeName);
+					}
 				} else {
-					logger::error("Failed to save theme: '{}'", newThemeName);
+					// Empty theme name, show validation error
+					showValidationError = true;
 				}
 			}
 

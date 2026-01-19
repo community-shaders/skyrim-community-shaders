@@ -1,3 +1,4 @@
+#include "Common/Color.hlsli"
 #include "Common/DummyVSTexCoord.hlsl"
 #include "Common/FrameBuffer.hlsli"
 #include "Common/SharedData.hlsli"
@@ -40,12 +41,17 @@ PS_OUTPUT main(PS_INPUT input)
 		volumetricLightingPower *= SharedData::enbSettings.VolumetricRaysRangeFactor;
 	}
 
-	color = volumetricLightingColor * volumetricLightingPower;
+	color += VolumetricLightingColor.xyz * Color::VolumetricLighting(volumetricLightingPower.xxx).x;
+
 #	endif
 
 #	if defined(LENS_FLARE)
 	float3 lensFlareColor = LFSourceTex.Sample(LFSourceSampler, input.TexCoord).xyz;
-	color += lensFlareColor;
+	if (SharedData::linearLightingSettings.enableLinearLighting) {
+		color += Color::GammaToLinear(lensFlareColor);
+	} else {
+		color += lensFlareColor;
+	}
 #	endif
 
 	psout.Color = color;
