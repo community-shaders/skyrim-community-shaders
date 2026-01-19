@@ -306,17 +306,17 @@ namespace Util
 		if (!tes) {
 			return true;
 		}
-		
+
 		if (tes->interiorCell) {
 			return true;
 		}
-		
+
 		if (auto worldSpace = tes->GetRuntimeData2().worldSpace) {
 			if (!worldSpace->flags.any(RE::TESWorldSpace::Flag::kNoSky, RE::TESWorldSpace::Flag::kFixedDimensions)) {
 				return false;
 			}
 		}
-		
+
 		return true;
 	}
 }  // namespace Util

@@ -236,7 +236,7 @@ const std::vector<Feature*>& Feature::GetFeatureList()
 		&globals::features::renderDoc,
 		&globals::features::weatherEditor,
 		&globals::features::linearLighting,
-    &globals::features::enbPostProcessing
+		&globals::features::enbPostProcessing
 	};
 
 	if (REL::Module::IsVR()) {
