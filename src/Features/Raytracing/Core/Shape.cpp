@@ -925,7 +925,12 @@ bool Shape::UpdateSkinning()
 	if ((flags & Flags::Skinned) != Flags::Skinned)
 		return false;
 
+	if (!geometry)
+		return false;
+
 	// TODO: Handle lazy skinned meshes update
+	if (geometry->GetAppCulled())
+		return false;
 
 	return true;
 }

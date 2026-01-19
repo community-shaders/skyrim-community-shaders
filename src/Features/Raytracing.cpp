@@ -2143,6 +2143,22 @@ bool Raytracing::RemoveInstance(RE::FormID formID, bool releaseModel)
 	return removed;
 }
 
+void Raytracing::SetInstanceDetached(RE::NiAVObject* root, bool detached)
+{
+	if (auto instanceIt = instances.find(root); instanceIt != instances.end()) {
+		instanceIt->second.SetDetached(detached);
+	}
+}
+
+void Raytracing::SetInstanceDetached(RE::FormID formID, bool detached)
+{
+	if (auto nodesIt = formIDNodes.find(formID); nodesIt != formIDNodes.end()) {
+		for (auto& rootNode : nodesIt->second) {
+			RemoveInstance(rootNode, detached);
+		}
+	}
+}
+
 eastl::shared_ptr<Allocation> Raytracing::GetTextureRegister(ID3D11Texture2D* dx11Texture, eastl::shared_ptr<Allocation> defaultTexture)
 {
 	std::lock_guard lock{ textureRegisterMutex };
@@ -2343,6 +2359,9 @@ void Raytracing::UpdateInstances()
 	DX::ThrowIfFailed(indirectionBuffer->uploadResource->Map(0, &readRange, reinterpret_cast<void**>(&pIndirectionData)));
 
 	for (auto& [pNiNode, instance] : instances) {
+		if (instance.IsDetached())
+			continue;
+
 		if (blasInstances.size() > RTConstants::MAX_INSTANCES)
 			break;
 
@@ -2638,6 +2657,9 @@ void Raytracing::UpdateShadowInstances()
 	}
 
 	for (auto& [pNiNode, instance] : instances) {
+		if (instance.IsDetached())
+			continue;
+
 		if (blasShadowInstances.size() > RTConstants::MAX_INSTANCES)
 			break;
 
@@ -3428,7 +3450,9 @@ void Raytracing::PostPostLoad()
 	//TESLoadGameEventHandler::Register();
 
 	TESObjectLoadedEventHandler::Register();
+	
 	//TESCellAttachDetachEventHandler::Register();
+	// 
 	//TESCellFullyLoadedEventHandler::Register();
 }
 
@@ -4156,7 +4180,7 @@ RE::BSEventNotifyControl Raytracing::TESObjectLoadedEventHandler::ProcessEvent(c
 		return RE::BSEventNotifyControl::kContinue;
 	}
 
-	logger::info("[RT] TESObjectLoadedEvent - {} Name: {} - FullLodRef: {}", typeid(*eventRef).name(), eventRef->GetName(), eventRef->GetFullLODRef());
+	//logger::info("[RT] TESObjectLoadedEvent - {} Name: {} - FullLodRef: {}", typeid(*eventRef).name(), eventRef->GetName(), eventRef->GetFullLODRef());
 
 	//if (eventRef->formType.none(RE::FormType::NPC, RE::FormType::LeveledNPC, RE::FormType::ActorCharacter))
 	if (eventRef->formType.none(RE::FormType::ActorCharacter))
@@ -4188,17 +4212,27 @@ RE::BSEventNotifyControl Raytracing::TESObjectLoadedEventHandler::ProcessEvent(c
 	return RE::BSEventNotifyControl::kContinue;
 }
 
-// This might be usefull for instance management
 RE::BSEventNotifyControl Raytracing::TESCellAttachDetachEventHandler::ProcessEvent(const RE::TESCellAttachDetachEvent* a_event, RE::BSTEventSource<RE::TESCellAttachDetachEvent>*)
 {
-	if (!a_event)
+	globals::features::raytracing.SetInstanceDetached(a_event->reference->GetFormID(), !a_event->attached);
+
+	return RE::BSEventNotifyControl::kContinue;
+}
+
+RE::BSEventNotifyControl Raytracing::CellAttachDetachEventHandler::ProcessEvent(const RE::CellAttachDetachEvent* a_event, RE::BSTEventSource<RE::CellAttachDetachEvent>*)
+{
+	bool attaching = a_event->status == RE::CellAttachDetachEvent::Status::StartAttach;
+	bool detaching = a_event->status == RE::CellAttachDetachEvent::Status::StartDetach;
+
+	if (!attaching && !detaching)
 		return RE::BSEventNotifyControl::kContinue;
 
-	auto* refr = a_event->reference.get();
+	auto* land = a_event->cell->GetRuntimeData().cellLand;
 
-	auto* base = refr->GetBaseObject();
+	if (!land)
+		return RE::BSEventNotifyControl::kContinue;
 
-	logger::info("TESCellAttachDetachEventHandler::ProcessEvent {} {} {}", a_event->attached, magic_enum::enum_name(refr->formType.get()), magic_enum::enum_name(base->formType.get()));
+	globals::features::raytracing.SetInstanceDetached(land->GetFormID(), detaching);
 
 	return RE::BSEventNotifyControl::kContinue;
 }

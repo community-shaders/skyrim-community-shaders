@@ -39,6 +39,8 @@
 #include "Features/Raytracing/Types.h"
 #include "Features/Raytracing/Utils.h"
 
+#include "Features/Raytracing/RE/CellAttachDetachEvent.h"
+
 #include "Raytracing/FeatureData.hlsli"
 #include "Raytracing/Includes/Types/FrameData.hlsli"
 #include "Raytracing/Includes/Types/Instance.hlsli"
@@ -577,11 +579,14 @@ struct Raytracing : public OverlayFeature
 
 	// Creates mesh buffers for all graph TriShapes, handles materials and builds a single BLAS for the node
 	void CreateModel(RE::TESForm* form, const char* model, RE::NiAVObject* root);
-	void CreateModelInternal(RE::TESForm* refr, const char* path, RE::NiAVObject* pRoot);
+	void CreateModelInternal(RE::TESForm* refr, const char* path, RE::NiAVObject* root);
 
 	// Removes the instance and optionally also releases the model and all its buffers if refCount reaches 0
-	bool RemoveInstance(RE::NiAVObject* pRoot, bool releaseModel);
+	bool RemoveInstance(RE::NiAVObject* root, bool releaseModel);
 	bool RemoveInstance(RE::FormID formID, bool releaseModel);
+
+	void SetInstanceDetached(RE::NiAVObject* root, bool detached);
+	void SetInstanceDetached(RE::FormID formID, bool detached);
 
 	// TODO: Move to Model struct
 	void UpdateModelBLAS(Model* model);
@@ -1080,7 +1085,7 @@ struct Raytracing : public OverlayFeature
 					if (flags & MarkerFlags::MapMarker || flags & MarkerFlags::HeadingMarker)
 						return result;
 
-					logger::info("[RT] Load3D - {} Name: {} - FullLodRef: {}", typeid(*baseObject).name(), oThis->GetName(), oThis->GetFullLODRef());
+					//logger::info("[RT] Load3D - {} Name: {} - FullLodRef: {}", typeid(*baseObject).name(), oThis->GetName(), oThis->GetFullLODRef());
 
 					if (auto* model = baseObject->As<RE::TESModel>()) {
 						rt.CreateModel(oThis, model->GetModel(), result);
@@ -1273,6 +1278,19 @@ struct Raytracing : public OverlayFeature
 			static inline REL::Relocation<decltype(thunk)> func;
 		};
 
+		struct TES_Init
+		{
+			static RE::TES* thunk(void* a1, char* a2, RE::NiNode* a3, RE::NiNode* a4, RE::Sky* a5, RE::NiNode* a6)
+			{
+				auto result = func(a1, a2, a3, a4, a5, a6);
+
+				CellAttachDetachEventHandler::Register(result);
+
+				return result;
+			}
+			static inline REL::Relocation<decltype(thunk)> func;
+		};
+		
 		static void Install()
 		{
 			stl::write_vfunc<0x6A, Load3D<RE::TESObjectREFR>>(RE::VTABLE_TESObjectREFR[0]);
@@ -1314,6 +1332,8 @@ struct Raytracing : public OverlayFeature
 			stl::detour_thunk<TESObjectLAND_Attach3D>(REL::RelocationID(18334, 18750));
 			stl::detour_thunk<TESObjectLAND_Detach3D>(REL::RelocationID(18333, 18749));
 
+			stl::detour_thunk<TES_Init>(REL::RelocationID(13139, 13279));
+			
 			logger::info("[RT] Installed hooks");
 		}
 
@@ -1396,6 +1416,23 @@ struct Raytracing : public OverlayFeature
 
 			auto scriptEventSourceHolder = RE::ScriptEventSourceHolder::GetSingleton();
 			scriptEventSourceHolder->GetEventSource<RE::TESCellAttachDetachEvent>()->AddEventSink(&singleton);
+
+			logger::info("Registered {}", typeid(singleton).name());
+
+			return true;
+		}
+	};
+
+	class CellAttachDetachEventHandler : public RE::BSTEventSink<RE::CellAttachDetachEvent>
+	{
+	public:
+		virtual RE::BSEventNotifyControl ProcessEvent(const RE::CellAttachDetachEvent* a_event, RE::BSTEventSource<RE::CellAttachDetachEvent>*);
+
+		static bool Register(RE::TES* tes)
+		{
+			static CellAttachDetachEventHandler singleton;
+
+			tes->AddEventSink<RE::CellAttachDetachEvent>(&singleton);
 
 			logger::info("Registered {}", typeid(singleton).name());
 

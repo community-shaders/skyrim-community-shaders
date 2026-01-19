@@ -11,14 +11,18 @@
 
 struct Instance
 {
-	// What model this instance references
-	eastl::string filename;
+	Instance(eastl::string filename) :
+		filename(filename) {};
 
-	// Used for BLAS instance
-	float3x4 transform;
+	void SetDetached(bool detach)
+	{
+		detached = detach;
+	}
 
-	// Makes sure we only update once per frame
-	Util::FrameChecker frameChecker;
+	bool IsDetached() const
+	{
+		return detached;
+	}
 
 	// Checks for skinned and dynamic trishapes update
 	void Update(RE::NiAVObject* pNiNode, const eastl::pair<eastl::string, Model*>& modelPair, SkinningPipeline* skinningPipeline)
@@ -31,6 +35,8 @@ struct Instance
 		// Is this working?
 		if (pNiNode->GetAppCulled())
 			return;
+
+		//logger::info("Render Use: {}", pNiNode->GetFlags().any(RE::NiAVObject::Flag::kRenderUse));
 
 		// Instance has already been updated this frame
 		if (!frameChecker.IsNewFrame())
@@ -74,4 +80,16 @@ struct Instance
 			}
 		}
 	}
+
+	// What model this instance references
+	eastl::string filename;
+
+	// Used for BLAS instance
+	float3x4 transform;
+
+	// Makes sure we only update once per frame
+	Util::FrameChecker frameChecker;
+
+private:
+	bool detached = false;
 };
