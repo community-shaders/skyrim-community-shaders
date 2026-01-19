@@ -1236,7 +1236,7 @@ struct Raytracing : public OverlayFeature
 			{
 				func(oThis, a2);
 
-				logger::info("[RT] TESObjectLAND_Attach3D - IsLODLand: {}", oThis->QIsLODLandObject());
+				logger::info("[RT] TESObjectLAND_Attach3D - a2: {}, IsLODLand: {}", a2, oThis->QIsLODLandObject());
 
 				if (!oThis)
 					return;
@@ -1254,6 +1254,8 @@ struct Raytracing : public OverlayFeature
 
 				if (!loadedData || !loadedData->mesh)
 					return;
+
+				logger::info("[RT] TESObjectLAND_Attach3D - {}", std::format("Landscape_{}_{}", exteriorData->cellX, exteriorData->cellY).c_str());
 
 				for (uint i = 0; i < 4; i++) {
 					auto mesh = loadedData->mesh[i];
@@ -1273,11 +1275,40 @@ struct Raytracing : public OverlayFeature
 			{
 				globals::features::raytracing.RemoveInstance(oThis->GetFormID(), true);
 
+				auto* cell = oThis->parentCell;
+
+				if (cell->IsExteriorCell()) {
+					auto& runtimeData = cell->GetRuntimeData();
+
+					auto* exteriorData = runtimeData.cellData.exterior;
+
+					logger::info("[RT] TESObjectLAND::Detach3D - {}", std::format("Landscape_{}_{}", exteriorData->cellX, exteriorData->cellY).c_str());
+				}
+
 				func(oThis);
 			}
 			static inline REL::Relocation<decltype(thunk)> func;
 		};
 
+		struct TESObjectLAND_Destructor
+		{
+			static void thunk(RE::TESObjectLAND* oThis)
+			{
+				auto* cell = oThis->parentCell;
+
+				if (cell->IsExteriorCell()) {
+					auto& runtimeData = cell->GetRuntimeData();
+
+					auto* exteriorData = runtimeData.cellData.exterior;
+
+					logger::info("[RT] TESObjectLAND::Destructor - {}", std::format("Landscape_{}_{}", exteriorData->cellX, exteriorData->cellY).c_str());
+				}
+
+				func(oThis);
+			}
+			static inline REL::Relocation<decltype(thunk)> func;
+		};
+		
 		struct TES_Init
 		{
 			static RE::TES* thunk(void* a1, char* a2, RE::NiNode* a3, RE::NiNode* a4, RE::Sky* a5, RE::NiNode* a6)
@@ -1290,6 +1321,20 @@ struct Raytracing : public OverlayFeature
 			}
 			static inline REL::Relocation<decltype(thunk)> func;
 		};
+		
+		struct AttachDistant3DTask_Attach
+		{
+			static void thunk(void* a1, float a2)
+			{
+				func(a1, a2);
+
+				auto* refr = *reinterpret_cast<RE::TESObjectREFR**>(reinterpret_cast<uintptr_t>(a1) + 24);
+
+				logger::info("[RT] AttachDistant3DTask::Attach {}", magic_enum::enum_name(refr->GetFormType()));
+			}
+			static inline REL::Relocation<decltype(thunk)> func;
+		};
+		
 		
 		static void Install()
 		{
@@ -1330,9 +1375,15 @@ struct Raytracing : public OverlayFeature
 			stl::detour_thunk<CreateTextureFromDDS>(REL::RelocationID(69334, 70716));
 
 			stl::detour_thunk<TESObjectLAND_Attach3D>(REL::RelocationID(18334, 18750));
+
 			stl::detour_thunk<TESObjectLAND_Detach3D>(REL::RelocationID(18333, 18749));
+			//stl::detour_thunk<TESObjectLAND_Detach3D>(REL::RelocationID(18335, 18751));
+
+			stl::write_vfunc<0x0, TESObjectLAND_Destructor>(RE::VTABLE_TESObjectLAND[0]);
 
 			stl::detour_thunk<TES_Init>(REL::RelocationID(13139, 13279));
+			
+			stl::write_vfunc<0x6, AttachDistant3DTask_Attach>(RE::VTABLE_AttachDistant3DTask[0]);
 			
 			logger::info("[RT] Installed hooks");
 		}

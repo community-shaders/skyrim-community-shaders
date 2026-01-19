@@ -1873,8 +1873,6 @@ void Raytracing::CreateModel(RE::TESForm* form, const char* model, RE::NiAVObjec
 	auto* controller = reinterpret_cast<RE::NiMultiTargetTransformController*>(root->GetController(rtti.get()));
 
 	if (controller) {
-		logger::info("[RT] Load3D - NiMultiTargetTransformController {}", model);
-
 		eastl::hash_set<RE::NiNode*> parents;
 		eastl::hash_set<RE::NiAVObject*> targets;
 
@@ -2154,7 +2152,7 @@ void Raytracing::SetInstanceDetached(RE::FormID formID, bool detached)
 {
 	if (auto nodesIt = formIDNodes.find(formID); nodesIt != formIDNodes.end()) {
 		for (auto& rootNode : nodesIt->second) {
-			RemoveInstance(rootNode, detached);
+			SetInstanceDetached(rootNode, detached);
 		}
 	}
 }
@@ -4227,7 +4225,13 @@ RE::BSEventNotifyControl Raytracing::CellAttachDetachEventHandler::ProcessEvent(
 	if (!attaching && !detaching)
 		return RE::BSEventNotifyControl::kContinue;
 
-	auto* land = a_event->cell->GetRuntimeData().cellLand;
+	auto& runtimeData = a_event->cell->GetRuntimeData();
+
+	for (auto& reference : runtimeData.references) {	
+		globals::features::raytracing.SetInstanceDetached(reference->GetFormID(), detaching);
+	}
+
+	auto* land = runtimeData.cellLand;
 
 	if (!land)
 		return RE::BSEventNotifyControl::kContinue;
