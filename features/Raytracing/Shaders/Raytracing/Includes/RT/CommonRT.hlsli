@@ -113,6 +113,21 @@ float3 TangentToWorld(float3 normal, float3 tangentSample)
            normal * tangentSample.z;
 }
 
+float3 SampleConeUniform(inout uint randomSeed, in float cosMax)
+{
+    float r1 = Random(randomSeed);
+    float r2 = Random(randomSeed);
+    float phi = 2.0f * Math::PI * r1;
+
+    float cosTheta = 1.0f - r2 * (1.0f - cosMax);
+    float sinTheta = sqrt(max(0.0f, 1.0f - cosTheta * cosTheta));
+    return float3(
+        cos(phi) * sinTheta,
+        sin(phi) * sinTheta,
+        cosTheta
+    );
+}
+
 float3 OffsetRay(float3 p, float3 n, float3 l)
 {
 	const float MinBias = 0.01f;

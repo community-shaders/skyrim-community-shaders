@@ -146,12 +146,14 @@ float3 EvalLight(in float3 l, in Surface surface, in BRDFContext brdfContext, in
 float3 EvalDirectionalLight(in Surface surface, in BRDFContext brdfContext, in DirectionalLight light, in Material material, inout uint randomSeed)
 {
     light.Color = DirLightToLinear(light.Color);
-    float3 direct = EvalLight(light.Vector, surface, brdfContext, material) * light.Color;
+    // Sun angular radius is ~0.00465 radians (~0.266 degrees)
+    float cosSunDisk = cos(0.00465f);
+    float3 lr = TangentToWorld(light.Vector, SampleConeUniform(randomSeed, cosSunDisk));
+    float3 direct = EvalLight(lr, surface, brdfContext, material) * light.Color;
 
     [branch]
     if (any(direct > MIN_DIFFUSE_SHADOW))
     {
-        float3 lr = TangentToWorld(light.Vector, SampleCosineHemisphereScaled(randomSeed, 0.025f));
         direct *= TraceRayShadow(Scene, surface, lr);
     }
 
@@ -240,12 +242,13 @@ float3 EvalPointLight(in Surface surface, in BRDFContext brdfContext, in LightDa
 		atten = 1.0f - intensityFactor * intensityFactor;
 	}
 
-    float3 direct = EvalLight(l, surface, brdfContext, material) * atten * light.Color * light.Fade * lightWeight;
+    float3 lr = TangentToWorld(l, SampleCosineHemisphereScaled(randomSeed, lightSourceAngle));
+
+    float3 direct = EvalLight(lr, surface, brdfContext, material) * atten * light.Color * light.Fade * lightWeight;
 
     [branch]
     if (any(direct > MIN_DIFFUSE_SHADOW))
     {
-        float3 lr = TangentToWorld(l, SampleCosineHemisphereScaled(randomSeed, lightSourceAngle));
         direct *= TraceRayShadowFinite(Scene, surface, lr, dist);
     }
 
