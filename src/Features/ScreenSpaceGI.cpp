@@ -11,6 +11,7 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	Enabled,
 	EnableGI,
 	EnableExperimentalSpecularGI,
+	EnableVanillaSSAO,
 	NumSlices,
 	NumSteps,
 	ResolutionMode,
@@ -51,7 +52,7 @@ void ScreenSpaceGI::DrawSettings()
 
 	ImGui::Checkbox("Show Advanced Options", &showAdvanced);
 
-	if (ImGui::BeginTable("Toggles", 3)) {
+	if (ImGui::BeginTable("Toggles", 4)) {
 		ImGui::TableNextColumn();
 		ImGui::Checkbox("Enabled", &settings.Enabled);
 		if (auto _tt = Util::HoverTooltipWrapper()) {
@@ -62,6 +63,11 @@ void ScreenSpaceGI::DrawSettings()
 		{
 			auto ilToggleGuard = Util::DisableGuard(!settings.Enabled);
 			recompileFlag |= ImGui::Checkbox("Indirect Lighting (IL)", &settings.EnableGI);
+		}
+		ImGui::TableNextColumn();
+		ImGui::Checkbox("Vanilla SSAO", &settings.EnableVanillaSSAO);
+		if (auto _tt = Util::HoverTooltipWrapper()) {
+			ImGui::Text("Enable Skyrim's built-in SSAO. Usually disabled when using SSGI to avoid double-darkening.");
 		}
 		ImGui::TableNextColumn();
 		if (showAdvanced) {
@@ -663,9 +669,9 @@ void ScreenSpaceGI::DrawSSGI()
 	auto imageSpaceManager = RE::ImageSpaceManager::GetSingleton();
 	GET_INSTANCE_MEMBER(BSImagespaceShaderISSAOBlurH, imageSpaceManager);
 
-	// Disable vanilla SSAO
-	bool* enableSSAO = reinterpret_cast<bool*>(reinterpret_cast<uintptr_t>(BSImagespaceShaderISSAOBlurH.get()) + 0x50LL);
-	*enableSSAO = false;
+	// Toggle vanilla SSAO
+	static bool* enableSSAO = reinterpret_cast<bool*>(reinterpret_cast<uintptr_t>(BSImagespaceShaderISSAOBlurH.get()) + 0x50LL);
+	*enableSSAO = settings.EnableVanillaSSAO;
 
 	if (!(settings.Enabled && ShadersOK())) {
 		FLOAT clr[4] = { 0.f, 0.f, 0.f, 0.f };
