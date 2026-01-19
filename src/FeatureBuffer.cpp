@@ -51,7 +51,5 @@ std::pair<unsigned char*, size_t> GetFeatureBufferData(bool a_inWorld)
 		globals::features::snowCover.GetCommonBufferData(),
 		globals::features::terrainShadows.GetCommonBufferData(),
 		globals::features::terrainVariation.settings,
-		globals::features::wetnessEffects.GetCommonBufferData()
-	)
-
+		globals::features::wetnessEffects.GetCommonBufferData())
 }

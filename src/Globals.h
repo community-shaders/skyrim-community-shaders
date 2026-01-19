@@ -32,7 +32,6 @@ struct WeatherEditor;
 struct WeatherPicker;
 struct WetnessEffects;
 
-
 class State;
 class Deferred;
 struct TruePBR;
