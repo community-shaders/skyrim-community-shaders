@@ -1178,8 +1178,6 @@ namespace Util
 
 		return clicked;
 	}
-<<<<<<< HEAD
-=======
 
 	bool LoadDDSTextureFromFile(ID3D11Device* device,
 		const char* filename,
@@ -1580,5 +1578,4 @@ namespace Util
 		}
 	}
 
->>>>>>> dev
 }  // namespace Util
