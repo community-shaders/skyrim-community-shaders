@@ -8,6 +8,9 @@
 #include <wrl\client.h>
 #include <wrl\wrappers\corewrappers.h>
 
+#define STATIC_ASSERT_ALIGNAS_16(structName) \
+	static_assert(sizeof(structName) % 16 == 0, #structName " is not a multiple of 16.");
+
 template <typename T>
 D3D11_BUFFER_DESC StructuredBufferDesc(uint64_t count, bool uav = true, bool dynamic = false)
 {

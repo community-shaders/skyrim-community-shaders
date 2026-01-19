@@ -10,13 +10,14 @@ struct HairSpecular;
 struct IBL;
 struct InteriorSun;
 struct InverseSquareLighting;
-struct LODBlending;
 struct LightLimitFix;
+struct LinearLighting;
+struct LODBlending;
 struct PerformanceOverlay;
 struct ScreenSpaceGI;
 struct ScreenSpaceShadows;
-struct SkySync;
 struct Skylighting;
+struct SkySync;
 struct SnowCover;
 struct SubsurfaceScattering;
 struct TerrainBlending;
@@ -24,15 +25,18 @@ struct TerrainHelper;
 struct TerrainShadows;
 struct TerrainVariation;
 struct Upscaling;
-struct VR;
 struct VolumetricLighting;
+struct VR;
 struct WaterEffects;
+struct WeatherEditor;
 struct WeatherPicker;
 struct WetnessEffects;
+
 
 class State;
 class Deferred;
 struct TruePBR;
+class RenderDoc;
 class Menu;
 
 namespace SIE
@@ -61,13 +65,15 @@ namespace globals
 		extern IBL ibl;
 		extern InteriorSun interiorSun;
 		extern InverseSquareLighting inverseSquareLighting;
-		extern LODBlending lodBlending;
 		extern LightLimitFix lightLimitFix;
+		extern LinearLighting linearLighting;
+		extern LODBlending lodBlending;
 		extern PerformanceOverlay performanceOverlay;
+		extern RenderDoc renderDoc;
 		extern ScreenSpaceGI screenSpaceGI;
 		extern ScreenSpaceShadows screenSpaceShadows;
-		extern SkySync skySync;
 		extern Skylighting skylighting;
+		extern SkySync skySync;
 		extern SnowCover snowCover;
 		extern SubsurfaceScattering subsurfaceScattering;
 		extern TerrainBlending terrainBlending;
@@ -75,9 +81,10 @@ namespace globals
 		extern TerrainShadows terrainShadows;
 		extern TerrainVariation terrainVariation;
 		extern Upscaling upscaling;
-		extern VR vr;
 		extern VolumetricLighting volumetricLighting;
+		extern VR vr;
 		extern WaterEffects waterEffects;
+		extern WeatherEditor weatherEditor;
 		extern WeatherPicker weatherPicker;
 		extern WetnessEffects wetnessEffects;
 
@@ -199,7 +206,9 @@ namespace globals
 		extern RE::BSGraphics::State* graphicsState;
 		extern RE::BSGraphics::Renderer* renderer;
 		extern RE::BSShaderManager::State* smState;
+		extern RE::TES* tes;
 		extern bool isVR;
+		extern RE::MemoryManager* memoryManager;
 		extern RE::INISettingCollection* iniSettingCollection;
 		extern RE::INIPrefSettingCollection* iniPrefSettingCollection;
 		extern RE::GameSettingCollection* gameSettingCollection;

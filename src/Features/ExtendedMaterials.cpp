@@ -44,7 +44,7 @@ void ExtendedMaterials::DrawSettings()
 			ImGui::Text("Enables parallax on standard meshes made for parallax.");
 		}
 
-		if (ImGui::Checkbox("Enable Terrain", (bool*)&settings.EnableTerrain)) {
+		if (ImGui::Checkbox("Enable Legacy Terrain", (bool*)&settings.EnableTerrain)) {
 			if (settings.EnableTerrain) {
 				DataLoaded();
 			}

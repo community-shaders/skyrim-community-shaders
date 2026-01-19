@@ -51,4 +51,7 @@ public:
 private:
 	// FSR scratch buffer - needs to be freed in DestroyFSRResources
 	void* fsrScratchBuffer = nullptr;
+
+	// Flag to prevent spamming the log with FSR3 dispatch crash messages
+	bool fsrDispatchCrashLogged = false;
 };

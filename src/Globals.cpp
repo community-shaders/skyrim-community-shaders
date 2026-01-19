@@ -13,7 +13,9 @@
 #include "Features/InverseSquareLighting.h"
 #include "Features/LODBlending.h"
 #include "Features/LightLimitFix.h"
+#include "Features/LinearLighting.h"
 #include "Features/PerformanceOverlay.h"
+#include "Features/RenderDoc.h"
 #include "Features/ScreenSpaceGI.h"
 #include "Features/ScreenSpaceShadows.h"
 #include "Features/SkySync.h"
@@ -28,14 +30,14 @@
 #include "Features/VR.h"
 #include "Features/VolumetricLighting.h"
 #include "Features/WaterEffects.h"
+#include "Features/WeatherEditor.h"
 #include "Features/WeatherPicker.h"
 #include "Features/WetnessEffects.h"
 #include "Menu.h"
 #include "ShaderCache.h"
 #include "State.h"
-#include "Utils/Game.h"
-
 #include "TruePBR.h"
+#include "Utils/Game.h"
 
 namespace globals
 {
@@ -58,13 +60,15 @@ namespace globals
 		IBL ibl{};
 		InteriorSun interiorSun{};
 		InverseSquareLighting inverseSquareLighting{};
-		LODBlending lodBlending{};
 		LightLimitFix lightLimitFix{};
+		LinearLighting linearLighting{};
+		LODBlending lodBlending{};
 		PerformanceOverlay performanceOverlay{};
+		RenderDoc renderDoc{};
 		ScreenSpaceGI screenSpaceGI{};
 		ScreenSpaceShadows screenSpaceShadows{};
-		SkySync skySync{};
 		Skylighting skylighting{};
+		SkySync skySync{};
 		SnowCover snowCover{};
 		SubsurfaceScattering subsurfaceScattering{};
 		TerrainBlending terrainBlending{};
@@ -72,9 +76,10 @@ namespace globals
 		TerrainShadows terrainShadows{};
 		TerrainVariation terrainVariation{};
 		Upscaling upscaling{};
-		VR vr{};
 		VolumetricLighting volumetricLighting{};
+		VR vr{};
 		WaterEffects waterEffects{};
+		WeatherEditor weatherEditor{};
 		WeatherPicker weatherPicker{};
 		WetnessEffects wetnessEffects{};
 
@@ -89,7 +94,9 @@ namespace globals
 		RE::BSGraphics::State* graphicsState = nullptr;
 		RE::BSGraphics::Renderer* renderer = nullptr;
 		RE::BSShaderManager::State* smState = nullptr;
+		RE::TES* tes = nullptr;
 		bool isVR = false;
+		RE::MemoryManager* memoryManager = nullptr;
 		RE::INISettingCollection* iniSettingCollection = nullptr;
 		RE::INIPrefSettingCollection* iniPrefSettingCollection = nullptr;
 		RE::GameSettingCollection* gameSettingCollection = nullptr;

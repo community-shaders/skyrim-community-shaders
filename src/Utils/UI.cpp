@@ -1,13 +1,21 @@
 #include "UI.h"
+
+#include "../WeatherEditor/EditorWindow.h"
+#include "FileSystem.h"
 #include "Menu.h"
+#include "Menu/IconLoader.h"
+#include "WeatherManager.h"
+#include "WeatherVariableRegistry.h"
 
 #ifndef DIRECTINPUT_VERSION
 #	define DIRECTINPUT_VERSION 0x0800
 #endif
+#include <DirectXTex.h>
 #include <d3d11.h>
 #include <dinput.h>
 #include <imgui.h>
 #include <imgui_internal.h>
+#include <wrl/client.h>
 
 #include "../Feature.h"
 #include "../Globals.h"
@@ -16,14 +24,17 @@
 
 #define STB_IMAGE_IMPLEMENTATION
 #include <algorithm>
+#include <array>
 #include <chrono>
 #include <cmath>
 #include <format>
 #include <functional>
 #include <iomanip>
+#include <mutex>
 #include <sstream>
 #include <stb_image.h>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 namespace Util
@@ -70,192 +81,10 @@ namespace Util
 		const auto Size = ImGui::GetMainViewport()->Size;
 		return { Size.x * scale, Size.y * scale };
 	}
-	// Icon loading functions (moved from UIIconLoader)
-	bool LoadTextureFromFile(ID3D11Device* device,
-		const char* filename,
-		ID3D11ShaderResourceView** out_srv,
-		ImVec2& out_size)
-	{
-		// Validate input parameters
-		if (!device || !out_srv) {
-			logger::warn("LoadTextureFromFile: Invalid parameters - device: {}, out_srv: {}",
-				device ? "valid" : "null", out_srv ? "valid" : "null");
-			return false;
-		}
 
-		// Initialize output to nullptr
-		*out_srv = nullptr;
-
-		logger::debug("LoadTextureFromFile: Attempting to load {}", filename);
-
-		// Load from disk into a raw RGBA buffer
-		int image_width = 0;
-		int image_height = 0;
-		int channels_in_file;
-		unsigned char* image_data = stbi_load(filename, &image_width, &image_height, &channels_in_file, 4);
-		if (image_data == NULL) {
-			logger::warn("LoadTextureFromFile: Failed to load image data from {}", filename);
-			return false;
-		}
-		// Creates Textures for Icons with Mipmapping to support high DPI displays.
-		logger::debug("LoadTextureFromFile: Loaded image {}x{} with {} channels from {}",
-			image_width, image_height, channels_in_file, filename);
-		D3D11_TEXTURE2D_DESC desc;
-		ZeroMemory(&desc, sizeof(desc));
-		desc.Width = image_width;
-		desc.Height = image_height;
-		desc.MipLevels = 0;  // Let D3D11 calculate the full mipmap chain
-		desc.ArraySize = 1;
-		desc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
-		desc.SampleDesc.Count = 1;
-		desc.SampleDesc.Quality = 0;
-		desc.Usage = D3D11_USAGE_DEFAULT;
-		desc.BindFlags = D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_RENDER_TARGET;
-		desc.MiscFlags = D3D11_RESOURCE_MISC_GENERATE_MIPS;
-		desc.CPUAccessFlags = 0;
-
-		ID3D11Texture2D* pTexture = nullptr;
-		// Create texture without initial data to enable full mipmap chain
-		HRESULT hr = device->CreateTexture2D(&desc, nullptr, &pTexture);
-		if (FAILED(hr) || !pTexture) {
-			logger::warn("LoadTextureFromFile: Failed to create D3D11 texture, HRESULT: 0x{:08X}", static_cast<uint32_t>(hr));
-			stbi_image_free(image_data);
-			return false;
-		}
-
-		// Upload the base level data using UpdateSubresource
-		ID3D11DeviceContext* context = nullptr;
-		device->GetImmediateContext(&context);
-		if (context) {
-			context->UpdateSubresource(pTexture, 0, nullptr, image_data, image_width * 4, 0);
-		}
-
-		// Create simple shader resource view
-		hr = device->CreateShaderResourceView(pTexture, nullptr, out_srv);
-		if (FAILED(hr) || !*out_srv) {
-			logger::warn("LoadTextureFromFile: Failed to create shader resource view, HRESULT: 0x{:08X}", static_cast<uint32_t>(hr));
-			pTexture->Release();
-			stbi_image_free(image_data);
-			if (context)
-				context->Release();
-			*out_srv = nullptr;
-			return false;
-		}
-
-		// Generate mipmaps for better icon quality at different scales
-		if (context) {
-			context->GenerateMips(*out_srv);
-			context->Release();
-		}
-		// Success - clean up intermediate resources
-		pTexture->Release();
-		stbi_image_free(image_data);
-
-		out_size = ImVec2((float)image_width, (float)image_height);
-		logger::debug("LoadTextureFromFile: Successfully loaded {} ({}x{})", filename, image_width, image_height);
-		return true;
-	}
 	bool InitializeMenuIcons(Menu* menu)
 	{
-		if (!menu) {
-			logger::warn("InitializeMenuIcons: Menu pointer is null");
-			return false;
-		}
-
-		// Get the D3D device from globals
-		ID3D11Device* device = globals::d3d::device;
-		if (!device) {
-			logger::warn("InitializeMenuIcons: D3D device is null");
-			return false;
-		}
-		// Define path to icons
-		std::string basePath = Util::PathHelpers::GetIconsPath().string() + "\\";
-		logger::info("InitializeMenuIcons: Loading icons from base path: {}", basePath);
-
-		// Initialize all texture pointers to nullptr for safe cleanup
-		std::array<ID3D11ShaderResourceView**, 15> texturePointers = {
-			&menu->uiIcons.saveSettings.texture,
-			&menu->uiIcons.loadSettings.texture,
-			&menu->uiIcons.clearCache.texture,
-			&menu->uiIcons.logo.texture,
-			&menu->uiIcons.discord.texture,
-			&menu->uiIcons.characters.texture,
-			&menu->uiIcons.display.texture,
-			&menu->uiIcons.grass.texture,
-			&menu->uiIcons.lighting.texture,
-			&menu->uiIcons.sky.texture,
-			&menu->uiIcons.landscape.texture,
-			&menu->uiIcons.water.texture,
-			&menu->uiIcons.debug.texture,
-			&menu->uiIcons.materials.texture,
-			&menu->uiIcons.postProcessing.texture
-		};
-
-		// Safely release existing textures
-		for (auto* texturePtr : texturePointers) {
-			if (*texturePtr) {
-				(*texturePtr)->Release();
-				*texturePtr = nullptr;
-			}
-		}
-
-		// Instead of failing completely if one icon fails, try to load each one individually
-		bool anyIconLoaded = false;
-		int iconsLoaded = 0;
-
-		// Helper function to load a single icon
-		auto loadIcon = [&](const std::string& path, ID3D11ShaderResourceView** texture, ImVec2& size) -> bool {
-			if (LoadTextureFromFile(device, path.c_str(), texture, size)) {
-				iconsLoaded++;
-				anyIconLoaded = true;
-				return true;
-			}
-			return false;
-		};
-
-		// Helper function to load icon with logging
-		auto loadIconWithLogging = [&](const std::string& path, ID3D11ShaderResourceView** texture, ImVec2& size, const std::string& name) {
-			if (!loadIcon(path, texture, size)) {
-				logger::warn("InitializeMenuIcons: Failed to load {} icon from: {}", name, path);
-			}
-		};
-
-		// Load action icons
-		loadIconWithLogging(basePath + "Action Icons\\save-settings.png", &menu->uiIcons.saveSettings.texture, menu->uiIcons.saveSettings.size, "save-settings");
-		loadIconWithLogging(basePath + "Action Icons\\load-settings.png", &menu->uiIcons.loadSettings.texture, menu->uiIcons.loadSettings.size, "load-settings");
-		loadIconWithLogging(basePath + "Action Icons\\clear-cache.png", &menu->uiIcons.clearCache.texture, menu->uiIcons.clearCache.size, "clear-cache");
-		loadIconWithLogging(basePath + "Community Shaders Logo\\cs-logo.png", &menu->uiIcons.logo.texture, menu->uiIcons.logo.size, "logo");
-		loadIconWithLogging(basePath + "Action Icons\\discord.png", &menu->uiIcons.discord.texture, menu->uiIcons.discord.size, "discord");
-
-		// Load category icons in a more compact way
-		struct CategoryIcon
-		{
-			const char* filename;
-			ID3D11ShaderResourceView** texture;
-			ImVec2& size;
-		};
-
-		std::vector<CategoryIcon> categoryIcons = {
-			{ "characters.png", &menu->uiIcons.characters.texture, menu->uiIcons.characters.size },
-			{ "display.png", &menu->uiIcons.display.texture, menu->uiIcons.display.size },
-			{ "grass.png", &menu->uiIcons.grass.texture, menu->uiIcons.grass.size },
-			{ "lighting.png", &menu->uiIcons.lighting.texture, menu->uiIcons.lighting.size },
-			{ "sky.png", &menu->uiIcons.sky.texture, menu->uiIcons.sky.size },
-			{ "landscape.png", &menu->uiIcons.landscape.texture, menu->uiIcons.landscape.size },
-			{ "water.png", &menu->uiIcons.water.texture, menu->uiIcons.water.size },
-			{ "debug.png", &menu->uiIcons.debug.texture, menu->uiIcons.debug.size },
-			{ "materials.png", &menu->uiIcons.materials.texture, menu->uiIcons.materials.size },
-			{ "post-processing.png", &menu->uiIcons.postProcessing.texture, menu->uiIcons.postProcessing.size }
-		};
-
-		for (const auto& icon : categoryIcons) {
-			std::string path = basePath + "Categories\\" + icon.filename;
-			loadIcon(path, icon.texture, icon.size);
-		}
-
-		logger::info("InitializeMenuIcons: Loaded {}/15 icons successfully", iconsLoaded);
-
-		return anyIconLoaded;
+		return IconLoader::InitializeMenuIcons(menu);
 	}
 
 	// Text rendering helpers
@@ -290,7 +119,7 @@ namespace Util
 		return ImVec2(endPos.x - startPos.x, endPos.y - startPos.y);
 	}
 
-	ImVec2 DrawAlignedTextWithLogo(ID3D11ShaderResourceView* logoTexture, const ImVec2& logoSize, const char* text, float textScale)
+	ImVec2 DrawAlignedTextWithLogo(ID3D11ShaderResourceView* logoTexture, const ImVec2& logoSize, const char* text, float textScale, ImU32 logoTint)
 	{
 		// Save current cursor position
 		ImVec2 startPos = ImGui::GetCursorPos();
@@ -305,9 +134,18 @@ namespace Util
 		// Position cursor for logo with vertical alignment
 		ImGui::SetCursorPos(ImVec2(startPos.x, startPos.y + verticalOffset));
 
-		// Render logo
-		ImGui::Image(logoTexture, logoSize);
+		// Render logo using draw list with tint color support
+		ImVec2 logoPos = ImGui::GetCursorScreenPos();
+		ImVec2 logoMin = logoPos;
+		ImVec2 logoMax = ImVec2(logoPos.x + logoSize.x, logoPos.y + logoSize.y);
+		ImGui::GetWindowDrawList()->AddImage(logoTexture, logoMin, logoMax, ImVec2(0, 0), ImVec2(1, 1), logoTint);
+
+		// Advance cursor past logo
+		ImGui::Dummy(logoSize);
 		ImGui::SameLine();
+
+		// Add consistent spacing between logo and text
+		ImGui::SetCursorPosX(ImGui::GetCursorPosX() + 8.0f);
 
 		// Reset cursor for text with proper vertical alignment
 		ImGui::SetCursorPos(ImVec2(ImGui::GetCursorPosX(), startPos.y));
@@ -325,6 +163,25 @@ namespace Util
 		ImVec2 endPos = ImGui::GetCursorPos();
 		return ImVec2(endPos.x - startPos.x, endPos.y - startPos.y);
 	}
+
+	float GetCenterOffsetForContent(float contentWidth)
+	{
+		// Get full window width for true centering
+		float fullWindowWidth = ImGui::GetWindowWidth();
+		float windowPaddingX = ImGui::GetStyle().WindowPadding.x;
+		float availableFullWidth = fullWindowWidth - (windowPaddingX * 2.0f);
+
+		// Calculate center position
+		float centerOffset = (availableFullWidth - contentWidth) * 0.5f;
+
+		// Adjust for current cursor position
+		float currentX = ImGui::GetCursorPosX();
+		float targetX = windowPaddingX + centerOffset;
+		float offset = targetX - currentX;
+
+		return offset > 0.0f ? offset : 0.0f;
+	}
+
 	// StyledButtonWrapper implementation
 	StyledButtonWrapper::StyledButtonWrapper(const ImVec4& normalColor, const ImVec4& hoveredColor, const ImVec4& activeColor) :
 		m_pushedStyles(0)
@@ -440,17 +297,21 @@ namespace Util
 		hovered = ImGui::IsItemHovered();
 
 		// Draw the lines and text using Menu theme colors
-		auto& theme = globals::menu->GetTheme().FeatureHeading;
+		auto& themeSettings = globals::menu->GetSettings().Theme;
+		auto& palette = themeSettings.Palette;
 
-		// Get the color based on hover state
-		ImVec4 color = hovered ? theme.ColorHovered : theme.ColorDefault;
-		// If minimized, apply the minimized factor
+		// Use theme text color
+		ImVec4 color = palette.Text;
+
+		// If minimized, apply reduced alpha
 		if (!isExpanded) {
-			color.w *= theme.MinimizedFactor;
+			color.w *= 0.7f;  // 70% alpha when minimized
 		}
-		ImU32 headerColor = ImGui::GetColorU32(color);
-
-		// Left line
+		// If hovered, slightly dim the color
+		if (hovered) {
+			color.w *= 0.8f;  // 80% alpha when hovered
+		}
+		ImU32 headerColor = ImGui::GetColorU32(color);  // Left line
 		if (lineLength > 0) {
 			drawList->AddLine(ImVec2(pos.x, lineY), ImVec2(pos.x + lineLength, lineY), headerColor, 1.0f);
 		}
@@ -498,7 +359,9 @@ namespace Util
 
 		// Use Menu theme colors for consistent styling
 		auto& theme = globals::menu->GetTheme().FeatureHeading;
-		ImVec4 color = useWhiteText ? ImVec4(1.0f, 1.0f, 1.0f, 1.0f) : theme.ColorDefault;
+		auto& palette = globals::menu->GetTheme().Palette;
+		// When useWhiteText is true, use the theme's text color instead of hardcoded white
+		ImVec4 color = useWhiteText ? palette.Text : theme.ColorDefault;
 
 		ImU32 headerColor = ImGui::GetColorU32(color);
 
@@ -691,6 +554,43 @@ namespace Util
 		return ascending ? (a < b) : (b < a);
 	}
 
+	void RenderTextWithHighlights(const std::string& text, const std::string& searchTerm, ImVec4 highlightColor)
+	{
+		if (searchTerm.empty()) {
+			ImGui::TextUnformatted(text.c_str());
+			return;
+		}
+
+		std::string lowerText = text;
+		std::string lowerSearch = searchTerm;
+		std::transform(lowerText.begin(), lowerText.end(), lowerText.begin(), [](unsigned char c) { return static_cast<char>(::tolower(c)); });
+		std::transform(lowerSearch.begin(), lowerSearch.end(), lowerSearch.begin(), [](unsigned char c) { return static_cast<char>(::tolower(c)); });
+
+		size_t pos = 0;
+		size_t lastPos = 0;
+
+		while ((pos = lowerText.find(lowerSearch, lastPos)) != std::string::npos) {
+			// Render text before highlight
+			if (pos > lastPos) {
+				ImGui::TextUnformatted(text.substr(lastPos, pos - lastPos).c_str());
+				ImGui::SameLine(0, 0);
+			}
+
+			// Render highlighted text
+			ImGui::PushStyleColor(ImGuiCol_Text, highlightColor);
+			ImGui::TextUnformatted(text.substr(pos, searchTerm.length()).c_str());
+			ImGui::PopStyleColor();
+			ImGui::SameLine(0, 0);
+
+			lastPos = pos + searchTerm.length();
+		}
+
+		// Render remaining text
+		if (lastPos < text.length()) {
+			ImGui::TextUnformatted(text.substr(lastPos).c_str());
+		}
+	}
+
 	ImVec4 GetThresholdColor(float value, float good, float warn, ImVec4 goodColor, ImVec4 warnColor, ImVec4 badColor)
 	{
 		if (value < good)
@@ -712,13 +612,50 @@ namespace Util
 		std::string query = searchQuery;
 
 		// Convert all to lowercase for case-insensitive search
-		std::transform(shortName.begin(), shortName.end(), shortName.begin(), ::tolower);
-		std::transform(displayName.begin(), displayName.end(), displayName.begin(), ::tolower);
-		std::transform(query.begin(), query.end(), query.begin(), ::tolower);
+		std::transform(shortName.begin(), shortName.end(), shortName.begin(), [](unsigned char c) { return static_cast<char>(::tolower(c)); });
+		std::transform(displayName.begin(), displayName.end(), displayName.begin(), [](unsigned char c) { return static_cast<char>(::tolower(c)); });
+		std::transform(query.begin(), query.end(), query.begin(), [](unsigned char c) { return static_cast<char>(::tolower(c)); });
 
 		// Search in both short name and display name
 		return shortName.find(query) != std::string::npos ||
 		       displayName.find(query) != std::string::npos;
+	}
+
+	bool StringMatchesSearch(const std::string& text, const std::string& searchQuery)
+	{
+		if (searchQuery.empty())
+			return true;
+
+		std::string lowerText = text;
+		std::string lowerQuery = searchQuery;
+
+		// Convert all to lowercase for case-insensitive search
+		std::transform(lowerText.begin(), lowerText.end(), lowerText.begin(), ::tolower);
+		std::transform(lowerQuery.begin(), lowerQuery.end(), lowerQuery.begin(), ::tolower);
+
+		return lowerText.find(lowerQuery) != std::string::npos;
+	}
+
+	void DrawSearchIcon(const ImVec2& position, float size, float alpha)
+	{
+		ImDrawList* drawList = ImGui::GetWindowDrawList();
+
+		ImVec2 center = ImVec2(position.x + size * 0.46f, position.y + size * 0.5f);
+		float radius = size * 0.3f;
+
+		// Use themed text color with reduced alpha for search icon
+		auto& theme = globals::menu->GetTheme().Palette;
+		ImVec4 iconColor = theme.Text;
+		iconColor.w *= alpha;  // Apply alpha multiplier for subtler appearance
+		ImU32 placeholderColor = ImGui::GetColorU32(iconColor);
+
+		// Draw circle
+		drawList->AddCircle(center, radius, placeholderColor, 12, 2.2f);
+
+		// Draw handle
+		ImVec2 handleStart = ImVec2(center.x + radius * 0.81f, center.y + radius * 0.81f);
+		ImVec2 handleEnd = ImVec2(handleStart.x + size * 0.29f, handleStart.y + size * 0.29f);
+		drawList->AddLine(handleStart, handleEnd, placeholderColor, 2.1f);
 	}
 
 	void DrawFeatureSearchBar(std::string& searchString, float availableWidth)
@@ -738,7 +675,9 @@ namespace Util
 		// Custom style - always transparent background to avoid click blocking
 		ImVec4 bgColor = ImVec4(0.0f, 0.0f, 0.0f, 0.0f);
 		ImVec4 bgColorActive = ImVec4(0.3f, 0.3f, 0.3f, 0.9f);
-		ImVec4 textColor = ImVec4(0.9f, 0.9f, 0.9f, 1.0f);
+		// Use theme text color instead of hardcoded color
+		auto& palette = globals::menu->GetTheme().Palette;
+		ImVec4 textColor = palette.Text;
 
 		ImGui::PushStyleColor(ImGuiCol_FrameBg, bgColor);
 		ImGui::PushStyleColor(ImGuiCol_FrameBgHovered, bgColor);
@@ -758,21 +697,9 @@ namespace Util
 			searchString = buffer;
 		}
 
-		// Draw a simple search icon (magnifying glass shape)
+		// Draw search icon using the reusable function
 		ImVec2 iconPos = ImVec2(cursorPos.x + 8.0f, cursorPos.y + (frameHeight - iconSize) * 0.5f);
-		ImDrawList* drawList = ImGui::GetWindowDrawList();
-
-		ImVec2 center = ImVec2(iconPos.x + iconSize * 0.46f, iconPos.y + iconSize * 0.5f);
-		float radius = iconSize * 0.3f;
-		ImU32 placeholderColor = IM_COL32(140, 140, 140, 180);
-
-		// Draw circle
-		drawList->AddCircle(center, radius, placeholderColor, 12, 2.2f);
-
-		// Draw handle
-		ImVec2 handleStart = ImVec2(center.x + radius * 0.81f, center.y + radius * 0.81f);
-		ImVec2 handleEnd = ImVec2(handleStart.x + iconSize * 0.29f, handleStart.y + iconSize * 0.29f);
-		drawList->AddLine(handleStart, handleEnd, placeholderColor, 2.1f);
+		DrawSearchIcon(iconPos, iconSize, 0.7f);
 
 		ImGui::PopStyleVar(2);
 		ImGui::PopStyleColor(5);
@@ -1192,5 +1119,466 @@ namespace Util
 
 			return keyboard_keys_international[key];
 		}
+	}  // namespace Input
+
+	bool ButtonWithFlash(const char* label, const ImVec2& size, int flashDurationMs)
+	{
+		static std::unordered_map<std::string, std::chrono::steady_clock::time_point> flashTimers;
+		static std::mutex flashTimersMutex;
+
+		std::string buttonId = std::string(label);
+		auto now = std::chrono::steady_clock::now();
+
+		// Check if this button has active flash (thread-safe)
+		bool hasActiveFlash = false;
+		{
+			std::lock_guard<std::mutex> lock(flashTimersMutex);
+			auto it = flashTimers.find(buttonId);
+			if (it != flashTimers.end()) {
+				auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(now - it->second);
+				if (elapsed.count() < flashDurationMs) {
+					hasActiveFlash = true;
+				} else {
+					// Flash expired, remove it
+					flashTimers.erase(it);
+				}
+			}
+		}
+
+		// Style the button with flash effect if active.
+		bool styleChanged = false;
+		if (hasActiveFlash) {
+			// Use subtle white overlay similar to action icon hover effect
+			ImVec4 normalButton = ImGui::GetStyleColorVec4(ImGuiCol_Button);
+			ImVec4 flashColor = ImVec4(
+				normalButton.x + 0.2f,  // Brighten slightly
+				normalButton.y + 0.2f,
+				normalButton.z + 0.2f,
+				normalButton.w);
+			ImVec4 flashHovered = ImVec4(flashColor.x * 1.1f, flashColor.y * 1.1f, flashColor.z * 1.1f, flashColor.w);
+			ImVec4 flashActive = ImVec4(flashColor.x * 0.9f, flashColor.y * 0.9f, flashColor.z * 0.9f, flashColor.w);
+
+			ImGui::PushStyleColor(ImGuiCol_Button, flashColor);
+			ImGui::PushStyleColor(ImGuiCol_ButtonHovered, flashHovered);
+			ImGui::PushStyleColor(ImGuiCol_ButtonActive, flashActive);
+			styleChanged = true;
+		}
+
+		bool clicked = ImGui::Button(label, size);
+
+		if (styleChanged) {
+			ImGui::PopStyleColor(3);
+		}
+
+		// If clicked, start the flash timer (thread-safe)
+		if (clicked) {
+			std::lock_guard<std::mutex> lock(flashTimersMutex);
+			flashTimers[buttonId] = now;
+		}
+
+		return clicked;
 	}
+<<<<<<< HEAD
+=======
+
+	bool LoadDDSTextureFromFile(ID3D11Device* device,
+		const char* filename,
+		ID3D11ShaderResourceView** out_srv,
+		ImVec2& out_size)
+	{
+		if (!device || !out_srv) {
+			logger::warn("LoadDDSTextureFromFile: Invalid parameters");
+			return false;
+		}
+
+		*out_srv = nullptr;
+
+		// Try to load from BSA using Skyrim's resource system
+		RE::BSResourceNiBinaryStream bsaStream(filename);
+		if (!bsaStream.good()) {
+			logger::warn("LoadDDSTextureFromFile: Failed to open resource: {}", filename);
+			return false;
+		}
+
+		// Read entire DDS file into memory
+		std::vector<uint8_t> ddsData;
+		auto size = bsaStream.stream->totalSize;
+		if (size == 0) {
+			logger::warn("LoadDDSTextureFromFile: Resource has zero size: {}", filename);
+			return false;
+		}
+
+		ddsData.resize(size);
+		bsaStream.read(reinterpret_cast<char*>(ddsData.data()), size);
+
+		// Load DDS from memory
+		DirectX::ScratchImage image;
+		try {
+			DX::ThrowIfFailed(DirectX::LoadFromDDSMemory(
+				ddsData.data(),
+				ddsData.size(),
+				DirectX::DDS_FLAGS_NONE,
+				nullptr,
+				image));
+		} catch (const DX::com_exception& e) {
+			logger::warn("LoadDDSTextureFromFile: Failed to load DDS data from {}: {}", filename, e.what());
+			return false;
+		}
+
+		ID3D11Resource* pResource = nullptr;
+		try {
+			DX::ThrowIfFailed(DirectX::CreateTexture(device,
+				image.GetImages(), image.GetImageCount(),
+				image.GetMetadata(), &pResource));
+		} catch (const DX::com_exception& e) {
+			logger::warn("LoadDDSTextureFromFile: Failed to create texture: {}", e.what());
+			return false;
+		}
+
+		ID3D11Texture2D* pTexture = reinterpret_cast<ID3D11Texture2D*>(pResource);
+		D3D11_TEXTURE2D_DESC desc;
+		pTexture->GetDesc(&desc);
+
+		D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc = {
+			.Format = desc.Format,
+			.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2D,
+			.Texture2D = {
+				.MostDetailedMip = 0,
+				.MipLevels = desc.MipLevels }
+		};
+
+		HRESULT hr = device->CreateShaderResourceView(pTexture, &srvDesc, out_srv);
+		pTexture->Release();
+
+		if (FAILED(hr) || !*out_srv) {
+			logger::warn("LoadDDSTextureFromFile: Failed to create SRV, HRESULT: 0x{:08X}", static_cast<uint32_t>(hr));
+			return false;
+		}
+
+		out_size = ImVec2((float)desc.Width, (float)desc.Height);
+		logger::debug("LoadDDSTextureFromFile: Successfully loaded {} ({}x{})", filename, desc.Width, desc.Height);
+		return true;
+	}
+
+	bool FeatureToggle(const char* label, bool* enabled, const ImVec2& size)
+	{
+		if (!enabled)
+			return false;
+
+		// Calculate appropriate size if not specified - make it smaller
+		ImVec2 toggleSize = size;
+		if (toggleSize.x <= 0) {
+			toggleSize.x = ImGui::GetFrameHeight() * 1.6f;  // Smaller 1.6:1 aspect ratio
+		}
+		if (toggleSize.y <= 0) {
+			toggleSize.y = ImGui::GetFrameHeight() * 0.8f;  // Smaller height
+		}
+
+		// Get theme colors for better integration
+		auto& style = ImGui::GetStyle();
+		auto& colors = style.Colors;
+
+		// Use theme header colors instead of bright green/red
+		ImVec4 toggleBg = *enabled ?
+		                      colors[ImGuiCol_Header] :  // Use header color when enabled
+		                      colors[ImGuiCol_FrameBg];  // Use frame background when disabled
+
+		ImVec4 toggleBgHovered = *enabled ?
+		                             colors[ImGuiCol_HeaderHovered] :  // Use header hovered when enabled
+		                             colors[ImGuiCol_FrameBgHovered];  // Use frame hovered when disabled
+
+		ImVec4 toggleBgActive = *enabled ?
+		                            colors[ImGuiCol_HeaderActive] :  // Use header active when enabled
+		                            colors[ImGuiCol_FrameBgActive];  // Use frame active when disabled
+
+		// Apply toggle styling with border
+		ImGui::PushStyleColor(ImGuiCol_Button, toggleBg);
+		ImGui::PushStyleColor(ImGuiCol_ButtonHovered, toggleBgHovered);
+		ImGui::PushStyleColor(ImGuiCol_ButtonActive, toggleBgActive);
+		ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, toggleSize.y * 0.5f);  // Round ends
+		ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 1.5f);               // Larger border
+
+		// Create unique ID for the toggle
+		ImGui::PushID(label);
+
+		// Draw the toggle button
+		bool clicked = ImGui::Button("", toggleSize);
+
+		// Draw the toggle knob
+		ImDrawList* drawList = ImGui::GetWindowDrawList();
+		ImVec2 buttonMin = ImGui::GetItemRectMin();
+		ImVec2 buttonMax = ImGui::GetItemRectMax();
+
+		// Calculate knob position and size
+		float knobRadius = (toggleSize.y - 4.0f) * 0.5f;
+		float knobPadding = 2.0f;
+		float knobTravel = toggleSize.x - (knobRadius * 2.0f) - (knobPadding * 2.0f);
+		float knobX = *enabled ?
+		                  buttonMin.x + knobPadding + knobRadius + knobTravel :
+		                  buttonMin.x + knobPadding + knobRadius;
+		float knobY = buttonMin.y + toggleSize.y * 0.5f;
+
+		// Draw knob
+		ImU32 knobColor = ImGui::ColorConvertFloat4ToU32(ImVec4(1.0f, 1.0f, 1.0f, 1.0f));
+		drawList->AddCircleFilled(ImVec2(knobX, knobY), knobRadius, knobColor);
+
+		ImGui::PopID();
+		ImGui::PopStyleVar(2);  // Pop both FrameRounding and FrameBorderSize
+		ImGui::PopStyleColor(3);
+
+		// Handle toggle action
+		if (clicked) {
+			*enabled = !*enabled;
+		}
+
+		return clicked;
+	}
+
+	namespace WeatherUI
+	{
+		bool IsWeatherControlled(Feature* feature, const char* settingName)
+		{
+			if (!feature || !settingName) {
+				return false;
+			}
+
+			auto* globalRegistry = WeatherVariables::GlobalWeatherRegistry::GetSingleton();
+			auto* weatherManager = WeatherManager::GetSingleton();
+
+			// Check if this feature has registered weather variables
+			std::string featureName = feature->GetShortName();
+			if (!globalRegistry->HasWeatherSupport(featureName)) {
+				return false;
+			}
+
+			// Check if current weather exists
+			auto currentWeathers = weatherManager->GetCurrentWeathers();
+			if (!currentWeathers.currentWeather) {
+				return false;
+			}
+
+			// Load weather settings for this feature
+			json weatherSettings;
+			if (!weatherManager->LoadSettingsFromWeather(currentWeathers.currentWeather, featureName, weatherSettings)) {
+				return false;
+			}
+
+			// Check if this specific setting has an override
+			return weatherSettings.contains(settingName) && !weatherSettings[settingName].is_null();
+		}
+
+		bool SliderFloat(const char* label, Feature* feature, const char* settingName, float* value, float min, float max, const char* format)
+		{
+			bool isControlled = IsWeatherControlled(feature, settingName);
+
+			if (isControlled) {
+				auto* weatherManager = WeatherManager::GetSingleton();
+				auto currentWeathers = weatherManager->GetCurrentWeathers();
+
+				// Make it look like a clickable button when weather-controlled
+				ImGui::PushStyleColor(ImGuiCol_FrameBg, ImVec4(0.3f, 0.3f, 0.4f, 0.8f));
+				ImGui::PushStyleColor(ImGuiCol_FrameBgHovered, ImVec4(0.4f, 0.4f, 0.5f, 0.9f));
+				ImGui::PushStyleColor(ImGuiCol_FrameBgActive, ImVec4(0.5f, 0.5f, 0.6f, 1.0f));
+				ImGui::PushStyleVar(ImGuiStyleVar_Alpha, ImGui::GetStyle().Alpha * 0.7f);
+			}
+
+			ImGuiSliderFlags flags = isControlled ? (static_cast<ImGuiSliderFlags>(ImGuiSliderFlags_NoInput) | static_cast<ImGuiSliderFlags>(ImGuiSliderFlags_ReadOnly)) : ImGuiSliderFlags_None;
+			bool changed = ImGui::SliderFloat(label, value, min, max, format, flags);
+
+			if (isControlled) {
+				ImGui::PopStyleVar();
+				ImGui::PopStyleColor(3);
+
+				// Check if clicked
+				if (ImGui::IsItemClicked()) {
+					auto* weatherManager = WeatherManager::GetSingleton();
+					auto* editorWindow = EditorWindow::GetSingleton();
+					auto currentWeathers = weatherManager->GetCurrentWeathers();
+
+					if (currentWeathers.currentWeather && editorWindow) {
+						editorWindow->OpenWeatherFeatureSetting(
+							currentWeathers.currentWeather,
+							feature->GetShortName(),
+							settingName);
+					}
+				}
+
+				if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
+					ImGui::BeginTooltip();
+					auto* weatherManager = WeatherManager::GetSingleton();
+					auto currentWeathers = weatherManager->GetCurrentWeathers();
+					ImGui::PushTextWrapPos(ImGui::GetFontSize() * 35.0f);
+					ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.2f, 1.0f), "Weather Override Active");
+					ImGui::TextWrapped("This setting is controlled by the current weather (%s).",
+						currentWeathers.currentWeather ? currentWeathers.currentWeather->GetFormEditorID() : "Unknown");
+					ImGui::Separator();
+					ImGui::TextColored(ImVec4(0.6f, 0.9f, 0.6f, 1.0f), "Click to open Weather Editor");
+					ImGui::PopTextWrapPos();
+					ImGui::EndTooltip();
+				}
+
+				return false;  // Prevent changes when weather-controlled
+			}
+
+			return changed;
+		}
+
+		bool Checkbox(const char* label, Feature* feature, const char* settingName, bool* value)
+		{
+			bool isControlled = IsWeatherControlled(feature, settingName);
+
+			if (isControlled) {
+				auto* weatherManager = WeatherManager::GetSingleton();
+				auto currentWeathers = weatherManager->GetCurrentWeathers();
+
+				ImGui::PushStyleColor(ImGuiCol_FrameBg, ImVec4(0.3f, 0.3f, 0.4f, 0.8f));
+				ImGui::PushStyleColor(ImGuiCol_FrameBgHovered, ImVec4(0.4f, 0.4f, 0.5f, 0.9f));
+				ImGui::PushStyleVar(ImGuiStyleVar_Alpha, ImGui::GetStyle().Alpha * 0.7f);
+				ImGui::PushItemFlag(ImGuiItemFlags_Disabled, true);
+			}
+
+			bool changed = ImGui::Checkbox(label, value);
+
+			if (isControlled) {
+				ImGui::PopItemFlag();
+				ImGui::PopStyleVar();
+				ImGui::PopStyleColor(2);
+
+				if (ImGui::IsItemClicked()) {
+					auto* weatherManager = WeatherManager::GetSingleton();
+					auto* editorWindow = EditorWindow::GetSingleton();
+					auto currentWeathers = weatherManager->GetCurrentWeathers();
+
+					if (currentWeathers.currentWeather && editorWindow) {
+						editorWindow->OpenWeatherFeatureSetting(
+							currentWeathers.currentWeather,
+							feature->GetShortName(),
+							settingName);
+					}
+				}
+
+				if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
+					ImGui::BeginTooltip();
+					auto* weatherManager = WeatherManager::GetSingleton();
+					auto currentWeathers = weatherManager->GetCurrentWeathers();
+					ImGui::PushTextWrapPos(ImGui::GetFontSize() * 35.0f);
+					ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.2f, 1.0f), "Weather Override Active");
+					ImGui::TextWrapped("This setting is controlled by the current weather (%s).",
+						currentWeathers.currentWeather ? currentWeathers.currentWeather->GetFormEditorID() : "Unknown");
+					ImGui::Separator();
+					ImGui::TextColored(ImVec4(0.6f, 0.9f, 0.6f, 1.0f), "Click to open Weather Editor");
+					ImGui::PopTextWrapPos();
+					ImGui::EndTooltip();
+				}
+
+				return false;
+			}
+
+			return changed;
+		}
+
+		bool ColorEdit3(const char* label, Feature* feature, const char* settingName, float col[3])
+		{
+			bool isControlled = IsWeatherControlled(feature, settingName);
+
+			if (isControlled) {
+				auto* weatherManager = WeatherManager::GetSingleton();
+				auto currentWeathers = weatherManager->GetCurrentWeathers();
+
+				ImGui::PushStyleVar(ImGuiStyleVar_Alpha, ImGui::GetStyle().Alpha * 0.7f);
+				ImGui::PushItemFlag(ImGuiItemFlags_Disabled, true);
+			}
+
+			bool changed = ImGui::ColorEdit3(label, col);
+
+			if (isControlled) {
+				ImGui::PopItemFlag();
+				ImGui::PopStyleVar();
+
+				if (ImGui::IsItemClicked()) {
+					auto* weatherManager = WeatherManager::GetSingleton();
+					auto* editorWindow = EditorWindow::GetSingleton();
+					auto currentWeathers = weatherManager->GetCurrentWeathers();
+
+					if (currentWeathers.currentWeather && editorWindow) {
+						editorWindow->OpenWeatherFeatureSetting(
+							currentWeathers.currentWeather,
+							feature->GetShortName(),
+							settingName);
+					}
+				}
+
+				if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
+					ImGui::BeginTooltip();
+					auto* weatherManager = WeatherManager::GetSingleton();
+					auto currentWeathers = weatherManager->GetCurrentWeathers();
+					ImGui::PushTextWrapPos(ImGui::GetFontSize() * 35.0f);
+					ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.2f, 1.0f), "Weather Override Active");
+					ImGui::TextWrapped("This setting is controlled by the current weather (%s).",
+						currentWeathers.currentWeather ? currentWeathers.currentWeather->GetFormEditorID() : "Unknown");
+					ImGui::Separator();
+					ImGui::TextColored(ImVec4(0.6f, 0.9f, 0.6f, 1.0f), "Click to open Weather Editor");
+					ImGui::PopTextWrapPos();
+					ImGui::EndTooltip();
+				}
+
+				return false;
+			}
+
+			return changed;
+		}
+
+		bool ColorEdit4(const char* label, Feature* feature, const char* settingName, float col[4])
+		{
+			bool isControlled = IsWeatherControlled(feature, settingName);
+
+			if (isControlled) {
+				auto* weatherManager = WeatherManager::GetSingleton();
+				auto currentWeathers = weatherManager->GetCurrentWeathers();
+
+				ImGui::PushStyleVar(ImGuiStyleVar_Alpha, ImGui::GetStyle().Alpha * 0.7f);
+				ImGui::PushItemFlag(ImGuiItemFlags_Disabled, true);
+			}
+
+			bool changed = ImGui::ColorEdit4(label, col);
+
+			if (isControlled) {
+				ImGui::PopItemFlag();
+				ImGui::PopStyleVar();
+
+				if (ImGui::IsItemClicked()) {
+					auto* weatherManager = WeatherManager::GetSingleton();
+					auto* editorWindow = EditorWindow::GetSingleton();
+					auto currentWeathers = weatherManager->GetCurrentWeathers();
+
+					if (currentWeathers.currentWeather && editorWindow) {
+						editorWindow->OpenWeatherFeatureSetting(
+							currentWeathers.currentWeather,
+							feature->GetShortName(),
+							settingName);
+					}
+				}
+
+				if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
+					ImGui::BeginTooltip();
+					auto* weatherManager = WeatherManager::GetSingleton();
+					auto currentWeathers = weatherManager->GetCurrentWeathers();
+					ImGui::PushTextWrapPos(ImGui::GetFontSize() * 35.0f);
+					ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.2f, 1.0f), "Weather Override Active");
+					ImGui::TextWrapped("This setting is controlled by the current weather (%s).",
+						currentWeathers.currentWeather ? currentWeathers.currentWeather->GetFormEditorID() : "Unknown");
+					ImGui::Separator();
+					ImGui::TextColored(ImVec4(0.6f, 0.9f, 0.6f, 1.0f), "Click to open Weather Editor");
+					ImGui::PopTextWrapPos();
+					ImGui::EndTooltip();
+				}
+
+				return false;
+			}
+
+			return changed;
+		}
+	}
+
+>>>>>>> dev
 }  // namespace Util

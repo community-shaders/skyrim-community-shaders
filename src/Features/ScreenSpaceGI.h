@@ -1,5 +1,7 @@
 #pragma once
 
+#include "Buffer.h"
+
 struct ScreenSpaceGI : Feature
 {
 private:
@@ -126,6 +128,7 @@ public:
 
 		float2 pad;
 	};
+	STATIC_ASSERT_ALIGNAS_16(SSGICB);
 	eastl::unique_ptr<ConstantBuffer> ssgiCB;
 
 	eastl::unique_ptr<Texture2D> texNoise = nullptr;

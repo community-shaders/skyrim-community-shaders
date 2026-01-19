@@ -4,6 +4,7 @@
 #include "Globals.h"
 #include "Hooks.h"
 #include "Menu.h"
+#include "Menu/ThemeManager.h"
 #include "ShaderCache.h"
 #include "State.h"
 #include "TruePBR.h"
@@ -145,7 +146,7 @@ bool Load()
 	}
 
 	if (REL::Module::IsVR()) {
-		REL::IDDatabase::get().IsVRAddressLibraryAtLeastVersion("0.189.0", true);
+		REL::IDDatabase::get().IsVRAddressLibraryAtLeastVersion("0.193.0", true);
 	}
 
 	auto privateProfileRedirectorVersion = Util::GetDllVersion(L"Data/SKSE/Plugins/PrivateProfileRedirector.dll");
@@ -161,6 +162,13 @@ bool Load()
 
 	auto state = globals::state;
 	state->Load();
+	state->LoadTheme();  // Load theme settings from SettingsTheme.json
+
+	// Initialize theme system - create default themes and discover existing ones
+	globals::menu->CreateDefaultThemes();  // Creates JSON files if they don't exist
+	auto themeManager = ThemeManager::GetSingleton();
+	themeManager->DiscoverThemes();  // Discover all available themes
+
 	auto log = spdlog::default_logger();
 	log->set_level(state->GetLogLevel());
 

@@ -15,6 +15,8 @@ public:
 		bool& settingsEffectsToggle;
 		bool& settingSkipCompilationKey;
 		bool& settingOverlayToggleKey;
+		bool& settingShaderBlockPrevKey;  // Debug: shader block previous key
+		bool& settingShaderBlockNextKey;  // Debug: shader block next key
 	};
 
 	static void RenderGeneralSettings(
@@ -29,7 +31,8 @@ private:
 	static void RenderInterfaceTab();
 
 	// Interface sub-tabs
-	static void RenderUIOptionsTab();
-	static void RenderSizesTab();
+	static void RenderThemesTab();
+	static void RenderFontsTab();
+	static void RenderStylingTab();
 	static void RenderColorsTab();
 };

@@ -138,7 +138,7 @@ namespace FrameBuffer
 	bool IsOutsideFrame(float2 uv, bool dynamicres = false)
 	{
 		float2 max = dynamicres ? DynamicResolutionParams1.xy : float2(1, 1);
-		return any(uv < float2(0, 0) || uv > max.xy);
+		return any(uv < float2(0, 0)) || any(uv > max.xy);
 	}
 
 }

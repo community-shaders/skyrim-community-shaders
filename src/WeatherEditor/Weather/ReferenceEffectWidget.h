@@ -1,0 +1,40 @@
+#pragma once
+
+#include "../Widget.h"
+
+class ReferenceEffectWidget : public Widget
+{
+public:
+	ReferenceEffectWidget(RE::BGSReferenceEffect* a_referenceEffect) :
+		referenceEffect(a_referenceEffect)
+	{
+		form = a_referenceEffect;
+	}
+
+	~ReferenceEffectWidget() override = default;
+
+	void DrawWidget() override;
+	void LoadSettings() override;
+	void SaveSettings() override;
+	void ApplyChanges() override;
+	void RevertChanges() override;
+	bool HasUnsavedChanges() const override;
+
+	RE::BGSReferenceEffect* referenceEffect = nullptr;
+
+private:
+	struct Settings
+	{
+		RE::BGSArtObject* artObject = nullptr;
+		RE::TESEffectShader* effectShader = nullptr;
+		bool faceTarget = false;
+		bool attachToCamera = false;
+		bool inheritRotation = false;
+	};
+
+	Settings settings;
+	Settings originalSettings;
+
+	std::vector<RE::BGSArtObject*> artObjectArray;
+	std::vector<RE::TESEffectShader*> effectShaderArray;
+};

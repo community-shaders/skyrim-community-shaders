@@ -1436,7 +1436,7 @@ namespace FeatureIssues
 			auto* menu = Menu::GetSingleton();
 			const auto& themeSettings = menu->GetTheme();
 
-			if (ImGui::CollapsingHeader("Testing", ImGuiTreeNodeFlags_DefaultOpen | ImGuiTreeNodeFlags_OpenOnArrow | ImGuiTreeNodeFlags_OpenOnDoubleClick)) {
+			if (ImGui::CollapsingHeader("Testing", ImGuiTreeNodeFlags_OpenOnArrow | ImGuiTreeNodeFlags_OpenOnDoubleClick)) {
 				{
 					auto sectionWrapper = Util::SectionWrapper("Feature Issue Testing",
 						"These tools create test INI files to trigger all known feature issue types for testing purposes.",
@@ -1459,7 +1459,7 @@ namespace FeatureIssues
 						{
 							auto disableGuard = Util::DisableGuard(hasActiveTests);
 							auto buttonStyle = Util::StyledButtonWrapper(
-								themeSettings.Palette.Border,
+								themeSettings.Palette.FrameBorder,
 								themeSettings.StatusPalette.RestartNeeded,
 								themeSettings.StatusPalette.CurrentHotkey);
 
@@ -1482,7 +1482,7 @@ namespace FeatureIssues
 						{
 							auto disableGuard = Util::DisableGuard(!hasActiveTests);
 							auto buttonStyle = Util::StyledButtonWrapper(
-								themeSettings.Palette.Border,
+								themeSettings.Palette.FrameBorder,
 								themeSettings.StatusPalette.Error,
 								themeSettings.StatusPalette.CurrentHotkey);
 

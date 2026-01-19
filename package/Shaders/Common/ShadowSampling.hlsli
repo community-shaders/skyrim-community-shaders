@@ -149,7 +149,7 @@ namespace ShadowSampling
 
 		float worldShadow = 1.0;
 #if defined(TERRAIN_SHADOWS)
-		worldShadow = lerp(TerrainShadows::GetTerrainShadow(positionWS + offset, LinearSampler), 1.0, 0.1);
+		worldShadow = TerrainShadows::GetTerrainShadow(positionWS + offset, LinearSampler);
 #endif
 
 #if defined(CLOUD_SHADOWS)

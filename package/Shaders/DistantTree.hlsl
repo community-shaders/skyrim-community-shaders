@@ -222,6 +222,7 @@ PS_OUTPUT main(PS_INPUT input)
 	psout.Diffuse.w = 0;
 #	else
 	float4 baseColor = TexDiffuse.SampleBias(SampDiffuse, input.TexCoord.xy, SharedData::MipBias);
+	baseColor.xyz = Color::Diffuse(baseColor.xyz);
 
 	if ((baseColor.w - AlphaTestRefRS) < 0) {
 		discard;
@@ -257,9 +258,10 @@ PS_OUTPUT main(PS_INPUT input)
 	if (dirShadow != 0.0)
 		dirShadow *= ShadowSampling::GetWorldShadow(input.WorldPosition.xyz, FrameBuffer::CameraPosAdjust[eyeIndex].xyz, eyeIndex);
 
-	float3 diffuseColor = SharedData::DirLightColor.xyz * dirShadow * 0.5;
+	float llDirLightMult = (SharedData::linearLightingSettings.enableLinearLighting && !SharedData::linearLightingSettings.isDirLightLinear) ? SharedData::linearLightingSettings.dirLightMult : 1.0f;
+	float3 diffuseColor = Color::DirectionalLight(SharedData::DirLightColor.xyz / max(llDirLightMult, 1e-5), SharedData::linearLightingSettings.isDirLightLinear) * dirShadow * 0.5 * llDirLightMult * Color::VanillaDiffuseMult();
 
-	float3 directionalAmbientColor = max(0, mul(SharedData::DirectionalAmbient, float4(normal, 1.0)));
+	float3 directionalAmbientColor = Color::Ambient(mul(SharedData::DirectionalAmbient, float4(normal, 1.0)));
 #			if defined(IBL)
 	float3 iblColor = 0;
 	if (SharedData::iblSettings.EnableDiffuseIBL) {
@@ -269,7 +271,7 @@ PS_OUTPUT main(PS_INPUT input)
 #					else
 		iblColor += Color::Saturation(ImageBasedLighting::GetIBLColor(-normal), SharedData::iblSettings.IBLSaturation) * SharedData::iblSettings.DiffuseIBLScale;
 #					endif
-		directionalAmbientColor += Color::LinearToGamma(iblColor);
+		directionalAmbientColor += Color::IrradianceToGamma(iblColor);
 	}
 #			endif
 	diffuseColor += directionalAmbientColor;
@@ -287,19 +289,20 @@ PS_OUTPUT main(PS_INPUT input)
 #		else
 	float dirShadow = ShadowSampling::GetWorldShadow(input.WorldPosition.xyz, FrameBuffer::CameraPosAdjust[eyeIndex].xyz, eyeIndex);
 
-	float3 diffuseColor = SharedData::DirLightColor.xyz * dirShadow * 0.5;
+	float llDirLightMult = (SharedData::linearLightingSettings.enableLinearLighting && !SharedData::linearLightingSettings.isDirLightLinear) ? SharedData::linearLightingSettings.dirLightMult : 1.0f;
+	float3 diffuseColor = Color::DirectionalLight(SharedData::DirLightColor.xyz / max(llDirLightMult, 1e-5), SharedData::linearLightingSettings.isDirLightLinear) * dirShadow * 0.5 * llDirLightMult * Color::VanillaDiffuseMult();
 
-	float3 directionalAmbientColor = mul(SharedData::DirectionalAmbient, float4(normal, 1.0));
+	float3 directionalAmbientColor = Color::Ambient(mul(SharedData::DirectionalAmbient, float4(-normal, 1.0)));
 #			if defined(IBL)
 	float3 iblColor = 0;
 	if (SharedData::iblSettings.EnableDiffuseIBL) {
 		directionalAmbientColor *= SharedData::iblSettings.DALCAmount;
 #					if defined(SKYLIGHTING)
-		iblColor += Color::Saturation(ImageBasedLighting::GetIBLColor(-normal, 1.0), SharedData::iblSettings.IBLSaturation) * SharedData::iblSettings.DiffuseIBLScale;
+		iblColor += Color::Saturation(ImageBasedLighting::GetIBLColor(normal, 1.0), SharedData::iblSettings.IBLSaturation) * SharedData::iblSettings.DiffuseIBLScale;
 #					else
-		iblColor += Color::Saturation(ImageBasedLighting::GetIBLColor(-normal), SharedData::iblSettings.IBLSaturation) * SharedData::iblSettings.DiffuseIBLScale;
+		iblColor += Color::Saturation(ImageBasedLighting::GetIBLColor(normal), SharedData::iblSettings.IBLSaturation) * SharedData::iblSettings.DiffuseIBLScale;
 #					endif
-		directionalAmbientColor += Color::LinearToGamma(iblColor);
+		directionalAmbientColor += Color::IrradianceToGamma(iblColor);
 	}
 #			endif
 	diffuseColor += directionalAmbientColor;

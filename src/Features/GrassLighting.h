@@ -1,5 +1,7 @@
 #pragma once
 
+#include "Buffer.h"
+
 struct GrassLighting : Feature
 {
 private:
@@ -35,6 +37,7 @@ public:
 		float BasicGrassBrightness = 1.0f;
 		uint pad[3];
 	};
+	STATIC_ASSERT_ALIGNAS_16(Settings);
 
 	Settings settings;
 

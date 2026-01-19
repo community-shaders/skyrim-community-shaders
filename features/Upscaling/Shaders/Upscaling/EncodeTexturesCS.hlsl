@@ -25,6 +25,7 @@ RWTexture2D<float2> MotionVectorOutput : register(u2);
 
 #if defined(DLSS)
 	float depth = DepthMask[dispatchID.xy];
+	float nearFactor = smoothstep(4096.0 * 2.5, 0.0, SharedData::GetScreenDepth(depth));
 
 	// Find longest motion vector in 5x5 neighborhood
 	float2 motionVector = MotionVectorMask[dispatchID.xy];
@@ -58,7 +59,7 @@ RWTexture2D<float2> MotionVectorOutput : register(u2);
 		}
 	}
 
-	MotionVectorOutput[dispatchID.xy] = longestMotionVector;
+	MotionVectorOutput[dispatchID.xy] = lerp(longestMotionVector, motionVector, nearFactor);
 #endif
 
 	float reactiveMask = taaMask.x * 0.1 + taaMask.y;

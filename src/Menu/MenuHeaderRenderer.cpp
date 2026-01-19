@@ -10,8 +10,53 @@
 #include "ThemeManager.h"
 #include "Util.h"
 
+namespace
+{
+	class RoleFontGuard
+	{
+	public:
+		explicit RoleFontGuard(Menu::FontRole role)
+		{
+			Menu* menuInstance = globals::menu;
+			if (!menuInstance) {
+				logger::error("RoleFontGuard: globals::menu is null, cannot retrieve font for role");
+				return;
+			}
+
+			font_ = menuInstance->GetFont(role);
+			if (font_) {
+				ImGui::PushFont(font_);
+				fontPushed_ = true;
+			} else {
+				logger::warn("RoleFontGuard: Failed to retrieve font for role {}", static_cast<int>(role));
+			}
+		}
+
+		~RoleFontGuard()
+		{
+			if (fontPushed_) {
+				ImGui::PopFont();
+			}
+		}
+
+		RoleFontGuard(const RoleFontGuard&) = delete;
+		RoleFontGuard& operator=(const RoleFontGuard&) = delete;
+
+		[[nodiscard]] ImFont* Get() const { return font_; }
+
+	private:
+		ImFont* font_ = nullptr;
+		bool fontPushed_ = false;
+	};
+}
+
 void MenuHeaderRenderer::RenderHeader(bool isDocked, bool showLogo, bool canShowIcons, float uiScale, const Menu::UIIcons& uiIcons)
 {
+	if (!globals::menu) {
+		logger::error("MenuHeaderRenderer::RenderHeader: globals::menu is null, cannot render header");
+		return;
+	}
+
 	auto title = std::format("Community Shaders {}", Util::GetFormattedVersion(Plugin::VERSION));
 	auto actionIcons = BuildActionIcons(canShowIcons, uiIcons);
 
@@ -25,6 +70,8 @@ void MenuHeaderRenderer::RenderHeader(bool isDocked, bool showLogo, bool canShow
 		RenderDockedIcons(actionIcons, uiScale);
 	} else {
 		// When not docked, show the custom header
+		bool centerHeader = globals::menu->GetTheme().CenterHeader;
+
 		if ((showLogo || canShowIcons) && ImGui::BeginTable("##HeaderLayout", 2, ImGuiTableFlags_SizingStretchProp)) {
 			ImGui::TableSetupColumn("Title", ImGuiTableColumnFlags_WidthStretch);
 			ImGui::TableSetupColumn("Buttons", ImGuiTableColumnFlags_WidthFixed);
@@ -39,25 +86,61 @@ void MenuHeaderRenderer::RenderHeader(bool isDocked, bool showLogo, bool canShow
 			const float textScaleFactor = baseTextScale * uiScale;
 			const float logoSize = baseIconSize * uiScale;  // Match action icon size
 
+			if (centerHeader) {
+				// Calculate the width of the content
+				float contentWidth = 0.0f;
+
+				if (showLogo) {
+					float logoAspectRatio = uiIcons.logo.size.x / uiIcons.logo.size.y;
+					contentWidth = (logoSize * logoAspectRatio) + 8.0f;  // Logo width + spacing
+				}
+
+				// Calculate text width
+				{
+					RoleFontGuard titleFont(Menu::FontRole::Title);
+					ImGui::SetWindowFontScale(textScaleFactor);
+					contentWidth += ImGui::CalcTextSize(title.c_str()).x;
+					ImGui::SetWindowFontScale(1.0f);
+				}
+
+				float offset = Util::GetCenterOffsetForContent(contentWidth);
+				if (offset > 0.0f) {
+					ImGui::SetCursorPosX(ImGui::GetCursorPosX() + offset);
+				}
+			} else {
+				// Add padding for left-aligned layout
+				ImGui::SetCursorPosX(ImGui::GetCursorPosX() + ThemeManager::Constants::CURSOR_POSITION_PADDING);
+			}
+
 			// Always display logo if texture is available
 			if (showLogo) {
 				float logoAspectRatio = uiIcons.logo.size.x / uiIcons.logo.size.y;
 				ImVec2 logoSizeVec(logoSize * logoAspectRatio, logoSize);
 
-				// Add a bit of padding before the logo and text
-				ImGui::SetCursorPosX(ImGui::GetCursorPosX() + ThemeManager::Constants::CURSOR_POSITION_PADDING);
+				// Determine tint color for logo
+				ImU32 logoTint = IM_COL32_WHITE;
+				if (globals::menu->GetSettings().Theme.UseMonochromeLogo) {
+					ImVec4 textColor = globals::menu->GetSettings().Theme.Palette.Text;
+					logoTint = ImGui::GetColorU32(textColor);
+				}
 
 				// Use our helper to render aligned logo and text with perfect vertical alignment
-				Util::DrawAlignedTextWithLogo(
-					uiIcons.logo.texture,
-					logoSizeVec,
-					title.c_str(),
-					textScaleFactor);
+				{
+					RoleFontGuard titleFont(Menu::FontRole::Title);
+					Util::DrawAlignedTextWithLogo(
+						uiIcons.logo.texture,
+						logoSizeVec,
+						title.c_str(),
+						textScaleFactor,
+						logoTint);
+				}
 			} else {
 				// No logo, just render the text with proper alignment
 				ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(0, 0));
-				ImGui::SetCursorPosX(ImGui::GetCursorPosX() + ThemeManager::Constants::CURSOR_POSITION_PADDING);
-				Util::DrawSharpText(title.c_str(), true, textScaleFactor);
+				{
+					RoleFontGuard titleFont(Menu::FontRole::Title);
+					Util::DrawSharpText(title.c_str(), true, textScaleFactor);
+				}
 				ImGui::PopStyleVar();
 			}
 
@@ -71,8 +154,28 @@ void MenuHeaderRenderer::RenderHeader(bool isDocked, bool showLogo, bool canShow
 			const float baseTextScale = ThemeManager::Constants::HEADER_FALLBACK_TEXT_SCALE;
 			const float textScaleFactor = baseTextScale * uiScale;  // Apply UI scale
 
+			if (centerHeader) {
+				// Calculate text width for centering
+				float textWidth = 0.0f;
+				{
+					RoleFontGuard titleFont(Menu::FontRole::Title);
+					ImGui::SetWindowFontScale(textScaleFactor);
+					textWidth = ImGui::CalcTextSize(title.c_str()).x;
+					ImGui::SetWindowFontScale(1.0f);
+				}
+
+				// Use helper to get centering offset
+				float offset = Util::GetCenterOffsetForContent(textWidth);
+				if (offset > 0.0f) {
+					ImGui::SetCursorPosX(ImGui::GetCursorPosX() + offset);
+				}
+			}
+
 			ImGui::SetWindowFontScale(textScaleFactor);
-			ImGui::TextUnformatted(title.c_str());
+			{
+				RoleFontGuard titleFont(Menu::FontRole::Title);
+				ImGui::TextUnformatted(title.c_str());
+			}
 			ImGui::SetWindowFontScale(1.0f);
 		}
 	}
@@ -90,8 +193,9 @@ void MenuHeaderRenderer::RenderHeader(bool isDocked, bool showLogo, bool canShow
 		if (ImGui::BeginTable("##ActionButtons", 4, ImGuiTableFlags_SizingStretchSame)) {
 			// Save Settings Button
 			ImGui::TableNextColumn();
-			if (ImGui::Button("Save Settings", { -1, 0 })) {
+			if (Util::ButtonWithFlash("Save Settings", { -1, 0 })) {
 				globals::state->Save();
+				globals::state->SaveTheme();
 			}
 
 			// Restore Saved Settings Button
@@ -174,7 +278,10 @@ std::vector<MenuHeaderRenderer::ActionIcon> MenuHeaderRenderer::BuildActionIcons
 	if (uiIcons.saveSettings.texture) {
 		actionIcons.push_back({ uiIcons.saveSettings.texture,
 			"Save Settings",
-			[]() { globals::state->Save(); } });
+			[]() {
+				globals::state->Save();
+				globals::state->SaveTheme();
+			} });
 	}
 	if (uiIcons.loadSettings.texture) {
 		actionIcons.push_back({ uiIcons.loadSettings.texture,
@@ -253,9 +360,23 @@ void MenuHeaderRenderer::RenderDockedIcons(const std::vector<ActionIcon>& action
 		bool isHovered = mousePos.x >= interactionMin.x && mousePos.x <= interactionMax.x &&
 		                 mousePos.y >= interactionMin.y && mousePos.y <= interactionMax.y;
 
-		// Draw icon with hover effect, using reduced area to minimize padding
-		ImU32 tintColor = isHovered ? IM_COL32(255, 255, 255, 255) : IM_COL32(220, 220, 220, 220);
-		fgDrawList->AddImage(it->texture, iconMin, iconMax, ImVec2(0, 0), ImVec2(1, 1), tintColor);
+		// Only render if texture is valid
+		if (it->texture) {
+			// Draw icon with hover effect, using reduced area to minimize padding
+			ImU32 tintColor;
+			if (globals::menu->GetSettings().Theme.UseMonochromeIcons) {
+				// Use theme text color for monochrome icons
+				ImVec4 textColor = globals::menu->GetSettings().Theme.Palette.Text;
+				if (!isHovered) {
+					textColor.w *= 0.85f;  // Slightly reduce alpha when not hovered
+				}
+				tintColor = ImGui::GetColorU32(textColor);
+			} else {
+				// Use white/gray tint for colored icons
+				tintColor = isHovered ? IM_COL32(255, 255, 255, 255) : IM_COL32(220, 220, 220, 220);
+			}
+			fgDrawList->AddImage(it->texture, iconMin, iconMax, ImVec2(0, 0), ImVec2(1, 1), tintColor);
+		}
 
 		// Handle interaction
 		if (isHovered) {
@@ -291,13 +412,25 @@ void MenuHeaderRenderer::RenderUndockedIcons(const std::vector<ActionIcon>& acti
 	ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0));                                                         // Transparent button background
 	ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.8f, 0.8f, 0.8f, 0.25f));                                     // Slightly more visible hover effect
 
+	// Get tint color for monochrome icons
+	ImVec4 tintColor = ImVec4(1, 1, 1, 1);
+	if (globals::menu->GetSettings().Theme.UseMonochromeIcons) {
+		tintColor = globals::menu->GetSettings().Theme.Palette.Text;
+	}
+
 	// Draw action icons as ImageButtons
 	for (size_t i = 0; i < actionIcons.size(); ++i) {
 		const auto& icon = actionIcons[i];
+
+		// Skip if texture is null
+		if (!icon.texture) {
+			continue;
+		}
+
 		std::string buttonId = std::format("##ActionBtn{}", i);
 
 		// Use ImageButton with reduced image size to minimize padding
-		if (ImGui::ImageButton(buttonId.c_str(), icon.texture, imageSize)) {
+		if (ImGui::ImageButton(buttonId.c_str(), icon.texture, imageSize, ImVec2(0, 0), ImVec2(1, 1), ImVec4(0, 0, 0, 0), tintColor)) {
 			icon.callback();
 		}
 		if (auto _tt = Util::HoverTooltipWrapper()) {
@@ -341,7 +474,15 @@ void MenuHeaderRenderer::RenderWatermarkLogo(const Menu::UIIcons& uiIcons)
 	ImVec2 logoMin(logoX, logoY);
 	ImVec2 logoMax(logoX + watermarkWidth, logoY + watermarkHeight);
 
-	// Use very low alpha for subtle watermark effect
-	ImU32 watermarkColor = IM_COL32(255, 255, 255, 45);
+	// Determine watermark color based on monochrome logo setting
+	ImU32 watermarkColor;
+	if (globals::menu->GetSettings().Theme.UseMonochromeLogo) {
+		ImVec4 textColor = globals::menu->GetSettings().Theme.Palette.Text;
+		textColor.w = 0.18f;  // Very low alpha for subtle watermark effect
+		watermarkColor = ImGui::GetColorU32(textColor);
+	} else {
+		watermarkColor = IM_COL32(255, 255, 255, 45);
+	}
+
 	drawList->AddImage(uiIcons.logo.texture, logoMin, logoMax, ImVec2(0, 0), ImVec2(1, 1), watermarkColor);
 }

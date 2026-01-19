@@ -8,6 +8,7 @@
 
 #include "Feature.h"
 #include "FeatureIssues.h"
+#include "Fonts.h"
 #include "Globals.h"
 #include "Menu.h"
 #include "Menu/HomePageRenderer.h"
@@ -15,6 +16,7 @@
 #include "SettingsOverrideManager.h"
 #include "State.h"
 #include "Util.h"
+#include "WeatherVariableRegistry.h"
 
 namespace
 {
@@ -24,6 +26,22 @@ namespace
 	bool IsCoreMenu(const std::string& menuName)
 	{
 		return std::find(CORE_MENU_NAMES.begin(), CORE_MENU_NAMES.end(), menuName) != CORE_MENU_NAMES.end();
+	}
+
+	void SeparatorTextWithFont(const char* text, Menu::FontRole role)
+	{
+		MenuFonts::FontRoleGuard guard(role);
+		ImGui::SeparatorText(text);
+	}
+
+	void SeparatorTextWithFont(const std::string& text, Menu::FontRole role)
+	{
+		SeparatorTextWithFont(text.c_str(), role);
+	}
+
+	bool BeginTabItemWithFont(const char* label, Menu::FontRole role, ImGuiTabItemFlags flags = ImGuiTabItemFlags_None)
+	{
+		return MenuFonts::BeginTabItemWithFont(label, role, flags);
 	}
 }
 
@@ -101,7 +119,7 @@ std::vector<FeatureListRenderer::MenuFuncInfo> FeatureListRenderer::BuildMenuLis
 	}
 
 	// Define category order
-	std::vector<std::string> categoryOrder = { "Display", "Debug", "Characters", "Grass", "Lighting", "Materials", "Post-Processing", "Sky", "Landscape & Textures", "Water", "Other" };
+	std::vector<std::string> categoryOrder = { "Display", "Utility", "Characters", "Grass", "Lighting", "Materials", "Post-Processing", "Sky", "Landscape & Textures", "Water", "Other" };
 	// Add categorized features to menu with collapsible headers
 	for (const std::string& category : categoryOrder) {
 		if (categorizedFeatures.find(category) != categorizedFeatures.end() && !categorizedFeatures[category].empty()) {
@@ -246,18 +264,21 @@ void FeatureListRenderer::RenderRightColumn(
 
 void FeatureListRenderer::ListMenuVisitor::operator()(const BuiltInMenu& menu)
 {
+	MenuFonts::FontRoleGuard fontGuard(Menu::FontRole::Subheading);
+
 	// Use error color for Feature Issues menu item
 	bool isFeatureIssues = (menu.name == "Feature Issues");
 	if (isFeatureIssues) {
 		auto& themeSettings = globals::menu->GetSettings().Theme;
 		ImGui::PushStyleColor(ImGuiCol_Text, themeSettings.StatusPalette.Error);
-	}
 
-	if (ImGui::Selectable(fmt::format(" {} ", menu.name).c_str(), selectedMenuRef == listId, ImGuiSelectableFlags_SpanAllColumns))
-		selectedMenuRef = listId;
+		if (ImGui::Selectable(fmt::format(" {} ", menu.name).c_str(), selectedMenuRef == listId, ImGuiSelectableFlags_SpanAllColumns))
+			selectedMenuRef = listId;
 
-	if (isFeatureIssues) {
 		ImGui::PopStyleColor();
+	} else {
+		if (ImGui::Selectable(fmt::format(" {} ", menu.name).c_str(), selectedMenuRef == listId, ImGuiSelectableFlags_SpanAllColumns))
+			selectedMenuRef = listId;
 	}
 }
 
@@ -267,8 +288,8 @@ void FeatureListRenderer::ListMenuVisitor::operator()(const std::string& label)
 	if (label == "Unloaded Features") {
 		Util::DrawSectionHeader(label.c_str(), true);
 	} else {
-		// Use default separator text for other labels
-		ImGui::SeparatorText(label.c_str());
+		// Use default separator text for other labels - should be themed via ImGuiCol_Separator
+		SeparatorTextWithFont(label, Menu::FontRole::Subheading);
 	}
 }
 
@@ -278,8 +299,12 @@ void FeatureListRenderer::ListMenuVisitor::operator()(const CategoryHeader& head
 	bool isExpanded = categoryExpansionStates[header.name];
 
 	// Draw category header with custom styling using util:UI function
-	int count = Menu::categoryCounts[std::string(header.name)];
-	Util::DrawCategoryHeader(header.name.c_str(), isExpanded, count);
+	// Use Heading font for category headers
+	{
+		MenuFonts::FontRoleGuard fontGuard(Menu::FontRole::Heading);
+		int count = Menu::categoryCounts[std::string(header.name)];
+		Util::DrawCategoryHeader(header.name.c_str(), isExpanded, count);
+	}
 
 	// Update expansion state
 	categoryExpansionStates[header.name] = isExpanded;
@@ -287,6 +312,8 @@ void FeatureListRenderer::ListMenuVisitor::operator()(const CategoryHeader& head
 
 void FeatureListRenderer::ListMenuVisitor::operator()(Feature* feat)
 {
+	MenuFonts::FontRoleGuard fontGuard(Menu::FontRole::Subheading);
+
 	const auto featureName = feat->GetShortName();
 	bool isDisabled = globals::state->IsFeatureDisabled(featureName);
 	bool isLoaded = feat->loaded;
@@ -313,15 +340,11 @@ void FeatureListRenderer::ListMenuVisitor::operator()(Feature* feat)
 		}
 	}
 
-	// Set text color
+	// Create selectable item with semantic color
 	ImGui::PushStyleColor(ImGuiCol_Text, textColor);
-
-	// Create selectable item
 	if (ImGui::Selectable(fmt::format(" {} ", feat->GetName()).c_str(), selectedMenuRef == listId, ImGuiSelectableFlags_SpanAllColumns)) {
 		selectedMenuRef = listId;
 	}
-
-	// Restore original text color
 	ImGui::PopStyleColor();
 
 	// Display version if loaded
@@ -363,6 +386,7 @@ void FeatureListRenderer::DrawMenuVisitor::operator()(Feature* feat)
 	float buttonPadding = ThemeManager::Constants::BUTTON_PADDING;
 	float buttonSpacing = ThemeManager::Constants::BUTTON_SPACING;
 
+	MenuFonts::TabBarPaddingGuard tabPaddingGuard(Menu::FontRole::Subheading);
 	if (ImGui::BeginTabBar("##FeatureTabs", ImGuiTabBarFlags_Reorderable)) {
 		// Render Settings and About tabs
 		RenderFeatureSettingsTab(feat, isDisabled, isLoaded, hasFailedMessage);
@@ -381,142 +405,178 @@ bool FeatureListRenderer::DrawMenuVisitor::IsFeatureInstalled(const std::string&
 
 void FeatureListRenderer::DrawMenuVisitor::RenderFeatureSettingsTab(Feature* feat, bool isDisabled, bool isLoaded, bool hasFailedMessage)
 {
-	if (ImGui::BeginTabItem("Settings")) {
-		if (ImGui::BeginChild("##FeatureSettingsFrame", { 0, 0 }, true)) {
-			auto& themeSettings = globals::menu->GetSettings().Theme;
+	if (!BeginTabItemWithFont("Settings", Menu::FontRole::Subheading)) {
+		return;
+	}
 
-			// Feature-specific settings section
-			ImGui::SeparatorText("Feature Settings");
-			if (isDisabled) {
-				// Show disabled message
-				ImGui::TextColored(themeSettings.StatusPalette.Disable, "Feature settings are hidden because this feature is disabled at boot.");
-				ImGui::Spacing();
-				ImGui::Text("Enable the feature above to access its configuration options.");
-			} else {
-				if (isLoaded) {
-					// Check if the feature has any settings by monitoring cursor position
-					ImVec2 cursorPosBefore = ImGui::GetCursorPos();
-					feat->DrawSettings();
-					ImVec2 cursorPosAfter = ImGui::GetCursorPos();
+	if (ImGui::BeginChild("##FeatureSettingsFrame", { 0, 0 }, true)) {
+		auto& themeSettings = globals::menu->GetSettings().Theme;
 
-					// If cursor position hasn't changed significantly, no visible settings were drawn
-					const float epsilon = 0.1f;
-					bool cursorMoved = (std::abs(cursorPosAfter.x - cursorPosBefore.x) > epsilon ||
-										std::abs(cursorPosAfter.y - cursorPosBefore.y) > epsilon);
-					if (!cursorMoved) {
-						ImGui::TextColored(themeSettings.StatusPalette.Disable, "There are no settings available for this feature.");
+		SeparatorTextWithFont("Feature Settings", Menu::FontRole::Subheading);
+		if (isDisabled) {
+			ImGui::TextColored(themeSettings.StatusPalette.Disable, "Feature settings are hidden because this feature is disabled at boot.");
+			ImGui::Spacing();
+			ImGui::Text("Enable the feature above to access its configuration options.");
+		} else {
+			if (isLoaded) {
+				auto weatherRegistry = WeatherVariables::GlobalWeatherRegistry::GetSingleton();
+				if (weatherRegistry->HasWeatherSupport(feat->GetShortName())) {
+					bool paused = weatherRegistry->IsFeaturePaused(feat->GetShortName());
+					if (ImGui::Checkbox("Pause Weather Overrides", &paused)) {
+						weatherRegistry->SetFeaturePaused(feat->GetShortName(), paused);
 					}
+					if (auto _tt = Util::HoverTooltipWrapper()) {
+						ImGui::Text(
+							"Temporarily disable weather-based setting adjustments for this feature.\n"
+							"This state is not saved.");
+					}
+					ImGui::Separator();
+				}
+
+				ImVec2 cursorPosBefore = ImGui::GetCursorPos();
+				feat->DrawSettings();
+				ImVec2 cursorPosAfter = ImGui::GetCursorPos();
+
+				const float epsilon = 0.1f;
+				bool cursorMoved = (std::abs(cursorPosAfter.x - cursorPosBefore.x) > epsilon ||
+									std::abs(cursorPosAfter.y - cursorPosBefore.y) > epsilon);
+				if (!cursorMoved) {
+					ImGui::TextColored(themeSettings.StatusPalette.Disable, "There are no settings available for this feature.");
+				}
+			} else {
+				if (FeatureIssues::IsObsoleteFeature(feat->GetShortName())) {
+					feat->DrawUnloadedUI();
+				} else if (IsFeatureInstalled(feat->GetShortName())) {
+					ImGui::Text("This feature will be available after restart.");
 				} else {
-					// Check if feature is obsolete first - always show error for obsolete features
-					if (FeatureIssues::IsObsoleteFeature(feat->GetShortName())) {
-						// Obsolete feature - show detailed unloaded UI with error info
-						feat->DrawUnloadedUI();
-					} else if (IsFeatureInstalled(feat->GetShortName())) {
-						// INI file exists - show simple pending restart message
-						ImGui::Text("This feature will be available after restart.");
-					} else {
-						// INI file missing - show detailed unloaded UI with installation info
-						feat->DrawUnloadedUI();
-						// Add download link if available
-						if (!feat->GetFeatureModLink().empty()) {
-							ImGui::Spacing();
-							const auto downloadText = fmt::format("Click here to download this feature ({})", feat->GetFeatureModLink());
-							if (ImGui::Selectable(downloadText.c_str())) {
-								ShellExecuteA(NULL, "open", feat->GetFeatureModLink().c_str(), NULL, NULL, SW_SHOWNORMAL);
-							}
-							if (auto _tt = Util::HoverTooltipWrapper()) {
-								ImGui::Text("Download the feature from the mod page.");
-							}
+					feat->DrawUnloadedUI();
+					if (!feat->GetFeatureModLink().empty()) {
+						ImGui::Spacing();
+						const auto downloadText = fmt::format("Click here to download this feature ({})", feat->GetFeatureModLink());
+						if (ImGui::Selectable(downloadText.c_str())) {
+							ShellExecuteA(NULL, "open", feat->GetFeatureModLink().c_str(), NULL, NULL, SW_SHOWNORMAL);
+						}
+						if (auto _tt = Util::HoverTooltipWrapper()) {
+							ImGui::Text("Download the feature from the mod page.");
 						}
 					}
 				}
 			}
+		}
 
-			// Error Messages (Not for obsolete features as this is already covered by DrawUnloadedUI)
-			if (hasFailedMessage && feat->DrawFailLoadMessage() && !FeatureIssues::IsObsoleteFeature(feat->GetShortName())) {
-				ImGui::Spacing();
-				ImGui::SeparatorText("Error");
-				ImGui::TextColored(themeSettings.StatusPalette.Error, feat->failedLoadedMessage.c_str());
+		if (hasFailedMessage && feat->DrawFailLoadMessage() && !FeatureIssues::IsObsoleteFeature(feat->GetShortName())) {
+			ImGui::Spacing();
+			SeparatorTextWithFont("Error", Menu::FontRole::Subheading);
+			ImGui::TextColored(themeSettings.StatusPalette.Error, feat->failedLoadedMessage.c_str());
+		}
+
+		if (!isDisabled && isLoaded) {
+			// Position button in screen coordinates so it stays fixed in viewport when scrolling
+			ImVec2 windowPos = ImGui::GetWindowPos();
+			ImVec2 windowSize = ImGui::GetWindowSize();
+			float scrollbarWidth = ImGui::GetScrollMaxY() > 0 ? ImGui::GetStyle().ScrollbarSize : 0.0f;
+
+			float iconDimension = ImGui::GetFrameHeight() * 1.2f;
+			ImVec2 iconSize = ImVec2(iconDimension, iconDimension);
+
+			float padding = 10.0f;
+			ImVec2 buttonPos = ImVec2(
+				windowPos.x + windowSize.x - iconSize.x - padding - scrollbarWidth,
+				windowPos.y + windowSize.y - iconSize.y - padding);
+			ImGui::SetCursorScreenPos(buttonPos);
+			auto& theme = globals::menu->GetTheme().Palette;
+			ImVec4 iconColor = theme.Text;
+			iconColor.w *= 0.7f;
+
+			ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.0f, 0.0f, 0.0f, 0.0f));
+			ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(1.0f, 1.0f, 1.0f, 0.3f));
+			ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(1.0f, 1.0f, 1.0f, 0.5f));
+
+			auto& menu = *globals::menu;
+			if (menu.uiIcons.featureSettingRevert.texture) {
+				if (ImGui::ImageButton("##RestoreDefaults", menu.uiIcons.featureSettingRevert.texture, iconSize)) {
+					feat->RestoreDefaultSettings();
+				}
+			} else {
+				if (ImGui::Button("R##RestoreDefaults", iconSize)) {
+					feat->RestoreDefaultSettings();
+				}
+			}
+
+			ImGui::PopStyleColor(3);
+
+			if (auto _tt = Util::HoverTooltipWrapper()) {
+				ImGui::Text("Restore default settings for this feature");
 			}
 		}
-		ImGui::EndChild();
-		ImGui::EndTabItem();
 	}
+	ImGui::EndChild();
+	ImGui::EndTabItem();
 }
 
 void FeatureListRenderer::DrawMenuVisitor::RenderFeatureAboutTab(Feature* feat, bool isDisabled, bool isLoaded, bool hasFailedMessage)
 {
-	if (ImGui::BeginTabItem("About")) {
-		if (ImGui::BeginChild("##FeatureAboutFrame", { 0, 0 }, true)) {
-			auto& themeSettings = globals::menu->GetSettings().Theme;
+	if (!BeginTabItemWithFont("About", Menu::FontRole::Subheading)) {
+		return;
+	}
 
-			// Status Section
-			ImGui::SeparatorText("Status");
+	if (ImGui::BeginChild("##FeatureAboutFrame", { 0, 0 }, true)) {
+		auto& themeSettings = globals::menu->GetSettings().Theme;
 
-			ImVec4 statusColor;
-			const char* statusText;
-			if (isDisabled) {
-				statusColor = themeSettings.StatusPalette.Disable;
-				statusText = "Disabled at boot.";
-			} else if (hasFailedMessage) {
+		SeparatorTextWithFont("Status", Menu::FontRole::Subheading);
+
+		ImVec4 statusColor;
+		const char* statusText;
+		if (isDisabled) {
+			statusColor = themeSettings.StatusPalette.Disable;
+			statusText = "Disabled at boot.";
+		} else if (hasFailedMessage) {
+			statusColor = themeSettings.StatusPalette.Error;
+			statusText = "Failed to load.";
+		} else if (!isLoaded) {
+			if (!IsFeatureInstalled(feat->GetShortName())) {
 				statusColor = themeSettings.StatusPalette.Error;
-				statusText = "Failed to load.";
-			} else if (!isLoaded) {
-				// Check if INI file exists to determine actual status
-				if (!IsFeatureInstalled(feat->GetShortName())) {
-					// INI file missing - feature not installed
-					statusColor = themeSettings.StatusPalette.Error;
-					statusText = "Not installed.";
-				} else {
-					// INI file exists but feature not loaded - truly pending restart
-					statusColor = themeSettings.StatusPalette.RestartNeeded;
-					statusText = "Pending restart.";
-				}
+				statusText = "Not installed.";
 			} else {
-				statusColor = themeSettings.StatusPalette.SuccessColor;
-				statusText = "Active.";
+				statusColor = themeSettings.StatusPalette.RestartNeeded;
+				statusText = "Pending restart.";
 			}
+		} else {
+			statusColor = themeSettings.StatusPalette.SuccessColor;
+			statusText = "Active.";
+		}
 
-			ImGui::TextColored(statusColor, "Current State: %s", statusText);
+		ImGui::TextColored(statusColor, "Current State: %s", statusText);
 
-			// Feature Info - Description and key features
-			if (isLoaded) {
-				auto [description, keyFeatures] = feat->GetFeatureSummary();
-				if (!description.empty()) {
-					ImGui::Spacing();
-					ImGui::SeparatorText("Description");
-					ImGui::TextWrapped("%s", description.c_str());
-
-					if (!keyFeatures.empty()) {
-						ImGui::Spacing();
-						ImGui::SeparatorText("Key Features");
-						for (const auto& feature : keyFeatures) {
-							ImGui::BulletText("%s", feature.c_str());
-						}
-					}
-				}
-			} else {
-				// For unloaded features, show basic info if available
+		if (isLoaded) {
+			auto [description, keyFeatures] = feat->GetFeatureSummary();
+			if (!description.empty()) {
 				ImGui::Spacing();
-				ImGui::SeparatorText("Information");
-				if (hasFailedMessage) {
-					ImGui::TextColored(themeSettings.StatusPalette.Error, "%s", feat->failedLoadedMessage.c_str());
-				} else {
-					// For features that are pending restart or not installed,
-					// the detailed information is shown in the Settings tab.
-					// Here we just show a simple message directing users there.
-					if (!IsFeatureInstalled(feat->GetShortName())) {
-						ImGui::Text("Feature installation details are available in the Settings tab.");
-					} else {
-						// INI file exists but feature not loaded - truly pending restart
-						ImGui::Text("This feature is pending restart.");
+				SeparatorTextWithFont("Description", Menu::FontRole::Subheading);
+				ImGui::TextWrapped("%s", description.c_str());
+
+				if (!keyFeatures.empty()) {
+					ImGui::Spacing();
+					SeparatorTextWithFont("Key Features", Menu::FontRole::Subheading);
+					for (const auto& feature : keyFeatures) {
+						ImGui::BulletText("%s", feature.c_str());
 					}
 				}
+			}
+		} else {
+			ImGui::Spacing();
+			SeparatorTextWithFont("Information", Menu::FontRole::Subheading);
+			if (hasFailedMessage) {
+				ImGui::TextColored(themeSettings.StatusPalette.Error, "%s", feat->failedLoadedMessage.c_str());
+			} else if (!IsFeatureInstalled(feat->GetShortName())) {
+				ImGui::Text("Feature installation details are available in the Settings tab.");
+			} else {
+				ImGui::Text("This feature is pending restart.");
 			}
 		}
-		ImGui::EndChild();
-		ImGui::EndTabItem();
 	}
+	ImGui::EndChild();
+	ImGui::EndTabItem();
 }
 
 void FeatureListRenderer::DrawMenuVisitor::RenderFeatureActionButtons(Feature* feat, bool isDisabled, bool isLoaded, float buttonPadding, float buttonSpacing)
@@ -525,24 +585,19 @@ void FeatureListRenderer::DrawMenuVisitor::RenderFeatureActionButtons(Feature* f
 	const auto featureName = feat->GetShortName();
 
 	// Calculate button widths based on text content
-	const char* bootButtonText = isDisabled ? "Enable at Boot" : "Disable at Boot";
-	const char* defaultsButtonText = "Restore Defaults";
 	const char* overrideButtonText = "Apply Override";
 
-	float bootButtonWidth = ImGui::CalcTextSize(bootButtonText).x + buttonPadding;
-	float defaultsButtonWidth = ImGui::CalcTextSize(defaultsButtonText).x + buttonPadding;
+	// Toggle is more compact without label - just the toggle width
+	float bootToggleWidth = ImGui::GetFrameHeight() * 1.6f;
 	float overrideButtonWidth = ImGui::CalcTextSize(overrideButtonText).x + buttonPadding;
 
 	// Check if override is available for this feature
 	auto overrideManager = SettingsOverrideManager::GetSingleton();
 	bool hasOverrides = overrideManager && overrideManager->HasFeatureOverrides(featureName);
 
-	float totalButtonWidth = bootButtonWidth;
-	if (!isDisabled && isLoaded) {
-		totalButtonWidth += defaultsButtonWidth + buttonSpacing;
-		if (hasOverrides) {
-			totalButtonWidth += overrideButtonWidth + buttonSpacing;
-		}
+	float totalButtonWidth = bootToggleWidth;
+	if (!isDisabled && isLoaded && hasOverrides) {
+		totalButtonWidth += overrideButtonWidth + buttonSpacing;
 	}
 
 	// Position buttons on the right side of the tab bar
@@ -553,64 +608,48 @@ void FeatureListRenderer::DrawMenuVisitor::RenderFeatureActionButtons(Feature* f
 		ImGui::SetCursorPosX(ImGui::GetCursorPosX() + rightOffset);
 	}
 
-	// Disable/Enable at boot button
-	ImVec4 textColor;
-	if (isDisabled) {
-		textColor = themeSettings.StatusPalette.Disable;
-	} else if (!feat->failedLoadedMessage.empty()) {
-		textColor = themeSettings.StatusPalette.Error;
-	} else {
-		textColor = ImGui::GetStyleColorVec4(ImGuiCol_Text);
+	// Enable/Disable at boot toggle
+	bool bootEnabled = !isDisabled;
+
+	// Apply disabled styling if feature has failed to load
+	if (!feat->failedLoadedMessage.empty()) {
+		ImGui::PushStyleColor(ImGuiCol_Text, themeSettings.StatusPalette.Error);
 	}
 
-	ImGui::PushStyleColor(ImGuiCol_Text, textColor);
-	if (ImGui::Button(bootButtonText, { bootButtonWidth, 0 })) {
+	if (Util::FeatureToggle("##BootToggle", &bootEnabled)) {
 		bool newState = feat->ToggleAtBootSetting();
 		logger::info("{}: {} at boot.", featureName, newState ? "Enabled" : "Disabled");
 	}
-	ImGui::PopStyleColor();
+
+	if (!feat->failedLoadedMessage.empty()) {
+		ImGui::PopStyleColor();
+	}
 
 	if (auto _tt = Util::HoverTooltipWrapper()) {
 		ImGui::Text(
-			"Current State: %s\n"
-			"%s the feature settings at boot. "
-			"Restart will be required to reenable. "
-			"This is the same as deleting the ini file. "
-			"This should remove any performance impact for the feature.",
-			isDisabled ? "Disabled" : "Enabled",
-			isDisabled ? "Enable" : "Disable");
+			"Toggle feature loading at boot.\n"
+			"Current state: %s\n"
+			"Restart required for changes to take effect.\n"
+			"Disabling removes performance impact.",
+			bootEnabled ? "Enabled" : "Disabled");
 	}
 
-	// Restore Defaults button (when feature is not disabled and is loaded)
-	if (!isDisabled && isLoaded) {
+	// Apply Override button (when feature has available overrides)
+	if (!isDisabled && isLoaded && hasOverrides) {
 		ImGui::SameLine();
-		if (ImGui::Button(defaultsButtonText, { defaultsButtonWidth, 0 })) {
-			feat->RestoreDefaultSettings();
+		if (ImGui::Button(overrideButtonText, { overrideButtonWidth, 0 })) {
+			if (feat->ReapplyOverrideSettings()) {
+				logger::info("Successfully reapplied override settings for {}", featureName);
+			} else {
+				logger::warn("Failed to reapply override settings for {}", featureName);
+			}
 		}
 
 		if (auto _tt = Util::HoverTooltipWrapper()) {
 			ImGui::Text(
-				"Restores the feature's settings back to their default values. "
-				"You will still need to Save Settings to make these changes permanent.");
-		}
-
-		// Apply Override button (when feature has available overrides)
-		if (hasOverrides) {
-			ImGui::SameLine();
-			if (ImGui::Button(overrideButtonText, { overrideButtonWidth, 0 })) {
-				if (feat->ReapplyOverrideSettings()) {
-					logger::info("Successfully reapplied override settings for {}", featureName);
-				} else {
-					logger::warn("Failed to reapply override settings for {}", featureName);
-				}
-			}
-
-			if (auto _tt = Util::HoverTooltipWrapper()) {
-				ImGui::Text(
-					"Reapplies override settings from mod override JSON files. "
-					"This will overwrite current settings with override values. "
-					"You will still need to Save Settings to make these changes permanent.");
-			}
+				"Restores original override settings from mod files.\n"
+				"This will discard your customizations and revert to\n"
+				"the mod author's recommended settings.");
 		}
 	}
 }

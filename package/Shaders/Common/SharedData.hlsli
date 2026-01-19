@@ -180,6 +180,10 @@ namespace SharedData
 		float LODObjectBrightness;
 		float LODObjectSnowBrightness;
 		bool DisableTerrainVertexColors;
+		float LODTerrainGamma;
+		float LODObjectGamma;
+		float LODObjectSnowGamma;
+		float pad0;
 	};
 
 	struct HairSpecularSettings
@@ -231,21 +235,58 @@ namespace SharedData
 		float Strength;      // [0, 1.0] The inverse blend weight of the effect
 	};
 
+	struct LinearLightingSettings
+	{
+		uint enableLinearLighting;
+		uint enableGammaCorrection;
+		uint isDirLightLinear;
+		float dirLightMult;
+		float lightGamma;
+		float colorGamma;
+		float emitColorGamma;
+		float glowmapGamma;
+		float ambientGamma;
+		float fogGamma;
+		float fogAlphaGamma;
+		float effectGamma;
+		float effectAlphaGamma;
+		float skyGamma;
+		float waterGamma;
+		float vlGamma;
+		float vanillaDiffuseMult;
+		float vanillaSpecularMult;
+		float grassDiffuseMult;
+		float grassSpecularMult;
+		float vanillaDiffuseColorMult;
+		float lightMult;
+		float directionalLightMult;
+		float pointLightMult;
+		float emitColorMult;
+		float glowmapMult;
+		float effectLightingMult;
+		float membraneEffectMult;
+		float bloodEffectMult;
+		float projectedEffectMult;
+		float deferredEffectMult;
+		float otherEffectMult;
+	};
+
 	cbuffer FeatureData : register(b6)
 	{
 		CloudShadowsSettings cloudShadowsSettings;
+		CPMSettings extendedMaterialSettings;
 		CubemapCreatorSettings cubemapCreatorSettings;
-		ExtendedMaterialSettings extendedMaterialSettings;
 		ExtendedTranslucencySettings extendedTranslucencySettings;
 		GrassLightingSettings grassLightingSettings;
 		HairSpecularSettings hairSpecularSettings;
 		IBLSettings iblSettings;
 		LightLimitFixSettings lightLimitFixSettings;
+		LinearLightingSettings linearLightingSettings;
 		LODBlendingSettings lodBlendingSettings;
 		SkylightingSettings skylightingSettings;
 		SnowCoverSettings snowCoverSettings;
-		TerraOccSettings terraOccSettings;
 		TerrainVariationSettings terrainVariationSettings;
+		TerraOccSettings terraOccSettings;
 		WetnessEffectsSettings wetnessEffectsSettings;
 	};
 

@@ -1,4 +1,6 @@
 #include "FileSystem.h"
+#include <Windows.h>
+#include <filesystem>
 #include <fstream>
 #include <psapi.h>
 
@@ -20,7 +22,8 @@ namespace Util
 				auto executablePath = std::filesystem::path(buffer);
 
 				auto gamePath = executablePath.parent_path();
-				return gamePath / "Data";
+				auto dataPath = gamePath / "Data";
+				return dataPath;
 			} catch (const std::exception& e) {
 				// Fallback to current_path if Windows API method fails
 				logger::warn("Failed to get game path via Windows API, falling back to current_path: {}", e.what());
@@ -68,9 +71,24 @@ namespace Util
 			return GetCommunityShaderPath() / "SettingsDefault.json";
 		}
 
+		std::filesystem::path GetSettingsThemePath()
+		{
+			return GetCommunityShaderPath() / "SettingsTheme.json";
+		}
+
+		std::filesystem::path GetThemesPath()
+		{
+			return GetCommunityShaderPath() / "Themes";
+		}
+
 		std::filesystem::path GetOverridesPath()
 		{
 			return GetCommunityShaderPath() / "Overrides";
+		}
+
+		std::filesystem::path GetUserOverridesPath()
+		{
+			return GetOverridesPath() / "User";
 		}
 
 		std::filesystem::path GetAppliedOverridesPath()
@@ -86,16 +104,6 @@ namespace Util
 		std::filesystem::path GetFeaturesPath()
 		{
 			return GetShadersPath() / "Features";
-		}
-
-		std::filesystem::path GetFeatureIniPath(const std::string& featureName)
-		{
-			return GetFeaturesPath() / (featureName + ".ini");
-		}
-
-		std::filesystem::path GetFeatureShaderPath(const std::string& featureName)
-		{
-			return GetShadersPath() / featureName;
 		}
 
 		std::filesystem::path GetCurrentModuleRealPath()
@@ -136,9 +144,24 @@ namespace Util
 			return GetRootRealPath() / "Shaders";
 		}
 
+		std::filesystem::path GetThemesRealPath()
+		{
+			return GetRootRealPath() / "SKSE" / "Plugins" / "CommunityShaders" / "Themes";
+		}
+
 		std::filesystem::path GetFeaturesRealPath()
 		{
 			return GetShadersRealPath() / "Features";
+		}
+
+		std::filesystem::path GetFeatureIniPath(const std::string& featureName)
+		{
+			return GetFeaturesPath() / (featureName + ".ini");
+		}
+
+		std::filesystem::path GetFeatureShaderPath(const std::string& featureName)
+		{
+			return GetFeaturesPath() / featureName;
 		}
 	}
 
@@ -170,6 +193,15 @@ namespace Util
 			}
 
 			return result;
+		}
+
+		void EnsureDirectoryExists(const std::filesystem::path& path)
+		{
+			std::error_code ec;
+			std::filesystem::create_directories(path, ec);
+			if (ec) {
+				logger::warn("Failed to create directory '{}': {}", path.string(), ec.message());
+			}
 		}
 	}
 }

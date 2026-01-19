@@ -21,11 +21,11 @@
             "name": "imgui",
             "features": ["dx11-binding", "win32-binding", "docking-experimental"]
         },
-        "intel-xess",
         "magic-enum",
         "detours",
         "nlohmann-json",
         "pystring",
+        "renderdoc",
         "stb",
         "tracy",
         "unordered-dense",
@@ -37,6 +37,14 @@
             "version": "3.5.0"
         },
         {
+            "name": "eabase",
+            "version": "2025-08-01"
+        },
+        {
+            "name": "eastl",
+            "version": "3.27.1"
+        },
+        {
             "name": "imgui",
             "version": "1.90"
         },
@@ -45,10 +53,9 @@
             "version": "0.11.0"
         },
         {
-            "name": "magic-enum",
-            "version": "0.9.6",
-            "port-version": 1
+            "name": "directx-headers",
+            "version": "1.606.4"
         }
     ],
-    "builtin-baseline": "98aa6396292d57e737a6ef999d4225ca488859d5"
+    "builtin-baseline": "7a6bb52bfd8eba088f8bf5cae70ca8d81503e42e"
 }

@@ -1,8 +1,7 @@
 #pragma once
 
-#include "FileSystem.h"
 #include "Format.h"
-#include "Winapi.h"
+#include "WinApi.h"
 #include <algorithm>
 #include <filesystem>
 #include <imgui.h>
@@ -81,10 +80,28 @@ namespace Util
 		std::filesystem::path GetSettingsDefaultPath();
 
 		/**
+		 * Gets the SettingsTheme.json file path
+		 * @return CommunityShaderPath / "SettingsTheme.json"
+		 */
+		std::filesystem::path GetSettingsThemePath();
+
+		/**
+		 * Gets the Themes directory path
+		 * @return CommunityShaderPath / "Themes"
+		 */
+		std::filesystem::path GetThemesPath();
+
+		/**
 		 * Gets the Overrides directory path
 		 * @return CommunityShaderPath / "Overrides"
 		 */
 		std::filesystem::path GetOverridesPath();
+
+		/**
+		 * Gets the User Overrides directory path (for user modifications to overrides)
+		 * @return CommunityShaderPath / "Overrides" / "User"
+		 */
+		std::filesystem::path GetUserOverridesPath();
 
 		/**
 		 * Gets the AppliedOverrides.json file path
@@ -143,6 +160,12 @@ namespace Util
 		std::filesystem::path GetShadersRealPath();
 
 		/**
+		 * Returns the real path to the Themes directory containing theme JSON files.
+		 * @return  <mod_root> / "SKSE" / "Plugins" / "CommunityShaders" / "Themes"
+		 */
+		std::filesystem::path GetThemesRealPath();
+
+		/**
 		 * Returns the real path to the Features directory containing feature INI files.
 		 * @return  <mod_root> / "Shaders" / "Features"
 		 */
@@ -172,6 +195,12 @@ namespace Util
 		 * @return DeletionResult with success status and details
 		 */
 		DeletionResult SafeDelete(const std::string& path, const std::string& description);
+
+		/**
+		 * Ensures a directory exists, creating it if necessary with proper error handling
+		 * @param path The directory path to ensure exists
+		 */
+		void EnsureDirectoryExists(const std::filesystem::path& path);
 	}
 
 	/**
