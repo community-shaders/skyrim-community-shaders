@@ -2,6 +2,6 @@
 
 void Allocation::FreeAllocation() const
 {
-	logger::info("[RT] Allocation::FreeAllocation - Index {}", index);
+	logger::debug("[RT] Allocation::FreeAllocation - Index {}", index);
 	allocator->Free(index);
 }
