@@ -16,6 +16,7 @@
 #include "SettingsOverrideManager.h"
 #include "State.h"
 #include "Util.h"
+#include "WeatherVariableRegistry.h"
 
 namespace
 {
@@ -118,7 +119,7 @@ std::vector<FeatureListRenderer::MenuFuncInfo> FeatureListRenderer::BuildMenuLis
 	}
 
 	// Define category order
-	std::vector<std::string> categoryOrder = { "Display", "Debug", "Characters", "Grass", "Lighting", "Materials", "Post-Processing", "Sky", "Landscape & Textures", "Water", "Other" };
+	std::vector<std::string> categoryOrder = { "Display", "Utility", "Characters", "Grass", "Lighting", "Materials", "Post-Processing", "Sky", "Landscape & Textures", "Water", "Other" };
 	// Add categorized features to menu with collapsible headers
 	for (const std::string& category : categoryOrder) {
 		if (categorizedFeatures.find(category) != categorizedFeatures.end() && !categorizedFeatures[category].empty()) {
@@ -418,6 +419,20 @@ void FeatureListRenderer::DrawMenuVisitor::RenderFeatureSettingsTab(Feature* fea
 			ImGui::Text("Enable the feature above to access its configuration options.");
 		} else {
 			if (isLoaded) {
+				auto weatherRegistry = WeatherVariables::GlobalWeatherRegistry::GetSingleton();
+				if (weatherRegistry->HasWeatherSupport(feat->GetShortName())) {
+					bool paused = weatherRegistry->IsFeaturePaused(feat->GetShortName());
+					if (ImGui::Checkbox("Pause Weather Overrides", &paused)) {
+						weatherRegistry->SetFeaturePaused(feat->GetShortName(), paused);
+					}
+					if (auto _tt = Util::HoverTooltipWrapper()) {
+						ImGui::Text(
+							"Temporarily disable weather-based setting adjustments for this feature.\n"
+							"This state is not saved.");
+					}
+					ImGui::Separator();
+				}
+
 				ImVec2 cursorPosBefore = ImGui::GetCursorPos();
 				feat->DrawSettings();
 				ImVec2 cursorPosAfter = ImGui::GetCursorPos();
@@ -633,9 +648,9 @@ void FeatureListRenderer::DrawMenuVisitor::RenderFeatureActionButtons(Feature* f
 
 		if (auto _tt = Util::HoverTooltipWrapper()) {
 			ImGui::Text(
-				"Reapplies override settings from mod override JSON files. "
-				"This will overwrite current settings with override values. "
-				"You will still need to Save Settings to make these changes permanent.");
+				"Restores original override settings from mod files.\n"
+				"This will discard your customizations and revert to\n"
+				"the mod author's recommended settings.");
 		}
 	}
 }

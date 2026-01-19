@@ -31,6 +31,11 @@ public:
 		int32_t MoonLightSource = 0;
 		int32_t SunPath = 0;
 		float CustomAngle = -35.0f;
+		float SunriseBeginOffset = 0.0f;
+		float SunriseEndOffset = 0.0f;
+		float SunsetBeginOffset = 0.0f;
+		float SunsetEndOffset = 0.0f;
+		float MinShadowElevation = 0.25f;
 	};
 
 	Settings settings;
@@ -147,7 +152,6 @@ private:
 	static constexpr float SunHorizonDistance = 280.0f;
 	static constexpr float SunPeakDistance = 400.0f;
 	static constexpr float SunScaleFactor = 48.0f / 2048.0f;
-	static constexpr float MinElevation = 0.25f;
 
 	static constexpr float SouthernSunAngle = 90.0f - 35.0f;
 	static constexpr float NorthernSunAngle = 90.0f + 35.0f;

@@ -1,6 +1,7 @@
 #include "Common/Color.hlsli"
 #include "Common/DummyVSTexCoord.hlsl"
 #include "Common/FrameBuffer.hlsli"
+#include "Common/SharedData.hlsli"
 
 typedef VS_OUTPUT PS_INPUT;
 
@@ -135,6 +136,9 @@ PS_OUTPUT main(PS_INPUT input)
 	srgbColor = lerp(srgbColor, Fade.xyz, Fade.w);
 #		endif
 
+	if (SharedData::linearLightingSettings.enableLinearLighting && SharedData::linearLightingSettings.enableGammaCorrection) {
+		srgbColor = Color::TrueLinearToGamma(srgbColor);
+	}
 	srgbColor = FrameBuffer::ToSRGBColor(srgbColor);
 
 	psout.Color = float4(srgbColor, 1.0);

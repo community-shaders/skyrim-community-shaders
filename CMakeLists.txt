@@ -2,17 +2,10 @@ cmake_minimum_required(VERSION 3.21)
 cmake_policy(SET CMP0116 NEW)
 set(CMAKE_POLICY_WARNING_CMP0116 OFF)
 
-if(CMAKE_VERSION VERSION_GREATER_EQUAL "4.0.0")
-    message(
-        ERROR
-        "EASTL will fail to install with vcpkg using cmake 4.0+, remove this line if the port get fixed."
-    )
-endif()
-
 project(
     # gersemi: ignore
     CommunityShaders
-    VERSION 1.4.6
+    VERSION 1.4.7
     LANGUAGES CXX
 )
 

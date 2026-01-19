@@ -86,6 +86,11 @@ namespace Util
 			return GetCommunityShaderPath() / "Overrides";
 		}
 
+		std::filesystem::path GetUserOverridesPath()
+		{
+			return GetOverridesPath() / "User";
+		}
+
 		std::filesystem::path GetAppliedOverridesPath()
 		{
 			return GetCommunityShaderPath() / "AppliedOverrides.json";
