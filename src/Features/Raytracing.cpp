@@ -1869,23 +1869,6 @@ void Raytracing::CreateModel(RE::TESForm* form, const char* model, RE::NiAVObjec
 		return;
 	}
 
-	/*auto formType = form->GetFormType();
-
-	if (formType == RE::FormType::Reference)
-		formType = form->As<RE::TESObjectREFR>()->GetBaseObject()->GetFormType();
-
-	if (formType == RE::FormType::Container || formType == RE::FormType::Door) {
-		if (auto* fadeNode = netimmerse_cast<RE::NiNode*>(root)) {
-			for (auto& child : fadeNode->GetChildren()) {
-				CreateModelInternal(form, std::format("{}_{}_{}", model, child->name.c_str(), child->parentIndex).c_str(), child.get());
-			}
-		}
-		return;
-	}*/
-
-	if (!root)
-		return;
-
 	const REL::Relocation<const RE::NiRTTI*> rtti{ RE::NiMultiTargetTransformController::Ni_RTTI };
 	auto* controller = reinterpret_cast<RE::NiMultiTargetTransformController*>(root->GetController(rtti.get()));
 
