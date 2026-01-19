@@ -1864,6 +1864,11 @@ static RE::BSVisit::BSVisitControl TraverseScenegraphRTGeometries(RE::NiAVObject
 
 void Raytracing::CreateModel(RE::TESForm* form, const char* model, RE::NiAVObject* root)
 {
+	if (!root) {
+		logger::warn("[RT] CreateModel - NULL root object for model: {}", model ? model : "unknown");
+		return;
+	}
+
 	/*auto formType = form->GetFormType();
 
 	if (formType == RE::FormType::Reference)
