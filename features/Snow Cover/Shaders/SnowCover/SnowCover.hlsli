@@ -1,4 +1,5 @@
 #include "Common/Color.hlsli"
+#include "Common/LightingCommon.hlsli"
 #include "Common/SharedData.hlsli"
 #include "Common/Random.hlsli"
 #if defined(PSHADER)
@@ -108,7 +109,7 @@ namespace SnowCover
 	}
 
 #		if defined(TRUE_PBR)
-	PBR::SurfaceProperties ApplySnowPBR(inout float3 diffuse, inout float3 worldNormal, out float mult, float disp, float3 p, float skylight, float waterDist, float viewDist, PBR::SurfaceProperties prop, float2 uv)
+	MaterialProperties ApplySnowPBR(inout float3 diffuse, inout float3 worldNormal, out float mult, float disp, float3 p, float skylight, float waterDist, float viewDist, MaterialProperties prop, float2 uv)
 	{
 		bool alt;
 		mult = ApplySnowBase(worldNormal, uv, alt, disp, p, skylight, waterDist, viewDist);

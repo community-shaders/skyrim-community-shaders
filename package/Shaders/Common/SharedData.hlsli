@@ -36,7 +36,7 @@ namespace SharedData
 		float3 pad0;
 	};
 
-	struct ExtendedMaterialSettings
+	struct CPMSettings
 	{
 		bool EnableComplexMaterial;
 		bool EnableParallax;

@@ -113,9 +113,6 @@ namespace Color
 		return HSV;
 	}
 
-	// Attempt to match vanilla materials that are darker than PBR
-	const static float PBRLightingScale = 0.666;
-
 	float LinearToGamma(float color)
 	{
 		return pow(abs(color), 1.0 / 1.6);
