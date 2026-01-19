@@ -37,9 +37,17 @@ bool Effect::Load()
 		}
 	}
 
-	selectedTechniqueIndex = static_cast<uint32_t>(GetPrivateProfileIntA(section.c_str(), "TECHNIQUE", selectedTechniqueIndex, iniPath.string().c_str()));
-
-	selectedTechniqueIndex = std::clamp(selectedTechniqueIndex, 1u, (uint)uiTechniques.size()) - 1u;
+	// Load technique index (stored as 1-indexed in .ini, convert to 0-indexed)
+	if (!uiTechniques.empty()) {
+		uint32_t techniqueFromIni = static_cast<uint32_t>(GetPrivateProfileIntA(section.c_str(), "TECHNIQUE", selectedTechniqueIndex + 1, iniPath.string().c_str()));
+		// Convert from 1-indexed to 0-indexed and clamp to valid range
+		if (techniqueFromIni > 0) {
+			uint32_t maxIndex = static_cast<uint32_t>(uiTechniques.size() - 1);
+			selectedTechniqueIndex = (techniqueFromIni - 1 < maxIndex) ? (techniqueFromIni - 1) : maxIndex;
+		} else {
+			selectedTechniqueIndex = 0;
+		}
+	}
 
 	logger::info("[ENBPP] Loaded settings from '{}' for effect '{}'", iniPath.string(), GetName());
 	return true;
@@ -96,6 +104,9 @@ void Effect::Save()
 	if (!techniqueResult) {
 		logger::warn("[ENBPP] Failed to write TECHNIQUE key to ini file '{}'", iniPath.string());
 	}
+
+	// Flush Windows .ini cache to disk to ensure Load() reads fresh data
+	WritePrivateProfileStringA(NULL, NULL, NULL, iniPath.string().c_str());
 
 	logger::info("[ENBPP] Saved settings to '{}' for effect '{}'", iniPath.string(), GetName());
 }

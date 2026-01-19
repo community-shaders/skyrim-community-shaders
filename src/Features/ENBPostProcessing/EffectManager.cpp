@@ -21,6 +21,7 @@ void EffectManager::Initialize()
 	RegisterSettings();
 	CreateCommonResources();
 	Apply();
+	initialized.store(true, std::memory_order_release);
 }
 
 void EffectManager::Apply()
@@ -213,9 +214,6 @@ void EffectManager::RegisterSettings()
 
 void EffectManager::ExecuteEffects()
 {
-	if (!IsReady())
-		return;
-
 	auto context = globals::d3d::context;
 	auto renderer = globals::game::renderer;
 

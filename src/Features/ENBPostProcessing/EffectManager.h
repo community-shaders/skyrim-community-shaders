@@ -46,7 +46,6 @@ public:
 
 	// Effect execution
 	void ExecuteEffects();
-	void ExecutePostPass();
 
 	// Lifecycle
 	void Initialize();
