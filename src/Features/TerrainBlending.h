@@ -69,6 +69,8 @@ public:
 	void ResetTerrainDepth();
 	void BlendPrepassDepths();
 
+	void(__fastcall* gSetCameraData)(RE::BSGraphics::State*, RE::NiCamera*, uint32_t) = nullptr;
+
 	Texture2D* blendedDepthTexture = nullptr;
 	Texture2D* blendedDepthTexture16 = nullptr;
 
