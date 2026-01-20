@@ -248,6 +248,7 @@ public:
 		bool UseMonochromeLogo = false;      // whether to use monochrome CS logo
 		bool ShowFooter = true;              // whether to show the footer with game version/GPU info
 		bool CenterHeader = false;           // whether to center the header title and logo
+		bool DisableClearCacheButton = false; // disable the Clear Shader Cache button in the menu header
 		float TooltipHoverDelay = 0.5f;      // tooltip hover delay in seconds
 		bool BackgroundBlurEnabled = false;  // enable background blur effect
 		// Scrollbar opacity settings
@@ -377,7 +378,6 @@ public:
 		uint32_t ShaderBlockNextKey = VK_NEXT;   // Debug: cycle forward through shaders (PageDown)
 		bool EnableShaderBlocking = false;       // Enable shader blocking hotkeys for debugging
 		bool FirstTimeSetupCompleted = false;    // Track if first-time setup has been completed
-		bool DisableClearCacheButton = false;    // Disable the Clear Shader Cache button in the menu header
 		ThemeSettings Theme;
 		std::string SelectedThemePreset = "";  // Currently selected theme preset (empty = custom/user theme)
 	};

@@ -320,9 +320,9 @@ void SettingsTabRenderer::RenderInterfaceTab()
 		ImGui::Spacing();
 		SeparatorTextWithFont("Button Visibility", Menu::FontRole::Subheading);
 		
-		bool disableClearCache = globals::menu->GetSettings().DisableClearCacheButton;
+		bool disableClearCache = globals::menu->GetSettings().Theme.DisableClearCacheButton;
 		if (ImGui::Checkbox("Disable Clear Shader Cache Button", &disableClearCache)) {
-			globals::menu->GetSettings().DisableClearCacheButton = disableClearCache;
+			globals::menu->GetSettings().Theme.DisableClearCacheButton = disableClearCache;
 		}
 		if (auto _tt = Util::HoverTooltipWrapper()) {
 			ImGui::Text(

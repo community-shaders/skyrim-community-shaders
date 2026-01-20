@@ -207,7 +207,7 @@ void MenuHeaderRenderer::RenderHeader(bool isDocked, bool showLogo, bool canShow
 			// Clear Shader Cache Button
 			ImGui::TableNextColumn();
 			{
-				bool isDisabled = globals::menu->GetSettings().DisableClearCacheButton;
+				bool isDisabled = globals::menu->GetSettings().Theme.DisableClearCacheButton;
 				if (isDisabled) {
 					ImGui::BeginDisabled();
 				}
@@ -303,7 +303,7 @@ std::vector<MenuHeaderRenderer::ActionIcon> MenuHeaderRenderer::BuildActionIcons
 	}
 	if (uiIcons.clearCache.texture) {
 		auto shaderCache = globals::shaderCache;
-		bool isDisabled = globals::menu->GetSettings().DisableClearCacheButton;
+		bool isDisabled = globals::menu->GetSettings().Theme.DisableClearCacheButton;
 		actionIcons.push_back({ uiIcons.clearCache.texture,
 			isDisabled ? "Clear Shader Cache (Disabled)" :
 			             "Clear Shader Cache\n\n"
