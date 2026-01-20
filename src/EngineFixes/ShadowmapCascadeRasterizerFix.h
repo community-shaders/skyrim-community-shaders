@@ -18,15 +18,15 @@ struct ShadowmapRasterizerFix : EngineFix
 	static inline RasterStateArray shadowmapRasterStates[maxCascades] = {};
 
 	static constexpr int firstCascadeDepthBias = 160;
-	static constexpr float firstCascadeDepthBiasClamp = 0.004f;
+	static constexpr float firstCascadeDepthBiasClamp = 0.015f;
 	static constexpr float firstCascadeSlopeScaleBias = 3.2f;
 
-	static constexpr int secondCascadeDepthBias = 0;
-	static constexpr float secondCascadeDepthBiasClamp = 0.005f;
+	static constexpr int secondCascadeDepthBias = 100;
+	static constexpr float secondCascadeDepthBiasClamp = 0.015f;
 	static constexpr float secondCascadeSlopeScaleBias = 3.8f;
 
-	static constexpr int thirdCascadeDepthBias = 0;
-	static constexpr float thirdCascadeDepthBiasClamp = 0.005f;
+	static constexpr int thirdCascadeDepthBias = 100;
+	static constexpr float thirdCascadeDepthBiasClamp = 0.015f;
 	static constexpr float thirdCascadeSlopeScaleBias = 3.8f;
 
 	struct ShadowMapRasterizerDescriptor
