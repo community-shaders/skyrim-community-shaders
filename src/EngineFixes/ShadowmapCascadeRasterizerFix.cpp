@@ -17,7 +17,7 @@ void ShadowmapRasterizerFix::BSShadowDirectionalLight_RenderShadowmaps_RenderCas
 		//Backup
 		if (cascade == 0) {
 			std::memcpy(backupGameRasterStates, *gRasterStates, sizeof(RasterStateArray));
-			numCascades = RE::GetINISetting("iNumSplits:Display")->data.u;
+			numCascades = std::min(RE::GetINISetting("iNumSplits:Display")->data.u, maxCascades);
 		}
 
 		//Clone
