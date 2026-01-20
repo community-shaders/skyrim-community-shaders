@@ -315,6 +315,21 @@ void SettingsTabRenderer::RenderInterfaceTab()
 			RenderColorsTab();
 			ImGui::EndTabBar();
 		}
+		
+		// Additional Interface Settings (outside of sub-tabs)
+		ImGui::Spacing();
+		SeparatorTextWithFont("Button Visibility", Menu::FontRole::Subheading);
+		
+		bool disableClearCache = globals::menu->GetSettings().DisableClearCacheButton;
+		if (ImGui::Checkbox("Disable Clear Shader Cache Button", &disableClearCache)) {
+			globals::menu->GetSettings().DisableClearCacheButton = disableClearCache;
+		}
+		if (auto _tt = Util::HoverTooltipWrapper()) {
+			ImGui::Text(
+				"Disables the Clear Shader Cache button in the menu header.\n"
+				"The button will appear greyed out and non-functional.");
+		}
+		
 		ImGui::EndTabItem();
 	}
 }

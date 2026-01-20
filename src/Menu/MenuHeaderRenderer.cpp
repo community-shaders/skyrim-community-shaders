@@ -206,10 +206,19 @@ void MenuHeaderRenderer::RenderHeader(bool isDocked, bool showLogo, bool canShow
 
 			// Clear Shader Cache Button
 			ImGui::TableNextColumn();
-			if (ImGui::Button("Clear Shader Cache", { -1, 0 })) {
-				shaderCache->Clear();
-				if (shaderCache->IsDiskCache()) {
-					shaderCache->DeleteDiskCache();
+			{
+				bool isDisabled = globals::menu->GetSettings().DisableClearCacheButton;
+				if (isDisabled) {
+					ImGui::BeginDisabled();
+				}
+				if (ImGui::Button("Clear Shader Cache", { -1, 0 })) {
+					shaderCache->Clear();
+					if (shaderCache->IsDiskCache()) {
+						shaderCache->DeleteDiskCache();
+					}
+				}
+				if (isDisabled) {
+					ImGui::EndDisabled();
 				}
 			}
 			if (auto _tt = Util::HoverTooltipWrapper()) {
@@ -281,30 +290,35 @@ std::vector<MenuHeaderRenderer::ActionIcon> MenuHeaderRenderer::BuildActionIcons
 			[]() {
 				globals::state->Save();
 				globals::state->SaveTheme();
-			} });
+			},
+			false });
 	}
 	if (uiIcons.loadSettings.texture) {
 		actionIcons.push_back({ uiIcons.loadSettings.texture,
 			"Restore Saved Settings",
 			[]() {
 				globals::state->Load();
-			} });
+			},
+			false });
 	}
 	if (uiIcons.clearCache.texture) {
 		auto shaderCache = globals::shaderCache;
+		bool isDisabled = globals::menu->GetSettings().DisableClearCacheButton;
 		actionIcons.push_back({ uiIcons.clearCache.texture,
-			"Clear Shader Cache\n\n"
-			"Clears the shader cache and disk cache (if enabled).\n"
-			"The Shader Cache is the collection of compiled shaders which replace\n"
-			"the vanilla shaders at runtime. The Disk Cache is a collection of\n"
-			"compiled shaders on disk. Clearing will mean that shaders are\n"
-			"recompiled only when the game re-encounters them.",
+			isDisabled ? "Clear Shader Cache (Disabled)" :
+			             "Clear Shader Cache\n\n"
+			             "Clears the shader cache and disk cache (if enabled).\n"
+			             "The Shader Cache is the collection of compiled shaders which replace\n"
+			             "the vanilla shaders at runtime. The Disk Cache is a collection of\n"
+			             "compiled shaders on disk. Clearing will mean that shaders are\n"
+			             "recompiled only when the game re-encounters them.",
 			[shaderCache]() {
 				shaderCache->Clear();
 				if (shaderCache->IsDiskCache()) {
 					shaderCache->DeleteDiskCache();
 				}
-			} });
+			},
+			isDisabled });
 	}
 
 	return actionIcons;
@@ -365,25 +379,31 @@ void MenuHeaderRenderer::RenderDockedIcons(const std::vector<ActionIcon>& action
 			// Draw icon with hover effect, using reduced area to minimize padding
 			ImU32 tintColor;
 			if (globals::menu->GetSettings().Theme.UseMonochromeIcons) {
-				// Use theme text color for monochrome icons
 				ImVec4 textColor = globals::menu->GetSettings().Theme.Palette.Text;
-				if (!isHovered) {
-					textColor.w *= 0.85f;  // Slightly reduce alpha when not hovered
+				if (it->disabled) {
+					textColor.w *= 0.35f;
+				} else if (!isHovered) {
+					textColor.w *= 0.85f;
 				}
 				tintColor = ImGui::GetColorU32(textColor);
 			} else {
-				// Use white/gray tint for colored icons
-				tintColor = isHovered ? IM_COL32(255, 255, 255, 255) : IM_COL32(220, 220, 220, 220);
+				if (it->disabled) {
+					tintColor = IM_COL32(128, 128, 128, 90);
+				} else {
+					tintColor = isHovered ? IM_COL32(255, 255, 255, 255) : IM_COL32(220, 220, 220, 220);
+				}
 			}
 			fgDrawList->AddImage(it->texture, iconMin, iconMax, ImVec2(0, 0), ImVec2(1, 1), tintColor);
 		}
 
 		// Handle interaction
 		if (isHovered) {
-			// Draw subtle background for hovered icon using interaction area
-			fgDrawList->AddRectFilled(interactionMin, interactionMax, IM_COL32(255, 255, 255, 40));
+			// Draw subtle background for hovered icon using interaction area (only if not disabled)
+			if (!it->disabled) {
+				fgDrawList->AddRectFilled(interactionMin, interactionMax, IM_COL32(255, 255, 255, 40));
+			}
 
-			if (ImGui::IsMouseClicked(ImGuiMouseButton_Left)) {
+			if (ImGui::IsMouseClicked(ImGuiMouseButton_Left) && !it->disabled) {
 				it->callback();
 			}
 
@@ -429,12 +449,21 @@ void MenuHeaderRenderer::RenderUndockedIcons(const std::vector<ActionIcon>& acti
 
 		std::string buttonId = std::format("##ActionBtn{}", i);
 
+		// Disable interaction for disabled icons
+		if (icon.disabled) {
+			ImGui::BeginDisabled();
+		}
+
 		// Use ImageButton with reduced image size to minimize padding
 		if (ImGui::ImageButton(buttonId.c_str(), icon.texture, imageSize, ImVec2(0, 0), ImVec2(1, 1), ImVec4(0, 0, 0, 0), tintColor)) {
 			icon.callback();
 		}
 		if (auto _tt = Util::HoverTooltipWrapper()) {
 			ImGui::Text("%s", icon.tooltip);
+		}
+
+		if (icon.disabled) {
+			ImGui::EndDisabled();
 		}
 
 		// Add SameLine except for the last button
