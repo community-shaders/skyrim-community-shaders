@@ -265,3 +265,20 @@ uint32_t WeatherManager::GetEffectiveWeatherID(uint32_t actualWeatherID)
 
 	return actualWeatherID;
 }
+
+std::unordered_map<std::string, std::string> WeatherManager::GetWeatherFiles() const
+{
+	std::unordered_map<std::string, std::string> result;
+	
+	for (const auto& [sectionName, entry] : weatherEntries) {
+		for (uint32_t weatherID : entry.weatherIDs) {
+			std::ostringstream oss;
+			oss << "weather_" << weatherID;
+			std::string weatherKey = oss.str();
+			std::filesystem::path weatherFilePath = "enbseries/" + entry.fileName;
+			result[weatherKey] = weatherFilePath.string();
+		}
+	}
+	
+	return result;
+}

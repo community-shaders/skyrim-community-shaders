@@ -29,6 +29,8 @@ public:
 
 	const std::unordered_map<std::string, WeatherEntry>& GetWeatherEntries() const { return weatherEntries; }
 
+	std::unordered_map<std::string, std::string> GetWeatherFiles() const;
+
 private:
 	std::unordered_map<std::string, WeatherEntry> weatherEntries;
 	std::unordered_map<uint32_t, std::string> weatherIDMap;

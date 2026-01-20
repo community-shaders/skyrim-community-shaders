@@ -279,6 +279,41 @@ void SettingManager::LoadWeatherSettings(const std::string& weatherKey, const st
 	}
 }
 
+void SettingManager::SaveWeatherSettings(const std::string& weatherKey, const std::string& filePath)
+{
+	std::string weatherIDStr = weatherKey.substr(8);
+	uint32_t weatherID = std::stoul(weatherIDStr);
+
+	auto weatherIt = weatherData.find(weatherID);
+	if (weatherIt == weatherData.end()) {
+		return;
+	}
+
+	for (const auto& [category, categoryData] : categories) {
+		for (const auto& [key, setting] : categoryData.settings) {
+			if (setting.hasWeatherSupport) {
+				std::string settingKey = category + "::" + key;
+				auto valueIt = weatherIt->second.find(settingKey);
+				if (valueIt != weatherIt->second.end()) {
+					Setting tempSetting = setting;
+					tempSetting.currentValue = valueIt->second;
+					SaveSettingToFile(filePath, category, key, tempSetting);
+				}
+			}
+		}
+	}
+}
+
+void SettingManager::SaveAllWeatherSettings()
+{
+	auto& weatherManager = WeatherManager::GetSingleton();
+	const auto& weatherFiles = weatherManager.GetWeatherFiles();
+
+	for (const auto& [weatherKey, filePath] : weatherFiles) {
+		SaveWeatherSettings(weatherKey, filePath);
+	}
+}
+
 void SettingManager::ReloadAllWeatherSettings()
 {
 	weatherData.clear();
@@ -320,6 +355,21 @@ void SettingManager::SaveToFile(const std::string& filePath)
 			if (!setting.hasWeatherSupport) {
 				SaveSettingToFile(filePath, category, key, setting);
 			}
+		}
+
+		bool hasWeatherSupport = false;
+		for (const auto& [key, setting] : categoryData.settings) {
+			if (setting.hasWeatherSupport) {
+				hasWeatherSupport = true;
+				break;
+			}
+		}
+
+		if (hasWeatherSupport) {
+			WritePrivateProfileStringA(category.c_str(), "IgnoreWeatherSystem",
+				categoryData.ignoreWeatherSystem ? "true" : "false", filePath.c_str());
+			WritePrivateProfileStringA(category.c_str(), "IgnoreWeatherSystemInterior",
+				categoryData.ignoreWeatherSystemInterior ? "true" : "false", filePath.c_str());
 		}
 	}
 }
@@ -592,6 +642,7 @@ void SettingManager::Load()
 void SettingManager::Save()
 {
 	SaveToFile("enbseries.ini");
+	SaveAllWeatherSettings();
 }
 
 // Explicit template instantiations
