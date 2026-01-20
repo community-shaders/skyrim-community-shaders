@@ -318,7 +318,7 @@ void SettingsTabRenderer::RenderInterfaceTab()
 		
 		// Additional Interface Settings (outside of sub-tabs)
 		ImGui::Spacing();
-		SeparatorTextWithFont("Button Visibility", Menu::FontRole::Subheading);
+		SeparatorTextWithFont("Header Buttons", Menu::FontRole::Subheading);
 		
 		bool disableClearCache = globals::menu->GetSettings().Theme.DisableClearCacheButton;
 		if (ImGui::Checkbox("Disable Clear Shader Cache Button", &disableClearCache)) {
