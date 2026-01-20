@@ -337,9 +337,9 @@ PS_OUTPUT main(PS_INPUT input)
 		psout.Color.xyz *= SharedData::enbSettings.CloudsIntensity;
 
 		float cloudsEdgeAlpha = saturate(1.0 - (baseColor.w + SharedData::enbSettings.CloudsEdgeClamp));
-		float3 sunPhase = pow(saturate(dot(normalize(input.WorldPosition.xyz), SharedData::SunDirection.xyz)), 20.0) * SharedData::SunColor.xyz;
-		float3 masserPhase = pow(saturate(dot(normalize(input.WorldPosition.xyz), SharedData::MasserDirection.xyz)), 20.0) * SharedData::MasserColor.xyz * SharedData::enbSettings.CloudsEdgeMoonMultiplier;
-		float3 secundaPhase = pow(saturate(dot(normalize(input.WorldPosition.xyz), SharedData::SecundaDirection.xyz)), 20.0) * SharedData::SecundaColor.xyz * SharedData::enbSettings.CloudsEdgeMoonMultiplier;
+		float3 sunPhase = pow(saturate(dot(normalize(input.WorldPosition.xyz), SharedData::SunDirection.xyz)), 12.0) * SharedData::SunColor.xyz;
+		float3 masserPhase = pow(saturate(dot(normalize(input.WorldPosition.xyz), SharedData::MasserDirection.xyz)), 12.0) * SharedData::MasserColor.xyz * SharedData::enbSettings.CloudsEdgeMoonMultiplier;
+		float3 secundaPhase = pow(saturate(dot(normalize(input.WorldPosition.xyz), SharedData::SecundaDirection.xyz)), 12.0) * SharedData::SecundaColor.xyz * SharedData::enbSettings.CloudsEdgeMoonMultiplier;
 
 		float3 cloudsScatter = (sunPhase + masserPhase + secundaPhase) * cloudsEdgeAlpha * SharedData::enbSettings.CloudsEdgeIntensity;
 
