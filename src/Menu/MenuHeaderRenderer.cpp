@@ -290,16 +290,14 @@ std::vector<MenuHeaderRenderer::ActionIcon> MenuHeaderRenderer::BuildActionIcons
 			[]() {
 				globals::state->Save();
 				globals::state->SaveTheme();
-			},
-			false });
+			} });
 	}
 	if (uiIcons.loadSettings.texture) {
 		actionIcons.push_back({ uiIcons.loadSettings.texture,
 			"Restore Saved Settings",
 			[]() {
 				globals::state->Load();
-			},
-			false });
+			} });
 	}
 	if (uiIcons.clearCache.texture) {
 		auto shaderCache = globals::shaderCache;
