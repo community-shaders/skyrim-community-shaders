@@ -242,15 +242,15 @@ public:
 			return roles;
 		}();
 
-		bool UseSimplePalette = false;       // DEPRECATED: No longer affects behavior. UI now shows both Simple and Advanced controls.
-		bool ShowActionIcons = true;         // whether to show action buttons as icons
-		bool UseMonochromeIcons = false;     // whether to use monochrome (white) action icons with text color tinting
-		bool UseMonochromeLogo = false;      // whether to use monochrome CS logo
-		bool ShowFooter = true;              // whether to show the footer with game version/GPU info
-		bool CenterHeader = false;           // whether to center the header title and logo
-		bool DisableClearCacheButton = false; // disable the Clear Shader Cache button in the menu header
-		float TooltipHoverDelay = 0.5f;      // tooltip hover delay in seconds
-		bool BackgroundBlurEnabled = false;  // enable background blur effect
+		bool UseSimplePalette = false;         // DEPRECATED: No longer affects behavior. UI now shows both Simple and Advanced controls.
+		bool ShowActionIcons = true;           // whether to show action buttons as icons
+		bool UseMonochromeIcons = false;       // whether to use monochrome (white) action icons with text color tinting
+		bool UseMonochromeLogo = false;        // whether to use monochrome CS logo
+		bool ShowFooter = true;                // whether to show the footer with game version/GPU info
+		bool CenterHeader = false;             // whether to center the header title and logo
+		bool DisableClearCacheButton = false;  // disable the Clear Shader Cache button in the menu header
+		float TooltipHoverDelay = 0.5f;        // tooltip hover delay in seconds
+		bool BackgroundBlurEnabled = false;    // enable background blur effect
 		// Scrollbar opacity settings
 		struct ScrollbarOpacitySettings
 		{

@@ -304,12 +304,12 @@ std::vector<MenuHeaderRenderer::ActionIcon> MenuHeaderRenderer::BuildActionIcons
 		bool isDisabled = globals::menu->GetSettings().Theme.DisableClearCacheButton;
 		actionIcons.push_back({ uiIcons.clearCache.texture,
 			isDisabled ? "Clear Shader Cache (Disabled)" :
-			             "Clear Shader Cache\n\n"
-			             "Clears the shader cache and disk cache (if enabled).\n"
-			             "The Shader Cache is the collection of compiled shaders which replace\n"
-			             "the vanilla shaders at runtime. The Disk Cache is a collection of\n"
-			             "compiled shaders on disk. Clearing will mean that shaders are\n"
-			             "recompiled only when the game re-encounters them.",
+						 "Clear Shader Cache\n\n"
+						 "Clears the shader cache and disk cache (if enabled).\n"
+						 "The Shader Cache is the collection of compiled shaders which replace\n"
+						 "the vanilla shaders at runtime. The Disk Cache is a collection of\n"
+						 "compiled shaders on disk. Clearing will mean that shaders are\n"
+						 "recompiled only when the game re-encounters them.",
 			[shaderCache]() {
 				shaderCache->Clear();
 				if (shaderCache->IsDiskCache()) {

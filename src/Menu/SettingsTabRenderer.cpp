@@ -315,11 +315,11 @@ void SettingsTabRenderer::RenderInterfaceTab()
 			RenderColorsTab();
 			ImGui::EndTabBar();
 		}
-		
+
 		// Additional Interface Settings (outside of sub-tabs)
 		ImGui::Spacing();
 		SeparatorTextWithFont("Header Buttons", Menu::FontRole::Subheading);
-		
+
 		bool disableClearCache = globals::menu->GetSettings().Theme.DisableClearCacheButton;
 		if (ImGui::Checkbox("Disable Clear Shader Cache Button", &disableClearCache)) {
 			globals::menu->GetSettings().Theme.DisableClearCacheButton = disableClearCache;
@@ -329,7 +329,7 @@ void SettingsTabRenderer::RenderInterfaceTab()
 				"Disables the Clear Shader Cache button in the menu header.\n"
 				"The button will appear greyed out and non-functional.");
 		}
-		
+
 		ImGui::EndTabItem();
 	}
 }
