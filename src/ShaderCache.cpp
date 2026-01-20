@@ -2217,7 +2217,7 @@ namespace SIE
 		}
 
 		// Check feature validation
-		if (valid && !(globals::state->ValidateCache(ini))) {
+		if (!(globals::state->ValidateCache(ini))) {
 			logger::info("Disk cache outdated: feature validation failed");
 			valid = false;
 		}
