@@ -922,7 +922,7 @@ void Shape::UpdateUploadDynamicBuffers(ID3D12GraphicsCommandList4* commandList)
 
 bool Shape::UpdateSkinning()
 {
-	if ((flags & Flags::Skinned) != Flags::Skinned)
+	if (!(flags & Flags::Skinned))
 		return false;
 
 	if (!geometry)

@@ -531,6 +531,7 @@ struct Raytracing : public OverlayFeature
 		PIXCaptureLocation PIXCaptureLocation = PIXCaptureLocation::GlobalIllumination;
 		bool EnableDebugDevice = false;
 		bool WhiteFurnace = false;
+		bool DisableSkinned = false;
 		SHaRCPipeline::Settings SHaRC;
 	} settings;
 
@@ -1236,7 +1237,7 @@ struct Raytracing : public OverlayFeature
 			{
 				func(oThis, a2);
 
-				logger::info("[RT] TESObjectLAND_Attach3D - a2: {}, IsLODLand: {}", a2, oThis->QIsLODLandObject());
+				logger::trace("[RT] TESObjectLAND_Attach3D - a2: {}, IsLODLand: {}", a2, oThis->QIsLODLandObject());
 
 				if (!oThis)
 					return;
@@ -1255,7 +1256,7 @@ struct Raytracing : public OverlayFeature
 				if (!loadedData || !loadedData->mesh)
 					return;
 
-				logger::info("[RT] TESObjectLAND_Attach3D - {}", std::format("Landscape_{}_{}", exteriorData->cellX, exteriorData->cellY).c_str());
+				logger::trace("[RT] TESObjectLAND_Attach3D - {}", std::format("Landscape_{}_{}", exteriorData->cellX, exteriorData->cellY).c_str());
 
 				for (uint i = 0; i < 4; i++) {
 					auto mesh = loadedData->mesh[i];
@@ -1379,11 +1380,11 @@ struct Raytracing : public OverlayFeature
 			stl::detour_thunk<TESObjectLAND_Detach3D>(REL::RelocationID(18333, 18749));
 			//stl::detour_thunk<TESObjectLAND_Detach3D>(REL::RelocationID(18335, 18751));
 
-			stl::write_vfunc<0x0, TESObjectLAND_Destructor>(RE::VTABLE_TESObjectLAND[0]);
+			//stl::write_vfunc<0x0, TESObjectLAND_Destructor>(RE::VTABLE_TESObjectLAND[0]);
 
 			stl::detour_thunk<TES_Init>(REL::RelocationID(13139, 13279));
 			
-			stl::write_vfunc<0x6, AttachDistant3DTask_Attach>(RE::VTABLE_AttachDistant3DTask[0]);
+			//stl::write_vfunc<0x6, AttachDistant3DTask_Attach>(RE::VTABLE_AttachDistant3DTask[0]);
 			
 			logger::info("[RT] Installed hooks");
 		}

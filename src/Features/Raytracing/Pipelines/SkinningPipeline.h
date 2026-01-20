@@ -63,10 +63,9 @@ struct SkinningPipeline : ComputePipeline<SkinningHeap>
 	{
 		Flags updateFlags;
 		eastl::string path;
-		Shape* shape;
 	};
 
-	eastl::vector<QueuedShape> queuedShapes;
+	eastl::unordered_map<Shape*, QueuedShape> queuedShapes;
 
 	eastl::unique_ptr<DX12::StructuredBufferUpload<VertexUpdateData>> vertexUpdateBuffer = nullptr;
 	eastl::unique_ptr<DX12::StructuredBufferUpload<float3x4>> boneMatricesBuffer = nullptr;

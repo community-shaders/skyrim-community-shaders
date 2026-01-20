@@ -41,7 +41,9 @@ public:
 	// Allocate the lowest available slot
 	Allocation* Allocate()
 	{
-		assert(nextFree != INVALID && "No available slots!");
+		if (nextFree == INVALID)
+			logger::critical("[RT] Allocator::Allocate - No available allocation slots.");
+
 		uint16_t slot = nextFree;
 		nextFree = slots[slot];  // move head
 		return new Allocation(slot, this);

@@ -87,10 +87,9 @@ void SkinningPipeline::SetupResources(ID3D12Device5* device)
 
 void SkinningPipeline::QueueUpdate(Flags updateFlags, eastl::string path, Shape* shape)
 {
-	queuedShapes.emplace_back(
-		updateFlags,
-		path,
-		shape);
+	queuedShapes.emplace(
+		shape,
+		QueuedShape{ updateFlags, path });
 }
 
 bool SkinningPipeline::PrepareResources(ID3D12GraphicsCommandList4* commandList, uint& count, uint& vertexCount)
@@ -115,9 +114,7 @@ bool SkinningPipeline::PrepareResources(ID3D12GraphicsCommandList4* commandList,
 
 	float3 bonePivot = float3(cameraPosition.x - eye.x, cameraPosition.y - eye.y, cameraPosition.z - eye.z);
 
-	for (auto& queuedShape : queuedShapes) {
-		Shape* shape = queuedShape.shape;
-
+	for (auto& [shape, queuedShape] : queuedShapes) {
 		uint boneOffset = (uint)boneMatricesData.size();
 
 		vertexCount = std::max(vertexCount, (uint)shape->vertexCount);
@@ -166,9 +163,7 @@ void SkinningPipeline::RestoreResources(ID3D12GraphicsCommandList4* commandList)
 	eastl::vector<CD3DX12_RESOURCE_BARRIER> barriers;
 	barriers.reserve(queuedShapes.size());
 
-	for (auto& queuedShape : queuedShapes) {
-		Shape* shape = queuedShape.shape;
-
+	for (auto& [shape, queuedShape] : queuedShapes) {
 		CD3DX12_RESOURCE_BARRIER barrier;
 		if (shape->vertexBuffer->GetTransitionBarrier(D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, barrier))
 			barriers.push_back(barrier);
@@ -189,7 +184,7 @@ void SkinningPipeline::UpdateBLASES(ID3D12GraphicsCommandList4* commandList)
 
 	// One model contains multiple shapes, lets make a unique list of all updated model
 	eastl::hash_set<eastl::string> paths;
-	for (auto& queuedShape : queuedShapes) {
+	for (auto& [shape, queuedShape] : queuedShapes) {
 		paths.emplace(queuedShape.path);
 	}
 
@@ -255,106 +250,3 @@ void SkinningPipeline::Dispatch(ID3D12GraphicsCommandList4* commandList, ID3D12D
 
 	ClearQueue();
 }
-
-/*void Raytracing::UpdateDynamicSkinning(ID3D12GraphicsCommandList4* pCommandList)
-{
-	if (vertexUpdate.empty())
-		return;
-
-	auto updateCount = vertexUpdate.size();
-
-	eastl::vector<VertexUpdateData> vertexUpdateData;
-	vertexUpdateData.reserve(updateCount);
-
-	// Reset vertices (having another buffer and just reading from it in shaders might be better)
-	{
-		eastl::vector<CD3DX12_RESOURCE_BARRIER> barriers;
-		barriers.reserve(updateCount);
-
-		for (auto& item : vertexUpdate) {
-			vertexUpdateData.emplace_back(item.allocatedIndex, item.flags, item.vertexCount, 0);
-
-			if (item.flags & Flags::Skinned) {
-				barriers.push_back(item.vertexBuffer->GetTransitionBarrier(true, D3D12_RESOURCE_STATE_COPY_DEST));
-			}
-		}
-
-		if (!barriers.empty()) {
-			pCommandList->ResourceBarrier((uint32_t)barriers.size(), barriers.data());
-
-			for (auto& item : vertexUpdate) {
-				if (item.flags & Flags::Skinned) {
-					pCommandList->CopyResource(item.vertexBuffer->resource.get(), item.vertexBuffer->uploadResource[0].get());
-				}
-			}
-		}
-	}
-
-	vertexUpdateBuffer->UpdateList(vertexUpdateData.data(), vertexUpdateData.size());
-	vertexUpdateBuffer->Upload(pCommandList);
-
-	pCommandList->SetPipelineState(skinningPipeline.get());
-	pCommandList->SetComputeRootSignature(skinningRS.get());
-
-	auto computeHeapPtr = skinningHeap->Heap();
-	pCommandList->SetDescriptorHeaps(1, &computeHeapPtr);
-
-	pCommandList->SetComputeRootDescriptorTable(0, skinningHeap->TableGPUHandle(SkinningHeap::Table::UAV));
-
-	pCommandList->SetComputeRootDescriptorTable(1, skinningHeap->TableGPUHandle(SkinningHeap::Table::SRV));
-
-	pCommandList->SetComputeRootDescriptorTable(2, skinningHeap->TableGPUHandle(SkinningHeap::Table::DynamicBuffer));
-
-	pCommandList->SetComputeRootDescriptorTable(3, skinningHeap->TableGPUHandle(SkinningHeap::Table::SkinningBuffer));
-
-	// Constant buffer
-	//pCommandList->SetComputeRootConstantBufferView(2, shadowsCB->resource->GetGPUVirtualAddress());
-
-	// Transition to Unordered Access
-	{
-		eastl::vector<CD3DX12_RESOURCE_BARRIER> barriers;
-		barriers.reserve(updateCount);
-
-		for (auto& item : vertexUpdate) {
-			barriers.push_back(item.vertexBuffer->GetTransitionBarrier(true, D3D12_RESOURCE_STATE_UNORDERED_ACCESS));
-		}
-
-		pCommandList->ResourceBarrier((uint32_t)barriers.size(), barriers.data());
-	}
-
-	// Dispatch our GPU vertex update
-	//auto dispatchCount = static_cast<uint32_t>(ceil(updateCount / 16.0f));
-	//pCommandList->Dispatch(dispatchCount, 1, 1);
-
-	// Transition back to non-pixel shader resource
-	{
-		eastl::vector<CD3DX12_RESOURCE_BARRIER> barriers;
-		barriers.reserve(updateCount);
-
-		for (auto& item : vertexUpdate) {
-			barriers.push_back(item.vertexBuffer->GetTransitionBarrier(true, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE));
-		}
-
-		pCommandList->ResourceBarrier((uint32_t)barriers.size(), barriers.data());
-	}
-
-	auto blasUpdateCount = (uint)modelUpdate.size();
-
-	eastl::vector<CD3DX12_RESOURCE_BARRIER> uavBarriers;
-	uavBarriers.reserve(blasUpdateCount);
-
-	for (auto& path : modelUpdate) {
-		if (auto modelIt = models.find(path); modelIt != models.end()) {
-			auto& model = modelIt->second;
-
-			UpdateModelBLAS(model.get());
-
-			uavBarriers.push_back(CD3DX12_RESOURCE_BARRIER::UAV(model->blasBuffer->GetResource()));
-		}
-	}
-
-	commandList->ResourceBarrier(blasUpdateCount, uavBarriers.data());
-
-	vertexUpdate.clear();
-	modelUpdate.clear();
-}*/

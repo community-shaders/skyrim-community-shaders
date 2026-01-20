@@ -63,6 +63,7 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	SHaRC,
 	SVGFDiffuse,
 	SVGFSpecular,
+	DisableSkinned,
 	RAYTRACING_EXTRA_FIELDS)
 
 ////////////////////////////////////////////////////////////////////////////////////
@@ -505,6 +506,8 @@ void Raytracing::DrawDebugSettings()
 	ImGui::PushID("DebugSettings");
 
 	if (ImGui::TreeNodeEx("Skinning and DynamicTriShapes", ImGuiTreeNodeFlags_DefaultOpen)) {
+		ImGui::Checkbox("Disable Skinning", &settings.DisableSkinned);
+
 		ImGui::Checkbox("Disable Updates", &debugDisableTriShapesUpdate);
 
 		if (ImGui::Checkbox("Use Optimized Mapping", &skinningPipeline->settings.OptimizedMapping))
@@ -522,7 +525,7 @@ void Raytracing::DrawDebugSettings()
 	}
 
 	ImGui::Checkbox("Disable Texture Sharing", &debugDisableTextureSharing);
-
+	
 	ImGui::InputText("Shader Defines", &debugDefines);
 
 	ImGui::SameLine();
@@ -595,29 +598,33 @@ void Raytracing::DrawDebugSettings()
 	}
 
 	ImGui::Checkbox("Enabled Debug Device", &settings.EnableDebugDevice);
-	{
-		if (ImGui::TreeNodeEx("Statistics", ImGuiTreeNodeFlags_DefaultOpen)) {
-			ImGui::Text(std::format("Lights: {}", lights.size()).c_str());
 
-			ImGui::Text(std::format("Used Textures: {}, Shared: {}", textureRegisters.UsedCount(), textures.size()).c_str());
-			ImGui::Text(std::format("Used Shapes: {}", shapeRegisters.UsedCount()).c_str());
-			ImGui::Text(std::format("Models: {}", models.size()).c_str());
+	if (ImGui::TreeNodeEx("Statistics", ImGuiTreeNodeFlags_DefaultOpen)) {
+		ImGui::Text(std::format("Lights: {}", lights.size()).c_str());
 
-			auto instanceCount = instances.size();
-			ImGui::Text(std::format("Instances: {}", instanceCount).c_str());
+		ImGui::Text(std::format("Used Textures: {}, Shared: {}", textureRegisters.UsedCount(), textures.size()).c_str());
+		ImGui::Text(std::format("Used Shapes: {}", shapeRegisters.UsedCount()).c_str());
+		ImGui::Text(std::format("Models: {}", models.size()).c_str());
 
-			if (settings.GlobalIllumination) {
-				auto blasInstancesCount = blasInstances.size();
-				ImGui::Text(std::format("GI Unculled: {}, Culled: {}", blasInstancesCount, instanceCount - blasInstancesCount).c_str());
+		auto instanceCount = instances.size();
+
+		if (ImGui::TreeNodeEx(std::format("Instances: {}", instanceCount).c_str())) {
+			for (auto& [root, instance]: instances) {
+				ImGui::Text(std::format("{}, Detached: {}", std::string_view{ instance.filename }, instance.IsDetached()).c_str());
 			}
-
-			if (RaytracedShadows()) {
-				auto blasInstancesCount = blasShadowInstances.size();
-				ImGui::Text(std::format("Shadow Unculled: {}, Culled: {}", blasInstancesCount, instanceCount - blasInstancesCount).c_str());
-			}
-
-			ImGui::TreePop();
 		}
+
+		if (settings.GlobalIllumination) {
+			auto blasInstancesCount = blasInstances.size();
+			ImGui::Text(std::format("GI Unculled: {}, Culled: {}", blasInstancesCount, instanceCount - blasInstancesCount).c_str());
+		}
+
+		if (RaytracedShadows()) {
+			auto blasInstancesCount = blasShadowInstances.size();
+			ImGui::Text(std::format("Shadow Unculled: {}, Culled: {}", blasInstancesCount, instanceCount - blasInstancesCount).c_str());
+		}
+
+		ImGui::TreePop();
 	}
 
 	ImGui::PopID();
@@ -1882,8 +1889,11 @@ void Raytracing::CreateModel(RE::TESForm* form, const char* model, RE::NiAVObjec
 			if (!target)
 				continue;
 
-			targets.emplace(target);
+			auto [it, emplaced] = targets.emplace(target);
 			parents.emplace(target->parent);
+
+			if (!emplaced)
+				continue;
 
 			CreateModelInternal(form, std::format("{}_{}", model, target->name.c_str()).c_str(), target);
 		}
@@ -2069,6 +2079,7 @@ void Raytracing::CreateModelInternal(RE::TESForm* form, const char* path, RE::Ni
 
 		return RE::BSVisit::BSVisitControl::kContinue;
 	});
+
 
 	if (auto shapeCount = shapes.size(); shapeCount > 0) {
 		eastl::string modelKey = path;
@@ -2370,6 +2381,14 @@ void Raytracing::UpdateInstances()
 			continue;
 
 		auto& model = it->second;
+
+		if (model->GetFlags() & Flags::Skinned) {
+			if (settings.DisableSkinned)
+				continue;
+
+			if (pNiNode->GetAppCulled())
+				continue;
+		}
 
 		if (cullingSettings.Mode == CullingMode::Smart) {
 			auto worldBound = pNiNode->worldBound;
@@ -3450,7 +3469,6 @@ void Raytracing::PostPostLoad()
 	TESObjectLoadedEventHandler::Register();
 	
 	//TESCellAttachDetachEventHandler::Register();
-	// 
 	//TESCellFullyLoadedEventHandler::Register();
 }
 
