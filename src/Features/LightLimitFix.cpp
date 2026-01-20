@@ -255,8 +255,8 @@ void LightLimitFix::BSLightingShader_SetupGeometry_GeometrySetupConstantPointLig
 
 		if (i < a_pass->numShadowLights) {
 			auto* shadowLight = static_cast<RE::BSShadowLight*>(bsLight);
-			auto& shadowLightData = shadowLight->GetRuntimeData();
-			light.shadowMaskIndex = shadowLightData.maskIndex;
+			GET_INSTANCE_MEMBER(maskIndex, shadowLight);
+			light.shadowMaskIndex = maskIndex;
 			light.lightFlags.set(LightFlags::Shadow);
 		}
 
@@ -266,8 +266,8 @@ void LightLimitFix::BSLightingShader_SetupGeometry_GeometrySetupConstantPointLig
 	for (uint32_t i = 0; i < a_pass->numShadowLights; i++) {
 		auto bsLight = a_pass->sceneLights[i + 1];
 		auto* shadowLight = static_cast<RE::BSShadowLight*>(bsLight);
-		auto& shadowLightData = shadowLight->GetRuntimeData();
-		strictLightDataTemp.ShadowBitMask |= (1 << shadowLightData.maskIndex);
+		GET_INSTANCE_MEMBER(maskIndex, shadowLight);
+		strictLightDataTemp.ShadowBitMask |= (1 << maskIndex);
 	}
 }
 
@@ -441,8 +441,8 @@ void LightLimitFix::UpdateLights()
 
 					if (bsLight->IsShadowLight()) {
 						auto* shadowLight = static_cast<RE::BSShadowLight*>(bsLight);
-						auto& shadowLightData = shadowLight->GetRuntimeData();
-						light.shadowMaskIndex = shadowLightData.maskIndex;
+						GET_INSTANCE_MEMBER(maskIndex, shadowLight);
+						light.shadowMaskIndex = maskIndex;
 						light.lightFlags.set(LightFlags::Shadow);
 					}
 
