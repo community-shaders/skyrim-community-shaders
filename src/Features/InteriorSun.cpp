@@ -200,7 +200,7 @@ void InteriorSun::InitialiseOnNewCell(const RE::NiPointer<RE::BSPortalGraph>& po
 
 	if (const auto portalSharedNode = portalGraph->portalSharedNode) {
 		for (const auto& room : portalGraph->rooms)
-			currentCellRoomsAndPortals.push_back(room.get());
+			currentCellRoomsAndPortals.push_back(RE::NiPointer<RE::NiAVObject>(room.get()));
 
 		for (auto child : portalGraph->portalSharedNode->GetChildren())
 			currentCellRoomsAndPortals.push_back(child);
