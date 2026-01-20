@@ -2205,17 +2205,15 @@ namespace SIE
 		}
 
 		// Check plugin version
-		if (valid) {
-			if (auto pluginVersion = ini.GetValue("Cache", "PluginVersion")) {
-				if (strcmp(Plugin::VERSION.string().c_str(), pluginVersion) != 0) {
-					logger::info("Disk cache outdated: plugin version changed (current: {}, cached: {})",
-						Plugin::VERSION.string(), pluginVersion);
-					valid = false;
-				}
-			} else {
-				logger::info("Disk cache outdated: no plugin version found");
+		if (auto pluginVersion = ini.GetValue("Cache", "PluginVersion")) {
+			if (strcmp(Plugin::VERSION.string().c_str(), pluginVersion) != 0) {
+				logger::info("Disk cache outdated: plugin version changed (current: {}, cached: {})",
+					Plugin::VERSION.string(), pluginVersion);
 				valid = false;
 			}
+		} else {
+			logger::info("Disk cache outdated: no plugin version found");
+			valid = false;
 		}
 
 		// Check feature validation
@@ -2239,7 +2237,7 @@ namespace SIE
 		ini.SetValue("Cache", "PluginVersion", Plugin::VERSION.string().c_str());
 		globals::state->WriteDiskCacheInfo(ini);
 		ini.SaveFile(L"Data\\ShaderCache\\Info.ini");
-		logger::info("Saved disk cache info (Cache: {}, Plugin: {})", 
+		logger::info("Saved disk cache info (cache version: {}, plugin version: {})", 
 			SHADER_CACHE_VERSION.string(), Plugin::VERSION.string());
 	}
 
