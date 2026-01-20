@@ -7,6 +7,8 @@
 
 #include "Features/DynamicCubemaps.h"
 
+#include "Plugin.h"
+
 namespace SIE
 {
 	namespace SShaderCache
@@ -2190,13 +2192,35 @@ namespace SIE
 		ini.LoadFile(L"Data\\ShaderCache\\Info.ini");
 		bool valid = true;
 
+		// Check shader cache version
 		if (auto version = ini.GetValue("Cache", "Version")) {
-			if (strcmp(SHADER_CACHE_VERSION.string().c_str(), version) != 0 || !(globals::state->ValidateCache(ini))) {
-				logger::info("Disk cache outdated or invalid");
+			if (strcmp(SHADER_CACHE_VERSION.string().c_str(), version) != 0) {
+				logger::info("Disk cache outdated: cache version mismatch (current: {}, cached: {})",
+					SHADER_CACHE_VERSION.string(), version);
 				valid = false;
 			}
 		} else {
-			logger::info("Disk cache outdated or invalid");
+			logger::info("Disk cache outdated: no cache version found");
+			valid = false;
+		}
+
+		// Check plugin version
+		if (valid) {
+			if (auto pluginVersion = ini.GetValue("Cache", "PluginVersion")) {
+				if (strcmp(Plugin::VERSION.string().c_str(), pluginVersion) != 0) {
+					logger::info("Disk cache outdated: plugin version changed (current: {}, cached: {})",
+						Plugin::VERSION.string(), pluginVersion);
+					valid = false;
+				}
+			} else {
+				logger::info("Disk cache outdated: no plugin version found");
+				valid = false;
+			}
+		}
+
+		// Check feature validation
+		if (valid && !(globals::state->ValidateCache(ini))) {
+			logger::info("Disk cache outdated: feature validation failed");
 			valid = false;
 		}
 
@@ -2212,9 +2236,11 @@ namespace SIE
 		CSimpleIniA ini;
 		ini.SetUnicode();
 		ini.SetValue("Cache", "Version", SHADER_CACHE_VERSION.string().c_str());
+		ini.SetValue("Cache", "PluginVersion", Plugin::VERSION.string().c_str());
 		globals::state->WriteDiskCacheInfo(ini);
 		ini.SaveFile(L"Data\\ShaderCache\\Info.ini");
-		logger::info("Saved disk cache info");
+		logger::info("Saved disk cache info (Cache: {}, Plugin: {})", 
+			SHADER_CACHE_VERSION.string(), Plugin::VERSION.string());
 	}
 
 	ShaderCache::ShaderCache()
