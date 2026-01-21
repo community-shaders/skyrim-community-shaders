@@ -13,6 +13,7 @@
 #include "Features/InverseSquareLighting.h"
 #include "Features/LODBlending.h"
 #include "Features/LightLimitFix.h"
+#include "Features/LinearLighting.h"
 #include "Features/PerformanceOverlay.h"
 #include "Features/RenderDoc.h"
 #include "Features/ScreenSpaceGI.h"
@@ -28,6 +29,7 @@
 #include "Features/VR.h"
 #include "Features/VolumetricLighting.h"
 #include "Features/WaterEffects.h"
+#include "Features/WeatherEditor.h"
 #include "Features/WeatherPicker.h"
 #include "Features/WetnessEffects.h"
 #include "Menu.h"
@@ -54,6 +56,7 @@ namespace globals
 		GrassLighting grassLighting{};
 		IBL ibl{};
 		LightLimitFix lightLimitFix{};
+		LinearLighting linearLighting{};
 		LODBlending lodBlending{};
 		HairSpecular hairSpecular{};
 		InteriorSun interiorSun{};
@@ -76,6 +79,7 @@ namespace globals
 		ExtendedTranslucency extendedTranslucency{};
 		Upscaling upscaling{};
 		RenderDoc renderDoc{};
+		WeatherEditor weatherEditor{};
 
 		namespace llf
 		{
@@ -88,7 +92,9 @@ namespace globals
 		RE::BSGraphics::State* graphicsState = nullptr;
 		RE::BSGraphics::Renderer* renderer = nullptr;
 		RE::BSShaderManager::State* smState = nullptr;
+		RE::TES* tes = nullptr;
 		bool isVR = false;
+		RE::MemoryManager* memoryManager = nullptr;
 		RE::INISettingCollection* iniSettingCollection = nullptr;
 		RE::INIPrefSettingCollection* iniPrefSettingCollection = nullptr;
 		RE::GameSettingCollection* gameSettingCollection = nullptr;

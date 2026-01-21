@@ -1,0 +1,139 @@
+{
+    "DisplayName": "Default Light",
+    "Description": "Sleek monochrome theme with modern minimalist aesthetic",
+    "Version": "1.0.0",
+    "Author": "Community Shaders Team",
+    "Theme": {
+        "FontSize": 27.0,
+        "FontName": "Jost/Jost-Regular.ttf",
+        "GlobalScale": 0.0,
+        "FontRoles": [
+            {
+                "Family": "IBMPlex Sans",
+                "Style": "Condensed Light",
+                "File": "IBMPlexSans/IBMPlexSans_Condensed-Light.ttf",
+                "SizeScale": 1.0
+            },
+            {
+                "Family": "IBMPlex Mono",
+                "Style": "Regular",
+                "File": "IBMPlexMono/IBMPlexMono-Regular.ttf",
+                "SizeScale": 1.0
+            },
+            {
+                "Family": "IBMPlex Sans",
+                "Style": "Regular",
+                "File": "IBMPlexSans/IBMPlexSans-Regular.ttf",
+                "SizeScale": 1.0
+            },
+            {
+                "Family": "IBMPlex Serif",
+                "Style": "Light",
+                "File": "IBMPlexSerif/IBMPlexSerif-Light.ttf",
+                "SizeScale": 1.0
+            }
+        ],
+        "UseSimplePalette": false,
+        "ShowActionIcons": true,
+        "ShowFooter": false,
+        "CenterHeader": true,
+        "TooltipHoverDelay": 0.5,
+        "BackgroundBlurEnabled": false,
+        "Palette": {
+            "Background": [0.98, 0.98, 0.98, 0.9],
+            "Text": [0.08, 0.08, 0.08, 1.0],
+            "WindowBorder": [0.75, 0.75, 0.75, 0.7],
+            "FrameBorder": [0.82, 0.82, 0.82, 0.8],
+            "Separator": [0.85, 0.85, 0.85, 0.7],
+            "ResizeGrip": [0.65, 0.65, 0.65, 0.8]
+        },
+        "StatusPalette": {
+            "Disable": [0.55, 0.55, 0.55, 1.0],
+            "Error": [0.25, 0.25, 0.25, 1.0],
+            "Warning": [0.35, 0.35, 0.35, 1.0],
+            "RestartNeeded": [0.15, 0.15, 0.15, 1.0],
+            "CurrentHotkey": [0.3, 0.3, 0.3, 1.0],
+            "SuccessColor": [0.2, 0.2, 0.2, 1.0],
+            "InfoColor": [0.4, 0.4, 0.4, 1.0]
+        },
+        "FeatureHeading": {
+            "ColorDefault": [0.88, 0.88, 0.88, 1.0],
+            "ColorHovered": [0.8, 0.8, 0.8, 1.0],
+            "MinimizedFactor": 0.7
+        },
+        "Style": {
+            "WindowBorderSize": 1.0,
+            "ChildBorderSize": 0.0,
+            "FrameBorderSize": 1.0,
+            "WindowPadding": [16.0, 12.0],
+            "WindowRounding": 6.0,
+            "IndentSpacing": 8.0,
+            "FramePadding": [8.0, 4.0],
+            "CellPadding": [12.0, 4.0],
+            "ItemSpacing": [8.0, 6.0]
+        },
+        "FullPalette": [
+            [0.08, 0.08, 0.08, 1.0],
+            [0.55, 0.55, 0.55, 1.0],
+            [0.98, 0.98, 0.98, 0.9],
+            [1.0, 1.0, 1.0, 0.0],
+            [0.94, 0.94, 0.94, 0.85],
+            [0.75, 0.75, 0.75, 0.7],
+            [1.0, 1.0, 1.0, 0.0],
+            [1.0, 1.0, 1.0, 0.95],
+            [0.85, 0.85, 0.85, 0.7],
+            [0.88, 0.88, 0.88, 0.8],
+            [1.0, 1.0, 1.0, 0.75],
+            [1.0, 1.0, 1.0, 0.82],
+            [0.88, 0.88, 0.88, 0.9],
+            [0.92, 0.92, 0.92, 0.85],
+            [0.85, 0.85, 0.85, 0.85],
+            [0.82, 0.82, 0.82, 0.8],
+            [0.75, 0.75, 0.75, 0.85],
+            [0.68, 0.68, 0.68, 0.9],
+            [0.08, 0.08, 0.08, 1.0],
+            [0.15, 0.15, 0.15, 1.0],
+            [0.25, 0.25, 0.25, 1.0],
+            [0.7, 0.7, 0.7, 1.0],
+            [0.6, 0.6, 0.6, 1.0],
+            [0.5, 0.5, 0.5, 1.0],
+            [0.45, 0.45, 0.45, 1.0],
+            [0.5, 0.5, 0.5, 1.0],
+            [0.55, 0.55, 0.55, 1.0],
+            [0.68, 0.68, 0.68, 1.0],
+            [0.6, 0.6, 0.6, 1.0],
+            [0.52, 0.52, 0.52, 1.0],
+            [0.08, 0.08, 0.08, 1.0],
+            [0.08, 0.08, 0.08, 0.15],
+            [0.08, 0.08, 0.08, 0.3],
+            [0.65, 0.65, 0.65, 1.0],
+            [0.55, 0.55, 0.55, 1.0],
+            [0.45, 0.45, 0.45, 1.0],
+            [0.96, 0.96, 0.96, 1.0],
+            [0.5, 0.5, 0.5, 1.0],
+            [0.7, 0.7, 0.7, 0.8],
+            [1.0, 1.0, 1.0, 0.0],
+            [0.08, 0.08, 0.08, 1.0],
+            [0.3, 0.3, 0.3, 1.0],
+            [0.25, 0.25, 0.25, 1.0],
+            [0.2, 0.2, 0.2, 1.0],
+            [0.65, 0.65, 0.65, 1.0],
+            [0.8, 0.8, 0.8, 1.0],
+            [0.75, 0.75, 0.75, 1.0],
+            [1.0, 1.0, 1.0, 0.0],
+            [0.08, 0.08, 0.08, 0.08],
+            [0.6, 0.6, 0.6, 1.0],
+            [0.25, 0.25, 0.25, 1.0],
+            [0.5, 0.5, 0.5, 1.0],
+            [0.78, 0.78, 0.78, 1.0],
+            [0.72, 0.72, 0.72, 1.0],
+            [0.68, 0.68, 0.68, 1.0]
+        ],
+        "ScrollbarOpacity": {
+            "Background": 0.0,
+            "Thumb": 0.5,
+            "ThumbHovered": 0.7,
+            "ThumbActive": 0.85
+        }
+    }
+}

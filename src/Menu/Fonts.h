@@ -46,6 +46,35 @@ namespace MenuFonts
 	};
 
 	/**
+	 * @brief RAII guard for tab bars that automatically scales padding for larger tab fonts
+	 *
+	 * Scales FramePadding when tab fonts are larger than body text to ensure proper
+	 * tab bar height and separator positioning. Automatically restores original padding on destruction.
+	 *
+	 * Usage:
+	 *   {
+	 *       MenuFonts::TabBarPaddingGuard tabGuard(Menu::FontRole::Subheading);
+	 *       if (ImGui::BeginTabBar("##MyTabs")) {
+	 *           // Tab items...
+	 *           ImGui::EndTabBar();
+	 *       }
+	 *   } // Padding automatically restored here
+	 */
+	class TabBarPaddingGuard
+	{
+	public:
+		explicit TabBarPaddingGuard(FontRole tabFontRole);
+		~TabBarPaddingGuard();
+
+		TabBarPaddingGuard(const TabBarPaddingGuard&) = delete;
+		TabBarPaddingGuard& operator=(const TabBarPaddingGuard&) = delete;
+
+	private:
+		ImVec2 originalPadding_;
+		bool scaled_ = false;
+	};
+
+	/**
 	 * @brief Begins an ImGui tab item with the specified font role
 	 *
 	 * Convenience wrapper that combines FontRoleGuard with ImGui::BeginTabItem.
