@@ -98,6 +98,12 @@ namespace Util
 		std::filesystem::path GetOverridesPath();
 
 		/**
+		 * Gets the User Overrides directory path (for user modifications to overrides)
+		 * @return CommunityShaderPath / "Overrides" / "User"
+		 */
+		std::filesystem::path GetUserOverridesPath();
+
+		/**
 		 * Gets the AppliedOverrides.json file path
 		 * @return CommunityShaderPath / "AppliedOverrides.json"
 		 */

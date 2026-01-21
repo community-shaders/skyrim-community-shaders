@@ -90,6 +90,9 @@ PS_OUTPUT main(PS_INPUT input)
 #		if defined(POSTPROCESS)
 	if (SharedData::postProcessingSettings.DisableVanillaTonemapping) {
 		psout.Color = float4(inputColor, 1.0);
+		if (SharedData::linearLightingSettings.enableLinearLighting && SharedData::linearLightingSettings.enableGammaCorrection) {
+			psout.Color.xyz = Color::TrueLinearToGamma(psout.Color.xyz);
+		}
 		return psout;
 	}
 #		endif
@@ -143,6 +146,9 @@ PS_OUTPUT main(PS_INPUT input)
 	srgbColor = lerp(srgbColor, Fade.xyz, Fade.w);
 #		endif
 
+	if (SharedData::linearLightingSettings.enableLinearLighting && SharedData::linearLightingSettings.enableGammaCorrection) {
+		srgbColor = Color::TrueLinearToGamma(srgbColor);
+	}
 	srgbColor = FrameBuffer::ToSRGBColor(srgbColor);
 
 	psout.Color = float4(srgbColor, 1.0);

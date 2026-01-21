@@ -11,11 +11,13 @@
 #include "Features/TerrainBlending.h"
 #include "Features/TerrainHelper.h"
 #include "Features/Upscaling.h"
+#include "Features/WeatherEditor.h"
 #include "Menu.h"
 #include "SettingsOverrideManager.h"
 #include "ShaderCache.h"
 #include "TruePBR.h"
 #include "Utils/FileSystem.h"
+#include "WeatherManager.h"
 
 void State::Draw()
 {
@@ -24,10 +26,14 @@ void State::Draw()
 	auto& terrainBlending = globals::features::terrainBlending;
 	auto& terrainHelper = globals::features::terrainHelper;
 	auto& cloudShadows = globals::features::cloudShadows;
+	auto& weatherEditor = globals::features::weatherEditor;
 	auto truePBR = globals::truePBR;
 	auto context = globals::d3d::context;
 
 	if (shaderCache->IsEnabled()) {
+		if (weatherEditor.loaded)
+			WeatherManager::GetSingleton()->UpdateFeatures();
+
 		if (terrainBlending.loaded)
 			terrainBlending.TerrainShaderHacks();
 
@@ -153,6 +159,9 @@ void State::Setup()
 		if (feature->loaded)
 			feature->SetupResources();
 	globals::deferred->SetupResources();
+
+	// Load per-weather settings after features are setup
+	WeatherManager::GetSingleton()->LoadPerWeatherSettingsFromDisk();
 }
 
 static std::string GetConfigPath(State::ConfigMode a_configMode)
@@ -206,7 +215,7 @@ void State::Load(ConfigMode a_configMode, bool a_allowReload)
 		}
 	};
 
-	// NEW LOADING ORDER: Default → Overrides → User
+	// LOADING ORDER: Default → User → Overrides → User Overrides (.user files)
 
 	// Step 1: Always start with default settings
 	logger::info("Loading default settings from: {}", defaultConfigFilePath);
@@ -221,22 +230,7 @@ void State::Load(ConfigMode a_configMode, bool a_allowReload)
 		}
 	}
 
-	// Step 2: Apply overrides (only new/changed ones) to default settings
-	auto overrideManager = SettingsOverrideManager::GetSingleton();
-	size_t overridesDiscovered = overrideManager->DiscoverOverrides();
-	json appliedOverrides = overrideManager->LoadAppliedOverridesTracking();
-
-	if (overridesDiscovered > 0) {
-		logger::info("Discovered {} override files", overridesDiscovered);
-
-		// Apply global overrides to main settings (only new/changed ones)
-		size_t newGlobalOverrides = overrideManager->ApplyNewOverrides(settings, appliedOverrides);
-		if (newGlobalOverrides > 0) {
-			logger::info("Applied {} new/changed global override(s)", newGlobalOverrides);
-		}
-	}
-
-	// Step 3: Apply user settings on top of default + overrides
+	// Step 2: Apply user settings on top of defaults (user preferences)
 	if (a_configMode == ConfigMode::USER) {
 		json userSettings;
 		std::ifstream userFile(userConfigFilePath);
@@ -245,7 +239,7 @@ void State::Load(ConfigMode a_configMode, bool a_allowReload)
 				userFile >> userSettings;
 				userFile.close();
 
-				// Merge user settings on top of (default + overrides)
+				// Merge user settings on top of defaults
 				for (auto& [key, value] : userSettings.items()) {
 					settings[key] = value;
 				}
@@ -256,6 +250,27 @@ void State::Load(ConfigMode a_configMode, bool a_allowReload)
 			}
 		} else {
 			logger::info("No user config file found at: {}", userConfigFilePath);
+		}
+	}
+
+	// Step 3: Discover and prepare overrides (applied after user settings, so overrides take priority)
+	auto overrideManager = SettingsOverrideManager::GetSingleton();
+	size_t overridesDiscovered = overrideManager->DiscoverOverrides();
+
+	// Cleanup stale user override files (where override hash has changed)
+	if (overridesDiscovered > 0) {
+		logger::info("Discovered {} override files", overridesDiscovered);
+		overrideManager->CleanupStaleUserOverrides();
+
+		// Apply global overrides to main settings
+		size_t globalOverrides = overrideManager->ApplyGlobalOverrides(settings);
+		if (globalOverrides > 0) {
+			logger::info("Applied {} global override(s)", globalOverrides);
+		}
+
+		// Apply global user overrides on top (if any)
+		if (overrideManager->LoadUserOverride("Global", settings)) {
+			logger::info("Applied global user override customizations");
 		}
 	}
 
@@ -343,19 +358,30 @@ void State::Load(ConfigMode a_configMode, bool a_allowReload)
 					// Load base feature settings from merged config (default + user)
 					feature->Load(settings);
 
-					// Apply new/changed feature-specific overrides if any
-					if (overridesDiscovered > 0) {
+					// Register weather variables (features opt-in by implementing this)
+					feature->RegisterWeatherVariables();
+
+					// Apply feature-specific overrides on top (overrides take priority over user settings)
+					if (overridesDiscovered > 0 && overrideManager->HasFeatureOverrides(featureName)) {
 						json featureJson;
 						feature->SaveSettings(featureJson);  // Get current settings as JSON
 
-						size_t newFeatureOverrides = overrideManager->ApplyNewFeatureOverrides(featureName, featureJson, appliedOverrides);
-						if (newFeatureOverrides > 0) {
-							logger::info("Applied {} new/changed override(s) to {}", newFeatureOverrides, feature->GetName());
-							try {
-								feature->LoadSettings(featureJson);  // Reload with new overrides applied
-							} catch (...) {
-								logger::warn("Invalid override settings for {}, keeping original settings.", feature->GetName());
-							}
+						// Apply overrides
+						size_t appliedOverrides = overrideManager->ApplyOverrides(featureName, featureJson);
+						if (appliedOverrides > 0) {
+							logger::info("Applied {} override(s) to {}", appliedOverrides, feature->GetName());
+						}
+
+						// Apply user override customizations on top (if any)
+						if (overrideManager->LoadUserOverride(featureName, featureJson)) {
+							logger::info("Applied user override customizations to {}", feature->GetName());
+						}
+
+						// Reload settings with overrides applied
+						try {
+							feature->LoadSettings(featureJson);
+						} catch (...) {
+							logger::warn("Invalid override settings for {}, keeping original settings.", feature->GetName());
 						}
 					}
 				} else {
@@ -367,11 +393,6 @@ void State::Load(ConfigMode a_configMode, bool a_allowReload)
 				                                   (feature->failedLoadedMessage + "\n" + feature->GetName() + " failed to load. Check CommunityShaders.log");
 				logger::warn("Error loading setting for feature '{}': {}", feature->GetShortName(), e.what());
 			}
-		}
-
-		// Save updated applied overrides tracking
-		if (overridesDiscovered > 0) {
-			overrideManager->SaveAppliedOverridesTracking(appliedOverrides);
 		}
 
 		if (settings["Version"].is_string() && settings["Version"].get<std::string>() != Plugin::VERSION.string()) {
@@ -453,8 +474,24 @@ void State::Save(ConfigMode a_configMode)
 
 	settings["Version"] = Plugin::VERSION.string();
 
-	for (auto* feature : Feature::GetFeatureList())
+	// Save feature settings and user overrides
+	auto overrideManager = SettingsOverrideManager::GetSingleton();
+	for (auto* feature : Feature::GetFeatureList()) {
 		feature->Save(settings);
+
+		// If feature has overrides, save user modifications to .user file
+		const std::string featureName = feature->GetShortName();
+		if (overrideManager->HasFeatureOverrides(featureName) && feature->loaded) {
+			json currentSettings;
+			feature->SaveSettings(currentSettings);
+
+			// Get the merged override settings (all overrides applied to empty base)
+			json overrideSettings = overrideManager->GetMergedOverrideSettings(featureName, json::object());
+
+			// Save user override only if settings differ from override
+			overrideManager->SaveUserOverride(featureName, currentSettings, overrideSettings);
+		}
+	}
 
 	try {
 		o << settings.dump(1);
@@ -835,61 +872,35 @@ float State::GetTotalSmoothedDrawCalls() const
 
 void State::LoadTheme()
 {
-	// Don't override if a theme preset is already selected (e.g., first-time Default Dark setup)
-	if (!globals::menu->GetSettings().SelectedThemePreset.empty()) {
-		logger::info("Theme preset '{}' already selected, skipping SettingsTheme.json load", globals::menu->GetSettings().SelectedThemePreset);
+	// Load the active preset from SettingsUser.json (already read during State::Load)
+	auto presetName = globals::menu->GetSettings().SelectedThemePreset;
+	if (presetName.empty()) {
+		logger::info("No active theme preset set; skipping preset load");
 		return;
 	}
 
-	auto themeConfigPath = Util::PathHelpers::GetSettingsThemePath();
-
-	if (!std::filesystem::exists(themeConfigPath)) {
-		logger::info("No theme config file found at: {}", themeConfigPath.string());
-		return;
+	// Ensure default themes exist and theme manager has discovered themes
+	globals::menu->CreateDefaultThemes();
+	auto themeManager = ThemeManager::GetSingleton();
+	if (themeManager && !themeManager->IsDiscovered()) {
+		themeManager->DiscoverThemes();
 	}
 
-	try {
-		std::ifstream themeFile(themeConfigPath);
-		if (!themeFile.is_open()) {
-			logger::warn("Unable to open theme config file: {}", themeConfigPath.string());
-			return;
+	logger::info("Loading active theme preset: '{}'", presetName);
+	if (!globals::menu->LoadThemePreset(presetName)) {
+		logger::warn("Failed to load preset '{}', attempting to fall back to 'Default'", presetName);
+		if (globals::menu->LoadThemePreset("Default")) {
+			globals::menu->GetSettings().SelectedThemePreset = "Default";
+			logger::info("Fallback to 'Default' theme succeeded");
+		} else {
+			logger::warn("Fallback to 'Default' theme failed");
 		}
-
-		json themeSettings;
-		themeFile >> themeSettings;
-		themeFile.close();
-
-		if (themeSettings["Menu"].is_object()) {
-			logger::info("Loading theme settings from: {}", themeConfigPath.string());
-			globals::menu->LoadTheme(themeSettings["Menu"]);
-		}
-	} catch (const std::exception& e) {
-		logger::warn("Error loading theme config file: {}", e.what());
 	}
 }
 
 void State::SaveTheme()
 {
-	auto themeConfigPath = Util::PathHelpers::GetSettingsThemePath();
-
-	try {
-		std::filesystem::create_directories(themeConfigPath.parent_path());
-	} catch (const std::filesystem::filesystem_error& e) {
-		logger::warn("Error creating directory during SaveTheme: {}", e.what());
-		return;
-	}
-
-	std::ofstream themeFile(themeConfigPath);
-	if (!themeFile.is_open()) {
-		logger::warn("Failed to open theme config file for saving: {}", themeConfigPath.string());
-		return;
-	}
-
-	json themeSettings;
-	globals::menu->SaveTheme(themeSettings["Menu"]);
-
-	themeFile << std::setw(4) << themeSettings << std::endl;
-	themeFile.close();
-
-	logger::info("Theme settings saved to: {}", themeConfigPath.string());
+	// SelectedThemePreset is now persisted via SettingsUser.json (State::Save)
+	// Keep this function as a no-op for backward compatibility and to avoid writing separate theme files.
+	logger::info("SaveTheme() no longer writes SettingsTheme.json; SelectedThemePreset is saved with SettingsUser.json");
 }
