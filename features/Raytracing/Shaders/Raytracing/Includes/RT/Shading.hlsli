@@ -440,6 +440,21 @@ bool SampleTransmissionBSDF(in Surface surface, in BRDFContext brdfContext, in b
     }
 }
 
+bool SimpleTransmission(in Surface surface, in BRDFContext brdfContext, inout uint randomSeed, out float3 direction, out MonteCarlo::BRDFWeight brdfWeight)
+{
+    const float3 V = brdfContext.ViewDirection;
+    float3 N = surface.Normal;
+
+    brdfWeight.diffuse = 0.0f;
+    brdfWeight.specular = 0.0f;
+    brdfWeight.transmission = 0.0f;
+
+    // No refraction or reflection, just pass through
+    direction = -V;
+    brdfWeight.transmission = surface.TransmissionColor;
+    return false;
+}
+
 #if defined(FULL_MATERIAL)
 bool SampleFuzzBSDF(in Surface surface, in BRDFContext brdfContext, inout uint randomSeed, out float3 direction, out MonteCarlo::BRDFWeight brdfWeight)
 {

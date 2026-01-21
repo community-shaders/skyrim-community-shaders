@@ -198,6 +198,8 @@ struct Surface
 
             TransmissionColor = lerp(float3(1.0f, 1.0f, 1.0f), Albedo, alpha);
             Albedo = float3(0.0f, 0.0f, 0.0f);
+        } else {
+            TransmissionColor = float3(0.0f, 0.0f, 0.0f);
         }
         
         [branch]

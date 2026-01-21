@@ -257,13 +257,20 @@ void main()
                 isSpecular = SampleFuzzBSDF(surface, brdfContext, randomSeed, direction, brdfWeight);
             else
 #   endif
-            if ((material.AlphaFlags & AlphaFlags::kAlphaBlend) != 0) {
-                isSpecular = SampleTransmissionBSDF(surface, brdfContext, isEnter, randomSeed, direction, brdfWeight);
-                if (!isSpecular)
-                    isEnter = !isEnter;
-            }
-            else
+            bool hasTransmission = any(surface.TransmissionColor) > 0.0f;
+            if (hasTransmission) {
+                if (material.Feature == Feature::kHairTint) {
+                    isSpecular = SimpleTransmission(surface, brdfContext, randomSeed, direction, brdfWeight);
+                } else {
+                    isSpecular = SampleTransmissionBSDF(surface, brdfContext, isEnter, randomSeed, direction, brdfWeight);
+                    if (!isSpecular)
+                        isEnter = !isEnter;
+                }
+            } else {
                 isSpecular = SampleDefaultBSDF(surface, brdfContext, randomSeed, direction, brdfWeight);
+                if (j > 0)
+                    isEnter = true;
+            }
 
             throughput *= surface.AO;
 
@@ -289,7 +296,7 @@ void main()
             throughput *= brdfWeight.total();
 #   endif
 #endif
-            if (dot(surface.GeomNormal, direction) <= 0.0)
+            if (!hasTransmission && dot(surface.GeomNormal, direction) <= 0.0)
                 break;
 
 #if defined(SHARC) && defined(SHARC_UPDATE)
@@ -317,7 +324,9 @@ void main()
                     throughput /= rrProbability;
             }
 
-            ray.Origin = OffsetRay(surface.Position, surface.GeomNormal, direction);
+            float dirDotGeom = dot(direction, surface.GeomNormal);
+            float3 offsetNormal = dirDotGeom > 0.0 ? surface.GeomNormal : -surface.GeomNormal;
+            ray.Origin = OffsetRay(surface.Position, offsetNormal, direction);
             ray.Direction = direction;
             ray.TMin = 0.01f;
             ray.TMax = RAY_TMAX;
