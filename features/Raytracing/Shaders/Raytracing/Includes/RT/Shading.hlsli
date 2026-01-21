@@ -222,8 +222,6 @@ float3 EvalPointLight(in Surface surface, in BRDFContext brdfContext, in LightDa
     float dist = length(l);
     l /= dist;
 
-    // float atten = VanillaSquaredAtten(dist, light.Radius);
-    // float atten = InverseSquareAtten(dist * GAME_UNIT_TO_M, light.Radius * GAME_UNIT_TO_M);
     float lightSourceAngle = 0.05f;
 
 	float atten = 0.0f;

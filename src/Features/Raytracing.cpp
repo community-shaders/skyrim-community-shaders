@@ -1427,6 +1427,7 @@ eastl::vector<LightLimitFix::LightData> Raytracing::GetPointLights()
 						isl.ProcessLight(light, bsLight, niLight);
 					} else {
 						light.radius = runtimeData.radius.x;
+						light.invRadius = 1.0f / light.radius;
 						light.fade = runtimeData.fade;
 
 						if (settings.LodDimmer)
