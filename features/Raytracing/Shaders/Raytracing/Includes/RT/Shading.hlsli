@@ -261,6 +261,7 @@ bool SampleDefaultBSDF(in Surface surface, in BRDFContext brdfContext, inout uin
 
     brdfWeight.diffuse = 0.0f;
     brdfWeight.specular = 0.0f;
+    brdfWeight.transmission = 0.0f;
 
     const float specularProb = lerp(MonteCarlo::GetSpecularBrdfProbability(surface, V, surface.Normal), 1.0f, surface.Metallic);
     const bool isSpecular = Random(randomSeed) < specularProb;
@@ -336,6 +337,109 @@ bool SampleDefaultBSDF(in Surface surface, in BRDFContext brdfContext, inout uin
     return isSpecular;
 }
 
+bool SampleTransmissionBSDF(in Surface surface, in BRDFContext brdfContext, in bool isEnter, inout uint randomSeed, out float3 direction, out MonteCarlo::BRDFWeight brdfWeight)
+{
+    const float3 V = brdfContext.ViewDirection;
+    float3 N = surface.Normal;
+    if (!isEnter)
+        N = -N;
+
+    brdfWeight.diffuse = 0.0f;
+    brdfWeight.specular = 0.0f;
+    brdfWeight.transmission = 0.0f;
+
+    float materialIOR = max(surface.IOR, 1.001f);
+    float relativeEta = isEnter ? (1.0f / materialIOR) : materialIOR;
+
+    direction = float3(0, 0, 0);
+
+    float3 Ve = float3(
+            dot(V, surface.Tangent),
+            dot(V, surface.Bitangent),
+            dot(V, surface.Normal)
+        );
+
+    const float alpha = surface.Roughness * surface.Roughness;
+    const float alpha2 = alpha * alpha;
+    
+    float3 He = MonteCarlo::SampleGGX_VNDF(Ve, alpha, randomSeed);
+
+    float3 H = surface.Tangent * He.x + surface.Bitangent * He.y + N * He.z;
+    H = normalize(H);
+
+    float VdotH = saturate(dot(V, H));
+    float NdotV = saturate(dot(N, V));
+
+    float F = FresnelDielectric(VdotH, relativeEta);
+
+    float rnd = Random(randomSeed);
+
+    if (rnd < F)
+    {
+        float3 L = reflect(-V, H);
+        direction = L;
+        
+        float NdotL = saturate(dot(N, L));
+        float NdotH = saturate(dot(N, H));
+        
+        if (NdotL <= 0.0f) 
+        {
+            brdfWeight.specular = 0.0f;
+            return true;
+        }
+
+        float D = BRDF::D_GGX(surface.Roughness, NdotH);
+        float Vis = BRDF::Vis_SmithJointApprox(surface.Roughness, NdotV, NdotL);
+        // Fr = D * Vis * F;
+
+        float pdf = MonteCarlo::SampleGGXVNDFReflectionPdf(alpha, alpha2, NdotH, NdotV, VdotH);
+        
+        // PDF = pdf * F
+        // Weight = (D * Vis * F * NdotL) / (pdf * F) = (D * Vis * NdotL) / pdf
+        float pdfRCP = 1.0f / max(pdf, 1e-7f);
+        
+        brdfWeight.specular = D * Vis * NdotL * pdfRCP;
+        
+        return true;
+    }
+    else
+    {
+        float3 L = refract(-V, H, relativeEta);
+        direction = L;
+
+        if (dot(L, L) < 0.01f) return false; 
+
+        float NdotL = saturate(dot(-N, L));
+        float NdotH = saturate(dot(N, H));
+        float LdotH = saturate(dot(-L, H));
+
+        if (NdotL <= 0.0f) return false;
+
+        float D = BRDF::D_GGX(surface.Roughness, NdotH);
+        float Vis = BRDF::Vis_SmithJointApprox(surface.Roughness, NdotV, NdotL);
+
+        // Eq: ( |V.H| * |L.H| ) / ( (eta*V.H + L.H)^2 ) * eta^2
+        float denom = (relativeEta * VdotH + LdotH);
+        float denom2 = max(denom * denom, 1e-5f);
+
+        float refractTerm = 4.0f * VdotH * LdotH * (relativeEta * relativeEta) / denom2;
+
+        float3 Ft = surface.TransmissionColor * D * Vis * refractTerm;
+
+        // Jacobian = (eta^2 * |L.H|) / (eta * V.H + L.H)^2
+        float jacobian = (relativeEta * relativeEta * LdotH) / denom2;
+
+        float pdfRefl = MonteCarlo::SampleGGXVNDFReflectionPdf(alpha, alpha2, NdotH, NdotV, VdotH);
+        float pdfH = pdfRefl * 4.0f * VdotH;
+
+        float pdf = pdfH * jacobian;
+        float pdfRCP = 1.0f / max(pdf, 1e-7f);
+
+        brdfWeight.transmission = Ft * NdotL * pdfRCP;
+        return false;
+    }
+}
+
 #if defined(FULL_MATERIAL)
 bool SampleFuzzBSDF(in Surface surface, in BRDFContext brdfContext, inout uint randomSeed, out float3 direction, out MonteCarlo::BRDFWeight brdfWeight)
 {
@@ -345,6 +449,7 @@ bool SampleFuzzBSDF(in Surface surface, in BRDFContext brdfContext, inout uint r
 
     brdfWeight.diffuse = 0.0f;
     brdfWeight.specular = 0.0f;
+    brdfWeight.transmission = 0.0f;
 
     float specularProb = lerp(MonteCarlo::GetSpecularBrdfProbability(surface, V, surface.Normal), 1.0f, surface.Metallic);
     float Efuzz = (0.526422 / ((-0.227114 + surface.Roughness) * (-0.968835 + surface.Roughness) * ((5.38869 - 20.2835 * brdfContext.NdotV) * surface.Roughness) - (-1.18761 - ((2.58744 - brdfContext.NdotV) * brdfContext.NdotV)))) + 0.0615456;

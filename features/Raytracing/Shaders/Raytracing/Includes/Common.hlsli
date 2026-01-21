@@ -139,4 +139,41 @@ float ShadowTerminatorTerm(float3 L, float3 N, float3 Ns)
 	return G + G * (G - G * G); // smooth
 }
 
+float F0toIOR(float3 F0)
+{
+	float f0 = max(max(F0.r, F0.g), F0.b);
+	return (1.0 + sqrt(f0)) / (1.0 - sqrt(f0));
+}
+
+// Compute the cosine of the angle of refraction with respect to the surface
+// normal, given the cosine of the angle of incidence with respect to the
+// surface normal and the relative index of refraction at the interface
+// (IOR of incident medium over that of the refracting medium).  Both angles
+// are measured with respect to the same surface normal.  In case of total
+// internal reflection, the return value is zero.
+float ComputeCosThetaRefracted(float eta, float cosTheta)
+{
+    float cos2ThetaRefracted = 1 - eta * eta * (1 - cosTheta * cosTheta);
+    return -sign(cosTheta) * sqrt(max(cos2ThetaRefracted, 0.0));
+}
+
+// Compute surface reflectance using the Fresnel equations given a relative
+// index of refraction and cosines of the angles of the incident and refracted
+// rays with respect to the surface normal. Both angles are measured with
+// respect to the same surface normal.
+float FresnelDielectric(float eta, float cosTheta1, float cosTheta2)
+{
+    float ks = eta * cosTheta1;
+    float sqrtRs = (ks + cosTheta2) / (ks - cosTheta2);
+    float kp = eta * cosTheta2;
+    float sqrtRp = (kp + cosTheta1) / (kp - cosTheta1);
+    return 0.5 * (sqrtRs * sqrtRs + sqrtRp * sqrtRp);
+}
+
+float FresnelDielectric(float eta, float cosTheta1)
+{
+    float cosTheta2 = ComputeCosThetaRefracted(eta, cosTheta1);
+    return FresnelDielectric(eta, cosTheta1, cosTheta2);
+}
+
 #endif

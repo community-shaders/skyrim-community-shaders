@@ -23,6 +23,8 @@ struct Surface
     float3 Emissive;
     float AO;
     float3 F0;
+    float IOR;
+    float3 TransmissionColor;
 
 #if defined(FULL_MATERIAL)
     float3 SubsurfaceColor;
@@ -184,11 +186,24 @@ struct Surface
         {
             Albedo = float3(1.0f, 0.0f, 1.0f);
         }
+
+        [branch]
+        if (material.AlphaFlags == AlphaFlags::kAlphaBlend) {
+            float alpha = baseTexture.SampleLevel(BaseSampler, texCoord0, 0).a * material.BaseColor().a;
+
+            [branch]
+            if (material.ShaderFlags & ShaderFlags::kVertexAlpha) {
+                alpha *= vertexColor.a;
+            }
+
+            TransmissionColor = lerp(float3(1.0f, 1.0f, 1.0f), Albedo, alpha);
+            Albedo = float3(0.0f, 0.0f, 0.0f);
+        }
         
         [branch]
         if (material.ShaderFlags & ShaderFlags::kExternalEmittance) {
             Emissive *= Frame.EmittanceColor;
-        }       
+        }
 #endif
 
 #if defined(DEBUG_NONORMALMAP)
@@ -291,7 +306,8 @@ struct Surface
 
     void TestMaterial(in Vertex v0, in Vertex v1, in Vertex v2, in float3 uvw, in float3 normalWS, in float3 tangentWS, in float3 bitangentWS, in Material material)
     {
-        Albedo = 0.5f;
+        Albedo = 0.18f;  // Neutral grey
+        TransmissionColor = float3(0.0f, 0.0f, 0.0f);
 
         Normal = normalWS;
         Tangent = tangentWS;
@@ -351,6 +367,7 @@ struct Surface
 
 #ifdef DEBUG_WHITE_FURNACE
         surface.Albedo = float3(1.0f, 1.0f, 1.0f);
+        surface.TransmissionColor = float3(0.0f, 0.0f, 0.0f);
 #endif
 
         surface.Roughness = PBR::Roughness(surface.Roughness, Frame.Roughness.x, Frame.Roughness.y);
@@ -359,6 +376,7 @@ struct Surface
         surface.DiffuseAlbedo = surface.Albedo * (1.0f - surface.Metallic);
 
         surface.F0 = PBR::F0(surface.F0, surface.Albedo, surface.Metallic);
+        surface.IOR = F0toIOR(surface.F0);
 
 #if defined(FULL_MATERIAL)
         surface.SubsurfaceColor = float3(0.0f, 0.0f, 0.0f);
@@ -405,6 +423,7 @@ struct Surface
         surface.DiffuseAlbedo = surface.Albedo * (1.0f - surface.Metallic);
 
         surface.F0 = PBR::F0(albedo, metallic);
+        surface.IOR = F0toIOR(surface.F0);
 
 #if defined(FULL_MATERIAL)
         surface.SubsurfaceColor = float3(0.0f, 0.0f, 0.0f);

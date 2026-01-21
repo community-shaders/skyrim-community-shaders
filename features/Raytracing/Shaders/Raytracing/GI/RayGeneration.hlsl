@@ -235,6 +235,7 @@ void main()
 
         float3 sampleRadiance = float3(0.0f, 0.0f, 0.0f);
         float3 throughput = float3(1.0f, 1.0f, 1.0f);
+        bool isEnter = true;
 
 #if defined(RAW_RADIANCE)
         float3 throughputDelta = float3(1.0f, 1.0f, 1.0f);
@@ -256,12 +257,18 @@ void main()
                 isSpecular = SampleFuzzBSDF(surface, brdfContext, randomSeed, direction, brdfWeight);
             else
 #   endif
-            isSpecular = SampleDefaultBSDF(surface, brdfContext, randomSeed, direction, brdfWeight);
+            if ((material.AlphaFlags & AlphaFlags::kAlphaBlend) != 0) {
+                isSpecular = SampleTransmissionBSDF(surface, brdfContext, isEnter, randomSeed, direction, brdfWeight);
+                if (!isSpecular)
+                    isEnter = !isEnter;
+            }
+            else
+                isSpecular = SampleDefaultBSDF(surface, brdfContext, randomSeed, direction, brdfWeight);
 
             throughput *= surface.AO;
 
 #   if defined(RAW_RADIANCE)
-            float3 brdfWeightOriginal = brdfWeight.diffuse * surface.DiffuseAlbedo + brdfWeight.specular;
+            float3 brdfWeightOriginal = brdfWeight.diffuse * surface.DiffuseAlbedo + brdfWeight.specular + brdfWeight.transmission;
 
 #if defined(SHARC) && defined(SHARC_UPDATE)
             const bool sharcUpdatePass = Frame.SHaRC.UpdatePass;
@@ -272,14 +279,14 @@ void main()
             if (j > 0 || sharcUpdatePass) {
                 throughput *= brdfWeightOriginal;
             } else {
-                float3 brdWeightRaw = brdfWeight.diffuse + brdfWeight.specular;
+                float3 brdWeightRaw = brdfWeight.total();
 
                 throughputDelta = brdfWeightOriginal / brdWeightRaw;
 
                 throughput *= brdWeightRaw;
             }
 #   else
-            throughput *= brdfWeight.diffuse + brdfWeight.specular;
+            throughput *= brdfWeight.total();
 #   endif
 #endif
             if (dot(surface.GeomNormal, direction) <= 0.0)

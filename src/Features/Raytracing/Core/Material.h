@@ -176,7 +176,7 @@ struct Material
 	uint16_t AlphaFlags;
 
 	eastl::array<half4, 2> Colors;
-	eastl::array<half, 4> Scalars;
+	eastl::array<half, 3> Scalars;
 
 	eastl::array<half4, 2> TexCoordOffsetScale;
 
@@ -187,7 +187,7 @@ struct Material
 		return MaterialData(
 			TexCoordOffsetScale[0], TexCoordOffsetScale[1],
 			Colors[0], Colors[1],
-			Scalars[0], Scalars[1], Scalars[2], Scalars[3],
+			Scalars[0], Scalars[1], Scalars[2],
 			AlphaFlags,
 			Textures[0]->GetIndex(),
 			Textures[1]->GetIndex(),

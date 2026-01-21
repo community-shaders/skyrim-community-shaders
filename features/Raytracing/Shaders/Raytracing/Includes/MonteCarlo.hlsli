@@ -12,6 +12,12 @@ namespace MonteCarlo
     {
         float3 diffuse;
         float3 specular;
+        float3 transmission;
+
+        float3 total()
+        {
+            return diffuse + specular + transmission;
+        }
     };
 
     // The following functions bellow all come from NVidia
