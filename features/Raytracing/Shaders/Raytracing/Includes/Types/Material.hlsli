@@ -56,6 +56,13 @@ namespace Feature
 	static const uint16_t kLODLandNoise = 18;
 	static const uint16_t kMultiTexLandLODBlend = 19;
 }
+
+namespace AlphaFlags
+{
+	static const uint16_t kOpaque = 0;
+	static const uint16_t kAlphaBlend = (1 << 0);
+	static const uint16_t kAlphaTest = (1 << 1);
+}
 #endif
 
 // DirectX 12 is very picky about buffer alignment, make sure all variable boundaries are properly aligned
@@ -75,6 +82,9 @@ struct Material
 	half Scalar0;
 	half Scalar1;
 	half Scalar2;
+	half Scalar3;
+
+	uint16_t AlphaFlags;
 
 	// Textures
 	uint16_t Texture0;
@@ -130,6 +140,11 @@ struct Material
 	uint16_t EffectTexture()
     {
 		return Texture2;
+	}
+
+	half AlphaMult()
+	{
+		return Scalar3;
 	}
 
 	// Vanilla

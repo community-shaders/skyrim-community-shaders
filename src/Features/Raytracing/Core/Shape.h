@@ -21,8 +21,8 @@ using namespace magic_enum::bitwise_operators;
 enum Flags : uint8_t
 {
 	None = 0,
-	AlphaBlend = 1 << 0,
-	AlphaTest = 1 << 1,
+	AlphaBlending = 1 << 0,
+	AlphaTesting = 1 << 1,
 	Dynamic = 1 << 2,
 	Skinned = 1 << 3,
 	Landscape = 1 << 4

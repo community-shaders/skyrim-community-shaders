@@ -372,13 +372,16 @@ void Shape::BuildMaterial(const RE::BSGeometry::GEOMETRY_RUNTIME_DATA& geometryR
 		float4(0.0f, 0.0f, 0.0f, 0.0f)
 	};
 
-	eastl::array<half, 3> scalars;
+	eastl::array<half, 4> scalars;
 	scalars.fill(0.0f);
+	scalars[3] = 1.0f;
 
 	eastl::array<half4, 2> texCoordOffsetScales = {
 		float4(0.0f, 0.0f, 1.0f, 1.0f),
 		float4(0.0f, 0.0f, 1.0f, 1.0f)
 	};
+
+	uint16_t alphaFlags = 0u;
 
 	eastl::array<eastl::shared_ptr<Allocation>, 20> textures;
 	textures.fill(blackTexture);
@@ -392,7 +395,7 @@ void Shape::BuildMaterial(const RE::BSGeometry::GEOMETRY_RUNTIME_DATA& geometryR
 		auto* property = geometryRuntimeData.properties[State::kProperty].get();
 
 		if (property && property->GetType() == RE::NiProperty::Type::kAlpha) {
-			flags |= Flags::AlphaBlend;
+			flags |= Flags::AlphaBlending;
 		}
 
 		if (property; auto* lightingShaderProp = netimmerse_cast<RE::BSLightingShaderProperty*>(property)) {
@@ -424,13 +427,16 @@ void Shape::BuildMaterial(const RE::BSGeometry::GEOMETRY_RUNTIME_DATA& geometryR
 				// Set alpha flags
 				auto alphaProperty = property->GetRTTI() == globals::rtti::NiAlphaPropertyRTTI.get() ? static_cast<RE::NiAlphaProperty*>(property) : nullptr;
 				if (lightingShaderProp->alpha < 0.999f || (alphaProperty && alphaProperty->GetAlphaBlending())) {
-					flags |= Flags::AlphaBlend;
+					flags |= Flags::AlphaBlending;
+					scalars[3] = lightingShaderProp->alpha;
+					alphaFlags = Material::AlphaFlags::kAlphaBlend;
 				} else if (alphaProperty && alphaProperty->GetAlphaTesting()) {
-					flags &= ~Flags::AlphaBlend;
-					flags |= Flags::AlphaTest;
+					flags &= ~Flags::AlphaBlending;
+					flags |= Flags::AlphaTesting;
+					alphaFlags = Material::AlphaFlags::kAlphaTest;
 				} else {
-					flags &= ~Flags::AlphaBlend;
-					flags &= ~Flags::AlphaTest;
+					flags &= ~Flags::AlphaBlending;
+					flags &= ~Flags::AlphaTesting;
 				}
 
 				// This is always nullptr :(
@@ -600,6 +606,7 @@ void Shape::BuildMaterial(const RE::BSGeometry::GEOMETRY_RUNTIME_DATA& geometryR
 		shaderType,
 		feature,
 		pbrFlags,
+		alphaFlags,
 		colors,
 		scalars,
 		texCoordOffsetScales,
