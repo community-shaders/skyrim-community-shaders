@@ -21,10 +21,11 @@ using namespace magic_enum::bitwise_operators;
 enum Flags : uint8_t
 {
 	None = 0,
-	Alpha = 1 << 0,
-	Dynamic = 1 << 1,
-	Skinned = 1 << 2,
-	Landscape = 1 << 3
+	AlphaBlend = 1 << 0,
+	AlphaTest = 1 << 1,
+	Dynamic = 1 << 2,
+	Skinned = 1 << 3,
+	Landscape = 1 << 4
 };
 DEFINE_ENUM_FLAG_OPERATORS(Flags);
 

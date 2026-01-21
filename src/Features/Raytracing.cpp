@@ -1713,7 +1713,7 @@ void Raytracing::CommitModel(Model* model)
 	for (auto i = 0; i < meshCount; i++) {
 		auto& shape = shapes[i];
 
-		bool hasAlpha = shape->flags & Flags::Alpha;
+		bool hasAlpha = shape->flags & (Flags::AlphaBlend | Flags::AlphaTest);
 		bool hasGlow = shape->material.Feature == RE::BSShaderMaterial::Feature::kGlowMap;
 
 		bool isOpaque = !hasAlpha && !(hasGlow && settings.InteriorSun);
@@ -1813,9 +1813,11 @@ void Raytracing::UpdateModelBLAS(Model* model)
 	for (auto i = 0; i < shapeCount; i++) {
 		auto& shape = shapes[i];
 
+		bool hasAlpha = shape->flags & (Flags::AlphaBlend | Flags::AlphaTest);
+
 		geometryDescs[i] = {
 			.Type = D3D12_RAYTRACING_GEOMETRY_TYPE_TRIANGLES,
-			.Flags = shape->flags & Flags::Alpha ? D3D12_RAYTRACING_GEOMETRY_FLAG_NONE : D3D12_RAYTRACING_GEOMETRY_FLAG_OPAQUE,
+			.Flags = hasAlpha ? D3D12_RAYTRACING_GEOMETRY_FLAG_NONE : D3D12_RAYTRACING_GEOMETRY_FLAG_OPAQUE,
 			.Triangles = {
 				.Transform3x4 = 0,
 				.IndexFormat = DXGI_FORMAT_R16_UINT,

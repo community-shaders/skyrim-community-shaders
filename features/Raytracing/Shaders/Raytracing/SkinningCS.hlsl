@@ -24,8 +24,8 @@ StructuredBuffer<Skinning> MeshSkinning[]               : register(t0, space3);
 
 namespace Flags
 {
-    static const uint Dynamic = (1 << 1);
-    static const uint Skinned = (1 << 2);
+    static const uint Dynamic = (1 << 2);
+    static const uint Skinned = (1 << 3);
 }
 
 float3x4 GetBoneTransformMatrix(Skinning skinning, float3 pivot, uint boneOffset)

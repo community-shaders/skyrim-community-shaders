@@ -392,7 +392,7 @@ void Shape::BuildMaterial(const RE::BSGeometry::GEOMETRY_RUNTIME_DATA& geometryR
 		auto* property = geometryRuntimeData.properties[State::kProperty].get();
 
 		if (property && property->GetType() == RE::NiProperty::Type::kAlpha) {
-			flags |= Flags::Alpha;
+			flags |= Flags::AlphaBlend;
 		}
 
 		if (property; auto* lightingShaderProp = netimmerse_cast<RE::BSLightingShaderProperty*>(property)) {
@@ -420,6 +420,18 @@ void Shape::BuildMaterial(const RE::BSGeometry::GEOMETRY_RUNTIME_DATA& geometryR
 				shaderType = RE::BSShader::Type::Lighting;
 
 				logger::debug("[RT] BuildMaterial - [Effect] BSLightingShaderProperty Flags: {}", GetFlagsString<EShaderPropertyFlag>(lightingShaderProp->flags.underlying()));
+
+				// Set alpha flags
+				auto alphaProperty = property->GetRTTI() == globals::rtti::NiAlphaPropertyRTTI.get() ? static_cast<RE::NiAlphaProperty*>(property) : nullptr;
+				if (lightingShaderProp->alpha < 0.999f || (alphaProperty && alphaProperty->GetAlphaBlending())) {
+					flags |= Flags::AlphaBlend;
+				} else if (alphaProperty && alphaProperty->GetAlphaTesting()) {
+					flags &= ~Flags::AlphaBlend;
+					flags |= Flags::AlphaTest;
+				} else {
+					flags &= ~Flags::AlphaBlend;
+					flags &= ~Flags::AlphaTest;
+				}
 
 				// This is always nullptr :(
 				if (auto& effectData = lightingShaderProp->effectData) {
