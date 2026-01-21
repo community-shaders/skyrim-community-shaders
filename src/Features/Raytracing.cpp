@@ -901,6 +901,9 @@ void Raytracing::SetupResources()
 		depthTexture = eastl::make_unique<WrappedResource>(texDesc, d3d11Device.get(), d3d12Device.get());
 		DX::ThrowIfFailed(depthTexture->resource->SetName(L"Depth texture"));
 
+		auto barrier = CD3DX12_RESOURCE_BARRIER::Transition(depthTexture->resource.get(), D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+		commandList->ResourceBarrier(1, &barrier);
+
 		D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
 		srvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
 		srvDesc.Format = texDesc.Format;
@@ -962,11 +965,19 @@ void Raytracing::SetupResources()
 			mainTexture = eastl::make_unique<WrappedResource>(texDesc, d3d11Device.get(), d3d12Device.get());
 			DX::ThrowIfFailed(mainTexture->resource->SetName(L"Main Texture"));
 
-			D3D12_UNORDERED_ACCESS_VIEW_DESC uavDesc = {};
-			uavDesc.ViewDimension = D3D12_UAV_DIMENSION_TEXTURE2D;
-			uavDesc.Format = texDesc.Format;
+			D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
+			srvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
+			srvDesc.Format = texDesc.Format;
+			srvDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
+			srvDesc.Texture2D.MostDetailedMip = 0;
+			srvDesc.Texture2D.MipLevels = texDesc.MipLevels;
+			srvDesc.Texture2D.PlaneSlice = 0;
+			srvDesc.Texture2D.ResourceMinLODClamp = 0.0f;
 
-			d3d12Device->CreateUnorderedAccessView(mainTexture->resource.get(), nullptr, &uavDesc, giHeap->CPUHandle(GIHeap::Slot::Main));
+			d3d12Device->CreateShaderResourceView(mainTexture->resource.get(), &srvDesc, giHeap->CPUHandle(GIHeap::Slot::Main)); 
+
+			auto barrier = CD3DX12_RESOURCE_BARRIER::Transition(mainTexture->resource.get(), D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+			commandList->ResourceBarrier(1, &barrier);
 		}
 	}
 
@@ -1125,7 +1136,7 @@ void Raytracing::InitRR()
 	pref.flags = sl::PreferenceFlags::eUseManualHooking;
 	//sl::PreferenceFlags::eUseFrameBasedResourceTagging;
 
-	pref.logLevel = sl::LogLevel::eOff;
+	//pref.logLevel = sl::LogLevel::eOff;
 
 	slInit = (PFun_slInit*)GetProcAddress(interposer, "slInit");
 	slGetNewFrameToken = (PFun_slGetNewFrameToken*)GetProcAddress(interposer, "slGetNewFrameToken");
@@ -2466,11 +2477,11 @@ void Raytracing::UpdateInstances()
 	blasInstanceBuffer->Upload(commandList.get());
 
 	instanceBuffer->UpdateList(instanceBufferData.data(), std::min(instanceBufferData.size(), (size_t)RTConstants::MAX_INSTANCES));
-	instanceBuffer->Upload(commandList.get());
+	instanceBuffer->Upload(commandList.get(), 0, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
 
-	materialBuffer->Upload(commandList.get());
+	materialBuffer->Upload(commandList.get(), 0, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
 
-	indirectionBuffer->Upload(commandList.get());
+	indirectionBuffer->Upload(commandList.get(), D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
 }
 
 auto GetFrustumCorners2(const RE::NiFrustum& frustum)
@@ -2925,7 +2936,7 @@ void Raytracing::DrawRTGI()
 		skinningPipeline->ClearQueue();
 
 	// Upload buffers
-	lightBuffer->Upload(commandList.get());
+	lightBuffer->Upload(commandList.get(), 0, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
 
 	if (UpdateRenderSize())
 		SetupOutputRT();
@@ -3113,8 +3124,8 @@ void Raytracing::DrawRTGI()
 					uint32_t state = settings.PathTracing ? D3D12_RESOURCE_STATE_UNORDERED_ACCESS : D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE;
 
 					sl::Resource colorIn = { sl::ResourceType::eTex2d, outputTexture->resource.get(), D3D12_RESOURCE_STATE_UNORDERED_ACCESS };
-					sl::Resource colorOut = { sl::ResourceType::eTex2d, mainTexture->resource.get(), D3D12_RESOURCE_STATE_UNORDERED_ACCESS };
-					sl::Resource depth = { sl::ResourceType::eTex2d, depthTexture->resource.get(), D3D12_RESOURCE_STATE_COMMON };
+					sl::Resource colorOut = { sl::ResourceType::eTex2d, mainTexture->resource.get(), D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE };
+					sl::Resource depth = { sl::ResourceType::eTex2d, depthTexture->resource.get(), D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE };
 					sl::Resource mvec = { sl::ResourceType::eTex2d, motionVectorsTexture->resource.get(), 0 };
 					sl::Resource diffuseAlbedo = { sl::ResourceType::eTex2d, settings.PathTracing ? diffuseAlbedoPathTracingTexture->resource.get() : diffuseAlbedoTexture->resource.get(), state };
 					sl::Resource specularAlbedo = { sl::ResourceType::eTex2d, specularAlbedoTexture->resource.get(), D3D12_RESOURCE_STATE_UNORDERED_ACCESS };
@@ -3145,11 +3156,20 @@ void Raytracing::DrawRTGI()
 			} else
 #endif
 			{
+				auto barrier = CD3DX12_RESOURCE_BARRIER::Transition(mainTexture->resource.get(), D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_COPY_DEST);
+				commandList->ResourceBarrier(1, &barrier);
+
 				outputTexture->TransitionBarrier(commandList.get(), D3D12_RESOURCE_STATE_COPY_SOURCE);
 				commandList->CopyResource(mainTexture->resource.get(), outputTexture->resource.get());
 				outputTexture->TransitionBarrier(commandList.get(), D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+
+				barrier = CD3DX12_RESOURCE_BARRIER::Transition(mainTexture->resource.get(), D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+				commandList->ResourceBarrier(1, &barrier);
 			}
 		} else {
+			auto barrier = CD3DX12_RESOURCE_BARRIER::Transition(mainTexture->resource.get(), D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_COPY_DEST);
+			commandList->ResourceBarrier(1, &barrier);
+
 			if (settings.DebugOutput == DebugOutput::Output) {
 				outputTexture->TransitionBarrier(commandList.get(), D3D12_RESOURCE_STATE_COPY_SOURCE);
 				commandList->CopyResource(mainTexture->resource.get(), outputTexture->resource.get());
@@ -3202,6 +3222,9 @@ void Raytracing::DrawRTGI()
 				auto transitionNonPixelRes = CD3DX12_RESOURCE_BARRIER::Transition(diffuseAlbedoProxy, D3D12_RESOURCE_STATE_COPY_SOURCE, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
 				commandList->ResourceBarrier(1, &transitionNonPixelRes);
 			}
+
+			barrier = CD3DX12_RESOURCE_BARRIER::Transition(mainTexture->resource.get(), D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+			commandList->ResourceBarrier(1, &barrier);
 		}
 
 		DX::ThrowIfFailed(commandList->Close());
@@ -3702,6 +3725,7 @@ void Raytracing::InitD3D12(ID3D11Device* ppDevice, ID3D11DeviceContext* pImmedia
 
 			DX::ThrowIfFailed(allocator->CreatePool(&poolDesc, dynamicVertexPool.put()));
 			DX::ThrowIfFailed(allocator->CreatePool(&poolDesc, vertexPool.put()));
+			DX::ThrowIfFailed(allocator->CreatePool(&poolDesc, vertexCopyPool.put()));
 			DX::ThrowIfFailed(allocator->CreatePool(&poolDesc, skinningPool.put()));
 			DX::ThrowIfFailed(allocator->CreatePool(&poolDesc, trianglePool.put()));
 
@@ -3723,8 +3747,6 @@ void Raytracing::InitD3D12(ID3D11Device* ppDevice, ID3D11DeviceContext* pImmedia
 
 void Raytracing::CreateRootSignature()
 {
-	auto unboundTableFlags = D3D12_DESCRIPTOR_RANGE_FLAG_DATA_VOLATILE | D3D12_DESCRIPTOR_RANGE_FLAG_DESCRIPTORS_VOLATILE;  // D3D12_DESCRIPTOR_RANGE_FLAG_DATA_VOLATILE
-
 	// UAV range
 	giHeap->CreateTable(
 		GIHeap::Table::UAV,
@@ -3743,35 +3765,35 @@ void Raytracing::CreateRootSignature()
 	giHeap->CreateTable(
 		GIHeap::Table::SRV,
 		D3D12_DESCRIPTOR_RANGE_TYPE_SRV,
-		{ { GIHeap::Slot::Main, 1, 0, D3D12_DESCRIPTOR_RANGE_FLAG_DESCRIPTORS_VOLATILE },
-			{ GIHeap::Slot::Depth, 1, 0, D3D12_DESCRIPTOR_RANGE_FLAG_DESCRIPTORS_VOLATILE },
-			{ GIHeap::Slot::Albedo, 1, 0, D3D12_DESCRIPTOR_RANGE_FLAG_DESCRIPTORS_VOLATILE },
-			{ GIHeap::Slot::NormalRoughness, 1, 0, D3D12_DESCRIPTOR_RANGE_FLAG_DESCRIPTORS_VOLATILE },
-			{ GIHeap::Slot::GNMD, 1, 0, D3D12_DESCRIPTOR_RANGE_FLAG_DESCRIPTORS_VOLATILE },
-			{ GIHeap::Slot::TLAS, 1, 0, D3D12_DESCRIPTOR_RANGE_FLAG_DESCRIPTORS_VOLATILE },
-			{ GIHeap::Slot::SkyHemisphere, 1, 0, D3D12_DESCRIPTOR_RANGE_FLAG_DESCRIPTORS_VOLATILE },
-			{ GIHeap::Slot::Lights, 1, 0, D3D12_DESCRIPTOR_RANGE_FLAG_DESCRIPTORS_VOLATILE },
-			{ GIHeap::Slot::Materials, 1, 0, D3D12_DESCRIPTOR_RANGE_FLAG_DATA_VOLATILE | D3D12_DESCRIPTOR_RANGE_FLAG_DESCRIPTORS_VOLATILE },
-			{ GIHeap::Slot::Instances, 1, 0, D3D12_DESCRIPTOR_RANGE_FLAG_DATA_VOLATILE | D3D12_DESCRIPTOR_RANGE_FLAG_DESCRIPTORS_VOLATILE },
-			{ GIHeap::Slot::Indirection, 1, 0, D3D12_DESCRIPTOR_RANGE_FLAG_DATA_VOLATILE | D3D12_DESCRIPTOR_RANGE_FLAG_DESCRIPTORS_VOLATILE } });
+		{ { GIHeap::Slot::Main, 1, 0 },
+			{ GIHeap::Slot::Depth, 1, 0 },
+			{ GIHeap::Slot::Albedo, 1, 0 },
+			{ GIHeap::Slot::NormalRoughness, 1, 0 },
+			{ GIHeap::Slot::GNMD, 1, 0 },
+			{ GIHeap::Slot::TLAS, 1, 0 },
+			{ GIHeap::Slot::SkyHemisphere, 1, 0 },
+			{ GIHeap::Slot::Lights, 1, 0 },
+			{ GIHeap::Slot::Materials, 1, 0 },
+			{ GIHeap::Slot::Instances, 1, 0 },
+			{ GIHeap::Slot::Indirection, 1, 0 } });
 
 	// Vertex buffers (unbounded)
 	giHeap->CreateTable(
 		GIHeap::Table::VertexBuffer,
 		D3D12_DESCRIPTOR_RANGE_TYPE_SRV,
-		{ { GIHeap::Slot::Vertices, UINT_MAX, 1, unboundTableFlags } });
+		{ { GIHeap::Slot::Vertices, UINT_MAX, 1, D3D12_DESCRIPTOR_RANGE_FLAG_DESCRIPTORS_VOLATILE } });
 
 	// Triangle buffers (unbounded)
 	giHeap->CreateTable(
 		GIHeap::Table::TriangleBuffer,
 		D3D12_DESCRIPTOR_RANGE_TYPE_SRV,
-		{ { GIHeap::Slot::Triangles, UINT_MAX, 2, unboundTableFlags } });
+		{ { GIHeap::Slot::Triangles, UINT_MAX, 2, D3D12_DESCRIPTOR_RANGE_FLAG_DESCRIPTORS_VOLATILE } });
 
 	// Textures (unbounded)
 	giHeap->CreateTable(
 		GIHeap::Table::Textures,
 		D3D12_DESCRIPTOR_RANGE_TYPE_SRV,
-		{ { GIHeap::Slot::Textures, UINT_MAX, 3, unboundTableFlags } });
+		{ { GIHeap::Slot::Textures, UINT_MAX, 3, D3D12_DESCRIPTOR_RANGE_FLAG_DESCRIPTORS_VOLATILE } });
 
 	auto rootParameters = giHeap->GetRootParameters();
 

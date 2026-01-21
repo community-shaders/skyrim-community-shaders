@@ -62,8 +62,8 @@ struct Instance
 				if (updateFlags & Flags::Skinned) {
 					auto& skinInstance = shape->geometry->GetGeometryRuntimeData().skinInstance;
 
-					shape->boneMatrices.clear();
-					shape->boneMatrices.resize(skinInstance->numMatrices);
+					if (shape->boneMatrices.empty())
+						shape->boneMatrices.resize(skinInstance->numMatrices);
 
 					float3x4* boneMatricesArray = reinterpret_cast<float3x4*>(skinInstance->boneMatrices);
 

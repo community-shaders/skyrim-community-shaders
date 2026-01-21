@@ -655,6 +655,7 @@ struct Raytracing : public OverlayFeature
 
 	winrt::com_ptr<D3D12MA::Pool> dynamicVertexPool = nullptr;
 	winrt::com_ptr<D3D12MA::Pool> vertexPool = nullptr;
+	winrt::com_ptr<D3D12MA::Pool> vertexCopyPool = nullptr;
 	winrt::com_ptr<D3D12MA::Pool> skinningPool = nullptr;
 	winrt::com_ptr<D3D12MA::Pool> trianglePool = nullptr;
 

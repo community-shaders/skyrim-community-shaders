@@ -49,7 +49,10 @@ public:
 	eastl::vector<Triangle> triangles;
 
 	eastl::unique_ptr<DX12::StructuredBufferUploadMA<float4>> dynamicPositionBuffer = nullptr;
+
 	eastl::unique_ptr<DX12::StructuredBufferUploadMA<Vertex>> vertexBuffer = nullptr;
+	eastl::unique_ptr<DX12::StructuredBufferUploadMA<Vertex>> vertexCopyBuffer = nullptr;
+
 	eastl::unique_ptr<DX12::StructuredBufferUploadMA<Skinning>> skinningBuffer = nullptr;
 	eastl::unique_ptr<DX12::StructuredBufferUploadMA<Triangle>> triangleBuffer = nullptr;
 

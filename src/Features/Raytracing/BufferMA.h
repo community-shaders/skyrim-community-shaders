@@ -277,11 +277,8 @@ namespace DX12
 		{
 			D3D12_RESOURCE_STATES state = this->state;
 
-			// D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE
-
 			this->TransitionBarrier(commandList, D3D12_RESOURCE_STATE_COPY_DEST);
 			commandList->CopyResource(this->resource.get(), uploadResource[uploadIndex].get());
-			//commandList->CopyBufferRegion(this->resource.get(), 0, uploadBuffer.get(), 0, sizeof(T) * this->count);
 			this->TransitionBarrier(commandList, finalState != D3D12_RESOURCE_STATE_COMMON ? finalState : state);
 		}
 

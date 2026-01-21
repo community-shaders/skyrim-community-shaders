@@ -684,12 +684,12 @@ void Shape::CreateBuffers(const std::wstring& name)
 		dynamicPositionBuffer->CreateSRV(skinningHeap->CPUHandle(SkinningHeap::Slot::DynamicVertices, allocation->GetIndex()));
 	}
 
+	bool updatable = (flags & Flags::Dynamic) || (flags & Flags::Skinned);
+
 	// Vertices
 	{
-		bool hasUAV = (flags & Flags::Dynamic) || (flags & Flags::Skinned);
-
 		allocDesc.CustomPool = rt.vertexPool.get();
-		vertexBuffer = eastl::make_unique<DX12::StructuredBufferUploadMA<Vertex>>(device, allocator, allocDesc, uploadAllocDesc, vertexCount, hasUAV);
+		vertexBuffer = eastl::make_unique<DX12::StructuredBufferUploadMA<Vertex>>(device, allocator, allocDesc, uploadAllocDesc, vertexCount, updatable);
 
 		vertexBuffer->UpdateList(vertices.data(), vertexCount);
 		DX::ThrowIfFailed(vertexBuffer->resource->SetName(std::format(L"Vertex Buffer [{}] - {}", allocation->GetIndex(), name).c_str()));
@@ -700,7 +700,7 @@ void Shape::CreateBuffers(const std::wstring& name)
 		vertexBuffer->Upload(commandList, 0, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
 
 		// UAV
-		if (hasUAV) {
+		if (updatable) {
 			D3D12_UNORDERED_ACCESS_VIEW_DESC uavDesc = {};
 			uavDesc.ViewDimension = D3D12_UAV_DIMENSION_BUFFER;
 			uavDesc.Format = DXGI_FORMAT_UNKNOWN;
@@ -724,6 +724,32 @@ void Shape::CreateBuffers(const std::wstring& name)
 			vbDesc.Buffer.Flags = D3D12_BUFFER_SRV_FLAG_NONE;
 
 			device->CreateShaderResourceView(vertexBuffer->resource.get(), &vbDesc, giHeap->CPUHandle(GIHeap::Slot::Vertices, allocation->GetIndex()));
+		}
+	}
+
+	// Vertices Copy
+	if (updatable)
+	{
+		allocDesc.CustomPool = rt.vertexCopyPool.get();
+		vertexCopyBuffer = eastl::make_unique<DX12::StructuredBufferUploadMA<Vertex>>(device, allocator, allocDesc, uploadAllocDesc, vertexCount);
+
+		vertexCopyBuffer->UpdateList(vertices.data(), vertexCount);
+		DX::ThrowIfFailed(vertexCopyBuffer->resource->SetName(std::format(L"Vertex Copy Buffer [{}] - {}", allocation->GetIndex(), name).c_str()));
+
+		vertexCopyBuffer->Upload(commandList, 0, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+
+		// SRV
+		{
+			D3D12_SHADER_RESOURCE_VIEW_DESC vbDesc = {};
+			vbDesc.ViewDimension = D3D12_SRV_DIMENSION_BUFFER;
+			vbDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
+			vbDesc.Format = DXGI_FORMAT_UNKNOWN;
+			vbDesc.Buffer.FirstElement = 0;
+			vbDesc.Buffer.NumElements = vertexCount;
+			vbDesc.Buffer.StructureByteStride = sizeof(Vertex);
+			vbDesc.Buffer.Flags = D3D12_BUFFER_SRV_FLAG_NONE;
+
+			device->CreateShaderResourceView(vertexCopyBuffer->resource.get(), &vbDesc, skinningHeap->CPUHandle(SkinningHeap::Slot::Vertices, allocation->GetIndex()));
 		}
 	}
 

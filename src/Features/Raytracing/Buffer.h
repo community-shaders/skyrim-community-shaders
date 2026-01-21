@@ -128,7 +128,7 @@ namespace DX12
 				IID_PPV_ARGS(&uploadResource)));
 		}
 
-		void Update(void const* src_data, size_t data_size)
+		void Update(void const* src_data, size_t data_size) const
 		{
 			void* pData;
 			DX::ThrowIfFailed(uploadResource->Map(0, &readRange, &pData));
@@ -137,11 +137,13 @@ namespace DX12
 			uploadResource->Unmap(0, &writeRange);
 		}
 
-		void Upload(ID3D12GraphicsCommandList4* commandList)
+		void Upload(ID3D12GraphicsCommandList4* commandList, D3D12_RESOURCE_STATES finalState = D3D12_RESOURCE_STATE_COMMON)
 		{
+			D3D12_RESOURCE_STATES initialState = this->state;
+
 			this->TransitionBarrier(commandList, D3D12_RESOURCE_STATE_COPY_DEST);
 			commandList->CopyBufferRegion(this->resource.get(), 0, uploadResource.get(), 0, size);
-			this->TransitionBarrier(commandList, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+			this->TransitionBarrier(commandList, finalState != D3D12_RESOURCE_STATE_COMMON ? finalState : initialState);
 		}
 
 		winrt::com_ptr<ID3D12Resource> uploadResource = nullptr;
@@ -417,13 +419,13 @@ namespace DX12
 			Update(srcData, sizeof(T) * localCount, 0, uploadIndex);
 		}
 
-		void Upload(ID3D12GraphicsCommandList4* commandList, uint uploadIndex = 0)
+		void Upload(ID3D12GraphicsCommandList4* commandList, uint uploadIndex = 0, D3D12_RESOURCE_STATES finalState = D3D12_RESOURCE_STATE_COMMON)
 		{
 			D3D12_RESOURCE_STATES state = this->state;
 
 			this->TransitionBarrier(commandList, D3D12_RESOURCE_STATE_COPY_DEST);
 			commandList->CopyResource(this->resource.get(), uploadBuffer[uploadIndex].get());
-			this->TransitionBarrier(commandList, state);
+			this->TransitionBarrier(commandList, finalState != D3D12_RESOURCE_STATE_COMMON ? finalState : state);
 		}
 
 		void UploadRegion(ID3D12GraphicsCommandList4* commandList, uint64_t dataSize, uint64_t offset, uint uploadIndex = 0)

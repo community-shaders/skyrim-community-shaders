@@ -17,9 +17,10 @@ StructuredBuffer<BoneMatrix> BoneMatrices               : register(t1, space0);
 
 StructuredBuffer<float4> DynamicVertices[]              : register(t0, space1);
 
-StructuredBuffer<Skinning> MeshSkinning[]               : register(t0, space2);
+StructuredBuffer<Vertex> Vertices[]                     : register(t0, space2);
 
-//StructuredBuffer<Vertex> Vertices[]                     : register(t0, space2);
+StructuredBuffer<Skinning> MeshSkinning[]               : register(t0, space3);
+
 
 namespace Flags
 {
@@ -81,8 +82,7 @@ void main(uint3 DTid : SV_DispatchThreadID)
 
     uint shapeIndex = NonUniformResourceIndex(updateData.index);
 
-    // This contains the original uploaded vertex
-    Vertex vertex = OutputVertices[shapeIndex][vertexIndex];
+    Vertex vertex = Vertices[shapeIndex][vertexIndex];
 
     if (updateData.flags & Flags::Dynamic)
     {
