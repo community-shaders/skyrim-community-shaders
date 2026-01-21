@@ -39,7 +39,8 @@ namespace ShadowSampling
 	{
 		ShadowData sD = SharedShadowData[0];
 
-		float fadeFactor = 1.0 - pow(saturate(dot(positionWS, positionWS) / sD.ShadowLightParam.z), 8);
+		float fadeDistance = saturate(dot(positionWS, positionWS) / sD.ShadowLightParam.z);
+		float fadeFactor = 1.0 - pow(fadeDistance, 8);
 		uint sampleCount = ceil(8.0 * (1.0 - saturate(length(positionWS) / sqrt(sD.ShadowLightParam.z))));
 
 		if (sampleCount == 0)
@@ -65,8 +66,8 @@ namespace ShadowSampling
 				float r = rnd.z;
 				float4 sincos_phi;
 				sincos(phi, sincos_phi.y, sincos_phi.x);
-				float3 sampleOffset = viewDirection * (float(i) - float(sampleCount) * 0.5) * 64 * rcpSampleCount;
-				sampleOffset += float3(r * sin_theta * sincos_phi.x, r * sin_theta * sincos_phi.y, r * cos_theta) * 64;
+				float3 sampleOffset = viewDirection * (float(i) - float(sampleCount) * 0.5) * 16 * rcpSampleCount;
+				sampleOffset += float3(r * sin_theta * sincos_phi.x, r * sin_theta * sincos_phi.y, r * cos_theta) * 16;
 
 				uint cascadeIndex = sD.EndSplitDistances.x < GetShadowDepth(positionWS.xyz + viewDirection * (sampleOffset.x + sampleOffset.y), eyeIndex);  // Stochastic cascade sampling
 
@@ -84,7 +85,7 @@ namespace ShadowSampling
 
 	float Get2DFilteredShadowCascade(float noise, float2x2 rotationMatrix, float sampleOffsetScale, float2 baseUV, float cascadeIndex, float compareValue, uint eyeIndex)
 	{
-		const uint sampleCount = 16;
+		const uint sampleCount = 8;
 
 		float layerIndexRcp = rcp(1 + cascadeIndex);
 
@@ -95,7 +96,7 @@ namespace ShadowSampling
 #endif
 
 		for (uint sampleIndex = 0; sampleIndex < sampleCount; ++sampleIndex) {
-			float2 sampleOffset = mul(Random::PoissonSampleOffsets16[sampleIndex], rotationMatrix);
+			float2 sampleOffset = mul(Random::SpiralSampleOffsets8[sampleIndex], rotationMatrix);
 
 			float2 sampleUV = layerIndexRcp * sampleOffset * sampleOffsetScale + baseUV;
 
@@ -160,16 +161,13 @@ namespace ShadowSampling
 		return worldShadow;
 	}
 
-	float GetEffectShadow(float3 worldPosition, float3 viewDirection, float2 screenPosition, uint eyeIndex, out bool isWorldShadow)
+	float GetEffectShadow(float3 worldPosition, float3 viewDirection, float2 screenPosition, uint eyeIndex)
 	{
-		isWorldShadow = false;
 		float worldShadow = GetWorldShadow(worldPosition, FrameBuffer::CameraPosAdjust[eyeIndex].xyz, eyeIndex);
 		if (worldShadow != 0.0) {
 			float shadow = Get3DFilteredShadow(worldPosition, viewDirection, screenPosition, eyeIndex);
-			isWorldShadow = shadow >= worldShadow;
-			return min(worldShadow, shadow);
+			return worldShadow * shadow;
 		}
-		isWorldShadow = true;
 		return worldShadow;
 	}
 

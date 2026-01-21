@@ -148,9 +148,8 @@ public:
 		InWorld = 1 << 0,
 		IsReflections = 1 << 1,
 		IsBeastRace = 1 << 2,
-		EffectShadows = 1 << 3,
-		IsTree = 1 << 4,
-		GrassSphereNormal = 1 << 5
+		IsTree = 1 << 3,
+		GrassSphereNormal = 1 << 4
 	};
 
 	enum class ExtraFeatureDescriptors : uint32_t

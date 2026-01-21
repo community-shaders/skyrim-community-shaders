@@ -549,84 +549,58 @@ float3 GetLightingColor(float3 msPosition, float3 worldPosition, float4 screenPo
 
 	float3 color = DLightColor.xyz * Color::EffectLightingMult();
 
-	if ((Permutation::ExtraShaderDescriptor & Permutation::ExtraFlags::EffectShadows)) {
-		float llDirLightMult = (SharedData::linearLightingSettings.enableLinearLighting && !SharedData::linearLightingSettings.isDirLightLinear) ? SharedData::linearLightingSettings.dirLightMult : 1.0f;
-		float3 dirLightColor = Color::DirectionalLight(SharedData::DirLightColor.xyz / max(llDirLightMult, 1e-5), SharedData::linearLightingSettings.isDirLightLinear) * llDirLightMult * 0.5 * Color::EffectLightingMult();
-		float3 ambientColor = max(0, mul(SharedData::DirectionalAmbient, float4(0, 0, 1, 1)));
+	float llDirLightMult = (SharedData::linearLightingSettings.enableLinearLighting && !SharedData::linearLightingSettings.isDirLightLinear) ? SharedData::linearLightingSettings.dirLightMult : 1.0f;
+	float3 dirLightColor = Color::DirectionalLight(SharedData::DirLightColor.xyz / max(llDirLightMult, 1e-5), SharedData::linearLightingSettings.isDirLightLinear) * llDirLightMult * Color::EffectLightingMult();
+	float3 ambientColor = max(0, mul(SharedData::DirectionalAmbient, float4(0, 0, 1, 1)));
 
 #		if defined(IBL)
-		if (SharedData::iblSettings.EnableDiffuseIBL && (!SharedData::InInterior || SharedData::iblSettings.EnableInterior)) {
-			ambientColor *= SharedData::iblSettings.DALCAmount;
-		}
-#		endif
-
-		color = ambientColor;
-
-#		if defined(SKYLIGHTING)
-#			if defined(VR)
-		float3 positionMSSkylight = worldPosition + FrameBuffer::CameraPosAdjust[eyeIndex].xyz - FrameBuffer::CameraPosAdjust[0].xyz;
-#			else
-		float3 positionMSSkylight = worldPosition;
-#			endif
-
-		sh2 skylightingSH = Skylighting::sampleNoBias(SharedData::skylightingSettings, Skylighting::SkylightingProbeArray, positionMSSkylight);
-		float skylightingDiffuse = SphericalHarmonics::FuncProductIntegral(skylightingSH, SphericalHarmonics::EvaluateCosineLobe(float3(0, 0, 1))) / Math::PI;
-		skylightingDiffuse = saturate(skylightingDiffuse);
-		skylightingDiffuse = lerp(1.0, skylightingDiffuse, Skylighting::getFadeOutFactor(worldPosition));
-		skylightingDiffuse = Skylighting::mixDiffuse(SharedData::skylightingSettings, skylightingDiffuse);
-
-		color = Color::IrradianceToLinear(color);
-		color *= skylightingDiffuse;
-		color = Color::IrradianceToGamma(color);
-#		endif
-
-#		if defined(IBL)
-		float3 iblColor = 0;
-		if (SharedData::iblSettings.EnableDiffuseIBL) {
-			if (!SharedData::InInterior || SharedData::iblSettings.EnableInterior)
-			{
-#			if defined(SKYLIGHTING)
-				iblColor += Color::Saturation(ImageBasedLighting::GetIBLColor(float3(0, 0, -1), skylightingDiffuse), SharedData::iblSettings.IBLSaturation) * SharedData::iblSettings.DiffuseIBLScale;
-#			else
-				iblColor += Color::Saturation(ImageBasedLighting::GetIBLColor(float3(0, 0, -1)), SharedData::iblSettings.IBLSaturation) * SharedData::iblSettings.DiffuseIBLScale;
-#			endif
-				color += Color::IrradianceToGamma(iblColor);
-			}
-		}
-#		endif
-
-		if (!SharedData::InInterior){
-			bool isWorldShadow = false;
-			float shadow = ShadowSampling::GetEffectShadow(worldPosition.xyz, normalize(worldPosition.xyz), screenPosition.xy, eyeIndex, isWorldShadow);
-			color += dirLightColor * shadow;
-			// Do not denoise world shadows
-			if (!isWorldShadow)
-				shadowVariance = ComputeShadowVariance(shadow);
-		} else {
-			color += dirLightColor;
-		}
-	} else {
-#		if defined(SKYLIGHTING)
-#			if defined(VR)
-		float3 positionMSSkylight = worldPosition + FrameBuffer::CameraPosAdjust[eyeIndex].xyz - FrameBuffer::CameraPosAdjust[0].xyz;
-#			else
-		float3 positionMSSkylight = worldPosition;
-#			endif
-
-		sh2 skylightingSH = Skylighting::sampleNoBias(SharedData::skylightingSettings, Skylighting::SkylightingProbeArray, positionMSSkylight);
-
-		if (!SharedData::InInterior) {
-			float skylightingDiffuse = SphericalHarmonics::FuncProductIntegral(skylightingSH, SphericalHarmonics::EvaluateCosineLobe(float3(0, 0, 1))) / Math::PI;
-			skylightingDiffuse = saturate(skylightingDiffuse);
-			skylightingDiffuse = lerp(1.0, skylightingDiffuse, Skylighting::getFadeOutFactor(worldPosition));
-			skylightingDiffuse = Skylighting::mixDiffuse(SharedData::skylightingSettings, skylightingDiffuse);
-
-			color = Color::IrradianceToLinear(color);
-			color *= skylightingDiffuse;
-			color = Color::IrradianceToGamma(color);
-		}
-#		endif
+	if (SharedData::iblSettings.EnableDiffuseIBL && (!SharedData::InInterior || SharedData::iblSettings.EnableInterior)) {
+		ambientColor *= SharedData::iblSettings.DALCAmount;
 	}
+#		endif
+
+	color -= ambientColor;
+	color = max(0, color);
+
+	if (!SharedData::InInterior){
+		bool isWorldShadow = false;
+		float shadow = ShadowSampling::GetEffectShadow(worldPosition.xyz, normalize(worldPosition.xyz), screenPosition.xy, eyeIndex);
+		color *= shadow;
+		shadowVariance = ComputeShadowVariance(shadow);
+	}
+
+#		if defined(SKYLIGHTING)
+#			if defined(VR)
+	float3 positionMSSkylight = worldPosition + FrameBuffer::CameraPosAdjust[eyeIndex].xyz - FrameBuffer::CameraPosAdjust[0].xyz;
+#			else
+	float3 positionMSSkylight = worldPosition;
+#			endif
+
+	sh2 skylightingSH = Skylighting::sampleNoBias(SharedData::skylightingSettings, Skylighting::SkylightingProbeArray, positionMSSkylight);
+	float skylightingDiffuse = SphericalHarmonics::FuncProductIntegral(skylightingSH, SphericalHarmonics::EvaluateCosineLobe(float3(0, 0, 1))) / Math::PI;
+	skylightingDiffuse = saturate(skylightingDiffuse);
+	skylightingDiffuse = lerp(1.0, skylightingDiffuse, Skylighting::getFadeOutFactor(worldPosition));
+	skylightingDiffuse = Skylighting::mixDiffuse(SharedData::skylightingSettings, skylightingDiffuse);
+
+	color = Color::IrradianceToLinear(color);
+	color += ambientColor * skylightingDiffuse;
+	color = Color::IrradianceToGamma(color);
+#		endif
+
+#		if defined(IBL)
+	float3 iblColor = 0;
+	if (SharedData::iblSettings.EnableDiffuseIBL) {
+		if (!SharedData::InInterior || SharedData::iblSettings.EnableInterior)
+		{
+#			if defined(SKYLIGHTING)
+			iblColor += Color::Saturation(ImageBasedLighting::GetIBLColor(float3(0, 0, -1), skylightingDiffuse), SharedData::iblSettings.IBLSaturation) * SharedData::iblSettings.DiffuseIBLScale;
+#			else
+			iblColor += Color::Saturation(ImageBasedLighting::GetIBLColor(float3(0, 0, -1)), SharedData::iblSettings.IBLSaturation) * SharedData::iblSettings.DiffuseIBLScale;
+#			endif
+			color += Color::IrradianceToGamma(iblColor);
+		}
+	}
+#		endif
 
 #		if defined(LIGHT_LIMIT_FIX)
 	if (!(Permutation::ExtraShaderDescriptor & Permutation::ExtraFlags::InWorld))
@@ -703,38 +677,38 @@ PS_OUTPUT main(PS_INPUT input)
 
 #		if defined(LIGHT_LIMIT_FIX)
 	uint lightCount = 0;
-	if (LightingInfluence.x > 0.0) {
-		float3 viewPosition = mul(FrameBuffer::CameraView[eyeIndex], float4(input.WorldPosition.xyz, 1)).xyz;
-		float2 screenUV = FrameBuffer::ViewToUV(viewPosition, true, eyeIndex);
-		bool inWorld = Permutation::ExtraShaderDescriptor & Permutation::ExtraFlags::InWorld;
+	
+	float3 viewPosition = mul(FrameBuffer::CameraView[eyeIndex], float4(input.WorldPosition.xyz, 1)).xyz;
+	float2 screenUV = FrameBuffer::ViewToUV(viewPosition, true, eyeIndex);
+	bool inWorld = Permutation::ExtraShaderDescriptor & Permutation::ExtraFlags::InWorld;
 
-		uint clusterIndex = 0;
-		if (inWorld && LightLimitFix::GetClusterIndex(screenUV, viewPosition.z, clusterIndex)) {
-			lightCount = LightLimitFix::lightGrid[clusterIndex].lightCount;
-			uint lightOffset = LightLimitFix::lightGrid[clusterIndex].offset;
-			[loop] for (uint i = 0; i < lightCount; i++)
-			{
-				uint clusteredLightIndex = LightLimitFix::lightList[lightOffset + i];
-				LightLimitFix::Light light = LightLimitFix::lights[clusteredLightIndex];
-				if (LightLimitFix::IsLightIgnored(light) || light.lightFlags & LightLimitFix::LightFlags::Shadow) {
-					continue;
-				}
-				float3 lightDirection = light.positionWS[eyeIndex].xyz - input.WorldPosition.xyz;
-				float lightDist = length(lightDirection);
+	uint clusterIndex = 0;
+	if (inWorld && LightLimitFix::GetClusterIndex(screenUV, viewPosition.z, clusterIndex)) {
+		lightCount = LightLimitFix::lightGrid[clusterIndex].lightCount;
+		uint lightOffset = LightLimitFix::lightGrid[clusterIndex].offset;
+		[loop] for (uint i = 0; i < lightCount; i++)
+		{
+			uint clusteredLightIndex = LightLimitFix::lightList[lightOffset + i];
+			LightLimitFix::Light light = LightLimitFix::lights[clusteredLightIndex];
+			if (LightLimitFix::IsLightIgnored(light) || light.lightFlags & LightLimitFix::LightFlags::Shadow) {
+				continue;
+			}
+			float3 lightDirection = light.positionWS[eyeIndex].xyz - input.WorldPosition.xyz;
+			float lightDist = length(lightDirection);
 
 #			if defined(ISL)
-				float intensityMultiplier = InverseSquareLighting::GetAttenuation(lightDist, light);
+			float intensityMultiplier = InverseSquareLighting::GetAttenuation(lightDist, light);
 #			else
-				float intensityFactor = saturate(lightDist / light.radius);
-				float intensityMultiplier = 1 - intensityFactor * intensityFactor;
+			float intensityFactor = saturate(lightDist / light.radius);
+			float intensityMultiplier = 1 - intensityFactor * intensityFactor;
 #			endif
 
-				const bool isPointLightLinear = light.lightFlags & LightLimitFix::LightFlags::Linear;
-				float3 lightColor = Color::PointLight(light.color.xyz, isPointLightLinear) * intensityMultiplier * 0.5 * light.fade * Color::EffectLightingMult();
-				propertyColor += lightColor;
-			}
+			const bool isPointLightLinear = light.lightFlags & LightLimitFix::LightFlags::Linear;
+			float3 lightColor = Color::PointLight(light.color.xyz, isPointLightLinear) * intensityMultiplier * 0.5 * light.fade * Color::EffectLightingMult();
+			propertyColor += lightColor;
 		}
 	}
+	
 #		endif
 #	elif defined(MEMBRANE)
 	propertyColor *= 0;
