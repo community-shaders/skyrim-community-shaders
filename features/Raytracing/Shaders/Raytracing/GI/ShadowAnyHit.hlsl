@@ -22,7 +22,7 @@ void main(inout ShadowPayload payload, in BuiltInTriangleIntersectionAttributes 
     
     [branch]
     if (material.Feature == Feature::kGlowMap)
-        alpha = Color::RGBToLuminance(Textures[NonUniformResourceIndex(material.GlowTexture())].SampleLevel(BaseSampler, texCoord, 0).rgb);
+        alpha = 1.0f - Color::RGBToLuminance(Textures[NonUniformResourceIndex(material.GlowTexture())].SampleLevel(BaseSampler, texCoord, 0).rgb);
     else
         alpha = Textures[NonUniformResourceIndex(material.BaseTexture())].SampleLevel(BaseSampler, texCoord, 0).a;
 
