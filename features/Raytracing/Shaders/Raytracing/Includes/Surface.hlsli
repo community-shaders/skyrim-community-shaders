@@ -197,7 +197,7 @@ struct Surface
             }
 
             TransmissionColor = lerp(float3(1.0f, 1.0f, 1.0f), Albedo, alpha);
-            Albedo = float3(0.0f, 0.0f, 0.0f);
+            Albedo *= alpha;
         } else {
             TransmissionColor = float3(0.0f, 0.0f, 0.0f);
         }
@@ -344,6 +344,7 @@ struct Surface
 
         surface.Albedo = float3(1.0f, 1.0f, 1.0f);
         surface.Emissive = float3(0.0f, 0.0f, 0.0f);
+        surface.TransmissionColor = float3(0.0f, 0.0f, 0.0f);
         surface.Roughness = PBR::Defaults::Roughness;
         surface.Metallic = PBR::Defaults::Metallic;
         surface.AO = 1.0f;
@@ -379,6 +380,32 @@ struct Surface
 
         surface.F0 = PBR::F0(surface.F0, surface.Albedo, surface.Metallic);
         surface.IOR = F0toIOR(surface.F0);
+
+#   ifdef DEBUG_GLASS
+        surface.TransmissionColor = 1.0f;
+        surface.Albedo = float3(0.0f, 0.0f, 0.0f);
+        surface.DiffuseAlbedo = float3(0.0f, 0.0f, 0.0f);
+        surface.Emissive = float3(0.0f, 0.0f, 0.0f);
+        surface.Metallic = 0.0f;
+        surface.Roughness = 0.1f;
+        surface.F0 = 0.04f;
+        surface.IOR = 1.5f;
+        surface.Normal = surface.GeomNormal;
+        return surface;
+#   endif
+
+#   ifdef DEBUG_METAL
+        surface.TransmissionColor = 0.0f;
+        surface.Albedo = 0.18f;
+        surface.DiffuseAlbedo = float3(0.0f, 0.0f, 0.0f);
+        surface.Emissive = float3(0.0f, 0.0f, 0.0f);
+        surface.Metallic = 1.0f;
+        surface.Roughness = 0.1f;
+        surface.F0 = 0.04f;
+        surface.IOR = 1.5f;
+        // surface.Normal = surface.GeomNormal;
+        return surface;
+#   endif
 
 #if defined(FULL_MATERIAL)
         surface.SubsurfaceColor = float3(0.0f, 0.0f, 0.0f);
