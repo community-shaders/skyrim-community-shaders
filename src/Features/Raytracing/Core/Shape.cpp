@@ -425,18 +425,20 @@ void Shape::BuildMaterial(const RE::BSGeometry::GEOMETRY_RUNTIME_DATA& geometryR
 				logger::debug("[RT] BuildMaterial - [Effect] BSLightingShaderProperty Flags: {}", GetFlagsString<EShaderPropertyFlag>(lightingShaderProp->flags.underlying()));
 
 				// Set alpha flags
-				auto alphaProperty = property->GetRTTI() == globals::rtti::NiAlphaPropertyRTTI.get() ? static_cast<RE::NiAlphaProperty*>(property) : nullptr;
-				if (lightingShaderProp->alpha < 0.999f || (alphaProperty && alphaProperty->GetAlphaBlending())) {
-					flags |= Flags::AlphaBlending;
-					scalars[3] = lightingShaderProp->alpha;
-					alphaFlags = Material::AlphaFlags::kAlphaBlend;
-				} else if (alphaProperty && alphaProperty->GetAlphaTesting()) {
-					flags &= ~Flags::AlphaBlending;
-					flags |= Flags::AlphaTesting;
-					alphaFlags = Material::AlphaFlags::kAlphaTest;
-				} else {
-					flags &= ~Flags::AlphaBlending;
-					flags &= ~Flags::AlphaTesting;
+				if (flags & Flags::AlphaBlending) {
+					auto alphaProperty = property->GetRTTI() == globals::rtti::NiAlphaPropertyRTTI.get() ? static_cast<RE::NiAlphaProperty*>(property) : nullptr;
+					if (lightingShaderProp->alpha < 0.999f || (alphaProperty && alphaProperty->GetAlphaBlending())) {
+						flags |= Flags::AlphaBlending;
+						scalars[3] = lightingShaderProp->alpha;
+						alphaFlags = Material::AlphaFlags::kAlphaBlend;
+					} else if (alphaProperty && alphaProperty->GetAlphaTesting()) {
+						flags &= ~Flags::AlphaBlending;
+						flags |= Flags::AlphaTesting;
+						alphaFlags = Material::AlphaFlags::kAlphaTest;
+					} else {
+						flags &= ~Flags::AlphaBlending;
+						flags &= ~Flags::AlphaTesting;
+					}
 				}
 
 				// This is always nullptr :(
