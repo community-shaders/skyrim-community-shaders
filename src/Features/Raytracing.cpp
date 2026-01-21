@@ -64,6 +64,7 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	SVGFDiffuse,
 	SVGFSpecular,
 	DisableSkinned,
+	InteriorSun,
 	RAYTRACING_EXTRA_FIELDS)
 
 ////////////////////////////////////////////////////////////////////////////////////
@@ -492,6 +493,8 @@ void Raytracing::DrawAdvancedSettings()
 
 	if (DrawEnumRadio("Lighting Mode", advSettings.LightingMode, nullptr, LightingModeTooltips))
 		recompileReason |= RecompileReason::Advanced;
+
+	ImGui::Checkbox("Interior Sun", &settings.InteriorSun);
 
 	ImGui::PopID();
 
@@ -1710,9 +1713,14 @@ void Raytracing::CommitModel(Model* model)
 	for (auto i = 0; i < meshCount; i++) {
 		auto& shape = shapes[i];
 
+		bool hasAlpha = shape->flags & Flags::Alpha;
+		bool hasGlow = shape->material.Feature == RE::BSShaderMaterial::Feature::kGlowMap;
+
+		bool isOpaque = !hasAlpha && !(hasGlow && settings.InteriorSun);
+
 		geometryDescs[i] = {
 			.Type = D3D12_RAYTRACING_GEOMETRY_TYPE_TRIANGLES,
-			.Flags = shape->flags & Flags::Alpha ? D3D12_RAYTRACING_GEOMETRY_FLAG_NONE : D3D12_RAYTRACING_GEOMETRY_FLAG_OPAQUE,
+			.Flags = isOpaque ? D3D12_RAYTRACING_GEOMETRY_FLAG_OPAQUE : D3D12_RAYTRACING_GEOMETRY_FLAG_NONE,
 			.Triangles = {
 				.Transform3x4 = 0,
 				.IndexFormat = DXGI_FORMAT_R16_UINT,

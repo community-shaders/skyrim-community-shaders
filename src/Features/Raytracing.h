@@ -532,6 +532,7 @@ struct Raytracing : public OverlayFeature
 		bool EnableDebugDevice = false;
 		bool WhiteFurnace = false;
 		bool DisableSkinned = false;
+		bool InteriorSun = true;
 		SHaRCPipeline::Settings SHaRC;
 	} settings;
 
