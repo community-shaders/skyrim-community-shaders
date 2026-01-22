@@ -365,6 +365,7 @@ void HomePageRenderer::RenderFirstTimeSetupDialog()
 	bool hovered = ImGui::IsItemHovered();
 	ImGui::PopID();
 
+	// Set cursor position back for text rendering
 	ImGui::SetCursorScreenPos(buttonPos);
 
 	// Choose color based on state
@@ -382,12 +383,16 @@ void HomePageRenderer::RenderFirstTimeSetupDialog()
 	}
 
 	ImGui::TextColored(hotkeyColor, "%s", hotkeyDisplay.c_str());
+
+	// Reset font scale
 	ImGui::SetWindowFontScale(fontScale);
 
+	// Handle click to start hotkey capture
 	if (clicked && !isCapturing) {
 		menu->settingToggleKey = true;
 	}
 
+	// Show hotkey capture message when in capture mode
 	if (isCapturing) {
 		const char* pressKeyText = "Press any key to set as toggle key...";
 		centerText(pressKeyText);
@@ -405,6 +410,7 @@ void HomePageRenderer::RenderFirstTimeSetupDialog()
 	// Check for Enter or Escape key to close, but only if not capturing a hotkey
 	if ((ImGui::IsKeyPressed(ImGuiKey_Enter) || ImGui::IsKeyPressed(ImGuiKey_Escape)) && !isCapturing) {
 		MarkFirstTimeSetupComplete();
+		// Note: Settings are automatically saved to ensure welcome screen won't show again
 	}
 
 	// Help text with breathing animation
@@ -414,6 +420,8 @@ void HomePageRenderer::RenderFirstTimeSetupDialog()
 	ImGui::SetWindowFontScale(fontScale * 1.35f);
 	centerText(helpText);
 	ImGui::TextColored(ImVec4(1.0f, 1.0f, 1.0f, breathe), "%s", helpText);
+
+	// Reset font scale
 	ImGui::SetWindowFontScale(fontScale);
 
 	ImGui::End();
