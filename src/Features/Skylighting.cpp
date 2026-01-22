@@ -31,8 +31,10 @@ void Skylighting::ResetSkylighting()
 {
 	auto context = globals::d3d::context;
 	UINT clr[1] = { 0 };
+	UINT clrShadow[1] = { 1 };
+
 	context->ClearUnorderedAccessViewUint(texAccumFramesArray->uav.get(), clr);
-	context->ClearUnorderedAccessViewUint(texShadowVisibilityAccumArray->uav.get(), clr);
+	context->ClearUnorderedAccessViewUint(texShadowVisibilityArray->uav.get(), clrShadow);
 	queuedResetSkylighting = false;
 }
 
@@ -115,14 +117,13 @@ void Skylighting::SetupResources()
 		texAccumFramesArray->CreateUAV(uavDesc);
 	}
 
-	// Shadow Visibility Array (R16_FLOAT for smooth 0-1 values)
 	{
 		D3D11_TEXTURE3D_DESC texDesc{
 			.Width = probeArrayDims[0],
 			.Height = probeArrayDims[1],
 			.Depth = probeArrayDims[2],
 			.MipLevels = 1,
-			.Format = DXGI_FORMAT_R16_FLOAT,
+			.Format = DXGI_FORMAT_R16G16B16A16_UINT,
 			.Usage = D3D11_USAGE_DEFAULT,
 			.BindFlags = D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_UNORDERED_ACCESS,
 			.CPUAccessFlags = 0,
