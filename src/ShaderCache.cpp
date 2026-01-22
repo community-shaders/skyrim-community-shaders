@@ -2237,8 +2237,7 @@ namespace SIE
 		ini.SetValue("Cache", "PluginVersion", Plugin::VERSION.string().c_str());
 		globals::state->WriteDiskCacheInfo(ini);
 		ini.SaveFile(L"Data\\ShaderCache\\Info.ini");
-		logger::info("Saved disk cache info (cache version: {}, plugin version: {})", 
-			SHADER_CACHE_VERSION.string(), Plugin::VERSION.string());
+		logger::info("Saved disk cache info (cache version: {}, plugin version: {})", SHADER_CACHE_VERSION.string(), Plugin::VERSION.string());
 	}
 
 	ShaderCache::ShaderCache()
