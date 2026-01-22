@@ -30,7 +30,7 @@ RWTexture3D<sh2> outProbeArray : register(u0);
 RWTexture3D<uint> outAccumFramesArray : register(u1);
 RWTexture3D<uint> outShadowVisibilityBitArray : register(u2);
 RWTexture3D<uint> outShadowVisibilityBitShiftArray : register(u3);
-RWTexture3D<float> outShadowVisibilityArray : register(u4); 
+RWTexture3D<float> outShadowVisibilityArray : register(u4);
 
 SamplerComparisonState comparisonSampler : register(s0);
 
@@ -129,7 +129,7 @@ float Get2DFilteredShadow(float3 positionWS, uint eyeIndex, out bool validShadow
 		outProbeArray[dtid] = unitSH;
 		outAccumFramesArray[dtid] = 0;
 	}
-	
+
 	static const float3 noise3D[32] = {
 		float3(0.247, -0.583, 0.891),
 		float3(-0.672, 0.315, -0.428),
@@ -164,11 +164,11 @@ float Get2DFilteredShadow(float3 positionWS, uint eyeIndex, out bool validShadow
 		float3(0.578, -0.762, -0.614),
 		float3(-0.469, 0.381, 0.947)
 	};
-	
+
 	uint shadowVisibilityBitShift = outShadowVisibilityBitShiftArray[dtid];
 
 	cellCentreMS += noise3D[shadowVisibilityBitShift] * Skylighting::CELL_SIZE;
-	
+
 	float3 viewDirection = FrameBuffer::WorldToView(-normalize(cellCentreMS), false);
 	float2 uv = FrameBuffer::ViewToUV(viewDirection, false);
 
@@ -179,9 +179,9 @@ float Get2DFilteredShadow(float3 positionWS, uint eyeIndex, out bool validShadow
 		uint shadowVisibilityBits = isValid ? outShadowVisibilityBitArray[dtid] : 0;
 
 		shadowVisibilityBits &= ~(1u << shadowVisibilityBitShift);
-		shadowVisibilityBits |= (hasShadowVisibility << shadowVisibilityBitShift);	
-		
-		shadowVisibilityBitShift = (shadowVisibilityBitShift + 1) % 32;	
+		shadowVisibilityBits |= (hasShadowVisibility << shadowVisibilityBitShift);
+
+		shadowVisibilityBitShift = (shadowVisibilityBitShift + 1) % 32;
 
 		float shadowVisibility = float(countbits(shadowVisibilityBits)) / 32.0;
 
