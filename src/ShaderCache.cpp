@@ -2192,18 +2192,6 @@ namespace SIE
 		ini.LoadFile(L"Data\\ShaderCache\\Info.ini");
 		bool valid = true;
 
-		// Check shader cache version
-		if (auto version = ini.GetValue("Cache", "Version")) {
-			if (strcmp(SHADER_CACHE_VERSION.string().c_str(), version) != 0) {
-				logger::info("Disk cache outdated: cache version mismatch (current: {}, cached: {})",
-					SHADER_CACHE_VERSION.string(), version);
-				valid = false;
-			}
-		} else {
-			logger::info("Disk cache outdated: no cache version found");
-			valid = false;
-		}
-
 		// Check plugin version
 		if (auto pluginVersion = ini.GetValue("Cache", "PluginVersion")) {
 			if (strcmp(Plugin::VERSION.string().c_str(), pluginVersion) != 0) {
@@ -2233,11 +2221,10 @@ namespace SIE
 	{
 		CSimpleIniA ini;
 		ini.SetUnicode();
-		ini.SetValue("Cache", "Version", SHADER_CACHE_VERSION.string().c_str());
 		ini.SetValue("Cache", "PluginVersion", Plugin::VERSION.string().c_str());
 		globals::state->WriteDiskCacheInfo(ini);
 		ini.SaveFile(L"Data\\ShaderCache\\Info.ini");
-		logger::info("Saved disk cache info (cache version: {}, plugin version: {})", SHADER_CACHE_VERSION.string(), Plugin::VERSION.string());
+		logger::info("Saved disk cache info (plugin version: {})", Plugin::VERSION.string());
 	}
 
 	ShaderCache::ShaderCache()
