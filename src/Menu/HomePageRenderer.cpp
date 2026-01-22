@@ -345,6 +345,7 @@ void HomePageRenderer::RenderFirstTimeSetupDialog()
 	ImGui::Text("%s", description);
 
 	// Hotkey selection - clickable hotkey text
+	// Show current toggle key and allow user to change it by clicking on it
 	auto& themeSettings = menu->GetTheme();
 	bool isCapturing = menu->settingToggleKey;
 
