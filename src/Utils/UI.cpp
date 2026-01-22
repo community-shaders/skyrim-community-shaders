@@ -636,6 +636,24 @@ namespace Util
 		return lowerText.find(lowerQuery) != std::string::npos;
 	}
 
+	void DrawModalBackground(uint8_t alpha)
+	{
+		auto& io = ImGui::GetIO();
+		ImGui::GetBackgroundDrawList()->AddRectFilled(
+			ImVec2(0, 0),
+			io.DisplaySize,
+			IM_COL32(0, 0, 0, alpha));
+	}
+
+	void DrawBreathingText(const char* text, float speed, float minAlpha, float maxAlpha)
+	{
+		float alphaRange = maxAlpha - minAlpha;
+		float breathe = minAlpha + alphaRange * sinf((float)ImGui::GetTime() * speed);
+		auto& theme = globals::menu->GetTheme().Palette;
+		ImVec4 color = ImVec4(theme.Text.x, theme.Text.y, theme.Text.z, breathe);
+		ImGui::TextColored(color, "%s", text);
+	}
+
 	void DrawSearchIcon(const ImVec2& position, float size, float alpha)
 	{
 		ImDrawList* drawList = ImGui::GetWindowDrawList();

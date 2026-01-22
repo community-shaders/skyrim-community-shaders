@@ -256,10 +256,7 @@ void HomePageRenderer::RenderFirstTimeSetupDialog()
 	io.MouseDrawCursor = true;  // Show ImGui cursor
 
 	// Draw semi-transparent dark overlay behind the dialog for depth
-	ImGui::GetBackgroundDrawList()->AddRectFilled(
-		ImVec2(0, 0),
-		io.DisplaySize,
-		IM_COL32(0, 0, 0, 160));
+	Util::DrawModalBackground();
 
 	// Center the window properly with rounded corners and thin border
 	ImVec2 center = ImVec2(io.DisplaySize.x * 0.5f, io.DisplaySize.y * 0.5f);
@@ -326,6 +323,9 @@ void HomePageRenderer::RenderFirstTimeSetupDialog()
 	auto centerText = [windowWidth](const char* text) {
 		ImGui::SetCursorPosX((windowWidth - ImGui::CalcTextSize(text).x) * 0.5f);
 	};
+	auto centerWidth = [windowWidth](float width) {
+		ImGui::SetCursorPosX((windowWidth - width) * 0.5f);
+	};
 
 	// Version text - two lines, both centered (reduced spacing between lines)
 	const char* versionLine1 = "This appears to be a new install, update, or";
@@ -350,13 +350,13 @@ void HomePageRenderer::RenderFirstTimeSetupDialog()
 	bool isCapturing = menu->settingToggleKey;
 
 	// Increase font size for hotkey text - bigger when capturing
-	ImGui::SetWindowFontScale(fontScale * (isCapturing ? 2.0f : 1.6f));
+	ImGui::SetWindowFontScale(fontScale * (isCapturing ? HOTKEY_TEXT_SCALE_CAPTURING : HOTKEY_TEXT_SCALE));
 
 	// Format hotkey with brackets to make it look like a button
 	std::string hotkeyDisplay = isCapturing ? "[ ... ]" : std::string("[ ") + Util::Input::KeyIdToString(menu->GetSettings().ToggleKey) + " ]";
 	ImVec2 hotkeyTextSize = ImGui::CalcTextSize(hotkeyDisplay.c_str());
 
-	ImGui::SetCursorPosX((windowWidth - hotkeyTextSize.x) * 0.5f);
+	centerWidth(hotkeyTextSize.x);
 	ImVec2 buttonPos = ImGui::GetCursorScreenPos();
 
 	// Create invisible button for hover detection and clicking
@@ -371,12 +371,17 @@ void HomePageRenderer::RenderFirstTimeSetupDialog()
 	// Choose color based on state
 	ImVec4 hotkeyColor;
 	if (isCapturing) {
+		// Pulsing effect using theme's hotkey color
 		float pulse = 0.7f + 0.3f * sinf((float)ImGui::GetTime() * 4.0f);
-		hotkeyColor = ImVec4(pulse, pulse * 0.8f, 0.2f, 1.0f);
+		hotkeyColor = ImVec4(
+			themeSettings.StatusPalette.CurrentHotkey.x * pulse,
+			themeSettings.StatusPalette.CurrentHotkey.y * pulse,
+			themeSettings.StatusPalette.CurrentHotkey.z * pulse,
+			themeSettings.StatusPalette.CurrentHotkey.w);
 	} else if (hovered) {
-		hotkeyColor = ImVec4(themeSettings.StatusPalette.CurrentHotkey.x * 0.7f,
-			themeSettings.StatusPalette.CurrentHotkey.y * 0.7f,
-			themeSettings.StatusPalette.CurrentHotkey.z * 0.7f,
+		hotkeyColor = ImVec4(themeSettings.StatusPalette.CurrentHotkey.x * HOTKEY_HOVER_DIM_FACTOR,
+			themeSettings.StatusPalette.CurrentHotkey.y * HOTKEY_HOVER_DIM_FACTOR,
+			themeSettings.StatusPalette.CurrentHotkey.z * HOTKEY_HOVER_DIM_FACTOR,
 			themeSettings.StatusPalette.CurrentHotkey.w);
 	} else {
 		hotkeyColor = themeSettings.StatusPalette.CurrentHotkey;
@@ -415,11 +420,10 @@ void HomePageRenderer::RenderFirstTimeSetupDialog()
 
 	// Help text with breathing animation
 	const char* helpText = "Press Escape or Enter to continue";
-	float breathe = 0.7f + 0.3f * sinf((float)ImGui::GetTime() * 2.5f);
 
-	ImGui::SetWindowFontScale(fontScale * 1.35f);
+	ImGui::SetWindowFontScale(fontScale * HELP_TEXT_SCALE);
 	centerText(helpText);
-	ImGui::TextColored(ImVec4(1.0f, 1.0f, 1.0f, breathe), "%s", helpText);
+	Util::DrawBreathingText(helpText);
 
 	// Reset font scale
 	ImGui::SetWindowFontScale(fontScale);
