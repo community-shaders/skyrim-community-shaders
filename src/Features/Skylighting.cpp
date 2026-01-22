@@ -2,6 +2,7 @@
 
 #include <DDSTextureLoader.h>
 
+#include "Deferred.h"
 #include "ShaderCache.h"
 #include "State.h"
 
@@ -31,6 +32,7 @@ void Skylighting::ResetSkylighting()
 	auto context = globals::d3d::context;
 	UINT clr[1] = { 0 };
 	context->ClearUnorderedAccessViewUint(texAccumFramesArray->uav.get(), clr);
+	context->ClearUnorderedAccessViewUint(texShadowVisibilityAccumArray->uav.get(), clr);
 	queuedResetSkylighting = false;
 }
 
@@ -111,6 +113,49 @@ void Skylighting::SetupResources()
 		texAccumFramesArray = new Texture3D(texDesc);
 		texAccumFramesArray->CreateSRV(srvDesc);
 		texAccumFramesArray->CreateUAV(uavDesc);
+	}
+
+	// Shadow Visibility Array (R16_FLOAT for smooth 0-1 values)
+	{
+		D3D11_TEXTURE3D_DESC texDesc{
+			.Width = probeArrayDims[0],
+			.Height = probeArrayDims[1],
+			.Depth = probeArrayDims[2],
+			.MipLevels = 1,
+			.Format = DXGI_FORMAT_R16_FLOAT,
+			.Usage = D3D11_USAGE_DEFAULT,
+			.BindFlags = D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_UNORDERED_ACCESS,
+			.CPUAccessFlags = 0,
+			.MiscFlags = 0
+		};
+
+		D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc = {
+			.Format = texDesc.Format,
+			.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE3D,
+			.Texture3D = {
+				.MostDetailedMip = 0,
+				.MipLevels = texDesc.MipLevels }
+		};
+
+		D3D11_UNORDERED_ACCESS_VIEW_DESC uavDesc = {
+			.Format = texDesc.Format,
+			.ViewDimension = D3D11_UAV_DIMENSION_TEXTURE3D,
+			.Texture3D = {
+				.MipSlice = 0,
+				.FirstWSlice = 0,
+				.WSize = texDesc.Depth }
+		};
+
+		texShadowVisibilityArray = new Texture3D(texDesc);
+		texShadowVisibilityArray->CreateSRV(srvDesc);
+		texShadowVisibilityArray->CreateUAV(uavDesc);
+
+		// Accumulation buffer (R8_UINT)
+		texDesc.Format = srvDesc.Format = uavDesc.Format = DXGI_FORMAT_R8_UINT;
+
+		texShadowVisibilityAccumArray = new Texture3D(texDesc);
+		texShadowVisibilityAccumArray->CreateSRV(srvDesc);
+		texShadowVisibilityAccumArray->CreateUAV(uavDesc);
 	}
 
 	{
@@ -223,8 +268,18 @@ void Skylighting::Prepass()
 	auto context = globals::d3d::context;
 
 	{
-		std::array<ID3D11ShaderResourceView*, 1> srvs = { texOcclusion->srv.get() };
-		std::array<ID3D11UnorderedAccessView*, 2> uavs = { texProbeArray->uav.get(), texAccumFramesArray->uav.get() };
+		auto deferred = globals::deferred;
+		std::array<ID3D11ShaderResourceView*, 3> srvs = {
+			texOcclusion->srv.get(),
+			deferred->shadowView,
+			deferred->perShadow->srv.get()
+		};
+		std::array<ID3D11UnorderedAccessView*, 4> uavs = {
+			texProbeArray->uav.get(),
+			texAccumFramesArray->uav.get(),
+			texShadowVisibilityArray->uav.get(),
+			texShadowVisibilityAccumArray->uav.get()
+		};
 		std::array<ID3D11SamplerState*, 1> samplers = { comparisonSampler.get() };
 
 		// Update probe array
@@ -251,8 +306,12 @@ void Skylighting::Prepass()
 
 	// Set PS shader resources
 	{
-		ID3D11ShaderResourceView* srvs[2] = { texProbeArray->srv.get(), stbn_vec3_2Dx1D_128x128x64.get() };
-		context->PSSetShaderResources(50, 2, srvs);
+		ID3D11ShaderResourceView* srvs[3] = {
+			texProbeArray->srv.get(),
+			stbn_vec3_2Dx1D_128x128x64.get(),
+			texShadowVisibilityArray->srv.get()
+		};
+		context->PSSetShaderResources(50, 3, srvs);
 	}
 }
 
