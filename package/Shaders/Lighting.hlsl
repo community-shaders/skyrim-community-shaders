@@ -2460,7 +2460,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 
 	// Soft shadow: skylighting shadow visibility for soft/rim/back lighting
 #	if defined(SKYLIGHTING)
-	float softShadow = skylightingShadowVisibility;
+	float softShadow = max(detailedShadow, skylightingShadowVisibility);
 #	else
 	float softShadow = detailedShadow;
 #	endif

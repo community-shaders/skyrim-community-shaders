@@ -167,7 +167,7 @@ float Get2DFilteredShadow(float3 positionWS, uint eyeIndex, out bool validShadow
 
 	uint shadowVisibilityBitShift = outShadowVisibilityBitShiftArray[dtid];
 
-	cellCentreMS += noise3D[shadowVisibilityBitShift] * Skylighting::CELL_SIZE;
+	cellCentreMS += noise3D[shadowVisibilityBitShift] * Skylighting::CELL_SIZE * 0.5;
 
 	float3 viewDirection = FrameBuffer::WorldToView(-normalize(cellCentreMS), false);
 	float2 uv = FrameBuffer::ViewToUV(viewDirection, false);
