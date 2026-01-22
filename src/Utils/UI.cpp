@@ -648,7 +648,7 @@ namespace Util
 	void DrawBreathingText(const char* text, float speed, float minAlpha, float maxAlpha)
 	{
 		float alphaRange = maxAlpha - minAlpha;
-		float breathe = minAlpha + alphaRange * sinf((float)ImGui::GetTime() * speed);
+		float breathe = minAlpha + alphaRange * 0.5f * (1.0f + sinf((float)ImGui::GetTime() * speed));
 		auto& theme = globals::menu->GetTheme().Palette;
 		ImVec4 color = ImVec4(theme.Text.x, theme.Text.y, theme.Text.z, breathe);
 		ImGui::TextColored(color, "%s", text);
