@@ -330,7 +330,7 @@ void HomePageRenderer::RenderFirstTimeSetupDialog()
 	// Version text - two lines, both centered (reduced spacing between lines)
 	const char* versionLine1 = "This appears to be a new install, update, or";
 	const char* versionLine2 = "reinstallation of Community Shaders.";
-	
+
 	centerText(versionLine1);
 	ImGui::Text("%s", versionLine1);
 	ImGui::SetCursorPosY(ImGui::GetCursorPosY() - 4.0f);
@@ -416,7 +416,7 @@ void HomePageRenderer::RenderFirstTimeSetupDialog()
 	// Help text with breathing animation
 	const char* helpText = "Press Escape or Enter to continue";
 	float breathe = 0.7f + 0.3f * sinf((float)ImGui::GetTime() * 2.5f);
-	
+
 	ImGui::SetWindowFontScale(fontScale * 1.35f);
 	centerText(helpText);
 	ImGui::TextColored(ImVec4(1.0f, 1.0f, 1.0f, breathe), "%s", helpText);
