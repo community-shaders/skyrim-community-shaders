@@ -102,17 +102,25 @@ if(CMAKE_GENERATOR MATCHES "Visual Studio")
 	)
 endif()
 
-add_subdirectory(${CommonLibPath} ${CommonLibName} EXCLUDE_FROM_ALL)
+# Ensure ENABLE_SKYRIM_* options are properly set for CommonLib's STATIC_ASSERT_SIZE macro
+# Convert string values to boolean to ensure generator expressions work correctly
+if(ENABLE_SKYRIM_SE)
+	set(ENABLE_SKYRIM_SE ON CACHE BOOL "Enable SE support" FORCE)
+else()
+	set(ENABLE_SKYRIM_SE OFF CACHE BOOL "Enable SE support" FORCE)
+endif()
+if(ENABLE_SKYRIM_AE)
+	set(ENABLE_SKYRIM_AE ON CACHE BOOL "Enable AE support" FORCE)
+else()
+	set(ENABLE_SKYRIM_AE OFF CACHE BOOL "Enable AE support" FORCE)
+endif()
+if(ENABLE_SKYRIM_VR)
+	set(ENABLE_SKYRIM_VR ON CACHE BOOL "Enable VR support" FORCE)
+else()
+	set(ENABLE_SKYRIM_VR OFF CACHE BOOL "Enable VR support" FORCE)
+endif()
 
-# Propagate CommonLib's ENABLE_SKYRIM_* defines to dependent targets
-# This is required for STATIC_ASSERT_SIZE macro in CommonLib headers
-target_compile_definitions(
-	${PROJECT_NAME}
-	PUBLIC
-	"$<$<BOOL:${ENABLE_SKYRIM_SE}>:ENABLE_SKYRIM_SE=1>"
-	"$<$<BOOL:${ENABLE_SKYRIM_AE}>:ENABLE_SKYRIM_AE=1>"
-	"$<$<BOOL:${ENABLE_SKYRIM_VR}>:ENABLE_SKYRIM_VR=1>"
-)
+add_subdirectory(${CommonLibPath} ${CommonLibName} EXCLUDE_FROM_ALL)
 
 find_package(spdlog CONFIG REQUIRED)
 
