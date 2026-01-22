@@ -579,7 +579,7 @@ float3 GetLightingColor(float3 msPosition, float3 worldPosition, float4 screenPo
 
 	float skylightingShadowVisibility;
 	sh2 skylightingSH = Skylighting::sampleFast(SharedData::skylightingSettings, Skylighting::SkylightingProbeArray, Skylighting::ShadowVisibilityProbeArray, positionMSSkylight, normal, skylightingShadowVisibility);
-	
+
 	if (!SharedData::InInterior){
 		color *= skylightingShadowVisibility;
 	}
