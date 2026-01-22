@@ -161,7 +161,7 @@ namespace Skylighting
 	// TODO compute in UpdateProbesCS.hlsl
 	float CalculateShadowVisibility(uint4 shadowVisibilityBits)
 	{
-		uint4 bitCounts = countbits(shadowVisibilityBits);	
+		uint4 bitCounts = countbits(shadowVisibilityBits);
 		return float(bitCounts.x + bitCounts.y + bitCounts.z + bitCounts.w) / 64.0f;
 	}
 
