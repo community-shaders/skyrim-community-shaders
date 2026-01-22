@@ -120,7 +120,7 @@ namespace Skylighting
 		return SphericalHarmonics::Scale(sum, rcpWsum);
 	}
 
-	sh2 sampleNoBias(SharedData::SkylightingSettings params, Texture3D<sh2> probeArray, Texture3D<float> shadowVisArray, float3 positionMS, out float shadowVisibility)
+	sh2 sampleFast(SharedData::SkylightingSettings params, Texture3D<sh2> probeArray, Texture3D<float> shadowVisArray, float3 positionMS, float3 normalWS, out float shadowVisibility)
 	{
 		const static sh2 unitSH = float4(sqrt(4 * Math::PI), 0, 0, 0);
 		sh2 scaledUnitSH = unitSH / 1e-10;
@@ -129,6 +129,8 @@ namespace Skylighting
 			shadowVisibility = 1.0;
 			return scaledUnitSH;
 		}
+
+		positionMS.xyz += normalWS * CELL_SIZE;  // Receiver normal bias
 
 		float3 positionMSAdjusted = positionMS - params.PosOffset.xyz;
 		float3 uvw = positionMSAdjusted / ARRAY_SIZE + .5;

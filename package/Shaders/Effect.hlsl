@@ -573,9 +573,13 @@ float3 GetLightingColor(float3 msPosition, float3 worldPosition, float4 screenPo
 	float3 positionMSSkylight = worldPosition;
 #			endif
 
-	float skylightingShadowVisibility;
-	sh2 skylightingSH = Skylighting::sampleNoBias(SharedData::skylightingSettings, Skylighting::SkylightingProbeArray, Skylighting::ShadowVisibilityProbeArray, positionMSSkylight, skylightingShadowVisibility);
+	float3 ddx = ddx_coarse(worldPosition);
+	float3 ddy = ddy_coarse(worldPosition);
+	float3 normal = -normalize(cross(ddx, ddy));
 
+	float skylightingShadowVisibility;
+	sh2 skylightingSH = Skylighting::sampleFast(SharedData::skylightingSettings, Skylighting::SkylightingProbeArray, Skylighting::ShadowVisibilityProbeArray, positionMSSkylight, normal, skylightingShadowVisibility);
+	
 	if (!SharedData::InInterior){
 		color *= skylightingShadowVisibility;
 	}

@@ -93,6 +93,7 @@ float Get2DFilteredShadow(float3 positionWS, uint eyeIndex, out bool validShadow
 	return 1.0;
 }
 
+
 [numthreads(8, 8, 1)] void main(uint3 dtid : SV_DispatchThreadID) {
 	const float fadeInThreshold = 15;
 	const static sh2 unitSH = float4(sqrt(4.0 * Math::PI), 0, 0, 0);
@@ -171,22 +172,30 @@ float Get2DFilteredShadow(float3 positionWS, uint eyeIndex, out bool validShadow
 
 	float3 viewDirection = FrameBuffer::WorldToView(-normalize(cellCentreMS), false);
 	float2 uv = FrameBuffer::ViewToUV(viewDirection, false);
+	
+	if (!FrameBuffer::IsOutsideFrame(uv) && viewDirection.z < 0.0) {  // Check that the view direction exists in screenspace and that it is in front of the camera
+		bool validShadow;
+		uint hasShadowVisibility = Get2DFilteredShadow(cellCentreMS, 0, validShadow) > 0.5;
 
-	bool validShadow;
-	uint hasShadowVisibility = Get2DFilteredShadow(cellCentreMS, 0, validShadow) > 0.5;
+		if (validShadow){
+			uint shadowVisibilityBits = isValid ? outShadowVisibilityBitArray[dtid] : 0;
 
-	if (validShadow){
-		uint shadowVisibilityBits = isValid ? outShadowVisibilityBitArray[dtid] : 0;
+			shadowVisibilityBits &= ~(1u << shadowVisibilityBitShift);
+			shadowVisibilityBits |= (hasShadowVisibility << shadowVisibilityBitShift);
 
-		shadowVisibilityBits &= ~(1u << shadowVisibilityBitShift);
-		shadowVisibilityBits |= (hasShadowVisibility << shadowVisibilityBitShift);
+			shadowVisibilityBitShift = (shadowVisibilityBitShift + 1) % 32;
 
-		shadowVisibilityBitShift = (shadowVisibilityBitShift + 1) % 32;
+			float shadowVisibility = float(countbits(shadowVisibilityBits)) / 32.0;
+			
+			ShadowData sD = SharedShadowData[0];
+			float fadeFactor = 1.0 - pow(saturate(dot(cellCentreMS.xyz, cellCentreMS.xyz) / sD.ShadowLightParam.z), 8);
 
-		float shadowVisibility = float(countbits(shadowVisibilityBits)) / 32.0;
+			float skylightingFadeFactor = Skylighting::getFadeOutFactor(cellCentreMS);
+			shadowVisibility = lerp(1.0, shadowVisibility, min(fadeFactor, skylightingFadeFactor));
 
-		outShadowVisibilityBitArray[dtid] = shadowVisibilityBits;
-		outShadowVisibilityBitShiftArray[dtid] = shadowVisibilityBitShift;
-		outShadowVisibilityArray[dtid] = shadowVisibility;
+			outShadowVisibilityBitArray[dtid] = shadowVisibilityBits;
+			outShadowVisibilityBitShiftArray[dtid] = shadowVisibilityBitShift;
+			outShadowVisibilityArray[dtid] = shadowVisibility;
+		}
 	}
 }
