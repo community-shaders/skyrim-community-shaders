@@ -34,7 +34,7 @@ void Skylighting::ResetSkylighting()
 	UINT clrShadow[1] = { 1 };
 
 	context->ClearUnorderedAccessViewUint(texAccumFramesArray->uav.get(), clr);
-	context->ClearUnorderedAccessViewUint(texShadowVisibilityArray->uav.get(), clrShadow);
+	context->ClearUnorderedAccessViewUint(texShadowVisibilityBitArray->uav.get(), clrShadow);
 	queuedResetSkylighting = false;
 }
 
@@ -123,7 +123,7 @@ void Skylighting::SetupResources()
 			.Height = probeArrayDims[1],
 			.Depth = probeArrayDims[2],
 			.MipLevels = 1,
-			.Format = DXGI_FORMAT_R16G16B16A16_UINT,
+			.Format = DXGI_FORMAT_R32_UINT,
 			.Usage = D3D11_USAGE_DEFAULT,
 			.BindFlags = D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_UNORDERED_ACCESS,
 			.CPUAccessFlags = 0,
@@ -147,16 +147,23 @@ void Skylighting::SetupResources()
 				.WSize = texDesc.Depth }
 		};
 
-		texShadowVisibilityArray = new Texture3D(texDesc);
-		texShadowVisibilityArray->CreateSRV(srvDesc);
-		texShadowVisibilityArray->CreateUAV(uavDesc);
+		texShadowVisibilityBitArray = new Texture3D(texDesc);
+		texShadowVisibilityBitArray->CreateSRV(srvDesc);
+		texShadowVisibilityBitArray->CreateUAV(uavDesc);
 
-		// Accumulation buffer (R8_UINT)
+		// Bit shift buffer (R8_UINT)
 		texDesc.Format = srvDesc.Format = uavDesc.Format = DXGI_FORMAT_R8_UINT;
 
-		texShadowVisibilityAccumArray = new Texture3D(texDesc);
-		texShadowVisibilityAccumArray->CreateSRV(srvDesc);
-		texShadowVisibilityAccumArray->CreateUAV(uavDesc);
+		texShadowVisibilityBitShiftArray = new Texture3D(texDesc);
+		texShadowVisibilityBitShiftArray->CreateSRV(srvDesc);
+		texShadowVisibilityBitShiftArray->CreateUAV(uavDesc);
+
+		// Visibility buffer (R8 UNORM)
+		texDesc.Format = srvDesc.Format = uavDesc.Format = DXGI_FORMAT_R8_UNORM;
+
+		texShadowVisibility = new Texture3D(texDesc);
+		texShadowVisibility->CreateSRV(srvDesc);
+		texShadowVisibility->CreateUAV(uavDesc);
 	}
 
 	{
@@ -275,11 +282,12 @@ void Skylighting::Prepass()
 			deferred->shadowView,
 			deferred->perShadow->srv.get()
 		};
-		std::array<ID3D11UnorderedAccessView*, 4> uavs = {
+		std::array<ID3D11UnorderedAccessView*, 5> uavs = {
 			texProbeArray->uav.get(),
 			texAccumFramesArray->uav.get(),
-			texShadowVisibilityArray->uav.get(),
-			texShadowVisibilityAccumArray->uav.get()
+			texShadowVisibilityBitArray->uav.get(),
+			texShadowVisibilityBitShiftArray->uav.get(),
+			texShadowVisibility->uav.get()
 		};
 		std::array<ID3D11SamplerState*, 1> samplers = { comparisonSampler.get() };
 
@@ -310,7 +318,7 @@ void Skylighting::Prepass()
 		ID3D11ShaderResourceView* srvs[3] = {
 			texProbeArray->srv.get(),
 			stbn_vec3_2Dx1D_128x128x64.get(),
-			texShadowVisibilityArray->srv.get()
+			texShadowVisibility->srv.get()
 		};
 		context->PSSetShaderResources(50, 3, srvs);
 	}

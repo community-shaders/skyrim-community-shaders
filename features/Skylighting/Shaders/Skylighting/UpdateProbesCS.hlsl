@@ -1,6 +1,7 @@
 #include "Common/Math.hlsli"
 #include "Common/FrameBuffer.hlsli"
 #include "Common/SharedData.hlsli"
+#include "Common/Random.hlsli"
 
 #include "Skylighting/Skylighting.hlsli"
 
@@ -22,13 +23,14 @@ struct ShadowData
 };
 
 Texture2D<unorm float> srcOcclusionDepth : register(t0);
-Texture2DArray<float4> SharedShadowMap : register(t1);      // Shadow cascade texture
+Texture2DArray<float> SharedShadowMap : register(t1);      // Shadow cascade texture
 StructuredBuffer<ShadowData> SharedShadowData : register(t2);  // Shadow data buffer
 
 RWTexture3D<sh2> outProbeArray : register(u0);
 RWTexture3D<uint> outAccumFramesArray : register(u1);
-RWTexture3D<uint4> outShadowVisibilityArray : register(u2);     // Shadow visibility storage
-RWTexture3D<uint> outShadowVisibilityAccumFrames : register(u3);  // Shadow visibility accumulation
+RWTexture3D<uint> outShadowVisibilityBitArray : register(u2);
+RWTexture3D<uint> outShadowVisibilityBitShiftArray : register(u3);
+RWTexture3D<float> outShadowVisibilityArray : register(u4); 
 
 SamplerComparisonState comparisonSampler : register(s0);
 
@@ -36,12 +38,6 @@ float GetShadowDepth(float3 positionWS, uint eyeIndex)
 {
 	float4 positionCSShifted = mul(FrameBuffer::CameraViewProj[eyeIndex], float4(positionWS, 1));
 	return positionCSShifted.z / positionCSShifted.w;
-}
-
-float Get2DFilteredShadowCascade(float2 baseUV, float cascadeIndex, float compareValue)
-{
-	compareValue -= 0.0001;
-	return SharedShadowMap.SampleCmpLevelZero(comparisonSampler, float3(baseUV, cascadeIndex), compareValue).x;
 }
 
 float Get2DFilteredShadow(float3 positionWS, uint eyeIndex, out bool validShadow)
@@ -54,10 +50,15 @@ float Get2DFilteredShadow(float3 positionWS, uint eyeIndex, out bool validShadow
 
 	if (sD.EndSplitDistances.z >= shadowMapDepth) {
 		float4x3 lightProjectionMatrix = sD.ShadowMapProj[eyeIndex][0];
+		float shadowMapThreshold = sD.AlphaTestRef.y;
 		float cascadeIndex = 0;
-
-		if (sD.EndSplitDistances.x < shadowMapDepth) {
+		if (2.5 < sD.EndSplitDistances.w && sD.EndSplitDistances.y < shadowMapDepth) {
+			lightProjectionMatrix = sD.ShadowMapProj[eyeIndex][2];
+			shadowMapThreshold = sD.AlphaTestRef.z;
+			cascadeIndex = 2;
+		} else if (sD.EndSplitDistances.x < shadowMapDepth) {
 			lightProjectionMatrix = sD.ShadowMapProj[eyeIndex][1];
+			shadowMapThreshold = sD.AlphaTestRef.z;
 			cascadeIndex = 1;
 		}
 
@@ -69,7 +70,7 @@ float Get2DFilteredShadow(float3 positionWS, uint eyeIndex, out bool validShadow
 			return 0.0;
 		}
 
-		float shadowVisibility = Get2DFilteredShadowCascade(positionLS.xy, cascadeIndex, positionLS.z);
+		float shadowVisibility = SharedShadowMap.SampleCmpLevelZero(comparisonSampler, float3(positionLS.xy, cascadeIndex), positionLS.z - shadowMapThreshold);
 
 		if (cascadeIndex < 1 && sD.StartSplitDistances.y < shadowMapDepth) {
 			float3 cascade1PositionLS = mul(transpose(sD.ShadowMapProj[eyeIndex][1]), float4(positionWS.xyz, 1)).xyz;
@@ -80,7 +81,7 @@ float Get2DFilteredShadow(float3 positionWS, uint eyeIndex, out bool validShadow
 				return 0.0;
 			}
 
-			float cascade1ShadowVisibility = Get2DFilteredShadowCascade(cascade1PositionLS.xy, 1, cascade1PositionLS.z);
+			float cascade1ShadowVisibility = SharedShadowMap.SampleCmpLevelZero(comparisonSampler, float3(cascade1PositionLS.xy, 1), cascade1PositionLS.z - shadowMapThreshold);
 
 			float cascade1BlendFactor = smoothstep(0, 1, (shadowMapDepth - sD.StartSplitDistances.y) / (sD.EndSplitDistances.x - sD.StartSplitDistances.y));
 			shadowVisibility = lerp(shadowVisibility, cascade1ShadowVisibility, cascade1BlendFactor);
@@ -128,50 +129,64 @@ float Get2DFilteredShadow(float3 positionWS, uint eyeIndex, out bool validShadow
 		outProbeArray[dtid] = unitSH;
 		outAccumFramesArray[dtid] = 0;
 	}
-
-	uint accumFrames = outShadowVisibilityAccumFrames[dtid];
-
-	const float3 offsets16[16] = {
-		float3(0.0, 0.0, 0.0),
-		float3(0.5, 0.333, 0.2),
-		float3(-0.5, 0.667, 0.4),
-		float3(0.25, -0.333, 0.6),
-		float3(-0.25, -0.667, 0.8),
-		float3(0.75, 0.111, -0.2),
-		float3(-0.75, 0.444, -0.4),
-		float3(0.125, 0.778, -0.6),
-		float3(-0.125, -0.111, -0.8),
-		float3(0.625, -0.444, 0.1),
-		float3(-0.625, -0.778, 0.3),
-		float3(0.375, 0.222, 0.5),
-		float3(-0.375, 0.556, 0.7),
-		float3(0.875, 0.889, 0.9),
-		float3(-0.875, -0.222, -0.1),
-		float3(0.0625, -0.556, -0.3)
+	
+	static const float3 noise3D[32] = {
+		float3(0.247, -0.583, 0.891),
+		float3(-0.672, 0.315, -0.428),
+		float3(0.934, 0.762, -0.153),
+		float3(-0.391, -0.847, 0.526),
+		float3(0.618, 0.094, 0.739),
+		float3(-0.825, -0.271, -0.683),
+		float3(0.152, 0.968, 0.347),
+		float3(0.503, -0.714, -0.592),
+		float3(-0.436, 0.629, 0.814),
+		float3(0.887, -0.198, 0.461),
+		float3(-0.759, 0.852, -0.305),
+		float3(0.321, -0.476, -0.921),
+		float3(-0.094, 0.543, -0.768),
+		float3(0.776, 0.418, 0.632),
+		float3(-0.538, -0.695, 0.279),
+		float3(0.649, -0.921, 0.186),
+		float3(-0.913, 0.127, 0.574),
+		float3(0.285, 0.806, -0.447),
+		float3(0.471, -0.352, 0.698),
+		float3(-0.627, -0.194, -0.856),
+		float3(0.834, 0.591, -0.712),
+		float3(-0.173, -0.968, -0.421),
+		float3(0.562, 0.239, -0.785),
+		float3(-0.745, 0.487, 0.316),
+		float3(0.108, -0.631, 0.894),
+		float3(0.926, -0.845, -0.267),
+		float3(-0.384, 0.712, -0.539),
+		float3(0.697, 0.163, 0.825),
+		float3(-0.851, -0.429, 0.641),
+		float3(0.214, 0.934, 0.372),
+		float3(0.578, -0.762, -0.614),
+		float3(-0.469, 0.381, 0.947)
 	};
+	
+	uint shadowVisibilityBitShift = outShadowVisibilityBitShiftArray[dtid];
 
-	cellCentreMS += offsets16[accumFrames] * Skylighting::CELL_SIZE;
-
+	cellCentreMS += noise3D[shadowVisibilityBitShift] * Skylighting::CELL_SIZE;
+	
 	float3 viewDirection = FrameBuffer::WorldToView(-normalize(cellCentreMS), false);
 	float2 uv = FrameBuffer::ViewToUV(viewDirection, false);
 
 	bool validShadow;
-	float shadowVisibility = Get2DFilteredShadow(cellCentreMS, 0, validShadow);
+	uint hasShadowVisibility = Get2DFilteredShadow(cellCentreMS, 0, validShadow) > 0.5;
 
 	if (validShadow){
-		uint4 shadowVisibilityBits = isValid ? outShadowVisibilityArray[dtid] : 0;
+		uint shadowVisibilityBits = isValid ? outShadowVisibilityBitArray[dtid] : 0;
 
-		// Place bits at next available slots in visibility array
-		shadowVisibilityBits &= ~(1u << accumFrames);
+		shadowVisibilityBits &= ~(1u << shadowVisibilityBitShift);
+		shadowVisibilityBits |= (hasShadowVisibility << shadowVisibilityBitShift);	
+		
+		shadowVisibilityBitShift = (shadowVisibilityBitShift + 1) % 32;	
 
-		shadowVisibilityBits.x |= (shadowVisibility == 1.0) << accumFrames;
-		shadowVisibilityBits.y |= (shadowVisibility >= 0.75) << accumFrames;
-		shadowVisibilityBits.z |= (shadowVisibility >= 0.5) << accumFrames;
-		shadowVisibilityBits.w |= (shadowVisibility >= 0.25) << accumFrames;
+		float shadowVisibility = float(countbits(shadowVisibilityBits)) / 32.0;
 
-		accumFrames += 1;
-
-		outShadowVisibilityArray[dtid] = shadowVisibilityBits;
-		outShadowVisibilityAccumFrames[dtid] = accumFrames % 16;
+		outShadowVisibilityBitArray[dtid] = shadowVisibilityBits;
+		outShadowVisibilityBitShiftArray[dtid] = shadowVisibilityBitShift;
+		outShadowVisibilityArray[dtid] = shadowVisibility;
 	}
 }

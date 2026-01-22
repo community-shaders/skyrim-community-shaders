@@ -11,7 +11,7 @@ namespace Skylighting
 #if defined(PSHADER)
 	Texture3D<sh2> SkylightingProbeArray : register(t50);
 	Texture2DArray<float3> stbn_vec3_2Dx1D_128x128x64 : register(t51);
-	Texture3D<uint4> ShadowVisibilityProbeArray : register(t52);
+	Texture3D<float> ShadowVisibilityProbeArray : register(t52);
 #endif
 
 	const static uint3 ARRAY_DIM = uint3(256, 256, 128);
@@ -158,16 +158,9 @@ namespace Skylighting
 		return SphericalHarmonics::Scale(sum, rcp(wsum + 1e-10));
 	}
 
-	// TODO compute in UpdateProbesCS.hlsl
-	float CalculateShadowVisibility(uint4 shadowVisibilityBits)
-	{
-		uint4 bitCounts = countbits(shadowVisibilityBits);	
-		return float(bitCounts.x + bitCounts.y + bitCounts.z + bitCounts.w) / 64.0f;
-	}
-
 	float sampleShadowVisibility(
 	    SharedData::SkylightingSettings params,
-	    Texture3D<uint4> shadowVisArray,
+	    Texture3D<float> shadowVisArray,
 	    float3 positionMS)
 	{
 		if (SharedData::InInterior)
@@ -202,7 +195,7 @@ namespace Skylighting
 			float w = trilinearWeights.x * trilinearWeights.y * trilinearWeights.z;
 
 			uint3 cellTexID = (cellID + params.ArrayOrigin.xyz) % ARRAY_DIM;
-			float probe = CalculateShadowVisibility(shadowVisArray[cellTexID]) * w;
+			float probe = shadowVisArray[cellTexID] * w;
 
 			sum += probe;
 			wsum += w;

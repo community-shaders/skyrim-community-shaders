@@ -75,8 +75,9 @@ public:
 	Texture3D* texAccumFramesArray = nullptr;
 
 	// Shadow visibility storage
-	Texture3D* texShadowVisibilityArray = nullptr;
-	Texture3D* texShadowVisibilityAccumArray = nullptr;
+	Texture3D* texShadowVisibilityBitArray = nullptr;
+	Texture3D* texShadowVisibilityBitShiftArray = nullptr;
+	Texture3D* texShadowVisibility = nullptr;
 
 	winrt::com_ptr<ID3D11ComputeShader> probeUpdateCompute = nullptr;
 	winrt::com_ptr<ID3D11ShaderResourceView> stbn_vec3_2Dx1D_128x128x64;
