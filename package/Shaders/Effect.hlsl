@@ -677,7 +677,7 @@ PS_OUTPUT main(PS_INPUT input)
 
 #		if defined(LIGHT_LIMIT_FIX)
 	uint lightCount = 0;
-	
+
 	float3 viewPosition = mul(FrameBuffer::CameraView[eyeIndex], float4(input.WorldPosition.xyz, 1)).xyz;
 	float2 screenUV = FrameBuffer::ViewToUV(viewPosition, true, eyeIndex);
 	bool inWorld = Permutation::ExtraShaderDescriptor & Permutation::ExtraFlags::InWorld;
@@ -708,7 +708,7 @@ PS_OUTPUT main(PS_INPUT input)
 			propertyColor += lightColor;
 		}
 	}
-	
+
 #		endif
 #	elif defined(MEMBRANE)
 	propertyColor *= 0;
