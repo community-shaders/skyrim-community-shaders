@@ -104,6 +104,16 @@ endif()
 
 add_subdirectory(${CommonLibPath} ${CommonLibName} EXCLUDE_FROM_ALL)
 
+# Propagate CommonLib's ENABLE_SKYRIM_* defines to dependent targets
+# This is required for STATIC_ASSERT_SIZE macro in CommonLib headers
+target_compile_definitions(
+	${PROJECT_NAME}
+	PUBLIC
+	"$<$<BOOL:${ENABLE_SKYRIM_SE}>:ENABLE_SKYRIM_SE=1>"
+	"$<$<BOOL:${ENABLE_SKYRIM_AE}>:ENABLE_SKYRIM_AE=1>"
+	"$<$<BOOL:${ENABLE_SKYRIM_VR}>:ENABLE_SKYRIM_VR=1>"
+)
+
 find_package(spdlog CONFIG REQUIRED)
 
 target_include_directories(
