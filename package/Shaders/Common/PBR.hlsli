@@ -141,23 +141,26 @@ namespace PBR
 		float satNdotH = saturate(NdotH);
 		float satVdotH = saturate(VdotH);
 
+		float3 diffuseLightColor = context.lightColor * context.detailedShadow;
+		float3 coatDiffuseLightColor = context.coatLightColor * context.detailedShadow;
+
 #if !defined(LANDSCAPE) && !defined(LODLANDSCAPE)
 		[branch] if ((PBRFlags & Flags::HairMarschner) != 0)
 		{
-			lightingOutput.transmission += context.lightColor * GetHairColorMarschner(N, V, L, NdotL, NdotV, VdotL, 0, 1, 0, material);
+			lightingOutput.transmission += diffuseLightColor * GetHairColorMarschner(N, V, L, NdotL, NdotV, VdotL, 0, 1, 0, material);
 		}
 		else
 #endif
 		{
-			lightingOutput.diffuse += context.lightColor * satNdotL * BRDF::Diffuse_Lambert();
+			lightingOutput.diffuse += diffuseLightColor * satNdotL * BRDF::Diffuse_Lambert();
 
 			float3 F;
 #if defined(GLINT)
 			lightingOutput.specular += GetSpecularDirectLightMultiplierMicrofacetWithGlint(material.Noise, material.Roughness, material.F0, satNdotL, satNdotV, satNdotH, satVdotH, mul(tbnTr, H).x,
 							material.GlintLogMicrofacetDensity, material.GlintMicrofacetRoughness, material.GlintDensityRandomization, material.GlintCache, F) *
-			            context.lightColor * satNdotL;
+			            diffuseLightColor * satNdotL;
 #else
-			lightingOutput.specular += GetSpecularDirectLightMultiplierMicrofacet(material.Roughness, material.F0, satNdotL, satNdotV, satNdotH, satVdotH, F) * context.lightColor * satNdotL;
+			lightingOutput.specular += GetSpecularDirectLightMultiplierMicrofacet(material.Roughness, material.F0, satNdotL, satNdotV, satNdotH, satVdotH, F) * diffuseLightColor * satNdotL;
 #endif
 
 			float2 specularBRDF = BRDF::EnvBRDF(material.Roughness, satNdotV);
@@ -166,7 +169,7 @@ namespace PBR
 #if !defined(LANDSCAPE) && !defined(LODLANDSCAPE)
 			[branch] if ((PBRFlags & Flags::Fuzz) != 0)
 			{
-				float3 fuzzSpecular = GetSpecularDirectLightMultiplierMicroflakes(material.Roughness, material.FuzzColor, satNdotL, satNdotV, satNdotH, satVdotH) * context.lightColor * satNdotL;
+				float3 fuzzSpecular = GetSpecularDirectLightMultiplierMicroflakes(material.Roughness, material.FuzzColor, satNdotL, satNdotV, satNdotH, satVdotH) * diffuseLightColor * satNdotL;
 				fuzzSpecular *= 1 + material.FuzzColor * (1 / (specularBRDF.x + specularBRDF.y) - 1);
 
 				lightingOutput.specular = lerp(lightingOutput.specular, fuzzSpecular, material.FuzzWeight);
@@ -174,11 +177,12 @@ namespace PBR
 
 			[branch] if ((PBRFlags & Flags::Subsurface) != 0)
 			{
+				float3 softLightColor = context.lightColor * context.softShadow;
 				const float subsurfacePower = 12.234;
 				float forwardScatter = exp2(saturate(-VdotL) * subsurfacePower - subsurfacePower);
 				float backScatter = saturate(satNdotL * material.Thickness + (1.0 - material.Thickness)) * 0.5;
 				float subsurface = lerp(backScatter, 1, forwardScatter) * (1.0 - material.Thickness);
-				lightingOutput.transmission += material.SubsurfaceColor * subsurface * context.lightColor * BRDF::Diffuse_Lambert();
+				lightingOutput.transmission += material.SubsurfaceColor * subsurface * softLightColor * BRDF::Diffuse_Lambert();
 			}
 			else if ((PBRFlags & Flags::TwoLayer) != 0)
 			{
@@ -195,13 +199,13 @@ namespace PBR
 				}
 
 				float3 coatF;
-				float3 coatSpecular = GetSpecularDirectLightMultiplierMicrofacet(material.CoatRoughness, material.CoatF0, coatNdotL, coatNdotV, coatNdotH, coatVdotH, coatF) * context.coatLightColor * coatNdotL;
+				float3 coatSpecular = GetSpecularDirectLightMultiplierMicrofacet(material.CoatRoughness, material.CoatF0, coatNdotL, coatNdotV, coatNdotH, coatVdotH, coatF) * coatDiffuseLightColor * coatNdotL;
 
 				float3 layerAttenuation = 1 - coatF * material.CoatStrength;
 				lightingOutput.diffuse *= layerAttenuation;
 				lightingOutput.specular *= layerAttenuation;
 
-				lightingOutput.coatDiffuse += context.coatLightColor * coatNdotL * BRDF::Diffuse_Lambert();
+				lightingOutput.coatDiffuse += coatDiffuseLightColor * coatNdotL * BRDF::Diffuse_Lambert();
 				lightingOutput.specular += coatSpecular * material.CoatStrength;
 			}
 #endif

@@ -30,6 +30,7 @@ SamplerState LinearSampler : register(s0);
 
 Texture3D<sh2> SkylightingProbeArray : register(t8);
 Texture2DArray<float3> stbn_vec3_2Dx1D_128x128x64 : register(t9);
+Texture3D<float> ShadowVisibilityProbeArray : register(t14);
 
 #endif
 
@@ -197,7 +198,8 @@ void SampleSSGISpecular(uint2 pixCoord, sh2 lobe, out float ao, out float3 il, i
 		float3 positionMS = positionWS.xyz;
 #		endif
 
-		sh2 skylighting = Skylighting::sample(SharedData::skylightingSettings, SkylightingProbeArray, stbn_vec3_2Dx1D_128x128x64, dispatchID.xy, positionMS.xyz, R);
+		float skylightingShadowVisibility;
+		sh2 skylighting = Skylighting::sample(SharedData::skylightingSettings, SkylightingProbeArray, ShadowVisibilityProbeArray, stbn_vec3_2Dx1D_128x128x64, dispatchID.xy, positionMS.xyz, R, skylightingShadowVisibility);
 
 		float skylightingSpecular = SphericalHarmonics::FuncProductIntegral(skylighting, specularLobe);
 		skylightingSpecular = saturate(skylightingSpecular);

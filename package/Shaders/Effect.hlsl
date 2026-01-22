@@ -563,10 +563,7 @@ float3 GetLightingColor(float3 msPosition, float3 worldPosition, float4 screenPo
 	color = max(0, color);
 
 	if (!SharedData::InInterior){
-		bool isWorldShadow = false;
-		float shadow = ShadowSampling::GetEffectShadow(worldPosition.xyz, normalize(worldPosition.xyz), screenPosition.xy, eyeIndex);
-		color *= shadow;
-		shadowVariance = ComputeShadowVariance(shadow);
+		color *= ShadowSampling::GetWorldShadow(worldPosition.xyz, FrameBuffer::CameraPosAdjust[eyeIndex].xyz, eyeIndex);;
 	}
 
 #		if defined(SKYLIGHTING)
@@ -576,7 +573,13 @@ float3 GetLightingColor(float3 msPosition, float3 worldPosition, float4 screenPo
 	float3 positionMSSkylight = worldPosition;
 #			endif
 
-	sh2 skylightingSH = Skylighting::sampleNoBias(SharedData::skylightingSettings, Skylighting::SkylightingProbeArray, positionMSSkylight);
+	float skylightingShadowVisibility;
+	sh2 skylightingSH = Skylighting::sampleNoBias(SharedData::skylightingSettings, Skylighting::SkylightingProbeArray, Skylighting::ShadowVisibilityProbeArray, positionMSSkylight, skylightingShadowVisibility);
+	
+	if (!SharedData::InInterior){
+		color *= skylightingShadowVisibility;
+	}
+
 	float skylightingDiffuse = SphericalHarmonics::FuncProductIntegral(skylightingSH, SphericalHarmonics::EvaluateCosineLobe(float3(0, 0, 1))) / Math::PI;
 	skylightingDiffuse = saturate(skylightingDiffuse);
 	skylightingDiffuse = lerp(1.0, skylightingDiffuse, Skylighting::getFadeOutFactor(worldPosition));

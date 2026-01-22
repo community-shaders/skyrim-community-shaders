@@ -9,9 +9,9 @@
 #endif
 
 #if defined(TRUE_PBR)
-DirectContext CreateDirectLightingContext(float3 worldNormal, float3 coatWorldNormal, float3 vertexNormal, float3 viewDir, float3 coatViewDir, float3 lightDir, float3 coatLightDir, float3 lightColor, float shadowFactor, float parallaxShadow)
+DirectContext CreateDirectLightingContext(float3 worldNormal, float3 coatWorldNormal, float3 vertexNormal, float3 viewDir, float3 coatViewDir, float3 lightDir, float3 coatLightDir, float3 lightColor, float detailedShadow, float softShadow)
 #else
-DirectContext CreateDirectLightingContext(float3 worldNormal, float3 vertexNormal, float3 viewDir, float3 lightDir, float3 lightColor, float shadowFactor, float parallaxShadow)
+DirectContext CreateDirectLightingContext(float3 worldNormal, float3 vertexNormal, float3 viewDir, float3 lightDir, float3 lightColor, float detailedShadow, float softShadow)
 #endif
 {
     DirectContext context = (DirectContext)0;
@@ -20,20 +20,15 @@ DirectContext CreateDirectLightingContext(float3 worldNormal, float3 vertexNorma
     context.viewDir = normalize(viewDir);
     context.lightDir = normalize(lightDir);
     context.halfVector = normalize(context.viewDir + context.lightDir);
-    context.lightColor = lightColor * shadowFactor * parallaxShadow;
+    context.lightColor = lightColor;
+    context.detailedShadow = detailedShadow;
+    context.softShadow = softShadow;
 #if defined(TRUE_PBR)
 	context.coatWorldNormal = normalize(coatWorldNormal);
 	context.coatViewDir = normalize(coatViewDir);
 	context.coatLightDir = normalize(coatLightDir);
 	context.coatHalfVector = normalize(context.coatViewDir + context.coatLightDir);
-	[branch] if ((PBRFlags & PBR::Flags::InterlayerParallax) != 0)
-	{
-		context.coatLightColor = lightColor * shadowFactor;
-	}
-	else
-	{
-		context.coatLightColor = context.lightColor;
-	}
+	context.coatLightColor = lightColor;
 #endif
     return context;
 }
@@ -107,19 +102,21 @@ void EvaluateLighting(DirectContext context, MaterialProperties material, float3
 	}
 #	endif
 	const float NdotL = dot(context.worldNormal, context.lightDir);
-    lightingOutput.diffuse = saturate(NdotL) * context.lightColor * Color::VanillaDiffuseMult();
+	float3 diffuseLightColor = context.lightColor * context.detailedShadow;
+	float3 softLightColor = context.lightColor * context.softShadow;
+    lightingOutput.diffuse = saturate(NdotL) * diffuseLightColor * Color::VanillaDiffuseMult();
 #		if defined(SOFT_LIGHTING)
-	lightingOutput.diffuse += context.lightColor * GetSoftLightMultiplier(NdotL) * material.rimSoftLightColor * Color::VanillaDiffuseMult();
+	lightingOutput.diffuse += softLightColor * GetSoftLightMultiplier(NdotL) * material.rimSoftLightColor * Color::VanillaDiffuseMult();
 #		endif
 
 #		if defined(RIM_LIGHTING)
-	lightingOutput.diffuse += context.lightColor * GetRimLightMultiplier(context.lightDir, context.viewDir, context.worldNormal) * material.rimSoftLightColor * Color::VanillaDiffuseMult();
+	lightingOutput.diffuse += softLightColor * GetRimLightMultiplier(context.lightDir, context.viewDir, context.worldNormal) * material.rimSoftLightColor * Color::VanillaDiffuseMult();
 #		endif
 
 #		if defined(BACK_LIGHTING)
-	lightingOutput.diffuse += context.lightColor * saturate(-NdotL) * material.backLightColor * Color::VanillaDiffuseMult();
+	lightingOutput.diffuse += softLightColor * saturate(-NdotL) * material.backLightColor * Color::VanillaDiffuseMult();
 #		endif
-    lightingOutput.specular = VanillaSpecular(context, material.Shininess, uv) * material.SpecularColor * material.Glossiness * context.lightColor * Color::VanillaSpecularMult();
+    lightingOutput.specular = VanillaSpecular(context, material.Shininess, uv) * material.SpecularColor * material.Glossiness * diffuseLightColor * Color::VanillaSpecularMult();
 #endif
 }
 
@@ -165,9 +162,9 @@ void EvaluateWetnessLighting(float3 wetnessNormal, DirectContext context, float 
 {
 	const float wetnessStrength = saturate(1 - roughness);
 #	if defined(TRUE_PBR)
-	const float3 lightColor = context.coatLightColor;
+	const float3 lightColor = context.coatLightColor * context.detailedShadow;
 #	else
-	const float3 lightColor = context.lightColor;
+	const float3 lightColor = context.lightColor * context.detailedShadow;
 #	endif
 
 	const float wetnessF0 = 0.02;

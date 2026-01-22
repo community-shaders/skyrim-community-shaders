@@ -642,12 +642,14 @@ struct WaterNormalData
 {
 	float3 normal;
 	float4 rippleInfo;  // xyz = scaled ripple normal (normalized normal * intensity), w = splash effect intensity
+	float skylightingShadowVisibility;
 };
 
 WaterNormalData GetWaterNormal(PS_INPUT input, float distanceFactor, float normalsDepthFactor, float3 viewDirection, float depth, uint eyeIndex)
 {
 	WaterNormalData result;
 	result.rippleInfo = float4(0, 0, 0, 0);
+	result.skylightingShadowVisibility = 1;
 	float3 normalScalesRcp = rcp(input.NormalsScale.xyz);
 
 #			if defined(WATER_PARALLAX)
@@ -769,7 +771,7 @@ WaterNormalData GetWaterNormal(PS_INPUT input, float distanceFactor, float norma
 #					else
 	float3 positionMSSkylight = input.WPosition.xyz;
 #					endif
-	sh2 skylightingSH = Skylighting::sample(SharedData::skylightingSettings, Skylighting::SkylightingProbeArray, Skylighting::stbn_vec3_2Dx1D_128x128x64, input.HPosition.xy, positionMSSkylight, float3(0, 0, 1));
+	sh2 skylightingSH = Skylighting::sample(SharedData::skylightingSettings, Skylighting::SkylightingProbeArray, Skylighting::ShadowVisibilityProbeArray, Skylighting::stbn_vec3_2Dx1D_128x128x64, input.HPosition.xy, positionMSSkylight, float3(0, 0, 1), result.skylightingShadowVisibility);
 	float skylighting = SphericalHarmonics::Unproject(skylightingSH, float3(0, 0, 1));
 
 	float wetnessOcclusion = inWorld ? pow(saturate(skylighting), 2) : 0;
@@ -846,7 +848,8 @@ float3 GetWaterSpecularColor(PS_INPUT input, float3 normal, float3 viewDirection
 				float3 positionMSSkylight = input.WPosition.xyz;
 #					endif
 
-				sh2 skylighting = Skylighting::sample(SharedData::skylightingSettings, Skylighting::SkylightingProbeArray, Skylighting::stbn_vec3_2Dx1D_128x128x64, input.HPosition.xy, positionMSSkylight, R);
+				float skylightingSpecShadowVisibility;
+				sh2 skylighting = Skylighting::sample(SharedData::skylightingSettings, Skylighting::SkylightingProbeArray, Skylighting::ShadowVisibilityProbeArray, Skylighting::stbn_vec3_2Dx1D_128x128x64, input.HPosition.xy, positionMSSkylight, R, skylightingSpecShadowVisibility);
 				sh2 specularLobe = SphericalHarmonics::FauxSpecularLobe(normal, -viewDirection, 0.0);
 
 				float skylightingSpecular = SphericalHarmonics::FuncProductIntegral(skylighting, specularLobe);
@@ -1212,8 +1215,10 @@ PS_OUTPUT main(PS_INPUT input)
 	float3 sunColor = GetSunColor(normal, viewDirection);
 
 	if (!(Permutation::PixelShaderDescriptor & Permutation::WaterFlags::Interior) && any(sunColor > 0.0)) {
-		sunColor *= ShadowSampling::GetWaterShadow(screenNoise, input.WPosition.xyz, eyeIndex);
+		sunColor *= ShadowSampling::GetWorldShadow(input.WPosition.xyz, FrameBuffer::CameraPosAdjust[eyeIndex].xyz, eyeIndex);
 	}
+
+	sunColor *= waterData.skylightingShadowVisibility;
 
 #					if defined(VC)
 	float specularFraction = lerp(1, fresnel * diffuseOutput.refractionMul, distanceFactor);
