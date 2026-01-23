@@ -73,6 +73,12 @@ void WeatherManager::UpdateFeatures()
 
 	// Always update if lerp factor changes or weather changed
 	if (weatherChanged || std::abs(currentWeathers.lerpFactor - lastKnownWeather.lerpFactor) > 0.001f) {
+		if (weatherChanged) {
+			logger::info("Weather changed - Current: {}, Last: {}", 
+				currentWeathers.currentWeather ? GetWeatherKey(currentWeathers.currentWeather) : "None",
+				currentWeathers.lastWeather ? GetWeatherKey(currentWeathers.lastWeather) : "None");
+		}
+		
 		auto* globalRegistry = WeatherVariables::GlobalWeatherRegistry::GetSingleton();
 
 		// Get all features and update those that have registered weather variables
@@ -90,12 +96,18 @@ void WeatherManager::UpdateFeatures()
 
 				// Load settings for last weather (from)
 				if (currentWeathers.lastWeather && currentWeathers.lerpFactor < 1.0f) {
-					LoadSettingsFromWeather(currentWeathers.lastWeather, featureName, currWeatherSettings);
+					bool loadedLast = LoadSettingsFromWeather(currentWeathers.lastWeather, featureName, currWeatherSettings);
+					if (loadedLast) {
+						logger::info("Loaded {} settings for last weather: {}", featureName, GetWeatherKey(currentWeathers.lastWeather));
+					}
 				}
 
 				// Load settings for current weather (to)
 				if (currentWeathers.currentWeather) {
-					LoadSettingsFromWeather(currentWeathers.currentWeather, featureName, nextWeatherSettings);
+					bool loadedCurrent = LoadSettingsFromWeather(currentWeathers.currentWeather, featureName, nextWeatherSettings);
+					if (loadedCurrent) {
+						logger::info("Loaded {} settings for current weather: {}", featureName, GetWeatherKey(currentWeathers.currentWeather));
+					}
 				}
 
 				// Let the global registry handle variable interpolation
