@@ -1715,9 +1715,9 @@ void Raytracing::CommitModel(Model* model)
 		auto& shape = shapes[i];
 
 		bool hasAlphaTesting = shape->flags & Shape::Flags::AlphaTesting;
-		bool hasGlow = shape->material.Feature == RE::BSShaderMaterial::Feature::kGlowMap;
+		bool isWindows = shape->material.shaderFlags.any(RE::BSShaderProperty::EShaderPropertyFlag::kAssumeShadowmask) && (shape->material.Feature == RE::BSShaderMaterial::Feature::kGlowMap || shape->material.PBRFlags.any(PBRShaderFlags::HasEmissive));
 
-		bool isOpaque = !hasAlphaTesting && !(hasGlow && settings.InteriorSun);
+		bool isOpaque = !hasAlphaTesting && !(isWindows && settings.InteriorSun);
 
 		geometryDescs[i] = {
 			.Type = D3D12_RAYTRACING_GEOMETRY_TYPE_TRIANGLES,

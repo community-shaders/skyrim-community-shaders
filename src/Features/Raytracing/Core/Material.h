@@ -69,7 +69,8 @@ struct Material
 		kMultiTextureLandscape = 1 << 13,
 		kEyeReflect = 1 << 14,
 		kHairTint = 1 << 15,
-		kTwoSided = 1 << 16
+		kTwoSided = 1 << 16,
+		kAssumeShadowmask = 1 << 17
 	};
 
 	enum AlphaFlags : uint16_t
@@ -163,6 +164,10 @@ struct Material
 
 		if (shaderFlags.any(EShaderPropertyFlag::kTwoSided)) {
 			shaderFlagsLocal |= ShaderFlags::kTwoSided;
+		}
+
+		if (shaderFlags.any(EShaderPropertyFlag::kAssumeShadowmask)) {
+			shaderFlagsLocal |= ShaderFlags::kAssumeShadowmask;
 		}
 
 		return shaderFlagsLocal;

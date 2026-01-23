@@ -21,11 +21,10 @@ void main(inout ShadowPayload payload, in BuiltInTriangleIntersectionAttributes 
     float alpha;
     
     [branch]
-    if (material.Feature == Feature::kGlowMap)
+    if (material.Feature == Feature::kGlowMap || material.PBRFlags & PBR::Flags::HasEmissive)
         alpha = 1.0f - Color::RGBToLuminance(Textures[NonUniformResourceIndex(material.GlowTexture())].SampleLevel(BaseSampler, texCoord, 0).rgb);
     else
         alpha = Textures[NonUniformResourceIndex(material.BaseTexture())].SampleLevel(BaseSampler, texCoord, 0).a;
-
 
     [branch]
     if (alpha < 0.5f)
