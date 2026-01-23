@@ -7,10 +7,23 @@ Texture2D<float4> SpecularGITexture     : register(t3);
 
 RWTexture2D<float4> MainOutputTexture   : register(u0);
 
+cbuffer AccumulationCB : register(b2)
+{
+    float AccumulationWeight;  // 1.0 / (accumulatedFrames + 1)
+    float3 _padding;
+}
+
 [numthreads(8, 8, 1)]
 void main(uint2 id : SV_DispatchThreadID)
 {
-#if defined(COMPOSITE)
+#if defined(ACCUMULATION)
+    // Accumulation denoiser mode: blend current frame with previous
+    float3 previousColor = MainInputTexture[id].rgb;        // Previous accumulated result (t0)
+    float3 currentColor = DiffuseAlbedoTexture[id].rgb;     // Current frame (t1)
+    
+    // Weighted average: newAccum = prevAccum * (1 - weight) + current * weight
+    float3 outputColor = lerp(previousColor, currentColor, AccumulationWeight);
+#elif defined(COMPOSITE)
     float3 outputColor = Color::GammaToTrueLinear(MainInputTexture[id].rgb);
 
 #   if defined(DIFFUSE)
