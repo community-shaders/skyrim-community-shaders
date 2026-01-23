@@ -33,7 +33,7 @@ struct Model
 		}
 	}
 
-	Flags GetFlags() const
+	Shape::Flags GetFlags() const
 	{
 		return flags;
 	}
@@ -60,7 +60,7 @@ struct Model
 	}
 
 private:
-	Flags flags = Flags::None;
+	Shape::Flags flags = Shape::Flags::None;
 	uint32_t shaderTypes = RE::BSShader::Type::None;
 	int features = static_cast<int>(RE::BSShaderMaterial::Feature::kNone);
 	eastl::atomic<int> refCount{ 0 };

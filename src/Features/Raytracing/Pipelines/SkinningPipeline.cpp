@@ -87,7 +87,7 @@ void SkinningPipeline::SetupResources(ID3D12Device5* device)
 	boneMatricesBuffer->CreateSRV(heap->CPUHandle(SkinningHeap::Slot::BoneMatrices));
 }
 
-void SkinningPipeline::QueueUpdate(Flags updateFlags, eastl::string path, Shape* shape)
+void SkinningPipeline::QueueUpdate(Shape::Flags updateFlags, eastl::string path, Shape* shape)
 {
 	queuedShapes.emplace(
 		shape,
@@ -132,13 +132,13 @@ bool SkinningPipeline::PrepareResources([[maybe_unused]]ID3D12GraphicsCommandLis
 		}
 
 		vertexCount = std::max(vertexCount, (uint)shape->vertexCount);
-		vertexUpdateData.emplace_back(shape->allocation->GetIndex(), queuedShape.updateFlags, shape->vertexCount, boneOffset, bonePivot, 0);
+		vertexUpdateData.emplace_back(shape->allocation->GetIndex(), queuedShape.updateFlags, shape->vertexCount, boneOffset, bonePivot, shape->boundRadius);
 
 		// Dynamic TriShapes
 		shape->UpdateUploadDynamicBuffers(commandList);
 
 		// Skinning - This is a bit more involved
-		if (queuedShape.updateFlags & Flags::Skinned) {
+		if (queuedShape.updateFlags & Shape::Flags::Skinned) {
 			boneMatricesData.insert(boneMatricesData.end(),
 				eastl::make_move_iterator(shape->boneMatrices.begin()),
 				eastl::make_move_iterator(shape->boneMatrices.end()));

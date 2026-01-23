@@ -1714,7 +1714,7 @@ void Raytracing::CommitModel(Model* model)
 	for (auto i = 0; i < meshCount; i++) {
 		auto& shape = shapes[i];
 
-		bool hasAlphaTesting = shape->flags & Flags::AlphaTesting;
+		bool hasAlphaTesting = shape->flags & Shape::Flags::AlphaTesting;
 		bool hasGlow = shape->material.Feature == RE::BSShaderMaterial::Feature::kGlowMap;
 
 		bool isOpaque = !hasAlphaTesting && !(hasGlow && settings.InteriorSun);
@@ -1737,7 +1737,7 @@ void Raytracing::CommitModel(Model* model)
 
 	auto modelFlags = model->GetFlags();
 
-	bool updatable = (modelFlags & Flags::Skinned) || (modelFlags & Flags::Dynamic);
+	bool updatable = (modelFlags & Shape::Flags::Skinned) || (modelFlags & Shape::Flags::Dynamic);
 
 	D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAGS buildFlags = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_NONE;
 
@@ -1814,7 +1814,7 @@ void Raytracing::UpdateModelBLAS(Model* model)
 	for (auto i = 0; i < shapeCount; i++) {
 		auto& shape = shapes[i];
 
-		bool hasAlphaTesting = shape->flags & Flags::AlphaTesting;
+		bool hasAlphaTesting = shape->flags & Shape::Flags::AlphaTesting;
 
 		geometryDescs[i] = {
 			.Type = D3D12_RAYTRACING_GEOMETRY_TYPE_TRIANGLES,
@@ -2017,14 +2017,14 @@ void Raytracing::CreateModelInternal(RE::TESForm* form, const char* path, RE::Ni
 			return RE::BSVisit::BSVisitControl::kContinue;
 		}
 
-		auto flags = Flags::None;
+		auto flags = Shape::Flags::None;
 
 		// Landscape needs special handling of triangles
 		if (formType == RE::FormType::Land)
-			flags |= Flags::Landscape;
+			flags |= Shape::Flags::Landscape;
 
 		if (geometryType.all(RE::BSGeometry::Type::kDynamicTriShape))
-			flags |= Flags::Dynamic;
+			flags |= Shape::Flags::Dynamic;
 
 		auto localToRoot = GetXMFromNiTransform(rootWorldInverse * pGeometry->world);
 
@@ -2080,7 +2080,7 @@ void Raytracing::CreateModelInternal(RE::TESForm* form, const char* path, RE::Ni
 
 				// Fix for modded geometry
 				if (partition.bonesPerVertex > 0)
-					flags |= Flags::Skinned;
+					flags |= Shape::Flags::Skinned;
 
 				auto meshData = eastl::make_unique<Shape>(shapeRegisters.Allocate(), pGeometry, flags);
 
@@ -2109,7 +2109,7 @@ void Raytracing::CreateModelInternal(RE::TESForm* form, const char* path, RE::Ni
 		auto model = eastl::make_unique<Model>(shapes);
 
 		// Models with these flags cannot be instanced directly
-		if ((model->GetFlags() & Flags::Dynamic) || (model->GetFlags() & Flags::Skinned))
+		if ((model->GetFlags() & Shape::Flags::Dynamic) || (model->GetFlags() & Shape::Flags::Skinned))
 			modelKey.append(std::format("_{:08X}", reinterpret_cast<uintptr_t>(pRoot)).c_str());
 
 		auto [it, emplaced] = models.emplace(modelKey, eastl::move(model));
@@ -2404,15 +2404,19 @@ void Raytracing::UpdateInstances()
 
 		auto& model = it->second;
 
-		if (model->GetFlags() & Flags::Skinned) {
-			if (settings.DisableSkinned)
-				continue;
+		auto flags = model->GetFlags();
 
-			if (pNiNode->GetAppCulled())
-				continue;
-		}
+		bool dynamic = flags & Shape::Flags::Dynamic;
+		bool skinned = flags & Shape::Flags::Skinned;
+		bool landscape = flags & Shape::Flags::Landscape;
+
+		if (settings.DisableSkinned && (dynamic || skinned))
+			continue;
 
 		if (cullingSettings.Mode == CullingMode::Smart) {
+			if (landscape && pNiNode->GetAppCulled())
+				continue;
+
 			auto worldBound = pNiNode->worldBound;
 
 			float worldBoundRadius = Util::Units::GameUnitsToMeters(worldBound.radius);
@@ -4216,18 +4220,18 @@ RE::BSEventNotifyControl Raytracing::TESObjectLoadedEventHandler::ProcessEvent(c
 
 	auto* eventRef = RE::TESForm::LookupByID<RE::TESObjectREFR>(a_event->formID);
 
+	if (a_event->loaded)
+		return RE::BSEventNotifyControl::kContinue;
+
+	auto formID = eventRef->GetFormID();
+
+	globals::features::raytracing.RemoveInstance(formID, true);
+
 	/*auto* base = eventRef->GetBaseObject();
 
-	logger::info("TESObjectLoadedEventHandler::ProcessEvent {} {}", magic_enum::enum_name(eventRef->formType.get()), magic_enum::enum_name(base->formType.get()));*/
-
-	// Unloaded
-	if (!a_event->loaded) {
-		auto formID = eventRef->GetFormID();
-
-		globals::features::raytracing.RemoveInstance(formID, true);
-
-		return RE::BSEventNotifyControl::kContinue;
-	}
+	logger::info("TESObjectLoadedEventHandler::ProcessEvent {} - {:08X}, {} - {:08X}",
+		magic_enum::enum_name(eventRef->formType.get()), eventRef->GetFormID(),
+		magic_enum::enum_name(base->formType.get()), base->GetFormID());
 
 	//logger::info("[RT] TESObjectLoadedEvent - {} Name: {} - FullLodRef: {}", typeid(*eventRef).name(), eventRef->GetName(), eventRef->GetFullLODRef());
 
@@ -4235,28 +4239,17 @@ RE::BSEventNotifyControl Raytracing::TESObjectLoadedEventHandler::ProcessEvent(c
 	if (eventRef->formType.none(RE::FormType::ActorCharacter))
 		return RE::BSEventNotifyControl::kContinue;
 
-	/*if (eventRef->data.objectReference->formType.none(RE::FormType::NPC))
-		return RE::BSEventNotifyControl::kContinue;*/
-
 	auto* actor = eventRef->As<RE::Actor>();
 
 	if (!actor)
 		return RE::BSEventNotifyControl::kContinue;
-
-	/*if (actor) {
-		logger::info("[RT] TESObjectLoadedEventHandler - Actor: {}", actor->GetName());
-
-		auto* actorBase = actor->GetActorBase();
-		if (actorBase)
-			logger::info("[RT] TESObjectLoadedEventHandler - ActorBase: {}", actorBase->GetFullName());
-	}*/
 
 	auto* pNiAVObject = eventRef->Get3D();
 
 	if (!pNiAVObject)
 		return RE::BSEventNotifyControl::kContinue;
 
-	globals::features::raytracing.CreateModelInternal(eventRef, actor->GetName(), netimmerse_cast<RE::NiNode*>(pNiAVObject));
+	globals::features::raytracing.CreateModelInternal(eventRef, actor->GetName(), pNiAVObject);*/
 
 	return RE::BSEventNotifyControl::kContinue;
 }

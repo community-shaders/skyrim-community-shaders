@@ -49,7 +49,7 @@ struct SkinningPipeline : ComputePipeline<SkinningHeap>
 
 	static constexpr uint MAX_BATCHES = 4;
 
-	static constexpr uint MAX_GEOMETRY = 512;
+	static constexpr uint MAX_GEOMETRY = 1024;
 
 	static constexpr uint MAX_BONE_MATRICES = MAX_GEOMETRY * 10;
 
@@ -63,7 +63,7 @@ struct SkinningPipeline : ComputePipeline<SkinningHeap>
 
 	struct QueuedShape
 	{
-		Flags updateFlags;
+		Shape::Flags updateFlags;
 		eastl::string path;
 	};
 
@@ -84,7 +84,7 @@ struct SkinningPipeline : ComputePipeline<SkinningHeap>
 	void CreateRootSignature(ID3D12Device5* device) override;
 	void CompileShaders(ID3D12Device5* device) override;
 	void SetupResources(ID3D12Device5* device) override;
-	void QueueUpdate(Flags updateFlags, eastl::string name, Shape* shape);
+	void QueueUpdate(Shape::Flags updateFlags, eastl::string name, Shape* shape);
 	bool PrepareResources(ID3D12GraphicsCommandList4* commandList, uint& count, uint& vertexCount);
 	void UpdateBLASES(ID3D12GraphicsCommandList4* commandList);
 	void RestoreResources(ID3D12GraphicsCommandList4* commandList);
