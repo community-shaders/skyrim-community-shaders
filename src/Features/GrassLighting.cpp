@@ -25,13 +25,11 @@ void GrassLighting::DrawSettings()
 		}
 
 		ImGui::Spacing();
-		ImGui::Spacing();
 		ImGui::TextWrapped("Complex Grass Detection");
 		ImGui::SliderFloat("Detection Threshold", &settings.ComplexGrassThreshold, 0.001f, 0.1f, "%.3f");
 		if (auto _tt = Util::HoverTooltipWrapper()) {
 			ImGui::Text(
-				"Threshold for detecting complex grass textures. "
-				"Lower values are more strict. Adjust if grass is incorrectly detected as complex/non-complex.");
+				"Threshold for detecting complex grass textures. Lower values are more strict.");
 		}
 
 		ImGui::Spacing();
