@@ -966,6 +966,7 @@ void Shape::UpdateUploadDynamicBuffers(ID3D12GraphicsCommandList4* commandList)
 	dynamicPositionBuffer->Upload(commandList);
 }
 
+// TODO: Handle lazy skinned meshes update
 bool Shape::UpdateSkinning()
 {
 	if (!(flags & Flags::Skinned))
@@ -974,9 +975,13 @@ bool Shape::UpdateSkinning()
 	if (!geometry)
 		return false;
 
-	// TODO: Handle lazy skinned meshes update
-	if (geometry->GetAppCulled())
+	auto& geometryFlags = geometry->GetFlags();
+
+	if (geometryFlags.any(RE::NiAVObject::Flag::kHidden))
 		return false;
+
+	/*if (geometryFlags.any(RE::NiAVObject::Flag::kNoAnimSyncS))
+		return false;*/
 
 	return true;
 }

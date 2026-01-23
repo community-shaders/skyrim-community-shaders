@@ -31,30 +31,31 @@ struct Instance
 	}
 
 	// Checks for skinned and dynamic trishapes update
-	void Update(RE::NiAVObject* pNiNode, const eastl::pair<eastl::string, Model*>& modelPair, SkinningPipeline* skinningPipeline)
+	void Update(RE::NiAVObject* node, const eastl::pair<eastl::string, Model*>& modelPair, SkinningPipeline* skinningPipeline)
 	{
 		// Instance was not changed by the game, so there is no need to update it
 		// This doesn't work at all for actors
 		/*if (pNiNode->lastUpdatedFrameCounter < globals::state->frameCount && hasUpdated)
 				return true;*/
 
-		// Is this working?
-		if (pNiNode->GetAppCulled())
-			return;
-
-		//logger::info("Render Use: {}", pNiNode->GetFlags().any(RE::NiAVObject::Flag::kRenderUse));
-
 		// Instance has already been updated this frame
 		if (!frameChecker.IsNewFrame())
 			return;
 
 		// Sets the BLAS instance transform
-		XMStoreFloat3x4(&transform, GetXMFromNiTransform(pNiNode->world));
+		XMStoreFloat3x4(&transform, GetXMFromNiTransform(node->world));
+
+		if (node->GetAppCulled())
+			return;
 
 		auto& [path, model] = modelPair;
 
 		if ((model->GetFlags() & Shape::Flags::Dynamic) || (model->GetFlags() & Shape::Flags::Skinned)) {
+			logger::trace("Update {} - [0x{:08X}] {}", filename, node->GetFlags().underlying(), GetFlagsString<RE::NiAVObject::Flag>(node->GetFlags().underlying()));
+			
 			for (auto& shape : model->shapes) {
+				logger::trace("Update {} - [0x{:08X}] {}", shape->geometry->name, shape->geometry->GetFlags().underlying(), GetFlagsString<RE::NiAVObject::Flag>(shape->geometry->GetFlags().underlying()));
+
 				Shape::Flags updateFlags = Shape::Flags::None;
 
 				if (shape->UpdateDynamicPosition()) {

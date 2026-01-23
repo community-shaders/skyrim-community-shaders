@@ -29,6 +29,7 @@
 #include "Features/Raytracing/BufferMA.h"
 #include "Features/Raytracing/Heap.h"
 #include "Features/Raytracing/HeapManager.h"
+#include "Features/Raytracing/magic_enum_spec.h"
 #include "Features/Raytracing/Pipelines/SHaRCPipeline.h"
 #include "Features/Raytracing/Pipelines/SVGFPipeline.h"
 #include "Features/Raytracing/Pipelines/SkinningPipeline.h"
@@ -1266,7 +1267,7 @@ struct Raytracing : public OverlayFeature
 					}
 
 					if (type == RE::FormType::Static && (flags & MarkerFlags::IsMarker)) {
-						logger::debug("\tTES::sub_1401A0920 - Is Heading Marker");
+						logger::debug("\tTES::sub_1401A0920 - Is Marker");
 						return;
 					}
 

@@ -205,6 +205,10 @@ static inline bool ShareableTexture(const char* path)
 template <typename T>
 static inline std::string GetFlagsString(auto value)
 {
+	static_assert(
+		magic_enum::customize::enum_range<T>::is_flags,
+		"T must be a magic_enum flags enum");
+
 	using N = decltype(value);
 
 	const auto& entries = magic_enum::enum_entries<T>();

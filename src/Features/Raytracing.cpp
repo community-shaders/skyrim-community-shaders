@@ -2109,13 +2109,6 @@ void Raytracing::CreateModelInternal(RE::TESForm* form, const char* path, RE::Ni
 
 				shapes.push_back(eastl::move(meshData));
 			}
-
-			/*auto* rootParent = skinInstance->rootParent;
-			auto* bones = skinInstance->bones;
-			auto* boneWorldTransforms = skinInstance->boneWorldTransforms;
-
-			auto& numMatrices = skinInstance->numMatrices;
-			auto* boneMatrices = skinInstance->boneMatrices;*/
 		}
 
 		return RE::BSVisit::BSVisitControl::kContinue;
@@ -2408,7 +2401,7 @@ void Raytracing::UpdateInstances()
 	uint32_t* pIndirectionData = nullptr;
 	DX::ThrowIfFailed(indirectionBuffer->uploadResource->Map(0, &readRange, reinterpret_cast<void**>(&pIndirectionData)));
 
-	for (auto& [pNiNode, instance] : instances) {
+	for (auto& [node, instance] : instances) {
 		if (instance.IsDetached())
 			continue;
 
@@ -2432,11 +2425,14 @@ void Raytracing::UpdateInstances()
 		if (settings.DisableSkinned && (dynamic || skinned))
 			continue;
 
+		//if (!model->RenderUse())
+		//	continue;
+
 		if (cullingSettings.Mode == CullingMode::Smart) {
-			if (landscape && pNiNode->GetAppCulled())
+			if (landscape && node->GetFlags().any(RE::NiAVObject::Flag::kHidden))
 				continue;
 
-			auto worldBound = pNiNode->worldBound;
+			auto worldBound = node->worldBound;
 
 			float worldBoundRadius = Util::Units::GameUnitsToMeters(worldBound.radius);
 			float distanceToBounds = Util::Units::GameUnitsToMeters(position.GetDistance(worldBound.center)) - worldBoundRadius;
@@ -2463,15 +2459,15 @@ void Raytracing::UpdateInstances()
 			}
 
 			// We'll cull small models or very distant ones (that are outside the player view)
-			if (frustumCull && !camera->NodeInFrustum(pNiNode))
+			if (frustumCull && !camera->NodeInFrustum(node))
 				continue;
 
 		} else if (cullingSettings.Mode == CullingMode::Skyrim) {
-			if (pNiNode->GetAppCulled())
+			if (node->GetFlags().any(RE::NiAVObject::Flag::kHidden))
 				continue;
 		}
 
-		instance.Update(pNiNode, { it->first, model.get() }, skinningPipeline.get());
+		instance.Update(node, { it->first, model.get() }, skinningPipeline.get());
 
 		// This is temporary while I think of a better place to fit this (probably on instance.Update?)
 		auto firstShapeIndex = totalShapeCount;
@@ -2499,7 +2495,7 @@ void Raytracing::UpdateInstances()
 
 		instanceBufferData.emplace_back(
 			instance.transform,
-			LightData(GatherInstanceLights(pNiNode)),
+			LightData(GatherInstanceLights(node)),
 			firstShapeIndex);
 	}
 
