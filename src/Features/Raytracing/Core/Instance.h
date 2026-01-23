@@ -11,6 +11,12 @@
 
 struct Instance
 {
+	enum State : uint8_t
+	{
+		Hidden = 1 << 0,
+		Detached = 1 << 1
+	};
+
 	Instance(eastl::string filename) :
 		filename(filename) {};
 
@@ -47,19 +53,19 @@ struct Instance
 
 		auto& [path, model] = modelPair;
 
-		if ((model->GetFlags() & Flags::Dynamic) || (model->GetFlags() & Flags::Skinned)) {
+		if ((model->GetFlags() & Shape::Flags::Dynamic) || (model->GetFlags() & Shape::Flags::Skinned)) {
 			for (auto& shape : model->shapes) {
-				Flags updateFlags = Flags::None;
+				Shape::Flags updateFlags = Shape::Flags::None;
 
 				if (shape->UpdateDynamicPosition()) {
-					updateFlags |= Flags::Dynamic;
+					updateFlags |= Shape::Flags::Dynamic;
 				}
 
 				if (shape->UpdateSkinning()) {
-					updateFlags |= Flags::Skinned;
+					updateFlags |= Shape::Flags::Skinned;
 				}
 
-				if (updateFlags & Flags::Skinned) {
+				if (updateFlags & Shape::Flags::Skinned) {
 					auto& skinInstance = shape->geometry->GetGeometryRuntimeData().skinInstance;
 
 					if (shape->boneMatrices.empty())
@@ -67,14 +73,17 @@ struct Instance
 
 					float3x4* boneMatricesArray = reinterpret_cast<float3x4*>(skinInstance->boneMatrices);
 
-					auto skinRootInverse = GetXMFromNiTransform(skinInstance->rootParent->world.Invert());
+					auto rootParent = skinInstance->rootParent;
+					auto skinRootInverse = GetXMFromNiTransform(rootParent->world.Invert());
+
+					shape->boundRadius = rootParent->worldBound.radius + (rootParent->world.translate + rootParent->worldBound.center).GetDistance(shape->geometry->world.translate);
 
 					for (uint i = 0; i < skinInstance->numMatrices; i++) {
 						XMStoreFloat3x4(&shape->boneMatrices[i], XMMatrixMultiply(XMLoadFloat3x4(&boneMatricesArray[i]), skinRootInverse));
 					}
 				}
 
-				if ((updateFlags & Flags::Dynamic) || (updateFlags & Flags::Skinned)) {
+				if ((updateFlags & Shape::Flags::Dynamic) || (updateFlags & Shape::Flags::Skinned)) {
 					skinningPipeline->QueueUpdate(updateFlags, path, shape.get());
 				}
 			}

@@ -84,11 +84,13 @@ void main(uint3 DTid : SV_DispatchThreadID)
 
     Vertex vertex = Vertices[shapeIndex][vertexIndex];
 
+    float3 position = vertex.Position;
+    
     if (updateData.flags & Flags::Dynamic)
     {
         float4 dynamicVertex = DynamicVertices[shapeIndex][vertexIndex];
 
-        vertex.Position = dynamicVertex.xyz;
+        position = dynamicVertex.xyz;
         //vertex.Tangent = (half3)normalize(float3(dynamicVertex.w, vertex.Tangent.yz));
     }
 
@@ -98,7 +100,7 @@ void main(uint3 DTid : SV_DispatchThreadID)
 
         float3x4 boneMatrix = GetBoneTransformMatrix(skinning, updateData.bonePivot, updateData.boneOffset);
 
-        vertex.Position = mul(boneMatrix, float4(vertex.Position, 1.0f));
+        position = mul(boneMatrix, float4(position, 1.0f));
 
         if ((updateData.flags & Flags::Dynamic) == 0)
         {
@@ -110,5 +112,12 @@ void main(uint3 DTid : SV_DispatchThreadID)
         }
     }
 
+    float dist = length(position);
+    
+    if (dist > updateData.boundRadius)
+        position = (position/dist) * updateData.boundRadius;
+    
+    vertex.Position = position;
+    
     OutputVertices[shapeIndex][vertexIndex] = vertex;
 }

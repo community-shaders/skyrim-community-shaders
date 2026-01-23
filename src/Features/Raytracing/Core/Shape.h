@@ -16,21 +16,22 @@
 #include "Raytracing/Includes/Types/Triangle.hlsli"
 #include "Raytracing/Includes/Types/Vertex.hlsli"
 
-using namespace magic_enum::bitwise_operators;
-
-enum Flags : uint8_t
-{
-	None = 0,
-	Alpha = 1 << 0,
-	Dynamic = 1 << 1,
-	Skinned = 1 << 2,
-	Landscape = 1 << 3
-};
-DEFINE_ENUM_FLAG_OPERATORS(Flags);
-
 class Shape
 {
 public:
+	enum Flags : uint8_t
+	{
+		None = 0,
+		Alpha = 1 << 0,
+		Dynamic = 1 << 1,
+		Skinned = 1 << 2,
+		Landscape = 1 << 3
+	};
+
+	enum State : uint8_t
+	{
+		Hidden = 1 << 0
+	};
 
 	// The position of this meshes SRV in the register stack
 	eastl::unique_ptr<Allocation, AllocationDeleter> allocation;
@@ -62,11 +63,11 @@ public:
 
 	Flags flags = Flags::None;
 
+	float boundRadius;
+
 	Shape(Allocation* allocation, RE::BSGeometry* geometry, Flags flags = Flags::None) :
 		allocation({ allocation, AllocationDeleter() }), geometry(geometry), flags(flags)
-	{
-		//logger::info("[RT] Shape {} at Index {}", geometry->name, allocation->GetIndex());
-	}
+	{ }
 
 	/*inline Shape Clone(uint16_t registerIndexIn, RE::BSGeometry* geometryIn) const
 	{
@@ -105,3 +106,5 @@ public:
 	// For PBR shader flags we need to copy exactly what TruePBR does
 	static stl::enumeration<PBRShaderFlags, uint32_t> GetPBRShaderFlags(const BSLightingShaderMaterialPBR* pbrMaterial);
 };
+
+DEFINE_ENUM_FLAG_OPERATORS(Shape::Flags);

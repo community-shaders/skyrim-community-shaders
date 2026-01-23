@@ -80,8 +80,9 @@ struct Raytracing : public OverlayFeature
 {
 	enum MarkerFlags : uint32_t
 	{
+		Compressed = 1 << 18,
 		MapMarker = 1 << 22,
-		HeadingMarker = 1 << 23
+		HeadingMarker = 1 << 23 // TESObjectSTAT
 	};
 
 	struct GIHeapDef
@@ -1074,16 +1075,26 @@ struct Raytracing : public OverlayFeature
 		{
 			static RE::NiAVObject* thunk(T* oThis, bool a_backgroundLoading)
 			{
+				auto* baseObject = oThis->GetBaseObject();
+
+				logger::info("{}::Load3D Background {}  {} - {:08X}, {} - {:08X}",
+					typeid(T).name(),
+					a_backgroundLoading,
+					magic_enum::enum_name(oThis->formType.get()), oThis->GetFormID(),
+					magic_enum::enum_name(baseObject->formType.get()), baseObject->GetFormID());
+
 				RE::NiAVObject* result = func(oThis, a_backgroundLoading);
 
 				if (auto& rt = globals::features::raytracing; rt.Active()) {
-					auto* baseObject = oThis->GetBaseObject();
+					
 
 					auto flags = baseObject->GetFormFlags();
 					RE::FormType type = baseObject->GetFormType();
 
 					if (type == RE::FormType::IdleMarker)
 						return result;
+
+					//if (typeid(T) != typeid(RE::TESObjectREFR))
 
 					if (flags & MarkerFlags::MapMarker || flags & MarkerFlags::HeadingMarker)
 						return result;
@@ -1146,56 +1157,6 @@ struct Raytracing : public OverlayFeature
 				}
 
 				func(oThis);
-			}
-			static inline REL::Relocation<decltype(thunk)> func;
-		};
-
-		template <typename T>
-		struct Clone3DBase
-		{
-			static RE::NiAVObject* thunk(T* oThis, bool a_backgroundLoading)
-			{
-				auto* result = func(oThis, a_backgroundLoading);
-
-				if (auto& rt = globals::features::raytracing; rt.Active()) {
-					//auto clss = type_name<T>();
-					auto clss = typeid(T).name();
-
-					if (auto model = oThis->As<RE::TESModel>()) {
-						rt.CreateModel(model->GetModel(), netimmerse_cast<RE::NiNode*>(result));
-						logger::warn("[RT] {}::Clone3DBase Valid TESModel for {} - {}", clss, result->name, model->GetModel());
-					} else {
-						logger::warn("[RT] {}::Clone3DBase Invalid TESModel for {}", clss, result ? result->name : "nullptr");
-					}
-				}
-
-				return result;
-			}
-			static inline REL::Relocation<decltype(thunk)> func;
-		};
-
-		template <typename T>
-		struct Clone3D
-		{
-			static RE::NiAVObject* thunk(T* oThis, bool a_backgroundLoading)
-			{
-				auto* result = func(oThis, a_backgroundLoading);
-
-				if (auto& rt = globals::features::raytracing; rt.Active()) {
-					//auto clss = type_name<T>();
-					auto clss = typeid(T).name();
-
-					auto baseObject = oThis->GetBaseObject();
-
-					if (auto model = baseObject->As<RE::TESModel>()) {
-						rt.CreateModel(model->GetModel(), netimmerse_cast<RE::NiNode*>(result));
-						logger::warn("[RT] {}::Clone3D Valid TESModel for {} - {}", clss, result->name, model->GetModel());
-					} else {
-						logger::warn("[RT] {}::Clone3D Invalid TESModel for {}", clss, result ? result->name : "nullptr");
-					}
-				}
-
-				return result;
 			}
 			static inline REL::Relocation<decltype(thunk)> func;
 		};
@@ -1338,11 +1299,69 @@ struct Raytracing : public OverlayFeature
 			static inline REL::Relocation<decltype(thunk)> func;
 		};
 		
+		struct TES_Load3D
+		{
+			static void thunk(RE::TES* a1, RE::TESObjectREFR* refr, RE::TESObjectCELL *a3, void* queuedTree, char a5, RE::NiNode* a6)
+			{
+				auto* baseObject = refr->GetBaseObject();
+
+				logger::info("\tTES::sub_1401A0920 {} - {:08X}, {} - {:08X}",
+					magic_enum::enum_name(refr->formType.get()), refr->GetFormID(),
+					magic_enum::enum_name(baseObject->formType.get()), baseObject->GetFormID());
+
+				func(a1, refr, a3, queuedTree, a5, a6);
+
+				if (auto& rt = globals::features::raytracing; rt.Active()) {
+					auto flags = baseObject->GetFormFlags();
+					RE::FormType type = baseObject->GetFormType();
+
+					if (type == RE::FormType::IdleMarker) {
+						return;
+					}
+
+					// Some actors have markers embedded into their form
+					//if (type != RE::FormType::ActorCharacter && (flags & MarkerFlags::MapMarker)) {
+					if (type == RE::FormType::Activator && (flags & MarkerFlags::MapMarker)) {
+						logger::info("\tTES::sub_1401A0920 - Is Map Marker");
+						return;
+					}
+
+					if (type == RE::FormType::Static && (flags & MarkerFlags::HeadingMarker)) {
+						logger::info("\tTES::sub_1401A0920 - Is Heading Marker");
+						return;
+					}
+
+					auto* pNiAVObject = refr->Get3D();
+
+					if (!pNiAVObject) {
+						logger::info("\tTES::sub_1401A0920 - No 3D");
+						return;
+					}
+
+					if (auto* model = baseObject->As<RE::TESModel>()) {
+						rt.CreateModel(refr, model->GetModel(), pNiAVObject);
+					} else if (auto* actor = refr->As<RE::Actor>()) {
+						rt.CreateModelInternal(refr, actor->GetName(), pNiAVObject);
+					} else {
+						logger::info("\tTES::sub_1401A0920 - No TESModel");
+					}
+				}
+
+				logger::info("\tTES::sub_1401A0920 - End");
+			}
+			static inline REL::Relocation<decltype(thunk)> func;
+		};
 		
 		static void Install()
 		{
-			stl::write_vfunc<0x6A, Load3D<RE::TESObjectREFR>>(RE::VTABLE_TESObjectREFR[0]);
+			stl::detour_thunk<TES_Load3D>(REL::RelocationID(0, 13355));
+
 			stl::write_vfunc<0x6B, Release3DRelatedData<RE::TESObjectREFR>>(RE::VTABLE_TESObjectREFR[0]);
+			stl::write_vfunc<0x6B, Release3DRelatedData<RE::PlayerCharacter>>(RE::VTABLE_Actor[0]);
+
+			//stl::write_vfunc<0x6A, Load3D<RE::TESObjectREFR>>(RE::VTABLE_TESObjectREFR[0]);
+			// 
+			//stl::write_vfunc<0x6B, Release3DRelatedData<RE::TESObjectREFR>>(RE::VTABLE_TESObjectREFR[0]);
 
 			//stl::detour_thunk<TESObjectREFR_Enable>(REL::RelocationID(19373, 19800));
 			//stl::write_vfunc<0x89, TESObjectREFR_Disable>(RE::VTABLE_TESObjectREFR[0]);
@@ -1351,9 +1370,11 @@ struct Raytracing : public OverlayFeature
 			stl::write_vfunc<0x0, NiSourceTexture_Destructor>(RE::VTABLE_NiSourceTexture[0]);
 
 			// Destructors to remove instances
+
 			stl::write_vfunc<0x0, Destructor<RE::NiNode>>(RE::VTABLE_NiNode[0]);
 			stl::write_vfunc<0x0, Destructor<RE::BSFadeNode>>(RE::VTABLE_BSFadeNode[0]);
 			stl::write_vfunc<0x0, Destructor<RE::BSFadeNode>>(RE::VTABLE_BSLeafAnimNode[0]);
+
 			//stl::write_vfunc<0x0, Destructor<RE::BSFadeNode>>(RE::VTABLE_BSTreeNode[0]);
 
 			stl::detour_thunk<Main_RenderWorld>(REL::RelocationID(100424, 107142));
@@ -1385,7 +1406,7 @@ struct Raytracing : public OverlayFeature
 			//stl::write_vfunc<0x0, TESObjectLAND_Destructor>(RE::VTABLE_TESObjectLAND[0]);
 
 			stl::detour_thunk<TES_Init>(REL::RelocationID(13139, 13279));
-			
+
 			//stl::write_vfunc<0x6, AttachDistant3DTask_Attach>(RE::VTABLE_AttachDistant3DTask[0]);
 			
 			logger::info("[RT] Installed hooks");
