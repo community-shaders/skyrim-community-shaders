@@ -160,7 +160,7 @@ float Get2DFilteredShadow(float3 positionWS, uint eyeIndex, out bool validShadow
 
 	float3 viewDirection = FrameBuffer::WorldToView(-normalize(cellCentreMS), false);
 	float2 uv = FrameBuffer::ViewToUV(viewDirection, false);
-	
+
 	if (!FrameBuffer::IsOutsideFrame(uv) && viewDirection.z < 0.0) {  // Check that the view direction exists in screenspace and that it is in front of the camera
 		bool validShadow;
 		uint hasShadowVisibility = Get2DFilteredShadow(cellCentreMS, 0, validShadow) > 0.5;
@@ -174,7 +174,7 @@ float Get2DFilteredShadow(float3 positionWS, uint eyeIndex, out bool validShadow
 			shadowVisibilityBitShift = (shadowVisibilityBitShift + 1) % 32;
 
 			float shadowVisibility = float(countbits(shadowVisibilityBits)) / 32.0;
-			
+
 			ShadowData sD = SharedShadowData[0];
 			float fadeFactor = 1.0 - pow(saturate(dot(cellCentreMS.xyz, cellCentreMS.xyz) / sD.ShadowLightParam.z), 8);
 
