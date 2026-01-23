@@ -48,6 +48,16 @@ struct Model
 		return features;
 	}
 
+	bool RenderUse() const
+	{
+		for (auto& shape : shapes) {
+			if (shape->geometry->GetFlags().any(RE::NiAVObject::Flag::kRenderUse))
+				return true;
+		}
+
+		return false;
+	}
+
 	void AddRef()
 	{
 		refCount.fetch_add(1, eastl::memory_order_relaxed);

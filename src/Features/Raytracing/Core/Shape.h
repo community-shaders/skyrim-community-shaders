@@ -30,7 +30,8 @@ public:
 
 	enum State : uint8_t
 	{
-		Hidden = 1 << 0
+		Hidden = 1 << 0,
+		HiddenDismember = 1 << 1
 	};
 
 	// The position of this meshes SRV in the register stack
@@ -62,6 +63,8 @@ public:
 	Material material;
 
 	Flags flags = Flags::None;
+
+	State state;
 
 	float boundRadius;
 
