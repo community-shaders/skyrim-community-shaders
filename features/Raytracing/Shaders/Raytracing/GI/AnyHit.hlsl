@@ -1,6 +1,7 @@
 #include "Raytracing/Includes/Types.hlsli"
 #include "Raytracing/Includes/Registers.hlsli"
 #include "Raytracing/Includes/RT/Geometry.hlsli"
+#include "Raytracing/Includes/PBR.hlsli"
 
 #include "Common/Color.hlsli"
 

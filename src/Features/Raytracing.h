@@ -829,6 +829,10 @@ struct Raytracing : public OverlayFeature
 
 	eastl::unique_ptr<WrappedResource> mainTexture = nullptr;
 
+	// Accumulation buffer for path tracing denoiser
+	eastl::unique_ptr<WrappedResource> accumulationTexture = nullptr;
+	eastl::unique_ptr<WrappedResource> accumulationTextureCopy = nullptr;
+
 	std::shared_mutex geometryMutex;
 	std::shared_mutex bufferMutex;
 	std::shared_mutex renderMutex;
