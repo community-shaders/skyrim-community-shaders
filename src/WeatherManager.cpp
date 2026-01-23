@@ -48,12 +48,18 @@ void WeatherManager::LoadPerWeatherSettingsFromDisk()
 			settingsFile.close();
 
 			// Store the entire weather settings in cache
-			// The structure is expected to be: { "FeatureName": { settings }, ... }
-			if (weatherData.is_object()) {
-				for (auto& [featureName, featureSettings] : weatherData.items()) {
+			// The structure is expected to be: { "featureSettings": { "FeatureName": { settings }, ... }
+			if (weatherData.is_object() && weatherData.contains("featureSettings") && weatherData["featureSettings"].is_object()) {
+				for (auto& [featureName, featureSettings] : weatherData["featureSettings"].items()) {
 					perWeatherSettingsCache[weatherKey][featureName] = featureSettings;
 				}
 				logger::info("Loaded settings for weather: {}", weatherKey);
+			} else if (weatherData.is_object()) {
+				// Legacy format support: { "FeatureName": { settings }, ... }
+				for (auto& [featureName, featureSettings] : weatherData.items()) {
+					perWeatherSettingsCache[weatherKey][featureName] = featureSettings;
+				}
+				logger::info("Loading weather {} with legacy flat format, will convert on save", weatherKey);
 			}
 		} catch (const nlohmann::json::parse_error& e) {
 			logger::warn("Error parsing weather settings file ({}): {}", entry.path().string(), e.what());
@@ -157,18 +163,23 @@ void WeatherManager::SaveSettingsToWeather(RE::TESWeather* weather, const std::s
 		}
 	}
 
+	// Ensure weatherData has featureSettings object
+	if (!weatherData.contains("featureSettings") || !weatherData["featureSettings"].is_object()) {
+		weatherData["featureSettings"] = json::object();
+	}
+
 	// Update with new feature settings or remove feature entry if settings empty
 	if (settings.is_object() && settings.empty()) {
 		// Remove feature entry from loaded JSON
-		if (weatherData.is_object()) {
-			weatherData.erase(featureName);
+		if (weatherData["featureSettings"].is_object()) {
+			weatherData["featureSettings"].erase(featureName);
 		}
 	} else {
-		weatherData[featureName] = settings;
+		weatherData["featureSettings"][featureName] = settings;
 	}
 
 	// Write back to disk
-	if (weatherData.is_object() && weatherData.empty()) {
+	if (weatherData["featureSettings"].is_object() && weatherData["featureSettings"].empty()) {
 		// No features left for this weather — remove file if it exists
 		if (std::filesystem::exists(filePath)) {
 			try {
