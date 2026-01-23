@@ -1305,7 +1305,7 @@ struct Raytracing : public OverlayFeature
 			{
 				auto* baseObject = refr->GetBaseObject();
 
-				logger::info("\tTES::sub_1401A0920 {} - {:08X}, {} - {:08X}",
+				logger::debug("\tTES::sub_1401A0920 {} - {:08X}, {} - {:08X}",
 					magic_enum::enum_name(refr->formType.get()), refr->GetFormID(),
 					magic_enum::enum_name(baseObject->formType.get()), baseObject->GetFormID());
 
@@ -1319,22 +1319,20 @@ struct Raytracing : public OverlayFeature
 						return;
 					}
 
-					// Some actors have markers embedded into their form
-					//if (type != RE::FormType::ActorCharacter && (flags & MarkerFlags::MapMarker)) {
 					if (type == RE::FormType::Activator && (flags & MarkerFlags::MapMarker)) {
-						logger::info("\tTES::sub_1401A0920 - Is Map Marker");
+						logger::debug("\tTES::sub_1401A0920 - Is Map Marker");
 						return;
 					}
 
 					if (type == RE::FormType::Static && (flags & MarkerFlags::HeadingMarker)) {
-						logger::info("\tTES::sub_1401A0920 - Is Heading Marker");
+						logger::debug("\tTES::sub_1401A0920 - Is Heading Marker");
 						return;
 					}
 
 					auto* pNiAVObject = refr->Get3D();
 
 					if (!pNiAVObject) {
-						logger::info("\tTES::sub_1401A0920 - No 3D");
+						logger::warn("\tTES::sub_1401A0920 - No 3D");
 						return;
 					}
 
@@ -1343,11 +1341,11 @@ struct Raytracing : public OverlayFeature
 					} else if (auto* actor = refr->As<RE::Actor>()) {
 						rt.CreateModelInternal(refr, actor->GetName(), pNiAVObject);
 					} else {
-						logger::info("\tTES::sub_1401A0920 - No TESModel");
+						logger::warn("\tTES::sub_1401A0920 - No TESModel");
 					}
 				}
 
-				logger::info("\tTES::sub_1401A0920 - End");
+				logger::debug("\tTES::sub_1401A0920 - End");
 			}
 			static inline REL::Relocation<decltype(thunk)> func;
 		};
