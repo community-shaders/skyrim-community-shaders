@@ -54,12 +54,6 @@ void WeatherManager::LoadPerWeatherSettingsFromDisk()
 					perWeatherSettingsCache[weatherKey][featureName] = featureSettings;
 				}
 				logger::info("Loaded settings for weather: {}", weatherKey);
-			} else if (weatherData.is_object()) {
-				// Legacy format support: { "FeatureName": { settings }, ... }
-				for (auto& [featureName, featureSettings] : weatherData.items()) {
-					perWeatherSettingsCache[weatherKey][featureName] = featureSettings;
-				}
-				logger::info("Loading weather {} with legacy flat format, will convert on save", weatherKey);
 			}
 		} catch (const nlohmann::json::parse_error& e) {
 			logger::warn("Error parsing weather settings file ({}): {}", entry.path().string(), e.what());
