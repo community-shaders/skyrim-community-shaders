@@ -620,6 +620,16 @@ namespace Util
 	void DrawBreathingText(const char* text, float speed = 2.5f, float minAlpha = 0.7f, float maxAlpha = 1.0f);
 
 	/**
+	 * @brief Returns a color with pulsing brightness animation applied.
+	 * @param baseColor The base color to pulse
+	 * @param speed Animation speed multiplier (default: 4.0f)
+	 * @param minBrightness Minimum brightness multiplier (default: 0.7f)
+	 * @param maxBrightness Maximum brightness multiplier (default: 1.0f)
+	 * @return The color with pulsing brightness applied (alpha unchanged)
+	 */
+	ImVec4 GetPulsingColor(const ImVec4& baseColor, float speed = 4.0f, float minBrightness = 0.7f, float maxBrightness = 1.0f);
+
+	/**
 	 * @brief Draws the feature search bar with magnifying glass icon.
 	 * @param searchString Reference to the search string to modify
 	 * @param availableWidth The available width for the search bar

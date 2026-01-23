@@ -372,12 +372,7 @@ void HomePageRenderer::RenderFirstTimeSetupDialog()
 	ImVec4 hotkeyColor;
 	if (isCapturing) {
 		// Pulsing effect using theme's hotkey color
-		float pulse = 0.7f + 0.3f * sinf((float)ImGui::GetTime() * 4.0f);
-		hotkeyColor = ImVec4(
-			themeSettings.StatusPalette.CurrentHotkey.x * pulse,
-			themeSettings.StatusPalette.CurrentHotkey.y * pulse,
-			themeSettings.StatusPalette.CurrentHotkey.z * pulse,
-			themeSettings.StatusPalette.CurrentHotkey.w);
+		hotkeyColor = Util::GetPulsingColor(themeSettings.StatusPalette.CurrentHotkey);
 	} else if (hovered) {
 		hotkeyColor = ImVec4(themeSettings.StatusPalette.CurrentHotkey.x * HOTKEY_HOVER_DIM_FACTOR,
 			themeSettings.StatusPalette.CurrentHotkey.y * HOTKEY_HOVER_DIM_FACTOR,

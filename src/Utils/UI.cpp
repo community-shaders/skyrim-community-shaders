@@ -654,6 +654,17 @@ namespace Util
 		ImGui::TextColored(color, "%s", text);
 	}
 
+	ImVec4 GetPulsingColor(const ImVec4& baseColor, float speed, float minBrightness, float maxBrightness)
+	{
+		float brightnessRange = maxBrightness - minBrightness;
+		float pulse = minBrightness + brightnessRange * 0.5f * (1.0f + sinf((float)ImGui::GetTime() * speed));
+		return ImVec4(
+			baseColor.x * pulse,
+			baseColor.y * pulse,
+			baseColor.z * pulse,
+			baseColor.w);
+	}
+
 	void DrawSearchIcon(const ImVec2& position, float size, float alpha)
 	{
 		ImDrawList* drawList = ImGui::GetWindowDrawList();
