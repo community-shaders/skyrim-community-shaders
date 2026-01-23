@@ -1252,7 +1252,7 @@ struct Raytracing : public OverlayFeature
 					}
 
 					if (type == RE::FormType::Static && (flags & MarkerFlags::IsMarker)) {
-						logger::debug("\tTES::sub_1401A0920 - Is Heading Marker");
+						logger::debug("\tTES::sub_1401A0920 - Is Marker");
 						return;
 					}
 
