@@ -1488,6 +1488,9 @@ void WeatherWidget::LoadFeatureSettings()
 
 		json featureJson;
 		if (weatherManager->LoadSettingsFromWeather(weather, featureName, featureJson)) {
+			// LoadSettingsFromWeather returns true only when __enabled is true in the cache
+			// Add it to the settings for the UI to display correctly
+			featureJson["__enabled"] = true;
 			settings.featureSettings[featureName] = featureJson;
 		}
 	}
