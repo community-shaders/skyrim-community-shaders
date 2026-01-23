@@ -52,20 +52,11 @@ void WeatherManager::LoadPerWeatherSettingsFromDisk()
 			if (weatherData.is_object()) {
 				for (auto& [featureName, featureSettings] : weatherData.items()) {
 					perWeatherSettingsCache[weatherKey][featureName] = featureSettings;
-					// Log if __enabled flag is present and its value
-					if (featureSettings.is_object()) {
-						bool hasEnabled = featureSettings.contains("__enabled");
-						bool enabledValue = featureSettings.value("__enabled", false);
-						logger::info("Loaded {} for weather {} - __enabled present: {}, value: {}", 
-							featureName, weatherKey, hasEnabled, enabledValue);
-					} else {
-						logger::warn("Feature {} for weather {} is not a valid JSON object", featureName, weatherKey);
-					}
 				}
 				logger::info("Loaded settings for weather: {}", weatherKey);
 			}
-		} catch (const std::exception& e) {
-			logger::warn("Error loading weather settings file ({}): {}", entry.path().string(), e.what());
+		} catch (const nlohmann::json::parse_error& e) {
+			logger::warn("Error parsing weather settings file ({}): {}", entry.path().string(), e.what());
 		}
 	}
 
@@ -98,14 +89,8 @@ void WeatherManager::UpdateFeatures()
 				json nextWeatherSettings;
 
 				// Load settings for last weather (from)
-				// Use game's lastWeather if available, otherwise fall back to our tracked lastKnownWeather
-				RE::TESWeather* fromWeather = currentWeathers.lastWeather;
-				if (!fromWeather && lastKnownWeather.currentWeather) {
-					fromWeather = lastKnownWeather.currentWeather;
-				}
-				
-				if (fromWeather && currentWeathers.lerpFactor < 1.0f) {
-					LoadSettingsFromWeather(fromWeather, featureName, currWeatherSettings);
+				if (currentWeathers.lastWeather && currentWeathers.lerpFactor < 1.0f) {
+					LoadSettingsFromWeather(currentWeathers.lastWeather, featureName, currWeatherSettings);
 				}
 
 				// Load settings for current weather (to)
