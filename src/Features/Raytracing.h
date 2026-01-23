@@ -81,8 +81,8 @@ struct Raytracing : public OverlayFeature
 	enum MarkerFlags : uint32_t
 	{
 		Compressed = 1 << 18,
-		MapMarker = 1 << 22,
-		HeadingMarker = 1 << 23 // TESObjectSTAT
+		MapMarker = 1 << 22,	// TESObjectACTI
+		IsMarker = 1 << 23		// TESObjectSTAT
 	};
 
 	struct GIHeapDef
@@ -1053,79 +1053,6 @@ struct Raytracing : public OverlayFeature
 		};
 
 		template <typename T>
-		struct Load
-		{
-			static bool thunk(RE::TESObjectLAND* oThis, RE::TESFile* a_mod)
-			{
-				bool result = func(oThis, a_mod);
-
-				if (auto& rt = globals::features::raytracing; rt.Active()) {
-					logger::info("[RT] {}::Load", typeid(*oThis).name());
-
-					RE::TESObjectLAND::LoadedLandData* loadedLandData = oThis->loadedData;
-
-					if (loadedLandData) {
-						logger::info("[RT] LoadedLandData");
-
-						if (loadedLandData->mesh) {
-							for (uint i = 0; i < 4; i++) {
-								auto mesh = loadedLandData->mesh[i];
-
-								if (mesh) {
-									logger::info("[RT] Mesh [{}]", i);
-								}
-							}
-						}
-					}
-				}
-
-				return result;
-			}
-			static inline REL::Relocation<decltype(thunk)> func;
-		};
-
-		template <typename T>
-		struct Load3D
-		{
-			static RE::NiAVObject* thunk(T* oThis, bool a_backgroundLoading)
-			{
-				auto* baseObject = oThis->GetBaseObject();
-
-				logger::info("{}::Load3D Background {}  {} - {:08X}, {} - {:08X}",
-					typeid(T).name(),
-					a_backgroundLoading,
-					magic_enum::enum_name(oThis->formType.get()), oThis->GetFormID(),
-					magic_enum::enum_name(baseObject->formType.get()), baseObject->GetFormID());
-
-				RE::NiAVObject* result = func(oThis, a_backgroundLoading);
-
-				if (auto& rt = globals::features::raytracing; rt.Active()) {
-					
-
-					auto flags = baseObject->GetFormFlags();
-					RE::FormType type = baseObject->GetFormType();
-
-					if (type == RE::FormType::IdleMarker)
-						return result;
-
-					//if (typeid(T) != typeid(RE::TESObjectREFR))
-
-					if (flags & MarkerFlags::MapMarker || flags & MarkerFlags::HeadingMarker)
-						return result;
-
-					//logger::info("[RT] Load3D - {} Name: {} - FullLodRef: {}", typeid(*baseObject).name(), oThis->GetName(), oThis->GetFullLODRef());
-
-					if (auto* model = baseObject->As<RE::TESModel>()) {
-						rt.CreateModel(oThis, model->GetModel(), result);
-					}
-				}
-
-				return result;
-			}
-			static inline REL::Relocation<decltype(thunk)> func;
-		};
-
-		template <typename T>
 		struct Release3DRelatedData
 		{
 			static void thunk(T* oThis)
@@ -1338,7 +1265,7 @@ struct Raytracing : public OverlayFeature
 						return;
 					}
 
-					if (type == RE::FormType::Static && (flags & MarkerFlags::HeadingMarker)) {
+					if (type == RE::FormType::Static && (flags & MarkerFlags::IsMarker)) {
 						logger::debug("\tTES::sub_1401A0920 - Is Heading Marker");
 						return;
 					}
@@ -1370,10 +1297,6 @@ struct Raytracing : public OverlayFeature
 
 			stl::write_vfunc<0x6B, Release3DRelatedData<RE::TESObjectREFR>>(RE::VTABLE_TESObjectREFR[0]);
 			stl::write_vfunc<0x6B, Release3DRelatedData<RE::PlayerCharacter>>(RE::VTABLE_Actor[0]);
-
-			//stl::write_vfunc<0x6A, Load3D<RE::TESObjectREFR>>(RE::VTABLE_TESObjectREFR[0]);
-			// 
-			//stl::write_vfunc<0x6B, Release3DRelatedData<RE::TESObjectREFR>>(RE::VTABLE_TESObjectREFR[0]);
 
 			//stl::detour_thunk<TESObjectREFR_Enable>(REL::RelocationID(19373, 19800));
 			//stl::write_vfunc<0x89, TESObjectREFR_Disable>(RE::VTABLE_TESObjectREFR[0]);
