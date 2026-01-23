@@ -64,22 +64,10 @@ float Get2DFilteredShadow(float3 positionWS, uint eyeIndex, out bool validShadow
 
 		float3 positionLS = mul(transpose(lightProjectionMatrix), float4(positionWS.xyz, 1)).xyz;
 
-		if (saturate(positionLS.x) != positionLS.x || saturate(positionLS.y) != positionLS.y)
-		{
-			validShadow = false;
-			return 0.0;
-		}
-
 		float shadowVisibility = SharedShadowMap.SampleCmpLevelZero(comparisonSampler, float3(positionLS.xy, cascadeIndex), positionLS.z - shadowMapThreshold);
 
 		if (cascadeIndex < 1 && sD.StartSplitDistances.y < shadowMapDepth) {
 			float3 cascade1PositionLS = mul(transpose(sD.ShadowMapProj[eyeIndex][1]), float4(positionWS.xyz, 1)).xyz;
-
-			if (saturate(cascade1PositionLS.x) != cascade1PositionLS.x || saturate(cascade1PositionLS.y) != cascade1PositionLS.y)
-			{
-				validShadow = false;
-				return 0.0;
-			}
 
 			float cascade1ShadowVisibility = SharedShadowMap.SampleCmpLevelZero(comparisonSampler, float3(cascade1PositionLS.xy, 1), cascade1PositionLS.z - shadowMapThreshold);
 
@@ -168,11 +156,11 @@ float Get2DFilteredShadow(float3 positionWS, uint eyeIndex, out bool validShadow
 
 	uint shadowVisibilityBitShift = outShadowVisibilityBitShiftArray[dtid];
 
-	cellCentreMS += noise3D[shadowVisibilityBitShift] * Skylighting::CELL_SIZE * 0.5;
+	cellCentreMS += noise3D[shadowVisibilityBitShift] * Skylighting::CELL_SIZE;
 
 	float3 viewDirection = FrameBuffer::WorldToView(-normalize(cellCentreMS), false);
 	float2 uv = FrameBuffer::ViewToUV(viewDirection, false);
-
+	
 	if (!FrameBuffer::IsOutsideFrame(uv) && viewDirection.z < 0.0) {  // Check that the view direction exists in screenspace and that it is in front of the camera
 		bool validShadow;
 		uint hasShadowVisibility = Get2DFilteredShadow(cellCentreMS, 0, validShadow) > 0.5;
@@ -186,7 +174,7 @@ float Get2DFilteredShadow(float3 positionWS, uint eyeIndex, out bool validShadow
 			shadowVisibilityBitShift = (shadowVisibilityBitShift + 1) % 32;
 
 			float shadowVisibility = float(countbits(shadowVisibilityBits)) / 32.0;
-
+			
 			ShadowData sD = SharedShadowData[0];
 			float fadeFactor = 1.0 - pow(saturate(dot(cellCentreMS.xyz, cellCentreMS.xyz) / sD.ShadowLightParam.z), 8);
 

@@ -1156,6 +1156,14 @@ PS_OUTPUT main(PS_INPUT input)
 	float3 specularColor = GetWaterSpecularColor(input, normal, viewDirection, distanceFactor, depthControl.y, eyeIndex);
 	DiffuseOutput diffuseOutput = GetWaterDiffuseColor(input, normal, viewDirection, distanceMul, depthControl.y, fresnel, eyeIndex, viewPosition, screenNoise, depth);
 
+	float3 waterColor = diffuseOutput.refractionDiffuseColor;
+
+	float3 dirColor;
+	float3 ambientColor;
+	Color::ExtractLighting(diffuseOutput.refractionDiffuseColor, dirColor, ambientColor);
+
+	diffuseOutput.refractionDiffuseColor = (dirColor * waterData.skylightingShadowVisibility) + ambientColor;
+
 	float3 diffuseColor = lerp(diffuseOutput.refractionColor, diffuseOutput.refractionDiffuseColor, diffuseOutput.refractionMul);
 
 	depthControl = DepthControl * (distanceMul - 1) + 1;

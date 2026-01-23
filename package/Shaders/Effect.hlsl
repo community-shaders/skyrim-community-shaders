@@ -549,18 +549,17 @@ float3 GetLightingColor(float3 msPosition, float3 worldPosition, float4 screenPo
 
 	float3 color = DLightColor.xyz * Color::EffectLightingMult();
 
-	float llDirLightMult = (SharedData::linearLightingSettings.enableLinearLighting && !SharedData::linearLightingSettings.isDirLightLinear) ? SharedData::linearLightingSettings.dirLightMult : 1.0f;
-	float3 dirLightColor = Color::DirectionalLight(SharedData::DirLightColor.xyz / max(llDirLightMult, 1e-5), SharedData::linearLightingSettings.isDirLightLinear) * llDirLightMult * Color::EffectLightingMult();
-	float3 ambientColor = max(0, mul(SharedData::DirectionalAmbient, float4(0, 0, 1, 1)));
+	float3 dirColor;
+	float3 ambientColor;
+	Color::ExtractLighting(color, dirColor, ambientColor);
+
+	color = dirColor;
 
 #		if defined(IBL)
 	if (SharedData::iblSettings.EnableDiffuseIBL && (!SharedData::InInterior || SharedData::iblSettings.EnableInterior)) {
 		ambientColor *= SharedData::iblSettings.DALCAmount;
 	}
 #		endif
-
-	color -= ambientColor;
-	color = max(0, color);
 
 	if (!SharedData::InInterior){
 		color *= ShadowSampling::GetWorldShadow(worldPosition.xyz, FrameBuffer::CameraPosAdjust[eyeIndex].xyz, eyeIndex);;
@@ -573,25 +572,23 @@ float3 GetLightingColor(float3 msPosition, float3 worldPosition, float4 screenPo
 	float3 positionMSSkylight = worldPosition;
 #			endif
 
-	float3 ddx = ddx_coarse(worldPosition);
-	float3 ddy = ddy_coarse(worldPosition);
-	float3 normal = -normalize(cross(ddx, ddy));
+	float3 normal = float3(0, 0, 1);
 
 	float skylightingShadowVisibility;
 	sh2 skylightingSH = Skylighting::sampleFast(SharedData::skylightingSettings, Skylighting::SkylightingProbeArray, Skylighting::ShadowVisibilityProbeArray, positionMSSkylight, normal, skylightingShadowVisibility);
-
-	if (!SharedData::InInterior){
-		color *= skylightingShadowVisibility;
-	}
-
+	
+	color *= skylightingShadowVisibility;
+	
 	float skylightingDiffuse = SphericalHarmonics::FuncProductIntegral(skylightingSH, SphericalHarmonics::EvaluateCosineLobe(float3(0, 0, 1))) / Math::PI;
 	skylightingDiffuse = saturate(skylightingDiffuse);
 	skylightingDiffuse = lerp(1.0, skylightingDiffuse, Skylighting::getFadeOutFactor(worldPosition));
 	skylightingDiffuse = Skylighting::mixDiffuse(SharedData::skylightingSettings, skylightingDiffuse);
 
-	color = Color::IrradianceToLinear(color);
-	color += ambientColor * skylightingDiffuse;
-	color = Color::IrradianceToGamma(color);
+	ambientColor = Color::IrradianceToLinear(ambientColor);
+	ambientColor *= skylightingDiffuse;
+	ambientColor = Color::IrradianceToGamma(ambientColor);
+
+	color += ambientColor;
 #		endif
 
 #		if defined(IBL)
