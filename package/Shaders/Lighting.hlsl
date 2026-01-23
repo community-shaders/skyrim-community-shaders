@@ -3146,6 +3146,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 		} else {
 			psout.Diffuse.xyz = shadowColor.xyz;
 		}
+		outputAlbedo = psout.Diffuse.xyz;
 		baseColor.xyz = 0.0;
 	} else {
 		psout.Diffuse.xyz = color.xyz;

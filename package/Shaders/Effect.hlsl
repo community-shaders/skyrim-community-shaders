@@ -852,6 +852,7 @@ PS_OUTPUT main(PS_INPUT input)
 	finalColor *= fogMul;
 #	endif
 	psout.Diffuse = finalColor;
+	float3 outputAlbedo = 0;
 #	if defined(LIGHTING) && defined(LIGHT_LIMIT_FIX) && defined(LLFDEBUG)
 	if (SharedData::lightLimitFixSettings.EnableLightsVisualisation) {
 		if (SharedData::lightLimitFixSettings.LightsVisualisationMode == 0) {
@@ -861,6 +862,7 @@ PS_OUTPUT main(PS_INPUT input)
 		} else {
 			psout.Diffuse.xyz = LightLimitFix::TurboColormap((float)lightCount / MAX_CLUSTER_LIGHTS);
 		}
+		outputAlbedo = psout.Diffuse.xyz;
 	}
 #	endif
 
@@ -879,11 +881,11 @@ PS_OUTPUT main(PS_INPUT input)
 
 #if defined(MULTBLEND) || defined(MULTBLEND_DECAL)
 	psout.Specular = float4(psout.Diffuse.xyz, finalColor.w);
-	psout.Albedo = float4(psout.Diffuse.xyz, finalColor.w);
+	psout.Albedo = float4(outputAlbedo, finalColor.w);
 	psout.Reflectance = float4(psout.Diffuse.xyz, finalColor.w);
 	psout.Masks = float4(Color::RGBToLuminance(psout.Diffuse.xyz).xxx, finalColor.w);
 #else
-	psout.Albedo = float4(0, 0, 0, finalColor.w);
+	psout.Albedo = float4(outputAlbedo, finalColor.w);
 	psout.Specular = float4(0, 0, 0, finalColor.w);
 	psout.Reflectance = float4(0, 0, 0, finalColor.w);
 	psout.Masks = float4(0, 0, 0, finalColor.w);

@@ -824,6 +824,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 		} else {
 			diffuseColor.xyz = LightLimitFix::TurboColormap((float)lightCount / MAX_CLUSTER_LIGHTS);
 		}
+		albedo = diffuseColor;
 	} else {
 		psout.Diffuse = float4(diffuseColor, 1);
 	}
