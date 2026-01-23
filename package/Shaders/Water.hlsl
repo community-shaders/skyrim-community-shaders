@@ -771,7 +771,7 @@ WaterNormalData GetWaterNormal(PS_INPUT input, float distanceFactor, float norma
 #					else
 	float3 positionMSSkylight = input.WPosition.xyz;
 #					endif
-	sh2 skylightingSH = Skylighting::sample(SharedData::skylightingSettings, Skylighting::SkylightingProbeArray, Skylighting::ShadowVisibilityProbeArray, Skylighting::stbn_vec3_2Dx1D_128x128x64, input.HPosition.xy, positionMSSkylight, float3(0, 0, 1), result.skylightingShadowVisibility);
+	sh2 skylightingSH = Skylighting::sampleFast(SharedData::skylightingSettings, Skylighting::SkylightingProbeArray, Skylighting::ShadowVisibilityProbeArray, positionMSSkylight, result.skylightingShadowVisibility);
 	float skylighting = SphericalHarmonics::Unproject(skylightingSH, float3(0, 0, 1));
 
 	float wetnessOcclusion = inWorld ? pow(saturate(skylighting), 2) : 0;
