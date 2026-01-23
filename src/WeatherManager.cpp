@@ -53,15 +53,19 @@ void WeatherManager::LoadPerWeatherSettingsFromDisk()
 				for (auto& [featureName, featureSettings] : weatherData.items()) {
 					perWeatherSettingsCache[weatherKey][featureName] = featureSettings;
 					// Log if __enabled flag is present and its value
-					bool hasEnabled = featureSettings.contains("__enabled");
-					bool enabledValue = featureSettings.value("__enabled", false);
-					logger::info("Loaded {} for weather {} - __enabled present: {}, value: {}", 
-						featureName, weatherKey, hasEnabled, enabledValue);
+					if (featureSettings.is_object()) {
+						bool hasEnabled = featureSettings.contains("__enabled");
+						bool enabledValue = featureSettings.value("__enabled", false);
+						logger::info("Loaded {} for weather {} - __enabled present: {}, value: {}", 
+							featureName, weatherKey, hasEnabled, enabledValue);
+					} else {
+						logger::warn("Feature {} for weather {} is not a valid JSON object", featureName, weatherKey);
+					}
 				}
 				logger::info("Loaded settings for weather: {}", weatherKey);
 			}
-		} catch (const nlohmann::json::parse_error& e) {
-			logger::warn("Error parsing weather settings file ({}): {}", entry.path().string(), e.what());
+		} catch (const std::exception& e) {
+			logger::warn("Error loading weather settings file ({}): {}", entry.path().string(), e.what());
 		}
 	}
 
