@@ -821,7 +821,7 @@ float3 GetWaterSpecularColor(PS_INPUT input, float3 normal, float3 viewDirection
 		if (Permutation::PixelShaderDescriptor & Permutation::WaterFlags::Cubemap) {
 #			if defined(DYNAMIC_CUBEMAPS)
 			float3 dynamicCubemap;
-			if (SharedData::InInterior || skylightingSpecular >= 1.0) {
+			if (SharedData::InInterior) {
 				dynamicCubemap = DynamicCubemaps::EnvTexture.SampleLevel(CubeMapSampler, R, 0).xyz;
 			} else {
 				float3 specularIrradiance = 1;

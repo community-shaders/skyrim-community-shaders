@@ -59,7 +59,7 @@ namespace ShadowSampling
 #		if defined(IBL)
 	if (SharedData::iblSettings.EnableDiffuseIBL && (!SharedData::InInterior || SharedData::iblSettings.EnableInterior)) {
 		ambientColorAmb *= SharedData::iblSettings.DALCAmount;
-#			if defined(SKYLIGHTING)
+#			if defined(SKYLIGHTING) && !defined(INTERIOR)
 		float3 iblColor = Color::Saturation(ImageBasedLighting::GetIBLColor(float3(0, 0, -1), skylightingDiffuse), SharedData::iblSettings.IBLSaturation) * SharedData::iblSettings.DiffuseIBLScale;
 #			else
 		float3 iblColor = Color::Saturation(ImageBasedLighting::GetIBLColor(float3(0, 0, -1)), SharedData::iblSettings.IBLSaturation) * SharedData::iblSettings.DiffuseIBLScale;
