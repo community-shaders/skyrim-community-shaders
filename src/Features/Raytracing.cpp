@@ -297,8 +297,6 @@ void Raytracing::DrawDenoiserSettings()
 #ifdef DLSS_RR
 	DrawDLSSRRSettings();
 #endif
-
-	// Draw Accumulation settings
 	if (settings.Denoiser == Denoiser::Accumulation && settings.PathTracing) {
 		if (ImGui::CollapsingHeader("Accumulation")) {
 			ImGui::Text("Accumulated Frames: %d", accumulatedFrames);
@@ -873,7 +871,6 @@ void Raytracing::SetupResources()
 	auto cbDesc = ConstantBufferDesc<RenderResData>();
 	renderResCB = eastl::make_unique<ConstantBuffer>(cbDesc);
 
-	// Accumulation denoiser constant buffer
 	accumulationCBData = eastl::make_unique<AccumulationCBData>();
 	auto accCbDesc = ConstantBufferDesc<AccumulationCBData>();
 	accumulationCB = eastl::make_unique<ConstantBuffer>(accCbDesc);
@@ -3326,14 +3323,11 @@ void Raytracing::DrawRTGI()
 
 	// Check for camera movement for accumulation denoiser
 	if (settings.Denoiser == Denoiser::Accumulation && settings.PathTracing) {
-		// Detect camera movement by comparing current and previous unjittered ViewProj matrices
 		const auto& currentViewProj = globals::game::frameBufferCached.GetCameraViewProjUnjittered();
 		const auto& prevViewProj = globals::game::frameBufferCached.GetCameraPreviousViewProjUnjittered();
 
-		// If matrices are different, camera has moved (or FOV changed, etc.)
 		bool matrixChanged = std::memcmp(&currentViewProj, &prevViewProj, sizeof(currentViewProj)) != 0;
 
-		// Also check position change explicitly
 		float3 posDelta = frameData->Position - frameData->PositionPrev;
 		float movementSq = posDelta.x * posDelta.x + posDelta.y * posDelta.y + posDelta.z * posDelta.z;
 		const float posThreshold = 0.01f;
@@ -3385,14 +3379,10 @@ void Raytracing::DrawRTGI()
 		auto dispatchCount = Util::GetScreenDispatchCount();
 		d3d11Context->Dispatch(dispatchCount.x, dispatchCount.y, 1);
 	} else if (settings.PathTracing && settings.Denoiser == Denoiser::Accumulation) {
-		// Accumulation denoiser: accumulate path tracing results only
 		if (accumulatedFrames == 0 || cameraHasMoved) {
-			// First frame or camera moved: copy path tracing result directly to accumulation buffer
 			d3d11Context->CopyResource(accumulationTexture->resource11, mainTexture->resource11);
-			// Also copy to main texture for display
 			d3d11Context->CopyResource(main.texture, mainTexture->resource11);
 		} else {
-			// Accumulate: blend current PT result with previous accumulated PT results
 			accumulationCBData->AccumulationWeight = 1.0f / static_cast<float>(accumulatedFrames + 1);
 			accumulationCB->Update(accumulationCBData.get(), sizeof(AccumulationCBData));
 
@@ -3401,26 +3391,20 @@ void Raytracing::DrawRTGI()
 
 			d3d11Context->CSSetShader(accumulationCS.get(), nullptr, 0);
 
-			// Copy current accumulation buffer to copy texture for reading
 			d3d11Context->CopyResource(accumulationTextureCopy->resource11, accumulationTexture->resource11);
 
-			// Set input textures:
-			// MainInputTexture (t0) = previous accumulated PT result (accumulationTextureCopy)
-			// DiffuseAlbedoTexture (t1) = current frame PT result (mainTexture)
 			eastl::array<ID3D11ShaderResourceView*, 2> srvs = {
-				accumulationTextureCopy->srv,        // Previous accumulated PT
-				mainTexture->srv                     // Current frame PT
+				accumulationTextureCopy->srv,
+				mainTexture->srv
 			};
 			d3d11Context->CSSetShaderResources(0, (uint)srvs.size(), srvs.data());
 
-			// Output to accumulation buffer UAV
 			ID3D11UnorderedAccessView* accumulationUAV = accumulationTexture->uav;
 			d3d11Context->CSSetUnorderedAccessViews(0, 1, &accumulationUAV, nullptr);
 
 			auto dispatchCount = Util::GetScreenDispatchCount();
 			d3d11Context->Dispatch(dispatchCount.x, dispatchCount.y, 1);
 
-			// Copy accumulated result to main texture for display
 			d3d11Context->CopyResource(main.texture, accumulationTexture->resource11);
 		}
 	} else {
@@ -4275,7 +4259,6 @@ void Raytracing::CompileCompositeShader()
 	if (auto rawPtr = reinterpret_cast<ID3D11ComputeShader*>(Util::CompileShader(L"Data\\Shaders\\Raytracing\\CompositeCS.hlsl", defines, "cs_5_0")); rawPtr)
 		compositeCS.attach(rawPtr);
 
-	// Compile accumulation shader
 	std::vector<std::pair<const char*, const char*>> accDefines;
 	accDefines.emplace_back("ACCUMULATION", "");
 	if (settings.ConvertToGamma) {

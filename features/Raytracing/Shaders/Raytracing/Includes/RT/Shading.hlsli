@@ -145,10 +145,8 @@ float3 EvalTransmissionBSDF(in float3 l, in Surface surface, in BRDFContext brdf
     float eta = isEnter ? (1.0f / materialIOR) : materialIOR;
     
     float NdotL = dot(surface.Normal, l);
-    // Use raw NdotV for transmission (not saturated)
     float NdotV = dot(surface.Normal, brdfContext.ViewDirection);
-    
-    // Check if this is reflection (same hemisphere) or transmission (opposite hemisphere)
+
     bool isReflection = NdotL * NdotV > 0.0f;
     
     NdotL = abs(NdotL);
@@ -160,13 +158,11 @@ float3 EvalTransmissionBSDF(in float3 l, in Surface surface, in BRDFContext brdf
     
     if (isReflection)
     {
-        // Reflection case: half vector is in between V and L
         H = normalize(brdfContext.ViewDirection + l);
         VdotH = clamp(dot(brdfContext.ViewDirection, H), 1e-5f, 1.0f);
     }
     else
     {
-        // Transmission case: half vector is refracted
         H = -normalize(brdfContext.ViewDirection * eta + l);
         VdotH = abs(dot(brdfContext.ViewDirection, H));
     }
@@ -179,13 +175,11 @@ float3 EvalTransmissionBSDF(in float3 l, in Surface surface, in BRDFContext brdf
     
     if (isReflection)
     {
-        // Reflection component
         float3 Fr = (D * Vis) * F;
         return Fr * NdotL;
     }
     else
     {
-        // Transmission component
         float LdotH = abs(dot(l, H));
         float sqrtDenom = VdotH + eta * LdotH;
         float jacobian = (eta * eta * LdotH) / max(sqrtDenom * sqrtDenom, 1e-7f);
@@ -196,6 +190,11 @@ float3 EvalTransmissionBSDF(in float3 l, in Surface surface, in BRDFContext brdf
     }
 }
 
+float3 EvalSimpleTransmission(in float3 l, in Surface surface, in BRDFContext brdfContext)
+{
+    return surface.TransmissionColor;
+}
+
 float3 EvalLight(in float3 l, in Surface surface, in BRDFContext brdfContext, in Material material)
 {
 #if LIGHTEVAL_MODE == LIGHTEVAL_MODE_DIFFUSE
@@ -204,9 +203,15 @@ float3 EvalLight(in float3 l, in Surface surface, in BRDFContext brdfContext, in
     bool hasTransmission = any(surface.TransmissionColor) > 0.0f;
     if (hasTransmission)
     {
-        // For direct lighting, determine if light is entering or exiting based on view direction and geometry normal
-        bool isEnter = dot(brdfContext.ViewDirection, surface.GeomNormal) > 0.0f;
-        return EvalTransmissionBSDF(l, surface, brdfContext, isEnter);
+        if (material.Feature == Feature::kHairTint)
+        {
+            return EvalSimpleTransmission(l, surface, brdfContext);
+        }
+        else
+        {
+            bool isEnter = dot(brdfContext.ViewDirection, surface.GeomNormal) > 0.0f;
+            return EvalTransmissionBSDF(l, surface, brdfContext, isEnter);
+        }
     }
 #   if defined(FULL_MATERIAL)
     else if ((material.PBRFlags & PBR::Flags::Fuzz) != 0)

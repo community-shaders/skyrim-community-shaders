@@ -17,13 +17,9 @@ cbuffer AccumulationCB : register(b2)
 void main(uint2 id : SV_DispatchThreadID)
 {
 #if defined(ACCUMULATION)
-    // Accumulation denoiser mode: accumulate path tracing results only
-    // MainInputTexture (t0) = previous accumulated path tracing result (from dedicated accumulation buffer)
-    // DiffuseAlbedoTexture (t1) = current frame's path tracing result
-    float3 previousAccumulated = MainInputTexture[id].rgb;  // Previous accumulated PT result (t0)
-    float3 currentPathTraced = DiffuseAlbedoTexture[id].rgb;  // Current frame's PT result (t1)
-    
-    // Weighted average: newAccum = prevAccum * (1 - weight) + current * weight
+    float3 previousAccumulated = MainInputTexture[id].rgb;
+    float3 currentPathTraced = DiffuseAlbedoTexture[id].rgb;
+
     float3 outputColor = lerp(previousAccumulated, currentPathTraced, AccumulationWeight);
 #elif defined(COMPOSITE)
     float3 outputColor = Color::GammaToTrueLinear(MainInputTexture[id].rgb);
