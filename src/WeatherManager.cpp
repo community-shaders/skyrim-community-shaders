@@ -218,13 +218,7 @@ bool WeatherManager::LoadSettingsFromWeather(RE::TESWeather* weather, const std:
 				return false;
 			}
 
-			// Copy all settings except the __enabled flag
-			o_json = json::object();
-			for (auto it = featureJson.begin(); it != featureJson.end(); ++it) {
-				if (it.key() != "__enabled") {
-					o_json[it.key()] = it.value();
-				}
-			}
+			o_json = featureJson;
 			return true;
 		}
 	}
