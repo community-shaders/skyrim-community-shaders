@@ -1711,8 +1711,14 @@ void Raytracing::CommitModel(Model* model)
 
 	eastl::vector<D3D12_RAYTRACING_GEOMETRY_DESC> geometryDescs(meshCount);
 
+	// If no trishape has render use, we assume it is not used and skip using it to hide geometry
+	bool isRenderUseValid = model->IsRenderUseValid();
+
 	for (auto i = 0; i < meshCount; i++) {
 		auto& shape = shapes[i];
+
+		if (isRenderUseValid && shape->geometry->GetFlags().none(RE::NiAVObject::Flag::kRenderUse))
+			continue;
 
 		bool hasAlpha = shape->flags & Shape::Flags::Alpha;
 		bool hasGlow = shape->material.Feature == RE::BSShaderMaterial::Feature::kGlowMap;
@@ -2403,9 +2409,6 @@ void Raytracing::UpdateInstances()
 
 		if (settings.DisableSkinned && (dynamic || skinned))
 			continue;
-
-		//if (!model->RenderUse())
-		//	continue;
 
 		if (cullingSettings.Mode == CullingMode::Smart) {
 			if (landscape && node->GetFlags().any(RE::NiAVObject::Flag::kHidden))

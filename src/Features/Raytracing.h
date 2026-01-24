@@ -1247,11 +1247,6 @@ struct Raytracing : public OverlayFeature
 						return;
 					}
 
-					if (type == RE::FormType::Activator && (flags & MarkerFlags::MapMarker)) {
-						logger::debug("\tTES::sub_1401A0920 - Is Map Marker");
-						return;
-					}
-
 					if (type == RE::FormType::Static && (flags & MarkerFlags::IsMarker)) {
 						logger::debug("\tTES::sub_1401A0920 - Is Marker");
 						return;

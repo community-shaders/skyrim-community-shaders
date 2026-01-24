@@ -48,7 +48,7 @@ struct Model
 		return features;
 	}
 
-	bool RenderUse() const
+	bool IsRenderUseValid() const
 	{
 		for (auto& shape : shapes) {
 			if (shape->geometry->GetFlags().any(RE::NiAVObject::Flag::kRenderUse))
