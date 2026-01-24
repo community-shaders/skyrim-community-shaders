@@ -990,17 +990,18 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #	endif
 
 #	if defined(TERRAIN_BLENDING)
-	float depthSampled = TerrainBlending::TerrainBlendingMaskTexture[input.Position.xy].x;
+	float blendFactorTerrain = 0.0;
+	[flatten] if (SharedData::terrainBlendingSettings.Enabled) {
+		float depthSampled = TerrainBlending::TerrainBlendingMaskTexture[input.Position.xy].x;
 
-	float depthSampledLinear = SharedData::GetScreenDepth(depthSampled);
-	float depthPixelLinear = SharedData::GetScreenDepth(input.Position.z);
+		float depthSampledLinear = SharedData::GetScreenDepth(depthSampled);
+		float depthPixelLinear = SharedData::GetScreenDepth(input.Position.z);
 
-	float blendFactorTerrain = saturate((depthSampledLinear - depthPixelLinear) / 10.0);
+		blendFactorTerrain = saturate((depthSampledLinear - depthPixelLinear) / 10.0);
 
-	if (input.Position.z == depthSampled)
-		blendFactorTerrain = 1;
-
-	blendFactorTerrain = saturate(blendFactorTerrain);
+		if (input.Position.z == depthSampled)
+			blendFactorTerrain = 1;
+	}
 #	endif
 
 	float2 uv = input.TexCoord0.xy;
@@ -3160,7 +3161,9 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #	if defined(DEFERRED)
 
 #		if defined(TERRAIN_BLENDING)
-	psout.Diffuse.w = blendFactorTerrain;
+	[flatten] if (SharedData::terrainBlendingSettings.Enabled) {
+		psout.Diffuse.w = blendFactorTerrain;
+	}
 #		endif
 
 	psout.MotionVectors.zw = float2(0.0, psout.Diffuse.w);
