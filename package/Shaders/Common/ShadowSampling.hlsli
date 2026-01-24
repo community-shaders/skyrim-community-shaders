@@ -72,24 +72,24 @@ namespace ShadowSampling
 		float3 dirLightColorDir = Color::DirectionalLight(SharedData::DirLightColor.xyz / max(llDirLightMult, 1e-5), SharedData::linearLightingSettings.isDirLightLinear) * llDirLightMult * Color::EffectLightingMult();
 
 		float maxScale = 1.0;
-		
+
 		if (ambientColorAmb.x > 0.0)
 			maxScale = min(maxScale, inputColor.x / ambientColorAmb.x);
 		if (ambientColorAmb.y > 0.0)
 			maxScale = min(maxScale, inputColor.y / ambientColorAmb.y);
 		if (ambientColorAmb.z > 0.0)
 			maxScale = min(maxScale, inputColor.z / ambientColorAmb.z);
-	
+
 		if (dirLightColorDir.x > 0.0)
 			maxScale = min(maxScale, inputColor.x / dirLightColorDir.x);
 		if (dirLightColorDir.y > 0.0)
 			maxScale = min(maxScale, inputColor.y / dirLightColorDir.y);
 		if (dirLightColorDir.z > 0.0)
 			maxScale = min(maxScale, inputColor.z / dirLightColorDir.z);
-		
+
 		ambientColorAmb *= maxScale;
 		dirLightColorDir *= maxScale;
-		
+
 		float3 dirLightColorAmb = max(0.0, inputColor - ambientColorAmb);
 		float3 ambientColorDir = max(0.0, inputColor - dirLightColorDir);
 
