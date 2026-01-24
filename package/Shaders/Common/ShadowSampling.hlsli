@@ -56,45 +56,30 @@ namespace ShadowSampling
 	{
 		float3 ambientColorAmb = max(0, mul(SharedData::DirectionalAmbient, float4(0, 0, 1, 1)));
 
-#		if defined(IBL)
-	if (SharedData::iblSettings.EnableDiffuseIBL && (!SharedData::InInterior || SharedData::iblSettings.EnableInterior)) {
-		ambientColorAmb *= SharedData::iblSettings.DALCAmount;
-#			if defined(SKYLIGHTING) && !defined(INTERIOR)
-		float3 iblColor = Color::Saturation(ImageBasedLighting::GetIBLColor(float3(0, 0, -1), skylightingDiffuse), SharedData::iblSettings.IBLSaturation) * SharedData::iblSettings.DiffuseIBLScale;
-#			else
-		float3 iblColor = Color::Saturation(ImageBasedLighting::GetIBLColor(float3(0, 0, -1)), SharedData::iblSettings.IBLSaturation) * SharedData::iblSettings.DiffuseIBLScale;
-#			endif
-		ambientColorAmb += Color::IrradianceToGamma(iblColor);
-	}
-#		endif
+	#   if defined(IBL)
+		if (SharedData::iblSettings.EnableDiffuseIBL && (!SharedData::InInterior || SharedData::iblSettings.EnableInterior)) {
+			ambientColorAmb *= SharedData::iblSettings.DALCAmount;
+	#       if defined(SKYLIGHTING) && !defined(INTERIOR)
+			float3 iblColor = Color::Saturation(ImageBasedLighting::GetIBLColor(float3(0, 0, -1), skylightingDiffuse), SharedData::iblSettings.IBLSaturation) * SharedData::iblSettings.DiffuseIBLScale;
+	#       else
+			float3 iblColor = Color::Saturation(ImageBasedLighting::GetIBLColor(float3(0, 0, -1)), SharedData::iblSettings.IBLSaturation) * SharedData::iblSettings.DiffuseIBLScale;
+	#       endif
+			ambientColorAmb += Color::IrradianceToGamma(iblColor);
+		}
+	#   endif
 
-		float llDirLightMult = (SharedData::linearLightingSettings.enableLinearLighting && !SharedData::linearLightingSettings.isDirLightLinear) ? SharedData::linearLightingSettings.dirLightMult : 1.0f;
-		float3 dirLightColorDir = Color::DirectionalLight(SharedData::DirLightColor.xyz / max(llDirLightMult, 1e-5), SharedData::linearLightingSettings.isDirLightLinear) * llDirLightMult * Color::EffectLightingMult();
+		float llDirLightMult = (SharedData::linearLightingSettings.enableLinearLighting && !SharedData::linearLightingSettings.isDirLightLinear) 
+			? SharedData::linearLightingSettings.dirLightMult : 1.0f;
+		float3 dirLightColorDir = Color::DirectionalLight(SharedData::DirLightColor.xyz / max(llDirLightMult, 1e-5), 
+			SharedData::linearLightingSettings.isDirLightLinear) * llDirLightMult * Color::EffectLightingMult();
 
-		float maxScale = 1.0;
-
-		if (ambientColorAmb.x > 0.0)
-			maxScale = min(maxScale, inputColor.x / ambientColorAmb.x);
-		if (ambientColorAmb.y > 0.0)
-			maxScale = min(maxScale, inputColor.y / ambientColorAmb.y);
-		if (ambientColorAmb.z > 0.0)
-			maxScale = min(maxScale, inputColor.z / ambientColorAmb.z);
-
-		if (dirLightColorDir.x > 0.0)
-			maxScale = min(maxScale, inputColor.x / dirLightColorDir.x);
-		if (dirLightColorDir.y > 0.0)
-			maxScale = min(maxScale, inputColor.y / dirLightColorDir.y);
-		if (dirLightColorDir.z > 0.0)
-			maxScale = min(maxScale, inputColor.z / dirLightColorDir.z);
-
-		ambientColorAmb *= maxScale;
-		dirLightColorDir *= maxScale;
-
-		float3 dirLightColorAmb = max(0.0, inputColor - ambientColorAmb);
-		float3 ambientColorDir = max(0.0, inputColor - dirLightColorDir);
-
-		dirColor = lerp(dirLightColorAmb, dirLightColorDir, 0.5);
-		ambientColor = lerp(ambientColorAmb, ambientColorDir, 0.5);
+		// Calculate total expected lighting and find scale to match input
+		float3 totalLight = ambientColorAmb + dirLightColorDir;
+		float3 scale = totalLight > 0.0 ? inputColor / totalLight : 1.0;
+		
+		// Distribute proportionally
+		ambientColor = ambientColorAmb * scale;
+		dirColor = dirLightColorDir * scale;
 	}
 }
 
