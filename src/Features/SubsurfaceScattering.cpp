@@ -244,7 +244,7 @@ void SubsurfaceScattering::DrawSSS()
 
 		ID3D11ShaderResourceView* views[5];
 		views[0] = main.SRV;
-		views[1] = terrainBlending.loaded ? terrainBlending.blendedDepthTexture16->srv.get() : depth.depthSRV;
+		views[1] = terrainBlending.loaded && terrainBlending.settings.Enabled ? terrainBlending.blendedDepthTexture16->srv.get() : depth.depthSRV;
 		views[2] = mask.SRV;
 		views[3] = albedo.SRV;
 		views[4] = normal.SRV;
