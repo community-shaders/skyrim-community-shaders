@@ -4,6 +4,28 @@
 #include "ShaderCache.h"
 #include "State.h"
 
+NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
+	TerrainBlending::Settings,
+	Enabled)
+
+void TerrainBlending::DrawSettings()
+{
+	ImGui::Checkbox("Enable Terrain Blending", (bool*)&settings.Enabled);
+	if (auto _tt = Util::HoverTooltipWrapper()) {
+		ImGui::Text("Enable seamless blending between terrain and objects.");
+	}
+}
+
+void TerrainBlending::LoadSettings(json& o_json)
+{
+	settings = o_json;
+}
+
+void TerrainBlending::SaveSettings(json& o_json)
+{
+	o_json = settings;
+}
+
 ID3D11VertexShader* TerrainBlending::GetTerrainVertexShader()
 {
 	if (!terrainVertexShader) {
@@ -211,7 +233,7 @@ void TerrainBlending::Hooks::Main_RenderDepth::thunk(bool a1, bool a2)
 
 	singleton.averageEyePosition = Util::GetAverageEyePosition();
 
-	if (shaderCache->IsEnabled()) {
+	if (shaderCache->IsEnabled() && singleton.settings.Enabled) {
 		mainDepth.depthSRV = singleton.blendedDepthTexture->srv.get();
 		zPrepassCopy.depthSRV = singleton.blendedDepthTexture->srv.get();
 
@@ -241,7 +263,7 @@ void TerrainBlending::Hooks::BSBatchRenderer__RenderPassImmediately::thunk(RE::B
 	auto& singleton = globals::features::terrainBlending;
 	auto shaderCache = globals::shaderCache;
 
-	if (shaderCache->IsEnabled()) {
+	if (shaderCache->IsEnabled() && singleton.settings.Enabled) {
 		if (singleton.renderDepth) {
 			// Entering or exiting terrain depth section
 			bool inTerrain = a_pass->shaderProperty && a_pass->shaderProperty->flags.all(RE::BSShaderProperty::EShaderPropertyFlag::kMultiTextureLandscape);
@@ -290,8 +312,7 @@ void TerrainBlending::RenderTerrainBlendingPasses()
 	auto stateUpdateFlags = globals::game::stateUpdateFlags;
 
 	// Used to get the distance of the surface to the lowest depth
-	auto view = terrainDepth.depthSRV;
-	context->PSSetShaderResources(55, 1, &view);
+	context->PSSetShaderResources(55, 1, &terrainDepth.depthSRV);
 
 	if (!terrainRenderPasses.empty() || !renderPasses.empty()) {
 		GET_INSTANCE_MEMBER(alphaBlendMode, shadowState)

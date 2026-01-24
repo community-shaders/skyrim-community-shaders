@@ -20,6 +20,19 @@ public:
 	}
 	virtual inline bool HasShaderDefine(RE::BSShader::Type) override { return true; }
 
+	struct Settings
+	{
+		uint32_t Enabled = true;
+		uint32_t pad[3];
+	};
+	STATIC_ASSERT_ALIGNAS_16(Settings);
+
+	Settings settings;
+
+	virtual void DrawSettings() override;
+	virtual void LoadSettings(json& o_json) override;
+	virtual void SaveSettings(json& o_json) override;
+
 	virtual void SetupResources() override;
 
 	ID3D11VertexShader* GetTerrainVertexShader();

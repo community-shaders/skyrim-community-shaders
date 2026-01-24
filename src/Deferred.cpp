@@ -427,7 +427,7 @@ void Deferred::DeferredPasses()
 			albedo.SRV,
 			normalRoughness.SRV,
 			masks.SRV,
-			dynamicCubemaps.loaded || REL::Module::IsVR() ? (terrainBlending.loaded ? terrainBlending.blendedDepthTexture16->srv.get() : depth.depthSRV) : nullptr,
+			dynamicCubemaps.loaded || REL::Module::IsVR() ? (terrainBlending.loaded && terrainBlending.settings.Enabled ? terrainBlending.blendedDepthTexture16->srv.get() : depth.depthSRV) : nullptr,
 			dynamicCubemaps.loaded ? reflectance.SRV : nullptr,
 			dynamicCubemaps.loaded ? dynamicCubemaps.envTexture->srv.get() : nullptr,
 			dynamicCubemaps.loaded ? dynamicCubemaps.envReflectionsTexture->srv.get() : nullptr,
@@ -691,8 +691,9 @@ void Deferred::Hooks::Main_RenderWorld_BlendedDecals::thunk(RE::BSShaderAccumula
 	if (globals::shaderCache->IsEnabled() && globals::state->inWorld) {
 		auto& terrainBlending = globals::features::terrainBlending;
 		// Defer terrain rendering until after everything else
-		if (terrainBlending.loaded)
+		if (terrainBlending.loaded && terrainBlending.settings.Enabled) {
 			terrainBlending.RenderTerrainBlendingPasses();
+		}
 	}
 
 	// Deferred blended decals
