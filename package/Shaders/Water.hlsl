@@ -1103,9 +1103,9 @@ PS_OUTPUT main(PS_INPUT input)
 		float skylighting = SphericalHarmonics::Unproject(skylightingSH, float3(0, 0, 1));
 
 		skylightingDiffuse = SphericalHarmonics::FuncProductIntegral(skylightingSH, SphericalHarmonics::EvaluateCosineLobe(float3(0, 0, 1))) / Math::PI;
-		skylightingDiffuse = saturate(skylightingDiffuse);		
+		skylightingDiffuse = saturate(skylightingDiffuse);
 		skylightingDiffuse = lerp(1.0, skylightingDiffuse, Skylighting::getFadeOutFactor(input.WPosition.xyz));
-		
+
 		skylightingSpecular = skylightingDiffuse;
 
 		skylightingDiffuse = Skylighting::mixDiffuse(SharedData::skylightingSettings, skylightingDiffuse);
