@@ -157,23 +157,25 @@ void WeatherManager::SaveSettingsToWeather(RE::TESWeather* weather, const std::s
 		}
 	}
 
-	// Ensure weatherData has featureSettings object
+	// Ensure weatherData is an object and has featureSettings
+	if (!weatherData.is_object()) {
+		weatherData = json::object();
+	}
 	if (!weatherData.contains("featureSettings") || !weatherData["featureSettings"].is_object()) {
 		weatherData["featureSettings"] = json::object();
 	}
+	auto& featureSettings = weatherData["featureSettings"];
 
 	// Update with new feature settings or remove feature entry if settings empty
 	if (settings.is_object() && settings.empty()) {
 		// Remove feature entry from loaded JSON
-		if (weatherData["featureSettings"].is_object()) {
-			weatherData["featureSettings"].erase(featureName);
-		}
+		featureSettings.erase(featureName);
 	} else {
-		weatherData["featureSettings"][featureName] = settings;
+		featureSettings[featureName] = settings;
 	}
 
 	// Write back to disk
-	if (weatherData["featureSettings"].is_object() && weatherData["featureSettings"].empty()) {
+	if (featureSettings.empty()) {
 		// No features left for this weather — remove file if it exists
 		if (std::filesystem::exists(filePath)) {
 			try {
