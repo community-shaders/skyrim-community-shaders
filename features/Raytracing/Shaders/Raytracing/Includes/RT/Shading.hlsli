@@ -190,11 +190,6 @@ float3 EvalTransmissionBSDF(in float3 l, in Surface surface, in BRDFContext brdf
     }
 }
 
-float3 EvalSimpleTransmission(in float3 l, in Surface surface, in BRDFContext brdfContext)
-{
-    return surface.TransmissionColor;
-}
-
 float3 EvalLight(in float3 l, in Surface surface, in BRDFContext brdfContext, in Material material)
 {
 #if LIGHTEVAL_MODE == LIGHTEVAL_MODE_DIFFUSE
@@ -203,15 +198,8 @@ float3 EvalLight(in float3 l, in Surface surface, in BRDFContext brdfContext, in
     bool hasTransmission = any(surface.TransmissionColor) > 0.0f;
     if (hasTransmission)
     {
-        if (material.Feature == Feature::kHairTint)
-        {
-            return EvalSimpleTransmission(l, surface, brdfContext);
-        }
-        else
-        {
-            bool isEnter = dot(brdfContext.ViewDirection, surface.GeomNormal) > 0.0f;
-            return EvalTransmissionBSDF(l, surface, brdfContext, isEnter);
-        }
+        bool isEnter = dot(brdfContext.ViewDirection, surface.GeomNormal) > 0.0f;
+        return EvalTransmissionBSDF(l, surface, brdfContext, isEnter);
     }
 #   if defined(FULL_MATERIAL)
     else if ((material.PBRFlags & PBR::Flags::Fuzz) != 0)
@@ -233,7 +221,7 @@ float3 EvalDirectionalLight(in Surface surface, in BRDFContext brdfContext, in D
     [branch]
     if (any(direct > MIN_DIFFUSE_SHADOW))
     {
-        direct *= TraceRayShadow(Scene, surface, lr);
+        direct *= TraceRayShadow(Scene, surface, lr, randomSeed);
     }
 
     return direct;
@@ -326,7 +314,7 @@ float3 EvalPointLight(in Surface surface, in BRDFContext brdfContext, in LightDa
     [branch]
     if (any(direct > MIN_DIFFUSE_SHADOW))
     {
-        direct *= TraceRayShadowFinite(Scene, surface, lr, dist);
+        direct *= TraceRayShadowFinite(Scene, surface, lr, dist, randomSeed);
     }
 
     return direct;
@@ -533,21 +521,6 @@ bool SampleTransmissionBSDF(in Surface surface, in BRDFContext brdfContext, in b
         direction = L;
         return true;
     }
-}
-
-bool SimpleTransmission(in Surface surface, in BRDFContext brdfContext, inout uint randomSeed, out float3 direction, out MonteCarlo::BRDFWeight brdfWeight)
-{
-    const float3 V = brdfContext.ViewDirection;
-
-    brdfWeight.diffuse = 0.0f;
-    brdfWeight.specular = 0.0f;
-    brdfWeight.transmission = 0.0f;
-
-    // No refraction or reflection, just pass through
-    direction = -V;
-    // For simple transmission (like hair), use full transmission color
-    brdfWeight.transmission = surface.TransmissionColor;
-    return false;
 }
 
 #if defined(FULL_MATERIAL)

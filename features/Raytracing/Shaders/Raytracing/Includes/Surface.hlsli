@@ -188,7 +188,7 @@ struct Surface
         }
 
         [branch]
-        if (material.AlphaFlags == AlphaFlags::kAlphaBlend) {
+        if (material.AlphaFlags == AlphaFlags::kAlphaBlend && !((material.Feature == Feature::kHairTint || material.Feature == Feature::kFaceGen || material.Feature == Feature::kFaceGenRGBTint || material.Feature == Feature::kEye))) {
             float alpha = baseTexture.SampleLevel(BaseSampler, texCoord0, 0).a * material.BaseColor().a;
 
             [branch]

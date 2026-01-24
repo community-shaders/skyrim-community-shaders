@@ -4,6 +4,7 @@
 struct ShadowPayload
 {
     float missed;
+    uint randomSeed;
 };
 
 #endif // SHADOWPAYLOAD_HLSL

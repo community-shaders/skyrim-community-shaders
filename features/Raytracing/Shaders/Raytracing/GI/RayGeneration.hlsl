@@ -271,11 +271,7 @@ void main()
             bool hasTransmission = any(surface.TransmissionColor) > 0.0f;
             if (hasTransmission) {
                 isEnter = dot(brdfContext.ViewDirection, surface.GeomNormal) > 0.0f;
-                if (material.Feature == Feature::kHairTint) {
-                    isSpecular = SimpleTransmission(surface, brdfContext, randomSeed, direction, brdfWeight);
-                } else {
-                    isSpecular = SampleTransmissionBSDF(surface, brdfContext, isEnter, randomSeed, direction, brdfWeight);
-                }
+                isSpecular = SampleTransmissionBSDF(surface, brdfContext, isEnter, randomSeed, direction, brdfWeight);
             } else {
                 isSpecular = SampleDefaultBSDF(surface, brdfContext, randomSeed, direction, brdfWeight);
                 if (j > 0)
