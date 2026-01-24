@@ -52,13 +52,13 @@ namespace ShadowSampling
 		return worldShadow;
 	}
 
-	void ExtractLighting(float3 inputColor, out float3 dirColor, out float3 ambientColor, float skylightingDiffuse)
+	void ExtractLighting(float3 inputColor, out float3 dirColor, out float3 ambientColor, float skylightingDiffuse = 1.0)
 	{
 		float3 ambientColorAmb = max(0, mul(SharedData::DirectionalAmbient, float4(0, 0, 1, 1)));
 
 #		if defined(IBL)
 	if (SharedData::iblSettings.EnableDiffuseIBL && (!SharedData::InInterior || SharedData::iblSettings.EnableInterior)) {
-		ambientColor *= SharedData::iblSettings.DALCAmount;
+		ambientColorAmb *= SharedData::iblSettings.DALCAmount;
 #			if defined(SKYLIGHTING)
 			ambientColorAmb += Color::Saturation(ImageBasedLighting::GetIBLColor(float3(0, 0, -1), skylightingDiffuse), SharedData::iblSettings.IBLSaturation) * SharedData::iblSettings.DiffuseIBLScale;
 #			else
