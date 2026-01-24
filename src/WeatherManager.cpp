@@ -177,13 +177,11 @@ void WeatherManager::SaveSettingsToWeather(RE::TESWeather* weather, const std::s
 	// Write back to disk
 	if (featureSettings.empty()) {
 		// No features left for this weather — remove file if it exists
-		if (std::filesystem::exists(filePath)) {
-			try {
-				std::filesystem::remove(filePath);
-				logger::info("Removed weather settings file (no features remain): {}", filePath);
-			} catch (const std::filesystem::filesystem_error& e) {
-				logger::warn("Failed to remove empty weather settings file ({}): {}", filePath, e.what());
-			}
+		std::error_code ec;
+		if (std::filesystem::remove(filePath, ec)) {
+			logger::info("Removed weather settings file (no features remain): {}", filePath);
+		} else if (ec) {
+			logger::warn("Failed to remove empty weather settings file ({}): {}", filePath, ec.message());
 		}
 		return;
 	}
