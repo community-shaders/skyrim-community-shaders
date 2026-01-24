@@ -117,9 +117,11 @@ namespace Util
 		if (ImGui::BeginPopupModal("Clear Shader Cache?", &showClearCacheConfirmation, ImGuiWindowFlags_AlwaysAutoResize)) {
 			ImGui::Text("Are you sure you want to clear the shader cache?");
 			ImGui::Spacing();
+			ImGui::Spacing();
 			ImGui::TextWrapped(
 				"This will clear all compiled shaders from memory and disk cache (if enabled). "
 				"Shaders will be recompiled when the game next encounters them.");
+			ImGui::Spacing();
 			ImGui::Spacing();
 			ImGui::Separator();
 			ImGui::Spacing();
@@ -128,7 +130,7 @@ namespace Util
 
 			ImGui::Spacing();
 
-			// Center the buttons using same pattern as first-time setup
+			// Center buttons
 			constexpr float buttonWidth = ThemeManager::Constants::POPUP_BUTTON_WIDTH;
 			const float spacing = ImGui::GetStyle().ItemSpacing.x;
 			const float totalWidth = buttonWidth * 2 + spacing;
