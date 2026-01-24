@@ -108,7 +108,7 @@ float Get2DFilteredShadow(float3 positionWS, uint index, uint eyeIndex)
 		}
 
 		float3 positionLS = mul(transpose(lightProjectionMatrix), float4(positionWS.xyz, 1)).xyz;
-		
+
 		positionLS.xy += sampleOffset * rcp(1.0 + cascadeIndex);
 
 		return SharedShadowMap.SampleCmpLevelZero(comparisonSampler, float3(positionLS.xy, cascadeIndex), positionLS.z - shadowMapThreshold);
@@ -180,6 +180,6 @@ float Get2DFilteredShadow(float3 positionWS, uint index, uint eyeIndex)
 
 		outShadowVisibilityBitArray[dtid] = shadowVisibilityBits;
 		outShadowVisibilityBitShiftArray[dtid] = shadowVisibilityBitShift;
-		outShadowVisibilityArray[dtid] = shadowVisibility;	
+		outShadowVisibilityArray[dtid] = shadowVisibility;
 	}
 }
