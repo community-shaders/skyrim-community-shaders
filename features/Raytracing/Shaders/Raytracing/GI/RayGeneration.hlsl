@@ -72,8 +72,10 @@ void main()
     sourcePayload.primitiveIndex = 0;
     sourcePayload.PackBarycentrics(float2(0.0f, 0.0f));
     sourcePayload.PackInstanceGeometryIndex(0, 0);
+    sourcePayload.randomSeed = randomSeed;
 
     TraceRay(Scene, RAY_FLAG_NONE, 0xFF, DIFFUSE_RAY_HITGROUP_IDX, 0, DIFFUSE_RAY_MISS_IDX, sourceRay, sourcePayload);
+    randomSeed = sourcePayload.randomSeed;
 
     if (!sourcePayload.Hit())
     {
@@ -341,8 +343,10 @@ void main()
             payload.primitiveIndex = 0;
             payload.PackBarycentrics(float2(0.0f, 0.0f));
             payload.PackInstanceGeometryIndex(0, 0);
+            payload.randomSeed = randomSeed;
 
             TraceRay(Scene, RAY_FLAG_NONE, 0xFF, DIFFUSE_RAY_HITGROUP_IDX, 0, DIFFUSE_RAY_MISS_IDX, ray, payload);
+            randomSeed = payload.randomSeed;
 
             if (j == 0)
             {
