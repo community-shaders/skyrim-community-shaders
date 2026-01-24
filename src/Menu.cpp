@@ -993,7 +993,7 @@ void Menu::OnFocusChanged()
 	// Solves the alt+tab stuck issue, but disables tab after tabbing back in.
 	if (const auto& inputMgr = RE::BSInputDeviceManager::GetSingleton()) {
 		if (const auto& device = inputMgr->GetKeyboard()) {
-			device->Reset();
+			device->ClearInputState();
 		}
 	}
 	// Allows tab to work again after alt+tabbing back in.
