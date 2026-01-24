@@ -642,6 +642,7 @@ struct WaterNormalData
 {
 	float3 normal;
 	float4 rippleInfo;  // xyz = scaled ripple normal (normalized normal * intensity), w = splash effect intensity
+	float skylightingDiffuse;
 	float skylightingShadowVisibility;
 };
 
@@ -650,6 +651,7 @@ WaterNormalData GetWaterNormal(PS_INPUT input, float distanceFactor, float norma
 	WaterNormalData result;
 	result.rippleInfo = float4(0, 0, 0, 0);
 	result.skylightingShadowVisibility = 1;
+	result.skylightingDiffuse = 1;
 	float3 normalScalesRcp = rcp(input.NormalsScale.xyz);
 
 #			if defined(WATER_PARALLAX)
@@ -773,6 +775,12 @@ WaterNormalData GetWaterNormal(PS_INPUT input, float distanceFactor, float norma
 #					endif
 	sh2 skylightingSH = Skylighting::sampleFast(SharedData::skylightingSettings, Skylighting::SkylightingProbeArray, Skylighting::ShadowVisibilityProbeArray, positionMSSkylight, result.skylightingShadowVisibility);
 	float skylighting = SphericalHarmonics::Unproject(skylightingSH, float3(0, 0, 1));
+
+	float skylightingDiffuse = SphericalHarmonics::FuncProductIntegral(skylightingSH, SphericalHarmonics::EvaluateCosineLobe(float3(0, 0, 1))) / Math::PI;
+	skylightingDiffuse = saturate(skylightingDiffuse);
+	skylightingDiffuse = lerp(1.0, skylightingDiffuse, Skylighting::getFadeOutFactor(input.WPosition.xyz));
+	skylightingDiffuse = Skylighting::mixDiffuse(SharedData::skylightingSettings, skylightingDiffuse);
+	result.skylightingDiffuse = skylightingDiffuse;
 
 	float wetnessOcclusion = inWorld ? pow(saturate(skylighting), 2) : 0;
 #				else
@@ -1160,9 +1168,19 @@ PS_OUTPUT main(PS_INPUT input)
 
 	float3 dirColor;
 	float3 ambientColor;
-	Color::ExtractLighting(diffuseOutput.refractionDiffuseColor, dirColor, ambientColor);
+#			if defined(SKYLIGHTING) && !defined(INTERIOR)
+	ShadowSampling::ExtractLighting(diffuseOutput.refractionDiffuseColor, dirColor, ambientColor, waterData.skylightingDiffuse);
+#			else
+	ShadowSampling::ExtractLighting(diffuseOutput.refractionDiffuseColor, dirColor, ambientColor);
+#			endif
 
-	diffuseOutput.refractionDiffuseColor = (dirColor * waterData.skylightingShadowVisibility) + ambientColor;
+	dirColor *= waterData.skylightingShadowVisibility;
+
+	ambientColor = Color::IrradianceToLinear(ambientColor);
+	ambientColor *= waterData.skylightingDiffuse;
+	ambientColor = Color::IrradianceToGamma(ambientColor);
+
+	diffuseOutput.refractionDiffuseColor = dirColor + ambientColor;
 
 	float3 diffuseColor = lerp(diffuseOutput.refractionColor, diffuseOutput.refractionDiffuseColor, diffuseOutput.refractionMul);
 

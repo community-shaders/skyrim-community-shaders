@@ -532,38 +532,11 @@ cbuffer PerGeometry : register(b2)
 
 #	include "Common/ShadowSampling.hlsli"
 
-float ComputeShadowVariance(float shadow)
-{
-    // Measure local gradient magnitude; classify "no variation" using a small threshold.
-    const float2 grad = float2(ddx(shadow), ddy(shadow));
-    const float v = abs(grad.x) + abs(grad.y) + fwidth(shadow);
-    const float epsilon = 1e-4;
-    return (v < epsilon) ? 1.0 : 0.0;
-}
 
 #	if defined(LIGHTING)
-float3 GetLightingColor(float3 msPosition, float3 worldPosition, float4 screenPosition, uint eyeIndex, inout float shadowVariance)
+float3 GetLightingColor(float3 msPosition, float3 worldPosition, float4 screenPosition, uint eyeIndex)
 {
-	float4 lightDistanceSquared = (PLightPositionX[eyeIndex] - msPosition.xxxx) * (PLightPositionX[eyeIndex] - msPosition.xxxx) + (PLightPositionY[eyeIndex] - msPosition.yyyy) * (PLightPositionY[eyeIndex] - msPosition.yyyy) + (PLightPositionZ[eyeIndex] - msPosition.zzzz) * (PLightPositionZ[eyeIndex] - msPosition.zzzz);
-	float4 lightFadeMul = 1.0.xxxx - saturate(PLightingRadiusInverseSquared * lightDistanceSquared);
-
 	float3 color = DLightColor.xyz * Color::EffectLightingMult();
-
-	float3 dirColor;
-	float3 ambientColor;
-	Color::ExtractLighting(color, dirColor, ambientColor);
-
-	color = dirColor;
-
-#		if defined(IBL)
-	if (SharedData::iblSettings.EnableDiffuseIBL && (!SharedData::InInterior || SharedData::iblSettings.EnableInterior)) {
-		ambientColor *= SharedData::iblSettings.DALCAmount;
-	}
-#		endif
-
-	if (!SharedData::InInterior){
-		color *= ShadowSampling::GetWorldShadow(worldPosition.xyz, FrameBuffer::CameraPosAdjust[eyeIndex].xyz, eyeIndex);;
-	}
 
 #		if defined(SKYLIGHTING)
 #			if defined(VR)
@@ -575,39 +548,38 @@ float3 GetLightingColor(float3 msPosition, float3 worldPosition, float4 screenPo
 	float skylightingShadowVisibility;
 	sh2 skylightingSH = Skylighting::sampleFast(SharedData::skylightingSettings, Skylighting::SkylightingProbeArray, Skylighting::ShadowVisibilityProbeArray, positionMSSkylight, skylightingShadowVisibility);
 	
-	color *= skylightingShadowVisibility;
-	
 	float skylightingDiffuse = SphericalHarmonics::FuncProductIntegral(skylightingSH, SphericalHarmonics::EvaluateCosineLobe(float3(0, 0, 1))) / Math::PI;
 	skylightingDiffuse = saturate(skylightingDiffuse);
 	skylightingDiffuse = lerp(1.0, skylightingDiffuse, Skylighting::getFadeOutFactor(worldPosition));
 	skylightingDiffuse = Skylighting::mixDiffuse(SharedData::skylightingSettings, skylightingDiffuse);
+#	endif
+
+	float3 dirColor;
+	float3 ambientColor;
+#		if defined(SKYLIGHTING) && !defined(INTERIOR)
+	ShadowSampling::ExtractLighting(color, dirColor, ambientColor, skylightingDiffuse);
+#		else
+	ShadowSampling::ExtractLighting(color, dirColor, ambientColor);
+#		endif
+
+	dirColor *= ShadowSampling::GetWorldShadow(worldPosition.xyz, FrameBuffer::CameraPosAdjust[eyeIndex].xyz, eyeIndex);
+
+#		if defined(SKYLIGHTING)
+	dirColor *= skylightingShadowVisibility;
 
 	ambientColor = Color::IrradianceToLinear(ambientColor);
 	ambientColor *= skylightingDiffuse;
 	ambientColor = Color::IrradianceToGamma(ambientColor);
-
-	color += ambientColor;
 #		endif
 
-#		if defined(IBL)
-	float3 iblColor = 0;
-	if (SharedData::iblSettings.EnableDiffuseIBL) {
-		if (!SharedData::InInterior || SharedData::iblSettings.EnableInterior)
-		{
-#			if defined(SKYLIGHTING)
-			iblColor += Color::Saturation(ImageBasedLighting::GetIBLColor(float3(0, 0, -1), skylightingDiffuse), SharedData::iblSettings.IBLSaturation) * SharedData::iblSettings.DiffuseIBLScale;
-#			else
-			iblColor += Color::Saturation(ImageBasedLighting::GetIBLColor(float3(0, 0, -1)), SharedData::iblSettings.IBLSaturation) * SharedData::iblSettings.DiffuseIBLScale;
-#			endif
-			color += Color::IrradianceToGamma(iblColor);
-		}
-	}
-#		endif
+	color = dirColor + ambientColor;
 
 #		if defined(LIGHT_LIMIT_FIX)
 	if (!(Permutation::ExtraShaderDescriptor & Permutation::ExtraFlags::InWorld))
 #		endif
 	{
+		float4 lightDistanceSquared = (PLightPositionX[eyeIndex] - msPosition.xxxx) * (PLightPositionX[eyeIndex] - msPosition.xxxx) + (PLightPositionY[eyeIndex] - msPosition.yyyy) * (PLightPositionY[eyeIndex] - msPosition.yyyy) + (PLightPositionZ[eyeIndex] - msPosition.zzzz) * (PLightPositionZ[eyeIndex] - msPosition.zzzz);
+		float4 lightFadeMul = 1.0.xxxx - saturate(PLightingRadiusInverseSquared * lightDistanceSquared);
 		color.x += dot(Color::PointLight(PLightColorR.xxx).x * lightFadeMul * Color::EffectLightingMult(), 1.0.xxxx);
         color.y += dot(Color::PointLight(PLightColorG.xxx).x * lightFadeMul * Color::EffectLightingMult(), 1.0.xxxx);
         color.z += dot(Color::PointLight(PLightColorB.xxx).x * lightFadeMul * Color::EffectLightingMult(), 1.0.xxxx);
@@ -672,10 +644,9 @@ PS_OUTPUT main(PS_INPUT input)
 
 	float lightingInfluence = LightingInfluence.x;
 	float3 propertyColor = Color::Effect(PropertyColor.xyz);
-	float shadowVariance = 1.0;
 
 #	if defined(LIGHTING)
-	propertyColor = GetLightingColor(input.MSPosition.xyz, input.WorldPosition.xyz, input.Position.xyzw, eyeIndex, shadowVariance);
+	propertyColor = GetLightingColor(input.MSPosition.xyz, input.WorldPosition.xyz, input.Position.xyzw, eyeIndex);
 
 #		if defined(LIGHT_LIMIT_FIX)
 	uint lightCount = 0;
@@ -880,7 +851,7 @@ PS_OUTPUT main(PS_INPUT input)
 	psout.ScreenSpaceNormals.xy = screenSpaceNormal.xy + 0.5.xx;
 	psout.ScreenSpaceNormals.zw = 0.0.xx;
 #	else
-	psout.Normal = float4(shadowVariance, 0, 0, finalColor.w);
+	psout.Normal = float4(1, 0, 0, finalColor.w);
 	psout.Color2 = finalColor;
 #	endif
 

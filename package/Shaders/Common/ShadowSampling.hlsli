@@ -4,6 +4,11 @@
 #include "Common/Math.hlsli"
 #include "Common/Random.hlsli"
 #include "Common/SharedData.hlsli"
+#include "Common/Color.hlsli"
+
+#if defined(IBL)
+#	include "IBL/IBL.hlsli"
+#endif
 
 namespace ShadowSampling
 {
@@ -45,6 +50,51 @@ namespace ShadowSampling
 #endif
 
 		return worldShadow;
+	}
+
+	void ExtractLighting(float3 inputColor, out float3 dirColor, out float3 ambientColor, float skylightingDiffuse)
+	{
+		float3 ambientColorAmb = max(0, mul(SharedData::DirectionalAmbient, float4(0, 0, 1, 1)));
+
+#		if defined(IBL)
+	if (SharedData::iblSettings.EnableDiffuseIBL && (!SharedData::InInterior || SharedData::iblSettings.EnableInterior)) {
+		ambientColor *= SharedData::iblSettings.DALCAmount;
+#			if defined(SKYLIGHTING)
+			ambientColorAmb += Color::Saturation(ImageBasedLighting::GetIBLColor(float3(0, 0, -1), skylightingDiffuse), SharedData::iblSettings.IBLSaturation) * SharedData::iblSettings.DiffuseIBLScale;
+#			else
+			ambientColorAmb += Color::Saturation(ImageBasedLighting::GetIBLColor(float3(0, 0, -1)), SharedData::iblSettings.IBLSaturation) * SharedData::iblSettings.DiffuseIBLScale;
+#			endif
+			ambientColorAmb += Color::IrradianceToGamma(ambientColorAmb);
+	}
+#		endif
+
+		float llDirLightMult = (SharedData::linearLightingSettings.enableLinearLighting && !SharedData::linearLightingSettings.isDirLightLinear) ? SharedData::linearLightingSettings.dirLightMult : 1.0f;
+		float3 dirLightColorDir = Color::DirectionalLight(SharedData::DirLightColor.xyz / max(llDirLightMult, 1e-5), SharedData::linearLightingSettings.isDirLightLinear) * llDirLightMult * Color::EffectLightingMult();
+
+		float maxScale = 1.0;
+		
+		if (ambientColorAmb.x > 0.0)
+			maxScale = min(maxScale, inputColor.x / ambientColorAmb.x);
+		if (ambientColorAmb.y > 0.0)
+			maxScale = min(maxScale, inputColor.y / ambientColorAmb.y);
+		if (ambientColorAmb.z > 0.0)
+			maxScale = min(maxScale, inputColor.z / ambientColorAmb.z);
+	
+		if (dirLightColorDir.x > 0.0)
+			maxScale = min(maxScale, inputColor.x / dirLightColorDir.x);
+		if (dirLightColorDir.y > 0.0)
+			maxScale = min(maxScale, inputColor.y / dirLightColorDir.y);
+		if (dirLightColorDir.z > 0.0)
+			maxScale = min(maxScale, inputColor.z / dirLightColorDir.z);
+		
+		ambientColorAmb *= maxScale;
+		dirLightColorDir *= maxScale;
+		
+		float3 dirLightColorAmb = max(0.0, inputColor - ambientColorAmb);
+		float3 ambientColorDir = max(0.0, inputColor - dirLightColorDir);
+
+		dirColor = lerp(dirLightColorAmb, dirLightColorDir, 0.5);
+		ambientColor = lerp(ambientColorAmb, ambientColorDir, 0.5);
 	}
 }
 
