@@ -218,7 +218,7 @@ void SettingsTabRenderer::RenderShadersTab()
 		// Skip confirmation when clearing shader cache
 		auto& menuSettings = globals::menu->GetSettings();
 		bool skipConfirmation = menuSettings.SkipClearCacheConfirmation;
-		if (ImGui::Checkbox("Don't ask me again", &skipConfirmation)) {
+		if (ImGui::Checkbox("Skip Clear Cache Dialogue", &skipConfirmation)) {
 			menuSettings.SkipClearCacheConfirmation = skipConfirmation;
 		}
 		if (auto _tt = Util::HoverTooltipWrapper()) {
