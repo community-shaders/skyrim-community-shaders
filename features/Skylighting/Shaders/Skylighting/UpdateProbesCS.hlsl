@@ -69,7 +69,7 @@ float Get2DFilteredShadow(float3 positionWS, uint eyeIndex, out bool validShadow
 		if (cascadeIndex < 1 && sD.StartSplitDistances.y < shadowMapDepth) {
 			float3 cascade1PositionLS = mul(transpose(sD.ShadowMapProj[eyeIndex][1]), float4(positionWS.xyz, 1)).xyz;
 
-			float cascade1ShadowVisibility = SharedShadowMap.SampleCmpLevelZero(comparisonSampler, float3(cascade1PositionLS.xy, 1), cascade1PositionLS.z - shadowMapThreshold);
+			float cascade1ShadowVisibility = SharedShadowMap.SampleCmpLevelZero(comparisonSampler, float3(cascade1PositionLS.xy, 1), cascade1PositionLS.z - sD.AlphaTestRef.z);
 
 			float cascade1BlendFactor = smoothstep(0, 1, (shadowMapDepth - sD.StartSplitDistances.y) / (sD.EndSplitDistances.x - sD.StartSplitDistances.y));
 			shadowVisibility = lerp(shadowVisibility, cascade1ShadowVisibility, cascade1BlendFactor);
