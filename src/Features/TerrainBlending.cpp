@@ -12,7 +12,7 @@ void TerrainBlending::DrawSettings()
 {
 	ImGui::Checkbox("Enable Terrain Blending", (bool*)&settings.Enabled);
 	if (auto _tt = Util::HoverTooltipWrapper()) {
-		ImGui::Text("Enable seamless blending between terrain and objects. When disabled, vanilla behavior is used.");
+		ImGui::Text("Enable seamless blending between terrain and objects.");
 	}
 }
 
