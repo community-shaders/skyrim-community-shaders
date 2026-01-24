@@ -177,7 +177,7 @@ void main()
 
 #if defined(DEBUG_NORMALOUT) || defined(DEBUG_TANGENTOUT) || defined(DEBUG_BITANGENTOUT)
     
-#if defined(DEBUG_NORMALOUT)   
+#if defined(DEBUG_NORMALOUT)
     float3 output = sourceSurface.Normal;
 #elif defined(DEBUG_TANGENTOUT)
     float3 output = sourceSurface.Tangent;
@@ -186,6 +186,13 @@ void main()
 #endif
     
     OutputTexture[idx] = float4(output * 0.5f + 0.5f, 1.0f);
+    SpecularAlbedo[idx] = float4(0.5f, 0.5f, 0.5f, 0.0f);
+    SpecularHitDist[idx] = RAY_TMAX;
+    return;
+#endif
+
+#if defined(DEBUG_TRANSOUT)
+    OutputTexture[idx] = float4(sourceSurface.TransmissionColor, 1.0f);
     SpecularAlbedo[idx] = float4(0.5f, 0.5f, 0.5f, 0.0f);
     SpecularHitDist[idx] = RAY_TMAX;
     return;
@@ -232,9 +239,14 @@ void main()
 
         surface = sourceSurface;
         brdfContext = sourceBRDFContext;
+#if defined(PATH_TRACING)
+        material = sourceMaterial;
+        instance = sourceInstance;
+#endif
 
         float3 sampleRadiance = float3(0.0f, 0.0f, 0.0f);
         float3 throughput = float3(1.0f, 1.0f, 1.0f);
+        bool isEnter = true;
 
 #if defined(RAW_RADIANCE)
         float3 throughputDelta = float3(1.0f, 1.0f, 1.0f);
@@ -256,12 +268,20 @@ void main()
                 isSpecular = SampleFuzzBSDF(surface, brdfContext, randomSeed, direction, brdfWeight);
             else
 #   endif
-            isSpecular = SampleDefaultBSDF(surface, brdfContext, randomSeed, direction, brdfWeight);
+            bool hasTransmission = any(surface.TransmissionColor) > 0.0f;
+            if (hasTransmission) {
+                isEnter = dot(brdfContext.ViewDirection, surface.GeomNormal) > 0.0f;
+                isSpecular = SampleTransmissionBSDF(surface, brdfContext, isEnter, randomSeed, direction, brdfWeight);
+            } else {
+                isSpecular = SampleDefaultBSDF(surface, brdfContext, randomSeed, direction, brdfWeight);
+                if (j > 0)
+                    isEnter = true;
+            }
 
             throughput *= surface.AO;
 
 #   if defined(RAW_RADIANCE)
-            float3 brdfWeightOriginal = brdfWeight.diffuse * surface.DiffuseAlbedo + brdfWeight.specular;
+            float3 brdfWeightOriginal = brdfWeight.diffuse * surface.DiffuseAlbedo + brdfWeight.specular + brdfWeight.transmission;
 
 #if defined(SHARC) && defined(SHARC_UPDATE)
             const bool sharcUpdatePass = Frame.SHaRC.UpdatePass;
@@ -272,17 +292,17 @@ void main()
             if (j > 0 || sharcUpdatePass) {
                 throughput *= brdfWeightOriginal;
             } else {
-                float3 brdWeightRaw = brdfWeight.diffuse + brdfWeight.specular;
+                float3 brdWeightRaw = brdfWeight.total();
 
                 throughputDelta = brdfWeightOriginal / brdWeightRaw;
 
                 throughput *= brdWeightRaw;
             }
 #   else
-            throughput *= brdfWeight.diffuse + brdfWeight.specular;
+            throughput *= brdfWeight.total();
 #   endif
 #endif
-            if (dot(surface.GeomNormal, direction) <= 0.0)
+            if (!hasTransmission && dot(surface.GeomNormal, direction) <= 0.0)
                 break;
 
 #if defined(SHARC) && defined(SHARC_UPDATE)
@@ -310,7 +330,9 @@ void main()
                     throughput /= rrProbability;
             }
 
-            ray.Origin = OffsetRay(surface.Position, surface.GeomNormal, direction);
+            float dirDotGeom = dot(direction, surface.GeomNormal);
+            float3 offsetNormal = dirDotGeom > 0.0 ? surface.GeomNormal : -surface.GeomNormal;
+            ray.Origin = OffsetRay(surface.Position, offsetNormal, direction);
             ray.Direction = direction;
             ray.TMin = 0.01f;
             ray.TMax = RAY_TMAX;

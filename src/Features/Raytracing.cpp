@@ -187,6 +187,7 @@ void Raytracing::DrawSettings()
 		CompileRTGIShaders();
 		CompileCompositeShader();
 		recompileReason = RecompileReason::None;
+		accumulatedFrames = 0; // Reset accumulation on recompile/settings change
 	}
 }
 
@@ -296,6 +297,18 @@ void Raytracing::DrawDenoiserSettings()
 #ifdef DLSS_RR
 	DrawDLSSRRSettings();
 #endif
+	if (settings.Denoiser == Denoiser::Accumulation && settings.PathTracing) {
+		if (ImGui::CollapsingHeader("Accumulation")) {
+			ImGui::Text("Accumulated Frames: %d", accumulatedFrames);
+			if (auto _tt = Util::HoverTooltipWrapper()) {
+				ImGui::Text("Number of frames accumulated for denoising.\nAccumulation resets when camera moves.");
+			}
+			
+			if (cameraHasMoved) {
+				ImGui::TextColored({ 1.0f, 0.5f, 0.0f, 1.0f }, "Camera is moving - resetting accumulation");
+			}
+		}
+	}
 }
 //ResolutionMode
 
@@ -687,6 +700,11 @@ void Raytracing::DrawOverlay()
 		ImGui::EndTable();
 	}
 
+	if (settings.PathTracing && settings.Denoiser == Denoiser::Accumulation) {
+		ImGui::Separator();
+		ImGui::Text("Accumulation Frames: %d", accumulatedFrames);
+	}
+
 	ImGui::End();
 }
 
@@ -853,6 +871,10 @@ void Raytracing::SetupResources()
 	auto cbDesc = ConstantBufferDesc<RenderResData>();
 	renderResCB = eastl::make_unique<ConstantBuffer>(cbDesc);
 
+	accumulationCBData = eastl::make_unique<AccumulationCBData>();
+	auto accCbDesc = ConstantBufferDesc<AccumulationCBData>();
+	accumulationCB = eastl::make_unique<ConstantBuffer>(accCbDesc);
+
 	// Setup default textures (this is a bit wordy...)
 	{
 		uint8_t white[] = { 255u, 255u, 255u, 255u };
@@ -981,6 +1003,25 @@ void Raytracing::SetupResources()
 
 			auto barrier = CD3DX12_RESOURCE_BARRIER::Transition(mainTexture->resource.get(), D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
 			commandList->ResourceBarrier(1, &barrier);
+		}
+
+		// Accumulation buffer for path tracing denoiser
+		{
+			D3D11_TEXTURE2D_DESC texDesc{};
+			texDesc.Width = mainDesc.Width;
+			texDesc.Height = mainDesc.Height;
+			texDesc.MipLevels = 1;
+			texDesc.ArraySize = 1;
+			texDesc.Format = DXGI_FORMAT_R16G16B16A16_FLOAT;
+			texDesc.SampleDesc.Count = 1;
+			texDesc.SampleDesc.Quality = 0;
+			texDesc.BindFlags = D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_UNORDERED_ACCESS;
+
+			accumulationTexture = eastl::make_unique<WrappedResource>(texDesc, d3d11Device.get(), d3d12Device.get());
+			DX::ThrowIfFailed(accumulationTexture->resource->SetName(L"Accumulation Texture"));
+
+			accumulationTextureCopy = eastl::make_unique<WrappedResource>(texDesc, d3d11Device.get(), d3d12Device.get());
+			DX::ThrowIfFailed(accumulationTextureCopy->resource->SetName(L"Accumulation Texture Copy"));
 		}
 	}
 
@@ -1720,10 +1761,11 @@ void Raytracing::CommitModel(Model* model)
 		if (isRenderUseValid && shape->geometry->GetFlags().none(RE::NiAVObject::Flag::kRenderUse))
 			continue;
 
-		bool hasAlpha = shape->flags & Shape::Flags::Alpha;
-		bool hasGlow = shape->material.Feature == RE::BSShaderMaterial::Feature::kGlowMap;
+		bool hasAlphaTesting = shape->flags & Shape::Flags::AlphaTesting;
+		bool isBlend = (shape->flags & Shape::Flags::AlphaBlending) &&  (shape->material.Feature == RE::BSShaderMaterial::Feature::kHairTint || shape->material.Feature == RE::BSShaderMaterial::Feature::kFaceGen || shape->material.Feature == RE::BSShaderMaterial::Feature::kFaceGenRGBTint || shape->material.Feature == RE::BSShaderMaterial::Feature::kEye);
+		bool isWindows = shape->material.shaderFlags.any(RE::BSShaderProperty::EShaderPropertyFlag::kAssumeShadowmask) && (shape->material.Feature == RE::BSShaderMaterial::Feature::kGlowMap || shape->material.PBRFlags.any(PBRShaderFlags::HasEmissive));
 
-		bool isOpaque = !hasAlpha && !(hasGlow && settings.InteriorSun);
+		bool isOpaque = !hasAlphaTesting && !(isWindows && settings.InteriorSun) && !isBlend;
 
 		geometryDescs[i] = {
 			.Type = D3D12_RAYTRACING_GEOMETRY_TYPE_TRIANGLES,
@@ -1820,9 +1862,15 @@ void Raytracing::UpdateModelBLAS(Model* model)
 	for (auto i = 0; i < shapeCount; i++) {
 		auto& shape = shapes[i];
 
+		bool hasAlphaTesting = shape->flags & Shape::Flags::AlphaTesting;
+		bool isBlend = (shape->flags & Shape::Flags::AlphaBlending) &&  (shape->material.Feature == RE::BSShaderMaterial::Feature::kHairTint || shape->material.Feature == RE::BSShaderMaterial::Feature::kFaceGen || shape->material.Feature == RE::BSShaderMaterial::Feature::kFaceGenRGBTint || shape->material.Feature == RE::BSShaderMaterial::Feature::kEye);
+		bool isWindows = shape->material.shaderFlags.any(RE::BSShaderProperty::EShaderPropertyFlag::kAssumeShadowmask) && (shape->material.Feature == RE::BSShaderMaterial::Feature::kGlowMap || shape->material.PBRFlags.any(PBRShaderFlags::HasEmissive));
+
+		bool isOpaque = !hasAlphaTesting && !(isWindows && settings.InteriorSun) && !isBlend;
+
 		geometryDescs[i] = {
 			.Type = D3D12_RAYTRACING_GEOMETRY_TYPE_TRIANGLES,
-			.Flags = shape->flags & Shape::Flags::Alpha ? D3D12_RAYTRACING_GEOMETRY_FLAG_NONE : D3D12_RAYTRACING_GEOMETRY_FLAG_OPAQUE,
+			.Flags = isOpaque ? D3D12_RAYTRACING_GEOMETRY_FLAG_OPAQUE : D3D12_RAYTRACING_GEOMETRY_FLAG_NONE,
 			.Triangles = {
 				.Transform3x4 = 0,
 				.IndexFormat = DXGI_FORMAT_R16_UINT,
@@ -3281,6 +3329,26 @@ void Raytracing::DrawRTGI()
 
 	PostRaytraceCleanup();
 
+	// Check for camera movement for accumulation denoiser
+	if (settings.Denoiser == Denoiser::Accumulation && settings.PathTracing) {
+		const auto& currentViewProj = globals::game::frameBufferCached.GetCameraViewProjUnjittered();
+		const auto& prevViewProj = globals::game::frameBufferCached.GetCameraPreviousViewProjUnjittered();
+
+		bool matrixChanged = std::memcmp(&currentViewProj, &prevViewProj, sizeof(currentViewProj)) != 0;
+
+		float3 posDelta = frameData->Position - frameData->PositionPrev;
+		float movementSq = posDelta.x * posDelta.x + posDelta.y * posDelta.y + posDelta.z * posDelta.z;
+		const float posThreshold = 0.01f;
+
+		cameraHasMoved = matrixChanged || (movementSq > posThreshold);
+		
+		if (cameraHasMoved) {
+			accumulatedFrames = 0;
+		} else {
+			accumulatedFrames++;
+		}
+	}
+
 	if (settings.DebugOutput == DebugOutput::None) {
 		if (settings.Denoiser == Denoiser::SVGF) {
 			auto sampler = samplerState.get();
@@ -3318,6 +3386,35 @@ void Raytracing::DrawRTGI()
 
 		auto dispatchCount = Util::GetScreenDispatchCount();
 		d3d11Context->Dispatch(dispatchCount.x, dispatchCount.y, 1);
+	} else if (settings.PathTracing && settings.Denoiser == Denoiser::Accumulation) {
+		if (accumulatedFrames == 0 || cameraHasMoved) {
+			d3d11Context->CopyResource(accumulationTexture->resource11, mainTexture->resource11);
+			d3d11Context->CopyResource(main.texture, mainTexture->resource11);
+		} else {
+			accumulationCBData->AccumulationWeight = 1.0f / static_cast<float>(accumulatedFrames + 1);
+			accumulationCB->Update(accumulationCBData.get(), sizeof(AccumulationCBData));
+
+			auto* accumulationCBPtr = accumulationCB->CB();
+			d3d11Context->CSSetConstantBuffers(2, 1, &accumulationCBPtr);
+
+			d3d11Context->CSSetShader(accumulationCS.get(), nullptr, 0);
+
+			d3d11Context->CopyResource(accumulationTextureCopy->resource11, accumulationTexture->resource11);
+
+			eastl::array<ID3D11ShaderResourceView*, 2> srvs = {
+				accumulationTextureCopy->srv,
+				mainTexture->srv
+			};
+			d3d11Context->CSSetShaderResources(0, (uint)srvs.size(), srvs.data());
+
+			ID3D11UnorderedAccessView* accumulationUAV = accumulationTexture->uav;
+			d3d11Context->CSSetUnorderedAccessViews(0, 1, &accumulationUAV, nullptr);
+
+			auto dispatchCount = Util::GetScreenDispatchCount();
+			d3d11Context->Dispatch(dispatchCount.x, dispatchCount.y, 1);
+
+			d3d11Context->CopyResource(main.texture, accumulationTexture->resource11);
+		}
 	} else {
 		d3d11Context->CopyResource(main.texture, mainTexture->resource11);
 	}
@@ -4169,6 +4266,14 @@ void Raytracing::CompileCompositeShader()
 
 	if (auto rawPtr = reinterpret_cast<ID3D11ComputeShader*>(Util::CompileShader(L"Data\\Shaders\\Raytracing\\CompositeCS.hlsl", defines, "cs_5_0")); rawPtr)
 		compositeCS.attach(rawPtr);
+
+	std::vector<std::pair<const char*, const char*>> accDefines;
+	accDefines.emplace_back("ACCUMULATION", "");
+	if (settings.ConvertToGamma) {
+		accDefines.emplace_back("GAMMA_OUTPUT", "");
+	}
+	if (auto rawPtr = reinterpret_cast<ID3D11ComputeShader*>(Util::CompileShader(L"Data\\Shaders\\Raytracing\\CompositeCS.hlsl", accDefines, "cs_5_0")); rawPtr)
+		accumulationCS.attach(rawPtr);
 }
 
 RaytracingFD::FeatureData Raytracing::GetCommonBufferData()

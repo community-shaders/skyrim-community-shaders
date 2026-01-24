@@ -22,10 +22,11 @@ public:
 	enum Flags : uint8_t
 	{
 		None = 0,
-		Alpha = 1 << 0,
-		Dynamic = 1 << 1,
-		Skinned = 1 << 2,
-		Landscape = 1 << 3
+		AlphaBlending = 1 << 0,
+		AlphaTesting = 1 << 1,
+		Dynamic = 1 << 2,
+		Skinned = 1 << 3,
+		Landscape = 1 << 4
 	};
 
 	enum State : uint8_t

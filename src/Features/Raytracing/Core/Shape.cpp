@@ -380,6 +380,8 @@ void Shape::BuildMaterial(const RE::BSGeometry::GEOMETRY_RUNTIME_DATA& geometryR
 		float4(0.0f, 0.0f, 1.0f, 1.0f)
 	};
 
+	uint16_t alphaFlags = 0u;
+
 	eastl::array<eastl::shared_ptr<Allocation>, 20> textures;
 	textures.fill(blackTexture);
 
@@ -392,7 +394,7 @@ void Shape::BuildMaterial(const RE::BSGeometry::GEOMETRY_RUNTIME_DATA& geometryR
 		auto* property = geometryRuntimeData.properties[State::kProperty].get();
 
 		if (property && property->GetType() == RE::NiProperty::Type::kAlpha) {
-			flags |= Flags::Alpha;
+			flags |= Flags::AlphaBlending;
 		}
 
 		if (property; auto* lightingShaderProp = netimmerse_cast<RE::BSLightingShaderProperty*>(property)) {
@@ -420,6 +422,23 @@ void Shape::BuildMaterial(const RE::BSGeometry::GEOMETRY_RUNTIME_DATA& geometryR
 				shaderType = RE::BSShader::Type::Lighting;
 
 				logger::debug("[RT] BuildMaterial - [Effect] BSLightingShaderProperty Flags: {}", GetFlagsString<EShaderPropertyFlag>(lightingShaderProp->flags.underlying()));
+
+				// Set alpha flags
+				if (flags & Flags::AlphaBlending) {
+					auto alphaProperty = property->GetRTTI() == globals::rtti::NiAlphaPropertyRTTI.get() ? static_cast<RE::NiAlphaProperty*>(property) : nullptr;
+					if (lightingShaderProp->alpha < 0.999f || (alphaProperty && alphaProperty->GetAlphaBlending())) {
+						flags |= Flags::AlphaBlending;
+						colors[0].w = lightingShaderProp->alpha;
+						alphaFlags = Material::AlphaFlags::kAlphaBlend;
+					} else if (alphaProperty && alphaProperty->GetAlphaTesting()) {
+						flags &= ~Flags::AlphaBlending;
+						flags |= Flags::AlphaTesting;
+						alphaFlags = Material::AlphaFlags::kAlphaTest;
+					} else {
+						flags &= ~Flags::AlphaBlending;
+						flags &= ~Flags::AlphaTesting;
+					}
+				}
 
 				// This is always nullptr :(
 				if (auto& effectData = lightingShaderProp->effectData) {
@@ -531,7 +550,7 @@ void Shape::BuildMaterial(const RE::BSGeometry::GEOMETRY_RUNTIME_DATA& geometryR
 										lightingHairTintMaterial->tintColor.red,
 										lightingHairTintMaterial->tintColor.green,
 										lightingHairTintMaterial->tintColor.blue,
-										1.0f
+										(float)colors[0].w
 									};
 								}
 							}
@@ -551,7 +570,7 @@ void Shape::BuildMaterial(const RE::BSGeometry::GEOMETRY_RUNTIME_DATA& geometryR
 										lightingFacegenTintMaterial->tintColor.red,
 										lightingFacegenTintMaterial->tintColor.green,
 										lightingFacegenTintMaterial->tintColor.blue,
-										1.0f
+										(float)colors[0].w
 									};
 								}
 							}
@@ -588,6 +607,7 @@ void Shape::BuildMaterial(const RE::BSGeometry::GEOMETRY_RUNTIME_DATA& geometryR
 		shaderType,
 		feature,
 		pbrFlags,
+		alphaFlags,
 		colors,
 		scalars,
 		texCoordOffsetScales,

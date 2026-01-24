@@ -69,7 +69,15 @@ struct Material
 		kMultiTextureLandscape = 1 << 13,
 		kEyeReflect = 1 << 14,
 		kHairTint = 1 << 15,
-		kTwoSided = 1 << 16
+		kTwoSided = 1 << 16,
+		kAssumeShadowmask = 1 << 17
+	};
+
+	enum AlphaFlags : uint16_t
+	{
+		kOpaque = 0,
+		kAlphaBlend = 1 << 0,
+		kAlphaTest = 1 << 1
 	};
 
 	ShaderFlags GetShaderFlags() const
@@ -158,6 +166,10 @@ struct Material
 			shaderFlagsLocal |= ShaderFlags::kTwoSided;
 		}
 
+		if (shaderFlags.any(EShaderPropertyFlag::kAssumeShadowmask)) {
+			shaderFlagsLocal |= ShaderFlags::kAssumeShadowmask;
+		}
+
 		return shaderFlagsLocal;
 	}
 
@@ -165,6 +177,8 @@ struct Material
 	RE::BSShader::Type shaderType;
 	RE::BSShaderMaterial::Feature Feature;
 	stl::enumeration<PBRShaderFlags, uint16_t> PBRFlags;
+
+	uint16_t AlphaFlags;
 
 	eastl::array<half4, 2> Colors;
 	eastl::array<half, 3> Scalars;
@@ -179,6 +193,7 @@ struct Material
 			TexCoordOffsetScale[0], TexCoordOffsetScale[1],
 			Colors[0], Colors[1],
 			Scalars[0], Scalars[1], Scalars[2],
+			AlphaFlags,
 			Textures[0]->GetIndex(),
 			Textures[1]->GetIndex(),
 			Textures[2]->GetIndex(),
