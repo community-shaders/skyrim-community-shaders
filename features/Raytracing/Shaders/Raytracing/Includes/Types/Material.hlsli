@@ -32,6 +32,8 @@ namespace ShaderFlags
     static const uint kMultiTextureLandscape = (1 << 13);
     static const uint kEyeReflect = (1 << 14);
     static const uint kHairTint = (1 << 15);
+	static const uint kTwoSided = (1 << 16);
+	static const uint kAssumeShadowmask = (1 << 17);
 }
 
 namespace Feature

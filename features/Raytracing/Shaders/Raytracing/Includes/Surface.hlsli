@@ -73,6 +73,9 @@ struct Surface
         float4 vertexColor = Interpolate(v0.Color.unpack(), v1.Color.unpack(), v2.Color.unpack(), uvw);
 		vertexColor = saturate(vertexColor / max(max(vertexColor.r, vertexColor.g), vertexColor.b));
 
+        const bool isWindows = (material.Feature == Feature::kGlowMap || material.PBRFlags & PBR::Flags::HasEmissive) && material.ShaderFlags & ShaderFlags::kAssumeShadowmask;
+        float3 windowAlpha = float3(0.0f, 0.0f, 0.0f);
+
         [branch]
         if (material.ShaderType == ShaderType::TruePBR)
         {
@@ -82,6 +85,10 @@ struct Surface
             float3 albedo = baseTexture.SampleLevel(BaseSampler, texCoord0, 0).rgb;
             float4 rmaos = rmaosTexture.SampleLevel(BaseSampler, texCoord0, 0);
             float3 emissive = emissiveTexture.SampleLevel(BaseSampler, texCoord0, 0).rgb;
+
+            if (isWindows) {
+                windowAlpha = emissive;
+            }
 
             Albedo = albedo * material.BaseColor().rgb * vertexColor.rgb;
             Emissive = emissive * EmitColorToLinear(material.EffectColor().rgb) * material.EffectColor().a * Frame.Emissive * EmitColorMult();
@@ -123,6 +130,9 @@ struct Surface
             [branch]
             if (material.Feature == Feature::kGlowMap) {
                 Texture2D glowTexture = Textures[NonUniformResourceIndex(material.GlowTexture())];
+                if (isWindows) {
+                    windowAlpha = glowTexture.SampleLevel(BaseSampler, texCoord0, 0).rgb;
+                }
                 Emissive = GlowToLinear(glowTexture.SampleLevel(BaseSampler, texCoord0, 0).rgb) * EmitColorToLinear(material.EffectColor().rgb) * material.EffectColor().a * Frame.Emissive * EmitColorMult();
             }
 
@@ -200,6 +210,13 @@ struct Surface
             Albedo *= alpha;
         } else {
             TransmissionColor = float3(0.0f, 0.0f, 0.0f);
+        }
+
+        [branch]
+        if (isWindows) {
+            TransmissionColor = windowAlpha;
+            Albedo *= 1.0f - windowAlpha;
+            Emissive *= 0;
         }
         
         [branch]

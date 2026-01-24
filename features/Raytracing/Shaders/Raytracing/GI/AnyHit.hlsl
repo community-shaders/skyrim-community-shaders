@@ -1,6 +1,5 @@
 #include "Raytracing/Includes/Types.hlsli"
 #include "Raytracing/Includes/Registers.hlsli"
-#include "Raytracing/Includes/RT/CommonRT.hlsli"
 #include "Raytracing/Includes/RT/Geometry.hlsli"
 #include "Raytracing/Includes/PBR.hlsli"
 
@@ -20,17 +19,10 @@ void main(inout Payload payload, in BuiltInTriangleIntersectionAttributes attrib
 
     float2 texCoord = material.TexCoord(Interpolate(v0.Texcoord0, v1.Texcoord0, v2.Texcoord0, uvw));
 
-    float alpha;
-    const bool isWindows = material.Feature == Feature::kGlowMap || material.PBRFlags & PBR::Flags::HasEmissive;
-    
-    [branch]
-    if (material.Feature == Feature::kGlowMap || material.PBRFlags & PBR::Flags::HasEmissive)
-        alpha = 1.0f - Color::RGBToLuminance(Textures[NonUniformResourceIndex(material.GlowTexture())].SampleLevel(BaseSampler, texCoord, 0).rgb);
-    else
-        alpha = Textures[NonUniformResourceIndex(material.BaseTexture())].SampleLevel(BaseSampler, texCoord, 0).a;
+    float alpha = Textures[NonUniformResourceIndex(material.BaseTexture())].SampleLevel(BaseSampler, texCoord, 0).a;
 
     [branch]
-    if (material.AlphaFlags == AlphaFlags::kAlphaTest || isWindows)
+    if (material.AlphaFlags == AlphaFlags::kAlphaTest)
     {
         if (alpha < 0.5f)
         {
