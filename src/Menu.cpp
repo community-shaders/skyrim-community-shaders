@@ -153,6 +153,7 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	ShaderBlockNextKey,
 	EnableShaderBlocking,
 	FirstTimeSetupCompleted,
+	SkipClearCacheConfirmation,
 	Theme,
 	SelectedThemePreset)
 
@@ -680,6 +681,9 @@ void Menu::DrawSettings()
 			ImGui::Spacing();
 			DrawFooter();
 		}
+
+		// Draw global popups (needs to be called once per frame)
+		Util::DrawClearShaderCacheConfirmation();
 	}
 	ImGui::End();
 }
