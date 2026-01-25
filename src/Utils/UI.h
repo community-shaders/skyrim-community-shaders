@@ -83,6 +83,15 @@ namespace Util
 	};
 
 	/**
+	 * Confirmation popup for clearing shader cache.
+	 * Call RequestClearShaderCacheConfirmation() when the clear button is clicked.
+	 * Call DrawClearShaderCacheConfirmation() every frame to render the popup.
+	 * The popup respects the "don't ask me again" setting.
+	 */
+	void RequestClearShaderCacheConfirmation();
+	void DrawClearShaderCacheConfirmation();
+
+	/**
 	 * RAII wrapper for styled ImGui buttons that automatically applies and restores styling.
 	 * Use this to ensure consistent button styling without forgetting to pop styles.
 	 */
@@ -603,6 +612,31 @@ namespace Util
 	 * @param alpha Alpha multiplier for the icon color (default: 0.7f for subtle appearance)
 	 */
 	void DrawSearchIcon(const ImVec2& position, float size = 20.0f, float alpha = 0.7f);
+
+	/**
+	 * @brief Draws a semi-transparent dark overlay behind modal dialogs for depth.
+	 * @param alpha The alpha value for the overlay (0-255, default: 160)
+	 */
+	void DrawModalBackground(uint8_t alpha = 160);
+
+	/**
+	 * @brief Draws text with a breathing/pulsing alpha animation using theme text color.
+	 * @param text The text to display
+	 * @param speed Animation speed multiplier (default: 2.5f)
+	 * @param minAlpha Minimum alpha value (default: 0.7f)
+	 * @param maxAlpha Maximum alpha value (default: 1.0f)
+	 */
+	void DrawBreathingText(const char* text, float speed = 2.5f, float minAlpha = 0.7f, float maxAlpha = 1.0f);
+
+	/**
+	 * @brief Returns a color with pulsing brightness animation applied.
+	 * @param baseColor The base color to pulse
+	 * @param speed Animation speed multiplier (default: 4.0f)
+	 * @param minBrightness Minimum brightness multiplier (default: 0.7f)
+	 * @param maxBrightness Maximum brightness multiplier (default: 1.0f)
+	 * @return The color with pulsing brightness applied (alpha unchanged)
+	 */
+	ImVec4 GetPulsingColor(const ImVec4& baseColor, float speed = 4.0f, float minBrightness = 0.7f, float maxBrightness = 1.0f);
 
 	/**
 	 * @brief Draws the feature search bar with magnifying glass icon.

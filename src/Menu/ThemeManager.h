@@ -179,6 +179,7 @@ public:
 		static constexpr float CURSOR_POSITION_PADDING = 14.0f;
 		static constexpr float SEPARATOR_THICKNESS = 3.0f;
 		static constexpr float UNDOCKED_ICON_ITEM_SPACING = 6.0f;
+		static constexpr float POPUP_BUTTON_WIDTH = 180.0f;
 	};
 
 	static ThemeManager* GetSingleton()
