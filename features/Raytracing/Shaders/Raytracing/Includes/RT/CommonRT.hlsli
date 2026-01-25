@@ -136,6 +136,7 @@ float3 OffsetRay(float3 p, float3 n, float3 l, bool hasTransmission = false)
     if (NdotL < 0.0f && hasTransmission)
     {
         n = -n;
+        NdotL = -NdotL;
     }
 	const float NormalBias = lerp(MaxBias, MinBias, saturate(NdotL));
 	p += n * NormalBias;
