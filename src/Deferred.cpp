@@ -238,7 +238,7 @@ void Deferred::ReflectionsPrepasses()
 	state->UpdateSharedData(false, false);
 
 	ZoneScoped;
-	TracyD3D11Zone(globals::game::graphicsState->tracyCtx, "Early Prepass");
+	TracyD3D11Zone(globals::state->tracyCtx, "Reflections Prepass");
 
 	auto context = globals::d3d::context;
 	context->OMSetRenderTargets(0, nullptr, nullptr);  // Unbind all bound render targets
@@ -262,7 +262,7 @@ void Deferred::EarlyPrepasses()
 	globals::state->UpdateSharedData(false, true);
 
 	ZoneScoped;
-	TracyD3D11Zone(globals::game::graphicsState->tracyCtx, "Early Prepass");
+	TracyD3D11Zone(globals::state->tracyCtx, "Early Prepass");
 
 	auto context = globals::d3d::context;
 	context->OMSetRenderTargets(0, nullptr, nullptr);  // Unbind all bound render targets
