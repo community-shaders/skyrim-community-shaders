@@ -318,7 +318,12 @@ static void detour_thunk(size_t offset)
 	DetourTransactionCommit();
 }
 
+static bool IsPlayer(RE::FormID formID)
+{
+	return formID == RTConstants::PLAYER_REFR_FORMID;
+};
+
 static bool IsPlayer(RE::TESForm* form)
 {
-	return form->GetFormID() == RTConstants::PLAYER_REFR_FORMID;
+	return IsPlayer(form->GetFormID());
 };

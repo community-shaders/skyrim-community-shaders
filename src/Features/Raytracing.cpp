@@ -2052,7 +2052,7 @@ void Raytracing::CreateModelInternal(RE::TESForm* form, const char* path, RE::Ni
 			auto meshData = eastl::make_unique<Shape>(shapeRegisters.Allocate(), pGeometry, flags);
 
 			meshData->BuildMesh(triShapeRD, triShapeRuntime.vertexCount, triShapeRuntime.triangleCount, 0, localToRoot);
-			meshData->BuildMaterial(geometryRuntimeData, name);
+			meshData->BuildMaterial(geometryRuntimeData, name, formID);
 			meshData->CreateBuffers(ToWide(name));
 
 			shapes.push_back(eastl::move(meshData));
@@ -2091,7 +2091,7 @@ void Raytracing::CreateModelInternal(RE::TESForm* form, const char* path, RE::Ni
 				auto meshData = eastl::make_unique<Shape>(shapeRegisters.Allocate(), pGeometry, flags);
 
 				meshData->BuildMesh(partition.buffData, skinPartition->vertexCount, partition.triangles, partition.bonesPerVertex, localToRoot);
-				meshData->BuildMaterial(geometryRuntimeData, name);
+				meshData->BuildMaterial(geometryRuntimeData, name, formID);
 				meshData->CreateBuffers(ToWide(name));
 
 				shapes.push_back(eastl::move(meshData));
@@ -2201,9 +2201,6 @@ eastl::shared_ptr<Allocation> Raytracing::GetTextureRegister(ID3D11Texture2D* dx
 		return refIt->second->allocation;
 	}
 
-	// std::lock_guard lock{ renderMutex };
-
-	// Search for texture in shared map
 	winrt::com_ptr<IDXGIResource> dxgiResource;
 	HRESULT hr = dx11Texture->QueryInterface(IID_PPV_ARGS(dxgiResource.put()));
 

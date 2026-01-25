@@ -69,7 +69,8 @@ struct Material
 		kMultiTextureLandscape = 1 << 13,
 		kEyeReflect = 1 << 14,
 		kHairTint = 1 << 15,
-		kTwoSided = 1 << 16
+		kTwoSided = 1 << 16,
+		kFaceGenRGBTint = 1 << 17
 	};
 
 	ShaderFlags GetShaderFlags() const
@@ -158,6 +159,10 @@ struct Material
 			shaderFlagsLocal |= ShaderFlags::kTwoSided;
 		}
 
+		if (shaderFlags.any(EShaderPropertyFlag::kFaceGenRGBTint)) {
+			shaderFlagsLocal |= ShaderFlags::kFaceGenRGBTint;
+		}
+		
 		return shaderFlagsLocal;
 	}
 
