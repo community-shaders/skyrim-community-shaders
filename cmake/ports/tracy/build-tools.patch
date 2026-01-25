@@ -7,8 +7,8 @@ index 72901a8c..365724a8 100644
      add_subdirectory(python)
  endif()
 +
-+option(VCPKG_CLI_TOOLS "library" OFF)
-+option(VCPKG_GUI_TOOLS "library" OFF)
++option(VCPKG_CLI_TOOLS "Build Tracy command-line tools (csvexport, capture, import, update)" OFF)
++option(VCPKG_GUI_TOOLS "Build Tracy GUI profiler application" OFF)
 +if(VCPKG_CLI_TOOLS)
 +    add_subdirectory(csvexport)
 +    add_subdirectory(capture)

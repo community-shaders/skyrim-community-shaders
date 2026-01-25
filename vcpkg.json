@@ -48,7 +48,10 @@
             "name": "imgui",
             "version": "1.90"
         },
-
+        {
+            "name": "tracy",
+            "version": "0.13.1"
+        },
         {
             "name": "directx-headers",
             "version": "1.606.4"
