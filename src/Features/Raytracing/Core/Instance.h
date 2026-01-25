@@ -17,8 +17,8 @@ struct Instance
 		Detached = 1 << 1
 	};
 
-	Instance(eastl::string filename) :
-		filename(filename) {};
+	Instance(RE::FormID formID, eastl::string filename) :
+		formID(formID), filename(filename) {};
 
 	void SetDetached(bool detach)
 	{
@@ -90,6 +90,9 @@ struct Instance
 			}
 		}
 	}
+
+	// Instance form id
+	RE::FormID formID;
 
 	// What model this instance references
 	eastl::string filename;

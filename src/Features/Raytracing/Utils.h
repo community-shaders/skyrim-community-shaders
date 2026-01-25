@@ -3,6 +3,7 @@
 #include "PCH.h"
 
 #include "Features/Raytracing/Types.h"
+#include "Features/Raytracing/RTConstants.h"
 
 #include "TruePBR.h"
 #include "TruePBR/BSLightingShaderMaterialPBR.h"
@@ -316,3 +317,8 @@ static void detour_thunk(size_t offset)
 	DetourAttach(reinterpret_cast<PVOID*>(&T::func), reinterpret_cast<PVOID>(T::thunk));
 	DetourTransactionCommit();
 }
+
+static bool IsPlayer(RE::TESForm* form)
+{
+	return form->GetFormID() == RTConstants::PLAYER_REFR_FORMID;
+};

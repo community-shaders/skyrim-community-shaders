@@ -1251,7 +1251,7 @@ struct Raytracing : public OverlayFeature
 			{
 				auto* baseObject = refr->GetBaseObject();
 
-				logger::debug("\tTES::sub_1401A0920 {} - {:08X}, {} - {:08X}",
+				logger::debug("\tTES::Load3D {} - {:08X}, {} - {:08X}",
 					magic_enum::enum_name(refr->formType.get()), refr->GetFormID(),
 					magic_enum::enum_name(baseObject->formType.get()), baseObject->GetFormID());
 
@@ -1279,21 +1279,36 @@ struct Raytracing : public OverlayFeature
 
 					if (auto* model = baseObject->As<RE::TESModel>()) {
 						rt.CreateModel(refr, model->GetModel(), pNiAVObject);
-					} else if (auto* actor = refr->As<RE::Actor>()) {
-						rt.CreateModelInternal(refr, actor->GetName(), pNiAVObject);
 					} else {
-						logger::warn("\tTES::sub_1401A0920 - No TESModel");
+						if (IsPlayer(refr)) {
+							if (auto* player = reinterpret_cast<RE::PlayerCharacter*>(refr)) {
+								const char* name = player->GetName();
+
+								// First Person
+								//rt.CreateModelInternal(refr, std::format("{}_1stPerson", name).c_str(), pNiAVObject);
+
+								// Third Person
+								rt.CreateModelInternal(refr, name, player->Get3D(false));
+
+								return;
+							}
+						}
+						
+						if (auto* actor = refr->As<RE::Actor>()) {
+							rt.CreateModelInternal(refr, actor->GetName(), pNiAVObject);
+							return;
+						}
+
+						logger::warn("\tTES::sub_1401A0920 - No TESModel - {}, {:08X}", magic_enum::enum_name(refr->formType.get()), refr->GetFormID());
 					}
 				}
-
-				logger::debug("\tTES::sub_1401A0920 - End");
 			}
 			static inline REL::Relocation<decltype(thunk)> func;
 		};
 		
 		static void Install()
 		{
-			stl::detour_thunk<TES_Load3D>(REL::RelocationID(0, 13355));
+			stl::detour_thunk<TES_Load3D>(REL::RelocationID(13209, 13355));
 
 			stl::write_vfunc<0x6B, Release3DRelatedData<RE::TESObjectREFR>>(RE::VTABLE_TESObjectREFR[0]);
 			stl::write_vfunc<0x6B, Release3DRelatedData<RE::PlayerCharacter>>(RE::VTABLE_Actor[0]);
