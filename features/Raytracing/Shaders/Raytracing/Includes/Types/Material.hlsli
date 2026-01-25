@@ -80,6 +80,7 @@ struct Material
 
 	half4 Color0;
 	half4 Color1;
+	half4 Color2;
 
 	half Scalar0;
 	half Scalar1;
@@ -146,7 +147,7 @@ struct Material
 	// Vanilla
     half4 SpecularColor()
     {
-		return Color1;
+		return Color2;
 	}
 
     uint16_t GlowTexture()

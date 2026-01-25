@@ -367,9 +367,10 @@ void Shape::BuildMaterial(const RE::BSGeometry::GEOMETRY_RUNTIME_DATA& geometryR
 	using Feature = RE::BSShaderMaterial::Feature;
 	using EShaderPropertyFlag = RE::BSShaderProperty::EShaderPropertyFlag;
 
-	eastl::array<half4, 2> colors = {
+	eastl::array<half4, 3> colors = {
 		float4(1.0f, 1.0f, 1.0f, 1.0f),
-		float4(0.0f, 0.0f, 0.0f, 0.0f)
+		float4(0.0f, 0.0f, 0.0f, 0.0f),
+		float4(1.0f, 1.0f, 1.0f, 1.0f)
 	};
 
 	eastl::array<half, 3> scalars;
@@ -520,7 +521,7 @@ void Shape::BuildMaterial(const RE::BSGeometry::GEOMETRY_RUNTIME_DATA& geometryR
 									textures[3] = TextureRegister(lightingBaseMaterial->specularBackLightingTexture, blackTexture);
 								}
 
-								colors[1] = {
+								colors[2] = {
 									lightingBaseMaterial->specularColor.red,
 									lightingBaseMaterial->specularColor.green,
 									lightingBaseMaterial->specularColor.blue,
