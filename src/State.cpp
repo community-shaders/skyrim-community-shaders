@@ -21,6 +21,8 @@
 
 void State::Draw()
 {
+	ZoneScoped;
+
 	auto shaderCache = globals::shaderCache;
 	auto deferred = globals::deferred;
 	auto& terrainBlending = globals::features::terrainBlending;
@@ -31,19 +33,30 @@ void State::Draw()
 	auto context = globals::d3d::context;
 
 	if (shaderCache->IsEnabled()) {
-		if (weatherEditor.loaded)
+		if (weatherEditor.loaded) {
+			ZoneScopedN("WeatherManager::UpdateFeatures");
 			WeatherManager::GetSingleton()->UpdateFeatures();
+		}
 
-		if (terrainBlending.loaded && terrainBlending.settings.Enabled)
+		if (terrainBlending.loaded && terrainBlending.settings.Enabled) {
+			ZoneScopedN("TerrainBlending::TerrainShaderHacks");
 			terrainBlending.TerrainShaderHacks();
+		}
 
-		if (cloudShadows.loaded)
+		if (cloudShadows.loaded) {
+			ZoneScopedN("CloudShadows::SkyShaderHacks");
 			cloudShadows.SkyShaderHacks();
+		}
 
-		if (terrainHelper.loaded)
+		if (terrainHelper.loaded) {
+			ZoneScopedN("TerrainHelper::SetShaderResouces");
 			terrainHelper.SetShaderResouces(context);
+		}
 
-		truePBR->SetShaderResouces(context);
+		{
+			ZoneScopedN("TruePBR::SetShaderResouces");
+			truePBR->SetShaderResouces(context);
+		}
 
 		if (permutationData != permutationDataPrevious) {
 			permutationCB->Update(permutationData);
@@ -122,9 +135,7 @@ void State::Debug()
 
 void State::Reset()
 {
-	for (auto* feature : Feature::GetFeatureList())
-		if (feature->loaded)
-			feature->Reset();
+	Feature::ForEachLoadedFeature("Reset", [](Feature* feature) { feature->Reset(); });
 	if (!globals::game::ui->GameIsPaused())
 		timer += RE::GetSecondsSinceLastFrame();
 	lastModifiedPixelDescriptor = 0;
@@ -155,9 +166,7 @@ void State::Setup()
 {
 	globals::truePBR->SetupResources();
 	SetupResources();
-	for (auto* feature : Feature::GetFeatureList())
-		if (feature->loaded)
-			feature->SetupResources();
+	Feature::ForEachLoadedFeature("SetupResources", [](Feature* feature) { feature->SetupResources(); });
 	globals::deferred->SetupResources();
 
 	// Load per-weather settings after features are setup

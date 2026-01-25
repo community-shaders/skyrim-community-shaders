@@ -365,7 +365,7 @@ void UnifiedWater::BGSTerrainBlock_Attach::thunk(RE::BGSTerrainBlock* block)
 		const auto water = block->water;
 		for (auto& child : water->GetChildren()) {
 			if (child) {
-				waterSystem->RemoveGeometry(child->AsGeometry());
+				waterSystem->RemoveWater(child.get());
 				water->DetachChild(child.get());
 			}
 		}
@@ -376,9 +376,9 @@ void UnifiedWater::BGSTerrainBlock_Attach::thunk(RE::BGSTerrainBlock* block)
 		const auto lodLevel = node->GetLODLevel();
 		const auto worldSpace = block->node->manager->worldSpace;
 
-		const auto instructions = singleton.waterCache->GetInstructions(worldSpace, lodLevel, node->x, node->y);
+		const auto instructions = singleton.waterCache->GetInstructions(worldSpace, lodLevel, node->baseCellX, node->baseCellY);
 		if (!instructions) {
-			logger::warn("[Unified Water] No instructions found for {} chunk at {}, {}", worldSpace->GetFormEditorID(), node->x, node->y);
+			logger::warn("[Unified Water] No instructions found for {} chunk at {}, {}", worldSpace->GetFormEditorID(), node->baseCellX, node->baseCellY);
 			func(block);
 			return;
 		}
@@ -392,8 +392,8 @@ void UnifiedWater::BGSTerrainBlock_Attach::thunk(RE::BGSTerrainBlock* block)
 			const auto targetShape = lodLevel > 4 || singleton.settings.UseOptimisedMeshes ? singleton.optimisedWaterMesh : singleton.waterMesh;
 			RE::BSTriShape* shape = targetShape->CreateClone(cloningProcess)->AsTriShape();
 
-			const auto posX = (instruction.x - node->x) * 4096.0f + instruction.size * 2048.0f;
-			const auto posY = (instruction.y - node->y) * 4096.0f + instruction.size * 2048.0f;
+			const auto posX = (instruction.x - node->baseCellX) * 4096.0f + instruction.size * 2048.0f;
+			const auto posY = (instruction.y - node->baseCellY) * 4096.0f + instruction.size * 2048.0f;
 			shape->local.scale = static_cast<float>(instruction.size);
 			shape->local.translate = { posX, posY, instruction.waterHeight };
 
@@ -410,7 +410,7 @@ void UnifiedWater::BGSTerrainBlock_Attach::thunk(RE::BGSTerrainBlock* block)
 		return;
 
 	for (auto& [shape, instruction] : built) {
-		waterSystem->InitializeWater(shape, instruction->form.ptr, instruction->waterHeight, nullptr, true, false);
+		waterSystem->AddWater(shape, instruction->form.ptr, instruction->waterHeight, nullptr, true, false);
 
 		if (const auto prop = shape->GetGeometryRuntimeData().properties[1].get(); prop && prop->GetRTTI() == globals::rtti::BSWaterShaderPropertyRTTI.get()) {
 			const auto waterShaderProp = static_cast<RE::BSWaterShaderProperty*>(prop);
