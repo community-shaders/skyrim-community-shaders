@@ -352,7 +352,7 @@ eastl::shared_ptr<Allocation> Shape::TextureRegister(const RE::NiPointer<RE::NiS
 		return rt.GetTextureRegister(niPointer->rendererTexture->texture, defaultTexture);
 }
 
-void Shape::BuildMaterial(const RE::BSGeometry::GEOMETRY_RUNTIME_DATA& geometryRuntimeData, [[maybe_unused]] const char* name)
+void Shape::BuildMaterial(const RE::BSGeometry::GEOMETRY_RUNTIME_DATA& geometryRuntimeData, [[maybe_unused]] const char* name, RE::FormID formID)
 {
 	auto& rt = globals::features::raytracing;
 
@@ -560,8 +560,12 @@ void Shape::BuildMaterial(const RE::BSGeometry::GEOMETRY_RUNTIME_DATA& geometryR
 
 							// FaceGen
 							if (feature == Feature::kFaceGen) {
-								if (const auto* lightingFacegenMaterial = skyrim_cast<RE::BSLightingShaderMaterialFacegen*>(shaderMaterial)) {
-									textures[4] = TextureRegister(lightingFacegenMaterial->tintTexture, grayTexture);
+								if (const auto* lightingFacegenMaterial = skyrim_cast<RE::BSLightingShaderMaterialFacegen*>(shaderMaterial)) {				
+									if (IsPlayer(formID))
+										textures[4] = rt.GetTextureRegister(globals::game::renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kPLAYER_FACEGEN_TINT].texture, grayTexture);
+									else
+										textures[4] = TextureRegister(lightingFacegenMaterial->tintTexture, grayTexture);
+
 									textures[5] = TextureRegister(lightingFacegenMaterial->detailTexture, detailTexture);
 								}
 							}

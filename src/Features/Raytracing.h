@@ -902,7 +902,7 @@ struct Raytracing : public OverlayFeature
 		{
 			static HRESULT WINAPI thunk(ID3D11Device* This, const D3D11_TEXTURE2D_DESC* pDesc, const D3D11_SUBRESOURCE_DATA* pInitialData, ID3D11Texture2D** ppTexture2D)
 			{
-				if (!pDesc || !pInitialData)
+				if (!pDesc)
 					return func(This, pDesc, pInitialData, ppTexture2D);
 
 				auto& rt = globals::features::raytracing;
@@ -1306,12 +1306,31 @@ struct Raytracing : public OverlayFeature
 			static inline REL::Relocation<decltype(thunk)> func;
 		};
 		
+		struct CreateRenderTarget_PlayerFaceGenTint
+		{
+			static void thunk(RE::BSGraphics::Renderer* oThis, RE::RENDER_TARGETS::RENDER_TARGET a_target, RE::BSGraphics::RenderTargetProperties* a_properties)
+			{			
+				auto& rt = globals::features::raytracing;
+
+				std::lock_guard<std::recursive_mutex> lock(rt.shareTextureMutex);
+
+				rt.shareTexture = !rt.debugDisableTextureSharing;
+
+				func(oThis, a_target, a_properties);
+
+				rt.shareTexture = false;
+			}
+			static inline REL::Relocation<decltype(thunk)> func;
+		};
+
 		static void Install()
 		{
 			stl::detour_thunk<TES_Load3D>(REL::RelocationID(13209, 13355));
 
 			stl::write_vfunc<0x6B, Release3DRelatedData<RE::TESObjectREFR>>(RE::VTABLE_TESObjectREFR[0]);
 			stl::write_vfunc<0x6B, Release3DRelatedData<RE::PlayerCharacter>>(RE::VTABLE_Actor[0]);
+
+			stl::write_thunk_call<CreateRenderTarget_PlayerFaceGenTint>(REL::RelocationID(100458, 107175).address() + REL::Relocate(0x606, 0x605, 0x0));
 
 			//stl::detour_thunk<TESObjectREFR_Enable>(REL::RelocationID(19373, 19800));
 			//stl::write_vfunc<0x89, TESObjectREFR_Disable>(RE::VTABLE_TESObjectREFR[0]);

@@ -155,14 +155,13 @@ struct Surface
 	            tintColor = tintColor * Albedo * 2.0f;
 	            tintColor = tintColor - tintColor * Albedo;
 	            Albedo = (Albedo * Albedo + tintColor) * detailColor;
-            }
-
-            [branch]
-            if (material.Feature == Feature::kFaceGenRGBTint) {
+                
+            } else if (material.Feature == Feature::kFaceGenRGBTint) {
 	            float3 tintColor = material.BaseColor().rgb * Albedo * 2.0f;
 	            tintColor = tintColor - tintColor * Albedo;
 	            Albedo = float3(1.01171875f, 0.99609375f, 1.01171875f) * (Albedo * Albedo + tintColor);
             }
+            
         } else if (material.ShaderType == ShaderType::Effect) {
             float3 base = float3(1, 1, 1);
 
