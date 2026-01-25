@@ -170,18 +170,17 @@ public:
 	static bool IsFeatureKnown(const std::string& shortName, REL::Version* outVersion = nullptr);
 
 	/**
-	 * @brief Execute a callable for each loaded feature with automatic Tracy CPU profiling and GPU markers
+	 * @brief Execute a callable for each loaded feature with optional Tracy CPU profiling
 	 *
 	 * Iterates through all loaded features and calls the provided function with automatic
-	 * CPU profiling (ZoneScoped via Tracy) and GPU frame annotations (PerfEvents) when enabled.
+	 * CPU profiling zones (ZoneScoped/ZoneText via Tracy) when TRACY_ENABLE is defined.
 	 * Thread-local string formatting is used to minimize per-call overhead.
-	 * GPU markers are automatically gated by globals::state->frameAnnotations.
 	 *
 	 * Usage:
 	 *   Feature::ForEachLoadedFeature("Reset", [](Feature* feature) { feature->Reset(); });
 	 *   Feature::ForEachLoadedFeature("Prepass", [](Feature* feature) { feature->Prepass(); });
 	 *
-	 * @param methodName Name of the method being called (for Tracy zone and GPU marker naming)
+	 * @param methodName Name of the method being called (used for Tracy zone naming)
 	 * @param callback Callable that receives (Feature*) and performs the operation
 	 */
 	template <typename Func>
@@ -199,7 +198,6 @@ public:
 				}
 #else
 				callback(feature);
-
 #endif
 			}
 		}
