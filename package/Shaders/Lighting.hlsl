@@ -3147,6 +3147,9 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #		endif  // ANISOTROPIC_ALPHA
 
 	psout.Diffuse.w = alpha;
+#		if !defined(DEFERRED) && defined(RT)
+	psout.Diffuse.w = SharedData::raytracingSettings.EnvMap;
+#		endif
 #	endif
 
 #	if defined(LIGHT_LIMIT_FIX) && defined(LLFDEBUG)
