@@ -108,10 +108,18 @@ struct Surface
 
             [branch]
             if (material.ShaderFlags & ShaderFlags::kSpecular) {
-                Texture2D specularTexture = Textures[NonUniformResourceIndex(material.SpecularTexture())];
                 Roughness = material.RoughnessScale() >= 0.0f ? saturate(material.RoughnessScale()) : 1.0f;
 
-                float3 specularColor = specularTexture.SampleLevel(BaseSampler, texCoord0, 0).r * material.SpecularColor().rgb * material.SpecularColor().a;
+                float3 specularColor = 0.0f;
+
+                [branch]
+                if (material.ShaderFlags & ShaderFlags::kModelSpaceNormals) {
+                    Texture2D specularTexture = Textures[NonUniformResourceIndex(material.SpecularTexture())];
+                    specularColor = specularTexture.SampleLevel(BaseSampler, texCoord0, 0).r * material.SpecularColor().rgb * material.SpecularColor().a;
+                } else {
+                    Texture2D normalTexture = Textures[NonUniformResourceIndex(material.NormalTexture())];
+                    specularColor = normalTexture.SampleLevel(BaseSampler, texCoord0, 0).a * material.SpecularColor().rgb * material.SpecularColor().a;
+                }
                 F0 = clamp(0.08f * specularColor, 0.02f, 0.08f);
             }
 

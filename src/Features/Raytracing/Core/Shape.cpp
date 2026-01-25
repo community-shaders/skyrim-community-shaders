@@ -516,7 +516,9 @@ void Shape::BuildMaterial(const RE::BSGeometry::GEOMETRY_RUNTIME_DATA& geometryR
 							textures[1] = TextureRegister(lightingBaseMaterial->normalTexture, normalTexture, false);  // shaderFlags.any(EShaderPropertyFlag::kModelSpaceNormals)
 
 							if (shaderFlags.any(EShaderPropertyFlag::kSpecular)) {
-								textures[3] = TextureRegister(lightingBaseMaterial->specularBackLightingTexture, blackTexture);
+								if (shaderFlags.any(EShaderPropertyFlag::kModelSpaceNormals)) {
+									textures[3] = TextureRegister(lightingBaseMaterial->specularBackLightingTexture, blackTexture);
+								}
 
 								colors[1] = {
 									lightingBaseMaterial->specularColor.red,
