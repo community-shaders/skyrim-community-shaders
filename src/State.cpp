@@ -181,7 +181,6 @@ static std::string GetConfigPath(State::ConfigMode a_configMode)
 
 void State::Load(ConfigMode a_configMode, bool a_allowReload)
 {
-	auto shaderCache = globals::shaderCache;
 	json settings;
 	bool errorDetected = false;
 
@@ -275,58 +274,9 @@ void State::Load(ConfigMode a_configMode, bool a_allowReload)
 	}
 
 	try {
-		// Load Menu settings
-
-		if (settings["Menu"].is_object()) {
-			logger::info("Loading 'Menu' settings");
-			globals::menu->Load(settings["Menu"]);
-		}
-
-		if (settings["Advanced"].is_object()) {
-			logger::info("Loading 'Advanced' settings");
-			json& advanced = settings["Advanced"];
-			if (advanced["Dump Shaders"].is_boolean())
-				shaderCache->SetDump(advanced["Dump Shaders"]);
-			if (advanced["Log Level"].is_number_integer())
-				logLevel = magic_enum::enum_cast<spdlog::level::level_enum>(advanced["Log Level"].get<int>()).value_or(spdlog::level::info);
-			if (advanced["Shader Defines"].is_string())
-				SetDefines(advanced["Shader Defines"]);
-			if (advanced["Compiler Threads"].is_number_integer())
-				shaderCache->compilationThreadCount = std::clamp(advanced["Compiler Threads"].get<int32_t>(), 1, static_cast<int32_t>(std::thread::hardware_concurrency()));
-			if (advanced["Background Compiler Threads"].is_number_integer())
-				shaderCache->backgroundCompilationThreadCount = std::clamp(advanced["Background Compiler Threads"].get<int32_t>(), 1, static_cast<int32_t>(std::thread::hardware_concurrency()));
-			if (advanced["Use FileWatcher"].is_boolean())
-				shaderCache->SetFileWatcher(advanced["Use FileWatcher"]);
-			if (advanced["Frame Annotations"].is_boolean())
-				frameAnnotations = advanced["Frame Annotations"];
-		}
-
-		if (settings["General"].is_object()) {
-			logger::info("Loading 'General' settings");
-			json& general = settings["General"];
-
-			if (general["Enable Shaders"].is_boolean())
-				shaderCache->SetEnabled(general["Enable Shaders"]);
-
-			if (general["Enable Disk Cache"].is_boolean())
-				shaderCache->SetDiskCache(general["Enable Disk Cache"]);
-
-			if (general["Enable Async"].is_boolean())
-				shaderCache->SetAsync(general["Enable Async"]);
-		}
-
-		if (settings["Replace Original Shaders"].is_object()) {
-			logger::info("Loading 'Replace Original Shaders' settings");
-			json& originalShaders = settings["Replace Original Shaders"];
-			ForEachShaderTypeWithIndex([&](auto type, int classIndex) {
-				auto name = magic_enum::enum_name(type);
-				if (originalShaders[name].is_boolean()) {
-					enabledClasses[classIndex] = originalShaders[name];
-				} else {
-					logger::warn("Invalid entry for shader class '{}', using default", name);
-				}
-			});
-		}
+		// Load core settings (Menu, Advanced, General, Replace Original Shaders)
+		logger::info("Loading core settings");
+		LoadFromJson(settings);
 		// Ensure 'Disable at Boot' section exists in the JSON
 		if (!settings.contains("Disable at Boot") || !settings["Disable at Boot"].is_object()) {
 			// Initialize to an empty object if it doesn't exist
@@ -416,26 +366,10 @@ void State::Load(ConfigMode a_configMode, bool a_allowReload)
 		Load(a_configMode, false);
 }
 
-void State::Save(ConfigMode a_configMode)
+void State::SaveToJson(nlohmann::json& settings)
 {
+	std::lock_guard<std::mutex> lock(m_mutex);
 	const auto shaderCache = globals::shaderCache;
-	std::string configPath = GetConfigPath(a_configMode);
-	std::ofstream o{ configPath };
-
-	try {
-		std::filesystem::create_directories(Util::PathHelpers::GetCommunityShaderPath());
-	} catch (const std::filesystem::filesystem_error& e) {
-		logger::warn("Error creating directory during Save ({}) : {}\n", Util::PathHelpers::GetCommunityShaderPath().string(), e.what());
-		return;
-	}
-
-	// Check if the file opened successfully
-	if (!o.is_open()) {
-		logger::warn("Failed to open config file for saving: {}", configPath);
-		return;  // Exit early if file cannot be opened
-	}
-
-	json settings;
 
 	globals::menu->Save(settings["Menu"]);
 
@@ -492,6 +426,86 @@ void State::Save(ConfigMode a_configMode)
 			overrideManager->SaveUserOverride(featureName, currentSettings, overrideSettings);
 		}
 	}
+}
+
+void State::LoadFromJson(nlohmann::json& settings)
+{
+	std::lock_guard<std::mutex> lock(m_mutex);
+	const auto shaderCache = globals::shaderCache;
+
+	// Load Menu settings
+	if (settings.contains("Menu") && settings["Menu"].is_object()) {
+		globals::menu->Load(settings["Menu"]);
+	}
+
+	if (settings.contains("Advanced") && settings["Advanced"].is_object()) {
+		json& advanced = settings["Advanced"];
+		if (advanced.contains("Dump Shaders") && advanced["Dump Shaders"].is_boolean())
+			shaderCache->SetDump(advanced["Dump Shaders"]);
+		if (advanced.contains("Log Level") && advanced["Log Level"].is_number_integer())
+			logLevel = magic_enum::enum_cast<spdlog::level::level_enum>(advanced["Log Level"].get<int>()).value_or(spdlog::level::info);
+		if (advanced.contains("Shader Defines") && advanced["Shader Defines"].is_string())
+			SetDefines(advanced["Shader Defines"]);
+		if (advanced.contains("Compiler Threads") && advanced["Compiler Threads"].is_number_integer())
+			shaderCache->compilationThreadCount = std::clamp(advanced["Compiler Threads"].get<int32_t>(), 1, static_cast<int32_t>(std::thread::hardware_concurrency()));
+		if (advanced.contains("Background Compiler Threads") && advanced["Background Compiler Threads"].is_number_integer())
+			shaderCache->backgroundCompilationThreadCount = std::clamp(advanced["Background Compiler Threads"].get<int32_t>(), 1, static_cast<int32_t>(std::thread::hardware_concurrency()));
+		if (advanced.contains("Use FileWatcher") && advanced["Use FileWatcher"].is_boolean())
+			shaderCache->SetFileWatcher(advanced["Use FileWatcher"]);
+		if (advanced.contains("Frame Annotations") && advanced["Frame Annotations"].is_boolean())
+			frameAnnotations = advanced["Frame Annotations"];
+	}
+
+	if (settings.contains("General") && settings["General"].is_object()) {
+		json& general = settings["General"];
+		if (general.contains("Enable Shaders") && general["Enable Shaders"].is_boolean())
+			shaderCache->SetEnabled(general["Enable Shaders"]);
+		if (general.contains("Enable Disk Cache") && general["Enable Disk Cache"].is_boolean())
+			shaderCache->SetDiskCache(general["Enable Disk Cache"]);
+		if (general.contains("Enable Async") && general["Enable Async"].is_boolean())
+			shaderCache->SetAsync(general["Enable Async"]);
+	}
+
+	if (settings.contains("Replace Original Shaders") && settings["Replace Original Shaders"].is_object()) {
+		json& originalShaders = settings["Replace Original Shaders"];
+		ForEachShaderTypeWithIndex([&](auto type, int classIndex) {
+			auto name = magic_enum::enum_name(type);
+			if (originalShaders.contains(name) && originalShaders[name].is_boolean()) {
+				enabledClasses[classIndex] = originalShaders[name];
+			} else {
+				logger::warn("Invalid entry for shader class '{}', using current value", name);
+			}
+		});
+	}
+
+	// Load feature settings (only for already-loaded features)
+	for (auto* feature : Feature::GetFeatureList()) {
+		if (feature->loaded) {
+			feature->Load(settings);
+		}
+	}
+}
+
+void State::Save(ConfigMode a_configMode)
+{
+	std::string configPath = GetConfigPath(a_configMode);
+	std::ofstream o{ configPath };
+
+	try {
+		std::filesystem::create_directories(Util::PathHelpers::GetCommunityShaderPath());
+	} catch (const std::filesystem::filesystem_error& e) {
+		logger::warn("Error creating directory during Save ({}) : {}\n", Util::PathHelpers::GetCommunityShaderPath().string(), e.what());
+		return;
+	}
+
+	// Check if the file opened successfully
+	if (!o.is_open()) {
+		logger::warn("Failed to open config file for saving: {}", configPath);
+		return;  // Exit early if file cannot be opened
+	}
+
+	json settings;
+	SaveToJson(settings);
 
 	try {
 		o << settings.dump(1);

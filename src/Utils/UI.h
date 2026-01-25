@@ -83,6 +83,15 @@ namespace Util
 	};
 
 	/**
+	 * Confirmation popup for clearing shader cache.
+	 * Call RequestClearShaderCacheConfirmation() when the clear button is clicked.
+	 * Call DrawClearShaderCacheConfirmation() every frame to render the popup.
+	 * The popup respects the "don't ask me again" setting.
+	 */
+	void RequestClearShaderCacheConfirmation();
+	void DrawClearShaderCacheConfirmation();
+
+	/**
 	 * RAII wrapper for styled ImGui buttons that automatically applies and restores styling.
 	 * Use this to ensure consistent button styling without forgetting to pop styles.
 	 */
