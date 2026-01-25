@@ -44,43 +44,6 @@ float Get2DFilteredShadow(float3 positionWS, uint index, uint eyeIndex)
 {
 	ShadowData sD = SharedShadowData[0];
 
-	static const float2 poissonDisk32[32] = {
-		float2(-0.613392, 0.617481),
-		float2(0.170019, -0.040254),
-		float2(-0.299417, 0.791925),
-		float2(0.645680, 0.493210),
-		float2(-0.651784, 0.717887),
-		float2(0.421003, 0.027070),
-		float2(-0.817194, -0.271096),
-		float2(-0.705374, -0.668203),
-		float2(0.977050, -0.108615),
-		float2(0.063326, 0.142369),
-		float2(0.203528, 0.214331),
-		float2(-0.667531, 0.326090),
-		float2(-0.098422, -0.295755),
-		float2(-0.885922, 0.215369),
-		float2(0.566637, 0.605213),
-		float2(0.039766, -0.396100),
-		float2(0.751946, 0.453352),
-		float2(0.078707, -0.715323),
-		float2(-0.075838, -0.529344),
-		float2(0.724479, -0.580798),
-		float2(0.222999, -0.215125),
-		float2(-0.467574, -0.405438),
-		float2(-0.248268, -0.814753),
-		float2(0.354411, -0.887570),
-		float2(0.175817, 0.382366),
-		float2(0.487472, -0.063082),
-		float2(-0.084078, 0.898312),
-		float2(0.488876, -0.783441),
-		float2(0.470016, 0.217933),
-		float2(-0.696890, -0.549791),
-		float2(-0.149693, 0.605762),
-		float2(0.034211, 0.979980)
-	};
-
-	float2 sampleOffset = poissonDisk32[index] * sD.ShadowSampleParam.z;
-
 	float shadowMapDepth = GetShadowDepth(positionWS, eyeIndex);
 
 	if (sD.EndSplitDistances.z >= shadowMapDepth) {
@@ -108,9 +71,7 @@ float Get2DFilteredShadow(float3 positionWS, uint index, uint eyeIndex)
 		}
 
 		float3 positionLS = mul(transpose(lightProjectionMatrix), float4(positionWS.xyz, 1)).xyz;
-
-		positionLS.xy += sampleOffset * rcp(1.0 + cascadeIndex);
-
+		
 		return SharedShadowMap.SampleCmpLevelZero(comparisonSampler, float3(positionLS.xy, cascadeIndex), positionLS.z - shadowMapThreshold);
 	}
 
@@ -155,15 +116,52 @@ float Get2DFilteredShadow(float3 positionWS, uint index, uint eyeIndex)
 		outAccumFramesArray[dtid] = 0;
 	}
 
-
 	float3 viewDirection = FrameBuffer::WorldToView(-normalize(cellCentreMS), false);
 	float2 uv = FrameBuffer::ViewToUV(viewDirection, false);
 
 	if (!FrameBuffer::IsOutsideFrame(uv) && viewDirection.z < 0.0) {  // Check that the view direction exists in screenspace and that it is in front of the camera
-		uint shadowVisibilityBitShift = outShadowVisibilityBitShiftArray[dtid];
-		uint hasShadowVisibility = uint(Get2DFilteredShadow(cellCentreMS, shadowVisibilityBitShift, 0));
-
 		uint shadowVisibilityBits = isValid ? outShadowVisibilityBitArray[dtid] : 0;
+
+		static const float3 noise3D[32] = {
+			float3(0.247, -0.583, 0.891),
+			float3(-0.672, 0.315, -0.428),
+			float3(0.934, 0.762, -0.153),
+			float3(-0.391, -0.847, 0.526),
+			float3(0.618, 0.094, 0.739),
+			float3(-0.825, -0.271, -0.683),
+			float3(0.152, 0.968, 0.347),
+			float3(0.503, -0.714, -0.592),
+			float3(-0.436, 0.629, 0.814),
+			float3(0.887, -0.198, 0.461),
+			float3(-0.759, 0.852, -0.305),
+			float3(0.321, -0.476, -0.921),
+			float3(-0.094, 0.543, -0.768),
+			float3(0.776, 0.418, 0.632),
+			float3(-0.538, -0.695, 0.279),
+			float3(0.649, -0.921, 0.186),
+			float3(-0.913, 0.127, 0.574),
+			float3(0.285, 0.806, -0.447),
+			float3(0.471, -0.352, 0.698),
+			float3(-0.627, -0.194, -0.856),
+			float3(0.834, 0.591, -0.712),
+			float3(-0.173, -0.968, -0.421),
+			float3(0.562, 0.239, -0.785),
+			float3(-0.745, 0.487, 0.316),
+			float3(0.108, -0.631, 0.894),
+			float3(0.926, -0.845, -0.267),
+			float3(-0.384, 0.712, -0.539),
+			float3(0.697, 0.163, 0.825),
+			float3(-0.851, -0.429, 0.641),
+			float3(0.214, 0.934, 0.372),
+			float3(0.578, -0.762, -0.614),
+			float3(-0.469, 0.381, 0.947)
+		};
+
+		uint shadowVisibilityBitShift = outShadowVisibilityBitShiftArray[dtid];
+
+		cellCentreMS += noise3D[shadowVisibilityBitShift] * Skylighting::CELL_SIZE;
+
+		uint hasShadowVisibility = uint(Get2DFilteredShadow(cellCentreMS, shadowVisibilityBitShift, 0));
 
 		shadowVisibilityBits &= ~(1u << shadowVisibilityBitShift);
 		shadowVisibilityBits |= (hasShadowVisibility << shadowVisibilityBitShift);
@@ -180,6 +178,6 @@ float Get2DFilteredShadow(float3 positionWS, uint index, uint eyeIndex)
 
 		outShadowVisibilityBitArray[dtid] = shadowVisibilityBits;
 		outShadowVisibilityBitShiftArray[dtid] = shadowVisibilityBitShift;
-		outShadowVisibilityArray[dtid] = shadowVisibility;
+		outShadowVisibilityArray[dtid] = shadowVisibility;	
 	}
 }

@@ -11,7 +11,8 @@ namespace Skylighting
 #if defined(PSHADER)
 	Texture3D<sh2> SkylightingProbeArray : register(t50);
 	Texture2DArray<float3> stbn_vec3_2Dx1D_128x128x64 : register(t51);
-	Texture3D<float> ShadowVisibilityProbeArray : register(t52);
+	Texture3D<uint> ShadowVisibilityBitArray : register(t52);
+	Texture3D<float> ShadowVisibilityProbeArray : register(t53);
 #endif
 
 	const static uint3 ARRAY_DIM = uint3(256, 256, 128);
@@ -109,6 +110,7 @@ namespace Skylighting
 
 					uint3 cellTexID = (cellID + params.ArrayOrigin.xyz) % ARRAY_DIM;
 					sh2 probe = SphericalHarmonics::Scale(probeArray[cellTexID], w);
+					
 					shadowSum += shadowVisArray[cellTexID] * w;
 
 					sum = SphericalHarmonics::Add(sum, probe);
@@ -120,7 +122,7 @@ namespace Skylighting
 		return SphericalHarmonics::Scale(sum, rcpWsum);
 	}
 
-	sh2 sampleFast(SharedData::SkylightingSettings params, Texture3D<sh2> probeArray, Texture3D<float> shadowVisArray, float3 positionMS, out float shadowVisibility)
+	sh2 sampleFast(SharedData::SkylightingSettings params, Texture3D<sh2> probeArray, Texture3D<float> shadowVisArray, Texture3D<uint> shadowBitArray, float3 positionMS, out float shadowVisibility)
 	{
 		const static sh2 unitSH = float4(sqrt(4 * Math::PI), 0, 0, 0);
 		sh2 scaledUnitSH = unitSH / 1e-10;
@@ -163,15 +165,66 @@ namespace Skylighting
 
 			uint3 cellTexID = (cellID + params.ArrayOrigin.xyz) % ARRAY_DIM;
 			sh2 probe = SphericalHarmonics::Scale(probeArray[cellTexID], w);
-			shadowSum += shadowVisArray[cellTexID] * w;
+
+			static const float3 noise3D[32] = {
+				float3(0.247, -0.583, 0.891),
+				float3(-0.672, 0.315, -0.428),
+				float3(0.934, 0.762, -0.153),
+				float3(-0.391, -0.847, 0.526),
+				float3(0.618, 0.094, 0.739),
+				float3(-0.825, -0.271, -0.683),
+				float3(0.152, 0.968, 0.347),
+				float3(0.503, -0.714, -0.592),
+				float3(-0.436, 0.629, 0.814),
+				float3(0.887, -0.198, 0.461),
+				float3(-0.759, 0.852, -0.305),
+				float3(0.321, -0.476, -0.921),
+				float3(-0.094, 0.543, -0.768),
+				float3(0.776, 0.418, 0.632),
+				float3(-0.538, -0.695, 0.279),
+				float3(0.649, -0.921, 0.186),
+				float3(-0.913, 0.127, 0.574),
+				float3(0.285, 0.806, -0.447),
+				float3(0.471, -0.352, 0.698),
+				float3(-0.627, -0.194, -0.856),
+				float3(0.834, 0.591, -0.712),
+				float3(-0.173, -0.968, -0.421),
+				float3(0.562, 0.239, -0.785),
+				float3(-0.745, 0.487, 0.316),
+				float3(0.108, -0.631, 0.894),
+				float3(0.926, -0.845, -0.267),
+				float3(-0.384, 0.712, -0.539),
+				float3(0.697, 0.163, 0.825),
+				float3(-0.851, -0.429, 0.641),
+				float3(0.214, 0.934, 0.372),
+				float3(0.578, -0.762, -0.614),
+				float3(-0.469, 0.381, 0.947)
+			};
+
+			uint shadowBits = shadowBitArray[cellTexID];
+
+			float tempShadowSum = 0;
+			float tempShadowWeight = 0;
+
+			for(uint i = 0; i < 32; i++){				
+				float3 bitCellCentreMS = cellCentreMS + noise3D[i] * Skylighting::CELL_SIZE;
+				float weight = rcp(distance(positionMSAdjusted, bitCellCentreMS) + 1e-10);
+
+				tempShadowSum += float((shadowBits >> i) & 1u) * weight;
+				tempShadowWeight += weight;
+			}
+
+			tempShadowSum *= rcp(tempShadowWeight + 1e-10);
+
+			shadowSum += tempShadowSum * w;
 
 			sum = SphericalHarmonics::Add(sum, probe);
 			wsum += w;
 		}
 
-		float rcpWsum = rcp(wsum + 1e-10);
-		shadowVisibility = shadowSum * rcpWsum;
-		return SphericalHarmonics::Scale(sum, rcpWsum);
+		shadowVisibility = shadowSum * rcp(wsum + 1e-10);
+
+		return SphericalHarmonics::Scale(sum, rcp(wsum + 1e-10));
 	}
 
 }

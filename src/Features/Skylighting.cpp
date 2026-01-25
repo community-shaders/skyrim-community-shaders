@@ -315,9 +315,10 @@ void Skylighting::Prepass()
 
 	// Set PS shader resources
 	{
-		ID3D11ShaderResourceView* srvs[3] = {
+		ID3D11ShaderResourceView* srvs[4] = {
 			texProbeArray->srv.get(),
 			stbn_vec3_2Dx1D_128x128x64.get(),
+			texShadowVisibilityBitArray->srv.get(),
 			texShadowVisibility->srv.get()
 		};
 		context->PSSetShaderResources(50, 3, srvs);
