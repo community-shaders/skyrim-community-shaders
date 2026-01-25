@@ -1975,7 +1975,7 @@ void Raytracing::CreateModelInternal(RE::TESForm* form, const char* path, RE::Ni
 		return;
 	}
 
-	logger::trace("[RT] CreateModel - Path: {}, FormID [0x{:08X}], NiNode [0x{:08X}]: {}", path, formID, reinterpret_cast<uintptr_t>(pRoot), pRoot->name);
+	logger::info("[RT] CreateModel - Path: {}, FormID [0x{:08X}], NiNode [0x{:08X}]: {}", path, formID, reinterpret_cast<uintptr_t>(pRoot), pRoot->name);
 
 	auto formType = form->GetFormType();
 
@@ -1985,6 +1985,8 @@ void Raytracing::CreateModelInternal(RE::TESForm* form, const char* path, RE::Ni
 
 	TraverseScenegraphRTGeometries(pRoot, [&](RE::BSGeometry* pGeometry) -> RE::BSVisit::BSVisitControl {
 		const char* name = pGeometry->name.c_str();
+
+		logger::info("\t\t[RT] CreateModel::TraverseScenegraphGeometries - {}", name);
 
 		const auto& geometryType = pGeometry->GetType();
 
@@ -2115,7 +2117,7 @@ void Raytracing::CreateModelInternal(RE::TESForm* form, const char* path, RE::Ni
 			CommitModel(it->second.get());
 			AddInstance(formID, pRoot, modelKey);
 
-			logger::debug("[RT] CreateModel - Commited {} TriShapes", shapeCount);
+			logger::info("[RT] CreateModel - Commited {} TriShapes", shapeCount);
 		} else {
 			logger::warn("[RT] CreateModel - Emplace failed for {} TriShapes", shapeCount);
 		}
@@ -2291,7 +2293,7 @@ void Raytracing::AddInstance(RE::FormID formID, RE::NiAVObject* pNiNode, eastl::
 
 	if (auto instanceIt = instances.find(pNiNode); instanceIt == instances.end()) {
 		if (auto modelIt = models.find(path); modelIt != models.end()) {
-			auto [it, emplaced] = instances.try_emplace(pNiNode, Instance(path));
+			auto [it, emplaced] = instances.try_emplace(pNiNode, Instance(formID, path));
 
 			if (emplaced) {
 				if (auto nodesIt = formIDNodes.find(formID); nodesIt != formIDNodes.end()) {
@@ -2366,6 +2368,8 @@ void Raytracing::UpdateInstances()
 
 	const auto& cullingSettings = settings.AdvancedSettings.Culling;
 
+	auto* player = RE::PlayerCharacter::GetSingleton();
+
 	RE::NiCamera* camera = nullptr;
 	RE::NiPoint3 position;
 
@@ -2392,6 +2396,9 @@ void Raytracing::UpdateInstances()
 
 		if (blasInstances.size() > RTConstants::MAX_INSTANCES)
 			break;
+
+		if (instance.formID == player->formID && !player->Is3rdPersonVisible())
+			continue;
 
 		auto it = models.find(instance.filename);
 

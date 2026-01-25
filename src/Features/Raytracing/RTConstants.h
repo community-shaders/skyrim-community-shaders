@@ -14,4 +14,6 @@ namespace RTConstants
 
 	static constexpr uint SKY_CUBEMAP_SIZE = 256;
 	static constexpr uint SKY_HEMI_SIZE = SKY_CUBEMAP_SIZE * 2;
+
+	static constexpr uint PLAYER_REFR_FORMID = 0x00000014;
 }
