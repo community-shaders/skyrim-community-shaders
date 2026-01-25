@@ -4,6 +4,7 @@
 #include <Tracy/TracyD3D11.hpp>
 
 #include <Buffer.h>
+#include <mutex>
 #include <nlohmann/json.hpp>
 
 using json = nlohmann::json;
@@ -83,7 +84,7 @@ public:
 
 	// In-memory serialization for A/B testing (avoids disk I/O during swaps)
 	void SaveToJson(nlohmann::json& o_json);
-	void LoadFromJson(const nlohmann::json& i_json);
+	void LoadFromJson(nlohmann::json& i_json);
 
 	void LoadTheme();
 	void SaveTheme();
@@ -291,6 +292,7 @@ public:
 		{ "TruePBR", false }
 	};
 	std::unordered_map<std::string, bool> disabledFeatures;
+	std::mutex m_mutex;
 
 	inline ~State()
 	{

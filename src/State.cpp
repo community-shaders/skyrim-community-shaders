@@ -368,6 +368,7 @@ void State::Load(ConfigMode a_configMode, bool a_allowReload)
 
 void State::SaveToJson(nlohmann::json& settings)
 {
+	std::lock_guard<std::mutex> lock(m_mutex);
 	const auto shaderCache = globals::shaderCache;
 
 	globals::menu->Save(settings["Menu"]);
@@ -427,17 +428,18 @@ void State::SaveToJson(nlohmann::json& settings)
 	}
 }
 
-void State::LoadFromJson(const nlohmann::json& settings)
+void State::LoadFromJson(nlohmann::json& settings)
 {
+	std::lock_guard<std::mutex> lock(m_mutex);
 	const auto shaderCache = globals::shaderCache;
 
 	// Load Menu settings
 	if (settings.contains("Menu") && settings["Menu"].is_object()) {
-		globals::menu->Load(const_cast<nlohmann::json&>(settings["Menu"]));
+		globals::menu->Load(settings["Menu"]);
 	}
 
 	if (settings.contains("Advanced") && settings["Advanced"].is_object()) {
-		const json& advanced = settings["Advanced"];
+		json& advanced = settings["Advanced"];
 		if (advanced.contains("Dump Shaders") && advanced["Dump Shaders"].is_boolean())
 			shaderCache->SetDump(advanced["Dump Shaders"]);
 		if (advanced.contains("Log Level") && advanced["Log Level"].is_number_integer())
@@ -455,7 +457,7 @@ void State::LoadFromJson(const nlohmann::json& settings)
 	}
 
 	if (settings.contains("General") && settings["General"].is_object()) {
-		const json& general = settings["General"];
+		json& general = settings["General"];
 		if (general.contains("Enable Shaders") && general["Enable Shaders"].is_boolean())
 			shaderCache->SetEnabled(general["Enable Shaders"]);
 		if (general.contains("Enable Disk Cache") && general["Enable Disk Cache"].is_boolean())
@@ -465,7 +467,7 @@ void State::LoadFromJson(const nlohmann::json& settings)
 	}
 
 	if (settings.contains("Replace Original Shaders") && settings["Replace Original Shaders"].is_object()) {
-		const json& originalShaders = settings["Replace Original Shaders"];
+		json& originalShaders = settings["Replace Original Shaders"];
 		ForEachShaderTypeWithIndex([&](auto type, int classIndex) {
 			auto name = magic_enum::enum_name(type);
 			if (originalShaders.contains(name) && originalShaders[name].is_boolean()) {
@@ -479,7 +481,7 @@ void State::LoadFromJson(const nlohmann::json& settings)
 	// Load feature settings (only for already-loaded features)
 	for (auto* feature : Feature::GetFeatureList()) {
 		if (feature->loaded) {
-			feature->Load(const_cast<nlohmann::json&>(settings));
+			feature->Load(settings);
 		}
 	}
 }

@@ -4,9 +4,57 @@
 #include "State.h"
 #include "Utils/FileSystem.h"
 #include "Utils/UI.h"
+#include <cmath>
 #include <fmt/format.h>
 #include <fstream>
 #include <imgui.h>
+
+namespace
+{
+	std::vector<SettingsDiffEntry> DiffSnapshots(const nlohmann::json& userJson, const nlohmann::json& testJson, float epsilon)
+	{
+		std::vector<SettingsDiffEntry> diffEntries;
+
+		try {
+			auto diff = nlohmann::json::diff(userJson, testJson);
+
+			for (const auto& change : diff) {
+				std::string op = change.value("op", "");
+				std::string path = change.value("path", "");
+				std::string aVal, bVal;
+
+				if (op == "replace") {
+					auto aJson = userJson.at(nlohmann::json::json_pointer(path));
+					auto bJson = testJson.at(nlohmann::json::json_pointer(path));
+
+					// If both values are numbers, check if difference is within epsilon
+					if (aJson.is_number() && bJson.is_number()) {
+						double aDouble = aJson.get<double>();
+						double bDouble = bJson.get<double>();
+						if (std::abs(aDouble - bDouble) < static_cast<double>(epsilon)) {
+							continue;  // Skip insignificant numeric differences
+						}
+					}
+
+					aVal = aJson.dump();
+					bVal = bJson.dump();
+				} else if (op == "add") {
+					aVal = "(none)";
+					bVal = testJson.at(nlohmann::json::json_pointer(path)).dump();
+				} else if (op == "remove") {
+					aVal = userJson.at(nlohmann::json::json_pointer(path)).dump();
+					bVal = "(none)";
+				}
+
+				diffEntries.push_back({ path, aVal, bVal });
+			}
+		} catch (...) {
+			// Swallow and return what we have (likely empty)
+		}
+
+		return diffEntries;
+	}
+}
 
 ABTestingManager* ABTestingManager::GetSingleton()
 {
@@ -107,20 +155,20 @@ void ABTestingManager::Update()
 			usingTestConfig ? "Variant B (TEST)" : "Variant A (USER)");
 
 		if (usingTestConfig) {
-			// Swap to USER - load from memory snapshot (no disk I/O)
-			if (hasUserSnapshot) {
-				state->LoadFromJson(userConfigSnapshot);
-			} else {
-				logger::error("USER snapshot missing! Cannot swap to Variant A.");
-				usingTestConfig = false;  // Stay on TEST
-			}
-		} else {
 			// Swap to TEST - load from memory snapshot (no disk I/O)
 			if (hasTestSnapshot) {
 				state->LoadFromJson(testConfigSnapshot);
 			} else {
 				logger::error("TEST snapshot missing! Cannot swap to Variant B.");
-				usingTestConfig = true;  // Stay on USER
+				usingTestConfig = false;  // Stay on USER
+			}
+		} else {
+			// Swap to USER - load from memory snapshot (no disk I/O)
+			if (hasUserSnapshot) {
+				state->LoadFromJson(userConfigSnapshot);
+			} else {
+				logger::error("USER snapshot missing! Cannot swap to Variant A.");
+				usingTestConfig = true;  // Stay on TEST
 			}
 		}
 
@@ -166,47 +214,7 @@ std::vector<std::string> ABTestingManager::GetConfigDifferencesForDisplay() cons
 	if (!hasTestSnapshot || !hasUserSnapshot)
 		return differences;
 
-	// Compare the cached snapshots directly using JSON diff
-	auto diffEntries = Util::FileSystem::LoadJsonDiff(
-		Util::PathHelpers::GetCommunityShaderPath() / "temp_user_snapshot.json",
-		Util::PathHelpers::GetCommunityShaderPath() / "temp_test_snapshot.json");
-
-	// Write snapshots to temp files for comparison
-	auto tempUserPath = Util::PathHelpers::GetCommunityShaderPath() / "temp_user_snapshot.json";
-	auto tempTestPath = Util::PathHelpers::GetCommunityShaderPath() / "temp_test_snapshot.json";
-	try {
-		std::ofstream userFile(tempUserPath);
-		if (userFile.is_open()) {
-			userFile << userConfigSnapshot.dump(1);
-			userFile.close();
-		} else {
-			return differences;
-		}
-
-		std::ofstream testFile(tempTestPath);
-		if (testFile.is_open()) {
-			testFile << testConfigSnapshot.dump(1);
-			testFile.close();
-		} else {
-			return differences;
-		}
-	} catch (...) {
-		return differences;
-	}
-
-	// Use existing diff utility to find all differences
-	try {
-		diffEntries = Util::FileSystem::LoadJsonDiff(tempUserPath, tempTestPath);
-	} catch (...) {
-		return differences;
-	}
-
-	// Clean up temp files
-	try {
-		std::filesystem::remove(tempUserPath);
-		std::filesystem::remove(tempTestPath);
-	} catch (...) {
-	}
+	auto diffEntries = DiffSnapshots(userConfigSnapshot, testConfigSnapshot, 0.0001f);
 
 	// Format diff entries for display
 	for (const auto& entry : diffEntries) {
@@ -240,45 +248,10 @@ std::vector<std::string> ABTestingManager::GetConfigDifferencesForDisplay() cons
 
 std::vector<SettingsDiffEntry> ABTestingManager::GetConfigDiffEntries(float epsilon) const
 {
-	std::vector<SettingsDiffEntry> diffEntries;
 	if (!hasTestSnapshot || !hasUserSnapshot)
-		return diffEntries;
+		return {};
 
-	// Persist snapshots to temp files and reuse the existing diff utility
-	auto tempUserPath = Util::PathHelpers::GetCommunityShaderPath() / "temp_user_snapshot.json";
-	auto tempTestPath = Util::PathHelpers::GetCommunityShaderPath() / "temp_test_snapshot.json";
-
-	try {
-		std::ofstream userFile(tempUserPath);
-		if (!userFile.is_open())
-			return diffEntries;
-		userFile << userConfigSnapshot.dump(1);
-		userFile.close();
-
-		std::ofstream testFile(tempTestPath);
-		if (!testFile.is_open())
-			return diffEntries;
-		testFile << testConfigSnapshot.dump(1);
-		testFile.close();
-	} catch (...) {
-		return diffEntries;
-	}
-
-	// Compute diff with epsilon filtering for insignificant float changes
-	try {
-		diffEntries = Util::FileSystem::LoadJsonDiff(tempUserPath, tempTestPath, epsilon);
-	} catch (...) {
-		// fall through with empty diff
-	}
-
-	// Cleanup temp files
-	try {
-		std::filesystem::remove(tempUserPath);
-		std::filesystem::remove(tempTestPath);
-	} catch (...) {
-	}
-
-	return diffEntries;
+	return DiffSnapshots(userConfigSnapshot, testConfigSnapshot, epsilon);
 }
 
 void ABTestingManager::ClearCachedSnapshots()
@@ -331,7 +304,7 @@ void ABTestingManager::DrawOverlayUI()
 		if (!differences.empty()) {
 			ImGui::Separator();
 
-			constexpr size_t MAX_CHANGES_DISPLAYED = 10;  // Show max 5 individual changes, otherwise show count
+			constexpr size_t MAX_CHANGES_DISPLAYED = 10;  // Show max 10 individual changes, otherwise show count
 			if (differences.size() <= MAX_CHANGES_DISPLAYED) {
 				ImGui::TextColored(ImVec4(0.7f, 0.9f, 1.0f, 1.0f), "Changes from USER:");
 				for (const auto& diff : differences) {

@@ -1211,6 +1211,10 @@ void PerformanceOverlay::DrawABTestSection(const std::vector<DrawCallRow>& allRo
 				if (abTestingManager && abTestingManager->HasCachedSnapshots()) {
 					// Pull structured diff entries directly from ABTestingManager (in-memory snapshots)
 					this->settingsDiff = abTestingManager->GetConfigDiffEntries();
+				} else {
+					std::filesystem::path userPath = Util::PathHelpers::GetDataPath() / "SKSE/Plugins/CommunityShaders/SettingsUser.json";
+					std::filesystem::path testPath = Util::PathHelpers::GetDataPath() / "SKSE/Plugins/CommunityShaders/SettingsTest.json";
+					this->settingsDiff = Util::FileSystem::LoadJsonDiff(userPath, testPath);
 				}
 				this->settingsDiffLoaded = true;
 			}

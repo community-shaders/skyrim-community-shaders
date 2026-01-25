@@ -1,5 +1,6 @@
 #include "FileSystem.h"
 #include <Windows.h>
+#include <cmath>
 #include <filesystem>
 #include <fstream>
 #include <psapi.h>
@@ -237,12 +238,12 @@ std::vector<SettingsDiffEntry> Util::FileSystem::LoadJsonDiff(const std::filesys
 				auto aJson = userJson.at(nlohmann::json::json_pointer(path));
 				auto bJson = testJson.at(nlohmann::json::json_pointer(path));
 
-				// If both values are numbers, check if difference is within epsilon
+				// If both values are numbers, check if difference is within epsilon (double precision)
 				if (aJson.is_number() && bJson.is_number()) {
-					float aFloat = aJson.get<float>();
-					float bFloat = bJson.get<float>();
-					if (std::abs(aFloat - bFloat) < epsilon) {
-						continue;  // Skip insignificant float differences
+					double aDouble = aJson.get<double>();
+					double bDouble = bJson.get<double>();
+					if (std::abs(aDouble - bDouble) < static_cast<double>(epsilon)) {
+						continue;  // Skip insignificant numeric differences
 					}
 				}
 
