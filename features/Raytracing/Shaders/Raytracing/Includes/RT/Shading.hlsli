@@ -447,7 +447,7 @@ bool SampleTransmissionBSDF(in Surface surface, in BRDFContext brdfContext, in b
     float VdotH = saturate(dot(Ve, He));
     float NdotH = saturate(dot(surface.Normal, H));
 
-    float F = FresnelDielectric(eta, VdotH);
+    float F = saturate(FresnelDielectric(eta, VdotH));
 
     float rnd = Random(randomSeed);
     float pdf = 0.0f;
