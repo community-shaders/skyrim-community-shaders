@@ -313,6 +313,7 @@ struct Raytracing : public OverlayFeature
 	{
 		None,
 		SVGF,
+		Accumulation,
 #ifdef DLSS_RR
 		DLSSRR
 #endif
@@ -694,6 +695,15 @@ struct Raytracing : public OverlayFeature
 	winrt::com_ptr<ID3D11ComputeShader> convertTexturesCS = nullptr;
 	winrt::com_ptr<ID3D11ComputeShader> convertTexturesPTCS = nullptr;
 	winrt::com_ptr<ID3D11ComputeShader> compositeCS = nullptr;
+	winrt::com_ptr<ID3D11ComputeShader> accumulationCS = nullptr;
+
+	struct alignas(16) AccumulationCBData
+	{
+		float AccumulationWeight;
+		float3 _padding;
+	};
+	eastl::unique_ptr<AccumulationCBData> accumulationCBData = nullptr;
+	eastl::unique_ptr<ConstantBuffer> accumulationCB = nullptr;
 
 	eastl::unique_ptr<DX12::StructuredBufferUpload<D3D12_RAYTRACING_INSTANCE_DESC>> blasInstanceBuffer = nullptr;
 	eastl::vector<D3D12_RAYTRACING_INSTANCE_DESC> blasInstances;
@@ -819,6 +829,10 @@ struct Raytracing : public OverlayFeature
 
 	eastl::unique_ptr<WrappedResource> mainTexture = nullptr;
 
+	// Accumulation buffer for path tracing denoiser
+	eastl::unique_ptr<WrappedResource> accumulationTexture = nullptr;
+	eastl::unique_ptr<WrappedResource> accumulationTextureCopy = nullptr;
+
 	std::shared_mutex geometryMutex;
 	std::shared_mutex bufferMutex;
 	std::shared_mutex renderMutex;
@@ -833,6 +847,10 @@ struct Raytracing : public OverlayFeature
 	double captureInterval = 0.1;
 	double lastTime = 0;
 	bool canMeasure = false;
+
+	// Accumulation denoiser state
+	int accumulatedFrames = 0;
+	bool cameraHasMoved = true;
 
 	void UpdateMeasureTime(double currentTime)
 	{

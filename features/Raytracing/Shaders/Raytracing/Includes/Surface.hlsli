@@ -23,6 +23,8 @@ struct Surface
     float3 Emissive;
     float AO;
     float3 F0;
+    float IOR;
+    float3 TransmissionColor;
 
 #if defined(FULL_MATERIAL)
     float3 SubsurfaceColor;
@@ -71,6 +73,9 @@ struct Surface
         float4 vertexColor = Interpolate(v0.Color.unpack(), v1.Color.unpack(), v2.Color.unpack(), uvw);
 		vertexColor = saturate(vertexColor / max(max(vertexColor.r, vertexColor.g), vertexColor.b));
 
+        const bool isWindows = (material.Feature == Feature::kGlowMap || material.PBRFlags & PBR::Flags::HasEmissive) && material.ShaderFlags & ShaderFlags::kAssumeShadowmask;
+        float3 windowAlpha = float3(0.0f, 0.0f, 0.0f);
+
         [branch]
         if (material.ShaderType == ShaderType::TruePBR)
         {
@@ -80,6 +85,10 @@ struct Surface
             float3 albedo = baseTexture.SampleLevel(BaseSampler, texCoord0, 0).rgb;
             float4 rmaos = rmaosTexture.SampleLevel(BaseSampler, texCoord0, 0);
             float3 emissive = emissiveTexture.SampleLevel(BaseSampler, texCoord0, 0).rgb;
+
+            if (isWindows) {
+                windowAlpha = emissive;
+            }
 
             Albedo = albedo * material.BaseColor().rgb * vertexColor.rgb;
             Emissive = emissive * EmitColorToLinear(material.EffectColor().rgb) * material.EffectColor().a * Frame.Emissive * EmitColorMult();
@@ -99,10 +108,18 @@ struct Surface
 
             [branch]
             if (material.ShaderFlags & ShaderFlags::kSpecular) {
-                Texture2D specularTexture = Textures[NonUniformResourceIndex(material.SpecularTexture())];
                 Roughness = material.RoughnessScale() >= 0.0f ? saturate(material.RoughnessScale()) : 1.0f;
 
-                float3 specularColor = specularTexture.SampleLevel(BaseSampler, texCoord0, 0).r * material.SpecularColor().rgb * material.SpecularColor().a;
+                float3 specularColor = 0.0f;
+
+                [branch]
+                if (material.ShaderFlags & ShaderFlags::kModelSpaceNormals) {
+                    Texture2D specularTexture = Textures[NonUniformResourceIndex(material.SpecularTexture())];
+                    specularColor = specularTexture.SampleLevel(BaseSampler, texCoord0, 0).r * material.SpecularColor().rgb * material.SpecularColor().a;
+                } else {
+                    Texture2D normalTexture = Textures[NonUniformResourceIndex(material.NormalTexture())];
+                    specularColor = normalTexture.SampleLevel(BaseSampler, texCoord0, 0).a * material.SpecularColor().rgb * material.SpecularColor().a;
+                }
                 F0 = clamp(0.08f * specularColor, 0.02f, 0.08f);
             }
 
@@ -121,6 +138,9 @@ struct Surface
             [branch]
             if (material.Feature == Feature::kGlowMap) {
                 Texture2D glowTexture = Textures[NonUniformResourceIndex(material.GlowTexture())];
+                if (isWindows) {
+                    windowAlpha = glowTexture.SampleLevel(BaseSampler, texCoord0, 0).rgb;
+                }
                 Emissive = GlowToLinear(glowTexture.SampleLevel(BaseSampler, texCoord0, 0).rgb) * EmitColorToLinear(material.EffectColor().rgb) * material.EffectColor().a * Frame.Emissive * EmitColorMult();
             }
 
@@ -183,11 +203,33 @@ struct Surface
         {
             Albedo = float3(1.0f, 0.0f, 1.0f);
         }
+
+        [branch]
+        if (material.AlphaFlags == AlphaFlags::kAlphaBlend && !((material.Feature == Feature::kHairTint || material.Feature == Feature::kFaceGen || material.Feature == Feature::kFaceGenRGBTint || material.Feature == Feature::kEye))) {
+            float alpha = baseTexture.SampleLevel(BaseSampler, texCoord0, 0).a * material.BaseColor().a;
+
+            [branch]
+            if (material.ShaderFlags & ShaderFlags::kVertexAlpha) {
+                alpha *= vertexColor.a;
+            }
+
+            TransmissionColor = lerp(float3(1.0f, 1.0f, 1.0f), Albedo, alpha);
+            Albedo *= alpha;
+        } else {
+            TransmissionColor = float3(0.0f, 0.0f, 0.0f);
+        }
+
+        [branch]
+        if (isWindows) {
+            TransmissionColor = windowAlpha;
+            Albedo *= 1.0f - windowAlpha;
+            Emissive *= 0;
+        }
         
         [branch]
         if (material.ShaderFlags & ShaderFlags::kExternalEmittance) {
             Emissive *= Frame.EmittanceColor;
-        }       
+        }
 #endif
 
 #if defined(DEBUG_NONORMALMAP)
@@ -290,7 +332,8 @@ struct Surface
 
     void TestMaterial(in Vertex v0, in Vertex v1, in Vertex v2, in float3 uvw, in float3 normalWS, in float3 tangentWS, in float3 bitangentWS, in Material material)
     {
-        Albedo = 0.5f;
+        Albedo = 0.18f;  // Neutral grey
+        TransmissionColor = float3(0.0f, 0.0f, 0.0f);
 
         Normal = normalWS;
         Tangent = tangentWS;
@@ -325,6 +368,7 @@ struct Surface
 
         surface.Albedo = float3(1.0f, 1.0f, 1.0f);
         surface.Emissive = float3(0.0f, 0.0f, 0.0f);
+        surface.TransmissionColor = float3(0.0f, 0.0f, 0.0f);
         surface.Roughness = PBR::Defaults::Roughness;
         surface.Metallic = PBR::Defaults::Metallic;
         surface.AO = 1.0f;
@@ -350,6 +394,7 @@ struct Surface
 
 #ifdef DEBUG_WHITE_FURNACE
         surface.Albedo = float3(1.0f, 1.0f, 1.0f);
+        surface.TransmissionColor = float3(0.0f, 0.0f, 0.0f);
 #endif
 
         surface.Roughness = PBR::Roughness(surface.Roughness, Frame.Roughness.x, Frame.Roughness.y);
@@ -358,6 +403,33 @@ struct Surface
         surface.DiffuseAlbedo = surface.Albedo * (1.0f - surface.Metallic);
 
         surface.F0 = PBR::F0(surface.F0, surface.Albedo, surface.Metallic);
+        surface.IOR = F0toIOR(surface.F0);
+
+#   ifdef DEBUG_GLASS
+        surface.TransmissionColor = 1.0f;
+        surface.Albedo = float3(0.0f, 0.0f, 0.0f);
+        surface.DiffuseAlbedo = float3(0.0f, 0.0f, 0.0f);
+        surface.Emissive = float3(0.0f, 0.0f, 0.0f);
+        surface.Metallic = 0.0f;
+        surface.Roughness = 0.1f;
+        surface.F0 = 0.04f;
+        surface.IOR = 1.5f;
+        surface.Normal = surface.GeomNormal;
+        return surface;
+#   endif
+
+#   ifdef DEBUG_METAL
+        surface.TransmissionColor = 0.0f;
+        surface.Albedo = 0.18f;
+        surface.DiffuseAlbedo = float3(0.0f, 0.0f, 0.0f);
+        surface.Emissive = float3(0.0f, 0.0f, 0.0f);
+        surface.Metallic = 1.0f;
+        surface.Roughness = 0.1f;
+        surface.F0 = 0.04f;
+        surface.IOR = 1.5f;
+        // surface.Normal = surface.GeomNormal;
+        return surface;
+#   endif
 
 #if defined(FULL_MATERIAL)
         surface.SubsurfaceColor = float3(0.0f, 0.0f, 0.0f);
@@ -404,6 +476,7 @@ struct Surface
         surface.DiffuseAlbedo = surface.Albedo * (1.0f - surface.Metallic);
 
         surface.F0 = PBR::F0(albedo, metallic);
+        surface.IOR = F0toIOR(surface.F0);
 
 #if defined(FULL_MATERIAL)
         surface.SubsurfaceColor = float3(0.0f, 0.0f, 0.0f);

@@ -7,10 +7,21 @@ Texture2D<float4> SpecularGITexture     : register(t3);
 
 RWTexture2D<float4> MainOutputTexture   : register(u0);
 
+cbuffer AccumulationCB : register(b2)
+{
+    float AccumulationWeight;  // 1.0 / (accumulatedFrames + 1)
+    float3 _padding;
+}
+
 [numthreads(8, 8, 1)]
 void main(uint2 id : SV_DispatchThreadID)
 {
-#if defined(COMPOSITE)
+#if defined(ACCUMULATION)
+    float3 previousAccumulated = MainInputTexture[id].rgb;
+    float3 currentPathTraced = DiffuseAlbedoTexture[id].rgb;
+
+    float3 outputColor = lerp(previousAccumulated, currentPathTraced, AccumulationWeight);
+#elif defined(COMPOSITE)
     float3 outputColor = Color::GammaToTrueLinear(MainInputTexture[id].rgb);
 
 #   if defined(DIFFUSE)

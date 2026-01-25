@@ -32,8 +32,8 @@ namespace ShaderFlags
     static const uint kMultiTextureLandscape = (1 << 13);
     static const uint kEyeReflect = (1 << 14);
     static const uint kHairTint = (1 << 15);
-    static const uint kTwoSided = (1 << 16);	
-    static const uint kFaceGenRGBTint = (1 << 17);	
+	static const uint kTwoSided = (1 << 16);
+	static const uint kAssumeShadowmask = (1 << 17);
 }
 
 namespace Feature
@@ -58,6 +58,13 @@ namespace Feature
 	static const uint16_t kLODLandNoise = 18;
 	static const uint16_t kMultiTexLandLODBlend = 19;
 }
+
+namespace AlphaFlags
+{
+	static const uint16_t kOpaque = 0;
+	static const uint16_t kAlphaBlend = (1 << 0);
+	static const uint16_t kAlphaTest = (1 << 1);
+}
 #endif
 
 // DirectX 12 is very picky about buffer alignment, make sure all variable boundaries are properly aligned
@@ -73,10 +80,13 @@ struct Material
 
 	half4 Color0;
 	half4 Color1;
+	half4 Color2;
 
 	half Scalar0;
 	half Scalar1;
 	half Scalar2;
+
+	uint16_t AlphaFlags;
 
 	// Textures
 	uint16_t Texture0;
@@ -137,7 +147,7 @@ struct Material
 	// Vanilla
     half4 SpecularColor()
     {
-		return Color1;
+		return Color2;
 	}
 
     uint16_t GlowTexture()

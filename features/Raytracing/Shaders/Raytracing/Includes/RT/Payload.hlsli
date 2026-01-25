@@ -19,6 +19,7 @@ struct Payload
     uint primitiveIndex;
     uint barycentricsPacked;
     uint instanceGeometryIndexPacked;
+    uint randomSeed;
 
     void PackBarycentrics(float2 barycentrics)
     {

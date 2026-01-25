@@ -1,6 +1,8 @@
 #include "Raytracing/Includes/Types.hlsli"
 #include "Raytracing/Includes/Registers.hlsli"
+#include "Raytracing/Includes/RT/CommonRT.hlsli"
 #include "Raytracing/Includes/RT/Geometry.hlsli"
+#include "Raytracing/Includes/PBR.hlsli"
 
 #include "Common/Color.hlsli"
 
@@ -18,23 +20,31 @@ void main(inout ShadowPayload payload, in BuiltInTriangleIntersectionAttributes 
 
     float2 texCoord = material.TexCoord(Interpolate(v0.Texcoord0, v1.Texcoord0, v2.Texcoord0, uvw));
 
-    float alpha;
-    
-    [branch]
-    if (material.Feature == Feature::kGlowMap)
-        alpha = 1.0f - Color::RGBToLuminance(Textures[NonUniformResourceIndex(material.GlowTexture())].SampleLevel(BaseSampler, texCoord, 0).rgb);
-    else
-        alpha = Textures[NonUniformResourceIndex(material.BaseTexture())].SampleLevel(BaseSampler, texCoord, 0).a;
-
+    float alpha = Textures[NonUniformResourceIndex(material.BaseTexture())].SampleLevel(BaseSampler, texCoord, 0).a;
 
     [branch]
-    if (alpha < 0.5f)
+    if (material.AlphaFlags == AlphaFlags::kAlphaTest)
     {
-        IgnoreHit();
+        if (alpha < 0.5f)
+        {
+            IgnoreHit();
+        }
+        else
+        {
+            AcceptHitAndEndSearch();
+        }
     }
-    else
+    else if (material.AlphaFlags == AlphaFlags::kAlphaBlend)
     {
-        AcceptHitAndEndSearch();
+        float rnd = Random(payload.randomSeed);
+        if (rnd > alpha)
+        {
+            IgnoreHit();
+        }
+        else
+        {
+            AcceptHitAndEndSearch();
+        }
     }
 }
 

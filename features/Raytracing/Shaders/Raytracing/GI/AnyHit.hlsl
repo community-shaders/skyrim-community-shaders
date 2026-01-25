@@ -1,6 +1,8 @@
 #include "Raytracing/Includes/Types.hlsli"
 #include "Raytracing/Includes/Registers.hlsli"
+#include "Raytracing/Includes/RT/CommonRT.hlsli"
 #include "Raytracing/Includes/RT/Geometry.hlsli"
+#include "Raytracing/Includes/PBR.hlsli"
 
 #include "Common/Color.hlsli"
 
@@ -21,9 +23,20 @@ void main(inout Payload payload, in BuiltInTriangleIntersectionAttributes attrib
     float alpha = Textures[NonUniformResourceIndex(material.BaseTexture())].SampleLevel(BaseSampler, texCoord, 0).a;
 
     [branch]
-    if (alpha < 0.5f)
+    if (material.AlphaFlags == AlphaFlags::kAlphaTest)
     {
-        IgnoreHit();
+        if (alpha < 0.5f)
+        {
+            IgnoreHit();
+        }
+    }
+    else if (material.AlphaFlags == AlphaFlags::kAlphaBlend)
+    {
+        float rnd = Random(payload.randomSeed);
+        if (rnd > alpha)
+        {
+            IgnoreHit();
+        }
     }
 }
 
