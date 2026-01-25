@@ -1290,7 +1290,7 @@ struct Raytracing : public OverlayFeature
 		
 		static void Install()
 		{
-			stl::detour_thunk<TES_Load3D>(REL::RelocationID(0, 13355));
+			stl::detour_thunk<TES_Load3D>(REL::RelocationID(13209, 13355));
 
 			stl::write_vfunc<0x6B, Release3DRelatedData<RE::TESObjectREFR>>(RE::VTABLE_TESObjectREFR[0]);
 			stl::write_vfunc<0x6B, Release3DRelatedData<RE::PlayerCharacter>>(RE::VTABLE_Actor[0]);
