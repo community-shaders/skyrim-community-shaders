@@ -128,11 +128,16 @@ float3 SampleConeUniform(inout uint randomSeed, in float cosMax)
     );
 }
 
-float3 OffsetRay(float3 p, float3 n, float3 l)
+float3 OffsetRay(float3 p, float3 n, float3 l, bool hasTransmission = false)
 {
 	const float MinBias = 0.01f;
 	const float MaxBias = GN_BIAS_MAX;
-	const float NormalBias = lerp(MaxBias, MinBias, saturate(dot(n, l)));
+    float NdotL = dot(n, l);
+    if (NdotL < 0.0f && hasTransmission)
+    {
+        n = -n;
+    }
+	const float NormalBias = lerp(MaxBias, MinBias, saturate(NdotL));
 	p += n * NormalBias;
 	return p;
 }

@@ -8,7 +8,8 @@
 float TraceRayShadow(RaytracingAccelerationStructure scene, Surface surface, float3 direction, inout uint randomSeed)
 {
     RayDesc ray;
-    ray.Origin = OffsetRay(surface.Position, surface.GeomNormal, direction);
+    bool hasTransmission = any(surface.TransmissionColor) > 0.0f;
+    ray.Origin = OffsetRay(surface.Position, surface.GeomNormal, direction, hasTransmission);
     ray.Direction = direction;
     ray.TMin = 0.01f;
     ray.TMax = SHADOW_RAY_TMAX;
@@ -26,7 +27,8 @@ float TraceRayShadow(RaytracingAccelerationStructure scene, Surface surface, flo
 float TraceRayShadowFinite(RaytracingAccelerationStructure scene, Surface surface, float3 direction, float tmax, inout uint randomSeed)
 {
     RayDesc ray;
-    ray.Origin = OffsetRay(surface.Position, surface.GeomNormal, direction);
+    bool hasTransmission = any(surface.TransmissionColor) > 0.0f;
+    ray.Origin = OffsetRay(surface.Position, surface.GeomNormal, direction, hasTransmission);
     ray.Direction = direction;
     ray.TMin = 0.01f;
     ray.TMax = tmax;
