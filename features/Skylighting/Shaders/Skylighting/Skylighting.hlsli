@@ -110,7 +110,7 @@ namespace Skylighting
 
 					uint3 cellTexID = (cellID + params.ArrayOrigin.xyz) % ARRAY_DIM;
 					sh2 probe = SphericalHarmonics::Scale(probeArray[cellTexID], w);
-					
+
 					shadowSum += shadowVisArray[cellTexID] * w;
 
 					sum = SphericalHarmonics::Add(sum, probe);
@@ -206,7 +206,7 @@ namespace Skylighting
 			float tempShadowSum = 0;
 			float tempShadowWeight = 0;
 
-			for(uint i = 0; i < 32; i++){				
+			for(uint i = 0; i < 32; i++){
 				float3 bitCellCentreMS = cellCentreMS + noise3D[i] * Skylighting::CELL_SIZE;
 				float weight = rcp(distance(positionMSAdjusted, bitCellCentreMS) + 1e-10);
 
