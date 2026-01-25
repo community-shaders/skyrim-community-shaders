@@ -1,5 +1,6 @@
 #pragma once
 #include "ABTestAggregator.h"
+#include "Utils/FileSystem.h"
 #include <nlohmann/json.hpp>
 #include <vector>
 
@@ -27,6 +28,16 @@ public:
 	// Access to aggregator
 	ABTestAggregator& GetAggregator() { return aggregator; }
 
+	// Access to cached settings for performance overlay (in-memory, no disk I/O)
+	bool HasCachedSnapshots() const { return hasTestSnapshot && hasUserSnapshot; }
+	const nlohmann::json& GetUserSnapshot() const { return userConfigSnapshot; }
+	const nlohmann::json& GetTestSnapshot() const { return testConfigSnapshot; }
+	std::vector<std::string> GetConfigDifferencesForDisplay() const;
+	std::vector<SettingsDiffEntry> GetConfigDiffEntries(float epsilon = 0.0001f) const;
+
+	// Clear cached snapshots explicitly (used when overlay results are cleared)
+	void ClearCachedSnapshots();
+
 private:
 	uint32_t testInterval = 0;
 	bool abTestingEnabled = false;
@@ -34,4 +45,13 @@ private:
 	LARGE_INTEGER timingFrequency = { 0 };
 	LARGE_INTEGER lastTestSwitch = { 0 };
 	ABTestAggregator aggregator;
+
+	// In-memory storage for both variants to avoid disk I/O during swapping
+	nlohmann::json testConfigSnapshot;
+	nlohmann::json userConfigSnapshot;
+	bool hasTestSnapshot = false;
+	bool hasUserSnapshot = false;
+
+	// Track what changed between USER and TEST configs
+	std::vector<std::string> GetConfigDifferences() const;
 };

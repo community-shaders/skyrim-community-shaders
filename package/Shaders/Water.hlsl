@@ -80,7 +80,9 @@ struct VS_OUTPUT
 {
 #	if defined(SPECULAR) || defined(UNDERWATER)
 	float4 HPosition : SV_POSITION0;
+#   if !defined(UNIFIED_WATER)
 	float4 FogParam : COLOR0;
+#	endif
 	float4 WPosition : TEXCOORD0;
 	float4 TexCoord1 : TEXCOORD1;
 	float4 TexCoord2 : TEXCOORD2;
@@ -187,10 +189,12 @@ VS_OUTPUT main(VS_INPUT input)
 	vsout.WorldPosition = worldPos;
 	vsout.PreviousWorldPosition = mul(PreviousWorld[eyeIndex], inputPosition);
 #		else
-	float fogColorParam = min(VSFogFarColor.w,
-		pow(saturate(length(worldViewPos.xyz) * VSFogParam.y - VSFogParam.x), NormalsScale.w));
-	vsout.FogParam.xyz = lerp(VSFogNearColor.xyz, VSFogFarColor.xyz, fogColorParam);
-	vsout.FogParam.w = fogColorParam;
+
+#		if !defined(UNIFIED_WATER)
+	float fogDistanceFactor = min(VSFogFarColor.w, pow(saturate(length(worldViewPos.xyz) * VSFogParam.y - VSFogParam.x), NormalsScale.w));
+	vsout.FogParam.xyz = lerp(VSFogNearColor.xyz, VSFogFarColor.xyz, fogDistanceFactor);
+	vsout.FogParam.w = fogDistanceFactor;
+		#endif
 
 	vsout.WPosition.xyz = worldPos.xyz;
 	vsout.WPosition.w = length(worldPos.xyz);
@@ -211,14 +215,27 @@ VS_OUTPUT main(VS_INPUT input)
 	float2 scrollAdjust2 = posAdjust / NormalsScale.yy;
 	float2 scrollAdjust3 = posAdjust / NormalsScale.zz;
 
+#						if defined(UNIFIED_WATER) && defined(NORMAL_TEXCOORD)
+	float2 cellShift = float2(floor(ObjectUV.z * 0.5), floor((ObjectUV.z - 1.0) * 0.5));
+	float2 scaledUV = input.TexCoord0.xy * ObjectUV.z - cellShift;
+#						endif
+
 #				if !(defined(FLOWMAP) && (defined(REFRACTIONS) || defined(BLEND_NORMALS) || defined(DEPTH) || NUM_SPECULAR_LIGHTS == 0))
 #					if defined(NORMAL_TEXCOORD)
 	float3 normalsScale = 0.001 * NormalsScale.xyz;
+#						if defined(UNIFIED_WATER)
+	if (ObjectUV.x) {
+		scrollAdjust1 = scaledUV / normalsScale.xx;
+		scrollAdjust2 = scaledUV / normalsScale.yy;
+		scrollAdjust3 = scaledUV / normalsScale.zz;
+	}
+#						else
 	if (ObjectUV.x) {
 		scrollAdjust1 = input.TexCoord0.xy / normalsScale.xx;
 		scrollAdjust2 = input.TexCoord0.xy / normalsScale.yy;
 		scrollAdjust3 = input.TexCoord0.xy / normalsScale.zz;
 	}
+#						endif
 #					else
 	if (ObjectUV.x) {
 		scrollAdjust1 = 0.0;
@@ -245,16 +262,29 @@ VS_OUTPUT main(VS_INPUT input)
 #					if !defined(NORMAL_TEXCOORD)
 	vsout.TexCoord3 = 0.0;
 #					elif defined(WADING)
+#						if defined(UNIFIED_WATER)
+	float2 wadingUV = (input.TexCoord0.xy - 0.5f) * 0.5f;
+	vsout.TexCoord2.zw = (CellTexCoordOffset.xy + wadingUV) / ObjectUV.xy;
+	vsout.TexCoord3.xy = CellTexCoordOffset.zw + wadingUV;
+#						else
 	vsout.TexCoord2.zw = ((-0.5 + input.TexCoord0.xy) * 0.1 + CellTexCoordOffset.xy) +
 	                     float2(CellTexCoordOffset.z, -CellTexCoordOffset.w + ObjectUV.x) / ObjectUV.xx;
 	vsout.TexCoord3.xy = -0.25 + (input.TexCoord0.xy * 0.5 + ObjectUV.yz);
+#						endif
 	vsout.TexCoord3.zw = input.TexCoord0.xy;
 #					elif (defined(REFRACTIONS) || NUM_SPECULAR_LIGHTS == 0 || defined(BLEND_NORMALS))
+#						if defined(UNIFIED_WATER)
+	float2 dims = float2(ObjectUV.x, ObjectUV.y);
+	vsout.TexCoord2.zw = (CellTexCoordOffset.xy + scaledUV) / dims;
+	vsout.TexCoord3.xy = CellTexCoordOffset.zw + scaledUV;
+	vsout.TexCoord3.zw = scaledUV;
+#						else
 	vsout.TexCoord2.zw = (CellTexCoordOffset.xy + input.TexCoord0.xy) / ObjectUV.xx;
-	vsout.TexCoord3.xy = (CellTexCoordOffset.zw + input.TexCoord0.xy);
+	vsout.TexCoord3.xy = CellTexCoordOffset.zw + input.TexCoord0.xy;
 	vsout.TexCoord3.zw = input.TexCoord0.xy;
+#						endif
 #					endif
-	vsout.TexCoord4 = ObjectUV.x;
+	vsout.TexCoord4 = ObjectUV.xy;
 #				else
 	vsout.TexCoord1.xy = NormalsScroll0.xy + scrollAdjust1;
 	vsout.TexCoord1.zw = NormalsScroll0.zw + scrollAdjust2;
@@ -575,7 +605,17 @@ float3 GetFlowmapNormal(PS_INPUT input, float2 uvShift, float multiplier, float 
 {
 	FlowmapData flowData = GetFlowmapDataUV(input, uvShift);
 	float2 uv = offset + (flowData.flowVector - float2(multiplier * ((0.001 * ReflectionColor.w) * flowData.color.w), 0));
-	return float3(FlowMapNormalsTex.SampleBias(FlowMapNormalsSampler, uv, SharedData::MipBias).xy, flowData.color.z);
+
+	float2 dx = ddx(uv);
+	float2 dy = ddy(uv);
+	float mipLevel = 0.5 * log2(max(dot(dx, dx), dot(dy, dy)));
+	mipLevel = clamp(mipLevel + SharedData::MipBias, 0, 5);
+
+	float mipScale = exp2(-mipLevel);
+	float2 scaledFlowVector = flowData.flowVector * mipScale;
+	float2 scaledUv = offset + (scaledFlowVector - float2(multiplier * ((0.001 * ReflectionColor.w) * flowData.color.w), 0));
+
+	return float3(FlowMapNormalsTex.SampleLevel(FlowMapNormalsSampler, scaledUv, mipLevel).xy, flowData.color.z);
 }
 
 /**
@@ -1010,6 +1050,26 @@ DiffuseOutput GetWaterDiffuseColor(PS_INPUT input, float3 normal, float3 viewDir
 	float3 refractionColor = RefractionTex.Sample(RefractionSampler, refractionUV).xyz;
 	float3 refractionDiffuseColor = lerp(Color::Water(ShallowColor.xyz), Color::Water(DeepColor.xyz), distanceMul.y);
 
+	if (!(Permutation::PixelShaderDescriptor & Permutation::WaterFlags::Interior)) {
+#				if defined(SKYLIGHTING)
+		float3 skylightingPosition = lerp(input.WPosition.xyz, refractionWorldPosition.xyz, noise);
+
+#					if defined(VR)
+		float3 positionMSSkylight = skylightingPosition + FrameBuffer::CameraPosAdjust[eyeIndex].xyz - FrameBuffer::CameraPosAdjust[0].xyz;
+#					else
+		float3 positionMSSkylight = skylightingPosition;
+#					endif
+
+		sh2 skylightingSH = Skylighting::sampleNoBias(SharedData::skylightingSettings, Skylighting::SkylightingProbeArray, positionMSSkylight);
+		float skylightingDiffuse = SphericalHarmonics::FuncProductIntegral(skylightingSH, SphericalHarmonics::EvaluateCosineLobe(float3(0, 0, 1))) / Math::PI;
+		skylightingDiffuse = saturate(skylightingDiffuse);
+		skylightingDiffuse = lerp(1.0, skylightingDiffuse, Skylighting::getFadeOutFactor(input.WPosition.xyz));
+
+		float3 refractionDiffuseColorSkylight = Skylighting::mixDiffuse(SharedData::skylightingSettings, skylightingDiffuse);
+		refractionDiffuseColor = Color::LinearToGamma(Color::GammaToLinear(refractionDiffuseColor) * refractionDiffuseColorSkylight);
+#				endif
+	}
+
 #				if defined(UNDERWATER)
 	float refractionMul = 0;
 #				else
@@ -1073,6 +1133,10 @@ PS_OUTPUT main(PS_INPUT input)
 
 	float distanceFactor = saturate(lerp(FrameBuffer::FrameParams.w, 1, (input.WPosition.w - 8192) / (WaterParams.x - 8192)));
 	float4 distanceMul = saturate(lerp(VarAmounts.z, 1, -(distanceFactor - 1))).xxxx;
+	float distanceBlendFactor = distanceFactor;
+#			if defined(UNIFIED_WATER)
+	distanceBlendFactor = 1.0f;
+#			endif
 
 	bool isSpecular = false;
 
@@ -1116,7 +1180,7 @@ PS_OUTPUT main(PS_INPUT input)
 	float3 viewPosition = mul(FrameBuffer::CameraView[eyeIndex], float4(input.WPosition.xyz, 1)).xyz;
 	float2 screenUV = FrameBuffer::ViewToUV(viewPosition, true, eyeIndex);
 
-	WaterNormalData waterData = GetWaterNormal(input, distanceFactor, depthControl.z, viewDirection, depth, eyeIndex);
+	WaterNormalData waterData = GetWaterNormal(input, distanceBlendFactor, depthControl.z, viewDirection, depth, eyeIndex);
 	float3 normal = waterData.normal;
 
 	float fresnel = GetFresnelValue(normal, viewDirection);
@@ -1216,15 +1280,25 @@ PS_OUTPUT main(PS_INPUT input)
 	}
 
 #					if defined(VC)
-	float specularFraction = lerp(1, fresnel * diffuseOutput.refractionMul, distanceFactor);
+	float specularFraction = lerp(1, fresnel * diffuseOutput.refractionMul, distanceBlendFactor);
 	float3 finalColorPreFog = lerp(diffuseColor, specularColor, specularFraction) + sunColor * depthControl.w;
+
+#						if !defined(UNIFIED_WATER)
+	float fogDistanceFactor = input.FogParam.w;
 	float3 fogColor = Color::Fog(input.FogParam.xyz);
+#						else
+	float fogDistanceFactor = min(FogFarColor.w, pow(saturate(input.WPosition.w * FogParam.y - FogParam.x), FresnelRI.y));
+	float3 fogColor = Color::Fog(lerp(FogNearColor.xyz, FogFarColor.xyz, fogDistanceFactor));
+#						endif
+
 #						if defined(IBL)
 	if (SharedData::iblSettings.EnableDiffuseIBL && !SharedData::InInterior) {
 		fogColor = ImageBasedLighting::GetFogIBLColor(fogColor);
 	}
 #						endif
-	float3 finalColor = lerp(finalColorPreFog, fogColor * PosAdjust[eyeIndex].w, Color::FogAlpha(input.FogParam.w));
+
+float3 finalColor = lerp(finalColorPreFog, fogColor * PosAdjust[eyeIndex].w, Color::FogAlpha(fogDistanceFactor));
+
 #						if defined(WETNESS_EFFECTS) && defined(DEBUG_WETNESS_EFFECTS)
 	// DEBUG MODE: Override water color with debug visualization
 	float3 debugColor = WetnessEffects::GetDebugWetnessColorStandard(waterData.rippleInfo, 2.0, 3.0);
@@ -1234,15 +1308,24 @@ PS_OUTPUT main(PS_INPUT input)
 #						endif
 
 #					else
-	float specularFraction = lerp(1, fresnel, distanceFactor);
+	float specularFraction = lerp(1, fresnel, distanceBlendFactor);
 	float3 finalColorPreFog = lerp(diffuseOutput.refractionDiffuseColor, specularColor, specularFraction) + sunColor * depthControl.w;
-	float3 preFogColor = Color::Fog(input.FogParam.xyz);
+
+#						if !defined(UNIFIED_WATER)
+    float fogDistanceFactor = input.FogParam.w;
+    float3 preFogColor = Color::Fog(input.FogParam.xyz);
+#						else
+    float fogDistanceFactor = min(FogFarColor.w, pow(saturate(input.WPosition.w * FogParam.y - FogParam.x), FresnelRI.y));
+    float3 preFogColor = Color::Fog(lerp(FogNearColor.xyz, FogFarColor.xyz, fogDistanceFactor));
+#						endif
+
 #						if defined(IBL)
 	if (SharedData::iblSettings.EnableDiffuseIBL && !SharedData::InInterior) {
 		preFogColor = ImageBasedLighting::GetFogIBLColor(preFogColor);
 	}
 #						endif
-	finalColorPreFog = lerp(finalColorPreFog, preFogColor * PosAdjust[eyeIndex].w, Color::FogAlpha(input.FogParam.w));
+
+finalColorPreFog = lerp(finalColorPreFog, preFogColor * PosAdjust[eyeIndex].w, Color::FogAlpha(fogDistanceFactor));
 
 	float3 refractionColor = diffuseOutput.refractionColor;
 
@@ -1267,7 +1350,7 @@ PS_OUTPUT main(PS_INPUT input)
 
 #				endif
 #			endif
-	psout.Lighting = float4(finalColor, isSpecular);
+	psout.Lighting = saturate(float4(finalColor, isSpecular));
 #		endif
 
 #		if defined(STENCIL)
