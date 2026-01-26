@@ -25,9 +25,9 @@ VS_OUTPUT vertex(VS_INPUT input)
 
 	output.Position = float4(pos.x, -pos.y, 1.0, 1.0);
 	output.TexCoord0 = input.TexCoord0.xy;
-	output.Normal = input.Normal.xyz;
-	output.Tangent = input.Tangent.xyz;
-	output.Bitangent = input.Bitangent.xyz;
+	output.Normal = input.Normal.xzy;
+	output.Tangent = input.Tangent.xzy;
+	output.Bitangent = input.Bitangent.xzy;
 
 	return output;
 }
@@ -37,17 +37,17 @@ Texture2D<float4> MSNormalMap	: register(t0);
 
 float4 pixel(VS_OUTPUT input) : SV_Target
 {
-	float3 msnNormalMap = MSNormalMap.SampleLevel(MSNSampler, input.TexCoord0, 0.0f).rgb;
-	
+	float3 msnNormalMap = MSNormalMap.SampleLevel(MSNSampler, input.TexCoord0, 0.0f).rgb;	
     float3 msNormals = normalize(msnNormalMap * 2.0f - 1.0f);
 
-    float3 normal = normalize(input.Normal.xzy);
-    float3 tangent = normalize(input.Tangent.xzy);
-    float3 bitangent = normalize(input.Bitangent.xzy);
+    float3 normal = normalize(input.Normal);
+    float3 tangent = normalize(input.Tangent);
+    float3 bitangent = normalize(input.Bitangent);
 
     float3x3 tbn = float3x3(tangent, bitangent, normal);
 
-	float3 tangentNormal = mul(transpose(tbn), msNormals);
-
+	float3 tangentNormal = mul(tbn, msNormals - normal);
+    tangentNormal.z = sqrt(saturate(1.0f - dot(tangentNormal.xy, tangentNormal.xy)));
+	
     return float4(tangentNormal * 0.5f + 0.5f, 1.0f);
 }

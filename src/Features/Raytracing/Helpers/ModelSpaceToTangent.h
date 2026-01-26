@@ -17,6 +17,8 @@ float4 LandBlendWeights2 : TEXCOORD2;*/
 struct ModelSpaceToTangent
 {
 	winrt::com_ptr<ID3D11VertexShader> vertexShader = nullptr;
+	winrt::com_ptr<ID3D11VertexShader> vertexDynamicShader = nullptr;
+
 	winrt::com_ptr<ID3D11PixelShader> pixelShader = nullptr;
 
 	winrt::com_ptr<ID3D11InputLayout> inputLayout = nullptr;
@@ -36,7 +38,7 @@ struct ModelSpaceToTangent
 		float3 normal;
 		float3 tangent;
 		uint32_t color;
-		float3 binormal;
+		float3 bitangent;
 
 		UnpackedVertex& operator=(const Vertex& src)
 		{
@@ -45,7 +47,7 @@ struct ModelSpaceToTangent
 			normal = src.Normal;
 			tangent = src.Tangent;
 			color = src.Color.packed;
-			binormal = src.Bitangent;
+			bitangent = src.Bitangent;
 			return *this;
 		}
 	};
@@ -63,6 +65,9 @@ struct ModelSpaceToTangent
 
 		if (auto rawPtr = reinterpret_cast<ID3D11VertexShader*>(Util::CompileShader(L"Data\\Shaders\\Raytracing\\ModelSpaceToTangent.hlsl", {}, "vs_5_0", "vertex", inputDesc, inputLayout.put())); rawPtr)
 			vertexShader.attach(rawPtr);
+
+		if (auto rawPtr = reinterpret_cast<ID3D11VertexShader*>(Util::CompileShader(L"Data\\Shaders\\Raytracing\\ModelSpaceToTangent.hlsl", { { "DYNAMIC", "" } }, "vs_5_0", "vertex", inputDesc, inputLayout.put())); rawPtr)
+			vertexDynamicShader.attach(rawPtr);
 
 		if (auto rawPtr = reinterpret_cast<ID3D11PixelShader*>(Util::CompileShader(L"Data\\Shaders\\Raytracing\\ModelSpaceToTangent.hlsl", {}, "ps_5_0", "pixel")); rawPtr)
 			pixelShader.attach(rawPtr);
@@ -131,7 +136,6 @@ struct ModelSpaceToTangent
 		float blendFactor[4] = { 0, 0, 0, 0 };
 		context->OMSetBlendState(blendState.get(), blendFactor, 0xffffffff);
 
-		context->VSSetShader(vertexShader.get(), nullptr, 0);
 		context->PSSetShader(pixelShader.get(), nullptr, 0);
 
 		ID3D11SamplerState* sampler = samplerState.get();
@@ -150,6 +154,13 @@ struct ModelSpaceToTangent
 		rect.right = static_cast<LONG>(texDesc.Width);
 		rect.bottom = static_cast<LONG>(texDesc.Height);
 		context->RSSetScissorRects(1, &rect);
+
+		context->IASetInputLayout(inputLayout.get());
+	}
+
+	void SetVertexShader(bool dynamic) const
+	{
+		globals::d3d::context->VSSetShader(dynamic ? vertexDynamicShader.get() : vertexShader.get(), nullptr, 0);
 	}
 
 	void Draw(ID3D11Buffer* vertexBuffer, ID3D11Buffer* indexBuffer, uint triangleCount) const
@@ -162,8 +173,6 @@ struct ModelSpaceToTangent
 		UINT offset = 0;
 
 		context->IASetVertexBuffers(0, 1, &vertexBuffer, &stride, &offset);
-
-		context->IASetInputLayout(inputLayout.get());
 
 		context->DrawIndexed(triangleCount * 3, 0, 0);
 	}

@@ -661,7 +661,7 @@ void Raytracing::DrawDebugSettings()
 
 				auto& [msNormal, convertedNormal] = normalMapVector.at(i);
 
-				if (!msNormal)
+				if (!convertedNormal->OriginalSRV)
 					continue;
 
 				if (!convertedNormal)
@@ -670,7 +670,7 @@ void Raytracing::DrawDebugSettings()
 				if (!convertedNormal->converted)
 					continue;
 
-				if (!convertedNormal->Texture || !convertedNormal->Texture->resource)
+				if (!convertedNormal->Texture || !convertedNormal->Texture->srv || !convertedNormal->Texture->srv.get())
 					continue;
 
 				if (ImGui::Selectable(std::to_string(i).c_str(), isSelected))
@@ -685,7 +685,7 @@ void Raytracing::DrawDebugSettings()
 
 		auto& [msNormal, convertedNormal] = normalMapVector.at(debugNormalMap);
 
-		if (convertedNormal && convertedNormal->converted && convertedNormal->OriginalSRV && convertedNormal->Texture && convertedNormal->Texture->srv) {
+		if (convertedNormal && convertedNormal->converted && convertedNormal->OriginalSRV && convertedNormal->Texture && convertedNormal->Texture->srv && convertedNormal->Texture->srv.get()) {
 			ImGui::Image(convertedNormal->OriginalSRV, ImVec2(256, 256));
 			ImGui::SameLine();
 			ImGui::Image(convertedNormal->Texture->srv.get(), ImVec2(256, 256));
@@ -1114,6 +1114,12 @@ void Raytracing::SetupResources()
 		srvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
 
 		indirectionBuffer->CreateSRV(srvDesc, giHeap->CPUHandle(GIHeap::Slot::Indirection));
+	}
+
+	// Geometry transform buffer
+	{
+		transformBuffer = eastl::make_unique<DX12::StructuredBufferUpload<float3x4>>(d3d12Device.get(), RTConstants::MAX_TRANSFORMS);
+		DX::ThrowIfFailed(transformBuffer->resource->SetName(L"Transform Buffer"));
 	}
 
 	// Create instance buffer for BLAS
@@ -1821,7 +1827,7 @@ void Raytracing::CommitModel(Model* model)
 			.Type = D3D12_RAYTRACING_GEOMETRY_TYPE_TRIANGLES,
 			.Flags = isOpaque ? D3D12_RAYTRACING_GEOMETRY_FLAG_OPAQUE : D3D12_RAYTRACING_GEOMETRY_FLAG_NONE,
 			.Triangles = {
-				.Transform3x4 = 0,
+				.Transform3x4 = shape->TransformBuffer(transformBuffer->resource.get()),
 				.IndexFormat = DXGI_FORMAT_R16_UINT,
 				.VertexFormat = DXGI_FORMAT_R32G32B32_FLOAT,
 				.IndexCount = shape->triangleCount * 3,
@@ -1922,7 +1928,7 @@ void Raytracing::UpdateModelBLAS(Model* model)
 			.Type = D3D12_RAYTRACING_GEOMETRY_TYPE_TRIANGLES,
 			.Flags = isOpaque ? D3D12_RAYTRACING_GEOMETRY_FLAG_OPAQUE : D3D12_RAYTRACING_GEOMETRY_FLAG_NONE,
 			.Triangles = {
-				.Transform3x4 = 0,
+				.Transform3x4 = shape->TransformBuffer(transformBuffer->resource.get()),
 				.IndexFormat = DXGI_FORMAT_R16_UINT,
 				.VertexFormat = DXGI_FORMAT_R32G32B32_FLOAT,
 				.IndexCount = shape->triangleCount * 3,
@@ -2130,7 +2136,8 @@ void Raytracing::CreateModelInternal(RE::TESForm* form, const char* path, RE::Ni
 		if (geometryType.all(RE::BSGeometry::Type::kDynamicTriShape))
 			flags |= Shape::Flags::Dynamic;
 
-		auto localToRoot = GetXMFromNiTransform(rootWorldInverse * pGeometry->world);
+		float3x4 localToRoot;
+		XMStoreFloat3x4(&localToRoot, GetXMFromNiTransform(rootWorldInverse * pGeometry->world));
 
 		if (auto* triShapeRD = geometryRuntimeData.rendererData) {  // Non-Skinned
 			auto* pTriShape = netimmerse_cast<RE::BSTriShape*>(pGeometry);
@@ -2147,9 +2154,9 @@ void Raytracing::CreateModelInternal(RE::TESForm* form, const char* path, RE::Ni
 				return RE::BSVisit::BSVisitControl::kContinue;
 			}
 
-			auto meshData = eastl::make_unique<Shape>(shapeRegisters.Allocate(), pGeometry, flags);
+			auto meshData = eastl::make_unique<Shape>(shapeRegisters.Allocate(), pGeometry, localToRoot, flags);
 
-			meshData->BuildMesh(triShapeRD, triShapeRuntime.vertexCount, triShapeRuntime.triangleCount, 0, localToRoot);
+			meshData->BuildMesh(triShapeRD, triShapeRuntime.vertexCount, triShapeRuntime.triangleCount, 0);
 			meshData->BuildMaterial(geometryRuntimeData, name, formID);
 			meshData->CreateBuffers(ToWide(name));
 
@@ -2186,9 +2193,9 @@ void Raytracing::CreateModelInternal(RE::TESForm* form, const char* path, RE::Ni
 				if (partition.bonesPerVertex > 0)
 					flags |= Shape::Flags::Skinned;
 
-				auto meshData = eastl::make_unique<Shape>(shapeRegisters.Allocate(), pGeometry, flags);
+				auto meshData = eastl::make_unique<Shape>(shapeRegisters.Allocate(), pGeometry, localToRoot, flags);
 
-				meshData->BuildMesh(partition.buffData, skinPartition->vertexCount, partition.triangles, partition.bonesPerVertex, localToRoot);
+				meshData->BuildMesh(partition.buffData, skinPartition->vertexCount, partition.triangles, partition.bonesPerVertex);
 				meshData->BuildMaterial(geometryRuntimeData, name, formID);
 				meshData->CreateBuffers(ToWide(name));
 
@@ -2408,6 +2415,9 @@ eastl::shared_ptr<Allocation> Raytracing::GetMSNormalMapRegister([[maybe_unused]
 		rtvDesc.Texture2D.MipSlice = 0;
 
 		normalMap->Texture->CreateRTV(rtvDesc);
+
+		static float clearColor[4] = { 0.5f, 0.5f, 1.0f, 1.0f };
+		globals::d3d::context->ClearRenderTargetView(normalMap->Texture->rtv.get(), clearColor);
 
 		// Share the new texture
 		winrt::com_ptr<IDXGIResource> dxgiResource;
@@ -2674,6 +2684,8 @@ void Raytracing::UpdateInstances()
 	instanceBuffer->Upload(commandList.get(), 0, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
 
 	materialBuffer->Upload(commandList.get(), 0, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+
+	//transformBuffer->Upload(commandList.get(), 0, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
 
 	indirectionBuffer->Upload(commandList.get(), D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
 }

@@ -674,6 +674,8 @@ struct Raytracing : public OverlayFeature
 
 	eastl::unique_ptr<DX12::StructuredBufferUpload<MaterialData>> materialBuffer = nullptr;
 
+	eastl::unique_ptr<DX12::StructuredBufferUpload<float3x4>> transformBuffer = nullptr;
+
 	eastl::vector<InstanceData> instanceBufferData;
 	eastl::unique_ptr<DX12::StructuredBufferUpload<InstanceData>> instanceBuffer = nullptr;
 

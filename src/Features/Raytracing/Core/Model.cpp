@@ -86,15 +86,11 @@ void Model::ConvertMSN()
 		ID3D11RenderTargetView* rtv = convertedNormalMap->Texture->rtv.get();
 		context->OMSetRenderTargets(1, &rtv, nullptr);
 
-		logger::info("Shapes: {}", msnShapes.size());
-
 		// We will continuously render and blend the final result to the same texture
 		for (auto* shape : msnShapes) {
 			// Update Vertex Buffer
 			{
 				vertices.resize(shape->vertexCount);
-
-				logger::info("Vertex Buffer: {}", shape->vertexCount);
 
 				for (size_t i = 0; i < shape->vertexCount; i++) {
 					vertices[i] = shape->vertices[i];
@@ -110,8 +106,6 @@ void Model::ConvertMSN()
 
 			// Update Index Buffer
 			{
-				logger::info("Index Buffer: {}", shape->triangleCount);
-
 				D3D11_MAPPED_SUBRESOURCE mapped;
 				context->Map(indexBuffer.get(), 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped);
 
@@ -119,6 +113,8 @@ void Model::ConvertMSN()
 
 				context->Unmap(indexBuffer.get(), 0);
 			}
+
+			rt.normalMapConverter->SetVertexShader(shape->flags & Shape::Flags::Dynamic);
 
 			rt.normalMapConverter->Draw(vertexBuffer.get(), indexBuffer.get(), shape->triangleCount);
 		}

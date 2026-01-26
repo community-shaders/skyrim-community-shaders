@@ -9,6 +9,7 @@ namespace RTConstants
 	static constexpr uint MAX_MODELS = 1024;
 	static constexpr uint MAX_SHAPES = MAX_MODELS * 6;
 	static constexpr uint MAX_MATERIALS = MAX_SHAPES;
+	static constexpr uint MAX_TRANSFORMS = MAX_SHAPES;
 	static constexpr uint MAX_INSTANCES = 4096;
 	static constexpr uint MAX_LIGHTS = 255;
 
