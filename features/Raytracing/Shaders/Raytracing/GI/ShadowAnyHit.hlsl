@@ -56,8 +56,6 @@ void main(inout ShadowPayload payload, in BuiltInTriangleIntersectionAttributes 
             transmittance = Textures[NonUniformResourceIndex(material.GlowTexture())].SampleLevel(BaseSampler, texCoord, 0).rgb;
             [branch]
             if (material.ShaderFlags & ShaderFlags::kSpecular) {
-                Roughness = material.RoughnessScale() >= 0.0f ? saturate(material.RoughnessScale()) : 1.0f;
-
                 float3 specularColor = 0.0f;
 
                 [branch]
@@ -93,6 +91,8 @@ void main(inout ShadowPayload payload, in BuiltInTriangleIntersectionAttributes 
 
         float handedness = (dot(cross(normalWS, tangentWS), bitangentWS) < 0.0f) ? -1.0f : 1.0f;
 
+        float3 Normal, Tangent, Bitangent;
+
         NormalMap(
                 normal,
                 handedness,
@@ -100,7 +100,7 @@ void main(inout ShadowPayload payload, in BuiltInTriangleIntersectionAttributes 
                 Normal, Tangent, Bitangent
             );
 
-        float3 viewDir = -Normalize(WorldRayDirection());
+        float3 viewDir = -normalize(WorldRayDirection());
 
         float NdotV = abs(dot(Normal, viewDir));
 
