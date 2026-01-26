@@ -222,6 +222,8 @@ struct Raytracing : public OverlayFeature
 	eastl::vector<LightLimitFix::LightData> GetPointLights();
 	void UpdateLights();
 
+	void ConvertMSN();
+
 	void Main_RenderWorld(bool a1);
 	void BSShader_SetupGeometry(RE::BSShader* This, RE::BSRenderPass* Pass, uint32_t RenderFlags);
 
@@ -543,6 +545,7 @@ struct Raytracing : public OverlayFeature
 	std::string debugDefines = "";
 	bool debugDisableTriShapesUpdate = false;
 	bool debugDisableTextureSharing = false;
+	uint debugNormalMap = 0;
 
 	enum class RecompileReason : uint32_t
 	{
@@ -578,13 +581,13 @@ struct Raytracing : public OverlayFeature
 			resource(eastl::move(res)), allocation(eastl::move(alloc)) {}
 	};
 
-	// Creates a single BLAS for a collection of Shapes
-	// TODO: Move to Model struct
-	void CommitModel(Model* model);
-
 	// Creates mesh buffers for all graph TriShapes, handles materials and builds a single BLAS for the node
 	void CreateModel(RE::TESForm* form, const char* model, RE::NiAVObject* root);
 	void CreateModelInternal(RE::TESForm* refr, const char* path, RE::NiAVObject* root);
+
+	// Creates a single BLAS for a collection of Shapes
+	// TODO: Move to Model struct
+	void CommitModel(Model* model);
 
 	// Removes the instance and optionally also releases the model and all its buffers if refCount reaches 0
 	bool RemoveInstance(RE::NiAVObject* root, bool releaseModel);
@@ -686,9 +689,15 @@ struct Raytracing : public OverlayFeature
 	{
 		eastl::unique_ptr<TextureReference> Reference;
 		eastl::unique_ptr<Texture2D> Texture;
+		ID3D11ShaderResourceView* OriginalSRV = nullptr;
+		bool converted = false;
 	};
 
+	eastl::deque<eastl::string> msnConvertionQueue;
+
 	eastl::unordered_map<ID3D11Texture2D*, eastl::unique_ptr<ConvertedNormalMap>> normalMaps;
+
+	eastl::unordered_map<uint16_t, ID3D11Texture2D*> allocationMSNormalMaps;
 
 	winrt::com_ptr<ID3D11SamplerState> samplerState = nullptr;
 	winrt::com_ptr<ID3D11ComputeShader> copyDepthCS = nullptr;

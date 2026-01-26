@@ -493,7 +493,7 @@ void Shape::BuildMaterial(const RE::BSGeometry::GEOMETRY_RUNTIME_DATA& geometryR
 						const auto* lightingPBRMaterial = static_cast<BSLightingShaderMaterialPBR*>(shaderMaterial);
 
 						textures[0] = TextureRegister(lightingPBRMaterial->diffuseTexture, grayTexture);
-						textures[1] = TextureRegister(lightingPBRMaterial->normalTexture, normalTexture);
+						textures[RTConstants::MATERIAL_NORMALMAP_ID] = TextureRegister(lightingPBRMaterial->normalTexture, normalTexture);
 						textures[2] = TextureRegister(lightingPBRMaterial->emissiveTexture, blackTexture);
 						textures[3] = TextureRegister(lightingPBRMaterial->rmaosTexture, rmaosTexture);
 
@@ -514,7 +514,9 @@ void Shape::BuildMaterial(const RE::BSGeometry::GEOMETRY_RUNTIME_DATA& geometryR
 						// Vanilla Materials
 						if (const RE::BSLightingShaderMaterialBase* lightingBaseMaterial = skyrim_cast<RE::BSLightingShaderMaterialBase*>(shaderMaterial)) {
 							textures[0] = TextureRegister(lightingBaseMaterial->diffuseTexture, grayTexture);
-							textures[1] = TextureRegister(lightingBaseMaterial->normalTexture, normalTexture, false);  // shaderFlags.any(EShaderPropertyFlag::kModelSpaceNormals)
+
+							bool isModelSpaceNormalMap = shaderFlags.any(EShaderPropertyFlag::kModelSpaceNormals);
+							textures[RTConstants::MATERIAL_NORMALMAP_ID] = TextureRegister(lightingBaseMaterial->normalTexture, normalTexture, isModelSpaceNormalMap);
 
 							if (shaderFlags.any(EShaderPropertyFlag::kSpecular)) {
 								if (shaderFlags.any(EShaderPropertyFlag::kModelSpaceNormals)) {

@@ -61,7 +61,7 @@ struct Material
 		kFalloff = 1 << 5,
 		kEnvMap = 1 << 6,
 		kFace = 1 << 7,
-		kModelSpaceNormals = 1 << 8,
+		//kModelSpaceNormals = 1 << 8,
 		kRefraction = 1 << 9,
 		kProjectedUV = 1 << 10,
 		kExternalEmittance = 1 << 11,
@@ -130,9 +130,9 @@ struct Material
 			shaderFlagsLocal |= ShaderFlags::kFace;
 		}
 
-		if (shaderFlags.any(EShaderPropertyFlag::kModelSpaceNormals)) {
+		/*if (shaderFlags.any(EShaderPropertyFlag::kModelSpaceNormals)) {
 			shaderFlagsLocal |= ShaderFlags::kModelSpaceNormals;
-		}
+		}*/
 
 		if (shaderFlags.any(EShaderPropertyFlag::kRefraction)) {
 			shaderFlagsLocal |= ShaderFlags::kRefraction;
