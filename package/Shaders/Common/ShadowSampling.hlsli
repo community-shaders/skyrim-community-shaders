@@ -4,10 +4,14 @@
 #include "Common/Math.hlsli"
 #include "Common/Random.hlsli"
 #include "Common/SharedData.hlsli"
+#include "Common/Color.hlsli"
+
+#if defined(IBL)
+#	include "IBL/IBL.hlsli"
+#endif
 
 namespace ShadowSampling
 {
-
 	Texture2DArray<float4> SharedShadowMap : register(t18);
 
 	struct ShadowData
@@ -40,7 +44,7 @@ namespace ShadowSampling
 		ShadowData sD = SharedShadowData[0];
 
 		float fadeFactor = 1.0 - pow(saturate(dot(positionWS, positionWS) / sD.ShadowLightParam.z), 8);
-		uint sampleCount = ceil(8.0 * (1.0 - saturate(length(positionWS) / sqrt(sD.ShadowLightParam.z))));
+		uint sampleCount = ceil(16.0 * (1.0 - saturate(length(positionWS) / sqrt(sD.ShadowLightParam.z))));
 
 		if (sampleCount == 0)
 			return 1.0;
@@ -50,25 +54,35 @@ namespace ShadowSampling
 		uint3 seed = Random::pcg3d(uint3(screenPosition.xy, screenPosition.x * Math::PI));
 
 		float2 compareValue;
-		compareValue.x = mul(transpose(sD.ShadowMapProj[eyeIndex][0]), float4(positionWS, 1)).z - 0.01;
-		compareValue.y = mul(transpose(sD.ShadowMapProj[eyeIndex][1]), float4(positionWS, 1)).z - 0.01;
+		compareValue.x = mul(transpose(sD.ShadowMapProj[eyeIndex][0]), float4(positionWS, 1)).z - sD.AlphaTestRef.y;
+		compareValue.y = mul(transpose(sD.ShadowMapProj[eyeIndex][1]), float4(positionWS, 1)).z - sD.AlphaTestRef.z;
 
 		float shadow = 0.0;
 		if (sD.EndSplitDistances.z >= GetShadowDepth(positionWS, eyeIndex)) {
 			for (uint i = 0; i < sampleCount; i++) {
-				float3 rnd = Random::R3Modified(i + SharedData::FrameCount * sampleCount, seed / 4294967295.f);
+				// Stratified jitter instead of pure random
+				float3 stratified = (float3(i, i * 2, i * 3) + 0.5) * rcpSampleCount;
+				float3 rnd = frac(Random::R3Modified(i, seed / 4294967295.f) + stratified);
 
-				// https://stats.stackexchange.com/questions/8021/how-to-generate-uniformly-distributed-points-in-the-3-d-unit-ball
 				float phi = rnd.x * Math::TAU;
 				float cos_theta = rnd.y * 2 - 1;
-				float sin_theta = sqrt(1 - cos_theta);
-				float r = rnd.z;
+				float u = rnd.z;
+				
+				// Proper uniform sphere distribution: r = u^(1/3) for volume
+				float r = pow(u, 1.0 / 3.0);
+				
+				float sin_theta = sqrt(max(0, 1 - cos_theta * cos_theta));
 				float4 sincos_phi;
 				sincos(phi, sincos_phi.y, sincos_phi.x);
-				float3 sampleOffset = viewDirection * (float(i) - float(sampleCount) * 0.5) * 64 * rcpSampleCount;
-				sampleOffset += float3(r * sin_theta * sincos_phi.x, r * sin_theta * sincos_phi.y, r * cos_theta) * 64;
+				
+				// March along view direction with stratified steps
+				float marchStep = (float(i) + 0.5) * rcpSampleCount - 0.5;
+				float3 sampleOffset = viewDirection * marchStep * 16;
+				sampleOffset += float3(r * sin_theta * sincos_phi.x, 
+									r * sin_theta * sincos_phi.y, 
+									r * cos_theta) * 16;
 
-				uint cascadeIndex = sD.EndSplitDistances.x < GetShadowDepth(positionWS.xyz + viewDirection * (sampleOffset.x + sampleOffset.y), eyeIndex);  // Stochastic cascade sampling
+				uint cascadeIndex = sD.EndSplitDistances.x < GetShadowDepth(positionWS.xyz + viewDirection * (sampleOffset.x + sampleOffset.y), eyeIndex);
 
 				float3 positionLS = mul(transpose(sD.ShadowMapProj[eyeIndex][cascadeIndex]), float4(positionWS + sampleOffset, 1));
 
@@ -160,16 +174,13 @@ namespace ShadowSampling
 		return worldShadow;
 	}
 
-	float GetEffectShadow(float3 worldPosition, float3 viewDirection, float2 screenPosition, uint eyeIndex, out bool isWorldShadow)
+	float GetEffectShadow(float3 worldPosition, float3 viewDirection, float2 screenPosition, uint eyeIndex)
 	{
-		isWorldShadow = false;
 		float worldShadow = GetWorldShadow(worldPosition, FrameBuffer::CameraPosAdjust[eyeIndex].xyz, eyeIndex);
 		if (worldShadow != 0.0) {
 			float shadow = Get3DFilteredShadow(worldPosition, viewDirection, screenPosition, eyeIndex);
-			isWorldShadow = shadow >= worldShadow;
-			return min(worldShadow, shadow);
+			return worldShadow * shadow;
 		}
-		isWorldShadow = true;
 		return worldShadow;
 	}
 
@@ -193,6 +204,36 @@ namespace ShadowSampling
 		}
 
 		return worldShadow;
+	}
+
+	void ExtractLighting(float3 inputColor, out float3 dirColor, out float3 ambientColor, float skylightingDiffuse = 1.0)
+	{
+		float3 ambientColorAmb = max(0, mul(SharedData::DirectionalAmbient, float4(0, 0, 1, 1)));
+
+	#   if defined(IBL)
+		if (SharedData::iblSettings.EnableDiffuseIBL && (!SharedData::InInterior || SharedData::iblSettings.EnableInterior)) {
+			ambientColorAmb *= SharedData::iblSettings.DALCAmount;
+	#       if defined(SKYLIGHTING) && !defined(INTERIOR)
+			float3 iblColor = Color::Saturation(ImageBasedLighting::GetIBLColor(float3(0, 0, -1), skylightingDiffuse), SharedData::iblSettings.IBLSaturation) * SharedData::iblSettings.DiffuseIBLScale;
+	#       else
+			float3 iblColor = Color::Saturation(ImageBasedLighting::GetIBLColor(float3(0, 0, -1)), SharedData::iblSettings.IBLSaturation) * SharedData::iblSettings.DiffuseIBLScale;
+	#       endif
+			ambientColorAmb += Color::IrradianceToGamma(iblColor);
+		}
+	#   endif
+
+		float llDirLightMult = (SharedData::linearLightingSettings.enableLinearLighting && !SharedData::linearLightingSettings.isDirLightLinear)
+			? SharedData::linearLightingSettings.dirLightMult : 1.0f;
+		float3 dirLightColorDir = Color::DirectionalLight(SharedData::DirLightColor.xyz / max(llDirLightMult, 1e-5),
+			SharedData::linearLightingSettings.isDirLightLinear) * llDirLightMult * Color::EffectLightingMult();
+
+		// Calculate total expected lighting and find scale to match input
+		float3 totalLight = ambientColorAmb + dirLightColorDir;
+		float3 scale = totalLight > 0.0 ? inputColor / totalLight : 1.0;
+
+		// Distribute proportionally
+		ambientColor = ambientColorAmb * scale;
+		dirColor = dirLightColorDir * scale;
 	}
 }
 
