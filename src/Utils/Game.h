@@ -170,4 +170,36 @@ namespace Util
 
 	bool IsInterior();
 
+	/**
+	 * @brief Converts a 2D world position to cell coordinates.
+	 *
+	 * @param worldPos The world position as a 2D point.
+	 * @param x Output parameter for the cell X coordinate.
+	 * @param y Output parameter for the cell Y coordinate.
+	 */
+	void WorldToCell(const RE::NiPoint2& worldPos, int32_t& x, int32_t& y);
+
+	/**
+	 * @brief Converts a 3D world position to cell coordinates.
+	 *
+	 * @param worldPos The world position as a 3D point.
+	 * @param x Output parameter for the cell X coordinate.
+	 * @param y Output parameter for the cell Y coordinate.
+	 */
+	void WorldToCell(const RE::NiPoint3& worldPos, int32_t& x, int32_t& y);
+
+	/**
+	 * @brief Converts a four-character string to a uint32_t for efficient comparison.
+	 *
+	 * Four Character Code (FCC) allows representing section names in plugin files
+	 * as human-readable strings in code, while compiling to simple integer comparisons
+	 * with no runtime cost compared to string comparisons.
+	 *
+	 * @param s A null-terminated array of exactly 4 characters.
+	 * @return The four characters packed into a uint32_t (little-endian).
+	 */
+	constexpr uint32_t FCC(const char s[4]) noexcept
+	{
+		return s[0] | s[1] << 8 | s[2] << 16 | s[3] << 24;
+	}
 }  // namespace Util

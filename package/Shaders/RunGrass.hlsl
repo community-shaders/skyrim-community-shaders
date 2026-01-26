@@ -489,7 +489,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 
 	float3 complexTest = TexBaseSampler.Load(int3(0, int(y) - 1, 0)).xyz * 2.0 - 1.0;
 	float complexLength = length(complexTest);
-	bool complex = abs(complexLength - 1.0) < 0.03;
+	bool complex = abs(complexLength - 1.0) < SharedData::grassLightingSettings.ComplexGrassThreshold;
 #		endif  // !TRUE_PBR
 
 	float4 baseColor;
@@ -639,11 +639,23 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	dirLightColor *= dirShadow;
 	dirLightColor *= dirDetailShadow;
 
-	lightsDiffuseColor += dirLightColor * saturate(dirLightAngle) * Color::GrassDiffuseMult();
+    float wrapAmount = saturate(input.VertexNormal.w * 10.0)* 0.5 * (!complex);
+
+		if (SharedData::grassLightingSettings.EnableWrappedLighting)
+    {
+        // Old Wrapped Model
+        float wrappedDirLight = saturate(dirLightAngle + wrapAmount) / (1.0 + wrapAmount);
+        lightsDiffuseColor += dirLightColor * saturate(wrappedDirLight) * Color::GrassDiffuseMult();
+    }
+			else
+    {
+        // Original Standard Model
+        lightsDiffuseColor += dirLightColor * saturate(dirLightAngle) * Color::GrassDiffuseMult();
+    }
 
 	float3 vertexColor = input.VertexColor.xyz;
 
-#				if defined(SKYLIGHTING)
+#if defined(SKYLIGHTING)
 	float skylightingFadeOutFactor = 1.0;
 	if (!SharedData::InInterior) {
 		skylightingFadeOutFactor = Skylighting::getFadeOutFactor(input.WorldPosition.xyz);
@@ -714,8 +726,17 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 
 				float lightAngle = dot(normal, normalizedLightDirection);
 				float lightNoL = dot(normalizedLightDirection.xyz, viewDirection);
+				float3 lightDiffuseColor;
 
-				float3 lightDiffuseColor = lightColor * saturate(lightAngle);
+				if (SharedData::grassLightingSettings.EnableWrappedLighting)
+				{
+                    float wrappedLight = saturate(lightAngle + wrapAmount) / (1.0 + wrapAmount);
+					lightDiffuseColor = lightColor * wrappedLight;
+				}
+                else
+                {
+                    lightDiffuseColor = lightColor * saturate(lightAngle);
+                }
 
 				sss += lightColor * saturate(-lightAngle);
 
@@ -723,7 +744,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 
 				if (complex)
 					lightsSpecularColor += GrassLighting::GetLightSpecularInput(normalizedLightDirection, viewDirection, normal, lightColor, SharedData::grassLightingSettings.Glossiness) * Color::GrassSpecularMult();
-#				endif
+#endif
 			}
 		}
 	}

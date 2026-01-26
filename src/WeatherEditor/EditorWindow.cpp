@@ -135,7 +135,7 @@ void EditorWindow::ShowObjectsWindow()
 	ImGui::Begin("Weather and Lighting Browser");
 
 	// Static variable to track the selected category
-	static std::string selectedCategory = "Lighting Template";
+	static std::string selectedCategory = "Weather";
 
 	// Static variable for filtering objects
 	static char filterBuffer[256] = "";
@@ -157,7 +157,7 @@ void EditorWindow::ShowObjectsWindow()
 		ImGui::Spacing();
 
 		// List of categories
-		const char* categories[] = { "Lighting Template", "Weather", "WorldSpace", "Cell Lighting", "ImageSpace", "Volumetric Lighting", "Shader Particle Geometry", "Lens Flare", "Visual Effect" };
+		const char* categories[] = { "Weather", "ImageSpace", "WorldSpace", "Lighting Template", "Cell Lighting", "Volumetric Lighting", "Shader Particle Geometry", "Lens Flare", "Visual Effect" };
 		for (int i = 0; i < IM_ARRAYSIZE(categories); ++i) {
 			// Highlight the selected category
 			if (ImGui::Selectable(categories[i], selectedCategory == categories[i])) {

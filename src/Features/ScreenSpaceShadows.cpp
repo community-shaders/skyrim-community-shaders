@@ -157,12 +157,8 @@ void ScreenSpaceShadows::DrawShadows()
 	// Shared dispatch logic for both VR and non-VR
 	auto DispatchEye = [&](const char* eyeName, ID3D11ComputeShader* shader, const float* lightProj,
 						   float invTexSizeX, float invTexSizeY) {
-		std::string eventName;
-		const char* tracyName = "SSS - Ray March";
-
 		if (globals::state->frameAnnotations && eyeName) {
-			eventName = std::format("SSS - Ray March ({})", eyeName);
-			tracyName = eventName.c_str();
+			std::string eventName = std::format("SSS - Ray March ({})", eyeName);
 			globals::state->BeginPerfEvent(eventName);
 		} else if (globals::state->frameAnnotations) {
 			globals::state->BeginPerfEvent("SSS - Ray March");
@@ -173,7 +169,7 @@ void ScreenSpaceShadows::DrawShadows()
 		auto dispatchList = Bend::BuildDispatchList(const_cast<float*>(lightProj), viewportSize, minRenderBounds, maxRenderBounds);
 
 		for (int i = 0; i < dispatchList.DispatchCount; i++) {
-			TracyD3D11Zone(globals::state->tracyCtx, tracyName);
+			TracyD3D11Zone(globals::state->tracyCtx, "SSS - Ray March");
 
 			auto dispatchData = dispatchList.Dispatch[i];
 

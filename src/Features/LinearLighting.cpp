@@ -22,7 +22,8 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	grassSpecularMult,
 	vanillaDiffuseColorMult,
 	lightMult,
-	directionalLightMult,
+	directionalLightMultExterior,
+	directionalLightMultInterior,
 	pointLightMult,
 	emitColorMult,
 	glowmapMult,
@@ -58,7 +59,8 @@ void LinearLighting::DrawSettings()
 	ImGui::SliderFloat("Grass Specular Multiplier", &settings.grassSpecularMult, 0.0f, 10.0f, "%.2f");
 	ImGui::SliderFloat("Vanilla Diffuse Color Multiplier", &settings.vanillaDiffuseColorMult, 0.0f, 10.0f, "%.2f");
 	ImGui::SliderFloat("Light Multiplier", &settings.lightMult, 0.0f, 10.0f, "%.2f");
-	ImGui::SliderFloat("Directional Light Multiplier", &settings.directionalLightMult, 0.0f, 10.0f, "%.2f");
+	ImGui::SliderFloat("Exterior Directional Light Multiplier", &settings.directionalLightMultExterior, 0.0f, 10.0f, "%.2f");
+	ImGui::SliderFloat("Interior Directional Light Multiplier", &settings.directionalLightMultInterior, 0.0f, 10.0f, "%.2f");
 	ImGui::SliderFloat("Point Light Multiplier", &settings.pointLightMult, 0.0f, 10.0f, "%.2f");
 	ImGui::SliderFloat("Emissive Color Multiplier", &settings.emitColorMult, 0.0f, 10.0f, "%.2f");
 	ImGui::SliderFloat("Glowmap Multiplier", &settings.glowmapMult, 0.0f, 10.0f, "%.2f");
@@ -157,7 +159,7 @@ LinearLighting::PerFrameData LinearLighting::GetCommonBufferData()
 	data.grassSpecularMult = settings.grassSpecularMult;
 	data.vanillaDiffuseColorMult = settings.vanillaDiffuseColorMult;
 	data.lightMult = settings.lightMult;
-	data.directionalLightMult = settings.directionalLightMult;
+	data.directionalLightMult = Util::IsInterior() ? settings.directionalLightMultInterior : settings.directionalLightMultExterior;
 	data.pointLightMult = settings.pointLightMult;
 	data.emitColorMult = settings.emitColorMult;
 	data.glowmapMult = settings.glowmapMult;

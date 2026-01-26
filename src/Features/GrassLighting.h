@@ -35,7 +35,9 @@ public:
 		float SubsurfaceScatteringAmount = 0.5f;
 		uint OverrideComplexGrassSettings = false;
 		float BasicGrassBrightness = 1.0f;
-		uint pad[3];
+		uint EnableWrappedLighting = false;
+		float ComplexGrassThreshold = 0.03f;
+		uint pad1;
 	};
 	STATIC_ASSERT_ALIGNAS_16(Settings);
 

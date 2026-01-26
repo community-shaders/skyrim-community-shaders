@@ -215,6 +215,16 @@ void SettingsTabRenderer::RenderShadersTab()
 			ImGui::Text("Skips a shader being replaced if it hasn't been compiled yet. Also makes compilation blazingly fast!");
 		}
 
+		// Skip confirmation when clearing shader cache
+		auto& menuSettings = globals::menu->GetSettings();
+		bool skipConfirmation = menuSettings.SkipClearCacheConfirmation;
+		if (ImGui::Checkbox("Skip Clear Cache Dialogue", &skipConfirmation)) {
+			menuSettings.SkipClearCacheConfirmation = skipConfirmation;
+		}
+		if (auto _tt = Util::HoverTooltipWrapper()) {
+			ImGui::Text("When checked, the shader cache will be cleared immediately without asking for confirmation.");
+		}
+
 		if (shaderCache->GetTotalTasks() > 0) {
 			ImGui::Text("Last shader cache build duration: %s",
 				shaderCache->GetShaderStatsString(true, true).c_str());
