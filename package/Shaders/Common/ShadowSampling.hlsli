@@ -192,20 +192,6 @@ namespace ShadowSampling
 		return Get2DFilteredShadow(noise, rotationMatrix, worldPosition, eyeIndex);
 	}
 
-	float GetWaterShadow(float noise, float3 worldPosition, uint eyeIndex)
-	{
-		float worldShadow = GetWorldShadow(worldPosition, FrameBuffer::CameraPosAdjust[eyeIndex].xyz, eyeIndex);
-		if (worldShadow != 0.0) {
-			float2 rotation;
-			sincos(Math::TAU * noise, rotation.y, rotation.x);
-			float2x2 rotationMatrix = float2x2(rotation.x, rotation.y, -rotation.y, rotation.x);
-			float shadow = Get2DFilteredShadow(noise, rotationMatrix, worldPosition, eyeIndex);
-			return worldShadow * shadow;
-		}
-
-		return worldShadow;
-	}
-
 	void ExtractLighting(float3 inputColor, out float3 dirColor, out float3 ambientColor, float skylightingDiffuse = 1.0)
 	{
 		float3 ambientColorAmb = max(0, mul(SharedData::DirectionalAmbient, float4(0, 0, 1, 1)));
