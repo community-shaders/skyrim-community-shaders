@@ -4,6 +4,7 @@
 struct ShadowPayload
 {
     float missed;
+    float3 transmission;
     uint randomSeed;
 };
 
