@@ -67,19 +67,19 @@ namespace ShadowSampling
 				float phi = rnd.x * Math::TAU;
 				float cos_theta = rnd.y * 2 - 1;
 				float u = rnd.z;
-				
+
 				// Proper uniform sphere distribution: r = u^(1/3) for volume
 				float r = pow(u, 1.0 / 3.0);
-				
+
 				float sin_theta = sqrt(max(0, 1 - cos_theta * cos_theta));
 				float4 sincos_phi;
 				sincos(phi, sincos_phi.y, sincos_phi.x);
-				
+
 				// March along view direction with stratified steps
 				float marchStep = (float(i) + 0.5) * rcpSampleCount - 0.5;
 				float3 sampleOffset = viewDirection * marchStep * 16;
-				sampleOffset += float3(r * sin_theta * sincos_phi.x, 
-									r * sin_theta * sincos_phi.y, 
+				sampleOffset += float3(r * sin_theta * sincos_phi.x,
+									r * sin_theta * sincos_phi.y,
 									r * cos_theta) * 16;
 
 				uint cascadeIndex = sD.EndSplitDistances.x < GetShadowDepth(positionWS.xyz + viewDirection * (sampleOffset.x + sampleOffset.y), eyeIndex);
