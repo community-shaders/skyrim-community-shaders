@@ -239,7 +239,9 @@ namespace SharedData
 	struct TerrainBlendingSettings
 	{
 		uint Enabled;
-		uint3 _padding;
+		float BlendStrength;
+		float TerrainDepthCullingDistance;
+		float pad0;
 	};
 
 	cbuffer FeatureData : register(b6)

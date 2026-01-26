@@ -6,13 +6,30 @@
 
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	TerrainBlending::Settings,
-	Enabled)
+	Enabled,
+	BlendStrength,
+	TerrainDepthCullingDistance)
 
 void TerrainBlending::DrawSettings()
 {
 	ImGui::Checkbox("Enable Terrain Blending", (bool*)&settings.Enabled);
 	if (auto _tt = Util::HoverTooltipWrapper()) {
 		ImGui::Text("Enable seamless blending between terrain and objects.");
+	}
+
+	ImGui::SliderFloat("Blend Strength", &settings.BlendStrength, 0.125f, 1.25f, "%.3f");
+	if (auto _tt = Util::HoverTooltipWrapper()) {
+		ImGui::Text(
+			"Controls degree of blending.\n"
+			"Lower values create a tighter transition.");
+	}
+
+	ImGui::SeparatorText("Performance Option");
+	ImGui::SliderFloat("Terrain Depth Culling Distance", &settings.TerrainDepthCullingDistance, 256.0f, 8192.0f, "%.0f units");
+	if (auto _tt = Util::HoverTooltipWrapper()) {
+		ImGui::Text(
+			"Skips terrain depth blending beyond this distance.\n"
+			"Decrease to just before blending stops to save performance.");
 	}
 }
 
@@ -271,7 +288,7 @@ void TerrainBlending::Hooks::BSBatchRenderer__RenderPassImmediately::thunk(RE::B
 			bool inTerrain = a_pass->shaderProperty && a_pass->shaderProperty->flags.all(RE::BSShaderProperty::EShaderPropertyFlag::kMultiTextureLandscape);
 
 			if (inTerrain) {
-				if ((a_pass->geometry->worldBound.center.GetDistance(singleton.averageEyePosition) - a_pass->geometry->worldBound.radius) > 2048.0f) {
+				if ((a_pass->geometry->worldBound.center.GetDistance(singleton.averageEyePosition) - a_pass->geometry->worldBound.radius) > singleton.settings.TerrainDepthCullingDistance) {
 					inTerrain = false;
 				}
 			}

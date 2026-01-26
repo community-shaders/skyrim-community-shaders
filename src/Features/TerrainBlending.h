@@ -23,7 +23,9 @@ public:
 	struct Settings
 	{
 		uint32_t Enabled = true;
-		uint32_t pad[3];
+		float BlendStrength = 1.0f;
+		float TerrainDepthCullingDistance = 2048.0f;
+		float pad0 = 0.0f;
 	};
 	STATIC_ASSERT_ALIGNAS_16(Settings);
 
