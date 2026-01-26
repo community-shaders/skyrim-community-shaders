@@ -644,6 +644,7 @@ void Raytracing::DrawDebugSettings()
 	}
 
 	// Debug Draw Original and Converted Normal Maps
+#if defined(DEBUG_MSNCONVERSION)
 	if (!normalMaps.empty())
 	{
 		eastl::vector<std::pair<ID3D11Texture2D*, ConvertedNormalMap*>> normalMapVector;
@@ -691,6 +692,7 @@ void Raytracing::DrawDebugSettings()
 			ImGui::Image(convertedNormal->Texture->srv.get(), ImVec2(256, 256));
 		}
 	}
+#endif
 
 	ImGui::PopID();
 
