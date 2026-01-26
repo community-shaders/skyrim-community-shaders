@@ -242,19 +242,12 @@ struct Surface
 
         float handedness = (dot(cross(normalWS, tangentWS), bitangentWS) < 0.0f) ? -1.0f : 1.0f;
 
-        [branch]
-        if (material.ShaderFlags & ShaderFlags::kModelSpaceNormals) {
-            ModelSpaceNormalMap(normal, handedness, objectToWorld3x3, tangentWS, Normal, Tangent, Bitangent);
-        }
-        else
-        {
-            NormalMap(
-                normal,
-                handedness,
-                normalWS, tangentWS, bitangentWS,
-                Normal, Tangent, Bitangent
-            );
-        }
+        NormalMap(
+            normal,
+            handedness,
+            normalWS, tangentWS, bitangentWS,
+            Normal, Tangent, Bitangent
+        );
 #endif
     }
 

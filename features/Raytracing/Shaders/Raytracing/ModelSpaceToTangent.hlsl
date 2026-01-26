@@ -37,8 +37,8 @@ Texture2D<float4> MSNormalMap	: register(t0);
 
 float4 pixel(VS_OUTPUT input) : SV_Target
 {
-	float3 msnNormalMap = MSNormalMap.SampleLevel(MSNSampler, input.TexCoord0, 0.0f).rgb;	
-    float3 msNormals = normalize(msnNormalMap * 2.0f - 1.0f);
+	float4 msnNormalMap = MSNormalMap.SampleLevel(MSNSampler, input.TexCoord0, 0.0f);	
+    float3 msNormals = normalize(msnNormalMap.xyz * 2.0f - 1.0f);
 
     float3 normal = normalize(input.Normal);
     float3 tangent = normalize(input.Tangent);
@@ -49,5 +49,5 @@ float4 pixel(VS_OUTPUT input) : SV_Target
 	float3 tangentNormal = mul(tbn, msNormals - normal);
     tangentNormal.z = sqrt(saturate(1.0f - dot(tangentNormal.xy, tangentNormal.xy)));
 	
-    return float4(tangentNormal * 0.5f + 0.5f, 1.0f);
+    return float4(tangentNormal * 0.5f + 0.5f, msnNormalMap.w);
 }
