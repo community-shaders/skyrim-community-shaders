@@ -9,7 +9,7 @@ RWTexture2D<float4> MainOutputTexture   : register(u0);
 
 cbuffer AccumulationCB : register(b2)
 {
-    float AccumulationWeight;  // 1.0 / (accumulatedFrames + 1)
+    uint AccumulatedFrames;
     float3 _padding;
 }
 
@@ -20,7 +20,7 @@ void main(uint2 id : SV_DispatchThreadID)
     float3 previousAccumulated = MainInputTexture[id].rgb;
     float3 currentPathTraced = DiffuseAlbedoTexture[id].rgb;
 
-    float3 outputColor = lerp(previousAccumulated, currentPathTraced, AccumulationWeight);
+    float3 outputColor = lerp(previousAccumulated, currentPathTraced, 1.0 / (AccumulatedFrames + 1));
 #elif defined(COMPOSITE)
     float3 outputColor = Color::GammaToTrueLinear(MainInputTexture[id].rgb);
 

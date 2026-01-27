@@ -3580,7 +3580,7 @@ void Raytracing::DrawRTGI()
 			d3d11Context->CopyResource(accumulationTexture->resource11, mainTexture->resource11);
 			d3d11Context->CopyResource(main.texture, mainTexture->resource11);
 		} else {
-			accumulationCBData->AccumulationWeight = 1.0f / static_cast<float>(accumulatedFrames + 1);
+			accumulationCBData->AccumulatedFrames = (uint)accumulatedFrames;
 			accumulationCB->Update(accumulationCBData.get(), sizeof(AccumulationCBData));
 
 			auto* accumulationCBPtr = accumulationCB->CB();

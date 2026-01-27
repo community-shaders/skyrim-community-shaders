@@ -716,7 +716,7 @@ struct Raytracing : public OverlayFeature
 
 	struct alignas(16) AccumulationCBData
 	{
-		float AccumulationWeight;
+		uint AccumulatedFrames;
 		float3 _padding;
 	};
 	eastl::unique_ptr<AccumulationCBData> accumulationCBData = nullptr;
