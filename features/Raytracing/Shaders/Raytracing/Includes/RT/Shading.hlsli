@@ -44,20 +44,20 @@ float VanillaSquaredAtten(float dist, float range)
     return saturate(1.0 - dist * dist / (range * range));
 }
 
-float3 Diffuse(float roughness, float3 N, float3 V, float3 L, float NdotV, float NdotL, float VdotH, float VdotL, float NdotH)
-{
-#if DIFFUSE_MODE == DIFFUSE_MODE_BURLEY
-    return BRDF::Diffuse_Burley(roughness, NdotV, NdotL, VdotH);
-#elif DIFFUSE_MODE == DIFFUSE_MODE_ORENNAYAR
-    return BRDF::Diffuse_OrenNayar(roughness, N, V, L, NdotV, NdotL);
-#elif DIFFUSE_MODE == DIFFUSE_MODE_GOTANDA
-    return BRDF::Diffuse_Gotanda(roughness, NdotV, NdotL, VdotL);
-#elif DIFFUSE_MODE == DIFFUSE_MODE_CHAN
-    return BRDF::Diffuse_Chan(roughness, NdotV, NdotL, VdotH, NdotH);
-#else
-    return BRDF::Diffuse_Lambert();
-#endif
-}
+// float3 Diffuse(float roughness, float3 N, float3 V, float3 L, float NdotV, float NdotL, float VdotH, float VdotL, float NdotH)
+// {
+// #if DIFFUSE_MODE == DIFFUSE_MODE_BURLEY
+//     return BRDF::Diffuse_Burley(roughness, NdotV, NdotL, VdotH);
+// #elif DIFFUSE_MODE == DIFFUSE_MODE_ORENNAYAR
+//     return BRDF::Diffuse_OrenNayar(roughness, N, V, L, NdotV, NdotL);
+// #elif DIFFUSE_MODE == DIFFUSE_MODE_GOTANDA
+//     return BRDF::Diffuse_Gotanda(roughness, NdotV, NdotL, VdotL);
+// #elif DIFFUSE_MODE == DIFFUSE_MODE_CHAN
+//     return BRDF::Diffuse_Chan(roughness, NdotV, NdotL, VdotH, NdotH);
+// #else
+//     return BRDF::Diffuse_Lambert();
+// #endif
+// }
 
 float3 EvalDiffuse(in float3 l, in Surface surface, in BRDFContext brdfContext)
 {
@@ -219,6 +219,7 @@ float3 EvalLight(in float3 l, in Surface surface, in BRDFContext brdfContext, in
 #else
     float4 bsdfEval = bsdf.Eval(brdfContext, surface, l);
     return bsdfEval.xyz;
+#endif
 }
 
 float3 EvalDirectionalLight(in Surface surface, in BRDFContext brdfContext, in DirectionalLight light, in StandardBSDF bsdf, inout uint randomSeed)

@@ -294,7 +294,21 @@ void main()
             isSpecular = bsdfSample.isLobe(LobeType::Specular);
             bool hasTransmission = bsdfSample.isLobe(LobeType::Transmission);
 
+            if (isValid)
+                direction = bsdfSample.wo;
+            else
+                break;
+
+            // Check direction validity before modifying any state
+            if (!hasTransmission && dot(surface.GeomNormal, direction) <= 0.0)
+                break;
+
             throughput *= bsdfSample.isLobe(LobeType::Transmission) ? 1.f : surface.AO;
+
+            // Update isEnter state when transmission occurs
+            if (hasTransmission) {
+                isEnter = !isEnter;
+            }
 
             brdfWeight.diffuse = bsdfSample.isLobe(LobeType::DiffuseReflection) ? bsdfSample.weight : float3(0.f, 0.f, 0.f);
 #   if defined(RAW_RADIANCE)
@@ -325,8 +339,6 @@ void main()
             throughput *= bsdfSample.weight;
 #   endif
 #endif
-            if (!hasTransmission && dot(surface.GeomNormal, direction) <= 0.0)
-                break;
 
 #if defined(SHARC) && defined(SHARC_UPDATE)
             [branch]
@@ -432,7 +444,7 @@ void main()
             brdfContext = BRDFContext(surface, -direction);
             bsdf = StandardBSDF::make(surface, isEnter);
 
-            float3 directRadiance = EvaluateDirectRadiance(surface, brdfContext, instance, material, bsdf, randomSeed);
+            float3 directRadiance = EvaluateDirectRadiance(surface, brdfContext, instance, bsdf, randomSeed);
             sampleRadiance += directRadiance * throughput;
 
 #if defined(SHARC) && defined(SHARC_UPDATE)

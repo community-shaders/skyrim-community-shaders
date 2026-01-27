@@ -104,6 +104,13 @@ struct DiffuseReflection
         return true;
     }
 
+    float EvalPdf(const float3 wi, const float3 wo)
+    {
+        if (min(wi.z, wo.z) < kMinCosTheta) return 0.f;
+
+        return K_1_PI * wo.z;
+    }
+
     float3 EvalWeight(float3 wo, float3 wi)
     {
         const float3 N = float3(0.0f, 0.0f, 1.0f);
@@ -130,7 +137,7 @@ struct DiffuseTransmissionLambert
         return K_1_PI * albedo * -wo.z;
     }
 
-    bool SampleBSDF(const float3 wi, out float3 wo, out float pdf, out float3 weight, out uint lobe, out float lobeP, float3 preGeneratedSample)
+    bool SampleBSDF(const float3 wi, out float3 wo, out float pdf, out float3 weight, out uint lobe, out float lobeP, const float3 preGeneratedSample)
     {
         wo = sample_cosine_hemisphere_concentric(preGeneratedSample.xy, pdf);
         wo.z = -wo.z;
@@ -182,7 +189,7 @@ struct SpecularReflectionMicrofacet // : IBxDF
         return F * D * G * 0.25f / wi.z;
     }
 
-    bool SampleBSDF(const float3 wi, out float3 wo, out float pdf, out float3 weight, out uint lobe, out float lobeP, const float2 preGeneratedSample)
+    bool SampleBSDF(const float3 wi, out float3 wo, out float pdf, out float3 weight, out uint lobe, out float lobeP, const float3 preGeneratedSample)
     {
         wo = float3(0,0,0);
         weight = float3(0,0,0);
@@ -283,7 +290,7 @@ struct SpecularReflectionTransmissionMicrofacet
         }
     }
 
-    bool SampleBSDF(const float3 wi, out float3 wo, out float pdf, out float3 weight, out uint lobe, out float lobeP, const float2 preGeneratedSample)
+    bool SampleBSDF(const float3 wi, out float3 wo, out float pdf, out float3 weight, out uint lobe, out float lobeP, const float3 preGeneratedSample)
     {
         wo = float3(0,0,0);
         weight = float3(0,0,0);
@@ -436,7 +443,7 @@ struct DefaultBSDF
     DiffuseReflection diffuseReflection;
     DiffuseTransmissionLambert diffuseTransmission;
     SpecularReflectionMicrofacet specularReflection;
-    SpecularReflectionTransmissionMicrofacet specularTransmission;
+    SpecularReflectionTransmissionMicrofacet specularReflectionTransmission;
 
     float diffTrans;                        ///< Mix between diffuse BRDF and diffuse BTDF.
     float specTrans;                        ///< Mix between dielectric BRDF and specular BSDF.
@@ -463,7 +470,7 @@ struct DefaultBSDF
         uint activeLobes = (uint)LobeType::DiffuseReflection | (uint)LobeType::SpecularReflection;
         if (transmissionAlbedo.r > 0.f || transmissionAlbedo.g > 0.f || transmissionAlbedo.b > 0.f)
         {
-            activeLobes |= (uint)LobeType::SpecularTransmission; // no diffuse transmission for now
+            activeLobes |= (uint)LobeType::SpecularTransmission | (uint)LobeType::DeltaTransmission; // no diffuse transmission for now
         }
 
         float3 surfaceSpecular = surface.F0;
@@ -474,18 +481,18 @@ struct DefaultBSDF
         specularReflection.alpha = alpha;
         specularReflection.activeLobes = activeLobes;
 
-        specularTransmission.transmissionAlbedo = transmissionAlbedo;
-        specularTransmission.alpha = surfaceEta == 1.f ? 0.f : alpha;
-        specularTransmission.eta = surfaceEta;
-        specularTransmission.activeLobes = activeLobes;
-        specularTransmission.isThinSurface = isThinSurface;
+        specularReflectionTransmission.transmissionAlbedo = transmissionAlbedo;
+        specularReflectionTransmission.alpha = surfaceEta == 1.f ? 0.f : alpha;
+        specularReflectionTransmission.eta = surfaceEta;
+        specularReflectionTransmission.activeLobes = activeLobes;
+        specularReflectionTransmission.isThinSurface = isThinSurface;
 
         diffTrans = 0.f; // disabled for now.
-        specTrans = activeLobes & (uint)LobeType::SpecularTransmission ? 1.f : 0.f;
+        specTrans = activeLobes & (uint)LobeType::Transmission ? 1.f : 0.f;
 
         float surfaceMetallic = surface.Metallic;
         float metallicBRDF = surfaceMetallic * (1.f - specTrans);
-        float dielectricBRDF = (1.f - surfaceMetallic) * (1.f - specTrans);
+        float dielectricBSDF = (1.f - surfaceMetallic) * (1.f - specTrans);
         float specularBSDF = specTrans;
 
         float diffuseWeight = Luminance(surface.DiffuseAlbedo);
@@ -602,7 +609,7 @@ struct DefaultBSDF
         return valid;
     }
 
-    float EvalPdf(const float3 wi, out DeltaLobe deltaLobes[cMaxDeltaLobes], out int deltaLobeCount, out float nonDeltaPart)
+    float EvalPdf(const float3 wi, const float3 wo)
     {
         float pdf = 0.f;
         if (pDiffuseReflection > 0.f) pdf += pDiffuseReflection * diffuseReflection.EvalPdf(wi, wo);
@@ -625,7 +632,7 @@ struct DefaultBSDF
             nonDeltaPart += pSpecularReflectionTransmission;
 
         // no spec reflection or transmission? delta lobes are zero (we can just return, already initialized to 0)!
-        if ( (pSpecularReflection+pSpecularReflectionTransmission) == 0 || psdExclude )    
+        if ( (pSpecularReflection+pSpecularReflectionTransmission) == 0 )    
             return;
 
         // note, deltaReflection here represents both this.specularReflection and this.specularReflectionTransmission's
@@ -728,10 +735,10 @@ struct StandardBSDF
         DefaultBSDF bsdf = DefaultBSDF::make(N, wi, surface, isEnter);
 
         float3 woLocal;
-        bool result = bsdf.SampleBSDF(wiLocal, woLocal, pdf, weight, lobe, lobeP, preGeneratedSamples);
+        bool valid = bsdf.SampleBSDF(wiLocal, woLocal, result.pdf, result.weight, result.lobe, result.lobeP, preGeneratedSamples.xyz);
 
         result.wo = surface.FromLocal(woLocal);
-        return result;
+        return valid;
     }
 
     float EvalPdf(const BRDFContext brdfContext, const Surface surface, const float3 wo)
@@ -748,7 +755,6 @@ struct StandardBSDF
 
     uint GetLobes(const Surface surface)
     {
-        float3 N = surface.Normal;
         return DefaultBSDF::getLobes(surface);
     }
 
