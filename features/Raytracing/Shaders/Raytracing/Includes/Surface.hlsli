@@ -238,6 +238,7 @@ struct Surface
             TransmissionColor = windowAlpha;
             Albedo *= 1.0f - windowAlpha;
             Emissive *= 0;
+            Roughness = max(Roughness, 0.08f); // prevent delta transmission
         }
         
         [branch]
