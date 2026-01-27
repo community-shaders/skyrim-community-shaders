@@ -60,27 +60,17 @@ namespace ShadowSampling
 		float shadow = 0.0;
 		if (sD.EndSplitDistances.z >= GetShadowDepth(positionWS, eyeIndex)) {
 			for (uint i = 0; i < sampleCount; i++) {
-				// Stratified jitter instead of pure random
-				float3 stratified = (float3(i, i * 2, i * 3) + 0.5) * rcpSampleCount;
-				float3 rnd = frac(Random::R3Modified(i, seed / 4294967295.f) + stratified);
+				float3 rnd = Random::R3Modified(i + SharedData::FrameCount * sampleCount, seed / 4294967295.f);
 
+				// https://stats.stackexchange.com/questions/8021/how-to-generate-uniformly-distributed-points-in-the-3-d-unit-ball
 				float phi = rnd.x * Math::TAU;
 				float cos_theta = rnd.y * 2 - 1;
-				float u = rnd.z;
-
-				// Proper uniform sphere distribution: r = u^(1/3) for volume
-				float r = pow(u, 1.0 / 3.0);
-
-				float sin_theta = sqrt(max(0, 1 - cos_theta * cos_theta));
+				float sin_theta = sqrt(1 - cos_theta);
+				float r = rnd.z;
 				float4 sincos_phi;
 				sincos(phi, sincos_phi.y, sincos_phi.x);
-
-				// March along view direction with stratified steps
-				float marchStep = (float(i) + 0.5) * rcpSampleCount - 0.5;
-				float3 sampleOffset = viewDirection * marchStep * 16;
-				sampleOffset += float3(r * sin_theta * sincos_phi.x,
-									r * sin_theta * sincos_phi.y,
-									r * cos_theta) * 16;
+				float3 sampleOffset = viewDirection * (float(i) - float(sampleCount) * 0.5) * 16 * rcpSampleCount;
+				sampleOffset += float3(r * sin_theta * sincos_phi.x, r * sin_theta * sincos_phi.y, r * cos_theta) * 16;
 
 				uint cascadeIndex = sD.EndSplitDistances.x < GetShadowDepth(positionWS.xyz + viewDirection * (sampleOffset.x + sampleOffset.y), eyeIndex);
 
