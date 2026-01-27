@@ -285,6 +285,11 @@ namespace WeatherVariables
 			variables.push_back(std::static_pointer_cast<IWeatherVariable>(var));
 		}
 
+		void ClearVariables()
+		{
+			variables.clear();
+		}
+
 		void LerpAllVariables(const json& from, const json& to, float factor)
 		{
 			for (auto& var : variables) {
@@ -343,6 +348,9 @@ namespace WeatherVariables
 			auto it = featureRegistries.find(featureName);
 			if (it == featureRegistries.end()) {
 				featureRegistries[featureName] = std::make_unique<FeatureWeatherRegistry>();
+			} else {
+				// Clear existing variables before re-registration (handles settings reload)
+				it->second->ClearVariables();
 			}
 			return featureRegistries[featureName].get();
 		}
