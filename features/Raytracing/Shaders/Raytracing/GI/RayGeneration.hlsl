@@ -18,6 +18,8 @@
 #include "Raytracing/Includes/MonteCarlo.hlsli"
 #include "Raytracing/Includes/PBR.hlsli"
 
+#include "Raytracing/Includes/Materials/BSDF.hlsli"
+
 [shader("raygeneration")]
 void main()
 {
@@ -103,8 +105,10 @@ void main()
     Surface sourceSurface = Surface(sourcePosition, sourcePayload, sourceInstance, sourceMaterial);
     BRDFContext sourceBRDFContext = BRDFContext(sourceSurface, -sourceDirection);
 
+    StandardBSDF sourceBSDF = StandardBSDF::make(sourceSurface, true);
+
     // Direct Light for PT
-    float3 direct = EvaluateDirectRadiance(sourceSurface, sourceBRDFContext, sourceInstance, sourceMaterial, randomSeed) + sourceSurface.Emissive;
+    float3 direct = EvaluateDirectRadiance(sourceSurface, sourceBRDFContext, sourceInstance, sourceBSDF, randomSeed) + sourceSurface.Emissive;
 #else
     const float2 uv = float2(idx + 0.5f) / size;
 
@@ -162,6 +166,8 @@ void main()
 
     Surface sourceSurface = Surface(positionWS, geometryNormalWS, normalWS, tangentWS, bitangetWS, albedo, linearRoughness, metalness, 0, ao);
     BRDFContext sourceBRDFContext = BRDFContext(sourceSurface, normalize(-positionCS));
+
+    StandardBSDF sourceBSDF = StandardBSDF::make(sourceSurface, true);
 #endif
 
 #if defined(DEBUG_MODELSPACE)
@@ -223,6 +229,8 @@ void main()
     Surface surface;
     BRDFContext brdfContext;
 
+    StandardBSDF bsdf;
+
 #if defined(SHARC)
     SharcState sharcState;
     SharcHitData sharcHitData;
@@ -241,6 +249,7 @@ void main()
 
         surface = sourceSurface;
         brdfContext = sourceBRDFContext;
+        bsdf = sourceBSDF;
 #if defined(PATH_TRACING)
         material = sourceMaterial;
         instance = sourceInstance;
@@ -257,6 +266,7 @@ void main()
         [loop]
         for (uint j = 0; j < MAX_BOUNCES; j++)
         {
+            BSDFSample bsdfSample;
 #if LIGHTING_MODE == LIGHTING_MODE_DIFFUSE
             direction = surface.Mul(SampleCosineHemisphere(randomSeed));
 
@@ -265,22 +275,33 @@ void main()
             throughput *= surface.AO;
             throughput *= surface.Albedo;
 #else
-#   if defined(FULL_MATERIAL)
-            if ((material.PBRFlags & PBR::Flags::Fuzz) != 0)
-                isSpecular = SampleFuzzBSDF(surface, brdfContext, randomSeed, direction, brdfWeight);
-            else
-#   endif
-            bool hasTransmission = any(surface.TransmissionColor) > 0.0f;
-            if (hasTransmission) {
-                isEnter = dot(brdfContext.ViewDirection, surface.GeomNormal) > 0.0f;
-                isSpecular = SampleTransmissionBSDF(surface, brdfContext, isEnter, randomSeed, direction, brdfWeight);
-            } else {
-                isSpecular = SampleDefaultBSDF(surface, brdfContext, randomSeed, direction, brdfWeight);
-                if (j > 0)
-                    isEnter = true;
-            }
+// #   if defined(FULL_MATERIAL)
+//             if ((material.PBRFlags & PBR::Flags::Fuzz) != 0)
+//                 isSpecular = SampleFuzzBSDF(surface, brdfContext, randomSeed, direction, brdfWeight);
+//             else
+// #   endif
+//             bool hasTransmission = any(surface.TransmissionColor) > 0.0f;
+//             if (hasTransmission) {
+//                 isEnter = dot(brdfContext.ViewDirection, surface.GeomNormal) > 0.0f;
+//                 isSpecular = SampleTransmissionBSDF(surface, brdfContext, isEnter, randomSeed, direction, brdfWeight);
+//             } else {
+//                 isSpecular = SampleDefaultBSDF(surface, brdfContext, randomSeed, direction, brdfWeight);
+//                 if (j > 0)
+//                     isEnter = true;
+//             }
+            float3 randomSample = float3(Random(randomSeed), Random(randomSeed), Random(randomSeed));
+            bool isValid = bsdf.SampleBSDF(randomSample, brdfContext, surface, bsdfSample);
+            isSpecular = bsdfSample.isLobe(LobeType::Specular);
+            bool hasTransmission = bsdfSample.isLobe(LobeType::Transmission);
 
-            throughput *= surface.AO;
+            throughput *= bsdfSample.isLobe(LobeType::Transmission) ? 1.f : surface.AO;
+
+            brdfWeight.diffuse = bsdfSample.isLobe(LobeType::DiffuseReflection) ? bsdfSample.weight : float3(0.f, 0.f, 0.f);
+#   if defined(RAW_RADIANCE)
+            brdfWeight.diffuse /= max(surface.DiffuseAlbedo, 1e-4f);
+#   endif
+            brdfWeight.specular = bsdfSample.isLobe(LobeType::SpecularReflection) ? bsdfSample.weight : float3(0.f, 0.f, 0.f);
+            brdfWeight.transmission = bsdfSample.isLobe(LobeType::Transmission) ? bsdfSample.weight : float3(0.f, 0.f, 0.f);
 
 #   if defined(RAW_RADIANCE)
             float3 brdfWeightOriginal = brdfWeight.diffuse * surface.DiffuseAlbedo + brdfWeight.specular + brdfWeight.transmission;
@@ -294,14 +315,14 @@ void main()
             if (j > 0 || sharcUpdatePass) {
                 throughput *= brdfWeightOriginal;
             } else {
-                float3 brdWeightRaw = brdfWeight.total();
+                float3 brdfWeightRaw = bsdfSample.weight;
 
-                throughputDelta = brdfWeightOriginal / brdWeightRaw;
+                throughputDelta = brdfWeightOriginal / brdfWeightRaw;
 
-                throughput *= brdWeightRaw;
+                throughput *= brdfWeightRaw;
             }
 #   else
-            throughput *= brdfWeight.total();
+            throughput *= bsdfSample.weight;
 #   endif
 #endif
             if (!hasTransmission && dot(surface.GeomNormal, direction) <= 0.0)
@@ -406,8 +427,9 @@ void main()
 #endif
 
             brdfContext = BRDFContext(surface, -direction);
+            bsdf = StandardBSDF::make(surface, isEnter);
 
-            float3 directRadiance = EvaluateDirectRadiance(surface, brdfContext, instance, material, randomSeed);
+            float3 directRadiance = EvaluateDirectRadiance(surface, brdfContext, instance, material, bsdf, randomSeed);
             sampleRadiance += directRadiance * throughput;
 
 #if defined(SHARC) && defined(SHARC_UPDATE)
