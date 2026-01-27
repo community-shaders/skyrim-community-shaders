@@ -344,13 +344,16 @@ void main()
 #else
                 throughputColor = throughput;
 #endif
+                const float rrVal = sqrt(Color::RGBToLuminance(throughputColor));
+                float rrProb = saturate(0.85 - rrVal);
+                rrProb *= rrProb;
 
-                float rrProbability = j < RR_MIN_BOUNCE ? 1.0f : min(0.95f, Color::RGBToLuminance(throughputColor));
+                rrProb = saturate(rrProb + max(0, ((float)j / (float)MAX_BOUNCES - 0.4f)));
 
-                if (rrProbability < Random(randomSeed))
+                if (Random(randomSeed) < rrProb)
                     break;
-                else
-                    throughput /= rrProbability;
+
+                throughput /= (1.0f - rrProb);
             }
 
             float dirDotGeom = dot(direction, surface.GeomNormal);
