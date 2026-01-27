@@ -87,12 +87,12 @@ static std::string PrintVertexFlags(uint16_t value)
 	return result;
 }
 
-static uint16_t GetVertexSize2(uint16_t desc)
+static uint16_t GetVertexSize2(uint64_t desc)
 {
 	return (desc & 0xF) * 4;
 }
 
-void Shape::BuildMesh(RE::BSGraphics::TriShape* rendererData, const std::uint32_t& vertexCountIn, const std::uint16_t& triangleCountIn, const std::uint16_t& bonesPerVertex)
+void Shape::BuildMesh(RE::BSGraphics::TriShape* rendererData, const uint32_t& vertexCountIn, const uint32_t& triangleCountIn, const std::uint16_t& bonesPerVertex)
 {
 	auto vertexDesc = rendererData->vertexDesc;
 
@@ -136,6 +136,10 @@ void Shape::BuildMesh(RE::BSGraphics::TriShape* rendererData, const std::uint32_
 			skinning.resize(vertexCountIn);
 
 		auto vertexSize = GetVertexSize(vertexFlags);
+		auto vertexSize2 = GetVertexSize2(*reinterpret_cast<uint64_t*>(&vertexDesc));
+
+		if (vertexSize != vertexSize2)
+			logger::warn("[RT] Shape::BuildMesh - Vertex size mismatch: {} != {}", vertexSize, vertexSize2);
 
 		bool hasPosition = vertexFlags & RE::BSGraphics::Vertex::VF_VERTEX;
 
@@ -299,24 +303,7 @@ void Shape::BuildMesh(RE::BSGraphics::TriShape* rendererData, const std::uint32_
 			}
 		} else {
 			triangles.resize(triangleCountIn);
-
-			const auto indexCount = triangleCountIn * 3;
-
-			eastl::vector<uint16_t> indices(indexCount);
-			std::memcpy(indices.data(), rendererData->rawIndexData, sizeof(uint16_t) * indexCount);
-
-			for (uint16_t t = 0; t < triangleCountIn; ++t) {
-				uint16_t i = t * 3u;
-
-				uint16_t v0 = indices[i];
-				uint16_t v1 = indices[i + 1u];
-				uint16_t v2 = indices[i + 2u];
-
-				if (v0 >= vertexCount || v1 >= vertexCount || v2 >= vertexCount)
-					logger::critical("[RT] Triangle {} vertex overflow: [{}, {}, {}]", t, v0, v1, v2);
-
-				triangles[t] = Triangle(v0, v1, v2);
-			}
+			std::memcpy(triangles.data(), rendererData->rawIndexData, sizeof(Triangle) * triangleCountIn);
 		}
 
 		triangleCount = triangleCountIn;
