@@ -92,7 +92,7 @@ static uint16_t GetVertexSize2(uint16_t desc)
 	return (desc & 0xF) * 4;
 }
 
-void Shape::BuildMesh(RE::BSGraphics::TriShape* rendererData, const std::uint32_t& vertexCountIn, const std::uint16_t& triangleCountIn, const std::uint16_t& bonesPerVertex, const float4x4& transform)
+void Shape::BuildMesh(RE::BSGraphics::TriShape* rendererData, const std::uint32_t& vertexCountIn, const std::uint16_t& triangleCountIn, const std::uint16_t& bonesPerVertex)
 {
 	auto vertexDesc = rendererData->vertexDesc;
 
@@ -175,10 +175,7 @@ void Shape::BuildMesh(RE::BSGraphics::TriShape* rendererData, const std::uint32_
 			}
 
 			if (hasPosition || dynamic) {
-				if (skinned)
-					vertexData.Position = { pos.x, pos.y, pos.z };
-				else
-					vertexData.Position = float3::Transform({ pos.x, pos.y, pos.z }, transform);
+				vertexData.Position = { pos.x, pos.y, pos.z };
 			}
 
 			if (vertexFlags & RE::BSGraphics::Vertex::VF_UV) {
@@ -190,20 +187,14 @@ void Shape::BuildMesh(RE::BSGraphics::TriShape* rendererData, const std::uint32_
 				std::memcpy(&normalData, vtx + normOffset, sizeof(uint32_t));
 				auto normalUnpacked = UnpackByte4(normalData);
 
-				if (skinned)
-					vertexData.Normal = Normalize({ normalUnpacked.x, normalUnpacked.y, normalUnpacked.z });
-				else
-					vertexData.Normal = Normalize(float3::TransformNormal({ normalUnpacked.x, normalUnpacked.y, normalUnpacked.z }, transform));
+				vertexData.Normal = Normalize({ normalUnpacked.x, normalUnpacked.y, normalUnpacked.z });
 
 				if (hasBitangent) {
 					uint32_t bitangentData;
 					std::memcpy(&bitangentData, vtx + tangOffset, sizeof(uint32_t));
 					auto bitangentUnpacked = UnpackByte4(bitangentData);
 
-					if (skinned)
-						vertexData.Bitangent = Normalize({ bitangentUnpacked.x, bitangentUnpacked.y, bitangentUnpacked.z });
-					else
-						vertexData.Bitangent = Normalize(float3::TransformNormal({ bitangentUnpacked.x, bitangentUnpacked.y, bitangentUnpacked.z }, transform));
+					vertexData.Bitangent = Normalize({ bitangentUnpacked.x, bitangentUnpacked.y, bitangentUnpacked.z });
 
 					float3 tangent = { pos.w, normalUnpacked.w, bitangentUnpacked.w };
 
@@ -219,10 +210,7 @@ void Shape::BuildMesh(RE::BSGraphics::TriShape* rendererData, const std::uint32_
 						tangent.x *= handedness;
 					}
 
-					if (skinned)
-						vertexData.Tangent = Normalize(tangent);
-					else
-						vertexData.Tangent = Normalize(float3::TransformNormal(tangent, transform));
+					vertexData.Tangent = Normalize(tangent);
 				}
 			}
 
@@ -493,7 +481,7 @@ void Shape::BuildMaterial(const RE::BSGeometry::GEOMETRY_RUNTIME_DATA& geometryR
 						const auto* lightingPBRMaterial = static_cast<BSLightingShaderMaterialPBR*>(shaderMaterial);
 
 						textures[0] = TextureRegister(lightingPBRMaterial->diffuseTexture, grayTexture);
-						textures[1] = TextureRegister(lightingPBRMaterial->normalTexture, normalTexture);
+						textures[RTConstants::MATERIAL_NORMALMAP_ID] = TextureRegister(lightingPBRMaterial->normalTexture, normalTexture);
 						textures[2] = TextureRegister(lightingPBRMaterial->emissiveTexture, blackTexture);
 						textures[3] = TextureRegister(lightingPBRMaterial->rmaosTexture, rmaosTexture);
 
@@ -514,7 +502,9 @@ void Shape::BuildMaterial(const RE::BSGeometry::GEOMETRY_RUNTIME_DATA& geometryR
 						// Vanilla Materials
 						if (const RE::BSLightingShaderMaterialBase* lightingBaseMaterial = skyrim_cast<RE::BSLightingShaderMaterialBase*>(shaderMaterial)) {
 							textures[0] = TextureRegister(lightingBaseMaterial->diffuseTexture, grayTexture);
-							textures[1] = TextureRegister(lightingBaseMaterial->normalTexture, normalTexture, false);  // shaderFlags.any(EShaderPropertyFlag::kModelSpaceNormals)
+
+							bool isModelSpaceNormalMap = shaderFlags.any(EShaderPropertyFlag::kModelSpaceNormals);
+							textures[RTConstants::MATERIAL_NORMALMAP_ID] = TextureRegister(lightingBaseMaterial->normalTexture, normalTexture, isModelSpaceNormalMap);
 
 							if (shaderFlags.any(EShaderPropertyFlag::kSpecular)) {
 								if (shaderFlags.any(EShaderPropertyFlag::kModelSpaceNormals)) {
@@ -690,8 +680,6 @@ void Shape::CreateBuffers(const std::wstring& name)
 	auto* skinningHeap = rt.skinningPipeline->heap.get();
 	auto* giHeap = rt.giHeap.get();
 
-	auto* materialBuffer = rt.materialBuffer.get();
-
 	D3D12MA::ALLOCATION_DESC allocDesc = { .HeapType = D3D12_HEAP_TYPE_DEFAULT };
 
 	D3D12MA::ALLOCATION_DESC uploadAllocDesc = { .HeapType = D3D12_HEAP_TYPE_UPLOAD };
@@ -832,7 +820,11 @@ void Shape::CreateBuffers(const std::wstring& name)
 
 	// Material
 	auto materialData = material.GetData();
-	materialBuffer->UpdateAt(&materialData, allocation->GetIndex());
+	rt.materialBuffer->UpdateAt(&materialData, allocation->GetIndex());
+
+	// Transform
+	rt.transformBuffer->UpdateAt(&localToRoot, allocation->GetIndex());
+	rt.transformBuffer->UploadRegion(commandList, sizeof(float3x4), sizeof(float3x4) * allocation->GetIndex());
 }
 
 void Shape::CalculateVectors(bool calculateNormal)
@@ -840,10 +832,10 @@ void Shape::CalculateVectors(bool calculateNormal)
 	eastl::vector<float3> normals;
 
 	if (calculateNormal)
-		normals.resize(vertexCount);
+		normals.resize(vertexCount, float3(0, 0, 0));
 
-	eastl::vector<float3> tangents(vertexCount);
-	eastl::vector<float3> bitangents(vertexCount);
+	eastl::vector<float3> tangents;
+	tangents.resize(vertexCount, float3(0, 0, 0));
 
 	// Loop over triangles
 	for (auto& t : triangles) {
@@ -859,12 +851,12 @@ void Shape::CalculateVectors(bool calculateNormal)
 		half2 uv1 = v1.Texcoord0;
 		half2 uv2 = v2.Texcoord0;
 
-		float3 edge1 = pos1 - pos0;
-		float3 edge2 = pos2 - pos0;
+		float3 deltaPos1 = pos1 - pos0;
+		float3 deltaPos2 = pos2 - pos0;
 
 		// Optionaly compute normals
 		if (calculateNormal) {
-			float3 faceNormal = edge1.Cross(edge2);
+			float3 faceNormal = deltaPos1.Cross(deltaPos2);
 
 			normals[t.x] += faceNormal;
 			normals[t.y] += faceNormal;
@@ -875,55 +867,37 @@ void Shape::CalculateVectors(bool calculateNormal)
 		float2 deltaUV1 = uv1 - uv0;
 		float2 deltaUV2 = uv2 - uv0;
 
-		float f = deltaUV1.x * deltaUV2.y - deltaUV2.x * deltaUV1.y;
+		float det = deltaUV1.x * deltaUV2.y - deltaUV1.y * deltaUV2.x;
 
-		if (f == 0.0f)
-			f = 1.0f;
+		if (fabs(det) < 1e-8f)
+			continue;
 
-		f = 1.0f / f;
+		float r = 1.0f / det;
 
-		// Compute tangent / bitangent
-		half3 tangent = half3(f * (deltaUV2.y * edge1 - deltaUV1.y * edge2));
-		half3 bitangent = half3(f * (-deltaUV2.x * edge1 + deltaUV1.x * edge2));
+		float3 tangent = r * (deltaUV2.y * deltaPos1 - deltaUV1.y * deltaPos2);
+
 
 		// Accumulate per-vertex
 		tangents[t.x] += tangent;
 		tangents[t.y] += tangent;
 		tangents[t.z] += tangent;
-
-		bitangents[t.x] += bitangent;
-		bitangents[t.y] += bitangent;
-		bitangents[t.z] += bitangent;
 	}
 
 	// Normalize and orthogonalize
 	for (size_t i = 0; i < vertexCount; i++) {
 		auto& v = vertices[i];
 
-		float3 n = calculateNormal ? normals[i] : float3(v.Normal);
-		float3 t = tangents[i];
-		float3 b = bitangents[i];
+		float3 n = Normalize(calculateNormal ? normals[i] : float3(v.Normal));
 
-		n.Normalize();
+		float3 t = Normalize(tangents[i] - n * n.Dot(tangents[i]));
 
-		// Handle missing tangents (planar / degenerate UVs)
-		if (t.Length() < 1e-6f) {
-			float3 up = (fabs(n.z) < 0.999f) ? float3(0, 0, 1) : float3(0, 1, 0);
-			t = up.Cross(n);
-		} else {
-			// Gram-Schmidt orthogonalization
-			t = t - n * n.Dot(t);
-		}
+		float3 b = n.Cross(t);
+		float sign = (b.Dot(t.Cross(n)) < 0.0f) ? -1.0f : 1.0f;
+		b *= sign;
 
-		t.Normalize();
+		if (calculateNormal)
+			v.Normal = n;
 
-		float handedness = (n.Cross(t).Dot(b) < 0.0f) ? -1.0f : 1.0f;
-
-		// Recompute bitangent
-		b = n.Cross(t) * handedness;
-		b.Normalize();
-
-		v.Normal = n;
 		v.Tangent = t;
 		v.Bitangent = b;
 	}
@@ -992,18 +966,3 @@ bool Shape::UpdateSkinning()
 
 	return true;
 }
-
-/*eastl::vector<float3x4> Shape::GetBoneMatrices()
-{
-	eastl::vector<float3x4> boneMatrices;
-
-	if ((flags & Flags::Skinned) != Flags::Skinned)
-		return boneMatrices;
-
-	auto& skinInstance = geometry->GetGeometryRuntimeData().skinInstance;
-
-	boneMatrices.resize(skinInstance->numMatrices);
-	std::memcpy(boneMatrices.data(), skinInstance->boneMatrices, skinInstance->allocatedSize);
-
-	return boneMatrices;
-}*/

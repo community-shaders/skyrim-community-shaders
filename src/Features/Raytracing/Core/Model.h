@@ -4,8 +4,6 @@
 
 #include <d3d12.h>
 
-#include "Features/Raytracing.h"
-
 #include "Features/Raytracing/Buffer.h"
 #include "Features/Raytracing/Types.h"
 
@@ -57,6 +55,18 @@ struct Model
 
 		return false;
 	}
+
+	bool ShouldQueueMSNConversion() const
+	{
+		for (auto& shape : shapes) {
+			if (shape->material.shaderFlags.any(RE::BSShaderProperty::EShaderPropertyFlag::kModelSpaceNormals))
+				return true;
+		}
+
+		return false;
+	}
+
+	void ConvertMSN();
 
 	void AddRef()
 	{
