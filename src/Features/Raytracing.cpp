@@ -694,6 +694,8 @@ void Raytracing::DrawDebugSettings()
 	}
 #endif
 
+	ImGui::Image(skyHemisphere->srv, ImVec2(512, 512));
+
 	ImGui::PopID();
 
 	ImGui::EndTabItem();
@@ -1196,6 +1198,15 @@ void Raytracing::SetupResources()
 		srvDesc.Texture2D.ResourceMinLODClamp = 0.0f;
 
 		d3d12Device->CreateShaderResourceView(skyHemisphere->resource.get(), &srvDesc, giHeap->CPUHandle(GIHeap::Slot::SkyHemisphere));
+
+		// Setup TESWaterReflections
+		waterReflections = RE::NiPointer(new RE::TESWaterReflections());
+
+		waterReflections->flags.set(true, RE::TESWaterReflections::Flags::kDirty, RE::TESWaterReflections::Flags::kDynamicCubemap, RE::TESWaterReflections::Flags::kWorldOrigin);
+
+		for (uint i = 0; i < 6; i++) {
+			waterReflections->cubeMapSides[i] = RE::TESWaterReflections::CubeMapSide(i, 0.0f);
+		}
 	}
 
 	fenceEvent = CreateEvent(nullptr, FALSE, FALSE, nullptr);
@@ -1768,6 +1779,36 @@ void Raytracing::Main_RenderWorld(bool a1)
 		renderingWorld = true;
 		lightsUpdated = false;
 
+		/*RE::PlayerCharacter* player = RE::PlayerCharacter::GetSingleton();
+		if (player && player->parentCell && player->parentCell->IsInteriorCell()) {
+			//logger::info("WaterReflections: [0x{:08X}]", reinterpret_cast<uintptr_t>(waterReflections.get()));
+
+			//waterReflections->Update();	
+		}*/
+
+		/*auto* tes = RE::TES::GetSingleton();
+		if (tes->interiorCell) {
+			if (tes->interiorCell->cellFlags.none(RE::TESObjectCELL::Flag::kHasWater))
+				tes->interiorCell->cellFlags.set(true, RE::TESObjectCELL::Flag::kHasWater);
+
+			waterReflections->flags.set(true, RE::TESWaterReflections::Flags::kNeedsUpdate);
+
+			logger::info("WaterReflections Camera: [0x{:08X}]", reinterpret_cast<uintptr_t>(waterReflections->cubeMapCamera.get()));
+
+			UpdateReflections();
+			//waterReflections->Update();
+		} else {
+			auto* tesWaterSystem = RE::TESWaterSystem::GetSingleton();
+
+			if (!tesWaterSystem->waterReflections.empty()) {
+				logger::info("Water Reflections Flags [0x{:08X}]", tesWaterSystem->waterReflections[0]->flags.underlying());
+			}
+		}*/
+
+		/*auto* sky = globals::game::sky;
+		//sky->flags.reset(RE::Sky::Flags::kHideSky);
+		//sky->mode = RE::Sky::Mode::kSkyDomeOnly;*/
+
 		SkyCubeToHemi();
 		ConvertMSN();
 	}
@@ -1811,13 +1852,13 @@ void Raytracing::CommitModel(Model* model)
 	eastl::vector<D3D12_RAYTRACING_GEOMETRY_DESC> geometryDescs(meshCount);
 
 	// If no trishape has render use, we assume it is not used and skip using it to hide geometry
-	bool isRenderUseValid = model->IsRenderUseValid();
+	//bool isRenderUseValid = model->IsRenderUseValid();
 
 	for (auto i = 0; i < meshCount; i++) {
 		auto& shape = shapes[i];
 
-		if (isRenderUseValid && shape->geometry->GetFlags().none(RE::NiAVObject::Flag::kRenderUse))
-			continue;
+		/*if (isRenderUseValid && shape->geometry->GetFlags().none(RE::NiAVObject::Flag::kRenderUse))
+			continue;*/
 
 		bool hasAlphaTesting = shape->flags & Shape::Flags::AlphaTesting;
 		bool isBlend = (shape->flags & Shape::Flags::AlphaBlending) &&  (shape->material.Feature == RE::BSShaderMaterial::Feature::kHairTint || shape->material.Feature == RE::BSShaderMaterial::Feature::kFaceGen || shape->material.Feature == RE::BSShaderMaterial::Feature::kFaceGenRGBTint || shape->material.Feature == RE::BSShaderMaterial::Feature::kEye);
@@ -3734,30 +3775,24 @@ void Raytracing::RenderShadows()
 	d3d11Context->CopyResource(shadowMask.texture, shadowMaskTexture->resource11);
 }
 
+void Raytracing::DataLoaded()
+{
+	CellAttachDetachEventHandler::Register();
+	BGSActorCellEventHandler::Register();
+}
+
 void Raytracing::PostPostLoad()
 {
 	Hooks::Install();
 	Initialize();
-	//RE::BSTSingletonExplicit<RE::BSModelDB::BSModelProcessor>;
-
-	//auto* g_TESProcessor = REL::Relocation<RE::BSModelDB::BSModelProcessor*>(0x01F5D910).get();
-	//(g_TESProcessor) = new RTProcessor(g_TESProcessor);
 
 	//MenuOpenCloseEventHandler::Register();
 	//TESLoadGameEventHandler::Register();
 
 	TESObjectLoadedEventHandler::Register();
-	
-	//TESCellAttachDetachEventHandler::Register();
+
 	//TESCellFullyLoadedEventHandler::Register();
 }
-
-/*void Raytracing::RTProcessor::PostCreate(const RE::BSModelDB::DBTraits::ArgsType& a_args, const char* modelName, RE::NiPointer<RE::NiNode>& a_root, std::uint32_t& typeOut)
-{
-	m_oldProcessor->PostCreate(a_args, modelName, a_root, typeOut);
-	logger::error("[RT] RTProcessor::PostCreate - ModelName: {}", modelName);
-}*/
-
 static std::wstring GetLatestWinPixGpuCapturerPath()
 {
 	LPWSTR programFilesPath = nullptr;
@@ -4477,37 +4512,6 @@ RE::BSEventNotifyControl Raytracing::TESObjectLoadedEventHandler::ProcessEvent(c
 
 	globals::features::raytracing.RemoveInstance(formID, true);
 
-	/*auto* base = eventRef->GetBaseObject();
-
-	logger::info("TESObjectLoadedEventHandler::ProcessEvent {} - {:08X}, {} - {:08X}",
-		magic_enum::enum_name(eventRef->formType.get()), eventRef->GetFormID(),
-		magic_enum::enum_name(base->formType.get()), base->GetFormID());
-
-	//logger::info("[RT] TESObjectLoadedEvent - {} Name: {} - FullLodRef: {}", typeid(*eventRef).name(), eventRef->GetName(), eventRef->GetFullLODRef());
-
-	//if (eventRef->formType.none(RE::FormType::NPC, RE::FormType::LeveledNPC, RE::FormType::ActorCharacter))
-	if (eventRef->formType.none(RE::FormType::ActorCharacter))
-		return RE::BSEventNotifyControl::kContinue;
-
-	auto* actor = eventRef->As<RE::Actor>();
-
-	if (!actor)
-		return RE::BSEventNotifyControl::kContinue;
-
-	auto* pNiAVObject = eventRef->Get3D();
-
-	if (!pNiAVObject)
-		return RE::BSEventNotifyControl::kContinue;
-
-	globals::features::raytracing.CreateModelInternal(eventRef, actor->GetName(), pNiAVObject);*/
-
-	return RE::BSEventNotifyControl::kContinue;
-}
-
-RE::BSEventNotifyControl Raytracing::TESCellAttachDetachEventHandler::ProcessEvent(const RE::TESCellAttachDetachEvent* a_event, RE::BSTEventSource<RE::TESCellAttachDetachEvent>*)
-{
-	globals::features::raytracing.SetInstanceDetached(a_event->reference->GetFormID(), !a_event->attached);
-
 	return RE::BSEventNotifyControl::kContinue;
 }
 
@@ -4531,6 +4535,26 @@ RE::BSEventNotifyControl Raytracing::CellAttachDetachEventHandler::ProcessEvent(
 		return RE::BSEventNotifyControl::kContinue;
 
 	globals::features::raytracing.SetInstanceDetached(land->GetFormID(), detaching);
+
+	return RE::BSEventNotifyControl::kContinue;
+}
+
+RE::BSEventNotifyControl Raytracing::BGSActorCellEventHandler::ProcessEvent(const RE::BGSActorCellEvent* a_event, RE::BSTEventSource<RE::BGSActorCellEvent>*)
+{
+	if (a_event->flags.underlying() != static_cast<uint32_t>(RE::BGSActorCellEvent::CellFlag::kEnter))
+		return RE::BSEventNotifyControl::kContinue;
+
+	auto* tesWaterSystem = RE::TESWaterSystem::GetSingleton();
+
+	/*if (tesWaterSystem->waterObjects.empty()) {
+		tesWaterSystem->waterObjects.push_back(RE::NiPointer(globals::features::raytracing.waterObject.get()));
+	}*/
+
+	if (tesWaterSystem->waterReflections.empty()) {
+		tesWaterSystem->waterReflections.push_back(globals::features::raytracing.waterReflections);
+	}
+
+	tesWaterSystem->Enable();
 
 	return RE::BSEventNotifyControl::kContinue;
 }
