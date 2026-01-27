@@ -432,7 +432,7 @@ void WeatherPicker::RenderWeatherControls(RE::Sky* sky)
 	// Accelerate checkbox
 	ImGui::Checkbox("Accelerate Weather Change", &s_accelerateWeatherChange);
 	if (auto _tt = Util::HoverTooltipWrapper()) {
-		Util::DrawMultiLineTooltip({ "When enabled, weather changes are immediate.",
+		Util::DrawMultiLineTooltip({ "When enabled, weather changes are immediate",
 			"When disabled, uses normal transition speed." });
 	}  // Reset Weather button
 	std::string resetButtonLabel = "Reset Weather";
@@ -486,7 +486,12 @@ void WeatherPicker::RenderWeatherControls(RE::Sky* sky)
 				s_selectedWeatherIdx = i;
 				// Weather changed, apply it
 				auto selectedWeather = s_filteredWeathers[s_selectedWeatherIdx];
-				sky->SetWeather(selectedWeather, true, s_accelerateWeatherChange);
+				sky->SetWeather(selectedWeather, true, false);
+				
+				if (s_accelerateWeatherChange) {
+					sky->currentWeatherPct = 1.0f;
+				}
+				
 				logger::info("[WeatherPicker] Changed weather to: {}", Util::FormatWeather(selectedWeather));
 			}
 			ImGui::PopStyleColor();
