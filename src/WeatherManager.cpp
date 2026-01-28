@@ -48,9 +48,9 @@ void WeatherManager::LoadPerWeatherSettingsFromDisk()
 			settingsFile.close();
 
 			// Store the entire weather settings in cache
-			// The structure is expected to be: { "FeatureName": { settings }, ... }
-			if (weatherData.is_object()) {
-				for (auto& [featureName, featureSettings] : weatherData.items()) {
+			// The structure is expected to be: { "featureSettings": { "FeatureName": { settings }, ... }
+			if (weatherData.is_object() && weatherData.contains("featureSettings") && weatherData["featureSettings"].is_object()) {
+				for (auto& [featureName, featureSettings] : weatherData["featureSettings"].items()) {
 					perWeatherSettingsCache[weatherKey][featureName] = featureSettings;
 				}
 				logger::info("Loaded settings for weather: {}", weatherKey);
@@ -157,26 +157,31 @@ void WeatherManager::SaveSettingsToWeather(RE::TESWeather* weather, const std::s
 		}
 	}
 
+	// Ensure weatherData is an object and has featureSettings
+	if (!weatherData.is_object()) {
+		weatherData = json::object();
+	}
+	if (!weatherData.contains("featureSettings") || !weatherData["featureSettings"].is_object()) {
+		weatherData["featureSettings"] = json::object();
+	}
+	auto& featureSettings = weatherData["featureSettings"];
+
 	// Update with new feature settings or remove feature entry if settings empty
 	if (settings.is_object() && settings.empty()) {
 		// Remove feature entry from loaded JSON
-		if (weatherData.is_object()) {
-			weatherData.erase(featureName);
-		}
+		featureSettings.erase(featureName);
 	} else {
-		weatherData[featureName] = settings;
+		featureSettings[featureName] = settings;
 	}
 
 	// Write back to disk
-	if (weatherData.is_object() && weatherData.empty()) {
+	if (featureSettings.empty()) {
 		// No features left for this weather — remove file if it exists
-		if (std::filesystem::exists(filePath)) {
-			try {
-				std::filesystem::remove(filePath);
-				logger::info("Removed weather settings file (no features remain): {}", filePath);
-			} catch (const std::filesystem::filesystem_error& e) {
-				logger::warn("Failed to remove empty weather settings file ({}): {}", filePath, e.what());
-			}
+		std::error_code ec;
+		if (std::filesystem::remove(filePath, ec)) {
+			logger::info("Removed weather settings file (no features remain): {}", filePath);
+		} else if (ec) {
+			logger::warn("Failed to remove empty weather settings file ({}): {}", filePath, ec.message());
 		}
 		return;
 	}
