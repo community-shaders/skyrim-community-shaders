@@ -562,7 +562,7 @@ float3 GetLightingColor(float3 msPosition, float3 worldPosition, float2 screenPo
 
 	float shadow = ShadowSampling::GetEffectShadow(worldPosition.xyz, normalize(worldPosition.xyz), screenPosition, eyeIndex);
 
-	shadowVariance = 1.0 - saturate(fwidth(shadow));
+	shadowVariance = 1.0 - sqrt(saturate(fwidth(shadow)));
 
 	dirColor *= shadow;
 

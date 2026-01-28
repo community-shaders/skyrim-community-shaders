@@ -47,29 +47,43 @@ namespace ShadowSampling
 		static const float rcpSampleCount = 1.0 / float(sampleCount);
 
 		float noise = Random::InterleavedGradientNoise(screenPosition, SharedData::FrameCount);
+		float noiseTransform = noise * 2.0 - 1.0;
 		float2 rotation;
-		sincos(Math::TAU * (noise * 2.0 - 1.0), rotation.y, rotation.x);
+		sincos(Math::TAU * noiseTransform, rotation.y, rotation.x);
 		float2x2 rotationMatrix = float2x2(rotation.x, rotation.y, -rotation.y, rotation.x);
 
 		float shadowMapDepth = GetShadowDepth(positionWS, eyeIndex);
 
 		float shadow = 0.0;
 		if (sD.EndSplitDistances.z >= shadowMapDepth) {
-			float cascade1BlendFactor = smoothstep(0, 1, (shadowMapDepth - sD.StartSplitDistances.y) / (sD.EndSplitDistances.x - sD.StartSplitDistances.y));
-			uint cascadeIndex = noise < cascade1BlendFactor;
+			float cascade1Probability = saturate((shadowMapDepth - sD.StartSplitDistances.y) / (sD.EndSplitDistances.x - sD.StartSplitDistances.y));
+			uint cascadeIndex = noise < cascade1Probability; // Stochastic cascade selection
 
 			float compareValue = mul(transpose(sD.ShadowMapProj[eyeIndex][cascadeIndex]), float4(positionWS, 1)).z - sD.AlphaTestRef[1 + cascadeIndex];
-			float sampleRadius = sD.ShadowSampleParam.z * rcp(1 + cascadeIndex) * 4.0;
+			float sampleRadius = sD.ShadowSampleParam.z * rcp(1 + cascadeIndex);
 
+			float viewRayLength = 128;
+
+			// Minimum and maximum positions along view ray
+#if defined(EFFECT)
+			// Go both forwards and backwards due to billboards
+			viewRayLength *= 0.5;
+			float3 positionLS = mul(transpose(sD.ShadowMapProj[eyeIndex][cascadeIndex]), float4(positionWS - viewDirection * viewRayLength, 1));
+			float3 viewOffsetLS = mul(transpose(sD.ShadowMapProj[eyeIndex][cascadeIndex]), float4(positionWS + viewDirection * viewRayLength, 1));
+#else
 			float3 positionLS = mul(transpose(sD.ShadowMapProj[eyeIndex][cascadeIndex]), float4(positionWS, 1));
-			float3 viewOffsetLS = mul(transpose(sD.ShadowMapProj[eyeIndex][cascadeIndex]), float4(positionWS + viewDirection * 128, 1));
+			float3 viewOffsetLS = mul(transpose(sD.ShadowMapProj[eyeIndex][cascadeIndex]), float4(positionWS + viewDirection * viewRayLength, 1));
+#endif  
 
 			for (uint i = 0; i < sampleCount; i++) {
-				float t = (float(i) - float(sampleCount) * 0.5) * rcpSampleCount + 0.5;
-				float3 sampledPositionLS = lerp(positionLS, viewOffsetLS, t);
+				// Random offset along view ray
+				float t = (float(i) - float(sampleCount)) * rcpSampleCount;
+				float3 sampledPositionLS = lerp(positionLS, viewOffsetLS, frac(t + noiseTransform));
 
+				// Blur shadow with poisson disc
 				sampledPositionLS.xy += mul(Random::PoissonSampleOffsets16[i], rotationMatrix) * sampleRadius;
 
+				// Average 4 shadow samples for improved quality
 				float4 depths = SharedShadowMap.GatherRed(LinearSampler, float3(saturate(sampledPositionLS.xy), cascadeIndex), 0);
 				shadow += dot(depths > compareValue, 0.25);
 			}
