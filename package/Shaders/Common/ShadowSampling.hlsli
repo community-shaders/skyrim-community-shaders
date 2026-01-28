@@ -61,12 +61,11 @@ namespace ShadowSampling
 			float compareValue = mul(transpose(sD.ShadowMapProj[eyeIndex][cascadeIndex]), float4(positionWS, 1)).z - sD.AlphaTestRef[1 + cascadeIndex];
 			float sampleRadius = sD.ShadowSampleParam.z * rcp(1 + cascadeIndex) * 4.0;
 
-			float3 positionLS = mul(transpose(sD.ShadowMapProj[eyeIndex][cascadeIndex]), float4(positionWS, 1));
-			float3 viewOffsetLS = mul(transpose(sD.ShadowMapProj[eyeIndex][cascadeIndex]), float4(positionWS + viewDirection * 128, 1));
-
-			for (uint i = 0; i < sampleCount; i++) {
-				uint noisyIndex = (i + uint(noise * sampleCount)) % sampleCount;
-				float t = (float(noisyIndex) - float(sampleCount) * 0.5) * rcpSampleCount + 0.5;
+			float3 positionLS = mul(transpose(sD.ShadowMapProj[eyeIndex][cascadeIndex]), float4(positionWS, 1));	
+			float3 viewOffsetLS = mul(transpose(sD.ShadowMapProj[eyeIndex][cascadeIndex]), float4(positionWS + viewDirection * 128, 1));			
+			
+			for (uint i = 0; i < sampleCount; i++) {	
+				float t = (float(i) - float(sampleCount) * 0.5) * rcpSampleCount + 0.5;
 				float3 sampledPositionLS = lerp(positionLS, viewOffsetLS, t);
 
 				sampledPositionLS.xy += mul(Random::PoissonSampleOffsets16[i], rotationMatrix) * sampleRadius;
