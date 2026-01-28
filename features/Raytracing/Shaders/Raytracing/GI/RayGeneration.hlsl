@@ -370,7 +370,7 @@ void main()
 
             float dirDotGeom = dot(direction, surface.GeomNormal);
             float3 offsetNormal = dirDotGeom > 0.0 ? surface.GeomNormal : -surface.GeomNormal;
-            ray.Origin = OffsetRay(surface.Position, offsetNormal, direction);
+            ray.Origin = OffsetRay(surface.Position, offsetNormal);
             ray.Direction = direction;
             ray.TMin = 0.01f;
             ray.TMax = RAY_TMAX;
