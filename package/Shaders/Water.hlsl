@@ -843,7 +843,7 @@ WaterNormalData GetWaterNormal(PS_INPUT input, float distanceFactor, float norma
 
 float3 GetWaterSpecularColor(PS_INPUT input, float3 normal, float3 viewDirection, float distanceFactor, float skylightingSpecular)
 {
-	if (!(Permutation::PixelShaderDescriptor & Permutation::WaterFlags::Reflections)) 
+	if (!(Permutation::PixelShaderDescriptor & Permutation::WaterFlags::Reflections))
 		return ReflectionColor.xyz * VarAmounts.y;
 
 	float3 R = reflect(viewDirection, WaterParams.y * normal + float3(0, 0, 1 - WaterParams.y));
