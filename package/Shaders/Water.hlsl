@@ -1159,7 +1159,7 @@ PS_OUTPUT main(PS_INPUT input)
 
 #			if defined(SKYLIGHTING)
 	sh2 specularLobe = SphericalHarmonics::FauxSpecularLobe(normal, -viewDirection, 0.0);
-+	skylightingSpecular = SphericalHarmonics::FuncProductIntegral(skylightingSH, specularLobe);
+	skylightingSpecular = SphericalHarmonics::FuncProductIntegral(skylightingSH, specularLobe);
 	skylightingSpecular = saturate(skylightingSpecular);
 	skylightingSpecular = Skylighting::mixSpecular(SharedData::skylightingSettings, skylightingSpecular);
 #			endif
