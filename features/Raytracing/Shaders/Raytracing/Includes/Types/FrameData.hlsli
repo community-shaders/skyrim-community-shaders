@@ -54,7 +54,7 @@ alignas(16)
     float4x4 Pad0;
     float4x4 Pad1;
     float4x4 Pad2;
-    float4x3 Pad3;
+    float3x4 Pad3;
 };
 #ifdef __cplusplus
 static_assert(sizeof(FrameData) == 1024);
