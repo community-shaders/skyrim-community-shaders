@@ -1271,9 +1271,18 @@ struct Raytracing : public OverlayFeature
 						return;
 					}
 
-					if (type == RE::FormType::Static && (flags & MarkerFlags::IsMarker)) {
-						logger::debug("\tTES::sub_1401A0920 - Is Marker");
-						return;
+					if (flags & MarkerFlags::IsMarker) {
+						if (type == RE::FormType::Static)
+							return;
+
+						if (type == RE::FormType::Door)
+							return;
+
+						if (type == RE::FormType::Action)
+							return;
+
+						if (type == RE::FormType::Furniture)
+							return;
 					}
 
 					auto* pNiAVObject = refr->Get3D();

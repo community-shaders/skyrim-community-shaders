@@ -95,7 +95,7 @@ public:
 		return ((flags & Flags::Dynamic) || (flags & Flags::Skinned)) ? 0 : resource->GetGPUVirtualAddress() + sizeof(float3x4) * allocation->GetIndex();
 	}
 
-	void BuildMesh(RE::BSGraphics::TriShape* rendererData, const std::uint32_t& vertexCountIn, const std::uint16_t& triangleCountIn, const std::uint16_t& bonesPerVertex);
+	void BuildMesh(RE::BSGraphics::TriShape* rendererData, const uint32_t& vertexCountIn, const uint32_t& triangleCountIn, const uint16_t& bonesPerVertex);
 
 	void BuildMaterial(const RE::BSGeometry::GEOMETRY_RUNTIME_DATA& geometryRuntimeData, [[maybe_unused]] const char* name, RE::FormID formID);
 
