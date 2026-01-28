@@ -1193,8 +1193,6 @@ PS_OUTPUT main(PS_INPUT input)
 	float3 specularColor = GetWaterSpecularColor(input, normal, viewDirection, distanceFactor, depthControl.y, eyeIndex, skylightingSpecular);
 	DiffuseOutput diffuseOutput = GetWaterDiffuseColor(input, normal, viewDirection, distanceMul, depthControl.y, fresnel, eyeIndex, viewPosition, depth);
 
-	float3 waterColor = diffuseOutput.refractionDiffuseColor;
-
 	float3 dirColor;
 	float3 ambientColor;
 #			if defined(SKYLIGHTING) && !defined(INTERIOR)
