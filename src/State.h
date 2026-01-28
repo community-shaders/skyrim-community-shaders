@@ -183,7 +183,7 @@ public:
 
 		float BillboardRadius;
 		float3 pad0;
-		
+
 		bool operator==(const PermutationCB& other) const
 		{
 			return PixelShaderDescriptor == other.PixelShaderDescriptor &&
