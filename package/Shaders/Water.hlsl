@@ -841,84 +841,60 @@ WaterNormalData GetWaterNormal(PS_INPUT input, float distanceFactor, float norma
 	return result;
 }
 
-float3 GetWaterSpecularColor(PS_INPUT input, float3 normal, float3 viewDirection,
-	float distanceFactor, float refractionsDepthFactor, uint eyeIndex, float skylightingSpecular)
+float3 GetWaterSpecularColor(PS_INPUT input, float3 normal, float3 viewDirection, float distanceFactor, float skylightingSpecular)
 {
-	if (Permutation::PixelShaderDescriptor & Permutation::WaterFlags::Reflections) {
-		float3 finalSsrReflectionColor = 0.0.xxx;
-		float ssrFraction = 0.0;
-		float3 reflectionColor = 0.0.xxx;
-		float3 R = reflect(viewDirection, WaterParams.y * normal + float3(0, 0, 1 - WaterParams.y));
+	if (!(Permutation::PixelShaderDescriptor & Permutation::WaterFlags::Reflections)) 
+		return ReflectionColor.xyz * VarAmounts.y;
 
-		if (Permutation::PixelShaderDescriptor & Permutation::WaterFlags::Cubemap) {
-#			if defined(DYNAMIC_CUBEMAPS)
-			float3 dynamicCubemap;
-			if (SharedData::InInterior) {
-				dynamicCubemap = DynamicCubemaps::EnvTexture.SampleLevel(CubeMapSampler, R, 0).xyz;
-			} else {
-				float3 specularIrradiance = 1;
+	float3 R = reflect(viewDirection, WaterParams.y * normal + float3(0, 0, 1 - WaterParams.y));
+	float3 reflectionColor = CubeMapTex.SampleLevel(CubeMapSampler, R, 0).xyz;
 
-				if (skylightingSpecular < 1.0) {
-					specularIrradiance = Color::IrradianceToLinear(DynamicCubemaps::EnvTexture.SampleLevel(CubeMapSampler, R, 0).xyz);
-				}
+#		if defined(DYNAMIC_CUBEMAPS)
+	float3 dynamicCubemap;
+	if (SharedData::InInterior) {
+		dynamicCubemap = DynamicCubemaps::EnvTexture.SampleLevel(CubeMapSampler, R, 0).xyz;
+	} else {
+		float3 specularIrradiance = 1.0;
+		if (skylightingSpecular < 1.0)
+			specularIrradiance = Color::IrradianceToLinear(DynamicCubemaps::EnvTexture.SampleLevel(CubeMapSampler, R, 0).xyz);
 
-				float3 specularIrradianceReflections = 1.0;
+		float3 specularIrradianceReflections = 1.0;
+		if (skylightingSpecular > 0.0)
+			specularIrradianceReflections = Color::IrradianceToLinear(DynamicCubemaps::EnvReflectionsTexture.SampleLevel(CubeMapSampler, R, 0).xyz);
 
-				if (skylightingSpecular > 0.0) {
-					specularIrradianceReflections = Color::IrradianceToLinear(DynamicCubemaps::EnvReflectionsTexture.SampleLevel(CubeMapSampler, R, 0).xyz);
-				}
-
-				dynamicCubemap = Color::IrradianceToGamma(lerp(specularIrradiance, specularIrradianceReflections, skylightingSpecular));
-			}
-
-#				if defined(VR)
-			// Reflection cubemap is incorrect for interiors in VR, ignore it
-			if (Permutation::PixelShaderDescriptor & Permutation::WaterFlags::Interior || SharedData::HideSky)
-				reflectionColor = dynamicCubemap.xyz;
-			else
-				reflectionColor = lerp(dynamicCubemap.xyz, CubeMapTex.SampleLevel(CubeMapSampler, R, 0).xyz, saturate(length(input.WPosition.xyz) / 1024.0));
-#				else
-			if (SharedData::HideSky)
-				reflectionColor = dynamicCubemap.xyz;
-			else
-				reflectionColor = lerp(dynamicCubemap.xyz, CubeMapTex.SampleLevel(CubeMapSampler, R, 0).xyz, saturate(length(input.WPosition.xyz) / 1024.0));
-#				endif
-#			else
-			reflectionColor = CubeMapTex.SampleLevel(CubeMapSampler, R, 0).xyz;
-#			endif
-		} else {
-#			if !defined(LOD) && NUM_SPECULAR_LIGHTS == 0
-			float4 reflectionNormalRaw = float4((VarAmounts.w * refractionsDepthFactor) * normal.xy + input.MPosition.xy, input.MPosition.z, 1);
-#			else
-			float4 reflectionNormalRaw = float4(VarAmounts.w * normal.xy, 0, 1);
-#			endif
-
-			float4 reflectionNormal = mul(transpose(TextureProj[eyeIndex]), reflectionNormalRaw);
-			reflectionColor = ReflectionTex.SampleLevel(ReflectionSampler, reflectionNormal.xy / reflectionNormal.ww, 0).xyz;
-		}
-
-#			if !defined(LOD) && NUM_SPECULAR_LIGHTS == 0
-		if (Permutation::PixelShaderDescriptor & Permutation::WaterFlags::Cubemap) {
-			float pointingDirection = dot(viewDirection, R);
-			float pointingAlignment = dot(reflect(viewDirection, float3(0, 0, 1)), R);
-			float ssrAmount = min(pointingAlignment, pointingDirection);
-			if (SSRParams.x > 0.0 && ssrAmount > 0.0) {
-				float2 ssrReflectionUv = ((FrameBuffer::DynamicResolutionParams2.xy * input.HPosition.xy) * SSRParams.zw) + 0.05 * normal.xy;
-				float2 ssrReflectionUvDR = FrameBuffer::GetDynamicResolutionAdjustedScreenPosition(ssrReflectionUv);
-				float4 ssrReflectionColorBlurred = RawSSRReflectionTex.Sample(RawSSRReflectionSampler, ssrReflectionUvDR);
-				float4 ssrReflectionColorRaw = RawSSRReflectionTex.Sample(RawSSRReflectionSampler, ssrReflectionUvDR);
-				float4 ssrReflectionColor = lerp(ssrReflectionColorBlurred, ssrReflectionColorRaw, ssrAmount * 0.7);
-
-				finalSsrReflectionColor = max(0, ssrReflectionColor.xyz);
-				ssrFraction = saturate(ssrReflectionColor.w * distanceFactor * ssrAmount);
-			}
-		}
-#			endif
-
-		float3 finalReflectionColor = Color::IrradianceToGamma(lerp(Color::IrradianceToLinear(reflectionColor), Color::IrradianceToLinear(finalSsrReflectionColor), ssrFraction));
-		return finalReflectionColor;
+		dynamicCubemap = Color::IrradianceToGamma(lerp(specularIrradiance, specularIrradianceReflections, skylightingSpecular));
 	}
-	return ReflectionColor.xyz * VarAmounts.y;
+
+	float reflectionAmount = saturate(length(input.WPosition.xyz) / 1024.0);
+
+#			if defined(VR)
+	// Reflection cubemap is incorrect for interiors in VR, ignore it
+	if (Permutation::PixelShaderDescriptor & Permutation::WaterFlags::Interior || SharedData::HideSky)
+			reflectionAmount = 0.0;
+#			else
+	if (SharedData::HideSky)
+			reflectionAmount = 0.0;
+#			endif
+	reflectionColor = lerp(dynamicCubemap, reflectionColor, reflectionAmount);
+#		endif
+
+#		if !defined(LOD) && NUM_SPECULAR_LIGHTS == 0
+	float pointingDirection = dot(viewDirection, R);
+	float pointingAlignment = dot(reflect(viewDirection, float3(0, 0, 1)), R);
+	float ssrAmount = min(pointingAlignment, pointingDirection);
+	if (SSRParams.x > 0.0 && ssrAmount > 0.0) {
+		float2 ssrReflectionUv = ((FrameBuffer::DynamicResolutionParams2.xy * input.HPosition.xy) * SSRParams.zw) + 0.05 * normal.xy;
+		float2 ssrReflectionUvDR = FrameBuffer::GetDynamicResolutionAdjustedScreenPosition(ssrReflectionUv);
+		float4 ssrReflectionColorBlurred = RawSSRReflectionTex.Sample(RawSSRReflectionSampler, ssrReflectionUvDR);
+		float4 ssrReflectionColorRaw = RawSSRReflectionTex.Sample(RawSSRReflectionSampler, ssrReflectionUvDR);
+		float4 ssrReflectionColor = lerp(ssrReflectionColorBlurred, ssrReflectionColorRaw, ssrAmount * 0.7);
+		float3 finalSsrReflectionColor = max(0, ssrReflectionColor.xyz);
+		float ssrFraction = saturate(ssrReflectionColor.w * distanceFactor * ssrAmount);
+		reflectionColor = lerp(Color::IrradianceToLinear(reflectionColor), Color::IrradianceToLinear(finalSsrReflectionColor), ssrFraction);
+	}
+#		endif
+
+	return reflectionColor;
 }
 
 float GetScreenDepthWater(float2 screenPosition, uint a_useVR = 0)
@@ -1119,13 +1095,11 @@ PS_OUTPUT main(PS_INPUT input)
 #			endif
 	float3 viewPosition = mul(FrameBuffer::CameraView[eyeIndex], float4(input.WPosition.xyz, 1)).xyz;
 	float2 screenUV = FrameBuffer::ViewToUV(viewPosition, true, eyeIndex);
-
-	float skylightingDiffuse = 1.0;
-	float skylightingSpecular = 1.0;
-	float wetnessOcclusion = 1.0;
+	const bool inWorld = (Permutation::ExtraShaderDescriptor & Permutation::ExtraFlags::InWorld);
 
 #			if defined(SKYLIGHTING)
-	const bool inWorld = (Permutation::ExtraShaderDescriptor & Permutation::ExtraFlags::InWorld);
+	float wetnessOcclusion = 1.0;
+
 #				if defined(VR)
 	float3 positionMSSkylight = input.WPosition.xyz + FrameBuffer::CameraPosAdjust[eyeIndex].xyz - FrameBuffer::CameraPosAdjust[0].xyz;
 #				else
@@ -1135,7 +1109,7 @@ PS_OUTPUT main(PS_INPUT input)
 	sh2 skylightingSH = Skylighting::sampleNoBias(SharedData::skylightingSettings, Skylighting::SkylightingProbeArray, positionMSSkylight);
 	float skylighting = SphericalHarmonics::Unproject(skylightingSH, float3(0, 0, 1));
 
-	skylightingDiffuse = SphericalHarmonics::FuncProductIntegral(skylightingSH, SphericalHarmonics::EvaluateCosineLobe(float3(0, 0, 1))) / Math::PI;
+	float skylightingDiffuse = SphericalHarmonics::FuncProductIntegral(skylightingSH, SphericalHarmonics::EvaluateCosineLobe(float3(0, 0, 1))) / Math::PI;
 	skylightingDiffuse = saturate(skylightingDiffuse);
 	skylightingDiffuse = lerp(1.0, skylightingDiffuse, Skylighting::getFadeOutFactor(input.WPosition.xyz));
 	skylightingDiffuse = Skylighting::mixDiffuse(SharedData::skylightingSettings, skylightingDiffuse);
@@ -1143,13 +1117,17 @@ PS_OUTPUT main(PS_INPUT input)
 	wetnessOcclusion = inWorld ? pow(saturate(skylighting), 2) : 0;
 #			endif
 
+#if defined(SKYLIGHTING)
 	WaterNormalData waterData = GetWaterNormal(input, distanceFactor, depthControl.z, viewDirection, depth, eyeIndex, wetnessOcclusion);
+#else
+	WaterNormalData waterData = GetWaterNormal(input, distanceFactor, depthControl.z, viewDirection, depth, eyeIndex, inWorld);
+#endif
 
 	float3 normal = waterData.normal;
 
 #			if defined(SKYLIGHTING)
 	sh2 specularLobe = SphericalHarmonics::FauxSpecularLobe(normal, -viewDirection, 0.0);
-	skylightingSpecular = SphericalHarmonics::FuncProductIntegral(skylightingSH, specularLobe);
+	float skylightingSpecular = SphericalHarmonics::FuncProductIntegral(skylightingSH, specularLobe);
 	skylightingSpecular = saturate(skylightingSpecular);
 	skylightingSpecular = Skylighting::mixSpecular(SharedData::skylightingSettings, skylightingSpecular);
 #			endif
@@ -1159,7 +1137,7 @@ PS_OUTPUT main(PS_INPUT input)
 #			if defined(SPECULAR) && (NUM_SPECULAR_LIGHTS != 0)
 	float3 finalColor = 0.0.xxx;
 
-	for (int lightIndex = 0; lightIndex < NUM_SPECULAR_LIGHTS; ++lightIndex) {
+	[unroll] for (int lightIndex = 0; lightIndex < NUM_SPECULAR_LIGHTS; ++lightIndex) {
 		float3 lightVector = LightPos[lightIndex].xyz - (PosAdjust[eyeIndex].xyz + input.WPosition.xyz);
 		float3 lightDirection = normalize(normalize(lightVector) - viewDirection);
 		float lightFade = saturate(length(lightVector) / LightPos[lightIndex].w);
@@ -1181,7 +1159,12 @@ PS_OUTPUT main(PS_INPUT input)
 	isSpecular = true;
 #			else
 
-	float3 specularColor = GetWaterSpecularColor(input, normal, viewDirection, distanceFactor, depthControl.y, eyeIndex, skylightingSpecular);
+#if defined(SKYLIGHTING)
+	float3 specularColor = GetWaterSpecularColor(input, normal, viewDirection, distanceFactor, skylightingSpecular);
+#else
+	float3 specularColor = GetWaterSpecularColor(input, normal, viewDirection, distanceFactor, 1.0);
+#endif
+
 	DiffuseOutput diffuseOutput = GetWaterDiffuseColor(input, normal, viewDirection, distanceMul, depthControl.y, fresnel, eyeIndex, viewPosition, depth);
 
 	float dirShadow = ShadowSampling::GetEffectShadow(input.WPosition.xyz, viewDirection, input.HPosition.xy, eyeIndex);
@@ -1280,7 +1263,7 @@ PS_OUTPUT main(PS_INPUT input)
 	}
 #						endif
 
-float3 finalColor = lerp(finalColorPreFog, fogColor * PosAdjust[eyeIndex].w, Color::FogAlpha(fogDistanceFactor));
+	float3 finalColor = lerp(finalColorPreFog, fogColor * PosAdjust[eyeIndex].w, Color::FogAlpha(fogDistanceFactor));
 
 #						if defined(WETNESS_EFFECTS) && defined(DEBUG_WETNESS_EFFECTS)
 	// DEBUG MODE: Override water color with debug visualization
@@ -1308,7 +1291,7 @@ float3 finalColor = lerp(finalColorPreFog, fogColor * PosAdjust[eyeIndex].w, Col
 	}
 #						endif
 
-finalColorPreFog = lerp(finalColorPreFog, preFogColor * PosAdjust[eyeIndex].w, Color::FogAlpha(fogDistanceFactor));
+	finalColorPreFog = lerp(finalColorPreFog, preFogColor * PosAdjust[eyeIndex].w, Color::FogAlpha(fogDistanceFactor));
 
 	float3 refractionColor = diffuseOutput.refractionColor;
 

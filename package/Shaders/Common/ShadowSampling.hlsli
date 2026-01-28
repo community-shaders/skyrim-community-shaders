@@ -6,13 +6,13 @@
 #include "Common/SharedData.hlsli"
 #include "Common/Color.hlsli"
 
-#	if defined(TERRAIN_SHADOWS)
-#		include "TerrainShadows/TerrainShadows.hlsli"
-#	endif
+#if defined(TERRAIN_SHADOWS)
+#	include "TerrainShadows/TerrainShadows.hlsli"
+#endif
 
-#	if defined(CLOUD_SHADOWS)
-#		include "CloudShadows/CloudShadows.hlsli"
-#	endif
+#if defined(CLOUD_SHADOWS)
+#	include "CloudShadows/CloudShadows.hlsli"
+#endif
 
 #if defined(IBL)
 #	include "IBL/IBL.hlsli"
@@ -197,11 +197,9 @@ namespace ShadowSampling
 	float GetEffectShadow(float3 worldPosition, float3 viewDirection, float2 screenPosition, uint eyeIndex)
 	{
 		float worldShadow = GetWorldShadow(worldPosition, FrameBuffer::CameraPosAdjust[eyeIndex].xyz, eyeIndex);
-		[branch] if (worldShadow > 0.0) {
-			float shadow = Get3DFilteredShadow(worldPosition, viewDirection, screenPosition, eyeIndex);
-			return worldShadow * shadow;
-		}
-		return 0.0;
+		if (worldShadow == 0.0)
+			return 0.0;
+		return worldShadow * Get3DFilteredShadow(worldPosition, viewDirection, screenPosition, eyeIndex);
 	}
 
 	float GetLightingShadow(float noise, float3 worldPosition, uint eyeIndex)
