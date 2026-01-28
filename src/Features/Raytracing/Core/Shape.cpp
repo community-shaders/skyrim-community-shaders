@@ -323,8 +323,16 @@ eastl::shared_ptr<Allocation> Shape::TextureRegister(const RE::NiPointer<RE::NiS
 
 	if (modelSpaceNormalMap)
 		return rt.GetMSNormalMapRegister(this, niPointer->rendererTexture, defaultTexture);
-	else
-		return rt.GetTextureRegister(niPointer->rendererTexture->texture, defaultTexture);
+	else {
+		ID3D11Texture2D* texture2D = nullptr;
+
+		HRESULT hr = niPointer->rendererTexture->texture->QueryInterface(IID_PPV_ARGS(&texture2D));
+		if (FAILED(hr)) {
+			return defaultTexture;
+		}
+
+		return rt.GetTextureRegister(texture2D, defaultTexture);
+	}
 }
 
 void Shape::BuildMaterial(const RE::BSGeometry::GEOMETRY_RUNTIME_DATA& geometryRuntimeData, [[maybe_unused]] const char* name, RE::FormID formID)
@@ -379,7 +387,7 @@ void Shape::BuildMaterial(const RE::BSGeometry::GEOMETRY_RUNTIME_DATA& geometryR
 			if (RE::BSLightingShaderProperty* lightingShaderProp = skyrim_cast<RE::BSLightingShaderProperty*>(effect)) {
 				shaderType = RE::BSShader::Type::Lighting;
 
-				logger::debug("[RT] BuildMaterial - [Effect] BSLightingShaderProperty Flags: {}", GetFlagsString<EShaderPropertyFlag>(lightingShaderProp->flags.underlying()));
+				logger::info("[RT] BuildMaterial - BSLightingShaderProperty [0x{:08X}] Flags: {}", reinterpret_cast<uintptr_t>(lightingShaderProp), GetFlagsString<EShaderPropertyFlag>(lightingShaderProp->flags.underlying()));
 
 				// Set alpha flags
 				if (flags & Flags::AlphaBlending) {
@@ -398,16 +406,12 @@ void Shape::BuildMaterial(const RE::BSGeometry::GEOMETRY_RUNTIME_DATA& geometryR
 					}
 				}
 
-				if (lightingShaderProp->flags.any(EShaderPropertyFlag::kOwnEmit)) {
-					colors[1] = {
-						lightingShaderProp->emissiveColor->red,
-						lightingShaderProp->emissiveColor->green,
-						lightingShaderProp->emissiveColor->blue,
-						lightingShaderProp->emissiveMult
-					};
-
-					logger::info("[RT] BuildMaterial - Emissive Color: {}", colors[1]);
-				}
+				colors[1] = {
+					lightingShaderProp->emissiveColor->red,
+					lightingShaderProp->emissiveColor->green,
+					lightingShaderProp->emissiveColor->blue,
+					lightingShaderProp->emissiveMult
+				};
 
 				if (auto shaderMaterial = lightingShaderProp->material) {
 					feature = shaderMaterial->GetFeature();
@@ -500,6 +504,12 @@ void Shape::BuildMaterial(const RE::BSGeometry::GEOMETRY_RUNTIME_DATA& geometryR
 							// Glow
 							if (feature == Feature::kGlowMap) {
 								if (const auto* lightingGlowMaterial = skyrim_cast<RE::BSLightingShaderMaterialGlowmap*>(shaderMaterial)) {
+									if (lightingShaderProp->flags.none(EShaderPropertyFlag::kOwnEmit)) {
+										colors[1].x = 1.0f;
+										colors[1].y = 1.0f;
+										colors[1].z = 1.0f;
+									}
+
 									textures[2] = TextureRegister(lightingGlowMaterial->glowTexture, blackTexture);
 								}
 							}

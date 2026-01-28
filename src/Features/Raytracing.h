@@ -605,7 +605,7 @@ struct Raytracing : public OverlayFeature
 	// TODO: Move to Model struct
 	void UpdateModelBLAS(Model* model);
 
-	eastl::shared_ptr<Allocation> GetTextureRegister(ID3D11Resource* texture, eastl::shared_ptr<Allocation> defaultTexture);
+	eastl::shared_ptr<Allocation> GetTextureRegister(ID3D11Texture2D* texture, eastl::shared_ptr<Allocation> defaultTexture);
 	eastl::shared_ptr<Allocation> GetMSNormalMapRegister(Shape* shape, RE::BSGraphics::Texture* texture, eastl::shared_ptr<Allocation> defaultTexture);
 
 	Allocator shapeRegisters = Allocator(RTConstants::MAX_SHAPES);
@@ -691,7 +691,7 @@ struct Raytracing : public OverlayFeature
 	Util::FrameChecker shadowFrameChecker;
 
 	// Textures that have been shared with DX12 and placed in a heap as SRV
-	eastl::unordered_map<ID3D11Resource*, eastl::unique_ptr<TextureReference>> textures;
+	eastl::unordered_map<ID3D11Texture2D*, eastl::unique_ptr<TextureReference>> textures;
 
 	struct ConvertedNormalMap
 	{
@@ -703,9 +703,9 @@ struct Raytracing : public OverlayFeature
 
 	eastl::deque<eastl::string> msnConvertionQueue;
 
-	eastl::unordered_map<ID3D11Resource*, eastl::unique_ptr<ConvertedNormalMap>> normalMaps;
+	eastl::unordered_map<ID3D11Texture2D*, eastl::unique_ptr<ConvertedNormalMap>> normalMaps;
 
-	eastl::unordered_map<uint16_t, ID3D11Resource*> allocationMSNormalMaps;
+	eastl::unordered_map<uint16_t, ID3D11Texture2D*> allocationMSNormalMaps;
 
 	winrt::com_ptr<ID3D11SamplerState> samplerState = nullptr;
 	winrt::com_ptr<ID3D11ComputeShader> copyDepthCS = nullptr;
@@ -944,8 +944,12 @@ struct Raytracing : public OverlayFeature
 			static void thunk(RE::NiSourceTexture* oThis)
 			{
 				if (oThis && oThis->rendererTexture) {
-					if (auto texture = oThis->rendererTexture->texture) {
+					if (auto resource = oThis->rendererTexture->texture) {
 						auto& rt = globals::features::raytracing;
+
+						ID3D11Texture2D* texture = nullptr;
+
+						resource->QueryInterface(IID_PPV_ARGS(&texture));
 
 						if (auto it = rt.textures.find(texture); it != rt.textures.end()) {
 							auto index = it->second->allocation->GetIndex();
@@ -1320,7 +1324,7 @@ struct Raytracing : public OverlayFeature
 			}
 			static inline REL::Relocation<decltype(thunk)> func;
 		};
-		
+
 		struct CreateRenderTarget_PlayerFaceGenTint
 		{
 			static void thunk(RE::BSGraphics::Renderer* oThis, RE::RENDER_TARGETS::RENDER_TARGET a_target, RE::BSGraphics::RenderTargetProperties* a_properties)

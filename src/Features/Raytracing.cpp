@@ -2341,7 +2341,7 @@ void Raytracing::SetInstanceDetached(RE::FormID formID, bool detached)
 	}
 }
 
-eastl::shared_ptr<Allocation> Raytracing::GetTextureRegister(ID3D11Resource* dx11Texture, eastl::shared_ptr<Allocation> defaultTexture)
+eastl::shared_ptr<Allocation> Raytracing::GetTextureRegister(ID3D11Texture2D* dx11Texture, eastl::shared_ptr<Allocation> defaultTexture)
 {
 	std::lock_guard lock{ textureRegisterMutex };
 
@@ -2416,12 +2416,18 @@ eastl::shared_ptr<Allocation> Raytracing::GetMSNormalMapRegister([[maybe_unused]
 {
 	std::lock_guard lock{ textureRegisterMutex };
 
-	auto texture2D = reinterpret_cast<ID3D11Texture2D*>(texture->texture);
+	ID3D11Texture2D* texture2D = nullptr;
 
-	if (auto refIt = normalMaps.find(texture->texture); refIt != normalMaps.end()) {
+	HRESULT hr = texture->texture->QueryInterface(IID_PPV_ARGS(&texture2D));
+	if (FAILED(hr)) {
+		logger::error("[RT] GetTextureRegister - Failed to get ID3D11Texture2D");
+		return defaultTexture;
+	}
+
+	if (auto refIt = normalMaps.find(texture2D); refIt != normalMaps.end()) {
 		return refIt->second->Reference->allocation;
 	} else {
-		auto [it, emplaced] = normalMaps.emplace(texture->texture, eastl::make_unique<ConvertedNormalMap>());
+		auto [it, emplaced] = normalMaps.emplace(texture2D, eastl::make_unique<ConvertedNormalMap>());
 
 		if (!emplaced) {
 			logger::warn("[RT] GetMSNormalMapRegister - NormalMap emplace failed.");
@@ -2466,7 +2472,7 @@ eastl::shared_ptr<Allocation> Raytracing::GetMSNormalMapRegister([[maybe_unused]
 
 		// Share the new texture
 		winrt::com_ptr<IDXGIResource> dxgiResource;
-		HRESULT hr = normalMap->Texture->resource->QueryInterface(IID_PPV_ARGS(dxgiResource.put()));
+		hr = normalMap->Texture->resource->QueryInterface(IID_PPV_ARGS(dxgiResource.put()));
 
 		if (FAILED(hr)) {
 			logger::error("[RT] GetTextureRegister - Failed to query interface.");
@@ -2511,7 +2517,7 @@ eastl::shared_ptr<Allocation> Raytracing::GetMSNormalMapRegister([[maybe_unused]
 
 		d3d12Device->CreateShaderResourceView(normalMap->Reference->resource.get(), &texSrvDesc, giHeap->CPUHandle(GIHeap::Slot::Textures, normalMap->Reference->allocation->GetIndex()));
 	
-		allocationMSNormalMaps.emplace(normalMap->Reference->allocation->GetIndex(), texture->texture);
+		allocationMSNormalMaps.emplace(normalMap->Reference->allocation->GetIndex(), texture2D);
 
 		return normalMap->Reference->allocation;	
 	}
