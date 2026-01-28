@@ -57,18 +57,18 @@ namespace ShadowSampling
 		float shadow = 0.0;
 		if (sD.EndSplitDistances.z >= shadowMapDepth) {
 			float cascade1Probability = saturate((shadowMapDepth - sD.StartSplitDistances.y) / (sD.EndSplitDistances.x - sD.StartSplitDistances.y));
-			
+
 			// Precompute cascade data for both cascades
 			float compareValues[2];
 			float sampleRadii[2];
 			float3 positionsLS[2];
 			float3 viewOffsetsLS[2];
-			
+
 			[unroll]
 			for (uint cascadeIdx = 0; cascadeIdx < 2; cascadeIdx++) {
 				compareValues[cascadeIdx] = mul(transpose(sD.ShadowMapProj[eyeIndex][cascadeIdx]), float4(positionWS, 1)).z - sD.AlphaTestRef[1 + cascadeIdx];
 				sampleRadii[cascadeIdx] = sD.ShadowSampleParam.z * rcp(1 + cascadeIdx) * 2.0;
-				
+
 #if defined(EFFECT)
 				// Enough for non-billboards + enough for Sovngarde fog
 				float viewRayLength = 16.0 + Permutation::BillboardRadius * 0.1;
