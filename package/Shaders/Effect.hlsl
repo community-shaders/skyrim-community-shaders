@@ -533,7 +533,7 @@ cbuffer PerGeometry : register(b2)
 #	include "Common/ShadowSampling.hlsli"
 
 #	if defined(LIGHTING)
-float3 GetLightingColor(float3 msPosition, float3 worldPosition, float4 screenPosition, uint eyeIndex, inout float shadowVariance)
+float3 GetLightingColor(float3 msPosition, float3 worldPosition, float2 screenPosition, uint eyeIndex, inout float shadowVariance)
 {
 	float3 color = DLightColor.xyz * Color::EffectLightingMult();
 
@@ -554,7 +554,7 @@ float3 GetLightingColor(float3 msPosition, float3 worldPosition, float4 screenPo
 
 	float3 dirColor;
 	float3 ambientColor;
-#		if defined(SKYLIGHTING) && !defined(INTERIOR)
+#		if defined(SKYLIGHTING)
 	ShadowSampling::ExtractLighting(color, dirColor, ambientColor, skylightingDiffuse);
 #		else
 	ShadowSampling::ExtractLighting(color, dirColor, ambientColor);
@@ -647,7 +647,7 @@ PS_OUTPUT main(PS_INPUT input)
 	float shadowVariance = 1.0;
 
 #	if defined(LIGHTING)
-	propertyColor = GetLightingColor(input.MSPosition.xyz, input.WorldPosition.xyz, input.Position.xyzw, eyeIndex, shadowVariance);
+	propertyColor = GetLightingColor(input.MSPosition.xyz, input.WorldPosition.xyz, input.Position.xy, eyeIndex, shadowVariance);
 
 #		if defined(LIGHT_LIMIT_FIX)
 	uint lightCount = 0;
