@@ -1549,8 +1549,8 @@ eastl::vector<LightLimitFix::LightData> Raytracing::GetPointLights()
 
 					if (bsLight->IsShadowLight()) {
 						auto* shadowLight = static_cast<RE::BSShadowLight*>(bsLight);
-						GET_INSTANCE_MEMBER(shadowLightIndex, shadowLight);
-						light.shadowMaskIndex = shadowLightIndex;
+						GET_INSTANCE_MEMBER(maskIndex, shadowLight);
+						light.shadowMaskIndex = maskIndex;
 						light.lightFlags.set(LightLimitFix::LightFlags::Shadow);
 					}
 
@@ -2341,7 +2341,7 @@ void Raytracing::SetInstanceDetached(RE::FormID formID, bool detached)
 	}
 }
 
-eastl::shared_ptr<Allocation> Raytracing::GetTextureRegister(ID3D11Texture2D* dx11Texture, eastl::shared_ptr<Allocation> defaultTexture)
+eastl::shared_ptr<Allocation> Raytracing::GetTextureRegister(ID3D11Resource* dx11Texture, eastl::shared_ptr<Allocation> defaultTexture)
 {
 	std::lock_guard lock{ textureRegisterMutex };
 
@@ -2416,6 +2416,8 @@ eastl::shared_ptr<Allocation> Raytracing::GetMSNormalMapRegister([[maybe_unused]
 {
 	std::lock_guard lock{ textureRegisterMutex };
 
+	auto texture2D = reinterpret_cast<ID3D11Texture2D*>(texture->texture);
+
 	if (auto refIt = normalMaps.find(texture->texture); refIt != normalMaps.end()) {
 		return refIt->second->Reference->allocation;
 	} else {
@@ -2431,7 +2433,7 @@ eastl::shared_ptr<Allocation> Raytracing::GetMSNormalMapRegister([[maybe_unused]
 		normalMap->OriginalSRV = texture->resourceView;
 
 		D3D11_TEXTURE2D_DESC desc;
-		texture->texture->GetDesc(&desc);
+		texture2D->GetDesc(&desc);
 		desc.MipLevels = 1;
 		desc.ArraySize = 1;
 		desc.Format = DXGI_FORMAT_R10G10B10A2_UNORM;
@@ -3635,8 +3637,7 @@ void Raytracing::UpdateShadowsFrameBuffer()
 	shadowsCBData->Position = float4(cameraPosition.x, cameraPosition.y, cameraPosition.z, 0.0f);
 
 	if (shadowLight) {
-		auto direction = Float3(-shadowLight->GetShadowDirectionalLightRuntimeData().lightDirection);
-		direction.Normalize();
+		auto direction = Normalize(Float3(-shadowLight->GetShadowDirectionalLightRuntimeData().sunVector));
 		shadowsCBData->Direction = float4(direction.x, direction.y, direction.z, 0.0f);
 	}
 

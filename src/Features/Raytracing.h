@@ -605,7 +605,7 @@ struct Raytracing : public OverlayFeature
 	// TODO: Move to Model struct
 	void UpdateModelBLAS(Model* model);
 
-	eastl::shared_ptr<Allocation> GetTextureRegister(ID3D11Texture2D* texture, eastl::shared_ptr<Allocation> defaultTexture);
+	eastl::shared_ptr<Allocation> GetTextureRegister(ID3D11Resource* texture, eastl::shared_ptr<Allocation> defaultTexture);
 	eastl::shared_ptr<Allocation> GetMSNormalMapRegister(Shape* shape, RE::BSGraphics::Texture* texture, eastl::shared_ptr<Allocation> defaultTexture);
 
 	Allocator shapeRegisters = Allocator(RTConstants::MAX_SHAPES);
@@ -691,7 +691,7 @@ struct Raytracing : public OverlayFeature
 	Util::FrameChecker shadowFrameChecker;
 
 	// Textures that have been shared with DX12 and placed in a heap as SRV
-	eastl::unordered_map<ID3D11Texture2D*, eastl::unique_ptr<TextureReference>> textures;
+	eastl::unordered_map<ID3D11Resource*, eastl::unique_ptr<TextureReference>> textures;
 
 	struct ConvertedNormalMap
 	{
@@ -703,9 +703,9 @@ struct Raytracing : public OverlayFeature
 
 	eastl::deque<eastl::string> msnConvertionQueue;
 
-	eastl::unordered_map<ID3D11Texture2D*, eastl::unique_ptr<ConvertedNormalMap>> normalMaps;
+	eastl::unordered_map<ID3D11Resource*, eastl::unique_ptr<ConvertedNormalMap>> normalMaps;
 
-	eastl::unordered_map<uint16_t, ID3D11Texture2D*> allocationMSNormalMaps;
+	eastl::unordered_map<uint16_t, ID3D11Resource*> allocationMSNormalMaps;
 
 	winrt::com_ptr<ID3D11SamplerState> samplerState = nullptr;
 	winrt::com_ptr<ID3D11ComputeShader> copyDepthCS = nullptr;

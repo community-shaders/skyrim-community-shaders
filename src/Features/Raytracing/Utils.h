@@ -45,7 +45,7 @@ static inline float3 Normalize(float3 vector)
 	return vector;
 }
 
-static inline ID3D11Texture2D* TryGetTexture(const RE::NiPointer<RE::NiSourceTexture> niPointer)
+static inline ID3D11Resource* TryGetTexture(const RE::NiPointer<RE::NiSourceTexture> niPointer)
 {
 	if (niPointer) {
 		if (const auto& bsTexture = niPointer->rendererTexture; bsTexture) {
