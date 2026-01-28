@@ -1184,7 +1184,7 @@ PS_OUTPUT main(PS_INPUT input)
 	float3 specularColor = GetWaterSpecularColor(input, normal, viewDirection, distanceFactor, depthControl.y, eyeIndex, skylightingSpecular);
 	DiffuseOutput diffuseOutput = GetWaterDiffuseColor(input, normal, viewDirection, distanceMul, depthControl.y, fresnel, eyeIndex, viewPosition, depth);
 
-	float dirShadow = ShadowSampling::GetEffectShadow(input.WPosition.xyz, normalize(input.WPosition.xyz), input.HPosition.xy, eyeIndex);
+	float dirShadow = ShadowSampling::GetEffectShadow(input.WPosition.xyz, viewDirection, input.HPosition.xy, eyeIndex);
 
 	float3 dirColor;
 	float3 ambientColor;
