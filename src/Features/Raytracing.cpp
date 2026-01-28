@@ -3238,8 +3238,11 @@ void Raytracing::DrawRTGI()
 			if (sky && sky->region)
 				frameData->EmittanceColor = Float3(sky->region->emittanceColor);
 			else
-				frameData->EmittanceColor = float3::One;  // I assume no sky = interior (except for blackreach I guess?)
+				frameData->EmittanceColor = float3::One;
 		}
+
+		auto& cloudShadows = globals::features::cloudShadows;
+		frameData->CloudOpacity = cloudShadows.loaded ? cloudShadows.settings.Opacity : 0.0f;
 
 		frameData->SHaRC = settings.SHaRC.GetFrameData(settings.TraceMode == TraceMode::SHaRC);  // Sets UpdatePass to true if in SHaRC mode
 

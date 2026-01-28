@@ -645,7 +645,7 @@ float EvalSkyOcclusion(float3 dir)
 {
     float2 uv = EvalHemiUV(dir);
 
-    return 1.0F - SkyHemisphere.SampleLevel(BaseSampler, uv, 0.0f).a;
+    return lerp(1.0f, 1.0f - SkyHemisphere.SampleLevel(BaseSampler, uv, 0.0f).a, Frame.CloudOpacity);
 }
 
 float3 EvaluateDirectRadiance(in Surface surface, in BRDFContext brdfContext, in Instance instance, in Material material, inout uint randomSeed)
