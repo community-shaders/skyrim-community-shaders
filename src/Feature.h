@@ -1,6 +1,9 @@
 #pragma once
 
 #include "FeatureVersions.h"
+#ifdef TRACY_ENABLE
+#	include <Tracy/Tracy.hpp>
+#endif
 
 struct Feature
 {
@@ -165,4 +168,38 @@ public:
 	 * @return True if the feature is found, false otherwise.
 	 */
 	static bool IsFeatureKnown(const std::string& shortName, REL::Version* outVersion = nullptr);
+
+	/**
+	 * @brief Execute a callable for each loaded feature with optional Tracy CPU profiling
+	 *
+	 * Iterates through all loaded features and calls the provided function with automatic
+	 * CPU profiling zones (ZoneScoped/ZoneText via Tracy) when TRACY_ENABLE is defined.
+	 * Thread-local string formatting is used to minimize per-call overhead.
+	 *
+	 * Usage:
+	 *   Feature::ForEachLoadedFeature("Reset", [](Feature* feature) { feature->Reset(); });
+	 *   Feature::ForEachLoadedFeature("Prepass", [](Feature* feature) { feature->Prepass(); });
+	 *
+	 * @param methodName Name of the method being called (used for Tracy zone naming)
+	 * @param callback Callable that receives (Feature*) and performs the operation
+	 */
+	template <typename Func>
+	static inline void ForEachLoadedFeature(std::string_view methodName, Func&& callback)
+	{
+		for (auto* feature : GetFeatureList()) {
+			if (feature->loaded) {
+#ifdef TRACY_ENABLE
+				{
+					ZoneScoped;
+					static thread_local std::string zoneName;
+					zoneName = std::format("{}::{}", feature->GetShortName(), methodName);
+					ZoneText(zoneName.c_str(), zoneName.size());
+					callback(feature);
+				}
+#else
+				callback(feature);
+#endif
+			}
+		}
+	}
 };
