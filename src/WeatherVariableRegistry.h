@@ -54,7 +54,8 @@ namespace WeatherVariables
 			T* valuePtr, T defaultValue,
 			std::function<T(const T&, const T&, float)> lerpFunc = nullptr) :
 			name(name),
-			displayName(displayName), tooltip(tooltip), valuePtr(valuePtr), defaultValue(defaultValue), userSettingsValue(defaultValue), lerpFunc(lerpFunc)
+			displayName(displayName), tooltip(tooltip), valuePtr(valuePtr), defaultValue(defaultValue),
+			userSettingsValue(valuePtr ? *valuePtr : defaultValue), lerpFunc(lerpFunc)
 		{
 			if (!lerpFunc) {
 				// Default lerp for float types
