@@ -287,6 +287,7 @@ void Deferred::CopyShadowData()
 					ID3D11UnorderedAccessView* csUavs[1]{ shadowCopyUAV };
 					context->CSSetUnorderedAccessViews(0, 1, csUavs, nullptr);
 
+					context->CSSetSamplers(0, 1, &pointSampler);
 					context->CSSetShader(downsampleShadowCS, nullptr, 0);
 
 					uint fullShadowSize = shadowCopyWidth * 4;
@@ -298,6 +299,8 @@ void Deferred::CopyShadowData()
 					context->CSSetShaderResources(0, 1, csSrvs);
 					csUavs[0] = nullptr;
 					context->CSSetUnorderedAccessViews(0, 1, csUavs, nullptr);
+					ID3D11SamplerState* nullSampler = nullptr;
+					context->CSSetSamplers(0, 1, &nullSampler);
 					context->CSSetShader(nullptr, nullptr, 0);
 
 					shadowTexture->Release();

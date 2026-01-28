@@ -1,17 +1,25 @@
 Texture2DArray<float> InputTexture : register(t0);
 RWTexture2DArray<unorm float> OutputTexture : register(u0);
 
+SamplerState PointSampler : register(s0);
+
 groupshared float g_scratchDepths[8][8];
 
 [numthreads(8, 8, 1)] void main(uint3 dispatchThreadID
 								: SV_DispatchThreadID, uint2 groupThreadID
 								: SV_GroupThreadID) {
-	// MIP 0 -> 1: each thread loads a 2x2 block and computes max
+	// MIP 0 -> 1: each thread gathers a 2x2 block and computes max
 	uint2 pixCoord = dispatchThreadID.xy * 2;
-	float depth0 = InputTexture.Load(int4(pixCoord + uint2(0, 0), dispatchThreadID.z, 0));
-	float depth1 = InputTexture.Load(int4(pixCoord + uint2(1, 0), dispatchThreadID.z, 0));
-	float depth2 = InputTexture.Load(int4(pixCoord + uint2(0, 1), dispatchThreadID.z, 0));
-	float depth3 = InputTexture.Load(int4(pixCoord + uint2(1, 1), dispatchThreadID.z, 0));
+
+	uint inputW, inputH, inputSlices;
+	InputTexture.GetDimensions(inputW, inputH, inputSlices);
+	float2 uv = (pixCoord + 1.0) / float2(inputW, inputH);
+
+	float4 depths4 = InputTexture.GatherRed(PointSampler, float3(uv, dispatchThreadID.z));
+	float depth0 = depths4.w;
+	float depth1 = depths4.z;
+	float depth2 = depths4.x;
+	float depth3 = depths4.y;
 
 	float dm1 = max(max(depth0, depth1), max(depth2, depth3));
 	g_scratchDepths[groupThreadID.x][groupThreadID.y] = dm1;
