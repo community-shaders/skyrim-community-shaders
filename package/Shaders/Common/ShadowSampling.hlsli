@@ -195,7 +195,7 @@ namespace ShadowSampling
 		float llDirLightMult = (SharedData::linearLightingSettings.enableLinearLighting && !SharedData::linearLightingSettings.isDirLightLinear)
 			? SharedData::linearLightingSettings.dirLightMult : 1.0f;
 		float3 dirLightColorDir = Color::DirectionalLight(SharedData::DirLightColor.xyz / max(llDirLightMult, 1e-5),
-			SharedData::linearLightingSettings.isDirLightLinear) * llDirLightMult * Color::EffectLightingMult();
+			SharedData::linearLightingSettings.isDirLightLinear) * llDirLightMult;
 
 		// Calculate total expected lighting and find scale to match input
 		float3 totalLight = ambientColorAmb + dirLightColorDir;
