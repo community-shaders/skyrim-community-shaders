@@ -43,46 +43,42 @@ namespace ShadowSampling
 	{
 		ShadowData sD = SharedShadowData[0];
 
-		float fadeFactor = 1.0 - pow(saturate(dot(positionWS, positionWS) / sD.ShadowLightParam.z), 8);
-		uint sampleCount = ceil(16.0 * (1.0 - saturate(length(positionWS) / sqrt(sD.ShadowLightParam.z))));
+		static const uint sampleCount = 16;
+		static const float rcpSampleCount = 1.0 / float(sampleCount);
 
-		if (sampleCount == 0)
-			return 1.0;
+		float noise = Random::InterleavedGradientNoise(screenPosition, SharedData::FrameCount);
+		float2 rotation;
+		sincos(Math::TAU * (noise * 2.0 - 1.0), rotation.y, rotation.x);
+		float2x2 rotationMatrix = float2x2(rotation.x, rotation.y, -rotation.y, rotation.x);
 
-		float rcpSampleCount = rcp((float)sampleCount);
-
-		uint3 seed = Random::pcg3d(uint3(screenPosition.xy, screenPosition.x * Math::PI));
-
-		float2 compareValue;
-		compareValue.x = mul(transpose(sD.ShadowMapProj[eyeIndex][0]), float4(positionWS, 1)).z - sD.AlphaTestRef.y;
-		compareValue.y = mul(transpose(sD.ShadowMapProj[eyeIndex][1]), float4(positionWS, 1)).z - sD.AlphaTestRef.z;
+		float shadowMapDepth = GetShadowDepth(positionWS, eyeIndex);
 
 		float shadow = 0.0;
-		if (sD.EndSplitDistances.z >= GetShadowDepth(positionWS, eyeIndex)) {
-			for (uint i = 0; i < sampleCount; i++) {
-				float3 rnd = Random::R3Modified(i + SharedData::FrameCount * sampleCount, seed / 4294967295.f);
+		if (sD.EndSplitDistances.z >= shadowMapDepth) {
+			float cascade1BlendFactor = smoothstep(0, 1, (shadowMapDepth - sD.StartSplitDistances.y) / (sD.EndSplitDistances.x - sD.StartSplitDistances.y));
+			uint cascadeIndex = noise < cascade1BlendFactor;
+			
+			float compareValue = mul(transpose(sD.ShadowMapProj[eyeIndex][cascadeIndex]), float4(positionWS, 1)).z - sD.AlphaTestRef[1 + cascadeIndex];
+			float sampleRadius = sD.ShadowSampleParam.z * rcp(1 + cascadeIndex) * 4.0;
 
-				// https://stats.stackexchange.com/questions/8021/how-to-generate-uniformly-distributed-points-in-the-3-d-unit-ball
-				float phi = rnd.x * Math::TAU;
-				float cos_theta = rnd.y * 2 - 1;
-				float sin_theta = sqrt(1 - cos_theta);
-				float r = rnd.z;
-				float4 sincos_phi;
-				sincos(phi, sincos_phi.y, sincos_phi.x);
-				float3 sampleOffset = viewDirection * (float(i) - float(sampleCount) * 0.5) * 16 * rcpSampleCount;
-				sampleOffset += float3(r * sin_theta * sincos_phi.x, r * sin_theta * sincos_phi.y, r * cos_theta) * 16;
+			float3 positionLS = mul(transpose(sD.ShadowMapProj[eyeIndex][cascadeIndex]), float4(positionWS, 1));	
+			float3 viewOffsetLS = mul(transpose(sD.ShadowMapProj[eyeIndex][cascadeIndex]), float4(positionWS + viewDirection * 128, 1));			
+			
+			for (uint i = 0; i < sampleCount; i++) {	
+				uint noisyIndex = (i + uint(noise * sampleCount)) % sampleCount;			
+				float t = (float(noisyIndex) - float(sampleCount) * 0.5) * rcpSampleCount + 0.5;
+				float3 sampledPositionLS = lerp(positionLS, viewOffsetLS, t);
 
-				uint cascadeIndex = sD.EndSplitDistances.x < GetShadowDepth(positionWS.xyz + viewDirection * (sampleOffset.x + sampleOffset.y), eyeIndex);
+				sampledPositionLS.xy += mul(Random::PoissonSampleOffsets16[i], rotationMatrix) * sampleRadius;
 
-				float3 positionLS = mul(transpose(sD.ShadowMapProj[eyeIndex][cascadeIndex]), float4(positionWS + sampleOffset, 1));
-
-				float4 depths = SharedShadowMap.GatherRed(LinearSampler, float3(saturate(positionLS.xy), cascadeIndex), 0);
-				shadow += dot(depths > compareValue[cascadeIndex], 0.25);
+				float4 depths = SharedShadowMap.GatherRed(LinearSampler, float3(saturate(sampledPositionLS.xy), cascadeIndex), 0);
+				shadow += dot(depths > compareValue, 0.25);
 			}
 		} else {
 			shadow = 1.0;
 		}
 
+		float fadeFactor = 1.0 - pow(saturate(dot(positionWS, positionWS) / sD.ShadowLightParam.z), 8);
 		return lerp(1.0, shadow * rcpSampleCount, fadeFactor);
 	}
 
@@ -94,9 +90,7 @@ namespace ShadowSampling
 
 		float visibility = 0.0;
 
-#if defined(WATER)
-		sampleOffsetScale *= 2.0;
-#endif
+		sampleOffsetScale *= 4.0;
 
 		for (uint sampleIndex = 0; sampleIndex < sampleCount; ++sampleIndex) {
 			float2 sampleOffset = mul(Random::PoissonSampleOffsets16[sampleIndex], rotationMatrix);

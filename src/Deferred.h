@@ -67,8 +67,16 @@ public:
 	STATIC_ASSERT_ALIGNAS_16(PerGeometry);
 
 	ID3D11ComputeShader* copyShadowCS = nullptr;
+	ID3D11ComputeShader* downsampleShadowCS = nullptr;
 	Buffer* perShadow = nullptr;
 	ID3D11ShaderResourceView* shadowView = nullptr;
+
+	ID3D11Texture2D* shadowCopyTexture = nullptr;
+	ID3D11ShaderResourceView* shadowCopySRV = nullptr;
+	ID3D11UnorderedAccessView* shadowCopyUAV = nullptr;
+	uint32_t shadowCopyWidth = 0;
+	uint32_t shadowCopyHeight = 0;
+	uint32_t shadowCopyArraySize = 0;
 
 	struct Hooks
 	{
