@@ -199,7 +199,8 @@ namespace ShadowSampling
 
 		// Calculate total expected lighting and find scale to match input
 		float3 totalLight = ambientColorAmb + dirLightColorDir;
-		float3 scale = totalLight > 0.0 ? inputColor / totalLight : 1.0;
+		float3 safeTotal = max(totalLight, 1e-5);
+		float3 scale = inputColor / safeTotal;
 
 		// Distribute proportionally
 		ambientColor = ambientColorAmb * scale;
