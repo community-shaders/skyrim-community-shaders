@@ -43,7 +43,7 @@ namespace ShadowSampling
 	{
 		ShadowData sD = SharedShadowData[0];
 
-		static const uint sampleCount = 16;
+		static const uint sampleCount = 8;
 		static const float rcpSampleCount = 1.0 / float(sampleCount);
 
 		float noise = Random::InterleavedGradientNoise(screenPosition, SharedData::FrameCount);
@@ -57,21 +57,21 @@ namespace ShadowSampling
 		float shadow = 0.0;
 		if (sD.EndSplitDistances.z >= shadowMapDepth) {
 			float cascade1Probability = saturate((shadowMapDepth - sD.StartSplitDistances.y) / (sD.EndSplitDistances.x - sD.StartSplitDistances.y));
-
+			
 			// Precompute cascade data for both cascades
 			float compareValues[2];
 			float sampleRadii[2];
 			float3 positionsLS[2];
 			float3 viewOffsetsLS[2];
-
+			
 			[unroll]
 			for (uint cascadeIdx = 0; cascadeIdx < 2; cascadeIdx++) {
 				compareValues[cascadeIdx] = mul(transpose(sD.ShadowMapProj[eyeIndex][cascadeIdx]), float4(positionWS, 1)).z - sD.AlphaTestRef[1 + cascadeIdx];
 				sampleRadii[cascadeIdx] = sD.ShadowSampleParam.z * rcp(1 + cascadeIdx) * 2.0;
-
+				
 #if defined(EFFECT)
-				// Base fuzziness for non-billboards + enough for Sovngarde fog
-				float viewRayLength = 8.0 + Permutation::BillboardRadius * 0.1;
+				// Enough for non-billboards + enough for Sovngarde fog
+				float viewRayLength = 16.0 + Permutation::BillboardRadius * 0.1;
 				positionsLS[cascadeIdx] = mul(transpose(sD.ShadowMapProj[eyeIndex][cascadeIdx]), float4(positionWS - viewDirection * viewRayLength, 1));
 				viewOffsetsLS[cascadeIdx] = mul(transpose(sD.ShadowMapProj[eyeIndex][cascadeIdx]), float4(positionWS + viewDirection * viewRayLength, 1));
 #else
@@ -85,7 +85,7 @@ namespace ShadowSampling
 			for (uint i = 0; i < sampleCount; i++) {
 				uint noisyIndex = uint((float(i) + sampleCount * noise) % sampleCount);
 				float t = (float(sampleCount) - float(noisyIndex + 1)) * rcpSampleCount;
-				uint cascadeIndex = frac(t + noiseTransform) < cascade1Probability;
+				uint cascadeIndex = frac(t + noise) < cascade1Probability;
 
 				float compareValue = compareValues[cascadeIndex];
 				float sampleRadius = sampleRadii[cascadeIndex];
@@ -96,7 +96,7 @@ namespace ShadowSampling
 				float3 sampledPositionLS = lerp(positionLS, viewOffsetLS, t + noiseTransform * rcpSampleCount);
 
 				// Blur shadow with poisson disc
-				sampledPositionLS.xy += mul(Random::PoissonSampleOffsets16[i], rotationMatrix) * sampleRadius;
+				sampledPositionLS.xy += mul(Random::SpiralSampleOffsets8[i], rotationMatrix) * sampleRadius;
 
 				// Average 4 shadow samples for improved quality
 				float4 depths = SharedShadowMap.GatherRed(LinearSampler, float3(saturate(sampledPositionLS.xy), cascadeIndex), 0);
