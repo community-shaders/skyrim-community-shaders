@@ -434,14 +434,6 @@ cbuffer AlphaTestRefCB : register(b11)
 #		include "DynamicCubemaps/DynamicCubemaps.hlsli"
 #	endif
 
-#	if defined(TERRAIN_SHADOWS)
-#		include "TerrainShadows/TerrainShadows.hlsli"
-#	endif
-
-#	if defined(CLOUD_SHADOWS)
-#		include "CloudShadows/CloudShadows.hlsli"
-#	endif
-
 #	if defined(SKYLIGHTING)
 #		include "Skylighting/Skylighting.hlsli"
 #	endif

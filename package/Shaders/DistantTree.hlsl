@@ -167,14 +167,6 @@ const static float DepthOffsets[16] = {
 #		include "ScreenSpaceShadows/ScreenSpaceShadows.hlsli"
 #	endif
 
-#	if defined(TERRAIN_SHADOWS)
-#		include "TerrainShadows/TerrainShadows.hlsli"
-#	endif
-
-#	if defined(CLOUD_SHADOWS)
-#		include "CloudShadows/CloudShadows.hlsli"
-#	endif
-
 #	if defined(IBL)
 #		include "IBL/IBL.hlsli"
 #	endif
