@@ -98,8 +98,20 @@ void WeatherManager::UpdateFeatures()
 					LoadSettingsFromWeather(currentWeathers.currentWeather, featureName, nextWeatherSettings);
 				}
 
-				// Let the global registry handle variable interpolation
-				globalRegistry->UpdateFeatureFromWeathers(featureName, currWeatherSettings, nextWeatherSettings, currentWeathers.lerpFactor);
+				// If transition is complete (lerpFactor >= 1.0) and current weather has no override,
+				// ensure values are set to user settings baseline to prevent contamination from previous overrides
+				if (currentWeathers.lerpFactor >= 1.0f && nextWeatherSettings.empty()) {
+					auto* featureRegistry = globalRegistry->GetFeatureRegistry(featureName);
+					if (featureRegistry) {
+						const auto& variables = featureRegistry->GetVariables();
+						for (const auto& var : variables) {
+							var->SetToUserSettings();
+						}
+					}
+				} else {
+					// Let the global registry handle variable interpolation
+					globalRegistry->UpdateFeatureFromWeathers(featureName, currWeatherSettings, nextWeatherSettings, currentWeathers.lerpFactor);
+				}
 			}
 		}
 

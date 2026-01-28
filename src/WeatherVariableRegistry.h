@@ -42,6 +42,7 @@ namespace WeatherVariables
 		virtual std::string GetDisplayName() const = 0;
 		virtual std::string GetTooltip() const = 0;
 		virtual void CaptureUserSettingsValue() = 0;
+		virtual void SetToUserSettings() = 0;
 	};
 
 	// Templated weather variable for type safety
@@ -137,6 +138,13 @@ namespace WeatherVariables
 		{
 			if (valuePtr) {
 				userSettingsValue = *valuePtr;
+			}
+		}
+
+		void SetToUserSettings() override
+		{
+			if (valuePtr) {
+				*valuePtr = userSettingsValue;
 			}
 		}
 
