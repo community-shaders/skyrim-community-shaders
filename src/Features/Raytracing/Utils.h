@@ -214,7 +214,7 @@ static inline std::string GetFlagsString(auto value)
 
 	const auto& entries = magic_enum::enum_entries<T>();
 
-	std::string flags;
+	std::string flags = "";
 
 	for (const auto& [flag, name] : entries) {
 		if (value & static_cast<N>(flag)) {

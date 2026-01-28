@@ -644,10 +644,11 @@ void Raytracing::DrawDebugSettings()
 	}
 
 	// Debug Draw Original and Converted Normal Maps
-#if defined(DEBUG_MSNCONVERSION)
-	if (!normalMaps.empty())
-	{
-		eastl::vector<std::pair<ID3D11Texture2D*, ConvertedNormalMap*>> normalMapVector;
+//#if defined(DEBUG_MSNCONVERSION)
+	if (normalMaps.empty()) {
+		ImGui::Text("No normal maps converted.");
+	} else {
+		eastl::vector<std::pair<ID3D11Resource*, ConvertedNormalMap*>> normalMapVector;
 
 		for (auto& [msNormal, convertedNormal] : normalMaps) {
 			normalMapVector.emplace_back(msNormal, convertedNormal.get());
@@ -692,7 +693,7 @@ void Raytracing::DrawDebugSettings()
 			ImGui::Image(convertedNormal->Texture->srv.get(), ImVec2(256, 256));
 		}
 	}
-#endif
+//#endif
 
 	ImGui::Image(skyHemisphere->srv, ImVec2(512, 512));
 
@@ -2122,7 +2123,7 @@ void Raytracing::CreateModelInternal(RE::TESForm* form, const char* path, RE::Ni
 		return;
 	}
 
-	logger::info("[RT] CreateModel - Path: {}, FormID [0x{:08X}], NiNode [0x{:08X}]: {}", path, formID, reinterpret_cast<uintptr_t>(pRoot), pRoot->name);
+	logger::debug("[RT] CreateModel - Path: {}, FormID [0x{:08X}], NiNode [0x{:08X}]: {}", path, formID, reinterpret_cast<uintptr_t>(pRoot), pRoot->name);
 
 	auto formType = form->GetFormType();
 
@@ -2133,7 +2134,7 @@ void Raytracing::CreateModelInternal(RE::TESForm* form, const char* path, RE::Ni
 	TraverseScenegraphRTGeometries(pRoot, [&](RE::BSGeometry* pGeometry) -> RE::BSVisit::BSVisitControl {
 		const char* name = pGeometry->name.c_str();
 
-		logger::info("\t\t[RT] CreateModel::TraverseScenegraphGeometries - {}", name);
+		logger::debug("\t\t[RT] CreateModel::TraverseScenegraphGeometries - {}", name);
 
 		const auto& geometryType = pGeometry->GetType();
 
@@ -2269,7 +2270,7 @@ void Raytracing::CreateModelInternal(RE::TESForm* form, const char* path, RE::Ni
 
 			AddInstance(formID, pRoot, modelKey);
 
-			logger::info("[RT] CreateModel - Commited {} TriShapes", shapeCount);
+			logger::debug("[RT] CreateModel - Commited {} TriShapes", shapeCount);
 		} else {
 			logger::warn("[RT] CreateModel - Emplace failed for {} TriShapes", shapeCount);
 		}
@@ -2365,7 +2366,10 @@ eastl::shared_ptr<Allocation> Raytracing::GetTextureRegister(ID3D11Texture2D* dx
 	hr = dxgiResource->GetSharedHandle(&sharedHandle);
 
 	if (FAILED(hr) || !sharedHandle) {
-		logger::error("[RT] GetTextureRegister - Failed to get shared handle.");
+		D3D11_TEXTURE2D_DESC desc;
+		dx11Texture->GetDesc(&desc);
+
+		logger::warn("[RT] GetTextureRegister - Failed to get shared handle - [{}, {}] Format: {}, Flags: {}", desc.Width, desc.Height, magic_enum::enum_name(desc.Format), GetFlagsString<D3D11_RESOURCE_MISC_FLAG>(desc.MiscFlags));
 		return defaultTexture;
 	}
 
@@ -2416,13 +2420,7 @@ eastl::shared_ptr<Allocation> Raytracing::GetMSNormalMapRegister([[maybe_unused]
 {
 	std::lock_guard lock{ textureRegisterMutex };
 
-	ID3D11Texture2D* texture2D = nullptr;
-
-	HRESULT hr = texture->texture->QueryInterface(IID_PPV_ARGS(&texture2D));
-	if (FAILED(hr)) {
-		logger::error("[RT] GetTextureRegister - Failed to get ID3D11Texture2D");
-		return defaultTexture;
-	}
+	auto* texture2D = reinterpret_cast<ID3D11Texture2D*>(texture->texture);
 
 	if (auto refIt = normalMaps.find(texture2D); refIt != normalMaps.end()) {
 		return refIt->second->Reference->allocation;
@@ -2472,10 +2470,10 @@ eastl::shared_ptr<Allocation> Raytracing::GetMSNormalMapRegister([[maybe_unused]
 
 		// Share the new texture
 		winrt::com_ptr<IDXGIResource> dxgiResource;
-		hr = normalMap->Texture->resource->QueryInterface(IID_PPV_ARGS(dxgiResource.put()));
+		HRESULT hr = normalMap->Texture->resource->QueryInterface(IID_PPV_ARGS(dxgiResource.put()));
 
 		if (FAILED(hr)) {
-			logger::error("[RT] GetTextureRegister - Failed to query interface.");
+			logger::error("[RT] GetMSNormalMapRegister - Failed to query interface.");
 			return defaultTexture;
 		}
 
@@ -2483,7 +2481,7 @@ eastl::shared_ptr<Allocation> Raytracing::GetMSNormalMapRegister([[maybe_unused]
 		hr = dxgiResource->GetSharedHandle(&sharedHandle);
 
 		if (FAILED(hr) || !sharedHandle) {
-			logger::error("[RT] GetTextureRegister - Failed to get shared handle.");
+			logger::error("[RT] GetMSNormalMapRegister - Failed to get shared handle.");
 			return defaultTexture;
 		}
 
@@ -2493,12 +2491,12 @@ eastl::shared_ptr<Allocation> Raytracing::GetMSNormalMapRegister([[maybe_unused]
 		CloseHandle(sharedHandle);
 
 		if (FAILED(hr)) {
-			logger::error("[RT] GetTextureRegister - Failed to open shared handle.");
+			logger::error("[RT] GetMSNormalMapRegister - Failed to open shared handle.");
 			return defaultTexture;
 		}
 
 		if (!dx12Texture) {
-			logger::error("[RT] GetTextureRegister - Failed to adquire DX12 texture.");
+			logger::error("[RT] GetMSNormalMapRegister - Failed to adquire DX12 texture.");
 			return defaultTexture;
 		}
 

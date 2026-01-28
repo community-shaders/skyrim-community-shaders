@@ -79,7 +79,7 @@ void Model::ConvertMSN()
 		if (convertedNormalMap->converted)
 			continue;
 
-		rt.normalMapConverter->Setup(reinterpret_cast<ID3D11Texture2D*>(msnMap));
+		rt.normalMapConverter->Setup(msnMap);
 
 		context->PSSetShaderResources(0, 1, &convertedNormalMap->OriginalSRV);
 

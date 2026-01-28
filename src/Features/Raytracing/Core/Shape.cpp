@@ -324,14 +324,7 @@ eastl::shared_ptr<Allocation> Shape::TextureRegister(const RE::NiPointer<RE::NiS
 	if (modelSpaceNormalMap)
 		return rt.GetMSNormalMapRegister(this, niPointer->rendererTexture, defaultTexture);
 	else {
-		ID3D11Texture2D* texture2D = nullptr;
-
-		HRESULT hr = niPointer->rendererTexture->texture->QueryInterface(IID_PPV_ARGS(&texture2D));
-		if (FAILED(hr)) {
-			return defaultTexture;
-		}
-
-		return rt.GetTextureRegister(texture2D, defaultTexture);
+		return rt.GetTextureRegister(reinterpret_cast<ID3D11Texture2D*>(niPointer->rendererTexture->texture), defaultTexture);
 	}
 }
 
@@ -384,10 +377,13 @@ void Shape::BuildMaterial(const RE::BSGeometry::GEOMETRY_RUNTIME_DATA& geometryR
 		auto* effect = geometryRuntimeData.properties[State::kEffect].get();
 
 		if (effect) {
+			if (RE::BSShaderProperty* shaderProp = netimmerse_cast<RE::BSShaderProperty*>(effect))
+				shaderFlags = shaderProp->flags.get();
+
 			if (RE::BSLightingShaderProperty* lightingShaderProp = skyrim_cast<RE::BSLightingShaderProperty*>(effect)) {
 				shaderType = RE::BSShader::Type::Lighting;
 
-				logger::info("[RT] BuildMaterial - BSLightingShaderProperty [0x{:08X}] Flags: {}", reinterpret_cast<uintptr_t>(lightingShaderProp), GetFlagsString<EShaderPropertyFlag>(lightingShaderProp->flags.underlying()));
+				logger::debug("[RT] BuildMaterial - BSLightingShaderProperty [0x{:08X}] Flags: {}", reinterpret_cast<uintptr_t>(lightingShaderProp), GetFlagsString<EShaderPropertyFlag>(lightingShaderProp->flags.underlying()));
 
 				// Set alpha flags
 				if (flags & Flags::AlphaBlending) {

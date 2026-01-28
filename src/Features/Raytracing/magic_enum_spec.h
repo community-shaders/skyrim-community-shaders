@@ -23,4 +23,10 @@ namespace magic_enum::customize
 	{
 		static constexpr bool is_flags = true;
 	};
+
+	template <>
+	struct enum_range<D3D11_RESOURCE_MISC_FLAG>
+	{
+		static constexpr bool is_flags = true;
+	};
 }
