@@ -359,11 +359,11 @@ void main()
                 throughput /= (1.0f - rrProb);
             }
 
-            float dirDotGeom = dot(direction, surface.GeomNormal);
-            float3 offsetNormal = dirDotGeom > 0.0 ? surface.GeomNormal : -surface.GeomNormal;
-            ray.Origin = OffsetRay(surface.Position, offsetNormal);
+            // Use hasTransmission flag to properly determine ray offset direction
+            // instead of re-checking direction against geom normal
+            ray.Origin = OffsetRay(surface.Position, surface.GeomNormal, hasTransmission);
             ray.Direction = direction;
-            ray.TMin = 0.01f;
+            ray.TMin = 0.0f;  // OffsetRay already handles precision, no additional offset needed
             ray.TMax = RAY_TMAX;
 
             payload.hitDistance = -1.0f;

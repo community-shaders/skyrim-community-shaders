@@ -114,7 +114,7 @@ float3 TraceRayShadow(RaytracingAccelerationStructure scene, Surface surface, fl
     bool hasTransmission = dot(surface.GeomNormal, direction) < 0.0f;
     ray.Origin = OffsetRay(surface.Position, surface.GeomNormal, hasTransmission);
     ray.Direction = direction;
-    ray.TMin = 0.01f;
+    ray.TMin = 0.0f;
     ray.TMax = SHADOW_RAY_TMAX;
 
     ShadowPayload shadowPayload;
@@ -134,7 +134,7 @@ float3 TraceRayShadowFinite(RaytracingAccelerationStructure scene, Surface surfa
     bool hasTransmission = dot(surface.GeomNormal, direction) < 0.0f;
     ray.Origin = OffsetRay(surface.Position, surface.GeomNormal, hasTransmission);
     ray.Direction = direction;
-    ray.TMin = 0.01f;
+    ray.TMin = 0.0f;
     ray.TMax = tmax;
 
     ShadowPayload shadowPayload;
