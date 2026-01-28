@@ -113,6 +113,7 @@ void Widget::Load()
 		}
 
 		LoadSettings();
+		ApplyChanges();
 
 		EditorWindow::GetSingleton()->ShowNotification(
 			std::format("Loaded saved settings for {}", GetEditorID()),
