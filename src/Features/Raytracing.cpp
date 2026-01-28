@@ -1125,6 +1125,8 @@ void Raytracing::SetupResources()
 	{
 		transformBuffer = eastl::make_unique<DX12::StructuredBufferUpload<float3x4>>(d3d12Device.get(), RTConstants::MAX_TRANSFORMS);
 		DX::ThrowIfFailed(transformBuffer->resource->SetName(L"Transform Buffer"));
+
+		transformBuffer->TransitionBarrier(commandList.get(), D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
 	}
 
 	// Create instance buffer for BLAS
@@ -1737,9 +1739,8 @@ void Raytracing::SkyCubeToHemi() const
 	context->CSSetShader(cubeToHemiCS.get(), nullptr, 0);
 
 	auto reflections = globals::game::renderer->GetRendererData().cubemapRenderTargets[RE::RENDER_TARGET_CUBEMAP::kREFLECTIONS];
-	auto reflectionOcc = globals::features::cloudShadows.loaded ? globals::features::cloudShadows.texCubemapCloudOcc->srv.get() : nullptr;
+	auto reflectionOcc = globals::features::cloudShadows.loaded ? globals::features::cloudShadows.texCubemapCloudOccCopy->srv.get() : nullptr;
 
-	//globals::features::cloudShadows.texCubemapCloudOcc
 	eastl::array<ID3D11ShaderResourceView*, 2> srvs = {
 		reflections.SRV,
 		reflectionOcc
@@ -1752,9 +1753,7 @@ void Raytracing::SkyCubeToHemi() const
 	ID3D11UnorderedAccessView* uav = skyHemisphere->uav;
 	context->CSSetUnorderedAccessViews(0, 1, &uav, nullptr);
 
-	float hemiResolution = RTConstants::SKY_HEMI_SIZE;
-	uint dispatch = (uint)std::ceil(hemiResolution / 8.0f);
-
+	uint dispatch = (uint)std::ceil(RTConstants::SKY_HEMI_SIZE / 8.0f);
 	context->Dispatch(dispatch, dispatch, 1);
 
 	uav = nullptr;
