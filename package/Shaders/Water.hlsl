@@ -434,16 +434,8 @@ float CalculateDepthMultFromUV(float2 uv, float depth, uint eyeIndex = 0)
 #		define SampColorSampler Normals01Sampler
 #		define LinearSampler Normals01Sampler
 
-#		if defined(TERRAIN_SHADOWS)
-#			include "TerrainShadows/TerrainShadows.hlsli"
-#		endif
-
 #		if defined(SKYLIGHTING)
 #			include "Skylighting/Skylighting.hlsli"
-#		endif
-
-#		if defined(CLOUD_SHADOWS)
-#			include "CloudShadows/CloudShadows.hlsli"
 #		endif
 
 #		include "Common/ShadowSampling.hlsli"
@@ -1128,8 +1120,6 @@ PS_OUTPUT main(PS_INPUT input)
 	float3 viewPosition = mul(FrameBuffer::CameraView[eyeIndex], float4(input.WPosition.xyz, 1)).xyz;
 	float2 screenUV = FrameBuffer::ViewToUV(viewPosition, true, eyeIndex);
 
-	float dirShadow = ShadowSampling::GetEffectShadow(input.WPosition.xyz, normalize(input.WPosition.xyz), input.HPosition.xy, eyeIndex);
-
 	float skylightingDiffuse = 1.0;
 	float skylightingSpecular = 1.0;
 	float wetnessOcclusion = 1.0;
@@ -1193,6 +1183,8 @@ PS_OUTPUT main(PS_INPUT input)
 
 	float3 specularColor = GetWaterSpecularColor(input, normal, viewDirection, distanceFactor, depthControl.y, eyeIndex, skylightingSpecular);
 	DiffuseOutput diffuseOutput = GetWaterDiffuseColor(input, normal, viewDirection, distanceMul, depthControl.y, fresnel, eyeIndex, viewPosition, depth);
+
+	float dirShadow = ShadowSampling::GetEffectShadow(input.WPosition.xyz, normalize(input.WPosition.xyz), input.HPosition.xy, eyeIndex);
 
 	float3 dirColor;
 	float3 ambientColor;
