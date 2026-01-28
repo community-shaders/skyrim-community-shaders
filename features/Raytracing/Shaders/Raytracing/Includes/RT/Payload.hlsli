@@ -1,6 +1,8 @@
 #ifndef PAYLOAD_HLSL
 #define PAYLOAD_HLSL
 
+#include "Raytracing/Includes/Materials/TexLODHelpers.hlsli"
+
 uint PackUnorm2x16(float2 v)
 {
     uint2 u = (uint2)round(saturate(v) * 65535.0f);
@@ -20,6 +22,7 @@ struct Payload
     uint barycentricsPacked;
     uint instanceGeometryIndexPacked;
     uint randomSeed;
+    RayCone rayCone;
 
     void PackBarycentrics(float2 barycentrics)
     {
