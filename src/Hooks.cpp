@@ -180,10 +180,9 @@ namespace EffectExtensions
 					state->permutationData.BillboardRadius = billboardNode->worldBound.radius;
 				}
 			}
-			}
 		}
-		static inline REL::Relocation<decltype(thunk)> func;
-	};
+	} static inline REL::Relocation<decltype(thunk)> func;
+};
 }
 
 namespace LightingExtensions
