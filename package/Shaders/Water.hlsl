@@ -1135,33 +1135,34 @@ PS_OUTPUT main(PS_INPUT input)
 	float wetnessOcclusion = 1.0;
 
 #			if defined(SKYLIGHTING)
-	{
-		const bool inWorld = (Permutation::ExtraShaderDescriptor & Permutation::ExtraFlags::InWorld);
+	const bool inWorld = (Permutation::ExtraShaderDescriptor & Permutation::ExtraFlags::InWorld);
 #				if defined(VR)
-		float3 positionMSSkylight = input.WPosition.xyz + FrameBuffer::CameraPosAdjust[eyeIndex].xyz - FrameBuffer::CameraPosAdjust[0].xyz;
+	float3 positionMSSkylight = input.WPosition.xyz + FrameBuffer::CameraPosAdjust[eyeIndex].xyz - FrameBuffer::CameraPosAdjust[0].xyz;
 #				else
-		float3 positionMSSkylight = input.WPosition.xyz;
+	float3 positionMSSkylight = input.WPosition.xyz;
 #				endif
 
-		sh2 skylightingSH = Skylighting::sampleNoBias(SharedData::skylightingSettings, Skylighting::SkylightingProbeArray, positionMSSkylight);
-		float skylighting = SphericalHarmonics::Unproject(skylightingSH, float3(0, 0, 1));
+	sh2 skylightingSH = Skylighting::sampleNoBias(SharedData::skylightingSettings, Skylighting::SkylightingProbeArray, positionMSSkylight);
+	float skylighting = SphericalHarmonics::Unproject(skylightingSH, float3(0, 0, 1));
 
-		skylightingDiffuse = SphericalHarmonics::FuncProductIntegral(skylightingSH, SphericalHarmonics::EvaluateCosineLobe(float3(0, 0, 1))) / Math::PI;
-		skylightingDiffuse = saturate(skylightingDiffuse);
-		skylightingDiffuse = lerp(1.0, skylightingDiffuse, Skylighting::getFadeOutFactor(input.WPosition.xyz));
+	skylightingDiffuse = SphericalHarmonics::FuncProductIntegral(skylightingSH, SphericalHarmonics::EvaluateCosineLobe(float3(0, 0, 1))) / Math::PI;
+	skylightingDiffuse = saturate(skylightingDiffuse);
+	skylightingDiffuse = lerp(1.0, skylightingDiffuse, Skylighting::getFadeOutFactor(input.WPosition.xyz));
+	skylightingDiffuse = Skylighting::mixDiffuse(SharedData::skylightingSettings, skylightingDiffuse);
 
-		skylightingSpecular = skylightingDiffuse;
-
-		skylightingDiffuse = Skylighting::mixDiffuse(SharedData::skylightingSettings, skylightingDiffuse);
-		skylightingSpecular = Skylighting::mixSpecular(SharedData::skylightingSettings, skylightingSpecular);
-
-		wetnessOcclusion = inWorld ? pow(saturate(skylighting), 2) : 0;
-	}
+	wetnessOcclusion = inWorld ? pow(saturate(skylighting), 2) : 0;
 #			endif
 
 	WaterNormalData waterData = GetWaterNormal(input, distanceFactor, depthControl.z, viewDirection, depth, eyeIndex, wetnessOcclusion);
 
 	float3 normal = waterData.normal;
+
+#			if defined(SKYLIGHTING)
+	sh2 specularLobe = SphericalHarmonics::FauxSpecularLobe(normal, -viewDirection, 0.0);
+	skylightingSpecular = SphericalHarmonics::FuncProductIntegral(skylighting, specularLobe);
+	skylightingSpecular = saturate(skylightingSpecular);
+	skylightingSpecular = Skylighting::mixSpecular(SharedData::skylightingSettings, skylightingSpecular);
+#			endif
 
 	float fresnel = GetFresnelValue(normal, viewDirection);
 
