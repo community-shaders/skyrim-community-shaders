@@ -49,7 +49,7 @@ namespace ShadowSampling
 		float noise = Random::InterleavedGradientNoise(screenPosition, SharedData::FrameCount);
 		float noiseTransform = noise * 2.0 - 1.0;
 		float2 rotation;
-		sincos(Math::TAU * noiseTransform, rotation.y, rotation.x);
+		sincos(Math::TAU * noise, rotation.y, rotation.x);
 		float2x2 rotationMatrix = float2x2(rotation.x, rotation.y, -rotation.y, rotation.x);
 
 		float shadowMapDepth = GetShadowDepth(positionWS, eyeIndex);
@@ -57,28 +57,43 @@ namespace ShadowSampling
 		float shadow = 0.0;
 		if (sD.EndSplitDistances.z >= shadowMapDepth) {
 			float cascade1Probability = saturate((shadowMapDepth - sD.StartSplitDistances.y) / (sD.EndSplitDistances.x - sD.StartSplitDistances.y));
-			uint cascadeIndex = noise < cascade1Probability; // Stochastic cascade selection
-
-			float compareValue = mul(transpose(sD.ShadowMapProj[eyeIndex][cascadeIndex]), float4(positionWS, 1)).z - sD.AlphaTestRef[1 + cascadeIndex];
-			float sampleRadius = sD.ShadowSampleParam.z * rcp(1 + cascadeIndex);
-
-			float viewRayLength = 128;
-
-			// Minimum and maximum positions along view ray
+			
+			// Precompute cascade data for both cascades
+			float compareValues[2];
+			float sampleRadii[2];
+			float3 positionsLS[2];
+			float3 viewOffsetsLS[2];
+			
+			[unroll]
+			for (uint cascadeIdx = 0; cascadeIdx < 2; cascadeIdx++) {
+				compareValues[cascadeIdx] = mul(transpose(sD.ShadowMapProj[eyeIndex][cascadeIdx]), float4(positionWS, 1)).z - sD.AlphaTestRef[1 + cascadeIdx];
+				sampleRadii[cascadeIdx] = sD.ShadowSampleParam.z * rcp(1 + cascadeIdx) * 2.0;
+				
 #if defined(EFFECT)
-			// Go both forwards and backwards due to billboards
-			viewRayLength *= 0.5;
-			float3 positionLS = mul(transpose(sD.ShadowMapProj[eyeIndex][cascadeIndex]), float4(positionWS - viewDirection * viewRayLength, 1));
-			float3 viewOffsetLS = mul(transpose(sD.ShadowMapProj[eyeIndex][cascadeIndex]), float4(positionWS + viewDirection * viewRayLength, 1));
+				// Base fuzziness for non-billboards + enough for Sovngarde fog
+				float viewRayLength = 8.0 + Permutation::BillboardRadius * 0.1;
+				positionsLS[cascadeIdx] = mul(transpose(sD.ShadowMapProj[eyeIndex][cascadeIdx]), float4(positionWS - viewDirection * viewRayLength, 1));
+				viewOffsetsLS[cascadeIdx] = mul(transpose(sD.ShadowMapProj[eyeIndex][cascadeIdx]), float4(positionWS + viewDirection * viewRayLength, 1));
 #else
-			float3 positionLS = mul(transpose(sD.ShadowMapProj[eyeIndex][cascadeIndex]), float4(positionWS, 1));
-			float3 viewOffsetLS = mul(transpose(sD.ShadowMapProj[eyeIndex][cascadeIndex]), float4(positionWS + viewDirection * viewRayLength, 1));
+				// Enough for Eastmarch water
+				float viewRayLength = 128.0;
+				positionsLS[cascadeIdx] = mul(transpose(sD.ShadowMapProj[eyeIndex][cascadeIdx]), float4(positionWS, 1));
+				viewOffsetsLS[cascadeIdx] = mul(transpose(sD.ShadowMapProj[eyeIndex][cascadeIdx]), float4(positionWS + viewDirection * viewRayLength, 1));
 #endif
+			}
 
 			for (uint i = 0; i < sampleCount; i++) {
-				// Random offset along view ray
-				float t = (float(i) - float(sampleCount)) * rcpSampleCount;
-				float3 sampledPositionLS = lerp(positionLS, viewOffsetLS, frac(t + noiseTransform));
+				uint noisyIndex = uint((float(i) + sampleCount * noise) % sampleCount);
+				float t = (float(sampleCount) - float(noisyIndex + 1)) * rcpSampleCount;
+				uint cascadeIndex = frac(t + noiseTransform) < cascade1Probability;
+
+				float compareValue = compareValues[cascadeIndex];
+				float sampleRadius = sampleRadii[cascadeIndex];
+				float3 positionLS = positionsLS[cascadeIndex];
+				float3 viewOffsetLS = viewOffsetsLS[cascadeIndex];
+
+				// Offset along view ray with optimised sample pattern
+				float3 sampledPositionLS = lerp(positionLS, viewOffsetLS, t + noiseTransform * rcpSampleCount);
 
 				// Blur shadow with poisson disc
 				sampledPositionLS.xy += mul(Random::PoissonSampleOffsets16[i], rotationMatrix) * sampleRadius;
@@ -197,31 +212,48 @@ namespace ShadowSampling
 	{
 		float3 ambientColorAmb = max(0, mul(SharedData::DirectionalAmbient, float4(0, 0, 1, 1)));
 
-	#   if defined(IBL)
-		if (SharedData::iblSettings.EnableDiffuseIBL && (!SharedData::InInterior || SharedData::iblSettings.EnableInterior)) {
-			ambientColorAmb *= SharedData::iblSettings.DALCAmount;
-	#       if defined(SKYLIGHTING) && !defined(INTERIOR)
-			float3 iblColor = Color::Saturation(ImageBasedLighting::GetIBLColor(float3(0, 0, -1), skylightingDiffuse), SharedData::iblSettings.IBLSaturation) * SharedData::iblSettings.DiffuseIBLScale;
-	#       else
-			float3 iblColor = Color::Saturation(ImageBasedLighting::GetIBLColor(float3(0, 0, -1)), SharedData::iblSettings.IBLSaturation) * SharedData::iblSettings.DiffuseIBLScale;
-	#       endif
-			ambientColorAmb += Color::IrradianceToGamma(iblColor);
+#		if defined(IBL)
+	if (SharedData::iblSettings.EnableDiffuseIBL && (!SharedData::InInterior || SharedData::iblSettings.EnableInterior)) {
+		ambientColorAmb *= SharedData::iblSettings.DALCAmount;
+#			if defined(SKYLIGHTING) && !defined(INTERIOR)
+		float3 iblColor = Color::Saturation(ImageBasedLighting::GetIBLColor(float3(0, 0, -1), skylightingDiffuse), SharedData::iblSettings.IBLSaturation) * SharedData::iblSettings.DiffuseIBLScale;
+#			else
+		float3 iblColor = Color::Saturation(ImageBasedLighting::GetIBLColor(float3(0, 0, -1)), SharedData::iblSettings.IBLSaturation) * SharedData::iblSettings.DiffuseIBLScale;
+#			endif
+		ambientColorAmb += Color::IrradianceToGamma(iblColor);
+	}
+#		endif
+
+		float llDirLightMult = (SharedData::linearLightingSettings.enableLinearLighting && !SharedData::linearLightingSettings.isDirLightLinear) ? SharedData::linearLightingSettings.dirLightMult : 1.0f;
+		float3 dirLightColorDir = Color::DirectionalLight(SharedData::DirLightColor.xyz / max(llDirLightMult, 1e-5), SharedData::linearLightingSettings.isDirLightLinear) * llDirLightMult;
+
+		{
+			float maxScale = 1.0;
+			if (ambientColorAmb.x > 0.0)
+				maxScale = min(maxScale, inputColor.x / ambientColorAmb.x);
+			if (ambientColorAmb.y > 0.0)
+				maxScale = min(maxScale, inputColor.y / ambientColorAmb.y);
+			if (ambientColorAmb.z > 0.0)
+				maxScale = min(maxScale, inputColor.z / ambientColorAmb.z);
+			ambientColorAmb *= maxScale;
 		}
-	#   endif
 
-		float llDirLightMult = (SharedData::linearLightingSettings.enableLinearLighting && !SharedData::linearLightingSettings.isDirLightLinear)
-			? SharedData::linearLightingSettings.dirLightMult : 1.0f;
-		float3 dirLightColorDir = Color::DirectionalLight(SharedData::DirLightColor.xyz / max(llDirLightMult, 1e-5),
-			SharedData::linearLightingSettings.isDirLightLinear) * llDirLightMult;
+		{
+			float maxScale = 1.0;
+			if (dirLightColorDir.x > 0.0)
+				maxScale = min(maxScale, inputColor.x / dirLightColorDir.x);
+			if (dirLightColorDir.y > 0.0)
+				maxScale = min(maxScale, inputColor.y / dirLightColorDir.y);
+			if (dirLightColorDir.z > 0.0)
+				maxScale = min(maxScale, inputColor.z / dirLightColorDir.z);
+			dirLightColorDir *= maxScale;
+		}
 
-		// Calculate total expected lighting and find scale to match input
-		float3 totalLight = ambientColorAmb + dirLightColorDir;
-		float3 safeTotal = max(totalLight, 1e-5);
-		float3 scale = inputColor / safeTotal;
+		float3 dirLightColorAmb = max(0.0, inputColor - ambientColorAmb);
+		float3 ambientColorDir = max(0.0, inputColor - dirLightColorDir);
 
-		// Distribute proportionally
-		ambientColor = ambientColorAmb * scale;
-		dirColor = dirLightColorDir * scale;
+		dirColor = lerp(dirLightColorAmb, dirLightColorDir, 0.5);
+		ambientColor = lerp(ambientColorAmb, ambientColorDir, 0.5);
 	}
 }
 

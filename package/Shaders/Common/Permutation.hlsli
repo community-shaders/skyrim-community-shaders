@@ -80,6 +80,8 @@ namespace Permutation
 		uint PixelShaderDescriptor;
 		uint ExtraShaderDescriptor;
 		uint ExtraFeatureDescriptor;
+
+		float BillboardRadius;
 	};
 
 }

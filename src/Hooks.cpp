@@ -162,6 +162,29 @@ bool Hooks::BSShader_BeginTechnique::thunk(RE::BSShader* shader, uint32_t vertex
 	return shaderFound;
 }
 
+namespace EffectExtensions
+{
+	struct BSEffectShader_SetupGeometry
+	{
+		static void thunk(RE::BSShader* shader, RE::BSRenderPass* pass, uint32_t renderFlags)
+		{
+			func(shader, pass, renderFlags);
+
+			auto state = globals::state;
+
+			state->permutationData.BillboardRadius = 0.0f;
+
+			if (auto node = pass->geometry->parent) {
+				if (node->GetRTTI() == globals::rtti::NiBillboardNodeRTTI.get()) {
+					auto billboardNode = static_cast<RE::NiBillboardNode*>(node->parent);
+					state->permutationData.BillboardRadius = billboardNode->worldBound.radius;	
+				}
+			}
+		}
+		static inline REL::Relocation<decltype(thunk)> func;
+	};
+}
+
 namespace LightingExtensions
 {
 	struct BSLightingShader_SetupGeometry
@@ -883,6 +906,7 @@ namespace Hooks
 		stl::write_thunk_call<TESWaterReflections_Update_Actor_GetLOSPosition>(REL::RelocationID(31373, 32160).address() + REL::Relocate(0x1AD, 0x1CA, 0x1ed));
 
 		logger::info("Installing SetupGeometry hooks");
+		stl::write_vfunc<0x6, EffectExtensions::BSEffectShader_SetupGeometry>(RE::VTABLE_BSEffectShader[0]);
 		stl::write_vfunc<0x6, LightingExtensions::BSLightingShader_SetupGeometry>(RE::VTABLE_BSLightingShader[0]);
 		stl::write_thunk_call<GrassExtensions::BSGrassShaderProperty_ctor>(REL::RelocationID(15214, 15383).address() + REL::Relocate(0x45B, 0x4F5));
 		stl::write_vfunc<0x6, GrassExtensions::BSGrassShader_SetupGeometry>(RE::VTABLE_BSGrassShader[0]);

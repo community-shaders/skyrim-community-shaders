@@ -181,11 +181,14 @@ public:
 		uint ExtraShaderDescriptor;
 		uint ExtraFeatureDescriptor;
 
+		float BillboardRadius;
+		float3 pad0;
+		
 		bool operator==(const PermutationCB& other) const
 		{
 			return PixelShaderDescriptor == other.PixelShaderDescriptor &&
 			       ExtraShaderDescriptor == other.ExtraShaderDescriptor &&
-			       ExtraFeatureDescriptor == other.ExtraFeatureDescriptor;
+			       ExtraFeatureDescriptor == other.ExtraFeatureDescriptor && BillboardRadius == other.BillboardRadius;
 		}
 	};
 	STATIC_ASSERT_ALIGNAS_16(PermutationCB);
