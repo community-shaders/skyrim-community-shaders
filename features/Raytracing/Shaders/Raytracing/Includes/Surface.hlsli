@@ -152,10 +152,12 @@ struct Surface
             [branch]
             if (material.Feature == Feature::kGlowMap) {
                 Texture2D glowTexture = Textures[NonUniformResourceIndex(material.GlowTexture())];
+                float3 glow = glowTexture.SampleLevel(BaseSampler, texCoord0, 0).rgb;
+                
                 if (isWindows) {
-                    windowAlpha = glowTexture.SampleLevel(BaseSampler, texCoord0, 0).rgb;
+                    windowAlpha = glow;
                 }
-                Emissive = GlowToLinear(glowTexture.SampleLevel(BaseSampler, texCoord0, 0).rgb) * EmitColorToLinear(material.EffectColor().rgb) * material.EffectColor().a * Frame.Emissive * EmitColorMult();
+                Emissive = GlowToLinear(glow) * EmitColorToLinear(material.EffectColor().rgb) * material.EffectColor().a * Frame.Emissive * EmitColorMult();
             }
 
             [branch]

@@ -373,27 +373,9 @@ void Shape::BuildMaterial(const RE::BSGeometry::GEOMETRY_RUNTIME_DATA& geometryR
 			flags |= Flags::AlphaBlending;
 		}
 
-		if (property; auto* lightingShaderProp = netimmerse_cast<RE::BSLightingShaderProperty*>(property)) {
-			logger::info("[RT] BuildMaterial - [Prop] BSLightingShaderProperty Flags: {}", GetFlagsString<EShaderPropertyFlag>(lightingShaderProp->flags.underlying()));
-
-			if (auto& effectData = lightingShaderProp->effectData) {
-				logger::debug("[RT] BuildMaterial - Effect - Alpha: {}, Z Test Func: {}", effectData->alpha, magic_enum::enum_name(effectData->zTestFunc));
-			}
-		}
-
-		logger::trace("[RT] BuildMaterial {}", name);
-
 		auto* effect = geometryRuntimeData.properties[State::kEffect].get();
 
-		logger::trace("[RT] BuildMaterial - Effect RTTI: {}", effect->GetRTTI()->GetName());
-
 		if (effect) {
-			if (RE::BSShaderProperty* shaderProp = netimmerse_cast<RE::BSShaderProperty*>(effect)) {
-				shaderFlags = shaderProp->flags.get();
-
-				logger::debug("[RT] BuildMaterial - [Effect] BSLightingShaderProperty Flags: {}", GetFlagsString<EShaderPropertyFlag>(shaderFlags.underlying()));
-			}
-
 			if (RE::BSLightingShaderProperty* lightingShaderProp = skyrim_cast<RE::BSLightingShaderProperty*>(effect)) {
 				shaderType = RE::BSShader::Type::Lighting;
 
@@ -416,17 +398,16 @@ void Shape::BuildMaterial(const RE::BSGeometry::GEOMETRY_RUNTIME_DATA& geometryR
 					}
 				}
 
-				// This is always nullptr :(
-				if (auto& effectData = lightingShaderProp->effectData) {
-					logger::info("[RT] BuildMaterial - Effect - Alpha: {}, Z Test Func: {}", effectData->alpha, magic_enum::enum_name(effectData->zTestFunc));
-				}
+				if (lightingShaderProp->flags.any(EShaderPropertyFlag::kOwnEmit)) {
+					colors[1] = {
+						lightingShaderProp->emissiveColor->red,
+						lightingShaderProp->emissiveColor->green,
+						lightingShaderProp->emissiveColor->blue,
+						lightingShaderProp->emissiveMult
+					};
 
-				colors[1] = {
-					lightingShaderProp->emissiveColor->red,
-					lightingShaderProp->emissiveColor->green,
-					lightingShaderProp->emissiveColor->blue,
-					lightingShaderProp->emissiveMult
-				};
+					logger::info("[RT] BuildMaterial - Emissive Color: {}", colors[1]);
+				}
 
 				if (auto shaderMaterial = lightingShaderProp->material) {
 					feature = shaderMaterial->GetFeature();
