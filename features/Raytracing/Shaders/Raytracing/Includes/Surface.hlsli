@@ -399,13 +399,13 @@ struct Surface
 
         float3x3 objectToWorld3x3 = mul((float3x3) instance.Transform, (float3x3) shape.Transform);
 
-        float coneTexLODValue = ComputeRayConeTriangleLODValue(v0, v1, v2, objectToWorld3x3);
-        surface.MipLevel = payload.rayCone.computeLOD(coneTexLODValue, rayDir, normalW, true) + Frame.TexLODBias;
+        float coneTexLODValue = surface.ComputeRayConeTriangleLODValue(v0, v1, v2, objectToWorld3x3);
 
         float3 normalWS = normalize(mul(objectToWorld3x3, Interpolate(v0.Normal, v1.Normal, v2.Normal, uvw)));
         float3 tangentWS = normalize(mul(objectToWorld3x3, Interpolate(v0.Tangent, v1.Tangent, v2.Tangent, uvw)));
         float3 bitangentWS = normalize(mul(objectToWorld3x3, Interpolate(v0.Bitangent, v1.Bitangent, v2.Bitangent, uvw)));
 
+        surface.MipLevel = payload.rayCone.computeLOD(coneTexLODValue, rayDir, normalWS, true) + Frame.TexLODBias;
         surface.GeomNormal = normalWS;
 
         surface.Albedo = float3(1.0f, 1.0f, 1.0f);

@@ -437,4 +437,20 @@ bool refractRayCone(inout RayCone rayCone, float3 rayOrg, float3 rayDir, float3 
     return true;
 }
 
+// Experimental ray cone spread heuristic: assume pdf comes from an uniform sphere cap lobe. Then we can compute cone spread
+// angle alpha (a plane angle) from the uniform sphere cap solid angle (omega), which can be derived from pdf 
+// (omega = 1 / uniform_sphere_cap_pdf). 
+// The formula is alpha = 2 * acos( 1 - omega / 2*PI ) - see https://rechneronline.de/winkel/solid-angle.php
+// (This heuristic starts to break down for BSDFs with overlapping lobes but seems good enough in most cases - perhaps BSDF should be responsible providing the scatter angle).
+//
+// growthFactor 0.3 is very conservative underestimation, see https://www.jcgt.org/published/0010/01/01/paper.pdf, "Improved Shader and Texture Level of Detail Using Ray Cones", 
+// Chapter 3. Curvature Approximations            "...On the other hand, when ray cones are used inside a Monte Carlo path tracer, one would prefer slightly underestimating the 
+// spread angle, since antialiasing will be handled by stochastic supersampling anyway, and the main objective would be to avoid introducing overblur in the results."
+float ComputeRayConeSpreadAngleExpansionByScatterPDF(float pdf)
+{
+	const float minPDF = 0.0001;
+	pdf = max(pdf, minPDF);
+	return sqrt(1.0 / pdf);
+}
+
 #endif // __TEX_LOD_HELPERS_HLSLI__

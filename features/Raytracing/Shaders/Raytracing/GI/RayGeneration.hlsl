@@ -19,6 +19,7 @@
 #include "Raytracing/Includes/PBR.hlsli"
 
 #include "Raytracing/Includes/Materials/BSDF.hlsli"
+#include "Raytracing/Includes/Materials/TexLODHelpers.hlsli"
 
 [shader("raygeneration")]
 void main()
