@@ -73,7 +73,7 @@ namespace ShadowSampling
 #else
 			float3 positionLS = mul(transpose(sD.ShadowMapProj[eyeIndex][cascadeIndex]), float4(positionWS, 1));
 			float3 viewOffsetLS = mul(transpose(sD.ShadowMapProj[eyeIndex][cascadeIndex]), float4(positionWS + viewDirection * viewRayLength, 1));
-#endif  
+#endif
 
 			for (uint i = 0; i < sampleCount; i++) {
 				// Random offset along view ray
