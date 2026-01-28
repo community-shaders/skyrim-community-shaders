@@ -180,10 +180,13 @@ void WeatherManager::SaveSettingsToWeather(RE::TESWeather* weather, const std::s
 		std::error_code ec;
 		if (std::filesystem::remove(filePath, ec)) {
 			logger::info("Removed weather settings file (no data remain): {}", filePath);
-		} else if (ec) {
-			logger::warn("Failed to remove empty weather settings file ({}): {}", filePath, ec.message());
+			return;
 		}
-		return;
+		if (ec == std::errc::no_such_file_or_directory) {
+			return;
+		}
+		logger::warn("Failed to remove empty weather settings file ({}): {}", filePath, ec.message());
+		// fall through to write updated JSON as a best-effort fallback
 	}
 
 	std::ofstream settingsFile(filePath);
