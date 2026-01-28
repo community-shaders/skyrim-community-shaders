@@ -176,9 +176,10 @@ namespace EffectExtensions
 
 			if (auto node = pass->geometry->parent) {
 				if (node->GetRTTI() == globals::rtti::NiBillboardNodeRTTI.get()) {
-					auto billboardNode = static_cast<RE::NiBillboardNode*>(node->parent);
+					auto billboardNode = static_cast<RE::NiBillboardNode*>(node);
 					state->permutationData.BillboardRadius = billboardNode->worldBound.radius;
 				}
+			}
 			}
 		}
 		static inline REL::Relocation<decltype(thunk)> func;
