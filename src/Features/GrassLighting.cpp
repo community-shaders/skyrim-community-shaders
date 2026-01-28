@@ -6,7 +6,9 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	SpecularStrength,
 	SubsurfaceScatteringAmount,
 	OverrideComplexGrassSettings,
-	BasicGrassBrightness)
+	BasicGrassBrightness,
+	EnableWrappedLighting,
+	ComplexGrassThreshold)
 
 void GrassLighting::DrawSettings()
 {
@@ -20,6 +22,14 @@ void GrassLighting::DrawSettings()
 		ImGui::SliderFloat("Specular Strength", &settings.SpecularStrength, 0.0f, 1.0f);
 		if (auto _tt = Util::HoverTooltipWrapper()) {
 			ImGui::Text("Specular highlight strength.");
+		}
+
+		ImGui::Spacing();
+		ImGui::TextWrapped("Complex Grass Detection");
+		ImGui::SliderFloat("Detection Threshold", &settings.ComplexGrassThreshold, 0.001f, 0.1f, "%.3f");
+		if (auto _tt = Util::HoverTooltipWrapper()) {
+			ImGui::Text(
+				"Threshold for detecting complex grass textures. Lower values are more strict.");
 		}
 
 		ImGui::Spacing();
@@ -43,6 +53,12 @@ void GrassLighting::DrawSettings()
 	}
 
 	if (ImGui::TreeNodeEx("Lighting", ImGuiTreeNodeFlags_DefaultOpen)) {
+		ImGui::Checkbox("Enable Wrapped Lighting", (bool*)&settings.EnableWrappedLighting);
+		if (auto _tt = Util::HoverTooltipWrapper()) {
+			ImGui::Text("Enables a softer-looking wrapped lighting model from CS 1.3. Useful for certain non-complex grass textures that look too dark during mid day, when the sun is directly overhead.");
+		}
+		ImGui::Spacing();
+		ImGui::Spacing();
 		ImGui::Checkbox("Override Complex Grass Lighting Settings", (bool*)&settings.OverrideComplexGrassSettings);
 		if (auto _tt = Util::HoverTooltipWrapper()) {
 			ImGui::Text(

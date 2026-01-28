@@ -2645,6 +2645,9 @@ namespace SIE
 
 	void ShaderCompilationTask::Perform() const
 	{
+		ZoneScoped;
+		ZoneText(GetString().c_str(), GetString().size());
+
 		if (shaderClass == ShaderClass::Vertex) {
 			ShaderCache::Instance().MakeAndAddVertexShader(shader, descriptor);
 		} else if (shaderClass == ShaderClass::Pixel) {

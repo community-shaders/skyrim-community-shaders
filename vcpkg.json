@@ -53,12 +53,12 @@
         },
         {
             "name": "tracy",
-            "version": "0.11.0"
+            "version": "0.13.1"
         },
         {
             "name": "directx-headers",
             "version": "1.606.4"
         }
     ],
-    "builtin-baseline": "fafcc0e93bfba303e5e48790def745d27e6d449b"
+    "builtin-baseline": "7a6bb52bfd8eba088f8bf5cae70ca8d81503e42e"
 }
