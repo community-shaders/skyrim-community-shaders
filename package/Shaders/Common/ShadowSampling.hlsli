@@ -175,7 +175,11 @@ namespace ShadowSampling
 		return Get2DFilteredShadow(noise, rotationMatrix, worldPosition, eyeIndex);
 	}
 
-	void ExtractLighting(float3 inputColor, out float3 dirColor, out float3 ambientColor, float skylightingDiffuse = 1.0)
+#if defined(SKYLIGHTING) && !defined(INTERIOR)
+	void ExtractLighting(float3 inputColor, out float3 dirColor, out float3 ambientColor, float skylightingDiffuse)
+#else
+	void ExtractLighting(float3 inputColor, out float3 dirColor, out float3 ambientColor)
+#endif
 	{
 		float3 ambientColorAmb = max(0, mul(SharedData::DirectionalAmbient, float4(0, 0, 1, 1)));
 
