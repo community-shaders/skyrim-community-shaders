@@ -76,13 +76,20 @@ namespace ShadowSampling
 		sincos(Math::TAU * noise, rotation.y, rotation.x);
 		float2x2 rotationMatrix = float2x2(rotation.x, rotation.y, -rotation.y, rotation.x);
 
-		float worldShadow = 0.0;
-		for(uint i = 0; i < sampleCount; i++){
-			float3 positionWSTemp = positionWS;
-			positionWSTemp.xy += mul(Random::SpiralSampleOffsets8[i], rotationMatrix) * 1024;
-			worldShadow += GetWorldShadow(positionWSTemp, FrameBuffer::CameraPosAdjust[eyeIndex].xyz, eyeIndex);
-		}
-		worldShadow *= rcpSampleCount;
+#if defined(EFFECT)
+		// Enough for non-billboards + enough for Sovngarde fog
+		float viewRayLength = Permutation::EffectRadius * 0.1;
+		float3 startPosition = positionWS - viewDirection * viewRayLength;
+		float3 endPosition = positionWS + viewDirection * viewRayLength;
+#else
+		// Enough for Eastmarch water
+		float viewRayLength = 128.0;
+		float3 startPosition = positionWS;
+		float3 endPosition = positionWS + viewDirection * viewRayLength;
+#endif
+
+		float worldShadow = GetWorldShadow(lerp(startPosition, endPosition, noise), FrameBuffer::CameraPosAdjust[eyeIndex].xyz, eyeIndex);
+
 		if (worldShadow == 0.0)
 			return 0.0;
 
@@ -94,17 +101,6 @@ namespace ShadowSampling
 
 		float cascade1Probability = saturate((shadowMapDepth - sD.StartSplitDistances.y) / (sD.EndSplitDistances.x - sD.StartSplitDistances.y));
 
-#if defined(EFFECT)
-		// Enough for non-billboards + enough for Sovngarde fog
-		float viewRayLength = 16.0 + Permutation::BillboardRadius * 0.1;
-		float3 startPosition = positionWS - viewDirection * viewRayLength;
-		float3 endPosition = positionWS + viewDirection * viewRayLength;
-#else
-		// Enough for Eastmarch water
-		float viewRayLength = 128.0;
-		float3 startPosition = positionWS;
-		float3 endPosition = positionWS + viewDirection * viewRayLength;
-#endif
 		// Precompute cascade data for both cascades
 		float compareValues[2];
 		float sampleRadii[2];
@@ -219,7 +215,7 @@ namespace ShadowSampling
 #else
 	void ExtractLighting(float3 inputColor, out float3 dirColor, out float3 ambientColor)
 #endif
-	{
+	{		
 		float3 ambientColorAmb = max(0, mul(SharedData::DirectionalAmbient, float4(0, 0, 1, 1)));
 
 #		if defined(IBL)
@@ -262,8 +258,8 @@ namespace ShadowSampling
 		float3 dirLightColorAmb = max(0.0, inputColor - ambientColorAmb);
 		float3 ambientColorDir = max(0.0, inputColor - dirLightColorDir);
 
-		dirColor = lerp(dirLightColorAmb, dirLightColorDir, 0.5);
-		ambientColor = lerp(ambientColorAmb, ambientColorDir, 0.5);
+		dirColor = lerp(dirLightColorAmb, dirLightColorDir, 0.0);
+		ambientColor = lerp(ambientColorAmb, ambientColorDir, 0.0);
 	}
 }
 

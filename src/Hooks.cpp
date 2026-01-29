@@ -169,17 +169,7 @@ namespace EffectExtensions
 		static void thunk(RE::BSShader* shader, RE::BSRenderPass* pass, uint32_t renderFlags)
 		{
 			func(shader, pass, renderFlags);
-
-			auto state = globals::state;
-
-			state->permutationData.BillboardRadius = 0.0f;
-
-			if (auto node = pass->geometry->parent) {
-				if (node->GetRTTI() == globals::rtti::NiBillboardNodeRTTI.get()) {
-					auto billboardNode = static_cast<RE::NiBillboardNode*>(node);
-					state->permutationData.BillboardRadius = billboardNode->worldBound.radius;
-				}
-			}
+			globals::state->permutationData.EffectRadius = pass->geometry->worldBound.radius;
 		}
 		static inline REL::Relocation<decltype(thunk)> func;
 	};
