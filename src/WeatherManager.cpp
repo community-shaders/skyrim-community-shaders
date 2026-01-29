@@ -12,8 +12,15 @@ WeatherManager::CurrentWeathers WeatherManager::GetCurrentWeathers()
 	}
 
 	result.currentWeather = sky->currentWeather;
-	result.lastWeather = sky->lastWeather;
 	result.lerpFactor = sky->currentWeatherPct;
+
+	// Update cache: store current lastWeather if it exists, otherwise keep the cached one
+	if (sky->lastWeather) {
+		cachedLastWeather = sky->lastWeather;
+	}
+
+	// Use cached last weather if sky->lastWeather is null
+	result.lastWeather = sky->lastWeather ? sky->lastWeather : cachedLastWeather;
 
 	return result;
 }
@@ -260,5 +267,6 @@ void WeatherManager::ClearCache()
 {
 	perWeatherSettingsCache.clear();
 	lastKnownWeather = CurrentWeathers();
+	cachedLastWeather = nullptr;
 	logger::info("Cleared WeatherManager cache");
 }
