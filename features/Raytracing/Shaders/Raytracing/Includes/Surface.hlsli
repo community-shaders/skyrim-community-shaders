@@ -368,7 +368,7 @@ struct Surface
 
         float2 texCoord0 = material.TexCoord(Interpolate(v0.Texcoord0, v1.Texcoord0, v2.Texcoord0, uvw));
 
-        float3x3 objectToWorld3x3 = (float3x3) instance.Transform;
+        float3x3 objectToWorld3x3 = mul((float3x3) instance.Transform, (float3x3) shape.Transform);
 
         float3 normalWS = normalize(mul(objectToWorld3x3, Interpolate(v0.Normal, v1.Normal, v2.Normal, uvw)));
         float3 tangentWS = normalize(mul(objectToWorld3x3, Interpolate(v0.Tangent, v1.Tangent, v2.Tangent, uvw)));

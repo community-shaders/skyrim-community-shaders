@@ -794,6 +794,14 @@ void Shape::CreateBuffers(const std::wstring& name)
 		}
 	}
 
+	// Updatable geometry is already in root space
+	if (updatable)
+		localToRoot = float3x4(
+			1.0f, 0.0f, 0.0f, 0.0f,
+			0.0f, 1.0f, 0.0f, 0.0f,
+			0.0f, 0.0f, 1.0f, 0.0f);
+
+	// This buffer is used for BLAS build/rebuild
 	rt.transformBuffer->UpdateAt(&localToRoot, allocationIndex);
 	rt.transformBuffer->UploadRegion(commandList, sizeof(float3x4), sizeof(float3x4) * allocationIndex);
 }
@@ -876,11 +884,7 @@ void Shape::CalculateVectors(bool calculateNormal)
 
 D3D12_GPU_VIRTUAL_ADDRESS Shape::TransformBuffer() const
 {
-	if ((flags & Flags::Dynamic) || (flags & Flags::Skinned))
-		return 0;
-
-	auto offset = sizeof(float3x4) * allocation->GetIndex();
-
+	auto offset = allocation->GetIndex() * sizeof(float3x4);
 	return globals::features::raytracing.transformBuffer->resource->GetGPUVirtualAddress() + offset;
 }
 
