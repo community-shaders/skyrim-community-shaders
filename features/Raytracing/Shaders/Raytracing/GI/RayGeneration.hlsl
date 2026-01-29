@@ -76,7 +76,7 @@ void main()
     sourcePayload.PackInstanceGeometryIndex(0, 0);
     sourcePayload.randomSeed = randomSeed;
 
-    TraceRay(Scene, RAY_FLAG_NONE, 0xFF, DIFFUSE_RAY_HITGROUP_IDX, 0, DIFFUSE_RAY_MISS_IDX, sourceRay, sourcePayload);
+    TraceRay(Scene, RAY_FLAG_CULL_BACK_FACING_TRIANGLES, 0xFF, DIFFUSE_RAY_HITGROUP_IDX, 0, DIFFUSE_RAY_MISS_IDX, sourceRay, sourcePayload);
     randomSeed = sourcePayload.randomSeed;
 
     if (!sourcePayload.Hit())
@@ -381,7 +381,7 @@ void main()
             payload.PackInstanceGeometryIndex(0, 0);
             payload.randomSeed = randomSeed;
 
-            TraceRay(Scene, RAY_FLAG_NONE, 0xFF, DIFFUSE_RAY_HITGROUP_IDX, 0, DIFFUSE_RAY_MISS_IDX, ray, payload);
+            TraceRay(Scene, RAY_FLAG_CULL_BACK_FACING_TRIANGLES, 0xFF, DIFFUSE_RAY_HITGROUP_IDX, 0, DIFFUSE_RAY_MISS_IDX, ray, payload);
             randomSeed = payload.randomSeed;
 
             if (j == 0)
