@@ -246,15 +246,12 @@ void SkinningPipeline::Dispatch(ID3D12GraphicsCommandList4* commandList, ID3D12D
 
 	commandList->SetComputeRootDescriptorTable(4, heap->TableGPUHandle(SkinningHeap::Table::SkinningBuffer));
 
-	if (settings.Dispatch) {
-		const uint vertexDispatchSize = DivideRoundUp(vertexCount, settings.ThreadGroupSize);
-		commandList->Dispatch(count, vertexDispatchSize, 1);
-	}
+	const uint vertexDispatchSize = DivideRoundUp(vertexCount, settings.ThreadGroupSize);
+	commandList->Dispatch(count, vertexDispatchSize, 1);
 
 	RestoreResources(commandList);
 
-	if (settings.UpdateBLAS)
-		UpdateBLASES(commandList);
+	UpdateBLASES(commandList);
 
 	ClearQueue();
 }

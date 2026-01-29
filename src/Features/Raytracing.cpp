@@ -466,6 +466,8 @@ void Raytracing::DrawAdvancedSettings()
 	if (ImGui::TreeNodeEx("Culling", ImGuiTreeNodeFlags_DefaultOpen)) {
 		DrawEnumRadio("Culling", advSettings.Culling.Mode, nullptr, CullingModeTooltips);
 
+		ImGui::Checkbox("Variable Update Rate", &advSettings.VariableUpdateRate);
+
 		ImGui::SliderInt("Minimal Radius", &advSettings.Culling.MinRadius, 0, 10, "%d", ImGuiSliderFlags_AlwaysClamp);
 		if (auto _tt = Util::HoverTooltipWrapper()) {
 			ImGui::Text("Nodes with a radius lower than this value are culled when outside the view.\n");
@@ -524,18 +526,12 @@ void Raytracing::DrawDebugSettings()
 	if (ImGui::TreeNodeEx("Skinning and DynamicTriShapes", ImGuiTreeNodeFlags_DefaultOpen)) {
 		ImGui::Checkbox("Disable Skinning", &settings.DisableSkinned);
 
-		ImGui::Checkbox("Disable Updates", &debugDisableTriShapesUpdate);
-
 		if (ImGui::Checkbox("Use Optimized Mapping", &skinningPipeline->settings.OptimizedMapping))
 			skinningPipeline->recompile = true;
 
 		if (ImGui::SliderInt("Thread Group Size", (int*)&skinningPipeline->settings.ThreadGroupSize,
 				SkinningPipeline::MIN_THREAD_GROUP_SIZE, SkinningPipeline::MAX_THREAD_GROUP_SIZE, "%d", ImGuiSliderFlags_AlwaysClamp))
 			skinningPipeline->recompile = true;
-
-		ImGui::Checkbox("Dispatch", &skinningPipeline->settings.Dispatch);
-
-		ImGui::Checkbox("Update BLAS", &skinningPipeline->settings.UpdateBLAS);
 
 		ImGui::TreePop();
 	}
@@ -2584,15 +2580,9 @@ void Raytracing::UpdateInstances()
 
 	auto* player = RE::PlayerCharacter::GetSingleton();
 
-	RE::NiCamera* camera = nullptr;
-	RE::NiPoint3 position;
-
-	if (cullingSettings.Mode == CullingMode::Smart) {
-		auto* tesCamera = RE::PlayerCamera::GetSingleton()->currentState->camera;
-
-		camera = FindNiCamera(tesCamera->cameraRoot.get());
-		position = camera->world.translate;
-	}
+	auto* tesCamera = RE::PlayerCamera::GetSingleton()->currentState->camera;
+	RE::NiCamera* camera = FindNiCamera(tesCamera->cameraRoot.get());
+	RE::NiPoint3 position = camera->world.translate;
 
 	//auto eye = Util::GetAverageEyePosition();
 	//float4 cameraPos = globals::game::frameBufferCached.GetCameraPosAdjust();
@@ -2625,6 +2615,9 @@ void Raytracing::UpdateInstances()
 		bool landscape = flags & Shape::Flags::Landscape;
 
 		if (settings.DisableSkinned && (dynamic || skinned))
+			continue;
+
+		if (skinned && node->GetFlags().any(RE::NiAVObject::Flag::kHidden))
 			continue;
 
 		if (cullingSettings.Mode == CullingMode::Smart) {
@@ -2666,7 +2659,7 @@ void Raytracing::UpdateInstances()
 				continue;
 		}
 
-		instance.Update(node, { it->first, model.get() }, skinningPipeline.get());
+		instance.Update(node, position, { it->first, model.get() }, skinningPipeline.get());
 
 		// This is temporary while I think of a better place to fit this (probably on instance.Update?)
 		auto firstShapeIndex = totalShapeCount;
@@ -2895,12 +2888,11 @@ void Raytracing::UpdateShadowInstances()
 	float3 bbMin, bbMax;
 	float3 localLightDirection;
 
+	auto* tesCamera = RE::PlayerCamera::GetSingleton()->currentState->camera;
+	RE::NiCamera* camera = FindNiCamera(tesCamera->cameraRoot.get());
+	RE::NiPoint3 position = camera->world.translate;
+
 	if (settings.CullShadows) {
-		auto* playerCamera = RE::PlayerCamera::GetSingleton();
-		auto* tesCamera = playerCamera->currentState->camera;
-
-		RE::NiCamera* camera = FindNiCamera(tesCamera->cameraRoot.get());
-
 		auto transform = GetXMFromNiTransform(camera->world);
 		transformInverse = DirectX::XMMatrixInverse(nullptr, transform);
 
@@ -2940,7 +2932,7 @@ void Raytracing::UpdateShadowInstances()
 
 		auto& model = it->second;
 
-		instance.Update(pNiNode, { it->first, model.get() }, skinningPipeline.get());
+		instance.Update(pNiNode, position, { it->first, model.get() }, skinningPipeline.get());
 
 		D3D12_RAYTRACING_INSTANCE_DESC blasShadowInstance = {
 			.InstanceID = static_cast<uint>(blasShadowInstances.size()),
@@ -3161,10 +3153,7 @@ void Raytracing::DrawRTGI()
 
 	UpdateInstances();
 
-	if (!debugDisableTriShapesUpdate)
-		skinningPipeline->Dispatch(commandList.get(), d3d12Device.get());
-	else
-		skinningPipeline->ClearQueue();
+	skinningPipeline->Dispatch(commandList.get(), d3d12Device.get());
 
 	// Upload buffers
 	lightBuffer->Upload(commandList.get(), 0, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
@@ -3665,10 +3654,7 @@ void Raytracing::RenderShadows()
 	// Do DX12 work...
 	UpdateShadowInstances();
 
-	if (!debugDisableTriShapesUpdate)
-		skinningPipeline->Dispatch(commandList.get(), d3d12Device.get());
-	else
-		skinningPipeline->ClearQueue();
+	skinningPipeline->Dispatch(commandList.get(), d3d12Device.get());
 
 	//UpdateDynamicSkinning(commandList.get());
 

@@ -20,76 +20,31 @@ struct Instance
 	Instance(RE::FormID formID, eastl::string filename) :
 		formID(formID), filename(filename) {};
 
-	void SetDetached(bool detach)
+	void SetDetached(bool detach);
+
+	bool IsDetached() const;
+
+	static uint UpdateRate(float distance)
 	{
-		detached = detach;
+		if (distance < 25)
+			return 0;
+
+		if (distance < 100)
+			return 1;
+
+		if (distance < 250)
+			return 2;
+
+		if (distance < 500)
+			return 3;
+
+		return 4;
 	}
 
-	bool IsDetached() const
-	{
-		return detached;
-	}
+	bool ShouldUpdate(RE::NiAVObject* node, RE::NiPoint3 cameraPosition);
 
 	// Checks for skinned and dynamic trishapes update
-	void Update(RE::NiAVObject* node, const eastl::pair<eastl::string, Model*>& modelPair, SkinningPipeline* skinningPipeline)
-	{
-		// Instance was not changed by the game, so there is no need to update it
-		// This doesn't work at all for actors
-		/*if (pNiNode->lastUpdatedFrameCounter < globals::state->frameCount && hasUpdated)
-				return true;*/
-
-		// Instance has already been updated this frame
-		if (!frameChecker.IsNewFrame())
-			return;
-
-		// Sets the BLAS instance transform
-		XMStoreFloat3x4(&transform, GetXMFromNiTransform(node->world));
-
-		if (node->GetAppCulled())
-			return;
-
-		auto& [path, model] = modelPair;
-
-		if ((model->GetFlags() & Shape::Flags::Dynamic) || (model->GetFlags() & Shape::Flags::Skinned)) {
-			logger::trace("Update {} - [0x{:08X}] {}", filename, node->GetFlags().underlying(), GetFlagsString<RE::NiAVObject::Flag>(node->GetFlags().underlying()));
-			
-			for (auto& shape : model->shapes) {
-				logger::trace("Update {} - [0x{:08X}] {}", shape->geometry->name, shape->geometry->GetFlags().underlying(), GetFlagsString<RE::NiAVObject::Flag>(shape->geometry->GetFlags().underlying()));
-
-				Shape::Flags updateFlags = Shape::Flags::None;
-
-				if (shape->UpdateDynamicPosition()) {
-					updateFlags |= Shape::Flags::Dynamic;
-				}
-
-				if (shape->UpdateSkinning()) {
-					updateFlags |= Shape::Flags::Skinned;
-				}
-
-				if (updateFlags & Shape::Flags::Skinned) {
-					auto& skinInstance = shape->geometry->GetGeometryRuntimeData().skinInstance;
-
-					if (shape->boneMatrices.empty())
-						shape->boneMatrices.resize(skinInstance->numMatrices);
-
-					float3x4* boneMatricesArray = reinterpret_cast<float3x4*>(skinInstance->boneMatrices);
-
-					auto rootParent = skinInstance->rootParent;
-					auto skinRootInverse = GetXMFromNiTransform(rootParent->world.Invert());
-
-					shape->boundRadius = rootParent->worldBound.radius + (rootParent->world.translate + rootParent->worldBound.center).GetDistance(shape->geometry->world.translate);
-
-					for (uint i = 0; i < skinInstance->numMatrices; i++) {
-						XMStoreFloat3x4(&shape->boneMatrices[i], XMMatrixMultiply(XMLoadFloat3x4(&boneMatricesArray[i]), skinRootInverse));
-					}
-				}
-
-				if ((updateFlags & Shape::Flags::Dynamic) || (updateFlags & Shape::Flags::Skinned)) {
-					skinningPipeline->QueueUpdate(updateFlags, path, shape.get());
-				}
-			}
-		}
-	}
+	void Update(RE::NiAVObject* node, RE::NiPoint3 cameraPosition, const eastl::pair<eastl::string, Model*>& modelPair, SkinningPipeline* skinningPipeline);
 
 	// Instance form id
 	RE::FormID formID;
@@ -101,7 +56,7 @@ struct Instance
 	float3x4 transform;
 
 	// Makes sure we only update once per frame
-	Util::FrameChecker frameChecker;
+	uint lastUpdate = 0;
 
 private:
 	bool detached = false;

@@ -49,7 +49,7 @@ struct SkinningPipeline : ComputePipeline<SkinningHeap>
 
 	static constexpr uint MAX_BATCHES = 4;
 
-	static constexpr uint MAX_GEOMETRY = 1024;
+	static constexpr uint MAX_GEOMETRY = 2048;
 
 	static constexpr uint MAX_BONE_MATRICES = MAX_GEOMETRY * 10;
 
@@ -57,8 +57,6 @@ struct SkinningPipeline : ComputePipeline<SkinningHeap>
 	{
 		bool OptimizedMapping = false;
 		uint ThreadGroupSize = 32;
-		bool Dispatch = true;
-		bool UpdateBLAS = true;
 	} settings;
 
 	struct QueuedShape
