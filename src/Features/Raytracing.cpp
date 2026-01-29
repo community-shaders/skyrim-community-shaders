@@ -1093,6 +1093,8 @@ void Raytracing::SetupResources()
 		DX::ThrowIfFailed(shapeBuffer->resource->SetName(L"Shape Buffer"));
 
 		shapeBuffer->CreateSRV(giHeap->CPUHandle(GIHeap::Slot::Shapes));
+
+		DX::ThrowIfFailed(shapeBuffer->UploadResource()->Map(0, nullptr, reinterpret_cast<void**>(&shapeData)));
 	}
 
 	// Instance buffer
@@ -2701,13 +2703,12 @@ void Raytracing::UpdateInstances()
 		instanceCount++;
 	}
 
-	shapeBuffer->UpdateList(shapeData.data(), RTConstants::MAX_SHAPES);
 	shapeBuffer->Upload(commandList.get(), 0, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
 
 	blasInstanceBuffer->UpdateList(blasInstances.data(), std::min(blasInstances.size(), (size_t)RTConstants::MAX_INSTANCES));
 	blasInstanceBuffer->Upload(commandList.get());
 
-	instanceBuffer->UpdateList(instanceData.data(), RTConstants::MAX_INSTANCES);
+	instanceBuffer->UpdateList(instanceData.data(), std::min(instanceCount, RTConstants::MAX_INSTANCES));
 	instanceBuffer->Upload(commandList.get(), 0, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
 }
 
@@ -3951,7 +3952,7 @@ void Raytracing::InitD3D12(ID3D11Device* ppDevice, ID3D11DeviceContext* pImmedia
 		if (SUCCEEDED(d3d12Device->QueryInterface(IID_PPV_ARGS(&infoQueue)))) {
 			infoQueue->SetBreakOnSeverity(D3D12_MESSAGE_SEVERITY_CORRUPTION, TRUE);
 			infoQueue->SetBreakOnSeverity(D3D12_MESSAGE_SEVERITY_ERROR, TRUE);
-			infoQueue->SetBreakOnSeverity(D3D12_MESSAGE_SEVERITY_WARNING, TRUE);
+			infoQueue->SetBreakOnSeverity(D3D12_MESSAGE_SEVERITY_WARNING, FALSE);
 		} else {
 			logger::critical("[RT] Debug break creation failed.");
 		}

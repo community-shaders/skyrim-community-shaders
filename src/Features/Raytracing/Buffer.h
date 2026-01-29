@@ -437,6 +437,11 @@ namespace DX12
 			this->TransitionBarrier(commandList, state);
 		}
 
+		ID3D12Resource* UploadResource(uint index = 0)
+		{
+			return uploadResources[index].get();
+		}
+
 	private:
 		eastl::vector<winrt::com_ptr<ID3D12Resource>> uploadResources;
 		D3D12_RANGE readRange = { 0, 0 };

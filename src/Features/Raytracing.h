@@ -682,7 +682,7 @@ struct Raytracing : public OverlayFeature
 	eastl::unique_ptr<DX12::StructuredBufferUpload<float3x4>> transformBuffer = nullptr;
 
 	// Indirection, Transform and Material buffers
-	eastl::array<ShapeData, RTConstants::MAX_SHAPES> shapeData;
+	ShapeData* shapeData = nullptr;
 	eastl::unique_ptr<DX12::StructuredBufferUpload<ShapeData>> shapeBuffer = nullptr;
 
 	eastl::array<InstanceData, RTConstants::MAX_INSTANCES> instanceData;
