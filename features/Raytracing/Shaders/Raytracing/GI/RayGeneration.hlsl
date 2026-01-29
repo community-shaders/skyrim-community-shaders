@@ -307,6 +307,8 @@ void main()
             // Update isEnter state when transmission occurs
             if (hasTransmission) {
                 isEnter = !isEnter;
+            } else {
+                isEnter = dot(direction, surface.GeomNormal) >= 0.0f;
             }
 
             brdfWeight.diffuse = bsdfSample.isLobe(LobeType::DiffuseReflection) ? bsdfSample.weight : float3(0.f, 0.f, 0.f);
