@@ -41,6 +41,24 @@ namespace ShadowSampling
 
 	StructuredBuffer<ShadowData> SharedShadowData : register(t19);
 
+	float GetWorldShadow(float3 positionWS, float3 offset, uint eyeIndex)
+	{
+		if (SharedData::InInterior || SharedData::HideSky)
+			return 1.0;
+
+		float worldShadow = 1.0;
+#if defined(TERRAIN_SHADOWS)
+		worldShadow = TerrainShadows::GetTerrainShadow(positionWS + offset, LinearSampler);
+#endif
+
+#if defined(CLOUD_SHADOWS)
+		if (!SharedData::InMapMenu)
+			worldShadow *= CloudShadows::GetCloudShadowMult(positionWS, LinearSampler);
+#endif
+
+		return worldShadow;
+	}
+
 	float GetShadowDepth(float3 positionWS, uint eyeIndex)
 	{
 		float4 positionCSShifted = mul(FrameBuffer::CameraViewProj[eyeIndex], float4(positionWS, 1));
@@ -49,73 +67,83 @@ namespace ShadowSampling
 
 	float Get3DFilteredShadow(float3 positionWS, float3 viewDirection, float2 screenPosition, uint eyeIndex)
 	{
+		float noise = Random::InterleavedGradientNoise(screenPosition, SharedData::FrameCount);
+
 		ShadowData sD = SharedShadowData[0];
 
 		static const uint sampleCount = 8;
 		static const float rcpSampleCount = 1.0 / float(sampleCount);
 
-		float noise = Random::InterleavedGradientNoise(screenPosition, SharedData::FrameCount);
 		float noiseTransform = noise * 2.0 - 1.0;
 		float2 rotation;
 		sincos(Math::TAU * noise, rotation.y, rotation.x);
 		float2x2 rotationMatrix = float2x2(rotation.x, rotation.y, -rotation.y, rotation.x);
 
+		float worldShadow = 0.0;
+		for(uint i = 0; i < 8; i++){
+			float3 positionWSTemp = positionWS;
+			positionWSTemp.xy += mul(Random::SpiralSampleOffsets8[i], rotationMatrix) * 1024;
+			worldShadow += GetWorldShadow(positionWSTemp, FrameBuffer::CameraPosAdjust[eyeIndex].xyz, eyeIndex);
+		}
+		worldShadow /= 8.0;
+		if (worldShadow == 0.0)
+			return 0.0;
+
 		float shadowMapDepth = GetShadowDepth(positionWS, eyeIndex);
 
 		float shadow = 0.0;
-		if (sD.EndSplitDistances.z >= shadowMapDepth) {
-			float cascade1Probability = saturate((shadowMapDepth - sD.StartSplitDistances.y) / (sD.EndSplitDistances.x - sD.StartSplitDistances.y));
+		
+		if (sD.EndSplitDistances.z < shadowMapDepth)
+			return worldShadow;
 
-			// Precompute cascade data for both cascades
-			float compareValues[2];
-			float sampleRadii[2];
-			float3 positionsLS[2];
-			float3 viewOffsetsLS[2];
-
-			[unroll]
-			for (uint cascadeIdx = 0; cascadeIdx < 2; cascadeIdx++) {
-				compareValues[cascadeIdx] = mul(transpose(sD.ShadowMapProj[eyeIndex][cascadeIdx]), float4(positionWS, 1)).z - sD.AlphaTestRef[1 + cascadeIdx];
-				sampleRadii[cascadeIdx] = sD.ShadowSampleParam.z * rcp(1 + cascadeIdx) * 2.0;
+		float cascade1Probability = saturate((shadowMapDepth - sD.StartSplitDistances.y) / (sD.EndSplitDistances.x - sD.StartSplitDistances.y));
 
 #if defined(EFFECT)
-				// Enough for non-billboards + enough for Sovngarde fog
-				float viewRayLength = 16.0 + Permutation::BillboardRadius * 0.1;
-				positionsLS[cascadeIdx] = mul(transpose(sD.ShadowMapProj[eyeIndex][cascadeIdx]), float4(positionWS - viewDirection * viewRayLength, 1));
-				viewOffsetsLS[cascadeIdx] = mul(transpose(sD.ShadowMapProj[eyeIndex][cascadeIdx]), float4(positionWS + viewDirection * viewRayLength, 1));
+		// Enough for non-billboards + enough for Sovngarde fog
+		float viewRayLength = 16.0 + Permutation::BillboardRadius * 0.1;
+		float3 startPosition = positionWS - viewDirection * viewRayLength;
+		float3 endPosition = positionWS + viewDirection * viewRayLength;
 #else
-				// Enough for Eastmarch water
-				float viewRayLength = 128.0;
-				positionsLS[cascadeIdx] = mul(transpose(sD.ShadowMapProj[eyeIndex][cascadeIdx]), float4(positionWS, 1));
-				viewOffsetsLS[cascadeIdx] = mul(transpose(sD.ShadowMapProj[eyeIndex][cascadeIdx]), float4(positionWS + viewDirection * viewRayLength, 1));
+		// Enough for Eastmarch water
+		float viewRayLength = 128.0;
+		float3 startPosition = positionWS;
+		float3 endPosition = positionWS + viewDirection * viewRayLength;
 #endif
-			}
+		// Precompute cascade data for both cascades
+		float compareValues[2];
+		float sampleRadii[2];
+		float3 positionsLS[2];
+		float3 viewOffsetsLS[2];
+		for (uint cascadeIdx = 0; cascadeIdx < 2; cascadeIdx++) {
+			compareValues[cascadeIdx] = mul(transpose(sD.ShadowMapProj[eyeIndex][cascadeIdx]), float4(positionWS, 1)).z - sD.AlphaTestRef[1 + cascadeIdx];
+			sampleRadii[cascadeIdx] = sD.ShadowSampleParam.z * rcp(1 + cascadeIdx) * 2.0;
+			positionsLS[cascadeIdx] = mul(transpose(sD.ShadowMapProj[eyeIndex][cascadeIdx]), float4(startPosition, 1));
+			viewOffsetsLS[cascadeIdx] = mul(transpose(sD.ShadowMapProj[eyeIndex][cascadeIdx]), float4(endPosition, 1));
+		}
 
-			for (uint i = 0; i < sampleCount; i++) {
-				uint noisyIndex = uint((float(i) + sampleCount * noise) % sampleCount);
-				float t = (float(sampleCount) - float(noisyIndex + 1)) * rcpSampleCount;
-				uint cascadeIndex = frac(t + noise) < cascade1Probability;
+		for (uint i = 0; i < sampleCount; i++) {
+			uint noisyIndex = uint((float(i) + sampleCount * noise) % sampleCount);
+			float t = (float(sampleCount) - float(noisyIndex + 1)) * rcpSampleCount;
+			uint cascadeIndex = frac(t + noise) < cascade1Probability;
 
-				float compareValue = compareValues[cascadeIndex];
-				float sampleRadius = sampleRadii[cascadeIndex];
-				float3 positionLS = positionsLS[cascadeIndex];
-				float3 viewOffsetLS = viewOffsetsLS[cascadeIndex];
+			float compareValue = compareValues[cascadeIndex];
+			float sampleRadius = sampleRadii[cascadeIndex];
+			float3 positionLS = positionsLS[cascadeIndex];
+			float3 viewOffsetLS = viewOffsetsLS[cascadeIndex];
 
-				// Offset along view ray with optimised sample pattern
-				float3 sampledPositionLS = lerp(positionLS, viewOffsetLS, t + noiseTransform * rcpSampleCount);
+			// Offset along view ray with optimised sample pattern
+			float3 sampledPositionLS = lerp(positionLS, viewOffsetLS, t + noiseTransform * rcpSampleCount);
 
-				// Blur shadow with poisson disc
-				sampledPositionLS.xy += mul(Random::SpiralSampleOffsets8[i], rotationMatrix) * sampleRadius;
+			// Blur shadow with poisson disc
+			sampledPositionLS.xy += mul(Random::SpiralSampleOffsets8[i], rotationMatrix) * sampleRadius;
 
-				// Average 4 shadow samples for improved quality
-				float4 depths = SharedShadowMap.GatherRed(LinearSampler, float3(saturate(sampledPositionLS.xy), cascadeIndex), 0);
-				shadow += dot(depths > compareValue, 0.25);
-			}
-		} else {
-			shadow = 1.0;
+			// Average 4 shadow samples for improved quality
+			float4 depths = SharedShadowMap.GatherRed(LinearSampler, float3(saturate(sampledPositionLS.xy), cascadeIndex), 0);
+			shadow += dot(depths > compareValue, 0.25);
 		}
 
 		float fadeFactor = 1.0 - pow(saturate(dot(positionWS, positionWS) / sD.ShadowLightParam.z), 8);
-		return lerp(1.0, shadow * rcpSampleCount, fadeFactor);
+		return worldShadow * lerp(1.0, shadow * rcpSampleCount, fadeFactor);
 	}
 
 	float Get2DFilteredShadowCascade(float noise, float2x2 rotationMatrix, float sampleOffsetScale, float2 baseUV, float cascadeIndex, float compareValue, uint eyeIndex)
@@ -176,30 +204,9 @@ namespace ShadowSampling
 		return 1.0;
 	}
 
-	float GetWorldShadow(float3 positionWS, float3 offset, uint eyeIndex)
-	{
-		if (SharedData::InInterior || SharedData::HideSky)
-			return 1.0;
-
-		float worldShadow = 1.0;
-#if defined(TERRAIN_SHADOWS)
-		worldShadow = TerrainShadows::GetTerrainShadow(positionWS + offset, LinearSampler);
-#endif
-
-#if defined(CLOUD_SHADOWS)
-		if (!SharedData::InMapMenu)
-			worldShadow *= CloudShadows::GetCloudShadowMult(positionWS, LinearSampler);
-#endif
-
-		return worldShadow;
-	}
-
 	float GetEffectShadow(float3 worldPosition, float3 viewDirection, float2 screenPosition, uint eyeIndex)
 	{
-		float worldShadow = GetWorldShadow(worldPosition, FrameBuffer::CameraPosAdjust[eyeIndex].xyz, eyeIndex);
-		if (worldShadow == 0.0)
-			return 0.0;
-		return worldShadow * Get3DFilteredShadow(worldPosition, viewDirection, screenPosition, eyeIndex);
+		return Get3DFilteredShadow(worldPosition, viewDirection, screenPosition, eyeIndex);
 	}
 
 	float GetLightingShadow(float noise, float3 worldPosition, uint eyeIndex)

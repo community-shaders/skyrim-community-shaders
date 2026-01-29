@@ -579,7 +579,47 @@ float3 GetLightingColor(float3 msPosition, float3 worldPosition, float2 screenPo
 
 	return color;
 }
+#	else
+float3 GetLightingShadow(float3 color, float3 worldPosition, float2 screenPosition, uint eyeIndex, inout float shadowVariance)
+{
+#		if defined(SKYLIGHTING)
+#			if defined(VR)
+	float3 positionMSSkylight = worldPosition + FrameBuffer::CameraPosAdjust[eyeIndex].xyz - FrameBuffer::CameraPosAdjust[0].xyz;
+#			else
+	float3 positionMSSkylight = worldPosition;
+#			endif
+
+	sh2 skylightingSH = Skylighting::sampleNoBias(SharedData::skylightingSettings, Skylighting::SkylightingProbeArray, positionMSSkylight);
+
+	float skylightingDiffuse = SphericalHarmonics::FuncProductIntegral(skylightingSH, SphericalHarmonics::EvaluateCosineLobe(float3(0, 0, 1))) / Math::PI;
+	skylightingDiffuse = saturate(skylightingDiffuse);
+	skylightingDiffuse = lerp(1.0, skylightingDiffuse, Skylighting::getFadeOutFactor(worldPosition));
+	skylightingDiffuse = Skylighting::mixDiffuse(SharedData::skylightingSettings, skylightingDiffuse);
 #	endif
+
+	float3 dirColor;
+	float3 ambientColor;
+#		if defined(SKYLIGHTING)
+	ShadowSampling::ExtractLighting(color, dirColor, ambientColor, skylightingDiffuse);
+#		else
+	ShadowSampling::ExtractLighting(color, dirColor, ambientColor);
+#		endif
+
+	float shadow = ShadowSampling::GetEffectShadow(worldPosition.xyz, normalize(worldPosition.xyz), screenPosition, eyeIndex);
+
+	shadowVariance = 1.0 - sqrt(saturate(fwidth(shadow)));
+
+	dirColor *= shadow;
+
+#		if defined(SKYLIGHTING)
+	ambientColor = Color::IrradianceToLinear(ambientColor);
+	ambientColor *= skylightingDiffuse;
+	ambientColor = Color::IrradianceToGamma(ambientColor);
+#		endif
+
+	return dirColor + ambientColor;;
+}
+#endif
 
 PS_OUTPUT main(PS_INPUT input)
 {
@@ -757,13 +797,18 @@ PS_OUTPUT main(PS_INPUT input)
 		baseColor.xyz = Color::Effect(baseColorScale * TexGrayscaleSampler.Sample(SampGrayscaleSampler, grayscaleToColorUv).xyz);
 	}
 
-	float3 lightColor = lerp(baseColor.xyz, propertyColor * baseColor.xyz, lightingInfluence.xxx);
+	float3 lightColor = lerp(baseColor.xyz, propertyColor * baseColor.xyz, lightingInfluence);
 
 #	if !defined(MOTIONVECTORS_NORMALS)
 	if (alpha * fogMul.w - AlphaTestRefRS < 0) {
 		discard;
 	}
 #	endif
+
+#if !defined(LIGHTING) && defined(VC) && defined(TEXCOORD) && defined(NORMALS) && defined(TEXTURE) && defined(FALLOFF) && defined(SOFT)
+	if(Permutation::PixelShaderDescriptor & Permutation::EffectFlags::GrayscaleToAlpha && lightingInfluence == 1.0)
+		lightColor = GetLightingShadow(lightColor, input.WorldPosition.xyz, input.Position.xy, eyeIndex, shadowVariance);
+#endif
 
 #	if !defined(MOTIONVECTORS_NORMALS)
 #		if defined(ADDBLEND)
