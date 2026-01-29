@@ -92,7 +92,7 @@ namespace ShadowSampling
 		float shadowMapDepth = GetShadowDepth(positionWS, eyeIndex);
 
 		float shadow = 0.0;
-		
+
 		if (sD.EndSplitDistances.z < shadowMapDepth)
 			return worldShadow;
 
