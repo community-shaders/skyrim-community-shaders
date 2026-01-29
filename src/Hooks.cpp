@@ -185,7 +185,6 @@ namespace EffectExtensions
 	};
 }
 
-
 namespace LightingExtensions
 {
 	struct BSLightingShader_SetupGeometry
