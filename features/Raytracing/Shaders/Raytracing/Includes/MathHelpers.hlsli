@@ -13,6 +13,39 @@ inline float Average(float3 rgb)
     return (rgb.x+rgb.y+rgb.z) / 3.0;
 }
 
+/** Generate a vector that is orthogonal to the input vector.
+    This can be used to invent a tangent frame for meshes that don't have real tangents/bitangents.
+    \param[in] u Unit vector.
+    \return v Unit vector that is orthogonal to u.
+*/
+float3 perp_stark(float3 u)
+{
+    // TODO: Validate this and look at numerical precision etc. Are there better ways to do it?
+    float3 a = abs(u);
+    uint uyx = (a.x - a.y) < 0 ? 1 : 0;
+    uint uzx = (a.x - a.z) < 0 ? 1 : 0;
+    uint uzy = (a.y - a.z) < 0 ? 1 : 0;
+    uint xm = uyx & uzx;
+    uint ym = (1 ^ xm) & uzy;
+    uint zm = 1 ^ (xm | ym);  // 1 ^ (xm & ym)
+    float3 v = normalize(cross(u, float3(xm, ym, zm)));
+    return v;
+}
+// fp16 variant
+half3 perp_stark(half3 u)
+{
+    // TODO: Validate this and look at numerical precision etc. Are there better ways to do it?
+    half3 a = abs(u);
+    uint uyx = (a.x - a.y) < 0 ? 1 : 0;
+    uint uzx = (a.x - a.z) < 0 ? 1 : 0;
+    uint uzy = (a.y - a.z) < 0 ? 1 : 0;
+    uint xm = uyx & uzx;
+    uint ym = (1 ^ xm) & uzy;
+    uint zm = 1 ^ (xm | ym);  // 1 ^ (xm & ym)
+    half3 v = normalize(cross(u, half3(xm, ym, zm)));
+    return v;
+}
+
 /** Uniform sampling of the unit disk using polar coordinates.
     \param[in] u Uniform random number in [0,1)^2.
     \return Sampled point on the unit disk.
