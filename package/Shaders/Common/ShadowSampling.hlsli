@@ -69,7 +69,7 @@ namespace ShadowSampling
 	{
 		static const uint sampleCount = 8;
 		static const float rcpSampleCount = 1.0 / float(sampleCount);
-		
+
 		float noise = Random::InterleavedGradientNoise(screenPosition, SharedData::FrameCount);
 		float noiseTransform = noise * 2.0 - 1.0;
 		float2 rotation;
@@ -87,7 +87,7 @@ namespace ShadowSampling
 			return 0.0;
 
 		float shadowMapDepth = GetShadowDepth(positionWS, eyeIndex);
-		
+
 		ShadowData sD = SharedShadowData[0];
 		if (sD.EndSplitDistances.z < shadowMapDepth)
 			return worldShadow;
