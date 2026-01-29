@@ -102,14 +102,11 @@ void main(uint3 DTid : SV_DispatchThreadID)
 
         position = mul(boneMatrix, float4(position, 1.0f));
 
-        if ((updateData.flags & Flags::Dynamic) == 0)
-        {
-            float3x3 boneMatrixRot = (float3x3)boneMatrix;
+        float3x3 boneMatrixRot = (float3x3)boneMatrix;
 
-            vertex.Normal = (half3) normalize(mul(boneMatrixRot, vertex.Normal));
-            vertex.Tangent = (half3) normalize(mul(boneMatrixRot, vertex.Tangent));
-            vertex.Bitangent = (half3) normalize(mul(boneMatrixRot, vertex.Bitangent));
-        }
+        vertex.Normal = (half3) normalize(mul(boneMatrixRot, vertex.Normal));
+        vertex.Tangent = (half3) normalize(mul(boneMatrixRot, vertex.Tangent));
+        vertex.Bitangent = (half3) normalize(mul(boneMatrixRot, vertex.Bitangent));
     }
 
     float dist = length(position);
