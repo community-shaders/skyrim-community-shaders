@@ -80,14 +80,14 @@ void main(inout ShadowPayload payload, in BuiltInTriangleIntersectionAttributes 
         }
 
         Instance instance = GetInstance(InstanceIndex());
-        float3x3 objectToWorld3x3 = (float3x3) instance.Transform;
+        float3x3 objectToWorld3x3 = mul((float3x3) instance.Transform, (float3x3) shape.Transform);
 
         float3 normalWS = normalize(mul(objectToWorld3x3, Interpolate(v0.Normal, v1.Normal, v2.Normal, uvw)));
         float3 tangentWS = normalize(mul(objectToWorld3x3, Interpolate(v0.Tangent, v1.Tangent, v2.Tangent, uvw)));
         float3 bitangentWS = normalize(mul(objectToWorld3x3, Interpolate(v0.Bitangent, v1.Bitangent, v2.Bitangent, uvw)));
 
         Texture2D normalTexture = Textures[NonUniformResourceIndex(material.NormalTexture())];
-        float3 normal = normalTexture.SampleLevel(BaseSampler, texCoord, 0).xyz * 2.0f - 1.0f;
+        float3 normal = normalTexture.SampleLevel(BaseSampler, texCoord, 0).xyz;
 
         float handedness = (dot(cross(normalWS, tangentWS), bitangentWS) < 0.0f) ? -1.0f : 1.0f;
 
