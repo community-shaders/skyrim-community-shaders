@@ -1852,7 +1852,7 @@ void Raytracing::CommitModel(Model* model)
 
 		geometryDescs[i] = {
 			.Type = D3D12_RAYTRACING_GEOMETRY_TYPE_TRIANGLES,
-			.Flags = isOpaque ? D3D12_RAYTRACING_GEOMETRY_FLAG_OPAQUE : D3D12_RAYTRACING_GEOMETRY_FLAG_NONE,
+			.Flags = isOpaque ? D3D12_RAYTRACING_GEOMETRY_FLAG_OPAQUE : D3D12_RAYTRACING_GEOMETRY_FLAG_NONE | D3D12_RAYTRACING_GEOMETRY_FLAG_NO_DUPLICATE_ANYHIT_INVOCATION,
 			.Triangles = {
 				.Transform3x4 = shape->TransformBuffer(),
 				.IndexFormat = DXGI_FORMAT_R16_UINT,
@@ -1953,7 +1953,7 @@ void Raytracing::UpdateModelBLAS(Model* model)
 
 		geometryDescs[i] = {
 			.Type = D3D12_RAYTRACING_GEOMETRY_TYPE_TRIANGLES,
-			.Flags = isOpaque ? D3D12_RAYTRACING_GEOMETRY_FLAG_OPAQUE : D3D12_RAYTRACING_GEOMETRY_FLAG_NONE,
+			.Flags = isOpaque ? D3D12_RAYTRACING_GEOMETRY_FLAG_OPAQUE : D3D12_RAYTRACING_GEOMETRY_FLAG_NONE | D3D12_RAYTRACING_GEOMETRY_FLAG_NO_DUPLICATE_ANYHIT_INVOCATION,
 			.Triangles = {
 				.Transform3x4 = shape->TransformBuffer(),
 				.IndexFormat = DXGI_FORMAT_R16_UINT,
@@ -2683,11 +2683,14 @@ void Raytracing::UpdateInstances()
 			shapeData[firstShapeIndex + i] = model->shapes[i]->GetData();
 		}
 
-		D3D12_RAYTRACING_INSTANCE_DESC blasInstance = {
-			.InstanceID = 0,  // We don't really use this, instances are an unordered_map, so yeah unordered...
-			.InstanceMask = 1,
-			.AccelerationStructure = model->blasBuffer->GetResource()->GetGPUVirtualAddress()
-		};
+		// TODO: split double sided models so only them get the flag
+		bool isDoubleSided = model->GetShaderFlags().any(RE::BSShaderProperty::EShaderPropertyFlag::kTwoSided);
+
+		D3D12_RAYTRACING_INSTANCE_DESC blasInstance{};
+		blasInstance.InstanceID = 0;
+		blasInstance.InstanceMask = 1;
+		blasInstance.Flags = isDoubleSided ? D3D12_RAYTRACING_INSTANCE_FLAG_TRIANGLE_CULL_DISABLE : D3D12_RAYTRACING_INSTANCE_FLAG_NONE;
+		blasInstance.AccelerationStructure = model->blasBuffer->GetResource()->GetGPUVirtualAddress();
 
 		// Copy transform matrix from Instance to DX12 BLAS instance
 		memcpy(blasInstance.Transform, instance.transform.m, sizeof(blasInstance.Transform));

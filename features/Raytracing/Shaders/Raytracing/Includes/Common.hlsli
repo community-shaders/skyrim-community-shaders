@@ -62,28 +62,14 @@ half3 DecodeNormal(half2 f)
 
 void NormalMap(float3 normalMap, float handedness, float3 geomNormalWS, float3 geomTangentWS, float3 geomBitangentWS, out float3 normalWS, out float3 tangentWS, out float3 bitangentWS)
 {
+	normalMap = normalMap * 2.0f - 1.0f;
+	
     normalWS = normalize(
 		normalMap.x * geomTangentWS +
 		normalMap.y * geomBitangentWS +
 		normalMap.z * geomNormalWS
 	);
 
-    tangentWS = normalize(geomTangentWS - normalWS * dot(geomTangentWS, normalWS));
-    bitangentWS = cross(normalWS, tangentWS) * handedness;
-}
-
-void ModelSpaceNormalMap(float3 normalMap, float handedness, float3 geomNormalWS, float3 geomTangentWS, float3 geomBitangentWS, out float3 normalWS, out float3 tangentWS, out float3 bitangentWS)
-{
-	float3x3 tbn = float3x3(geomTangentWS, geomBitangentWS, geomNormalWS);
-
-	normalWS = normalize(mul(tbn, normalMap.xyz));
-    tangentWS = normalize(geomTangentWS - normalWS * dot(geomTangentWS, normalWS));
-    bitangentWS = cross(normalWS, tangentWS) * handedness;
-}
-
-void ModelSpaceNormalMap(float3 normalMap, float handedness, float3x3 objectToWorld3x3, float3 geomTangentWS, out float3 normalWS, out float3 tangentWS, out float3 bitangentWS)
-{
-	normalWS = normalize(mul(objectToWorld3x3, normalMap.xzy));
     tangentWS = normalize(geomTangentWS - normalWS * dot(geomTangentWS, normalWS));
     bitangentWS = cross(normalWS, tangentWS) * handedness;
 }

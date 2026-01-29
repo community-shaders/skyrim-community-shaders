@@ -255,7 +255,7 @@ struct Surface
         Bitangent = bitangentWS;
 #else
         Texture2D normalTexture = Textures[NonUniformResourceIndex(material.NormalTexture())];
-        float3 normal = normalTexture.SampleLevel(BaseSampler, texCoord0, 0).xyz * 2.0f - 1.0f;
+        float3 normal = normalTexture.SampleLevel(BaseSampler, texCoord0, 0).xyz;
 
         float handedness = (dot(cross(normalWS, tangentWS), bitangentWS) < 0.0f) ? -1.0f : 1.0f;
 
@@ -327,16 +327,22 @@ struct Surface
             Albedo = baseColor; // GammaToTrueLinear looks wonky
         }
 
+#if defined(DEBUG_NONORMALMAP)
+        Normal = normalWS;
+        Tangent = tangentWS;
+        Bitangent = bitangentWS;
+#else          
         float3 normal = BlendLandTexture(material.Texture6, texCoord0, landBlend0.x).rgb + BlendLandTexture(material.Texture7, texCoord0, landBlend0.y).rgb +
                         BlendLandTexture(material.Texture8, texCoord0, landBlend0.z).rgb + BlendLandTexture(material.Texture9, texCoord0, landBlend0.w).rgb +
                         BlendLandTexture(material.Texture10, texCoord0, landBlend1.x).rgb + BlendLandTexture(material.Texture11, texCoord0, landBlend1.y).rgb;
-
+        
         NormalMap(
             normal,
             handedness,
             normalWS, tangentWS, bitangentWS,
             Normal, Tangent, Bitangent
         );
+#endif        
     }
 
 

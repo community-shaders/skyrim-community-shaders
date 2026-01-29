@@ -143,8 +143,6 @@ void Shape::BuildMesh(RE::BSGraphics::TriShape* rendererData, const uint32_t& ve
 
 		bool hasPosition = vertexFlags & RE::BSGraphics::Vertex::VF_VERTEX;
 
-		//bool isFullPrec = vertexFlags & RE::BSGraphics::Vertex::VF_FULLPREC;
-
 		uint32_t posOffset = vertexDesc.GetAttributeOffset(RE::BSGraphics::Vertex::VA_POSITION);
 		uint32_t uvOffset = vertexDesc.GetAttributeOffset(RE::BSGraphics::Vertex::VA_TEXCOORD0);
 		uint32_t normOffset = vertexDesc.GetAttributeOffset(RE::BSGraphics::Vertex::VA_NORMAL);
@@ -152,8 +150,6 @@ void Shape::BuildMesh(RE::BSGraphics::TriShape* rendererData, const uint32_t& ve
 		uint32_t colorOffset = vertexDesc.GetAttributeOffset(RE::BSGraphics::Vertex::VA_COLOR);
 		uint32_t skinOffset = vertexDesc.GetAttributeOffset(RE::BSGraphics::Vertex::VA_SKINNING);
 		uint32_t landOffset = vertexDesc.GetAttributeOffset(RE::BSGraphics::Vertex::VA_LANDDATA);
-
-		//uint32_t boneIDOffset = !hasPosition && isFullPrec ? sizeof(float) : sizeof(uint16_t) * bonesPerVertex;
 
 		uint32_t boneIDOffset = sizeof(uint16_t) * bonesPerVertex;
 

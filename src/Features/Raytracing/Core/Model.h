@@ -28,6 +28,7 @@ struct Model
 			flags |= shape->flags;
 			shaderTypes |= shape->material.shaderType;
 			features |= static_cast<int>(shape->material.Feature);
+			shaderFlags.set(shape->material.shaderFlags.get());
 		}
 	}
 
@@ -44,6 +45,12 @@ struct Model
 	auto GetFeatures() const
 	{
 		return features;
+	}
+
+
+	auto GetShaderFlags() const
+	{
+		return shaderFlags;
 	}
 
 	bool IsRenderUseValid() const
@@ -83,5 +90,6 @@ private:
 	Shape::Flags flags = Shape::Flags::None;
 	uint32_t shaderTypes = RE::BSShader::Type::None;
 	int features = static_cast<int>(RE::BSShaderMaterial::Feature::kNone);
+	REX::EnumSet<RE::BSShaderProperty::EShaderPropertyFlag, std::uint64_t> shaderFlags;
 	eastl::atomic<int> refCount{ 0 };
 };
