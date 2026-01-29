@@ -76,7 +76,7 @@ namespace ShadowSampling
 		sincos(Math::TAU * noise, rotation.y, rotation.x);
 		float2x2 rotationMatrix = float2x2(rotation.x, rotation.y, -rotation.y, rotation.x);
 
-`#if` defined(EFFECT)
+#if defined(EFFECT)
 		// Enough for non-billboards + enough for Sovngarde fog
 		float viewRayLength = min(Permutation::EffectRadius * 0.1, 128);
 		float3 startPosition = positionWS - viewDirection * viewRayLength;
