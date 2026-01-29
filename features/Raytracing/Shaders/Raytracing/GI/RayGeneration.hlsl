@@ -210,6 +210,14 @@ void main()
     return;
 #endif
 
+#if defined(DEBUG_MIPLEVEL)
+    float3 output = TurboColormap(saturate(sourceSurface.MipLevel / 12.0f));
+    OutputTexture[idx] = float4(output, 1.0f);
+    SpecularAlbedo[idx] = float4(0.5f, 0.5f, 0.5f, 0.0f);
+    SpecularHitDist[idx] = RAY_TMAX;
+    return;
+#endif
+
 #if defined(SHARC) && defined(SHARC_DEBUG)
     HashGridParameters gridParameters = GetSharcGridParameters();
 
