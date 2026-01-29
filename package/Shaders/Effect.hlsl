@@ -617,7 +617,7 @@ float3 GetLightingShadow(float3 color, float3 worldPosition, float2 screenPositi
 	ambientColor = Color::IrradianceToGamma(ambientColor);
 #		endif
 
-	return dirColor + ambientColor;;
+	return dirColor + ambientColor;
 }
 #endif
 
