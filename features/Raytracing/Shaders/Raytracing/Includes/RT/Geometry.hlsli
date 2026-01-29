@@ -43,16 +43,16 @@ Instance GetInstance(uint instanceIdx)
     return Instances[instanceIdx];
 }
 
-uint GetShapeIdx(in Payload payload, out Instance instance)
-{
-    instance = GetInstance(payload.InstanceIndex());
-    return Indirection.Load((instance.FirstGeometryID + payload.GeometryIndex()) * 4);
-}
-
-uint GetShapeIdx(in uint instanceIndex, in uint geometryIndex)
+Shape GetShape(in uint instanceIndex, in uint geometryIndex)
 {
     Instance instance = GetInstance(instanceIndex);
-    return Indirection.Load((instance.FirstGeometryID + geometryIndex) * 4);
+    return Shapes[instance.FirstGeometryID + geometryIndex];
+}
+
+Shape GetShape(in Payload payload, out Instance instance)
+{
+    instance = GetInstance(payload.InstanceIndex());
+    return Shapes[instance.FirstGeometryID + payload.GeometryIndex()];
 }
 
 Triangle GetTriangle(in uint shapeIdx, in uint primitiveIdx)

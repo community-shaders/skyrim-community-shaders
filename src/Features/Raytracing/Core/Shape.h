@@ -12,6 +12,7 @@
 
 #include "Features/Raytracing/Core/Material.h"
 
+#include "Raytracing/Includes/Types/Shape.hlsli"
 #include "Raytracing/Includes/Types/Skinning.hlsli"
 #include "Raytracing/Includes/Types/Triangle.hlsli"
 #include "Raytracing/Includes/Types/Vertex.hlsli"
@@ -91,9 +92,7 @@ public:
 		return clone;
 	}*/
 
-	D3D12_GPU_VIRTUAL_ADDRESS TransformBuffer(ID3D12Resource* resource) const {
-		return ((flags & Flags::Dynamic) || (flags & Flags::Skinned)) ? 0 : resource->GetGPUVirtualAddress() + sizeof(float3x4) * allocation->GetIndex();
-	}
+	D3D12_GPU_VIRTUAL_ADDRESS TransformBuffer() const;
 
 	void BuildMesh(RE::BSGraphics::TriShape* rendererData, const uint32_t& vertexCountIn, const uint32_t& triangleCountIn, const uint16_t& bonesPerVertex);
 
@@ -115,6 +114,8 @@ public:
 
 	// For PBR shader flags we need to copy exactly what TruePBR does
 	static stl::enumeration<PBRShaderFlags, uint32_t> GetPBRShaderFlags(const BSLightingShaderMaterialPBR* pbrMaterial);
+
+	ShapeData GetData() const;
 };
 
 DEFINE_ENUM_FLAG_OPERATORS(Shape::Flags);

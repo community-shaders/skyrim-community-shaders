@@ -48,6 +48,7 @@
 #include "Raytracing/Includes/Types/FrameData.hlsli"
 #include "Raytracing/Includes/Types/Instance.hlsli"
 #include "Raytracing/Includes/Types/Light.hlsli"
+#include "Raytracing/Includes/Types/Shape.hlsli"
 #include "Raytracing/Includes/Types/Material.hlsli"
 #include "Raytracing/Includes/Types/ShadowsFrameData.hlsli"
 #include "Raytracing/Includes/Types/Skinning.hlsli"
@@ -118,9 +119,8 @@ struct Raytracing : public OverlayFeature
 			TLAS,
 			SkyHemisphere,
 			Lights,
-			Materials,
+			Shapes,
 			Instances,
-			Indirection,
 			Vertices,
 			Triangles = Vertices + RTConstants::MAX_SHAPES,
 			Textures = Triangles + RTConstants::MAX_SHAPES,
@@ -678,15 +678,15 @@ struct Raytracing : public OverlayFeature
 	eastl::unordered_map<RE::NiAVObject*, Instance> instances;
 	eastl::unordered_map<RE::FormID, eastl::vector<RE::NiAVObject*>> formIDNodes;
 
-	eastl::unique_ptr<DX12::StructuredBufferUpload<MaterialData>> materialBuffer = nullptr;
-
+	// Transform buffer for BLAS build/rebuild
 	eastl::unique_ptr<DX12::StructuredBufferUpload<float3x4>> transformBuffer = nullptr;
 
-	eastl::vector<InstanceData> instanceBufferData;
-	eastl::unique_ptr<DX12::StructuredBufferUpload<InstanceData>> instanceBuffer = nullptr;
+	// Indirection, Transform and Material buffers
+	eastl::array<ShapeData, RTConstants::MAX_SHAPES> shapeData;
+	eastl::unique_ptr<DX12::StructuredBufferUpload<ShapeData>> shapeBuffer = nullptr;
 
-	// Maps geometry to their actual buffer SRV
-	eastl::unique_ptr<DX12::ResourceUpload> indirectionBuffer = nullptr;
+	eastl::array<InstanceData, RTConstants::MAX_INSTANCES> instanceData;
+	eastl::unique_ptr<DX12::StructuredBufferUpload<InstanceData>> instanceBuffer = nullptr;
 
 	Util::FrameChecker shadowFrameChecker;
 

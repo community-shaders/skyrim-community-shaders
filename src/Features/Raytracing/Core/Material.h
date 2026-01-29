@@ -187,12 +187,12 @@ struct Material
 
 	eastl::array<eastl::shared_ptr<Allocation>, 20> Textures;
 
-	MaterialData GetData()
+	MaterialData GetData() const
 	{
 		return MaterialData(
 			TexCoordOffsetScale[0], TexCoordOffsetScale[1],
 			Colors[0], Colors[1], Colors[2],
-			Scalars[0], Scalars[1], Scalars[2],
+			Scalars[0], Scalars[1], Scalars[2], 0,
 			AlphaFlags,
 			Textures[0]->GetIndex(),
 			Textures[1]->GetIndex(),

@@ -1079,7 +1079,7 @@ void Raytracing::SetupResources()
 		}
 	}
 
-	// t3 - Light buffer
+	// Light buffer
 	{
 		lightBuffer = eastl::make_unique<DX12::StructuredBufferUpload<Light>>(d3d12Device.get(), RTConstants::MAX_LIGHTS);
 		DX::ThrowIfFailed(lightBuffer->resource->SetName(L"Light Buffer"));
@@ -1087,38 +1087,20 @@ void Raytracing::SetupResources()
 		lightBuffer->CreateSRV(giHeap->CPUHandle(GIHeap::Slot::Lights));
 	}
 
-	// t4 - Material buffer
+	// Shape buffer
 	{
-		materialBuffer = eastl::make_unique<DX12::StructuredBufferUpload<MaterialData>>(d3d12Device.get(), RTConstants::MAX_MATERIALS);
-		DX::ThrowIfFailed(materialBuffer->resource->SetName(L"Material Buffer"));
+		shapeBuffer = eastl::make_unique<DX12::StructuredBufferUpload<ShapeData>>(d3d12Device.get(), RTConstants::MAX_SHAPES);
+		DX::ThrowIfFailed(shapeBuffer->resource->SetName(L"Shape Buffer"));
 
-		materialBuffer->CreateSRV(giHeap->CPUHandle(GIHeap::Slot::Materials));
+		shapeBuffer->CreateSRV(giHeap->CPUHandle(GIHeap::Slot::Shapes));
 	}
 
-	// t5 - Instance buffer
+	// Instance buffer
 	{
 		instanceBuffer = eastl::make_unique<DX12::StructuredBufferUpload<InstanceData>>(d3d12Device.get(), RTConstants::MAX_INSTANCES);
 		DX::ThrowIfFailed(instanceBuffer->resource->SetName(L"Instance Buffer"));
 
 		instanceBuffer->CreateSRV(giHeap->CPUHandle(GIHeap::Slot::Instances));
-	}
-
-	// t6 - Indirection buffer
-	{
-		// Could probably fit in 16 bits but indexing would be awkward
-		indirectionBuffer = eastl::make_unique<DX12::ResourceUpload>(d3d12Device.get(), sizeof(uint32_t) * RTConstants::MAX_SHAPES);
-		DX::ThrowIfFailed(indirectionBuffer->resource->SetName(L"Indirection Buffer"));
-
-		D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
-		srvDesc.ViewDimension = D3D12_SRV_DIMENSION_BUFFER;
-		srvDesc.Format = DXGI_FORMAT_R32_TYPELESS;
-		srvDesc.Buffer.FirstElement = 0;
-		srvDesc.Buffer.NumElements = RTConstants::MAX_SHAPES;
-		srvDesc.Buffer.StructureByteStride = 0;
-		srvDesc.Buffer.Flags = D3D12_BUFFER_SRV_FLAG_RAW;
-		srvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
-
-		indirectionBuffer->CreateSRV(srvDesc, giHeap->CPUHandle(GIHeap::Slot::Indirection));
 	}
 
 	// Geometry transform buffer
@@ -1870,7 +1852,7 @@ void Raytracing::CommitModel(Model* model)
 			.Type = D3D12_RAYTRACING_GEOMETRY_TYPE_TRIANGLES,
 			.Flags = isOpaque ? D3D12_RAYTRACING_GEOMETRY_FLAG_OPAQUE : D3D12_RAYTRACING_GEOMETRY_FLAG_NONE,
 			.Triangles = {
-				.Transform3x4 = shape->TransformBuffer(transformBuffer->resource.get()),
+				.Transform3x4 = shape->TransformBuffer(),
 				.IndexFormat = DXGI_FORMAT_R16_UINT,
 				.VertexFormat = DXGI_FORMAT_R32G32B32_FLOAT,
 				.IndexCount = shape->triangleCount * 3,
@@ -1971,7 +1953,7 @@ void Raytracing::UpdateModelBLAS(Model* model)
 			.Type = D3D12_RAYTRACING_GEOMETRY_TYPE_TRIANGLES,
 			.Flags = isOpaque ? D3D12_RAYTRACING_GEOMETRY_FLAG_OPAQUE : D3D12_RAYTRACING_GEOMETRY_FLAG_NONE,
 			.Triangles = {
-				.Transform3x4 = shape->TransformBuffer(transformBuffer->resource.get()),
+				.Transform3x4 = shape->TransformBuffer(),
 				.IndexFormat = DXGI_FORMAT_R16_UINT,
 				.VertexFormat = DXGI_FORMAT_R32G32B32_FLOAT,
 				.IndexCount = shape->triangleCount * 3,
@@ -2593,9 +2575,6 @@ void Raytracing::UpdateInstances()
 {
 	//std::lock_guard lock{ geometryMutex };
 
-	instanceBufferData.clear();
-	instanceBufferData.reserve(instances.size());
-
 	blasInstances.clear();
 	blasInstances.reserve(instances.size());
 
@@ -2617,11 +2596,7 @@ void Raytracing::UpdateInstances()
 	//float4 cameraPos = globals::game::frameBufferCached.GetCameraPosAdjust();
 
 	uint32_t totalShapeCount = 0;
-
-	// We'll manually map once, copy all data sequentially, then unmap and upload
-	D3D12_RANGE readRange = { 0, 0 };
-	uint32_t* pIndirectionData = nullptr;
-	DX::ThrowIfFailed(indirectionBuffer->uploadResource->Map(0, &readRange, reinterpret_cast<void**>(&pIndirectionData)));
+	uint32_t instanceCount = 0;
 
 	for (auto& [node, instance] : instances) {
 		if (instance.IsDetached())
@@ -2695,13 +2670,15 @@ void Raytracing::UpdateInstances()
 		auto firstShapeIndex = totalShapeCount;
 		auto shapeCount = model->shapes.size();
 
-		if (totalShapeCount + shapeCount > RTConstants::MAX_SHAPES)
+		if (totalShapeCount + shapeCount > RTConstants::MAX_SHAPES) {
+			logger::error("[RT] UpdateInstances - Total shape count {} would excede RTConstants::MAX_SHAPES {}", totalShapeCount + shapeCount, RTConstants::MAX_SHAPES);
 			break;
+		}
 
 		totalShapeCount += static_cast<uint32_t>(shapeCount);
 
 		for (size_t i = 0; i < shapeCount; i++) {
-			pIndirectionData[firstShapeIndex + i] = static_cast<uint32_t>(model->shapes[i]->allocation->GetIndex());
+			shapeData[firstShapeIndex + i] = model->shapes[i]->GetData();
 		}
 
 		D3D12_RAYTRACING_INSTANCE_DESC blasInstance = {
@@ -2715,27 +2692,23 @@ void Raytracing::UpdateInstances()
 
 		blasInstances.push_back(blasInstance);
 
-		instanceBufferData.emplace_back(
+		instanceData[instanceCount] = {
 			instance.transform,
 			LightData(GatherInstanceLights(node)),
-			firstShapeIndex);
+			firstShapeIndex
+		};
+
+		instanceCount++;
 	}
 
-	// Unmap indirection table
-	D3D12_RANGE writeRange = { 0, std::min(totalShapeCount, RTConstants::MAX_SHAPES) * sizeof(uint32_t) };
-	indirectionBuffer->uploadResource->Unmap(0, &writeRange);
+	shapeBuffer->UpdateList(shapeData.data(), RTConstants::MAX_SHAPES);
+	shapeBuffer->Upload(commandList.get(), 0, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
 
 	blasInstanceBuffer->UpdateList(blasInstances.data(), std::min(blasInstances.size(), (size_t)RTConstants::MAX_INSTANCES));
 	blasInstanceBuffer->Upload(commandList.get());
 
-	instanceBuffer->UpdateList(instanceBufferData.data(), std::min(instanceBufferData.size(), (size_t)RTConstants::MAX_INSTANCES));
+	instanceBuffer->UpdateList(instanceData.data(), RTConstants::MAX_INSTANCES);
 	instanceBuffer->Upload(commandList.get(), 0, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
-
-	materialBuffer->Upload(commandList.get(), 0, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
-
-	//transformBuffer->Upload(commandList.get(), 0, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
-
-	indirectionBuffer->Upload(commandList.get(), D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
 }
 
 auto GetFrustumCorners2(const RE::NiFrustum& frustum)
@@ -3978,7 +3951,7 @@ void Raytracing::InitD3D12(ID3D11Device* ppDevice, ID3D11DeviceContext* pImmedia
 		if (SUCCEEDED(d3d12Device->QueryInterface(IID_PPV_ARGS(&infoQueue)))) {
 			infoQueue->SetBreakOnSeverity(D3D12_MESSAGE_SEVERITY_CORRUPTION, TRUE);
 			infoQueue->SetBreakOnSeverity(D3D12_MESSAGE_SEVERITY_ERROR, TRUE);
-			infoQueue->SetBreakOnSeverity(D3D12_MESSAGE_SEVERITY_WARNING, FALSE);
+			infoQueue->SetBreakOnSeverity(D3D12_MESSAGE_SEVERITY_WARNING, TRUE);
 		} else {
 			logger::critical("[RT] Debug break creation failed.");
 		}
@@ -4072,9 +4045,8 @@ void Raytracing::CreateRootSignature()
 			{ GIHeap::Slot::TLAS, 1, 0 },
 			{ GIHeap::Slot::SkyHemisphere, 1, 0 },
 			{ GIHeap::Slot::Lights, 1, 0 },
-			{ GIHeap::Slot::Materials, 1, 0 },
-			{ GIHeap::Slot::Instances, 1, 0 },
-			{ GIHeap::Slot::Indirection, 1, 0 } });
+			{ GIHeap::Slot::Shapes, 1, 0 },
+			{ GIHeap::Slot::Instances, 1, 0 } });
 
 	// Vertex buffers (unbounded)
 	giHeap->CreateTable(

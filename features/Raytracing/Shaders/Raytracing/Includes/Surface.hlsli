@@ -356,15 +356,15 @@ struct Surface
 
         surface.Position = position;
 
-        uint shapeIndex = GetShapeIdx(payload, instance);
+        Shape shape = GetShape(payload, instance);
 
         // Loads all geometry releated data
         Vertex v0, v1, v2;
-        GetVertices(shapeIndex, payload.primitiveIndex, v0, v1, v2);
+        GetVertices(shape.GeometryIdx, payload.primitiveIndex, v0, v1, v2);
 
         float3 uvw = GetBary(payload.Barycentrics());
 
-        material = Materials[shapeIndex];
+        material = shape.Material;
 
         float2 texCoord0 = material.TexCoord(Interpolate(v0.Texcoord0, v1.Texcoord0, v2.Texcoord0, uvw));
 

@@ -85,7 +85,8 @@ struct Material
 	half Scalar0;
 	half Scalar1;
 	half Scalar2;
-
+	half Scalar3; // For padding
+	
 	uint16_t AlphaFlags;
 
 	// Textures
