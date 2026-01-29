@@ -580,7 +580,7 @@ float3 GetLightingColor(float3 msPosition, float3 worldPosition, float2 screenPo
 	return color;
 }
 #	else
-float3 GetLightingShadow(float3 color, float3 worldPosition, float2 screenPosition, uint eyeIndex, inout float shadowVariance)
+float3 GetLightingShadow(float3 color, float3 worldPosition, float2 screenPosition, float depth, uint eyeIndex, inout float shadowVariance)
 {
 #		if defined(SKYLIGHTING)
 #			if defined(VR)
@@ -605,7 +605,31 @@ float3 GetLightingShadow(float3 color, float3 worldPosition, float2 screenPositi
 	ShadowSampling::ExtractLighting(color, dirColor, ambientColor);
 #		endif
 
-	float shadow = ShadowSampling::GetEffectShadow(worldPosition.xyz, normalize(worldPosition.xyz), screenPosition, eyeIndex);
+	static const uint sampleCount = 8;
+	static const float rcpSampleCount = 1.0 / float(sampleCount);
+
+	float noise = Random::InterleavedGradientNoise(screenPosition, SharedData::FrameCount);
+	float noiseTransform = noise * 2.0 - 1.0;
+	float2 rotation;
+	sincos(Math::TAU * noise, rotation.y, rotation.x);
+	float2x2 rotationMatrix = float2x2(rotation.x, rotation.y, -rotation.y, rotation.x);
+
+	// Enough for sky statics
+	float maxDistance = max(0, SharedData::GetScreenDepth(depth));
+	float viewRayLength = min(maxDistance, 4096);
+	float3 viewDirection = normalize(worldPosition);
+	float3 startPosition = worldPosition - viewDirection * viewRayLength;
+	float3 endPosition = worldPosition + viewDirection * min(maxDistance, 4096);
+
+	float shadow = 0;
+	for(uint i = 0; i < sampleCount; i++){
+		uint noisyIndex = uint((float(i) + sampleCount * noise) % sampleCount);
+		float t = (float(sampleCount) - float(noisyIndex + 1)) * rcpSampleCount;
+		float tSample = t + noiseTransform * rcpSampleCount;
+		shadow += ShadowSampling::GetWorldShadow(lerp(startPosition, endPosition, tSample), FrameBuffer::CameraPosAdjust[eyeIndex].xyz, eyeIndex);
+	}
+
+	shadow *= rcpSampleCount;
 
 	shadowVariance = 1.0 - sqrt(saturate(fwidth(shadow)));
 
@@ -807,7 +831,7 @@ PS_OUTPUT main(PS_INPUT input)
 
 #if !defined(LIGHTING) && defined(VC) && defined(TEXCOORD) && defined(NORMALS) && defined(TEXTURE) && defined(FALLOFF) && defined(SOFT)
 	if(Permutation::PixelShaderDescriptor & Permutation::EffectFlags::GrayscaleToAlpha && lightingInfluence == 1.0)
-		lightColor = GetLightingShadow(lightColor, input.WorldPosition.xyz, input.Position.xy, eyeIndex, shadowVariance);
+		lightColor = GetLightingShadow(lightColor, input.WorldPosition.xyz, input.Position.xy, depth, eyeIndex, shadowVariance);
 #endif
 
 #	if !defined(MOTIONVECTORS_NORMALS)

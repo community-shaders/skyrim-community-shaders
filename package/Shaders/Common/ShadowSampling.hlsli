@@ -78,7 +78,7 @@ namespace ShadowSampling
 
 #if defined(EFFECT)
 		// Enough for non-billboards + enough for Sovngarde fog
-		float viewRayLength = Permutation::EffectRadius * 0.1;
+		float viewRayLength = min(Permutation::BillboardRadius * 0.1, 128);
 		float3 startPosition = positionWS - viewDirection * viewRayLength;
 		float3 endPosition = positionWS + viewDirection * viewRayLength;
 #else
@@ -88,7 +88,15 @@ namespace ShadowSampling
 		float3 endPosition = positionWS + viewDirection * viewRayLength;
 #endif
 
-		float worldShadow = GetWorldShadow(lerp(startPosition, endPosition, noise), FrameBuffer::CameraPosAdjust[eyeIndex].xyz, eyeIndex);
+		float worldShadow = 0;
+		for(uint i = 0; i < sampleCount; i++){
+			uint noisyIndex = uint((float(i) + sampleCount * noise) % sampleCount);
+			float t = (float(sampleCount) - float(noisyIndex + 1)) * rcpSampleCount;
+			float tSample = t + noiseTransform * rcpSampleCount;
+			worldShadow += ShadowSampling::GetWorldShadow(lerp(startPosition, endPosition, tSample), FrameBuffer::CameraPosAdjust[eyeIndex].xyz, eyeIndex);
+		}
+
+		worldShadow *= rcpSampleCount;
 
 		if (worldShadow == 0.0)
 			return 0.0;
@@ -125,7 +133,8 @@ namespace ShadowSampling
 			float3 viewOffsetLS = viewOffsetsLS[cascadeIndex];
 
 			// Offset along view ray with optimised sample pattern
-			float3 sampledPositionLS = lerp(positionLS, viewOffsetLS, t + noiseTransform * rcpSampleCount);
+			float tSample = t + noiseTransform * rcpSampleCount;
+			float3 sampledPositionLS = lerp(positionLS, viewOffsetLS, tSample);
 
 			// Blur shadow with poisson disc
 			sampledPositionLS.xy += mul(Random::SpiralSampleOffsets8[i], rotationMatrix) * sampleRadius;

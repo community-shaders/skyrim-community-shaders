@@ -226,8 +226,8 @@ void Deferred::CopyShadowData()
 					D3D11_TEXTURE2D_DESC srcDesc;
 					shadowTexture->GetDesc(&srcDesc);
 
-					uint32_t newWidth = srcDesc.Width / 4;
-					uint32_t newHeight = srcDesc.Height / 4;
+					uint32_t newWidth = srcDesc.Width / 2;
+					uint32_t newHeight = srcDesc.Height / 2;
 
 					// Lazily create or recreate downscaled texture if dimensions changed
 					if (!shadowCopyTexture || shadowCopyWidth != newWidth || shadowCopyHeight != newHeight || shadowCopyArraySize != srcDesc.ArraySize) {
@@ -289,10 +289,7 @@ void Deferred::CopyShadowData()
 
 					context->CSSetSamplers(0, 1, &pointSampler);
 					context->CSSetShader(downsampleShadowCS, nullptr, 0);
-
-					uint fullShadowSize = shadowCopyWidth * 4;
-
-					context->Dispatch((fullShadowSize + 15) >> 4, (fullShadowSize + 15) >> 4, shadowCopyArraySize);
+					context->Dispatch((shadowCopyWidth + 7) >> 3, (shadowCopyWidth + 7) >> 3, shadowCopyArraySize);
 
 					// Cleanup CS state
 					csSrvs[0] = nullptr;
