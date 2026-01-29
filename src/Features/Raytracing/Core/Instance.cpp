@@ -25,7 +25,12 @@ bool Instance::ShouldUpdate(RE::NiAVObject* node, RE::NiPoint3 cameraPosition)
 
 	float distance = Util::Units::GameUnitsToMeters(node->world.translate.GetDistance(cameraPosition));
 
-	return delta >= UpdateRate(distance);
+	if (delta >= UpdateRate(distance)) {
+		lastUpdate = globals::state->frameCount;
+		return true;
+	}
+
+	return false;
 }
 
 // Checks for skinned and dynamic trishapes update
