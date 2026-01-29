@@ -890,7 +890,7 @@ float3 GetWaterSpecularColor(PS_INPUT input, float3 normal, float3 viewDirection
 		float4 ssrReflectionColor = lerp(ssrReflectionColorBlurred, ssrReflectionColorRaw, ssrAmount * 0.7);
 		float3 finalSsrReflectionColor = max(0, ssrReflectionColor.xyz);
 		float ssrFraction = saturate(ssrReflectionColor.w * distanceFactor * ssrAmount);
-		reflectionColor = lerp(Color::IrradianceToLinear(reflectionColor), Color::IrradianceToLinear(finalSsrReflectionColor), ssrFraction);
+		reflectionColor = lerp(reflectionColor, finalSsrReflectionColor, ssrFraction);
 	}
 #		endif
 
