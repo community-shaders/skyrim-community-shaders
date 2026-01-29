@@ -67,32 +67,28 @@ namespace ShadowSampling
 
 	float Get3DFilteredShadow(float3 positionWS, float3 viewDirection, float2 screenPosition, uint eyeIndex)
 	{
-		float noise = Random::InterleavedGradientNoise(screenPosition, SharedData::FrameCount);
-
-		ShadowData sD = SharedShadowData[0];
-
 		static const uint sampleCount = 8;
 		static const float rcpSampleCount = 1.0 / float(sampleCount);
-
+		
+		float noise = Random::InterleavedGradientNoise(screenPosition, SharedData::FrameCount);
 		float noiseTransform = noise * 2.0 - 1.0;
 		float2 rotation;
 		sincos(Math::TAU * noise, rotation.y, rotation.x);
 		float2x2 rotationMatrix = float2x2(rotation.x, rotation.y, -rotation.y, rotation.x);
 
 		float worldShadow = 0.0;
-		for(uint i = 0; i < 8; i++){
+		for(uint i = 0; i < sampleCount; i++){
 			float3 positionWSTemp = positionWS;
 			positionWSTemp.xy += mul(Random::SpiralSampleOffsets8[i], rotationMatrix) * 1024;
 			worldShadow += GetWorldShadow(positionWSTemp, FrameBuffer::CameraPosAdjust[eyeIndex].xyz, eyeIndex);
 		}
-		worldShadow /= 8.0;
+		worldShadow *= rcpSampleCount;
 		if (worldShadow == 0.0)
 			return 0.0;
 
 		float shadowMapDepth = GetShadowDepth(positionWS, eyeIndex);
-
-		float shadow = 0.0;
 		
+		ShadowData sD = SharedShadowData[0];
 		if (sD.EndSplitDistances.z < shadowMapDepth)
 			return worldShadow;
 
@@ -121,6 +117,7 @@ namespace ShadowSampling
 			viewOffsetsLS[cascadeIdx] = mul(transpose(sD.ShadowMapProj[eyeIndex][cascadeIdx]), float4(endPosition, 1));
 		}
 
+		float shadow = 0.0;
 		for (uint i = 0; i < sampleCount; i++) {
 			uint noisyIndex = uint((float(i) + sampleCount * noise) % sampleCount);
 			float t = (float(sampleCount) - float(noisyIndex + 1)) * rcpSampleCount;
