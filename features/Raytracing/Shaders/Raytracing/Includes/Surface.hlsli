@@ -15,6 +15,7 @@ struct Surface
 {
     float3 Position;
     float3 GeomNormal;
+    float3 GeomTangent;
     float3 Normal;
     float3 Tangent;
     float3 Bitangent;
@@ -407,6 +408,7 @@ struct Surface
 
         surface.MipLevel = payload.rayCone.computeLOD(coneTexLODValue, rayDir, normalWS, true) + Frame.TexLODBias;
         surface.GeomNormal = normalWS;
+        surface.GeomTangent = tangentWS;
 
         surface.Albedo = float3(1.0f, 1.0f, 1.0f);
         surface.Emissive = float3(0.0f, 0.0f, 0.0f);
@@ -502,6 +504,8 @@ struct Surface
         surface.Normal = normal;
         surface.Tangent = tangent;
         surface.Bitangent = bitangent;
+
+        surface.GeomTangent = tangent; // not needed for hybrid
 
 #   ifdef DEBUG_WHITE_FURNACE
         surface.Albedo = float3(1.0f, 1.0f, 1.0f);

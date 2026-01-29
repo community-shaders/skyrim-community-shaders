@@ -212,4 +212,52 @@ float3 EvaluateDirectRadiance(in Surface surface, in BRDFContext brdfContext, in
     return radiance;
 }
 
+bool ComputeTangentSpace(inout Surface surface, const bool ignoreTangent)
+{
+    // Check that tangent space exists and can be safely orthonormalized.
+    // Otherwise invent a tanget frame based on the normal.
+    // We check that:
+    //  - Tangent exists, this is indicated by a nonzero sign (w).
+    //  - It has nonzero length. Zeros can occur due to interpolation or bad assets.
+    //  - It is not parallel to the normal. This can occur due to normal mapping or bad assets.
+    //  - It does not have NaNs. These will propagate and trigger the fallback.
+
+    float NdotT = dot(surface.GeomTangent, surface.Normal);
+    bool nonParallel = abs(NdotT) < 0.9999f;
+    bool nonZero = dot(surface.GeomTangent, surface.GeomTangent) > 0.f;
+
+    bool valid = nonZero && nonParallel;
+    if (!ignoreTangent && valid)
+    {
+        surface.Tangent = normalize(surface.GeomTangent - surface.Normal * NdotT);
+        surface.Bitangent = cross(surface.Normal, surface.Tangent);
+    }
+    else
+    {
+        surface.Tangent = perp_stark(surface.Normal);
+        surface.Bitangent = cross(surface.Normal, surface.Tangent);
+    }
+
+    return valid;
+}
+
+void AdjustShadingNormal(inout Surface surface, BRDFContext brdfContext, uniform bool recomputeTangentSpace, const bool ignoreTangent)
+{
+    float3 Ng = dot(brdfContext.ViewDirection, surface.GeomNormal) >= 0.f ? surface.GeomNormal : -surface.GeomNormal;
+    float signN = dot(surface.Normal, Ng) >= 0.f ? 1.f : -1.f;
+    float3 Ns = signN * surface.Normal;
+
+    // Blend the shading normal towards the geometric normal at grazing angles.
+    // This is to avoid the view vector from becoming back-facing.
+    const float kCosThetaThreshold = 0.1f;
+    float cosTheta = dot(brdfContext.ViewDirection, Ns);
+    if (cosTheta <= kCosThetaThreshold)
+    {
+        float t = saturate(cosTheta * (1.f / kCosThetaThreshold));
+        surface.Normal = signN * normalize(lerp(Ng, Ns, t));
+    }
+    if (cosTheta <= kCosThetaThreshold || recomputeTangentSpace)
+        ComputeTangentSpace(surface, ignoreTangent);
+}
+
 #endif // SHADING_HLSL
