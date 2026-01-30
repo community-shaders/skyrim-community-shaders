@@ -111,6 +111,8 @@ void main()
 
     StandardBSDF sourceBSDF = StandardBSDF::make(sourceSurface, true);
 
+    AdjustShadingNormal(sourceSurface, sourceBRDFContext, true, false);
+
     // Direct Light for PT
     float3 direct = EvaluateDirectRadiance(sourceSurface, sourceBRDFContext, sourceInstance, sourceBSDF, randomSeed) + sourceSurface.Emissive;
 #else
