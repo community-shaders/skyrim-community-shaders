@@ -270,6 +270,7 @@ void main()
 
         float3 sampleRadiance = float3(0.0f, 0.0f, 0.0f);
         float3 throughput = float3(1.0f, 1.0f, 1.0f);
+        float materialRoughnessPrev = 0.0f;
         bool isEnter = true;
 
 #if defined(RAW_RADIANCE)
@@ -369,6 +370,10 @@ void main()
                 throughput /= (1.0f - rrProb);
             }
 
+#if defined(SHARC)
+            materialRoughnessPrev += bsdfSample.isLobe(LobeType::Diffuse) ? 1.0f : material.roughness;
+#endif
+
             // Use hasTransmission flag to properly determine ray offset direction
             // instead of re-checking direction against geom normal
             ray.Origin = OffsetRay(surface.Position, surface.GeomNormal, hasTransmission);
@@ -432,7 +437,9 @@ void main()
                 bool isValidHit = payload.hitDistance > voxelSize * sqrt(3.0f);
 
                 if (isValidHit) {
-                    float footprint = payload.hitDistance * sqrt(0.5f * surface.Roughness / max(1.0f - surface.Roughness, DIV_EPSILON));
+                    materialRoughnessPrev = min(materialRoughnessPrev, 0.99f);
+                    float a2 = materialRoughnessPrev * materialRoughnessPrev * materialRoughnessPrev * materialRoughnessPrev;
+                    float footprint = payload.hitDistance * sqrt(0.5f * a2 / max(1.0f - a2, DIV_EPSILON));
                     isValidHit &= footprint > voxelSize;
                 }
 
