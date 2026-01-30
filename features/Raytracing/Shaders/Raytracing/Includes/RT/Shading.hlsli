@@ -44,21 +44,6 @@ float VanillaSquaredAtten(float dist, float range)
     return saturate(1.0 - dist * dist / (range * range));
 }
 
-// float3 Diffuse(float roughness, float3 N, float3 V, float3 L, float NdotV, float NdotL, float VdotH, float VdotL, float NdotH)
-// {
-// #if DIFFUSE_MODE == DIFFUSE_MODE_BURLEY
-//     return BRDF::Diffuse_Burley(roughness, NdotV, NdotL, VdotH);
-// #elif DIFFUSE_MODE == DIFFUSE_MODE_ORENNAYAR
-//     return BRDF::Diffuse_OrenNayar(roughness, N, V, L, NdotV, NdotL);
-// #elif DIFFUSE_MODE == DIFFUSE_MODE_GOTANDA
-//     return BRDF::Diffuse_Gotanda(roughness, NdotV, NdotL, VdotL);
-// #elif DIFFUSE_MODE == DIFFUSE_MODE_CHAN
-//     return BRDF::Diffuse_Chan(roughness, NdotV, NdotL, VdotH, NdotH);
-// #else
-//     return BRDF::Diffuse_Lambert();
-// #endif
-// }
-
 float3 EvalDiffuse(in float3 l, in Surface surface, in BRDFContext brdfContext)
 {
     float NdotL = saturate(dot(surface.Normal, l));
@@ -69,148 +54,6 @@ float3 EvalDiffuse(in float3 l, in Surface surface, in BRDFContext brdfContext)
     // Diffuse is meant to be very light (and used with DDGI), so I don't see much point in using a different diffuse or shading model here
     return surface.DiffuseAlbedo * NdotL * BRDF::Diffuse_Lambert();
 }
-
-// float3 EvalDefaultBSDF(in float3 l, in Surface surface, in BRDFContext brdfContext)
-// {
-//     float NdotL = saturate(dot(surface.Normal, l));
-
-//     if (NdotL <= 0.0f)
-//         return float3(0.0f, 0.0f, 0.0f);
-
-//     float3 H = normalize(brdfContext.ViewDirection + l);
-
-//     float NdotH = saturate(dot(surface.Normal, H));
-//     float VdotH = clamp(dot(brdfContext.ViewDirection, H), 1e-5f, 1.0f);
-//     float VdotL = saturate(dot(brdfContext.ViewDirection, l));
-
-//     float D = BRDF::D_GGX(surface.Roughness, NdotH);
-//     float Vis = BRDF::Vis_SmithJointApprox(surface.Roughness, max(1e-5f, brdfContext.NdotV), NdotL);
-//     float3 F = BRDF::F_Schlick(surface.F0, VdotH);
-
-//     // specular BRDF
-//     float3 Fr = (D * Vis) * F;
-
-//     float3 Fd = surface.DiffuseAlbedo
-//     * Diffuse(surface.Roughness, surface.Normal, brdfContext.ViewDirection, l, brdfContext.NdotV, NdotL, VdotH, VdotL, NdotH)
-//     * ShadowTerminatorTerm(l, surface.Normal, surface.GeomNormal);
-
-//     return (Fd + Fr) * NdotL;
-// }
-
-// #if defined(FULL_MATERIAL)
-// float3 EvalFuzzBSDF(in float3 l, in Surface surface, in BRDFContext brdfContext)
-// {
-//     float NdotL = saturate(dot(surface.Normal, l));
-
-//     if (NdotL <= 0.0f)
-//         return float3(0.0f, 0.0f, 0.0f);
-
-//     float3 H = normalize(brdfContext.ViewDirection + l);
-
-//     float NdotH = saturate(dot(surface.Normal, H));
-//     float VdotH = clamp(dot(brdfContext.ViewDirection, H), 1e-5f, 1.0f);
-//     float VdotL = saturate(dot(brdfContext.ViewDirection, l));
-
-//     float D = BRDF::D_GGX(surface.Roughness, NdotH);
-//     float Vis = BRDF::Vis_SmithJointApprox(surface.Roughness, max(1e-5f, brdfContext.NdotV), NdotL);
-//     float3 F = BRDF::F_Schlick(surface.F0, VdotH);
-
-//     // specular BRDF
-//     float3 Fr = (D * Vis) * F;
-
-//     float3 Fd = surface.DiffuseAlbedo
-//     * Diffuse(surface.Roughness, surface.Normal, brdfContext.ViewDirection, l, brdfContext.NdotV, NdotL, VdotH, VdotL, NdotH)
-//     * ShadowTerminatorTerm(l, surface.Normal, surface.GeomNormal);
-
-//     float Efuzz = (0.526422 / ((-0.227114 + surface.Roughness) * (-0.968835 + surface.Roughness) * ((5.38869 - 20.2835 * brdfContext.NdotV) * surface.Roughness) - (-1.18761 - ((2.58744 - brdfContext.NdotV) * brdfContext.NdotV)))) + 0.0615456;
-//     float Dfuzz = BRDF::D_Charlie(surface.Roughness, NdotH);
-//     float Gfuzz = BRDF::Vis_Neubelt(brdfContext.NdotV, NdotL);
-//     float3 Ffuzz = surface.FuzzColor * Dfuzz * Gfuzz;
-
-//     return ((Fd + Fr) * lerp(1, 1 - Efuzz, surface.FuzzWeight) + Ffuzz * surface.FuzzWeight) * NdotL;
-// }
-// #endif
-
-// float3 EvalTransmissionBSDF(in float3 l, in Surface surface, in BRDFContext brdfContext, in bool isEnter)
-// {
-//     float materialIOR = max(surface.IOR, 1.0f);
-    
-//     // Special case: IOR=1 means no refraction, light passes straight through
-//     if (abs(materialIOR - 1.0f) < 0.001f)
-//     {
-//         float NdotL = abs(dot(surface.Normal, l));
-//         if (NdotL > 0.0f)
-//             return surface.TransmissionColor * NdotL;
-//         return float3(0.0f, 0.0f, 0.0f);
-//     }
-    
-//     float eta = isEnter ? (1.0f / materialIOR) : materialIOR;
-    
-//     float NdotL = dot(surface.Normal, l);
-//     float NdotV = dot(surface.Normal, brdfContext.ViewDirection);
-
-//     bool isReflection = NdotL * NdotV > 0.0f;
-    
-//     NdotL = abs(NdotL);
-//     if (NdotL <= 0.0f)
-//         return float3(0.0f, 0.0f, 0.0f);
-    
-//     float3 H;
-//     float VdotH;
-    
-//     if (isReflection)
-//     {
-//         H = normalize(brdfContext.ViewDirection + l);
-//         VdotH = clamp(dot(brdfContext.ViewDirection, H), 1e-5f, 1.0f);
-//     }
-//     else
-//     {
-//         H = -normalize(brdfContext.ViewDirection * eta + l);
-//         VdotH = abs(dot(brdfContext.ViewDirection, H));
-//     }
-    
-//     float NdotH = saturate(dot(surface.Normal, H));
-    
-//     float F = FresnelDielectric(eta, VdotH);
-//     float D = BRDF::D_GGX(surface.Roughness, NdotH);
-//     float Vis = BRDF::Vis_SmithJointApprox(surface.Roughness, max(1e-5f, abs(NdotV)), NdotL);
-    
-//     if (isReflection)
-//     {
-//         float3 Fr = (D * Vis) * F;
-//         return Fr * NdotL;
-//     }
-//     else
-//     {
-//         float LdotH = abs(dot(l, H));
-//         float sqrtDenom = VdotH + eta * LdotH;
-//         float jacobian = (eta * eta * LdotH) / max(sqrtDenom * sqrtDenom, 1e-7f);
-
-//         float etaScale = eta * eta;
-//         float3 Ft = surface.TransmissionColor * (1.0f - F) * (D * Vis) * etaScale * jacobian;
-//         return Ft * NdotL;
-//     }
-// }
-
-// float3 EvalLight(in float3 l, in Surface surface, in BRDFContext brdfContext, in Material material)
-// {
-// #if LIGHTEVAL_MODE == LIGHTEVAL_MODE_DIFFUSE
-//     return EvalDiffuse(l, surface, brdfContext);
-// #else
-//     bool hasTransmission = any(surface.TransmissionColor) > 0.0f;
-//     if (hasTransmission)
-//     {
-//         bool isEnter = dot(brdfContext.ViewDirection, surface.GeomNormal) > 0.0f;
-//         return EvalTransmissionBSDF(l, surface, brdfContext, isEnter);
-//     }
-// #   if defined(FULL_MATERIAL)
-//     else if ((material.PBRFlags & PBR::Flags::Fuzz) != 0)
-//         return EvalFuzzBSDF(l, surface, brdfContext);
-// #   endif
-//     else
-//         return EvalDefaultBSDF(l, surface, brdfContext);
-// #endif
-// }
 
 float3 EvalLight(in float3 l, in Surface surface, in BRDFContext brdfContext, in StandardBSDF bsdf)
 {
@@ -332,305 +175,6 @@ float3 EvalPointLight(in Surface surface, in BRDFContext brdfContext, in LightDa
     return direct;
 }
 
-// bool SampleDefaultBSDF(in Surface surface, in BRDFContext brdfContext, inout uint randomSeed, out float3 direction, out MonteCarlo::BRDFWeight brdfWeight)
-// {
-//     const float3 V = brdfContext.ViewDirection;
-//     float3 L = 0;
-//     float NdotL = 0;
-
-//     brdfWeight.diffuse = 0.0f;
-//     brdfWeight.specular = 0.0f;
-//     brdfWeight.transmission = 0.0f;
-
-//     const float specularProb = lerp(MonteCarlo::GetSpecularBrdfProbability(surface, V, surface.Normal), 1.0f, surface.Metallic);
-//     const bool isSpecular = Random(randomSeed) < specularProb;
-
-//     float pdf = 0.0f;
-//     float diffusePdf = 0.0f;
-//     float specularPdf = 0.0f;
-
-//     float3 Ve = float3(
-//             dot(brdfContext.ViewDirection, surface.Tangent),
-//             dot(brdfContext.ViewDirection, surface.Bitangent),
-//             dot(brdfContext.ViewDirection, surface.Normal)
-//         );
-//     float3 Le = 0.0f;
-//     float3 He = 0.0f;
-
-//     const float alpha = surface.Roughness * surface.Roughness;
-//     const float alpha2 = alpha * alpha;
-
-//     [branch]
-//     if (!isSpecular)
-//     {
-//         Le = SampleCosineHemisphere(randomSeed);
-//         He = normalize(Ve + Le);
-//     }
-//     else
-//     {
-//         // float2 E = Get2D(randomSeed);
-//         // E.x = MonteCarlo::RescaleRandomNumber(E.x, specularProb, 1.0f);
-//         // float2 Xi = MonteCarlo::Hammersley(0, 1, random2D);
-//         He = MonteCarlo::SampleGGX_VNDF(Ve, alpha, randomSeed);
-//         // He = MonteCarlo::ImportanceSampleVisibleGGX(E, alpha, Ve).xyz;
-//         Le = reflect(-Ve, He);
-//     }
-
-//     L = surface.Mul(Le);
-//     float3 H = surface.Mul(He);
-//     NdotL = saturate(dot(surface.Normal, L));
-//     float VdotH = saturate(dot(He, Ve));
-//     float NdotH = saturate(dot(surface.Normal, H));
-//     float VdotL = saturate(dot(Ve, Le));
-
-//     // const float2 GGXResult = MonteCarlo::GGXEvalReflection(Le, Ve, He, alpha);
-//     specularPdf = MonteCarlo::SampleGGXVNDFReflectionPdf(alpha, alpha2, NdotH, brdfContext.NdotV, VdotH);
-//     diffusePdf = NdotL / Math::PI;
-
-//     float3 F = BRDF::F_Schlick(surface.F0, VdotH);
-
-// #if defined(RAW_RADIANCE)
-//     float diffuseAlbedo = 1.0f;
-// #else
-//     float3 diffuseAlbedo = surface.DiffuseAlbedo;
-// #endif
-
-//     float3 Fd = diffuseAlbedo * NdotL
-//         * Diffuse(surface.Roughness, surface.Normal, V, L, brdfContext.NdotV, NdotL, VdotH, VdotL, NdotH)
-//         * ShadowTerminatorTerm(L, surface.Normal, surface.GeomNormal);
-
-//     float3 Fr = F * MonteCarlo::SpecularSampleWeightGGXVNDF(alpha, alpha2, NdotL, brdfContext.NdotV, VdotH, NdotH) * specularPdf;
-// #if GGX_ENERGY_CONSERVATION
-//     Fr *= BRDF::GGXEnergyConservationTerm(surface.F0, surface.Roughness, brdfContext.NdotV);
-// #endif
-
-//     pdf = (1.0f - specularProb) * diffusePdf + specularProb * specularPdf;
-
-//     float pdfRCP = 1.0f / max(pdf, 1e-7f);
-
-//     brdfWeight.diffuse = Fd * pdfRCP;
-//     brdfWeight.specular = Fr * pdfRCP;
-
-//     direction = L;
-
-//     return isSpecular;
-// }
-
-// bool SampleTransmissionBSDF(in Surface surface, in BRDFContext brdfContext, in bool isEnter, inout uint randomSeed, out float3 direction, out MonteCarlo::BRDFWeight brdfWeight)
-// {
-//     const float3 V = brdfContext.ViewDirection;
-//     float3 N = surface.Normal;
-//     float3 L = 0;
-//     float NdotL = 0;
-
-//     brdfWeight.diffuse = 0.0f;
-//     brdfWeight.specular = 0.0f;
-//     brdfWeight.transmission = 0.0f;
-
-//     float materialIOR = max(surface.IOR, 1.0f);
-    
-//     // Special case: IOR=1 means no refraction, light passes straight through
-//     if (abs(materialIOR - 1.0f) < 0.001f)
-//     {
-//         direction = -V;  // Light continues in same direction
-//         brdfWeight.transmission = surface.TransmissionColor;
-//         return false;  // Not specular, just transmission
-//     }
-    
-//     float eta = isEnter ? (1.0f / materialIOR) : materialIOR;
-    
-//     // Use raw NdotV for transmission (not saturated)
-//     float rawNdotV = dot(surface.Normal, V);
-
-//     direction = float3(0, 0, 0);
-
-//     float3 Ve = float3(
-//             dot(V, surface.Tangent),
-//             dot(V, surface.Bitangent),
-//             dot(V, surface.Normal)
-//         );
-
-//     const float alpha = surface.Roughness * surface.Roughness;
-//     const float alpha2 = alpha * alpha;
-    
-//     float3 He = MonteCarlo::SampleGGX_VNDF(Ve, alpha, randomSeed);
-//     float3 H = surface.Mul(He);
-
-//     float VdotH = saturate(dot(Ve, He));
-//     float NdotH = saturate(dot(surface.Normal, H));
-
-//     float F = saturate(FresnelDielectric(eta, VdotH));
-
-//     float rnd = Random(randomSeed);
-//     float pdf = 0.0f;
-//     float3 Le = 0.0f;
-
-//     if (rnd < F)
-//     {
-//         Le = reflect(-Ve, He);
-//         L = surface.Mul(Le);
-//         NdotL = saturate(dot(surface.Normal, L));
-        
-//         if (NdotL <= 0.0f)
-//             return false;
-        
-//         float specularPdf = MonteCarlo::SampleGGXVNDFReflectionPdf(alpha, alpha2, NdotH, abs(rawNdotV), VdotH);
-//         pdf = F * specularPdf;
-        
-//         float3 Fr = MonteCarlo::SpecularSampleWeightGGXVNDF(alpha, alpha2, NdotL, abs(rawNdotV), VdotH, NdotH) * specularPdf;
-        
-// #if GGX_ENERGY_CONSERVATION
-//         Fr *= BRDF::GGXEnergyConservationTerm(surface.F0, surface.Roughness, abs(rawNdotV));
-// #endif
-        
-//         brdfWeight.specular = Fr / max(pdf, 1e-7f);
-//         direction = L;
-//         return true;
-//     }
-//     else
-//     {
-//         float cosThetaT;
-//         float3 T = refract(-Ve, He, eta);
-
-//         if (length(T) < 0.01f) {
-//             Le = reflect(-Ve, He);
-//             L = surface.Mul(Le);
-//             NdotL = saturate(dot(surface.Normal, L));
-            
-//             if (NdotL <= 0.0f)
-//                 return false;
-            
-//             float specularPdf = MonteCarlo::SampleGGXVNDFReflectionPdf(alpha, alpha2, NdotH, abs(rawNdotV), VdotH);
-//             pdf = specularPdf;
-            
-//             float3 Fr = MonteCarlo::SpecularSampleWeightGGXVNDF(alpha, alpha2, NdotL, abs(rawNdotV), VdotH, NdotH) * specularPdf;
-//             brdfWeight.specular = Fr / max(pdf, 1e-7f);
-//             direction = L;
-//             return true;
-//         }
-
-//         Le = normalize(T);
-//         L = surface.Mul(Le);
-//         NdotL = abs(dot(surface.Normal, L));
-
-//         float TdotH = abs(dot(Le, He));
-//         float LdotH = abs(dot(L, H));
-
-//         float sqrtDenom = VdotH + eta * LdotH;
-//         float jacobian = (eta * eta * abs(LdotH)) / (sqrtDenom * sqrtDenom);
-
-//         float transmissionPdf = MonteCarlo::SampleGGXVNDFReflectionPdf(alpha, alpha2, NdotH, abs(rawNdotV), VdotH) * jacobian;
-//         pdf = (1 - F) * transmissionPdf;
-
-//         // Scale by eta^2 when exiting (eta > 1) to compensate for solid angle change
-//         // When entering (eta < 1), don't scale down to avoid darkening
-//         float etaScale = eta * eta;
-//         float3 transmissionWeight = surface.TransmissionColor * (1.0f - F) * etaScale * NdotL;
-        
-//         float G = MonteCarlo::SpecularSampleWeightGGXVNDF(alpha, alpha2, NdotL, abs(rawNdotV), abs(TdotH), NdotH);
-        
-//         brdfWeight.transmission = transmissionWeight * G * transmissionPdf / max(pdf, 1e-7f);
-//         direction = L;
-//         return true;
-//     }
-// }
-
-// #if defined(FULL_MATERIAL)
-// bool SampleFuzzBSDF(in Surface surface, in BRDFContext brdfContext, inout uint randomSeed, out float3 direction, out MonteCarlo::BRDFWeight brdfWeight)
-// {
-//     const float3 V = brdfContext.ViewDirection;
-//     float3 L = 0;
-//     float NdotL = 0;
-
-//     brdfWeight.diffuse = 0.0f;
-//     brdfWeight.specular = 0.0f;
-//     brdfWeight.transmission = 0.0f;
-
-//     float specularProb = lerp(MonteCarlo::GetSpecularBrdfProbability(surface, V, surface.Normal), 1.0f, surface.Metallic);
-//     float Efuzz = (0.526422 / ((-0.227114 + surface.Roughness) * (-0.968835 + surface.Roughness) * ((5.38869 - 20.2835 * brdfContext.NdotV) * surface.Roughness) - (-1.18761 - ((2.58744 - brdfContext.NdotV) * brdfContext.NdotV)))) + 0.0615456;
-//     float fuzzProb = Efuzz * surface.FuzzWeight;
-//     specularProb *= 1 - fuzzProb;
-
-//     float pdf = 0.0f;
-//     float diffusePdf = 0.0f;
-//     float specularPdf = 0.0f;
-//     float fuzzPdf = 0.0f;
-
-//     float3 Ve = float3(
-//             dot(brdfContext.ViewDirection, surface.Tangent),
-//             dot(brdfContext.ViewDirection, surface.Bitangent),
-//             dot(brdfContext.ViewDirection, surface.Normal)
-//         );
-//     float3 Le = 0.0f;
-//     float3 He = 0.0f;
-
-//     const float alpha = surface.Roughness * surface.Roughness;
-//     const float alpha2 = alpha * alpha;
-
-//     const bool isSpecular = Random(randomSeed) < specularProb;
-
-//     [branch]
-//     if (isSpecular)
-//     {
-//         He = MonteCarlo::SampleGGX_VNDF(Ve, alpha, randomSeed);
-//         Le = reflect(-Ve, He);
-//     }
-//     else
-//     {
-//         Le = SampleCosineHemisphere(randomSeed);
-//         He = normalize(Ve + Le);
-//     }
-
-//     L = surface.Mul(Le);
-//     float3 H = surface.Mul(He);
-//     NdotL = saturate(dot(surface.Normal, L));
-//     float VdotH = saturate(dot(He, Ve));
-//     float NdotH = saturate(dot(surface.Normal, H));
-//     float VdotL = saturate(dot(Ve, Le));
-
-//     // const float2 GGXResult = MonteCarlo::GGXEvalReflection(Le, Ve, He, alpha);
-//     specularPdf = MonteCarlo::SampleGGXVNDFReflectionPdf(alpha, alpha2, NdotH, brdfContext.NdotV, VdotH);
-//     diffusePdf = NdotL / Math::PI;
-//     fuzzPdf = diffusePdf;
-
-//     float3 F = BRDF::F_Schlick(surface.F0, VdotH);
-
-// #if defined(RAW_RADIANCE)
-//     float diffuseAlbedo = 1.0f;
-// #else
-//     float3 diffuseAlbedo = surface.DiffuseAlbedo;
-// #endif
-
-//     float3 Fd = diffuseAlbedo * NdotL
-//         * Diffuse(surface.Roughness, surface.Normal, V, L, brdfContext.NdotV, NdotL, VdotH, VdotL, NdotH)
-//         * ShadowTerminatorTerm(L, surface.Normal, surface.GeomNormal);
-
-//     float3 Fr = F * MonteCarlo::SpecularSampleWeightGGXVNDF(alpha, alpha2, NdotL, brdfContext.NdotV, VdotH, NdotH) * specularPdf;
-// #if GGX_ENERGY_CONSERVATION
-//     Fr *= BRDF::GGXEnergyConservationTerm(surface.F0, surface.Roughness, brdfContext.NdotV);
-// #endif
-
-//     // Fuzz
-//     const float Dfuzz = BRDF::D_Charlie(surface.Roughness, NdotH);
-//     const float Gfuzz = BRDF::Vis_Neubelt(brdfContext.NdotV, NdotL);
-//     float3 Ffuzz = surface.FuzzColor * Dfuzz * Gfuzz * NdotL;
-
-//     pdf = (1.0f - fuzzProb - specularProb) * diffusePdf + specularProb * specularPdf + fuzzProb * fuzzPdf;
-
-//     float pdfRCP = 1.0f / max(pdf, 1e-7f);
-
-//     float fuzzMult = lerp(1, 1 - Efuzz, surface.FuzzWeight);
-//     float fuzzSum = Ffuzz * surface.FuzzWeight;
-
-//     brdfWeight.diffuse = (Fd * fuzzMult + fuzzSum) * pdfRCP;
-//     brdfWeight.specular = (Fr * fuzzMult + fuzzSum) * pdfRCP;
-
-//     direction = L;
-
-//     return isSpecular;
-// }
-// #endif
-
 float2 EvalHemiUV(float3 dir)
 {
     dir.z = max(dir.z, 0.0f);
@@ -666,6 +210,54 @@ float3 EvaluateDirectRadiance(in Surface surface, in BRDFContext brdfContext, in
     radiance += EvalPointLight(surface, brdfContext, instance.LightData, bsdf, randomSeed);
 
     return radiance;
+}
+
+bool ComputeTangentSpace(inout Surface surface, const bool ignoreTangent)
+{
+    // Check that tangent space exists and can be safely orthonormalized.
+    // Otherwise invent a tanget frame based on the normal.
+    // We check that:
+    //  - Tangent exists, this is indicated by a nonzero sign (w).
+    //  - It has nonzero length. Zeros can occur due to interpolation or bad assets.
+    //  - It is not parallel to the normal. This can occur due to normal mapping or bad assets.
+    //  - It does not have NaNs. These will propagate and trigger the fallback.
+
+    float NdotT = dot(surface.GeomTangent, surface.Normal);
+    bool nonParallel = abs(NdotT) < 0.9999f;
+    bool nonZero = dot(surface.GeomTangent, surface.GeomTangent) > 0.f;
+
+    bool valid = nonZero && nonParallel;
+    if (!ignoreTangent && valid)
+    {
+        surface.Tangent = normalize(surface.GeomTangent - surface.Normal * NdotT);
+        surface.Bitangent = cross(surface.Normal, surface.Tangent);
+    }
+    else
+    {
+        surface.Tangent = perp_stark(surface.Normal);
+        surface.Bitangent = cross(surface.Normal, surface.Tangent);
+    }
+
+    return valid;
+}
+
+void AdjustShadingNormal(inout Surface surface, BRDFContext brdfContext, uniform bool recomputeTangentSpace, const bool ignoreTangent)
+{
+    float3 Ng = dot(brdfContext.ViewDirection, surface.GeomNormal) >= 0.f ? surface.GeomNormal : -surface.GeomNormal;
+    float signN = dot(surface.Normal, Ng) >= 0.f ? 1.f : -1.f;
+    float3 Ns = signN * surface.Normal;
+
+    // Blend the shading normal towards the geometric normal at grazing angles.
+    // This is to avoid the view vector from becoming back-facing.
+    const float kCosThetaThreshold = 0.1f;
+    float cosTheta = dot(brdfContext.ViewDirection, Ns);
+    if (cosTheta <= kCosThetaThreshold)
+    {
+        float t = saturate(cosTheta * (1.f / kCosThetaThreshold));
+        surface.Normal = signN * normalize(lerp(Ng, Ns, t));
+    }
+    if (cosTheta <= kCosThetaThreshold || recomputeTangentSpace)
+        ComputeTangentSpace(surface, ignoreTangent);
 }
 
 #endif // SHADING_HLSL

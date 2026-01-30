@@ -49,6 +49,7 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	Sky,
 	Directional,
 	Point,
+	TexLODBias,
 	LodDimmer,
 	RaytracedShadows,
 	PathTracing,
@@ -496,6 +497,8 @@ void Raytracing::DrawAdvancedSettings()
 		recompileReason |= RecompileReason::Advanced;
 
 	ImGui::SliderInt("RIS Max Candidates", &advSettings.RIS.MaxCandidates, 2, 16);
+
+	ImGui::SliderFloat("Texture LOD Bias", &settings.TexLODBias, -4.0f, 4.0f, "%.1f");
 
 	if (ImGui::Checkbox("GGX Energy Conservation", &advSettings.GGXEnergyConservation))
 		recompileReason |= RecompileReason::Advanced;
@@ -3199,6 +3202,9 @@ void Raytracing::DrawRTGI()
 
 		frameData->Lights = static_cast<uint>(lights.size());
 
+		frameData->PixelConeSpreadAngle = std::atan((2.0f / eye.projMat.m[1][1]) / renderSize.y);
+		frameData->TexLODBias = settings.TexLODBias;
+
 		frameData->RussianRoulette = settings.RussianRoulette;
 
 		if (Util::IsInterior()) {
@@ -4245,7 +4251,7 @@ void Raytracing::CompileRTGIShaders()
 		pipelineBuilder.AddHitGroup(L"ShadowHitGroup", L"", L"ShadowAnyHit");
 
 		// Shader + pipeline config
-		pipelineBuilder.AddShaderConfig(20, 8);
+		pipelineBuilder.AddShaderConfig(32, 8);
 		pipelineBuilder.AddGlobalRootSignature(rootSignature.get());
 		pipelineBuilder.AddPipelineConfig(1);  // Max recursion depth
 

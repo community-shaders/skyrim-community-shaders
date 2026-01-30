@@ -527,6 +527,7 @@ struct Raytracing : public OverlayFeature
 		float Sky = 1.0f;
 		float Directional = 1.0f;
 		float Point = 1.0f;
+		float TexLODBias = -1.0f;
 		bool LodDimmer = true;
 		bool RaytracedShadows = true;
 		bool PathTracing = false;

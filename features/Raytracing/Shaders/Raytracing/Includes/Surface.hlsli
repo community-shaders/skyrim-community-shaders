@@ -8,11 +8,14 @@
 #include "Raytracing/Includes/RT/Geometry.hlsli"
 #include "Raytracing/Includes/RT/CommonRT.hlsli"
 
+#include "Raytracing/Includes/Materials/TexLODHelpers.hlsli"
+
 #define Surface(...) static Surface ctor(__VA_ARGS__)
 struct Surface
 {
     float3 Position;
     float3 GeomNormal;
+    float3 GeomTangent;
     float3 Normal;
     float3 Tangent;
     float3 Bitangent;
@@ -42,6 +45,8 @@ struct Surface
     //Glints::GlintCachedVars GlintCache;
     float Noise;
 #endif
+
+    float MipLevel;
 
     float3 Mul(float3 tangentSample)
     {
@@ -96,9 +101,9 @@ struct Surface
             Texture2D rmaosTexture = Textures[NonUniformResourceIndex(material.RMAOSTexture())];
             Texture2D emissiveTexture = Textures[NonUniformResourceIndex(material.EmissiveTexture())];
 
-            float3 albedo = baseTexture.SampleLevel(BaseSampler, texCoord0, 0).rgb;
-            float4 rmaos = rmaosTexture.SampleLevel(BaseSampler, texCoord0, 0);
-            float3 emissive = emissiveTexture.SampleLevel(BaseSampler, texCoord0, 0).rgb;
+            float3 albedo = baseTexture.SampleLevel(BaseSampler, texCoord0, MipLevel).rgb;
+            float4 rmaos = rmaosTexture.SampleLevel(BaseSampler, texCoord0, MipLevel);
+            float3 emissive = emissiveTexture.SampleLevel(BaseSampler, texCoord0, MipLevel).rgb;
 
             if (isWindows) {
                 windowAlpha = emissive;
@@ -111,7 +116,7 @@ struct Surface
             AO = rmaos.z;
             F0 = material.SpecularLevel() * rmaos.w;
         } else if (material.ShaderType == ShaderType::Lighting) {
-            float3 diffuse = baseTexture.SampleLevel(BaseSampler, texCoord0, 0).rgb;
+            float3 diffuse = baseTexture.SampleLevel(BaseSampler, texCoord0, MipLevel).rgb;
 
             Albedo = VanillaDiffuseColor(diffuse * vertexColor.rgb);
 
@@ -129,10 +134,10 @@ struct Surface
                 [branch]
                 if (material.ShaderFlags & ShaderFlags::kModelSpaceNormals) {
                     Texture2D specularTexture = Textures[NonUniformResourceIndex(material.SpecularTexture())];
-                    specularColor = specularTexture.SampleLevel(BaseSampler, texCoord0, 0).r * material.SpecularColor().rgb * material.SpecularColor().a;
+                    specularColor = specularTexture.SampleLevel(BaseSampler, texCoord0, MipLevel).r * material.SpecularColor().rgb * material.SpecularColor().a;
                 } else {
                     Texture2D normalTexture = Textures[NonUniformResourceIndex(material.NormalTexture())];
-                    specularColor = normalTexture.SampleLevel(BaseSampler, texCoord0, 0).a * material.SpecularColor().rgb * material.SpecularColor().a;
+                    specularColor = normalTexture.SampleLevel(BaseSampler, texCoord0, MipLevel).a * material.SpecularColor().rgb * material.SpecularColor().a;
                 }
                 F0 = clamp(0.08f * specularColor, 0.02f, 0.08f);
             }
@@ -143,7 +148,7 @@ struct Surface
                 Texture2D envMaskTexture = Textures[NonUniformResourceIndex(material.EnvMaskTexture())];
 
                 float3 envColor = ColorToLinear(envTexture.SampleLevel(BaseSampler, texCoord0, 15).rgb);
-                float envMask = envMaskTexture.SampleLevel(BaseSampler, texCoord0, 0).r;
+                float envMask = envMaskTexture.SampleLevel(BaseSampler, texCoord0, MipLevel).r;
 
                 Albedo = lerp(Albedo, envColor, envMask);
                 Metallic = envMask;
@@ -152,7 +157,7 @@ struct Surface
             [branch]
             if (material.Feature == Feature::kGlowMap) {
                 Texture2D glowTexture = Textures[NonUniformResourceIndex(material.GlowTexture())];
-                float3 glow = glowTexture.SampleLevel(BaseSampler, texCoord0, 0).rgb;
+                float3 glow = glowTexture.SampleLevel(BaseSampler, texCoord0, MipLevel).rgb;
                 
                 if (isWindows) {
                     windowAlpha = glow;
@@ -163,11 +168,11 @@ struct Surface
             [branch]
             if (material.Feature == Feature::kFaceGen) {
                 Texture2D detailTexture = Textures[NonUniformResourceIndex(material.DetailTexture())];
-	            float3 detailColor = detailTexture.SampleLevel(BaseSampler, texCoord0, 0).rgb;
+	            float3 detailColor = detailTexture.SampleLevel(BaseSampler, texCoord0, MipLevel).rgb;
 	            detailColor = float3(3.984375, 3.984375, 3.984375) * (float3(0.00392156886, 0, 0.00392156886) + detailColor);
 
                 Texture2D tintTexture = Textures[NonUniformResourceIndex(material.TintTexture())];
-	            float3 tintColor = tintTexture.SampleLevel(BaseSampler, texCoord0, 0).rgb;
+	            float3 tintColor = tintTexture.SampleLevel(BaseSampler, texCoord0, MipLevel).rgb;
 	            tintColor = tintColor * Albedo * 2.0f;
 	            tintColor = tintColor - tintColor * Albedo;
 	            Albedo = (Albedo * Albedo + tintColor) * detailColor;
@@ -184,7 +189,7 @@ struct Surface
             [branch]
             if (material.ShaderFlags & ShaderFlags::kGrayscaleToPaletteColor)
             {
-                base *= baseTexture.SampleLevel(BaseSampler, texCoord0, 0).rgb;
+                base *= baseTexture.SampleLevel(BaseSampler, texCoord0, MipLevel).rgb;
             }
 
             float3 baseColorMul = material.EffectColor().rgb;
@@ -206,7 +211,7 @@ struct Surface
 
                 float2 grayscaleToColorUv = float2(base.g, baseColorMul.x);
 
-                baseColor = baseColorScale * effectTexture.SampleLevel(BaseSampler, grayscaleToColorUv, 0).rgb;
+                baseColor = baseColorScale * effectTexture.SampleLevel(BaseSampler, grayscaleToColorUv, MipLevel).rgb;
             }
 
             float3 baseColorLinear = EffectToLinear(baseColor);
@@ -222,7 +227,7 @@ struct Surface
 
         [branch]
         if (material.AlphaFlags == AlphaFlags::kAlphaBlend && !((material.Feature == Feature::kHairTint || material.Feature == Feature::kFaceGen || material.Feature == Feature::kFaceGenRGBTint || material.Feature == Feature::kEye))) {
-            float alpha = baseTexture.SampleLevel(BaseSampler, texCoord0, 0).a * material.BaseColor().a;
+            float alpha = baseTexture.SampleLevel(BaseSampler, texCoord0, MipLevel).a * material.BaseColor().a;
 
             [branch]
             if (material.ShaderFlags & ShaderFlags::kVertexAlpha) {
@@ -255,7 +260,7 @@ struct Surface
         Bitangent = bitangentWS;
 #else
         Texture2D normalTexture = Textures[NonUniformResourceIndex(material.NormalTexture())];
-        float3 normal = normalTexture.SampleLevel(BaseSampler, texCoord0, 0).xyz;
+        float3 normal = normalTexture.SampleLevel(BaseSampler, texCoord0, MipLevel).xyz;
 
         float handedness = (dot(cross(normalWS, tangentWS), bitangentWS) < 0.0f) ? -1.0f : 1.0f;
 
@@ -273,7 +278,7 @@ struct Surface
         if (weight > LAND_MIN_WEIGHT)
         {
             Texture2D texture = Textures[NonUniformResourceIndex(textureIndex)];
-            return texture.SampleLevel(BaseSampler, texcoord, 0) * weight;
+            return texture.SampleLevel(BaseSampler, texcoord, MipLevel) * weight;
         }
         else
         {
@@ -356,7 +361,26 @@ struct Surface
         Bitangent = bitangentWS;
     }
 
-    Surface(float3 position, Payload payload, out Instance instance, out Material material)
+    float ComputeRayConeTriangleLODValue(in Vertex v0, in Vertex v1, in Vertex v2, float3x3 world)
+    {
+        float3 vertexPositions[3];
+        vertexPositions[0] = v0.Position;
+        vertexPositions[1] = v1.Position;
+        vertexPositions[2] = v2.Position;
+
+        float2 vertexTexcoords[3];
+        vertexTexcoords[0] = v0.Texcoord0;
+        vertexTexcoords[1] = v1.Texcoord0;
+        vertexTexcoords[2] = v2.Texcoord0;
+
+        return computeRayConeTriangleLODValue(
+            vertexPositions,
+            vertexTexcoords,
+            world
+        );
+    }
+
+    Surface(float3 position, Payload payload, float3 rayDir, out Instance instance, out Material material)
     {
         Surface surface;
 
@@ -376,11 +400,15 @@ struct Surface
 
         float3x3 objectToWorld3x3 = mul((float3x3) instance.Transform, (float3x3) shape.Transform);
 
+        float coneTexLODValue = surface.ComputeRayConeTriangleLODValue(v0, v1, v2, objectToWorld3x3);
+
         float3 normalWS = normalize(mul(objectToWorld3x3, Interpolate(v0.Normal, v1.Normal, v2.Normal, uvw)));
         float3 tangentWS = normalize(mul(objectToWorld3x3, Interpolate(v0.Tangent, v1.Tangent, v2.Tangent, uvw)));
         float3 bitangentWS = normalize(mul(objectToWorld3x3, Interpolate(v0.Bitangent, v1.Bitangent, v2.Bitangent, uvw)));
 
+        surface.MipLevel = payload.rayCone.computeLOD(coneTexLODValue, rayDir, normalWS, true) + Frame.TexLODBias;
         surface.GeomNormal = normalWS;
+        surface.GeomTangent = tangentWS;
 
         surface.Albedo = float3(1.0f, 1.0f, 1.0f);
         surface.Emissive = float3(0.0f, 0.0f, 0.0f);
@@ -476,6 +504,8 @@ struct Surface
         surface.Normal = normal;
         surface.Tangent = tangent;
         surface.Bitangent = bitangent;
+
+        surface.GeomTangent = tangent; // not needed for hybrid
 
 #   ifdef DEBUG_WHITE_FURNACE
         surface.Albedo = float3(1.0f, 1.0f, 1.0f);
