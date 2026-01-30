@@ -282,8 +282,8 @@ public:
 		{
 			ImVec4 ColorDefault{ 0.8f, 0.8f, 0.8f, 1.0f };
 			ImVec4 ColorHovered{ 0.6f, 0.6f, 0.6f, 1.0f };
-			float MinimizedFactor = 0.7f;      // 70% of original alpha for when the header is minimized
-			float FeatureTitleScale = 1.5f;    // Scale multiplier for feature title text in settings tab
+			float MinimizedFactor = 0.7f;    // 70% of original alpha for when the header is minimized
+			float FeatureTitleScale = 1.5f;  // Scale multiplier for feature title text in settings tab
 		} FeatureHeading;
 
 		ImGuiStyle Style = []() {
