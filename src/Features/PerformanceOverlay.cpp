@@ -1195,6 +1195,10 @@ void PerformanceOverlay::DrawABTestSection(const std::vector<DrawCallRow>& allRo
 			this->settingsDiff.clear();
 			this->settingsDiffLoaded = false;
 			showSettingsDiff = false;
+			// Also clear cached snapshots so diff does not linger after user opts to clear
+			if (abTestingManager) {
+				abTestingManager->ClearCachedSnapshots();
+			}
 			ImGui::EndGroup();
 			ImGui::Separator();
 			return;
@@ -1203,9 +1207,15 @@ void PerformanceOverlay::DrawABTestSection(const std::vector<DrawCallRow>& allRo
 		// --- Settings diff section (inline, toggled) ---
 		if (showSettingsDiff) {
 			if (!this->settingsDiffLoaded) {
-				std::filesystem::path userPath = Util::PathHelpers::GetDataPath() / "SKSE/Plugins/CommunityShaders/SettingsUser.json";
-				std::filesystem::path testPath = Util::PathHelpers::GetDataPath() / "SKSE/Plugins/CommunityShaders/SettingsTest.json";
-				this->settingsDiff = Util::FileSystem::LoadJsonDiff(userPath, testPath);
+				// Use cached memory data from ABTestingManager instead of loading from disk
+				if (abTestingManager && abTestingManager->HasCachedSnapshots()) {
+					// Pull structured diff entries directly from ABTestingManager (in-memory snapshots)
+					this->settingsDiff = abTestingManager->GetConfigDiffEntries();
+				} else {
+					std::filesystem::path userPath = Util::PathHelpers::GetDataPath() / "SKSE/Plugins/CommunityShaders/SettingsUser.json";
+					std::filesystem::path testPath = Util::PathHelpers::GetDataPath() / "SKSE/Plugins/CommunityShaders/SettingsTest.json";
+					this->settingsDiff = Util::FileSystem::LoadJsonDiff(userPath, testPath);
+				}
 				this->settingsDiffLoaded = true;
 			}
 			ImGui::TextUnformatted("Differences between USER (A) and TEST (B) configs:");

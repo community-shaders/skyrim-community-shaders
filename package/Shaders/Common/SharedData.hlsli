@@ -34,7 +34,8 @@ namespace SharedData
 
 		float BasicGrassBrightness;
 		bool EnableWrappedLighting;
-		float2 pad0;
+		float ComplexGrassThreshold;
+		float1 pad0;
 	};
 
 	struct CPMSettings
@@ -231,6 +232,12 @@ namespace SharedData
 		float pad0;
 	};
 
+	struct TerrainBlendingSettings
+	{
+		uint Enabled;
+		uint3 _padding;
+	};
+
 	cbuffer FeatureData : register(b6)
 	{
 		GrassLightingSettings grassLightingSettings;
@@ -247,6 +254,7 @@ namespace SharedData
 		IBLSettings iblSettings;
 		ExtendedTranslucencySettings extendedTranslucencySettings;
 		LinearLightingSettings linearLightingSettings;
+		TerrainBlendingSettings terrainBlendingSettings;
 	};
 
 	Texture2D<float4> DepthTexture : register(t17);
