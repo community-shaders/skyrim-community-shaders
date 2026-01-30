@@ -734,7 +734,7 @@ void Upscaling::ConfigureUpscaling(RE::BSGraphics::State* a_viewport)
 		auto renderHeight = static_cast<int>(screenHeight * resolutionScaleBase);
 
 		resolutionScale.x = static_cast<float>(renderWidth) / static_cast<float>(screenWidth);
-		resolutionScale.y = static_cast<float>(renderHeight) / static_cast<float>(screenHeight);	
+		resolutionScale.y = static_cast<float>(renderHeight) / static_cast<float>(screenHeight);
 
 		auto phaseCount = GetJitterPhaseCount(renderWidth, screenWidth);
 
