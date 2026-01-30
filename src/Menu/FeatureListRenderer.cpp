@@ -55,7 +55,8 @@ namespace
 		auto& palette = themeSettings.Palette;
 		auto& featureHeading = themeSettings.FeatureHeading;
 
-		const float titleScale = featureHeading.FeatureTitleScale;
+		// Clamp to UI slider range to prevent malformed theme JSON from destabilizing layout
+		const float titleScale = std::clamp(featureHeading.FeatureTitleScale, 1.0f, 3.0f);
 
 		// Calculate text sizes for positioning
 		ImVec2 titleSize;
