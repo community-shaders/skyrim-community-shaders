@@ -5,7 +5,7 @@
 namespace RTConstants
 {
 	// DX12 will not like if we don't respect these numbers and try to write over the resource end
-	static constexpr uint MAX_TEXTURES = 1024;
+	static constexpr uint MAX_TEXTURES = 4096;
 	static constexpr uint MAX_MODELS = 1024;
 	static constexpr uint MAX_SHAPES = MAX_MODELS * 6;
 	static constexpr uint MAX_MATERIALS = MAX_SHAPES;
