@@ -67,8 +67,11 @@ namespace ShadowSampling
 
 	float Get3DFilteredShadow(float3 positionWS, float3 viewDirection, float2 screenPosition, uint eyeIndex)
 	{
-		static const uint sampleCount = 8;
-		static const float rcpSampleCount = 1.0 / float(sampleCount);
+		static const uint sampleCount8 = 8;
+		static const float rcpSampleCount8 = 1.0 / float(sampleCount8);
+
+		static const uint sampleCount16 = 16;
+		static const float rcpSampleCount16 = 1.0 / float(sampleCount16);
 
 		float noise = Random::InterleavedGradientNoise(screenPosition, SharedData::FrameCount);
 		float noiseTransform = noise * 2.0 - 1.0;
@@ -89,14 +92,14 @@ namespace ShadowSampling
 #endif
 
 		float worldShadow = 0;
-		for(uint i = 0; i < sampleCount; i++){
-			uint noisyIndex = uint((float(i) + sampleCount * noise) % sampleCount);
-			float t = (float(sampleCount) - float(noisyIndex + 1)) * rcpSampleCount;
-			float tSample = t + noiseTransform * rcpSampleCount;
+		for(uint i = 0; i < sampleCount8; i++){
+			uint noisyIndex = uint((float(i) + sampleCount8 * noise) % sampleCount8);
+			float t = (float(sampleCount8) - float(noisyIndex + 1)) * rcpSampleCount8;
+			float tSample = t + noiseTransform * rcpSampleCount8;
 			worldShadow += ShadowSampling::GetWorldShadow(lerp(startPosition, endPosition, tSample), FrameBuffer::CameraPosAdjust[eyeIndex].xyz, eyeIndex);
 		}
 
-		worldShadow *= rcpSampleCount;
+		worldShadow *= rcpSampleCount8;
 
 		if (worldShadow == 0.0)
 			return 0.0;
@@ -122,9 +125,9 @@ namespace ShadowSampling
 		}
 
 		float shadow = 0.0;
-		for (uint k = 0; k < sampleCount; k++) {
-			uint noisyIndex = uint((float(k) + sampleCount * noise) % sampleCount);
-			float t = (float(sampleCount) - float(noisyIndex + 1)) * rcpSampleCount;
+		for (uint k = 0; k < sampleCount16; k++) {
+			uint noisyIndex = uint((float(k) + sampleCount16 * noise) % sampleCount16);
+			float t = (float(sampleCount16) - float(noisyIndex + 1)) * rcpSampleCount16;
 			uint cascadeIndex = frac(t + noise) < cascade1Probability;
 
 			float compareValue = compareValues[cascadeIndex];
@@ -133,11 +136,11 @@ namespace ShadowSampling
 			float3 viewOffsetLS = viewOffsetsLS[cascadeIndex];
 
 			// Offset along view ray with optimised sample pattern
-			float tSample = t + noiseTransform * rcpSampleCount;
+			float tSample = t + noiseTransform * rcpSampleCount16;
 			float3 sampledPositionLS = lerp(positionLS, viewOffsetLS, tSample);
 
 			// Blur shadow with poisson disc
-			sampledPositionLS.xy += mul(Random::SpiralSampleOffsets8[k], rotationMatrix) * sampleRadius;
+			sampledPositionLS.xy += mul(Random::PoissonSampleOffsets16[k], rotationMatrix) * sampleRadius;
 
 			// Average 4 shadow samples for improved quality
 			float4 depths = SharedShadowMap.GatherRed(LinearSampler, float3(saturate(sampledPositionLS.xy), cascadeIndex), 0);
@@ -145,7 +148,7 @@ namespace ShadowSampling
 		}
 
 		float fadeFactor = 1.0 - pow(saturate(dot(positionWS, positionWS) / sD.ShadowLightParam.z), 8);
-		return worldShadow * lerp(1.0, shadow * rcpSampleCount, fadeFactor);
+		return worldShadow * lerp(1.0, shadow * rcpSampleCount16, fadeFactor);
 	}
 
 	float Get2DFilteredShadowCascade(float noise, float2x2 rotationMatrix, float sampleOffsetScale, float2 baseUV, float cascadeIndex, float compareValue, uint eyeIndex)
