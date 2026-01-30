@@ -55,8 +55,8 @@ public:
 		uint frameGenerationMode = 1;
 		uint frameGenerationForceEnable = 0;
 		uint streamlineLogLevel = 0;  // 0=Off, 1=Default, 2=Verbose
-		float sharpnessFSR = 1.0f;
-		float sharpnessDLSS = 0.5f;
+		float sharpnessFSR = 0.0f;
+		float sharpnessDLSS = 0.0f;
 	};
 
 	Settings settings;
