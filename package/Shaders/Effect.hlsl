@@ -582,23 +582,9 @@ float3 GetLightingColor(float3 msPosition, float3 worldPosition, float2 screenPo
 #	else
 float3 GetLightingShadow(float3 color, float3 worldPosition, float2 screenPosition, float depth, uint eyeIndex, inout float shadowVariance)
 {
-#		if defined(SKYLIGHTING)
-#			if defined(VR)
-	float3 positionMSSkylight = worldPosition + FrameBuffer::CameraPosAdjust[eyeIndex].xyz - FrameBuffer::CameraPosAdjust[0].xyz;
-#			else
-	float3 positionMSSkylight = worldPosition;
-#			endif
-
-	sh2 skylightingSH = Skylighting::sampleNoBias(SharedData::skylightingSettings, Skylighting::SkylightingProbeArray, positionMSSkylight);
-
-	float skylightingDiffuse = SphericalHarmonics::FuncProductIntegral(skylightingSH, SphericalHarmonics::EvaluateCosineLobe(float3(0, 0, 1))) / Math::PI;
-	skylightingDiffuse = saturate(skylightingDiffuse);
-	skylightingDiffuse = lerp(1.0, skylightingDiffuse, Skylighting::getFadeOutFactor(worldPosition));
-	skylightingDiffuse = Skylighting::mixDiffuse(SharedData::skylightingSettings, skylightingDiffuse);
-#	endif
-
 	float3 dirColor;
 	float3 ambientColor;
+	float skylightingDiffuse = 1.0;
 #		if defined(SKYLIGHTING)
 	ShadowSampling::ExtractLighting(color, dirColor, ambientColor, skylightingDiffuse);
 #		else
@@ -616,10 +602,10 @@ float3 GetLightingShadow(float3 color, float3 worldPosition, float2 screenPositi
 
 	// Enough for sky statics
 	float maxDistance = max(0, SharedData::GetScreenDepth(depth));
-	float viewRayLength = min(maxDistance, 4096);
+	float viewRayLength = 4096;
 	float3 viewDirection = normalize(worldPosition);
 	float3 startPosition = worldPosition - viewDirection * viewRayLength;
-	float3 endPosition = worldPosition + viewDirection * min(maxDistance, 4096);
+	float3 endPosition = worldPosition + viewDirection * min(maxDistance, viewRayLength);
 
 	float shadow = 0;
 	for(uint i = 0; i < sampleCount; i++){
@@ -634,12 +620,6 @@ float3 GetLightingShadow(float3 color, float3 worldPosition, float2 screenPositi
 	shadowVariance = 1.0 - sqrt(saturate(fwidth(shadow)));
 
 	dirColor *= shadow;
-
-#		if defined(SKYLIGHTING)
-	ambientColor = Color::IrradianceToLinear(ambientColor);
-	ambientColor *= skylightingDiffuse;
-	ambientColor = Color::IrradianceToGamma(ambientColor);
-#		endif
 
 	return dirColor + ambientColor;
 }
