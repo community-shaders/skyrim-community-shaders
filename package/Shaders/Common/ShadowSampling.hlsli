@@ -122,8 +122,8 @@ namespace ShadowSampling
 		}
 
 		float shadow = 0.0;
-		for (uint i = 0; i < sampleCount; i++) {
-			uint noisyIndex = uint((float(i) + sampleCount * noise) % sampleCount);
+		for (uint k = 0; k < sampleCount; k++) {
+			uint noisyIndex = uint((float(k) + sampleCount * noise) % sampleCount);
 			float t = (float(sampleCount) - float(noisyIndex + 1)) * rcpSampleCount;
 			uint cascadeIndex = frac(t + noise) < cascade1Probability;
 
@@ -137,7 +137,7 @@ namespace ShadowSampling
 			float3 sampledPositionLS = lerp(positionLS, viewOffsetLS, tSample);
 
 			// Blur shadow with poisson disc
-			sampledPositionLS.xy += mul(Random::SpiralSampleOffsets8[i], rotationMatrix) * sampleRadius;
+			sampledPositionLS.xy += mul(Random::SpiralSampleOffsets8[k], rotationMatrix) * sampleRadius;
 
 			// Average 4 shadow samples for improved quality
 			float4 depths = SharedShadowMap.GatherRed(LinearSampler, float3(saturate(sampledPositionLS.xy), cascadeIndex), 0);
