@@ -371,7 +371,7 @@ void main()
             }
 
 #if defined(SHARC)
-            materialRoughnessPrev += bsdfSample.isLobe(LobeType::Diffuse) ? 1.0f : material.roughness;
+            materialRoughnessPrev += bsdfSample.isLobe(LobeType::Diffuse) ? 1.0f : surface.Roughness;
 #endif
 
             // Use hasTransmission flag to properly determine ray offset direction
