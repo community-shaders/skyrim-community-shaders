@@ -296,13 +296,15 @@ void main()
             isSpecular = bsdfSample.isLobe(LobeType::Specular);
             bool hasTransmission = bsdfSample.isLobe(LobeType::Transmission);
 
+            float3 faceNormalOriented = dot(brdfContext.ViewDirection, surface.FaceNormal) >= 0.0f ? surface.FaceNormal : -surface.FaceNormal;
+
             if (isValid)
                 direction = bsdfSample.wo;
             else
                 break;
 
             // Check direction validity before modifying any state
-            if (!hasTransmission && dot(surface.GeomNormal, direction) <= 0.0)
+            if (!hasTransmission && dot(faceNormalOriented, direction) <= 0.0)
                 break;
 
             throughput *= bsdfSample.isLobe(LobeType::Transmission) ? 1.f : surface.AO;
@@ -311,7 +313,7 @@ void main()
             if (hasTransmission) {
                 isEnter = !isEnter;
             } else {
-                isEnter = dot(direction, surface.GeomNormal) >= 0.0f;
+                isEnter = dot(direction, faceNormalOriented) >= 0.0f;
             }
 
             brdfWeight.diffuse = bsdfSample.isLobe(LobeType::DiffuseReflection) ? bsdfSample.weight : float3(0.f, 0.f, 0.f);
@@ -376,9 +378,7 @@ void main()
             materialRoughnessPrev += bsdfSample.isLobe(LobeType::Diffuse) ? 1.0f : surface.Roughness;
 #endif
 
-            // Use hasTransmission flag to properly determine ray offset direction
-            // instead of re-checking direction against geom normal
-            ray.Origin = OffsetRay(surface.Position, surface.GeomNormal, hasTransmission);
+            ray.Origin = OffsetRay(surface.Position, faceNormalOriented, hasTransmission);
             ray.Direction = direction;
             ray.TMin = 0.0f;  // OffsetRay already handles precision, no additional offset needed
             ray.TMax = RAY_TMAX;
@@ -425,7 +425,7 @@ void main()
 
 #if defined(SHARC)
             sharcHitData.positionWorld = surface.Position;
-            sharcHitData.normalWorld = surface.GeomNormal;
+            sharcHitData.normalWorld = faceNormalOriented;
 
 #   if SHARC_SEPARATE_EMISSIVE
             sharcHitData.emissive = surface.Emissive;

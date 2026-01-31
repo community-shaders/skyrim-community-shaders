@@ -243,7 +243,7 @@ bool ComputeTangentSpace(inout Surface surface, const bool ignoreTangent)
 
 void AdjustShadingNormal(inout Surface surface, BRDFContext brdfContext, uniform bool recomputeTangentSpace, const bool ignoreTangent)
 {
-    float3 Ng = dot(brdfContext.ViewDirection, surface.GeomNormal) >= 0.f ? surface.GeomNormal : -surface.GeomNormal;
+    float3 Ng = dot(brdfContext.ViewDirection, surface.FaceNormal) >= 0.f ? surface.FaceNormal : -surface.FaceNormal;
     float signN = dot(surface.Normal, Ng) >= 0.f ? 1.f : -1.f;
     float3 Ns = signN * surface.Normal;
 
