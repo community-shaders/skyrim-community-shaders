@@ -83,6 +83,13 @@ struct Surface
         return Mul(v);
     }
 
+    void FlipNormal()
+    {
+        Normal = -Normal;
+        GeomNormal = -GeomNormal;
+        FaceNormal = -FaceNormal;
+    }
+
     void DefaultMaterial(in Vertex v0, in Vertex v1, in Vertex v2, in float3 uvw, in float3 normalWS, in float3 tangentWS, in float3 bitangentWS, float3x3 objectToWorld3x3, in Material material)
     {
         float2 texCoord0 = material.TexCoord(Interpolate(v0.Texcoord0, v1.Texcoord0, v2.Texcoord0, uvw));
