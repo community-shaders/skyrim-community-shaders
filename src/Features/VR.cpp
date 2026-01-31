@@ -2636,9 +2636,9 @@ void VR::UpdateCursorFromWandPointing()
 		float screenX = uv.x * io.DisplaySize.x;
 		float screenY = (1.0f - uv.y) * io.DisplaySize.y;
 
-		// Clamp to screen bounds
-		screenX = std::clamp(screenX, 0.0f, io.DisplaySize.x - 1.0f);
-		screenY = std::clamp(screenY, 0.0f, io.DisplaySize.y - 1.0f);
+		// Clamp to screen bounds (allow full display size, consistent with thumbstick cursor)
+		screenX = std::clamp(screenX, 0.0f, io.DisplaySize.x);
+		screenY = std::clamp(screenY, 0.0f, io.DisplaySize.y);
 
 		io.MousePos = ImVec2(screenX, screenY);
 		io.AddMousePosEvent(screenX, screenY);
