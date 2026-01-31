@@ -41,7 +41,7 @@ bool WaterCache::SetCurrentWorldSpace(const RE::TESWorldSpace* worldSpace)
 
 std::vector<WaterCache::Instruction>* WaterCache::GetInstructions(const RE::TESWorldSpace* worldSpace, const uint32_t lodLevel, const uint32_t x, const uint32_t y)
 {
-	if (!currentCache && !SetCurrentWorldSpace(worldSpace)) {
+	if (!SetCurrentWorldSpace(worldSpace)) {
 		logger::error("[Unified Water] [Cache] Failed to set current cache to {} while getting instructions", worldSpace->GetFormEditorID());
 		return nullptr;
 	}

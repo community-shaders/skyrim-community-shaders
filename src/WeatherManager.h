@@ -57,4 +57,7 @@ private:
 
 	// Track last known weather state to detect changes
 	CurrentWeathers lastKnownWeather;
+
+	// Cached last weather - sky->lastWeather can be cleared before currentWeatherPct reaches 1.0
+	RE::TESWeather* cachedLastWeather = nullptr;
 };
