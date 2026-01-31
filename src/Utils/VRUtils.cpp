@@ -301,6 +301,10 @@ namespace Util
 		if (!overlay || overlayHandle == vr::k_ulOverlayHandleInvalid || controllerIndex == vr::k_unTrackedDeviceIndexInvalid)
 			return false;
 
+		// Bounds check to prevent array out-of-bounds access
+		if (controllerIndex >= vr::k_unMaxTrackedDeviceCount)
+			return false;
+
 		// Get controller pose
 		vr::TrackedDevicePose_t poses[vr::k_unMaxTrackedDeviceCount];
 		if (!GetDeviceToAbsoluteTrackingPoseCompatible(vr::TrackingUniverseStanding, 0, poses, vr::k_unMaxTrackedDeviceCount))

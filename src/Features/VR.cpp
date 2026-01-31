@@ -1970,24 +1970,30 @@ void VR::ProcessThumbstickScroll(RE::VRControllerState& controllerState, size_t 
 	bool usingScrollStickY = (std::abs(controllerState.thumbsticks[thumbstickIndex].y) > deadzone);
 
 	if (usingScrollStickX || usingScrollStickY) {
-		static float scrollAccumX = 0.0f;
-		static float scrollAccumY = 0.0f;
+		// Per-controller scroll accumulation to prevent interference between controllers
+		struct ScrollAccum
+		{
+			float x = 0.0f;
+			float y = 0.0f;
+		};
+		static std::unordered_map<size_t, ScrollAccum> scrollAccums;
+		ScrollAccum& accum = scrollAccums[thumbstickIndex];
 
 		// Accumulate scroll input with sensitivity scaling
-		scrollAccumX += controllerState.thumbsticks[thumbstickIndex].x * 0.1f;
-		scrollAccumY += controllerState.thumbsticks[thumbstickIndex].y * 0.1f;
+		accum.x += controllerState.thumbsticks[thumbstickIndex].x * 0.1f;
+		accum.y += controllerState.thumbsticks[thumbstickIndex].y * 0.1f;
 
 		// Send scroll events when accumulated enough input
 		float scrollEventX = 0.0f;
 		float scrollEventY = 0.0f;
 
-		if (std::abs(scrollAccumX) > 0.3f) {
-			scrollEventX = scrollAccumX > 0 ? 1.0f : -1.0f;
-			scrollAccumX = 0.0f;
+		if (std::abs(accum.x) > 0.3f) {
+			scrollEventX = accum.x > 0 ? 1.0f : -1.0f;
+			accum.x = 0.0f;
 		}
-		if (std::abs(scrollAccumY) > 0.3f) {
-			scrollEventY = scrollAccumY > 0 ? 1.0f : -1.0f;
-			scrollAccumY = 0.0f;
+		if (std::abs(accum.y) > 0.3f) {
+			scrollEventY = accum.y > 0 ? 1.0f : -1.0f;
+			accum.y = 0.0f;
 		}
 
 		// Send both horizontal and vertical scroll events if needed
@@ -2600,19 +2606,19 @@ void VR::UpdateCursorFromWandPointing()
 		pointingController = Util::GetControllerIndexForDevice(ControllerDevice::Primary, lastKnownLeftHandedMode);
 	}
 
-	if (pointingController == vr::k_unTrackedDeviceIndexInvalid)
+	if (pointingController == vr::k_unTrackedDeviceIndexInvalid) {
+		wandState.isIntersecting = false;
 		return;
+	}
 
 	// Try to get intersection with active overlay
 	ImVec2 uv;
 	bool intersected = false;
-	vr::VROverlayHandle_t activeOverlay = vr::k_ulOverlayHandleInvalid;
 
 	// Check HMD overlay first
 	if (menuOverlayHandle != vr::k_ulOverlayHandleInvalid) {
 		if (ComputeWandIntersection(menuOverlayHandle, pointingController, uv)) {
 			intersected = true;
-			activeOverlay = menuOverlayHandle;
 		}
 	}
 
@@ -2620,7 +2626,6 @@ void VR::UpdateCursorFromWandPointing()
 	if (!intersected && menuControllerOverlayHandle != vr::k_ulOverlayHandleInvalid) {
 		if (ComputeWandIntersection(menuControllerOverlayHandle, pointingController, uv)) {
 			intersected = true;
-			activeOverlay = menuControllerOverlayHandle;
 		}
 	}
 
@@ -2639,5 +2644,8 @@ void VR::UpdateCursorFromWandPointing()
 		io.AddMousePosEvent(screenX, screenY);
 		io.MouseDrawCursor = true;
 		io.WantSetMousePos = true;
+	} else {
+		// Ensure wand state is cleared if no intersection
+		wandState.isIntersecting = false;
 	}
 }
