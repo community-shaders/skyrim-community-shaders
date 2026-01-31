@@ -36,7 +36,8 @@ public:
 		uint OverrideComplexGrassSettings = false;
 		float BasicGrassBrightness = 1.0f;
 		uint EnableWrappedLighting = false;
-		uint pad[2];
+		float ComplexGrassThreshold = 0.03f;
+		uint pad1;
 	};
 	STATIC_ASSERT_ALIGNAS_16(Settings);
 

@@ -228,6 +228,23 @@ namespace Util
 
 	namespace FileSystem
 	{
-		std::vector<SettingsDiffEntry> LoadJsonDiff(const std::filesystem::path& userPath, const std::filesystem::path& testPath);
+		/**
+		 * Compares two JSON objects and returns a list of differences
+		 * Core diffing logic shared between file-based and in-memory JSON comparisons
+		 * @param userJson First JSON object (USER/baseline variant)
+		 * @param testJson Second JSON object (TEST variant)
+		 * @param epsilon Tolerance for floating-point comparisons (default: 0.0001f filters precision noise while preserving meaningful changes >0.01%)
+		 * @return Vector of differences between the two JSON objects
+		 */
+		std::vector<SettingsDiffEntry> DiffJson(const nlohmann::json& userJson, const nlohmann::json& testJson, float epsilon = 0.0001f);
+
+		/**
+		 * Loads and compares two JSON files, returning a list of differences
+		 * @param userPath Path to the first JSON file (USER variant)
+		 * @param testPath Path to the second JSON file (TEST variant)
+		 * @param epsilon Tolerance for floating-point comparisons (default: 0.0001f)
+		 * @return Vector of differences between the two JSON files
+		 */
+		std::vector<SettingsDiffEntry> LoadJsonDiff(const std::filesystem::path& userPath, const std::filesystem::path& testPath, float epsilon = 0.0001f);
 	}
 }

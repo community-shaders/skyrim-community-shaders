@@ -153,6 +153,7 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	ShaderBlockNextKey,
 	EnableShaderBlocking,
 	FirstTimeSetupCompleted,
+	SkipClearCacheConfirmation,
 	Theme,
 	SelectedThemePreset)
 
@@ -680,6 +681,9 @@ void Menu::DrawSettings()
 			ImGui::Spacing();
 			DrawFooter();
 		}
+
+		// Draw global popups (needs to be called once per frame)
+		Util::DrawClearShaderCacheConfirmation();
 	}
 	ImGui::End();
 }
@@ -929,7 +933,7 @@ void Menu::ProcessInputEventQueue()
 						std::function<void()> action;
 					};
 					KeyAction keyActions[] = {
-						{ settings.ToggleKey, [this]() { IsEnabled = !IsEnabled; } },
+						{ settings.ToggleKey, [this]() { if (!HomePageRenderer::ShouldShowFirstTimeSetup()) IsEnabled = !IsEnabled; } },
 						{ settings.SkipCompilationKey, [shaderCache]() { shaderCache->backgroundCompilation = true; } },
 						{ settings.EffectToggleKey, [shaderCache]() { shaderCache->SetEnabled(!shaderCache->IsEnabled()); } },
 						{ settings.ShaderBlockPrevKey, [this, shaderCache]() { if (settings.EnableShaderBlocking) shaderCache->IterateShaderBlock(); } },
@@ -989,7 +993,7 @@ void Menu::OnFocusChanged()
 	// Solves the alt+tab stuck issue, but disables tab after tabbing back in.
 	if (const auto& inputMgr = RE::BSInputDeviceManager::GetSingleton()) {
 		if (const auto& device = inputMgr->GetKeyboard()) {
-			device->Reset();
+			device->ClearInputState();
 		}
 	}
 	// Allows tab to work again after alt+tabbing back in.

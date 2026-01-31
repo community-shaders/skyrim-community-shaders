@@ -59,11 +59,19 @@ void AdvancedSettingsRenderer::RenderAdvancedSettings(
 			ImGui::EndChild();
 			ImGui::EndTabItem();
 		}
-
 		// Shader Debug Tab
 		if (MenuFonts::BeginTabItemWithFont("Shader Debug", Menu::FontRole::Subheading)) {
 			if (ImGui::BeginChild("##ShaderDebugContent", ImVec2(0, 0), false)) {
 				RenderShaderDebugSection();
+			}
+			ImGui::EndChild();
+			ImGui::EndTabItem();
+		}
+
+		// Testing Tab (for A/B Testing and related settings)
+		if (MenuFonts::BeginTabItemWithFont("Testing", Menu::FontRole::Subheading)) {
+			if (ImGui::BeginChild("##Testing", ImVec2(0, 0), false)) {
+				RenderTestingSection();
 			}
 			ImGui::EndChild();
 			ImGui::EndTabItem();
@@ -128,10 +136,6 @@ void AdvancedSettingsRenderer::RenderLoggingSection()
 			"This is activated if the startup compilation is skipped. "
 			"The more threads the faster compilation will finish but may make the system unresponsive. ");
 	}
-
-	// A/B Testing settings
-	auto* abTestingManager = ABTestingManager::GetSingleton();
-	abTestingManager->DrawSettingsUI();
 
 	// Dump Ini Settings button
 	if (ImGui::Button("Dump Ini Settings", { -1, 0 })) {
@@ -564,4 +568,11 @@ void AdvancedSettingsRenderer::RenderDeveloperSection()
 			}
 		}
 	}
+}
+
+void AdvancedSettingsRenderer::RenderTestingSection()
+{
+	// A/B Testing settings
+	auto* abTestingManager = ABTestingManager::GetSingleton();
+	abTestingManager->DrawSettingsUI();
 }
