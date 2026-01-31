@@ -69,7 +69,8 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	Menu::ThemeSettings::FeatureHeadingColors,
 	ColorDefault,
 	ColorHovered,
-	MinimizedFactor)
+	MinimizedFactor,
+	FeatureTitleScale)
 
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	Menu::ThemeSettings::ScrollbarOpacitySettings,
