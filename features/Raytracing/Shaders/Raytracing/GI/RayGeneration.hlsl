@@ -80,8 +80,7 @@ void main()
     TraceRay(Scene, RAY_FLAG_CULL_BACK_FACING_TRIANGLES, 0xFF, DIFFUSE_RAY_HITGROUP_IDX, 0, DIFFUSE_RAY_MISS_IDX, sourceRay, sourcePayload);
     randomSeed = sourcePayload.randomSeed;
 
-    RayCone sourceRayCone = RayCone::make(0, Frame.PixelConeSpreadAngle);    
-    sourceRayCone = sourceRayCone.propagateDistance(sourcePayload.hitDistance);
+    RayCone sourceRayCone = RayCone::make(Frame.PixelConeSpreadAngle * sourcePayload.hitDistance, Frame.PixelConeSpreadAngle);    
 
     if (!sourcePayload.Hit())
     {
@@ -172,6 +171,8 @@ void main()
 
     float3 albedo = LLGammaToTrueLinear(AlbedoTexture.SampleLevel(BaseSampler, uv, 0).rgb);
 
+    RayCone sourceRayCone = RayCone::make(Frame.PixelConeSpreadAngle * hitDistance, Frame.PixelConeSpreadAngle);
+    
     Surface sourceSurface = Surface(positionWS, geometryNormalWS, normalWS, tangentWS, bitangentWS, albedo, linearRoughness, metalness, 0, ao);
     BRDFContext sourceBRDFContext = BRDFContext(sourceSurface, -positionCS / hitDistance);
 
@@ -247,12 +248,8 @@ void main()
 
     StandardBSDF bsdf;
     
- #if defined(PATH_TRACING)   
     RayCone rayCone;
-#else
-    RayCone rayCone = RayCone::make(Frame.PixelConeSpreadAngle * hitDistance, Frame.PixelConeSpreadAngle); // Same as calling make then propagateDistance
- #endif    
-    
+
 #if defined(SHARC)
     SharcState sharcState;
     SharcHitData sharcHitData;
@@ -272,11 +269,11 @@ void main()
         surface = sourceSurface;
         brdfContext = sourceBRDFContext;
         bsdf = sourceBSDF;
+        rayCone = sourceRayCone;        
 #if defined(PATH_TRACING)
         material = sourceMaterial;
         instance = sourceInstance;
         payload = sourcePayload;
-        rayCone = sourceRayCone;
 #endif
 
         float3 sampleRadiance = float3(0.0f, 0.0f, 0.0f);
