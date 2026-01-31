@@ -2246,7 +2246,7 @@ void Raytracing::CreateModelInternal(RE::TESForm* form, const char* path, RE::Ni
 		if ((model->GetFlags() & Shape::Flags::Dynamic) || (model->GetFlags() & Shape::Flags::Skinned))
 			modelKey.append(Model::KeySuffix(pRoot).c_str());
 
-		auto [it, emplaced] = models.emplace(modelKey, eastl::move(model));
+		auto [it, emplaced] = models.try_emplace(modelKey, eastl::move(model));
 
 		if (emplaced) {
 			if (it->second->ShouldQueueMSNConversion())
