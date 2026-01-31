@@ -22,7 +22,6 @@ struct Payload
     uint barycentricsPacked;
     uint instanceGeometryIndexPacked;
     uint randomSeed;
-    RayCone rayCone;
 
     void PackBarycentrics(float2 barycentrics)
     {

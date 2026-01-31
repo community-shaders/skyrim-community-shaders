@@ -76,12 +76,12 @@ void main()
     sourcePayload.PackBarycentrics(float2(0.0f, 0.0f));
     sourcePayload.PackInstanceGeometryIndex(0, 0);
     sourcePayload.randomSeed = randomSeed;
-    sourcePayload.rayCone = RayCone::make(0, Frame.PixelConeSpreadAngle);
 
     TraceRay(Scene, RAY_FLAG_CULL_BACK_FACING_TRIANGLES, 0xFF, DIFFUSE_RAY_HITGROUP_IDX, 0, DIFFUSE_RAY_MISS_IDX, sourceRay, sourcePayload);
     randomSeed = sourcePayload.randomSeed;
 
-    sourcePayload.rayCone = sourcePayload.rayCone.propagateDistance(sourcePayload.hitDistance);
+    RayCone sourceRayCone = RayCone::make(0, Frame.PixelConeSpreadAngle);    
+    sourceRayCone = sourceRayCone.propagateDistance(sourcePayload.hitDistance);
 
     if (!sourcePayload.Hit())
     {
@@ -106,7 +106,7 @@ void main()
     Instance sourceInstance;
     Material sourceMaterial;
 
-    Surface sourceSurface = Surface(sourcePosition, sourcePayload, sourceDirection, sourceInstance, sourceMaterial);
+    Surface sourceSurface = Surface(sourcePosition, sourcePayload, sourceDirection, sourceRayCone, sourceInstance, sourceMaterial);
     BRDFContext sourceBRDFContext = BRDFContext(sourceSurface, -sourceDirection);
 
     StandardBSDF sourceBSDF = StandardBSDF::make(sourceSurface, true);
@@ -163,6 +163,8 @@ void main()
     const float3 positionCS = ViewToWorldPosition(positionVS, Frame.ViewInverse);
     const float3 positionWS = positionCS + Frame.Position.xyz;
 
+    const float hitDistance = length(positionCS);
+    
     const snorm half3 normalWS = normalRoughness.xyz;
 
     float3 tangentWS, bitangentWS;
@@ -171,7 +173,7 @@ void main()
     float3 albedo = LLGammaToTrueLinear(AlbedoTexture.SampleLevel(BaseSampler, uv, 0).rgb);
 
     Surface sourceSurface = Surface(positionWS, geometryNormalWS, normalWS, tangentWS, bitangentWS, albedo, linearRoughness, metalness, 0, ao);
-    BRDFContext sourceBRDFContext = BRDFContext(sourceSurface, normalize(-positionCS));
+    BRDFContext sourceBRDFContext = BRDFContext(sourceSurface, -positionCS / hitDistance);
 
     StandardBSDF sourceBSDF = StandardBSDF::make(sourceSurface, true);
 #endif
@@ -244,7 +246,13 @@ void main()
     BRDFContext brdfContext;
 
     StandardBSDF bsdf;
-
+    
+ #if defined(PATH_TRACING)   
+    RayCone rayCone;
+#else
+    RayCone rayCone = RayCone::make(Frame.PixelConeSpreadAngle * hitDistance, Frame.PixelConeSpreadAngle); // Same as calling make then propagateDistance
+ #endif    
+    
 #if defined(SHARC)
     SharcState sharcState;
     SharcHitData sharcHitData;
@@ -268,13 +276,14 @@ void main()
         material = sourceMaterial;
         instance = sourceInstance;
         payload = sourcePayload;
+        rayCone = sourceRayCone;
 #endif
 
         float3 sampleRadiance = float3(0.0f, 0.0f, 0.0f);
         float3 throughput = float3(1.0f, 1.0f, 1.0f);
         float materialRoughnessPrev = 0.0f;
         bool isEnter = true;
-
+        
 #if defined(RAW_RADIANCE)
         float3 throughputDelta = float3(1.0f, 1.0f, 1.0f);
 #endif
@@ -390,11 +399,11 @@ void main()
             payload.randomSeed = randomSeed;
 
             if (!bsdfSample.isLobe(LobeType::Delta))
-                payload.rayCone = RayCone::make(payload.rayCone.getWidth(), min(payload.rayCone.getSpreadAngle() + ComputeRayConeSpreadAngleExpansionByScatterPDF(bsdfSample.pdf), 2.0 * K_PI));
+                rayCone = RayCone::make(rayCone.getWidth(), min(rayCone.getSpreadAngle() + ComputeRayConeSpreadAngleExpansionByScatterPDF(bsdfSample.pdf), 2.0 * K_PI));
 
             TraceRay(Scene, RAY_FLAG_CULL_BACK_FACING_TRIANGLES, 0xFF, DIFFUSE_RAY_HITGROUP_IDX, 0, DIFFUSE_RAY_MISS_IDX, ray, payload);
             randomSeed = payload.randomSeed;
-            payload.rayCone = payload.rayCone.propagateDistance(payload.hitDistance);
+            rayCone = rayCone.propagateDistance(payload.hitDistance);
 
             if (j == 0)
             {
@@ -421,7 +430,7 @@ void main()
 
             float3 localPosition = ray.Origin + direction * payload.hitDistance;
 
-            surface = Surface(localPosition, payload, direction, instance, material);
+            surface = Surface(localPosition, payload, direction, rayCone, instance, material);
 
 #if defined(SHARC)
             sharcHitData.positionWorld = surface.Position;
