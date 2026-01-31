@@ -402,11 +402,8 @@ void main()
             randomSeed = payload.randomSeed;
             rayCone = rayCone.propagateDistance(payload.hitDistance);
 
-            if (j == 0)
-            {
-                if (isSpecular)
-                    specHitDist = max(specHitDist, payload.hitDistance);
-            }
+            if (isSpecular)
+                specHitDist += payload.hitDistance;
 
             if (!payload.Hit())
             {
