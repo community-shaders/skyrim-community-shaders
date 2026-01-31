@@ -107,6 +107,7 @@ void main()
 
     Surface sourceSurface = Surface(sourcePosition, sourcePayload, sourceDirection, sourceRayCone, sourceInstance, sourceMaterial);
     BRDFContext sourceBRDFContext = BRDFContext(sourceSurface, -sourceDirection);
+    if (sourceMaterial.ShaderFlags & ShaderFlags::kTwoSided != 0 && dot(sourceSurface.FaceNormal, sourceBRDFContext.ViewDirection) < 0.0f) sourceSurface.FlipNormal();
 
     StandardBSDF sourceBSDF = StandardBSDF::make(sourceSurface, true);
 
@@ -309,10 +310,6 @@ void main()
             else
                 break;
 
-            // Check direction validity before modifying any state
-            if (!hasTransmission && dot(faceNormalOriented, direction) <= 0.0)
-                break;
-
             throughput *= bsdfSample.isLobe(LobeType::Transmission) ? 1.f : surface.AO;
 
             // Update isEnter state when transmission occurs
@@ -459,6 +456,9 @@ void main()
 #endif
 
             brdfContext = BRDFContext(surface, -direction);
+            if (material.ShaderFlags & ShaderFlags::kTwoSided != 0 && dot(surface.FaceNormal, brdfContext.ViewDirection) < 0.0f)
+                surface.FlipNormal();
+
             AdjustShadingNormal(surface, brdfContext, true, false);  // Adjusts the normal of the supplied shading frame to reduce black pixels due to back-facing view direction.
             bsdf = StandardBSDF::make(surface, isEnter);
 
