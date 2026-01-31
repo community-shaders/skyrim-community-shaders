@@ -1,6 +1,7 @@
 #include "FeatureListRenderer.h"
 
 #include <algorithm>
+#include <cmath>
 #include <filesystem>
 #include <format>
 #include <imgui.h>
@@ -55,8 +56,12 @@ namespace
 		auto& palette = themeSettings.Palette;
 		auto& featureHeading = themeSettings.FeatureHeading;
 
-		// Clamp to UI slider range to prevent malformed theme JSON from destabilizing layout
-		const float titleScale = std::clamp(featureHeading.FeatureTitleScale, 1.0f, 3.0f);
+		// Sanitize and clamp to UI slider range to prevent malformed theme JSON from destabilizing layout
+		float titleScale = featureHeading.FeatureTitleScale;
+		if (!std::isfinite(titleScale)) {
+			titleScale = ThemeManager::Constants::DEFAULT_FEATURE_TITLE_SCALE;
+		}
+		titleScale = std::clamp(titleScale, 1.0f, 3.0f);
 
 		ImVec2 startPos = ImGui::GetCursorScreenPos();
 
@@ -98,9 +103,12 @@ namespace
 			ImVec4 versionColor = palette.Text;
 			versionColor.w *= ThemeManager::Constants::VERSION_TEXT_OPACITY;
 
-			ImGui::SetWindowFontScale(titleScale);
-			ImGui::TextColored(versionColor, "v%s", formattedVersion.c_str());
-			ImGui::SetWindowFontScale(1.0f);
+			{
+				MenuFonts::FontRoleGuard bodyGuard(Menu::FontRole::Body);
+				ImGui::SetWindowFontScale(titleScale);
+				ImGui::TextColored(versionColor, "v%s", formattedVersion.c_str());
+				ImGui::SetWindowFontScale(1.0f);
+			}
 
 			// Reset cursor to after the title block
 			ImGui::SetCursorScreenPos(ImVec2(startPos.x, startPos.y + titleSize.y + ImGui::GetStyle().ItemSpacing.y));
