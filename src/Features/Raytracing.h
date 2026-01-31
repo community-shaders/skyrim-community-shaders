@@ -1088,11 +1088,9 @@ struct Raytracing : public OverlayFeature
 		{
 			static void thunk(T* oThis)
 			{
-				if (auto& rt = globals::features::raytracing; rt.Active()) {
-					if (auto* pNiAVObject = oThis->Get3D()) {
-						rt.RemoveInstance(oThis->GetFormID(), true);
-					}
-				}
+				logger::info("[RT] Release3DRelatedData::{} - {}_{:08X}", typeid(T).name(), oThis->GetName(), reinterpret_cast<uintptr_t>(oThis->Get3D()));
+
+				globals::features::raytracing.RemoveInstance(oThis->GetFormID(), true);
 
 				func(oThis);
 			}
@@ -1295,7 +1293,7 @@ struct Raytracing : public OverlayFeature
 					auto* pNiAVObject = refr->Get3D();
 
 					if (!pNiAVObject) {
-						logger::warn("\tTES::sub_1401A0920 - No 3D");
+						logger::warn("\tTES::Load3D - No 3D");
 						return;
 					}
 	
@@ -1323,7 +1321,7 @@ struct Raytracing : public OverlayFeature
 							return;
 						}
 
-						logger::warn("\tTES::sub_1401A0920 - No TESModel - {}, {:08X}", magic_enum::enum_name(refr->formType.get()), refr->GetFormID());
+						logger::warn("\tTES::Load3D - No TESModel - {}, {:08X}", magic_enum::enum_name(refr->formType.get()), refr->GetFormID());
 					}
 				}
 			}
@@ -1363,14 +1361,32 @@ struct Raytracing : public OverlayFeature
 			};
 			static inline REL::Relocation<decltype(thunk)> func;
 		};
+		
+		template <typename T>
+		struct Set3D
+		{
+			static void thunk(T* oThis, RE::NiAVObject* a_object, bool a_queue3DTasks = true)
+			{
+				if (!a_object)
+					globals::features::raytracing.RemoveInstance(oThis->GetFormID(), true);
+
+				func(oThis, a_object, a_queue3DTasks);
+			}
+			static inline REL::Relocation<decltype(thunk)> func;
+		};
 
 		static void Install()
 		{
+			// Creates model and instances for all forms
 			stl::detour_thunk<TES_Load3D>(REL::RelocationID(13209, 13355));
 
-			stl::write_vfunc<0x6B, Release3DRelatedData<RE::TESObjectREFR>>(RE::VTABLE_TESObjectREFR[0]);
-			stl::write_vfunc<0x6B, Release3DRelatedData<RE::PlayerCharacter>>(RE::VTABLE_Actor[0]);
-
+			// Releases 3D resources (instances and models)
+			{
+				stl::write_vfunc<0x6B, Release3DRelatedData<RE::TESObjectREFR>>(RE::VTABLE_TESObjectREFR[0]);
+				stl::detour_thunk<Set3D<RE::Actor>>(REL::RelocationID(36199, 37178));
+			}
+			
+			// Makes Player FaceGenTint RenderTarget shareable
 			stl::write_thunk_call<CreateRenderTarget_PlayerFaceGenTint>(REL::RelocationID(100458, 107175).address() + REL::Relocate(0x606, 0x605, 0x0));
 
 			//stl::detour_thunk<TESObjectREFR_Enable>(REL::RelocationID(19373, 19800));
@@ -1379,13 +1395,12 @@ struct Raytracing : public OverlayFeature
 			// NiSourceTexture Destructor
 			stl::write_vfunc<0x0, NiSourceTexture_Destructor>(RE::VTABLE_NiSourceTexture[0]);
 
-			// Destructors to remove instances
-
-			stl::write_vfunc<0x0, Destructor<RE::NiNode>>(RE::VTABLE_NiNode[0]);
-			stl::write_vfunc<0x0, Destructor<RE::BSFadeNode>>(RE::VTABLE_BSFadeNode[0]);
-			stl::write_vfunc<0x0, Destructor<RE::BSFadeNode>>(RE::VTABLE_BSLeafAnimNode[0]);
-
-			//stl::write_vfunc<0x0, Destructor<RE::BSFadeNode>>(RE::VTABLE_BSTreeNode[0]);
+			// Destructors to remove instances (not models)
+			{
+				stl::write_vfunc<0x0, Destructor<RE::NiNode>>(RE::VTABLE_NiNode[0]);
+				stl::write_vfunc<0x0, Destructor<RE::BSFadeNode>>(RE::VTABLE_BSFadeNode[0]);
+				stl::write_vfunc<0x0, Destructor<RE::BSFadeNode>>(RE::VTABLE_BSLeafAnimNode[0]);
+			}
 
 			stl::detour_thunk<Main_RenderWaterEffects>(REL::RelocationID(35561, 36560));
 
@@ -1393,8 +1408,6 @@ struct Raytracing : public OverlayFeature
 			
 			// We use these to render only the sky to the cubemaps, maybe it would be cleaner if we could override cubemap renderpass?
 			stl::write_vfunc<0x6, BSShader_SetupGeometry<RE::BSShader::Type::Lighting>>(RE::VTABLE_BSLightingShader[0]);
-
-			//stl::write_vfunc<0x6, BSSkyShader_SetupGeometry>(RE::VTABLE_BSSkyShader[0]);
 
 			stl::write_vfunc<0x35, BSCubeMapCamera_RenderCubemap>(RE::VTABLE_BSCubeMapCamera[0]);
 
