@@ -17,6 +17,7 @@ public:
 	virtual inline std::string GetShortName() override { return "WeatherEditor"; }
 	virtual inline std::string_view GetShaderDefineName() override { return "WEATHER"; }
 	virtual inline std::string_view GetCategory() const override { return "Utility"; }
+	virtual inline bool SupportsVR() override { return true; }
 	virtual inline std::pair<std::string, std::vector<std::string>> GetFeatureSummary() override
 	{
 		return {
@@ -26,6 +27,7 @@ public:
 				"Real-time editing and previewing of effects" }
 		};
 	}
+	virtual bool SupportsVR() override { return true; }
 
 	virtual void DataLoaded() override;
 	virtual void DrawSettings() override;
