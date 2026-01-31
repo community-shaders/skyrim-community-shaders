@@ -1,4 +1,5 @@
 #include "Common/Color.hlsli"
+#include "Common/reinhard.hlsl"
 
 Texture2D<float4> SceneTex : register(t0);
 Texture2D<float4> UITex : register(t1);
@@ -14,6 +15,9 @@ cbuffer PerFrame : register(b0)
 // Uses Reinhard-style compression above shoulder threshold
 float3 HDRSoftClip(float3 colorNits, float paperWhite, float peakNits)
 {
+	// Ensure peak is always above paper white to avoid broken math
+	peakNits = max(peakNits, paperWhite * 1.1);
+	
 	float shoulder = paperWhite * 2.0;  // Start rolloff at 2x paper white
 	
 	float3 result;
@@ -54,11 +58,9 @@ float3 HDRSoftClip(float3 colorNits, float paperWhite, float peakNits)
 	if (enableHDR) {
 		// HDR output path: BT.709 -> BT.2020 -> soft clip -> PQ encode
 		if (skipUIComposite) {
-			// Frame Gen mode: FidelityFX handles UI compositing
-			float3 sceneBT2020 = Color::BT709ToBT2020(sceneLinear);
-			float3 sceneNits = sceneBT2020 * paperWhite;
-			sceneNits = HDRSoftClip(sceneNits, paperWhite, peakNits);
-			finalColor = Color::pq::Encode(sceneNits / 10000.0, 10000.0);
+			// Frame Gen mode: Output scene in GAMMA to match non-FG compositing behavior
+			// FidelityFX will composite UI in gamma space, then we encode to PQ after
+			finalColor = Color::TrueLinearToGamma(sceneLinear);
 		} else {
 			// Non-Frame Gen mode: composite UI in gamma space first
 			// Convert linear scene back to gamma for compositing (UI is in gamma space)
@@ -74,19 +76,22 @@ float3 HDRSoftClip(float3 colorNits, float paperWhite, float peakNits)
 			finalColor = Color::pq::Encode(compositedNits / 10000.0, 10000.0);
 		}
 	} else {
-		// SDR output path: output to R10G10B10A2 with sRGB colorspace
+		// SDR output path: gamma 2.2 output
+		// Apply Reinhard tonemapping in linear space to prevent harsh clipping on bright highlights
+		float3 sceneClipped = renodx::tonemap::Reinhard(sceneLinear);
+		
 		if (skipUIComposite) {
 			// Frame Gen mode: FidelityFX handles UI compositing
-			// Output gamma-encoded for sRGB display
-			finalColor = Color::TrueLinearToGamma(sceneLinear);
+			// Output gamma 2.2 encoded
+			finalColor = Color::TrueLinearToGamma(sceneClipped);
 		} else {
 			// Non-Frame Gen mode: composite UI then gamma encode
-			float3 sceneGamma = Color::TrueLinearToGamma(sceneLinear);
+			float3 sceneGamma = Color::TrueLinearToGamma(sceneClipped);
 			float3 uiScaled = ui.rgb * uiBrightness;
 			float3 composited = uiScaled + sceneGamma * (1.0 - ui.a);
 			finalColor = composited;  // Already in gamma space
 		}
 	}
 
-	HDROutput[dispatchID.xy] = float4(saturate(finalColor), 1.0);
+	HDROutput[dispatchID.xy] = float4(enableHDR ? finalColor : saturate(finalColor), 1.0);
 }
