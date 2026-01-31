@@ -348,7 +348,7 @@ void SnowCover::SaveConfig()
 
 	try {
 		auto curr_worldspace = GetWorldspace();
-		auto path = (Util::PathHelpers::GetFeatureShaderPath("SnowCover") / curr_worldspace).replace_extension(std::filesystem::path(".json"));
+		auto path = (Util::PathHelpers::GetShadersPath() / "SnowCover" / curr_worldspace).replace_extension(std::filesystem::path(".json"));
 		std::ofstream file(path);
 		file << config.dump(4);
 	} catch (const std::system_error& e) {
@@ -366,9 +366,9 @@ void SnowCover::Reload()
 		if (curr_worldspace == last_worldspace)
 			return;
 		last_worldspace = curr_worldspace;
-		path = (Util::PathHelpers::GetFeatureShaderPath("SnowCover") / curr_worldspace).replace_extension(std::filesystem::path(".json"));
+		path = (Util::PathHelpers::GetShadersPath() / "SnowCover" / curr_worldspace).replace_extension(std::filesystem::path(".json"));
 		if (!std::filesystem::exists(path)) {
-			status = std::string("Config doesn't exist.");
+			status = std::format("Config doesn't exist {}", path.generic_string());
 			wsettings.EnableSnowCover = false;
 			return;
 		}
@@ -383,8 +383,8 @@ void SnowCover::Reload()
 		logger::error("[Snow Cover] Error opening file: {}", e.what());
 	}
 
-	auto whitelist_path = Util::PathHelpers::GetFeatureShaderPath("SnowCover") / "whitelist.txt";
-	auto blacklist_path = Util::PathHelpers::GetFeatureShaderPath("SnowCover") / "blacklist.txt";
+	auto whitelist_path = Util::PathHelpers::GetShadersPath() / "SnowCover" / "whitelist.txt";
+	auto blacklist_path = Util::PathHelpers::GetShadersPath() / "SnowCover" / "blacklist.txt";
 
 	whitelist = FormIdParser::parseTriNameFile(whitelist_path);
 	blacklist = FormIdParser::parseTriNameFile(blacklist_path);
@@ -435,17 +435,17 @@ void SnowCover::Reload()
 		HRESULT hr = DirectX::CreateDDSTextureFromFile(device, context, (data_path / main_tex).replace_extension(".dds").native().c_str(), nullptr, &views.at(0));
 		if (hr != S_OK) {
 			logger::warn("Snow Cover: Error loading {}.dds texture: {}", main_tex.generic_string(), hr);
-			DirectX::CreateDDSTextureFromFile(device, context, (Util::PathHelpers::GetFeatureShaderPath("SnowCover") / "default" / "main.dds").native().c_str(), nullptr, &views.at(0));
+			DirectX::CreateDDSTextureFromFile(device, context, (Util::PathHelpers::GetShadersPath() / "SnowCover" / "default" / "main.dds").native().c_str(), nullptr, &views.at(0));
 		}
 		hr = DirectX::CreateDDSTextureFromFile(device, context, (data_path / main_tex).concat("_n.dds").native().c_str(), nullptr, &views.at(1));
 		if (hr != S_OK) {
 			logger::warn("Snow Cover: Error loading {}_n.dds texture: {}", main_tex.generic_string(), hr);
-			DirectX::CreateDDSTextureFromFile(device, context, (Util::PathHelpers::GetFeatureShaderPath("SnowCover") / "default" / "main_n.dds").native().c_str(), nullptr, &views.at(1));
+			DirectX::CreateDDSTextureFromFile(device, context, (Util::PathHelpers::GetShadersPath() / "SnowCover" / "default" / "main_n.dds").native().c_str(), nullptr, &views.at(1));
 		}
 		hr = DirectX::CreateDDSTextureFromFile(device, context, (data_path / main_tex).concat("_rmaos.dds").native().c_str(), nullptr, &views.at(2));
 		if (hr != S_OK) {
 			logger::warn("Snow Cover: Error loading {}_rmaos.dds texture: {}", main_tex.generic_string(), hr);
-			DirectX::CreateDDSTextureFromFile(device, context, (Util::PathHelpers::GetFeatureShaderPath("SnowCover") / "default" / "main_rmaos.dds").native().c_str(), nullptr, &views.at(2));
+			DirectX::CreateDDSTextureFromFile(device, context, (Util::PathHelpers::GetShadersPath() / "SnowCover"  / "default" / "main_rmaos.dds").native().c_str(), nullptr, &views.at(2));
 		}
 		if (config.contains("AltTexture") && config["AltTexture"] != "") {
 			if (views[3])

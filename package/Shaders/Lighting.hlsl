@@ -2358,16 +2358,15 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 		float disp = 0;
 #		endif
 		float3 snowNormal = worldNormal;
-		float3 snowedColor = baseColor.rgb;
 #		if defined(TREE_ANIM)
 			snowNormal = normalize(snowNormal + float3(0, 0, 0.5));
 		if (SharedData::snowCoverSettings.AffectTreeTint)
-			SnowCover::ApplyFoliageColor(snowedColor.rgb, SnowCover::GetEnvironmentalMultiplier(adjustedWorldPos));
+			SnowCover::ApplyFoliageColor(material.BaseColor, SnowCover::GetEnvironmentalMultiplier(adjustedWorldPos));
 #		endif
 #		if defined(TRUE_PBR)
-		material = SnowCover::ApplySnowPBR(snowedColor, snowNormal, snowFactor, disp, adjustedWorldPos, snowOcclusion, input.WorldPosition.z - waterHeight, viewPosition.z, material, uv - uvOriginal);
+		snowFactor = SnowCover::ApplySnowPBR(material, snowNormal, snowFactor, disp, adjustedWorldPos, snowOcclusion, input.WorldPosition.z - waterHeight, viewPosition.z, uv - uvOriginal);
 #		else
-		snowFactor = SnowCover::ApplySnow(snowedColor, snowNormal, glossiness, shininess, disp, adjustedWorldPos, snowOcclusion, input.WorldPosition.z - waterHeight, viewPosition.z, uv - uvOriginal);
+		snowFactor = SnowCover::ApplySnow(material, snowNormal, disp, adjustedWorldPos, snowOcclusion, input.WorldPosition.z - waterHeight, viewPosition.z, uv - uvOriginal);
 #		endif
 	if (snowFactor > 0)
 #	if defined(MODELSPACENORMALS) && !defined(SKINNED)
@@ -2377,12 +2376,11 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #	endif
 
 #		if defined(LODLANDNOISE)
-		snowedColor *= snowFactor + (1 - snowFactor) * lodLandNoiseMultiplier;
+		material.BaseColor *= snowFactor + (1 - snowFactor) * lodLandNoiseMultiplier;
 #		endif
-		baseColor.rgb = snowedColor;
 #		if defined(LOD_LAND_BLEND) && defined(TRUE_PBR)
 		lodLandFadeFactor = snowFactor + (1 - snowFactor) * lodLandFadeFactor;
-		lodLandColor.rgb = lerp(lodLandColor, snowedColor * Color::PBRLightingScale, snowFactor);
+		lodLandColor.rgb = lerp(lodLandColor, material.BaseColor * Color::PBRLightingScale, snowFactor);
 #		endif
 	}
 
