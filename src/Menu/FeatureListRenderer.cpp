@@ -1,7 +1,6 @@
 #include "FeatureListRenderer.h"
 
 #include <algorithm>
-#include <cmath>
 #include <filesystem>
 #include <format>
 #include <imgui.h>
@@ -59,24 +58,16 @@ namespace
 		// Clamp to UI slider range to prevent malformed theme JSON from destabilizing layout
 		const float titleScale = std::clamp(featureHeading.FeatureTitleScale, 1.0f, 3.0f);
 
-		// Calculate text sizes for positioning
+		ImVec2 startPos = ImGui::GetCursorScreenPos();
+
+		// Calculate title size and draw feature name with Title font
 		ImVec2 titleSize;
 		{
 			MenuFonts::FontRoleGuard titleGuard(Menu::FontRole::Title);
 			titleSize = ImGui::CalcTextSize(featureName.c_str());
 			titleSize.x *= titleScale;
 			titleSize.y *= titleScale;
-		}
 
-		// Pixel-align cursor position for sharper text rendering
-		ImVec2 startPos = ImGui::GetCursorScreenPos();
-		startPos.x = std::round(startPos.x);
-		startPos.y = std::round(startPos.y);
-		ImGui::SetCursorScreenPos(startPos);
-
-		// Draw feature name with Title font
-		{
-			MenuFonts::FontRoleGuard titleGuard(Menu::FontRole::Title);
 			ImGui::SetWindowFontScale(titleScale);
 			ImGui::TextUnformatted(featureName.c_str());
 			ImGui::SetWindowFontScale(1.0f);
@@ -97,9 +88,9 @@ namespace
 				versionSize.y *= titleScale;
 			}
 
-			// Position version text: right of title, bottom-aligned, pixel-aligned
-			float versionX = std::round(startPos.x + titleSize.x + ImGui::GetStyle().ItemSpacing.x);
-			float versionY = std::round(startPos.y + titleSize.y - versionSize.y);
+			// Position version text: right of title, bottom-aligned
+			float versionX = startPos.x + titleSize.x + ImGui::GetStyle().ItemSpacing.x;
+			float versionY = startPos.y + titleSize.y - versionSize.y;
 
 			ImGui::SetCursorScreenPos(ImVec2(versionX, versionY));
 
@@ -112,7 +103,7 @@ namespace
 			ImGui::SetWindowFontScale(1.0f);
 
 			// Reset cursor to after the title block
-			ImGui::SetCursorScreenPos(ImVec2(startPos.x, std::round(startPos.y + titleSize.y + ImGui::GetStyle().ItemSpacing.y)));
+			ImGui::SetCursorScreenPos(ImVec2(startPos.x, startPos.y + titleSize.y + ImGui::GetStyle().ItemSpacing.y));
 		}
 
 		// Draw plain separator below
