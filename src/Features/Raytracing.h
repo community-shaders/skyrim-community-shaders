@@ -854,6 +854,7 @@ struct Raytracing : public OverlayFeature
 	eastl::unique_ptr<WrappedResource> accumulationTextureCopy = nullptr;
 
 	std::shared_mutex modelMutex;
+	std::shared_mutex landDetachMutex;
 	std::shared_mutex bufferMutex;
 	std::shared_mutex renderMutex;
 
@@ -1088,8 +1089,6 @@ struct Raytracing : public OverlayFeature
 		{
 			static void thunk(T* oThis)
 			{
-				logger::info("[RT] Release3DRelatedData::{} - {}_{:08X}", typeid(T).name(), oThis->GetName(), reinterpret_cast<uintptr_t>(oThis->Get3D()));
-
 				globals::features::raytracing.RemoveInstance(oThis->GetFormID(), true);
 
 				func(oThis);
@@ -1207,7 +1206,11 @@ struct Raytracing : public OverlayFeature
 		{
 			static void thunk(RE::TESObjectLAND* oThis)
 			{
-				globals::features::raytracing.RemoveInstance(oThis->GetFormID(), true);
+				auto& rt = globals::features::raytracing;
+
+				std::lock_guard lock{ rt.landDetachMutex };
+
+				rt.RemoveInstance(oThis->GetFormID(), true);
 
 				auto* cell = oThis->parentCell;
 
@@ -1425,10 +1428,8 @@ struct Raytracing : public OverlayFeature
 
 			stl::detour_thunk<TESObjectLAND_Attach3D>(REL::RelocationID(18334, 18750));
 
-			stl::detour_thunk<TESObjectLAND_Detach3D>(REL::RelocationID(18333, 18749));
-			//stl::detour_thunk<TESObjectLAND_Detach3D>(REL::RelocationID(18335, 18751));
-
-			//stl::write_vfunc<0x0, TESObjectLAND_Destructor>(RE::VTABLE_TESObjectLAND[0]);
+			stl::detour_thunk<TESObjectLAND_Detach3D>(REL::RelocationID(18333, 18749)); // sub_1402A8A80
+			//stl::detour_thunk<TESObjectLAND_Detach3D2>(REL::RelocationID(18334, 18750));  // sub_1402A8B00
 
 			//stl::write_vfunc<0x6, AttachDistant3DTask_Attach>(RE::VTABLE_AttachDistant3DTask[0]);
 			
