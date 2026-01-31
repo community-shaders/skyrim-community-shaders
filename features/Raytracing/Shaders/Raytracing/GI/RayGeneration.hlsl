@@ -107,7 +107,7 @@ void main()
 
     Surface sourceSurface = Surface(sourcePosition, sourcePayload, sourceDirection, sourceRayCone, sourceInstance, sourceMaterial);
     BRDFContext sourceBRDFContext = BRDFContext(sourceSurface, -sourceDirection);
-    if (sourceMaterial.ShaderFlags & ShaderFlags::kTwoSided != 0 && dot(sourceSurface.FaceNormal, sourceBRDFContext.ViewDirection) < 0.0f) sourceSurface.FlipNormal();
+    if ((sourceMaterial.ShaderFlags & ShaderFlags::kTwoSided) != 0 && dot(sourceSurface.FaceNormal, sourceBRDFContext.ViewDirection) < 0.0f) sourceSurface.FlipNormal();
 
     StandardBSDF sourceBSDF = StandardBSDF::make(sourceSurface, true);
 
@@ -456,7 +456,7 @@ void main()
 #endif
 
             brdfContext = BRDFContext(surface, -direction);
-            if (material.ShaderFlags & ShaderFlags::kTwoSided != 0 && dot(surface.FaceNormal, brdfContext.ViewDirection) < 0.0f)
+            if ((material.ShaderFlags & ShaderFlags::kTwoSided) != 0 && dot(surface.FaceNormal, brdfContext.ViewDirection) < 0.0f)
                 surface.FlipNormal();
 
             AdjustShadingNormal(surface, brdfContext, true, false);  // Adjusts the normal of the supplied shading frame to reduce black pixels due to back-facing view direction.
