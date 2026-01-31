@@ -260,11 +260,10 @@ struct IDXGISwapChain_Present
 
 		bool frameGenActive = upscaling.d3d12SwapChainActive;
 
-		// Determine if HDR resources are ready
+		// HDR processing always runs to handle format conversion (HDR or SDR encoding)
 		bool hdrReady = hdr && hdr->hdrDataCB && hdr->outputTexture;
 
-		// For ImGui rendering, we need to render to the appropriate UI texture
-		// Frame Gen: uses uiBufferWrapped, Non-Frame Gen: uses our uiTexture
+		// For ImGui/UI rendering, redirect to appropriate UI texture
 		if (hdrReady) {
 			ID3D11RenderTargetView* uiRTV = nullptr;
 			D3D11_TEXTURE2D_DESC texDesc = {};
@@ -298,13 +297,13 @@ struct IDXGISwapChain_Present
 			ID3D11RenderTargetView* nullRTV = nullptr;
 			globals::d3d::context->OMSetRenderTargets(1, &nullRTV, nullptr);
 
-			// Apply HDR processing pipeline - uses appropriate UI texture based on Frame Gen state
+			// Apply HDR/SDR processing - handles both PQ encoding (HDR) and gamma encoding (SDR)
 			hdr->ApplyHDR();
 		}
 
 		HRESULT retval = func(This, SyncInterval, Flags);
 
-		// Clear UI buffer and restore original kFRAMEBUFFER.RTV for next frame (non-Frame Gen only)
+		// Clear UI buffer and restore original kFRAMEBUFFER.RTV for next frame
 		if (hdrReady && !frameGenActive)
 			hdr->ClearUIBuffer();
 

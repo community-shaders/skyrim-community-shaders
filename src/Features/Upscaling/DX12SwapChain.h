@@ -112,6 +112,7 @@ public:
 	HANDLE GetFrameLatencyWaitableObject();
 
 	void SetUIBuffer();
+	void SetColorSpace(bool enableHDR);
 
 	// D3D12 interop resource management
 	void CreateSharedResources();

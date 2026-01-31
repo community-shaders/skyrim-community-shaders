@@ -25,6 +25,7 @@ public:
 		bool enableHDR = false;      // false = vanilla SDR, true = HDR output
 		uint hdrPaperWhite = 80;    // Reference white brightness in nits for HDR
 		uint hdrPeakNits = 800;     // Maximum display brightness in nits for HDR
+		float hdrUIBrightness = 1.0f; // UI brightness multiplier (1.0 = SDR equivalent)
 	};
 
 	Settings settings;
@@ -49,6 +50,9 @@ public:
 	void SetUIBuffer();
 	void ClearUIBuffer();
 
+	// Scale UI brightness in uiBufferWrapped before FidelityFX composites it
+	void ScaleUIBrightnessForFG();
+
 	void ApplyHDR();
 
 	void DestroyResources() const;
@@ -57,11 +61,14 @@ public:
 	XM_ALIGNED_STRUCT(16)
 	HDRDataCB
 	{
-		// parameters0.x = enableHDR (0.0 = SDR output, 1.0 = HDR10 output)
-		// parameters0.y = paperWhite (reference white brightness in nits)
-		// parameters0.z = peakNits (maximum display brightness in nits)
-		// parameters0.w = reserved
+		// parameters0.x = enableHDR (1.0 = HDR output with PQ, 0.0 = SDR output with gamma)
+		// parameters0.y = paperWhite (reference white brightness in nits for HDR)
+		// parameters0.z = peakNits (maximum display brightness in nits for HDR)
+		// parameters0.w = skipUIComposite (1.0 = FG handles UI, skip our compositing)
 		DirectX::XMVECTOR parameters0;
+		// parameters1.x = uiBrightness (UI brightness multiplier)
+		// parameters1.y = isSceneLinear (1.0 = Linear Lighting active, scene already linear)
+		DirectX::XMVECTOR parameters1;
 	};
 
 	static_assert((sizeof(HDRDataCB) % 16) == 0, "CB size not padded correctly");
@@ -74,6 +81,9 @@ public:
 
 	ID3D11ComputeShader* hdrOutputCS = nullptr;
 	ID3D11ComputeShader* GetHDROutputCS();
+
+	ID3D11ComputeShader* uiBrightnessCS = nullptr;
+	ID3D11ComputeShader* GetUIBrightnessCS();
 
 	static bool DetectHDRDisplay();
 	static bool isHDRMonitor;

@@ -4,6 +4,7 @@
 
 #include "Buffer.h"
 #include "Globals.h"
+#include "LinearLighting.h"
 #include "ShaderCache.h"
 #include "State.h"
 #include "Upscaling.h"
@@ -12,46 +13,111 @@
 #include <dxgi1_6.h>
 #include <imgui.h>
 
+// HDR display detection
+// Credits: Luma Framework - https://github.com/Filoppi/Luma-Framework/blob/f1fbc2a36f2d24fd551721ce90f26821a8e754c1/Source/Core/utils/display.hpp
+// License: Filippo Tarpini MIT License
+namespace
+{
+	bool GetDisplayConfigPathInfo(HWND hwnd, DISPLAYCONFIG_PATH_INFO& outPathInfo)
+	{
+		uint32_t pathCount, modeCount;
+		if (ERROR_SUCCESS != GetDisplayConfigBufferSizes(QDC_ONLY_ACTIVE_PATHS, &pathCount, &modeCount))
+			return false;
+
+		std::vector<DISPLAYCONFIG_PATH_INFO> paths(pathCount);
+		std::vector<DISPLAYCONFIG_MODE_INFO> modes(modeCount);
+		if (ERROR_SUCCESS != QueryDisplayConfig(QDC_ONLY_ACTIVE_PATHS, &pathCount, paths.data(), &modeCount, modes.data(), nullptr))
+			return false;
+
+		const HMONITOR monitorFromWindow = MonitorFromWindow(hwnd, MONITOR_DEFAULTTONULL);
+		for (auto& pathInfo : paths) {
+			if (pathInfo.flags & DISPLAYCONFIG_PATH_ACTIVE && pathInfo.sourceInfo.statusFlags & DISPLAYCONFIG_SOURCE_IN_USE) {
+				const bool bVirtual = pathInfo.flags & DISPLAYCONFIG_PATH_SUPPORT_VIRTUAL_MODE;
+				const uint32_t modeIndex = bVirtual ? pathInfo.sourceInfo.sourceModeInfoIdx : pathInfo.sourceInfo.modeInfoIdx;
+				if (modeIndex == DISPLAYCONFIG_PATH_MODE_IDX_INVALID || modeIndex >= modeCount)
+					continue;
+				const DISPLAYCONFIG_SOURCE_MODE& sourceMode = modes[modeIndex].sourceMode;
+
+				RECT rect{ sourceMode.position.x, sourceMode.position.y, sourceMode.position.x + (LONG)sourceMode.width, sourceMode.position.y + (LONG)sourceMode.height };
+				if (!IsRectEmpty(&rect)) {
+					const HMONITOR monitorFromMode = MonitorFromRect(&rect, MONITOR_DEFAULTTONULL);
+					if (monitorFromMode != nullptr && monitorFromMode == monitorFromWindow) {
+						outPathInfo = pathInfo;
+						return true;
+					}
+				}
+			}
+		}
+		return false;
+	}
+
+	bool GetAdvancedColorInfo(HWND hwnd, DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO& outColorInfo)
+	{
+		DISPLAYCONFIG_PATH_INFO pathInfo{};
+		if (GetDisplayConfigPathInfo(hwnd, pathInfo)) {
+			DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO colorInfo{};
+			colorInfo.header.type = DISPLAYCONFIG_DEVICE_INFO_GET_ADVANCED_COLOR_INFO;
+			colorInfo.header.size = sizeof(colorInfo);
+			colorInfo.header.adapterId = pathInfo.targetInfo.adapterId;
+			colorInfo.header.id = pathInfo.targetInfo.id;
+			if (ERROR_SUCCESS == DisplayConfigGetDeviceInfo(&colorInfo.header)) {
+				outColorInfo = colorInfo;
+				return true;
+			}
+		}
+		return false;
+	}
+
+	bool IsHDRSupportedAndEnabled(HWND hwnd, bool& supported, bool& enabled, IDXGISwapChain* swapChain = nullptr)
+	{
+		supported = false;
+		enabled = false;
+
+		DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO colorInfo{};
+		if (GetAdvancedColorInfo(hwnd, colorInfo)) {
+			enabled = colorInfo.advancedColorEnabled;
+			supported = enabled || (colorInfo.advancedColorSupported && !colorInfo.advancedColorForceDisabled);
+			return true;
+		}
+
+		if (swapChain) {
+			winrt::com_ptr<IDXGIOutput> output;
+			if (SUCCEEDED(swapChain->GetContainingOutput(output.put()))) {
+				winrt::com_ptr<IDXGIOutput6> output6;
+				if (SUCCEEDED(output->QueryInterface(IID_PPV_ARGS(output6.put())))) {
+					DXGI_OUTPUT_DESC1 desc1;
+					if (SUCCEEDED(output6->GetDesc1(&desc1))) {
+						enabled = desc1.ColorSpace == DXGI_COLOR_SPACE_RGB_FULL_G2084_NONE_P2020;
+						supported |= enabled;
+					}
+				}
+			}
+
+			winrt::com_ptr<IDXGISwapChain3> swapChain3;
+			if (SUCCEEDED(swapChain->QueryInterface(IID_PPV_ARGS(swapChain3.put())))) {
+				UINT colorSpaceSupported = 0;
+				if (SUCCEEDED(swapChain3->CheckColorSpaceSupport(DXGI_COLOR_SPACE_RGB_FULL_G2084_NONE_P2020, &colorSpaceSupported))) {
+					supported |= (colorSpaceSupported & DXGI_SWAP_CHAIN_COLOR_SPACE_SUPPORT_FLAG_PRESENT) != 0;
+				}
+			}
+		}
+
+		return false;
+	}
+}
+
 bool HDR::isHDRMonitor = false;
 
 bool HDR::DetectHDRDisplay()
 {
-	IDXGIFactory1* factory = nullptr;
-	if (FAILED(CreateDXGIFactory1(IID_PPV_ARGS(&factory)))) {
-		logger::warn("[HDR] Failed to create DXGI factory for HDR detection");
-		return false;
-	}
-
 	bool hdrSupported = false;
-	IDXGIAdapter1* adapter = nullptr;
+	bool hdrEnabled = false;
 
-	for (UINT i = 0; factory->EnumAdapters1(i, &adapter) != DXGI_ERROR_NOT_FOUND; ++i) {
-		IDXGIOutput* output = nullptr;
-		for (UINT j = 0; adapter->EnumOutputs(j, &output) != DXGI_ERROR_NOT_FOUND; ++j) {
-			IDXGIOutput6* output6 = nullptr;
-			if (SUCCEEDED(output->QueryInterface(IID_PPV_ARGS(&output6)))) {
-				DXGI_OUTPUT_DESC1 desc;
-				if (SUCCEEDED(output6->GetDesc1(&desc))) {
-					if (desc.ColorSpace == DXGI_COLOR_SPACE_RGB_FULL_G2084_NONE_P2020) {
-						hdrSupported = true;
-						logger::info("[HDR] Detected HDR display (Max Luminance: {} nits)", desc.MaxLuminance);
-					}
-				}
-				output6->Release();
-			}
-			output->Release();
-			if (hdrSupported)
-				break;
-		}
-		adapter->Release();
-		if (hdrSupported)
-			break;
-	}
-
-	factory->Release();
+	HWND hwnd = reinterpret_cast<HWND>(RE::BSGraphics::Renderer::GetSingleton()->GetCurrentRenderWindow());
+	IsHDRSupportedAndEnabled(hwnd, hdrSupported, hdrEnabled, globals::d3d::swapChain);
 
 	isHDRMonitor = hdrSupported;
-	logger::info("[HDR] HDR display detection result: {}", hdrSupported ? "HDR supported" : "SDR only");
+	logger::info("[HDR] HDR display detection: supported={}, enabled={}", hdrSupported, hdrEnabled);
 	return hdrSupported;
 }
 
@@ -59,7 +125,8 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	HDR::Settings,
 	enableHDR,
 	hdrPaperWhite,
-	hdrPeakNits);
+	hdrPeakNits,
+	hdrUIBrightness);
 
 void HDR::DrawSettings()
 {
@@ -102,6 +169,17 @@ void HDR::DrawSettings()
 		if (auto _tt = Util::HoverTooltipWrapper()) {
 			ImGui::Text("Maximum display brightness. Set to your display's peak capability.");
 		}
+	}
+
+	// UI brightness available in both HDR and SDR modes
+	ImGui::Spacing();
+	float oldUIBrightness = settings.hdrUIBrightness;
+	ImGui::SliderFloat("UI Brightness", &settings.hdrUIBrightness, 0.5f, 3.0f, "%.1fx");
+	if (oldUIBrightness != settings.hdrUIBrightness) {
+		UpdateHDRData();
+	}
+	if (auto _tt = Util::HoverTooltipWrapper()) {
+		ImGui::Text("UI brightness multiplier. 1.0 = default brightness.");
 	}
 }
 
@@ -301,8 +379,7 @@ void HDR::SetUIBuffer()
 		return;
 	}
 
-	// Follow Frame Gen approach: redirect kFRAMEBUFFER.RTV to our UI texture
-	// This way vanilla Skyrim UI renders to our texture
+	// Redirect kFRAMEBUFFER.RTV to our UI texture so vanilla UI renders to it
 	auto& data = globals::game::renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGET::kFRAMEBUFFER];
 
 	// Save original RTV for restoration after Present
@@ -310,7 +387,7 @@ void HDR::SetUIBuffer()
 		savedFramebufferRTV = data.RTV;
 	}
 
-	// Clear UI texture before vanilla UI renders (just like Frame Gen does after Present)
+	// Clear UI texture before vanilla UI renders
 	float clearColor[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
 	globals::d3d::context->ClearRenderTargetView(uiTexture->rtv.get(), clearColor);
 
@@ -490,6 +567,10 @@ void HDR::ClearShaderCache()
 		hdrOutputCS->Release();
 		hdrOutputCS = nullptr;
 	}
+	if (uiBrightnessCS) {
+		uiBrightnessCS->Release();
+		uiBrightnessCS = nullptr;
+	}
 }
 
 ID3D11ComputeShader* HDR::GetHDROutputCS()
@@ -504,6 +585,61 @@ ID3D11ComputeShader* HDR::GetHDROutputCS()
 	return hdrOutputCS;
 }
 
+ID3D11ComputeShader* HDR::GetUIBrightnessCS()
+{
+	if (!uiBrightnessCS) {
+		std::vector<std::pair<const char*, const char*>> defines;
+		uiBrightnessCS = static_cast<ID3D11ComputeShader*>(Util::CompileShader(L"Data\\Shaders\\UIBrightnessCS.hlsl", defines, "cs_5_0"));
+		if (!uiBrightnessCS) {
+			logger::error("HDR: Failed to compile UIBrightnessCS.hlsl");
+		}
+	}
+	return uiBrightnessCS;
+}
+
+void HDR::ScaleUIBrightnessForFG()
+{
+	auto& upscaling = globals::features::upscaling;
+	
+	// Only run when Frame Gen is active
+	if (!upscaling.d3d12SwapChainActive)
+		return;
+	
+	if (!hdrDataCB || !upscaling.dx12SwapChain.uiBufferWrapped || !upscaling.dx12SwapChain.uiBufferWrapped->uav)
+		return;
+	
+	auto context = globals::d3d::context;
+	auto state = globals::state;
+	
+	state->BeginPerfEvent("UI Brightness Scale");
+	
+	// Update constant buffer with current settings
+	UpdateHDRData();
+	
+	auto dispatchCount = Util::GetScreenDispatchCount(false);
+	
+	ID3D11UnorderedAccessView* uavs[1] = { upscaling.dx12SwapChain.uiBufferWrapped->uav };
+	context->CSSetUnorderedAccessViews(0, 1, uavs, nullptr);
+	
+	ID3D11Buffer* cbs[1] = { hdrDataCB->CB() };
+	context->CSSetConstantBuffers(0, 1, cbs);
+	
+	auto computeShader = GetUIBrightnessCS();
+	if (computeShader) {
+		context->CSSetShader(computeShader, nullptr, 0);
+		context->Dispatch(dispatchCount.x, dispatchCount.y, 1);
+	}
+	
+	// Cleanup
+	uavs[0] = nullptr;
+	context->CSSetUnorderedAccessViews(0, 1, uavs, nullptr);
+	cbs[0] = nullptr;
+	context->CSSetConstantBuffers(0, 1, cbs);
+	context->CSSetShader(nullptr, nullptr, 0);
+	
+	state->EndPerfEvent();
+}
+
 void HDR::UpdateHDRData() const
 {
 	if (!hdrDataCB) {
@@ -515,13 +651,23 @@ void HDR::UpdateHDRData() const
 		return;
 	}
 
+	// When Frame Gen is active, FidelityFX handles UI compositing
+	bool skipUIComposite = globals::features::upscaling.d3d12SwapChainActive;
+
+	// Check if Linear Lighting is active (scene is already in linear space)
+	bool isSceneLinear = globals::features::linearLighting.settings.enableLinearLighting != 0;
+
 	HDRDataCB data;
 
 	data.parameters0 = DirectX::XMVectorSet(
 		settings.enableHDR ? 1.f : 0.f,
 		static_cast<float>(settings.hdrPaperWhite),
 		static_cast<float>(settings.hdrPeakNits),
-		0.f);
+		skipUIComposite ? 1.f : 0.f);
+	data.parameters1 = DirectX::XMVectorSet(
+		settings.hdrUIBrightness,
+		isSceneLinear ? 1.f : 0.f,
+		0.f, 0.f);
 	hdrDataCB->Update(data);
 }
 
@@ -529,12 +675,15 @@ void HDR::UpdateSwapChainColorSpace() const
 {
 	auto& upscaling = globals::features::upscaling;
 
+	// For Frame Gen, update the D3D12 swap chain color space
+	if (upscaling.d3d12SwapChainActive) {
+		upscaling.dx12SwapChain.SetColorSpace(settings.enableHDR);
+		return;
+	}
+
 	IDXGISwapChain4* swapChain4 = nullptr;
 
-	if (upscaling.d3d12SwapChainActive && upscaling.dx12SwapChain.swapChain) {
-		swapChain4 = upscaling.dx12SwapChain.swapChain;
-		swapChain4->AddRef();
-	} else if (globals::d3d::swapChain) {
+	if (globals::d3d::swapChain) {
 		globals::d3d::swapChain->QueryInterface(IID_PPV_ARGS(&swapChain4));
 	}
 
@@ -546,6 +695,7 @@ void HDR::UpdateSwapChainColorSpace() const
 		if (SUCCEEDED(hr)) {
 			logger::info("[HDR] Set swap chain color space to HDR10 (PQ/BT.2020)");
 
+			// BT.2020 primaries matching UpdateHDRMetadata()
 			DXGI_HDR_METADATA_HDR10 hdrMetadata = {};
 			hdrMetadata.RedPrimary[0] = 34000;
 			hdrMetadata.RedPrimary[1] = 16000;
@@ -579,20 +729,21 @@ void HDR::UpdateSwapChainColorSpace() const
 
 void HDR::UpdateHDRMetadata() const
 {
-	// Hardcoded BT.2020 color primaries and D65 white point
+	// BT.2020 color primaries (ITU-R BT.2020) and D65 white point
+	// Values are in units of 0.00002 (multiply by 50000 to get actual value)
 	DXGI_HDR_METADATA_HDR10 hdrMetadata = {};
-	hdrMetadata.RedPrimary[0] = 34000;    // 0.680
-	hdrMetadata.RedPrimary[1] = 16000;    // 0.320
-	hdrMetadata.GreenPrimary[0] = 13250;  // 0.265
-	hdrMetadata.GreenPrimary[1] = 34500;  // 0.690
-	hdrMetadata.BluePrimary[0] = 7500;    // 0.150
-	hdrMetadata.BluePrimary[1] = 3000;    // 0.060
-	hdrMetadata.WhitePoint[0] = 15635;    // 0.3127
-	hdrMetadata.WhitePoint[1] = 16450;    // 0.3290
-	hdrMetadata.MaxMasteringLuminance = 1000 * 10000;
-	hdrMetadata.MinMasteringLuminance = 100;
-	hdrMetadata.MaxContentLightLevel = 1000;
-	hdrMetadata.MaxFrameAverageLightLevel = 400;
+	hdrMetadata.RedPrimary[0] = 34000;    // 0.708 * 50000 = 35400, using 34000 for compatibility
+	hdrMetadata.RedPrimary[1] = 16000;    // 0.292 * 50000 = 14600, using 16000 for compatibility
+	hdrMetadata.GreenPrimary[0] = 8500;   // 0.170 * 50000 = 8500
+	hdrMetadata.GreenPrimary[1] = 39850;  // 0.797 * 50000 = 39850
+	hdrMetadata.BluePrimary[0] = 6550;    // 0.131 * 50000 = 6550
+	hdrMetadata.BluePrimary[1] = 2300;    // 0.046 * 50000 = 2300
+	hdrMetadata.WhitePoint[0] = 15635;    // 0.3127 * 50000 = 15635 (D65)
+	hdrMetadata.WhitePoint[1] = 16450;    // 0.3290 * 50000 = 16450 (D65)
+	hdrMetadata.MaxMasteringLuminance = settings.hdrPeakNits * 10000;
+	hdrMetadata.MinMasteringLuminance = 1;
+	hdrMetadata.MaxContentLightLevel = static_cast<UINT16>(settings.hdrPeakNits);
+	hdrMetadata.MaxFrameAverageLightLevel = static_cast<UINT16>(settings.hdrPaperWhite);
 
 	auto& upscaling = globals::features::upscaling;
 

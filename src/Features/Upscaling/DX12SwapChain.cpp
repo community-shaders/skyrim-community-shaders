@@ -64,27 +64,8 @@ void DX12SwapChain::CreateSwapChain(IDXGIAdapter* adapter, DXGI_SWAP_CHAIN_DESC 
 
 	frameIndex = swapChain->GetCurrentBackBufferIndex();
 
-	DX::ThrowIfFailed(swapChain->SetColorSpace1(DXGI_COLOR_SPACE_RGB_FULL_G2084_NONE_P2020));
-	logger::info("[DX12SwapChain] Set swap chain color space to HDR10 (PQ/BT.2020)");
-
 	auto hdr = HDR::GetSingleton();
-	DXGI_HDR_METADATA_HDR10 hdrMetadata = {};
-	// BT.2020 color primaries (hardcoded)
-	hdrMetadata.RedPrimary[0] = 34000;    // 0.708 * 50000
-	hdrMetadata.RedPrimary[1] = 16000;    // 0.292 * 50000
-	hdrMetadata.GreenPrimary[0] = 8500;   // 0.170 * 50000
-	hdrMetadata.GreenPrimary[1] = 39850;  // 0.797 * 50000
-	hdrMetadata.BluePrimary[0] = 6550;    // 0.131 * 50000
-	hdrMetadata.BluePrimary[1] = 2300;    // 0.046 * 50000
-	hdrMetadata.WhitePoint[0] = 15635;    // D65: 0.3127 * 50000
-	hdrMetadata.WhitePoint[1] = 16450;    // D65: 0.3290 * 50000
-	hdrMetadata.MaxMasteringLuminance = hdr->settings.hdrPeakNits * 10000;
-	hdrMetadata.MinMasteringLuminance = 1;
-	hdrMetadata.MaxContentLightLevel = static_cast<UINT16>(hdr->settings.hdrPeakNits);
-	hdrMetadata.MaxFrameAverageLightLevel = static_cast<UINT16>(hdr->settings.hdrPaperWhite);
-
-	DX::ThrowIfFailed(swapChain->SetHDRMetaData(DXGI_HDR_METADATA_TYPE_HDR10, sizeof(hdrMetadata), &hdrMetadata));
-	logger::info("[DX12SwapChain] Set HDR10 metadata");
+	SetColorSpace(hdr->settings.enableHDR);
 
 	fidelityFX.SetupFrameGeneration();
 }
@@ -112,6 +93,7 @@ void DX12SwapChain::CreateInterop()
 	swapChainBufferWrapped = new WrappedResource(texDesc11, d3d11Device.get(), d3d12Device.get());
 
 	texDesc11.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+	texDesc11.BindFlags = D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_RENDER_TARGET | D3D11_BIND_UNORDERED_ACCESS;
 	uiBufferWrapped = new WrappedResource(texDesc11, d3d11Device.get(), d3d12Device.get());
 }
 
@@ -169,6 +151,11 @@ HRESULT DX12SwapChain::Present(UINT SyncInterval, UINT Flags)
 			commandLists[frameIndex]->ResourceBarrier(static_cast<UINT>(barriers.size()), barriers.data());
 		}
 	}
+
+	// Scale UI brightness before FidelityFX composites it (HDR only)
+	auto hdr = HDR::GetSingleton();
+	if (hdr)
+		hdr->ScaleUIBrightnessForFG();
 
 	globals::features::upscaling.fidelityFX.Present(upscaling.settings.frameGenerationMode && !globals::game::ui->GameIsPaused());
 
@@ -411,6 +398,38 @@ HRESULT STDMETHODCALLTYPE DXGISwapChainProxy::GetFrameStatistics(_Out_ DXGI_FRAM
 HRESULT STDMETHODCALLTYPE DXGISwapChainProxy::GetLastPresentCount(_Out_ UINT* pLastPresentCount)
 {
 	return swapChain->GetLastPresentCount(pLastPresentCount);
+}
+
+void DX12SwapChain::SetColorSpace(bool enableHDR)
+{
+	if (!swapChain)
+		return;
+
+	auto hdr = HDR::GetSingleton();
+
+	if (enableHDR) {
+		swapChain->SetColorSpace1(DXGI_COLOR_SPACE_RGB_FULL_G2084_NONE_P2020);
+		logger::info("[DX12SwapChain] Set color space to HDR10 (PQ/BT.2020)");
+
+		DXGI_HDR_METADATA_HDR10 hdrMetadata = {};
+		hdrMetadata.RedPrimary[0] = 34000;
+		hdrMetadata.RedPrimary[1] = 16000;
+		hdrMetadata.GreenPrimary[0] = 8500;
+		hdrMetadata.GreenPrimary[1] = 39850;
+		hdrMetadata.BluePrimary[0] = 6550;
+		hdrMetadata.BluePrimary[1] = 2300;
+		hdrMetadata.WhitePoint[0] = 15635;
+		hdrMetadata.WhitePoint[1] = 16450;
+		hdrMetadata.MaxMasteringLuminance = hdr->settings.hdrPeakNits * 10000;
+		hdrMetadata.MinMasteringLuminance = 1;
+		hdrMetadata.MaxContentLightLevel = static_cast<UINT16>(hdr->settings.hdrPeakNits);
+		hdrMetadata.MaxFrameAverageLightLevel = static_cast<UINT16>(hdr->settings.hdrPaperWhite);
+		swapChain->SetHDRMetaData(DXGI_HDR_METADATA_TYPE_HDR10, sizeof(hdrMetadata), &hdrMetadata);
+	} else {
+		swapChain->SetColorSpace1(DXGI_COLOR_SPACE_RGB_FULL_G22_NONE_P709);
+		logger::info("[DX12SwapChain] Set color space to SDR (sRGB)");
+		swapChain->SetHDRMetaData(DXGI_HDR_METADATA_TYPE_NONE, 0, nullptr);
+	}
 }
 
 void DX12SwapChain::SetUIBuffer()
