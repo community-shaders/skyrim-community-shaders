@@ -32,6 +32,11 @@ struct Model
 		}
 	}
 
+	static std::string KeySuffix(RE::NiAVObject* root)
+	{
+		return std::format("_{:08X}", reinterpret_cast<uintptr_t>(root));
+	}
+
 	Shape::Flags GetFlags() const
 	{
 		return flags;

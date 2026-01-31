@@ -161,6 +161,8 @@ void Shape::BuildMesh(RE::BSGraphics::TriShape* rendererData, const uint32_t& ve
 			boneIds.resize(bonesPerVertex);	
 		}
 
+		float3 min(FLT_MAX), max(-FLT_MAX);
+
 		for (uint16_t i = 0; i < vertexCountIn; i++) {
 			uint8_t* vtx = rendererData->rawVertexData + i * vertexSize;
 
@@ -173,6 +175,9 @@ void Shape::BuildMesh(RE::BSGraphics::TriShape* rendererData, const uint32_t& ve
 			} else if (dynamic) {
 				pos = dynamicPosition[i];
 			}
+
+			min = float3::Min(min, float3(pos));
+			max = float3::Max(max, float3(pos));
 
 			if (hasPosition || dynamic) {
 				vertexData.Position = { pos.x, pos.y, pos.z };
@@ -267,6 +272,8 @@ void Shape::BuildMesh(RE::BSGraphics::TriShape* rendererData, const uint32_t& ve
 
 			vertices[i] = vertexData;
 		}
+
+		aabb = AABB::FromMinMax(min, max);
 
 		vertexCount = vertexCountIn;
 	}

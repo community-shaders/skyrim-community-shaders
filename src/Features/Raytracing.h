@@ -853,7 +853,7 @@ struct Raytracing : public OverlayFeature
 	eastl::unique_ptr<WrappedResource> accumulationTexture = nullptr;
 	eastl::unique_ptr<WrappedResource> accumulationTextureCopy = nullptr;
 
-	std::shared_mutex geometryMutex;
+	std::shared_mutex modelMutex;
 	std::shared_mutex bufferMutex;
 	std::shared_mutex renderMutex;
 
@@ -1298,6 +1298,8 @@ struct Raytracing : public OverlayFeature
 						logger::warn("\tTES::sub_1401A0920 - No 3D");
 						return;
 					}
+	
+					std::lock_guard lock{ rt.modelMutex };
 
 					if (auto* model = baseObject->As<RE::TESModel>()) {
 						rt.CreateModel(refr, model->GetModel(), pNiAVObject);

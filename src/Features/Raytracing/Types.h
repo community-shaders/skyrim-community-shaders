@@ -196,3 +196,16 @@ struct uint4
 static_assert(sizeof(uint4) == 16);
 
 typedef half4 float16_t4;
+
+struct AABB
+{
+	float3 center;
+	float3 size;
+	float3 extents;
+
+	static AABB FromMinMax(float3 min, float3 max)
+	{
+		const float3 size = max - min;
+		return AABB((min + max) * 0.5f, size, size * 0.5f);
+	}
+};

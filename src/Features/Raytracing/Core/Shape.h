@@ -27,7 +27,9 @@ public:
 		AlphaTesting = 1 << 1,
 		Dynamic = 1 << 2,
 		Skinned = 1 << 3,
-		Landscape = 1 << 4
+		Landscape = 1 << 4,
+		Static = 1 << 5,
+		DoubleSidedGeom = 1 << 6
 	};
 
 	enum State : uint8_t
@@ -67,6 +69,8 @@ public:
 	Flags flags = Flags::None;
 
 	State state;
+
+	AABB aabb;
 
 	float boundRadius;
 
