@@ -88,12 +88,11 @@ void DX12SwapChain::CreateInterop()
 	texDesc11.Format = swapChainDesc.Format;
 	texDesc11.SampleDesc.Count = 1;
 	texDesc11.SampleDesc.Quality = 0;
-	texDesc11.BindFlags = D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_RENDER_TARGET;
+	texDesc11.BindFlags = D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_RENDER_TARGET | D3D11_BIND_UNORDERED_ACCESS;
 
 	swapChainBufferWrapped = new WrappedResource(texDesc11, d3d11Device.get(), d3d12Device.get());
 
 	texDesc11.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
-	texDesc11.BindFlags = D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_RENDER_TARGET | D3D11_BIND_UNORDERED_ACCESS;
 	uiBufferWrapped = new WrappedResource(texDesc11, d3d11Device.get(), d3d12Device.get());
 }
 
@@ -152,12 +151,14 @@ HRESULT DX12SwapChain::Present(UINT SyncInterval, UINT Flags)
 		}
 	}
 
-	// Scale UI brightness before FidelityFX composites it (HDR only)
+	// Scale UI brightness for SDR Frame Gen (FidelityFX composites gamma UI over gamma scene)
+	// For HDR, UI compositing is handled in ApplyHDR to ensure correct gamma-space blending
 	auto hdr = HDR::GetSingleton();
-	if (hdr)
+	bool isHDR = hdr && hdr->settings.enableHDR;
+	if (hdr && !isHDR)
 		hdr->ScaleUIBrightnessForFG();
 
-	globals::features::upscaling.fidelityFX.Present(upscaling.settings.frameGenerationMode && !globals::game::ui->GameIsPaused());
+	globals::features::upscaling.fidelityFX.Present(upscaling.settings.frameGenerationMode && !globals::game::ui->GameIsPaused(), isHDR);
 
 	DX::ThrowIfFailed(commandLists[frameIndex]->Close());
 

@@ -45,7 +45,6 @@ void HDRDisplay::ClearShaderCache()
 
 bool HDRDisplay::IsHDREnabled() const
 {
-	// HDR pipeline is always active
 	return true;
 }
 

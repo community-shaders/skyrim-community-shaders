@@ -13,9 +13,48 @@
 #include <dxgi1_6.h>
 #include <imgui.h>
 
+#ifndef NTDDI_WIN11_GE
+#	define NTDDI_WIN11_GE 0x0A000010
+#endif
+
+// Win11 24H2 structures - define if SDK doesn't have them
+#ifndef DISPLAYCONFIG_DEVICE_INFO_GET_ADVANCED_COLOR_INFO_2
+#	define DISPLAYCONFIG_DEVICE_INFO_GET_ADVANCED_COLOR_INFO_2 ((DISPLAYCONFIG_DEVICE_INFO_TYPE)13)
+
+typedef enum
+{
+	DISPLAYCONFIG_ADVANCED_COLOR_MODE_SDR = 0,
+	DISPLAYCONFIG_ADVANCED_COLOR_MODE_WCG = 1,
+	DISPLAYCONFIG_ADVANCED_COLOR_MODE_HDR = 2
+} DISPLAYCONFIG_ADVANCED_COLOR_MODE;
+
+typedef struct DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO_2
+{
+	DISPLAYCONFIG_DEVICE_INFO_HEADER header;
+	union
+	{
+		struct
+		{
+			UINT32 advancedColorSupported : 1;
+			UINT32 advancedColorActive : 1;
+			UINT32 reserved1 : 1;
+			UINT32 advancedColorLimitedByPolicy : 1;
+			UINT32 highDynamicRangeSupported : 1;
+			UINT32 highDynamicRangeUserEnabled : 1;
+			UINT32 wideColorEnforced : 1;
+			UINT32 reserved : 25;
+		};
+		UINT32 value;
+	};
+	DISPLAYCONFIG_COLOR_ENCODING colorEncoding;
+	UINT32 bitsPerColorChannel;
+	DISPLAYCONFIG_ADVANCED_COLOR_MODE activeColorMode;
+} DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO_2;
+#endif
+
 // HDR display detection
-// Credits: Luma Framework - https://github.com/Filoppi/Luma-Framework/blob/f1fbc2a36f2d24fd551721ce90f26821a8e754c1/Source/Core/utils/display.hpp
-// License: Filippo Tarpini MIT License
+// Credits: Luma Framework by Filippo Tarpini (MIT License)
+// https://github.com/Filoppi/Luma-Framework/blob/f1fbc2a36f2d24fd551721ce90f26821a8e754c1/Source/Core/utils/display.hpp
 namespace
 {
 	bool GetDisplayConfigPathInfo(HWND hwnd, DISPLAYCONFIG_PATH_INFO& outPathInfo)
@@ -68,18 +107,60 @@ namespace
 		return false;
 	}
 
+	// Win11 24H2+ API - uses runtime detection, will fail gracefully on older Windows
+	bool GetAdvancedColorInfo2(HWND hwnd, DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO_2& outColorInfo2)
+	{
+		DISPLAYCONFIG_PATH_INFO pathInfo{};
+		if (GetDisplayConfigPathInfo(hwnd, pathInfo)) {
+			DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO_2 colorInfo2{};
+			colorInfo2.header.type = DISPLAYCONFIG_DEVICE_INFO_GET_ADVANCED_COLOR_INFO_2;
+			colorInfo2.header.size = sizeof(colorInfo2);
+			colorInfo2.header.adapterId = pathInfo.targetInfo.adapterId;
+			colorInfo2.header.id = pathInfo.targetInfo.id;
+			// This will fail on older Windows versions that don't support the API
+			if (ERROR_SUCCESS == DisplayConfigGetDeviceInfo(&colorInfo2.header)) {
+				outColorInfo2 = colorInfo2;
+				return true;
+			}
+		}
+		return false;
+	}
+
 	bool IsHDRSupportedAndEnabled(HWND hwnd, bool& supported, bool& enabled, IDXGISwapChain* swapChain = nullptr)
 	{
 		supported = false;
 		enabled = false;
 
+		// Try Windows 11 24H2+ API first - distinguishes HDR from WCG
+		DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO_2 colorInfo2{};
+		if (GetAdvancedColorInfo2(hwnd, colorInfo2)) {
+			// WCG (Wide Color Gamut) allows wider color range without higher brightness peak
+			// We only consider true HDR mode, not WCG
+			enabled = colorInfo2.activeColorMode == DISPLAYCONFIG_ADVANCED_COLOR_MODE_HDR;
+			supported = enabled || (colorInfo2.highDynamicRangeSupported && !colorInfo2.advancedColorLimitedByPolicy);
+			// Copy bitfield members to avoid non-const reference binding issues
+			UINT32 hdrSupported = colorInfo2.highDynamicRangeSupported;
+			UINT32 limitedByPolicy = colorInfo2.advancedColorLimitedByPolicy;
+			logger::debug("[HDR] Win11 24H2 detection: activeColorMode={}, hdrSupported={}, limitedByPolicy={}",
+				static_cast<int>(colorInfo2.activeColorMode), hdrSupported, limitedByPolicy);
+			return true;
+		}
+
+		// Fallback for older Windows versions
 		DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO colorInfo{};
 		if (GetAdvancedColorInfo(hwnd, colorInfo)) {
 			enabled = colorInfo.advancedColorEnabled;
 			supported = enabled || (colorInfo.advancedColorSupported && !colorInfo.advancedColorForceDisabled);
+			// Copy bitfield members to avoid non-const reference binding issues
+			UINT32 advancedEnabled = colorInfo.advancedColorEnabled;
+			UINT32 advancedSupported = colorInfo.advancedColorSupported;
+			UINT32 forceDisabled = colorInfo.advancedColorForceDisabled;
+			logger::debug("[HDR] Legacy detection: advancedColorEnabled={}, advancedColorSupported={}, forceDisabled={}",
+				advancedEnabled, advancedSupported, forceDisabled);
 			return true;
 		}
 
+		// Last resort: check swap chain color space support
 		if (swapChain) {
 			winrt::com_ptr<IDXGIOutput> output;
 			if (SUCCEEDED(swapChain->GetContainingOutput(output.put()))) {
@@ -87,8 +168,11 @@ namespace
 				if (SUCCEEDED(output->QueryInterface(IID_PPV_ARGS(output6.put())))) {
 					DXGI_OUTPUT_DESC1 desc1;
 					if (SUCCEEDED(output6->GetDesc1(&desc1))) {
-						enabled = desc1.ColorSpace == DXGI_COLOR_SPACE_RGB_FULL_G2084_NONE_P2020;
+						// Check for HDR10 PQ or scRGB linear HDR
+						enabled = desc1.ColorSpace == DXGI_COLOR_SPACE_RGB_FULL_G2084_NONE_P2020 ||
+						          desc1.ColorSpace == DXGI_COLOR_SPACE_RGB_FULL_G10_NONE_P709;
 						supported |= enabled;
+						logger::debug("[HDR] DXGI output detection: colorSpace={}, maxLuminance={}", static_cast<int>(desc1.ColorSpace), desc1.MaxLuminance);
 					}
 				}
 			}
@@ -97,6 +181,10 @@ namespace
 			if (SUCCEEDED(swapChain->QueryInterface(IID_PPV_ARGS(swapChain3.put())))) {
 				UINT colorSpaceSupported = 0;
 				if (SUCCEEDED(swapChain3->CheckColorSpaceSupport(DXGI_COLOR_SPACE_RGB_FULL_G2084_NONE_P2020, &colorSpaceSupported))) {
+					supported |= (colorSpaceSupported & DXGI_SWAP_CHAIN_COLOR_SPACE_SUPPORT_FLAG_PRESENT) != 0;
+				}
+				// Also check scRGB linear HDR support
+				if (SUCCEEDED(swapChain3->CheckColorSpaceSupport(DXGI_COLOR_SPACE_RGB_FULL_G10_NONE_P709, &colorSpaceSupported))) {
 					supported |= (colorSpaceSupported & DXGI_SWAP_CHAIN_COLOR_SPACE_SUPPORT_FLAG_PRESENT) != 0;
 				}
 			}
@@ -131,9 +219,9 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 void HDR::DrawSettings()
 {
 	if (isHDRMonitor) {
-		ImGui::TextColored(ImVec4(0.2f, 1.0f, 0.2f, 1.0f), "HDR Display Detected");
+		ImGui::TextColored(Util::Colors::GetSuccess(), "HDR Display Detected");
 	} else {
-		ImGui::TextColored(ImVec4(1.0f, 0.6f, 0.2f, 1.0f), "SDR Display (HDR not detected)");
+		ImGui::TextColored(Util::Colors::GetWarning(), "SDR Display (HDR not detected)");
 	}
 	ImGui::Spacing();
 
@@ -152,16 +240,22 @@ void HDR::DrawSettings()
 		ImGui::Spacing();
 
 		uint oldPaperWhite = settings.hdrPaperWhite;
-		ImGui::SliderInt("Paper White (nits)", reinterpret_cast<int*>(&settings.hdrPaperWhite), 80, 400);
+		ImGui::SliderInt("Paper White (nits)", reinterpret_cast<int*>(&settings.hdrPaperWhite), 80, 1000);
+		if (settings.hdrPaperWhite >= settings.hdrPeakNits) {
+			settings.hdrPaperWhite = settings.hdrPeakNits - 1;
+		}
 		if (oldPaperWhite != settings.hdrPaperWhite) {
 			UpdateHDRData();
 		}
 		if (auto _tt = Util::HoverTooltipWrapper()) {
-			ImGui::Text("Brightness of reference white. Adjust to match your display.");
+			ImGui::Text("Brightness of reference white. Must be lower than peak brightness.");
 		}
 
 		uint oldPeakNits = settings.hdrPeakNits;
 		ImGui::SliderInt("Peak Brightness (nits)", reinterpret_cast<int*>(&settings.hdrPeakNits), 400, 5000);
+		if (settings.hdrPeakNits <= settings.hdrPaperWhite) {
+			settings.hdrPeakNits = settings.hdrPaperWhite + 1;
+		}
 		if (oldPeakNits != settings.hdrPeakNits) {
 			UpdateHDRData();
 			UpdateHDRMetadata();
@@ -174,7 +268,7 @@ void HDR::DrawSettings()
 	// UI brightness available in both HDR and SDR modes
 	ImGui::Spacing();
 	float oldUIBrightness = settings.hdrUIBrightness;
-	ImGui::SliderFloat("UI Brightness", &settings.hdrUIBrightness, 0.5f, 3.0f, "%.1fx");
+	ImGui::SliderFloat("UI Brightness", &settings.hdrUIBrightness, 0.5f, 2.0f, "%.1fx");
 	if (oldUIBrightness != settings.hdrUIBrightness) {
 		UpdateHDRData();
 	}
@@ -749,13 +843,21 @@ void HDR::UpdateHDRMetadata() const
 
 	if (upscaling.d3d12SwapChainActive && upscaling.dx12SwapChain.swapChain) {
 		upscaling.dx12SwapChain.swapChain->SetHDRMetaData(DXGI_HDR_METADATA_TYPE_HDR10, sizeof(hdrMetadata), &hdrMetadata);
-		logger::info("[HDR] Updated D3D12 swap chain HDR10 metadata");
+		static bool loggedOnce = false;
+		if (!loggedOnce) {
+			logger::info("[HDR] Updated D3D12 swap chain HDR10 metadata");
+			loggedOnce = true;
+		}
 	} else {
 		IDXGISwapChain4* swapChain4 = nullptr;
 		if (SUCCEEDED(globals::d3d::swapChain->QueryInterface(IID_PPV_ARGS(&swapChain4)))) {
 			swapChain4->SetHDRMetaData(DXGI_HDR_METADATA_TYPE_HDR10, sizeof(hdrMetadata), &hdrMetadata);
 			swapChain4->Release();
-			logger::info("[HDR] Updated D3D11 swap chain HDR10 metadata");
+			static bool loggedOnce = false;
+			if (!loggedOnce) {
+				logger::info("[HDR] Updated D3D11 swap chain HDR10 metadata");
+				loggedOnce = true;
+			}
 		}
 	}
 }

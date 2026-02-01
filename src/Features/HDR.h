@@ -23,8 +23,8 @@ public:
 	struct Settings
 	{
 		bool enableHDR = false;      // false = vanilla SDR, true = HDR output
-		uint hdrPaperWhite = 80;    // Reference white brightness in nits for HDR
-		uint hdrPeakNits = 800;     // Maximum display brightness in nits for HDR
+		uint hdrPaperWhite = 203;    // Reference white brightness in nits for HDR
+		uint hdrPeakNits = 1000;     // Maximum display brightness in nits for HDR
 		float hdrUIBrightness = 1.0f; // UI brightness multiplier (1.0 = SDR equivalent)
 	};
 
@@ -50,7 +50,8 @@ public:
 	void SetUIBuffer();
 	void ClearUIBuffer();
 
-	// Scale UI brightness in uiBufferWrapped before FidelityFX composites it
+	// Scale UI brightness in uiBufferWrapped for SDR Frame Gen (FidelityFX composites gamma UI over gamma scene)
+	// For HDR, UI compositing is handled in ApplyHDR to ensure correct gamma-space blending
 	void ScaleUIBrightnessForFG();
 
 	void ApplyHDR();

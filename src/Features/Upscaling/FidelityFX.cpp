@@ -69,7 +69,7 @@ void FidelityFX::SetupFrameGeneration()
  *
  * @param a_useFrameGeneration If true, enables frame generation and dispatches the necessary workloads; otherwise, presents without frame generation.
  */
-void FidelityFX::Present(bool a_useFrameGeneration)
+void FidelityFX::Present(bool a_useFrameGeneration, bool a_isHDR)
 {
 	auto& upscaling = globals::features::upscaling;
 	auto& swapChain = globals::features::upscaling.dx12SwapChain;
@@ -117,9 +117,18 @@ void FidelityFX::Present(bool a_useFrameGeneration)
 		logger::critical("[FidelityFX] Failed to configure frame generation!");
 	}
 
+	// Register UI resource with FidelityFX for SDR mode only
+	// For HDR, UI compositing happens in HDROutputCS.hlsl to ensure correct gamma-space blending
 	ffx::ConfigureDescFrameGenerationSwapChainRegisterUiResourceDX12 uiConfig{};
-	uiConfig.uiResource = ffxApiGetResourceDX12(swapChain.uiBufferWrapped->resource.get());
-	uiConfig.flags = FFX_FRAMEGENERATION_UI_COMPOSITION_FLAG_USE_PREMUL_ALPHA | FFX_FRAMEGENERATION_UI_COMPOSITION_FLAG_ENABLE_INTERNAL_UI_DOUBLE_BUFFERING;
+	if (a_isHDR) {
+		// HDR: Don't register UI - compositing already done in HDROutputCS
+		uiConfig.uiResource = FfxApiResource({});
+		uiConfig.flags = 0;
+	} else {
+		// SDR: Register UI for FidelityFX to composite
+		uiConfig.uiResource = ffxApiGetResourceDX12(swapChain.uiBufferWrapped->resource.get());
+		uiConfig.flags = FFX_FRAMEGENERATION_UI_COMPOSITION_FLAG_USE_PREMUL_ALPHA | FFX_FRAMEGENERATION_UI_COMPOSITION_FLAG_ENABLE_INTERNAL_UI_DOUBLE_BUFFERING;
+	}
 
 	if (ffx::Configure(swapChainContext, uiConfig) != ffx::ReturnCode::Ok) {
 		logger::critical("[FidelityFX] Failed to configure UI composition!");

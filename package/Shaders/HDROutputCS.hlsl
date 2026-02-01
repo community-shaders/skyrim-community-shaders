@@ -56,36 +56,34 @@ float3 HDRSoftClip(float3 colorNits, float paperWhite, float peakNits)
 	float3 sceneLinear = isSceneLinear ? max(0, scene.rgb) : Color::GammaToTrueLinear(max(0, scene.rgb));
 
 	if (enableHDR) {
-		// HDR output path: BT.709 -> BT.2020 -> soft clip -> PQ encode
-		if (skipUIComposite) {
-			// Frame Gen mode: Output scene in GAMMA to match non-FG compositing behavior
-			// FidelityFX will composite UI in gamma space, then we encode to PQ after
-			finalColor = Color::TrueLinearToGamma(sceneLinear);
-		} else {
-			// Non-Frame Gen mode: composite UI in gamma space first
-			// Convert linear scene back to gamma for compositing (UI is in gamma space)
-			float3 sceneGamma = Color::TrueLinearToGamma(sceneLinear);
-			float3 uiScaled = ui.rgb * uiBrightness;
-			float3 composited = uiScaled + sceneGamma * (1.0 - ui.a);
-			
-			// Linearize composited result, convert to BT.2020, soft clip, then PQ encode
-			float3 compositedLinear = Color::GammaToTrueLinear(max(0, composited));
-			float3 compositedBT2020 = Color::BT709ToBT2020(compositedLinear);
-			float3 compositedNits = compositedBT2020 * paperWhite;
-			compositedNits = HDRSoftClip(compositedNits, paperWhite, peakNits);
-			finalColor = Color::pq::Encode(compositedNits / 10000.0, 10000.0);
-		}
+		// HDR output path: composite in gamma space, then convert to BT.2020 and PQ encode
+		// This approach ensures correct blending and a single encoding step
+		// For HDR, we always composite UI here (FidelityFX UI composition is disabled for HDR)
+		
+		// Convert linear scene back to gamma for compositing (UI is in gamma space)
+		float3 sceneGamma = Color::TrueLinearToGamma(sceneLinear);
+		
+		// Composite UI over scene in gamma space
+		float3 uiScaled = ui.rgb * uiBrightness;
+		float3 composited = uiScaled + sceneGamma * (1.0 - ui.a);
+		
+		// Convert composited result: gamma -> linear -> BT.2020 -> nits -> soft clip -> PQ
+		float3 compositedLinear = Color::GammaToTrueLinear(max(0, composited));
+		float3 compositedBT2020 = Color::BT709ToBT2020(compositedLinear);
+		float3 compositedNits = compositedBT2020 * paperWhite;
+		compositedNits = HDRSoftClip(compositedNits, paperWhite, peakNits);
+		finalColor = Color::pq::Encode(compositedNits / 10000.0, 10000.0);
 	} else {
 		// SDR output path: gamma 2.2 output
 		// Apply Reinhard tonemapping in linear space to prevent harsh clipping on bright highlights
 		float3 sceneClipped = renodx::tonemap::Reinhard(sceneLinear);
 		
 		if (skipUIComposite) {
-			// Frame Gen mode: FidelityFX handles UI compositing
-			// Output gamma 2.2 encoded
+			// Frame Gen SDR mode: FidelityFX handles UI compositing
+			// Output gamma 2.2 encoded scene only
 			finalColor = Color::TrueLinearToGamma(sceneClipped);
 		} else {
-			// Non-Frame Gen mode: composite UI then gamma encode
+			// Non-Frame Gen SDR mode: composite UI then output
 			float3 sceneGamma = Color::TrueLinearToGamma(sceneClipped);
 			float3 uiScaled = ui.rgb * uiBrightness;
 			float3 composited = uiScaled + sceneGamma * (1.0 - ui.a);

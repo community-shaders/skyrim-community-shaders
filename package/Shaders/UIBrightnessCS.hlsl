@@ -1,6 +1,5 @@
-// Scales UI brightness for HDR before FidelityFX composites it
-// In HDR mode: converts UI from gamma to linear, scales by paper white * uiBrightness
-// In SDR mode: just applies brightness multiplier
+// Scales UI brightness for FidelityFX Frame Gen compositing (SDR only)
+// For HDR, UI compositing is handled in HDROutputCS.hlsl to ensure correct gamma-space blending
 
 #include "Common/Color.hlsli"
 
@@ -8,8 +7,8 @@ RWTexture2D<float4> UITex : register(u0);
 
 cbuffer PerFrame : register(b0)
 {
-	float4 parameters0 : packoffset(c0);  // .x = enableHDR, .y = paperWhite, .z = peakNits, .w = skipUIComposite
-	float4 parameters1 : packoffset(c1);  // .x = uiBrightness, .y = isSceneLinear
+	float4 parameters0 : packoffset(c0);  // .x = enableHDR, .y = paperWhite, .z = peakNits, .w = unused
+	float4 parameters1 : packoffset(c1);  // .x = uiBrightness, .y = unused
 }
 
 [numthreads(8, 8, 1)] void main(uint3 dispatchID : SV_DispatchThreadID)
@@ -17,20 +16,12 @@ cbuffer PerFrame : register(b0)
 	float4 ui = UITex[dispatchID.xy];
 	
 	if (ui.a > 0.0) {
-		bool enableHDR = parameters0.x > 0.5;
-		float paperWhite = parameters0.y;
 		float uiBrightness = parameters1.x;
 		
-		if (enableHDR) {
-			// For HDR: FidelityFX composites in linear space
-			// Convert UI from gamma to linear, scale by paper white and brightness
-			float3 uiLinear = Color::GammaToTrueLinear(ui.rgb);
-			float3 uiBT2020 = Color::BT709ToBT2020(uiLinear);
-			ui.rgb = uiBT2020 * paperWhite * uiBrightness / 10000.0;  // Normalize for PQ
-		} else {
-			// For SDR: just apply brightness multiplier
-			ui.rgb *= uiBrightness;
-		}
+		// Apply brightness multiplier in gamma space
+		// For SDR FG: FidelityFX composites this gamma UI over gamma scene
+		// For HDR: This shader is not called (UI compositing happens in HDROutputCS)
+		ui.rgb *= uiBrightness;
 	}
 	
 	UITex[dispatchID.xy] = ui;

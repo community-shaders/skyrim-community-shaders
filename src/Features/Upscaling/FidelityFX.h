@@ -38,7 +38,7 @@ public:
 
 	void LoadFFX();
 	void SetupFrameGeneration();
-	void Present(bool a_useFrameGeneration);
+	void Present(bool a_useFrameGeneration, bool a_isHDR = false);
 
 	void CreateFSRResources();
 
