@@ -31,6 +31,12 @@
                 "Style": "Light",
                 "File": "CrimsonPro/CrimsonPro-Light.ttf",
                 "SizeScale": 1.0
+            },
+            {
+                "Family": "Crimson Pro",
+                "Style": "Light",
+                "File": "CrimsonPro/CrimsonPro-Light.ttf",
+                "SizeScale": 0.9
             }
         ],
         "UseSimplePalette": false,

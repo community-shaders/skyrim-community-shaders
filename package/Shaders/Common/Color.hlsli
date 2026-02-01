@@ -159,7 +159,7 @@ namespace Color
 
 	float3 Light(float3 color, bool isLinear = false)
 	{
-		color = (ENABLE_LL && !isLinear) ? pow(abs(color), SharedData::linearLightingSettings.lightGamma) * SharedData::linearLightingSettings.lightMult : color;
+		color = (ENABLE_LL && !isLinear) ? pow(abs(color), SharedData::linearLightingSettings.lightGamma) : color;
 #	if defined(TRUE_PBR)
 		return color * PBRLightingCompensation;  // Compensate for traditional Lambertian diffuse
 #	else
@@ -285,24 +285,9 @@ namespace Color
 		return ENABLE_LL ? color : LinearToGamma(color);
 	}
 
-	float VanillaDiffuseMult()
+	float VanillaNormalization()
 	{
-		return ENABLE_LL ? SharedData::linearLightingSettings.vanillaDiffuseMult : 1.0f;
-	}
-
-	float VanillaSpecularMult()
-	{
-		return ENABLE_LL ? SharedData::linearLightingSettings.vanillaSpecularMult : 1.0f;
-	}
-
-	float GrassDiffuseMult()
-	{
-		return ENABLE_LL ? SharedData::linearLightingSettings.grassDiffuseMult : 1.0f;
-	}
-
-	float GrassSpecularMult()
-	{
-		return ENABLE_LL ? SharedData::linearLightingSettings.grassSpecularMult : 1.0f;
+		return ENABLE_LL ? 1.0 / Math::PI : 1.0f;
 	}
 
 	float VanillaDiffuseColorMult()

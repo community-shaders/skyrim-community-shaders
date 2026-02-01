@@ -161,6 +161,24 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 bool IsEnabled = false;
 std::unordered_map<std::string, int> Menu::categoryCounts;
 
+// Pad FontRoles JSON array with defaults if shorter than FontRole::Count.
+// Prevents deserialization failure when loading old settings with fewer font roles.
+static void SanitizeFontRolesJson(json& themeJson)
+{
+	if (!themeJson.contains("FontRoles") || !themeJson["FontRoles"].is_array())
+		return;
+
+	auto& fontRoles = themeJson["FontRoles"];
+	const size_t expected = static_cast<size_t>(Menu::FontRole::Count);
+
+	if (fontRoles.size() < expected) {
+		auto defaults = Menu::ThemeSettings{}.FontRoles;
+		for (size_t i = fontRoles.size(); i < expected; ++i) {
+			fontRoles.push_back(defaults[i]);
+		}
+	}
+}
+
 std::optional<Menu::FontRole> Menu::ResolveFontRole(std::string_view key)
 {
 	for (size_t i = 0; i < FontRoleDescriptors.size(); ++i) {
@@ -228,6 +246,7 @@ void Menu::Load(json& o_json)
 	// Legacy support: If old config has Theme data and no SelectedThemePreset, load it
 	if (o_json.contains("Theme") && o_json["Theme"].is_object() && settings.SelectedThemePreset.empty()) {
 		bool hasFontRoles = o_json["Theme"].contains("FontRoles");
+		SanitizeFontRolesJson(o_json["Theme"]);
 		settings.Theme = o_json["Theme"];
 		MenuFonts::NormalizeFontRoles(settings.Theme, hasFontRoles);
 
@@ -283,6 +302,7 @@ void Menu::LoadTheme(json& o_json)
 {
 	if (o_json["Theme"].is_object()) {
 		bool hasFontRoles = o_json["Theme"].contains("FontRoles");
+		SanitizeFontRolesJson(o_json["Theme"]);
 		settings.Theme = o_json["Theme"];
 		MenuFonts::NormalizeFontRoles(settings.Theme, hasFontRoles);
 
@@ -367,6 +387,7 @@ bool Menu::LoadThemePreset(const std::string& themeName)
 				}
 				if (themeSettings.contains("FontRoles")) {
 					try {
+						SanitizeFontRolesJson(themeSettings);
 						settings.Theme.FontRoles = themeSettings["FontRoles"];
 					} catch (...) {}
 				}
