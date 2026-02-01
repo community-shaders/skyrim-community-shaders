@@ -2344,7 +2344,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 		if(glintParameters.y < 0.01)
 			material.GlintLogMicrofacetDensity = 1; // this will disable glint in case there shouldn't be any
 #			if defined(LANDSCAPE)
-		float disp = sh0 * max(displacementParams[0].HeightScale * input.LandBlendWeights1.x, max(displacementParams[1].HeightScale * input.LandBlendWeights1.y, max(displacementParams[2].HeightScale * input.LandBlendWeights1.z, max(displacementParams[3].HeightScale * input.LandBlendWeights1.w, max(displacementParams[4].HeightScale * input.LandBlendWeights2.x, displacementParams[5].HeightScale * input.LandBlendWeights2.y)))));
+		float disp = sh0;
 #			elif defined(EMAT)
 		float disp = (sh0 - 0.5) * displacementParams.HeightScale;
 #			else
@@ -2368,13 +2368,21 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #		else
 		snowFactor = SnowCover::ApplySnow(material, snowNormal, disp, adjustedWorldPos, snowOcclusion, input.WorldPosition.z - waterHeight, viewPosition.z, uv - uvOriginal);
 #		endif
-	if (snowFactor > 0)
+	if (snowFactor > 0){
+		float3 sd = FrameBuffer::ViewToWorld(-float3(ddx_fine(snowFactor), ddy_fine(snowFactor), 0), false, eyeIndex);
+//#	if defined(MODELSPACENORMALS) && !defined(SKINNED)
+//		worldNormal = normalize(lerp(worldNormal, SnowCover::MyReorientNormal(worldNormal, snowNormal), snowFactor));
+//#	else
+//		worldNormal = normalize(lerp(worldNormal, SnowCover::MyReorientNormal(worldNormal, normalize(mul(tbn, snowNormal))), snowFactor));
+//#	endif
 #	if defined(MODELSPACENORMALS) && !defined(SKINNED)
-		worldNormal = normalize(lerp(worldNormal, SnowCover::MyReorientNormal(worldNormal, snowNormal), snowFactor));
+		worldNormal = normalize(lerp(worldNormal, snowNormal, snowFactor*0.75) + sd);
 #	else
-		worldNormal = normalize(lerp(worldNormal, SnowCover::MyReorientNormal(worldNormal, normalize(mul(tbn, snowNormal))), snowFactor));
+		worldNormal = normalize(lerp(worldNormal, normalize(mul(tbn, snowNormal)), snowFactor*0.75) + sd);
 #	endif
-
+		//material.BaseColor = worldNormal*0.5 + 0.5;
+	}
+		//material.BaseColor = disp;
 #		if defined(LODLANDNOISE)
 		material.BaseColor *= snowFactor + (1 - snowFactor) * lodLandNoiseMultiplier;
 #		endif

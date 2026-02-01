@@ -86,9 +86,9 @@ namespace SnowCover
 		float weatherRange = 1 - smoothstep(20000, 40000 + 1000 * sin(p.z * 0.001 + cos(p.x * p.y * 0.001)), viewDist);
 		// the amount of snow based on weather, TimeSnowing transitions smoothly between -1 in rain and 1 when snowing
 		float weatherMult = weatherRange * pow(SharedData::snowCoverSettings.TimeSnowing, 3) * max(500, SharedData::snowCoverSettings.SnowingDensity) / 500;
-		weatherMult = clamp((weatherMult + disp * 0.1) * max(SharedData::snowCoverSettings.minAngle, worldNormal.z), -1, 1);
+		weatherMult = clamp((weatherMult) * max(SharedData::snowCoverSettings.minAngle, worldNormal.z), -1, 1);
 		// the amount of snow based on season and weather
-		float env_mult = saturate(max(saturate(GetEnvironmentalMultiplier(p) + disp), weatherMult)) - waterDist;
+		float env_mult = saturate(max((GetEnvironmentalMultiplier(p) + disp*5), weatherMult)) - waterDist;
 #		if !defined(LANDSCAPE) && !defined(LOD)
 		// removes pure white lod object billboard trees (ultra billboards) that have no special flags and are not marked as lod
 		float distMult = 1 - smoothstep(4096+2048,9192, viewDist)*0.5;
@@ -96,16 +96,16 @@ namespace SnowCover
 		float distMult = 1;
 #		endif
 		float mult = distMult * skylight * env_mult * smoothstep(SharedData::snowCoverSettings.minAngle, SharedData::snowCoverSettings.maxAngle, worldNormal.z);
-		if (mult < 0.001){
+		if (mult <= 0){
 			alt = false;
-			return 0;
+			return mult;
 		}
 		float main_mult = (1 - abs(worldNormal.z - SharedData::snowCoverSettings.peakMainAngle)) + min(0, weatherMult) * SharedData::snowCoverSettings.minAngle;
 		float alt_mult = (1 - abs(worldNormal.z - SharedData::snowCoverSettings.peakAltAngle)) + sin(p.z * 0.01 + cos(p.x * p.y * 0.01) * 0.025) * 0.05;
 		alt = alt_mult > main_mult;
 		// apparently LOD landscape color sampler clamps uvs
 		uv = frac(SharedData::snowCoverSettings.UVScale * (p.xy / 100 + worldNormal.xy * disp));
-		return mult;
+		return min(1, mult);
 	}
 
 #		if defined(TRUE_PBR)
@@ -113,8 +113,8 @@ namespace SnowCover
 	{
 		bool alt;
 		mult = ApplySnowBase(worldNormal, uv, alt, disp, p, skylight, waterDist, viewDist);
-		if (mult <= 0.0)
-			return 0;
+		if (mult <= 0)
+			return mult;
 		float4 rmaos;
 		if (alt){
 			rmaos = IceRmaos.Sample(SampColorSampler, uv);
