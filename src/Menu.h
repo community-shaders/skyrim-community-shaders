@@ -379,6 +379,7 @@ public:
 		bool EnableShaderBlocking = false;        // Enable shader blocking hotkeys for debugging
 		bool FirstTimeSetupCompleted = false;     // Track if first-time setup has been completed
 		bool SkipClearCacheConfirmation = false;  // Skip confirmation dialog when clearing shader cache
+		bool AutoHideFeatureList = false;         // Auto-hide left feature list panel, show on hover
 		ThemeSettings Theme;
 		std::string SelectedThemePreset = "";  // Currently selected theme preset (empty = custom/user theme)
 	};
