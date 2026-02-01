@@ -1,5 +1,4 @@
 #include "Common/Color.hlsli"
-#include "Common/reinhard.hlsl"
 
 Texture2D<float4> SceneTex : register(t0);
 Texture2D<float4> UITex : register(t1);
@@ -11,7 +10,7 @@ cbuffer PerFrame : register(b0)
 	float4 parameters1 : packoffset(c1);  // .x = uiBrightness, .y = isSceneLinear
 }
 
-// Attempt at soft shoulder rolloff to prevent hard clipping at peak brightness
+// Soft shoulder rolloff to prevent hard clipping at peak brightness (HDR only)
 // Uses Reinhard-style compression above shoulder threshold
 float3 HDRSoftClip(float3 colorNits, float paperWhite, float peakNits)
 {
@@ -56,16 +55,20 @@ float3 HDRSoftClip(float3 colorNits, float paperWhite, float peakNits)
 	float3 sceneLinear = isSceneLinear ? max(0, scene.rgb) : Color::GammaToTrueLinear(max(0, scene.rgb));
 
 	if (enableHDR) {
-		// HDR output path: composite in gamma space, then convert to BT.2020 and PQ encode
-		// This approach ensures correct blending and a single encoding step
-		// For HDR, we always composite UI here (FidelityFX UI composition is disabled for HDR)
+		// HDR output path: composite in gamma space (if not skipped), then convert to BT.2020 and PQ encode
 		
-		// Convert linear scene back to gamma for compositing (UI is in gamma space)
+		// Convert linear scene to gamma for compositing (UI is in gamma space)
 		float3 sceneGamma = Color::TrueLinearToGamma(sceneLinear);
 		
-		// Composite UI over scene in gamma space
-		float3 uiScaled = ui.rgb * uiBrightness;
-		float3 composited = uiScaled + sceneGamma * (1.0 - ui.a);
+		float3 composited;
+		if (skipUIComposite) {
+			// FG handles UI compositing after frame interpolation - skip our compositing
+			composited = sceneGamma;
+		} else {
+			// Composite UI over scene in gamma space
+			float3 uiScaled = ui.rgb * uiBrightness;
+			composited = uiScaled + sceneGamma * (1.0 - ui.a);
+		}
 		
 		// Convert composited result: gamma -> linear -> BT.2020 -> nits -> soft clip -> PQ
 		float3 compositedLinear = Color::GammaToTrueLinear(max(0, composited));
@@ -75,20 +78,18 @@ float3 HDRSoftClip(float3 colorNits, float paperWhite, float peakNits)
 		finalColor = Color::pq::Encode(compositedNits / 10000.0, 10000.0);
 	} else {
 		// SDR output path: gamma 2.2 output
-		// Apply Reinhard tonemapping in linear space to prevent harsh clipping on bright highlights
-		float3 sceneClipped = renodx::tonemap::Reinhard(sceneLinear);
+		float3 sceneGamma = Color::TrueLinearToGamma(sceneLinear);
 		
+		float3 composited;
 		if (skipUIComposite) {
-			// Frame Gen SDR mode: FidelityFX handles UI compositing
-			// Output gamma 2.2 encoded scene only
-			finalColor = Color::TrueLinearToGamma(sceneClipped);
+			// FG handles UI compositing - skip our compositing
+			composited = sceneGamma;
 		} else {
-			// Non-Frame Gen SDR mode: composite UI then output
-			float3 sceneGamma = Color::TrueLinearToGamma(sceneClipped);
+			// Composite UI over scene in gamma space
 			float3 uiScaled = ui.rgb * uiBrightness;
-			float3 composited = uiScaled + sceneGamma * (1.0 - ui.a);
-			finalColor = composited;  // Already in gamma space
+			composited = uiScaled + sceneGamma * (1.0 - ui.a);
 		}
+		finalColor = composited;
 	}
 
 	HDROutput[dispatchID.xy] = float4(enableHDR ? finalColor : saturate(finalColor), 1.0);

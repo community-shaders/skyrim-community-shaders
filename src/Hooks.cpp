@@ -263,17 +263,19 @@ struct IDXGISwapChain_Present
 		// HDR processing always runs to handle format conversion (HDR or SDR encoding)
 		bool hdrReady = hdr && hdr->hdrDataCB && hdr->outputTexture;
 
-		// For ImGui/UI rendering, redirect to appropriate UI texture
-		if (hdrReady) {
+		// When FG is active: ImGui renders to FG's uiBufferWrapped (FidelityFX handles compositing after interpolation)
+		// When FG is NOT active: ImGui renders to hdr->uiTexture (we composite in ApplyHDR)
+		if (frameGenActive) {
+			// FG path: render ImGui to the same buffer as vanilla UI (uiBufferWrapped)
+			// FidelityFX will composite this after frame interpolation
+			auto& data = globals::game::renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGET::kFRAMEBUFFER];
+			globals::d3d::context->OMSetRenderTargets(1, &data.RTV, nullptr);
+		} else if (hdrReady) {
+			// Non-FG path: render ImGui to hdr->uiTexture
 			ID3D11RenderTargetView* uiRTV = nullptr;
 			D3D11_TEXTURE2D_DESC texDesc = {};
 
-			if (frameGenActive && upscaling.dx12SwapChain.uiBufferWrapped) {
-				uiRTV = upscaling.dx12SwapChain.uiBufferWrapped->rtv;
-				if (upscaling.dx12SwapChain.uiBufferWrapped->resource11) {
-					upscaling.dx12SwapChain.uiBufferWrapped->resource11->GetDesc(&texDesc);
-				}
-			} else if (hdr->uiTexture && hdr->uiTexture->rtv && hdr->uiTexture->resource) {
+			if (hdr->uiTexture && hdr->uiTexture->rtv && hdr->uiTexture->resource) {
 				uiRTV = hdr->uiTexture->rtv.get();
 				hdr->uiTexture->resource->GetDesc(&texDesc);
 			}
@@ -298,13 +300,15 @@ struct IDXGISwapChain_Present
 			globals::d3d::context->OMSetRenderTargets(1, &nullRTV, nullptr);
 
 			// Apply HDR/SDR processing - handles both PQ encoding (HDR) and gamma encoding (SDR)
+			// When FG is active, this writes to swapChainBufferWrapped; FidelityFX handles UI compositing
+			// When FG is NOT active, this composites UI and writes to the D3D11 swap chain
 			hdr->ApplyHDR();
 		}
 
 		HRESULT retval = func(This, SyncInterval, Flags);
 
-		// Clear UI buffer and restore original kFRAMEBUFFER.RTV for next frame
-		if (hdrReady && !frameGenActive)
+		// Clear UI buffer for next frame (only when FG is NOT active)
+		if (!frameGenActive && hdrReady)
 			hdr->ClearUIBuffer();
 
 		TracyD3D11Collect(state->tracyCtx);

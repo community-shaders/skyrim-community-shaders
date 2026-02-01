@@ -33,6 +33,9 @@ public:
 	// Track if FidelityFX is currently being used for frame generation
 	bool isFrameGenActive = false;
 
+	// Track HDR state for frame generation callback (needs to be accessible from static callback)
+	static inline bool isHDRActive = false;
+
 	// Cached DLL version info for FidelityFX plugin directory
 	static std::vector<std::pair<std::string, std::string>> dllVersions;
 

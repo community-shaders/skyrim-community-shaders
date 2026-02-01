@@ -1467,9 +1467,13 @@ void Upscaling::MenuManagerDrawInterfaceStartHook::thunk(int64_t a1)
 	globals::features::upscaling.PostDisplay();
 
 	// For non-Frame Gen HDR: redirect kFRAMEBUFFER.RTV to UI texture before vanilla UI renders
-	auto hdr = HDR::GetSingleton();
-	if (hdr)
-		hdr->SetUIBuffer();
+	// When FG is active, its SetUIBuffer redirects to uiBufferWrapped instead
+	auto& upscaling = globals::features::upscaling;
+	if (!upscaling.d3d12SwapChainActive) {
+		auto hdr = HDR::GetSingleton();
+		if (hdr)
+			hdr->SetUIBuffer();
+	}
 
 	func(a1);
 }

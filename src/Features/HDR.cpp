@@ -560,12 +560,10 @@ void HDR::ApplyHDR()
 		auto& mainRT = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMAIN];
 		ID3D11ShaderResourceView* sceneSRV = mainRT.SRV;
 
-		// Bind scene texture (t0) and UI texture (t1)
-		// Use Frame Gen's uiBufferWrapped when active, otherwise our uiTexture
+		// Always use our uiTexture for UI - we handle compositing ourselves
+		// This prevents FidelityFX from applying frame interpolation to UI
 		ID3D11ShaderResourceView* uiSRV = nullptr;
-		if (upscaling.d3d12SwapChainActive && upscaling.dx12SwapChain.uiBufferWrapped) {
-			uiSRV = upscaling.dx12SwapChain.uiBufferWrapped->srv;
-		} else if (uiTexture && uiTexture->srv) {
+		if (uiTexture && uiTexture->srv) {
 			uiSRV = uiTexture->srv.get();
 		}
 		ID3D11ShaderResourceView* views[2] = { sceneSRV, uiSRV };
@@ -745,7 +743,8 @@ void HDR::UpdateHDRData() const
 		return;
 	}
 
-	// When Frame Gen is active, FidelityFX handles UI compositing
+	// When Frame Gen is active, FidelityFX handles UI compositing after frame interpolation
+	// Skip UI compositing in our shader to prevent double-compositing or artifacts
 	bool skipUIComposite = globals::features::upscaling.d3d12SwapChainActive;
 
 	// Check if Linear Lighting is active (scene is already in linear space)

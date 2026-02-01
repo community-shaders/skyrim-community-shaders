@@ -151,12 +151,12 @@ HRESULT DX12SwapChain::Present(UINT SyncInterval, UINT Flags)
 		}
 	}
 
-	// Scale UI brightness for SDR Frame Gen (FidelityFX composites gamma UI over gamma scene)
-	// For HDR, UI compositing is handled in ApplyHDR to ensure correct gamma-space blending
+	// Scale UI brightness before FidelityFX composites it (applies to uiBufferWrapped)
 	auto hdr = HDR::GetSingleton();
-	bool isHDR = hdr && hdr->settings.enableHDR;
-	if (hdr && !isHDR)
+	if (hdr)
 		hdr->ScaleUIBrightnessForFG();
+
+	bool isHDR = hdr && hdr->settings.enableHDR;
 
 	globals::features::upscaling.fidelityFX.Present(upscaling.settings.frameGenerationMode && !globals::game::ui->GameIsPaused(), isHDR);
 

@@ -1,5 +1,6 @@
-// Scales UI brightness for FidelityFX Frame Gen compositing (SDR only)
-// For HDR, UI compositing is handled in HDROutputCS.hlsl to ensure correct gamma-space blending
+// Scales UI brightness and encodes for FidelityFX Frame Gen compositing
+// For HDR: converts gamma UI to PQ so FidelityFX can blend PQ UI over PQ scene
+// For SDR: just applies brightness multiplier
 
 #include "Common/Color.hlsli"
 
@@ -16,12 +17,23 @@ cbuffer PerFrame : register(b0)
 	float4 ui = UITex[dispatchID.xy];
 	
 	if (ui.a > 0.0) {
+		bool enableHDR = parameters0.x > 0.5;
+		float paperWhite = parameters0.y;
+		float peakNits = parameters0.z;
 		float uiBrightness = parameters1.x;
 		
-		// Apply brightness multiplier in gamma space
-		// For SDR FG: FidelityFX composites this gamma UI over gamma scene
-		// For HDR: This shader is not called (UI compositing happens in HDROutputCS)
+		// Apply brightness multiplier in gamma space first
 		ui.rgb *= uiBrightness;
+		
+		if (enableHDR) {
+			// For HDR: encode UI to PQ so FidelityFX can blend PQ over PQ
+			// gamma -> linear -> BT.2020 -> nits -> PQ
+			float3 uiLinear = Color::GammaToTrueLinear(ui.rgb);
+			float3 uiBT2020 = Color::BT709ToBT2020(uiLinear);
+			float3 uiNits = uiBT2020 * paperWhite;
+			ui.rgb = Color::pq::Encode(uiNits / 10000.0, 10000.0);
+		}
+		// For SDR: UI stays in gamma space, FidelityFX blends gamma over gamma
 	}
 	
 	UITex[dispatchID.xy] = ui;
