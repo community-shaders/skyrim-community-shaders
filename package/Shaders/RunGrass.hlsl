@@ -635,12 +635,12 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
     {
         // Old Wrapped Model
         float wrappedDirLight = saturate(dirLightAngle + wrapAmount) / (1.0 + wrapAmount);
-        lightsDiffuseColor += dirLightColor * saturate(wrappedDirLight) * Color::GrassDiffuseMult();
+        lightsDiffuseColor += dirLightColor * saturate(wrappedDirLight) * Color::VanillaNormalization();
     }
 			else
     {
         // Original Standard Model
-        lightsDiffuseColor += dirLightColor * saturate(dirLightAngle) * Color::GrassDiffuseMult();
+        lightsDiffuseColor += dirLightColor * saturate(dirLightAngle) * Color::VanillaNormalization();
     }
 
 	float3 vertexColor = input.VertexColor.xyz;
@@ -656,10 +656,10 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	float3 albedo = max(0, baseColor.xyz * Color::ColorToLinear(vertexColor));
 
 	float3 subsurfaceColor = lerp(dot(albedo, 1.0 / 3.0), albedo, 2.0) * saturate(input.VertexNormal.w * 10.0);
-	float3 sss = dirLightColor * saturate(-dirLightAngle) * Color::GrassDiffuseMult();
+	float3 sss = dirLightColor * saturate(-dirLightAngle) * Color::VanillaNormalization();
 
 	if (complex)
-		lightsSpecularColor += GrassLighting::GetLightSpecularInput(SharedData::DirLightDirection.xyz, viewDirection, normal, dirLightColor, SharedData::grassLightingSettings.Glossiness) * Color::GrassSpecularMult();
+		lightsSpecularColor += GrassLighting::GetLightSpecularInput(SharedData::DirLightDirection.xyz, viewDirection, normal, dirLightColor, SharedData::grassLightingSettings.Glossiness) * Color::VanillaNormalization();
 #			endif
 
 #			if defined(LIGHT_LIMIT_FIX)
@@ -730,10 +730,10 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 
 				sss += lightColor * saturate(-lightAngle);
 
-				lightsDiffuseColor += lightDiffuseColor * Color::GrassDiffuseMult();
+				lightsDiffuseColor += lightDiffuseColor * Color::VanillaNormalization();
 
 				if (complex)
-					lightsSpecularColor += GrassLighting::GetLightSpecularInput(normalizedLightDirection, viewDirection, normal, lightColor, SharedData::grassLightingSettings.Glossiness) * Color::GrassSpecularMult();
+					lightsSpecularColor += GrassLighting::GetLightSpecularInput(normalizedLightDirection, viewDirection, normal, lightColor, SharedData::grassLightingSettings.Glossiness) * Color::VanillaNormalization();
 #endif
 			}
 		}
