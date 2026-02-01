@@ -86,6 +86,38 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	File,
 	SizeScale)
 
+// Custom JSON handler for FontRoles array to handle version mismatches gracefully
+// When loading settings saved with fewer font roles, only the existing roles are updated,
+// new roles keep their default values. This prevents crashes when adding new FontRole types.
+namespace nlohmann
+{
+	template <>
+	struct adl_serializer<std::array<Menu::ThemeSettings::FontRoleSettings, static_cast<size_t>(Menu::FontRole::Count)>>
+	{
+		static void to_json(json& j, const std::array<Menu::ThemeSettings::FontRoleSettings, static_cast<size_t>(Menu::FontRole::Count)>& arr)
+		{
+			j = json::array();
+			for (const auto& item : arr) {
+				j.push_back(item);
+			}
+		}
+
+		static void from_json(const json& j, std::array<Menu::ThemeSettings::FontRoleSettings, static_cast<size_t>(Menu::FontRole::Count)>& arr)
+		{
+			// Start with default values
+			arr = Menu::ThemeSettings{}.FontRoles;
+
+			// Only read as many elements as exist in the JSON
+			if (j.is_array()) {
+				size_t count = std::min(j.size(), arr.size());
+				for (size_t i = 0; i < count; ++i) {
+					j.at(i).get_to(arr[i]);
+				}
+			}
+		}
+	};
+}
+
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	ImGuiStyle,
 	WindowPadding,

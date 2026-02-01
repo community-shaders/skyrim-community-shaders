@@ -6,6 +6,7 @@
 #include <format>
 #include <imgui.h>
 #include <ranges>
+#include <system_error>
 
 #include "Feature.h"
 #include "FeatureIssues.h"
@@ -478,7 +479,9 @@ void FeatureListRenderer::DrawMenuVisitor::operator()(Feature* feat)
 
 bool FeatureListRenderer::DrawMenuVisitor::IsFeatureInstalled(const std::string& featureName)
 {
-	return std::filesystem::exists(Util::PathHelpers::GetFeatureIniPath(featureName));
+	const auto path = Util::PathHelpers::GetFeatureIniPath(featureName);
+	std::error_code ec;
+	return std::filesystem::exists(path, ec);
 }
 
 void FeatureListRenderer::DrawMenuVisitor::RenderFeatureHeader(Feature* feat, bool isDisabled, bool isLoaded)
@@ -646,27 +649,28 @@ void FeatureListRenderer::DrawMenuVisitor::RenderFeatureAboutDropdown(Feature* f
 	}
 
 	ImGui::Spacing();
-	ImGui::Separator();
-	ImGui::Spacing();
 
-	// Use collapsible header for About section (collapsed by default)
-	ImGuiTreeNodeFlags flags = ImGuiTreeNodeFlags_None;  // Collapsed by default (no DefaultOpen)
+	// Use tree node for About section (non-colored, expanded by default)
+	ImGuiTreeNodeFlags flags = ImGuiTreeNodeFlags_DefaultOpen | ImGuiTreeNodeFlags_SpanAvailWidth;
 	{
-		MenuFonts::FontRoleGuard fontGuard(Menu::FontRole::Subheading);
-		if (ImGui::CollapsingHeader("About", flags)) {
+		MenuFonts::FontRoleGuard headerGuard(Menu::FontRole::Subheading);
+		if (ImGui::TreeNodeEx("About", flags)) {
+			// Use Subtext font for About content (smaller secondary text)
+			MenuFonts::FontRoleGuard contentGuard(Menu::FontRole::Subtext);
+			
 			if (!description.empty()) {
-				ImGui::Spacing();
-				SeparatorTextWithFont("Description", Menu::FontRole::Subheading);
 				ImGui::TextWrapped("%s", description.c_str());
 			}
 
 			if (!keyFeatures.empty()) {
-				ImGui::Spacing();
-				SeparatorTextWithFont("Key Features", Menu::FontRole::Subheading);
+				if (!description.empty()) {
+					ImGui::Spacing();
+				}
 				for (const auto& feature : keyFeatures) {
 					ImGui::BulletText("%s", feature.c_str());
 				}
 			}
+			ImGui::TreePop();
 		}
 	}
 }
