@@ -58,7 +58,6 @@ private:
 		static bool IsFeatureInstalled(const std::string& featureName);
 		static void RenderFeatureHeader(Feature* feat, bool isDisabled, bool isLoaded);
 		static void RenderFeatureSettings(Feature* feat, bool isDisabled, bool isLoaded, bool hasFailedMessage);
-		static void RenderFeatureAboutDropdown(Feature* feat, bool isLoaded);
 		static void RenderRestoreDefaultsButton(Feature* feat, bool isDisabled, bool isLoaded);
 	};
 

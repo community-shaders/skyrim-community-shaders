@@ -50,8 +50,10 @@ namespace
 	 * @brief Draws a feature header with the feature name in large text and version in smaller text
 	 * @param featureName The display name of the feature
 	 * @param version The version string (can be empty)
+	 * @param description Short description shown below the title (single line, truncated if too long)
+	 * @return The height of just the title line (for button alignment)
 	 */
-	void DrawFeatureHeader(const std::string& featureName, const std::string& version)
+	float DrawFeatureHeader(const std::string& featureName, const std::string& version, const std::string& description = "")
 	{
 		auto& themeSettings = globals::menu->GetTheme();
 		auto& palette = themeSettings.Palette;
@@ -78,6 +80,9 @@ namespace
 			ImGui::TextUnformatted(featureName.c_str());
 			ImGui::SetWindowFontScale(1.0f);
 		}
+
+		// Store the title-only height for return value
+		float titleOnlyHeight = titleSize.y;
 
 		// Draw version on same line with Body font, bottom-aligned if version exists
 		if (!version.empty()) {
@@ -111,12 +116,22 @@ namespace
 				ImGui::SetWindowFontScale(1.0f);
 			}
 
-			// Reset cursor to after the title block
-			ImGui::SetCursorScreenPos(ImVec2(startPos.x, startPos.y + titleSize.y + ImGui::GetStyle().ItemSpacing.y));
+			// Reset cursor to after the title block (reduced spacing for tighter layout)
+			ImGui::SetCursorScreenPos(ImVec2(startPos.x, startPos.y + titleSize.y + 2.0f));
+		}
+
+		// Draw description if provided (single line, truncated)
+		if (!description.empty()) {
+			MenuFonts::FontRoleGuard subtextGuard(Menu::FontRole::Subtext);
+			ImVec4 descColor = palette.Text;
+			descColor.w *= 0.7f;  // Slightly dimmed
+			ImGui::TextColored(descColor, "%s", description.c_str());
 		}
 
 		// Draw plain separator below
 		ImGui::Separator();
+
+		return titleOnlyHeight;
 	}
 }
 
@@ -468,9 +483,6 @@ void FeatureListRenderer::DrawMenuVisitor::operator()(Feature* feat)
 		// Render feature settings content
 		RenderFeatureSettings(feat, isDisabled, isLoaded, hasFailedMessage);
 
-		// Render collapsible About section at the bottom
-		RenderFeatureAboutDropdown(feat, isLoaded);
-
 		// Render restore defaults button (floating in bottom-right)
 		RenderRestoreDefaultsButton(feat, isDisabled, isLoaded);
 	}
@@ -512,16 +524,22 @@ void FeatureListRenderer::DrawMenuVisitor::RenderFeatureHeader(Feature* feat, bo
 	// Save position before drawing title
 	ImVec2 titleStartPos = ImGui::GetCursorScreenPos();
 
-	// Draw feature title and version on the left
-	DrawFeatureHeader(feat->GetName(), isLoaded ? feat->version : "");
+	// Get feature description for subtitle
+	auto [description, keyFeatures] = feat->GetFeatureSummary();
+	(void)keyFeatures;  // Not used for subtitle display
 
-	// Position action buttons to the right of the header, middle-aligned with title
-	ImVec2 cursorPosAfterTitle = ImGui::GetCursorScreenPos();
-	float titleHeight = cursorPosAfterTitle.y - titleStartPos.y;
+	// Draw feature title, version, and description on the left
+	// Returns title-only height for button alignment
+	float titleOnlyHeight = DrawFeatureHeader(feat->GetName(), isLoaded ? feat->version : "", description);
+
+	// Save cursor position after header (for restoring after buttons are drawn)
+	ImVec2 cursorPosAfterHeader = ImGui::GetCursorScreenPos();
+
+	// Position action buttons to the right of the header, middle-aligned with title only
 	float buttonHeight = ImGui::GetFrameHeight();
 
-	// Calculate Y position to middle-align buttons with title (before separator)
-	float buttonY = titleStartPos.y + (titleHeight - buttonHeight) * 0.5f;
+	// Calculate Y position to middle-align buttons with title text only (not description)
+	float buttonY = titleStartPos.y + (titleOnlyHeight - buttonHeight) * 0.5f;
 
 	ImGui::SetCursorScreenPos(ImVec2(titleStartPos.x + availableWidth - totalButtonWidth, buttonY));
 
@@ -571,7 +589,7 @@ void FeatureListRenderer::DrawMenuVisitor::RenderFeatureHeader(Feature* feat, bo
 	}
 
 	// Restore cursor position after the title and separator
-	ImGui::SetCursorScreenPos(cursorPosAfterTitle);
+	ImGui::SetCursorScreenPos(cursorPosAfterHeader);
 }
 
 void FeatureListRenderer::DrawMenuVisitor::RenderFeatureSettings(Feature* feat, bool isDisabled, bool isLoaded, bool hasFailedMessage)
@@ -633,45 +651,6 @@ void FeatureListRenderer::DrawMenuVisitor::RenderFeatureSettings(Feature* feat, 
 		ImGui::Spacing();
 		SeparatorTextWithFont("Error", Menu::FontRole::Subheading);
 		ImGui::TextColored(themeSettings.StatusPalette.Error, feat->failedLoadedMessage.c_str());
-	}
-}
-
-void FeatureListRenderer::DrawMenuVisitor::RenderFeatureAboutDropdown(Feature* feat, bool isLoaded)
-{
-	// Only show About dropdown for loaded features with content
-	if (!isLoaded) {
-		return;
-	}
-
-	auto [description, keyFeatures] = feat->GetFeatureSummary();
-	if (description.empty() && keyFeatures.empty()) {
-		return;
-	}
-
-	ImGui::Spacing();
-
-	// Use tree node for About section (non-colored, expanded by default)
-	ImGuiTreeNodeFlags flags = ImGuiTreeNodeFlags_DefaultOpen | ImGuiTreeNodeFlags_SpanAvailWidth;
-	{
-		MenuFonts::FontRoleGuard headerGuard(Menu::FontRole::Subheading);
-		if (ImGui::TreeNodeEx("About", flags)) {
-			// Use Subtext font for About content (smaller secondary text)
-			MenuFonts::FontRoleGuard contentGuard(Menu::FontRole::Subtext);
-
-			if (!description.empty()) {
-				ImGui::TextWrapped("%s", description.c_str());
-			}
-
-			if (!keyFeatures.empty()) {
-				if (!description.empty()) {
-					ImGui::Spacing();
-				}
-				for (const auto& feature : keyFeatures) {
-					ImGui::BulletText("%s", feature.c_str());
-				}
-			}
-			ImGui::TreePop();
-		}
 	}
 }
 

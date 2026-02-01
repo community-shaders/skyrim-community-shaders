@@ -74,7 +74,7 @@ public:
 		FontRoleDescriptor{ "Title", "Title", 1.0f },
 		FontRoleDescriptor{ "Heading", "Headings", 1.0f },
 		FontRoleDescriptor{ "Subheading", "Subheadings", 1.0f },
-		FontRoleDescriptor{ "Subtext", "Subtext", 0.85f }
+		FontRoleDescriptor{ "Subtext", "Subtext", 0.9f }
 	};
 
 	static constexpr std::string_view GetFontRoleKey(FontRole role)
@@ -242,7 +242,7 @@ public:
 			setRole(FontRole::Title, "Jost", "Regular", "Jost/Jost-Regular.ttf", 1.0f);
 			setRole(FontRole::Heading, "Jost", "Regular", "Jost/Jost-Regular.ttf", 1.0f);
 			setRole(FontRole::Subheading, "Jost", "Regular", "Jost/Jost-Regular.ttf", 1.0f);
-			setRole(FontRole::Subtext, "Jost", "Regular", "Jost/Jost-Regular.ttf", 0.85f);
+			setRole(FontRole::Subtext, "Jost", "Regular", "Jost/Jost-Regular.ttf", 0.9f);
 
 			return roles;
 		}();
