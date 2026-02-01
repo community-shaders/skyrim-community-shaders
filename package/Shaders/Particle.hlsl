@@ -312,7 +312,7 @@ PS_OUTPUT main(PS_INPUT input)
 #	if defined(LIGHT_LIMIT_FIX)
 	uint lightCount = 0;
 	{
-		float3 viewPosition = FrameBuffer::WorldToView(positionWS, true, eyeIndex);
+		float3 viewPosition = FrameBuffer::WorldToView(positionWS.xyz, true, eyeIndex);
 		float2 screenUV = FrameBuffer::ViewToUV(viewPosition, true, eyeIndex);
 
 		uint clusterIndex = 0;
