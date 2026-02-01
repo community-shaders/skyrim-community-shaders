@@ -868,7 +868,7 @@ PS_OUTPUT main(PS_INPUT input)
 	psout.PS.w = diffuseAlpha;
 #		else
 
-	float grassBrightnessMultiplier = 1.0 / 2.8 // Match brightness of ISSkyrimClearDAY;
+	baseColor.xyz /= 2.8; // Match brightness of ISSkyrimClearDAY;
 
 	uint eyeIndex = Stereo::GetEyeIndexPS(input.HPosition, VPOSOffset);
 
@@ -898,7 +898,7 @@ PS_OUTPUT main(PS_INPUT input)
 	}
 
 	float llDirLightMult = (SharedData::linearLightingSettings.enableLinearLighting && !SharedData::linearLightingSettings.isDirLightLinear) ? SharedData::linearLightingSettings.dirLightMult : 1.0f;
-	float3 diffuseColor = Color::DirectionalLight(SharedData::DirLightColor.xyz / max(llDirLightMult, 1e-5), SharedData::linearLightingSettings.isDirLightLinear) * dirShadow * dirDetailShadow * grassBrightnessMultiplier * llDirLightMult;
+	float3 diffuseColor = Color::DirectionalLight(SharedData::DirLightColor.xyz / max(llDirLightMult, 1e-5), SharedData::linearLightingSettings.isDirLightLinear) * dirShadow * dirDetailShadow * llDirLightMult;
 
 #			if defined(LIGHT_LIMIT_FIX)
 	uint clusterIndex = 0;
@@ -942,7 +942,7 @@ PS_OUTPUT main(PS_INPUT input)
 
 				lightColor *= lightShadow;
 
-				diffuseColor += lightColor * grassBrightnessMultiplier;
+				diffuseColor += lightColor;
 			}
 		}
 	}
