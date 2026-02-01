@@ -68,7 +68,7 @@
             "ThumbActive": 0.8
         },
         "Style": {
-            "WindowBorderSize": 0.0,
+            "WindowBorderSize": 2.0,
             "ChildBorderSize": 0.0,
             "FrameBorderSize": 0.0,
             "WindowPadding": [8.0, 8.0],

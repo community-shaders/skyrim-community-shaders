@@ -1,6 +1,7 @@
 #include "FeatureListRenderer.h"
 
 #include <algorithm>
+#include <cmath>
 #include <filesystem>
 #include <format>
 #include <imgui.h>
@@ -42,6 +43,79 @@ namespace
 	bool BeginTabItemWithFont(const char* label, Menu::FontRole role, ImGuiTabItemFlags flags = ImGuiTabItemFlags_None)
 	{
 		return MenuFonts::BeginTabItemWithFont(label, role, flags);
+	}
+
+	/**
+	 * @brief Draws a feature header with the feature name in large text and version in smaller text
+	 * @param featureName The display name of the feature
+	 * @param version The version string (can be empty)
+	 */
+	void DrawFeatureHeader(const std::string& featureName, const std::string& version)
+	{
+		auto& themeSettings = globals::menu->GetTheme();
+		auto& palette = themeSettings.Palette;
+		auto& featureHeading = themeSettings.FeatureHeading;
+
+		// Sanitize and clamp to UI slider range to prevent malformed theme JSON from destabilizing layout
+		float titleScale = featureHeading.FeatureTitleScale;
+		if (!std::isfinite(titleScale)) {
+			titleScale = ThemeManager::Constants::DEFAULT_FEATURE_TITLE_SCALE;
+		}
+		titleScale = std::clamp(titleScale, 1.0f, 3.0f);
+
+		ImVec2 startPos = ImGui::GetCursorScreenPos();
+
+		// Calculate title size and draw feature name with Title font
+		ImVec2 titleSize;
+		{
+			MenuFonts::FontRoleGuard titleGuard(Menu::FontRole::Title);
+			titleSize = ImGui::CalcTextSize(featureName.c_str());
+			titleSize.x *= titleScale;
+			titleSize.y *= titleScale;
+
+			ImGui::SetWindowFontScale(titleScale);
+			ImGui::TextUnformatted(featureName.c_str());
+			ImGui::SetWindowFontScale(1.0f);
+		}
+
+		// Draw version on same line with Body font, bottom-aligned if version exists
+		if (!version.empty()) {
+			// Format version: replace dashes with dots for consistency
+			std::string formattedVersion = version;
+			std::replace(formattedVersion.begin(), formattedVersion.end(), '-', '.');
+
+			// Calculate version text size at scaled size
+			ImVec2 versionSize;
+			{
+				MenuFonts::FontRoleGuard bodyGuard(Menu::FontRole::Body);
+				versionSize = ImGui::CalcTextSize(("v" + formattedVersion).c_str());
+				versionSize.x *= titleScale;
+				versionSize.y *= titleScale;
+			}
+
+			// Position version text: right of title, bottom-aligned
+			float versionX = startPos.x + titleSize.x + ImGui::GetStyle().ItemSpacing.x;
+			float versionY = startPos.y + titleSize.y - versionSize.y;
+
+			ImGui::SetCursorScreenPos(ImVec2(versionX, versionY));
+
+			// Use dimmed text color for version
+			ImVec4 versionColor = palette.Text;
+			versionColor.w *= ThemeManager::Constants::VERSION_TEXT_OPACITY;
+
+			{
+				MenuFonts::FontRoleGuard bodyGuard(Menu::FontRole::Body);
+				ImGui::SetWindowFontScale(titleScale);
+				ImGui::TextColored(versionColor, "v%s", formattedVersion.c_str());
+				ImGui::SetWindowFontScale(1.0f);
+			}
+
+			// Reset cursor to after the title block
+			ImGui::SetCursorScreenPos(ImVec2(startPos.x, startPos.y + titleSize.y + ImGui::GetStyle().ItemSpacing.y));
+		}
+
+		// Draw plain separator below
+		ImGui::Separator();
 	}
 }
 
@@ -412,7 +486,9 @@ void FeatureListRenderer::DrawMenuVisitor::RenderFeatureSettingsTab(Feature* fea
 	if (ImGui::BeginChild("##FeatureSettingsFrame", { 0, 0 }, true)) {
 		auto& themeSettings = globals::menu->GetSettings().Theme;
 
-		SeparatorTextWithFont("Feature Settings", Menu::FontRole::Subheading);
+		// Draw feature header with name and version
+		DrawFeatureHeader(feat->GetName(), isLoaded ? feat->version : "");
+
 		if (isDisabled) {
 			ImGui::TextColored(themeSettings.StatusPalette.Disable, "Feature settings are hidden because this feature is disabled at boot.");
 			ImGui::Spacing();

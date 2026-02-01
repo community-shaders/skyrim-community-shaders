@@ -1386,7 +1386,7 @@ PS_OUTPUT main(PS_INPUT input)
 
 #				endif
 #			endif
-	psout.Lighting = saturate(float4(finalColor, isSpecular));
+	psout.Lighting = float4(finalColor, isSpecular);
 #		endif
 
 #		if defined(STENCIL)
