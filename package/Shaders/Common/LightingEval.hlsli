@@ -107,19 +107,19 @@ void EvaluateLighting(DirectContext context, MaterialProperties material, float3
 	}
 #	endif
 	const float NdotL = dot(context.worldNormal, context.lightDir);
-    lightingOutput.diffuse = saturate(NdotL) * context.lightColor * Color::VanillaDiffuseMult();
+    lightingOutput.diffuse = saturate(NdotL) * context.lightColor * Color::VanillaNormalization();
 #		if defined(SOFT_LIGHTING)
-	lightingOutput.diffuse += context.lightColor * GetSoftLightMultiplier(NdotL) * material.rimSoftLightColor * Color::VanillaDiffuseMult();
+	lightingOutput.diffuse += context.lightColor * GetSoftLightMultiplier(NdotL) * material.rimSoftLightColor * Color::VanillaNormalization();
 #		endif
 
 #		if defined(RIM_LIGHTING)
-	lightingOutput.diffuse += context.lightColor * GetRimLightMultiplier(context.lightDir, context.viewDir, context.worldNormal) * material.rimSoftLightColor * Color::VanillaDiffuseMult();
+	lightingOutput.diffuse += context.lightColor * GetRimLightMultiplier(context.lightDir, context.viewDir, context.worldNormal) * material.rimSoftLightColor * Color::VanillaNormalization();
 #		endif
 
 #		if defined(BACK_LIGHTING)
-	lightingOutput.diffuse += context.lightColor * saturate(-NdotL) * material.backLightColor * Color::VanillaDiffuseMult();
+	lightingOutput.diffuse += context.lightColor * saturate(-NdotL) * material.backLightColor * Color::VanillaNormalization();
 #		endif
-    lightingOutput.specular = VanillaSpecular(context, material.Shininess, uv) * material.SpecularColor * material.Glossiness * context.lightColor * Color::VanillaSpecularMult();
+    lightingOutput.specular = VanillaSpecular(context, material.Shininess, uv) * material.SpecularColor * material.Glossiness * context.lightColor * Color::VanillaNormalization();
 #endif
 }
 
