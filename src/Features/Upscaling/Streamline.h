@@ -33,7 +33,7 @@ public:
 	bool featureDLSS = false;
 
 	sl::ViewportHandle viewport{ 0 };
-
+	static constexpr uint32_t MAX_RESOLUTION = 8192;
 	HMODULE interposer = NULL;
 
 	// SL Interposer Functions

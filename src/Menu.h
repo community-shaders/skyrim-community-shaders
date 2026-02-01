@@ -58,6 +58,7 @@ public:
 		Title,       // Large title text (e.g., "Community Shaders" header)
 		Heading,     // Section headers (tabs, category labels)
 		Subheading,  // Subsection headers (feature names, separators)
+		Subtext,     // Smaller secondary text (descriptions, about content)
 		Count        // Total number of roles
 	};
 
@@ -72,7 +73,8 @@ public:
 		FontRoleDescriptor{ "Body", "Body Text", 1.0f },
 		FontRoleDescriptor{ "Title", "Title", 1.0f },
 		FontRoleDescriptor{ "Heading", "Headings", 1.0f },
-		FontRoleDescriptor{ "Subheading", "Subheadings", 1.0f }
+		FontRoleDescriptor{ "Subheading", "Subheadings", 1.0f },
+		FontRoleDescriptor{ "Subtext", "Subtext", 0.9f }
 	};
 
 	static constexpr std::string_view GetFontRoleKey(FontRole role)
@@ -147,8 +149,10 @@ public:
 			files[static_cast<size_t>(role)] = std::move(value);
 		};
 		setFile(FontRole::Body, "Jost/Jost-Regular.ttf");
+		setFile(FontRole::Title, "Jost/Jost-Regular.ttf");
 		setFile(FontRole::Heading, "Jost/Jost-Regular.ttf");
 		setFile(FontRole::Subheading, "Jost/Jost-Regular.ttf");
+		setFile(FontRole::Subtext, "Jost/Jost-Regular.ttf");
 		return files;
 	}();
 	mutable std::array<float, static_cast<size_t>(FontRole::Count)> cachedFontPixelSizesByRole = {};
@@ -238,6 +242,7 @@ public:
 			setRole(FontRole::Title, "Jost", "Regular", "Jost/Jost-Regular.ttf", 1.0f);
 			setRole(FontRole::Heading, "Jost", "Regular", "Jost/Jost-Regular.ttf", 1.0f);
 			setRole(FontRole::Subheading, "Jost", "Regular", "Jost/Jost-Regular.ttf", 1.0f);
+			setRole(FontRole::Subtext, "Jost", "Regular", "Jost/Jost-Regular.ttf", 0.9f);
 
 			return roles;
 		}();
