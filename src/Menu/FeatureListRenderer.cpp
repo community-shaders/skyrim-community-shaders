@@ -56,8 +56,17 @@ namespace
 		const float expandDelay = ThemeManager::Constants::AUTOHIDE_EXPAND_DELAY;
 		const float panelWidth = windowSize.x * ThemeManager::Constants::AUTOHIDE_PANEL_WIDTH_RATIO;
 
-		bool mouseInActivationZone = (mousePos.x - windowPos.x) < activationZoneWidth;
-		bool mouseOverPanel = leftPanelVisible && (mousePos.x - windowPos.x) < panelWidth;
+		// Calculate relative X position
+		const float relativeX = mousePos.x - windowPos.x;
+
+		// For activation: only check if mouse is at left edge (allow any Y position for easier triggering)
+		// Prevent negative X from triggering, but don't restrict Y-axis for activation
+		bool mouseInActivationZone = relativeX >= 0.0f && relativeX < activationZoneWidth;
+
+		// For staying visible: check both X and Y to ensure mouse is actually over the panel area
+		const bool mouseOverPanelX = relativeX >= 0.0f && relativeX < panelWidth;
+		const bool mouseOverPanelY = mousePos.y >= windowPos.y && mousePos.y <= (windowPos.y + windowSize.y);
+		bool mouseOverPanel = leftPanelVisible && mouseOverPanelX && mouseOverPanelY;
 
 		// Track hover start time
 		if (mouseInActivationZone && !wasHovering) {
