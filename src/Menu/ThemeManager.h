@@ -180,6 +180,10 @@ public:
 		static constexpr float SEPARATOR_THICKNESS = 3.0f;
 		static constexpr float UNDOCKED_ICON_ITEM_SPACING = 6.0f;
 		static constexpr float POPUP_BUTTON_WIDTH = 180.0f;
+
+		// Feature header constants
+		static constexpr float DEFAULT_FEATURE_TITLE_SCALE = 1.5f;  // Default scale for feature title text
+		static constexpr float VERSION_TEXT_OPACITY = 0.6f;         // Opacity for version text next to feature title
 	};
 
 	static ThemeManager* GetSingleton()

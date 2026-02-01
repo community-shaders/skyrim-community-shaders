@@ -36,6 +36,7 @@
         "UseSimplePalette": false,
         "ShowActionIcons": true,
         "UseMonochromeIcons": false,
+        "CenterHeader": true,
         "TooltipHoverDelay": 0.5,
         "BackgroundBlurEnabled": false,
         "Palette": {
