@@ -818,6 +818,18 @@ void SettingsTabRenderer::RenderFontsTab()
 				menuInstance->pendingFontReload = true;
 			}
 
+			// Add Feature Title Scale slider under Title font role
+			if (role == Menu::FontRole::Title) {
+				ImGui::SliderFloat("Feature Header Scale", &themeSettings.FeatureHeading.FeatureTitleScale, 1.0f, 3.0f, "%.1fx", ImGuiSliderFlags_AlwaysClamp);
+				if (auto _tt = Util::HoverTooltipWrapper()) {
+					ImGui::Text("Scale multiplier for feature title text in the Settings tab.");
+				}
+				ImGui::SameLine();
+				if (ImGui::Button("Reset##FeatureHeaderScale")) {
+					themeSettings.FeatureHeading.FeatureTitleScale = ThemeManager::Constants::DEFAULT_FEATURE_TITLE_SCALE;
+				}
+			}
+
 			ImGui::Separator();
 			ImGui::PopID();
 		}
