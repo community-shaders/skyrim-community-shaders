@@ -32,7 +32,7 @@ void GrassCollision::UpdateCollisions(PerFrame& perFrameData)
 		for (auto array : actors) {
 			for (auto& actorHandle : *array) {
 				auto actorPtr = actorHandle.get();
-				if (actorPtr && actorPtr.get()) {
+				if (actorPtr && actorPtr.get() && actorPtr.get()->Is3DLoaded()) {
 					actorList.push_back(actorPtr.get());
 				}
 			}
