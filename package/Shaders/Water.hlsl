@@ -1353,7 +1353,6 @@ PS_OUTPUT main(PS_INPUT input)
 		preFogColor = exponentialHeightFog.xyz;
 		fogDistanceFactor = exponentialHeightFog.w;
 	}
-	else
 #						endif
 
 	finalColorPreFog = lerp(finalColorPreFog, preFogColor * PosAdjust[eyeIndex].w, fogDistanceFactor);
