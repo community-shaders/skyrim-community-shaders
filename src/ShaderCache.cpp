@@ -1,4 +1,6 @@
 #include "ShaderCache.h"
+#include "Globals.h"
+#include "ShaderFileWatcher.h"
 
 #include <d3dcompiler.h>
 
@@ -9,6 +11,63 @@
 
 namespace SIE
 {
+
+	// Custom include handler to track all includes during shader compilation
+	class TrackingIncludeHandler : public ID3DInclude
+	{
+	public:
+		// Captured include paths (normalized)
+		std::vector<std::string> includes;
+		// Owned buffers for include contents; kept alive for the lifetime of this handler
+		std::vector<std::vector<char>> buffers;
+		std::filesystem::path baseDir;
+
+		TrackingIncludeHandler(const std::filesystem::path& base) :
+			baseDir(base) {}
+
+		HRESULT Open(D3D_INCLUDE_TYPE IncludeType, LPCSTR pFileName, LPCVOID /*pParentData*/, LPCVOID* ppData, UINT* pBytes) override
+		{
+			(void)IncludeType;
+			try {
+				std::filesystem::path includePath = baseDir / pFileName;
+				// Normalize path to reduce duplicates (weakly_canonical may throw)
+				std::error_code ec;
+				auto canonical = std::filesystem::weakly_canonical(includePath, ec);
+				std::string pathStr = (ec ? includePath.string() : canonical.string());
+				// On Windows, normalize to lowercase for comparison
+#ifdef _WIN32
+				std::transform(pathStr.begin(), pathStr.end(), pathStr.begin(), [](unsigned char c) { return std::tolower(c); });
+#endif
+				includes.push_back(pathStr);
+
+				// Read file into owned buffer
+				std::ifstream ifs(pathStr, std::ios::binary | std::ios::ate);
+				if (!ifs)
+					return E_FAIL;
+				std::streamsize size = ifs.tellg();
+				ifs.seekg(0, std::ios::beg);
+				std::vector<char> buf(static_cast<size_t>(size));
+				if (size > 0) {
+					if (!ifs.read(buf.data(), size))
+						return E_FAIL;
+				}
+				buffers.push_back(std::move(buf));
+				const auto& storage = buffers.back();
+				*ppData = storage.empty() ? nullptr : storage.data();
+				*pBytes = static_cast<UINT>(storage.size());
+				return S_OK;
+			} catch (...) {
+				return E_FAIL;
+			}
+		}
+
+		HRESULT Close(LPCVOID /*pData*/) override
+		{
+			// Buffers are owned by this handler; no action required on Close.
+			return S_OK;
+		}
+	};
+
 	namespace SShaderCache
 	{
 		static void GetShaderDefines(const RE::BSShader&, uint32_t, D3D_SHADER_MACRO*);
@@ -1272,7 +1331,7 @@ namespace SIE
 			return type;
 		}
 
-		static ID3DBlob* CompileShader(ShaderClass shaderClass, const RE::BSShader& shader, uint32_t descriptor, bool useDiskCache)
+		static ID3DBlob* CompileShader(ShaderClass shaderClass, const RE::BSShader& shader, uint32_t descriptor, bool useDiskCache, ShaderFileDependencyTracker* dependencyTracker)
 		{
 			if (!SShaderCache::ResolveImageSpaceDescriptor(shader, descriptor)) {
 				return nullptr;
@@ -1349,8 +1408,18 @@ namespace SIE
 			// compile shaders
 			ID3DBlob* errorBlob = nullptr;
 			const uint32_t flags = !globals::state->IsDeveloperMode() ? D3DCOMPILE_OPTIMIZATION_LEVEL3 : D3DCOMPILE_DEBUG;
-			const HRESULT compileResult = D3DCompileFromFile(path.c_str(), defines.data(), D3D_COMPILE_STANDARD_FILE_INCLUDE, "main",
+
+			// Track includes
+			TrackingIncludeHandler includeHandler(std::filesystem::path(path).parent_path());
+			const HRESULT compileResult = D3DCompileFromFile(path.c_str(), defines.data(), &includeHandler, "main",
 				GetShaderProfile(shaderClass), flags, 0, &shaderBlob, &errorBlob);
+			// If the include handler captured any includes, register them so the watcher
+			// can invalidate dependents even if this compilation fails. Do NOT clear
+			// mappings when there are no captured includes to avoid removing prior
+			// dependency information on transient failures.
+			if (dependencyTracker && !includeHandler.includes.empty()) {
+				dependencyTracker->RegisterDependencies(Util::WStringToString(path), includeHandler.includes);
+			}
 
 			if (FAILED(compileResult)) {
 				if (errorBlob != nullptr) {
@@ -2034,30 +2103,31 @@ namespace SIE
 				static_cast<const RE::BSImagespaceShader&>(shader).originalShaderName :
 				shader.fxpFilename);
 		auto pathString = Util::WStringToString(path);
-		if (a_blob) {  // only create hlsl record if successful
-			std::string lowerFilePath = Util::FixFilePath(pathString);
-			{
-				std::unique_lock lockH{ hlslMapMutex };
-				auto it = hlslToShaderMap.find(lowerFilePath);
-				hlslRecord newRecord{ key, shader.shaderType.get(), descriptor, shaderClass, SIE::SShaderCache::GetDiskPath(shader.fxpFilename, descriptor, shaderClass) };
+		// Always create or update an hlsl->shader record so failing compiles are
+		// trackable and can be invalidated by the file watcher. This allows
+		// Clear(path) to find failed shaders and mark them for recompilation.
+		std::string lowerFilePath = Util::FixFilePath(pathString);
+		{
+			std::unique_lock lockH{ hlslMapMutex };
+			auto it = hlslToShaderMap.find(lowerFilePath);
+			hlslRecord newRecord{ key, shader.shaderType.get(), descriptor, shaderClass, SIE::SShaderCache::GetDiskPath(shader.fxpFilename, descriptor, shaderClass) };
 
-				if (it != hlslToShaderMap.end()) {
-					auto& entries = it->second;
+			if (it != hlslToShaderMap.end()) {
+				auto& entries = it->second;
 
-					// Find and remove existing record with the same key
-					auto existingRecord = std::find_if(entries.begin(), entries.end(),
-						[&](const hlslRecord& r) { return r.key == key; });
+				// Find and remove existing record with the same key
+				auto existingRecord = std::find_if(entries.begin(), entries.end(),
+					[&](const hlslRecord& r) { return r.key == key; });
 
-					if (existingRecord != entries.end()) {
-						entries.erase(existingRecord);  // Remove the old record
-					}
-
-					// Insert the new or updated record
-					entries.insert(newRecord);
-				} else {
-					// Create a new entry in hlslToShaderMap for this file path
-					hlslToShaderMap.emplace(lowerFilePath, std::set<hlslRecord>{ newRecord });
+				if (existingRecord != entries.end()) {
+					entries.erase(existingRecord);  // Remove the old record
 				}
+
+				// Insert the new or updated record
+				entries.insert(newRecord);
+			} else {
+				// Create a new entry in hlslToShaderMap for this file path
+				hlslToShaderMap.emplace(lowerFilePath, std::set<hlslRecord>{ newRecord });
 			}
 		}
 
@@ -2219,6 +2289,7 @@ namespace SIE
 
 	ShaderCache::ShaderCache()
 	{
+		dependencyTracker = std::make_unique<ShaderFileDependencyTracker>();
 		logger::debug("ShaderCache initialized with {} compiler threads", (int)compilationThreadCount);
 		compilationPool.push_task(&ShaderCache::ManageCompilationSet, this, ssource.get_token());
 	}
@@ -2243,7 +2314,7 @@ namespace SIE
 		logger::info("Starting FileWatcher");
 		if (!fileWatcher) {
 			fileWatcher = new efsw::FileWatcher();
-			listener = new UpdateListener();
+			listener = new UpdateListener(dependencyTracker.get());
 			// Add a folder to watch, and get the efsw::WatchID
 			// Reporting the files and directories changes to the instance of the listener
 			watchID = fileWatcher->addWatch("Data\\Shaders", listener, true);
@@ -2324,7 +2395,7 @@ namespace SIE
 		uint32_t descriptor)
 	{
 		if (const auto shaderBlob =
-				SShaderCache::CompileShader(ShaderClass::Vertex, shader, descriptor, isDiskCache)) {
+				SShaderCache::CompileShader(ShaderClass::Vertex, shader, descriptor, isDiskCache, dependencyTracker.get())) {
 			auto device = globals::d3d::device;
 
 			auto newShader = SShaderCache::CreateVertexShader(*shaderBlob, shader,
@@ -2353,7 +2424,7 @@ namespace SIE
 		uint32_t descriptor)
 	{
 		if (const auto shaderBlob =
-				SShaderCache::CompileShader(ShaderClass::Pixel, shader, descriptor, isDiskCache)) {
+				SShaderCache::CompileShader(ShaderClass::Pixel, shader, descriptor, isDiskCache, dependencyTracker.get())) {
 			auto device = globals::d3d::device;
 
 			auto newShader = SShaderCache::CreatePixelShader(*shaderBlob, shader,
@@ -2382,7 +2453,7 @@ namespace SIE
 		uint32_t descriptor)
 	{
 		if (const auto shaderBlob =
-				SShaderCache::CompileShader(ShaderClass::Compute, shader, descriptor, isDiskCache)) {
+				SShaderCache::CompileShader(ShaderClass::Compute, shader, descriptor, isDiskCache, dependencyTracker.get())) {
 			auto device = globals::d3d::device;
 
 			auto newShader = SShaderCache::CreateComputeShader(*shaderBlob, shader,
@@ -2426,6 +2497,18 @@ namespace SIE
 	uint64_t ShaderCache::GetFailedTasks()
 	{
 		return compilationSet.failedTasks;
+	}
+
+	uint64_t ShaderCache::GetCurrentFailedCount()
+	{
+		std::scoped_lock lock(mapMutex);
+		uint64_t count = 0;
+		for (const auto& [key, result] : shaderMap) {
+			if (result.status == ShaderCompilationTask::Status::Failed) {
+				++count;
+			}
+		}
+		return count;
 	}
 
 	uint64_t ShaderCache::GetTotalTasks()
@@ -2832,19 +2915,25 @@ namespace SIE
 			GetHumanTime(GetEta() + totalMs));
 	}
 
+	UpdateListener::UpdateListener(ShaderFileDependencyTracker* deps_) :
+		deps(deps_) {}
+
 	void UpdateListener::UpdateCache(const std::filesystem::path& filePath, SIE::ShaderCache* cache, bool& clearCache, bool& fileDone)
 	{
+		fileDone = true;
+		// Skip directories
+		if (std::filesystem::is_directory(filePath)) {
+			return;
+		}
 		// Extract file components
 		const std::string extension = filePath.extension().string();
 		const std::string shaderTypeString = filePath.stem().string();
 		std::chrono::time_point<std::chrono::system_clock> modifiedTime{};
 		auto shaderType = magic_enum::enum_cast<RE::BSShader::Type>(shaderTypeString, magic_enum::case_insensitive);
-		fileDone = true;
 		// Check if the file exists and get its modified time
 		if (std::filesystem::exists(filePath)) {
 			modifiedTime = std::chrono::clock_cast<std::chrono::system_clock>(std::filesystem::last_write_time(filePath));
 		} else {
-			fileDone = true;
 			return;
 		}
 
@@ -2873,6 +2962,14 @@ namespace SIE
 					clearCache = true;
 				}
 			}
+			// Handle include file changes (.hlsli) by invalidating dependents
+			else if (!std::filesystem::is_directory(filePath) && lowerExtension == ".hlsli") {
+				// Invalidate all .hlsl files that depend on this .hlsli
+				auto dependents = deps->GetDependents(filePath.string());
+				for (const auto& hlsl : dependents) {
+					cache->Clear(hlsl);
+				}
+			}
 		}
 		// Indicate that file processing is not yet complete
 		fileDone = false;
@@ -2885,7 +2982,7 @@ namespace SIE
 		auto cache = globals::shaderCache;
 		while (cache->UseFileWatcher()) {
 			lock.lock();
-			if (!queue.empty() && queue.size() == lastQueueSize) {
+			if (!queue.empty()) {
 				bool clearCache = false;
 				for (fileAction fAction : queue) {
 					const std::filesystem::path filePath = std::filesystem::path(std::format("{}\\{}", fAction.dir, fAction.filename));
@@ -2899,7 +2996,9 @@ namespace SIE
 						logger::debug("Detected Deleted path {}", filePath.string());
 						break;
 					case efsw::Actions::Modified:
-						logger::debug("Detected Changed path {}", filePath.string());
+						if (!std::filesystem::is_directory(filePath)) {
+							logger::debug("Detected Changed path {}", filePath.string());
+						}
 						UpdateCache(filePath, cache, clearCache, fileDone);
 						break;
 					case efsw::Actions::Moved:
@@ -2917,7 +3016,6 @@ namespace SIE
 				}
 				queue.clear();
 			}
-			lastQueueSize = queue.size();
 			lock.unlock();
 			std::this_thread::sleep_for(std::chrono::milliseconds(100));
 		}
