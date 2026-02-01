@@ -285,26 +285,9 @@ namespace Color
 		return ENABLE_LL ? color : LinearToGamma(color);
 	}
 
-	static const float VANILLA_MULT = 1.0 / Math::PI;
-
-	float VanillaDiffuseMult()
+	float VanillaNormalization()
 	{
-		return ENABLE_LL ? VANILLA_MULT : 1.0f;
-	}
-
-	float VanillaSpecularMult()
-	{
-		return ENABLE_LL ? VANILLA_MULT : 1.0f;
-	}
-
-	float GrassDiffuseMult()
-	{
-		return ENABLE_LL ? VANILLA_MULT : 1.0f;
-	}
-
-	float GrassSpecularMult()
-	{
-		return ENABLE_LL ? VANILLA_MULT : 1.0f;
+		return ENABLE_LL ? 1.0 / Math::PI : 1.0f;
 	}
 
 	float VanillaDiffuseColorMult()
