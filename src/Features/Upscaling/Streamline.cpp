@@ -286,7 +286,7 @@ void Streamline::SetDLSSOptions()
 	dlssOptions.ultraQualityPreset = sl::DLSSPreset::ePresetJ;
 	dlssOptions.qualityPreset = sl::DLSSPreset::ePresetM;
 	dlssOptions.balancedPreset = sl::DLSSPreset::ePresetM;
-	dlssOptions.performancePreset = sl::DLSSPreset::ePresetL;
+	dlssOptions.performancePreset = sl::DLSSPreset::ePresetM;
 	dlssOptions.ultraPerformancePreset = sl::DLSSPreset::ePresetL;
 
 	dlssOptions.preExposure = 1.0f;
