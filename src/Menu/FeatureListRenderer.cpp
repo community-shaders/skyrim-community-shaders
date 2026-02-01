@@ -657,7 +657,7 @@ void FeatureListRenderer::DrawMenuVisitor::RenderFeatureAboutDropdown(Feature* f
 		if (ImGui::TreeNodeEx("About", flags)) {
 			// Use Subtext font for About content (smaller secondary text)
 			MenuFonts::FontRoleGuard contentGuard(Menu::FontRole::Subtext);
-			
+
 			if (!description.empty()) {
 				ImGui::TextWrapped("%s", description.c_str());
 			}
