@@ -17,7 +17,7 @@ SamplerState PointSampler : register(s0);
 		float2 uv = (pixCoord + 1.0) / float2(inputW, inputH);
 
 		float4 depths4 = InputTexture.GatherRed(PointSampler, float3(uv, 1));
-		
+
 		OutputTexture[dispatchThreadID.xy] = depths4;
 	}
 }
