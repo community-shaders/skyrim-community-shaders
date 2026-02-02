@@ -247,14 +247,6 @@ cbuffer PerGeometry : register(b2)
 	float3 TextureSize : packoffset(c1);
 };
 
-#	if defined(TERRAIN_SHADOWS)
-#		include "TerrainShadows/TerrainShadows.hlsli"
-#	endif
-
-#	if defined(CLOUD_SHADOWS)
-#		include "CloudShadows/CloudShadows.hlsli"
-#	endif
-
 #	define LinearSampler SampSourceTexture
 #	include "Common/ShadowSampling.hlsli"
 

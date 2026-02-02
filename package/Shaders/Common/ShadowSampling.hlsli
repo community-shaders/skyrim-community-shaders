@@ -69,7 +69,7 @@ namespace ShadowSampling
 	{
 		static const uint sampleCount8 = 8;
 		static const float rcpSampleCount8 = 1.0 / float(sampleCount8);
-		static const uint sampleCount8Minus1 = 7;
+		static const uint sampleCount8Minus1 = sampleCount8 - 1;
 
 		static const uint sampleCount16 = 16;
 		static const float rcpSampleCount16 = 1.0 / float(sampleCount16);
@@ -145,7 +145,7 @@ namespace ShadowSampling
 		float shadow = 0.0;
 		for (uint k = 0; k < sampleCount16; k++) {
 			uint noisyIndex = (k + uint(sampleCount16 * noise)) % sampleCount16;
-			float t = (sampleCount16 - 1 - noisyIndex) * rcpSampleCount16;
+			float t = float(sampleCount16Minus1 - noisyIndex) * rcpSampleCount16;
 
 			// Probabilistically select cascade (0 or 1 within the pair)
 			uint cascadeIndex = uint(frac(t + noise) < cascadeProbability);
