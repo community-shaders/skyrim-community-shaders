@@ -113,7 +113,7 @@ namespace ShadowSampling
 		float shadowMapDepth = GetShadowDepth(positionWS, eyeIndex);
 
 		ShadowData sD = SharedShadowData[0];
-		
+
 		// Early out beyond cascade 2
 		if (sD.EndSplitDistances.w < shadowMapDepth)
 			return worldShadow;
