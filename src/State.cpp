@@ -7,6 +7,7 @@
 #include "Deferred.h"
 #include "FeatureIssues.h"
 #include "Features/CloudShadows.h"
+#include "Features/HDR.h"
 #include "Features/PerformanceOverlay.h"
 #include "Features/TerrainBlending.h"
 #include "Features/TerrainHelper.h"
@@ -789,6 +790,14 @@ void State::UpdateSharedData([[maybe_unused]] bool a_inWorld, [[maybe_unused]] b
 		} else {
 			data.MipBias = 0;
 		}
+
+		auto* hdr = HDR::GetSingleton();
+		data.HDRData = {
+			hdr->settings.enableHDR ? 1.0f : 0.0f,
+			static_cast<float>(hdr->settings.hdrPaperWhite),
+			static_cast<float>(hdr->settings.hdrPeakNits),
+			0.0f
+		};
 
 		sharedDataCB->Update(data);
 	}

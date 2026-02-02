@@ -126,6 +126,35 @@ namespace
 		return false;
 	}
 
+	bool CheckSwapChainHDRSupport(IDXGISwapChain* swapChain, bool& supported, bool& enabled)
+	{
+		winrt::com_ptr<IDXGIOutput> output;
+		if (SUCCEEDED(swapChain->GetContainingOutput(output.put()))) {
+			winrt::com_ptr<IDXGIOutput6> output6;
+			if (SUCCEEDED(output->QueryInterface(IID_PPV_ARGS(output6.put())))) {
+				DXGI_OUTPUT_DESC1 desc1;
+				if (SUCCEEDED(output6->GetDesc1(&desc1))) {
+					enabled = desc1.ColorSpace == DXGI_COLOR_SPACE_RGB_FULL_G2084_NONE_P2020 ||
+					          desc1.ColorSpace == DXGI_COLOR_SPACE_RGB_FULL_G10_NONE_P709;
+					supported |= enabled;
+					logger::debug("[HDR] DXGI output detection: colorSpace={}, maxLuminance={}", static_cast<int>(desc1.ColorSpace), desc1.MaxLuminance);
+				}
+			}
+		}
+
+		winrt::com_ptr<IDXGISwapChain3> swapChain3;
+		if (SUCCEEDED(swapChain->QueryInterface(IID_PPV_ARGS(swapChain3.put())))) {
+			UINT colorSpaceSupported = 0;
+			if (SUCCEEDED(swapChain3->CheckColorSpaceSupport(DXGI_COLOR_SPACE_RGB_FULL_G2084_NONE_P2020, &colorSpaceSupported))) {
+				supported |= (colorSpaceSupported & DXGI_SWAP_CHAIN_COLOR_SPACE_SUPPORT_FLAG_PRESENT) != 0;
+			}
+			if (SUCCEEDED(swapChain3->CheckColorSpaceSupport(DXGI_COLOR_SPACE_RGB_FULL_G10_NONE_P709, &colorSpaceSupported))) {
+				supported |= (colorSpaceSupported & DXGI_SWAP_CHAIN_COLOR_SPACE_SUPPORT_FLAG_PRESENT) != 0;
+			}
+		}
+		return true;
+	}
+
 	bool IsHDRSupportedAndEnabled(HWND hwnd, bool& supported, bool& enabled, IDXGISwapChain* swapChain = nullptr)
 	{
 		supported = false;
@@ -162,31 +191,10 @@ namespace
 
 		// Last resort: check swap chain color space support
 		if (swapChain) {
-			winrt::com_ptr<IDXGIOutput> output;
-			if (SUCCEEDED(swapChain->GetContainingOutput(output.put()))) {
-				winrt::com_ptr<IDXGIOutput6> output6;
-				if (SUCCEEDED(output->QueryInterface(IID_PPV_ARGS(output6.put())))) {
-					DXGI_OUTPUT_DESC1 desc1;
-					if (SUCCEEDED(output6->GetDesc1(&desc1))) {
-						// Check for HDR10 PQ or scRGB linear HDR
-						enabled = desc1.ColorSpace == DXGI_COLOR_SPACE_RGB_FULL_G2084_NONE_P2020 ||
-						          desc1.ColorSpace == DXGI_COLOR_SPACE_RGB_FULL_G10_NONE_P709;
-						supported |= enabled;
-						logger::debug("[HDR] DXGI output detection: colorSpace={}, maxLuminance={}", static_cast<int>(desc1.ColorSpace), desc1.MaxLuminance);
-					}
-				}
-			}
-
-			winrt::com_ptr<IDXGISwapChain3> swapChain3;
-			if (SUCCEEDED(swapChain->QueryInterface(IID_PPV_ARGS(swapChain3.put())))) {
-				UINT colorSpaceSupported = 0;
-				if (SUCCEEDED(swapChain3->CheckColorSpaceSupport(DXGI_COLOR_SPACE_RGB_FULL_G2084_NONE_P2020, &colorSpaceSupported))) {
-					supported |= (colorSpaceSupported & DXGI_SWAP_CHAIN_COLOR_SPACE_SUPPORT_FLAG_PRESENT) != 0;
-				}
-				// Also check scRGB linear HDR support
-				if (SUCCEEDED(swapChain3->CheckColorSpaceSupport(DXGI_COLOR_SPACE_RGB_FULL_G10_NONE_P709, &colorSpaceSupported))) {
-					supported |= (colorSpaceSupported & DXGI_SWAP_CHAIN_COLOR_SPACE_SUPPORT_FLAG_PRESENT) != 0;
-				}
+			__try {
+				CheckSwapChainHDRSupport(swapChain, supported, enabled);
+			} __except (EXCEPTION_EXECUTE_HANDLER) {
+				logger::warn("[HDR] Exception during swap chain HDR detection (possibly due to Streamline interposer), skipping swap chain queries");
 			}
 		}
 
@@ -273,7 +281,8 @@ void HDR::DrawSettings()
 		UpdateHDRData();
 	}
 	if (auto _tt = Util::HoverTooltipWrapper()) {
-		ImGui::Text("UI brightness multiplier. 1.0 = default brightness.");
+		ImGui::Text("Adjusts UI brightness. UI always renders at 100 nits baseline,");
+		ImGui::Text("independent of Paper White setting. 1.0x = 100 nits.");
 	}
 }
 
@@ -300,6 +309,8 @@ void HDR::RestoreDefaultSettings()
 void HDR::SetupResources()
 {
 	logger::info("[HDR] SetupResources called");
+
+	DetectHDRDisplay();
 
 	auto renderer = globals::game::renderer;
 	auto& main = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMAIN];
@@ -698,9 +709,14 @@ void HDR::ScaleUIBrightnessForFG()
 {
 	auto& upscaling = globals::features::upscaling;
 	
-	// Only run when FG is actively generating frames
+	// Match the exact condition used for FidelityFX::Present() to ensure consistency
+	// Only run when FG is actively generating frames this frame
 	// When paused, UI compositing is handled by HDROutputCS instead
-	if (!upscaling.IsFrameGenerationActive())
+	bool fgActiveThisFrame = upscaling.d3d12SwapChainActive && 
+	                         upscaling.settings.frameGenerationMode && 
+	                         !globals::game::ui->GameIsPaused() &&
+	                         !globals::game::isVR;
+	if (!fgActiveThisFrame)
 		return;
 	
 	if (!hdrDataCB || !upscaling.dx12SwapChain.uiBufferWrapped || !upscaling.dx12SwapChain.uiBufferWrapped->uav)
@@ -749,9 +765,12 @@ void HDR::UpdateHDRData() const
 		return;
 	}
 
-	// Only skip UI compositing when FG is actively generating frames
-	// When paused (FG disabled), we must composite UI ourselves since FidelityFX won't do it reliably
-	bool skipUIComposite = globals::features::upscaling.IsFrameGenerationActive();
+	auto& upscaling = globals::features::upscaling;
+	bool fgActiveThisFrame = upscaling.d3d12SwapChainActive && 
+	                         upscaling.settings.frameGenerationMode && 
+	                         !globals::game::ui->GameIsPaused() &&
+	                         !globals::game::isVR;
+	bool skipUIComposite = fgActiveThisFrame;
 
 	// Scene from ISHDR is always gamma-encoded (tonemapper includes gamma 2.2)
 	// This is true regardless of Linear Lighting status because ISHDR runs after lighting

@@ -74,8 +74,23 @@ void FidelityFX::Present(bool a_useFrameGeneration, bool a_isHDR)
 	auto& upscaling = globals::features::upscaling;
 	auto& swapChain = globals::features::upscaling.dx12SwapChain;
 
-	// Store HDR state for the callback to access
-	isHDRActive = a_isHDR;
+	// Cache peak nits first since we need HDR singleton access
+	auto hdr = HDR::GetSingleton();
+	float peakNits = hdr ? static_cast<float>(hdr->settings.hdrPeakNits) : 1000.0f;
+
+	// Detect if HDR parameters changed - if so, we need to reset FG history
+	// because frames in the history were encoded with different parameters
+	bool hdrParamsChanged = (a_isHDR != prevHDRActive) || 
+	                        (a_isHDR && std::abs(peakNits - prevPeakNits) > 1.0f);
+	
+	// Update tracking for next frame
+	prevHDRActive = a_isHDR;
+	prevPeakNits = peakNits;
+
+	// Store HDR state atomically for the callback to access (may be read from async thread)
+	// Use seq_cst for both to ensure the callback sees both values consistently
+	hdrPeakNits.store(peakNits, std::memory_order_seq_cst);
+	isHDRActive.store(a_isHDR, std::memory_order_seq_cst);
 
 	ffx::ConfigureDescFrameGeneration configParameters{};
 
@@ -85,12 +100,13 @@ void FidelityFX::Present(bool a_useFrameGeneration, bool a_isHDR)
 		configParameters.frameGenerationCallback = [](ffxDispatchDescFrameGeneration* params, void* pUserCtx) -> ffxReturnCode_t {
 			// Tell FidelityFX the color space so it can properly interpolate. Fixes pixel smearing that occured with HDR on.
 			// PQ requires decoding to linear for correct motion interpolation
-			if (FidelityFX::isHDRActive) {
+			// Read atomically with seq_cst since this callback may run on async thread
+			bool hdrActive = FidelityFX::isHDRActive.load(std::memory_order_seq_cst);
+			if (hdrActive) {
 				params->backbufferTransferFunction = FFX_API_BACKBUFFER_TRANSFER_FUNCTION_PQ;
 				// Set luminance range for PQ decoding (0 to peak nits)
-				auto hdr = HDR::GetSingleton();
 				params->minMaxLuminance[0] = 0.0f;
-				params->minMaxLuminance[1] = hdr ? static_cast<float>(hdr->settings.hdrPeakNits) : 1000.0f;
+				params->minMaxLuminance[1] = FidelityFX::hdrPeakNits.load(std::memory_order_seq_cst);
 			} else {
 				params->backbufferTransferFunction = FFX_API_BACKBUFFER_TRANSFER_FUNCTION_SRGB;
 			}
@@ -112,6 +128,14 @@ void FidelityFX::Present(bool a_useFrameGeneration, bool a_isHDR)
 	configParameters.presentCallbackUserContext = nullptr;
 
 	static uint64_t frameID = 0;
+	
+	// If HDR parameters changed, skip a frame ID to force FidelityFX to reset its history
+	// This prevents interpolation artifacts when frames were encoded with different parameters
+	// Per FidelityFX docs: "Any non-exactly-one difference will reset the frame generation logic"
+	if (hdrParamsChanged && a_useFrameGeneration) {
+		frameID += 2;  // Skip one ID to trigger reset
+	}
+	
 	configParameters.frameID = frameID;
 	configParameters.swapChain = swapChain.swapChain;
 	configParameters.onlyPresentGenerated = false;

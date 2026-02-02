@@ -204,6 +204,7 @@ public:
 		uint HideSky;
 		float MipBias;
 		float pad0;
+		float4 HDRData;  // x=enableHDR, y=paperWhite, z=peakNits, w=unused
 	};
 	STATIC_ASSERT_ALIGNAS_16(SharedDataCB);
 

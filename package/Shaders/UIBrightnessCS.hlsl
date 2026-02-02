@@ -16,14 +16,15 @@ cbuffer PerFrame : register(b0)
 {
 	float4 ui = UITex[dispatchID.xy];
 	
-	if (ui.a > 0.0) {
+	// Use small threshold instead of 0 to handle near-invisible UI with potential garbage RGB. (Invisible UI bars like Magika/Stamina)
+	if (ui.a > 1.0 / 255.0) {
 		bool enableHDR = parameters0.x > 0.5;
 		float paperWhite = parameters0.y;
 		float peakNits = parameters0.z;
 		float uiBrightness = parameters1.x;
 		
-		// Apply brightness scaling
-		ui.rgb *= uiBrightness;
+		// Apply brightness scaling and clamp to valid range
+		ui.rgb = max(0, ui.rgb * uiBrightness);
 		
 		if (enableHDR) {
 			// For HDR: encode UI to PQ so FidelityFX can blend PQ over PQ
@@ -37,6 +38,9 @@ cbuffer PerFrame : register(b0)
 		// FidelityFX configured WITHOUT USE_PREMUL_ALPHA flag
 		// Standard alpha blend: Final = UI.RGB * UI.Alpha + Scene * (1 - UI.Alpha)
 		// No premultiply needed - pass through as-is
+	} else {
+		// Zero out entire pixel when alpha is effectively 0 to prevent FG artifacts
+		ui = 0;
 	}
 	
 	UITex[dispatchID.xy] = ui;
