@@ -137,22 +137,22 @@ PS_OUTPUT main(PS_INPUT input)
 		// HDR path: Preserve linear values, skip tonemapping
 		// Add bloom (bloom also contains HDR highlight information)
 		float3 blendedColor = inputColor + bloomColor * Param.x;
-		
+
 		// Apply cinematic color grading while preserving HDR range
 		float blendedLuminance = Color::RGBToLuminance(blendedColor);
-		
+
 		// Saturation (Cinematic.x)
 		float3 linearColor = lerp(blendedLuminance, blendedColor, Cinematic.x);
-		
+
 		// Tint (Tint.w controls blend amount)
 		linearColor = lerp(linearColor, blendedLuminance * Tint.xyz, Tint.w);
-		
+
 		// Intensity multiplier (Cinematic.w)
 		linearColor *= Cinematic.w;
-		
+
 		// Contrast - apply gently to preserve HDR highlights
 		linearColor = lerp(avgValue.x, linearColor, lerp(Cinematic.z, 1.0, 0.5));
-		
+
 		outputColor = max(0, linearColor);
 	} else {
 		// SDR path: Apply tonemapping to compress HDR to 0-1
@@ -169,7 +169,7 @@ PS_OUTPUT main(PS_INPUT input)
 			blendedColor = compressedHuePreserving;
 			blendedColor += saturate(Param.x - blendedColor) * bloomColor;
 		}
-		
+
 		// Apply cinematic color grading
 		float blendedLuminance = Color::RGBToLuminance(blendedColor);
 		float3 linearColor = Cinematic.w * lerp(lerp(blendedLuminance, blendedColor, Cinematic.x), blendedLuminance * Tint.xyz, Tint.w).xyz;

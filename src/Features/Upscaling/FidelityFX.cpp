@@ -80,9 +80,9 @@ void FidelityFX::Present(bool a_useFrameGeneration, bool a_isHDR)
 
 	// Detect if HDR parameters changed - if so, we need to reset FG history
 	// because frames in the history were encoded with different parameters
-	bool hdrParamsChanged = (a_isHDR != prevHDRActive) || 
+	bool hdrParamsChanged = (a_isHDR != prevHDRActive) ||
 	                        (a_isHDR && std::abs(peakNits - prevPeakNits) > 1.0f);
-	
+
 	// Update tracking for next frame
 	prevHDRActive = a_isHDR;
 	prevPeakNits = peakNits;
@@ -128,14 +128,14 @@ void FidelityFX::Present(bool a_useFrameGeneration, bool a_isHDR)
 	configParameters.presentCallbackUserContext = nullptr;
 
 	static uint64_t frameID = 0;
-	
+
 	// If HDR parameters changed, skip a frame ID to force FidelityFX to reset its history
 	// This prevents interpolation artifacts when frames were encoded with different parameters
 	// Per FidelityFX docs: "Any non-exactly-one difference will reset the frame generation logic"
 	if (hdrParamsChanged && a_useFrameGeneration) {
 		frameID += 2;  // Skip one ID to trigger reset
 	}
-	
+
 	configParameters.frameID = frameID;
 	configParameters.swapChain = swapChain.swapChain;
 	configParameters.onlyPresentGenerated = false;

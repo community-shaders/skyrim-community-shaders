@@ -47,7 +47,7 @@ float3 HDRSoftClip(float3 colorNits, float paperWhite, float peakNits)
 {
 	peakNits = max(peakNits, paperWhite * 1.1);
 	float shoulder = paperWhite * 2.0;
-	
+
 	float3 result;
 	[unroll]
 	for (int i = 0; i < 3; i++) {
@@ -84,18 +84,18 @@ float3 HDRSoftClip(float3 colorNits, float paperWhite, float peakNits)
 		// HDR path: ISHDR outputs linear (if LL enabled) or gamma-encoded values
 		// Convert to linear if needed, then to BT.2020, scale to nits, and PQ encode
 		float3 sceneLinear = max(0, scene.rgb);
-		
+
 		// If Linear Lighting is NOT enabled, ISHDR outputs gamma-encoded values
 		if (!linearLighting) {
 			// Convert gamma to linear for HDR processing (preserves >1.0 values)
 			sceneLinear = pow(abs(sceneLinear), 2.2);
 		}
-		
+
 		// Convert BT.709 to BT.2020 and scale to nits
 		// ISHDR output of 1.0 = paperWhite nits, values >1.0 = brighter
 		float3 sceneBT2020 = Color::BT709ToBT2020(sceneLinear);
 		float3 sceneNits = sceneBT2020 * paperWhite;
-		
+
 		float3 finalNits;
 		if (skipUIComposite) {
 			finalNits = sceneNits;
@@ -106,7 +106,7 @@ float3 HDRSoftClip(float3 colorNits, float paperWhite, float peakNits)
 			float3 uiNits = uiBT2020 * (paperWhite * uiBrightness);
 			finalNits = uiNits * ui.a + sceneNits * (1.0 - ui.a);
 		}
-		
+
 		// Soft clip to peak brightness and PQ encode
 		finalNits = HDRSoftClip(finalNits, paperWhite, peakNits);
 		finalColor = Color::pq::Encode(finalNits / 10000.0, 10000.0);
@@ -114,7 +114,7 @@ float3 HDRSoftClip(float3 colorNits, float paperWhite, float peakNits)
 		// SDR path: ISHDR outputs tonemapped, gamma-encoded values
 		// Just composite UI and pass through
 		float3 sceneGamma = scene.rgb;
-		
+
 		float3 composited;
 		if (skipUIComposite) {
 			composited = sceneGamma;
