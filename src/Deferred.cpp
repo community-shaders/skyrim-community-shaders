@@ -164,7 +164,7 @@ void Deferred::SetupResources()
 		defines.push_back({ "DOWNSAMPLE_SHADOW_MIP1", nullptr });
 		downsampleShadowMip1CS = static_cast<ID3D11ComputeShader*>(Util::CompileShader(L"Data\\Shaders\\DownsampleShadowCS.hlsl", defines, "cs_5_0"));
 		defines.clear();
-		defines.push_back({"DOWNSAMPLE_SHADOW_MIP2", nullptr});
+		defines.push_back({ "DOWNSAMPLE_SHADOW_MIP2", nullptr });
 		downsampleShadowMip2CS = static_cast<ID3D11ComputeShader*>(Util::CompileShader(L"Data\\Shaders\\DownsampleShadowCS.hlsl", defines, "cs_5_0"));
 	}
 
@@ -310,7 +310,7 @@ void Deferred::CopyShadowData()
 					context->CSSetUnorderedAccessViews(0, 1, csUavs, nullptr);
 					context->CSSetShader(downsampleShadowMip0CS, nullptr, 0);
 					context->Dispatch((shadowCopyWidth + 7) >> 3, (shadowCopyHeight + 7) >> 3, 1);
-					
+
 					// Mip 1 with second cascade
 					csUavs[0] = shadowCopyMip1UAV;
 					context->CSSetUnorderedAccessViews(0, 1, csUavs, nullptr);
