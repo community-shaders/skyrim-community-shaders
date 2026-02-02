@@ -156,7 +156,13 @@ void Deferred::SetupResources()
 		perShadow->CreateUAV(uavDesc);
 
 		copyShadowCS = static_cast<ID3D11ComputeShader*>(Util::CompileShader(L"Data\\Shaders\\CopyShadowDataCS.hlsl", {}, "cs_5_0"));
-		downsampleShadowCS = static_cast<ID3D11ComputeShader*>(Util::CompileShader(L"Data\\Shaders\\DownsampleShadowCS.hlsl", {}, "cs_5_0"));
+		
+		std::vector<std::pair<const char*, const char*>> defines;
+		defines.push_back({"DOWNSAMPLE_SHADOW_MIP0", nullptr});
+		downsampleShadowMip0CS = static_cast<ID3D11ComputeShader*>(Util::CompileShader(L"Data\\Shaders\\DownsampleShadowCS.hlsl", defines, "cs_5_0"));
+		defines.clear();
+		defines.push_back({"DOWNSAMPLE_SHADOW_MIP1", nullptr});
+		downsampleShadowMip1CS = static_cast<ID3D11ComputeShader*>(Util::CompileShader(L"Data\\Shaders\\DownsampleShadowCS.hlsl", defines, "cs_5_0"));
 	}
 
 	{
@@ -230,14 +236,18 @@ void Deferred::CopyShadowData()
 					uint32_t newHeight = srcDesc.Height / 2;
 
 					// Lazily create or recreate downscaled texture if dimensions changed
-					if (!shadowCopyTexture || shadowCopyWidth != newWidth || shadowCopyHeight != newHeight || shadowCopyArraySize != srcDesc.ArraySize) {
+					if (!shadowCopyTexture || shadowCopyWidth != newWidth || shadowCopyHeight != newHeight) {
 						if (shadowCopySRV) {
 							shadowCopySRV->Release();
 							shadowCopySRV = nullptr;
 						}
-						if (shadowCopyUAV) {
-							shadowCopyUAV->Release();
-							shadowCopyUAV = nullptr;
+						if (shadowCopyMip0UAV) {
+							shadowCopyMip0UAV->Release();
+							shadowCopyMip0UAV = nullptr;
+						}
+						if (shadowCopyMip1UAV) {
+							shadowCopyMip1UAV->Release();
+							shadowCopyMip1UAV = nullptr;
 						}
 						if (shadowCopyTexture) {
 							shadowCopyTexture->Release();
@@ -246,50 +256,57 @@ void Deferred::CopyShadowData()
 
 						shadowCopyWidth = newWidth;
 						shadowCopyHeight = newHeight;
-						shadowCopyArraySize = srcDesc.ArraySize;
 
 						D3D11_TEXTURE2D_DESC copyDesc{};
 						copyDesc.Width = newWidth;
 						copyDesc.Height = newHeight;
-						copyDesc.MipLevels = 1;
-						copyDesc.ArraySize = srcDesc.ArraySize;
-						copyDesc.Format = DXGI_FORMAT_R16_UNORM;
+						copyDesc.MipLevels = 2;
+						copyDesc.ArraySize = 1;
+						copyDesc.Format = DXGI_FORMAT_R16G16B16A16_UNORM;
 						copyDesc.SampleDesc.Count = 1;
 						copyDesc.SampleDesc.Quality = 0;
 						copyDesc.Usage = D3D11_USAGE_DEFAULT;
-						copyDesc.BindFlags = D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_UNORDERED_ACCESS;
+						copyDesc.BindFlags = D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_UNORDERED_ACCESS | D3D11_BIND_RENDER_TARGET;
+						copyDesc.MiscFlags = 0;
 
 						auto device = globals::d3d::device;
 						DX::ThrowIfFailed(device->CreateTexture2D(&copyDesc, nullptr, &shadowCopyTexture));
 
 						D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc{};
-						srvDesc.Format = DXGI_FORMAT_R16_UNORM;
-						srvDesc.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2DARRAY;
-						srvDesc.Texture2DArray.MostDetailedMip = 0;
-						srvDesc.Texture2DArray.MipLevels = 1;
-						srvDesc.Texture2DArray.FirstArraySlice = 0;
-						srvDesc.Texture2DArray.ArraySize = srcDesc.ArraySize;
+						srvDesc.Format = DXGI_FORMAT_R16G16B16A16_UNORM;
+						srvDesc.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2D;
+						srvDesc.Texture2D.MostDetailedMip = 0;
+						srvDesc.Texture2D.MipLevels = 2;
 						DX::ThrowIfFailed(device->CreateShaderResourceView(shadowCopyTexture, &srvDesc, &shadowCopySRV));
 
 						D3D11_UNORDERED_ACCESS_VIEW_DESC uavDesc{};
-						uavDesc.Format = DXGI_FORMAT_R16_UNORM;
-						uavDesc.ViewDimension = D3D11_UAV_DIMENSION_TEXTURE2DARRAY;
-						uavDesc.Texture2DArray.MipSlice = 0;
-						uavDesc.Texture2DArray.FirstArraySlice = 0;
-						uavDesc.Texture2DArray.ArraySize = srcDesc.ArraySize;
-						DX::ThrowIfFailed(device->CreateUnorderedAccessView(shadowCopyTexture, &uavDesc, &shadowCopyUAV));
+						uavDesc.Format = DXGI_FORMAT_R16G16B16A16_UNORM;
+						uavDesc.ViewDimension = D3D11_UAV_DIMENSION_TEXTURE2D;
+						uavDesc.Texture2D.MipSlice = 0;
+						DX::ThrowIfFailed(device->CreateUnorderedAccessView(shadowCopyTexture, &uavDesc, &shadowCopyMip0UAV));
+						
+						uavDesc.Texture2D.MipSlice = 1;
+						DX::ThrowIfFailed(device->CreateUnorderedAccessView(shadowCopyTexture, &uavDesc, &shadowCopyMip1UAV));
 					}
 
 					// Dispatch downsample compute shader
 					ID3D11ShaderResourceView* csSrvs[1]{ shadowView };
 					context->CSSetShaderResources(0, 1, csSrvs);
 
-					ID3D11UnorderedAccessView* csUavs[1]{ shadowCopyUAV };
-					context->CSSetUnorderedAccessViews(0, 1, csUavs, nullptr);
 
 					context->CSSetSamplers(0, 1, &pointSampler);
-					context->CSSetShader(downsampleShadowCS, nullptr, 0);
-					context->Dispatch((shadowCopyWidth + 7) >> 3, (shadowCopyWidth + 7) >> 3, shadowCopyArraySize);
+
+					// Mip 0 with second cascade
+					ID3D11UnorderedAccessView* csUavs[1]{ shadowCopyMip0UAV };
+					context->CSSetUnorderedAccessViews(0, 1, csUavs, nullptr);
+					context->CSSetShader(downsampleShadowMip0CS, nullptr, 0);
+					context->Dispatch((shadowCopyWidth + 7) >> 3, (shadowCopyHeight + 7) >> 3, 1);
+					
+					// Mip 1 with first cascade
+					csUavs[0] = shadowCopyMip1UAV;
+					context->CSSetUnorderedAccessViews(0, 1, csUavs, nullptr);
+					context->CSSetShader(downsampleShadowMip1CS, nullptr, 0);
+					context->Dispatch((shadowCopyWidth + 7) >> 3, (shadowCopyHeight + 7) >> 3, 1);
 
 					// Cleanup CS state
 					csSrvs[0] = nullptr;

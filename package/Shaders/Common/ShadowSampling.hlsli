@@ -20,7 +20,7 @@
 
 namespace ShadowSampling
 {
-	Texture2DArray<float4> SharedShadowMap : register(t18);
+	Texture2D<float4> SharedShadowMap : register(t18);
 
 	struct ShadowData
 	{
@@ -143,7 +143,7 @@ namespace ShadowSampling
 			sampledPositionLS.xy += mul(Random::PoissonSampleOffsets16[k], rotationMatrix) * sampleRadius;
 
 			// Average 4 shadow samples for improved quality
-			float4 depths = SharedShadowMap.GatherRed(LinearSampler, float3(saturate(sampledPositionLS.xy), cascadeIndex), 0);
+			float4 depths = SharedShadowMap.SampleLevel(LinearSampler, saturate(sampledPositionLS.xy), 1 - cascadeIndex);
 			shadow += dot(depths > compareValue, 0.25);
 		}
 
@@ -166,7 +166,7 @@ namespace ShadowSampling
 
 			float2 sampleUV = layerIndexRcp * sampleOffset * sampleOffsetScale + baseUV;
 
-			float4 depths = SharedShadowMap.GatherRed(LinearSampler, float3(saturate(sampleUV), cascadeIndex), 0);
+			float4 depths = SharedShadowMap.SampleLevel(LinearSampler, saturate(sampleUV), 1 - cascadeIndex);
 			visibility += dot(depths > compareValue, 0.25);
 		}
 
