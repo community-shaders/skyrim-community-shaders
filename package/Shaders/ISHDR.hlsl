@@ -7,14 +7,16 @@
  *   - BLEND: Final tonemapping, bloom compositing, and color grading
  *   - FADE: Screen fade effects (loading screens, etc.)
  *
- * @note HDR Pipeline Integration:
- *   When the HDR feature is active, HDROutputCS.hlsl handles the final output
- *   for BOTH HDR and SDR modes, completely overwriting this shader's output.
- *   ISHDR still runs and its tonemapped result is written to kMAIN, which
- *   HDROutputCS then reads for the SDR path. For HDR, HDROutputCS reads the
- *   pre-tonemapped linear values from kMAIN before ISHDR modifies them.
+ * HDR Pipeline:
+ *   1. Scene renders to kMAIN with linear HDR values (can exceed 1.0)
+ *   2. This shader (ISHDR BLEND) reads from BlendTex, applies bloom and color grading
+ *      - SDR mode: Applies tonemapping to compress to 0-1 range, outputs gamma-encoded
+ *      - HDR mode: Skips tonemapping to preserve >1.0 values, outputs linear
+ *   3. Output goes to kFRAMEBUFFER, then HDROutputCS reads it for final processing:
+ *      - SDR: Passthrough + UI composite
+ *      - HDR: BT.2020 conversion, nit scaling, PQ encoding + UI composite
  *
- * @see HDROutputCS.hlsl for the final output shader
+ * @see HDROutputCS.hlsl for final format conversion and UI compositing
  * @see HDR.cpp for the C++ HDR feature implementation
  */
 
@@ -105,8 +107,9 @@ PS_OUTPUT main(PS_INPUT input)
 	psout.Color = float4(downsampledColor, BlurScale.z);
 
 #	elif defined(BLEND)
-	// BLEND path: Final tonemapping and color grading
-	// Note: When HDR feature is active, HDROutputCS overwrites our output for both HDR and SDR modes
+	// BLEND path: Bloom, color grading, and tonemapping
+	// HDR mode: Preserves linear values >1.0, skips tonemapping
+	// SDR mode: Applies tonemapping to compress to 0-1
 	float2 uv = FrameBuffer::GetDynamicResolutionAdjustedScreenPosition(input.TexCoord);
 
 	float3 inputColor = BlendTex.Sample(BlendSampler, uv).xyz;
@@ -120,33 +123,59 @@ PS_OUTPUT main(PS_INPUT input)
 
 	float2 avgValue = AvgTex.Sample(AvgSampler, input.TexCoord.xy).xy;
 
+	// Check if HDR output is enabled
+	bool isHDR = SharedData::HDRData.x > 0.5;
+
 	float3 outputColor = 0.0;
 
-	// Apply auto-exposure
+	// Apply auto-exposure (same for both HDR and SDR)
 	if (avgValue.x != 0 && avgValue.y != 0)
 		inputColor *= avgValue.y / avgValue.x;
 	inputColor = max(0, inputColor);
-	
-	// Apply tonemapping (compresses HDR scene to 0-1 SDR range)
-	float3 blendedColor;
-	[branch] if (Param.z > 0.5)
-	{
-		blendedColor = DisplayMapping::HuePreservingHejlBurgessDawson(inputColor, bloomColor);
+
+	if (isHDR) {
+		// HDR path: Preserve linear values, skip tonemapping
+		// Add bloom (bloom also contains HDR highlight information)
+		float3 blendedColor = inputColor + bloomColor * Param.x;
+		
+		// Apply cinematic color grading while preserving HDR range
+		float blendedLuminance = Color::RGBToLuminance(blendedColor);
+		
+		// Saturation (Cinematic.x)
+		float3 linearColor = lerp(blendedLuminance, blendedColor, Cinematic.x);
+		
+		// Tint (Tint.w controls blend amount)
+		linearColor = lerp(linearColor, blendedLuminance * Tint.xyz, Tint.w);
+		
+		// Intensity multiplier (Cinematic.w)
+		linearColor *= Cinematic.w;
+		
+		// Contrast - apply gently to preserve HDR highlights
+		linearColor = lerp(avgValue.x, linearColor, lerp(Cinematic.z, 1.0, 0.5));
+		
+		outputColor = max(0, linearColor);
+	} else {
+		// SDR path: Apply tonemapping to compress HDR to 0-1
+		float3 blendedColor;
+		[branch] if (Param.z > 0.5)
+		{
+			blendedColor = DisplayMapping::HuePreservingHejlBurgessDawson(inputColor, bloomColor);
+		}
+		else
+		{
+			float maxCol = Color::RGBToLuminance(inputColor);
+			float mappedMax = GetTonemapFactorReinhard(maxCol).x;
+			float3 compressedHuePreserving = inputColor * mappedMax / maxCol;
+			blendedColor = compressedHuePreserving;
+			blendedColor += saturate(Param.x - blendedColor) * bloomColor;
+		}
+		
+		// Apply cinematic color grading
+		float blendedLuminance = Color::RGBToLuminance(blendedColor);
+		float3 linearColor = Cinematic.w * lerp(lerp(blendedLuminance, blendedColor, Cinematic.x), blendedLuminance * Tint.xyz, Tint.w).xyz;
+		linearColor = lerp(avgValue.x, linearColor, Cinematic.z);
+		outputColor = max(0, linearColor);
 	}
-	else
-	{
-		float maxCol = Color::RGBToLuminance(inputColor);
-		float mappedMax = GetTonemapFactorReinhard(maxCol).x;
-		float3 compressedHuePreserving = inputColor * mappedMax / maxCol;
-		blendedColor = compressedHuePreserving;
-		blendedColor += saturate(Param.x - blendedColor) * bloomColor;
-	}
-	
-	// Apply cinematic color grading
-	float blendedLuminance = Color::RGBToLuminance(blendedColor);
-	float3 linearColor = Cinematic.w * lerp(lerp(blendedLuminance, blendedColor, Cinematic.x), blendedLuminance * Tint.xyz, Tint.w).xyz;
-	linearColor = lerp(avgValue.x, linearColor, Cinematic.z);
-	outputColor = max(0, linearColor);
 
 #	if defined(FADE)
 	outputColor = lerp(outputColor, Fade.xyz, Fade.w);

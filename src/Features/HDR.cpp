@@ -569,9 +569,10 @@ void HDR::ApplyHDR()
 	{
 		auto dispatchCount = Util::GetScreenDispatchCount(false);
 
-		// Both Frame Gen and non-Frame Gen paths read from kMAIN for consistent behavior
-		auto& mainRT = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMAIN];
-		ID3D11ShaderResourceView* sceneSRV = mainRT.SRV;
+		// Read from kFRAMEBUFFER - this is where ISHDR writes its output
+		// ISHDR handles tonemapping for SDR, or preserves HDR values when HDR is enabled
+		auto& framebufferRT = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kFRAMEBUFFER];
+		ID3D11ShaderResourceView* sceneSRV = framebufferRT.SRV;
 
 		// Choose the correct UI buffer based on which path is active
 		// When D3D12 swap chain is active, vanilla UI renders to uiBufferWrapped
