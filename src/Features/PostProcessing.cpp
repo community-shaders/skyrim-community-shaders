@@ -226,6 +226,11 @@ void PostProcessing::ProcessSettings(json& o_json)
 
 void PostProcessing::SaveSettings(json& o_json)
 {
+	if (!pendingSettings.empty()) {
+		o_json = pendingSettings;
+		return;
+	}
+
 	for (auto& pipe : pipeline) {
 		if (pipe) {
 			json featureSetting{};
