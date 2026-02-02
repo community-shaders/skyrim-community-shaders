@@ -11,6 +11,16 @@
 
 // Static member definitions
 bool HomePageRenderer::isFirstTimeSetupShown = false;
+uint32_t HomePageRenderer::keyThatClosedDialog = 0;
+
+bool HomePageRenderer::ShouldSkipKeyRelease(uint32_t key)
+{
+	if (keyThatClosedDialog && key == keyThatClosedDialog) {
+		keyThatClosedDialog = 0;
+		return true;
+	}
+	return false;
+}
 
 void HomePageRenderer::RenderHomePage()
 {
@@ -249,6 +259,10 @@ void HomePageRenderer::RenderFAQSection()
 
 void HomePageRenderer::RenderFirstTimeSetupDialog()
 {
+	if (!ShouldShowFirstTimeSetup()) {
+		return;
+	}
+
 	// Block input to the game and make cursor visible - input blocking is handled by ShouldSwallowInput()
 	auto& io = ImGui::GetIO();
 	io.WantCaptureMouse = true;
@@ -408,9 +422,9 @@ void HomePageRenderer::RenderFirstTimeSetupDialog()
 	ImGui::Spacing();
 
 	// Check for Enter or Escape key to close, but only if not capturing a hotkey
-	if ((ImGui::IsKeyPressed(ImGuiKey_Enter) || ImGui::IsKeyPressed(ImGuiKey_Escape)) && !isCapturing) {
-		MarkFirstTimeSetupComplete();
-		// Note: Settings are automatically saved to ensure welcome screen won't show again
+	bool escapePressed = ImGui::IsKeyPressed(ImGuiKey_Escape);
+	if ((ImGui::IsKeyPressed(ImGuiKey_Enter) || escapePressed) && !isCapturing) {
+		MarkFirstTimeSetupComplete(escapePressed ? VK_ESCAPE : VK_RETURN);
 	}
 
 	// Help text with breathing animation
@@ -444,7 +458,7 @@ bool HomePageRenderer::ShouldShowFirstTimeSetup()
 	return !menu->GetSettings().FirstTimeSetupCompleted;
 }
 
-void HomePageRenderer::MarkFirstTimeSetupComplete()
+void HomePageRenderer::MarkFirstTimeSetupComplete(uint32_t closingKey)
 {
 	// Set the flag in the Menu settings
 	auto menu = Menu::GetSingleton();
@@ -454,5 +468,6 @@ void HomePageRenderer::MarkFirstTimeSetupComplete()
 	// This prevents the welcome screen from showing again even if user doesn't manually save
 	globals::state->Save();
 
-	isFirstTimeSetupShown = true;  // Mark as shown this session
+	isFirstTimeSetupShown = true;
+	keyThatClosedDialog = closingKey;
 }
