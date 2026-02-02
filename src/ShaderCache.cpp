@@ -2962,13 +2962,17 @@ namespace SIE
 					clearCache = true;
 				}
 			}
-			// Handle include file changes (.hlsli) by invalidating dependents
-			else if (!std::filesystem::is_directory(filePath) && lowerExtension == ".hlsli") {
-				// Invalidate all .hlsl files that depend on this .hlsli
-				auto dependents = deps->GetDependents(filePath.string());
-				for (const auto& hlsl : dependents) {
-					cache->Clear(hlsl);
-				}
+		}
+		// Handle include file changes (.hlsli) by invalidating dependents
+		else if (!std::filesystem::is_directory(filePath) && lowerExtension == ".hlsli") {
+			// Normalize to absolute canonical path to match how dependencies are tracked
+			std::error_code ec;
+			auto canonicalPath = std::filesystem::weakly_canonical(filePath, ec);
+			std::string pathStr = (ec ? filePath.string() : canonicalPath.string());
+			// Invalidate all .hlsl files that depend on this .hlsli
+			auto dependents = deps->GetDependents(pathStr);
+			for (const auto& hlsl : dependents) {
+				cache->Clear(hlsl);
 			}
 		}
 		// Indicate that file processing is not yet complete

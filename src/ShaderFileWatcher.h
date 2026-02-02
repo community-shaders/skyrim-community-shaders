@@ -1,10 +1,7 @@
 #pragma once
 
 #include "Utils/Format.h"
-#include <efsw/efsw.hpp>
-#include <filesystem>
 #include <mutex>
-#include <set>
 #include <string>
 #include <unordered_map>
 #include <unordered_set>
@@ -13,21 +10,10 @@
 namespace SIE
 {
 
-	// Forward declaration
-	template <typename T>
-	class ThreadPool;
-	class ShaderCache;
-
 	// Dependency tracking: .hlsl/.hlsli relationships
 	class ShaderFileDependencyTracker
 	{
 	public:
-		// Map: .hlsl file -> set of included files (usually .hlsli)
-		std::unordered_map<std::string, std::unordered_set<std::string>> hlslToIncludes;
-		// Map: .hlsli file -> set of dependent .hlsl files
-		std::unordered_map<std::string, std::unordered_set<std::string>> hlsliToHlsl;
-		std::mutex mutex;
-
 		// Called after compiling a .hlsl file, with the set of includes used
 		void RegisterDependencies(const std::string& hlslFile, const std::vector<std::string>& includes)
 		{
@@ -86,34 +72,13 @@ namespace SIE
 			hlslToIncludes.clear();
 			hlsliToHlsl.clear();
 		}
-	};
-
-	// Filewatcher listener for shaders
-	class ShaderFileWatcher : public efsw::FileWatchListener
-	{
-	public:
-		ShaderFileWatcher(ShaderCache* cache, ShaderFileDependencyTracker* deps);
-		void handleFileAction(efsw::WatchID watchid, const std::string& dir, const std::string& filename, efsw::Action action, std::string oldFilename) override;
-		void processQueue();
-		void StartWatching(const std::string& root);
-		void StopWatching();
 
 	private:
-		ShaderCache* cache;
-		ShaderFileDependencyTracker* deps;
-		efsw::FileWatcher* fileWatcher = nullptr;
-		efsw::WatchID watchID = 0;
-		std::mutex queueMutex;
-		struct FileAction
-		{
-			efsw::WatchID watchid;
-			std::string dir;
-			std::string filename;
-			efsw::Action action;
-			std::string oldFilename;
-		};
-		std::vector<FileAction> queue;
-		bool running = false;
+		// Map: .hlsl file -> set of included files (usually .hlsli)
+		std::unordered_map<std::string, std::unordered_set<std::string>> hlslToIncludes;
+		// Map: .hlsli file -> set of dependent .hlsl files
+		std::unordered_map<std::string, std::unordered_set<std::string>> hlsliToHlsl;
+		std::mutex mutex;
 	};
 
 }  // namespace SIE
