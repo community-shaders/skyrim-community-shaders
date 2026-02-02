@@ -69,9 +69,11 @@ namespace ShadowSampling
 	{
 		static const uint sampleCount8 = 8;
 		static const float rcpSampleCount8 = 1.0 / float(sampleCount8);
+		static const uint sampleCount8Minus1 = 7;
 
 		static const uint sampleCount16 = 16;
 		static const float rcpSampleCount16 = 1.0 / float(sampleCount16);
+		static const uint sampleCount16Minus1 = sampleCount16 - 1;
 
 		float noise = Random::InterleavedGradientNoise(screenPosition, SharedData::FrameCount);
 		float noiseTransform = noise * 2.0 - 1.0;
@@ -81,12 +83,12 @@ namespace ShadowSampling
 
 #if defined(EFFECT)
 		// Enough for non-billboards + enough for Sovngarde fog
-		float viewRayLength = min(Permutation::EffectRadius * 0.1, 128);
+		float viewRayLength = min(Permutation::EffectRadius * 0.2, 256);
 		float3 startPosition = positionWS - viewDirection * viewRayLength;
 		float3 endPosition = positionWS + viewDirection * viewRayLength;
 #else
 		// Enough for Eastmarch water
-		float viewRayLength = 128.0;
+		float viewRayLength = 256.0;
 		float3 startPosition = positionWS;
 		float3 endPosition = positionWS + viewDirection * viewRayLength;
 #endif
@@ -94,15 +96,15 @@ namespace ShadowSampling
 		float worldShadow = 0;
 		for(uint i = 0; i < sampleCount8; i++){
 			uint noisyIndex = uint((float(i) + sampleCount8 * noise) % sampleCount8);
-			float t = (float(sampleCount8) - float(noisyIndex + 1)) * rcpSampleCount8;
+			float t = (float(sampleCount8Minus1) - float(noisyIndex)) * rcpSampleCount8;
 			float tSample = t + noiseTransform * rcpSampleCount8;
 			worldShadow += ShadowSampling::GetWorldShadow(lerp(startPosition, endPosition, tSample), FrameBuffer::CameraPosAdjust[eyeIndex].xyz, eyeIndex);
 		}
 
-		worldShadow *= rcpSampleCount8;
-
 		if (worldShadow == 0.0)
 			return 0.0;
+
+		worldShadow *= rcpSampleCount8;
 
 		float shadowMapDepth = GetShadowDepth(positionWS, eyeIndex);
 
@@ -110,53 +112,53 @@ namespace ShadowSampling
 		if (sD.EndSplitDistances.w < shadowMapDepth)  // Early out beyond cascade 2
 			return worldShadow;
 
-		// Calculate blend probabilities for cascade transitions
-		float cascade1Probability = saturate((shadowMapDepth - sD.StartSplitDistances.y) / (sD.EndSplitDistances.x - sD.StartSplitDistances.y));
-		float cascade2Probability = saturate((shadowMapDepth - sD.StartSplitDistances.z) / (sD.EndSplitDistances.y - sD.StartSplitDistances.z));
-
 		// Determine which cascade pair to blend between
-		bool inFarRegion = shadowMapDepth > sD.EndSplitDistances.x;
-		if (inFarRegion) cascade1Probability = cascade2Probability;
+		bool inFarRegion = sD.EndSplitDistances.x < shadowMapDepth;
+		float2 blendRange = inFarRegion 
+			? float2(sD.StartSplitDistances.z, sD.EndSplitDistances.y)
+			: float2(sD.StartSplitDistances.y, sD.EndSplitDistances.x);
+		float cascadeProbability = saturate((shadowMapDepth - blendRange.x) / (blendRange.y - blendRange.x));
 
-		// Precompute cascade data for all 3 cascades
-		float compareValues[3];
-		float sampleRadii[3];
-		float3 positionsLS[3];
-		float3 viewOffsetsLS[3];
-		for (uint cascadeIdx = 0; cascadeIdx < 3; cascadeIdx++) {
-			compareValues[cascadeIdx] = mul(transpose(sD.ShadowMapProj[eyeIndex][cascadeIdx]), float4(positionWS, 1)).z - sD.AlphaTestRef[cascadeIdx ? 1 : 2];
-			sampleRadii[cascadeIdx] = sD.ShadowSampleParam.z * rcp(1 + cascadeIdx) * 2.0;
-			positionsLS[cascadeIdx] = mul(transpose(sD.ShadowMapProj[eyeIndex][cascadeIdx]), float4(startPosition, 1));
-			viewOffsetsLS[cascadeIdx] = mul(transpose(sD.ShadowMapProj[eyeIndex][cascadeIdx]), float4(endPosition, 1));
+		// Precompute cascade data
+		uint baseCascade = uint(inFarRegion);
+
+		float compareValues[2];
+		float sampleRadii[2];
+		float3 positionsLS[2];
+		float3 viewOffsetsLS[2];
+
+		for (uint i = 0; i < 2; i++) {
+			uint cascadeIdx = baseCascade + i;
+			float4x3 proj = sD.ShadowMapProj[eyeIndex][cascadeIdx];
+			compareValues[i] = mul(transpose(proj), float4(positionWS, 1)).z - sD.AlphaTestRef[1 + min(1, cascadeIdx)];
+			sampleRadii[i] = sD.ShadowSampleParam.z * exp2(-float(cascadeIdx)) * 2.0;
+			positionsLS[i] = mul(transpose(proj), float4(startPosition, 1));
+			viewOffsetsLS[i] = mul(transpose(proj), float4(endPosition, 1));
 		}
 
 		float shadow = 0.0;
 		for (uint k = 0; k < sampleCount16; k++) {
-			uint noisyIndex = uint((float(k) + sampleCount16 * noise) % sampleCount16);
-			float t = (float(sampleCount16) - float(noisyIndex + 1)) * rcpSampleCount16;
-
-			// Probabilistically select cascade based on region
-			uint cascadeIndex = uint(inFarRegion) + (frac(t + noise) < cascade1Probability);
-
-			float compareValue = compareValues[cascadeIndex];
-			float sampleRadius = sampleRadii[cascadeIndex];
-			float3 positionLS = positionsLS[cascadeIndex];
-			float3 viewOffsetLS = viewOffsetsLS[cascadeIndex];
+			uint noisyIndex = (k + uint(sampleCount16 * noise)) % sampleCount16;
+			float t = (sampleCount16 - 1 - noisyIndex) * rcpSampleCount16;
+			
+			// Probabilistically select cascade (0 or 1 within the pair)
+			uint cascadeIndex = uint(frac(t + noise) < cascadeProbability);
 
 			// Offset along view ray with optimised sample pattern
 			float tSample = t + noiseTransform * rcpSampleCount16;
-			float3 sampledPositionLS = lerp(positionLS, viewOffsetLS, tSample);
+			float3 sampledPositionLS = lerp(positionsLS[cascadeIndex], viewOffsetsLS[cascadeIndex], tSample);
 
 			// Blur shadow with poisson disc
-			sampledPositionLS.xy += mul(Random::PoissonSampleOffsets16[k], rotationMatrix) * sampleRadius;
+			sampledPositionLS.xy += mul(Random::PoissonSampleOffsets16[k], rotationMatrix) * sampleRadii[cascadeIndex];
 
 			// Average 4 shadow samples for improved quality
-			float4 depths = SharedShadowMap.SampleLevel(LinearSampler, saturate(sampledPositionLS.xy), 2 - cascadeIndex);
-			shadow += dot(depths > compareValue, 0.25);
+			float4 depths = SharedShadowMap.SampleLevel(LinearSampler, saturate(sampledPositionLS.xy), 2u - baseCascade - cascadeIndex);
+			float4 shadowVisibilities = float4(depths > compareValues[cascadeIndex]);
+			shadow += shadowVisibilities.x + shadowVisibilities.y + shadowVisibilities.z + shadowVisibilities.w;
 		}
 
 		float fadeFactor = 1.0 - pow(saturate(dot(positionWS, positionWS) / sD.ShadowLightParam.z), 8);
-		return worldShadow * lerp(1.0, shadow * rcpSampleCount16, fadeFactor);
+		return worldShadow * lerp(1.0, shadow * rcpSampleCount16 * 0.25, fadeFactor);
 	}
 
 	float Get2DFilteredShadowCascade(float noise, float2x2 rotationMatrix, float sampleOffsetScale, float2 baseUV, float cascadeIndex, float compareValue, uint eyeIndex)
