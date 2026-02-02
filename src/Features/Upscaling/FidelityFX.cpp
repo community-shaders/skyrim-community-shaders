@@ -243,12 +243,6 @@ void FidelityFX::DestroyFSRResources()
 	fsrDispatchCrashLogged = false;
 }
 
-float2 FidelityFX::GetInputResolutionScale([[maybe_unused]] uint32_t outputWidth, [[maybe_unused]] uint32_t outputHeight, uint32_t qualityMode)
-{
-	float scale = 1.0f / ffxFsr3GetUpscaleRatioFromQualityMode((FfxFsr3QualityMode)qualityMode);
-	return { scale, scale };
-}
-
 FfxResource ffxGetResource(ID3D11Resource* dx11Resource,
 	[[maybe_unused]] wchar_t const* ffxResName,
 	FfxResourceStates state = FFX_RESOURCE_STATE_PIXEL_COMPUTE_READ)

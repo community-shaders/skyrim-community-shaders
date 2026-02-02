@@ -184,6 +184,17 @@ void Upscaling::DrawSettings()
 	// Check the current upscale method
 	auto upscaleMethod = GetUpscaleMethod();
 
+	// Display warning for DLSS resolution limits
+	if (upscaleMethod == UpscaleMethod::kDLSS) {
+		auto screenSize = globals::state->screenSize;
+		if (screenSize.x > streamline.MAX_RESOLUTION || screenSize.y > streamline.MAX_RESOLUTION) {
+			ImGui::PushStyleColor(ImGuiCol_Text, Util::Colors::GetWarning());
+			ImGui::Text("Warning: Requested resolution %.0f x %.0f exceeds maximum supported resolution %d x %d for DLSS.", screenSize.x, screenSize.y, streamline.MAX_RESOLUTION, streamline.MAX_RESOLUTION);
+			ImGui::Text("DLSS will not function. Lower your resolution or select a different upscaling method.");
+			ImGui::PopStyleColor();
+		}
+	}
+
 	// Display upscaling settings if applicable
 	if (upscaleMethod != UpscaleMethod::kNONE && upscaleMethod != UpscaleMethod::kTAA) {
 		const char* upscalePresetsDLSS[] = { "Ultra Performance", "Performance", "Balanced", "Quality", "DLAA" };
@@ -730,26 +741,13 @@ void Upscaling::ConfigureUpscaling(RE::BSGraphics::State* a_viewport)
 	auto screenHeight = static_cast<int>(screenSize.y);
 
 	if (upscaleMethod != UpscaleMethod::kNONE && upscaleMethod != UpscaleMethod::kTAA) {
-		float2 resolutionScaleBase = { 1.0f, 1.0f };
+		float resolutionScaleBase = 1.0f / ffxFsr3GetUpscaleRatioFromQualityMode((FfxFsr3QualityMode)settings.qualityMode);
 
-		if (upscaleMethod == UpscaleMethod::kDLSS) {
-			resolutionScaleBase = streamline.GetInputResolutionScale((uint32_t)screenSize.x, (uint32_t)screenSize.y, settings.qualityMode);
-		} else if (upscaleMethod == UpscaleMethod::kFSR) {
-			resolutionScaleBase = fidelityFX.GetInputResolutionScale((uint32_t)screenSize.x, (uint32_t)screenSize.y, settings.qualityMode);
-		}
+		auto renderWidth = static_cast<int>(screenWidth * resolutionScaleBase);
+		auto renderHeight = static_cast<int>(screenHeight * resolutionScaleBase);
 
-		auto renderWidth = static_cast<int>(screenWidth * resolutionScaleBase.x);
-		auto renderHeight = static_cast<int>(screenHeight * resolutionScaleBase.y);
-
-		// Use precise scale if the integer conversion doesn't change the dimensions
-		if (renderWidth == screenWidth && renderHeight == screenHeight) {
-			// For DLAA and other 1:1 modes, ensure exactly 1.0
-			resolutionScale.x = 1.0f;
-			resolutionScale.y = 1.0f;
-		} else {
-			resolutionScale.x = static_cast<float>(renderWidth) / static_cast<float>(screenWidth);
-			resolutionScale.y = static_cast<float>(renderHeight) / static_cast<float>(screenHeight);
-		}
+		resolutionScale.x = static_cast<float>(renderWidth) / static_cast<float>(screenWidth);
+		resolutionScale.y = static_cast<float>(renderHeight) / static_cast<float>(screenHeight);
 
 		auto phaseCount = GetJitterPhaseCount(renderWidth, screenWidth);
 

@@ -56,9 +56,9 @@ private:
 	private:
 		// Helper methods for Feature rendering
 		static bool IsFeatureInstalled(const std::string& featureName);
-		static void RenderFeatureSettingsTab(Feature* feat, bool isDisabled, bool isLoaded, bool hasFailedMessage);
-		static void RenderFeatureAboutTab(Feature* feat, bool isDisabled, bool isLoaded, bool hasFailedMessage);
-		static void RenderFeatureActionButtons(Feature* feat, bool isDisabled, bool isLoaded, float buttonPadding, float buttonSpacing);
+		static void RenderFeatureHeader(Feature* feat, bool isDisabled, bool isLoaded);
+		static void RenderFeatureSettings(Feature* feat, bool isDisabled, bool isLoaded, bool hasFailedMessage);
+		static void RenderRestoreDefaultsButton(Feature* feat, bool isDisabled, bool isLoaded);
 	};
 
 	static std::vector<MenuFuncInfo> BuildMenuList(

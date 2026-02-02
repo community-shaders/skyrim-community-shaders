@@ -218,12 +218,7 @@ namespace SharedData
 		float skyGamma;
 		float waterGamma;
 		float vlGamma;
-		float vanillaDiffuseMult;
-		float vanillaSpecularMult;
-		float grassDiffuseMult;
-		float grassSpecularMult;
 		float vanillaDiffuseColorMult;
-		float lightMult;
 		float directionalLightMult;
 		float pointLightMult;
 		float emitColorMult;
@@ -234,6 +229,7 @@ namespace SharedData
 		float projectedEffectMult;
 		float deferredEffectMult;
 		float otherEffectMult;
+		float pad0;
 	};
 
 	struct TerrainBlendingSettings

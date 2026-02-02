@@ -18,6 +18,7 @@
 #include "TruePBR.h"
 #include "Utils/FileSystem.h"
 #include "WeatherManager.h"
+#include "WeatherVariableRegistry.h"
 
 void State::Draw()
 {
@@ -343,6 +344,9 @@ void State::Load(ConfigMode a_configMode, bool a_allowReload)
 							logger::warn("Invalid override settings for {}, keeping original settings.", feature->GetName());
 						}
 					}
+
+					// Capture current values as user settings baseline for weather overrides
+					WeatherVariables::GlobalWeatherRegistry::GetSingleton()->CaptureFeatureUserSettings(featureName);
 				} else {
 					logger::info("Feature '{}' is disabled at boot.", featureName);
 				}
@@ -828,9 +832,7 @@ void State::UpdateSharedData([[maybe_unused]] bool a_inWorld, [[maybe_unused]] b
 			auto upscaleMethod = upscaling.GetUpscaleMethod();
 			if (temporal && upscaleMethod != Upscaling::UpscaleMethod::kTAA) {
 				auto renderSize = Util::ConvertToDynamic(screenSize, true);
-				data.MipBias = std::log2f(renderSize.x / screenSize.x);
-				if (upscaleMethod == Upscaling::UpscaleMethod::kDLSS)
-					data.MipBias -= 1.0f;
+				data.MipBias = std::log2f(renderSize.x / screenSize.x) - 1.0f;
 			} else {
 				data.MipBias = 0;
 			}

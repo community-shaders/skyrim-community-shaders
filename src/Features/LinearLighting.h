@@ -42,12 +42,7 @@ struct LinearLighting : Feature
 		float vlGamma = 1.8f;
 
 		// Lighting multipliers
-		float vanillaDiffuseMult = 0.32f;
-		float vanillaSpecularMult = 0.32f;
-		float grassDiffuseMult = 0.32f;
-		float grassSpecularMult = 0.32f;
 		float vanillaDiffuseColorMult = 1.5f;
-		float lightMult = 1.0f;
 		float directionalLightMultExterior = 1.0f;
 		float directionalLightMultInterior = 1.0f;
 		float pointLightMult = 1.0f;
@@ -81,12 +76,7 @@ struct LinearLighting : Feature
 		float skyGamma;
 		float waterGamma;
 		float vlGamma;
-		float vanillaDiffuseMult;
-		float vanillaSpecularMult;
-		float grassDiffuseMult;
-		float grassSpecularMult;
 		float vanillaDiffuseColorMult;
-		float lightMult;
 		float directionalLightMult;  // Computed based on interior/exterior
 		float pointLightMult;
 		float emitColorMult;
@@ -97,6 +87,7 @@ struct LinearLighting : Feature
 		float projectedEffectMult;
 		float deferredEffectMult;
 		float otherEffectMult;
+		float pad0;
 	};
 
 	struct alignas(16) PerGeometryData
