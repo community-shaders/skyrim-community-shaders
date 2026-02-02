@@ -355,6 +355,11 @@ struct BSShaderRenderTargets_Create
 	 */
 	static void thunk()
 	{
+		auto iniPrefSettingCollection = RE::INIPrefSettingCollection::GetSingleton();
+		iniPrefSettingCollection->GetSetting("iNumSplits:Display")->data.i = 3;
+		iniPrefSettingCollection->GetSetting("iShadowMapResolution:Display")->data.i = 2048;
+		iniPrefSettingCollection->GetSetting("iNumFocusShadow:Display")->data.i = 0;
+
 		func();
 		globals::ReInit();
 		globals::state->Setup();
