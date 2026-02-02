@@ -98,4 +98,8 @@ public:
 	// Format constants to be used elsewhere
 	static constexpr auto BSGraphics_HDR_Format = RE::BSGraphics::Format::kR16G16B16A16_FLOAT;
 	static constexpr auto BSGraphics_HDR_R10_Format = RE::BSGraphics::Format::kR10G10B10A2_UNORM;
+
+private:
+	bool showHDRWarningPopup = false;
+	bool pendingHDREnable = false;
 };

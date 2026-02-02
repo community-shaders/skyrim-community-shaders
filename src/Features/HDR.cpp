@@ -234,14 +234,52 @@ void HDR::DrawSettings()
 	ImGui::Spacing();
 
 	bool oldEnableHDR = settings.enableHDR;
-	ImGui::Checkbox("Enable HDR", &settings.enableHDR);
-	if (oldEnableHDR != settings.enableHDR) {
-		logger::info("HDR: enableHDR changed to: {}", settings.enableHDR);
-		UpdateHDRData();
-		UpdateSwapChainColorSpace();
+	if (ImGui::Checkbox("Enable HDR", &settings.enableHDR)) {
+		if (settings.enableHDR && !oldEnableHDR) {
+			settings.enableHDR = oldEnableHDR;
+			pendingHDREnable = true;
+			showHDRWarningPopup = true;
+			ImGui::OpenPopup("HDR Warning##HDRDisplay");
+		} else if (!settings.enableHDR && oldEnableHDR) {
+			logger::info("HDR: enableHDR changed to: false");
+			UpdateHDRData();
+			UpdateSwapChainColorSpace();
+		}
 	}
 	if (auto _tt = Util::HoverTooltipWrapper()) {
 		ImGui::Text("Enable HDR output. Matches vanilla visuals with extended dynamic range.");
+	}
+
+	if (ImGui::BeginPopupModal("HDR Warning##HDRDisplay", &showHDRWarningPopup, ImGuiWindowFlags_AlwaysAutoResize)) {
+		ImGui::TextColored(Util::Colors::GetWarning(), "WARNING: HDR Display Configuration");
+		ImGui::Separator();
+		ImGui::Spacing();
+		ImGui::TextWrapped("The game will look VERY WRONG on an SDR (standard) monitor.");
+		ImGui::TextWrapped("Only enable this feature if you have an HDR-capable display.");
+		ImGui::Spacing();
+		ImGui::TextWrapped("Note: Repeatedly toggling this setting may cause instability or flickering.");
+		ImGui::Spacing();
+		ImGui::Separator();
+		ImGui::Spacing();
+
+		if (ImGui::Button("Enable HDR", ImVec2(120, 0))) {
+			settings.enableHDR = true;
+			logger::info("HDR: enableHDR changed to: true");
+			UpdateHDRData();
+			UpdateSwapChainColorSpace();
+			showHDRWarningPopup = false;
+			pendingHDREnable = false;
+			ImGui::CloseCurrentPopup();
+		}
+		ImGui::SameLine();
+		if (ImGui::Button("Cancel", ImVec2(120, 0))) {
+			settings.enableHDR = false;
+			showHDRWarningPopup = false;
+			pendingHDREnable = false;
+			ImGui::CloseCurrentPopup();
+		}
+
+		ImGui::EndPopup();
 	}
 
 	if (settings.enableHDR) {
@@ -295,7 +333,18 @@ void HDR::SaveSettings(json& o_json)
 void HDR::LoadSettings(json& o_json)
 {
 	std::lock_guard<std::mutex> lock(settingsMutex);
+	
+	// Check if this is first launch (no enableHDR setting saved)
+	bool isFirstLaunch = !o_json.contains("enableHDR");
+	
 	settings = o_json;
+	
+	// On first launch, auto-configure HDR based on display detection
+	if (isFirstLaunch) {
+		bool hdrMonitor = DetectHDRDisplay();
+		settings.enableHDR = hdrMonitor;
+		logger::info("[HDR] First launch detected - auto-configuring HDR based on display: {}", hdrMonitor ? "enabled" : "disabled");
+	}
 }
 
 void HDR::RestoreDefaultSettings()
