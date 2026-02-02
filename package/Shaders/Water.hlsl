@@ -1118,9 +1118,9 @@ PS_OUTPUT main(PS_INPUT input)
 #			endif
 
 #if defined(SKYLIGHTING)
-	WaterNormalData waterData = GetWaterNormal(input, distanceFactor, depthControl.z, viewDirection, depth, eyeIndex, wetnessOcclusion);
+	WaterNormalData waterData = GetWaterNormal(input, distanceBlendFactor, depthControl.z, viewDirection, depth, eyeIndex, wetnessOcclusion);
 #else
-	WaterNormalData waterData = GetWaterNormal(input, distanceFactor, depthControl.z, viewDirection, depth, eyeIndex, inWorld);
+	WaterNormalData waterData = GetWaterNormal(input, distanceBlendFactor, depthControl.z, viewDirection, depth, eyeIndex, inWorld);
 #endif
 
 	float3 normal = waterData.normal;
