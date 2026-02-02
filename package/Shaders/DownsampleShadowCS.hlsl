@@ -8,7 +8,7 @@ SamplerState PointSampler : register(s0);
 	uint w, h;
 	OutputTexture.GetDimensions(w, h);
 
-	if (dispatchThreadID.x < w && dispatchThreadID.y < h) 
+	if (dispatchThreadID.x < w && dispatchThreadID.y < h)
 	{
 		// Each thread gathers a 2x2 block and packs into RGBA
 		uint2 pixCoord = dispatchThreadID.xy * 2;
@@ -40,13 +40,13 @@ groupshared float g_scratchDepths[8][8];
 
 	// MIP 1 -> 2: 2x2 reduction in shared memory (4x4 total)
 	[branch]
-	if (all((groupThreadID.xy % 2) == 0)) 
+	if (all((groupThreadID.xy % 2) == 0))
 	{
 		float inTL = g_scratchDepths[groupThreadID.x + 0][groupThreadID.y + 0];
 		float inTR = g_scratchDepths[groupThreadID.x + 1][groupThreadID.y + 0];
 		float inBL = g_scratchDepths[groupThreadID.x + 0][groupThreadID.y + 1];
-		float inBR = g_scratchDepths[groupThreadID.x + 1][groupThreadID.y + 1];	
-		OutputTexture[dispatchThreadID.xy / 2] = float4(inTL, inTR, inBL, inBR);		
+		float inBR = g_scratchDepths[groupThreadID.x + 1][groupThreadID.y + 1];
+		OutputTexture[dispatchThreadID.xy / 2] = float4(inTL, inTR, inBL, inBR);
 	}
 }
 #elif defined(DOWNSAMPLE_SHADOW_MIP2)
@@ -71,12 +71,12 @@ groupshared float g_scratchDepths[8][8];
 
 	// MIP 1 -> 2: 2x2 reduction in shared memory (4x4 total)
 	[branch]
-	if (all((groupThreadID.xy % 2) == 0)) 
+	if (all((groupThreadID.xy % 2) == 0))
 	{
 		float inTL = g_scratchDepths[groupThreadID.x + 0][groupThreadID.y + 0];
 		float inTR = g_scratchDepths[groupThreadID.x + 1][groupThreadID.y + 0];
 		float inBL = g_scratchDepths[groupThreadID.x + 0][groupThreadID.y + 1];
-		float inBR = g_scratchDepths[groupThreadID.x + 1][groupThreadID.y + 1];	
+		float inBR = g_scratchDepths[groupThreadID.x + 1][groupThreadID.y + 1];
 		g_scratchDepths[groupThreadID.x][groupThreadID.y] = dot(float4(inTL, inTR, inBL, inBR), 0.25);
 	}
 
@@ -89,7 +89,7 @@ groupshared float g_scratchDepths[8][8];
 		float inTR = g_scratchDepths[groupThreadID.x + 2][groupThreadID.y + 0];
 		float inBL = g_scratchDepths[groupThreadID.x + 0][groupThreadID.y + 2];
 		float inBR = g_scratchDepths[groupThreadID.x + 2][groupThreadID.y + 2];
-		OutputTexture[dispatchThreadID.xy / 4] = float4(inTL, inTR, inBL, inBR);	
+		OutputTexture[dispatchThreadID.xy / 4] = float4(inTL, inTR, inBL, inBR);
 	}
 }
 #else

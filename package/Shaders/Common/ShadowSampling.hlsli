@@ -134,10 +134,10 @@ namespace ShadowSampling
 		for (uint k = 0; k < sampleCount16; k++) {
 			uint noisyIndex = uint((float(k) + sampleCount16 * noise) % sampleCount16);
 			float t = (float(sampleCount16) - float(noisyIndex + 1)) * rcpSampleCount16;
-			
+
 			// Probabilistically select cascade based on region
 			uint cascadeIndex = uint(inFarRegion) + (frac(t + noise) < cascade1Probability);
-	
+
 			float compareValue = compareValues[cascadeIndex];
 			float sampleRadius = sampleRadii[cascadeIndex];
 			float3 positionLS = positionsLS[cascadeIndex];
