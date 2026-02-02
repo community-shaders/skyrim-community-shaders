@@ -107,18 +107,24 @@ namespace ShadowSampling
 		float shadowMapDepth = GetShadowDepth(positionWS, eyeIndex);
 
 		ShadowData sD = SharedShadowData[0];
-		if (sD.EndSplitDistances.z < shadowMapDepth)
+		if (sD.EndSplitDistances.w < shadowMapDepth)  // Early out beyond cascade 2
 			return worldShadow;
 
+		// Calculate blend probabilities for cascade transitions
 		float cascade1Probability = saturate((shadowMapDepth - sD.StartSplitDistances.y) / (sD.EndSplitDistances.x - sD.StartSplitDistances.y));
+		float cascade2Probability = saturate((shadowMapDepth - sD.StartSplitDistances.z) / (sD.EndSplitDistances.y - sD.StartSplitDistances.z));
 
-		// Precompute cascade data for both cascades
-		float compareValues[2];
-		float sampleRadii[2];
-		float3 positionsLS[2];
-		float3 viewOffsetsLS[2];
-		for (uint cascadeIdx = 0; cascadeIdx < 2; cascadeIdx++) {
-			compareValues[cascadeIdx] = mul(transpose(sD.ShadowMapProj[eyeIndex][cascadeIdx]), float4(positionWS, 1)).z - sD.AlphaTestRef[1 + cascadeIdx];
+		// Determine which cascade pair to blend between
+		bool inFarRegion = shadowMapDepth > sD.EndSplitDistances.x;
+		if (inFarRegion) cascade1Probability = cascade2Probability;
+
+		// Precompute cascade data for all 3 cascades
+		float compareValues[3];
+		float sampleRadii[3];
+		float3 positionsLS[3];
+		float3 viewOffsetsLS[3];
+		for (uint cascadeIdx = 0; cascadeIdx < 3; cascadeIdx++) {
+			compareValues[cascadeIdx] = mul(transpose(sD.ShadowMapProj[eyeIndex][cascadeIdx]), float4(positionWS, 1)).z - sD.AlphaTestRef[cascadeIdx ? 1 : 2];
 			sampleRadii[cascadeIdx] = sD.ShadowSampleParam.z * rcp(1 + cascadeIdx) * 2.0;
 			positionsLS[cascadeIdx] = mul(transpose(sD.ShadowMapProj[eyeIndex][cascadeIdx]), float4(startPosition, 1));
 			viewOffsetsLS[cascadeIdx] = mul(transpose(sD.ShadowMapProj[eyeIndex][cascadeIdx]), float4(endPosition, 1));
@@ -128,8 +134,10 @@ namespace ShadowSampling
 		for (uint k = 0; k < sampleCount16; k++) {
 			uint noisyIndex = uint((float(k) + sampleCount16 * noise) % sampleCount16);
 			float t = (float(sampleCount16) - float(noisyIndex + 1)) * rcpSampleCount16;
-			uint cascadeIndex = frac(t + noise) < cascade1Probability;
-
+			
+			// Probabilistically select cascade based on region
+			uint cascadeIndex = uint(inFarRegion) + (frac(t + noise) < cascade1Probability);
+	
 			float compareValue = compareValues[cascadeIndex];
 			float sampleRadius = sampleRadii[cascadeIndex];
 			float3 positionLS = positionsLS[cascadeIndex];
@@ -143,7 +151,7 @@ namespace ShadowSampling
 			sampledPositionLS.xy += mul(Random::PoissonSampleOffsets16[k], rotationMatrix) * sampleRadius;
 
 			// Average 4 shadow samples for improved quality
-			float4 depths = SharedShadowMap.SampleLevel(LinearSampler, saturate(sampledPositionLS.xy), 1 - cascadeIndex);
+			float4 depths = SharedShadowMap.SampleLevel(LinearSampler, saturate(sampledPositionLS.xy), 2 - cascadeIndex);
 			shadow += dot(depths > compareValue, 0.25);
 		}
 

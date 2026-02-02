@@ -163,6 +163,9 @@ void Deferred::SetupResources()
 		defines.clear();
 		defines.push_back({"DOWNSAMPLE_SHADOW_MIP1", nullptr});
 		downsampleShadowMip1CS = static_cast<ID3D11ComputeShader*>(Util::CompileShader(L"Data\\Shaders\\DownsampleShadowCS.hlsl", defines, "cs_5_0"));
+		defines.clear();
+		defines.push_back({"DOWNSAMPLE_SHADOW_MIP2", nullptr});
+		downsampleShadowMip2CS = static_cast<ID3D11ComputeShader*>(Util::CompileShader(L"Data\\Shaders\\DownsampleShadowCS.hlsl", defines, "cs_5_0"));
 	}
 
 	{
@@ -249,6 +252,10 @@ void Deferred::CopyShadowData()
 							shadowCopyMip1UAV->Release();
 							shadowCopyMip1UAV = nullptr;
 						}
+						if (shadowCopyMip2UAV) {
+							shadowCopyMip2UAV->Release();
+							shadowCopyMip2UAV = nullptr;
+						}
 						if (shadowCopyTexture) {
 							shadowCopyTexture->Release();
 							shadowCopyTexture = nullptr;
@@ -260,7 +267,7 @@ void Deferred::CopyShadowData()
 						D3D11_TEXTURE2D_DESC copyDesc{};
 						copyDesc.Width = newWidth;
 						copyDesc.Height = newHeight;
-						copyDesc.MipLevels = 2;
+						copyDesc.MipLevels = 3;
 						copyDesc.ArraySize = 1;
 						copyDesc.Format = DXGI_FORMAT_R16G16B16A16_UNORM;
 						copyDesc.SampleDesc.Count = 1;
@@ -276,7 +283,7 @@ void Deferred::CopyShadowData()
 						srvDesc.Format = DXGI_FORMAT_R16G16B16A16_UNORM;
 						srvDesc.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2D;
 						srvDesc.Texture2D.MostDetailedMip = 0;
-						srvDesc.Texture2D.MipLevels = 2;
+						srvDesc.Texture2D.MipLevels = 3;
 						DX::ThrowIfFailed(device->CreateShaderResourceView(shadowCopyTexture, &srvDesc, &shadowCopySRV));
 
 						D3D11_UNORDERED_ACCESS_VIEW_DESC uavDesc{};
@@ -287,25 +294,33 @@ void Deferred::CopyShadowData()
 						
 						uavDesc.Texture2D.MipSlice = 1;
 						DX::ThrowIfFailed(device->CreateUnorderedAccessView(shadowCopyTexture, &uavDesc, &shadowCopyMip1UAV));
+
+						uavDesc.Texture2D.MipSlice = 2;
+						DX::ThrowIfFailed(device->CreateUnorderedAccessView(shadowCopyTexture, &uavDesc, &shadowCopyMip2UAV));
 					}
 
 					// Dispatch downsample compute shader
 					ID3D11ShaderResourceView* csSrvs[1]{ shadowView };
 					context->CSSetShaderResources(0, 1, csSrvs);
 
-
 					context->CSSetSamplers(0, 1, &pointSampler);
 
-					// Mip 0 with second cascade
+					// Mip 0 with third cascade
 					ID3D11UnorderedAccessView* csUavs[1]{ shadowCopyMip0UAV };
 					context->CSSetUnorderedAccessViews(0, 1, csUavs, nullptr);
 					context->CSSetShader(downsampleShadowMip0CS, nullptr, 0);
 					context->Dispatch((shadowCopyWidth + 7) >> 3, (shadowCopyHeight + 7) >> 3, 1);
 					
-					// Mip 1 with first cascade
+					// Mip 1 with second cascade
 					csUavs[0] = shadowCopyMip1UAV;
 					context->CSSetUnorderedAccessViews(0, 1, csUavs, nullptr);
 					context->CSSetShader(downsampleShadowMip1CS, nullptr, 0);
+					context->Dispatch((shadowCopyWidth + 7) >> 3, (shadowCopyHeight + 7) >> 3, 1);
+
+					// Mip 2 with third cascade
+					csUavs[0] = shadowCopyMip2UAV;
+					context->CSSetUnorderedAccessViews(0, 1, csUavs, nullptr);
+					context->CSSetShader(downsampleShadowMip2CS, nullptr, 0);
 					context->Dispatch((shadowCopyWidth + 7) >> 3, (shadowCopyHeight + 7) >> 3, 1);
 
 					// Cleanup CS state
