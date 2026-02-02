@@ -238,18 +238,16 @@ void Deferred::ReflectionsPrepasses()
 	state->UpdateSharedData(false, false);
 
 	ZoneScoped;
-	TracyD3D11Zone(globals::game::graphicsState->tracyCtx, "Early Prepass");
+	TracyD3D11Zone(globals::state->tracyCtx, "Reflections Prepass");
 
 	auto context = globals::d3d::context;
 	context->OMSetRenderTargets(0, nullptr, nullptr);  // Unbind all bound render targets
 
 	globals::game::stateUpdateFlags->set(RE::BSGraphics::ShaderFlags::DIRTY_RENDERTARGET);  // Run OMSetRenderTargets again
 
-	for (auto* feature : Feature::GetFeatureList()) {
-		if (feature->loaded) {
-			feature->ReflectionsPrepass();
-		}
-	}
+	Feature::ForEachLoadedFeature("ReflectionsPrepass", [](Feature* feature) {
+		feature->ReflectionsPrepass();
+	});
 }
 
 void Deferred::EarlyPrepasses()
@@ -262,18 +260,16 @@ void Deferred::EarlyPrepasses()
 	globals::state->UpdateSharedData(false, true);
 
 	ZoneScoped;
-	TracyD3D11Zone(globals::game::graphicsState->tracyCtx, "Early Prepass");
+	TracyD3D11Zone(globals::state->tracyCtx, "Early Prepass");
 
 	auto context = globals::d3d::context;
 	context->OMSetRenderTargets(0, nullptr, nullptr);  // Unbind all bound render targets
 
 	globals::game::stateUpdateFlags->set(RE::BSGraphics::ShaderFlags::DIRTY_RENDERTARGET);  // Run OMSetRenderTargets again
 
-	for (auto* feature : Feature::GetFeatureList()) {
-		if (feature->loaded) {
-			feature->EarlyPrepass();
-		}
-	}
+	Feature::ForEachLoadedFeature("EarlyPrepass", [](Feature* feature) {
+		feature->EarlyPrepass();
+	});
 }
 
 void Deferred::PrepassPasses()
@@ -290,11 +286,9 @@ void Deferred::PrepassPasses()
 	context->OMSetRenderTargets(0, nullptr, nullptr);  // Unbind all bound render targets
 
 	globals::truePBR->PrePass();
-	for (auto* feature : Feature::GetFeatureList()) {
-		if (feature->loaded) {
-			feature->Prepass();
-		}
-	}
+	Feature::ForEachLoadedFeature("Prepass", [](Feature* feature) {
+		feature->Prepass();
+	});
 }
 
 void Deferred::StartDeferred()
@@ -427,7 +421,7 @@ void Deferred::DeferredPasses()
 			albedo.SRV,
 			normalRoughness.SRV,
 			masks.SRV,
-			dynamicCubemaps.loaded || REL::Module::IsVR() ? (terrainBlending.loaded ? terrainBlending.blendedDepthTexture16->srv.get() : depth.depthSRV) : nullptr,
+			dynamicCubemaps.loaded || REL::Module::IsVR() ? (terrainBlending.loaded && terrainBlending.settings.Enabled ? terrainBlending.blendedDepthTexture16->srv.get() : depth.depthSRV) : nullptr,
 			dynamicCubemaps.loaded ? reflectance.SRV : nullptr,
 			dynamicCubemaps.loaded ? dynamicCubemaps.envTexture->srv.get() : nullptr,
 			dynamicCubemaps.loaded ? dynamicCubemaps.envReflectionsTexture->srv.get() : nullptr,
@@ -691,8 +685,9 @@ void Deferred::Hooks::Main_RenderWorld_BlendedDecals::thunk(RE::BSShaderAccumula
 	if (globals::shaderCache->IsEnabled() && globals::state->inWorld) {
 		auto& terrainBlending = globals::features::terrainBlending;
 		// Defer terrain rendering until after everything else
-		if (terrainBlending.loaded)
+		if (terrainBlending.loaded && terrainBlending.settings.Enabled) {
 			terrainBlending.RenderTerrainBlendingPasses();
+		}
 	}
 
 	// Deferred blended decals

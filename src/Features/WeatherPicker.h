@@ -11,7 +11,7 @@ struct WeatherPicker : OverlayFeature
 
 	virtual bool SupportsVR() override { return true; }
 	virtual bool IsCore() const override { return true; }
-	virtual std::string_view GetCategory() const override { return "Sky"; }
+	virtual std::string_view GetCategory() const override { return "Utility"; }
 	virtual bool IsInMenu() const override { return true; }  // Show in main menu to provide weather debugging UI
 
 	virtual std::pair<std::string, std::vector<std::string>> GetFeatureSummary() override;

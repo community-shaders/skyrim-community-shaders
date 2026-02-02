@@ -28,9 +28,9 @@ struct OverlayFeature : Feature
 	virtual bool IsOverlayVisible() const = 0;
 
 	/**
-     * @brief Get the category for UI grouping. Overlays default to "Debug".
+     * @brief Get the category for UI grouping. Overlays default to "Utility".
      *
      * Subclasses may override this to provide a different category.
      */
-	virtual std::string_view GetCategory() const override { return "Debug"; }
+	virtual std::string_view GetCategory() const override { return "Utility"; }
 };
