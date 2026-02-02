@@ -92,8 +92,8 @@ void DX12SwapChain::CreateInterop()
 
 	swapChainBufferWrapped = new WrappedResource(texDesc11, d3d11Device.get(), d3d12Device.get());
 
-	// UI buffer uses 10-bit format for proper HDR/PQ precision
-	texDesc11.Format = DXGI_FORMAT_R10G10B10A2_UNORM;
+	// UI buffer uses RGBA16 float for full alpha precision
+	texDesc11.Format = DXGI_FORMAT_R16G16B16A16_FLOAT;
 	uiBufferWrapped = new WrappedResource(texDesc11, d3d11Device.get(), d3d12Device.get());
 }
 

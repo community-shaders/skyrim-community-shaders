@@ -65,8 +65,8 @@ float3 HDRSoftClip(float3 colorNits, float paperWhite, float peakNits)
 			// FG handles UI compositing after frame interpolation - skip our compositing
 			composited = sceneGamma;
 		} else {
-			// Composite UI over scene using standard alpha blending (non-premultiplied)
-			// Final = UI.RGB * UI.A + Scene.RGB * (1 - UI.A)
+			// Match FidelityFX standard alpha blend (non-premultiplied formula)
+			// FidelityFX without USE_PREMUL_ALPHA flag uses: Final = UI.RGB * UI.A + Scene * (1 - UI.A)
 			float3 uiScaled = ui.rgb * uiBrightness;
 			composited = uiScaled * ui.a + sceneGamma * (1.0 - ui.a);
 		}
@@ -86,8 +86,8 @@ float3 HDRSoftClip(float3 colorNits, float paperWhite, float peakNits)
 			// FG handles UI compositing - skip our compositing
 			composited = sceneGamma;
 		} else {
-			// Composite UI over scene using standard alpha blending (non-premultiplied)
-			// Final = UI.RGB * UI.A + Scene.RGB * (1 - UI.A)
+			// Match FidelityFX standard alpha blend (non-premultiplied formula)
+			// FidelityFX without USE_PREMUL_ALPHA flag uses: Final = UI.RGB * UI.A + Scene * (1 - UI.A)
 			float3 uiScaled = ui.rgb * uiBrightness;
 			composited = uiScaled * ui.a + sceneGamma * (1.0 - ui.a);
 		}
