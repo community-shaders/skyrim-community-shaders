@@ -795,22 +795,30 @@ void HDR::UpdateSwapChainColorSpace() const
 		if (SUCCEEDED(hr)) {
 			logger::info("[HDR] Set swap chain color space to HDR10 (PQ/BT.2020)");
 
-			// BT.2020 primaries matching UpdateHDRMetadata()
-			DXGI_HDR_METADATA_HDR10 hdrMetadata = {};
-			hdrMetadata.RedPrimary[0] = 34000;
-			hdrMetadata.RedPrimary[1] = 16000;
-			hdrMetadata.GreenPrimary[0] = 8500;
-			hdrMetadata.GreenPrimary[1] = 39850;
-			hdrMetadata.BluePrimary[0] = 6550;
-			hdrMetadata.BluePrimary[1] = 2300;
-			hdrMetadata.WhitePoint[0] = 15635;
-			hdrMetadata.WhitePoint[1] = 16450;
-			hdrMetadata.MaxMasteringLuminance = settings.hdrPeakNits * 10000;
-			hdrMetadata.MinMasteringLuminance = 1;
-			hdrMetadata.MaxContentLightLevel = static_cast<UINT16>(settings.hdrPeakNits);
-			hdrMetadata.MaxFrameAverageLightLevel = static_cast<UINT16>(settings.hdrPaperWhite);
+			DXGI_OUTPUT_DESC1 outDesc1 = {};
+			winrt::com_ptr<IDXGIOutput> output;
+			if (SUCCEEDED(swapChain4->GetContainingOutput(output.put()))) {
+				winrt::com_ptr<IDXGIOutput6> output6;
+				if (SUCCEEDED(output->QueryInterface(IID_PPV_ARGS(output6.put())))) {
+					output6->GetDesc1(&outDesc1);
+				}
+			}
 
-			swapChain4->SetHDRMetaData(DXGI_HDR_METADATA_TYPE_HDR10, sizeof(hdrMetadata), &hdrMetadata);
+			DXGI_HDR_METADATA_HDR10 metadata = {};
+			metadata.RedPrimary[0] = 34000;
+			metadata.RedPrimary[1] = 16000;
+			metadata.GreenPrimary[0] = 8500;
+			metadata.GreenPrimary[1] = 39850;
+			metadata.BluePrimary[0] = 6550;
+			metadata.BluePrimary[1] = 2300;
+			metadata.WhitePoint[0] = 15635;
+			metadata.WhitePoint[1] = 16450;
+			metadata.MinMasteringLuminance = 0;
+			metadata.MaxMasteringLuminance = static_cast<UINT>(outDesc1.MaxLuminance * 10000);
+			metadata.MaxContentLightLevel = static_cast<UINT16>(settings.hdrPeakNits);
+			metadata.MaxFrameAverageLightLevel = static_cast<UINT16>(settings.hdrPaperWhite);
+
+			swapChain4->SetHDRMetaData(DXGI_HDR_METADATA_TYPE_HDR10, sizeof(metadata), &metadata);
 		} else {
 			logger::warn("[HDR] Failed to set HDR10 color space");
 		}
