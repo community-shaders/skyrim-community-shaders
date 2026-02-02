@@ -45,6 +45,8 @@ namespace SIE
 				if (!ifs)
 					return E_FAIL;
 				std::streamsize size = ifs.tellg();
+				if (size < 0)
+					return E_FAIL;
 				ifs.seekg(0, std::ios::beg);
 				std::vector<char> buf(static_cast<size_t>(size));
 				if (size > 0) {
@@ -2969,6 +2971,11 @@ namespace SIE
 			std::error_code ec;
 			auto canonicalPath = std::filesystem::weakly_canonical(filePath, ec);
 			std::string pathStr = (ec ? filePath.string() : canonicalPath.string());
+			// On Windows, normalize to lowercase to match TrackingIncludeHandler
+#ifdef _WIN32
+			std::transform(pathStr.begin(), pathStr.end(), pathStr.begin(),
+				[](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+#endif
 			// Invalidate all .hlsl files that depend on this .hlsli
 			auto dependents = deps->GetDependents(pathStr);
 			for (const auto& hlsl : dependents) {
