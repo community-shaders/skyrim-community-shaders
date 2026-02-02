@@ -602,7 +602,7 @@ float3 GetLightingShadow(float3 color, float3 worldPosition, float2 screenPositi
 
 	// Enough for sky statics
 	float maxDistance = max(0, SharedData::GetScreenDepth(depth));
-	float viewRayLength = 4096;
+	float viewRayLength = 4096.0;
 	float3 viewDirection = normalize(worldPosition);
 	float3 startPosition = worldPosition - viewDirection * viewRayLength;
 	float3 endPosition = worldPosition + viewDirection * min(maxDistance, viewRayLength);
@@ -612,7 +612,12 @@ float3 GetLightingShadow(float3 color, float3 worldPosition, float2 screenPositi
 		uint noisyIndex = uint((float(i) + sampleCount * noise) % sampleCount);
 		float t = (float(sampleCount) - float(noisyIndex + 1)) * rcpSampleCount;
 		float tSample = t + noiseTransform * rcpSampleCount;
-		shadow += ShadowSampling::GetWorldShadow(lerp(startPosition, endPosition, tSample), FrameBuffer::CameraPosAdjust[eyeIndex].xyz, eyeIndex);
+		
+		float3 samplePositionWS = lerp(startPosition, endPosition, tSample);
+		samplePositionWS.xy += mul(Random::SpiralSampleOffsets8[i], rotationMatrix) * 4096.0;
+		samplePositionWS.z += length(Random::SpiralSampleOffsets8[i]);
+
+		shadow += ShadowSampling::GetWorldShadow(samplePositionWS, FrameBuffer::CameraPosAdjust[eyeIndex].xyz, eyeIndex);
 	}
 
 	shadow *= rcpSampleCount;
