@@ -42,17 +42,17 @@ struct HairChiangBSDF
 
     void __init(float3 wi, Surface surface)
     {
-        hairMaterialData.baseColor = surface.DiffuseAlbedo;
-        hairMaterialData.longitudinalRoughness = surface.Roughness * 0.8f;
-        hairMaterialData.azimuthalRoughness = surface.Roughness;
+        hairMaterialData.baseColor = surface.DiffuseAlbedo * surface.DiffuseAlbedo;
+        hairMaterialData.longitudinalRoughness = clamp(surface.Roughness * 0.8f, 0.3f, 0.7f);
+        hairMaterialData.azimuthalRoughness = clamp(surface.Roughness, 0.3f, 0.7f);
 
         hairMaterialData.ior = 1.55f; // Typical value for human hair
         hairMaterialData.eta = 1.0f / 1.55f;
 
         hairMaterialData.fresnelApproximation = 0; // Dielectric
         hairMaterialData.absorptionModel = HairAbsorptionModel_Color; // We don't have melanin data in skyrim
-        hairMaterialData.melanin = 0.0f;
-        hairMaterialData.melaninRedness = 0.0f;
+        hairMaterialData.melanin = 0.3f;
+        hairMaterialData.melaninRedness = 0.5f;
         hairMaterialData.cuticleAngleInDegrees = 3.0f;
 
         hairInteractionSurface = CreateHairInteractionSurface(wi, surface.Tangent, surface.Bitangent, surface.Normal);
@@ -68,7 +68,7 @@ struct HairChiangBSDF
 
     static uint getLobes(Surface surface)
     {
-        uint lobes = (uint)LobeType::SpecularReflection | (uint)LobeType::DiffuseReflection | (uint)LobeType::DiffuseTransmission;
+        uint lobes = (uint)LobeType::DiffuseReflection | (uint)LobeType::DiffuseTransmission;
 
         return lobes;
     }
@@ -151,6 +151,8 @@ struct HairChiangBSDF
         u[0] = preGeneratedSample.xy;
         u[1] = preGeneratedSample.zw;
 
+        lobe = LobeType::DiffuseReflection;
+        lobeP = 1.0f;
         uint lobeType;
 
         const float sinThetaI = wi.x;
@@ -271,16 +273,9 @@ struct HairChiangBSDF
         {
             weight = Eval(wi, wo).xyz / pdf;
             // we treat R as specular, TT as diffuse transmission, TRT as diffuse reflection
-            if (lobeType == HairLobeType_R)
-            {
-                lobe = (uint)LobeType::SpecularReflection;
-            }
-            else if (lobeType == HairLobeType_TT)
-            {
+            if (lobeType == HairLobeType_TT) {
                 lobe = (uint)LobeType::DiffuseTransmission;
-            }
-            else // TRT
-            {
+            } else {
                 lobe = (uint)LobeType::DiffuseReflection;
             }
             lobeP = 1.0f;
