@@ -333,12 +333,12 @@ void HDR::SaveSettings(json& o_json)
 void HDR::LoadSettings(json& o_json)
 {
 	std::lock_guard<std::mutex> lock(settingsMutex);
-	
+
 	// Check if this is first launch (no enableHDR setting saved)
 	bool isFirstLaunch = !o_json.contains("enableHDR");
-	
+
 	settings = o_json;
-	
+
 	// On first launch, auto-configure HDR based on display detection
 	if (isFirstLaunch) {
 		bool hdrMonitor = DetectHDRDisplay();
