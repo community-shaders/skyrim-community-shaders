@@ -753,8 +753,9 @@ void HDR::UpdateHDRData() const
 	// When paused (FG disabled), we must composite UI ourselves since FidelityFX won't do it reliably
 	bool skipUIComposite = globals::features::upscaling.IsFrameGenerationActive();
 
-	// Check if Linear Lighting is active (scene is already in linear space)
-	bool isSceneLinear = globals::features::linearLighting.settings.enableLinearLighting != 0;
+	// Scene from ISHDR is always gamma-encoded (tonemapper includes gamma 2.2)
+	// This is true regardless of Linear Lighting status because ISHDR runs after lighting
+	bool isSceneLinear = false;
 
 	HDRDataCB data;
 

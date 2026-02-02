@@ -50,8 +50,8 @@ float3 HDRSoftClip(float3 colorNits, float paperWhite, float peakNits)
 
 	float3 finalColor;
 	
-	// Get scene in linear space
-	// If Linear Lighting is active, scene is already linear; otherwise convert from gamma 2.2
+	// Scene from ISHDR is always gamma-encoded (tonemapper includes gamma 2.2 curve)
+	// Convert to linear for processing, regardless of Linear Lighting status
 	float3 sceneLinear = isSceneLinear ? max(0, scene.rgb) : Color::GammaToTrueLinear(max(0, scene.rgb));
 
 	if (enableHDR) {
