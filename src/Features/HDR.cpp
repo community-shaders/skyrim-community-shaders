@@ -339,8 +339,10 @@ void HDR::SetupResources()
 	outputTexture->CreateUAV(uavDesc);
 
 	// UI texture for separate UI rendering
+	// Use R16G16B16A16_FLOAT for HDR - this preserves precision for HDR conversion
+	// ImGui renders in sRGB color space, which we convert to PQ in HDROutputCS
 	D3D11_TEXTURE2D_DESC uiTexDesc = texDesc;
-	uiTexDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+	uiTexDesc.Format = DXGI_FORMAT_R16G16B16A16_FLOAT;
 	uiTexDesc.BindFlags = D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_UNORDERED_ACCESS;
 
 	D3D11_SHADER_RESOURCE_VIEW_DESC uiSrvDesc = srvDesc;
@@ -355,7 +357,7 @@ void HDR::SetupResources()
 
 	// Create RTV for UI texture
 	D3D11_RENDER_TARGET_VIEW_DESC rtvDesc{};
-	rtvDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+	rtvDesc.Format = DXGI_FORMAT_R16G16B16A16_FLOAT;
 	rtvDesc.ViewDimension = D3D11_RTV_DIMENSION_TEXTURE2D;
 	rtvDesc.Texture2D.MipSlice = 0;
 	uiTexture->CreateRTV(rtvDesc);
@@ -560,10 +562,13 @@ void HDR::ApplyHDR()
 		auto& mainRT = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMAIN];
 		ID3D11ShaderResourceView* sceneSRV = mainRT.SRV;
 
-		// Always use our uiTexture for UI - we handle compositing ourselves
-		// This prevents FidelityFX from applying frame interpolation to UI
+		// Choose the correct UI buffer based on which path is active
+		// When D3D12 swap chain is active, vanilla UI renders to uiBufferWrapped
+		// Otherwise it renders to our uiTexture
 		ID3D11ShaderResourceView* uiSRV = nullptr;
-		if (uiTexture && uiTexture->srv) {
+		if (upscaling.d3d12SwapChainActive && upscaling.dx12SwapChain.uiBufferWrapped) {
+			uiSRV = upscaling.dx12SwapChain.uiBufferWrapped->srv;
+		} else if (uiTexture && uiTexture->srv) {
 			uiSRV = uiTexture->srv.get();
 		}
 		ID3D11ShaderResourceView* views[2] = { sceneSRV, uiSRV };
@@ -693,8 +698,9 @@ void HDR::ScaleUIBrightnessForFG()
 {
 	auto& upscaling = globals::features::upscaling;
 	
-	// Only run when Frame Gen is active
-	if (!upscaling.d3d12SwapChainActive)
+	// Only run when FG is actively generating frames
+	// When paused, UI compositing is handled by HDROutputCS instead
+	if (!upscaling.IsFrameGenerationActive())
 		return;
 	
 	if (!hdrDataCB || !upscaling.dx12SwapChain.uiBufferWrapped || !upscaling.dx12SwapChain.uiBufferWrapped->uav)
@@ -707,12 +713,12 @@ void HDR::ScaleUIBrightnessForFG()
 	
 	// Update constant buffer with current settings
 	UpdateHDRData();
-	
+
 	auto dispatchCount = Util::GetScreenDispatchCount(false);
-	
+
 	ID3D11UnorderedAccessView* uavs[1] = { upscaling.dx12SwapChain.uiBufferWrapped->uav };
 	context->CSSetUnorderedAccessViews(0, 1, uavs, nullptr);
-	
+
 	ID3D11Buffer* cbs[1] = { hdrDataCB->CB() };
 	context->CSSetConstantBuffers(0, 1, cbs);
 	
@@ -728,7 +734,7 @@ void HDR::ScaleUIBrightnessForFG()
 	cbs[0] = nullptr;
 	context->CSSetConstantBuffers(0, 1, cbs);
 	context->CSSetShader(nullptr, nullptr, 0);
-	
+
 	state->EndPerfEvent();
 }
 
@@ -743,9 +749,9 @@ void HDR::UpdateHDRData() const
 		return;
 	}
 
-	// When Frame Gen is active, FidelityFX handles UI compositing after frame interpolation
-	// Skip UI compositing in our shader to prevent double-compositing or artifacts
-	bool skipUIComposite = globals::features::upscaling.d3d12SwapChainActive;
+	// Only skip UI compositing when FG is actively generating frames
+	// When paused (FG disabled), we must composite UI ourselves since FidelityFX won't do it reliably
+	bool skipUIComposite = globals::features::upscaling.IsFrameGenerationActive();
 
 	// Check if Linear Lighting is active (scene is already in linear space)
 	bool isSceneLinear = globals::features::linearLighting.settings.enableLinearLighting != 0;

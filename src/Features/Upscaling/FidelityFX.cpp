@@ -131,12 +131,17 @@ void FidelityFX::Present(bool a_useFrameGeneration, bool a_isHDR)
 		logger::critical("[FidelityFX] Failed to configure frame generation!");
 	}
 
-	// Register UI buffer with FidelityFX so it composites UI AFTER frame interpolation
-	// This prevents the UI from being smeared by motion interpolation
+	// Register UI buffer with FidelityFX only when FG is active
+	// When paused, UI is composited in HDROutputCS to avoid flickering from inconsistent FidelityFX compositing
 	ffx::ConfigureDescFrameGenerationSwapChainRegisterUiResourceDX12 uiConfig{};
-	uiConfig.uiResource = ffxApiGetResourceDX12(swapChain.uiBufferWrapped->resource.get());
-	uiConfig.flags = FFX_FRAMEGENERATION_UI_COMPOSITION_FLAG_USE_PREMUL_ALPHA |
-		FFX_FRAMEGENERATION_UI_COMPOSITION_FLAG_ENABLE_INTERNAL_UI_DOUBLE_BUFFERING;
+	if (a_useFrameGeneration) {
+		uiConfig.uiResource = ffxApiGetResourceDX12(swapChain.uiBufferWrapped->resource.get());
+		uiConfig.flags = FFX_FRAMEGENERATION_UI_COMPOSITION_FLAG_ENABLE_INTERNAL_UI_DOUBLE_BUFFERING;
+	} else {
+		// No UI resource when FG is disabled - backbuffer already has UI composited
+		uiConfig.uiResource = FfxApiResource({});
+		uiConfig.flags = 0;
+	}
 
 	if (ffx::Configure(swapChainContext, uiConfig) != ffx::ReturnCode::Ok) {
 		logger::critical("[FidelityFX] Failed to configure UI composition!");
