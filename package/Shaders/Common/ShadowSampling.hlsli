@@ -65,7 +65,7 @@ namespace ShadowSampling
 		return positionCSShifted.z / positionCSShifted.w;
 	}
 
-	float Get3DFilteredShadow(float3 positionWS, float3 viewDirection, float2 screenPosition, uint eyeIndex)
+	float Get3DFilteredShadow(float3 positionWS, float3 viewDirection, float2 screenPosition, uint eyeIndex, float depth)
 	{
 		static const uint sampleCount8 = 8;
 		static const float rcpSampleCount8 = 1.0 / float(sampleCount8);
@@ -81,16 +81,20 @@ namespace ShadowSampling
 		sincos(Math::TAU * noise, rotation.y, rotation.x);
 		float2x2 rotationMatrix = float2x2(rotation.x, rotation.y, -rotation.y, rotation.x);
 
+		float screenDepth = SharedData::GetScreenDepth(depth);
+		float objectDepth = length(positionWS);
+		float maxDistance = max(0, screenDepth - objectDepth);
+
 #if defined(EFFECT)
 		// Enough for non-billboards + enough for Sovngarde fog
 		float viewRayLength = min(Permutation::EffectRadius * 0.2, 256);
 		float3 startPosition = positionWS - viewDirection * viewRayLength;
-		float3 endPosition = positionWS + viewDirection * viewRayLength;
+		float3 endPosition = positionWS + viewDirection * min(viewRayLength, maxDistance);
 #else
 		// Enough for Eastmarch water
-		float viewRayLength = 256.0;
+		float viewRayLength = 128.0;
 		float3 startPosition = positionWS;
-		float3 endPosition = positionWS + viewDirection * viewRayLength;
+		float3 endPosition = positionWS + viewDirection * min(viewRayLength, maxDistance);
 #endif
 
 		float worldShadow = 0;
@@ -109,7 +113,9 @@ namespace ShadowSampling
 		float shadowMapDepth = GetShadowDepth(positionWS, eyeIndex);
 
 		ShadowData sD = SharedShadowData[0];
-		if (sD.EndSplitDistances.w < shadowMapDepth)  // Early out beyond cascade 2
+		
+		// Early out beyond cascade 2
+		if (sD.EndSplitDistances.w < shadowMapDepth)
 			return worldShadow;
 
 		// Determine which cascade pair to blend between
@@ -131,7 +137,7 @@ namespace ShadowSampling
 			uint cascadeIdx = baseCascade + i;
 			float4x3 proj = sD.ShadowMapProj[eyeIndex][cascadeIdx];
 			compareValues[i] = mul(transpose(proj), float4(positionWS, 1)).z - sD.AlphaTestRef[1 + min(1, cascadeIdx)];
-			sampleRadii[i] = sD.ShadowSampleParam.z * exp2(-float(cascadeIdx)) * 2.0;
+			sampleRadii[i] = sD.ShadowSampleParam.z * exp2(-float(cascadeIdx)) * 4.0;
 			positionsLS[i] = mul(transpose(proj), float4(startPosition, 1));
 			viewOffsetsLS[i] = mul(transpose(proj), float4(endPosition, 1));
 		}
@@ -217,11 +223,6 @@ namespace ShadowSampling
 		}
 
 		return 1.0;
-	}
-
-	float GetEffectShadow(float3 worldPosition, float3 viewDirection, float2 screenPosition, uint eyeIndex)
-	{
-		return Get3DFilteredShadow(worldPosition, viewDirection, screenPosition, eyeIndex);
 	}
 
 	float GetLightingShadow(float noise, float3 worldPosition, uint eyeIndex)

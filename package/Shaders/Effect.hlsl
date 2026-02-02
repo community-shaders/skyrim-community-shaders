@@ -525,7 +525,7 @@ cbuffer PerGeometry : register(b2)
 #	include "Common/ShadowSampling.hlsli"
 
 #	if defined(LIGHTING)
-float3 GetLightingColor(float3 msPosition, float3 worldPosition, float2 screenPosition, uint eyeIndex, inout float shadowVariance)
+float3 GetLightingColor(float3 msPosition, float3 worldPosition, float2 screenPosition, uint eyeIndex, float depth, inout float shadowVariance)
 {
 	float3 color = DLightColor.xyz * Color::EffectLightingMult();
 
@@ -552,7 +552,7 @@ float3 GetLightingColor(float3 msPosition, float3 worldPosition, float2 screenPo
 	ShadowSampling::ExtractLighting(color, dirColor, ambientColor);
 #		endif
 
-	float shadow = ShadowSampling::GetEffectShadow(worldPosition.xyz, normalize(worldPosition.xyz), screenPosition, eyeIndex);
+	float shadow = ShadowSampling::Get3DFilteredShadow(worldPosition.xyz, normalize(worldPosition.xyz), screenPosition, eyeIndex, depth);
 
 	shadowVariance = 1.0 - sqrt(saturate(fwidth(shadow)));
 
@@ -673,8 +673,9 @@ PS_OUTPUT main(PS_INPUT input)
 #	endif
 
 	float softMul = 1;
+	float depth = 1;
 #	if defined(SOFT)
-	float depth = TexDepthSamplerEffect.Load(int3(input.Position.xy, 0)).x;
+	depth = TexDepthSamplerEffect.Load(int3(input.Position.xy, 0)).x;
 	softMul = saturate(-input.TexCoord0.w + LightingInfluence.y / ((1 - depth) * CameraDataEffect.z + CameraDataEffect.y));
 #	endif
 
@@ -683,7 +684,7 @@ PS_OUTPUT main(PS_INPUT input)
 	float shadowVariance = 1.0;
 
 #	if defined(LIGHTING)
-	propertyColor = GetLightingColor(input.MSPosition.xyz, input.WorldPosition.xyz, input.Position.xy, eyeIndex, shadowVariance);
+	propertyColor = GetLightingColor(input.MSPosition.xyz, input.WorldPosition.xyz, input.Position.xy, eyeIndex, depth, shadowVariance);
 
 #		if defined(LIGHT_LIMIT_FIX)
 	uint lightCount = 0;
