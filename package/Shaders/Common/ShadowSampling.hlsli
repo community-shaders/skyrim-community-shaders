@@ -137,7 +137,7 @@ namespace ShadowSampling
 			uint cascadeIdx = baseCascade + i;
 			float4x3 proj = sD.ShadowMapProj[eyeIndex][cascadeIdx];
 			compareValues[i] = mul(transpose(proj), float4(positionWS, 1)).z - sD.AlphaTestRef[1 + min(1, cascadeIdx)];
-			sampleRadii[i] = sD.ShadowSampleParam.z * exp2(-float(cascadeIdx)) * 4.0;
+			sampleRadii[i] = sD.ShadowSampleParam.z * exp2(-float(cascadeIdx)) * 2.0;
 			positionsLS[i] = mul(transpose(proj), float4(startPosition, 1));
 			viewOffsetsLS[i] = mul(transpose(proj), float4(endPosition, 1));
 		}
