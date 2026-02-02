@@ -1107,6 +1107,33 @@ bool Upscaling::IsUpscalingActive()
 	return resolutionScale.x < .99f;
 }
 
+std::vector<FeatureConstraints::Constraint> Upscaling::GetActiveConstraints() const
+{
+	std::vector<FeatureConstraints::Constraint> constraints;
+
+	// Check if upscaling is active - need to cast away const for method call
+	auto* self = const_cast<Upscaling*>(this);
+	if (!self->IsUpscalingActive()) {
+		return constraints;
+	}
+
+	// When upscaling is active in VR, depth buffer culling must be disabled
+	// because upscalers modify the depth buffer, causing incorrect occlusion
+	if (globals::game::isVR) {
+		constraints.push_back({ { "VR", "EnableDepthBufferCullingExterior" },
+			false,
+			"Upscaling modifies the depth buffer, causing incorrect VR occlusion tests in exteriors.",
+			false });
+
+		constraints.push_back({ { "VR", "EnableDepthBufferCullingInterior" },
+			false,
+			"Upscaling modifies the depth buffer, causing incorrect VR occlusion tests in interiors.",
+			false });
+	}
+
+	return constraints;
+}
+
 /**
  * @brief Retrieves the current frame time for frame generation.
  *

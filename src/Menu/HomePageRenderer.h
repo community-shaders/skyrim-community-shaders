@@ -31,6 +31,7 @@ private:
 	static void RenderWelcomeSection();
 	static void RenderQuickLinksSection();
 	static void RenderFAQSection();
+	static void RenderActiveConstraintsSection();
 
 	static void MarkFirstTimeSetupComplete();
 

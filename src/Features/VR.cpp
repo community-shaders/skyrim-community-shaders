@@ -588,45 +588,30 @@ namespace
 		auto& vr = globals::features::vr;
 		VR::Settings& settings = vr.settings;
 		if (ImGui::CollapsingHeader("General Settings", ImGuiTreeNodeFlags_DefaultOpen)) {
-			// If an upscaler is active that rewrites or repurposes the depth buffer,
-			// depth-buffer-culling must be disabled to avoid incorrect occlusion tests
-			// (which are especially problematic in VR). Query the Upscaling feature
-			// to see whether we're running FSR or DLSS.
-			// Determine if an external upscaler is active by reading the numeric
-			// setting value directly. Avoid referencing Upscaling types here to
-			// prevent header/type collisions in this translation unit.
-			// Query the Upscaling feature for an authoritative state flag.
-			bool upscalingActive = globals::features::upscaling.IsUpscalingActive();
-
-			// Exteriors
-			if (upscalingActive)
-				ImGui::BeginDisabled();
-			ImGui::Checkbox("Enable Depth Buffer Culling in Exteriors", &settings.EnableDepthBufferCullingExterior);
-			if (upscalingActive) {
-				if (auto _tt = Util::HoverTooltipWrapper()) {
-					ImGui::Text("Disabled while an external upscaler is active (FSR/DLSS) because upscalers may modify depth.\nThis prevents incorrect occlusion in VR.");
-				}
-				ImGui::EndDisabled();
-			} else {
+			// Use constraint-aware checkboxes that automatically handle disabling
+			// and showing tooltips when other features constrain these settings
+			Util::ConstrainedUI::Checkbox("Enable Depth Buffer Culling in Exteriors",
+				&settings.EnableDepthBufferCullingExterior,
+				{ "VR", "EnableDepthBufferCullingExterior" });
+			// Show normal tooltip when not constrained
+			auto exteriorConstraint = FeatureConstraints::GetConstraints({ "VR", "EnableDepthBufferCullingExterior" });
+			if (!exteriorConstraint.isConstrained) {
 				if (auto _tt = Util::HoverTooltipWrapper()) {
 					ImGui::Text("Improves performance in exteriors, recommended ON.");
 				}
 			}
 
-			// Interiors
-			if (upscalingActive)
-				ImGui::BeginDisabled();
-			ImGui::Checkbox("Enable Depth Buffer Culling in Interiors", &settings.EnableDepthBufferCullingInterior);
-			if (upscalingActive) {
-				if (auto _tt = Util::HoverTooltipWrapper()) {
-					ImGui::Text("Disabled while an external upscaler is active (FSR/DLSS) because upscalers may modify depth.\nThis prevents incorrect occlusion in VR.");
-				}
-				ImGui::EndDisabled();
-			} else {
+			Util::ConstrainedUI::Checkbox("Enable Depth Buffer Culling in Interiors",
+				&settings.EnableDepthBufferCullingInterior,
+				{ "VR", "EnableDepthBufferCullingInterior" });
+			// Show normal tooltip when not constrained
+			auto interiorConstraint = FeatureConstraints::GetConstraints({ "VR", "EnableDepthBufferCullingInterior" });
+			if (!interiorConstraint.isConstrained) {
 				if (auto _tt = Util::HoverTooltipWrapper()) {
 					ImGui::Text("Improves performance in interiors, recommended OFF due to occasional visual glitches.");
 				}
 			}
+
 			if (ImGui::SliderFloat("Min Occludee Box Extent", &settings.MinOccludeeBoxExtent, 0.0f, 1000.0f, "%.1f"))
 				*vr.gMinOccludeeBoxExtent = settings.MinOccludeeBoxExtent;
 			if (auto _tt = Util::HoverTooltipWrapper()) {
@@ -1663,15 +1648,24 @@ void VR::SubmitOverlayFrame()
 // Helper to centralize VR depth buffer culling logic, reducing duplication between DataLoaded and EarlyPrepass.
 void VR::UpdateDepthBufferCulling(bool desired)
 {
-	if (globals::features::upscaling.IsUpscalingActive()) {
-		if (gDepthBufferCulling && *gDepthBufferCulling) {
-			logger::info("Upscaling detected, disabling incompatible depth buffer culling.");
-			*gDepthBufferCulling = false;
+	// Check if any feature is constraining this setting
+	auto constraint = FeatureConstraints::GetConstraints({ "VR", "EnableDepthBufferCullingExterior" });
+
+	if (constraint.isConstrained) {
+		bool forcedValue = std::get<bool>(constraint.forcedValue);
+		if (gDepthBufferCulling && *gDepthBufferCulling != forcedValue) {
+			*gDepthBufferCulling = forcedValue;
+			for (const auto& src : constraint.sources) {
+				logger::info("{} forcing depth buffer culling {}: {}",
+					src.featureName,
+					forcedValue ? "ON" : "OFF",
+					src.reason);
+			}
 		}
 	} else {
 		if (gDepthBufferCulling && *gDepthBufferCulling != desired) {
 			*gDepthBufferCulling = desired;
-			logger::info("VR depth buffer culling restored to {}", desired);
+			logger::info("VR depth buffer culling set to {}", desired);
 		}
 	}
 }

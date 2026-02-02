@@ -3,6 +3,7 @@
 
 #include <imgui.h>
 
+#include "FeatureConstraints.h"
 #include "Globals.h"
 #include "Menu.h"
 #include "Plugin.h"
@@ -18,6 +19,8 @@ void HomePageRenderer::RenderHomePage()
 
 	RenderWelcomeSection();
 	ImGui::Spacing();
+
+	RenderActiveConstraintsSection();
 
 	RenderQuickLinksSection();
 	ImGui::Spacing();
@@ -245,6 +248,81 @@ void HomePageRenderer::RenderFAQSection()
 			" Branding materials and assets (icons, nexus branding, typography, etc) are not covered by the GPL Licence."
 			" Any included assets may not be used without explicit permission.");
 	}
+}
+
+void HomePageRenderer::RenderActiveConstraintsSection()
+{
+	auto constraints = FeatureConstraints::GetAllActiveConstraints();
+	if (constraints.empty()) {
+		return;  // Don't show section if there are no active constraints
+	}
+
+	ImGui::Spacing();
+
+	// Use warning color for the header to draw attention
+	auto menu = Menu::GetSingleton();
+	ImVec4 warningColor = menu ? menu->GetTheme().StatusPalette.Warning : ImVec4(1.0f, 0.8f, 0.2f, 1.0f);
+
+	ImGui::PushStyleColor(ImGuiCol_Text, warningColor);
+	bool headerOpen = ImGui::CollapsingHeader("Active Setting Constraints", ImGuiTreeNodeFlags_None);
+	ImGui::PopStyleColor();
+
+	if (headerOpen) {
+		ImGui::TextWrapped(
+			"Some settings are constrained by other features. Hover over rows for details.");
+
+		ImGui::Spacing();
+
+		// Compact table format
+		if (ImGui::BeginTable("ConstraintsTable", 3, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingStretchProp)) {
+			ImGui::TableSetupColumn("Setting", ImGuiTableColumnFlags_WidthStretch);
+			ImGui::TableSetupColumn("Forced To", ImGuiTableColumnFlags_WidthFixed, 80.0f);
+			ImGui::TableSetupColumn("Constrained By", ImGuiTableColumnFlags_WidthStretch);
+			ImGui::TableHeadersRow();
+
+			for (const auto& [settingId, result] : constraints) {
+				ImGui::TableNextRow();
+
+				// Setting column
+				ImGui::TableSetColumnIndex(0);
+				ImGui::TextColored(warningColor, "%s.%s", settingId.featureShortName.c_str(), settingId.settingPath.c_str());
+
+				// Forced value column
+				ImGui::TableSetColumnIndex(1);
+				ImGui::Text("%s", FeatureConstraints::FormatConstraintValue(result.forcedValue).c_str());
+
+				// Constrained by column - show feature names, tooltip has details
+				ImGui::TableSetColumnIndex(2);
+				std::string sourceNames;
+				for (size_t i = 0; i < result.sources.size(); ++i) {
+					if (i > 0)
+						sourceNames += ", ";
+					sourceNames += result.sources[i].featureName;
+				}
+				ImGui::Text("%s", sourceNames.c_str());
+
+				// Tooltip with full details on row hover
+				if (ImGui::IsItemHovered()) {
+					ImGui::BeginTooltip();
+					ImGui::PushTextWrapPos(ImGui::GetFontSize() * 25.0f);
+					for (const auto& src : result.sources) {
+						ImGui::TextColored(warningColor, "%s:", src.featureName.c_str());
+						ImGui::TextWrapped("%s", src.reason.c_str());
+						if (src.recommendDisableAtBoot) {
+							ImVec4 errorColor = menu ? menu->GetTheme().StatusPalette.Error : ImVec4(1.0f, 0.4f, 0.4f, 1.0f);
+							ImGui::TextColored(errorColor, "Consider disabling at boot.");
+						}
+						ImGui::Spacing();
+					}
+					ImGui::PopTextWrapPos();
+					ImGui::EndTooltip();
+				}
+			}
+			ImGui::EndTable();
+		}
+	}
+
+	ImGui::Spacing();
 }
 
 void HomePageRenderer::RenderFirstTimeSetupDialog()
