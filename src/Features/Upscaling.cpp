@@ -447,7 +447,7 @@ void Upscaling::PostPostLoad()
 	logger::info("[Upscaling] Installed hooks");
 }
 
-Upscaling::UpscaleMethod Upscaling::GetUpscaleMethod()
+Upscaling::UpscaleMethod Upscaling::GetUpscaleMethod() const
 {
 	if (streamline.featureDLSS)
 		return (UpscaleMethod)settings.upscaleMethod;
@@ -1091,7 +1091,7 @@ bool Upscaling::IsFrameGenerationActive() const
 	return d3d12SwapChainActive && settings.frameGenerationMode && fidelityFX.isFrameGenActive && !globals::game::isVR;
 }
 
-bool Upscaling::IsUpscalingActive()
+bool Upscaling::IsUpscalingActive() const
 {
 	auto method = GetUpscaleMethod();
 
@@ -1111,9 +1111,7 @@ std::vector<FeatureConstraints::Constraint> Upscaling::GetActiveConstraints() co
 {
 	std::vector<FeatureConstraints::Constraint> constraints;
 
-	// Check if upscaling is active - need to cast away const for method call
-	auto* self = const_cast<Upscaling*>(this);
-	if (!self->IsUpscalingActive()) {
+	if (!IsUpscalingActive()) {
 		return constraints;
 	}
 

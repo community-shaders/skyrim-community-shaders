@@ -1,4 +1,5 @@
 ﻿#include "VR.h"
+#include "FeatureConstraints.h"
 #include "Menu.h"
 #include "Menu/Fonts.h"
 #include "RE/B/BSOpenVR.h"
@@ -134,7 +135,7 @@ void VR::DataLoaded()
 	// Initialize occlusion culling based on settings, but force-disable if an external
 	// upscaler is active (FSR/DLSS) since upscalers may modify the depth buffer.
 	bool desired = settings.EnableDepthBufferCullingExterior;
-	UpdateDepthBufferCulling(desired);
+	UpdateDepthBufferCulling(desired, { "VR", "EnableDepthBufferCullingExterior" });
 
 	if (gMinOccludeeBoxExtent) {
 		*gMinOccludeeBoxExtent = settings.MinOccludeeBoxExtent;
@@ -147,8 +148,10 @@ void VR::EarlyPrepass()
 {
 	// Respect user settings unless an external upscaler is active; if so, force-disable
 	// depth-buffer culling to avoid incorrect occlusion tests in VR.
-	bool desired = RE::TES::GetSingleton()->interiorCell ? settings.EnableDepthBufferCullingInterior : settings.EnableDepthBufferCullingExterior;
-	UpdateDepthBufferCulling(desired);
+	bool isInterior = RE::TES::GetSingleton()->interiorCell != nullptr;
+	auto settingId = isInterior ? FeatureConstraints::SettingId{ "VR", "EnableDepthBufferCullingInterior" } : FeatureConstraints::SettingId{ "VR", "EnableDepthBufferCullingExterior" };
+	bool desired = isInterior ? settings.EnableDepthBufferCullingInterior : settings.EnableDepthBufferCullingExterior;
+	UpdateDepthBufferCulling(desired, settingId);
 }
 
 //=============================================================================
@@ -1646,21 +1649,27 @@ void VR::SubmitOverlayFrame()
 }
 
 // Helper to centralize VR depth buffer culling logic, reducing duplication between DataLoaded and EarlyPrepass.
-void VR::UpdateDepthBufferCulling(bool desired)
+void VR::UpdateDepthBufferCulling(bool desired, const FeatureConstraints::SettingId& settingId)
 {
 	// Check if any feature is constraining this setting
-	auto constraint = FeatureConstraints::GetConstraints({ "VR", "EnableDepthBufferCullingExterior" });
+	auto constraint = FeatureConstraints::GetConstraints(settingId);
 
 	if (constraint.isConstrained) {
-		bool forcedValue = std::get<bool>(constraint.forcedValue);
-		if (gDepthBufferCulling && *gDepthBufferCulling != forcedValue) {
-			*gDepthBufferCulling = forcedValue;
-			for (const auto& src : constraint.sources) {
-				logger::info("{} forcing depth buffer culling {}: {}",
-					src.featureName,
-					forcedValue ? "ON" : "OFF",
-					src.reason);
+		// Use std::get_if to safely extract bool value and avoid std::bad_variant_access
+		if (auto* forcedValuePtr = std::get_if<bool>(&constraint.forcedValue)) {
+			bool forcedValue = *forcedValuePtr;
+			if (gDepthBufferCulling && *gDepthBufferCulling != forcedValue) {
+				*gDepthBufferCulling = forcedValue;
+				for (const auto& src : constraint.sources) {
+					logger::info("{} forcing depth buffer culling {}: {}",
+						src.featureName,
+						forcedValue ? "ON" : "OFF",
+						src.reason);
+				}
 			}
+		} else {
+			// Constraint has non-bool value type - log warning and skip
+			logger::warn("VR::UpdateDepthBufferCulling: Constraint on {} has non-bool forced value, ignoring", settingId.settingPath);
 		}
 	} else {
 		if (gDepthBufferCulling && *gDepthBufferCulling != desired) {

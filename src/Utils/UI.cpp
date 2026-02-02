@@ -1704,45 +1704,58 @@ namespace Util
 
 	namespace ConstrainedUI
 	{
+		namespace
+		{
+			// Helper to render constraint tooltip
+			void RenderConstraintTooltip(const FeatureConstraints::ConstraintResult& constraint)
+			{
+				if (!ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+					return;
+
+				ImGui::BeginTooltip();
+				ImGui::PushTextWrapPos(ImGui::GetFontSize() * 35.0f);
+				ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.2f, 1.0f), "Setting Constrained");
+				ImGui::Text("This setting is constrained by:");
+				ImGui::Spacing();
+				for (const auto& src : constraint.sources) {
+					ImGui::BulletText("%s", src.featureName.c_str());
+					ImGui::Indent();
+					ImGui::TextWrapped("%s", src.reason.c_str());
+					if (src.recommendDisableAtBoot) {
+						ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.5f, 1.0f),
+							"Consider disabling this feature at boot for best compatibility.");
+					}
+					ImGui::Unindent();
+				}
+				ImGui::Separator();
+				ImGui::Text("Forced value: %s", FeatureConstraints::FormatConstraintValue(constraint.forcedValue).c_str());
+				ImGui::PopTextWrapPos();
+				ImGui::EndTooltip();
+			}
+		}
+
 		bool Checkbox(const char* label, bool* value, const FeatureConstraints::SettingId& settingId)
 		{
 			auto constraint = FeatureConstraints::GetConstraints(settingId);
 
 			if (constraint.isConstrained) {
-				ImGui::BeginDisabled();
-			}
-
-			bool changed = ImGui::Checkbox(label, value);
-
-			if (constraint.isConstrained) {
-				ImGui::EndDisabled();
-
-				if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
-					ImGui::BeginTooltip();
-					ImGui::PushTextWrapPos(ImGui::GetFontSize() * 35.0f);
-					ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.2f, 1.0f), "Setting Constrained");
-					ImGui::Text("This setting is constrained by:");
-					ImGui::Spacing();
-					for (const auto& src : constraint.sources) {
-						ImGui::BulletText("%s", src.featureName.c_str());
-						ImGui::Indent();
-						ImGui::TextWrapped("%s", src.reason.c_str());
-						if (src.recommendDisableAtBoot) {
-							ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.5f, 1.0f),
-								"Consider disabling this feature at boot for best compatibility.");
-						}
-						ImGui::Unindent();
-					}
-					ImGui::Separator();
-					ImGui::Text("Forced value: %s", FeatureConstraints::FormatConstraintValue(constraint.forcedValue).c_str());
-					ImGui::PopTextWrapPos();
-					ImGui::EndTooltip();
+				// Display the forced value instead of the stored value
+				if (auto* forcedBool = std::get_if<bool>(&constraint.forcedValue)) {
+					bool displayValue = *forcedBool;
+					ImGui::BeginDisabled();
+					ImGui::Checkbox(label, &displayValue);
+					ImGui::EndDisabled();
+					RenderConstraintTooltip(constraint);
+				} else {
+					// Fallback: wrong type, show disabled with stored value
+					ImGui::BeginDisabled();
+					ImGui::Checkbox(label, value);
+					ImGui::EndDisabled();
 				}
-
 				return false;
 			}
 
-			return changed;
+			return ImGui::Checkbox(label, value);
 		}
 
 		bool SliderFloat(const char* label, float* value, float min, float max,
@@ -1751,40 +1764,23 @@ namespace Util
 			auto constraint = FeatureConstraints::GetConstraints(settingId);
 
 			if (constraint.isConstrained) {
-				ImGui::BeginDisabled();
-			}
-
-			bool changed = ImGui::SliderFloat(label, value, min, max, format);
-
-			if (constraint.isConstrained) {
-				ImGui::EndDisabled();
-
-				if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
-					ImGui::BeginTooltip();
-					ImGui::PushTextWrapPos(ImGui::GetFontSize() * 35.0f);
-					ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.2f, 1.0f), "Setting Constrained");
-					ImGui::Text("This setting is constrained by:");
-					ImGui::Spacing();
-					for (const auto& src : constraint.sources) {
-						ImGui::BulletText("%s", src.featureName.c_str());
-						ImGui::Indent();
-						ImGui::TextWrapped("%s", src.reason.c_str());
-						if (src.recommendDisableAtBoot) {
-							ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.5f, 1.0f),
-								"Consider disabling this feature at boot for best compatibility.");
-						}
-						ImGui::Unindent();
-					}
-					ImGui::Separator();
-					ImGui::Text("Forced value: %s", FeatureConstraints::FormatConstraintValue(constraint.forcedValue).c_str());
-					ImGui::PopTextWrapPos();
-					ImGui::EndTooltip();
+				// Display the forced value instead of the stored value
+				if (auto* forcedFloat = std::get_if<float>(&constraint.forcedValue)) {
+					float displayValue = *forcedFloat;
+					ImGui::BeginDisabled();
+					ImGui::SliderFloat(label, &displayValue, min, max, format);
+					ImGui::EndDisabled();
+					RenderConstraintTooltip(constraint);
+				} else {
+					// Fallback: wrong type, show disabled with stored value
+					ImGui::BeginDisabled();
+					ImGui::SliderFloat(label, value, min, max, format);
+					ImGui::EndDisabled();
 				}
-
 				return false;
 			}
 
-			return changed;
+			return ImGui::SliderFloat(label, value, min, max, format);
 		}
 
 		bool SliderInt(const char* label, int* value, int min, int max,
@@ -1793,40 +1789,23 @@ namespace Util
 			auto constraint = FeatureConstraints::GetConstraints(settingId);
 
 			if (constraint.isConstrained) {
-				ImGui::BeginDisabled();
-			}
-
-			bool changed = ImGui::SliderInt(label, value, min, max, format);
-
-			if (constraint.isConstrained) {
-				ImGui::EndDisabled();
-
-				if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
-					ImGui::BeginTooltip();
-					ImGui::PushTextWrapPos(ImGui::GetFontSize() * 35.0f);
-					ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.2f, 1.0f), "Setting Constrained");
-					ImGui::Text("This setting is constrained by:");
-					ImGui::Spacing();
-					for (const auto& src : constraint.sources) {
-						ImGui::BulletText("%s", src.featureName.c_str());
-						ImGui::Indent();
-						ImGui::TextWrapped("%s", src.reason.c_str());
-						if (src.recommendDisableAtBoot) {
-							ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.5f, 1.0f),
-								"Consider disabling this feature at boot for best compatibility.");
-						}
-						ImGui::Unindent();
-					}
-					ImGui::Separator();
-					ImGui::Text("Forced value: %s", FeatureConstraints::FormatConstraintValue(constraint.forcedValue).c_str());
-					ImGui::PopTextWrapPos();
-					ImGui::EndTooltip();
+				// Display the forced value instead of the stored value
+				if (auto* forcedInt = std::get_if<int>(&constraint.forcedValue)) {
+					int displayValue = *forcedInt;
+					ImGui::BeginDisabled();
+					ImGui::SliderInt(label, &displayValue, min, max, format);
+					ImGui::EndDisabled();
+					RenderConstraintTooltip(constraint);
+				} else {
+					// Fallback: wrong type, show disabled with stored value
+					ImGui::BeginDisabled();
+					ImGui::SliderInt(label, value, min, max, format);
+					ImGui::EndDisabled();
 				}
-
 				return false;
 			}
 
-			return changed;
+			return ImGui::SliderInt(label, value, min, max, format);
 		}
 	}
 

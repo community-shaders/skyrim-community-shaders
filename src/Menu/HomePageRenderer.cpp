@@ -9,6 +9,7 @@
 #include "Plugin.h"
 #include "State.h"
 #include "Util.h"
+#include "Utils/UI.h"
 
 // Static member definitions
 bool HomePageRenderer::isFirstTimeSetupShown = false;
@@ -273,53 +274,73 @@ void HomePageRenderer::RenderActiveConstraintsSection()
 
 		ImGui::Spacing();
 
-		// Compact table format
-		if (ImGui::BeginTable("ConstraintsTable", 3, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingStretchProp)) {
-			ImGui::TableSetupColumn("Setting", ImGuiTableColumnFlags_WidthStretch);
-			ImGui::TableSetupColumn("Forced To", ImGuiTableColumnFlags_WidthFixed, 80.0f);
-			ImGui::TableSetupColumn("Constrained By", ImGuiTableColumnFlags_WidthStretch);
-			ImGui::TableHeadersRow();
+		// Prepare data for table
+		struct ConstraintRow
+		{
+			std::string setting;
+			std::string forcedTo;
+			std::string constrainedBy;
+			std::string tooltip;
+		};
 
-			for (const auto& [settingId, result] : constraints) {
-				ImGui::TableNextRow();
-
-				// Setting column
-				ImGui::TableSetColumnIndex(0);
-				ImGui::TextColored(warningColor, "%s.%s", settingId.featureShortName.c_str(), settingId.settingPath.c_str());
-
-				// Forced value column
-				ImGui::TableSetColumnIndex(1);
-				ImGui::Text("%s", FeatureConstraints::FormatConstraintValue(result.forcedValue).c_str());
-
-				// Constrained by column - show feature names, tooltip has details
-				ImGui::TableSetColumnIndex(2);
-				std::string sourceNames;
-				for (size_t i = 0; i < result.sources.size(); ++i) {
-					if (i > 0)
-						sourceNames += ", ";
-					sourceNames += result.sources[i].featureName;
-				}
-				ImGui::Text("%s", sourceNames.c_str());
-
-				// Tooltip with full details on row hover
-				if (ImGui::IsItemHovered()) {
-					ImGui::BeginTooltip();
-					ImGui::PushTextWrapPos(ImGui::GetFontSize() * 25.0f);
-					for (const auto& src : result.sources) {
-						ImGui::TextColored(warningColor, "%s:", src.featureName.c_str());
-						ImGui::TextWrapped("%s", src.reason.c_str());
-						if (src.recommendDisableAtBoot) {
-							ImVec4 errorColor = menu ? menu->GetTheme().StatusPalette.Error : ImVec4(1.0f, 0.4f, 0.4f, 1.0f);
-							ImGui::TextColored(errorColor, "Consider disabling at boot.");
-						}
-						ImGui::Spacing();
-					}
-					ImGui::PopTextWrapPos();
-					ImGui::EndTooltip();
+		std::vector<ConstraintRow> rows;
+		for (const auto& [settingId, result] : constraints) {
+			ConstraintRow row;
+			row.setting = std::format("{}.{}", settingId.featureShortName, settingId.settingPath);
+			row.forcedTo = FeatureConstraints::FormatConstraintValue(result.forcedValue);
+			for (size_t i = 0; i < result.sources.size(); ++i) {
+				if (i > 0)
+					row.constrainedBy += ", ";
+				row.constrainedBy += result.sources[i].featureName;
+			}
+			// Build tooltip
+			for (const auto& src : result.sources) {
+				if (!row.tooltip.empty())
+					row.tooltip += "\n";
+				row.tooltip += std::format("{}: {}", src.featureName, src.reason);
+				if (src.recommendDisableAtBoot) {
+					row.tooltip += "\nConsider disabling at boot.";
 				}
 			}
-			ImGui::EndTable();
+			rows.push_back(row);
 		}
+
+		// Define headers
+		std::vector<std::string> headers = { "Setting", "Forced To", "Constrained By" };
+
+		// Custom sorts (string comparators for each column)
+		std::vector<std::function<bool(const ConstraintRow&, const ConstraintRow&, bool)>> customSorts = {
+			[](const ConstraintRow& a, const ConstraintRow& b, bool asc) { return Util::StringSortComparator(a.setting, b.setting, asc); },
+			[](const ConstraintRow& a, const ConstraintRow& b, bool asc) { return Util::StringSortComparator(a.forcedTo, b.forcedTo, asc); },
+			[](const ConstraintRow& a, const ConstraintRow& b, bool asc) { return Util::StringSortComparator(a.constrainedBy, b.constrainedBy, asc); }
+		};
+
+		// Cell render
+		auto cellRender = [warningColor](int, int colIdx, const ConstraintRow& row) {
+			std::string value;
+			std::string tooltip;
+			ImVec4 textColor = ImVec4(0, 0, 0, 0);
+			if (colIdx == 0) {
+				value = row.setting;
+				textColor = warningColor;
+			} else if (colIdx == 1) {
+				value = row.forcedTo;
+			} else if (colIdx == 2) {
+				value = row.constrainedBy;
+				tooltip = row.tooltip;
+			}
+			Util::RenderTableCell(value, "", tooltip, nullptr, ImVec4(1, 1, 1, 1), true, textColor);
+		};
+
+		// Render table
+		Util::ShowSortedStringTableCustom<ConstraintRow>(
+			"ConstraintsTable",
+			headers,
+			rows,
+			0,     // sortColumn
+			true,  // ascending
+			customSorts,
+			cellRender);
 	}
 
 	ImGui::Spacing();

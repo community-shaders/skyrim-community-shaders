@@ -9,6 +9,7 @@
 #include <system_error>
 
 #include "Feature.h"
+#include "FeatureConstraints.h"
 #include "FeatureIssues.h"
 #include "Fonts.h"
 #include "Globals.h"
@@ -409,12 +410,13 @@ void FeatureListRenderer::RenderLeftColumn(
 
 void FeatureListRenderer::RenderRightColumn(
 	const std::vector<MenuFuncInfo>& menuList,
-	size_t selectedMenu)
+	size_t selectedMenu,
+	std::string& pendingFeatureSelection)
 {
 	ImGui::TableNextColumn();
 
 	if (selectedMenu < menuList.size()) {
-		std::visit(DrawMenuVisitor{}, menuList[selectedMenu]);
+		std::visit(DrawMenuVisitor{ pendingFeatureSelection }, menuList[selectedMenu]);
 	} else {
 		ImGui::TextDisabled("Please select an item on the left.");
 	}
@@ -556,6 +558,8 @@ void FeatureListRenderer::DrawMenuVisitor::operator()(Feature* feat)
 		RenderRestoreDefaultsButton(feat, isDisabled, isLoaded);
 	}
 	ImGui::EndChild();
+	// Render reactive constraint warning dialog if needed
+	RenderReactiveConstraintWarningDialog();
 }
 
 bool FeatureListRenderer::DrawMenuVisitor::IsFeatureInstalled(const std::string& featureName)
@@ -621,8 +625,19 @@ void FeatureListRenderer::DrawMenuVisitor::RenderFeatureHeader(Feature* feat, bo
 	}
 
 	if (Util::FeatureToggle("##BootToggle", &bootEnabled)) {
-		bool newState = feat->ToggleAtBootSetting();
-		logger::info("{}: {} at boot.", featureName, newState ? "Enabled" : "Disabled");
+		// Check if enabling this feature would create new constraints
+		auto potentialConstraints = FeatureConstraints::GetConstraintsFromEnablingFeature(feat);
+
+		if (!potentialConstraints.empty()) {
+			// Show confirmation dialog
+			showConstraintConfirmation = true;
+			featureToEnable = feat;
+			constraintsToCreate = std::move(potentialConstraints);
+		} else {
+			// No constraints would be created, proceed normally
+			bool newState = feat->ToggleAtBootSetting();
+			logger::info("{}: {} at boot.", featureName, newState ? "Enabled" : "Disabled");
+		}
 	}
 
 	if (!feat->failedLoadedMessage.empty()) {
@@ -685,9 +700,49 @@ void FeatureListRenderer::DrawMenuVisitor::RenderFeatureSettings(Feature* feat, 
 				ImGui::Separator();
 			}
 
+			// Capture constraints before drawing settings for reactive constraint detection
+			auto constraintsBefore = FeatureConstraints::GetAllActiveConstraints();
+			logger::debug("Reactive constraint detection: {} constraints before DrawSettings() for {}", constraintsBefore.size(), feat->GetShortName());
+
 			ImVec2 cursorPosBefore = ImGui::GetCursorPos();
 			feat->DrawSettings();
 			ImVec2 cursorPosAfter = ImGui::GetCursorPos();
+
+			// Capture constraints after drawing settings
+			auto constraintsAfter = FeatureConstraints::GetAllActiveConstraints();
+			logger::debug("Reactive constraint detection: {} constraints after DrawSettings() for {}", constraintsAfter.size(), feat->GetShortName());
+
+			// Detect new or changed constraints created by setting changes
+			std::vector<std::pair<FeatureConstraints::SettingId, FeatureConstraints::ConstraintResult>> changedConstraints;
+			for (const auto& [settingId, newResult] : constraintsAfter) {
+				auto it = std::find_if(constraintsBefore.begin(), constraintsBefore.end(),
+					[&settingId](const auto& pair) { return pair.first == settingId; });
+				if (it == constraintsBefore.end()) {
+					// New constraint added
+					changedConstraints.emplace_back(settingId, newResult);
+				} else {
+					// Check if existing constraint changed
+					const auto& oldResult = it->second;
+					if (oldResult.forcedValue != newResult.forcedValue ||
+						oldResult.sources.size() != newResult.sources.size() ||
+						!std::equal(oldResult.sources.begin(), oldResult.sources.end(), newResult.sources.begin(),
+							[](const auto& a, const auto& b) { return a.featureName == b.featureName && a.reason == b.reason; })) {
+						// Constraint changed
+						changedConstraints.emplace_back(settingId, newResult);
+					}
+				}
+			}
+
+			// Show reactive constraint warning if constraints were created or changed
+			if (!changedConstraints.empty()) {
+				logger::info("Reactive constraint detection: {} constraints changed by {}", changedConstraints.size(), feat->GetShortName());
+				for (const auto& [settingId, result] : changedConstraints) {
+					logger::info("  - {} ({}) forced to {}", settingId.settingPath, result.sources[0].featureName, FeatureConstraints::FormatConstraintValue(result.forcedValue));
+				}
+				showReactiveConstraintWarning = true;
+				reactiveConstraintFeature = feat;
+				newReactiveConstraints = std::move(changedConstraints);
+			}
 
 			const float cursorEpsilon = 0.1f;
 			bool cursorMoved = (std::abs(cursorPosAfter.x - cursorPosBefore.x) > cursorEpsilon ||
@@ -762,5 +817,163 @@ void FeatureListRenderer::DrawMenuVisitor::RenderRestoreDefaultsButton(Feature* 
 
 	if (auto _tt = Util::HoverTooltipWrapper()) {
 		ImGui::Text("Restore default settings for this feature");
+	}
+}
+
+void FeatureListRenderer::DrawMenuVisitor::RenderConstraintConfirmationDialog()
+{
+	if (!showConstraintConfirmation || !featureToEnable) {
+		return;
+	}
+
+	ImGui::OpenPopup("Enable Feature Confirmation");
+
+	ImVec2 center = ImGui::GetMainViewport()->GetCenter();
+	ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+	ImGui::SetNextWindowSize(ImVec2(500, 0), ImGuiCond_Appearing);
+
+	if (ImGui::BeginPopupModal("Enable Feature Confirmation", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
+		ImGui::TextWrapped("Enabling %s will create the following setting constraints:", featureToEnable->GetName().c_str());
+		ImGui::Spacing();
+		ImGui::Separator();
+
+		if (ImGui::BeginTable("##ConstraintTable", 3, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingStretchProp)) {
+			ImGui::TableSetupColumn("Feature", ImGuiTableColumnFlags_WidthStretch);
+			ImGui::TableSetupColumn("Setting", ImGuiTableColumnFlags_WidthStretch);
+			ImGui::TableSetupColumn("Forced Value", ImGuiTableColumnFlags_WidthStretch);
+			ImGui::TableHeadersRow();
+
+			size_t rowIndex = 0;
+			for (const auto& [settingId, result] : constraintsToCreate) {
+				ImGui::TableNextRow();
+				ImGui::TableSetColumnIndex(0);
+				if (ImGui::Selectable(fmt::format("{}##{}", result.sources[0].featureName, rowIndex).c_str())) {
+					pendingFeatureSelection = result.sources[0].featureName;
+					ImGui::CloseCurrentPopup();
+				}
+				if (auto _tt = Util::HoverTooltipWrapper()) {
+					ImGui::Text("Click to navigate to %s feature", result.sources[0].featureName.c_str());
+				}
+				ImGui::TableSetColumnIndex(1);
+				ImGui::Text("%s", settingId.settingPath.c_str());
+				ImGui::TableSetColumnIndex(2);
+				ImGui::Text("%s", FeatureConstraints::FormatConstraintValue(result.forcedValue).c_str());
+				rowIndex++;
+			}
+
+			ImGui::EndTable();
+		}
+
+		ImGui::Spacing();
+		ImGui::Separator();
+		ImGui::Spacing();
+
+		ImGui::TextWrapped("These settings will be disabled in their respective feature menus and forced to the specified values. You can re-enable the constrained features to remove these constraints.");
+
+		ImGui::Spacing();
+
+		if (ImGui::Button("Confirm Enable", ImVec2(120, 0))) {
+			// Proceed with enabling the feature
+			bool newState = featureToEnable->ToggleAtBootSetting();
+			logger::info("{}: {} at boot.", featureToEnable->GetShortName(), newState ? "Enabled" : "Disabled");
+
+			// Reset dialog state
+			showConstraintConfirmation = false;
+			featureToEnable = nullptr;
+			constraintsToCreate.clear();
+
+			ImGui::CloseCurrentPopup();
+		}
+
+		ImGui::SameLine();
+
+		if (ImGui::Button("Cancel", ImVec2(120, 0))) {
+			// Reset dialog state without enabling
+			showConstraintConfirmation = false;
+			featureToEnable = nullptr;
+			constraintsToCreate.clear();
+
+			ImGui::CloseCurrentPopup();
+		}
+
+		ImGui::EndPopup();
+	}
+}
+
+void FeatureListRenderer::DrawMenuVisitor::RenderReactiveConstraintWarningDialog()
+{
+	if (!showReactiveConstraintWarning || !reactiveConstraintFeature) {
+		return;
+	}
+
+	// Only open the popup once when the flag is first set
+	static bool popupOpened = false;
+	if (!popupOpened) {
+		logger::info("Opening reactive constraint warning dialog for {}", reactiveConstraintFeature->GetName());
+		ImGui::OpenPopup("Setting Change Warning");
+		popupOpened = true;
+	}
+
+	ImVec2 center = ImGui::GetMainViewport()->GetCenter();
+	ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+	ImGui::SetNextWindowSize(ImVec2(500, 0), ImGuiCond_Appearing);
+
+	if (ImGui::BeginPopupModal("Setting Change Warning", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
+		ImGui::TextWrapped("Your recent setting changes in %s have created the following constraints:", reactiveConstraintFeature->GetName().c_str());
+		ImGui::Spacing();
+		ImGui::Separator();
+
+		if (ImGui::BeginTable("##ReactiveConstraintTable", 3, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingStretchProp)) {
+			ImGui::TableSetupColumn("Feature", ImGuiTableColumnFlags_WidthStretch);
+			ImGui::TableSetupColumn("Setting", ImGuiTableColumnFlags_WidthStretch);
+			ImGui::TableSetupColumn("Forced Value", ImGuiTableColumnFlags_WidthStretch);
+			ImGui::TableHeadersRow();
+
+			size_t rowIndex = 0;
+			for (const auto& [settingId, result] : newReactiveConstraints) {
+				ImGui::TableNextRow();
+				ImGui::TableSetColumnIndex(0);
+				if (ImGui::Selectable(fmt::format("{}##{}", result.sources[0].featureName, rowIndex).c_str())) {
+					pendingFeatureSelection = result.sources[0].featureName;
+					ImGui::CloseCurrentPopup();
+				}
+				if (auto _tt = Util::HoverTooltipWrapper()) {
+					ImGui::Text("Click to navigate to %s feature", result.sources[0].featureName.c_str());
+				}
+				ImGui::TableSetColumnIndex(1);
+				ImGui::Text("%s", settingId.settingPath.c_str());
+				ImGui::TableSetColumnIndex(2);
+				ImGui::Text("%s", FeatureConstraints::FormatConstraintValue(result.forcedValue).c_str());
+				rowIndex++;
+			}
+
+			ImGui::EndTable();
+		}
+
+		ImGui::Spacing();
+		ImGui::Separator();
+		ImGui::Spacing();
+
+		ImGui::TextWrapped("These settings are now disabled in their respective feature menus and forced to the specified values. You can adjust the constrained features to remove these constraints.");
+
+		ImGui::Spacing();
+
+		if (ImGui::Button("OK", ImVec2(120, 0))) {
+			// Reset dialog state
+			showReactiveConstraintWarning = false;
+			reactiveConstraintFeature = nullptr;
+			newReactiveConstraints.clear();
+			popupOpened = false;  // Reset for next time
+
+			ImGui::CloseCurrentPopup();
+		}
+
+		ImGui::EndPopup();
+	} else {
+		// Popup was closed externally, reset state
+		showReactiveConstraintWarning = false;
+		reactiveConstraintFeature = nullptr;
+		newReactiveConstraints.clear();
+		popupOpened = false;
 	}
 }

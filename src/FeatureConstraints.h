@@ -1,8 +1,11 @@
 #pragma once
 
+#include <functional>
 #include <string>
 #include <variant>
 #include <vector>
+
+struct Feature;
 
 namespace FeatureConstraints
 {
@@ -74,6 +77,25 @@ namespace FeatureConstraints
 	std::vector<std::pair<SettingId, ConstraintResult>> GetAllActiveConstraints();
 
 	/**
+	 * @brief Get constraints that would be created by enabling a specific feature
+	 * @param featureToEnable The feature that would be enabled
+	 * @return Vector of setting IDs and constraint results that would be created
+	 */
+	std::vector<std::pair<SettingId, ConstraintResult>> GetConstraintsFromEnablingFeature(Feature* featureToEnable);
+
+	/**
+	 * @brief Get constraints that would be created by a setting change
+	 * @param feature The feature whose setting is changing
+	 * @param applyChange Function to apply the setting change temporarily
+	 * @param revertChange Function to revert the setting change
+	 * @return Vector of setting IDs and constraint results that would be created by the change
+	 */
+	std::vector<std::pair<SettingId, ConstraintResult>> GetConstraintsFromSettingChange(
+		Feature* feature,
+		const std::function<void()>& applyChange,
+		const std::function<void()>& revertChange);
+
+	/**
 	 * @brief Build a formatted tooltip string for a constrained setting
 	 * @param result The constraint result to format
 	 * @return Formatted string suitable for ImGui tooltip
@@ -86,19 +108,4 @@ namespace FeatureConstraints
 	 * @return String representation of the value
 	 */
 	std::string FormatConstraintValue(const std::variant<bool, int, float>& value);
-
-	/**
-	 * @brief Check what constraints a feature would impose if enabled
-	 * @param featureShortName The short name of the feature to check
-	 * @return Vector of constraints that would be imposed
-	 */
-	std::vector<Constraint> GetPotentialConstraints(const std::string& featureShortName);
-
-	/**
-	 * @brief Check if enabling a feature would conflict with currently-enabled settings
-	 * @param featureShortName The short name of the feature being enabled
-	 * @param outConflicts Output vector of constraint conflicts (setting currently enabled but would be forced off)
-	 * @return True if there are conflicts that the user should be warned about
-	 */
-	bool WouldCauseConflicts(const std::string& featureShortName, std::vector<std::pair<Constraint, bool>>& outConflicts);
 }
