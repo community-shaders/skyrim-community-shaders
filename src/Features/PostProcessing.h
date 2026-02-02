@@ -95,7 +95,6 @@ struct PostProcessing : Feature
 
 	void PreProcess();
 	void DrawBeforeUpscaling();
-	void UpdateToD();
 
 	/////////////////////////////////////////////////////////////////////////////////
 
@@ -104,8 +103,6 @@ struct PostProcessing : Feature
 
 	struct ImageSpaceManager
 	{
-		float timeOfDay[6] = { 0.f, 0.f, 0.f, 0.f, 0.f, 0.f };  // 0: dawn, 1: sunrise, 2: day, 3: sunset, 4: dusk, 5: night
-		bool inInterior = false;
 		RE::ImageSpaceData gameISData;
 	};
 

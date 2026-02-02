@@ -127,15 +127,6 @@ void PostProcessing::DrawSettings()
 	ImGui::Separator();
 
 	if (ImGui::TreeNode("Debug")) {
-		ImGui::Text("In Interior: %s", imageSpaceManager->inInterior ? "Yes" : "No");
-		ImGui::Text("Time of Day:");
-		ImGui::Text("Dawn: %.2f\nSunrise: %.2f\nDay: %.2f\nSunset: %.2f\nDusk: %.2f\nNight: %.2f",
-			imageSpaceManager->timeOfDay[0],
-			imageSpaceManager->timeOfDay[1],
-			imageSpaceManager->timeOfDay[2],
-			imageSpaceManager->timeOfDay[3],
-			imageSpaceManager->timeOfDay[4],
-			imageSpaceManager->timeOfDay[5]);
 		if (ImGui::TreeNode("Game ImageSpace Values")) {
 			ImGui::Text("Base Amount: %.3f", imageSpaceManager->gameISData.baseAmount);
 			ImGui::Text("Base Data:");
@@ -433,77 +424,6 @@ void PostProcessing::Reset()
 	}
 }
 
-// from doodlum
-void PostProcessing::UpdateToD()
-{
-	if (bypass)
-		return;
-
-	auto sky = globals::game::sky;
-	if (!sky)
-		return;
-
-	imageSpaceManager->inInterior = Util::IsInterior();
-
-	float currentTime = sky->currentGameHour;
-
-	float sunriseBegin = sky->GetSunriseBegin();
-	float sunriseEnd = sky->GetSunriseEnd();
-	float sunsetBegin = sky->GetSunsetBegin();
-	float sunsetEnd = sky->GetSunsetEnd();
-
-	float dawnMid = sunriseBegin + (sunriseEnd - sunriseBegin) * 0.5f;
-	float duskMid = sunsetBegin + (sunsetEnd - sunsetBegin) * 0.5f;
-
-	auto range01 = [](float t, float a, float b) {
-		// Handles wrap-around if b < a
-		float range = b - a;
-		if (range < 0.0f)
-			range += 24.0f;
-		float value = t - a;
-		if (value < 0.0f)
-			value += 24.0f;
-		return std::clamp(value / range, 0.0f, 1.0f);
-	};
-
-	for (int i = 0; i < 6; ++i) {
-		imageSpaceManager->timeOfDay[i] = 0.0f;
-	}
-
-	// Dawn → Sunrise
-	if (currentTime >= sunriseBegin && currentTime < dawnMid) {
-		float f = range01(currentTime, sunriseBegin, dawnMid);
-		imageSpaceManager->timeOfDay[0] = 1.0f - f;  // dawn
-		imageSpaceManager->timeOfDay[1] = f;         // sunrise
-	} else if (currentTime >= dawnMid && currentTime < sunriseEnd) {
-		float f = range01(currentTime, dawnMid, sunriseEnd);
-		imageSpaceManager->timeOfDay[1] = 1.0f - f;  // sunrise
-		imageSpaceManager->timeOfDay[2] = f;         // day
-	}
-	// Day → Sunset
-	else if (currentTime >= sunriseEnd && currentTime < sunsetBegin) {
-		float f = range01(currentTime, sunriseEnd, sunsetBegin);
-		imageSpaceManager->timeOfDay[2] = 1.0f - f;  // day
-		imageSpaceManager->timeOfDay[3] = f;         // sunset
-	}
-	// Sunset → Dusk
-	else if (currentTime >= sunsetBegin && currentTime < duskMid) {
-		float f = range01(currentTime, sunsetBegin, duskMid);
-		imageSpaceManager->timeOfDay[3] = 1.0f - f;  // sunset
-		imageSpaceManager->timeOfDay[4] = f;         // dusk
-	} else if (currentTime >= duskMid && currentTime < sunsetEnd) {
-		float f = range01(currentTime, duskMid, sunsetEnd);
-		imageSpaceManager->timeOfDay[4] = 1.0f - f;  // dusk
-		imageSpaceManager->timeOfDay[5] = f;         // night
-	}
-	// Night → Dawn (wrap)
-	else {
-		float f = range01(currentTime, sunsetEnd, sunriseBegin);
-		imageSpaceManager->timeOfDay[5] = 1.0f - f;  // night
-		imageSpaceManager->timeOfDay[0] = f;         // dawn
-	}
-}
-
 void PostProcessing::DrawBeforeUpscaling()
 {
 	if (bypass)
@@ -622,8 +542,6 @@ void PostProcessing::Prepass()
 		ProcessSettings(pendingSettings);
 		pendingSettings = {};
 	}
-
-	UpdateToD();
 
 	// Update gameISData
 	const auto ImageSpace = RE::ImageSpaceManager::GetSingleton();
