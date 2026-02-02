@@ -114,7 +114,7 @@ namespace ShadowSampling
 
 		// Determine which cascade pair to blend between
 		bool inFarRegion = sD.EndSplitDistances.x < shadowMapDepth;
-		float2 blendRange = inFarRegion 
+		float2 blendRange = inFarRegion
 			? float2(sD.StartSplitDistances.z, sD.EndSplitDistances.y)
 			: float2(sD.StartSplitDistances.y, sD.EndSplitDistances.x);
 		float cascadeProbability = saturate((shadowMapDepth - blendRange.x) / (blendRange.y - blendRange.x));
@@ -140,7 +140,7 @@ namespace ShadowSampling
 		for (uint k = 0; k < sampleCount16; k++) {
 			uint noisyIndex = (k + uint(sampleCount16 * noise)) % sampleCount16;
 			float t = (sampleCount16 - 1 - noisyIndex) * rcpSampleCount16;
-			
+
 			// Probabilistically select cascade (0 or 1 within the pair)
 			uint cascadeIndex = uint(frac(t + noise) < cascadeProbability);
 
