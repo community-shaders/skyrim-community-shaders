@@ -33,7 +33,7 @@ public:
 	bool featureDLSS = false;
 
 	sl::ViewportHandle viewport{ 0 };
-
+	static constexpr uint32_t MAX_RESOLUTION = 8192;
 	HMODULE interposer = NULL;
 
 	// SL Interposer Functions
@@ -77,8 +77,6 @@ public:
 	void SetDLSSOptions();
 
 	void Upscale(ID3D11Resource* a_upscalingTexture, ID3D11Resource* a_reactiveMask, ID3D11Resource* a_transparencyCompositionMask, ID3D11Resource* a_motionVectors);
-
-	float2 GetInputResolutionScale(uint32_t outputWidth, uint32_t outputHeight, uint32_t qualityPreset);
 
 	void DestroyDLSSResources();
 };

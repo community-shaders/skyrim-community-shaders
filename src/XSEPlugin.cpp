@@ -88,11 +88,7 @@ void MessageHandler(SKSE::MessagingInterface::Message* message)
 				auto shaderCache = globals::shaderCache;
 
 				// Run feature PostPostLoad() first so features can disable themselves if needed
-				for (auto* feature : Feature::GetFeatureList()) {
-					if (feature->loaded) {
-						feature->PostPostLoad();
-					}
-				}
+				Feature::ForEachLoadedFeature("PostPostLoad", [](Feature* feature) { feature->PostPostLoad(); });
 
 				// Now validate disk cache after features have had a chance to modify their state
 				shaderCache->ValidateDiskCache();
@@ -126,11 +122,7 @@ void MessageHandler(SKSE::MessagingInterface::Message* message)
 				}
 
 				globals::truePBR->DataLoaded();
-				for (auto* feature : Feature::GetFeatureList()) {
-					if (feature->loaded) {
-						feature->DataLoaded();
-					}
-				}
+				Feature::ForEachLoadedFeature("DataLoaded", [](Feature* feature) { feature->DataLoaded(); });
 			}
 
 			break;
@@ -206,11 +198,7 @@ bool Load()
 	if (errors.empty()) {
 		Hooks::InstallEarlyHooks();
 		logger::info("Calling feature Load methods");
-		for (auto* feature : Feature::GetFeatureList()) {
-			if (feature->loaded) {
-				feature->Load();
-			}
-		}
+		Feature::ForEachLoadedFeature("Load", [](Feature* feature) { feature->Load(); });
 	}
 
 	return true;

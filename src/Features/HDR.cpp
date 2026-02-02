@@ -35,14 +35,14 @@ typedef struct DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO_2
 	{
 		struct
 		{
-			UINT32 advancedColorSupported : 1;
-			UINT32 advancedColorActive : 1;
-			UINT32 reserved1 : 1;
-			UINT32 advancedColorLimitedByPolicy : 1;
-			UINT32 highDynamicRangeSupported : 1;
-			UINT32 highDynamicRangeUserEnabled : 1;
-			UINT32 wideColorEnforced : 1;
-			UINT32 reserved : 25;
+			UINT32 advancedColorSupported: 1;
+			UINT32 advancedColorActive: 1;
+			UINT32 reserved1: 1;
+			UINT32 advancedColorLimitedByPolicy: 1;
+			UINT32 highDynamicRangeSupported: 1;
+			UINT32 highDynamicRangeUserEnabled: 1;
+			UINT32 wideColorEnforced: 1;
+			UINT32 reserved: 25;
 		};
 		UINT32 value;
 	};
@@ -758,25 +758,25 @@ ID3D11ComputeShader* HDR::GetUIBrightnessCS()
 void HDR::ScaleUIBrightnessForFG()
 {
 	auto& upscaling = globals::features::upscaling;
-	
+
 	// Match the exact condition used for FidelityFX::Present() to ensure consistency
 	// Only run when FG is actively generating frames this frame
 	// When paused, UI compositing is handled by HDROutputCS instead
-	bool fgActiveThisFrame = upscaling.d3d12SwapChainActive && 
-	                         upscaling.settings.frameGenerationMode && 
+	bool fgActiveThisFrame = upscaling.d3d12SwapChainActive &&
+	                         upscaling.settings.frameGenerationMode &&
 	                         !globals::game::ui->GameIsPaused() &&
 	                         !globals::game::isVR;
 	if (!fgActiveThisFrame)
 		return;
-	
+
 	if (!hdrDataCB || !upscaling.dx12SwapChain.uiBufferWrapped || !upscaling.dx12SwapChain.uiBufferWrapped->uav)
 		return;
-	
+
 	auto context = globals::d3d::context;
 	auto state = globals::state;
-	
+
 	state->BeginPerfEvent("UI Brightness Scale");
-	
+
 	// Update constant buffer with current settings
 	UpdateHDRData();
 
@@ -787,13 +787,13 @@ void HDR::ScaleUIBrightnessForFG()
 
 	ID3D11Buffer* cbs[1] = { hdrDataCB->CB() };
 	context->CSSetConstantBuffers(0, 1, cbs);
-	
+
 	auto computeShader = GetUIBrightnessCS();
 	if (computeShader) {
 		context->CSSetShader(computeShader, nullptr, 0);
 		context->Dispatch(dispatchCount.x, dispatchCount.y, 1);
 	}
-	
+
 	// Cleanup
 	uavs[0] = nullptr;
 	context->CSSetUnorderedAccessViews(0, 1, uavs, nullptr);
@@ -816,8 +816,8 @@ void HDR::UpdateHDRData() const
 	}
 
 	auto& upscaling = globals::features::upscaling;
-	bool fgActiveThisFrame = upscaling.d3d12SwapChainActive && 
-	                         upscaling.settings.frameGenerationMode && 
+	bool fgActiveThisFrame = upscaling.d3d12SwapChainActive &&
+	                         upscaling.settings.frameGenerationMode &&
 	                         !globals::game::ui->GameIsPaused() &&
 	                         !globals::game::isVR;
 	bool skipUIComposite = fgActiveThisFrame;

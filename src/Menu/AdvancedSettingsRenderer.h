@@ -19,4 +19,5 @@ private:
 	static void RenderPBRSection(const std::function<void()>& drawTruePBRSettings);
 	static void RenderDisableAtBootSection(const std::function<void()>& drawDisableAtBootSettings);
 	static void RenderDeveloperSection();
+	static void RenderTestingSection();
 };

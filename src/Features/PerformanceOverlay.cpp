@@ -1195,6 +1195,10 @@ void PerformanceOverlay::DrawABTestSection(const std::vector<DrawCallRow>& allRo
 			this->settingsDiff.clear();
 			this->settingsDiffLoaded = false;
 			showSettingsDiff = false;
+			// Also clear cached snapshots so diff does not linger after user opts to clear
+			if (abTestingManager) {
+				abTestingManager->ClearCachedSnapshots();
+			}
 			ImGui::EndGroup();
 			ImGui::Separator();
 			return;
@@ -1203,9 +1207,15 @@ void PerformanceOverlay::DrawABTestSection(const std::vector<DrawCallRow>& allRo
 		// --- Settings diff section (inline, toggled) ---
 		if (showSettingsDiff) {
 			if (!this->settingsDiffLoaded) {
-				std::filesystem::path userPath = Util::PathHelpers::GetDataPath() / "SKSE/Plugins/CommunityShaders/SettingsUser.json";
-				std::filesystem::path testPath = Util::PathHelpers::GetDataPath() / "SKSE/Plugins/CommunityShaders/SettingsTest.json";
-				this->settingsDiff = Util::FileSystem::LoadJsonDiff(userPath, testPath);
+				// Use cached memory data from ABTestingManager instead of loading from disk
+				if (abTestingManager && abTestingManager->HasCachedSnapshots()) {
+					// Pull structured diff entries directly from ABTestingManager (in-memory snapshots)
+					this->settingsDiff = abTestingManager->GetConfigDiffEntries();
+				} else {
+					std::filesystem::path userPath = Util::PathHelpers::GetDataPath() / "SKSE/Plugins/CommunityShaders/SettingsUser.json";
+					std::filesystem::path testPath = Util::PathHelpers::GetDataPath() / "SKSE/Plugins/CommunityShaders/SettingsTest.json";
+					this->settingsDiff = Util::FileSystem::LoadJsonDiff(userPath, testPath);
+				}
 				this->settingsDiffLoaded = true;
 			}
 			ImGui::TextUnformatted("Differences between USER (A) and TEST (B) configs:");
@@ -1467,7 +1477,11 @@ std::vector<ColumnConfig> PerformanceOverlay::BuildDrawCallTableColumns(const Me
 
 	columns.push_back(ColumnConfig{
 		legends.frameTime.header,
-		MakeMetricColumn(theme, [](const DrawCallRow& row) { return row.frameTime; }, [](const auto& theme, float value, const DrawCallRow&) { return Util::GetThresholdColor(value, PerformanceOverlay::Settings::kFrameTimeGoodThreshold, PerformanceOverlay::Settings::kFrameTimeWarningThreshold, theme.StatusPalette.SuccessColor, theme.StatusPalette.Warning, theme.StatusPalette.Error); }, [](float /*value*/, const DrawCallRow& row) { return Util::FormatMilliseconds(row.frameTime) + " (" + Util::FormatPercent(row.percent) + ")"; }, legends.frameTime.tooltip), [](const DrawCallRow& a, const DrawCallRow& b, bool asc) { return asc ? (a.percent < b.percent) : (a.percent > b.percent); }, [legends]() {
+		MakeMetricColumn(theme, [](const DrawCallRow& row) { return row.frameTime; }, [](const auto& theme, float value, const DrawCallRow& row) {
+			if (magic_enum::enum_cast<SpecialShaderType>(row.shaderType).has_value()) {
+				return theme.Palette.Text;
+			}
+			return Util::GetThresholdColor(value, PerformanceOverlay::Settings::kFrameTimeGoodThreshold, PerformanceOverlay::Settings::kFrameTimeWarningThreshold, theme.StatusPalette.SuccessColor, theme.StatusPalette.Warning, theme.StatusPalette.Error); }, [](float /*value*/, const DrawCallRow& row) { return Util::FormatMilliseconds(row.frameTime) + " (" + Util::FormatPercent(row.percent) + ")"; }, legends.frameTime.tooltip), [](const DrawCallRow& a, const DrawCallRow& b, bool asc) { return asc ? (a.percent < b.percent) : (a.percent > b.percent); }, [legends]() {
 			 if (ImGui::IsItemHovered()) {
 				 if (auto _tt = Util::HoverTooltipWrapper()) {
 					 Util::DrawColoredMultiLineTooltip(legends.frameTime.tooltip);
@@ -1476,7 +1490,11 @@ std::vector<ColumnConfig> PerformanceOverlay::BuildDrawCallTableColumns(const Me
 
 	columns.push_back(ColumnConfig{
 		legends.costPerCall.header,
-		MakeMetricColumn(theme, [](const DrawCallRow& row) { return row.costPerCall; }, [](const auto& theme, float value, const DrawCallRow&) { return Util::GetThresholdColor(value, PerformanceOverlay::Settings::kCostPerCallGoodThreshold, PerformanceOverlay::Settings::kCostPerCallWarningThreshold, theme.StatusPalette.SuccessColor, theme.StatusPalette.Warning, theme.StatusPalette.Error); }, [](float value, const DrawCallRow&) { return (value < PerformanceOverlay::Settings::kMicrosecondThreshold && value > 0.0f) ? Util::FormatMicroseconds(value * 1000.0f) : Util::FormatMilliseconds(value); }, legends.costPerCall.tooltip), [](const DrawCallRow& a, const DrawCallRow& b, bool asc) { return asc ? (a.costPerCall < b.costPerCall) : (a.costPerCall > b.costPerCall); }, [legends]() {
+		MakeMetricColumn(theme, [](const DrawCallRow& row) { return row.costPerCall; }, [](const auto& theme, float value, const DrawCallRow& row) {
+			if (magic_enum::enum_cast<SpecialShaderType>(row.shaderType).has_value()) {
+				return theme.Palette.Text;
+			}
+			return Util::GetThresholdColor(value, PerformanceOverlay::Settings::kCostPerCallGoodThreshold, PerformanceOverlay::Settings::kCostPerCallWarningThreshold, theme.StatusPalette.SuccessColor, theme.StatusPalette.Warning, theme.StatusPalette.Error); }, [](float value, const DrawCallRow&) { return (value < PerformanceOverlay::Settings::kMicrosecondThreshold && value > 0.0f) ? Util::FormatMicroseconds(value * 1000.0f) : Util::FormatMilliseconds(value); }, legends.costPerCall.tooltip), [](const DrawCallRow& a, const DrawCallRow& b, bool asc) { return asc ? (a.costPerCall < b.costPerCall) : (a.costPerCall > b.costPerCall); }, [legends]() {
 			 if (ImGui::IsItemHovered()) {
 				 if (auto _tt = Util::HoverTooltipWrapper()) {
 					 Util::DrawColoredMultiLineTooltip(legends.costPerCall.tooltip);

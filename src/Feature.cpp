@@ -27,6 +27,7 @@
 #include "Features/TerrainHelper.h"
 #include "Features/TerrainShadows.h"
 #include "Features/TerrainVariation.h"
+#include "Features/UnifiedWater.h"
 #include "Features/Upscaling.h"
 #include "Features/VR.h"
 #include "Features/VolumetricLighting.h"
@@ -235,6 +236,7 @@ const std::vector<Feature*>& Feature::GetFeatureList()
 		&globals::features::renderDoc,
 		&globals::features::weatherEditor,
 		&globals::features::linearLighting,
+		&globals::features::unifiedWater,
 		&globals::features::hdrDisplay
 	};
 
@@ -281,19 +283,24 @@ bool Feature::ToggleAtBootSetting()
 bool Feature::ReapplyOverrideSettings()
 {
 	auto overrideManager = SettingsOverrideManager::GetSingleton();
-	if (!overrideManager || !overrideManager->HasFeatureOverrides(GetShortName())) {
+	std::string featureName = GetShortName();
+
+	if (!overrideManager || !overrideManager->HasFeatureOverrides(featureName)) {
 		return false;
 	}
 
-	// Get current settings as JSON
+	// Delete user override file to restore original override behavior
+	overrideManager->DeleteUserOverride(featureName);
+
+	// Get base settings and apply overrides fresh
 	json featureJson;
 	SaveSettings(featureJson);
 
-	// Apply overrides to the current settings
-	size_t appliedCount = overrideManager->ReapplyFeatureOverrides(GetShortName(), featureJson);
+	// Apply overrides to the settings (without user customizations)
+	size_t appliedCount = overrideManager->ReapplyFeatureOverrides(featureName, featureJson);
 
 	if (appliedCount > 0) {
-		// Load the modified settings back into the feature
+		// Load the override settings back into the feature
 		LoadSettings(featureJson);
 		return true;
 	}

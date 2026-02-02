@@ -102,7 +102,7 @@ void IBL::RegisterWeatherVariables()
 		0.0f, 1.0f));
 }
 
-void IBL::EarlyPrepass()
+void IBL::ReflectionsPrepass()
 {
 	if (loaded) {
 		auto context = globals::d3d::context;
