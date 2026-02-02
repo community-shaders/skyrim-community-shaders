@@ -30,6 +30,66 @@ namespace
 		return std::find(CORE_MENU_NAMES.begin(), CORE_MENU_NAMES.end(), menuName) != CORE_MENU_NAMES.end();
 	}
 
+	/**
+	 * @brief Determines if the left feature panel should be visible based on auto-hide settings and mouse position
+	 * @return true if panel should be visible, false if it should be hidden
+	 */
+	bool ShouldShowLeftPanel()
+	{
+		bool autoHideEnabled = globals::menu->GetSettings().AutoHideFeatureList;
+		static bool leftPanelVisible = true;
+		static float hoverStartTime = 0.0f;
+		static bool wasHovering = false;
+
+		if (!autoHideEnabled) {
+			leftPanelVisible = true;
+			return true;
+		}
+
+		// Get mouse position and window bounds
+		ImVec2 mousePos = ImGui::GetMousePos();
+		ImVec2 windowPos = ImGui::GetWindowPos();
+		ImVec2 windowSize = ImGui::GetWindowSize();
+		float currentTime = static_cast<float>(ImGui::GetTime());
+
+		// Use constants for auto-hide behavior
+		const float activationZoneWidth = ThemeManager::Constants::AUTOHIDE_ACTIVATION_ZONE_WIDTH;
+		const float expandDelay = ThemeManager::Constants::AUTOHIDE_EXPAND_DELAY;
+		const float panelWidth = windowSize.x * ThemeManager::Constants::AUTOHIDE_PANEL_WIDTH_RATIO;
+
+		// Calculate relative X position
+		const float relativeX = mousePos.x - windowPos.x;
+
+		// For activation: only check if mouse is at left edge (allow any Y position for easier triggering)
+		// Prevent negative X from triggering, but don't restrict Y-axis for activation
+		bool mouseInActivationZone = relativeX >= 0.0f && relativeX < activationZoneWidth;
+
+		// For staying visible: check both X and Y to ensure mouse is actually over the panel area
+		const bool mouseOverPanelX = relativeX >= 0.0f && relativeX < panelWidth;
+		const bool mouseOverPanelY = mousePos.y >= windowPos.y && mousePos.y <= (windowPos.y + windowSize.y);
+		bool mouseOverPanel = leftPanelVisible && mouseOverPanelX && mouseOverPanelY;
+
+		// Track hover start time
+		if (mouseInActivationZone && !wasHovering) {
+			hoverStartTime = currentTime;
+			wasHovering = true;
+		} else if (!mouseInActivationZone) {
+			wasHovering = false;
+		}
+
+		// Expand only after delay has elapsed
+		bool shouldExpand = mouseInActivationZone && (currentTime - hoverStartTime >= expandDelay);
+
+		// Update visibility: expand with delay, or stay visible while mouse is over panel
+		if (shouldExpand || mouseOverPanel) {
+			leftPanelVisible = true;
+		} else if (!mouseOverPanel && !mouseInActivationZone) {
+			leftPanelVisible = false;
+		}
+
+		return leftPanelVisible;
+	}
+
 	void SeparatorTextWithFont(const char* text, Menu::FontRole role)
 	{
 		MenuFonts::FontRoleGuard guard(role);
@@ -150,13 +210,22 @@ void FeatureListRenderer::RenderFeatureList(
 
 	HandlePendingFeatureSelection(pendingFeatureSelection, menuList, selectedMenu);
 
-	// Create the table with two columns
-	if (ImGui::BeginTable("Menus Table", 2, ImGuiTableFlags_SizingStretchProp | ImGuiTableFlags_Resizable)) {
-		ImGui::TableSetupColumn("##ListOfMenus", 0, 2);
-		ImGui::TableSetupColumn("##MenuConfig", 0, 8);
+	// Determine if left panel should be visible based on auto-hide settings
+	bool leftPanelVisible = ShouldShowLeftPanel();
 
-		RenderLeftColumn(menuList, selectedMenu, featureSearch, categoryExpansionStates);
-		RenderRightColumn(menuList, selectedMenu);
+	// Create the table with appropriate number of columns based on visibility
+	int numColumns = leftPanelVisible ? 2 : 1;
+	if (ImGui::BeginTable("Menus Table", numColumns, ImGuiTableFlags_SizingStretchProp | ImGuiTableFlags_Resizable)) {
+		if (leftPanelVisible) {
+			ImGui::TableSetupColumn("##ListOfMenus", 0, 2);
+			ImGui::TableSetupColumn("##MenuConfig", 0, 8);
+			RenderLeftColumn(menuList, selectedMenu, featureSearch, categoryExpansionStates);
+			RenderRightColumn(menuList, selectedMenu);
+		} else {
+			// When left panel is hidden, right column takes full width
+			ImGui::TableSetupColumn("##MenuConfig", 0, 1);
+			RenderRightColumn(menuList, selectedMenu);
+		}
 
 		ImGui::EndTable();
 	}
