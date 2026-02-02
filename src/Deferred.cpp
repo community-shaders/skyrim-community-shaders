@@ -156,12 +156,12 @@ void Deferred::SetupResources()
 		perShadow->CreateUAV(uavDesc);
 
 		copyShadowCS = static_cast<ID3D11ComputeShader*>(Util::CompileShader(L"Data\\Shaders\\CopyShadowDataCS.hlsl", {}, "cs_5_0"));
-		
+
 		std::vector<std::pair<const char*, const char*>> defines;
-		defines.push_back({"DOWNSAMPLE_SHADOW_MIP0", nullptr});
+		defines.push_back({ "DOWNSAMPLE_SHADOW_MIP0", nullptr });
 		downsampleShadowMip0CS = static_cast<ID3D11ComputeShader*>(Util::CompileShader(L"Data\\Shaders\\DownsampleShadowCS.hlsl", defines, "cs_5_0"));
 		defines.clear();
-		defines.push_back({"DOWNSAMPLE_SHADOW_MIP1", nullptr});
+		defines.push_back({ "DOWNSAMPLE_SHADOW_MIP1", nullptr });
 		downsampleShadowMip1CS = static_cast<ID3D11ComputeShader*>(Util::CompileShader(L"Data\\Shaders\\DownsampleShadowCS.hlsl", defines, "cs_5_0"));
 		defines.clear();
 		defines.push_back({"DOWNSAMPLE_SHADOW_MIP2", nullptr});
@@ -291,7 +291,7 @@ void Deferred::CopyShadowData()
 						uavDesc.ViewDimension = D3D11_UAV_DIMENSION_TEXTURE2D;
 						uavDesc.Texture2D.MipSlice = 0;
 						DX::ThrowIfFailed(device->CreateUnorderedAccessView(shadowCopyTexture, &uavDesc, &shadowCopyMip0UAV));
-						
+
 						uavDesc.Texture2D.MipSlice = 1;
 						DX::ThrowIfFailed(device->CreateUnorderedAccessView(shadowCopyTexture, &uavDesc, &shadowCopyMip1UAV));
 

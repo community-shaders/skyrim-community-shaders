@@ -17,7 +17,8 @@ SamplerState PointSampler : register(s0);
 		InputTexture.GetDimensions(inputW, inputH, inputSlices);
 		float2 uv = (pixCoord + 0.5) / float2(inputW, inputH);
 
-		OutputTexture[dispatchThreadID.xy] = InputTexture.GatherRed(PointSampler, float3(uv, 2));
+
+		float4 depths4 = InputTexture.GatherRed(PointSampler, float3(uv, 1));
 	}
 }
 #elif defined(DOWNSAMPLE_SHADOW_MIP1)
