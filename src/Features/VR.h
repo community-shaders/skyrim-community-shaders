@@ -349,6 +349,9 @@ public:
 		float mouseDeadzone = Config::kDefaultMouseDeadzone;  ///< Thumbstick deadzone for mouse input (0.0-1.0)
 		float mouseSpeed = Config::kDefaultMouseSpeed;        ///< Mouse speed multiplier (0.1-50.0)
 
+		// Wand pointing settings
+		bool EnableWandPointing = true;  ///< Enable controller wand/ray-cast pointing (modern VR input)
+
 		// Visual customization
 		std::array<float, 4> dragHighlightColor = { 1.0f, 1.0f, 0.0f, 0.3f };  ///< RGBA color for drag highlight
 
@@ -419,9 +422,14 @@ public:
 	void UpdateVROverlayControllerPosition();
 
 	void ProcessVREvents(std::vector<Menu::KeyEvent>& vrEvents);
+
+	// Wand pointing methods
+	bool ComputeWandIntersection(vr::VROverlayHandle_t overlayHandle, vr::TrackedDeviceIndex_t controllerIndex, ImVec2& outUV);
+	void UpdateCursorFromWandPointing();
 	void UpdateOverlayMenuStateFromInput();
 	void ProcessVRButtonEvent(const Menu::KeyEvent& event);
 	void UpdateControllerState(const Menu::KeyEvent& event);
+	void ProcessThumbstickScroll(RE::VRControllerState& controllerState, size_t thumbstickIndex, float deadzone, ImGuiIO& io);
 	void ProcessControllerInputForImGui();
 
 	void EnsureOverlayInitialized();
@@ -584,6 +592,16 @@ public:
 	} openVRInfo;
 
 	RE::NiPoint3 savedPlayerWorldPos = RE::NiPoint3();  // Used for auto-reset distance check
+
+	// Wand pointing state
+	struct WandIntersectionState
+	{
+		bool isIntersecting = false;
+		ImVec2 uvCoordinates = ImVec2(0.0f, 0.0f);
+		vr::TrackedDeviceIndex_t controllerIndex = vr::k_unTrackedDeviceIndexInvalid;
+		Vector3 rayOrigin = Vector3::Zero;
+		Vector3 rayDirection = Vector3::Zero;
+	} wandState;
 
 public:
 	//=============================================================================
