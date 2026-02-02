@@ -24,7 +24,7 @@
 #define __HAIRBSDFHELPER_HLSLI__
 
 #include "Raytracing/Includes/Common.hlsli"
-#include "Raytracing/Includes/Fresnel.hlsli"
+#include "Raytracing/Includes/Materials/Fresnel.hlsli"
 
 float MP(const float cosThetaI, const float cosThetaO, const float sinThetaI, const float sinThetaO, const float v)
 {
@@ -94,12 +94,12 @@ void ComputeApPdf(const HairMaterialInteraction hairMaterialInteraction, const f
     float3 ap[Hair_Max_Scattering_Events + 1];
     AP(hairMaterialInteraction, cosThetaO, T, ap);
 
-    // Compute apPdf from individal ap terms.
+    // Compute apPdf from individual ap terms.
     float sumY = 0.0f;
     [unroll]
     for (uint p = 0; p < Hair_Max_Scattering_Events; ++p)
     {
-        apPdf[p] = luminance(ap[p]);
+        apPdf[p] = Luminance(ap[p]);
         sumY += apPdf[p];
     }
 

@@ -566,7 +566,7 @@ struct DefaultBSDF
 
         if (uSelect < pDiffuseReflection)
         {
-            valid = diffuseReflection.SampleBSDF(wi, wo, pdf, weight, lobe, lobeP, preGeneratedSample.xyz);
+            valid = diffuseReflection.SampleBSDF(wi, wo, pdf, weight, lobe, lobeP, preGeneratedSample);
             weight /= pDiffuseReflection;
             weight *= (1.f - specTrans) * (1.f - diffTrans);
             pdf *= pDiffuseReflection;
@@ -576,7 +576,7 @@ struct DefaultBSDF
         }
         else if (uSelect < pDiffuseReflection + pDiffuseTransmission)
         {
-            valid = diffuseTransmission.SampleBSDF(wi, wo, pdf, weight, lobe, lobeP, preGeneratedSample.xyz);
+            valid = diffuseTransmission.SampleBSDF(wi, wo, pdf, weight, lobe, lobeP, preGeneratedSample);
             weight /= pDiffuseTransmission;
             weight *= (1.f - specTrans) * diffTrans;
             pdf *= pDiffuseTransmission;
@@ -585,7 +585,7 @@ struct DefaultBSDF
         }
         else if (uSelect < pDiffuseReflection + pDiffuseTransmission + pSpecularReflection)
         {
-            valid = specularReflection.SampleBSDF(wi, wo, pdf, weight, lobe, lobeP, preGeneratedSample.xyz);
+            valid = specularReflection.SampleBSDF(wi, wo, pdf, weight, lobe, lobeP, preGeneratedSample);
             weight /= pSpecularReflection;
             weight *= (1.f - specTrans);
             pdf *= pSpecularReflection;
@@ -595,7 +595,7 @@ struct DefaultBSDF
         }
         else if (pSpecularReflectionTransmission > 0.f)
         {
-            valid = specularReflectionTransmission.SampleBSDF(wi, wo, pdf, weight, lobe, lobeP, preGeneratedSample.xyz);
+            valid = specularReflectionTransmission.SampleBSDF(wi, wo, pdf, weight, lobe, lobeP, preGeneratedSample);
             weight /= pSpecularReflectionTransmission;
             weight *= specTrans;
             pdf *= pSpecularReflectionTransmission;
@@ -724,7 +724,7 @@ struct StandardBSDF
 
         if (material.Feature == Feature::kHairTint)
         {
-            HairChiangBSDF bsdf = HairChiangBSDF::make(N, wi, surface);
+            HairChiangBSDF bsdf = HairChiangBSDF::make(wi, surface);
             return bsdf.Eval(wiLocal, woLocal);
         } else {
             DefaultBSDF bsdf = DefaultBSDF::make(N, wi, surface, isEnter);
@@ -741,10 +741,10 @@ struct StandardBSDF
 
         if (material.Feature == Feature::kHairTint)
         {
-            HairChiangBSDF bsdf = HairChiangBSDF::make(N, wi, surface);
+            HairChiangBSDF bsdf = HairChiangBSDF::make(wi, surface);
 
             float3 woLocal;
-            bool valid = bsdf.SampleBSDF(wiLocal, woLocal, result.pdf, result.weight, result.lobe, result.lobeP, preGeneratedSamples.xyz);
+            bool valid = bsdf.SampleBSDF(wiLocal, woLocal, result.pdf, result.weight, result.lobe, result.lobeP, preGeneratedSamples);
 
             result.wo = surface.FromLocal(woLocal);
             return valid;
@@ -752,7 +752,7 @@ struct StandardBSDF
             DefaultBSDF bsdf = DefaultBSDF::make(N, wi, surface, isEnter);
 
             float3 woLocal;
-            bool valid = bsdf.SampleBSDF(wiLocal, woLocal, result.pdf, result.weight, result.lobe, result.lobeP, preGeneratedSamples.xyz);
+            bool valid = bsdf.SampleBSDF(wiLocal, woLocal, result.pdf, result.weight, result.lobe, result.lobeP, preGeneratedSamples);
 
             result.wo = surface.FromLocal(woLocal);
             return valid;

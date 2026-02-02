@@ -7,6 +7,8 @@
 * distribution of this software and related documentation without an express
 * license agreement from NVIDIA CORPORATION is strictly prohibited.
 */
+#ifndef __FRESNEL_HLSLI__
+#define __FRESNEL_HLSLI__
 
 float CalculateBaseReflectivity(const float incidentIoR, const float transmittedIoR)
 {
@@ -135,3 +137,5 @@ float3 evalFresnelConductor(float3 eta, float3 k, float cosThetaI)
         evalFresnelConductor(eta.z, k.z, cosThetaI)
     );
 }
+
+#endif // __FRESNEL_HLSLI__

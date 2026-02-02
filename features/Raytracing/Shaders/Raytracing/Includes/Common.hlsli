@@ -64,11 +64,10 @@ void NormalMap(float3 normalMap, float handedness, float3 geomNormalWS, float3 g
 {
 	normalMap = normalMap * 2.0f - 1.0f;
 	
-    normalWS = normalize(
-		normalMap.x * geomTangentWS +
-		normalMap.y * geomBitangentWS +
-		normalMap.z * geomNormalWS
-	);
+    normalWS = normalMap.x * geomTangentWS + normalMap.y * geomBitangentWS + normalMap.z * geomNormalWS;
+	
+	float normalLengthSq = dot(normalWS, normalWS);
+    normalWS = (normalLengthSq > 1e-6f) ? (normalWS * rsqrt(normalLengthSq)) : geomNormalWS;
 
     tangentWS = normalize(geomTangentWS - normalWS * dot(geomTangentWS, normalWS));
     bitangentWS = cross(normalWS, tangentWS) * handedness;

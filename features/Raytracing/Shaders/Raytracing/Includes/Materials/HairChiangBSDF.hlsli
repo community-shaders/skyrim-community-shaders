@@ -142,7 +142,7 @@ struct HairChiangBSDF
         // const float cosThetaI_N = wi.z; // The angle between wi and normal, which is (0, 0, 1) on local space
         // result = abs(cosThetaI_N) > 0.0f ? result / abs(cosThetaI_N) : 0.0f;
 
-        return max(result, Average(result));
+        return float4(max(result, 0.0f), Average(result));
     }
 
     bool SampleBSDF(const float3 wi, out float3 wo, out float pdf, out float3 weight, out uint lobe, out float lobeP, const float4 preGeneratedSample)
@@ -269,7 +269,7 @@ struct HairChiangBSDF
 
         if (pdf > 1e-3f)
         {
-            weight = Eval(wi, wo) / pdf;
+            weight = Eval(wi, wo).xyz / pdf;
             // we treat R as specular, TT as diffuse transmission, TRT as diffuse reflection
             if (lobeType == HairLobeType_R)
             {

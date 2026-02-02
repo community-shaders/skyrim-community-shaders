@@ -35,6 +35,8 @@
 #define HairAbsorptionModel_Physics    (1)
 #define HairAbsorptionModel_Normalized (2)
 
+#define PI_OVER_EIGHT 0.626657069f // sqrt(pi / 8.0f);
+
 /************************************************
     Hair Surface
 ************************************************/
@@ -192,7 +194,7 @@ float ComputelogisticDistributionScalar(const float betaN)
 //
 void ComputeHairCuticleScales(const float cuticleAngleInDegrees, inout HairMaterialInteraction hairMaterialInteraction)
 {
-    hairMaterialInteraction.sin2kAlpha[0] = sin(cuticleAngleInDegrees / 180.0f * PI);
+    hairMaterialInteraction.sin2kAlpha[0] = sin(cuticleAngleInDegrees / 180.0f * K_PI);
     hairMaterialInteraction.cos2kAlpha[0] = sqrt(saturate(1.f - hairMaterialInteraction.sin2kAlpha[0] * hairMaterialInteraction.sin2kAlpha[0]));
     [unroll]
     for (uint i = 1; i < 3; i++)
@@ -266,7 +268,7 @@ float ComputeRoughnessVarianceSeparateChiang(const float betaM)
 
 void ComputeHairCuticleScalesSeparateChiang(const float cuticleAngleInDegrees, inout HairMaterialSeparateChiangInteraction hairMaterialSeparateChiangInteraction)
 {
-    hairMaterialSeparateChiangInteraction.sin2kAlpha[0] = sin(cuticleAngleInDegrees / 180.0f * PI);
+    hairMaterialSeparateChiangInteraction.sin2kAlpha[0] = sin(cuticleAngleInDegrees / 180.0f * K_PI);
     hairMaterialSeparateChiangInteraction.cos2kAlpha[0] = sqrt(saturate(1.f - hairMaterialSeparateChiangInteraction.sin2kAlpha[0] * hairMaterialSeparateChiangInteraction.sin2kAlpha[0]));
     [unroll]
     for (uint i = 1; i < 3; i++)
