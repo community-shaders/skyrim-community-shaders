@@ -151,7 +151,7 @@ struct HairChiangBSDF
         u[0] = preGeneratedSample.xy;
         u[1] = preGeneratedSample.zw;
 
-        lobe = LobeType::DiffuseReflection;
+        lobe = (uint)LobeType::DiffuseReflection;
         lobeP = 1.0f;
         uint lobeType;
 
