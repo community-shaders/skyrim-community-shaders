@@ -131,7 +131,7 @@ void main()
     AdjustShadingNormal(sourceSurface, sourceBRDFContext, true, false);
 
     // Direct Light for PT
-    float3 direct = EvaluateDirectRadiance(sourceSurface, sourceBRDFContext, sourceInstance, sourceBSDF, randomSeed) + sourceSurface.Emissive;
+    float3 direct = EvaluateDirectRadiance(sourceMaterial, sourceSurface, sourceBRDFContext, sourceInstance, sourceBSDF, randomSeed) + sourceSurface.Emissive;
 #else
     const float2 uv = float2(idx + 0.5f) / size;
 
@@ -315,8 +315,8 @@ void main()
             throughput *= surface.AO;
             throughput *= surface.Albedo;
 #else
-            float3 randomSample = float3(Random(randomSeed), Random(randomSeed), Random(randomSeed));
-            bool isValid = bsdf.SampleBSDF(randomSample, brdfContext, surface, bsdfSample);
+            float4 randomSample = float4(Random(randomSeed), Random(randomSeed), Random(randomSeed), Random(randomSeed));
+            bool isValid = bsdf.SampleBSDF(randomSample, brdfContext, material, surface, bsdfSample);
             isSpecular = bsdfSample.isLobe(LobeType::Specular);
             bool hasTransmission = bsdfSample.isLobe(LobeType::Transmission);
 
@@ -478,7 +478,7 @@ void main()
             AdjustShadingNormal(surface, brdfContext, true, false);  // Adjusts the normal of the supplied shading frame to reduce black pixels due to back-facing view direction.
             bsdf = StandardBSDF::make(surface, isEnter);
 
-            float3 directRadiance = EvaluateDirectRadiance(surface, brdfContext, instance, bsdf, randomSeed);
+            float3 directRadiance = EvaluateDirectRadiance(material, surface, brdfContext, instance, bsdf, randomSeed);
             sampleRadiance += directRadiance * throughput;
 
 #if defined(SHARC) && defined(SHARC_UPDATE)

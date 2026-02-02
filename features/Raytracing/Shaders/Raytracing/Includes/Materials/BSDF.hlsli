@@ -11,6 +11,8 @@
 #include "Raytracing/Includes/Materials/LobeType.hlsli"
 #include "Raytracing/Includes/Materials/Microfacet.hlsli"
 
+#include "Raytracing/Includes/Materials/HairChiangBSDF.hlsli"
+
 // Minimum cos(theta) for the incident and outgoing vectors.
 // Some BSDF functions are not robust for cos(theta) == 0.0,
 // so using a small epsilon for consistency.
@@ -87,7 +89,7 @@ struct DiffuseReflection
         return EvalWeight(wo, wi) * wo.z * K_1_PI;
     }
 
-    bool SampleBSDF(const float3 wi, out float3 wo, out float pdf, out float3 weight, out uint lobe, out float lobeP, float3 preGeneratedSample)
+    bool SampleBSDF(const float3 wi, out float3 wo, out float pdf, out float3 weight, out uint lobe, out float lobeP, float4 preGeneratedSample)
     {
         wo = sample_cosine_hemisphere_concentric(preGeneratedSample.xy, pdf);
         lobe = (uint)LobeType::DiffuseReflection;
@@ -137,7 +139,7 @@ struct DiffuseTransmissionLambert
         return K_1_PI * albedo * -wo.z;
     }
 
-    bool SampleBSDF(const float3 wi, out float3 wo, out float pdf, out float3 weight, out uint lobe, out float lobeP, const float3 preGeneratedSample)
+    bool SampleBSDF(const float3 wi, out float3 wo, out float pdf, out float3 weight, out uint lobe, out float lobeP, const float4 preGeneratedSample)
     {
         wo = sample_cosine_hemisphere_concentric(preGeneratedSample.xy, pdf);
         wo.z = -wo.z;
@@ -189,7 +191,7 @@ struct SpecularReflectionMicrofacet // : IBxDF
         return F * D * G * 0.25f / wi.z;
     }
 
-    bool SampleBSDF(const float3 wi, out float3 wo, out float pdf, out float3 weight, out uint lobe, out float lobeP, const float3 preGeneratedSample)
+    bool SampleBSDF(const float3 wi, out float3 wo, out float pdf, out float3 weight, out uint lobe, out float lobeP, const float4 preGeneratedSample)
     {
         wo = float3(0,0,0);
         weight = float3(0,0,0);
@@ -290,7 +292,7 @@ struct SpecularReflectionTransmissionMicrofacet
         }
     }
 
-    bool SampleBSDF(const float3 wi, out float3 wo, out float pdf, out float3 weight, out uint lobe, out float lobeP, const float3 preGeneratedSample)
+    bool SampleBSDF(const float3 wi, out float3 wo, out float pdf, out float3 weight, out uint lobe, out float lobeP, const float4 preGeneratedSample)
     {
         wo = float3(0,0,0);
         weight = float3(0,0,0);
@@ -550,7 +552,7 @@ struct DefaultBSDF
         return float4(diffuse+specular, Average(specular)); // use average instead of sum to avoid hitting fp16 ceiling early
     }
 
-    bool SampleBSDF(const float3 wi, out float3 wo, out float pdf, out float3 weight, out uint lobe, out float lobeP, const float3 preGeneratedSample)
+    bool SampleBSDF(const float3 wi, out float3 wo, out float pdf, out float3 weight, out uint lobe, out float lobeP, const float4 preGeneratedSample)
     {
         wo = float3(0,0,0);
         weight = float3(0,0,0);
@@ -712,7 +714,7 @@ struct StandardBSDF
         return bsdf;
     }
 
-    float4 Eval(const BRDFContext brdfContext, const Surface surface, const float3 wo)
+    float4 Eval(const BRDFContext brdfContext, const Material material, const Surface surface, const float3 wo)
     {
         float3 wi = brdfContext.ViewDirection;
         float3 N = surface.Normal;
@@ -720,25 +722,41 @@ struct StandardBSDF
         float3 wiLocal = surface.ToLocal(wi);
         float3 woLocal = surface.ToLocal(wo);
 
-        DefaultBSDF bsdf = DefaultBSDF::make(N, wi, surface, isEnter);
-
-        return bsdf.Eval(wiLocal, woLocal);
+        if (material.Feature == Feature::kHairTint)
+        {
+            HairChiangBSDF bsdf = HairChiangBSDF::make(N, wi, surface);
+            return bsdf.Eval(wiLocal, woLocal);
+        } else {
+            DefaultBSDF bsdf = DefaultBSDF::make(N, wi, surface, isEnter);
+            return bsdf.Eval(wiLocal, woLocal);
+        }
     }
 
-    bool SampleBSDF(const float3 preGeneratedSamples, const BRDFContext brdfContext, const Surface surface, out BSDFSample result)
+    bool SampleBSDF(const float4 preGeneratedSamples, const BRDFContext brdfContext, const Material material, const Surface surface, out BSDFSample result)
     {
         float3 wi = brdfContext.ViewDirection;
         float3 N = surface.Normal;
 
         float3 wiLocal = surface.ToLocal(wi);
 
-        DefaultBSDF bsdf = DefaultBSDF::make(N, wi, surface, isEnter);
+        if (material.Feature == Feature::kHairTint)
+        {
+            HairChiangBSDF bsdf = HairChiangBSDF::make(N, wi, surface);
 
-        float3 woLocal;
-        bool valid = bsdf.SampleBSDF(wiLocal, woLocal, result.pdf, result.weight, result.lobe, result.lobeP, preGeneratedSamples.xyz);
+            float3 woLocal;
+            bool valid = bsdf.SampleBSDF(wiLocal, woLocal, result.pdf, result.weight, result.lobe, result.lobeP, preGeneratedSamples.xyz);
 
-        result.wo = surface.FromLocal(woLocal);
-        return valid;
+            result.wo = surface.FromLocal(woLocal);
+            return valid;
+        } else {
+            DefaultBSDF bsdf = DefaultBSDF::make(N, wi, surface, isEnter);
+
+            float3 woLocal;
+            bool valid = bsdf.SampleBSDF(wiLocal, woLocal, result.pdf, result.weight, result.lobe, result.lobeP, preGeneratedSamples.xyz);
+
+            result.wo = surface.FromLocal(woLocal);
+            return valid;
+        }
     }
 
     float EvalPdf(const BRDFContext brdfContext, const Surface surface, const float3 wo)

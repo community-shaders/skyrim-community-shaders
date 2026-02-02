@@ -55,23 +55,23 @@ float3 EvalDiffuse(in float3 l, in Surface surface, in BRDFContext brdfContext)
     return surface.DiffuseAlbedo * NdotL * BRDF::Diffuse_Lambert();
 }
 
-float3 EvalLight(in float3 l, in Surface surface, in BRDFContext brdfContext, in StandardBSDF bsdf)
+float3 EvalLight(in float3 l, in Material material, in Surface surface, in BRDFContext brdfContext, in StandardBSDF bsdf)
 {
 #if LIGHTEVAL_MODE == LIGHTEVAL_MODE_DIFFUSE
     return EvalDiffuse(l, surface, brdfContext);
 #else
-    float4 bsdfEval = bsdf.Eval(brdfContext, surface, l);
+    float4 bsdfEval = bsdf.Eval(brdfContext, material, surface, l);
     return bsdfEval.xyz;
 #endif
 }
 
-float3 EvalDirectionalLight(in Surface surface, in BRDFContext brdfContext, in DirectionalLight light, in StandardBSDF bsdf, inout uint randomSeed)
+float3 EvalDirectionalLight(in Material material, in Surface surface, in BRDFContext brdfContext, in DirectionalLight light, in StandardBSDF bsdf, inout uint randomSeed)
 {
     light.Color = DirLightToLinear(light.Color);
     // Sun angular radius is ~0.00465 radians (~0.266 degrees)
     float cosSunDisk = cos(0.00465f);
     float3 lr = TangentToWorld(light.Vector, SampleConeUniform(randomSeed, cosSunDisk));
-    float3 direct = EvalLight(lr, surface, brdfContext, bsdf) * light.Color;
+    float3 direct = EvalLight(lr, material, surface, brdfContext, bsdf) * light.Color;
 
     [branch]
     if (any(direct > MIN_DIFFUSE_SHADOW))
@@ -91,7 +91,7 @@ float GetLightSampleWeight(Surface surface, Light light)
     return atten * intensity;
 }
 
-float3 EvalPointLight(in Surface surface, in BRDFContext brdfContext, in LightData lightData, in StandardBSDF bsdf, inout uint randomSeed)
+float3 EvalPointLight(in Material material, in Surface surface, in BRDFContext brdfContext, in LightData lightData, in StandardBSDF bsdf, inout uint randomSeed)
 {
     if (lightData.Count == 0)
         return float3(0, 0, 0);
@@ -164,7 +164,7 @@ float3 EvalPointLight(in Surface surface, in BRDFContext brdfContext, in LightDa
 
     float3 lr = TangentToWorld(l, SampleCosineHemisphereScaled(randomSeed, lightSourceAngle));
 
-    float3 direct = EvalLight(lr, surface, brdfContext, bsdf) * atten * light.Color * light.Fade * lightWeight;
+    float3 direct = EvalLight(lr, material, surface, brdfContext, bsdf) * atten * light.Color * light.Fade * lightWeight;
 
     [branch]
     if (any(direct > MIN_DIFFUSE_SHADOW))
@@ -204,10 +204,10 @@ float EvalSkyOcclusion(float3 dir)
     return lerp(1.0f, 1.0f - SkyHemisphere.SampleLevel(BaseSampler, uv, 0.0f).a, Frame.CloudOpacity);
 }
 
-float3 EvaluateDirectRadiance(in Surface surface, in BRDFContext brdfContext, in Instance instance, in StandardBSDF bsdf, inout uint randomSeed)
+float3 EvaluateDirectRadiance(in Material material, in Surface surface, in BRDFContext brdfContext, in Instance instance, in StandardBSDF bsdf, inout uint randomSeed)
 {
-    float3 radiance = EvalDirectionalLight(surface, brdfContext, Frame.Directional, bsdf, randomSeed) * EvalSkyOcclusion(Frame.Directional.Vector);
-    radiance += EvalPointLight(surface, brdfContext, instance.LightData, bsdf, randomSeed);
+    float3 radiance = EvalDirectionalLight(material, surface, brdfContext, Frame.Directional, bsdf, randomSeed) * EvalSkyOcclusion(Frame.Directional.Vector);
+    radiance += EvalPointLight(material, surface, brdfContext, instance.LightData, bsdf, randomSeed);
 
     return radiance;
 }

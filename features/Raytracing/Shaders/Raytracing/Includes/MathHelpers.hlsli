@@ -13,6 +13,87 @@ inline float Average(float3 rgb)
     return (rgb.x+rgb.y+rgb.z) / 3.0;
 }
 
+float Sqrt01(float x)
+{
+    return max(sqrt(saturate(x)), 1e-7);
+}
+
+// Safe sqrt for x
+float Sqrt0(float x)
+{
+    return sqrt(max(x, 1e-7));
+}
+
+float3 Sqrt0(float3 x)
+{
+    return sqrt(max(x, 1e-7));
+}
+
+float Atan2safe(float x, float y)
+{
+    return abs(x) + abs(y) < 1e-7 ? 0 : atan2(x, y);
+}
+
+float I0(float x)
+{
+    float val = 0.f;
+    float x2i = 1.f;
+    float ifact = 1.f;
+    uint i4 = 1;
+
+    [unroll]
+    for (uint i = 0; i < 10; i++)
+    {
+        if (i > 1)
+            ifact *= i;
+        val += x2i / (ifact * ifact * i4);
+        x2i *= x * x;
+        i4 *= 4;
+    }
+    return val;
+}
+
+float LogI0(float x)
+{
+    if (x > 12)
+    {
+        return x + 0.5f * (-log(K_2PI) + log(1.f / x) + 0.125f / x);
+    }
+    else
+    {
+        return log(I0(x));
+    }
+}
+
+float PhiFunction(int p, float gammaI, float gammaT)
+{
+    return 2.f * p * gammaT - 2.f * gammaI + p * K_PI;
+}
+
+float Logistic(float x, float s)
+{
+    x = abs(x);
+    float tmp = exp(-x / s);
+    return tmp / (s * (1.f + tmp) * (1.f + tmp));
+}
+
+float LogisticCDF(float x, float s)
+{
+    return 1.f / (1.f + exp(-x / s));
+}
+
+float TrimmedLogistic(float x, float s, float a, float b)
+{
+    return Logistic(x, s) / (LogisticCDF(b, s) - LogisticCDF(a, s));
+}
+
+float SampleTrimmedLogistic(float u, float s, float a, float b)
+{
+    float k = LogisticCDF(b, s) - LogisticCDF(a, s);
+    float x = -s * log(1.f / (u * k + LogisticCDF(a, s)) - 1.f);
+    return clamp(x, a, b);
+}
+
 /** Generate a vector that is orthogonal to the input vector.
     This can be used to invent a tangent frame for meshes that don't have real tangents/bitangents.
     \param[in] u Unit vector.
