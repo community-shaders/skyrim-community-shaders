@@ -20,6 +20,7 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	directionalLightMultExterior,
 	directionalLightMultInterior,
 	pointLightMult,
+	ambientMult,
 	emitColorMult,
 	glowmapMult,
 	effectLightingMult,
@@ -46,6 +47,7 @@ void LinearLighting::DrawSettings()
 			ImGui::SeparatorText("Multipliers");
 			ImGui::SliderFloat("Exterior Directional Light Multiplier", &settings.directionalLightMultExterior, 0.0f, 10.0f, "%.2f");
 			ImGui::SliderFloat("Interior Directional Light Multiplier", &settings.directionalLightMultInterior, 0.0f, 10.0f, "%.2f");
+			ImGui::SliderFloat("Ambient Multiplier", &settings.ambientMult, 0.0f, 10.0f, "%.2f");
 			ImGui::SliderFloat("Glowmap Multiplier", &settings.glowmapMult, 0.0f, 10.0f, "%.2f");
 
 			ImGui::EndTabItem();
@@ -164,6 +166,7 @@ LinearLighting::PerFrameData LinearLighting::GetCommonBufferData()
 	data.vanillaDiffuseColorMult = settings.vanillaDiffuseColorMult;
 	data.directionalLightMult = Util::IsInterior() ? settings.directionalLightMultInterior : settings.directionalLightMultExterior;
 	data.pointLightMult = settings.pointLightMult;
+	data.ambientMult = settings.ambientMult;
 	data.emitColorMult = settings.emitColorMult;
 	data.glowmapMult = settings.glowmapMult;
 	data.effectLightingMult = settings.effectLightingMult;
