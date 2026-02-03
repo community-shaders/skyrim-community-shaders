@@ -69,15 +69,26 @@ public:
 	ID3D11ComputeShader* copyShadowCS = nullptr;
 	ID3D11ComputeShader* downsampleShadowMip0CS = nullptr;
 	ID3D11ComputeShader* downsampleShadowMip1CS = nullptr;
+	ID3D11ComputeShader* blurShadowHorizontalCS = nullptr;
+	ID3D11ComputeShader* blurShadowVerticalCS = nullptr;
 	Buffer* perShadow = nullptr;
 	ID3D11ShaderResourceView* shadowView = nullptr;
 
 	ID3D11Texture2D* shadowCopyTexture = nullptr;
 	ID3D11ShaderResourceView* shadowCopySRV = nullptr;
+	ID3D11ShaderResourceView* shadowCopyMip0SRV = nullptr;
+	ID3D11ShaderResourceView* shadowCopyMip1SRV = nullptr;
 	ID3D11UnorderedAccessView* shadowCopyMip0UAV = nullptr;
 	ID3D11UnorderedAccessView* shadowCopyMip1UAV = nullptr;
 	uint32_t shadowCopyWidth = 0;
 	uint32_t shadowCopyHeight = 0;
+
+	// Temporary texture for blur intermediate result
+	ID3D11Texture2D* shadowBlurTempTexture = nullptr;
+	ID3D11ShaderResourceView* shadowBlurTempMip0SRV = nullptr;
+	ID3D11ShaderResourceView* shadowBlurTempMip1SRV = nullptr;
+	ID3D11UnorderedAccessView* shadowBlurTempMip0UAV = nullptr;
+	ID3D11UnorderedAccessView* shadowBlurTempMip1UAV = nullptr;
 
 	struct Hooks
 	{

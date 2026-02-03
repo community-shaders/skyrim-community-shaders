@@ -67,16 +67,9 @@ namespace ShadowSampling
 
 	float Get3DFilteredShadow(float3 positionWS, float3 viewDirection, float2 screenPosition, uint eyeIndex, float depth)
 	{
-		static const uint sampleCount8 = 8;
-		static const float rcpSampleCount8 = 1.0 / float(sampleCount8);
-		static const uint sampleCount8Minus1 = sampleCount8 - 1;
-
-		static const uint sampleCount16 = 16;
-		static const float rcpSampleCount16 = 1.0 / float(sampleCount16);
-		static const uint sampleCount16Minus1 = sampleCount16 - 1;
-
+		const float stepSize = 32.0;  // Fixed step size in world units
+		
 		float noise = Random::InterleavedGradientNoise(screenPosition, SharedData::FrameCount);
-		float noiseTransform = noise * 2.0 - 1.0;
 		float2 rotation;
 		sincos(Math::TAU * noise, rotation.y, rotation.x);
 		float2x2 rotationMatrix = float2x2(rotation.x, rotation.y, -rotation.y, rotation.x);
@@ -85,40 +78,38 @@ namespace ShadowSampling
 		float objectDepth = length(positionWS);
 		float maxDistance = max(0, screenDepth - objectDepth);
 
-#if defined(EFFECT)
-		// Enough for non-billboards + enough for Sovngarde fog
-		float viewRayLength = min(Permutation::EffectRadius * 0.2, 256);
+	#if defined(EFFECT)
+		float viewRayLength = min(Permutation::EffectRadius * 0.1, 128);
 		float3 startPosition = positionWS - viewDirection * viewRayLength;
 		float3 endPosition = positionWS + viewDirection * min(viewRayLength, maxDistance);
-#elif defined(UNDERWATER)
-		// Enough for Eastmarch water
+	#elif defined(UNDERWATER)
 		float viewRayLength = 128.0;
 		float3 startPosition = positionWS - viewDirection * viewRayLength;
 		float3 endPosition = positionWS;
-#else
-		// Enough for Eastmarch water
+	#else
 		float viewRayLength = 128.0;
 		float3 startPosition = positionWS;
 		float3 endPosition = positionWS + viewDirection * min(viewRayLength, maxDistance);
-#endif
+	#endif
 
+		float totalRayLength = distance(endPosition, startPosition);
+		uint sampleCount = uint(totalRayLength / stepSize + 0.5);
+		float rcpSampleCount = 1.0 / float(sampleCount);
+
+		startPosition += (endPosition - startPosition) * noise * rcpSampleCount;
+
+		// Sample world shadows with consistent step size
 		float worldShadow = 0;
-		for(uint i = 0; i < sampleCount8; i++){
-			uint noisyIndex = uint((float(i) + sampleCount8 * noise) % sampleCount8);
-			float t = (float(sampleCount8Minus1) - float(noisyIndex)) * rcpSampleCount8;
-			float tSample = t + noiseTransform * rcpSampleCount8;
-			
-			float3 samplePositionWS = lerp(startPosition, endPosition, tSample);
-			samplePositionWS.xy += mul(Random::SpiralSampleOffsets8[i], rotationMatrix) * viewRayLength;
-			samplePositionWS.z += length(Random::SpiralSampleOffsets8[i]);
-
-			worldShadow += ShadowSampling::GetWorldShadow(samplePositionWS, FrameBuffer::CameraPosAdjust[eyeIndex].xyz, eyeIndex);
+		for(uint i = 0; i < sampleCount; i++){
+			float t = float(i) * rcpSampleCount;
+			float3 sampledPositionWS = lerp(startPosition, endPosition, t);
+			worldShadow += ShadowSampling::GetWorldShadow(sampledPositionWS, FrameBuffer::CameraPosAdjust[eyeIndex].xyz, eyeIndex);
 		}
 
 		if (worldShadow == 0.0)
 			return 0.0;
 
-		worldShadow *= rcpSampleCount8;
+		worldShadow *= rcpSampleCount;
 
 		float shadowMapDepth = GetShadowDepth(positionWS, eyeIndex);
 
@@ -132,32 +123,23 @@ namespace ShadowSampling
 		float cascade1Probability = saturate((shadowMapDepth - sD.StartSplitDistances.y) / (sD.EndSplitDistances.x - sD.StartSplitDistances.y));
 		
 		float compareValues[2];
-		float sampleRadii[2];
 		float3 positionsLS[2];
 		float3 viewOffsetsLS[2];
 		for (uint cascadeIdx = 0; cascadeIdx < 2; cascadeIdx++) {
 			compareValues[cascadeIdx] = mul(transpose(sD.ShadowMapProj[eyeIndex][cascadeIdx]), float4(positionWS, 1)).z - sD.AlphaTestRef[1 + cascadeIdx];
-			sampleRadii[cascadeIdx] = sD.ShadowSampleParam.z * rcp(1.0 + cascadeIdx);
 			positionsLS[cascadeIdx] = mul(transpose(sD.ShadowMapProj[eyeIndex][cascadeIdx]), float4(startPosition, 1));
 			viewOffsetsLS[cascadeIdx] = mul(transpose(sD.ShadowMapProj[eyeIndex][cascadeIdx]), float4(endPosition, 1));
 		}
 
-		uint noise16 = uint(sampleCount16 * noise);
-
 		float shadow = 0.0;
-		for (uint k = 0; k < sampleCount16; k++) {
-			uint noisyIndex = (k + noise16) % sampleCount16;
-			float t = float(sampleCount16Minus1 - noisyIndex) * rcpSampleCount16;
+		for (uint k = 0; k < sampleCount; k++) {
+			float t = float(k) * rcpSampleCount;
 
 			// Probabilistically select cascade (0 or 1 within the pair)
-			uint cascadeIndex = uint(frac(t + noise16) < cascade1Probability);
+			uint cascadeIndex = uint(frac(t + noise) < cascade1Probability);
 
-			// Offset along view ray with optimised sample pattern
-			float tSample = t + noiseTransform * rcpSampleCount16;
-			float3 sampledPositionLS = lerp(positionsLS[cascadeIndex], viewOffsetsLS[cascadeIndex], tSample);
-
-			// Blur shadow with poisson disc
-		//	sampledPositionLS.xy += mul(Random::PoissonSampleOffsets16[k], rotationMatrix) * sampleRadii[cascadeIndex];
+			// March with consistent steps
+			float3 sampledPositionLS = lerp(positionsLS[cascadeIndex], viewOffsetsLS[cascadeIndex], t);
 
 			// Sample VSM shadow map
 			float2 moments = SharedShadowMap.SampleLevel(LinearSampler, saturate(sampledPositionLS.xy), 1u - cascadeIndex);
@@ -178,7 +160,7 @@ namespace ShadowSampling
 		}
 
 		float fadeFactor = 1.0 - pow(saturate(dot(positionWS, positionWS) / sD.ShadowLightParam.z), 8);
-		return worldShadow * lerp(1.0, shadow * rcpSampleCount16, fadeFactor);
+		return worldShadow * lerp(1.0, shadow * rcpSampleCount, fadeFactor);
 	}
 
 	float Get2DFilteredShadowCascade(float noise, float2x2 rotationMatrix, float sampleOffsetScale, float2 baseUV, float cascadeIndex, float compareValue, uint eyeIndex)

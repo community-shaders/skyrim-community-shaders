@@ -163,6 +163,13 @@ void Deferred::SetupResources()
 		defines.clear();
 		defines.push_back({ "DOWNSAMPLE_SHADOW_MIP1", nullptr });
 		downsampleShadowMip1CS = static_cast<ID3D11ComputeShader*>(Util::CompileShader(L"Data\\Shaders\\DownsampleShadowCS.hlsl", defines, "cs_5_0"));
+
+		defines.clear();
+		defines.push_back({ "BLUR_HORIZONTAL", nullptr });
+		blurShadowHorizontalCS = static_cast<ID3D11ComputeShader*>(Util::CompileShader(L"Data\\Shaders\\BlurShadowCS.hlsl", defines, "cs_5_0"));
+		defines.clear();
+		defines.push_back({ "BLUR_VERTICAL", nullptr });
+		blurShadowVerticalCS = static_cast<ID3D11ComputeShader*>(Util::CompileShader(L"Data\\Shaders\\BlurShadowCS.hlsl", defines, "cs_5_0"));
 	}
 
 	{
@@ -241,6 +248,14 @@ void Deferred::CopyShadowData()
 							shadowCopySRV->Release();
 							shadowCopySRV = nullptr;
 						}
+						if (shadowCopyMip0SRV) {
+							shadowCopyMip0SRV->Release();
+							shadowCopyMip0SRV = nullptr;
+						}
+						if (shadowCopyMip1SRV) {
+							shadowCopyMip1SRV->Release();
+							shadowCopyMip1SRV = nullptr;
+						}
 						if (shadowCopyMip0UAV) {
 							shadowCopyMip0UAV->Release();
 							shadowCopyMip0UAV = nullptr;
@@ -252,6 +267,28 @@ void Deferred::CopyShadowData()
 						if (shadowCopyTexture) {
 							shadowCopyTexture->Release();
 							shadowCopyTexture = nullptr;
+						}
+
+						// Release blur temp texture resources
+						if (shadowBlurTempMip0SRV) {
+							shadowBlurTempMip0SRV->Release();
+							shadowBlurTempMip0SRV = nullptr;
+						}
+						if (shadowBlurTempMip1SRV) {
+							shadowBlurTempMip1SRV->Release();
+							shadowBlurTempMip1SRV = nullptr;
+						}
+						if (shadowBlurTempMip0UAV) {
+							shadowBlurTempMip0UAV->Release();
+							shadowBlurTempMip0UAV = nullptr;
+						}
+						if (shadowBlurTempMip1UAV) {
+							shadowBlurTempMip1UAV->Release();
+							shadowBlurTempMip1UAV = nullptr;
+						}
+						if (shadowBlurTempTexture) {
+							shadowBlurTempTexture->Release();
+							shadowBlurTempTexture = nullptr;
 						}
 
 						shadowCopyWidth = newWidth;
@@ -279,6 +316,15 @@ void Deferred::CopyShadowData()
 						srvDesc.Texture2D.MipLevels = 2;
 						DX::ThrowIfFailed(device->CreateShaderResourceView(shadowCopyTexture, &srvDesc, &shadowCopySRV));
 
+						// Create mip-specific SRVs for blur passes
+						srvDesc.Texture2D.MostDetailedMip = 0;
+						srvDesc.Texture2D.MipLevels = 1;
+						DX::ThrowIfFailed(device->CreateShaderResourceView(shadowCopyTexture, &srvDesc, &shadowCopyMip0SRV));
+
+						srvDesc.Texture2D.MostDetailedMip = 1;
+						srvDesc.Texture2D.MipLevels = 1;
+						DX::ThrowIfFailed(device->CreateShaderResourceView(shadowCopyTexture, &srvDesc, &shadowCopyMip1SRV));
+
 						D3D11_UNORDERED_ACCESS_VIEW_DESC uavDesc{};
 						uavDesc.Format = copyDesc.Format;
 						uavDesc.ViewDimension = D3D11_UAV_DIMENSION_TEXTURE2D;
@@ -287,6 +333,24 @@ void Deferred::CopyShadowData()
 
 						uavDesc.Texture2D.MipSlice = 1;
 						DX::ThrowIfFailed(device->CreateUnorderedAccessView(shadowCopyTexture, &uavDesc, &shadowCopyMip1UAV));
+
+						// Create temporary texture for blur intermediate result
+						DX::ThrowIfFailed(device->CreateTexture2D(&copyDesc, nullptr, &shadowBlurTempTexture));
+
+						// Create mip-specific SRVs for blur temp texture
+						srvDesc.Texture2D.MostDetailedMip = 0;
+						srvDesc.Texture2D.MipLevels = 1;
+						DX::ThrowIfFailed(device->CreateShaderResourceView(shadowBlurTempTexture, &srvDesc, &shadowBlurTempMip0SRV));
+
+						srvDesc.Texture2D.MostDetailedMip = 1;
+						srvDesc.Texture2D.MipLevels = 1;
+						DX::ThrowIfFailed(device->CreateShaderResourceView(shadowBlurTempTexture, &srvDesc, &shadowBlurTempMip1SRV));
+
+						uavDesc.Texture2D.MipSlice = 0;
+						DX::ThrowIfFailed(device->CreateUnorderedAccessView(shadowBlurTempTexture, &uavDesc, &shadowBlurTempMip0UAV));
+
+						uavDesc.Texture2D.MipSlice = 1;
+						DX::ThrowIfFailed(device->CreateUnorderedAccessView(shadowBlurTempTexture, &uavDesc, &shadowBlurTempMip1UAV));
 					}
 
 					// Dispatch downsample compute shader
@@ -309,11 +373,83 @@ void Deferred::CopyShadowData()
 					context->CSSetShader(downsampleShadowMip1CS, nullptr, 0);
 					context->Dispatch((shadowFullSize + 7) >> 3, (shadowFullSize + 7) >> 3, 1);
 
-					// Cleanup CS state
+					// Unbind shadow view before blur passes
 					csSrvs[0] = nullptr;
 					context->CSSetShaderResources(0, 1, csSrvs);
 					csUavs[0] = nullptr;
 					context->CSSetUnorderedAccessViews(0, 1, csUavs, nullptr);
+
+					// 11x11 separable blur for Mip 0
+					{
+						uint32_t mip0Width = newWidth;
+						uint32_t mip0Height = newHeight;
+						const uint32_t GROUP_SIZE = 128;
+
+						// Horizontal pass: shadowCopy mip0 -> shadowBlurTemp mip0
+						ID3D11ShaderResourceView* blurSrvs[1]{ shadowCopyMip0SRV };
+						context->CSSetShaderResources(0, 1, blurSrvs);
+						csUavs[0] = shadowBlurTempMip0UAV;
+						context->CSSetUnorderedAccessViews(0, 1, csUavs, nullptr);
+						context->CSSetShader(blurShadowHorizontalCS, nullptr, 0);
+						context->Dispatch((mip0Width + GROUP_SIZE - 1) / GROUP_SIZE, mip0Height, 1);
+
+						// Unbind for next pass
+						blurSrvs[0] = nullptr;
+						context->CSSetShaderResources(0, 1, blurSrvs);
+						csUavs[0] = nullptr;
+						context->CSSetUnorderedAccessViews(0, 1, csUavs, nullptr);
+
+						// Vertical pass: shadowBlurTemp mip0 -> shadowCopy mip0
+						blurSrvs[0] = shadowBlurTempMip0SRV;
+						context->CSSetShaderResources(0, 1, blurSrvs);
+						csUavs[0] = shadowCopyMip0UAV;
+						context->CSSetUnorderedAccessViews(0, 1, csUavs, nullptr);
+						context->CSSetShader(blurShadowVerticalCS, nullptr, 0);
+						context->Dispatch(mip0Width, (mip0Height + GROUP_SIZE - 1) / GROUP_SIZE, 1);
+
+						// Unbind
+						blurSrvs[0] = nullptr;
+						context->CSSetShaderResources(0, 1, blurSrvs);
+						csUavs[0] = nullptr;
+						context->CSSetUnorderedAccessViews(0, 1, csUavs, nullptr);
+					}
+
+					// 11x11 separable blur for Mip 1
+					{
+						uint32_t mip1Width = newWidth / 2;
+						uint32_t mip1Height = newHeight / 2;
+						const uint32_t GROUP_SIZE = 128;
+
+						// Horizontal pass: shadowCopy mip1 -> shadowBlurTemp mip1
+						ID3D11ShaderResourceView* blurSrvs[1]{ shadowCopyMip1SRV };
+						context->CSSetShaderResources(0, 1, blurSrvs);
+						csUavs[0] = shadowBlurTempMip1UAV;
+						context->CSSetUnorderedAccessViews(0, 1, csUavs, nullptr);
+						context->CSSetShader(blurShadowHorizontalCS, nullptr, 0);
+						context->Dispatch((mip1Width + GROUP_SIZE - 1) / GROUP_SIZE, mip1Height, 1);
+
+						// Unbind for next pass
+						blurSrvs[0] = nullptr;
+						context->CSSetShaderResources(0, 1, blurSrvs);
+						csUavs[0] = nullptr;
+						context->CSSetUnorderedAccessViews(0, 1, csUavs, nullptr);
+
+						// Vertical pass: shadowBlurTemp mip1 -> shadowCopy mip1
+						blurSrvs[0] = shadowBlurTempMip1SRV;
+						context->CSSetShaderResources(0, 1, blurSrvs);
+						csUavs[0] = shadowCopyMip1UAV;
+						context->CSSetUnorderedAccessViews(0, 1, csUavs, nullptr);
+						context->CSSetShader(blurShadowVerticalCS, nullptr, 0);
+						context->Dispatch(mip1Width, (mip1Height + GROUP_SIZE - 1) / GROUP_SIZE, 1);
+
+						// Unbind
+						blurSrvs[0] = nullptr;
+						context->CSSetShaderResources(0, 1, blurSrvs);
+						csUavs[0] = nullptr;
+						context->CSSetUnorderedAccessViews(0, 1, csUavs, nullptr);
+					}
+
+					// Cleanup CS state
 					ID3D11SamplerState* nullSampler = nullptr;
 					context->CSSetSamplers(0, 1, &nullSampler);
 					context->CSSetShader(nullptr, nullptr, 0);
