@@ -199,7 +199,8 @@ void SkinningPipeline::UpdateBLASES(ID3D12GraphicsCommandList4* commandList)
 		if (auto it = rt.models.find(path); it != rt.models.end()) {
 			auto& model = it->second;
 
-			rt.UpdateModelBLAS(model.get());
+			// TODO: Take this out of skinning pipeline (to where?)
+			model->UpdateBLAS(commandList);
 
 			barriers.push_back(CD3DX12_RESOURCE_BARRIER::UAV(model->blasBuffer->GetResource()));
 		}

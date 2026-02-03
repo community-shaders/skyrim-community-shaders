@@ -4,6 +4,8 @@
 
 #include <d3d12.h>
 
+#include "State.h"
+
 #include "Features/Raytracing/Buffer.h"
 #include "Features/Raytracing/Types.h"
 
@@ -80,6 +82,20 @@ struct Model
 
 	void ConvertMSN();
 
+	bool BLASBuildExecuted() const
+	{
+		return blasBuildFrame < globals::state->frameCount;
+	}
+
+	bool BLASUpdateExecuted() const
+	{
+		return blasUpdateFrame < globals::state->frameCount;
+	}
+
+	void BuildBLAS(ID3D12GraphicsCommandList4* commandList);
+
+	void UpdateBLAS(ID3D12GraphicsCommandList4* commandList);
+
 	void AddRef()
 	{
 		refCount.fetch_add(1, eastl::memory_order_relaxed);
@@ -96,5 +112,7 @@ private:
 	uint32_t shaderTypes = RE::BSShader::Type::None;
 	int features = static_cast<int>(RE::BSShaderMaterial::Feature::kNone);
 	REX::EnumSet<RE::BSShaderProperty::EShaderPropertyFlag, std::uint64_t> shaderFlags;
+	uint blasBuildFrame;
+	uint blasUpdateFrame;
 	eastl::atomic<int> refCount{ 0 };
 };

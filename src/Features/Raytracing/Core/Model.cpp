@@ -124,3 +124,125 @@ void Model::ConvertMSN()
 		rt.allocationMSNormalMaps.erase(allocation);
 	}
 }
+
+void Model::BuildBLAS(ID3D12GraphicsCommandList4* commandList)
+{
+	auto& rt = globals::features::raytracing;
+
+	std::lock_guard lock{ rt.renderMutex };
+
+	static eastl::vector<D3D12_RAYTRACING_GEOMETRY_DESC> geometryDescs;
+	geometryDescs.clear();
+
+	if (geometryDescs.capacity() < shapes.size())
+		geometryDescs.reserve(shapes.size());
+
+	for (auto& shape : shapes) {
+		geometryDescs.push_back(shape->GeometryDesc());
+	}
+
+	auto modelFlags = GetFlags();
+
+	bool updatable = (modelFlags & Shape::Flags::Skinned) || (modelFlags & Shape::Flags::Dynamic);
+
+	D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAGS buildFlags = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_NONE;
+
+	if (updatable)
+		buildFlags = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_ALLOW_UPDATE | D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_PREFER_FAST_BUILD;
+	else
+		buildFlags = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_ALLOW_COMPACTION | D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_PREFER_FAST_TRACE;
+
+	D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_INPUTS inputs = {
+		.Type = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL,
+		.Flags = buildFlags,
+		.NumDescs = static_cast<uint>(geometryDescs.size()),
+		.DescsLayout = D3D12_ELEMENTS_LAYOUT_ARRAY,
+		.pGeometryDescs = geometryDescs.data()
+	};
+
+	D3D12_RAYTRACING_ACCELERATION_STRUCTURE_PREBUILD_INFO prebuildInfo;
+	rt.d3d12Device->GetRaytracingAccelerationStructurePrebuildInfo(&inputs, &prebuildInfo);
+
+	D3D12_RESOURCE_DESC desc = {
+		.Dimension = D3D12_RESOURCE_DIMENSION_BUFFER,
+		.Width = prebuildInfo.ScratchDataSizeInBytes,
+		.Height = 1,
+		.DepthOrArraySize = 1,
+		.MipLevels = 1,
+		.SampleDesc = Raytracing::NO_AA,
+		.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR,
+		.Flags = D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS
+	};
+
+	auto blasScratchDesc = Raytracing::DEFAULT_HEAP_MA;
+	blasScratchDesc.CustomPool = rt.blasScratchPool.get();
+
+	winrt::com_ptr<D3D12MA::Allocation> scratch = nullptr;
+	DX::ThrowIfFailed(rt.allocator->CreateResource(&blasScratchDesc, &desc, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, nullptr, scratch.put(), IID_NULL, NULL));
+
+	auto blasDesc = Raytracing::DEFAULT_HEAP_MA;
+	blasDesc.CustomPool = rt.blasPool.get();
+
+	desc.Width = prebuildInfo.ResultDataMaxSizeInBytes;
+	DX::ThrowIfFailed(rt.allocator->CreateResource(&blasDesc, &desc, D3D12_RESOURCE_STATE_RAYTRACING_ACCELERATION_STRUCTURE, nullptr, blasBuffer.put(), IID_NULL, NULL));
+
+	D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_DESC buildDesc = {
+		.DestAccelerationStructureData = blasBuffer->GetResource()->GetGPUVirtualAddress(),
+		.Inputs = inputs,
+		.ScratchAccelerationStructureData = scratch->GetResource()->GetGPUVirtualAddress()
+	};
+
+	commandList->BuildRaytracingAccelerationStructure(&buildDesc, 0, nullptr);
+
+	// Register frame that BLAS was created
+	blasBuildFrame = globals::state->frameCount;
+
+	const auto& asBarrier = CD3DX12_RESOURCE_BARRIER::UAV(blasBuffer->GetResource());
+	commandList->ResourceBarrier(1, &asBarrier);
+
+	if (updatable)
+		blasScratchBuffer = std::move(scratch);
+	else
+		rt.tempGPUData.emplace_back(std::move(scratch), rt.fenceValue);
+}
+
+void Model::UpdateBLAS(ID3D12GraphicsCommandList4* commandList)
+{
+	auto gpuVirtualAddr = blasBuffer->GetResource()->GetGPUVirtualAddress();
+
+	if (!BLASBuildExecuted())
+		return;
+
+	if (!BLASUpdateExecuted())
+		return;
+	
+	static eastl::vector<D3D12_RAYTRACING_GEOMETRY_DESC> geometryDescs;
+	geometryDescs.clear();
+
+	if (geometryDescs.capacity() < shapes.size())
+		geometryDescs.reserve(shapes.size());
+
+	for (auto& shape : shapes) {
+		geometryDescs.push_back(shape->GeometryDesc());
+	}
+
+	D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_INPUTS inputs = {
+		.Type = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL,
+		.Flags = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_PREFER_FAST_BUILD | D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_PERFORM_UPDATE,
+		.NumDescs = static_cast<uint>(geometryDescs.size()),
+		.DescsLayout = D3D12_ELEMENTS_LAYOUT_ARRAY,
+		.pGeometryDescs = geometryDescs.data()
+	};
+
+	D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_DESC buildDesc = {
+		.DestAccelerationStructureData = gpuVirtualAddr,
+		.Inputs = inputs,
+		.SourceAccelerationStructureData = gpuVirtualAddr,
+		.ScratchAccelerationStructureData = blasScratchBuffer->GetResource()->GetGPUVirtualAddress()
+	};
+
+	commandList->BuildRaytracingAccelerationStructure(&buildDesc, 0, nullptr);
+
+	// Register frame that BLAS was updated
+	blasUpdateFrame = globals::state->frameCount;
+}

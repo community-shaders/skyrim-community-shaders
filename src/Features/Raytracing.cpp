@@ -1825,121 +1825,6 @@ void Raytracing::MakeAndCopy(const eastl::vector<T>& data, winrt::com_ptr<ID3D12
 	res->Unmap(0, nullptr);
 }
 
-void Raytracing::CommitModel(Model* model)
-{
-	std::lock_guard lock{ renderMutex };
-
-	static eastl::vector<D3D12_RAYTRACING_GEOMETRY_DESC> geometryDescs;
-	geometryDescs.clear();
-
-	if (geometryDescs.capacity() < model->shapes.size())
-		geometryDescs.reserve(model->shapes.size());
-
-	for (auto& shape : model->shapes) {
-		geometryDescs.push_back(shape->GeometryDesc());
-	}
-
-	auto modelFlags = model->GetFlags();
-
-	bool updatable = (modelFlags & Shape::Flags::Skinned) || (modelFlags & Shape::Flags::Dynamic);
-
-	D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAGS buildFlags = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_NONE;
-
-	if (updatable)
-		buildFlags = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_ALLOW_UPDATE | D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_PREFER_FAST_BUILD;
-	else
-		buildFlags = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_ALLOW_COMPACTION | D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_PREFER_FAST_TRACE;
-
-	D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_INPUTS inputs = {
-		.Type = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL,
-		.Flags = buildFlags,
-		.NumDescs = static_cast<uint>(geometryDescs.size()),
-		.DescsLayout = D3D12_ELEMENTS_LAYOUT_ARRAY,
-		.pGeometryDescs = geometryDescs.data()
-	};
-
-	D3D12_RAYTRACING_ACCELERATION_STRUCTURE_PREBUILD_INFO prebuildInfo;
-	d3d12Device->GetRaytracingAccelerationStructurePrebuildInfo(&inputs, &prebuildInfo);
-
-	D3D12_RESOURCE_DESC desc = {
-		.Dimension = D3D12_RESOURCE_DIMENSION_BUFFER,
-		.Width = prebuildInfo.ScratchDataSizeInBytes,
-		.Height = 1,
-		.DepthOrArraySize = 1,
-		.MipLevels = 1,
-		.SampleDesc = NO_AA,
-		.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR,
-		.Flags = D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS
-	};
-
-	auto blasScratchDesc = DEFAULT_HEAP_MA;
-	blasScratchDesc.CustomPool = blasScratchPool.get();
-
-	winrt::com_ptr<D3D12MA::Allocation> scratch = nullptr;
-	DX::ThrowIfFailed(allocator->CreateResource(&blasScratchDesc, &desc, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, nullptr, scratch.put(), IID_NULL, NULL));
-
-	auto blasDesc = DEFAULT_HEAP_MA;
-	blasDesc.CustomPool = blasPool.get();
-
-	desc.Width = prebuildInfo.ResultDataMaxSizeInBytes;
-	DX::ThrowIfFailed(allocator->CreateResource(&blasDesc, &desc, D3D12_RESOURCE_STATE_RAYTRACING_ACCELERATION_STRUCTURE, nullptr, model->blasBuffer.put(), IID_NULL, NULL));
-
-	D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_DESC buildDesc = {
-		.DestAccelerationStructureData = model->blasBuffer->GetResource()->GetGPUVirtualAddress(),
-		.Inputs = inputs,
-		.ScratchAccelerationStructureData = scratch->GetResource()->GetGPUVirtualAddress()
-	};
-
-	commandList->BuildRaytracingAccelerationStructure(&buildDesc, 0, nullptr);
-
-	destASFrame.emplace(model->blasBuffer->GetResource()->GetGPUVirtualAddress());
-
-	const auto& asBarrier = CD3DX12_RESOURCE_BARRIER::UAV(model->blasBuffer->GetResource());
-	commandList->ResourceBarrier(1, &asBarrier);
-
-	if (updatable)
-		model->blasScratchBuffer = std::move(scratch);
-	else
-		tempGPUData.emplace_back(std::move(scratch), fenceValue);
-}
-
-void Raytracing::UpdateModelBLAS(Model* model)
-{
-	auto gpuVirtualAddr = model->blasBuffer->GetResource()->GetGPUVirtualAddress();
-
-	if (destASFrame.find(gpuVirtualAddr) != destASFrame.end())
-		return;
-
-	static eastl::vector<D3D12_RAYTRACING_GEOMETRY_DESC> geometryDescs;
-	geometryDescs.clear();
-
-	if (geometryDescs.capacity() < model->shapes.size())
-		geometryDescs.reserve(model->shapes.size());
-
-	for (auto& shape : model->shapes) {
-		geometryDescs.push_back(shape->GeometryDesc());
-	}
-
-	D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_INPUTS inputs = {
-		.Type = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL,
-		.Flags = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_PREFER_FAST_BUILD | D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_PERFORM_UPDATE,
-		.NumDescs = static_cast<uint>(geometryDescs.size()),
-		.DescsLayout = D3D12_ELEMENTS_LAYOUT_ARRAY,
-		.pGeometryDescs = geometryDescs.data()
-	};
-
-	D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_DESC buildDesc = {
-		.DestAccelerationStructureData = gpuVirtualAddr,
-		.Inputs = inputs,
-		.SourceAccelerationStructureData = gpuVirtualAddr,
-		.ScratchAccelerationStructureData = model->blasScratchBuffer->GetResource()->GetGPUVirtualAddress()
-	};
-
-	commandList->BuildRaytracingAccelerationStructure(&buildDesc, 0, nullptr);
-
-	destASFrame.emplace(model->blasBuffer->GetResource()->GetGPUVirtualAddress());
-}
-
 // A custom visit controller built to ignore billboard/particle geometry
 static RE::BSVisit::BSVisitControl TraverseScenegraphRTGeometries(RE::NiAVObject* a_object, std::function<RE::BSVisit::BSVisitControl(RE::BSGeometry*)> a_func)
 {
@@ -2206,7 +2091,7 @@ void Raytracing::CreateModelInternal(RE::TESForm* form, const char* path, RE::Ni
 			if (it->second->ShouldQueueMSNConversion())
 				msnConvertionQueue.emplace_back(modelKey);
 
-			CommitModel(it->second.get());
+			it->second->BuildBLAS(commandList.get());
 
 			AddInstance(formID, pRoot, modelKey);
 
@@ -2915,8 +2800,6 @@ void Raytracing::PostRaytraceCleanup()
 	while (!tempGPUData.empty() && tempGPUData.front().fenceValue <= fenceValue) {
 		tempGPUData.pop_front();
 	}
-
-	destASFrame.clear();
 }
 
 void Raytracing::BSShader_SetupGeometry([[maybe_unused]] RE::BSShader* oThis, [[maybe_unused]] RE::BSRenderPass* pPass, [[maybe_unused]] uint32_t renderFlags)

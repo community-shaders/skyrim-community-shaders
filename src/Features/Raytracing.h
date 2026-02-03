@@ -594,19 +594,12 @@ struct Raytracing : public OverlayFeature
 	void CreateModel(RE::TESForm* form, const char* model, RE::NiAVObject* root);
 	void CreateModelInternal(RE::TESForm* refr, const char* path, RE::NiAVObject* root);
 
-	// Creates a single BLAS for a collection of Shapes
-	// TODO: Move to Model struct
-	void CommitModel(Model* model);
-
 	// Removes the instance and optionally also releases the model and all its buffers if refCount reaches 0
 	bool RemoveInstance(RE::NiAVObject* root, bool releaseModel);
 	bool RemoveInstance(RE::FormID formID, bool releaseModel);
 
 	void SetInstanceDetached(RE::NiAVObject* root, bool detached);
 	void SetInstanceDetached(RE::FormID formID, bool detached);
-
-	// TODO: Move to Model struct
-	void UpdateModelBLAS(Model* model);
 
 	eastl::shared_ptr<Allocation> GetTextureRegister(ID3D11Texture2D* texture, eastl::shared_ptr<Allocation> defaultTexture);
 	eastl::shared_ptr<Allocation> GetMSNormalMapRegister(Shape* shape, RE::BSGraphics::Texture* texture, eastl::shared_ptr<Allocation> defaultTexture);
@@ -796,9 +789,6 @@ struct Raytracing : public OverlayFeature
 	};
 
 	eastl::deque<TempGPUData> tempGPUData;
-
-	// All 'DestAccelerationStructureData' written with 'BuildRaytracingAccelerationStructure' this frame
-	eastl::hash_set<D3D12_GPU_VIRTUAL_ADDRESS> destASFrame;
 
 	// D3D11
 	winrt::com_ptr<ID3D11Device5> d3d11Device = nullptr;
