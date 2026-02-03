@@ -262,10 +262,15 @@ void Menu::Load(json& o_json)
 	migrateKey(o_json, "ShaderBlockPrevKey", settings.ShaderBlockPrevKey);
 	migrateKey(o_json, "ShaderBlockNextKey", settings.ShaderBlockNextKey);
 
-	// Helper for new smart serialization
+	// Helper for new smart serialization with error handling
 	auto loadComboList = [](const json& j, const char* keyName, std::vector<InputCombo>& target) {
 		if (j.contains(keyName) && j[keyName].is_array()) {
-			InputCombo::ComboList::from_json(j[keyName], target);
+			try {
+				InputCombo::ComboList::from_json(j[keyName], target);
+			} catch (const std::exception& e) {
+				logger::warn("Failed to load combo list '{}': {}, using default", keyName, e.what());
+				// Leave target unchanged (keeps default or migrated value)
+			}
 		}
 	};
 
@@ -1038,19 +1043,33 @@ void Menu::ProcessInputEventQueue()
 						 } },
 					};
 					for (const auto& ka : keyActions) {
-						// Check if key matches last key in combo and all modifiers are held
+						// Check if key matches last key in combo and all modifiers are held (exact match)
 						if (!ka.settingKey.empty() &&
 							ka.settingKey.back().GetKey() == key &&
 							ka.settingKey.back().GetDevice() == InputDeviceType::Keyboard) {
-							bool allModifiersHeld = true;
+							// Build set of required modifiers from combo
+							bool requiresCtrl = false, requiresShift = false, requiresAlt = false;
 							for (size_t i = 0; i < ka.settingKey.size() - 1; ++i) {
-								if (!(GetAsyncKeyState(ka.settingKey[i].GetKey()) & Constants::KEY_PRESSED_MASK)) {
-									allModifiersHeld = false;
-									break;
-								}
+								uint32_t modKey = ka.settingKey[i].GetKey();
+								if (modKey == VK_CONTROL || modKey == VK_LCONTROL || modKey == VK_RCONTROL)
+									requiresCtrl = true;
+								else if (modKey == VK_SHIFT || modKey == VK_LSHIFT || modKey == VK_RSHIFT)
+									requiresShift = true;
+								else if (modKey == VK_MENU || modKey == VK_LMENU || modKey == VK_RMENU)
+									requiresAlt = true;
 							}
 
-							if (allModifiersHeld) {
+							// Check current modifier state
+							bool ctrlHeld = (GetAsyncKeyState(VK_CONTROL) & Constants::KEY_PRESSED_MASK) != 0;
+							bool shiftHeld = (GetAsyncKeyState(VK_SHIFT) & Constants::KEY_PRESSED_MASK) != 0;
+							bool altHeld = (GetAsyncKeyState(VK_MENU) & Constants::KEY_PRESSED_MASK) != 0;
+
+							// Exact match: required modifiers must be held, and no extra modifiers
+							bool exactMatch = (requiresCtrl == ctrlHeld) &&
+							                  (requiresShift == shiftHeld) &&
+							                  (requiresAlt == altHeld);
+
+							if (exactMatch) {
 								ka.action();
 								break;
 							}
