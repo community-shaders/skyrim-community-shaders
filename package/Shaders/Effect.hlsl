@@ -612,7 +612,7 @@ float3 GetLightingShadow(float3 color, float3 worldPosition, float2 screenPositi
 		uint noisyIndex = uint((float(i) + sampleCount * noise) % sampleCount);
 		float t = (float(sampleCount) - float(noisyIndex + 1)) * rcpSampleCount;
 		float tSample = t + noiseTransform * rcpSampleCount;
-		
+
 		float3 samplePositionWS = lerp(startPosition, endPosition, tSample);
 		samplePositionWS.xy += mul(Random::SpiralSampleOffsets8[i], rotationMatrix) * 4096.0;
 		samplePositionWS.z += length(Random::SpiralSampleOffsets8[i]);

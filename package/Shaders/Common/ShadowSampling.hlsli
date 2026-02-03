@@ -107,7 +107,7 @@ namespace ShadowSampling
 			uint noisyIndex = uint((float(i) + sampleCount8 * noise) % sampleCount8);
 			float t = (float(sampleCount8Minus1) - float(noisyIndex)) * rcpSampleCount8;
 			float tSample = t + noiseTransform * rcpSampleCount8;
-			
+
 			float3 samplePositionWS = lerp(startPosition, endPosition, tSample);
 			samplePositionWS.xy += mul(Random::SpiralSampleOffsets8[i], rotationMatrix) * viewRayLength;
 			samplePositionWS.z += length(Random::SpiralSampleOffsets8[i]);
@@ -130,7 +130,7 @@ namespace ShadowSampling
 
 		// Precompute cascade data
 		float cascade1Probability = saturate((shadowMapDepth - sD.StartSplitDistances.y) / (sD.EndSplitDistances.x - sD.StartSplitDistances.y));
-		
+
 		float compareValues[2];
 		float sampleRadii[2];
 		float3 positionsLS[2];
