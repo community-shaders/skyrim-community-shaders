@@ -27,8 +27,25 @@ void main()
     uint2 idx = DispatchRaysIndex().xy;
     uint2 size = DispatchRaysDimensions().xy;
 
-    uint randomSeed = InitRandomSeed(idx, size, Frame.FrameCount);
-
+#if defined(CHECKERBOARD)    
+    if ((idx.x + idx.y) & 1)
+#elif defined(TEMPORAL_CHECKERBOARD)
+    if ((idx.x + idx.y + Frame.FrameCount) & 1)
+#endif
+#if defined(CHECKERBOARD) || defined(TEMPORAL_CHECKERBOARD)
+    {
+        OutputTexture[idx] = float4(0.0f, 0.0f, 0.0f, 0.0f);
+        DiffuseAlbedoPathTracing[idx] = float4(0.0f, 0.0f, 0.0f, 1.0f);
+        NormalRoughnessPathTracing[idx] = float4(0.0f, 0.0f, 0.0f, 1.0f);
+        SpecularAlbedo[idx] = float4(0.5f, 0.5f, 0.5f, 0.0f);
+        SpecularHitDist[idx] = RAY_TMAX;
+    
+        return;
+    }       
+#endif   
+    
+    uint randomSeed = InitRandomSeed(idx, size, Frame.FrameCount);    
+  
 #if defined(SHARC)
     SharcParameters sharcParameters = GetSharcParameters();
 
