@@ -22,6 +22,9 @@
 #include <RE/N/NiBound.h>
 #include <RE/S/ShaderAccumulator.h>
 #include <RE/N/NiSmartPointer.h>
+#include <RE/B/BSCullingProcess.h>
+#include <RE/B/BSFadeNodeCuller.h>
+#include <RE/N/NiCullingProcess.h>
 
 #include "Features/HiZOcclusion.h"
 
@@ -714,6 +717,90 @@ namespace Hooks
 		static inline REL::Relocation<decltype(thunk)> func;
 	};
 
+	// Hook BSCullingProcess::AppendVirtual to cull geometry EARLY during scene traversal
+	// This prevents all downstream CPU work (batching, shader setup, state changes)
+	struct BSCullingProcess_AppendVirtual
+	{
+		static void thunk(RE::BSCullingProcess* cullingProcess, RE::BSGeometry& geometry, uint32_t a_arg2)
+		{
+			auto& hiz = globals::features::hiZOcclusion;
+			
+			if (hiz.loaded && 
+			    hiz.settings.enableHiZCulling &&
+			    !globals::state->renderingShadowmaps &&
+			    !globals::state->activeReflections) {
+				
+				if (hiz.IsGeometryOccluded(&geometry)) {
+					// Skip LOD objects if cullLODObjects is disabled
+					if (!hiz.settings.cullLODObjects && HiZOcclusion::IsLODGeometry(&geometry)) {
+						hiz.stats.lodSkippedCount++;
+					} else {
+						hiz.stats.earlyCulledCount++;
+						return;  // Skip adding to visible set entirely
+					}
+				}
+			}
+			
+			func(cullingProcess, geometry, a_arg2);
+		}
+		static inline REL::Relocation<decltype(thunk)> func;
+	};
+
+	// Hook BSFadeNodeCuller::AppendVirtual - this is the MAIN culling path for most world geometry
+	// BSFadeNodeCuller inherits from NiCullingProcess (not BSCullingProcess) so needs separate hook
+	struct BSFadeNodeCuller_AppendVirtual
+	{
+		static void thunk(RE::BSFadeNodeCuller* culler, RE::BSGeometry& geometry, uint32_t a_arg2)
+		{
+			auto& hiz = globals::features::hiZOcclusion;
+			
+			if (hiz.loaded && 
+			    hiz.settings.enableHiZCulling &&
+			    !globals::state->renderingShadowmaps &&
+			    !globals::state->activeReflections) {
+				
+				if (hiz.IsGeometryOccluded(&geometry)) {
+					if (!hiz.settings.cullLODObjects && HiZOcclusion::IsLODGeometry(&geometry)) {
+						hiz.stats.lodSkippedCount++;
+					} else {
+						hiz.stats.earlyCulledCount++;
+						return;
+					}
+				}
+			}
+			
+			func(culler, geometry, a_arg2);
+		}
+		static inline REL::Relocation<decltype(thunk)> func;
+	};
+
+	// Hook NiCullingProcess::AppendVirtual - base class fallback for any other culling paths
+	struct NiCullingProcess_AppendVirtual
+	{
+		static void thunk(RE::NiCullingProcess* cullingProcess, RE::BSGeometry& geometry, uint32_t a_arg2)
+		{
+			auto& hiz = globals::features::hiZOcclusion;
+			
+			if (hiz.loaded && 
+			    hiz.settings.enableHiZCulling &&
+			    !globals::state->renderingShadowmaps &&
+			    !globals::state->activeReflections) {
+				
+				if (hiz.IsGeometryOccluded(&geometry)) {
+					if (!hiz.settings.cullLODObjects && HiZOcclusion::IsLODGeometry(&geometry)) {
+						hiz.stats.lodSkippedCount++;
+					} else {
+						hiz.stats.earlyCulledCount++;
+						return;
+					}
+				}
+			}
+			
+			func(cullingProcess, geometry, a_arg2);
+		}
+		static inline REL::Relocation<decltype(thunk)> func;
+	};
+
 struct BSBatchRenderer_RenderPassImmediately
 	{
 		static void thunk(RE::BSRenderPass* pass, uint32_t technique, bool alphaTest, uint32_t renderFlags)
@@ -747,8 +834,10 @@ struct BSBatchRenderer_RenderPassImmediately
 					case RE::BSShader::Type::Grass:
 					case RE::BSShader::Type::Sky:
 					case RE::BSShader::Type::Water:
+						break;  // Never cull: batched/infinite/reflections
 					case RE::BSShader::Type::Utility:
-						break;  // Never cull: batched/infinite/reflections/shadows
+						if (hiz.ShouldCullUtilityShader(pass, technique)) return;
+						break;
 					case RE::BSShader::Type::Particle:
 					case RE::BSShader::Type::Effect:
 						if (hiz.ShouldCullParticleShader(pass)) return;
@@ -1005,6 +1094,13 @@ struct BSBatchRenderer_RenderPassImmediately
 
 		logger::info("Hooking BSBatchRenderer::RenderPassImmediately for Hi-Z culling");
 		stl::write_thunk_call<BSBatchRenderer_RenderPassImmediately>(REL::RelocationID(100852, 107642).address() + REL::Relocate(0x29E, 0x28F));
+		
+		// Hook multiple culling process AppendVirtual functions (vfunc 0x18) for early geometry culling
+		// This prevents ALL downstream CPU work by culling during scene traversal
+		logger::info("Hooking culling processes for early Hi-Z culling (BSCullingProcess, BSFadeNodeCuller, NiCullingProcess)");
+		stl::write_vfunc<0x18, BSCullingProcess_AppendVirtual>(RE::VTABLE_BSCullingProcess[0]);
+		stl::write_vfunc<0x18, BSFadeNodeCuller_AppendVirtual>(RE::VTABLE_BSFadeNodeCuller[0]);
+		stl::write_vfunc<0x18, NiCullingProcess_AppendVirtual>(RE::VTABLE_NiCullingProcess[0]);
 		
 		// Hook depth prepass rendering to set state flag (AE only - address not available for SE)
 		if (REL::Module::IsAE()) {

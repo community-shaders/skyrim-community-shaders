@@ -109,6 +109,7 @@ struct HiZOcclusion : OverlayFeature
         // Hi-Z culling settings
         bool enableHiZCulling = true;     // enable Hi-Z occlusion culling
         float conservativeBias = 0.010f;   // depth bias for conservative testing (0.01 = 1% bias)
+        bool cullLODObjects = false;      // enable culling for LOD objects (may cause flickering at low bias)
         bool showCullingStats = false;    // show Hi-Z culling statistics in UI
 
         // Bounds overlay viewer (draw tested bounds and closest point)
@@ -191,6 +192,9 @@ struct HiZOcclusion : OverlayFeature
     // Integration with rendering pipeline (no hooks needed)
     void IntegrateWithRenderPipeline();
     
+    // Check if geometry has LOD flags (LODObjects, HDLODObjects, LODLandscape)
+    static bool IsLODGeometry(RE::BSGeometry* geometry);
+    
     // Check if a Utility shader call should be culled for the given render pass
     // Returns true if the call should be culled, false otherwise
     bool ShouldCullUtilityShader(RE::BSRenderPass* pass, uint32_t technique);
@@ -237,6 +241,10 @@ struct HiZOcclusion : OverlayFeature
         uint32_t defaultValue = 0;
         uint32_t culledFrustum = 0;
         uint32_t culledNoEarlyOut = 0;
+        
+        // Early culling at scene traversal (prevents all downstream CPU work)
+        uint32_t earlyCulledCount = 0;       // geometry culled at AppendVirtual before batching
+        uint32_t lodSkippedCount = 0;        // LOD geometry skipped due to cullLODObjects=false
         
         // Shadow/Utility shader culling stats
         uint32_t utilityCallsTotal = 0;      // total utility shader calls this frame

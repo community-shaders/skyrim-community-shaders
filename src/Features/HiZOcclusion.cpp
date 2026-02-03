@@ -7,6 +7,8 @@
 #include "Utils/UI.h"
 
 #include <RE/N/NiBound.h>
+#include <RE/B/BSShaderProperty.h>
+#include <RE/B/BSLightingShaderProperty.h>
 
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
     HiZOcclusion::Settings,
@@ -15,6 +17,7 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
     hizViewerScale,
     enableHiZCulling,
     conservativeBias,
+    cullLODObjects,
     showCullingStats,
     debugMode,
     enableBoundsViewer,
@@ -264,6 +267,28 @@ void HiZOcclusion::DrawSettings()
         ImGui::SameLine();
         if (auto _tt = Util::HoverTooltipWrapper()) {
             ImGui::SetTooltip("Conservative bias for Hi-Z Culling. \nHigher values are more conservative, lower values are more aggressive.");
+        }
+        
+        ImGui::Checkbox("Cull LOD Objects", &settings.cullLODObjects);
+        if (auto _tt = Util::HoverTooltipWrapper()) {
+            ImGui::SetTooltip("Enable culling for LOD objects (terrain LOD, object LOD).\nDisable if you see flickering on distant objects at low bias values.");
+        }
+        
+        // Show early culling stat (geometry culled during scene traversal - prevents ALL downstream work)
+        if (displayStats.earlyCulledCount > 0 || displayStats.lodSkippedCount > 0) {
+            ImGui::Separator();
+            if (displayStats.earlyCulledCount > 0) {
+                ImGui::TextColored(ImVec4(0.0f, 1.0f, 0.5f, 1.0f), "Early Culled (at traversal): %u", displayStats.earlyCulledCount);
+                if (auto _tt = Util::HoverTooltipWrapper()) {
+                    ImGui::SetTooltip("Geometry culled during scene traversal before batching.\nThis prevents ALL downstream CPU work (batching, shader setup, state changes).");
+                }
+            }
+            if (displayStats.lodSkippedCount > 0) {
+                ImGui::TextColored(ImVec4(0.5f, 0.5f, 1.0f, 1.0f), "LOD Objects Skipped: %u", displayStats.lodSkippedCount);
+                if (auto _tt = Util::HoverTooltipWrapper()) {
+                    ImGui::SetTooltip("LOD geometry that was not culled because 'Cull LOD Objects' is disabled.");
+                }
+            }
         }
         
         // Show combined culling stats
@@ -536,6 +561,8 @@ void HiZOcclusion::Prepass()
     stats.defaultValue = 0;
     stats.culledFrustum = 0;
     stats.culledNoEarlyOut = 0;
+    stats.earlyCulledCount = 0;
+    stats.lodSkippedCount = 0;
     stats.utilityCallsTotal = 0;
     stats.utilityCallsCulled = 0;
     stats.particleCallsTotal = 0;
@@ -1562,6 +1589,21 @@ bool HiZOcclusion::IsGeometryOccluded(RE::BSGeometry* geometry) const
         return false;
     }
     return occludedGeometry.find(geometry) != occludedGeometry.end();
+}
+
+bool HiZOcclusion::IsLODGeometry(RE::BSGeometry* geometry)
+{
+    if (!geometry) {
+        return false;
+    }
+    
+    auto shaderProperty = static_cast<RE::BSShaderProperty*>(geometry->GetGeometryRuntimeData().properties[1].get());
+    if (!shaderProperty) {
+        return false;
+    }
+    
+    using Flag = RE::BSShaderProperty::EShaderPropertyFlag;
+    return shaderProperty->flags.any(Flag::kLODObjects, Flag::kHDLODObjects, Flag::kLODLandscape);
 }
 
 void HiZOcclusion::MarkGeometryOccluded(RE::BSGeometry* geometry)
