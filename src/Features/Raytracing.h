@@ -498,12 +498,13 @@ struct Raytracing : public OverlayFeature
 		ReSTIRSettings ReSTIR;
 
 		bool GGXEnergyConservation = true;
+		bool UseHairChiangBSDF = true;
 
 		DiffuseBRDF DiffuseBRDF = DiffuseBRDF::Burley;
 		LightEvalMode LightEvalMode = LightEvalMode::BRDF;
 		LightingMode LightingMode = LightingMode::PBR;
 
-		NLOHMANN_DEFINE_TYPE_INTRUSIVE_WITH_DEFAULT(AdvancedSettings, Culling, VariableUpdateRate, RIS, ReSTIR, GGXEnergyConservation, DiffuseBRDF, LightEvalMode, LightingMode)
+		NLOHMANN_DEFINE_TYPE_INTRUSIVE_WITH_DEFAULT(AdvancedSettings, Culling, VariableUpdateRate, RIS, ReSTIR, GGXEnergyConservation, UseHairChiangBSDF, DiffuseBRDF, LightEvalMode, LightingMode)
 	};
 
 	////////////////////////////////////////////////// Feature Specific Data

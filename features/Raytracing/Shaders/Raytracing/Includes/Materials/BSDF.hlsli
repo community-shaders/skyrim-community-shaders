@@ -722,11 +722,14 @@ struct StandardBSDF
         float3 wiLocal = surface.ToLocal(wi);
         float3 woLocal = surface.ToLocal(wo);
 
+#ifdef HAIR_CHIANG_BSDF
         if (material.Feature == Feature::kHairTint)
         {
             HairChiangBSDF bsdf = HairChiangBSDF::make(wi, surface);
             return bsdf.Eval(wiLocal, woLocal);
-        } else {
+        } else
+#endif
+        {
             DefaultBSDF bsdf = DefaultBSDF::make(N, wi, surface, isEnter);
             return bsdf.Eval(wiLocal, woLocal);
         }
@@ -739,6 +742,7 @@ struct StandardBSDF
 
         float3 wiLocal = surface.ToLocal(wi);
 
+#ifdef HAIR_CHIANG_BSDF
         if (material.Feature == Feature::kHairTint)
         {
             HairChiangBSDF bsdf = HairChiangBSDF::make(wi, surface);
@@ -748,7 +752,9 @@ struct StandardBSDF
 
             result.wo = surface.FromLocal(woLocal);
             return valid;
-        } else {
+        } else
+#endif
+        {
             DefaultBSDF bsdf = DefaultBSDF::make(N, wi, surface, isEnter);
 
             float3 woLocal;

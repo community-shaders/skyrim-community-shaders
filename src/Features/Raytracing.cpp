@@ -503,6 +503,13 @@ void Raytracing::DrawAdvancedSettings()
 	if (ImGui::Checkbox("GGX Energy Conservation", &advSettings.GGXEnergyConservation))
 		recompileReason |= RecompileReason::Advanced;
 
+	if (ImGui::Checkbox("Use Hair Chiang BSDF", &advSettings.UseHairChiangBSDF))
+		recompileReason |= RecompileReason::Advanced;
+
+	if (auto _tt = Util::HoverTooltipWrapper()) {
+		ImGui::Text("Best with hair specular feature enabled.\n");
+	}
+
 	if (DrawEnumCombo("Diffuse BRDF", advSettings.DiffuseBRDF))
 		recompileReason |= RecompileReason::Advanced;
 
@@ -4036,6 +4043,9 @@ void Raytracing::CompileRTGIShaders()
 
 	if (advSettings.GGXEnergyConservation)
 		defines.emplace_back(L"GGX_ENERGY_CONSERVATION");
+
+	if (advSettings.UseHairChiangBSDF)
+		defines.emplace_back(L"HAIR_CHIANG_BSDF");
 
 	const auto diffuseMode = std::to_wstring(static_cast<uint32_t>(advSettings.DiffuseBRDF));
 	defines.emplace_back(L"DIFFUSE_MODE", diffuseMode.c_str());
