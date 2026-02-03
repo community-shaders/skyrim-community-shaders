@@ -1916,13 +1916,7 @@ void Raytracing::UpdateModelBLAS(Model* model)
 	if (geometryDescs.capacity() < model->shapes.size())
 		geometryDescs.reserve(model->shapes.size());
 
-	// If no trishape has render use, we assume it is not used and skip using it to hide geometry
-	//bool isRenderUseValid = model->IsRenderUseValid();
-
 	for (auto& shape : model->shapes) {
-		/*if (isRenderUseValid && shape->geometry->GetFlags().none(RE::NiAVObject::Flag::kRenderUse))
-		continue;*/
-
 		geometryDescs.push_back(shape->GeometryDesc());
 	}
 

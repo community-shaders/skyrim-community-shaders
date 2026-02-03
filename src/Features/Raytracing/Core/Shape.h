@@ -108,6 +108,8 @@ public:
 
 	void CalculateVectors(bool calculateNormal);
 
+	Flags Update(bool isRenderUseValid);
+
 	bool UpdateDynamicPosition();
 
 	void UpdateUploadDynamicBuffers(ID3D12GraphicsCommandList4* commandList);

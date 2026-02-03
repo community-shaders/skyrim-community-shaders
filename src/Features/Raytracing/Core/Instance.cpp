@@ -53,43 +53,13 @@ void Instance::Update(RE::NiAVObject* node, RE::NiPoint3 cameraPosition, const e
 
 	auto& [path, model] = modelPair;
 
-	if ((model->GetFlags() & Shape::Flags::Dynamic) || (model->GetFlags() & Shape::Flags::Skinned)) {
-		logger::trace("Update {} - [0x{:08X}] {}", filename, node->GetFlags().underlying(), GetFlagsString<RE::NiAVObject::Flag>(node->GetFlags().underlying()));
+	bool isRenderUseValid = model->IsRenderUseValid();
 
-		for (auto& shape : model->shapes) {
-			logger::trace("Update {} - [0x{:08X}] {}", shape->geometry->name, shape->geometry->GetFlags().underlying(), GetFlagsString<RE::NiAVObject::Flag>(shape->geometry->GetFlags().underlying()));
+	for (auto& shape : model->shapes) {
+		auto updateFlags = shape->Update(isRenderUseValid);
 
-			Shape::Flags updateFlags = Shape::Flags::None;
-
-			if (shape->UpdateDynamicPosition()) {
-				updateFlags |= Shape::Flags::Dynamic;
-			}
-
-			if (shape->UpdateSkinning()) {
-				updateFlags |= Shape::Flags::Skinned;
-			}
-
-			if (updateFlags & Shape::Flags::Skinned) {
-				auto& skinInstance = shape->geometry->GetGeometryRuntimeData().skinInstance;
-
-				if (shape->boneMatrices.empty())
-					shape->boneMatrices.resize(skinInstance->numMatrices);
-
-				float3x4* boneMatricesArray = reinterpret_cast<float3x4*>(skinInstance->boneMatrices);
-
-				auto rootParent = skinInstance->rootParent;
-				auto skinRootInverse = GetXMFromNiTransform(rootParent->world.Invert());
-
-				shape->boundRadius = rootParent->worldBound.radius + (rootParent->world.translate + rootParent->worldBound.center).GetDistance(shape->geometry->world.translate);
-
-				for (uint i = 0; i < skinInstance->numMatrices; i++) {
-					XMStoreFloat3x4(&shape->boneMatrices[i], XMMatrixMultiply(XMLoadFloat3x4(&boneMatricesArray[i]), skinRootInverse));
-				}
-			}
-
-			if ((updateFlags & Shape::Flags::Dynamic) || (updateFlags & Shape::Flags::Skinned)) {
-				skinningPipeline->QueueUpdate(updateFlags, path, shape.get());
-			}
+		if ((updateFlags & Shape::Flags::Dynamic) || (updateFlags & Shape::Flags::Skinned)) {
+			skinningPipeline->QueueUpdate(updateFlags, path, shape.get());
 		}
 	}
 }

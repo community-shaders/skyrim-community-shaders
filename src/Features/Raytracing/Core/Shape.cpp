@@ -915,6 +915,58 @@ D3D12_GPU_VIRTUAL_ADDRESS Shape::TransformBuffer() const
 	return globals::features::raytracing.transformBuffer->resource->GetGPUVirtualAddress() + offset;
 }
 
+Shape::Flags Shape::Update(bool isRenderUseValid)
+{
+	auto dynamic = flags & Shape::Flags::Dynamic;
+	auto skinned = flags & Shape::Flags::Skinned;
+
+	if ((dynamic || skinned) && geometry->GetFlags().any(RE::NiAVObject::Flag::kHidden)) {
+		state |= State::Hidden;
+	} else if (isRenderUseValid && geometry->GetFlags().none(RE::NiAVObject::Flag::kRenderUse)) {
+		state |= State::Hidden;
+	} else {
+		state &= ~State::Hidden;
+	}
+
+	if (state & State::Hidden) {
+		return Shape::Flags::None;
+	}
+
+	Shape::Flags updateFlags = Shape::Flags::None;
+
+	if (dynamic || skinned) {
+		logger::trace("Update {} - [0x{:08X}] {}", geometry->name, geometry->GetFlags().underlying(), GetFlagsString<RE::NiAVObject::Flag>(geometry->GetFlags().underlying()));
+
+		if (UpdateDynamicPosition()) {
+			updateFlags |= Shape::Flags::Dynamic;
+		}
+
+		if (UpdateSkinning()) {
+			updateFlags |= Shape::Flags::Skinned;
+		}
+
+		if (updateFlags & Shape::Flags::Skinned) {
+			auto& skinInstance = geometry->GetGeometryRuntimeData().skinInstance;
+
+			if (boneMatrices.empty())
+				boneMatrices.resize(skinInstance->numMatrices);
+
+			float3x4* boneMatricesArray = reinterpret_cast<float3x4*>(skinInstance->boneMatrices);
+
+			auto rootParent = skinInstance->rootParent;
+			auto skinRootInverse = GetXMFromNiTransform(rootParent->world.Invert());
+
+			boundRadius = rootParent->worldBound.radius + (rootParent->world.translate + rootParent->worldBound.center).GetDistance(geometry->world.translate);
+
+			for (uint i = 0; i < skinInstance->numMatrices; i++) {
+				XMStoreFloat3x4(&boneMatrices[i], XMMatrixMultiply(XMLoadFloat3x4(&boneMatricesArray[i]), skinRootInverse));
+			}
+		}
+	}
+
+	return updateFlags;
+}
+
 // Updates Dynamic Vertex position (and Bitangent.x) buffer
 // TODO: Test performance and stability of using a upload heap buffer and keeping it mapped to dynamicData
 bool Shape::UpdateDynamicPosition()
