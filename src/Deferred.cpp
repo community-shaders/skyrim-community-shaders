@@ -232,8 +232,8 @@ void Deferred::CopyShadowData()
 					D3D11_TEXTURE2D_DESC srcDesc;
 					shadowTexture->GetDesc(&srcDesc);
 
-					uint32_t newWidth = srcDesc.Width / 2;
-					uint32_t newHeight = srcDesc.Height / 2;
+					uint32_t newWidth = srcDesc.Width / 4;
+					uint32_t newHeight = srcDesc.Height / 4;
 
 					// Lazily create or recreate downscaled texture if dimensions changed
 					if (!shadowCopyTexture || shadowCopyWidth != newWidth || shadowCopyHeight != newHeight) {
@@ -262,7 +262,7 @@ void Deferred::CopyShadowData()
 						copyDesc.Height = newHeight;
 						copyDesc.MipLevels = 2;
 						copyDesc.ArraySize = 1;
-						copyDesc.Format = DXGI_FORMAT_R16_UNORM;
+						copyDesc.Format = DXGI_FORMAT_R32G32_FLOAT;
 						copyDesc.SampleDesc.Count = 1;
 						copyDesc.SampleDesc.Quality = 0;
 						copyDesc.Usage = D3D11_USAGE_DEFAULT;
@@ -294,18 +294,20 @@ void Deferred::CopyShadowData()
 					context->CSSetShaderResources(0, 1, csSrvs);
 
 					context->CSSetSamplers(0, 1, &pointSampler);
+					
+					auto shadowFullSize = newWidth * 2;
 
 					// Mip 0 with second cascade
 					ID3D11UnorderedAccessView* csUavs[1]{ shadowCopyMip0UAV };
 					context->CSSetUnorderedAccessViews(0, 1, csUavs, nullptr);
 					context->CSSetShader(downsampleShadowMip0CS, nullptr, 0);
-					context->Dispatch((shadowCopyWidth + 7) >> 3, (shadowCopyHeight + 7) >> 3, 1);
+					context->Dispatch((shadowFullSize + 7) >> 3, (shadowFullSize + 7) >> 3, 1);
 
 					// Mip 1 with first cascade
 					csUavs[0] = shadowCopyMip1UAV;
 					context->CSSetUnorderedAccessViews(0, 1, csUavs, nullptr);
 					context->CSSetShader(downsampleShadowMip1CS, nullptr, 0);
-					context->Dispatch((shadowCopyWidth + 7) >> 3, (shadowCopyHeight + 7) >> 3, 1);
+					context->Dispatch((shadowFullSize + 7) >> 3, (shadowFullSize + 7) >> 3, 1);
 
 					// Cleanup CS state
 					csSrvs[0] = nullptr;

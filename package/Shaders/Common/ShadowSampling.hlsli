@@ -20,7 +20,7 @@
 
 namespace ShadowSampling
 {
-	Texture2D<float> SharedShadowMap : register(t18);
+	Texture2D<float2> SharedShadowMap : register(t18);
 
 	struct ShadowData
 	{
@@ -87,7 +87,7 @@ namespace ShadowSampling
 
 #if defined(EFFECT)
 		// Enough for non-billboards + enough for Sovngarde fog
-		float viewRayLength = min(Permutation::EffectRadius * 0.1, 128);
+		float viewRayLength = min(Permutation::EffectRadius * 0.2, 256);
 		float3 startPosition = positionWS - viewDirection * viewRayLength;
 		float3 endPosition = positionWS + viewDirection * min(viewRayLength, maxDistance);
 #elif defined(UNDERWATER)
@@ -107,7 +107,7 @@ namespace ShadowSampling
 			uint noisyIndex = uint((float(i) + sampleCount8 * noise) % sampleCount8);
 			float t = (float(sampleCount8Minus1) - float(noisyIndex)) * rcpSampleCount8;
 			float tSample = t + noiseTransform * rcpSampleCount8;
-
+			
 			float3 samplePositionWS = lerp(startPosition, endPosition, tSample);
 			samplePositionWS.xy += mul(Random::SpiralSampleOffsets8[i], rotationMatrix) * viewRayLength;
 			samplePositionWS.z += length(Random::SpiralSampleOffsets8[i]);
@@ -130,36 +130,51 @@ namespace ShadowSampling
 
 		// Precompute cascade data
 		float cascade1Probability = saturate((shadowMapDepth - sD.StartSplitDistances.y) / (sD.EndSplitDistances.x - sD.StartSplitDistances.y));
-
+		
 		float compareValues[2];
 		float sampleRadii[2];
 		float3 positionsLS[2];
 		float3 viewOffsetsLS[2];
 		for (uint cascadeIdx = 0; cascadeIdx < 2; cascadeIdx++) {
 			compareValues[cascadeIdx] = mul(transpose(sD.ShadowMapProj[eyeIndex][cascadeIdx]), float4(positionWS, 1)).z - sD.AlphaTestRef[1 + cascadeIdx];
-			sampleRadii[cascadeIdx] = sD.ShadowSampleParam.z * rcp(1 + cascadeIdx) * 2.0;
+			sampleRadii[cascadeIdx] = sD.ShadowSampleParam.z * rcp(1.0 + cascadeIdx);
 			positionsLS[cascadeIdx] = mul(transpose(sD.ShadowMapProj[eyeIndex][cascadeIdx]), float4(startPosition, 1));
 			viewOffsetsLS[cascadeIdx] = mul(transpose(sD.ShadowMapProj[eyeIndex][cascadeIdx]), float4(endPosition, 1));
 		}
 
+		uint noise16 = uint(sampleCount16 * noise);
+
 		float shadow = 0.0;
 		for (uint k = 0; k < sampleCount16; k++) {
-			uint noisyIndex = (k + uint(sampleCount16 * noise)) % sampleCount16;
+			uint noisyIndex = (k + noise16) % sampleCount16;
 			float t = float(sampleCount16Minus1 - noisyIndex) * rcpSampleCount16;
 
 			// Probabilistically select cascade (0 or 1 within the pair)
-			uint cascadeIndex = uint(frac(t + noise) < cascade1Probability);
+			uint cascadeIndex = uint(frac(t + noise16) < cascade1Probability);
 
 			// Offset along view ray with optimised sample pattern
 			float tSample = t + noiseTransform * rcpSampleCount16;
 			float3 sampledPositionLS = lerp(positionsLS[cascadeIndex], viewOffsetsLS[cascadeIndex], tSample);
 
 			// Blur shadow with poisson disc
-			sampledPositionLS.xy += mul(Random::PoissonSampleOffsets16[k], rotationMatrix) * sampleRadii[cascadeIndex];
+		//	sampledPositionLS.xy += mul(Random::PoissonSampleOffsets16[k], rotationMatrix) * sampleRadii[cascadeIndex];
 
-			// Average 4 shadow samples for improved quality
-			float depth = SharedShadowMap.SampleLevel(LinearSampler, saturate(sampledPositionLS.xy), 1u - cascadeIndex);
-			shadow += depth > compareValues[cascadeIndex];
+			// Sample VSM shadow map
+			float2 moments = SharedShadowMap.SampleLevel(LinearSampler, saturate(sampledPositionLS.xy), 1u - cascadeIndex);
+			float depth = moments.x;      // E[x]
+			float depth2 = moments.y;     // E[x²]
+
+			float receiverDepth = compareValues[cascadeIndex];
+
+			// VSM using Chebyshev's inequality
+			float lit = 1.0;
+			if (receiverDepth > depth) {
+				float variance = max(depth2 - (depth * depth), 0.00001); // σ² = E[x²] - E[x]²
+				float d = receiverDepth - depth;
+				lit = variance / (variance + d * d); // p_max(t) = σ²/(σ² + (t - μ)²)
+			}
+
+			shadow += lit;
 		}
 
 		float fadeFactor = 1.0 - pow(saturate(dot(positionWS, positionWS) / sD.ShadowLightParam.z), 8);
@@ -181,8 +196,8 @@ namespace ShadowSampling
 
 			float2 sampleUV = layerIndexRcp * sampleOffset * sampleOffsetScale + baseUV;
 
-			float4 depths = SharedShadowMap.SampleLevel(LinearSampler, saturate(sampleUV), 1 - cascadeIndex);
-			visibility += dot(depths > compareValue, 0.25);
+			//float4 depths = SharedShadowMap.SampleLevel(LinearSampler, saturate(sampleUV), 1 - cascadeIndex);
+			visibility += dot(0 > compareValue, 0.25);
 		}
 
 		return visibility * rcp((float)sampleCount);
