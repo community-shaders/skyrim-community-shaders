@@ -94,6 +94,40 @@ float SampleTrimmedLogistic(float u, float s, float a, float b)
     return clamp(x, a, b);
 }
 
+float2 PolarToCartesian(float r, float theta)
+{
+    return r * float2(cos(theta), sin(theta));
+}
+
+void CreateCoordinateSystemFromZ(bool rightHand, float3 zAxis, out float3 xAxis, out float3 yAxis)
+{
+    float yz = -zAxis.y * zAxis.z;
+    yAxis = normalize(abs(zAxis.z) > 0.9999 ? float3(-zAxis.x * zAxis.y, 1.f - zAxis.y * zAxis.y, yz) :
+                                              float3(-zAxis.x * zAxis.z, yz, 1.f - zAxis.z * zAxis.z));
+    xAxis = rightHand ? cross(yAxis, zAxis) : cross(zAxis, yAxis);
+}
+
+// Spherical to Cartesian in the basis x, y, z
+// z is up
+float3 SphericalDirection(float sinTheta, float cosTheta, float phi, float3 x, float3 y, float3 z)
+{
+    return sinTheta * cos(phi) * x + sinTheta * sin(phi) * y + cosTheta * z;
+}
+
+float3 CalculateDiskSamplePosition(
+    in const float rand,
+    in const float r,
+    in float3 centerPos,
+    in float3 tangent,
+    in float3 biTangent)
+{
+    // Sample Disk
+    const float theta = rand * K_2PI;
+    const float2 diskSample = PolarToCartesian(r, theta);
+
+    return centerPos + tangent * diskSample.xxx + biTangent * diskSample.yyy;
+}
+
 /** Generate a vector that is orthogonal to the input vector.
     This can be used to invent a tangent frame for meshes that don't have real tangents/bitangents.
     \param[in] u Unit vector.

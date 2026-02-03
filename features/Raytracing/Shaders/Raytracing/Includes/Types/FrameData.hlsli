@@ -51,7 +51,11 @@ alignas(16)
     float PixelConeSpreadAngle;
     float TexLODBias;
     float CloudOpacity;
-    float4x4 Pad0;
+    int SSSSampleCount;
+    int SSSTransmissionBsdfSampleCount;
+    int SSSTransmissionPerBsdfScatteringSampleCount;
+    BOOL EnableSssTransmission;
+    float3x4 Pad0;
     float4x4 Pad1;
     float4x4 Pad2;
     float3x4 Pad3;

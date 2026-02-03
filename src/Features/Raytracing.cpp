@@ -510,6 +510,15 @@ void Raytracing::DrawAdvancedSettings()
 		ImGui::Text("Best with hair specular feature enabled.\n");
 	}
 
+	if (ImGui::TreeNodeEx("SSS Transmission", ImGuiTreeNodeFlags_DefaultOpen)) {
+		ImGui::SliderInt("SSS Sample Count", &advSettings.SSSSampleCount, 1, 16);
+		ImGui::Checkbox("Enable SSS Transmission", &advSettings.EnableSssTransmission);
+		ImGui::SliderInt("SSS Transmission BSDF Sample Count", &advSettings.SSSTransmissionBsdfSampleCount, 1, 16);
+		ImGui::SliderInt("SSS Transmission Per BSDF Scattering Sample Count", &advSettings.SSSTransmissionPerBsdfScatteringSampleCount, 1, 16);
+
+		ImGui::TreePop();
+	}
+
 	if (DrawEnumCombo("Diffuse BRDF", advSettings.DiffuseBRDF))
 		recompileReason |= RecompileReason::Advanced;
 
@@ -3048,6 +3057,11 @@ void Raytracing::DrawRTGI()
 
 		frameData->PixelConeSpreadAngle = std::atan((2.0f / eye.projMat.m[1][1]) / renderSize.y);
 		frameData->TexLODBias = settings.TexLODBias;
+
+		frameData->SSSSampleCount = settings.AdvancedSettings.SSSSampleCount;
+		frameData->SSSTransmissionBsdfSampleCount = settings.AdvancedSettings.SSSTransmissionBsdfSampleCount;
+		frameData->SSSTransmissionPerBsdfScatteringSampleCount = settings.AdvancedSettings.SSSTransmissionPerBsdfScatteringSampleCount;
+		frameData->EnableSssTransmission = settings.AdvancedSettings.EnableSssTransmission;
 
 		frameData->RussianRoulette = settings.RussianRoulette;
 

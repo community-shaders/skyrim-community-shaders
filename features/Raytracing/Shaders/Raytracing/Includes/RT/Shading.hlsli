@@ -22,159 +22,6 @@ static const float ISL_METRES_TO_UNITS = 70.f;
 static const float ISL_METRES_TO_UNITS_SQ = ISL_METRES_TO_UNITS * ISL_METRES_TO_UNITS;
 static const float ISL_SCALED_UNITS_SQ = ISL_SCALE * ISL_METRES_TO_UNITS_SQ;
 
-float InverseSquareAtten(float dist, float range)
-{
-    // Normalized inverse-square
-    float atten = 1.0 / (1.0 + dist * dist);
-
-    // Smooth fade to zero at range
-    float fade = saturate(1.0 - dist / range);
-    fade = fade * fade * (3.0 - 2.0 * fade);
-
-    return atten * fade;
-}
-
-float LinearAtten(float dist, float range)
-{
-    return saturate(1.0 - dist / range);
-}
-
-float VanillaSquaredAtten(float dist, float range)
-{
-    return saturate(1.0 - dist * dist / (range * range));
-}
-
-float3 EvalDiffuse(in float3 l, in Surface surface, in BRDFContext brdfContext)
-{
-    float NdotL = saturate(dot(surface.Normal, l));
-
-    if (NdotL <= 0.0f)
-        return float3(0.0f, 0.0f, 0.0f);
-
-    // Diffuse is meant to be very light (and used with DDGI), so I don't see much point in using a different diffuse or shading model here
-    return surface.DiffuseAlbedo * NdotL * BRDF::Diffuse_Lambert();
-}
-
-float3 EvalLight(in float3 l, in Material material, in Surface surface, in BRDFContext brdfContext, in StandardBSDF bsdf)
-{
-#if LIGHTEVAL_MODE == LIGHTEVAL_MODE_DIFFUSE
-    return EvalDiffuse(l, surface, brdfContext);
-#else
-    float4 bsdfEval = bsdf.Eval(brdfContext, material, surface, l);
-    return bsdfEval.xyz;
-#endif
-}
-
-float3 EvalDirectionalLight(in Material material, in Surface surface, in BRDFContext brdfContext, in DirectionalLight light, in StandardBSDF bsdf, inout uint randomSeed)
-{
-    light.Color = DirLightToLinear(light.Color);
-    // Sun angular radius is ~0.00465 radians (~0.266 degrees)
-    float cosSunDisk = cos(0.00465f);
-    float3 lr = TangentToWorld(light.Vector, SampleConeUniform(randomSeed, cosSunDisk));
-    float3 direct = EvalLight(lr, material, surface, brdfContext, bsdf) * light.Color;
-
-    [branch]
-    if (any(direct > MIN_DIFFUSE_SHADOW))
-    {
-        direct *= TraceRayShadow(Scene, surface, lr, randomSeed);
-    }
-
-    return direct;
-}
-
-float GetLightSampleWeight(Surface surface, Light light)
-{
-    float3 l = (light.Vector - surface.Position);
-    float dist = length(l) * GAME_UNIT_TO_M;
-    float atten = 1.0 / (1.0 + dist * dist);
-    float intensity = max(light.Color.r, max(light.Color.g, light.Color.b)) * light.Fade;
-    return atten * intensity;
-}
-
-float3 EvalPointLight(in Material material, in Surface surface, in BRDFContext brdfContext, in LightData lightData, in StandardBSDF bsdf, inout uint randomSeed)
-{
-    if (lightData.Count == 0)
-        return float3(0, 0, 0);
-
-    float lightWeight = float(lightData.Count);
-
-#if defined(RIS)
-    const uint candidateCount = min(RIS_MAX_CANDIDATES, lightData.Count);
-    uint selectedLightID = 0;
-    float totalWeight = 0.0f;
-    float selectedWeight = 0.0f;
-
-    for (uint i = 0; i < candidateCount; i++)
-    {
-        uint lightIdx = min(uint(Random(randomSeed) * lightData.Count), lightData.Count - 1);
-        uint lightID = lightData.GetID(lightIdx);
-        Light testLight = Lights[lightID];
-        const bool isTestLinear = (testLight.Flags & LightFlags::LinearLight) != 0;
-        testLight.Color = PointLightToLinear(testLight.Color, isTestLinear);
-        float weight = GetLightSampleWeight(surface, testLight);
-        totalWeight += weight;
-
-        if (Random(randomSeed) * totalWeight < weight)
-        {
-            selectedLightID = lightID;
-            selectedWeight = weight;
-        }
-    }
-    if (totalWeight == 0.0f)
-        return float3(0, 0, 0);
-
-    float risWeight = (totalWeight / max(selectedWeight, 1e-7f)) / float(candidateCount);
-
-    lightWeight *= risWeight;
-
-    Light light = Lights[selectedLightID];
-#else
-
-    uint lightIdx = min(uint(Random(randomSeed) * lightData.Count), lightData.Count - 1);
-
-    uint lightID = lightData.GetID(lightIdx);
-
-    Light light = Lights[lightID];
-#endif
-
-    const bool isLinear = (light.Flags & LightFlags::LinearLight) != 0;
-    light.Color = PointLightToLinear(light.Color, isLinear);
-
-    float3 l = (light.Vector - surface.Position);
-    float dist = length(l);
-    l /= dist;
-
-    float lightSourceAngle = 0.05f;
-
-	float atten = 0.0f;
-	if ((light.Flags & LightFlags::ISL) != 0)
-	{
-		float invSq = ISL_SCALED_UNITS_SQ * rcp(dist * dist + light.SizeBias);
-		float t = saturate((light.Radius - dist) * light.FadeZone);
-		float fastSmoothstep = t * t * (3.0f - 2.0f * t);
-		atten = invSq * fastSmoothstep;
-        float size = sqrt((light.SizeBias * 2.0f) / (0.8 * 4900));
-        lightSourceAngle = atan2(size, dist);
-	}
-	else
-	{
-		float intensityFactor = saturate(dist * light.InvRadius);
-		atten = 1.0f - intensityFactor * intensityFactor;
-	}
-
-    float3 lr = TangentToWorld(l, SampleCosineHemisphereScaled(randomSeed, lightSourceAngle));
-
-    float3 direct = EvalLight(lr, material, surface, brdfContext, bsdf) * atten * light.Color * light.Fade * lightWeight;
-
-    [branch]
-    if (any(direct > MIN_DIFFUSE_SHADOW))
-    {
-        direct *= TraceRayShadowFinite(Scene, surface, lr, dist, randomSeed);
-    }
-
-    return direct;
-}
-
 float2 EvalHemiUV(float3 dir)
 {
     dir.z = max(dir.z, 0.0f);
@@ -204,12 +51,233 @@ float EvalSkyOcclusion(float3 dir)
     return lerp(1.0f, 1.0f - SkyHemisphere.SampleLevel(BaseSampler, uv, 0.0f).a, Frame.CloudOpacity);
 }
 
+float3 EvalDiffuse(in float3 l, in Surface surface, in BRDFContext brdfContext)
+{
+    float NdotL = saturate(dot(surface.Normal, l));
+
+    if (NdotL <= 0.0f)
+        return float3(0.0f, 0.0f, 0.0f);
+
+    // Diffuse is meant to be very light (and used with DDGI), so I don't see much point in using a different diffuse or shading model here
+    return surface.DiffuseAlbedo * NdotL * BRDF::Diffuse_Lambert();
+}
+
+float3 EvalLight(in float3 l, in Material material, in Surface surface, in BRDFContext brdfContext, in StandardBSDF bsdf)
+{
+#if LIGHTEVAL_MODE == LIGHTEVAL_MODE_DIFFUSE
+    return EvalDiffuse(l, surface, brdfContext);
+#else
+    float4 bsdfEval = bsdf.Eval(brdfContext, material, surface, l);
+    return bsdfEval.xyz;
+#endif
+}
+
+void GetDirectionalLightIrradiance(out float3 irradiance, out float3 lr, inout uint randomSeed)
+{
+    irradiance = DirLightToLinear(Frame.Directional.Color) * EvalSkyOcclusion(Frame.Directional.Vector);
+    lr = -Frame.Directional.Vector;
+
+    // Sun angular radius is ~0.00465 radians (~0.266 degrees)
+    float cosSunDisk = cos(0.00465f);
+    lr = TangentToWorld(lr, SampleConeUniform(randomSeed, cosSunDisk));
+}
+
+float3 EvalDirectionalLight(in Material material, in Surface surface, in BRDFContext brdfContext, in StandardBSDF bsdf, inout uint randomSeed)
+{
+    float3 irradiance;
+    float3 lr;
+    GetDirectionalLightIrradiance(irradiance, lr, randomSeed);
+    float3 direct = EvalLight(lr, material, surface, brdfContext, bsdf) * irradiance;
+    [branch]
+    if (any(direct > MIN_DIFFUSE_SHADOW))
+    {
+        direct *= TraceRayShadow(Scene, surface, lr, randomSeed);
+    }
+
+    return direct;
+}
+
+float GetAttenuation(Light light, float dist, inout float lightSourceAngle)
+{
+    float atten = 0.0f;
+    if ((light.Flags & LightFlags::ISL) != 0)
+	{
+		float invSq = ISL_SCALED_UNITS_SQ * rcp(dist * dist + light.SizeBias);
+		float t = saturate((light.Radius - dist) * light.FadeZone);
+		float fastSmoothstep = t * t * (3.0f - 2.0f * t);
+		atten = invSq * fastSmoothstep;
+        float size = sqrt((light.SizeBias * 2.0f) / (0.8 * 4900));
+        lightSourceAngle = atan2(size, dist);
+	}
+	else
+	{
+		float intensityFactor = saturate(dist * light.InvRadius);
+		atten = 1.0f - intensityFactor * intensityFactor;
+	}
+    return atten;
+}
+
+float GetLightSampleWeight(Surface surface, Light light)
+{
+    float3 l = (light.Vector - surface.Position);
+    float dist = length(l) * GAME_UNIT_TO_M;
+    float lightSourceAngle = 0.0f;
+    float atten = GetAttenuation(light, dist, lightSourceAngle);
+    float intensity = max(light.Color.r, max(light.Color.g, light.Color.b)) * light.Fade;
+    return atten * intensity;
+}
+
+// Get irradiance for point light without BRDF evaluation
+void GetPointLightIrradiance(in LightData lightData, out float3 irradiance, out float3 lr, out float dist, inout uint randomSeed)
+{
+    if (lightData.Count == 0)
+    {
+        irradiance = float3(0, 0, 0);
+        lr = float3(0, 0, 0);
+        return;
+    }
+
+    float lightWeight = float(lightData.Count);
+
+#if defined(RIS)
+    const uint candidateCount = min(RIS_MAX_CANDIDATES, lightData.Count);
+    uint selectedLightID = 0;
+    float totalWeight = 0.0f;
+    float selectedWeight = 0.0f;
+
+    for (uint i = 0; i < candidateCount; i++)
+    {
+        uint lightIdx = min(uint(Random(randomSeed) * lightData.Count), lightData.Count - 1);
+        uint lightID = lightData.GetID(lightIdx);
+        Light testLight = Lights[lightID];
+        const bool isTestLinear = (testLight.Flags & LightFlags::LinearLight) != 0;
+        testLight.Color = PointLightToLinear(testLight.Color, isTestLinear);
+        float weight = GetLightSampleWeight(surface, testLight);
+        totalWeight += weight;
+
+        if (Random(randomSeed) * totalWeight < weight)
+        {
+            selectedLightID = lightID;
+            selectedWeight = weight;
+        }
+    }
+    if (totalWeight == 0.0f)
+    {
+        irradiance = float3(0, 0, 0);
+        lr = float3(0, 0, 0);
+        return;
+    }
+
+    float risWeight = (totalWeight / max(selectedWeight, 1e-7f)) / float(candidateCount);
+
+    lightWeight *= risWeight;
+
+    Light light = Lights[selectedLightID];
+#else
+
+    uint lightIdx = min(uint(Random(randomSeed) * lightData.Count), lightData.Count - 1);
+    uint lightID = lightData.GetID(lightIdx);
+    Light light = Lights[lightID];
+#endif
+
+    const bool isLinear = (light.Flags & LightFlags::LinearLight) != 0;
+    light.Color = PointLightToLinear(light.Color, isLinear);
+
+    lr = (light.Vector - surface.Position);
+    dist = length(lr);
+    lr /= dist;
+
+    float lightSourceAngle = 0.05f;
+
+    float atten = GetAttenuation(light, dist, lightSourceAngle);
+
+    irradiance = light.Color * light.Fade * atten * lightWeight;
+    lr = TangentToWorld(lr, SampleCosineHemisphereScaled(randomSeed, lightSourceAngle));
+}
+
+float3 EvalPointLight(in Material material, in Surface surface, in BRDFContext brdfContext, in LightData lightData, in StandardBSDF bsdf, inout uint randomSeed)
+{
+    float3 lightIrradiance;
+    float3 lr;
+    float dist;
+    GetPointLightIrradiance(lightData, lightIrradiance, lr, dist, randomSeed);
+
+    float3 direct = EvalLight(lr, material, surface, brdfContext, bsdf) * lightIrradiance;
+
+    [branch]
+    if (any(direct > MIN_DIFFUSE_SHADOW))
+    {
+        direct *= TraceRayShadowFinite(Scene, surface, lr, dist, randomSeed);
+    }
+
+    return direct;
+}
+
 float3 EvaluateDirectRadiance(in Material material, in Surface surface, in BRDFContext brdfContext, in Instance instance, in StandardBSDF bsdf, inout uint randomSeed)
 {
-    float3 radiance = EvalDirectionalLight(material, surface, brdfContext, Frame.Directional, bsdf, randomSeed) * EvalSkyOcclusion(Frame.Directional.Vector);
+    float3 radiance = EvalDirectionalLight(material, surface, brdfContext, bsdf, randomSeed);
     radiance += EvalPointLight(material, surface, brdfContext, instance.LightData, bsdf, randomSeed);
 
     return radiance;
+}
+
+void GetLightIrradianceMIS(in Instance instance, out float3 irradiance, out float3 lr, out float distance, inout uint randomSeed)
+{
+    float3 directionalIrradiance;
+    float3 dirLr;
+    GetDirectionalLightIrradiance(directionalIrradiance, dirLr, randomSeed);
+
+    float3 pointIrradiance;
+    float3 pointLr;
+    float pointDist;
+    GetPointLightIrradiance(instance.LightData, pointIrradiance, pointLr, pointDist, randomSeed);
+
+    pDirLight = Luminance(directionalIrradiance);
+    pPointLight = Luminance(pointIrradiance);
+
+    float total = pDirLight + pPointLight;
+    if (total == 0.0f)
+    {
+        irradiance = float3(0, 0, 0);
+        lr = float3(0, 0, 0);
+        distance = 0.0f;
+        return;
+    }
+
+    pDirLight /= total;
+    pPointLight /= total;
+
+    float r = Random(randomSeed);
+    if (r < pDirLight)
+    {
+        irradiance = directionalIrradiance / pDirLight;
+        lr = dirLr;
+        distance = SHADOW_RAY_TMAX;
+    }
+    else
+    {
+        irradiance = pointIrradiance / pPointLight;
+        lr = pointLr;
+        distance = pointDist;
+    }
+}
+
+float3 EvaluateDirectRadianceMIS(in Material material, in Surface surface, in BRDFContext brdfContext, in Instance instance, in StandardBSDF bsdf, inout uint randomSeed)
+{
+    float3 lightIrradiance;
+    float3 lr;
+    float distance;
+    GetLightIrradianceMIS(instance, lightIrradiance, lr, distance, randomSeed);
+
+    float3 direct = EvalLight(lr, material, surface, brdfContext, bsdf) * lightIrradiance;
+
+    [branch]
+    if (any(direct > MIN_DIFFUSE_SHADOW))
+    {
+        direct *= TraceRayShadowFinite(Scene, surface, lr, distance, randomSeed);
+    }
+
+    return direct;
 }
 
 bool ComputeTangentSpace(inout Surface surface, const bool ignoreTangent)

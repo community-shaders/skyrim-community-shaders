@@ -461,6 +461,14 @@ void Shape::BuildMaterial(const RE::BSGeometry::GEOMETRY_RUNTIME_DATA& geometryR
 
 						pbrFlags = GetPBRShaderFlags(lightingPBRMaterial);
 
+						if (pbrFlags & PBRShaderFlags::Subsurface) {
+							textures[6] = TextureRegister(lightingPBRMaterial->featuresTexture0, blackTexture);
+
+							auto sssColor = lightingPBRMaterial->GetSubsurfaceColor();
+							colors[2] = { sssColor.red, sssColor.green, sssColor.blue, 1.0f };
+							scalars[2] = lightingPBRMaterial->GetSubsurfaceOpacity();
+						}
+
 						// Enforce TruePBR flag
 						shaderFlags.set(EShaderPropertyFlag::kMenuScreen);
 					} else {

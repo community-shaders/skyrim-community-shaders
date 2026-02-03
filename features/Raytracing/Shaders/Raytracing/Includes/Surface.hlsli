@@ -25,6 +25,15 @@ float3 FlipIfOpposite(float3 normal, float3 referenceNormal)
     return (dot(normal, referenceNormal)>=0)?(normal):(-normal);
 }
 
+struct Subsurface
+{
+    float3 TransmissionColor = float3(0.0f, 0.0f, 0.0f);
+    float Scale = 0.0f;
+    float3 ScatteringColor = float3(0.0f, 0.0f, 0.0f);
+    float Anisotropy = 0.0f;
+    uint HasSubsurface = 0;
+};
+
 #define Surface(...) static Surface ctor(__VA_ARGS__)
 struct Surface
 {
@@ -44,6 +53,7 @@ struct Surface
     float3 F0;
     float IOR;
     float3 TransmissionColor;
+    Subsurface SubsurfaceData;
 
 #if defined(FULL_MATERIAL)
     float3 SubsurfaceColor;
@@ -138,6 +148,20 @@ struct Surface
             Metallic = saturate(rmaos.y);
             AO = rmaos.z;
             F0 = material.SpecularLevel() * rmaos.w;
+
+            if (material.PBRFlags & PBR::Flags::Subsurface) {
+                Texture2D subsurfaceTexture = Textures[NonUniformResourceIndex(material.SubsurfaceTexture())];
+
+                float4 subsurfaceColor = subsurfaceTexture.SampleLevel(BaseSampler, texCoord0, MipLevel);
+                float thickness = subsurfaceColor.a * material.SubsurfaceScale();
+                float transmissionStrength = 1.0f - saturate(thickness);
+                SubsurfaceData.ScatteringColor = material.SubsurfaceScatteringColor().rgb * subsurfaceColor.rgb;
+                SubsurfaceData.TransmissionColor = SubsurfaceData.ScatteringColor * transmissionStrength;
+                SubsurfaceData.Scale = 1.0f / max(thickness, 1e-5f);
+                SubsurfaceData.Anisotropy = 0.0f;
+
+                SubsurfaceData.HasSubsurface = SubsurfaceData.ScatteringColor != float3(0.0f, 0.0f, 0.0f) ? 1 : 0;
+            }
         } else if (material.ShaderType == ShaderType::Lighting) {
             float3 diffuse = baseTexture.SampleLevel(BaseSampler, texCoord0, MipLevel).rgb;
 
@@ -204,6 +228,30 @@ struct Surface
 	            float3 tintColor = material.BaseColor().rgb * Albedo * 2.0f;
 	            tintColor = tintColor - tintColor * Albedo;
 	            Albedo = float3(1.01171875f, 0.99609375f, 1.01171875f) * (Albedo * Albedo + tintColor);
+            }
+
+            [branch]
+            if (material.Feature == Feature::kFaceGen || material.Feature == Feature::kFaceGenRGBTint) {
+                F0 = 0.02776f;
+                SubsurfaceData.HasSubsurface = 1;
+                SubsurfaceData.Anisotropy = 0.0f;
+
+                // Typical skin values
+                SubsurfaceData.ScatteringColor = float3(0.570f, 0.310f, 0.170f);
+                SubsurfaceData.TransmissionColor = float3(3.670f, 1.370f, 0.680f);
+                SubsurfaceData.Scale = 40.0f;
+            }
+
+            [branch]
+            if (material.Feature == Feature::kEye) {
+                Roughness = 0.08f;
+                F0 = 0.02776f;
+                SubsurfaceData.HasSubsurface = 1;
+                SubsurfaceData.Anisotropy = 0.0f;
+                // Typical eye values
+                SubsurfaceData.ScatteringColor = float3(0.482f, 0.169f, 0.109f);
+                SubsurfaceData.TransmissionColor = 0.0f;
+                SubsurfaceData.Scale = 0.01f * M_TO_GAME_UNIT;
             }
             
         } else if (material.ShaderType == ShaderType::Effect) {

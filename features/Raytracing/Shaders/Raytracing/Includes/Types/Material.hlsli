@@ -230,6 +230,21 @@ struct Material
 		return Texture3;
 	}
 
+	uint16_t SubsurfaceTexture()
+	{
+		return Texture6;
+	}
+
+	half SubsurfaceScale()
+	{
+		return Scalar2;
+	}
+
+	half4 SubsurfaceScatteringColor()
+	{
+		return Color2;
+	}
+
 #ifndef __cplusplus
 	float2 TexCoord(float2 texCoord)
     {
