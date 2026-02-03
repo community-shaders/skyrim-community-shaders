@@ -522,6 +522,8 @@ void Shape::BuildMaterial(const RE::BSGeometry::GEOMETRY_RUNTIME_DATA& geometryR
 										lightingHairTintMaterial->tintColor.blue,
 										(float)colors[0].w
 									};
+									// Load flowmap texture for hair (stored in specularBackLightingTexture slot)
+									textures[3] = TextureRegister(lightingBaseMaterial->specularBackLightingTexture, blackTexture);
 								}
 							}
 

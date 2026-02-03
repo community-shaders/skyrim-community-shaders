@@ -70,7 +70,8 @@ struct Material
 		kEyeReflect = 1 << 14,
 		kHairTint = 1 << 15,
 		kTwoSided = 1 << 16,
-		kAssumeShadowmask = 1 << 17
+		kAssumeShadowmask = 1 << 17,
+		kBackLighting = 1 << 18
 	};
 
 	enum AlphaFlags : uint16_t
@@ -168,6 +169,10 @@ struct Material
 
 		if (shaderFlags.any(EShaderPropertyFlag::kAssumeShadowmask)) {
 			shaderFlagsLocal |= ShaderFlags::kAssumeShadowmask;
+		}
+
+		if (shaderFlags.any(EShaderPropertyFlag::kBackLighting)) {
+			shaderFlagsLocal |= ShaderFlags::kBackLighting;
 		}
 
 		return shaderFlagsLocal;

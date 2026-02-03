@@ -34,6 +34,7 @@ namespace ShaderFlags
     static const uint kHairTint = (1 << 15);
 	static const uint kTwoSided = (1 << 16);
 	static const uint kAssumeShadowmask = (1 << 17);
+	static const uint kBackLighting = (1 << 18);
 }
 
 namespace Feature
