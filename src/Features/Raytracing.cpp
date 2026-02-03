@@ -1762,36 +1762,6 @@ void Raytracing::Main_RenderWorld(bool a1)
 		renderingWorld = true;
 		lightsUpdated = false;
 
-		/*RE::PlayerCharacter* player = RE::PlayerCharacter::GetSingleton();
-		if (player && player->parentCell && player->parentCell->IsInteriorCell()) {
-			//logger::info("WaterReflections: [0x{:08X}]", reinterpret_cast<uintptr_t>(waterReflections.get()));
-
-			//waterReflections->Update();	
-		}*/
-
-		/*auto* tes = RE::TES::GetSingleton();
-		if (tes->interiorCell) {
-			if (tes->interiorCell->cellFlags.none(RE::TESObjectCELL::Flag::kHasWater))
-				tes->interiorCell->cellFlags.set(true, RE::TESObjectCELL::Flag::kHasWater);
-
-			waterReflections->flags.set(true, RE::TESWaterReflections::Flags::kNeedsUpdate);
-
-			logger::info("WaterReflections Camera: [0x{:08X}]", reinterpret_cast<uintptr_t>(waterReflections->cubeMapCamera.get()));
-
-			UpdateReflections();
-			//waterReflections->Update();
-		} else {
-			auto* tesWaterSystem = RE::TESWaterSystem::GetSingleton();
-
-			if (!tesWaterSystem->waterReflections.empty()) {
-				logger::info("Water Reflections Flags [0x{:08X}]", tesWaterSystem->waterReflections[0]->flags.underlying());
-			}
-		}*/
-
-		/*auto* sky = globals::game::sky;
-		//sky->flags.reset(RE::Sky::Flags::kHideSky);
-		//sky->mode = RE::Sky::Mode::kSkyDomeOnly;*/
-
 		SkyCubeToHemi();
 		ConvertMSN();
 	}
