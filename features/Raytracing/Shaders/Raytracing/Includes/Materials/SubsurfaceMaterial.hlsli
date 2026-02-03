@@ -112,14 +112,14 @@ float3 ComputeTransmissionAlbedo(in const float3 transmissionColor)
 VolumeCoefficients ComputeSubsurfaceVolumeCoefficients(in const SubsurfaceMaterialData sssData)
 {
     const float3 s = ComputeTransmissionAlbedo(sssData.transmissionColor);
-    const float3 alpha = (WhiteColor - s * s) / max(WhiteColor - sssData.g * (s * s), 1e-7f);
+    const float3 alpha = (float3(1.f, 1.f, 1.f) - s * s) / max(float3(1.f, 1.f, 1.f) - sssData.g * (s * s), 1e-7f);
     const float scale = SSS_METERS_UNIT * sssData.scale;
     const float3 scatteringRadius = max(scale.rrr * sssData.scatteringColor, 1e-7f);
 
     VolumeCoefficients subsurfaceVolumeCoefficients;
     subsurfaceVolumeCoefficients.scattering = alpha / scatteringRadius;
     subsurfaceVolumeCoefficients.absorption =
-        (WhiteColor / scatteringRadius) - subsurfaceVolumeCoefficients.scattering;
+        (float3(1.f, 1.f, 1.f) / scatteringRadius) - subsurfaceVolumeCoefficients.scattering;
 
     return subsurfaceVolumeCoefficients;
 }

@@ -27,11 +27,11 @@ float3 FlipIfOpposite(float3 normal, float3 referenceNormal)
 
 struct Subsurface
 {
-    float3 TransmissionColor = float3(0.0f, 0.0f, 0.0f);
-    float Scale = 0.0f;
-    float3 ScatteringColor = float3(0.0f, 0.0f, 0.0f);
-    float Anisotropy = 0.0f;
-    uint HasSubsurface = 0;
+    float3 TransmissionColor;
+    float Scale;
+    float3 ScatteringColor;
+    float Anisotropy;
+    uint HasSubsurface;
 };
 
 #define Surface(...) static Surface ctor(__VA_ARGS__)
@@ -154,13 +154,15 @@ struct Surface
 
                 float4 subsurfaceColor = subsurfaceTexture.SampleLevel(BaseSampler, texCoord0, MipLevel);
                 float thickness = subsurfaceColor.a * material.SubsurfaceScale();
-                float transmissionStrength = 1.0f - saturate(thickness);
-                SubsurfaceData.ScatteringColor = material.SubsurfaceScatteringColor().rgb * subsurfaceColor.rgb;
-                SubsurfaceData.TransmissionColor = SubsurfaceData.ScatteringColor * transmissionStrength;
-                SubsurfaceData.Scale = 1.0f / max(thickness, 1e-5f);
+                SubsurfaceData.ScatteringColor = subsurfaceColor.rgb * material.SubsurfaceScatteringColor().rgb;
+                SubsurfaceData.TransmissionColor = Albedo;
+
+                // SubsurfaceData.ScatteringColor = float3(1.800f, 2.900f, 4.500f);
+                // SubsurfaceData.Scale = 12.234f / thickness;
+                SubsurfaceData.Scale = 1000;
                 SubsurfaceData.Anisotropy = 0.0f;
 
-                SubsurfaceData.HasSubsurface = SubsurfaceData.ScatteringColor != float3(0.0f, 0.0f, 0.0f) ? 1 : 0;
+                SubsurfaceData.HasSubsurface = any(SubsurfaceData.ScatteringColor) > 0.0f ? 1 : 0;
             }
         } else if (material.ShaderType == ShaderType::Lighting) {
             float3 diffuse = baseTexture.SampleLevel(BaseSampler, texCoord0, MipLevel).rgb;
@@ -237,8 +239,8 @@ struct Surface
                 SubsurfaceData.Anisotropy = 0.0f;
 
                 // Typical skin values
-                SubsurfaceData.ScatteringColor = float3(0.570f, 0.310f, 0.170f);
-                SubsurfaceData.TransmissionColor = float3(3.670f, 1.370f, 0.680f);
+                SubsurfaceData.ScatteringColor = float3(4.820f, 1.690f, 1.090f);
+                SubsurfaceData.TransmissionColor = Albedo;
                 SubsurfaceData.Scale = 40.0f;
             }
 
@@ -246,11 +248,11 @@ struct Surface
             if (material.Feature == Feature::kEye) {
                 Roughness = 0.08f;
                 F0 = 0.02776f;
-                SubsurfaceData.HasSubsurface = 1;
+                SubsurfaceData.HasSubsurface = 0;
                 SubsurfaceData.Anisotropy = 0.0f;
                 // Typical eye values
                 SubsurfaceData.ScatteringColor = float3(0.482f, 0.169f, 0.109f);
-                SubsurfaceData.TransmissionColor = 0.0f;
+                SubsurfaceData.TransmissionColor = Albedo;
                 SubsurfaceData.Scale = 0.01f * M_TO_GAME_UNIT;
             }
             
@@ -323,6 +325,10 @@ struct Surface
         if (material.ShaderFlags & ShaderFlags::kExternalEmittance) {
             Emissive *= Frame.EmittanceColor;
         }
+
+        // if (SubsurfaceData.HasSubsurface != 0) {
+        //     Albedo = float3(0.0f, 1.0f, 0.0f); // Subsurface materials do not have a direct albedo component
+        // }
 #endif
 
 #if defined(DEBUG_NONORMALMAP)
@@ -490,6 +496,7 @@ struct Surface
         Surface surface;
 
         surface.Position = position;
+        surface.SubsurfaceData = (Subsurface)0;
 
         Shape shape = GetShape(payload, instance);
 
@@ -611,6 +618,7 @@ struct Surface
 
     Surface(float3 position, float3 geomNormal, float3 normal, float3 tangent, float3 bitangent, float3 albedo, float roughness, float metallic, float3 emissive, float ao) {
         Surface surface;
+        surface.SubsurfaceData = (Subsurface)0;
 
         surface.Position = position;
 

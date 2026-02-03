@@ -69,7 +69,7 @@ float3 SampleDirectionHenyeyGreenstein(float2 rndSample, in float g, in float3 w
 
     // Compute direction for Henyey-Greenstein sample
     const float sinTheta = sqrt(max((float) 0, 1 - cosTheta * cosTheta));
-    const float phi = RTXCR_TWO_PI * rndSample.y;
+    const float phi = K_2PI * rndSample.y;
     float3 x, y;
     const float3 z = wo;
     CreateCoordinateSystemFromZ(true, z, x, y);

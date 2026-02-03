@@ -16,6 +16,7 @@
 #include "Raytracing/Includes/RT/Shading.hlsli"
 #include "Raytracing/Includes/RT/Rays.hlsli"
 
+#include "Raytracing/Includes/Materials/LobeType.hlsli"
 #include "Raytracing/Includes/Materials/SubsurfaceScattering.hlsli"
 #include "Raytracing/Includes/Materials/Transmission.hlsli"
 
@@ -66,36 +67,34 @@ float3 evalSingleScatteringTransmission(
             {
                 float3 localPosition = transmissionRay.Origin + refractedRayDirection * payload.hitDistance;
 
-                Instance backInstance;
-                Material backMaterial;
-                Surface backSurface = Surface(localPosition, payload, refractedRayDirection, rayCone, backInstance, backMaterial);
+                Instance sampleInstance;
+                Material sampleMaterial;
+                Surface sampleSurface = Surface(localPosition, payload, refractedRayDirection, rayCone, sampleInstance, sampleMaterial);
 
-                const float3 sampleGeometryNormal = backSurface.FaceNormal;
-                const float3 sampleShadingNormal = backSurface.Normal;
-
+                const float3 sampleGeometryNormal = sampleSurface.FaceNormal;
+                const float3 sampleShadingNormal = sampleSurface.Normal;
                 backPosition = OffsetRay(backPosition, sampleGeometryNormal, false);
 
                 // Prepare data needed to evaluate the light
                 float3 incidentVector = 0.0f;
                 float lightDistance = 0.0f;
                 float3 irradiance = 0.0f;
-                GetLightIrradianceMIS(scatterInstance, irradiance, incidentVector, lightDistance, randomSeed);
+                GetLightIrradianceMIS(sampleInstance, sampleSurface, irradiance, incidentVector, lightDistance, randomSeed);
 
                 const float3 vectorToLight = normalize(incidentVector);
 
                 if (any(irradiance > MIN_DIFFUSE_SHADOW))
                 {
-                    const float3 lightVisibility = TraceRayShadowFinite(Scene, scatterSurface, vectorToLight, lightDistance, randomSeed);
+                    const float3 lightVisibility = TraceRayShadowFinite(Scene, sampleSurface, vectorToLight, lightDistance, randomSeed);
                     if (any(lightVisibility > 0.0f))
                     {
                         const float3 lightRadiance = irradiance * lightVisibility;
-                        const float totalScatteringDistance = currentT + scatteringPayload.hitDistance;
                         const float3 transmissionBsdf = EvaluateBoundaryTerm(sourceSurface.Normal,
-                                                                            vectorToLight,
-                                                                            refractedRayDirection,
-                                                                            sampleShadingNormal,
-                                                                            thickness,
-                                                                            sssMaterialCoefficients);
+                                                                             vectorToLight,
+                                                                             refractedRayDirection,
+                                                                             sampleShadingNormal,
+                                                                             thickness,
+                                                                             sssMaterialCoefficients);
 
                         // Li * bsdf * cosTheta / CosineLobePDF = Li * bsdf * cosTheta / (cosTheta / pi) = Li * bsdf * pi
                         radiance += lightRadiance * transmissionBsdf * K_PI;
@@ -159,7 +158,7 @@ float3 evalSingleScatteringTransmission(
                 float3 incidentVector = 0.0f;
                 float lightDistance = 0.0f;
                 float3 irradiance = 0.0f;
-                GetLightIrradianceMIS(scatterInstance, irradiance, incidentVector, lightDistance, randomSeed);
+                GetLightIrradianceMIS(scatterInstance, scatterSurface, irradiance, incidentVector, lightDistance, randomSeed);
 
                 const float3 vectorToLight = normalize(incidentVector);
 
@@ -221,24 +220,24 @@ float3 EvaluateSubsurfaceNEE(
     float3 incidentVector;
     float lightDistance;
     float3 irradiance;
-    GetLightIrradianceMIS(instance, irradiance, incidentVector, lightDistance, randomSeed);
+    GetLightIrradianceMIS(instance, surface, irradiance, incidentVector, lightDistance, randomSeed);
     const float3 vectorToLight = normalize(incidentVector);
     const float3 lightVector = vectorToLight * lightDistance;
 
-    if (irradiance > MIN_DIFFUSE_SHADOW)
+    if (any(irradiance) > MIN_DIFFUSE_SHADOW)
     {
         const float3 centerSpecularF0 = surface.F0;
         const float3 diffuseAlbedo = surface.DiffuseAlbedo;
 
         const float3 cameraUp = float3(
-            Frame.ViewInverse.m[0][0],
-            Frame.ViewInverse.m[1][0],
-            Frame.ViewInverse.m[2][0]);
+            Frame.ViewInverse[0][0],
+            Frame.ViewInverse[1][0],
+            Frame.ViewInverse[2][0]);
 
         const float3 cameraDirection = float3(
-            Frame.ViewInverse.m[0][2],
-            Frame.ViewInverse.m[1][2],
-            Frame.ViewInverse.m[2][2]);
+            Frame.ViewInverse[0][2],
+            Frame.ViewInverse[1][2],
+            Frame.ViewInverse[2][2]);
 
         if (Random(randomSeed) < 0.5f)
         {
@@ -248,6 +247,7 @@ float3 EvaluateSubsurfaceNEE(
         }
 
         uint effectiveSample = 0;
+        float maxRadius = 1.0f;
 
         for (uint sssSampleIndex = 0; sssSampleIndex < Frame.SSSSampleCount; ++sssSampleIndex)
         {
@@ -282,7 +282,7 @@ float3 EvaluateSubsurfaceNEE(
                 float sampleLightDistance = 0.0f;
                 float sampleLightIrradiance = 0.0f;
 
-                GetLightIrradianceMIS(sampleInstance, sampleLightIrradiance, sampleIncidentVector, sampleLightDistance, randomSeed);
+                GetLightIrradianceMIS(sampleInstance, sampleSurface, sampleLightIrradiance, sampleIncidentVector, sampleLightDistance, randomSeed);
 
                 if (any(sampleLightIrradiance > MIN_DIFFUSE_SHADOW)) {
                     const float3 vectorToLight = normalize(sampleIncidentVector);
@@ -306,7 +306,7 @@ float3 EvaluateSubsurfaceNEE(
 
     if (Frame.EnableSssTransmission)
     {
-        radiance += evalSingleScatteringTransmission(
+        radiance += max(evalSingleScatteringTransmission(
             surface,
             brdfContext,
             material,
@@ -314,26 +314,28 @@ float3 EvaluateSubsurfaceNEE(
             subsurfaceMaterialData,
             subsurfaceInteraction,
             rayCone,
-            randomSeed);
+            randomSeed), 0.0f);
     }
 
     // Evaluate microfacet specular reflection at the surface
     {
         const bool transition = dot(vectorToLight, geometryNormal) < 0.0f;
         const float3 shadowHitPosOffset = surface.Position;
-        const float3 shadowV = brdfContext.viewDirection;
+        const float3 shadowV = brdfContext.ViewDirection;
         // Cast shadow ray towards the selected light
         const float3 lightVisibility = TraceRayShadowFinite(Scene, surface, vectorToLight, lightDistance, randomSeed);
 
         if (any(lightVisibility > 0.0f))
         {
             const float3 lightRadiance = irradiance * lightVisibility;
-            SpecularReflectionMicrofacet bsdf;
-            bsdf.albedo = centerSpecularF0;
-            bsdf.alpha = material.Roughness * material.Roughness;
-            bsdf.activeLobes = (uint)LobeType::SpecularReflection;
+            const float alpha = max(surface.Roughness * surface.Roughness, 0.01f);
+            float3 bsdf = evalMicrofacet(brdfContext.ViewDirection, vectorToLight, surface.Normal, alpha);
+            float3 halfVector = normalize(brdfContext.ViewDirection + vectorToLight);
+            float VdotH = saturate(dot(brdfContext.ViewDirection, halfVector));
+            float3 F = evalFresnelSchlick(surface.F0, VdotH);
+            bsdf *= F;
 
-            radiance += bsdf.Eval(brdfContext.viewDirection, vectorToLight) * lightRadiance;
+            radiance += bsdf * lightRadiance;
         }
     }
 

@@ -75,7 +75,7 @@ float3 EvalLight(in float3 l, in Material material, in Surface surface, in BRDFC
 void GetDirectionalLightIrradiance(out float3 irradiance, out float3 lr, inout uint randomSeed)
 {
     irradiance = DirLightToLinear(Frame.Directional.Color) * EvalSkyOcclusion(Frame.Directional.Vector);
-    lr = -Frame.Directional.Vector;
+    lr = Frame.Directional.Vector;
 
     // Sun angular radius is ~0.00465 radians (~0.266 degrees)
     float cosSunDisk = cos(0.00465f);
@@ -128,7 +128,7 @@ float GetLightSampleWeight(Surface surface, Light light)
 }
 
 // Get irradiance for point light without BRDF evaluation
-void GetPointLightIrradiance(in LightData lightData, out float3 irradiance, out float3 lr, out float dist, inout uint randomSeed)
+void GetPointLightIrradiance(in LightData lightData, in Surface surface, out float3 irradiance, out float3 lr, out float dist, inout uint randomSeed)
 {
     if (lightData.Count == 0)
     {
@@ -200,7 +200,7 @@ float3 EvalPointLight(in Material material, in Surface surface, in BRDFContext b
     float3 lightIrradiance;
     float3 lr;
     float dist;
-    GetPointLightIrradiance(lightData, lightIrradiance, lr, dist, randomSeed);
+    GetPointLightIrradiance(lightData, surface, lightIrradiance, lr, dist, randomSeed);
 
     float3 direct = EvalLight(lr, material, surface, brdfContext, bsdf) * lightIrradiance;
 
@@ -221,7 +221,7 @@ float3 EvaluateDirectRadiance(in Material material, in Surface surface, in BRDFC
     return radiance;
 }
 
-void GetLightIrradianceMIS(in Instance instance, out float3 irradiance, out float3 lr, out float distance, inout uint randomSeed)
+void GetLightIrradianceMIS(in Instance instance, in Surface surface, out float3 irradiance, out float3 lr, out float distance, inout uint randomSeed)
 {
     float3 directionalIrradiance;
     float3 dirLr;
@@ -230,13 +230,13 @@ void GetLightIrradianceMIS(in Instance instance, out float3 irradiance, out floa
     float3 pointIrradiance;
     float3 pointLr;
     float pointDist;
-    GetPointLightIrradiance(instance.LightData, pointIrradiance, pointLr, pointDist, randomSeed);
+    GetPointLightIrradiance(instance.LightData, surface, pointIrradiance, pointLr, pointDist, randomSeed);
 
-    pDirLight = Luminance(directionalIrradiance);
-    pPointLight = Luminance(pointIrradiance);
+    float pDirLight = Luminance(directionalIrradiance);
+    float pPointLight = Luminance(pointIrradiance);
 
     float total = pDirLight + pPointLight;
-    if (total == 0.0f)
+    if (total < 1e-6f)
     {
         irradiance = float3(0, 0, 0);
         lr = float3(0, 0, 0);
@@ -244,10 +244,10 @@ void GetLightIrradianceMIS(in Instance instance, out float3 irradiance, out floa
         return;
     }
 
+    float r = Random(randomSeed);
     pDirLight /= total;
     pPointLight /= total;
 
-    float r = Random(randomSeed);
     if (r < pDirLight)
     {
         irradiance = directionalIrradiance / pDirLight;
@@ -267,7 +267,7 @@ float3 EvaluateDirectRadianceMIS(in Material material, in Surface surface, in BR
     float3 lightIrradiance;
     float3 lr;
     float distance;
-    GetLightIrradianceMIS(instance, lightIrradiance, lr, distance, randomSeed);
+    GetLightIrradianceMIS(instance, surface, lightIrradiance, lr, distance, randomSeed);
 
     float3 direct = EvalLight(lr, material, surface, brdfContext, bsdf) * lightIrradiance;
 

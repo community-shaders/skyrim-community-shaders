@@ -9,6 +9,7 @@
 #include "Raytracing/Includes/RT/CommonRT.hlsli"
 #include "Raytracing/Includes/RT/Shading.hlsli"
 #include "Raytracing/Includes/RT/Geometry.hlsli"
+#include "Raytracing/Includes/RT/SubsurfaceShading.hlsli"
 
 #include "Common/Color.hlsli"
 #include "Common/BRDF.hlsli"
@@ -44,7 +45,8 @@ void main()
     }       
 #endif   
     
-    uint randomSeed = InitRandomSeed(idx, size, Frame.FrameCount);    
+    uint randomSeed = InitRandomSeed(idx, size, Frame.FrameCount);
+    bool isSssPath = false;
   
 #if defined(SHARC)
     SharcParameters sharcParameters = GetSharcParameters();
@@ -132,8 +134,10 @@ void main()
 
     // Direct Light for PT
     float3 direct = sourceSurface.Emissive;
-    if (sourceSurface.SubsurfaceData.HasSubsurface != 0)
+    if (sourceSurface.SubsurfaceData.HasSubsurface != 0) {
         direct += EvaluateSubsurfaceNEE(sourceSurface, sourceBRDFContext, sourceMaterial, sourceInstance, sourcePayload, sourceRayCone, randomSeed);
+        isSssPath = true;
+    }
     else
         direct += EvaluateDirectRadiance(sourceMaterial, sourceSurface, sourceBRDFContext, sourceInstance, sourceBSDF, randomSeed);
 #else
@@ -483,8 +487,10 @@ void main()
             bsdf = StandardBSDF::make(surface, isEnter);
 
             float3 directRadiance = 0.0f;
-            if (surface.SubsurfaceData.HasSubsurface != 0)
-                directRadiance += EvaluateSubsurfaceNEE(surface, brdfContext, material, instance, pPayload, rayCone, randomSeed);
+            if (surface.SubsurfaceData.HasSubsurface != 0 && !isSssPath) {
+                directRadiance += EvaluateSubsurfaceNEE(surface, brdfContext, material, instance, payload, rayCone, randomSeed);
+                isSssPath = true;
+            }
             else
                 directRadiance += EvaluateDirectRadiance(material, surface, brdfContext, instance, bsdf, randomSeed);
             sampleRadiance += directRadiance * throughput;
