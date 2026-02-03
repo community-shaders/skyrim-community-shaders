@@ -1829,40 +1829,14 @@ void Raytracing::CommitModel(Model* model)
 {
 	std::lock_guard lock{ renderMutex };
 
-	auto& shapes = model->shapes;
-	auto meshCount = shapes.size();
+	static eastl::vector<D3D12_RAYTRACING_GEOMETRY_DESC> geometryDescs;
+	geometryDescs.clear();
 
-	eastl::vector<D3D12_RAYTRACING_GEOMETRY_DESC> geometryDescs(meshCount);
+	if (geometryDescs.capacity() < model->shapes.size())
+		geometryDescs.reserve(model->shapes.size());
 
-	// If no trishape has render use, we assume it is not used and skip using it to hide geometry
-	//bool isRenderUseValid = model->IsRenderUseValid();
-
-	for (auto i = 0; i < meshCount; i++) {
-		auto& shape = shapes[i];
-
-		/*if (isRenderUseValid && shape->geometry->GetFlags().none(RE::NiAVObject::Flag::kRenderUse))
-			continue;*/
-
-		bool hasAlphaTesting = shape->flags & Shape::Flags::AlphaTesting;
-		bool isBlend = (shape->flags & Shape::Flags::AlphaBlending) &&  (shape->material.Feature == RE::BSShaderMaterial::Feature::kHairTint || shape->material.Feature == RE::BSShaderMaterial::Feature::kFaceGen || shape->material.Feature == RE::BSShaderMaterial::Feature::kFaceGenRGBTint || shape->material.Feature == RE::BSShaderMaterial::Feature::kEye);
-		bool isWindows = shape->material.shaderFlags.any(RE::BSShaderProperty::EShaderPropertyFlag::kAssumeShadowmask) && (shape->material.Feature == RE::BSShaderMaterial::Feature::kGlowMap || shape->material.PBRFlags.any(PBRShaderFlags::HasEmissive));
-
-		bool isOpaque = !hasAlphaTesting && !(isWindows && settings.InteriorSun) && !isBlend;
-
-		geometryDescs[i] = {
-			.Type = D3D12_RAYTRACING_GEOMETRY_TYPE_TRIANGLES,
-			.Flags = isOpaque ? D3D12_RAYTRACING_GEOMETRY_FLAG_OPAQUE : D3D12_RAYTRACING_GEOMETRY_FLAG_NONE | D3D12_RAYTRACING_GEOMETRY_FLAG_NO_DUPLICATE_ANYHIT_INVOCATION,
-			.Triangles = {
-				.Transform3x4 = shape->TransformBuffer(),
-				.IndexFormat = DXGI_FORMAT_R16_UINT,
-				.VertexFormat = DXGI_FORMAT_R32G32B32_FLOAT,
-				.IndexCount = shape->triangleCount * 3,
-				.VertexCount = shape->vertexCount,
-				.IndexBuffer = shape->triangleBuffer->resource->GetGPUVirtualAddress(),
-				.VertexBuffer = {
-					.StartAddress = shape->vertexBuffer->resource->GetGPUVirtualAddress(),
-					.StrideInBytes = sizeof(Vertex) } }
-		};
+	for (auto& shape : model->shapes) {
+		geometryDescs.push_back(shape->GeometryDesc());
 	}
 
 	auto modelFlags = model->GetFlags();
@@ -1936,34 +1910,20 @@ void Raytracing::UpdateModelBLAS(Model* model)
 	if (destASFrame.find(gpuVirtualAddr) != destASFrame.end())
 		return;
 
-	auto& shapes = model->shapes;
-	auto shapeCount = shapes.size();
+	static eastl::vector<D3D12_RAYTRACING_GEOMETRY_DESC> geometryDescs;
+	geometryDescs.clear();
 
-	eastl::vector<D3D12_RAYTRACING_GEOMETRY_DESC> geometryDescs(shapeCount);
+	if (geometryDescs.capacity() < model->shapes.size())
+		geometryDescs.reserve(model->shapes.size());
 
-	for (auto i = 0; i < shapeCount; i++) {
-		auto& shape = shapes[i];
+	// If no trishape has render use, we assume it is not used and skip using it to hide geometry
+	//bool isRenderUseValid = model->IsRenderUseValid();
 
-		bool hasAlphaTesting = shape->flags & Shape::Flags::AlphaTesting;
-		bool isBlend = (shape->flags & Shape::Flags::AlphaBlending) &&  (shape->material.Feature == RE::BSShaderMaterial::Feature::kHairTint || shape->material.Feature == RE::BSShaderMaterial::Feature::kFaceGen || shape->material.Feature == RE::BSShaderMaterial::Feature::kFaceGenRGBTint || shape->material.Feature == RE::BSShaderMaterial::Feature::kEye);
-		bool isWindows = shape->material.shaderFlags.any(RE::BSShaderProperty::EShaderPropertyFlag::kAssumeShadowmask) && (shape->material.Feature == RE::BSShaderMaterial::Feature::kGlowMap || shape->material.PBRFlags.any(PBRShaderFlags::HasEmissive));
+	for (auto& shape : model->shapes) {
+		/*if (isRenderUseValid && shape->geometry->GetFlags().none(RE::NiAVObject::Flag::kRenderUse))
+		continue;*/
 
-		bool isOpaque = !hasAlphaTesting && !(isWindows && settings.InteriorSun) && !isBlend;
-
-		geometryDescs[i] = {
-			.Type = D3D12_RAYTRACING_GEOMETRY_TYPE_TRIANGLES,
-			.Flags = isOpaque ? D3D12_RAYTRACING_GEOMETRY_FLAG_OPAQUE : D3D12_RAYTRACING_GEOMETRY_FLAG_NONE | D3D12_RAYTRACING_GEOMETRY_FLAG_NO_DUPLICATE_ANYHIT_INVOCATION,
-			.Triangles = {
-				.Transform3x4 = shape->TransformBuffer(),
-				.IndexFormat = DXGI_FORMAT_R16_UINT,
-				.VertexFormat = DXGI_FORMAT_R32G32B32_FLOAT,
-				.IndexCount = shape->triangleCount * 3,
-				.VertexCount = shape->vertexCount,
-				.IndexBuffer = shape->triangleBuffer->resource->GetGPUVirtualAddress(),
-				.VertexBuffer = {
-					.StartAddress = shape->vertexBuffer->resource->GetGPUVirtualAddress(),
-					.StrideInBytes = sizeof(Vertex) } }
-		};
+		geometryDescs.push_back(shape->GeometryDesc());
 	}
 
 	D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_INPUTS inputs = {

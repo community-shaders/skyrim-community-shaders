@@ -885,6 +885,30 @@ void Shape::CalculateVectors(bool calculateNormal)
 	}
 }
 
+D3D12_RAYTRACING_GEOMETRY_DESC Shape::GeometryDesc() const
+{
+	bool hasAlphaTesting = flags & Shape::Flags::AlphaTesting;
+	bool isBlend = (flags & Shape::Flags::AlphaBlending) && (material.Feature == RE::BSShaderMaterial::Feature::kHairTint || material.Feature == RE::BSShaderMaterial::Feature::kFaceGen || material.Feature == RE::BSShaderMaterial::Feature::kFaceGenRGBTint || material.Feature == RE::BSShaderMaterial::Feature::kEye);
+	bool isWindows = material.shaderFlags.any(RE::BSShaderProperty::EShaderPropertyFlag::kAssumeShadowmask) && (material.Feature == RE::BSShaderMaterial::Feature::kGlowMap || material.PBRFlags.any(PBRShaderFlags::HasEmissive));
+
+	bool isOpaque = !hasAlphaTesting && !isWindows && !isBlend;
+
+	return {
+		.Type = D3D12_RAYTRACING_GEOMETRY_TYPE_TRIANGLES,
+		.Flags = isOpaque ? D3D12_RAYTRACING_GEOMETRY_FLAG_OPAQUE : D3D12_RAYTRACING_GEOMETRY_FLAG_NONE | D3D12_RAYTRACING_GEOMETRY_FLAG_NO_DUPLICATE_ANYHIT_INVOCATION,
+		.Triangles = {
+			.Transform3x4 = TransformBuffer(),
+			.IndexFormat = DXGI_FORMAT_R16_UINT,
+			.VertexFormat = DXGI_FORMAT_R32G32B32_FLOAT,
+			.IndexCount = triangleCount * 3,
+			.VertexCount = vertexCount,
+			.IndexBuffer = triangleBuffer->resource->GetGPUVirtualAddress(),
+			.VertexBuffer = {
+				.StartAddress = vertexBuffer->resource->GetGPUVirtualAddress(),
+				.StrideInBytes = sizeof(Vertex) } }
+	};
+}
+
 D3D12_GPU_VIRTUAL_ADDRESS Shape::TransformBuffer() const
 {
 	auto offset = allocation->GetIndex() * sizeof(float3x4);
