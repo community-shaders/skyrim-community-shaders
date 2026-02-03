@@ -3,9 +3,9 @@
 // License: MIT License
 
 #include "BackgroundBlur.h"
+#include "../Features/Upscaling.h"
 #include "../Globals.h"
 #include "../Util.h"
-#include "../Features/Upscaling.h"
 
 #include <algorithm>
 #include <cmath>
@@ -419,9 +419,12 @@ namespace BackgroundBlur
 		HRESULT hr = globals::d3d::device->CreateShaderResourceView(sourceTexture, nullptr, &sourceSRV);
 		if (FAILED(hr)) {
 			logger::error("Failed to create source SRV for blur");
-			if (originalRTV) originalRTV->Release();
-			if (originalDSV) originalDSV->Release();
-			if (originalRS) originalRS->Release();
+			if (originalRTV)
+				originalRTV->Release();
+			if (originalDSV)
+				originalDSV->Release();
+			if (originalRS)
+				originalRS->Release();
 			return;
 		}
 
@@ -648,7 +651,7 @@ namespace BackgroundBlur
 		ID3D11Texture2D* currentTexture = nullptr;
 		ID3D11ShaderResourceView* uiBufferSRV = nullptr;  // For compositing HUD before blur
 		ID3D11RenderTargetView* uiBufferRTV = nullptr;    // For clearing HUD in blur area
-		bool ownsRTV = false;  // Track if we need to release the RTV
+		bool ownsRTV = false;                             // Track if we need to release the RTV
 
 		if (useUpscalingBackbuffer) {
 			// When D3D12 swap chain is active, get the backbuffer directly from upscaling
