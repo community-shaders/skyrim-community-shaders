@@ -340,3 +340,11 @@ static std::wstring ToWide(const std::string& str)
 		(int)str.size(), &wstr[0], size_needed);
 	return wstr;
 }
+
+static RE::BSFadeNode* FindBSFadeNode(RE::NiNode* a_niNode)
+{
+	if (auto fadeNode = a_niNode->AsFadeNode()) {
+		return fadeNode;
+	}
+	return a_niNode->parent ? FindBSFadeNode(a_niNode->parent) : nullptr;
+}

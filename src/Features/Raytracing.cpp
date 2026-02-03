@@ -1803,28 +1803,6 @@ void Raytracing::Main_RenderWorld(bool a1)
 	}
 }
 
-static RE::BSFadeNode* FindBSFadeNode(RE::NiNode* a_niNode)
-{
-	if (auto fadeNode = a_niNode->AsFadeNode()) {
-		return fadeNode;
-	}
-	return a_niNode->parent ? FindBSFadeNode(a_niNode->parent) : nullptr;
-}
-
-template <typename T>
-void Raytracing::MakeAndCopy(const eastl::vector<T>& data, winrt::com_ptr<ID3D12Resource>& res)
-{
-	auto desc = BASIC_BUFFER_DESC;
-	desc.Width = sizeof(T) * data.size();
-
-	DX::ThrowIfFailed(d3d12Device->CreateCommittedResource(&UPLOAD_HEAP, D3D12_HEAP_FLAG_NONE, &desc, D3D12_RESOURCE_STATE_GENERIC_READ, nullptr, IID_PPV_ARGS(&res)));
-
-	void* ptr;
-	DX::ThrowIfFailed(res->Map(0, nullptr, &ptr));
-	memcpy(ptr, data.data(), desc.Width);
-	res->Unmap(0, nullptr);
-}
-
 // A custom visit controller built to ignore billboard/particle geometry
 static RE::BSVisit::BSVisitControl TraverseScenegraphRTGeometries(RE::NiAVObject* a_object, std::function<RE::BSVisit::BSVisitControl(RE::BSGeometry*)> a_func)
 {

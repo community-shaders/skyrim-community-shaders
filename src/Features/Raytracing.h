@@ -246,9 +246,6 @@ struct Raytracing : public OverlayFeature
 	void AddInstances();
 	void ClearInstances();
 
-	template <typename T>
-	void MakeAndCopy(const eastl::vector<T>& data, winrt::com_ptr<ID3D12Resource>& res);
-
 	void DeviceRemovedHandler();
 
 	void CopyDepth();
