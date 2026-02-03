@@ -74,7 +74,7 @@ void OverlayRenderer::HandleVRSetup()
 bool OverlayRenderer::ShouldSkipRendering()
 {
 	auto shaderCache = globals::shaderCache;
-	auto failed = shaderCache->GetFailedTasks();
+	auto failed = shaderCache->GetCurrentFailedCount();
 	auto hide = shaderCache->IsHideErrors();
 	auto* abTestingManager = ABTestingManager::GetSingleton();
 	auto* renderDoc = RenderDoc::GetSingleton();
@@ -113,7 +113,7 @@ void OverlayRenderer::InitializeImGuiFrame(Menu& menu)
 void OverlayRenderer::RenderShaderCompilationStatus(const std::function<const char*(uint32_t)>& keyIdToString)
 {
 	auto shaderCache = globals::shaderCache;
-	auto failed = shaderCache->GetFailedTasks();
+	auto failed = shaderCache->GetCurrentFailedCount();
 	auto hide = shaderCache->IsHideErrors();
 
 	uint64_t totalShaders = shaderCache->GetTotalTasks();
