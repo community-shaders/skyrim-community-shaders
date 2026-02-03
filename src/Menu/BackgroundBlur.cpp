@@ -5,6 +5,7 @@
 #include "BackgroundBlur.h"
 #include "../Globals.h"
 #include "../Util.h"
+#include "../Features/Upscaling.h"
 
 #include <algorithm>
 #include <cmath>
@@ -38,7 +39,10 @@ namespace BackgroundBlur
 		winrt::com_ptr<ID3D11BlendState> blendState;
 		winrt::com_ptr<ID3D11RasterizerState> scissorRasterizerState;
 
-		// Downsampled textures for blur (quarter-res for performance)
+		// Blend state for compositing UI over game world (alpha blending)
+		winrt::com_ptr<ID3D11BlendState> compositeBlendState;
+
+		// Downsampled textures for blur (1/8 res for performance)
 		winrt::com_ptr<ID3D11Texture2D> downsampleTexture;
 		winrt::com_ptr<ID3D11RenderTargetView> downsampleRTV;
 		winrt::com_ptr<ID3D11ShaderResourceView> downsampleSRV;
@@ -50,6 +54,15 @@ namespace BackgroundBlur
 		winrt::com_ptr<ID3D11RenderTargetView> blurRTV2;
 		winrt::com_ptr<ID3D11ShaderResourceView> blurSRV1;
 		winrt::com_ptr<ID3D11ShaderResourceView> blurSRV2;
+
+		// Legacy composite texture members (kept for cleanup compatibility)
+		winrt::com_ptr<ID3D11Texture2D> compositeTexture;
+		winrt::com_ptr<ID3D11RenderTargetView> compositeRTV;
+		winrt::com_ptr<ID3D11ShaderResourceView> compositeSRV;
+
+		// 1x1 transparent black texture for clearing with scissor
+		winrt::com_ptr<ID3D11Texture2D> clearTexture;
+		winrt::com_ptr<ID3D11ShaderResourceView> clearSRV;
 
 		UINT textureWidth = 0;
 		UINT textureHeight = 0;
@@ -154,6 +167,55 @@ namespace BackgroundBlur
 			return false;
 		}
 
+		// Create blend state for compositing UI over game world (pre-multiplied alpha blend)
+		// UI buffer uses pre-multiplied alpha, so SrcBlend=ONE and DestBlend=INV_SRC_ALPHA
+		D3D11_BLEND_DESC compositeBlendDesc = {};
+		compositeBlendDesc.RenderTarget[0].BlendEnable = TRUE;
+		compositeBlendDesc.RenderTarget[0].SrcBlend = D3D11_BLEND_ONE;
+		compositeBlendDesc.RenderTarget[0].DestBlend = D3D11_BLEND_INV_SRC_ALPHA;
+		compositeBlendDesc.RenderTarget[0].BlendOp = D3D11_BLEND_OP_ADD;
+		compositeBlendDesc.RenderTarget[0].SrcBlendAlpha = D3D11_BLEND_ONE;
+		compositeBlendDesc.RenderTarget[0].DestBlendAlpha = D3D11_BLEND_INV_SRC_ALPHA;
+		compositeBlendDesc.RenderTarget[0].BlendOpAlpha = D3D11_BLEND_OP_ADD;
+		compositeBlendDesc.RenderTarget[0].RenderTargetWriteMask = D3D11_COLOR_WRITE_ENABLE_ALL;
+
+		hr = device->CreateBlendState(&compositeBlendDesc, compositeBlendState.put());
+		if (FAILED(hr)) {
+			logger::error("Failed to create composite blend state");
+			initializationFailed = true;
+			return false;
+		}
+
+		// Create 1x1 transparent black texture for clearing with scissor
+		D3D11_TEXTURE2D_DESC clearTexDesc = {};
+		clearTexDesc.Width = 1;
+		clearTexDesc.Height = 1;
+		clearTexDesc.MipLevels = 1;
+		clearTexDesc.ArraySize = 1;
+		clearTexDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+		clearTexDesc.SampleDesc.Count = 1;
+		clearTexDesc.Usage = D3D11_USAGE_IMMUTABLE;
+		clearTexDesc.BindFlags = D3D11_BIND_SHADER_RESOURCE;
+
+		uint32_t clearPixel = 0x00000000;  // RGBA = 0,0,0,0 (transparent black)
+		D3D11_SUBRESOURCE_DATA clearData = {};
+		clearData.pSysMem = &clearPixel;
+		clearData.SysMemPitch = 4;
+
+		hr = device->CreateTexture2D(&clearTexDesc, &clearData, clearTexture.put());
+		if (FAILED(hr)) {
+			logger::error("Failed to create clear texture");
+			initializationFailed = true;
+			return false;
+		}
+
+		hr = device->CreateShaderResourceView(clearTexture.get(), nullptr, clearSRV.put());
+		if (FAILED(hr)) {
+			logger::error("Failed to create clear SRV");
+			initializationFailed = true;
+			return false;
+		}
+
 		// Create scissor-enabled rasterizer state
 		D3D11_RASTERIZER_DESC rsDesc = {};
 		rsDesc.FillMode = D3D11_FILL_SOLID;
@@ -200,8 +262,11 @@ namespace BackgroundBlur
 		blurRTV2 = nullptr;
 		blurSRV1 = nullptr;
 		blurSRV2 = nullptr;
+		compositeTexture = nullptr;
+		compositeRTV = nullptr;
+		compositeSRV = nullptr;
 
-		// Create downsampled texture description
+		// Create downsampled texture description (no full-res composite needed - all work at 1/8 res)
 		D3D11_TEXTURE2D_DESC texDesc = {};
 		texDesc.Width = dsWidth;
 		texDesc.Height = dsHeight;
@@ -313,7 +378,7 @@ namespace BackgroundBlur
 		downsampledHeight = dsHeight;
 	}
 
-	void PerformBlur(ID3D11Texture2D* sourceTexture, ID3D11RenderTargetView* targetRTV, ImVec2 menuMin, ImVec2 menuMax)
+	void PerformBlur(ID3D11Texture2D* sourceTexture, ID3D11RenderTargetView* targetRTV, ImVec2 menuMin, ImVec2 menuMax, ID3D11ShaderResourceView* uiBufferSRV = nullptr, ID3D11RenderTargetView* uiBufferRTV = nullptr)
 	{
 		std::lock_guard<std::mutex> lock(resourceMutex);
 
@@ -334,14 +399,6 @@ namespace BackgroundBlur
 		D3D11_TEXTURE2D_DESC sourceDesc;
 		sourceTexture->GetDesc(&sourceDesc);
 
-		// Create SRV for source
-		ID3D11ShaderResourceView* sourceSRV = nullptr;
-		HRESULT hr = globals::d3d::device->CreateShaderResourceView(sourceTexture, nullptr, &sourceSRV);
-		if (FAILED(hr)) {
-			logger::error("Failed to create source SRV for blur");
-			return;
-		}
-
 		// Save current state
 		ID3D11RenderTargetView* originalRTV = nullptr;
 		ID3D11DepthStencilView* originalDSV = nullptr;
@@ -354,7 +411,23 @@ namespace BackgroundBlur
 		ID3D11RasterizerState* originalRS = nullptr;
 		context->RSGetState(&originalRS);
 
-		// Downsample source to quarter resolution with bilinear filtering
+		auto constantBufferPtr = constantBuffer.get();
+		auto samplerStatePtr = samplerState.get();
+
+		// Create SRV for source texture
+		ID3D11ShaderResourceView* sourceSRV = nullptr;
+		HRESULT hr = globals::d3d::device->CreateShaderResourceView(sourceTexture, nullptr, &sourceSRV);
+		if (FAILED(hr)) {
+			logger::error("Failed to create source SRV for blur");
+			if (originalRTV) originalRTV->Release();
+			if (originalDSV) originalDSV->Release();
+			if (originalRS) originalRS->Release();
+			return;
+		}
+
+		ID3D11ShaderResourceView* nullSRV = nullptr;
+
+		// Set up downsample viewport - all work done at 1/8 resolution for performance
 		D3D11_VIEWPORT downsampleViewport = {};
 		downsampleViewport.Width = static_cast<FLOAT>(downsampledWidth);
 		downsampleViewport.Height = static_cast<FLOAT>(downsampledHeight);
@@ -364,28 +437,30 @@ namespace BackgroundBlur
 
 		auto downsampleRTVPtr = downsampleRTV.get();
 		context->OMSetRenderTargets(1, &downsampleRTVPtr, nullptr);
-
-		auto constantBufferPtr = constantBuffer.get();
-		auto samplerStatePtr = samplerState.get();
 		context->VSSetShader(vertexShader.get(), nullptr, 0);
+		context->PSSetShader(horizontalPixelShader.get(), nullptr, 0);
 		context->PSSetSamplers(0, 1, &samplerStatePtr);
 
-		// Simple copy to downsample (bilinear filtering does the work)
+		// Step 1: Downsample game world directly (bilinear filtering does the work)
 		BlurConstants downsampleConstants = {};
 		downsampleConstants.texelSize[0] = 1.0f / static_cast<float>(sourceDesc.Width);
 		downsampleConstants.texelSize[1] = 1.0f / static_cast<float>(sourceDesc.Height);
-		downsampleConstants.texelSize[2] = 0.0f;
-		downsampleConstants.texelSize[3] = 0.0f;
 		downsampleConstants.blurParams[0] = 1;  // Single sample for downsample
 		context->UpdateSubresource(constantBuffer.get(), 0, nullptr, &downsampleConstants, 0, 0);
-
 		context->PSSetConstantBuffers(0, 1, &constantBufferPtr);
-		context->PSSetShader(horizontalPixelShader.get(), nullptr, 0);
 		context->PSSetShaderResources(0, 1, &sourceSRV);
 		context->Draw(3, 0);
-
-		ID3D11ShaderResourceView* nullSRV = nullptr;
 		context->PSSetShaderResources(0, 1, &nullSRV);
+
+		// Step 2: Blend UI buffer at downsampled resolution (pre-multiplied alpha)
+		// Small HUD elements may be slightly softened but this is much faster
+		if (uiBufferSRV && compositeBlendState) {
+			context->OMSetBlendState(compositeBlendState.get(), nullptr, 0xFFFFFFFF);
+			context->PSSetShaderResources(0, 1, &uiBufferSRV);
+			context->Draw(3, 0);
+			context->PSSetShaderResources(0, 1, &nullSRV);
+			context->OMSetBlendState(nullptr, nullptr, 0xFFFFFFFF);
+		}
 
 		// Calculate blur parameters at eighth resolution
 		float blurRadius = BLUR_INTENSITY * 10.0f;
@@ -454,6 +529,21 @@ namespace BackgroundBlur
 		context->Draw(3, 0);
 		context->PSSetShaderResources(0, 1, &nullSRV);
 
+		// Clear the UI buffer in the scissor area so the HUD doesn't draw on top of our blur
+		// The HUD outside the menu area remains visible
+		if (uiBufferRTV && clearSRV) {
+			// Draw transparent black over just the scissor area to clear the HUD there
+			context->OMSetRenderTargets(1, &uiBufferRTV, nullptr);
+			// Use opaque blend to overwrite
+			context->OMSetBlendState(nullptr, nullptr, 0xFFFFFFFF);
+			// Scissor is still set from above
+			// Draw the 1x1 transparent black texture (shader will sample and output transparent)
+			auto clearSRVPtr = clearSRV.get();
+			context->PSSetShaderResources(0, 1, &clearSRVPtr);
+			context->Draw(3, 0);
+			context->PSSetShaderResources(0, 1, &nullSRV);
+		}
+
 		// Restore state
 		context->OMSetRenderTargets(1, &originalRTV, originalDSV);
 		context->OMSetBlendState(nullptr, nullptr, 0xFFFFFFFF);
@@ -482,11 +572,19 @@ namespace BackgroundBlur
 		constantBuffer = nullptr;
 		samplerState = nullptr;
 		blendState = nullptr;
+		compositeBlendState = nullptr;
 		scissorRasterizerState = nullptr;
 
 		downsampleTexture = nullptr;
 		downsampleRTV = nullptr;
 		downsampleSRV = nullptr;
+
+		compositeTexture = nullptr;
+		compositeRTV = nullptr;
+		compositeSRV = nullptr;
+
+		clearTexture = nullptr;
+		clearSRV = nullptr;
 
 		blurTexture1 = nullptr;
 		blurTexture2 = nullptr;
@@ -542,27 +640,61 @@ namespace BackgroundBlur
 			return;
 		}
 
-		// Get current render target
+		// Check if upscaling with D3D12 swap chain is active
+		auto& upscaling = globals::features::upscaling;
+		bool useUpscalingBackbuffer = upscaling.d3d12SwapChainActive;
+
 		ID3D11RenderTargetView* currentRTV = nullptr;
-		context->OMGetRenderTargets(1, &currentRTV, nullptr);
-
-		if (!currentRTV) {
-			return;
-		}
-
-		// Get render target texture and its dimensions
-		ID3D11Resource* currentRT = nullptr;
-		currentRTV->GetResource(&currentRT);
-
 		ID3D11Texture2D* currentTexture = nullptr;
-		HRESULT hr = currentRT->QueryInterface(__uuidof(ID3D11Texture2D), (void**)&currentTexture);
+		ID3D11ShaderResourceView* uiBufferSRV = nullptr;  // For compositing HUD before blur
+		ID3D11RenderTargetView* uiBufferRTV = nullptr;    // For clearing HUD in blur area
+		bool ownsRTV = false;  // Track if we need to release the RTV
 
-		if (FAILED(hr) || !currentTexture) {
-			if (currentRT)
-				currentRT->Release();
-			if (currentRTV)
-				currentRTV->Release();
-			return;
+		if (useUpscalingBackbuffer) {
+			// When D3D12 swap chain is active, get the backbuffer directly from upscaling
+			// because OMGetRenderTargets returns the UI buffer, not the game world
+			currentTexture = upscaling.GetD3D11BackbufferTexture();
+			currentRTV = upscaling.GetD3D11BackbufferRTV();
+			if (!currentTexture || !currentRTV) {
+				return;
+			}
+			// AddRef since we'll Release later in cleanup (to match non-upscaling path)
+			currentTexture->AddRef();
+			currentRTV->AddRef();
+			ownsRTV = true;
+
+			// During gameplay (not paused), HUD is in separate UI buffer
+			// We'll composite it onto the backbuffer before blurring
+			auto ui = globals::game::ui;
+			bool gameNotPaused = ui && !ui->GameIsPaused();
+			if (gameNotPaused) {
+				uiBufferSRV = upscaling.GetD3D11UIBufferSRV();
+				uiBufferRTV = upscaling.GetD3D11UIBufferRTV();
+			}
+		} else {
+			// Normal path: get current render target
+			context->OMGetRenderTargets(1, &currentRTV, nullptr);
+
+			if (!currentRTV) {
+				return;
+			}
+			ownsRTV = true;
+
+			// Get render target texture and its dimensions
+			ID3D11Resource* currentRT = nullptr;
+			currentRTV->GetResource(&currentRT);
+
+			HRESULT hr = currentRT->QueryInterface(__uuidof(ID3D11Texture2D), (void**)&currentTexture);
+
+			if (FAILED(hr) || !currentTexture) {
+				if (currentRT)
+					currentRT->Release();
+				if (currentRTV)
+					currentRTV->Release();
+				return;
+			}
+
+			currentRT->Release();
 		}
 
 		D3D11_TEXTURE2D_DESC texDesc;
@@ -579,7 +711,6 @@ namespace BackgroundBlur
 		ImGuiContext* ctx = ImGui::GetCurrentContext();
 		if (!ctx || ctx->Windows.Size == 0) {
 			currentTexture->Release();
-			currentRT->Release();
 			currentRTV->Release();
 			return;
 		}
@@ -619,12 +750,12 @@ namespace BackgroundBlur
 			ImVec2 windowMax = windowRect.Max;
 
 			// Perform blur for this window area
-			PerformBlur(currentTexture, currentRTV, windowMin, windowMax);
+			// Pass UI buffer SRV/RTV for compositing and clearing during upscaling gameplay
+			PerformBlur(currentTexture, currentRTV, windowMin, windowMax, uiBufferSRV, uiBufferRTV);
 		}
 
 		// Cleanup
 		currentTexture->Release();
-		currentRT->Release();
 		currentRTV->Release();
 	}
 

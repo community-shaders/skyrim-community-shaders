@@ -113,6 +113,21 @@ public:
 
 	void SetUIBuffer();
 
+	// Get the D3D11 backbuffer texture (game world content)
+	ID3D11Texture2D* GetBackbufferTexture() const;
+
+	// Get the pre-created RTV for the backbuffer
+	ID3D11RenderTargetView* GetBackbufferRTV() const;
+
+	// Get the UI buffer texture (HUD content during gameplay)
+	ID3D11Texture2D* GetUIBufferTexture() const;
+
+	// Get the UI buffer SRV for reading
+	ID3D11ShaderResourceView* GetUIBufferSRV() const;
+
+	// Get the UI buffer RTV for writing
+	ID3D11RenderTargetView* GetUIBufferRTV() const;
+
 	// D3D12 interop resource management
 	void CreateSharedResources();
 };

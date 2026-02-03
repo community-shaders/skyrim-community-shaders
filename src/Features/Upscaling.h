@@ -200,6 +200,21 @@ public:
 	void CreateProxyInterop();
 	IDXGISwapChain* GetProxySwapChain();
 
+	// Get the D3D11 backbuffer texture when D3D12 swap chain is active (for background blur)
+	ID3D11Texture2D* GetD3D11BackbufferTexture() const;
+
+	// Get the pre-created RTV for the backbuffer when D3D12 swap chain is active
+	ID3D11RenderTargetView* GetD3D11BackbufferRTV() const;
+
+	// Get the UI buffer texture (HUD during gameplay) when D3D12 swap chain is active
+	ID3D11Texture2D* GetD3D11UIBufferTexture() const;
+
+	// Get the UI buffer SRV when D3D12 swap chain is active
+	ID3D11ShaderResourceView* GetD3D11UIBufferSRV() const;
+
+	// Get the UI buffer RTV when D3D12 swap chain is active
+	ID3D11RenderTargetView* GetD3D11UIBufferRTV() const;
+
 private:
 	struct Main_UpdateJitter
 	{
