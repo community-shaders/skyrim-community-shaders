@@ -131,19 +131,14 @@ void Model::BuildBLAS(ID3D12GraphicsCommandList4* commandList)
 
 	std::lock_guard lock{ rt.renderMutex };
 
-	static eastl::vector<D3D12_RAYTRACING_GEOMETRY_DESC> geometryDescs;
-	geometryDescs.clear();
+	eastl::vector<D3D12_RAYTRACING_GEOMETRY_DESC> geometryDescs(shapes.size());
 
-	if (geometryDescs.capacity() < shapes.size())
-		geometryDescs.reserve(shapes.size());
-
-	for (auto& shape : shapes) {
-		geometryDescs.push_back(shape->GeometryDesc());
+	// Initial build with all shapes, visible or not, so the scratch buffer can be sized to fit all geometry
+	for (size_t i = 0; i < shapes.size(); i++) {
+		geometryDescs[i] = shapes[i]->GeometryDesc();
 	}
 
-	auto modelFlags = GetFlags();
-
-	bool updatable = (modelFlags & Shape::Flags::Skinned) || (modelFlags & Shape::Flags::Dynamic);
+	bool updatable = (flags & Shape::Flags::Skinned) || (flags & Shape::Flags::Dynamic);
 
 	D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAGS buildFlags = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_NONE;
 
