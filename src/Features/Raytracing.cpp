@@ -2381,8 +2381,8 @@ void Raytracing::UpdateInstances()
 	//auto eye = Util::GetAverageEyePosition();
 	//float4 cameraPos = globals::game::frameBufferCached.GetCameraPosAdjust();
 
-	uint32_t totalShapeCount = 0;
-	uint32_t instanceCount = 0;
+	uint32_t shapeIndex = 0;
+	uint32_t instanceIndex = 0;
 
 	for (auto& [node, instance] : instances) {
 		if (instance.IsDetached())
@@ -2456,18 +2456,21 @@ void Raytracing::UpdateInstances()
 		instance.Update(node, position, { it->first, model.get() }, skinningPipeline.get());
 
 		// This is temporary while I think of a better place to fit this (probably on instance.Update?)
-		auto firstShapeIndex = totalShapeCount;
-		auto shapeCount = model->shapes.size();
+		auto firstShapeIndex = shapeIndex;
 
-		if (totalShapeCount + shapeCount > RTConstants::MAX_SHAPES) {
-			logger::error("[RT] UpdateInstances - Total shape count {} would excede RTConstants::MAX_SHAPES {}", totalShapeCount + shapeCount, RTConstants::MAX_SHAPES);
-			break;
-		}
+		bool canHide = model->BLASBuildExecuted();
 
-		totalShapeCount += static_cast<uint32_t>(shapeCount);
+		for (auto& shape : model->shapes) {
+			if (shapeIndex >= RTConstants::MAX_SHAPES) {
+				logger::critical("[RT] UpdateInstances - Total shape count {} would exceed RTConstants::MAX_SHAPES {}", shapeIndex, RTConstants::MAX_SHAPES);
+				break;
+			}
 
-		for (size_t i = 0; i < shapeCount; i++) {
-			shapeData[firstShapeIndex + i] = model->shapes[i]->GetData();
+			if (canHide && (shape->state & Shape::Hidden))
+				continue;
+
+			shapeData[shapeIndex] = shape->GetData();
+			shapeIndex++;
 		}
 
 		// TODO: split double sided models so only them get the flag
@@ -2484,13 +2487,12 @@ void Raytracing::UpdateInstances()
 
 		blasInstances.push_back(blasInstance);
 
-		instanceData[instanceCount] = {
+		instanceData[instanceIndex] = {
 			instance.transform,
 			LightData(GatherInstanceLights(node)),
 			firstShapeIndex
 		};
-
-		instanceCount++;
+		instanceIndex++;
 	}
 
 	shapeBuffer->Upload(commandList.get(), 0, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
@@ -2498,7 +2500,7 @@ void Raytracing::UpdateInstances()
 	blasInstanceBuffer->UpdateList(blasInstances.data(), std::min(blasInstances.size(), (size_t)RTConstants::MAX_INSTANCES));
 	blasInstanceBuffer->Upload(commandList.get());
 
-	instanceBuffer->UpdateList(instanceData.data(), std::min(instanceCount, RTConstants::MAX_INSTANCES));
+	instanceBuffer->UpdateList(instanceData.data(), std::min(instanceIndex, RTConstants::MAX_INSTANCES));
 	instanceBuffer->Upload(commandList.get(), 0, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
 }
 
