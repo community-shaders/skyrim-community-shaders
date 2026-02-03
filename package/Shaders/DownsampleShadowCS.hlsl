@@ -1,5 +1,5 @@
 Texture2DArray<float> InputTexture : register(t0);
-RWTexture2D<float4> OutputTexture : register(u0);
+RWTexture2D<float> OutputTexture : register(u0);
 
 SamplerState PointSampler : register(s0);
 
@@ -17,7 +17,9 @@ SamplerState PointSampler : register(s0);
 		InputTexture.GetDimensions(inputW, inputH, inputSlices);
 		float2 uv = (pixCoord + 0.5) / float2(inputW, inputH);
 
-		OutputTexture[dispatchThreadID.xy] = InputTexture.GatherRed(PointSampler, float3(uv, 1));
+		float4 depths4 = InputTexture.GatherRed(PointSampler, float3(uv, 1));
+
+		OutputTexture[dispatchThreadID.xy] = dot(depths4, 0.25);
 	}
 }
 #elif defined(DOWNSAMPLE_SHADOW_MIP1)
@@ -45,7 +47,8 @@ groupshared float g_scratchDepths[8][8];
 		float inTR = g_scratchDepths[groupThreadID.x + 1][groupThreadID.y + 0];
 		float inBL = g_scratchDepths[groupThreadID.x + 0][groupThreadID.y + 1];
 		float inBR = g_scratchDepths[groupThreadID.x + 1][groupThreadID.y + 1];
-		OutputTexture[dispatchThreadID.xy / 2] = float4(inTL, inTR, inBL, inBR);
+		
+		OutputTexture[dispatchThreadID.xy / 2] = dot(float4(inTL, inTR, inBL, inBR), 0.25);
 	}
 }
 #endif

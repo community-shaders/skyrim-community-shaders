@@ -249,10 +249,6 @@ void Deferred::CopyShadowData()
 							shadowCopyMip1UAV->Release();
 							shadowCopyMip1UAV = nullptr;
 						}
-						if (shadowCopyMip2UAV) {
-							shadowCopyMip2UAV->Release();
-							shadowCopyMip2UAV = nullptr;
-						}
 						if (shadowCopyTexture) {
 							shadowCopyTexture->Release();
 							shadowCopyTexture = nullptr;
@@ -266,7 +262,7 @@ void Deferred::CopyShadowData()
 						copyDesc.Height = newHeight;
 						copyDesc.MipLevels = 2;
 						copyDesc.ArraySize = 1;
-						copyDesc.Format = DXGI_FORMAT_R16G16B16A16_UNORM;
+						copyDesc.Format = DXGI_FORMAT_R16_UNORM;
 						copyDesc.SampleDesc.Count = 1;
 						copyDesc.SampleDesc.Quality = 0;
 						copyDesc.Usage = D3D11_USAGE_DEFAULT;
@@ -277,14 +273,14 @@ void Deferred::CopyShadowData()
 						DX::ThrowIfFailed(device->CreateTexture2D(&copyDesc, nullptr, &shadowCopyTexture));
 
 						D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc{};
-						srvDesc.Format = DXGI_FORMAT_R16G16B16A16_UNORM;
+						srvDesc.Format = copyDesc.Format;
 						srvDesc.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2D;
 						srvDesc.Texture2D.MostDetailedMip = 0;
 						srvDesc.Texture2D.MipLevels = 2;
 						DX::ThrowIfFailed(device->CreateShaderResourceView(shadowCopyTexture, &srvDesc, &shadowCopySRV));
 
 						D3D11_UNORDERED_ACCESS_VIEW_DESC uavDesc{};
-						uavDesc.Format = DXGI_FORMAT_R16G16B16A16_UNORM;
+						uavDesc.Format = copyDesc.Format;
 						uavDesc.ViewDimension = D3D11_UAV_DIMENSION_TEXTURE2D;
 						uavDesc.Texture2D.MipSlice = 0;
 						DX::ThrowIfFailed(device->CreateUnorderedAccessView(shadowCopyTexture, &uavDesc, &shadowCopyMip0UAV));

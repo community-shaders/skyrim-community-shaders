@@ -20,7 +20,7 @@
 
 namespace ShadowSampling
 {
-	Texture2D<float4> SharedShadowMap : register(t18);
+	Texture2D<float> SharedShadowMap : register(t18);
 
 	struct ShadowData
 	{
@@ -158,13 +158,12 @@ namespace ShadowSampling
 			sampledPositionLS.xy += mul(Random::PoissonSampleOffsets16[k], rotationMatrix) * sampleRadii[cascadeIndex];
 
 			// Average 4 shadow samples for improved quality
-			float4 depths = SharedShadowMap.SampleLevel(LinearSampler, saturate(sampledPositionLS.xy), 1u - cascadeIndex);
-			float4 shadowVisibilities = float4(depths > compareValues[cascadeIndex]);
-			shadow += shadowVisibilities.x + shadowVisibilities.y + shadowVisibilities.z + shadowVisibilities.w;
+			float depth = SharedShadowMap.SampleLevel(LinearSampler, saturate(sampledPositionLS.xy), 1u - cascadeIndex);
+			shadow += depth > compareValues[cascadeIndex];
 		}
 
 		float fadeFactor = 1.0 - pow(saturate(dot(positionWS, positionWS) / sD.ShadowLightParam.z), 8);
-		return worldShadow * lerp(1.0, shadow * rcpSampleCount16 * 0.25, fadeFactor);
+		return worldShadow * lerp(1.0, shadow * rcpSampleCount16, fadeFactor);
 	}
 
 	float Get2DFilteredShadowCascade(float noise, float2x2 rotationMatrix, float sampleOffsetScale, float2 baseUV, float cascadeIndex, float compareValue, uint eyeIndex)
