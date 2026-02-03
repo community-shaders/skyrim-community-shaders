@@ -241,19 +241,40 @@ public:
 
 	/**
 	 * @brief Wrapper for std::vector<InputCombo> to provide custom JSON serialization.
+	 *
+	 * Serialization rules for backward compatibility:
+	 * - Single keyboard key (no modifiers): saves as plain uint32_t key code
+	 * - Single VR/controller input: saves as plain uint32_t packed value
+	 * - Multiple keys (combo): saves as array of uint32_t values
+	 * - Empty: saves as 0 (unbound)
+	 *
+	 * This allows users who don't use combo keys to maintain compatibility
+	 * with older versions of the software.
 	 */
 	struct ComboList
 	{
 		static void to_json(nlohmann::json& j, const std::vector<InputCombo>& combos)
 		{
-			// Check if all are keyboard inputs
-			bool allKeyboardOrMouse = true;
 			if (combos.empty()) {
-				// Empty list is ambiguous, but empty array [] is fine
-				j = nlohmann::json::array();
+				// Empty/unbound - save as 0 for backward compatibility
+				j = 0;
 				return;
 			}
 
+			// Single input (no combo) - save as single uint32_t for backward compatibility
+			if (combos.size() == 1) {
+				if (combos[0].GetDevice() == InputDeviceType::Keyboard) {
+					// Single keyboard key - save as plain key code
+					j = combos[0].GetKey();
+				} else {
+					// Single VR/controller input - save as packed value
+					j = combos[0].deviceAndKey;
+				}
+				return;
+			}
+
+			// Multiple inputs (combo) - save as array
+			bool allKeyboardOrMouse = true;
 			for (const auto& c : combos) {
 				if (c.GetDevice() != InputDeviceType::Keyboard && c.GetDevice() != InputDeviceType::Mouse) {
 					allKeyboardOrMouse = false;
@@ -263,7 +284,6 @@ public:
 
 			if (allKeyboardOrMouse) {
 				// For keyboard-only combos, serialize as simple key codes for readability
-				// Values < 0x10000 are assumed to be keyboard on deserialization
 				std::vector<uint32_t> keyCodes;
 				keyCodes.reserve(combos.size());
 				for (const auto& c : combos) {
@@ -288,24 +308,52 @@ public:
 		static void from_json(const nlohmann::json& j, std::vector<InputCombo>& combos)
 		{
 			combos.clear();
-			if (!j.is_array())
-				return;
 
-			for (const auto& item : j) {
-				if (item.is_number_integer()) {
-					uint32_t val = item.get<uint32_t>();
-
-					if (val < 0x10000) {
-						// Simple key code - assume keyboard input
-						combos.push_back(InputCombo::Keyboard(val));
-					} else {
-						// Packed InputCombo with device type in upper bits
-						InputCombo c;
-						c.deviceAndKey = val;
-						combos.push_back(c);
+			if (j.is_array()) {
+				// Array format - multiple inputs in combo
+				for (const auto& item : j) {
+					if (item.is_number_integer()) {
+						uint32_t val = item.get<uint32_t>();
+						parseAndAdd(val, combos);
 					}
 				}
+			} else if (j.is_number_integer()) {
+				// Single integer format (backward compatibility)
+				uint32_t val = j.get<uint32_t>();
+				parseAndAdd(val, combos);
+			}
+			// Other types (null, string, etc.) leave combos empty
+		}
+
+	private:
+		static void parseAndAdd(uint32_t val, std::vector<InputCombo>& combos)
+		{
+			if (val == 0) {
+				// 0 means unbound, don't add anything
+				return;
+			}
+
+			if (val < 0x10000) {
+				// Simple key code - assume keyboard input
+				combos.push_back(InputCombo::Keyboard(val));
+			} else {
+				// Packed InputCombo with device type in upper bits
+				InputCombo c;
+				c.deviceAndKey = val;
+				combos.push_back(c);
 			}
 		}
 	};
 };
+
+// ADL-discoverable JSON serialization for std::vector<InputCombo>
+// These are picked up automatically by nlohmann_json when serializing/deserializing
+inline void to_json(nlohmann::json& j, const std::vector<InputCombo>& combos)
+{
+	InputCombo::ComboList::to_json(j, combos);
+}
+
+inline void from_json(const nlohmann::json& j, std::vector<InputCombo>& combos)
+{
+	InputCombo::ComboList::from_json(j, combos);
+}
