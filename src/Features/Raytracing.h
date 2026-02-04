@@ -23,6 +23,7 @@
 #include "Features/Raytracing/Core/Instance.h"
 #include "Features/Raytracing/Core/Model.h"
 #include "Features/Raytracing/Core/Shape.h"
+#include "Features/Raytracing/Core/DismemberReference.h"
 
 #include "Features/Raytracing/Helpers/ModelSpaceToTangent.h"
 
@@ -244,9 +245,6 @@ struct Raytracing : public OverlayFeature
 	void UpdateBLASes();
 
 	void UpdateShadowInstances();
-
-	void AddInstances();
-	void ClearInstances();
 
 	void DeviceRemovedHandler();
 
@@ -653,6 +651,9 @@ struct Raytracing : public OverlayFeature
 	eastl::shared_ptr<DefaultTexture> defaultBlackTexture = nullptr;
 	eastl::shared_ptr<DefaultTexture> defaultRMAOSTexture = nullptr;
 	eastl::shared_ptr<DefaultTexture> defaultDetailTexture = nullptr;
+
+	// TODO: Add cleanup for elements of this vector
+	eastl::unordered_map<RE::BSDismemberSkinInstance*, eastl::vector<DismemberReference>> dismemberReferences;
 
 	// We'll group trishapes by their parent nodes, hopefully trishapes don't move on their own
 	eastl::unordered_map<eastl::string, eastl::unique_ptr<Model>> models;
@@ -1370,6 +1371,26 @@ struct Raytracing : public OverlayFeature
 			static inline REL::Relocation<decltype(thunk)> func;
 		};
 
+		struct BSDismemberSkinInstance_UpdateDismemberPartion
+		{
+			static void thunk(RE::BSDismemberSkinInstance* oThis, std::uint16_t a_slot, bool a_enable)
+			{
+				func(oThis, a_slot, a_enable);
+
+				auto& dismemberReferences = globals::features::raytracing.dismemberReferences;
+
+				if (auto it = dismemberReferences.find(oThis); it != dismemberReferences.end()) {
+					for (DismemberReference& dismemberRef : it->second) {
+						if (a_slot == dismemberRef.slot) {
+							dismemberRef.shape->UpdateDismember(a_enable);
+							break;
+						}
+					}
+				}
+			}
+			static inline REL::Relocation<decltype(thunk)> func;
+		};
+		
 		static void Install()
 		{
 			// Creates model and instances for all forms
@@ -1383,6 +1404,8 @@ struct Raytracing : public OverlayFeature
 			
 			// Makes Player FaceGenTint RenderTarget shareable
 			stl::write_thunk_call<CreateRenderTarget_PlayerFaceGenTint>(REL::RelocationID(100458, 107175).address() + REL::Relocate(0x606, 0x605, 0x0));
+
+			stl::detour_thunk<BSDismemberSkinInstance_UpdateDismemberPartion>(REL::RelocationID(15576, 15753));
 
 			//stl::detour_thunk<TESObjectREFR_Enable>(REL::RelocationID(19373, 19800));
 			//stl::write_vfunc<0x89, TESObjectREFR_Disable>(RE::VTABLE_TESObjectREFR[0]);

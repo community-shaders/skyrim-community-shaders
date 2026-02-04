@@ -150,20 +150,9 @@ void Model::BuildBLAS(ID3D12GraphicsCommandList4* commandList)
 		geometryDescs[i] = shapes[i]->GeometryDesc();
 	}
 
-	//const bool updatable = (shapeflags & Shape::Flags::Skinned) || (shapeflags & Shape::Flags::Dynamic);
-
-	const bool updatable = true;
-
-	D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAGS buildFlags = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_NONE;
-
-	if (updatable)
-		buildFlags = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_ALLOW_UPDATE | D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_PREFER_FAST_BUILD;
-	else
-		buildFlags = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_ALLOW_COMPACTION | D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_PREFER_FAST_TRACE;
-
 	D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_INPUTS inputs = {
 		.Type = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL,
-		.Flags = buildFlags,
+		.Flags = BuildFlags(),
 		.NumDescs = static_cast<uint>(geometryDescs.size()),
 		.DescsLayout = D3D12_ELEMENTS_LAYOUT_ARRAY,
 		.pGeometryDescs = geometryDescs.data()
@@ -186,8 +175,7 @@ void Model::BuildBLAS(ID3D12GraphicsCommandList4* commandList)
 	auto blasScratchDesc = Raytracing::DEFAULT_HEAP_MA;
 	blasScratchDesc.CustomPool = rt.blasScratchPool.get();
 
-	winrt::com_ptr<D3D12MA::Allocation> scratch = nullptr;
-	DX::ThrowIfFailed(rt.allocator->CreateResource(&blasScratchDesc, &desc, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, nullptr, scratch.put(), IID_NULL, NULL));
+	DX::ThrowIfFailed(rt.allocator->CreateResource(&blasScratchDesc, &desc, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, nullptr, blasScratchBuffer.put(), IID_NULL, NULL));
 
 	auto blasDesc = Raytracing::DEFAULT_HEAP_MA;
 	blasDesc.CustomPool = rt.blasPool.get();
@@ -199,7 +187,7 @@ void Model::BuildBLAS(ID3D12GraphicsCommandList4* commandList)
 		.DestAccelerationStructureData = blasBuffer->GetResource()->GetGPUVirtualAddress(),
 		.Inputs = inputs,
 		.SourceAccelerationStructureData = 0,
-		.ScratchAccelerationStructureData = scratch->GetResource()->GetGPUVirtualAddress()
+		.ScratchAccelerationStructureData = blasScratchBuffer->GetResource()->GetGPUVirtualAddress()
 	};
 
 	commandList->BuildRaytracingAccelerationStructure(&buildDesc, 0, nullptr);
@@ -209,16 +197,11 @@ void Model::BuildBLAS(ID3D12GraphicsCommandList4* commandList)
 
 	const auto& asBarrier = CD3DX12_RESOURCE_BARRIER::UAV(blasBuffer->GetResource());
 	commandList->ResourceBarrier(1, &asBarrier);
-
-	if (updatable)
-		blasScratchBuffer = std::move(scratch);
-	else
-		rt.tempGPUData.emplace_back(std::move(scratch), rt.fenceValue);
 }
 
 bool Model::UpdateBLAS(ID3D12GraphicsCommandList4* commandList)
 {
-	const bool update = (flags & Flags::BLASUpdate); 
+	bool update = (flags & Flags::BLASUpdate); 
 	const bool rebuild = (flags & Flags::BLASRebuild);
 
 	if (!update && !rebuild)
@@ -230,6 +213,16 @@ bool Model::UpdateBLAS(ID3D12GraphicsCommandList4* commandList)
 	if (!BLASUpdateExecuted())
 		return false;
 	
+	if (update && !((shapeflags & Shape::Flags::Skinned) || (shapeflags & Shape::Flags::Dynamic))) {
+		logger::critical("[RT] Model::UpdateBLAS - Only Skinned and Dynamic geometry should get the 'BLASUpdate' flag - 0x{:08X}.", reinterpret_cast<uintptr_t>(this));
+
+		update = false;
+		flags &= ~Flags::BLASUpdate;
+
+		if (!rebuild)
+			return false;
+	}
+
 	static eastl::vector<D3D12_RAYTRACING_GEOMETRY_DESC> geometryDescs;
 	geometryDescs.clear();
 
@@ -248,7 +241,7 @@ bool Model::UpdateBLAS(ID3D12GraphicsCommandList4* commandList)
 
 	D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_INPUTS inputs = {
 		.Type = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL,
-		.Flags = rebuild ? D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_PREFER_FAST_BUILD : D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_PREFER_FAST_BUILD | D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_PERFORM_UPDATE,
+		.Flags = UpdateFlags(rebuild),
 		.NumDescs = static_cast<uint>(geometryDescs.size()),
 		.DescsLayout = D3D12_ELEMENTS_LAYOUT_ARRAY,
 		.pGeometryDescs = geometryDescs.data()

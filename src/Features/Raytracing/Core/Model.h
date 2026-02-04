@@ -93,13 +93,30 @@ struct Model
 
 	bool BLASUpdateExecuted() const;
 
+	D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAGS BuildFlags() const
+	{
+		if ((shapeflags & Shape::Flags::Skinned) || (shapeflags & Shape::Flags::Dynamic))
+			return D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_ALLOW_UPDATE | D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_PREFER_FAST_BUILD;
+
+		return D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_ALLOW_COMPACTION | D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_PREFER_FAST_TRACE;
+	}
+
+
+	D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAGS UpdateFlags(bool rebuild) const
+	{
+		if (rebuild)
+			return BuildFlags();
+
+		return D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_PREFER_FAST_BUILD | D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_PERFORM_UPDATE;
+	}
+
 	void BuildBLAS(ID3D12GraphicsCommandList4* commandList);
 
 	bool UpdateBLAS(ID3D12GraphicsCommandList4* commandList);
 
 	bool HideShape([[maybe_unused]]Shape* shape) const
 	{
-		return BLASBuildExecuted() && ((shape->state & Shape::State::Hidden) == Shape::State::Hidden);
+		return BLASBuildExecuted() && ((shape->state & Shape::State::Hidden) != Shape::State::None);
 	}
 
 	void AddRef()

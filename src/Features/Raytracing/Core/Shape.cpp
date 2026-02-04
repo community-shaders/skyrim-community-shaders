@@ -920,13 +920,13 @@ Shape::Flags Shape::Update([[maybe_unused]]bool isRenderUseValid)
 	auto dynamic = flags & Shape::Flags::Dynamic;
 	auto skinned = flags & Shape::Flags::Skinned;
 
-	/*if ((dynamic || skinned) && geometry->GetFlags().any(RE::NiAVObject::Flag::kHidden)) {
+	if ((dynamic || skinned) && geometry->GetFlags().any(RE::NiAVObject::Flag::kHidden)) {
 		state |= State::Hidden;
 	} else if (isRenderUseValid && geometry->GetFlags().none(RE::NiAVObject::Flag::kRenderUse)) {
 		state |= State::Hidden;
 	} else {
 		state &= ~State::Hidden;
-	}*/
+	}
 
 	//logger::info("Shape::Update {} - RenderUseValid: {} - Hidden: {}, Flags: {}", geometry->name, isRenderUseValid, (state & State::Hidden) != 0, GetFlagsString<RE::NiAVObject::Flag>(geometry->GetFlags().underlying()).c_str());
 
@@ -973,7 +973,7 @@ Shape::Flags Shape::Update([[maybe_unused]]bool isRenderUseValid)
 // TODO: Test performance and stability of using a upload heap buffer and keeping it mapped to dynamicData
 bool Shape::UpdateDynamicPosition()
 {
-	if ((flags & Flags::Dynamic) != Flags::Dynamic)
+	if (!(flags & Flags::Dynamic))
 		return false;
 
 	if (!geometry)
@@ -1013,6 +1013,11 @@ void Shape::UpdateUploadDynamicBuffers(ID3D12GraphicsCommandList4* commandList)
 	dynamicPositionBuffer->Upload(commandList);
 }
 
+bool Shape::IsHidden() const
+{
+	return ((state & State::Hidden) != State::None) || ((state & State::DismemberHidden) != State::None);
+}
+
 // TODO: Handle lazy skinned meshes update
 bool Shape::UpdateSkinning()
 {
@@ -1031,6 +1036,14 @@ bool Shape::UpdateSkinning()
 		return false;*/
 
 	return true;
+}
+
+void Shape::UpdateDismember(bool enable)
+{
+	if (enable)
+		state &= ~State::DismemberHidden;
+	else
+		state |= State::DismemberHidden;
 }
 
 ShapeData Shape::GetData() const
