@@ -82,13 +82,13 @@ float RoundedRectSDF(float2 pixelPos, float2 rectMin, float2 rectMax, float radi
     // Center of the rectangle
     float2 rectCenter = (rectMin + rectMax) * 0.5f;
     float2 rectHalfSize = (rectMax - rectMin) * 0.5f;
-    
+
     // Clamp radius to not exceed half the smallest dimension
     radius = min(radius, min(rectHalfSize.x, rectHalfSize.y));
-    
+
     // Distance from center
     float2 p = abs(pixelPos - rectCenter) - rectHalfSize + radius;
-    
+
     // SDF for rounded rectangle
     return length(max(p, 0.0f)) + min(max(p.x, p.y), 0.0f) - radius;
 }
@@ -97,36 +97,31 @@ float4 PS_Main(VS_OUTPUT input) : SV_TARGET
 {
     // Convert UV to pixel coordinates
     float2 pixelPos = input.TexCoord * float2(WindowParams.y, WindowParams.z);
-    
+
     // Get window bounds and corner radius
     float2 rectMin = WindowRect.xy;
     float2 rectMax = WindowRect.zw;
     float cornerRadius = WindowParams.x;
-    
+
     // Calculate signed distance to rounded rectangle
     float sdf = RoundedRectSDF(pixelPos, rectMin, rectMax, cornerRadius);
-    
+
     // Create smooth edge (anti-aliased)
     // Negative = inside, positive outside
     // Use 1.0 pixel transition for smooth edge
     float alpha = saturate(-sdf);
-    
+
     // Early out if completely outside
     if (alpha <= 0.0f)
     {
         discard;
     }
-    
-    // Calculate texel size of the downsampled blur texture
-    // WindowParams.y/z are screen dimensions, blur texture is 1/8th of that
-    float2 blurTexelSize = 8.0f / float2(WindowParams.y, WindowParams.z);
-    
-    // Sample with soft dithering to hide blocky pixels from the downsampled blur
-    float4 blurColor = SampleWithSoftening(input.TexCoord, pixelPos, blurTexelSize);
+    // Sample the blurred texture
+    float4 blurColor = InputTexture.Sample(LinearSampler, input.TexCoord);
     
     // Apply rounded corner mask to alpha
     // The blur strength is applied via blend state, so just use the rounded mask here
     blurColor.a = alpha;
-    
+
     return blurColor;
 }

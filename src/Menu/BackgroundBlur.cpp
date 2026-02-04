@@ -589,7 +589,7 @@ namespace BackgroundBlur
 			// IMPORTANT: Switch back to horizontal shader for UI buffer clearing
 			// The composite shader expects WindowBuffer which isn't set up for this pass
 			context->PSSetShader(horizontalPixelShader.get(), nullptr, 0);
-			
+
 			// Restore scissor to exact window bounds for clearing
 			D3D11_RECT clearScissorRect;
 			clearScissorRect.left = static_cast<LONG>((std::max)(0.0f, menuMin.x));
@@ -597,7 +597,7 @@ namespace BackgroundBlur
 			clearScissorRect.right = static_cast<LONG>((std::min)(static_cast<FLOAT>(sourceDesc.Width), menuMax.x));
 			clearScissorRect.bottom = static_cast<LONG>((std::min)(static_cast<FLOAT>(sourceDesc.Height), menuMax.y));
 			context->RSSetScissorRects(1, &clearScissorRect);
-			
+
 			// Draw transparent black over just the scissor area to clear the HUD there
 			context->OMSetRenderTargets(1, &uiBufferRTV, nullptr);
 			// Use opaque blend to overwrite
