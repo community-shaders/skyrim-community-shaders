@@ -1315,9 +1315,11 @@ PS_OUTPUT main(PS_INPUT input)
 			fogColor = exponentialHeightFog.xyz;
 			fogDistanceFactor = exponentialHeightFog.w;
 		}
+		else
 #						endif
+	fogColor *= PosAdjust[eyeIndex].w;
 
-	float3 finalColor = lerp(finalColorPreFog, fogColor * PosAdjust[eyeIndex].w, fogDistanceFactor);
+	float3 finalColor = lerp(finalColorPreFog, fogColor, fogDistanceFactor);
 
 #						if defined(WETNESS_EFFECTS) && defined(DEBUG_WETNESS_EFFECTS)
 	// DEBUG MODE: Override water color with debug visualization
@@ -1353,9 +1355,11 @@ PS_OUTPUT main(PS_INPUT input)
 		preFogColor = exponentialHeightFog.xyz;
 		fogDistanceFactor = exponentialHeightFog.w;
 	}
+	else
 #						endif
+	preFogColor *= PosAdjust[eyeIndex].w;
 
-	finalColorPreFog = lerp(finalColorPreFog, preFogColor * PosAdjust[eyeIndex].w, fogDistanceFactor);
+	finalColorPreFog = lerp(finalColorPreFog, preFogColor, fogDistanceFactor);
 
 	float3 refractionColor = diffuseOutput.refractionColor;
 
