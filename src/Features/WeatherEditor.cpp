@@ -83,21 +83,23 @@ void WeatherEditor::DrawSettings()
 
 void WeatherEditor::Prepass()
 {
-	// Handle weather acceleration - advance weather percentage with user-controlled speed
+	// Handle weather acceleration - use SetWeather with accelerate=true to properly advance engine transition
 	if (s_isAcceleratingWeatherChange) {
 		auto sky = globals::game::sky;
-		if (sky) {
+		if (sky && sky->currentWeather && s_cachedLastWeather) {
 			// Get actual frame time in seconds from game
 			float deltaTime = *globals::game::deltaTime;
 			s_accelerationTime += deltaTime;
 
-			// Advance weather percentage at configured rate
-			float newPct = std::min(s_accelerationTime * s_accelerationRate, 1.0f);
-
-			sky->currentWeatherPct = newPct;
+			// Call SetWeather with accelerate multiple times based on acceleration rate
+			// Each call advances the transition, scaled by user's desired speed
+			int accelerateCalls = static_cast<int>(deltaTime * s_accelerationRate * 60.0f);
+			for (int i = 0; i < accelerateCalls && sky->currentWeatherPct < 1.0f; ++i) {
+				sky->SetWeather(sky->currentWeather, true, true);
+			}
 
 			// Stop acceleration when complete
-			if (newPct >= 1.0f) {
+			if (sky->currentWeatherPct >= 1.0f) {
 				s_isAcceleratingWeatherChange = false;
 				s_accelerationTime = 0.0f;
 			}
@@ -223,6 +225,7 @@ void WeatherEditor::DrawWeatherStatusPanel()
 				currentWeathers.currentWeather->GetFormEditorID() :
 				std::format("{:08X}", currentWeathers.currentWeather->GetFormID()).c_str());
 
+		// Always reserve space for transition info to prevent UI shifting
 		if (currentWeathers.lastWeather && currentWeathers.lerpFactor < 1.0f) {
 			ImGui::Text("Transitioning From: %s",
 				currentWeathers.lastWeather->GetFormEditorID() ?
@@ -232,7 +235,9 @@ void WeatherEditor::DrawWeatherStatusPanel()
 			ImGui::ProgressBar(currentWeathers.lerpFactor, ImVec2(-1, 0),
 				std::format("Transition: {:.1f}%%", currentWeathers.lerpFactor * 100.0f).c_str());
 		} else {
-			ImGui::Text("Transition: Complete (100%%)");
+			// Reserve space with blank text and invisible progress bar
+			ImGui::Text(" ");
+			ImGui::Dummy(ImVec2(-1, ImGui::GetFrameHeight()));
 		}
 
 		// Show if weather has custom settings
@@ -682,7 +687,7 @@ void WeatherEditor::RenderWeatherControls(RE::Sky* sky)
 				sky->SetWeather(selectedWeather, true, false);
 
 				if (s_accelerateWeatherChange) {
-					// Start fast acceleration (20% per second)
+					// Start weather change with normal transition, then accelerate it via Prepass
 					s_isAcceleratingWeatherChange = true;
 					s_accelerationTime = 0.0f;
 				}
