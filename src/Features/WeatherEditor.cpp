@@ -88,6 +88,39 @@ void WeatherEditor::Prepass()
 			sky->ForceWeather(lockedWeather, false);
 		}
 	}
+
+	// Handle sleep/wait menu to prevent freezing when time is paused
+	auto ui = RE::UI::GetSingleton();
+	auto calendar = RE::Calendar::GetSingleton();
+	if (ui && calendar && calendar->timeScale) {
+		bool sleepWaitMenuOpen = ui->IsMenuOpen("Sleep/Wait Menu");
+		static bool s_wasRestoredForWait = false;
+		static bool s_wasPausedBeforeWait = false;
+		
+		if (sleepWaitMenuOpen && calendar->timeScale->value == 0.0f) {
+			// Sleep/wait menu is open and time is paused - restore time scale temporarily
+			if (!s_wasRestoredForWait) {
+				// First frame of wait menu while paused - restore time
+				// Time was paused (regardless of which method), so we need to restore after wait
+				s_wasPausedBeforeWait = true;
+				
+				// Check if paused via EditorWindow or main time controls
+				if (editorWindow->IsTimePaused()) {
+					editorWindow->ResumeTime();
+				} else {
+					calendar->timeScale->value = 20.0f;  // Use vanilla as default
+				}
+				s_wasRestoredForWait = true;
+			}
+		} else if (!sleepWaitMenuOpen && s_wasRestoredForWait) {
+			// Menu closed - restore pause state if it was paused before wait
+			if (s_wasPausedBeforeWait && !editorWindow->IsTimePaused()) {
+				editorWindow->PauseTime();
+			}
+			s_wasRestoredForWait = false;
+			s_wasPausedBeforeWait = false;
+		}
+	}
 }
 
 void WeatherEditor::DrawWeatherPickerSection()
@@ -203,11 +236,18 @@ void WeatherEditor::DrawTimeControls()
 		static float s_savedTimeScale = 20.0f;
 		static constexpr float s_vanillaTimeScale = 20.0f;
 		
-		// Check if time is actually paused (timeScale is 0)
-		if (calendar->timeScale->value == 0.0f && !s_isTimePaused) {
-			s_isTimePaused = true;
-		} else if (calendar->timeScale->value > 0.0f && s_isTimePaused) {
-			s_isTimePaused = false;
+		// Check if sleep/wait menu is open - don't sync pause state during wait
+		auto ui = RE::UI::GetSingleton();
+		bool sleepWaitMenuOpen = ui && ui->IsMenuOpen("Sleep/Wait Menu");
+		
+		// Check if time is actually paused (timeScale is 0), but ignore during sleep/wait
+		if (!sleepWaitMenuOpen) {
+			if (calendar->timeScale->value == 0.0f && !s_isTimePaused) {
+				s_isTimePaused = true;
+				s_savedTimeScale = 20.0f;  // Default to vanilla if externally paused
+			} else if (calendar->timeScale->value > 0.0f && s_isTimePaused) {
+				s_isTimePaused = false;
+			}
 		}
 
 		if (ImGui::Button(s_isTimePaused ? "Resume Time" : "Pause Time", ImVec2(120, 0))) {
