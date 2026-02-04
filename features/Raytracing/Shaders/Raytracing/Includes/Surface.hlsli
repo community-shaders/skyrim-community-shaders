@@ -250,9 +250,9 @@ struct Surface
                 SubsurfaceData.Anisotropy = 0.0f;
 
                 // Typical skin values
-                SubsurfaceData.ScatteringColor = float3(1,0.8,0.6);
+                SubsurfaceData.ScatteringColor = float3(4.820f, 1.690f, 1.090f);
                 SubsurfaceData.TransmissionColor = Albedo;
-                SubsurfaceData.Scale = 4.f;
+                SubsurfaceData.Scale = 1.f;
             }
 
             [branch]

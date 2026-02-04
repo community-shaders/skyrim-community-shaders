@@ -43,8 +43,8 @@ struct HairChiangBSDF
     void __init(float3 wi, Surface surface)
     {
         hairMaterialData.baseColor = surface.DiffuseAlbedo * surface.DiffuseAlbedo;
-        hairMaterialData.longitudinalRoughness = clamp(surface.Roughness * 0.8f, 0.3f, 0.7f);
-        hairMaterialData.azimuthalRoughness = clamp(surface.Roughness, 0.3f, 0.7f);
+        hairMaterialData.longitudinalRoughness = surface.Roughness;
+        hairMaterialData.azimuthalRoughness = surface.Roughness;
 
         hairMaterialData.ior = 1.55f; // Typical value for human hair
         hairMaterialData.eta = 1.0f / 1.55f;
