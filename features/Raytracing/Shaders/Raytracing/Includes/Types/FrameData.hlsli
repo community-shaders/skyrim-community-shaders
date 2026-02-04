@@ -52,10 +52,14 @@ alignas(16)
     float TexLODBias;
     float CloudOpacity;
     int SSSSampleCount;
-    int SSSTransmissionBsdfSampleCount;
-    int SSSTransmissionPerBsdfScatteringSampleCount;
+    float SSSMaxSampleRadius;
+    BOOL SSSMaterialOverride;
     BOOL EnableSssTransmission;
-    float3x4 Pad0;
+    float3 OverrideSSSTransmissionColor;
+    float OverrideSSSScale;
+    float3 OverrideSSSScatteringColor;
+    float OverrideSSSAnisotropy;
+    float4 Pad0;
     float4x4 Pad1;
     float4x4 Pad2;
     float3x4 Pad3;

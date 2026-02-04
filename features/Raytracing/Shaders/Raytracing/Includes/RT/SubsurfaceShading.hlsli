@@ -13,6 +13,9 @@
 
 #define USE_DIFFUSE_MEAN_FREE_PATH 1
 
+#define SSS_TRANSMISSION_BSDF_SAMPLE_COUNT 1
+#define SSS_TRANSMISSION_PER_BSDF_SCATTERING_SAMPLE_COUNT 1
+
 #include "Raytracing/Includes/RT/Shading.hlsli"
 #include "Raytracing/Includes/RT/Rays.hlsli"
 
@@ -34,7 +37,7 @@ float3 evalSingleScatteringTransmission(
 
     const SubsurfaceMaterialCoefficients sssMaterialCoefficients = ComputeSubsurfaceMaterialCoefficients(subsurfaceMaterialData);
 
-    for (int bsdfSampleIndex = 0; bsdfSampleIndex < Frame.SSSTransmissionBsdfSampleCount; ++bsdfSampleIndex)
+    for (int bsdfSampleIndex = 0; bsdfSampleIndex < SSS_TRANSMISSION_BSDF_SAMPLE_COUNT; ++bsdfSampleIndex)
     {
         // Trace rays for diffuse transmittance into the volume
         const float3 refractedRayDirection = CalculateRefractionRay(subsurfaceInteraction, float2(Random(randomSeed), Random(randomSeed)));
@@ -104,11 +107,11 @@ float3 evalSingleScatteringTransmission(
         }
 
         // Trace rays along the scattering ray
-        const float stepSize = thickness / (Frame.SSSTransmissionPerBsdfScatteringSampleCount + 1);
+        const float stepSize = thickness / (SSS_TRANSMISSION_PER_BSDF_SCATTERING_SAMPLE_COUNT + 1);
         float accumulatedT = 0.0f;
         float3 scatteringThroughput = float3(0.0f, 0.0f, 0.0f);
 
-        for (int sampleIndex = 0; sampleIndex < Frame.SSSTransmissionPerBsdfScatteringSampleCount; ++sampleIndex)
+        for (int sampleIndex = 0; sampleIndex < SSS_TRANSMISSION_PER_BSDF_SCATTERING_SAMPLE_COUNT; ++sampleIndex)
         {
             // TODO: Important Sampling along the scattering ray direction
             const float currentT = accumulatedT + stepSize;
@@ -180,10 +183,10 @@ float3 evalSingleScatteringTransmission(
             }
         }
 
-        radiance += scatteringThroughput / Frame.SSSTransmissionPerBsdfScatteringSampleCount;
+        radiance += scatteringThroughput / SSS_TRANSMISSION_PER_BSDF_SCATTERING_SAMPLE_COUNT;
     }
 
-    radiance /= Frame.SSSTransmissionBsdfSampleCount;
+    radiance /= SSS_TRANSMISSION_BSDF_SAMPLE_COUNT;
 
     return radiance;
 }
@@ -202,6 +205,13 @@ float3 EvaluateSubsurfaceNEE(
     subsurfaceMaterialData.scatteringColor = surface.SubsurfaceData.ScatteringColor;
     subsurfaceMaterialData.scale = surface.SubsurfaceData.Scale;
     subsurfaceMaterialData.g = surface.SubsurfaceData.Anisotropy;
+
+    if (Frame.SSSMaterialOverride) {
+        subsurfaceMaterialData.transmissionColor = Frame.OverrideSSSTransmissionColor;
+        subsurfaceMaterialData.scatteringColor = Frame.OverrideSSSScatteringColor;
+        subsurfaceMaterialData.scale = Frame.OverrideSSSScale;
+        subsurfaceMaterialData.g = Frame.OverrideSSSAnisotropy;
+    }
 
     const float3 geometryNormal = surface.FaceNormal;
     const float3 shadingNormal = surface.Normal;
@@ -247,7 +257,6 @@ float3 EvaluateSubsurfaceNEE(
         }
 
         uint effectiveSample = 0;
-        float maxRadius = 1.0f;
 
         for (uint sssSampleIndex = 0; sssSampleIndex < Frame.SSSSampleCount; ++sssSampleIndex)
         {
@@ -256,8 +265,8 @@ float3 EvaluateSubsurfaceNEE(
             const float2 rand2 = float2(Random(randomSeed), Random(randomSeed));
             EvalBurleyDiffusionProfile(subsurfaceMaterialData,
                                       subsurfaceInteraction,
-                                      maxRadius,
-                                      Frame.EnableSssTransmission,
+                                      Frame.SSSMaxSampleRadius,
+                                      Frame.EnableSssTransmission && false, // disable normalization
                                       rand2,
                                       subsurfaceSample);
 

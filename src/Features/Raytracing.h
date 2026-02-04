@@ -504,12 +504,18 @@ struct Raytracing : public OverlayFeature
 		LightEvalMode LightEvalMode = LightEvalMode::BRDF;
 		LightingMode LightingMode = LightingMode::PBR;
 
+		bool EnableSubsurfaceScattering = true;
 		bool EnableSssTransmission = true;
+		bool SSSMaterialOverride = false;
 		int SSSSampleCount = 1;
-		int SSSTransmissionBsdfSampleCount = 1;
-		int SSSTransmissionPerBsdfScatteringSampleCount = 1;
+		float SSSMaxSampleRadius = 1.0f;
 
-		NLOHMANN_DEFINE_TYPE_INTRUSIVE_WITH_DEFAULT(AdvancedSettings, Culling, VariableUpdateRate, RIS, ReSTIR, GGXEnergyConservation, UseHairChiangBSDF, DiffuseBRDF, LightEvalMode, LightingMode, EnableSssTransmission, SSSTransmissionBsdfSampleCount, SSSTransmissionPerBsdfScatteringSampleCount)
+		float3 OverrideSSSTransmissionColor = float3(1.0f, 0.735f, 0.612f);
+		float3 OverrideSSSScatteringColor = float3(1.0f, 1.0f, 1.0f);
+		float OverrideSSSScale = 40.0f;
+		float OverrideSSSAnisotropy = -0.5f;
+
+		NLOHMANN_DEFINE_TYPE_INTRUSIVE_WITH_DEFAULT(AdvancedSettings, Culling, VariableUpdateRate, RIS, ReSTIR, GGXEnergyConservation, UseHairChiangBSDF, DiffuseBRDF, LightEvalMode, LightingMode, EnableSubsurfaceScattering, EnableSssTransmission, SSSMaterialOverride, SSSSampleCount, SSSMaxSampleRadius, OverrideSSSTransmissionColor, OverrideSSSScatteringColor, OverrideSSSScale, OverrideSSSAnisotropy)
 	};
 
 	////////////////////////////////////////////////// Feature Specific Data

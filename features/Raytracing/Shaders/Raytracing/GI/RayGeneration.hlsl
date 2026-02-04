@@ -134,11 +134,13 @@ void main()
 
     // Direct Light for PT
     float3 direct = sourceSurface.Emissive;
+#ifdef SUBSURFACE_SCATTERING
     if (sourceSurface.SubsurfaceData.HasSubsurface != 0) {
         direct += EvaluateSubsurfaceNEE(sourceSurface, sourceBRDFContext, sourceMaterial, sourceInstance, sourcePayload, sourceRayCone, randomSeed);
         isSssPath = true;
     }
     else
+#endif
         direct += EvaluateDirectRadiance(sourceMaterial, sourceSurface, sourceBRDFContext, sourceInstance, sourceBSDF, randomSeed);
 #else
     const float2 uv = float2(idx + 0.5f) / size;
@@ -487,11 +489,13 @@ void main()
             bsdf = StandardBSDF::make(surface, isEnter);
 
             float3 directRadiance = 0.0f;
+#ifdef SUBSURFACE_SCATTERING
             if (surface.SubsurfaceData.HasSubsurface != 0 && !isSssPath) {
                 directRadiance += EvaluateSubsurfaceNEE(surface, brdfContext, material, instance, payload, rayCone, randomSeed);
                 isSssPath = true;
             }
             else
+#endif
                 directRadiance += EvaluateDirectRadiance(material, surface, brdfContext, instance, bsdf, randomSeed);
             sampleRadiance += directRadiance * throughput;
 
