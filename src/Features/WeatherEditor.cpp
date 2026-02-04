@@ -87,8 +87,8 @@ void WeatherEditor::Prepass()
 	if (s_isAcceleratingWeatherChange) {
 		auto sky = globals::game::sky;
 		if (sky) {
-			// Get actual frame time in seconds (State tracks it in milliseconds)
-			float deltaTime = globals::state->GetFrameTime() * 0.001f;  // Convert ms to seconds
+			// Get actual frame time in seconds from game
+			float deltaTime = *globals::game::deltaTime;
 			s_accelerationTime += deltaTime;
 
 			// Advance weather percentage at configured rate
