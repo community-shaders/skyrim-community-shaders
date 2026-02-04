@@ -742,6 +742,7 @@ void WeatherEditor::RenderWeatherInformationDisplay(RE::Sky* sky, bool showInter
 
 		ImGui::EndTable();
 	}
+}
 
 void WeatherEditor::RenderCoreWeatherDetails(bool showInteractiveElements)
 {
