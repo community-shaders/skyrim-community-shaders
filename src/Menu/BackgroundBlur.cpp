@@ -34,7 +34,9 @@ namespace BackgroundBlur
 		winrt::com_ptr<ID3D11VertexShader> vertexShader;
 		winrt::com_ptr<ID3D11PixelShader> horizontalPixelShader;
 		winrt::com_ptr<ID3D11PixelShader> verticalPixelShader;
+		winrt::com_ptr<ID3D11PixelShader> compositePixelShader;  // For rounded corner compositing
 		winrt::com_ptr<ID3D11Buffer> constantBuffer;
+		winrt::com_ptr<ID3D11Buffer> windowConstantBuffer;  // For window rect and corner radius
 		winrt::com_ptr<ID3D11SamplerState> samplerState;
 		winrt::com_ptr<ID3D11BlendState> blendState;
 		winrt::com_ptr<ID3D11RasterizerState> scissorRasterizerState;
@@ -79,6 +81,13 @@ namespace BackgroundBlur
 			int blurParams[4];   // x = samples, y = unused, z = unused, w = unused
 		};
 
+		// Window constants for rounded corner compositing
+		struct WindowConstants
+		{
+			float windowRect[4];    // x = minX, y = minY, z = maxX, w = maxY (in pixels)
+			float windowParams[4];  // x = cornerRadius, y = screenWidth, z = screenHeight, w = unused
+		};
+
 	}  // anonymous namespace
 
 	bool Initialize()
@@ -119,6 +128,14 @@ namespace BackgroundBlur
 			return false;
 		}
 
+		// Compile composite pixel shader (for rounded corner compositing)
+		compositePixelShader.attach(static_cast<ID3D11PixelShader*>(Util::CompileShader(L"Data\\Shaders\\Menu\\BackgroundBlurComposite.hlsl", {}, "ps_5_0", "PS_Main")));
+		if (!compositePixelShader) {
+			logger::error("Failed to compile composite blur pixel shader");
+			initializationFailed = true;
+			return false;
+		}
+
 		// Create constant buffer
 		D3D11_BUFFER_DESC bufferDesc = {};
 		bufferDesc.Usage = D3D11_USAGE_DEFAULT;
@@ -128,6 +145,19 @@ namespace BackgroundBlur
 		HRESULT hr = device->CreateBuffer(&bufferDesc, nullptr, constantBuffer.put());
 		if (FAILED(hr)) {
 			logger::error("Failed to create blur constant buffer");
+			initializationFailed = true;
+			return false;
+		}
+
+		// Create window constant buffer (for rounded corner parameters)
+		D3D11_BUFFER_DESC windowBufferDesc = {};
+		windowBufferDesc.Usage = D3D11_USAGE_DEFAULT;
+		windowBufferDesc.ByteWidth = sizeof(WindowConstants);
+		windowBufferDesc.BindFlags = D3D11_BIND_CONSTANT_BUFFER;
+
+		hr = device->CreateBuffer(&windowBufferDesc, nullptr, windowConstantBuffer.put());
+		if (FAILED(hr)) {
+			logger::error("Failed to create window constant buffer");
 			initializationFailed = true;
 			return false;
 		}
@@ -378,7 +408,7 @@ namespace BackgroundBlur
 		downsampledHeight = dsHeight;
 	}
 
-	void PerformBlur(ID3D11Texture2D* sourceTexture, ID3D11RenderTargetView* targetRTV, ImVec2 menuMin, ImVec2 menuMax, ID3D11ShaderResourceView* uiBufferSRV = nullptr, ID3D11RenderTargetView* uiBufferRTV = nullptr)
+	void PerformBlur(ID3D11Texture2D* sourceTexture, ID3D11RenderTargetView* targetRTV, ImVec2 menuMin, ImVec2 menuMax, float cornerRadius, ID3D11ShaderResourceView* uiBufferSRV = nullptr, ID3D11RenderTargetView* uiBufferRTV = nullptr)
 	{
 		std::lock_guard<std::mutex> lock(resourceMutex);
 
@@ -509,15 +539,15 @@ namespace BackgroundBlur
 		context->Draw(3, 0);
 		context->PSSetShaderResources(0, 1, &nullSRV);
 
-		// Final composition: upscale from quarter-res with scissor test
-		// Bilinear sampler smooths the upscale automatically
+		// Final composition: upscale from quarter-res with rounded corner mask
 		context->RSSetViewports(1, &originalViewport);
 
+		// Expand scissor rect slightly for anti-aliased rounded corner edges
 		D3D11_RECT scissorRect;
-		scissorRect.left = static_cast<LONG>((std::max)(0.0f, menuMin.x));
-		scissorRect.top = static_cast<LONG>((std::max)(0.0f, menuMin.y));
-		scissorRect.right = static_cast<LONG>((std::min)(static_cast<FLOAT>(sourceDesc.Width), menuMax.x));
-		scissorRect.bottom = static_cast<LONG>((std::min)(static_cast<FLOAT>(sourceDesc.Height), menuMax.y));
+		scissorRect.left = static_cast<LONG>((std::max)(0.0f, menuMin.x - 2.0f));
+		scissorRect.top = static_cast<LONG>((std::max)(0.0f, menuMin.y - 2.0f));
+		scissorRect.right = static_cast<LONG>((std::min)(static_cast<FLOAT>(sourceDesc.Width), menuMax.x + 2.0f));
+		scissorRect.bottom = static_cast<LONG>((std::min)(static_cast<FLOAT>(sourceDesc.Height), menuMax.y + 2.0f));
 
 		context->RSSetState(scissorRasterizerState.get());
 		context->RSSetScissorRects(1, &scissorRect);
@@ -525,6 +555,27 @@ namespace BackgroundBlur
 		context->OMSetRenderTargets(1, &targetRTV, nullptr);
 		float blendFactor[4] = { 1.0f, 1.0f, 1.0f, BLUR_INTENSITY * 0.8f };
 		context->OMSetBlendState(blendState.get(), blendFactor, 0xFFFFFFFF);
+
+		// Use composite shader with rounded corner mask if available, otherwise fallback
+		if (compositePixelShader && windowConstantBuffer) {
+			// Set up window constants for rounded corner compositing
+			WindowConstants windowConstants = {};
+			windowConstants.windowRect[0] = menuMin.x;
+			windowConstants.windowRect[1] = menuMin.y;
+			windowConstants.windowRect[2] = menuMax.x;
+			windowConstants.windowRect[3] = menuMax.y;
+			windowConstants.windowParams[0] = cornerRadius;
+			windowConstants.windowParams[1] = static_cast<float>(sourceDesc.Width);
+			windowConstants.windowParams[2] = static_cast<float>(sourceDesc.Height);
+			windowConstants.windowParams[3] = 0.0f;
+			context->UpdateSubresource(windowConstantBuffer.get(), 0, nullptr, &windowConstants, 0, 0);
+
+			context->PSSetShader(compositePixelShader.get(), nullptr, 0);
+			auto windowConstantBufferPtr = windowConstantBuffer.get();
+			context->PSSetConstantBuffers(0, 1, &constantBufferPtr);
+			context->PSSetConstantBuffers(1, 1, &windowConstantBufferPtr);
+		}
+		// Note: if composite shader not available, vertical shader is still set from blur pass
 
 		// Use blurred quarter-res texture, bilinear filtering upscales smoothly
 		auto srv2Ptr = blurSRV2.get();
@@ -535,11 +586,22 @@ namespace BackgroundBlur
 		// Clear the UI buffer in the scissor area so the HUD doesn't draw on top of our blur
 		// The HUD outside the menu area remains visible
 		if (uiBufferRTV && clearSRV) {
+			// IMPORTANT: Switch back to horizontal shader for UI buffer clearing
+			// The composite shader expects WindowBuffer which isn't set up for this pass
+			context->PSSetShader(horizontalPixelShader.get(), nullptr, 0);
+			
+			// Restore scissor to exact window bounds for clearing
+			D3D11_RECT clearScissorRect;
+			clearScissorRect.left = static_cast<LONG>((std::max)(0.0f, menuMin.x));
+			clearScissorRect.top = static_cast<LONG>((std::max)(0.0f, menuMin.y));
+			clearScissorRect.right = static_cast<LONG>((std::min)(static_cast<FLOAT>(sourceDesc.Width), menuMax.x));
+			clearScissorRect.bottom = static_cast<LONG>((std::min)(static_cast<FLOAT>(sourceDesc.Height), menuMax.y));
+			context->RSSetScissorRects(1, &clearScissorRect);
+			
 			// Draw transparent black over just the scissor area to clear the HUD there
 			context->OMSetRenderTargets(1, &uiBufferRTV, nullptr);
 			// Use opaque blend to overwrite
 			context->OMSetBlendState(nullptr, nullptr, 0xFFFFFFFF);
-			// Scissor is still set from above
 			// Draw the 1x1 transparent black texture (shader will sample and output transparent)
 			auto clearSRVPtr = clearSRV.get();
 			context->PSSetShaderResources(0, 1, &clearSRVPtr);
@@ -572,7 +634,9 @@ namespace BackgroundBlur
 		vertexShader = nullptr;
 		horizontalPixelShader = nullptr;
 		verticalPixelShader = nullptr;
+		compositePixelShader = nullptr;
 		constantBuffer = nullptr;
+		windowConstantBuffer = nullptr;
 		samplerState = nullptr;
 		blendState = nullptr;
 		compositeBlendState = nullptr;
@@ -752,9 +816,12 @@ namespace BackgroundBlur
 			ImVec2 windowMin = windowRect.Min;
 			ImVec2 windowMax = windowRect.Max;
 
-			// Perform blur for this window area
+			// Get window corner rounding from the window's style
+			float cornerRadius = window->WindowRounding;
+
+			// Perform blur for this window area with rounded corners
 			// Pass UI buffer SRV/RTV for compositing and clearing during upscaling gameplay
-			PerformBlur(currentTexture, currentRTV, windowMin, windowMax, uiBufferSRV, uiBufferRTV);
+			PerformBlur(currentTexture, currentRTV, windowMin, windowMax, cornerRadius, uiBufferSRV, uiBufferRTV);
 		}
 
 		// Cleanup

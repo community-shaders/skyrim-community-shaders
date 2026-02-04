@@ -29,13 +29,14 @@ namespace BackgroundBlur
 	void CreateBlurTextures(UINT width, UINT height, DXGI_FORMAT format);
 
 	/**
-	 * @brief Performs two-pass Gaussian blur on source texture
+	 * @brief Performs two-pass Gaussian blur on source texture with rounded corner support
 	 * @param sourceTexture Input texture to blur
 	 * @param targetRTV Output render target
-	 * @param menuMin Top-left corner of menu area (for scissor test)
-	 * @param menuMax Bottom-right corner of menu area (for scissor test)
+	 * @param menuMin Top-left corner of menu area
+	 * @param menuMax Bottom-right corner of menu area
+	 * @param cornerRadius Corner radius for rounded rectangle mask
 	 */
-	void PerformBlur(ID3D11Texture2D* sourceTexture, ID3D11RenderTargetView* targetRTV, ImVec2 menuMin, ImVec2 menuMax);
+	void PerformBlur(ID3D11Texture2D* sourceTexture, ID3D11RenderTargetView* targetRTV, ImVec2 menuMin, ImVec2 menuMax, float cornerRadius);
 
 	/**
 	 * @brief Cleans up all blur resources
