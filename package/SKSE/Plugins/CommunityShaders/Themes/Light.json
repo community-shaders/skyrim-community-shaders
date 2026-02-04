@@ -31,6 +31,12 @@
                 "Style": "Light",
                 "File": "IBMPlexSerif/IBMPlexSerif-Light.ttf",
                 "SizeScale": 1.0
+            },
+            {
+                "Family": "IBMPlex Sans",
+                "Style": "Condensed Light",
+                "File": "IBMPlexSans/IBMPlexSans_Condensed-Light.ttf",
+                "SizeScale": 0.9
             }
         ],
         "UseSimplePalette": false,

@@ -4,6 +4,8 @@
 #include "FileSystem.h"
 #include "Menu.h"
 #include "Menu/IconLoader.h"
+#include "Menu/ThemeManager.h"
+#include "ShaderCache.h"
 #include "WeatherManager.h"
 #include "WeatherVariableRegistry.h"
 
@@ -66,6 +68,99 @@ namespace Util
 	{
 		if (disable)
 			ImGui::EndDisabled();
+	}
+
+	// Static state for clear shader cache confirmation popup
+	static bool showClearCacheConfirmation = false;
+	static bool dontAskAgainCheckbox = false;
+
+	// Helper function to perform the actual cache clearing
+	static void PerformClearShaderCache()
+	{
+		auto* shaderCache = globals::shaderCache;
+		if (shaderCache) {
+			shaderCache->Clear();
+			if (shaderCache->IsDiskCache()) {
+				shaderCache->DeleteDiskCache();
+			}
+		}
+	}
+
+	void RequestClearShaderCacheConfirmation()
+	{
+		auto* menu = globals::menu;
+		if (!menu)
+			return;
+
+		// If user has opted to skip confirmation, clear immediately
+		if (menu->GetSettings().SkipClearCacheConfirmation) {
+			PerformClearShaderCache();
+			return;
+		}
+
+		// Show confirmation popup
+		showClearCacheConfirmation = true;
+		dontAskAgainCheckbox = false;
+	}
+
+	void DrawClearShaderCacheConfirmation()
+	{
+		if (!showClearCacheConfirmation)
+			return;
+
+		ImGui::OpenPopup("Clear Shader Cache?");
+
+		// Center the popup
+		ImVec2 center = ImGui::GetMainViewport()->GetCenter();
+		ImGui::SetNextWindowPos(center, ImGuiCond_Always, ImVec2(0.5f, 0.5f));
+
+		if (ImGui::BeginPopupModal("Clear Shader Cache?", &showClearCacheConfirmation, ImGuiWindowFlags_AlwaysAutoResize)) {
+			ImGui::Text("Are you sure you want to clear the shader cache?");
+			ImGui::Spacing();
+			ImGui::Spacing();
+			ImGui::TextWrapped(
+				"This will clear all compiled shaders from memory and disk cache (if enabled). "
+				"Shaders will be recompiled when the game next encounters them.");
+			ImGui::Spacing();
+			ImGui::Spacing();
+			ImGui::Separator();
+			ImGui::Spacing();
+
+			ImGui::Checkbox("Don't ask me again", &dontAskAgainCheckbox);
+
+			ImGui::Spacing();
+
+			// Center buttons
+			constexpr float buttonWidth = ThemeManager::Constants::POPUP_BUTTON_WIDTH;
+			const float spacing = ImGui::GetStyle().ItemSpacing.x;
+			const float totalWidth = buttonWidth * 2 + spacing;
+			const float windowWidth = ImGui::GetWindowWidth();
+			const float offset = (windowWidth - totalWidth) * 0.5f;
+			if (offset > 0)
+				ImGui::SetCursorPosX(offset);
+
+			if (ImGui::Button("Clear Cache", ImVec2(buttonWidth, 0))) {
+				// Save preference if checkbox is checked
+				if (dontAskAgainCheckbox) {
+					if (auto* menu = globals::menu) {
+						menu->GetSettings().SkipClearCacheConfirmation = true;
+					}
+				}
+
+				PerformClearShaderCache();
+				showClearCacheConfirmation = false;
+				ImGui::CloseCurrentPopup();
+			}
+
+			ImGui::SameLine();
+
+			if (ImGui::Button("Cancel", ImVec2(buttonWidth, 0))) {
+				showClearCacheConfirmation = false;
+				ImGui::CloseCurrentPopup();
+			}
+
+			ImGui::EndPopup();
+		}
 	}
 
 	bool PercentageSlider(const char* label, float* data, float lb, float ub, const char* format)
@@ -634,6 +729,35 @@ namespace Util
 		std::transform(lowerQuery.begin(), lowerQuery.end(), lowerQuery.begin(), ::tolower);
 
 		return lowerText.find(lowerQuery) != std::string::npos;
+	}
+
+	void DrawModalBackground(uint8_t alpha)
+	{
+		auto& io = ImGui::GetIO();
+		ImGui::GetBackgroundDrawList()->AddRectFilled(
+			ImVec2(0, 0),
+			io.DisplaySize,
+			IM_COL32(0, 0, 0, alpha));
+	}
+
+	void DrawBreathingText(const char* text, float speed, float minAlpha, float maxAlpha)
+	{
+		float alphaRange = maxAlpha - minAlpha;
+		float breathe = minAlpha + alphaRange * 0.5f * (1.0f + sinf((float)ImGui::GetTime() * speed));
+		auto& theme = globals::menu->GetTheme().Palette;
+		ImVec4 color = ImVec4(theme.Text.x, theme.Text.y, theme.Text.z, breathe);
+		ImGui::TextColored(color, "%s", text);
+	}
+
+	ImVec4 GetPulsingColor(const ImVec4& baseColor, float speed, float minBrightness, float maxBrightness)
+	{
+		float brightnessRange = maxBrightness - minBrightness;
+		float pulse = minBrightness + brightnessRange * 0.5f * (1.0f + sinf((float)ImGui::GetTime() * speed));
+		return ImVec4(
+			baseColor.x * pulse,
+			baseColor.y * pulse,
+			baseColor.z * pulse,
+			baseColor.w);
 	}
 
 	void DrawSearchIcon(const ImVec2& position, float size, float alpha)

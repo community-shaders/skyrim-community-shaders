@@ -100,8 +100,12 @@ cmake --build ./build/ALL --target PREPARE_AIO
 # Prepare shaders only (useful for CI shader validation)
 cmake --build ./build/ALL --target prepare_shaders
 
-# Copy shaders to deployment directories (when AUTO_PLUGIN_DEPLOYMENT=ON)
-cmake --build ./build/ALL --target COPY_SHADERS
+# Fast shader-only deployment (no DLL build, no tests - for dev iteration)
+# See docs/development/shader-workflow.md for details
+cmake --build ./build/ALL-WITH-AUTO-DEPLOYMENT --target COPY_SHADERS
+
+# Full deployment with DLL build and tests
+cmake --build ./build/ALL-WITH-AUTO-DEPLOYMENT --target DEPLOY_ALL
 
 # Create AIO zip package (when AIO_ZIP_TO_DIST=ON)
 cmake --build ./build/ALL --target AIO_ZIP_PACKAGE

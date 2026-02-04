@@ -228,33 +228,8 @@ bool SettingsOverrideManager::HasFeatureOverrides(const std::string& featureName
 
 size_t SettingsOverrideManager::ReapplyFeatureOverrides(const std::string& featureName, json& featureJson)
 {
-	if (!enabled || !discovered) {
-		return 0;
-	}
-
-	size_t appliedCount = 0;
-
-	auto it = featureOverrideMap.find(featureName);
-	if (it != featureOverrideMap.end()) {
-		for (size_t index : it->second) {
-			const auto& override = overrides[index];
-			if (override.enabled) {
-				try {
-					MergeJson(featureJson, override.overrideData);
-					appliedCount++;
-					logger::info("Manually reapplied override from {} to {}", override.modName, featureName);
-				} catch (const std::exception& e) {
-					logger::warn("Failed to manually reapply override from {} to {}: {}",
-						override.modName, featureName, e.what());
-
-					// Report reapplication failure to Feature Issues
-					ReportOverrideFailure(override.modName, featureName, "Failed to reapply override: " + std::string(e.what()));
-				}
-			}
-		}
-	}
-
-	return appliedCount;
+	// Reuse ApplyOverrides - same logic, just different use case
+	return ApplyOverrides(featureName, featureJson);
 }
 
 void SettingsOverrideManager::SetOverrideEnabled(const std::string& modName, const std::string& featureName, bool isEnabled)
@@ -319,23 +294,21 @@ json SettingsOverrideManager::LoadAppliedOverridesTracking() const
 					logger::info("Applied overrides tracking file contains invalid data structure, resetting");
 					appliedOverrides = json::object();
 				} else {
-					// Validate each tracking entry
+					// Validate each tracking entry - must be string hash with "_hash" key suffix
 					auto it = appliedOverrides.begin();
 					while (it != appliedOverrides.end()) {
 						const std::string& key = it.key();
 						const auto& value = it.value();
 
-						// Validate tracking entry structure
-						if (!value.is_object() ||
-							!value.contains("hash") ||
-							!value.contains("firstApplied") ||
-							!value["hash"].is_string() ||
-							!value["firstApplied"].is_number()) {
-							logger::info("Invalid tracking entry for '{}', removing", key);
-							it = appliedOverrides.erase(it);
-						} else {
+						// Valid format: simple string hash for "_hash" keys
+						if (key.ends_with("_hash") && value.is_string()) {
 							++it;
+							continue;
 						}
+
+						// Invalid entry
+						logger::info("Invalid tracking entry for '{}', removing", key);
+						it = appliedOverrides.erase(it);
 					}
 				}
 			} catch (const json::parse_error& e) {
@@ -405,208 +378,6 @@ void SettingsOverrideManager::SaveAppliedOverridesTracking(const json& appliedOv
 std::filesystem::path SettingsOverrideManager::GetAppliedOverridesTrackingPath() const
 {
 	return Util::PathHelpers::GetAppliedOverridesPath();
-}
-
-size_t SettingsOverrideManager::ApplyNewOverrides(json& baseSettings, json& appliedOverrides)
-{
-	if (!enabled || !discovered) {
-		return 0;
-	}
-
-	// Validate input parameters
-	if (!baseSettings.is_object()) {
-		logger::info("Cannot apply overrides - base settings is not a JSON object");
-		return 0;
-	}
-
-	if (!appliedOverrides.is_object()) {
-		logger::info("Applied overrides tracking data is not a JSON object, resetting");
-		appliedOverrides = json::object();
-	}
-
-	size_t appliedCount = 0;
-	auto currentTime = std::time(nullptr);
-
-	for (const auto& override : overrides) {
-		if (!override.enabled || !override.isGlobal) {
-			continue;
-		}
-
-		try {
-			// Create tracking key
-			std::string trackingKey = override.modName + "_Global";
-
-			// Validate tracking key length
-			if (trackingKey.length() > MAX_STRING_LENGTH) {
-				logger::info("Skipping override with overly long tracking key: {}", override.modName);
-				continue;
-			}
-
-			// Check if this override has been applied before
-			bool shouldApply = false;
-			if (!appliedOverrides.contains(trackingKey)) {
-				// First time seeing this override
-				shouldApply = true;
-			} else {
-				// Check if the override file has changed
-				auto& tracking = appliedOverrides[trackingKey];
-				if (!tracking.is_object()) {
-					// Invalid tracking data, reapply
-					shouldApply = true;
-					logger::info("Invalid tracking data for {}, reapplying", override.modName);
-				} else {
-					std::string currentHash = tracking.value("hash", "");
-					if (currentHash != override.fileHash) {
-						// Override file has changed, reapply
-						shouldApply = true;
-						logger::info("Override file {} has changed, reapplying", override.modName);
-					}
-				}
-			}
-
-			if (shouldApply) {
-				// Validate override data before merging
-				if (!override.overrideData.is_object()) {
-					logger::info("Skipping override from {} - invalid data structure", override.modName);
-					continue;
-				}
-
-				// Create a backup of base settings for rollback if needed
-				json backupSettings = baseSettings;
-
-				try {
-					MergeJson(baseSettings, override.overrideData);
-					appliedCount++;
-
-					// Update tracking
-					appliedOverrides[trackingKey] = {
-						{ "hash", override.fileHash },
-						{ "firstApplied", currentTime },
-						{ "lastApplied", currentTime },
-						{ "version", override.version }
-					};
-
-					logger::info("Applied global override from {}", override.modName);
-				} catch (const std::exception& mergeError) {
-					// Rollback on merge failure
-					baseSettings = backupSettings;
-					logger::info("Failed to merge global override from {}, rolled back: {}", override.modName, mergeError.what());
-				}
-			}
-		} catch (const std::exception& e) {
-			logger::info("Error processing global override from {}: {}", override.modName, e.what());
-		}
-	}
-
-	return appliedCount;
-}
-
-size_t SettingsOverrideManager::ApplyNewFeatureOverrides(const std::string& featureName, json& featureJson, json& appliedOverrides)
-{
-	if (!enabled || !discovered) {
-		return 0;
-	}
-
-	// Validate input parameters
-	if (featureName.empty() || featureName.length() > MAX_STRING_LENGTH) {
-		logger::info("Cannot apply overrides - invalid feature name");
-		return 0;
-	}
-
-	if (!featureJson.is_object()) {
-		logger::info("Cannot apply overrides to {} - feature JSON is not an object", featureName);
-		return 0;
-	}
-
-	if (!appliedOverrides.is_object()) {
-		logger::info("Applied overrides tracking data is not a JSON object, resetting");
-		appliedOverrides = json::object();
-	}
-
-	size_t appliedCount = 0;
-	auto currentTime = std::time(nullptr);
-
-	auto it = featureOverrideMap.find(featureName);
-	if (it != featureOverrideMap.end()) {
-		for (size_t index : it->second) {
-			if (index >= overrides.size()) {
-				logger::info("Invalid override index {} for feature {}", index, featureName);
-				continue;
-			}
-
-			const auto& override = overrides[index];
-			if (!override.enabled) {
-				continue;
-			}
-
-			try {
-				// Create tracking key
-				std::string trackingKey = override.modName + "_" + featureName;
-
-				// Validate tracking key length
-				if (trackingKey.length() > MAX_STRING_LENGTH) {
-					logger::info("Skipping override with overly long tracking key: {}_{}", override.modName, featureName);
-					continue;
-				}
-
-				// Check if this override has been applied before
-				bool shouldApply = false;
-				if (!appliedOverrides.contains(trackingKey)) {
-					// First time seeing this override
-					shouldApply = true;
-				} else {
-					// Check if the override file has changed
-					auto& tracking = appliedOverrides[trackingKey];
-					if (!tracking.is_object()) {
-						// Invalid tracking data, reapply
-						shouldApply = true;
-						logger::info("Invalid tracking data for {} on {}, reapplying", override.modName, featureName);
-					} else {
-						std::string currentHash = tracking.value("hash", "");
-						if (currentHash != override.fileHash) {
-							// Override file has changed, reapply
-							shouldApply = true;
-							logger::info("Override file {} for {} has changed, reapplying", override.modName, featureName);
-						}
-					}
-				}
-
-				if (shouldApply) {
-					// Validate override data before merging
-					if (!override.overrideData.is_object()) {
-						logger::info("Skipping override from {} for {} - invalid data structure", override.modName, featureName);
-						continue;
-					}
-
-					// Create a backup of feature settings for rollback if needed
-					json backupSettings = featureJson;
-
-					try {
-						MergeJson(featureJson, override.overrideData);
-						appliedCount++;
-
-						// Update tracking
-						appliedOverrides[trackingKey] = {
-							{ "hash", override.fileHash },
-							{ "firstApplied", currentTime },
-							{ "lastApplied", currentTime },
-							{ "version", override.version }
-						};
-
-						logger::info("Applied override from {} to {}", override.modName, featureName);
-					} catch (const std::exception& mergeError) {
-						// Rollback on merge failure
-						featureJson = backupSettings;
-						logger::info("Failed to merge override from {} to {}, rolled back: {}", override.modName, featureName, mergeError.what());
-					}
-				}
-			} catch (const std::exception& e) {
-				logger::info("Error processing override from {} for {}: {}", override.modName, featureName, e.what());
-			}
-		}
-	}
-
-	return appliedCount;
 }
 
 std::unique_ptr<SettingsOverrideManager::OverrideInfo> SettingsOverrideManager::LoadOverrideFile(const std::filesystem::path& filePath)
@@ -744,15 +515,13 @@ std::pair<std::string, std::string> SettingsOverrideManager::ParseOverrideFilena
 	// Remove .json extension
 	std::string nameWithoutExt = filename;
 	const std::string jsonExt = ".json";
-	if (nameWithoutExt.length() >= jsonExt.length() &&
-		nameWithoutExt.substr(nameWithoutExt.length() - jsonExt.length()) == jsonExt) {
+	if (nameWithoutExt.ends_with(jsonExt)) {
 		nameWithoutExt = nameWithoutExt.substr(0, nameWithoutExt.length() - jsonExt.length());
 	}
 
 	// Check for global override
 	const std::string globalSuffix = "_Global";
-	if (nameWithoutExt.length() >= globalSuffix.length() &&
-		nameWithoutExt.substr(nameWithoutExt.length() - globalSuffix.length()) == globalSuffix) {
+	if (nameWithoutExt.ends_with(globalSuffix)) {
 		std::string modName = nameWithoutExt.substr(0, nameWithoutExt.length() - globalSuffix.length());
 		return { modName, "" };  // Empty feature name indicates global
 	}
@@ -1166,4 +935,279 @@ void SettingsOverrideManager::ReportOverrideFailure(const std::string& modName, 
 		fullErrorMessage,
 		FeatureIssues::FeatureIssueInfo::IssueType::OVERRIDE_FAILED,
 		fileInfo);
+}
+
+std::filesystem::path SettingsOverrideManager::GetUserOverridesDirectory() const
+{
+	return Util::PathHelpers::GetUserOverridesPath();
+}
+
+bool SettingsOverrideManager::LoadUserOverride(const std::string& featureName, json& featureJson)
+{
+	if (!enabled || featureName.empty()) {
+		return false;
+	}
+
+	auto userFilePath = GetUserOverridesDirectory() / (featureName + ".user.json");
+
+	std::error_code ec;
+	if (!std::filesystem::exists(userFilePath, ec)) {
+		return false;
+	}
+
+	try {
+		auto fileSize = std::filesystem::file_size(userFilePath, ec);
+		if (ec || fileSize == 0 || fileSize > 1024 * 1024) {
+			logger::info("User override file invalid size: {}", userFilePath.string());
+			return false;
+		}
+
+		std::ifstream file(userFilePath);
+		if (!file.is_open()) {
+			return false;
+		}
+
+		json userJson;
+		file >> userJson;
+		file.close();
+
+		if (!userJson.is_object()) {
+			logger::info("User override file is not a JSON object: {}", userFilePath.string());
+			return false;
+		}
+
+		// Merge user settings on top
+		MergeJson(featureJson, userJson);
+		logger::info("Loaded user override for {}", featureName);
+		return true;
+
+	} catch (const std::exception& e) {
+		logger::info("Error loading user override for {}: {}", featureName, e.what());
+		return false;
+	}
+}
+
+bool SettingsOverrideManager::SaveUserOverride(const std::string& featureName, const json& currentSettings, const json& overrideSettings)
+{
+	if (!enabled || featureName.empty()) {
+		return false;
+	}
+
+	// Compare only the keys that BOTH exist in overrides AND in current settings
+	// Keys that the override defines but the feature doesn't save should be ignored
+	// (they might be for nested settings or deprecated options)
+	bool hasDifferences = false;
+	for (const auto& [key, overrideValue] : overrideSettings.items()) {
+		// Skip keys that the feature doesn't save - can't track user changes to them
+		if (!currentSettings.contains(key)) {
+			continue;
+		}
+
+		const auto& currentValue = currentSettings[key];
+
+		// For numeric values, compare with tolerance to handle float32/float64 precision differences
+		// JSON stores floats as float64, but C++ features often use float32, causing precision loss
+		if (currentValue.is_number() && overrideValue.is_number()) {
+			double current = currentValue.get<double>();
+			double override = overrideValue.get<double>();
+			double diff = std::abs(current - override);
+			// Use relative tolerance for larger values, absolute for small values
+			double tolerance = std::max(1e-6, std::abs(override) * 1e-5);
+			if (diff > tolerance) {
+				hasDifferences = true;
+				break;
+			}
+		} else if (currentValue != overrideValue) {
+			hasDifferences = true;
+			break;
+		}
+	}
+
+	if (!hasDifferences) {
+		// User hasn't changed any overridden settings, delete user file if it exists
+		DeleteUserOverride(featureName);
+		return false;
+	}
+
+	try {
+		auto userDir = GetUserOverridesDirectory();
+		std::filesystem::create_directories(userDir);
+
+		auto userFilePath = userDir / (featureName + ".user.json");
+
+		std::ofstream file(userFilePath);
+		if (!file.is_open()) {
+			logger::info("Could not create user override file: {}", userFilePath.string());
+			return false;
+		}
+
+		file << currentSettings.dump(1);
+		file.flush();
+
+		if (file.fail()) {
+			logger::info("Failed to write user override file: {}", userFilePath.string());
+			file.close();
+			return false;
+		}
+
+		file.close();
+
+		// Store the current override hash so we can detect if overrides change later
+		json tracking = LoadAppliedOverridesTracking();
+		std::string trackingKey = featureName + "_hash";
+		tracking[trackingKey] = GetCombinedOverrideHash(featureName);
+		SaveAppliedOverridesTracking(tracking);
+
+		logger::info("Saved user override for {}", featureName);
+		return true;
+
+	} catch (const std::exception& e) {
+		logger::info("Error saving user override for {}: {}", featureName, e.what());
+		return false;
+	}
+}
+
+bool SettingsOverrideManager::HasUserOverride(const std::string& featureName) const
+{
+	if (!enabled || featureName.empty()) {
+		return false;
+	}
+
+	auto userFilePath = GetUserOverridesDirectory() / (featureName + ".user.json");
+	std::error_code ec;
+	return std::filesystem::exists(userFilePath, ec);
+}
+
+bool SettingsOverrideManager::DeleteUserOverride(const std::string& featureName)
+{
+	if (featureName.empty()) {
+		return false;
+	}
+
+	auto userFilePath = GetUserOverridesDirectory() / (featureName + ".user.json");
+
+	std::error_code ec;
+	if (!std::filesystem::exists(userFilePath, ec)) {
+		return true;  // Already doesn't exist
+	}
+
+	try {
+		std::filesystem::remove(userFilePath, ec);
+		if (ec) {
+			logger::info("Failed to delete user override file: {}", ec.message());
+			return false;
+		}
+
+		// Clean up tracking entry
+		json tracking = LoadAppliedOverridesTracking();
+		std::string trackingKey = featureName + "_hash";
+		if (tracking.contains(trackingKey)) {
+			tracking.erase(trackingKey);
+			SaveAppliedOverridesTracking(tracking);
+		}
+
+		logger::info("Deleted user override for {}", featureName);
+		return true;
+	} catch (const std::exception& e) {
+		logger::info("Error deleting user override for {}: {}", featureName, e.what());
+		return false;
+	}
+}
+
+std::string SettingsOverrideManager::GetCombinedOverrideHash(const std::string& featureName) const
+{
+	if (!enabled || !discovered) {
+		return "";
+	}
+
+	std::string combinedHashes;
+
+	auto it = featureOverrideMap.find(featureName);
+	if (it != featureOverrideMap.end()) {
+		for (size_t index : it->second) {
+			if (index < overrides.size()) {
+				combinedHashes += overrides[index].fileHash;
+			}
+		}
+	}
+
+	if (combinedHashes.empty()) {
+		return "";
+	}
+
+	return ComputeContentHash(combinedHashes);
+}
+
+void SettingsOverrideManager::CleanupStaleUserOverrides()
+{
+	if (!enabled || !discovered) {
+		return;
+	}
+
+	auto userDir = GetUserOverridesDirectory();
+	std::error_code ec;
+
+	if (!std::filesystem::exists(userDir, ec)) {
+		return;
+	}
+
+	json tracking = LoadAppliedOverridesTracking();
+
+	try {
+		for (const auto& entry : std::filesystem::directory_iterator(userDir)) {
+			if (!entry.is_regular_file()) {
+				continue;
+			}
+
+			std::string filename = entry.path().filename().string();
+
+			// Check for .user.json extension
+			const std::string suffix = ".user.json";
+			if (!filename.ends_with(suffix)) {
+				continue;
+			}
+
+			// Extract feature name
+			std::string featureName = filename.substr(0, filename.length() - suffix.length());
+
+			// Check if this feature still has overrides
+			if (!HasFeatureOverrides(featureName) && featureName != "Global") {
+				// Override was removed, delete user file
+				logger::info("Cleaning up orphaned user override: {}", featureName);
+				std::filesystem::remove(entry.path(), ec);
+				continue;
+			}
+
+			// Check if override hash has changed
+			std::string currentHash = GetCombinedOverrideHash(featureName);
+			std::string trackingKey = featureName + "_hash";
+
+			if (tracking.contains(trackingKey) && tracking[trackingKey].is_string()) {
+				std::string storedHash = tracking[trackingKey].get<std::string>();
+				if (storedHash != currentHash) {
+					// Override file changed, delete user customizations
+					logger::info("Override changed for {}, removing stale user override", featureName);
+					std::filesystem::remove(entry.path(), ec);
+
+					// Update stored hash
+					tracking[trackingKey] = currentHash;
+				}
+			} else {
+				// First time tracking or invalid entry, set the hash
+				tracking[trackingKey] = currentHash;
+			}
+		}
+
+		SaveAppliedOverridesTracking(tracking);
+
+	} catch (const std::exception& e) {
+		logger::info("Error during user override cleanup: {}", e.what());
+	}
+}
+
+json SettingsOverrideManager::GetMergedOverrideSettings(const std::string& featureName, const json& baseSettings)
+{
+	json merged = baseSettings;
+	ApplyOverrides(featureName, merged);
+	return merged;
 }

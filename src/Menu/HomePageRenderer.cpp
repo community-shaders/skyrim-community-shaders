@@ -255,6 +255,9 @@ void HomePageRenderer::RenderFirstTimeSetupDialog()
 	io.WantCaptureKeyboard = true;
 	io.MouseDrawCursor = true;  // Show ImGui cursor
 
+	// Draw semi-transparent dark overlay behind the dialog for depth
+	Util::DrawModalBackground();
+
 	// Center the window properly with rounded corners and thin border
 	ImVec2 center = ImVec2(io.DisplaySize.x * 0.5f, io.DisplaySize.y * 0.5f);
 	ImGui::SetNextWindowPos(center, ImGuiCond_Always, ImVec2(0.5f, 0.5f));
@@ -317,142 +320,108 @@ void HomePageRenderer::RenderFirstTimeSetupDialog()
 
 	// Center all content
 	float windowWidth = ImGui::GetWindowWidth();
+	auto centerText = [windowWidth](const char* text) {
+		ImGui::SetCursorPosX((windowWidth - ImGui::CalcTextSize(text).x) * 0.5f);
+	};
+	auto centerWidth = [windowWidth](float width) {
+		ImGui::SetCursorPosX((windowWidth - width) * 0.5f);
+	};
 
-	// Welcome title - centered
-	const char* welcomeTitle = "Welcome to Community Shaders!";
-	float welcomeTitleWidth = ImGui::CalcTextSize(welcomeTitle).x;
-	ImGui::SetCursorPosX((windowWidth - welcomeTitleWidth) * 0.5f);
-	ImGui::Text("%s", welcomeTitle);
+	// Version text - two lines, both centered (reduced spacing between lines)
+	const char* versionLine1 = "This appears to be a new install, update, or";
+	const char* versionLine2 = "reinstallation of Community Shaders.";
 
-	ImGui::Spacing();
-
-	// Version text - wrapped and centered
-	const char* versionText = "This appears to be a new install, update, or reinstallation of Community Shaders.";
-	float textPadding = 40.0f;  // Padding from window edges
-
-	// Use a centered region for wrapped text
-	ImGui::SetCursorPosX(textPadding);
-	ImGui::BeginGroup();
-	ImGui::PushTextWrapPos(windowWidth - textPadding);
-
-	// Calculate the wrapped text size to center it
-	ImVec2 textSize = ImGui::CalcTextSize(versionText, nullptr, true, windowWidth - textPadding * 2);
-	float centerOffset = (windowWidth - textPadding * 2 - textSize.x) * 0.5f;
-	if (centerOffset > 0) {
-		ImGui::SetCursorPosX(textPadding + centerOffset);
-	}
-
-	ImGui::TextWrapped("%s", versionText);
-	ImGui::PopTextWrapPos();
-	ImGui::EndGroup();
+	centerText(versionLine1);
+	ImGui::Text("%s", versionLine1);
+	ImGui::SetCursorPosY(ImGui::GetCursorPosY() - 4.0f);
+	centerText(versionLine2);
+	ImGui::Text("%s", versionLine2);
 
 	ImGui::Spacing();
 
 	// Description - centered
-	const char* description = "Please select a hotkey to access the menu:";
-	float descWidth = ImGui::CalcTextSize(description).x;
-	ImGui::SetCursorPosX((windowWidth - descWidth) * 0.5f);
+	const char* description = "Please choose a hotkey to access the menu:";
+	centerText(description);
 	ImGui::Text("%s", description);
 
 	// Hotkey selection - clickable hotkey text
 	// Show current toggle key and allow user to change it by clicking on it
 	auto& themeSettings = menu->GetTheme();
-	const char* currentKeyName = Util::Input::KeyIdToString(menu->GetSettings().ToggleKey);
+	bool isCapturing = menu->settingToggleKey;
 
-	// Increase font size for hotkey text
-	ImGui::SetWindowFontScale(fontScale * HOTKEY_TEXT_SCALE_MULTIPLIER);
+	// Increase font size for hotkey text - bigger when capturing
+	ImGui::SetWindowFontScale(fontScale * (isCapturing ? HOTKEY_TEXT_SCALE_CAPTURING : HOTKEY_TEXT_SCALE));
 
-	// Calculate text dimensions for centering and button area
-	float hotkeyWidth = ImGui::CalcTextSize(currentKeyName).x;
-	float centerX = (windowWidth - hotkeyWidth) * 0.5f;
-	ImGui::SetCursorPosX(centerX);
+	// Format hotkey with brackets to make it look like a button
+	std::string hotkeyDisplay = isCapturing ? "[ ... ]" : std::string("[ ") + Util::Input::KeyIdToString(menu->GetSettings().ToggleKey) + " ]";
+	ImVec2 hotkeyTextSize = ImGui::CalcTextSize(hotkeyDisplay.c_str());
+
+	centerWidth(hotkeyTextSize.x);
+	ImVec2 buttonPos = ImGui::GetCursorScreenPos();
 
 	// Create invisible button for hover detection and clicking
-	ImVec2 buttonPos = ImGui::GetCursorScreenPos();
-	ImVec2 hotkeyTextSize = ImGui::CalcTextSize(currentKeyName);
-	bool hovered = false;
-	bool clicked = false;
-
 	ImGui::PushID("HotkeyButton");
-	if (ImGui::InvisibleButton("##HotkeyClick", hotkeyTextSize)) {
-		clicked = true;
-	}
-	hovered = ImGui::IsItemHovered();
+	bool clicked = ImGui::InvisibleButton("##HotkeyClick", hotkeyTextSize);
+	bool hovered = ImGui::IsItemHovered();
 	ImGui::PopID();
 
 	// Set cursor position back for text rendering
 	ImGui::SetCursorScreenPos(buttonPos);
 
-	// Choose color based on hover state - darken when hovered.
-	ImVec4 hotkeyColor = hovered ?
-	                         ImVec4(themeSettings.StatusPalette.CurrentHotkey.x * 0.7f,
-								 themeSettings.StatusPalette.CurrentHotkey.y * 0.7f,
-								 themeSettings.StatusPalette.CurrentHotkey.z * 0.7f,
-								 themeSettings.StatusPalette.CurrentHotkey.w) :
-	                         themeSettings.StatusPalette.CurrentHotkey;
+	// Choose color based on state
+	ImVec4 hotkeyColor;
+	if (isCapturing) {
+		// Pulsing effect using theme's hotkey color
+		hotkeyColor = Util::GetPulsingColor(themeSettings.StatusPalette.CurrentHotkey);
+	} else if (hovered) {
+		hotkeyColor = ImVec4(themeSettings.StatusPalette.CurrentHotkey.x * HOTKEY_HOVER_DIM_FACTOR,
+			themeSettings.StatusPalette.CurrentHotkey.y * HOTKEY_HOVER_DIM_FACTOR,
+			themeSettings.StatusPalette.CurrentHotkey.z * HOTKEY_HOVER_DIM_FACTOR,
+			themeSettings.StatusPalette.CurrentHotkey.w);
+	} else {
+		hotkeyColor = themeSettings.StatusPalette.CurrentHotkey;
+	}
 
-	ImGui::TextColored(hotkeyColor, "%s", currentKeyName);
+	ImGui::TextColored(hotkeyColor, "%s", hotkeyDisplay.c_str());
 
 	// Reset font scale
 	ImGui::SetWindowFontScale(fontScale);
 
 	// Handle click to start hotkey capture
-	if (clicked) {
+	if (clicked && !isCapturing) {
 		menu->settingToggleKey = true;
 	}
 
-	// Show hotkey capture message or hotkey text
-	if (menu->settingToggleKey) {
+	// Show hotkey capture message when in capture mode
+	if (isCapturing) {
 		const char* pressKeyText = "Press any key to set as toggle key...";
-		float pressKeyWidth = ImGui::CalcTextSize(pressKeyText).x;
-		ImGui::SetCursorPosX((windowWidth - pressKeyWidth) * 0.5f);
-		ImGui::Text("%s", pressKeyText);
+		centerText(pressKeyText);
+		ImGui::TextDisabled("%s", pressKeyText);
 	}
 
 	ImGui::Spacing();
 
-	// "You can change this later" text - wrapped and centered
 	const char* laterText = "You can change this later in General > Keybindings.";
-	float laterWidth = ImGui::CalcTextSize(laterText).x;
-	if (laterWidth > windowWidth - 40.0f) {
-		// Text is too wide, use wrapped text with centering
-		float laterTextPadding = 40.0f;
-
-		ImGui::SetCursorPosX(laterTextPadding);
-		ImGui::BeginGroup();
-		ImGui::PushTextWrapPos(windowWidth - laterTextPadding);
-
-		// Calculate the wrapped text size to center it
-		ImVec2 laterTextSize = ImGui::CalcTextSize(laterText, nullptr, true, windowWidth - laterTextPadding * 2);
-		float laterCenterOffset = (windowWidth - laterTextPadding * 2 - laterTextSize.x) * 0.5f;
-		if (laterCenterOffset > 0) {
-			ImGui::SetCursorPosX(laterTextPadding + laterCenterOffset);
-		}
-
-		ImGui::TextWrapped("%s", laterText);
-		ImGui::PopTextWrapPos();
-		ImGui::EndGroup();
-	} else {
-		// Text fits, center it normally
-		ImGui::SetCursorPosX((windowWidth - laterWidth) * 0.5f);
-		ImGui::Text("%s", laterText);
-	}
+	centerText(laterText);
+	ImGui::Text("%s", laterText);
 
 	ImGui::Spacing();
 
 	// Check for Enter or Escape key to close, but only if not capturing a hotkey
-	bool shouldClose = (ImGui::IsKeyPressed(ImGuiKey_Enter) || ImGui::IsKeyPressed(ImGuiKey_Escape)) && !menu->settingToggleKey;
-
-	if (shouldClose) {
+	if ((ImGui::IsKeyPressed(ImGuiKey_Enter) || ImGui::IsKeyPressed(ImGuiKey_Escape)) && !isCapturing) {
 		MarkFirstTimeSetupComplete();
 		// Note: Settings are automatically saved to ensure welcome screen won't show again
 	}
 
-	// Center the help text
+	// Help text with breathing animation
 	const char* helpText = "Press Escape or Enter to continue";
-	float helpWidth = ImGui::CalcTextSize(helpText).x;
-	ImGui::SetCursorPosX((windowWidth - helpWidth) * 0.5f);
-	ImGui::TextDisabled("%s", helpText);
+
+	ImGui::SetWindowFontScale(fontScale * HELP_TEXT_SCALE);
+	centerText(helpText);
+	Util::DrawBreathingText(helpText);
+
+	// Reset font scale
+	ImGui::SetWindowFontScale(fontScale);
 
 	ImGui::End();
 	ImGui::PopStyleVar(2);

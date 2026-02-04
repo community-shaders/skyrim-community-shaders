@@ -18,9 +18,12 @@
 #include "TruePBR.h"
 #include "Utils/FileSystem.h"
 #include "WeatherManager.h"
+#include "WeatherVariableRegistry.h"
 
 void State::Draw()
 {
+	ZoneScoped;
+
 	auto shaderCache = globals::shaderCache;
 	auto deferred = globals::deferred;
 	auto& terrainBlending = globals::features::terrainBlending;
@@ -31,19 +34,30 @@ void State::Draw()
 	auto context = globals::d3d::context;
 
 	if (shaderCache->IsEnabled()) {
-		if (weatherEditor.loaded)
+		if (weatherEditor.loaded) {
+			ZoneScopedN("WeatherManager::UpdateFeatures");
 			WeatherManager::GetSingleton()->UpdateFeatures();
+		}
 
-		if (terrainBlending.loaded)
+		if (terrainBlending.loaded && terrainBlending.settings.Enabled) {
+			ZoneScopedN("TerrainBlending::TerrainShaderHacks");
 			terrainBlending.TerrainShaderHacks();
+		}
 
-		if (cloudShadows.loaded)
+		if (cloudShadows.loaded) {
+			ZoneScopedN("CloudShadows::SkyShaderHacks");
 			cloudShadows.SkyShaderHacks();
+		}
 
-		if (terrainHelper.loaded)
+		if (terrainHelper.loaded) {
+			ZoneScopedN("TerrainHelper::SetShaderResouces");
 			terrainHelper.SetShaderResouces(context);
+		}
 
-		truePBR->SetShaderResouces(context);
+		{
+			ZoneScopedN("TruePBR::SetShaderResouces");
+			truePBR->SetShaderResouces(context);
+		}
 
 		if (permutationData != permutationDataPrevious) {
 			permutationCB->Update(permutationData);
@@ -122,9 +136,7 @@ void State::Debug()
 
 void State::Reset()
 {
-	for (auto* feature : Feature::GetFeatureList())
-		if (feature->loaded)
-			feature->Reset();
+	Feature::ForEachLoadedFeature("Reset", [](Feature* feature) { feature->Reset(); });
 	if (!globals::game::ui->GameIsPaused())
 		timer += RE::GetSecondsSinceLastFrame();
 	lastModifiedPixelDescriptor = 0;
@@ -155,9 +167,7 @@ void State::Setup()
 {
 	globals::truePBR->SetupResources();
 	SetupResources();
-	for (auto* feature : Feature::GetFeatureList())
-		if (feature->loaded)
-			feature->SetupResources();
+	Feature::ForEachLoadedFeature("SetupResources", [](Feature* feature) { feature->SetupResources(); });
 	globals::deferred->SetupResources();
 
 	// Load per-weather settings after features are setup
@@ -181,7 +191,6 @@ static std::string GetConfigPath(State::ConfigMode a_configMode)
 
 void State::Load(ConfigMode a_configMode, bool a_allowReload)
 {
-	auto shaderCache = globals::shaderCache;
 	json settings;
 	bool errorDetected = false;
 
@@ -215,7 +224,7 @@ void State::Load(ConfigMode a_configMode, bool a_allowReload)
 		}
 	};
 
-	// NEW LOADING ORDER: Default → Overrides → User
+	// LOADING ORDER: Default → User → Overrides → User Overrides (.user files)
 
 	// Step 1: Always start with default settings
 	logger::info("Loading default settings from: {}", defaultConfigFilePath);
@@ -230,22 +239,7 @@ void State::Load(ConfigMode a_configMode, bool a_allowReload)
 		}
 	}
 
-	// Step 2: Apply overrides (only new/changed ones) to default settings
-	auto overrideManager = SettingsOverrideManager::GetSingleton();
-	size_t overridesDiscovered = overrideManager->DiscoverOverrides();
-	json appliedOverrides = overrideManager->LoadAppliedOverridesTracking();
-
-	if (overridesDiscovered > 0) {
-		logger::info("Discovered {} override files", overridesDiscovered);
-
-		// Apply global overrides to main settings (only new/changed ones)
-		size_t newGlobalOverrides = overrideManager->ApplyNewOverrides(settings, appliedOverrides);
-		if (newGlobalOverrides > 0) {
-			logger::info("Applied {} new/changed global override(s)", newGlobalOverrides);
-		}
-	}
-
-	// Step 3: Apply user settings on top of default + overrides
+	// Step 2: Apply user settings on top of defaults (user preferences)
 	if (a_configMode == ConfigMode::USER) {
 		json userSettings;
 		std::ifstream userFile(userConfigFilePath);
@@ -254,7 +248,7 @@ void State::Load(ConfigMode a_configMode, bool a_allowReload)
 				userFile >> userSettings;
 				userFile.close();
 
-				// Merge user settings on top of (default + overrides)
+				// Merge user settings on top of defaults
 				for (auto& [key, value] : userSettings.items()) {
 					settings[key] = value;
 				}
@@ -268,59 +262,31 @@ void State::Load(ConfigMode a_configMode, bool a_allowReload)
 		}
 	}
 
+	// Step 3: Discover and prepare overrides (applied after user settings, so overrides take priority)
+	auto overrideManager = SettingsOverrideManager::GetSingleton();
+	size_t overridesDiscovered = overrideManager->DiscoverOverrides();
+
+	// Cleanup stale user override files (where override hash has changed)
+	if (overridesDiscovered > 0) {
+		logger::info("Discovered {} override files", overridesDiscovered);
+		overrideManager->CleanupStaleUserOverrides();
+
+		// Apply global overrides to main settings
+		size_t globalOverrides = overrideManager->ApplyGlobalOverrides(settings);
+		if (globalOverrides > 0) {
+			logger::info("Applied {} global override(s)", globalOverrides);
+		}
+
+		// Apply global user overrides on top (if any)
+		if (overrideManager->LoadUserOverride("Global", settings)) {
+			logger::info("Applied global user override customizations");
+		}
+	}
+
 	try {
-		// Load Menu settings
-
-		if (settings["Menu"].is_object()) {
-			logger::info("Loading 'Menu' settings");
-			globals::menu->Load(settings["Menu"]);
-		}
-
-		if (settings["Advanced"].is_object()) {
-			logger::info("Loading 'Advanced' settings");
-			json& advanced = settings["Advanced"];
-			if (advanced["Dump Shaders"].is_boolean())
-				shaderCache->SetDump(advanced["Dump Shaders"]);
-			if (advanced["Log Level"].is_number_integer())
-				logLevel = magic_enum::enum_cast<spdlog::level::level_enum>(advanced["Log Level"].get<int>()).value_or(spdlog::level::info);
-			if (advanced["Shader Defines"].is_string())
-				SetDefines(advanced["Shader Defines"]);
-			if (advanced["Compiler Threads"].is_number_integer())
-				shaderCache->compilationThreadCount = std::clamp(advanced["Compiler Threads"].get<int32_t>(), 1, static_cast<int32_t>(std::thread::hardware_concurrency()));
-			if (advanced["Background Compiler Threads"].is_number_integer())
-				shaderCache->backgroundCompilationThreadCount = std::clamp(advanced["Background Compiler Threads"].get<int32_t>(), 1, static_cast<int32_t>(std::thread::hardware_concurrency()));
-			if (advanced["Use FileWatcher"].is_boolean())
-				shaderCache->SetFileWatcher(advanced["Use FileWatcher"]);
-			if (advanced["Frame Annotations"].is_boolean())
-				frameAnnotations = advanced["Frame Annotations"];
-		}
-
-		if (settings["General"].is_object()) {
-			logger::info("Loading 'General' settings");
-			json& general = settings["General"];
-
-			if (general["Enable Shaders"].is_boolean())
-				shaderCache->SetEnabled(general["Enable Shaders"]);
-
-			if (general["Enable Disk Cache"].is_boolean())
-				shaderCache->SetDiskCache(general["Enable Disk Cache"]);
-
-			if (general["Enable Async"].is_boolean())
-				shaderCache->SetAsync(general["Enable Async"]);
-		}
-
-		if (settings["Replace Original Shaders"].is_object()) {
-			logger::info("Loading 'Replace Original Shaders' settings");
-			json& originalShaders = settings["Replace Original Shaders"];
-			ForEachShaderTypeWithIndex([&](auto type, int classIndex) {
-				auto name = magic_enum::enum_name(type);
-				if (originalShaders[name].is_boolean()) {
-					enabledClasses[classIndex] = originalShaders[name];
-				} else {
-					logger::warn("Invalid entry for shader class '{}', using default", name);
-				}
-			});
-		}
+		// Load core settings (Menu, Advanced, General, Replace Original Shaders)
+		logger::info("Loading core settings");
+		LoadFromJson(settings);
 		// Ensure 'Disable at Boot' section exists in the JSON
 		if (!settings.contains("Disable at Boot") || !settings["Disable at Boot"].is_object()) {
 			// Initialize to an empty object if it doesn't exist
@@ -355,21 +321,32 @@ void State::Load(ConfigMode a_configMode, bool a_allowReload)
 					// Register weather variables (features opt-in by implementing this)
 					feature->RegisterWeatherVariables();
 
-					// Apply new/changed feature-specific overrides if any
-					if (overridesDiscovered > 0) {
+					// Apply feature-specific overrides on top (overrides take priority over user settings)
+					if (overridesDiscovered > 0 && overrideManager->HasFeatureOverrides(featureName)) {
 						json featureJson;
 						feature->SaveSettings(featureJson);  // Get current settings as JSON
 
-						size_t newFeatureOverrides = overrideManager->ApplyNewFeatureOverrides(featureName, featureJson, appliedOverrides);
-						if (newFeatureOverrides > 0) {
-							logger::info("Applied {} new/changed override(s) to {}", newFeatureOverrides, feature->GetName());
-							try {
-								feature->LoadSettings(featureJson);  // Reload with new overrides applied
-							} catch (...) {
-								logger::warn("Invalid override settings for {}, keeping original settings.", feature->GetName());
-							}
+						// Apply overrides
+						size_t appliedOverrides = overrideManager->ApplyOverrides(featureName, featureJson);
+						if (appliedOverrides > 0) {
+							logger::info("Applied {} override(s) to {}", appliedOverrides, feature->GetName());
+						}
+
+						// Apply user override customizations on top (if any)
+						if (overrideManager->LoadUserOverride(featureName, featureJson)) {
+							logger::info("Applied user override customizations to {}", feature->GetName());
+						}
+
+						// Reload settings with overrides applied
+						try {
+							feature->LoadSettings(featureJson);
+						} catch (...) {
+							logger::warn("Invalid override settings for {}, keeping original settings.", feature->GetName());
 						}
 					}
+
+					// Capture current values as user settings baseline for weather overrides
+					WeatherVariables::GlobalWeatherRegistry::GetSingleton()->CaptureFeatureUserSettings(featureName);
 				} else {
 					logger::info("Feature '{}' is disabled at boot.", featureName);
 				}
@@ -379,11 +356,6 @@ void State::Load(ConfigMode a_configMode, bool a_allowReload)
 				                                   (feature->failedLoadedMessage + "\n" + feature->GetName() + " failed to load. Check CommunityShaders.log");
 				logger::warn("Error loading setting for feature '{}': {}", feature->GetShortName(), e.what());
 			}
-		}
-
-		// Save updated applied overrides tracking
-		if (overridesDiscovered > 0) {
-			overrideManager->SaveAppliedOverridesTracking(appliedOverrides);
 		}
 
 		if (settings["Version"].is_string() && settings["Version"].get<std::string>() != Plugin::VERSION.string()) {
@@ -407,26 +379,10 @@ void State::Load(ConfigMode a_configMode, bool a_allowReload)
 		Load(a_configMode, false);
 }
 
-void State::Save(ConfigMode a_configMode)
+void State::SaveToJson(nlohmann::json& settings)
 {
+	std::lock_guard<std::mutex> lock(m_mutex);
 	const auto shaderCache = globals::shaderCache;
-	std::string configPath = GetConfigPath(a_configMode);
-	std::ofstream o{ configPath };
-
-	try {
-		std::filesystem::create_directories(Util::PathHelpers::GetCommunityShaderPath());
-	} catch (const std::filesystem::filesystem_error& e) {
-		logger::warn("Error creating directory during Save ({}) : {}\n", Util::PathHelpers::GetCommunityShaderPath().string(), e.what());
-		return;
-	}
-
-	// Check if the file opened successfully
-	if (!o.is_open()) {
-		logger::warn("Failed to open config file for saving: {}", configPath);
-		return;  // Exit early if file cannot be opened
-	}
-
-	json settings;
 
 	globals::menu->Save(settings["Menu"]);
 
@@ -465,8 +421,104 @@ void State::Save(ConfigMode a_configMode)
 
 	settings["Version"] = Plugin::VERSION.string();
 
-	for (auto* feature : Feature::GetFeatureList())
+	// Save feature settings and user overrides
+	auto overrideManager = SettingsOverrideManager::GetSingleton();
+	for (auto* feature : Feature::GetFeatureList()) {
 		feature->Save(settings);
+
+		// If feature has overrides, save user modifications to .user file
+		const std::string featureName = feature->GetShortName();
+		if (overrideManager->HasFeatureOverrides(featureName) && feature->loaded) {
+			json currentSettings;
+			feature->SaveSettings(currentSettings);
+
+			// Get the merged override settings (all overrides applied to empty base)
+			json overrideSettings = overrideManager->GetMergedOverrideSettings(featureName, json::object());
+
+			// Save user override only if settings differ from override
+			overrideManager->SaveUserOverride(featureName, currentSettings, overrideSettings);
+		}
+	}
+}
+
+void State::LoadFromJson(nlohmann::json& settings)
+{
+	std::lock_guard<std::mutex> lock(m_mutex);
+	const auto shaderCache = globals::shaderCache;
+
+	// Load Menu settings
+	if (settings.contains("Menu") && settings["Menu"].is_object()) {
+		globals::menu->Load(settings["Menu"]);
+	}
+
+	if (settings.contains("Advanced") && settings["Advanced"].is_object()) {
+		json& advanced = settings["Advanced"];
+		if (advanced.contains("Dump Shaders") && advanced["Dump Shaders"].is_boolean())
+			shaderCache->SetDump(advanced["Dump Shaders"]);
+		if (advanced.contains("Log Level") && advanced["Log Level"].is_number_integer())
+			logLevel = magic_enum::enum_cast<spdlog::level::level_enum>(advanced["Log Level"].get<int>()).value_or(spdlog::level::info);
+		if (advanced.contains("Shader Defines") && advanced["Shader Defines"].is_string())
+			SetDefines(advanced["Shader Defines"]);
+		if (advanced.contains("Compiler Threads") && advanced["Compiler Threads"].is_number_integer())
+			shaderCache->compilationThreadCount = std::clamp(advanced["Compiler Threads"].get<int32_t>(), 1, static_cast<int32_t>(std::thread::hardware_concurrency()));
+		if (advanced.contains("Background Compiler Threads") && advanced["Background Compiler Threads"].is_number_integer())
+			shaderCache->backgroundCompilationThreadCount = std::clamp(advanced["Background Compiler Threads"].get<int32_t>(), 1, static_cast<int32_t>(std::thread::hardware_concurrency()));
+		if (advanced.contains("Use FileWatcher") && advanced["Use FileWatcher"].is_boolean())
+			shaderCache->SetFileWatcher(advanced["Use FileWatcher"]);
+		if (advanced.contains("Frame Annotations") && advanced["Frame Annotations"].is_boolean())
+			frameAnnotations = advanced["Frame Annotations"];
+	}
+
+	if (settings.contains("General") && settings["General"].is_object()) {
+		json& general = settings["General"];
+		if (general.contains("Enable Shaders") && general["Enable Shaders"].is_boolean())
+			shaderCache->SetEnabled(general["Enable Shaders"]);
+		if (general.contains("Enable Disk Cache") && general["Enable Disk Cache"].is_boolean())
+			shaderCache->SetDiskCache(general["Enable Disk Cache"]);
+		if (general.contains("Enable Async") && general["Enable Async"].is_boolean())
+			shaderCache->SetAsync(general["Enable Async"]);
+	}
+
+	if (settings.contains("Replace Original Shaders") && settings["Replace Original Shaders"].is_object()) {
+		json& originalShaders = settings["Replace Original Shaders"];
+		ForEachShaderTypeWithIndex([&](auto type, int classIndex) {
+			auto name = magic_enum::enum_name(type);
+			if (originalShaders.contains(name) && originalShaders[name].is_boolean()) {
+				enabledClasses[classIndex] = originalShaders[name];
+			} else {
+				logger::warn("Invalid entry for shader class '{}', using current value", name);
+			}
+		});
+	}
+
+	// Load feature settings (only for already-loaded features)
+	for (auto* feature : Feature::GetFeatureList()) {
+		if (feature->loaded) {
+			feature->Load(settings);
+		}
+	}
+}
+
+void State::Save(ConfigMode a_configMode)
+{
+	std::string configPath = GetConfigPath(a_configMode);
+	std::ofstream o{ configPath };
+
+	try {
+		std::filesystem::create_directories(Util::PathHelpers::GetCommunityShaderPath());
+	} catch (const std::filesystem::filesystem_error& e) {
+		logger::warn("Error creating directory during Save ({}) : {}\n", Util::PathHelpers::GetCommunityShaderPath().string(), e.what());
+		return;
+	}
+
+	// Check if the file opened successfully
+	if (!o.is_open()) {
+		logger::warn("Failed to open config file for saving: {}", configPath);
+		return;  // Exit early if file cannot be opened
+	}
+
+	json settings;
+	SaveToJson(settings);
 
 	try {
 		o << settings.dump(1);
@@ -780,9 +832,7 @@ void State::UpdateSharedData([[maybe_unused]] bool a_inWorld, [[maybe_unused]] b
 			auto upscaleMethod = upscaling.GetUpscaleMethod();
 			if (temporal && upscaleMethod != Upscaling::UpscaleMethod::kTAA) {
 				auto renderSize = Util::ConvertToDynamic(screenSize, true);
-				data.MipBias = std::log2f(renderSize.x / screenSize.x);
-				if (upscaleMethod == Upscaling::UpscaleMethod::kDLSS)
-					data.MipBias -= 1.0f;
+				data.MipBias = std::log2f(renderSize.x / screenSize.x) - 1.0f;
 			} else {
 				data.MipBias = 0;
 			}
@@ -803,7 +853,7 @@ void State::UpdateSharedData([[maybe_unused]] bool a_inWorld, [[maybe_unused]] b
 
 	const auto& depth = globals::game::renderer->GetDepthStencilData().depthStencils[RE::RENDER_TARGETS_DEPTHSTENCIL::kPOST_ZPREPASS_COPY];
 	auto& terrainBlending = globals::features::terrainBlending;
-	auto srv = (terrainBlending.loaded ? terrainBlending.blendedDepthTexture16->srv.get() : depth.depthSRV);
+	auto srv = (terrainBlending.loaded && terrainBlending.settings.Enabled ? terrainBlending.blendedDepthTexture16->srv.get() : depth.depthSRV);
 
 	globals::d3d::context->PSSetShaderResources(17, 1, &srv);
 }
