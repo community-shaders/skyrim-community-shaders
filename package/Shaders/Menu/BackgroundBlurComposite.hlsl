@@ -47,7 +47,7 @@ float4 SampleWithSoftening(float2 uv, float2 pixelPos, float2 texelSize)
 {
     // Get base random offset for this pixel
     float2 noise = Hash22(pixelPos);
-    
+
     // Rotated grid offsets (45 degree rotation for better coverage)
     // This creates a smooth disc-like sampling pattern
     static const float2 offsets[4] = {
@@ -56,13 +56,13 @@ float4 SampleWithSoftening(float2 uv, float2 pixelPos, float2 texelSize)
         float2(-0.25f,  0.25f),
         float2( 0.25f,  0.25f)
     };
-    
+
     // Random rotation angle based on pixel position
     float angle = noise.x * 6.28318530718f;
     float s = sin(angle);
     float c = cos(angle);
     float2x2 rotation = float2x2(c, -s, s, c);
-    
+
     // Sample 4 points with rotated jittered offsets and average
     float4 result = 0;
     [unroll]
@@ -71,7 +71,7 @@ float4 SampleWithSoftening(float2 uv, float2 pixelPos, float2 texelSize)
         float2 jitter = mul(rotation, offsets[i]) * texelSize;
         result += InputTexture.Sample(LinearSampler, uv + jitter);
     }
-    
+
     return result * 0.25f;
 }
 
@@ -116,13 +116,8 @@ float4 PS_Main(VS_OUTPUT input) : SV_TARGET
     {
         discard;
     }
-
-    // Calculate texel size of the downsampled blur texture
-    // WindowParams.y/z are screen dimensions, blur texture is 1/8th of that
-    float2 blurTexelSize = 8.0f / float2(WindowParams.y, WindowParams.z);
-
-    // Sample with soft dithering to hide blocky pixels from the downsampled blur
-    float4 blurColor = SampleWithSoftening(input.TexCoord, pixelPos, blurTexelSize);
+    // Sample the blurred texture
+    float4 blurColor = InputTexture.Sample(LinearSampler, input.TexCoord);
     
     // Apply rounded corner mask to alpha
     // The blur strength is applied via blend state, so just use the rounded mask here
