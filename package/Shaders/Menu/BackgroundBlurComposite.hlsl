@@ -116,8 +116,13 @@ float4 PS_Main(VS_OUTPUT input) : SV_TARGET
     {
         discard;
     }
-    // Sample the blurred texture
-    float4 blurColor = InputTexture.Sample(LinearSampler, input.TexCoord);
+
+    // Calculate texel size of the downsampled blur texture
+    // WindowParams.y/z are screen dimensions, blur texture is 1/8th of that
+    float2 blurTexelSize = 8.0f / float2(WindowParams.y, WindowParams.z);
+
+    // Sample with soft dithering to hide blocky pixels from the downsampled blur
+    float4 blurColor = SampleWithSoftening(input.TexCoord, pixelPos, blurTexelSize);
     
     // Apply rounded corner mask to alpha
     // The blur strength is applied via blend state, so just use the rounded mask here
