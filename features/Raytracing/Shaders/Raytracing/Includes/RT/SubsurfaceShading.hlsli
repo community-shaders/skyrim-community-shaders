@@ -238,6 +238,7 @@ float3 EvaluateSubsurfaceNEE(
     {
         const float3 centerSpecularF0 = surface.F0;
         const float3 diffuseAlbedo = surface.DiffuseAlbedo;
+        subsurfaceMaterialData.transmissionColor = Frame.SSSMaterialOverride ? subsurfaceMaterialData.transmissionColor : diffuseAlbedo;
 
         const float3 cameraUp = float3(
             Frame.ViewInverse[0][0],

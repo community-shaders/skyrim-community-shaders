@@ -54,6 +54,8 @@ struct Surface
     float IOR;
     float3 TransmissionColor;
     Subsurface SubsurfaceData;
+    float DiffTrans;
+    float SpecTrans;
 
 #if defined(FULL_MATERIAL)
     float3 SubsurfaceColor;
@@ -105,6 +107,7 @@ struct Surface
     void DefaultMaterial(in Vertex v0, in Vertex v1, in Vertex v2, in float3 uvw, in float3 normalWS, in float3 tangentWS, in float3 bitangentWS, float3x3 objectToWorld3x3, in Material material)
     {
         float2 texCoord0 = material.TexCoord(Interpolate(v0.Texcoord0, v1.Texcoord0, v2.Texcoord0, uvw));
+        TransmissionColor = float3(0.0f, 0.0f, 0.0f);
 
 #if defined(DEBUG_SHADERTYPE)
         [branch]
@@ -149,7 +152,7 @@ struct Surface
             AO = rmaos.z;
             F0 = material.SpecularLevel() * rmaos.w;
 
-            if (material.PBRFlags & PBR::Flags::Subsurface) {
+            if ((material.PBRFlags & PBR::Flags::Subsurface) && !(material.ShaderFlags & ShaderFlags::kTwoSided)) {
                 Texture2D subsurfaceTexture = Textures[NonUniformResourceIndex(material.SubsurfaceTexture())];
 
                 float4 subsurfaceColor = subsurfaceTexture.SampleLevel(BaseSampler, texCoord0, MipLevel);
@@ -159,12 +162,18 @@ struct Surface
 
                 TransmissionColor = SubsurfaceData.ScatteringColor;
 
-                // SubsurfaceData.ScatteringColor = float3(1.800f, 2.900f, 4.500f);
-                // SubsurfaceData.Scale = 12.234f / thickness;
-                SubsurfaceData.Scale = 1000;
+                SubsurfaceData.Scale = 40.0f;
                 SubsurfaceData.Anisotropy = 0.0f;
 
                 SubsurfaceData.HasSubsurface = any(SubsurfaceData.ScatteringColor) > 0.0f ? 1 : 0;
+            } else if ((material.PBRFlags & PBR::Flags::Subsurface) && (material.ShaderFlags & ShaderFlags::kTwoSided)) {
+                // Two sided subsurface - for leaves and thin objects
+                Texture2D subsurfaceTexture = Textures[NonUniformResourceIndex(material.SubsurfaceTexture())];
+                // Just use simple diffuse transmission for thin objects
+                float4 subsurfaceColor = subsurfaceTexture.SampleLevel(BaseSampler, texCoord0, MipLevel);
+                float thickness = subsurfaceColor.a * material.SubsurfaceScale();
+                TransmissionColor = subsurfaceColor.rgb * material.SubsurfaceScatteringColor().rgb;
+                DiffTrans = 1 - thickness;
             }
         } else if (material.ShaderType == ShaderType::Lighting) {
             float3 diffuse = baseTexture.SampleLevel(BaseSampler, texCoord0, MipLevel).rgb;
@@ -241,9 +250,9 @@ struct Surface
                 SubsurfaceData.Anisotropy = 0.0f;
 
                 // Typical skin values
-                SubsurfaceData.ScatteringColor = float3(4.820f, 1.690f, 1.090f);
+                SubsurfaceData.ScatteringColor = float3(1,0.8,0.6);
                 SubsurfaceData.TransmissionColor = Albedo;
-                SubsurfaceData.Scale = 40.0f;
+                SubsurfaceData.Scale = 4.f;
             }
 
             [branch]
@@ -311,8 +320,7 @@ struct Surface
 
             TransmissionColor = lerp(float3(1.0f, 1.0f, 1.0f), Albedo, alpha);
             Albedo *= alpha;
-        } else {
-            TransmissionColor = float3(0.0f, 0.0f, 0.0f);
+            SpecTrans = 1.0f;
         }
 
         [branch]
@@ -321,16 +329,13 @@ struct Surface
             Albedo *= 1.0f - windowAlpha;
             Emissive *= 0;
             Roughness = max(Roughness, 0.08f); // prevent delta transmission
+            SpecTrans = 1.0f;
         }
         
         [branch]
         if (material.ShaderFlags & ShaderFlags::kExternalEmittance) {
             Emissive *= Frame.EmittanceColor;
         }
-
-        // if (SubsurfaceData.HasSubsurface != 0) {
-        //     Albedo = float3(0.0f, 1.0f, 0.0f); // Subsurface materials do not have a direct albedo component
-        // }
 #endif
 
 #if defined(DEBUG_NONORMALMAP)
@@ -499,6 +504,8 @@ struct Surface
 
         surface.Position = position;
         surface.SubsurfaceData = (Subsurface)0;
+        surface.DiffTrans = 0.0f;
+        surface.SpecTrans = 0.0f;
 
         Shape shape = GetShape(payload, instance);
 
@@ -621,6 +628,8 @@ struct Surface
     Surface(float3 position, float3 geomNormal, float3 normal, float3 tangent, float3 bitangent, float3 albedo, float roughness, float metallic, float3 emissive, float ao) {
         Surface surface;
         surface.SubsurfaceData = (Subsurface)0;
+        surface.DiffTrans = 0.0f;
+        surface.SpecTrans = 0.0f;
 
         surface.Position = position;
 

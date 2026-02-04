@@ -489,8 +489,8 @@ struct DefaultBSDF
         specularReflectionTransmission.activeLobes = activeLobes;
         specularReflectionTransmission.isThinSurface = isThinSurface;
 
-        diffTrans = ((activeLobes & (uint)LobeType::Transmission) && surface.SubsurfaceData.HasSubsurface > 0) ? Luminance(surface.TransmissionColor) : 0.f;
-        specTrans = ((activeLobes & (uint)LobeType::Transmission) && surface.SubsurfaceData.HasSubsurface == 0) & (uint)LobeType::Transmission ? 1.f : 0.f;
+        diffTrans = surface.DiffTrans;
+        specTrans = surface.SpecTrans;
 
         float surfaceMetallic = surface.Metallic;
         float metallicBRDF = surfaceMetallic * (1.f - specTrans);
@@ -529,13 +529,15 @@ struct DefaultBSDF
         float alpha = surfaceRoughness * surfaceRoughness;
         bool isDelta = alpha < kMinGGXAlpha;
 
-        float diffTrans = (any(surface.TransmissionColor > 0.f) && surface.SubsurfaceData.HasSubsurface > 0) ? Luminance(surface.TransmissionColor) : 0.f;
-        float specTrans = (any(surface.TransmissionColor > 0.f) && surface.SubsurfaceData.HasSubsurface == 0) ? 1.f : 0.f;
+        float diffTrans = surface.DiffTrans;
+        float specTrans = surface.SpecTrans;
 
         uint lobes = isDelta ? (uint)LobeType::DeltaReflection : (uint)LobeType::SpecularReflection;
-        if (any(surface.DiffuseAlbedo > 0.f) && diffTrans < 1.f)
-            lobes |= (uint)LobeType::DiffuseReflection;
-        
+        if (any(surface.DiffuseAlbedo > 0.f) && specTrans < 1.f)
+        {
+            if (diffTrans < 1.f) lobes |= (uint)LobeType::DiffuseReflection;
+            if (diffTrans > 0.f) lobes |= (uint)LobeType::DiffuseTransmission;
+        }
         if (specTrans > 0.f) lobes |= isDelta ? (uint)LobeType::DeltaTransmission : (uint)LobeType::SpecularTransmission;
 
         return lobes;

@@ -27,7 +27,7 @@
 
 #define MAX_SSS_SAMPLE_COUNT 4
 
-#define SSS_METERS_UNIT 0.01428f // Skyrim units to meters
+#define SSS_METERS_UNIT (1.f / 14.28f) // mm to skyrim units
 
 #define SSS_MIN_ALBEDO 0.01f
 
