@@ -83,31 +83,32 @@ void WeatherEditor::DrawSettings()
 
 void WeatherEditor::DrawWeatherPickerSection()
 {
-	if (ImGui::TreeNodeEx("Weather Details", ImGuiTreeNodeFlags_DefaultOpen)) {
-		const auto& themeSettings = Menu::GetSingleton()->GetTheme();
-		const auto& menuSettings = Menu::GetSingleton()->GetSettings();
+	ImGui::Spacing();
+	ImGui::Spacing();
+	ImGui::Spacing();
+	Util::DrawSectionHeader("Weather Details");
 
-		// Show as Overlay checkbox
-		bool showInOverlay = WeatherDetailsWindow.ShowInOverlay;
-		if (ImGui::Checkbox("Show in Overlay", &showInOverlay)) {
-			WeatherDetailsWindow.ShowInOverlay = showInOverlay;
-		}
-		if (auto _tt = Util::HoverTooltipWrapper()) {
-			ImGui::Text("Opens weather details in a separate window that stays open\neven when the main menu is closed. ");
-			ImGui::Text("Toggle with ");
-			ImGui::SameLine();
-			ImGui::TextColored(themeSettings.StatusPalette.CurrentHotkey, "%s", Util::Input::KeyIdToString(menuSettings.OverlayToggleKey));
-		}
-		ImGui::Spacing();
+	const auto& themeSettings = Menu::GetSingleton()->GetTheme();
+	const auto& menuSettings = Menu::GetSingleton()->GetSettings();
 
-		// Render core weather details
-		RenderCoreWeatherDetails(true);  // true = show interactive elements in main settings panel
-
-		// Render weather analysis from features with collapsible headers
-		RenderFeatureWeatherAnalysis();
-
-		ImGui::TreePop();
+	// Show as Overlay checkbox
+	bool showInOverlay = WeatherDetailsWindow.ShowInOverlay;
+	if (ImGui::Checkbox("Show in Overlay", &showInOverlay)) {
+		WeatherDetailsWindow.ShowInOverlay = showInOverlay;
 	}
+	if (auto _tt = Util::HoverTooltipWrapper()) {
+		ImGui::Text("Opens weather details in a separate window that stays open\neven when the main menu is closed. ");
+		ImGui::Text("Toggle with ");
+		ImGui::SameLine();
+		ImGui::TextColored(themeSettings.StatusPalette.CurrentHotkey, "%s", Util::Input::KeyIdToString(menuSettings.OverlayToggleKey));
+	}
+	ImGui::Spacing();
+
+	// Render core weather details
+	RenderCoreWeatherDetails(true);  // true = show interactive elements in main settings panel
+
+	// Render weather analysis from features with collapsible headers
+	RenderFeatureWeatherAnalysis();
 }
 
 void WeatherEditor::LerpWeather(RE::TESWeather* oldWeather, RE::TESWeather* newWeather, float currentWeatherPct)
@@ -680,11 +681,10 @@ void WeatherEditor::RenderWeatherControls(RE::Sky* sky)
 
 void WeatherEditor::RenderWeatherInformationDisplay(RE::Sky* sky, bool showInteractiveElements)
 {
-	static bool weatherInfoExpanded = true;
-	Util::DrawSectionHeader("Weather Information", false, true, &weatherInfoExpanded);
-
-	if (!weatherInfoExpanded)
-		return;
+	ImGui::Spacing();
+	ImGui::Spacing();
+	ImGui::Spacing();
+	Util::DrawSectionHeader("Weather Information", false, true);
 
 	// Update cache: store current lastWeather if it exists, otherwise keep the cached one
 	if (sky->lastWeather) {
@@ -713,7 +713,6 @@ void WeatherEditor::RenderWeatherInformationDisplay(RE::Sky* sky, bool showInter
 
 		ImGui::EndTable();
 	}
-}
 
 void WeatherEditor::RenderCoreWeatherDetails(bool showInteractiveElements)
 {
