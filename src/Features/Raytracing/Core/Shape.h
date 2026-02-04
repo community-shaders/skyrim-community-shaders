@@ -69,17 +69,19 @@ public:
 
 	Flags flags = Flags::None;
 
-	State state = State::None;
-
 	AABB aabb;
+
+	bool dirtyState = false;
 
 	float boundRadius;
 
 	float3x4 localToRoot;
 
+	uint16_t slot;
+
 	Shape(Allocation* allocation, RE::BSGeometry* geometry, float3x4 localToRoot, Flags flags = Flags::None) :
-		allocation({ allocation, AllocationDeleter() }), geometry(geometry), localToRoot(localToRoot) , flags(flags)
-	{ }
+		allocation({ allocation, AllocationDeleter() }), geometry(geometry), localToRoot(localToRoot), flags(flags)
+	{}
 
 	/*inline Shape Clone(uint16_t registerIndexIn, RE::BSGeometry* geometryIn) const
 	{
@@ -109,13 +111,15 @@ public:
 
 	void CalculateVectors(bool calculateNormal);
 
-	Flags Update(bool isRenderUseValid);
+	Flags Update();
 
 	bool UpdateDynamicPosition();
 
 	void UpdateUploadDynamicBuffers(ID3D12GraphicsCommandList4* commandList);
 
 	bool UpdateSkinning();
+
+	void SetState(State stateIn, bool activate);
 
 	void UpdateDismember(bool enable);
 
@@ -127,6 +131,9 @@ public:
 	static stl::enumeration<PBRShaderFlags, uint32_t> GetPBRShaderFlags(const BSLightingShaderMaterialPBR* pbrMaterial);
 
 	ShapeData GetData() const;
+
+private:
+	State state = State::None;
 };
 
 DEFINE_ENUM_FLAG_OPERATORS(Shape::Flags);

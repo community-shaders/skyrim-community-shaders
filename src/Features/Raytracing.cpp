@@ -1897,7 +1897,7 @@ void Raytracing::CreateModelInternal(RE::TESForm* form, const char* path, RE::Ni
 		return;
 	}
 
-	logger::debug("[RT] CreateModel - Path: {}, FormID [0x{:08X}], NiNode [0x{:08X}]: {}", path, formID, reinterpret_cast<uintptr_t>(pRoot), pRoot->name);
+	logger::info("[RT] CreateModel - Path: {}, FormID [0x{:08X}], NiNode [0x{:08X}]: {}", path, formID, reinterpret_cast<uintptr_t>(pRoot), pRoot->name);
 
 	auto formType = form->GetFormType();
 
@@ -1908,7 +1908,7 @@ void Raytracing::CreateModelInternal(RE::TESForm* form, const char* path, RE::Ni
 	TraverseScenegraphRTGeometries(pRoot, [&](RE::BSGeometry* pGeometry) -> RE::BSVisit::BSVisitControl {
 		const char* name = pGeometry->name.c_str();
 
-		logger::debug("\t\t[RT] CreateModel::TraverseScenegraphGeometries - {}", name);
+		logger::info("\t\t[RT] CreateModel::TraverseScenegraphGeometries - {}", name);
 
 		const auto& geometryType = pGeometry->GetType();
 
@@ -1980,12 +1980,6 @@ void Raytracing::CreateModelInternal(RE::TESForm* form, const char* path, RE::Ni
 
 			shapes.push_back(eastl::move(meshData));
 		} else if (auto* skinInstance = geometryRuntimeData.skinInstance.get()) {  // Skinned
-			/*static REL::Relocation<const RE::NiRTTI*> bsDismemberedSkinInstanceRTTI{ RE::BSDismemberSkinInstance::Ni_RTTI };
-			bool isDismembered = skinInstance->GetRTTI()->IsKindOf(bsDismemberedSkinInstanceRTTI.get());
-
-			if (isDismembered)
-				logger::warn("\t\t[RT] CreateModel::TraverseScenegraphGeometries - Is dismembered");*/
-
 			auto& skinPartition = skinInstance->skinPartition;
 
 			if (!skinPartition) {
@@ -1998,11 +1992,32 @@ void Raytracing::CreateModelInternal(RE::TESForm* form, const char* path, RE::Ni
 				return RE::BSVisit::BSVisitControl::kContinue;
 			}
 
-			logger::info("\t\t[RT] CreateModel::TraverseScenegraphGeometries - Partitions: {}, VertexCount: {}, Unk24: [0x{:X}]", skinPartition->numPartitions, skinPartition->vertexCount, skinPartition->unk24);
-			
+			logger::debug("\t\t[RT] CreateModel::TraverseScenegraphGeometries - Partitions: {}, VertexCount: {}, Unk24: [0x{:X}]", skinPartition->numPartitions, skinPartition->vertexCount, skinPartition->unk24);
 
+			// This looks diabolical
+			static REL::Relocation<const RE::NiRTTI*> dismemberRTTI{ RE::BSDismemberSkinInstance::Ni_RTTI };
 
-			for (auto& partition : skinPartition->partitions) {
+			RE::BSDismemberSkinInstance* dismemberSkinInstance = nullptr;
+
+			eastl::vector<RE::BSDismemberSkinInstance::Data> dismemberData;
+
+			decltype(dismemberReferences.begin()) it;
+			bool emplacedDismemberRef = false;
+
+			if (skinInstance->GetRTTI() == dismemberRTTI.get()) {
+				dismemberSkinInstance = reinterpret_cast<RE::BSDismemberSkinInstance*>(skinInstance);
+
+				auto& dismemberRuntime = dismemberSkinInstance->GetRuntimeData();
+
+				dismemberData.resize(dismemberRuntime.numPartitions);
+				std::memcpy(dismemberData.data(), dismemberRuntime.partitions, dismemberRuntime.numPartitions * sizeof(RE::BSDismemberSkinInstance::Data));
+
+				eastl::tie(it, emplacedDismemberRef) = dismemberReferences.try_emplace(dismemberSkinInstance, eastl::vector<Shape*>(dismemberRuntime.numPartitions));
+			}
+
+			for (size_t i = 0; i < skinPartition->partitions.size(); i++) {
+				auto& partition = skinPartition->partitions[i];
+
 				// Fix for modded geometry
 				if (partition.triangles == 0) {
 					logger::error("\t\t[RT] CreateModel::TraverseScenegraphGeometries - Triangle count of 0 for {}: {}", path ? path : "N/A", name ? name : "N/A");
@@ -2015,35 +2030,17 @@ void Raytracing::CreateModelInternal(RE::TESForm* form, const char* path, RE::Ni
 
 				auto meshData = eastl::make_unique<Shape>(shapeRegisters.Allocate(), pGeometry, localToRoot, flags);
 
+				// Diabolical Part II
+				if (emplacedDismemberRef) {
+					meshData->slot = dismemberData[i].slot;
+					it->second[i] = meshData.get();
+				}
+
 				meshData->BuildMesh(partition.buffData, skinPartition->vertexCount, partition.triangles, partition.bonesPerVertex);
 				meshData->BuildMaterial(geometryRuntimeData, name, formID);
 				meshData->CreateBuffers(ToWide(name));
 
 				shapes.push_back(eastl::move(meshData));
-			}
-
-			static REL::Relocation<const RE::NiRTTI*> dismemberRTTI{ RE::BSDismemberSkinInstance::Ni_RTTI };
-			if (skinInstance->GetRTTI() == dismemberRTTI.get()) {
-				auto dismemberSkinInstance = reinterpret_cast<RE::BSDismemberSkinInstance*>(skinInstance);
-
-				auto& dismemberRuntime = dismemberSkinInstance->GetRuntimeData();
-
-				if (skinPartition->partitions.size() == dismemberRuntime.numPartitions) {
-					auto [it, emplaced] = dismemberReferences.try_emplace(dismemberSkinInstance, eastl::vector<DismemberReference>());
-
-					if (emplaced) {
-						it->second.resize(dismemberRuntime.numPartitions);
-
-						for (size_t i = 0; i < dismemberRuntime.numPartitions; i++) {
-							it->second[i] = DismemberReference(shapes[i].get(), dismemberRuntime.partitions[i].slot);
-						}
-					}
-				} else {
-					logger::warn("\t\t[RT] CreateModel::TraverseScenegraphGeometries - Partitions number and dismember partitions number mismatch.");
-				}
-
-				
-				logger::info("\t\t[RT] CreateModel::TraverseScenegraphGeometries - Dismember Partitions: {}", dismemberSkinInstance->GetRuntimeData().numPartitions);
 			}
 		}
 
@@ -2322,7 +2319,7 @@ eastl::shared_ptr<Allocation> Raytracing::GetMSNormalMapRegister([[maybe_unused]
 
 void Raytracing::AddInstance(RE::FormID formID, RE::NiAVObject* pNiNode, eastl::string path)
 {
-	logger::info("[RT] AddInstance [0x{:08X}] - {}, Path: {}", formID, pNiNode->name, path);
+	logger::debug("[RT] AddInstance [0x{:08X}] - {}, Path: {}", formID, pNiNode->name, path);
 
 	if (auto instanceIt = instances.find(pNiNode); instanceIt == instances.end()) {
 		if (auto modelIt = models.find(path); modelIt != models.end()) {

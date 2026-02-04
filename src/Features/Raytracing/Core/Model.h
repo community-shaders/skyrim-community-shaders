@@ -67,16 +67,6 @@ struct Model
 		return shaderFlags;
 	}
 
-	bool IsRenderUseValid() const
-	{
-		for (auto& shape : shapes) {
-			if (shape->geometry->GetFlags().any(RE::NiAVObject::Flag::kRenderUse))
-				return true;
-		}
-
-		return false;
-	}
-
 	bool ShouldQueueMSNConversion() const
 	{
 		for (auto& shape : shapes) {
@@ -116,7 +106,7 @@ struct Model
 
 	bool HideShape([[maybe_unused]]Shape* shape) const
 	{
-		return BLASBuildExecuted() && ((shape->state & Shape::State::Hidden) != Shape::State::None);
+		return BLASBuildExecuted() && shape->IsHidden();
 	}
 
 	void AddRef()

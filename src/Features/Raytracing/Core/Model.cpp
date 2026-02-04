@@ -214,7 +214,7 @@ bool Model::UpdateBLAS(ID3D12GraphicsCommandList4* commandList)
 		return false;
 	
 	if (update && !((shapeflags & Shape::Flags::Skinned) || (shapeflags & Shape::Flags::Dynamic))) {
-		logger::critical("[RT] Model::UpdateBLAS - Only Skinned and Dynamic geometry should get the 'BLASUpdate' flag - 0x{:08X}.", reinterpret_cast<uintptr_t>(this));
+		logger::critical("[RT] Model::UpdateBLAS - Only Skinned and Dynamic geometry should get the 'BLASUpdate' flag - [0x{:08X}]", reinterpret_cast<uintptr_t>(this));
 
 		update = false;
 		flags &= ~Flags::BLASUpdate;

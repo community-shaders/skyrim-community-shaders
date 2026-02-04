@@ -915,22 +915,19 @@ D3D12_GPU_VIRTUAL_ADDRESS Shape::TransformBuffer() const
 	return globals::features::raytracing.transformBuffer->resource->GetGPUVirtualAddress() + offset;
 }
 
-Shape::Flags Shape::Update([[maybe_unused]]bool isRenderUseValid)
+Shape::Flags Shape::Update()
 {
 	auto dynamic = flags & Shape::Flags::Dynamic;
 	auto skinned = flags & Shape::Flags::Skinned;
 
-	if ((dynamic || skinned) && geometry->GetFlags().any(RE::NiAVObject::Flag::kHidden)) {
-		state |= State::Hidden;
-	} else if (isRenderUseValid && geometry->GetFlags().none(RE::NiAVObject::Flag::kRenderUse)) {
-		state |= State::Hidden;
-	} else {
-		state &= ~State::Hidden;
-	}
+	// I don't know if kHidden is set on inner nodes for culling, so to be safe we check
+	/*if (dynamic || skinned) {
+		SetState(State::Hidden, geometry->GetFlags().any(RE::NiAVObject::Flag::kHidden));
+	}*/
 
 	//logger::info("Shape::Update {} - RenderUseValid: {} - Hidden: {}, Flags: {}", geometry->name, isRenderUseValid, (state & State::Hidden) != 0, GetFlagsString<RE::NiAVObject::Flag>(geometry->GetFlags().underlying()).c_str());
 
-	if ((state & State::Hidden) == State::Hidden) {
+	if (IsHidden()) {
 		return Shape::Flags::None;
 	}
 
@@ -1038,12 +1035,22 @@ bool Shape::UpdateSkinning()
 	return true;
 }
 
+void Shape::SetState(State stateIn, bool activate)
+{
+	auto prevState = state;
+
+	if (activate)
+		state |= stateIn;
+	else
+		state &= ~stateIn;
+
+	if (state != prevState)
+		dirtyState = true;
+}
+
 void Shape::UpdateDismember(bool enable)
 {
-	if (enable)
-		state &= ~State::DismemberHidden;
-	else
-		state |= State::DismemberHidden;
+	SetState(State::DismemberHidden, !enable);
 }
 
 ShapeData Shape::GetData() const
