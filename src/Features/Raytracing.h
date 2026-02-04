@@ -245,9 +245,6 @@ struct Raytracing : public OverlayFeature
 
 	void UpdateShadowInstances();
 
-	void AddInstances();
-	void ClearInstances();
-
 	void DeviceRemovedHandler();
 
 	void CopyDepth();

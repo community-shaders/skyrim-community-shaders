@@ -2350,19 +2350,6 @@ static RE::NiCamera* FindNiCamera(RE::NiAVObject* object)
 	return nullptr;
 }
 
-void Raytracing::AddInstances()
-{
-	/*RE::BSVisit::TraverseScenegraphObjects(pRoot, [&](RE::NiAVObject* pObject) -> RE::BSVisit::BSVisitControl {
-
-		return RE::BSVisit::BSVisitControl::kContinue;
-	});*/
-}
-
-void Raytracing::ClearInstances()
-{
-	instances.clear();
-}
-
 void Raytracing::UpdateInstances()
 {
 	//std::lock_guard lock{ geometryMutex };
@@ -4282,13 +4269,10 @@ RE::BSEventNotifyControl Raytracing::MenuOpenCloseEventHandler::ProcessEvent(con
 {
 	// When entering a loadscreen
 	if (a_event->menuName == RE::LoadingMenu::MENU_NAME) {
-		//auto& rtgi = globals::features::raytracing;
-
 		logger::debug("MenuOpenCloseEventHandler::ProcessEvent - Opening: {}", a_event->opening);
 
 		if (a_event->opening) {
-			auto& rt = globals::features::raytracing;
-			rt.ClearInstances();
+			//auto& rt = globals::features::raytracing;
 		}
 	}
 
@@ -4298,9 +4282,6 @@ RE::BSEventNotifyControl Raytracing::MenuOpenCloseEventHandler::ProcessEvent(con
 RE::BSEventNotifyControl Raytracing::TESLoadGameEventHandler::ProcessEvent(const RE::TESLoadGameEvent* a_event, RE::BSTEventSource<RE::TESLoadGameEvent>*)
 {
 	logger::debug("TESLoadGameEventHandler::ProcessEvent {}", reinterpret_cast<intptr_t>(a_event));
-
-	auto& rt = globals::features::raytracing;
-	rt.AddInstances();
 
 	return RE::BSEventNotifyControl::kContinue;
 }
