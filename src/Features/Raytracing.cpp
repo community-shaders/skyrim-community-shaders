@@ -2508,7 +2508,29 @@ void Raytracing::UpdateInstances()
 
 void Raytracing::UpdateBLASes()
 {
+	eastl::vector<CD3DX12_RESOURCE_BARRIER> barriers;
+	//barriers.clear();
+	//barriers.reserve(queuedShapes.size());
 
+	for (auto& [node, instance] : instances) {
+		auto it = models.find(instance.filename);
+
+		auto& model = it->second;
+
+		auto flags = model->flags;
+
+		if (!model->UpdateBLAS(commandList.get()))
+			continue;
+
+		logger::info("[RT] UpdateBLASes {} - {} - 0x{:08X} - {}", instance.filename, model->shapes.size(), reinterpret_cast<uintptr_t>(node), (flags & Model::Flags::BLASRebuild) ? "Rebuild" : "Update");
+
+		barriers.push_back(CD3DX12_RESOURCE_BARRIER::UAV(model->blasBuffer->GetResource()));
+	}
+
+	const uint blasUpdateCount = (uint)barriers.size();
+
+	if (blasUpdateCount > 0)
+		commandList->ResourceBarrier(blasUpdateCount, barriers.data());
 }
 
 auto GetFrustumCorners2(const RE::NiFrustum& frustum)

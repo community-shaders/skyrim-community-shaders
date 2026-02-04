@@ -56,9 +56,20 @@ void Instance::Update(RE::NiAVObject* node, RE::NiPoint3 cameraPosition, const e
 	bool isRenderUseValid = model->IsRenderUseValid();
 
 	for (auto& shape : model->shapes) {
+		const bool prevHidden = (shape->state & Shape::State::Hidden) == Shape::State::Hidden;
+
 		auto updateFlags = shape->Update(isRenderUseValid);
 
+		const bool hidden = (shape->state & Shape::State::Hidden) == Shape::State::Hidden;
+
+		if (hidden != prevHidden) {
+			model->flags |= Model::Flags::BLASRebuild;
+			logger::info("Instance::Update {} - {} 0x{:08X} - Hidden Changed To: {}", path, shape->geometry->name, reinterpret_cast<uintptr_t>(this), hidden);
+		}
+
 		if ((updateFlags & Shape::Flags::Dynamic) || (updateFlags & Shape::Flags::Skinned)) {
+			model->flags |= Model::Flags::BLASUpdate;
+
 			skinningPipeline->QueueUpdate(updateFlags, path, shape.get());
 		}
 	}

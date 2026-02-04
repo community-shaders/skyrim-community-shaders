@@ -32,8 +32,9 @@ public:
 		DoubleSidedGeom = 1 << 6
 	};
 
-	enum State : uint8_t
+	enum class State : uint8_t
 	{
+		None = 0,
 		Hidden = 1 << 0,
 		HiddenDismember = 1 << 1
 	};
@@ -68,7 +69,7 @@ public:
 
 	Flags flags = Flags::None;
 
-	State state;
+	State state = State::None;
 
 	AABB aabb;
 
@@ -125,3 +126,4 @@ public:
 };
 
 DEFINE_ENUM_FLAG_OPERATORS(Shape::Flags);
+DEFINE_ENUM_FLAG_OPERATORS(Shape::State);

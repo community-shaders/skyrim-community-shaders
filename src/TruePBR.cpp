@@ -42,7 +42,7 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 
 #define CHECK_PBR_TEXTURE(textureName)                                                                         \
 	if (!(pbrMaterial->textureName)) {                                                                         \
-		logger::warn("[TruePBR] {} missing {}; treating as nonPBR", pbrMaterial->inputFilePath, #textureName); \
+		logger::debug("[TruePBR] {} missing {}; treating as nonPBR", pbrMaterial->inputFilePath, #textureName); \
 		return false;                                                                                          \
 	}
 

@@ -150,7 +150,9 @@ void Model::BuildBLAS(ID3D12GraphicsCommandList4* commandList)
 		geometryDescs[i] = shapes[i]->GeometryDesc();
 	}
 
-	bool updatable = (flags & Shape::Flags::Skinned) || (flags & Shape::Flags::Dynamic);
+	//const bool updatable = (shapeflags & Shape::Flags::Skinned) || (shapeflags & Shape::Flags::Dynamic);
+
+	const bool updatable = true;
 
 	D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAGS buildFlags = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_NONE;
 
@@ -172,7 +174,7 @@ void Model::BuildBLAS(ID3D12GraphicsCommandList4* commandList)
 
 	D3D12_RESOURCE_DESC desc = {
 		.Dimension = D3D12_RESOURCE_DIMENSION_BUFFER,
-		.Width = prebuildInfo.ScratchDataSizeInBytes,
+		.Width = std::max(prebuildInfo.ScratchDataSizeInBytes, prebuildInfo.UpdateScratchDataSizeInBytes),
 		.Height = 1,
 		.DepthOrArraySize = 1,
 		.MipLevels = 1,
@@ -216,6 +218,12 @@ void Model::BuildBLAS(ID3D12GraphicsCommandList4* commandList)
 
 bool Model::UpdateBLAS(ID3D12GraphicsCommandList4* commandList)
 {
+	const bool update = (flags & Flags::BLASUpdate); 
+	const bool rebuild = (flags & Flags::BLASRebuild);
+
+	if (!update && !rebuild)
+		return false;
+
 	if (!BLASBuildExecuted())
 		return false;
 
@@ -238,8 +246,6 @@ bool Model::UpdateBLAS(ID3D12GraphicsCommandList4* commandList)
 	if (geometryDescs.empty())
 		return false;
 
-	bool rebuild = false;
-
 	D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_INPUTS inputs = {
 		.Type = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL,
 		.Flags = rebuild ? D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_PREFER_FAST_BUILD : D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_PREFER_FAST_BUILD | D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_PERFORM_UPDATE,
@@ -256,6 +262,9 @@ bool Model::UpdateBLAS(ID3D12GraphicsCommandList4* commandList)
 	};
 
 	commandList->BuildRaytracingAccelerationStructure(&buildDesc, 0, nullptr);
+
+	flags &= ~Flags::BLASUpdate;
+	flags &= ~Flags::BLASRebuild;
 
 	// Register frame that BLAS was updated
 	blasUpdateFrame = globals::features::raytracing.frameIndex;

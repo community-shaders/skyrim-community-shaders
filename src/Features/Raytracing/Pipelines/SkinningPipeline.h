@@ -84,7 +84,6 @@ struct SkinningPipeline : ComputePipeline<SkinningHeap>
 	void SetupResources(ID3D12Device5* device) override;
 	void QueueUpdate(Shape::Flags updateFlags, eastl::string name, Shape* shape);
 	bool PrepareResources(ID3D12GraphicsCommandList4* commandList, uint& count, uint& vertexCount);
-	void UpdateBLASES(ID3D12GraphicsCommandList4* commandList);
 	void RestoreResources(ID3D12GraphicsCommandList4* commandList);
 	void ClearQueue();
 	void Dispatch(ID3D12GraphicsCommandList4* commandList, ID3D12Device5* device);

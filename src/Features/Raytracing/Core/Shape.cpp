@@ -915,28 +915,22 @@ D3D12_GPU_VIRTUAL_ADDRESS Shape::TransformBuffer() const
 	return globals::features::raytracing.transformBuffer->resource->GetGPUVirtualAddress() + offset;
 }
 
-Shape::Flags Shape::Update(bool isRenderUseValid)
+Shape::Flags Shape::Update([[maybe_unused]]bool isRenderUseValid)
 {
 	auto dynamic = flags & Shape::Flags::Dynamic;
 	auto skinned = flags & Shape::Flags::Skinned;
 
-	auto prevState = state;
-
-	if ((dynamic || skinned) && geometry->GetFlags().any(RE::NiAVObject::Flag::kHidden)) {
+	/*if ((dynamic || skinned) && geometry->GetFlags().any(RE::NiAVObject::Flag::kHidden)) {
 		state |= State::Hidden;
 	} else if (isRenderUseValid && geometry->GetFlags().none(RE::NiAVObject::Flag::kRenderUse)) {
 		state |= State::Hidden;
 	} else {
 		state &= ~State::Hidden;
-	}
-
-	if (prevState != state) {
-		logger::info("Shape::Update {} 0x{:08X} - Hidden Changed To: {}", geometry->name, reinterpret_cast<uintptr_t>(this), (state & State::Hidden) != 0);
-	}
+	}*/
 
 	//logger::info("Shape::Update {} - RenderUseValid: {} - Hidden: {}, Flags: {}", geometry->name, isRenderUseValid, (state & State::Hidden) != 0, GetFlagsString<RE::NiAVObject::Flag>(geometry->GetFlags().underlying()).c_str());
 
-	if (state & State::Hidden) {
+	if ((state & State::Hidden) == State::Hidden) {
 		return Shape::Flags::None;
 	}
 

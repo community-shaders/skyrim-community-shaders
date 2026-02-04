@@ -18,9 +18,9 @@
 
 struct Model
 {
-	enum BLASFlags {
-		Update = 1 << 0,
-		Rebuild	= 1 << 1	
+	enum Flags {
+		BLASUpdate = 1 << 0,
+		BLASRebuild	= 1 << 1	
 	};
 
 	eastl::vector<eastl::unique_ptr<Shape>> shapes;
@@ -28,11 +28,13 @@ struct Model
 	winrt::com_ptr<D3D12MA::Allocation> blasBuffer = nullptr;
 	winrt::com_ptr<D3D12MA::Allocation> blasScratchBuffer = nullptr;
 
+	Flags flags;
+
 	Model(eastl::vector<eastl::unique_ptr<Shape>>& shapes) :
 		shapes(eastl::move(shapes))
 	{
 		for (auto& shape : this->shapes) {
-			flags |= shape->flags;
+			shapeflags |= shape->flags;
 			shaderTypes |= shape->material.shaderType;
 			features |= static_cast<int>(shape->material.Feature);
 			shaderFlags.set(shape->material.shaderFlags.get());
@@ -46,7 +48,7 @@ struct Model
 
 	Shape::Flags GetFlags() const
 	{
-		return flags;
+		return shapeflags;
 	}
 
 	uint32_t GetShaderTypes() const
@@ -97,8 +99,7 @@ struct Model
 
 	bool HideShape([[maybe_unused]]Shape* shape) const
 	{
-		return false;
-		//return BLASBuildExecuted() && (shape->state & Shape::Hidden);
+		return BLASBuildExecuted() && ((shape->state & Shape::State::Hidden) == Shape::State::Hidden);
 	}
 
 	void AddRef()
@@ -113,7 +114,7 @@ struct Model
 	}
 
 private:
-	Shape::Flags flags = Shape::Flags::None;
+	Shape::Flags shapeflags = Shape::Flags::None;
 	uint32_t shaderTypes = RE::BSShader::Type::None;
 	int features = static_cast<int>(RE::BSShaderMaterial::Feature::kNone);
 	REX::EnumSet<RE::BSShaderProperty::EShaderPropertyFlag, std::uint64_t> shaderFlags;
