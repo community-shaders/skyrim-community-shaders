@@ -35,6 +35,7 @@ namespace BackgroundBlur
 		winrt::com_ptr<ID3D11PixelShader> horizontalPixelShader;
 		winrt::com_ptr<ID3D11PixelShader> verticalPixelShader;
 		winrt::com_ptr<ID3D11PixelShader> compositePixelShader;  // For rounded corner compositing
+		winrt::com_ptr<ID3D11PixelShader> clearPixelShader;      // For rounded corner UI buffer clearing
 		winrt::com_ptr<ID3D11Buffer> constantBuffer;
 		winrt::com_ptr<ID3D11Buffer> windowConstantBuffer;  // For window rect and corner radius
 		winrt::com_ptr<ID3D11SamplerState> samplerState;
@@ -132,6 +133,14 @@ namespace BackgroundBlur
 		compositePixelShader.attach(static_cast<ID3D11PixelShader*>(Util::CompileShader(L"Data\\Shaders\\Menu\\BackgroundBlurComposite.hlsl", {}, "ps_5_0", "PS_Main")));
 		if (!compositePixelShader) {
 			logger::error("Failed to compile composite blur pixel shader");
+			initializationFailed = true;
+			return false;
+		}
+
+		// Compile clear pixel shader from same file (for rounded corner UI buffer clearing)
+		clearPixelShader.attach(static_cast<ID3D11PixelShader*>(Util::CompileShader(L"Data\\Shaders\\Menu\\BackgroundBlurComposite.hlsl", {}, "ps_5_0", "PS_Clear")));
+		if (!clearPixelShader) {
+			logger::error("Failed to compile clear pixel shader");
 			initializationFailed = true;
 			return false;
 		}
@@ -552,13 +561,9 @@ namespace BackgroundBlur
 		context->RSSetState(scissorRasterizerState.get());
 		context->RSSetScissorRects(1, &scissorRect);
 
-		context->OMSetRenderTargets(1, &targetRTV, nullptr);
-		float blendFactor[4] = { 1.0f, 1.0f, 1.0f, BLUR_INTENSITY * 0.8f };
-		context->OMSetBlendState(blendState.get(), blendFactor, 0xFFFFFFFF);
-
-		// Use composite shader with rounded corner mask if available, otherwise fallback
-		if (compositePixelShader && windowConstantBuffer) {
-			// Set up window constants for rounded corner compositing
+		// Set up window constants for rounded corner shaders (used by both composite and clear)
+		bool useRoundedCorners = compositePixelShader && clearPixelShader && windowConstantBuffer;
+		if (useRoundedCorners) {
 			WindowConstants windowConstants = {};
 			windowConstants.windowRect[0] = menuMin.x;
 			windowConstants.windowRect[1] = menuMin.y;
@@ -569,44 +574,43 @@ namespace BackgroundBlur
 			windowConstants.windowParams[2] = static_cast<float>(sourceDesc.Height);
 			windowConstants.windowParams[3] = 0.0f;
 			context->UpdateSubresource(windowConstantBuffer.get(), 0, nullptr, &windowConstants, 0, 0);
-
-			context->PSSetShader(compositePixelShader.get(), nullptr, 0);
 			auto windowConstantBufferPtr = windowConstantBuffer.get();
-			context->PSSetConstantBuffers(0, 1, &constantBufferPtr);
 			context->PSSetConstantBuffers(1, 1, &windowConstantBufferPtr);
 		}
-		// Note: if composite shader not available, vertical shader is still set from blur pass
 
-		// Use blurred quarter-res texture, bilinear filtering upscales smoothly
+		// Draw blur to target
+		context->OMSetRenderTargets(1, &targetRTV, nullptr);
+		float blendFactor[4] = { 1.0f, 1.0f, 1.0f, BLUR_INTENSITY * 0.8f };
+		context->OMSetBlendState(blendState.get(), blendFactor, 0xFFFFFFFF);
+		context->PSSetShader(useRoundedCorners ? compositePixelShader.get() : verticalPixelShader.get(), nullptr, 0);
 		auto srv2Ptr = blurSRV2.get();
 		context->PSSetShaderResources(0, 1, &srv2Ptr);
 		context->Draw(3, 0);
 		context->PSSetShaderResources(0, 1, &nullSRV);
 
-		// Clear the UI buffer in the scissor area so the HUD doesn't draw on top of our blur
-		// The HUD outside the menu area remains visible
-		if (uiBufferRTV && clearSRV) {
-			// IMPORTANT: Switch back to horizontal shader for UI buffer clearing
-			// The composite shader expects WindowBuffer which isn't set up for this pass
-			context->PSSetShader(horizontalPixelShader.get(), nullptr, 0);
-
-			// Restore scissor to exact window bounds for clearing
-			D3D11_RECT clearScissorRect;
-			clearScissorRect.left = static_cast<LONG>((std::max)(0.0f, menuMin.x));
-			clearScissorRect.top = static_cast<LONG>((std::max)(0.0f, menuMin.y));
-			clearScissorRect.right = static_cast<LONG>((std::min)(static_cast<FLOAT>(sourceDesc.Width), menuMax.x));
-			clearScissorRect.bottom = static_cast<LONG>((std::min)(static_cast<FLOAT>(sourceDesc.Height), menuMax.y));
-			context->RSSetScissorRects(1, &clearScissorRect);
-
-			// Draw transparent black over just the scissor area to clear the HUD there
+		// Clear UI buffer where blur was drawn (prevents HUD showing through)
+		if (uiBufferRTV) {
 			context->OMSetRenderTargets(1, &uiBufferRTV, nullptr);
-			// Use opaque blend to overwrite
 			context->OMSetBlendState(nullptr, nullptr, 0xFFFFFFFF);
-			// Draw the 1x1 transparent black texture (shader will sample and output transparent)
-			auto clearSRVPtr = clearSRV.get();
-			context->PSSetShaderResources(0, 1, &clearSRVPtr);
-			context->Draw(3, 0);
-			context->PSSetShaderResources(0, 1, &nullSRV);
+
+			if (useRoundedCorners) {
+				// Clear with same rounded shape - window constants already bound
+				context->PSSetShader(clearPixelShader.get(), nullptr, 0);
+				context->Draw(3, 0);
+			} else if (clearSRV) {
+				// Fallback: rectangular clear
+				context->PSSetShader(horizontalPixelShader.get(), nullptr, 0);
+				D3D11_RECT clearScissorRect;
+				clearScissorRect.left = static_cast<LONG>((std::max)(0.0f, menuMin.x));
+				clearScissorRect.top = static_cast<LONG>((std::max)(0.0f, menuMin.y));
+				clearScissorRect.right = static_cast<LONG>((std::min)(static_cast<FLOAT>(sourceDesc.Width), menuMax.x));
+				clearScissorRect.bottom = static_cast<LONG>((std::min)(static_cast<FLOAT>(sourceDesc.Height), menuMax.y));
+				context->RSSetScissorRects(1, &clearScissorRect);
+				auto clearSRVPtr = clearSRV.get();
+				context->PSSetShaderResources(0, 1, &clearSRVPtr);
+				context->Draw(3, 0);
+				context->PSSetShaderResources(0, 1, &nullSRV);
+			}
 		}
 
 		// Restore state
@@ -635,6 +639,7 @@ namespace BackgroundBlur
 		horizontalPixelShader = nullptr;
 		verticalPixelShader = nullptr;
 		compositePixelShader = nullptr;
+		clearPixelShader = nullptr;
 		constantBuffer = nullptr;
 		windowConstantBuffer = nullptr;
 		samplerState = nullptr;
