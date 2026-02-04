@@ -319,12 +319,78 @@ void SettingsTabRenderer::RenderInterfaceTab()
 	if (BeginTabItemWithFont("Interface", Menu::FontRole::Heading)) {
 		MenuFonts::TabBarPaddingGuard tabPaddingGuard(Menu::FontRole::Subheading);
 		if (ImGui::BeginTabBar("##tabs", ImGuiTabBarFlags_None)) {
+			RenderBehaviorTab();
 			RenderThemesTab();
 			RenderFontsTab();
 			RenderStylingTab();
 			RenderColorsTab();
 			ImGui::EndTabBar();
 		}
+		ImGui::EndTabItem();
+	}
+}
+
+void SettingsTabRenderer::RenderBehaviorTab()
+{
+	if (BeginTabItemWithFont("Behavior", Menu::FontRole::Heading)) {
+		auto& themeSettings = globals::menu->GetSettings().Theme;
+
+		SeparatorTextWithFont("UI Behavior", Menu::FontRole::Subheading);
+
+		ImGui::Checkbox("Show Icon Buttons in Header", &themeSettings.ShowActionIcons);
+		if (auto _tt = Util::HoverTooltipWrapper()) {
+			ImGui::Text(
+				"When enabled: Shows action buttons (Save, Load, Clear Cache) as icons in the header\n"
+				"When disabled: Shows as text buttons below the header");
+		}
+
+		if (themeSettings.ShowActionIcons) {
+			ImGui::Indent();
+			if (ImGui::Checkbox("Use Monochrome Icons", &themeSettings.UseMonochromeIcons)) {
+				globals::menu->pendingIconReload = true;
+			}
+			if (auto _tt = Util::HoverTooltipWrapper()) {
+				ImGui::Text("Uses white monochrome icons that adapt to your theme's text color");
+			}
+			ImGui::SameLine();
+			if (ImGui::Checkbox("Use Monochrome CS Logo", &themeSettings.UseMonochromeLogo)) {
+				globals::menu->pendingIconReload = true;
+			}
+			if (auto _tt = Util::HoverTooltipWrapper()) {
+				ImGui::Text("Uses monochrome version of the Community Shaders logo");
+			}
+			ImGui::Unindent();
+		}
+
+		ImGui::Checkbox("Show Footer", &themeSettings.ShowFooter);
+		if (auto _tt = Util::HoverTooltipWrapper()) {
+			ImGui::Text("Shows the footer with game version, swap chain, and GPU information at the bottom of the window");
+		}
+
+		ImGui::Checkbox("Center Header Title", &themeSettings.CenterHeader);
+		if (auto _tt = Util::HoverTooltipWrapper()) {
+			ImGui::Text("Centers the Community Shaders title and logo in the header title bar");
+		}
+
+		ImGui::Checkbox("Auto-hide Feature List", &globals::menu->GetSettings().AutoHideFeatureList);
+		if (auto _tt = Util::HoverTooltipWrapper()) {
+			ImGui::Text("Automatically hides the left feature list panel. Move cursor to the left edge to show it.");
+		}
+
+		ImGui::SliderFloat("Tooltip Hover Delay", &themeSettings.TooltipHoverDelay, 0.0f, 2.0f, "%.2f s", ImGuiSliderFlags_AlwaysClamp);
+		if (auto _tt = Util::HoverTooltipWrapper()) {
+			ImGui::TextUnformatted("Time in seconds to wait before a tooltip appears when hovering over an item.");
+		}
+
+		SeparatorTextWithFont("Visual Effects", Menu::FontRole::Subheading);
+
+		if (ImGui::Checkbox("Background Blur", &themeSettings.BackgroundBlurEnabled)) {
+			BackgroundBlur::SetEnabled(themeSettings.BackgroundBlurEnabled);
+		}
+		if (auto _tt = Util::HoverTooltipWrapper()) {
+			ImGui::Text("Applies a blur effect to the background behind the menu window.");
+		}
+
 		ImGui::EndTabItem();
 	}
 }
@@ -850,56 +916,6 @@ void SettingsTabRenderer::RenderStylingTab()
 	if (BeginTabItemWithFont("Styling", Menu::FontRole::Heading)) {
 		auto& themeSettings = globals::menu->GetSettings().Theme;
 		auto& style = themeSettings.Style;
-
-		SeparatorTextWithFont("Styling Options", Menu::FontRole::Subheading);
-
-		ImGui::Checkbox("Show Icon Buttons in Header", &themeSettings.ShowActionIcons);
-		if (auto _tt = Util::HoverTooltipWrapper()) {
-			ImGui::Text(
-				"When enabled: Shows action buttons (Save, Load, Clear Cache) as icons in the header\n"
-				"When disabled: Shows as text buttons below the header");
-		}
-
-		if (themeSettings.ShowActionIcons) {
-			ImGui::Indent();
-			if (ImGui::Checkbox("Use Monochrome Icons", &themeSettings.UseMonochromeIcons)) {
-				// Defer icon reload to next frame to avoid rendering with released textures
-				globals::menu->pendingIconReload = true;
-			}
-			if (auto _tt = Util::HoverTooltipWrapper()) {
-				ImGui::Text("Uses white monochrome icons that adapt to your theme's text color");
-			}
-			ImGui::SameLine();
-			if (ImGui::Checkbox("Use Monochrome CS Logo", &themeSettings.UseMonochromeLogo)) {
-				globals::menu->pendingIconReload = true;
-			}
-			if (auto _tt = Util::HoverTooltipWrapper()) {
-				ImGui::Text("Uses monochrome version of the Community Shaders logo");
-			}
-			ImGui::Unindent();
-		}
-
-		ImGui::Checkbox("Show Footer", &themeSettings.ShowFooter);
-		if (auto _tt = Util::HoverTooltipWrapper()) {
-			ImGui::Text("Shows the footer with game version, swap chain, and GPU information at the bottom of the window");
-		}
-
-		ImGui::Checkbox("Center Header Title", &themeSettings.CenterHeader);
-		if (auto _tt = Util::HoverTooltipWrapper()) {
-			ImGui::Text("Centers the Community Shaders title and logo in the header title bar");
-		}
-
-		ImGui::SliderFloat("Tooltip Hover Delay", &themeSettings.TooltipHoverDelay, 0.0f, 2.0f, "%.2f s", ImGuiSliderFlags_AlwaysClamp);
-		if (auto _tt = Util::HoverTooltipWrapper()) {
-			ImGui::TextUnformatted("Time in seconds to wait before a tooltip appears when hovering over an item.");
-		}
-
-		if (ImGui::Checkbox("Background Blur", &themeSettings.BackgroundBlurEnabled)) {
-			BackgroundBlur::SetEnabled(themeSettings.BackgroundBlurEnabled);
-		}
-		if (auto _tt = Util::HoverTooltipWrapper()) {
-			ImGui::Text("Applies a blur effect to the background behind the menu window.");
-		}
 
 		SeparatorTextWithFont("Main", Menu::FontRole::Subheading);
 		if (ImGui::SliderFloat("Global Scale", &themeSettings.GlobalScale, -1.f, 1.f, "%.2f")) {
