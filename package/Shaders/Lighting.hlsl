@@ -997,7 +997,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 		float depthSampledLinear = SharedData::GetScreenDepth(depthSampled);
 		float depthPixelLinear = SharedData::GetScreenDepth(input.Position.z);
 
-		blendFactorTerrain = saturate((depthSampledLinear - depthPixelLinear) / 10.0);
+		blendFactorTerrain = saturate((depthSampledLinear - depthPixelLinear) / 5.0);
 
 		if (input.Position.z == depthSampled)
 			blendFactorTerrain = 1;
@@ -2214,7 +2214,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 		if (EnvmapData.y) {
 			envMask *= TexEnvMaskSampler.Sample(SampEnvMaskSampler, uv).x;
 		} else {
-			envMask *= material.Glossiness;
+			envMask *= glossiness;
 		}
 	}
 
@@ -2943,6 +2943,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	if (!dynamicCubemap)
 #		endif
 		specularColor += envColor * Color::IrradianceToLinear(diffuseColor);
+		indirectLobeWeights.diffuse += envColor;
 #	endif
 
 #	if defined(EMAT_ENVMAP)

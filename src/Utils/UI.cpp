@@ -3,6 +3,7 @@
 #include "../WeatherEditor/EditorWindow.h"
 #include "FileSystem.h"
 #include "Menu.h"
+#include "Menu/Fonts.h"
 #include "Menu/IconLoader.h"
 #include "Menu/ThemeManager.h"
 #include "ShaderCache.h"
@@ -41,18 +42,29 @@
 
 namespace Util
 {
-	HoverTooltipWrapper::HoverTooltipWrapper()
+	HoverTooltipWrapper::HoverTooltipWrapper() :
+		previousFont(nullptr)
 	{
 		hovered = ImGui::IsItemHovered(ImGuiHoveredFlags_DelayNormal | ImGuiHoveredFlags_AllowWhenDisabled);
 		if (hovered) {
 			ImGui::BeginTooltip();
 			ImGui::PushTextWrapPos(ImGui::GetFontSize() * 35.0f);
+			// Apply Subtext font for consistent tooltip styling
+			if (auto* menu = globals::menu) {
+				if (auto* subtextFont = menu->GetFont(Menu::FontRole::Subtext)) {
+					previousFont = ImGui::GetFont();
+					ImGui::PushFont(subtextFont);
+				}
+			}
 		}
 	}
 
 	HoverTooltipWrapper::~HoverTooltipWrapper()
 	{
 		if (hovered) {
+			if (previousFont) {
+				ImGui::PopFont();
+			}
 			ImGui::PopTextWrapPos();
 			ImGui::EndTooltip();
 		}
