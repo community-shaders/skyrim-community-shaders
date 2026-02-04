@@ -1013,6 +1013,11 @@ void Shape::UpdateUploadDynamicBuffers(ID3D12GraphicsCommandList4* commandList)
 	dynamicPositionBuffer->Upload(commandList);
 }
 
+bool Shape::IsHidden() const
+{
+	return ((state & State::Hidden) != State::None) || ((state & State::DismemberHidden) != State::None);
+}
+
 // TODO: Handle lazy skinned meshes update
 bool Shape::UpdateSkinning()
 {
@@ -1031,6 +1036,14 @@ bool Shape::UpdateSkinning()
 		return false;*/
 
 	return true;
+}
+
+void Shape::UpdateDismember(bool enable)
+{
+	if (enable)
+		state &= ~State::DismemberHidden;
+	else
+		state |= State::DismemberHidden;
 }
 
 ShapeData Shape::GetData() const

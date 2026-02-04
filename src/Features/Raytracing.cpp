@@ -1979,7 +1979,7 @@ void Raytracing::CreateModelInternal(RE::TESForm* form, const char* path, RE::Ni
 			meshData->CreateBuffers(ToWide(name));
 
 			shapes.push_back(eastl::move(meshData));
-		} else if (auto* skinInstance = (RE::BSDismemberSkinInstance*)geometryRuntimeData.skinInstance.get()) {  // Skinned
+		} else if (auto* skinInstance = geometryRuntimeData.skinInstance.get()) {  // Skinned
 			/*static REL::Relocation<const RE::NiRTTI*> bsDismemberedSkinInstanceRTTI{ RE::BSDismemberSkinInstance::Ni_RTTI };
 			bool isDismembered = skinInstance->GetRTTI()->IsKindOf(bsDismemberedSkinInstanceRTTI.get());
 
@@ -1998,7 +1998,9 @@ void Raytracing::CreateModelInternal(RE::TESForm* form, const char* path, RE::Ni
 				return RE::BSVisit::BSVisitControl::kContinue;
 			}
 
-			logger::debug("\t\t[RT] CreateModel::TraverseScenegraphGeometries - Partitions: {}, VertexCount: {}, Unk24: [0x{:X}]", skinPartition->numPartitions, skinPartition->vertexCount, skinPartition->unk24);
+			logger::info("\t\t[RT] CreateModel::TraverseScenegraphGeometries - Partitions: {}, VertexCount: {}, Unk24: [0x{:X}]", skinPartition->numPartitions, skinPartition->vertexCount, skinPartition->unk24);
+			
+
 
 			for (auto& partition : skinPartition->partitions) {
 				// Fix for modded geometry
@@ -2018,6 +2020,30 @@ void Raytracing::CreateModelInternal(RE::TESForm* form, const char* path, RE::Ni
 				meshData->CreateBuffers(ToWide(name));
 
 				shapes.push_back(eastl::move(meshData));
+			}
+
+			static REL::Relocation<const RE::NiRTTI*> dismemberRTTI{ RE::BSDismemberSkinInstance::Ni_RTTI };
+			if (skinInstance->GetRTTI() == dismemberRTTI.get()) {
+				auto dismemberSkinInstance = reinterpret_cast<RE::BSDismemberSkinInstance*>(skinInstance);
+
+				auto& dismemberRuntime = dismemberSkinInstance->GetRuntimeData();
+
+				if (skinPartition->partitions.size() == dismemberRuntime.numPartitions) {
+					auto [it, emplaced] = dismemberReferences.try_emplace(dismemberSkinInstance, eastl::vector<DismemberReference>());
+
+					if (emplaced) {
+						it->second.resize(dismemberRuntime.numPartitions);
+
+						for (size_t i = 0; i < dismemberRuntime.numPartitions; i++) {
+							it->second[i] = DismemberReference(shapes[i].get(), dismemberRuntime.partitions[i].slot);
+						}
+					}
+				} else {
+					logger::warn("\t\t[RT] CreateModel::TraverseScenegraphGeometries - Partitions number and dismember partitions number mismatch.");
+				}
+
+				
+				logger::info("\t\t[RT] CreateModel::TraverseScenegraphGeometries - Dismember Partitions: {}", dismemberSkinInstance->GetRuntimeData().numPartitions);
 			}
 		}
 

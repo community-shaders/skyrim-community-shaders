@@ -36,7 +36,7 @@ public:
 	{
 		None = 0,
 		Hidden = 1 << 0,
-		HiddenDismember = 1 << 1
+		DismemberHidden = 1 << 1
 	};
 
 	// The position of this meshes SRV in the register stack
@@ -116,6 +116,10 @@ public:
 	void UpdateUploadDynamicBuffers(ID3D12GraphicsCommandList4* commandList);
 
 	bool UpdateSkinning();
+
+	void UpdateDismember(bool enable);
+
+	bool IsHidden() const;
 
 	eastl::shared_ptr<Allocation> TextureRegister(const RE::NiPointer<RE::NiSourceTexture> niPointer, eastl::shared_ptr<Allocation> defaultTexture, bool modelSpaceNormalMap);
 

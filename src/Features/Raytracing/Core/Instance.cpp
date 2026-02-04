@@ -55,6 +55,8 @@ void Instance::Update(RE::NiAVObject* node, RE::NiPoint3 cameraPosition, const e
 
 	bool isRenderUseValid = model->IsRenderUseValid();
 
+	//bool changed = false;
+
 	for (auto& shape : model->shapes) {
 		const bool prevHidden = (shape->state & Shape::State::Hidden) != Shape::State::None;
 
@@ -65,6 +67,7 @@ void Instance::Update(RE::NiAVObject* node, RE::NiPoint3 cameraPosition, const e
 		if (hidden != prevHidden) {
 			model->flags |= Model::Flags::BLASRebuild;
 
+			//changed = true;
 			logger::trace("Instance::Update {} - {} 0x{:08X} - Valid: {}, Hidden: {}, Flags: {}", 
 				path, shape->geometry->name, reinterpret_cast<uintptr_t>(this), isRenderUseValid,
 				hidden, GetFlagsString<RE::NiAVObject::Flag>(shape->geometry->GetFlags().underlying()));
@@ -76,4 +79,15 @@ void Instance::Update(RE::NiAVObject* node, RE::NiPoint3 cameraPosition, const e
 			skinningPipeline->QueueUpdate(updateFlags, path, shape.get());
 		}
 	}
+
+	//RE::BSDismemberSkinInstance
+
+	/*if (changed) {
+		RE::BSVisit::TraverseScenegraphObjects(node, [&](RE::NiAVObject* pObject) -> RE::BSVisit::BSVisitControl {
+			logger::info("Instance::Update {} - {}, Flags: {}",
+				path, pObject->name, GetFlagsString<RE::NiAVObject::Flag>(pObject->GetFlags().underlying()));
+
+			return RE::BSVisit::BSVisitControl::kContinue;
+		});	
+	}*/
 }
