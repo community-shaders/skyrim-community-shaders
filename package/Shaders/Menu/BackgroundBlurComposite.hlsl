@@ -137,9 +137,9 @@ float4 PS_Clear(VS_OUTPUT input) : SV_TARGET
 {
     float2 pixelPos = input.TexCoord * float2(WindowParams.y, WindowParams.z);
     float sdf = RoundedRectSDF(pixelPos, WindowRect.xy, WindowRect.zw, WindowParams.x);
-    
+
     // Discard pixels outside rounded rect to preserve HUD in corners
     clip(-sdf - 0.001f);
-    
+
     return float4(0.0f, 0.0f, 0.0f, 0.0f);
 }
