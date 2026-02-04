@@ -282,6 +282,13 @@ void Streamline::SetDLSSOptions()
 	dlssOptions.colorBuffersHDR = sl::Boolean::eTrue;
 	dlssOptions.useAutoExposure = sl::Boolean::eTrue;
 
+	dlssOptions.dlaaPreset = sl::DLSSPreset::ePresetJ;
+	dlssOptions.ultraQualityPreset = sl::DLSSPreset::ePresetJ;
+	dlssOptions.qualityPreset = sl::DLSSPreset::ePresetM;
+	dlssOptions.balancedPreset = sl::DLSSPreset::ePresetM;
+	dlssOptions.performancePreset = sl::DLSSPreset::ePresetM;
+	dlssOptions.ultraPerformancePreset = sl::DLSSPreset::ePresetL;
+
 	dlssOptions.preExposure = 1.0f;
 	dlssOptions.sharpness = 0.0f;
 
@@ -331,59 +338,6 @@ void Streamline::Upscale(ID3D11Resource* a_upscalingTexture, ID3D11Resource* a_r
 	sl::ViewportHandle view(viewport);
 	const sl::BaseStructure* inputs[] = { &view };
 	slEvaluateFeature(sl::kFeatureDLSS, *frameToken, inputs, _countof(inputs), globals::d3d::context);
-}
-
-float2 Streamline::GetInputResolutionScale(uint32_t outputWidth, uint32_t outputHeight, uint32_t qualityMode)
-{
-	sl::DLSSMode dlssMode;
-	switch (qualityMode) {
-	case 1:
-		dlssMode = sl::DLSSMode::eMaxQuality;
-		break;
-	case 2:
-		dlssMode = sl::DLSSMode::eBalanced;
-		break;
-	case 3:
-		dlssMode = sl::DLSSMode::eMaxPerformance;
-		break;
-	case 4:
-		dlssMode = sl::DLSSMode::eUltraPerformance;
-		break;
-	default:
-		dlssMode = sl::DLSSMode::eDLAA;
-		break;
-	}
-
-	sl::DLSSOptions dlssOptions{};
-	dlssOptions.mode = dlssMode;
-	dlssOptions.outputWidth = outputWidth;
-	dlssOptions.outputHeight = outputHeight;
-
-	sl::DLSSOptimalSettings optimalSettings{};
-	sl::Result result = slDLSSGetOptimalSettings(dlssOptions, optimalSettings);
-	if (result != sl::Result::eOk) {
-		if (outputWidth > MAX_RESOLUTION || outputHeight > MAX_RESOLUTION) {
-			logger::critical("[Streamline] Requested resolution {} x {} exceeds the maximum allowed resolution of {} x {}. Lower your resolution to enable Streamline.", outputWidth, outputHeight, MAX_RESOLUTION, MAX_RESOLUTION);
-		}
-		logger::critical("[Streamline] Failed to get DLSS optimal settings, error code: {}({})", magic_enum::enum_name(result), (int)result);
-		return { 1.0f, 1.0f };
-	}
-
-	float scaleX;
-	float scaleY;
-
-	if (globals::game::ui->GameIsPaused()) {
-		// Calculate scale as ratio of minimum render resolution to output resolution
-		scaleX = (float)optimalSettings.renderWidthMin / (float)outputWidth;
-		scaleY = (float)optimalSettings.renderHeightMin / (float)outputHeight;
-	} else {
-		// Calculate scale as ratio of optimal render resolution to output resolution
-		scaleX = (float)optimalSettings.optimalRenderWidth / (float)outputWidth;
-		scaleY = (float)optimalSettings.optimalRenderHeight / (float)outputHeight;
-	}
-
-	// Return separate X and Y scales for more precision
-	return { scaleX, scaleY };
 }
 
 /**

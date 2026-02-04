@@ -31,6 +31,7 @@ private:
 	static void RenderInterfaceTab();
 
 	// Interface sub-tabs
+	static void RenderBehaviorTab();
 	static void RenderThemesTab();
 	static void RenderFontsTab();
 	static void RenderStylingTab();

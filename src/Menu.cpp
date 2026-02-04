@@ -155,6 +155,7 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	EnableShaderBlocking,
 	FirstTimeSetupCompleted,
 	SkipClearCacheConfirmation,
+	AutoHideFeatureList,
 	Theme,
 	SelectedThemePreset)
 
@@ -918,6 +919,12 @@ void Menu::ProcessInputEventQueue()
 			if (key == event.keyCode)
 				key = MapVirtualKeyEx(event.keyCode, MAPVK_VSC_TO_VK_EX, GetKeyboardLayout(0));
 			if (!event.IsPressed()) {
+				// Skip key release if it was used to close the first-time setup dialog
+				if (HomePageRenderer::ShouldSkipKeyRelease(key)) {
+					io.AddKeyEvent(Util::Input::VirtualKeyToImGuiKey(key), event.IsPressed());
+					continue;
+				}
+
 				struct HotkeyAction
 				{
 					uint32_t* settingKey;
