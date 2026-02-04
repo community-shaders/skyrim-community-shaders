@@ -18,6 +18,11 @@
 
 struct Model
 {
+	enum BLASFlags {
+		Update = 1 << 0,
+		Rebuild	= 1 << 1	
+	};
+
 	eastl::vector<eastl::unique_ptr<Shape>> shapes;
 
 	winrt::com_ptr<D3D12MA::Allocation> blasBuffer = nullptr;
@@ -82,19 +87,19 @@ struct Model
 
 	void ConvertMSN();
 
-	bool BLASBuildExecuted() const
-	{
-		return blasBuildFrame < globals::state->frameCount;
-	}
+	bool BLASBuildExecuted() const;
 
-	bool BLASUpdateExecuted() const
-	{
-		return blasUpdateFrame < globals::state->frameCount;
-	}
+	bool BLASUpdateExecuted() const;
 
 	void BuildBLAS(ID3D12GraphicsCommandList4* commandList);
 
-	void UpdateBLAS(ID3D12GraphicsCommandList4* commandList);
+	bool UpdateBLAS(ID3D12GraphicsCommandList4* commandList);
+
+	bool HideShape([[maybe_unused]]Shape* shape) const
+	{
+		return false;
+		//return BLASBuildExecuted() && (shape->state & Shape::Hidden);
+	}
 
 	void AddRef()
 	{
@@ -112,7 +117,7 @@ private:
 	uint32_t shaderTypes = RE::BSShader::Type::None;
 	int features = static_cast<int>(RE::BSShaderMaterial::Feature::kNone);
 	REX::EnumSet<RE::BSShaderProperty::EShaderPropertyFlag, std::uint64_t> shaderFlags;
-	uint blasBuildFrame;
-	uint blasUpdateFrame;
+	uint64_t blasBuildFrame;
+	uint64_t blasUpdateFrame;
 	eastl::atomic<int> refCount{ 0 };
 };

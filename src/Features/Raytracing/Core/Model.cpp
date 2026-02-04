@@ -125,6 +125,18 @@ void Model::ConvertMSN()
 	}
 }
 
+bool Model::BLASBuildExecuted() const
+{
+	//logger::info("[RT] BLASBuildExecuted - Build Frame: {}, Current Frame: {} - {}", blasBuildFrame, globals::features::raytracing.frameIndex, blasBuildFrame < globals::features::raytracing.frameIndex);
+	return blasBuildFrame < globals::features::raytracing.frameIndex;
+}
+
+bool Model::BLASUpdateExecuted() const
+{
+	//logger::info("[RT] BLASUpdateExecuted - Update Frame: {}, Current Frame: {} - {}", blasUpdateFrame, globals::features::raytracing.frameIndex, blasUpdateFrame < globals::features::raytracing.frameIndex);
+	return blasUpdateFrame < globals::features::raytracing.frameIndex;
+}
+
 void Model::BuildBLAS(ID3D12GraphicsCommandList4* commandList)
 {
 	auto& rt = globals::features::raytracing;
@@ -184,13 +196,14 @@ void Model::BuildBLAS(ID3D12GraphicsCommandList4* commandList)
 	D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_DESC buildDesc = {
 		.DestAccelerationStructureData = blasBuffer->GetResource()->GetGPUVirtualAddress(),
 		.Inputs = inputs,
+		.SourceAccelerationStructureData = 0,
 		.ScratchAccelerationStructureData = scratch->GetResource()->GetGPUVirtualAddress()
 	};
 
 	commandList->BuildRaytracingAccelerationStructure(&buildDesc, 0, nullptr);
 
 	// Register frame that BLAS was created
-	blasBuildFrame = globals::state->frameCount;
+	blasBuildFrame = rt.frameIndex;
 
 	const auto& asBarrier = CD3DX12_RESOURCE_BARRIER::UAV(blasBuffer->GetResource());
 	commandList->ResourceBarrier(1, &asBarrier);
@@ -201,15 +214,13 @@ void Model::BuildBLAS(ID3D12GraphicsCommandList4* commandList)
 		rt.tempGPUData.emplace_back(std::move(scratch), rt.fenceValue);
 }
 
-void Model::UpdateBLAS(ID3D12GraphicsCommandList4* commandList)
+bool Model::UpdateBLAS(ID3D12GraphicsCommandList4* commandList)
 {
-	auto gpuVirtualAddr = blasBuffer->GetResource()->GetGPUVirtualAddress();
-
 	if (!BLASBuildExecuted())
-		return;
+		return false;
 
 	if (!BLASUpdateExecuted())
-		return;
+		return false;
 	
 	static eastl::vector<D3D12_RAYTRACING_GEOMETRY_DESC> geometryDescs;
 	geometryDescs.clear();
@@ -218,26 +229,35 @@ void Model::UpdateBLAS(ID3D12GraphicsCommandList4* commandList)
 		geometryDescs.reserve(shapes.size());
 
 	for (auto& shape : shapes) {
+		if (HideShape(shape.get()))
+			continue;
+
 		geometryDescs.push_back(shape->GeometryDesc());
 	}
 
+	if (geometryDescs.empty())
+		return false;
+
+	bool rebuild = false;
+
 	D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_INPUTS inputs = {
 		.Type = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL,
-		.Flags = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_PREFER_FAST_BUILD | D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_PERFORM_UPDATE,
+		.Flags = rebuild ? D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_PREFER_FAST_BUILD : D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_PREFER_FAST_BUILD | D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_PERFORM_UPDATE,
 		.NumDescs = static_cast<uint>(geometryDescs.size()),
 		.DescsLayout = D3D12_ELEMENTS_LAYOUT_ARRAY,
 		.pGeometryDescs = geometryDescs.data()
 	};
 
 	D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_DESC buildDesc = {
-		.DestAccelerationStructureData = gpuVirtualAddr,
+		.DestAccelerationStructureData = blasBuffer->GetResource()->GetGPUVirtualAddress(),
 		.Inputs = inputs,
-		.SourceAccelerationStructureData = gpuVirtualAddr,
+		.SourceAccelerationStructureData = rebuild ? 0 : blasBuffer->GetResource()->GetGPUVirtualAddress(),
 		.ScratchAccelerationStructureData = blasScratchBuffer->GetResource()->GetGPUVirtualAddress()
 	};
 
 	commandList->BuildRaytracingAccelerationStructure(&buildDesc, 0, nullptr);
 
 	// Register frame that BLAS was updated
-	blasUpdateFrame = globals::state->frameCount;
+	blasUpdateFrame = globals::features::raytracing.frameIndex;
+	return true;
 }

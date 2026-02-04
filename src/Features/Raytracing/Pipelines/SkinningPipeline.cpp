@@ -175,7 +175,7 @@ void SkinningPipeline::RestoreResources(ID3D12GraphicsCommandList4* commandList)
 			barriers.push_back(barrier);
 	}
 
-	uint barrierCount = (uint)barriers.size();
+	const uint barrierCount = (uint)barriers.size();
 
 	if (barrierCount > 0)
 		commandList->ResourceBarrier(barrierCount, barriers.data());
@@ -200,13 +200,14 @@ void SkinningPipeline::UpdateBLASES(ID3D12GraphicsCommandList4* commandList)
 			auto& model = it->second;
 
 			// TODO: Take this out of skinning pipeline (to where?)
-			model->UpdateBLAS(commandList);
+			if (!model->UpdateBLAS(commandList))
+				continue;
 
 			barriers.push_back(CD3DX12_RESOURCE_BARRIER::UAV(model->blasBuffer->GetResource()));
 		}
 	}
 
-	uint blasUpdateCount = (uint)barriers.size();
+	const uint blasUpdateCount = (uint)barriers.size();
 
 	if (blasUpdateCount > 0)
 		commandList->ResourceBarrier(blasUpdateCount, barriers.data());

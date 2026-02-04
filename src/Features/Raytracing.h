@@ -241,6 +241,8 @@ struct Raytracing : public OverlayFeature
 	eastl::vector<size_t> GatherInstanceLights(RE::NiAVObject* pNiNode);
 
 	void UpdateInstances();
+	void UpdateBLASes();
+
 	void UpdateShadowInstances();
 
 	void AddInstances();
@@ -681,6 +683,9 @@ struct Raytracing : public OverlayFeature
 	eastl::array<InstanceData, RTConstants::MAX_INSTANCES> instanceData;
 	eastl::unique_ptr<DX12::StructuredBufferUpload<InstanceData>> instanceBuffer = nullptr;
 
+	Util::FrameChecker frameChecker;
+	uint64_t frameIndex;
+
 	Util::FrameChecker shadowFrameChecker;
 
 	// Textures that have been shared with DX12 and placed in a heap as SRV
@@ -897,7 +902,7 @@ struct Raytracing : public OverlayFeature
 
 	sl::ViewportHandle slViewportHandle{ 0 };
 
-	Util::FrameChecker frameChecker;
+	Util::FrameChecker dlssFrameChecker;
 	sl::FrameToken* frameToken = nullptr;
 
 	float2 jitter = { 0, 0 };

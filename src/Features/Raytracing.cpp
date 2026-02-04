@@ -1374,7 +1374,7 @@ void Raytracing::SetDLSSRROptions()
 
 void Raytracing::CheckFrameConstants()
 {
-	if (frameChecker.IsNewFrame()) {
+	if (dlssFrameChecker.IsNewFrame()) {
 		slGetNewFrameToken(frameToken, &globals::state->frameCount);
 
 		auto state = globals::state;
@@ -2057,7 +2057,7 @@ bool Raytracing::RemoveInstance(RE::NiAVObject* pRoot, bool releaseModel)
 	if (auto instanceIt = instances.find(pRoot); instanceIt != instances.end()) {
 		auto& instance = instanceIt->second;
 
-		logger::debug("[RT] RemoveInstance - \"{}\", \"{}\"", pRoot->name, instance.filename);
+		logger::info("[RT] RemoveInstance - \"{}\", \"{}\"", pRoot->name, instance.filename);
 
 		if (auto modelIt = models.find(instance.filename); modelIt != models.end()) {
 			auto& model = modelIt->second;
@@ -2071,7 +2071,7 @@ bool Raytracing::RemoveInstance(RE::NiAVObject* pRoot, bool releaseModel)
 				// Not sure if its necesary to mutex here, but when the model goes out of scope the buffers are destroyed so I assume it is
 				std::lock_guard lock{ renderMutex };
 
-				logger::debug("[RT] RemoveInstance - No refs, erasing from collection");
+				logger::info("[RT] RemoveInstance - No refs, erasing from collection");
 				models.erase(modelIt);
 			}
 		}
@@ -2296,7 +2296,7 @@ eastl::shared_ptr<Allocation> Raytracing::GetMSNormalMapRegister([[maybe_unused]
 
 void Raytracing::AddInstance(RE::FormID formID, RE::NiAVObject* pNiNode, eastl::string path)
 {
-	logger::debug("[RT] AddInstance [0x{:08X}] - {}, Path: {}", formID, pNiNode->name, path);
+	logger::info("[RT] AddInstance [0x{:08X}] - {}, Path: {}", formID, pNiNode->name, path);
 
 	if (auto instanceIt = instances.find(pNiNode); instanceIt == instances.end()) {
 		if (auto modelIt = models.find(path); modelIt != models.end()) {
@@ -2458,20 +2458,22 @@ void Raytracing::UpdateInstances()
 		// This is temporary while I think of a better place to fit this (probably on instance.Update?)
 		auto firstShapeIndex = shapeIndex;
 
-		bool canHide = model->BLASBuildExecuted();
-
 		for (auto& shape : model->shapes) {
 			if (shapeIndex >= RTConstants::MAX_SHAPES) {
 				logger::critical("[RT] UpdateInstances - Total shape count {} would exceed RTConstants::MAX_SHAPES {}", shapeIndex, RTConstants::MAX_SHAPES);
 				break;
 			}
 
-			if (canHide && (shape->state & Shape::Hidden))
+			if (model->HideShape(shape.get()))
 				continue;
 
 			shapeData[shapeIndex] = shape->GetData();
 			shapeIndex++;
 		}
+
+		// No visible shape in instance
+		if (shapeIndex == firstShapeIndex)
+			continue;
 
 		// TODO: split double sided models so only them get the flag
 		bool isDoubleSided = model->GetShaderFlags().any(RE::BSShaderProperty::EShaderPropertyFlag::kTwoSided);
@@ -2502,6 +2504,11 @@ void Raytracing::UpdateInstances()
 
 	instanceBuffer->UpdateList(instanceData.data(), std::min(instanceIndex, RTConstants::MAX_INSTANCES));
 	instanceBuffer->Upload(commandList.get(), 0, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+}
+
+void Raytracing::UpdateBLASes()
+{
+
 }
 
 auto GetFrustumCorners2(const RE::NiFrustum& frustum)
@@ -2949,6 +2956,8 @@ void Raytracing::DrawRTGI()
 
 	skinningPipeline->Dispatch(commandList.get(), d3d12Device.get());
 
+	UpdateBLASes();
+
 	// Upload buffers
 	lightBuffer->Upload(commandList.get(), 0, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
 
@@ -3266,6 +3275,11 @@ void Raytracing::DrawRTGI()
 		DX::ThrowIfFailed(d3d12Fence->SetEventOnCompletion(fenceValue, nullptr));
 	}
 
+	if (frameChecker.IsNewFrame()) {
+		logger::info("[RT] Executed Frame: {}", frameIndex);
+		frameIndex++;
+	}
+
 	if (canMeasure)
 		mainGPUTime = static_cast<float>((Util::GetNowSecs() - startTime) * 1000.0);
 
@@ -3520,6 +3534,9 @@ void Raytracing::RenderShadows()
 	if (d3d12Fence->GetCompletedValue() < fenceValue) {
 		DX::ThrowIfFailed(d3d12Fence->SetEventOnCompletion(fenceValue, nullptr));
 	}
+
+	if (frameChecker.IsNewFrame())
+		frameIndex++;
 
 	if (canMeasure)
 		shadowsGPUTime = static_cast<float>((Util::GetNowSecs() - startTime) * 1000.0);
