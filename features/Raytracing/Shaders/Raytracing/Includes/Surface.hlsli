@@ -157,6 +157,8 @@ struct Surface
                 SubsurfaceData.ScatteringColor = subsurfaceColor.rgb * material.SubsurfaceScatteringColor().rgb;
                 SubsurfaceData.TransmissionColor = Albedo;
 
+                TransmissionColor = SubsurfaceData.ScatteringColor;
+
                 // SubsurfaceData.ScatteringColor = float3(1.800f, 2.900f, 4.500f);
                 // SubsurfaceData.Scale = 12.234f / thickness;
                 SubsurfaceData.Scale = 1000;
@@ -248,10 +250,10 @@ struct Surface
             if (material.Feature == Feature::kEye) {
                 Roughness = 0.08f;
                 F0 = 0.02776f;
-                SubsurfaceData.HasSubsurface = 0;
+                SubsurfaceData.HasSubsurface = 1;
                 SubsurfaceData.Anisotropy = 0.0f;
                 // Typical eye values
-                SubsurfaceData.ScatteringColor = float3(0.482f, 0.169f, 0.109f);
+                SubsurfaceData.ScatteringColor = float3(1.0f, 0.8f, 0.6f);
                 SubsurfaceData.TransmissionColor = Albedo;
                 SubsurfaceData.Scale = 0.01f * M_TO_GAME_UNIT;
             }

@@ -521,8 +521,8 @@ void Raytracing::DrawAdvancedSettings()
 			ImGui::Checkbox("SSS Material Override", &advSettings.SSSMaterialOverride);
 
 			if (advSettings.SSSMaterialOverride) {
-				ImGui::ColorEdit3("Override SSS Transmission Color", reinterpret_cast<float*>(&advSettings.OverrideSSSTransmissionColor));
-				ImGui::ColorEdit3("Override SSS Scattering Color", reinterpret_cast<float*>(&advSettings.OverrideSSSScatteringColor));
+				ImGui::ColorEdit3("Override SSS Transmission Color", reinterpret_cast<float*>(&advSettings.OverrideSSSTransmissionColor), ImGuiColorEditFlags_Float);
+				ImGui::ColorEdit3("Override SSS Scattering Color", reinterpret_cast<float*>(&advSettings.OverrideSSSScatteringColor), ImGuiColorEditFlags_Float);
 				ImGui::SliderFloat("Override SSS Scale", &advSettings.OverrideSSSScale, 0.01f, 1000.0f, "%.2f");
 				ImGui::SliderFloat("Override SSS Anisotropy", &advSettings.OverrideSSSAnisotropy, -0.99f, 0.99f);
 			}

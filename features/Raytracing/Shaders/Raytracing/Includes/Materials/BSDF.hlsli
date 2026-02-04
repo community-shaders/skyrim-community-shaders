@@ -472,7 +472,7 @@ struct DefaultBSDF
         uint activeLobes = (uint)LobeType::DiffuseReflection | (uint)LobeType::SpecularReflection;
         if (transmissionAlbedo.r > 0.f || transmissionAlbedo.g > 0.f || transmissionAlbedo.b > 0.f)
         {
-            activeLobes |= (uint)LobeType::SpecularTransmission | (uint)LobeType::DeltaTransmission; // no diffuse transmission for now
+            activeLobes |= (uint)LobeType::DiffuseTransmission | (uint)LobeType::SpecularTransmission | (uint)LobeType::DeltaTransmission;
         }
 
         float3 surfaceSpecular = surface.F0;
@@ -489,8 +489,8 @@ struct DefaultBSDF
         specularReflectionTransmission.activeLobes = activeLobes;
         specularReflectionTransmission.isThinSurface = isThinSurface;
 
-        diffTrans = 0.f; // disabled for now.
-        specTrans = activeLobes & (uint)LobeType::Transmission ? 1.f : 0.f;
+        diffTrans = ((activeLobes & (uint)LobeType::Transmission) && surface.SubsurfaceData.HasSubsurface > 0) ? Luminance(surface.TransmissionColor) : 0.f;
+        specTrans = ((activeLobes & (uint)LobeType::Transmission) && surface.SubsurfaceData.HasSubsurface == 0) & (uint)LobeType::Transmission ? 1.f : 0.f;
 
         float surfaceMetallic = surface.Metallic;
         float metallicBRDF = surfaceMetallic * (1.f - specTrans);
@@ -529,8 +529,8 @@ struct DefaultBSDF
         float alpha = surfaceRoughness * surfaceRoughness;
         bool isDelta = alpha < kMinGGXAlpha;
 
-        float diffTrans = 0.f; // disabled for now.
-        float specTrans = (surface.TransmissionColor.r > 0.f || surface.TransmissionColor.g > 0.f || surface.TransmissionColor.b > 0.f) ? 1.f : 0.f;
+        float diffTrans = (any(surface.TransmissionColor > 0.f) && surface.SubsurfaceData.HasSubsurface > 0) ? Luminance(surface.TransmissionColor) : 0.f;
+        float specTrans = (any(surface.TransmissionColor > 0.f) && surface.SubsurfaceData.HasSubsurface == 0) ? 1.f : 0.f;
 
         uint lobes = isDelta ? (uint)LobeType::DeltaReflection : (uint)LobeType::SpecularReflection;
         if (any(surface.DiffuseAlbedo > 0.f) && diffTrans < 1.f)
