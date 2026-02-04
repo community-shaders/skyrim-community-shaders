@@ -59,22 +59,11 @@ private:
 	private:
 		std::string& pendingFeatureSelection;
 
-		// State for confirmation dialog
-		bool showConstraintConfirmation = false;
-		Feature* featureToEnable = nullptr;
-		std::vector<std::pair<FeatureConstraints::SettingId, FeatureConstraints::ConstraintResult>> constraintsToCreate;
-
-		// State for reactive constraint warning dialog
-		bool showReactiveConstraintWarning = false;
-		std::vector<std::pair<FeatureConstraints::SettingId, FeatureConstraints::ConstraintResult>> newReactiveConstraints;
-		Feature* reactiveConstraintFeature = nullptr;
-
 		// Helper methods for Feature rendering
 		static bool IsFeatureInstalled(const std::string& featureName);
 		void RenderFeatureHeader(Feature* feat, bool isDisabled, bool isLoaded);
 		void RenderFeatureSettings(Feature* feat, bool isDisabled, bool isLoaded, bool hasFailedMessage);
 		static void RenderRestoreDefaultsButton(Feature* feat, bool isDisabled, bool isLoaded);
-		void RenderConstraintConfirmationDialog();
 		void RenderReactiveConstraintWarningDialog();
 	};
 

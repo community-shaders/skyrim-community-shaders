@@ -280,6 +280,7 @@ void HomePageRenderer::RenderActiveConstraintsSection()
 			std::string setting;
 			std::string forcedTo;
 			std::string constrainedBy;
+			std::string firstSourceShortName;  // For "navigate to feature" on click
 			std::string tooltip;
 		};
 
@@ -292,6 +293,9 @@ void HomePageRenderer::RenderActiveConstraintsSection()
 				if (i > 0)
 					row.constrainedBy += ", ";
 				row.constrainedBy += result.sources[i].featureName;
+			}
+			if (!result.sources.empty()) {
+				row.firstSourceShortName = result.sources[0].featureShortName;
 			}
 			// Build tooltip
 			for (const auto& src : result.sources) {
@@ -315,21 +319,31 @@ void HomePageRenderer::RenderActiveConstraintsSection()
 			[](const ConstraintRow& a, const ConstraintRow& b, bool asc) { return Util::StringSortComparator(a.constrainedBy, b.constrainedBy, asc); }
 		};
 
-		// Cell render
-		auto cellRender = [warningColor](int, int colIdx, const ConstraintRow& row) {
-			std::string value;
-			std::string tooltip;
-			ImVec4 textColor = ImVec4(0, 0, 0, 0);
+		// Cell render -- column 2 ("Constrained By") is clickable to navigate
+		// to the first source feature's settings page.
+		auto cellRender = [warningColor](int rowIdx, int colIdx, const ConstraintRow& row) {
 			if (colIdx == 0) {
-				value = row.setting;
-				textColor = warningColor;
+				Util::RenderTableCell(row.setting, "", "", nullptr, ImVec4(1, 1, 1, 1), true, warningColor);
 			} else if (colIdx == 1) {
-				value = row.forcedTo;
+				Util::RenderTableCell(row.forcedTo, "", "", nullptr, ImVec4(1, 1, 1, 1), true);
 			} else if (colIdx == 2) {
-				value = row.constrainedBy;
-				tooltip = row.tooltip;
+				if (!row.firstSourceShortName.empty()) {
+					if (ImGui::Selectable(std::format("{}##nav{}", row.constrainedBy, rowIdx).c_str())) {
+						if (auto* menu = Menu::GetSingleton()) {
+							menu->SelectFeatureMenu(row.firstSourceShortName);
+						}
+					}
+					if (auto _tt = Util::HoverTooltipWrapper()) {
+						ImGui::Text("Click to navigate to %s", row.constrainedBy.c_str());
+						if (!row.tooltip.empty()) {
+							ImGui::Separator();
+							ImGui::Text("%s", row.tooltip.c_str());
+						}
+					}
+				} else {
+					Util::RenderTableCell(row.constrainedBy, "", row.tooltip, nullptr, ImVec4(1, 1, 1, 1), true);
+				}
 			}
-			Util::RenderTableCell(value, "", tooltip, nullptr, ImVec4(1, 1, 1, 1), true, textColor);
 		};
 
 		// Render table

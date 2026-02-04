@@ -1,11 +1,8 @@
 #pragma once
 
-#include <functional>
 #include <string>
 #include <variant>
 #include <vector>
-
-struct Feature;
 
 namespace FeatureConstraints
 {
@@ -44,7 +41,8 @@ namespace FeatureConstraints
 
 		struct Source
 		{
-			std::string featureName;
+			std::string featureName;       // Display name (e.g. "Terrain Blending")
+			std::string featureShortName;  // Menu navigation key (e.g. "TerrainBlending")
 			std::string reason;
 			bool recommendDisableAtBoot;
 		};
@@ -75,25 +73,6 @@ namespace FeatureConstraints
 	 * @return Vector of setting IDs and their constraint results
 	 */
 	std::vector<std::pair<SettingId, ConstraintResult>> GetAllActiveConstraints();
-
-	/**
-	 * @brief Get constraints that would be created by enabling a specific feature
-	 * @param featureToEnable The feature that would be enabled
-	 * @return Vector of setting IDs and constraint results that would be created
-	 */
-	std::vector<std::pair<SettingId, ConstraintResult>> GetConstraintsFromEnablingFeature(Feature* featureToEnable);
-
-	/**
-	 * @brief Get constraints that would be created by a setting change
-	 * @param feature The feature whose setting is changing
-	 * @param applyChange Function to apply the setting change temporarily
-	 * @param revertChange Function to revert the setting change
-	 * @return Vector of setting IDs and constraint results that would be created by the change
-	 */
-	std::vector<std::pair<SettingId, ConstraintResult>> GetConstraintsFromSettingChange(
-		Feature* feature,
-		const std::function<void()>& applyChange,
-		const std::function<void()>& revertChange);
 
 	/**
 	 * @brief Build a formatted tooltip string for a constrained setting

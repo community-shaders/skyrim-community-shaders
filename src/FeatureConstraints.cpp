@@ -19,8 +19,16 @@ namespace FeatureConstraints
 					if (!result.isConstrained) {
 						result.isConstrained = true;
 						result.forcedValue = constraint.forcedValue;
+					} else if (constraint.forcedValue != result.forcedValue) {
+						// Two features disagree on the forced value; first one wins.
+						// Log once so it surfaces during development / testing.
+						logger::warn("[FeatureConstraints] Conflict on {}.{}: {} wants {}, but {} already forced {}",
+							setting.featureShortName, setting.settingPath,
+							feature->GetName(), FormatConstraintValue(constraint.forcedValue),
+							result.sources[0].featureName, FormatConstraintValue(result.forcedValue));
 					}
 					result.sources.push_back({ feature->GetName(),
+						feature->GetShortName(),
 						constraint.reason,
 						constraint.recommendDisableAtBoot });
 				}
@@ -52,92 +60,6 @@ namespace FeatureConstraints
 		}
 
 		return allConstraints;
-	}
-
-	/**
-	 * @brief Get constraints that would be created by enabling a specific feature
-	 * @param featureToEnable The feature that would be enabled
-	 * @return Vector of setting IDs and constraint results that would be created
-	 */
-	std::vector<std::pair<SettingId, ConstraintResult>> GetConstraintsFromEnablingFeature(Feature* featureToEnable)
-	{
-		std::vector<std::pair<SettingId, ConstraintResult>> newConstraints;
-		std::unordered_set<std::string> processedKeys;
-
-		// Get constraints from the feature we're enabling
-		auto constraints = featureToEnable->GetActiveConstraints();
-		for (const auto& constraint : constraints) {
-			std::string key = constraint.targetSetting.featureShortName + "|" + constraint.targetSetting.settingPath;
-			if (processedKeys.insert(key).second) {
-				// Check if this setting is already constrained by other features
-				auto existingResult = GetConstraints(constraint.targetSetting);
-				if (!existingResult.isConstrained) {
-					// This constraint would be new
-					ConstraintResult newResult;
-					newResult.isConstrained = true;
-					newResult.forcedValue = constraint.forcedValue;
-					newResult.sources.push_back({ featureToEnable->GetName(),
-						constraint.reason,
-						constraint.recommendDisableAtBoot });
-					newConstraints.push_back({ constraint.targetSetting, newResult });
-				}
-			}
-		}
-
-		return newConstraints;
-	}
-
-	/**
-	 * @brief Get constraints that would be created by a setting change
-	 * @param feature The feature whose setting is changing
-	 * @param applyChange Function to apply the setting change temporarily
-	 * @param revertChange Function to revert the setting change
-	 * @return Vector of setting IDs and constraint results that would be created by the change
-	 */
-	std::vector<std::pair<SettingId, ConstraintResult>> GetConstraintsFromSettingChange(
-		Feature* feature,
-		const std::function<void()>& applyChange,
-		const std::function<void()>& revertChange)
-	{
-		std::vector<std::pair<SettingId, ConstraintResult>> newConstraints;
-		std::unordered_set<std::string> processedKeys;
-
-		// Get current constraints from this feature
-		auto currentConstraints = feature->GetActiveConstraints();
-		std::unordered_set<std::string> currentKeys;
-		for (const auto& constraint : currentConstraints) {
-			currentKeys.insert(constraint.targetSetting.featureShortName + "|" + constraint.targetSetting.settingPath);
-		}
-
-		// Apply the setting change temporarily
-		applyChange();
-
-		// Get new constraints after the change
-		auto newConstraintsFromFeature = feature->GetActiveConstraints();
-
-		// Revert the change
-		revertChange();
-
-		// Find constraints that would be newly created
-		for (const auto& constraint : newConstraintsFromFeature) {
-			std::string key = constraint.targetSetting.featureShortName + "|" + constraint.targetSetting.settingPath;
-			if (processedKeys.insert(key).second && currentKeys.find(key) == currentKeys.end()) {
-				// This constraint would be new - check if the setting is already constrained by other features
-				auto existingResult = GetConstraints(constraint.targetSetting);
-				if (!existingResult.isConstrained) {
-					// This constraint would be newly created
-					ConstraintResult newResult;
-					newResult.isConstrained = true;
-					newResult.forcedValue = constraint.forcedValue;
-					newResult.sources.push_back({ feature->GetName(),
-						constraint.reason,
-						constraint.recommendDisableAtBoot });
-					newConstraints.push_back({ constraint.targetSetting, newResult });
-				}
-			}
-		}
-
-		return newConstraints;
 	}
 
 	std::string BuildConstraintTooltip(const ConstraintResult& result)
