@@ -19,7 +19,7 @@
  *   - SceneTex (t0): kFRAMEBUFFER - ISHDR's output
  *     * SDR: Tonemapped, gamma-encoded values (0-1)
  *     * HDR: Linear values from ISHDR (can exceed 1.0 for highlights)
- *   - UITex (t1): UI layer with premultiplied alpha
+ *   - UITex (t1): UI layer with straight alpha
  *   - HDROutput (u0): Final swap chain buffer (PQ encoded for HDR, sRGB for SDR)
  *
  * @see ISHDR.hlsl for tonemapping, bloom, and color grading
@@ -31,7 +31,7 @@
 
 /// Scene texture - reads from kFRAMEBUFFER (ISHDR's output)
 Texture2D<float4> SceneTex : register(t0);
-/// UI texture - gamma-encoded with premultiplied alpha
+/// UI texture - gamma-encoded with straight alpha
 Texture2D<float4> UITex : register(t1);
 /// Output UAV - writes to swap chain
 RWTexture2D<float4> HDROutput : register(u0);
@@ -41,6 +41,10 @@ cbuffer PerFrame : register(b0)
 	float4 parameters0 : packoffset(c0);  ///< .x=enableHDR, .y=paperWhite nits, .z=peakNits, .w=skipUIComposite
 	float4 parameters1 : packoffset(c1);  ///< .x=uiBrightness multiplier
 }
+
+// UI reference brightness in nits - matches typical SDR monitor brightness
+// This ensures UI has consistent perceived brightness in both SDR and HDR modes
+static const float UI_REFERENCE_NITS = 200.0;
 
 /// Soft shoulder rolloff to prevent hard clipping at peak brightness
 float3 HDRSoftClip(float3 colorNits, float paperWhite, float peakNits)
@@ -96,20 +100,26 @@ float3 HDRSoftClip(float3 colorNits, float paperWhite, float peakNits)
 		float3 sceneBT2020 = Color::BT709ToBT2020(sceneLinear);
 		float3 sceneNits = sceneBT2020 * paperWhite;
 
-		float3 finalNits;
+		// Soft clip scene to peak brightness
+		sceneNits = HDRSoftClip(sceneNits, paperWhite, peakNits);
+
+		// PQ encode scene
+		float3 scenePQ = Color::pq::Encode(sceneNits / 10000.0, 10000.0);
+
 		if (skipUIComposite) {
-			finalNits = sceneNits;
+			finalColor = scenePQ;
 		} else {
-			// Composite UI (UI is gamma-encoded)
+			// Composite UI in PQ space to match FidelityFX's blending behavior
+			// FidelityFX uses premultiplied-style blending: result = ui + scene * (1-alpha)
+			// This ensures visual consistency between FG and non-FG paths
 			float3 uiLinear = Color::GammaToTrueLinear(max(0, ui.rgb));
 			float3 uiBT2020 = Color::BT709ToBT2020(uiLinear);
-			float3 uiNits = uiBT2020 * (paperWhite * uiBrightness);
-			finalNits = uiNits * ui.a + sceneNits * (1.0 - ui.a);
-		}
+			float3 uiNits = uiBT2020 * UI_REFERENCE_NITS * uiBrightness;
+			float3 uiPQ = Color::pq::Encode(uiNits / 10000.0, 10000.0);
 
-		// Soft clip to peak brightness and PQ encode
-		finalNits = HDRSoftClip(finalNits, paperWhite, peakNits);
-		finalColor = Color::pq::Encode(finalNits / 10000.0, 10000.0);
+			// Use premultiplied-style blend to match FidelityFX
+			finalColor = uiPQ + scenePQ * (1.0 - ui.a);
+		}
 	} else {
 		// SDR path: ISHDR outputs tonemapped, gamma-encoded values
 		// Just composite UI and pass through

@@ -12,6 +12,10 @@ cbuffer PerFrame : register(b0)
 	float4 parameters1 : packoffset(c1);  // .x = uiBrightness, .y = unused
 }
 
+// UI reference brightness in nits - matches typical SDR monitor brightness
+// This ensures UI has consistent perceived brightness in both SDR and HDR modes
+static const float UI_REFERENCE_NITS = 200.0;
+
 [numthreads(8, 8, 1)] void main(uint3 dispatchID : SV_DispatchThreadID)
 {
 	float4 ui = UITex[dispatchID.xy];
@@ -23,23 +27,19 @@ cbuffer PerFrame : register(b0)
 		float peakNits = parameters0.z;
 		float uiBrightness = parameters1.x;
 
-		// Apply brightness scaling and clamp to valid range
-		ui.rgb = max(0, ui.rgb * uiBrightness);
-
 		if (enableHDR) {
-			// For HDR: encode UI to PQ so FidelityFX can blend PQ over PQ
-			// gamma -> linear -> BT.2020 -> nits -> PQ
-			float3 uiLinear = Color::GammaToTrueLinear(ui.rgb);
+			// HDR: encode UI to PQ so FidelityFX can blend PQ over PQ
+			// UI renders at UI_REFERENCE_NITS for consistent brightness with SDR
+			float3 uiLinear = Color::GammaToTrueLinear(max(0, ui.rgb));
 			float3 uiBT2020 = Color::BT709ToBT2020(uiLinear);
-			float3 uiNits = uiBT2020 * paperWhite;
+			float3 uiNits = uiBT2020 * UI_REFERENCE_NITS * uiBrightness;
 			ui.rgb = Color::pq::Encode(uiNits / 10000.0, 10000.0);
+		} else {
+			// SDR: simple brightness multiplier in gamma space
+			ui.rgb = max(0, ui.rgb * uiBrightness);
 		}
-
-		// FidelityFX configured WITHOUT USE_PREMUL_ALPHA flag
-		// Standard alpha blend: Final = UI.RGB * UI.Alpha + Scene * (1 - UI.Alpha)
-		// No premultiply needed - pass through as-is
 	} else {
-		// Zero out entire pixel when alpha is effectively 0 to prevent FG artifacts
+		// Zero out pixel when alpha is effectively 0 to prevent FG artifacts
 		ui = 0;
 	}
 

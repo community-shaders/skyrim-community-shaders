@@ -38,7 +38,6 @@ public:
 
 	void SetupResources();
 	void UpdateHDRData() const;
-	void UpdateHDRMetadata() const;
 	void UpdateSwapChainColorSpace() const;
 
 	// UI rendering - redirects UI to separate target for proper compositing
@@ -89,15 +88,14 @@ public:
 	static bool DetectHDRDisplay();
 	static bool isHDRMonitor;
 
+	float GetDisplayMaxLuminance() const;
+	mutable float cachedDisplayMaxLuminance = 1000.0f;
+
 	// Saved state for UI rendering redirection
 	bool renderingUI = false;
 	ID3D11RenderTargetView* savedRTV = nullptr;
 	ID3D11DepthStencilView* savedDSV = nullptr;
 	ID3D11RenderTargetView* savedFramebufferRTV = nullptr;  // Original kFRAMEBUFFER.RTV for restoration
-
-	// Format constants to be used elsewhere
-	static constexpr auto BSGraphics_HDR_Format = RE::BSGraphics::Format::kR16G16B16A16_FLOAT;
-	static constexpr auto BSGraphics_HDR_R10_Format = RE::BSGraphics::Format::kR10G10B10A2_UNORM;
 
 private:
 	bool showHDRWarningPopup = false;

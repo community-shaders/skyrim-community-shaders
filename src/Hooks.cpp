@@ -549,7 +549,7 @@ namespace Hooks
 			auto hdr = HDR::GetSingleton();
 			// Always use HDR format for kMAIN since we always render in HDR
 			if (hdr) {
-				a_properties->format = HDR::BSGraphics_HDR_Format;
+				a_properties->format = RE::BSGraphics::Format::kR16G16B16A16_FLOAT;
 				logger::info("HDR: Upgrading kMAIN render target to R16G16B16A16_FLOAT");
 			}
 			func(This, a_target, a_properties);

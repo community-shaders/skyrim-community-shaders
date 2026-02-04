@@ -436,7 +436,7 @@ void DX12SwapChain::SetColorSpace(bool enableHDR)
 
 void DX12SwapChain::SetUIBuffer()
 {
-	// Clear UI buffer before vanilla UI renders (matches non-FG HDR::SetUIBuffer behavior)
+	// Clear UI buffer before vanilla UI renders
 	float clearColor[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
 	d3d11Context->ClearRenderTargetView(uiBufferWrapped->rtv, clearColor);
 

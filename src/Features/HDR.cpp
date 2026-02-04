@@ -304,11 +304,12 @@ void HDR::DrawSettings()
 		}
 		if (oldPeakNits != settings.hdrPeakNits) {
 			UpdateHDRData();
-			UpdateHDRMetadata();
 		}
 		if (auto _tt = Util::HoverTooltipWrapper()) {
-			ImGui::Text("Maximum display brightness. Set to your display's peak capability.");
+			ImGui::Text("Maximum display brightness for highlights compression.");
 		}
+
+		ImGui::TextDisabled("Display reports: %.0f nits max", cachedDisplayMaxLuminance);
 	}
 
 	// UI brightness available in both HDR and SDR modes
@@ -360,6 +361,10 @@ void HDR::SetupResources()
 	logger::info("[HDR] SetupResources called");
 
 	DetectHDRDisplay();
+
+	// Cache display max luminance for UI display
+	cachedDisplayMaxLuminance = GetDisplayMaxLuminance();
+	logger::info("[HDR] Display reports max luminance: {:.0f} nits", cachedDisplayMaxLuminance);
 
 	auto renderer = globals::game::renderer;
 	auto& main = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMAIN];
@@ -759,14 +764,14 @@ void HDR::ScaleUIBrightnessForFG()
 {
 	auto& upscaling = globals::features::upscaling;
 
-	// Match the exact condition used for FidelityFX::Present() to ensure consistency
-	// Only run when FG is actively generating frames this frame
-	// When paused, UI compositing is handled by HDROutputCS instead
-	bool fgActiveThisFrame = upscaling.d3d12SwapChainActive &&
-	                         upscaling.settings.frameGenerationMode &&
-	                         !globals::game::ui->GameIsPaused() &&
-	                         !globals::game::isVR;
-	if (!fgActiveThisFrame)
+	// Only run when FG is actively compositing UI this frame
+	// When paused, FidelityFX doesn't composite UI (uiResource is cleared), so HDROutputCS handles it
+	// and expects raw gamma-encoded UI without brightness pre-scaling
+	bool fgCompositing = upscaling.d3d12SwapChainActive &&
+	                     upscaling.settings.frameGenerationMode &&
+	                     !globals::game::ui->GameIsPaused() &&
+	                     !globals::game::isVR;
+	if (!fgCompositing)
 		return;
 
 	if (!hdrDataCB || !upscaling.dx12SwapChain.uiBufferWrapped || !upscaling.dx12SwapChain.uiBufferWrapped->uav)
@@ -804,6 +809,26 @@ void HDR::ScaleUIBrightnessForFG()
 	state->EndPerfEvent();
 }
 
+float HDR::GetDisplayMaxLuminance() const
+{
+	float maxLuminance = 1000.0f;
+
+	winrt::com_ptr<IDXGIOutput> output;
+	if (globals::d3d::swapChain && SUCCEEDED(globals::d3d::swapChain->GetContainingOutput(output.put()))) {
+		winrt::com_ptr<IDXGIOutput6> output6;
+		if (SUCCEEDED(output->QueryInterface(IID_PPV_ARGS(output6.put())))) {
+			DXGI_OUTPUT_DESC1 desc1;
+			if (SUCCEEDED(output6->GetDesc1(&desc1))) {
+				maxLuminance = desc1.MaxLuminance;
+				if (maxLuminance < 80.0f) {
+					maxLuminance = 1000.0f;  // Fallback if display reports invalid value
+				}
+			}
+		}
+	}
+	return maxLuminance;
+}
+
 void HDR::UpdateHDRData() const
 {
 	if (!hdrDataCB) {
@@ -826,12 +851,15 @@ void HDR::UpdateHDRData() const
 	// This is true regardless of Linear Lighting status because ISHDR runs after lighting
 	bool isSceneLinear = false;
 
+	// Use user-specified peak brightness for highlights compression
+	float effectivePeakNits = static_cast<float>(settings.hdrPeakNits);
+
 	HDRDataCB data;
 
 	data.parameters0 = DirectX::XMVectorSet(
 		settings.enableHDR ? 1.f : 0.f,
 		static_cast<float>(settings.hdrPaperWhite),
-		static_cast<float>(settings.hdrPeakNits),
+		effectivePeakNits,
 		skipUIComposite ? 1.f : 0.f);
 	data.parameters1 = DirectX::XMVectorSet(
 		settings.hdrUIBrightness,
@@ -847,6 +875,10 @@ void HDR::UpdateSwapChainColorSpace() const
 	// For Frame Gen, update the D3D12 swap chain color space
 	if (upscaling.d3d12SwapChainActive) {
 		upscaling.dx12SwapChain.SetColorSpace(settings.enableHDR);
+		// Clear any HDR10 static metadata - some monitors have issues with it
+		if (upscaling.dx12SwapChain.swapChain) {
+			upscaling.dx12SwapChain.swapChain->SetHDRMetaData(DXGI_HDR_METADATA_TYPE_NONE, 0, nullptr);
+		}
 		return;
 	}
 
@@ -863,31 +895,9 @@ void HDR::UpdateSwapChainColorSpace() const
 		HRESULT hr = swapChain4->SetColorSpace1(DXGI_COLOR_SPACE_RGB_FULL_G2084_NONE_P2020);
 		if (SUCCEEDED(hr)) {
 			logger::info("[HDR] Set swap chain color space to HDR10 (PQ/BT.2020)");
-
-			DXGI_OUTPUT_DESC1 outDesc1 = {};
-			winrt::com_ptr<IDXGIOutput> output;
-			if (SUCCEEDED(swapChain4->GetContainingOutput(output.put()))) {
-				winrt::com_ptr<IDXGIOutput6> output6;
-				if (SUCCEEDED(output->QueryInterface(IID_PPV_ARGS(output6.put())))) {
-					output6->GetDesc1(&outDesc1);
-				}
-			}
-
-			DXGI_HDR_METADATA_HDR10 metadata = {};
-			metadata.RedPrimary[0] = 34000;
-			metadata.RedPrimary[1] = 16000;
-			metadata.GreenPrimary[0] = 8500;
-			metadata.GreenPrimary[1] = 39850;
-			metadata.BluePrimary[0] = 6550;
-			metadata.BluePrimary[1] = 2300;
-			metadata.WhitePoint[0] = 15635;
-			metadata.WhitePoint[1] = 16450;
-			metadata.MinMasteringLuminance = 0;
-			metadata.MaxMasteringLuminance = static_cast<UINT>(outDesc1.MaxLuminance * 10000);
-			metadata.MaxContentLightLevel = static_cast<UINT16>(settings.hdrPeakNits);
-			metadata.MaxFrameAverageLightLevel = static_cast<UINT16>(settings.hdrPaperWhite);
-
-			swapChain4->SetHDRMetaData(DXGI_HDR_METADATA_TYPE_HDR10, sizeof(metadata), &metadata);
+			// Do NOT set HDR10 static metadata - it can cause issues on some monitors
+			// The HGiG approach is to handle highlights compression in the shader instead.
+			swapChain4->SetHDRMetaData(DXGI_HDR_METADATA_TYPE_NONE, 0, nullptr);
 		} else {
 			logger::warn("[HDR] Failed to set HDR10 color space");
 		}
@@ -904,43 +914,3 @@ void HDR::UpdateSwapChainColorSpace() const
 	swapChain4->Release();
 }
 
-void HDR::UpdateHDRMetadata() const
-{
-	// BT.2020 color primaries (ITU-R BT.2020) and D65 white point
-	// Values are in units of 0.00002 (multiply by 50000 to get actual value)
-	DXGI_HDR_METADATA_HDR10 hdrMetadata = {};
-	hdrMetadata.RedPrimary[0] = 34000;    // 0.708 * 50000 = 35400, using 34000 for compatibility
-	hdrMetadata.RedPrimary[1] = 16000;    // 0.292 * 50000 = 14600, using 16000 for compatibility
-	hdrMetadata.GreenPrimary[0] = 8500;   // 0.170 * 50000 = 8500
-	hdrMetadata.GreenPrimary[1] = 39850;  // 0.797 * 50000 = 39850
-	hdrMetadata.BluePrimary[0] = 6550;    // 0.131 * 50000 = 6550
-	hdrMetadata.BluePrimary[1] = 2300;    // 0.046 * 50000 = 2300
-	hdrMetadata.WhitePoint[0] = 15635;    // 0.3127 * 50000 = 15635 (D65)
-	hdrMetadata.WhitePoint[1] = 16450;    // 0.3290 * 50000 = 16450 (D65)
-	hdrMetadata.MaxMasteringLuminance = settings.hdrPeakNits * 10000;
-	hdrMetadata.MinMasteringLuminance = 1;
-	hdrMetadata.MaxContentLightLevel = static_cast<UINT16>(settings.hdrPeakNits);
-	hdrMetadata.MaxFrameAverageLightLevel = static_cast<UINT16>(settings.hdrPaperWhite);
-
-	auto& upscaling = globals::features::upscaling;
-
-	if (upscaling.d3d12SwapChainActive && upscaling.dx12SwapChain.swapChain) {
-		upscaling.dx12SwapChain.swapChain->SetHDRMetaData(DXGI_HDR_METADATA_TYPE_HDR10, sizeof(hdrMetadata), &hdrMetadata);
-		static bool loggedOnce = false;
-		if (!loggedOnce) {
-			logger::info("[HDR] Updated D3D12 swap chain HDR10 metadata");
-			loggedOnce = true;
-		}
-	} else {
-		IDXGISwapChain4* swapChain4 = nullptr;
-		if (SUCCEEDED(globals::d3d::swapChain->QueryInterface(IID_PPV_ARGS(&swapChain4)))) {
-			swapChain4->SetHDRMetaData(DXGI_HDR_METADATA_TYPE_HDR10, sizeof(hdrMetadata), &hdrMetadata);
-			swapChain4->Release();
-			static bool loggedOnce = false;
-			if (!loggedOnce) {
-				logger::info("[HDR] Updated D3D11 swap chain HDR10 metadata");
-				loggedOnce = true;
-			}
-		}
-	}
-}
