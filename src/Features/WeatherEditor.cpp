@@ -81,6 +81,30 @@ void WeatherEditor::DrawSettings()
 	DrawWeatherPickerSection();
 }
 
+void WeatherEditor::Prepass()
+{
+	// Handle weather acceleration - advance weather percentage with user-controlled speed
+	if (s_isAcceleratingWeatherChange) {
+		auto sky = globals::game::sky;
+		if (sky) {
+			// Get actual frame time in seconds (State tracks it in milliseconds)
+			float deltaTime = globals::state->GetFrameTime() * 0.001f;  // Convert ms to seconds
+			s_accelerationTime += deltaTime;
+
+			// Advance weather percentage at configured rate
+			float newPct = std::min(s_accelerationTime * s_accelerationRate, 1.0f);
+
+			sky->currentWeatherPct = newPct;
+
+			// Stop acceleration when complete
+			if (newPct >= 1.0f) {
+				s_isAcceleratingWeatherChange = false;
+				s_accelerationTime = 0.0f;
+			}
+		}
+	}
+}
+
 void WeatherEditor::DrawWeatherPickerSection()
 {
 	ImGui::Spacing();
@@ -597,9 +621,12 @@ void WeatherEditor::RenderWeatherControls(RE::Sky* sky)
 
 	// Accelerate checkbox
 	ImGui::Checkbox("Accelerate Weather Change", &s_accelerateWeatherChange);
+	ImGui::SameLine();
+	ImGui::SetNextItemWidth(150.0f);
+	ImGui::SliderFloat("##TransitionSpeed", &s_accelerationRate, 0.1f, 1.0f, "%.2f/s");
 	if (auto _tt = Util::HoverTooltipWrapper()) {
-		Util::DrawMultiLineTooltip({ "When enabled, weather changes are immediate",
-			"When disabled, uses normal transition speed." });
+		Util::DrawMultiLineTooltip({ "When enabled, weather changes at the specified speed",
+			"Speed in percentage per second (0.1 - 1.0)" });
 	}  // Reset Weather button
 	std::string resetButtonLabel = "Reset Weather";
 	if (sky->defaultWeather) {
@@ -655,7 +682,9 @@ void WeatherEditor::RenderWeatherControls(RE::Sky* sky)
 				sky->SetWeather(selectedWeather, true, false);
 
 				if (s_accelerateWeatherChange) {
-					sky->currentWeatherPct = 1.0f;
+					// Start fast acceleration (20% per second)
+					s_isAcceleratingWeatherChange = true;
+					s_accelerationTime = 0.0f;
 				}
 
 				logger::info("[WeatherEditor] Changed weather to: {}", Util::FormatWeather(selectedWeather));

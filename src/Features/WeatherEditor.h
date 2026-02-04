@@ -39,6 +39,7 @@ public:
 
 	virtual void DataLoaded() override;
 	virtual void DrawSettings() override;
+	virtual void Prepass() override;
 
 	void LerpWeather(RE::TESWeather*, RE::TESWeather*, float);
 
@@ -111,7 +112,10 @@ private:
 	static inline uint32_t s_weatherFlagFilter = ALL_WEATHER_FLAGS;  // Start with all filters enabled by default (bits 0-6)
 	static inline uint32_t s_lastWeatherFlagFilter = UNCLASSIFIED_FLAG;
 	static inline bool s_accelerateWeatherChange = true;
+	static inline float s_accelerationRate = 0.2f;  // Base: 20% per second, adjustable via UI
 	static inline RE::TESWeather* s_cachedLastWeather = nullptr;
+	static inline bool s_isAcceleratingWeatherChange = false;
+	static inline float s_accelerationTime = 0.0f;
 
 	// Static helper for display name extraction
 	static std::string GetDisplayName(const RE::TESWeather* weather);
