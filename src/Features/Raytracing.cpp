@@ -2057,7 +2057,7 @@ bool Raytracing::RemoveInstance(RE::NiAVObject* pRoot, bool releaseModel)
 	if (auto instanceIt = instances.find(pRoot); instanceIt != instances.end()) {
 		auto& instance = instanceIt->second;
 
-		logger::info("[RT] RemoveInstance - \"{}\", \"{}\"", pRoot->name, instance.filename);
+		logger::debug("[RT] RemoveInstance - \"{}\", \"{}\"", pRoot->name, instance.filename);
 
 		if (auto modelIt = models.find(instance.filename); modelIt != models.end()) {
 			auto& model = modelIt->second;
@@ -2071,7 +2071,7 @@ bool Raytracing::RemoveInstance(RE::NiAVObject* pRoot, bool releaseModel)
 				// Not sure if its necesary to mutex here, but when the model goes out of scope the buffers are destroyed so I assume it is
 				std::lock_guard lock{ renderMutex };
 
-				logger::info("[RT] RemoveInstance - No refs, erasing from collection");
+				logger::debug("[RT] RemoveInstance - No refs, erasing from collection");
 				models.erase(modelIt);
 			}
 		}
@@ -2508,21 +2508,23 @@ void Raytracing::UpdateInstances()
 
 void Raytracing::UpdateBLASes()
 {
-	eastl::vector<CD3DX12_RESOURCE_BARRIER> barriers;
-	//barriers.clear();
-	//barriers.reserve(queuedShapes.size());
+	static eastl::vector<CD3DX12_RESOURCE_BARRIER> barriers;
+	barriers.clear();
+
+	if (barriers.capacity() < instances.size())
+		barriers.reserve(instances.size());
 
 	for (auto& [node, instance] : instances) {
 		auto it = models.find(instance.filename);
 
 		auto& model = it->second;
 
-		auto flags = model->flags;
+		//auto flags = model->flags;
 
 		if (!model->UpdateBLAS(commandList.get()))
 			continue;
 
-		logger::info("[RT] UpdateBLASes {} - {} - 0x{:08X} - {}", instance.filename, model->shapes.size(), reinterpret_cast<uintptr_t>(node), (flags & Model::Flags::BLASRebuild) ? "Rebuild" : "Update");
+		//logger::info("[RT] UpdateBLASes {} - {} - 0x{:08X} - {}", instance.filename, model->shapes.size(), reinterpret_cast<uintptr_t>(node), (flags & Model::Flags::BLASRebuild) ? "Rebuild" : "Update");
 
 		barriers.push_back(CD3DX12_RESOURCE_BARRIER::UAV(model->blasBuffer->GetResource()));
 	}
@@ -3298,7 +3300,7 @@ void Raytracing::DrawRTGI()
 	}
 
 	if (frameChecker.IsNewFrame()) {
-		logger::info("[RT] Executed Frame: {}", frameIndex);
+		//logger::info("[RT] Executed Frame: {}", frameIndex);
 		frameIndex++;
 	}
 

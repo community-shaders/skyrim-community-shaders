@@ -56,15 +56,18 @@ void Instance::Update(RE::NiAVObject* node, RE::NiPoint3 cameraPosition, const e
 	bool isRenderUseValid = model->IsRenderUseValid();
 
 	for (auto& shape : model->shapes) {
-		const bool prevHidden = (shape->state & Shape::State::Hidden) == Shape::State::Hidden;
+		const bool prevHidden = (shape->state & Shape::State::Hidden) != Shape::State::None;
 
 		auto updateFlags = shape->Update(isRenderUseValid);
 
-		const bool hidden = (shape->state & Shape::State::Hidden) == Shape::State::Hidden;
+		const bool hidden = (shape->state & Shape::State::Hidden) != Shape::State::None;
 
 		if (hidden != prevHidden) {
 			model->flags |= Model::Flags::BLASRebuild;
-			logger::info("Instance::Update {} - {} 0x{:08X} - Hidden Changed To: {}", path, shape->geometry->name, reinterpret_cast<uintptr_t>(this), hidden);
+
+			logger::trace("Instance::Update {} - {} 0x{:08X} - Valid: {}, Hidden: {}, Flags: {}", 
+				path, shape->geometry->name, reinterpret_cast<uintptr_t>(this), isRenderUseValid,
+				hidden, GetFlagsString<RE::NiAVObject::Flag>(shape->geometry->GetFlags().underlying()));
 		}
 
 		if ((updateFlags & Shape::Flags::Dynamic) || (updateFlags & Shape::Flags::Skinned)) {
