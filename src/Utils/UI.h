@@ -53,11 +53,14 @@ namespace Util
 	 * if (auto _tt = Util::HoverTooltipWrapper()){
 	 *     ImGui::Text("What the tooltip says.");
 	 * }
+	 *
+	 * Automatically applies the Subtext font role for consistent tooltip styling.
 	*/
 	class HoverTooltipWrapper
 	{
 	private:
 		bool hovered;
+		ImFont* previousFont;
 
 	public:
 		HoverTooltipWrapper();
