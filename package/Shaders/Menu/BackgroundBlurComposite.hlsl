@@ -118,7 +118,7 @@ float4 PS_Main(VS_OUTPUT input) : SV_TARGET
     }
     // Sample the blurred texture
     float4 blurColor = InputTexture.Sample(LinearSampler, input.TexCoord);
-    
+
     // Apply rounded corner mask to alpha
     // The blur strength is applied via blend state, so just use the rounded mask here
     blurColor.a = alpha;
