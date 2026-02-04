@@ -58,12 +58,7 @@ namespace BackgroundBlur
 		winrt::com_ptr<ID3D11ShaderResourceView> blurSRV1;
 		winrt::com_ptr<ID3D11ShaderResourceView> blurSRV2;
 
-		// Legacy composite texture members (kept for cleanup compatibility)
-		winrt::com_ptr<ID3D11Texture2D> compositeTexture;
-		winrt::com_ptr<ID3D11RenderTargetView> compositeRTV;
-		winrt::com_ptr<ID3D11ShaderResourceView> compositeSRV;
-
-		// 1x1 transparent black texture for clearing with scissor
+		// 1x1 transparent black texture for fallback rectangular clearing
 		winrt::com_ptr<ID3D11Texture2D> clearTexture;
 		winrt::com_ptr<ID3D11ShaderResourceView> clearSRV;
 
@@ -301,9 +296,6 @@ namespace BackgroundBlur
 		blurRTV2 = nullptr;
 		blurSRV1 = nullptr;
 		blurSRV2 = nullptr;
-		compositeTexture = nullptr;
-		compositeRTV = nullptr;
-		compositeSRV = nullptr;
 
 		// Create downsampled texture description (no full-res composite needed - all work at 1/8 res)
 		D3D11_TEXTURE2D_DESC texDesc = {};
@@ -469,13 +461,13 @@ namespace BackgroundBlur
 
 		ID3D11ShaderResourceView* nullSRV = nullptr;
 
-		// Set up downsample viewport - all work done at 1/8 resolution for performance
-		D3D11_VIEWPORT downsampleViewport = {};
-		downsampleViewport.Width = static_cast<FLOAT>(downsampledWidth);
-		downsampleViewport.Height = static_cast<FLOAT>(downsampledHeight);
-		downsampleViewport.MinDepth = 0.0f;
-		downsampleViewport.MaxDepth = 1.0f;
-		context->RSSetViewports(1, &downsampleViewport);
+		// Set up viewport for all blur passes (1/8 resolution for performance)
+		D3D11_VIEWPORT blurViewport = {};
+		blurViewport.Width = static_cast<FLOAT>(downsampledWidth);
+		blurViewport.Height = static_cast<FLOAT>(downsampledHeight);
+		blurViewport.MinDepth = 0.0f;
+		blurViewport.MaxDepth = 1.0f;
+		context->RSSetViewports(1, &blurViewport);
 
 		auto downsampleRTVPtr = downsampleRTV.get();
 		context->OMSetRenderTargets(1, &downsampleRTVPtr, nullptr);
@@ -519,15 +511,6 @@ namespace BackgroundBlur
 		constants.blurParams[3] = 0;
 
 		context->UpdateSubresource(constantBuffer.get(), 0, nullptr, &constants, 0, 0);
-
-		// Set up viewport for blur (quarter resolution)
-		D3D11_VIEWPORT blurViewport = {};
-		blurViewport.Width = static_cast<FLOAT>(downsampledWidth);
-		blurViewport.Height = static_cast<FLOAT>(downsampledHeight);
-		blurViewport.MinDepth = 0.0f;
-		blurViewport.MaxDepth = 1.0f;
-		context->RSSetViewports(1, &blurViewport);
-
 		context->PSSetConstantBuffers(0, 1, &constantBufferPtr);
 
 		// First pass: Horizontal blur (on downsampled texture)
@@ -650,10 +633,6 @@ namespace BackgroundBlur
 		downsampleTexture = nullptr;
 		downsampleRTV = nullptr;
 		downsampleSRV = nullptr;
-
-		compositeTexture = nullptr;
-		compositeRTV = nullptr;
-		compositeSRV = nullptr;
 
 		clearTexture = nullptr;
 		clearSRV = nullptr;

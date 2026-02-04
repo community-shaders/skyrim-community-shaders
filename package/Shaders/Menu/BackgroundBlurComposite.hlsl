@@ -1,12 +1,6 @@
 // Composite Blur Pass Shader with Rounded Rectangle Mask
 // Part of the BackgroundBlur system - applies blurred texture with rounded corners
 
-cbuffer BlurBuffer : register(b0)
-{
-    float4 TexelSize;     // x = 1/width, y = 1/height, z = blur strength, w = unused
-    int4   BlurParams;    // x = samples, y = unused, z = unused, w = unused
-};
-
 cbuffer WindowBuffer : register(b1)
 {
     float4 WindowRect;    // x = minX, y = minY, z = maxX, w = maxY (in pixels)
