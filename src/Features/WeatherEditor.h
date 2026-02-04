@@ -94,6 +94,7 @@ public:
 	static ImVec4 GetWeatherFlagColorByName(const std::string& flagName);
 
 private:
+	void DrawTimeControls();
 	void DrawWeatherStatusPanel();
 	void DrawWeatherPickerSection();
 

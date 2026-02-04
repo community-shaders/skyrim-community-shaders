@@ -67,8 +67,11 @@ void WeatherEditor::DrawSettings()
 		EditorWindow::GetSingleton()->open = true;
 	}
 
-	DrawWeatherStatusPanel();
+	// Time controls
+	DrawTimeControls();
 
+	// Basic weather editor info
+	DrawWeatherStatusPanel();
 
 	// Integrated Weather Picker UI
 	DrawWeatherPickerSection();
@@ -188,19 +191,92 @@ void WeatherEditor::LerpWeather(RE::TESWeather* oldWeather, RE::TESWeather* newW
 	}
 }
 
+void WeatherEditor::DrawTimeControls()
+{
+	ImGui::Spacing();
+	Util::DrawSectionHeader("Time Controls");
+	ImGui::Spacing();
+	
+	auto calendar = RE::Calendar::GetSingleton();
+	if (calendar && calendar->gameHour && calendar->timeScale) {
+		static bool s_isTimePaused = false;
+		static float s_savedTimeScale = 20.0f;
+		static constexpr float s_vanillaTimeScale = 20.0f;
+		
+		// Check if time is actually paused (timeScale is 0)
+		if (calendar->timeScale->value == 0.0f && !s_isTimePaused) {
+			s_isTimePaused = true;
+		} else if (calendar->timeScale->value > 0.0f && s_isTimePaused) {
+			s_isTimePaused = false;
+		}
+
+		if (ImGui::Button(s_isTimePaused ? "Resume Time" : "Pause Time", ImVec2(120, 0))) {
+			if (s_isTimePaused) {
+				// Resume time - restore previous time scale
+				calendar->timeScale->value = s_savedTimeScale;
+				s_isTimePaused = false;
+			} else {
+				// Pause time - save current time scale and set to 0
+				s_savedTimeScale = calendar->timeScale->value;
+				calendar->timeScale->value = 0.0f;
+				s_isTimePaused = true;
+			}
+		}
+		if (auto _tt = Util::HoverTooltipWrapper()) {
+			ImGui::Text("Pause or resume game time progression");
+		}
+
+		ImGui::SameLine();
+
+		ImGui::SliderFloat("Game Time", &calendar->gameHour->value, 0.0f, 23.99f, "%.2f");
+		if (auto _tt = Util::HoverTooltipWrapper()) {
+			ImGui::Text("Adjust the current game time");
+		}
+
+		// Timescale multiplier (exponential scale, vanilla at midpoint)
+		static float s_timeScaleSlider = s_vanillaTimeScale;
+		
+		// Sync slider with actual value (handles external changes like reset button)
+		if (std::abs(calendar->timeScale->value - s_timeScaleSlider) > 0.01f) {
+			s_timeScaleSlider = calendar->timeScale->value;
+		}
+
+		if (ImGui::Button("Reset Speed", ImVec2(120, 0))) {
+			calendar->timeScale->value = s_vanillaTimeScale;
+			s_timeScaleSlider = s_vanillaTimeScale;
+		}
+		if (auto _tt = Util::HoverTooltipWrapper()) {
+			ImGui::Text("Reset time speed to vanilla (%.1fx)", s_vanillaTimeScale);
+		}
+		
+		ImGui::SameLine();
+		
+		if (ImGui::SliderFloat("##TimeScale", &s_timeScaleSlider, 0.1f, 4000.0f, 
+			s_timeScaleSlider == s_vanillaTimeScale ? "Vanilla Speed" : "", ImGuiSliderFlags_Logarithmic)) {
+			calendar->timeScale->value = s_timeScaleSlider;
+		}
+		
+		ImGui::SameLine();
+		
+		ImGui::Text("%.1fx", calendar->timeScale->value);
+		if (auto _tt = Util::HoverTooltipWrapper()) {
+			ImGui::Text("Adjust how fast time passes (vanilla: %.1fx)", s_vanillaTimeScale);
+		}
+	}
+
+	ImGui::Spacing();
+}
+
 void WeatherEditor::DrawWeatherStatusPanel()
 {
-	ImGui::Text("Current Weather Status");
-	ImGui::Separator();
+	ImGui::Spacing();
+	Util::DrawSectionHeader("Weather Status");
+	ImGui::Spacing();
 
 	auto weatherManager = WeatherManager::GetSingleton();
 	auto currentWeathers = weatherManager->GetCurrentWeathers();
 
 	if (currentWeathers.currentWeather) {
-		ImGui::Text("Current Weather: %s",
-			currentWeathers.currentWeather->GetFormEditorID() ?
-				currentWeathers.currentWeather->GetFormEditorID() :
-				std::format("{:08X}", currentWeathers.currentWeather->GetFormID()).c_str());
 
 		// Show if weather has custom settings
 		if (weatherManager->HasWeatherSettings(currentWeathers.currentWeather)) {
@@ -208,19 +284,39 @@ void WeatherEditor::DrawWeatherStatusPanel()
 		} else {
 			ImGui::TextColored({ 0.7f, 0.7f, 0.7f, 1.0f }, "Using Default Settings");
 		}
+
+		// Show what the current weather is
+		ImGui::Text("Current Weather: %s",
+			currentWeathers.currentWeather->GetFormEditorID() ?
+				currentWeathers.currentWeather->GetFormEditorID() :
+				std::format("{:08X}", currentWeathers.currentWeather->GetFormID()).c_str());	
+			
 		// Always reserve space for transition info to prevent UI shifting
 		if (currentWeathers.lastWeather && currentWeathers.lerpFactor < 1.0f) {
 			ImGui::Text("Transitioning From: %s",
 				currentWeathers.lastWeather->GetFormEditorID() ?
 					currentWeathers.lastWeather->GetFormEditorID() :
 					std::format("{:08X}", currentWeathers.lastWeather->GetFormID()).c_str());
-
-			ImGui::ProgressBar(currentWeathers.lerpFactor, ImVec2(-1, 0),
-				std::format("Transition: {:.1f}%%", currentWeathers.lerpFactor * 100.0f).c_str());
 		} else {
-			// Reserve space with blank text and invisible progress bar
-			ImGui::Text(" ");
-			ImGui::Dummy(ImVec2(-1, ImGui::GetFrameHeight()));
+			ImGui::Text("Transitioning From: No Transition");
+		}
+
+		// Always show progress bar
+		float displayPct = (currentWeathers.lastWeather && currentWeathers.lerpFactor < 1.0f) ? 
+			currentWeathers.lerpFactor : 1.0f;
+		
+		// Show background color when transition is complete
+		if (!(currentWeathers.lastWeather && currentWeathers.lerpFactor < 1.0f)) {
+			ImGui::PushStyleColor(ImGuiCol_PlotHistogram, ImGui::GetStyleColorVec4(ImGuiCol_FrameBg));
+		}
+		
+		ImGui::ProgressBar(displayPct, ImVec2(-1, 0),
+			(currentWeathers.lastWeather && currentWeathers.lerpFactor < 1.0f) ?
+				std::format("Transition: {:.1f}%", currentWeathers.lerpFactor * 100.0f).c_str() :
+				"");
+		
+		if (!(currentWeathers.lastWeather && currentWeathers.lerpFactor < 1.0f)) {
+			ImGui::PopStyleColor();
 		}
 
 	} else {
