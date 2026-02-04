@@ -247,7 +247,7 @@ struct Surface
             if (material.Feature == Feature::kFaceGen || material.Feature == Feature::kFaceGenRGBTint) {
                 F0 = 0.02776f;
                 SubsurfaceData.HasSubsurface = 1;
-                SubsurfaceData.Anisotropy = 0.0f;
+                SubsurfaceData.Anisotropy = -0.5f;
 
                 // Typical skin values
                 SubsurfaceData.ScatteringColor = float3(4.820f, 1.690f, 1.090f);
@@ -260,11 +260,11 @@ struct Surface
                 Roughness = 0.08f;
                 F0 = 0.02776f;
                 SubsurfaceData.HasSubsurface = 1;
-                SubsurfaceData.Anisotropy = 0.0f;
+                SubsurfaceData.Anisotropy = -0.5f;
                 // Typical eye values
                 SubsurfaceData.ScatteringColor = float3(1.0f, 0.8f, 0.6f);
                 SubsurfaceData.TransmissionColor = Albedo;
-                SubsurfaceData.Scale = 0.01f * M_TO_GAME_UNIT;
+                SubsurfaceData.Scale = 0.1f;
             }
             
         } else if (material.ShaderType == ShaderType::Effect) {
