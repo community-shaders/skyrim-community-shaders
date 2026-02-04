@@ -67,15 +67,8 @@ void WeatherEditor::DrawSettings()
 		EditorWindow::GetSingleton()->open = true;
 	}
 
-	ImGui::Spacing();
-	ImGui::Separator();
-	ImGui::Spacing();
-
 	DrawWeatherStatusPanel();
 
-	ImGui::Spacing();
-	ImGui::Separator();
-	ImGui::Spacing();
 
 	// Integrated Weather Picker UI
 	DrawWeatherPickerSection();
@@ -83,34 +76,19 @@ void WeatherEditor::DrawSettings()
 
 void WeatherEditor::Prepass()
 {
-	// Handle weather acceleration - use SetWeather with accelerate=true to properly advance engine transition
-	if (s_isAcceleratingWeatherChange) {
+	// Re-enforce weather lock if active (handles time changes)
+	auto editorWindow = EditorWindow::GetSingleton();
+	if (editorWindow->IsWeatherLocked()) {
+		auto lockedWeather = editorWindow->GetLockedWeather();
 		auto sky = globals::game::sky;
-		if (sky && sky->currentWeather && s_cachedLastWeather) {
-			// Get actual frame time in seconds from game
-			float deltaTime = *globals::game::deltaTime;
-			s_accelerationTime += deltaTime;
-
-			// Call SetWeather with accelerate multiple times based on acceleration rate
-			// Each call advances the transition, scaled by user's desired speed
-			int accelerateCalls = static_cast<int>(deltaTime * s_accelerationRate * 60.0f);
-			for (int i = 0; i < accelerateCalls && sky->currentWeatherPct < 1.0f; ++i) {
-				sky->SetWeather(sky->currentWeather, true, true);
-			}
-
-			// Stop acceleration when complete
-			if (sky->currentWeatherPct >= 1.0f) {
-				s_isAcceleratingWeatherChange = false;
-				s_accelerationTime = 0.0f;
-			}
+		if (sky && lockedWeather && sky->currentWeather != lockedWeather) {
+			sky->ForceWeather(lockedWeather, false);
 		}
 	}
 }
 
 void WeatherEditor::DrawWeatherPickerSection()
 {
-	ImGui::Spacing();
-	ImGui::Spacing();
 	ImGui::Spacing();
 	Util::DrawSectionHeader("Weather Details");
 
@@ -214,7 +192,6 @@ void WeatherEditor::DrawWeatherStatusPanel()
 {
 	ImGui::Text("Current Weather Status");
 	ImGui::Separator();
-	ImGui::Spacing();
 
 	auto weatherManager = WeatherManager::GetSingleton();
 	auto currentWeathers = weatherManager->GetCurrentWeathers();
@@ -225,6 +202,12 @@ void WeatherEditor::DrawWeatherStatusPanel()
 				currentWeathers.currentWeather->GetFormEditorID() :
 				std::format("{:08X}", currentWeathers.currentWeather->GetFormID()).c_str());
 
+		// Show if weather has custom settings
+		if (weatherManager->HasWeatherSettings(currentWeathers.currentWeather)) {
+			ImGui::TextColored({ 0.0f, 1.0f, 0.0f, 1.0f }, "Has Custom Settings");
+		} else {
+			ImGui::TextColored({ 0.7f, 0.7f, 0.7f, 1.0f }, "Using Default Settings");
+		}
 		// Always reserve space for transition info to prevent UI shifting
 		if (currentWeathers.lastWeather && currentWeathers.lerpFactor < 1.0f) {
 			ImGui::Text("Transitioning From: %s",
@@ -240,12 +223,6 @@ void WeatherEditor::DrawWeatherStatusPanel()
 			ImGui::Dummy(ImVec2(-1, ImGui::GetFrameHeight()));
 		}
 
-		// Show if weather has custom settings
-		if (weatherManager->HasWeatherSettings(currentWeathers.currentWeather)) {
-			ImGui::TextColored({ 0.0f, 1.0f, 0.0f, 1.0f }, "Has Custom Settings");
-		} else {
-			ImGui::TextColored({ 0.7f, 0.7f, 0.7f, 1.0f }, "Using Default Settings");
-		}
 	} else {
 		ImGui::TextColored({ 1.0f, 0.5f, 0.0f, 1.0f }, "No Active Weather");
 	}
@@ -626,42 +603,45 @@ void WeatherEditor::RenderWeatherControls(RE::Sky* sky)
 
 	// Accelerate checkbox
 	ImGui::Checkbox("Accelerate Weather Change", &s_accelerateWeatherChange);
-	ImGui::SameLine();
-	ImGui::SetNextItemWidth(150.0f);
-	ImGui::SliderFloat("##TransitionSpeed", &s_accelerationRate, 0.1f, 1.0f, "%.2f/s");
 	if (auto _tt = Util::HoverTooltipWrapper()) {
-		Util::DrawMultiLineTooltip({ "When enabled, weather changes at the specified speed",
-			"Speed in percentage per second (0.1 - 1.0)" });
+		ImGui::Text("When enabled, weather changes instantly");
 	}  // Reset Weather button
-	std::string resetButtonLabel = "Reset Weather";
-	if (sky->defaultWeather) {
-		resetButtonLabel += " to " + Util::FormatWeather(sky->defaultWeather);
-	}
-
-	// Color the reset button to match the default weather
-	if (sky->defaultWeather) {
-		ImVec4 weatherColor = GetWeatherTypeColor(sky->defaultWeather);
-		ImGui::PushStyleColor(ImGuiCol_Text, weatherColor);
-	}
-
-	if (ImGui::Button(resetButtonLabel.c_str())) {
+	if (ImGui::Button("Reset Weather")) {
 		sky->ResetWeather();
 		// Update the selection box to reflect the reset weather without double-applying
 		s_selectedWeatherIdx = FindWeatherIndex(sky->defaultWeather);
 		logger::info("[WeatherEditor] Reset weather to default");
 	}
 
-	if (sky->defaultWeather) {
+	if (auto _tt = Util::HoverTooltipWrapper()) {
+		ImGui::Text("Resets weather to default");
+	}
+
+	// Lock Weather toggle
+	ImGui::SameLine();
+	auto editorWindow = EditorWindow::GetSingleton();
+	bool isLocked = editorWindow->IsWeatherLocked();
+	const char* lockLabel = isLocked ? "Unlock Weather" : "Lock Weather";
+
+	if (isLocked) {
+		const auto& theme = Menu::GetSingleton()->GetTheme();
+		ImGui::PushStyleColor(ImGuiCol_Button, theme.StatusPalette.SuccessColor);
+	}
+	if (ImGui::Button(lockLabel)) {
+		if (isLocked) {
+			editorWindow->UnlockWeather();
+		} else {
+			editorWindow->LockWeather(sky->currentWeather);
+		}
+	}
+	if (isLocked) {
 		ImGui::PopStyleColor();
 	}
 	if (auto _tt = Util::HoverTooltipWrapper()) {
-		if (sky->defaultWeather) {
-			Util::DrawMultiLineTooltip({ "Resets to default weather:",
-				Util::FormatWeather(sky->defaultWeather).c_str() });
-		} else {
-			ImGui::Text("Resets weather to default (no default weather set)");
-		}
-	}  // Weather Selection - now with colored text
+		ImGui::Text(isLocked ? "Unlock weather to allow natural changes" : "Lock current weather to prevent changes");
+	}
+
+	// Weather Selection - now with colored text
 	std::vector<std::string> weatherLabels;
 	weatherLabels.reserve(s_filteredWeathers.size());
 	for (const auto& weather : s_filteredWeathers) {
@@ -684,12 +664,13 @@ void WeatherEditor::RenderWeatherControls(RE::Sky* sky)
 				s_selectedWeatherIdx = i;
 				// Weather changed, apply it
 				auto selectedWeather = s_filteredWeathers[s_selectedWeatherIdx];
-				sky->SetWeather(selectedWeather, true, false);
-
+				
 				if (s_accelerateWeatherChange) {
-					// Start weather change with normal transition, then accelerate it via Prepass
-					s_isAcceleratingWeatherChange = true;
-					s_accelerationTime = 0.0f;
+					// Instant transition - force the weather
+					sky->ForceWeather(selectedWeather, false);
+				} else {
+					// Normal transition
+					sky->SetWeather(selectedWeather, true, false);
 				}
 
 				logger::info("[WeatherEditor] Changed weather to: {}", Util::FormatWeather(selectedWeather));
