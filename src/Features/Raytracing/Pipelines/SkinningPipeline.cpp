@@ -135,7 +135,8 @@ bool SkinningPipeline::PrepareResources([[maybe_unused]]ID3D12GraphicsCommandLis
 		vertexUpdateData.emplace_back(shape->allocation->GetIndex(), queuedShape.updateFlags, shape->vertexCount, boneOffset, bonePivot, shape->boundRadius);
 
 		// Dynamic TriShapes
-		shape->UpdateUploadDynamicBuffers(commandList);
+		if (queuedShape.updateFlags & Shape::Flags::Dynamic)
+			shape->UpdateUploadDynamicBuffers(commandList);
 
 		// Skinning - This is a bit more involved
 		if (queuedShape.updateFlags & Shape::Flags::Skinned) {

@@ -29,4 +29,16 @@ namespace magic_enum::customize
 	{
 		static constexpr bool is_flags = true;
 	};
+
+	template <>
+	struct enum_range<D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAGS>
+	{
+		static constexpr bool is_flags = true;
+	};
+
+	template <>
+	struct enum_range<Shape::Flags>
+	{
+		static constexpr bool is_flags = true;
+	};
 }

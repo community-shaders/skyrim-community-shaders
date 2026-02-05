@@ -23,7 +23,6 @@
 #include "Features/Raytracing/Core/Instance.h"
 #include "Features/Raytracing/Core/Model.h"
 #include "Features/Raytracing/Core/Shape.h"
-#include "Features/Raytracing/Core/DismemberReference.h"
 
 #include "Features/Raytracing/Helpers/ModelSpaceToTangent.h"
 
@@ -665,7 +664,7 @@ struct Raytracing : public OverlayFeature
 	eastl::shared_ptr<DefaultTexture> defaultDetailTexture = nullptr;
 
 	// TODO: Add cleanup for elements of this vector
-	eastl::unordered_map<RE::BSDismemberSkinInstance*, eastl::vector<DismemberReference>> dismemberReferences;
+	eastl::unordered_map<RE::BSDismemberSkinInstance*, eastl::vector<Shape*>> dismemberReferences;
 
 	// We'll group trishapes by their parent nodes, hopefully trishapes don't move on their own
 	eastl::unordered_map<eastl::string, eastl::unique_ptr<Model>> models;
@@ -1392,9 +1391,10 @@ struct Raytracing : public OverlayFeature
 				auto& dismemberReferences = globals::features::raytracing.dismemberReferences;
 
 				if (auto it = dismemberReferences.find(oThis); it != dismemberReferences.end()) {
-					for (DismemberReference& dismemberRef : it->second) {
-						if (a_slot == dismemberRef.slot) {
-							dismemberRef.shape->UpdateDismember(a_enable);
+					for (auto& shape : it->second) {
+						if (a_slot == shape->slot) {
+							logger::info("[RT] BSDismemberSkinInstance::UpdateDismemberPartion {} {} - 0x{:08X} 0x{:08X}", a_slot, a_enable, reinterpret_cast<uintptr_t>(oThis), reinterpret_cast<uintptr_t>(shape));
+							shape->UpdateDismember(a_enable);
 							break;
 						}
 					}

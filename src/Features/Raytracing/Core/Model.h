@@ -18,7 +18,7 @@
 
 struct Model
 {
-	enum Flags {
+	enum Flags : uint8_t {
 		BLASUpdate = 1 << 0,
 		BLASRebuild	= 1 << 1	
 	};
@@ -28,13 +28,15 @@ struct Model
 	winrt::com_ptr<D3D12MA::Allocation> blasBuffer = nullptr;
 	winrt::com_ptr<D3D12MA::Allocation> blasScratchBuffer = nullptr;
 
-	Flags flags;
+	eastl::vector<D3D12_RAYTRACING_GEOMETRY_DESC> geometryDescs;
+
+	stl::enumeration<Flags, uint8_t> flags;
 
 	Model(eastl::vector<eastl::unique_ptr<Shape>>& shapes) :
 		shapes(eastl::move(shapes))
 	{
 		for (auto& shape : this->shapes) {
-			shapeflags |= shape->flags;
+			shapeflags.set(shape->flags.get());
 			shaderTypes |= shape->material.shaderType;
 			features |= static_cast<int>(shape->material.Feature);
 			shaderFlags.set(shape->material.shaderFlags.get());
@@ -46,7 +48,7 @@ struct Model
 		return std::format("_{:08X}", reinterpret_cast<uintptr_t>(root));
 	}
 
-	Shape::Flags GetFlags() const
+	auto GetShapeFlags() const
 	{
 		return shapeflags;
 	}
@@ -67,16 +69,6 @@ struct Model
 		return shaderFlags;
 	}
 
-	bool IsRenderUseValid() const
-	{
-		for (auto& shape : shapes) {
-			if (shape->geometry->GetFlags().any(RE::NiAVObject::Flag::kRenderUse))
-				return true;
-		}
-
-		return false;
-	}
-
 	bool ShouldQueueMSNConversion() const
 	{
 		for (auto& shape : shapes) {
@@ -91,16 +83,15 @@ struct Model
 
 	bool BLASBuildExecuted() const;
 
-	bool BLASUpdateExecuted() const;
+	bool BLASUpdateQueued() const;
 
 	D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAGS BuildFlags() const
 	{
-		if ((shapeflags & Shape::Flags::Skinned) || (shapeflags & Shape::Flags::Dynamic))
+		if (shapeflags.any(Shape::Flags::Dynamic, Shape::Flags::Skinned))
 			return D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_ALLOW_UPDATE | D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_PREFER_FAST_BUILD;
 
-		return D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_ALLOW_COMPACTION | D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_PREFER_FAST_TRACE;
+		return D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_PREFER_FAST_TRACE;
 	}
-
 
 	D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAGS UpdateFlags(bool rebuild) const
 	{
@@ -114,9 +105,9 @@ struct Model
 
 	bool UpdateBLAS(ID3D12GraphicsCommandList4* commandList);
 
-	bool HideShape([[maybe_unused]]Shape* shape) const
+	bool HideShape(Shape* shape) const
 	{
-		return BLASBuildExecuted() && ((shape->state & Shape::State::Hidden) != Shape::State::None);
+		return BLASBuildExecuted() && shape->IsHidden();
 	}
 
 	void AddRef()
@@ -131,10 +122,11 @@ struct Model
 	}
 
 private:
-	Shape::Flags shapeflags = Shape::Flags::None;
+	stl::enumeration<Shape::Flags, uint8_t> shapeflags = Shape::Flags::None;
 	uint32_t shaderTypes = RE::BSShader::Type::None;
 	int features = static_cast<int>(RE::BSShaderMaterial::Feature::kNone);
 	REX::EnumSet<RE::BSShaderProperty::EShaderPropertyFlag, std::uint64_t> shaderFlags;
+	bool blasBuilt = false;
 	uint64_t blasBuildFrame;
 	uint64_t blasUpdateFrame;
 	eastl::atomic<int> refCount{ 0 };

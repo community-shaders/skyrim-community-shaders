@@ -104,9 +104,9 @@ void Shape::BuildMesh(RE::BSGraphics::TriShape* rendererData, const uint32_t& ve
 	// Vertices
 	{
 		bool dynamic = false;
-		bool skinned = flags & Flags::Skinned;
+		bool skinned = flags.any(Flags::Skinned);
 
-		if (flags & Flags::Dynamic) {
+		if (flags.any(Flags::Dynamic)) {
 			dynamicPosition.resize(vertexCountIn);
 
 			auto rtti = geometry->GetRTTI();
@@ -127,7 +127,7 @@ void Shape::BuildMesh(RE::BSGraphics::TriShape* rendererData, const uint32_t& ve
 			// Clear Dynamic flag if geometry is not a valid BSDynamicTriShape.
 			// Enforces the invariant that when Flags::Dynamic is set, geometry is always a BSDynamicTriShape.
 			if (!dynamic)
-				flags &= ~Flags::Dynamic;
+				flags.reset(Flags::Dynamic);
 		}
 
 		vertices.resize(vertexCountIn);
@@ -897,8 +897,8 @@ void Shape::CalculateVectors(bool calculateNormal)
 
 D3D12_RAYTRACING_GEOMETRY_DESC Shape::GeometryDesc() const
 {
-	bool hasAlphaTesting = flags & Shape::Flags::AlphaTesting;
-	bool isBlend = (flags & Shape::Flags::AlphaBlending) && (material.Feature == RE::BSShaderMaterial::Feature::kHairTint || material.Feature == RE::BSShaderMaterial::Feature::kFaceGen || material.Feature == RE::BSShaderMaterial::Feature::kFaceGenRGBTint || material.Feature == RE::BSShaderMaterial::Feature::kEye);
+	bool hasAlphaTesting = flags.any(Shape::Flags::AlphaTesting);
+	bool isBlend = flags.any(Shape::Flags::AlphaBlending) && (material.Feature == RE::BSShaderMaterial::Feature::kHairTint || material.Feature == RE::BSShaderMaterial::Feature::kFaceGen || material.Feature == RE::BSShaderMaterial::Feature::kFaceGenRGBTint || material.Feature == RE::BSShaderMaterial::Feature::kEye);
 	bool isWindows = material.shaderFlags.any(RE::BSShaderProperty::EShaderPropertyFlag::kAssumeShadowmask) && (material.Feature == RE::BSShaderMaterial::Feature::kGlowMap || material.PBRFlags.any(PBRShaderFlags::HasEmissive));
 
 	bool isOpaque = !hasAlphaTesting && !isWindows && !isBlend;
@@ -925,55 +925,28 @@ D3D12_GPU_VIRTUAL_ADDRESS Shape::TransformBuffer() const
 	return globals::features::raytracing.transformBuffer->resource->GetGPUVirtualAddress() + offset;
 }
 
-Shape::Flags Shape::Update([[maybe_unused]]bool isRenderUseValid)
+Shape::Flags Shape::Update()
 {
-	auto dynamic = flags & Shape::Flags::Dynamic;
-	auto skinned = flags & Shape::Flags::Skinned;
+	const auto dynamic = flags.any(Shape::Flags::Dynamic);
+	const auto skinned = flags.any(Shape::Flags::Skinned);
 
-	if ((dynamic || skinned) && geometry->GetFlags().any(RE::NiAVObject::Flag::kHidden)) {
-		state |= State::Hidden;
-	} else if (isRenderUseValid && geometry->GetFlags().none(RE::NiAVObject::Flag::kRenderUse)) {
-		state |= State::Hidden;
-	} else {
-		state &= ~State::Hidden;
+	// I don't know if kHidden is set on inner nodes for culling, so to be safe we check
+	if (dynamic || skinned) {
+		SetPendingState(State::Hidden, geometry->GetFlags().any(RE::NiAVObject::Flag::kHidden));
 	}
 
-	//logger::info("Shape::Update {} - RenderUseValid: {} - Hidden: {}, Flags: {}", geometry->name, isRenderUseValid, (state & State::Hidden) != 0, GetFlagsString<RE::NiAVObject::Flag>(geometry->GetFlags().underlying()).c_str());
-
-	if ((state & State::Hidden) == State::Hidden) {
+	if (IsPendingHidden()) {
 		return Shape::Flags::None;
 	}
 
 	Shape::Flags updateFlags = Shape::Flags::None;
 
-	if (dynamic || skinned) {
-		logger::trace("Update {} - [0x{:08X}] {}", geometry->name, geometry->GetFlags().underlying(), GetFlagsString<RE::NiAVObject::Flag>(geometry->GetFlags().underlying()));
+	if (dynamic && UpdateDynamicPosition()) {
+		updateFlags |= Shape::Flags::Dynamic;
+	}
 
-		if (UpdateDynamicPosition()) {
-			updateFlags |= Shape::Flags::Dynamic;
-		}
-
-		if (UpdateSkinning()) {
-			updateFlags |= Shape::Flags::Skinned;
-		}
-
-		if (updateFlags & Shape::Flags::Skinned) {
-			auto& skinInstance = geometry->GetGeometryRuntimeData().skinInstance;
-
-			if (boneMatrices.empty())
-				boneMatrices.resize(skinInstance->numMatrices);
-
-			float3x4* boneMatricesArray = reinterpret_cast<float3x4*>(skinInstance->boneMatrices);
-
-			auto rootParent = skinInstance->rootParent;
-			auto skinRootInverse = GetXMFromNiTransform(rootParent->world.Invert());
-
-			boundRadius = rootParent->worldBound.radius + (rootParent->world.translate + rootParent->worldBound.center).GetDistance(geometry->world.translate);
-
-			for (uint i = 0; i < skinInstance->numMatrices; i++) {
-				XMStoreFloat3x4(&boneMatrices[i], XMMatrixMultiply(XMLoadFloat3x4(&boneMatricesArray[i]), skinRootInverse));
-			}
-		}
+	if (skinned && UpdateSkinning()) {
+		updateFlags |= Shape::Flags::Skinned;
 	}
 
 	return updateFlags;
@@ -983,12 +956,6 @@ Shape::Flags Shape::Update([[maybe_unused]]bool isRenderUseValid)
 // TODO: Test performance and stability of using a upload heap buffer and keeping it mapped to dynamicData
 bool Shape::UpdateDynamicPosition()
 {
-	if (!(flags & Flags::Dynamic))
-		return false;
-
-	if (!geometry)
-		return false;
-
 	auto* dynamicTriShape = reinterpret_cast<RE::BSDynamicTriShape*>(geometry);
 
 	const auto& runtimeData = dynamicTriShape->GetDynamicTrishapeRuntimeData();
@@ -1016,7 +983,7 @@ bool Shape::UpdateDynamicPosition()
 // Updates 'dynamicPositionBuffer' with dynamicPosition.data() and uploads the buffer to the GPU using the command list
 void Shape::UpdateUploadDynamicBuffers(ID3D12GraphicsCommandList4* commandList)
 {
-	if ((flags & Flags::Dynamic) != Flags::Dynamic)
+	if (flags.none(Flags::Dynamic))
 		return;
 
 	dynamicPositionBuffer->UpdateList(dynamicPosition.data(), dynamicPosition.size());
@@ -1028,32 +995,62 @@ bool Shape::IsHidden() const
 	return ((state & State::Hidden) != State::None) || ((state & State::DismemberHidden) != State::None);
 }
 
+bool Shape::IsPendingHidden() const
+{
+	return ((pendingState & State::Hidden) != State::None) || ((pendingState & State::DismemberHidden) != State::None);
+}
+
+bool Shape::IsDirtyState() const
+{
+	return pendingState != state;
+}
+
 // TODO: Handle lazy skinned meshes update
 bool Shape::UpdateSkinning()
 {
-	if (!(flags & Flags::Skinned))
-		return false;
+	/*auto& geometryFlags = geometry->GetFlags();
 
-	if (!geometry)
-		return false;
-
-	auto& geometryFlags = geometry->GetFlags();
-
-	if (geometryFlags.any(RE::NiAVObject::Flag::kHidden))
-		return false;
-
-	/*if (geometryFlags.any(RE::NiAVObject::Flag::kNoAnimSyncS))
+	if (geometryFlags.any(RE::NiAVObject::Flag::kNoAnimSyncS))
 		return false;*/
+
+		// Update Bone matrices
+	auto& skinInstance = geometry->GetGeometryRuntimeData().skinInstance;
+
+	if (boneMatrices.empty())
+		boneMatrices.resize(skinInstance->numMatrices);
+
+	float3x4* boneMatricesArray = reinterpret_cast<float3x4*>(skinInstance->boneMatrices);
+
+	auto rootParent = skinInstance->rootParent;
+	auto skinRootInverse = GetXMFromNiTransform(rootParent->world.Invert());
+
+	boundRadius = rootParent->worldBound.radius + (rootParent->world.translate + rootParent->worldBound.center).GetDistance(geometry->world.translate);
+
+	for (uint i = 0; i < skinInstance->numMatrices; i++) {
+		XMStoreFloat3x4(&boneMatrices[i], XMMatrixMultiply(XMLoadFloat3x4(&boneMatricesArray[i]), skinRootInverse));
+	}
 
 	return true;
 }
 
+// State is set as pending first, final state is updated after BLAS rebuild call
+void Shape::SetPendingState(State stateIn, bool activate)
+{
+	if (activate)
+		pendingState |= stateIn;
+	else
+		pendingState &= ~stateIn;
+}
+
 void Shape::UpdateDismember(bool enable)
 {
-	if (enable)
-		state &= ~State::DismemberHidden;
-	else
-		state |= State::DismemberHidden;
+	SetPendingState(State::DismemberHidden, !enable);
+}
+
+// Updates state from pending
+void Shape::UpdateState()
+{
+	state = pendingState;
 }
 
 ShapeData Shape::GetData() const
