@@ -94,7 +94,7 @@ void SkinningPipeline::QueueUpdate(Shape::Flags updateFlags, eastl::string path,
 		QueuedShape{ updateFlags, path });
 }
 
-bool SkinningPipeline::PrepareResources([[maybe_unused]]ID3D12GraphicsCommandList4* commandList, uint& count, uint& vertexCount)
+bool SkinningPipeline::PrepareResources([[maybe_unused]]ID3D12GraphicsCommandList4* commandList, uint& numShapes, uint& numVertices)
 {
 	if (queuedShapes.empty())
 		return false;
@@ -124,14 +124,7 @@ bool SkinningPipeline::PrepareResources([[maybe_unused]]ID3D12GraphicsCommandLis
 			break;
 		}
 
-		count = (uint)vertexUpdateData.size();
-
-		if (count >= MAX_GEOMETRY) {
-			logger::critical("[RT] SkinningPipeline::PrepareResources - Exceeded maximum geometry update limit of {}", MAX_GEOMETRY);
-			break;
-		}
-
-		vertexCount = std::max(vertexCount, (uint)shape->vertexCount);
+		numVertices = std::max(numVertices, (uint)shape->vertexCount);
 		vertexUpdateData.emplace_back(shape->allocation->GetIndex(), queuedShape.updateFlags, shape->vertexCount, boneOffset, bonePivot, shape->boundRadius);
 
 		// Dynamic TriShapes
@@ -150,16 +143,24 @@ bool SkinningPipeline::PrepareResources([[maybe_unused]]ID3D12GraphicsCommandLis
 			barriers.push_back(barrier);
 	}
 
-	uint barrierCount = (uint)barriers.size();
+	const uint numBarriers = static_cast<uint>(barriers.size());
 
-	if (barrierCount > 0)
-		commandList->ResourceBarrier(barrierCount, barriers.data());
+	if (numBarriers > 0)
+		commandList->ResourceBarrier(numBarriers, barriers.data());
 
-	vertexUpdateBuffer->UpdateList(vertexUpdateData.data(), count);
-	vertexUpdateBuffer->Upload(commandList);
+	numShapes = static_cast<uint>(vertexUpdateData.size());
 
-	boneMatricesBuffer->UpdateList(boneMatricesData.data(), boneMatricesData.size());
-	boneMatricesBuffer->Upload(commandList);
+	if (numShapes >= MAX_GEOMETRY) {
+		logger::critical("[RT] SkinningPipeline::PrepareResources - Exceeded maximum geometry update limit of {}", MAX_GEOMETRY);
+		numShapes = std::min(numShapes, MAX_GEOMETRY);
+	}
+
+	vertexUpdateBuffer->UpdateList(vertexUpdateData.data(), numShapes);
+	vertexUpdateBuffer->UploadRegion(commandList, sizeof(VertexUpdateData) * numShapes, 0);
+
+	const uint numBoneMatrices = static_cast<uint>(boneMatricesData.size());
+	boneMatricesBuffer->UpdateList(boneMatricesData.data(), numBoneMatrices);
+	boneMatricesBuffer->UploadRegion(commandList, sizeof(float3x4) * numBoneMatrices, 0);
 
 	return true;
 }
