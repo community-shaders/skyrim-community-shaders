@@ -7,6 +7,14 @@
 * distribution of this software and related documentation without an express
 * license agreement from NVIDIA CORPORATION is strictly prohibited.
 */
+#ifndef __FRESNEL_HLSLI__
+#define __FRESNEL_HLSLI__
+
+float CalculateBaseReflectivity(const float incidentIoR, const float transmittedIoR)
+{
+    const float tmp = (incidentIoR - transmittedIoR) / (incidentIoR + transmittedIoR);
+    return tmp * tmp;
+}
 
 /** Evaluates the Fresnel term using Schlick's approximation.
     Introduced in http://www.cs.virginia.edu/~jdl/bib/appearance/analytic%20models/schlick94b.pdf
@@ -27,6 +35,11 @@ float3 evalFresnelSchlick(float3 f0, float3 f90, float cosTheta)
 float evalFresnelSchlick(float f0, float f90, float cosTheta)
 {
     return f0 + (f90 - f0) * pow(max(1 - cosTheta, 0), 5); // Clamp to avoid NaN if cosTheta = 1+epsilon
+}
+
+float3 evalFresnelSchlick(float3 f0, float cosTheta)
+{
+    return evalFresnelSchlick(f0, float3(1.0f, 1.0f, 1.0f), cosTheta);
 }
 
 float3 evalFresnelGeneralizedSchlick(float3 f0, float3 f90, float exponent, float cosTheta)
@@ -124,3 +137,5 @@ float3 evalFresnelConductor(float3 eta, float3 k, float cosThetaI)
         evalFresnelConductor(eta.z, k.z, cosThetaI)
     );
 }
+
+#endif // __FRESNEL_HLSLI__

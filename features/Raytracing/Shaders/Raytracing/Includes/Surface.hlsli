@@ -10,6 +10,8 @@
 
 #include "Raytracing/Includes/Materials/TexLODHelpers.hlsli"
 
+#define HAIRSETTINGS Frame.Features.HairSpecular
+
 // Helpers
 
 float3 SafeNormalize(float3 input)
@@ -22,6 +24,15 @@ float3 FlipIfOpposite(float3 normal, float3 referenceNormal)
 {
     return (dot(normal, referenceNormal)>=0)?(normal):(-normal);
 }
+
+struct Subsurface
+{
+    float3 TransmissionColor;
+    float Scale;
+    float3 ScatteringColor;
+    float Anisotropy;
+    uint HasSubsurface;
+};
 
 #define Surface(...) static Surface ctor(__VA_ARGS__)
 struct Surface
@@ -42,6 +53,9 @@ struct Surface
     float3 F0;
     float IOR;
     float3 TransmissionColor;
+    Subsurface SubsurfaceData;
+    float DiffTrans;
+    float SpecTrans;
 
 #if defined(FULL_MATERIAL)
     float3 SubsurfaceColor;
@@ -93,6 +107,7 @@ struct Surface
     void DefaultMaterial(in Vertex v0, in Vertex v1, in Vertex v2, in float3 uvw, in float3 normalWS, in float3 tangentWS, in float3 bitangentWS, float3x3 objectToWorld3x3, in Material material)
     {
         float2 texCoord0 = material.TexCoord(Interpolate(v0.Texcoord0, v1.Texcoord0, v2.Texcoord0, uvw));
+        TransmissionColor = float3(0.0f, 0.0f, 0.0f);
 
 #if defined(DEBUG_SHADERTYPE)
         [branch]
@@ -136,6 +151,30 @@ struct Surface
             Metallic = saturate(rmaos.y);
             AO = rmaos.z;
             F0 = material.SpecularLevel() * rmaos.w;
+
+            if ((material.PBRFlags & PBR::Flags::Subsurface) && !(material.ShaderFlags & ShaderFlags::kTwoSided)) {
+                Texture2D subsurfaceTexture = Textures[NonUniformResourceIndex(material.SubsurfaceTexture())];
+
+                float4 subsurfaceColor = subsurfaceTexture.SampleLevel(BaseSampler, texCoord0, MipLevel);
+                float thickness = subsurfaceColor.a * material.SubsurfaceScale();
+                SubsurfaceData.ScatteringColor = subsurfaceColor.rgb * material.SubsurfaceScatteringColor().rgb;
+                SubsurfaceData.TransmissionColor = Albedo;
+
+                TransmissionColor = SubsurfaceData.ScatteringColor;
+
+                SubsurfaceData.Scale = 40.0f;
+                SubsurfaceData.Anisotropy = 0.0f;
+
+                SubsurfaceData.HasSubsurface = any(SubsurfaceData.ScatteringColor) > 0.0f ? 1 : 0;
+            } else if ((material.PBRFlags & PBR::Flags::Subsurface) && (material.ShaderFlags & ShaderFlags::kTwoSided)) {
+                // Two sided subsurface - for leaves and thin objects
+                Texture2D subsurfaceTexture = Textures[NonUniformResourceIndex(material.SubsurfaceTexture())];
+                // Just use simple diffuse transmission for thin objects
+                float4 subsurfaceColor = subsurfaceTexture.SampleLevel(BaseSampler, texCoord0, MipLevel);
+                float thickness = subsurfaceColor.a * material.SubsurfaceScale();
+                TransmissionColor = subsurfaceColor.rgb * material.SubsurfaceScatteringColor().rgb;
+                DiffTrans = 1 - thickness;
+            }
         } else if (material.ShaderType == ShaderType::Lighting) {
             float3 diffuse = baseTexture.SampleLevel(BaseSampler, texCoord0, MipLevel).rgb;
 
@@ -203,6 +242,30 @@ struct Surface
 	            tintColor = tintColor - tintColor * Albedo;
 	            Albedo = float3(1.01171875f, 0.99609375f, 1.01171875f) * (Albedo * Albedo + tintColor);
             }
+
+            [branch]
+            if (material.Feature == Feature::kFaceGen || material.Feature == Feature::kFaceGenRGBTint) {
+                F0 = 0.02776f;
+                SubsurfaceData.HasSubsurface = 1;
+                SubsurfaceData.Anisotropy = -0.5f;
+
+                // Typical skin values
+                SubsurfaceData.ScatteringColor = float3(4.820f, 1.690f, 1.090f);
+                SubsurfaceData.TransmissionColor = Albedo;
+                SubsurfaceData.Scale = 1.f;
+            }
+
+            [branch]
+            if (material.Feature == Feature::kEye) {
+                Roughness = 0.08f;
+                F0 = 0.02776f;
+                SubsurfaceData.HasSubsurface = 1;
+                SubsurfaceData.Anisotropy = -0.5f;
+                // Typical eye values
+                SubsurfaceData.ScatteringColor = float3(1.0f, 0.8f, 0.6f);
+                SubsurfaceData.TransmissionColor = Albedo;
+                SubsurfaceData.Scale = 0.1f;
+            }
             
         } else if (material.ShaderType == ShaderType::Effect) {
             float3 base = float3(1, 1, 1);
@@ -257,8 +320,7 @@ struct Surface
 
             TransmissionColor = lerp(float3(1.0f, 1.0f, 1.0f), Albedo, alpha);
             Albedo *= alpha;
-        } else {
-            TransmissionColor = float3(0.0f, 0.0f, 0.0f);
+            SpecTrans = 1.0f;
         }
 
         [branch]
@@ -267,6 +329,7 @@ struct Surface
             Albedo *= 1.0f - windowAlpha;
             Emissive *= 0;
             Roughness = max(Roughness, 0.08f); // prevent delta transmission
+            SpecTrans = 1.0f;
         }
         
         [branch]
@@ -291,6 +354,40 @@ struct Surface
             normalWS, tangentWS, bitangentWS,
             Normal, Tangent, Bitangent
         );
+#endif
+
+        // Hair flowmap processing
+#ifdef HAIR_CHIANG_BSDF
+        [branch]
+        if (material.Feature == Feature::kHairTint && HAIRSETTINGS.Enabled) {
+            Roughness = 1.0f - saturate(HAIRSETTINGS.HairGlossiness * 0.01f);
+            Albedo = saturate(Albedo * HAIRSETTINGS.BaseColorMult);
+            [branch]
+            if (material.ShaderFlags & ShaderFlags::kBackLighting) {
+                Texture2D hairFlowMapTexture = Textures[NonUniformResourceIndex(material.SpecularTexture())];
+                uint2 hairFlowDimensions;
+                hairFlowMapTexture.GetDimensions(hairFlowDimensions.x, hairFlowDimensions.y);
+                
+                [branch]
+                if (hairFlowDimensions.x > 32 && hairFlowDimensions.y > 32) {
+                    float2 sampledHairFlow2D = hairFlowMapTexture.SampleLevel(BaseSampler, texCoord0, MipLevel).xy;
+                    
+                    [branch]
+                    if (sampledHairFlow2D.x > 0.0 || sampledHairFlow2D.y > 0.0) {
+                        float3 sampledHairFlow = float3(sampledHairFlow2D * 2.0f - 1.0f, 0.0f);
+                        float3x3 tbn = float3x3(Tangent, Bitangent, Normal);
+                        float3 hairRootDirection = normalize(mul(sampledHairFlow, tbn));
+                        
+                        // Re-orthogonalize T and B to N and the new hair root direction
+                        hairRootDirection = normalize(hairRootDirection - Normal * dot(hairRootDirection, Normal));
+                        Bitangent = hairRootDirection;
+                        
+                        float hairHandedness = (dot(cross(Normal, Tangent), Bitangent) < 0.0f) ? -1.0f : 1.0f;
+                        Tangent = normalize(cross(Bitangent, Normal)) * hairHandedness;
+                    }
+                }
+            }
+        }
 #endif
     }
 
@@ -406,6 +503,9 @@ struct Surface
         Surface surface;
 
         surface.Position = position;
+        surface.SubsurfaceData = (Subsurface)0;
+        surface.DiffTrans = 0.0f;
+        surface.SpecTrans = 0.0f;
 
         Shape shape = GetShape(payload, instance);
 
@@ -527,6 +627,9 @@ struct Surface
 
     Surface(float3 position, float3 geomNormal, float3 normal, float3 tangent, float3 bitangent, float3 albedo, float roughness, float metallic, float3 emissive, float ao) {
         Surface surface;
+        surface.SubsurfaceData = (Subsurface)0;
+        surface.DiffTrans = 0.0f;
+        surface.SpecTrans = 0.0f;
 
         surface.Position = position;
 

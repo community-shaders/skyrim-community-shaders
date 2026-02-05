@@ -461,6 +461,14 @@ void Shape::BuildMaterial(const RE::BSGeometry::GEOMETRY_RUNTIME_DATA& geometryR
 
 						pbrFlags = GetPBRShaderFlags(lightingPBRMaterial);
 
+						if (pbrFlags & PBRShaderFlags::Subsurface) {
+							textures[6] = TextureRegister(lightingPBRMaterial->featuresTexture0, blackTexture);
+
+							auto sssColor = lightingPBRMaterial->GetSubsurfaceColor();
+							colors[2] = { sssColor.red, sssColor.green, sssColor.blue, 1.0f };
+							scalars[2] = lightingPBRMaterial->GetSubsurfaceOpacity();
+						}
+
 						// Enforce TruePBR flag
 						shaderFlags.set(EShaderPropertyFlag::kMenuScreen);
 					} else {
@@ -522,6 +530,8 @@ void Shape::BuildMaterial(const RE::BSGeometry::GEOMETRY_RUNTIME_DATA& geometryR
 										lightingHairTintMaterial->tintColor.blue,
 										(float)colors[0].w
 									};
+									// Load flowmap texture for hair (stored in specularBackLightingTexture slot)
+									textures[3] = TextureRegister(lightingBaseMaterial->specularBackLightingTexture, blackTexture);
 								}
 							}
 

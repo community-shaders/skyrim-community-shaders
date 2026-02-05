@@ -51,7 +51,15 @@ alignas(16)
     float PixelConeSpreadAngle;
     float TexLODBias;
     float CloudOpacity;
-    float4x4 Pad0;
+    int SSSSampleCount;
+    float SSSMaxSampleRadius;
+    BOOL SSSMaterialOverride;
+    BOOL EnableSssTransmission;
+    float3 OverrideSSSTransmissionColor;
+    float OverrideSSSScale;
+    float3 OverrideSSSScatteringColor;
+    float OverrideSSSAnisotropy;
+    float4 Pad0;
     float4x4 Pad1;
     float4x4 Pad2;
     float3x4 Pad3;

@@ -111,7 +111,7 @@ float3 OffsetRay(float3 position, float3 normal, bool hasTransmission = false)
 float3 TraceRayShadow(RaytracingAccelerationStructure scene, Surface surface, float3 direction, inout uint randomSeed)
 {
     RayDesc ray;
-    bool hasTransmission = any(surface.TransmissionColor) > 0.0f && dot(surface.FaceNormal, direction) < 0.0f;
+    bool hasTransmission = any(surface.TransmissionColor > 0.0f) && dot(surface.FaceNormal, direction) < 0.0f;
     ray.Origin = OffsetRay(surface.Position, surface.FaceNormal, hasTransmission);
     ray.Direction = direction;
     ray.TMin = 0.0f;
@@ -131,7 +131,7 @@ float3 TraceRayShadow(RaytracingAccelerationStructure scene, Surface surface, fl
 float3 TraceRayShadowFinite(RaytracingAccelerationStructure scene, Surface surface, float3 direction, float tmax, inout uint randomSeed)
 {
     RayDesc ray;
-    bool hasTransmission = any(surface.TransmissionColor) > 0.0f && dot(surface.FaceNormal, direction) < 0.0f;
+    bool hasTransmission = any(surface.TransmissionColor > 0.0f) && dot(surface.FaceNormal, direction) < 0.0f;
     ray.Origin = OffsetRay(surface.Position, surface.FaceNormal, hasTransmission);
     ray.Direction = direction;
     ray.TMin = 0.0f;
@@ -146,6 +146,27 @@ float3 TraceRayShadowFinite(RaytracingAccelerationStructure scene, Surface surfa
     
     randomSeed = shadowPayload.randomSeed;
     return shadowPayload.transmission * shadowPayload.missed;
+}
+
+Payload SampleSubsurface(RaytracingAccelerationStructure scene, const float3 samplePosition, const float3 surfaceNormal, const float tmax, inout uint randomSeed)
+{
+    RayDesc ray;
+    ray.Origin = samplePosition;
+    ray.Direction = -surfaceNormal; // Shooting ray towards the surface
+    ray.TMin = 0.0f;
+    ray.TMax = tmax;
+
+    Payload payload;
+    payload.hitDistance = -1.0f;
+    payload.primitiveIndex = 0;
+    payload.PackBarycentrics(float2(0.0f, 0.0f));
+    payload.PackInstanceGeometryIndex(0, 0);
+    payload.randomSeed = randomSeed;
+
+    TraceRay(scene, RAY_FLAG_CULL_BACK_FACING_TRIANGLES, 0xFF, DIFFUSE_RAY_HITGROUP_IDX, 0, DIFFUSE_RAY_MISS_IDX, ray, payload);
+    randomSeed = payload.randomSeed;
+
+    return payload;
 }
 
 #endif // RAYS_HLSL

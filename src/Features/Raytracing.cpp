@@ -504,6 +504,33 @@ void Raytracing::DrawAdvancedSettings()
 	if (ImGui::Checkbox("GGX Energy Conservation", &advSettings.GGXEnergyConservation))
 		recompileReason |= RecompileReason::Advanced;
 
+	if (ImGui::Checkbox("Use Hair Chiang BSDF", &advSettings.UseHairChiangBSDF))
+		recompileReason |= RecompileReason::Advanced;
+
+	if (auto _tt = Util::HoverTooltipWrapper()) {
+		ImGui::Text("Best with hair specular feature enabled.\n");
+	}
+
+	if (ImGui::TreeNodeEx("Subsurface Scattering", ImGuiTreeNodeFlags_DefaultOpen)) {
+		if (ImGui::Checkbox("Enable Subsurface Scattering", &advSettings.EnableSubsurfaceScattering))
+			recompileReason |= RecompileReason::Advanced;
+
+		if (advSettings.EnableSubsurfaceScattering) {
+			ImGui::SliderInt("SSS Sample Count", &advSettings.SSSSampleCount, 1, 16);
+			ImGui::SliderFloat("Max Sample Radius", &advSettings.SSSMaxSampleRadius, 0.01f, 64.0f, "%.2f");
+			ImGui::Checkbox("Enable SSS Transmission", &advSettings.EnableSssTransmission);
+			ImGui::Checkbox("SSS Material Override", &advSettings.SSSMaterialOverride);
+
+			if (advSettings.SSSMaterialOverride) {
+				ImGui::ColorEdit3("Override SSS Transmission Color", reinterpret_cast<float*>(&advSettings.OverrideSSSTransmissionColor), ImGuiColorEditFlags_Float);
+				ImGui::ColorEdit3("Override SSS Scattering Color", reinterpret_cast<float*>(&advSettings.OverrideSSSScatteringColor), ImGuiColorEditFlags_Float);
+				ImGui::SliderFloat("Override SSS Scale", &advSettings.OverrideSSSScale, 0.01f, 1000.0f, "%.2f");
+				ImGui::SliderFloat("Override SSS Anisotropy", &advSettings.OverrideSSSAnisotropy, -0.99f, 0.99f);
+			}
+		}
+		ImGui::TreePop();
+	}
+
 	if (DrawEnumCombo("Diffuse BRDF", advSettings.DiffuseBRDF))
 		recompileReason |= RecompileReason::Advanced;
 
@@ -3040,6 +3067,15 @@ void Raytracing::DrawRTGI()
 		frameData->PixelConeSpreadAngle = std::atan((2.0f / eye.projMat.m[1][1]) / renderSize.y);
 		frameData->TexLODBias = settings.TexLODBias;
 
+		frameData->SSSSampleCount = settings.AdvancedSettings.SSSSampleCount;
+		frameData->SSSMaxSampleRadius = settings.AdvancedSettings.SSSMaxSampleRadius;
+		frameData->EnableSssTransmission = settings.AdvancedSettings.EnableSssTransmission;
+		frameData->SSSMaterialOverride = settings.AdvancedSettings.SSSMaterialOverride;
+		frameData->OverrideSSSTransmissionColor = settings.AdvancedSettings.OverrideSSSTransmissionColor;
+		frameData->OverrideSSSScatteringColor = settings.AdvancedSettings.OverrideSSSScatteringColor;
+		frameData->OverrideSSSScale = settings.AdvancedSettings.OverrideSSSScale;
+		frameData->OverrideSSSAnisotropy = settings.AdvancedSettings.OverrideSSSAnisotropy;
+
 		frameData->RussianRoulette = settings.RussianRoulette;
 
 		if (Util::IsInterior()) {
@@ -4034,6 +4070,12 @@ void Raytracing::CompileRTGIShaders()
 
 	if (advSettings.GGXEnergyConservation)
 		defines.emplace_back(L"GGX_ENERGY_CONSERVATION");
+
+	if (advSettings.UseHairChiangBSDF)
+		defines.emplace_back(L"HAIR_CHIANG_BSDF");
+
+	if (advSettings.EnableSubsurfaceScattering)
+		defines.emplace_back(L"SUBSURFACE_SCATTERING");
 
 	const auto diffuseMode = std::to_wstring(static_cast<uint32_t>(advSettings.DiffuseBRDF));
 	defines.emplace_back(L"DIFFUSE_MODE", diffuseMode.c_str());

@@ -11,6 +11,8 @@
 #include "Raytracing/Includes/Materials/LobeType.hlsli"
 #include "Raytracing/Includes/Materials/Microfacet.hlsli"
 
+#include "Raytracing/Includes/Materials/HairChiangBSDF.hlsli"
+
 // Minimum cos(theta) for the incident and outgoing vectors.
 // Some BSDF functions are not robust for cos(theta) == 0.0,
 // so using a small epsilon for consistency.
@@ -87,7 +89,7 @@ struct DiffuseReflection
         return EvalWeight(wo, wi) * wo.z * K_1_PI;
     }
 
-    bool SampleBSDF(const float3 wi, out float3 wo, out float pdf, out float3 weight, out uint lobe, out float lobeP, float3 preGeneratedSample)
+    bool SampleBSDF(const float3 wi, out float3 wo, out float pdf, out float3 weight, out uint lobe, out float lobeP, float4 preGeneratedSample)
     {
         wo = sample_cosine_hemisphere_concentric(preGeneratedSample.xy, pdf);
         lobe = (uint)LobeType::DiffuseReflection;
@@ -137,7 +139,7 @@ struct DiffuseTransmissionLambert
         return K_1_PI * albedo * -wo.z;
     }
 
-    bool SampleBSDF(const float3 wi, out float3 wo, out float pdf, out float3 weight, out uint lobe, out float lobeP, const float3 preGeneratedSample)
+    bool SampleBSDF(const float3 wi, out float3 wo, out float pdf, out float3 weight, out uint lobe, out float lobeP, const float4 preGeneratedSample)
     {
         wo = sample_cosine_hemisphere_concentric(preGeneratedSample.xy, pdf);
         wo.z = -wo.z;
@@ -189,7 +191,7 @@ struct SpecularReflectionMicrofacet // : IBxDF
         return F * D * G * 0.25f / wi.z;
     }
 
-    bool SampleBSDF(const float3 wi, out float3 wo, out float pdf, out float3 weight, out uint lobe, out float lobeP, const float3 preGeneratedSample)
+    bool SampleBSDF(const float3 wi, out float3 wo, out float pdf, out float3 weight, out uint lobe, out float lobeP, const float4 preGeneratedSample)
     {
         wo = float3(0,0,0);
         weight = float3(0,0,0);
@@ -290,7 +292,7 @@ struct SpecularReflectionTransmissionMicrofacet
         }
     }
 
-    bool SampleBSDF(const float3 wi, out float3 wo, out float pdf, out float3 weight, out uint lobe, out float lobeP, const float3 preGeneratedSample)
+    bool SampleBSDF(const float3 wi, out float3 wo, out float pdf, out float3 weight, out uint lobe, out float lobeP, const float4 preGeneratedSample)
     {
         wo = float3(0,0,0);
         weight = float3(0,0,0);
@@ -470,7 +472,7 @@ struct DefaultBSDF
         uint activeLobes = (uint)LobeType::DiffuseReflection | (uint)LobeType::SpecularReflection;
         if (transmissionAlbedo.r > 0.f || transmissionAlbedo.g > 0.f || transmissionAlbedo.b > 0.f)
         {
-            activeLobes |= (uint)LobeType::SpecularTransmission | (uint)LobeType::DeltaTransmission; // no diffuse transmission for now
+            activeLobes |= (uint)LobeType::DiffuseTransmission | (uint)LobeType::SpecularTransmission | (uint)LobeType::DeltaTransmission;
         }
 
         float3 surfaceSpecular = surface.F0;
@@ -487,8 +489,8 @@ struct DefaultBSDF
         specularReflectionTransmission.activeLobes = activeLobes;
         specularReflectionTransmission.isThinSurface = isThinSurface;
 
-        diffTrans = 0.f; // disabled for now.
-        specTrans = activeLobes & (uint)LobeType::Transmission ? 1.f : 0.f;
+        diffTrans = surface.DiffTrans;
+        specTrans = surface.SpecTrans;
 
         float surfaceMetallic = surface.Metallic;
         float metallicBRDF = surfaceMetallic * (1.f - specTrans);
@@ -527,13 +529,15 @@ struct DefaultBSDF
         float alpha = surfaceRoughness * surfaceRoughness;
         bool isDelta = alpha < kMinGGXAlpha;
 
-        float diffTrans = 0.f; // disabled for now.
-        float specTrans = (surface.TransmissionColor.r > 0.f || surface.TransmissionColor.g > 0.f || surface.TransmissionColor.b > 0.f) ? 1.f : 0.f;
+        float diffTrans = surface.DiffTrans;
+        float specTrans = surface.SpecTrans;
 
         uint lobes = isDelta ? (uint)LobeType::DeltaReflection : (uint)LobeType::SpecularReflection;
-        if (any(surface.DiffuseAlbedo > 0.f) && diffTrans < 1.f)
-            lobes |= (uint)LobeType::DiffuseReflection;
-        
+        if (any(surface.DiffuseAlbedo > 0.f) && specTrans < 1.f)
+        {
+            if (diffTrans < 1.f) lobes |= (uint)LobeType::DiffuseReflection;
+            if (diffTrans > 0.f) lobes |= (uint)LobeType::DiffuseTransmission;
+        }
         if (specTrans > 0.f) lobes |= isDelta ? (uint)LobeType::DeltaTransmission : (uint)LobeType::SpecularTransmission;
 
         return lobes;
@@ -550,7 +554,7 @@ struct DefaultBSDF
         return float4(diffuse+specular, Average(specular)); // use average instead of sum to avoid hitting fp16 ceiling early
     }
 
-    bool SampleBSDF(const float3 wi, out float3 wo, out float pdf, out float3 weight, out uint lobe, out float lobeP, const float3 preGeneratedSample)
+    bool SampleBSDF(const float3 wi, out float3 wo, out float pdf, out float3 weight, out uint lobe, out float lobeP, const float4 preGeneratedSample)
     {
         wo = float3(0,0,0);
         weight = float3(0,0,0);
@@ -564,7 +568,7 @@ struct DefaultBSDF
 
         if (uSelect < pDiffuseReflection)
         {
-            valid = diffuseReflection.SampleBSDF(wi, wo, pdf, weight, lobe, lobeP, preGeneratedSample.xyz);
+            valid = diffuseReflection.SampleBSDF(wi, wo, pdf, weight, lobe, lobeP, preGeneratedSample);
             weight /= pDiffuseReflection;
             weight *= (1.f - specTrans) * (1.f - diffTrans);
             pdf *= pDiffuseReflection;
@@ -574,7 +578,7 @@ struct DefaultBSDF
         }
         else if (uSelect < pDiffuseReflection + pDiffuseTransmission)
         {
-            valid = diffuseTransmission.SampleBSDF(wi, wo, pdf, weight, lobe, lobeP, preGeneratedSample.xyz);
+            valid = diffuseTransmission.SampleBSDF(wi, wo, pdf, weight, lobe, lobeP, preGeneratedSample);
             weight /= pDiffuseTransmission;
             weight *= (1.f - specTrans) * diffTrans;
             pdf *= pDiffuseTransmission;
@@ -583,7 +587,7 @@ struct DefaultBSDF
         }
         else if (uSelect < pDiffuseReflection + pDiffuseTransmission + pSpecularReflection)
         {
-            valid = specularReflection.SampleBSDF(wi, wo, pdf, weight, lobe, lobeP, preGeneratedSample.xyz);
+            valid = specularReflection.SampleBSDF(wi, wo, pdf, weight, lobe, lobeP, preGeneratedSample);
             weight /= pSpecularReflection;
             weight *= (1.f - specTrans);
             pdf *= pSpecularReflection;
@@ -593,7 +597,7 @@ struct DefaultBSDF
         }
         else if (pSpecularReflectionTransmission > 0.f)
         {
-            valid = specularReflectionTransmission.SampleBSDF(wi, wo, pdf, weight, lobe, lobeP, preGeneratedSample.xyz);
+            valid = specularReflectionTransmission.SampleBSDF(wi, wo, pdf, weight, lobe, lobeP, preGeneratedSample);
             weight /= pSpecularReflectionTransmission;
             weight *= specTrans;
             pdf *= pSpecularReflectionTransmission;
@@ -712,7 +716,7 @@ struct StandardBSDF
         return bsdf;
     }
 
-    float4 Eval(const BRDFContext brdfContext, const Surface surface, const float3 wo)
+    float4 Eval(const BRDFContext brdfContext, const Material material, const Surface surface, const float3 wo)
     {
         float3 wi = brdfContext.ViewDirection;
         float3 N = surface.Normal;
@@ -720,25 +724,47 @@ struct StandardBSDF
         float3 wiLocal = surface.ToLocal(wi);
         float3 woLocal = surface.ToLocal(wo);
 
-        DefaultBSDF bsdf = DefaultBSDF::make(N, wi, surface, isEnter);
-
-        return bsdf.Eval(wiLocal, woLocal);
+#ifdef HAIR_CHIANG_BSDF
+        if (material.Feature == Feature::kHairTint)
+        {
+            HairChiangBSDF bsdf = HairChiangBSDF::make(wi, surface);
+            return bsdf.Eval(wiLocal, woLocal);
+        } else
+#endif
+        {
+            DefaultBSDF bsdf = DefaultBSDF::make(N, wi, surface, isEnter);
+            return bsdf.Eval(wiLocal, woLocal);
+        }
     }
 
-    bool SampleBSDF(const float3 preGeneratedSamples, const BRDFContext brdfContext, const Surface surface, out BSDFSample result)
+    bool SampleBSDF(const float4 preGeneratedSamples, const BRDFContext brdfContext, const Material material, const Surface surface, out BSDFSample result)
     {
         float3 wi = brdfContext.ViewDirection;
         float3 N = surface.Normal;
 
         float3 wiLocal = surface.ToLocal(wi);
 
-        DefaultBSDF bsdf = DefaultBSDF::make(N, wi, surface, isEnter);
+#ifdef HAIR_CHIANG_BSDF
+        if (material.Feature == Feature::kHairTint)
+        {
+            HairChiangBSDF bsdf = HairChiangBSDF::make(wi, surface);
 
-        float3 woLocal;
-        bool valid = bsdf.SampleBSDF(wiLocal, woLocal, result.pdf, result.weight, result.lobe, result.lobeP, preGeneratedSamples.xyz);
+            float3 woLocal;
+            bool valid = bsdf.SampleBSDF(wiLocal, woLocal, result.pdf, result.weight, result.lobe, result.lobeP, preGeneratedSamples);
 
-        result.wo = surface.FromLocal(woLocal);
-        return valid;
+            result.wo = surface.FromLocal(woLocal);
+            return valid;
+        } else
+#endif
+        {
+            DefaultBSDF bsdf = DefaultBSDF::make(N, wi, surface, isEnter);
+
+            float3 woLocal;
+            bool valid = bsdf.SampleBSDF(wiLocal, woLocal, result.pdf, result.weight, result.lobe, result.lobeP, preGeneratedSamples);
+
+            result.wo = surface.FromLocal(woLocal);
+            return valid;
+        }
     }
 
     float EvalPdf(const BRDFContext brdfContext, const Surface surface, const float3 wo)

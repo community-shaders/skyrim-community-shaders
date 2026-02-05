@@ -313,4 +313,19 @@ float3 approxSpecularIntegralGGX(float3 specularReflectance, float alpha, float 
     return mad(specularReflectance, max(0.0, scale), max(0.0, bias));
 }
 
+// Evaluates microfacet specular BRDF
+float3 evalMicrofacet(const float3 wi, const float3 wo, const float3 N, const float alpha)
+{
+    float3 h = normalize(wi + wo);
+    float NdotL = max(0.0f, dot(N, wo));
+    float NdotV = max(0.0f, dot(N, wi));
+    float NdotH = max(0.0f, dot(N, h));
+    float VdotH = max(0.0f, dot(wi, h));
+
+    float D = evalNdfGGX(alpha, NdotH);
+    float G = evalMaskingSmithGGXCorrelated(alpha, NdotV, NdotL);
+
+    return (D * G * NdotL) / (4.0f * NdotV * NdotL + 1e-7f);
+}
+
 #endif // __MICROFACET_HLSLI__
