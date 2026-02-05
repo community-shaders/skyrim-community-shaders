@@ -102,7 +102,7 @@ void SkinningPipeline::QueueUpdate(Shape::Flags updateFlags, eastl::string path,
 		QueuedShape{ updateFlags, path });
 }
 
-bool SkinningPipeline::PrepareResources(ID3D12GraphicsCommandList4* commandList, uint& count, uint& vertexCount)
+bool SkinningPipeline::PrepareResources(ID3D12GraphicsCommandList4* commandList, uint& numShapes, uint& numVertices)
 {
 	if (queuedShapes.empty())
 		return false;
@@ -132,9 +132,9 @@ bool SkinningPipeline::PrepareResources(ID3D12GraphicsCommandList4* commandList,
 			break;
 		}
 
-		vertexCount = std::max(vertexCount, (uint)shape->vertexCount);
+		numVertices = std::max(numVertices, shape->vertexCount);
 
-		vertexUpdateData[shapeIndex] = VertexUpdateData(shape->allocation->GetIndex(), queuedShape.updateFlags, shape->vertexCount, boneMatrixIndex, bonePivot, shape->boundRadius);
+		vertexUpdateData[shapeIndex] = VertexUpdateData(shape->allocation->GetIndex(), queuedShape.updateFlags, shape->vertexCount, boneMatrixIndex, bonePivot);
 		shapeIndex++;
 
 		// Dynamic TriShapes
@@ -163,7 +163,7 @@ bool SkinningPipeline::PrepareResources(ID3D12GraphicsCommandList4* commandList,
 
 	boneMatricesBuffer->UploadRegion(commandList, sizeof(float3x4) * boneMatrixIndex, 0);
 
-	count = shapeIndex;
+	numShapes = shapeIndex;
 
 	return true;
 }
