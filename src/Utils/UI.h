@@ -7,6 +7,7 @@
 #include <vector>
 #include <windows.h>  // For WPARAM and virtual key constants
 
+#include "../FeatureConstraints.h"
 #include "../Menu/Fonts.h"
 #include "Utils/Input.h"
 
@@ -248,6 +249,49 @@ namespace Util
 		 */
 		bool ColorEdit3(const char* label, Feature* feature, const char* settingName, float col[3]);
 		bool ColorEdit4(const char* label, Feature* feature, const char* settingName, float col[4]);
+	}
+
+	/**
+	 * Constraint-aware UI helpers
+	 * These functions automatically check if a setting is constrained by another feature
+	 * and disable the control with an informative tooltip explaining why
+	 */
+	namespace ConstrainedUI
+	{
+		/**
+		 * Constraint-aware checkbox that greys out when constrained by another feature
+		 * @param label The label for the checkbox
+		 * @param value Pointer to the bool value
+		 * @param settingId The setting identifier for constraint lookup
+		 * @return True if value was changed (only possible when not constrained)
+		 */
+		bool Checkbox(const char* label, bool* value, const FeatureConstraints::SettingId& settingId);
+
+		/**
+		 * Constraint-aware slider float that greys out when constrained by another feature
+		 * @param label The label for the slider
+		 * @param value Pointer to the float value
+		 * @param min Minimum value
+		 * @param max Maximum value
+		 * @param settingId The setting identifier for constraint lookup
+		 * @param format Display format
+		 * @return True if value was changed (only possible when not constrained)
+		 */
+		bool SliderFloat(const char* label, float* value, float min, float max,
+			const FeatureConstraints::SettingId& settingId, const char* format = "%.3f");
+
+		/**
+		 * Constraint-aware slider int that greys out when constrained by another feature
+		 * @param label The label for the slider
+		 * @param value Pointer to the int value
+		 * @param min Minimum value
+		 * @param max Maximum value
+		 * @param settingId The setting identifier for constraint lookup
+		 * @param format Display format
+		 * @return True if value was changed (only possible when not constrained)
+		 */
+		bool SliderInt(const char* label, int* value, int min, int max,
+			const FeatureConstraints::SettingId& settingId, const char* format = "%d");
 	}
 
 	/**

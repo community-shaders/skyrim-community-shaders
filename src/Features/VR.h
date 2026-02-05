@@ -1,4 +1,5 @@
 #pragma once
+#include "FeatureConstraints.h"
 #include "Menu.h"
 #include "OverlayFeature.h"
 #include "Utils/Input.h"
@@ -105,7 +106,7 @@ public:
 	virtual void DataLoaded() override;
 	virtual void EarlyPrepass() override;
 
-	void UpdateDepthBufferCulling(bool desired);
+	void UpdateDepthBufferCulling(bool desired, const FeatureConstraints::SettingId& settingId);
 
 	virtual void LoadSettings(json& o_json) override;
 	virtual void SaveSettings(json& o_json) override;
