@@ -1972,13 +1972,13 @@ void Raytracing::CreateModelInternal(RE::TESForm* form, const char* path, RE::Ni
 				return RE::BSVisit::BSVisitControl::kContinue;
 			}
 
-			auto meshData = eastl::make_unique<Shape>(flags, shapeRegisters.Allocate(), pGeometry, localToRoot);
+			auto shape = eastl::make_unique<Shape>(flags, shapeRegisters.Allocate(), pGeometry, localToRoot);
 
-			meshData->BuildMesh(triShapeRD, triShapeRuntime.vertexCount, triShapeRuntime.triangleCount, 0);
-			meshData->BuildMaterial(geometryRuntimeData, name, formID);
-			meshData->CreateBuffers(ToWide(name));
+			shape->BuildMesh(triShapeRD, triShapeRuntime.vertexCount, triShapeRuntime.triangleCount, 0);
+			shape->BuildMaterial(geometryRuntimeData, name, formID);
+			shape->CreateBuffers(ToWide(name));
 
-			shapes.push_back(eastl::move(meshData));
+			shapes.push_back(eastl::move(shape));
 		} else if (auto* skinInstance = geometryRuntimeData.skinInstance.get()) {  // Skinned
 			auto& skinPartition = skinInstance->skinPartition;
 
@@ -2033,18 +2033,18 @@ void Raytracing::CreateModelInternal(RE::TESForm* form, const char* path, RE::Ni
 				if (partition.bonesPerVertex > 0)
 					flags |= Shape::Flags::Skinned;
 
-				auto meshData = eastl::make_unique<Shape>(flags, shapeRegisters.Allocate(), pGeometry, localToRoot, dismemberPartition.editorVisible, dismemberPartition.slot);
+				auto shape = eastl::make_unique<Shape>(flags, shapeRegisters.Allocate(), pGeometry, localToRoot, dismemberPartition.editorVisible, dismemberPartition.slot);
 
 				// Diabolical Part II
 				if (emplacedDismemberRef) {
-					it->second[i] = meshData.get();
+					it->second[i] = shape.get();
 				}
 
-				meshData->BuildMesh(partition.buffData, skinPartition->vertexCount, partition.triangles, partition.bonesPerVertex);
-				meshData->BuildMaterial(geometryRuntimeData, name, formID);
-				meshData->CreateBuffers(ToWide(name));
+				shape->BuildMesh(partition.buffData, skinPartition->vertexCount, partition.triangles, partition.bonesPerVertex);
+				shape->BuildMaterial(geometryRuntimeData, name, formID);
+				shape->CreateBuffers(ToWide(name));
 
-				shapes.push_back(eastl::move(meshData));
+				shapes.push_back(eastl::move(shape));
 			}
 		}
 
