@@ -1005,8 +1005,12 @@ bool Shape::UpdateSkinning()
 	if (geometryFlags.any(RE::NiAVObject::Flag::kNoAnimSyncS))
 		return false;*/
 
-		// Update Bone matrices
+	// Update Bone matrices
 	auto& skinInstance = geometry->GetGeometryRuntimeData().skinInstance;
+
+	// RaceMenu crash fix
+	if (!skinInstance)
+		return false;
 
 	if (boneMatrices.empty())
 		boneMatrices.resize(skinInstance->numMatrices);
