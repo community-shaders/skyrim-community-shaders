@@ -3021,7 +3021,7 @@ void Raytracing::DrawRTGI()
 	UpdateBLASes();
 
 	// Upload buffers
-	lightBuffer->Upload(commandList.get(), 0, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+	lightBuffer->UploadRegion(commandList.get(), sizeof(Light) * lights.size(), 0, 0, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
 
 	if (UpdateRenderSize())
 		SetupOutputRT();

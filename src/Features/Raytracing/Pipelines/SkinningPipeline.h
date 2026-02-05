@@ -70,8 +70,11 @@ struct SkinningPipeline : ComputePipeline<SkinningHeap>
 	eastl::unique_ptr<DX12::StructuredBufferUpload<VertexUpdateData>> vertexUpdateBuffer = nullptr;
 	eastl::unique_ptr<DX12::StructuredBufferUpload<float3x4>> boneMatricesBuffer = nullptr;
 
-	eastl::vector<VertexUpdateData> vertexUpdateData;
-	eastl::vector<float3x4> boneMatricesData;
+	VertexUpdateData* vertexUpdateData = nullptr;
+	float3x4* boneMatricesData = nullptr;
+
+	//eastl::vector<VertexUpdateData> vertexUpdateData;
+	//eastl::vector<float3x4> boneMatricesData;
 
 	eastl::vector<CD3DX12_RESOURCE_BARRIER> barriers;
 

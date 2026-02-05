@@ -74,17 +74,25 @@ void SkinningPipeline::SetupResources(ID3D12Device5* device)
 {
 	auto* commandList = globals::features::raytracing.commandList.get();
 
-	vertexUpdateBuffer = eastl::make_unique<DX12::StructuredBufferUpload<VertexUpdateData>>(device, MAX_GEOMETRY, false);
-	DX::ThrowIfFailed(vertexUpdateBuffer->resource->SetName(L"Vertex Update Buffer"));
-	vertexUpdateBuffer->TransitionBarrier(commandList, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+	{
+		vertexUpdateBuffer = eastl::make_unique<DX12::StructuredBufferUpload<VertexUpdateData>>(device, MAX_GEOMETRY, false);
+		DX::ThrowIfFailed(vertexUpdateBuffer->resource->SetName(L"Vertex Update Buffer"));
+		vertexUpdateBuffer->TransitionBarrier(commandList, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
 
-	vertexUpdateBuffer->CreateSRV(heap->CPUHandle(SkinningHeap::Slot::UpdateData));
+		vertexUpdateBuffer->CreateSRV(heap->CPUHandle(SkinningHeap::Slot::UpdateData));
 
-	boneMatricesBuffer = eastl::make_unique<DX12::StructuredBufferUpload<float3x4>>(device, MAX_BONE_MATRICES, false);
-	DX::ThrowIfFailed(boneMatricesBuffer->resource->SetName(L"Bone Matrices Buffer"));
-	boneMatricesBuffer->TransitionBarrier(commandList, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+		DX::ThrowIfFailed(vertexUpdateBuffer->UploadResource()->Map(0, nullptr, reinterpret_cast<void**>(&vertexUpdateData)));
+	}
 
-	boneMatricesBuffer->CreateSRV(heap->CPUHandle(SkinningHeap::Slot::BoneMatrices));
+	{
+		boneMatricesBuffer = eastl::make_unique<DX12::StructuredBufferUpload<float3x4>>(device, MAX_BONE_MATRICES, false);
+		DX::ThrowIfFailed(boneMatricesBuffer->resource->SetName(L"Bone Matrices Buffer"));
+		boneMatricesBuffer->TransitionBarrier(commandList, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+
+		boneMatricesBuffer->CreateSRV(heap->CPUHandle(SkinningHeap::Slot::BoneMatrices));
+
+		DX::ThrowIfFailed(boneMatricesBuffer->UploadResource()->Map(0, nullptr, reinterpret_cast<void**>(&boneMatricesData)));
+	}
 }
 
 void SkinningPipeline::QueueUpdate(Shape::Flags updateFlags, eastl::string path, Shape* shape)
@@ -94,18 +102,12 @@ void SkinningPipeline::QueueUpdate(Shape::Flags updateFlags, eastl::string path,
 		QueuedShape{ updateFlags, path });
 }
 
-bool SkinningPipeline::PrepareResources([[maybe_unused]]ID3D12GraphicsCommandList4* commandList, uint& count, uint& vertexCount)
+bool SkinningPipeline::PrepareResources(ID3D12GraphicsCommandList4* commandList, uint& numShapes, uint& numVertices)
 {
 	if (queuedShapes.empty())
 		return false;
 
 	auto queueSize = queuedShapes.size();
-
-	vertexUpdateData.clear();
-	vertexUpdateData.reserve(queueSize);
-
-	boneMatricesData.clear();
-	boneMatricesData.reserve(MAX_BONE_MATRICES);
 
 	// Barrier to UAV state
 	barriers.clear();
@@ -116,23 +118,24 @@ bool SkinningPipeline::PrepareResources([[maybe_unused]]ID3D12GraphicsCommandLis
 
 	float3 bonePivot = float3(cameraPosition.x, cameraPosition.y, cameraPosition.z) - eye;
 
+	uint shapeIndex = 0;
+	uint boneMatrixIndex = 0;
+
 	for (auto& [shape, queuedShape] : queuedShapes) {
-		uint boneOffset = (uint)boneMatricesData.size();
-
-		if (boneOffset >= MAX_BONE_MATRICES) {
-			logger::critical("[RT] SkinningPipeline::PrepareResources - Exceeded maximum bone matrices limit of {}", MAX_BONE_MATRICES);
-			break;
-		}
-
-		count = (uint)vertexUpdateData.size();
-
-		if (count >= MAX_GEOMETRY) {
+		if (shapeIndex >= MAX_GEOMETRY) {
 			logger::critical("[RT] SkinningPipeline::PrepareResources - Exceeded maximum geometry update limit of {}", MAX_GEOMETRY);
 			break;
 		}
 
-		vertexCount = std::max(vertexCount, (uint)shape->vertexCount);
-		vertexUpdateData.emplace_back(shape->allocation->GetIndex(), queuedShape.updateFlags, shape->vertexCount, boneOffset, bonePivot, shape->boundRadius);
+		if (boneMatrixIndex >= MAX_BONE_MATRICES) {
+			logger::critical("[RT] SkinningPipeline::PrepareResources - Exceeded maximum bone matrices limit of {}", MAX_BONE_MATRICES);
+			break;
+		}
+
+		numVertices = std::max(numVertices, shape->vertexCount);
+
+		vertexUpdateData[shapeIndex] = VertexUpdateData(shape->allocation->GetIndex(), queuedShape.updateFlags, shape->vertexCount, boneMatrixIndex, bonePivot);
+		shapeIndex++;
 
 		// Dynamic TriShapes
 		if (queuedShape.updateFlags & Shape::Flags::Dynamic)
@@ -140,9 +143,10 @@ bool SkinningPipeline::PrepareResources([[maybe_unused]]ID3D12GraphicsCommandLis
 
 		// Skinning - This is a bit more involved
 		if (queuedShape.updateFlags & Shape::Flags::Skinned) {
-			boneMatricesData.insert(boneMatricesData.end(),
-				eastl::make_move_iterator(shape->boneMatrices.begin()),
-				eastl::make_move_iterator(shape->boneMatrices.end()));
+			const auto numBoneMatrices = static_cast<uint>(shape->boneMatrices.size());
+
+			std::memcpy(boneMatricesData + boneMatrixIndex, shape->boneMatrices.data(), sizeof(float3x4) * numBoneMatrices);
+			boneMatrixIndex += numBoneMatrices;
 		}
 
 		CD3DX12_RESOURCE_BARRIER barrier;
@@ -150,16 +154,16 @@ bool SkinningPipeline::PrepareResources([[maybe_unused]]ID3D12GraphicsCommandLis
 			barriers.push_back(barrier);
 	}
 
-	uint barrierCount = (uint)barriers.size();
+	uint numBarriers = (uint)barriers.size();
 
-	if (barrierCount > 0)
-		commandList->ResourceBarrier(barrierCount, barriers.data());
+	if (numBarriers > 0)
+		commandList->ResourceBarrier(numBarriers, barriers.data());
 
-	vertexUpdateBuffer->UpdateList(vertexUpdateData.data(), count);
-	vertexUpdateBuffer->Upload(commandList);
+	vertexUpdateBuffer->UploadRegion(commandList, sizeof(VertexUpdateData) * shapeIndex, 0);
 
-	boneMatricesBuffer->UpdateList(boneMatricesData.data(), boneMatricesData.size());
-	boneMatricesBuffer->Upload(commandList);
+	boneMatricesBuffer->UploadRegion(commandList, sizeof(float3x4) * boneMatrixIndex, 0);
+
+	numShapes = shapeIndex;
 
 	return true;
 }

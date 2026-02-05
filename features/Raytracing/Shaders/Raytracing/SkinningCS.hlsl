@@ -109,11 +109,6 @@ void main(uint3 DTid : SV_DispatchThreadID)
         vertex.Bitangent = (half3) normalize(mul(boneMatrixRot, vertex.Bitangent));
     }
 
-    float dist = length(position);
-    
-    if (dist > updateData.boundRadius)
-        position = (position/dist) * updateData.boundRadius;
-    
     vertex.Position = position;
     
     OutputVertices[shapeIndex][vertexIndex] = vertex;
