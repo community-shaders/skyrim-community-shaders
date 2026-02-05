@@ -122,7 +122,8 @@ void WeatherEditor::Prepass()
 				if (editorWindow->IsTimePaused()) {
 					editorWindow->ResumeTime();
 				} else {
-					calendar->timeScale->value = 20.0f;  // Use vanilla as default
+					float restoreTimeScale = editorWindow->savedTimeScale > 0.0f ? editorWindow->savedTimeScale : 20.0f;
+					calendar->timeScale->value = restoreTimeScale;
 				}
 				s_wasRestoredForWait = true;
 			}
@@ -246,9 +247,9 @@ void WeatherEditor::DrawTimeControls()
 
 	auto calendar = RE::Calendar::GetSingleton();
 	if (calendar && calendar->gameHour && calendar->timeScale) {
-		static bool s_isTimePaused = false;
-		static float s_savedTimeScale = 20.0f;
 		static constexpr float s_vanillaTimeScale = 20.0f;
+		auto editorWindow = EditorWindow::GetSingleton();
+		bool isTimePaused = editorWindow->IsTimePaused();
 
 		// Check if sleep/wait menu is open - don't sync pause state during wait
 		auto ui = RE::UI::GetSingleton();
@@ -256,25 +257,23 @@ void WeatherEditor::DrawTimeControls()
 
 		// Check if time is actually paused (timeScale is 0), but ignore during sleep/wait
 		if (!sleepWaitMenuOpen) {
-			if (calendar->timeScale->value == 0.0f && !s_isTimePaused) {
-				s_isTimePaused = true;
-				s_savedTimeScale = 20.0f;  // Default to vanilla if externally paused
-			} else if (calendar->timeScale->value > 0.0f && s_isTimePaused) {
-				s_isTimePaused = false;
+			if (calendar->timeScale->value == 0.0f && !isTimePaused) {
+				// External pause: keep a sane restore value for the shared state.
+				editorWindow->savedTimeScale = s_vanillaTimeScale;
+			} else if (calendar->timeScale->value > 0.0f && isTimePaused) {
+				// External resume: clear the shared pause state.
+				editorWindow->timePaused = false;
 			}
+			isTimePaused = editorWindow->IsTimePaused();
 		}
 
-		if (ImGui::Button(s_isTimePaused ? "Resume Time" : "Pause Time", ImVec2(120, 0))) {
-			if (s_isTimePaused) {
-				// Resume time - restore previous time scale
-				calendar->timeScale->value = s_savedTimeScale;
-				s_isTimePaused = false;
+		if (ImGui::Button(isTimePaused ? "Resume Time" : "Pause Time", ImVec2(120, 0))) {
+			if (isTimePaused) {
+				editorWindow->ResumeTime();
 			} else {
-				// Pause time - save current time scale and set to 0
-				s_savedTimeScale = calendar->timeScale->value;
-				calendar->timeScale->value = 0.0f;
-				s_isTimePaused = true;
+				editorWindow->PauseTime();
 			}
+			isTimePaused = editorWindow->IsTimePaused();
 		}
 		if (auto _tt = Util::HoverTooltipWrapper()) {
 			ImGui::Text("Pause or resume game time progression");
@@ -298,6 +297,7 @@ void WeatherEditor::DrawTimeControls()
 		if (ImGui::Button("Reset Speed", ImVec2(120, 0))) {
 			calendar->timeScale->value = s_vanillaTimeScale;
 			s_timeScaleSlider = s_vanillaTimeScale;
+			editorWindow->savedTimeScale = s_vanillaTimeScale;
 		}
 		if (auto _tt = Util::HoverTooltipWrapper()) {
 			ImGui::Text("Reset time speed to vanilla (%.1fx)", s_vanillaTimeScale);
