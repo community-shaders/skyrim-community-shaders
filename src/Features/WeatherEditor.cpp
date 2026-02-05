@@ -780,9 +780,9 @@ void WeatherEditor::RenderWeatherControls(RE::Sky* sky)
 	if (ImGui::Button(lockLabel)) {
 		if (isLocked) {
 			editorWindow->UnlockWeather();
-		} else {
-			editorWindow->LockWeather(sky->currentWeather);
-		}
+        } else if (sky->currentWeather) {  
+            editorWindow->LockWeather(sky->currentWeather);  
+        }  
 	}
 	if (isLocked) {
 		ImGui::PopStyleColor();
@@ -1194,14 +1194,16 @@ std::string WeatherEditor::GetDisplayName(const RE::TESWeather* weather)
 void WeatherEditor::DrawOverlay()
 {
 	bool overlayVisible = Menu::GetSingleton()->overlayVisible;
+	static bool s_prevOverlayVisible = false;
 	// If ShowInOverlay is true and overlay is visible, auto-enable the window if not already enabled
 	if (WeatherDetailsWindow.ShowInOverlay && overlayVisible) {
-		if (!WeatherDetailsWindow.Enabled) {
+		if (!s_prevOverlayVisible && !WeatherDetailsWindow.Enabled) {
 			WeatherDetailsWindow.Enabled = true;
 		}
 		bool* p_open = &WeatherDetailsWindow.Enabled;
 		RenderWeatherDetailsWindow(p_open);
 	}
+	s_prevOverlayVisible = overlayVisible;
 }
 
 bool WeatherEditor::IsOverlayVisible() const
