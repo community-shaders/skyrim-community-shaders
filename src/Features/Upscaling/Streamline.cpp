@@ -456,9 +456,16 @@ void Streamline::DestroyDLSSResources()
 {
 	sl::DLSSOptions dlssOptions{};
 	dlssOptions.mode = sl::DLSSMode::eOff;
+
 	slDLSSSetOptions(viewport, dlssOptions);
 	slFreeResources(sl::kFeatureDLSS, viewport);
 
-	// Non-VR resource tracking
+	if (globals::game::isVR) {
+		slDLSSSetOptions(viewportRight, dlssOptions);
+		slFreeResources(sl::kFeatureDLSS, viewportRight);
+		globals::features::upscaling.vrResourcesAllocated[0] = false;
+		globals::features::upscaling.vrResourcesAllocated[1] = false;
+	}
+
 	resourcesAllocated = false;
 }

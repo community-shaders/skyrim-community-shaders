@@ -232,6 +232,8 @@ void FidelityFX::CreateFSRResources()
 
 		if (ffxFsr3ContextCreate(&fsrContext[i], &contextDescription) != FFX_OK) {
 			logger::critical("[FidelityFX] Failed to initialize FSR3 context for eye {}!", i);
+			for (uint32_t j = 0; j < i; ++j)
+				ffxFsr3ContextDestroy(&fsrContext[j]);
 			free(fsrScratchBuffer);
 			fsrScratchBuffer = nullptr;
 			return;

@@ -1,6 +1,7 @@
 #pragma once
 #include <algorithm>
 #include <cfloat>  // For FLT_MAX
+#include <cstdio>
 #include <functional>
 #include <imgui.h>
 #include <string>

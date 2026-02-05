@@ -849,7 +849,9 @@ void Upscaling::PreparePerEyeInputs(ID3D11Resource* colorSrc, ID3D11Resource* de
 	bool needsRecreate = !vrIntermediateColorIn[0] || !vrIntermediateColorOut[0];
 	if (!needsRecreate) {
 		needsRecreate = (vrIntermediateColorIn[0]->desc.Width != eyeWidthIn ||
-						 vrIntermediateColorIn[0]->desc.Height != eyeHeightIn);
+						 vrIntermediateColorIn[0]->desc.Height != eyeHeightIn ||
+						 vrIntermediateColorOut[0]->desc.Width != eyeWidthOut ||
+						 vrIntermediateColorOut[0]->desc.Height != eyeHeightOut);
 	}
 	if (needsRecreate) {
 		logger::info("[Upscaling] (Re)creating VR intermediates: per-eye in {}x{}, out {}x{}",
