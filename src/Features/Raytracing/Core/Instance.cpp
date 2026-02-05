@@ -12,37 +12,39 @@ bool Instance::IsDetached() const
 	return detached;
 }
 
-bool Instance::ShouldUpdate(RE::NiAVObject* node, RE::NiPoint3 cameraPosition)
+bool Instance::SkipUpdate(RE::NiAVObject* node, const RE::NiPoint3& cameraPosition)
 {
-	bool vur = globals::features::raytracing.settings.AdvancedSettings.VariableUpdateRate;
+	auto& rt = globals::features::raytracing;
 
-	uint delta = globals::state->frameCount - lastUpdate;
+	if (!rt.settings.AdvancedSettings.VariableUpdateRate)
+		return false;
 
-	if (!vur && delta > 0) {
-		lastUpdate = globals::state->frameCount;
+	const uint64_t delta = rt.frameIndex - lastUpdate;
+
+	const float distance = Util::Units::GameUnitsToMeters(node->worldBound.center.GetDistance(cameraPosition));
+
+	const uint64_t interval = UpdateInterval(distance);
+
+	if (delta < interval)
 		return true;
-	}
 
-	float distance = Util::Units::GameUnitsToMeters(node->world.translate.GetDistance(cameraPosition));
-
-	if (delta >= UpdateRate(distance)) {
-		lastUpdate = globals::state->frameCount;
-		return true;
-	}
+	lastUpdate = rt.frameIndex;
 
 	return false;
 }
 
 // Checks for skinned and dynamic trishapes update
-void Instance::Update(RE::NiAVObject* node, RE::NiPoint3 cameraPosition, const eastl::pair<eastl::string, Model*>& modelPair, [[maybe_unused]] SkinningPipeline* skinningPipeline)
+void Instance::Update(RE::NiAVObject* node, const RE::NiPoint3& cameraPosition, const eastl::pair<eastl::string, Model*>& modelPair, [[maybe_unused]] SkinningPipeline* skinningPipeline)
 {
 	// Instance was not changed by the game, so there is no need to update it
 	// This doesn't work at all for actors
 	/*if (pNiNode->lastUpdatedFrameCounter < globals::state->frameCount && hasUpdated)
 			return true;*/
 
+	auto& [path, model] = modelPair;
+
 	// Instance has already been updated this frame
-	if (!ShouldUpdate(node, cameraPosition))
+	if (SkipUpdate(node, cameraPosition))
 		return;
 
 	// Sets the BLAS instance transform
@@ -50,8 +52,6 @@ void Instance::Update(RE::NiAVObject* node, RE::NiPoint3 cameraPosition, const e
 
 	/*if (node->GetAppCulled())
 		return;*/
-
-	auto& [path, model] = modelPair;
 
 	for (auto& shape : model->shapes) {
 		auto updateFlags = shape->Update();

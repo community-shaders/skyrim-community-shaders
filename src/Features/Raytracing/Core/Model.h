@@ -110,6 +110,11 @@ struct Model
 		return BLASBuildExecuted() && shape->IsHidden();
 	}
 
+	uint64_t BLASUpdateFrame() const
+	{
+		return blasUpdateFrame;
+	}
+
 	void AddRef()
 	{
 		refCount.fetch_add(1, eastl::memory_order_relaxed);

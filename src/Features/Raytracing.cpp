@@ -467,8 +467,6 @@ void Raytracing::DrawAdvancedSettings()
 	if (ImGui::TreeNodeEx("Culling", ImGuiTreeNodeFlags_DefaultOpen)) {
 		DrawEnumRadio("Culling", advSettings.Culling.Mode, nullptr, CullingModeTooltips);
 
-		ImGui::Checkbox("Variable Update Rate", &advSettings.VariableUpdateRate);
-
 		ImGui::SliderInt("Minimal Radius", &advSettings.Culling.MinRadius, 0, 10, "%d", ImGuiSliderFlags_AlwaysClamp);
 		if (auto _tt = Util::HoverTooltipWrapper()) {
 			ImGui::Text("Nodes with a radius lower than this value are culled when outside the view.\n");
@@ -492,6 +490,9 @@ void Raytracing::DrawAdvancedSettings()
 
 		ImGui::TreePop();
 	}
+
+	ImGui::Checkbox("Variable Update Rate", &advSettings.VariableUpdateRate);
+
 
 	if (ImGui::Checkbox("Resampled Importance Sampling", &advSettings.RIS.Enabled))
 		recompileReason |= RecompileReason::Advanced;
