@@ -154,10 +154,10 @@ bool SkinningPipeline::PrepareResources(ID3D12GraphicsCommandList4* commandList,
 			barriers.push_back(barrier);
 	}
 
-	uint barrierCount = (uint)barriers.size();
+	uint numBarriers = (uint)barriers.size();
 
-	if (barrierCount > 0)
-		commandList->ResourceBarrier(barrierCount, barriers.data());
+	if (numBarriers > 0)
+		commandList->ResourceBarrier(numBarriers, barriers.data());
 
 	vertexUpdateBuffer->UploadRegion(commandList, sizeof(VertexUpdateData) * shapeIndex, 0);
 
