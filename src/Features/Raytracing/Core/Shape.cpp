@@ -397,7 +397,7 @@ void Shape::BuildMaterial(const RE::BSGeometry::GEOMETRY_RUNTIME_DATA& geometryR
 						flags |= Flags::AlphaTesting;
 						alphaFlags = Material::AlphaFlags::kAlphaTest;
 
-						float alphaScale = (1.0f - (alphaProperty->alphaThreshold / 255.0f)) * 2.0f;
+						float alphaScale = (alphaProperty->alphaThreshold / 255.0f) / 0.5f;
 						colors[0].w *= alphaScale;
 					}
 				}
@@ -1005,8 +1005,12 @@ bool Shape::UpdateSkinning()
 	if (geometryFlags.any(RE::NiAVObject::Flag::kNoAnimSyncS))
 		return false;*/
 
-		// Update Bone matrices
+	// Update Bone matrices
 	auto& skinInstance = geometry->GetGeometryRuntimeData().skinInstance;
+
+	// RaceMenu crash fix
+	if (!skinInstance)
+		return false;
 
 	if (boneMatrices.empty())
 		boneMatrices.resize(skinInstance->numMatrices);
