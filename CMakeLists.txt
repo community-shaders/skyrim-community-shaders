@@ -5,7 +5,7 @@ set(CMAKE_POLICY_WARNING_CMP0116 OFF)
 project(
     # gersemi: ignore
     CommunityShaders
-    VERSION 1.4.7
+    VERSION 1.4.8
     LANGUAGES CXX
 )
 

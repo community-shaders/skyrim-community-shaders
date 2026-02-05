@@ -36,6 +36,8 @@ public:
 		};
 	}
 
+	virtual std::vector<FeatureConstraints::Constraint> GetActiveConstraints() const override;
+
 	float2 jitter = { 0, 0 };
 
 	enum class UpscaleMethod
@@ -90,7 +92,7 @@ public:
 	// FG FPS Measurement for Overlay
 	bool IsFrameGenerationActive() const;
 	float GetFrameGenerationFrameTime() const;
-	bool IsUpscalingActive();
+	bool IsUpscalingActive() const;
 
 	// Feature interface overrides
 	virtual void DrawSettings() override;
@@ -108,7 +110,7 @@ public:
 	virtual void PostPostLoad() override;
 	virtual void SetupResources() override;
 
-	UpscaleMethod GetUpscaleMethod();
+	UpscaleMethod GetUpscaleMethod() const;
 
 	void CheckResources(UpscaleMethod a_upscalemethod);
 	void CreateUpscalingTextureResources(UpscaleMethod a_upscalemethod);
