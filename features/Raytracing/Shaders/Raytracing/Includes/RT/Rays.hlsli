@@ -100,13 +100,35 @@ float3 CalculateRayOffset(float positionError, float3 triangleNormal)
     return (max(kOrigin, positionError) * (kFloatULP * kOffsetScale)) * triangleNormal;
 }
 
-float3 OffsetRay(float3 position, float3 normal, bool hasTransmission = false)
+// The method above seems to cause some self-intersection issues in certain scenarios
+
+// Computes new ray origin based on hit position to avoid self-intersections. 
+// The function assumes that the hit position has been computed by barycentric interpolation, and not from the ray t which is less accurate.
+// Described in Ray Tracing Gems, Chapter 6, "A Fast and Robust Method for Avoiding Self-Intersection" by Carsten Wächter and Nikolaus Binder.
+float3 OffsetRay(float3 worldPosition, float3 faceNormal, bool hasTransmission = false)  // expects triangle faceNormal pointing towards the intended ray direction
 {
-    float3 offset = CalculateRayOffset(CalculatePositionError(position), normal);
     if (hasTransmission)
-        offset = -offset;
-    return position + offset;
+        faceNormal = -faceNormal;
+    const float origin = 1.f / 16.f;
+    const float fScale = 3.f / 65536.f;
+    const float iScale = 3 * 256.f;
+
+    // Per-component integer offset to bit representation of fp32 position.
+    int3 iOff = int3(faceNormal * iScale);
+    float3 iPos = asfloat(asint(worldPosition) + select(worldPosition < 0.f, -iOff, iOff));
+
+    // Select per-component between small fixed offset or above variable offset depending on distance to origin.
+    float3 fOff = faceNormal * fScale;
+    return select(abs(worldPosition) < origin, worldPosition + fOff, iPos);
 }
+
+// float3 OffsetRay(float3 position, float3 normal, bool hasTransmission = false)
+// {
+//     float3 offset = CalculateRayOffset(CalculatePositionError(position), normal);
+//     if (hasTransmission)
+//         offset = -offset;
+//     return position + offset;
+// }
 
 float3 TraceRayShadow(RaytracingAccelerationStructure scene, Surface surface, float3 direction, inout uint randomSeed)
 {
