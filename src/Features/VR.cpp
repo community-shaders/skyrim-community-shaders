@@ -1,4 +1,5 @@
 ﻿#include "VR.h"
+#include "FeatureConstraints.h"
 #include "Menu.h"
 #include "Menu/Fonts.h"
 #include "RE/B/BSOpenVR.h"
@@ -134,7 +135,7 @@ void VR::DataLoaded()
 	// Initialize occlusion culling based on settings, but force-disable if an external
 	// upscaler is active (FSR/DLSS) since upscalers may modify the depth buffer.
 	bool desired = settings.EnableDepthBufferCullingExterior;
-	UpdateDepthBufferCulling(desired);
+	UpdateDepthBufferCulling(desired, { "VR", "EnableDepthBufferCullingExterior" });
 
 	if (gMinOccludeeBoxExtent) {
 		*gMinOccludeeBoxExtent = settings.MinOccludeeBoxExtent;
@@ -147,8 +148,10 @@ void VR::EarlyPrepass()
 {
 	// Respect user settings unless an external upscaler is active; if so, force-disable
 	// depth-buffer culling to avoid incorrect occlusion tests in VR.
-	bool desired = RE::TES::GetSingleton()->interiorCell ? settings.EnableDepthBufferCullingInterior : settings.EnableDepthBufferCullingExterior;
-	UpdateDepthBufferCulling(desired);
+	bool isInterior = RE::TES::GetSingleton()->interiorCell != nullptr;
+	auto settingId = isInterior ? FeatureConstraints::SettingId{ "VR", "EnableDepthBufferCullingInterior" } : FeatureConstraints::SettingId{ "VR", "EnableDepthBufferCullingExterior" };
+	bool desired = isInterior ? settings.EnableDepthBufferCullingInterior : settings.EnableDepthBufferCullingExterior;
+	UpdateDepthBufferCulling(desired, settingId);
 }
 
 //=============================================================================
@@ -588,45 +591,30 @@ namespace
 		auto& vr = globals::features::vr;
 		VR::Settings& settings = vr.settings;
 		if (ImGui::CollapsingHeader("General Settings", ImGuiTreeNodeFlags_DefaultOpen)) {
-			// If an upscaler is active that rewrites or repurposes the depth buffer,
-			// depth-buffer-culling must be disabled to avoid incorrect occlusion tests
-			// (which are especially problematic in VR). Query the Upscaling feature
-			// to see whether we're running FSR or DLSS.
-			// Determine if an external upscaler is active by reading the numeric
-			// setting value directly. Avoid referencing Upscaling types here to
-			// prevent header/type collisions in this translation unit.
-			// Query the Upscaling feature for an authoritative state flag.
-			bool upscalingActive = globals::features::upscaling.IsUpscalingActive();
-
-			// Exteriors
-			if (upscalingActive)
-				ImGui::BeginDisabled();
-			ImGui::Checkbox("Enable Depth Buffer Culling in Exteriors", &settings.EnableDepthBufferCullingExterior);
-			if (upscalingActive) {
-				if (auto _tt = Util::HoverTooltipWrapper()) {
-					ImGui::Text("Disabled while an external upscaler is active (FSR/DLSS) because upscalers may modify depth.\nThis prevents incorrect occlusion in VR.");
-				}
-				ImGui::EndDisabled();
-			} else {
+			// Use constraint-aware checkboxes that automatically handle disabling
+			// and showing tooltips when other features constrain these settings
+			Util::ConstrainedUI::Checkbox("Enable Depth Buffer Culling in Exteriors",
+				&settings.EnableDepthBufferCullingExterior,
+				{ "VR", "EnableDepthBufferCullingExterior" });
+			// Show normal tooltip when not constrained
+			auto exteriorConstraint = FeatureConstraints::GetConstraints({ "VR", "EnableDepthBufferCullingExterior" });
+			if (!exteriorConstraint.isConstrained) {
 				if (auto _tt = Util::HoverTooltipWrapper()) {
 					ImGui::Text("Improves performance in exteriors, recommended ON.");
 				}
 			}
 
-			// Interiors
-			if (upscalingActive)
-				ImGui::BeginDisabled();
-			ImGui::Checkbox("Enable Depth Buffer Culling in Interiors", &settings.EnableDepthBufferCullingInterior);
-			if (upscalingActive) {
-				if (auto _tt = Util::HoverTooltipWrapper()) {
-					ImGui::Text("Disabled while an external upscaler is active (FSR/DLSS) because upscalers may modify depth.\nThis prevents incorrect occlusion in VR.");
-				}
-				ImGui::EndDisabled();
-			} else {
+			Util::ConstrainedUI::Checkbox("Enable Depth Buffer Culling in Interiors",
+				&settings.EnableDepthBufferCullingInterior,
+				{ "VR", "EnableDepthBufferCullingInterior" });
+			// Show normal tooltip when not constrained
+			auto interiorConstraint = FeatureConstraints::GetConstraints({ "VR", "EnableDepthBufferCullingInterior" });
+			if (!interiorConstraint.isConstrained) {
 				if (auto _tt = Util::HoverTooltipWrapper()) {
 					ImGui::Text("Improves performance in interiors, recommended OFF due to occasional visual glitches.");
 				}
 			}
+
 			if (ImGui::SliderFloat("Min Occludee Box Extent", &settings.MinOccludeeBoxExtent, 0.0f, 1000.0f, "%.1f"))
 				*vr.gMinOccludeeBoxExtent = settings.MinOccludeeBoxExtent;
 			if (auto _tt = Util::HoverTooltipWrapper()) {
@@ -814,7 +802,7 @@ namespace
 			struct VRKeyBindingConfig
 			{
 				const char* label;
-				std::vector<ButtonCombo>& combos;
+				std::vector<InputCombo>& combos;
 				const char* description;
 				const char* controllerRequirement;
 			};
@@ -854,19 +842,19 @@ namespace
 		ImGui::Spacing();
 		// Reset to defaults button
 		if (ImGui::Button("Reset to Defaults")) {
-			// Use ButtonCombo structure for cleaner defaults
+			// Use InputCombo structure for cleaner defaults
 			settings.VRMenuOpenKeys = {
-				ButtonCombo::Primary(static_cast<uint32_t>(RE::BSOpenVRControllerDevice::Keys::kXA)),
-				ButtonCombo::Primary(static_cast<uint32_t>(RE::BSOpenVRControllerDevice::Keys::kBY))
+				InputCombo::Primary(static_cast<uint32_t>(RE::BSOpenVRControllerDevice::Keys::kXA)),
+				InputCombo::Primary(static_cast<uint32_t>(RE::BSOpenVRControllerDevice::Keys::kBY))
 			};
 			settings.VRMenuCloseKeys = {
-				ButtonCombo::Both(static_cast<uint32_t>(RE::BSOpenVRControllerDevice::Keys::kGrip))
+				InputCombo::Both(static_cast<uint32_t>(RE::BSOpenVRControllerDevice::Keys::kGrip))
 			};
 			settings.VROverlayOpenKeys = {
-				ButtonCombo::Primary(static_cast<uint32_t>(RE::BSOpenVRControllerDevice::Keys::kJoystickTrigger))
+				InputCombo::Primary(static_cast<uint32_t>(RE::BSOpenVRControllerDevice::Keys::kJoystickTrigger))
 			};
 			settings.VROverlayCloseKeys = {
-				ButtonCombo::Secondary(static_cast<uint32_t>(RE::BSOpenVRControllerDevice::Keys::kJoystickTrigger))
+				InputCombo::Secondary(static_cast<uint32_t>(RE::BSOpenVRControllerDevice::Keys::kJoystickTrigger))
 			};
 		}
 		if (auto _tt = Util::HoverTooltipWrapper()) {
@@ -1661,17 +1649,32 @@ void VR::SubmitOverlayFrame()
 }
 
 // Helper to centralize VR depth buffer culling logic, reducing duplication between DataLoaded and EarlyPrepass.
-void VR::UpdateDepthBufferCulling(bool desired)
+void VR::UpdateDepthBufferCulling(bool desired, const FeatureConstraints::SettingId& settingId)
 {
-	if (globals::features::upscaling.IsUpscalingActive()) {
-		if (gDepthBufferCulling && *gDepthBufferCulling) {
-			logger::info("Upscaling detected, disabling incompatible depth buffer culling.");
-			*gDepthBufferCulling = false;
+	// Check if any feature is constraining this setting
+	auto constraint = FeatureConstraints::GetConstraints(settingId);
+
+	if (constraint.isConstrained) {
+		// Use std::get_if to safely extract bool value and avoid std::bad_variant_access
+		if (auto* forcedValuePtr = std::get_if<bool>(&constraint.forcedValue)) {
+			bool forcedValue = *forcedValuePtr;
+			if (gDepthBufferCulling && *gDepthBufferCulling != forcedValue) {
+				*gDepthBufferCulling = forcedValue;
+				for (const auto& src : constraint.sources) {
+					logger::info("{} forcing depth buffer culling {}: {}",
+						src.featureName,
+						forcedValue ? "ON" : "OFF",
+						src.reason);
+				}
+			}
+		} else {
+			// Constraint has non-bool value type - log warning and skip
+			logger::warn("VR::UpdateDepthBufferCulling: Constraint on {} has non-bool forced value, ignoring", settingId.settingPath);
 		}
 	} else {
 		if (gDepthBufferCulling && *gDepthBufferCulling != desired) {
 			*gDepthBufferCulling = desired;
-			logger::info("VR depth buffer culling restored to {}", desired);
+			logger::info("VR depth buffer culling set to {}", desired);
 		}
 	}
 }

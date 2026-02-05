@@ -447,7 +447,7 @@ void Upscaling::PostPostLoad()
 	logger::info("[Upscaling] Installed hooks");
 }
 
-Upscaling::UpscaleMethod Upscaling::GetUpscaleMethod()
+Upscaling::UpscaleMethod Upscaling::GetUpscaleMethod() const
 {
 	if (streamline.featureDLSS)
 		return (UpscaleMethod)settings.upscaleMethod;
@@ -1091,7 +1091,7 @@ bool Upscaling::IsFrameGenerationActive() const
 	return d3d12SwapChainActive && settings.frameGenerationMode && fidelityFX.isFrameGenActive && !globals::game::isVR;
 }
 
-bool Upscaling::IsUpscalingActive()
+bool Upscaling::IsUpscalingActive() const
 {
 	auto method = GetUpscaleMethod();
 
@@ -1105,6 +1105,31 @@ bool Upscaling::IsUpscalingActive()
 
 	// resolutionScale.x represents renderWidth / displayWidth.
 	return resolutionScale.x < .99f;
+}
+
+std::vector<FeatureConstraints::Constraint> Upscaling::GetActiveConstraints() const
+{
+	std::vector<FeatureConstraints::Constraint> constraints;
+
+	if (!IsUpscalingActive()) {
+		return constraints;
+	}
+
+	// When upscaling is active in VR, depth buffer culling must be disabled
+	// because upscalers modify the depth buffer, causing incorrect occlusion
+	if (globals::game::isVR) {
+		constraints.push_back({ { "VR", "EnableDepthBufferCullingExterior" },
+			false,
+			"Upscaling modifies the depth buffer, causing incorrect VR occlusion tests in exteriors.",
+			false });
+
+		constraints.push_back({ { "VR", "EnableDepthBufferCullingInterior" },
+			false,
+			"Upscaling modifies the depth buffer, causing incorrect VR occlusion tests in interiors.",
+			false });
+	}
+
+	return constraints;
 }
 
 /**

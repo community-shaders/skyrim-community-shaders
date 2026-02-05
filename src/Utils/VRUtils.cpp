@@ -19,13 +19,13 @@ namespace Util
 			}
 			ImVec4 color;
 			switch (combo[i].GetDevice()) {
-			case ControllerDevice::Primary:
+			case InputDeviceType::Primary:
 				color = Util::GetControllerPrimaryColor();
 				break;
-			case ControllerDevice::Secondary:
+			case InputDeviceType::Secondary:
 				color = Util::GetControllerSecondaryColor();
 				break;
-			case ControllerDevice::Both:
+			case InputDeviceType::Both:
 				color = Util::GetControllerBothColor();
 				break;
 			default:
@@ -41,15 +41,15 @@ namespace Util
 				ImVec4 labelColor = Util::GetControllerDefaultColor();
 				const char* label = "";
 				switch (combo[i].GetDevice()) {
-				case ControllerDevice::Primary:
+				case InputDeviceType::Primary:
 					label = "(Primary Controller)";
 					labelColor = Util::GetControllerPrimaryColor();
 					break;
-				case ControllerDevice::Secondary:
+				case InputDeviceType::Secondary:
 					label = "(Secondary Controller)";
 					labelColor = Util::GetControllerSecondaryColor();
 					break;
-				case ControllerDevice::Both:
+				case InputDeviceType::Both:
 					label = "(Both Controllers)";
 					labelColor = Util::GetControllerBothColor();
 					break;
@@ -153,7 +153,7 @@ namespace Util
 		}
 	}
 
-	ImVec4 GetControllerDeviceColor(ControllerDevice device, bool isRecording)
+	ImVec4 GetControllerDeviceColor(InputDeviceType device, bool isRecording)
 	{
 		// UI color constants from VR.cpp
 		constexpr ImVec4 Primary = ImVec4(0.0f, 1.0f, 0.0f, 1.0f);     // Green
@@ -162,22 +162,22 @@ namespace Util
 		constexpr ImVec4 Recording = ImVec4(1.0f, 0.65f, 0.0f, 1.0f);  // Orange
 		constexpr ImVec4 Default = ImVec4(1.0f, 1.0f, 1.0f, 1.0f);     // White
 
-		if (isRecording && device == ControllerDevice::Both) {
+		if (isRecording && device == InputDeviceType::Both) {
 			return Recording;  // Orange for recording mode
 		}
 		switch (device) {
-		case ControllerDevice::Primary:
+		case InputDeviceType::Primary:
 			return Primary;
-		case ControllerDevice::Secondary:
+		case InputDeviceType::Secondary:
 			return Secondary;
-		case ControllerDevice::Both:
+		case InputDeviceType::Both:
 			return Both;
 		default:
 			return Default;
 		}
 	}
 
-	vr::TrackedDeviceIndex_t GetControllerIndexForDevice(ControllerDevice device, bool isLeftHanded)
+	vr::TrackedDeviceIndex_t GetControllerIndexForDevice(InputDeviceType device, bool isLeftHanded)
 	{
 		OpenVRContext ctx;
 		if (!ctx.IsValid())
@@ -186,7 +186,7 @@ namespace Util
 		// Determine the OpenVR role based on handedness and our device enum
 		vr::ETrackedControllerRole targetRole;
 
-		if (device == ControllerDevice::Primary) {
+		if (device == InputDeviceType::Primary) {
 			// Primary controller = dominant hand
 			targetRole = isLeftHanded ? vr::ETrackedControllerRole::TrackedControllerRole_LeftHand : vr::ETrackedControllerRole::TrackedControllerRole_RightHand;
 		} else {

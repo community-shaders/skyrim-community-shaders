@@ -1,18 +1,55 @@
 #include "TerrainBlending.h"
 
 #include "Deferred.h"
+#include "Globals.h"
 #include "ShaderCache.h"
 #include "State.h"
+#include "VR.h"
 
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	TerrainBlending::Settings,
 	Enabled)
 
+std::vector<FeatureConstraints::Constraint> TerrainBlending::GetActiveConstraints() const
+{
+	std::vector<FeatureConstraints::Constraint> constraints;
+
+	// Only impose constraints when the feature is loaded, enabled, and we're in VR
+	if (!loaded || !settings.Enabled || !globals::game::isVR) {
+		return constraints;
+	}
+
+	// Terrain Blending has visual issues with VR depth buffer culling in exteriors
+	constraints.push_back({ { "VR", "EnableDepthBufferCullingExterior" },
+		false,
+		"Terrain Blending has visual issues with VR depth buffer culling in exteriors.",
+		false });
+
+	return constraints;
+}
+
 void TerrainBlending::DrawSettings()
 {
+	bool wasEnabled = settings.Enabled;
 	ImGui::Checkbox("Enable Terrain Blending", (bool*)&settings.Enabled);
+
+	// Show warning if enabling in VR and depth culling is currently enabled
+	if (globals::game::isVR && settings.Enabled && !wasEnabled) {
+		// Check if VR depth culling exterior is currently enabled
+		auto& vr = globals::features::vr;
+		if (vr.settings.EnableDepthBufferCullingExterior) {
+			ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.2f, 1.0f),
+				"Note: VR Depth Buffer Culling (Exteriors) will be disabled while this feature is enabled.");
+		}
+	}
+
 	if (auto _tt = Util::HoverTooltipWrapper()) {
 		ImGui::Text("Enable seamless blending between terrain and objects.");
+		if (globals::game::isVR) {
+			ImGui::Separator();
+			ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.2f, 1.0f), "VR Note:");
+			ImGui::TextWrapped("When enabled in VR, this feature requires disabling Depth Buffer Culling in exteriors to prevent visual issues.");
+		}
 	}
 }
 
