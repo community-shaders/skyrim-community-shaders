@@ -77,9 +77,11 @@ public:
 
 	uint16_t slot;
 
-	Shape(Allocation* allocation, RE::BSGeometry* geometry, float3x4 localToRoot, Flags flags = Flags::None) :
-		allocation({ allocation, AllocationDeleter() }), geometry(geometry), localToRoot(localToRoot), flags(flags)
-	{}
+	Shape(Flags flags, Allocation* allocation, RE::BSGeometry* geometry, float3x4 localToRoot, bool dismemberVisible = true, uint16_t slot = 0) :
+		flags(flags), allocation({ allocation, AllocationDeleter() }), geometry(geometry), localToRoot(localToRoot), slot(slot)
+	{
+		UpdateDismember(dismemberVisible);
+	}
 
 	/*inline Shape Clone(uint16_t registerIndexIn, RE::BSGeometry* geometryIn) const
 	{

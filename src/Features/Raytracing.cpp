@@ -1897,7 +1897,7 @@ void Raytracing::CreateModelInternal(RE::TESForm* form, const char* path, RE::Ni
 		return;
 	}
 
-	logger::info("[RT] CreateModel - Path: {}, FormID [0x{:08X}], NiNode [0x{:08X}]: {}", path, formID, reinterpret_cast<uintptr_t>(pRoot), pRoot->name);
+	logger::debug("[RT] CreateModel - Path: {}, FormID [0x{:08X}], NiNode [0x{:08X}]: {}", path, formID, reinterpret_cast<uintptr_t>(pRoot), pRoot->name);
 
 	auto formType = form->GetFormType();
 
@@ -1908,7 +1908,7 @@ void Raytracing::CreateModelInternal(RE::TESForm* form, const char* path, RE::Ni
 	TraverseScenegraphRTGeometries(pRoot, [&](RE::BSGeometry* pGeometry) -> RE::BSVisit::BSVisitControl {
 		const char* name = pGeometry->name.c_str();
 
-		logger::info("\t\t[RT] CreateModel::TraverseScenegraphGeometries - {}", name);
+		logger::debug("\t\t[RT] CreateModel::TraverseScenegraphGeometries - {}", name);
 
 		const auto& geometryType = pGeometry->GetType();
 
@@ -1972,7 +1972,7 @@ void Raytracing::CreateModelInternal(RE::TESForm* form, const char* path, RE::Ni
 				return RE::BSVisit::BSVisitControl::kContinue;
 			}
 
-			auto meshData = eastl::make_unique<Shape>(shapeRegisters.Allocate(), pGeometry, localToRoot, flags);
+			auto meshData = eastl::make_unique<Shape>(flags, shapeRegisters.Allocate(), pGeometry, localToRoot);
 
 			meshData->BuildMesh(triShapeRD, triShapeRuntime.vertexCount, triShapeRuntime.triangleCount, 0);
 			meshData->BuildMaterial(geometryRuntimeData, name, formID);
@@ -1992,31 +1992,36 @@ void Raytracing::CreateModelInternal(RE::TESForm* form, const char* path, RE::Ni
 				return RE::BSVisit::BSVisitControl::kContinue;
 			}
 
-			logger::debug("\t\t[RT] CreateModel::TraverseScenegraphGeometries - Partitions: {}, VertexCount: {}, Unk24: [0x{:X}]", skinPartition->numPartitions, skinPartition->vertexCount, skinPartition->unk24);
+			const auto skinNumPartitions = skinPartition->numPartitions;
+
+			logger::debug("\t\t[RT] CreateModel::TraverseScenegraphGeometries - Partitions: {}, VertexCount: {}, Unk24: [0x{:X}]", skinNumPartitions, skinPartition->vertexCount, skinPartition->unk24);
 
 			// This looks diabolical
 			static REL::Relocation<const RE::NiRTTI*> dismemberRTTI{ RE::BSDismemberSkinInstance::Ni_RTTI };
 
-			RE::BSDismemberSkinInstance* dismemberSkinInstance = nullptr;
-
-			eastl::vector<RE::BSDismemberSkinInstance::Data> dismemberData;
+			eastl::vector<RE::BSDismemberSkinInstance::Data> dismemberData(skinNumPartitions, { true, false, 0 });
 
 			decltype(dismemberReferences.begin()) it;
 			bool emplacedDismemberRef = false;
 
 			if (skinInstance->GetRTTI() == dismemberRTTI.get()) {
-				dismemberSkinInstance = reinterpret_cast<RE::BSDismemberSkinInstance*>(skinInstance);
+				auto* dismemberSkinInstance = reinterpret_cast<RE::BSDismemberSkinInstance*>(skinInstance);
 
 				auto& dismemberRuntime = dismemberSkinInstance->GetRuntimeData();
+		
+				const auto dismemberNumPartitions = static_cast<uint32_t>(dismemberRuntime.numPartitions);
 
-				dismemberData.resize(dismemberRuntime.numPartitions);
-				std::memcpy(dismemberData.data(), dismemberRuntime.partitions, dismemberRuntime.numPartitions * sizeof(RE::BSDismemberSkinInstance::Data));
+				if (skinNumPartitions != dismemberNumPartitions)
+					logger::error("\t\t[RT] CreateModel::TraverseScenegraphGeometries - Skin and Dismember partition count mismatch");
 
-				eastl::tie(it, emplacedDismemberRef) = dismemberReferences.try_emplace(dismemberSkinInstance, eastl::vector<Shape*>(dismemberRuntime.numPartitions));
+				std::memcpy(dismemberData.data(), dismemberRuntime.partitions, dismemberNumPartitions * sizeof(RE::BSDismemberSkinInstance::Data));
+
+				eastl::tie(it, emplacedDismemberRef) = dismemberReferences.try_emplace(dismemberSkinInstance, eastl::vector<Shape*>(skinNumPartitions));
 			}
 
 			for (size_t i = 0; i < skinPartition->partitions.size(); i++) {
 				auto& partition = skinPartition->partitions[i];
+				auto& dismemberPartition = dismemberData[i];
 
 				// Fix for modded geometry
 				if (partition.triangles == 0) {
@@ -2028,11 +2033,10 @@ void Raytracing::CreateModelInternal(RE::TESForm* form, const char* path, RE::Ni
 				if (partition.bonesPerVertex > 0)
 					flags |= Shape::Flags::Skinned;
 
-				auto meshData = eastl::make_unique<Shape>(shapeRegisters.Allocate(), pGeometry, localToRoot, flags);
+				auto meshData = eastl::make_unique<Shape>(flags, shapeRegisters.Allocate(), pGeometry, localToRoot, dismemberPartition.editorVisible, dismemberPartition.slot);
 
 				// Diabolical Part II
 				if (emplacedDismemberRef) {
-					meshData->slot = dismemberData[i].slot;
 					it->second[i] = meshData.get();
 				}
 
@@ -2066,7 +2070,7 @@ void Raytracing::CreateModelInternal(RE::TESForm* form, const char* path, RE::Ni
 
 			AddInstance(formID, pRoot, modelKey);
 
-			logger::info("[RT] CreateModel - Commited {} TriShapes to [0x{:08X}]", shapeCount, reinterpret_cast<uintptr_t>(it->second.get()));
+			logger::debug("[RT] CreateModel - Commited {} TriShapes to [0x{:08X}]", shapeCount, reinterpret_cast<uintptr_t>(it->second.get()));
 		} else {
 			logger::warn("[RT] CreateModel - Emplace failed for {} TriShapes", shapeCount);
 		}
@@ -2165,7 +2169,7 @@ eastl::shared_ptr<Allocation> Raytracing::GetTextureRegister(ID3D11Texture2D* dx
 		D3D11_TEXTURE2D_DESC desc;
 		dx11Texture->GetDesc(&desc);
 
-		logger::warn("[RT] GetTextureRegister - Failed to get shared handle - [{}, {}] Format: {}, Flags: {}", desc.Width, desc.Height, magic_enum::enum_name(desc.Format), GetFlagsString<D3D11_RESOURCE_MISC_FLAG>(desc.MiscFlags));
+		logger::debug("[RT] GetTextureRegister - Failed to get shared handle - [{}, {}] Format: {}, Flags: {}", desc.Width, desc.Height, magic_enum::enum_name(desc.Format), GetFlagsString<D3D11_RESOURCE_MISC_FLAG>(desc.MiscFlags));
 		return defaultTexture;
 	}
 
