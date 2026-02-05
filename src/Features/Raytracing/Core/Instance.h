@@ -24,27 +24,17 @@ struct Instance
 
 	bool IsDetached() const;
 
-	static uint UpdateRate(float distance)
+	static uint UpdateInterval(float distance)
 	{
-		if (distance < 25)
-			return 0;
-
-		if (distance < 100)
-			return 1;
-
-		if (distance < 250)
-			return 2;
-
-		if (distance < 500)
-			return 3;
-
-		return 4;
+		float t = std::log2((distance - 25.0f) + 1.0f) * 0.3f;
+		return std::clamp(static_cast<uint>(t), 0u, 30u);
 	}
+	//
 
-	bool ShouldUpdate(RE::NiAVObject* node, RE::NiPoint3 cameraPosition);
+	bool SkipUpdate(RE::NiAVObject* node, const RE::NiPoint3& cameraPosition);
 
 	// Checks for skinned and dynamic trishapes update
-	void Update(RE::NiAVObject* node, RE::NiPoint3 cameraPosition, const eastl::pair<eastl::string, Model*>& modelPair, SkinningPipeline* skinningPipeline);
+	void Update(RE::NiAVObject* node, const RE::NiPoint3& cameraPosition, const eastl::pair<eastl::string, Model*>& modelPair, SkinningPipeline* skinningPipeline);
 
 	// Instance form id
 	RE::FormID formID;
@@ -56,7 +46,7 @@ struct Instance
 	float3x4 transform;
 
 	// Makes sure we only update once per frame
-	uint lastUpdate = 0;
+	uint64_t lastUpdate = 0;
 
 private:
 	bool detached = false;
