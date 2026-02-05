@@ -43,10 +43,6 @@ namespace WeatherVariables
 		virtual std::string GetTooltip() const = 0;
 		virtual void CaptureUserSettingsValue() = 0;
 		virtual void SetToUserSettings() = 0;
-
-		// Transition lifecycle - called by FeatureWeatherRegistry
-		// BeginTransition captures the current value as the transition start point
-		// EndTransition clears the cached transition state
 		virtual void BeginTransition(const json& fromOverride) = 0;
 		virtual void EndTransition() = 0;
 		virtual bool IsInTransition() const = 0;
@@ -120,7 +116,6 @@ namespace WeatherVariables
 			*valuePtr = lerpFunc(fromVal, toVal, factor);
 		}
 
-		// Transition lifecycle implementation
 		void BeginTransition(const json& fromOverride) override
 		{
 			if (!valuePtr)
@@ -128,7 +123,6 @@ namespace WeatherVariables
 
 			// Capture the starting value for this transition
 			if (!fromOverride.is_null()) {
-				// Source weather has an override - use that value
 				try {
 					transitionStartValue = fromOverride.get<T>();
 				} catch (const nlohmann::json::type_error& e) {
@@ -136,7 +130,6 @@ namespace WeatherVariables
 					transitionStartValue = *valuePtr;
 				}
 			} else {
-				// Source weather has no override - use current value (which should be user settings)
 				transitionStartValue = *valuePtr;
 			}
 			inTransition = true;
@@ -382,7 +375,6 @@ namespace WeatherVariables
 			}
 		}
 
-		// Transition management - call at start of weather transition to cache "from" values
 		void BeginTransition(const json& fromWeatherSettings)
 		{
 			for (auto& var : variables) {
@@ -392,7 +384,6 @@ namespace WeatherVariables
 			inTransition = true;
 		}
 
-		// Call when transition completes to clear cached state
 		void EndTransition()
 		{
 			for (auto& var : variables) {
@@ -501,7 +492,6 @@ namespace WeatherVariables
 			}
 		}
 
-		// Transition management - called by WeatherManager when weather transitions start/end
 		void BeginFeatureTransition(const std::string& featureName, const json& fromWeatherSettings)
 		{
 			auto* registry = GetFeatureRegistry(featureName);
