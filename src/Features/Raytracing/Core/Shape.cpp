@@ -1012,12 +1012,21 @@ bool Shape::UpdateSkinning()
 	if (!skinInstance)
 		return false;
 
+	// UBE crash fix
+	if (skinInstance->numMatrices == 0 || !skinInstance->boneMatrices)
+		return false;
+
 	if (boneMatrices.empty())
 		boneMatrices.resize(skinInstance->numMatrices);
 
 	float3x4* boneMatricesArray = reinterpret_cast<float3x4*>(skinInstance->boneMatrices);
 
 	auto rootParent = skinInstance->rootParent;
+
+	// UBE crash fix
+	if (!rootParent)
+		return false;
+
 	auto skinRootInverse = GetXMFromNiTransform(rootParent->world.Invert());
 
 	for (uint i = 0; i < skinInstance->numMatrices; i++) {
