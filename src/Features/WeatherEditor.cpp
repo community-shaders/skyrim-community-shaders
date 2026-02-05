@@ -25,6 +25,20 @@ void WeatherEditor::DataLoaded()
 	LoadAllWeathers();
 }
 
+std::pair<std::string, std::vector<std::string>> WeatherEditor::GetFeatureSummary()
+{
+	std::string description = "Interactive weather control system that lets you instantly change and analyze weather conditions in-game.";
+	std::vector<std::string> keyFeatures = {
+		"Instantly switch between any weather with immediate or gradual transitions",
+		"Filter weather by type (Pleasant, Cloudy, Rainy, Snow, Aurora) for easy browsing",
+		"View detailed weather information including wind, precipitation, and lightning data",
+		"Color-coded weather names show all weather properties at a glance",
+		"Persistent overlay window for continuous weather monitoring while playing"
+	};
+
+	return { description, keyFeatures };
+}
+
 int8_t LerpInt8_t(const int8_t oldValue, const int8_t newVal, const float lerpValue)
 {
 	int lerpedValue = (int)std::lerp(oldValue, newVal, lerpValue);
