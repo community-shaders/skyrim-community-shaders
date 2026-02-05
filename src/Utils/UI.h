@@ -9,6 +9,7 @@
 
 #include "../FeatureConstraints.h"
 #include "../Menu/Fonts.h"
+#include "Utils/Input.h"
 
 // Forward declarations
 struct ID3D11Device;
@@ -54,11 +55,14 @@ namespace Util
 	 * if (auto _tt = Util::HoverTooltipWrapper()){
 	 *     ImGui::Text("What the tooltip says.");
 	 * }
+	 *
+	 * Automatically applies the Subtext font role for consistent tooltip styling.
 	*/
 	class HoverTooltipWrapper
 	{
 	private:
 		bool hovered;
+		ImFont* previousFont;
 
 	public:
 		HoverTooltipWrapper();
@@ -815,6 +819,24 @@ namespace Util
 		 * @endcode
 		 */
 		const char* KeyIdToString(uint32_t key);
+
+		/**
+		 * @brief Converts a key combo (vector of InputCombo) to a human-readable string
+		 *
+		 * For keyboard-only combos, produces strings like "Ctrl + Shift + A".
+		 * For VR inputs, delegates to InputCombo::GetVRString for proper formatting.
+		 *
+		 * @param combo Vector of InputCombo representing the key combination
+		 * @return Human-readable string representation of the combo, or "None" if empty
+		 *
+		 * @example
+		 * @code
+		 * std::vector<InputCombo> combo = { InputCombo::Keyboard(VK_CONTROL), InputCombo::Keyboard('A') };
+		 * std::string comboStr = Util::Input::KeyIdToString(combo);
+		 * // comboStr will be "Control + A"
+		 * @endcode
+		 */
+		std::string KeyIdToString(const std::vector<InputCombo>& combo);
 	}
 
 	/**
@@ -1256,4 +1278,23 @@ namespace Util
 		ImGui::PopStyleVar();
 		ImGui::EndChild();
 	}
+
+	/**
+	 * @brief Unified input recording widget for both VR and Desktop
+	 *
+	 * Handles recording of multi-key sequences for keyboard, mouse, and VR controllers.
+	 * Supports modifiers, combo sequences, and device-specific rendering.
+	 *
+	 * @param label The label for the input setting
+	 * @param combo The vector of InputCombo to record into
+	 * @param isRecording Reference to boolean tracking active recording state
+	 * @param recordingLabel Unique label ID for the recording button
+	 *
+	 * @return true if the combo was modified
+	 */
+	bool InputComboWidget(
+		const char* label,
+		std::vector<InputCombo>& combo,
+		bool& isRecording,
+		const char* recordingLabel);
 }  // namespace Util

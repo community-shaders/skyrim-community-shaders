@@ -2,6 +2,7 @@
 #include "FeatureConstraints.h"
 #include "Menu.h"
 #include "OverlayFeature.h"
+#include "Utils/Input.h"
 #include <algorithm>
 #include <d3d11.h>
 #include <imgui_impl_dx11.h>
@@ -11,190 +12,12 @@
 #include <unordered_map>
 #include <vector>
 #include <winrt/base.h>
+
 using namespace DirectX::SimpleMath;
 
-/**
- * @brief Identifies which VR controller(s) to target for input actions
- *
- * This enum is used throughout the VR system to specify which controller
- * should handle specific input events or UI interactions.
- */
-enum class ControllerDevice
-{
-	Primary = 0,    ///< The dominant hand controller (right for right-handed, left for left-handed)
-	Secondary = 1,  ///< The non-dominant hand controller
-	Both = 2        ///< Both controllers simultaneously
-};
-
-/**
- * @brief Converts a ControllerDevice enum value to a human-readable string
- * @param device The controller device to convert
- * @return String representation of the device ("Primary", "Secondary", "Both", or "Unknown")
- */
-constexpr const char* ToString(ControllerDevice device)
-{
-	switch (device) {
-	case ControllerDevice::Primary:
-		return "Primary";
-	case ControllerDevice::Secondary:
-		return "Secondary";
-	case ControllerDevice::Both:
-		return "Both";
-	default:
-		return "Unknown";
-	}
-}
-
-/**
- * @brief Validates if a ControllerDevice enum value is within valid range
- * @param device The controller device to validate
- * @return true if the device value is valid, false otherwise
- */
-constexpr bool IsValidDevice(ControllerDevice device)
-{
-	return device >= ControllerDevice::Primary && device <= ControllerDevice::Both;
-}
-
-/**
- * @brief Represents a combination of controller device and button/key for VR input mapping
- *
- * This structure efficiently encodes both the target controller and the specific button
- * into a single 32-bit value for performance and JSON serialization compatibility.
- * The upper 16 bits store the device type, lower 16 bits store the key code.
- *
- * @example
- * ```cpp
- * // Create a combo for the A button on the secondary controller
- * auto combo = ButtonCombo::Secondary(RE::BSOpenVRControllerDevice::Keys::kXA);
- *
- * // Check which device and key
- * ControllerDevice device = combo.GetDevice();
- * uint32_t key = combo.GetKey();
- * ```
- */
-struct ButtonCombo
-{
-private:
-	uint32_t deviceAndKey;  // device in upper bits, key in lower bits
-
-public:
-	/**
-	 * @brief Constructs a ButtonCombo with the specified device and key
-	 * @param device The target controller device
-	 * @param key The button/key code (must fit in 16 bits, values > 0xFFFF will be truncated)
-	 */
-	ButtonCombo(ControllerDevice device, uint32_t key) :
-		deviceAndKey((static_cast<uint32_t>(device) << 16) | (key & 0xFFFF))
-	{
-		// Validate that the device is within valid range
-		if (!IsValidDevice(device)) {
-			logger::warn("ButtonCombo: Invalid device value {} ({}), using as-is",
-				static_cast<uint32_t>(device), magic_enum::enum_name(device));
-		}
-
-		// Validate that the key fits within 16 bits to prevent silent data loss
-		if (key > 0xFFFF) {
-			logger::warn("ButtonCombo: Key value 0x{:X} exceeds 16-bit limit (0xFFFF), truncating to 0x{:X}",
-				key, key & 0xFFFF);
-		}
-	}
-
-	/**
-	 * @brief Creates a ButtonCombo for the primary controller
-	 * @param key The button/key code
-	 * @return ButtonCombo targeting the primary controller
-	 */
-	static ButtonCombo Primary(uint32_t key) { return ButtonCombo(ControllerDevice::Primary, key); }
-
-	/**
-	 * @brief Creates a ButtonCombo for the secondary controller
-	 * @param key The button/key code
-	 * @return ButtonCombo targeting the secondary controller
-	 */
-	static ButtonCombo Secondary(uint32_t key) { return ButtonCombo(ControllerDevice::Secondary, key); }
-
-	/**
-	 * @brief Creates a ButtonCombo for both controllers
-	 * @param key The button/key code
-	 * @return ButtonCombo targeting both controllers
-	 */
-	static ButtonCombo Both(uint32_t key) { return ButtonCombo(ControllerDevice::Both, key); }
-
-	/**
-	 * @brief Gets the controller device from this combo
-	 * @return The target controller device
-	 */
-	ControllerDevice GetDevice() const { return static_cast<ControllerDevice>(deviceAndKey >> 16); }
-	/**
-	 * @brief Gets the button/key code from this combo
-	 * @return The button/key code (16-bit value)
-	 */
-	uint32_t GetKey() const { return deviceAndKey & 0xFFFF; }
-
-	/**
-	 * @brief Validates if this ButtonCombo has valid device and key values
-	 * @return true if both device and key are valid, false otherwise
-	 */
-	bool IsValid() const
-	{
-		return IsValidDevice(GetDevice()) && GetKey() != 0;
-	}
-
-	/**
-	 * @brief Equality comparison operator for container usage
-	 * @param other The ButtonCombo to compare with
-	 * @return true if both combos represent the same device and key
-	 */
-	bool operator==(const ButtonCombo& other) const
-	{
-		return deviceAndKey == other.deviceAndKey;
-	}
-
-	/**
-	 * @brief Less-than comparison operator for ordered container usage
-	 * @param other The ButtonCombo to compare with
-	 * @return true if this combo sorts before the other
-	 */
-	bool operator<(const ButtonCombo& other) const
-	{
-		return deviceAndKey < other.deviceAndKey;
-	}
-
-	/**
-	 * @brief Creates a human-readable string representation for debugging
-	 * @return String in format "Device:Key" (e.g., "Primary:123")
-	 */
-	std::string ToString() const
-	{
-		return std::string(::ToString(GetDevice())) + ":" + std::to_string(GetKey());
-	}
-
-	/**
-	 * @brief Default constructor for JSON serialization compatibility
-	 */
-	ButtonCombo() :
-		deviceAndKey(0) {}
-
-	/**
-	 * @brief JSON serialization support - converts ButtonCombo to JSON
-	 * @param j Output JSON object
-	 * @param combo ButtonCombo to serialize
-	 */
-	friend void to_json(nlohmann::json& j, const ButtonCombo& combo)
-	{
-		j = combo.deviceAndKey;
-	}
-
-	/**
-	 * @brief JSON deserialization support - creates ButtonCombo from JSON
-	 * @param j Input JSON object
-	 * @param combo ButtonCombo to populate
-	 */
-	friend void from_json(const nlohmann::json& j, ButtonCombo& combo)
-	{
-		combo.deviceAndKey = j.get<uint32_t>();
-	}
-};
+// Backwards compatibility aliases
+using ControllerDevice = InputDeviceType;
+using ButtonCombo = InputCombo;
 
 /**
  * @brief Main VR feature class providing VR-specific optimizations and overlay UI system

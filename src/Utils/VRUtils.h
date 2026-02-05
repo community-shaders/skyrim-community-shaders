@@ -1,5 +1,6 @@
 #pragma once
 #include "D3D.h"
+#include "Utils/Input.h"
 #include <SimpleMath.h>
 #include <d3d11.h>
 #include <imgui.h>  // For ImVec4
@@ -7,8 +8,8 @@
 #include <vector>
 
 // Forward declarations - actual definitions are in Features/VR.h
-enum class ControllerDevice;
-struct ButtonCombo;
+using ControllerDevice = InputDeviceType;
+using ButtonCombo = InputCombo;
 
 /**
  * @brief VR utility functions and helpers for OpenVR integration

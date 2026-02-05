@@ -13,6 +13,16 @@
 
 // Static member definitions
 bool HomePageRenderer::isFirstTimeSetupShown = false;
+uint32_t HomePageRenderer::keyThatClosedDialog = 0;
+
+bool HomePageRenderer::ShouldSkipKeyRelease(uint32_t key)
+{
+	if (keyThatClosedDialog && key == keyThatClosedDialog) {
+		keyThatClosedDialog = 0;
+		return true;
+	}
+	return false;
+}
 
 void HomePageRenderer::RenderHomePage()
 {
@@ -362,6 +372,10 @@ void HomePageRenderer::RenderActiveConstraintsSection()
 
 void HomePageRenderer::RenderFirstTimeSetupDialog()
 {
+	if (!ShouldShowFirstTimeSetup()) {
+		return;
+	}
+
 	// Block input to the game and make cursor visible - input blocking is handled by ShouldSwallowInput()
 	auto& io = ImGui::GetIO();
 	io.WantCaptureMouse = true;
@@ -466,8 +480,15 @@ void HomePageRenderer::RenderFirstTimeSetupDialog()
 	ImGui::SetWindowFontScale(fontScale * (isCapturing ? HOTKEY_TEXT_SCALE_CAPTURING : HOTKEY_TEXT_SCALE));
 
 	// Format hotkey with brackets to make it look like a button
-	std::string hotkeyDisplay = isCapturing ? "[ ... ]" : std::string("[ ") + Util::Input::KeyIdToString(menu->GetSettings().ToggleKey) + " ]";
-	ImVec2 hotkeyTextSize = ImGui::CalcTextSize(hotkeyDisplay.c_str());
+	std::string hotkeyStr;
+	if (isCapturing) {
+		hotkeyStr = "[ ... ]";
+	} else {
+		auto& keys = menu->GetSettings().ToggleKey;
+		hotkeyStr = std::string("[ ") + Util::Input::KeyIdToString(keys) + " ]";
+	}
+
+	ImVec2 hotkeyTextSize = ImGui::CalcTextSize(hotkeyStr.c_str());
 
 	centerWidth(hotkeyTextSize.x);
 	ImVec2 buttonPos = ImGui::GetCursorScreenPos();
@@ -495,14 +516,17 @@ void HomePageRenderer::RenderFirstTimeSetupDialog()
 		hotkeyColor = themeSettings.StatusPalette.CurrentHotkey;
 	}
 
-	ImGui::TextColored(hotkeyColor, "%s", hotkeyDisplay.c_str());
+	ImGui::TextColored(hotkeyColor, "%s", hotkeyStr.c_str());
 
 	// Reset font scale
 	ImGui::SetWindowFontScale(fontScale);
 
 	// Handle click to start hotkey capture
 	if (clicked && !isCapturing) {
-		menu->settingToggleKey = true;
+		// Prevent starting capture if this click was caused by Enter key,
+		// because we want Enter to close the dialog instead.
+		if (!ImGui::IsKeyPressed(ImGuiKey_Enter))
+			menu->settingToggleKey = true;
 	}
 
 	// Show hotkey capture message when in capture mode
@@ -521,9 +545,9 @@ void HomePageRenderer::RenderFirstTimeSetupDialog()
 	ImGui::Spacing();
 
 	// Check for Enter or Escape key to close, but only if not capturing a hotkey
-	if ((ImGui::IsKeyPressed(ImGuiKey_Enter) || ImGui::IsKeyPressed(ImGuiKey_Escape)) && !isCapturing) {
-		MarkFirstTimeSetupComplete();
-		// Note: Settings are automatically saved to ensure welcome screen won't show again
+	bool escapePressed = ImGui::IsKeyPressed(ImGuiKey_Escape);
+	if ((ImGui::IsKeyPressed(ImGuiKey_Enter) || escapePressed) && !isCapturing) {
+		MarkFirstTimeSetupComplete(escapePressed ? VK_ESCAPE : VK_RETURN);
 	}
 
 	// Help text with breathing animation
@@ -557,15 +581,18 @@ bool HomePageRenderer::ShouldShowFirstTimeSetup()
 	return !menu->GetSettings().FirstTimeSetupCompleted;
 }
 
-void HomePageRenderer::MarkFirstTimeSetupComplete()
+void HomePageRenderer::MarkFirstTimeSetupComplete(uint32_t closingKey)
 {
 	// Set the flag in the Menu settings
 	auto menu = Menu::GetSingleton();
 	menu->GetSettings().FirstTimeSetupCompleted = true;
+	// Ensure we are not capturing a hotkey when closing the dialog
+	menu->settingToggleKey = false;
 
 	// Immediately save settings to ensure the flag is persisted
 	// This prevents the welcome screen from showing again even if user doesn't manually save
 	globals::state->Save();
 
-	isFirstTimeSetupShown = true;  // Mark as shown this session
+	isFirstTimeSetupShown = true;
+	keyThatClosedDialog = closingKey;
 }

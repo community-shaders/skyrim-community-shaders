@@ -802,7 +802,7 @@ namespace
 			struct VRKeyBindingConfig
 			{
 				const char* label;
-				std::vector<ButtonCombo>& combos;
+				std::vector<InputCombo>& combos;
 				const char* description;
 				const char* controllerRequirement;
 			};
@@ -842,19 +842,19 @@ namespace
 		ImGui::Spacing();
 		// Reset to defaults button
 		if (ImGui::Button("Reset to Defaults")) {
-			// Use ButtonCombo structure for cleaner defaults
+			// Use InputCombo structure for cleaner defaults
 			settings.VRMenuOpenKeys = {
-				ButtonCombo::Primary(static_cast<uint32_t>(RE::BSOpenVRControllerDevice::Keys::kXA)),
-				ButtonCombo::Primary(static_cast<uint32_t>(RE::BSOpenVRControllerDevice::Keys::kBY))
+				InputCombo::Primary(static_cast<uint32_t>(RE::BSOpenVRControllerDevice::Keys::kXA)),
+				InputCombo::Primary(static_cast<uint32_t>(RE::BSOpenVRControllerDevice::Keys::kBY))
 			};
 			settings.VRMenuCloseKeys = {
-				ButtonCombo::Both(static_cast<uint32_t>(RE::BSOpenVRControllerDevice::Keys::kGrip))
+				InputCombo::Both(static_cast<uint32_t>(RE::BSOpenVRControllerDevice::Keys::kGrip))
 			};
 			settings.VROverlayOpenKeys = {
-				ButtonCombo::Primary(static_cast<uint32_t>(RE::BSOpenVRControllerDevice::Keys::kJoystickTrigger))
+				InputCombo::Primary(static_cast<uint32_t>(RE::BSOpenVRControllerDevice::Keys::kJoystickTrigger))
 			};
 			settings.VROverlayCloseKeys = {
-				ButtonCombo::Secondary(static_cast<uint32_t>(RE::BSOpenVRControllerDevice::Keys::kJoystickTrigger))
+				InputCombo::Secondary(static_cast<uint32_t>(RE::BSOpenVRControllerDevice::Keys::kJoystickTrigger))
 			};
 		}
 		if (auto _tt = Util::HoverTooltipWrapper()) {
