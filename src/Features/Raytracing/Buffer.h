@@ -428,13 +428,13 @@ namespace DX12
 			this->TransitionBarrier(commandList, finalState != D3D12_RESOURCE_STATE_COMMON ? finalState : state);
 		}
 
-		void UploadRegion(ID3D12GraphicsCommandList4* commandList, uint64_t dataSize, uint64_t offset, uint uploadIndex = 0)
+		void UploadRegion(ID3D12GraphicsCommandList4* commandList, uint64_t dataSize, uint64_t offset, uint uploadIndex = 0, D3D12_RESOURCE_STATES finalState = D3D12_RESOURCE_STATE_COMMON)
 		{
 			D3D12_RESOURCE_STATES state = this->state;
 
 			this->TransitionBarrier(commandList, D3D12_RESOURCE_STATE_COPY_DEST);
 			commandList->CopyBufferRegion(this->resource.get(), offset, uploadResources[uploadIndex].get(), offset, dataSize);
-			this->TransitionBarrier(commandList, state);
+			this->TransitionBarrier(commandList, finalState != D3D12_RESOURCE_STATE_COMMON ? finalState : state);
 		}
 
 		ID3D12Resource* UploadResource(uint index = 0)

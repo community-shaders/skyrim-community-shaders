@@ -8,7 +8,7 @@ struct VertexUpdateData
 	uint vertexCount;
     uint boneOffset;
 	float3 bonePivot;
-	float boundRadius;
+	uint pad;
 };
 
 #ifdef __cplusplus
