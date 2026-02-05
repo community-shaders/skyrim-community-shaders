@@ -780,9 +780,9 @@ void WeatherEditor::RenderWeatherControls(RE::Sky* sky)
 	if (ImGui::Button(lockLabel)) {
 		if (isLocked) {
 			editorWindow->UnlockWeather();
-        } else if (sky->currentWeather) {  
-            editorWindow->LockWeather(sky->currentWeather);  
-        }  
+		} else if (sky->currentWeather) {
+			editorWindow->LockWeather(sky->currentWeather);
+		}
 	}
 	if (isLocked) {
 		ImGui::PopStyleColor();
