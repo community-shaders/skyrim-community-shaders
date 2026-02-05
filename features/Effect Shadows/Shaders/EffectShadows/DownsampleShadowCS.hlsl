@@ -19,21 +19,21 @@ groupshared float2 g_scratchDepths[8][8];
 [numthreads(8, 8, 1)]
 void main(uint3 dispatchThreadID : SV_DispatchThreadID, uint3 groupThreadID : SV_GroupThreadID) {
 	uint2 pixCoord = dispatchThreadID.xy * 2;
-	
+
 	uint inputW, inputH, inputSlices;
 	InputTexture.GetDimensions(inputW, inputH, inputSlices);
 	float2 uv = (pixCoord + 0.5) / float2(inputW, inputH);
-	
+
 	// Gather from cascade 1 and compute VSM moments
 	float4 depths = InputTexture.GatherRed(PointSampler, float3(uv, 1));
 	g_scratchDepths[groupThreadID.x][groupThreadID.y] = ComputeVSMMoments(depths);
-	
+
 	GroupMemoryBarrierWithGroupSync();
-	
+
 	// 2x2 reduction -> output
 	if (all((groupThreadID.xy % 2) == 0)) {
 		uint2 tid = groupThreadID.xy;
-		OutputTexture[dispatchThreadID.xy / 2] = 
+		OutputTexture[dispatchThreadID.xy / 2] =
 			(g_scratchDepths[tid.x + 0][tid.y + 0] +
 			 g_scratchDepths[tid.x + 1][tid.y + 0] +
 			 g_scratchDepths[tid.x + 0][tid.y + 1] +
@@ -48,33 +48,33 @@ groupshared float2 g_scratchDepths[8][8];
 [numthreads(8, 8, 1)]
 void main(uint3 dispatchThreadID : SV_DispatchThreadID, uint3 groupThreadID : SV_GroupThreadID) {
 	uint2 pixCoord = dispatchThreadID.xy * 2;
-	
+
 	uint inputW, inputH, inputSlices;
 	InputTexture.GetDimensions(inputW, inputH, inputSlices);
 	float2 uv = (pixCoord + 0.5) / float2(inputW, inputH);
-	
+
 	// Gather from cascade 0 and compute VSM moments
 	float4 depths = InputTexture.GatherRed(PointSampler, float3(uv, 0));
 	g_scratchDepths[groupThreadID.x][groupThreadID.y] = ComputeVSMMoments(depths);
-	
+
 	GroupMemoryBarrierWithGroupSync();
-	
+
 	// First reduction: 2x2
 	if (all((groupThreadID.xy % 2) == 0)) {
 		uint2 tid = groupThreadID.xy;
-		g_scratchDepths[tid.x][tid.y] = 
+		g_scratchDepths[tid.x][tid.y] =
 			(g_scratchDepths[tid.x + 0][tid.y + 0] +
 			 g_scratchDepths[tid.x + 1][tid.y + 0] +
 			 g_scratchDepths[tid.x + 0][tid.y + 1] +
 			 g_scratchDepths[tid.x + 1][tid.y + 1]) * 0.25;
 	}
-	
+
 	GroupMemoryBarrierWithGroupSync();
-	
+
 	// Second reduction: 4x4 -> output
 	if (all((groupThreadID.xy % 4) == 0)) {
 		uint2 tid = groupThreadID.xy;
-		OutputTexture[dispatchThreadID.xy / 4] = 
+		OutputTexture[dispatchThreadID.xy / 4] =
 			(g_scratchDepths[tid.x + 0][tid.y + 0] +
 			 g_scratchDepths[tid.x + 2][tid.y + 0] +
 			 g_scratchDepths[tid.x + 0][tid.y + 2] +

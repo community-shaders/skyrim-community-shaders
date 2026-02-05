@@ -2,6 +2,7 @@
 
 struct CloudShadows;
 struct DynamicCubemaps;
+struct EffectShadows;
 struct ExtendedMaterials;
 struct GrassCollision;
 struct GrassLighting;
@@ -56,6 +57,7 @@ namespace globals
 	{
 		extern CloudShadows cloudShadows;
 		extern DynamicCubemaps dynamicCubemaps;
+		extern EffectShadows effectShadows;
 		extern ExtendedMaterials extendedMaterials;
 		extern GrassCollision grassCollision;
 		extern GrassLighting grassLighting;

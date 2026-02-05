@@ -48,48 +48,6 @@ public:
 	ID3D11SamplerState* linearSampler = nullptr;
 	ID3D11SamplerState* pointSampler = nullptr;
 
-	struct alignas(16) PerGeometry
-	{
-		float4 VPOSOffset;
-		float4 ShadowSampleParam;    // fPoissonRadiusScale / iShadowMapResolution in z and w
-		float4 EndSplitDistances;    // cascade end distances int xyz, cascade count int z
-		float4 StartSplitDistances;  // cascade start ditances int xyz, 4 int z
-		float4 FocusShadowFadeParam;
-		float4 DebugColor;
-		float4 PropertyColor;
-		float4 AlphaTestRef;
-		float4 ShadowLightParam;  // Falloff in x, ShadowDistance squared in z
-		DirectX::XMFLOAT4X3 FocusShadowMapProj[4];
-		// Since PerGeometry is passed between c++ and hlsl, can't have different defines due to strong typing
-		DirectX::XMFLOAT4X3 ShadowMapProj[2][3];
-		DirectX::XMFLOAT4X3 CameraViewProjInverse[2];
-	};
-	STATIC_ASSERT_ALIGNAS_16(PerGeometry);
-
-	ID3D11ComputeShader* copyShadowCS = nullptr;
-	ID3D11ComputeShader* downsampleShadowMip0CS = nullptr;
-	ID3D11ComputeShader* downsampleShadowMip1CS = nullptr;
-	ID3D11ComputeShader* blurShadowHorizontalCS = nullptr;
-	ID3D11ComputeShader* blurShadowVerticalCS = nullptr;
-	Buffer* perShadow = nullptr;
-	ID3D11ShaderResourceView* shadowView = nullptr;
-
-	ID3D11Texture2D* shadowCopyTexture = nullptr;
-	ID3D11ShaderResourceView* shadowCopySRV = nullptr;
-	ID3D11ShaderResourceView* shadowCopyMip0SRV = nullptr;
-	ID3D11ShaderResourceView* shadowCopyMip1SRV = nullptr;
-	ID3D11UnorderedAccessView* shadowCopyMip0UAV = nullptr;
-	ID3D11UnorderedAccessView* shadowCopyMip1UAV = nullptr;
-	uint32_t shadowCopyWidth = 0;
-	uint32_t shadowCopyHeight = 0;
-
-	// Temporary texture for blur intermediate result
-	ID3D11Texture2D* shadowBlurTempTexture = nullptr;
-	ID3D11ShaderResourceView* shadowBlurTempMip0SRV = nullptr;
-	ID3D11ShaderResourceView* shadowBlurTempMip1SRV = nullptr;
-	ID3D11UnorderedAccessView* shadowBlurTempMip0UAV = nullptr;
-	ID3D11UnorderedAccessView* shadowBlurTempMip1UAV = nullptr;
-
 	struct Hooks
 	{
 		struct Main_RenderShadowMaps

@@ -18,29 +18,12 @@
 #	include "IBL/IBL.hlsli"
 #endif
 
+#if defined(EFFECT_SHADOWS)
+#	include "EffectShadows/EffectShadows.hlsli"
+#endif
+
 namespace ShadowSampling
 {
-	Texture2D<float2> SharedShadowMap : register(t18);
-
-	struct ShadowData
-	{
-		float4 VPOSOffset;
-		float4 ShadowSampleParam;    // fPoissonRadiusScale / iShadowMapResolution in z and w
-		float4 EndSplitDistances;    // cascade end distances int xyz, cascade count int z
-		float4 StartSplitDistances;  // cascade start ditances int xyz, 4 int z
-		float4 FocusShadowFadeParam;
-		float4 DebugColor;
-		float4 PropertyColor;
-		float4 AlphaTestRef;
-		float4 ShadowLightParam;  // Falloff in x, ShadowDistance squared in z
-		float4x3 FocusShadowMapProj[4];
-		// Since ShadowData is passed between c++ and hlsl, can't have different defines due to strong typing
-		float4x3 ShadowMapProj[2][3];
-		float4x4 CameraViewProjInverse[2];
-	};
-
-	StructuredBuffer<ShadowData> SharedShadowData : register(t19);
-
 	float GetWorldShadow(float3 positionWS, float3 offset, uint eyeIndex)
 	{
 		if (SharedData::InInterior || SharedData::HideSky)
@@ -59,16 +42,10 @@ namespace ShadowSampling
 		return worldShadow;
 	}
 
-	float GetShadowDepth(float3 positionWS, uint eyeIndex)
-	{
-		float4 positionCSShifted = mul(FrameBuffer::CameraViewProj[eyeIndex], float4(positionWS, 1));
-		return positionCSShifted.z / positionCSShifted.w;
-	}
-
 	float Get3DFilteredShadow(float3 positionWS, float3 viewDirection, float2 screenPosition, uint eyeIndex, float depth)
 	{
 		const float stepSize = 32.0;  // Fixed step size in world units
-		
+
 		float noise = Random::InterleavedGradientNoise(screenPosition, SharedData::FrameCount);
 		float2 rotation;
 		sincos(Math::TAU * noise, rotation.y, rotation.x);
@@ -111,122 +88,17 @@ namespace ShadowSampling
 
 		worldShadow *= rcpSampleCount;
 
-		float shadowMapDepth = GetShadowDepth(positionWS, eyeIndex);
-
-		ShadowData sD = SharedShadowData[0];
-
-		// Early out beyond cascade 2
-		if (sD.EndSplitDistances.w < shadowMapDepth)
-			return worldShadow;
-
-		// Precompute cascade data
-		float cascade1Probability = saturate((shadowMapDepth - sD.StartSplitDistances.y) / (sD.EndSplitDistances.x - sD.StartSplitDistances.y));
-		
-		float compareValues[2];
-		float3 positionsLS[2];
-		float3 viewOffsetsLS[2];
-		for (uint cascadeIdx = 0; cascadeIdx < 2; cascadeIdx++) {
-			compareValues[cascadeIdx] = mul(transpose(sD.ShadowMapProj[eyeIndex][cascadeIdx]), float4(positionWS, 1)).z - sD.AlphaTestRef[1 + cascadeIdx];
-			positionsLS[cascadeIdx] = mul(transpose(sD.ShadowMapProj[eyeIndex][cascadeIdx]), float4(startPosition, 1));
-			viewOffsetsLS[cascadeIdx] = mul(transpose(sD.ShadowMapProj[eyeIndex][cascadeIdx]), float4(endPosition, 1));
-		}
-
-		float shadow = 0.0;
-		for (uint k = 0; k < sampleCount; k++) {
-			float t = float(k) * rcpSampleCount;
-
-			// Probabilistically select cascade (0 or 1 within the pair)
-			uint cascadeIndex = uint(frac(t + noise) < cascade1Probability);
-
-			// March with consistent steps
-			float3 sampledPositionLS = lerp(positionsLS[cascadeIndex], viewOffsetsLS[cascadeIndex], t);
-
-			// Sample VSM shadow map
-			float2 moments = SharedShadowMap.SampleLevel(LinearSampler, saturate(sampledPositionLS.xy), 1u - cascadeIndex);
-			float depth = moments.x;      // E[x]
-			float depth2 = moments.y;     // E[x²]
-
-			float receiverDepth = compareValues[cascadeIndex];
-
-			// VSM using Chebyshev's inequality
-			float lit = 1.0;
-			if (receiverDepth > depth) {
-				float variance = max(depth2 - (depth * depth), 0.00001); // σ² = E[x²] - E[x]²
-				float d = receiverDepth - depth;
-				lit = variance / (variance + d * d); // p_max(t) = σ²/(σ² + (t - μ)²)
-			}
-
-			shadow += lit;
-		}
-
-		float fadeFactor = 1.0 - pow(saturate(dot(positionWS, positionWS) / sD.ShadowLightParam.z), 8);
-		return worldShadow * lerp(1.0, shadow * rcpSampleCount, fadeFactor);
-	}
-
-	float Get2DFilteredShadowCascade(float noise, float2x2 rotationMatrix, float sampleOffsetScale, float2 baseUV, float cascadeIndex, float compareValue, uint eyeIndex)
-	{
-		const uint sampleCount = 16;
-
-		float layerIndexRcp = rcp(1 + cascadeIndex);
-
-		float visibility = 0.0;
-
-		sampleOffsetScale *= 4.0;
-
-		for (uint sampleIndex = 0; sampleIndex < sampleCount; ++sampleIndex) {
-			float2 sampleOffset = mul(Random::PoissonSampleOffsets16[sampleIndex], rotationMatrix);
-
-			float2 sampleUV = layerIndexRcp * sampleOffset * sampleOffsetScale + baseUV;
-
-			//float4 depths = SharedShadowMap.SampleLevel(LinearSampler, saturate(sampleUV), 1 - cascadeIndex);
-			visibility += dot(0 > compareValue, 0.25);
-		}
-
-		return visibility * rcp((float)sampleCount);
-	}
-
-	float Get2DFilteredShadow(float noise, float2x2 rotationMatrix, float3 positionWS, uint eyeIndex)
-	{
-		ShadowData sD = SharedShadowData[0];
-
-		float shadowMapDepth = GetShadowDepth(positionWS, eyeIndex);
-
-		if (sD.EndSplitDistances.z >= shadowMapDepth) {
-			float fadeFactor = 1 - pow(saturate(dot(positionWS.xyz, positionWS.xyz) / sD.ShadowLightParam.z), 8);
-
-			float4x3 lightProjectionMatrix = sD.ShadowMapProj[eyeIndex][0];
-			float cascadeIndex = 0;
-
-			if (sD.EndSplitDistances.x < shadowMapDepth) {
-				lightProjectionMatrix = sD.ShadowMapProj[eyeIndex][1];
-				cascadeIndex = 1;
-			}
-
-			float3 positionLS = mul(transpose(lightProjectionMatrix), float4(positionWS.xyz, 1)).xyz;
-
-			float shadowVisibility = Get2DFilteredShadowCascade(noise, rotationMatrix, sD.ShadowSampleParam.z, positionLS.xy, cascadeIndex, positionLS.z, eyeIndex);
-
-			if (cascadeIndex < 1 && sD.StartSplitDistances.y < shadowMapDepth) {
-				float3 cascade1PositionLS = mul(transpose(sD.ShadowMapProj[eyeIndex][1]), float4(positionWS.xyz, 1)).xyz;
-
-				float cascade1ShadowVisibility = Get2DFilteredShadowCascade(noise, rotationMatrix, sD.ShadowSampleParam.z, cascade1PositionLS.xy, 1, cascade1PositionLS.z, eyeIndex);
-
-				float cascade1BlendFactor = smoothstep(0, 1, (shadowMapDepth - sD.StartSplitDistances.y) / (sD.EndSplitDistances.x - sD.StartSplitDistances.y));
-				shadowVisibility = lerp(shadowVisibility, cascade1ShadowVisibility, cascade1BlendFactor);
-			}
-
-			return lerp(1.0, shadowVisibility, fadeFactor);
-		}
-
-		return 1.0;
+#if defined(EFFECT_SHADOWS)
+		float shadow = EffectShadows::GetVSMShadow(positionWS, startPosition, endPosition, noise, sampleCount, eyeIndex);
+		return worldShadow * shadow;
+#else
+		return worldShadow;
+#endif
 	}
 
 	float GetLightingShadow(float noise, float3 worldPosition, uint eyeIndex)
 	{
-		float2 rotation;
-		sincos(Math::TAU * noise, rotation.y, rotation.x);
-		float2x2 rotationMatrix = float2x2(rotation.x, rotation.y, -rotation.y, rotation.x);
-		return Get2DFilteredShadow(noise, rotationMatrix, worldPosition, eyeIndex);
+		return 1;
 	}
 
 #if defined(SKYLIGHTING) && !defined(INTERIOR)
