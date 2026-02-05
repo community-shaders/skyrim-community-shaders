@@ -294,7 +294,7 @@ float3 EvaluateSubsurfaceNEE(
                 // Prepare data needed to evaluate the sample light
                 float3 sampleIncidentVector = float3(0.0f, 0.0f, 0.0f);
                 float sampleLightDistance = 0.0f;
-                float sampleLightIrradiance = 0.0f;
+                float3 sampleLightIrradiance = 0.0f;
 
                 GetLightIrradianceMIS(sampleInstance, sampleSurface, sampleLightIrradiance, sampleIncidentVector, sampleLightDistance, randomSeed);
 
