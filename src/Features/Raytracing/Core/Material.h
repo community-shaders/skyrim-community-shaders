@@ -71,7 +71,8 @@ struct Material
 		kHairTint = 1 << 15,
 		kTwoSided = 1 << 16,
 		kAssumeShadowmask = 1 << 17,
-		kBackLighting = 1 << 18
+		kBackLighting = 1 << 18,
+		kTreeAnim = 1 << 19
 	};
 
 	enum AlphaFlags : uint16_t
@@ -175,6 +176,10 @@ struct Material
 			shaderFlagsLocal |= ShaderFlags::kBackLighting;
 		}
 
+		if (shaderFlags.any(EShaderPropertyFlag::kTreeAnim)) {
+			shaderFlagsLocal |= ShaderFlags::kTreeAnim;
+		}
+		
 		return shaderFlagsLocal;
 	}
 

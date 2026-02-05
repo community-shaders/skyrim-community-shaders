@@ -71,8 +71,6 @@ public:
 
 	AABB aabb;
 
-	float boundRadius;
-
 	float3x4 localToRoot;
 
 	uint16_t slot;
