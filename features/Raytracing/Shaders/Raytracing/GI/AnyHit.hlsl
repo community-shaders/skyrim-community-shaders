@@ -22,6 +22,13 @@ void main(inout Payload payload, in BuiltInTriangleIntersectionAttributes attrib
 
     float alpha = Textures[NonUniformResourceIndex(material.BaseTexture())].SampleLevel(BaseSampler, texCoord, 0).a;
 
+    alpha *= material.BaseColor().a;   
+    
+    if ((material.ShaderFlags & ShaderFlags::kVertexAlpha) && !(material.ShaderFlags & ShaderFlags::kTreeAnim))
+    {
+        alpha *= Interpolate(v0.Color.unpack().a, v1.Color.unpack().a, v2.Color.unpack().a, uvw);
+    }   
+    
     [branch]
     if (material.AlphaFlags == AlphaFlags::kAlphaTest)
     {

@@ -373,15 +373,13 @@ void Shape::BuildMaterial(const RE::BSGeometry::GEOMETRY_RUNTIME_DATA& geometryR
 	{
 		auto* property = geometryRuntimeData.properties[State::kProperty].get();
 
-		if (property && property->GetType() == RE::NiProperty::Type::kAlpha) {
-			flags |= Flags::AlphaBlending;
-		}
-
 		auto* effect = geometryRuntimeData.properties[State::kEffect].get();
 
 		if (effect) {
-			if (RE::BSShaderProperty* shaderProp = netimmerse_cast<RE::BSShaderProperty*>(effect))
+			if (RE::BSShaderProperty* shaderProp = netimmerse_cast<RE::BSShaderProperty*>(effect)) {
 				shaderFlags = shaderProp->flags.get();
+				colors[0].w *= shaderProp->alpha;
+			}
 
 			if (RE::BSLightingShaderProperty* lightingShaderProp = skyrim_cast<RE::BSLightingShaderProperty*>(effect)) {
 				shaderType = RE::BSShader::Type::Lighting;
@@ -389,19 +387,18 @@ void Shape::BuildMaterial(const RE::BSGeometry::GEOMETRY_RUNTIME_DATA& geometryR
 				logger::debug("[RT] BuildMaterial - BSLightingShaderProperty [0x{:08X}] Flags: {}", reinterpret_cast<uintptr_t>(lightingShaderProp), GetFlagsString<EShaderPropertyFlag>(lightingShaderProp->flags.underlying()));
 
 				// Set alpha flags
-				if (flags & Flags::AlphaBlending) {
-					auto alphaProperty = property->GetRTTI() == globals::rtti::NiAlphaPropertyRTTI.get() ? static_cast<RE::NiAlphaProperty*>(property) : nullptr;
-					if (lightingShaderProp->alpha < 0.999f || (alphaProperty && alphaProperty->GetAlphaBlending())) {
+				if (property && property->GetType() == RE::NiProperty::Type::kAlpha) {
+					auto alphaProperty = property->GetRTTI() == globals::rtti::NiAlphaPropertyRTTI.get() ? reinterpret_cast<RE::NiAlphaProperty*>(property) : nullptr;
+
+					if (alphaProperty && alphaProperty->GetAlphaBlending()) {
 						flags |= Flags::AlphaBlending;
-						colors[0].w = lightingShaderProp->alpha;
 						alphaFlags = Material::AlphaFlags::kAlphaBlend;
 					} else if (alphaProperty && alphaProperty->GetAlphaTesting()) {
-						flags &= ~Flags::AlphaBlending;
 						flags |= Flags::AlphaTesting;
 						alphaFlags = Material::AlphaFlags::kAlphaTest;
-					} else {
-						flags &= ~Flags::AlphaBlending;
-						flags &= ~Flags::AlphaTesting;
+
+						float alphaScale = (1.0f - (alphaProperty->alphaThreshold / 255.0f)) * 2.0f;
+						colors[0].w *= alphaScale;
 					}
 				}
 
@@ -524,12 +521,10 @@ void Shape::BuildMaterial(const RE::BSGeometry::GEOMETRY_RUNTIME_DATA& geometryR
 							// Hair
 							if (feature == Feature::kHairTint) {
 								if (const auto* lightingHairTintMaterial = skyrim_cast<RE::BSLightingShaderMaterialHairTint*>(shaderMaterial)) {
-									colors[0] = {
-										lightingHairTintMaterial->tintColor.red,
-										lightingHairTintMaterial->tintColor.green,
-										lightingHairTintMaterial->tintColor.blue,
-										(float)colors[0].w
-									};
+									colors[0].x = lightingHairTintMaterial->tintColor.red;
+									colors[0].y = lightingHairTintMaterial->tintColor.green;
+									colors[0].z = lightingHairTintMaterial->tintColor.blue;
+
 									// Load flowmap texture for hair (stored in specularBackLightingTexture slot)
 									textures[3] = TextureRegister(lightingBaseMaterial->specularBackLightingTexture, blackTexture);
 								}
@@ -550,12 +545,9 @@ void Shape::BuildMaterial(const RE::BSGeometry::GEOMETRY_RUNTIME_DATA& geometryR
 							// FaceGen RGB Tint
 							if (feature == Feature::kFaceGenRGBTint) {
 								if (const auto* lightingFacegenTintMaterial = skyrim_cast<RE::BSLightingShaderMaterialFacegenTint*>(shaderMaterial)) {
-									colors[0] = {
-										lightingFacegenTintMaterial->tintColor.red,
-										lightingFacegenTintMaterial->tintColor.green,
-										lightingFacegenTintMaterial->tintColor.blue,
-										(float)colors[0].w
-									};
+									colors[0].x = lightingFacegenTintMaterial->tintColor.red;
+									colors[0].y = lightingFacegenTintMaterial->tintColor.green;
+									colors[0].z = lightingFacegenTintMaterial->tintColor.blue;
 								}
 							}
 						}

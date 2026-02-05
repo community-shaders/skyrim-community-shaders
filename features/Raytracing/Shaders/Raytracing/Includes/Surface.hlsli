@@ -314,7 +314,7 @@ struct Surface
             float alpha = baseTexture.SampleLevel(BaseSampler, texCoord0, MipLevel).a * material.BaseColor().a;
 
             [branch]
-            if (material.ShaderFlags & ShaderFlags::kVertexAlpha) {
+            if ((material.ShaderFlags & ShaderFlags::kVertexAlpha) && !(material.ShaderFlags & ShaderFlags::kTreeAnim)) {
                 alpha *= vertexColor.a;
             }
 
