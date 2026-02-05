@@ -2529,14 +2529,10 @@ void Raytracing::UpdateBLASes()
 
 		auto& model = it->second;
 
-		//auto flags = model->flags;
-
-		if (!model->UpdateBLAS(commandList.get()))
-			continue;
+		if (model->UpdateBLAS(commandList.get()))
+			barriers.push_back(CD3DX12_RESOURCE_BARRIER::UAV(model->blasBuffer->GetResource()));
 
 		//logger::info("[RT] UpdateBLASes {} - {} - 0x{:08X} - {}", instance.filename, model->shapes.size(), reinterpret_cast<uintptr_t>(node), (flags & Model::Flags::BLASRebuild) ? "Rebuild" : "Update");
-
-		barriers.push_back(CD3DX12_RESOURCE_BARRIER::UAV(model->blasBuffer->GetResource()));
 	}
 
 	const uint blasUpdateCount = (uint)barriers.size();

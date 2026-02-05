@@ -83,7 +83,7 @@ struct Model
 
 	bool BLASBuildExecuted() const;
 
-	bool BLASUpdateExecuted() const;
+	bool BLASUpdateQueued() const;
 
 	D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAGS BuildFlags() const
 	{
@@ -126,6 +126,7 @@ private:
 	uint32_t shaderTypes = RE::BSShader::Type::None;
 	int features = static_cast<int>(RE::BSShaderMaterial::Feature::kNone);
 	REX::EnumSet<RE::BSShaderProperty::EShaderPropertyFlag, std::uint64_t> shaderFlags;
+	bool blasBuilt = false;
 	uint64_t blasBuildFrame;
 	uint64_t blasUpdateFrame;
 	eastl::atomic<int> refCount{ 0 };

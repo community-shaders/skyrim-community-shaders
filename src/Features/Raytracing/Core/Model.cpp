@@ -127,14 +127,12 @@ void Model::ConvertMSN()
 
 bool Model::BLASBuildExecuted() const
 {
-	//logger::info("[RT] BLASBuildExecuted - Build Frame: {}, Current Frame: {} - {}", blasBuildFrame, globals::features::raytracing.frameIndex, blasBuildFrame < globals::features::raytracing.frameIndex);
-	return blasBuildFrame < globals::features::raytracing.frameIndex;
+	return blasBuilt && blasBuildFrame < globals::features::raytracing.frameIndex;
 }
 
-bool Model::BLASUpdateExecuted() const
+bool Model::BLASUpdateQueued() const
 {
-	//logger::info("[RT] BLASUpdateExecuted - Update Frame: {}, Current Frame: {} - {}", blasUpdateFrame, globals::features::raytracing.frameIndex, blasUpdateFrame < globals::features::raytracing.frameIndex);
-	return blasUpdateFrame < globals::features::raytracing.frameIndex;
+	return blasUpdateFrame == globals::features::raytracing.frameIndex;
 }
 
 void Model::BuildBLAS(ID3D12GraphicsCommandList4* commandList)
@@ -193,6 +191,7 @@ void Model::BuildBLAS(ID3D12GraphicsCommandList4* commandList)
 	commandList->BuildRaytracingAccelerationStructure(&buildDesc, 0, nullptr);
 
 	// Register frame that BLAS was created
+	blasBuilt = true;
 	blasBuildFrame = rt.frameIndex;
 
 	const auto& asBarrier = CD3DX12_RESOURCE_BARRIER::UAV(blasBuffer->GetResource());
@@ -210,7 +209,7 @@ bool Model::UpdateBLAS(ID3D12GraphicsCommandList4* commandList)
 	if (!BLASBuildExecuted())
 		return false;
 
-	if (!BLASUpdateExecuted())
+	if (BLASUpdateQueued())
 		return false;
 	
 	if (update && shapeflags.none(Shape::Flags::Skinned,Shape::Flags::Dynamic)) {
@@ -285,5 +284,6 @@ bool Model::UpdateBLAS(ID3D12GraphicsCommandList4* commandList)
 
 	// Register frame that BLAS was updated
 	blasUpdateFrame = globals::features::raytracing.frameIndex;
+
 	return true;
 }
