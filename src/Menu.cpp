@@ -1179,6 +1179,9 @@ void Menu::DrawWeatherDetailsWindow()
 	if (!globals::features::weatherEditor.WeatherDetailsWindow.Enabled) {
 		return;
 	}
+	if (!globals::features::weatherEditor.loaded) {
+		return;
+	}
 
 	// Use Weather core feature for all window management and rendering
 	auto& weather = globals::features::weatherEditor;

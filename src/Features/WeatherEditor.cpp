@@ -107,7 +107,7 @@ void WeatherEditor::Prepass()
 	auto ui = RE::UI::GetSingleton();
 	auto calendar = RE::Calendar::GetSingleton();
 	if (ui && calendar && calendar->timeScale) {
-		bool sleepWaitMenuOpen = ui->IsMenuOpen("Sleep/Wait Menu");
+		bool sleepWaitMenuOpen = ui->IsMenuOpen(RE::SleepWaitMenu::MENU_NAME);
 		static bool s_wasRestoredForWait = false;
 		static bool s_wasPausedBeforeWait = false;
 
@@ -252,7 +252,7 @@ void WeatherEditor::DrawTimeControls()
 
 		// Check if sleep/wait menu is open - don't sync pause state during wait
 		auto ui = RE::UI::GetSingleton();
-		bool sleepWaitMenuOpen = ui && ui->IsMenuOpen("Sleep/Wait Menu");
+		bool sleepWaitMenuOpen = ui && ui->IsMenuOpen(RE::SleepWaitMenu::MENU_NAME);
 
 		// Check if time is actually paused (timeScale is 0), but ignore during sleep/wait
 		if (!sleepWaitMenuOpen) {
@@ -497,7 +497,7 @@ void WeatherEditor::DisplayPrecipitationInfo(RE::TESWeather* weather)
 	auto particleDensity = weather->precipitationData->GetSettingValue(RE::BGSShaderParticleGeometryData::DataID::kParticleDensity).f;
 	ImGui::BulletText("Particle Density: %.3f", particleDensity);
 	GET_INSTANCE_MEMBER(particleTexture, weather->precipitationData)
-	if (particleTexture.textureName.c_str()) {
+	if (!particleTexture.textureName.empty()) {
 		ImGui::BulletText("Particle Texture: %s", particleTexture.textureName.c_str());
 	} else {
 		ImGui::BulletText("Particle Texture: None");
