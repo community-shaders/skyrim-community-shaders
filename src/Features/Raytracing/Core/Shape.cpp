@@ -1024,8 +1024,6 @@ bool Shape::UpdateSkinning()
 	auto rootParent = skinInstance->rootParent;
 	auto skinRootInverse = GetXMFromNiTransform(rootParent->world.Invert());
 
-	boundRadius = rootParent->worldBound.radius + (rootParent->world.translate + rootParent->worldBound.center).GetDistance(geometry->world.translate);
-
 	for (uint i = 0; i < skinInstance->numMatrices; i++) {
 		XMStoreFloat3x4(&boneMatrices[i], XMMatrixMultiply(XMLoadFloat3x4(&boneMatricesArray[i]), skinRootInverse));
 	}
