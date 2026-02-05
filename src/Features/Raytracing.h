@@ -23,7 +23,6 @@
 #include "Features/Raytracing/Core/Instance.h"
 #include "Features/Raytracing/Core/Model.h"
 #include "Features/Raytracing/Core/Shape.h"
-#include "Features/Raytracing/Core/DismemberReference.h"
 
 #include "Features/Raytracing/Helpers/ModelSpaceToTangent.h"
 
@@ -1377,7 +1376,7 @@ struct Raytracing : public OverlayFeature
 			{
 				func(oThis, a_slot, a_enable);
 
-				auto dismemberReferences = globals::features::raytracing.dismemberReferences;
+				auto& dismemberReferences = globals::features::raytracing.dismemberReferences;
 
 				if (auto it = dismemberReferences.find(oThis); it != dismemberReferences.end()) {
 					for (auto& shape : it->second) {

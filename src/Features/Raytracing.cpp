@@ -2053,7 +2053,7 @@ void Raytracing::CreateModelInternal(RE::TESForm* form, const char* path, RE::Ni
 		auto model = eastl::make_unique<Model>(shapes);
 
 		// Models with these flags cannot be instanced directly
-		if ((model->GetFlags() & Shape::Flags::Dynamic) || (model->GetFlags() & Shape::Flags::Skinned))
+		if (model->GetShapeFlags().any(Shape::Flags::Dynamic, Shape::Flags::Skinned))
 			modelKey.append(Model::KeySuffix(pRoot).c_str());
 
 		auto [it, emplaced] = models.try_emplace(modelKey, eastl::move(model));
@@ -2066,7 +2066,7 @@ void Raytracing::CreateModelInternal(RE::TESForm* form, const char* path, RE::Ni
 
 			AddInstance(formID, pRoot, modelKey);
 
-			logger::debug("[RT] CreateModel - Commited {} TriShapes", shapeCount);
+			logger::info("[RT] CreateModel - Commited {} TriShapes to [0x{:08X}]", shapeCount, reinterpret_cast<uintptr_t>(it->second.get()));
 		} else {
 			logger::warn("[RT] CreateModel - Emplace failed for {} TriShapes", shapeCount);
 		}
@@ -2412,11 +2412,11 @@ void Raytracing::UpdateInstances()
 
 		auto& model = it->second;
 
-		auto flags = model->GetFlags();
+		auto shapeFlags = model->GetShapeFlags();
 
-		bool dynamic = flags & Shape::Flags::Dynamic;
-		bool skinned = flags & Shape::Flags::Skinned;
-		bool landscape = flags & Shape::Flags::Landscape;
+		const bool dynamic = shapeFlags.any(Shape::Flags::Dynamic);
+		const bool skinned = shapeFlags.any(Shape::Flags::Skinned);
+		const bool landscape = shapeFlags.any(Shape::Flags::Landscape);
 
 		if (settings.DisableSkinned && (dynamic || skinned))
 			continue;

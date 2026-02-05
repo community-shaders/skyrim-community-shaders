@@ -114,7 +114,7 @@ void Model::ConvertMSN()
 				context->Unmap(indexBuffer.get(), 0);
 			}
 
-			rt.normalMapConverter->SetVertexShader(shape->flags & Shape::Flags::Dynamic);
+			rt.normalMapConverter->SetVertexShader(shape->flags.any(Shape::Flags::Dynamic));
 
 			rt.normalMapConverter->Draw(vertexBuffer.get(), indexBuffer.get(), shape->triangleCount);
 		}
@@ -143,7 +143,7 @@ void Model::BuildBLAS(ID3D12GraphicsCommandList4* commandList)
 
 	std::lock_guard lock{ rt.renderMutex };
 
-	eastl::vector<D3D12_RAYTRACING_GEOMETRY_DESC> geometryDescs(shapes.size());
+	geometryDescs.resize(shapes.size());
 
 	// Initial build with all shapes, visible or not, so the scratch buffer can be sized to fit all geometry
 	for (size_t i = 0; i < shapes.size(); i++) {
@@ -163,7 +163,7 @@ void Model::BuildBLAS(ID3D12GraphicsCommandList4* commandList)
 
 	D3D12_RESOURCE_DESC desc = {
 		.Dimension = D3D12_RESOURCE_DIMENSION_BUFFER,
-		.Width = std::max(prebuildInfo.ScratchDataSizeInBytes, prebuildInfo.UpdateScratchDataSizeInBytes),
+		.Width = std::max(prebuildInfo.ScratchDataSizeInBytes, prebuildInfo.UpdateScratchDataSizeInBytes) * 2,
 		.Height = 1,
 		.DepthOrArraySize = 1,
 		.MipLevels = 1,
@@ -201,8 +201,8 @@ void Model::BuildBLAS(ID3D12GraphicsCommandList4* commandList)
 
 bool Model::UpdateBLAS(ID3D12GraphicsCommandList4* commandList)
 {
-	bool update = (flags & Flags::BLASUpdate); 
-	const bool rebuild = (flags & Flags::BLASRebuild);
+	const bool update = flags.any(Flags::BLASUpdate); 
+	const bool rebuild = flags.any(Flags::BLASRebuild);
 
 	if (!update && !rebuild)
 		return false;
@@ -213,31 +213,34 @@ bool Model::UpdateBLAS(ID3D12GraphicsCommandList4* commandList)
 	if (!BLASUpdateExecuted())
 		return false;
 	
-	if (update && !((shapeflags & Shape::Flags::Skinned) || (shapeflags & Shape::Flags::Dynamic))) {
+	if (update && shapeflags.none(Shape::Flags::Skinned,Shape::Flags::Dynamic)) {
 		logger::critical("[RT] Model::UpdateBLAS - Only Skinned and Dynamic geometry should get the 'BLASUpdate' flag - [0x{:08X}]", reinterpret_cast<uintptr_t>(this));
 
-		update = false;
-		flags &= ~Flags::BLASUpdate;
+		flags.reset(Flags::BLASUpdate);
 
 		if (!rebuild)
 			return false;
 	}
 
-	static eastl::vector<D3D12_RAYTRACING_GEOMETRY_DESC> geometryDescs;
 	geometryDescs.clear();
-
-	if (geometryDescs.capacity() < shapes.size())
-		geometryDescs.reserve(shapes.size());
+	geometryDescs.reserve(shapes.size());
 
 	for (auto& shape : shapes) {
-		if (HideShape(shape.get()))
-			continue;
+		if (rebuild) {
+			if (shape->IsPendingHidden())
+				continue;
+		} else {
+			if (shape->IsHidden())
+				continue;		
+		}
 
 		geometryDescs.push_back(shape->GeometryDesc());
 	}
 
-	if (geometryDescs.empty())
+	if (geometryDescs.empty()) {
+		logger::warn("[RT] Model::UpdateBLAS - Empty Geometry Descs");
 		return false;
+	}
 
 	D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_INPUTS inputs = {
 		.Type = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL,
@@ -246,6 +249,23 @@ bool Model::UpdateBLAS(ID3D12GraphicsCommandList4* commandList)
 		.DescsLayout = D3D12_ELEMENTS_LAYOUT_ARRAY,
 		.pGeometryDescs = geometryDescs.data()
 	};
+
+	/*D3D12_RAYTRACING_ACCELERATION_STRUCTURE_PREBUILD_INFO prebuildInfo;
+	globals::features::raytracing.d3d12Device->GetRaytracingAccelerationStructurePrebuildInfo(&inputs, &prebuildInfo);
+
+	if (prebuildInfo.ResultDataMaxSizeInBytes > blasBuffer->GetResource()->GetDesc().Width) {
+		logger::critical("[RT] ResultDataMaxSizeInBytes greater than current resource size.");
+	}
+
+	auto scratchWidth = blasScratchBuffer->GetResource()->GetDesc().Width;
+
+	if (prebuildInfo.ScratchDataSizeInBytes > scratchWidth) {
+		logger::critical("[RT] ScratchDataSizeInBytes greater than current scratch resource size.");
+	}
+
+	if (prebuildInfo.UpdateScratchDataSizeInBytes > scratchWidth) {
+		logger::critical("[RT] UpdateScratchDataSizeInBytes greater than current scratch resource size.");
+	}*/
 
 	D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_DESC buildDesc = {
 		.DestAccelerationStructureData = blasBuffer->GetResource()->GetGPUVirtualAddress(),
@@ -256,8 +276,12 @@ bool Model::UpdateBLAS(ID3D12GraphicsCommandList4* commandList)
 
 	commandList->BuildRaytracingAccelerationStructure(&buildDesc, 0, nullptr);
 
-	flags &= ~Flags::BLASUpdate;
-	flags &= ~Flags::BLASRebuild;
+	if (rebuild)
+		for (auto& shape : shapes) {
+			shape->UpdateState();
+		}
+
+	flags.reset(Flags::BLASUpdate, Flags::BLASRebuild);
 
 	// Register frame that BLAS was updated
 	blasUpdateFrame = globals::features::raytracing.frameIndex;

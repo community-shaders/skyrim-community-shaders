@@ -67,11 +67,9 @@ public:
 
 	Material material;
 
-	Flags flags = Flags::None;
+	stl::enumeration<Flags, uint8_t> flags = Flags::None;
 
 	AABB aabb;
-
-	bool dirtyState = false;
 
 	float boundRadius;
 
@@ -119,11 +117,17 @@ public:
 
 	bool UpdateSkinning();
 
-	void SetState(State stateIn, bool activate);
+	void SetPendingState(State stateIn, bool activate);
 
 	void UpdateDismember(bool enable);
 
+	void UpdateState();
+
 	bool IsHidden() const;
+
+	bool IsPendingHidden() const;
+
+	bool IsDirtyState() const;
 
 	eastl::shared_ptr<Allocation> TextureRegister(const RE::NiPointer<RE::NiSourceTexture> niPointer, eastl::shared_ptr<Allocation> defaultTexture, bool modelSpaceNormalMap);
 
@@ -133,6 +137,8 @@ public:
 	ShapeData GetData() const;
 
 private:
+	// State is pending until BLASRebuild
+	State pendingState = State::None;
 	State state = State::None;
 };
 

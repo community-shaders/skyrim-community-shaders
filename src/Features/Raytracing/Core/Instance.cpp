@@ -56,19 +56,17 @@ void Instance::Update(RE::NiAVObject* node, RE::NiPoint3 cameraPosition, const e
 	for (auto& shape : model->shapes) {
 		auto updateFlags = shape->Update();
 
-		if (shape->dirtyState) {
-			model->flags |= Model::Flags::BLASRebuild;
+		if (shape->IsDirtyState()) {
+			model->flags.set(Model::Flags::BLASRebuild);
 
-			logger::info("Instance::Update {} - {} 0x{:08X} - Hidden: {}", 
-				path, shape->geometry->name, 
-				reinterpret_cast<uintptr_t>(shape.get()), shape->IsHidden());
-
-			shape->dirtyState = false;
+			/*logger::info("Instance::Update {} 0x{:08X} - {} 0x{:08X} - Hidden: {}", 
+				path, reinterpret_cast<uintptr_t>(model),
+				shape->geometry->name, reinterpret_cast<uintptr_t>(shape.get()), 
+				shape->IsPendingHidden());*/
 		}
 
 		if ((updateFlags & Shape::Flags::Dynamic) || (updateFlags & Shape::Flags::Skinned)) {
-			model->flags |= Model::Flags::BLASUpdate;
-
+			model->flags.set(Model::Flags::BLASUpdate);
 			skinningPipeline->QueueUpdate(updateFlags, path, shape.get());
 		}
 	}

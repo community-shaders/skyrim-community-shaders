@@ -922,10 +922,12 @@ Shape::Flags Shape::Update()
 
 	// I don't know if kHidden is set on inner nodes for culling, so to be safe we check
 	if (dynamic || skinned) {
-		SetPendingState(State::Hidden, geometry->GetFlags().any(RE::NiAVObject::Flag::kHidden));
+		SetState(State::Hidden, geometry->GetFlags().any(RE::NiAVObject::Flag::kHidden));
 	}
 
-	if (IsPendingHidden()) {
+	//logger::info("Shape::Update {} - RenderUseValid: {} - Hidden: {}, Flags: {}", geometry->name, isRenderUseValid, (state & State::Hidden) != 0, GetFlagsString<RE::NiAVObject::Flag>(geometry->GetFlags().underlying()).c_str());
+
+	if (IsHidden()) {
 		return Shape::Flags::None;
 	}
 
@@ -985,22 +987,20 @@ bool Shape::IsHidden() const
 	return ((state & State::Hidden) != State::None) || ((state & State::DismemberHidden) != State::None);
 }
 
-bool Shape::IsPendingHidden() const
-{
-	return ((pendingState & State::Hidden) != State::None) || ((pendingState & State::DismemberHidden) != State::None);
-}
-
 bool Shape::IsDirtyState() const
 {
-	return pendingState != state;
+	return pendindState != state;
 }
 
-// TODO: Handle lazy skinned meshes update
+	// TODO: Handle lazy skinned meshes update
 bool Shape::UpdateSkinning()
 {
-	/*auto& geometryFlags = geometry->GetFlags();
+	auto& geometryFlags = geometry->GetFlags();
 
-	if (geometryFlags.any(RE::NiAVObject::Flag::kNoAnimSyncS))
+	if (geometryFlags.any(RE::NiAVObject::Flag::kHidden))
+		return false;
+
+	/*if (geometryFlags.any(RE::NiAVObject::Flag::kNoAnimSyncS))
 		return false;*/
 
 		// Update Bone matrices
@@ -1024,23 +1024,17 @@ bool Shape::UpdateSkinning()
 }
 
 // State is set as pending first, final state is updated after BLAS rebuild call
-void Shape::SetPendingState(State stateIn, bool activate)
+void Shape::SetState(State stateIn, bool activate)
 {
 	if (activate)
-		pendingState |= stateIn;
+		pendindState |= stateIn;
 	else
-		pendingState &= ~stateIn;
+		pendindState &= ~stateIn;
 }
 
 void Shape::UpdateDismember(bool enable)
 {
-	SetPendingState(State::DismemberHidden, !enable);
-}
-
-// Updates state from pending
-void Shape::UpdateState()
-{
-	state = pendingState;
+	SetState(State::DismemberHidden, !enable);
 }
 
 ShapeData Shape::GetData() const
