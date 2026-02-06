@@ -294,7 +294,7 @@ bool Streamline::IsRTXAndBelow40Series(IDXGIAdapter* a_adapter)
 		return false;
 
 	// RTX 30 series (Ampere) - 0x2200-0x25FF
-	if (deviceId >= 0x2200 && deviceId <= 0x25FF)
+	if (deviceID >= 0x2200 && deviceID <= 0x2600)
 		return true;
 
 	// RTX 20 series (Turing with RT cores) - 0x1E00-0x1FFF
