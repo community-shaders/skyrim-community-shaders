@@ -45,6 +45,10 @@ public:
 	void EndUIRendering();
 	bool IsRenderingUI() const { return renderingUI; }
 
+	// Redirect kFRAMEBUFFER to hdrTexture (float16) so ISHDR writes HDR values >1.0
+	void RedirectFramebuffer();
+	void RestoreFramebuffer();
+
 	// Frame Gen style UI buffer - redirects kFRAMEBUFFER.RTV for vanilla UI capture
 	void SetUIBuffer();
 	void ClearUIBuffer();
@@ -96,6 +100,11 @@ public:
 	ID3D11RenderTargetView* savedRTV = nullptr;
 	ID3D11DepthStencilView* savedDSV = nullptr;
 	ID3D11RenderTargetView* savedFramebufferRTV = nullptr;  // Original kFRAMEBUFFER.RTV for restoration
+
+	// Saved kFRAMEBUFFER state for HDR redirect (ISHDR writes to hdrTexture instead)
+	ID3D11Texture2D* savedFramebufferTexture = nullptr;
+	ID3D11ShaderResourceView* savedFramebufferSRV = nullptr;
+	bool framebufferRedirected = false;
 
 private:
 	bool showHDRWarningPopup = false;

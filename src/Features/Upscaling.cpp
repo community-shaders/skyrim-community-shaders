@@ -1495,7 +1495,16 @@ void Upscaling::Main_PostProcessing::thunk(RE::ImageSpaceManager* a_this, uint32
 
 	BSImagespaceShaderISTemporalAA->taaEnabled = upscaleMethod == UpscaleMethod::kTAA;
 
+	// Redirect kFRAMEBUFFER to float texture before ISHDR runs so HDR values >1.0 survive
+	auto hdr = HDR::GetSingleton();
+	if (hdr)
+		hdr->RedirectFramebuffer();
+
 	func(a_this, a3, a_target, a_4, a_5);
+
+	// Restore kFRAMEBUFFER after ISHDR — hdrTexture now has the HDR scene
+	if (hdr)
+		hdr->RestoreFramebuffer();
 
 	BSImagespaceShaderISTemporalAA->taaEnabled = false;
 }

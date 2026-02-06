@@ -1,26 +1,14 @@
 /**
  * @file HDROutputCS.hlsl
- * @brief Final output compute shader - format conversion and UI compositing.
+ * @brief Final output compute shader - HDR encoding and UI compositing.
  *
- * @details This shader is the final stage that copies ISHDR's output to the swap chain.
- *   ISHDR does all the heavy lifting (tonemapping, bloom, color grading).
- *   This shader just handles format conversion and UI compositing.
+ * @details For HDR, kFRAMEBUFFER is redirected to a float16 texture so ISHDR
+ *   can write linear values >1.0. This shader reads those values directly,
+ *   applies DICE highlight compression, and PQ-encodes for the HDR10 swap chain.
  *
- * Pipeline Overview:
- *   1. Scene renders to kMAIN with linear HDR values
- *   2. ISHDR reads from BlendTex, applies processing, writes to kFRAMEBUFFER:
- *      - SDR: Tonemapped, gamma-encoded (0-1 range)
- *      - HDR: Linear with preserved highlights (can exceed 1.0)
- *   3. This shader reads kFRAMEBUFFER (ISHDR's output):
- *      - SDR: Passthrough + UI composite
- *      - HDR: BT.2020 conversion, nit scaling, PQ encoding + UI composite
- *
- * Data Flow:
- *   - SceneTex (t0): kFRAMEBUFFER - ISHDR's output
- *     * SDR: Tonemapped, gamma-encoded values (0-1)
- *     * HDR: Linear values from ISHDR (can exceed 1.0 for highlights)
- *   - UITex (t1): UI layer with straight alpha
- *   - HDROutput (u0): Final swap chain buffer (PQ encoded for HDR, sRGB for SDR)
+ * Pipeline:
+ *   - SDR: ISHDR tonemaps to 0-1 → passthrough + UI composite
+ *   - HDR: ISHDR skips tonemapping → linear HDR → BT.2020 → DICE → PQ + UI composite
  *
  * @see ISHDR.hlsl for tonemapping, bloom, and color grading
  * @see HDR.cpp ApplyHDR() for the dispatch logic
@@ -48,12 +36,10 @@ static const float SRGB_WHITE_LEVEL_NITS = 80.0;
 // UI reference brightness in nits
 static const float UI_REFERENCE_NITS = 100.0;
 
-// DICE-style exponential range compression
-float3 DICERangeCompress(float3 x, float maxRange)
+// Exponential range compression: maps [0, inf) -> [0, 1) asymptotically
+float DICERangeCompress(float x)
 {
-	float3 compression = 1.0 - exp(-x);
-	float maxCompression = 1.0 - exp(-maxRange);
-	return compression / maxCompression;
+	return 1.0 - exp(-x);
 }
 
 // DICE tonemapper operating in PQ space by luminance.
@@ -76,8 +62,8 @@ float3 DICETonemap(float3 color, float peakWhite)
 
 	float compressibleRange = sourceLumPQ - shoulderPQ;
 	float compressedRange = peakPQ - shoulderPQ;
-	float3 compressed = DICERangeCompress(float3(compressibleRange / compressedRange, 0, 0), 1.0);
-	float compressedLumPQ = shoulderPQ + compressedRange * compressed.x;
+	float compressed = DICERangeCompress(compressibleRange / compressedRange);
+	float compressedLumPQ = shoulderPQ + compressedRange * compressed;
 
 	// Convert back to linear
 	float compressedLum = Color::pq::Decode(compressedLumPQ, 10000.0).x * HDR10_MaxWhite;
@@ -98,29 +84,23 @@ float3 DICETonemap(float3 color, float peakWhite)
 
 	float3 finalColor;
 
-	// Check if Linear Lighting is enabled - determines if ISHDR outputs linear or gamma
-	bool linearLighting = SharedData::linearLightingSettings.enableLinearLighting > 0;
+	bool isSceneLinear = parameters1.y > 0.5;
 
 	if (enableHDR) {
-		// HDR path: ISHDR outputs linear (if LL enabled) or gamma-encoded values
-		// Convert to linear, apply DICE in normalized space, then PQ encode
+		// ISHDR HDR path preserves values >1.0 in a float16 texture.
+		// With Linear Lighting: output is already linear.
+		// Without Linear Lighting: output is gamma-encoded, needs linearization.
 		float3 sceneLinear = max(0, scene.rgb);
-
-		if (!linearLighting) {
-			sceneLinear = pow(abs(sceneLinear), 2.2);
-		}
+		if (!isSceneLinear)
+			sceneLinear = Color::GammaToTrueLinear(sceneLinear);
 
 		float3 sceneBT2020 = Color::BT709ToBT2020(sceneLinear);
 
 		// Normalize paper white and peak white relative to sRGB reference (80 nits).
-		// In this space, 1.0 = sRGB white = 80 nits.
-		// Paper white (e.g. 203 nits) maps SDR white to 203/80 = 2.54x.
 		float pw = paperWhite / SRGB_WHITE_LEVEL_NITS;
 		float peak = peakNits / SRGB_WHITE_LEVEL_NITS;
 
-		// DICE tonemap in normalized space — SDR content (0-1) passes through
-		// largely untouched, only highlights above shoulder get compressed toward peak.
-		// Multiply by pw before, divide after: preserves SDR range.
+		// DICE compress highlights toward peak brightness.
 		float3 tonemapped = DICETonemap(sceneBT2020 * pw, peak) / pw;
 
 		// PQ encode: paper white maps scene value of 1.0 to paperWhite nits on display

@@ -396,6 +396,13 @@ void HDR::SetupResources()
 	hdrTexture->CreateSRV(srvDesc);
 	hdrTexture->CreateUAV(uavDesc);
 
+	// RTV so ISHDR can render directly into this float texture
+	D3D11_RENDER_TARGET_VIEW_DESC hdrRtvDesc{};
+	hdrRtvDesc.Format = DXGI_FORMAT_R16G16B16A16_FLOAT;
+	hdrRtvDesc.ViewDimension = D3D11_RTV_DIMENSION_TEXTURE2D;
+	hdrRtvDesc.Texture2D.MipSlice = 0;
+	hdrTexture->CreateRTV(hdrRtvDesc);
+
 	// Output texture - must match swap chain format for CopyResource to work
 	texDesc.Format = swapChainFormat;
 	srvDesc.Format = texDesc.Format;
@@ -522,6 +529,43 @@ void HDR::EndUIRendering()
 	renderingUI = false;
 }
 
+void HDR::RedirectFramebuffer()
+{
+	if (!settings.enableHDR || !hdrTexture || !hdrTexture->rtv)
+		return;
+
+	auto& fb = globals::game::renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGET::kFRAMEBUFFER];
+
+	// Save originals
+	savedFramebufferTexture = fb.texture;
+	savedFramebufferSRV = fb.SRV;
+	if (!savedFramebufferRTV)
+		savedFramebufferRTV = fb.RTV;
+
+	// Redirect to hdrTexture (R16G16B16A16_FLOAT) so ISHDR can write values >1.0
+	fb.texture = reinterpret_cast<ID3D11Texture2D*>(hdrTexture->resource.get());
+	fb.SRV = hdrTexture->srv.get();
+	fb.RTV = hdrTexture->rtv.get();
+
+	framebufferRedirected = true;
+}
+
+void HDR::RestoreFramebuffer()
+{
+	if (!framebufferRedirected)
+		return;
+
+	auto& fb = globals::game::renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGET::kFRAMEBUFFER];
+
+	fb.texture = savedFramebufferTexture;
+	fb.SRV = savedFramebufferSRV;
+	// RTV restored later by ClearUIBuffer or kept for UI redirect
+
+	savedFramebufferTexture = nullptr;
+	savedFramebufferSRV = nullptr;
+	framebufferRedirected = false;
+}
+
 void HDR::SetUIBuffer()
 {
 	// Skip if D3D12 frame gen is active - it has its own UI buffer handling
@@ -625,10 +669,12 @@ void HDR::ApplyHDR()
 	{
 		auto dispatchCount = Util::GetScreenDispatchCount(false);
 
-		// Read from kFRAMEBUFFER - this is where ISHDR writes its output
-		// ISHDR handles tonemapping for SDR, or preserves HDR values when HDR is enabled
+		// When HDR is enabled, ISHDR wrote to hdrTexture (float16, values >1.0 preserved).
+		// When SDR, ISHDR wrote to kFRAMEBUFFER (UNORM, tonemapped 0-1).
 		auto& framebufferRT = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kFRAMEBUFFER];
-		ID3D11ShaderResourceView* sceneSRV = framebufferRT.SRV;
+		ID3D11ShaderResourceView* sceneSRV = (settings.enableHDR && hdrTexture && hdrTexture->srv)
+		                                         ? hdrTexture->srv.get()
+		                                         : framebufferRT.SRV;
 
 		// Choose the correct UI buffer based on which path is active
 		// When D3D12 swap chain is active, vanilla UI renders to uiBufferWrapped
@@ -709,6 +755,7 @@ void HDR::DestroyResources() const
 {
 	hdrTexture->srv = nullptr;
 	hdrTexture->uav = nullptr;
+	hdrTexture->rtv = nullptr;
 	hdrTexture->resource = nullptr;
 	delete hdrTexture;
 
@@ -849,9 +896,9 @@ void HDR::UpdateHDRData() const
 	                         !globals::game::isVR;
 	bool skipUIComposite = fgActiveThisFrame;
 
-	// Scene from ISHDR is always gamma-encoded (tonemapper includes gamma 2.2)
-	// This is true regardless of Linear Lighting status because ISHDR runs after lighting
-	bool isSceneLinear = false;
+	// Linear Lighting keeps the pipeline linear throughout.
+	// Without it, ISHDR gamma-encodes its output even in HDR mode.
+	bool isSceneLinear = globals::features::linearLighting.settings.enableLinearLighting;
 
 	// Use user-specified peak brightness for highlights compression
 	float effectivePeakNits = static_cast<float>(settings.hdrPeakNits);
