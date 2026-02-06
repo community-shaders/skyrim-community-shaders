@@ -74,7 +74,6 @@ public:
 
 	// Samplers
 	ID3D11SamplerState* linearSampler = nullptr;
-	ID3D11SamplerState* pointSampler = nullptr;
 
 	virtual void SetupResources() override;
 	virtual void ClearShaderCache() override;

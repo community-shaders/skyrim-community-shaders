@@ -1,6 +1,6 @@
 Texture2DArray<float> InputTexture : register(t0);
 RWTexture2D<float2> OutputTexture : register(u0);
-SamplerState PointSampler : register(s0);
+SamplerState LinearSampler : register(s0);
 
 // Compute VSM moments from 4 depth samples
 float2 ComputeVSMMoments(float4 depths) {
@@ -25,7 +25,7 @@ void main(uint3 dispatchThreadID : SV_DispatchThreadID, uint3 groupThreadID : SV
 	float2 uv = (pixCoord + 0.5) / float2(inputW, inputH);
 
 	// Gather from cascade 1 and compute VSM moments
-	float4 depths = InputTexture.GatherRed(PointSampler, float3(uv, 1));
+	float4 depths = InputTexture.GatherRed(LinearSampler, float3(uv, 1));
 	g_scratchDepths[groupThreadID.x][groupThreadID.y] = ComputeVSMMoments(depths);
 
 	GroupMemoryBarrierWithGroupSync();
@@ -54,7 +54,7 @@ void main(uint3 dispatchThreadID : SV_DispatchThreadID, uint3 groupThreadID : SV
 	float2 uv = (pixCoord + 0.5) / float2(inputW, inputH);
 
 	// Gather from cascade 0 and compute VSM moments
-	float4 depths = InputTexture.GatherRed(PointSampler, float3(uv, 0));
+	float4 depths = InputTexture.GatherRed(LinearSampler, float3(uv, 0));
 	g_scratchDepths[groupThreadID.x][groupThreadID.y] = ComputeVSMMoments(depths);
 
 	GroupMemoryBarrierWithGroupSync();

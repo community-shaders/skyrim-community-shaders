@@ -19,7 +19,6 @@ public:
 	}
 
 	void SetupResources();
-	void CopyShadowData();
 	void ReflectionsPrepasses();
 	void EarlyPrepasses();
 	void StartDeferred();

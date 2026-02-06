@@ -17,9 +17,6 @@ void EffectShadows::SetupResources()
 		samplerDesc.MinLOD = 0;
 		samplerDesc.MaxLOD = D3D11_FLOAT32_MAX;
 		DX::ThrowIfFailed(device->CreateSamplerState(&samplerDesc, &linearSampler));
-
-		samplerDesc.Filter = D3D11_FILTER_MIN_MAG_MIP_POINT;
-		DX::ThrowIfFailed(device->CreateSamplerState(&samplerDesc, &pointSampler));
 	}
 
 	// Create shadow data buffer
@@ -256,7 +253,7 @@ void EffectShadows::CopyShadowData()
 					ID3D11ShaderResourceView* csSrvs[1]{ shadowView };
 					context->CSSetShaderResources(0, 1, csSrvs);
 
-					context->CSSetSamplers(0, 1, &pointSampler);
+					context->CSSetSamplers(0, 1, &linearSampler);
 
 					auto shadowFullSize = newWidth * 2;
 

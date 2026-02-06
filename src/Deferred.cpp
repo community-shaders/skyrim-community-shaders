@@ -7,7 +7,6 @@
 #include "TruePBR.h"
 
 #include "Features/DynamicCubemaps.h"
-#include "Features/EffectShadows.h"
 #include "Features/IBL.h"
 #include "Features/ScreenSpaceGI.h"
 #include "Features/Skylighting.h"
@@ -149,13 +148,6 @@ void Deferred::SetupResources()
 			.Texture2D = { .MipSlice = 0 }
 		};
 	}
-}
-
-void Deferred::CopyShadowData()
-{
-	auto& effectShadows = globals::features::effectShadows;
-	if (effectShadows.loaded)
-		effectShadows.CopyShadowData();
 }
 
 void Deferred::ReflectionsPrepasses()

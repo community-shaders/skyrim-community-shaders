@@ -12,6 +12,7 @@
 #include "Features/TerrainHelper.h"
 #include "Features/Upscaling.h"
 #include "Features/WeatherEditor.h"
+#include "Features/EffectShadows.h"
 #include "Menu.h"
 #include "SettingsOverrideManager.h"
 #include "ShaderCache.h"
@@ -25,13 +26,13 @@ void State::Draw()
 	ZoneScoped;
 
 	auto shaderCache = globals::shaderCache;
-	auto deferred = globals::deferred;
 	auto& terrainBlending = globals::features::terrainBlending;
 	auto& terrainHelper = globals::features::terrainHelper;
 	auto& cloudShadows = globals::features::cloudShadows;
 	auto& weatherEditor = globals::features::weatherEditor;
 	auto truePBR = globals::truePBR;
 	auto context = globals::d3d::context;
+	auto& effectShadows = globals::features::effectShadows;
 
 	if (shaderCache->IsEnabled()) {
 		if (weatherEditor.loaded) {
@@ -67,8 +68,8 @@ void State::Draw()
 		if (currentShader && updateShader) {
 			if (currentShader->shaderType.get() == RE::BSShader::Type::Utility) {
 				if (currentPixelDescriptor & static_cast<uint32_t>(SIE::ShaderCache::UtilityShaderFlags::RenderShadowmask)) {
-					deferred->CopyShadowData();
-				}
+					if (effectShadows.loaded)
+						effectShadows.CopyShadowData();				}
 			}
 		}
 
