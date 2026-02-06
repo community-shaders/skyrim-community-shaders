@@ -1514,6 +1514,11 @@ namespace Util
 				return false;
 			}
 
+			// Still controlled if variable is mid-transition (e.g., transitioning to a weather without an override)
+			if (globalRegistry->IsFeatureVariableInTransition(featureName, settingName)) {
+				return true;
+			}
+
 			// Check if current weather exists
 			auto currentWeathers = weatherManager->GetCurrentWeathers();
 			if (!currentWeathers.currentWeather) {
