@@ -38,6 +38,7 @@ public:
 	// Using atomic for thread safety since async workloads may read this from different threads
 	static inline std::atomic<bool> isHDRActive = false;
 	static inline std::atomic<float> hdrPeakNits = 1000.0f;
+	static inline std::atomic<bool> needsReset = false;
 
 	// Track previous HDR parameters to detect changes that require FG reset
 	bool prevHDRActive = false;

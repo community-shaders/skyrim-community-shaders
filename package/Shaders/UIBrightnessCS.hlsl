@@ -1,4 +1,5 @@
 // Scales UI brightness and encodes for FidelityFX Frame Gen compositing
+// Output is premultiplied alpha: RGB is already multiplied by alpha
 // For HDR: converts gamma UI to PQ so FidelityFX can blend PQ UI over PQ scene
 // For SDR: applies brightness multiplier
 
@@ -38,6 +39,10 @@ static const float UI_REFERENCE_NITS = 200.0;
 			// SDR: simple brightness multiplier in gamma space
 			ui.rgb = max(0, ui.rgb * uiBrightness);
 		}
+
+		// Output premultiplied alpha: RGB * alpha
+		// FidelityFX expects: result = ui.rgb + scene * (1 - ui.a)
+		ui.rgb *= ui.a;
 	} else {
 		// Zero out pixel when alpha is effectively 0 to prevent FG artifacts
 		ui = 0;

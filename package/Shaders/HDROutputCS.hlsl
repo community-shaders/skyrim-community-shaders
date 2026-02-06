@@ -110,27 +110,29 @@ float3 HDRSoftClip(float3 colorNits, float paperWhite, float peakNits)
 			finalColor = scenePQ;
 		} else {
 			// Composite UI in PQ space to match FidelityFX's blending behavior
-			// FidelityFX uses premultiplied-style blending: result = ui + scene * (1-alpha)
+			// Use premultiplied alpha: result = ui_premul + scene * (1-alpha)
 			// This ensures visual consistency between FG and non-FG paths
 			float3 uiLinear = Color::GammaToTrueLinear(max(0, ui.rgb));
 			float3 uiBT2020 = Color::BT709ToBT2020(uiLinear);
 			float3 uiNits = uiBT2020 * UI_REFERENCE_NITS * uiBrightness;
 			float3 uiPQ = Color::pq::Encode(uiNits / 10000.0, 10000.0);
 
-			// Use premultiplied-style blend to match FidelityFX
-			finalColor = uiPQ + scenePQ * (1.0 - ui.a);
+			// Premultiply by alpha, then blend (same as FidelityFX with PREMUL_ALPHA flag)
+			float3 uiPremul = uiPQ * ui.a;
+			finalColor = uiPremul + scenePQ * (1.0 - ui.a);
 		}
 	} else {
 		// SDR path: ISHDR outputs tonemapped, gamma-encoded values
-		// Just composite UI and pass through
+		// Just composite UI and pass through (premultiplied alpha)
 		float3 sceneGamma = scene.rgb;
 
 		float3 composited;
 		if (skipUIComposite) {
 			composited = sceneGamma;
 		} else {
-			float3 uiScaled = ui.rgb * uiBrightness;
-			composited = uiScaled * ui.a + sceneGamma * (1.0 - ui.a);
+			// Premultiplied blend: result = ui_premul + scene * (1-alpha)
+			float3 uiPremul = ui.rgb * uiBrightness * ui.a;
+			composited = uiPremul + sceneGamma * (1.0 - ui.a);
 		}
 		finalColor = saturate(composited);
 	}

@@ -91,6 +91,7 @@ void FidelityFX::Present(bool a_useFrameGeneration, bool a_isHDR)
 	// Use seq_cst for both to ensure the callback sees both values consistently
 	hdrPeakNits.store(peakNits, std::memory_order_seq_cst);
 	isHDRActive.store(a_isHDR, std::memory_order_seq_cst);
+	needsReset.store(hdrParamsChanged, std::memory_order_seq_cst);
 
 	ffx::ConfigureDescFrameGeneration configParameters{};
 
@@ -109,6 +110,10 @@ void FidelityFX::Present(bool a_useFrameGeneration, bool a_isHDR)
 				params->minMaxLuminance[1] = FidelityFX::hdrPeakNits.load(std::memory_order_seq_cst);
 			} else {
 				params->backbufferTransferFunction = FFX_API_BACKBUFFER_TRANSFER_FUNCTION_SRGB;
+			}
+			// Force reset when HDR parameters changed to clear internal buffers
+			if (FidelityFX::needsReset.exchange(false, std::memory_order_seq_cst)) {
+				params->reset = true;
 			}
 			return ffxModule.Dispatch(reinterpret_cast<ffxContext*>(pUserCtx), &params->header);
 		};
@@ -160,7 +165,9 @@ void FidelityFX::Present(bool a_useFrameGeneration, bool a_isHDR)
 	ffx::ConfigureDescFrameGenerationSwapChainRegisterUiResourceDX12 uiConfig{};
 	if (a_useFrameGeneration) {
 		uiConfig.uiResource = ffxApiGetResourceDX12(swapChain.uiBufferWrapped->resource.get());
-		uiConfig.flags = FFX_FRAMEGENERATION_UI_COMPOSITION_FLAG_ENABLE_INTERNAL_UI_DOUBLE_BUFFERING;
+		// Use both premultiplied alpha and double buffering for consistent blending
+		uiConfig.flags = FFX_FRAMEGENERATION_UI_COMPOSITION_FLAG_USE_PREMUL_ALPHA | 
+		                 FFX_FRAMEGENERATION_UI_COMPOSITION_FLAG_ENABLE_INTERNAL_UI_DOUBLE_BUFFERING;
 	} else {
 		// No UI resource when FG is disabled - backbuffer already has UI composited
 		uiConfig.uiResource = FfxApiResource({});
