@@ -109,16 +109,17 @@ void Shape::BuildMesh(RE::BSGraphics::TriShape* rendererData, const uint32_t& ve
 		if (flags.any(Flags::Dynamic)) {
 			dynamicPosition.resize(vertexCountIn);
 
-			auto rtti = geometry->GetRTTI();
-
 			static REL::Relocation<const RE::NiRTTI*> dynamicTriShapeRTTI{ RE::BSDynamicTriShape::Ni_RTTI };
 
-			if (rtti == dynamicTriShapeRTTI.get()) {
+			if (geometry->GetRTTI() == dynamicTriShapeRTTI.get()) {
 				auto* pDynamicTriShape = reinterpret_cast<RE::BSDynamicTriShape*>(geometry);
 
 				if (pDynamicTriShape) {
-					const auto& dynTriShapeRuntime = pDynamicTriShape->GetDynamicTrishapeRuntimeData();
+					auto& dynTriShapeRuntime = pDynamicTriShape->GetDynamicTrishapeRuntimeData();
+
+					dynTriShapeRuntime.lock.Lock();
 					std::memcpy(dynamicPosition.data(), dynTriShapeRuntime.dynamicData, dynTriShapeRuntime.dataSize);
+					dynTriShapeRuntime.lock.Unlock();
 
 					dynamic = true;
 				}
@@ -678,6 +679,8 @@ void Shape::CreateBuffers(const std::wstring& name)
 		dynamicPositionBuffer->TransitionBarrier(commandList, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
 
 		dynamicPositionBuffer->CreateSRV(skinningHeap->CPUHandle(SkinningHeap::Slot::DynamicVertices, allocationIndex));
+
+		UpdateUploadDynamicBuffers(commandList);
 	}
 
 	bool updatable = (flags & Flags::Dynamic) || (flags & Flags::Skinned);
@@ -950,24 +953,27 @@ bool Shape::UpdateDynamicPosition()
 {
 	auto* dynamicTriShape = reinterpret_cast<RE::BSDynamicTriShape*>(geometry);
 
-	const auto& runtimeData = dynamicTriShape->GetDynamicTrishapeRuntimeData();
+	auto& runtimeData = dynamicTriShape->GetDynamicTrishapeRuntimeData();
 
-	auto* dynamicData = runtimeData.dynamicData;
-
-	if (!dynamicData)
+	if (!runtimeData.dynamicData)
 		return false;
 
-	auto dataSize = runtimeData.dataSize;
+	auto& dataSize = runtimeData.dataSize;
 
 	// Is this even a possibility?
 	if (dataSize == 0)
 		return false;
 
-	// Has dynamic position changed?
-	if (std::memcmp(dynamicPosition.data(), dynamicData, dataSize) == 0)
-		return false;
+	runtimeData.lock.Lock();
 
-	std::memcpy(dynamicPosition.data(), dynamicData, dataSize);
+	// Has dynamic position changed?
+	if (std::memcmp(dynamicPosition.data(), runtimeData.dynamicData, dataSize) == 0) {
+		runtimeData.lock.Unlock();
+		return false;
+	}
+
+	std::memcpy(dynamicPosition.data(), runtimeData.dynamicData, dataSize);
+	runtimeData.lock.Unlock();
 
 	return true;
 }

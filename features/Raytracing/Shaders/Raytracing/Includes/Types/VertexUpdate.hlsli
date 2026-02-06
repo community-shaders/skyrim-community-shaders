@@ -4,11 +4,11 @@
 struct VertexUpdateData
 {
 	uint index;
-	uint flags;
+	uint updateFlags;
 	uint vertexCount;
     uint boneOffset;
 	float3 bonePivot;
-	uint pad;
+	uint shapeFlags;
 };
 
 #ifdef __cplusplus
