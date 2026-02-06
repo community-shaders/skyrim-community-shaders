@@ -217,7 +217,6 @@ struct Raytracing : public OverlayFeature
 	void CompileRTGIShaders();
 	void CompileRTShadowsShaders();
 
-	void Initialize();
 	void InitD3D12(ID3D11Device* ppDevice, ID3D11DeviceContext* pImmediateContext, IDXGIAdapter* a_adapter);
 	void CreateRootSignature();
 	void CreateShadowsRootSignature();
@@ -819,9 +818,6 @@ struct Raytracing : public OverlayFeature
 
 	eastl::unique_ptr<ModelSpaceToTangent> normalMapConverter;
 
-	// Sky Cubemap
-	bool renderingCubemap = false;
-
 	eastl::unique_ptr<WrappedResource> skyHemisphere = nullptr;
 	winrt::com_ptr<ID3D11ComputeShader> cubeToHemiCS = nullptr;
 
@@ -1005,32 +1001,9 @@ struct Raytracing : public OverlayFeature
 
 				if (rt.Active()) {
 					rt.BSShader_SetupGeometry(This, Pass, RenderFlags);
-
-					if (rt.renderingCubemap) {
-						if (This->shaderType.get() != RE::BSShader::Type::Sky) {
-							This->RestoreGeometry(Pass, RenderFlags);
-							//Pass->geometry->CullGeometry(true);
-							return;
-						}
-					}
 				}
 
 				func(This, Pass, RenderFlags);
-			}
-			static inline REL::Relocation<decltype(thunk)> func;
-		};
-
-		struct BSCubeMapCamera_RenderCubemap
-		{
-			static void thunk(RE::NiCamera* camera, int a2, bool a3, bool a4, bool a5)
-			{
-				auto& rt = globals::features::raytracing;
-
-				rt.renderingCubemap = true;
-
-				func(camera, a2, a3, a4, a5);
-
-				rt.renderingCubemap = false;
 			}
 			static inline REL::Relocation<decltype(thunk)> func;
 		};
@@ -1438,8 +1411,6 @@ struct Raytracing : public OverlayFeature
 			
 			// We use these to render only the sky to the cubemaps, maybe it would be cleaner if we could override cubemap renderpass?
 			stl::write_vfunc<0x6, BSShader_SetupGeometry<RE::BSShader::Type::Lighting>>(RE::VTABLE_BSLightingShader[0]);
-
-			stl::write_vfunc<0x35, BSCubeMapCamera_RenderCubemap>(RE::VTABLE_BSCubeMapCamera[0]);
 
 			if (REL::Module::IsAE()) {
 				stl::write_vfunc<0x35, BSTriShape_OnVisible>(RE::VTABLE_BSTriShape[0]);

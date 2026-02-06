@@ -3638,7 +3638,11 @@ void Raytracing::DataLoaded()
 void Raytracing::PostPostLoad()
 {
 	Hooks::Install();
-	Initialize();
+
+	RE::GetINISetting("bReflectLODLand:Water")->data.b = false;
+	RE::GetINISetting("bReflectLODObjects:Water")->data.b = false;
+	RE::GetINISetting("bReflectLODTrees:Water")->data.b = false;
+	RE::GetINISetting("bReflectSky:Water")->data.b = true;
 
 	//MenuOpenCloseEventHandler::Register();
 	//TESLoadGameEventHandler::Register();
@@ -4022,10 +4026,6 @@ void Raytracing::CreateShadowsRootSignature()
 
 	DX::ThrowIfFailed(d3d12Device->CreateRootSignature(0, signature->GetBufferPointer(), signature->GetBufferSize(), IID_PPV_ARGS(&shadowRS)));
 	DX::ThrowIfFailed(shadowRS->SetName(L"Shadow Root Signature"));
-}
-
-void Raytracing::Initialize()
-{
 }
 
 void Raytracing::ClearShaderCache()
