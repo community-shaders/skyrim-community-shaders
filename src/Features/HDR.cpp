@@ -915,4 +915,3 @@ void HDR::UpdateSwapChainColorSpace() const
 
 	swapChain4->Release();
 }
-
