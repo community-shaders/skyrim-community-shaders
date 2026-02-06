@@ -1027,7 +1027,7 @@ bool Shape::UpdateSkinning()
 
 	float3x4* boneMatricesArray = reinterpret_cast<float3x4*>(skinInstance->boneMatrices);
 
-	auto rootParent = skinInstance->rootParent;
+	auto* rootParent = skinInstance->rootParent;
 
 	// UBE crash fix
 	if (!rootParent)

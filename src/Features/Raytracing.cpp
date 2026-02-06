@@ -2064,9 +2064,8 @@ void Raytracing::CreateModelInternal(RE::TESForm* form, const char* path, RE::Ni
 				auto shape = eastl::make_unique<Shape>(flags, shapeRegisters.Allocate(), pGeometry, localToRoot, dismemberPartition.editorVisible, dismemberPartition.slot);
 
 				// Diabolical Part II
-				if (emplacedDismemberRef) {
+				if (emplacedDismemberRef)
 					it->second[i] = shape.get();
-				}
 
 				shape->BuildMesh(partition.buffData, skinPartition->vertexCount, partition.triangles, partition.bonesPerVertex);
 				shape->BuildMaterial(geometryRuntimeData, name, formID);
