@@ -69,26 +69,6 @@ void EffectShadows::SetupResources()
 
 void EffectShadows::ClearShaderCache()
 {
-	if (copyShadowCS) {
-		copyShadowCS->Release();
-		copyShadowCS = nullptr;
-	}
-	if (downsampleShadowMip0CS) {
-		downsampleShadowMip0CS->Release();
-		downsampleShadowMip0CS = nullptr;
-	}
-	if (downsampleShadowMip1CS) {
-		downsampleShadowMip1CS->Release();
-		downsampleShadowMip1CS = nullptr;
-	}
-	if (blurShadowHorizontalCS) {
-		blurShadowHorizontalCS->Release();
-		blurShadowHorizontalCS = nullptr;
-	}
-	if (blurShadowVerticalCS) {
-		blurShadowVerticalCS->Release();
-		blurShadowVerticalCS = nullptr;
-	}
 }
 
 void EffectShadows::CopyShadowData()
