@@ -289,8 +289,6 @@ bool Streamline::IsRTXAndBelow40Series(IDXGIAdapter* a_adapter)
 	UINT vendorId = adapterDesc.VendorId;
 	UINT deviceId = adapterDesc.DeviceId;
 
-	a_adapter->Release();
-
 	// Check if NVIDIA
 	if (vendorId != 0x10DE)
 		return false;
