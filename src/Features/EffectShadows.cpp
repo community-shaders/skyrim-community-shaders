@@ -102,7 +102,7 @@ void EffectShadows::CopyShadowData()
 	{
 		context->PSGetShaderResources(4, 1, &shadowView);
 
-		// Downsample shadow texture array to 4x smaller resolution
+		// Downsample shadow texture array to 8x smaller resolution
 		if (shadowView) {
 			ID3D11Resource* shadowResource = nullptr;
 			shadowView->GetResource(&shadowResource);
@@ -115,8 +115,8 @@ void EffectShadows::CopyShadowData()
 					D3D11_TEXTURE2D_DESC srcDesc;
 					shadowTexture->GetDesc(&srcDesc);
 
-					uint32_t newWidth = srcDesc.Width / 4;
-					uint32_t newHeight = srcDesc.Height / 4;
+					uint32_t newWidth = srcDesc.Width / 8;
+					uint32_t newHeight = srcDesc.Height / 8;
 
 					// Lazily create or recreate downscaled texture if dimensions changed
 					if (!shadowCopyTexture || shadowCopyWidth != newWidth || shadowCopyHeight != newHeight) {
@@ -235,7 +235,7 @@ void EffectShadows::CopyShadowData()
 
 					context->CSSetSamplers(0, 1, &linearSampler);
 
-					auto shadowFullSize = newWidth * 2;
+					auto shadowFullSize = newWidth * 4;
 
 					// Mip 0 with second cascade
 					ID3D11UnorderedAccessView* csUavs[1]{ shadowCopyMip0UAV };

@@ -13,7 +13,7 @@ float2 ComputeVSMMoments(float4 depths) {
 }
 
 #if defined(DOWNSAMPLE_SHADOW_MIP0)
-// Cascade 1: Mip 0->1->2 (4x total reduction)
+// Cascade 1: Mip 0->1->2->3 (8x total reduction)
 groupshared float2 g_scratchDepths[8][8];
 
 [numthreads(8, 8, 1)]
@@ -30,19 +30,31 @@ void main(uint3 dispatchThreadID : SV_DispatchThreadID, uint3 groupThreadID : SV
 
 	GroupMemoryBarrierWithGroupSync();
 
-	// 2x2 reduction -> output
+	// First 2x2 reduction
 	if (all((groupThreadID.xy % 2) == 0)) {
 		uint2 tid = groupThreadID.xy;
-		OutputTexture[dispatchThreadID.xy / 2] =
+		g_scratchDepths[tid.x][tid.y] =
 			(g_scratchDepths[tid.x + 0][tid.y + 0] +
 			 g_scratchDepths[tid.x + 1][tid.y + 0] +
 			 g_scratchDepths[tid.x + 0][tid.y + 1] +
 			 g_scratchDepths[tid.x + 1][tid.y + 1]) * 0.25;
 	}
+
+	GroupMemoryBarrierWithGroupSync();
+
+	// Second 2x2 reduction -> output
+	if (all((groupThreadID.xy % 4) == 0)) {
+		uint2 tid = groupThreadID.xy;
+		OutputTexture[dispatchThreadID.xy / 4] =
+			(g_scratchDepths[tid.x + 0][tid.y + 0] +
+			 g_scratchDepths[tid.x + 2][tid.y + 0] +
+			 g_scratchDepths[tid.x + 0][tid.y + 2] +
+			 g_scratchDepths[tid.x + 2][tid.y + 2]) * 0.25;
+	}
 }
 
 #elif defined(DOWNSAMPLE_SHADOW_MIP1)
-// Cascade 0: Mip 0->1->2->3 (8x total reduction)
+// Cascade 0: Mip 0->1->2->3->4 (16x total reduction)
 groupshared float2 g_scratchDepths[8][8];
 
 [numthreads(8, 8, 1)]
@@ -71,14 +83,25 @@ void main(uint3 dispatchThreadID : SV_DispatchThreadID, uint3 groupThreadID : SV
 
 	GroupMemoryBarrierWithGroupSync();
 
-	// Second reduction: 4x4 -> output
+	// Second reduction: 4x4
 	if (all((groupThreadID.xy % 4) == 0)) {
 		uint2 tid = groupThreadID.xy;
-		OutputTexture[dispatchThreadID.xy / 4] =
+		g_scratchDepths[tid.x][tid.y] =
 			(g_scratchDepths[tid.x + 0][tid.y + 0] +
 			 g_scratchDepths[tid.x + 2][tid.y + 0] +
 			 g_scratchDepths[tid.x + 0][tid.y + 2] +
 			 g_scratchDepths[tid.x + 2][tid.y + 2]) * 0.25;
+	}
+
+	GroupMemoryBarrierWithGroupSync();
+
+	// Third reduction: 8x8 -> output
+	if (all((groupThreadID.xy % 8) == 0)) {
+		OutputTexture[dispatchThreadID.xy / 8] =
+			(g_scratchDepths[0][0] +
+			 g_scratchDepths[4][0] +
+			 g_scratchDepths[0][4] +
+			 g_scratchDepths[4][4]) * 0.25;
 	}
 }
 #endif
