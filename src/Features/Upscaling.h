@@ -132,6 +132,36 @@ public:
 	winrt::com_ptr<ID3D11BlendState> upscaleBlendState;
 	winrt::com_ptr<ID3D11RasterizerState> upscaleRasterizerState;
 
+	// Shared VR HMD Mask Clearing
+	winrt::com_ptr<ID3D11ComputeShader> vrClearHMDMaskCS;
+	winrt::com_ptr<ID3D11Buffer> vrClearHMDMaskCB;
+	// Helper to dispatch mask clearing for a single eye region
+	void ClearHMDMask(ID3D11UnorderedAccessView* colorUAV, ID3D11ShaderResourceView* depthSRV,
+		uint32_t eyeWidth, uint32_t eyeHeight, uint32_t depthOffsetX, uint32_t colorOffsetX);
+
+	// Shared VR Per-Eye Intermediate Buffers
+	// Owned here so both Streamline (DLSS) and FidelityFX (FSR) can use them.
+	eastl::unique_ptr<Texture2D> vrIntermediateColorIn[2];           // per-eye render resolution
+	eastl::unique_ptr<Texture2D> vrIntermediateColorOut[2];          // per-eye output resolution
+	eastl::unique_ptr<Texture2D> vrIntermediateDepth[2];             // per-eye render resolution
+	eastl::unique_ptr<Texture2D> vrIntermediateMotionVectors[2];     // per-eye render resolution
+	eastl::unique_ptr<Texture2D> vrIntermediateReactiveMask[2];      // per-eye render resolution
+	eastl::unique_ptr<Texture2D> vrIntermediateTransparencyMask[2];  // per-eye render resolution
+	bool vrResourcesAllocated[2] = { false, false };
+
+	// Helper to create/resize per-eye buffers matching source formats
+	void CreateVRIntermediateTextures(uint32_t inWidth, uint32_t inHeight, uint32_t outWidth, uint32_t outHeight,
+		ID3D11Resource* colorSrc, ID3D11Resource* mvecSrc, ID3D11Resource* reactiveSrc, ID3D11Resource* transparencySrc);
+
+	// Helper: Create a Texture2D matching source format at a given size
+	static eastl::unique_ptr<Texture2D> CreateTextureFromSource(ID3D11Resource* src, uint32_t width, uint32_t height,
+		bool copyBindFlags = false, bool createSRV = false, bool createUAV = false, const char* name = nullptr);
+
+	// Shared Pipeline Steps
+	void PreparePerEyeInputs(ID3D11Resource* colorSrc, ID3D11Resource* depthSrc, ID3D11Resource* mvecSrc,
+		ID3D11Resource* reactiveSrc, ID3D11Resource* transparencySrc);
+	void FinalizePerEyeOutputs(ID3D11Resource* colorDst);
+
 	void ConfigureTAA();
 	void ConfigureUpscaling(RE::BSGraphics::State* a_state);
 	void Upscale();

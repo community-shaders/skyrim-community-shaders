@@ -43,6 +43,8 @@ namespace WeatherVariables
 		virtual std::string GetTooltip() const = 0;
 		virtual void CaptureUserSettingsValue() = 0;
 		virtual void SetToUserSettings() = 0;
+		virtual void BeginTransition(const json& fromOverride) = 0;
+		virtual void EndTransition() = 0;
 	};
 
 	// Templated weather variable for type safety
@@ -55,7 +57,8 @@ namespace WeatherVariables
 			std::function<T(const T&, const T&, float)> lerpFunc = nullptr) :
 			name(name),
 			displayName(displayName), tooltip(tooltip), valuePtr(valuePtr), defaultValue(defaultValue),
-			userSettingsValue(valuePtr ? *valuePtr : defaultValue), lerpFunc(lerpFunc)
+			userSettingsValue(valuePtr ? *valuePtr : defaultValue), lerpFunc(lerpFunc),
+			inTransition(false), transitionStartValue(defaultValue)
 		{
 			if (!lerpFunc) {
 				// Default lerp for float types
@@ -84,15 +87,18 @@ namespace WeatherVariables
 			T fromVal;
 			T toVal;
 
-			if (hasFromOverride) {
+			// Use cached transition start value if in transition, otherwise parse from JSON
+			if (inTransition) {
+				fromVal = transitionStartValue;
+			} else if (hasFromOverride) {
 				try {
 					fromVal = from.get<T>();
 				} catch (const nlohmann::json::type_error& e) {
 					logger::debug("Type error in Lerp 'from' for {}: {}", name, e.what());
-					fromVal = *valuePtr;  // Fallback to current value on error
+					fromVal = userSettingsValue;
 				}
 			} else {
-				fromVal = *valuePtr;
+				fromVal = userSettingsValue;
 			}
 
 			if (hasToOverride) {
@@ -107,6 +113,30 @@ namespace WeatherVariables
 			}
 
 			*valuePtr = lerpFunc(fromVal, toVal, factor);
+		}
+
+		void BeginTransition(const json& fromOverride) override
+		{
+			if (!valuePtr)
+				return;
+
+			// Capture the starting value for this transition
+			if (!fromOverride.is_null()) {
+				try {
+					transitionStartValue = fromOverride.get<T>();
+				} catch (const nlohmann::json::type_error& e) {
+					logger::debug("Type error in BeginTransition for {}: {}", name, e.what());
+					transitionStartValue = *valuePtr;
+				}
+			} else {
+				transitionStartValue = *valuePtr;
+			}
+			inTransition = true;
+		}
+
+		void EndTransition() override
+		{
+			inTransition = false;
 		}
 
 		void SaveToJson(json& j) const override
@@ -161,6 +191,10 @@ namespace WeatherVariables
 		T defaultValue;
 		T userSettingsValue;
 		std::function<T(const T&, const T&, float)> lerpFunc;
+
+		// Transition state
+		bool inTransition;
+		T transitionStartValue;
 	};
 
 	// Specialized weather variables for common types
@@ -302,8 +336,7 @@ namespace WeatherVariables
 		void LerpAllVariables(const json& from, const json& to, float factor)
 		{
 			for (auto& var : variables) {
-				json fromVar = from.is_null() || !from.contains(var->GetName()) ? json{} : from[var->GetName()];
-				json toVar = to.is_null() || !to.contains(var->GetName()) ? json{} : to[var->GetName()];
+				auto [fromVar, toVar] = ExtractVarJson(var->GetName(), from, to);
 				var->Lerp(fromVar, toVar, factor);
 			}
 		}
@@ -336,9 +369,32 @@ namespace WeatherVariables
 			}
 		}
 
+		void BeginTransition(const json& fromWeatherSettings)
+		{
+			for (auto& var : variables) {
+				auto [fromVar, _] = ExtractVarJson(var->GetName(), fromWeatherSettings, json{});
+				var->BeginTransition(fromVar);
+			}
+		}
+
+		void EndTransition()
+		{
+			for (auto& var : variables) {
+				var->EndTransition();
+			}
+		}
+
 		const std::vector<std::shared_ptr<IWeatherVariable>>& GetVariables() const { return variables; }
 
 	private:
+		// Extract per-variable JSON from weather settings, returning null json if absent
+		static std::pair<json, json> ExtractVarJson(const std::string& varName, const json& from, const json& to)
+		{
+			json fromVar = (!from.is_object() || !from.contains(varName)) ? json{} : from[varName];
+			json toVar = (!to.is_object() || !to.contains(varName)) ? json{} : to[varName];
+			return { fromVar, toVar };
+		}
+
 		std::vector<std::shared_ptr<IWeatherVariable>> variables;
 	};
 
@@ -422,6 +478,22 @@ namespace WeatherVariables
 			auto* registry = GetFeatureRegistry(featureName);
 			if (registry) {
 				registry->CaptureAllUserSettingsValues();
+			}
+		}
+
+		void BeginFeatureTransition(const std::string& featureName, const json& fromWeatherSettings)
+		{
+			auto* registry = GetFeatureRegistry(featureName);
+			if (registry) {
+				registry->BeginTransition(fromWeatherSettings);
+			}
+		}
+
+		void EndFeatureTransition(const std::string& featureName)
+		{
+			auto* registry = GetFeatureRegistry(featureName);
+			if (registry) {
+				registry->EndTransition();
 			}
 		}
 

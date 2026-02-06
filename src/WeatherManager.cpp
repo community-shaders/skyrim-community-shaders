@@ -78,6 +78,12 @@ void WeatherManager::UpdateFeatures()
 	bool weatherChanged = (currentWeathers.currentWeather != lastKnownWeather.currentWeather) ||
 	                      (currentWeathers.lastWeather != lastKnownWeather.lastWeather);
 
+	// Detect if a new transition is starting
+	bool transitionStarting = weatherChanged && currentWeathers.lerpFactor < 1.0f;
+
+	// Detect if transition just completed
+	bool transitionEnding = lastKnownWeather.lerpFactor < 1.0f && currentWeathers.lerpFactor >= 1.0f;
+
 	// Always update if lerp factor changes or weather changed
 	if (weatherChanged || std::abs(currentWeathers.lerpFactor - lastKnownWeather.lerpFactor) > 0.001f) {
 		auto* globalRegistry = WeatherVariables::GlobalWeatherRegistry::GetSingleton();
@@ -105,19 +111,28 @@ void WeatherManager::UpdateFeatures()
 					LoadSettingsFromWeather(currentWeathers.currentWeather, featureName, nextWeatherSettings);
 				}
 
-				// If transition is complete (lerpFactor >= 1.0) and current weather has no override,
-				// ensure values are set to user settings baseline to prevent contamination from previous overrides
+				// Handle transition lifecycle
+				if (transitionStarting) {
+					// Begin new transition - cache the "from" values
+					globalRegistry->BeginFeatureTransition(featureName, currWeatherSettings);
+				}
+
+				// Update feature variables
 				if (currentWeathers.lerpFactor >= 1.0f && nextWeatherSettings.empty()) {
+					// Transition complete, no override on destination - reset to user settings
+					globalRegistry->EndFeatureTransition(featureName);
 					auto* featureRegistry = globalRegistry->GetFeatureRegistry(featureName);
 					if (featureRegistry) {
-						const auto& variables = featureRegistry->GetVariables();
-						for (const auto& var : variables) {
+						for (const auto& var : featureRegistry->GetVariables()) {
 							var->SetToUserSettings();
 						}
 					}
 				} else {
-					// Let the global registry handle variable interpolation
+					// In transition or has override - interpolate
 					globalRegistry->UpdateFeatureFromWeathers(featureName, currWeatherSettings, nextWeatherSettings, currentWeathers.lerpFactor);
+					if (transitionEnding) {
+						globalRegistry->EndFeatureTransition(featureName);
+					}
 				}
 			}
 		}
