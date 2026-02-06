@@ -94,6 +94,33 @@ float SampleTrimmedLogistic(float u, float s, float a, float b)
     return clamp(x, a, b);
 }
 
+// 1D Gaussian distribution normalized over [-inf,inf]
+float Gaussian1D(const float x, const float stddev)
+{
+    return exp(-x * x / (2.0f * stddev * stddev)) / (stddev * sqrt(2.0f * K_PI));
+}
+
+float PhiR(const float h)
+{
+    return -2.0 * asin(h);
+}
+
+float PhiTT(const float h, const float a) // a = 1.0 / eta_prime
+{
+    return K_PI - 2.0 * asin(h) + 2.0 * asin(h * a);
+}
+
+float PhiTRT(const float h, const float a) // a = 1.0 / eta_prime
+{
+    return -2.0 * asin(h) + 4.0 * asin(h * a);
+}
+
+// sample from normal distribution (Box-Muller transform)
+float RandomGaussian1D(const float xi1, const float xi2)
+{
+    return sqrt(2.0f) * cos(2.0f * K_PI * xi1) * Sqrt0(-log(1 - xi2));
+}
+
 float2 PolarToCartesian(float r, float theta)
 {
     return r * float2(cos(theta), sin(theta));

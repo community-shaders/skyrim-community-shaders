@@ -381,6 +381,13 @@ struct Raytracing : public OverlayFeature
 		BRDF
 	};
 
+	enum struct HairBSDF : int32_t
+	{
+		None,
+		ChiangBSDF,
+		FarFieldBCSDF
+	};
+
 	static constexpr const char* LightEvalModeTooltips[] = {
 		"Diffuse only, no specular.",
 		"Diffuse and Specular with BRDF."
@@ -497,7 +504,7 @@ struct Raytracing : public OverlayFeature
 		ReSTIRSettings ReSTIR;
 
 		bool GGXEnergyConservation = true;
-		bool UseHairChiangBSDF = true;
+		HairBSDF HairBSDF = HairBSDF::ChiangBSDF;
 
 		DiffuseBRDF DiffuseBRDF = DiffuseBRDF::Burley;
 		LightEvalMode LightEvalMode = LightEvalMode::BRDF;
@@ -514,7 +521,7 @@ struct Raytracing : public OverlayFeature
 		float OverrideSSSScale = 40.0f;
 		float OverrideSSSAnisotropy = -0.5f;
 
-		NLOHMANN_DEFINE_TYPE_INTRUSIVE_WITH_DEFAULT(AdvancedSettings, Culling, VariableUpdateRate, RIS, ReSTIR, GGXEnergyConservation, UseHairChiangBSDF, DiffuseBRDF, LightEvalMode, LightingMode, EnableSubsurfaceScattering, EnableSssTransmission, SSSMaterialOverride, SSSSampleCount, SSSMaxSampleRadius, OverrideSSSTransmissionColor, OverrideSSSScatteringColor, OverrideSSSScale, OverrideSSSAnisotropy)
+		NLOHMANN_DEFINE_TYPE_INTRUSIVE_WITH_DEFAULT(AdvancedSettings, Culling, VariableUpdateRate, RIS, ReSTIR, GGXEnergyConservation, HairBSDF, DiffuseBRDF, LightEvalMode, LightingMode, EnableSubsurfaceScattering, EnableSssTransmission, SSSMaterialOverride, SSSSampleCount, SSSMaxSampleRadius, OverrideSSSTransmissionColor, OverrideSSSScatteringColor, OverrideSSSScale, OverrideSSSAnisotropy)
 	};
 
 	////////////////////////////////////////////////// Feature Specific Data

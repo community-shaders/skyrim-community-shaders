@@ -12,6 +12,10 @@
 #include "Raytracing/Includes/Materials/Microfacet.hlsli"
 
 #include "Raytracing/Includes/Materials/HairChiangBSDF.hlsli"
+#include "Raytracing/Includes/Materials/HairFarFieldBCSDF.hlsli"
+
+#define HAIR_MODE_CHIANG_BSDF 1
+#define HAIR_MODE_FARFIELD_BCSDF 2
 
 // Minimum cos(theta) for the incident and outgoing vectors.
 // Some BSDF functions are not robust for cos(theta) == 0.0,
@@ -724,10 +728,16 @@ struct StandardBSDF
         float3 wiLocal = surface.ToLocal(wi);
         float3 woLocal = surface.ToLocal(wo);
 
-#ifdef HAIR_CHIANG_BSDF
+#if HAIR_MODE == HAIR_MODE_CHIANG_BSDF
         if (material.Feature == Feature::kHairTint)
         {
             HairChiangBSDF bsdf = HairChiangBSDF::make(wi, surface);
+            return bsdf.Eval(wiLocal, woLocal);
+        } else
+#elif HAIR_MODE == HAIR_MODE_FARFIELD_BCSDF
+        if (material.Feature == Feature::kHairTint)
+        {
+            HairFarfieldBCSDF bsdf = HairFarfieldBCSDF::make(wi, surface);
             return bsdf.Eval(wiLocal, woLocal);
         } else
 #endif
@@ -737,20 +747,38 @@ struct StandardBSDF
         }
     }
 
-    bool SampleBSDF(const float4 preGeneratedSamples, const BRDFContext brdfContext, const Material material, const Surface surface, out BSDFSample result)
+    bool SampleBSDF(const BRDFContext brdfContext, const Material material, const Surface surface, out BSDFSample result, inout uint randomSeed)
     {
+        float4 preGeneratedSamples = float4(
+            Random(randomSeed),
+            Random(randomSeed),
+            Random(randomSeed),
+            Random(randomSeed)
+        );
         float3 wi = brdfContext.ViewDirection;
         float3 N = surface.Normal;
 
         float3 wiLocal = surface.ToLocal(wi);
 
-#ifdef HAIR_CHIANG_BSDF
+#if HAIR_MODE == HAIR_MODE_CHIANG_BSDF
         if (material.Feature == Feature::kHairTint)
         {
             HairChiangBSDF bsdf = HairChiangBSDF::make(wi, surface);
 
             float3 woLocal;
             bool valid = bsdf.SampleBSDF(wiLocal, woLocal, result.pdf, result.weight, result.lobe, result.lobeP, preGeneratedSamples);
+
+            result.wo = surface.FromLocal(woLocal);
+            return valid;
+        } else
+#elif HAIR_MODE == HAIR_MODE_FARFIELD_BCSDF
+        if (material.Feature == Feature::kHairTint)
+        {
+            HairFarfieldBCSDF bsdf = HairFarfieldBCSDF::make(wi, surface);
+            float lobeRandom = Random(randomSeed);
+
+            float3 woLocal;
+            bool valid = bsdf.SampleBSDF(wiLocal, woLocal, result.pdf, result.weight, result.lobe, result.lobeP, lobeRandom, preGeneratedSamples);
 
             result.wo = surface.FromLocal(woLocal);
             return valid;

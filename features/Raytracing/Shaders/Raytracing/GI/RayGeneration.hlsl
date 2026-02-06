@@ -325,8 +325,7 @@ void main()
             throughput *= surface.AO;
             throughput *= surface.Albedo;
 #else
-            float4 randomSample = float4(Random(randomSeed), Random(randomSeed), Random(randomSeed), Random(randomSeed));
-            bool isValid = bsdf.SampleBSDF(randomSample, brdfContext, material, surface, bsdfSample);
+            bool isValid = bsdf.SampleBSDF(brdfContext, material, surface, bsdfSample, randomSeed);
             isSpecular = bsdfSample.isLobe(LobeType::Specular);
             bool hasTransmission = bsdfSample.isLobe(LobeType::Transmission);
 

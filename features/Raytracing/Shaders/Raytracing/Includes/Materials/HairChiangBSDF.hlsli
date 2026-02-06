@@ -73,7 +73,7 @@ struct HairChiangBSDF
         return lobes;
     }
 
-    float4 Eval(const float3 wi, const float3 wo)
+    float4 Eval(const float3 wi, const float3 wo) // for hair, wi = light dir, wo = view dir
     {
         const float sinThetaO = wo.x;
         const float cosThetaO = Sqrt01(1.0f - sinThetaO * sinThetaO);
@@ -145,7 +145,7 @@ struct HairChiangBSDF
         return float4(max(result, 0.0f), Average(result));
     }
 
-    bool SampleBSDF(const float3 wi, out float3 wo, out float pdf, out float3 weight, out uint lobe, out float lobeP, const float4 preGeneratedSample)
+    bool SampleBSDF(const float3 wo, out float3 wi, out float pdf, out float3 weight, out uint lobe, out float lobeP, const float4 preGeneratedSample)
     {
         float2 u[2];
         u[0] = preGeneratedSample.xy;
@@ -155,13 +155,13 @@ struct HairChiangBSDF
         lobeP = 1.0f;
         uint lobeType;
 
-        const float sinThetaI = wi.x;
-        const float cosThetaI = Sqrt01(1.0f - sinThetaI * sinThetaI);
-        const float phiI = Atan2safe(wi.z, wi.y);
+        const float sinThetaO = wo.x;
+        const float cosThetaO = Sqrt01(1.0f - sinThetaO * sinThetaO);
+        const float phiO = Atan2safe(wo.z, wo.y);
 
         // Determine which term p to sample for hair scattering.
         float apPdf[Hair_Max_Scattering_Events + 1];
-        ComputeApPdf(hairMaterialInteraction, cosThetaI, apPdf);
+        ComputeApPdf(hairMaterialInteraction, cosThetaO, apPdf);
 
         uint p = 0;
         float vp = hairMaterialInteraction.v[0];
@@ -182,25 +182,25 @@ struct HairChiangBSDF
             }
         }
 
-        float sinThetaIp = sinThetaI;
-        float cosThetaIp = cosThetaI;
+        float sinThetaOp = sinThetaO;
+        float cosThetaOp = cosThetaO;
         if (p == 0)
         {
-            sinThetaIp = sinThetaI * hairMaterialInteraction.cos2kAlpha[1] - cosThetaI * hairMaterialInteraction.sin2kAlpha[1];
-            cosThetaIp = cosThetaI * hairMaterialInteraction.cos2kAlpha[1] + sinThetaI * hairMaterialInteraction.sin2kAlpha[1];
+            sinThetaOp = sinThetaO * hairMaterialInteraction.cos2kAlpha[1] - cosThetaO * hairMaterialInteraction.sin2kAlpha[1];
+            cosThetaOp = cosThetaO * hairMaterialInteraction.cos2kAlpha[1] + sinThetaO * hairMaterialInteraction.sin2kAlpha[1];
             lobeType = HairLobeType_R;
         }
         else if (p == 1)
         {
-            sinThetaIp = sinThetaI * hairMaterialInteraction.cos2kAlpha[0] + cosThetaI * hairMaterialInteraction.sin2kAlpha[0];
-            cosThetaIp = cosThetaI * hairMaterialInteraction.cos2kAlpha[0] - sinThetaI * hairMaterialInteraction.sin2kAlpha[0];
+            sinThetaOp = sinThetaO * hairMaterialInteraction.cos2kAlpha[0] + cosThetaO * hairMaterialInteraction.sin2kAlpha[0];
+            cosThetaOp = cosThetaO * hairMaterialInteraction.cos2kAlpha[0] - sinThetaO * hairMaterialInteraction.sin2kAlpha[0];
 
             lobeType = HairLobeType_TT;
         }
         else if (p == 2)
         {
-            sinThetaIp = sinThetaI * hairMaterialInteraction.cos2kAlpha[2] + cosThetaI * hairMaterialInteraction.sin2kAlpha[2];
-            cosThetaIp = cosThetaI * hairMaterialInteraction.cos2kAlpha[2] - sinThetaI * hairMaterialInteraction.sin2kAlpha[2];
+            sinThetaOp = sinThetaO * hairMaterialInteraction.cos2kAlpha[2] + cosThetaO * hairMaterialInteraction.sin2kAlpha[2];
+            cosThetaOp = cosThetaO * hairMaterialInteraction.cos2kAlpha[2] - sinThetaO * hairMaterialInteraction.sin2kAlpha[2];
 
             lobeType = HairLobeType_TRT;
         }
@@ -213,11 +213,11 @@ struct HairChiangBSDF
         const float cosTheta = 1.0f + vp * log(u[1].x + (1.0f - u[1].x) * exp(-2.0f / vp));
         const float sinTheta = Sqrt01(1.0f - cosTheta * cosTheta);
         const float cosPhi = cos(u[1].y * K_2PI);
-        const float sinThetaO = -cosTheta * sinThetaIp + sinTheta * cosPhi * cosThetaIp;
-        const float cosThetaO = Sqrt01(1.0f - sinThetaO * sinThetaO);
+        const float sinThetaI = -cosTheta * sinThetaOp + sinTheta * cosPhi * cosThetaOp;
+        const float cosThetaI = Sqrt01(1.0f - sinThetaI * sinThetaI);
 
         // Sample Np to compute dphi
-        const float etap = Sqrt0(hairMaterialInteraction.ior * hairMaterialInteraction.ior - sinThetaI * sinThetaI) / cosThetaI;
+        const float etap = Sqrt0(hairMaterialInteraction.ior * hairMaterialInteraction.ior - sinThetaO * sinThetaO) / cosThetaO;
         const float sinGammaT = hairMaterialInteraction.h / etap;
         const float gammaT = asin(clamp(sinGammaT, -1.0f, 1.0f));
         float dphi;
@@ -231,41 +231,41 @@ struct HairChiangBSDF
             dphi = u[0].y * K_2PI;
         }
 
-        const float phiO = phiI + dphi;
-        wo = float3(sinThetaO, cosThetaO * cos(phiO), cosThetaO * sin(phiO));
+        const float phiI = phiO + dphi;
+        wi = float3(sinThetaI, cosThetaI * cos(phiI), cosThetaI * sin(phiI));
 
         pdf = 0.0f;
         [unroll]
         for (uint i = 0; i < Hair_Max_Scattering_Events; ++i)
         {
-            float sinThetaOp, cosThetaOp;
+            float sinThetaIp, cosThetaIp;
             if (i == 0)
             {
-                sinThetaOp = sinThetaO * hairMaterialInteraction.cos2kAlpha[1] - cosThetaO * hairMaterialInteraction.sin2kAlpha[1];
-                cosThetaOp = cosThetaO * hairMaterialInteraction.cos2kAlpha[1] + sinThetaO * hairMaterialInteraction.sin2kAlpha[1];
+                sinThetaIp = sinThetaI * hairMaterialInteraction.cos2kAlpha[1] - cosThetaI * hairMaterialInteraction.sin2kAlpha[1];
+                cosThetaIp = cosThetaI * hairMaterialInteraction.cos2kAlpha[1] + sinThetaI * hairMaterialInteraction.sin2kAlpha[1];
             }
             else if (i == 1)
             {
-                sinThetaOp = sinThetaO * hairMaterialInteraction.cos2kAlpha[0] + cosThetaO * hairMaterialInteraction.sin2kAlpha[0];
-                cosThetaOp = cosThetaO * hairMaterialInteraction.cos2kAlpha[0] - sinThetaO * hairMaterialInteraction.sin2kAlpha[0];
+                sinThetaIp = sinThetaI * hairMaterialInteraction.cos2kAlpha[0] + cosThetaI * hairMaterialInteraction.sin2kAlpha[0];
+                cosThetaIp = cosThetaI * hairMaterialInteraction.cos2kAlpha[0] - sinThetaI * hairMaterialInteraction.sin2kAlpha[0];
             }
             else if (i == 2)
             {
-                sinThetaOp = sinThetaO * hairMaterialInteraction.cos2kAlpha[2] + cosThetaO * hairMaterialInteraction.sin2kAlpha[2];
-                cosThetaOp = cosThetaO * hairMaterialInteraction.cos2kAlpha[2] - sinThetaO * hairMaterialInteraction.sin2kAlpha[2];
+                sinThetaIp = sinThetaI * hairMaterialInteraction.cos2kAlpha[2] + cosThetaI * hairMaterialInteraction.sin2kAlpha[2];
+                cosThetaIp = cosThetaI * hairMaterialInteraction.cos2kAlpha[2] - sinThetaI * hairMaterialInteraction.sin2kAlpha[2];
             }
             else
             {
-                sinThetaOp = sinThetaO;
-                cosThetaOp = cosThetaO;
+                sinThetaIp = sinThetaI;
+                cosThetaIp = cosThetaI;
             }
 
-            cosThetaOp = abs(cosThetaOp);
-            pdf += MP(cosThetaOp, cosThetaI, sinThetaOp, sinThetaI, hairMaterialInteraction.v[i]) *
+            cosThetaIp = abs(cosThetaIp);
+            pdf += MP(cosThetaIp, cosThetaO, sinThetaIp, sinThetaO, hairMaterialInteraction.v[i]) *
                     apPdf[i] *
                     NP(dphi, i, hairMaterialInteraction.logisticDistributionScalar, hairMaterialInteraction.gammaI, gammaT);
         }
-        pdf += MP(cosThetaO, cosThetaI, sinThetaO, sinThetaI, hairMaterialInteraction.v[Hair_Max_Scattering_Events]) *
+        pdf += MP(cosThetaI, cosThetaO, sinThetaI, sinThetaO, hairMaterialInteraction.v[RTXCR_Hair_Max_Scattering_Events]) *
                 apPdf[Hair_Max_Scattering_Events] *
                 K_1_2PI;
 
