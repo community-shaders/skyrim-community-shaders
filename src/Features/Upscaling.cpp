@@ -1454,15 +1454,6 @@ void Upscaling::LoadUpscalingSDKs()
 	fidelityFX.LoadFFX();  // Only for frame generation now
 }
 
-void Upscaling::CheckFrameConstants()
-{
-	// In VR, constants are set per-eye in the Upscale() loop
-	// Skip the early call from DeferredPasses to avoid issues
-	if (globals::game::isVR)
-		return;
-	streamline.CheckFrameConstants(streamline.viewport, 0);
-}
-
 void Upscaling::SetUIBuffer()
 {
 	dx12SwapChain.SetUIBuffer();
