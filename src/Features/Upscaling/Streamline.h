@@ -64,6 +64,8 @@ public:
 	Util::FrameChecker frameChecker;
 	sl::FrameToken* frameToken = nullptr;
 
+	bool isRTXBelow40series = false;
+
 	bool resourcesAllocated = false;  // Non-VR resource allocation tracking
 
 	// Helper: Execute DLSS for a single viewport with given resources
@@ -82,6 +84,8 @@ public:
 	void PostDevice();
 
 	void CheckFrameConstants(sl::ViewportHandle p_viewport, uint32_t eyeIndex = 0);
+
+	bool IsRTXAndBelow40Series(IDXGIAdapter* a_adapter);
 
 	void SetDLSSOptions(sl::ViewportHandle p_viewport, uint32_t width);
 
