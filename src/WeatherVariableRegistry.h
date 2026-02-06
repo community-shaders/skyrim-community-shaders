@@ -390,8 +390,8 @@ namespace WeatherVariables
 		// Extract per-variable JSON from weather settings, returning null json if absent
 		static std::pair<json, json> ExtractVarJson(const std::string& varName, const json& from, const json& to)
 		{
-			json fromVar = (from.is_null() || !from.contains(varName)) ? json{} : from[varName];
-			json toVar = (to.is_null() || !to.contains(varName)) ? json{} : to[varName];
+			json fromVar = (!from.is_object() || !from.contains(varName)) ? json{} : from[varName];
+			json toVar = (!to.is_object() || !to.contains(varName)) ? json{} : to[varName];
 			return { fromVar, toVar };
 		}
 
