@@ -111,16 +111,6 @@ float4 PS_Main(VS_OUTPUT input) : SV_TARGET
         discard;
     }
 
-    // Fast path: pixels well inside the rounded rect don't need expensive dithering
-    // The 4-sample rotated jitter only helps hide blockiness at edges
-    if (sdf < -1.5f)
-    {
-        float4 blurColor = InputTexture.Sample(LinearSampler, input.TexCoord);
-        blurColor.a = 1.0f;
-        return blurColor;
-    }
-
-    // Edge pixels: use soft dithering to hide blocky pixels from the downsampled blur
     float2 blurTexelSize = 8.0f / float2(WindowParams.y, WindowParams.z);
 
     // Sample with soft dithering to hide blocky pixels from the downsampled blur
