@@ -26,70 +26,91 @@ namespace EffectShadows
 
 	float GetShadowDepth(float3 positionWS, uint eyeIndex)
 	{
-		float4 positionCSShifted = mul(FrameBuffer::CameraViewProj[eyeIndex], float4(positionWS, 1));
-		return positionCSShifted.z / positionCSShifted.w;
+		float4 positionCS = mul(FrameBuffer::CameraViewProj[eyeIndex], float4(positionWS, 1));
+		return positionCS.z / positionCS.w;
 	}
 
-	float GetVSMShadow(float3 positionWS, float3 startPosition, float3 endPosition, float noise, uint sampleCount, uint eyeIndex)
+	// Sample a single cascade for VSM shadow
+	float SampleVSMCascade(
+		uint cascadeIndex,
+		uint sampleCount,
+		float rcpSampleCount,
+		float3 startPositionLS,
+		float3 endPositionLS)
 	{
-		ShadowData sD = SharedShadowData[0];
-
-		float shadowMapDepth = GetShadowDepth(positionWS, eyeIndex);
-		
-		// Early out beyond cascade 2
-		if (sD.EndSplitDistances.w < shadowMapDepth)
-			return 1.0;
-
-		float rcpSampleCount = 1.0 / float(sampleCount);
-
-		// Precompute cascade data
-		float cascade1Probability = (shadowMapDepth - sD.StartSplitDistances.y) / (sD.EndSplitDistances.x - sD.StartSplitDistances.y);
-
-		float compareValuesStart[2];
-		float compareValuesEnd[2];
-
-		float3 positionsLS[2];
-		float3 viewOffsetsLS[2];
-		for (uint cascadeIdx = 0; cascadeIdx < 2; cascadeIdx++) {
-			compareValuesStart[cascadeIdx] = mul(transpose(sD.ShadowMapProj[eyeIndex][cascadeIdx]), float4(startPosition, 1)).z - sD.AlphaTestRef[1 + cascadeIdx];
-			compareValuesEnd[cascadeIdx] = mul(transpose(sD.ShadowMapProj[eyeIndex][cascadeIdx]), float4(endPosition, 1)).z - sD.AlphaTestRef[1 + cascadeIdx];
-
-			positionsLS[cascadeIdx] = mul(transpose(sD.ShadowMapProj[eyeIndex][cascadeIdx]), float4(startPosition, 1));
-			viewOffsetsLS[cascadeIdx] = mul(transpose(sD.ShadowMapProj[eyeIndex][cascadeIdx]), float4(endPosition, 1));
-		}
-
 		float shadow = 0.0;
+
+		[loop]
 		for (uint k = 0; k < sampleCount; k++) {
 			float t = float(k) * rcpSampleCount;
+			float3 samplePosLS = lerp(startPositionLS, endPositionLS, t);
 
-			// Probabilistically select cascade (0 or 1 within the pair)
-			uint cascadeIndex = (t + noise) < cascade1Probability;
+			// Sample VSM moments
+			float2 moments = SharedShadowMap.SampleLevel(LinearSampler, samplePosLS.xy, 1u - cascadeIndex);
 
-			// March with consistent steps
-			float3 sampledPositionLS = lerp(positionsLS[cascadeIndex], viewOffsetsLS[cascadeIndex], t);
-
-			// Sample VSM shadow map
-			float2 moments = SharedShadowMap.SampleLevel(LinearSampler, saturate(sampledPositionLS.xy), 1u - cascadeIndex);
-			float depth = moments.x;      // E[x]
-			float depth2 = moments.y;     // E[x²]
-
-			float receiverDepth = lerp(compareValuesStart[cascadeIndex], compareValuesEnd[cascadeIndex], t);
-
-			// VSM using Chebyshev's inequality
+			// VSM shadow test using Chebyshev's inequality
 			float lit = 1.0;
-			if (receiverDepth > depth) {
-				float variance = max(depth2 - (depth * depth), 0.00001); // σ² = E[x²] - E[x]²
-				float d = receiverDepth - depth;
-				lit = variance / (variance + d * d); // p_max(t) = σ²/(σ² + (t - μ)²)
+			if (samplePosLS.z > moments.x) {
+				float variance = max(moments.y - moments.x * moments.x, 1e-5);
+				float d = samplePosLS.z - moments.x;
+				lit = variance / (variance + d * d);
 			}
 
 			shadow += lit;
 		}
 
-		float fadeFactor = 1.0 - pow(saturate(dot(positionWS, positionWS) / sD.ShadowLightParam.z), 8);
-		shadow = lerp(1.0, shadow * rcpSampleCount, fadeFactor);
+		return shadow * rcpSampleCount;
+	}
 
-		return shadow;
+	float GetVSMShadow(float3 startPosition, float3 endPosition, uint sampleCount, float rcpSampleCount, uint eyeIndex)
+	{
+		ShadowData sD = SharedShadowData[0];
+
+		float3 midPosition = (startPosition + endPosition) * 0.5;
+		float shadowMapDepth = GetShadowDepth(midPosition, eyeIndex);
+		
+		// Early out beyond cascade range
+		if (shadowMapDepth >= sD.EndSplitDistances.w)
+			return 1.0;
+
+		// Compute cascade blend factor with smoothstep
+		float cascade1Probability = smoothstep(0.0, 1.0, 
+			(shadowMapDepth - sD.StartSplitDistances.y) / 
+			(sD.EndSplitDistances.x - sD.StartSplitDistances.y));
+
+		// Determine which cascade(s) to sample
+		uint primaryCascade = uint(cascade1Probability);
+		bool needsBlending = (cascade1Probability > 0.0) && (cascade1Probability < 1.0);
+
+		// Transform ray to light space for primary cascade
+		float4x3 shadowProj = sD.ShadowMapProj[eyeIndex][primaryCascade];
+		float3 startLS = mul(transpose(shadowProj), float4(startPosition, 1));
+		float3 endLS = mul(transpose(shadowProj), float4(endPosition, 1));
+		startLS.xy = saturate(startLS.xy);
+		endLS.xy = saturate(endLS.xy);
+
+		// Sample primary cascade
+		float shadow = SampleVSMCascade(primaryCascade, sampleCount, rcpSampleCount, startLS, endLS);
+
+		// Blend with secondary cascade if needed
+		[branch]
+		if (needsBlending) {
+			uint secondaryCascade = 1 - primaryCascade;
+			
+			shadowProj = sD.ShadowMapProj[eyeIndex][secondaryCascade];
+			startLS = mul(transpose(shadowProj), float4(startPosition, 1));
+			endLS = mul(transpose(shadowProj), float4(endPosition, 1));
+			startLS.xy = saturate(startLS.xy);
+			endLS.xy = saturate(endLS.xy);
+
+			float shadowBlend = SampleVSMCascade(secondaryCascade, sampleCount, rcpSampleCount, startLS, endLS);
+			shadow = lerp(shadow, shadowBlend, cascade1Probability);
+		}
+
+		// Apply distance fade
+		float distSq = dot(midPosition, midPosition);
+		float fadeFactor = 1.0 - pow(saturate(distSq / sD.ShadowLightParam.z), 8);
+		return lerp(1.0, shadow, fadeFactor);
 	}
 }
 
