@@ -402,20 +402,6 @@ void Streamline::EvaluateDLSS(sl::ViewportHandle vp, uint32_t eyeIndex,
 
 	slSetTag(vp, tags, _countof(tags), context);
 
-	// Allocate resources on first use (VR: per-viewport; non-VR: once)
-	bool isVR = globals::game::isVR;
-	bool* allocated = isVR ? &globals::features::upscaling.vrResourcesAllocated[eyeIndex] : &resourcesAllocated;
-	if (!*allocated) {
-		sl::Result allocResult = slAllocateResources(context, sl::kFeatureDLSS, vp);
-		if (allocResult != sl::Result::eOk) {
-			logger::error("[Streamline] slAllocateResources failed{}", isVR ? std::format(" for eye {}", eyeIndex) : "");
-		} else {
-			*allocated = true;
-			if (isVR)
-				logger::info("[Streamline] Allocated DLSS resources for eye {}", eyeIndex);
-		}
-	}
-
 	sl::ViewportHandle view(vp);
 	const sl::BaseStructure* inputs[] = { &view };
 
@@ -507,8 +493,6 @@ void Streamline::DestroyDLSSResources()
 	if (globals::game::isVR) {
 		slDLSSSetOptions(viewportRight, dlssOptions);
 		slFreeResources(sl::kFeatureDLSS, viewportRight);
-		globals::features::upscaling.vrResourcesAllocated[0] = false;
-		globals::features::upscaling.vrResourcesAllocated[1] = false;
 	}
 
 	resourcesAllocated = false;

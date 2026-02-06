@@ -66,8 +66,6 @@ public:
 
 	bool isRTXBelow40series = false;
 
-	bool resourcesAllocated = false;  // Non-VR resource allocation tracking
-
 	// Helper: Execute DLSS for a single viewport with given resources
 	void EvaluateDLSS(sl::ViewportHandle vp, uint32_t eyeIndex,
 		ID3D11Resource* colorIn, ID3D11Resource* colorOut, ID3D11Resource* depth,
