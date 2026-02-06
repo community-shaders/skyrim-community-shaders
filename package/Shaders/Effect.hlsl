@@ -552,11 +552,14 @@ float3 GetLightingColor(float3 msPosition, float3 worldPosition, float2 screenPo
 	ShadowSampling::ExtractLighting(color, dirColor, ambientColor);
 #		endif
 
-	float shadow = ShadowSampling::Get3DFilteredShadow(worldPosition.xyz, normalize(worldPosition.xyz), screenPosition, eyeIndex, depth);
+	float3 viewDirection = normalize(worldPosition.xyz);
 
-	shadowVariance = 1.0 - sqrt(saturate(fwidth(shadow)));
+	float dirShadow = ShadowSampling::Get3DFilteredShadow(worldPosition.xyz, viewDirection, screenPosition, eyeIndex, depth);
 
-	dirColor *= shadow;
+	shadowVariance = 1.0 - sqrt(saturate(fwidth(dirShadow)));
+
+	dirColor *= dirShadow;
+	dirColor *= 1.0 + dot(SharedData::DirLightDirection.xyz, viewDirection) * 0.5 + 0.5;
 
 #		if defined(SKYLIGHTING)
 	ambientColor = Color::IrradianceToLinear(ambientColor);

@@ -935,13 +935,10 @@ struct DiffuseOutput
 	float3 refractionDiffuseColor;
 	float depth;
 	float refractionMul;
-	float3 refractionDepthAdjustedViewDirection;
 };
 
 DiffuseOutput GetWaterDiffuseColor(PS_INPUT input, float3 normal, float3 viewDirection, inout float4 distanceMul, float refractionsDepthFactor, float fresnel, uint eyeIndex, float3 viewPosition, float depth, inout float realDepth)
 {
-	float3 refractionDepthAdjustedViewDirection = viewDirection;
-
 #			if defined(REFRACTIONS)
 	float4 refractionNormal = mul(transpose(TextureProj[eyeIndex]), float4((VarAmounts.w * refractionsDepthFactor * normal.xy) + input.MPosition.xy, input.MPosition.z, 1));
 
@@ -967,7 +964,7 @@ DiffuseOutput GetWaterDiffuseColor(PS_INPUT input, float3 normal, float3 viewDir
 	float refractionDepthMul = CalculateDepthMultFromUV(refractionUvRawNoStereo, refractionDepth, eyeIndex);
 #					endif  //VR
 
-	refractionDepthAdjustedViewDirection = -viewDirection * refractionDepthMul;
+	float3 refractionDepthAdjustedViewDirection = -viewDirection * refractionDepthMul;
 	float refractionViewSurfaceAngle = dot(refractionDepthAdjustedViewDirection, ReflectPlane[eyeIndex].xyz);
 
 	float refractionPlaneMul = (1 - ReflectPlane[eyeIndex].w / refractionViewSurfaceAngle);
@@ -1001,7 +998,6 @@ DiffuseOutput GetWaterDiffuseColor(PS_INPUT input, float3 normal, float3 viewDir
 	output.refractionDiffuseColor = refractionDiffuseColor;
 	output.depth = depth;
 	output.refractionMul = refractionMul;
-	output.refractionDepthAdjustedViewDirection = refractionDepthAdjustedViewDirection;
 	return output;
 #			else
 	DiffuseOutput output;
@@ -1009,7 +1005,6 @@ DiffuseOutput GetWaterDiffuseColor(PS_INPUT input, float3 normal, float3 viewDir
 	output.refractionDiffuseColor = output.refractionColor;
 	output.depth = 1;
 	output.refractionMul = 1;
-	output.refractionDepthAdjustedViewDirection = refractionDepthAdjustedViewDirection;
 	return output;
 #			endif
 }
@@ -1174,7 +1169,7 @@ PS_OUTPUT main(PS_INPUT input)
 
 	DiffuseOutput diffuseOutput = GetWaterDiffuseColor(input, normal, viewDirection, distanceMul, depthControl.y, fresnel, eyeIndex, viewPosition, depth, realDepth);
 
-	float dirShadow = ShadowSampling::Get3DFilteredShadow(input.WPosition.xyz, diffuseOutput.refractionDepthAdjustedViewDirection, input.HPosition.xy, eyeIndex, realDepth);
+	float dirShadow = ShadowSampling::Get3DFilteredShadow(input.WPosition.xyz, viewDirection, input.HPosition.xy, eyeIndex, realDepth);
 
 	float3 dirColor;
 	float3 ambientColor;
@@ -1185,6 +1180,7 @@ PS_OUTPUT main(PS_INPUT input)
 #			endif
 
 	dirColor *= dirShadow;
+	dirColor *= 1.0 + dot(SharedData::DirLightDirection.xyz, viewDirection) * 0.5 + 0.5;
 
 #				if defined(SKYLIGHTING)
 	ambientColor = Color::IrradianceToLinear(ambientColor);

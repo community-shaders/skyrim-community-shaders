@@ -56,7 +56,7 @@ namespace ShadowSampling
 		float maxDistance = max(0, screenDepth - objectDepth);
 
 	#if defined(EFFECT)
-		float viewRayLength = min(Permutation::EffectRadius * 0.1, 128);
+		float viewRayLength = min(Permutation::EffectRadius * 0.2, 256);
 		float3 startPosition = positionWS - viewDirection * viewRayLength;
 		float3 endPosition = positionWS + viewDirection * min(viewRayLength, maxDistance);
 	#elif defined(UNDERWATER)
@@ -70,7 +70,7 @@ namespace ShadowSampling
 	#endif
 
 		float totalRayLength = distance(endPosition, startPosition);
-		uint sampleCount = uint(totalRayLength / stepSize + 0.5);
+		uint sampleCount = clamp(uint(totalRayLength / stepSize + 0.5), 1, 4);
 		float rcpSampleCount = 1.0 / float(sampleCount);
 
 		startPosition += (endPosition - startPosition) * noise * rcpSampleCount;
@@ -135,22 +135,10 @@ namespace ShadowSampling
 			ambientColorAmb *= maxScale;
 		}
 
-		{
-			float maxScale = 1.0;
-			if (dirLightColorDir.x > 0.0)
-				maxScale = min(maxScale, inputColor.x / dirLightColorDir.x);
-			if (dirLightColorDir.y > 0.0)
-				maxScale = min(maxScale, inputColor.y / dirLightColorDir.y);
-			if (dirLightColorDir.z > 0.0)
-				maxScale = min(maxScale, inputColor.z / dirLightColorDir.z);
-			dirLightColorDir *= maxScale;
-		}
-
 		float3 dirLightColorAmb = max(0.0, inputColor - ambientColorAmb);
-		float3 ambientColorDir = max(0.0, inputColor - dirLightColorDir);
 
-		dirColor = lerp(dirLightColorAmb, dirLightColorDir, 0.0);
-		ambientColor = lerp(ambientColorAmb, ambientColorDir, 0.0);
+		dirColor = dirLightColorAmb;
+		ambientColor = ambientColorAmb;
 	}
 }
 

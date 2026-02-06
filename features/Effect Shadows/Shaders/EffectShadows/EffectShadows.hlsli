@@ -43,13 +43,17 @@ namespace EffectShadows
 		float rcpSampleCount = 1.0 / float(sampleCount);
 
 		// Precompute cascade data
-		float cascade1Probability = saturate((shadowMapDepth - sD.StartSplitDistances.y) / (sD.EndSplitDistances.x - sD.StartSplitDistances.y));
+		float cascade1Probability = (shadowMapDepth - sD.StartSplitDistances.y) / (sD.EndSplitDistances.x - sD.StartSplitDistances.y);
 
-		float compareValues[2];
+		float compareValuesStart[2];
+		float compareValuesEnd[2];
+
 		float3 positionsLS[2];
 		float3 viewOffsetsLS[2];
 		for (uint cascadeIdx = 0; cascadeIdx < 2; cascadeIdx++) {
-			compareValues[cascadeIdx] = mul(transpose(sD.ShadowMapProj[eyeIndex][cascadeIdx]), float4(positionWS, 1)).z - sD.AlphaTestRef[1 + cascadeIdx];
+			compareValuesStart[cascadeIdx] = mul(transpose(sD.ShadowMapProj[eyeIndex][cascadeIdx]), float4(startPosition, 1)).z - sD.AlphaTestRef[1 + cascadeIdx];
+			compareValuesEnd[cascadeIdx] = mul(transpose(sD.ShadowMapProj[eyeIndex][cascadeIdx]), float4(endPosition, 1)).z - sD.AlphaTestRef[1 + cascadeIdx];
+
 			positionsLS[cascadeIdx] = mul(transpose(sD.ShadowMapProj[eyeIndex][cascadeIdx]), float4(startPosition, 1));
 			viewOffsetsLS[cascadeIdx] = mul(transpose(sD.ShadowMapProj[eyeIndex][cascadeIdx]), float4(endPosition, 1));
 		}
@@ -59,7 +63,7 @@ namespace EffectShadows
 			float t = float(k) * rcpSampleCount;
 
 			// Probabilistically select cascade (0 or 1 within the pair)
-			uint cascadeIndex = uint(frac(t + noise) < cascade1Probability);
+			uint cascadeIndex = (t + noise) < cascade1Probability;
 
 			// March with consistent steps
 			float3 sampledPositionLS = lerp(positionsLS[cascadeIndex], viewOffsetsLS[cascadeIndex], t);
@@ -69,7 +73,7 @@ namespace EffectShadows
 			float depth = moments.x;      // E[x]
 			float depth2 = moments.y;     // E[x²]
 
-			float receiverDepth = compareValues[cascadeIndex];
+			float receiverDepth = lerp(compareValuesStart[cascadeIndex], compareValuesEnd[cascadeIndex], t);
 
 			// VSM using Chebyshev's inequality
 			float lit = 1.0;
