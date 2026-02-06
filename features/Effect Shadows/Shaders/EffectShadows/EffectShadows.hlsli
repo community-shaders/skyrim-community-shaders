@@ -1,6 +1,8 @@
 #ifndef __EFFECT_SHADOWS_HLSLI__
 #define __EFFECT_SHADOWS_HLSLI__
 
+// "Assassin's Creed 4: Black Flag - Road to next-gen graphics" https://bartwronski.com/wp-content/uploads/2014/03/ac4_gdc.pdf
+
 namespace EffectShadows
 {
 	Texture2D<float2> SharedShadowMap : register(t18);
