@@ -53,8 +53,8 @@ float4 SampleWithSoftening(float2 uv, float2 pixelPos, float2 texelSize)
 
     // Random rotation angle based on pixel position
     float angle = noise.x * 6.28318530718f;
-    float s = sin(angle);
-    float c = cos(angle);
+    float s, c;
+    sincos(angle, s, c);
     float2x2 rotation = float2x2(c, -s, s, c);
 
     // Sample 4 points with rotated jittered offsets and average
@@ -111,8 +111,16 @@ float4 PS_Main(VS_OUTPUT input) : SV_TARGET
         discard;
     }
 
-    // Calculate texel size of the downsampled blur texture
-    // WindowParams.y/z are screen dimensions, blur texture is 1/8th of that
+    // Fast path: pixels well inside the rounded rect don't need expensive dithering
+    // The 4-sample rotated jitter only helps hide blockiness at edges
+    if (sdf < -1.5f)
+    {
+        float4 blurColor = InputTexture.Sample(LinearSampler, input.TexCoord);
+        blurColor.a = 1.0f;
+        return blurColor;
+    }
+
+    // Edge pixels: use soft dithering to hide blocky pixels from the downsampled blur
     float2 blurTexelSize = 8.0f / float2(WindowParams.y, WindowParams.z);
 
     // Sample with soft dithering to hide blocky pixels from the downsampled blur

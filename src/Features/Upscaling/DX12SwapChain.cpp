@@ -399,29 +399,19 @@ void DX12SwapChain::SetUIBuffer()
 	}
 }
 
-ID3D11Texture2D* DX12SwapChain::GetBackbufferTexture() const
+DX12SwapChain::BlurResources DX12SwapChain::GetBlurResources() const
 {
-	return swapChainBufferWrapped ? swapChainBufferWrapped->resource11 : nullptr;
-}
-
-ID3D11RenderTargetView* DX12SwapChain::GetBackbufferRTV() const
-{
-	return swapChainBufferWrapped ? swapChainBufferWrapped->rtv : nullptr;
-}
-
-ID3D11Texture2D* DX12SwapChain::GetUIBufferTexture() const
-{
-	return uiBufferWrapped ? uiBufferWrapped->resource11 : nullptr;
-}
-
-ID3D11ShaderResourceView* DX12SwapChain::GetUIBufferSRV() const
-{
-	return uiBufferWrapped ? uiBufferWrapped->srv : nullptr;
-}
-
-ID3D11RenderTargetView* DX12SwapChain::GetUIBufferRTV() const
-{
-	return uiBufferWrapped ? uiBufferWrapped->rtv : nullptr;
+	BlurResources res;
+	if (swapChainBufferWrapped) {
+		res.backbufferTex = swapChainBufferWrapped->resource11;
+		res.backbufferRTV = swapChainBufferWrapped->rtv;
+		res.backbufferSRV = swapChainBufferWrapped->srv;
+	}
+	if (uiBufferWrapped) {
+		res.uiBufferSRV = uiBufferWrapped->srv;
+		res.uiBufferRTV = uiBufferWrapped->rtv;
+	}
+	return res;
 }
 
 void DX12SwapChain::CreateSharedResources()

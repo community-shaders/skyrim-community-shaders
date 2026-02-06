@@ -113,20 +113,18 @@ public:
 
 	void SetUIBuffer();
 
-	// Get the D3D11 backbuffer texture (game world content)
-	ID3D11Texture2D* GetBackbufferTexture() const;
+	// Resources needed by BackgroundBlur when D3D12 swap chain is active
+	struct BlurResources
+	{
+		ID3D11Texture2D* backbufferTex = nullptr;
+		ID3D11RenderTargetView* backbufferRTV = nullptr;
+		ID3D11ShaderResourceView* backbufferSRV = nullptr;
+		ID3D11ShaderResourceView* uiBufferSRV = nullptr;
+		ID3D11RenderTargetView* uiBufferRTV = nullptr;
+	};
 
-	// Get the pre-created RTV for the backbuffer
-	ID3D11RenderTargetView* GetBackbufferRTV() const;
-
-	// Get the UI buffer texture (HUD content during gameplay)
-	ID3D11Texture2D* GetUIBufferTexture() const;
-
-	// Get the UI buffer SRV for reading
-	ID3D11ShaderResourceView* GetUIBufferSRV() const;
-
-	// Get the UI buffer RTV for writing
-	ID3D11RenderTargetView* GetUIBufferRTV() const;
+	// Get all resources needed for background blur in one call
+	BlurResources GetBlurResources() const;
 
 	// D3D12 interop resource management
 	void CreateSharedResources();

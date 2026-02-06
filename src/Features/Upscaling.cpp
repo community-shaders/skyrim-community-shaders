@@ -1538,44 +1538,12 @@ IDXGISwapChain* Upscaling::GetProxySwapChain()
 	return dx12SwapChain.GetSwapChainProxy();
 }
 
-ID3D11Texture2D* Upscaling::GetD3D11BackbufferTexture() const
+Upscaling::BlurResources Upscaling::GetBlurResources() const
 {
 	if (d3d12SwapChainActive) {
-		return dx12SwapChain.GetBackbufferTexture();
+		return dx12SwapChain.GetBlurResources();
 	}
-	return nullptr;
-}
-
-ID3D11RenderTargetView* Upscaling::GetD3D11BackbufferRTV() const
-{
-	if (d3d12SwapChainActive) {
-		return dx12SwapChain.GetBackbufferRTV();
-	}
-	return nullptr;
-}
-
-ID3D11Texture2D* Upscaling::GetD3D11UIBufferTexture() const
-{
-	if (d3d12SwapChainActive) {
-		return dx12SwapChain.GetUIBufferTexture();
-	}
-	return nullptr;
-}
-
-ID3D11ShaderResourceView* Upscaling::GetD3D11UIBufferSRV() const
-{
-	if (d3d12SwapChainActive) {
-		return dx12SwapChain.GetUIBufferSRV();
-	}
-	return nullptr;
-}
-
-ID3D11RenderTargetView* Upscaling::GetD3D11UIBufferRTV() const
-{
-	if (d3d12SwapChainActive) {
-		return dx12SwapChain.GetUIBufferRTV();
-	}
-	return nullptr;
+	return {};
 }
 
 void Upscaling::Upscale()
