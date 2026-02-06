@@ -135,7 +135,10 @@ PS_OUTPUT main(PS_INPUT input)
 
 	if (isHDR) {
 		// HDR path: Preserve linear values, skip tonemapping
-		// Add bloom (bloom also contains HDR highlight information)
+		// Bloom should act on SDR-equivalent values. Since we skip tonemapping in HDR,
+		// the scene can have values >1.0 for highlights. Bloom itself is derived from
+		// the downsampled scene and is already at a similar scale.
+		// Add bloom at its natural intensity — HDROutputCS handles range compression.
 		float3 blendedColor = inputColor + bloomColor * Param.x;
 
 		// Apply cinematic color grading while preserving HDR range

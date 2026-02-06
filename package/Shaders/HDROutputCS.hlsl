@@ -42,30 +42,47 @@ cbuffer PerFrame : register(b0)
 	float4 parameters1 : packoffset(c1);  ///< .x=uiBrightness multiplier
 }
 
-// UI reference brightness in nits - matches typical SDR monitor brightness
-// This ensures UI has consistent perceived brightness in both SDR and HDR modes
-static const float UI_REFERENCE_NITS = 200.0;
+// sRGB reference white level per IEC 61966-2-1
+static const float SRGB_WHITE_LEVEL_NITS = 80.0;
 
-/// Soft shoulder rolloff to prevent hard clipping at peak brightness
-float3 HDRSoftClip(float3 colorNits, float paperWhite, float peakNits)
+// UI reference brightness in nits
+static const float UI_REFERENCE_NITS = 100.0;
+
+// DICE-style exponential range compression
+float3 DICERangeCompress(float3 x, float maxRange)
 {
-	peakNits = max(peakNits, paperWhite * 1.1);
-	float shoulder = paperWhite * 2.0;
+	float3 compression = 1.0 - exp(-x);
+	float maxCompression = 1.0 - exp(-maxRange);
+	return compression / maxCompression;
+}
 
-	float3 result;
-	[unroll]
-	for (int i = 0; i < 3; i++) {
-		float x = colorNits[i];
-		if (x <= shoulder) {
-			result[i] = x;
-		} else {
-			float overshoot = x - shoulder;
-			float range = peakNits - shoulder;
-			float compressed = overshoot / (overshoot / range + 1.0);
-			result[i] = shoulder + compressed;
-		}
-	}
-	return result;
+// DICE tonemapper operating in PQ space by luminance.
+// Input color is in normalized units where 1.0 = sRGB white (80 nits).
+// Paper white and peak white are also in these normalized units.
+float3 DICETonemap(float3 color, float peakWhite)
+{
+	float sourceLuminance = Color::RGBToLuminance(color);
+
+	// Shoulder starts at a fraction of peak to leave SDR range largely untouched
+	float shoulderStart = peakWhite * 0.5;
+	if (sourceLuminance <= shoulderStart)
+		return color;
+
+	// Normalize to PQ space for perceptually uniform compression
+	float HDR10_MaxWhite = 10000.0 / SRGB_WHITE_LEVEL_NITS;
+	float sourceLumPQ = Color::pq::Encode(sourceLuminance / HDR10_MaxWhite, 10000.0).x;
+	float shoulderPQ = Color::pq::Encode(shoulderStart / HDR10_MaxWhite, 10000.0).x;
+	float peakPQ = Color::pq::Encode(peakWhite / HDR10_MaxWhite, 10000.0).x;
+
+	float compressibleRange = sourceLumPQ - shoulderPQ;
+	float compressedRange = peakPQ - shoulderPQ;
+	float3 compressed = DICERangeCompress(float3(compressibleRange / compressedRange, 0, 0), 1.0);
+	float compressedLumPQ = shoulderPQ + compressedRange * compressed.x;
+
+	// Convert back to linear
+	float compressedLum = Color::pq::Decode(compressedLumPQ, 10000.0).x * HDR10_MaxWhite;
+
+	return color * (compressedLum / sourceLuminance);
 }
 
 [numthreads(8, 8, 1)] void main(uint3 dispatchID : SV_DispatchThreadID)
@@ -86,38 +103,37 @@ float3 HDRSoftClip(float3 colorNits, float paperWhite, float peakNits)
 
 	if (enableHDR) {
 		// HDR path: ISHDR outputs linear (if LL enabled) or gamma-encoded values
-		// Convert to linear if needed, then to BT.2020, scale to nits, and PQ encode
+		// Convert to linear, apply DICE in normalized space, then PQ encode
 		float3 sceneLinear = max(0, scene.rgb);
 
-		// If Linear Lighting is NOT enabled, ISHDR outputs gamma-encoded values
 		if (!linearLighting) {
-			// Convert gamma to linear for HDR processing (preserves >1.0 values)
 			sceneLinear = pow(abs(sceneLinear), 2.2);
 		}
 
-		// Convert BT.709 to BT.2020 and scale to nits
-		// ISHDR output of 1.0 = paperWhite nits, values >1.0 = brighter
 		float3 sceneBT2020 = Color::BT709ToBT2020(sceneLinear);
-		float3 sceneNits = sceneBT2020 * paperWhite;
 
-		// Soft clip scene to peak brightness
-		sceneNits = HDRSoftClip(sceneNits, paperWhite, peakNits);
+		// Normalize paper white and peak white relative to sRGB reference (80 nits).
+		// In this space, 1.0 = sRGB white = 80 nits.
+		// Paper white (e.g. 203 nits) maps SDR white to 203/80 = 2.54x.
+		float pw = paperWhite / SRGB_WHITE_LEVEL_NITS;
+		float peak = peakNits / SRGB_WHITE_LEVEL_NITS;
 
-		// PQ encode scene
-		float3 scenePQ = Color::pq::Encode(sceneNits / 10000.0, 10000.0);
+		// DICE tonemap in normalized space — SDR content (0-1) passes through
+		// largely untouched, only highlights above shoulder get compressed toward peak.
+		// Multiply by pw before, divide after: preserves SDR range.
+		float3 tonemapped = DICETonemap(sceneBT2020 * pw, peak) / pw;
+
+		// PQ encode: paper white maps scene value of 1.0 to paperWhite nits on display
+		float3 scenePQ = Color::pq::Encode(tonemapped * paperWhite / 10000.0, 10000.0);
 
 		if (skipUIComposite) {
 			finalColor = scenePQ;
 		} else {
-			// Composite UI in PQ space to match FidelityFX's blending behavior
-			// Use premultiplied alpha: result = ui_premul + scene * (1-alpha)
-			// This ensures visual consistency between FG and non-FG paths
 			float3 uiLinear = Color::GammaToTrueLinear(max(0, ui.rgb));
 			float3 uiBT2020 = Color::BT709ToBT2020(uiLinear);
 			float3 uiNits = uiBT2020 * UI_REFERENCE_NITS * uiBrightness;
 			float3 uiPQ = Color::pq::Encode(uiNits / 10000.0, 10000.0);
 
-			// Premultiply by alpha, then blend (same as FidelityFX with PREMUL_ALPHA flag)
 			float3 uiPremul = uiPQ * ui.a;
 			finalColor = uiPremul + scenePQ * (1.0 - ui.a);
 		}

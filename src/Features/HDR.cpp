@@ -286,7 +286,7 @@ void HDR::DrawSettings()
 		ImGui::Spacing();
 
 		uint oldPaperWhite = settings.hdrPaperWhite;
-		ImGui::SliderInt("Paper White (nits)", reinterpret_cast<int*>(&settings.hdrPaperWhite), 80, 1000);
+		ImGui::SliderInt("Paper White (nits)", reinterpret_cast<int*>(&settings.hdrPaperWhite), 80, 500);
 		if (settings.hdrPaperWhite >= settings.hdrPeakNits) {
 			settings.hdrPaperWhite = settings.hdrPeakNits - 1;
 		}
@@ -294,11 +294,12 @@ void HDR::DrawSettings()
 			UpdateHDRData();
 		}
 		if (auto _tt = Util::HoverTooltipWrapper()) {
-			ImGui::Text("Brightness of reference white. Must be lower than peak brightness.");
+			ImGui::Text("How bright SDR white appears on your HDR display.");
+			ImGui::Text("203 nits is the ITU BT.2408 reference. Increase for a brighter image.");
 		}
 
 		uint oldPeakNits = settings.hdrPeakNits;
-		ImGui::SliderInt("Peak Brightness (nits)", reinterpret_cast<int*>(&settings.hdrPeakNits), 400, 5000);
+		ImGui::SliderInt("Peak Brightness (nits)", reinterpret_cast<int*>(&settings.hdrPeakNits), 400, 10000);
 		if (settings.hdrPeakNits <= settings.hdrPaperWhite) {
 			settings.hdrPeakNits = settings.hdrPaperWhite + 1;
 		}
@@ -306,7 +307,8 @@ void HDR::DrawSettings()
 			UpdateHDRData();
 		}
 		if (auto _tt = Util::HoverTooltipWrapper()) {
-			ImGui::Text("Maximum display brightness for highlights compression.");
+			ImGui::Text("Maximum brightness your display can produce.");
+			ImGui::Text("Set to match your display's actual peak brightness.");
 		}
 
 		ImGui::TextDisabled("Display reports: %.0f nits max", cachedDisplayMaxLuminance);
@@ -352,8 +354,8 @@ void HDR::RestoreDefaultSettings()
 {
 	bool hdrMonitor = DetectHDRDisplay();
 	settings.enableHDR = hdrMonitor;
-	settings.hdrPaperWhite = 80;
-	settings.hdrPeakNits = 800;
+	settings.hdrPaperWhite = 203;
+	settings.hdrPeakNits = 1000;
 }
 
 void HDR::SetupResources()
