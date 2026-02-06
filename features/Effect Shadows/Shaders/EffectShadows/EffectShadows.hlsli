@@ -62,16 +62,24 @@ namespace EffectShadows
 		return shadow * rcpSampleCount;
 	}
 
-	float GetVSMShadow(float3 startPosition, float3 endPosition, uint sampleCount, float rcpSampleCount, uint eyeIndex)
+	float GetVSMShadow(float3 startPosition, float3 endPosition, uint baseSampleCount, uint eyeIndex)
 	{
 		ShadowData sD = SharedShadowData[0];
 
 		float3 midPosition = (startPosition + endPosition) * 0.5;
 		float shadowMapDepth = GetShadowDepth(midPosition, eyeIndex);
+
 		
 		// Early out beyond cascade range
 		if (shadowMapDepth >= sD.EndSplitDistances.w)
 			return 1.0;
+	
+		// Reduce over distance
+		float distSq = dot(midPosition, midPosition);
+		float fade = saturate(distSq / sD.ShadowLightParam.z);
+		
+		uint sampleCount = max(1, round(float(baseSampleCount) * (1.0 - fade)));
+		float rcpSampleCount = rcp(sampleCount);
 
 		// Compute cascade blend factor with smoothstep
 		float cascade1Probability = smoothstep(0.0, 1.0, 
@@ -108,8 +116,7 @@ namespace EffectShadows
 		}
 
 		// Apply distance fade
-		float distSq = dot(midPosition, midPosition);
-		float fadeFactor = 1.0 - pow(saturate(distSq / sD.ShadowLightParam.z), 8);
+		float fadeFactor = 1.0 - pow(fade, 8);
 		return lerp(1.0, shadow, fadeFactor);
 	}
 }

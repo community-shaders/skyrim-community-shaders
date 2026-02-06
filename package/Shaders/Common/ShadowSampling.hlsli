@@ -71,7 +71,7 @@ namespace ShadowSampling
 
 		float totalRayLength = distance(endPosition, startPosition);
 		uint sampleCount = clamp(uint(totalRayLength / stepSize + 0.5), 1, 4);
-		float rcpSampleCount = 1.0 / float(sampleCount);
+		float rcpSampleCount = rcp(sampleCount);
 
 		startPosition += (endPosition - startPosition) * noise * rcpSampleCount;
 
@@ -89,7 +89,7 @@ namespace ShadowSampling
 		worldShadow *= rcpSampleCount;
 
 #if defined(EFFECT_SHADOWS)
-		float shadow = EffectShadows::GetVSMShadow(positionWS, startPosition, endPosition, noise, sampleCount, eyeIndex);
+		float shadow = EffectShadows::GetVSMShadow(startPosition, endPosition, sampleCount, eyeIndex);
 		return worldShadow * shadow;
 #else
 		return worldShadow;
