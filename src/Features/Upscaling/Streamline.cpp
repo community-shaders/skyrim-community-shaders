@@ -423,10 +423,10 @@ void Streamline::EvaluateDLSS(sl::ViewportHandle vp, uint32_t eyeIndex,
 
 	if (evalResult != sl::Result::eOk) {
 		static bool evalErrorLogged[2] = { false, false };
-		uint32_t logIdx = isVR ? eyeIndex : 0;
+		uint32_t logIdx = globals::game::isVR ? eyeIndex : 0;
 		if (!evalErrorLogged[logIdx]) {
 			evalErrorLogged[logIdx] = true;
-			logger::error("[Streamline] slEvaluateFeature failed{} result={}", isVR ? std::format(" for eye {}", eyeIndex) : "", (int)evalResult);
+			logger::error("[Streamline] slEvaluateFeature failed{} result={}", globals::game::isVR ? std::format(" for eye {}", eyeIndex) : "", (int)evalResult);
 		}
 	}
 }
@@ -494,6 +494,4 @@ void Streamline::DestroyDLSSResources()
 		slDLSSSetOptions(viewportRight, dlssOptions);
 		slFreeResources(sl::kFeatureDLSS, viewportRight);
 	}
-
-	resourcesAllocated = false;
 }
