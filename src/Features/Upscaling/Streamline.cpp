@@ -339,11 +339,7 @@ void Streamline::SetDLSSOptions(sl::ViewportHandle p_viewport, uint32_t width)
 		auto& main = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMAIN];
 		D3D11_TEXTURE2D_DESC mainDesc;
 		static_cast<ID3D11Texture2D*>(main.texture)->GetDesc(&mainDesc);
-		bool isHDR = (mainDesc.Format == DXGI_FORMAT_R11G11B10_FLOAT ||
-					  mainDesc.Format == DXGI_FORMAT_R16G16B16A16_FLOAT ||
-					  mainDesc.Format == DXGI_FORMAT_R32G32B32A32_FLOAT ||
-					  mainDesc.Format == DXGI_FORMAT_R16G16B16A16_TYPELESS ||
-					  mainDesc.Format == DXGI_FORMAT_R32G32B32A32_TYPELESS);
+		bool isHDR = mainDesc.Format != DXGI_FORMAT_R8G8B8A8_UNORM;
 		dlssOptions.colorBuffersHDR = isHDR ? sl::Boolean::eTrue : sl::Boolean::eFalse;
 	}
 	dlssOptions.useAutoExposure = sl::Boolean::eTrue;
