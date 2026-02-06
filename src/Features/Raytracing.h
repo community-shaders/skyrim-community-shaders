@@ -217,7 +217,6 @@ struct Raytracing : public OverlayFeature
 	void CompileRTGIShaders();
 	void CompileRTShadowsShaders();
 
-	void Initialize();
 	void InitD3D12(ID3D11Device* ppDevice, ID3D11DeviceContext* pImmediateContext, IDXGIAdapter* a_adapter);
 	void CreateRootSignature();
 	void CreateShadowsRootSignature();
@@ -826,9 +825,6 @@ struct Raytracing : public OverlayFeature
 
 	eastl::unique_ptr<ModelSpaceToTangent> normalMapConverter;
 
-	// Sky Cubemap
-	bool renderingCubemap = false;
-
 	eastl::unique_ptr<WrappedResource> skyHemisphere = nullptr;
 	winrt::com_ptr<ID3D11ComputeShader> cubeToHemiCS = nullptr;
 
@@ -1012,32 +1008,9 @@ struct Raytracing : public OverlayFeature
 
 				if (rt.Active()) {
 					rt.BSShader_SetupGeometry(This, Pass, RenderFlags);
-
-					if (rt.renderingCubemap) {
-						if (This->shaderType.get() != RE::BSShader::Type::Sky) {
-							This->RestoreGeometry(Pass, RenderFlags);
-							//Pass->geometry->CullGeometry(true);
-							return;
-						}
-					}
 				}
 
 				func(This, Pass, RenderFlags);
-			}
-			static inline REL::Relocation<decltype(thunk)> func;
-		};
-
-		struct BSCubeMapCamera_RenderCubemap
-		{
-			static void thunk(RE::NiCamera* camera, int a2, bool a3, bool a4, bool a5)
-			{
-				auto& rt = globals::features::raytracing;
-
-				rt.renderingCubemap = true;
-
-				func(camera, a2, a3, a4, a5);
-
-				rt.renderingCubemap = false;
 			}
 			static inline REL::Relocation<decltype(thunk)> func;
 		};
@@ -1270,17 +1243,17 @@ struct Raytracing : public OverlayFeature
 			static inline REL::Relocation<decltype(thunk)> func;
 		};
 		
-		struct TES_Load3D
+		struct TES_AttachModel
 		{
-			static void thunk(RE::TES* a1, RE::TESObjectREFR* refr, RE::TESObjectCELL *a3, void* queuedTree, char a5, RE::NiNode* a6)
+			static void thunk(RE::TES* a1, RE::TESObjectREFR* refr, RE::TESObjectCELL *cell, void* queuedTree, char a5, RE::NiNode* a6)
 			{
 				auto* baseObject = refr->GetBaseObject();
 
-				logger::debug("\tTES::Load3D {} - {:08X}, {} - {:08X}",
+				logger::debug("\tTES::AttachModel {} - {:08X}, {} - {:08X}",
 					magic_enum::enum_name(refr->formType.get()), refr->GetFormID(),
 					magic_enum::enum_name(baseObject->formType.get()), baseObject->GetFormID());
 
-				func(a1, refr, a3, queuedTree, a5, a6);
+				func(a1, refr, cell, queuedTree, a5, a6);
 
 				if (auto& rt = globals::features::raytracing; rt.Active()) {
 					auto flags = baseObject->GetFormFlags();
@@ -1307,7 +1280,7 @@ struct Raytracing : public OverlayFeature
 					auto* pNiAVObject = refr->Get3D();
 
 					if (!pNiAVObject) {
-						logger::warn("\tTES::Load3D - No 3D");
+						logger::warn("\tTES::AttachModel - No 3D");
 						return;
 					}
 	
@@ -1335,7 +1308,7 @@ struct Raytracing : public OverlayFeature
 							return;
 						}
 
-						logger::warn("\tTES::Load3D - No TESModel - {}, {:08X}", magic_enum::enum_name(refr->formType.get()), refr->GetFormID());
+						logger::warn("\tTES::AttachModel - No TESModel - {}, {:08X}", magic_enum::enum_name(refr->formType.get()), refr->GetFormID());
 					}
 				}
 			}
@@ -1413,7 +1386,7 @@ struct Raytracing : public OverlayFeature
 		static void Install()
 		{
 			// Creates model and instances for all forms
-			stl::detour_thunk<TES_Load3D>(REL::RelocationID(13209, 13355));
+			stl::detour_thunk<TES_AttachModel>(REL::RelocationID(13209, 13355));
 
 			// Releases 3D resources (instances and models)
 			{
@@ -1445,8 +1418,6 @@ struct Raytracing : public OverlayFeature
 			
 			// We use these to render only the sky to the cubemaps, maybe it would be cleaner if we could override cubemap renderpass?
 			stl::write_vfunc<0x6, BSShader_SetupGeometry<RE::BSShader::Type::Lighting>>(RE::VTABLE_BSLightingShader[0]);
-
-			stl::write_vfunc<0x35, BSCubeMapCamera_RenderCubemap>(RE::VTABLE_BSCubeMapCamera[0]);
 
 			if (REL::Module::IsAE()) {
 				stl::write_vfunc<0x35, BSTriShape_OnVisible>(RE::VTABLE_BSTriShape[0]);

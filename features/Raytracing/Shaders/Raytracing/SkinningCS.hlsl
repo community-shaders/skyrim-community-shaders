@@ -86,15 +86,11 @@ void main(uint3 DTid : SV_DispatchThreadID)
 
     float3 position = vertex.Position;
     
-    if (updateData.flags & Flags::Dynamic)
-    {
-        float4 dynamicVertex = DynamicVertices[shapeIndex][vertexIndex];
+    // Always fetch dynamic positions for dynamic shapes
+    if (updateData.shapeFlags & Flags::Dynamic)
+        position = DynamicVertices[shapeIndex][vertexIndex].xyz;
 
-        position = dynamicVertex.xyz;
-        //vertex.Tangent = (half3)normalize(float3(dynamicVertex.w, vertex.Tangent.yz));
-    }
-
-    if (updateData.flags & Flags::Skinned)
+    if (updateData.updateFlags & Flags::Skinned)
     {
         Skinning skinning = MeshSkinning[shapeIndex][vertexIndex];
 

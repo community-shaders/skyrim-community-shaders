@@ -134,7 +134,7 @@ bool SkinningPipeline::PrepareResources(ID3D12GraphicsCommandList4* commandList,
 
 		numVertices = std::max(numVertices, shape->vertexCount);
 
-		vertexUpdateData[shapeIndex] = VertexUpdateData(shape->allocation->GetIndex(), queuedShape.updateFlags, shape->vertexCount, boneMatrixIndex, bonePivot);
+		vertexUpdateData[shapeIndex] = VertexUpdateData(shape->allocation->GetIndex(), queuedShape.updateFlags, shape->vertexCount, boneMatrixIndex, bonePivot, shape->flags.underlying());
 		shapeIndex++;
 
 		// Dynamic TriShapes
