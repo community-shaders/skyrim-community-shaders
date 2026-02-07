@@ -407,6 +407,12 @@ void State::SaveToJson(nlohmann::json& settings)
 	auto& upscalingJson = settings[upscaling.GetShortName()];
 	upscaling.SaveSettings(upscalingJson);
 
+	json originalShaders;
+	ForEachShaderTypeWithIndex([&](auto type, int classIndex) {
+		originalShaders[magic_enum::enum_name(type)] = enabledClasses[classIndex];
+	});
+	settings["Replace Original Shaders"] = originalShaders;
+
 	json disabledFeaturesJson;
 	for (const auto& [featureName, isDisabled] : disabledFeatures) {
 		disabledFeaturesJson[featureName] = isDisabled;
@@ -471,6 +477,18 @@ void State::LoadFromJson(nlohmann::json& settings)
 			shaderCache->SetDiskCache(general["Enable Disk Cache"]);
 		if (general.contains("Enable Async") && general["Enable Async"].is_boolean())
 			shaderCache->SetAsync(general["Enable Async"]);
+	}
+
+	if (settings.contains("Replace Original Shaders") && settings["Replace Original Shaders"].is_object()) {
+		json& originalShaders = settings["Replace Original Shaders"];
+		ForEachShaderTypeWithIndex([&](auto type, int classIndex) {
+			auto name = magic_enum::enum_name(type);
+			if (originalShaders.contains(name) && originalShaders[name].is_boolean()) {
+				enabledClasses[classIndex] = originalShaders[name];
+			} else {
+				logger::warn("Invalid entry for shader class '{}', using current value", name);
+			}
+		});
 	}
 
 	// Load feature settings (only for already-loaded features)

@@ -45,6 +45,7 @@ namespace WeatherVariables
 		virtual void SetToUserSettings() = 0;
 		virtual void BeginTransition(const json& fromOverride) = 0;
 		virtual void EndTransition() = 0;
+		virtual bool IsInTransition() const = 0;
 	};
 
 	// Templated weather variable for type safety
@@ -138,6 +139,8 @@ namespace WeatherVariables
 		{
 			inTransition = false;
 		}
+
+		bool IsInTransition() const override { return inTransition; }
 
 		void SaveToJson(json& j) const override
 		{
@@ -384,6 +387,15 @@ namespace WeatherVariables
 			}
 		}
 
+		bool IsVariableInTransition(const std::string& settingName) const
+		{
+			for (const auto& var : variables) {
+				if (var->GetName() == settingName)
+					return var->IsInTransition();
+			}
+			return false;
+		}
+
 		const std::vector<std::shared_ptr<IWeatherVariable>>& GetVariables() const { return variables; }
 
 	private:
@@ -495,6 +507,12 @@ namespace WeatherVariables
 			if (registry) {
 				registry->EndTransition();
 			}
+		}
+
+		bool IsFeatureVariableInTransition(const std::string& featureName, const std::string& settingName)
+		{
+			auto* registry = GetFeatureRegistry(featureName);
+			return registry && registry->IsVariableInTransition(settingName);
 		}
 
 	private:

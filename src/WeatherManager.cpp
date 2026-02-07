@@ -84,8 +84,8 @@ void WeatherManager::UpdateFeatures()
 	// Detect if transition just completed
 	bool transitionEnding = lastKnownWeather.lerpFactor < 1.0f && currentWeathers.lerpFactor >= 1.0f;
 
-	// Always update if lerp factor changes or weather changed
-	if (weatherChanged || std::abs(currentWeathers.lerpFactor - lastKnownWeather.lerpFactor) > 0.001f) {
+	// Always update if lerp factor changes, weather changed, or transition just completed
+	if (weatherChanged || transitionEnding || std::abs(currentWeathers.lerpFactor - lastKnownWeather.lerpFactor) > 0.001f) {
 		auto* globalRegistry = WeatherVariables::GlobalWeatherRegistry::GetSingleton();
 
 		// Get all features and update those that have registered weather variables

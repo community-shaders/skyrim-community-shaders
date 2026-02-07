@@ -344,7 +344,30 @@ void Streamline::SetDLSSOptions(sl::ViewportHandle p_viewport, uint32_t width)
 	}
 	dlssOptions.useAutoExposure = sl::Boolean::eTrue;
 
-	if (isRTXBelow40series) {
+	std::optional<sl::DLSSPreset> customPreset;
+	switch (globals::features::upscaling.settings.presetDLSS) {
+	case 1:
+		customPreset = sl::DLSSPreset::ePresetJ;
+		break;
+	case 2:
+		customPreset = sl::DLSSPreset::ePresetK;
+		break;
+	case 3:
+		customPreset = sl::DLSSPreset::ePresetL;
+		break;
+	case 4:
+		customPreset = sl::DLSSPreset::ePresetM;
+		break;
+	}
+
+	if (customPreset.has_value()) {
+		dlssOptions.dlaaPreset = customPreset.value();
+		dlssOptions.ultraQualityPreset = customPreset.value();
+		dlssOptions.qualityPreset = customPreset.value();
+		dlssOptions.balancedPreset = customPreset.value();
+		dlssOptions.performancePreset = customPreset.value();
+		dlssOptions.ultraPerformancePreset = customPreset.value();
+	} else if (isRTXBelow40series) {
 		dlssOptions.dlaaPreset = sl::DLSSPreset::ePresetJ;
 		dlssOptions.ultraQualityPreset = sl::DLSSPreset::ePresetJ;
 		dlssOptions.qualityPreset = sl::DLSSPreset::ePresetJ;

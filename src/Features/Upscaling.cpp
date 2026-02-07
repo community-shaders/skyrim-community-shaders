@@ -23,7 +23,8 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	frameGenerationForceEnable,
 	streamlineLogLevel,
 	sharpnessFSR,
-	sharpnessDLSS);
+	sharpnessDLSS,
+	presetDLSS);
 
 decltype(&D3D11CreateDeviceAndSwapChain) ptrD3D11CreateDeviceAndSwapChainUpscaling;
 
@@ -227,6 +228,15 @@ void Upscaling::DrawSettings()
 			ImGui::SliderFloat("Sharpness", &settings.sharpnessFSR, 0.0f, 1.0f, "%.1f");
 		} else if (upscaleMethod == UpscaleMethod::kDLSS) {
 			ImGui::SliderFloat("Sharpness", &settings.sharpnessDLSS, 0.0f, 1.0f, "%.1f");
+
+			const char* presets[] = { "Default", "Preset J", "Preset K", "Preset L", "Preset M" };
+			ImGui::Combo("DLSS Model Preset", (int*)&settings.presetDLSS, presets, 5);
+			if (auto _tt = Util::HoverTooltipWrapper()) {
+				ImGui::Text("Choose which DLSS AI model preset to use.");
+				ImGui::Text("Each model offers different visual quality, performance, and motion stability.");
+				ImGui::Text("Set to 'Default' for automatic selection based on your Upscale Preset and hardware.");
+				ImGui::Text("Changing this setting requires a restart to take effect.");
+			}
 		}
 	}
 
@@ -431,6 +441,10 @@ void Upscaling::LoadSettings(json& o_json)
 	if (settings.upscaleMethodNoDLSS >= static_cast<uint>(enumCount)) {
 		logger::warn("[Upscaling] Loaded upscaleMethodNoDLSS {} out of range, clamping to {}", settings.upscaleMethodNoDLSS, enumCount ? enumCount - 1 : 0);
 		settings.upscaleMethodNoDLSS = enumCount ? enumCount - 1 : 0;
+	}
+	if (settings.presetDLSS > 4) {
+		logger::warn("[Upscaling] Loaded presetDLSS {} out of range, resetting to 0 (Default)", settings.presetDLSS);
+		settings.presetDLSS = 0;
 	}
 	auto iniSettingCollection = globals::game::iniPrefSettingCollection;
 	if (iniSettingCollection) {
