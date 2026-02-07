@@ -59,6 +59,8 @@ public:
 		uint streamlineLogLevel = 0;  // 0=Off, 1=Default, 2=Verbose
 		float sharpnessFSR = 0.0f;
 		float sharpnessDLSS = 0.0f;
+		bool useCustomDLSSPresets = false;
+		uint DLSSPreset = 0;  // 0=J, 1=K, 2=L, 3=M
 	};
 
 	Settings settings;
