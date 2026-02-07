@@ -75,6 +75,8 @@ public:
 
 	uint16_t slot;
 
+	uint32_t frameID;
+
 	Shape(Flags flags, Allocation* allocation, RE::BSGeometry* geometry, float3x4 localToRoot, bool dismemberVisible = true, uint16_t slot = 0) :
 		flags(flags), allocation({ allocation, AllocationDeleter() }), geometry(geometry), localToRoot(localToRoot), slot(slot)
 	{

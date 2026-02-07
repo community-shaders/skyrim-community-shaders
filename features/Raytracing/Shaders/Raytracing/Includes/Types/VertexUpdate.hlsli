@@ -7,8 +7,8 @@ struct VertexUpdateData
 	uint updateFlags;
 	uint vertexCount;
     uint boneOffset;
-	float3 bonePivot;
 	uint shapeFlags;
+	uint3 pad0;	
 };
 
 #ifdef __cplusplus

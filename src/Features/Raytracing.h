@@ -1390,6 +1390,7 @@ struct Raytracing : public OverlayFeature
 			// Makes Player FaceGenTint RenderTarget shareable
 			stl::write_thunk_call<CreateRenderTarget_PlayerFaceGenTint>(REL::RelocationID(100458, 107175).address() + REL::Relocate(0x606, 0x605, 0x0));
 
+			// Updates Shape dismember state
 			stl::detour_thunk<BSDismemberSkinInstance_UpdateDismemberPartion>(REL::RelocationID(15576, 15753));
 
 			//stl::detour_thunk<TESObjectREFR_Enable>(REL::RelocationID(19373, 19800));
