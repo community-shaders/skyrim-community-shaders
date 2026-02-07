@@ -265,7 +265,7 @@ struct HairChiangBSDF
                     apPdf[i] *
                     NP(dphi, i, hairMaterialInteraction.logisticDistributionScalar, hairMaterialInteraction.gammaI, gammaT);
         }
-        pdf += MP(cosThetaI, cosThetaO, sinThetaI, sinThetaO, hairMaterialInteraction.v[RTXCR_Hair_Max_Scattering_Events]) *
+        pdf += MP(cosThetaI, cosThetaO, sinThetaI, sinThetaO, hairMaterialInteraction.v[Hair_Max_Scattering_Events]) *
                 apPdf[Hair_Max_Scattering_Events] *
                 K_1_2PI;
 

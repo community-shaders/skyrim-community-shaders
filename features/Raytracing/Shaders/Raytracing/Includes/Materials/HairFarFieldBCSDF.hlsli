@@ -102,7 +102,7 @@ struct HairFarFieldBCSDF
 
         // Compute R lobe - smooth N term, Gaussian M term
         const float fresCosR = cos(0.5f * acos(clamp(dot(wi, wo), -1.0f, 1.0f))); // [d'Eon et al. 2011 - (12)]
-        const float fresnelTermR = evalFresnelSchlick(f0, fresCosR);
+        const float fresnelTermR = evalFresnelSchlick(f0, fresCosR).x;
         const float betaR = sqrt(2.0f) * roughness * R_TERM_AZIMUTHAL_SQUEEZE;
         const float M_R = Gaussian1D(thetaH + hairMaterialInteractionBcsdf.cuticleAngle, betaR * 0.5f);
         const float N_R = fresnelTermR * 0.25f * cos(0.5f * phi);
@@ -116,7 +116,7 @@ struct HairFarFieldBCSDF
         // hTT: root of phi(h) for p = 1
         const float hTT = clamp(Sqrt01((0.5f + 0.5f * cosPhi) / (1.0f + etaPrmInvSqr - 2.0f * etaPrmInv * Sqrt01(0.5f - 0.5f * cosPhi))), -1.0f, 1.0f);
         const float TTfresnelDot = cos(thetaD) * cos(asin(hTT));
-        const float TT_f = evalFresnelSchlick(f0, TTfresnelDot); // [d'Eon et al. 2011 - (14)]
+        const float TT_f = evalFresnelSchlick(f0, TTfresnelDot).x; // [d'Eon et al. 2011 - (14)]
         const float fresnelTermTT = (1.0f - TT_f) * (1.0f - TT_f);
         const float N_TT =
             -1.0f / (2.0f * (-2.0f / Sqrt01(1.0f - hTT * hTT) + (2.0f * etaPrmInv) / Sqrt01(1.0f - etaPrmInvSqr * hTT * hTT)));
@@ -178,7 +178,7 @@ struct HairFarFieldBCSDF
         return float4(bsdf, pdf);
     }
 
-    bool SampleBSDF(const float3 wo, out float3 wi, out float pdf, out float3 weight, out uint lobe, out float lobeP, const float lobeRandom, const float4 preGeneratedSample)
+    bool SampleBSDF(const float3 wo, const float h, out float3 wi, out float pdf, out float3 weight, out uint lobe, out float lobeP, const float lobeRandom, const float4 preGeneratedSample)
     {
         const float2 rand2[2] = { preGeneratedSample.xy, preGeneratedSample.zw };
 
@@ -198,7 +198,7 @@ struct HairFarFieldBCSDF
         // sample lobe using specular cone propagation at selected h offset
         // equivalent to assuming thetaI = thetaO
         const float aSpec = cosThetaO / Sqrt0(pow(ior, 2.0f) - pow(sinThetaO, 2.0f));
-        const float fSpecR = evalFresnelSchlick(f0, cosThetaO * Sqrt01(1.0 - h * h));
+        const float fSpecR = evalFresnelSchlick(f0, cosThetaO * Sqrt01(1.0 - h * h)).x;
         const float fSpecT = 1.0 - fSpecR;
         const float cosThetaTSpec = cosThetaO / (aSpec * ior);
         const float gammaTSpec = asin(h * aSpec);
@@ -229,7 +229,7 @@ struct HairFarFieldBCSDF
 
             wi = cos(phi) * cos(thetaI) * N + sin(phi) * cos(thetaI) * B + sin(thetaI) * T;
 
-            const float fresnelTermR = evalFresnelSchlick(f0, cos(0.5f * acos(dot(wi, wo))));
+            const float fresnelTermR = evalFresnelSchlick(f0, cos(0.5f * acos(dot(wi, wo)))).x;
 
             sampleWeight = clamp(fresnelTermR / wR, 0.0f, 2.0f);
 
@@ -248,7 +248,7 @@ struct HairFarFieldBCSDF
 
             wi = cos(phi) * cos(thetaI) * N + sin(phi) * cos(thetaI) * B + sin(thetaI) * T;
 
-            const float f = evalFresnelSchlick(f0, cos(thetaD) * cos(asin(h))); // [d'Eon et al. 2011 - (14)]
+            const float f = evalFresnelSchlick(f0, cos(thetaD) * cos(asin(h))).x; // [d'Eon et al. 2011 - (14)]
 
             const float cosThetaT = cos(thetaD) / (a * ior);
             const float gammaT = asin(h * a);
@@ -271,7 +271,7 @@ struct HairFarFieldBCSDF
 
             wi = cos(phi) * cos(thetaI) * N + sin(phi) * cos(thetaI) * B + sin(thetaI) * T;
 
-            const float f = evalFresnelSchlick(f0, cos(thetaD) * cos(asin(h))); // [d'Eon et al. 2011 - (14)]
+            const float f = evalFresnelSchlick(f0, cos(thetaD) * cos(asin(h))).x; // [d'Eon et al. 2011 - (14)]
 
             const float cosThetaT = cos(thetaD) / (a * ior);
             const float gammaT = asin(h * a);
@@ -296,6 +296,7 @@ struct HairFarFieldBCSDF
         }
 
         weight = bsdfValue / pdf;
+        return true;
     }
 };
 

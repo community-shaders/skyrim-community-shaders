@@ -737,7 +737,7 @@ struct StandardBSDF
 #elif HAIR_MODE == HAIR_MODE_FARFIELD_BCSDF
         if (material.Feature == Feature::kHairTint)
         {
-            HairFarfieldBCSDF bsdf = HairFarfieldBCSDF::make(wi, surface);
+            HairFarFieldBCSDF bsdf = HairFarFieldBCSDF::make(wi, surface);
             return bsdf.Eval(wiLocal, woLocal);
         } else
 #endif
@@ -774,11 +774,12 @@ struct StandardBSDF
 #elif HAIR_MODE == HAIR_MODE_FARFIELD_BCSDF
         if (material.Feature == Feature::kHairTint)
         {
-            HairFarfieldBCSDF bsdf = HairFarfieldBCSDF::make(wi, surface);
+            HairFarFieldBCSDF bsdf = HairFarFieldBCSDF::make(wi, surface);
+            const float h = 2.0f * Random(randomSeed) - 1.0f;
             float lobeRandom = Random(randomSeed);
 
             float3 woLocal;
-            bool valid = bsdf.SampleBSDF(wiLocal, woLocal, result.pdf, result.weight, result.lobe, result.lobeP, lobeRandom, preGeneratedSamples);
+            bool valid = bsdf.SampleBSDF(wiLocal, h, woLocal, result.pdf, result.weight, result.lobe, result.lobeP, lobeRandom, preGeneratedSamples);
 
             result.wo = surface.FromLocal(woLocal);
             return valid;

@@ -357,7 +357,7 @@ struct Surface
 #endif
 
         // Hair flowmap processing
-#ifdef HAIR_CHIANG_BSDF
+#if HAIR_MODE
         [branch]
         if (material.Feature == Feature::kHairTint && HAIRSETTINGS.Enabled) {
             Roughness = 1.0f - saturate(HAIRSETTINGS.HairGlossiness * 0.01f);
