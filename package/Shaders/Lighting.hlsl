@@ -2224,7 +2224,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 		if (EnvmapData.y) {
 			envMask *= TexEnvMaskSampler.Sample(SampEnvMaskSampler, uv).x;
 		} else {
-			envMask *= material.Glossiness;
+			envMask *= glossiness;
 		}
 	}
 
@@ -2961,6 +2961,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	if (!dynamicCubemap)
 #		endif
 		specularColor += envColor * Color::IrradianceToLinear(diffuseColor);
+		indirectLobeWeights.diffuse += envColor;
 #	endif
 
 #	if defined(EMAT_ENVMAP)

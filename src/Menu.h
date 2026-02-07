@@ -2,6 +2,7 @@
 #pragma once
 #include "Feature.h"
 #include "Menu/ThemeManager.h"
+#include "Utils/Input.h"
 #include "Utils/Serialize.h"
 #include <array>
 #include <atomic>
@@ -58,6 +59,7 @@ public:
 		Title,       // Large title text (e.g., "Community Shaders" header)
 		Heading,     // Section headers (tabs, category labels)
 		Subheading,  // Subsection headers (feature names, separators)
+		Subtext,     // Smaller secondary text (descriptions, about content)
 		Count        // Total number of roles
 	};
 
@@ -72,7 +74,8 @@ public:
 		FontRoleDescriptor{ "Body", "Body Text", 1.0f },
 		FontRoleDescriptor{ "Title", "Title", 1.0f },
 		FontRoleDescriptor{ "Heading", "Headings", 1.0f },
-		FontRoleDescriptor{ "Subheading", "Subheadings", 1.0f }
+		FontRoleDescriptor{ "Subheading", "Subheadings", 1.0f },
+		FontRoleDescriptor{ "Subtext", "Subtext", 0.9f }
 	};
 
 	static constexpr std::string_view GetFontRoleKey(FontRole role)
@@ -147,8 +150,10 @@ public:
 			files[static_cast<size_t>(role)] = std::move(value);
 		};
 		setFile(FontRole::Body, "Jost/Jost-Regular.ttf");
+		setFile(FontRole::Title, "Jost/Jost-Regular.ttf");
 		setFile(FontRole::Heading, "Jost/Jost-Regular.ttf");
 		setFile(FontRole::Subheading, "Jost/Jost-Regular.ttf");
+		setFile(FontRole::Subtext, "Jost/Jost-Regular.ttf");
 		return files;
 	}();
 	mutable std::array<float, static_cast<size_t>(FontRole::Count)> cachedFontPixelSizesByRole = {};
@@ -238,6 +243,7 @@ public:
 			setRole(FontRole::Title, "Jost", "Regular", "Jost/Jost-Regular.ttf", 1.0f);
 			setRole(FontRole::Heading, "Jost", "Regular", "Jost/Jost-Regular.ttf", 1.0f);
 			setRole(FontRole::Subheading, "Jost", "Regular", "Jost/Jost-Regular.ttf", 1.0f);
+			setRole(FontRole::Subtext, "Jost", "Regular", "Jost/Jost-Regular.ttf", 0.9f);
 
 			return roles;
 		}();
@@ -282,7 +288,8 @@ public:
 		{
 			ImVec4 ColorDefault{ 0.8f, 0.8f, 0.8f, 1.0f };
 			ImVec4 ColorHovered{ 0.6f, 0.6f, 0.6f, 1.0f };
-			float MinimizedFactor = 0.7f;  // 70% of original alpha for when the header is minimized
+			float MinimizedFactor = 0.7f;    // 70% of original alpha for when the header is minimized
+			float FeatureTitleScale = 1.5f;  // Scale multiplier for feature title text in settings tab
 		} FeatureHeading;
 
 		ImGuiStyle Style = []() {
@@ -369,15 +376,17 @@ public:
 
 	struct Settings
 	{
-		uint32_t ToggleKey = VK_END;
-		uint32_t SkipCompilationKey = VK_ESCAPE;
-		uint32_t EffectToggleKey = VK_MULTIPLY;   // toggle all effects
-		uint32_t OverlayToggleKey = VK_F10;       // Global overlay toggle key for all overlays
-		uint32_t ShaderBlockPrevKey = VK_PRIOR;   // Debug: cycle backward through shaders (PageUp)
-		uint32_t ShaderBlockNextKey = VK_NEXT;    // Debug: cycle forward through shaders (PageDown)
-		bool EnableShaderBlocking = false;        // Enable shader blocking hotkeys for debugging
-		bool FirstTimeSetupCompleted = false;     // Track if first-time setup has been completed
-		bool SkipClearCacheConfirmation = false;  // Skip confirmation dialog when clearing shader cache
+		std::vector<InputCombo> ToggleKey = { InputCombo::Keyboard(VK_END) };
+		std::vector<InputCombo> SkipCompilationKey = { InputCombo::Keyboard(VK_ESCAPE) };
+		std::vector<InputCombo> EffectToggleKey = { InputCombo::Keyboard(VK_MULTIPLY) };  // toggle all effects
+		std::vector<InputCombo> OverlayToggleKey = { InputCombo::Keyboard(VK_F10) };      // Global overlay toggle key for all overlays
+		std::vector<InputCombo> ShaderBlockPrevKey = { InputCombo::Keyboard(VK_PRIOR) };  // Debug: cycle backward through shaders (PageUp)
+		std::vector<InputCombo> ShaderBlockNextKey = { InputCombo::Keyboard(VK_NEXT) };   // Debug: cycle forward through shaders (PageDown)
+		bool EnableShaderBlocking = false;                                                // Enable shader blocking hotkeys for debugging
+		bool FirstTimeSetupCompleted = false;                                             // Track if first-time setup has been completed
+		bool SkipClearCacheConfirmation = false;                                          // Skip confirmation dialog when clearing shader cache
+		bool AutoHideFeatureList = false;                                                 // Auto-hide left feature list panel, show on hover
+		bool SkipConstraintWarning = false;                                               // Skip popup when a setting change creates new constraints
 		ThemeSettings Theme;
 		std::string SelectedThemePreset = "";  // Currently selected theme preset (empty = custom/user theme)
 	};

@@ -12,8 +12,15 @@ WeatherManager::CurrentWeathers WeatherManager::GetCurrentWeathers()
 	}
 
 	result.currentWeather = sky->currentWeather;
-	result.lastWeather = sky->lastWeather;
 	result.lerpFactor = sky->currentWeatherPct;
+
+	// Update cache: store current lastWeather if it exists, otherwise keep the cached one
+	if (sky->lastWeather) {
+		cachedLastWeather = sky->lastWeather;
+	}
+
+	// Use cached last weather if sky->lastWeather is null
+	result.lastWeather = sky->lastWeather ? sky->lastWeather : cachedLastWeather;
 
 	return result;
 }
@@ -71,8 +78,14 @@ void WeatherManager::UpdateFeatures()
 	bool weatherChanged = (currentWeathers.currentWeather != lastKnownWeather.currentWeather) ||
 	                      (currentWeathers.lastWeather != lastKnownWeather.lastWeather);
 
-	// Always update if lerp factor changes or weather changed
-	if (weatherChanged || std::abs(currentWeathers.lerpFactor - lastKnownWeather.lerpFactor) > 0.001f) {
+	// Detect if a new transition is starting
+	bool transitionStarting = weatherChanged && currentWeathers.lerpFactor < 1.0f;
+
+	// Detect if transition just completed
+	bool transitionEnding = lastKnownWeather.lerpFactor < 1.0f && currentWeathers.lerpFactor >= 1.0f;
+
+	// Always update if lerp factor changes, weather changed, or transition just completed
+	if (weatherChanged || transitionEnding || std::abs(currentWeathers.lerpFactor - lastKnownWeather.lerpFactor) > 0.001f) {
 		auto* globalRegistry = WeatherVariables::GlobalWeatherRegistry::GetSingleton();
 
 		// Get all features and update those that have registered weather variables
@@ -98,8 +111,29 @@ void WeatherManager::UpdateFeatures()
 					LoadSettingsFromWeather(currentWeathers.currentWeather, featureName, nextWeatherSettings);
 				}
 
-				// Let the global registry handle variable interpolation
-				globalRegistry->UpdateFeatureFromWeathers(featureName, currWeatherSettings, nextWeatherSettings, currentWeathers.lerpFactor);
+				// Handle transition lifecycle
+				if (transitionStarting) {
+					// Begin new transition - cache the "from" values
+					globalRegistry->BeginFeatureTransition(featureName, currWeatherSettings);
+				}
+
+				// Update feature variables
+				if (currentWeathers.lerpFactor >= 1.0f && nextWeatherSettings.empty()) {
+					// Transition complete, no override on destination - reset to user settings
+					globalRegistry->EndFeatureTransition(featureName);
+					auto* featureRegistry = globalRegistry->GetFeatureRegistry(featureName);
+					if (featureRegistry) {
+						for (const auto& var : featureRegistry->GetVariables()) {
+							var->SetToUserSettings();
+						}
+					}
+				} else {
+					// In transition or has override - interpolate
+					globalRegistry->UpdateFeatureFromWeathers(featureName, currWeatherSettings, nextWeatherSettings, currentWeathers.lerpFactor);
+					if (transitionEnding) {
+						globalRegistry->EndFeatureTransition(featureName);
+					}
+				}
 			}
 		}
 
@@ -175,15 +209,18 @@ void WeatherManager::SaveSettingsToWeather(RE::TESWeather* weather, const std::s
 	}
 
 	// Write back to disk
-	if (featureSettings.empty()) {
-		// No features left for this weather — remove file if it exists
+	// Only delete file if featureSettings is empty AND weatherData contains only featureSettings (no other data)
+	if (featureSettings.empty() && weatherData.size() == 1 && weatherData.contains("featureSettings")) {
 		std::error_code ec;
 		if (std::filesystem::remove(filePath, ec)) {
-			logger::info("Removed weather settings file (no features remain): {}", filePath);
-		} else if (ec) {
-			logger::warn("Failed to remove empty weather settings file ({}): {}", filePath, ec.message());
+			logger::info("Removed weather settings file (no data remain): {}", filePath);
+			return;
 		}
-		return;
+		if (ec == std::errc::no_such_file_or_directory) {
+			return;
+		}
+		logger::warn("Failed to remove empty weather settings file ({}): {}", filePath, ec.message());
+		// fall through to write updated JSON as a best-effort fallback
 	}
 
 	std::ofstream settingsFile(filePath);
@@ -260,5 +297,6 @@ void WeatherManager::ClearCache()
 {
 	perWeatherSettingsCache.clear();
 	lastKnownWeather = CurrentWeathers();
+	cachedLastWeather = nullptr;
 	logger::info("Cleared WeatherManager cache");
 }

@@ -1,4 +1,5 @@
 ﻿#include "VR.h"
+#include "FeatureConstraints.h"
 #include "Menu.h"
 #include "Menu/Fonts.h"
 #include "RE/B/BSOpenVR.h"
@@ -60,7 +61,8 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	comboTimeout,
 	EnableDragToReposition,
 	kAutoHideSeconds,
-	VRMenuAutoResetDistance)
+	VRMenuAutoResetDistance,
+	EnableWandPointing)
 
 //=============================================================================
 // FEATURE BASE CLASS OVERRIDES
@@ -133,7 +135,7 @@ void VR::DataLoaded()
 	// Initialize occlusion culling based on settings, but force-disable if an external
 	// upscaler is active (FSR/DLSS) since upscalers may modify the depth buffer.
 	bool desired = settings.EnableDepthBufferCullingExterior;
-	UpdateDepthBufferCulling(desired);
+	UpdateDepthBufferCulling(desired, { "VR", "EnableDepthBufferCullingExterior" });
 
 	if (gMinOccludeeBoxExtent) {
 		*gMinOccludeeBoxExtent = settings.MinOccludeeBoxExtent;
@@ -146,8 +148,10 @@ void VR::EarlyPrepass()
 {
 	// Respect user settings unless an external upscaler is active; if so, force-disable
 	// depth-buffer culling to avoid incorrect occlusion tests in VR.
-	bool desired = RE::TES::GetSingleton()->interiorCell ? settings.EnableDepthBufferCullingInterior : settings.EnableDepthBufferCullingExterior;
-	UpdateDepthBufferCulling(desired);
+	bool isInterior = RE::TES::GetSingleton()->interiorCell != nullptr;
+	auto settingId = isInterior ? FeatureConstraints::SettingId{ "VR", "EnableDepthBufferCullingInterior" } : FeatureConstraints::SettingId{ "VR", "EnableDepthBufferCullingExterior" };
+	bool desired = isInterior ? settings.EnableDepthBufferCullingInterior : settings.EnableDepthBufferCullingExterior;
+	UpdateDepthBufferCulling(desired, settingId);
 }
 
 //=============================================================================
@@ -587,45 +591,30 @@ namespace
 		auto& vr = globals::features::vr;
 		VR::Settings& settings = vr.settings;
 		if (ImGui::CollapsingHeader("General Settings", ImGuiTreeNodeFlags_DefaultOpen)) {
-			// If an upscaler is active that rewrites or repurposes the depth buffer,
-			// depth-buffer-culling must be disabled to avoid incorrect occlusion tests
-			// (which are especially problematic in VR). Query the Upscaling feature
-			// to see whether we're running FSR or DLSS.
-			// Determine if an external upscaler is active by reading the numeric
-			// setting value directly. Avoid referencing Upscaling types here to
-			// prevent header/type collisions in this translation unit.
-			// Query the Upscaling feature for an authoritative state flag.
-			bool upscalingActive = globals::features::upscaling.IsUpscalingActive();
-
-			// Exteriors
-			if (upscalingActive)
-				ImGui::BeginDisabled();
-			ImGui::Checkbox("Enable Depth Buffer Culling in Exteriors", &settings.EnableDepthBufferCullingExterior);
-			if (upscalingActive) {
-				if (auto _tt = Util::HoverTooltipWrapper()) {
-					ImGui::Text("Disabled while an external upscaler is active (FSR/DLSS) because upscalers may modify depth.\nThis prevents incorrect occlusion in VR.");
-				}
-				ImGui::EndDisabled();
-			} else {
+			// Use constraint-aware checkboxes that automatically handle disabling
+			// and showing tooltips when other features constrain these settings
+			Util::ConstrainedUI::Checkbox("Enable Depth Buffer Culling in Exteriors",
+				&settings.EnableDepthBufferCullingExterior,
+				{ "VR", "EnableDepthBufferCullingExterior" });
+			// Show normal tooltip when not constrained
+			auto exteriorConstraint = FeatureConstraints::GetConstraints({ "VR", "EnableDepthBufferCullingExterior" });
+			if (!exteriorConstraint.isConstrained) {
 				if (auto _tt = Util::HoverTooltipWrapper()) {
 					ImGui::Text("Improves performance in exteriors, recommended ON.");
 				}
 			}
 
-			// Interiors
-			if (upscalingActive)
-				ImGui::BeginDisabled();
-			ImGui::Checkbox("Enable Depth Buffer Culling in Interiors", &settings.EnableDepthBufferCullingInterior);
-			if (upscalingActive) {
-				if (auto _tt = Util::HoverTooltipWrapper()) {
-					ImGui::Text("Disabled while an external upscaler is active (FSR/DLSS) because upscalers may modify depth.\nThis prevents incorrect occlusion in VR.");
-				}
-				ImGui::EndDisabled();
-			} else {
+			Util::ConstrainedUI::Checkbox("Enable Depth Buffer Culling in Interiors",
+				&settings.EnableDepthBufferCullingInterior,
+				{ "VR", "EnableDepthBufferCullingInterior" });
+			// Show normal tooltip when not constrained
+			auto interiorConstraint = FeatureConstraints::GetConstraints({ "VR", "EnableDepthBufferCullingInterior" });
+			if (!interiorConstraint.isConstrained) {
 				if (auto _tt = Util::HoverTooltipWrapper()) {
 					ImGui::Text("Improves performance in interiors, recommended OFF due to occasional visual glitches.");
 				}
 			}
+
 			if (ImGui::SliderFloat("Min Occludee Box Extent", &settings.MinOccludeeBoxExtent, 0.0f, 1000.0f, "%.1f"))
 				*vr.gMinOccludeeBoxExtent = settings.MinOccludeeBoxExtent;
 			if (auto _tt = Util::HoverTooltipWrapper()) {
@@ -697,9 +686,25 @@ namespace
 		if (!vr.openVRInfo.isCompatible)
 			return;
 		VR::Settings& settings = vr.settings;
-		if (ImGui::CollapsingHeader("Mouse Settings", ImGuiTreeNodeFlags_DefaultOpen)) {
+		if (ImGui::CollapsingHeader("Input Settings", ImGuiTreeNodeFlags_DefaultOpen)) {
+			// Wand pointing settings
+			if (ImGui::Checkbox("Enable Wand Pointing", &settings.EnableWandPointing)) {
+				// Reset wand state when toggling
+				vr.wandState.isIntersecting = false;
+			}
+			if (auto _tt = Util::HoverTooltipWrapper()) {
+				ImGui::Text("Use controller ray-casting to point at UI elements");
+			}
+			ImGui::Separator();
+			ImGui::Text("Joystick Settings");
 			ImGui::SliderFloat("Mouse Deadzone", &settings.mouseDeadzone, 0.0f, 1.0f, "%.2f");
+			if (auto _tt = Util::HoverTooltipWrapper()) {
+				ImGui::Text("Thumbstick deadzone for joystick cursor movement");
+			}
 			ImGui::SliderFloat("Mouse Speed", &settings.mouseSpeed, 0.1f, 50.0f, "%.2f");
+			if (auto _tt = Util::HoverTooltipWrapper()) {
+				ImGui::Text("Speed multiplier for joystick cursor movement");
+			}
 		}
 	}
 
@@ -797,7 +802,7 @@ namespace
 			struct VRKeyBindingConfig
 			{
 				const char* label;
-				std::vector<ButtonCombo>& combos;
+				std::vector<InputCombo>& combos;
 				const char* description;
 				const char* controllerRequirement;
 			};
@@ -837,19 +842,19 @@ namespace
 		ImGui::Spacing();
 		// Reset to defaults button
 		if (ImGui::Button("Reset to Defaults")) {
-			// Use ButtonCombo structure for cleaner defaults
+			// Use InputCombo structure for cleaner defaults
 			settings.VRMenuOpenKeys = {
-				ButtonCombo::Primary(static_cast<uint32_t>(RE::BSOpenVRControllerDevice::Keys::kXA)),
-				ButtonCombo::Primary(static_cast<uint32_t>(RE::BSOpenVRControllerDevice::Keys::kBY))
+				InputCombo::Primary(static_cast<uint32_t>(RE::BSOpenVRControllerDevice::Keys::kXA)),
+				InputCombo::Primary(static_cast<uint32_t>(RE::BSOpenVRControllerDevice::Keys::kBY))
 			};
 			settings.VRMenuCloseKeys = {
-				ButtonCombo::Both(static_cast<uint32_t>(RE::BSOpenVRControllerDevice::Keys::kGrip))
+				InputCombo::Both(static_cast<uint32_t>(RE::BSOpenVRControllerDevice::Keys::kGrip))
 			};
 			settings.VROverlayOpenKeys = {
-				ButtonCombo::Primary(static_cast<uint32_t>(RE::BSOpenVRControllerDevice::Keys::kJoystickTrigger))
+				InputCombo::Primary(static_cast<uint32_t>(RE::BSOpenVRControllerDevice::Keys::kJoystickTrigger))
 			};
 			settings.VROverlayCloseKeys = {
-				ButtonCombo::Secondary(static_cast<uint32_t>(RE::BSOpenVRControllerDevice::Keys::kJoystickTrigger))
+				InputCombo::Secondary(static_cast<uint32_t>(RE::BSOpenVRControllerDevice::Keys::kJoystickTrigger))
 			};
 		}
 		if (auto _tt = Util::HoverTooltipWrapper()) {
@@ -1165,6 +1170,56 @@ namespace
 						}
 					}
 				}
+				ImGui::EndTable();
+			}
+
+			// Wand Pointing Diagnostics
+			ImGui::SeparatorText("Wand Pointing State");
+			if (ImGui::BeginTable("##WandPointingState", 2, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg)) {
+				ImGui::TableSetupColumn("Property", ImGuiTableColumnFlags_WidthFixed, 200.0f);
+				ImGui::TableSetupColumn("Value", ImGuiTableColumnFlags_WidthStretch);
+				ImGui::TableHeadersRow();
+
+				ImGui::TableNextRow();
+				ImGui::TableSetColumnIndex(0);
+				ImGui::Text("Wand Pointing Enabled");
+				ImGui::TableSetColumnIndex(1);
+				ImGui::Text("%s", settings.EnableWandPointing ? "Yes" : "No");
+
+				ImGui::TableNextRow();
+				ImGui::TableSetColumnIndex(0);
+				ImGui::Text("Intersecting Overlay");
+				ImGui::TableSetColumnIndex(1);
+				if (vr.wandState.isIntersecting) {
+					ImGui::TextColored(menu->GetTheme().StatusPalette.InfoColor, "YES");
+				} else {
+					ImGui::Text("No");
+				}
+
+				ImGui::TableNextRow();
+				ImGui::TableSetColumnIndex(0);
+				ImGui::Text("UV Coordinates");
+				ImGui::TableSetColumnIndex(1);
+				ImGui::Text("(%.3f, %.3f)", vr.wandState.uvCoordinates.x, vr.wandState.uvCoordinates.y);
+
+				ImGui::TableNextRow();
+				ImGui::TableSetColumnIndex(0);
+				ImGui::Text("Controller Index");
+				ImGui::TableSetColumnIndex(1);
+				ImGui::Text("%u", vr.wandState.controllerIndex);
+
+				ImGui::TableNextRow();
+				ImGui::TableSetColumnIndex(0);
+				ImGui::Text("Ray Origin");
+				ImGui::TableSetColumnIndex(1);
+				ImGui::Text("(%.2f, %.2f, %.2f)", vr.wandState.rayOrigin.x, vr.wandState.rayOrigin.y, vr.wandState.rayOrigin.z);
+
+				ImGui::TableNextRow();
+				ImGui::TableSetColumnIndex(0);
+				ImGui::Text("Ray Direction");
+				ImGui::TableSetColumnIndex(1);
+				ImGui::Text("(%.2f, %.2f, %.2f)", vr.wandState.rayDirection.x, vr.wandState.rayDirection.y, vr.wandState.rayDirection.z);
+
 				ImGui::EndTable();
 			}
 		}
@@ -1594,17 +1649,32 @@ void VR::SubmitOverlayFrame()
 }
 
 // Helper to centralize VR depth buffer culling logic, reducing duplication between DataLoaded and EarlyPrepass.
-void VR::UpdateDepthBufferCulling(bool desired)
+void VR::UpdateDepthBufferCulling(bool desired, const FeatureConstraints::SettingId& settingId)
 {
-	if (globals::features::upscaling.IsUpscalingActive()) {
-		if (gDepthBufferCulling && *gDepthBufferCulling) {
-			logger::info("Upscaling detected, disabling incompatible depth buffer culling.");
-			*gDepthBufferCulling = false;
+	// Check if any feature is constraining this setting
+	auto constraint = FeatureConstraints::GetConstraints(settingId);
+
+	if (constraint.isConstrained) {
+		// Use std::get_if to safely extract bool value and avoid std::bad_variant_access
+		if (auto* forcedValuePtr = std::get_if<bool>(&constraint.forcedValue)) {
+			bool forcedValue = *forcedValuePtr;
+			if (gDepthBufferCulling && *gDepthBufferCulling != forcedValue) {
+				*gDepthBufferCulling = forcedValue;
+				for (const auto& src : constraint.sources) {
+					logger::info("{} forcing depth buffer culling {}: {}",
+						src.featureName,
+						forcedValue ? "ON" : "OFF",
+						src.reason);
+				}
+			}
+		} else {
+			// Constraint has non-bool value type - log warning and skip
+			logger::warn("VR::UpdateDepthBufferCulling: Constraint on {} has non-bool forced value, ignoring", settingId.settingPath);
 		}
 	} else {
 		if (gDepthBufferCulling && *gDepthBufferCulling != desired) {
 			*gDepthBufferCulling = desired;
-			logger::info("VR depth buffer culling restored to {}", desired);
+			logger::info("VR depth buffer culling set to {}", desired);
 		}
 	}
 }
@@ -1896,7 +1966,48 @@ void VR::UpdateControllerState(const Menu::KeyEvent& event)
 	}
 }
 
-// Converts VR controller thumbstick input to ImGui mouse and scroll events for the overlay UI
+// Helper function to process thumbstick input for scrolling
+void VR::ProcessThumbstickScroll(RE::VRControllerState& controllerState, size_t thumbstickIndex, float deadzone, ImGuiIO& io)
+{
+	bool usingScrollStickX = (std::abs(controllerState.thumbsticks[thumbstickIndex].x) > deadzone);
+	bool usingScrollStickY = (std::abs(controllerState.thumbsticks[thumbstickIndex].y) > deadzone);
+
+	if (usingScrollStickX || usingScrollStickY) {
+		// Per-controller scroll accumulation to prevent interference between controllers
+		struct ScrollAccum
+		{
+			float x = 0.0f;
+			float y = 0.0f;
+		};
+		static std::unordered_map<size_t, ScrollAccum> scrollAccums;
+		ScrollAccum& accum = scrollAccums[thumbstickIndex];
+
+		// Accumulate scroll input with sensitivity scaling
+		accum.x += controllerState.thumbsticks[thumbstickIndex].x * 0.1f;
+		accum.y += controllerState.thumbsticks[thumbstickIndex].y * 0.1f;
+
+		// Send scroll events when accumulated enough input
+		float scrollEventX = 0.0f;
+		float scrollEventY = 0.0f;
+
+		if (std::abs(accum.x) > 0.3f) {
+			scrollEventX = accum.x > 0 ? 1.0f : -1.0f;
+			accum.x = 0.0f;
+		}
+		if (std::abs(accum.y) > 0.3f) {
+			scrollEventY = accum.y > 0 ? 1.0f : -1.0f;
+			accum.y = 0.0f;
+		}
+
+		// Send both horizontal and vertical scroll events if needed
+		if (scrollEventX != 0.0f || scrollEventY != 0.0f) {
+			io.AddMouseWheelEvent(scrollEventX, scrollEventY);
+		}
+	}
+}
+
+// Converts VR controller input to ImGui mouse and scroll events for the overlay UI
+// Supports both modern wand pointing and traditional thumbstick control
 void VR::ProcessControllerInputForImGui()
 {
 	if (!globals::menu->IsEnabled)
@@ -1907,95 +2018,74 @@ void VR::ProcessControllerInputForImGui()
 	ImGuiIO& io = ImGui::GetIO();
 	io.ConfigFlags &= ~ImGuiConfigFlags_NoMouseCursorChange;
 	io.WantSetMousePos = false;
+
+	// Try wand pointing first
+	bool wandHandledCursor = false;
+	if (!testMode && settings.EnableWandPointing) {
+		UpdateCursorFromWandPointing();
+		wandHandledCursor = wandState.isIntersecting;
+	}
+
 	if (!testMode) {
-		// Determine which controller should handle cursor vs scrolling based on attachment mode
-		bool useAttachedControllerForCursor = (settings.attachMode == VR::Settings::OverlayAttachMode::ControllerOnly ||
-											   settings.attachMode == VR::Settings::OverlayAttachMode::Both);
+		// When wand is handling cursor, BOTH thumbsticks become scroll controls
+		// When wand is NOT active, use traditional cursor/scroll assignment
+		if (wandHandledCursor) {
+			// Wand mode: Both thumbsticks scroll
+			ProcessThumbstickScroll(primaryControllerState, static_cast<size_t>(RE::ControllerRole::Primary), mouseDeadzone, io);
+			ProcessThumbstickScroll(secondaryControllerState, static_cast<size_t>(RE::ControllerRole::Secondary), mouseDeadzone, io);
+		} else {
+			// Traditional mode: Determine which controller handles cursor vs scrolling
+			bool useAttachedControllerForCursor = (settings.attachMode == VR::Settings::OverlayAttachMode::ControllerOnly ||
+												   settings.attachMode == VR::Settings::OverlayAttachMode::Both);
 
-		// Assign cursor and scroll controllers based on settings
-		RE::VRControllerState* cursorController = nullptr;
-		RE::VRControllerState* scrollController = nullptr;
+			RE::VRControllerState* cursorController = nullptr;
+			RE::VRControllerState* scrollController = nullptr;
 
-		if (useAttachedControllerForCursor) {
-			// When attached to controller: attached controller = cursor, other controller = scrolling
-			if (settings.VRMenuAttachController == ControllerDevice::Primary) {
+			if (useAttachedControllerForCursor) {
+				// When attached to controller: attached controller = cursor, other controller = scrolling
+				if (settings.VRMenuAttachController == ControllerDevice::Primary) {
+					cursorController = &primaryControllerState;
+					scrollController = &secondaryControllerState;
+				} else {
+					cursorController = &secondaryControllerState;
+					scrollController = &primaryControllerState;
+				}
+			} else {
+				// HMD mode: primary = cursor, secondary = scroll (traditional)
 				cursorController = &primaryControllerState;
 				scrollController = &secondaryControllerState;
-			} else {
-				cursorController = &secondaryControllerState;
-				scrollController = &primaryControllerState;
 			}
-		} else {
-			// HMD mode: primary = cursor, secondary = scroll (traditional)
-			cursorController = &primaryControllerState;
-			scrollController = &secondaryControllerState;
-		}
 
-		// Cursor movement (from determined cursor controller)
-		if (cursorController) {
-			// Determine the correct thumbstick index based on which controller we're using
-			size_t thumbstickIndex = (cursorController == &primaryControllerState) ?
-			                             static_cast<size_t>(RE::ControllerRole::Primary) :
-			                             static_cast<size_t>(RE::ControllerRole::Secondary);
+			// Cursor movement (from determined cursor controller)
+			if (cursorController) {
+				size_t thumbstickIndex = (cursorController == &primaryControllerState) ?
+				                             static_cast<size_t>(RE::ControllerRole::Primary) :
+				                             static_cast<size_t>(RE::ControllerRole::Secondary);
 
-			float thumbstickX = cursorController->thumbsticks[thumbstickIndex].x;
-			float thumbstickY = cursorController->thumbsticks[thumbstickIndex].y;
-			bool usingCursorStick = (std::abs(thumbstickX) > mouseDeadzone || std::abs(thumbstickY) > mouseDeadzone);
-			if (usingCursorStick) {
-				ImVec2 mousePos = io.MousePos;
-				mousePos.x += thumbstickX * mouseSpeed;
-				mousePos.y -= thumbstickY * mouseSpeed;
-				if (mousePos.x < 0)
-					mousePos.x = 0;
-				if (mousePos.y < 0)
-					mousePos.y = 0;
-				if (mousePos.x > io.DisplaySize.x)
-					mousePos.x = io.DisplaySize.x;
-				if (mousePos.y > io.DisplaySize.y)
-					mousePos.y = io.DisplaySize.y;
-				io.MousePos = mousePos;
-				io.AddMousePosEvent(mousePos.x, mousePos.y);
-				io.MouseDrawCursor = true;
-				io.WantSetMousePos = true;
-				io.AddMouseButtonEvent(ImGuiMouseButton_Left, false);
+				float thumbstickX = cursorController->thumbsticks[thumbstickIndex].x;
+				float thumbstickY = cursorController->thumbsticks[thumbstickIndex].y;
+				bool usingCursorStick = (std::abs(thumbstickX) > mouseDeadzone || std::abs(thumbstickY) > mouseDeadzone);
+
+				if (usingCursorStick) {
+					ImVec2 mousePos = io.MousePos;
+					mousePos.x += thumbstickX * mouseSpeed;
+					mousePos.y -= thumbstickY * mouseSpeed;
+					mousePos.x = std::clamp(mousePos.x, 0.0f, io.DisplaySize.x);
+					mousePos.y = std::clamp(mousePos.y, 0.0f, io.DisplaySize.y);
+					io.MousePos = mousePos;
+					io.AddMousePosEvent(mousePos.x, mousePos.y);
+					io.MouseDrawCursor = true;
+					io.WantSetMousePos = true;
+					io.AddMouseButtonEvent(ImGuiMouseButton_Left, false);
+				}
 			}
-		}
 
-		// Scrolling (from determined scroll controller) - both horizontal and vertical
-		if (scrollController) {
-			// Determine the correct thumbstick index based on which controller we're using
-			size_t thumbstickIndex = (scrollController == &primaryControllerState) ?
-			                             static_cast<size_t>(RE::ControllerRole::Primary) :
-			                             static_cast<size_t>(RE::ControllerRole::Secondary);
-
-			bool usingScrollStickX = (std::abs(scrollController->thumbsticks[thumbstickIndex].x) > mouseDeadzone);
-			bool usingScrollStickY = (std::abs(scrollController->thumbsticks[thumbstickIndex].y) > mouseDeadzone);
-
-			if (usingScrollStickX || usingScrollStickY) {
-				static float scrollAccumX = 0.0f;
-				static float scrollAccumY = 0.0f;
-
-				// Accumulate scroll input with sensitivity scaling
-				scrollAccumX += scrollController->thumbsticks[thumbstickIndex].x * 0.1f;
-				scrollAccumY += scrollController->thumbsticks[thumbstickIndex].y * 0.1f;
-
-				// Send scroll events when accumulated enough input
-				float scrollEventX = 0.0f;
-				float scrollEventY = 0.0f;
-
-				if (std::abs(scrollAccumX) > 0.3f) {
-					scrollEventX = scrollAccumX > 0 ? 1.0f : -1.0f;
-					scrollAccumX = 0.0f;
-				}
-				if (std::abs(scrollAccumY) > 0.3f) {
-					scrollEventY = scrollAccumY > 0 ? 1.0f : -1.0f;
-					scrollAccumY = 0.0f;
-				}
-
-				// Send both horizontal and vertical scroll events if needed
-				if (scrollEventX != 0.0f || scrollEventY != 0.0f) {
-					io.AddMouseWheelEvent(scrollEventX, scrollEventY);
-				}
+			// Scrolling (from determined scroll controller)
+			if (scrollController) {
+				size_t thumbstickIndex = (scrollController == &primaryControllerState) ?
+				                             static_cast<size_t>(RE::ControllerRole::Primary) :
+				                             static_cast<size_t>(RE::ControllerRole::Secondary);
+				ProcessThumbstickScroll(*scrollController, thumbstickIndex, mouseDeadzone, io);
 			}
 		}
 	}
@@ -2454,4 +2544,111 @@ bool VR::IsOpenVRCompatible() const
 	}
 
 	return false;  // Not compatible unless explicitly whitelisted
+}
+
+//=============================================================================
+// WAND POINTING IMPLEMENTATION
+//=============================================================================
+
+bool VR::ComputeWandIntersection(vr::VROverlayHandle_t overlayHandle, vr::TrackedDeviceIndex_t controllerIndex, ImVec2& outUV)
+{
+	Util::OpenVRContext ctx;
+	if (!ctx.HasOverlay())
+		return false;
+
+	// Use utility function for core intersection logic
+	bool intersected = Util::ComputeWandIntersection(ctx.overlay, overlayHandle, controllerIndex, outUV);
+
+	if (intersected) {
+		// Update wand state for debugging and visualization
+		wandState.isIntersecting = true;
+		wandState.uvCoordinates = outUV;
+		wandState.controllerIndex = controllerIndex;
+
+		// Get controller pose for ray geometry (for debugging/laser visualization)
+		vr::TrackedDevicePose_t poses[vr::k_unMaxTrackedDeviceCount];
+		if (Util::GetDeviceToAbsoluteTrackingPoseCompatible(vr::TrackingUniverseStanding, 0, poses, vr::k_unMaxTrackedDeviceCount)) {
+			if (poses[controllerIndex].bPoseIsValid) {
+				wandState.rayOrigin = Vector3(
+					poses[controllerIndex].mDeviceToAbsoluteTracking.m[0][3],
+					poses[controllerIndex].mDeviceToAbsoluteTracking.m[1][3],
+					poses[controllerIndex].mDeviceToAbsoluteTracking.m[2][3]);
+				wandState.rayDirection = Vector3(
+					-poses[controllerIndex].mDeviceToAbsoluteTracking.m[0][2],
+					-poses[controllerIndex].mDeviceToAbsoluteTracking.m[1][2],
+					-poses[controllerIndex].mDeviceToAbsoluteTracking.m[2][2]);
+			}
+		}
+	} else {
+		wandState.isIntersecting = false;
+	}
+
+	return intersected;
+}
+
+void VR::UpdateCursorFromWandPointing()
+{
+	// Only update cursor when menu is active (ImGui must be initialized)
+	if (!settings.EnableWandPointing || !globals::menu->IsEnabled)
+		return;
+
+	ImGuiIO& io = ImGui::GetIO();
+
+	// Determine which controller should be used for pointing
+	// Use non-attached controller (free hand points at menu on other hand)
+	vr::TrackedDeviceIndex_t pointingController = vr::k_unTrackedDeviceIndexInvalid;
+
+	if (settings.attachMode == AttachMode::ControllerOnly || settings.attachMode == AttachMode::Both) {
+		// If menu is attached to a controller, use the OTHER controller for pointing
+		ControllerDevice oppositeController = (settings.VRMenuAttachController == ControllerDevice::Primary) ?
+		                                          ControllerDevice::Secondary :
+		                                          ControllerDevice::Primary;
+		pointingController = Util::GetControllerIndexForDevice(oppositeController, lastKnownLeftHandedMode);
+	} else {
+		// HMD-only mode: use primary (dominant) hand for pointing
+		pointingController = Util::GetControllerIndexForDevice(ControllerDevice::Primary, lastKnownLeftHandedMode);
+	}
+
+	if (pointingController == vr::k_unTrackedDeviceIndexInvalid) {
+		wandState.isIntersecting = false;
+		return;
+	}
+
+	// Try to get intersection with active overlay
+	ImVec2 uv;
+	bool intersected = false;
+
+	// Check HMD overlay first
+	if (menuOverlayHandle != vr::k_ulOverlayHandleInvalid) {
+		if (ComputeWandIntersection(menuOverlayHandle, pointingController, uv)) {
+			intersected = true;
+		}
+	}
+
+	// If HMD overlay didn't intersect, try controller overlay
+	if (!intersected && menuControllerOverlayHandle != vr::k_ulOverlayHandleInvalid) {
+		if (ComputeWandIntersection(menuControllerOverlayHandle, pointingController, uv)) {
+			intersected = true;
+		}
+	}
+
+	// Update cursor position from intersection
+	if (intersected) {
+		// Convert UV (0-1) to screen pixel coordinates
+		// Invert Y to match laser visualization (OpenVR UV has 0 at bottom)
+		float screenX = uv.x * io.DisplaySize.x;
+		float screenY = (1.0f - uv.y) * io.DisplaySize.y;
+
+		// Clamp to screen bounds (allow full display size, consistent with thumbstick cursor)
+		screenX = std::clamp(screenX, 0.0f, io.DisplaySize.x);
+		screenY = std::clamp(screenY, 0.0f, io.DisplaySize.y);
+
+		io.MousePos = ImVec2(screenX, screenY);
+		io.AddMousePosEvent(screenX, screenY);
+		io.MouseDrawCursor = true;
+		io.WantSetMousePos = true;
+	} else {
+		// Ensure wand state is cleared if no intersection
+		wandState.isIntersecting = false;
+	}
 }
