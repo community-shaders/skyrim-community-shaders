@@ -1,6 +1,8 @@
 #pragma once
 
+#include "Utils/Input.h"
 #include <functional>
+#include <vector>
 
 // Forward declarations
 class Menu;
@@ -20,14 +22,12 @@ public:
 	};
 
 	static void RenderGeneralSettings(
-		SettingsState& state,
-		const std::function<const char*(uint32_t)>& keyIdToString);
+		SettingsState& state);
 
 private:
 	static void RenderShadersTab();
 	static void RenderKeybindingsTab(
-		SettingsState& state,
-		const std::function<const char*(uint32_t)>& keyIdToString);
+		SettingsState& state);
 	static void RenderInterfaceTab();
 
 	// Interface sub-tabs

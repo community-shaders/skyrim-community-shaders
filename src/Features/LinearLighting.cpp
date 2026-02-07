@@ -145,6 +145,11 @@ void LinearLighting::PostPostLoad()
 
 LinearLighting::PerFrameData LinearLighting::GetCommonBufferData()
 {
+	if (!loaded) {
+		auto data = PerFrameData{};
+		data.enableLinearLighting = false;
+		return data;
+	}
 	bool isMainLoadingMenu = globals::game::ui && (globals::game::ui->IsMenuOpen(RE::MainMenu::MENU_NAME) || globals::game::ui->IsMenuOpen(RE::LoadingMenu::MENU_NAME));
 	auto data = PerFrameData{};
 	data.enableLinearLighting = settings.enableLinearLighting && !isMainLoadingMenu;

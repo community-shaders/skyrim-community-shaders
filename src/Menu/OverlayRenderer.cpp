@@ -25,7 +25,7 @@ void OverlayRenderer::RenderOverlay(
 	Menu& menu,
 	const std::function<void()>& processInputEventQueue,
 	const std::function<void()>& drawSettings,
-	const std::function<const char*(uint32_t)>& keyIdToString,
+	const std::function<const char*(std::vector<InputCombo>)>& keyIdToString,
 	float& cachedFontSize,
 	float currentFontSize)
 {
@@ -110,7 +110,7 @@ void OverlayRenderer::InitializeImGuiFrame(Menu& menu)
 	ThemeManager::SetupImGuiStyle(menu);
 }
 
-void OverlayRenderer::RenderShaderCompilationStatus(const std::function<const char*(uint32_t)>& keyIdToString)
+void OverlayRenderer::RenderShaderCompilationStatus(const std::function<const char*(std::vector<InputCombo>)>& keyIdToString)
 {
 	auto shaderCache = globals::shaderCache;
 	auto failed = shaderCache->GetCurrentFailedCount();

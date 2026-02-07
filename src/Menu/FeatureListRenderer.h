@@ -48,17 +48,23 @@ private:
 
 	struct DrawMenuVisitor
 	{
+		explicit DrawMenuVisitor(std::string& pendingFeatureSelectionRef) :
+			pendingFeatureSelection(pendingFeatureSelectionRef) {}
+
 		void operator()(const BuiltInMenu& menu);
 		void operator()(const std::string&);
 		void operator()(const CategoryHeader&);
 		void operator()(Feature* feat);
 
 	private:
+		std::string& pendingFeatureSelection;
+
 		// Helper methods for Feature rendering
 		static bool IsFeatureInstalled(const std::string& featureName);
-		static void RenderFeatureHeader(Feature* feat, bool isDisabled, bool isLoaded);
-		static void RenderFeatureSettings(Feature* feat, bool isDisabled, bool isLoaded, bool hasFailedMessage);
+		void RenderFeatureHeader(Feature* feat, bool isDisabled, bool isLoaded);
+		void RenderFeatureSettings(Feature* feat, bool isDisabled, bool isLoaded, bool hasFailedMessage);
 		static void RenderRestoreDefaultsButton(Feature* feat, bool isDisabled, bool isLoaded);
+		void RenderReactiveConstraintWarningDialog();
 	};
 
 	static std::vector<MenuFuncInfo> BuildMenuList(
@@ -80,5 +86,6 @@ private:
 
 	static void RenderRightColumn(
 		const std::vector<MenuFuncInfo>& menuList,
-		size_t selectedMenu);
+		size_t selectedMenu,
+		std::string& pendingFeatureSelection);
 };

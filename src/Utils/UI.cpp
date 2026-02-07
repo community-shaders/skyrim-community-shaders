@@ -6,6 +6,7 @@
 #include "Menu/Fonts.h"
 #include "Menu/IconLoader.h"
 #include "Menu/ThemeManager.h"
+#include "PerfUtils.h"
 #include "ShaderCache.h"
 #include "WeatherManager.h"
 #include "WeatherVariableRegistry.h"
@@ -21,9 +22,11 @@
 #include <wrl/client.h>
 
 #include "../Feature.h"
+#include "../Features/VR.h"
 #include "../Globals.h"
 #include "../Menu.h"
 #include "FileSystem.h"
+#include "VRUtils.h"
 
 #define STB_IMAGE_IMPLEMENTATION
 #include <algorithm>
@@ -1255,6 +1258,32 @@ namespace Util
 
 			return keyboard_keys_international[key];
 		}
+
+		std::string KeyIdToString(const std::vector<InputCombo>& combo)
+		{
+			if (combo.empty())
+				return "None";
+
+			bool hasVRInput = false;
+			for (const auto& input : combo) {
+				if (input.GetDevice() != InputDeviceType::Keyboard && input.GetDevice() != InputDeviceType::Mouse) {
+					hasVRInput = true;
+					break;
+				}
+			}
+
+			if (hasVRInput && REL::Module::IsVR()) {
+				return InputCombo::GetVRString(combo);
+			}
+
+			std::string result;
+			for (size_t i = 0; i < combo.size(); ++i) {
+				if (i > 0)
+					result += " + ";
+				result += KeyIdToString(combo[i].GetKey());
+			}
+			return result;
+		}
 	}  // namespace Input
 
 	bool ButtonWithFlash(const char* label, const ImVec2& size, int flashDurationMs)
@@ -1483,6 +1512,11 @@ namespace Util
 			std::string featureName = feature->GetShortName();
 			if (!globalRegistry->HasWeatherSupport(featureName)) {
 				return false;
+			}
+
+			// Still controlled if variable is mid-transition (e.g., transitioning to a weather without an override)
+			if (globalRegistry->IsFeatureVariableInTransition(featureName, settingName)) {
+				return true;
 			}
 
 			// Check if current weather exists
@@ -1714,4 +1748,219 @@ namespace Util
 		}
 	}
 
+	bool InputComboWidget(
+		const char* label,
+		std::vector<InputCombo>& combo,
+		bool& isRecording,
+		const char* recordingLabel)
+	{
+		bool changed = false;
+		ImGui::Text("%s", label);
+		ImGui::SameLine();
+
+		// Use theme colors for consistent styling
+		auto& theme = globals::menu->GetTheme().StatusPalette;
+
+		if (isRecording) {
+			// Recording state visual
+			ImGui::PushStyleColor(ImGuiCol_Button, theme.CurrentHotkey);
+			ImGui::PushStyleColor(ImGuiCol_ButtonHovered, theme.CurrentHotkey);
+			ImGui::PushStyleColor(ImGuiCol_ButtonActive, theme.CurrentHotkey);
+			ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0, 0, 0, 1));  // Black text on recording color
+
+			// Show current pending combo if available, otherwise prompt
+			std::string buttonText;
+			if (!combo.empty()) {
+				buttonText = Util::Input::KeyIdToString(combo) + "...";  // Indicate it's still capturing
+			} else {
+				buttonText = "Recording... (Esc to cancel)";
+			}
+
+			if (ImGui::Button(buttonText.c_str(), ImVec2(240, 0))) {
+				isRecording = false;
+			}
+
+			ImGui::PopStyleColor(4);
+
+			// Add tooltip explaining how to record
+			if (ImGui::IsItemHovered()) {
+				ImGui::SetTooltip("Press any key combination.\nModifiers (Ctrl, Shift, Alt) are supported.\nPress Escape to cancel.");
+			}
+		} else {
+			// Display current binding with unique button ID
+			std::string keyString = Util::Input::KeyIdToString(combo);
+			std::string btnLabel = keyString + "##" + recordingLabel;
+			if (ImGui::Button(btnLabel.c_str(), ImVec2(240, 0))) {
+				isRecording = true;
+			}
+
+			// Context menu for clearing
+			if (ImGui::BeginPopupContextItem()) {
+				if (ImGui::Selectable("Clear Binding")) {
+					combo.clear();
+					changed = true;
+				}
+				ImGui::EndPopup();
+			}
+
+			// First run / empty state hint
+			if (combo.empty()) {
+				ImGui::SameLine();
+				ImGui::TextDisabled("(Click to bind)");
+			}
+		}
+
+		// Draw VR-specific color coding if applicable
+		if (REL::Module::IsVR() && !combo.empty()) {
+			ImGui::SameLine();
+
+			// Check if we have mixed devices
+			bool hasPrimary = false;
+			bool hasSecondary = false;
+			bool hasBoth = false;
+
+			for (const auto& input : combo) {
+				switch (input.GetDevice()) {
+				case InputDeviceType::Primary:
+					hasPrimary = true;
+					break;
+				case InputDeviceType::Secondary:
+					hasSecondary = true;
+					break;
+				case InputDeviceType::Both:
+					hasBoth = true;
+					break;
+				default:
+					break;
+				}
+			}
+
+			ImVec4 indicatorColor = GetControllerDefaultColor();
+			const char* indicatorText = "";
+
+			if (hasBoth || (hasPrimary && hasSecondary)) {
+				indicatorColor = GetControllerBothColor();
+				indicatorText = hasBoth ? "(Both)" : "(Mixed)";
+			} else if (hasPrimary) {
+				indicatorColor = GetControllerPrimaryColor();
+				indicatorText = "(Primary)";
+			} else if (hasSecondary) {
+				indicatorColor = GetControllerSecondaryColor();
+				indicatorText = "(Secondary)";
+			}
+
+			if (indicatorText[0] != '\0') {
+				ImGui::TextColored(indicatorColor, "%s", indicatorText);
+			}
+		}
+
+		return changed;
+	}
+
+	namespace ConstrainedUI
+	{
+		namespace
+		{
+			// Helper to render constraint tooltip
+			void RenderConstraintTooltip(const FeatureConstraints::ConstraintResult& constraint)
+			{
+				if (!ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+					return;
+
+				ImGui::BeginTooltip();
+				ImGui::PushTextWrapPos(ImGui::GetFontSize() * 35.0f);
+				ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.2f, 1.0f), "Setting Constrained");
+				ImGui::Text("This setting is constrained by:");
+				ImGui::Spacing();
+				for (const auto& src : constraint.sources) {
+					ImGui::BulletText("%s", src.featureName.c_str());
+					ImGui::Indent();
+					ImGui::TextWrapped("%s", src.reason.c_str());
+					if (src.recommendDisableAtBoot) {
+						ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.5f, 1.0f),
+							"Consider disabling this feature at boot for best compatibility.");
+					}
+					ImGui::Unindent();
+				}
+				ImGui::Separator();
+				ImGui::Text("Forced value: %s", FeatureConstraints::FormatConstraintValue(constraint.forcedValue).c_str());
+				ImGui::PopTextWrapPos();
+				ImGui::EndTooltip();
+			}
+		}
+
+		bool Checkbox(const char* label, bool* value, const FeatureConstraints::SettingId& settingId)
+		{
+			auto constraint = FeatureConstraints::GetConstraints(settingId);
+
+			if (constraint.isConstrained) {
+				// Display the forced value instead of the stored value
+				if (auto* forcedBool = std::get_if<bool>(&constraint.forcedValue)) {
+					bool displayValue = *forcedBool;
+					ImGui::BeginDisabled();
+					ImGui::Checkbox(label, &displayValue);
+					ImGui::EndDisabled();
+				} else {
+					// Fallback: wrong type, show disabled with stored value
+					ImGui::BeginDisabled();
+					ImGui::Checkbox(label, value);
+					ImGui::EndDisabled();
+				}
+				RenderConstraintTooltip(constraint);
+				return false;
+			}
+
+			return ImGui::Checkbox(label, value);
+		}
+
+		bool SliderFloat(const char* label, float* value, float min, float max,
+			const FeatureConstraints::SettingId& settingId, const char* format)
+		{
+			auto constraint = FeatureConstraints::GetConstraints(settingId);
+
+			if (constraint.isConstrained) {
+				// Display the forced value instead of the stored value
+				if (auto* forcedFloat = std::get_if<float>(&constraint.forcedValue)) {
+					float displayValue = *forcedFloat;
+					ImGui::BeginDisabled();
+					ImGui::SliderFloat(label, &displayValue, min, max, format);
+					ImGui::EndDisabled();
+				} else {
+					// Fallback: wrong type, show disabled with stored value
+					ImGui::BeginDisabled();
+					ImGui::SliderFloat(label, value, min, max, format);
+					ImGui::EndDisabled();
+				}
+				RenderConstraintTooltip(constraint);
+				return false;
+			}
+
+			return ImGui::SliderFloat(label, value, min, max, format);
+		}
+
+		bool SliderInt(const char* label, int* value, int min, int max,
+			const FeatureConstraints::SettingId& settingId, const char* format)
+		{
+			auto constraint = FeatureConstraints::GetConstraints(settingId);
+
+			if (constraint.isConstrained) {
+				// Display the forced value instead of the stored value
+				if (auto* forcedInt = std::get_if<int>(&constraint.forcedValue)) {
+					int displayValue = *forcedInt;
+					ImGui::BeginDisabled();
+					ImGui::SliderInt(label, &displayValue, min, max, format);
+					ImGui::EndDisabled();
+				} else {
+					// Fallback: wrong type, show disabled with stored value
+					ImGui::BeginDisabled();
+					ImGui::SliderInt(label, value, min, max, format);
+					ImGui::EndDisabled();
+				}
+				RenderConstraintTooltip(constraint);
+				return false;
+			}
+
+			return ImGui::SliderInt(label, value, min, max, format);
+		}
+	}
 }  // namespace Util
