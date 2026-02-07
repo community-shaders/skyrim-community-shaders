@@ -1003,7 +1003,6 @@ bool Shape::IsDirtyState() const
 	return pendingState != state;
 }
 
-// TODO: Handle lazy skinned meshes update
 bool Shape::UpdateSkinning()
 {
 	/*auto& geometryFlags = geometry->GetFlags();
@@ -1016,6 +1015,10 @@ bool Shape::UpdateSkinning()
 
 	// RaceMenu crash fix
 	if (!skinInstance)
+		return false;
+
+	// Only update if the game has updated the matrices
+	if (frameID == skinInstance->frameID)
 		return false;
 
 	// UBE crash fix
@@ -1033,7 +1036,13 @@ bool Shape::UpdateSkinning()
 	if (!rootParent)
 		return false;
 
-	auto skinRootInverse = GetXMFromNiTransform(rootParent->world.Invert());
+	//logger::info("[RT] Shape::UpdateSkinning {} - {}, {}", geometry->name, rootParent->name, skinInstance->frameID);
+
+	auto delta = skinInstance->frameID - frameID;
+
+	auto skinRootInverse = GetXMFromNiTransform(delta > 1 ? rootParent->previousWorld.Invert() : rootParent->world.Invert());
+
+	frameID = skinInstance->frameID;
 
 	for (uint i = 0; i < skinInstance->numMatrices; i++) {
 		XMStoreFloat3x4(&boneMatrices[i], XMMatrixMultiply(XMLoadFloat3x4(&boneMatricesArray[i]), skinRootInverse));
