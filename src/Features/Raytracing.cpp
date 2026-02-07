@@ -22,6 +22,7 @@
 #include "Features/HairSpecular.h"
 #include "Features/LinearLighting.h"
 #include "Features/WetnessEffects.h"
+#include "Features/Upscaling.h"
 
 #include <imgui_stdlib.h>
 
@@ -87,6 +88,24 @@ void Raytracing::LoadSettings(json& o_json)
 void Raytracing::SaveSettings(json& o_json)
 {
 	o_json = settings;
+}
+
+std::vector<FeatureConstraints::Constraint> Raytracing::GetActiveConstraints() const
+{
+	std::vector<FeatureConstraints::Constraint> constraints;
+
+	// Only impose constraints when the feature is loaded and enabled
+	if (!loaded || !settings.Enabled) {
+		return constraints;
+	}
+
+	// Terrain Blending has visual issues with VR depth buffer culling in exteriors
+	constraints.push_back({ { "Upscaling", "upscaleMethod" },
+		static_cast<int>(Upscaling::UpscaleMethod::kNONE),
+		"Upscaling also creates a DirectX12 device which results in a crash.",
+		true });
+
+	return constraints;
 }
 
 static void DrawFloat2(const char* label, float2& v, float min = 0.0f, float max = 1.0f)

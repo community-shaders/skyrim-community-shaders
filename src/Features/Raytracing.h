@@ -171,6 +171,7 @@ struct Raytracing : public OverlayFeature
 	virtual bool inline SupportsVR() override { return false; }
 	virtual inline std::string_view GetShaderDefineName() override { return "RT"; }
 	virtual inline bool HasShaderDefine(RE::BSShader::Type t) override { return t == RE::BSShader::Type::Lighting; };
+	virtual std::vector<FeatureConstraints::Constraint> GetActiveConstraints() const override;
 
 	// Settings & UI
 	virtual void RestoreDefaultSettings() override;
