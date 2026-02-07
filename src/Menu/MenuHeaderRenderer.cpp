@@ -207,10 +207,7 @@ void MenuHeaderRenderer::RenderHeader(bool isDocked, bool showLogo, bool canShow
 			// Clear Shader Cache Button
 			ImGui::TableNextColumn();
 			if (ImGui::Button("Clear Shader Cache", { -1, 0 })) {
-				shaderCache->Clear();
-				if (shaderCache->IsDiskCache()) {
-					shaderCache->DeleteDiskCache();
-				}
+				Util::RequestClearShaderCacheConfirmation();
 			}
 			if (auto _tt = Util::HoverTooltipWrapper()) {
 				ImGui::Text(
@@ -291,7 +288,6 @@ std::vector<MenuHeaderRenderer::ActionIcon> MenuHeaderRenderer::BuildActionIcons
 			} });
 	}
 	if (uiIcons.clearCache.texture) {
-		auto shaderCache = globals::shaderCache;
 		actionIcons.push_back({ uiIcons.clearCache.texture,
 			"Clear Shader Cache\n\n"
 			"Clears the shader cache and disk cache (if enabled).\n"
@@ -299,11 +295,8 @@ std::vector<MenuHeaderRenderer::ActionIcon> MenuHeaderRenderer::BuildActionIcons
 			"the vanilla shaders at runtime. The Disk Cache is a collection of\n"
 			"compiled shaders on disk. Clearing will mean that shaders are\n"
 			"recompiled only when the game re-encounters them.",
-			[shaderCache]() {
-				shaderCache->Clear();
-				if (shaderCache->IsDiskCache()) {
-					shaderCache->DeleteDiskCache();
-				}
+			[]() {
+				Util::RequestClearShaderCacheConfirmation();
 			} });
 	}
 

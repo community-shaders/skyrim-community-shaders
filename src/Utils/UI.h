@@ -1,13 +1,16 @@
 #pragma once
 #include <algorithm>
 #include <cfloat>  // For FLT_MAX
+#include <cstdio>
 #include <functional>
 #include <imgui.h>
 #include <string>
 #include <vector>
 #include <windows.h>  // For WPARAM and virtual key constants
 
+#include "../FeatureConstraints.h"
 #include "../Menu/Fonts.h"
+#include "Utils/Input.h"
 
 // Forward declarations
 struct ID3D11Device;
@@ -16,11 +19,22 @@ struct ImVec2;
 class Menu;
 class Feature;
 
-#define BUFFER_VIEWER_NODE(a_value, a_scale)                                                                 \
-	if (ImGui::TreeNode(#a_value)) {                                                                         \
-		ImGui::Image(a_value->srv.get(), { a_value->desc.Width * a_scale, a_value->desc.Height * a_scale }); \
-		ImGui::TreePop();                                                                                    \
+// Helper macro for displaying texture buffers in ImGui with resolution info
+#define BUFFER_VIEWER_NODE_IMPL(a_value, a_label, a_scale)                                                       \
+	if (a_value && a_value->srv.get()) {                                                                         \
+		char buf[128];                                                                                           \
+		snprintf(buf, sizeof(buf), "%s (%ux%u)", a_label, a_value->desc.Width, a_value->desc.Height);            \
+		if (ImGui::TreeNode(buf)) {                                                                              \
+			ImGui::Image(a_value->srv.get(), { a_value->desc.Width * a_scale, a_value->desc.Height * a_scale }); \
+			ImGui::TreePop();                                                                                    \
+		}                                                                                                        \
 	}
+
+#define BUFFER_VIEWER_NODE(a_value, a_scale) \
+	BUFFER_VIEWER_NODE_IMPL(a_value, #a_value, a_scale)
+
+#define BUFFER_VIEWER_NODE_TITLE(a_value, a_title, a_scale) \
+	BUFFER_VIEWER_NODE_IMPL(a_value, a_title, a_scale)
 
 #define BUFFER_VIEWER_NODE_BULLET(a_value, a_scale) \
 	ImGui::BulletText(#a_value);                    \
@@ -53,11 +67,14 @@ namespace Util
 	 * if (auto _tt = Util::HoverTooltipWrapper()){
 	 *     ImGui::Text("What the tooltip says.");
 	 * }
+	 *
+	 * Automatically applies the Subtext font role for consistent tooltip styling.
 	*/
 	class HoverTooltipWrapper
 	{
 	private:
 		bool hovered;
+		ImFont* previousFont;
 
 	public:
 		HoverTooltipWrapper();
@@ -81,6 +98,15 @@ namespace Util
 		DisableGuard(bool disable);
 		~DisableGuard();
 	};
+
+	/**
+	 * Confirmation popup for clearing shader cache.
+	 * Call RequestClearShaderCacheConfirmation() when the clear button is clicked.
+	 * Call DrawClearShaderCacheConfirmation() every frame to render the popup.
+	 * The popup respects the "don't ask me again" setting.
+	 */
+	void RequestClearShaderCacheConfirmation();
+	void DrawClearShaderCacheConfirmation();
 
 	/**
 	 * RAII wrapper for styled ImGui buttons that automatically applies and restores styling.
@@ -235,6 +261,49 @@ namespace Util
 		 */
 		bool ColorEdit3(const char* label, Feature* feature, const char* settingName, float col[3]);
 		bool ColorEdit4(const char* label, Feature* feature, const char* settingName, float col[4]);
+	}
+
+	/**
+	 * Constraint-aware UI helpers
+	 * These functions automatically check if a setting is constrained by another feature
+	 * and disable the control with an informative tooltip explaining why
+	 */
+	namespace ConstrainedUI
+	{
+		/**
+		 * Constraint-aware checkbox that greys out when constrained by another feature
+		 * @param label The label for the checkbox
+		 * @param value Pointer to the bool value
+		 * @param settingId The setting identifier for constraint lookup
+		 * @return True if value was changed (only possible when not constrained)
+		 */
+		bool Checkbox(const char* label, bool* value, const FeatureConstraints::SettingId& settingId);
+
+		/**
+		 * Constraint-aware slider float that greys out when constrained by another feature
+		 * @param label The label for the slider
+		 * @param value Pointer to the float value
+		 * @param min Minimum value
+		 * @param max Maximum value
+		 * @param settingId The setting identifier for constraint lookup
+		 * @param format Display format
+		 * @return True if value was changed (only possible when not constrained)
+		 */
+		bool SliderFloat(const char* label, float* value, float min, float max,
+			const FeatureConstraints::SettingId& settingId, const char* format = "%.3f");
+
+		/**
+		 * Constraint-aware slider int that greys out when constrained by another feature
+		 * @param label The label for the slider
+		 * @param value Pointer to the int value
+		 * @param min Minimum value
+		 * @param max Maximum value
+		 * @param settingId The setting identifier for constraint lookup
+		 * @param format Display format
+		 * @return True if value was changed (only possible when not constrained)
+		 */
+		bool SliderInt(const char* label, int* value, int min, int max,
+			const FeatureConstraints::SettingId& settingId, const char* format = "%d");
 	}
 
 	/**
@@ -605,6 +674,31 @@ namespace Util
 	void DrawSearchIcon(const ImVec2& position, float size = 20.0f, float alpha = 0.7f);
 
 	/**
+	 * @brief Draws a semi-transparent dark overlay behind modal dialogs for depth.
+	 * @param alpha The alpha value for the overlay (0-255, default: 160)
+	 */
+	void DrawModalBackground(uint8_t alpha = 160);
+
+	/**
+	 * @brief Draws text with a breathing/pulsing alpha animation using theme text color.
+	 * @param text The text to display
+	 * @param speed Animation speed multiplier (default: 2.5f)
+	 * @param minAlpha Minimum alpha value (default: 0.7f)
+	 * @param maxAlpha Maximum alpha value (default: 1.0f)
+	 */
+	void DrawBreathingText(const char* text, float speed = 2.5f, float minAlpha = 0.7f, float maxAlpha = 1.0f);
+
+	/**
+	 * @brief Returns a color with pulsing brightness animation applied.
+	 * @param baseColor The base color to pulse
+	 * @param speed Animation speed multiplier (default: 4.0f)
+	 * @param minBrightness Minimum brightness multiplier (default: 0.7f)
+	 * @param maxBrightness Maximum brightness multiplier (default: 1.0f)
+	 * @return The color with pulsing brightness applied (alpha unchanged)
+	 */
+	ImVec4 GetPulsingColor(const ImVec4& baseColor, float speed = 4.0f, float minBrightness = 0.7f, float maxBrightness = 1.0f);
+
+	/**
 	 * @brief Draws the feature search bar with magnifying glass icon.
 	 * @param searchString Reference to the search string to modify
 	 * @param availableWidth The available width for the search bar
@@ -737,6 +831,24 @@ namespace Util
 		 * @endcode
 		 */
 		const char* KeyIdToString(uint32_t key);
+
+		/**
+		 * @brief Converts a key combo (vector of InputCombo) to a human-readable string
+		 *
+		 * For keyboard-only combos, produces strings like "Ctrl + Shift + A".
+		 * For VR inputs, delegates to InputCombo::GetVRString for proper formatting.
+		 *
+		 * @param combo Vector of InputCombo representing the key combination
+		 * @return Human-readable string representation of the combo, or "None" if empty
+		 *
+		 * @example
+		 * @code
+		 * std::vector<InputCombo> combo = { InputCombo::Keyboard(VK_CONTROL), InputCombo::Keyboard('A') };
+		 * std::string comboStr = Util::Input::KeyIdToString(combo);
+		 * // comboStr will be "Control + A"
+		 * @endcode
+		 */
+		std::string KeyIdToString(const std::vector<InputCombo>& combo);
 	}
 
 	/**
@@ -1178,4 +1290,23 @@ namespace Util
 		ImGui::PopStyleVar();
 		ImGui::EndChild();
 	}
+
+	/**
+	 * @brief Unified input recording widget for both VR and Desktop
+	 *
+	 * Handles recording of multi-key sequences for keyboard, mouse, and VR controllers.
+	 * Supports modifiers, combo sequences, and device-specific rendering.
+	 *
+	 * @param label The label for the input setting
+	 * @param combo The vector of InputCombo to record into
+	 * @param isRecording Reference to boolean tracking active recording state
+	 * @param recordingLabel Unique label ID for the recording button
+	 *
+	 * @return true if the combo was modified
+	 */
+	bool InputComboWidget(
+		const char* label,
+		std::vector<InputCombo>& combo,
+		bool& isRecording,
+		const char* recordingLabel);
 }  // namespace Util

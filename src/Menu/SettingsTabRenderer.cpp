@@ -7,6 +7,7 @@
 #include <windows.h>
 
 #include "BackgroundBlur.h"
+#include "Features/VR.h"
 #include "Fonts.h"
 #include "Globals.h"
 #include "IconLoader.h"
@@ -173,14 +174,12 @@ namespace
 	}
 }
 
-void SettingsTabRenderer::RenderGeneralSettings(
-	SettingsState& state,
-	const std::function<const char*(uint32_t)>& keyIdToString)
+void SettingsTabRenderer::RenderGeneralSettings(SettingsState& state)
 {
 	MenuFonts::TabBarPaddingGuard tabPaddingGuard(Menu::FontRole::Heading);
 	if (ImGui::BeginTabBar("##GeneralTabBar", ImGuiTabBarFlags_None)) {
 		RenderShadersTab();
-		RenderKeybindingsTab(state, keyIdToString);
+		RenderKeybindingsTab(state);
 		RenderInterfaceTab();
 		ImGui::EndTabBar();
 	}
@@ -215,6 +214,16 @@ void SettingsTabRenderer::RenderShadersTab()
 			ImGui::Text("Skips a shader being replaced if it hasn't been compiled yet. Also makes compilation blazingly fast!");
 		}
 
+		// Skip confirmation when clearing shader cache
+		auto& menuSettings = globals::menu->GetSettings();
+		bool skipConfirmation = menuSettings.SkipClearCacheConfirmation;
+		if (ImGui::Checkbox("Skip Clear Cache Dialogue", &skipConfirmation)) {
+			menuSettings.SkipClearCacheConfirmation = skipConfirmation;
+		}
+		if (auto _tt = Util::HoverTooltipWrapper()) {
+			ImGui::Text("When checked, the shader cache will be cleared immediately without asking for confirmation.");
+		}
+
 		if (shaderCache->GetTotalTasks() > 0) {
 			ImGui::Text("Last shader cache build duration: %s",
 				shaderCache->GetShaderStatsString(true, true).c_str());
@@ -225,80 +234,34 @@ void SettingsTabRenderer::RenderShadersTab()
 }
 
 void SettingsTabRenderer::RenderKeybindingsTab(
-	SettingsState& state,
-	const std::function<const char*(uint32_t)>& keyIdToString)
+	SettingsState& state)
 {
 	if (BeginTabItemWithFont("Keybindings", Menu::FontRole::Heading)) {
 		auto& settings = globals::menu->GetSettings();
-		auto& themeSettings = globals::menu->GetSettings().Theme;
 
-		// Toggle Key
-		if (state.settingToggleKey) {
-			ImGui::Text("Press any key to set as toggle key...");
-		} else {
-			ImGui::AlignTextToFramePadding();
-			ImGui::Text("Toggle Key:");
-			ImGui::SameLine();
-			ImGui::AlignTextToFramePadding();
-			ImGui::TextColored(themeSettings.StatusPalette.CurrentHotkey, "%s", keyIdToString(settings.ToggleKey));
+		Util::InputComboWidget(
+			"Toggle Key:",
+			settings.ToggleKey,
+			state.settingToggleKey,
+			"Change##toggle");
 
-			ImGui::AlignTextToFramePadding();
-			ImGui::SameLine();
-			if (ImGui::Button("Change##toggle")) {
-				state.settingToggleKey = true;
-			}
-		}
+		Util::InputComboWidget(
+			"Effect Toggle Key:",
+			settings.EffectToggleKey,
+			state.settingsEffectsToggle,
+			"Change##EffectToggle");
 
-		// Effects Toggle Key
-		if (state.settingsEffectsToggle) {
-			ImGui::Text("Press any key to set as a toggle key for all effects...");
-		} else {
-			ImGui::AlignTextToFramePadding();
-			ImGui::Text("Effect Toggle Key:");
-			ImGui::SameLine();
-			ImGui::AlignTextToFramePadding();
-			ImGui::TextColored(themeSettings.StatusPalette.CurrentHotkey, "%s", keyIdToString(settings.EffectToggleKey));
+		Util::InputComboWidget(
+			"Skip Compilation Key:",
+			settings.SkipCompilationKey,
+			state.settingSkipCompilationKey,
+			"Change##skip");
 
-			ImGui::AlignTextToFramePadding();
-			ImGui::SameLine();
-			if (ImGui::Button("Change##EffectToggle")) {
-				state.settingsEffectsToggle = true;
-			}
-		}
-
-		// Skip Compilation Key
-		if (state.settingSkipCompilationKey) {
-			ImGui::Text("Press any key to set as Skip Compilation Key...");
-		} else {
-			ImGui::AlignTextToFramePadding();
-			ImGui::Text("Skip Compilation Key:");
-			ImGui::SameLine();
-			ImGui::AlignTextToFramePadding();
-			ImGui::TextColored(themeSettings.StatusPalette.CurrentHotkey, "%s", keyIdToString(settings.SkipCompilationKey));
-
-			ImGui::AlignTextToFramePadding();
-			ImGui::SameLine();
-			if (ImGui::Button("Change##skip")) {
-				state.settingSkipCompilationKey = true;
-			}
-		}
-
-		// Overlay Toggle Key
-		if (state.settingOverlayToggleKey) {
-			ImGui::Text("Press any key to set as a toggle key for displaying the overlay...");
-		} else {
-			ImGui::AlignTextToFramePadding();
-			ImGui::Text("Overlay Toggle Key:");
-			ImGui::SameLine();
-			ImGui::AlignTextToFramePadding();
-			ImGui::TextColored(themeSettings.StatusPalette.CurrentHotkey, "%s", keyIdToString(settings.OverlayToggleKey));
-
-			ImGui::AlignTextToFramePadding();
-			ImGui::SameLine();
-			if (ImGui::Button("Change##OverlayToggle")) {
-				state.settingOverlayToggleKey = true;
-			}
-		}
+		Util::InputComboWidget(
+			"Overlay Toggle Key:",
+			settings.OverlayToggleKey,
+			state.settingOverlayToggleKey,
+			"Change##OverlayToggle");
 
 		ImGui::EndTabItem();
 	}
@@ -309,12 +272,78 @@ void SettingsTabRenderer::RenderInterfaceTab()
 	if (BeginTabItemWithFont("Interface", Menu::FontRole::Heading)) {
 		MenuFonts::TabBarPaddingGuard tabPaddingGuard(Menu::FontRole::Subheading);
 		if (ImGui::BeginTabBar("##tabs", ImGuiTabBarFlags_None)) {
+			RenderBehaviorTab();
 			RenderThemesTab();
 			RenderFontsTab();
 			RenderStylingTab();
 			RenderColorsTab();
 			ImGui::EndTabBar();
 		}
+		ImGui::EndTabItem();
+	}
+}
+
+void SettingsTabRenderer::RenderBehaviorTab()
+{
+	if (BeginTabItemWithFont("Behavior", Menu::FontRole::Heading)) {
+		auto& themeSettings = globals::menu->GetSettings().Theme;
+
+		SeparatorTextWithFont("UI Behavior", Menu::FontRole::Subheading);
+
+		ImGui::Checkbox("Show Icon Buttons in Header", &themeSettings.ShowActionIcons);
+		if (auto _tt = Util::HoverTooltipWrapper()) {
+			ImGui::Text(
+				"When enabled: Shows action buttons (Save, Load, Clear Cache) as icons in the header\n"
+				"When disabled: Shows as text buttons below the header");
+		}
+
+		if (themeSettings.ShowActionIcons) {
+			ImGui::Indent();
+			if (ImGui::Checkbox("Use Monochrome Icons", &themeSettings.UseMonochromeIcons)) {
+				globals::menu->pendingIconReload = true;
+			}
+			if (auto _tt = Util::HoverTooltipWrapper()) {
+				ImGui::Text("Uses white monochrome icons that adapt to your theme's text color");
+			}
+			ImGui::SameLine();
+			if (ImGui::Checkbox("Use Monochrome CS Logo", &themeSettings.UseMonochromeLogo)) {
+				globals::menu->pendingIconReload = true;
+			}
+			if (auto _tt = Util::HoverTooltipWrapper()) {
+				ImGui::Text("Uses monochrome version of the Community Shaders logo");
+			}
+			ImGui::Unindent();
+		}
+
+		ImGui::Checkbox("Show Footer", &themeSettings.ShowFooter);
+		if (auto _tt = Util::HoverTooltipWrapper()) {
+			ImGui::Text("Shows the footer with game version, swap chain, and GPU information at the bottom of the window");
+		}
+
+		ImGui::Checkbox("Center Header Title", &themeSettings.CenterHeader);
+		if (auto _tt = Util::HoverTooltipWrapper()) {
+			ImGui::Text("Centers the Community Shaders title and logo in the header title bar");
+		}
+
+		ImGui::Checkbox("Auto-hide Feature List", &globals::menu->GetSettings().AutoHideFeatureList);
+		if (auto _tt = Util::HoverTooltipWrapper()) {
+			ImGui::Text("Automatically hides the left feature list panel. Move cursor to the left edge to show it.");
+		}
+
+		ImGui::SliderFloat("Tooltip Hover Delay", &themeSettings.TooltipHoverDelay, 0.0f, 2.0f, "%.2f s", ImGuiSliderFlags_AlwaysClamp);
+		if (auto _tt = Util::HoverTooltipWrapper()) {
+			ImGui::TextUnformatted("Time in seconds to wait before a tooltip appears when hovering over an item.");
+		}
+
+		SeparatorTextWithFont("Visual Effects", Menu::FontRole::Subheading);
+
+		if (ImGui::Checkbox("Background Blur", &themeSettings.BackgroundBlurEnabled)) {
+			BackgroundBlur::SetEnabled(themeSettings.BackgroundBlurEnabled);
+		}
+		if (auto _tt = Util::HoverTooltipWrapper()) {
+			ImGui::Text("Applies a blur effect to the background behind the menu window.");
+		}
+
 		ImGui::EndTabItem();
 	}
 }
@@ -808,6 +837,18 @@ void SettingsTabRenderer::RenderFontsTab()
 				menuInstance->pendingFontReload = true;
 			}
 
+			// Add Feature Title Scale slider under Title font role
+			if (role == Menu::FontRole::Title) {
+				ImGui::SliderFloat("Feature Header Scale", &themeSettings.FeatureHeading.FeatureTitleScale, 1.0f, 3.0f, "%.1fx", ImGuiSliderFlags_AlwaysClamp);
+				if (auto _tt = Util::HoverTooltipWrapper()) {
+					ImGui::Text("Scale multiplier for feature title text in the Settings tab.");
+				}
+				ImGui::SameLine();
+				if (ImGui::Button("Reset##FeatureHeaderScale")) {
+					themeSettings.FeatureHeading.FeatureTitleScale = ThemeManager::Constants::DEFAULT_FEATURE_TITLE_SCALE;
+				}
+			}
+
 			ImGui::Separator();
 			ImGui::PopID();
 		}
@@ -828,56 +869,6 @@ void SettingsTabRenderer::RenderStylingTab()
 	if (BeginTabItemWithFont("Styling", Menu::FontRole::Heading)) {
 		auto& themeSettings = globals::menu->GetSettings().Theme;
 		auto& style = themeSettings.Style;
-
-		SeparatorTextWithFont("Styling Options", Menu::FontRole::Subheading);
-
-		ImGui::Checkbox("Show Icon Buttons in Header", &themeSettings.ShowActionIcons);
-		if (auto _tt = Util::HoverTooltipWrapper()) {
-			ImGui::Text(
-				"When enabled: Shows action buttons (Save, Load, Clear Cache) as icons in the header\n"
-				"When disabled: Shows as text buttons below the header");
-		}
-
-		if (themeSettings.ShowActionIcons) {
-			ImGui::Indent();
-			if (ImGui::Checkbox("Use Monochrome Icons", &themeSettings.UseMonochromeIcons)) {
-				// Defer icon reload to next frame to avoid rendering with released textures
-				globals::menu->pendingIconReload = true;
-			}
-			if (auto _tt = Util::HoverTooltipWrapper()) {
-				ImGui::Text("Uses white monochrome icons that adapt to your theme's text color");
-			}
-			ImGui::SameLine();
-			if (ImGui::Checkbox("Use Monochrome CS Logo", &themeSettings.UseMonochromeLogo)) {
-				globals::menu->pendingIconReload = true;
-			}
-			if (auto _tt = Util::HoverTooltipWrapper()) {
-				ImGui::Text("Uses monochrome version of the Community Shaders logo");
-			}
-			ImGui::Unindent();
-		}
-
-		ImGui::Checkbox("Show Footer", &themeSettings.ShowFooter);
-		if (auto _tt = Util::HoverTooltipWrapper()) {
-			ImGui::Text("Shows the footer with game version, swap chain, and GPU information at the bottom of the window");
-		}
-
-		ImGui::Checkbox("Center Header Title", &themeSettings.CenterHeader);
-		if (auto _tt = Util::HoverTooltipWrapper()) {
-			ImGui::Text("Centers the Community Shaders title and logo in the header title bar");
-		}
-
-		ImGui::SliderFloat("Tooltip Hover Delay", &themeSettings.TooltipHoverDelay, 0.0f, 2.0f, "%.2f s", ImGuiSliderFlags_AlwaysClamp);
-		if (auto _tt = Util::HoverTooltipWrapper()) {
-			ImGui::TextUnformatted("Time in seconds to wait before a tooltip appears when hovering over an item.");
-		}
-
-		if (ImGui::Checkbox("Background Blur", &themeSettings.BackgroundBlurEnabled)) {
-			BackgroundBlur::SetEnabled(themeSettings.BackgroundBlurEnabled);
-		}
-		if (auto _tt = Util::HoverTooltipWrapper()) {
-			ImGui::Text("Applies a blur effect to the background behind the menu window.");
-		}
 
 		SeparatorTextWithFont("Main", Menu::FontRole::Subheading);
 		if (ImGui::SliderFloat("Global Scale", &themeSettings.GlobalScale, -1.f, 1.f, "%.2f")) {

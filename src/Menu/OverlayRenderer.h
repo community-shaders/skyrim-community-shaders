@@ -1,6 +1,8 @@
 #pragma once
 
+#include "Utils/Input.h"
 #include <functional>
+#include <vector>
 
 class Menu;
 
@@ -39,7 +41,7 @@ public:
 		Menu& menu,
 		const std::function<void()>& processInputEventQueue,
 		const std::function<void()>& drawSettings,
-		const std::function<const char*(uint32_t)>& keyIdToString,
+		const std::function<const char*(std::vector<InputCombo>)>& keyIdToString,
 		float& cachedFontSize,
 		float currentFontSize);
 
@@ -48,7 +50,7 @@ private:
 	static bool ShouldSkipRendering();
 	static void HandleFontReload(Menu& menu, float& cachedFontSize, float currentFontSize);
 	static void InitializeImGuiFrame(Menu& menu);
-	static void RenderShaderCompilationStatus(const std::function<const char*(uint32_t)>& keyIdToString);
+	static void RenderShaderCompilationStatus(const std::function<const char*(std::vector<InputCombo>)>& keyIdToString);
 	static void RenderShaderBlockingStatus();
 	static void RenderFirstTimeSetupOverlay();
 	static void RenderFeatureOverlays();

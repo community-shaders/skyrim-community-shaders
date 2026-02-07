@@ -21,6 +21,7 @@ struct SubsurfaceScattering;
 struct TerrainBlending;
 struct TerrainHelper;
 struct TerrainShadows;
+struct UnifiedWater;
 struct VolumetricLighting;
 struct VR;
 struct WaterEffects;
@@ -40,6 +41,7 @@ class Menu;
 namespace SIE
 {
 	class ShaderCache;
+	class ShaderFileDependencyTracker;
 }
 
 namespace globals
@@ -74,6 +76,7 @@ namespace globals
 		extern TerrainBlending terrainBlending;
 		extern TerrainHelper terrainHelper;
 		extern TerrainShadows terrainShadows;
+		extern UnifiedWater unifiedWater;
 		extern VolumetricLighting volumetricLighting;
 		extern VR vr;
 		extern WaterEffects waterEffects;
@@ -209,6 +212,7 @@ namespace globals
 		extern RE::INISettingCollection* iniSettingCollection;
 		extern RE::INIPrefSettingCollection* iniPrefSettingCollection;
 		extern RE::GameSettingCollection* gameSettingCollection;
+		extern RE::TES* tes;
 		extern float* cameraNear;
 		extern float* cameraFar;
 		extern float* deltaTime;
@@ -235,9 +239,11 @@ namespace globals
 		extern REL::Relocation<const RE::NiRTTI*> NiIntegerExtraDataRTTI;
 		extern REL::Relocation<const RE::NiRTTI*> BSLightingShaderPropertyRTTI;
 		extern REL::Relocation<const RE::NiRTTI*> BSEffectShaderPropertyRTTI;
+		extern REL::Relocation<const RE::NiRTTI*> BSWaterShaderPropertyRTTI;
 		extern REL::Relocation<const RE::NiRTTI*> NiParticleSystemRTTI;
 		extern REL::Relocation<const RE::NiRTTI*> NiBillboardNodeRTTI;
 		extern REL::Relocation<const RE::NiRTTI*> NiAlphaPropertyRTTI;
+		extern REL::Relocation<const RE::NiRTTI*> NiSourceTextureRTTI;
 	}
 
 	extern State* state;

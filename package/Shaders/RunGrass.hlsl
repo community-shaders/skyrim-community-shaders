@@ -485,7 +485,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 
 	float3 complexTest = TexBaseSampler.Load(int3(0, int(y) - 1, 0)).xyz * 2.0 - 1.0;
 	float complexLength = length(complexTest);
-	bool complex = abs(complexLength - 1.0) < 0.03;
+	bool complex = abs(complexLength - 1.0) < SharedData::grassLightingSettings.ComplexGrassThreshold;
 #		endif  // !TRUE_PBR
 
 	float4 baseColor;
@@ -635,12 +635,12 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
     {
         // Old Wrapped Model
         float wrappedDirLight = saturate(dirLightAngle + wrapAmount) / (1.0 + wrapAmount);
-        lightsDiffuseColor += dirLightColor * saturate(wrappedDirLight) * Color::GrassDiffuseMult();
+        lightsDiffuseColor += dirLightColor * saturate(wrappedDirLight) * Color::VanillaNormalization();
     }
 			else
     {
         // Original Standard Model
-        lightsDiffuseColor += dirLightColor * saturate(dirLightAngle) * Color::GrassDiffuseMult();
+        lightsDiffuseColor += dirLightColor * saturate(dirLightAngle) * Color::VanillaNormalization();
     }
 
 	float3 vertexColor = input.VertexColor.xyz;
@@ -656,10 +656,10 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	float3 albedo = max(0, baseColor.xyz * Color::ColorToLinear(vertexColor));
 
 	float3 subsurfaceColor = lerp(dot(albedo, 1.0 / 3.0), albedo, 2.0) * saturate(input.VertexNormal.w * 10.0);
-	float3 sss = dirLightColor * saturate(-dirLightAngle) * Color::GrassDiffuseMult();
+	float3 sss = dirLightColor * saturate(-dirLightAngle) * Color::VanillaNormalization();
 
 	if (complex)
-		lightsSpecularColor += GrassLighting::GetLightSpecularInput(SharedData::DirLightDirection.xyz, viewDirection, normal, dirLightColor, SharedData::grassLightingSettings.Glossiness) * Color::GrassSpecularMult();
+		lightsSpecularColor += GrassLighting::GetLightSpecularInput(SharedData::DirLightDirection.xyz, viewDirection, normal, dirLightColor, SharedData::grassLightingSettings.Glossiness) * Color::VanillaNormalization();
 #			endif
 
 #			if defined(LIGHT_LIMIT_FIX)
@@ -730,10 +730,10 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 
 				sss += lightColor * saturate(-lightAngle);
 
-				lightsDiffuseColor += lightDiffuseColor * Color::GrassDiffuseMult();
+				lightsDiffuseColor += lightDiffuseColor * Color::VanillaNormalization();
 
 				if (complex)
-					lightsSpecularColor += GrassLighting::GetLightSpecularInput(normalizedLightDirection, viewDirection, normal, lightColor, SharedData::grassLightingSettings.Glossiness) * Color::GrassSpecularMult();
+					lightsSpecularColor += GrassLighting::GetLightSpecularInput(normalizedLightDirection, viewDirection, normal, lightColor, SharedData::grassLightingSettings.Glossiness) * Color::VanillaNormalization();
 #endif
 			}
 		}
@@ -868,6 +868,8 @@ PS_OUTPUT main(PS_INPUT input)
 	psout.PS.w = diffuseAlpha;
 #		else
 
+	baseColor.xyz /= 2.8; // Match brightness of ISSkyrimClearDAY;
+
 	uint eyeIndex = Stereo::GetEyeIndexPS(input.HPosition, VPOSOffset);
 
 	float3 viewPosition = mul(FrameBuffer::CameraView[eyeIndex], float4(input.WorldPosition.xyz, 1)).xyz;
@@ -896,7 +898,7 @@ PS_OUTPUT main(PS_INPUT input)
 	}
 
 	float llDirLightMult = (SharedData::linearLightingSettings.enableLinearLighting && !SharedData::linearLightingSettings.isDirLightLinear) ? SharedData::linearLightingSettings.dirLightMult : 1.0f;
-	float3 diffuseColor = Color::DirectionalLight(SharedData::DirLightColor.xyz / max(llDirLightMult, 1e-5), SharedData::linearLightingSettings.isDirLightLinear) * dirShadow * dirDetailShadow * 0.5 * llDirLightMult;
+	float3 diffuseColor = Color::DirectionalLight(SharedData::DirLightColor.xyz / max(llDirLightMult, 1e-5), SharedData::linearLightingSettings.isDirLightLinear) * dirShadow * dirDetailShadow * llDirLightMult;
 
 #			if defined(LIGHT_LIMIT_FIX)
 	uint clusterIndex = 0;
@@ -940,7 +942,7 @@ PS_OUTPUT main(PS_INPUT input)
 
 				lightColor *= lightShadow;
 
-				diffuseColor += lightColor * 0.5;
+				diffuseColor += lightColor;
 			}
 		}
 	}

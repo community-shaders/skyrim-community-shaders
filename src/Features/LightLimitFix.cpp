@@ -255,8 +255,8 @@ void LightLimitFix::BSLightingShader_SetupGeometry_GeometrySetupConstantPointLig
 
 		if (i < a_pass->numShadowLights) {
 			auto* shadowLight = static_cast<RE::BSShadowLight*>(bsLight);
-			GET_INSTANCE_MEMBER(shadowLightIndex, shadowLight);
-			light.shadowMaskIndex = shadowLightIndex;
+			GET_INSTANCE_MEMBER(maskIndex, shadowLight);
+			light.shadowMaskIndex = maskIndex;
 			light.lightFlags.set(LightFlags::Shadow);
 		}
 
@@ -266,8 +266,8 @@ void LightLimitFix::BSLightingShader_SetupGeometry_GeometrySetupConstantPointLig
 	for (uint32_t i = 0; i < a_pass->numShadowLights; i++) {
 		auto bsLight = a_pass->sceneLights[i + 1];
 		auto* shadowLight = static_cast<RE::BSShadowLight*>(bsLight);
-		GET_INSTANCE_MEMBER(shadowLightIndex, shadowLight);
-		strictLightDataTemp.ShadowBitMask |= (1 << shadowLightIndex);
+		GET_INSTANCE_MEMBER(maskIndex, shadowLight);
+		strictLightDataTemp.ShadowBitMask |= (1 << maskIndex);
 	}
 }
 
@@ -375,12 +375,6 @@ void LightLimitFix::ClearShaderCache()
 	clusterCullingCS = (ID3D11ComputeShader*)Util::CompileShader(L"Data\\Shaders\\LightLimitFix\\ClusterCullingCS.hlsl", {}, "cs_5_0");
 }
 
-namespace RE
-{
-	class BSMultiBoundRoom : public NiNode
-	{};
-}
-
 void LightLimitFix::UpdateLights()
 {
 	auto smState = globals::game::smState;
@@ -447,8 +441,8 @@ void LightLimitFix::UpdateLights()
 
 					if (bsLight->IsShadowLight()) {
 						auto* shadowLight = static_cast<RE::BSShadowLight*>(bsLight);
-						GET_INSTANCE_MEMBER(shadowLightIndex, shadowLight);
-						light.shadowMaskIndex = shadowLightIndex;
+						GET_INSTANCE_MEMBER(maskIndex, shadowLight);
+						light.shadowMaskIndex = maskIndex;
 						light.lightFlags.set(LightFlags::Shadow);
 					}
 
