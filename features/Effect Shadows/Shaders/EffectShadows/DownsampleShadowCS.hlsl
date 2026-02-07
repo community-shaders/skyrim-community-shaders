@@ -33,23 +33,11 @@ void main(uint3 dispatchThreadID : SV_DispatchThreadID, uint3 groupThreadID : SV
 	// First 2x2 reduction
 	if (all((groupThreadID.xy % 2) == 0)) {
 		uint2 tid = groupThreadID.xy;
-		g_scratchDepths[tid.x][tid.y] =
+		OutputTexture[dispatchThreadID.xy / 2] =
 			(g_scratchDepths[tid.x + 0][tid.y + 0] +
 			 g_scratchDepths[tid.x + 1][tid.y + 0] +
 			 g_scratchDepths[tid.x + 0][tid.y + 1] +
 			 g_scratchDepths[tid.x + 1][tid.y + 1]) * 0.25;
-	}
-
-	GroupMemoryBarrierWithGroupSync();
-
-	// Second 2x2 reduction -> output
-	if (all((groupThreadID.xy % 4) == 0)) {
-		uint2 tid = groupThreadID.xy;
-		OutputTexture[dispatchThreadID.xy / 4] =
-			(g_scratchDepths[tid.x + 0][tid.y + 0] +
-			 g_scratchDepths[tid.x + 2][tid.y + 0] +
-			 g_scratchDepths[tid.x + 0][tid.y + 2] +
-			 g_scratchDepths[tid.x + 2][tid.y + 2]) * 0.25;
 	}
 }
 
@@ -86,22 +74,11 @@ void main(uint3 dispatchThreadID : SV_DispatchThreadID, uint3 groupThreadID : SV
 	// Second reduction: 4x4
 	if (all((groupThreadID.xy % 4) == 0)) {
 		uint2 tid = groupThreadID.xy;
-		g_scratchDepths[tid.x][tid.y] =
+		OutputTexture[dispatchThreadID.xy / 4] =
 			(g_scratchDepths[tid.x + 0][tid.y + 0] +
 			 g_scratchDepths[tid.x + 2][tid.y + 0] +
 			 g_scratchDepths[tid.x + 0][tid.y + 2] +
 			 g_scratchDepths[tid.x + 2][tid.y + 2]) * 0.25;
-	}
-
-	GroupMemoryBarrierWithGroupSync();
-
-	// Third reduction: 8x8 -> output
-	if (all((groupThreadID.xy % 8) == 0)) {
-		OutputTexture[dispatchThreadID.xy / 8] =
-			(g_scratchDepths[0][0] +
-			 g_scratchDepths[4][0] +
-			 g_scratchDepths[0][4] +
-			 g_scratchDepths[4][4]) * 0.25;
 	}
 }
 #endif

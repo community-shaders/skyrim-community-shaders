@@ -559,7 +559,6 @@ float3 GetLightingColor(float3 msPosition, float3 worldPosition, float2 screenPo
 	shadowVariance = 1.0 - sqrt(saturate(fwidth(dirShadow)));
 
 	dirColor *= dirShadow;
-	dirColor *= 1.0 + dot(SharedData::DirLightDirection.xyz, viewDirection) * 0.5 + 0.5;
 
 #		if defined(SKYLIGHTING)
 	ambientColor = Color::IrradianceToLinear(ambientColor);
