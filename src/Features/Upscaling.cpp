@@ -24,8 +24,7 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	streamlineLogLevel,
 	sharpnessFSR,
 	sharpnessDLSS,
-	useCustomDLSSPresets,
-	DLSSPreset);
+	presetDLSS);
 
 decltype(&D3D11CreateDeviceAndSwapChain) ptrD3D11CreateDeviceAndSwapChainUpscaling;
 
@@ -230,15 +229,13 @@ void Upscaling::DrawSettings()
 		} else if (upscaleMethod == UpscaleMethod::kDLSS) {
 			ImGui::SliderFloat("Sharpness", &settings.sharpnessDLSS, 0.0f, 1.0f, "%.1f");
 
-			ImGui::Checkbox("Use Custom DLSS Model Preset", (bool*)&settings.useCustomDLSSPresets);
+			const char* presets[] = { "Default", "Preset J", "Preset K", "Preset L", "Preset M" };
+			ImGui::Combo("DLSS Model Preset", (int*)&settings.presetDLSS, presets, 5);
 			if (auto _tt = Util::HoverTooltipWrapper()) {
-				ImGui::Text("Manually choose which DLSS AI model to use.");
-				ImGui::Text("Each model offers different visual quality and performance.");
-				ImGui::Text("Leave disabled for automatic selection based on your settings.");
-			}
-			if (settings.useCustomDLSSPresets) {
-				const char* presets[] = { "J", "K", "L", "M" };
-				ImGui::SliderInt("DLSS Preset", (int*)&settings.DLSSPreset, 0, 3, presets[settings.DLSSPreset]);
+				ImGui::Text("Choose which DLSS AI model preset to use.");
+				ImGui::Text("Each model offers different visual quality, performance, and motion stability.");
+				ImGui::Text("Set to 'Default' for automatic selection based on your Upscale Preset and hardware.");
+				ImGui::Text("Changing this setting requires a restart to take effect.");
 			}
 		}
 	}
