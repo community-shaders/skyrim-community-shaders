@@ -665,7 +665,6 @@ void Upscaling::CheckResources(UpscaleMethod a_upscalemethod)
 						vrIntermediateReactiveMask[i].reset();
 						vrIntermediateTransparencyMask[i].reset();
 					}
-					vrResourcesAllocated[0] = vrResourcesAllocated[1] = false;
 				}
 			}
 			if (a_upscalemethod == UpscaleMethod::kFSR)
@@ -858,7 +857,6 @@ void Upscaling::PreparePerEyeInputs(ID3D11Resource* colorSrc, ID3D11Resource* de
 			eyeWidthIn, eyeHeightIn, eyeWidthOut, eyeHeightOut);
 		CreateVRIntermediateTextures(eyeWidthIn, eyeHeightIn, eyeWidthOut, eyeHeightOut,
 			colorSrc, mvecSrc, reactiveSrc, transparencySrc);
-		vrResourcesAllocated[0] = vrResourcesAllocated[1] = false;
 	}
 
 	// Extract both eyes' inputs from combined stereo buffers
@@ -1454,15 +1452,6 @@ void Upscaling::LoadUpscalingSDKs()
 	// This ensures all SDKs are available before any D3D device creation
 	streamline.LoadInterposer();
 	fidelityFX.LoadFFX();  // Only for frame generation now
-}
-
-void Upscaling::CheckFrameConstants()
-{
-	// In VR, constants are set per-eye in the Upscale() loop
-	// Skip the early call from DeferredPasses to avoid issues
-	if (globals::game::isVR)
-		return;
-	streamline.CheckFrameConstants(streamline.viewport, 0);
 }
 
 void Upscaling::SetUIBuffer()

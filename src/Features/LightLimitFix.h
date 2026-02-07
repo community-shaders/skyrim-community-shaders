@@ -176,7 +176,6 @@ public:
 
 	struct Settings
 	{
-		bool EnableContactShadows = false;
 		bool EnableLightsVisualisation = false;
 		uint LightsVisualisationMode = 0;
 	};

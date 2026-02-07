@@ -172,6 +172,14 @@ void Streamline::CheckFeatures(IDXGIAdapter* a_adapter)
 	if (featureDLSS) {
 		logger::info("[Streamline] DLSS feature is loaded");
 		featureDLSS = slIsFeatureSupported(sl::kFeatureDLSS, adapterInfo) == sl::Result::eOk;
+
+		isRTXBelow40series = IsRTXAndBelow40Series(a_adapter);
+
+		if (isRTXBelow40series)
+			logger::info("[Streamline] Older RTX GPU detected, DLSS 4.0 will be used instead of DLSS 4.5");
+		else
+			logger::info("[Streamline] Newer RTX GPU detected, DLSS 4.5 will be used instead of DLSS 4.0");
+
 	} else {
 		logger::info("[Streamline] DLSS feature is not loaded");
 		sl::FeatureRequirements featureRequirements;
@@ -272,6 +280,30 @@ void Streamline::CheckFrameConstants(sl::ViewportHandle p_viewport, uint32_t eye
 	}
 }
 
+bool Streamline::IsRTXAndBelow40Series(IDXGIAdapter* a_adapter)
+{
+	DXGI_ADAPTER_DESC adapterDesc = {};
+
+	a_adapter->GetDesc(&adapterDesc);
+
+	UINT vendorId = adapterDesc.VendorId;
+	UINT deviceId = adapterDesc.DeviceId;
+
+	// Check if NVIDIA
+	if (vendorId != 0x10DE)
+		return false;
+
+	// RTX 30 series (Ampere) - 0x2200-0x25FF
+	if (deviceId >= 0x2200 && deviceId <= 0x2600)
+		return true;
+
+	// RTX 20 series (Turing with RT cores) - 0x1E00-0x1FFF
+	if (deviceId >= 0x1E00 && deviceId <= 0x1FFF)
+		return true;
+
+	return false;
+}
+
 void Streamline::SetDLSSOptions(sl::ViewportHandle p_viewport, uint32_t width)
 {
 	sl::DLSSOptions dlssOptions{};
@@ -307,20 +339,26 @@ void Streamline::SetDLSSOptions(sl::ViewportHandle p_viewport, uint32_t width)
 		auto& main = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMAIN];
 		D3D11_TEXTURE2D_DESC mainDesc;
 		static_cast<ID3D11Texture2D*>(main.texture)->GetDesc(&mainDesc);
-		bool isHDR = (mainDesc.Format == DXGI_FORMAT_R16G16B16A16_FLOAT ||
-					  mainDesc.Format == DXGI_FORMAT_R32G32B32A32_FLOAT ||
-					  mainDesc.Format == DXGI_FORMAT_R16G16B16A16_TYPELESS ||
-					  mainDesc.Format == DXGI_FORMAT_R32G32B32A32_TYPELESS);
+		bool isHDR = mainDesc.Format != DXGI_FORMAT_R8G8B8A8_UNORM;
 		dlssOptions.colorBuffersHDR = isHDR ? sl::Boolean::eTrue : sl::Boolean::eFalse;
 	}
 	dlssOptions.useAutoExposure = sl::Boolean::eTrue;
 
-	dlssOptions.dlaaPreset = sl::DLSSPreset::ePresetJ;
-	dlssOptions.ultraQualityPreset = sl::DLSSPreset::ePresetJ;
-	dlssOptions.qualityPreset = sl::DLSSPreset::ePresetM;
-	dlssOptions.balancedPreset = sl::DLSSPreset::ePresetM;
-	dlssOptions.performancePreset = sl::DLSSPreset::ePresetM;
-	dlssOptions.ultraPerformancePreset = sl::DLSSPreset::ePresetL;
+	if (isRTXBelow40series) {
+		dlssOptions.dlaaPreset = sl::DLSSPreset::ePresetJ;
+		dlssOptions.ultraQualityPreset = sl::DLSSPreset::ePresetJ;
+		dlssOptions.qualityPreset = sl::DLSSPreset::ePresetJ;
+		dlssOptions.balancedPreset = sl::DLSSPreset::ePresetJ;
+		dlssOptions.performancePreset = sl::DLSSPreset::ePresetJ;
+		dlssOptions.ultraPerformancePreset = sl::DLSSPreset::ePresetM;
+	} else {
+		dlssOptions.dlaaPreset = sl::DLSSPreset::ePresetJ;
+		dlssOptions.ultraQualityPreset = sl::DLSSPreset::ePresetJ;
+		dlssOptions.qualityPreset = sl::DLSSPreset::ePresetM;
+		dlssOptions.balancedPreset = sl::DLSSPreset::ePresetM;
+		dlssOptions.performancePreset = sl::DLSSPreset::ePresetM;
+		dlssOptions.ultraPerformancePreset = sl::DLSSPreset::ePresetL;
+	}
 
 	dlssOptions.preExposure = 1.0f;
 	dlssOptions.sharpness = 0.0f;
@@ -358,20 +396,6 @@ void Streamline::EvaluateDLSS(sl::ViewportHandle vp, uint32_t eyeIndex,
 
 	slSetTag(vp, tags, _countof(tags), context);
 
-	// Allocate resources on first use (VR: per-viewport; non-VR: once)
-	bool isVR = globals::game::isVR;
-	bool* allocated = isVR ? &globals::features::upscaling.vrResourcesAllocated[eyeIndex] : &resourcesAllocated;
-	if (!*allocated) {
-		sl::Result allocResult = slAllocateResources(context, sl::kFeatureDLSS, vp);
-		if (allocResult != sl::Result::eOk) {
-			logger::error("[Streamline] slAllocateResources failed{}", isVR ? std::format(" for eye {}", eyeIndex) : "");
-		} else {
-			*allocated = true;
-			if (isVR)
-				logger::info("[Streamline] Allocated DLSS resources for eye {}", eyeIndex);
-		}
-	}
-
 	sl::ViewportHandle view(vp);
 	const sl::BaseStructure* inputs[] = { &view };
 
@@ -393,10 +417,10 @@ void Streamline::EvaluateDLSS(sl::ViewportHandle vp, uint32_t eyeIndex,
 
 	if (evalResult != sl::Result::eOk) {
 		static bool evalErrorLogged[2] = { false, false };
-		uint32_t logIdx = isVR ? eyeIndex : 0;
+		uint32_t logIdx = globals::game::isVR ? eyeIndex : 0;
 		if (!evalErrorLogged[logIdx]) {
 			evalErrorLogged[logIdx] = true;
-			logger::error("[Streamline] slEvaluateFeature failed{} result={}", isVR ? std::format(" for eye {}", eyeIndex) : "", (int)evalResult);
+			logger::error("[Streamline] slEvaluateFeature failed{} result={}", globals::game::isVR ? std::format(" for eye {}", eyeIndex) : "", (int)evalResult);
 		}
 	}
 }
@@ -463,9 +487,5 @@ void Streamline::DestroyDLSSResources()
 	if (globals::game::isVR) {
 		slDLSSSetOptions(viewportRight, dlssOptions);
 		slFreeResources(sl::kFeatureDLSS, viewportRight);
-		globals::features::upscaling.vrResourcesAllocated[0] = false;
-		globals::features::upscaling.vrResourcesAllocated[1] = false;
 	}
-
-	resourcesAllocated = false;
 }
