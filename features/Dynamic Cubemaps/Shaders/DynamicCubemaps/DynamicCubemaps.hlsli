@@ -28,6 +28,7 @@ namespace DynamicCubemaps
 		float NoV = saturate(dot(N, V));
 
 		float level = roughness * 7.0;
+		level -= 0.5;
 
 		float3 finalIrradiance = 0;
 
@@ -147,6 +148,7 @@ namespace DynamicCubemaps
 		float NoV = saturate(dot(N, V));
 
 		float level = roughness * 7.0;
+		level -= 0.5;
 
 		float3 finalIrradiance = 0;
 		float directionalAmbientColorSpecular = Color::RGBToLuminance(Color::Ambient(max(0, mul(SharedData::DirectionalAmbient, float4(R, 1.0))))) * Color::ReflectionNormalisationScale;

@@ -168,6 +168,7 @@ void SampleSSGISpecular(uint2 pixCoord, sh2 lobe, out float ao, out float3 il, i
 
 		float roughness = 1.0 - glossiness;
 		float level = roughness * 7.0;
+		level -= 0.5;
 
 		sh2 specularLobe = SphericalHarmonics::FauxSpecularLobe(normalWS, V, roughness);
 
@@ -215,6 +216,10 @@ void SampleSSGISpecular(uint2 pixCoord, sh2 lobe, out float ao, out float3 il, i
 		}
 #		endif
 
+		directionalAmbientColorSpecular = Color::IrradianceToLinear(directionalAmbientColorSpecular);
+		directionalAmbientColorSpecular *= skylightingSpecular;
+		directionalAmbientColorSpecular = Color::IrradianceToGamma(directionalAmbientColorSpecular);
+
 		float3 specularIrradianceReflections = 0.0;
 
 		if (skylightingSpecular > 0.0){
@@ -234,10 +239,6 @@ void SampleSSGISpecular(uint2 pixCoord, sh2 lobe, out float ao, out float3 il, i
 			specularIrradiance = EnvTexture.SampleLevel(LinearSampler, R, level);
 
 			float specularIrradianceLuminance = Color::RGBToLuminance(EnvTexture.SampleLevel(LinearSampler, R, 15));
-
-			directionalAmbientColorSpecular = Color::IrradianceToLinear(directionalAmbientColorSpecular);
-			directionalAmbientColorSpecular *= skylightingSpecular;
-			directionalAmbientColorSpecular = Color::IrradianceToGamma(directionalAmbientColorSpecular);
 
 			specularIrradiance = (specularIrradiance / max(specularIrradianceLuminance, 0.001)) * directionalAmbientColorSpecular;
 
