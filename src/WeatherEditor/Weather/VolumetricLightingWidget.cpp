@@ -36,11 +36,11 @@ void VolumetricLightingWidget::DrawWidget()
 				ImGui::SeparatorText("Density Settings");
 				if (WeatherUtils::DrawSliderFloat("Contribution", settings.densityContribution, 0.0f, 1.0f))
 					changed = true;
-				if (WeatherUtils::DrawSliderFloat("Size", settings.densitySize, 0.0f, 100.0f))
+				if (WeatherUtils::DrawSliderFloat("Size", settings.densitySize, 0.1f, 10000.0f))
 					changed = true;
-				if (WeatherUtils::DrawSliderFloat("Wind Speed", settings.densityWindSpeed, -100.0f, 100.0f))
+				if (WeatherUtils::DrawSliderFloat("Wind Speed", settings.densityWindSpeed, 0.0f, 100.0f))
 					changed = true;
-				if (WeatherUtils::DrawSliderFloat("Falling Speed", settings.densityFallingSpeed, -100.0f, 100.0f))
+				if (WeatherUtils::DrawSliderFloat("Falling Speed", settings.densityFallingSpeed, 0.0f, 100.0f))
 					changed = true;
 
 				ImGui::EndTabItem();
@@ -54,7 +54,7 @@ void VolumetricLightingWidget::DrawWidget()
 					changed = true;
 
 				ImGui::SeparatorText("Sampling");
-				if (WeatherUtils::DrawSliderFloat("Range Factor", settings.samplingRangeFactor, 0.0f, 100.0f))
+				if (WeatherUtils::DrawSliderFloat("Range Factor", settings.samplingRangeFactor, 0.0f, 160.0f))
 					changed = true;
 
 				ImGui::EndTabItem();
