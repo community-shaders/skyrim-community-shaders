@@ -115,7 +115,7 @@ namespace Color
 	const static float PBRLightingScale = ENABLE_LL ? 1.0 : 0.65;
 
 	// Attempt to normalise reflection brightness against DALC
-	const static float ReflectionNormalisationScale = ENABLE_LL ? 1.0 : 0.65;
+	const static float ReflectionNormalisationScale = ENABLE_LL ? 1.0 : 1.0;
 
 	const static float PBRLightingCompensation = ENABLE_LL ? 1.0 : Math::PI;
 
@@ -254,7 +254,7 @@ float3 GammaToLinearSafe(float3 color)
 
 	float3 Ambient(float3 color)
 	{
-		return ENABLE_LL ? pow(abs(color), SharedData::linearLightingSettings.ambientGamma) : color;
+		return ENABLE_LL ? pow(abs(color), SharedData::linearLightingSettings.ambientGamma) * SharedData::linearLightingSettings.ambientMult : color;
 	}
 
 	float3 Fog(float3 color)

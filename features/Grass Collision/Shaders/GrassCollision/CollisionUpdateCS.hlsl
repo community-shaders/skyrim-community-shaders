@@ -63,7 +63,7 @@ groupshared BoundingBoxPacked SharedBoundingBoxes[64];
 	float2 fadeRate = TimeDelta * 100 * float2(0.01, 1.0);
 
 	if (isValid) {
-		previousCollision = Collision[dispatchThreadId.xy];
+		previousCollision = Collision[dispatchThreadId.xy].xy;
 		previousCollision = lerp(ZRANGE.x, ZRANGE.y, previousCollision);
 
 		// Apply camera height change
