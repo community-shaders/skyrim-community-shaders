@@ -3,14 +3,26 @@
 
 #include <imgui.h>
 
+#include "FeatureConstraints.h"
 #include "Globals.h"
 #include "Menu.h"
 #include "Plugin.h"
 #include "State.h"
 #include "Util.h"
+#include "Utils/UI.h"
 
 // Static member definitions
 bool HomePageRenderer::isFirstTimeSetupShown = false;
+uint32_t HomePageRenderer::keyThatClosedDialog = 0;
+
+bool HomePageRenderer::ShouldSkipKeyRelease(uint32_t key)
+{
+	if (keyThatClosedDialog && key == keyThatClosedDialog) {
+		keyThatClosedDialog = 0;
+		return true;
+	}
+	return false;
+}
 
 void HomePageRenderer::RenderHomePage()
 {
@@ -18,6 +30,8 @@ void HomePageRenderer::RenderHomePage()
 
 	RenderWelcomeSection();
 	ImGui::Spacing();
+
+	RenderActiveConstraintsSection();
 
 	RenderQuickLinksSection();
 	ImGui::Spacing();
@@ -247,8 +261,121 @@ void HomePageRenderer::RenderFAQSection()
 	}
 }
 
+void HomePageRenderer::RenderActiveConstraintsSection()
+{
+	auto constraints = FeatureConstraints::GetAllActiveConstraints();
+	if (constraints.empty()) {
+		return;  // Don't show section if there are no active constraints
+	}
+
+	ImGui::Spacing();
+
+	// Use warning color for the header to draw attention
+	auto menu = Menu::GetSingleton();
+	ImVec4 warningColor = menu ? menu->GetTheme().StatusPalette.Warning : ImVec4(1.0f, 0.8f, 0.2f, 1.0f);
+
+	ImGui::PushStyleColor(ImGuiCol_Text, warningColor);
+	bool headerOpen = ImGui::CollapsingHeader("Active Setting Constraints", ImGuiTreeNodeFlags_None);
+	ImGui::PopStyleColor();
+
+	if (headerOpen) {
+		ImGui::TextWrapped(
+			"Some settings are constrained by other features. Hover over rows for details.");
+
+		ImGui::Spacing();
+
+		// Prepare data for table
+		struct ConstraintRow
+		{
+			std::string setting;
+			std::string forcedTo;
+			std::string constrainedBy;
+			std::string firstSourceShortName;  // For "navigate to feature" on click
+			std::string tooltip;
+		};
+
+		std::vector<ConstraintRow> rows;
+		for (const auto& [settingId, result] : constraints) {
+			ConstraintRow row;
+			row.setting = std::format("{}.{}", settingId.featureShortName, settingId.settingPath);
+			row.forcedTo = FeatureConstraints::FormatConstraintValue(result.forcedValue);
+			for (size_t i = 0; i < result.sources.size(); ++i) {
+				if (i > 0)
+					row.constrainedBy += ", ";
+				row.constrainedBy += result.sources[i].featureName;
+			}
+			if (!result.sources.empty()) {
+				row.firstSourceShortName = result.sources[0].featureShortName;
+			}
+			// Build tooltip
+			for (const auto& src : result.sources) {
+				if (!row.tooltip.empty())
+					row.tooltip += "\n";
+				row.tooltip += std::format("{}: {}", src.featureName, src.reason);
+				if (src.recommendDisableAtBoot) {
+					row.tooltip += "\nConsider disabling at boot.";
+				}
+			}
+			rows.push_back(row);
+		}
+
+		// Define headers
+		std::vector<std::string> headers = { "Setting", "Forced To", "Constrained By" };
+
+		// Custom sorts (string comparators for each column)
+		std::vector<std::function<bool(const ConstraintRow&, const ConstraintRow&, bool)>> customSorts = {
+			[](const ConstraintRow& a, const ConstraintRow& b, bool asc) { return Util::StringSortComparator(a.setting, b.setting, asc); },
+			[](const ConstraintRow& a, const ConstraintRow& b, bool asc) { return Util::StringSortComparator(a.forcedTo, b.forcedTo, asc); },
+			[](const ConstraintRow& a, const ConstraintRow& b, bool asc) { return Util::StringSortComparator(a.constrainedBy, b.constrainedBy, asc); }
+		};
+
+		// Cell render -- column 2 ("Constrained By") is clickable to navigate
+		// to the first source feature's settings page.
+		auto cellRender = [warningColor](int rowIdx, int colIdx, const ConstraintRow& row) {
+			if (colIdx == 0) {
+				Util::RenderTableCell(row.setting, "", "", nullptr, ImVec4(1, 1, 1, 1), true, warningColor);
+			} else if (colIdx == 1) {
+				Util::RenderTableCell(row.forcedTo, "", "", nullptr, ImVec4(1, 1, 1, 1), true);
+			} else if (colIdx == 2) {
+				if (!row.firstSourceShortName.empty()) {
+					if (ImGui::Selectable(std::format("{}##nav{}", row.constrainedBy, rowIdx).c_str())) {
+						if (auto* menu = Menu::GetSingleton()) {
+							menu->SelectFeatureMenu(row.firstSourceShortName);
+						}
+					}
+					if (auto _tt = Util::HoverTooltipWrapper()) {
+						ImGui::Text("Click to navigate to %s", row.constrainedBy.c_str());
+						if (!row.tooltip.empty()) {
+							ImGui::Separator();
+							ImGui::Text("%s", row.tooltip.c_str());
+						}
+					}
+				} else {
+					Util::RenderTableCell(row.constrainedBy, "", row.tooltip, nullptr, ImVec4(1, 1, 1, 1), true);
+				}
+			}
+		};
+
+		// Render table
+		Util::ShowSortedStringTableCustom<ConstraintRow>(
+			"ConstraintsTable",
+			headers,
+			rows,
+			0,     // sortColumn
+			true,  // ascending
+			customSorts,
+			cellRender);
+	}
+
+	ImGui::Spacing();
+}
+
 void HomePageRenderer::RenderFirstTimeSetupDialog()
 {
+	if (!ShouldShowFirstTimeSetup()) {
+		return;
+	}
+
 	// Block input to the game and make cursor visible - input blocking is handled by ShouldSwallowInput()
 	auto& io = ImGui::GetIO();
 	io.WantCaptureMouse = true;
@@ -353,8 +480,15 @@ void HomePageRenderer::RenderFirstTimeSetupDialog()
 	ImGui::SetWindowFontScale(fontScale * (isCapturing ? HOTKEY_TEXT_SCALE_CAPTURING : HOTKEY_TEXT_SCALE));
 
 	// Format hotkey with brackets to make it look like a button
-	std::string hotkeyDisplay = isCapturing ? "[ ... ]" : std::string("[ ") + Util::Input::KeyIdToString(menu->GetSettings().ToggleKey) + " ]";
-	ImVec2 hotkeyTextSize = ImGui::CalcTextSize(hotkeyDisplay.c_str());
+	std::string hotkeyStr;
+	if (isCapturing) {
+		hotkeyStr = "[ ... ]";
+	} else {
+		auto& keys = menu->GetSettings().ToggleKey;
+		hotkeyStr = std::string("[ ") + Util::Input::KeyIdToString(keys) + " ]";
+	}
+
+	ImVec2 hotkeyTextSize = ImGui::CalcTextSize(hotkeyStr.c_str());
 
 	centerWidth(hotkeyTextSize.x);
 	ImVec2 buttonPos = ImGui::GetCursorScreenPos();
@@ -382,14 +516,17 @@ void HomePageRenderer::RenderFirstTimeSetupDialog()
 		hotkeyColor = themeSettings.StatusPalette.CurrentHotkey;
 	}
 
-	ImGui::TextColored(hotkeyColor, "%s", hotkeyDisplay.c_str());
+	ImGui::TextColored(hotkeyColor, "%s", hotkeyStr.c_str());
 
 	// Reset font scale
 	ImGui::SetWindowFontScale(fontScale);
 
 	// Handle click to start hotkey capture
 	if (clicked && !isCapturing) {
-		menu->settingToggleKey = true;
+		// Prevent starting capture if this click was caused by Enter key,
+		// because we want Enter to close the dialog instead.
+		if (!ImGui::IsKeyPressed(ImGuiKey_Enter))
+			menu->settingToggleKey = true;
 	}
 
 	// Show hotkey capture message when in capture mode
@@ -408,9 +545,9 @@ void HomePageRenderer::RenderFirstTimeSetupDialog()
 	ImGui::Spacing();
 
 	// Check for Enter or Escape key to close, but only if not capturing a hotkey
-	if ((ImGui::IsKeyPressed(ImGuiKey_Enter) || ImGui::IsKeyPressed(ImGuiKey_Escape)) && !isCapturing) {
-		MarkFirstTimeSetupComplete();
-		// Note: Settings are automatically saved to ensure welcome screen won't show again
+	bool escapePressed = ImGui::IsKeyPressed(ImGuiKey_Escape);
+	if ((ImGui::IsKeyPressed(ImGuiKey_Enter) || escapePressed) && !isCapturing) {
+		MarkFirstTimeSetupComplete(escapePressed ? VK_ESCAPE : VK_RETURN);
 	}
 
 	// Help text with breathing animation
@@ -444,15 +581,18 @@ bool HomePageRenderer::ShouldShowFirstTimeSetup()
 	return !menu->GetSettings().FirstTimeSetupCompleted;
 }
 
-void HomePageRenderer::MarkFirstTimeSetupComplete()
+void HomePageRenderer::MarkFirstTimeSetupComplete(uint32_t closingKey)
 {
 	// Set the flag in the Menu settings
 	auto menu = Menu::GetSingleton();
 	menu->GetSettings().FirstTimeSetupCompleted = true;
+	// Ensure we are not capturing a hotkey when closing the dialog
+	menu->settingToggleKey = false;
 
 	// Immediately save settings to ensure the flag is persisted
 	// This prevents the welcome screen from showing again even if user doesn't manually save
 	globals::state->Save();
 
-	isFirstTimeSetupShown = true;  // Mark as shown this session
+	isFirstTimeSetupShown = true;
+	keyThatClosedDialog = closingKey;
 }

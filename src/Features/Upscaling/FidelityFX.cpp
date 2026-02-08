@@ -194,7 +194,8 @@ void FidelityFX::CreateFSRResources()
 
 	auto fsrDevice = ffxGetDeviceDX11(globals::d3d::device);
 
-	size_t scratchBufferSize = ffxGetScratchMemorySizeDX11(FFX_FSR3UPSCALER_CONTEXT_COUNT);
+	uint32_t numContexts = globals::game::isVR ? 2 : 1;
+	size_t scratchBufferSize = ffxGetScratchMemorySizeDX11(numContexts);
 	fsrScratchBuffer = calloc(scratchBufferSize, 1);
 	if (!fsrScratchBuffer) {
 		logger::critical("[FidelityFX] Failed to allocate FSR3 scratch buffer memory!");
@@ -203,35 +204,52 @@ void FidelityFX::CreateFSRResources()
 	memset(fsrScratchBuffer, 0, scratchBufferSize);
 
 	FfxInterface fsrInterface;
-	if (ffxGetInterfaceDX11(&fsrInterface, fsrDevice, fsrScratchBuffer, scratchBufferSize, FFX_FSR3UPSCALER_CONTEXT_COUNT) != FFX_OK) {
+	if (ffxGetInterfaceDX11(&fsrInterface, fsrDevice, fsrScratchBuffer, scratchBufferSize, numContexts) != FFX_OK) {
 		logger::critical("[FidelityFX] Failed to initialize FSR3 backend interface!");
 		free(fsrScratchBuffer);
 		fsrScratchBuffer = nullptr;
 		return;
 	}
 
-	FfxFsr3ContextDescription contextDescription;
-	contextDescription.maxRenderSize.width = (uint)state->screenSize.x;
-	contextDescription.maxRenderSize.height = (uint)state->screenSize.y;
-	contextDescription.maxUpscaleSize.width = (uint)state->screenSize.x;
-	contextDescription.maxUpscaleSize.height = (uint)state->screenSize.y;
-	contextDescription.displaySize.width = (uint)state->screenSize.x;
-	contextDescription.displaySize.height = (uint)state->screenSize.y;
-	contextDescription.flags = FFX_FSR3_ENABLE_UPSCALING_ONLY | FFX_FSR3_ENABLE_AUTO_EXPOSURE | FFX_FSR3_ENABLE_HIGH_DYNAMIC_RANGE;
-	contextDescription.backendInterfaceUpscaling = fsrInterface;
+	auto screenSize = state->screenSize;
+	auto renderSize = Util::ConvertToDynamic(screenSize);
 
-	if (ffxFsr3ContextCreate(&fsrContext, &contextDescription) != FFX_OK) {
-		logger::critical("[FidelityFX] Failed to initialize FSR3 context!");
-		free(fsrScratchBuffer);
-		fsrScratchBuffer = nullptr;
-		return;
+	uint32_t displayWidth = (uint32_t)(globals::game::isVR ? screenSize.x / 2 : screenSize.x);
+	uint32_t displayHeight = (uint32_t)screenSize.y;
+	uint32_t renderWidth = (uint32_t)(globals::game::isVR ? renderSize.x / 2 : renderSize.x);
+	uint32_t renderHeight = (uint32_t)renderSize.y;
+
+	for (uint32_t i = 0; i < numContexts; ++i) {
+		FfxFsr3ContextDescription contextDescription;
+		contextDescription.maxRenderSize.width = renderWidth;
+		contextDescription.maxRenderSize.height = renderHeight;
+		contextDescription.maxUpscaleSize.width = displayWidth;
+		contextDescription.maxUpscaleSize.height = displayHeight;
+		contextDescription.displaySize.width = displayWidth;
+		contextDescription.displaySize.height = displayHeight;
+		contextDescription.flags = FFX_FSR3_ENABLE_UPSCALING_ONLY | FFX_FSR3_ENABLE_AUTO_EXPOSURE | FFX_FSR3_ENABLE_HIGH_DYNAMIC_RANGE;
+		contextDescription.backendInterfaceUpscaling = fsrInterface;
+
+		if (ffxFsr3ContextCreate(&fsrContext[i], &contextDescription) != FFX_OK) {
+			logger::critical("[FidelityFX] Failed to initialize FSR3 context for eye {}!", i);
+			for (uint32_t j = 0; j < i; ++j)
+				ffxFsr3ContextDestroy(&fsrContext[j]);
+			free(fsrScratchBuffer);
+			fsrScratchBuffer = nullptr;
+			return;
+		}
 	}
+	logger::info("[FidelityFX] Created {} FSR3 contexts (Display: {}x{}, Render: {}x{})",
+		numContexts, displayWidth, displayHeight, renderWidth, renderHeight);
 }
 
 void FidelityFX::DestroyFSRResources()
 {
-	if (ffxFsr3ContextDestroy(&fsrContext) != FFX_OK)
-		logger::critical("[FidelityFX] Failed to destroy FSR3 context!");
+	uint32_t numContexts = globals::game::isVR ? 2 : 1;
+	for (uint32_t i = 0; i < numContexts; ++i) {
+		if (ffxFsr3ContextDestroy(&fsrContext[i]) != FFX_OK)
+			logger::critical("[FidelityFX] Failed to destroy FSR3 context for eye {}!", i);
+	}
 
 	// Free the scratch buffer to prevent memory leak
 	if (fsrScratchBuffer) {
@@ -271,54 +289,94 @@ void FidelityFX::Upscale(ID3D11Resource* a_upscalingTexture, ID3D11Resource* a_r
 	auto screenSize = state->screenSize;
 	auto renderSize = Util::ConvertToDynamic(screenSize);
 
-	{
+	auto& upscaling = globals::features::upscaling;
+	auto jitter = upscaling.jitter;
+
+	auto DispatchFSR = [&](uint32_t contextIndex, ID3D11Resource* r_color, ID3D11Resource* r_depth, ID3D11Resource* r_mvec,
+						   ID3D11Resource* r_reactive, ID3D11Resource* r_trans, ID3D11Resource* r_output,
+						   uint32_t r_width, float mv_scale_x) {
+		if (state->frameAnnotations) {
+			if (globals::game::isVR) {
+				char buf[32];
+				snprintf(buf, sizeof(buf), "FSR Dispatch Eye %u", contextIndex);
+				state->BeginPerfEvent(buf);
+			} else {
+				state->BeginPerfEvent("FSR Dispatch");
+			}
+		}
+
 		FfxFsr3DispatchUpscaleDescription dispatchParameters{};
-
 		dispatchParameters.commandList = ffxGetCommandListDX11(context);
-		dispatchParameters.color = ffxGetResource(a_upscalingTexture, L"FSR3_Input_OutputColor");
-		dispatchParameters.depth = ffxGetResource(depthTexture.texture, L"FSR3_InputDepth");
-		dispatchParameters.motionVectors = ffxGetResource(a_motionVectors, L"FSR3_InputMotionVectors");
+		dispatchParameters.color = ffxGetResource(r_color, L"FSR3_Input_OutputColor");
+		dispatchParameters.depth = ffxGetResource(r_depth, L"FSR3_InputDepth");
+		dispatchParameters.motionVectors = ffxGetResource(r_mvec, L"FSR3_InputMotionVectors");
 		dispatchParameters.exposure = ffxGetResource(nullptr, L"FSR3_InputExposure");
-		dispatchParameters.upscaleOutput = dispatchParameters.color;
-		dispatchParameters.reactive = ffxGetResource(a_reactiveMask, L"FSR3_InputReactiveMap");
-		dispatchParameters.transparencyAndComposition = ffxGetResource(a_transparencyCompositionMask, L"FSR3_TransparencyAndCompositionMap");
+		dispatchParameters.upscaleOutput = ffxGetResource(r_output, L"FSR3_OutputColor");
+		dispatchParameters.reactive = ffxGetResource(r_reactive, L"FSR3_InputReactiveMap");
+		dispatchParameters.transparencyAndComposition = ffxGetResource(r_trans, L"FSR3_TransparencyAndCompositionMap");
 
-		dispatchParameters.motionVectorScale.x = globals::game::isVR ? renderSize.x * 0.5f : renderSize.x;
+		dispatchParameters.motionVectorScale.x = mv_scale_x;
 		dispatchParameters.motionVectorScale.y = renderSize.y;
-		dispatchParameters.renderSize.width = (uint)renderSize.x;
+		dispatchParameters.renderSize.width = r_width;
 		dispatchParameters.renderSize.height = (uint)renderSize.y;
-
-		auto& upscaling = globals::features::upscaling;
-		auto jitter = upscaling.jitter;
 
 		dispatchParameters.jitterOffset.x = -jitter.x;
 		dispatchParameters.jitterOffset.y = -jitter.y;
 
 		dispatchParameters.frameTimeDelta = *globals::game::deltaTime * 1000.f;
-
 		dispatchParameters.cameraFar = *globals::game::cameraFar;
 		dispatchParameters.cameraNear = *globals::game::cameraNear;
-
 		dispatchParameters.enableSharpening = true;
 		dispatchParameters.sharpness = a_sharpness;
-
 		dispatchParameters.cameraFovAngleVertical = Util::GetVerticalFOVRad();
 		dispatchParameters.viewSpaceToMetersFactor = 0.01428222656f;
 		dispatchParameters.reset = false;
 		dispatchParameters.preExposure = 1.0f;
-
 		dispatchParameters.flags = 0;
 
-		// Wrap FSR dispatch in SEH to catch crashes when RenderDoc is active
 		__try {
-			if (ffxFsr3ContextDispatchUpscale(&fsrContext, &dispatchParameters) != FFX_OK)
-				logger::critical("[FidelityFX] Failed to dispatch upscaling!");
+			if (ffxFsr3ContextDispatchUpscale(&fsrContext[contextIndex], &dispatchParameters) != FFX_OK)
+				logger::critical("[FidelityFX] Failed to dispatch upscaling for eye {}!", contextIndex);
 		} __except (EXCEPTION_EXECUTE_HANDLER) {
 			if (!fsrDispatchCrashLogged) {
-				logger::critical("[FidelityFX] FSR3 dispatch crashed - this may be caused by RenderDoc capture interfering with FSR operations. Try disabling RenderDoc capture.");
+				logger::critical("[FidelityFX] FSR3 dispatch crashed for eye {} - this may be caused by RenderDoc capture interfering with FSR operations. Try disabling RenderDoc capture.", contextIndex);
 				fsrDispatchCrashLogged = true;
 			}
-			// Continue execution instead of crashing
 		}
+
+		if (state->frameAnnotations)
+			state->EndPerfEvent();
+	};
+
+	if (globals::game::isVR) {
+		// Prepare per-eye inputs and clear mask
+		upscaling.PreparePerEyeInputs(a_upscalingTexture, depthTexture.texture, a_motionVectors, a_reactiveMask, a_transparencyCompositionMask);
+
+		uint32_t numViews = 2;
+		uint32_t eyeWidth = (uint32_t)(renderSize.x / 2);
+		for (uint32_t i = 0; i < numViews; ++i) {
+			DispatchFSR(i,
+				upscaling.vrIntermediateColorIn[i]->resource.get(),
+				upscaling.vrIntermediateDepth[i]->resource.get(),
+				upscaling.vrIntermediateMotionVectors[i]->resource.get(),
+				upscaling.vrIntermediateReactiveMask[i]->resource.get(),
+				upscaling.vrIntermediateTransparencyMask[i]->resource.get(),
+				upscaling.vrIntermediateColorOut[i]->resource.get(),
+				eyeWidth,
+				renderSize.x / 2.0f);
+		}
+
+		// Merge outputs back to kMAIN
+		upscaling.FinalizePerEyeOutputs(a_upscalingTexture);
+	} else {
+		DispatchFSR(0,
+			a_upscalingTexture,
+			depthTexture.texture,
+			a_motionVectors,
+			a_reactiveMask,
+			a_transparencyCompositionMask,
+			a_upscalingTexture,  // Output to same texture
+			(uint)renderSize.x,
+			renderSize.x);
 	}
 }
