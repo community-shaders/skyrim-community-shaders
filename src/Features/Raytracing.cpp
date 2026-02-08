@@ -3118,12 +3118,13 @@ void Raytracing::DrawRTGI()
 		{
 			auto wetnessEffect = globals::features::wetnessEffects.GetCommonBufferData();
 			auto linearLighting = globals::features::linearLighting.GetCommonBufferData();
+			auto extendedTranslucency = globals::features::extendedTranslucency.GetCommonBufferData();
 
 			frameData->Features.ExtendedMaterial = *reinterpret_cast<CPMSettings*>(&globals::features::extendedMaterials.settings);
 			frameData->Features.WetnessEffects = *reinterpret_cast<WetnessEffectsSettings*>(&wetnessEffect);
 			frameData->Features.CloudShadows = *reinterpret_cast<CloudShadowsSettings*>(&globals::features::cloudShadows.settings);
 			frameData->Features.HairSpecular = *reinterpret_cast<HairSpecularSettings*>(&globals::features::hairSpecular.settings);
-			frameData->Features.ExtendedTranslucency = *reinterpret_cast<ExtendedTranslucencySettings*>(&globals::features::extendedTranslucency.settings);
+			frameData->Features.ExtendedTranslucency = *reinterpret_cast<ExtendedTranslucencySettings*>(&extendedTranslucency);
 			frameData->Features.LinearLighting = *reinterpret_cast<LinearLightingSettings*>(&linearLighting);
 
 			static_assert(sizeof(CPMSettings) == sizeof(ExtendedMaterials::Settings));
