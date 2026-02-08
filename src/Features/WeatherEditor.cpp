@@ -25,6 +25,20 @@ void WeatherEditor::DataLoaded()
 	LoadAllWeathers();
 }
 
+std::pair<std::string, std::vector<std::string>> WeatherEditor::GetFeatureSummary()
+{
+	std::string description = "Interactive weather control system that lets you instantly change and analyze weather conditions in-game.";
+	std::vector<std::string> keyFeatures = {
+		"Instantly switch between any weather with immediate or gradual transitions",
+		"Filter weather by type (Pleasant, Cloudy, Rainy, Snow, Aurora) for easy browsing",
+		"View detailed weather information including wind, precipitation, and lightning data",
+		"Color-coded weather names show all weather properties at a glance",
+		"Persistent overlay window for continuous weather monitoring while playing"
+	};
+
+	return { description, keyFeatures };
+}
+
 int8_t LerpInt8_t(const int8_t oldValue, const int8_t newVal, const float lerpValue)
 {
 	int lerpedValue = (int)std::lerp(oldValue, newVal, lerpValue);
@@ -67,15 +81,8 @@ void WeatherEditor::DrawSettings()
 		EditorWindow::GetSingleton()->open = true;
 	}
 
-	ImGui::Spacing();
-	ImGui::Separator();
-	ImGui::Spacing();
-
+	// Basic weather editor info
 	DrawWeatherStatusPanel();
-
-	ImGui::Spacing();
-	ImGui::Separator();
-	ImGui::Spacing();
 
 	// Integrated Weather Picker UI
 	DrawWeatherPickerSection();
@@ -83,31 +90,30 @@ void WeatherEditor::DrawSettings()
 
 void WeatherEditor::DrawWeatherPickerSection()
 {
-	if (ImGui::TreeNodeEx("Weather Details", ImGuiTreeNodeFlags_DefaultOpen)) {
-		const auto& themeSettings = Menu::GetSingleton()->GetTheme();
-		const auto& menuSettings = Menu::GetSingleton()->GetSettings();
+	ImGui::Spacing();
+	Util::DrawSectionHeader("Weather Details");
 
-		// Show as Overlay checkbox
-		bool showInOverlay = WeatherDetailsWindow.ShowInOverlay;
-		if (ImGui::Checkbox("Show in Overlay", &showInOverlay)) {
-			WeatherDetailsWindow.ShowInOverlay = showInOverlay;
-		}
-		if (auto _tt = Util::HoverTooltipWrapper()) {
-			ImGui::Text("Opens weather details in a separate window that stays open\neven when the main menu is closed. ");
-			ImGui::Text("Toggle with ");
-			ImGui::SameLine();
-			ImGui::TextColored(themeSettings.StatusPalette.CurrentHotkey, "%s", Util::Input::KeyIdToString(menuSettings.OverlayToggleKey));
-		}
-		ImGui::Spacing();
+	const auto& themeSettings = Menu::GetSingleton()->GetTheme();
+	const auto& menuSettings = Menu::GetSingleton()->GetSettings();
 
-		// Render core weather details
-		RenderCoreWeatherDetails(true);  // true = show interactive elements in main settings panel
-
-		// Render weather analysis from features with collapsible headers
-		RenderFeatureWeatherAnalysis();
-
-		ImGui::TreePop();
+	// Show as Overlay checkbox
+	bool showInOverlay = WeatherDetailsWindow.ShowInOverlay;
+	if (ImGui::Checkbox("Show in Overlay", &showInOverlay)) {
+		WeatherDetailsWindow.ShowInOverlay = showInOverlay;
 	}
+	if (auto _tt = Util::HoverTooltipWrapper()) {
+		ImGui::Text("Opens weather details in a separate window that stays open\neven when the main menu is closed. ");
+		ImGui::Text("Toggle with ");
+		ImGui::SameLine();
+		ImGui::TextColored(themeSettings.StatusPalette.CurrentHotkey, "%s", Util::Input::KeyIdToString(menuSettings.OverlayToggleKey));
+	}
+	ImGui::Spacing();
+
+	// Render core weather details
+	RenderCoreWeatherDetails(true);  // true = show interactive elements in main settings panel
+
+	// Render weather analysis from features with collapsible headers
+	RenderFeatureWeatherAnalysis();
 }
 
 void WeatherEditor::LerpWeather(RE::TESWeather* oldWeather, RE::TESWeather* newWeather, float currentWeatherPct)
@@ -185,37 +191,56 @@ void WeatherEditor::LerpWeather(RE::TESWeather* oldWeather, RE::TESWeather* newW
 
 void WeatherEditor::DrawWeatherStatusPanel()
 {
-	ImGui::Text("Current Weather Status");
-	ImGui::Separator();
+	ImGui::Spacing();
+	Util::DrawSectionHeader("Weather Status");
 	ImGui::Spacing();
 
 	auto weatherManager = WeatherManager::GetSingleton();
 	auto currentWeathers = weatherManager->GetCurrentWeathers();
 
 	if (currentWeathers.currentWeather) {
-		ImGui::Text("Current Weather: %s",
-			currentWeathers.currentWeather->GetFormEditorID() ?
-				currentWeathers.currentWeather->GetFormEditorID() :
-				std::format("{:08X}", currentWeathers.currentWeather->GetFormID()).c_str());
-
-		if (currentWeathers.lastWeather && currentWeathers.lerpFactor < 1.0f) {
-			ImGui::Text("Transitioning From: %s",
-				currentWeathers.lastWeather->GetFormEditorID() ?
-					currentWeathers.lastWeather->GetFormEditorID() :
-					std::format("{:08X}", currentWeathers.lastWeather->GetFormID()).c_str());
-
-			ImGui::ProgressBar(currentWeathers.lerpFactor, ImVec2(-1, 0),
-				std::format("Transition: {:.1f}%%", currentWeathers.lerpFactor * 100.0f).c_str());
-		} else {
-			ImGui::Text("Transition: Complete (100%%)");
-		}
-
 		// Show if weather has custom settings
 		if (weatherManager->HasWeatherSettings(currentWeathers.currentWeather)) {
 			ImGui::TextColored({ 0.0f, 1.0f, 0.0f, 1.0f }, "Has Custom Settings");
 		} else {
 			ImGui::TextColored({ 0.7f, 0.7f, 0.7f, 1.0f }, "Using Default Settings");
 		}
+
+		// Show what the current weather is
+		ImGui::Text("Current Weather: %s",
+			currentWeathers.currentWeather->GetFormEditorID() ?
+				currentWeathers.currentWeather->GetFormEditorID() :
+				std::format("{:08X}", currentWeathers.currentWeather->GetFormID()).c_str());
+
+		// Always reserve space for transition info to prevent UI shifting
+		if (currentWeathers.lastWeather && currentWeathers.lerpFactor < 1.0f) {
+			ImGui::Text("Transitioning From: %s",
+				currentWeathers.lastWeather->GetFormEditorID() ?
+					currentWeathers.lastWeather->GetFormEditorID() :
+					std::format("{:08X}", currentWeathers.lastWeather->GetFormID()).c_str());
+		} else {
+			ImGui::Text("Transitioning From: No Transition");
+		}
+
+		// Always show progress bar
+		float displayPct = (currentWeathers.lastWeather && currentWeathers.lerpFactor < 1.0f) ?
+		                       currentWeathers.lerpFactor :
+		                       1.0f;
+
+		// Show background color when transition is complete
+		if (!(currentWeathers.lastWeather && currentWeathers.lerpFactor < 1.0f)) {
+			ImGui::PushStyleColor(ImGuiCol_PlotHistogram, ImGui::GetStyleColorVec4(ImGuiCol_FrameBg));
+		}
+
+		ImGui::ProgressBar(displayPct, ImVec2(-1, 0),
+			(currentWeathers.lastWeather && currentWeathers.lerpFactor < 1.0f) ?
+				std::format("Transition: {:.1f}%", currentWeathers.lerpFactor * 100.0f).c_str() :
+				"");
+
+		if (!(currentWeathers.lastWeather && currentWeathers.lerpFactor < 1.0f)) {
+			ImGui::PopStyleColor();
+		}
+
 	} else {
 		ImGui::TextColored({ 1.0f, 0.5f, 0.0f, 1.0f }, "No Active Weather");
 	}
@@ -340,7 +365,7 @@ void WeatherEditor::DisplayPrecipitationInfo(RE::TESWeather* weather)
 	auto particleDensity = weather->precipitationData->GetSettingValue(RE::BGSShaderParticleGeometryData::DataID::kParticleDensity).f;
 	ImGui::BulletText("Particle Density: %.3f", particleDensity);
 	GET_INSTANCE_MEMBER(particleTexture, weather->precipitationData)
-	if (particleTexture.textureName.c_str()) {
+	if (!particleTexture.textureName.empty()) {
 		ImGui::BulletText("Particle Texture: %s", particleTexture.textureName.c_str());
 	} else {
 		ImGui::BulletText("Particle Texture: None");
@@ -597,38 +622,44 @@ void WeatherEditor::RenderWeatherControls(RE::Sky* sky)
 	// Accelerate checkbox
 	ImGui::Checkbox("Accelerate Weather Change", &s_accelerateWeatherChange);
 	if (auto _tt = Util::HoverTooltipWrapper()) {
-		Util::DrawMultiLineTooltip({ "When enabled, weather changes are immediate",
-			"When disabled, uses normal transition speed." });
+		ImGui::Text("When enabled, weather changes instantly");
 	}  // Reset Weather button
-	std::string resetButtonLabel = "Reset Weather";
-	if (sky->defaultWeather) {
-		resetButtonLabel += " to " + Util::FormatWeather(sky->defaultWeather);
-	}
-
-	// Color the reset button to match the default weather
-	if (sky->defaultWeather) {
-		ImVec4 weatherColor = GetWeatherTypeColor(sky->defaultWeather);
-		ImGui::PushStyleColor(ImGuiCol_Text, weatherColor);
-	}
-
-	if (ImGui::Button(resetButtonLabel.c_str())) {
+	if (ImGui::Button("Reset Weather")) {
 		sky->ResetWeather();
 		// Update the selection box to reflect the reset weather without double-applying
 		s_selectedWeatherIdx = FindWeatherIndex(sky->defaultWeather);
 		logger::info("[WeatherEditor] Reset weather to default");
 	}
 
-	if (sky->defaultWeather) {
+	if (auto _tt = Util::HoverTooltipWrapper()) {
+		ImGui::Text("Resets weather to default");
+	}
+
+	// Lock Weather toggle
+	ImGui::SameLine();
+	auto editorWindow = EditorWindow::GetSingleton();
+	bool isLocked = editorWindow->IsWeatherLocked();
+	const char* lockLabel = isLocked ? "Unlock Weather" : "Lock Weather";
+
+	if (isLocked) {
+		const auto& theme = Menu::GetSingleton()->GetTheme();
+		ImGui::PushStyleColor(ImGuiCol_Button, theme.StatusPalette.SuccessColor);
+	}
+	if (ImGui::Button(lockLabel)) {
+		if (isLocked) {
+			editorWindow->UnlockWeather();
+		} else if (sky->currentWeather) {
+			editorWindow->LockWeather(sky->currentWeather);
+		}
+	}
+	if (isLocked) {
 		ImGui::PopStyleColor();
 	}
 	if (auto _tt = Util::HoverTooltipWrapper()) {
-		if (sky->defaultWeather) {
-			Util::DrawMultiLineTooltip({ "Resets to default weather:",
-				Util::FormatWeather(sky->defaultWeather).c_str() });
-		} else {
-			ImGui::Text("Resets weather to default (no default weather set)");
-		}
-	}  // Weather Selection - now with colored text
+		ImGui::Text(isLocked ? "Unlock weather to allow natural changes" : "Lock current weather to prevent changes");
+	}
+
+	// Weather Selection - now with colored text
 	std::vector<std::string> weatherLabels;
 	weatherLabels.reserve(s_filteredWeathers.size());
 	for (const auto& weather : s_filteredWeathers) {
@@ -651,10 +682,13 @@ void WeatherEditor::RenderWeatherControls(RE::Sky* sky)
 				s_selectedWeatherIdx = i;
 				// Weather changed, apply it
 				auto selectedWeather = s_filteredWeathers[s_selectedWeatherIdx];
-				sky->SetWeather(selectedWeather, true, false);
 
 				if (s_accelerateWeatherChange) {
-					sky->currentWeatherPct = 1.0f;
+					// Instant transition - force the weather
+					sky->ForceWeather(selectedWeather, false);
+				} else {
+					// Normal transition
+					sky->SetWeather(selectedWeather, true, false);
 				}
 
 				logger::info("[WeatherEditor] Changed weather to: {}", Util::FormatWeather(selectedWeather));
@@ -680,11 +714,10 @@ void WeatherEditor::RenderWeatherControls(RE::Sky* sky)
 
 void WeatherEditor::RenderWeatherInformationDisplay(RE::Sky* sky, bool showInteractiveElements)
 {
-	static bool weatherInfoExpanded = true;
-	Util::DrawSectionHeader("Weather Information", false, true, &weatherInfoExpanded);
-
-	if (!weatherInfoExpanded)
-		return;
+	ImGui::Spacing();
+	ImGui::Spacing();
+	ImGui::Spacing();
+	Util::DrawSectionHeader("Weather Information", false, true);
 
 	// Update cache: store current lastWeather if it exists, otherwise keep the cached one
 	if (sky->lastWeather) {
@@ -1029,14 +1062,16 @@ std::string WeatherEditor::GetDisplayName(const RE::TESWeather* weather)
 void WeatherEditor::DrawOverlay()
 {
 	bool overlayVisible = Menu::GetSingleton()->overlayVisible;
+	static bool s_prevOverlayVisible = false;
 	// If ShowInOverlay is true and overlay is visible, auto-enable the window if not already enabled
 	if (WeatherDetailsWindow.ShowInOverlay && overlayVisible) {
-		if (!WeatherDetailsWindow.Enabled) {
+		if (!s_prevOverlayVisible && !WeatherDetailsWindow.Enabled) {
 			WeatherDetailsWindow.Enabled = true;
 		}
 		bool* p_open = &WeatherDetailsWindow.Enabled;
 		RenderWeatherDetailsWindow(p_open);
 	}
+	s_prevOverlayVisible = overlayVisible;
 }
 
 bool WeatherEditor::IsOverlayVisible() const
