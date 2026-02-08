@@ -159,9 +159,9 @@ void SampleSSGISpecular(uint2 pixCoord, sh2 lobe, out float ao, out float3 il, i
 
 	float3 reflectance = ReflectanceTexture[dispatchID.xy];
 
-	float3 V = normalize(positionWS.xyz);
+	float3 V = -normalize(positionWS.xyz);
 
-	reflectance.xyz += BRDF::EnvBRDFApproxLazarov(saturate(dot(normalWS, -V)), Color::ReflectionFresnelRoughness).y;
+	reflectance.xyz += BRDF::EnvBRDFApproxLazarov(saturate(dot(normalWS, V)), Color::ReflectionFresnelRoughness).y;
 
 	if (reflectance.x > 0.0 || reflectance.y > 0.0 || reflectance.z > 0.0) {
 		float3 R = reflect(V, normalWS);
@@ -169,7 +169,7 @@ void SampleSSGISpecular(uint2 pixCoord, sh2 lobe, out float ao, out float3 il, i
 		float roughness = 1.0 - glossiness;
 		float level = roughness * 7.0;
 
-		sh2 specularLobe = SphericalHarmonics::FauxSpecularLobe(normalWS, -V, roughness);
+		sh2 specularLobe = SphericalHarmonics::FauxSpecularLobe(normalWS, V, roughness);
 
 		float3 finalIrradiance = 0;
 

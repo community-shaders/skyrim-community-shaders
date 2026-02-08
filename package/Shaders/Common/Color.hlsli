@@ -114,7 +114,7 @@ namespace Color
 	const static float ReflectionNormalisationScale = ENABLE_LL ? 1.0 : 0.65;
 
 	// Roughness value for fresnel reflections
-	const static float ReflectionFresnelRoughness = 0.8;
+	const static float ReflectionFresnelRoughness = 0.7;
 
 	const static float PBRLightingCompensation = ENABLE_LL ? 1.0 : Math::PI;
 
