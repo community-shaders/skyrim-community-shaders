@@ -78,22 +78,22 @@ namespace Color
 
 	float GammaToLinear(float color)
 	{
-		return pow(abs(color), 2.2);
+		return pow(abs(color), 1.6);
 	}
 
 	float LinearToGamma(float color)
 	{
-		return pow(abs(color), 1.0 / 2.2);
+		return pow(abs(color), 1.0 / 1.6);
 	}
 
 	float3 GammaToLinear(float3 color)
 	{
-		return pow(abs(color), 2.2);
+		return pow(abs(color), 1.6);
 	}
 
 	float3 LinearToGamma(float3 color)
 	{
-		return pow(abs(color), 1.0 / 2.2);
+		return pow(abs(color), 1.0 / 1.6);
 	}
 
 	float3 GammaToTrueLinear(float3 color)
