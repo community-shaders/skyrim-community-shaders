@@ -868,7 +868,7 @@ PS_OUTPUT main(PS_INPUT input)
 	psout.PS.w = diffuseAlpha;
 #		else
 
-	baseColor.xyz /= 2.8; // Match brightness of ISSkyrimClearDAY;
+	baseColor.xyz *= 0.75;
 
 	uint eyeIndex = Stereo::GetEyeIndexPS(input.HPosition, VPOSOffset);
 

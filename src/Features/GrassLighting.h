@@ -34,7 +34,7 @@ public:
 		float SpecularStrength = 0.5f;
 		float SubsurfaceScatteringAmount = 0.5f;
 		uint OverrideComplexGrassSettings = false;
-		float BasicGrassBrightness = 1.0f / 2.8f;  // Match brightness of ISSkyrimClearDAY
+		float BasicGrassBrightness = 1.0f;
 		uint EnableWrappedLighting = false;
 		float ComplexGrassThreshold = 0.03f;
 		uint pad1;
