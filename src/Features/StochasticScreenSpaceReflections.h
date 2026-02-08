@@ -1,21 +1,21 @@
 #pragma once
 
-struct ScreenSpaceRayTracing : Feature
+struct StochasticScreenSpaceReflections : Feature
 {
-    static ScreenSpaceRayTracing* GetSingleton()
+    static StochasticScreenSpaceReflections* GetSingleton()
     {
-        static ScreenSpaceRayTracing singleton;
+        static StochasticScreenSpaceReflections singleton;
         return &singleton;
     }
 
-    virtual inline std::string GetName() override { return "Screen Space Ray Tracing"; }
-    virtual inline std::string GetShortName() override { return "ScreenSpaceRayTracing"; }
-    virtual inline std::string_view GetShaderDefineName() override { return "SSRT"; }
+    virtual inline std::string GetName() override { return "Stochastic Screen Space Reflections"; }
+    virtual inline std::string GetShortName() override { return "StochasticScreenSpaceReflections"; }
+    virtual inline std::string_view GetShaderDefineName() override { return "SSSR"; }
     virtual std::string_view GetCategory() const override { return "Lighting"; }
     virtual std::pair<std::string, std::vector<std::string>> GetFeatureSummary() override
 	{
 		return {
-			"Screen Space Ray Tracing provides high-quality global illumination with information in screen space.",
+			"Stochastic Screen Space Reflections provides high-quality global illumination with information in screen space.",
             {
                 "Realistic indirect lighting",
                 "Importance sampling for advanced reflections based on roughness",
@@ -61,9 +61,6 @@ struct ScreenSpaceRayTracing : Feature
         uint AtrousIterations = 3;
         float ColorPhi = 0.5f;
         float NormalPhi = 512.0f;
-#ifdef ENABLE_SHARC
-        bool EnableSharc = false;
-#endif
     } settings;
 
     struct alignas(16) SharedData
@@ -74,7 +71,7 @@ struct ScreenSpaceRayTracing : Feature
         float AmbientMult;
     };
 
-    struct alignas(16) SSRTCB
+    struct alignas(16) SSSRCB
     {
         uint MaxSteps;
         uint MaxMips;
@@ -94,13 +91,13 @@ struct ScreenSpaceRayTracing : Feature
         float normalPhi;
     };
 
-    eastl::unique_ptr<ConstantBuffer> ssrtCB;
+    eastl::unique_ptr<ConstantBuffer> sssrCB;
     eastl::unique_ptr<ConstantBuffer> denoiserCB;
 
     bool recompileFlag = false;
 
-    void DrawSSRTSpecular();
-    void DrawSSRTDiffuse();
+    void DrawSSSRSpecular();
+    void DrawSSSRDiffuse();
     virtual void Prepass() override;
 
     SharedData GetCommonBufferData();
@@ -108,7 +105,7 @@ struct ScreenSpaceRayTracing : Feature
     eastl::unique_ptr<Texture2D> texDepth = nullptr;
     eastl::unique_ptr<Texture2D> texColor = nullptr;
     eastl::unique_ptr<Texture2D> texSSRColor = nullptr;
-    eastl::unique_ptr<Texture2D> texSSRTDiffuseColor = nullptr;
+    eastl::unique_ptr<Texture2D> texSSSRDiffuseColor = nullptr;
     eastl::unique_ptr<Texture2D> texHitPDF = nullptr;
     eastl::unique_ptr<Texture2D> texHistory = nullptr;
     eastl::unique_ptr<Texture2D> texHistoryDiffuse = nullptr;
@@ -120,17 +117,9 @@ struct ScreenSpaceRayTracing : Feature
     eastl::unique_ptr<Texture2D> texVariance = nullptr;
     eastl::unique_ptr<Texture2D> texOutput = nullptr;
 
-#ifdef ENABLE_SHARC
-    eastl::unique_ptr<Buffer> sharcHashEntries = nullptr;
-    eastl::unique_ptr<Buffer> sharcHashCopyOffsets = nullptr;
-    eastl::unique_ptr<Buffer> sharcVoxelData = nullptr;
-    eastl::unique_ptr<Buffer> sharcVoxelDataPrev = nullptr;
-#endif
-
     winrt::com_ptr<ID3D11ShaderResourceView> noiseSRV = nullptr;
 
     static const uint maxMips = 9;
-    static const uint sharcNumEntries = 0x100000;
 
     std::array<winrt::com_ptr<ID3D11ShaderResourceView>, maxMips> depthSRVs = { nullptr };
 	std::array<winrt::com_ptr<ID3D11UnorderedAccessView>, maxMips> depthUAVs = { nullptr };
@@ -147,9 +136,4 @@ struct ScreenSpaceRayTracing : Feature
     winrt::com_ptr<ID3D11ComputeShader> varianceCS = nullptr;
     winrt::com_ptr<ID3D11ComputeShader> spatialCS = nullptr;
     winrt::com_ptr<ID3D11ComputeShader> spatialSpecularCS = nullptr;
-#ifdef ENABLE_SHARC
-    winrt::com_ptr<ID3D11ComputeShader> raymarchDiffuseSharcCS = nullptr;
-    winrt::com_ptr<ID3D11ComputeShader> sharcUpdateRaymarchCS = nullptr;
-    winrt::com_ptr<ID3D11ComputeShader> sharcResolveCS = nullptr;
-#endif
 };

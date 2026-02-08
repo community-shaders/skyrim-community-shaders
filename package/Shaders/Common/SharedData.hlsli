@@ -238,7 +238,7 @@ namespace SharedData
 		uint3 _padding;
 	};
 
-	struct SSRTSettings
+	struct SSSRSettings
     {
         uint EnableSpecular;
         float SpecularMult;
@@ -263,7 +263,7 @@ namespace SharedData
 		ExtendedTranslucencySettings extendedTranslucencySettings;
 		LinearLightingSettings linearLightingSettings;
 		TerrainBlendingSettings terrainBlendingSettings;
-		SSRTSettings ssrtSettings;
+		SSSRSettings sssrSettings;
 	};
 
 	Texture2D<float4> DepthTexture : register(t17);

@@ -1,7 +1,7 @@
 #include "Common/Color.hlsli"
 #include "Common/SharedData.hlsli"
 
-Texture2D<float4> SSRTDiffuseTexture : register(t0);
+Texture2D<float4> SSSRDiffuseTexture : register(t0);
 Texture2D<float4> AlbedoTexture : register(t1);
 
 RWTexture2D<float4> ColorTextureRW : register(u0);
@@ -13,10 +13,10 @@ RWTexture2D<float4> ColorTextureRW : register(u0);
     if (dispatchID.x >= width || dispatchID.y >= height)
         return;
 
-    float4 ssrtDiffuse = SSRTDiffuseTexture[dispatchID.xy];
+    float4 sssrDiffuse = SSSRDiffuseTexture[dispatchID.xy];
     float4 albedo = AlbedoTexture[dispatchID.xy];
     float4 originalColor = ColorTextureRW[dispatchID.xy];
 
-    float3 color = Color::IrradianceToGamma(ssrtDiffuse.xyz * Color::IrradianceToLinear(albedo.xyz) + Color::IrradianceToLinear(originalColor.xyz));
+    float3 color = Color::IrradianceToGamma(sssrDiffuse.xyz * Color::IrradianceToLinear(albedo.xyz) + Color::IrradianceToLinear(originalColor.xyz));
     ColorTextureRW[dispatchID.xy] = float4(color, originalColor.w);
 }

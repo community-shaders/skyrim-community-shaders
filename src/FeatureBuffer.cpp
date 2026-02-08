@@ -10,7 +10,7 @@
 #include "Features/LODBlending.h"
 #include "Features/LightLimitFix.h"
 #include "Features/LinearLighting.h"
-#include "Features/ScreenSpaceRayTracing.h"
+#include "Features/StochasticScreenSpaceReflections.h"
 #include "Features/Skylighting.h"
 #include "Features/TerrainBlending.h"
 #include "Features/TerrainShadows.h"

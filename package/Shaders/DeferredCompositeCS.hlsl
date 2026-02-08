@@ -55,8 +55,8 @@ void SampleSSGISpecular(uint2 pixCoord, sh2 lobe, out float ao, out float3 il, i
 	ao = 1 - SsgiAoTexture[pixCoord].x;
 	float NdotV = dot(normal, view);
 	ao = Color::SpecularAOLagarde(saturate(NdotV), ao, roughness);
-#	if defined(SSRT)
-	if (SharedData::ssrtSettings.EnableSpecular) {
+#	if defined(SSSR)
+	if (SharedData::sssrSettings.EnableSpecular) {
 		il = 0;
 		return;
 	}
@@ -87,8 +87,8 @@ void SampleSSGISpecular(uint2 pixCoord, sh2 lobe, out float ao, out float3 il, i
 #	endif
 #endif
 
-#if defined(SSRT)
-Texture2D<float4> SSRTexture : register(t16);
+#if defined(SSSR)
+Texture2D<float4> SSSRexture : register(t16);
 #endif
 
 [numthreads(8, 8, 1)] void main(uint3 dispatchID : SV_DispatchThreadID) {
@@ -285,9 +285,9 @@ Texture2D<float4> SSRTexture : register(t16);
 		finalIrradiance += ssgiIlSpecular;
 #	endif
 
-#	if defined(SSRT)
-		if (SharedData::ssrtSettings.EnableSpecular) {
-			float4 ssrIrradiance = SSRTexture[dispatchID.xy];
+#	if defined(SSSR)
+		if (SharedData::sssrSettings.EnableSpecular) {
+			float4 ssrIrradiance = SSSRexture[dispatchID.xy];
 			finalIrradiance = any(ssrIrradiance.rgb > 0) ? ssrIrradiance.rgb : finalIrradiance;
 		}
 #	endif

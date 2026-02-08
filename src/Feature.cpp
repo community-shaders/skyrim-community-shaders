@@ -18,7 +18,7 @@
 #include "Features/PerformanceOverlay.h"
 #include "Features/RenderDoc.h"
 #include "Features/ScreenSpaceGI.h"
-#include "Features/ScreenSpaceRayTracing.h"
+#include "Features/StochasticScreenSpaceReflections.h"
 #include "Features/ScreenSpaceShadows.h"
 #include "Features/SkySync.h"
 #include "Features/Skylighting.h"

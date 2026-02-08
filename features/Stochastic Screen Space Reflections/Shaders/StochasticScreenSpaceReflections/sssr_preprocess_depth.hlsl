@@ -1,4 +1,4 @@
-#include "ScreenSpaceRayTracing/ssrt_common.hlsli"
+#include "StochasticScreenSpaceReflections/sssr_common.hlsli"
 
 RWTexture2D<float> DepthOutput : register(u0);
 

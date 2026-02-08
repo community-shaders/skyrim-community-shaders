@@ -1,4 +1,4 @@
-#include "ScreenSpaceRayTracing/ssrt_common.hlsli"
+#include "StochasticScreenSpaceReflections/sssr_common.hlsli"
 
 Texture2D<float4> DiffuseTexture : register(t0);
 Texture2D<float3> SpecularTexture : register(t1);
