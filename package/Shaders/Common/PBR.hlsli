@@ -270,7 +270,7 @@ namespace PBR
 
 		// Apply ambient occlusion with multi-bounce approximation
 		float diffuseAO = Color::MultiBounceAO(material.BaseColor, material.AO.x).y;
-		float specularAO = Color::MultiBounceAO(material.F0, 
+		float specularAO = Color::MultiBounceAO(material.F0,
 			Color::SpecularAOLagarde(NdotV, material.AO, material.Roughness).x).y;
 
 		lobeWeights.diffuse *= diffuseAO;
