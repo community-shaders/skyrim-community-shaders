@@ -486,7 +486,7 @@ float LocalBRDF(float3 V, float3 L, float3 N, float roughness) {
         world_space_hit  = ScreenSpaceToWorldSpace(hit, FrameBuffer::CameraViewProjInverse[eyeIndex]);
         world_space_ray  = world_space_hit - world_space_origin.xyz;
         world_ray_length = length(world_space_ray);
-        float occlusion;
+        float occlusion = 1.0f;
         confidence       = valid_hit ? SSSR_ValidateHit(hit,
                                                       uv,
                                                       world_space_ray,
@@ -562,9 +562,6 @@ float LocalBRDF(float3 V, float3 L, float3 N, float roughness) {
 #   if defined(SSSR_SPECULAR)
             ao = GetSpecularOcclusionFromAmbientOcclusion(NdotV, ao, roughness);
             envColor *= ao;
-#   else
-            float3 multiBounceAO = Color::MultiBounceAO(albedo, ao);
-            envColor *= multiBounceAO;
 #   endif
             sampleColor.xyz = lerp(envColor, sampleColor.xyz, confidence);
             confidence = 1;

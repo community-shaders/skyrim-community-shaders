@@ -88,7 +88,7 @@ void SampleSSGISpecular(uint2 pixCoord, sh2 lobe, out float ao, out float3 il, i
 #endif
 
 #if defined(SSSR)
-Texture2D<float4> SSSRexture : register(t16);
+Texture2D<float4> SSSRTexture : register(t16);
 #endif
 
 [numthreads(8, 8, 1)] void main(uint3 dispatchID : SV_DispatchThreadID) {
@@ -287,7 +287,7 @@ Texture2D<float4> SSSRexture : register(t16);
 
 #	if defined(SSSR)
 		if (SharedData::sssrSettings.EnableSpecular) {
-			float4 ssrIrradiance = SSSRexture[dispatchID.xy];
+			float4 ssrIrradiance = SSSRTexture[dispatchID.xy];
 			finalIrradiance = any(ssrIrradiance.rgb > 0) ? ssrIrradiance.rgb : finalIrradiance;
 		}
 #	endif

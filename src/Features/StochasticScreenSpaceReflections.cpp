@@ -235,6 +235,7 @@ void StochasticScreenSpaceReflections::ClearShaderCache()
 		&temporalCS,
 		&varianceCS,
 		&spatialCS,
+        &spatialSpecularCS,
 	};
 
 	for (auto shader : shaderPtrs)
