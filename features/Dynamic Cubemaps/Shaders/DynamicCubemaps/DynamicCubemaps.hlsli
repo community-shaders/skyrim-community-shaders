@@ -160,7 +160,7 @@ namespace DynamicCubemaps
 		horizon *= horizon * horizon;
 
 #	if defined(DEFERRED)
-		return horizon * (F0 * specularBRDF.x + specularBRDF.y);
+		return horizon * (F0 * specularBRDF.x);
 #	else
 
 		float3 finalIrradiance = 0;
@@ -172,7 +172,7 @@ namespace DynamicCubemaps
 		if (SharedData::iblSettings.EnableDiffuseIBL && SharedData::iblSettings.UseStaticIBL && !inWorld && !inReflection) {
 			float3 specularIrradiance = ImageBasedLighting::StaticSpecularIBLTexture.SampleLevel(SampColorSampler, R.xzy, level).xyz;
 			finalIrradiance += specularIrradiance;
-			return horizon * (F0 * specularBRDF.x + specularBRDF.y) * finalIrradiance;
+			return horizon * (F0 * specularBRDF.x) * finalIrradiance;
 		}
 #		endif
 
@@ -195,7 +195,7 @@ namespace DynamicCubemaps
 			specularIrradiance = Color::IrradianceToLinear(specularIrradiance);
 
 			finalIrradiance = specularIrradiance;
-			return horizon * (F0 * specularBRDF.x + specularBRDF.y) * finalIrradiance;
+			return horizon * (F0 * specularBRDF.x) * finalIrradiance;
 		}
 
 		sh2 specularLobe = SphericalHarmonics::FauxSpecularLobe(N, -V, roughness);
@@ -259,7 +259,7 @@ namespace DynamicCubemaps
 
 		finalIrradiance = specularIrradiance;
 #		endif
-		return horizon * (F0 * specularBRDF.x + specularBRDF.y) * finalIrradiance;
+		return horizon * (F0 * specularBRDF.x) * finalIrradiance;
 #	endif
 	}
 #endif  // !WATER

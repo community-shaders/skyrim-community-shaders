@@ -78,22 +78,22 @@ namespace Color
 
 	float GammaToLinear(float color)
 	{
-		return pow(abs(color), 1.6);
+		return pow(abs(color), 2.2);
 	}
 
 	float LinearToGamma(float color)
 	{
-		return pow(abs(color), 1.0 / 1.6);
+		return pow(abs(color), 1.0 / 2.2);
 	}
 
 	float3 GammaToLinear(float3 color)
 	{
-		return pow(abs(color), 1.6);
+		return pow(abs(color), 2.2);
 	}
 
 	float3 LinearToGamma(float3 color)
 	{
-		return pow(abs(color), 1.0 / 1.6);
+		return pow(abs(color), 1.0 / 2.2);
 	}
 
 	float3 GammaToTrueLinear(float3 color)
@@ -108,7 +108,7 @@ namespace Color
 
 #if defined(PSHADER) || defined(CSHADER) || defined(COMPUTESHADER)
 	// Attempt to match vanilla materials that are darker than PBR
-	const static float PBRLightingScale = ENABLE_LL ? 1.0 : 0.65;
+	const static float PBRLightingScale = ENABLE_LL ? 1.0 : 1.0;
 
 	// Attempt to normalise reflection brightness against DALC
 	const static float ReflectionNormalisationScale = ENABLE_LL ? 1.0 : 1.0;
