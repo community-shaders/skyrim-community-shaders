@@ -2101,7 +2101,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	material.AO = rawRMAOS.z;
 
 	// Reduce fresnel as vanilla does not have it on non-metal surfaces
-	rawRMAOS.w = lerp(0.0, 1.0, smoothstep(0.0, 1.0, rawRMAOS.w));
+	rawRMAOS.w = lerp(0.0, 1.0, smoothstep(0.04, 1.0, rawRMAOS.w));
 
 	if (!SharedData::linearLightingSettings.enableLinearLighting) {
 		material.F0 = lerp(rawRMAOS.w, Color::GammaToTrueLinear(baseColor.xyz), material.Metallic);
