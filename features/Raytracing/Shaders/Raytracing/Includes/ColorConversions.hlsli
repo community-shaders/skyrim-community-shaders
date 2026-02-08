@@ -1,6 +1,7 @@
 #ifndef COLOR_CONVERSIONS_COMMON_HLSLI
 #define COLOR_CONVERSIONS_COMMON_HLSLI
 
+#include "Raytracing/Includes/Registers.hlsli"
 #include "Raytracing/Includes/SharedData.hlsli"
 
 #define LLSETTINGS Frame.Features.LinearLighting
@@ -18,7 +19,7 @@ float3 EffectToLinear(float3 color)
 
 float3 LightToLinear(float3 color)
 {
-    return pow(abs(color), LLSETTINGS.lightGamma) * LLSETTINGS.lightMult;
+    return pow(abs(color), LLSETTINGS.lightGamma);
 }
 
 float3 PointLightToLinear(float3 color, bool isLinear)

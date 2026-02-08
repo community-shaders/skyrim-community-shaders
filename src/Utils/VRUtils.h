@@ -1,5 +1,6 @@
 #pragma once
 #include "D3D.h"
+#include "Utils/Input.h"
 #include <SimpleMath.h>
 #include <d3d11.h>
 #include <imgui.h>  // For ImVec4
@@ -7,8 +8,8 @@
 #include <vector>
 
 // Forward declarations - actual definitions are in Features/VR.h
-enum class ControllerDevice;
-struct ButtonCombo;
+using ControllerDevice = InputDeviceType;
+using ButtonCombo = InputCombo;
 
 /**
  * @brief VR utility functions and helpers for OpenVR integration
@@ -236,5 +237,25 @@ namespace Util
 				mat.m[i][j] = m[i][j];
 		return mat;
 	}
+
+	//=============================================================================
+	// WAND POINTING UTILITIES
+	//=============================================================================
+
+	/**
+	 * @brief Computes controller ray intersection with a VR overlay
+	 * @param overlay OpenVR overlay interface
+	 * @param overlayHandle Handle to the overlay to test intersection with
+	 * @param controllerIndex Tracked device index of the controller
+	 * @param outUV Output UV coordinates (0-1 range) of intersection point
+	 * @return true if the controller ray intersects the overlay, false otherwise
+	 *
+	 * This function uses OpenVR's ComputeOverlayIntersection to perform ray-casting
+	 * from the controller's position and forward direction to detect if it's pointing
+	 * at the specified overlay. If an intersection is found, the UV coordinates are
+	 * returned in the outUV parameter.
+	 */
+	bool ComputeWandIntersection(vr::IVROverlay* overlay, vr::VROverlayHandle_t overlayHandle,
+		vr::TrackedDeviceIndex_t controllerIndex, ImVec2& outUV);
 
 }

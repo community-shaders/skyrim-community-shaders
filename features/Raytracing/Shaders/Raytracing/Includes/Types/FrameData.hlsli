@@ -59,10 +59,11 @@ alignas(16)
     float OverrideSSSScale;
     float3 OverrideSSSScatteringColor;
     float OverrideSSSAnisotropy;
-    float4 Pad0;
-    float4x4 Pad1;
-    float4x4 Pad2;
-    float3x4 Pad3;
+    float4 Pad1;
+    float4 Pad2;    
+    float4x4 Pad3;
+    float4x4 Pad4;
+    float3x4 Pad5;
 };
 #ifdef __cplusplus
 static_assert(sizeof(FrameData) == 1024);
