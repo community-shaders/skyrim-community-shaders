@@ -165,7 +165,7 @@ void SampleSSGISpecular(uint2 pixCoord, sh2 lobe, out float ao, out float3 il, i
 
 	if (reflectance.x > 0.0 || reflectance.y > 0.0 || reflectance.z > 0.0) {
 		float3 R = reflect(V, normalWS);
-		
+
 		float roughness = 1.0 - glossiness;
 		float level = roughness * 7.0;
 
