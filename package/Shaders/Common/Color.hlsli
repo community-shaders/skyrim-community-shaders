@@ -546,7 +546,7 @@ float max3(float3 v) { return max(v.x, max(v.y, v.z)); }
 float min3(float3 v) { return min(v.x, min(v.y, v.z)); }
 float average(float3 v) { return (v.x + v.y + v.z) / 3.0; }
 float safeDivision(float a, float b, float fallback = 0) { return (b == 0) ? fallback : (a / b); }
-float3 safeDivision(float3 a, float3 b, float3 fallback = 0) 
+float3 safeDivision(float3 a, float3 b, float3 fallback = 0)
 {
 	return float3(
 		(b.x == 0) ? fallback.x : (a.x / b.x),
@@ -631,7 +631,7 @@ float3 CorrectOutOfRangeColor(float3 Color, bool FixNegatives = true, bool FixPo
 	float peak = max3(Color);
 	float startRange = MaxRange * (1.0 - SmoothRatio);
 	float smoothRange = SmoothRatio > 0.0 ? clamp(peak, startRange, MaxRange) : MaxRange;
-	
+
 	if (FixPositives && peak > startRange)
 	{
 		float lum = GetLuminance(Color, ColorSpace);
@@ -639,10 +639,10 @@ float3 CorrectOutOfRangeColor(float3 Color, bool FixNegatives = true, bool FixPo
 		float lumExcess = targetLum - smoothRange;
 		float maxExcess = peak - smoothRange;
 		float alpha = saturate(safeDivision(maxExcess, maxExcess - lumExcess, 0));
-		
+
 		float3 newColor = lerp(Color, targetLum, alpha * DesatVsDarkRatio);
 		newColor *= saturate(safeDivision(smoothRange, max3(newColor), 1));
-		
+
 		if (SmoothRatio <= 0.0)
 			Color = newColor;
 		else

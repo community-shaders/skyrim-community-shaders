@@ -166,7 +166,7 @@ void FidelityFX::Present(bool a_useFrameGeneration, bool a_isHDR)
 	if (a_useFrameGeneration) {
 		uiConfig.uiResource = ffxApiGetResourceDX12(swapChain.uiBufferWrapped->resource.get());
 		// Use both premultiplied alpha and double buffering for consistent blending
-		uiConfig.flags = FFX_FRAMEGENERATION_UI_COMPOSITION_FLAG_USE_PREMUL_ALPHA | 
+		uiConfig.flags = FFX_FRAMEGENERATION_UI_COMPOSITION_FLAG_USE_PREMUL_ALPHA |
 		                 FFX_FRAMEGENERATION_UI_COMPOSITION_FLAG_ENABLE_INTERNAL_UI_DOUBLE_BUFFERING;
 	} else {
 		// No UI resource when FG is disabled - backbuffer already has UI composited
@@ -283,7 +283,7 @@ void FidelityFX::CreateFSRResources()
 		contextDescription.displaySize.height = displayHeight;
 		contextDescription.flags = FFX_FSR3_ENABLE_UPSCALING_ONLY | FFX_FSR3_ENABLE_AUTO_EXPOSURE | FFX_FSR3_ENABLE_HIGH_DYNAMIC_RANGE;
 		contextDescription.backBufferFormat = FFX_SURFACE_FORMAT_R10G10B10A2_UNORM;
-    contextDescription.backendInterfaceUpscaling = fsrInterface;
+		contextDescription.backendInterfaceUpscaling = fsrInterface;
 
 		if (ffxFsr3ContextCreate(&fsrContext[i], &contextDescription) != FFX_OK) {
 			logger::critical("[FidelityFX] Failed to initialize FSR3 context for eye {}!", i);
@@ -293,7 +293,6 @@ void FidelityFX::CreateFSRResources()
 			fsrScratchBuffer = nullptr;
 			return;
 		}
-
 	}
 	logger::info("[FidelityFX] Created {} FSR3 contexts (Display: {}x{}, Render: {}x{})",
 		numContexts, displayWidth, displayHeight, renderWidth, renderHeight);

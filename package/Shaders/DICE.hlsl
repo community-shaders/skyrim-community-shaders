@@ -201,7 +201,7 @@ float3 DICETonemap(
     const float shoulderStartPerceptual = DICE::ToPerceptual(shoulderStart / normalizationRange, Settings).x;
     const float inputMaxPerceptual = DICE::ToPerceptual(Settings.InputMax / normalizationRange, Settings).x;
     const float peakWhitePerceptual = DICE::ToPerceptual(PeakWhite / normalizationRange, Settings).x;
-    
+
     // Convert to the display primaries, for example in HDR it's good to tonemap in BT.2020.
     // Theoretically some modes (e.g. "DICE_TYPE_BY_LUMINANCE_PQ") don't need this conversion as results would be identical, but we do it anyway for simplicity.
     Color = FromColorSpaceToColorSpace(Color, Settings.InOutColorSpace, Settings.ProcessingColorSpace);
@@ -299,7 +299,7 @@ float3 DICETonemap(
       // Colors below the shoulder (or below zero) don't need to be adjusted
       Color *= (sourceColorPerceptual > shoulderStartPerceptual) ? (compressedColorNormalized / sourceColorNormalized) : 1.0;
     }
-      
+
     Color = FromColorSpaceToColorSpace(Color, Settings.ProcessingColorSpace, Settings.InOutColorSpace);
   }
   else // DICE_TYPE_BY_LUMINANCE_RGB
