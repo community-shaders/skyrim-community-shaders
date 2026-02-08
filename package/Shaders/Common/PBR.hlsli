@@ -209,7 +209,6 @@ namespace PBR
 
 		const float3 N = context.worldNormal;
 		const float3 V = context.viewDir;
-		const float3 VN = context.vertexNormal;
 
 		float NdotV = saturate(dot(N, V));
 
@@ -261,12 +260,6 @@ namespace PBR
 			}
 #endif
 		}
-
-		// Horizon specular occlusion
-		// https://marmosetco.tumblr.com/post/81245981087
-		float3 R = reflect(-V, N);
-		float horizon = saturate(1.0 + dot(R, VN));
-		lobeWeights.specular *= horizon * horizon;
 
 		// Apply ambient occlusion
 		lobeWeights.diffuse *= material.AO;

@@ -138,20 +138,7 @@ void GetIndirectLobeWeights(out IndirectLobeWeights lobeWeights, IndirectContext
 #	endif
 	lobeWeights.diffuse = material.BaseColor;
 #	if defined(DYNAMIC_CUBEMAPS)
-	if (any(material.F0 > 0)) {
-		const float3 N = context.worldNormal;
-		const float3 V = context.viewDir;
-		const float3 VN = context.vertexNormal;
-
-		lobeWeights.specular = material.F0;
-
-		// Horizon specular occlusion
-		// https://marmosetco.tumblr.com/post/81245981087
-		float3 R = reflect(-V, N);
-		float horizon = min(1.0 + dot(R, VN), 1.0);
-		horizon = horizon * horizon;
-		lobeWeights.specular *= horizon;
-	}
+	lobeWeights.specular = material.F0;	
 #	endif
 #endif
 }
@@ -212,13 +199,6 @@ float3 GetWetnessIndirectLobeWeights(inout IndirectLobeWeights lobeWeights, floa
 
 	lobeWeights.diffuse *= 1 - specularLobeWeight;
 	lobeWeights.specular *= 1 - specularLobeWeight;
-
-	// Horizon specular occlusion
-	// https://marmosetco.tumblr.com/post/81245981087
-	float3 R = reflect(-V, N);
-	float horizon = min(1.0 + dot(R, VN), 1.0);
-	horizon = horizon * horizon;
-	specularLobeWeight *= horizon;
 
 	return specularLobeWeight;
 }
