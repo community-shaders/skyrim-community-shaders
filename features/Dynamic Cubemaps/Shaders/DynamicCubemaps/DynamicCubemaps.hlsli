@@ -26,7 +26,7 @@ namespace DynamicCubemaps
 		// Horizon specular occlusion
 		// https://marmosetco.tumblr.com/post/81245981087
 		float horizon = min(1.0 + dot(R, VN), 1.0);
-		horizon *= horizon * horizon;
+		horizon = horizon * horizon;
 
 #	if defined(DEFERRED)
 		return horizon;
