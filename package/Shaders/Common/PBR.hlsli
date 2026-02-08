@@ -268,13 +268,9 @@ namespace PBR
 		float horizon = saturate(1.0 + dot(R, VN));
 		lobeWeights.specular *= horizon * horizon;
 
-		// Apply ambient occlusion with multi-bounce approximation
-		float diffuseAO = Color::MultiBounceAO(material.BaseColor, material.AO.x).y;
-		float specularAO = Color::MultiBounceAO(material.F0, 
-			Color::SpecularAOLagarde(NdotV, material.AO, material.Roughness).x).y;
-
-		lobeWeights.diffuse *= diffuseAO;
-		lobeWeights.specular *= specularAO;
+		// Apply ambient occlusion
+		lobeWeights.diffuse *= material.AO;
+		lobeWeights.specular *=  Color::SpecularAOLagarde(NdotV, material.AO, material.Roughness);
 	}
 }
 
