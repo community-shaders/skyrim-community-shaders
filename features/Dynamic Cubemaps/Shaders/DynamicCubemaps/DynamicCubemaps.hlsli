@@ -142,7 +142,7 @@ namespace DynamicCubemaps
 	{
 #	if defined(DEFERRED)
 		return 1.0;
-#	else		
+#	else
 		float3 R = reflect(-V, N);
 		float NoV = saturate(dot(N, V));
 
