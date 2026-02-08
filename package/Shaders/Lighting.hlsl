@@ -2994,7 +2994,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #	if !defined(DEFERRED)
 	color.xyz = Color::IrradianceToLinear(color.xyz);
 	color.xyz += specularColor;
-	
+
 	if (any(indirectLobeWeights.specular > 0)
 #		if defined(WETNESS_EFFECTS)
 		|| any(wetnessReflectance > 0)
