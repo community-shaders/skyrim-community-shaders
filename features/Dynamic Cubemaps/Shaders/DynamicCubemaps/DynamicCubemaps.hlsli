@@ -152,15 +152,13 @@ namespace DynamicCubemaps
 
 		float level = roughness * 7.0;
 
-		float2 specularBRDF = BRDF::EnvBRDF(roughness, NoV);
-
 		// Horizon specular occlusion
 		// https://marmosetco.tumblr.com/post/81245981087
 		float horizon = min(1.0 + dot(R, VN), 1.0);
 		horizon *= horizon * horizon;
 
 #	if defined(DEFERRED)
-		return horizon * (F0 * specularBRDF.x);
+		return horizon * F0;
 #	else
 
 		float3 finalIrradiance = 0;
@@ -172,7 +170,7 @@ namespace DynamicCubemaps
 		if (SharedData::iblSettings.EnableDiffuseIBL && SharedData::iblSettings.UseStaticIBL && !inWorld && !inReflection) {
 			float3 specularIrradiance = ImageBasedLighting::StaticSpecularIBLTexture.SampleLevel(SampColorSampler, R.xzy, level).xyz;
 			finalIrradiance += specularIrradiance;
-			return horizon * (F0 * specularBRDF.x) * finalIrradiance;
+			return horizon * F0 * finalIrradiance;
 		}
 #		endif
 
@@ -195,7 +193,7 @@ namespace DynamicCubemaps
 			specularIrradiance = Color::IrradianceToLinear(specularIrradiance);
 
 			finalIrradiance = specularIrradiance;
-			return horizon * (F0 * specularBRDF.x) * finalIrradiance;
+			return horizon * F0 * finalIrradiance;
 		}
 
 		sh2 specularLobe = SphericalHarmonics::FauxSpecularLobe(N, -V, roughness);
@@ -259,7 +257,7 @@ namespace DynamicCubemaps
 
 		finalIrradiance = specularIrradiance;
 #		endif
-		return horizon * (F0 * specularBRDF.x) * finalIrradiance;
+		return horizon * F0 * finalIrradiance;
 #	endif
 	}
 #endif  // !WATER

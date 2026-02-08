@@ -99,7 +99,7 @@ namespace PBR
 		float wrappedNdotL = saturate((dot(fakeN, L) + wrap) / ((1 + wrap) * (1 + wrap)));
 		float diffuseScatter = (1 / Math::PI) * lerp(wrappedNdotL, diffuseKajiya, 0.33);
 		float luma = Color::RGBToLuminance(material.BaseColor);
-		float3 scatterTint = pow(material.BaseColor / luma, 1 - shadow);
+		float3 scatterTint = pow(material.BaseColor / max(luma, 1e-5), 1 - shadow);
 		S += sqrt(material.BaseColor) * diffuseScatter * scatterTint;
 
 		return S;
@@ -236,9 +236,7 @@ namespace PBR
 				lobeWeights.diffuse += material.FuzzColor * material.FuzzWeight;
 			}
 #endif
-
-			float2 specularBRDF = BRDF::EnvBRDF(material.Roughness, NdotV);
-			lobeWeights.specular = material.F0 * specularBRDF.x;
+			lobeWeights.specular = material.F0;
 
 			lobeWeights.diffuse *= (1 - lobeWeights.specular);
 
@@ -267,15 +265,13 @@ namespace PBR
 		// Horizon specular occlusion
 		// https://marmosetco.tumblr.com/post/81245981087
 		float3 R = reflect(-V, N);
-		float horizon = min(1.0 + dot(R, VN), 1.0);
-		horizon = horizon * horizon;
-		lobeWeights.specular *= horizon;
+		float horizon = saturate(1.0 + dot(R, VN));
+		lobeWeights.specular *= horizon * horizon;
 
-		float3 diffuseAO = material.AO;
-		float3 specularAO = Color::SpecularAOLagarde(NdotV, material.AO, material.Roughness);
-
-		diffuseAO = Color::MultiBounceAO(material.BaseColor, diffuseAO.x).y;
-		specularAO = Color::MultiBounceAO(material.F0, specularAO.x).y;
+		// Apply ambient occlusion with multi-bounce approximation
+		float diffuseAO = Color::MultiBounceAO(material.BaseColor, material.AO.x).y;
+		float specularAO = Color::MultiBounceAO(material.F0, 
+			Color::SpecularAOLagarde(NdotV, material.AO, material.Roughness).x).y;
 
 		lobeWeights.diffuse *= diffuseAO;
 		lobeWeights.specular *= specularAO;
