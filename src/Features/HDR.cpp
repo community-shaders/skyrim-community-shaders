@@ -754,9 +754,7 @@ void HDR::ApplyHDR()
 		// When HDR is enabled, ISHDR wrote to hdrTexture (float16, values >1.0 preserved).
 		// When SDR, ISHDR wrote to kFRAMEBUFFER (UNORM, tonemapped 0-1).
 		auto& framebufferRT = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kFRAMEBUFFER];
-		ID3D11ShaderResourceView* sceneSRV = (settings.enableHDR && hdrTexture && hdrTexture->srv)
-		                                         ? hdrTexture->srv.get()
-		                                         : framebufferRT.SRV;
+		ID3D11ShaderResourceView* sceneSRV = (settings.enableHDR && hdrTexture && hdrTexture->srv) ? hdrTexture->srv.get() : framebufferRT.SRV;
 
 		// Choose the correct UI buffer based on which path is active
 		// When D3D12 swap chain is active, vanilla UI renders to uiBufferWrapped

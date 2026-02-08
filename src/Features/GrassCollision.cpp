@@ -31,7 +31,7 @@ void GrassCollision::UpdateCollisions(PerFrame& perFrameData)
 		actors.push_back(&processLists->highActorHandles);  // High actors are in combat or doing something interesting
 		for (auto array : actors) {
 			for (auto& actorHandle : *array) {
-				auto actorPtr = actorHandle.get();
+				auto actorPtr = actorHandle.getsafe();
 				if (actorPtr && actorPtr.get()) {
 					actorList.push_back(actorPtr.get());
 				}
