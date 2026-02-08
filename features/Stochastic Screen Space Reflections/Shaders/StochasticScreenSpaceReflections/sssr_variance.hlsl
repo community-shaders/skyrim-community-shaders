@@ -74,7 +74,7 @@ cbuffer DenoiserCB : register(b2)
         momentsSum /= weightedColor;
 
         float variance = momentsSum.y - (momentsSum.x * momentsSum.x);
-        variance *= 2 / history;
+        variance *= 2 / max(history, 1.f);
         VarianceOutput[DTid.xy] = float4(blendedColor, variance);
     }
 }
