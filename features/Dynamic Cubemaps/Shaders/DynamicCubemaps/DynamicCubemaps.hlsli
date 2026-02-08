@@ -16,9 +16,9 @@ namespace DynamicCubemaps
 #if !defined(WATER)
 
 #	if defined(SKYLIGHTING)
-	float3 GetDynamicCubemapSpecularIrradiance(float2 uv, float3 N, float3 V, float roughness, sh2 skylighting)
+	float3 GetDynamicCubemapSpecularIrradiance(float3 N, float3 V, float roughness, sh2 skylighting)
 #	else
-	float3 GetDynamicCubemapSpecularIrradiance(float2 uv, float3 N, float3 V, float roughness)
+	float3 GetDynamicCubemapSpecularIrradiance(float3 N, float3 V, float roughness)
 #	endif
 	{
 #	if defined(DEFERRED)
