@@ -399,7 +399,7 @@ void Shape::BuildMaterial(const RE::BSGeometry::GEOMETRY_RUNTIME_DATA& geometryR
 						alphaFlags = Material::AlphaFlags::kAlphaTest;
 
 						float alphaScale = (alphaProperty->alphaThreshold / 255.0f) / 0.5f;
-						colors[0].w *= alphaScale;
+						colors[0].w /= alphaScale;
 					}
 				}
 
