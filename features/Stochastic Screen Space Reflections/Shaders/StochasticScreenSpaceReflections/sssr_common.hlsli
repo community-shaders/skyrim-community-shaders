@@ -25,7 +25,7 @@ float4 ImportanceSampleGGX(float2 E, float a2)
 	H.x = SinTheta * cos( Phi );
 	H.y = SinTheta * sin( Phi );
 	H.z = CosTheta;
-	
+
 	float d = ( CosTheta * a2 - CosTheta ) * CosTheta + 1;
 	float D = a2 / ( Math::PI*d*d );
 	float PDF = D * CosTheta;
@@ -158,7 +158,7 @@ float3x3 GetTangentBasis( float3 TangentZ )
 	const float Sign = TangentZ.z >= 0 ? 1 : -1;
 	const float a = -rcp( Sign + TangentZ.z );
 	const float b = TangentZ.x * TangentZ.y * a;
-	
+
 	float3 TangentX = { 1 + Sign * a * Pow2( TangentZ.x ), Sign * b, -Sign * TangentZ.x };
 	float3 TangentY = { b,  Sign + a * Pow2( TangentZ.y ), -TangentZ.y };
 
@@ -186,7 +186,7 @@ float2 GetMotionVector(float sceneDepth, float2 screenUV, float4x4 matrix_LastVi
 
     float2 CurUV = CurNDC.xy * float2(0.5f, -0.5f) + 0.5;
     float2 LastUV = LastNDC.xy * float2(0.5f, -0.5f) + 0.5;
-    
+
     return CurUV - LastUV;
 }
 
@@ -209,7 +209,7 @@ uint3 Rand3DPCG16(int3 p)
 	// a permutation function on the other parts and the key.
 	//
 	// In this case, I'm using v.x, v.y and v.z as the parts, using + instead of ^ for
-	// the combination function, and just multiplying the other two parts (no key) for 
+	// the combination function, and just multiplying the other two parts (no key) for
 	// the permutation function.
 	//
 	// That gives a simple mad per round.
@@ -269,7 +269,7 @@ void ReprojectHit(Texture2D MotionTexture, SamplerState s, float3 hitUVz, uint e
 	prevScreen = thisClip.xy + velocity * float2(2.f, -2.f);
 
 	float2 prevUV = prevScreen.xy * float2(0.5f, -0.5f) + 0.5f;
-	
+
 	outPrevUV = prevUV;
 }
 

@@ -105,11 +105,11 @@ bool IsValidHistory(uint2 pixel, float2 uv, float3 currNormalVS)
             valid = true;
         }
     }
-    
+
     if (!valid)
     {
         float weightSum = 0.f;
-            
+
         int2 offsets[8] =
         {
             int2(0, 2),

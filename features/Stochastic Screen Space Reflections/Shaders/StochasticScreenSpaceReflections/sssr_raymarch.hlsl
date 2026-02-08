@@ -1,7 +1,7 @@
 // This file is rewritten from AMD's FidelityFX SDK.
 //
 // Copyright (C) 2024 Advanced Micro Devices, Inc.
-// 
+//
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files(the "Software"), to deal
 // in the Software without restriction, including without limitation the rights
@@ -77,13 +77,13 @@ float3 ProjectPosition(float3 origin, float4x4 mat)
 }
 
 // Origin and direction must be in the same space and mat must be able to transform from that space into clip space.
-float3 ProjectDirection(float3 origin, float3 direction, float3 screen_space_origin, float4x4 mat) 
+float3 ProjectDirection(float3 origin, float3 direction, float3 screen_space_origin, float4x4 mat)
 {
     float3 offsetted = ProjectPosition(origin + direction, mat);
     return offsetted - screen_space_origin;
 }
 
-float3 InvProjectPosition(float3 coord, float4x4 mat) 
+float3 InvProjectPosition(float3 coord, float4x4 mat)
 {
     coord.y = (1 - coord.y);
     coord.xy = 2 * coord.xy - 1;
@@ -513,7 +513,7 @@ float LocalBRDF(float3 V, float3 L, float3 N, float roughness) {
 #if defined(DYNAMIC_CUBEMAPS)
         if (UseDynamicCubemapsAsFallback != 0 && (confidence < 0.999f))
         {
-#   if defined(SSSR_SPECULAR)            
+#   if defined(SSSR_SPECULAR)
             const uint sampleMip = 0;
 #   else
             const uint sampleMip = 2;
