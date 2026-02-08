@@ -22,12 +22,13 @@ void VolumetricLightingWidget::DrawWidget()
 					changed = true;
 
 				ImGui::SeparatorText("RGB Color");
-				if (WeatherUtils::DrawSliderFloat("Red", settings.red, 0.0f, 1.0f))
+				float3 rgbColor{ settings.red, settings.green, settings.blue };
+				if (WeatherUtils::DrawColorEdit("Color", rgbColor)) {
+					settings.red = rgbColor.x;
+					settings.green = rgbColor.y;
+					settings.blue = rgbColor.z;
 					changed = true;
-				if (WeatherUtils::DrawSliderFloat("Green", settings.green, 0.0f, 1.0f))
-					changed = true;
-				if (WeatherUtils::DrawSliderFloat("Blue", settings.blue, 0.0f, 1.0f))
-					changed = true;
+				}
 
 				ImGui::EndTabItem();
 			}
