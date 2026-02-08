@@ -7,10 +7,10 @@
 #include "Util.h"
 #include "Utils/Game.h"
 #include "Utils/UI.h"
-#include "WeatherManager.h"
 #include "WeatherEditor/EditorWindow.h"
-#include <nlohmann/json.hpp>
+#include "WeatherManager.h"
 #include <cmath>
+#include <nlohmann/json.hpp>
 
 namespace
 {
@@ -807,7 +807,6 @@ void WeatherEditor::UpdateFilteredWeathers()
 			s_filteredWeathers.push_back(weather);
 		}
 	}
-
 }
 
 int WeatherEditor::FindWeatherIndex(RE::TESWeather* targetWeather)
