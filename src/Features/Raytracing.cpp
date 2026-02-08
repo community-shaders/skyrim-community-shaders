@@ -3125,6 +3125,13 @@ void Raytracing::DrawRTGI()
 			frameData->Features.HairSpecular = *reinterpret_cast<HairSpecularSettings*>(&globals::features::hairSpecular.settings);
 			frameData->Features.ExtendedTranslucency = *reinterpret_cast<ExtendedTranslucencySettings*>(&globals::features::extendedTranslucency.settings);
 			frameData->Features.LinearLighting = *reinterpret_cast<LinearLightingSettings*>(&linearLighting);
+
+			static_assert(sizeof(CPMSettings) == sizeof(ExtendedMaterials::Settings));
+			static_assert(sizeof(WetnessEffectsSettings) == sizeof(WetnessEffects::PerFrame));
+			static_assert(sizeof(CloudShadowsSettings) == sizeof(CloudShadows::Settings));
+			static_assert(sizeof(HairSpecularSettings) == sizeof(HairSpecular::Settings));
+			static_assert(sizeof(ExtendedTranslucencySettings) == sizeof(ExtendedTranslucency::PerFrame));
+			static_assert(sizeof(LinearLightingSettings) == sizeof(LinearLighting::PerFrameData));
 		}
 
 		// Upload buffer 0, for SHaRC resolve pass
