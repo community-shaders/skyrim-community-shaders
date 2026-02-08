@@ -518,7 +518,7 @@ float LocalBRDF(float3 V, float3 L, float3 N, float roughness) {
 #   else
             const uint sampleMip = 2;
 #   endif
-            float directionalAmbientLuminance = Color::RGBToLuminance(max(0.0, mul(SharedData::DirectionalAmbient, float4(world_space_reflected_direction, 1.0)))) * Color::ReflectionNormalisationScale;
+            float directionalAmbientLuminance = Color::RGBToLuminance(Color::Ambient(max(0.0, mul(SharedData::DirectionalAmbient, float4(world_space_reflected_direction, 1.0))))) * Color::ReflectionNormalisationScale;
             float envLuminance;
             // Fallback to dynamic cubemaps
             float3 envColor = EnvReflectionsTexture.SampleLevel(LinearSampler, world_space_reflected_direction, sampleMip);
