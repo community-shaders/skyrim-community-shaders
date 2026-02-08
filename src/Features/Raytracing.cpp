@@ -3118,14 +3118,21 @@ void Raytracing::DrawRTGI()
 		{
 			auto wetnessEffect = globals::features::wetnessEffects.GetCommonBufferData();
 			auto linearLighting = globals::features::linearLighting.GetCommonBufferData();
-			auto extendedTranslucency = globals::features::extendedTranslucency.GetCommonBufferData();
 
-			frameData->Features.ExtendedMaterial = *reinterpret_cast<CPMSettings*>(&globals::features::extendedMaterials.settings);
+			std::memcpy(&frameData->Features.ExtendedMaterial, &globals::features::extendedMaterials.settings, sizeof(CPMSettings));
+			std::memcpy(&frameData->Features.WetnessEffects, &wetnessEffect, sizeof(WetnessEffectsSettings));
+			std::memcpy(&frameData->Features.CloudShadows, &globals::features::cloudShadows.settings, sizeof(CloudShadowsSettings));
+			std::memcpy(&frameData->Features.HairSpecular, &globals::features::hairSpecular.settings, sizeof(HairSpecularSettings));
+			std::memcpy(&frameData->Features.ExtendedTranslucency, &globals::features::extendedTranslucency.GetCommonBufferData(), sizeof(ExtendedTranslucencySettings));
+			std::memcpy(&frameData->Features.LinearLighting, &linearLighting, sizeof(LinearLightingSettings));
+
+			/*frameData->Features.ExtendedMaterial = *reinterpret_cast<CPMSettings*>(&globals::features::extendedMaterials.settings);
 			frameData->Features.WetnessEffects = *reinterpret_cast<WetnessEffectsSettings*>(&wetnessEffect);
 			frameData->Features.CloudShadows = *reinterpret_cast<CloudShadowsSettings*>(&globals::features::cloudShadows.settings);
 			frameData->Features.HairSpecular = *reinterpret_cast<HairSpecularSettings*>(&globals::features::hairSpecular.settings);
-			frameData->Features.ExtendedTranslucency = *reinterpret_cast<ExtendedTranslucencySettings*>(&extendedTranslucency);
-			frameData->Features.LinearLighting = *reinterpret_cast<LinearLightingSettings*>(&linearLighting);
+			std::memcpy(&frameData->Features.ExtendedTranslucency, &globals::features::extendedTranslucency.GetCommonBufferData(), sizeof(ExtendedTranslucencySettings));
+			frameData->Features.ExtendedTranslucency = *reinterpret_cast<ExtendedTranslucencySettings*>(extendedTranslucency);
+			frameData->Features.LinearLighting = *reinterpret_cast<LinearLightingSettings*>(&linearLighting);*/
 
 			static_assert(sizeof(CPMSettings) == sizeof(ExtendedMaterials::Settings));
 			static_assert(sizeof(WetnessEffectsSettings) == sizeof(WetnessEffects::PerFrame));
