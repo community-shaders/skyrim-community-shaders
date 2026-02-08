@@ -143,11 +143,7 @@ void GetIndirectLobeWeights(out IndirectLobeWeights lobeWeights, IndirectContext
 		const float3 V = context.viewDir;
 		const float3 VN = context.vertexNormal;
 
-		float NdotV = saturate(dot(N, V));
-
-		float2 specularBRDF = BRDF::EnvBRDF(material.Roughness, NdotV);
-		lobeWeights.specular = material.F0 * specularBRDF.x + specularBRDF.y;
-		lobeWeights.specular *= 1 + material.F0 * (1 / (specularBRDF.x + specularBRDF.y) - 1);
+		lobeWeights.specular = material.F0;
 
 		// Horizon specular occlusion
 		// https://marmosetco.tumblr.com/post/81245981087

@@ -2990,6 +2990,8 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	color.xyz = Color::IrradianceToLinear(color.xyz);
 	color.xyz += specularColor;
 
+	indirectLobeWeights.specular += BRDF::EnvBRDFApproxLazarov(saturate(dot(worldNormal, viewDirection)), Color::ReflectionFresnelRoughness).y;
+
 	if (any(indirectLobeWeights.specular > 0)
 #		if defined(WETNESS_EFFECTS)
 		|| any(wetnessReflectance > 0)

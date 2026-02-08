@@ -6,6 +6,7 @@
 #include "Common/SharedData.hlsli"
 #include "Common/Spherical Harmonics/SphericalHarmonics.hlsli"
 #include "Common/VR.hlsli"
+#include "Common/BRDF.hlsli"
 
 Texture2D<float3> SpecularTexture : register(t0);
 Texture2D<unorm float3> AlbedoTexture : register(t1);
@@ -158,10 +159,13 @@ void SampleSSGISpecular(uint2 pixCoord, sh2 lobe, out float ao, out float3 il, i
 
 	float3 reflectance = ReflectanceTexture[dispatchID.xy];
 
-	if (reflectance.x > 0.0 || reflectance.y > 0.0 || reflectance.z > 0.0) {
-		float3 V = normalize(positionWS.xyz);
-		float3 R = reflect(V, normalWS);
+	float3 V = normalize(positionWS.xyz);
 
+	reflectance.xyz += BRDF::EnvBRDFApproxLazarov(saturate(dot(normalWS, V)), Color::ReflectionFresnelRoughness).y;
+
+	if (reflectance.x > 0.0 || reflectance.y > 0.0 || reflectance.z > 0.0) {
+		float3 R = reflect(V, normalWS);
+		
 		float roughness = 1.0 - glossiness;
 		float level = roughness * 7.0;
 

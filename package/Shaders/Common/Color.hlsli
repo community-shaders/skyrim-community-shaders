@@ -113,6 +113,9 @@ namespace Color
 	// Attempt to normalise reflection brightness against DALC
 	const static float ReflectionNormalisationScale = ENABLE_LL ? 1.0 : 0.65;
 
+	// Roughnss value for fresnel reflections
+	const static float ReflectionFresnelRoughness = 0.7;
+
 	const static float PBRLightingCompensation = ENABLE_LL ? 1.0 : Math::PI;
 
 	float3 GammaToLinearLuminancePreserving(float3 color)
