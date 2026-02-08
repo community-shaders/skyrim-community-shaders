@@ -2975,7 +2975,26 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	indirectLobeWeights.diffuse *= Color::PBRLightingScale;
 #	endif
 
+	float3 outputAlbedo = indirectLobeWeights.diffuse * vertexColor.xyz;
+
+#	if defined(IBL) && defined(SKYLIGHTING)
+	directionalAmbientColor -= iblColor;
+#	endif
+
+	directionalAmbientColor *= outputAlbedo;
+
+#	if defined(SKYLIGHTING)
+	Skylighting::applySkylighting(color.xyz, directionalAmbientColor, outputAlbedo, skylightingDiffuse);
+#	endif
+
+#	if defined(IBL) && defined(SKYLIGHTING)
+	directionalAmbientColor += iblColor * outputAlbedo;
+#	endif
+
 #	if !defined(DEFERRED)
+	color.xyz = Color::IrradianceToLinear(color.xyz);
+	color.xyz += specularColor;
+	
 	if (any(indirectLobeWeights.specular > 0)
 #		if defined(WETNESS_EFFECTS)
 		|| any(wetnessReflectance > 0)
@@ -2998,26 +3017,8 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #		else
 		color.xyz += indirectLobeWeights.specular * directionalAmbientColor;
 #		endif
-#	endif
 
-	float3 outputAlbedo = indirectLobeWeights.diffuse * vertexColor.xyz;
-
-#	if defined(IBL) && defined(SKYLIGHTING)
-	directionalAmbientColor -= iblColor;
-#	endif
-
-	directionalAmbientColor *= outputAlbedo;
-
-#	if defined(SKYLIGHTING)
-	Skylighting::applySkylighting(color.xyz, directionalAmbientColor, outputAlbedo, skylightingDiffuse);
-#	endif
-
-#	if defined(IBL) && defined(SKYLIGHTING)
-	directionalAmbientColor += iblColor * outputAlbedo;
-#	endif
-
-#	if !defined(DEFERRED)
-	color.xyz = Color::IrradianceToGamma(Color::IrradianceToLinear(color.xyz) + specularColor);
+	color.xyz = Color::IrradianceToGamma(color.xyz);
 	float3 fogColor = Color::Fog(input.FogParam.xyz);
 #		if defined(IBL)
 	if (SharedData::iblSettings.EnableDiffuseIBL && !SharedData::InInterior) {
