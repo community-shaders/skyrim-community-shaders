@@ -138,7 +138,7 @@ void GetIndirectLobeWeights(out IndirectLobeWeights lobeWeights, IndirectContext
 #	endif
 	lobeWeights.diffuse = material.BaseColor;
 #	if defined(DYNAMIC_CUBEMAPS)
-	lobeWeights.specular = material.F0;	
+	lobeWeights.specular = material.F0;
 #	endif
 #endif
 }
