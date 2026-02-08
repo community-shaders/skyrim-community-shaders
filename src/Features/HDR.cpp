@@ -222,7 +222,9 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	enableHDR,
 	hdrPaperWhite,
 	hdrPeakNits,
-	hdrUIBrightness);
+	hdrUIBrightness,
+	sdrUIBrightness,
+	dontShowHDRWarning);
 
 void HDR::DrawSettings()
 {
@@ -233,38 +235,92 @@ void HDR::DrawSettings()
 	}
 	ImGui::Spacing();
 
+	// Gate HDR checkbox behind monitor detection
 	bool oldEnableHDR = settings.enableHDR;
+	
+	// Disable checkbox if no HDR monitor detected AND HDR is not already enabled
+	// (Allow disabling HDR even on SDR if it's already on from saved settings)
+	if (!isHDRMonitor && !settings.enableHDR) {
+		ImGui::BeginDisabled();
+	}
+	
 	if (ImGui::Checkbox("Enable HDR", &settings.enableHDR)) {
 		if (settings.enableHDR && !oldEnableHDR) {
-			settings.enableHDR = oldEnableHDR;
-			pendingHDREnable = true;
-			showHDRWarningPopup = true;
-			ImGui::OpenPopup("HDR Warning##HDRDisplay");
+			logger::info("HDR: enableHDR changed to: true");
+			UpdateHDRData();
+			UpdateSwapChainColorSpace();
 		} else if (!settings.enableHDR && oldEnableHDR) {
 			logger::info("HDR: enableHDR changed to: false");
 			UpdateHDRData();
 			UpdateSwapChainColorSpace();
 		}
 	}
+	
+	if (!isHDRMonitor && !oldEnableHDR) {
+		ImGui::EndDisabled();
+	}
+	
 	if (auto _tt = Util::HoverTooltipWrapper()) {
-		ImGui::Text("Enable HDR output. Matches vanilla visuals with extended dynamic range.");
+		if (isHDRMonitor) {
+			ImGui::Text("Enable HDR output. Matches vanilla visuals with extended dynamic range.");
+		} else {
+			ImGui::Text("HDR display not detected. Use Advanced button to override.");
+		}
 	}
 
-	if (ImGui::BeginPopupModal("HDR Warning##HDRDisplay", &showHDRWarningPopup, ImGuiWindowFlags_AlwaysAutoResize)) {
-		ImGui::TextColored(Util::Colors::GetWarning(), "WARNING: HDR Display Configuration");
+	// Advanced override button for SDR monitors
+	if (!isHDRMonitor && !settings.enableHDR) {
+		ImGui::SameLine();
+		if (ImGui::Button("Advanced")) {
+			if (!settings.dontShowHDRWarning) {
+				pendingHDREnable = true;
+				showHDRWarningPopup = true;
+				ImGui::OpenPopup("HDR Warning##HDRDisplay");
+			} else {
+				// User previously dismissed warnings, enable directly
+				settings.enableHDR = true;
+				logger::info("HDR: enableHDR changed to: true (advanced override, warning suppressed)");
+				UpdateHDRData();
+				UpdateSwapChainColorSpace();
+			}
+		}
+		if (auto _tt = Util::HoverTooltipWrapper()) {
+			ImGui::Text("Force enable HDR even without detection (not recommended).");
+		}
+	}
+
+	// Show notice if HDR is enabled on SDR monitor
+	if (!isHDRMonitor && settings.enableHDR) {
+		ImGui::Spacing();
+		ImGui::PushStyleColor(ImGuiCol_Text, Util::Colors::GetWarning());
+		ImGui::TextWrapped("HDR is enabled but no HDR display was detected.");
+		ImGui::PopStyleColor();
+	}
+
+	if (ImGui::BeginPopupModal("HDR Warning##HDRDisplay", &showHDRWarningPopup, ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoMove)) {
+		// Center popup on screen
+		ImVec2 center = ImGui::GetMainViewport()->GetCenter();
+		ImGui::SetWindowPos(center, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+
+		// Prevent background dimming by pushing lower modal dimming
+		ImGui::PushStyleVar(ImGuiStyleVar_PopupBorderSize, 1.0f);
+
+		ImGui::TextColored(Util::Colors::GetWarning(), "WARNING: Force Enable HDR");
 		ImGui::Separator();
 		ImGui::Spacing();
-		ImGui::TextWrapped("The game will look VERY WRONG on an SDR (standard) monitor.");
-		ImGui::TextWrapped("Only enable this feature if you have an HDR-capable display.");
+		ImGui::PushStyleColor(ImGuiCol_Text, Util::Colors::GetWarning());
+		ImGui::TextWrapped("HDR was not detected on your monitor.");
+		ImGui::TextWrapped("The game will look VERY WRONG on an SDR (standard) display.");
+		ImGui::PopStyleColor();
 		ImGui::Spacing();
-		ImGui::TextWrapped("Note: Repeatedly toggling this setting may cause instability or flickering.");
+		ImGui::TextWrapped("Only proceed if you have an HDR-capable display that was not detected correctly.");
 		ImGui::Spacing();
 		ImGui::Separator();
 		ImGui::Spacing();
 
-		if (ImGui::Button("Enable HDR", ImVec2(120, 0))) {
+		if (ImGui::Button("Force Enable HDR", ImVec2(150, 0))) {
 			settings.enableHDR = true;
-			logger::info("HDR: enableHDR changed to: true");
+			logger::info("HDR: enableHDR changed to: true (forced override)");
 			UpdateHDRData();
 			UpdateSwapChainColorSpace();
 			showHDRWarningPopup = false;
@@ -272,13 +328,25 @@ void HDR::DrawSettings()
 			ImGui::CloseCurrentPopup();
 		}
 		ImGui::SameLine();
-		if (ImGui::Button("Cancel", ImVec2(120, 0))) {
+		if (ImGui::Button("Cancel", ImVec2(150, 0))) {
 			settings.enableHDR = false;
 			showHDRWarningPopup = false;
 			pendingHDREnable = false;
 			ImGui::CloseCurrentPopup();
 		}
 
+		ImGui::Spacing();
+		ImGui::Separator();
+		ImGui::Spacing();
+
+		// Add smaller "don't show again" checkbox
+		ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(ImGui::GetStyle().FramePadding.x, ImGui::GetStyle().FramePadding.y * 0.5f));
+		ImGui::SetWindowFontScale(0.9f);
+		ImGui::Checkbox("Don't show me this again", &settings.dontShowHDRWarning);
+		ImGui::SetWindowFontScale(1.0f);
+		ImGui::PopStyleVar();
+
+		ImGui::PopStyleVar();
 		ImGui::EndPopup();
 	}
 
@@ -314,16 +382,27 @@ void HDR::DrawSettings()
 		ImGui::TextDisabled("Display reports: %.0f nits max", cachedDisplayMaxLuminance);
 	}
 
-	// UI brightness available in both HDR and SDR modes
+	// UI brightness - show appropriate slider based on HDR mode
 	ImGui::Spacing();
-	float oldUIBrightness = settings.hdrUIBrightness;
-	ImGui::SliderFloat("UI Brightness", &settings.hdrUIBrightness, 0.5f, 2.0f, "%.1fx");
-	if (oldUIBrightness != settings.hdrUIBrightness) {
-		UpdateHDRData();
-	}
-	if (auto _tt = Util::HoverTooltipWrapper()) {
-		ImGui::Text("Adjusts UI brightness. UI always renders at 100 nits baseline,");
-		ImGui::Text("independent of Paper White setting. 1.0x = 100 nits.");
+	if (settings.enableHDR) {
+		float oldUIBrightness = settings.hdrUIBrightness;
+		ImGui::SliderFloat("HDR UI Brightness", &settings.hdrUIBrightness, 0.5f, 2.0f, "%.1fx");
+		if (oldUIBrightness != settings.hdrUIBrightness) {
+			UpdateHDRData();
+		}
+		if (auto _tt = Util::HoverTooltipWrapper()) {
+			ImGui::Text("Adjusts UI brightness in HDR mode. UI renders at 100 nits baseline,");
+			ImGui::Text("independent of Paper White setting. 1.0x = 100 nits.");
+		}
+	} else {
+		float oldUIBrightness = settings.sdrUIBrightness;
+		ImGui::SliderFloat("SDR UI Brightness", &settings.sdrUIBrightness, 0.5f, 2.0f, "%.1fx");
+		if (oldUIBrightness != settings.sdrUIBrightness) {
+			UpdateHDRData();
+		}
+		if (auto _tt = Util::HoverTooltipWrapper()) {
+			ImGui::Text("Adjusts UI brightness in SDR mode. 1.0x = normal brightness.");
+		}
 	}
 }
 
@@ -356,6 +435,9 @@ void HDR::RestoreDefaultSettings()
 	settings.enableHDR = hdrMonitor;
 	settings.hdrPaperWhite = 203;
 	settings.hdrPeakNits = 1000;
+	settings.hdrUIBrightness = 4.0f;
+	settings.sdrUIBrightness = 1.0f;
+	settings.dontShowHDRWarning = false;
 }
 
 void HDR::SetupResources()
@@ -910,8 +992,10 @@ void HDR::UpdateHDRData() const
 		static_cast<float>(settings.hdrPaperWhite),
 		effectivePeakNits,
 		skipUIComposite ? 1.f : 0.f);
+	// Use appropriate UI brightness based on HDR mode
+	float uiBrightness = settings.enableHDR ? settings.hdrUIBrightness : settings.sdrUIBrightness;
 	data.parameters1 = DirectX::XMVectorSet(
-		settings.hdrUIBrightness,
+		uiBrightness,
 		isSceneLinear ? 1.f : 0.f,
 		0.f, 0.f);
 	hdrDataCB->Update(data);

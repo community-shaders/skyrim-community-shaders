@@ -22,10 +22,12 @@ public:
 
 	struct Settings
 	{
-		bool enableHDR = false;        // false = vanilla SDR, true = HDR output
-		uint hdrPaperWhite = 203;      // Reference white brightness in nits for HDR
-		uint hdrPeakNits = 1000;       // Maximum display brightness in nits for HDR
-		float hdrUIBrightness = 1.0f;  // UI brightness multiplier (1.0 = SDR equivalent)
+		bool enableHDR = false;          // false = vanilla SDR, true = HDR output
+		uint hdrPaperWhite = 203;        // Reference white brightness in nits for HDR
+		uint hdrPeakNits = 1000;         // Maximum display brightness in nits for HDR
+		float hdrUIBrightness = 4.0f;    // UI brightness multiplier for HDR mode (1.0x = 100 nits)
+		float sdrUIBrightness = 1.0f;    // UI brightness multiplier for SDR mode (1.0x = normal)
+		bool dontShowHDRWarning = false; // User preference to suppress HDR warning popup
 	};
 
 	Settings settings;

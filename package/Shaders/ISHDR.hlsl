@@ -12,6 +12,7 @@
  *   2. This shader (ISHDR BLEND) reads from BlendTex, applies bloom and color grading
  *      - SDR mode: Applies tonemapping to compress to 0-1 range, outputs gamma-encoded
  *      - HDR mode: Skips tonemapping to preserve >1.0 values.
+ *        Bloom is Reinhard-compressed to SDR range to prevent excessive intensity.
  *        Gamma-encodes output unless Linear Lighting is active.
  *   3. Output goes to kFRAMEBUFFER, then HDROutputCS reads it for final processing:
  *      - SDR: Passthrough + UI composite
@@ -91,6 +92,7 @@ PS_OUTPUT main(PS_INPUT input)
 			texCoord = FrameBuffer::GetDynamicResolutionAdjustedScreenPosition(texCoord);
 		}
 		float3 imageColor = max(0.0, ImageTex.Sample(ImageSampler, texCoord).xyz);
+
 #		if defined(RGB2LUM)
 		imageColor = Color::RGBToLuminance(imageColor);
 #		elif (defined(LUM) || defined(LUMCLAMP)) && !defined(DOWNADAPT)
@@ -134,18 +136,33 @@ PS_OUTPUT main(PS_INPUT input)
 	inputColor = max(0, inputColor);
 
 	if (isHDR) {
-		// HDR: skip tonemapping — preserve linear values >1.0 for HDROutputCS
-		float3 blendedColor = inputColor + bloomColor * Param.x;
+		// HDR: run vanilla tonemapping for correct bloom blending and color grading,
+		// then recover HDR highlights by lerping back toward original linear values.
+		float3 blendedColor;
+		[branch] if (Param.z > 0.5)
+		{
+			blendedColor = DisplayMapping::HuePreservingHejlBurgessDawson(inputColor, bloomColor);
+		}
+		else
+		{
+			float maxCol = Color::RGBToLuminance(inputColor);
+			float mappedMax = GetTonemapFactorReinhard(maxCol).x;
+			float3 compressedHuePreserving = inputColor * mappedMax / maxCol;
+			blendedColor = compressedHuePreserving;
+			blendedColor += saturate(Param.x - blendedColor) * bloomColor;
+		}
 
 		float blendedLuminance = Color::RGBToLuminance(blendedColor);
-		float3 linearColor = lerp(blendedLuminance, blendedColor, Cinematic.x);
-		linearColor = lerp(linearColor, blendedLuminance * Tint.xyz, Tint.w);
-		linearColor *= Cinematic.w;
-		linearColor = lerp(avgValue.x, linearColor, lerp(Cinematic.z, 1.0, 0.5));
-		linearColor = max(0, linearColor);
+		float3 tonemapped = Cinematic.w * lerp(lerp(blendedLuminance, blendedColor, Cinematic.x), blendedLuminance * Tint.xyz, Tint.w).xyz;
+		tonemapped = lerp(avgValue.x, tonemapped, Cinematic.z);
+		tonemapped = max(0, tonemapped);
 
-		bool linearLighting = SharedData::linearLightingSettings.enableLinearLighting > 0;
-		outputColor = linearLighting ? linearColor : Color::TrueLinearToGamma(linearColor);
+		// Recover HDR highlights: blend from tonemapped toward original linear
+		// based on scene luminance. Dark areas stay vanilla, brights get HDR back.
+		float sceneLum = Color::RGBToLuminance(inputColor);
+		float recoveryFactor = saturate((sceneLum - 0.5) / 0.5);
+		float3 hdrRecovered = lerp(tonemapped, inputColor * Color::RGBToLuminance(tonemapped) / max(1e-5, sceneLum), recoveryFactor);
+		outputColor = max(0, hdrRecovered);
 	} else {
 		// SDR: tonemapping compresses to 0-1
 		float3 blendedColor;
