@@ -8,9 +8,17 @@
 #include "Utils/Game.h"
 #include "Utils/UI.h"
 #include "WeatherManager.h"
-
 #include "WeatherEditor/EditorWindow.h"
 #include <nlohmann/json.hpp>
+#include <cmath>
+
+namespace
+{
+	ImVec4 GetUnclassifiedWeatherColor()
+	{
+		return ImVec4(0.9f, 0.85f, 0.7f, 1.0f);
+	}
+}
 
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	WeatherEditor::WeatherDetailsWindowSettings,
@@ -93,7 +101,7 @@ void WeatherEditor::DrawWeatherPickerSection()
 			WeatherDetailsWindow.ShowInOverlay = showInOverlay;
 		}
 		if (auto _tt = Util::HoverTooltipWrapper()) {
-			ImGui::Text("Opens weather details in a separate window that stays open\neven when the main menu is closed. ");
+			ImGui::Text("Opens weather details in a separate window that stays open\neven when the main menu is closed.");
 			ImGui::Text("Toggle with ");
 			ImGui::SameLine();
 			ImGui::TextColored(themeSettings.StatusPalette.CurrentHotkey, "%s", Util::Input::KeyIdToString(menuSettings.OverlayToggleKey).c_str());
@@ -240,7 +248,7 @@ void WeatherEditor::RenderWeatherDetailsWindow(bool* open)
 	}
 
 	ImGui::SetNextWindowSize(ImVec2(600, 800), ImGuiCond_FirstUseEver);
-	if (ImGui::Begin("Weather Details##Popup", open, ImGuiWindowFlags_None)) {
+	if (ImGui::Begin("Weather Details##Popup", nullptr, ImGuiWindowFlags_None)) {
 		// Remember window position for next frame
 		ImVec2 currentPos = ImGui::GetWindowPos();
 		if (currentPos.x != WeatherDetailsWindow.Position.x || currentPos.y != WeatherDetailsWindow.Position.y) {
@@ -270,29 +278,25 @@ ImVec4 WeatherEditor::GetWeatherTypeColor(RE::TESWeather* weather)
 	const auto& theme = Menu::GetSingleton()->GetTheme();
 
 	// Priority order for weather classification colors (highest priority first)
-	static const std::vector<std::pair<RE::TESWeather::WeatherDataFlag, ImVec4>> priorityColors = {
-		{ RE::TESWeather::WeatherDataFlag::kRainy, ImVec4(0.4f, 0.7f, 1.0f, 1.0f) },             // Light blue for rain
-		{ RE::TESWeather::WeatherDataFlag::kSnow, ImVec4(0.9f, 0.9f, 1.0f, 1.0f) },              // Light blue-white for snow
-		{ RE::TESWeather::WeatherDataFlag::kPermAurora, ImVec4(0.8f, 0.4f, 1.0f, 1.0f) },        // Purple for aurora
-		{ RE::TESWeather::WeatherDataFlag::kAuroraFollowsSun, ImVec4(0.9f, 0.6f, 1.0f, 1.0f) },  // Light purple for aurora follows sun
-		{ RE::TESWeather::WeatherDataFlag::kCloudy, ImVec4(0.7f, 0.7f, 0.7f, 1.0f) },            // Gray for cloudy
-		{ RE::TESWeather::WeatherDataFlag::kPleasant, ImVec4(0.0f, 1.0f, 0.0f, 1.0f) }           // Placeholder, will use theme
+	static const std::vector<RE::TESWeather::WeatherDataFlag> priorityFlags = {
+		RE::TESWeather::WeatherDataFlag::kRainy,
+		RE::TESWeather::WeatherDataFlag::kSnow,
+		RE::TESWeather::WeatherDataFlag::kPermAurora,
+		RE::TESWeather::WeatherDataFlag::kAuroraFollowsSun,
+		RE::TESWeather::WeatherDataFlag::kCloudy,
+		RE::TESWeather::WeatherDataFlag::kPleasant
 	};
 
 	// Check flags in priority order
-	for (const auto& [flag, color] : priorityColors) {
+	for (const auto& flag : priorityFlags) {
 		if (weather->data.flags.any(flag)) {
-			// Handle theme-dependent colors
-			if (flag == RE::TESWeather::WeatherDataFlag::kPleasant) {
-				return theme.StatusPalette.SuccessColor;
-			}
-			return color;
+			return GetWeatherFlagColor(flag);
 		}
 	}
 
 	// Check for unclassified/unflagged weather
 	if (weather->data.flags.underlying() == 0) {
-		return ImVec4(0.9f, 0.85f, 0.7f, 1.0f);  // Light tan/beige for unclassified/unflagged
+		return GetUnclassifiedWeatherColor();
 	}
 
 	return theme.StatusPalette.InfoColor;  // Default blue
@@ -380,9 +384,13 @@ void WeatherEditor::DisplayLightningInfo(RE::TESWeather* weather, bool showInter
 		ImGui::PopStyleVar();
 	}
 	if (colorChanged && showInteractiveElements) {
-		weather->data.lightningColor.red = static_cast<std::uint8_t>(lightningColor[0] * 255.0f);
-		weather->data.lightningColor.green = static_cast<std::uint8_t>(lightningColor[1] * 255.0f);
-		weather->data.lightningColor.blue = static_cast<std::uint8_t>(lightningColor[2] * 255.0f);
+		auto toByte = [](float value) -> std::uint8_t {
+			int scaled = static_cast<int>(std::lround(value * 255.0f));
+			return static_cast<std::uint8_t>(std::clamp(scaled, 0, 255));
+		};
+		weather->data.lightningColor.red = toByte(lightningColor[0]);
+		weather->data.lightningColor.green = toByte(lightningColor[1]);
+		weather->data.lightningColor.blue = toByte(lightningColor[2]);
 	}
 	int8_t thunderFreqRaw = weather->data.thunderLightningFrequency;
 	ImGui::BulletText("Thunder Frequency: %d (signed 8-bit)", static_cast<int>(thunderFreqRaw));
@@ -567,7 +575,7 @@ void WeatherEditor::RenderWeatherControls(RE::Sky* sky)
 		// Get color - use the helper function for consistency
 		ImVec4 filterColor;
 		if (filters[i].isUnclassified) {
-			filterColor = ImVec4(0.9f, 0.85f, 0.7f, 1.0f);  // Light tan/beige for none/unclassified
+			filterColor = GetUnclassifiedWeatherColor();
 		} else {
 			filterColor = GetWeatherFlagColor(filters[i].flag);
 		}
@@ -800,8 +808,6 @@ void WeatherEditor::UpdateFilteredWeathers()
 		}
 	}
 
-	// Sort filtered weathers using the same comparator
-	std::sort(s_filteredWeathers.begin(), s_filteredWeathers.end(), WeatherNameComparator{});
 }
 
 int WeatherEditor::FindWeatherIndex(RE::TESWeather* targetWeather)
@@ -916,7 +922,7 @@ bool WeatherEditor::RenderMultiColorWeatherName(RE::TESWeather* weather, const s
 	std::vector<std::string> flagNames = GetWeatherFlagNames(weather);
 
 	// If no flags or only one flag, use simple single-color display
-	if (flagNames.empty() || flagNames.size() == 1 || (flagNames.size() == 1 && flagNames[0] == "None")) {
+	if (flagNames.size() <= 1) {
 		ImVec4 weatherColor = GetWeatherTypeColor(weather);
 		ImGui::PushStyleColor(ImGuiCol_Text, weatherColor);
 		ImGui::Text("%s", weatherName.c_str());
@@ -1010,11 +1016,14 @@ ImVec4 WeatherEditor::GetWeatherFlagColorByName(const std::string& flagName)
 	}
 
 	// Default for unclassified or unknown flags
-	return ImVec4(0.9f, 0.85f, 0.7f, 1.0f);  // Light tan/beige for none/unclassified
+	return GetUnclassifiedWeatherColor();
 }
 
 std::string WeatherEditor::GetDisplayName(const RE::TESWeather* weather)
 {
+	if (!weather) {
+		return "Unknown";
+	}
 	const char* name = weather->GetName();
 	if (name && strlen(name) > 0) {
 		return std::string(name);
@@ -1029,14 +1038,19 @@ std::string WeatherEditor::GetDisplayName(const RE::TESWeather* weather)
 void WeatherEditor::DrawOverlay()
 {
 	bool overlayVisible = Menu::GetSingleton()->overlayVisible;
+	static bool lastShowInOverlay = false;
+	const bool showInOverlay = WeatherDetailsWindow.ShowInOverlay;
 	// If ShowInOverlay is true and overlay is visible, auto-enable the window if not already enabled
-	if (WeatherDetailsWindow.ShowInOverlay && overlayVisible) {
-		if (!WeatherDetailsWindow.Enabled) {
+	if (showInOverlay && overlayVisible) {
+		if (!lastShowInOverlay) {
 			WeatherDetailsWindow.Enabled = true;
 		}
-		bool* p_open = &WeatherDetailsWindow.Enabled;
-		RenderWeatherDetailsWindow(p_open);
+		if (WeatherDetailsWindow.Enabled) {
+			bool* p_open = &WeatherDetailsWindow.Enabled;
+			RenderWeatherDetailsWindow(p_open);
+		}
 	}
+	lastShowInOverlay = showInOverlay;
 }
 
 bool WeatherEditor::IsOverlayVisible() const
