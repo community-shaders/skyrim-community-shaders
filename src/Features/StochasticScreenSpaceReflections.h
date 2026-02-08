@@ -15,10 +15,9 @@ struct StochasticScreenSpaceReflections : Feature
     virtual std::pair<std::string, std::vector<std::string>> GetFeatureSummary() override
 	{
 		return {
-			"Stochastic Screen Space Reflections provides high-quality global illumination with information in screen space.",
+            "Stochastic Screen Space Reflections provides high-quality specular reflections using screen-space data.",
             {
-                "Realistic indirect lighting",
-                "Importance sampling for advanced reflections based on roughness",
+                "Glossy reflections driven by surface roughness",
                 "Efficient ray marching with Hi-Z buffer",
                 "Uses dynamic cubemaps as fallback for missing information",
                 "Spatiotemporal Variance-Guided Filtering (SVGF) denoiser"
@@ -47,13 +46,8 @@ struct StochasticScreenSpaceReflections : Feature
         float Thickness = 5.f;
         float NormalBias = 0.1f;
         float BRDFBias = 0.25f;
-        bool UseDynamicCubemapsAsFallback = true;
         bool UseDynamicCubemapsAsFallbackSpecular = true;
-        uint DiffuseSPP = 2;
-        bool EnableDiffuse = true;
         float SpecularMult = 1.0f;
-        float DiffuseMult = 1.0f;
-        float AmbientMult = 0.0f;
         float OcclusionStrength = 1.0f;
         float CubemapNormalization = 0.0f;
         bool EnableSVGF = false;
@@ -67,8 +61,7 @@ struct StochasticScreenSpaceReflections : Feature
     {
         uint EnableSpecular;
         float SpecularMult;
-        float DiffuseMult;
-        float AmbientMult;
+        float _padding[2];
     };
 
     struct alignas(16) SSSRCB
@@ -94,10 +87,7 @@ struct StochasticScreenSpaceReflections : Feature
     eastl::unique_ptr<ConstantBuffer> sssrCB;
     eastl::unique_ptr<ConstantBuffer> denoiserCB;
 
-    bool recompileFlag = false;
-
     void DrawSSSRSpecular();
-    void DrawSSSRDiffuse();
     virtual void Prepass() override;
 
     SharedData GetCommonBufferData();
@@ -105,14 +95,11 @@ struct StochasticScreenSpaceReflections : Feature
     eastl::unique_ptr<Texture2D> texDepth = nullptr;
     eastl::unique_ptr<Texture2D> texColor = nullptr;
     eastl::unique_ptr<Texture2D> texSSRColor = nullptr;
-    eastl::unique_ptr<Texture2D> texSSSRDiffuseColor = nullptr;
     eastl::unique_ptr<Texture2D> texHitPDF = nullptr;
     eastl::unique_ptr<Texture2D> texHistory = nullptr;
-    eastl::unique_ptr<Texture2D> texHistoryDiffuse = nullptr;
     eastl::unique_ptr<Texture2D> texTemporal = nullptr;
     eastl::unique_ptr<Texture2D> texMoments = nullptr;
     eastl::unique_ptr<Texture2D> texHistoryMoments = nullptr;
-    eastl::unique_ptr<Texture2D> texHistoryMomentsDiffuse = nullptr;
     eastl::unique_ptr<Texture2D> texHistoryNormals = nullptr;
     eastl::unique_ptr<Texture2D> texVariance = nullptr;
     eastl::unique_ptr<Texture2D> texOutput = nullptr;
@@ -128,10 +115,8 @@ struct StochasticScreenSpaceReflections : Feature
 
     winrt::com_ptr<ID3D11ComputeShader> preprocessDepthCS = nullptr;
     winrt::com_ptr<ID3D11ComputeShader> raymarchSpecularCS = nullptr;
-    winrt::com_ptr<ID3D11ComputeShader> raymarchDiffuseCS = nullptr;
     winrt::com_ptr<ID3D11ComputeShader> prepareColorCS = nullptr;
     winrt::com_ptr<ID3D11ComputeShader> depthDownsampleCS = nullptr;
-    winrt::com_ptr<ID3D11ComputeShader> diffuseCompositeCS = nullptr;
     winrt::com_ptr<ID3D11ComputeShader> temporalCS = nullptr;
     winrt::com_ptr<ID3D11ComputeShader> varianceCS = nullptr;
     winrt::com_ptr<ID3D11ComputeShader> spatialCS = nullptr;

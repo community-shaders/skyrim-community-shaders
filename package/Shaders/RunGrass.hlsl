@@ -792,13 +792,6 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	}
 #				endif
 
-#				if defined(SSSR)
-	if (SharedData::sssrSettings.DiffuseMult > 0.0) {
-		directionalAmbientColor *= SharedData::sssrSettings.AmbientMult;
-		iblColor *= SharedData::sssrSettings.AmbientMult;
-	}
-#				endif
-
 	diffuseColor += directionalAmbientColor;
 
 #				if defined(IBL) && defined(SKYLIGHTING)
@@ -1008,13 +1001,6 @@ PS_OUTPUT main(PS_INPUT input)
 			iblColor = Color::IrradianceToGamma(iblColor);
 			directionalAmbientColor += iblColor;
 		}
-	}
-#			endif
-
-#			if defined(SSSR)
-	if (SharedData::sssrSettings.DiffuseMult > 0.0) {
-		directionalAmbientColor *= SharedData::sssrSettings.AmbientMult;
-		iblColor *= SharedData::sssrSettings.AmbientMult;
 	}
 #			endif
 

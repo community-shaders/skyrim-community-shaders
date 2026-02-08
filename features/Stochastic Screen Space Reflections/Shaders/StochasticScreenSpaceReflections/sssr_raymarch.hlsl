@@ -40,7 +40,6 @@ Texture3D<sh2> SkylightingProbeArray : register(t10);
 Texture2DArray<float3> stbn_vec3_2Dx1D_128x128x64 : register(t11);
 #   endif
 #endif
-Texture2D<float3> AlbedoTexture : register(t12);
 
 RWTexture2D<float4> SSRColorOutput : register(u0);
 RWTexture2D<float4> SSRPDFOutput : register(u1);
@@ -66,11 +65,7 @@ cbuffer SSSRCB : register(b1)
 #define HIZ_MIN_MIP 0
 #define SSSR_FLOAT_MAX 3.402823466e+38
 #define SSSR_DEPTH_HIERARCHY_MAX_MIP MaxMips
-#if defined(SSSR_SPECULAR)
-#   define SAMPLES_PER_PIXEL 1
-#else
-#   define SAMPLES_PER_PIXEL DIFFUSE_SPP
-#endif
+#define SAMPLES_PER_PIXEL 1
 
 float3 ProjectPosition(float3 origin, float4x4 mat)
 {
@@ -424,11 +419,7 @@ float LocalBRDF(float3 V, float3 L, float3 N, float roughness) {
 {
     uint2 screen_size = SharedData::BufferDim.xy;
     uint2 coords = DTid.xy;
-#if defined(SSSR_SPECULAR)
     uint sample_id = 0;
-#else
-    uint sample_id = groupThreadID.z;
-#endif
     float3 debug;
 
     float4 outColor = float4(0, 0, 0, 0);
@@ -442,9 +433,6 @@ float LocalBRDF(float3 V, float3 L, float3 N, float roughness) {
     GetNormalRoughness(coords.xy, normalVS, roughness);
     roughness = clamp(roughness, 0.02f, 1.0f);
 
-#if !defined(SSSR_SPECULAR)
-    float3 albedo = AlbedoTexture[coords.xy].xyz;
-#endif
 
     bool is_mirror = IsMirrorReflection(roughness);
     int most_detailed_mip = HIZ_MIN_MIP;
@@ -516,11 +504,7 @@ float LocalBRDF(float3 V, float3 L, float3 N, float roughness) {
 
             sampleColor = ScreenColorTextureMips.SampleLevel(LinearSampler, hit.xy * FrameBuffer::DynamicResolutionParams1.xy, 0).xyz;
             sampleColor = Color::IrradianceToLinear(sampleColor);
-#if !defined(SSSR_SPECULAR)
-            sampleColor *= SharedData::sssrSettings.DiffuseMult;
-#else
             sampleColor *= SharedData::sssrSettings.SpecularMult;
-#endif
 
             outPDF.xyz += hit * confidence;
             outPDF.w += pdf * confidence;

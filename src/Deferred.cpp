@@ -399,8 +399,6 @@ void Deferred::DeferredPasses()
 	bool ssgi_hq_spec = ssgi.settings.EnableExperimentalSpecularGI;
 
 	auto& sssr = globals::features::screenSpaceRayTracing;
-	if (sssr.loaded && sssr.settings.EnableDiffuse)
-		sssr.DrawSSSRDiffuse();
 
 	auto dispatchCount = Util::GetScreenDispatchCount(true);
 

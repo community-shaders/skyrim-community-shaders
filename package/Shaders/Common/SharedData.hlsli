@@ -242,8 +242,7 @@ namespace SharedData
     {
         uint EnableSpecular;
         float SpecularMult;
-        float DiffuseMult;
-		float AmbientMult;
+		float2 _padding;
     };
 
 	cbuffer FeatureData : register(b6)
