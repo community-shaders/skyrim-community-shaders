@@ -505,9 +505,8 @@ void TestWetnessIndirectLight()
     ASSERT(IsTrue, all(lobe_smooth >= 0.0f));
     ASSERT(IsTrue, all(lobe_rough >= 0.0f));
 
-    // Horizon occlusion - bent vertex normal should reduce weight
-    float3 VN_bent = float3(0.447, -0.447, 0.775);  // normalized(0.5, -0.5, 1)
-    float3 lobe_bent = PBR::GetWetnessIndirectSpecularLobeWeight(N, V, VN_bent, roughness);
+    // Horizon occlusion
+    float3 lobe_bent = PBR::GetWetnessIndirectSpecularLobeWeight(N, V, roughness);
     ASSERT(IsTrue, all(lobe_bent >= 0.0f));
     ASSERT(IsTrue, lobe_bent.x <= lobeWeight.x + 0.001f);
 
@@ -571,9 +570,8 @@ void TestWetnessProperties()
 
     // Horizon occlusion reduces specular
     float3 VN_aligned = N;
-    float3 VN_bent = float3(0.447, 0, 0.895);  // normalized(0.5, 0, 1)
     float3 lobe_aligned = PBR::GetWetnessIndirectSpecularLobeWeight(N, V, VN_aligned, 0.5f);
-    float3 lobe_bent = PBR::GetWetnessIndirectSpecularLobeWeight(N, V, VN_bent, 0.5f);
+    float3 lobe_bent = PBR::GetWetnessIndirectSpecularLobeWeight(N, V, 0.5f);
     ASSERT(IsTrue, lobe_bent.x <= lobe_aligned.x + 0.01f);
 
     // Color preservation
