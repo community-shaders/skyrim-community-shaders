@@ -44,13 +44,6 @@ namespace ShadowSampling
 
 	float Get3DFilteredShadow(float3 positionWS, float3 viewDirection, float2 screenPosition, uint eyeIndex, float depth, out float surfaceShadow)
 	{
-		const float stepSize = 32.0;  // Fixed step size in world units
-
-		float noise = Random::InterleavedGradientNoise(screenPosition, SharedData::FrameCount);
-		float2 rotation;
-		sincos(Math::TAU * noise, rotation.y, rotation.x);
-		float2x2 rotationMatrix = float2x2(rotation.x, rotation.y, -rotation.y, rotation.x);
-
 		float screenDepth = SharedData::GetScreenDepth(depth);
 		float objectDepth = length(positionWS);
 		float maxDistance = max(0, screenDepth - objectDepth);
@@ -70,8 +63,13 @@ namespace ShadowSampling
 	#endif
 
 		float totalRayLength = distance(endPosition, startPosition);
+		
+		const float stepSize = 32.0;  // Fixed step size in world units
+
 		uint sampleCount = clamp(uint(totalRayLength / stepSize + 0.5), 1, 4);
 		float rcpSampleCount = rcp(sampleCount);
+
+		float noise = Random::InterleavedGradientNoise(screenPosition, SharedData::FrameCount);
 
 		startPosition += (endPosition - startPosition) * noise * rcpSampleCount;
 
@@ -91,7 +89,7 @@ namespace ShadowSampling
 
 #if defined(EFFECT_SHADOWS)
 		float vsmSurfaceShadow;
-		float shadow = EffectShadows::GetVSMShadow(startPosition, endPosition, sampleCount, eyeIndex, vsmSurfaceShadow);
+		float shadow = EffectShadows::GetVSMShadow3D(startPosition, endPosition, sampleCount, eyeIndex, vsmSurfaceShadow);
 		surfaceShadow *= vsmSurfaceShadow;
 		return worldShadow * shadow;
 #else
@@ -101,7 +99,16 @@ namespace ShadowSampling
 
 	float GetLightingShadow(float noise, float3 worldPosition, uint eyeIndex)
 	{
-		return 1;
+		float worldShadow = ShadowSampling::GetWorldShadow(worldPosition, FrameBuffer::CameraPosAdjust[eyeIndex].xyz, eyeIndex);
+		if (worldShadow == 0.0)
+			return 0.0;
+
+#if defined(EFFECT_SHADOWS)
+		float shadow = EffectShadows::GetVSMShadow2D(worldPosition, eyeIndex);
+		return worldShadow * shadow;
+#else
+		return worldShadow;
+#endif
 	}
 
 #if defined(SKYLIGHTING) && !defined(INTERIOR)
