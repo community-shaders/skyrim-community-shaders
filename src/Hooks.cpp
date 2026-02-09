@@ -11,6 +11,7 @@
 #include "Util.h"
 
 #include "Features/HDR.h"
+#include "Features/HDRDisplay.h"
 #include "Features/InteriorSun.h"
 #include "Features/LightLimitFix.h"
 #include "Features/TerrainHelper.h"
@@ -260,18 +261,20 @@ struct IDXGISwapChain_Present
 
 		bool frameGenActive = upscaling.d3d12SwapChainActive;
 
-		// HDR processing always runs to handle format conversion (HDR or SDR encoding)
-		bool hdrReady = hdr && hdr->hdrDataCB && hdr->outputTexture;
+		// HDR pipeline only runs when the HDR Display feature is installed, loaded, AND HDR output is enabled
+		// When enableHDR is false (SDR mode), vanilla ISHDR writes directly to kFRAMEBUFFER and no compositing is needed
+		bool hdrReady = globals::features::hdrDisplay.loaded && hdr && hdr->settings.enableHDR && hdr->hdrDataCB && hdr->outputTexture;
 
 		// When FG is active: ImGui renders to FG's uiBufferWrapped (FidelityFX handles compositing after interpolation)
-		// When FG is NOT active: ImGui renders to hdr->uiTexture (we composite in ApplyHDR)
+		// When FG is NOT active + HDR loaded: ImGui renders to hdr->uiTexture (we composite in ApplyHDR)
+		// When HDR is NOT loaded: ImGui renders directly to kFRAMEBUFFER (vanilla path)
 		if (frameGenActive) {
 			// FG path: render ImGui to the same buffer as vanilla UI (uiBufferWrapped)
 			// FidelityFX will composite this after frame interpolation
 			auto& data = globals::game::renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGET::kFRAMEBUFFER];
 			globals::d3d::context->OMSetRenderTargets(1, &data.RTV, nullptr);
 		} else if (hdrReady) {
-			// Non-FG path: render ImGui to hdr->uiTexture
+			// Non-FG HDR path: render ImGui to hdr->uiTexture
 			ID3D11RenderTargetView* uiRTV = nullptr;
 			D3D11_TEXTURE2D_DESC texDesc = {};
 
@@ -290,6 +293,10 @@ struct IDXGISwapChain_Present
 				viewport.MaxDepth = 1.0f;
 				globals::d3d::context->RSSetViewports(1, &viewport);
 			}
+		} else {
+			// Vanilla path: render ImGui directly to kFRAMEBUFFER (swap chain backbuffer)
+			auto& data = globals::game::renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGET::kFRAMEBUFFER];
+			globals::d3d::context->OMSetRenderTargets(1, &data.RTV, nullptr);
 		}
 
 		menu->DrawOverlay();
@@ -299,8 +306,8 @@ struct IDXGISwapChain_Present
 			ID3D11RenderTargetView* nullRTV = nullptr;
 			globals::d3d::context->OMSetRenderTargets(1, &nullRTV, nullptr);
 
-			// Apply HDR/SDR processing - handles both PQ encoding (HDR) and gamma encoding (SDR)
-			// When FG is active, this writes to swapChainBufferWrapped; FidelityFX handles UI compositing
+			// Apply HDR processing - handles both HDR10 and SDR output based on shader/display availability
+			// When FG is active, FidelityFX handles the final output
 			// When FG is NOT active, this composites UI and writes to the D3D11 swap chain
 			hdr->ApplyHDR();
 		}
@@ -546,12 +553,9 @@ namespace Hooks
 		static void thunk(RE::BSGraphics::Renderer* This, RE::RENDER_TARGETS::RENDER_TARGET a_target, RE::BSGraphics::RenderTargetProperties* a_properties)
 		{
 			globals::state->ModifyRenderTarget(a_target, a_properties);
-			auto hdr = HDR::GetSingleton();
-			// Always use HDR format for kMAIN since we always render in HDR
-			if (hdr) {
-				a_properties->format = RE::BSGraphics::Format::kR16G16B16A16_FLOAT;
-				logger::info("HDR: Upgrading kMAIN render target to R16G16B16A16_FLOAT");
-			}
+			// Always use 16-bit HDR format for kMAIN render target
+			a_properties->format = RE::BSGraphics::Format::kR16G16B16A16_FLOAT;
+			logger::info("HDR: Upgrading kMAIN render target to R16G16B16A16_FLOAT");
 			func(This, a_target, a_properties);
 		}
 		static inline REL::Relocation<decltype(thunk)> func;

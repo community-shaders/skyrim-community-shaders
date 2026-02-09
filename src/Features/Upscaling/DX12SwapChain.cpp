@@ -4,6 +4,7 @@
 #include <dxgi1_6.h>
 
 #include "../HDR.h"
+#include "../HDRDisplay.h"
 #include "../Upscaling.h"
 #include "FidelityFX.h"
 #include "Streamline.h"
@@ -64,8 +65,12 @@ void DX12SwapChain::CreateSwapChain(IDXGIAdapter* adapter, DXGI_SWAP_CHAIN_DESC 
 
 	frameIndex = swapChain->GetCurrentBackBufferIndex();
 
+	// Set color space based on HDR Display feature state
 	auto hdr = HDR::GetSingleton();
-	SetColorSpace(hdr->settings.enableHDR);
+	if (hdr && globals::features::hdrDisplay.loaded)
+		SetColorSpace(hdr->settings.enableHDR);
+	else
+		SetColorSpace(false);
 
 	fidelityFX.SetupFrameGeneration();
 }
@@ -92,8 +97,8 @@ void DX12SwapChain::CreateInterop()
 
 	swapChainBufferWrapped = new WrappedResource(texDesc11, d3d11Device.get(), d3d12Device.get());
 
-	// UI buffer uses RGBA16 float for full alpha precision
-	texDesc11.Format = DXGI_FORMAT_R16G16B16A16_FLOAT;
+	// UI buffer uses R8G8B8A8_UNORM - vanilla UI is SDR and 8-bit precision
+	texDesc11.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
 	uiBufferWrapped = new WrappedResource(texDesc11, d3d11Device.get(), d3d12Device.get());
 }
 
@@ -126,11 +131,12 @@ HRESULT DX12SwapChain::Present(UINT SyncInterval, UINT Flags)
 	// is covered by the D3D11→D3D12 fence. Without this, FidelityFX may read
 	// uiBufferWrapped on D3D12 before the PQ encoding completes on D3D11,
 	// causing intermittent UI brightness flickering.
+	// Only runs when HDR Display feature is loaded (UIBrightnessCS may not exist otherwise)
 	auto hdr = HDR::GetSingleton();
-	if (hdr)
+	if (hdr && globals::features::hdrDisplay.loaded)
 		hdr->ScaleUIBrightnessForFG();
 
-	bool isHDR = hdr && hdr->settings.enableHDR;
+	bool isHDR = hdr && globals::features::hdrDisplay.loaded && hdr->settings.enableHDR;
 
 	// Wait for D3D11 to finish (includes ApplyHDR scene encoding AND UIBrightnessCS)
 	DX::ThrowIfFailed(d3d11Context->Signal(d3d11Fence.get(), fenceValue));
@@ -439,12 +445,11 @@ void DX12SwapChain::SetColorSpace(bool enableHDR)
 
 void DX12SwapChain::SetUIBuffer()
 {
-	// Clear UI buffer before vanilla UI renders
+	// Redirect kFRAMEBUFFER.RTV to our UI texture so vanilla UI renders to it
+	auto& data = globals::game::renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGET::kFRAMEBUFFER];
 	float clearColor[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
 	d3d11Context->ClearRenderTargetView(uiBufferWrapped->rtv, clearColor);
 
-	// Redirect kFRAMEBUFFER.RTV to our UI texture so vanilla UI renders to it
-	auto& data = globals::game::renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGET::kFRAMEBUFFER];
 	data.RTV = uiBufferWrapped->rtv;
 	d3d11Context->OMSetRenderTargets(1, &data.RTV, nullptr);
 }

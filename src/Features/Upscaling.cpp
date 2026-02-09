@@ -2,6 +2,7 @@
 
 #include "Deferred.h"
 #include "HDR.h"
+#include "HDRDisplay.h"
 #include "Hooks.h"
 #include "State.h"
 #include "Upscaling/DX12SwapChain.h"
@@ -1198,10 +1199,12 @@ void Upscaling::SetupResources()
 
 	copyDepthToSharedBufferPS.attach((ID3D11PixelShader*)Util::CompileShader(L"Data\\Shaders\\Upscaling\\CopyDepthToSharedBufferPS.hlsl", { { "PSHADER", "" } }, "ps_5_0"));
 
-	// Setup HDR resources
-	auto hdr = HDR::GetSingleton();
-	if (hdr)
-		hdr->SetupResources();
+	// Setup HDR resources only when the HDR Display feature is loaded
+	if (globals::features::hdrDisplay.loaded) {
+		auto hdr = HDR::GetSingleton();
+		if (hdr)
+			hdr->SetupResources();
+	}
 }
 
 void Upscaling::ClearShaderCache()
@@ -1792,8 +1795,9 @@ void Upscaling::MenuManagerDrawInterfaceStartHook::thunk(int64_t a1)
 
 	// For non-Frame Gen HDR: redirect kFRAMEBUFFER.RTV to UI texture before vanilla UI renders
 	// When FG is active, its SetUIBuffer redirects to uiBufferWrapped instead
+	// When HDR Display is not loaded, skip entirely so vanilla UI renders to kFRAMEBUFFER
 	auto& upscaling = globals::features::upscaling;
-	if (!upscaling.d3d12SwapChainActive) {
+	if (!upscaling.d3d12SwapChainActive && globals::features::hdrDisplay.loaded) {
 		auto hdr = HDR::GetSingleton();
 		if (hdr)
 			hdr->SetUIBuffer();
@@ -1822,7 +1826,9 @@ void Upscaling::Main_PostProcessing::thunk(RE::ImageSpaceManager* a_this, uint32
 	BSImagespaceShaderISTemporalAA->taaEnabled = upscaleMethod == UpscaleMethod::kTAA;
 
 	// Redirect kFRAMEBUFFER to float texture before ISHDR runs so HDR values >1.0 survive
-	auto hdr = HDR::GetSingleton();
+	// When HDR Display is not loaded, ISHDR writes to vanilla kFRAMEBUFFER (SDR path)
+	bool hdrLoaded = globals::features::hdrDisplay.loaded;
+	auto hdr = hdrLoaded ? HDR::GetSingleton() : nullptr;
 	if (hdr)
 		hdr->RedirectFramebuffer();
 

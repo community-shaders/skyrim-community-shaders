@@ -9,7 +9,7 @@ struct HDRDisplay : public Feature
 	virtual inline std::string GetShortName() override { return "HDRDisplay"; }
 	virtual inline std::string_view GetCategory() const override { return "Display"; }
 	virtual inline bool SupportsVR() override { return true; }
-	virtual inline bool IsCore() const override { return true; }
+	virtual inline bool IsCore() const override { return false; }
 
 	virtual inline std::string_view GetShaderDefineName() override { return "HDR_OUTPUT"; }
 	virtual inline bool HasShaderDefine(RE::BSShader::Type shaderType) override

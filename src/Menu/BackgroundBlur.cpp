@@ -4,6 +4,7 @@
 
 #include "BackgroundBlur.h"
 #include "../Features/HDR.h"
+#include "../Features/HDRDisplay.h"
 #include "../Globals.h"
 #include "../Util.h"
 
@@ -537,10 +538,10 @@ namespace BackgroundBlur
 			return;
 		}
 
-		// Skip blur when HDR processing is active - UI is rendered to a separate texture
-		// and composited by the HDR compute shader. This applies to both Frame Gen and non-Frame Gen paths.
+		// Skip blur when HDR output is active - UI is rendered to a separate texture
+		// and composited by the HDR pipeline. This applies to both Frame Gen and non-Frame Gen paths.
 		auto hdr = HDR::GetSingleton();
-		bool hdrActive = hdr && hdr->hdrDataCB && hdr->outputTexture;
+		bool hdrActive = globals::features::hdrDisplay.loaded && hdr && hdr->settings.enableHDR && hdr->hdrDataCB && hdr->outputTexture;
 		if (hdrActive) {
 			return;
 		}

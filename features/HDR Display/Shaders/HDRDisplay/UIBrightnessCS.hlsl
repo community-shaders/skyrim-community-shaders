@@ -1,7 +1,6 @@
-// Scales UI brightness and encodes for FidelityFX Frame Gen compositing
-// Output is premultiplied alpha: RGB is already multiplied by alpha
-// For HDR: converts gamma UI to PQ so FidelityFX can blend PQ UI over PQ scene
-// For SDR: applies brightness multiplier
+// Scales UI brightness for FG compositing.
+// UI is 8-bit UNORM (gamma SDR). Convert to PQ for HDR, or apply brightness for SDR.
+// Output is premultiplied alpha: result = ui.rgb + scene * (1 - ui.a)
 
 #include "Common/Color.hlsli"
 

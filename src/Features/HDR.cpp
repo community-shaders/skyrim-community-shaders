@@ -300,7 +300,7 @@ void HDR::DrawSettings()
 	if (ImGui::BeginPopupModal("HDR Warning##HDRDisplay", &showHDRWarningPopup, ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoMove)) {
 		// Center popup on screen
 		ImVec2 center = ImGui::GetMainViewport()->GetCenter();
-		ImGui::SetWindowPos(center, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+		ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
 
 		// Prevent background dimming by pushing lower modal dimming
 		ImGui::PushStyleVar(ImGuiStyleVar_PopupBorderSize, 1.0f);
@@ -386,7 +386,7 @@ void HDR::DrawSettings()
 	ImGui::Spacing();
 	if (settings.enableHDR) {
 		float oldUIBrightness = settings.hdrUIBrightness;
-		ImGui::SliderFloat("HDR UI Brightness", &settings.hdrUIBrightness, 0.5f, 2.0f, "%.1fx");
+		ImGui::SliderFloat("HDR UI Brightness", &settings.hdrUIBrightness, 0.5f, 5.0f, "%.1fx");
 		if (oldUIBrightness != settings.hdrUIBrightness) {
 			UpdateHDRData();
 		}
@@ -396,7 +396,7 @@ void HDR::DrawSettings()
 		}
 	} else {
 		float oldUIBrightness = settings.sdrUIBrightness;
-		ImGui::SliderFloat("SDR UI Brightness", &settings.sdrUIBrightness, 0.5f, 2.0f, "%.1fx");
+		ImGui::SliderFloat("SDR UI Brightness", &settings.sdrUIBrightness, 0.5f, 5.0f, "%.1fx");
 		if (oldUIBrightness != settings.sdrUIBrightness) {
 			UpdateHDRData();
 		}
@@ -495,10 +495,10 @@ void HDR::SetupResources()
 	outputTexture->CreateUAV(uavDesc);
 
 	// UI texture for separate UI rendering
-	// Use R16G16B16A16_FLOAT for HDR - this preserves precision for HDR conversion
-	// ImGui renders in sRGB color space, which we convert to PQ in HDROutputCS
+	// Use R8G8B8A8_UNORM (8-bit SDR) - vanilla UI is SDR and 8-bit precision
+	// naturally truncates near-black ghost bar artifacts to zero
 	D3D11_TEXTURE2D_DESC uiTexDesc = texDesc;
-	uiTexDesc.Format = DXGI_FORMAT_R16G16B16A16_FLOAT;
+	uiTexDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
 	uiTexDesc.BindFlags = D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_UNORDERED_ACCESS;
 
 	D3D11_SHADER_RESOURCE_VIEW_DESC uiSrvDesc = srvDesc;
@@ -513,7 +513,7 @@ void HDR::SetupResources()
 
 	// Create RTV for UI texture
 	D3D11_RENDER_TARGET_VIEW_DESC rtvDesc{};
-	rtvDesc.Format = DXGI_FORMAT_R16G16B16A16_FLOAT;
+	rtvDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
 	rtvDesc.ViewDimension = D3D11_RTV_DIMENSION_TEXTURE2D;
 	rtvDesc.Texture2D.MipSlice = 0;
 	uiTexture->CreateRTV(rtvDesc);
@@ -525,10 +525,16 @@ void HDR::SetupResources()
 	// Set up color space on D3D11 swap chain based on enableHDR setting (when not using Frame Gen)
 	UpdateSwapChainColorSpace();
 
-	logger::info("[HDR] SetupResources complete - hdrDataCB={}, hdrTexture={}, outputTexture={}",
+	// Eagerly compile compute shaders so availability is known before first frame
+	GetHDROutputCS();
+	GetUIBrightnessCS();
+
+	logger::info("[HDR] SetupResources complete - hdrDataCB={}, hdrTexture={}, outputTexture={}, hdrOutputCS={}, uiBrightnessCS={}",
 		hdrDataCB ? "valid" : "NULL",
 		hdrTexture ? "valid" : "NULL",
-		outputTexture ? "valid" : "NULL");
+		outputTexture ? "valid" : "NULL",
+		hdrOutputCS ? "valid" : "NULL",
+		uiBrightnessCS ? "valid" : "NULL");
 }
 
 void HDR::BeginUIRendering()
@@ -616,6 +622,9 @@ void HDR::RedirectFramebuffer()
 	if (!settings.enableHDR || !hdrTexture || !hdrTexture->rtv)
 		return;
 
+	if (!GetHDROutputCS())
+		return;
+
 	auto& fb = globals::game::renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGET::kFRAMEBUFFER];
 
 	// Save originals
@@ -652,6 +661,14 @@ void HDR::SetUIBuffer()
 {
 	// Skip if D3D12 frame gen is active - it has its own UI buffer handling
 	if (globals::features::upscaling.d3d12SwapChainActive)
+		return;
+
+	// SDR mode: vanilla UI composites directly to kFRAMEBUFFER, no redirect needed
+	if (!settings.enableHDR)
+		return;
+
+	// Don't redirect if the HDR compute shader isn't available - vanilla UI path works without it
+	if (!GetHDROutputCS())
 		return;
 
 	// Skip if resources aren't ready
@@ -760,11 +777,42 @@ void HDR::ApplyHDR()
 		// When D3D12 swap chain is active, vanilla UI renders to uiBufferWrapped
 		// Otherwise it renders to our uiTexture
 		ID3D11ShaderResourceView* uiSRV = nullptr;
+		ID3D11UnorderedAccessView* uiUAV = nullptr;
 		if (upscaling.d3d12SwapChainActive && upscaling.dx12SwapChain.uiBufferWrapped) {
 			uiSRV = upscaling.dx12SwapChain.uiBufferWrapped->srv;
+			uiUAV = upscaling.dx12SwapChain.uiBufferWrapped->uav;
 		} else if (uiTexture && uiTexture->srv) {
 			uiSRV = uiTexture->srv.get();
+			uiUAV = uiTexture->uav.get();
 		}
+
+		// Pre-process UI through UIBrightnessCS only for Frame Gen path
+		// FidelityFX needs premultiplied PQ UI for its own compositing
+		// In non-FG path, HDROutputCS handles UI conversion itself
+		bool fgActiveThisFrame = upscaling.d3d12SwapChainActive &&
+		                         upscaling.settings.frameGenerationMode &&
+		                         !globals::game::ui->GameIsPaused() &&
+		                         !globals::game::isVR;
+		if (fgActiveThisFrame && uiUAV) {
+			auto uiBrightnessShader = GetUIBrightnessCS();
+			if (uiBrightnessShader) {
+				ID3D11UnorderedAccessView* preUavs[1] = { uiUAV };
+				context->CSSetUnorderedAccessViews(0, 1, preUavs, nullptr);
+
+				ID3D11Buffer* preCbs[1] = { hdrDataCB->CB() };
+				context->CSSetConstantBuffers(0, 1, preCbs);
+
+				context->CSSetShader(uiBrightnessShader, nullptr, 0);
+				context->Dispatch(dispatchCount.x, dispatchCount.y, 1);
+
+				preUavs[0] = nullptr;
+				context->CSSetUnorderedAccessViews(0, 1, preUavs, nullptr);
+				preCbs[0] = nullptr;
+				context->CSSetConstantBuffers(0, 1, preCbs);
+				context->CSSetShader(nullptr, nullptr, 0);
+			}
+		}
+
 		ID3D11ShaderResourceView* views[2] = { sceneSRV, uiSRV };
 		context->CSSetShaderResources(0, ARRAYSIZE(views), views);
 
@@ -777,17 +825,46 @@ void HDR::ApplyHDR()
 
 		auto computeShader = GetHDROutputCS();
 		if (!computeShader) {
-			logger::error("HDR: Failed to get compute shader");
-			state->EndPerfEvent();
-			return;
+		// Fallback: HDR shader files not present - copy kFRAMEBUFFER directly to output
+		// This allows SDR output through ISHDR.hlsl when HDR display shaders aren't available
+		static bool loggedFallback = false;
+		if (!loggedFallback) {
+			logger::warn("HDR: HDR shader files not available - using SDR fallback (ISHDR output)");
+			loggedFallback = true;
 		}
 
-		context->CSSetShader(computeShader, nullptr, 0);
-
-		context->Dispatch(dispatchCount.x, dispatchCount.y, 1);
-
-		// Cleanup
+		// Cleanup any bound resources
 		views[0] = nullptr;
+		views[1] = nullptr;
+		context->CSSetShaderResources(0, ARRAYSIZE(views), views);
+
+		uavs[0] = { nullptr };
+		context->CSSetUnorderedAccessViews(0, ARRAYSIZE(uavs), uavs, nullptr);
+
+		cbs[0] = { nullptr };
+		context->CSSetConstantBuffers(0, ARRAYSIZE(cbs), cbs);
+
+		// Copy kFRAMEBUFFER directly to destination (bypassing HDR processing)
+		if (upscaling.d3d12SwapChainActive) {
+			// Frame Gen path: copy to D3D12 swap chain wrapped buffer
+			context->CopyResource(upscaling.dx12SwapChain.swapChainBufferWrapped->resource11, framebufferRT.texture);
+		} else {
+			// Normal path: copy directly to swap chain back buffer
+			ID3D11Texture2D* backBuffer = nullptr;
+			HRESULT hr = globals::d3d::swapChain->GetBuffer(0, IID_PPV_ARGS(&backBuffer));
+			if (SUCCEEDED(hr) && backBuffer) {
+				context->CopyResource(backBuffer, framebufferRT.texture);
+				backBuffer->Release();
+			}
+		}
+
+		state->EndPerfEvent();
+		return;
+	}
+
+	context->CSSetShader(computeShader, nullptr, 0);
+	context->Dispatch(dispatchCount.x, dispatchCount.y, 1);
+
 		views[1] = nullptr;
 		context->CSSetShaderResources(0, ARRAYSIZE(views), views);
 
@@ -869,7 +946,7 @@ ID3D11ComputeShader* HDR::GetHDROutputCS()
 {
 	if (!hdrOutputCS) {
 		std::vector<std::pair<const char*, const char*>> defines;
-		hdrOutputCS = static_cast<ID3D11ComputeShader*>(Util::CompileShader(L"Data\\Shaders\\HDROutputCS.hlsl", defines, "cs_5_0"));
+		hdrOutputCS = static_cast<ID3D11ComputeShader*>(Util::CompileShader(L"Data\\Shaders\\HDRDisplay\\HDROutputCS.hlsl", defines, "cs_5_0"));
 		if (!hdrOutputCS) {
 			logger::error("HDR: Failed to compile HDROutputCS.hlsl");
 		}
@@ -881,7 +958,7 @@ ID3D11ComputeShader* HDR::GetUIBrightnessCS()
 {
 	if (!uiBrightnessCS) {
 		std::vector<std::pair<const char*, const char*>> defines;
-		uiBrightnessCS = static_cast<ID3D11ComputeShader*>(Util::CompileShader(L"Data\\Shaders\\UIBrightnessCS.hlsl", defines, "cs_5_0"));
+		uiBrightnessCS = static_cast<ID3D11ComputeShader*>(Util::CompileShader(L"Data\\Shaders\\HDRDisplay\\UIBrightnessCS.hlsl", defines, "cs_5_0"));
 		if (!uiBrightnessCS) {
 			logger::error("HDR: Failed to compile UIBrightnessCS.hlsl");
 		}
@@ -901,6 +978,9 @@ void HDR::ScaleUIBrightnessForFG()
 	                     !globals::game::ui->GameIsPaused() &&
 	                     !globals::game::isVR;
 	if (!fgCompositing)
+		return;
+
+	if (!settings.enableHDR)
 		return;
 
 	if (!hdrDataCB || !upscaling.dx12SwapChain.uiBufferWrapped || !upscaling.dx12SwapChain.uiBufferWrapped->uav)

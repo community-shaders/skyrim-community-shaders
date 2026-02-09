@@ -16,7 +16,9 @@ cbuffer LLPerGeometry : register(b8)
 
 #include "Common/SharedData.hlsli"
 
+// Float limits
 #define FLT_MIN asfloat(0x00800000) // 1.175494351e-38f
+#define FLT_MAX asfloat(0x7F7FFFFF) // 3.402823466e+38f
 
 namespace Color
 {
@@ -519,7 +521,6 @@ static const float HDR10_MaxWhiteNits = 10000.0;
 
 #define CS_BT709 0
 #define CS_BT2020 1
-#define CS_AP1 2
 #define CS_DEFAULT CS_BT709
 
 static const float3 Rec2020_Luminance = float3(0.2627066, 0.6779996, 0.0592938);
@@ -571,26 +572,6 @@ float3 FromColorSpaceToColorSpace(float3 color, uint colorSpaceIn, uint colorSpa
 	return color;
 }
 
-float3 linear_to_gamma(float3 c, int clampType = GCT_DEFAULT, float gamma = 2.2)
-{
-	float3 s = Sign_Fast(c);
-	if (clampType == GCT_POSITIVE) c = max(c, 0.0);
-	else if (clampType == GCT_SATURATE) c = saturate(c);
-	else if (clampType == GCT_MIRROR) c = abs(c);
-	c = pow(c, 1.0 / gamma);
-	return (clampType == GCT_MIRROR) ? c * s : c;
-}
-
-float3 gamma_to_linear(float3 c, int clampType = GCT_DEFAULT, float gamma = 2.2)
-{
-	float3 s = Sign_Fast(c);
-	if (clampType == GCT_POSITIVE) c = max(c, 0.0);
-	else if (clampType == GCT_SATURATE) c = saturate(c);
-	else if (clampType == GCT_MIRROR) c = abs(c);
-	c = pow(c, gamma);
-	return (clampType == GCT_MIRROR) ? c * s : c;
-}
-
 float3 Linear_to_PQ(float3 c, int clampType = GCT_DEFAULT)
 {
 	float3 s = Sign_Fast(c);
@@ -611,126 +592,6 @@ float3 PQ_to_Linear(float3 c, int clampType = GCT_DEFAULT)
 	float3 p = pow(c, 1.0 / DICE_PQ_M2);
 	float3 lin = pow(max(p - DICE_PQ_C1, 0.0) / (DICE_PQ_C2 - DICE_PQ_C3 * p), 1.0 / DICE_PQ_M1);
 	return (clampType == GCT_MIRROR) ? lin * s : lin;
-}
-
-float3 CorrectOutOfRangeColor(float3 Color, bool FixNegatives = true, bool FixPositives = true, float DesatVsDarkRatio = 1.0, float MaxRange = 1.0, float SmoothRatio = 0.0, uint ColorSpace = CS_DEFAULT)
-{
-	if (FixNegatives && any(Color < 0.0))
-	{
-		float lum = GetLuminance(Color, ColorSpace);
-		if (lum > FLT_MIN)
-		{
-			float minCh = min3(Color);
-			float alpha = safeDivision(minCh, minCh - lum, 0);
-			Color = lerp(Color, lum, alpha);
-		}
-		else
-			Color = 0.0;
-	}
-
-	float peak = max3(Color);
-	float startRange = MaxRange * (1.0 - SmoothRatio);
-	float smoothRange = SmoothRatio > 0.0 ? clamp(peak, startRange, MaxRange) : MaxRange;
-
-	if (FixPositives && peak > startRange)
-	{
-		float lum = GetLuminance(Color, ColorSpace);
-		float targetLum = min(lum, smoothRange);
-		float lumExcess = targetLum - smoothRange;
-		float maxExcess = peak - smoothRange;
-		float alpha = saturate(safeDivision(maxExcess, maxExcess - lumExcess, 0));
-
-		float3 newColor = lerp(Color, targetLum, alpha * DesatVsDarkRatio);
-		newColor *= saturate(safeDivision(smoothRange, max3(newColor), 1));
-
-		if (SmoothRatio <= 0.0)
-			Color = newColor;
-		else
-			Color = lerp(Color, newColor, saturate((peak - startRange) / (MaxRange - startRange)));
-	}
-	return Color;
-}
-
-static const float3x3 BT2020_To_OkLab_LMS = {
-	0.616802060604095458984375f, 0.360165327787399291992187500f, 0.023032572492957115173339843750f,
-	0.265037387609481811523437500f, 0.635829150676727294921875f, 0.099133461713790893554687500f,
-	0.100168541073799133300781250f, 0.203908205032348632812500f, 0.695923268795013427734375f
-};
-
-static const float3x3 OkLab_LMS_To_BT2020 = {
-	2.14003872871398925781250f, -1.24652910232543945312500f, 0.106490373611450195312500f,
-	-0.884803473949432373046875f, 1.96015524864196777343750f, -0.0753517746925354003906250f,
-	-0.048540383577346801757812500f, -0.454479753971099853515625f, 1.503020167350769042968750f
-};
-
-static const float3x3 DICE_BT709_2_OKLABLMS = {
-	0.4122214708f, 0.5363325363f, 0.0514459929f,
-	0.2119034982f, 0.6806995451f, 0.1073969566f,
-	0.0883024619f, 0.2817188376f, 0.6299787005f
-};
-
-static const float3x3 DICE_OKLABLMS_2_OKLAB = {
-	0.2104542553f, 0.7936177850f, -0.0040720468f,
-	1.9779984951f, -2.4285922050f, 0.4505937099f,
-	0.0259040371f, 0.7827717662f, -0.8086757660f
-};
-
-static const float3x3 DICE_OKLAB_2_OKLABLMS = {
-	1.f, 0.3963377774f, 0.2158037573f,
-	1.f, -0.1055613458f, -0.0638541728f,
-	1.f, -0.0894841775f, -1.2914855480f
-};
-
-static const float3x3 DICE_OKLABLMS_2_BT709 = {
-	4.0767416621f, -3.3077115913f, 0.2309699292f,
-	-1.2684380046f, 2.6097574011f, -0.3413193965f,
-	-0.0041960863f, -0.7034186147f, 1.7076147010f
-};
-
-float3 linear_to_oklab(float3 c, uint colorSpace = CS_DEFAULT)
-{
-	float3x3 m = (colorSpace == CS_BT2020) ? BT2020_To_OkLab_LMS : DICE_BT709_2_OKLABLMS;
-	float3 lms = mul(m, c);
-	lms = sign(lms) * pow(abs(lms), 1.0 / 3.0);
-	return mul(DICE_OKLABLMS_2_OKLAB, lms);
-}
-
-float3 oklab_to_linear(float3 c, uint colorSpace = CS_DEFAULT)
-{
-	float3x3 m = (colorSpace == CS_BT2020) ? OkLab_LMS_To_BT2020 : DICE_OKLABLMS_2_BT709;
-	float3 lms = mul(DICE_OKLAB_2_OKLABLMS, c);
-	lms = lms * lms * lms;
-	return mul(m, lms);
-}
-
-float3 RestoreHueAndChrominance(float3 target, float3 source, float hueStr = 0.75, float chromaStr = 1.0, float minChroma = 0.0, float maxChroma = 3.402823466e+38F, float lightStr = 0.0, uint colorSpace = CS_DEFAULT)
-{
-	if (colorSpace == CS_AP1) return float3(1, 0, 1);
-	if (hueStr == 0.0 && chromaStr == 0.0 && lightStr == 0.0) return target;
-	if (GetLuminance(target, colorSpace) <= FLT_MIN) return target;
-
-	float3 srcLab = linear_to_oklab(source, colorSpace);
-	float3 tgtLab = linear_to_oklab(target, colorSpace);
-
-	tgtLab.x = lerp(tgtLab.x, srcLab.x, lightStr);
-	float curChroma = length(tgtLab.yz);
-
-	if (hueStr != 0.0)
-	{
-		float pre = curChroma;
-		tgtLab.yz = lerp(tgtLab.yz, srcLab.yz, hueStr);
-		float post = length(tgtLab.yz);
-		tgtLab.yz *= safeDivision(pre, post, 1);
-	}
-
-	if (chromaStr != 0.0)
-	{
-		float srcChroma = length(srcLab.yz);
-		float ratio = clamp(safeDivision(srcChroma, curChroma, 1), minChroma, maxChroma);
-		tgtLab.yz *= lerp(1.0, ratio, chromaStr);
-	}
-
-	return oklab_to_linear(tgtLab, colorSpace);
 }
 
 #endif  //__COLOR_DEPENDENCY_HLSL__
