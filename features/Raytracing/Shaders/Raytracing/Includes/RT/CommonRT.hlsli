@@ -29,7 +29,7 @@
 
 #define GN_BIAS_MAX (0.5f)
 
-#define MIN_DIFFUSE_SHADOW (0.001f)
+#define MIN_DIFFUSE_SHADOW (0.0001f)
 #define MIN_RADIANCE (0.01f)
 #define RR_MIN_BOUNCE (3)
 

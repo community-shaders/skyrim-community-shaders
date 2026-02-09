@@ -93,6 +93,10 @@ float3 EvalDirectionalLight(in Material material, in Surface surface, in BRDFCon
     {
         direct *= TraceRayShadow(Scene, surface, lr, randomSeed);
     }
+    else
+    {
+        direct = 0.0f;
+    }
 
     return direct;
 }
@@ -210,6 +214,10 @@ float3 EvalPointLight(in Material material, in Surface surface, in BRDFContext b
     {
         direct *= TraceRayShadowFinite(Scene, surface, lr, dist, randomSeed);
     }
+    else
+    {
+        direct = 0.0f;
+    }
 
     return direct;
 }
@@ -276,6 +284,10 @@ float3 EvaluateDirectRadianceMIS(in Material material, in Surface surface, in BR
     if (any(direct > MIN_DIFFUSE_SHADOW))
     {
         direct *= TraceRayShadowFinite(Scene, surface, lr, distance, randomSeed);
+    }
+    else
+    {
+        direct = 0.0f;
     }
 
     return direct;
