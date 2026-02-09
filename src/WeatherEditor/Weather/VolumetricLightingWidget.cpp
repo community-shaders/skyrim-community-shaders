@@ -14,7 +14,7 @@ void VolumetricLightingWidget::DrawWidget()
 		if (ImGui::BeginTabBar("VolumetricLightingTabs")) {
 			if (ImGui::BeginTabItem("Basic")) {
 				ImGui::SeparatorText("Intensity");
-				if (WeatherUtils::DrawSliderFloat("Intensity", settings.intensity, 0.0f, 10.0f))
+				if (WeatherUtils::DrawSliderFloat("Intensity", settings.intensity, 0.0f, 50.0f))
 					changed = true;
 
 				ImGui::SeparatorText("Custom Color");
@@ -22,12 +22,13 @@ void VolumetricLightingWidget::DrawWidget()
 					changed = true;
 
 				ImGui::SeparatorText("RGB Color");
-				if (WeatherUtils::DrawSliderFloat("Red", settings.red, 0.0f, 1.0f))
+				float3 rgbColor{ settings.red, settings.green, settings.blue };
+				if (WeatherUtils::DrawColorEdit("Color", rgbColor)) {
+					settings.red = rgbColor.x;
+					settings.green = rgbColor.y;
+					settings.blue = rgbColor.z;
 					changed = true;
-				if (WeatherUtils::DrawSliderFloat("Green", settings.green, 0.0f, 1.0f))
-					changed = true;
-				if (WeatherUtils::DrawSliderFloat("Blue", settings.blue, 0.0f, 1.0f))
-					changed = true;
+				}
 
 				ImGui::EndTabItem();
 			}
@@ -36,11 +37,11 @@ void VolumetricLightingWidget::DrawWidget()
 				ImGui::SeparatorText("Density Settings");
 				if (WeatherUtils::DrawSliderFloat("Contribution", settings.densityContribution, 0.0f, 1.0f))
 					changed = true;
-				if (WeatherUtils::DrawSliderFloat("Size", settings.densitySize, 0.0f, 10.0f))
+				if (WeatherUtils::DrawSliderFloat("Size", settings.densitySize, 0.1f, 10000.0f))
 					changed = true;
-				if (WeatherUtils::DrawSliderFloat("Wind Speed", settings.densityWindSpeed, -100.0f, 100.0f))
+				if (WeatherUtils::DrawSliderFloat("Wind Speed", settings.densityWindSpeed, 0.0f, 100.0f))
 					changed = true;
-				if (WeatherUtils::DrawSliderFloat("Falling Speed", settings.densityFallingSpeed, -100.0f, 100.0f))
+				if (WeatherUtils::DrawSliderFloat("Falling Speed", settings.densityFallingSpeed, 0.0f, 100.0f))
 					changed = true;
 
 				ImGui::EndTabItem();
@@ -50,11 +51,11 @@ void VolumetricLightingWidget::DrawWidget()
 				ImGui::SeparatorText("Phase Function");
 				if (WeatherUtils::DrawSliderFloat("Contribution", settings.phaseFunctionContribution, 0.0f, 1.0f))
 					changed = true;
-				if (WeatherUtils::DrawSliderFloat("Scattering", settings.phaseFunctionScattering, -1.0f, 1.0f))
+				if (WeatherUtils::DrawSliderFloat("Scattering", settings.phaseFunctionScattering, 0.0f, 1.0f))
 					changed = true;
 
 				ImGui::SeparatorText("Sampling");
-				if (WeatherUtils::DrawSliderFloat("Range Factor", settings.samplingRangeFactor, 0.0f, 10.0f))
+				if (WeatherUtils::DrawSliderFloat("Range Factor", settings.samplingRangeFactor, 0.0f, 160.0f))
 					changed = true;
 
 				ImGui::EndTabItem();
