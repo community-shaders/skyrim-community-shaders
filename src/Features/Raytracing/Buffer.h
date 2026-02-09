@@ -393,7 +393,7 @@ namespace DX12
 			Resource::SetName(name);
 
 			for (size_t i = 0; i < uploadResources.size(); i++) {
-				uploadResources[i]->SetName(std::format(L"{} [Upload {}]", name, i).c_str());
+				DX::ThrowIfFailed(uploadResources[i]->SetName(std::format(L"{} [Upload {}]", name, i).c_str()));
 			}
 		}
 

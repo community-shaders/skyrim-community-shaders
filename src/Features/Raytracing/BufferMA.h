@@ -21,7 +21,7 @@ namespace DX12
 
 		virtual void SetName(LPCWSTR name) const
 		{
-			resource->SetName(name);
+			DX::ThrowIfFailed(resource->SetName(name));
 		}
 
 		D3D12_RESOURCE_STATES GetState() const
@@ -247,7 +247,7 @@ namespace DX12
 			ResourceMA::SetName(name);
 
 			for (size_t i = 0; i < uploadResources.size(); i++) {
-				uploadResources[i]->SetName(std::format(L"{} [Upload {}]", name, i).c_str());
+				DX::ThrowIfFailed(uploadResources[i]->SetName(std::format(L"{} [Upload {}]", name, i).c_str()));
 			}
 		}
 
