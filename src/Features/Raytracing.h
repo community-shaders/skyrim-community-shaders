@@ -504,7 +504,7 @@ struct Raytracing : public OverlayFeature
 		ReSTIRSettings ReSTIR;
 
 		bool GGXEnergyConservation = true;
-		HairBSDF HairBSDF = HairBSDF::ChiangBSDF;
+		HairBSDF HairBSDF = HairBSDF::FarFieldBCSDF;
 
 		DiffuseBRDF DiffuseBRDF = DiffuseBRDF::Burley;
 		LightEvalMode LightEvalMode = LightEvalMode::BRDF;
