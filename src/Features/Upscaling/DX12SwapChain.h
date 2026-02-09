@@ -113,6 +113,19 @@ public:
 
 	void SetUIBuffer();
 
+	// Resources needed by BackgroundBlur when D3D12 swap chain is active
+	struct BlurResources
+	{
+		ID3D11Texture2D* backbufferTex = nullptr;
+		ID3D11RenderTargetView* backbufferRTV = nullptr;
+		ID3D11ShaderResourceView* backbufferSRV = nullptr;
+		ID3D11ShaderResourceView* uiBufferSRV = nullptr;
+		ID3D11RenderTargetView* uiBufferRTV = nullptr;
+	};
+
+	// Get all resources needed for background blur in one call
+	BlurResources GetBlurResources() const;
+
 	// D3D12 interop resource management
 	void CreateSharedResources();
 };

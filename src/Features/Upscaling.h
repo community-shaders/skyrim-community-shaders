@@ -231,6 +231,11 @@ public:
 	void CreateProxyInterop();
 	IDXGISwapChain* GetProxySwapChain();
 
+	using BlurResources = DX12SwapChain::BlurResources;
+
+	// Get all D3D11 resources needed for background blur when D3D12 swap chain is active
+	BlurResources GetBlurResources() const;
+
 private:
 	struct Main_UpdateJitter
 	{
