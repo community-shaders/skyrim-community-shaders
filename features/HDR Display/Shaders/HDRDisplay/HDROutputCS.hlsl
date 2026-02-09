@@ -50,23 +50,18 @@ static const float UI_REFERENCE_NITS = 100.0;
 	bool isSceneLinear = parameters1.y > 0.5;
 
 	if (enableHDR) {
-		// ISHDR HDR path preserves values >1.0 in a float16 texture.
-		// With Linear Lighting: output is already linear.
-		// Without Linear Lighting: output is gamma-encoded, needs linearization.
+		// ISHDR HDR path now runs the same tonemapping as SDR via HDR variant functions.
+		// Output is tonemapped 0-1 gamma-encoded (HejlBurgessDawson bakes in gamma).
+		// With Linear Lighting: output is tonemapped linear 0-1.
+		// We linearize, scale to paper white nits, convert to BT.2020, and PQ encode.
 		float3 sceneLinear = max(0, scene.rgb);
 		if (!isSceneLinear)
 			sceneLinear = Color::GammaToTrueLinear(sceneLinear);
 
-		// Normalize paper white and peak white relative to sRGB reference (80 nits).
-		float pw = paperWhite / sRGB_WhiteLevelNits;
-		float peak = peakNits / sRGB_WhiteLevelNits;
-
-		// Apply DICE tonemap (by luminance in PQ space with BT.2020 processing)
-		// ShoulderStart of 0.5 = compress from 50% of peak to preserve SDR range
-		float3 tonemapped = DisplayMapping::DICETonemap(sceneLinear * pw, peak, 0.5, CS_BT709, CS_BT2020) / pw;
-
-		// PQ encode: paper white maps scene value of 1.0 to paperWhite nits on display
-		float3 scenePQ = Color::pq::Encode(tonemapped * paperWhite / 10000.0, 10000.0);
+		// Map SDR 1.0 to paper white nits, convert to BT.2020, PQ encode
+		float3 sceneBT2020 = Color::BT709ToBT2020(sceneLinear);
+		float3 sceneNits = sceneBT2020 * paperWhite;
+		float3 scenePQ = Color::pq::Encode(sceneNits / 10000.0, 10000.0);
 
 		if (skipUIComposite) {
 			finalColor = scenePQ;
