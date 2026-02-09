@@ -615,7 +615,7 @@ namespace BackgroundBlur
 		bool useUpscalingBackbuffer = upscaling.d3d12SwapChainActive;
 
 		// Back buffer is black on main/loading menu during shader compilation without upscaling
-		if (!useUpscalingBackbuffer) {
+		if (!useUpscalingBackbuffer && !(upscaling.loaded && upscaling.IsUpscalingActive())) {
 			auto ui = globals::game::ui;
 			bool isMainOrLoading = ui && (ui->IsMenuOpen(RE::MainMenu::MENU_NAME) || ui->IsMenuOpen(RE::LoadingMenu::MENU_NAME));
 			auto shaderCache = globals::shaderCache;
