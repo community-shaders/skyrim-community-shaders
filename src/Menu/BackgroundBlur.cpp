@@ -5,6 +5,7 @@
 #include "BackgroundBlur.h"
 #include "../Features/Upscaling.h"
 #include "../Globals.h"
+#include "../ShaderCache.h"
 #include "../Util.h"
 
 #include <algorithm>
@@ -612,6 +613,16 @@ namespace BackgroundBlur
 		// Check if upscaling with D3D12 swap chain is active
 		auto& upscaling = globals::features::upscaling;
 		bool useUpscalingBackbuffer = upscaling.d3d12SwapChainActive;
+
+		// Back buffer is black on main/loading menu during shader compilation without upscaling
+		if (!useUpscalingBackbuffer) {
+			auto ui = globals::game::ui;
+			bool isMainOrLoading = ui && (ui->IsMenuOpen(RE::MainMenu::MENU_NAME) || ui->IsMenuOpen(RE::LoadingMenu::MENU_NAME));
+			auto shaderCache = globals::shaderCache;
+			if (isMainOrLoading && shaderCache && shaderCache->IsCompiling()) {
+				return;
+			}
+		}
 
 		winrt::com_ptr<ID3D11Texture2D> currentTexture;
 		winrt::com_ptr<ID3D11RenderTargetView> currentRTV;
