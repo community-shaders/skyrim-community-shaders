@@ -97,7 +97,7 @@ namespace ShadowSampling
 #endif
 	}
 
-	float GetLightingShadow(float noise, float3 worldPosition, uint eyeIndex)
+	float GetLightingShadow(float3 worldPosition, uint eyeIndex)
 	{
 		float worldShadow = ShadowSampling::GetWorldShadow(worldPosition, FrameBuffer::CameraPosAdjust[eyeIndex].xyz, eyeIndex);
 		if (worldShadow == 0.0)

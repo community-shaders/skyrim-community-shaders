@@ -2395,7 +2395,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	}
 #	if !defined(DEFERRED)
 	else if (!SharedData::InInterior && inWorld) {
-		dirLightColorMultiplier *= ShadowSampling::GetLightingShadow(screenNoise, input.WorldPosition.xyz, eyeIndex);
+		dirLightColorMultiplier *= ShadowSampling::GetLightingShadow(input.WorldPosition.xyz, eyeIndex);
 	}
 #	endif
 
