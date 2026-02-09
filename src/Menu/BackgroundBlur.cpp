@@ -5,9 +5,7 @@
 #include "BackgroundBlur.h"
 #include "../Features/Upscaling.h"
 #include "../Globals.h"
-#include "../Menu.h"
 #include "../Util.h"
-#include "../WeatherEditor/EditorWindow.h"
 
 #include <algorithm>
 #include <cmath>
@@ -680,15 +678,6 @@ namespace BackgroundBlur
 		// Find ImGui windows that need blur
 		ImGuiContext* ctx = ImGui::GetCurrentContext();
 		if (!ctx || ctx->Windows.Size == 0) {
-			return;
-		}
-
-		// Weather Editor mode: apply a single fullscreen blur instead of per-window blur
-		auto* editorWindow = EditorWindow::GetSingleton();
-		if (editorWindow && editorWindow->open && Menu::GetSingleton()->IsEnabled) {
-			ImVec2 fullMin = { 0.0f, 0.0f };
-			ImVec2 fullMax = { static_cast<float>(texDesc.Width), static_cast<float>(texDesc.Height) };
-			PerformBlur(currentTexture.get(), sourceSRV, currentRTV.get(), fullMin, fullMax, 0.0f, uiBufferSRV, uiBufferRTV);
 			return;
 		}
 
