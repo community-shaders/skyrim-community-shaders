@@ -63,7 +63,7 @@ namespace ShadowSampling
 	#endif
 
 		float totalRayLength = distance(endPosition, startPosition);
-
+		
 		const float stepSize = 32.0;  // Fixed step size in world units
 
 		uint sampleCount = clamp(uint(totalRayLength / stepSize + 0.5), 1, 4);
@@ -130,6 +130,9 @@ namespace ShadowSampling
 		ambientColorAmb += Color::IrradianceToGamma(iblColor);
 	}
 #		endif
+
+		float llDirLightMult = (SharedData::linearLightingSettings.enableLinearLighting && !SharedData::linearLightingSettings.isDirLightLinear) ? SharedData::linearLightingSettings.dirLightMult : 1.0f;
+		float3 dirLightColorDir = Color::DirectionalLight(SharedData::DirLightColor.xyz / max(llDirLightMult, 1e-5), SharedData::linearLightingSettings.isDirLightLinear) * llDirLightMult;
 
 		float inputLuma = Color::RGBToLuminance(inputColor);
 		float ambientLuma = Color::RGBToLuminance(ambientColorAmb);
