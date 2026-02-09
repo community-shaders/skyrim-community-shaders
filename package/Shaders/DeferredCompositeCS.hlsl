@@ -170,7 +170,7 @@ void SampleSSGISpecular(uint2 pixCoord, sh2 lobe, out float ao, out float3 il, i
 		float level = roughness * 7.0;
 		level -= 0.5;
 
-		sh2 specularLobe = SphericalHarmonics::FauxSpecularLobe(normalWS, V, roughness);
+		sh2 specularLobe = SphericalHarmonics::FauxSpecularLobe(normalWS, -V, roughness);
 
 		float3 finalIrradiance = 0;
 
