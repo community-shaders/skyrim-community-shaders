@@ -892,15 +892,14 @@ void Shape::CalculateVectors(bool calculateNormal)
 
 D3D12_RAYTRACING_GEOMETRY_DESC Shape::GeometryDesc() const
 {
-	bool hasAlphaTesting = flags.any(Shape::Flags::AlphaTesting);
-	bool isBlend = flags.any(Shape::Flags::AlphaBlending) && (material.Feature == RE::BSShaderMaterial::Feature::kHairTint || material.Feature == RE::BSShaderMaterial::Feature::kFaceGen || material.Feature == RE::BSShaderMaterial::Feature::kFaceGenRGBTint || material.Feature == RE::BSShaderMaterial::Feature::kEye);
+	bool isAlpha = flags.any(Shape::Flags::AlphaTesting, Shape::Flags::AlphaBlending);
 	bool isWindows = material.shaderFlags.any(RE::BSShaderProperty::EShaderPropertyFlag::kAssumeShadowmask) && (material.Feature == RE::BSShaderMaterial::Feature::kGlowMap || material.PBRFlags.any(PBRShaderFlags::HasEmissive));
 
-	bool isOpaque = !hasAlphaTesting && !isWindows && !isBlend;
+	bool isOpaque = !isAlpha && !isWindows;
 
 	return {
 		.Type = D3D12_RAYTRACING_GEOMETRY_TYPE_TRIANGLES,
-		.Flags = isOpaque ? D3D12_RAYTRACING_GEOMETRY_FLAG_OPAQUE : D3D12_RAYTRACING_GEOMETRY_FLAG_NONE | D3D12_RAYTRACING_GEOMETRY_FLAG_NO_DUPLICATE_ANYHIT_INVOCATION,
+		.Flags = isOpaque ? D3D12_RAYTRACING_GEOMETRY_FLAG_OPAQUE : D3D12_RAYTRACING_GEOMETRY_FLAG_NONE,
 		.Triangles = {
 			.Transform3x4 = TransformBuffer(),
 			.IndexFormat = DXGI_FORMAT_R16_UINT,
