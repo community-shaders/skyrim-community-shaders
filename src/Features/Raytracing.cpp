@@ -1048,8 +1048,6 @@ void Raytracing::SetupResources()
 		D3D11_TEXTURE2D_DESC shadowMaskDesc;
 		shadowMask.texture->GetDesc(&shadowMaskDesc);
 
-		logger::info("[RT] Shadowmask Format: {}", magic_enum::enum_name(shadowMaskDesc.Format));
-
 		D3D11_TEXTURE2D_DESC texDesc{};
 		texDesc.Width = mainDesc.Width;
 		texDesc.Height = mainDesc.Height;
@@ -1944,11 +1942,7 @@ void Raytracing::CreateModel(RE::TESForm* form, const char* model, RE::NiAVObjec
 
 void Raytracing::CreateActorModel([[maybe_unused]] RE::Actor* actor, [[maybe_unused]] const char* name, RE::NiAVObject* root)
 {
-	logger::info("[RT] CreateActorModel - {}", name);
-
 	TraverseScenegraphFadeNodes(root, [&]([[maybe_unused]] RE::BSFadeNode* fadeNode) -> RE::BSVisit::BSVisitControl {
-		logger::info("\t[RT] CreateActorModel::TraverseScenegraphFadeNodes {} - {}, Child Index: {}, Parent: {}", typeid(*fadeNode).name(), fadeNode->name, fadeNode->parentIndex, fadeNode->parent->name);
-
 		const bool isRoot = (fadeNode == root);
 
 		auto fadeNodeName = std::format("{}.{}", name, fadeNode->name.c_str());
@@ -2013,7 +2007,7 @@ void Raytracing::CreateModelInternal(RE::TESForm* form, const char* path, RE::Ni
 	TraverseScenegraphRTGeometries(pRoot, validFadeNode, [&](RE::BSGeometry * pGeometry)->RE::BSVisit::BSVisitControl {
 		const char* name = pGeometry->name.c_str();
 
-		logger::info("\t\t[RT] CreateModel::TraverseScenegraphGeometries - {}", name);
+		logger::trace("\t\t[RT] CreateModel::TraverseScenegraphGeometries - {}", name);
 
 		const auto& geometryType = pGeometry->GetType();
 
@@ -2639,8 +2633,6 @@ void Raytracing::UpdateBLASes()
 
 		if (model->UpdateBLAS(commandList.get()))
 			barriers.push_back(CD3DX12_RESOURCE_BARRIER::UAV(model->blasBuffer->GetResource()));
-
-		//logger::info("[RT] UpdateBLASes {} - {} - 0x{:08X} - {}", instance.filename, model->shapes.size(), reinterpret_cast<uintptr_t>(node), (flags & Model::Flags::BLASRebuild) ? "Rebuild" : "Update");
 	}
 
 	const uint blasUpdateCount = (uint)barriers.size();
@@ -2921,8 +2913,6 @@ void Raytracing::BuildTLAS()
 	D3D12_RAYTRACING_ACCELERATION_STRUCTURE_PREBUILD_INFO prebuildInfo;
 	d3d12Device->GetRaytracingAccelerationStructurePrebuildInfo(&inputs, &prebuildInfo);
 
-	//logger::info("[RT] Build TLAS - Instances: {}, ResultDataMaxSizeInBytes: {}, ScratchDataSizeInBytes: {}", MAX_INSTANCES, prebuildInfo.ResultDataMaxSizeInBytes, prebuildInfo.ScratchDataSizeInBytes);
-
 	auto desc = BASIC_BUFFER_DESC;
 	desc.Flags = D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS;
 
@@ -2965,8 +2955,6 @@ void Raytracing::RebuildTLAS(ID3D12GraphicsCommandList4* pCommandList, size_t nu
 
 	D3D12_RAYTRACING_ACCELERATION_STRUCTURE_PREBUILD_INFO prebuildInfo;
 	d3d12Device->GetRaytracingAccelerationStructurePrebuildInfo(&inputs, &prebuildInfo);
-
-	//logger::info("[RT] Rebuild TLAS - Instances: {}, ResultDataMaxSizeInBytes: {}, ScratchDataSizeInBytes: {}", numDescs, prebuildInfo.ResultDataMaxSizeInBytes, prebuildInfo.ScratchDataSizeInBytes);
 
 	D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_DESC buildDesc = {
 		.DestAccelerationStructureData = tlas->GetGPUVirtualAddress(),
