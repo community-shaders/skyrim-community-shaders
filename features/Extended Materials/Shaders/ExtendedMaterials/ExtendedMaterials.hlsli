@@ -455,7 +455,7 @@ namespace ExtendedMaterials
 						contactRefinement = true;
 						prevOffset = outOffset;
 						prevBound = pt2.x;
-						numSteps = numStepsTemp;						
+						numSteps = numStepsTemp;
 						stepSize /= (float)numSteps;
 						offsetPerStep /= (float)numSteps;
 						continue;
