@@ -104,6 +104,7 @@ void EffectShadows::CopyShadowData()
 		if (buf)
 			buf->Release();
 		buf = nullptr;
+	}
 
 		context->CSSetShader(nullptr, nullptr, 0);
 
