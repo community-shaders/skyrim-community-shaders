@@ -40,9 +40,9 @@ namespace Util
 			float y_neg = project(0.0f, -1.0f, 0.0f);
 			float z_pos = project(0.0f, 0.0f, 1.0f);
 			float z_neg = project(0.0f, 0.0f, -1.0f);
-			hx = 0.5f * (x_pos + x_neg);
-			hy = 0.5f * (y_pos + y_neg);
-			hz = 0.5f * (z_pos + z_neg);
+			hx = 0.5f * (x_pos - x_neg);
+			hy = 0.5f * (y_pos - y_neg);
+			hz = 0.5f * (z_pos - z_neg);
 		};
 		auto halfDiagonal = [](float hx, float hy, float hz) {
 			return sqrtf(hx * hx + hy * hy + hz * hz);
