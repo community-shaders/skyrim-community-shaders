@@ -63,7 +63,7 @@ namespace ShadowSampling
 	#endif
 
 		float totalRayLength = distance(endPosition, startPosition);
-		
+
 		const float stepSize = 32.0;  // Fixed step size in world units
 
 		uint sampleCount = clamp(uint(totalRayLength / stepSize + 0.5), 1, 4);
