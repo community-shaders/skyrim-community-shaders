@@ -237,13 +237,13 @@ void HDR::DrawSettings()
 
 	// Gate HDR checkbox behind monitor detection
 	bool oldEnableHDR = settings.enableHDR;
-	
+
 	// Disable checkbox if no HDR monitor detected AND HDR is not already enabled
 	// (Allow disabling HDR even on SDR if it's already on from saved settings)
 	if (!isHDRMonitor && !settings.enableHDR) {
 		ImGui::BeginDisabled();
 	}
-	
+
 	if (ImGui::Checkbox("Enable HDR", &settings.enableHDR)) {
 		if (settings.enableHDR && !oldEnableHDR) {
 			logger::info("HDR: enableHDR changed to: true");
@@ -255,11 +255,11 @@ void HDR::DrawSettings()
 			UpdateSwapChainColorSpace();
 		}
 	}
-	
+
 	if (!isHDRMonitor && !oldEnableHDR) {
 		ImGui::EndDisabled();
 	}
-	
+
 	if (auto _tt = Util::HoverTooltipWrapper()) {
 		if (isHDRMonitor) {
 			ImGui::Text("Enable HDR output. Matches vanilla visuals with extended dynamic range.");
