@@ -2945,7 +2945,10 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 		specularColor = 0;
 #	endif
 
+#	if !defined(TRUE_PBR)
+	// Vanilla specular needs gamma-to-linear conversion; PBR specular is already in linear space
 	specularColor = Color::IrradianceToLinear(specularColor);
+#	endif
 
 	diffuseColor = reflectionDiffuseColor;
 
