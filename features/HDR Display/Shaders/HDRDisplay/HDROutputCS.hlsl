@@ -1,23 +1,16 @@
 /**
  * @file HDROutputCS.hlsl
- * @brief Final output compute shader - HDR encoding and UI compositing.
+ * @brief Final output compute shader - UI compositing onto PQ scene.
  *
- * @details ISHDR HDR path bypasses vanilla tonemapping, outputting raw linear
- *   scene values (post auto-exposure). This shader converts to BT.2020 and
- *   PQ-encodes for HDR10 output.
- *
- * The key math (matching the original HDR PR and Luma Framework pattern):
- *   Color::pq::Encode(bt2020Color, paperWhite)
- * Inside Encode, color is scaled by (paperWhite / 10000), so:
- *   - Scene 1.0 encodes to paperWhite nits (e.g. 203 nits)
- *   - Scene > 1.0 naturally extends above paper white toward 10000 nits
- *   - The display clips at its own peak brightness
+ * @details ISHDR HDR path handles bloom, cinematic grading, DICE tonemapping,
+ *   BT.2020 conversion, and PQ encoding. Scene arrives here already PQ-encoded.
+ *   This shader composites UI on top and passes through to the swap chain.
  *
  * Pipeline:
  *   - SDR: ISHDR tonemaps to 0-1 → passthrough + UI composite
- *   - HDR: ISHDR passes raw linear → BT.2020 → PQ encode (paperWhite scaling) + UI composite
+ *   - HDR: ISHDR outputs PQ-encoded BT.2020 → passthrough + UI composite (PQ-encoded UI)
  *
- * @see ISHDR.hlsl for the HDR bypass path
+ * @see ISHDR.hlsl for bloom, DICE tonemapping, and PQ encoding
  * @see HDR.cpp ApplyHDR() for the dispatch logic
  */
 
@@ -35,6 +28,12 @@ cbuffer PerFrame : register(b0)
 }
 
 static const float UI_REFERENCE_NITS = 100.0;
+
+// Interleaved gradient noise (Jimenez 2014) — smooth spatial dither pattern
+float IGNoise(float2 pos)
+{
+	return frac(52.9829189 * frac(dot(pos, float2(0.06711056, 0.00583715))));
+}
 
 [numthreads(8, 8, 1)] void main(uint3 dispatchID : SV_DispatchThreadID)
 {
@@ -72,6 +71,12 @@ static const float UI_REFERENCE_NITS = 100.0;
 		}
 	} else {
 		finalColor = saturate(scene.rgb);
+	}
+
+	// Dither to break up 10-bit PQ banding in smooth gradients (sky, sun bloom)
+	if (enableHDR) {
+		float dither = (IGNoise(float2(dispatchID.xy)) - 0.5) / 1023.0;
+		finalColor += dither;
 	}
 
 	HDROutput[dispatchID.xy] = float4(finalColor, 1.0);

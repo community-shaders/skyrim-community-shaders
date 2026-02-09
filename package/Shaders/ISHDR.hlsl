@@ -137,10 +137,13 @@ PS_OUTPUT main(PS_INPUT input)
 
 	if (isHDR) {
 		float paperWhiteNits = SharedData::HDRData.y;
+		float peakNits = SharedData::HDRData.z;
 		float3 hdrLinear = max(0, inputColor);
 
-		hdrLinear += bloomColor;
+		// Bloom: same threshold logic as SDR — fill where scene < Param.x, no bloom on bright areas
+		hdrLinear += saturate(Param.x - hdrLinear) * bloomColor;
 
+		// Cinematic grading (saturation, tint, contrast) — same as SDR path
 		float hdrLuminance = Color::RGBToLuminance(hdrLinear);
 		float3 hdrGraded = Cinematic.w * lerp(lerp(hdrLuminance, hdrLinear, Cinematic.x), hdrLuminance * Tint.xyz, Tint.w).xyz;
 		hdrGraded = lerp(avgValue.x, hdrGraded, Cinematic.z);
@@ -149,6 +152,12 @@ PS_OUTPUT main(PS_INPUT input)
 #		if defined(FADE)
 		hdrLinear = lerp(hdrLinear, Fade.xyz, Fade.w);
 #		endif
+
+		// DICE tonemapping — Luma sandwich pattern:
+		// Multiply paper white in, DICE compress highlights to peak, divide paper white out
+		float pw = paperWhiteNits / sRGB_WhiteLevelNits;
+		float peak = peakNits / sRGB_WhiteLevelNits;
+		hdrLinear = DisplayMapping::DICETonemap(hdrLinear * pw, peak, 0.5, CS_BT709, CS_BT709) / pw;
 
 		float3 bt2020 = Color::BT709ToBT2020(hdrLinear);
 		outputColor = Color::pq::Encode(bt2020, paperWhiteNits);
