@@ -2314,7 +2314,7 @@ eastl::shared_ptr<Allocation> Raytracing::GetTextureRegister(ID3D11Texture2D* dx
 
 		auto allocationIndex = it->second->allocation->GetIndex();
 
-		dx12Texture->SetName(std::format(L"Shared Texture [{}]", allocationIndex).c_str());
+		it->second->resource->SetName(std::format(L"Shared Texture [{}]", allocationIndex).c_str());
 
 		d3d12Device->CreateShaderResourceView(it->second->resource.get(), &texSrvDesc, giHeap->CPUHandle(GIHeap::Slot::Textures, allocationIndex));
 
@@ -2428,7 +2428,7 @@ eastl::shared_ptr<Allocation> Raytracing::GetMSNormalMapRegister([[maybe_unused]
 
 		auto allocationIndex = normalMap->Reference->allocation->GetIndex();
 
-		dx12Texture->SetName(std::format(L"Shared MS Normalmap [{}]", allocationIndex).c_str());
+		normalMap->Reference->resource->SetName(std::format(L"Shared MS Normalmap [{}]", allocationIndex).c_str());
 
 		d3d12Device->CreateShaderResourceView(normalMap->Reference->resource.get(), &texSrvDesc, giHeap->CPUHandle(GIHeap::Slot::Textures, allocationIndex));
 	
