@@ -44,7 +44,7 @@
         "UseMonochromeIcons": true,
         "CenterHeader": true,
         "TooltipHoverDelay": 0.5,
-        "BackgroundBlurEnabled": false,
+        "BackgroundBlurEnabled": true,
         "Palette": {
             "Background": [0.05, 0.15, 0.25, 0.9],
             "Text": [0.9, 0.95, 1.0, 1.0],
