@@ -476,12 +476,15 @@ void Raytracing::DrawGeneralSettings()
 
 void Raytracing::DrawSSSSettings()
 {
+	auto& sssSettings = settings.AdvancedSettings.SSSSettings;
+
+	if (ImGui::Checkbox("Enable Subsurface Scattering", &sssSettings.Enabled))
+		recompileReason |= RecompileReason::Advanced;
+
+	if (!sssSettings.Enabled)
+		return;
+
 	if (ImGui::CollapsingHeader("Subsurface Scattering")) {
-		auto& sssSettings = settings.AdvancedSettings.SSSSettings;
-
-		if (ImGui::Checkbox("Enable Subsurface Scattering", &sssSettings.Enabled))
-			recompileReason |= RecompileReason::Advanced;
-
 		if (sssSettings.Enabled) {
 			ImGui::SliderInt("Sample Count", &sssSettings.SampleCount, 1, 16);
 			ImGui::SliderFloat("Max Sample Radius", &sssSettings.MaxSampleRadius, 0.01f, 64.0f, "%.2f");
