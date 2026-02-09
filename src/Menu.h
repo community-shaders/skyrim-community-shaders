@@ -255,7 +255,7 @@ public:
 		bool ShowFooter = true;              // whether to show the footer with game version/GPU info
 		bool CenterHeader = false;           // whether to center the header title and logo
 		float TooltipHoverDelay = 0.5f;      // tooltip hover delay in seconds
-		bool BackgroundBlurEnabled = false;  // enable background blur effect
+		bool BackgroundBlurEnabled = true;  // enable background blur effect
 		// Scrollbar opacity settings
 		struct ScrollbarOpacitySettings
 		{

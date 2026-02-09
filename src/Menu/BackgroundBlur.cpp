@@ -5,7 +5,9 @@
 #include "BackgroundBlur.h"
 #include "../Features/Upscaling.h"
 #include "../Globals.h"
+#include "../Menu.h"
 #include "../Util.h"
+#include "../WeatherEditor/EditorWindow.h"
 
 #include <algorithm>
 #include <cmath>
@@ -681,15 +683,26 @@ namespace BackgroundBlur
 			return;
 		}
 
+		// Weather Editor mode: apply a single fullscreen blur instead of per-window blur
+		auto* editorWindow = EditorWindow::GetSingleton();
+		if (editorWindow && editorWindow->open && Menu::GetSingleton()->IsEnabled) {
+			ImVec2 fullMin = { 0.0f, 0.0f };
+			ImVec2 fullMax = { static_cast<float>(texDesc.Width), static_cast<float>(texDesc.Height) };
+			PerformBlur(currentTexture.get(), sourceSRV, currentRTV.get(), fullMin, fullMax, 0.0f, uiBufferSRV, uiBufferRTV);
+			return;
+		}
+
 		// Apply blur behind each visible ImGui window
 		for (int i = 0; i < ctx->Windows.Size; i++) {
 			ImGuiWindow* window = ctx->Windows[i];
-			if (!window || window->Hidden || !window->WasActive || window->SkipItems) {
+			// Don't check Hidden - it causes a 1-frame blur delay when windows reappear
+			if (!window || !window->WasActive || window->SkipItems) {
 				continue;
 			}
 
 			// Skip child windows - only blur root windows to cover headers and footers
-			if (window->ParentWindow != nullptr) {
+			// Exception: docked windows are visually independent even though ParentWindow is set
+			if (window->ParentWindow != nullptr && !window->DockIsActive) {
 				continue;
 			}
 
