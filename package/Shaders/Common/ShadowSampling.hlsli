@@ -42,7 +42,7 @@ namespace ShadowSampling
 		return worldShadow;
 	}
 
-	float Get3DFilteredShadow(float3 positionWS, float3 viewDirection, float2 screenPosition, uint eyeIndex, float depth)
+	float Get3DFilteredShadow(float3 positionWS, float3 viewDirection, float2 screenPosition, uint eyeIndex, float depth, out float surfaceShadow)
 	{
 		const float stepSize = 32.0;  // Fixed step size in world units
 
@@ -61,8 +61,8 @@ namespace ShadowSampling
 		float3 endPosition = positionWS + viewDirection * min(viewRayLength, maxDistance);
 	#elif defined(UNDERWATER)
 		float viewRayLength = 128.0;
-		float3 startPosition = positionWS - viewDirection * viewRayLength;
-		float3 endPosition = positionWS;
+		float3 startPosition = positionWS;
+		float3 endPosition = positionWS - viewDirection * viewRayLength;
 	#else
 		float viewRayLength = 128.0;
 		float3 startPosition = positionWS;
@@ -75,9 +75,9 @@ namespace ShadowSampling
 
 		startPosition += (endPosition - startPosition) * noise * rcpSampleCount;
 
-		// Sample world shadows with consistent step size
-		float worldShadow = 0;
-		for(uint i = 0; i < sampleCount; i++){
+		surfaceShadow = ShadowSampling::GetWorldShadow(startPosition, FrameBuffer::CameraPosAdjust[eyeIndex].xyz, eyeIndex);
+		float worldShadow = surfaceShadow;
+		for(uint i = 1; i < sampleCount; i++){
 			float t = float(i) * rcpSampleCount;
 			float3 sampledPositionWS = lerp(startPosition, endPosition, t);
 			worldShadow += ShadowSampling::GetWorldShadow(sampledPositionWS, FrameBuffer::CameraPosAdjust[eyeIndex].xyz, eyeIndex);
@@ -89,7 +89,9 @@ namespace ShadowSampling
 		worldShadow *= rcpSampleCount;
 
 #if defined(EFFECT_SHADOWS)
-		float shadow = EffectShadows::GetVSMShadow(startPosition, endPosition, sampleCount, eyeIndex);
+		float vsmSurfaceShadow;
+		float shadow = EffectShadows::GetVSMShadow(startPosition, endPosition, sampleCount, eyeIndex, vsmSurfaceShadow);
+		surfaceShadow *= vsmSurfaceShadow;
 		return worldShadow * shadow;
 #else
 		return worldShadow;
