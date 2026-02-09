@@ -58,11 +58,12 @@ inline float2 hashLOD(float2 p)
 
 inline float3 NormalizeWeights(float3 weights)
 {
-	float weightSum = weights.x + weights.y + weights.z;
-	// Skip expensive division if already normalized
-	if (abs(weightSum - 1.0) < 0.01) return weights;
-	float rcpWeightSum = rcp(max(weightSum, 1e-6));
-	return weights * rcpWeightSum;
+	return weights * rcp(max(dot(weights, 1.0), 1e-6));
+}
+
+inline float2 NormalizeWeights2(float2 weights)
+{
+	return weights * rcp(max(weights.x + weights.y, 1e-6));
 }
 
 // Common barycentric coordinate calculation for stochastic sampling
@@ -137,19 +138,35 @@ inline float4 StochasticSampleLOD(float rnd, Texture2D tex, SamplerState samp, f
 	return lerp(sample2, sample1, 0.65);
 }
 
-// Main stochastic sampling function
+// Main stochastic sampling function with distance-based quality reduction
 inline float4 StochasticEffect(Texture2D tex, SamplerState samp, float2 uv, StochasticOffsets offsets, float2 dx, float2 dy)
 {
-	// Calculate custom mip level from original UVs.
+	// Calculate mip level from original UVs — serves as a distance proxy
 	float mipLevel = tex.CalculateLevelOfDetail(samp, uv);
 	float adjustedMipLevel = mipLevel + SharedData::MipBias;
 
-	// 3 Sample Blend
+	// Far distance: single offset sample at a bumped mip level (cheapest)
+	if (mipLevel >= FAR_DISTANCE_THRESHOLD)
+	{
+		return tex.SampleLevel(samp, uv + offsets.offset1, adjustedMipLevel + MIP_LEVEL_INCREASE);
+	}
+
+	// Medium distance: 2-sample blend (skip third sample and height blending)
+	if (mipLevel >= DISTANCE_SAMPLE_REDUCTION)
+	{
+		float4 sample1 = tex.SampleLevel(samp, uv + offsets.offset1, adjustedMipLevel);
+		float4 sample2 = tex.SampleLevel(samp, uv + offsets.offset2, adjustedMipLevel);
+
+		float2 weights = NormalizeWeights2(saturate(offsets.weights.xy));
+		return sample1 * weights.x + sample2 * weights.y;
+	}
+
+	// Close distance: full 3-sample blend with height-based weighting
 	float4 sample1 = tex.SampleLevel(samp, uv + offsets.offset1, adjustedMipLevel);
 	float4 sample2 = tex.SampleLevel(samp, uv + offsets.offset2, adjustedMipLevel);
 	float4 sample3 = tex.SampleLevel(samp, uv + offsets.offset3, adjustedMipLevel);
 
-	// Full height-based blending for terrain
+	// Height-based blending for terrain
 	float contrastFactor = HEIGHT_BLEND_CONTRAST * (1.0 - HEIGHT_INFLUENCE);
 	float3 blendWeights = pow(saturate(offsets.weights), contrastFactor);
 
@@ -167,30 +184,45 @@ inline float4 StochasticEffect(Texture2D tex, SamplerState samp, float2 uv, Stoc
 	// Combined weight calculation and normalization
 	float3 weights = NormalizeWeights(blendWeights * (1.0 + HEIGHT_INFLUENCE * heights));
 
-	// Final blend
 	return sample1 * weights.x + sample2 * weights.y + sample3 * weights.z;
 }
 
-// Stochastic sampling function without height blending for better performance
+// Stochastic sampling for parallax with distance-based quality reduction
 // Disable X4000 warning: FXC incorrectly reports potentially uninitialized variables due to complex control flow with early returns and conditional sampling
 #pragma warning(push)
 #pragma warning(disable : 4000)
 inline float4 StochasticEffectParallax(Texture2D tex, SamplerState samp, float2 uv, float mipLevel, StochasticOffsets offsets, float2 dx, float2 dy)
 {
-	// Early exit for disabled terrain variation - avoid all other computations
+	// Early exit for disabled terrain variation
 	if (!SharedData::terrainVariationSettings.enableTilingFix)
 	{
 		return tex.SampleLevel(samp, uv, mipLevel);
 	}
 
-	// Use progressive mip level increase for better performance in parallax
+	// Far distance: single offset sample at bumped mip (cheapest)
+	if (mipLevel >= FAR_DISTANCE_THRESHOLD)
+	{
+		return tex.SampleLevel(samp, uv + offsets.offset1, mipLevel + MIP_LEVEL_INCREASE);
+	}
+
+	// Progressive mip increase at medium+ distance
 	float adjustedMipLevel = mipLevel;
 	if (mipLevel > 1.0)
 	{
 		adjustedMipLevel = mipLevel + (MIP_LEVEL_INCREASE * 0.5);
 	}
 
-	// Take three samples for blending at the adjusted mip level
+	// Medium distance: 2-sample blend
+	if (mipLevel >= DISTANCE_SAMPLE_REDUCTION)
+	{
+		float4 sample1 = tex.SampleLevel(samp, uv + offsets.offset1, adjustedMipLevel);
+		float4 sample2 = tex.SampleLevel(samp, uv + offsets.offset2, adjustedMipLevel);
+
+		float2 weights = NormalizeWeights2(saturate(offsets.weights.xy));
+		return sample1 * weights.x + sample2 * weights.y;
+	}
+
+	// Close distance: full 3-sample blend
 	float4 sample1 = tex.SampleLevel(samp, uv + offsets.offset1, adjustedMipLevel);
 	float4 sample2 = tex.SampleLevel(samp, uv + offsets.offset2, adjustedMipLevel);
 	float4 sample3 = tex.SampleLevel(samp, uv + offsets.offset3, adjustedMipLevel);
