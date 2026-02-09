@@ -607,6 +607,7 @@ struct Raytracing : public OverlayFeature
 
 	// Creates mesh buffers for all graph TriShapes, handles materials and builds a single BLAS for the node
 	void CreateModel(RE::TESForm* form, const char* model, RE::NiAVObject* root);
+	void CreateActorModel(RE::Actor* actor, const char* name, RE::NiAVObject* root);
 	void CreateModelInternal(RE::TESForm* refr, const char* path, RE::NiAVObject* root);
 
 	// Removes the instance and optionally also releases the model and all its buffers if refCount reaches 0
@@ -1212,10 +1213,43 @@ struct Raytracing : public OverlayFeature
 			static inline REL::Relocation<decltype(thunk)> func;
 		};
 
+		struct TESObjectLAND_Detach3D2
+		{
+			static void thunk(RE::TESObjectLAND* oThis, bool a2)
+			{
+				if (oThis->GetFormFlags() & RE::TESObjectLAND::RecordFlags::kDeleted) {
+					auto& rt = globals::features::raytracing;
+
+					std::lock_guard lock{ rt.landDetachMutex };
+
+					rt.RemoveInstance(oThis->GetFormID(), true);
+
+					auto* cell = oThis->parentCell;
+
+					if (cell->IsExteriorCell()) {
+						auto& runtimeData = cell->GetRuntimeData();
+
+						auto* exteriorData = runtimeData.cellData.exterior;
+
+						logger::info("[RT] TESObjectLAND::Detach3D2 {} - {}", a2, std::format("Landscape_{}_{}", exteriorData->cellX, exteriorData->cellY).c_str());
+					}
+				}
+
+				func(oThis, a2);
+			}
+			static inline REL::Relocation<decltype(thunk)> func;
+		};
+
 		struct TESObjectLAND_Destructor
 		{
 			static void thunk(RE::TESObjectLAND* oThis)
 			{
+				auto& rt = globals::features::raytracing;
+
+				std::lock_guard lock{ rt.landDetachMutex };
+
+				rt.RemoveInstance(oThis->GetFormID(), true);
+
 				auto* cell = oThis->parentCell;
 
 				if (cell->IsExteriorCell()) {
@@ -1298,14 +1332,14 @@ struct Raytracing : public OverlayFeature
 								//rt.CreateModelInternal(refr, std::format("{}_1stPerson", name).c_str(), pNiAVObject);
 
 								// Third Person
-								rt.CreateModelInternal(refr, name, player->Get3D(false));
+								rt.CreateActorModel(player, name, player->Get3D(false));
 
 								return;
 							}
 						}
 						
 						if (auto* actor = refr->As<RE::Actor>()) {
-							rt.CreateModelInternal(refr, actor->GetName(), pNiAVObject);
+							rt.CreateActorModel(actor, actor->GetName(), pNiAVObject);
 							return;
 						}
 
@@ -1434,6 +1468,8 @@ struct Raytracing : public OverlayFeature
 			stl::detour_thunk<CreateTextureFromDDS>(REL::RelocationID(69334, 70716));
 
 			stl::detour_thunk<TESObjectLAND_Attach3D>(REL::RelocationID(18334, 18750));
+
+			//stl::detour_thunk<TESObjectLAND_Destructor>(REL::RelocationID(18394, 18823));
 
 			stl::detour_thunk<TESObjectLAND_Detach3D>(REL::RelocationID(18333, 18749)); // sub_1402A8A80
 			//stl::detour_thunk<TESObjectLAND_Detach3D2>(REL::RelocationID(18334, 18750));  // sub_1402A8B00
