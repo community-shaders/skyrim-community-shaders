@@ -12,7 +12,7 @@ namespace EffectShadows
 		float4 VPOSOffset;
 		float4 ShadowSampleParam;    // fPoissonRadiusScale / iShadowMapResolution in z and w
 		float4 EndSplitDistances;    // cascade end distances int xyz, cascade count int z
-		float4 StartSplitDistances;  // cascade start ditances int xyz, 4 int z
+		float4 StartSplitDistances;  // cascade start distances int xyz, 4 int z
 		float4 FocusShadowFadeParam;
 		float4 DebugColor;
 		float4 PropertyColor;

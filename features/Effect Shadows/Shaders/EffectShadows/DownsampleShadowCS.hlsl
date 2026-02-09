@@ -12,10 +12,9 @@ float2 ComputeVSMMoments(float4 depths) {
 	return moments * 0.25;
 }
 
-#if defined(DOWNSAMPLE_SHADOW_MIP0)
-// Cascade 1: Mip 0->1->2->3 (8x total reduction)
 groupshared float2 g_scratchDepths[8][8];
 
+#if defined(DOWNSAMPLE_SHADOW_MIP0)
 [numthreads(8, 8, 1)]
 void main(uint3 dispatchThreadID : SV_DispatchThreadID, uint3 groupThreadID : SV_GroupThreadID) {
 	uint2 pixCoord = dispatchThreadID.xy * 2;
@@ -42,9 +41,6 @@ void main(uint3 dispatchThreadID : SV_DispatchThreadID, uint3 groupThreadID : SV
 }
 
 #elif defined(DOWNSAMPLE_SHADOW_MIP1)
-// Cascade 0: Mip 0->1->2->3->4 (16x total reduction)
-groupshared float2 g_scratchDepths[8][8];
-
 [numthreads(8, 8, 1)]
 void main(uint3 dispatchThreadID : SV_DispatchThreadID, uint3 groupThreadID : SV_GroupThreadID) {
 	uint2 pixCoord = dispatchThreadID.xy * 2;

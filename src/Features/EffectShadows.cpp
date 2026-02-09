@@ -83,6 +83,10 @@ void EffectShadows::CopyShadowData()
 
 	ID3D11Buffer* buffers[3];
 	context->PSGetConstantBuffers(0, 3, buffers);
+	// Release the buffer at slot 1 before overwriting
++	if (buffers[1])
++		buffers[1]->Release();
+
 	context->PSGetConstantBuffers(12, 1, buffers + 1);
 
 	context->CSSetConstantBuffers(0, 3, buffers);
@@ -94,8 +98,12 @@ void EffectShadows::CopyShadowData()
 	uavs[0] = nullptr;
 	context->CSSetUnorderedAccessViews(0, 1, uavs, nullptr);
 
-	std::fill(buffers, buffers + ARRAYSIZE(buffers), nullptr);
-	context->CSSetConstantBuffers(0, 3, buffers);
+	// Release all COM references from PSGetConstantBuffers
++	for (auto& buf : buffers) {
++		if (buf)
++			buf->Release();
++		buf = nullptr;
++	}
 
 	context->CSSetShader(nullptr, nullptr, 0);
 
