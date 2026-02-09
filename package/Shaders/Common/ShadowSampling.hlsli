@@ -75,15 +75,16 @@ namespace ShadowSampling
 
 		startPosition += (endPosition - startPosition) * noise * rcpSampleCount;
 
-		surfaceShadow = ShadowSampling::GetWorldShadow(startPosition, FrameBuffer::CameraPosAdjust[eyeIndex].xyz, eyeIndex);
-		float worldShadow = surfaceShadow;
-		for(uint i = 1; i < sampleCount; i++){
+		float worldShadow = 0.0;
+		for(uint i = 0; i < sampleCount; i++){
 			float t = float(i) * rcpSampleCount;
-			float3 sampledPositionWS = lerp(startPosition, endPosition, t);
-			worldShadow += ShadowSampling::GetWorldShadow(sampledPositionWS, FrameBuffer::CameraPosAdjust[eyeIndex].xyz, eyeIndex);
+			float3 sampledPositionWS = lerp(endPosition, startPosition, t);
+			float worldShadowSample = ShadowSampling::GetWorldShadow(sampledPositionWS, FrameBuffer::CameraPosAdjust[eyeIndex].xyz, eyeIndex);
+			surfaceShadow = worldShadowSample;
+			worldShadow += worldShadowSample;
 		}
 
-		if (worldShadow == 0.0)
+		if (worldShadow == 0.0 && surfaceShadow == 0.0)
 			return 0.0;
 
 		worldShadow *= rcpSampleCount;
