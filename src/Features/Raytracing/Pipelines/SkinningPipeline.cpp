@@ -76,7 +76,7 @@ void SkinningPipeline::SetupResources(ID3D12Device5* device)
 
 	{
 		vertexUpdateBuffer = eastl::make_unique<DX12::StructuredBufferUpload<VertexUpdateData>>(device, MAX_GEOMETRY, false);
-		DX::ThrowIfFailed(vertexUpdateBuffer->resource->SetName(L"Vertex Update Buffer"));
+		vertexUpdateBuffer->SetName(L"Vertex Update Buffer");
 		vertexUpdateBuffer->TransitionBarrier(commandList, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
 
 		vertexUpdateBuffer->CreateSRV(heap->CPUHandle(SkinningHeap::Slot::UpdateData));
@@ -86,7 +86,7 @@ void SkinningPipeline::SetupResources(ID3D12Device5* device)
 
 	{
 		boneMatricesBuffer = eastl::make_unique<DX12::StructuredBufferUpload<float3x4>>(device, MAX_BONE_MATRICES, false);
-		DX::ThrowIfFailed(boneMatricesBuffer->resource->SetName(L"Bone Matrices Buffer"));
+		boneMatricesBuffer->SetName(L"Bone Matrices Buffer");
 		boneMatricesBuffer->TransitionBarrier(commandList, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
 
 		boneMatricesBuffer->CreateSRV(heap->CPUHandle(SkinningHeap::Slot::BoneMatrices));

@@ -691,7 +691,7 @@ void Shape::CreateBuffers(const std::wstring& name)
 		vertexBuffer = eastl::make_unique<DX12::StructuredBufferUploadMA<Vertex>>(device, allocator, allocDesc, uploadAllocDesc, vertexCount, updatable);
 
 		vertexBuffer->UpdateList(vertices.data(), vertexCount);
-		DX::ThrowIfFailed(vertexBuffer->resource->SetName(std::format(L"Vertex Buffer [{}] - {}", allocation->GetIndex(), name).c_str()));
+		vertexBuffer->SetName(std::format(L"Vertex Buffer [{}] - {}", allocation->GetIndex(), name).c_str());
 
 		if (vertexCount != vertices.size())
 			logger::error("[RT] Shape::CreateBuffers - VertexCount: {}, Vertices Size: {}", vertexCount, vertices.size());
@@ -733,7 +733,7 @@ void Shape::CreateBuffers(const std::wstring& name)
 		vertexCopyBuffer = eastl::make_unique<DX12::StructuredBufferUploadMA<Vertex>>(device, allocator, allocDesc, uploadAllocDesc, vertexCount);
 
 		vertexCopyBuffer->UpdateList(vertices.data(), vertexCount);
-		DX::ThrowIfFailed(vertexCopyBuffer->resource->SetName(std::format(L"Vertex Copy Buffer [{}] - {}", allocationIndex, name).c_str()));
+		vertexCopyBuffer->SetName(std::format(L"Vertex Copy Buffer [{}] - {}", allocationIndex, name).c_str());
 
 		vertexCopyBuffer->Upload(commandList, 0, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
 
@@ -758,7 +758,7 @@ void Shape::CreateBuffers(const std::wstring& name)
 		skinningBuffer = eastl::make_unique<DX12::StructuredBufferUploadMA<Skinning>>(device, allocator, allocDesc, uploadAllocDesc, vertexCount, false);
 
 		skinningBuffer->UpdateList(skinning.data(), vertexCount);
-		DX::ThrowIfFailed(skinningBuffer->resource->SetName(std::format(L"Skinning Buffer [{}] - {}", allocationIndex, name).c_str()));
+		skinningBuffer->SetName(std::format(L"Skinning Buffer [{}] - {}", allocationIndex, name).c_str());
 
 		skinningBuffer->Upload(commandList, 0, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
 
@@ -783,7 +783,7 @@ void Shape::CreateBuffers(const std::wstring& name)
 		triangleBuffer = eastl::make_unique<DX12::StructuredBufferUploadMA<Triangle>>(device, allocator, allocDesc, uploadAllocDesc, triangleCount, false);
 
 		triangleBuffer->UpdateList(triangles.data(), triangles.size());
-		DX::ThrowIfFailed(triangleBuffer->resource->SetName(std::format(L"Triangle Buffer [{}] - {}", allocationIndex, name).c_str()));
+		triangleBuffer->SetName(std::format(L"Triangle Buffer [{}] - {}", allocationIndex, name).c_str());
 
 		triangleBuffer->Upload(commandList, 0, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
 

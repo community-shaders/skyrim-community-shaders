@@ -25,7 +25,7 @@ namespace DX12
 
 		virtual ~Resource() = default;
 
-		void SetName(LPCWSTR name) const
+		virtual void SetName(LPCWSTR name) const
 		{
 			DX::ThrowIfFailed(resource->SetName(name));
 		}
@@ -385,6 +385,15 @@ namespace DX12
 					D3D12_RESOURCE_STATE_GENERIC_READ,
 					nullptr,
 					IID_PPV_ARGS(uploadResources[i].put())));
+			}
+		}
+
+		virtual void SetName(LPCWSTR name) const override
+		{
+			Resource::SetName(name);
+
+			for (size_t i = 0; i < uploadResources.size(); i++) {
+				uploadResources[i]->SetName(std::format(L"{} [Upload {}]", name, i).c_str());
 			}
 		}
 

@@ -1136,7 +1136,7 @@ void Raytracing::SetupResources()
 	// Light buffer
 	{
 		lightBuffer = eastl::make_unique<DX12::StructuredBufferUpload<Light>>(d3d12Device.get(), RTConstants::MAX_LIGHTS);
-		DX::ThrowIfFailed(lightBuffer->resource->SetName(L"Light Buffer"));
+		lightBuffer->SetName(L"Light Buffer");
 
 		lightBuffer->CreateSRV(giHeap->CPUHandle(GIHeap::Slot::Lights));
 	}
@@ -1144,7 +1144,7 @@ void Raytracing::SetupResources()
 	// Shape buffer
 	{
 		shapeBuffer = eastl::make_unique<DX12::StructuredBufferUpload<ShapeData>>(d3d12Device.get(), RTConstants::MAX_SHAPES);
-		DX::ThrowIfFailed(shapeBuffer->resource->SetName(L"Shape Buffer"));
+		shapeBuffer->SetName(L"Shape Buffer");
 
 		shapeBuffer->CreateSRV(giHeap->CPUHandle(GIHeap::Slot::Shapes));
 
@@ -1154,7 +1154,7 @@ void Raytracing::SetupResources()
 	// Instance buffer
 	{
 		instanceBuffer = eastl::make_unique<DX12::StructuredBufferUpload<InstanceData>>(d3d12Device.get(), RTConstants::MAX_INSTANCES);
-		DX::ThrowIfFailed(instanceBuffer->resource->SetName(L"Instance Buffer"));
+		instanceBuffer->SetName(L"Instance Buffer");
 
 		instanceBuffer->CreateSRV(giHeap->CPUHandle(GIHeap::Slot::Instances));
 	}
@@ -1162,7 +1162,7 @@ void Raytracing::SetupResources()
 	// Geometry transform buffer
 	{
 		transformBuffer = eastl::make_unique<DX12::StructuredBufferUpload<float3x4>>(d3d12Device.get(), RTConstants::MAX_TRANSFORMS);
-		DX::ThrowIfFailed(transformBuffer->resource->SetName(L"Transform Buffer"));
+		transformBuffer->SetName(L"Transform Buffer");
 
 		transformBuffer->TransitionBarrier(commandList.get(), D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
 	}
@@ -1170,7 +1170,7 @@ void Raytracing::SetupResources()
 	// Create instance buffer for BLAS
 	{
 		blasInstanceBuffer = eastl::make_unique<DX12::StructuredBufferUpload<D3D12_RAYTRACING_INSTANCE_DESC>>(d3d12Device.get(), RTConstants::MAX_INSTANCES, false);
-		DX::ThrowIfFailed(blasInstanceBuffer->resource->SetName(L"BLAS Instance Buffer"));
+		blasInstanceBuffer->SetName(L"BLAS Instance Buffer");
 
 		blasInstanceBuffer->TransitionBarrier(commandList.get(), D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
 	}
@@ -1178,7 +1178,7 @@ void Raytracing::SetupResources()
 	// Create shadow instance buffer for BLAS
 	{
 		blasShadowInstanceBuffer = eastl::make_unique<DX12::StructuredBufferUpload<D3D12_RAYTRACING_INSTANCE_DESC>>(d3d12Device.get(), RTConstants::MAX_INSTANCES, false);
-		DX::ThrowIfFailed(blasShadowInstanceBuffer->resource->SetName(L"BLAS Instance Buffer"));
+		blasShadowInstanceBuffer->SetName(L"BLAS Instance Buffer");
 
 		blasShadowInstanceBuffer->TransitionBarrier(commandList.get(), D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
 	}
@@ -1186,14 +1186,14 @@ void Raytracing::SetupResources()
 	logger::debug("Creating constant buffer...");
 	{
 		frameBuffer = eastl::make_unique<DX12::StructuredBufferUpload<FrameData>>(d3d12Device.get(), 1, false, 2);
-		DX::ThrowIfFailed(frameBuffer->resource->SetName(L"Frame Buffer"));
+		frameBuffer->SetName(L"Frame Buffer");
 
 		frameBuffer->TransitionBarrier(commandList.get(), D3D12_RESOURCE_STATE_VERTEX_AND_CONSTANT_BUFFER);
 
 		frameData = eastl::make_unique<FrameData>();
 
 		shadowsCB = eastl::make_unique<DX12::StructuredBufferUpload<ShadowsFrameData>>(d3d12Device.get(), 1, false);
-		DX::ThrowIfFailed(shadowsCB->resource->SetName(L"Shadows Constant Buffer"));
+		shadowsCB->SetName(L"Shadows Constant Buffer");
 
 		shadowsCB->TransitionBarrier(commandList.get(), D3D12_RESOURCE_STATE_VERTEX_AND_CONSTANT_BUFFER);
 
@@ -2312,10 +2312,15 @@ eastl::shared_ptr<Allocation> Raytracing::GetTextureRegister(ID3D11Texture2D* dx
 	if (emplaced) {
 		it->second = eastl::make_unique<TextureReference>(std::move(dx12Texture), eastl::shared_ptr<Allocation>(textureRegisters.Allocate(), AllocationDeleter()));
 
-		d3d12Device->CreateShaderResourceView(it->second->resource.get(), &texSrvDesc, giHeap->CPUHandle(GIHeap::Slot::Textures, it->second->allocation->GetIndex()));
+		auto allocationIndex = it->second->allocation->GetIndex();
+
+		dx12Texture->SetName(std::format(L"Shared Texture [{}]", allocationIndex).c_str());
+
+		d3d12Device->CreateShaderResourceView(it->second->resource.get(), &texSrvDesc, giHeap->CPUHandle(GIHeap::Slot::Textures, allocationIndex));
 
 		return it->second->allocation;
 	} else {
+		dx12Texture->SetName(L"Shared Texture [?]");
 		logger::error("[RT] GetTextureRegister - TextureReference emplace failed.");
 	}
 
@@ -2421,7 +2426,11 @@ eastl::shared_ptr<Allocation> Raytracing::GetMSNormalMapRegister([[maybe_unused]
 
 		normalMap->Reference = eastl::make_unique<TextureReference>(std::move(dx12Texture), eastl::shared_ptr<Allocation>(textureRegisters.Allocate(), AllocationDeleter()));
 
-		d3d12Device->CreateShaderResourceView(normalMap->Reference->resource.get(), &texSrvDesc, giHeap->CPUHandle(GIHeap::Slot::Textures, normalMap->Reference->allocation->GetIndex()));
+		auto allocationIndex = normalMap->Reference->allocation->GetIndex();
+
+		dx12Texture->SetName(std::format(L"Shared MS Normalmap [{}]", allocationIndex).c_str());
+
+		d3d12Device->CreateShaderResourceView(normalMap->Reference->resource.get(), &texSrvDesc, giHeap->CPUHandle(GIHeap::Slot::Textures, allocationIndex));
 	
 		allocationMSNormalMaps.emplace(normalMap->Reference->allocation->GetIndex(), texture2D);
 
