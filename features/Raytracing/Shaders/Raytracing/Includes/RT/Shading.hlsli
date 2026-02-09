@@ -134,6 +134,7 @@ void GetPointLightIrradiance(in LightData lightData, in Surface surface, out flo
     {
         irradiance = float3(0, 0, 0);
         lr = float3(0, 0, 0);
+        dist = 0.0f;
         return;
     }
 
