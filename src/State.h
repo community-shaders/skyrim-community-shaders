@@ -24,6 +24,7 @@ public:
 		for (auto& v : drawCalls) v = 0;
 		for (auto& v : frameTimePerType) v = 0.0f;
 		for (auto& v : smoothFrameTimePerType) v = 0.0f;
+		for (auto& v : enabledClasses) v = true;
 
 		// Initialize QueryPerformanceCounter frequency
 		frameTimingFrequency.QuadPart = 0;

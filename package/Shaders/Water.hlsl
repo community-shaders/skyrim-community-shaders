@@ -215,27 +215,19 @@ VS_OUTPUT main(VS_INPUT input)
 	float2 scrollAdjust2 = posAdjust / NormalsScale.yy;
 	float2 scrollAdjust3 = posAdjust / NormalsScale.zz;
 
-#						if defined(UNIFIED_WATER) && defined(NORMAL_TEXCOORD)
+#				if defined(UNIFIED_WATER) && defined(NORMAL_TEXCOORD)
 	float2 cellShift = float2(floor(ObjectUV.z * 0.5), floor((ObjectUV.z - 1.0) * 0.5));
 	float2 scaledUV = input.TexCoord0.xy * ObjectUV.z - cellShift;
-#						endif
+#				endif
 
 #				if !(defined(FLOWMAP) && (defined(REFRACTIONS) || defined(BLEND_NORMALS) || defined(DEPTH) || NUM_SPECULAR_LIGHTS == 0))
 #					if defined(NORMAL_TEXCOORD)
 	float3 normalsScale = 0.001 * NormalsScale.xyz;
-#						if defined(UNIFIED_WATER)
-	if (ObjectUV.x) {
-		scrollAdjust1 = scaledUV / normalsScale.xx;
-		scrollAdjust2 = scaledUV / normalsScale.yy;
-		scrollAdjust3 = scaledUV / normalsScale.zz;
-	}
-#						else
 	if (ObjectUV.x) {
 		scrollAdjust1 = input.TexCoord0.xy / normalsScale.xx;
 		scrollAdjust2 = input.TexCoord0.xy / normalsScale.yy;
 		scrollAdjust3 = input.TexCoord0.xy / normalsScale.zz;
 	}
-#						endif
 #					else
 	if (ObjectUV.x) {
 		scrollAdjust1 = 0.0;
@@ -1239,7 +1231,7 @@ PS_OUTPUT main(PS_INPUT input)
 
 #				if defined(UNDERWATER)
 	float3 finalSpecularColor = lerp(Color::Water(ShallowColor.xyz), specularColor, 0.5);
-	float3 finalColor = saturate(1 - input.WPosition.w * 0.002) * ((1 - fresnel) * (diffuseColor - finalSpecularColor)) + finalSpecularColor;
+	float3 finalColor = saturate(1 - length(input.WPosition.xyz) * 0.002) * ((1 - fresnel) * (diffuseColor - finalSpecularColor)) + finalSpecularColor;
 	// Add ripple and splash color effects for underwater
 #					if defined(WETNESS_EFFECTS) && defined(DEBUG_WETNESS_EFFECTS)
 	// DEBUG MODE: Override water color with debug visualization (darker for underwater)
