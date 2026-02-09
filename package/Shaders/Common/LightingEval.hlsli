@@ -189,7 +189,6 @@ float3 GetWetnessIndirectLobeWeights(inout IndirectLobeWeights lobeWeights, floa
 
 	const float3 N = wetnessNormal;
 	const float3 V = context.viewDir;
-	const float3 VN = context.vertexNormal;
 
 	float NdotV = saturate(abs(dot(N, V)) + EPSILON_DOT_CLAMP);
 	float2 specularBRDF = BRDF::EnvBRDF(roughness, NdotV);
