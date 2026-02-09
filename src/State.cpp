@@ -7,12 +7,12 @@
 #include "Deferred.h"
 #include "FeatureIssues.h"
 #include "Features/CloudShadows.h"
+#include "Features/EffectShadows.h"
 #include "Features/PerformanceOverlay.h"
 #include "Features/TerrainBlending.h"
 #include "Features/TerrainHelper.h"
 #include "Features/Upscaling.h"
 #include "Features/WeatherEditor.h"
-#include "Features/EffectShadows.h"
 #include "Menu.h"
 #include "SettingsOverrideManager.h"
 #include "ShaderCache.h"
@@ -69,7 +69,8 @@ void State::Draw()
 			if (currentShader->shaderType.get() == RE::BSShader::Type::Utility) {
 				if (currentPixelDescriptor & static_cast<uint32_t>(SIE::ShaderCache::UtilityShaderFlags::RenderShadowmask)) {
 					if (effectShadows.loaded)
-						effectShadows.CopyShadowData();				}
+						effectShadows.CopyShadowData();
+				}
 			}
 		}
 
