@@ -569,8 +569,7 @@ void TestWetnessProperties()
     ASSERT(IsTrue, all(wetness_smooth >= 0.0f));
 
     // Horizon occlusion reduces specular
-    float3 VN_aligned = N;
-    float3 lobe_aligned = PBR::GetWetnessIndirectSpecularLobeWeight(N, V, VN_aligned, 0.5f);
+    float3 lobe_aligned = PBR::GetWetnessIndirectSpecularLobeWeight(N, V, 0.5f);
     float3 lobe_bent = PBR::GetWetnessIndirectSpecularLobeWeight(N, V, 0.5f);
     ASSERT(IsTrue, lobe_bent.x <= lobe_aligned.x + 0.01f);
 
