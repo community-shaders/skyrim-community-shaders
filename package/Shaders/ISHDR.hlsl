@@ -136,12 +136,23 @@ PS_OUTPUT main(PS_INPUT input)
 	inputColor = max(0, inputColor);
 
 	if (isHDR) {
-		// HDR: bypass vanilla tonemapping, output raw linear scene values.
-		// HDROutputCS converts to BT.2020 and PQ-encodes with paper white scaling.
-		// Scene 1.0 = paper white nits, >1.0 extends toward peak brightness.
-		outputColor = max(0, inputColor);
+		float paperWhiteNits = SharedData::HDRData.y;
+		float3 hdrLinear = max(0, inputColor);
+
+		hdrLinear += bloomColor;
+
+		float hdrLuminance = Color::RGBToLuminance(hdrLinear);
+		float3 hdrGraded = Cinematic.w * lerp(lerp(hdrLuminance, hdrLinear, Cinematic.x), hdrLuminance * Tint.xyz, Tint.w).xyz;
+		hdrGraded = lerp(avgValue.x, hdrGraded, Cinematic.z);
+		hdrLinear = max(0, hdrGraded);
+
+#		if defined(FADE)
+		hdrLinear = lerp(hdrLinear, Fade.xyz, Fade.w);
+#		endif
+
+		float3 bt2020 = Color::BT709ToBT2020(hdrLinear);
+		outputColor = Color::pq::Encode(bt2020, paperWhiteNits);
 	} else {
-		// SDR: tonemapping compresses to 0-1
 		float3 blendedColor;
 		[branch] if (Param.z > 0.5)
 		{
@@ -160,11 +171,11 @@ PS_OUTPUT main(PS_INPUT input)
 		float3 linearColor = Cinematic.w * lerp(lerp(blendedLuminance, blendedColor, Cinematic.x), blendedLuminance * Tint.xyz, Tint.w).xyz;
 		linearColor = lerp(avgValue.x, linearColor, Cinematic.z);
 		outputColor = max(0, linearColor);
-	}
 
-#	if defined(FADE)
-	outputColor = lerp(outputColor, Fade.xyz, Fade.w);
-#	endif
+#		if defined(FADE)
+		outputColor = lerp(outputColor, Fade.xyz, Fade.w);
+#		endif
+	}
 
 	psout.Color = float4(outputColor, 1.0);
 

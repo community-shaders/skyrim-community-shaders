@@ -51,16 +51,8 @@ static const float UI_REFERENCE_NITS = 100.0;
 	float3 finalColor;
 
 	if (enableHDR) {
-		float3 sceneLinear = max(0, scene.rgb);
-		if (!isSceneLinear)
-			sceneLinear = Color::GammaToTrueLinear(sceneLinear);
-
-		float3 bt2020 = Color::BT709ToBT2020(sceneLinear);
-
-		// PQ encode: scene 1.0 maps to paperWhite nits on display.
-		// Values >1.0 extend above paper white toward 10000 nits (PQ max).
-		// The display naturally clips at its peak brightness.
-		float3 scenePQ = Color::pq::Encode(bt2020, paperWhite);
+		// Scene is already PQ-encoded in BT.2020 from ISHDR
+		float3 scenePQ = scene.rgb;
 
 		if (skipUIComposite) {
 			finalColor = scenePQ;
