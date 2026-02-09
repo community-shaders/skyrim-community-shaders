@@ -189,6 +189,7 @@ struct Raytracing : public OverlayFeature
 	void DrawResolutionSettings();
 	void DrawLightingSettings();
 	void DrawLightSettings();
+	void DrawSSSSettings();
 
 	void DrawGeneralSettings();
 	void DrawAdvancedSettings();
@@ -494,6 +495,32 @@ struct Raytracing : public OverlayFeature
 		NLOHMANN_DEFINE_TYPE_INTRUSIVE_WITH_DEFAULT(ReSTIRSettings, ReSTIRDI)
 	};
 
+	struct SSSSettings
+	{
+		bool Enabled = true;
+		int SampleCount = 1;
+		float MaxSampleRadius = 1.0f;
+		bool EnableTransmission = true;
+
+		bool MaterialOverride = false;
+		float3 OverrideTransmissionColor = float3(1.0f, 0.735f, 0.612f);
+		float3 OverrideScatteringColor = float3(1.0f, 1.0f, 1.0f);
+		float OverrideScale = 40.0f;
+		float OverrideAnisotropy = -0.5f;
+
+		NLOHMANN_DEFINE_TYPE_INTRUSIVE_WITH_DEFAULT(
+			SSSSettings,
+			Enabled,
+			SampleCount,
+			MaxSampleRadius,
+			EnableTransmission,
+			MaterialOverride,
+			OverrideTransmissionColor,
+			OverrideScatteringColor,
+			OverrideScale,
+			OverrideAnisotropy)
+	};
+
 	struct AdvancedSettings
 	{
 		CullingSettings Culling;
@@ -510,18 +537,9 @@ struct Raytracing : public OverlayFeature
 		LightEvalMode LightEvalMode = LightEvalMode::BRDF;
 		LightingMode LightingMode = LightingMode::PBR;
 
-		bool EnableSubsurfaceScattering = true;
-		bool EnableSssTransmission = true;
-		bool SSSMaterialOverride = false;
-		int SSSSampleCount = 1;
-		float SSSMaxSampleRadius = 1.0f;
+		SSSSettings SSSSettings;
 
-		float3 OverrideSSSTransmissionColor = float3(1.0f, 0.735f, 0.612f);
-		float3 OverrideSSSScatteringColor = float3(1.0f, 1.0f, 1.0f);
-		float OverrideSSSScale = 40.0f;
-		float OverrideSSSAnisotropy = -0.5f;
-
-		NLOHMANN_DEFINE_TYPE_INTRUSIVE_WITH_DEFAULT(AdvancedSettings, Culling, VariableUpdateRate, RIS, ReSTIR, GGXEnergyConservation, HairBSDF, DiffuseBRDF, LightEvalMode, LightingMode, EnableSubsurfaceScattering, EnableSssTransmission, SSSMaterialOverride, SSSSampleCount, SSSMaxSampleRadius, OverrideSSSTransmissionColor, OverrideSSSScatteringColor, OverrideSSSScale, OverrideSSSAnisotropy)
+		NLOHMANN_DEFINE_TYPE_INTRUSIVE_WITH_DEFAULT(AdvancedSettings, Culling, VariableUpdateRate, RIS, ReSTIR, GGXEnergyConservation, HairBSDF, DiffuseBRDF, LightEvalMode, LightingMode, SSSSettings)
 	};
 
 	////////////////////////////////////////////////// Feature Specific Data
