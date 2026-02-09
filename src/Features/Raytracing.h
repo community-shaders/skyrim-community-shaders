@@ -1198,7 +1198,7 @@ struct Raytracing : public OverlayFeature
 
 					auto* exteriorData = runtimeData.cellData.exterior;
 
-					logger::info("[RT] TESObjectLAND::Detach3D - {}", std::format("Landscape_{}_{}", exteriorData->cellX, exteriorData->cellY).c_str());
+					logger::debug("[RT] TESObjectLAND::Detach3D - {}", std::format("Landscape_{}_{}", exteriorData->cellX, exteriorData->cellY).c_str());
 				}
 
 				func(oThis);
@@ -1206,58 +1206,6 @@ struct Raytracing : public OverlayFeature
 			static inline REL::Relocation<decltype(thunk)> func;
 		};
 
-		struct TESObjectLAND_Detach3D2
-		{
-			static void thunk(RE::TESObjectLAND* oThis, bool a2)
-			{
-				if (oThis->GetFormFlags() & RE::TESObjectLAND::RecordFlags::kDeleted) {
-					auto& rt = globals::features::raytracing;
-
-					std::lock_guard lock{ rt.landDetachMutex };
-
-					rt.RemoveInstance(oThis->GetFormID(), true);
-
-					auto* cell = oThis->parentCell;
-
-					if (cell->IsExteriorCell()) {
-						auto& runtimeData = cell->GetRuntimeData();
-
-						auto* exteriorData = runtimeData.cellData.exterior;
-
-						logger::info("[RT] TESObjectLAND::Detach3D2 {} - {}", a2, std::format("Landscape_{}_{}", exteriorData->cellX, exteriorData->cellY).c_str());
-					}
-				}
-
-				func(oThis, a2);
-			}
-			static inline REL::Relocation<decltype(thunk)> func;
-		};
-
-		struct TESObjectLAND_Destructor
-		{
-			static void thunk(RE::TESObjectLAND* oThis)
-			{
-				auto& rt = globals::features::raytracing;
-
-				std::lock_guard lock{ rt.landDetachMutex };
-
-				rt.RemoveInstance(oThis->GetFormID(), true);
-
-				auto* cell = oThis->parentCell;
-
-				if (cell->IsExteriorCell()) {
-					auto& runtimeData = cell->GetRuntimeData();
-
-					auto* exteriorData = runtimeData.cellData.exterior;
-
-					logger::info("[RT] TESObjectLAND::Destructor - {}", std::format("Landscape_{}_{}", exteriorData->cellX, exteriorData->cellY).c_str());
-				}
-
-				func(oThis);
-			}
-			static inline REL::Relocation<decltype(thunk)> func;
-		};
-		
 		struct AttachDistant3DTask_Attach
 		{
 			static void thunk(void* a1, float a2)
@@ -1401,7 +1349,7 @@ struct Raytracing : public OverlayFeature
 				if (auto it = dismemberReferences.find(oThis); it != dismemberReferences.end()) {
 					for (auto& shape : it->second) {
 						if (a_slot == shape->slot) {
-							logger::info("[RT] BSDismemberSkinInstance::UpdateDismemberPartion {} {} - 0x{:08X} 0x{:08X}", a_slot, a_enable, reinterpret_cast<uintptr_t>(oThis), reinterpret_cast<uintptr_t>(shape));
+							logger::debug("[RT] BSDismemberSkinInstance::UpdateDismemberPartion {} {} - 0x{:08X} 0x{:08X}", a_slot, a_enable, reinterpret_cast<uintptr_t>(oThis), reinterpret_cast<uintptr_t>(shape));
 							shape->UpdateDismember(a_enable);
 							break;
 						}
@@ -1461,11 +1409,7 @@ struct Raytracing : public OverlayFeature
 			stl::detour_thunk<CreateTextureFromDDS>(REL::RelocationID(69334, 70716));
 
 			stl::detour_thunk<TESObjectLAND_Attach3D>(REL::RelocationID(18334, 18750));
-
-			//stl::detour_thunk<TESObjectLAND_Destructor>(REL::RelocationID(18394, 18823));
-
-			stl::detour_thunk<TESObjectLAND_Detach3D>(REL::RelocationID(18333, 18749)); // sub_1402A8A80
-			//stl::detour_thunk<TESObjectLAND_Detach3D2>(REL::RelocationID(18334, 18750));  // sub_1402A8B00
+			stl::detour_thunk<TESObjectLAND_Detach3D>(REL::RelocationID(18333, 18749));
 
 			//stl::write_vfunc<0x6, AttachDistant3DTask_Attach>(RE::VTABLE_AttachDistant3DTask[0]);
 			
