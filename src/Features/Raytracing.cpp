@@ -671,6 +671,64 @@ void Raytracing::DrawDebugSettings()
 
 	ImGui::Checkbox("Enabled Debug Device", &settings.EnableDebugDevice);
 
+	ImGui::Checkbox("MSN Visualization", &debugNormalMap);
+
+	if (debugNormalMap) {
+		if (normalMaps.empty()) {
+			ImGui::Text("No normal maps converted.");
+		} else {
+			eastl::vector<std::pair<ID3D11Resource*, ConvertedNormalMap*>> normalMapVector;
+
+			for (auto& [msNormal, convertedNormal] : normalMaps) {
+				normalMapVector.emplace_back(msNormal, convertedNormal.get());
+			}
+
+			auto normalMapsCount = static_cast<uint>(normalMapVector.size());
+			debugNormalMapIndex = std::min(debugNormalMapIndex, normalMapsCount);
+
+			if (ImGui::BeginCombo("NormalMap", std::to_string(debugNormalMapIndex).c_str())) {
+				for (uint i = 0; i < normalMapsCount; i++) {
+					bool isSelected = debugNormalMapIndex == i;
+
+					auto& [msNormal, convertedNormal] = normalMapVector.at(i);
+
+					if (!convertedNormal->OriginalSRV)
+						continue;
+
+					if (!convertedNormal)
+						continue;
+
+					if (!convertedNormal->converted)
+						continue;
+
+					if (!convertedNormal->Texture || !convertedNormal->Texture->srv || !convertedNormal->Texture->srv.get())
+						continue;
+
+					if (ImGui::Selectable(std::to_string(i).c_str(), isSelected))
+						debugNormalMapIndex = i;
+
+					if (isSelected)
+						ImGui::SetItemDefaultFocus();
+				}
+
+				ImGui::EndCombo();
+			}
+
+			auto& [msNormal, convertedNormal] = normalMapVector.at(debugNormalMapIndex);
+
+			if (convertedNormal && convertedNormal->converted && convertedNormal->OriginalSRV && convertedNormal->Texture && convertedNormal->Texture->srv && convertedNormal->Texture->srv.get()) {
+				ImGui::Image(convertedNormal->OriginalSRV, ImVec2(256, 256));
+				ImGui::SameLine();
+				ImGui::Image(convertedNormal->Texture->srv.get(), ImVec2(256, 256));
+			}
+		}
+	}
+
+	ImGui::Checkbox("Sky Hemisphere Visualization", &debugSkyHemi);
+
+	if (debugSkyHemi)
+		ImGui::Image(skyHemisphere->srv, ImVec2(512, 512));
+
 	if (ImGui::TreeNodeEx("Statistics", ImGuiTreeNodeFlags_DefaultOpen)) {
 		ImGui::Text(std::format("Lights: {}", lights.size()).c_str());
 
@@ -681,7 +739,7 @@ void Raytracing::DrawDebugSettings()
 		auto instanceCount = instances.size();
 
 		if (ImGui::TreeNodeEx(std::format("Instances: {}", instanceCount).c_str())) {
-			for (auto& [root, instance]: instances) {
+			for (auto& [root, instance] : instances) {
 				ImGui::Text(std::format("{}, Detached: {}", std::string_view{ instance.filename }, instance.IsDetached()).c_str());
 			}
 		}
@@ -698,60 +756,6 @@ void Raytracing::DrawDebugSettings()
 
 		ImGui::TreePop();
 	}
-
-	// Debug Draw Original and Converted Normal Maps
-//#if defined(DEBUG_MSNCONVERSION)
-	if (normalMaps.empty()) {
-		ImGui::Text("No normal maps converted.");
-	} else {
-		eastl::vector<std::pair<ID3D11Resource*, ConvertedNormalMap*>> normalMapVector;
-
-		for (auto& [msNormal, convertedNormal] : normalMaps) {
-			normalMapVector.emplace_back(msNormal, convertedNormal.get());
-		}
-
-		auto normalMapsCount = static_cast<uint>(normalMapVector.size());
-		debugNormalMap = std::min(debugNormalMap, normalMapsCount);
-
-		if (ImGui::BeginCombo("NormalMap", std::to_string(debugNormalMap).c_str())) {
-			for (uint i = 0; i < normalMapsCount; i++) {
-				bool isSelected = debugNormalMap == i;
-
-				auto& [msNormal, convertedNormal] = normalMapVector.at(i);
-
-				if (!convertedNormal->OriginalSRV)
-					continue;
-
-				if (!convertedNormal)
-					continue;
-
-				if (!convertedNormal->converted)
-					continue;
-
-				if (!convertedNormal->Texture || !convertedNormal->Texture->srv || !convertedNormal->Texture->srv.get())
-					continue;
-
-				if (ImGui::Selectable(std::to_string(i).c_str(), isSelected))
-					debugNormalMap = i;
-
-				if (isSelected)
-					ImGui::SetItemDefaultFocus();
-			}
-
-			ImGui::EndCombo();
-		}
-
-		auto& [msNormal, convertedNormal] = normalMapVector.at(debugNormalMap);
-
-		if (convertedNormal && convertedNormal->converted && convertedNormal->OriginalSRV && convertedNormal->Texture && convertedNormal->Texture->srv && convertedNormal->Texture->srv.get()) {
-			ImGui::Image(convertedNormal->OriginalSRV, ImVec2(256, 256));
-			ImGui::SameLine();
-			ImGui::Image(convertedNormal->Texture->srv.get(), ImVec2(256, 256));
-		}
-	}
-//#endif
-
-	ImGui::Image(skyHemisphere->srv, ImVec2(512, 512));
 
 	ImGui::PopID();
 

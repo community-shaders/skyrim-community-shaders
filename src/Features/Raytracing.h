@@ -587,7 +587,9 @@ struct Raytracing : public OverlayFeature
 	std::string debugDefines = "";
 	bool debugDisableTriShapesUpdate = false;
 	bool debugDisableTextureSharing = false;
-	uint debugNormalMap = 0;
+	bool debugNormalMap = false;
+	uint debugNormalMapIndex = 0;
+	bool debugSkyHemi = false;
 
 	enum class RecompileReason : uint32_t
 	{
