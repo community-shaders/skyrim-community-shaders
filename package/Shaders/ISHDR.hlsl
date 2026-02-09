@@ -69,22 +69,8 @@ float3 GetTonemapFactorReinhard(float3 luminance)
 	return (luminance * (luminance * Param.y + 1)) / (luminance + 1);
 }
 
-/// Reinhard tonemapping operator (HDR variant)
-float3 GetTonemapFactorReinhardHDR(float3 luminance)
-{
-	return (luminance * (luminance * Param.y + 1)) / (luminance + 1);
-}
-
 /// Hejl-Burgess-Dawson filmic tonemapping operator (includes gamma)
 float3 GetTonemapFactorHejlBurgessDawson(float3 luminance)
-{
-	float3 tmp = max(0, luminance - 0.004);
-	return Param.y *
-	       pow(((tmp * 6.2 + 0.5) * tmp) / (tmp * (tmp * 6.2 + 1.7) + 0.06), Color::GammaCorrectionValue);
-}
-
-/// Hejl-Burgess-Dawson filmic tonemapping operator (HDR variant)
-float3 GetTonemapFactorHejlBurgessDawsonHDR(float3 luminance)
 {
 	float3 tmp = max(0, luminance - 0.004);
 	return Param.y *
@@ -150,26 +136,10 @@ PS_OUTPUT main(PS_INPUT input)
 	inputColor = max(0, inputColor);
 
 	if (isHDR) {
-		// HDR: same tonemapping structure as SDR but using HDR variants.
-		// DICE in HDROutputCS handles compressing highlights to display peak.
-		float3 blendedColor;
-		[branch] if (Param.z > 0.5)
-		{
-			blendedColor = DisplayMapping::HuePreservingHejlBurgessDawsonHDR(inputColor, bloomColor);
-		}
-		else
-		{
-			float maxCol = Color::RGBToLuminance(inputColor);
-			float mappedMax = GetTonemapFactorReinhardHDR(maxCol).x;
-			float3 compressedHuePreserving = inputColor * mappedMax / maxCol;
-			blendedColor = compressedHuePreserving;
-			blendedColor += saturate(Param.x - blendedColor) * bloomColor;
-		}
-
-		float blendedLuminance = Color::RGBToLuminance(blendedColor);
-		float3 tonemapped = Cinematic.w * lerp(lerp(blendedLuminance, blendedColor, Cinematic.x), blendedLuminance * Tint.xyz, Tint.w).xyz;
-		tonemapped = lerp(avgValue.x, tonemapped, Cinematic.z);
-		outputColor = max(0, tonemapped);
+		// HDR: bypass vanilla tonemapping, output raw linear scene values.
+		// HDROutputCS converts to BT.2020 and PQ-encodes with paper white scaling.
+		// Scene 1.0 = paper white nits, >1.0 extends toward peak brightness.
+		outputColor = max(0, inputColor);
 	} else {
 		// SDR: tonemapping compresses to 0-1
 		float3 blendedColor;

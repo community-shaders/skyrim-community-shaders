@@ -242,29 +242,6 @@ namespace DisplayMapping
 
 		return col;
 	}
-
-	float3 HuePreservingHejlBurgessDawsonHDR(float3 col, float3 bloomCol)
-	{
-		float3 ictcp = RGBToICtCp(col);
-
-		float saturationAmount = pow(smoothstep(1.0, 0.3, ictcp.x), 1.3);
-		col = ICtCpToRGB(ictcp * float3(1, saturationAmount.xx));
-
-		float3 perChannelCompressed = GetTonemapFactorHejlBurgessDawsonHDR(col);
-		perChannelCompressed += saturate(Param.x - perChannelCompressed) * bloomCol;
-
-		col = perChannelCompressed;
-
-		float3 ictcpMapped = RGBToICtCp(col);
-
-		float postCompressionSaturationBoost = 0.3 * smoothstep(1.0, 0.5, ictcp.x);
-
-		ictcpMapped.yz = lerp(ictcpMapped.yz, ictcp.yz * ictcpMapped.x / max(1e-3, ictcp.x), postCompressionSaturationBoost);
-
-		col = ICtCpToRGB(ictcpMapped);
-
-		return col;
-	}
 #endif
 
 }
