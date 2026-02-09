@@ -46,7 +46,7 @@ struct HairFarFieldBCSDF
 
     void __init(float3 wi, Surface surface)
     {
-        hairMaterialData.baseColor = surface.DiffuseAlbedo * surface.DiffuseAlbedo;
+        hairMaterialData.baseColor = surface.DiffuseAlbedo;
         hairMaterialData.longitudinalRoughness = surface.Roughness;
         hairMaterialData.azimuthalRoughness = surface.Roughness;
 
@@ -295,7 +295,7 @@ struct HairFarFieldBCSDF
             return false;
         }
 
-        weight = bsdfValue / pdf;
+        weight = bsdfValue * sampleWeight / pdf;
         return true;
     }
 };
