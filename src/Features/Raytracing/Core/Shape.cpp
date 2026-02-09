@@ -1013,7 +1013,7 @@ bool Shape::UpdateSkinning()
 	auto& skinInstance = geometry->GetGeometryRuntimeData().skinInstance;
 
 	// RaceMenu crash fix
-	if (!skinInstance)
+	if (!skinInstance || !skinInstance.get())
 		return false;
 
 	// Only update if the game has updated the matrices
