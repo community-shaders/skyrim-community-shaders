@@ -10,6 +10,11 @@ cbuffer WindowBuffer : register(b1)
 SamplerState LinearSampler : register(s0);
 Texture2D InputTexture : register(t0);
 
+static const float TWO_PI = 6.28318530718f;
+static const int NUM_JITTER_SAMPLES = 4;
+static const float DOWNSAMPLE_FACTOR = 8.0f;
+static const float CLIP_EPSILON = 0.001f;
+
 struct VS_OUTPUT
 {
     float4 Position : SV_POSITION;
@@ -44,7 +49,7 @@ float4 SampleWithSoftening(float2 uv, float2 pixelPos, float2 texelSize)
 
     // Rotated grid offsets (45 degree rotation for better coverage)
     // This creates a smooth disc-like sampling pattern
-    static const float2 offsets[4] = {
+    static const float2 offsets[NUM_JITTER_SAMPLES] = {
         float2(-0.25f, -0.25f),
         float2( 0.25f, -0.25f),
         float2(-0.25f,  0.25f),
@@ -52,7 +57,7 @@ float4 SampleWithSoftening(float2 uv, float2 pixelPos, float2 texelSize)
     };
 
     // Random rotation angle based on pixel position
-    float angle = noise.x * 6.28318530718f;
+    float angle = noise.x * TWO_PI;
     float s, c;
     sincos(angle, s, c);
     float2x2 rotation = float2x2(c, -s, s, c);
@@ -60,13 +65,13 @@ float4 SampleWithSoftening(float2 uv, float2 pixelPos, float2 texelSize)
     // Sample 4 points with rotated jittered offsets and average
     float4 result = 0;
     [unroll]
-    for (int i = 0; i < 4; i++)
+    for (int i = 0; i < NUM_JITTER_SAMPLES; i++)
     {
         float2 jitter = mul(rotation, offsets[i]) * texelSize;
         result += InputTexture.Sample(LinearSampler, uv + jitter);
     }
 
-    return result * 0.25f;
+    return result / (float)NUM_JITTER_SAMPLES;
 }
 
 // Compute signed distance to a rounded rectangle
@@ -111,7 +116,7 @@ float4 PS_Main(VS_OUTPUT input) : SV_TARGET
         discard;
     }
 
-    float2 blurTexelSize = 8.0f / float2(WindowParams.y, WindowParams.z);
+    float2 blurTexelSize = DOWNSAMPLE_FACTOR / float2(WindowParams.y, WindowParams.z);
 
     // Sample with soft dithering to hide blocky pixels from the downsampled blur
     float4 blurColor = SampleWithSoftening(input.TexCoord, pixelPos, blurTexelSize);
@@ -131,7 +136,7 @@ float4 PS_Clear(VS_OUTPUT input) : SV_TARGET
     float sdf = RoundedRectSDF(pixelPos, WindowRect.xy, WindowRect.zw, WindowParams.x);
 
     // Discard pixels outside rounded rect to preserve HUD in corners
-    clip(-sdf - 0.001f);
+    clip(-sdf - CLIP_EPSILON);
 
     return float4(0.0f, 0.0f, 0.0f, 0.0f);
 }

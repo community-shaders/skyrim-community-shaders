@@ -23,6 +23,21 @@ constexpr float BLUR_INTENSITY = 0.03f;
 // Downsampling factor (8 = eighth resolution for performance)
 constexpr UINT DOWNSAMPLE_FACTOR = 8;
 
+// Multiplier applied to BLUR_INTENSITY to derive the blur kernel radius
+constexpr float BLUR_RADIUS_SCALE = 10.0f;
+
+// Number of samples per blur pass (Gaussian kernel taps)
+constexpr int BLUR_SAMPLE_COUNT = 9;
+
+// Extra pixels added around scissor rect for anti-aliased rounded corner edges
+constexpr float SCISSOR_AA_PADDING = 2.0f;
+
+// Scale factor applied to BLUR_INTENSITY for the final composite blend alpha
+constexpr float BLEND_ALPHA_SCALE = 0.8f;
+
+// Vertex count for a fullscreen triangle draw call
+constexpr UINT FULLSCREEN_TRIANGLE_VERTICES = 3;
+
 namespace BackgroundBlur
 {
 	// Module-local state
@@ -440,7 +455,7 @@ namespace BackgroundBlur
 		context->UpdateSubresource(constantBuffer.get(), 0, nullptr, &downsampleConstants, 0, 0);
 		context->PSSetConstantBuffers(0, 1, &constantBufferPtr);
 		context->PSSetShaderResources(0, 1, &sourceSRV);
-		context->Draw(3, 0);
+		context->Draw(FULLSCREEN_TRIANGLE_VERTICES, 0);
 		context->PSSetShaderResources(0, 1, &nullSRV);
 
 		// Step 2: Blend UI buffer at downsampled resolution (pre-multiplied alpha)
@@ -448,14 +463,14 @@ namespace BackgroundBlur
 		if (uiBufferSRV && compositeBlendState) {
 			context->OMSetBlendState(compositeBlendState.get(), nullptr, 0xFFFFFFFF);
 			context->PSSetShaderResources(0, 1, &uiBufferSRV);
-			context->Draw(3, 0);
+			context->Draw(FULLSCREEN_TRIANGLE_VERTICES, 0);
 			context->PSSetShaderResources(0, 1, &nullSRV);
 			context->OMSetBlendState(nullptr, nullptr, 0xFFFFFFFF);
 		}
 
 		// Calculate blur parameters at eighth resolution
-		float blurRadius = BLUR_INTENSITY * 10.0f;
-		int sampleCount = 9;
+		float blurRadius = BLUR_INTENSITY * BLUR_RADIUS_SCALE;
+		int sampleCount = BLUR_SAMPLE_COUNT;
 
 		BlurConstants constants = {};
 		constants.texelSize[0] = blurRadius / static_cast<float>(downsampledWidth);
@@ -472,7 +487,7 @@ namespace BackgroundBlur
 		context->OMSetRenderTargets(1, &rtv1Ptr, nullptr);
 		context->PSSetShader(horizontalPixelShader.get(), nullptr, 0);
 		context->PSSetShaderResources(0, 1, &downsampleSRVPtr);
-		context->Draw(3, 0);
+		context->Draw(FULLSCREEN_TRIANGLE_VERTICES, 0);
 
 		// Second pass: Vertical blur (on downsampled texture)
 		context->PSSetShaderResources(0, 1, &nullSRV);
@@ -481,7 +496,7 @@ namespace BackgroundBlur
 		context->OMSetRenderTargets(1, &rtv2Ptr, nullptr);
 		context->PSSetShader(verticalPixelShader.get(), nullptr, 0);
 		context->PSSetShaderResources(0, 1, &srv1Ptr);
-		context->Draw(3, 0);
+		context->Draw(FULLSCREEN_TRIANGLE_VERTICES, 0);
 		context->PSSetShaderResources(0, 1, &nullSRV);
 
 		// Final composition: upscale from quarter-res with rounded corner mask
@@ -489,10 +504,10 @@ namespace BackgroundBlur
 
 		// Expand scissor rect slightly for anti-aliased rounded corner edges
 		D3D11_RECT scissorRect;
-		scissorRect.left = static_cast<LONG>((std::max)(0.0f, menuMin.x - 2.0f));
-		scissorRect.top = static_cast<LONG>((std::max)(0.0f, menuMin.y - 2.0f));
-		scissorRect.right = static_cast<LONG>((std::min)(static_cast<FLOAT>(sourceDesc.Width), menuMax.x + 2.0f));
-		scissorRect.bottom = static_cast<LONG>((std::min)(static_cast<FLOAT>(sourceDesc.Height), menuMax.y + 2.0f));
+		scissorRect.left = static_cast<LONG>((std::max)(0.0f, menuMin.x - SCISSOR_AA_PADDING));
+		scissorRect.top = static_cast<LONG>((std::max)(0.0f, menuMin.y - SCISSOR_AA_PADDING));
+		scissorRect.right = static_cast<LONG>((std::min)(static_cast<FLOAT>(sourceDesc.Width), menuMax.x + SCISSOR_AA_PADDING));
+		scissorRect.bottom = static_cast<LONG>((std::min)(static_cast<FLOAT>(sourceDesc.Height), menuMax.y + SCISSOR_AA_PADDING));
 
 		context->RSSetState(scissorRasterizerState.get());
 		context->RSSetScissorRects(1, &scissorRect);
@@ -516,12 +531,12 @@ namespace BackgroundBlur
 
 		// Draw blur to target
 		context->OMSetRenderTargets(1, &targetRTV, nullptr);
-		float blendFactor[4] = { 1.0f, 1.0f, 1.0f, BLUR_INTENSITY * 0.8f };
+		float blendFactor[4] = { 1.0f, 1.0f, 1.0f, BLUR_INTENSITY * BLEND_ALPHA_SCALE };
 		context->OMSetBlendState(blendState.get(), blendFactor, 0xFFFFFFFF);
 		context->PSSetShader(useRoundedCorners ? compositePixelShader.get() : verticalPixelShader.get(), nullptr, 0);
 		auto srv2Ptr = blurSRV2.get();
 		context->PSSetShaderResources(0, 1, &srv2Ptr);
-		context->Draw(3, 0);
+		context->Draw(FULLSCREEN_TRIANGLE_VERTICES, 0);
 		context->PSSetShaderResources(0, 1, &nullSRV);
 
 		// Clear UI buffer where blur was drawn (prevents HUD showing through)
@@ -531,7 +546,7 @@ namespace BackgroundBlur
 
 			// Clear with same rounded shape - window constants already bound
 			context->PSSetShader(clearPixelShader.get(), nullptr, 0);
-			context->Draw(3, 0);
+			context->Draw(FULLSCREEN_TRIANGLE_VERTICES, 0);
 		}
 
 		// Restore state
