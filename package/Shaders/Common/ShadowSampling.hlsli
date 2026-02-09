@@ -131,18 +131,16 @@ namespace ShadowSampling
 	}
 #		endif
 
-		float llDirLightMult = (SharedData::linearLightingSettings.enableLinearLighting && !SharedData::linearLightingSettings.isDirLightLinear) ? SharedData::linearLightingSettings.dirLightMult : 1.0f;
-		float3 dirLightColorDir = Color::DirectionalLight(SharedData::DirLightColor.xyz / max(llDirLightMult, 1e-5), SharedData::linearLightingSettings.isDirLightLinear) * llDirLightMult;
+		float inputLuma = Color::RGBToLuminance(inputColor);
+		float ambientLuma = Color::RGBToLuminance(ambientColorAmb);
+		float dirLightLuma = Color::RGBToLuminance(dirLightColorDir);
 
-		{
-			float maxScale = 1.0;
-			if (ambientColorAmb.x > 0.0)
-				maxScale = min(maxScale, inputColor.x / ambientColorAmb.x);
-			if (ambientColorAmb.y > 0.0)
-				maxScale = min(maxScale, inputColor.y / ambientColorAmb.y);
-			if (ambientColorAmb.z > 0.0)
-				maxScale = min(maxScale, inputColor.z / ambientColorAmb.z);
-			ambientColorAmb *= maxScale;
+		float totalLuma = ambientLuma + dirLightLuma;
+
+		// Scale ambientColorAmb so total luma matches input luma
+		if (totalLuma > 0.0 && ambientLuma > 0.0) {
+			float lumaScale = inputLuma / totalLuma;  // Scale factor to match input
+			ambientColorAmb *= lumaScale;  // Scale while preserving color
 		}
 
 		float3 dirLightColorAmb = max(0.0, inputColor - ambientColorAmb);
