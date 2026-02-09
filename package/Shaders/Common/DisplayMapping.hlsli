@@ -25,7 +25,7 @@ namespace DisplayMapping
 			const float maxCompression = 1.f - exp(-Max);
 			return compression / maxCompression;
 		}
-		
+
 		float RangeCompress(float X, float Max = FLT_MAX)
 		{
 			return RangeCompress(X.xxx, Max).x;
@@ -44,7 +44,7 @@ namespace DisplayMapping
 			const float compressedRange = OutMaxValue - ShoulderStart;
 			return ShoulderStart + compressedRange * RangeCompress(compressableValue / compressedRange, ConsiderMaxValue ? (compressableRange / compressedRange) : FLT_MAX);
 		}
-		
+
 		float LuminanceCompress(
 			float InValue,
 			float OutMaxValue,

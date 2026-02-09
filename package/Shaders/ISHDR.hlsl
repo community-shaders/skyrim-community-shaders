@@ -138,7 +138,7 @@ PS_OUTPUT main(PS_INPUT input)
 	if (isHDR) {
 		float paperWhiteNits = SharedData::HDRData.y;
 		float peakNits = SharedData::HDRData.z;
-		
+
 		// Convert to linear space
 		float3 hdrLinear = Color::GammaToLinear(inputColor);
 		hdrLinear = max(0, hdrLinear);

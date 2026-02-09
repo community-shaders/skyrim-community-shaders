@@ -825,45 +825,45 @@ void HDR::ApplyHDR()
 
 		auto computeShader = GetHDROutputCS();
 		if (!computeShader) {
-		// Fallback: HDR shader files not present - copy kFRAMEBUFFER directly to output
-		// This allows SDR output through ISHDR.hlsl when HDR display shaders aren't available
-		static bool loggedFallback = false;
-		if (!loggedFallback) {
-			logger::warn("HDR: HDR shader files not available - using SDR fallback (ISHDR output)");
-			loggedFallback = true;
-		}
-
-		// Cleanup any bound resources
-		views[0] = nullptr;
-		views[1] = nullptr;
-		context->CSSetShaderResources(0, ARRAYSIZE(views), views);
-
-		uavs[0] = { nullptr };
-		context->CSSetUnorderedAccessViews(0, ARRAYSIZE(uavs), uavs, nullptr);
-
-		cbs[0] = { nullptr };
-		context->CSSetConstantBuffers(0, ARRAYSIZE(cbs), cbs);
-
-		// Copy kFRAMEBUFFER directly to destination (bypassing HDR processing)
-		if (upscaling.d3d12SwapChainActive) {
-			// Frame Gen path: copy to D3D12 swap chain wrapped buffer
-			context->CopyResource(upscaling.dx12SwapChain.swapChainBufferWrapped->resource11, framebufferRT.texture);
-		} else {
-			// Normal path: copy directly to swap chain back buffer
-			ID3D11Texture2D* backBuffer = nullptr;
-			HRESULT hr = globals::d3d::swapChain->GetBuffer(0, IID_PPV_ARGS(&backBuffer));
-			if (SUCCEEDED(hr) && backBuffer) {
-				context->CopyResource(backBuffer, framebufferRT.texture);
-				backBuffer->Release();
+			// Fallback: HDR shader files not present - copy kFRAMEBUFFER directly to output
+			// This allows SDR output through ISHDR.hlsl when HDR display shaders aren't available
+			static bool loggedFallback = false;
+			if (!loggedFallback) {
+				logger::warn("HDR: HDR shader files not available - using SDR fallback (ISHDR output)");
+				loggedFallback = true;
 			}
+
+			// Cleanup any bound resources
+			views[0] = nullptr;
+			views[1] = nullptr;
+			context->CSSetShaderResources(0, ARRAYSIZE(views), views);
+
+			uavs[0] = { nullptr };
+			context->CSSetUnorderedAccessViews(0, ARRAYSIZE(uavs), uavs, nullptr);
+
+			cbs[0] = { nullptr };
+			context->CSSetConstantBuffers(0, ARRAYSIZE(cbs), cbs);
+
+			// Copy kFRAMEBUFFER directly to destination (bypassing HDR processing)
+			if (upscaling.d3d12SwapChainActive) {
+				// Frame Gen path: copy to D3D12 swap chain wrapped buffer
+				context->CopyResource(upscaling.dx12SwapChain.swapChainBufferWrapped->resource11, framebufferRT.texture);
+			} else {
+				// Normal path: copy directly to swap chain back buffer
+				ID3D11Texture2D* backBuffer = nullptr;
+				HRESULT hr = globals::d3d::swapChain->GetBuffer(0, IID_PPV_ARGS(&backBuffer));
+				if (SUCCEEDED(hr) && backBuffer) {
+					context->CopyResource(backBuffer, framebufferRT.texture);
+					backBuffer->Release();
+				}
+			}
+
+			state->EndPerfEvent();
+			return;
 		}
 
-		state->EndPerfEvent();
-		return;
-	}
-
-	context->CSSetShader(computeShader, nullptr, 0);
-	context->Dispatch(dispatchCount.x, dispatchCount.y, 1);
+		context->CSSetShader(computeShader, nullptr, 0);
+		context->Dispatch(dispatchCount.x, dispatchCount.y, 1);
 
 		views[1] = nullptr;
 		context->CSSetShaderResources(0, ARRAYSIZE(views), views);
