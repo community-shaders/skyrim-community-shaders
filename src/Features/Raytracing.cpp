@@ -979,6 +979,7 @@ void Raytracing::SetupResources()
 		giHeap->CPUHandle(GIHeap::Slot::SHaRCAccumulation),
 		giHeap->CPUHandle(GIHeap::Slot::SHaRCResolved));
 
+	// Not a standard DX12 pipeline
 	svgfDenoiser = eastl::make_unique<SVGFPipeline>();
 	svgfDenoiser->SetupResources();
 

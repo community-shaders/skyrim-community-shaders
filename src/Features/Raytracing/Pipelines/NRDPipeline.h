@@ -36,25 +36,52 @@ struct NDRSubPipeline : IPipeline
 struct NRDPipeline : IPipeline
 {
     // NRD
-	nrd::RelaxSettings m_RelaxSettings = {};
-	nrd::ReblurSettings m_ReblurSettings = {};
+	nrd::CommonSettings commonSettings = {};
+
 	nrd::SigmaSettings m_SigmaSettings = {};
 	nrd::ReferenceSettings m_ReferenceSettings = {};
 
+	//eastl::unordered_map<nrd::Denoiser, nrd::Identifier> denoisers;
 	eastl::vector<eastl::unique_ptr<IPipeline>> pipelines;
+
+	nrd::Instance* instance = nullptr;
+
+	float2 jitter = { 0, 0 };
+	uint frameIndex = 0;
+
+	static constexpr float kMaxSceneDistance = 50000.0f;
+
+	NLOHMANN_DEFINE_TYPE_INTRUSIVE_WITH_DEFAULT(
+		nrd::RelaxSettings, 
+		checkerboardMode, 
+		hitDistanceReconstructionMode, 
+		diffuseMaxAccumulatedFrameNum, 
+		specularMaxAccumulatedFrameNum,
+		diffuseMaxFastAccumulatedFrameNum,
+		specularMaxFastAccumulatedFrameNum,
+		fastHistoryClampingSigmaScale)
+
+	NLOHMANN_DEFINE_TYPE_INTRUSIVE_WITH_DEFAULT(
+		nrd::ReblurSettings,
+		checkerboardMode,
+		hitDistanceReconstructionMode,
+		maxAccumulatedFrameNum,
+		maxFastAccumulatedFrameNum,
+		maxStabilizedFrameNum,
+		fastHistoryClampingSigmaScale)
 
 	struct Settings
 	{
-		uint MaxAccumulatedFrames = 16;
-		uint AtrousIterations = 3;
-		float ColorPhi = 0.5f;
-		float NormalPhi = 512.0f;
+		nrd::Denoiser Denoiser = nrd::Denoiser::RELAX_DIFFUSE;
+		nrd::RelaxSettings RelaxSettings = {};
+		nrd::ReblurSettings ReblurSettings = {};
 
-		NLOHMANN_DEFINE_TYPE_INTRUSIVE_WITH_DEFAULT(Settings, MaxAccumulatedFrames, AtrousIterations, ColorPhi, NormalPhi)
-	};
+		NLOHMANN_DEFINE_TYPE_INTRUSIVE_WITH_DEFAULT(Settings, RelaxSettings, ReblurSettings)
+	} settings;
 
 	void CompileShaders();
 	virtual void SetupResources(ID3D12Device5* device) override;
-	void Denoise() const;	
+	void UpdateCommonSettings();
+	void Denoise(ID3D12GraphicsCommandList4* commandList);	
 	void SetupTextureResources(uint2 size);
 };

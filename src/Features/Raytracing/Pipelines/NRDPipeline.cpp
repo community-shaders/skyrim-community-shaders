@@ -1,5 +1,8 @@
 #include "NRDPipeline.h"
 
+#include "State.h"
+#include "Features/Raytracing.h"
+
 void NRDPipeline::CompileShaders()
 {
 
@@ -65,7 +68,6 @@ void NRDPipeline::SetupResources(ID3D12Device5* device)
 	instanceCreationDesc.denoisers = denoisersDescs;
 	instanceCreationDesc.denoisersNum = _countof(denoisersDescs);
 
-	nrd::Instance* instance = nullptr;
 	nrd::Result res = nrd::CreateInstance(instanceCreationDesc, instance);
 
 	if (res != nrd::Result::SUCCESS) {
@@ -197,6 +199,12 @@ void NRDPipeline::SetupResources(ID3D12Device5* device)
 		DX::ThrowIfFailed(pipeline->pipelineState->SetName(std::format(L"Compute Pipeline - NRD {}", pipelineIndex).c_str()));
 
 		pipelines[pipelineIndex] = eastl::move(pipeline);
+
+		/*integrationCreationDesc.resourceWidth = resourceWidth;
+		integrationCreationDesc.resourceHeight = resourceHeight;
+
+		// Also NRD needs to be recreated on "resize"
+		nrd::Result result = NRD.RecreateD3D12(integrationCreationDesc, instanceCreationDesc, deviceCreationD3D12Desc);*/
 	}
 }
 
@@ -205,7 +213,87 @@ void NRDPipeline::SetupTextureResources([[maybe_unused]] uint2 size)
 
 }
 
-void NRDPipeline::Denoise() const
+void NRDPipeline::UpdateCommonSettings()
 {
+	auto state = globals::state;
 
+	std::memcpy(&commonSettings.worldToViewMatrixPrev, &commonSettings.worldToViewMatrix, sizeof(Matrix));
+	std::memcpy(&commonSettings.worldToViewMatrix, &globals::game::frameBufferCached.GetCameraViewInverse().Transpose().m, sizeof(Matrix));
+
+	std::memcpy(&commonSettings.viewToClipMatrixPrev, &commonSettings.viewToClipMatrixPrev, sizeof(Matrix));
+	std::memcpy(&commonSettings.viewToClipMatrix, &globals::game::frameBufferCached.GetCameraProjUnjittered().Transpose().m, sizeof(Matrix));
+
+    commonSettings.isMotionVectorInWorldSpace = false;
+	commonSettings.motionVectorScale[0] = (commonSettings.isMotionVectorInWorldSpace) ? (1.f) : (1.f / state->screenSize.x);
+	commonSettings.motionVectorScale[1] = (commonSettings.isMotionVectorInWorldSpace) ? (1.f) : (1.f / state->screenSize.y);
+	commonSettings.motionVectorScale[2] = 1.0f;
+
+	auto& rt = globals::features::raytracing;
+
+	auto screenSize = rt.GetScreenSize();
+	auto phaseCount = rt.GetJitterPhaseCount(rt.renderSize.x, screenSize.x);
+
+	commonSettings.cameraJitterPrev[0] = jitter.x;
+	commonSettings.cameraJitterPrev[1] = jitter.y;
+
+	rt.GetJitterOffset(&jitter.x, &jitter.y, state->frameCount, phaseCount);
+
+    commonSettings.cameraJitter[0] = jitter.x;
+	commonSettings.cameraJitter[1] = jitter.y;
+
+	commonSettings.frameIndex = frameIndex;
+
+	commonSettings.denoisingRange = kMaxSceneDistance * 2;  // with various bounces (in non-primary planes or with PSR) the virtual view Z can be much longer, so adding 2x!
+	//commonSettings.enableValidation = enableValidation && renderTargets.DenoiserOutValidation != nullptr;
+	//commonSettings.disocclusionThreshold = disocclusionThreshold;
+	//commonSettings.disocclusionThresholdAlternate = disocclusionThresholdAlternate;
+	//commonSettings.isDisocclusionThresholdMixAvailable = useDisocclusionThresholdAlternateMix;
+	//commonSettings.timeDeltaBetweenFrames = timeDeltaBetweenFrames;
+	//commonSettings.accumulationMode = (resetHistory) ? (nrd::AccumulationMode::CLEAR_AND_RESTART) : (nrd::AccumulationMode::CONTINUE);
+
+    auto const& textureDesc = rt.outputTexture->resource->GetDesc();
+
+	if (frameIndex == 0) {
+		commonSettings.resourceSizePrev[0] = static_cast<uint16_t>(textureDesc.Width);
+		commonSettings.resourceSizePrev[1] = static_cast<uint16_t>(textureDesc.Height);
+		commonSettings.rectSizePrev[0] = static_cast<uint16_t>(textureDesc.Width);
+		commonSettings.rectSizePrev[1] = static_cast<uint16_t>(textureDesc.Height);
+	} else {
+		commonSettings.resourceSizePrev[0] = commonSettings.resourceSize[0];
+		commonSettings.resourceSizePrev[1] = commonSettings.resourceSize[1];
+		commonSettings.rectSizePrev[0] = commonSettings.rectSize[0];
+		commonSettings.rectSizePrev[1] = commonSettings.rectSize[1];	
+	}
+
+	commonSettings.resourceSize[0] = static_cast<uint16_t>(textureDesc.Width);
+	commonSettings.resourceSize[1] = static_cast<uint16_t>(textureDesc.Height);
+	commonSettings.rectSize[0] = static_cast<uint16_t>(textureDesc.Width);
+	commonSettings.rectSize[1] = static_cast<uint16_t>(textureDesc.Height);
+
+	nrd::SetCommonSettings(*instance, commonSettings);
+}
+
+void NRDPipeline::Denoise([[maybe_unused]]ID3D12GraphicsCommandList4* commandList)
+{
+	nrd::Identifier identifier = NRD_ID(RELAX_DIFFUSE_SPECULAR);
+
+	nrd::SetDenoiserSettings(*instance, identifier, &settings.RelaxSettings);
+
+	UpdateCommonSettings();
+
+    const nrd::DispatchDesc* dispatchDescs = nullptr;
+	uint32_t dispatchDescNum = 0;
+	nrd::GetComputeDispatches(*instance, &identifier, 1, dispatchDescs, dispatchDescNum);
+
+	//const nrd::InstanceDesc* instanceDesc = nrd::GetInstanceDesc(*instance);
+
+    for (uint32_t dispatchIndex = 0; dispatchIndex < dispatchDescNum; dispatchIndex++) {
+		const nrd::DispatchDesc& dispatchDesc = dispatchDescs[dispatchIndex];
+
+		if (dispatchDesc.name) {
+			logger::info("[RT] NRDPipeline::Denoise: {}", dispatchDesc.name);
+		}
+	}
+
+	frameIndex++;
 }
