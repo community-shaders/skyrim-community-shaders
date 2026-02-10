@@ -3211,7 +3211,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 
 	psout.Reflectance = float4(indirectLobeWeights.specular, psout.Diffuse.w);
 
-#	if defined(TRUE_PBR)
+#	if defined(TRUE_PBR) || !defined(RT)
 	const float roughness = material.Roughness;
 	const float metallic = material.Metallic;
 #	else
