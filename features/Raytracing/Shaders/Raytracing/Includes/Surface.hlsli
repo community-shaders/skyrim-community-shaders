@@ -185,14 +185,10 @@ struct Surface
                 float3 hairTint = material.BaseColor().rgb;
                 Albedo *= VanillaDiffuseColor(hairTint);
             }
-
-            float specularity = 0.0f;
-            float glossiness = 0.0f;
-            float roughnessFromShininess = 1.0f;
             
             [branch]
             if (material.ShaderFlags & ShaderFlags::kSpecular) {
-                float3 specularColor = material.SpecularColor().rgb;
+                float3 specularColor = material.SpecularColor().rgb * material.SpecularColor().a;
                 
                 [branch]
                 if (material.ShaderFlags & ShaderFlags::kModelSpaceNormals) {
@@ -202,19 +198,11 @@ struct Surface
                     Texture2D normalTexture = Textures[NonUniformResourceIndex(material.NormalTexture())];
                     specularColor *= normalTexture.SampleLevel(BaseSampler, texCoord0, MipLevel).a;
                 }
-                           
-	            specularity = CalcSpecularity(specularColor, material.SpecularColor().a);
                 
-                // output from ShininessToRoughness
-	            roughnessFromShininess = material.RoughnessScale();
-                               
-                const float albedoLuminance = saturate(Color::RGBToLuminance(Albedo));         
-                Metallic = CalcMetallic(Albedo, specularity, roughnessFromShininess);
+	            Roughness = material.RoughnessScale();
                 
-                F0 = clamp(0.08f * specularColor, 0.02f, 0.08f);                    
+                F0 = clamp(0.08f * specularColor, 0.02f, 0.08f);         
             }
-  
-            Roughness = CalcRoughness(roughnessFromShininess, specularity);                
             
             [branch]
             if (material.ShaderFlags & ShaderFlags::kEnvMap || material.ShaderFlags & ShaderFlags::kEyeReflect) {
@@ -238,6 +226,10 @@ struct Surface
                 }
                 Emissive = GlowToLinear(glow) * EmitColorToLinear(material.EffectColor().rgb) * material.EffectColor().a * Frame.Emissive * EmitColorMult();
             }
+            else
+            {
+                Emissive = EmitColorToLinear(material.EffectColor().rgb) * material.EffectColor().a * Frame.Emissive * EmitColorMult();
+            }
 
             [branch]
             if (material.Feature == Feature::kFaceGen) {
@@ -260,6 +252,7 @@ struct Surface
             [branch]
             if (material.Feature == Feature::kFaceGen || material.Feature == Feature::kFaceGenRGBTint) {
                 F0 = 0.02776f;
+                Metallic = 0.0f;
                 SubsurfaceData.HasSubsurface = 1;
                 SubsurfaceData.Anisotropy = -0.5f;
 
@@ -273,12 +266,13 @@ struct Surface
             if (material.Feature == Feature::kEye) {
                 Roughness = 0.08f;
                 F0 = 0.02776f;
+                Metallic = 0.0f;
                 SubsurfaceData.HasSubsurface = 1;
                 SubsurfaceData.Anisotropy = -0.5f;
                 // Typical eye values
                 SubsurfaceData.ScatteringColor = float3(1.0f, 0.8f, 0.6f);
                 SubsurfaceData.TransmissionColor = Albedo;
-                SubsurfaceData.Scale = 0.1f;
+                SubsurfaceData.Scale = 1.f;
             }
             
         } else if (material.ShaderType == ShaderType::Effect) {

@@ -307,7 +307,7 @@ float3 EvaluateSubsurfaceNEE(
                     {
                         const float3 sampleLightRadiance = sampleLightIrradiance * sampleLightVisibility;
                         const float cosThetaI = min(max(0.00001f, dot(vectorToLight, sampleShadingNormal)), 1.0f);
-                        radiance += EvalBssrdf(subsurfaceSample, sampleLightRadiance, cosThetaI);
+                        radiance += max(EvalBssrdf(subsurfaceSample, sampleLightRadiance, cosThetaI), 0.0f);
 
                         ++effectiveSample;
                     }
@@ -349,7 +349,7 @@ float3 EvaluateSubsurfaceNEE(
             float3 F = evalFresnelSchlick(surface.F0, VdotH);
             bsdf *= F;
 
-            radiance += bsdf * lightRadiance;
+            radiance += max(bsdf * lightRadiance, 0.0f);
         }
     }
 
