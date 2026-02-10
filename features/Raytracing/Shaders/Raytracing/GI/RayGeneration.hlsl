@@ -246,6 +246,8 @@ void main()
     BRDFContext sourceBRDFContext = BRDFContext(sourceSurface, -positionCS / hitDistance);
 
     StandardBSDF sourceBSDF = StandardBSDF::make(sourceSurface, true);
+    
+    AdjustShadingNormal(sourceSurface, sourceBRDFContext, true, false);    
 #endif
 
 #if defined(DEBUG_MODELSPACE)
