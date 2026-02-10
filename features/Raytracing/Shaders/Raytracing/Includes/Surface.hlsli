@@ -7,6 +7,7 @@
 #include "Raytracing/Includes/Types.hlsli"
 #include "Raytracing/Includes/RT/Geometry.hlsli"
 #include "Raytracing/Includes/RT/CommonRT.hlsli"
+#include "Raytracing/Includes/VanillaToPBR.hlsli"
 
 #include "Raytracing/Includes/Materials/TexLODHelpers.hlsli"
 
@@ -185,23 +186,36 @@ struct Surface
                 Albedo *= VanillaDiffuseColor(hairTint);
             }
 
+            float specularity = 0.0f;
+            float glossiness = 0.0f;
+            float roughnessFromShininess = 1.0f;
+            
             [branch]
             if (material.ShaderFlags & ShaderFlags::kSpecular) {
-                Roughness = material.RoughnessScale() >= 0.0f ? saturate(material.RoughnessScale()) : 1.0f;
-
-                float3 specularColor = 0.0f;
-
+                float3 specularColor = material.SpecularColor().rgb;
+                
                 [branch]
                 if (material.ShaderFlags & ShaderFlags::kModelSpaceNormals) {
                     Texture2D specularTexture = Textures[NonUniformResourceIndex(material.SpecularTexture())];
-                    specularColor = specularTexture.SampleLevel(BaseSampler, texCoord0, MipLevel).r * material.SpecularColor().rgb * material.SpecularColor().a;
+                    specularColor *= specularTexture.SampleLevel(BaseSampler, texCoord0, MipLevel).r;
                 } else {
                     Texture2D normalTexture = Textures[NonUniformResourceIndex(material.NormalTexture())];
-                    specularColor = normalTexture.SampleLevel(BaseSampler, texCoord0, MipLevel).a * material.SpecularColor().rgb * material.SpecularColor().a;
+                    specularColor *= normalTexture.SampleLevel(BaseSampler, texCoord0, MipLevel).a;
                 }
-                F0 = clamp(0.08f * specularColor, 0.02f, 0.08f);
+                           
+	            specularity = CalcSpecularity(specularColor, material.SpecularColor().a);
+                
+                // output from ShininessToRoughness
+	            roughnessFromShininess = material.RoughnessScale();
+                               
+                const float albedoLuminance = saturate(Color::RGBToLuminance(Albedo));         
+                Metallic = CalcMetallic(Albedo, specularity, roughnessFromShininess);
+                
+                F0 = clamp(0.08f * specularColor, 0.02f, 0.08f);                    
             }
-
+  
+            Roughness = CalcRoughness(roughnessFromShininess, specularity);                
+            
             [branch]
             if (material.ShaderFlags & ShaderFlags::kEnvMap || material.ShaderFlags & ShaderFlags::kEyeReflect) {
                 Texture2D envTexture = Textures[NonUniformResourceIndex(material.EnvTexture())];
@@ -512,7 +526,6 @@ struct Surface
         // Loads all geometry releated data
         Vertex v0, v1, v2;
         GetVertices(shape.GeometryIdx, payload.primitiveIndex, v0, v1, v2);
-
         float3 uvw = GetBary(payload.Barycentrics());
 
         material = shape.Material;
