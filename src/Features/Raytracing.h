@@ -44,7 +44,6 @@
 
 #include "Features/Raytracing/RE/CellAttachDetachEvent.h"
 
-#include "Raytracing/FeatureData.hlsli"
 #include "Raytracing/Includes/Types/FrameData.hlsli"
 #include "Raytracing/Includes/Types/Instance.hlsli"
 #include "Raytracing/Includes/Types/Light.hlsli"
@@ -248,8 +247,9 @@ struct Raytracing : public OverlayFeature
 
 	void DeviceRemovedHandler();
 
-	void CopyDepth();
-	void ConvertTextures() const;
+	void CopyDepth() const;
+	void UnpackMetallicAO() const;
+	void CopyConvertTextures() const;
 
 	void PostRaytraceCleanup();
 
@@ -784,8 +784,16 @@ struct Raytracing : public OverlayFeature
 	eastl::unique_ptr<ShadowsFrameData> shadowsCBData = nullptr;
 
 	// SVGF
+	struct alignas(16) SharedData
+	{
+		float InteriorDirectional;
+		float Ambient;
+		float EnvMap;
+		uint Albedo;
+	};
+	static_assert(sizeof(SharedData) % 16 == 0);
 
-	RaytracingFD::FeatureData GetCommonBufferData();
+	SharedData GetCommonBufferData() const;
 
 	// D3D12
 	winrt::com_ptr<ID3D12Device5> d3d12Device = nullptr;

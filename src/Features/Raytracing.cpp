@@ -4422,16 +4422,14 @@ void Raytracing::CompileCompositeShader()
 		accumulationCS.attach(rawPtr);
 }
 
-RaytracingFD::FeatureData Raytracing::GetCommonBufferData()
+Raytracing::SharedData Raytracing::GetCommonBufferData() const
 {
-	RaytracingFD::FeatureData featureData{
+	return {
 		.InteriorDirectional = settings.GlobalIllumination ? 0.0f : 1.0f,
 		.Ambient = settings.GlobalIllumination ? 0.0f : 1.0f,
 		.EnvMap = settings.GlobalIllumination ? 0.0f : 1.0f,
 		.Albedo = settings.GlobalIllumination
 	};
-
-	return featureData;
 }
 
 RE::BSEventNotifyControl Raytracing::MenuOpenCloseEventHandler::ProcessEvent(const RE::MenuOpenCloseEvent* a_event, RE::BSTEventSource<RE::MenuOpenCloseEvent>*)
