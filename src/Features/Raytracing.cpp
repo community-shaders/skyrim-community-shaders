@@ -3568,7 +3568,7 @@ void Raytracing::DrawRTGI()
 	}
 
 	// Clear specular if Path Tracing is enabled
-	/*if (settings.PathTracing)*/ {
+	if (settings.PathTracing) {
 		auto renderer = globals::game::renderer;
 
 		float clearColor[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
