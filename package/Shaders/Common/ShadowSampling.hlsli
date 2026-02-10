@@ -71,11 +71,9 @@ namespace ShadowSampling
 
 		float noise = Random::InterleavedGradientNoise(screenPosition, SharedData::FrameCount);
 
-		startPosition += (endPosition - startPosition) * noise * rcpSampleCount;
-
 		float worldShadow = 0.0;
 		for(uint i = 0; i < sampleCount; i++){
-			float t = float(i) * rcpSampleCount;
+			float t = (float(i) + noise) * rcpSampleCount;
 			float3 sampledPositionWS = lerp(endPosition, startPosition, t);
 			float worldShadowSample = ShadowSampling::GetWorldShadow(sampledPositionWS, FrameBuffer::CameraPosAdjust[eyeIndex].xyz, eyeIndex);
 			surfaceShadow = worldShadowSample;
@@ -89,7 +87,7 @@ namespace ShadowSampling
 
 #if defined(EFFECT_SHADOWS)
 		float vsmSurfaceShadow;
-		float shadow = EffectShadows::GetVSMShadow3D(startPosition, endPosition, sampleCount, eyeIndex, vsmSurfaceShadow);
+		float shadow = EffectShadows::GetVSMShadow3D(startPosition, endPosition, noise, sampleCount, eyeIndex, vsmSurfaceShadow);
 		surfaceShadow *= vsmSurfaceShadow;
 		return worldShadow * shadow;
 #else
@@ -141,10 +139,8 @@ namespace ShadowSampling
 		float totalLuma = ambientLuma + dirLightLuma;
 
 		// Scale ambientColorAmb so total luma matches input luma
-		if (totalLuma > 0.0 && ambientLuma > 0.0) {
-			float lumaScale = inputLuma / totalLuma;  // Scale factor to match input
-			ambientColorAmb *= lumaScale;  // Scale while preserving color
-		}
+		if (totalLuma > 0.0 && ambientLuma > 0.0)
+			ambientColorAmb *= inputLuma / totalLuma;
 
 		float3 dirLightColorAmb = max(0.0, inputColor - ambientColorAmb);
 
