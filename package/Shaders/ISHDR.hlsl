@@ -139,30 +139,31 @@ PS_OUTPUT main(PS_INPUT input)
 		float paperWhiteNits = SharedData::HDRData.y;
 		float peakNits = SharedData::HDRData.z;
 
-		// Convert to linear space
-		float3 hdrLinear = Color::GammaToLinear(inputColor);
-		hdrLinear = max(0, hdrLinear);
-
-		// Bloom: same threshold logic as SDR — fill where scene < Param.x, no bloom on bright areas
-		hdrLinear += saturate(Param.x - hdrLinear) * bloomColor;
-		
+		// Apply cinematic adjustments in gamma space (matches SDR behavior)
 		// Brightness (intensity)
-		hdrLinear *= Cinematic.w;
+		float3 hdrGamma = inputColor * Cinematic.w;
 		
-		// Saturation - works correctly in linear space
-		hdrLinear = Color::Saturation(hdrLinear, Cinematic.x);
+		// Saturation in gamma space
+		hdrGamma = Color::Saturation(hdrGamma, Cinematic.x);
 		
-		static const float CONTRAST_PIVOT = 0.04;
-		hdrLinear = Color::LinearContrast(hdrLinear, Cinematic.z, CONTRAST_PIVOT);
-		hdrLinear = max(0, hdrLinear);
+		// Contrast in gamma space (using avgValue.x as pivot like SDR)
+		hdrGamma = lerp(avgValue.x, hdrGamma, Cinematic.z);
+		//hdrGamma = max(0, hdrGamma);
 		
-		// Tint
-		float hdrLuminance = Color::RGBToLuminance(hdrLinear);
-		hdrLinear = lerp(hdrLinear, hdrLuminance * Tint.xyz, Tint.w);
+		// Tint in gamma space
+		float hdrLuminanceGamma = Color::RGBToLuminance(hdrGamma);
+		hdrGamma = lerp(hdrGamma, hdrLuminanceGamma * Tint.xyz, Tint.w);
 
 #		if defined(FADE)
-		hdrLinear = lerp(hdrLinear, Fade.xyz, Fade.w);
+		hdrGamma = lerp(hdrGamma, Fade.xyz, Fade.w);
 #		endif
+
+		// Now convert to linear space for HDR processing
+		float3 hdrLinear = Color::GammaToLinear(hdrGamma);
+		hdrLinear = max(0, hdrLinear);
+
+		// Bloom in linear space
+		hdrLinear += saturate(Param.x - hdrLinear) * bloomColor;
 
 		// DICE tonemapping — Luma sandwich pattern:
 		// Multiply paper white in, DICE compress highlights to peak, divide paper white out
