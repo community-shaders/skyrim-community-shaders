@@ -11,6 +11,8 @@
 #include "Common/SharedData.hlsli"
 #include "Common/Skinned.hlsli"
 
+#include "Raytracing/Includes/VanillaToPBR.hlsli"
+
 #if defined(FACEGEN) || defined(FACEGEN_RGB_TINT)
 #	define SKIN
 #endif
@@ -3215,15 +3217,10 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	const float roughness = material.Roughness;
 	const float metallic = material.Metallic;
 #	else
-	const float specularity = saturate(max(material.SpecularColor.r, max(material.SpecularColor.g, material.SpecularColor.b)) * glossiness);
-	const float specularityRemapped = 1.0f - (specularity * 0.5f + 0.5f); 	
-
-	const float rawRoughness = ShininessToRoughness(material.Shininess);
-
-	const float roughness = rawRoughness * specularityRemapped;
-
-	const float albedoLuminance = saturate(Color::RGBToLuminance(outputAlbedo));
-	const float metallic = (1.0f - rawRoughness) * (specularity * specularity) * (1.0f - albedoLuminance);
+	const float specularity = CalcSpecularity(material.SpecularColor, glossiness);
+	const float roughnessFromShininess = ShininessToRoughness(material.Shininess);
+	const float roughness = CalcRoughness(roughnessFromShininess, specularity);
+	const float metallic = CalcMetallic(outputAlbedo, specularity, roughnessFromShininess);
 #	endif
 
 	psout.NormalGlossiness = float4(GBuffer::EncodeNormal(screenSpaceNormal), saturate(1.0 - roughness), psout.Diffuse.w);
