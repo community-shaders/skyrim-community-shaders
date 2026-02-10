@@ -633,26 +633,28 @@ struct Surface
 
         surface.Position = position;
 
+        surface.FaceNormal = geomNormal;
+
+        surface.MipLevel = 0.0f + Frame.TexLODBias;
         surface.GeomNormal = geomNormal;
+        surface.GeomTangent = tangent; // not needed for hybrid
 
         surface.Normal = normal;
         surface.Tangent = tangent;
         surface.Bitangent = bitangent;
-
-        surface.GeomTangent = tangent; // not needed for hybrid
 
 #   ifdef DEBUG_WHITE_FURNACE
         surface.Albedo = float3(1.0f, 1.0f, 1.0f);
 #   else
         surface.Albedo = albedo;
  #   endif
-
+        surface.TransmissionColor = float3(0.0f, 0.0f, 0.0f);
+        surface.Emissive = emissive * Frame.Emissive;
+        
         surface.Roughness = PBR::Roughness(roughness, Frame.Roughness.x, Frame.Roughness.y);
         surface.Metallic = Remap(metallic, Frame.Metalness.x, Frame.Metalness.y);
-
-        surface.Emissive = emissive * Frame.Emissive;
         surface.AO = ao;
-
+        
         surface.DiffuseAlbedo = surface.Albedo * (1.0f - surface.Metallic);
 
         surface.F0 = PBR::F0(albedo, metallic);

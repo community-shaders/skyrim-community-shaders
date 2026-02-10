@@ -32,10 +32,8 @@ void main(uint2 id : SV_DispatchThreadID)
     const snorm half3 normalWS = normalize(ViewToWorldVector(GBuffer::DecodeNormal(normalGlossiness.xy), FrameBuffer::CameraViewInverse[0]));
     NormalRoughness[id] = half4(normalWS, 1.0f - normalGlossiness.z);
 
-    float metallic, ao;
-    UnpackMAO(GNMAO.SampleLevel(Sampler, uv, 0).z, metallic, ao);
-
     const float4 albedo = Albedo.SampleLevel(Sampler, uv, 0);
+     const float metallic = GNMAO.SampleLevel(Sampler, uv, 0).z;   
     Diffuse[id] = float4(Color::GammaToTrueLinear(albedo.rgb) * (1.0f - metallic), albedo.a);
 #endif
     MotionVectorsOut[id] = MotionVectors.SampleLevel(Sampler, uv, 0);

@@ -2177,12 +2177,16 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 		material.FuzzWeight = lerp(material.FuzzWeight, 0, projectedMaterialWeight);
 	}
 #		endif
-#	else
+#	else	// TRUE_PBR
 	material.BaseColor = baseColor.xyz;
-#		if defined(SPECULAR)
+#		if defined(SPECULAR) || defined(LANDSCAPE)
 	material.Shininess = shininess;
 	material.Glossiness = glossiness;
+#			if defined(LANDSCAPE)
+	material.SpecularColor = 1;
+#			else
 	material.SpecularColor = SpecularColor.xyz;
+#			endif // LANDSCAPE
 #		else
 	material.Shininess = 0;
 	material.Glossiness = 0;
@@ -2194,7 +2198,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #		if defined(BACK_LIGHTING)
 	material.backLightColor = backLightColor.xyz;
 #		endif
-#	endif  // TRUE_PBR
+#	endif	// TRUE_PBR
 
 #	if defined(CS_HAIR) && defined(HAIR)
 	if (SharedData::hairSpecularSettings.Enabled) {
@@ -3206,7 +3210,23 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #		endif
 
 	psout.Reflectance = float4(indirectLobeWeights.specular, psout.Diffuse.w);
-	psout.NormalGlossiness = float4(GBuffer::EncodeNormal(screenSpaceNormal), saturate(1.0 - material.Roughness), psout.Diffuse.w);
+
+#	if defined(TRUE_PBR)
+	const float roughness = material.Roughness;
+	const float metallic = material.Metallic;
+#	else
+	const float specularity = saturate(max(material.SpecularColor.r, max(material.SpecularColor.g, material.SpecularColor.b)) * glossiness);
+	const float specularityRemapped = 1.0f - (specularity * 0.5f + 0.5f); 	
+
+	const float rawRoughness = ShininessToRoughness(material.Shininess);
+
+	const float roughness = rawRoughness * specularityRemapped;
+
+	const float albedoLuminance = saturate(Color::RGBToLuminance(outputAlbedo));
+	const float metallic = (1.0f - rawRoughness) * (specularity * specularity) * (1.0f - albedoLuminance);
+#	endif
+
+	psout.NormalGlossiness = float4(GBuffer::EncodeNormal(screenSpaceNormal), saturate(1.0 - roughness), psout.Diffuse.w);
 
 #		if defined(SNOW)
 #			if defined(TRUE_PBR)
@@ -3243,17 +3263,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 
 	float3 screenGeomNormal = normalize(FrameBuffer::WorldToView(worldGeomNormal, false, eyeIndex));
 
-    uint m = (uint)round(saturate(rawRMAOS.y) * 255.0);
-
-#if defined(TRUE_PBR)
-    uint a = (uint)round(saturate(rawRMAOS.z) * 255.0);
-#	else
-	uint a = 255u;
-#	endif // defined(TRUE_PBR)
-
-	uint packed = m | (a << 8);
-
-	psout.GeomNormalMetalnessAO = float4(GBuffer::EncodeNormal(screenGeomNormal), packed / 65535.0, psout.Diffuse.w);
+	psout.GeomNormalMetalnessAO = float4(GBuffer::EncodeNormal(screenGeomNormal), metallic, psout.Diffuse.w);
 #			endif // !defined(SNOW)
 #		endif // !defined(RT)
 #	endif // DEFERRED

@@ -145,17 +145,12 @@ void main()
 #else
     const float2 uv = float2(idx + 0.5f) / size;
 
-    const unorm float4 normalMetalnessAO = GNMAOTexture.SampleLevel(BaseSampler, uv, 0);
-
-    const half3 geometryNormalVS = DecodeNormal((half2)normalMetalnessAO.xy);
-    const float3 geometryNormalWS = normalize(ViewToWorldVector(geometryNormalVS, Frame.ViewInverse));
-
     const float depth = DepthTexture.SampleLevel(BaseSampler, uv, 0) * 0.99998;
 
     const float depthView = ScreenToViewDepth(depth, Frame.CameraData);
 
     const float4 mainColor = MainTexture.SampleLevel(BaseSampler, uv, 0);
-
+    
     [branch]
     if (depthView < FP_VIEW_Z || depth >= SKY_Z)
     {
@@ -182,10 +177,56 @@ void main()
     // We should also scale the GBuffer for DLSSRR
     const unorm float linearRoughness = normalRoughness.w;
 
-    // Metalness and AO packed in 16 bits
-    float metalness, ao;
-    UnpackMAO(normalMetalnessAO.z, metalness, ao);
+    const unorm float4 normalMetalnessAO = GNMAOTexture.SampleLevel(BaseSampler, uv, 0);
 
+    const half3 geometryNormalVS = DecodeNormal((half2)normalMetalnessAO.xy);
+    const float3 geometryNormalWS = normalize(ViewToWorldVector(geometryNormalVS, Frame.ViewInverse));
+      
+#if defined(DEBUG_GEOMNORMALOUT)
+    OutputTexture[idx] = float4(geometryNormalWS * 0.5f + 0.5f, 1.0f);
+    SpecularAlbedo[idx] = float4(0.5f, 0.5f, 0.5f, 0.0f);
+    SpecularHitDist[idx] = RAY_TMAX;
+    return;
+#endif
+    
+#if defined(DEBUG_DEPTHOUT)
+    OutputTexture[idx] = float4(depth, 0.0f, 0.0f, 1.0f);
+    SpecularAlbedo[idx] = float4(0.5f, 0.5f, 0.5f, 0.0f);
+    SpecularHitDist[idx] = RAY_TMAX;
+    return;
+#endif
+    
+#if defined(DEBUG_VIEWDEPTHOUT)
+    OutputTexture[idx] = float4(depthView, 0.0f, 0.0f, 1.0f);
+    SpecularAlbedo[idx] = float4(0.5f, 0.5f, 0.5f, 0.0f);
+    SpecularHitDist[idx] = RAY_TMAX;
+    return;
+#endif
+    
+    const float metalness = normalMetalnessAO.z;
+    const float ao = 1.0f;
+
+#if defined(DEBUG_ROUGHNESSOUT)
+    OutputTexture[idx] = float4(linearRoughness, 0.0f, 0.0f, 1.0f);
+    SpecularAlbedo[idx] = float4(0.5f, 0.5f, 0.5f, 0.0f);
+    SpecularHitDist[idx] = RAY_TMAX;
+    return;
+#endif    
+ 
+#if defined(DEBUG_METALLICOUT)
+    OutputTexture[idx] = float4(metalness, 0.0f, 0.0f, 1.0f);
+    SpecularAlbedo[idx] = float4(0.5f, 0.5f, 0.5f, 0.0f);
+    SpecularHitDist[idx] = RAY_TMAX;
+    return;
+#endif        
+    
+#if defined(DEBUG_AOOUT)
+    OutputTexture[idx] = float4(ao, 0.0f, 0.0f, 1.0f);
+    SpecularAlbedo[idx] = float4(0.5f, 0.5f, 0.5f, 0.0f);
+    SpecularHitDist[idx] = RAY_TMAX;
+    return;
+#endif       
+    
     const float3 positionVS = ScreenToViewPosition(uv, depthView, Frame.NDCToView);
     const float3 positionCS = ViewToWorldPosition(positionVS, Frame.ViewInverse);
     const float3 positionWS = positionCS + Frame.Position.xyz;

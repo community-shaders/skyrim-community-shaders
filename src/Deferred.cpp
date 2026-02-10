@@ -535,8 +535,7 @@ void Deferred::OverrideBlendStates()
 								blendDesc.RenderTarget[i].RenderTargetWriteMask = blendDesc.RenderTarget[0].RenderTargetWriteMask;
 							}
 
-							// Normals and motion vectors must use alpha blending
-							for (int i = 1; i < 3; i++) {
+							auto setAlphaBlending = [&](int i) {
 								blendDesc.RenderTarget[i].BlendEnable = blendDesc.RenderTarget[0].BlendEnable;
 								blendDesc.RenderTarget[i].SrcBlend = D3D11_BLEND_SRC_ALPHA;
 								blendDesc.RenderTarget[i].DestBlend = D3D11_BLEND_INV_SRC_ALPHA;
@@ -545,7 +544,12 @@ void Deferred::OverrideBlendStates()
 								blendDesc.RenderTarget[i].DestBlendAlpha = D3D11_BLEND_INV_SRC_ALPHA;
 								blendDesc.RenderTarget[i].BlendOpAlpha = D3D11_BLEND_OP_ADD;
 								blendDesc.RenderTarget[i].RenderTargetWriteMask = D3D11_COLOR_WRITE_ENABLE_ALL;
-							}
+							}; 
+
+							// Normals, motion vectors and geometry normals must use alpha blending
+							setAlphaBlending(1);
+							setAlphaBlending(2);
+							setAlphaBlending(7);
 
 							DX::ThrowIfFailed(device->CreateBlendState(&blendDesc, &deferredBlendStates[a][b][c][d]));
 						} else {

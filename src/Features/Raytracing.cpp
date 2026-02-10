@@ -1701,7 +1701,7 @@ static DirectX::XMFLOAT3X4 GetXMF3X4FromNiTransform(const RE::NiTransform& Trans
 	};
 }
 
-void Raytracing::CopyDepth()
+void Raytracing::CopyDepth() const
 {
 	auto context = globals::d3d::context;
 	auto renderer = globals::game::renderer;
@@ -1735,7 +1735,12 @@ void Raytracing::CopyDepth()
 	context->CSSetUnorderedAccessViews(0, (UINT)uavs.size(), uavs.data(), nullptr);
 }
 
-void Raytracing::ConvertTextures() const
+void Raytracing::UnpackMetallicAO() const
+{
+
+}
+
+void Raytracing::CopyConvertTextures() const
 {
 	auto context = globals::d3d::context;
 	auto renderer = globals::game::renderer;
@@ -3079,7 +3084,7 @@ void Raytracing::DrawRTGI()
 		d3d11Context->ClearRenderTargetView(rendererRuntimeData.renderTargets[ALBEDO].RTV, clearColor);
 	}
 
-	ConvertTextures();
+	CopyConvertTextures();
 
 	// Wait for D3D11 to finish
 	{
@@ -3563,7 +3568,7 @@ void Raytracing::DrawRTGI()
 	}
 
 	// Clear specular if Path Tracing is enabled
-	if (settings.PathTracing) {
+	/*if (settings.PathTracing)*/ {
 		auto renderer = globals::game::renderer;
 
 		float clearColor[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
