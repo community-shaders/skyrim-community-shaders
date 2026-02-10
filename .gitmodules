@@ -7,3 +7,6 @@
 [submodule "extern/FidelityFX-SDK"]
 	path = extern/FidelityFX-SDK
 	url = https://github.com/MapleHinata/FidelityFX-SDK
+[submodule "extern/NRD"]
+	path = extern/NRD
+	url = https://github.com/NVIDIA-RTX/NRD/

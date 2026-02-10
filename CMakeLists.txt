@@ -77,6 +77,14 @@ find_package(directx-dxc CONFIG REQUIRED)
 find_package(D3D12MemoryAllocator CONFIG REQUIRED)
 add_subdirectory(${CMAKE_SOURCE_DIR}/cmake/Streamline)
 
+set(NRD_USE_DX12 ON CACHE BOOL "" FORCE)
+set(NRD_STATIC_LIBRARY ON CACHE BOOL "" FORCE)
+
+set(NRD_EMBEDS_SPIRV_SHADERS OFF CACHE BOOL "" FORCE)
+set(NRD_EMBEDS_DXBC_SHADERS OFF CACHE BOOL "" FORCE)
+
+add_subdirectory(extern/NRD)
+
 find_path(DETOURS_INCLUDE_DIRS "detours/detours.h")
 find_library(DETOURS_LIBRARY detours REQUIRED)
 include(FidelityFX-SDK)
@@ -106,6 +114,7 @@ target_include_directories(
         ${CLIB_UTIL_INCLUDE_DIRS}
         "${CMAKE_SOURCE_DIR}/package/Shaders"
         ${DETOURS_INCLUDE_DIRS}
+        "extern/NRD/Include"
 )
 
 target_link_libraries(
@@ -128,6 +137,7 @@ target_link_libraries(
         Microsoft::DirectX-Headers
         Microsoft::DirectXShaderCompiler
         GPUOpen::D3D12MemoryAllocator
+        NRD
         ${DETOURS_LIBRARY}
 )
 

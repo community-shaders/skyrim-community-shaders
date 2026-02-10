@@ -290,9 +290,13 @@ struct Raytracing : public OverlayFeature
 		if (!sharcPipeline)
 			sharcPipeline = eastl::make_unique<SHaRCPipeline>();
 
-		static eastl::array<IPipeline*, 2> pipelines = {
+		if (!nrdPipeline)
+			nrdPipeline = eastl::make_unique<NRDPipeline>();
+
+		static eastl::array<IPipeline*, 3> pipelines = {
 			skinningPipeline.get(),
-			sharcPipeline.get()
+			sharcPipeline.get(),
+			nrdPipeline.get()
 		};
 
 		return pipelines;
@@ -319,6 +323,7 @@ struct Raytracing : public OverlayFeature
 		None,
 		SVGF,
 		Accumulation,
+		NRD,
 #ifdef DLSS_RR
 		DLSSRR
 #endif
@@ -809,6 +814,9 @@ struct Raytracing : public OverlayFeature
 
 	// SHaRC (Radiance cache)
 	eastl::unique_ptr<SHaRCPipeline> sharcPipeline = nullptr;
+
+	// SVGF (denoiser)
+	eastl::unique_ptr<NRDPipeline> nrdPipeline = nullptr;
 
 	// SVGF (denoiser)
 	eastl::unique_ptr<SVGFPipeline> svgfDenoiser = nullptr;
