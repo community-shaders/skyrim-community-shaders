@@ -435,7 +435,7 @@ void HDR::RestoreDefaultSettings()
 	settings.enableHDR = hdrMonitor;
 	settings.hdrPaperWhite = 203;
 	settings.hdrPeakNits = 1000;
-	settings.hdrUIBrightness = 4.0f;
+	settings.hdrUIBrightness = 2.3f;
 	settings.sdrUIBrightness = 1.0f;
 	settings.dontShowHDRWarning = false;
 }

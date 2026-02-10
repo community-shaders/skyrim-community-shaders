@@ -23,7 +23,8 @@ struct HDRDisplay : public Feature
 		return {
 			"Real High Dynamic Range output for HDR displays.",
 			{
-				"HDR10 output support (R10G10B10A2_UNORM)",
+				"HDR10 output support (10-bit) with upgraded HDR buffers (16-Bit).",
+				"Upgraded eye-adaptation for HDR scenes.",
 				"Configurable paper white and peak brightness",
 			}
 		};
