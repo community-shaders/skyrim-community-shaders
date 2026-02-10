@@ -7,7 +7,7 @@
 #include "Deferred.h"
 #include "FeatureIssues.h"
 #include "Features/CloudShadows.h"
-#include "Features/EffectShadows.h"
+#include "Features/VolumetricShadows.h"
 #include "Features/PerformanceOverlay.h"
 #include "Features/TerrainBlending.h"
 #include "Features/TerrainHelper.h"
@@ -32,7 +32,7 @@ void State::Draw()
 	auto& weatherEditor = globals::features::weatherEditor;
 	auto truePBR = globals::truePBR;
 	auto context = globals::d3d::context;
-	auto& effectShadows = globals::features::effectShadows;
+	auto& volumetricShadows = globals::features::volumetricShadows;
 
 	if (shaderCache->IsEnabled()) {
 		if (weatherEditor.loaded) {
@@ -68,8 +68,8 @@ void State::Draw()
 		if (currentShader && updateShader) {
 			if (currentShader->shaderType.get() == RE::BSShader::Type::Utility) {
 				if (currentPixelDescriptor & static_cast<uint32_t>(SIE::ShaderCache::UtilityShaderFlags::RenderShadowmask)) {
-					if (effectShadows.loaded)
-						effectShadows.CopyShadowData();
+					if (volumetricShadows.loaded)
+						volumetricShadows.CopyShadowData();
 				}
 			}
 		}
