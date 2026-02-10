@@ -1,9 +1,9 @@
-#ifndef __EFFECT_SHADOWS_HLSLI__
-#define __EFFECT_SHADOWS_HLSLI__
+#ifndef __VOLUMETRIC_SHADOWS_HLSLI__
+#define __VOLUMETRIC_SHADOWS_HLSLI__
 
 // "Assassin's Creed 4: Black Flag - Road to next-gen graphics" https://bartwronski.com/wp-content/uploads/2014/03/ac4_gdc.pdf
 
-namespace EffectShadows
+namespace VolumetricShadows
 {
 	Texture2D<float2> SharedShadowMap : register(t18);
 
@@ -199,4 +199,4 @@ namespace EffectShadows
 	}
 }
 
-#endif  // __EFFECT_SHADOWS_HLSLI__
+#endif  // __VOLUMETRIC_SHADOWS_HLSLI__

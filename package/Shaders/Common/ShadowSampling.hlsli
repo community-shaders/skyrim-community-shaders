@@ -18,8 +18,8 @@
 #	include "IBL/IBL.hlsli"
 #endif
 
-#if defined(EFFECT_SHADOWS)
-#	include "EffectShadows/EffectShadows.hlsli"
+#if defined(VOLUMETRIC_SHADOWS)
+#	include "VolumetricShadows/VolumetricShadows.hlsli"
 #endif
 
 namespace ShadowSampling
@@ -85,9 +85,9 @@ namespace ShadowSampling
 
 		worldShadow *= rcpSampleCount;
 
-#if defined(EFFECT_SHADOWS)
+#if defined(VOLUMETRIC_SHADOWS)
 		float vsmSurfaceShadow;
-		float shadow = EffectShadows::GetVSMShadow3D(startPosition, endPosition, noise, sampleCount, eyeIndex, vsmSurfaceShadow);
+		float shadow = VolumetricShadows::GetVSMShadow3D(startPosition, endPosition, noise, sampleCount, eyeIndex, vsmSurfaceShadow);
 		surfaceShadow *= vsmSurfaceShadow;
 		return worldShadow * shadow;
 #else
@@ -97,15 +97,11 @@ namespace ShadowSampling
 
 	float GetLightingShadow(float3 worldPosition, uint eyeIndex)
 	{
-		float worldShadow = ShadowSampling::GetWorldShadow(worldPosition, FrameBuffer::CameraPosAdjust[eyeIndex].xyz, eyeIndex);
-		if (worldShadow == 0.0)
-			return 0.0;
-
-#if defined(EFFECT_SHADOWS)
-		float shadow = EffectShadows::GetVSMShadow2D(worldPosition, eyeIndex);
-		return worldShadow * shadow;
+#if defined(VOLUMETRIC_SHADOWS)
+		float shadow = VolumetricShadows::GetVSMShadow2D(worldPosition, eyeIndex);
+		return shadow;
 #else
-		return worldShadow;
+		return 1.0;
 #endif
 	}
 
