@@ -145,12 +145,20 @@ PS_OUTPUT main(PS_INPUT input)
 
 		// Bloom: same threshold logic as SDR — fill where scene < Param.x, no bloom on bright areas
 		hdrLinear += saturate(Param.x - hdrLinear) * bloomColor;
-
-		// Cinematic grading (saturation, tint, contrast) — same as SDR path
+		
+		// Brightness (intensity)
+		hdrLinear *= Cinematic.w;
+		
+		// Saturation - works correctly in linear space
+		hdrLinear = Color::Saturation(hdrLinear, Cinematic.x);
+		
+		static const float CONTRAST_PIVOT = 0.04;
+		hdrLinear = Color::LinearContrast(hdrLinear, Cinematic.z, CONTRAST_PIVOT);
+		hdrLinear = max(0, hdrLinear);
+		
+		// Tint
 		float hdrLuminance = Color::RGBToLuminance(hdrLinear);
-		float3 hdrGraded = Cinematic.w * lerp(lerp(hdrLuminance, hdrLinear, Cinematic.x), hdrLuminance * Tint.xyz, Tint.w).xyz;
-		hdrGraded = lerp(avgValue.x, hdrGraded, Cinematic.z);
-		hdrLinear = max(0, hdrGraded);
+		hdrLinear = lerp(hdrLinear, hdrLuminance * Tint.xyz, Tint.w);
 
 #		if defined(FADE)
 		hdrLinear = lerp(hdrLinear, Fade.xyz, Fade.w);

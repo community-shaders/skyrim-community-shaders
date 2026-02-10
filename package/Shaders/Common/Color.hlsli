@@ -82,6 +82,12 @@ namespace Color
 		return color;
 	}
 
+	/// Linear contrast adjustment around a pivot point (typically 0.18 for 18% gray)
+	float3 LinearContrast(float3 color, float contrast, float pivot)
+	{
+		return (color - pivot) * contrast + pivot;
+	}
+
 	float GammaToLinear(float color)
 	{
 		return pow(abs(color), 1.6);
