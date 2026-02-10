@@ -2,12 +2,12 @@
 
 #include "Buffer.h"
 
-struct EffectShadows : Feature
+struct VolumetricShadows : Feature
 {
 public:
-	virtual inline std::string GetName() override { return "Effect Shadows"; }
-	virtual inline std::string GetShortName() override { return "EffectShadows"; }
-	virtual inline std::string_view GetShaderDefineName() override { return "EFFECT_SHADOWS"; }
+	virtual inline std::string GetName() override { return "Volumetric Shadows"; }
+	virtual inline std::string GetShortName() override { return "VolumetricShadows"; }
+	virtual inline std::string_view GetShaderDefineName() override { return "VOLUMETRIC_SHADOWS"; }
 	virtual std::string_view GetCategory() const override { return "Lighting"; }
 	virtual bool IsCore() const override { return true; }
 	virtual bool IsInMenu() const override { return false; }
@@ -15,7 +15,7 @@ public:
 	virtual std::pair<std::string, std::vector<std::string>> GetFeatureSummary() override
 	{
 		return {
-			"Effect Shadows provides downsampled VSM shadow maps for use by effects like particles and decals.\n"
+			"Volumetric Shadows provides downsampled VSM shadow maps for use by effects like particles and decals.\n"
 			"This improves shadow quality on transparent objects with minimal performance impact.",
 			{ "Downsampled VSM shadows",
 				"Gaussian blur filtering",

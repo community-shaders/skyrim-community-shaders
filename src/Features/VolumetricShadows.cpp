@@ -1,8 +1,8 @@
-#include "EffectShadows.h"
+#include "VolumetricShadows.h"
 
 #include "State.h"
 
-void EffectShadows::SetupResources()
+void VolumetricShadows::SetupResources()
 {
 	auto device = globals::d3d::device;
 
@@ -50,28 +50,28 @@ void EffectShadows::SetupResources()
 	}
 
 	// Compile compute shaders
-	copyShadowCS = static_cast<ID3D11ComputeShader*>(Util::CompileShader(L"Data\\Shaders\\EffectShadows\\CopyShadowDataCS.hlsl", {}, "cs_5_0"));
+	copyShadowCS = static_cast<ID3D11ComputeShader*>(Util::CompileShader(L"Data\\Shaders\\VolumetricShadows\\CopyShadowDataCS.hlsl", {}, "cs_5_0"));
 
 	std::vector<std::pair<const char*, const char*>> defines;
 	defines.push_back({ "DOWNSAMPLE_SHADOW_MIP0", nullptr });
-	downsampleShadowMip0CS = static_cast<ID3D11ComputeShader*>(Util::CompileShader(L"Data\\Shaders\\EffectShadows\\DownsampleShadowCS.hlsl", defines, "cs_5_0"));
+	downsampleShadowMip0CS = static_cast<ID3D11ComputeShader*>(Util::CompileShader(L"Data\\Shaders\\VolumetricShadows\\DownsampleShadowCS.hlsl", defines, "cs_5_0"));
 	defines.clear();
 	defines.push_back({ "DOWNSAMPLE_SHADOW_MIP1", nullptr });
-	downsampleShadowMip1CS = static_cast<ID3D11ComputeShader*>(Util::CompileShader(L"Data\\Shaders\\EffectShadows\\DownsampleShadowCS.hlsl", defines, "cs_5_0"));
+	downsampleShadowMip1CS = static_cast<ID3D11ComputeShader*>(Util::CompileShader(L"Data\\Shaders\\VolumetricShadows\\DownsampleShadowCS.hlsl", defines, "cs_5_0"));
 
 	defines.clear();
 	defines.push_back({ "BLUR_HORIZONTAL", nullptr });
-	blurShadowHorizontalCS = static_cast<ID3D11ComputeShader*>(Util::CompileShader(L"Data\\Shaders\\EffectShadows\\BlurShadowCS.hlsl", defines, "cs_5_0"));
+	blurShadowHorizontalCS = static_cast<ID3D11ComputeShader*>(Util::CompileShader(L"Data\\Shaders\\VolumetricShadows\\BlurShadowCS.hlsl", defines, "cs_5_0"));
 	defines.clear();
 	defines.push_back({ "BLUR_VERTICAL", nullptr });
-	blurShadowVerticalCS = static_cast<ID3D11ComputeShader*>(Util::CompileShader(L"Data\\Shaders\\EffectShadows\\BlurShadowCS.hlsl", defines, "cs_5_0"));
+	blurShadowVerticalCS = static_cast<ID3D11ComputeShader*>(Util::CompileShader(L"Data\\Shaders\\VolumetricShadows\\BlurShadowCS.hlsl", defines, "cs_5_0"));
 }
 
-void EffectShadows::ClearShaderCache()
+void VolumetricShadows::ClearShaderCache()
 {
 }
 
-void EffectShadows::CopyShadowData()
+void VolumetricShadows::CopyShadowData()
 {
 	ZoneScoped;
 	TracyD3D11Zone(globals::state->tracyCtx, "CopyShadowData");
@@ -360,22 +360,22 @@ void EffectShadows::CopyShadowData()
 	}
 }
 
-void EffectShadows::LoadSettings(json&)
+void VolumetricShadows::LoadSettings(json&)
 {
 	// No settings currently
 }
 
-void EffectShadows::SaveSettings(json&)
+void VolumetricShadows::SaveSettings(json&)
 {
 	// No settings currently
 }
 
-void EffectShadows::RestoreDefaultSettings()
+void VolumetricShadows::RestoreDefaultSettings()
 {
 	// No settings currently
 }
 
-bool EffectShadows::HasShaderDefine(RE::BSShader::Type)
+bool VolumetricShadows::HasShaderDefine(RE::BSShader::Type)
 {
 	return true;
 }
