@@ -77,6 +77,9 @@ void FidelityFX::Present(bool a_useFrameGeneration, bool a_isHDR)
 	// Cache peak nits first since we need HDR singleton access
 	auto hdr = HDR::GetSingleton();
 	float peakNits = hdr ? static_cast<float>(hdr->settings.hdrPeakNits) : 1000.0f;
+	
+	// Clamp peak nits to safe range [1.0f, 10000.0f] to prevent invalid values
+	peakNits = std::clamp(peakNits, 1.0f, 10000.0f);
 
 	// Detect if HDR parameters changed - if so, we need to reset FG history
 	// because frames in the history were encoded with different parameters

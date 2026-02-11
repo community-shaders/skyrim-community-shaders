@@ -35,10 +35,38 @@ void DX12SwapChain::CreateSwapChain(IDXGIAdapter* adapter, DXGI_SWAP_CHAIN_DESC 
 	IDXGIFactory4* dxgiFactory;
 	DX::ThrowIfFailed(adapter->GetParent(IID_PPV_ARGS(&dxgiFactory)));
 
+	// Runtime format negotiation for swap chain
+	DXGI_FORMAT attemptedFormat = DXGI_FORMAT_R10G10B10A2_UNORM;
+	DXGI_FORMAT negotiatedFormat = DXGI_FORMAT_R10G10B10A2_UNORM;
+	bool isVR = REL::Module::IsVR();
+	bool fallbackUsed = false;
+
+	// Test R10G10B10A2 support (applies to both VR and non-VR for HDR capability)
+	D3D12_FEATURE_DATA_FORMAT_SUPPORT formatSupport = { DXGI_FORMAT_R10G10B10A2_UNORM, D3D12_FORMAT_SUPPORT1_RENDER_TARGET, D3D12_FORMAT_SUPPORT2_NONE };
+	if (SUCCEEDED(d3d12Device->CheckFeatureSupport(D3D12_FEATURE_FORMAT_SUPPORT, &formatSupport, sizeof(formatSupport)))) {
+		if ((formatSupport.Support1 & D3D12_FORMAT_SUPPORT1_RENDER_TARGET) == 0) {
+			logger::warn("[DX12SwapChain] R10G10B10A2_UNORM not supported as render target, falling back to R8G8B8A8_UNORM");
+			negotiatedFormat = DXGI_FORMAT_R8G8B8A8_UNORM;
+			fallbackUsed = true;
+		} else if (isVR) {
+			logger::info("[DX12SwapChain] VR detected with R10G10B10A2_UNORM support, attempting HDR");
+		}
+	} else {
+		logger::warn("[DX12SwapChain] CheckFeatureSupport failed for R10G10B10A2_UNORM, falling back to R8G8B8A8_UNORM");
+		negotiatedFormat = DXGI_FORMAT_R8G8B8A8_UNORM;
+		fallbackUsed = true;
+	}
+
+	logger::info("[DX12SwapChain] Swap chain format negotiation: attempted={}, negotiated={}, VR={}, fallback={}",
+		static_cast<uint32_t>(attemptedFormat),
+		static_cast<uint32_t>(negotiatedFormat),
+		isVR ? "true" : "false",
+		fallbackUsed ? "true" : "false");
+
 	swapChainDesc = {};
 	swapChainDesc.Width = a_swapChainDesc.BufferDesc.Width;
 	swapChainDesc.Height = a_swapChainDesc.BufferDesc.Height;
-	swapChainDesc.Format = DXGI_FORMAT_R10G10B10A2_UNORM;
+	swapChainDesc.Format = negotiatedFormat;
 	swapChainDesc.SampleDesc.Count = 1;
 	swapChainDesc.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
 	swapChainDesc.BufferCount = 2;
@@ -65,12 +93,11 @@ void DX12SwapChain::CreateSwapChain(IDXGIAdapter* adapter, DXGI_SWAP_CHAIN_DESC 
 
 	frameIndex = swapChain->GetCurrentBackBufferIndex();
 
-	// Set color space based on HDR Display feature state
+	// Set color space based on HDR Display feature state and negotiated format
 	auto hdr = HDR::GetSingleton();
-	if (hdr && globals::features::hdrDisplay.loaded)
-		SetColorSpace(hdr->settings.enableHDR);
-	else
-		SetColorSpace(false);
+	bool enableHDR = hdr && globals::features::hdrDisplay.loaded && hdr->settings.enableHDR;
+	// Only set HDR color space if not falling back to SDR format
+	SetColorSpace(enableHDR && !fallbackUsed);
 
 	fidelityFX.SetupFrameGeneration();
 }
