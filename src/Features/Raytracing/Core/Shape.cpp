@@ -517,6 +517,10 @@ void Shape::BuildMaterial(const RE::BSGeometry::GEOMETRY_RUNTIME_DATA& geometryR
 
 									textures[2] = TextureRegister(lightingGlowMaterial->glowTexture, blackTexture);
 								}
+							} else if (lightingShaderProp->flags.none(EShaderPropertyFlag::kOwnEmit)) {
+								colors[1].x = 0.0f;
+								colors[1].y = 0.0f;
+								colors[1].z = 0.0f;
 							}
 
 							// Hair

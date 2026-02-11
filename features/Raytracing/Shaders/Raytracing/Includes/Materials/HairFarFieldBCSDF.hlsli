@@ -295,7 +295,7 @@ struct HairFarFieldBCSDF
             return false;
         }
 
-        weight = bsdfValue * sampleWeight / pdf;
+        weight = max(bsdfValue * sampleWeight / pdf, 0.0f);
         return true;
     }
 };

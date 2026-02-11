@@ -192,7 +192,7 @@ void GetPointLightIrradiance(in LightData lightData, in Surface surface, out flo
     dist = length(lr);
     lr /= dist;
 
-    float lightSourceAngle = 0.05f;
+    float lightSourceAngle = 0.005f;
 
     float atten = GetAttenuation(light, dist, lightSourceAngle);
 
