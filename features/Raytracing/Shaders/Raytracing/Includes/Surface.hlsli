@@ -185,11 +185,11 @@ struct Surface
                 float3 hairTint = material.BaseColor().rgb;
                 Albedo *= VanillaDiffuseColor(hairTint);
             }
-            
+    
             [branch]
             if (material.ShaderFlags & ShaderFlags::kSpecular) {
-                float3 specularColor = material.SpecularColor().rgb * material.SpecularColor().a;
-                
+                float3 specularColor = material.SpecularColor().rgb;
+            
                 [branch]
                 if (material.ShaderFlags & ShaderFlags::kModelSpaceNormals) {
                     Texture2D specularTexture = Textures[NonUniformResourceIndex(material.SpecularTexture())];
@@ -197,13 +197,20 @@ struct Surface
                 } else {
                     Texture2D normalTexture = Textures[NonUniformResourceIndex(material.NormalTexture())];
                     specularColor *= normalTexture.SampleLevel(BaseSampler, texCoord0, MipLevel).a;
-                }
+                }           
                 
-	            Roughness = material.RoughnessScale();
+#if defined(EXP_VANILLA_PBR_METAL)
+	            float specularity = CalcSpecularity(specularColor, material.SpecularColor().a);            
+	            float roughnessFromShininess = material.RoughnessScale();
                 
-                F0 = clamp(0.08f * specularColor, 0.02f, 0.08f);         
+                Metallic = CalcMetallic(Albedo, specularity, roughnessFromShininess);
+#endif
+
+                Roughness = material.RoughnessScale();
+                
+                F0 = clamp(0.08f * specularColor * material.SpecularColor().a, 0.02f, 0.08f);                    
             }
-            
+         
             [branch]
             if (material.ShaderFlags & ShaderFlags::kEnvMap || material.ShaderFlags & ShaderFlags::kEyeReflect) {
                 Texture2D envTexture = Textures[NonUniformResourceIndex(material.EnvTexture())];

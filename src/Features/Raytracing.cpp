@@ -3359,7 +3359,9 @@ void Raytracing::DrawRTGI()
 				}
 			} else
 #endif
-			{
+			if (settings.Denoiser == Denoiser::NRD) {
+				nrdPipeline->Denoise(commandList.get());
+			} else {
 				auto barrier = CD3DX12_RESOURCE_BARRIER::Transition(mainTexture->resource.get(), D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_COPY_DEST);
 				commandList->ResourceBarrier(1, &barrier);
 
