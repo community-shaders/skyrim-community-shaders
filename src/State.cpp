@@ -13,12 +13,12 @@
 #include "Features/Upscaling.h"
 #include "Features/WeatherEditor.h"
 #include "Menu.h"
+#include "SceneSettingsManager.h"
 #include "SettingsOverrideManager.h"
 #include "ShaderCache.h"
 #include "TruePBR.h"
 #include "Utils/FileSystem.h"
 #include "WeatherManager.h"
-#include "SceneSettingsManager.h"
 #include "WeatherVariableRegistry.h"
 
 void State::Draw()

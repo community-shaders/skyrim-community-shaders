@@ -60,8 +60,8 @@ public:
 
 	enum class EntrySource
 	{
-		User,       // User-added via UI
-		Overwrite   // Loaded from overwrite file
+		User,      // User-added via UI
+		Overwrite  // Loaded from overwrite file
 	};
 
 	struct SettingEntry
@@ -71,7 +71,7 @@ public:
 		json value;                    // Override value (bool, float, int, etc.)
 		bool paused = false;           // Temporarily disabled
 		EntrySource source = EntrySource::User;
-		std::string sourceFilename;    // For overwrites: the filename it came from
+		std::string sourceFilename;  // For overwrites: the filename it came from
 	};
 
 	// --- Generic Entry Management (scene-type agnostic) ---

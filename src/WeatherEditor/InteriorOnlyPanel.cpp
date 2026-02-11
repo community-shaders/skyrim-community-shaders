@@ -66,9 +66,7 @@ namespace InteriorOnlyPanel
 		if (cachedFeatureNames.empty())
 			cachedFeatureNames = SceneSettingsManager::GetLoadedFeatureNames();
 
-		const char* featurePreview = (selectedFeatureIdx >= 0 && selectedFeatureIdx < static_cast<int>(cachedFeatureNames.size()))
-		                                 ? cachedFeatureNames[selectedFeatureIdx].c_str()
-		                                 : "Select Feature...";
+		const char* featurePreview = (selectedFeatureIdx >= 0 && selectedFeatureIdx < static_cast<int>(cachedFeatureNames.size())) ? cachedFeatureNames[selectedFeatureIdx].c_str() : "Select Feature...";
 
 		ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x * FEATURE_DROPDOWN_WIDTH_RATIO);
 		if (ImGui::BeginCombo("##FeatureSelect", featurePreview)) {
@@ -91,16 +89,14 @@ namespace InteriorOnlyPanel
 		{
 			auto _ = Util::DisableGuard(selectedFeatureIdx < 0);
 
-			const char* settingPreview = (selectedSettingIdx >= 0 && selectedSettingIdx < static_cast<int>(cachedSettingKeys.size()))
-			                                 ? cachedSettingKeys[selectedSettingIdx].c_str()
-			                                 : "Select Setting...";
+			const char* settingPreview = (selectedSettingIdx >= 0 && selectedSettingIdx < static_cast<int>(cachedSettingKeys.size())) ? cachedSettingKeys[selectedSettingIdx].c_str() : "Select Setting...";
 
 			ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x * SETTING_DROPDOWN_WIDTH_RATIO);
 			if (ImGui::BeginCombo("##SettingSelect", settingPreview)) {
 				for (int i = 0; i < static_cast<int>(cachedSettingKeys.size()); ++i) {
 					bool selected = (i == selectedSettingIdx);
 					bool alreadyAdded = selectedFeatureIdx >= 0 &&
-					manager->HasEntryFromSource(kSceneType, cachedFeatureNames[selectedFeatureIdx], cachedSettingKeys[i], EntrySource::User);
+					                    manager->HasEntryFromSource(kSceneType, cachedFeatureNames[selectedFeatureIdx], cachedSettingKeys[i], EntrySource::User);
 					if (alreadyAdded) {
 						ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetStyle().Colors[ImGuiCol_TextDisabled]);
 						ImGui::Selectable(cachedSettingKeys[i].c_str(), false, ImGuiSelectableFlags_Disabled);
@@ -166,7 +162,7 @@ namespace InteriorOnlyPanel
 
 		// Overwrites are read-only; user entries overridden by an active overwrite are also disabled
 		bool readOnly = isOverwrite ||
-			manager->HasActiveOverwrite(kSceneType, entry.featureShortName, entry.settingKey);
+		                manager->HasActiveOverwrite(kSceneType, entry.featureShortName, entry.settingKey);
 
 		if (readOnly)
 			ImGui::BeginDisabled();
@@ -239,9 +235,7 @@ namespace InteriorOnlyPanel
 			}
 		}
 		if (auto _tt = Util::HoverTooltipWrapper())
-			ImGui::Text(entry.source == EntrySource::Overwrite
-				? "Delete overwrite file from disk"
-				: "Remove this setting");
+			ImGui::Text(entry.source == EntrySource::Overwrite ? "Delete overwrite file from disk" : "Remove this setting");
 
 		ImGui::PopID();
 	}
