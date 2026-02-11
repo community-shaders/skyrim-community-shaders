@@ -156,7 +156,6 @@ void HistogramAutoExposure::Draw(TextureInfo& inout_tex)
 	auto context = globals::d3d::context;
 	auto state = globals::state;
 
-	auto& pp = globals::features::postProcessing;
 	float exposureCompensation = settings.ExposureCompensation;
 	float2 adaptationRange = settings.AdaptationRange;
 
