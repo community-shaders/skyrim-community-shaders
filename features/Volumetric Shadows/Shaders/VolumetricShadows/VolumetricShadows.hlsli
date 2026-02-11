@@ -260,7 +260,7 @@ namespace VolumetricShadows
 
 	// Sample a single cascade for MSM shadow (2D point sample)
 	float SampleMSMCascade2D(uint cascadeIndex, float3 positionLS)
-	{	
+	{
 		float4 moments = SharedShadowMap.SampleLevel(LinearSampler, positionLS.xy, 1u - cascadeIndex);
 		moments = ConvertOptimizedMoments(moments);
 		return ComputeMSMHausdorff(moments, positionLS.z, 0.00003);
