@@ -56,21 +56,28 @@ float IGNoise(float2 pos)
 		if (skipUIComposite) {
 			finalColor = scenePQ;
 		} else {
-			float3 uiPremulPQ = float3(0, 0, 0);
-			float uiAlpha = ui.a;
-
-			if (uiAlpha > 1.0 / 255.0) {
-				float3 uiGamma = ui.rgb / uiAlpha;
-				float3 uiLinear = Color::GammaToTrueLinear(uiGamma);
-				float3 uiBT2020 = Color::BT709ToBT2020(uiLinear);
-				float uiNits = UI_REFERENCE_NITS * uiBrightness;
-				uiPremulPQ = Color::pq::Encode(uiBT2020, uiNits) * uiAlpha;
-			}
-
-			finalColor = uiPremulPQ + scenePQ * (1.0 - uiAlpha);
+			// UI is raw vanilla gamma - convert to PQ and composite
+			float3 uiLinear = Color::GammaToTrueLinear(max(0, ui.rgb));
+			float3 uiBT2020 = Color::BT709ToBT2020(uiLinear);
+			float uiNits = UI_REFERENCE_NITS * uiBrightness;
+			float3 uiPQ = Color::pq::Encode(uiBT2020, uiNits);
+			float3 uiPremulPQ = uiPQ * ui.a;
+			
+			finalColor = uiPremulPQ + scenePQ * (1.0 - ui.a);
 		}
 	} else {
-		finalColor = saturate(scene.rgb);
+		// SDR mode  
+		float3 sceneGamma = scene.rgb;
+
+		if (skipUIComposite) {
+			finalColor = sceneGamma;
+		} else {
+			// Premultiplied alpha composite
+			float3 uiPremul = ui.rgb * ui.a * uiBrightness;
+			finalColor = uiPremul + sceneGamma * (1.0 - ui.a);
+		}
+
+		finalColor = saturate(finalColor);
 	}
 
 	// Dither to break up 10-bit PQ banding in smooth gradients (sky, sun bloom)

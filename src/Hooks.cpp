@@ -261,11 +261,11 @@ struct IDXGISwapChain_Present
 
 		bool frameGenActive = upscaling.d3d12SwapChainActive;
 
-		// HDR pipeline only runs when the HDR Display feature is installed, loaded, AND HDR output is enabled
-		// When enableHDR is false (SDR mode), vanilla ISHDR writes directly to kFRAMEBUFFER and no compositing is needed
-		bool hdrReady = globals::features::hdrDisplay.loaded && hdr && hdr->settings.enableHDR && hdr->hdrDataCB && hdr->outputTexture;
-
-		// When FG is active: ImGui renders to FG's uiBufferWrapped (FidelityFX handles compositing after interpolation)
+	// HDR pipeline runs when:
+	// 1. HDR Display loaded + enableHDR=true + resources ready (full HDR processing)
+	// 2. Frame Gen active (needs ScaleUIBrightnessForFG to premultiply UI even in SDR mode)
+	bool hdrReady = globals::features::hdrDisplay.loaded && hdr && hdr->hdrDataCB && hdr->outputTexture &&
+	                (hdr->settings.enableHDR || frameGenActive);
 		// When FG is NOT active + HDR loaded: ImGui renders to hdr->uiTexture (we composite in ApplyHDR)
 		// When HDR is NOT loaded: ImGui renders directly to kFRAMEBUFFER (vanilla path)
 		if (frameGenActive) {

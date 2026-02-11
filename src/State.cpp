@@ -845,17 +845,12 @@ void State::UpdateSharedData([[maybe_unused]] bool a_inWorld, [[maybe_unused]] b
 		// Populate HDR data only when HDR Display feature is loaded
 		// When not loaded, ISHDR.hlsl uses the SDR branch (HDRData.x = 0)
 		auto* hdr = HDR::GetSingleton();
-		if (hdr && globals::features::hdrDisplay.loaded) {
-			data.HDRData = {
-				hdr->settings.enableHDR ? 1.0f : 0.0f,
-				static_cast<float>(hdr->settings.hdrPaperWhite),
-				static_cast<float>(hdr->settings.hdrPeakNits),
-				0.0f
-			};
-		} else {
-			// SDR defaults - ISHDR.hlsl will use vanilla tonemapping path
-			data.HDRData = { 0.0f, 203.0f, 1000.0f, 0.0f };
-		}
+		data.HDRData = {
+			hdr->settings.enableHDR ? 1.0f : 0.0f,
+			static_cast<float>(hdr->settings.hdrPaperWhite),
+			static_cast<float>(hdr->settings.hdrPeakNits),
+			0.0f
+		};
 
 		sharedDataCB->Update(data);
 	}

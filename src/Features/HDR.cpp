@@ -777,40 +777,10 @@ void HDR::ApplyHDR()
 		// When D3D12 swap chain is active, vanilla UI renders to uiBufferWrapped
 		// Otherwise it renders to our uiTexture
 		ID3D11ShaderResourceView* uiSRV = nullptr;
-		ID3D11UnorderedAccessView* uiUAV = nullptr;
 		if (upscaling.d3d12SwapChainActive && upscaling.dx12SwapChain.uiBufferWrapped) {
 			uiSRV = upscaling.dx12SwapChain.uiBufferWrapped->srv;
-			uiUAV = upscaling.dx12SwapChain.uiBufferWrapped->uav;
 		} else if (uiTexture && uiTexture->srv) {
 			uiSRV = uiTexture->srv.get();
-			uiUAV = uiTexture->uav.get();
-		}
-
-		// Pre-process UI through UIBrightnessCS only for Frame Gen path
-		// FidelityFX needs premultiplied PQ UI for its own compositing
-		// In non-FG path, HDROutputCS handles UI conversion itself
-		bool fgActiveThisFrame = upscaling.d3d12SwapChainActive &&
-		                         upscaling.settings.frameGenerationMode &&
-		                         !globals::game::ui->GameIsPaused() &&
-		                         !globals::game::isVR;
-		if (fgActiveThisFrame && uiUAV) {
-			auto uiBrightnessShader = GetUIBrightnessCS();
-			if (uiBrightnessShader) {
-				ID3D11UnorderedAccessView* preUavs[1] = { uiUAV };
-				context->CSSetUnorderedAccessViews(0, 1, preUavs, nullptr);
-
-				ID3D11Buffer* preCbs[1] = { hdrDataCB->CB() };
-				context->CSSetConstantBuffers(0, 1, preCbs);
-
-				context->CSSetShader(uiBrightnessShader, nullptr, 0);
-				context->Dispatch(dispatchCount.x, dispatchCount.y, 1);
-
-				preUavs[0] = nullptr;
-				context->CSSetUnorderedAccessViews(0, 1, preUavs, nullptr);
-				preCbs[0] = nullptr;
-				context->CSSetConstantBuffers(0, 1, preCbs);
-				context->CSSetShader(nullptr, nullptr, 0);
-			}
 		}
 
 		ID3D11ShaderResourceView* views[2] = { sceneSRV, uiSRV };
