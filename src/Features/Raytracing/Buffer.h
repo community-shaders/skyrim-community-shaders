@@ -115,6 +115,19 @@ namespace DX12
 		}
 
 	public:
+		explicit ResourceUpload(ID3D12Device5* device, D3D12_RESOURCE_DESC desc) :
+			Resource(device, D3D12_HEAP_TYPE_DEFAULT, desc, D3D12_RESOURCE_STATE_COPY_DEST), size(size)
+		{
+			const auto& heapProps = CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_UPLOAD);
+			DX::ThrowIfFailed(device->CreateCommittedResource(
+				&heapProps,
+				D3D12_HEAP_FLAG_NONE,
+				&this->desc,
+				D3D12_RESOURCE_STATE_GENERIC_READ,
+				nullptr,
+				IID_PPV_ARGS(&uploadResource)));
+		}
+
 		explicit ResourceUpload(ID3D12Device5* device, const uint64_t& size, D3D12_RESOURCE_FLAGS flags = D3D12_RESOURCE_FLAG_NONE) :
 			Resource(device, D3D12_HEAP_TYPE_DEFAULT, Desc(size, flags), D3D12_RESOURCE_STATE_COPY_DEST), size(size)
 		{
@@ -126,6 +139,12 @@ namespace DX12
 				D3D12_RESOURCE_STATE_GENERIC_READ,
 				nullptr,
 				IID_PPV_ARGS(&uploadResource)));
+		}
+
+		virtual void SetName(LPCWSTR name) const override
+		{
+			Resource::SetName(name);
+			DX::ThrowIfFailed(uploadResource->SetName(std::format(L"{} [Upload]", name).c_str()));
 		}
 
 		void Update(void const* src_data, size_t data_size) const
