@@ -46,6 +46,7 @@ struct LinearLighting : Feature
 		float directionalLightMultExterior = 1.0f;
 		float directionalLightMultInterior = 1.0f;
 		float pointLightMult = 1.0f;
+		float ambientMult = 0.67f;
 		float emitColorMult = 1.0f;
 		float glowmapMult = 0.5f;
 
@@ -79,6 +80,7 @@ struct LinearLighting : Feature
 		float vanillaDiffuseColorMult;
 		float directionalLightMult;  // Computed based on interior/exterior
 		float pointLightMult;
+		float ambientMult;
 		float emitColorMult;
 		float glowmapMult;
 		float effectLightingMult;
@@ -87,7 +89,6 @@ struct LinearLighting : Feature
 		float projectedEffectMult;
 		float deferredEffectMult;
 		float otherEffectMult;
-		float pad0;
 	};
 
 	struct alignas(16) PerGeometryData

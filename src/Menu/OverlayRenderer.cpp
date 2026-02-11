@@ -25,7 +25,7 @@ void OverlayRenderer::RenderOverlay(
 	Menu& menu,
 	const std::function<void()>& processInputEventQueue,
 	const std::function<void()>& drawSettings,
-	const std::function<const char*(uint32_t)>& keyIdToString,
+	const std::function<const char*(std::vector<InputCombo>)>& keyIdToString,
 	float& cachedFontSize,
 	float currentFontSize)
 {
@@ -74,7 +74,7 @@ void OverlayRenderer::HandleVRSetup()
 bool OverlayRenderer::ShouldSkipRendering()
 {
 	auto shaderCache = globals::shaderCache;
-	auto failed = shaderCache->GetFailedTasks();
+	auto failed = shaderCache->GetCurrentFailedCount();
 	auto hide = shaderCache->IsHideErrors();
 	auto* abTestingManager = ABTestingManager::GetSingleton();
 	auto* renderDoc = RenderDoc::GetSingleton();
@@ -110,10 +110,10 @@ void OverlayRenderer::InitializeImGuiFrame(Menu& menu)
 	ThemeManager::SetupImGuiStyle(menu);
 }
 
-void OverlayRenderer::RenderShaderCompilationStatus(const std::function<const char*(uint32_t)>& keyIdToString)
+void OverlayRenderer::RenderShaderCompilationStatus(const std::function<const char*(std::vector<InputCombo>)>& keyIdToString)
 {
 	auto shaderCache = globals::shaderCache;
-	auto failed = shaderCache->GetFailedTasks();
+	auto failed = shaderCache->GetCurrentFailedCount();
 	auto hide = shaderCache->IsHideErrors();
 
 	uint64_t totalShaders = shaderCache->GetTotalTasks();

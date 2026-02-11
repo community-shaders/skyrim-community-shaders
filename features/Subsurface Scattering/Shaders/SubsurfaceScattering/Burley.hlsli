@@ -88,7 +88,7 @@ float4 BurleyNormalizedSS(uint2 DTid, float2 texCoord, uint eyeIndex, float sssA
 	int seedStart = Random::pcg3d(int3(seed.xy, SharedData::FrameCount)).x;
 
 	[loop]
-	for (int i = 0; i < BurleySamples; ++i)
+	for (int i = 0; i < (int)BurleySamples; ++i)
 	{
 		seed.z = seedStart++;
 		float2 rand = float2(Random::pcg3d(seed).xy) / 4294967296.0f;  // to [0, 1)

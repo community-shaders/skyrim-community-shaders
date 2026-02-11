@@ -306,7 +306,8 @@ void AdvancedSettingsRenderer::RenderShaderDebugSection()
 				ImGui::Text("Block Previous:");
 				ImGui::SameLine();
 				ImGui::AlignTextToFramePadding();
-				ImGui::TextColored(themeSettings.StatusPalette.CurrentHotkey, "%s", Util::Input::KeyIdToString(menuSettings.ShaderBlockPrevKey));
+				ImGui::TextColored(themeSettings.StatusPalette.CurrentHotkey, "%s",
+					Util::Input::KeyIdToString(menuSettings.ShaderBlockPrevKey).c_str());
 				ImGui::SameLine();
 				if (ImGui::Button("Change##ShaderBlockPrev")) {
 					menu->settingShaderBlockPrevKey = true;
@@ -321,7 +322,8 @@ void AdvancedSettingsRenderer::RenderShaderDebugSection()
 				ImGui::Text("Block Next:");
 				ImGui::SameLine();
 				ImGui::AlignTextToFramePadding();
-				ImGui::TextColored(themeSettings.StatusPalette.CurrentHotkey, "%s", Util::Input::KeyIdToString(menuSettings.ShaderBlockNextKey));
+				ImGui::TextColored(themeSettings.StatusPalette.CurrentHotkey, "%s",
+					Util::Input::KeyIdToString(menuSettings.ShaderBlockNextKey).c_str());
 				ImGui::SameLine();
 				if (ImGui::Button("Change##ShaderBlockNext")) {
 					menu->settingShaderBlockNextKey = true;

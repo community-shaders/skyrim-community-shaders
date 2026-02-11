@@ -2,6 +2,7 @@
 #pragma once
 #include "Feature.h"
 #include "Menu/ThemeManager.h"
+#include "Utils/Input.h"
 #include "Utils/Serialize.h"
 #include <array>
 #include <atomic>
@@ -247,14 +248,14 @@ public:
 			return roles;
 		}();
 
-		bool UseSimplePalette = false;       // DEPRECATED: No longer affects behavior. UI now shows both Simple and Advanced controls.
-		bool ShowActionIcons = true;         // whether to show action buttons as icons
-		bool UseMonochromeIcons = false;     // whether to use monochrome (white) action icons with text color tinting
-		bool UseMonochromeLogo = false;      // whether to use monochrome CS logo
-		bool ShowFooter = true;              // whether to show the footer with game version/GPU info
-		bool CenterHeader = false;           // whether to center the header title and logo
-		float TooltipHoverDelay = 0.5f;      // tooltip hover delay in seconds
-		bool BackgroundBlurEnabled = false;  // enable background blur effect
+		bool UseSimplePalette = false;      // DEPRECATED: No longer affects behavior. UI now shows both Simple and Advanced controls.
+		bool ShowActionIcons = true;        // whether to show action buttons as icons
+		bool UseMonochromeIcons = false;    // whether to use monochrome (white) action icons with text color tinting
+		bool UseMonochromeLogo = false;     // whether to use monochrome CS logo
+		bool ShowFooter = true;             // whether to show the footer with game version/GPU info
+		bool CenterHeader = false;          // whether to center the header title and logo
+		float TooltipHoverDelay = 0.5f;     // tooltip hover delay in seconds
+		bool BackgroundBlurEnabled = true;  // enable background blur effect
 		// Scrollbar opacity settings
 		struct ScrollbarOpacitySettings
 		{
@@ -375,16 +376,17 @@ public:
 
 	struct Settings
 	{
-		uint32_t ToggleKey = VK_END;
-		uint32_t SkipCompilationKey = VK_ESCAPE;
-		uint32_t EffectToggleKey = VK_MULTIPLY;   // toggle all effects
-		uint32_t OverlayToggleKey = VK_F10;       // Global overlay toggle key for all overlays
-		uint32_t ShaderBlockPrevKey = VK_PRIOR;   // Debug: cycle backward through shaders (PageUp)
-		uint32_t ShaderBlockNextKey = VK_NEXT;    // Debug: cycle forward through shaders (PageDown)
-		bool EnableShaderBlocking = false;        // Enable shader blocking hotkeys for debugging
-		bool FirstTimeSetupCompleted = false;     // Track if first-time setup has been completed
-		bool SkipClearCacheConfirmation = false;  // Skip confirmation dialog when clearing shader cache
-		bool AutoHideFeatureList = false;         // Auto-hide left feature list panel, show on hover
+		std::vector<InputCombo> ToggleKey = { InputCombo::Keyboard(VK_END) };
+		std::vector<InputCombo> SkipCompilationKey = { InputCombo::Keyboard(VK_ESCAPE) };
+		std::vector<InputCombo> EffectToggleKey = { InputCombo::Keyboard(VK_MULTIPLY) };  // toggle all effects
+		std::vector<InputCombo> OverlayToggleKey = { InputCombo::Keyboard(VK_F10) };      // Global overlay toggle key for all overlays
+		std::vector<InputCombo> ShaderBlockPrevKey = { InputCombo::Keyboard(VK_PRIOR) };  // Debug: cycle backward through shaders (PageUp)
+		std::vector<InputCombo> ShaderBlockNextKey = { InputCombo::Keyboard(VK_NEXT) };   // Debug: cycle forward through shaders (PageDown)
+		bool EnableShaderBlocking = false;                                                // Enable shader blocking hotkeys for debugging
+		bool FirstTimeSetupCompleted = false;                                             // Track if first-time setup has been completed
+		bool SkipClearCacheConfirmation = false;                                          // Skip confirmation dialog when clearing shader cache
+		bool AutoHideFeatureList = false;                                                 // Auto-hide left feature list panel, show on hover
+		bool SkipConstraintWarning = false;                                               // Skip popup when a setting change creates new constraints
 		ThemeSettings Theme;
 		std::string SelectedThemePreset = "";  // Currently selected theme preset (empty = custom/user theme)
 	};

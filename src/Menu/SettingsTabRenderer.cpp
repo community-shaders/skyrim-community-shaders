@@ -7,6 +7,7 @@
 #include <windows.h>
 
 #include "BackgroundBlur.h"
+#include "Features/VR.h"
 #include "Fonts.h"
 #include "Globals.h"
 #include "IconLoader.h"
@@ -173,14 +174,12 @@ namespace
 	}
 }
 
-void SettingsTabRenderer::RenderGeneralSettings(
-	SettingsState& state,
-	const std::function<const char*(uint32_t)>& keyIdToString)
+void SettingsTabRenderer::RenderGeneralSettings(SettingsState& state)
 {
 	MenuFonts::TabBarPaddingGuard tabPaddingGuard(Menu::FontRole::Heading);
 	if (ImGui::BeginTabBar("##GeneralTabBar", ImGuiTabBarFlags_None)) {
 		RenderShadersTab();
-		RenderKeybindingsTab(state, keyIdToString);
+		RenderKeybindingsTab(state);
 		RenderInterfaceTab();
 		ImGui::EndTabBar();
 	}
@@ -235,80 +234,34 @@ void SettingsTabRenderer::RenderShadersTab()
 }
 
 void SettingsTabRenderer::RenderKeybindingsTab(
-	SettingsState& state,
-	const std::function<const char*(uint32_t)>& keyIdToString)
+	SettingsState& state)
 {
 	if (BeginTabItemWithFont("Keybindings", Menu::FontRole::Heading)) {
 		auto& settings = globals::menu->GetSettings();
-		auto& themeSettings = globals::menu->GetSettings().Theme;
 
-		// Toggle Key
-		if (state.settingToggleKey) {
-			ImGui::Text("Press any key to set as toggle key...");
-		} else {
-			ImGui::AlignTextToFramePadding();
-			ImGui::Text("Toggle Key:");
-			ImGui::SameLine();
-			ImGui::AlignTextToFramePadding();
-			ImGui::TextColored(themeSettings.StatusPalette.CurrentHotkey, "%s", keyIdToString(settings.ToggleKey));
+		Util::InputComboWidget(
+			"Toggle Key:",
+			settings.ToggleKey,
+			state.settingToggleKey,
+			"Change##toggle");
 
-			ImGui::AlignTextToFramePadding();
-			ImGui::SameLine();
-			if (ImGui::Button("Change##toggle")) {
-				state.settingToggleKey = true;
-			}
-		}
+		Util::InputComboWidget(
+			"Effect Toggle Key:",
+			settings.EffectToggleKey,
+			state.settingsEffectsToggle,
+			"Change##EffectToggle");
 
-		// Effects Toggle Key
-		if (state.settingsEffectsToggle) {
-			ImGui::Text("Press any key to set as a toggle key for all effects...");
-		} else {
-			ImGui::AlignTextToFramePadding();
-			ImGui::Text("Effect Toggle Key:");
-			ImGui::SameLine();
-			ImGui::AlignTextToFramePadding();
-			ImGui::TextColored(themeSettings.StatusPalette.CurrentHotkey, "%s", keyIdToString(settings.EffectToggleKey));
+		Util::InputComboWidget(
+			"Skip Compilation Key:",
+			settings.SkipCompilationKey,
+			state.settingSkipCompilationKey,
+			"Change##skip");
 
-			ImGui::AlignTextToFramePadding();
-			ImGui::SameLine();
-			if (ImGui::Button("Change##EffectToggle")) {
-				state.settingsEffectsToggle = true;
-			}
-		}
-
-		// Skip Compilation Key
-		if (state.settingSkipCompilationKey) {
-			ImGui::Text("Press any key to set as Skip Compilation Key...");
-		} else {
-			ImGui::AlignTextToFramePadding();
-			ImGui::Text("Skip Compilation Key:");
-			ImGui::SameLine();
-			ImGui::AlignTextToFramePadding();
-			ImGui::TextColored(themeSettings.StatusPalette.CurrentHotkey, "%s", keyIdToString(settings.SkipCompilationKey));
-
-			ImGui::AlignTextToFramePadding();
-			ImGui::SameLine();
-			if (ImGui::Button("Change##skip")) {
-				state.settingSkipCompilationKey = true;
-			}
-		}
-
-		// Overlay Toggle Key
-		if (state.settingOverlayToggleKey) {
-			ImGui::Text("Press any key to set as a toggle key for displaying the overlay...");
-		} else {
-			ImGui::AlignTextToFramePadding();
-			ImGui::Text("Overlay Toggle Key:");
-			ImGui::SameLine();
-			ImGui::AlignTextToFramePadding();
-			ImGui::TextColored(themeSettings.StatusPalette.CurrentHotkey, "%s", keyIdToString(settings.OverlayToggleKey));
-
-			ImGui::AlignTextToFramePadding();
-			ImGui::SameLine();
-			if (ImGui::Button("Change##OverlayToggle")) {
-				state.settingOverlayToggleKey = true;
-			}
-		}
+		Util::InputComboWidget(
+			"Overlay Toggle Key:",
+			settings.OverlayToggleKey,
+			state.settingOverlayToggleKey,
+			"Change##OverlayToggle");
 
 		ImGui::EndTabItem();
 	}
