@@ -1084,13 +1084,9 @@ void Menu::ProcessInputEventQueue()
 					}
 				}
 
-				// ESC closes editor first (without propagating), then menu
+				// Close menu with ESC if no editor window is open
 				auto* editorWindow = EditorWindow::GetSingleton();
-				if (key == VK_ESCAPE && editorWindow && editorWindow->open) {
-					editorWindow->open = false;
-					continue;  // Don't send to ImGui/menu
-				}
-				if (key == VK_ESCAPE && IsEnabled) {
+				if (key == VK_ESCAPE && IsEnabled && editorWindow && !editorWindow->open) {
 					IsEnabled = false;
 				}
 			}
