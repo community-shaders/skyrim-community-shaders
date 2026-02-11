@@ -65,7 +65,7 @@ static const float UI_REFERENCE_NITS = 80.0;
 		// Output: Adjusted gamma UI suitable for SDR displays
 		// 
 		// Simple brightness scaling in gamma space without color space conversion.
-		ui.rgb = max(0, ui.rgb * uiBrightness);
+		ui.rgb = max(0, ui.rgb);
 	}
 
 	// Convert to premultiplied alpha for proper compositing.
