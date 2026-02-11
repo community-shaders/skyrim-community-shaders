@@ -256,7 +256,7 @@ void ColorGrading::DrawSettings()
         ImGui::Combo("Log Type", (int*)&settings.logType, "ACEScct\0ARRILogC4\0SonySLog3\0");
     }
 
-	auto profile = settings.profile;
+	auto& profile = settings.profile;
     ImGui::SeparatorText("Color Grading");
     {
         ImGui::SliderFloat("Input Gamma", &profile.params[6].z, 0.f, 3.f, "%.3f");
