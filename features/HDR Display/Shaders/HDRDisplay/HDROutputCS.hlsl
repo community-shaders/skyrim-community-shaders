@@ -27,13 +27,7 @@ cbuffer PerFrame : register(b0)
 	float4 parameters1 : packoffset(c1);  ///< .x=uiBrightness multiplier, .y=isSceneLinear
 }
 
-static const float UI_REFERENCE_NITS = 100.0;
-
-// Interleaved gradient noise (Jimenez 2014) — smooth spatial dither pattern
-float IGNoise(float2 pos)
-{
-	return frac(52.9829189 * frac(dot(pos, float2(0.06711056, 0.00583715))));
-}
+static const float UI_REFERENCE_NITS = 80.0;
 
 [numthreads(8, 8, 1)] void main(uint3 dispatchID : SV_DispatchThreadID)
 {
@@ -50,40 +44,53 @@ float IGNoise(float2 pos)
 	float3 finalColor;
 
 	if (enableHDR) {
-		// Scene is already PQ-encoded in BT.2020 from ISHDR
+		// === HDR Pipeline ===
+		// Input: Scene is PQ-encoded in BT.2020 from ISHDR (bloom, tone, grading applied)
+		// Output: PQ-encoded BT.2020 ready for display or swap chain
+		
 		float3 scenePQ = scene.rgb;
 
 		if (skipUIComposite) {
+			// Direct passthrough when UI compositing is disabled
 			finalColor = scenePQ;
 		} else {
-			// UI is raw vanilla gamma - convert to PQ and composite
+			// Composite UI on top of PQ scene (UI was pre-processed to PQ by UIBrightnessCS)
+			// Both UI and scene are in PQ space, so we can blend directly.
+			
+			// Scale UI to nit reference level
+			float uiNits = UI_REFERENCE_NITS * uiBrightness;
+			
+			// UI is in BT.709, convert to BT.2020 for HDR
 			float3 uiLinear = Color::GammaToTrueLinear(max(0, ui.rgb));
 			float3 uiBT2020 = Color::BT709ToBT2020(uiLinear);
-			float uiNits = UI_REFERENCE_NITS * uiBrightness;
-			float3 uiPQ = Color::pq::Encode(uiBT2020, uiNits);
-			float3 uiPremulPQ = uiPQ * ui.a;
 			
+			// Encode UI to PQ space matching the scene
+			float3 uiPQ = Color::pq::Encode(uiBT2020, uiNits);
+			
+			// Apply UI alpha: blend = ui + (1-alpha)*scene
+			float3 uiPremulPQ = uiPQ * ui.a;
 			finalColor = uiPremulPQ + scenePQ * (1.0 - ui.a);
 		}
 	} else {
-		// SDR mode  
+		// === SDR Pipeline ===
+		// Input: Scene is tonemapped to gamma LDR range [0,1] from ISHDR
+		// Output: Gamma LDR ready for standard SDR display
+		
 		float3 sceneGamma = scene.rgb;
 
 		if (skipUIComposite) {
+			// Direct passthrough when UI compositing is disabled
 			finalColor = sceneGamma;
 		} else {
-			// Premultiplied alpha composite
+			// Composite UI on top of gamma scene using premultiplied alpha
+			// Both UI and scene are in sRGB gamma space for SDR.
+			
 			float3 uiPremul = ui.rgb * ui.a * uiBrightness;
 			finalColor = uiPremul + sceneGamma * (1.0 - ui.a);
 		}
 
+		// Clamp to [0,1] for SDR output
 		finalColor = saturate(finalColor);
-	}
-
-	// Dither to break up 10-bit PQ banding in smooth gradients (sky, sun bloom)
-	if (enableHDR) {
-		float dither = (IGNoise(float2(dispatchID.xy)) - 0.5) / 1023.0;
-		finalColor += dither;
 	}
 
 	HDROutput[dispatchID.xy] = float4(finalColor, 1.0);
