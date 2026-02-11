@@ -166,35 +166,32 @@ PS_OUTPUT main(PS_INPUT input)
 		float paperWhiteNits = SharedData::HDRData.y;
 		float peakNits = SharedData::HDRData.z;
 
-		// === Color Grading in Gamma Space ===
-		// Always perform grading in gamma space to preserve vanilla artistic intent.
-		// If Linear Lighting is active, convert to gamma first, then back to linear after.
+		// === Convert to Linear Space ===
+		// If Linear Lighting is active, input is already linear.
+		float3 hdrLinear = ENABLE_LL ? inputColor : Color::GammaToLinear(inputColor);
 		
-		// Convert to gamma space if needed (Linear Lighting makes input linear)
-		float3 hdrGamma = ENABLE_LL ? Color::LinearToGamma(inputColor) : inputColor;
+		// === Color Grading (Mixed Linear/Gamma) ===
+		// Most operations in linear for physical accuracy, contrast in gamma for artistic control.
 		
-		// Brightness adjustment (Cinematic.w)
-		hdrGamma *= Cinematic.w;
+		// Brightness adjustment (Cinematic.w) - uniform intensity scaling in linear
+		hdrLinear *= Cinematic.w;
 		
-		// Contrast stretch/compress (pivot around average scene luminance)
+		// Saturation adjustment in linear (can generate negative RGB for highly saturated colors)
+		hdrLinear = Color::Saturation(hdrLinear, Cinematic.x);
+		
+		// Contrast adjustment in gamma space (perceptual contrast matching SDR behavior)
+		float3 hdrGamma = Color::LinearToGamma(hdrLinear);
 		hdrGamma = lerp(avgValue.x, hdrGamma, Cinematic.z);
+		hdrLinear = Color::GammaToLinear(hdrGamma);
 		
-		// Color tint (blend to monochrome tint if nonzero)
-		float hdrLuminanceGamma = Color::RGBToLuminance(hdrGamma);
-		hdrGamma = lerp(hdrGamma, hdrLuminanceGamma * Tint.xyz, Tint.w);
+		// Color tint in linear (blend to monochrome tint if nonzero)
+		float hdrLuminance = Color::RGBToLuminance(hdrLinear);
+		hdrLinear = lerp(hdrLinear, hdrLuminance * Tint.xyz, Tint.w);
 
 #		if defined(FADE)
-		// Screen fade effect (loading screens, death, etc.)
-		hdrGamma = lerp(hdrGamma, Fade.xyz, Fade.w);
+		// Screen fade effect in linear (loading screens, death, etc.)
+		hdrLinear = lerp(hdrLinear, Fade.xyz, Fade.w);
 #		endif
-
-		// === Linear Space HDR Processing ===
-		// Convert graded result to linear for tonemapping and bloom.
-		// If Linear Lighting is active, input was already linear (converted to gamma for grading above).
-		float3 hdrLinear = Color::GammaToLinear(hdrGamma);
-		
-		// Saturation adjustment in linear space (preserves color accuracy, can generate negative RGB)
-		hdrLinear = Color::Saturation(hdrLinear, Cinematic.x);
 
 		// === Bloom Compositing (Linear Space) ===
 		// High-pass filtered bloom adds glow to bright areas.
