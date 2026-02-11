@@ -42,7 +42,7 @@ void main(uint3 dispatchThreadID : SV_DispatchThreadID, uint3 groupThreadID : SV
 	for(uint i = 0; i < 4; i++)
 		msmDepth += GetOptimizedMoments(depths[i]);
 	msmDepth *= 0.25;
-	
+
 	g_scratchDepths[groupThreadID.x][groupThreadID.y] = msmDepth;
 
 	GroupMemoryBarrierWithGroupSync();
