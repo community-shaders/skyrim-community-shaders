@@ -198,22 +198,21 @@ PS_OUTPUT main(PS_INPUT input)
 		// Bloom is added in linear space to prevent excessive intensity at bright values.
 		hdrLinear += saturate(Param.x - hdrLinear) * bloomColor;
 
-		// === DICE Tonemapping (Luma Sandwich) ===
-		// INPUT: Linear BT.709 color (ensured above regardless of Linear Lighting setting)
-		// Scales from paper-white reference to peak brightness reference.
-		// Compresses highlights smoothly while preserving mid-tone detail.
-		// 
-		// Pattern: in_linear * paper_white_scale → DICE tonemap → / paper_white_scale
-		// This preserves paper-white as a neutral anchor point during compression.
+		// === DICE Tonemapping ===
+		// INPUT: Linear BT.709 color in 80-nit reference (1.0 = 80 nits)
+		// Multiply paper-white scalar into color, as per Luma Framework design.
+		// DICE then compresses highlights from paper-white to peak, preserving mid-tone detail.
+		// OUTPUT: Still in 80-nit reference (1.0 = 80 nits), just with tonemapped values.
 		float pw = paperWhiteNits / sRGB_WhiteLevelNits;
 		float peak = peakNits / sRGB_WhiteLevelNits;
-		hdrLinear = DisplayMapping::DICETonemap(hdrLinear * pw, peak, 0.5, CS_BT709, CS_BT709) / pw;
+		hdrLinear *= pw;  // Paper-white multiplied in (e.g., 2.5 for 200 nits)
+		hdrLinear = DisplayMapping::DICETonemap(hdrLinear, peak, 0.5, CS_BT709, CS_BT709);
 
 		// === Color Space Conversion and PQ Encoding ===
 		// Expand from BT.709 (SDR) to BT.2020 (HDR) for wider color gamut.
 		float3 bt2020 = Color::BT709ToBT2020(hdrLinear);
-		// Encode to PQ curve for HDR displays (matches HLG/PQ reference)
-		outputColor = Color::pq::Encode(bt2020, paperWhiteNits);
+		// Encode to PQ curve: color remains in 80-nit reference (1.0 = 80 nits)
+		outputColor = Color::pq::Encode(bt2020, sRGB_WhiteLevelNits);
 	} else {
 		// === SDR Pipeline (LDR RT) ===
 		// Input: Linear HDR values (can exceed 1.0)
