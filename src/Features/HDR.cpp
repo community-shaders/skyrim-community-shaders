@@ -236,23 +236,33 @@ void HDR::DrawSettings()
 	ImGui::Spacing();
 
 	// Gate HDR checkbox behind monitor detection
-	bool oldEnableHDR = settings.enableHDR;
+	bool oldEnableHDR;
+	bool currentEnableHDR;
+	{
+		std::lock_guard<std::mutex> lock(settingsMutex);
+		oldEnableHDR = settings.enableHDR;
+		currentEnableHDR = settings.enableHDR;
+	}
 
 	// Disable checkbox if no HDR monitor detected AND HDR is not already enabled
 	// (Allow disabling HDR even on SDR if it's already on from saved settings)
-	if (!isHDRMonitor && !settings.enableHDR) {
+	if (!isHDRMonitor && !currentEnableHDR) {
 		ImGui::BeginDisabled();
 	}
 
-	if (ImGui::Checkbox("Enable HDR", &settings.enableHDR)) {
-		if (settings.enableHDR && !oldEnableHDR) {
-			logger::info("HDR: enableHDR changed to: true");
-			UpdateHDRData();
-			UpdateSwapChainColorSpace();
-		} else if (!settings.enableHDR && oldEnableHDR) {
-			logger::info("HDR: enableHDR changed to: false");
-			UpdateHDRData();
-			UpdateSwapChainColorSpace();
+	if (ImGui::Checkbox("Enable HDR", &currentEnableHDR)) {
+		{
+			std::lock_guard<std::mutex> lock(settingsMutex);
+			settings.enableHDR = currentEnableHDR;
+			if (settings.enableHDR && !oldEnableHDR) {
+				logger::info("HDR: enableHDR changed to: true");
+				UpdateHDRData();
+				UpdateSwapChainColorSpace();
+			} else if (!settings.enableHDR && oldEnableHDR) {
+				logger::info("HDR: enableHDR changed to: false");
+				UpdateHDRData();
+				UpdateSwapChainColorSpace();
+			}
 		}
 	}
 
@@ -269,19 +279,27 @@ void HDR::DrawSettings()
 	}
 
 	// Advanced override button for SDR monitors
-	if (!isHDRMonitor && !settings.enableHDR) {
+	if (!isHDRMonitor && !oldEnableHDR) {
 		ImGui::SameLine();
 		if (ImGui::Button("Advanced")) {
-			if (!settings.dontShowHDRWarning) {
+			bool dontShowWarning;
+			{
+				std::lock_guard<std::mutex> lock(settingsMutex);
+				dontShowWarning = settings.dontShowHDRWarning;
+			}
+			if (!dontShowWarning) {
 				pendingHDREnable = true;
 				showHDRWarningPopup = true;
 				ImGui::OpenPopup("HDR Warning##HDRDisplay");
 			} else {
 				// User previously dismissed warnings, enable directly
-				settings.enableHDR = true;
-				logger::info("HDR: enableHDR changed to: true (advanced override, warning suppressed)");
-				UpdateHDRData();
-				UpdateSwapChainColorSpace();
+				{
+					std::lock_guard<std::mutex> lock(settingsMutex);
+					settings.enableHDR = true;
+					logger::info("HDR: enableHDR changed to: true (advanced override, warning suppressed)");
+					UpdateHDRData();
+					UpdateSwapChainColorSpace();
+				}
 			}
 		}
 		if (auto _tt = Util::HoverTooltipWrapper()) {
@@ -290,11 +308,14 @@ void HDR::DrawSettings()
 	}
 
 	// Show notice if HDR is enabled on SDR monitor
-	if (!isHDRMonitor && settings.enableHDR) {
-		ImGui::Spacing();
-		ImGui::PushStyleColor(ImGuiCol_Text, Util::Colors::GetWarning());
-		ImGui::TextWrapped("HDR is enabled but no HDR display was detected.");
-		ImGui::PopStyleColor();
+	{
+		std::lock_guard<std::mutex> lock(settingsMutex);
+		if (!isHDRMonitor && settings.enableHDR) {
+			ImGui::Spacing();
+			ImGui::PushStyleColor(ImGuiCol_Text, Util::Colors::GetWarning());
+			ImGui::TextWrapped("HDR is enabled but no HDR display was detected.");
+			ImGui::PopStyleColor();
+		}
 	}
 
 	if (ImGui::BeginPopupModal("HDR Warning##HDRDisplay", &showHDRWarningPopup, ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoMove)) {
@@ -319,17 +340,23 @@ void HDR::DrawSettings()
 		ImGui::Spacing();
 
 		if (ImGui::Button("Force Enable HDR", ImVec2(150, 0))) {
-			settings.enableHDR = true;
-			logger::info("HDR: enableHDR changed to: true (forced override)");
-			UpdateHDRData();
-			UpdateSwapChainColorSpace();
+			{
+				std::lock_guard<std::mutex> lock(settingsMutex);
+				settings.enableHDR = true;
+				logger::info("HDR: enableHDR changed to: true (forced override)");
+				UpdateHDRData();
+				UpdateSwapChainColorSpace();
+			}
 			showHDRWarningPopup = false;
 			pendingHDREnable = false;
 			ImGui::CloseCurrentPopup();
 		}
 		ImGui::SameLine();
 		if (ImGui::Button("Cancel", ImVec2(150, 0))) {
-			settings.enableHDR = false;
+			{
+				std::lock_guard<std::mutex> lock(settingsMutex);
+				settings.enableHDR = false;
+			}
 			showHDRWarningPopup = false;
 			pendingHDREnable = false;
 			ImGui::CloseCurrentPopup();
@@ -340,9 +367,17 @@ void HDR::DrawSettings()
 		ImGui::Spacing();
 
 		// Add smaller "don't show again" checkbox
+		bool dontShowWarning;
+		{
+			std::lock_guard<std::mutex> lock(settingsMutex);
+			dontShowWarning = settings.dontShowHDRWarning;
+		}
 		ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(ImGui::GetStyle().FramePadding.x, ImGui::GetStyle().FramePadding.y * 0.5f));
 		ImGui::SetWindowFontScale(0.9f);
-		ImGui::Checkbox("Don't show me this again", &settings.dontShowHDRWarning);
+		if (ImGui::Checkbox("Don't show me this again", &dontShowWarning)) {
+			std::lock_guard<std::mutex> lock(settingsMutex);
+			settings.dontShowHDRWarning = dontShowWarning;
+		}
 		ImGui::SetWindowFontScale(1.0f);
 		ImGui::PopStyleVar();
 
@@ -350,29 +385,54 @@ void HDR::DrawSettings()
 		ImGui::EndPopup();
 	}
 
-	if (settings.enableHDR) {
+	// HDR settings sliders
+	bool isHDREnabled;
+	{
+		std::lock_guard<std::mutex> lock(settingsMutex);
+		isHDREnabled = settings.enableHDR;
+	}
+
+	if (isHDREnabled) {
 		ImGui::Spacing();
 
-		uint oldPaperWhite = settings.hdrPaperWhite;
-		ImGui::SliderInt("Paper White (nits)", reinterpret_cast<int*>(&settings.hdrPaperWhite), 80, 500);
-		if (settings.hdrPaperWhite >= settings.hdrPeakNits) {
-			settings.hdrPaperWhite = settings.hdrPeakNits - 1;
+		uint oldPaperWhite;
+		uint currentPaperWhite;
+		uint oldPeakNits;
+		uint currentPeakNits;
+		{
+			std::lock_guard<std::mutex> lock(settingsMutex);
+			oldPaperWhite = settings.hdrPaperWhite;
+			currentPaperWhite = settings.hdrPaperWhite;
+			oldPeakNits = settings.hdrPeakNits;
+			currentPeakNits = settings.hdrPeakNits;
 		}
-		if (oldPaperWhite != settings.hdrPaperWhite) {
-			UpdateHDRData();
+
+		ImGui::SliderInt("Paper White (nits)", reinterpret_cast<int*>(&currentPaperWhite), 80, 500);
+		{
+			std::lock_guard<std::mutex> lock(settingsMutex);
+			if (currentPaperWhite >= settings.hdrPeakNits) {
+				currentPaperWhite = settings.hdrPeakNits - 1;
+			}
+			settings.hdrPaperWhite = currentPaperWhite;
+			if (oldPaperWhite != settings.hdrPaperWhite) {
+				UpdateHDRData();
+			}
 		}
 		if (auto _tt = Util::HoverTooltipWrapper()) {
 			ImGui::Text("How bright SDR white appears on your HDR display.");
 			ImGui::Text("203 nits is the ITU BT.2408 reference. Increase for a brighter image.");
 		}
 
-		uint oldPeakNits = settings.hdrPeakNits;
-		ImGui::SliderInt("Peak Brightness (nits)", reinterpret_cast<int*>(&settings.hdrPeakNits), 400, 10000);
-		if (settings.hdrPeakNits <= settings.hdrPaperWhite) {
-			settings.hdrPeakNits = settings.hdrPaperWhite + 1;
-		}
-		if (oldPeakNits != settings.hdrPeakNits) {
-			UpdateHDRData();
+		ImGui::SliderInt("Peak Brightness (nits)", reinterpret_cast<int*>(&currentPeakNits), 400, 10000);
+		{
+			std::lock_guard<std::mutex> lock(settingsMutex);
+			if (currentPeakNits <= settings.hdrPaperWhite) {
+				currentPeakNits = settings.hdrPaperWhite + 1;
+			}
+			settings.hdrPeakNits = currentPeakNits;
+			if (oldPeakNits != settings.hdrPeakNits) {
+				UpdateHDRData();
+			}
 		}
 		if (auto _tt = Util::HoverTooltipWrapper()) {
 			ImGui::Text("Maximum brightness your display can produce.");
@@ -382,26 +442,23 @@ void HDR::DrawSettings()
 		ImGui::TextDisabled("Display reports: %.0f nits max", cachedDisplayMaxLuminance);
 	}
 
-	// UI brightness - show appropriate slider based on HDR mode
+	// UI brightness slider - only shown when HDR is enabled
 	ImGui::Spacing();
-	if (settings.enableHDR) {
-		float oldUIBrightness = settings.hdrUIBrightness;
-		ImGui::SliderFloat("HDR UI Brightness", &settings.hdrUIBrightness, 0.5f, 5.0f, "%.1fx");
-		if (oldUIBrightness != settings.hdrUIBrightness) {
-			UpdateHDRData();
-		}
-		if (auto _tt = Util::HoverTooltipWrapper()) {
-			ImGui::Text("Adjusts UI brightness in HDR mode. UI renders at 100 nits baseline,");
-			ImGui::Text("independent of Paper White setting. 1.0x = 100 nits.");
-		}
-	} else {
-		float oldUIBrightness = settings.sdrUIBrightness;
-		ImGui::SliderFloat("SDR UI Brightness", &settings.sdrUIBrightness, 0.5f, 5.0f, "%.1fx");
-		if (oldUIBrightness != settings.sdrUIBrightness) {
-			UpdateHDRData();
-		}
-		if (auto _tt = Util::HoverTooltipWrapper()) {
-			ImGui::Text("Adjusts UI brightness in SDR mode. 1.0x = normal brightness.");
+	{
+		std::lock_guard<std::mutex> lock(settingsMutex);
+		if (settings.enableHDR) {
+			float oldUIBrightness = settings.hdrUIBrightness;
+			float currentUIBrightness = settings.hdrUIBrightness;
+			
+			ImGui::SliderFloat("HDR UI Brightness", &currentUIBrightness, 0.5f, 5.0f, "%.1fx");
+			if (oldUIBrightness != currentUIBrightness) {
+				settings.hdrUIBrightness = currentUIBrightness;
+				UpdateHDRData();
+			}
+			if (auto _tt = Util::HoverTooltipWrapper()) {
+				ImGui::Text("Adjusts UI brightness in HDR mode. UI renders at 100 nits baseline,");
+				ImGui::Text("independent of Paper White setting. 1.0x = 100 nits.");
+			}
 		}
 	}
 }
