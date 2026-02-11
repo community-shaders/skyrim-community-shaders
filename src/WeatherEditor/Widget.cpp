@@ -333,6 +333,14 @@ void Widget::DrawWidgetHeader(const char* searchId, bool showApplyRevert, bool s
 			}
 		}
 
+		// Unsaved changes indicator
+		if (HasUnsavedChanges()) {
+			ImGui::SameLine();
+			ImGui::TextColored(menu->GetTheme().StatusPalette.Warning, "(!)");
+			if (ImGui::IsItemHovered())
+				ImGui::SetTooltip("Unsaved changes - click save to keep");
+		}
+
 		// Save/Load/Delete buttons
 		if (showSaveLoad && menu->uiIcons.saveSettings.texture && menu->uiIcons.loadSettings.texture) {
 			ImGui::SameLine();
@@ -458,6 +466,14 @@ void Widget::DrawWidgetHeader(const char* searchId, bool showApplyRevert, bool s
 			if (ImGui::IsItemHovered()) {
 				ImGui::SetTooltip("Revert to saved values");
 			}
+		}
+
+		// Unsaved changes indicator
+		if (HasUnsavedChanges()) {
+			ImGui::SameLine();
+			ImGui::TextColored(Menu::GetSingleton()->GetTheme().StatusPalette.Warning, "(!)");
+			if (ImGui::IsItemHovered())
+				ImGui::SetTooltip("Unsaved changes - click save to keep");
 		}
 
 		// Save/Load/Delete buttons

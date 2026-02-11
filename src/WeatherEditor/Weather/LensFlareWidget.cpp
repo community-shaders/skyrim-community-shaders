@@ -6,7 +6,7 @@ void LensFlareWidget::DrawWidget()
 {
 	ImGui::SetNextWindowSizeConstraints(ImVec2(600, 0), ImVec2(FLT_MAX, FLT_MAX));
 	if (ImGui::Begin(GetEditorID().c_str(), &open, ImGuiWindowFlags_NoSavedSettings)) {
-		DrawWidgetHeader("##LensFlareSearch", false, true);
+		DrawWidgetHeader("##LensFlareSearch", true, true);
 
 		bool changed = false;
 
@@ -59,8 +59,6 @@ void LensFlareWidget::ApplyChanges()
 
 	lensFlare->fadeDistRadiusScale = settings.fadeDistRadiusScale;
 	lensFlare->colorInfluence = settings.colorInfluence;
-
-	originalSettings = settings;
 }
 
 void LensFlareWidget::RevertChanges()

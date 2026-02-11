@@ -7,7 +7,7 @@ void PrecipitationWidget::DrawWidget()
 	WeatherUtils::SetCurrentWidget(this);
 	ImGui::SetNextWindowSizeConstraints(ImVec2(600, 0), ImVec2(FLT_MAX, FLT_MAX));
 	if (ImGui::Begin(GetEditorID().c_str(), &open, ImGuiWindowFlags_NoSavedSettings)) {
-		DrawWidgetHeader("##PrecipitationSearch", false, true);
+		DrawWidgetHeader("##PrecipitationSearch", true, true);
 
 		bool changed = false;
 
@@ -182,8 +182,6 @@ void PrecipitationWidget::ApplyChanges()
 	runtime.data[(uint32_t)RE::BGSShaderParticleGeometryData::DataID::kBoxSize].f = settings.boxSize;
 	runtime.data[(uint32_t)RE::BGSShaderParticleGeometryData::DataID::kParticleDensity].f = settings.particleDensity;
 	runtime.particleTexture.textureName = settings.particleTexture.c_str();
-
-	originalSettings = settings;
 }
 
 void PrecipitationWidget::RevertChanges()
