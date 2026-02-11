@@ -110,6 +110,12 @@ namespace Util
 		std::filesystem::path GetAppliedOverridesPath();
 
 		/**
+		 * Gets the SceneSettings directory path
+		 * @return CommunityShaderPath / "SceneSettings"
+		 */
+		std::filesystem::path GetSceneSettingsPath();
+
+		/**
 		 * Gets the main Shaders directory path
 		 * @return Data / "Shaders"
 		 */

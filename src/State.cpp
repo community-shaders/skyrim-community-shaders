@@ -18,6 +18,7 @@
 #include "TruePBR.h"
 #include "Utils/FileSystem.h"
 #include "WeatherManager.h"
+#include "SceneSettingsManager.h"
 #include "WeatherVariableRegistry.h"
 
 void State::Draw()
@@ -172,6 +173,9 @@ void State::Setup()
 
 	// Load per-weather settings after features are setup
 	WeatherManager::GetSingleton()->LoadPerWeatherSettingsFromDisk();
+
+	// Load scene-specific settings (Interior Only, etc.)
+	SceneSettingsManager::GetSingleton()->LoadAll();
 }
 
 static std::string GetConfigPath(State::ConfigMode a_configMode)

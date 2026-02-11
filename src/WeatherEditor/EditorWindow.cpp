@@ -1,6 +1,7 @@
 #include "EditorWindow.h"
 
 #include "Features/WeatherEditor.h"
+#include "InteriorOnlyPanel.h"
 #include "Menu.h"
 #include "PaletteWindow.h"
 #include "State.h"
@@ -157,7 +158,7 @@ void EditorWindow::ShowObjectsWindow()
 		ImGui::Spacing();
 
 		// List of categories
-		const char* categories[] = { "Weather", "ImageSpace", "WorldSpace", "Lighting Template", "Cell Lighting", "Volumetric Lighting", "Shader Particle Geometry", "Lens Flare", "Visual Effect" };
+		const char* categories[] = { "Weather", "ImageSpace", "WorldSpace", "Lighting Template", "Cell Lighting", "Volumetric Lighting", "Shader Particle Geometry", "Lens Flare", "Visual Effect", "Interior Only" };
 		for (int i = 0; i < IM_ARRAYSIZE(categories); ++i) {
 			// Highlight the selected category
 			if (ImGui::Selectable(categories[i], selectedCategory == categories[i])) {
@@ -165,6 +166,14 @@ void EditorWindow::ShowObjectsWindow()
 			}
 		}  // Right column: Objects
 		ImGui::TableSetColumnIndex(1);
+
+		// Interior Only category has its own panel
+		if (selectedCategory == "Interior Only") {
+			InteriorOnlyPanel::Draw();
+			ImGui::EndTable();
+			ImGui::End();
+			return;
+		}
 
 		// Display current active weather
 		auto sky = globals::game::sky;

@@ -5,6 +5,7 @@
 #include "Hooks.h"
 #include "Menu.h"
 #include "Menu/ThemeManager.h"
+#include "SceneSettingsManager.h"
 #include "ShaderCache.h"
 #include "State.h"
 #include "TruePBR.h"
@@ -89,6 +90,9 @@ void MessageHandler(SKSE::MessagingInterface::Message* message)
 
 				// Run feature PostPostLoad() first so features can disable themselves if needed
 				Feature::ForEachLoadedFeature("PostPostLoad", [](Feature* feature) { feature->PostPostLoad(); });
+
+				// Register scene settings event handler (Interior Only transitions)
+				SceneSettingsManager::MenuOpenCloseEventHandler::Register();
 
 				// Now validate disk cache after features have had a chance to modify their state
 				shaderCache->ValidateDiskCache();

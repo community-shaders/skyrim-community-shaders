@@ -17,6 +17,7 @@
 #include "Menu.h"
 #include "Menu/HomePageRenderer.h"
 #include "Menu/ThemeManager.h"
+#include "SceneSettingsManager.h"
 #include "SettingsOverrideManager.h"
 #include "State.h"
 #include "Util.h"
@@ -709,9 +710,35 @@ void FeatureListRenderer::DrawMenuVisitor::RenderFeatureSettings(Feature* feat, 
 				ImGui::Separator();
 			}
 
+			// Scene-specific settings toggle (Interior Only / TimeOfDay / Weather-Specific)
+			auto* sceneManager = SceneSettingsManager::GetSingleton();
+			const auto& featureShortName = feat->GetShortName();
+			bool sceneActive = sceneManager->HasActiveSettingsForFeature(featureShortName);
+			bool sceneDisabled = sceneActive && !sceneManager->IsFeaturePaused(featureShortName);
+			if (sceneActive) {
+				bool scenePaused = sceneManager->IsFeaturePaused(featureShortName);
+				if (Util::FeatureToggle("##PauseSceneSettings", &scenePaused))
+					sceneManager->SetFeaturePaused(featureShortName, scenePaused);
+				ImGui::SameLine();
+				ImGui::Text("Pause Scene Specific Settings");
+				if (auto _tt = Util::HoverTooltipWrapper()) {
+					ImGui::Text(
+						"Temporarily disable all scene-specific overrides (Interior Only, Time of Day, Weather)\n"
+						"for this feature. This state is not saved.");
+				}
+				ImGui::Separator();
+			}
+
+			// Disable feature settings while scene overrides are actively applied (not paused)
+			if (sceneDisabled)
+				ImGui::BeginDisabled();
+
 			ImVec2 cursorPosBefore = ImGui::GetCursorPos();
 			feat->DrawSettings();
 			ImVec2 cursorPosAfter = ImGui::GetCursorPos();
+
+			if (sceneDisabled)
+				ImGui::EndDisabled();
 
 			// --- Reactive constraint detection ---
 			// Compare the current full constraint set against g_knownConstraintKeys.
