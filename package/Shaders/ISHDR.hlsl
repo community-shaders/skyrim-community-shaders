@@ -170,23 +170,28 @@ PS_OUTPUT main(PS_INPUT input)
 		// If Linear Lighting is active, input is already linear.
 		float3 hdrLinear = ENABLE_LL ? inputColor : Color::GammaToLinear(inputColor);
 		
-		// === Color Grading (Mixed Linear/Gamma) ===
-		// Most operations in linear for physical accuracy, contrast in gamma for artistic control.
-		
-		// Brightness adjustment (Cinematic.w) - uniform intensity scaling in linear
-		hdrLinear *= Cinematic.w;
+		// === Color Grading (Mixed Linear/Gamma, matching vanilla order) ===
+		// Vanilla order: Saturation → Tint → Brightness → Contrast
+		// Physical accuracy: Saturation in linear; Tint & Contrast in gamma for artistic control.
 		
 		// Saturation adjustment in linear (can generate negative RGB for highly saturated colors)
 		hdrLinear = Color::Saturation(hdrLinear, Cinematic.x);
 		
-		// Contrast adjustment in gamma space (perceptual contrast matching SDR behavior)
+		// Tint and Contrast in gamma space (perceptual control matching SDR behavior)
 		float3 hdrGamma = Color::LinearToGamma(hdrLinear);
+		
+		// Color tint in gamma (blend to monochrome tint if nonzero)
+		float hdrLuminanceGamma = Color::RGBToLuminance(hdrGamma);
+		hdrGamma = lerp(hdrGamma, hdrLuminanceGamma * Tint.xyz, Tint.w);
+		
+		// Convert back to linear for brightness (uniform intensity scaling)
+		hdrLinear = Color::GammaToLinear(hdrGamma);
+		hdrLinear *= Cinematic.w;
+		
+		// Contrast adjustment in gamma space (pivot around scene average)
+		hdrGamma = Color::LinearToGamma(hdrLinear);
 		hdrGamma = lerp(avgValue.x, hdrGamma, Cinematic.z);
 		hdrLinear = Color::GammaToLinear(hdrGamma);
-		
-		// Color tint in linear (blend to monochrome tint if nonzero)
-		float hdrLuminance = Color::RGBToLuminance(hdrLinear);
-		hdrLinear = lerp(hdrLinear, hdrLuminance * Tint.xyz, Tint.w);
 
 #		if defined(FADE)
 		// Screen fade effect in linear (loading screens, death, etc.)
@@ -211,6 +216,8 @@ PS_OUTPUT main(PS_INPUT input)
 		// === Color Space Conversion and PQ Encoding ===
 		// Expand from BT.709 (SDR) to BT.2020 (HDR) for wider color gamut.
 		float3 bt2020 = Color::BT709ToBT2020(hdrLinear);
+		// Clamp to non-negative values to prevent NaN in pq::Encode pow operations
+		bt2020 = max(bt2020, 0.0);
 		// Encode to PQ curve: color remains in 80-nit reference (1.0 = 80 nits)
 		outputColor = Color::pq::Encode(bt2020, sRGB_WhiteLevelNits);
 	} else {

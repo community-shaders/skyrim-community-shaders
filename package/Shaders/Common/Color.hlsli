@@ -14,8 +14,6 @@ cbuffer LLPerGeometry : register(b8)
 };
 #endif
 
-#include "Common/SharedData.hlsli"
-
 // Float limits
 #define FLT_MIN asfloat(0x00800000) // 1.175494351e-38f
 #define FLT_MAX asfloat(0x7F7FFFFF) // 3.402823466e+38f

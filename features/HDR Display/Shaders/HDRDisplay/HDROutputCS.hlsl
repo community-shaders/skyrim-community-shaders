@@ -31,15 +31,18 @@ static const float UI_REFERENCE_NITS = 80.0;
 
 [numthreads(8, 8, 1)] void main(uint3 dispatchID : SV_DispatchThreadID)
 {
+	// Bounds check to prevent UAV out-of-bounds writes
+	uint width, height;
+	HDROutput.GetDimensions(width, height);
+	if (dispatchID.x >= width || dispatchID.y >= height)
+		return;
+
 	float4 scene = SceneTex[dispatchID.xy];
 	float4 ui = UITex[dispatchID.xy];
 
 	bool enableHDR = parameters0.x > 0.5;
-	float paperWhite = parameters0.y;
-	float peakNits = parameters0.z;
 	bool skipUIComposite = parameters0.w > 0.5;
 	float uiBrightness = parameters1.x;
-	bool isSceneLinear = parameters1.y > 0.5;
 
 	float3 finalColor;
 
