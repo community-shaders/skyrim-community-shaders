@@ -29,6 +29,7 @@ void WorldSpaceWidget::RevertChanges()
 void WorldSpaceWidget::LoadSettings()
 {
 	// Empty - no settings to load
+	ApplyChanges();
 }
 
 void WorldSpaceWidget::SaveSettings()

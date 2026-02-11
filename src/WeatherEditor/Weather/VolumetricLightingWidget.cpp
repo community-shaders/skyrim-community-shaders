@@ -110,6 +110,7 @@ void VolumetricLightingWidget::LoadSettings()
 	}
 
 	originalSettings = settings;
+	ApplyChanges();
 }
 
 void VolumetricLightingWidget::LoadFromGameSettings()

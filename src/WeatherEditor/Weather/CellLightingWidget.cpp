@@ -267,6 +267,7 @@ void CellLightingWidget::LoadSettings()
 	}
 
 	originalSettings = settings;
+	ApplyChanges();
 }
 
 void CellLightingWidget::LoadFromGameSettings()

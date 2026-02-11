@@ -464,6 +464,7 @@ void WeatherWidget::LoadSettings()
 		LoadWeatherValues();
 	}
 	LoadFeatureSettings();
+	ApplyChanges();
 }
 
 void WeatherWidget::SaveSettings()

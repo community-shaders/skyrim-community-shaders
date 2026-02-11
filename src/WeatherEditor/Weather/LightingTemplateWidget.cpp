@@ -310,6 +310,7 @@ void LightingTemplateWidget::LoadSettings()
 	} else {
 		settings = vanillaSettings;
 	}
+	ApplyChanges();
 }
 
 void LightingTemplateWidget::SaveSettings()

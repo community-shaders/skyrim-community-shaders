@@ -94,6 +94,7 @@ void ImageSpaceWidget::LoadSettings()
 		logger::error("Failed to load ImageSpace settings for {}: {}", GetEditorID(), e.what());
 		settings = vanillaSettings;
 	}
+	ApplyChanges();
 }
 
 void ImageSpaceWidget::SaveSettings()

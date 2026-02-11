@@ -113,7 +113,6 @@ void Widget::Load()
 		}
 
 		LoadSettings();
-		ApplyChanges();
 
 		EditorWindow::GetSingleton()->ShowNotification(
 			std::format("Loaded saved settings for {}", GetEditorID()),
@@ -373,7 +372,7 @@ void Widget::DrawWidgetHeader(const char* searchId, bool showApplyRevert, bool s
 		// Unsaved changes indicator
 		if (HasUnsavedChanges()) {
 			ImGui::SameLine();
-			ImGui::TextColored(menu->GetTheme().StatusPalette.Warning, "(UNSAVED CHANGES`)");
+			ImGui::TextColored(menu->GetTheme().StatusPalette.Warning, "(UNSAVED CHANGES)");
 			if (ImGui::IsItemHovered())
 				ImGui::SetTooltip("Unsaved changes - click save to keep");
 		}

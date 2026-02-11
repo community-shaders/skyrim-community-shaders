@@ -129,6 +129,7 @@ void PrecipitationWidget::LoadSettings()
 	}
 
 	originalSettings = settings;
+	ApplyChanges();
 }
 
 void PrecipitationWidget::LoadFromGameSettings()

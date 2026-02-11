@@ -82,6 +82,7 @@ void ReferenceEffectWidget::LoadSettings()
 	}
 
 	originalSettings = settings;
+	ApplyChanges();
 }
 
 void ReferenceEffectWidget::LoadFromGameSettings()

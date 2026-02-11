@@ -43,6 +43,7 @@ void LensFlareWidget::LoadSettings()
 		settings = vanillaSettings;
 	}
 	originalSettings = settings;
+	ApplyChanges();
 }
 
 void LensFlareWidget::LoadFromGameSettings()
