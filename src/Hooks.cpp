@@ -266,6 +266,12 @@ struct IDXGISwapChain_Present
 	// 2. Frame Gen active (needs ScaleUIBrightnessForFG to premultiply UI even in SDR mode)
 	bool hdrReady = globals::features::hdrDisplay.loaded && hdr && hdr->hdrDataCB && hdr->outputTexture &&
 	                (hdr->settings.enableHDR || frameGenActive);
+
+		// Save original viewport to restore after UI rendering
+		D3D11_VIEWPORT savedViewport = {};
+		UINT viewportCount = 1;
+		globals::d3d::context->RSGetViewports(&viewportCount, &savedViewport);
+
 		// When FG is NOT active + HDR loaded: ImGui renders to hdr->uiTexture (we composite in ApplyHDR)
 		// When HDR is NOT loaded: ImGui renders directly to kFRAMEBUFFER (vanilla path)
 		if (frameGenActive) {
@@ -286,12 +292,13 @@ struct IDXGISwapChain_Present
 			if (uiRTV && texDesc.Width > 0) {
 				globals::d3d::context->OMSetRenderTargets(1, &uiRTV, nullptr);
 
-				D3D11_VIEWPORT viewport = {};
-				viewport.Width = static_cast<float>(texDesc.Width);
-				viewport.Height = static_cast<float>(texDesc.Height);
-				viewport.MinDepth = 0.0f;
-				viewport.MaxDepth = 1.0f;
-				globals::d3d::context->RSSetViewports(1, &viewport);
+				// Set UI-sized viewport for this render target
+				D3D11_VIEWPORT uiViewport = {};
+				uiViewport.Width = static_cast<float>(texDesc.Width);
+				uiViewport.Height = static_cast<float>(texDesc.Height);
+				uiViewport.MinDepth = 0.0f;
+				uiViewport.MaxDepth = 1.0f;
+				globals::d3d::context->RSSetViewports(1, &uiViewport);
 			}
 		} else {
 			// Vanilla path: render ImGui directly to kFRAMEBUFFER (swap chain backbuffer)
@@ -300,6 +307,9 @@ struct IDXGISwapChain_Present
 		}
 
 		menu->DrawOverlay();
+
+		// Restore original viewport before HDR processing
+		globals::d3d::context->RSSetViewports(1, &savedViewport);
 
 		if (hdrReady) {
 			// Unbind render target before ApplyHDR to avoid resource hazard

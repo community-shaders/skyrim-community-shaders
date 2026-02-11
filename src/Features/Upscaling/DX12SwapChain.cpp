@@ -443,30 +443,12 @@ void DX12SwapChain::SetColorSpace(bool enableHDR)
 	if (!swapChain)
 		return;
 
-	auto hdr = HDR::GetSingleton();
-
 	if (enableHDR) {
 		swapChain->SetColorSpace1(DXGI_COLOR_SPACE_RGB_FULL_G2084_NONE_P2020);
 		logger::info("[DX12SwapChain] Set color space to HDR10 (PQ/BT.2020)");
-
-		DXGI_HDR_METADATA_HDR10 hdrMetadata = {};
-		hdrMetadata.RedPrimary[0] = 34000;
-		hdrMetadata.RedPrimary[1] = 16000;
-		hdrMetadata.GreenPrimary[0] = 8500;
-		hdrMetadata.GreenPrimary[1] = 39850;
-		hdrMetadata.BluePrimary[0] = 6550;
-		hdrMetadata.BluePrimary[1] = 2300;
-		hdrMetadata.WhitePoint[0] = 15635;
-		hdrMetadata.WhitePoint[1] = 16450;
-		hdrMetadata.MaxMasteringLuminance = hdr->settings.hdrPeakNits * 10000;
-		hdrMetadata.MinMasteringLuminance = 1;
-		hdrMetadata.MaxContentLightLevel = static_cast<UINT16>(hdr->settings.hdrPeakNits);
-		hdrMetadata.MaxFrameAverageLightLevel = static_cast<UINT16>(hdr->settings.hdrPaperWhite);
-		swapChain->SetHDRMetaData(DXGI_HDR_METADATA_TYPE_HDR10, sizeof(hdrMetadata), &hdrMetadata);
 	} else {
 		swapChain->SetColorSpace1(DXGI_COLOR_SPACE_RGB_FULL_G22_NONE_P709);
 		logger::info("[DX12SwapChain] Set color space to SDR (sRGB)");
-		swapChain->SetHDRMetaData(DXGI_HDR_METADATA_TYPE_NONE, 0, nullptr);
 	}
 }
 

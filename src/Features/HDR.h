@@ -25,8 +25,7 @@ public:
 		bool enableHDR = false;           // false = vanilla SDR, true = HDR output
 		uint hdrPaperWhite = 203;         // Reference white brightness in nits for HDR
 		uint hdrPeakNits = 1000;          // Maximum display brightness in nits for HDR
-		float hdrUIBrightness = 4.0f;     // UI brightness multiplier for HDR mode (1.0x = 100 nits)
-		float sdrUIBrightness = 1.0f;     // UI brightness multiplier for SDR mode (1.0x = normal)
+		float hdrUIBrightness = 2.3f;     // UI brightness multiplier for HDR mode (1.0x = 100 nits)
 		bool dontShowHDRWarning = false;  // User preference to suppress HDR warning popup
 	};
 
@@ -61,7 +60,7 @@ public:
 
 	void ApplyHDR();
 
-	void DestroyResources() const;
+	void DestroyResources();
 	void ClearShaderCache();
 
 	XM_ALIGNED_STRUCT(16)

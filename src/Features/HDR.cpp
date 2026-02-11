@@ -223,7 +223,6 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	hdrPaperWhite,
 	hdrPeakNits,
 	hdrUIBrightness,
-	sdrUIBrightness,
 	dontShowHDRWarning);
 
 void HDR::DrawSettings()
@@ -493,13 +492,17 @@ void HDR::RestoreDefaultSettings()
 	settings.hdrPaperWhite = 203;
 	settings.hdrPeakNits = 1000;
 	settings.hdrUIBrightness = 2.3f;
-	settings.sdrUIBrightness = 1.0f;
 	settings.dontShowHDRWarning = false;
 }
 
 void HDR::SetupResources()
 {
 	logger::info("[HDR] SetupResources called");
+
+	// Clean up existing resources to prevent memory leaks on re-initialization
+	if (hdrTexture || outputTexture || uiTexture || hdrDataCB) {
+		DestroyResources();
+	}
 
 	DetectHDRDisplay();
 
@@ -606,6 +609,11 @@ void HDR::BeginUIRendering()
 		return;
 	}
 
+	// Prevent re-entrance - if already rendering UI, skip to avoid leak
+	if (renderingUI) {
+		return;
+	}
+
 	if (!uiTexture || !uiTexture->rtv) {
 		static bool loggedOnce = false;
 		if (!loggedOnce) {
@@ -624,6 +632,16 @@ void HDR::BeginUIRendering()
 	}
 
 	auto context = globals::d3d::context;
+
+	// Release any existing saved render targets before overwriting
+	if (savedRTV) {
+		savedRTV->Release();
+		savedRTV = nullptr;
+	}
+	if (savedDSV) {
+		savedDSV->Release();
+		savedDSV = nullptr;
+	}
 
 	// Save current render target so we can restore after ImGui
 	context->OMGetRenderTargets(1, &savedRTV, &savedDSV);
@@ -680,6 +698,9 @@ void HDR::RedirectFramebuffer()
 		return;
 
 	if (!GetHDROutputCS())
+		return;
+	
+	if (framebufferRedirected)
 		return;
 
 	auto& fb = globals::game::renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGET::kFRAMEBUFFER];
@@ -892,6 +913,7 @@ void HDR::ApplyHDR()
 		context->CSSetShader(computeShader, nullptr, 0);
 		context->Dispatch(dispatchCount.x, dispatchCount.y, 1);
 
+		views[0] = nullptr;
 		views[1] = nullptr;
 		context->CSSetShaderResources(0, ARRAYSIZE(views), views);
 
@@ -910,7 +932,20 @@ void HDR::ApplyHDR()
 	// Otherwise copy directly to the D3D11 swap chain back buffer
 	if (upscaling.d3d12SwapChainActive) {
 		// Frame Gen path: copy to D3D12 swap chain wrapped buffer
-		context->CopyResource(upscaling.dx12SwapChain.swapChainBufferWrapped->resource11, outputTexture->resource.get());
+		if (upscaling.dx12SwapChain.swapChainBufferWrapped && 
+			upscaling.dx12SwapChain.swapChainBufferWrapped->resource11 && 
+			outputTexture && outputTexture->resource) {
+			context->CopyResource(upscaling.dx12SwapChain.swapChainBufferWrapped->resource11, outputTexture->resource.get());
+		} else {
+			static bool loggedOnce = false;
+			if (!loggedOnce) {
+				logger::warn("[HDR] Frame Gen path missing required resources - swapChainBufferWrapped={}, resource11={}, outputTexture={}, fallback to normal copy skipped",
+					upscaling.dx12SwapChain.swapChainBufferWrapped ? "valid" : "NULL",
+					(upscaling.dx12SwapChain.swapChainBufferWrapped && upscaling.dx12SwapChain.swapChainBufferWrapped->resource11) ? "valid" : "NULL",
+					(outputTexture && outputTexture->resource) ? "valid" : "NULL");
+				loggedOnce = true;
+			}
+		}
 	} else {
 		// Normal path: copy directly to swap chain back buffer
 		ID3D11Texture2D* backBuffer = nullptr;
@@ -935,18 +970,24 @@ void HDR::ApplyHDR()
 	state->EndPerfEvent();
 }
 
-void HDR::DestroyResources() const
+void HDR::DestroyResources()
 {
-	hdrTexture->srv = nullptr;
-	hdrTexture->uav = nullptr;
-	hdrTexture->rtv = nullptr;
-	hdrTexture->resource = nullptr;
-	delete hdrTexture;
+	if (hdrTexture) {
+		hdrTexture->srv = nullptr;
+		hdrTexture->uav = nullptr;
+		hdrTexture->rtv = nullptr;
+		hdrTexture->resource = nullptr;
+		delete hdrTexture;
+		hdrTexture = nullptr;
+	}
 
-	outputTexture->srv = nullptr;
-	outputTexture->uav = nullptr;
-	outputTexture->resource = nullptr;
-	delete outputTexture;
+	if (outputTexture) {
+		outputTexture->srv = nullptr;
+		outputTexture->uav = nullptr;
+		outputTexture->resource = nullptr;
+		delete outputTexture;
+		outputTexture = nullptr;
+	}
 
 	if (uiTexture) {
 		uiTexture->srv = nullptr;
@@ -954,6 +995,12 @@ void HDR::DestroyResources() const
 		uiTexture->rtv = nullptr;
 		uiTexture->resource = nullptr;
 		delete uiTexture;
+		uiTexture = nullptr;
+	}
+
+	if (hdrDataCB) {
+		delete hdrDataCB;
+		hdrDataCB = nullptr;
 	}
 }
 
@@ -1097,8 +1144,8 @@ void HDR::UpdateHDRData() const
 		static_cast<float>(settings.hdrPaperWhite),
 		effectivePeakNits,
 		skipUIComposite ? 1.f : 0.f);
-	// Use appropriate UI brightness based on HDR mode
-	float uiBrightness = settings.enableHDR ? settings.hdrUIBrightness : settings.sdrUIBrightness;
+	// UI brightness only used when HDR is enabled
+	float uiBrightness = settings.hdrUIBrightness;
 	data.parameters1 = DirectX::XMVectorSet(
 		uiBrightness,
 		isSceneLinear ? 1.f : 0.f,
@@ -1113,7 +1160,8 @@ void HDR::UpdateSwapChainColorSpace() const
 	// For Frame Gen, update the D3D12 swap chain color space
 	if (upscaling.d3d12SwapChainActive) {
 		upscaling.dx12SwapChain.SetColorSpace(settings.enableHDR);
-		// Clear any HDR10 static metadata - some monitors have issues with it
+		// HDR metadata is not set - some monitors have issues with HDR10 static metadata.
+		// DX12SwapChain handles color space only; metadata control is centralized here.
 		if (upscaling.dx12SwapChain.swapChain) {
 			upscaling.dx12SwapChain.swapChain->SetHDRMetaData(DXGI_HDR_METADATA_TYPE_NONE, 0, nullptr);
 		}

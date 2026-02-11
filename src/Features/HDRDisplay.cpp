@@ -26,30 +26,28 @@ void HDRDisplay::SaveSettings(json& o_json)
 
 void HDRDisplay::DrawSettings()
 {
-	if (hdr)
-		hdr->DrawSettings();
+	auto* hdrSingleton = HDR::GetSingleton();
+	if (hdrSingleton)
+		hdrSingleton->DrawSettings();
 }
 
 void HDRDisplay::SetupResources()
 {
-	hdr = HDR::GetSingleton();
-	if (hdr)
-		hdr->SetupResources();
+	auto* hdrSingleton = HDR::GetSingleton();
+	if (hdrSingleton)
+		hdrSingleton->SetupResources();
 }
 
 void HDRDisplay::ClearShaderCache()
 {
-	if (hdr)
-		hdr->ClearShaderCache();
-}
-
-bool HDRDisplay::IsHDREnabled() const
-{
-	return true;
+	auto* hdrSingleton = HDR::GetSingleton();
+	if (hdrSingleton)
+		hdrSingleton->ClearShaderCache();
 }
 
 void HDRDisplay::ApplyHDR()
 {
-	if (hdr)
-		hdr->ApplyHDR();
+	auto* hdrSingleton = HDR::GetSingleton();
+	if (hdrSingleton)
+		hdrSingleton->ApplyHDR();
 }
