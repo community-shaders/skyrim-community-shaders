@@ -183,7 +183,7 @@ namespace VolumetricShadows
 			// Sample MSM moments
 			float4 moments = SharedShadowMap.SampleLevel(LinearSampler, samplePosLS.xy, 1u - cascadeIndex);
 			moments = ConvertOptimizedMoments(moments);
-			float lit = ComputeMSMHausdorff(moments, samplePosLS.z, 0.0);
+			float lit = ComputeMSMHausdorff(moments, samplePosLS.z, 0.00003);
 
 			lit = lerp(lit, lit * lit, float(cascadeIndex));
 
@@ -263,7 +263,7 @@ namespace VolumetricShadows
 	{	
 		float4 moments = SharedShadowMap.SampleLevel(LinearSampler, positionLS.xy, 1u - cascadeIndex);
 		moments = ConvertOptimizedMoments(moments);
-		return ComputeMSMHausdorff(moments, positionLS.z, 0.0);
+		return ComputeMSMHausdorff(moments, positionLS.z, 0.00003);
 	}
 
 	float GetMSMShadow2D(float3 position, uint eyeIndex)
