@@ -1,9 +1,9 @@
-// 11x11 separable Gaussian blur for VSM shadow map
+// 11x11 separable Gaussian blur for MSM shadow map
 // BLUR_HORIZONTAL - horizontal pass
 // BLUR_VERTICAL - vertical pass
 
-Texture2D<float2> InputTexture : register(t0);
-RWTexture2D<float2> OutputTexture : register(u0);
+Texture2D<float4> InputTexture : register(t0);
+RWTexture2D<float4> OutputTexture : register(u0);
 
 // Gaussian weights for 11-tap kernel (sigma ~= 2.5)
 static const float weights[6] = {
@@ -20,7 +20,7 @@ static const float weights[6] = {
 
 // Shared memory for efficient loading
 // We need GROUP_SIZE + 2 * KERNEL_RADIUS elements
-groupshared float2 g_cache[GROUP_SIZE + 2 * KERNEL_RADIUS];
+groupshared float4 g_cache[GROUP_SIZE + 2 * KERNEL_RADIUS];
 
 #if defined(BLUR_HORIZONTAL)
 [numthreads(GROUP_SIZE, 1, 1)]
@@ -51,7 +51,7 @@ void main(uint3 groupID : SV_GroupID, uint3 groupThreadID : SV_GroupThreadID, ui
 		return;
 
 	// Apply horizontal blur
-	float2 result = g_cache[localIdx + KERNEL_RADIUS] * weights[0];
+	float4 result = g_cache[localIdx + KERNEL_RADIUS] * weights[0];
 
 	[unroll]
 	for (int i = 1; i <= KERNEL_RADIUS; i++) {
@@ -91,7 +91,7 @@ void main(uint3 groupID : SV_GroupID, uint3 groupThreadID : SV_GroupThreadID, ui
 		return;
 
 	// Apply vertical blur
-	float2 result = g_cache[localIdx + KERNEL_RADIUS] * weights[0];
+	float4 result = g_cache[localIdx + KERNEL_RADIUS] * weights[0];
 
 	[unroll]
 	for (int i = 1; i <= KERNEL_RADIUS; i++) {
