@@ -19,6 +19,7 @@ public:
 		bool& settingOverlayToggleKey;
 		bool& settingShaderBlockPrevKey;  // Debug: shader block previous key
 		bool& settingShaderBlockNextKey;  // Debug: shader block next key
+		bool& settingWeatherEditorToggleKey;  // Weather Editor toggle key
 	};
 
 	static void RenderGeneralSettings(
