@@ -24,7 +24,7 @@ cbuffer PerFrame : register(b0)
 
 // UI reference brightness in nits — matches typical SDR monitor brightness.
 // Ensures UI appears consistently bright in both SDR and HDR without being washed out or blown out.
-static const float UI_REFERENCE_NITS = 100.0;
+static const float UI_REFERENCE_NITS = 80.0;
 
 [numthreads(8, 8, 1)] void main(uint3 dispatchID : SV_DispatchThreadID)
 {

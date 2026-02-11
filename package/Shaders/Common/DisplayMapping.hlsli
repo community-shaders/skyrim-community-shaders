@@ -82,6 +82,22 @@ namespace DisplayMapping
 			Color *= compressedLuminanceNormalized / sourceLuminanceNormalized;
 		}
 
+		// Apply out-of-gamut color compression (desaturation pass)
+		// When tonemapping by luminance (even by average), individual RGB channels can exceed
+		// the display peak, especially blue which is ~10x less luminous than green.
+		// This second pass brings those channels back into range through desaturation,
+		// preventing clipping and hue shifts while maintaining highlight detail.
+		float smoothing = 0.2; // Smooth the correction to avoid gradient steps
+		Color = CorrectOutOfRangeColor(
+			Color,
+			true,  // FixNegatives
+			true,  // FixPositives
+			1.0,   // DesaturationVsDarkeningRatio (full desaturation, no darkening)
+			PeakWhite,
+			smoothing,
+			ProcessingColorSpace
+		);
+
 		return FromColorSpaceToColorSpace(Color, ProcessingColorSpace, InOutColorSpace);
 	}
 

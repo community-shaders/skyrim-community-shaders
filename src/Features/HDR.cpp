@@ -1045,11 +1045,8 @@ void HDR::ScaleUIBrightnessForFG()
 	auto& upscaling = globals::features::upscaling;
 
 	// Only run when FG is actively compositing UI this frame
-	// When paused, FidelityFX doesn't composite UI (uiResource is cleared), so HDROutputCS handles it
-	// and expects raw gamma-encoded UI without brightness pre-scaling
 	bool fgCompositing = upscaling.d3d12SwapChainActive &&
 	                     upscaling.settings.frameGenerationMode &&
-	                     !globals::game::ui->GameIsPaused() &&
 	                     !globals::game::isVR;
 	if (!fgCompositing)
 		return;
@@ -1124,9 +1121,16 @@ void HDR::UpdateHDRData() const
 	}
 
 	auto& upscaling = globals::features::upscaling;
+	
+	// Don't skip UI composite in main menu or loading screens - causes ghosting and brightness issues
+	bool isMainOrLoadingMenu = globals::game::ui && 
+	                           (globals::game::ui->IsMenuOpen(RE::MainMenu::MENU_NAME) || 
+	                            globals::game::ui->IsMenuOpen(RE::LoadingMenu::MENU_NAME));
+	
 	bool fgActiveThisFrame = upscaling.d3d12SwapChainActive &&
 	                         upscaling.settings.frameGenerationMode &&
 	                         !globals::game::ui->GameIsPaused() &&
+	                         !isMainOrLoadingMenu &&
 	                         !globals::game::isVR;
 	bool skipUIComposite = fgActiveThisFrame;
 

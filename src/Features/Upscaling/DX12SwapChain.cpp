@@ -449,7 +449,7 @@ void DX12SwapChain::SetColorSpace(bool enableHDR)
 	} else {
 		swapChain->SetColorSpace1(DXGI_COLOR_SPACE_RGB_FULL_G22_NONE_P709);
 		logger::info("[DX12SwapChain] Set color space to SDR (sRGB)");
-	}
+ 	}
 }
 
 void DX12SwapChain::SetUIBuffer()

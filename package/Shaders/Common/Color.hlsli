@@ -598,4 +598,114 @@ float3 PQ_to_Linear(float3 c, int clampType = GCT_DEFAULT)
 	return (clampType == GCT_MIRROR) ? lin * s : lin;
 }
 
+// ============================================================================
+// Gamut Mapping and Chrominance Functions
+// Adapted from Luma Framework (MIT License - Copyright (c) 2024+ Filippo Tarpini)
+// https://github.com/Filoppi/Luma-Framework
+// ============================================================================
+
+// Returns the mathematical chrominance (similar to saturation)
+float GetChrominance(float3 color)
+{
+	float maxVal = max3(color);
+	float minVal = min3(color);
+	float chrominance = (maxVal - minVal) / maxVal;
+	return (maxVal == 0.0) ? 0.0 : chrominance;
+}
+
+// Sets the relative chrominance (not absolute). Input value of 1 leaves color unchanged.
+// Note: This changes the luminance of a color, possibly increasing it
+float3 SetChrominance(float3 color, float chrominance)
+{
+	float maxVal = max3(color);
+	float minVal = min3(color);
+	float midVal = lerp(minVal, maxVal, 0.5);
+	return lerp(midVal, color, chrominance);
+}
+
+// Corrects out-of-range colors through desaturation and/or darkening.
+// This performs gamut mapping to keep RGB values within the valid range (0 to MaxRange).
+// When tonemapping by luminance, blue and red channels can overshoot beyond the display's
+// RGB peak, especially blue (which is ~10x less luminous than green). This function
+// brings those values back into range while preserving detail and minimizing hue shifts.
+//
+// PositivesDesaturationVsDarkeningRatio: Controls desaturation (1.0) vs darkening (0.0).
+//   Desaturation is generally preferred as darkening flattens highlights.
+// PositivesSmoothingRatio: 0-1 range, smooths the correction to avoid gradient steps.
+//   ~0.2 is a good default. Set to 0 for no smoothing.
+float3 CorrectOutOfRangeColor(
+	float3 Color,
+	bool FixNegatives = true,
+	bool FixPositives = true,
+	float PositivesDesaturationVsDarkeningRatio = 1.0,
+	float MaxRange = 1.0,
+	float PositivesSmoothingRatio = 0.0,
+	uint ColorSpace = CS_DEFAULT)
+{
+	// Handle negative color components (out of gamut on the low end)
+	if (FixNegatives && any(Color < 0.0))
+	{
+		float colorLuminance = GetLuminance(Color, ColorSpace);
+		
+		float3 positiveColor = max(Color, 0.0);
+		float3 negativeColor = min(Color, 0.0);
+		float positiveLuminance = GetLuminance(positiveColor, ColorSpace);
+		float negativeLuminance = GetLuminance(negativeColor, ColorSpace);
+		
+		// Desaturate until no channel is below 0
+		if (colorLuminance > FLT_MIN)
+		{
+			float minChannel = min3(Color);
+			// Both division elements are negative, so the ratio resolves to positive
+			float desaturateAlpha = safeDivision(minChannel, minChannel - colorLuminance, 0);
+			Color = lerp(Color, colorLuminance, desaturateAlpha);
+		}
+		// Snap to 0 if overall luminance was zero or negative
+		else
+		{
+			Color = 0.0;
+		}
+	}
+	
+	// Handle positive color components that exceed the max range
+	float colorPeak = max3(Color);
+	float startRange = MaxRange * (1.0 - PositivesSmoothingRatio);
+	float smoothedRange = (PositivesSmoothingRatio > 0.0) ? clamp(colorPeak, startRange, MaxRange) : MaxRange;
+	
+	if (FixPositives && colorPeak > startRange)
+	{
+		float colorLuminance = GetLuminance(Color, ColorSpace);
+		float targetLuminance = min(colorLuminance, smoothedRange);
+		float colorLuminanceInExcess = targetLuminance - smoothedRange;
+		float maxColorInExcess = colorPeak - smoothedRange;
+		
+		// Calculate desaturation amount needed to bring max channel within range
+		float desaturateAlpha = saturate(safeDivision(maxColorInExcess, maxColorInExcess - colorLuminanceInExcess, 0));
+		
+		// Split between desaturation and darkening based on ratio
+		float DarkeningAmount = 1.0 - PositivesDesaturationVsDarkeningRatio;
+		float DesaturationAmount = PositivesDesaturationVsDarkeningRatio;
+		
+		// Desaturate towards luminance
+		float3 newColor = lerp(Color, targetLuminance, desaturateAlpha * DesaturationAmount);
+		
+		// Darken if desaturation wasn't enough
+		float darkeningInvAlpha = saturate(safeDivision(smoothedRange, max3(newColor), 1));
+		newColor *= darkeningInvAlpha;
+		
+		// Apply smoothing if requested
+		if (PositivesSmoothingRatio <= 0.0)
+		{
+			Color = newColor;
+		}
+		else
+		{
+			float smoothingProgress = saturate((colorPeak - startRange) / (MaxRange - startRange));
+			Color = lerp(Color, newColor, smoothingProgress);
+		}
+	}
+	
+	return Color;
+}
+
 #endif  //__COLOR_DEPENDENCY_HLSL__
