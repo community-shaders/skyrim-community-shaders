@@ -160,21 +160,21 @@ PS_OUTPUT main(PS_INPUT input)
 
 	if (isHDR) {
 		// === HDR Pipeline (Float16 RT) ===
-		// Input: Linear HDR values (can exceed 1.0)
+		// Input: HDR values (can exceed 1.0) - gamma-encoded (vanilla) OR linear (Linear Lighting)
 		// Output: PQ-encoded BT.2020 for HDROutputCS → display
 		
 		float paperWhiteNits = SharedData::HDRData.y;
 		float peakNits = SharedData::HDRData.z;
 
 		// === Color Grading in Gamma Space ===
-		// Perform grading before linear work to match SDR appearance.
-		// This preserves the artistic intent from SDR color-grading presets.
+		// Always perform grading in gamma space to preserve vanilla artistic intent.
+		// If Linear Lighting is active, convert to gamma first, then back to linear after.
+		
+		// Convert to gamma space if needed (Linear Lighting makes input linear)
+		float3 hdrGamma = ENABLE_LL ? Color::LinearToGamma(inputColor) : inputColor;
 		
 		// Brightness adjustment (Cinematic.w)
-		float3 hdrGamma = inputColor * Cinematic.w;
-		
-		// Saturation boost/reduction
-		hdrGamma = Color::Saturation(hdrGamma, Cinematic.x);
+		hdrGamma *= Cinematic.w;
 		
 		// Contrast stretch/compress (pivot around average scene luminance)
 		hdrGamma = lerp(avgValue.x, hdrGamma, Cinematic.z);
@@ -189,16 +189,20 @@ PS_OUTPUT main(PS_INPUT input)
 #		endif
 
 		// === Linear Space HDR Processing ===
-		// Convert graded result back to linear for tonemapping and bloom.
+		// Convert graded result to linear for tonemapping and bloom.
+		// If Linear Lighting is active, input was already linear (converted to gamma for grading above).
 		float3 hdrLinear = Color::GammaToLinear(hdrGamma);
-		hdrLinear = max(0, hdrLinear);
+		
+		// Saturation adjustment in linear space (preserves color accuracy, can generate negative RGB)
+		hdrLinear = Color::Saturation(hdrLinear, Cinematic.x);
 
 		// === Bloom Compositing (Linear Space) ===
 		// High-pass filtered bloom adds glow to bright areas.
-		// Bloom in Reinhard-compressed SDR space to prevent excessive intensity at peak whites.
+		// Bloom is added in linear space to prevent excessive intensity at bright values.
 		hdrLinear += saturate(Param.x - hdrLinear) * bloomColor;
 
 		// === DICE Tonemapping (Luma Sandwich) ===
+		// INPUT: Linear BT.709 color (ensured above regardless of Linear Lighting setting)
 		// Scales from paper-white reference to peak brightness reference.
 		// Compresses highlights smoothly while preserving mid-tone detail.
 		// 
