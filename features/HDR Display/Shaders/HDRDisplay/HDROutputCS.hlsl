@@ -87,8 +87,7 @@ static const float UI_REFERENCE_NITS = 80.0;
 		} else {
 			// Composite UI on top of gamma scene using premultiplied alpha
 			// Both UI and scene are in sRGB gamma space for SDR.
-			
-			float3 uiPremul = ui.rgb * ui.a * uiBrightness;
+			float3 uiPremul = ui.rgb * ui.a;
 			finalColor = uiPremul + sceneGamma * (1.0 - ui.a);
 		}
 
