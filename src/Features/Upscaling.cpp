@@ -1087,24 +1087,6 @@ void Upscaling::ConfigureUpscaling(RE::BSGraphics::State* a_viewport)
 	// Disable dynamic resolution unless the game explicitly enables it
 	if (!globals::game::isVR)
 		runtimeData.dynamicResolutionLock = 1;
-
-	// If running in VR and an external upscaler is active, force-disable
-	// the engine's depth-buffer culling immediately. This ensures that
-	// enabling upscaling at runtime (after game load) does not leave the
-	// VR depth-buffer culling enabled which can cause incorrect occlusion.
-	if (globals::game::isVR) {
-		auto& vr = globals::features::vr;
-		if (IsUpscalingActive()) {
-			if (vr.gDepthBufferCulling) {
-				if (*vr.gDepthBufferCulling) {
-					*vr.gDepthBufferCulling = false;
-					logger::info("[Upscaling] VR detected - forcing depth buffer culling OFF due to active downscaling upscaler (scale={})", resolutionScale.x);
-				}
-			} else {
-				logger::warn("[Upscaling] VR depth buffer culling pointer is null, cannot force disable");
-			}
-		}
-	}
 }
 
 void Upscaling::SetupResources()
@@ -1409,33 +1391,14 @@ bool Upscaling::IsUpscalingActive() const
 		return false;
 	}
 
-	// resolutionScale.x represents renderWidth / displayWidth.
-	return resolutionScale.x < .99f;
+	// resolutionScale is render / display per-axis; use the stricter axis.
+	const float minScale = std::min(resolutionScale.x, resolutionScale.y);
+	return minScale < .99f;
 }
 
 std::vector<FeatureConstraints::Constraint> Upscaling::GetActiveConstraints() const
 {
-	std::vector<FeatureConstraints::Constraint> constraints;
-
-	if (!IsUpscalingActive()) {
-		return constraints;
-	}
-
-	// When upscaling is active in VR, depth buffer culling must be disabled
-	// because upscalers modify the depth buffer, causing incorrect occlusion
-	if (globals::game::isVR) {
-		constraints.push_back({ { "VR", "EnableDepthBufferCullingExterior" },
-			false,
-			"Upscaling modifies the depth buffer, causing incorrect VR occlusion tests in exteriors.",
-			false });
-
-		constraints.push_back({ { "VR", "EnableDepthBufferCullingInterior" },
-			false,
-			"Upscaling modifies the depth buffer, causing incorrect VR occlusion tests in interiors.",
-			false });
-	}
-
-	return constraints;
+	return {};
 }
 
 /**
@@ -1636,7 +1599,7 @@ void Upscaling::PerformUpscaling()
 
 void Upscaling::UpscaleDepth()
 {
-	if (resolutionScale.x != 1.0f) {
+	if (IsUpscalingActive()) {
 		globals::state->BeginPerfEvent("Render Target Upscaling");
 
 		auto& renderer = globals::game::renderer;
@@ -1675,9 +1638,28 @@ void Upscaling::UpscaleDepth()
 		ID3D11SamplerState* samplers[] = { deferred->linearSampler };
 		context->PSSetSamplers(0, ARRAYSIZE(samplers), samplers);
 
-		// Set up jitter constant buffer for upscaling
+		// Set up jitter/depth-kernel constant buffer for upscaling
 		JitterCB jitterData;
 		jitterData.jitter = jitter;
+		{
+			constexpr float kEnterWideKernelRatio = 1.55f;
+			constexpr float kExitWideKernelRatio = 1.45f;
+			const float minScale = std::max(std::min(resolutionScale.x, resolutionScale.y), 1e-6f);
+			const float upscaleRatio = 1.0f / minScale;
+
+			if (depthUpscaleUseWideKernel) {
+				if (upscaleRatio < kExitWideKernelRatio) {
+					depthUpscaleUseWideKernel = false;
+				}
+			} else {
+				if (upscaleRatio > kEnterWideKernelRatio) {
+					depthUpscaleUseWideKernel = true;
+				}
+			}
+
+			jitterData.useWideKernel = depthUpscaleUseWideKernel ? 1.0f : 0.0f;
+			jitterData.pad0 = 0.0f;
+		}
 
 		jitterCB->Update(jitterData);
 		auto bufferArray = jitterCB->CB();

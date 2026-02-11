@@ -10,19 +10,41 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	TerrainBlending::Settings,
 	Enabled)
 
+namespace
+{
+	bool ShouldUseBlendedDepthSRV()
+	{
+		if (!globals::game::isVR) {
+			return true;
+		}
+
+		auto& vr = globals::features::vr;
+		if (vr.gDepthBufferCulling && *vr.gDepthBufferCulling) {
+			return false;
+		}
+
+		return true;
+	}
+}
+
 std::vector<FeatureConstraints::Constraint> TerrainBlending::GetActiveConstraints() const
 {
 	std::vector<FeatureConstraints::Constraint> constraints;
 
-	// Only impose constraints when the feature is loaded, enabled, and we're in VR
+	// Only constrain when all requested conditions are active:
+	// VR + Terrain Blending enabled + runtime depth buffer culling enabled.
 	if (!loaded || !settings.Enabled || !globals::game::isVR) {
 		return constraints;
 	}
 
-	// Terrain Blending has visual issues with VR depth buffer culling in exteriors
-	constraints.push_back({ { "VR", "EnableDepthBufferCullingExterior" },
+	auto& vr = globals::features::vr;
+	if (!vr.gDepthBufferCulling || !*vr.gDepthBufferCulling) {
+		return constraints;
+	}
+
+	constraints.push_back({ { "ScreenSpaceShadows", "Enable" },
 		false,
-		"Terrain Blending has visual issues with VR depth buffer culling in exteriors.",
+		"Screen Space Shadows is disabled in VR when Terrain Blending and Depth Buffer Culling are both active.",
 		false });
 
 	return constraints;
@@ -30,26 +52,13 @@ std::vector<FeatureConstraints::Constraint> TerrainBlending::GetActiveConstraint
 
 void TerrainBlending::DrawSettings()
 {
-	bool wasEnabled = settings.Enabled;
-	ImGui::Checkbox("Enable Terrain Blending", (bool*)&settings.Enabled);
-
-	// Show warning if enabling in VR and depth culling is currently enabled
-	if (globals::game::isVR && settings.Enabled && !wasEnabled) {
-		// Check if VR depth culling exterior is currently enabled
-		auto& vr = globals::features::vr;
-		if (vr.settings.EnableDepthBufferCullingExterior) {
-			ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.2f, 1.0f),
-				"Note: VR Depth Buffer Culling (Exteriors) will be disabled while this feature is enabled.");
-		}
+	bool enabled = settings.Enabled != 0;
+	if (ImGui::Checkbox("Enable Terrain Blending", &enabled)) {
+		settings.Enabled = enabled ? 1u : 0u;
 	}
 
 	if (auto _tt = Util::HoverTooltipWrapper()) {
 		ImGui::Text("Enable seamless blending between terrain and objects.");
-		if (globals::game::isVR) {
-			ImGui::Separator();
-			ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.2f, 1.0f), "VR Note:");
-			ImGui::TextWrapped("When enabled in VR, this feature requires disabling Depth Buffer Culling in exteriors to prevent visual issues.");
-		}
 	}
 }
 
@@ -273,8 +282,13 @@ void TerrainBlending::Hooks::Main_RenderDepth::thunk(bool a1, bool a2)
 	singleton.averageEyePosition = Util::GetAverageEyePosition();
 
 	if (shaderCache->IsEnabled() && singleton.settings.Enabled) {
-		mainDepth.depthSRV = singleton.blendedDepthTexture->srv.get();
-		zPrepassCopy.depthSRV = singleton.blendedDepthTexture->srv.get();
+		if (ShouldUseBlendedDepthSRV()) {
+			mainDepth.depthSRV = singleton.blendedDepthTexture->srv.get();
+			zPrepassCopy.depthSRV = singleton.blendedDepthTexture->srv.get();
+		} else {
+			mainDepth.depthSRV = singleton.depthSRVBackup;
+			zPrepassCopy.depthSRV = singleton.prepassSRVBackup;
+		}
 
 		singleton.renderDepth = true;
 		singleton.ResetDepth();
@@ -307,7 +321,7 @@ void TerrainBlending::Hooks::BSBatchRenderer__RenderPassImmediately::thunk(RE::B
 			// Entering or exiting terrain depth section
 			bool inTerrain = a_pass->shaderProperty && a_pass->shaderProperty->flags.all(RE::BSShaderProperty::EShaderPropertyFlag::kMultiTextureLandscape);
 
-			if (inTerrain) {
+			if (inTerrain && a_pass->geometry) {
 				if ((a_pass->geometry->worldBound.center.GetDistance(singleton.averageEyePosition) - a_pass->geometry->worldBound.radius) > 1024.0f) {
 					inTerrain = false;
 				}
@@ -345,6 +359,20 @@ void TerrainBlending::Hooks::BSBatchRenderer__RenderPassImmediately::thunk(RE::B
 
 void TerrainBlending::RenderTerrainBlendingPasses()
 {
+	if (!settings.Enabled) {
+		renderDepth = false;
+		renderTerrainDepth = false;
+		renderAltTerrain = false;
+		terrainRenderPasses.clear();
+		renderPasses.clear();
+		auto renderer = globals::game::renderer;
+		auto& mainDepth = renderer->GetDepthStencilData().depthStencils[RE::RENDER_TARGETS_DEPTHSTENCIL::kMAIN];
+		auto& zPrepassCopy = renderer->GetDepthStencilData().depthStencils[RE::RENDER_TARGETS_DEPTHSTENCIL::kPOST_ZPREPASS_COPY];
+		mainDepth.depthSRV = depthSRVBackup;
+		zPrepassCopy.depthSRV = prepassSRVBackup;
+		return;
+	}
+
 	auto renderer = globals::game::renderer;
 	auto context = globals::d3d::context;
 	auto shadowState = globals::game::shadowState;

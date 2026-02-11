@@ -53,13 +53,13 @@ namespace FrameBuffer
 #endif  // !VR
 	}
 
-	float2 GetDynamicResolutionAdjustedScreenPosition(float2 screenPosition, uint stereo = 1)
+	float2 ClampDynamicResolutionAdjustedScreenPosition(float2 screenPositionDR, float2 screenPosition, uint stereo = 1)
 	{
-		float2 screenPositionDR = DynamicResolutionParams1.xy * screenPosition;
 		float2 minValue = 0;
 		float2 maxValue = float2(DynamicResolutionParams2.z, DynamicResolutionParams1.y);
 #if defined(VR)
-		// VR sometimes will clamp to stereouv
+		// VR uses side-by-side stereo packing in the shared render target.
+		// Clamp within the current eye's half to avoid cross-eye sampling.
 		if (stereo) {
 			bool isRight = screenPosition.x >= 0.5;
 			float minFactor = isRight ? 1 : 0;
@@ -69,6 +69,12 @@ namespace FrameBuffer
 		}
 #endif
 		return clamp(screenPositionDR, minValue, maxValue);
+	}
+
+	float2 GetDynamicResolutionAdjustedScreenPosition(float2 screenPosition, uint stereo = 1)
+	{
+		float2 screenPositionDR = DynamicResolutionParams1.xy * screenPosition;
+		return ClampDynamicResolutionAdjustedScreenPosition(screenPositionDR, screenPosition, stereo);
 	}
 
 	float3 GetDynamicResolutionAdjustedScreenPosition(float3 screenPositionDR, uint stereo = 1)
