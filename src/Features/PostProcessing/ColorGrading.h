@@ -45,6 +45,7 @@ struct ColorGrading : public PostProcessFeature
     {
         bool useToDInterior = false;
         bool skipLDR = false;
+        bool skipLUT = false;
         std::array<ColorProfile, 8> profiles = {};
         std::string currentTonemapper = "GT7";
         std::array<float4, 2> tonemapParams = { float4{ 1.f, 2.f, 0.f, 0.f }, float4{ 0.f, 0.f, 0.f, 0.f } };
@@ -102,8 +103,10 @@ struct ColorGrading : public PostProcessFeature
 
         uint logType;
         uint skipLDR;
+        uint skipLUT;
         uint enableTonemap;
         uint enableColorSpaceTransform;
+        uint pad[3];
     };
 	std::unique_ptr<ConstantBuffer> colorCB = nullptr;
 

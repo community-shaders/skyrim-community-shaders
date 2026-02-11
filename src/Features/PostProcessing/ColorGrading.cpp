@@ -19,6 +19,7 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
     ColorGrading::Settings,
     useToDInterior,
     skipLDR,
+    skipLUT,
     profiles,
     currentTonemapper,
     tonemapParams,
@@ -248,6 +249,10 @@ void ColorGrading::DrawSettings()
     ImGui::Checkbox("Skip LDR Color Grading", &settings.skipLDR);
     if (auto _tt = Util::HoverTooltipWrapper())
 		ImGui::Text("Skip color grading after tonemapping. This includes Lift Gamma Gain and Oklch adjustments.");
+
+    ImGui::Checkbox("Skip LUT (Direct Color Grading)", &settings.skipLUT);
+    if (auto _tt = Util::HoverTooltipWrapper())
+		ImGui::Text("Skip baking color grading into a LUT and apply it directly per-pixel. More accurate but slower.");
 
     ImGui::Checkbox("Convert Linear to Log Before HDR Color Grading", &settings.useLog);
     if (settings.useLog) {
@@ -673,6 +678,7 @@ void ColorGrading::Draw(TextureInfo& inout_tex)
 		},
 		.logType = settings.useLog ? ((1u << settings.logType) | (settings.invertLog ? (1u << 3u) : 0u)) : 0u,
 		.skipLDR = settings.skipLDR,
+		.skipLUT = settings.skipLUT,
 		.enableTonemap = settings.enableTonemap,
 		.enableColorSpaceTransform = settings.enableColorSpaceTransform
 	};
@@ -685,21 +691,23 @@ void ColorGrading::Draw(TextureInfo& inout_tex)
     context->CSSetSamplers(0, 1, samplers.data());
 	ID3D11UnorderedAccessView* uav = nullptr;
 
-	// LUT Gen
-	uav = texLUT->uav.get();
-	context->CSSetUnorderedAccessViews(0, 1, &uav, nullptr);
-	context->CSSetShader(lutgenCS.get(), nullptr, 0);
-	context->Dispatch(LUTDim >> 3, LUTDim >> 3, LUTDim >> 3);
+	if (!settings.skipLUT) {
+		// LUT Gen
+		uav = texLUT->uav.get();
+		context->CSSetUnorderedAccessViews(0, 1, &uav, nullptr);
+		context->CSSetShader(lutgenCS.get(), nullptr, 0);
+		context->Dispatch(LUTDim >> 3, LUTDim >> 3, LUTDim >> 3);
 
-	uav = nullptr;
-	context->CSSetUnorderedAccessViews(0, 1, &uav, nullptr);
-	context->CSSetShader(nullptr, nullptr, 0);
+		uav = nullptr;
+		context->CSSetUnorderedAccessViews(0, 1, &uav, nullptr);
+		context->CSSetShader(nullptr, nullptr, 0);
+	}
 
-	// Apply LUT
+	// Apply Color Grading (via LUT or direct)
 	std::array<ID3D11ShaderResourceView*, 2> srvs = { inout_tex.srv, texLUT->srv.get() };
 	uav = texColor->uav.get();
 	context->CSSetUnorderedAccessViews(0, 1, &uav, nullptr);
-	context->CSSetShaderResources(0, 2, srvs.data());
+	context->CSSetShaderResources(0, (UINT)(settings.skipLUT ? 1 : 2), srvs.data());
 	context->CSSetShader(colorgradingCS.get(), nullptr, 0);
 
 	context->Dispatch((texColor->desc.Width + 7) >> 3, (texColor->desc.Height + 7) >> 3, 1);
