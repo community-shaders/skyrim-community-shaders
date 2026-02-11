@@ -15,7 +15,8 @@ public:
 		}
 		form = a_lightingTemplate;
 		lightingTemplate = a_lightingTemplate;
-		LoadLightingTemplateValues();
+		LoadFromGameSettings();
+		vanillaSettings = settings;
 	}
 
 	struct DirectionalColor
@@ -51,6 +52,7 @@ public:
 	};
 
 	Settings settings;
+	Settings vanillaSettings;
 
 	~LightingTemplateWidget();
 
@@ -60,6 +62,7 @@ public:
 
 	void SetLightingTemplateValues();
 	void LoadLightingTemplateValues();
+	void LoadFromGameSettings();
 	void ApplyChanges();
 	void RevertChanges();
 

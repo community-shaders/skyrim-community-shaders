@@ -15,7 +15,8 @@ public:
 		}
 		form = a_imageSpace;
 		imageSpace = a_imageSpace;
-		LoadImageSpaceValues();
+		LoadFromGameSettings();
+		vanillaSettings = settings;
 	}
 
 	struct Settings
@@ -45,6 +46,7 @@ public:
 	};
 
 	Settings settings;
+	Settings vanillaSettings;
 
 	~ImageSpaceWidget();
 
@@ -54,6 +56,7 @@ public:
 
 	void SetImageSpaceValues();
 	void LoadImageSpaceValues();
+	void LoadFromGameSettings();
 	void ApplyChanges();
 	void RevertChanges();
 };

@@ -106,21 +106,26 @@ void VolumetricLightingWidget::LoadSettings()
 			logger::error("VolumetricLighting {}: Failed to load from JSON: {}", GetEditorID(), e.what());
 		}
 	} else {
-		settings.intensity = volumetricLighting->intensity;
-		settings.customColorContribution = volumetricLighting->customColor.contribution;
-		settings.red = volumetricLighting->red;
-		settings.green = volumetricLighting->green;
-		settings.blue = volumetricLighting->blue;
-		settings.densityContribution = volumetricLighting->density.contribution;
-		settings.densitySize = volumetricLighting->density.size;
-		settings.densityWindSpeed = volumetricLighting->density.windSpeed;
-		settings.densityFallingSpeed = volumetricLighting->density.fallingSpeed;
-		settings.phaseFunctionContribution = volumetricLighting->phaseFunction.contribution;
-		settings.phaseFunctionScattering = volumetricLighting->phaseFunction.scattering;
-		settings.samplingRangeFactor = volumetricLighting->samplingRepartition.rangeFactor;
+		settings = vanillaSettings;
 	}
 
 	originalSettings = settings;
+}
+
+void VolumetricLightingWidget::LoadFromGameSettings()
+{
+	settings.intensity = volumetricLighting->intensity;
+	settings.customColorContribution = volumetricLighting->customColor.contribution;
+	settings.red = volumetricLighting->red;
+	settings.green = volumetricLighting->green;
+	settings.blue = volumetricLighting->blue;
+	settings.densityContribution = volumetricLighting->density.contribution;
+	settings.densitySize = volumetricLighting->density.size;
+	settings.densityWindSpeed = volumetricLighting->density.windSpeed;
+	settings.densityFallingSpeed = volumetricLighting->density.fallingSpeed;
+	settings.phaseFunctionContribution = volumetricLighting->phaseFunction.contribution;
+	settings.phaseFunctionScattering = volumetricLighting->phaseFunction.scattering;
+	settings.samplingRangeFactor = volumetricLighting->samplingRepartition.rangeFactor;
 }
 
 void VolumetricLightingWidget::SaveSettings()
@@ -137,6 +142,7 @@ void VolumetricLightingWidget::SaveSettings()
 	js["phaseFunctionContribution"] = settings.phaseFunctionContribution;
 	js["phaseFunctionScattering"] = settings.phaseFunctionScattering;
 	js["samplingRangeFactor"] = settings.samplingRangeFactor;
+	originalSettings = settings;
 }
 
 void VolumetricLightingWidget::ApplyChanges()
@@ -160,7 +166,9 @@ void VolumetricLightingWidget::ApplyChanges()
 
 void VolumetricLightingWidget::RevertChanges()
 {
-	settings = originalSettings;
+	settings = vanillaSettings;
+	originalSettings = vanillaSettings;
+	ApplyChanges();
 }
 
 bool VolumetricLightingWidget::HasUnsavedChanges() const

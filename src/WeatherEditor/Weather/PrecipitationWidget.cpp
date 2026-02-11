@@ -125,24 +125,29 @@ void PrecipitationWidget::LoadSettings()
 			logger::error("Precipitation {}: Failed to load from JSON: {}", GetEditorID(), e.what());
 		}
 	} else {
-		auto& runtime = precipitation->GetRuntimeData();
-
-		settings.gravityVelocity = precipitation->GetSettingValue(RE::BGSShaderParticleGeometryData::DataID::kGravityVelocity).f;
-		settings.rotationVelocity = precipitation->GetSettingValue(RE::BGSShaderParticleGeometryData::DataID::kRotationVelocity).f;
-		settings.particleSizeX = precipitation->GetSettingValue(RE::BGSShaderParticleGeometryData::DataID::kParticleSizeX).f;
-		settings.particleSizeY = precipitation->GetSettingValue(RE::BGSShaderParticleGeometryData::DataID::kParticleSizeY).f;
-		settings.centerOffsetMin = precipitation->GetSettingValue(RE::BGSShaderParticleGeometryData::DataID::kCenterOffsetMin).f;
-		settings.centerOffsetMax = precipitation->GetSettingValue(RE::BGSShaderParticleGeometryData::DataID::kCenterOffsetMax).f;
-		settings.startRotationRange = precipitation->GetSettingValue(RE::BGSShaderParticleGeometryData::DataID::kStartRotationRange).f;
-		settings.numSubtexturesX = precipitation->GetSettingValue(RE::BGSShaderParticleGeometryData::DataID::kNumSubtexturesX).i;
-		settings.numSubtexturesY = precipitation->GetSettingValue(RE::BGSShaderParticleGeometryData::DataID::kNumSubtexturesY).i;
-		settings.particleType = precipitation->GetSettingValue(RE::BGSShaderParticleGeometryData::DataID::kParticleType).i;
-		settings.boxSize = precipitation->GetSettingValue(RE::BGSShaderParticleGeometryData::DataID::kBoxSize).f;
-		settings.particleDensity = precipitation->GetSettingValue(RE::BGSShaderParticleGeometryData::DataID::kParticleDensity).f;
-		settings.particleTexture = runtime.particleTexture.textureName.c_str();
+		settings = vanillaSettings;
 	}
 
 	originalSettings = settings;
+}
+
+void PrecipitationWidget::LoadFromGameSettings()
+{
+	auto& runtime = precipitation->GetRuntimeData();
+
+	settings.gravityVelocity = precipitation->GetSettingValue(RE::BGSShaderParticleGeometryData::DataID::kGravityVelocity).f;
+	settings.rotationVelocity = precipitation->GetSettingValue(RE::BGSShaderParticleGeometryData::DataID::kRotationVelocity).f;
+	settings.particleSizeX = precipitation->GetSettingValue(RE::BGSShaderParticleGeometryData::DataID::kParticleSizeX).f;
+	settings.particleSizeY = precipitation->GetSettingValue(RE::BGSShaderParticleGeometryData::DataID::kParticleSizeY).f;
+	settings.centerOffsetMin = precipitation->GetSettingValue(RE::BGSShaderParticleGeometryData::DataID::kCenterOffsetMin).f;
+	settings.centerOffsetMax = precipitation->GetSettingValue(RE::BGSShaderParticleGeometryData::DataID::kCenterOffsetMax).f;
+	settings.startRotationRange = precipitation->GetSettingValue(RE::BGSShaderParticleGeometryData::DataID::kStartRotationRange).f;
+	settings.numSubtexturesX = precipitation->GetSettingValue(RE::BGSShaderParticleGeometryData::DataID::kNumSubtexturesX).i;
+	settings.numSubtexturesY = precipitation->GetSettingValue(RE::BGSShaderParticleGeometryData::DataID::kNumSubtexturesY).i;
+	settings.particleType = precipitation->GetSettingValue(RE::BGSShaderParticleGeometryData::DataID::kParticleType).i;
+	settings.boxSize = precipitation->GetSettingValue(RE::BGSShaderParticleGeometryData::DataID::kBoxSize).f;
+	settings.particleDensity = precipitation->GetSettingValue(RE::BGSShaderParticleGeometryData::DataID::kParticleDensity).f;
+	settings.particleTexture = runtime.particleTexture.textureName.c_str();
 }
 
 void PrecipitationWidget::SaveSettings()
@@ -160,6 +165,7 @@ void PrecipitationWidget::SaveSettings()
 	js["boxSize"] = settings.boxSize;
 	js["particleDensity"] = settings.particleDensity;
 	js["particleTexture"] = settings.particleTexture;
+	originalSettings = settings;
 }
 
 void PrecipitationWidget::ApplyChanges()
@@ -186,7 +192,9 @@ void PrecipitationWidget::ApplyChanges()
 
 void PrecipitationWidget::RevertChanges()
 {
-	settings = originalSettings;
+	settings = vanillaSettings;
+	originalSettings = vanillaSettings;
+	ApplyChanges();
 }
 
 bool PrecipitationWidget::HasUnsavedChanges() const

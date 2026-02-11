@@ -223,7 +223,8 @@ void LightingTemplateWidget::ApplyChanges()
 
 void LightingTemplateWidget::RevertChanges()
 {
-	LoadLightingTemplateValues();
+	settings = vanillaSettings;
+	SetLightingTemplateValues();
 }
 
 void LightingTemplateWidget::SetLightingTemplateValues()
@@ -297,12 +298,17 @@ void LightingTemplateWidget::LoadLightingTemplateValues()
 	ColorToFloat3(dalc.directional.z.min, settings.dalc.directional[2].min);
 }
 
+void LightingTemplateWidget::LoadFromGameSettings()
+{
+	LoadLightingTemplateValues();
+}
+
 void LightingTemplateWidget::LoadSettings()
 {
 	if (!js.empty()) {
 		settings = js;
 	} else {
-		LoadLightingTemplateValues();
+		settings = vanillaSettings;
 	}
 }
 

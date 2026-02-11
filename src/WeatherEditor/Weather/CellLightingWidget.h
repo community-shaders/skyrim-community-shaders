@@ -9,6 +9,11 @@ public:
 		cell(a_cell)
 	{
 		form = a_cell;
+		if (cell) {
+			LoadFromGameSettings();
+			vanillaSettings = settings;
+			originalSettings = settings;
+		}
 	}
 
 	~CellLightingWidget() override = default;
@@ -23,6 +28,8 @@ public:
 	RE::TESObjectCELL* cell = nullptr;
 
 private:
+	void LoadFromGameSettings();
+
 	struct Settings
 	{
 		// INTERIOR_DATA properties
@@ -66,5 +73,6 @@ private:
 	};
 
 	Settings settings;
+	Settings vanillaSettings;
 	Settings originalSettings;
 };

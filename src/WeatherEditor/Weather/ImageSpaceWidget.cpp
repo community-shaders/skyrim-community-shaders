@@ -88,11 +88,11 @@ void ImageSpaceWidget::LoadSettings()
 		if (!js.empty() && js.contains("Settings") && js["Settings"].is_object()) {
 			settings = js["Settings"];
 		} else {
-			LoadImageSpaceValues();
+			settings = vanillaSettings;
 		}
 	} catch (const std::exception& e) {
 		logger::error("Failed to load ImageSpace settings for {}: {}", GetEditorID(), e.what());
-		LoadImageSpaceValues();
+		settings = vanillaSettings;
 	}
 }
 
@@ -167,6 +167,11 @@ void ImageSpaceWidget::LoadImageSpaceValues()
 	settings.dofRange = data.depthOfField.range;
 }
 
+void ImageSpaceWidget::LoadFromGameSettings()
+{
+	LoadImageSpaceValues();
+}
+
 void ImageSpaceWidget::ApplyChanges()
 {
 	SetImageSpaceValues();
@@ -174,5 +179,6 @@ void ImageSpaceWidget::ApplyChanges()
 
 void ImageSpaceWidget::RevertChanges()
 {
-	LoadImageSpaceValues();
+	settings = vanillaSettings;
+	SetImageSpaceValues();
 }

@@ -263,49 +263,60 @@ void CellLightingWidget::LoadSettings()
 			// Fall through to load from form
 		}
 	} else {
-		// No JSON data, load from game form
-		ColorToFloat3(lighting->ambient, settings.ambient);
-		ColorToFloat3(lighting->directional, settings.directional);
-		ColorToFloat3(lighting->fogColorNear, settings.fogColorNear);
-		ColorToFloat3(lighting->fogColorFar, settings.fogColorFar);
-
-		settings.fogNear = lighting->fogNear;
-		settings.fogFar = lighting->fogFar;
-		settings.fogPower = lighting->fogPower;
-		settings.fogClamp = lighting->fogClamp;
-
-		settings.directionalFade = lighting->directionalFade;
-		settings.clipDist = lighting->clipDist;
-		settings.lightFadeStart = lighting->lightFadeStart;
-		settings.lightFadeEnd = lighting->lightFadeEnd;
-		settings.directionalXY = lighting->directionalXY;
-		settings.directionalZ = lighting->directionalZ;
-
-		auto& dalc = lighting->directionalAmbientLightingColors;
-		ColorToFloat3(dalc.directional.x.max, settings.directionalXPlus);
-		ColorToFloat3(dalc.directional.x.min, settings.directionalXMinus);
-		ColorToFloat3(dalc.directional.y.max, settings.directionalYPlus);
-		ColorToFloat3(dalc.directional.y.min, settings.directionalYMinus);
-		ColorToFloat3(dalc.directional.z.max, settings.directionalZPlus);
-		ColorToFloat3(dalc.directional.z.min, settings.directionalZMinus);
-		ColorToFloat3(dalc.specular, settings.directionalSpecular);
-		settings.fresnelPower = dalc.fresnelPower;
-
-		auto flags = lighting->lightingTemplateInheritanceFlags;
-		settings.inheritAmbientColor = flags.any(RE::INTERIOR_DATA::Inherit::kAmbientColor);
-		settings.inheritDirectionalColor = flags.any(RE::INTERIOR_DATA::Inherit::kDirectionalColor);
-		settings.inheritFogColor = flags.any(RE::INTERIOR_DATA::Inherit::kFogColor);
-		settings.inheritFogNear = flags.any(RE::INTERIOR_DATA::Inherit::kFogNear);
-		settings.inheritFogFar = flags.any(RE::INTERIOR_DATA::Inherit::kFogFar);
-		settings.inheritDirectionalRotation = flags.any(RE::INTERIOR_DATA::Inherit::kDirectionalRotation);
-		settings.inheritDirectionalFade = flags.any(RE::INTERIOR_DATA::Inherit::kDirectionalFade);
-		settings.inheritClipDistance = flags.any(RE::INTERIOR_DATA::Inherit::kClipDistance);
-		settings.inheritFogPower = flags.any(RE::INTERIOR_DATA::Inherit::kFogPower);
-		settings.inheritFogMax = flags.any(RE::INTERIOR_DATA::Inherit::kFogMax);
-		settings.inheritLightFadeDistances = flags.any(RE::INTERIOR_DATA::Inherit::kLightFadeDistances);
+		settings = vanillaSettings;
 	}
 
 	originalSettings = settings;
+}
+
+void CellLightingWidget::LoadFromGameSettings()
+{
+	if (!cell || !cell->IsInteriorCell())
+		return;
+
+	auto lighting = cell->GetLighting();
+	if (!lighting)
+		return;
+
+	ColorToFloat3(lighting->ambient, settings.ambient);
+	ColorToFloat3(lighting->directional, settings.directional);
+	ColorToFloat3(lighting->fogColorNear, settings.fogColorNear);
+	ColorToFloat3(lighting->fogColorFar, settings.fogColorFar);
+
+	settings.fogNear = lighting->fogNear;
+	settings.fogFar = lighting->fogFar;
+	settings.fogPower = lighting->fogPower;
+	settings.fogClamp = lighting->fogClamp;
+
+	settings.directionalFade = lighting->directionalFade;
+	settings.clipDist = lighting->clipDist;
+	settings.lightFadeStart = lighting->lightFadeStart;
+	settings.lightFadeEnd = lighting->lightFadeEnd;
+	settings.directionalXY = lighting->directionalXY;
+	settings.directionalZ = lighting->directionalZ;
+
+	auto& dalc = lighting->directionalAmbientLightingColors;
+	ColorToFloat3(dalc.directional.x.max, settings.directionalXPlus);
+	ColorToFloat3(dalc.directional.x.min, settings.directionalXMinus);
+	ColorToFloat3(dalc.directional.y.max, settings.directionalYPlus);
+	ColorToFloat3(dalc.directional.y.min, settings.directionalYMinus);
+	ColorToFloat3(dalc.directional.z.max, settings.directionalZPlus);
+	ColorToFloat3(dalc.directional.z.min, settings.directionalZMinus);
+	ColorToFloat3(dalc.specular, settings.directionalSpecular);
+	settings.fresnelPower = dalc.fresnelPower;
+
+	auto flags = lighting->lightingTemplateInheritanceFlags;
+	settings.inheritAmbientColor = flags.any(RE::INTERIOR_DATA::Inherit::kAmbientColor);
+	settings.inheritDirectionalColor = flags.any(RE::INTERIOR_DATA::Inherit::kDirectionalColor);
+	settings.inheritFogColor = flags.any(RE::INTERIOR_DATA::Inherit::kFogColor);
+	settings.inheritFogNear = flags.any(RE::INTERIOR_DATA::Inherit::kFogNear);
+	settings.inheritFogFar = flags.any(RE::INTERIOR_DATA::Inherit::kFogFar);
+	settings.inheritDirectionalRotation = flags.any(RE::INTERIOR_DATA::Inherit::kDirectionalRotation);
+	settings.inheritDirectionalFade = flags.any(RE::INTERIOR_DATA::Inherit::kDirectionalFade);
+	settings.inheritClipDistance = flags.any(RE::INTERIOR_DATA::Inherit::kClipDistance);
+	settings.inheritFogPower = flags.any(RE::INTERIOR_DATA::Inherit::kFogPower);
+	settings.inheritFogMax = flags.any(RE::INTERIOR_DATA::Inherit::kFogMax);
+	settings.inheritLightFadeDistances = flags.any(RE::INTERIOR_DATA::Inherit::kLightFadeDistances);
 }
 
 void CellLightingWidget::SaveSettings()
@@ -345,6 +356,7 @@ void CellLightingWidget::SaveSettings()
 	js["inherit"]["fogPower"] = settings.inheritFogPower;
 	js["inherit"]["fogMax"] = settings.inheritFogMax;
 	js["inherit"]["lightFadeDistances"] = settings.inheritLightFadeDistances;
+	originalSettings = settings;
 }
 
 void CellLightingWidget::ApplyChanges()
@@ -415,7 +427,9 @@ void CellLightingWidget::ApplyChanges()
 
 void CellLightingWidget::RevertChanges()
 {
-	settings = originalSettings;
+	settings = vanillaSettings;
+	originalSettings = vanillaSettings;
+	ApplyChanges();
 }
 
 bool CellLightingWidget::HasUnsavedChanges() const

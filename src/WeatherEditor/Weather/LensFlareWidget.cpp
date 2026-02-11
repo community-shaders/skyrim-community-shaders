@@ -40,16 +40,22 @@ void LensFlareWidget::LoadSettings()
 			logger::error("LensFlare {}: Failed to load from JSON: {}", GetEditorID(), e.what());
 		}
 	} else {
-		settings.fadeDistRadiusScale = lensFlare->fadeDistRadiusScale;
-		settings.colorInfluence = lensFlare->colorInfluence;
+		settings = vanillaSettings;
 	}
 	originalSettings = settings;
+}
+
+void LensFlareWidget::LoadFromGameSettings()
+{
+	settings.fadeDistRadiusScale = lensFlare->fadeDistRadiusScale;
+	settings.colorInfluence = lensFlare->colorInfluence;
 }
 
 void LensFlareWidget::SaveSettings()
 {
 	js["fadeDistRadiusScale"] = settings.fadeDistRadiusScale;
 	js["colorInfluence"] = settings.colorInfluence;
+	originalSettings = settings;
 }
 
 void LensFlareWidget::ApplyChanges()
@@ -63,7 +69,9 @@ void LensFlareWidget::ApplyChanges()
 
 void LensFlareWidget::RevertChanges()
 {
-	settings = originalSettings;
+	settings = vanillaSettings;
+	originalSettings = vanillaSettings;
+	ApplyChanges();
 }
 
 bool LensFlareWidget::HasUnsavedChanges() const

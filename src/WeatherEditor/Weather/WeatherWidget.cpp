@@ -461,7 +461,7 @@ void WeatherWidget::LoadSettings()
 			return;
 		}
 	} else {
-		settings = vanillaSettings;
+		LoadWeatherValues();
 	}
 	LoadFeatureSettings();
 }
@@ -1500,7 +1500,8 @@ void WeatherWidget::ApplyChanges()
 
 void WeatherWidget::RevertChanges()
 {
-	LoadWeatherValues();
+	settings = vanillaSettings;
+	SetWeatherValues();
 }
 
 void WeatherWidget::DrawFeatureSettings()

@@ -9,6 +9,11 @@ public:
 		referenceEffect(a_referenceEffect)
 	{
 		form = a_referenceEffect;
+		if (referenceEffect) {
+			LoadFromGameSettings();
+			vanillaSettings = settings;
+			originalSettings = settings;
+		}
 	}
 
 	~ReferenceEffectWidget() override = default;
@@ -23,6 +28,8 @@ public:
 	RE::BGSReferenceEffect* referenceEffect = nullptr;
 
 private:
+	void LoadFromGameSettings();
+
 	struct Settings
 	{
 		RE::BGSArtObject* artObject = nullptr;
@@ -33,6 +40,7 @@ private:
 	};
 
 	Settings settings;
+	Settings vanillaSettings;
 	Settings originalSettings;
 
 	std::vector<RE::BGSArtObject*> artObjectArray;

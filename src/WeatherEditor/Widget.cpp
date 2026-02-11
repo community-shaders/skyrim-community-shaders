@@ -333,13 +333,6 @@ void Widget::DrawWidgetHeader(const char* searchId, bool showApplyRevert, bool s
 			}
 		}
 
-		// Unsaved changes indicator
-		if (HasUnsavedChanges()) {
-			ImGui::SameLine();
-			ImGui::TextColored(menu->GetTheme().StatusPalette.Warning, "(!)");
-			if (ImGui::IsItemHovered())
-				ImGui::SetTooltip("Unsaved changes - click save to keep");
-		}
 
 		// Save/Load/Delete buttons
 		if (showSaveLoad && menu->uiIcons.saveSettings.texture && menu->uiIcons.loadSettings.texture) {
@@ -375,6 +368,14 @@ void Widget::DrawWidgetHeader(const char* searchId, bool showApplyRevert, bool s
 					ImGui::SetTooltip("Delete saved file and revert to defaults");
 				}
 			}
+		}
+		
+		// Unsaved changes indicator
+		if (HasUnsavedChanges()) {
+			ImGui::SameLine();
+			ImGui::TextColored(menu->GetTheme().StatusPalette.Warning, "(UNSAVED CHANGES`)");
+			if (ImGui::IsItemHovered())
+				ImGui::SetTooltip("Unsaved changes - click save to keep");
 		}
 
 		ImGui::PopStyleColor(2);
@@ -468,14 +469,6 @@ void Widget::DrawWidgetHeader(const char* searchId, bool showApplyRevert, bool s
 			}
 		}
 
-		// Unsaved changes indicator
-		if (HasUnsavedChanges()) {
-			ImGui::SameLine();
-			ImGui::TextColored(Menu::GetSingleton()->GetTheme().StatusPalette.Warning, "(!)");
-			if (ImGui::IsItemHovered())
-				ImGui::SetTooltip("Unsaved changes - click save to keep");
-		}
-
 		// Save/Load/Delete buttons
 		if (showSaveLoad) {
 			ImGui::SameLine();
@@ -530,6 +523,14 @@ void Widget::DrawWidgetHeader(const char* searchId, bool showApplyRevert, bool s
 					ImGui::SetTooltip("Delete saved file and revert to defaults");
 				}
 			}
+		}
+
+		// Unsaved changes indicator
+		if (HasUnsavedChanges()) {
+			ImGui::SameLine();
+			ImGui::TextColored(Menu::GetSingleton()->GetTheme().StatusPalette.Warning, "(UNSAVED CHANGES)");
+			if (ImGui::IsItemHovered())
+				ImGui::SetTooltip("Unsaved changes - click save to keep");
 		}
 	}
 
