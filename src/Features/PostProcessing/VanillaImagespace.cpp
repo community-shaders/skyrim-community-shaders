@@ -59,7 +59,6 @@ void VanillaImagespace::DrawSettings()
 		}
 	}
 
-	ImGui::Text("Current Location: %s", isInInterior ? "Interior" : "Exterior");
 	ImGui::Text("Actual Values:");
 	ImGui::Text("Saturation: %.3f", actualValues.x);
 	ImGui::Text("Brightness: %.3f", actualValues.y);
@@ -176,7 +175,7 @@ void VanillaImagespace::Draw(TextureInfo& inout_tex)
 
 	auto& pp = globals::features::postProcessing;
 	imageSpaceData = pp.imageSpaceManager->gameISData;
-	isInInterior = pp.imageSpaceManager->inInterior;
+	isInInterior = Util::IsInterior();
 	
 	cinematic.x = imageSpaceData.baseData.cinematic.saturation;
 	cinematic.y = imageSpaceData.baseData.cinematic.brightness;
