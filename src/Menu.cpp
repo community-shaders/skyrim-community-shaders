@@ -687,11 +687,6 @@ void Menu::DrawSettings()
 	ImGui::SetNextWindowSize(Util::GetNativeViewportSizeScaled(0.8f), ImGuiCond_FirstUseEver);
 	auto title = std::format("Community Shaders {}", Util::GetFormattedVersion(Plugin::VERSION));
 
-	if (EditorWindow::GetSingleton()->open) {
-		EditorWindow::GetSingleton()->Draw();
-		return;
-	}
-
 	// Determine window flags based on docking state
 	ImGuiWindowFlags windowFlags = ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoScrollbar;
 	// Check if this will be docked (we need to peek at the docking state)
@@ -1089,16 +1084,14 @@ void Menu::ProcessInputEventQueue()
 					}
 				}
 
-				// Handle ESC key for editor and menu
+				// ESC closes editor first (without propagating), then menu
 				auto* editorWindow = EditorWindow::GetSingleton();
-				if (key == VK_ESCAPE) {
-					if (editorWindow && editorWindow->open) {
-						// Close editor window, don't propagate to menu
-						editorWindow->open = false;
-					} else if (IsEnabled) {
-						// Close menu only if editor is not open
-						IsEnabled = false;
-					}
+				if (key == VK_ESCAPE && editorWindow && editorWindow->open) {
+					editorWindow->open = false;
+					continue;  // Don't send to ImGui/menu
+				}
+				if (key == VK_ESCAPE && IsEnabled) {
+					IsEnabled = false;
 				}
 			}
 
