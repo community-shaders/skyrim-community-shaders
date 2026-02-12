@@ -250,7 +250,7 @@ void WeatherEditor::DrawWeatherStatusPanel()
 
 void WeatherEditor::RenderWeatherDetailsWindow(bool* open)
 {
-	if (!*open)
+	if (!open || !*open)
 		return;
 
 	// Set initial position if not already set
@@ -827,8 +827,6 @@ void WeatherEditor::UpdateFilteredWeathers()
 		}
 	}
 
-	// Sort filtered weathers using the same comparator
-	std::sort(s_filteredWeathers.begin(), s_filteredWeathers.end(), WeatherNameComparator{});
 }
 
 int WeatherEditor::FindWeatherIndex(RE::TESWeather* targetWeather)
