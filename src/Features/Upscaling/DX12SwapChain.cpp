@@ -463,6 +463,21 @@ void DX12SwapChain::SetUIBuffer()
 	d3d11Context->OMSetRenderTargets(1, &data.RTV, nullptr);
 }
 
+DX12SwapChain::BlurResources DX12SwapChain::GetBlurResources() const
+{
+	BlurResources res;
+	if (swapChainBufferWrapped) {
+		res.backbufferTex = swapChainBufferWrapped->resource11;
+		res.backbufferRTV = swapChainBufferWrapped->rtv;
+		res.backbufferSRV = swapChainBufferWrapped->srv;
+	}
+	if (uiBufferWrapped) {
+		res.uiBufferSRV = uiBufferWrapped->srv;
+		res.uiBufferRTV = uiBufferWrapped->rtv;
+	}
+	return res;
+}
+
 void DX12SwapChain::CreateSharedResources()
 {
 	auto renderer = globals::game::renderer;
