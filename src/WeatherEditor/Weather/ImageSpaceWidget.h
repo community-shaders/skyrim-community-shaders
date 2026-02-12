@@ -17,6 +17,7 @@ public:
 		imageSpace = a_imageSpace;
 		LoadFromGameSettings();
 		vanillaSettings = settings;
+		originalSettings = settings;
 	}
 
 	struct Settings
@@ -47,12 +48,14 @@ public:
 
 	Settings settings;
 	Settings vanillaSettings;
+	Settings originalSettings;
 
 	~ImageSpaceWidget();
 
 	virtual void DrawWidget() override;
 	virtual void LoadSettings() override;
 	virtual void SaveSettings() override;
+	virtual bool HasUnsavedChanges() const override;
 
 	void SetImageSpaceValues();
 	void LoadImageSpaceValues();

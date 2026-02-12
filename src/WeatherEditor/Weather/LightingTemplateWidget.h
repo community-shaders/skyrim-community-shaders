@@ -17,6 +17,7 @@ public:
 		lightingTemplate = a_lightingTemplate;
 		LoadFromGameSettings();
 		vanillaSettings = settings;
+		originalSettings = settings;
 	}
 
 	struct DirectionalColor
@@ -53,12 +54,14 @@ public:
 
 	Settings settings;
 	Settings vanillaSettings;
+	Settings originalSettings;
 
 	~LightingTemplateWidget();
 
 	virtual void DrawWidget() override;
 	virtual void LoadSettings() override;
 	virtual void SaveSettings() override;
+	virtual bool HasUnsavedChanges() const override;
 
 	void SetLightingTemplateValues();
 	void LoadLightingTemplateValues();
