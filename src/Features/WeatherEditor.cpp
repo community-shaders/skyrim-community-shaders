@@ -316,7 +316,7 @@ ImVec4 WeatherEditor::GetWeatherTypeColor(RE::TESWeather* weather)
 
 	// Check for unclassified/unflagged weather
 	if (weather->data.flags.underlying() == 0) {
-		return ImVec4(0.9f, 0.85f, 0.7f, 1.0f);  // Light tan/beige for unclassified/unflagged
+		return Menu::GetSingleton()->GetTheme().StatusPalette.Warning;
 	}
 
 	return theme.StatusPalette.InfoColor;  // Default blue
@@ -591,7 +591,7 @@ void WeatherEditor::RenderWeatherControls(RE::Sky* sky)
 		// Get color - use the helper function for consistency
 		ImVec4 filterColor;
 		if (filters[i].isUnclassified) {
-			filterColor = ImVec4(0.9f, 0.85f, 0.7f, 1.0f);  // Light tan/beige for none/unclassified
+			filterColor = Menu::GetSingleton()->GetTheme().StatusPalette.Warning;
 		} else {
 			filterColor = GetWeatherFlagColor(filters[i].flag);
 		}
@@ -1042,7 +1042,7 @@ ImVec4 WeatherEditor::GetWeatherFlagColorByName(const std::string& flagName)
 	}
 
 	// Default for unclassified or unknown flags
-	return ImVec4(0.9f, 0.85f, 0.7f, 1.0f);  // Light tan/beige for none/unclassified
+	return Menu::GetSingleton()->GetTheme().StatusPalette.Warning;
 }
 
 std::string WeatherEditor::GetDisplayName(const RE::TESWeather* weather)
