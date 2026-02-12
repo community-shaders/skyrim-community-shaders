@@ -133,11 +133,12 @@ public:
 	virtual bool HasUnsavedChanges() const { return false; }
 
 	// Draw common header with search bar and action buttons
-	void DrawWidgetHeader(const char* searchId, bool showApplyRevert = true, bool showSaveLoad = false, bool showForceWeather = false, RE::TESWeather* weather = nullptr);
+	void DrawWidgetHeader(const char* searchId, bool showApply = true, bool showSaveLoadRevert = false, bool showForceWeather = false, RE::TESWeather* weather = nullptr);
 
 	// Search functionality
 	char searchBuffer[256] = "";
 	bool searchActive = false;
+	bool showDeleteConfirmation = false;
 
 	bool MatchesSearch(const std::string& text) const;
 

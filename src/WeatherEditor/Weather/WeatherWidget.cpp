@@ -464,6 +464,7 @@ void WeatherWidget::LoadSettings()
 		LoadWeatherValues();
 	}
 	LoadFeatureSettings();
+	originalSettings = settings;
 	ApplyChanges();
 }
 
@@ -487,6 +488,7 @@ void WeatherWidget::SaveSettings()
 	} catch (const nlohmann::json::exception& e) {
 		logger::error("Weather {}: Failed to serialize settings to JSON: {}", GetEditorID(), e.what());
 	}
+	originalSettings = settings;
 }
 
 WeatherWidget* WeatherWidget::GetParent()
@@ -1502,7 +1504,7 @@ void WeatherWidget::ApplyChanges()
 void WeatherWidget::RevertChanges()
 {
 	settings = vanillaSettings;
-	SetWeatherValues();
+	ApplyChanges();
 }
 
 void WeatherWidget::DrawFeatureSettings()

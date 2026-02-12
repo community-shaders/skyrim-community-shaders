@@ -194,7 +194,6 @@ void PrecipitationWidget::ApplyChanges()
 void PrecipitationWidget::RevertChanges()
 {
 	settings = vanillaSettings;
-	originalSettings = vanillaSettings;
 	ApplyChanges();
 }
 

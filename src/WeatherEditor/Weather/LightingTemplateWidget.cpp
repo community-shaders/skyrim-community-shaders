@@ -32,7 +32,7 @@ void LightingTemplateWidget::DrawWidget()
 	ImGui::SetNextWindowSizeConstraints(ImVec2(600, 0), ImVec2(FLT_MAX, FLT_MAX));
 	if (ImGui::Begin(GetEditorID().c_str(), &open, ImGuiWindowFlags_NoSavedSettings)) {
 		// Draw header with search and Save/Load/Delete buttons
-		DrawWidgetHeader("##LightingTemplateSearch", false, true, false, nullptr);
+		DrawWidgetHeader("##LightingTemplateSearch", false, true);
 
 		if (ImGui::BeginTabBar("LightingTemplateSettingsTabs", ImGuiTabBarFlags_None)) {
 			if (ImGui::BeginTabItem("Basic")) {
@@ -223,7 +223,7 @@ void LightingTemplateWidget::ApplyChanges()
 void LightingTemplateWidget::RevertChanges()
 {
 	settings = vanillaSettings;
-	SetLightingTemplateValues();
+	ApplyChanges();
 }
 
 void LightingTemplateWidget::SetLightingTemplateValues()

@@ -22,8 +22,8 @@ public:
 		form = a_weather;
 		weather = a_weather;
 		LoadWeatherValues();
-		// Cache the original vanilla values for restoration
 		vanillaSettings = settings;
+		originalSettings = settings;
 	}
 
 	struct DirectionalColor
@@ -100,7 +100,7 @@ public:
 	};
 
 	Settings settings;
-	// Cached original vanilla values for restoration
+	Settings originalSettings;
 	Settings vanillaSettings;
 
 	// Cloud texture cache (layer index -> SRV)

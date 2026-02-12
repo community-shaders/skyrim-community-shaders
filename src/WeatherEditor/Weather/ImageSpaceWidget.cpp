@@ -188,7 +188,7 @@ void ImageSpaceWidget::ApplyChanges()
 void ImageSpaceWidget::RevertChanges()
 {
 	settings = vanillaSettings;
-	SetImageSpaceValues();
+	ApplyChanges();
 }
 
 bool ImageSpaceWidget::HasUnsavedChanges() const
