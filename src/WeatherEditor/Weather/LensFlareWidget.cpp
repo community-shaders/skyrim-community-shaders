@@ -31,6 +31,7 @@ void LensFlareWidget::LoadSettings()
 		return;
 
 	if (!js.empty()) {
+		settings = vanillaSettings;
 		try {
 			if (js.contains("fadeDistRadiusScale"))
 				settings.fadeDistRadiusScale = js["fadeDistRadiusScale"];

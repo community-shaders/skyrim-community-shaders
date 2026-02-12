@@ -49,6 +49,7 @@ void ReferenceEffectWidget::LoadSettings()
 		return;
 
 	if (!js.empty()) {
+		settings = vanillaSettings;
 		try {
 			if (js.contains("artObject")) {
 				std::string formIDStr = js["artObject"].get<std::string>();

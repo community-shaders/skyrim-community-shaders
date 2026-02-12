@@ -77,6 +77,7 @@ void VolumetricLightingWidget::LoadSettings()
 		return;
 
 	if (!js.empty()) {
+		settings = vanillaSettings;
 		try {
 			if (js.contains("intensity"))
 				settings.intensity = js["intensity"];

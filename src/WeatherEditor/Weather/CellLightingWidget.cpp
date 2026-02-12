@@ -159,6 +159,7 @@ void CellLightingWidget::LoadSettings()
 
 	// Try to load from JSON first
 	if (!js.empty()) {
+		settings = vanillaSettings;
 		try {
 			if (js.contains("ambient")) {
 				auto arr = js["ambient"];

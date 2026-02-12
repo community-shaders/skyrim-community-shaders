@@ -94,6 +94,7 @@ void PrecipitationWidget::LoadSettings()
 		return;
 
 	if (!js.empty()) {
+		settings = vanillaSettings;
 		try {
 			if (js.contains("gravityVelocity"))
 				settings.gravityVelocity = js["gravityVelocity"];
