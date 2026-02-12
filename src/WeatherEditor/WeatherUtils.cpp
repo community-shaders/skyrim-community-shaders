@@ -549,7 +549,11 @@ namespace TOD
 					}
 				}
 
-				if (ImGui::ColorPicker3((id + "_picker").c_str(), (float*)&colors[i], ImGuiColorEditFlags_NoAlpha)) {
+				// Use ColorPicker4 with ref_col to show original color preview
+				float col4[4] = { colors[i].x, colors[i].y, colors[i].z, 1.0f };
+				float refCol[4] = { colorCache[id].x, colorCache[id].y, colorCache[id].z, 1.0f };
+				if (ImGui::ColorPicker4((id + "_picker").c_str(), col4, ImGuiColorEditFlags_NoAlpha, refCol)) {
+					colors[i] = { col4[0], col4[1], col4[2] };
 					changed = true;
 				}
 				ImGui::EndPopup();
@@ -747,12 +751,14 @@ namespace TOD
 			ImVec4 color = ImVec4(colors[i].x, colors[i].y, colors[i].z, 1.0f);
 
 			static std::map<std::string, float3> colorCache;
+			static std::map<std::string, float3> originalColorCache;
 			static std::string activeColorId;
 
 			// Disable editing when inherited
 			ImGui::BeginDisabled(inheritFlag);
 			if (ImGui::ColorButton(id.c_str(), color, ImGuiColorEditFlags_NoAlpha, ImVec2(buttonSize, buttonSize))) {
 				colorCache[id] = colors[i];
+				originalColorCache[id] = colors[i];
 				activeColorId = id;
 				ImGui::OpenPopup(id.c_str());
 			}
@@ -794,11 +800,18 @@ namespace TOD
 				if (colorCache.find(id) == colorCache.end()) {
 					colorCache[id] = colors[i];
 				}
+				if (originalColorCache.find(id) == originalColorCache.end()) {
+					originalColorCache[id] = colors[i];
+				}
 
 				float3& cachedColor = colorCache[id];
 				bool colorChanged = false;
 
-				if (ImGui::ColorPicker3("##picker", &cachedColor.x, ImGuiColorEditFlags_NoAlpha)) {
+				// Use ColorPicker4 with ref_col to show original color preview
+				float col4[4] = { cachedColor.x, cachedColor.y, cachedColor.z, 1.0f };
+				float refCol[4] = { originalColorCache[id].x, originalColorCache[id].y, originalColorCache[id].z, 1.0f };
+				if (ImGui::ColorPicker4("##picker", col4, ImGuiColorEditFlags_NoAlpha, refCol)) {
+					cachedColor = { col4[0], col4[1], col4[2] };
 					colors[i] = cachedColor;
 					colorChanged = true;
 					changed = true;
