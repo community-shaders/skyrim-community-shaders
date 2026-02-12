@@ -124,7 +124,6 @@ void ReferenceEffectWidget::ApplyChanges()
 void ReferenceEffectWidget::RevertChanges()
 {
 	settings = vanillaSettings;
-	originalSettings = vanillaSettings;
 	ApplyChanges();
 }
 
