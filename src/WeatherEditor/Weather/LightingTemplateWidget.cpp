@@ -218,7 +218,6 @@ void LightingTemplateWidget::DrawDALCSettings()
 void LightingTemplateWidget::ApplyChanges()
 {
 	SetLightingTemplateValues();
-	SaveSettings();
 }
 
 void LightingTemplateWidget::RevertChanges()
