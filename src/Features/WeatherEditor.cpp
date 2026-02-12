@@ -399,9 +399,9 @@ void WeatherEditor::DisplayLightningInfo(RE::TESWeather* weather, bool showInter
 		ImGui::PopStyleVar();
 	}
 	if (colorChanged && showInteractiveElements) {
-		weather->data.lightningColor.red = static_cast<std::uint8_t>(lightningColor[0] * 255.0f);
-		weather->data.lightningColor.green = static_cast<std::uint8_t>(lightningColor[1] * 255.0f);
-		weather->data.lightningColor.blue = static_cast<std::uint8_t>(lightningColor[2] * 255.0f);
+		weather->data.lightningColor.red = static_cast<std::uint8_t>(lightningColor[0] * 255.0f + 0.5f);
+		weather->data.lightningColor.green = static_cast<std::uint8_t>(lightningColor[1] * 255.0f + 0.5f);
+		weather->data.lightningColor.blue = static_cast<std::uint8_t>(lightningColor[2] * 255.0f + 0.5f);
 	}
 	int8_t thunderFreqRaw = weather->data.thunderLightningFrequency;
 	ImGui::BulletText("Thunder Frequency: %d (signed 8-bit)", static_cast<int>(thunderFreqRaw));
@@ -559,7 +559,7 @@ void WeatherEditor::RenderWeatherControls(RE::Sky* sky)
 	}
 	// Dynamic checkbox layout - calculate how many fit per row
 	float availableWidth = ImGui::GetContentRegionAvail().x;
-	float checkboxWidth = 80.0f;  // Adjusted for "None"
+	float checkboxWidth = 110.0f;  // Fits "Aurora Sun" label
 	int checkboxesPerRow = std::max(1, static_cast<int>(availableWidth / checkboxWidth));
 
 	// Colored checkboxes with dynamic layout
@@ -1042,6 +1042,9 @@ ImVec4 WeatherEditor::GetWeatherFlagColorByName(const std::string& flagName)
 
 std::string WeatherEditor::GetDisplayName(const RE::TESWeather* weather)
 {
+	if (!weather) {
+		return "Unknown";
+	}
 	const char* name = weather->GetName();
 	if (name && strlen(name) > 0) {
 		return std::string(name);
