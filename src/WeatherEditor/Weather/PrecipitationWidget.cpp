@@ -136,6 +136,9 @@ void PrecipitationWidget::LoadSettings()
 
 void PrecipitationWidget::LoadFromGameSettings()
 {
+	if (!precipitation)
+		return;
+
 	auto& runtime = precipitation->GetRuntimeData();
 
 	settings.gravityVelocity = precipitation->GetSettingValue(RE::BGSShaderParticleGeometryData::DataID::kGravityVelocity).f;
