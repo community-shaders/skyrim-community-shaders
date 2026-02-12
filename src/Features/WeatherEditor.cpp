@@ -826,7 +826,6 @@ void WeatherEditor::UpdateFilteredWeathers()
 			s_filteredWeathers.push_back(weather);
 		}
 	}
-
 }
 
 int WeatherEditor::FindWeatherIndex(RE::TESWeather* targetWeather)
