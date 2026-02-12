@@ -184,7 +184,7 @@ void WeatherWidget::DrawWidget()
 		if (ImGui::BeginTabItem("Basic", nullptr, basicFlags)) {
 			DrawProperties("Sun", { { "Sun Damage", INT8_SLIDER } });
 			DrawProperties("Wind", { { "Wind Speed", UINT8_SLIDER }, { "Wind Direction", INT8_SLIDER }, { "Wind Direction Range", INT8_SLIDER } });
-			DrawProperties("Precipitation", { { "Precipitation Begin Fade In", INT8_SLIDER }, { "Precipitation Begin Fade Out", INT8_SLIDER } });
+			DrawProperties("Precipitation", { { "Precipitation Begin Fade In", INT8_SLIDER }, { "Precipitation End Fade Out", INT8_SLIDER } });
 			DrawProperties("Lightning", { { "Thunder Lightning Begin Fade In", INT8_SLIDER }, { "Thunder Lightning End Fade Out", INT8_SLIDER },
 											{ "Thunder Lightning Frequency", INT8_SLIDER }, { "Lightning Color", COLOR3_PICKER } });
 			DrawProperties("Visual Effects", { { "Visual Effect Begin", INT8_SLIDER }, { "Visual Effect End", INT8_SLIDER } });
@@ -465,8 +465,8 @@ void WeatherWidget::LoadSettings()
 	}
 	InitializeInheritFlags();
 	LoadFeatureSettings();
-	originalSettings = settings;
 	ApplyChanges();
+	originalSettings = settings;
 }
 
 void WeatherWidget::SaveSettings()
@@ -654,6 +654,19 @@ void WeatherWidget::InitializeInheritFlags()
 		"Fog_Far",
 		"Fog_Power",
 		"Fog_Max",
+		"Sun Damage",
+		"Wind Speed",
+		"Wind Direction",
+		"Wind Direction Range",
+		"Precipitation Begin Fade In",
+		"Precipitation End Fade Out",
+		"Thunder Lightning Begin Fade In",
+		"Thunder Lightning End Fade Out",
+		"Thunder Lightning Frequency",
+		"Lightning Color",
+		"Visual Effect Begin",
+		"Visual Effect End",
+		"Trans Delta",
 	};
 	for (const char* key : kFixedKeys) {
 		ensureFlag(key);
@@ -1550,10 +1563,67 @@ void WeatherWidget::RevertChanges()
 	ApplyChanges();
 }
 
+static bool IsDefaultFeatureOverrides(const json& value)
+{
+	if (!value.is_object())
+		return true;
+	if (value.empty())
+		return true;
+	if (value.size() == 1 && value.contains("__enabled"))
+		return !value.value("__enabled", false);
+	return false;
+}
+
+static bool AreFlagsEqualNormalized(const std::map<std::string, bool>& a, const std::map<std::string, bool>& b)
+{
+	for (const auto& [key, value] : a) {
+		auto it = b.find(key);
+		if (it == b.end()) {
+			if (value)
+				return false;
+			continue;
+		}
+		if (value != it->second)
+			return false;
+	}
+
+	for (const auto& [key, value] : b) {
+		if (value && a.find(key) == a.end())
+			return false;
+	}
+
+	return true;
+}
+
+static bool AreFeatureSettingsEqualNormalized(const std::map<std::string, json>& a, const std::map<std::string, json>& b)
+{
+	for (const auto& [key, value] : a) {
+		const bool aDefault = IsDefaultFeatureOverrides(value);
+		auto it = b.find(key);
+		if (it == b.end()) {
+			if (!aDefault)
+				return false;
+			continue;
+		}
+		const bool bDefault = IsDefaultFeatureOverrides(it->second);
+		if (aDefault != bDefault)
+			return false;
+		if (!aDefault && value != it->second)
+			return false;
+	}
+
+	for (const auto& [key, value] : b) {
+		if (!IsDefaultFeatureOverrides(value) && a.find(key) == a.end())
+			return false;
+	}
+
+	return true;
+}
+
 bool WeatherWidget::Settings::operator==(const Settings& o) const
 {
 	return parent == o.parent &&
-	       inheritFlags == o.inheritFlags &&
+	       AreFlagsEqualNormalized(inheritFlags, o.inheritFlags) &&
 	       weatherProperties == o.weatherProperties &&
 	       weatherColors == o.weatherColors &&
 	       fogProperties == o.fogProperties &&
@@ -1561,7 +1631,7 @@ bool WeatherWidget::Settings::operator==(const Settings& o) const
 	       std::equal(std::begin(dalc), std::end(dalc), std::begin(o.dalc)) &&
 	       std::equal(std::begin(clouds), std::end(clouds), std::begin(o.clouds)) &&
 	       std::equal(std::begin(imageSpaces), std::end(imageSpaces), std::begin(o.imageSpaces)) &&
-	       featureSettings == o.featureSettings;
+	       AreFeatureSettingsEqualNormalized(featureSettings, o.featureSettings);
 }
 
 bool WeatherWidget::HasUnsavedChanges() const
@@ -1592,12 +1662,11 @@ void WeatherWidget::DrawFeatureSettings()
 		}
 
 		std::string displayName = feature->GetName();
-
-		// Get or initialize feature settings for this weather
-		if (settings.featureSettings.find(featureName) == settings.featureSettings.end()) {
-			settings.featureSettings[featureName] = json::object();
-		}
-		auto& featureJson = settings.featureSettings[featureName];
+		auto featureIt = settings.featureSettings.find(featureName);
+		const json* featureJsonView = (featureIt != settings.featureSettings.end()) ? &featureIt->second : nullptr;
+		auto getFeatureJson = [&]() -> json& {
+			return settings.featureSettings.try_emplace(featureName, json::object()).first->second;
+		};
 
 		// Handle pending navigation - auto-expand this feature if it matches
 		bool shouldAutoExpand = (pendingFeatureNavigation == featureName);
@@ -1607,7 +1676,7 @@ void WeatherWidget::DrawFeatureSettings()
 
 		if (ImGui::TreeNode(displayName.c_str())) {
 			// Check if weather-specific overrides are enabled (using special key)
-			bool overridesEnabled = featureJson.value("__enabled", false);
+			bool overridesEnabled = featureJsonView ? featureJsonView->value("__enabled", false) : false;
 
 			// Weather-specific override toggle
 			ImGui::PushStyleColor(ImGuiCol_Button, overridesEnabled ? ImVec4(0.2f, 0.7f, 0.2f, 1.0f) : ImVec4(0.5f, 0.5f, 0.5f, 1.0f));
@@ -1630,6 +1699,7 @@ void WeatherWidget::DrawFeatureSettings()
 			}
 
 			if (toggleClicked) {
+				auto& featureJson = getFeatureJson();
 				if (overridesEnabled) {
 					// Disable overrides - mark as disabled but keep the settings
 					featureJson["__enabled"] = false;
@@ -1668,6 +1738,7 @@ void WeatherWidget::DrawFeatureSettings()
 
 			// Only show controls if weather-specific overrides are enabled
 			if (overridesEnabled) {
+				auto& featureJson = getFeatureJson();
 				// Draw UI for each registered variable
 				const auto& variables = featureRegistry->GetVariables();
 				bool modified = false;
@@ -1682,19 +1753,19 @@ void WeatherWidget::DrawFeatureSettings()
 					// Check if this variable has a weather-specific value
 					bool hasOverride = featureJson.contains(varName);
 
-					// Get the current value
-					// If we have an override, use it; otherwise get from feature's live value
-					if (!hasOverride) {
-						// Initialize from feature's current value
+					json currentValue;
+					if (hasOverride) {
+						currentValue = featureJson.at(varName);
+					} else {
 						json tempJson;
 						var->SaveToJson(tempJson);
-						if (tempJson.contains(varName)) {
-							featureJson[varName] = tempJson[varName];
-							hasOverride = true;  // Now we have a value to work with
+						auto it = tempJson.find(varName);
+						if (it == tempJson.end()) {
+							ImGui::PopID();
+							continue;
 						}
+						currentValue = *it;
 					}
-
-					json currentValue = featureJson[varName];
 
 					// Try to detect variable type and render appropriate control
 					// Check if it's a bool variable first
@@ -1845,7 +1916,7 @@ void WeatherWidget::UpdateSearchResults()
 	std::vector<std::pair<std::string, std::map<std::string, int>>> basicCategories = {
 		{ "Sun", { { "Sun Damage", 0 } } },
 		{ "Wind", { { "Wind Speed", 0 }, { "Wind Direction", 0 }, { "Wind Direction Range", 0 } } },
-		{ "Precipitation", { { "Precipitation Begin Fade In", 0 }, { "Precipitation Begin Fade Out", 0 } } },
+		{ "Precipitation", { { "Precipitation Begin Fade In", 0 }, { "Precipitation End Fade Out", 0 } } },
 		{ "Lightning", { { "Thunder Lightning Begin Fade In", 0 }, { "Thunder Lightning End Fade Out", 0 },
 						   { "Thunder Lightning Frequency", 0 }, { "Lightning Color", 1 } } },
 		{ "Visual Effects", { { "Visual Effect Begin", 0 }, { "Visual Effect End", 0 } } },
