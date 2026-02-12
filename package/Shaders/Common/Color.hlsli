@@ -646,12 +646,12 @@ float3 CorrectOutOfRangeColor(
 	if (FixNegatives && any(Color < 0.0))
 	{
 		float colorLuminance = GetLuminance(Color, ColorSpace);
-		
+
 		float3 positiveColor = max(Color, 0.0);
 		float3 negativeColor = min(Color, 0.0);
 		float positiveLuminance = GetLuminance(positiveColor, ColorSpace);
 		float negativeLuminance = GetLuminance(negativeColor, ColorSpace);
-		
+
 		// Desaturate until no channel is below 0
 		if (colorLuminance > FLT_MIN)
 		{
@@ -666,33 +666,33 @@ float3 CorrectOutOfRangeColor(
 			Color = 0.0;
 		}
 	}
-	
+
 	// Handle positive color components that exceed the max range
 	float colorPeak = max3(Color);
 	float startRange = MaxRange * (1.0 - PositivesSmoothingRatio);
 	float smoothedRange = (PositivesSmoothingRatio > 0.0) ? clamp(colorPeak, startRange, MaxRange) : MaxRange;
-	
+
 	if (FixPositives && colorPeak > startRange)
 	{
 		float colorLuminance = GetLuminance(Color, ColorSpace);
 		float targetLuminance = min(colorLuminance, smoothedRange);
 		float colorLuminanceInExcess = targetLuminance - smoothedRange;
 		float maxColorInExcess = colorPeak - smoothedRange;
-		
+
 		// Calculate desaturation amount needed to bring max channel within range
 		float desaturateAlpha = saturate(safeDivision(maxColorInExcess, maxColorInExcess - colorLuminanceInExcess, 0));
-		
+
 		// Split between desaturation and darkening based on ratio
 		float DarkeningAmount = 1.0 - PositivesDesaturationVsDarkeningRatio;
 		float DesaturationAmount = PositivesDesaturationVsDarkeningRatio;
-		
+
 		// Desaturate towards luminance
 		float3 newColor = lerp(Color, targetLuminance, desaturateAlpha * DesaturationAmount);
-		
+
 		// Darken if desaturation wasn't enough
 		float darkeningInvAlpha = saturate(safeDivision(smoothedRange, max3(newColor), 1));
 		newColor *= darkeningInvAlpha;
-		
+
 		// Apply smoothing if requested
 		if (PositivesSmoothingRatio <= 0.0)
 		{
@@ -704,7 +704,7 @@ float3 CorrectOutOfRangeColor(
 			Color = lerp(Color, newColor, smoothingProgress);
 		}
 	}
-	
+
 	return Color;
 }
 

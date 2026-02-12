@@ -50,7 +50,7 @@ static const float UI_REFERENCE_NITS = 80.0;
 		// === HDR Pipeline ===
 		// Input: Scene is PQ-encoded in BT.2020 from ISHDR (bloom, tone, grading applied)
 		// Output: PQ-encoded BT.2020 ready for display or swap chain
-		
+
 		float3 scenePQ = scene.rgb;
 
 		if (skipUIComposite) {
@@ -59,17 +59,17 @@ static const float UI_REFERENCE_NITS = 80.0;
 		} else {
 			// Composite UI on top of PQ scene (UI was pre-processed to PQ by UIBrightnessCS)
 			// Both UI and scene are in PQ space, so we can blend directly.
-			
+
 			// Scale UI to nit reference level
 			float uiNits = UI_REFERENCE_NITS * uiBrightness;
-			
+
 			// UI is in BT.709, convert to BT.2020 for HDR
 			float3 uiLinear = Color::GammaToTrueLinear(max(0, ui.rgb));
 			float3 uiBT2020 = Color::BT709ToBT2020(uiLinear);
-			
+
 			// Encode UI to PQ space matching the scene
 			float3 uiPQ = Color::pq::Encode(uiBT2020, uiNits);
-			
+
 			// Apply UI alpha: blend = ui + (1-alpha)*scene
 			float3 uiPremulPQ = uiPQ * ui.a;
 			finalColor = uiPremulPQ + scenePQ * (1.0 - ui.a);
@@ -78,7 +78,7 @@ static const float UI_REFERENCE_NITS = 80.0;
 		// === SDR Pipeline ===
 		// Input: Scene is tonemapped to gamma LDR range [0,1] from ISHDR
 		// Output: Gamma LDR ready for standard SDR display
-		
+
 		float3 sceneGamma = scene.rgb;
 
 		if (skipUIComposite) {

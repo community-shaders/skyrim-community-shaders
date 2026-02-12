@@ -448,7 +448,7 @@ void HDR::DrawSettings()
 		if (settings.enableHDR) {
 			float oldUIBrightness = settings.hdrUIBrightness;
 			float currentUIBrightness = settings.hdrUIBrightness;
-			
+
 			ImGui::SliderFloat("HDR UI Brightness", &currentUIBrightness, 0.5f, 5.0f, "%.1fx");
 			if (oldUIBrightness != currentUIBrightness) {
 				settings.hdrUIBrightness = currentUIBrightness;
@@ -699,7 +699,7 @@ void HDR::RedirectFramebuffer()
 
 	if (!GetHDROutputCS())
 		return;
-	
+
 	if (framebufferRedirected)
 		return;
 
@@ -932,8 +932,8 @@ void HDR::ApplyHDR()
 	// Otherwise copy directly to the D3D11 swap chain back buffer
 	if (upscaling.d3d12SwapChainActive) {
 		// Frame Gen path: copy to D3D12 swap chain wrapped buffer
-		if (upscaling.dx12SwapChain.swapChainBufferWrapped && 
-			upscaling.dx12SwapChain.swapChainBufferWrapped->resource11 && 
+		if (upscaling.dx12SwapChain.swapChainBufferWrapped &&
+			upscaling.dx12SwapChain.swapChainBufferWrapped->resource11 &&
 			outputTexture && outputTexture->resource) {
 			context->CopyResource(upscaling.dx12SwapChain.swapChainBufferWrapped->resource11, outputTexture->resource.get());
 		} else {
@@ -1121,12 +1121,12 @@ void HDR::UpdateHDRData() const
 	}
 
 	auto& upscaling = globals::features::upscaling;
-	
+
 	// Don't skip UI composite in main menu or loading screens - causes ghosting and brightness issues
-	bool isMainOrLoadingMenu = globals::game::ui && 
-	                           (globals::game::ui->IsMenuOpen(RE::MainMenu::MENU_NAME) || 
-	                            globals::game::ui->IsMenuOpen(RE::LoadingMenu::MENU_NAME));
-	
+	bool isMainOrLoadingMenu = globals::game::ui &&
+	                           (globals::game::ui->IsMenuOpen(RE::MainMenu::MENU_NAME) ||
+								   globals::game::ui->IsMenuOpen(RE::LoadingMenu::MENU_NAME));
+
 	bool fgActiveThisFrame = upscaling.d3d12SwapChainActive &&
 	                         upscaling.settings.frameGenerationMode &&
 	                         !globals::game::ui->GameIsPaused() &&

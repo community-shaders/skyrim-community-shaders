@@ -261,11 +261,11 @@ struct IDXGISwapChain_Present
 
 		bool frameGenActive = upscaling.d3d12SwapChainActive;
 
-	// HDR pipeline runs when:
-	// 1. HDR Display loaded + enableHDR=true + resources ready (full HDR processing)
-	// 2. Frame Gen active (needs ScaleUIBrightnessForFG to premultiply UI even in SDR mode)
-	bool hdrReady = globals::features::hdrDisplay.loaded && hdr && hdr->hdrDataCB && hdr->outputTexture &&
-	                (hdr->settings.enableHDR || frameGenActive);
+		// HDR pipeline runs when:
+		// 1. HDR Display loaded + enableHDR=true + resources ready (full HDR processing)
+		// 2. Frame Gen active (needs ScaleUIBrightnessForFG to premultiply UI even in SDR mode)
+		bool hdrReady = globals::features::hdrDisplay.loaded && hdr && hdr->hdrDataCB && hdr->outputTexture &&
+		                (hdr->settings.enableHDR || frameGenActive);
 
 		// Save original viewport to restore after UI rendering
 		D3D11_VIEWPORT savedViewport = {};

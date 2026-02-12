@@ -87,17 +87,17 @@ PS_OUTPUT main(PS_INPUT input)
 	// === Auto-Exposure Luminance Downsampling ===
 	// Repeatedly downsample image to compute average luminance for exposure adjustment.
 	// Output is used by BLEND pass to normalize scene brightness.
-	
+
 	float3 downsampledColor = 0;
 	for (int sampleIndex = 0; sampleIndex < DOWNSAMPLE; ++sampleIndex) {
 		float2 texCoord = BlurOffsets[sampleIndex].xy * BlurScale.xy + input.TexCoord;
-		
+
 		// Adjust for dynamic resolution scaling
 		[branch] if (Flags.x > 0.5)
 		{
 			texCoord = FrameBuffer::GetDynamicResolutionAdjustedScreenPosition(texCoord);
 		}
-		
+
 		float3 imageColor = max(0.0, ImageTex.Sample(ImageSampler, texCoord).xyz);
 
 		// Extract luminance based on shader variant
@@ -111,7 +111,7 @@ PS_OUTPUT main(PS_INPUT input)
 		// Accumulate weighted sample
 		downsampledColor += imageColor * BlurOffsets[sampleIndex].z;
 	}
-	
+
 #		if defined(DOWNADAPT)
 	// Adaptive exposure — smoothly adjust luminance target over time.
 	// Prevents jarring exposure changes when moving between light/dark areas.
@@ -130,7 +130,7 @@ PS_OUTPUT main(PS_INPUT input)
 	// Output format depends on HDR mode:
 	//   - SDR: Tonemapped to [0,1] gamma-encoded sRGB
 	//   - HDR: Preserved >1.0 linear values, then converted to BT.2020 PQ for HDROutputCS
-	
+
 	float2 uv = FrameBuffer::GetDynamicResolutionAdjustedScreenPosition(input.TexCoord);
 
 	// Main scene color (already linearly lit from engine)
@@ -162,32 +162,32 @@ PS_OUTPUT main(PS_INPUT input)
 		// === HDR Pipeline (Float16 RT) ===
 		// Input: HDR values (can exceed 1.0) - gamma-encoded (vanilla) OR linear (Linear Lighting)
 		// Output: PQ-encoded BT.2020 for HDROutputCS → display
-		
+
 		float paperWhiteNits = SharedData::HDRData.y;
 		float peakNits = SharedData::HDRData.z;
 
 		// === Convert to Linear Space ===
 		// If Linear Lighting is active, input is already linear.
 		float3 hdrLinear = ENABLE_LL ? inputColor : Color::GammaToLinear(inputColor);
-		
+
 		// === Color Grading (Mixed Linear/Gamma, matching vanilla order) ===
 		// Vanilla order: Saturation → Tint → Brightness → Contrast
 		// Physical accuracy: Saturation in linear; Tint & Contrast in gamma for artistic control.
-		
+
 		// Saturation adjustment in linear (can generate negative RGB for highly saturated colors)
 		hdrLinear = Color::Saturation(hdrLinear, Cinematic.x);
-		
+
 		// Tint and Contrast in gamma space (perceptual control matching SDR behavior)
 		float3 hdrGamma = Color::LinearToGamma(hdrLinear);
-		
+
 		// Color tint in gamma (blend to monochrome tint if nonzero)
 		float hdrLuminanceGamma = Color::RGBToLuminance(hdrGamma);
 		hdrGamma = lerp(hdrGamma, hdrLuminanceGamma * Tint.xyz, Tint.w);
-		
+
 		// Convert back to linear for brightness (uniform intensity scaling)
 		hdrLinear = Color::GammaToLinear(hdrGamma);
 		hdrLinear *= Cinematic.w;
-		
+
 		// Contrast adjustment in gamma space (pivot around scene average)
 		hdrGamma = Color::LinearToGamma(hdrLinear);
 		hdrGamma = lerp(avgValue.x, hdrGamma, Cinematic.z);
@@ -224,12 +224,12 @@ PS_OUTPUT main(PS_INPUT input)
 		// === SDR Pipeline (LDR RT) ===
 		// Input: Linear HDR values (can exceed 1.0)
 		// Output: Tonemapped [0,1] gamma sRGB for traditional displays
-		
+
 		float3 blendedColor;
-		
+
 		// === Tonemapping + Bloom Selection ===
 		// Choose between two hue-preserving tonemap algorithms (user preference Param.z).
-		
+
 		[branch] if (Param.z > 0.5)
 		{
 			// Hejl-Burgess-Dawson: Smoother rolloff, better for cinematic look
@@ -250,19 +250,19 @@ PS_OUTPUT main(PS_INPUT input)
 
 		// === Color Grading (Post-Tonemap) ===
 		// Apply saturation, contrast, and tint to the tonemapped result.
-		
+
 		float blendedLuminance = Color::RGBToLuminance(blendedColor);
-		
+
 		// Saturation adjustment: lerp between luminance (desaturated) and full color
 		float3 saturated = lerp(blendedLuminance, blendedColor, Cinematic.x);
-		
+
 		// Brightness scaling and tint application
 		float3 tinted = lerp(saturated, blendedLuminance * Tint.xyz, Tint.w);
-		
+
 		// Scale by brightness and apply contrast (pivot around scene average)
 		float3 linearColor = Cinematic.w * tinted;
 		linearColor = lerp(avgValue.x, linearColor, Cinematic.z);
-		
+
 		// Clamp to prevent negative values
 		outputColor = max(0, linearColor);
 

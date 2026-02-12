@@ -44,26 +44,26 @@ static const float UI_REFERENCE_NITS = 80.0;
 		// === HDR Pipeline ===
 		// Input: Vanilla gamma UI (sRGB, BT.709)
 		// Output: PQ-encoded UI in BT.2020 colorspace
-		// 
+		//
 		// FidelityFX FrameGeneration blends in PQ space, so UI must be PQ-encoded.
 		// Scale to UI_REFERENCE_NITS for consistent perceived brightness with SDR.
-		
+
 		// Convert from gamma to linear
 		float3 uiLinear = Color::GammaToTrueLinear(max(0, ui.rgb));
-		
+
 		// Expand to wider BT.2020 colorspace for HDR (reduces banding on saturated colors)
 		float3 uiBT2020 = Color::BT709ToBT2020(uiLinear);
-		
+
 		// Scale to reference nit level and apply user brightness adjustment
 		float3 uiNits = uiBT2020 * UI_REFERENCE_NITS * uiBrightness;
-		
+
 		// Encode to PQ (assumes 10000 nit max for PQ range)
 		ui.rgb = Color::pq::Encode(uiNits / 10000.0, 10000.0);
 	} else {
 		// === SDR Pipeline ===
 		// Input: Vanilla gamma UI (sRGB, BT.709)
 		// Output: Adjusted gamma UI suitable for SDR displays
-		// 
+		//
 		// Simple brightness scaling in gamma space without color space conversion.
 		ui.rgb = max(0, ui.rgb);
 	}
