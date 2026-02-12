@@ -1541,6 +1541,14 @@ IDXGISwapChain* Upscaling::GetProxySwapChain()
 	return dx12SwapChain.GetSwapChainProxy();
 }
 
+Upscaling::BlurResources Upscaling::GetBlurResources() const
+{
+	if (d3d12SwapChainActive) {
+		return dx12SwapChain.GetBlurResources();
+	}
+	return {};
+}
+
 void Upscaling::Upscale()
 {
 	auto upscaleMethod = GetUpscaleMethod();
