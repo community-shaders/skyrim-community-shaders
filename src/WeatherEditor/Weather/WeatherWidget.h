@@ -24,7 +24,6 @@ public:
 		LoadWeatherValues();
 		// Cache the original vanilla values for restoration
 		vanillaSettings = settings;
-		originalSettings = settings;
 	}
 
 	struct DirectionalColor
@@ -82,7 +81,6 @@ public:
 
 	struct Settings
 	{
-		bool operator==(const Settings& other) const = default;
 		std::string parent = "None";
 		// Per-parameter inheritance flags (one per parameter, not per TOD)
 		std::map<std::string, bool> inheritFlags;
@@ -104,7 +102,6 @@ public:
 	Settings settings;
 	// Cached original vanilla values for restoration
 	Settings vanillaSettings;
-	Settings originalSettings;
 
 	// Cloud texture cache (layer index -> SRV)
 	std::map<int, ID3D11ShaderResourceView*> cloudTextureCache;
@@ -114,7 +111,6 @@ public:
 	virtual void DrawWidget() override;
 	virtual void LoadSettings() override;
 	virtual void SaveSettings() override;
-	bool HasUnsavedChanges() const override;
 
 	WeatherWidget* GetParent();
 	bool HasParent() const;

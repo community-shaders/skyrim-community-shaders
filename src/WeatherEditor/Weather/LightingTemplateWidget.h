@@ -17,7 +17,6 @@ public:
 		lightingTemplate = a_lightingTemplate;
 		LoadFromGameSettings();
 		vanillaSettings = settings;
-		originalSettings = settings;
 	}
 
 	struct DirectionalColor
@@ -35,7 +34,6 @@ public:
 
 	struct Settings
 	{
-		bool operator==(const Settings& other) const = default;
 		float3 ambient;
 		float3 directional;
 		float3 fogColorNear;
@@ -55,14 +53,12 @@ public:
 
 	Settings settings;
 	Settings vanillaSettings;
-	Settings originalSettings;
 
 	~LightingTemplateWidget();
 
 	virtual void DrawWidget() override;
 	virtual void LoadSettings() override;
 	virtual void SaveSettings() override;
-	bool HasUnsavedChanges() const override;
 
 	void SetLightingTemplateValues();
 	void LoadLightingTemplateValues();

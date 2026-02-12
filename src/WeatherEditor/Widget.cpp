@@ -332,6 +332,7 @@ void Widget::DrawWidgetHeader(const char* searchId, bool showApplyRevert, bool s
 			}
 		}
 
+
 		// Save/Load/Delete buttons
 		if (showSaveLoad && menu->uiIcons.saveSettings.texture && menu->uiIcons.loadSettings.texture) {
 			ImGui::SameLine();

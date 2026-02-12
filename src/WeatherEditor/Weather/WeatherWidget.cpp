@@ -436,8 +436,8 @@ void WeatherWidget::LoadSettings()
 			}
 
 			if (hadErrors) {
-				// Fallback to cached vanilla values
-				settings = vanillaSettings;
+				// Fallback to vanilla/game values
+				LoadWeatherValues();
 				EditorWindow::GetSingleton()->ShowNotification(
 					std::format("Some values failed to load for {}", GetEditorID()),
 					ImVec4(1.0f, 0.0f, 0.0f, 1.0f),
@@ -452,8 +452,8 @@ void WeatherWidget::LoadSettings()
 
 		} catch (const nlohmann::json::exception& e) {
 			logger::error("Weather {}: Failed to deserialize settings from JSON: {}", GetEditorID(), e.what());
-			// Fallback to cached vanilla values on exception
-			settings = vanillaSettings;
+			// Fallback to vanilla/game values on exception
+			LoadWeatherValues();
 			EditorWindow::GetSingleton()->ShowNotification(
 				std::format("Some values failed to load for {}", GetEditorID()),
 				ImVec4(1.0f, 0.0f, 0.0f, 1.0f),
@@ -461,10 +461,9 @@ void WeatherWidget::LoadSettings()
 			return;
 		}
 	} else {
-		settings = vanillaSettings;
+		LoadWeatherValues();
 	}
 	LoadFeatureSettings();
-	originalSettings = settings;
 	ApplyChanges();
 }
 
@@ -488,7 +487,6 @@ void WeatherWidget::SaveSettings()
 	} catch (const nlohmann::json::exception& e) {
 		logger::error("Weather {}: Failed to serialize settings to JSON: {}", GetEditorID(), e.what());
 	}
-	originalSettings = settings;
 }
 
 WeatherWidget* WeatherWidget::GetParent()
@@ -1505,11 +1503,6 @@ void WeatherWidget::RevertChanges()
 {
 	settings = vanillaSettings;
 	SetWeatherValues();
-}
-
-bool WeatherWidget::HasUnsavedChanges() const
-{
-	return settings != originalSettings;
 }
 
 void WeatherWidget::DrawFeatureSettings()

@@ -429,6 +429,7 @@ void CellLightingWidget::ApplyChanges()
 void CellLightingWidget::RevertChanges()
 {
 	settings = vanillaSettings;
+	originalSettings = vanillaSettings;
 	ApplyChanges();
 }
 

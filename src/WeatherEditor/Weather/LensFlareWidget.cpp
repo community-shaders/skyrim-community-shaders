@@ -71,6 +71,7 @@ void LensFlareWidget::ApplyChanges()
 void LensFlareWidget::RevertChanges()
 {
 	settings = vanillaSettings;
+	originalSettings = vanillaSettings;
 	ApplyChanges();
 }
 

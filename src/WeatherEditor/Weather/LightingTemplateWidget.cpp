@@ -310,17 +310,10 @@ void LightingTemplateWidget::LoadSettings()
 	} else {
 		settings = vanillaSettings;
 	}
-	originalSettings = settings;
 	ApplyChanges();
 }
 
 void LightingTemplateWidget::SaveSettings()
 {
 	js = settings;
-	originalSettings = settings;
-}
-
-bool LightingTemplateWidget::HasUnsavedChanges() const
-{
-	return settings != originalSettings;
 }

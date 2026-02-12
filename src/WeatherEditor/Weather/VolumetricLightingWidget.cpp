@@ -168,6 +168,7 @@ void VolumetricLightingWidget::ApplyChanges()
 void VolumetricLightingWidget::RevertChanges()
 {
 	settings = vanillaSettings;
+	originalSettings = vanillaSettings;
 	ApplyChanges();
 }
 
