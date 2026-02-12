@@ -39,6 +39,7 @@ public:
 
 	virtual void DataLoaded() override;
 	virtual void DrawSettings() override;
+	virtual void Prepass() override;
 
 	void LerpWeather(RE::TESWeather*, RE::TESWeather*, float);
 

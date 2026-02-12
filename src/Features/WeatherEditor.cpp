@@ -74,6 +74,19 @@ void WeatherEditor::DrawSettings()
 	DrawWeatherPickerSection();
 }
 
+void WeatherEditor::Prepass()
+{
+	// Re-enforce weather lock if active (handles time changes)
+	auto editorWindow = EditorWindow::GetSingleton();
+	if (editorWindow->IsWeatherLocked()) {
+		auto lockedWeather = editorWindow->GetLockedWeather();
+		auto sky = globals::game::sky;
+		if (sky && lockedWeather && sky->currentWeather != lockedWeather) {
+			sky->ForceWeather(lockedWeather, false);
+		}
+	}
+}
+
 void WeatherEditor::DrawWeatherPickerSection()
 {
 	ImGui::Spacing();
