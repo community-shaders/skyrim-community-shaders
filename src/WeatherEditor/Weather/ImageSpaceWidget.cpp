@@ -24,7 +24,6 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	dofDistance,
 	dofRange)
 
-
 ImageSpaceWidget::~ImageSpaceWidget()
 {
 }
