@@ -437,7 +437,7 @@ void WeatherWidget::LoadSettings()
 
 			if (hadErrors) {
 				// Fallback to vanilla/game values
-				LoadWeatherValues();
+				settings = vanillaSettings;
 				EditorWindow::GetSingleton()->ShowNotification(
 					std::format("Some values failed to load for {}", GetEditorID()),
 					ImVec4(1.0f, 0.0f, 0.0f, 1.0f),
@@ -453,7 +453,7 @@ void WeatherWidget::LoadSettings()
 		} catch (const nlohmann::json::exception& e) {
 			logger::error("Weather {}: Failed to deserialize settings from JSON: {}", GetEditorID(), e.what());
 			// Fallback to vanilla/game values on exception
-			LoadWeatherValues();
+			settings = vanillaSettings;
 			EditorWindow::GetSingleton()->ShowNotification(
 				std::format("Some values failed to load for {}", GetEditorID()),
 				ImVec4(1.0f, 0.0f, 0.0f, 1.0f),
@@ -461,7 +461,7 @@ void WeatherWidget::LoadSettings()
 			return;
 		}
 	} else {
-		LoadWeatherValues();
+		settings = vanillaSettings;
 	}
 	LoadFeatureSettings();
 	originalSettings = settings;
