@@ -35,7 +35,7 @@ namespace ExtendedMaterials
 		return float4(AdjustDisplacementNormalized(displacement.x, params), AdjustDisplacementNormalized(displacement.y, params), AdjustDisplacementNormalized(displacement.z, params), AdjustDisplacementNormalized(displacement.w, params));
 	}
 
-	float GetMipLevel(float2 coords, Texture2D<float4> tex)
+	float GetMipLevel(float2 coords, Texture2D<float4> tex, float screenNoise)
 	{
 		// Compute the current gradients:
 		float2 textureDims;
@@ -71,6 +71,9 @@ namespace ExtendedMaterials
 		#if defined(VR)
 				mipLevel++;
 		#endif
+
+		// Stochastic mip selection: use screen noise to select between adjacent mip levels
+		mipLevel = floor(mipLevel) + (screenNoise < frac(mipLevel) ? 1.0 : 0.0);
 
 		return mipLevel;
 	}
@@ -349,8 +352,6 @@ namespace ExtendedMaterials
 
 #if defined(LANDSCAPE)
 		if (nearBlendToFar < 1.0) {
-			uint numSteps = uint((max(6, scale * 8) * (1.0 - nearBlendToFar)) + 0.5);
-			numSteps = clamp((numSteps + 3) & ~0x03, 4, max(8, scale * 8));
 #else
 #	if defined(TRUE_PBR)
 		if ((PBRFlags & PBR::Flags::InterlayerParallax) != 0 || nearBlendToFar < 1.0)
@@ -358,12 +359,12 @@ namespace ExtendedMaterials
 		if (nearBlendToFar < 1.0)
 #	endif
 		{
+#endif
 			float maxSteps = SharedData::InInterior ? 8 : 16;
 			uint numSteps = uint((maxSteps * (1.0 - nearBlendToFar)) + 0.5);
-			numSteps = clamp((numSteps + 3) & ~0x03, 4, max(6, scale * maxSteps));
-#endif
+			numSteps = clamp(numSteps, 1, max(6, scale * maxSteps));
+
 			float stepSize = rcp(numSteps);
-			stepSize += (noise * 2.0 - 1.0) * stepSize * stepSize;
 
 			float2 offsetPerStep = viewDirTS.xy * float2(maxHeight, maxHeight) * stepSize.xx;
 			float2 prevOffset = viewDirTS.xy * float2(minHeight, minHeight) + coords.xy;
