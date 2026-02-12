@@ -222,21 +222,20 @@ void WeatherEditor::DrawWeatherStatusPanel()
 		}
 
 		// Always show progress bar
-		float displayPct = (currentWeathers.lastWeather && currentWeathers.lerpFactor < 1.0f) ?
-		                       currentWeathers.lerpFactor :
-		                       1.0f;
+		const bool isTransitioning = currentWeathers.lastWeather && currentWeathers.lerpFactor < 1.0f;
+		float displayPct = isTransitioning ? currentWeathers.lerpFactor : 1.0f;
 
 		// Show background color when transition is complete
-		if (!(currentWeathers.lastWeather && currentWeathers.lerpFactor < 1.0f)) {
+		if (!isTransitioning) {
 			ImGui::PushStyleColor(ImGuiCol_PlotHistogram, ImGui::GetStyleColorVec4(ImGuiCol_FrameBg));
 		}
 
 		ImGui::ProgressBar(displayPct, ImVec2(-1, 0),
-			(currentWeathers.lastWeather && currentWeathers.lerpFactor < 1.0f) ?
+			isTransitioning ?
 				std::format("Transition: {:.1f}%", currentWeathers.lerpFactor * 100.0f).c_str() :
 				"");
 
-		if (!(currentWeathers.lastWeather && currentWeathers.lerpFactor < 1.0f)) {
+		if (!isTransitioning) {
 			ImGui::PopStyleColor();
 		}
 
@@ -294,23 +293,19 @@ ImVec4 WeatherEditor::GetWeatherTypeColor(RE::TESWeather* weather)
 	const auto& theme = Menu::GetSingleton()->GetTheme();
 
 	// Priority order for weather classification colors (highest priority first)
-	static const std::vector<std::pair<RE::TESWeather::WeatherDataFlag, ImVec4>> priorityColors = {
-		{ RE::TESWeather::WeatherDataFlag::kRainy, ImVec4(0.4f, 0.7f, 1.0f, 1.0f) },            // Light blue for rain
-		{ RE::TESWeather::WeatherDataFlag::kSnow, ImVec4(0.9f, 0.9f, 1.0f, 1.0f) },             // Light blue-white for snow
-		{ RE::TESWeather::WeatherDataFlag::kPermAurora, ImVec4(0.8f, 0.4f, 1.0f, 1.0f) },       // Purple for aurora
-		{ RE::TESWeather::WeatherDataFlag::kAuroraFollowsSun, ImVec4(0.9f, 0.6f, 1.0f, 1.0f) }, // Light purple for aurora follows sun
-		{ RE::TESWeather::WeatherDataFlag::kCloudy, ImVec4(0.7f, 0.7f, 0.7f, 1.0f) },           // Gray for cloudy
-		{ RE::TESWeather::WeatherDataFlag::kPleasant, ImVec4(0.0f, 1.0f, 0.0f, 1.0f) },         // Placeholder, will use theme
+	static const std::vector<RE::TESWeather::WeatherDataFlag> priorityOrder = {
+		RE::TESWeather::WeatherDataFlag::kRainy,
+		RE::TESWeather::WeatherDataFlag::kSnow,
+		RE::TESWeather::WeatherDataFlag::kPermAurora,
+		RE::TESWeather::WeatherDataFlag::kAuroraFollowsSun,
+		RE::TESWeather::WeatherDataFlag::kCloudy,
+		RE::TESWeather::WeatherDataFlag::kPleasant
 	};
 
 	// Check flags in priority order
-	for (const auto& [flag, color] : priorityColors) {
+	for (const auto& flag : priorityOrder) {
 		if (weather->data.flags.any(flag)) {
-			// Handle theme-dependent colors
-			if (flag == RE::TESWeather::WeatherDataFlag::kPleasant) {
-				return theme.StatusPalette.SuccessColor;
-			}
-			return color;
+			return GetWeatherFlagColor(flag);
 		}
 	}
 
@@ -948,7 +943,7 @@ bool WeatherEditor::RenderMultiColorWeatherName(RE::TESWeather* weather, const s
 	std::vector<std::string> flagNames = GetWeatherFlagNames(weather);
 
 	// If no flags or only one flag, use simple single-color display
-	if (flagNames.empty() || flagNames.size() == 1 || (flagNames.size() == 1 && flagNames[0] == "None")) {
+	if (flagNames.size() <= 1) {
 		ImVec4 weatherColor = GetWeatherTypeColor(weather);
 		ImGui::PushStyleColor(ImGuiCol_Text, weatherColor);
 		ImGui::Text("%s", weatherName.c_str());
