@@ -49,7 +49,7 @@ void ImageSpaceWidget::DrawWidget()
 			changed |= PropertyDrawer::DrawFloat("Bloom Threshold", settings.hdrBloomThreshold, 0.0f, 10.0f, search);
 			changed |= PropertyDrawer::DrawFloat("Bloom Scale", settings.hdrBloomScale, 0.0f, 10.0f, search);
 			changed |= PropertyDrawer::DrawFloat("White", settings.hdrWhite, 0.0f, 10.0f, search);
-			changed |= PropertyDrawer::DrawFloat("Sunlight Scale", settings.hdrSunlightScale, 0.0f, 10.0f, search);
+			changed |= PropertyDrawer::DrawFloat("Sunlight Scale", settings.hdrSunlightScale, 0.0f, 50.0f, search);
 			changed |= PropertyDrawer::DrawFloat("Sky Scale", settings.hdrSkyScale, 0.0f, 10.0f, search);
 
 			PropertyDrawer::DrawSeparator();
