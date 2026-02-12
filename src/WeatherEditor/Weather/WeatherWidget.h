@@ -56,7 +56,15 @@ public:
 		float cloudAlpha[ColorTimes::kTotal];
 		bool enabled = true;
 		std::string texturePath;
-		bool operator==(const Cloud& o) const { return cloudLayerSpeedY == o.cloudLayerSpeedY && cloudLayerSpeedX == o.cloudLayerSpeedX && std::equal(std::begin(color), std::end(color), std::begin(o.color)) && std::equal(std::begin(cloudAlpha), std::end(cloudAlpha), std::begin(o.cloudAlpha)) && enabled == o.enabled && texturePath == o.texturePath; }
+		bool operator==(const Cloud& o) const
+		{
+			return cloudLayerSpeedY == o.cloudLayerSpeedY &&
+			       cloudLayerSpeedX == o.cloudLayerSpeedX &&
+			       std::equal(std::begin(color), std::end(color), std::begin(o.color)) &&
+			       std::equal(std::begin(cloudAlpha), std::end(cloudAlpha), std::begin(o.cloudAlpha)) &&
+			       enabled == o.enabled &&
+			       texturePath == o.texturePath;
+		}
 	};
 
 	struct ImageSpaceSettings
@@ -125,8 +133,8 @@ public:
 	bool HasParent() const;
 	void SetWeatherValues();
 	void LoadWeatherValues();
-	void ApplyChanges();
-	void RevertChanges();
+	void ApplyChanges() override;
+	void RevertChanges() override;
 	bool HasUnsavedChanges() const override;
 
 	// New methods for per-feature settings

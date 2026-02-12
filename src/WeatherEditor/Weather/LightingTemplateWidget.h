@@ -69,8 +69,8 @@ public:
 	void SetLightingTemplateValues();
 	void LoadLightingTemplateValues();
 	void LoadFromGameSettings();
-	void ApplyChanges();
-	void RevertChanges();
+	void ApplyChanges() override;
+	void RevertChanges() override;
 
 private:
 	void DrawDALCSettings();

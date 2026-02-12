@@ -61,6 +61,6 @@ public:
 	void SetImageSpaceValues();
 	void LoadImageSpaceValues();
 	void LoadFromGameSettings();
-	void ApplyChanges();
-	void RevertChanges();
+	void ApplyChanges() override;
+	void RevertChanges() override;
 };

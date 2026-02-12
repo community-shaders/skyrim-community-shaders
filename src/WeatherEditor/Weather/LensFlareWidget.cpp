@@ -38,6 +38,7 @@ void LensFlareWidget::LoadSettings()
 				settings.colorInfluence = js["colorInfluence"];
 		} catch (const std::exception& e) {
 			logger::error("LensFlare {}: Failed to load from JSON: {}", GetEditorID(), e.what());
+			settings = vanillaSettings;
 		}
 	} else {
 		settings = vanillaSettings;
@@ -48,6 +49,8 @@ void LensFlareWidget::LoadSettings()
 
 void LensFlareWidget::LoadFromGameSettings()
 {
+	if (!lensFlare)
+		return;
 	settings.fadeDistRadiusScale = lensFlare->fadeDistRadiusScale;
 	settings.colorInfluence = lensFlare->colorInfluence;
 }

@@ -260,7 +260,7 @@ void CellLightingWidget::LoadSettings()
 
 		} catch (const std::exception& e) {
 			logger::error("CellLighting {}: Failed to load from JSON: {}", GetEditorID(), e.what());
-			// Fall through to load from form
+			settings = vanillaSettings;
 		}
 	} else {
 		settings = vanillaSettings;

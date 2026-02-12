@@ -123,6 +123,7 @@ void PrecipitationWidget::LoadSettings()
 				settings.particleTexture = js["particleTexture"].get<std::string>();
 		} catch (const std::exception& e) {
 			logger::error("Precipitation {}: Failed to load from JSON: {}", GetEditorID(), e.what());
+			settings = vanillaSettings;
 		}
 	} else {
 		settings = vanillaSettings;

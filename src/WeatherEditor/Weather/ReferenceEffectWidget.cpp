@@ -76,6 +76,7 @@ void ReferenceEffectWidget::LoadSettings()
 				settings.inheritRotation = js["inheritRotation"];
 		} catch (const std::exception& e) {
 			logger::error("ReferenceEffect {}: Failed to load from JSON: {}", GetEditorID(), e.what());
+			settings = vanillaSettings;
 		}
 	} else {
 		settings = vanillaSettings;
@@ -87,6 +88,8 @@ void ReferenceEffectWidget::LoadSettings()
 
 void ReferenceEffectWidget::LoadFromGameSettings()
 {
+	if (!referenceEffect)
+		return;
 	settings.artObject = referenceEffect->data.artObject;
 	settings.effectShader = referenceEffect->data.effectShader;
 	settings.faceTarget = referenceEffect->data.flags.any(RE::BGSReferenceEffect::Flag::kFaceTarget);

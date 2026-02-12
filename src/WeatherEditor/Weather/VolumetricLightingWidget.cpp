@@ -104,6 +104,7 @@ void VolumetricLightingWidget::LoadSettings()
 				settings.samplingRangeFactor = js["samplingRangeFactor"];
 		} catch (const std::exception& e) {
 			logger::error("VolumetricLighting {}: Failed to load from JSON: {}", GetEditorID(), e.what());
+			settings = vanillaSettings;
 		}
 	} else {
 		settings = vanillaSettings;
@@ -115,6 +116,8 @@ void VolumetricLightingWidget::LoadSettings()
 
 void VolumetricLightingWidget::LoadFromGameSettings()
 {
+	if (!volumetricLighting)
+		return;
 	settings.intensity = volumetricLighting->intensity;
 	settings.customColorContribution = volumetricLighting->customColor.contribution;
 	settings.red = volumetricLighting->red;
