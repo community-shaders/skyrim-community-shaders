@@ -30,6 +30,7 @@ public:
 	{
 		float3 min;
 		float3 max;
+		bool operator==(const DirectionalColor&) const = default;
 	};
 
 	struct DALC
@@ -37,11 +38,13 @@ public:
 		DirectionalColor directional[3];
 		float3 specular;
 		float fresnelPower;
+		bool operator==(const DALC& o) const { return std::equal(std::begin(directional), std::end(directional), std::begin(o.directional)) && specular == o.specular && fresnelPower == o.fresnelPower; }
 	};
 
 	struct Atmosphere
 	{
 		float3 colorTimes[ColorTimes::kTotal];
+		bool operator==(const Atmosphere& o) const { return std::equal(std::begin(colorTimes), std::end(colorTimes), std::begin(o.colorTimes)); }
 	};
 
 	struct Cloud
@@ -52,6 +55,7 @@ public:
 		float cloudAlpha[ColorTimes::kTotal];
 		bool enabled = true;
 		std::string texturePath;
+		bool operator==(const Cloud& o) const { return cloudLayerSpeedY == o.cloudLayerSpeedY && cloudLayerSpeedX == o.cloudLayerSpeedX && std::equal(std::begin(color), std::end(color), std::begin(o.color)) && std::equal(std::begin(cloudAlpha), std::end(cloudAlpha), std::begin(o.cloudAlpha)) && enabled == o.enabled && texturePath == o.texturePath; }
 	};
 
 	struct ImageSpaceSettings
@@ -77,6 +81,8 @@ public:
 		float dofStrength = 0.0f;
 		float dofDistance = 0.0f;
 		float dofRange = 0.0f;
+
+		bool operator==(const ImageSpaceSettings&) const = default;
 	};
 
 	struct Settings
@@ -97,6 +103,8 @@ public:
 
 		// Per-feature settings storage
 		std::map<std::string, json> featureSettings;
+
+		bool operator==(const Settings& o) const;
 	};
 
 	Settings settings;
@@ -118,6 +126,7 @@ public:
 	void LoadWeatherValues();
 	void ApplyChanges();
 	void RevertChanges();
+	bool HasUnsavedChanges() const override;
 
 	// New methods for per-feature settings
 	void SaveFeatureSettings();

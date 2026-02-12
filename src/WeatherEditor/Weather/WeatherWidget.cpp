@@ -1507,6 +1507,25 @@ void WeatherWidget::RevertChanges()
 	ApplyChanges();
 }
 
+bool WeatherWidget::Settings::operator==(const Settings& o) const
+{
+	return parent == o.parent &&
+	       inheritFlags == o.inheritFlags &&
+	       weatherProperties == o.weatherProperties &&
+	       weatherColors == o.weatherColors &&
+	       fogProperties == o.fogProperties &&
+	       std::equal(std::begin(atmosphereColors), std::end(atmosphereColors), std::begin(o.atmosphereColors)) &&
+	       std::equal(std::begin(dalc), std::end(dalc), std::begin(o.dalc)) &&
+	       std::equal(std::begin(clouds), std::end(clouds), std::begin(o.clouds)) &&
+	       std::equal(std::begin(imageSpaces), std::end(imageSpaces), std::begin(o.imageSpaces)) &&
+	       featureSettings == o.featureSettings;
+}
+
+bool WeatherWidget::HasUnsavedChanges() const
+{
+	return !(settings == originalSettings);
+}
+
 void WeatherWidget::DrawFeatureSettings()
 {
 	ImGui::TextWrapped(
