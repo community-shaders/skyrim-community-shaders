@@ -138,7 +138,6 @@ public:
 	// Search functionality
 	char searchBuffer[256] = "";
 	bool searchActive = false;
-	bool showDeleteConfirmation = false;
 
 	bool MatchesSearch(const std::string& text) const;
 
