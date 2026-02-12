@@ -519,45 +519,6 @@ void WeatherWidget::SetWeatherValues()
 	auto& colorData = weather->colorData;
 	auto& fogData = weather->fogData;
 
-	auto& flags = settings.inheritFlags;
-	auto ensureFlag = [&](const std::string& key) {
-		flags.try_emplace(key, false);
-	};
-
-	static const char* kFixedKeys[] = {
-		"Precipitation",
-		"ReferenceEffect",
-		"DALC_Specular",
-		"DALC_Fresnel",
-		"DALC_DirXMax",
-		"DALC_DirXMin",
-		"DALC_DirYMax",
-		"DALC_DirYMin",
-		"DALC_DirZMax",
-		"DALC_DirZMin",
-		"Fog_Near",
-		"Fog_Far",
-		"Fog_Power",
-		"Fog_Max",
-	};
-	for (const char* key : kFixedKeys) {
-		ensureFlag(key);
-	}
-
-	for (int i = 0; i < ColorTimes::kTotal; i++) {
-		ensureFlag(std::format("ImageSpace_{}", i));
-		ensureFlag(std::format("VolumetricLighting_{}", i));
-	}
-
-	for (int i = 0; i < ColorTypes::kTotal; i++) {
-		ensureFlag(std::format("Atmosphere_{}", ColorTypeLabel(i)));
-	}
-
-	for (int i = 0; i < TESWeather::kTotalLayers; i++) {
-		ensureFlag(std::format("Cloud{}_Color", i));
-		ensureFlag(std::format("Cloud{}_Alpha", i));
-	}
-}
 	weather->data.transDelta = (int8_t)weatherProps["Trans Delta"];
 
 	// Sun
@@ -668,6 +629,48 @@ void WeatherWidget::SetWeatherValues()
 				globalRegistry->UpdateFeatureFromWeathers(featureName, emptyWeather, filteredSettings, 1.0f);
 			}
 		}
+	}
+}
+
+void WeatherWidget::InitializeInheritFlags()
+{
+	auto& flags = settings.inheritFlags;
+	auto ensureFlag = [&](const std::string& key) {
+		flags.try_emplace(key, false);
+	};
+
+	static const char* kFixedKeys[] = {
+		"Precipitation",
+		"ReferenceEffect",
+		"DALC_Specular",
+		"DALC_Fresnel",
+		"DALC_DirXMax",
+		"DALC_DirXMin",
+		"DALC_DirYMax",
+		"DALC_DirYMin",
+		"DALC_DirZMax",
+		"DALC_DirZMin",
+		"Fog_Near",
+		"Fog_Far",
+		"Fog_Power",
+		"Fog_Max",
+	};
+	for (const char* key : kFixedKeys) {
+		ensureFlag(key);
+	}
+
+	for (int i = 0; i < ColorTimes::kTotal; i++) {
+		ensureFlag(std::format("ImageSpace_{}", i));
+		ensureFlag(std::format("VolumetricLighting_{}", i));
+	}
+
+	for (int i = 0; i < ColorTypes::kTotal; i++) {
+		ensureFlag(std::format("Atmosphere_{}", ColorTypeLabel(i)));
+	}
+
+	for (int i = 0; i < TESWeather::kTotalLayers; i++) {
+		ensureFlag(std::format("Cloud{}_Color", i));
+		ensureFlag(std::format("Cloud{}_Alpha", i));
 	}
 }
 
