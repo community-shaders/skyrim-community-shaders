@@ -70,6 +70,7 @@ private:
 		bool inheritFogPower = false;
 		bool inheritFogMax = false;
 		bool inheritLightFadeDistances = false;
+		bool operator==(const Settings&) const = default;
 	};
 
 	Settings settings;

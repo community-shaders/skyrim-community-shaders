@@ -37,6 +37,7 @@ private:
 		bool faceTarget = false;
 		bool attachToCamera = false;
 		bool inheritRotation = false;
+		bool operator==(const Settings&) const = default;
 	};
 
 	Settings settings;

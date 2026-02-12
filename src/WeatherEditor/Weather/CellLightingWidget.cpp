@@ -434,37 +434,5 @@ void CellLightingWidget::RevertChanges()
 
 bool CellLightingWidget::HasUnsavedChanges() const
 {
-	return settings.ambient != originalSettings.ambient ||
-	       settings.directional != originalSettings.directional ||
-	       settings.fogColorNear != originalSettings.fogColorNear ||
-	       settings.fogColorFar != originalSettings.fogColorFar ||
-	       settings.fogNear != originalSettings.fogNear ||
-	       settings.fogFar != originalSettings.fogFar ||
-	       settings.fogPower != originalSettings.fogPower ||
-	       settings.fogClamp != originalSettings.fogClamp ||
-	       settings.directionalFade != originalSettings.directionalFade ||
-	       settings.clipDist != originalSettings.clipDist ||
-	       settings.lightFadeStart != originalSettings.lightFadeStart ||
-	       settings.lightFadeEnd != originalSettings.lightFadeEnd ||
-	       settings.directionalXY != originalSettings.directionalXY ||
-	       settings.directionalZ != originalSettings.directionalZ ||
-	       settings.directionalXPlus != originalSettings.directionalXPlus ||
-	       settings.directionalXMinus != originalSettings.directionalXMinus ||
-	       settings.directionalYPlus != originalSettings.directionalYPlus ||
-	       settings.directionalYMinus != originalSettings.directionalYMinus ||
-	       settings.directionalZPlus != originalSettings.directionalZPlus ||
-	       settings.directionalZMinus != originalSettings.directionalZMinus ||
-	       settings.directionalSpecular != originalSettings.directionalSpecular ||
-	       settings.fresnelPower != originalSettings.fresnelPower ||
-	       settings.inheritAmbientColor != originalSettings.inheritAmbientColor ||
-	       settings.inheritDirectionalColor != originalSettings.inheritDirectionalColor ||
-	       settings.inheritFogColor != originalSettings.inheritFogColor ||
-	       settings.inheritFogNear != originalSettings.inheritFogNear ||
-	       settings.inheritFogFar != originalSettings.inheritFogFar ||
-	       settings.inheritDirectionalRotation != originalSettings.inheritDirectionalRotation ||
-	       settings.inheritDirectionalFade != originalSettings.inheritDirectionalFade ||
-	       settings.inheritClipDistance != originalSettings.inheritClipDistance ||
-	       settings.inheritFogPower != originalSettings.inheritFogPower ||
-	       settings.inheritFogMax != originalSettings.inheritFogMax ||
-	       settings.inheritLightFadeDistances != originalSettings.inheritLightFadeDistances;
+	return !(settings == originalSettings);
 }

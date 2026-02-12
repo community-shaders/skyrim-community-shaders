@@ -173,16 +173,5 @@ void VolumetricLightingWidget::RevertChanges()
 
 bool VolumetricLightingWidget::HasUnsavedChanges() const
 {
-	return settings.intensity != originalSettings.intensity ||
-	       settings.customColorContribution != originalSettings.customColorContribution ||
-	       settings.red != originalSettings.red ||
-	       settings.green != originalSettings.green ||
-	       settings.blue != originalSettings.blue ||
-	       settings.densityContribution != originalSettings.densityContribution ||
-	       settings.densitySize != originalSettings.densitySize ||
-	       settings.densityWindSpeed != originalSettings.densityWindSpeed ||
-	       settings.densityFallingSpeed != originalSettings.densityFallingSpeed ||
-	       settings.phaseFunctionContribution != originalSettings.phaseFunctionContribution ||
-	       settings.phaseFunctionScattering != originalSettings.phaseFunctionScattering ||
-	       settings.samplingRangeFactor != originalSettings.samplingRangeFactor;
+	return !(settings == originalSettings);
 }

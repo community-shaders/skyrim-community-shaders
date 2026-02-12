@@ -34,6 +34,7 @@ private:
 	{
 		float fadeDistRadiusScale = 1.0f;
 		float colorInfluence = 0.2f;
+		bool operator==(const Settings&) const = default;
 	};
 
 	Settings settings;

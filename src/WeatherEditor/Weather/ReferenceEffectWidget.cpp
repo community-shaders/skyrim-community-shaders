@@ -129,9 +129,5 @@ void ReferenceEffectWidget::RevertChanges()
 
 bool ReferenceEffectWidget::HasUnsavedChanges() const
 {
-	return settings.artObject != originalSettings.artObject ||
-	       settings.effectShader != originalSettings.effectShader ||
-	       settings.faceTarget != originalSettings.faceTarget ||
-	       settings.attachToCamera != originalSettings.attachToCamera ||
-	       settings.inheritRotation != originalSettings.inheritRotation;
+	return !(settings == originalSettings);
 }

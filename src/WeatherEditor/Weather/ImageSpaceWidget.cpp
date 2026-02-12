@@ -192,21 +192,5 @@ void ImageSpaceWidget::RevertChanges()
 
 bool ImageSpaceWidget::HasUnsavedChanges() const
 {
-	return settings.hdrEyeAdaptSpeed != originalSettings.hdrEyeAdaptSpeed ||
-	       settings.hdrBloomBlurRadius != originalSettings.hdrBloomBlurRadius ||
-	       settings.hdrBloomThreshold != originalSettings.hdrBloomThreshold ||
-	       settings.hdrBloomScale != originalSettings.hdrBloomScale ||
-	       settings.hdrWhite != originalSettings.hdrWhite ||
-	       settings.hdrSunlightScale != originalSettings.hdrSunlightScale ||
-	       settings.hdrSkyScale != originalSettings.hdrSkyScale ||
-	       settings.cinematicSaturation != originalSettings.cinematicSaturation ||
-	       settings.cinematicBrightness != originalSettings.cinematicBrightness ||
-	       settings.cinematicContrast != originalSettings.cinematicContrast ||
-	       settings.tintColor.x != originalSettings.tintColor.x ||
-	       settings.tintColor.y != originalSettings.tintColor.y ||
-	       settings.tintColor.z != originalSettings.tintColor.z ||
-	       settings.tintAmount != originalSettings.tintAmount ||
-	       settings.dofStrength != originalSettings.dofStrength ||
-	       settings.dofDistance != originalSettings.dofDistance ||
-	       settings.dofRange != originalSettings.dofRange;
+	return !(settings == originalSettings);
 }

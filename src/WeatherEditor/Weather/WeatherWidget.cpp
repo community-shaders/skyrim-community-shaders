@@ -484,12 +484,13 @@ void WeatherWidget::SaveSettings()
 			logger::error("Weather {}: Serialized JSON missing atmosphereColors field!", GetEditorID());
 		} else if (!js.contains("clouds")) {
 			logger::error("Weather {}: Serialized JSON missing clouds field!", GetEditorID());
+		} else {
+			originalSettings = settings;
 		}
 
 	} catch (const nlohmann::json::exception& e) {
 		logger::error("Weather {}: Failed to serialize settings to JSON: {}", GetEditorID(), e.what());
 	}
-	originalSettings = settings;
 }
 
 WeatherWidget* WeatherWidget::GetParent()

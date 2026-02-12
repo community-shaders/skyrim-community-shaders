@@ -45,6 +45,7 @@ private:
 		float boxSize = 1.0f;
 		float particleDensity = 1.0f;
 		std::string particleTexture = "";
+		bool operator==(const Settings&) const = default;
 	};
 
 	Settings settings;

@@ -76,6 +76,5 @@ void LensFlareWidget::RevertChanges()
 
 bool LensFlareWidget::HasUnsavedChanges() const
 {
-	return settings.fadeDistRadiusScale != originalSettings.fadeDistRadiusScale ||
-	       settings.colorInfluence != originalSettings.colorInfluence;
+	return !(settings == originalSettings);
 }

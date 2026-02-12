@@ -44,6 +44,7 @@ private:
 		float phaseFunctionContribution = 0.0f;
 		float phaseFunctionScattering = 0.0f;
 		float samplingRangeFactor = 1.0f;
+		bool operator==(const Settings&) const = default;
 	};
 
 	Settings settings;

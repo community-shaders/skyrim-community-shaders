@@ -44,6 +44,7 @@ public:
 		float dofStrength = 0.0f;
 		float dofDistance = 0.0f;
 		float dofRange = 0.0f;
+		bool operator==(const Settings&) const = default;
 	};
 
 	Settings settings;

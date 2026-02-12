@@ -138,6 +138,7 @@ public:
 	// Search functionality
 	char searchBuffer[256] = "";
 	bool searchActive = false;
+	int deleteConfirmationFrame = -1;
 
 	bool MatchesSearch(const std::string& text) const;
 
@@ -147,6 +148,7 @@ protected:
 	std::string cachedEditorID;
 	virtual void DrawMenu();
 	std::string GetFolderName();
+	void DrawDeleteConfirmationModal();
 };
 
 // Simple widget for caching form data without full widget functionality

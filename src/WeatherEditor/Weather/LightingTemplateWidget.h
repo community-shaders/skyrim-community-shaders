@@ -24,6 +24,7 @@ public:
 	{
 		float3 min;
 		float3 max;
+		bool operator==(const DirectionalColor&) const = default;
 	};
 
 	struct DALC
@@ -31,6 +32,7 @@ public:
 		DirectionalColor directional[3];
 		float3 specular;
 		float fresnelPower;
+		bool operator==(const DALC&) const = default;
 	};
 
 	struct Settings
@@ -50,6 +52,7 @@ public:
 		float lightFadeStart;
 		float lightFadeEnd;
 		DALC dalc;
+		bool operator==(const Settings&) const = default;
 	};
 
 	Settings settings;

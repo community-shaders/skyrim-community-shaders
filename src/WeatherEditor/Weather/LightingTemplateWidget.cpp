@@ -321,48 +321,5 @@ void LightingTemplateWidget::SaveSettings()
 
 bool LightingTemplateWidget::HasUnsavedChanges() const
 {
-	return settings.ambient.x != originalSettings.ambient.x ||
-	       settings.ambient.y != originalSettings.ambient.y ||
-	       settings.ambient.z != originalSettings.ambient.z ||
-	       settings.directional.x != originalSettings.directional.x ||
-	       settings.directional.y != originalSettings.directional.y ||
-	       settings.directional.z != originalSettings.directional.z ||
-	       settings.fogColorNear.x != originalSettings.fogColorNear.x ||
-	       settings.fogColorNear.y != originalSettings.fogColorNear.y ||
-	       settings.fogColorNear.z != originalSettings.fogColorNear.z ||
-	       settings.fogColorFar.x != originalSettings.fogColorFar.x ||
-	       settings.fogColorFar.y != originalSettings.fogColorFar.y ||
-	       settings.fogColorFar.z != originalSettings.fogColorFar.z ||
-	       settings.fogNear != originalSettings.fogNear ||
-	       settings.fogFar != originalSettings.fogFar ||
-	       settings.directionalXY != originalSettings.directionalXY ||
-	       settings.directionalZ != originalSettings.directionalZ ||
-	       settings.directionalFade != originalSettings.directionalFade ||
-	       settings.clipDist != originalSettings.clipDist ||
-	       settings.fogPower != originalSettings.fogPower ||
-	       settings.fogClamp != originalSettings.fogClamp ||
-	       settings.lightFadeStart != originalSettings.lightFadeStart ||
-	       settings.lightFadeEnd != originalSettings.lightFadeEnd ||
-	       settings.dalc.specular.x != originalSettings.dalc.specular.x ||
-	       settings.dalc.specular.y != originalSettings.dalc.specular.y ||
-	       settings.dalc.specular.z != originalSettings.dalc.specular.z ||
-	       settings.dalc.fresnelPower != originalSettings.dalc.fresnelPower ||
-	       settings.dalc.directional[0].min.x != originalSettings.dalc.directional[0].min.x ||
-	       settings.dalc.directional[0].min.y != originalSettings.dalc.directional[0].min.y ||
-	       settings.dalc.directional[0].min.z != originalSettings.dalc.directional[0].min.z ||
-	       settings.dalc.directional[0].max.x != originalSettings.dalc.directional[0].max.x ||
-	       settings.dalc.directional[0].max.y != originalSettings.dalc.directional[0].max.y ||
-	       settings.dalc.directional[0].max.z != originalSettings.dalc.directional[0].max.z ||
-	       settings.dalc.directional[1].min.x != originalSettings.dalc.directional[1].min.x ||
-	       settings.dalc.directional[1].min.y != originalSettings.dalc.directional[1].min.y ||
-	       settings.dalc.directional[1].min.z != originalSettings.dalc.directional[1].min.z ||
-	       settings.dalc.directional[1].max.x != originalSettings.dalc.directional[1].max.x ||
-	       settings.dalc.directional[1].max.y != originalSettings.dalc.directional[1].max.y ||
-	       settings.dalc.directional[1].max.z != originalSettings.dalc.directional[1].max.z ||
-	       settings.dalc.directional[2].min.x != originalSettings.dalc.directional[2].min.x ||
-	       settings.dalc.directional[2].min.y != originalSettings.dalc.directional[2].min.y ||
-	       settings.dalc.directional[2].min.z != originalSettings.dalc.directional[2].min.z ||
-	       settings.dalc.directional[2].max.x != originalSettings.dalc.directional[2].max.x ||
-	       settings.dalc.directional[2].max.y != originalSettings.dalc.directional[2].max.y ||
-	       settings.dalc.directional[2].max.z != originalSettings.dalc.directional[2].max.z;
+	return !(settings == originalSettings);
 }

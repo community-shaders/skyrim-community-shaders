@@ -198,6 +198,44 @@ void Widget::DrawMenu()
 		}
 		ImGui::EndMenuBar();
 	}
+
+	DrawDeleteConfirmationModal();
+}
+
+void Widget::DrawDeleteConfirmationModal()
+{
+	if (!ImGui::IsPopupOpen("DeleteConfirmation"))
+		return;
+	if (deleteConfirmationFrame == ImGui::GetFrameCount())
+		return;
+
+	if (ImGui::BeginPopupModal("DeleteConfirmation", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
+		deleteConfirmationFrame = ImGui::GetFrameCount();
+		ImGui::Text("Are you sure you want to delete the saved settings file?");
+		ImGui::Spacing();
+		ImGui::Separator();
+		ImGui::Spacing();
+
+		const float buttonWidth = 120.0f;
+		const float spacing = ImGui::GetStyle().ItemSpacing.x;
+		const float totalWidth = (buttonWidth * 2) + spacing;
+		const float cursorX = (ImGui::GetWindowWidth() - totalWidth) / 2.0f;
+
+		ImGui::SetCursorPosX(cursorX);
+
+		if (ImGui::Button("Yes, Delete", ImVec2(buttonWidth, 0))) {
+			Delete();
+			ImGui::CloseCurrentPopup();
+		}
+		ImGui::SameLine();
+
+		if (ImGui::Button("Cancel", ImVec2(buttonWidth, 0))) {
+			ImGui::CloseCurrentPopup();
+		}
+		ImGui::SetItemDefaultFocus();
+
+		ImGui::EndPopup();
+	}
 }
 
 std::string Widget::GetFolderName()
@@ -265,7 +303,7 @@ void Widget::DrawWidgetHeader(const char* searchId, bool showApply, bool showSav
 	};
 
 	auto drawUnsavedIndicator = [&]() {
-		if (!HasUnsavedChanges())
+		if (!HasUnsavedChanges() || !menu)
 			return;
 		ImGui::SameLine();
 		ImGui::TextColored(menu->GetTheme().StatusPalette.Warning, "(UNSAVED CHANGES)");
@@ -325,7 +363,13 @@ void Widget::DrawWidgetHeader(const char* searchId, bool showApply, bool showSav
 		ImGui::PopStyleVar(2);
 	} else {
 		const float buttonHeight = ImGui::GetFrameHeight();
-		const auto& palette = Menu::GetSingleton()->GetTheme().StatusPalette;
+		if (!menu) {
+			drawSearchBar();
+			drawForceWeatherButton(buttonHeight);
+			ImGui::Separator();
+			return;
+		}
+		const auto& palette = menu->GetTheme().StatusPalette;
 
 		drawSearchBar();
 		drawForceWeatherButton(buttonHeight);
@@ -376,34 +420,7 @@ void Widget::DrawWidgetHeader(const char* searchId, bool showApply, bool showSav
 		drawUnsavedIndicator();
 	}
 
-	// Delete confirmation modal
-	if (ImGui::BeginPopupModal("DeleteConfirmation", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
-		ImGui::Text("Are you sure you want to delete the saved settings file?");
-		ImGui::Spacing();
-		ImGui::Separator();
-		ImGui::Spacing();
-
-		const float buttonWidth = 120.0f;
-		const float spacing = ImGui::GetStyle().ItemSpacing.x;
-		const float totalWidth = (buttonWidth * 2) + spacing;
-		const float cursorX = (ImGui::GetWindowWidth() - totalWidth) / 2.0f;
-
-		ImGui::SetCursorPosX(cursorX);
-
-		if (ImGui::Button("Yes, Delete", ImVec2(buttonWidth, 0))) {
-			Delete();
-			ImGui::CloseCurrentPopup();
-		}
-
-		ImGui::SetItemDefaultFocus();
-		ImGui::SameLine();
-
-		if (ImGui::Button("Cancel", ImVec2(buttonWidth, 0))) {
-			ImGui::CloseCurrentPopup();
-		}
-
-		ImGui::EndPopup();
-	}
+	DrawDeleteConfirmationModal();
 
 	ImGui::Separator();
 }

@@ -199,17 +199,5 @@ void PrecipitationWidget::RevertChanges()
 
 bool PrecipitationWidget::HasUnsavedChanges() const
 {
-	return settings.gravityVelocity != originalSettings.gravityVelocity ||
-	       settings.rotationVelocity != originalSettings.rotationVelocity ||
-	       settings.particleSizeX != originalSettings.particleSizeX ||
-	       settings.particleSizeY != originalSettings.particleSizeY ||
-	       settings.centerOffsetMin != originalSettings.centerOffsetMin ||
-	       settings.centerOffsetMax != originalSettings.centerOffsetMax ||
-	       settings.startRotationRange != originalSettings.startRotationRange ||
-	       settings.numSubtexturesX != originalSettings.numSubtexturesX ||
-	       settings.numSubtexturesY != originalSettings.numSubtexturesY ||
-	       settings.particleType != originalSettings.particleType ||
-	       settings.boxSize != originalSettings.boxSize ||
-	       settings.particleDensity != originalSettings.particleDensity ||
-	       settings.particleTexture != originalSettings.particleTexture;
+	return !(settings == originalSettings);
 }
