@@ -295,12 +295,12 @@ ImVec4 WeatherEditor::GetWeatherTypeColor(RE::TESWeather* weather)
 
 	// Priority order for weather classification colors (highest priority first)
 	static const std::vector<std::pair<RE::TESWeather::WeatherDataFlag, ImVec4>> priorityColors = {
-		{ RE::TESWeather::WeatherDataFlag::kPleasant, ImVec4(0.0f, 1.0f, 0.0f, 1.0f) },         // Placeholder, will use theme
-		{ RE::TESWeather::WeatherDataFlag::kCloudy, ImVec4(0.7f, 0.7f, 0.7f, 1.0f) },           // Gray for cloudy
 		{ RE::TESWeather::WeatherDataFlag::kRainy, ImVec4(0.4f, 0.7f, 1.0f, 1.0f) },            // Light blue for rain
 		{ RE::TESWeather::WeatherDataFlag::kSnow, ImVec4(0.9f, 0.9f, 1.0f, 1.0f) },             // Light blue-white for snow
 		{ RE::TESWeather::WeatherDataFlag::kPermAurora, ImVec4(0.8f, 0.4f, 1.0f, 1.0f) },       // Purple for aurora
-		{ RE::TESWeather::WeatherDataFlag::kAuroraFollowsSun, ImVec4(0.9f, 0.6f, 1.0f, 1.0f) }  // Light purple for aurora follows sun
+		{ RE::TESWeather::WeatherDataFlag::kAuroraFollowsSun, ImVec4(0.9f, 0.6f, 1.0f, 1.0f) }, // Light purple for aurora follows sun
+		{ RE::TESWeather::WeatherDataFlag::kCloudy, ImVec4(0.7f, 0.7f, 0.7f, 1.0f) },           // Gray for cloudy
+		{ RE::TESWeather::WeatherDataFlag::kPleasant, ImVec4(0.0f, 1.0f, 0.0f, 1.0f) },         // Placeholder, will use theme
 	};
 
 	// Check flags in priority order
