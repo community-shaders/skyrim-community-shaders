@@ -22,6 +22,7 @@ public:
 		form = a_weather;
 		weather = a_weather;
 		LoadWeatherValues();
+		InitializeInheritFlags();
 		vanillaSettings = settings;
 		originalSettings = settings;
 	}
@@ -138,6 +139,7 @@ public:
 	void NavigateToFeatureSetting(const std::string& featureName, const std::string& settingName);
 
 private:
+	void InitializeInheritFlags();
 	void DrawDALCSettings();
 	void DrawWeatherColorSettings();
 	void DrawCloudSettings();
