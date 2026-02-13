@@ -2425,9 +2425,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	if ((Permutation::PixelShaderDescriptor & Permutation::LightingFlags::DefShadow) && (Permutation::PixelShaderDescriptor & Permutation::LightingFlags::ShadowDir)){
 		dirDetailedShadow *= shadowColor.x;
 
-#	if defined(VOLUMETRIC_SHADOWS)
-		dirSoftShadow = max(dirSoftShadow, dirDetailedShadow);
-#	else
+#	if !defined(VOLUMETRIC_SHADOWS)
 		dirSoftShadow = dirDetailedShadow;
 #	endif
 	} else {
@@ -2896,11 +2894,8 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 
 	float mlpBlendFactor = saturate(viewNormalAngle) * (1.0 - baseColor.w);
 
-	color.xyz = lerp(color.xyz, diffuseColor * vertexColor * layerColor, mlpBlendFactor);
-
-#		if defined(DEFERRED)
+	color.xyz = lerp(color.xyz, reflectionDiffuseColor * layerColor, mlpBlendFactor);
 	indirectLobeWeights.diffuse *= 1.0 - mlpBlendFactor;
-#		endif
 #	endif  // MULTI_LAYER_PARALLAX
 
 #	if defined(SNOW)
