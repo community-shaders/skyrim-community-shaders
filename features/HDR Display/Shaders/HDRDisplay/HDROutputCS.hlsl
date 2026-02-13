@@ -57,22 +57,29 @@ static const float UI_REFERENCE_NITS = 80.0;
 			// Direct passthrough when UI compositing is disabled
 			finalColor = scenePQ;
 		} else {
-			// Composite UI on top of PQ scene (UI was pre-processed to PQ by UIBrightnessCS)
-			// Both UI and scene are in PQ space, so we can blend directly.
+			// Composite UI on top of scene in linear space.
+			// Blending in PQ space darkens alpha regions (~20%) due to PQ's steep nonlinearity.
+			// Decode scene to linear, blend there (matching SDR's luminance-proportional blend),
+			// then re-encode to PQ.
 
-			// Scale UI to nit reference level
 			float uiNits = UI_REFERENCE_NITS * uiBrightness;
 
-			// UI is in BT.709, convert to BT.2020 for HDR
-			float3 uiLinear = Color::GammaToTrueLinear(max(0, ui.rgb));
+			// Recover straight (non-premultiplied) UI color
+			float3 uiStraight = (ui.a > 0.001) ? ui.rgb / ui.a : float3(0, 0, 0);
+
+			// Convert UI from sRGB gamma BT.709 to linear BT.2020, scaled to nit level
+			float3 uiLinear = Color::GammaToTrueLinear(max(0, uiStraight));
 			float3 uiBT2020 = Color::BT709ToBT2020(uiLinear);
+			float3 uiScaled = uiBT2020 * (uiNits / 10000.0);
 
-			// Encode UI to PQ space matching the scene
-			float3 uiPQ = Color::pq::Encode(uiBT2020, uiNits);
+			// Decode scene from PQ to linear (normalized to 10000 nits)
+			float3 sceneLinear = Color::pq::Decode(scenePQ);
 
-			// Apply UI alpha: blend = ui + (1-alpha)*scene
-			float3 uiPremulPQ = uiPQ * ui.a;
-			finalColor = uiPremulPQ + scenePQ * (1.0 - ui.a);
+			// Blend in linear space for correct luminance
+			float3 blendedLinear = uiScaled * ui.a + sceneLinear * (1.0 - ui.a);
+
+			// Re-encode to PQ
+			finalColor = Color::pq::Encode(blendedLinear);
 		}
 	} else {
 		// === SDR Pipeline ===
@@ -86,9 +93,8 @@ static const float UI_REFERENCE_NITS = 80.0;
 			finalColor = sceneGamma;
 		} else {
 			// Composite UI on top of gamma scene using premultiplied alpha
-			// Both UI and scene are in sRGB gamma space for SDR.
-			float3 uiPremul = ui.rgb * ui.a;
-			finalColor = uiPremul + sceneGamma * (1.0 - ui.a);
+			// UI texture already has premultiplied RGB from the render blend state.
+			finalColor = ui.rgb + sceneGamma * (1.0 - ui.a);
 		}
 
 		// Clamp to [0,1] for SDR output

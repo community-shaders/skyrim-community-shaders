@@ -536,6 +536,14 @@ namespace BackgroundBlur
 			currentTexture = hdr->hdrTexture->resource;
 			sourceSRV = hdr->hdrTexture->srv.get();
 			currentRTV = hdr->hdrTexture->rtv;
+
+			// Vanilla UI is in a separate texture in HDR mode (SetUIBuffer redirect).
+			// Composite it into the blur so HUD elements appear blurred behind the menu,
+			// and clear the blur region from uiTexture to prevent double-compositing.
+			if (hdr->uiTexture && hdr->uiTexture->srv && hdr->uiTexture->rtv) {
+				uiBufferSRV = hdr->uiTexture->srv.get();
+				uiBufferRTV = hdr->uiTexture->rtv.get();
+			}
 		} else if (useUpscalingBackbuffer) {
 			// When D3D12 swap chain is active, get all resources in one call
 			auto res = upscaling.GetBlurResources();

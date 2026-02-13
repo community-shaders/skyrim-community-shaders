@@ -42,14 +42,17 @@ static const float UI_REFERENCE_NITS = 80.0;
 
 	if (enableHDR) {
 		// === HDR Pipeline ===
-		// Input: Vanilla gamma UI (sRGB, BT.709)
-		// Output: PQ-encoded UI in BT.2020 colorspace
+		// Input: Vanilla gamma UI (sRGB, BT.709) with premultiplied alpha
+		// Output: PQ-encoded UI in BT.2020 colorspace, premultiplied alpha
 		//
 		// FidelityFX FrameGeneration blends in PQ space, so UI must be PQ-encoded.
-		// Scale to UI_REFERENCE_NITS for consistent perceived brightness with SDR.
+		// Un-premultiply before nonlinear conversion to preserve antialiased edges.
+
+		// Recover straight (non-premultiplied) color
+		float3 uiStraight = (ui.a > 0.001) ? ui.rgb / ui.a : float3(0, 0, 0);
 
 		// Convert from gamma to linear
-		float3 uiLinear = Color::GammaToTrueLinear(max(0, ui.rgb));
+		float3 uiLinear = Color::GammaToTrueLinear(max(0, uiStraight));
 
 		// Expand to wider BT.2020 colorspace for HDR (reduces banding on saturated colors)
 		float3 uiBT2020 = Color::BT709ToBT2020(uiLinear);
@@ -61,15 +64,18 @@ static const float UI_REFERENCE_NITS = 80.0;
 		ui.rgb = Color::pq::Encode(uiNits / 10000.0, 10000.0);
 	} else {
 		// === SDR Pipeline ===
-		// Input: Vanilla gamma UI (sRGB, BT.709)
+		// Input: Vanilla gamma UI (sRGB, BT.709) with premultiplied alpha
 		// Output: Adjusted gamma UI suitable for SDR displays
 		//
-		// Simple brightness scaling in gamma space without color space conversion.
+		// Already premultiplied from render blend state — just clamp.
+		// No alpha multiply needed; skip to write.
 		ui.rgb = max(0, ui.rgb);
+		UITex[dispatchID.xy] = ui;
+		return;
 	}
 
-	// Convert to premultiplied alpha for proper compositing.
-	// FidelityFX will blend as: result = ui.rgb * ui.a + scene * (1 - ui.a)
+	// HDR path: output is straight PQ color from the conversion above.
+	// Premultiply for FidelityFX compositing: result = ui.rgb + scene * (1 - ui.a)
 	ui.rgb *= ui.a;
 
 	UITex[dispatchID.xy] = ui;
