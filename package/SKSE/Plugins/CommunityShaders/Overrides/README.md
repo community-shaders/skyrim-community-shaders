@@ -113,7 +113,6 @@ To create feature-specific overrides, you need to use the correct feature short 
 -   `VolumetricLighting` - Volumetric Lighting
 -   `VR` - VR
 -   `WaterEffects` - Water Effects
--   `WeatherPicker` - Weather Picker
 -   `PerformanceOverlay` - Performance Overlay
 -   `WetnessEffects` - Wetness Effects
 -   `ExtendedTranslucency` - Extended Translucency

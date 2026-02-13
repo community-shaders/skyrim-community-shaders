@@ -8,11 +8,6 @@
 static constexpr uint CLUSTER_MAX_LIGHTS = 128;
 static constexpr uint MAX_LIGHTS = 1024;
 
-NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
-	LightLimitFix::Settings,
-	EnableContactShadows,
-	LightsVisualisationMode)
-
 void LightLimitFix::DrawSettings()
 {
 	auto shaderCache = globals::shaderCache;
@@ -168,16 +163,6 @@ void LightLimitFix::SetupResources()
 	{
 		strictLightDataCB = new ConstantBuffer(ConstantBufferDesc<StrictLightDataCB>());
 	}
-}
-
-void LightLimitFix::LoadSettings(json& o_json)
-{
-	settings = o_json;
-}
-
-void LightLimitFix::SaveSettings(json& o_json)
-{
-	o_json = settings;
 }
 
 void LightLimitFix::RestoreDefaultSettings()
