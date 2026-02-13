@@ -145,7 +145,7 @@ void VR::DataLoaded()
 void VR::EarlyPrepass()
 {
 	// Apply culling setting each prepass based on current interior/exterior state.
-	const auto* tes = RE::TES::GetSingleton();
+	const auto* tes = globals::game::tes;
 	if (!tes) {
 		return;
 	}
@@ -615,7 +615,7 @@ namespace
 			}
 
 			if (exteriorChanged || interiorChanged) {
-				const auto* tes = RE::TES::GetSingleton();
+				const auto* tes = globals::game::tes;
 				const bool inInterior = tes && tes->interiorCell;
 				vr.UpdateDepthBufferCulling(inInterior ? settings.EnableDepthBufferCullingInterior : settings.EnableDepthBufferCullingExterior);
 			}
