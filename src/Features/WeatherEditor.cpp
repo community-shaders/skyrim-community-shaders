@@ -63,9 +63,13 @@ void LerpDirectional(RE::BGSDirectionalAmbientLightingColors::Directional& oldCo
 
 void WeatherEditor::DrawSettings()
 {
-	if (ImGui::Button("Open Editor", { -1, 0 })) {
+	auto player = RE::PlayerCharacter::GetSingleton();
+	bool hasCell = player && player->parentCell;
+	ImGui::BeginDisabled(!hasCell);
+	if (ImGui::Button(hasCell ? "Open Editor" : "Open Editor (no active cell)", { -1, 0 })) {
 		EditorWindow::GetSingleton()->open = true;
 	}
+	ImGui::EndDisabled();
 
 	ImGui::Spacing();
 	ImGui::Separator();
@@ -228,6 +232,10 @@ void WeatherEditor::DrawWeatherStatusPanel()
 void WeatherEditor::RenderWeatherDetailsWindow(bool* open)
 {
 	if (!*open)
+		return;
+
+	auto player = RE::PlayerCharacter::GetSingleton();
+	if (!player || !player->parentCell)
 		return;
 
 	// Set initial position if not already set
@@ -1028,6 +1036,10 @@ std::string WeatherEditor::GetDisplayName(const RE::TESWeather* weather)
 
 void WeatherEditor::DrawOverlay()
 {
+	auto player = RE::PlayerCharacter::GetSingleton();
+	if (!player || !player->parentCell)
+		return;
+
 	bool overlayVisible = Menu::GetSingleton()->overlayVisible;
 	static bool lastShowInOverlay = false;
 	const bool showInOverlay = WeatherDetailsWindow.ShowInOverlay;
