@@ -641,7 +641,7 @@ void SceneSettingsManager::DiscoverOverwrites(SceneType type)
 			overwritesLoaded++;
 			logger::info("[SceneSettings] Loaded {} overwrite: {} -> {}.{}", typeName, filename, featureShortName, settingKey);
 		} catch (const std::exception& e) {
-			logger::error("[SceneSettings] Failed to load {} overwrite '{}': {}", typeName, dirEntry.path().filename().string(), e.what());
+			logger::error("[SceneSettings] Failed to load {} overwrite '{}': {}", typeName, filename, e.what());
 		}
 	}
 
