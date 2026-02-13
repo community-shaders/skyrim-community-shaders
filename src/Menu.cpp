@@ -1158,7 +1158,7 @@ void Menu::ProcessInputEvents(RE::InputEvent* const* a_events)
 
 bool Menu::ShouldSwallowInput()
 {
-	return IsEnabled || HomePageRenderer::ShouldShowFirstTimeSetup();
+	return IsEnabled || HomePageRenderer::ShouldShowFirstTimeSetup() || EditorWindow::GetSingleton()->open;
 }
 
 void Menu::SelectFeatureMenu(const std::string& featureName)
