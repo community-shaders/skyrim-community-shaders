@@ -3,6 +3,7 @@
 #include "Deferred.h"
 #include "Features/CloudShadows.h"
 #include "Features/DynamicCubemaps.h"
+#include "Features/ExponentialHeightFog.h"
 #include "Features/ExtendedMaterials.h"
 #include "Features/ExtendedTranslucency.h"
 #include "Features/GrassCollision.h"
@@ -80,6 +81,7 @@ namespace globals
 		Upscaling upscaling{};
 		RenderDoc renderDoc{};
 		WeatherEditor weatherEditor{};
+		ExponentialHeightFog exponentialHeightFog{};
 
 		namespace llf
 		{
