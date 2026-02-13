@@ -225,8 +225,7 @@ bool IsDiagnosticSlot2GuardMode(const TerrainBlending& a_singleton)
 			return false;
 		}
 
-		auto& vr = globals::features::vr;
-		return vr.gDepthBufferCulling && *vr.gDepthBufferCulling;
+		return !ShouldUseBlendedDepthSRV();
 	}
 
 	struct SlotOverrideResult
@@ -381,8 +380,7 @@ std::vector<FeatureConstraints::Constraint> TerrainBlending::GetActiveConstraint
 		return constraints;
 	}
 
-	auto& vr = globals::features::vr;
-	if (!vr.gDepthBufferCulling || !*vr.gDepthBufferCulling) {
+	if (ShouldUseBlendedDepthSRV()) {
 		return constraints;
 	}
 
