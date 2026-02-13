@@ -314,6 +314,7 @@ void VolumetricShadows::CopyShadowData()
 		// Release COM object to prevent memory leak
 		if (shadowView)
 			shadowView->Release();
+		shadowView = nullptr;
 	}
 }
 
