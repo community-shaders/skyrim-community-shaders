@@ -75,6 +75,9 @@ public:
 	// Samplers
 	ID3D11SamplerState* linearSampler = nullptr;
 
+	// Alternates between cascade 0 and 1 each frame
+	uint32_t currentCascade = 0;
+
 	virtual void SetupResources() override;
 	virtual void ClearShaderCache() override;
 
