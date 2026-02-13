@@ -343,7 +343,6 @@ struct CreateDepthStencil_VolumetricLighting
 	static inline REL::Relocation<decltype(thunk)> func;
 };
 
-
 void VolumetricShadows::PostPostLoad()
 {
 	stl::write_thunk_call<CreateDepthStencil_VolumetricLighting>(REL::RelocationID(100458, 107175).address() + REL::Relocate(0x9DC, 0x9DC, 0x00));
