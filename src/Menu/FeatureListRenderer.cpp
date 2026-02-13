@@ -425,8 +425,8 @@ void FeatureListRenderer::RenderLeftColumn(
 
 		ImGui::EndListBox();
 	}
-	ImGui::PopStyleVar();  // Pop Alpha
 	ImGui::PopStyleVar();  // Pop FrameBorderSize
+	ImGui::PopStyleVar();  // Pop Alpha
 	ImGui::PopStyleColor();
 }
 
