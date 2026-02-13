@@ -212,9 +212,13 @@ void FeatureListRenderer::RenderFeatureList(
 
 	// Calculate animation target and smoothly animate panel visibility
 	static float animatedVisibility = 1.0f;
-	static float lastFrameTime = static_cast<float>(ImGui::GetTime());
+	static float lastFrameTime = -1.0f;
 	
 	float currentTime = static_cast<float>(ImGui::GetTime());
+	// Initialize lastFrameTime on first frame to avoid large delta
+	if (lastFrameTime < 0.0f) {
+		lastFrameTime = currentTime;
+	}
 	float deltaTime = currentTime - lastFrameTime;
 	lastFrameTime = currentTime;
 	
@@ -421,7 +425,8 @@ void FeatureListRenderer::RenderLeftColumn(
 
 		ImGui::EndListBox();
 	}
-	ImGui::PopStyleVar(2);  // Pop both Alpha and FrameBorderSize
+	ImGui::PopStyleVar();  // Pop Alpha
+	ImGui::PopStyleVar();  // Pop FrameBorderSize
 	ImGui::PopStyleColor();
 }
 
