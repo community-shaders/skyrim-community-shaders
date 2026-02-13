@@ -565,7 +565,7 @@ float3 GetLightingColor(float3 msPosition, float3 worldPosition, float2 screenPo
 	const bool inWorld = (Permutation::ExtraShaderDescriptor & Permutation::ExtraFlags::InWorld);
 
 	if (inWorld && !SharedData::InInterior)
-		ShadowSampling::Get3DFilteredShadow(worldPosition.xyz, viewDirection, screenPosition, eyeIndex, unusedSurfaceShadow);
+		dirShadow = ShadowSampling::Get3DFilteredShadow(worldPosition.xyz, viewDirection, screenPosition, eyeIndex, unusedSurfaceShadow);
 
 	shadowVariance = 1.0 - sqrt(saturate(fwidth(dirShadow)));
 
@@ -625,6 +625,7 @@ float3 GetLightingShadow(float3 color, float3 worldPosition, float2 screenPositi
 	const bool inWorld = (Permutation::ExtraShaderDescriptor & Permutation::ExtraFlags::InWorld);
 
 	if (inWorld && !SharedData::InInterior){
+		shadow = 0.0;
 		for(uint i = 0; i < sampleCount; i++){
 			uint noisyIndex = uint((float(i) + sampleCount * noise) % sampleCount);
 			float t = (float(sampleCount) - float(noisyIndex + 1)) * rcpSampleCount;
