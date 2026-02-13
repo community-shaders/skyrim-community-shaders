@@ -31,15 +31,15 @@ public:
 	virtual std::string GetEditorID() const
 	{
 		// If cachedEditorID looks like a fallback ID, try to get the real one
-		   // For Volumetric Lighting, support both old and new fallback prefixes
-		   if ((cachedEditorID.find("VolumetricLighting_") == 0 || cachedEditorID.find("VL_") == 0) && form) {
-			   const char* editorID = form->GetFormEditorID();
-			   if (editorID && editorID[0] != '\0') {
-				   const_cast<Widget*>(this)->cachedEditorID = editorID;
-				   return editorID;
-			   }
-		   }
-		   return cachedEditorID;
+		// For Volumetric Lighting, support both old and new fallback prefixes
+		if ((cachedEditorID.find("VolumetricLighting_") == 0 || cachedEditorID.find("VL_") == 0) && form) {
+			const char* editorID = form->GetFormEditorID();
+			if (editorID && editorID[0] != '\0') {
+				const_cast<Widget*>(this)->cachedEditorID = editorID;
+				return editorID;
+			}
+		}
+		return cachedEditorID;
 	}
 
 	virtual std::string GetFormID() const
@@ -90,10 +90,10 @@ public:
 		case RE::FormType::ImageSpace:
 			cachedEditorID = std::format("ImageSpace_{:08X}", form->GetFormID());
 			break;
-		   case RE::FormType::VolumetricLighting:
-			   // Use short fallback prefix for Volumetric Lighting
-			   cachedEditorID = std::format("VL_{:08X}", form->GetFormID());
-			   break;
+		case RE::FormType::VolumetricLighting:
+			// Use short fallback prefix for Volumetric Lighting
+			cachedEditorID = std::format("VL_{:08X}", form->GetFormID());
+			break;
 		case RE::FormType::ShaderParticleGeometryData:
 			cachedEditorID = std::format("ShaderParticleGeometry_{:08X}", form->GetFormID());
 			break;

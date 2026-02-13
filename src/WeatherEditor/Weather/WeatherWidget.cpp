@@ -280,7 +280,7 @@ void WeatherWidget::DrawWidget()
 				for (int i = 0; i < ColorTimes::kTotal; i++) {
 					ImGui::PushID(100 + i);
 					std::string label = ColorTimeLabel(i);
-					   std::string inheritKey = "VL_" + std::to_string(i);
+					std::string inheritKey = "VL_" + std::to_string(i);
 
 					// Inherit checkbox
 					if (hasParent) {
