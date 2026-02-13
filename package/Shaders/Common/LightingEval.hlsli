@@ -169,7 +169,7 @@ void EvaluateWetnessLighting(float3 wetnessNormal, DirectContext context, float 
 {
 	const float wetnessStrength = saturate(1 - roughness);
 #	if defined(TRUE_PBR)
-	const float3 lightColor = context.coatLightColor * context.detailedShadow;
+	const float3 lightColor = context.coatLightColor;
 #	else
 	const float3 lightColor = context.lightColor * context.detailedShadow;
 #	endif
