@@ -665,7 +665,13 @@ void FeatureListRenderer::DrawMenuVisitor::RenderFeatureHeader(Feature* feat, bo
 
 	// Apply Override button (when feature has available overrides)
 	if (!isDisabled && isLoaded && hasOverrides) {
+		// Disable the button when scene-specific settings are actively controlling this feature
+		auto* sceneManager = SceneSettingsManager::GetSingleton();
+		bool sceneControlled = sceneManager->HasActiveSettingsForFeature(featureName) && !sceneManager->IsFeaturePaused(featureName);
+
 		ImGui::SameLine();
+		if (sceneControlled)
+			ImGui::BeginDisabled();
 		if (ImGui::Button(overrideButtonText, { overrideButtonWidth, 0 })) {
 			if (feat->ReapplyOverrideSettings()) {
 				logger::info("Successfully reapplied override settings for {}", featureName);
@@ -673,12 +679,20 @@ void FeatureListRenderer::DrawMenuVisitor::RenderFeatureHeader(Feature* feat, bo
 				logger::warn("Failed to reapply override settings for {}", featureName);
 			}
 		}
+		if (sceneControlled)
+			ImGui::EndDisabled();
 
 		if (auto _tt = Util::HoverTooltipWrapper()) {
-			ImGui::Text(
-				"Restores original override settings from mod files.\n"
-				"This will discard your customizations and revert to\n"
-				"the mod author's recommended settings.");
+			if (sceneControlled) {
+				ImGui::Text(
+					"Cannot apply overrides while scene-specific settings are active.\n"
+					"Pause scene settings for this feature first.");
+			} else {
+				ImGui::Text(
+					"Restores original override settings from mod files.\n"
+					"This will discard your customizations and revert to\n"
+					"the mod author's recommended settings.");
+			}
 		}
 	}
 
