@@ -237,7 +237,7 @@ const std::vector<Feature*>& Feature::GetFeatureList()
 		&globals::features::linearLighting,
 		&globals::features::unifiedWater,
 		&globals::features::exponentialHeightFog,
-    &globals::features::hdrDisplay
+		&globals::features::hdrDisplay
 	};
 
 	if (REL::Module::IsVR()) {
