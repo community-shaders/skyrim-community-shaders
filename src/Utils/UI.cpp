@@ -775,6 +775,15 @@ namespace Util
 			baseColor.w);
 	}
 
+	float SmoothAnimateValue(float current, float target, float deltaTime, float speed)
+	{
+		// Exponential decay for smooth animation
+		// This creates a natural ease-out effect
+		float difference = target - current;
+		float delta = difference * (1.0f - expf(-speed * deltaTime));
+		return current + delta;
+	}
+
 	void DrawSearchIcon(const ImVec2& position, float size, float alpha)
 	{
 		ImDrawList* drawList = ImGui::GetWindowDrawList();

@@ -82,7 +82,8 @@ private:
 		const std::vector<MenuFuncInfo>& menuList,
 		size_t& selectedMenu,
 		std::string& featureSearch,
-		std::map<std::string, bool>& categoryExpansionStates);
+		std::map<std::string, bool>& categoryExpansionStates,
+		float animationValue = 1.0f);
 
 	static void RenderRightColumn(
 		const std::vector<MenuFuncInfo>& menuList,

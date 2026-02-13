@@ -186,9 +186,9 @@ public:
 		static constexpr float VERSION_TEXT_OPACITY = 0.6f;         // Opacity for version text next to feature title
 
 		// Auto-hide feature list constants
-		static constexpr float AUTOHIDE_ACTIVATION_ZONE_WIDTH = 50.0f;  // Width of hover zone at left edge (px)
-		static constexpr float AUTOHIDE_EXPAND_DELAY = 0.25f;           // Delay before expanding panel (seconds)
-		static constexpr float AUTOHIDE_PANEL_WIDTH_RATIO = 0.2f;       // Ratio of window width for panel (2/10)
+		static constexpr float AUTOHIDE_ACTIVATION_ZONE_WIDTH = 50.0f;   // Width of hover zone at left edge (px)
+		static constexpr float AUTOHIDE_PANEL_WIDTH_RATIO = 0.2f;        // Ratio of window width for panel (2/10)
+		static constexpr float AUTOHIDE_ANIMATION_SPEED = 12.0f;         // Speed of slide animation (higher = faster)
 	};
 
 	static ThemeManager* GetSingleton()

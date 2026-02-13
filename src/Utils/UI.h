@@ -699,6 +699,16 @@ namespace Util
 	ImVec4 GetPulsingColor(const ImVec4& baseColor, float speed = 4.0f, float minBrightness = 0.7f, float maxBrightness = 1.0f);
 
 	/**
+	 * @brief Smoothly animates a value towards a target using exponential decay.
+	 * @param current Current value (will be modified)
+	 * @param target Target value to animate towards
+	 * @param deltaTime Time since last frame in seconds
+	 * @param speed Animation speed (higher = faster, default: 10.0f)
+	 * @return The new animated value
+	 */
+	float SmoothAnimateValue(float current, float target, float deltaTime, float speed = 10.0f);
+
+	/**
 	 * @brief Draws the feature search bar with magnifying glass icon.
 	 * @param searchString Reference to the search string to modify
 	 * @param availableWidth The available width for the search bar

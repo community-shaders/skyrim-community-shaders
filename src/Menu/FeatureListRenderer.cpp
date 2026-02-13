@@ -33,63 +33,42 @@ namespace
 	}
 
 	/**
-	 * @brief Determines if the left feature panel should be visible based on auto-hide settings and mouse position
-	 * @return true if panel should be visible, false if it should be hidden
+	 * @brief Calculates the animation target (0.0 to 1.0) for the left panel based on auto-hide settings and mouse position
+	 * @param currentVisibility Current animated visibility value (used to determine if mouse is over visible panel)
+	 * @return Animation target value: 1.0 = fully visible, 0.0 = fully hidden
 	 */
-	bool ShouldShowLeftPanel()
+	float GetLeftPanelAnimationTarget(float currentVisibility)
 	{
 		bool autoHideEnabled = globals::menu->GetSettings().AutoHideFeatureList;
-		static bool leftPanelVisible = true;
-		static float hoverStartTime = 0.0f;
-		static bool wasHovering = false;
-
+		
 		if (!autoHideEnabled) {
-			leftPanelVisible = true;
-			return true;
+			return 1.0f;
 		}
 
 		// Get mouse position and window bounds
 		ImVec2 mousePos = ImGui::GetMousePos();
 		ImVec2 windowPos = ImGui::GetWindowPos();
 		ImVec2 windowSize = ImGui::GetWindowSize();
-		float currentTime = static_cast<float>(ImGui::GetTime());
 
 		// Use constants for auto-hide behavior
 		const float activationZoneWidth = ThemeManager::Constants::AUTOHIDE_ACTIVATION_ZONE_WIDTH;
-		const float expandDelay = ThemeManager::Constants::AUTOHIDE_EXPAND_DELAY;
 		const float panelWidth = windowSize.x * ThemeManager::Constants::AUTOHIDE_PANEL_WIDTH_RATIO;
 
 		// Calculate relative X position
 		const float relativeX = mousePos.x - windowPos.x;
 
-		// For activation: only check if mouse is at left edge (allow any Y position for easier triggering)
-		// Prevent negative X from triggering, but don't restrict Y-axis for activation
+		// Check if mouse is in activation zone (left edge)
 		bool mouseInActivationZone = relativeX >= 0.0f && relativeX < activationZoneWidth;
 
-		// For staying visible: check both X and Y to ensure mouse is actually over the panel area
+		// Check if mouse is over the panel area when it's visible
 		const bool mouseOverPanelX = relativeX >= 0.0f && relativeX < panelWidth;
 		const bool mouseOverPanelY = mousePos.y >= windowPos.y && mousePos.y <= (windowPos.y + windowSize.y);
-		bool mouseOverPanel = leftPanelVisible && mouseOverPanelX && mouseOverPanelY;
+		
+		// Only consider mouse over panel if panel is substantially visible
+		bool mouseOverPanel = (currentVisibility > 0.1f) && mouseOverPanelX && mouseOverPanelY;
 
-		// Track hover start time
-		if (mouseInActivationZone && !wasHovering) {
-			hoverStartTime = currentTime;
-			wasHovering = true;
-		} else if (!mouseInActivationZone) {
-			wasHovering = false;
-		}
-
-		// Expand only after delay has elapsed
-		bool shouldExpand = mouseInActivationZone && (currentTime - hoverStartTime >= expandDelay);
-
-		// Update visibility: expand with delay, or stay visible while mouse is over panel
-		if (shouldExpand || mouseOverPanel) {
-			leftPanelVisible = true;
-		} else if (!mouseOverPanel && !mouseInActivationZone) {
-			leftPanelVisible = false;
-		}
-
-		return leftPanelVisible;
+		// Show panel if mouse is in activation zone or over the panel
+		return (mouseInActivationZone || mouseOverPanel) ? 1.0f : 0.0f;
 	}
 
 	void SeparatorTextWithFont(const char* text, Menu::FontRole role)
@@ -231,16 +210,29 @@ void FeatureListRenderer::RenderFeatureList(
 
 	HandlePendingFeatureSelection(pendingFeatureSelection, menuList, selectedMenu);
 
-	// Determine if left panel should be visible based on auto-hide settings
-	bool leftPanelVisible = ShouldShowLeftPanel();
+	// Calculate animation target and smoothly animate panel visibility
+	static float animatedVisibility = 1.0f;
+	static float lastFrameTime = static_cast<float>(ImGui::GetTime());
+	
+	float currentTime = static_cast<float>(ImGui::GetTime());
+	float deltaTime = currentTime - lastFrameTime;
+	lastFrameTime = currentTime;
+	
+	float targetVisibility = GetLeftPanelAnimationTarget(animatedVisibility);
+	animatedVisibility = Util::SmoothAnimateValue(animatedVisibility, targetVisibility, deltaTime, ThemeManager::Constants::AUTOHIDE_ANIMATION_SPEED);
+	
+	// Panel is visible if animation value is above threshold
+	bool leftPanelVisible = animatedVisibility > 0.01f;
 
 	// Create the table with appropriate number of columns based on visibility
 	int numColumns = leftPanelVisible ? 2 : 1;
 	if (ImGui::BeginTable("Menus Table", numColumns, ImGuiTableFlags_SizingStretchProp | ImGuiTableFlags_Resizable)) {
 		if (leftPanelVisible) {
-			ImGui::TableSetupColumn("##ListOfMenus", 0, 2);
-			ImGui::TableSetupColumn("##MenuConfig", 0, 8);
-			RenderLeftColumn(menuList, selectedMenu, featureSearch, categoryExpansionStates);
+			// Use animated width for smooth sliding effect
+			float animatedWidth = 2.0f * animatedVisibility;
+			ImGui::TableSetupColumn("##ListOfMenus", 0, animatedWidth);
+			ImGui::TableSetupColumn("##MenuConfig", 0, 8.0f + (2.0f - animatedWidth));
+			RenderLeftColumn(menuList, selectedMenu, featureSearch, categoryExpansionStates, animatedVisibility);
 			RenderRightColumn(menuList, selectedMenu, pendingFeatureSelection);
 		} else {
 			// When left panel is hidden, right column takes full width
@@ -377,9 +369,14 @@ void FeatureListRenderer::RenderLeftColumn(
 	const std::vector<MenuFuncInfo>& menuList,
 	size_t& selectedMenu,
 	std::string& featureSearch,
-	std::map<std::string, bool>& categoryExpansionStates)
+	std::map<std::string, bool>& categoryExpansionStates,
+	float animationValue)
 {
 	ImGui::TableNextColumn();
+	
+	// Apply fade effect based on animation value
+	ImGui::PushStyleVar(ImGuiStyleVar_Alpha, animationValue);
+	
 	// Draw the feature list
 	ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 0.0f);
 	ImGui::PushStyleColor(ImGuiCol_FrameBg, ImVec4());
@@ -424,7 +421,7 @@ void FeatureListRenderer::RenderLeftColumn(
 
 		ImGui::EndListBox();
 	}
-	ImGui::PopStyleVar();
+	ImGui::PopStyleVar(2);  // Pop both Alpha and FrameBorderSize
 	ImGui::PopStyleColor();
 }
 
