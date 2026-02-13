@@ -561,9 +561,9 @@ float3 GetLightingColor(float3 msPosition, float3 worldPosition, float2 screenPo
 
 	float unusedSurfaceShadow;
 	float dirShadow = 1.0;
-	
+
 	const bool inWorld = (Permutation::ExtraShaderDescriptor & Permutation::ExtraFlags::InWorld);
-	
+
 	if (inWorld && !SharedData::InInterior)
 		ShadowSampling::Get3DFilteredShadow(worldPosition.xyz, viewDirection, screenPosition, eyeIndex, unusedSurfaceShadow);
 
