@@ -85,17 +85,16 @@ PS_OUTPUT main(PS_INPUT input)
 
 	// Upscale using linear sampling
 	psout.RefractionNormals = RefractionNormals.SampleLevel(LinearSampler, uv, 0);
-	float bilinearDepth = DepthTex.SampleLevel(LinearSampler, uv, 0);
+	psout.Depth = DepthTex.SampleLevel(LinearSampler, uv, 0);
 
-	float depthOut = bilinearDepth;
 #	if defined(VR)
-	float conservativeDepth = (useWideKernel > 0.5f) ? SampleMinDepth3x3(uv) : SampleMinDepth2x2(uv);
-	depthOut = conservativeDepth;
-#	endif
-
-	psout.Depth = depthOut;
+	float bilinearDepth = psout.Depth;
+	psout.Depth = (useWideKernel > 0.5f) ? SampleMinDepth3x3(uv) : SampleMinDepth2x2(uv);
 	// Keep SAO camera Z smooth to avoid over-occlusion; depth culling uses SV_Depth.
 	psout.SAOCameraZ = bilinearDepth;
+#	else
+	psout.SAOCameraZ = psout.Depth;
+#	endif
 
 	return psout;
 }
