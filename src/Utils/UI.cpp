@@ -361,7 +361,7 @@ namespace Util
 			categoryIcon = menu.landscape.texture;
 		} else if (strcmp(categoryName, "Water") == 0) {
 			categoryIcon = menu.water.texture;
-		} else if (strcmp(categoryName, "Debug") == 0) {
+		} else if (strcmp(categoryName, "Utility") == 0) {
 			categoryIcon = menu.debug.texture;
 		} else if (strcmp(categoryName, "Materials") == 0) {
 			categoryIcon = menu.materials.texture;
