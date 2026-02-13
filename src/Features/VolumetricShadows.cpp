@@ -126,8 +126,8 @@ void VolumetricShadows::CopyShadowData()
 					D3D11_TEXTURE2D_DESC srcDesc;
 					shadowTexture->GetDesc(&srcDesc);
 
-					uint32_t newWidth = srcDesc.Width / 4;
-					uint32_t newHeight = srcDesc.Height / 4;
+					uint32_t newWidth = srcDesc.Width / 8;
+					uint32_t newHeight = srcDesc.Height / 8;
 
 					// Lazily create or recreate downscaled texture if dimensions changed
 					if (!shadowCopyTexture || shadowCopyWidth != newWidth || shadowCopyHeight != newHeight) {
@@ -241,28 +241,33 @@ void VolumetricShadows::CopyShadowData()
 					}
 
 					// Dispatch downsample compute shader
-					ID3D11ShaderResourceView* csSrvs[1]{ shadowView };
-					context->CSSetShaderResources(0, 1, csSrvs);
+					auto renderer = globals::game::renderer;
+					auto& esramDepthStencil = renderer->GetDepthStencilData().depthStencils[RE::RENDER_TARGETS_DEPTHSTENCIL::kVOLUMETRIC_LIGHTING_SHADOWMAPS_ESRAM];
+
+					ID3D11ShaderResourceView* csSrvs[2]{ shadowView, esramDepthStencil.depthSRV };
+					context->CSSetShaderResources(0, 2, csSrvs);
 
 					context->CSSetSamplers(0, 1, &linearSampler);
 
-					auto shadowFullSize = newWidth * 2;
+					// Dispatch covers the full input: each thread gathers 2x2 input texels
+					auto dispatchSize = (srcDesc.Width / 2 + 7) / 8;
 
-					// Mip 0 with second cascade
+					// Mip 0 (cascade 1) - 8x downscale
 					ID3D11UnorderedAccessView* csUavs[1]{ shadowCopyMip0UAV };
 					context->CSSetUnorderedAccessViews(0, 1, csUavs, nullptr);
 					context->CSSetShader(downsampleShadowMip0CS, nullptr, 0);
-					context->Dispatch((shadowFullSize + 7) >> 3, (shadowFullSize + 7) >> 3, 1);
+					context->Dispatch(dispatchSize, dispatchSize, 1);
 
-					// Mip 1 with first cascade
+					// Mip 1 (cascade 0) - 16x downscale
 					csUavs[0] = shadowCopyMip1UAV;
 					context->CSSetUnorderedAccessViews(0, 1, csUavs, nullptr);
 					context->CSSetShader(downsampleShadowMip1CS, nullptr, 0);
-					context->Dispatch((shadowFullSize + 7) >> 3, (shadowFullSize + 7) >> 3, 1);
+					context->Dispatch(dispatchSize, dispatchSize, 1);
 
-					// Unbind shadow view before blur passes
+					// Unbind SRVs before blur passes
 					csSrvs[0] = nullptr;
-					context->CSSetShaderResources(0, 1, csSrvs);
+					csSrvs[1] = nullptr;
+					context->CSSetShaderResources(0, 2, csSrvs);
 					csUavs[0] = nullptr;
 					context->CSSetUnorderedAccessViews(0, 1, csUavs, nullptr);
 
