@@ -78,14 +78,8 @@ SceneSettingsManager::SettingType SceneSettingsManager::DetectSettingType(const 
 {
 	if (value.is_boolean())
 		return SettingType::Boolean;
-	if (value.is_number_integer()) {
-		// Many features use uint for GPU constant buffer alignment but display as checkboxes.
-		// Treat 0/1 integers as booleans to match their intended UI presentation.
-		auto intVal = value.get<int64_t>();
-		if (intVal == 0 || intVal == 1)
-			return SettingType::Boolean;
+	if (value.is_number_integer())
 		return SettingType::Integer;
-	}
 	if (value.is_number_float())
 		return SettingType::Float;
 	if (value.is_string())
@@ -153,8 +147,17 @@ void SceneSettingsManager::AddSetting(SceneType type, const std::string& feature
 			json& partial = savedExteriorSettings[added.featureShortName];
 			if (!partial.is_object())
 				partial = json::object();
-			if (!partial.contains(added.settingKey))
-				partial[added.settingKey] = added.value;
+
+			// Capture the feature's current value as the exterior baseline before applying the override
+			if (!partial.contains(added.settingKey)) {
+				auto* feature = FindFeatureByShortName(added.featureShortName);
+				if (feature) {
+					json currentSettings;
+					feature->SaveSettings(currentSettings);
+					if (currentSettings.contains(added.settingKey))
+						partial[added.settingKey] = currentSettings[added.settingKey];
+				}
+			}
 
 			// Only apply if no active overwrite exists for this key (overwrites take priority)
 			if (!HasActiveOverwrite(type, added.featureShortName, added.settingKey))
@@ -487,7 +490,10 @@ void SceneSettingsManager::SaveUserSettings(SceneType type)
 		std::ofstream file(path);
 		if (file.is_open()) {
 			file << data.dump(2);
-			logger::info("[SceneSettings] Saved {} {} user settings", data.size(), typeName);
+			if (file.fail())
+				logger::error("[SceneSettings] Write error saving {} settings (disk full or permissions issue)", typeName);
+			else
+				logger::info("[SceneSettings] Saved {} {} user settings", data.size(), typeName);
 		}
 	} catch (const std::exception& e) {
 		logger::error("[SceneSettings] Failed to save {} settings: {}", typeName, e.what());
@@ -552,6 +558,7 @@ void SceneSettingsManager::DiscoverOverwrites(SceneType type)
 
 	auto& vec = GetEntriesMut(type);
 	int filesFound = 0;
+	int overwritesLoaded = 0;
 	for (const auto& dirEntry : std::filesystem::directory_iterator(overwritesPath, ec)) {
 		if (!dirEntry.is_regular_file() || dirEntry.path().extension() != ".json")
 			continue;
@@ -631,13 +638,14 @@ void SceneSettingsManager::DiscoverOverwrites(SceneType type)
 			// Insert overwrites at the beginning so they appear first
 			vec.insert(vec.begin(), std::move(entry));
 
+			overwritesLoaded++;
 			logger::info("[SceneSettings] Loaded {} overwrite: {} -> {}.{}", typeName, filename, featureShortName, settingKey);
 		} catch (const std::exception& e) {
 			logger::error("[SceneSettings] Failed to load {} overwrite '{}': {}", typeName, dirEntry.path().filename().string(), e.what());
 		}
 	}
 
-	logger::info("[SceneSettings] {} overwrite discovery complete. Found {} JSON files, loaded {} overwrites", typeName, filesFound, vec.size());
+	logger::info("[SceneSettings] {} overwrite discovery complete. Found {} JSON files, loaded {} overwrites", typeName, filesFound, overwritesLoaded);
 }
 
 void SceneSettingsManager::LoadAll()

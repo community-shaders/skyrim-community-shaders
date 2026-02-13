@@ -731,14 +731,13 @@ void FeatureListRenderer::DrawMenuVisitor::RenderFeatureSettings(Feature* feat, 
 			bool sceneDisabled = sceneActive && !sceneManager->IsFeaturePaused(featureShortName);
 			if (sceneActive) {
 				bool scenePaused = sceneManager->IsFeaturePaused(featureShortName);
-				if (Util::FeatureToggle("##PauseSceneSettings", &scenePaused))
-					sceneManager->SetFeaturePaused(featureShortName, scenePaused);
+				bool sceneActive2 = !scenePaused;
+				if (Util::FeatureToggle("##PauseSceneSettings", &sceneActive2))
+					sceneManager->SetFeaturePaused(featureShortName, !sceneActive2);
 				ImGui::SameLine();
-				ImGui::Text("Pause Scene Specific Settings");
+				ImGui::Text("Scene Specific Settings");
 				if (auto _tt = Util::HoverTooltipWrapper()) {
-					ImGui::Text(
-						"Temporarily disable all scene-specific overrides (Interior Only, Time of Day, Weather)\n"
-						"for this feature. This state is not saved.");
+					ImGui::Text(scenePaused ? "Paused - click to resume" : "Active - click to pause");
 				}
 				ImGui::Separator();
 			}

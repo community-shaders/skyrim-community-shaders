@@ -50,7 +50,12 @@ public:
 				logger::error("[SceneSettings] UI event source not found");
 				return false;
 			}
-			ui->GetEventSource<RE::MenuOpenCloseEvent>()->AddEventSink(&singleton);
+			auto eventSource = ui->GetEventSource<RE::MenuOpenCloseEvent>();
+			if (!eventSource) {
+				logger::error("[SceneSettings] MenuOpenCloseEvent source not found");
+				return false;
+			}
+			eventSource->AddEventSink(&singleton);
 			logger::info("[SceneSettings] Registered MenuOpenCloseEventHandler");
 			return true;
 		}

@@ -341,8 +341,12 @@ namespace InteriorOnlyPanel
 			if (!overwriteIndices.empty())
 				ImGui::Separator();
 
-			for (auto i : userIndices)
+			for (auto i : userIndices) {
+				// Re-check bounds: a prior inline deletion may have shrunk the entries vector
+				if (i >= manager->GetEntries(kSceneType).size())
+					break;
 				DrawSettingEntry(i);
+			}
 		}
 	}
 }
