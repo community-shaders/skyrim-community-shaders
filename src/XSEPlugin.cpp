@@ -113,8 +113,16 @@ void MessageHandler(SKSE::MessagingInterface::Message* message)
 
 				auto shaderCache = globals::shaderCache;
 				shaderCache->menuLoaded = true;
-				while (shaderCache->IsCompiling() && !shaderCache->backgroundCompilation) {
+
+				auto* main = RE::Main::GetSingleton();
+
+				while (shaderCache->IsCompiling() && !shaderCache->backgroundCompilation && !(main && main->quitGame)) {
 					std::this_thread::sleep_for(100ms);
+				}
+
+				if (shaderCache->IsCompiling() && main && main->quitGame) {
+					logger::info("Game was closed before shader compilation finished");
+					break;
 				}
 
 				if (shaderCache->IsDiskCache()) {
