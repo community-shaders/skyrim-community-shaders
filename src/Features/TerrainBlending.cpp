@@ -168,6 +168,11 @@ bool IsDiagnosticSlot2GuardMode(const TerrainBlending& a_singleton)
 		return a_descriptor == kShadowmaskDepthDescriptor0 || a_descriptor == kShadowmaskDepthDescriptor1;
 	}
 
+	bool IsTbVrDepthCullingActive(const TerrainBlending& a_tb)
+	{
+		return globals::game::isVR && a_tb.loaded && a_tb.settings.Enabled && !ShouldUseBlendedDepthSRV();
+	}
+
 	bool IsSlot2CallerAllowlisted(const uint32_t a_callerRva)
 	{
 		for (const auto rva : kSlot2CallerAllowlistRvas) {
@@ -368,11 +373,7 @@ std::vector<FeatureConstraints::Constraint> TerrainBlending::GetActiveConstraint
 
 	// Only constrain when all requested conditions are active:
 	// VR + Terrain Blending enabled + runtime depth buffer culling enabled.
-	if (!loaded || !settings.Enabled || !globals::game::isVR) {
-		return constraints;
-	}
-
-	if (ShouldUseBlendedDepthSRV()) {
+	if (!IsTbVrDepthCullingActive(*this)) {
 		return constraints;
 	}
 
