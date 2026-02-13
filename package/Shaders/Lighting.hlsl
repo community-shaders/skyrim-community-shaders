@@ -2425,9 +2425,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	if ((Permutation::PixelShaderDescriptor & Permutation::LightingFlags::DefShadow) && (Permutation::PixelShaderDescriptor & Permutation::LightingFlags::ShadowDir)){
 		dirDetailedShadow *= shadowColor.x;
 
-#	if defined(VOLUMETRIC_SHADOWS)
-		dirDetailedShadow = min(dirDetailedShadow, dirSoftShadow);
-#	else
+#	if !defined(VOLUMETRIC_SHADOWS)
 		dirSoftShadow = dirDetailedShadow;
 #	endif
 	} else {
