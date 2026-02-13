@@ -42,16 +42,12 @@ namespace ShadowSampling
 		return worldShadow;
 	}
 
-	float Get3DFilteredShadow(float3 positionWS, float3 viewDirection, float2 screenPosition, uint eyeIndex, float depth, out float surfaceShadow)
+	float Get3DFilteredShadow(float3 positionWS, float3 viewDirection, float2 screenPosition, uint eyeIndex, out float surfaceShadow)
 	{
-		float screenDepth = SharedData::GetScreenDepth(depth);
-		float objectDepth = length(positionWS);
-		float maxDistance = max(0, screenDepth - objectDepth);
-
 	#if defined(EFFECT)
 		float viewRayLength = min(Permutation::EffectRadius * 0.2, 256);
 		float3 startPosition = positionWS - viewDirection * viewRayLength;
-		float3 endPosition = positionWS + viewDirection * min(viewRayLength, maxDistance);
+		float3 endPosition = positionWS + viewDirection * viewRayLength;
 	#elif defined(UNDERWATER)
 		float viewRayLength = 128.0;
 		float3 startPosition = positionWS;
@@ -59,7 +55,7 @@ namespace ShadowSampling
 	#else
 		float viewRayLength = 128.0;
 		float3 startPosition = positionWS;
-		float3 endPosition = positionWS + viewDirection * min(viewRayLength, maxDistance);
+		float3 endPosition = positionWS + viewDirection * viewRayLength;
 	#endif
 
 		float totalRayLength = distance(endPosition, startPosition);
