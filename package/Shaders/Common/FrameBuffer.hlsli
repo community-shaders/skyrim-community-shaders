@@ -53,6 +53,20 @@ namespace FrameBuffer
 #endif  // !VR
 	}
 
+	/**
+	 * @brief Clamps already dynamic-resolution-adjusted UVs to the valid render region.
+	 *
+	 * Use this when `screenPositionDR` has already been transformed into dynamic-resolution
+	 * space by custom math (for example, after jitter removal or other UV manipulation).
+	 * This function only clamps; it does not apply dynamic-resolution scaling.
+	 *
+	 * In VR, clamping is restricted to the current eye half to avoid cross-eye sampling.
+	 *
+	 * @param[in] screenPositionDR UVs already expressed in dynamic-resolution space.
+	 * @param[in] screenPosition Original normalized screen UVs (used to infer eye in VR).
+	 * @param[in] stereo Whether to apply stereo eye-half clamping in VR. Default is 1.
+	 * @return Clamped dynamic-resolution UVs.
+	 */
 	float2 ClampDynamicResolutionAdjustedScreenPosition(float2 screenPositionDR, float2 screenPosition, uint stereo = 1)
 	{
 		float2 minValue = 0;
@@ -71,22 +85,48 @@ namespace FrameBuffer
 		return clamp(screenPositionDR, minValue, maxValue);
 	}
 
+	/**
+	 * @brief Converts normalized screen UVs to dynamic-resolution UVs and clamps them.
+	 *
+	 * Use this when starting from regular screen UVs in [0, 1] that are not yet adjusted
+	 * for dynamic resolution.
+	 *
+	 * If UVs are already in dynamic-resolution space, use
+	 * `ClampDynamicResolutionAdjustedScreenPosition(...)` instead.
+	 *
+	 * @param[in] screenPosition Normalized screen UVs in non-DR space.
+	 * @param[in] stereo Whether to apply stereo eye-half clamping in VR. Default is 1.
+	 * @return Dynamic-resolution-adjusted and clamped UVs.
+	 */
 	float2 GetDynamicResolutionAdjustedScreenPosition(float2 screenPosition, uint stereo = 1)
 	{
 		float2 screenPositionDR = DynamicResolutionParams1.xy * screenPosition;
 		return ClampDynamicResolutionAdjustedScreenPosition(screenPositionDR, screenPosition, stereo);
 	}
 
+	/**
+	 * @brief float3 overload of `GetDynamicResolutionAdjustedScreenPosition(float2, uint)`.
+	 *
+	 * Applies dynamic-resolution adjustment/clamp to XY and preserves Z unchanged.
+	 */
 	float3 GetDynamicResolutionAdjustedScreenPosition(float3 screenPositionDR, uint stereo = 1)
 	{
 		return float3(GetDynamicResolutionAdjustedScreenPosition(screenPositionDR.xy, stereo), screenPositionDR.z);
 	}
 
+	/**
+	 * @brief Converts dynamic-resolution UVs back to normalized non-DR UVs.
+	 */
 	float2 GetDynamicResolutionUnadjustedScreenPosition(float2 screenPositionDR)
 	{
 		return screenPositionDR * DynamicResolutionParams2.xy;
 	}
 
+	/**
+	 * @brief float3 overload of `GetDynamicResolutionUnadjustedScreenPosition(float2)`.
+	 *
+	 * Converts XY back to non-DR UVs and preserves Z unchanged.
+	 */
 	float3 GetDynamicResolutionUnadjustedScreenPosition(float3 screenPositionDR)
 	{
 		return float3(GetDynamicResolutionUnadjustedScreenPosition(screenPositionDR.xy), screenPositionDR.z);
