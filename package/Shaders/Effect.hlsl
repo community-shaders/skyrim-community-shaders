@@ -560,7 +560,12 @@ float3 GetLightingColor(float3 msPosition, float3 worldPosition, float2 screenPo
 	float3 viewDirection = normalize(worldPosition.xyz);
 
 	float unusedSurfaceShadow;
-	float dirShadow = ShadowSampling::Get3DFilteredShadow(worldPosition.xyz, viewDirection, screenPosition, eyeIndex, unusedSurfaceShadow);
+	float dirShadow = 1.0;
+	
+	const bool inWorld = (Permutation::ExtraShaderDescriptor & Permutation::ExtraFlags::InWorld);
+	
+	if (inWorld && !SharedData::InInterior)
+		ShadowSampling::Get3DFilteredShadow(worldPosition.xyz, viewDirection, screenPosition, eyeIndex, unusedSurfaceShadow);
 
 	shadowVariance = 1.0 - sqrt(saturate(fwidth(dirShadow)));
 
@@ -615,20 +620,25 @@ float3 GetLightingShadow(float3 color, float3 worldPosition, float2 screenPositi
 	float3 startPosition = worldPosition - viewDirection * viewRayLength;
 	float3 endPosition = worldPosition + viewDirection * min(maxDistance, viewRayLength);
 
-	float shadow = 0;
-	for(uint i = 0; i < sampleCount; i++){
-		uint noisyIndex = uint((float(i) + sampleCount * noise) % sampleCount);
-		float t = (float(sampleCount) - float(noisyIndex + 1)) * rcpSampleCount;
-		float tSample = t + noiseTransform * rcpSampleCount;
+	float shadow = 1.0;
 
-		float3 samplePositionWS = lerp(startPosition, endPosition, tSample);
-		samplePositionWS.xy += mul(Random::SpiralSampleOffsets8[i], rotationMatrix) * 4096.0;
-		samplePositionWS.z += length(Random::SpiralSampleOffsets8[i]);
+	const bool inWorld = (Permutation::ExtraShaderDescriptor & Permutation::ExtraFlags::InWorld);
 
-		shadow += ShadowSampling::GetWorldShadow(samplePositionWS, FrameBuffer::CameraPosAdjust[eyeIndex].xyz, eyeIndex);
+	if (inWorld && !SharedData::InInterior){
+		for(uint i = 0; i < sampleCount; i++){
+			uint noisyIndex = uint((float(i) + sampleCount * noise) % sampleCount);
+			float t = (float(sampleCount) - float(noisyIndex + 1)) * rcpSampleCount;
+			float tSample = t + noiseTransform * rcpSampleCount;
+
+			float3 samplePositionWS = lerp(startPosition, endPosition, tSample);
+			samplePositionWS.xy += mul(Random::SpiralSampleOffsets8[i], rotationMatrix) * 4096.0;
+			samplePositionWS.z += length(Random::SpiralSampleOffsets8[i]);
+
+			shadow += ShadowSampling::GetWorldShadow(samplePositionWS, FrameBuffer::CameraPosAdjust[eyeIndex].xyz, eyeIndex);
+		}
+
+		shadow *= rcpSampleCount;
 	}
-
-	shadow *= rcpSampleCount;
 
 	shadowVariance = 1.0 - sqrt(saturate(fwidth(shadow)));
 
