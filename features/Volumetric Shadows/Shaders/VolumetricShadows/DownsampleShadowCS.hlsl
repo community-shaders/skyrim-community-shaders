@@ -2,8 +2,6 @@ Texture2DArray<float> InputTexture : register(t0);
 RWTexture2D<float2> OutputTexture : register(u0);
 SamplerState LinearSampler : register(s0);
 
-static const float VSM_MIN_BIAS = 0.5;
-
 float2 GetVSMMoments(in float depth)
 {
     return float2(depth, depth * depth);
@@ -11,10 +9,7 @@ float2 GetVSMMoments(in float depth)
 
 float2 ReduceMoments(float2 a, float2 b, float2 c, float2 d)
 {
-	float2 avg = (a + b + c + d) * 0.25;
-	float minDepth = min(min(a.x, b.x), min(c.x, d.x));
-	float2 minMoments = GetVSMMoments(minDepth);
-	return lerp(avg, minMoments, VSM_MIN_BIAS);
+	return (a + b + c + d) * 0.25;
 }
 
 groupshared float2 g_scratchDepths[8][8];
@@ -30,14 +25,11 @@ void main(uint3 dispatchThreadID : SV_DispatchThreadID, uint3 groupThreadID : SV
 
 	// Gather from cascade 1 and compute VSM moments
 	float4 depths = InputTexture.GatherRed(LinearSampler, float3(uv, 1));
-
-	float2 avg = 0;
+	
+	float2 vsmDepth = 0;
 	for(uint i = 0; i < 4; i++)
-		avg += GetVSMMoments(depths[i]);
-	avg *= 0.25;
-
-	float minDepth = min(min(depths.x, depths.y), min(depths.z, depths.w));
-	float2 vsmDepth = lerp(avg, GetVSMMoments(minDepth), VSM_MIN_BIAS);
+		vsmDepth += GetVSMMoments(depths[i]);
+	vsmDepth *= 0.25;
 
 	g_scratchDepths[groupThreadID.x][groupThreadID.y] = vsmDepth;
 
@@ -66,13 +58,10 @@ void main(uint3 dispatchThreadID : SV_DispatchThreadID, uint3 groupThreadID : SV
 	// Gather from cascade 0 and compute VSM moments
 	float4 depths = InputTexture.GatherRed(LinearSampler, float3(uv, 0));
 
-	float2 avg = 0;
+	float2 vsmDepth = 0;
 	for(uint i = 0; i < 4; i++)
-		avg += GetVSMMoments(depths[i]);
-	avg *= 0.25;
-
-	float minDepth = min(min(depths.x, depths.y), min(depths.z, depths.w));
-	float2 vsmDepth = lerp(avg, GetVSMMoments(minDepth), VSM_MIN_BIAS);
+		vsmDepth += GetVSMMoments(depths[i]);
+	vsmDepth *= 0.25;
 
 	g_scratchDepths[groupThreadID.x][groupThreadID.y] = vsmDepth;
 
