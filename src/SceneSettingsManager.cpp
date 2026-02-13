@@ -33,22 +33,12 @@ std::filesystem::path SceneSettingsManager::GetOverwritesPath(SceneType type)
 
 Feature* SceneSettingsManager::FindFeatureByShortName(const std::string& shortName)
 {
-	for (auto* feature : Feature::GetFeatureList()) {
-		if (feature->loaded && feature->GetShortName() == shortName)
-			return feature;
-	}
-	return nullptr;
+	return Feature::FindFeatureByShortName(shortName);
 }
 
 std::vector<std::string> SceneSettingsManager::GetLoadedFeatureNames()
 {
-	std::vector<std::string> names;
-	for (auto* feature : Feature::GetFeatureList()) {
-		if (feature->loaded && feature->IsInMenu())
-			names.push_back(feature->GetShortName());
-	}
-	std::sort(names.begin(), names.end());
-	return names;
+	return Feature::GetLoadedFeatureNames();
 }
 
 std::vector<std::string> SceneSettingsManager::GetFeatureSettingKeys(const std::string& featureShortName)
