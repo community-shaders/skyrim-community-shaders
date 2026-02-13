@@ -1636,6 +1636,12 @@ void EditorWindow::PerformUndo()
 
 void EditorWindow::ShowNotification(const std::string& message, const ImVec4& color, float duration)
 {
+	// Guard against calls before ImGui is initialized
+	if (!ImGui::GetCurrentContext()) {
+		logger::warn("ShowNotification called before ImGui initialization: {}", message);
+		return;
+	}
+
 	Notification notif;
 	notif.message = message;
 	notif.color = color;
@@ -1646,6 +1652,11 @@ void EditorWindow::ShowNotification(const std::string& message, const ImVec4& co
 
 void EditorWindow::RenderNotifications()
 {
+	// Guard against calls before ImGui is initialized
+	if (!ImGui::GetCurrentContext()) {
+		return;
+	}
+
 	float currentTime = static_cast<float>(ImGui::GetTime());
 	float yOffset = 10.0f;
 
