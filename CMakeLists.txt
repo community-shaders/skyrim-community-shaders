@@ -72,13 +72,12 @@ find_package(cppwinrt CONFIG REQUIRED)
 find_package(unordered_dense CONFIG REQUIRED)
 find_package(efsw CONFIG REQUIRED)
 find_package(Tracy CONFIG REQUIRED)
+find_package(directx-headers CONFIG REQUIRED)
 add_subdirectory(${CMAKE_SOURCE_DIR}/cmake/Streamline)
 
 find_path(DETOURS_INCLUDE_DIRS "detours/detours.h")
 find_library(DETOURS_LIBRARY detours REQUIRED)
 include(FidelityFX-SDK)
-
-include(CreationEngineRaytracing)
 
 target_compile_definitions(
     ${PROJECT_NAME}
@@ -110,7 +109,6 @@ target_include_directories(
 target_link_libraries(
     ${PROJECT_NAME}
     PRIVATE
-        Microsoft::DirectX-Headers
         Microsoft::CppWinRT
         magic_enum::magic_enum
         xbyak::xbyak
@@ -125,6 +123,7 @@ target_link_libraries(
         Tracy::TracyClient
         Streamline
         d3d12.lib
+        Microsoft::DirectX-Headers
         ${DETOURS_LIBRARY}
 )
 

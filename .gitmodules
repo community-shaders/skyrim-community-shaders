@@ -7,6 +7,3 @@
 [submodule "extern/FidelityFX-SDK"]
 	path = extern/FidelityFX-SDK
 	url = https://github.com/MapleHinata/FidelityFX-SDK
-[submodule "extern/CreationEngineRaytracing"]
-	path = extern/CreationEngineRaytracing
-	url = https://github.com/Gistix/CreationEngineRaytracing.git

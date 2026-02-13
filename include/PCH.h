@@ -121,9 +121,6 @@ namespace util
 #include <wrl/client.h>
 #include <wrl/event.h>
 
-// Ensures the newer headers are imported from DirectX-Headers instead of relying on possibly outdated Windows SDK
-#include <directx/d3d12.h>
-
 #include <DirectXColors.h>
 #include <DirectXMath.h>
 
