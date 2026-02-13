@@ -33,6 +33,7 @@
 #include "Features/WaterEffects.h"
 #include "Features/WeatherEditor.h"
 #include "Features/WetnessEffects.h"
+#include "Features/Raytracing.h"
 #include "Menu.h"
 #include "SettingsOverrideManager.h"
 #include "Utils/Format.h"
@@ -233,7 +234,8 @@ const std::vector<Feature*>& Feature::GetFeatureList()
 		&globals::features::renderDoc,
 		&globals::features::weatherEditor,
 		&globals::features::linearLighting,
-		&globals::features::unifiedWater
+		&globals::features::unifiedWater,
+		&globals::features::raytracing
 	};
 
 	if (REL::Module::IsVR()) {

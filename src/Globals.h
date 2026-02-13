@@ -30,6 +30,7 @@ struct WetnessEffects;
 struct ExtendedTranslucency;
 struct Upscaling;
 struct WeatherEditor;
+struct Raytracing;
 
 class State;
 class Deferred;
@@ -85,6 +86,7 @@ namespace globals
 		extern Upscaling upscaling;
 		extern RenderDoc renderDoc;
 		extern WeatherEditor weatherEditor;
+		extern Raytracing raytracing;
 
 		namespace llf
 		{

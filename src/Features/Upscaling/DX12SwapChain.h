@@ -61,7 +61,7 @@ public:
 class DX12SwapChain
 {
 public:
-	winrt::com_ptr<ID3D12Device> d3d12Device;
+	winrt::com_ptr<ID3D12Device5> d3d12Device;
 	winrt::com_ptr<ID3D12CommandQueue> commandQueue;
 	winrt::com_ptr<ID3D12CommandAllocator> commandAllocators[2];
 	winrt::com_ptr<ID3D12GraphicsCommandList4> commandLists[2];

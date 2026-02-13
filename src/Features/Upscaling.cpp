@@ -12,6 +12,7 @@
 #include <algorithm>
 #include <directx/d3dx12.h>
 #include <format>
+#include "Features/Raytracing.h"
 
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	Upscaling::Settings,
@@ -108,6 +109,12 @@ HRESULT WINAPI hk_D3D11CreateDeviceAndSwapChainUpscaling(
 			upscaling.CreateProxySwapChain(pAdapter, *pSwapChainDesc);
 			upscaling.CreateProxyInterop();
 
+			auto& rt = globals::features::raytracing;
+			if (rt.loaded) {
+				rt.InitializeCERaytracing(Upscaling::dx12SwapChain.d3d12Device.get(), Upscaling::dx12SwapChain.commandQueue.get());
+				//rt.CreateD3D12Device(*ppDevice, *ppImmediateContext, pAdapter);
+			}
+
 			*ppSwapChain = upscaling.GetProxySwapChain();
 
 			upscaling.d3d12SwapChainActive = true;
@@ -138,6 +145,11 @@ HRESULT WINAPI hk_D3D11CreateDeviceAndSwapChainUpscaling(
 		ppDevice,
 		pFeatureLevel,
 		ppImmediateContext);
+
+	auto& rt = globals::features::raytracing;
+	if (rt.loaded) {
+		rt.CreateD3D12Device(*ppDevice, *ppImmediateContext, pAdapter);
+	}
 
 	if (upscaling.IsBackendInitialized()) {
 		upscaling.UpgradeBackendInterface((void**)&(*ppDevice));

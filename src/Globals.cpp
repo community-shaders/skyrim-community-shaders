@@ -32,6 +32,7 @@
 #include "Features/WaterEffects.h"
 #include "Features/WeatherEditor.h"
 #include "Features/WetnessEffects.h"
+#include "Features/Raytracing.h"
 #include "Menu.h"
 #include "ShaderCache.h"
 #include "State.h"
@@ -80,6 +81,7 @@ namespace globals
 		Upscaling upscaling{};
 		RenderDoc renderDoc{};
 		WeatherEditor weatherEditor{};
+		Raytracing raytracing{};
 
 		namespace llf
 		{
