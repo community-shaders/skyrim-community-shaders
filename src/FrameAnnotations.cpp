@@ -1,5 +1,8 @@
 #include "FrameAnnotations.h"
 
+#include <atomic>
+
+#include "Features/TerrainBlending.h"
 #include "State.h"
 
 #pragma comment(lib, "dxguid.lib")
@@ -8,6 +11,9 @@ namespace FrameAnnotations
 {
 	namespace
 	{
+		std::atomic_uint32_t renderShadowmasksPhaseDepth{ 0 };
+		std::atomic_bool renderShadowmasksHookInstalled{ false };
+
 		static std::string BuildEventName(RE::ImageSpaceManager::ImageSpaceEffectEnum EffectType)
 		{
 			auto enumName = RE::ImageSpaceManager::GetImageSpaceEffectName(EffectType);
@@ -209,14 +215,26 @@ namespace FrameAnnotations
 	{
 		static void thunk(bool a1)
 		{
+			renderShadowmasksPhaseDepth.fetch_add(1, std::memory_order_relaxed);
+
 			globals::state->BeginPerfEvent("Shadowmasks");
 
 			func(a1);
 
 			globals::state->EndPerfEvent();
+
+			const uint32_t remaining = renderShadowmasksPhaseDepth.fetch_sub(1, std::memory_order_relaxed) - 1;
+			if (remaining == 0) {
+				globals::features::terrainBlending.OnShadowmaskPhaseEnd();
+			}
 		};
 		static inline REL::Relocation<decltype(thunk)> func;
 	};
+
+	bool IsInRenderShadowmasksPhase()
+	{
+		return renderShadowmasksPhaseDepth.load(std::memory_order_relaxed) != 0;
+	}
 
 	struct Main_RenderWorld
 	{
@@ -335,6 +353,10 @@ namespace FrameAnnotations
 
 	void OnPostPostLoad()
 	{
+		if (!renderShadowmasksHookInstalled.exchange(true, std::memory_order_relaxed)) {
+			stl::detour_thunk<Main_RenderShadowmasks>(REL::RelocationID(100422, 107140));
+		}
+
 		if (!globals::state->frameAnnotations)
 			return;
 
@@ -996,7 +1018,6 @@ namespace FrameAnnotations
 
 		stl::detour_thunk<BSBatchRenderer_RenderBatches>(REL::RelocationID(100852, 107642));
 		stl::detour_thunk<Main_RenderDepth>(REL::RelocationID(100421, 107139));
-		stl::detour_thunk<Main_RenderShadowmasks>(REL::RelocationID(100422, 107140));
 		stl::detour_thunk<Main_RenderWorld>(REL::RelocationID(100424, 107142));
 		stl::detour_thunk<Main_RenderFirstPersonView>(REL::RelocationID(100411, 107129));
 		stl::detour_thunk<Main_RenderPlayerView>(REL::RelocationID(35560, 36559));

@@ -22,10 +22,24 @@ public:
 	virtual bool SupportsVR() override { return true; }
 	virtual std::vector<FeatureConstraints::Constraint> GetActiveConstraints() const override;
 
+	enum class DepthOverridePath : uint32_t
+	{
+		GlobalDraw = 0,
+		EngineHook = 1
+	};
+
+	enum class Slot2GuardMode : uint32_t
+	{
+		Production = 0,
+		Diagnostic = 1
+	};
+
 	struct Settings
 	{
 		uint32_t Enabled = true;
-		uint32_t pad[3];
+		uint32_t OverridePath = static_cast<uint32_t>(DepthOverridePath::GlobalDraw);
+		uint32_t Slot2GuardModeValue = static_cast<uint32_t>(Slot2GuardMode::Production);
+		uint32_t pad[1];
 	};
 	STATIC_ASSERT_ALIGNAS_16(Settings);
 
@@ -86,6 +100,11 @@ public:
 	virtual void ClearShaderCache() override;
 
 	void RenderTerrainBlendingPasses();
+	void OnBeginTechnique(RE::BSShader* a_shader, uint32_t a_pixelDescriptor, uint32_t a_callerRva = 0);
+	void OnShadowmaskPhaseEnd();
+	void OnUtilitySetupGeometry(RE::BSShader* a_shader, RE::BSRenderPass* a_pass, uint32_t a_renderFlags, uint32_t a_callerRva = 0);
+	void OnShaderPropertySetupGeometry(RE::BSShaderProperty* a_shaderProperty, RE::BSGeometry* a_geometry, bool a_result, uint32_t a_callerRva = 0);
+	void OnSetDirtyStates(bool a_isCompute, uint32_t a_callerRva = 0);
 
 	struct Hooks
 	{
@@ -101,6 +120,18 @@ public:
 			static inline REL::Relocation<decltype(thunk)> func;
 		};
 
+		struct BSUtilityShader_SetupGeometry
+		{
+			static void thunk(RE::BSShader* a_shader, RE::BSRenderPass* a_pass, uint32_t a_renderFlags);
+			static inline REL::Relocation<decltype(thunk)> func;
+		};
+
+		struct BSShaderProperty_SetupGeometry
+		{
+			static bool thunk(RE::BSShaderProperty* a_shaderProperty, RE::BSGeometry* a_geometry);
+			static inline REL::Relocation<decltype(thunk)> func;
+		};
+
 		static void Install()
 		{
 			// To know when we are rendering z-prepass depth vs shadows depth
@@ -108,6 +139,12 @@ public:
 
 			// To manipulate the depth buffer write, depth testing, alpha blending
 			stl::write_thunk_call<BSBatchRenderer__RenderPassImmediately>(REL::RelocationID(100852, 107642).address() + REL::Relocate(0x29E, 0x28F));
+
+			// Engine path: late Utility setup hook so slot rebinding survives to draw.
+			stl::write_vfunc<0x6, BSUtilityShader_SetupGeometry>(RE::VTABLE_BSUtilityShader[0]);
+
+			// Engine path: even later material/property setup hook for final slot correction.
+			stl::write_vfunc<0x27, BSShaderProperty_SetupGeometry>(RE::VTABLE_BSShaderProperty[0]);
 
 			logger::info("[Terrain Blending] Installed hooks");
 		}
