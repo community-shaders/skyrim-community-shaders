@@ -530,6 +530,11 @@ cbuffer PerGeometry : register(b2)
 #		include "IBL/IBL.hlsli"
 #	endif
 
+#	if defined(EXP_HEIGHT_FOG)
+#		define SampColorSampler SampBaseSampler
+#		include "ExponentialHeightFog/ExponentialHeightFog.hlsli"
+#	endif
+
 #	include "Common/ShadowSampling.hlsli"
 
 float ComputeShadowVariance(float shadow)
@@ -552,6 +557,13 @@ float3 GetLightingColor(float3 msPosition, float3 worldPosition, float4 screenPo
 	if ((Permutation::ExtraShaderDescriptor & Permutation::ExtraFlags::EffectShadows)) {
 		float llDirLightMult = (SharedData::linearLightingSettings.enableLinearLighting && !SharedData::linearLightingSettings.isDirLightLinear) ? SharedData::linearLightingSettings.dirLightMult : 1.0f;
 		float3 dirLightColor = Color::DirectionalLight(SharedData::DirLightColor.xyz / max(llDirLightMult, 1e-5), SharedData::linearLightingSettings.isDirLightLinear) * llDirLightMult * 0.5 * Color::EffectLightingMult();
+
+#		if defined(EXP_HEIGHT_FOG)
+	if (SharedData::exponentialHeightFogSettings.enabled) {
+		dirLightColor *= ExponentialHeightFog::GetSunlightFogAttenuation(worldPosition.xyz, FrameBuffer::CameraPosAdjust[eyeIndex].xyz);
+	}
+#		endif
+
 		float3 ambientColor = max(0, mul(SharedData::DirectionalAmbient, float4(0, 0, 1, 1)));
 
 #		if defined(IBL)
@@ -825,19 +837,34 @@ PS_OUTPUT main(PS_INPUT input)
 	}
 #	endif
 
+	lightColor = Color::EffectMult(lightColor);
+
 #	if !defined(MOTIONVECTORS_NORMALS)
-#		if defined(ADDBLEND)
-	float3 blendedColor = lightColor * (1 - Color::FogAlpha(input.FogParam.w).xxx);
-#		elif defined(MULTBLEND) || defined(MULTBLEND_DECAL)
-	float3 blendedColor = lerp(lightColor, 1.0.xxx, saturate(1.5 * Color::FogAlpha(input.FogParam.w)).xxx);
-#		else
+	float fogFactor = Color::FogAlpha(input.FogParam.w);
 	float3 fogColor = Color::Fog(input.FogParam.xyz);
-#			if defined(IBL)
+#		if defined(IBL)
 	if (SharedData::iblSettings.EnableDiffuseIBL && !SharedData::InInterior) {
 		fogColor = ImageBasedLighting::GetFogIBLColor(fogColor);
 	}
+#		endif
+#		if defined(EXP_HEIGHT_FOG)
+	if (SharedData::exponentialHeightFogSettings.enabled) {
+		float4 exponentialHeightFog = ExponentialHeightFog::GetExponentialHeightFog(input.WorldPosition.xyz, FrameBuffer::CameraPosAdjust[eyeIndex].xyz, fogColor);
+#			if defined(ADDBLEND) || defined(MULTBLEND) || defined(MULTBLEND_DECAL)
+		fogColor = exponentialHeightFog.xyz;
+		fogFactor = exponentialHeightFog.w;
+#			else
+		fogColor = lightColor;
+		alpha *= 1 - exponentialHeightFog.w;
 #			endif
-	float3 blendedColor = lerp(lightColor, fogColor, Color::FogAlpha(input.FogParam.w).xxx);
+	}
+#		endif
+#		if defined(ADDBLEND)
+	float3 blendedColor = lightColor * (1 - fogFactor);
+#		elif defined(MULTBLEND) || defined(MULTBLEND_DECAL)
+	float3 blendedColor = lerp(lightColor, 1.0.xxx, saturate(1.5 * fogFactor).xxx);
+#		else
+	float3 blendedColor = lerp(lightColor, fogColor, fogFactor.xxx);
 #		endif
 #	else
 	float3 blendedColor = lightColor.xyz;
@@ -845,7 +872,7 @@ PS_OUTPUT main(PS_INPUT input)
 
 	alpha = Color::EffectAlpha(alpha);
 
-	float4 finalColor = float4(Color::EffectMult(blendedColor), alpha);
+	float4 finalColor = float4(blendedColor, alpha);
 #	if defined(MULTBLEND_DECAL)
 	finalColor.xyz *= alpha;
 #	else
