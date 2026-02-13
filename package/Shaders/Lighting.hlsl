@@ -2415,7 +2415,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 		dirDetailedShadow *= shadowColor.x;
 
 #	if defined(VOLUMETRIC_SHADOWS)
-		dirSoftShadow = max(dirSoftShadow, dirDetailedShadow);
+		dirDetailedShadow = min(dirDetailedShadow, dirSoftShadow);
 #	else
 		dirSoftShadow = dirDetailedShadow;
 #	endif
