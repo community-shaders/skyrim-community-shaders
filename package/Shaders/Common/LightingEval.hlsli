@@ -123,7 +123,7 @@ void EvaluateLighting(DirectContext context, MaterialProperties material, float3
 #		if defined(BACK_LIGHTING)
 	lightingOutput.diffuse += softLightColor * saturate(-NdotL) * material.backLightColor * Color::VanillaNormalization();
 #		endif
-    lightingOutput.specular = VanillaSpecular(context, material.Shininess, uv) * material.SpecularColor * material.Glossiness * context.lightColor * Color::VanillaNormalization();
+	lightingOutput.specular = VanillaSpecular(context, material.Shininess, uv) * material.SpecularColor * material.Glossiness * diffuseLightColor * Color::VanillaNormalization();
 #endif
 }
 
