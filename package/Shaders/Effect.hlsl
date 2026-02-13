@@ -615,7 +615,7 @@ float3 GetLightingShadow(float3 color, float3 worldPosition, float2 screenPositi
 
 	// Enough for sky statics
 	float maxDistance = max(0, SharedData::GetScreenDepth(depth));
-	float viewRayLength = 4096.0;
+	float viewRayLength = 2048.0;
 	float3 viewDirection = normalize(worldPosition);
 	float3 startPosition = worldPosition - viewDirection * viewRayLength;
 	float3 endPosition = worldPosition + viewDirection * min(maxDistance, viewRayLength);
