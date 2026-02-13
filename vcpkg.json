@@ -5,18 +5,15 @@
     "features": {
         "commonlibsse-ng": {
             "description": "Dependencies of clib-ng",
-            "dependencies": [ "catch2", "fmt", "directxtk", "rapidcsv", "spdlog" ]
-        },
-        "creationengineraytracing": {
-            "description": "Dependencies of Creation Engine Raytracing",
-            "dependencies": [ "eastl", "directxtk", "cppwinrt", "directx-dxc", "spdlog" ]
+            "dependencies": ["catch2", "fmt", "directxtk", "rapidcsv", "spdlog"]
         }
     },
-    "default-features": [ "commonlibsse-ng", "creationengineraytracing" ],
+    "default-features": ["commonlibsse-ng"],
     "dependencies": [
         "bshoshany-thread-pool",
         "clib-util",
         "cppwinrt",
+        "directx-headers",
         "directxtex",
         "eastl",
         "efsw",
@@ -54,6 +51,10 @@
         {
             "name": "tracy",
             "version": "0.13.1"
+        },
+        {
+            "name": "directx-headers",
+            "version": "1.606.4"
         }
     ],
     "builtin-baseline": "7a6bb52bfd8eba088f8bf5cae70ca8d81503e42e"
