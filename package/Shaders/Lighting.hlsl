@@ -2898,7 +2898,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	color.xyz = lerp(color.xyz, (diffuseColor + directionalAmbientColor * skylightingDiffuse) * vertexColor * layerColor, mlpBlendFactor);
 #else
 	color.xyz = lerp(color.xyz, (diffuseColor + directionalAmbientColor) * vertexColor * layerColor, mlpBlendFactor);
-#endif	
+#endif
 
 	indirectLobeWeights.diffuse *= 1.0 - mlpBlendFactor;
 #	endif  // MULTI_LAYER_PARALLAX
