@@ -196,13 +196,14 @@ void WeatherEditor::DrawWeatherStatusPanel()
 
 	auto weatherManager = WeatherManager::GetSingleton();
 	auto currentWeathers = weatherManager->GetCurrentWeathers();
+	const auto& theme = Menu::GetSingleton()->GetTheme();
 
 	if (currentWeathers.currentWeather) {
 		// Show if weather has custom settings
 		if (weatherManager->HasWeatherSettings(currentWeathers.currentWeather)) {
-			ImGui::TextColored({ 0.0f, 1.0f, 0.0f, 1.0f }, "Has Custom Settings");
+			ImGui::TextColored(theme.StatusPalette.SuccessColor, "Has Custom Settings");
 		} else {
-			ImGui::TextColored({ 0.7f, 0.7f, 0.7f, 1.0f }, "Using Default Settings");
+			ImGui::TextColored(theme.StatusPalette.Disable, "Using Default Settings");
 		}
 
 		// Show what the current weather is
@@ -240,7 +241,7 @@ void WeatherEditor::DrawWeatherStatusPanel()
 		}
 
 	} else {
-		ImGui::TextColored({ 1.0f, 0.5f, 0.0f, 1.0f }, "No Active Weather");
+		ImGui::TextColored(theme.StatusPalette.Warning, "No Active Weather");
 	}
 }
 
