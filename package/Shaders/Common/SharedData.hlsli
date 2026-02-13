@@ -239,6 +239,21 @@ namespace SharedData
 		uint3 _padding;
 	};
 
+	struct ExponentialHeightFogSettings
+	{
+		uint enabled;
+		uint useDynamicCubemaps;
+		float startDistance;
+		float fogHeight;
+		float fogHeightFalloff;
+		float fogDensity;
+		float directionalInscatteringMultiplier;
+		float directionalInscatteringExponent;
+		float4 inscatteringTint;
+		float cubemapMipLevel;
+		float3 pad;
+	};
+
 	cbuffer FeatureData : register(b6)
 	{
 		GrassLightingSettings grassLightingSettings;
@@ -256,6 +271,7 @@ namespace SharedData
 		ExtendedTranslucencySettings extendedTranslucencySettings;
 		LinearLightingSettings linearLightingSettings;
 		TerrainBlendingSettings terrainBlendingSettings;
+		ExponentialHeightFogSettings exponentialHeightFogSettings;
 	};
 
 	Texture2D<float4> DepthTexture : register(t17);
