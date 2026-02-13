@@ -510,6 +510,10 @@ void HDR::SetupResources()
 	cachedDisplayMaxLuminance = GetDisplayMaxLuminance();
 	logger::info("[HDR] Display reports max luminance: {:.0f} nits", cachedDisplayMaxLuminance);
 
+	// Set up swap chain color space BEFORE querying format and creating textures
+	// This ensures outputTexture matches the actual swap chain format for CopyResource
+	UpdateSwapChainColorSpace();
+
 	auto renderer = globals::game::renderer;
 	auto& main = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMAIN];
 
@@ -581,9 +585,6 @@ void HDR::SetupResources()
 	hdrDataCB = new ConstantBuffer(ConstantBufferDesc<HDRDataCB>());
 
 	UpdateHDRData();
-
-	// Set up color space on D3D11 swap chain based on enableHDR setting (when not using Frame Gen)
-	UpdateSwapChainColorSpace();
 
 	// Eagerly compile compute shaders so availability is known before first frame
 	GetHDROutputCS();
