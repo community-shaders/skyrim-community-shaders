@@ -497,8 +497,6 @@ void HDR::RestoreDefaultSettings()
 
 void HDR::SetupResources()
 {
-	logger::info("[HDR] SetupResources called");
-
 	// Clean up existing resources to prevent memory leaks on re-initialization
 	if (hdrTexture || outputTexture || uiTexture || hdrDataCB) {
 		DestroyResources();
@@ -508,7 +506,6 @@ void HDR::SetupResources()
 
 	// Cache display max luminance for UI display
 	cachedDisplayMaxLuminance = GetDisplayMaxLuminance();
-	logger::info("[HDR] Display reports max luminance: {:.0f} nits", cachedDisplayMaxLuminance);
 
 	// Set up swap chain color space BEFORE querying format and creating textures
 	// This ensures outputTexture matches the actual swap chain format for CopyResource
@@ -530,7 +527,6 @@ void HDR::SetupResources()
 	DXGI_SWAP_CHAIN_DESC scDesc;
 	if (SUCCEEDED(globals::d3d::swapChain->GetDesc(&scDesc))) {
 		swapChainFormat = scDesc.BufferDesc.Format;
-		logger::info("[HDR] Swap chain format: {}", static_cast<int>(swapChainFormat));
 	}
 
 	// Intermediate texture for HDR processing
@@ -589,48 +585,19 @@ void HDR::SetupResources()
 	// Eagerly compile compute shaders so availability is known before first frame
 	GetHDROutputCS();
 	GetUIBrightnessCS();
-
-	logger::info("[HDR] SetupResources complete - hdrDataCB={}, hdrTexture={}, outputTexture={}, hdrOutputCS={}, uiBrightnessCS={}",
-		hdrDataCB ? "valid" : "NULL",
-		hdrTexture ? "valid" : "NULL",
-		outputTexture ? "valid" : "NULL",
-		hdrOutputCS ? "valid" : "NULL",
-		uiBrightnessCS ? "valid" : "NULL");
 }
 
 void HDR::BeginUIRendering()
 {
 	// Skip if D3D12 frame gen is active - it has its own UI buffer handling
-	if (globals::features::upscaling.d3d12SwapChainActive) {
-		static bool loggedOnce = false;
-		if (!loggedOnce) {
-			logger::info("[HDR] BeginUIRendering skipped - d3d12SwapChainActive");
-			loggedOnce = true;
-		}
+	if (globals::features::upscaling.d3d12SwapChainActive)
 		return;
-	}
 
-	// Prevent re-entrance - if already rendering UI, skip to avoid leak
-	if (renderingUI) {
+	if (renderingUI)
 		return;
-	}
 
-	if (!uiTexture || !uiTexture->rtv) {
-		static bool loggedOnce = false;
-		if (!loggedOnce) {
-			logger::warn("[HDR] BeginUIRendering skipped - uiTexture={}, rtv={}",
-				uiTexture ? "valid" : "NULL",
-				(uiTexture && uiTexture->rtv) ? "valid" : "NULL");
-			loggedOnce = true;
-		}
+	if (!uiTexture || !uiTexture->rtv)
 		return;
-	}
-
-	static bool loggedOnce = false;
-	if (!loggedOnce) {
-		logger::info("[HDR] BeginUIRendering - setting uiTexture as render target for ImGui");
-		loggedOnce = true;
-	}
 
 	auto context = globals::d3d::context;
 
@@ -661,20 +628,8 @@ void HDR::EndUIRendering()
 	if (globals::features::upscaling.d3d12SwapChainActive)
 		return;
 
-	if (!renderingUI) {
-		static bool loggedOnce = false;
-		if (!loggedOnce) {
-			logger::warn("[HDR] EndUIRendering called but renderingUI=false");
-			loggedOnce = true;
-		}
+	if (!renderingUI)
 		return;
-	}
-
-	static bool loggedOnce = false;
-	if (!loggedOnce) {
-		logger::info("[HDR] EndUIRendering - restoring render target, UI captured");
-		loggedOnce = true;
-	}
 
 	auto context = globals::d3d::context;
 
@@ -709,8 +664,7 @@ void HDR::RedirectFramebuffer()
 	// Save originals
 	savedFramebufferTexture = fb.texture;
 	savedFramebufferSRV = fb.SRV;
-	if (!savedFramebufferRTV)
-		savedFramebufferRTV = fb.RTV;
+	savedFramebufferRTV = fb.RTV;
 
 	// Redirect to hdrTexture (R16G16B16A16_FLOAT) so ISHDR can write values >1.0
 	fb.texture = reinterpret_cast<ID3D11Texture2D*>(hdrTexture->resource.get());
@@ -729,10 +683,11 @@ void HDR::RestoreFramebuffer()
 
 	fb.texture = savedFramebufferTexture;
 	fb.SRV = savedFramebufferSRV;
-	// RTV restored later by ClearUIBuffer or kept for UI redirect
+	fb.RTV = savedFramebufferRTV;
 
 	savedFramebufferTexture = nullptr;
 	savedFramebufferSRV = nullptr;
+	savedFramebufferRTV = nullptr;
 	framebufferRedirected = false;
 }
 
@@ -751,18 +706,8 @@ void HDR::SetUIBuffer()
 		return;
 
 	// Skip if resources aren't ready
-	if (!uiTexture || !uiTexture->rtv || !hdrDataCB || !outputTexture) {
-		static bool loggedOnce = false;
-		if (!loggedOnce) {
-			logger::warn("[HDR] SetUIBuffer skipped - resources not ready: uiTexture={}, rtv={}, hdrDataCB={}, outputTexture={}",
-				uiTexture ? "valid" : "NULL",
-				(uiTexture && uiTexture->rtv) ? "valid" : "NULL",
-				hdrDataCB ? "valid" : "NULL",
-				outputTexture ? "valid" : "NULL");
-			loggedOnce = true;
-		}
+	if (!uiTexture || !uiTexture->rtv || !hdrDataCB || !outputTexture)
 		return;
-	}
 
 	// Redirect kFRAMEBUFFER.RTV to our UI texture so vanilla UI renders to it
 	auto& data = globals::game::renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGET::kFRAMEBUFFER];
@@ -779,12 +724,6 @@ void HDR::SetUIBuffer()
 	// Redirect to our UI texture
 	data.RTV = uiTexture->rtv.get();
 	globals::d3d::context->OMSetRenderTargets(1, &data.RTV, nullptr);
-
-	static bool loggedOnce = false;
-	if (!loggedOnce) {
-		logger::info("[HDR] SetUIBuffer - redirected kFRAMEBUFFER.RTV to uiTexture");
-		loggedOnce = true;
-	}
 }
 
 void HDR::ClearUIBuffer()
@@ -812,17 +751,8 @@ void HDR::ApplyHDR()
 {
 	std::lock_guard<std::mutex> lock(settingsMutex);
 
-	if (!hdrDataCB || !hdrTexture || !outputTexture) {
-		static bool loggedOnce = false;
-		if (!loggedOnce) {
-			logger::warn("[HDR] ApplyHDR early return: hdrDataCB={}, hdrTexture={}, outputTexture={}",
-				hdrDataCB ? "valid" : "NULL",
-				hdrTexture ? "valid" : "NULL",
-				outputTexture ? "valid" : "NULL");
-			loggedOnce = true;
-		}
+	if (!hdrDataCB || !hdrTexture || !outputTexture)
 		return;
-	}
 
 	auto& upscaling = globals::features::upscaling;
 
@@ -834,15 +764,6 @@ void HDR::ApplyHDR()
 	UpdateHDRData();
 
 	state->BeginPerfEvent("HDR Processing");
-
-	static bool loggedDispatch = false;
-	if (!loggedDispatch) {
-		logger::info("[HDR] ApplyHDR running - dispatching compute shader");
-		logger::info("[HDR] uiTexture={}, uiTexture->srv={}",
-			uiTexture ? "valid" : "NULL",
-			(uiTexture && uiTexture->srv) ? "valid" : "NULL");
-		loggedDispatch = true;
-	}
 
 	{
 		auto dispatchCount = Util::GetScreenDispatchCount(false);
@@ -875,13 +796,6 @@ void HDR::ApplyHDR()
 		auto computeShader = GetHDROutputCS();
 		if (!computeShader) {
 			// Fallback: HDR shader files not present - copy kFRAMEBUFFER directly to output
-			// This allows SDR output through ISHDR.hlsl when HDR display shaders aren't available
-			static bool loggedFallback = false;
-			if (!loggedFallback) {
-				logger::warn("HDR: HDR shader files not available - using SDR fallback (ISHDR output)");
-				loggedFallback = true;
-			}
-
 			// Cleanup any bound resources
 			views[0] = nullptr;
 			views[1] = nullptr;
@@ -924,8 +838,7 @@ void HDR::ApplyHDR()
 		cbs[0] = { nullptr };
 		context->CSSetConstantBuffers(0, ARRAYSIZE(cbs), cbs);
 
-		ID3D11ComputeShader* shader = nullptr;
-		context->CSSetShader(shader, nullptr, 0);
+		context->CSSetShader(nullptr, nullptr, 0);
 	}
 
 	// Copy result to appropriate destination
@@ -937,15 +850,6 @@ void HDR::ApplyHDR()
 			upscaling.dx12SwapChain.swapChainBufferWrapped->resource11 &&
 			outputTexture && outputTexture->resource) {
 			context->CopyResource(upscaling.dx12SwapChain.swapChainBufferWrapped->resource11, outputTexture->resource.get());
-		} else {
-			static bool loggedOnce = false;
-			if (!loggedOnce) {
-				logger::warn("[HDR] Frame Gen path missing required resources - swapChainBufferWrapped={}, resource11={}, outputTexture={}, fallback to normal copy skipped",
-					upscaling.dx12SwapChain.swapChainBufferWrapped ? "valid" : "NULL",
-					(upscaling.dx12SwapChain.swapChainBufferWrapped && upscaling.dx12SwapChain.swapChainBufferWrapped->resource11) ? "valid" : "NULL",
-					(outputTexture && outputTexture->resource) ? "valid" : "NULL");
-				loggedOnce = true;
-			}
 		}
 	} else {
 		// Normal path: copy directly to swap chain back buffer
@@ -954,17 +858,6 @@ void HDR::ApplyHDR()
 		if (SUCCEEDED(hr) && backBuffer) {
 			context->CopyResource(backBuffer, outputTexture->resource.get());
 			backBuffer->Release();
-			static bool loggedOnce = false;
-			if (!loggedOnce) {
-				logger::info("[HDR] Copying to D3D11 swap chain back buffer");
-				loggedOnce = true;
-			}
-		} else {
-			static bool loggedOnce = false;
-			if (!loggedOnce) {
-				logger::error("[HDR] Failed to get swap chain back buffer!");
-				loggedOnce = true;
-			}
 		}
 	}
 
@@ -1112,14 +1005,8 @@ float HDR::GetDisplayMaxLuminance() const
 
 void HDR::UpdateHDRData() const
 {
-	if (!hdrDataCB) {
-		static bool loggedOnce = false;
-		if (!loggedOnce) {
-			logger::warn("[HDR] UpdateHDRData called but hdrDataCB is null!");
-			loggedOnce = true;
-		}
+	if (!hdrDataCB)
 		return;
-	}
 
 	auto& upscaling = globals::features::upscaling;
 

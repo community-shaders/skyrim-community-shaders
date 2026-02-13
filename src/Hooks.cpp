@@ -248,6 +248,43 @@ namespace GrassExtensions
 	};
 }
 
+// HDR hooks - installed when Upscaling is NOT loaded but HDR Display IS loaded.
+// These replicate the critical hooks from Upscaling::PostPostLoad that the HDR pipeline depends on:
+// - Main_PostProcessing: wraps ISHDR with RedirectFramebuffer/RestoreFramebuffer so HDR values
+//   are written to a float16 texture instead of the 8-bit kFRAMEBUFFER
+// - MenuManagerDrawInterfaceStartHook: calls SetUIBuffer before vanilla UI renders so
+//   UI is captured in a separate texture for proper HDR compositing
+struct HDR_Main_PostProcessing
+{
+	static void thunk(RE::ImageSpaceManager* a_this, uint32_t a3, RE::RENDER_TARGET a_target, void* a_4, bool a_5)
+	{
+		auto hdr = globals::features::hdrDisplay.loaded ? HDR::GetSingleton() : nullptr;
+		if (hdr)
+			hdr->RedirectFramebuffer();
+
+		func(a_this, a3, a_target, a_4, a_5);
+
+		if (hdr)
+			hdr->RestoreFramebuffer();
+	}
+	static inline REL::Relocation<decltype(thunk)> func;
+};
+
+struct HDR_MenuManagerDrawInterfaceStartHook
+{
+	static void thunk(int64_t a1)
+	{
+		if (globals::features::hdrDisplay.loaded) {
+			auto hdr = HDR::GetSingleton();
+			if (hdr)
+				hdr->SetUIBuffer();
+		}
+
+		func(a1);
+	}
+	static inline REL::Relocation<decltype(thunk)> func;
+};
+
 struct IDXGISwapChain_Present
 {
 	static HRESULT WINAPI thunk(IDXGISwapChain* This, UINT SyncInterval, UINT Flags)
@@ -368,6 +405,15 @@ HRESULT WINAPI hk_D3D11CreateDeviceAndSwapChain(
 	DXGI_SWAP_CHAIN_DESC modifiedDesc = *pSwapChainDesc;
 	modifiedDesc.BufferDesc.Format = DXGI_FORMAT_R10G10B10A2_UNORM;
 	logger::info("[HDR] Upgrading D3D11 swap chain format from {} to R10G10B10A2_UNORM (24)", static_cast<int>(pSwapChainDesc->BufferDesc.Format));
+
+	// FLIP_DISCARD is required for SetColorSpace1 (HDR10 PQ output)
+	// Without it, the swap chain stays in sRGB mode and PQ-encoded data looks black
+	if (globals::features::hdrDisplay.loaded) {
+		modifiedDesc.SwapEffect = DXGI_SWAP_EFFECT_FLIP_DISCARD;
+		if (modifiedDesc.BufferCount < 2)
+			modifiedDesc.BufferCount = 2;
+		logger::info("[HDR] Set swap chain to FLIP_DISCARD for HDR color space support");
+	}
 
 	auto ret = ptrD3D11CreateDeviceAndSwapChain(pAdapter,
 		DriverType,
@@ -1021,6 +1067,14 @@ namespace Hooks
 		}
 
 		stl::write_thunk_call<BSLightingShader_SetupGeometry_GeometrySetupConstantPointLights>(REL::RelocationID(100565, 107300).address() + REL::Relocate(0x523, 0xB0E, 0x5FE));
+
+		// When Upscaling is NOT loaded, HDR needs its own hooks for the framebuffer redirect
+		// and UI capture pipeline that Upscaling normally provides via PostPostLoad
+		if (!globals::features::upscaling.loaded && globals::features::hdrDisplay.loaded) {
+			logger::info("Installing HDR pipeline hooks (Upscaling not loaded)");
+			stl::detour_thunk<HDR_MenuManagerDrawInterfaceStartHook>(REL::RelocationID(79947, 82084));
+			stl::write_thunk_call<HDR_Main_PostProcessing>(REL::RelocationID(100430, 107148).address() + REL::Relocate(0x1F0, 0x1E7, 0x206));
+		}
 	}
 
 	void InstallEarlyHooks()
