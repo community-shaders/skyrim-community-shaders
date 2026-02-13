@@ -15,9 +15,9 @@ public:
 	virtual std::pair<std::string, std::vector<std::string>> GetFeatureSummary() override
 	{
 		return {
-			"Volumetric Shadows provides downsampled MSM shadow maps for use by effects like particles and decals.\n"
+			"Volumetric Shadows provides downsampled VSM shadow maps for use by effects like particles and decals.\n"
 			"This improves shadow quality on transparent objects with minimal performance impact.",
-			{ "Downsampled MSM shadows",
+			{ "Downsampled VSM shadows",
 				"Gaussian blur filtering",
 				"Multi-cascade support",
 				"Optimized for effects rendering" }

@@ -2820,40 +2820,10 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #	elif defined(SKYLIGHTING)
 	float3 vertexColor = input.Color.xyz;
 	float vertexAO = max(max(vertexColor.r, vertexColor.g), vertexColor.b);
-
-	if (!SharedData::InInterior) {
-#		if defined(LANDSCAPE)
-		// Remove AO
-		vertexColor = vertexColor / vertexAO;
-#			if defined(LOD_BLENDING)
-		vertexColor = lerp(vertexColor, 1, SharedData::lodBlendingSettings.DisableTerrainVertexColors);
-#			endif  // LOD_BLENDING
-#		else
-
-		if (Permutation::ExtraShaderDescriptor & Permutation::ExtraFlags::IsTree) {
-			// Remove AO
-			float3 originalVertexColor = vertexColor;
-			vertexColor = lerp(vertexColor, vertexColor / vertexAO, sqrt(vertexAO));
-			vertexColor = lerp(input.Color.xyz, vertexColor, skylightingFadeOutFactor);
-
-			// Apply AO to direct lighting only
-			float3 originalDiffuseColor = diffuseColor;
-			diffuseColor -= lightsDiffuseColor;
-			diffuseColor += lerp(lightsDiffuseColor, lightsDiffuseColor * vertexAO, skylightingFadeOutFactor);
-
-			vertexColor = lerp(vertexColor, originalVertexColor, SharedData::skylightingSettings.MinDiffuseVisibility);
-			diffuseColor = lerp(diffuseColor, originalDiffuseColor, SharedData::skylightingSettings.MinDiffuseVisibility);
-		}
-
-		// Brighten skylighting on vertex AO
-		vertexColor *= 1.0 + (1.0 - vertexAO) * (1.0 - skylightingDiffuse);
-#		endif
-	}
+	// Modify skylightingDiffuse such that skylightingDiffuse * vertexAO = min(skylightingDiffuse, vertexAO)
+	skylightingDiffuse = saturate(skylightingDiffuse / max(vertexAO, 1e-5));
 #	else
 	float3 vertexColor = input.Color.xyz;
-#		if defined(LANDSCAPE) && defined(LOD_BLENDING)
-		vertexColor = lerp(vertexColor, 1, SharedData::lodBlendingSettings.DisableTerrainVertexColors);
-#		endif  // LOD_BLENDING
 #	endif  // defined (HAIR)
 
 	float4 color = 0;

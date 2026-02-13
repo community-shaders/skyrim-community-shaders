@@ -1,12 +1,12 @@
 #ifndef __VOLUMETRIC_SHADOWS_HLSLI__
 #define __VOLUMETRIC_SHADOWS_HLSLI__
 
-// Moment Shadow Maps (Peters & Klein, I3D 2015)
-// Hamburger 4-moment reconstruction for reduced light bleeding
+// Variance Shadow Maps (VSM)
+// Chebyshev's inequality on filtered depth moments
 
 namespace VolumetricShadows
 {
-	Texture2D<float4> SharedShadowMap : register(t18);
+	Texture2D<float2> SharedShadowMap : register(t18);
 
 	struct ShadowData
 	{
@@ -27,143 +27,26 @@ namespace VolumetricShadows
 
 	StructuredBuffer<ShadowData> SharedShadowData : register(t19);
 
+	static const float VSM_MIN_VARIANCE = 0.00001;
+
 	float GetShadowDepth(float3 positionWS, uint eyeIndex)
 	{
 		float4 positionCS = mul(FrameBuffer::CameraViewProj[eyeIndex], float4(positionWS, 1));
 		return positionCS.z / positionCS.w;
 	}
 
-//=================================================================================================
-//
-//  Shadows Sample
-//  by MJP
-//  http://mynameismjp.wordpress.com/
-//
-//  All code licensed under the MIT license
-//
-//=================================================================================================
-	float4 ConvertOptimizedMoments(in float4 optimizedMoments)
+	// Chebyshev upper bound on P(X >= t)
+	// moments.x = mean(z), moments.y = mean(z^2)
+	float ComputeVSM(float2 moments, float depth)
 	{
-		optimizedMoments[0] -= 0.035955884801f;
-		return mul(optimizedMoments, float4x4(0.2227744146f, 0.1549679261f, 0.1451988946f, 0.163127443f,
-											0.0771972861f, 0.1394629426f, 0.2120202157f, 0.2591432266f,
-											0.7926986636f, 0.7963415838f, 0.7258694464f, 0.6539092497f,
-											0.0319417555f,-0.1722823173f,-0.2758014811f,-0.3376131734f));
+		float variance = max(moments.y - moments.x * moments.x, VSM_MIN_VARIANCE);
+		float d = depth - moments.x;
+		float pMax = variance / (variance + d * d);
+		return (depth <= moments.x) ? 1.0 : pMax;
 	}
 
-	float ComputeMSMHamburger(in float4 moments, in float fragmentDepth, in float momentBias)
-	{
-		// Bias input data to avoid artifacts
-		float4 b = lerp(moments, float4(0.5f, 0.5f, 0.5f, 0.5f), momentBias);
-		float3 z;
-		z[0] = fragmentDepth;
-
-		// Compute a Cholesky factorization of the Hankel matrix B storing only non-
-		// trivial entries or related products
-		float L32D22 = mad(-b[0], b[1], b[2]);
-		float D22 = mad(-b[0], b[0], b[1]);
-		float squaredDepthVariance = mad(-b[1], b[1], b[3]);
-		float D33D22 = dot(float2(squaredDepthVariance, -L32D22), float2(D22, L32D22));
-		float InvD22 = 1.0f / D22;
-		float L32 = L32D22 * InvD22;
-
-		// Obtain a scaled inverse image of bz = (1,z[0],z[0]*z[0])^T
-		float3 c = float3(1.0f, z[0], z[0] * z[0]);
-
-		// Forward substitution to solve L*c1=bz
-		c[1] -= b.x;
-		c[2] -= b.y + L32 * c[1];
-
-		// Scaling to solve D*c2=c1
-		c[1] *= InvD22;
-		c[2] *= D22 / D33D22;
-
-		// Backward substitution to solve L^T*c3=c2
-		c[1] -= L32 * c[2];
-		c[0] -= dot(c.yz, b.xy);
-
-		// Solve the quadratic equation c[0]+c[1]*z+c[2]*z^2 to obtain solutions
-		// z[1] and z[2]
-		float p = c[1] / c[2];
-		float q = c[0] / c[2];
-		float D = (p * p * 0.25f) - q;
-		float r = sqrt(D);
-		z[1] =- p * 0.5f - r;
-		z[2] =- p * 0.5f + r;
-
-		// Compute the shadow intensity by summing the appropriate weights
-		float4 switchVal = (z[2] < z[0]) ? float4(z[1], z[0], 1.0f, 1.0f) :
-						((z[1] < z[0]) ? float4(z[0], z[1], 0.0f, 1.0f) :
-						float4(0.0f,0.0f,0.0f,0.0f));
-		float quotient = (switchVal[0] * z[2] - b[0] * (switchVal[0] + z[2]) + b[1])/((z[2] - switchVal[1]) * (z[0] - z[1]));
-		float shadowIntensity = switchVal[2] + switchVal[3] * quotient;
-		return 1.0f - saturate(shadowIntensity);
-	}
-
-	float ComputeMSMHausdorff(in float4 moments, in float fragmentDepth, in float momentBias)
-	{
-		// Bias input data to avoid artifacts
-		float4 b = lerp(moments, float4(0.5f, 0.5f, 0.5f, 0.5f), momentBias);
-		float3 z;
-		z[0] = fragmentDepth;
-
-		// Compute a Cholesky factorization of the Hankel matrix B storing only non-
-		// trivial entries or related products
-		float L32D22 = mad(-b[0], b[1], b[2]);
-		float D22 = mad(-b[0], b[0], b[1]);
-		float squaredDepthVariance = mad(-b[1], b[1], b[3]);
-		float D33D22 = dot(float2(squaredDepthVariance, -L32D22), float2(D22, L32D22));
-		float InvD22 = 1.0f / D22;
-		float L32 = L32D22 * InvD22;
-
-		// Obtain a scaled inverse image of bz=(1,z[0],z[0]*z[0])^T
-		float3 c = float3(1.0f, z[0], z[0] * z[0]);
-
-		// Forward substitution to solve L*c1=bz
-		c[1] -= b.x;
-		c[2] -= b.y + L32 * c[1];
-
-		// Scaling to solve D*c2=c1
-		c[1] *= InvD22;
-		c[2] *= D22 / D33D22;
-
-		// Backward substitution to solve L^T*c3=c2
-		c[1] -= L32 * c[2];
-		c[0] -= dot(c.yz, b.xy);
-
-		// Solve the quadratic equation c[0]+c[1]*z+c[2]*z^2 to obtain solutions z[1]
-		// and z[2]
-		float p = c[1] / c[2];
-		float q = c[0] / c[2];
-		float D = ((p * p) / 4.0f) - q;
-		float r = sqrt(D);
-		z[1] =- (p / 2.0f) - r;
-		z[2] =- (p / 2.0f) + r;
-
-		float shadowIntensity = 1.0f;
-
-		// Use a solution made of four deltas if the solution with three deltas is invalid
-		if(z[1] < 0.0f || z[2] > 1.0f)
-		{
-			float zFree = ((b[2] - b[1]) * z[0] + b[2] - b[3]) / ((b[1] - b[0]) * z[0] + b[1] - b[2]);
-			float w1Factor = (z[0] > zFree) ? 1.0f : 0.0f;
-			shadowIntensity = (b[1] - b[0] + (b[2] - b[0] - (zFree + 1.0f) * (b[1] - b[0])) * (zFree - w1Factor - z[0])
-													/(z[0] * (z[0] - zFree))) / (zFree - w1Factor) + 1.0f - b[0];
-		}
-		// Use the solution with three deltas
-		else{
-			float4 switchVal = (z[2] < z[0]) ? float4(z[1], z[0], 1.0f, 1.0f) :
-							((z[1] < z[0]) ? float4(z[0], z[1], 0.0f, 1.0f) :
-							float4(0.0f, 0.0f, 0.0f, 0.0f));
-			float quotient = (switchVal[0] * z[2] - b[0] * (switchVal[0] + z[2]) + b[1]) / ((z[2] - switchVal[1]) * (z[0] - z[1]));
-			shadowIntensity = switchVal[2] + switchVal[3] * quotient;
-		}
-
-		return 1.0f - saturate(shadowIntensity);
-	}
-
-	// Sample a single cascade for MSM shadow
-	float SampleMSMCascade3D(
+	// Sample a single cascade for VSM shadow
+	float SampleVSMCascade3D(
 		uint cascadeIndex,
 		float noise,
 		uint sampleCount,
@@ -180,12 +63,8 @@ namespace VolumetricShadows
 			float t = (float(k) + noise) * rcpSampleCount;
 			float3 samplePosLS = lerp(endPositionLS, startPositionLS, t);
 
-			// Sample MSM moments
-			float4 moments = SharedShadowMap.SampleLevel(LinearSampler, samplePosLS.xy, 1u - cascadeIndex);
-			moments = ConvertOptimizedMoments(moments);
-			float lit = ComputeMSMHausdorff(moments, samplePosLS.z, 0.00003);
-
-			lit = lerp(lit, lit * lit, float(cascadeIndex));
+			float2 moments = SharedShadowMap.SampleLevel(LinearSampler, samplePosLS.xy, 1u - cascadeIndex);
+			float lit = ComputeVSM(moments, samplePosLS.z);
 
 			// Last to set firstSample is start position
 			firstSample = lit;
@@ -196,7 +75,7 @@ namespace VolumetricShadows
 		return shadow * rcpSampleCount;
 	}
 
-	float GetMSMShadow3D(float3 startPosition, float3 endPosition, float noise, uint baseSampleCount, uint eyeIndex, out float surfaceShadow)
+	float GetVSMShadow3D(float3 startPosition, float3 endPosition, float noise, uint baseSampleCount, uint eyeIndex, out float surfaceShadow)
 	{
 		ShadowData sD = SharedShadowData[0];
 
@@ -232,7 +111,7 @@ namespace VolumetricShadows
 
 		// Sample primary cascade
 		float primaryFirstSample;
-		float shadow = SampleMSMCascade3D(primaryCascade, noise, sampleCount, rcpSampleCount, startLS, endLS, primaryFirstSample);
+		float shadow = SampleVSMCascade3D(primaryCascade, noise, sampleCount, rcpSampleCount, startLS, endLS, primaryFirstSample);
 		surfaceShadow = primaryFirstSample;
 
 		// Blend with secondary cascade if needed
@@ -247,7 +126,7 @@ namespace VolumetricShadows
 			endLS.xy = saturate(endLS.xy);
 
 			float secondaryFirstSample;
-			float shadowBlend = SampleMSMCascade3D(secondaryCascade, noise, sampleCount, rcpSampleCount, startLS, endLS, secondaryFirstSample);
+			float shadowBlend = SampleVSMCascade3D(secondaryCascade, noise, sampleCount, rcpSampleCount, startLS, endLS, secondaryFirstSample);
 			shadow = lerp(shadow, shadowBlend, cascadeSelect);
 			surfaceShadow = lerp(surfaceShadow, secondaryFirstSample, cascadeSelect);
 		}
@@ -258,15 +137,14 @@ namespace VolumetricShadows
 		return lerp(1.0, shadow, fadeFactor);
 	}
 
-	// Sample a single cascade for MSM shadow (2D point sample)
-	float SampleMSMCascade2D(uint cascadeIndex, float3 positionLS)
+	// Sample a single cascade for VSM shadow (2D point sample)
+	float SampleVSMCascade2D(uint cascadeIndex, float3 positionLS)
 	{
-		float4 moments = SharedShadowMap.SampleLevel(LinearSampler, positionLS.xy, 1u - cascadeIndex);
-		moments = ConvertOptimizedMoments(moments);
-		return ComputeMSMHausdorff(moments, positionLS.z, 0.00003);
+		float2 moments = SharedShadowMap.SampleLevel(LinearSampler, positionLS.xy, 1u - cascadeIndex);
+		return ComputeVSM(moments, positionLS.z);
 	}
 
-	float GetMSMShadow2D(float3 position, uint eyeIndex)
+	float GetVSMShadow2D(float3 position, uint eyeIndex)
 	{
 		ShadowData sD = SharedShadowData[0];
 
@@ -294,7 +172,7 @@ namespace VolumetricShadows
 		positionLS.xy = saturate(positionLS.xy);
 
 		// Sample primary cascade
-		float shadow = SampleMSMCascade2D(primaryCascade, positionLS);
+		float shadow = SampleVSMCascade2D(primaryCascade, positionLS);
 
 		// Blend with secondary cascade if needed
 		[branch]
@@ -305,7 +183,7 @@ namespace VolumetricShadows
 			positionLS = mul(transpose(shadowProj), float4(position, 1));
 			positionLS.xy = saturate(positionLS.xy);
 
-			float shadowBlend = SampleMSMCascade2D(secondaryCascade, positionLS);
+			float shadowBlend = SampleVSMCascade2D(secondaryCascade, positionLS);
 			shadow = lerp(shadow, shadowBlend, cascadeSelect);
 		}
 

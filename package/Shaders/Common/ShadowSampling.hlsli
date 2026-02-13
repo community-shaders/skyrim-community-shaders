@@ -86,9 +86,9 @@ namespace ShadowSampling
 		worldShadow *= rcpSampleCount;
 
 #if defined(VOLUMETRIC_SHADOWS)
-		float msmSurfaceShadow;
-		float shadow = VolumetricShadows::GetMSMShadow3D(startPosition, endPosition, noise, sampleCount, eyeIndex, msmSurfaceShadow);
-		surfaceShadow *= msmSurfaceShadow;
+		float vsmSurfaceShadow;
+		float shadow = VolumetricShadows::GetVSMShadow3D(startPosition, endPosition, noise, sampleCount, eyeIndex, vsmSurfaceShadow);
+		surfaceShadow *= vsmSurfaceShadow;
 		return worldShadow * shadow;
 #else
 		return worldShadow;
@@ -98,7 +98,7 @@ namespace ShadowSampling
 	float GetLightingShadow(float3 worldPosition, uint eyeIndex)
 	{
 #if defined(VOLUMETRIC_SHADOWS)
-		float shadow = VolumetricShadows::GetMSMShadow2D(worldPosition, eyeIndex);
+		float shadow = VolumetricShadows::GetVSMShadow2D(worldPosition, eyeIndex);
 		return shadow;
 #else
 		return 1.0;

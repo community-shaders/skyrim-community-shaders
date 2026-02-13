@@ -186,7 +186,7 @@ void VolumetricShadows::CopyShadowData()
 						copyDesc.Height = newHeight;
 						copyDesc.MipLevels = 2;
 						copyDesc.ArraySize = 1;
-						copyDesc.Format = DXGI_FORMAT_R16G16B16A16_UNORM;
+						copyDesc.Format = DXGI_FORMAT_R16G16_UNORM;
 						copyDesc.SampleDesc.Count = 1;
 						copyDesc.SampleDesc.Quality = 0;
 						copyDesc.Usage = D3D11_USAGE_DEFAULT;
