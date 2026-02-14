@@ -611,8 +611,7 @@ void DynamicCubemaps::SetupResources()
 		envCapturePositionReflectionsTexture->CreateSRV(srvDesc);
 		envCapturePositionReflectionsTexture->CreateUAV(uavDesc);
 
-		// Always use HDR format for environment maps
-		texDesc.Format = DXGI_FORMAT_R16G16B16A16_FLOAT;
+		texDesc.Format = DXGI_FORMAT_R11G11B10_FLOAT;
 		srvDesc.Format = texDesc.Format;
 		uavDesc.Format = texDesc.Format;
 
