@@ -395,10 +395,6 @@ void TerrainBlending::DrawSettings()
 	if (auto _tt = Util::HoverTooltipWrapper()) {
 		ImGui::Text("Enable seamless blending between terrain and objects.");
 	}
-
-	ImGui::SeparatorText("Depth Override Path");
-	ImGui::TextWrapped("Pass-specific engine hooks are active (OnBeginTechnique + OnUtilitySetupGeometry + OnShaderPropertySetupGeometry).");
-	ImGui::TextWrapped("Global Draw*/PSSetShaderResources overrides are disabled for Terrain Blending.");
 }
 
 void TerrainBlending::LoadSettings(json& o_json)

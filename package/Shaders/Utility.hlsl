@@ -272,7 +272,7 @@ VS_OUTPUT main(VS_INPUT input)
 #	if defined(OFFSET_DEPTH)
 	float bias = 5.0;
 #		if defined(VR)
-	bias = 1.25;
+	bias = 2.5;
 #		endif
 	vsout.PositionCS.z += bias;
 #	endif
