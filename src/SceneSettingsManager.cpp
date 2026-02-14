@@ -311,6 +311,10 @@ bool SceneSettingsManager::IsInterior()
 
 void SceneSettingsManager::OnCellTransition()
 {
+	// Sky must be initialized for reliable interior/exterior detection
+	if (!globals::game::sky)
+		return;
+
 	bool interior = IsInterior();
 
 	if (interior && !wasInterior) {
@@ -560,6 +564,10 @@ void SceneSettingsManager::DiscoverOverwrites(SceneType type)
 	int filesFound = 0;
 	int overwritesLoaded = 0;
 	for (const auto& dirEntry : std::filesystem::directory_iterator(overwritesPath, ec)) {
+		if (ec) {
+			logger::error("[SceneSettings] Error iterating {} overwrites directory: {}", typeName, ec.message());
+			break;
+		}
 		if (!dirEntry.is_regular_file() || dirEntry.path().extension() != ".json")
 			continue;
 
