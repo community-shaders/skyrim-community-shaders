@@ -1484,14 +1484,7 @@ void Upscaling::LoadUpscalingSDKs()
 
 void Upscaling::SetUIBuffer()
 {
-	// Redirect kFRAMEBUFFER.RTV to our UI texture so vanilla UI renders to it
-	auto& data = globals::game::renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGET::kFRAMEBUFFER];
-	float clearColor[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
-	auto context = globals::d3d::context;
-	
-	context->ClearRenderTargetView(dx12SwapChain.uiBufferWrapped->rtv, clearColor);
-	data.RTV = dx12SwapChain.uiBufferWrapped->rtv;
-	context->OMSetRenderTargets(1, &data.RTV, nullptr);
+	dx12SwapChain.SetUIBuffer();
 }
 
 HANDLE Upscaling::GetFrameLatencyWaitableObject() const
