@@ -1043,12 +1043,17 @@ bool Shape::UpdateSkinning()
 
 	auto delta = skinInstance->frameID - frameID;
 
-	auto skinRootInverse = GetXMFromNiTransform(delta > 1 ? rootParent->previousWorld.Invert() : rootParent->world.Invert());
+	// Protection against dangling rootParent pointer or corrupted memory causing Access Violation
+	__try {
+		auto skinRootInverse = GetXMFromNiTransform(delta > 1 ? rootParent->previousWorld.Invert() : rootParent->world.Invert());
 
-	frameID = skinInstance->frameID;
+		frameID = skinInstance->frameID;
 
-	for (uint i = 0; i < skinInstance->numMatrices; i++) {
-		XMStoreFloat3x4(&boneMatrices[i], XMMatrixMultiply(XMLoadFloat3x4(&boneMatricesArray[i]), skinRootInverse));
+		for (uint i = 0; i < skinInstance->numMatrices; i++) {
+			XMStoreFloat3x4(&boneMatrices[i], XMMatrixMultiply(XMLoadFloat3x4(&boneMatricesArray[i]), skinRootInverse));
+		}
+	} __except (EXCEPTION_EXECUTE_HANDLER) {
+		return false;
 	}
 
 	return true;
