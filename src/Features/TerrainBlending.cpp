@@ -145,17 +145,17 @@ namespace
 		fallbackTriggerRva = 0;
 	}
 
-bool IsEngineHookPathActive(const TerrainBlending& a_singleton)
-{
-	const auto overridePath = static_cast<TerrainBlending::DepthOverridePath>(a_singleton.settings.OverridePath);
-	return overridePath == TerrainBlending::DepthOverridePath::EngineHook;
-}
+	bool IsEngineHookPathActive(const TerrainBlending& a_singleton)
+	{
+		const auto overridePath = static_cast<TerrainBlending::DepthOverridePath>(a_singleton.settings.OverridePath);
+		return overridePath == TerrainBlending::DepthOverridePath::EngineHook;
+	}
 
-bool IsDiagnosticSlot2GuardMode(const TerrainBlending& a_singleton)
-{
-	(void)a_singleton;
-	return globals::state && globals::state->IsDeveloperMode();
-}
+	bool IsDiagnosticSlot2GuardMode(const TerrainBlending& a_singleton)
+	{
+		(void)a_singleton;
+		return globals::state && globals::state->IsDeveloperMode();
+	}
 
 	void LogTbHookStateTransition(bool a_active, bool a_useBlendedDepthSRV)
 	{
