@@ -291,7 +291,9 @@ void WeatherEditor::DrawTimeControls()
 		}
 
 		if (ImGui::Button("Reset Speed", ImVec2(120, 0))) {
-			calendar->timeScale->value = s_vanillaTimeScale;
+			if (!isTimePaused) {
+				calendar->timeScale->value = s_vanillaTimeScale;
+			} else {
 			s_timeScaleSlider = s_vanillaTimeScale;
 			editorWindow->savedTimeScale = s_vanillaTimeScale;
 		}
