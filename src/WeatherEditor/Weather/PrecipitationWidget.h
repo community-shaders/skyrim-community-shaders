@@ -9,6 +9,11 @@ public:
 		precipitation(a_precipitation)
 	{
 		form = a_precipitation;
+		if (precipitation) {
+			LoadFromGameSettings();
+			vanillaSettings = settings;
+			originalSettings = settings;
+		}
 	}
 
 	~PrecipitationWidget() override = default;
@@ -23,6 +28,8 @@ public:
 	RE::BGSShaderParticleGeometryData* precipitation = nullptr;
 
 private:
+	void LoadFromGameSettings();
+
 	struct Settings
 	{
 		float gravityVelocity = 0.0f;
@@ -38,8 +45,10 @@ private:
 		float boxSize = 1.0f;
 		float particleDensity = 1.0f;
 		std::string particleTexture = "";
+		bool operator==(const Settings&) const = default;
 	};
 
 	Settings settings;
+	Settings vanillaSettings;
 	Settings originalSettings;
 };

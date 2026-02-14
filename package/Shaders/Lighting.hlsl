@@ -938,6 +938,10 @@ float GetSnowParameterY(float texProjTmp, float alpha)
 #		include "IBL/IBL.hlsli"
 #	endif
 
+#	if defined(EXP_HEIGHT_FOG)
+#		include "ExponentialHeightFog/ExponentialHeightFog.hlsli"
+#	endif
+
 #	include "Common/LightingEval.hlsli"
 
 PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
@@ -1072,7 +1076,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #	if defined(EMAT)
 #		if defined(PARALLAX)
 	if (SharedData::extendedMaterialSettings.EnableParallax) {
-		mipLevel = ExtendedMaterials::GetMipLevel(uv, TexParallaxSampler);
+		mipLevel = ExtendedMaterials::GetMipLevel(uv, TexParallaxSampler, screenNoise);
 		uv = ExtendedMaterials::GetParallaxCoords(viewPosition.z, uv, mipLevel, viewDirection, tbnTr, screenNoise, TexParallaxSampler, SampParallaxSampler, 0, displacementParams, pixelOffset);
 		if (SharedData::extendedMaterialSettings.EnableShadows && (parallaxShadowQuality > 0.0f || SharedData::extendedMaterialSettings.ExtendShadows))
 			sh0 = TexParallaxSampler.SampleLevel(SampParallaxSampler, uv, mipLevel).x;
@@ -1092,7 +1096,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 		if (complexMaterial) {
 			if (envMaskTest > (4.0 / 255.0)) {
 				complexMaterialParallax = true;
-				mipLevel = ExtendedMaterials::GetMipLevel(uv, TexEnvMaskSampler);
+				mipLevel = ExtendedMaterials::GetMipLevel(uv, TexEnvMaskSampler, screenNoise);
 				uv = ExtendedMaterials::GetParallaxCoords(viewPosition.z, uv, mipLevel, viewDirection, tbnTr, screenNoise, TexEnvMaskSampler, SampTerrainParallaxSampler, 3, displacementParams, pixelOffset);
 				if (SharedData::extendedMaterialSettings.EnableShadows && (parallaxShadowQuality > 0.0f || SharedData::extendedMaterialSettings.ExtendShadows))
 					sh0 = TexEnvMaskSampler.SampleLevel(SampEnvMaskSampler, uv, mipLevel).w;
@@ -1137,7 +1141,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 		{
 			displacementParams.HeightScale *= PBRParams1.y;
 		}
-		mipLevel = ExtendedMaterials::GetMipLevel(uv, TexParallaxSampler);
+		mipLevel = ExtendedMaterials::GetMipLevel(uv, TexParallaxSampler, screenNoise);
 		uv = ExtendedMaterials::GetParallaxCoords(viewPosition.z, uv, mipLevel, refractedViewDirection, tbnTr, screenNoise, TexParallaxSampler, SampParallaxSampler, 0, displacementParams, pixelOffset);
 		if (SharedData::extendedMaterialSettings.EnableShadows && (parallaxShadowQuality > 0.0f || SharedData::extendedMaterialSettings.ExtendShadows))
 			sh0 = TexParallaxSampler.SampleLevel(SampParallaxSampler, uv, mipLevel).x;
@@ -1205,12 +1209,12 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #			else
 	if (SharedData::extendedMaterialSettings.EnableTerrainParallax || (SharedData::extendedMaterialSettings.EnableParallax && Permutation::ExtraFeatureDescriptor & Permutation::ExtraFeatureFlags::THLandHasDisplacement)) {
 #			endif
-		mipLevels[0] = ExtendedMaterials::GetMipLevel(uv, TexColorSampler);
-		mipLevels[1] = ExtendedMaterials::GetMipLevel(uv, TexLandColor2Sampler);
-		mipLevels[2] = ExtendedMaterials::GetMipLevel(uv, TexLandColor3Sampler);
-		mipLevels[3] = ExtendedMaterials::GetMipLevel(uv, TexLandColor4Sampler);
-		mipLevels[4] = ExtendedMaterials::GetMipLevel(uv, TexLandColor5Sampler);
-		mipLevels[5] = ExtendedMaterials::GetMipLevel(uv, TexLandColor6Sampler);
+		mipLevels[0] = ExtendedMaterials::GetMipLevel(uv, TexColorSampler, screenNoise);
+		mipLevels[1] = ExtendedMaterials::GetMipLevel(uv, TexLandColor2Sampler, screenNoise);
+		mipLevels[2] = ExtendedMaterials::GetMipLevel(uv, TexLandColor3Sampler, screenNoise);
+		mipLevels[3] = ExtendedMaterials::GetMipLevel(uv, TexLandColor4Sampler, screenNoise);
+		mipLevels[4] = ExtendedMaterials::GetMipLevel(uv, TexLandColor5Sampler, screenNoise);
+		mipLevels[5] = ExtendedMaterials::GetMipLevel(uv, TexLandColor6Sampler, screenNoise);
 
 		displacementParams[1] = displacementParams[0];
 		displacementParams[2] = displacementParams[0];
@@ -1255,12 +1259,12 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #		if defined(TERRAIN_VARIATION)
 	else if (useTerrainVariation) {
 		// Calculate proper mip levels for terrain variation when parallax is disabled but EMAT is available
-		mipLevels[0] = ExtendedMaterials::GetMipLevel(uv, TexColorSampler);
-		mipLevels[1] = ExtendedMaterials::GetMipLevel(uv, TexLandColor2Sampler);
-		mipLevels[2] = ExtendedMaterials::GetMipLevel(uv, TexLandColor3Sampler);
-		mipLevels[3] = ExtendedMaterials::GetMipLevel(uv, TexLandColor4Sampler);
-		mipLevels[4] = ExtendedMaterials::GetMipLevel(uv, TexLandColor5Sampler);
-		mipLevels[5] = ExtendedMaterials::GetMipLevel(uv, TexLandColor6Sampler);
+		mipLevels[0] = ExtendedMaterials::GetMipLevel(uv, TexColorSampler, screenNoise);
+		mipLevels[1] = ExtendedMaterials::GetMipLevel(uv, TexLandColor2Sampler, screenNoise);
+		mipLevels[2] = ExtendedMaterials::GetMipLevel(uv, TexLandColor3Sampler, screenNoise);
+		mipLevels[3] = ExtendedMaterials::GetMipLevel(uv, TexLandColor4Sampler, screenNoise);
+		mipLevels[4] = ExtendedMaterials::GetMipLevel(uv, TexLandColor5Sampler, screenNoise);
+		mipLevels[5] = ExtendedMaterials::GetMipLevel(uv, TexLandColor6Sampler, screenNoise);
 	}
 #		endif
 #		else
@@ -2392,6 +2396,13 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	float3 dirLightColor = Color::DirectionalLight(DirLightColor.xyz / max(llDirLightMult, 1e-5), SharedData::linearLightingSettings.isDirLightLinear) * llDirLightMult;
 	float3 dirLightColorMultiplier = 1;
 
+
+#	if defined(EXP_HEIGHT_FOG)
+	if (SharedData::exponentialHeightFogSettings.enabled) {
+		dirLightColor *= ExponentialHeightFog::GetSunlightFogAttenuation(input.WorldPosition.xyz, FrameBuffer::CameraPosAdjust[eyeIndex].xyz);
+	}
+#	endif
+
 #	if defined(WATER_EFFECTS)
 	dirLightColorMultiplier *= WaterEffects::ComputeCaustics(waterData, input.WorldPosition.xyz, eyeIndex);
 #	endif
@@ -3014,13 +3025,21 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #	if !defined(DEFERRED)
 	color.xyz = Color::IrradianceToGamma(Color::IrradianceToLinear(color.xyz) + specularColor);
 	float3 fogColor = Color::Fog(input.FogParam.xyz);
+	float fogFactor = Color::FogAlpha(input.FogParam.w);
 #		if defined(IBL)
 	if (SharedData::iblSettings.EnableDiffuseIBL && !SharedData::InInterior) {
 		fogColor = ImageBasedLighting::GetFogIBLColor(fogColor);
 	}
 #		endif
+#		if defined(EXP_HEIGHT_FOG)
+	if (SharedData::exponentialHeightFogSettings.enabled) {
+		float4 exponentialHeightFog = ExponentialHeightFog::GetExponentialHeightFog(input.WorldPosition.xyz, FrameBuffer::CameraPosAdjust[eyeIndex].xyz, fogColor);
+		fogColor = exponentialHeightFog.xyz;
+		fogFactor = exponentialHeightFog.w;
+	}
+#		endif
 	if (FrameBuffer::FrameParams.y && FrameBuffer::FrameParams.z)
-		color.xyz = lerp(color.xyz, fogColor, Color::FogAlpha(input.FogParam.w));
+		color.xyz = lerp(color.xyz, fogColor, fogFactor);
 #	endif
 
 #	if defined(TESTCUBEMAP) && defined(ENVMAP) && defined(DYNAMIC_CUBEMAPS)
