@@ -24,7 +24,7 @@ namespace InteriorOnlyPanel
 	static int selectedSettingIdx = -1;
 	static std::vector<std::string> cachedFeatureNames;
 	static std::vector<std::string> cachedSettingKeys;
-	static bool showAddUI = false;
+	static bool showAddUI = false;  // unused, kept for ABI compatibility
 
 	// Confirmation popup for deleting all overwrites
 	static Util::ConfirmationPopup deleteAllOverwritesPopup = []() {
@@ -126,16 +126,8 @@ namespace InteriorOnlyPanel
 
 				manager->AddSetting(kSceneType, featureName, settingKey, currentValue);
 				selectedSettingIdx = -1;
-				showAddUI = false;
 				return;
 			}
-		}
-
-		ImGui::SameLine();
-		if (ImGui::Button("Cancel")) {
-			showAddUI = false;
-			selectedFeatureIdx = -1;
-			selectedSettingIdx = -1;
 		}
 	}
 
@@ -246,19 +238,8 @@ namespace InteriorOnlyPanel
 		const auto& entries = manager->GetEntries(kSceneType);
 		auto& theme = globals::menu->GetSettings().Theme;
 
-		// Header with + button
+		// Header
 		ImGui::Text("Interior Only Settings");
-		ImGui::SameLine(ImGui::GetContentRegionAvail().x - ADD_BUTTON_WIDTH);
-		if (ImGui::Button("+", ImVec2(ADD_BUTTON_WIDTH, 0))) {
-			showAddUI = !showAddUI;
-			if (showAddUI) {
-				cachedFeatureNames = SceneSettingsManager::GetLoadedFeatureNames();
-				selectedFeatureIdx = -1;
-				selectedSettingIdx = -1;
-			}
-		}
-		if (auto _tt = Util::HoverTooltipWrapper())
-			ImGui::Text("Add a new interior-only setting override");
 
 		ImGui::Separator();
 
@@ -275,9 +256,8 @@ namespace InteriorOnlyPanel
 		if (deleteAllUserPopup.Draw())
 			manager->DeleteAllUserSettings(kSceneType);
 
-		// Add setting UI (when + is clicked)
-		if (showAddUI)
-			DrawAddSettingUI();
+		// Add setting UI (always visible)
+		DrawAddSettingUI();
 
 		// Collect indices by source
 		std::vector<size_t> overwriteIndices, userIndices;
