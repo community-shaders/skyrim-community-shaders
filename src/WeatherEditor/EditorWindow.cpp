@@ -9,7 +9,7 @@
 #include "WeatherUtils.h"
 #include "imgui_internal.h"
 
-NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(EditorWindow::Settings, recordMarkers, markedRecords, autoApplyChanges, suppressDeleteWarning, useTextButtons, enableInheritFromParent, editorUIScale, favoriteWidgets, recentWidgets, maxRecentWidgets, rememberOpenWidgets, lastOpenWidgets)
+NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(EditorWindow::Settings, recordMarkers, markedRecords, autoApplyChanges, useTextButtons, enableInheritFromParent, editorUIScale, favoriteWidgets, recentWidgets, maxRecentWidgets, rememberOpenWidgets, lastOpenWidgets)
 
 void TextUnformattedDisabled(const char* a_text, const char* a_textEnd = nullptr)
 {
@@ -1271,9 +1271,6 @@ void EditorWindow::ShowSettingsWindow()
 		if (settingsSelectedCategory == "General") {
 			ImGui::Checkbox("Auto-apply changes", &settings.autoApplyChanges);
 			AddTooltip("Automatically apply changes to weather/lighting when editing");
-
-			ImGui::Checkbox("Suppress delete warnings", &settings.suppressDeleteWarning);
-			AddTooltip("Don't show confirmation dialog when deleting saved files");
 
 			ImGui::Checkbox("Use text buttons instead of icons", &settings.useTextButtons);
 			AddTooltip("Display action buttons as text labels instead of icons");

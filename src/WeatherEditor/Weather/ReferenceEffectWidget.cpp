@@ -6,7 +6,7 @@ void ReferenceEffectWidget::DrawWidget()
 {
 	ImGui::SetNextWindowSizeConstraints(ImVec2(600, 0), ImVec2(FLT_MAX, FLT_MAX));
 	if (ImGui::Begin(GetEditorID().c_str(), &open, ImGuiWindowFlags_NoSavedSettings)) {
-		DrawWidgetHeader("##ReferenceEffectSearch", false, true);
+		DrawWidgetHeader("##ReferenceEffectSearch", true, true);
 
 		bool changed = false;
 
@@ -49,6 +49,7 @@ void ReferenceEffectWidget::LoadSettings()
 		return;
 
 	if (!js.empty()) {
+		settings = vanillaSettings;
 		try {
 			if (js.contains("artObject")) {
 				std::string formIDStr = js["artObject"].get<std::string>();
@@ -76,16 +77,25 @@ void ReferenceEffectWidget::LoadSettings()
 				settings.inheritRotation = js["inheritRotation"];
 		} catch (const std::exception& e) {
 			logger::error("ReferenceEffect {}: Failed to load from JSON: {}", GetEditorID(), e.what());
+			settings = vanillaSettings;
 		}
 	} else {
-		settings.artObject = referenceEffect->data.artObject;
-		settings.effectShader = referenceEffect->data.effectShader;
-		settings.faceTarget = referenceEffect->data.flags.any(RE::BGSReferenceEffect::Flag::kFaceTarget);
-		settings.attachToCamera = referenceEffect->data.flags.any(RE::BGSReferenceEffect::Flag::kAttachToCamera);
-		settings.inheritRotation = referenceEffect->data.flags.any(RE::BGSReferenceEffect::Flag::kInheritRotation);
+		settings = vanillaSettings;
 	}
 
 	originalSettings = settings;
+	ApplyChanges();
+}
+
+void ReferenceEffectWidget::LoadFromGameSettings()
+{
+	if (!referenceEffect)
+		return;
+	settings.artObject = referenceEffect->data.artObject;
+	settings.effectShader = referenceEffect->data.effectShader;
+	settings.faceTarget = referenceEffect->data.flags.any(RE::BGSReferenceEffect::Flag::kFaceTarget);
+	settings.attachToCamera = referenceEffect->data.flags.any(RE::BGSReferenceEffect::Flag::kAttachToCamera);
+	settings.inheritRotation = referenceEffect->data.flags.any(RE::BGSReferenceEffect::Flag::kInheritRotation);
 }
 
 void ReferenceEffectWidget::SaveSettings()
@@ -95,6 +105,7 @@ void ReferenceEffectWidget::SaveSettings()
 	js["faceTarget"] = settings.faceTarget;
 	js["attachToCamera"] = settings.attachToCamera;
 	js["inheritRotation"] = settings.inheritRotation;
+	originalSettings = settings;
 }
 
 void ReferenceEffectWidget::ApplyChanges()
@@ -112,20 +123,15 @@ void ReferenceEffectWidget::ApplyChanges()
 		referenceEffect->data.flags.set(RE::BGSReferenceEffect::Flag::kAttachToCamera);
 	if (settings.inheritRotation)
 		referenceEffect->data.flags.set(RE::BGSReferenceEffect::Flag::kInheritRotation);
-
-	originalSettings = settings;
 }
 
 void ReferenceEffectWidget::RevertChanges()
 {
-	settings = originalSettings;
+	settings = vanillaSettings;
+	ApplyChanges();
 }
 
 bool ReferenceEffectWidget::HasUnsavedChanges() const
 {
-	return settings.artObject != originalSettings.artObject ||
-	       settings.effectShader != originalSettings.effectShader ||
-	       settings.faceTarget != originalSettings.faceTarget ||
-	       settings.attachToCamera != originalSettings.attachToCamera ||
-	       settings.inheritRotation != originalSettings.inheritRotation;
+	return !(settings == originalSettings);
 }
