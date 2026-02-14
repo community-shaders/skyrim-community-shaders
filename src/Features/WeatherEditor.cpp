@@ -329,9 +329,9 @@ void WeatherEditor::DrawWeatherStatusPanel()
 	Util::DrawSectionHeader("Weather Status");
 	ImGui::Spacing();
 
-		auto weatherManager = WeatherManager::GetSingleton();
-		auto currentWeathers = weatherManager->GetCurrentWeathers();
-		const auto& theme = Menu::GetSingleton()->GetTheme();
+	auto weatherManager = WeatherManager::GetSingleton();
+	auto currentWeathers = weatherManager->GetCurrentWeathers();
+	const auto& theme = Menu::GetSingleton()->GetTheme();
 
 	if (currentWeathers.currentWeather) {
 		// Show if weather has custom settings
@@ -380,9 +380,9 @@ void WeatherEditor::DrawWeatherStatusPanel()
 	}
 }
 
-	// ================================================================================
-	// Weather Picker functionality (integrated from WeatherPicker feature)
-	// ================================================================================
+// ================================================================================
+// Weather Picker functionality (integrated from WeatherPicker feature)
+// ================================================================================
 
 void WeatherEditor::RenderWeatherDetailsWindow(bool* open)
 {
@@ -424,8 +424,7 @@ void WeatherEditor::RenderWeatherDetailsWindow(bool* open)
 	ImGui::End();
 }
 
-
-ImVec4 WeatherEditor::GetWeatherTypeColor(RE::TESWeather * weather)
+ImVec4 WeatherEditor::GetWeatherTypeColor(RE::TESWeather* weather)
 {
 	if (!weather) {
 		return Menu::GetSingleton()->GetTheme().StatusPalette.InfoColor;
@@ -459,7 +458,7 @@ ImVec4 WeatherEditor::GetWeatherTypeColor(RE::TESWeather * weather)
 }
 
 // --- Helper: Display basic weather info (name, flags, percentage) ---
-void WeatherEditor::DisplayWeatherBasicInfo(RE::TESWeather * weather, float weatherPct)
+void WeatherEditor::DisplayWeatherBasicInfo(RE::TESWeather* weather, float weatherPct)
 {
 	if (!weather) {
 		ImGui::BulletText("No Weather Found");
@@ -491,8 +490,7 @@ void WeatherEditor::DisplayWeatherBasicInfo(RE::TESWeather * weather, float weat
 	}
 }
 
-
-void WeatherEditor::DisplayPrecipitationInfo(RE::TESWeather * weather)
+void WeatherEditor::DisplayPrecipitationInfo(RE::TESWeather* weather)
 {
 	if (!weather || !weather->precipitationData) {
 		ImGui::BulletText("Particle Density: No precipitation data");
@@ -520,8 +518,7 @@ void WeatherEditor::DisplayPrecipitationInfo(RE::TESWeather * weather)
 	}
 }
 
-
-void WeatherEditor::DisplayLightningInfo(RE::TESWeather * weather, bool showInteractiveElements)
+void WeatherEditor::DisplayLightningInfo(RE::TESWeather* weather, bool showInteractiveElements)
 {
 	if (!weather || weather->data.thunderLightningFrequency <= 0)
 		return;
@@ -613,8 +610,7 @@ void WeatherEditor::DisplayLightningInfo(RE::TESWeather * weather, bool showInte
 	}
 }
 
-
-void WeatherEditor::DisplayWindInfo(RE::TESWeather * weather)
+void WeatherEditor::DisplayWindInfo(RE::TESWeather* weather)
 {
 	auto sky = globals::game::sky;
 	if (!weather || (weather->data.windSpeed <= 0 && (!sky || sky->windSpeed <= 0.0f)))
@@ -675,9 +671,8 @@ void WeatherEditor::DisplayWindInfo(RE::TESWeather * weather)
 	}
 }
 
-
 // --- Main function: now just delegates to helpers ---
-void WeatherEditor::DisplayWeatherInfo(RE::TESWeather * weather, float weatherPct, bool showInteractiveElements)
+void WeatherEditor::DisplayWeatherInfo(RE::TESWeather* weather, float weatherPct, bool showInteractiveElements)
 {
 	WeatherEditor::DisplayWeatherBasicInfo(weather, weatherPct);
 	WeatherEditor::DisplayPrecipitationInfo(weather);
@@ -685,8 +680,7 @@ void WeatherEditor::DisplayWeatherInfo(RE::TESWeather * weather, float weatherPc
 	WeatherEditor::DisplayWindInfo(weather);
 }
 
-
-void WeatherEditor::RenderWeatherControls(RE::Sky * sky)
+void WeatherEditor::RenderWeatherControls(RE::Sky* sky)
 {
 	// Weather Selection Section (only show interactive elements in inline mode)
 	static bool weatherControlsExpanded = true;
@@ -852,8 +846,7 @@ void WeatherEditor::RenderWeatherControls(RE::Sky * sky)
 	}
 }
 
-
-void WeatherEditor::RenderWeatherInformationDisplay(RE::Sky * sky, bool showInteractiveElements)
+void WeatherEditor::RenderWeatherInformationDisplay(RE::Sky* sky, bool showInteractiveElements)
 {
 	ImGui::Spacing();
 	ImGui::Spacing();
@@ -889,7 +882,6 @@ void WeatherEditor::RenderWeatherInformationDisplay(RE::Sky * sky, bool showInte
 	}
 }
 
-
 void WeatherEditor::RenderCoreWeatherDetails(bool showInteractiveElements)
 {
 	const auto showError = [](const char* msg) {
@@ -912,7 +904,6 @@ void WeatherEditor::RenderCoreWeatherDetails(bool showInteractiveElements)
 		showError("Sky not available");
 	}
 }
-
 
 void WeatherEditor::LoadAllWeathers()
 {
@@ -937,7 +928,6 @@ void WeatherEditor::LoadAllWeathers()
 		UpdateFilteredWeathers();
 	}
 }
-
 
 void WeatherEditor::UpdateFilteredWeathers()
 {
@@ -978,8 +968,7 @@ void WeatherEditor::UpdateFilteredWeathers()
 	}
 }
 
-
-int WeatherEditor::FindWeatherIndex(RE::TESWeather * targetWeather)
+int WeatherEditor::FindWeatherIndex(RE::TESWeather* targetWeather)
 {
 	if (!targetWeather)
 		return -1;
@@ -990,7 +979,6 @@ int WeatherEditor::FindWeatherIndex(RE::TESWeather * targetWeather)
 	}
 	return -1;
 }
-
 
 void WeatherEditor::RenderFeatureWeatherAnalysis()
 {
@@ -1029,8 +1017,7 @@ void WeatherEditor::RenderFeatureWeatherAnalysis()
 	}
 }
 
-
-std::vector<std::string> WeatherEditor::GetWeatherFlagNames(RE::TESWeather * weather)
+std::vector<std::string> WeatherEditor::GetWeatherFlagNames(RE::TESWeather* weather)
 {
 	std::vector<std::string> flagNames;
 	if (!weather) {
@@ -1082,8 +1069,7 @@ std::vector<std::string> WeatherEditor::GetWeatherFlagNames(RE::TESWeather * wea
 	return flagNames;
 }
 
-
-bool WeatherEditor::RenderMultiColorWeatherName(RE::TESWeather * weather, const std::string& weatherName)
+bool WeatherEditor::RenderMultiColorWeatherName(RE::TESWeather* weather, const std::string& weatherName)
 {
 	if (!weather) {
 		ImGui::Text("%s", weatherName.c_str());
@@ -1144,7 +1130,6 @@ bool WeatherEditor::RenderMultiColorWeatherName(RE::TESWeather * weather, const 
 	return baseNameHovered;
 }
 
-
 // Helper function to get color for a specific weather flag
 ImVec4 WeatherEditor::GetWeatherFlagColor(RE::TESWeather::WeatherDataFlag flag)
 {
@@ -1167,7 +1152,6 @@ ImVec4 WeatherEditor::GetWeatherFlagColor(RE::TESWeather::WeatherDataFlag flag)
 		return theme.StatusPalette.InfoColor;  // Default blue
 	}
 }
-
 
 // Helper function to get color for a specific flag name
 ImVec4 WeatherEditor::GetWeatherFlagColorByName(const std::string& flagName)
@@ -1193,7 +1177,6 @@ ImVec4 WeatherEditor::GetWeatherFlagColorByName(const std::string& flagName)
 	return Menu::GetSingleton()->GetTheme().StatusPalette.Warning;
 }
 
-
 std::string WeatherEditor::GetDisplayName(const RE::TESWeather* weather)
 {
 	if (!weather) {
@@ -1209,7 +1192,6 @@ std::string WeatherEditor::GetDisplayName(const RE::TESWeather* weather)
 	}
 	return std::to_string(weather->GetFormID());
 }
-
 
 void WeatherEditor::DrawOverlay()
 {
@@ -1229,7 +1211,6 @@ void WeatherEditor::DrawOverlay()
 	}
 	s_prevOverlayVisible = overlayVisible;
 }
-
 
 bool WeatherEditor::IsOverlayVisible() const
 {
