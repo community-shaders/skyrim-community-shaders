@@ -256,5 +256,6 @@ namespace globals
 	void OnInit();
 	void ReInit();
 	void OnDataLoaded();
+	void OnGameWindowClose();
 	void InstallD3DHooks(ID3D11DeviceContext* a_context);
 }

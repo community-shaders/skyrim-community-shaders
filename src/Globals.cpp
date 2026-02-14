@@ -208,6 +208,13 @@ namespace globals
 		shadowMaskQuarter = RE::GetINISetting("iShadowMaskQuarter:Display");
 	}
 
+	void OnGameWindowClose()
+	{
+		if (shaderCache) {
+			shaderCache->StopCompilation();
+		}
+	}
+
 	/**
  * @brief Caches the current frame buffer data and clears the mapped pointer.
  *
