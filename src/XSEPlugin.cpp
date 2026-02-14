@@ -114,7 +114,7 @@ void MessageHandler(SKSE::MessagingInterface::Message* message)
 				auto shaderCache = globals::shaderCache;
 				shaderCache->menuLoaded = true;
 
-				auto* main = RE::Main::GetSingleton();
+				auto* main = globals::game::main;
 
 				while (shaderCache->IsCompiling() && !shaderCache->backgroundCompilation && !(main && main->quitGame)) {
 					std::this_thread::sleep_for(100ms);
