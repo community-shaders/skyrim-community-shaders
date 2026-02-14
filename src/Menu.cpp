@@ -43,7 +43,7 @@
 #include "Features/PerformanceOverlay/ABTesting/ABTestAggregator.h"
 #include "Features/PerformanceOverlay/ABTesting/ABTesting.h"
 #include "Features/VR.h"
-#include "Features/WeatherPicker.h"
+#include "Features/WeatherEditor.h"
 #include "WeatherEditor/EditorWindow.h"
 
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
@@ -1047,7 +1047,7 @@ void Menu::ProcessInputEventQueue()
 						{ settings.ShaderBlockPrevKey, [this, shaderCache]() { if (settings.EnableShaderBlocking) shaderCache->IterateShaderBlock(); } },
 						{ settings.ShaderBlockNextKey, [this, shaderCache]() { if (settings.EnableShaderBlocking) shaderCache->IterateShaderBlock(false); } },
 						{ settings.OverlayToggleKey, []() { Menu::GetSingleton()->overlayVisible = !Menu::GetSingleton()->overlayVisible; } },
-						{ settings.WeatherEditorToggleKey, []() { EditorWindow::GetSingleton()->open = !EditorWindow::GetSingleton()->open; } },
+						{ settings.WeatherEditorToggleKey, []() { auto p = RE::PlayerCharacter::GetSingleton(); if (p && p->parentCell) EditorWindow::GetSingleton()->open = !EditorWindow::GetSingleton()->open; } },
 					};
 					for (const auto& ka : keyActions) {
 						// Check if key matches last key in combo and all modifiers are held (exact match)
@@ -1170,19 +1170,22 @@ void Menu::SelectFeatureMenu(const std::string& featureName)
 /**
  * @brief Renders the standalone weather details window when enabled
  *
- * Delegates to the WeatherPicker feature for rendering the weather details window
+ * Delegates to the WeatherEditor feature for rendering the weather details window
  * that can remain open even when the main menu is closed. This provides a simple
- * coordination layer between the Menu system and the WeatherPicker feature.
+ * coordination layer between the Menu system and the WeatherEditor feature.
  */
 void Menu::DrawWeatherDetailsWindow()
 {
-	if (!globals::features::weatherPicker.WeatherDetailsWindow.Enabled) {
+	if (!globals::features::weatherEditor.WeatherDetailsWindow.Enabled) {
+		return;
+	}
+	if (!globals::features::weatherEditor.loaded) {
 		return;
 	}
 
 	// Use Weather core feature for all window management and rendering
-	auto& weather = globals::features::weatherPicker;
-	bool* p_open = &globals::features::weatherPicker.WeatherDetailsWindow.Enabled;
+	auto& weather = globals::features::weatherEditor;
+	bool* p_open = &globals::features::weatherEditor.WeatherDetailsWindow.Enabled;
 	weather.RenderWeatherDetailsWindow(p_open);
 }
 

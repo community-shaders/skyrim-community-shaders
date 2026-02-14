@@ -52,9 +52,15 @@ void OverlayRenderer::RenderOverlay(
 	RenderFirstTimeSetupOverlay();
 
 	// Draw weather editor independently of main menu state
-	if (EditorWindow::GetSingleton()->open) {
+	// Auto-close editor if player leaves valid game space (e.g., loading screen)
+	auto* editorWindow = EditorWindow::GetSingleton();
+	auto player = RE::PlayerCharacter::GetSingleton();
+	if (editorWindow->open && !(player && player->parentCell)) {
+		editorWindow->open = false;
+	}
+	if (editorWindow->open) {
 		ImGui::GetIO().MouseDrawCursor = true;
-		EditorWindow::GetSingleton()->Draw();
+		editorWindow->Draw();
 	} else if (menu.IsEnabled || HomePageRenderer::ShouldShowFirstTimeSetup()) {
 		ImGui::GetIO().MouseDrawCursor = true;
 		if (menu.IsEnabled) {

@@ -116,7 +116,6 @@ public:
 		};
 		std::map<std::string, std::string> markedRecords;
 		bool autoApplyChanges = true;
-		bool suppressDeleteWarning = false;
 		bool useTextButtons = false;
 		bool enableInheritFromParent = false;
 		float editorUIScale = 1.0f;
