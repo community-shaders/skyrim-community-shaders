@@ -241,6 +241,12 @@ void GetLightIrradianceMIS(in Instance instance, in Surface surface, out float3 
     float pointDist;
     GetPointLightIrradiance(instance.LightData, surface, pointIrradiance, pointLr, pointDist, randomSeed);
 
+    float3 dirVisibility = TraceRayShadow(Scene, surface, dirLr, randomSeed);
+    directionalIrradiance *= dirVisibility;
+
+    float3 pointVisibility = TraceRayShadowFinite(Scene, surface, pointLr, pointDist, randomSeed);
+    pointIrradiance *= pointVisibility;
+
     float pDirLight = Luminance(directionalIrradiance);
     float pPointLight = Luminance(pointIrradiance);
 
@@ -279,16 +285,6 @@ float3 EvaluateDirectRadianceMIS(in Material material, in Surface surface, in BR
     GetLightIrradianceMIS(instance, surface, lightIrradiance, lr, distance, randomSeed);
 
     float3 direct = EvalLight(lr, material, surface, brdfContext, bsdf) * lightIrradiance;
-
-    [branch]
-    if (any(direct > MIN_DIFFUSE_SHADOW))
-    {
-        direct *= TraceRayShadowFinite(Scene, surface, lr, distance, randomSeed);
-    }
-    else
-    {
-        direct = 0.0f;
-    }
 
     return direct;
 }
