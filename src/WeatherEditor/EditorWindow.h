@@ -10,7 +10,6 @@
 #include "Weather/ReferenceEffectWidget.h"
 #include "Weather/VolumetricLightingWidget.h"
 #include "Weather/WeatherWidget.h"
-#include "Weather/WorldSpaceWidget.h"
 #include "WeatherUtils.h"
 #include "Widget.h"
 
@@ -31,7 +30,6 @@ public:
 
 	// Widget collections owned by EditorWindow, created in SetupResources(), released in destructor
 	std::vector<std::unique_ptr<Widget>> weatherWidgets;
-	std::vector<std::unique_ptr<Widget>> worldSpaceWidgets;
 	std::vector<std::unique_ptr<Widget>> lightingTemplateWidgets;
 	std::vector<std::unique_ptr<Widget>> imageSpaceWidgets;
 	std::vector<std::unique_ptr<Widget>> volumetricLightingWidgets;
