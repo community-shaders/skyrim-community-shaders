@@ -6,6 +6,7 @@
 
 #include <filesystem>
 #include <fstream>
+#include <unordered_set>
 
 // --- Path Resolution ---
 
@@ -39,6 +40,28 @@ Feature* SceneSettingsManager::FindFeatureByShortName(const std::string& shortNa
 std::vector<std::string> SceneSettingsManager::GetLoadedFeatureNames()
 {
 	return Feature::GetLoadedFeatureNames();
+}
+
+std::vector<std::string> SceneSettingsManager::GetInteriorRelevantFeatureNames()
+{
+	// Features that are relevant for interior-only setting overrides.
+	// Excludes exterior-only features: terrain, grass, LOD, sky, cloud shadows.
+	static const std::unordered_set<std::string> interiorRelevantFeatures = {
+		"VolumetricLighting",
+		"ScreenSpaceGI",
+		"ScreenSpaceShadows",
+		"LinearLighting",
+		"ImageBasedLighting",
+	};
+
+	auto allNames = Feature::GetLoadedFeatureNames();
+	std::vector<std::string> filtered;
+	filtered.reserve(allNames.size());
+	for (auto& name : allNames) {
+		if (interiorRelevantFeatures.contains(name))
+			filtered.push_back(std::move(name));
+	}
+	return filtered;
 }
 
 std::vector<std::string> SceneSettingsManager::GetFeatureSettingKeys(const std::string& featureShortName)
@@ -464,8 +487,22 @@ void SceneSettingsManager::ApplySettingToFeature(const SettingEntry& entry)
 	if (!settings.is_object())
 		return;
 
+	if (!settings.contains(entry.settingKey)) {
+		logger::warn("[SceneSettings] Setting '{}' not found in feature '{}', skipping", entry.settingKey, entry.featureShortName);
+		return;
+	}
+
 	settings[entry.settingKey] = entry.value;
 	feature->LoadSettings(settings);
+
+	// Round-trip verification: check if the feature clamped the value
+	json verify;
+	feature->SaveSettings(verify);
+	if (verify.contains(entry.settingKey) && verify[entry.settingKey] != entry.value) {
+		logger::warn("[SceneSettings] Feature '{}' clamped setting '{}' from {} to {}",
+			entry.featureShortName, entry.settingKey,
+			entry.value.dump(), verify[entry.settingKey].dump());
+	}
 }
 
 // --- Persistence ---

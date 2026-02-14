@@ -64,7 +64,7 @@ namespace InteriorOnlyPanel
 
 		// Feature dropdown
 		if (cachedFeatureNames.empty())
-			cachedFeatureNames = SceneSettingsManager::GetLoadedFeatureNames();
+			cachedFeatureNames = SceneSettingsManager::GetInteriorRelevantFeatureNames();
 
 		const char* featurePreview = (selectedFeatureIdx >= 0 && selectedFeatureIdx < static_cast<int>(cachedFeatureNames.size())) ? cachedFeatureNames[selectedFeatureIdx].c_str() : "Select Feature...";
 

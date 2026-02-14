@@ -134,6 +134,9 @@ public:
 	/// Get all loaded features' short names (for dropdown)
 	static std::vector<std::string> GetLoadedFeatureNames();
 
+	/// Get loaded feature short names filtered to only interior-relevant features
+	static std::vector<std::string> GetInteriorRelevantFeatureNames();
+
 	/// Get setting keys for a feature by JSON round-tripping its current settings
 	static std::vector<std::string> GetFeatureSettingKeys(const std::string& featureShortName);
 
