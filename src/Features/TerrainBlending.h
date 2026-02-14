@@ -37,7 +37,7 @@ public:
 	struct Settings
 	{
 		uint32_t Enabled = true;
-		uint32_t OverridePath = static_cast<uint32_t>(DepthOverridePath::GlobalDraw);
+		uint32_t OverridePath = static_cast<uint32_t>(DepthOverridePath::EngineHook);
 		uint32_t Slot2GuardModeValue = static_cast<uint32_t>(Slot2GuardMode::Production);
 		uint32_t pad[1];
 	};

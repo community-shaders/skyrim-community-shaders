@@ -1,7 +1,5 @@
 #include "Globals.h"
 
-#include <cstring>
-
 #include "Deferred.h"
 #include "Features/CloudShadows.h"
 #include "Features/DynamicCubemaps.h"
