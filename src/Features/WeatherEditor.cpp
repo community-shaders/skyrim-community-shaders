@@ -113,6 +113,9 @@ void WeatherEditor::Prepass()
 					editorWindow->ResumeTime();
 				} else {
 					float restoreTimeScale = editorWindow->savedTimeScale > 0.0f ? editorWindow->savedTimeScale : 20.0f;
+					// Direct field write only; calling EditorWindow::ResumeTime() here would overwrite
+					// an externally-set calendar->timeScale->value with editorWindow->savedTimeScale.
+					// We avoid ResumeTime() to preserve external changes to the time scale.
 					calendar->timeScale->value = restoreTimeScale;
 				}
 				s_wasRestoredForWait = true;
