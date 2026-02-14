@@ -1,5 +1,5 @@
-#ifndef ACES_HLSL
-#define ACES_HLSL
+#ifndef COLORSPACES_HLSLI
+#define COLORSPACES_HLSLI
 
 static const float3x3 AP0_2_XYZ_MAT =
 {
@@ -126,7 +126,7 @@ static const float3x3 XYZ_2_CAM16_MAT =
 
 // Transformations between CIE XYZ tristimulus values and CIE x,y 
 // chromaticity coordinates
-float3 XYZ_2_xyY(float3 XYZ)
+float3 XYZToxyY(float3 XYZ)
 {  
 	float3 xyY;
 	float divisor = (XYZ[0] + XYZ[1] + XYZ[2]);
@@ -138,7 +138,7 @@ float3 XYZ_2_xyY(float3 XYZ)
 	return xyY;
 }
 
-float3 xyY_2_XYZ(float3 xyY)
+float3 xyYToXYZ(float3 xyY)
 {
 	float3 XYZ;
 	XYZ[0] = xyY[0] * xyY[2] / max(xyY[1], 1e-10);
@@ -166,8 +166,8 @@ float3x3 ChromaticAdaptation(float2 src_xy, float2 dst_xy)
 		-0.0085287,  0.0400428,  0.9684867,
 	};
 
-	float3 src_XYZ = xyY_2_XYZ(float3( src_xy, 1 ));
-	float3 dst_XYZ = xyY_2_XYZ(float3( dst_xy, 1 ));
+	float3 src_XYZ = xyYToXYZ(float3( src_xy, 1 ));
+	float3 dst_XYZ = xyYToXYZ(float3( dst_xy, 1 ));
 
 	float3 src_coneResp = mul(ConeResponse, src_XYZ);
 	float3 dst_coneResp = mul(ConeResponse, dst_XYZ);
@@ -180,6 +180,18 @@ float3x3 ChromaticAdaptation(float2 src_xy, float2 dst_xy)
 	};
 
 	return mul(InvConeResponse, mul(VonKriesMat, ConeResponse));
+}
+
+float3 sRGBToAP1(float3 sRGB)
+{
+    float3 XYZ = mul(sRGB_2_XYZ_MAT, sRGB);
+    return mul(XYZ_2_AP1_MAT, XYZ);
+}
+
+float3 AP1TosRGB(float3 AP1)
+{
+    float3 XYZ = mul(AP1_2_XYZ_MAT, AP1);
+    return mul(XYZ_2_sRGB_MAT, XYZ);
 }
 
 #endif

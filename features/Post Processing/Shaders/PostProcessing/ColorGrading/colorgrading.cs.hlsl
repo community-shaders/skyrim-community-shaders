@@ -1,8 +1,8 @@
 #include "Common/Color.hlsli"
+#include "Common/ColorSpaces.hlsli"
 #include "Common/Math.hlsli"
 
 #include "PostProcessing/common.hlsli"
-#include "PostProcessing/aces.hlsli"
 #include "PostProcessing/ColourTransforms/GT7ToneMapping.hlsli"
 
 #define LUT_SIZE 64
