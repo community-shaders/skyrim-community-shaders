@@ -111,7 +111,6 @@ public:
 	HRESULT GetDevice(_In_ REFIID riid, _COM_Outptr_ void** ppDevice);
 	HANDLE GetFrameLatencyWaitableObject();
 
-	void SetUIBuffer();
 	void SetColorSpace(bool enableHDR);
 
 	// Resources needed by BackgroundBlur when D3D12 swap chain is active

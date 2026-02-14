@@ -452,16 +452,7 @@ void DX12SwapChain::SetColorSpace(bool enableHDR)
 	}
 }
 
-void DX12SwapChain::SetUIBuffer()
-{
-	// Redirect kFRAMEBUFFER.RTV to our UI texture so vanilla UI renders to it
-	auto& data = globals::game::renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGET::kFRAMEBUFFER];
-	float clearColor[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
-	d3d11Context->ClearRenderTargetView(uiBufferWrapped->rtv, clearColor);
 
-	data.RTV = uiBufferWrapped->rtv;
-	d3d11Context->OMSetRenderTargets(1, &data.RTV, nullptr);
-}
 
 DX12SwapChain::BlurResources DX12SwapChain::GetBlurResources() const
 {
