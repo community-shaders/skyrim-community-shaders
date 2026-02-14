@@ -15,7 +15,9 @@ public:
 		}
 		form = a_imageSpace;
 		imageSpace = a_imageSpace;
-		LoadImageSpaceValues();
+		LoadFromGameSettings();
+		vanillaSettings = settings;
+		originalSettings = settings;
 	}
 
 	struct Settings
@@ -42,18 +44,23 @@ public:
 		float dofStrength = 0.0f;
 		float dofDistance = 0.0f;
 		float dofRange = 0.0f;
+		bool operator==(const Settings&) const = default;
 	};
 
 	Settings settings;
+	Settings vanillaSettings;
+	Settings originalSettings;
 
 	~ImageSpaceWidget();
 
 	virtual void DrawWidget() override;
 	virtual void LoadSettings() override;
 	virtual void SaveSettings() override;
+	virtual bool HasUnsavedChanges() const override;
 
 	void SetImageSpaceValues();
 	void LoadImageSpaceValues();
-	void ApplyChanges();
-	void RevertChanges();
+	void LoadFromGameSettings();
+	void ApplyChanges() override;
+	void RevertChanges() override;
 };

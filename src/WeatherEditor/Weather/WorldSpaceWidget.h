@@ -18,9 +18,7 @@ public:
 	virtual void DrawWidget() override;
 	virtual void LoadSettings() override;
 	virtual void SaveSettings() override;
-
-	void ApplyChanges();
-	void RevertChanges();
+	virtual void ApplyChanges() override;
 
 	struct Settings
 	{
