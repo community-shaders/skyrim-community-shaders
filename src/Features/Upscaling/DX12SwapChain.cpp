@@ -452,8 +452,6 @@ void DX12SwapChain::SetColorSpace(bool enableHDR)
 	}
 }
 
-
-
 DX12SwapChain::BlurResources DX12SwapChain::GetBlurResources() const
 {
 	BlurResources res;
