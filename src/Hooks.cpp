@@ -401,7 +401,7 @@ struct BSInputDeviceManager_PollInputDevices
 						}
 						// For VR controllers, only block if OpenVR is compatible
 						else if (isVRController) {
-							blockedDevice = globals::features::vr.IsOpenVRCompatible();
+							blockedDevice = globals::features::vr.IsEffectivelyCompatible();
 						}
 						// For mouse/keyboard and other devices, block them (like Flatrim)
 						else {

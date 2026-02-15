@@ -15,8 +15,10 @@
 #include "Utils/VRUtils.h"
 #include <DirectXMath.h>
 #include <SimpleMath.h>
+#include <chrono>
 #include <cmath>
 #include <d3d11.h>
+#include <d3dcompiler.h>
 #include <imgui_impl_dx11.h>
 #include <unordered_map>
 #include <windows.h>
@@ -35,6 +37,7 @@ namespace
 
 constexpr int kOverlayWidth = 1920;
 constexpr int kOverlayHeight = 1080;
+constexpr float kOverlayAspect = static_cast<float>(kOverlayHeight) / static_cast<float>(kOverlayWidth);
 
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	VR::Settings,
@@ -97,11 +100,19 @@ void VR::SetupResources()
 		logger::info("  Version: {}", openVRInfo.version);
 		logger::info("  Size: {} bytes", openVRInfo.fileSize);
 		logger::info("  Modified: {}", openVRInfo.modificationTime);
+		logger::info("  Runtime: {}", VRDetection::RuntimeTypeToString(openVRInfo.runtimeType));
+		logger::info("  Interface probing: {}", openVRInfo.probingSucceeded ? "Passed" : "Failed");
+		logger::info("    Overlay (IVROverlay_016): {}", openVRInfo.hasOverlayInterface ? "Yes" : "No");
+		logger::info("    System (IVRSystem_017): {}", openVRInfo.hasSystemInterface ? "Yes" : "No");
+		logger::info("    Compositor (IVRCompositor_021): {}", openVRInfo.hasCompositorInterface ? "Yes" : "No");
 		logger::info("  Compatible: {}", openVRInfo.isCompatible ? "Yes" : "No");
 
 		if (!openVRInfo.isCompatible) {
-			logger::info("OpenVR version is incompatible.");
-			logger::info("Community Shaders VR menus will be disabled for stability");
+			if (globals::state->IsDeveloperMode()) {
+				logger::info("OpenVR not natively compatible, but developer mode is active - VR menus enabled");
+			} else {
+				logger::info("OpenVR version is incompatible. Community Shaders VR menus will be disabled for stability");
+			}
 		}
 	} else {
 		logger::info("OpenVR DLL not available in current process");
@@ -122,6 +133,23 @@ void VR::PostPostLoad()
 		static float s_defaultMinOccludeeBoxExtent = 10.0f;
 		gMinOccludeeBoxExtent = &s_defaultMinOccludeeBoxExtent;
 		logger::warn("VR: gMinOccludeeBoxExtent address not found - using fallback default (10.0)");
+	}
+
+	// Migration: Fix legacy overlay keybinds that were deserialized incorrectly
+	// Plain integer values (e.g., 32) deserialize as Keyboard device instead of VR controller
+	if (settings.VROverlayCloseKeys.size() == 1) {
+		auto& closeKey = settings.VROverlayCloseKeys[0];
+		if (closeKey.GetDevice() == ControllerDevice::Keyboard && closeKey.GetKey() == 32) {
+			settings.VROverlayCloseKeys[0] = InputCombo::Primary(32);
+			logger::info("VR: Migrated VROverlayCloseKeys from Keyboard(32) to Primary(32)");
+		}
+	}
+	if (settings.VROverlayOpenKeys.size() == 1) {
+		auto& openKey = settings.VROverlayOpenKeys[0];
+		if (openKey.GetDevice() == ControllerDevice::Keyboard && openKey.GetKey() == 32) {
+			settings.VROverlayOpenKeys[0] = InputCombo::Secondary(32);
+			logger::info("VR: Migrated VROverlayOpenKeys from Keyboard(32) to Secondary(32)");
+		}
 	}
 
 	// Patches BSGeometry::CopyTransformAndBounds to copy the model-bound translation across correctly instead of overwriting it with the bounding sphere centre
@@ -161,7 +189,7 @@ void VR::EarlyPrepass()
 void VR::DrawOverlay()
 {
 	auto& vr = globals::features::vr;
-	if (!vr.openVRInfo.isCompatible)
+	if (!vr.IsEffectivelyCompatible())
 		return;
 	static LARGE_INTEGER overlayShowStart = { 0 };
 	static LARGE_INTEGER freq = { 0 };
@@ -192,24 +220,40 @@ void VR::DrawOverlay()
 	int secondsLeft = int(std::ceil(autoHideSeconds - elapsed));
 
 	ImGuiIO& io = ImGui::GetIO();
-	ImVec2 overlaySize(480, 0);  // width, height auto
-	ImVec2 overlayPos = ImVec2((io.DisplaySize.x - overlaySize.x) * 0.5f, 80.0f);
+	ImVec2 overlaySize(520, 0);  // width, height auto
+	// Center horizontally and vertically for better VR readability
+	ImVec2 overlayPos = ImVec2((io.DisplaySize.x - overlaySize.x) * 0.5f, (io.DisplaySize.y * 0.35f));
 	ImGui::SetNextWindowPos(overlayPos, ImGuiCond_Always);
 	ImGui::SetNextWindowSize(overlaySize, ImGuiCond_Always);
-	ImGui::SetNextWindowBgAlpha(0.92f);
+	ImGui::SetNextWindowBgAlpha(0.95f);
 
 	ImGui::Begin("HowToUseOverlay", nullptr, ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoNav);
-	ImGui::Text("How to Use VR Community Shaders Menu:");
+
+	ImGui::PushTextWrapPos(ImGui::GetCursorPos().x + 500.0f);
+	ImGui::TextWrapped("How to Use VR Community Shaders Menu:");
 	ImGui::Separator();
-	ImGui::Text("You must be in the Main Menu or Tween Menu for these key binds to work.");
+	ImGui::TextWrapped("You must open the Main Menu or Tween Menu before VR controls work.");
 	ImGui::Spacing();
+	ImGui::PopTextWrapPos();
+
 	ImGui::Text("Open Menu: ");
+	ImGui::SameLine();
 	Util::DrawButtonCombo(settings.VRMenuOpenKeys, true);
-	ImGui::Text("\nClose Menu: ");
+
+	ImGui::Text("Close Menu: ");
+	ImGui::SameLine();
 	Util::DrawButtonCombo(settings.VRMenuCloseKeys, true);
+
 	ImGui::Spacing();
-	ImGui::TextDisabled("(This message will auto-disable in %d seconds)", secondsLeft);
-	ImGui::TextDisabled("(You can disable this message in VR settings > Controller Input Instructions)");
+	ImGui::PushTextWrapPos(ImGui::GetCursorPos().x + 500.0f);
+	ImGui::TextWrapped("Grip + Thumbstick: Adjust overlay depth (closer/farther)");
+	ImGui::Spacing();
+	ImGui::TextWrapped("Tip: Disable this VR overlay by setting Attach Mode to 'None' in VR settings.");
+	ImGui::Spacing();
+	ImGui::TextWrapped("(This welcome message will auto-hide in %d seconds)", secondsLeft);
+	ImGui::TextWrapped("(Disable in: VR settings > Controller Input Instructions)");
+	ImGui::PopTextWrapPos();
+
 	ImGui::End();
 }
 
@@ -244,7 +288,7 @@ void VR::DrawSettings()
 		}
 
 		// Key Bindings Tab
-		if (openVRInfo.isCompatible) {
+		if (IsEffectivelyCompatible()) {
 			if (BeginTabItemWithFont("Bindings", Menu::FontRole::Subheading)) {
 				if (ImGui::BeginChild("##VRBindingsFrame", { 0, 0 }, true)) {
 					DrawKeyBindings();
@@ -467,7 +511,7 @@ namespace
 	{
 		auto& vr = globals::features::vr;
 		auto& settings = vr.settings;
-		if (!vr.openVRInfo.isCompatible)
+		if (!vr.IsEffectivelyCompatible())
 			return;
 		if (ImGui::CollapsingHeader("Controller Input Instructions", ImGuiTreeNodeFlags_DefaultOpen)) {
 			ImGui::SliderInt("Auto-hide Welcome overlay timeout", &settings.kAutoHideSeconds, 0, VR::Config::kMaxAutoHideSeconds,
@@ -627,13 +671,22 @@ namespace
 	{
 		auto& vr = globals::features::vr;
 		auto& settings = vr.settings;
-		if (!vr.openVRInfo.isCompatible)
+		if (!vr.IsEffectivelyCompatible())
 			return;
 		if (ImGui::CollapsingHeader("Menu Settings", ImGuiTreeNodeFlags_DefaultOpen)) {
-			ImGui::SliderFloat("Menu Scale", &settings.VRMenuScale, VR::Config::kMinMenuScale, VR::Config::kMaxMenuScale, "%.2f");
+			float maxScale = VR::Config::kMaxMenuScale;
+			ImGui::SliderFloat("Menu Scale", &settings.VRMenuScale, VR::Config::kMinMenuScale, maxScale, "%.2f");
 			const char* positioningMethods[] = { "HMD Relative", "Fixed World Position" };
-			ImGui::Combo("Menu Positioning Method", &settings.VRMenuPositioningMethod, positioningMethods, IM_ARRAYSIZE(positioningMethods));
-			const char* attachModes[] = { "HMD Only", "Controller Only", "Both" };
+			int prevMethod = settings.VRMenuPositioningMethod;
+			if (ImGui::Combo("Menu Positioning Method", &settings.VRMenuPositioningMethod, positioningMethods, IM_ARRAYSIZE(positioningMethods))) {
+				if (prevMethod != 1 && settings.VRMenuPositioningMethod == 1) {
+					vr.SetFixedOverlayToCurrentHMD();
+					auto player = RE::PlayerCharacter::GetSingleton();
+					if (player)
+						vr.savedPlayerWorldPos = player->GetPosition();
+				}
+			}
+			const char* attachModes[] = { "HMD Only", "Controller Only", "Both", "None (Disabled)" };
 			int attachModeInt = static_cast<int>(settings.attachMode);
 			if (ImGui::Combo("Attach Mode", &attachModeInt, attachModes, IM_ARRAYSIZE(attachModes))) {
 				settings.attachMode = static_cast<VR::Settings::OverlayAttachMode>(attachModeInt);
@@ -662,7 +715,7 @@ namespace
 				ImGui::Text("HMD Offset Settings");
 				ImGui::SliderFloat("HMD Offset X", &settings.VRMenuOffsetX, -2.0f, 2.0f, "%.2f");
 				ImGui::SliderFloat("HMD Offset Y", &settings.VRMenuOffsetY, -2.0f, 2.0f, "%.2f");
-				ImGui::SliderFloat("HMD Offset Z", &settings.VRMenuOffsetZ, -2.0f, 2.0f, "%.2f");
+				ImGui::SliderFloat("HMD Offset Z", &settings.VRMenuOffsetZ, -4.0f, 1.0f, "%.2f");
 			}
 
 			// Fixed World Position: show auto reset distance and manual reset button
@@ -683,7 +736,7 @@ namespace
 	void DrawMouseSettings()
 	{
 		auto& vr = globals::features::vr;
-		if (!vr.openVRInfo.isCompatible)
+		if (!vr.IsEffectivelyCompatible())
 			return;
 		VR::Settings& settings = vr.settings;
 		if (ImGui::CollapsingHeader("Input Settings", ImGuiTreeNodeFlags_DefaultOpen)) {
@@ -711,7 +764,7 @@ namespace
 	void DrawDragSettings()
 	{
 		auto& vr = globals::features::vr;
-		if (!vr.openVRInfo.isCompatible)
+		if (!vr.IsEffectivelyCompatible())
 			return;
 		VR::Settings& settings = vr.settings;
 		if (ImGui::CollapsingHeader("Drag Settings", ImGuiTreeNodeFlags_DefaultOpen)) {
@@ -720,6 +773,11 @@ namespace
 				ImGui::BulletText("Fixed World Position: Any controller can drag (HMD-only mode) or attached controller only (Both modes)");
 				ImGui::BulletText("HMD Relative: Any controller can drag (HMD-only mode) or attached controller only (Both modes)");
 				ImGui::BulletText("Controller Attached: Only the opposite hand can drag the controller overlay");
+				ImGui::Spacing();
+				ImGui::TextWrapped("Depth Adjustment (Grip + Thumbstick):");
+				ImGui::BulletText("While gripping to drag, use the thumbstick on the same hand to adjust depth");
+				ImGui::BulletText("Thumbstick forward: Push overlay farther away");
+				ImGui::BulletText("Thumbstick back: Pull overlay closer");
 			}
 			ImGui::Checkbox("Enable drag to reposition overlays", &settings.EnableDragToReposition);
 			ImGui::BeginDisabled(!settings.EnableDragToReposition);
@@ -851,10 +909,10 @@ namespace
 				InputCombo::Both(static_cast<uint32_t>(RE::BSOpenVRControllerDevice::Keys::kGrip))
 			};
 			settings.VROverlayOpenKeys = {
-				InputCombo::Primary(static_cast<uint32_t>(RE::BSOpenVRControllerDevice::Keys::kJoystickTrigger))
+				InputCombo::Secondary(static_cast<uint32_t>(RE::BSOpenVRControllerDevice::Keys::kJoystickTrigger))
 			};
 			settings.VROverlayCloseKeys = {
-				InputCombo::Secondary(static_cast<uint32_t>(RE::BSOpenVRControllerDevice::Keys::kJoystickTrigger))
+				InputCombo::Primary(static_cast<uint32_t>(RE::BSOpenVRControllerDevice::Keys::kJoystickTrigger))
 			};
 		}
 		if (auto _tt = Util::HoverTooltipWrapper()) {
@@ -871,15 +929,36 @@ namespace
 		if (ImGui::CollapsingHeader("OpenVR Information", ImGuiTreeNodeFlags_DefaultOpen)) {
 			auto& info = vr.openVRInfo;
 			if (info.isAvailable) {
-				ImGui::Text("OpenVR System: %s", info.isCompatible ? "Active & Compatible" : "Active but INCOMPATIBLE");
-				if (!info.isCompatible) {
-					std::string reason = std::format("{} {}", "OpenVR version is incompatible.", "VR menus disabled.");
-					ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.5f, 1.0f), "Reason: %s", reason.c_str());
+				bool effective = vr.IsEffectivelyCompatible();
+				bool devOverride = !info.isCompatible && effective;
+
+				if (effective) {
+					if (devOverride)
+						ImGui::TextColored(ImVec4(1.0f, 1.0f, 0.0f, 1.0f), "OpenVR System: Active (Developer Mode Override)");
+					else
+						ImGui::Text("OpenVR System: Active & Compatible");
+				} else {
+					ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.5f, 1.0f), "OpenVR System: Active but INCOMPATIBLE");
+					ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.5f, 1.0f), "VR overlay menus disabled. Enable developer mode (debug logging) to override.");
 				}
+
+				ImGui::Text("Runtime: %s", VRDetection::RuntimeTypeToString(info.runtimeType));
 				ImGui::Text("DLL Path: %s", info.dllPath.c_str());
 				ImGui::Text("DLL Version: %s", info.version.c_str());
 				ImGui::Text("DLL Size: %llu bytes", info.fileSize);
 				ImGui::Text("Modified: %s", info.modificationTime.c_str());
+
+				ImGui::Separator();
+				ImGui::Text("Detection Method:");
+				ImGui::Text("  Interface Probing: %s", info.probingSucceeded ? "Passed" : "Failed");
+				ImGui::Text("    IVROverlay_016: %s", info.hasOverlayInterface ? "OK" : "Missing");
+				ImGui::Text("    IVRSystem_017: %s", info.hasSystemInterface ? "OK" : "Missing");
+				ImGui::Text("    IVRCompositor_021: %s", info.hasCompositorInterface ? "OK" : "Missing");
+				if (devOverride) {
+					ImGui::TextColored(ImVec4(1.0f, 1.0f, 0.0f, 1.0f), "  Developer Mode: Active (bypassing compatibility check)");
+				}
+				ImGui::TextColored(ImVec4(0.3f, 1.0f, 0.3f, 1.0f), "  Rendering: In-scene overlay (submit hook)");
+
 			} else {
 				ImGui::Text("OpenVR system not available");
 			}
@@ -1255,10 +1334,9 @@ void VR::UpdateVROverlayPosition()
 	bool showOnHMD = (settings.attachMode == AttachMode::HMDOnly || settings.attachMode == AttachMode::Both);
 
 	// Texture size
-	float aspect = static_cast<float>(kOverlayHeight) / kOverlayWidth;
 	float baseWidth = 1.0f;
 	float overlayWidth = baseWidth * settings.VRMenuScale;
-	float overlayHeight = overlayWidth * aspect;
+	float overlayHeight = overlayWidth * kOverlayAspect;
 	float offsetX = settings.VRMenuOffsetX;
 	float offsetY = settings.VRMenuOffsetY;
 	float offsetZ = settings.VRMenuOffsetZ;
@@ -1448,8 +1526,7 @@ void VR::UpdateVROverlayControllerPosition()
 // Add overlay management methods for VR menu overlays
 void VR::EnsureOverlayInitialized()
 {
-	// Check OpenVR compatibility first
-	if (!openVRInfo.isCompatible) {
+	if (!IsEffectivelyCompatible()) {
 		logger::warn("OpenVR version is incompatible.");
 		return;
 	}
@@ -1488,6 +1565,7 @@ void VR::EnsureOverlayInitialized()
 		overlay->SetOverlayWidthInMeters(menuOverlayHandle, 1.0f);
 	} else {
 		logger::error("CreateOverlay failed: {} ({})", static_cast<int>(err), magic_enum::enum_name(err));
+		return;
 	}
 	// Controller overlay
 	std::string controllerKey = "communityshaders.menu.controller";
@@ -1499,7 +1577,7 @@ void VR::EnsureOverlayInitialized()
 		Util::SetOverlayInputFlags(overlay, menuControllerOverlayHandle);
 		overlay->SetOverlayWidthInMeters(menuControllerOverlayHandle, 1.0f);
 	} else {
-		logger::error("CreateOverlay failed: {} ({})", static_cast<int>(err), magic_enum::enum_name(err));
+		logger::error("CreateOverlay failed for controller: {} ({})", static_cast<int>(err), magic_enum::enum_name(err));
 	}
 }
 
@@ -1527,124 +1605,45 @@ void VR::DestroyOverlay()
 
 void VR::RecreateOverlayTexturesIfNeeded()
 {
-	// Smart pointers automatically release existing resources when put() assigns new ones
 	Util::CreateOverlayTextureAndRTV(globals::d3d::device, kOverlayWidth, kOverlayHeight, menuTexture.put(), menuRTV.put());
 	Util::CreateOverlayTextureAndRTV(globals::d3d::device, kOverlayWidth, kOverlayHeight, menuControllerTexture.put(), menuControllerRTV.put());
 }
 
+// Wraps IVROverlay calls that may trigger OpenComposite's abort (int3) inside SEH.
 void VR::SubmitOverlayFrame()
 {
-	// Skip overlay operations if OpenVR is incompatible
-	if (!openVRInfo.isCompatible) {
-		return;
-	}
+	// The submit hook is the primary rendering method -- install it unconditionally
+	InstallSubmitHook();
 
 	RE::BSOpenVR* openvr = RE::BSOpenVR::GetSingleton();
-	auto* gameOverlay = openvr ? RE::BSOpenVR::GetIVROverlayFromContext(&openvr->vrContext) : nullptr;
-	auto* cleanOverlay = RE::BSOpenVR::GetCleanIVROverlay();
-
-	static bool cleanOverlayLogged = false;
-	if (!cleanOverlayLogged) {
-		if (cleanOverlay) {
-			logger::debug("VR: Successfully acquired clean IVROverlay interface via CommonLib: 0x{:X}", reinterpret_cast<uintptr_t>(cleanOverlay));
-		} else {
-			logger::error("VR: Failed to get clean IVROverlay interface via CommonLib");
-		}
-		cleanOverlayLogged = true;
-	}
-
-	if (!gameOverlay || !cleanOverlay) {
-		return;
-	}
-
 	if (!openvr || !openvr->vrSystem) {
-		logger::error("SubmitOverlayFrame: BSOpenVR or vrSystem is nullptr");
 		return;
 	}
 
-	// Update drag logic for all modes - only when overlay is visible
 	auto& enabled = globals::menu->IsEnabled;
 	auto& overlayVisible = globals::menu->overlayVisible;
-	if ((enabled || overlayVisible || settings.kAutoHideSeconds > 0) && menuOverlayHandle != vr::k_ulOverlayHandleInvalid && menuTexture.get() && menuRTV.get()) {
-		// Update drag logic only when overlay is active
+
+	if ((enabled || overlayVisible || settings.kAutoHideSeconds > 0) && menuTexture.get() && menuRTV.get()) {
+		UpdateFixedWorldPositioning();
 		UpdateOverlayDrag();
-		// Copy ImGui output to overlay texture
+
+		// Render ImGui to the overlay texture
 		ID3D11RenderTargetView* oldRTV = nullptr;
 		globals::d3d::context->OMGetRenderTargets(1, &oldRTV, nullptr);
 		ID3D11RenderTargetView* menuRTVPtr = menuRTV.get();
 		globals::d3d::context->OMSetRenderTargets(1, &menuRTVPtr, nullptr);
 		float clearColor[4] = { 0, 0, 0, 0 };
 		globals::d3d::context->ClearRenderTargetView(menuRTV.get(), clearColor);
-		// Re-render ImGui for HMD overlay
 		ImGui::Render();
 		ImGui_ImplDX11_RenderDrawData(ImGui::GetDrawData());
 		globals::d3d::context->OMSetRenderTargets(1, &oldRTV, nullptr);
 
-		// Apply highlight tint to HMD overlay if it's being dragged
-		bool hmdBeingDragged = settings.EnableDragToReposition && overlayDragState.dragging &&
-		                       (overlayDragState.mode == OverlayDragState::DragMode::HMD ||
-								   overlayDragState.mode == OverlayDragState::DragMode::FixedWorld);
-		Util::ApplyHighlightTintToTexture(menuTexture.get(), hmdBeingDragged, settings.dragHighlightColor);
+		// Apply highlight tint if being dragged (any mode, since both overlays share this texture)
+		bool beingDragged = settings.EnableDragToReposition && overlayDragState.dragging;
+		Util::ApplyHighlightTintToTexture(menuTexture.get(), beingDragged, settings.dragHighlightColor);
 
-		// Update overlay position and submit to SteamVR
-		UpdateVROverlayPosition();
-		vr::Texture_t tex = { menuTexture.get(), vr::TextureType_DirectX, vr::ColorSpace_Auto };
-		if (settings.attachMode == AttachMode::HMDOnly || settings.attachMode == AttachMode::Both) {
-			Util::SetOverlayInputFlags(gameOverlay, menuOverlayHandle);
-			vr::EVROverlayError err = cleanOverlay->SetOverlayTexture(menuOverlayHandle, &tex);
-			if (err != vr::VROverlayError_None) {
-				logger::error("SetOverlayTexture failed for menu overlay: {} ({})", static_cast<int>(err), magic_enum::enum_name(err));
-			}
-			err = gameOverlay->ShowOverlay(menuOverlayHandle);
-			if (err != vr::VROverlayError_None) {
-				logger::error("ShowOverlay failed for menu overlay: {} ({})", static_cast<int>(err), magic_enum::enum_name(err));
-			}
-		} else if (menuOverlayHandle != vr::k_ulOverlayHandleInvalid) {
-			gameOverlay->HideOverlay(menuOverlayHandle);
-		}
-		// Controller overlay
-		if (settings.attachMode == AttachMode::ControllerOnly || settings.attachMode == AttachMode::Both) {
-			// Copy the same ImGui output to controller overlay texture
-			ID3D11RenderTargetView* menuControllerRTVPtr = menuControllerRTV.get();
-			globals::d3d::context->OMSetRenderTargets(1, &menuControllerRTVPtr, nullptr);
-			globals::d3d::context->ClearRenderTargetView(menuControllerRTV.get(), clearColor);
-			// Re-render ImGui for controller overlay
-			ImGui::Render();
-			ImGui_ImplDX11_RenderDrawData(ImGui::GetDrawData());
-			globals::d3d::context->OMSetRenderTargets(1, &oldRTV, nullptr);
-
-			// Apply highlight tint to controller overlay if it's being dragged
-			bool controllerBeingDragged = overlayDragState.dragging &&
-			                              overlayDragState.mode == OverlayDragState::DragMode::Controller;
-			Util::ApplyHighlightTintToTexture(menuControllerTexture.get(), controllerBeingDragged, settings.dragHighlightColor);
-
-			// Position controller overlay and submit
-			UpdateVROverlayControllerPosition();
-
-			vr::Texture_t controllerTex = { menuControllerTexture.get(), vr::TextureType_DirectX, vr::ColorSpace_Auto };
-			Util::SetOverlayInputFlags(gameOverlay, menuControllerOverlayHandle);
-			vr::EVROverlayError err = cleanOverlay->SetOverlayTexture(menuControllerOverlayHandle, &controllerTex);
-			if (err != vr::VROverlayError_None) {
-				logger::error("SetOverlayTexture failed for controller overlay: {} ({})", static_cast<int>(err), magic_enum::enum_name(err));
-			}
-			err = gameOverlay->ShowOverlay(menuControllerOverlayHandle);
-			if (err != vr::VROverlayError_None) {
-				logger::error("ShowOverlay failed for controller overlay: {} ({})", static_cast<int>(err), magic_enum::enum_name(err));
-			}
-		} else if (menuControllerOverlayHandle != vr::k_ulOverlayHandleInvalid) {
-			gameOverlay->HideOverlay(menuControllerOverlayHandle);
-		}
-
-		// Release oldRTV after all usage is complete to prevent use-after-free
 		if (oldRTV)
 			oldRTV->Release();
-	} else {
-		if (menuOverlayHandle != vr::k_ulOverlayHandleInvalid) {
-			gameOverlay->HideOverlay(menuOverlayHandle);
-		}
-		if (menuControllerOverlayHandle != vr::k_ulOverlayHandleInvalid) {
-			gameOverlay->HideOverlay(menuControllerOverlayHandle);
-		}
 	}
 }
 
@@ -1707,9 +1706,9 @@ void VR::UpdateOverlayMenuStateFromInput()
 	bool uiMenusOpen = globals::game::ui &&
 	                   (globals::game::ui->IsMenuOpen(RE::MainMenu::MENU_NAME) || globals::game::ui->IsMenuOpen(RE::TweenMenu::MENU_NAME));
 
-	// Valid menu state means either one of those UI menus is open, or our menu is
+	// Valid menu state means either one of those UI menus is open, or our menu/overlay is
 	// enabled (but only if the game's UI system is present).
-	bool inValidMenuState = uiMenusOpen || (globals::game::ui && isEnabled);
+	bool inValidMenuState = uiMenusOpen || (globals::game::ui && (isEnabled || overlayEnabled));
 
 	if (!inValidMenuState)
 		return;
@@ -1738,26 +1737,22 @@ void VR::UpdateOverlayMenuStateFromInput()
 
 			switch (combo.GetDevice()) {
 			case ControllerDevice::Both:
-				// Check if this button is pressed on BOTH controllers
 				buttonPressed = primaryControllerState[combo.GetKey()].isPressed &&
 				                secondaryControllerState[combo.GetKey()].isPressed;
 				break;
 			case ControllerDevice::Primary:
-				// Check if this button is pressed on PRIMARY controller only
 				buttonPressed = primaryControllerState[combo.GetKey()].isPressed;
 				break;
 			case ControllerDevice::Secondary:
-				// Check if this button is pressed on SECONDARY controller only
 				buttonPressed = secondaryControllerState[combo.GetKey()].isPressed;
 				break;
 			}
 
 			if (!buttonPressed) {
-				return false;  // Any button not pressed means combo fails
+				return false;
 			}
 		}
 
-		// All configured buttons are pressed according to requirements
 		return true;
 	};
 
@@ -1773,18 +1768,22 @@ void VR::UpdateOverlayMenuStateFromInput()
 		{ [&]() {
 			 return CheckCombo(settings.VRMenuCloseKeys) && isEnabled;
 		 },
-			[&]() { isEnabled = false; },
+			[&]() {
+				isEnabled = false;
+				// Reset drag state to clear highlight when menu closes
+				overlayDragState.dragging = false;
+			},
 			true },
 
-		// Open VR overlay when closed
+		// Open VR overlay when closed (only when CS menu is open)
 		{ [&]() {
-			 return CheckCombo(settings.VROverlayOpenKeys) && !overlayEnabled;
+			 return CheckCombo(settings.VROverlayOpenKeys) && !overlayEnabled && isEnabled;
 		 },
 			[&]() { overlayEnabled = true; } },
 
-		// Close VR overlay when open
+		// Close VR overlay when open (only when CS menu is open)
 		{ [&]() {
-			 return CheckCombo(settings.VROverlayCloseKeys) && overlayEnabled;
+			 return CheckCombo(settings.VROverlayCloseKeys) && overlayEnabled && isEnabled;
 		 },
 			[&]() { overlayEnabled = false; } }
 	};
@@ -2000,8 +1999,10 @@ void VR::ProcessThumbstickScroll(RE::VRControllerState& controllerState, size_t 
 		}
 
 		// Send both horizontal and vertical scroll events if needed
+		// Negate X: thumbstick right (+X) should scroll content rightward,
+		// which requires negative wheel delta in ImGui convention
 		if (scrollEventX != 0.0f || scrollEventY != 0.0f) {
-			io.AddMouseWheelEvent(scrollEventX, scrollEventY);
+			io.AddMouseWheelEvent(-scrollEventX, scrollEventY);
 		}
 	}
 }
@@ -2027,13 +2028,16 @@ void VR::ProcessControllerInputForImGui()
 	}
 
 	if (!testMode) {
+		// Disable scrolling during grip drag (grip+joystick is used for depth adjustment)
+		bool isDragging = overlayDragState.dragging;
+
 		// When wand is handling cursor, BOTH thumbsticks become scroll controls
 		// When wand is NOT active, use traditional cursor/scroll assignment
-		if (wandHandledCursor) {
+		if (wandHandledCursor && !isDragging) {
 			// Wand mode: Both thumbsticks scroll
 			ProcessThumbstickScroll(primaryControllerState, static_cast<size_t>(RE::ControllerRole::Primary), mouseDeadzone, io);
 			ProcessThumbstickScroll(secondaryControllerState, static_cast<size_t>(RE::ControllerRole::Secondary), mouseDeadzone, io);
-		} else {
+		} else if (!isDragging) {
 			// Traditional mode: Determine which controller handles cursor vs scrolling
 			bool useAttachedControllerForCursor = (settings.attachMode == VR::Settings::OverlayAttachMode::ControllerOnly ||
 												   settings.attachMode == VR::Settings::OverlayAttachMode::Both);
@@ -2115,6 +2119,10 @@ bool VR::CanPerformDrag()
 	if (!settings.EnableDragToReposition)
 		return false;
 
+	// Only allow drag when CS menu is open to prevent interference with gameplay
+	if (!globals::menu->IsEnabled)
+		return false;
+
 	RE::BSOpenVR* openvr = RE::BSOpenVR::GetSingleton();
 	auto* system = openvr ? openvr->vrSystem : nullptr;
 	if (!system)
@@ -2185,28 +2193,36 @@ void VR::UpdateActiveDrag()
 					if (controllerPose.bPoseIsValid) {
 						Matrix attachedControllerMatrix = Util::HmdMatrix34ToMatrix(controllerPose.mDeviceToAbsoluteTracking);
 
-						// Calculate world-space delta
+						// Calculate world-space delta (translation is in _41,_42,_43 after HmdMatrix34ToMatrix transpose)
 						Vector3 worldDelta(
-							controllerMatrix._14 - overlayDragState.initialControllerMatrix._14,
-							controllerMatrix._24 - overlayDragState.initialControllerMatrix._24,
-							controllerMatrix._34 - overlayDragState.initialControllerMatrix._34);
+							controllerMatrix._41 - overlayDragState.initialControllerMatrix._41,
+							controllerMatrix._42 - overlayDragState.initialControllerMatrix._42,
+							controllerMatrix._43 - overlayDragState.initialControllerMatrix._43);
 
-						// Transform world delta to attached controller local space (use transpose for correct direction)
-						Vector3 localDelta = Vector3::Transform(worldDelta, attachedControllerMatrix);
+						// Transform world delta to attached controller local space
+						Matrix worldToLocal = attachedControllerMatrix.Invert();
+						Vector3 localDelta = Vector3::TransformNormal(worldDelta, worldToLocal);
 
 						// Apply local delta to offsets
 						settings.VRMenuControllerOffsetX = overlayDragState.initialControllerOffset.x + localDelta.x;
 						settings.VRMenuControllerOffsetY = overlayDragState.initialControllerOffset.y + localDelta.y;
 						settings.VRMenuControllerOffsetZ = overlayDragState.initialControllerOffset.z + localDelta.z;
-						UpdateVROverlayPosition();
 					}
 				}
 				break;
 			}
 		case OverlayDragState::DragMode::FixedWorld:
 			{
-				Matrix delta = controllerMatrix * overlayDragState.initialControllerMatrix.Invert();
-				fixedWorldOverlayPosition.m = delta * overlayDragState.initialOverlayMatrix;
+				// Translation-only drag: move overlay position without inheriting wrist rotation
+				Vector3 worldDelta(
+					controllerMatrix._41 - overlayDragState.initialControllerMatrix._41,
+					controllerMatrix._42 - overlayDragState.initialControllerMatrix._42,
+					controllerMatrix._43 - overlayDragState.initialControllerMatrix._43);
+				Matrix translated = overlayDragState.initialOverlayMatrix;
+				translated._41 += worldDelta.x;
+				translated._42 += worldDelta.y;
+				translated._43 += worldDelta.z;
+				fixedWorldOverlayPosition.m = translated;
 				break;
 			}
 		case OverlayDragState::DragMode::HMD:
@@ -2219,21 +2235,91 @@ void VR::UpdateActiveDrag()
 					Matrix hmdMatrix = Util::HmdMatrix34ToMatrix(hmdPose.mDeviceToAbsoluteTracking);
 
 					// Calculate world-space delta
+					// Note: HmdMatrix34ToMatrix converts to Row-Major Row-Vector format, so translation is in the bottom row (_41, _42, _43)
 					Vector3 worldDelta(
-						controllerMatrix._14 - overlayDragState.initialControllerMatrix._14,
-						controllerMatrix._24 - overlayDragState.initialControllerMatrix._24,
-						controllerMatrix._34 - overlayDragState.initialControllerMatrix._34);
+						controllerMatrix._41 - overlayDragState.initialControllerMatrix._41,
+						controllerMatrix._42 - overlayDragState.initialControllerMatrix._42,
+						controllerMatrix._43 - overlayDragState.initialControllerMatrix._43);
 
-					// Transform world delta to HMD local space (use transpose for correct direction)
-					Vector3 localDelta = Vector3::Transform(worldDelta, hmdMatrix);
+					// Transform world delta to HMD local space
+					// Use Invert to convert World Delta -> Local Delta
+					// Use TransformNormal to treat as vector (ignore translation)
+					Matrix worldToLocal = hmdMatrix.Invert();
+					Vector3 localDelta = Vector3::TransformNormal(worldDelta, worldToLocal);
 
-					// Apply local delta to offsets
+					// Debug: Log delta values
+					static auto lastDeltaLog = std::chrono::steady_clock::now();
+					auto nowDelta = std::chrono::steady_clock::now();
+					if (std::chrono::duration_cast<std::chrono::milliseconds>(nowDelta - lastDeltaLog).count() > 500) {
+						logger::debug("VR Drag Delta - Local: ({:.3f}, {:.3f}, {:.3f})", localDelta.x, localDelta.y, localDelta.z);
+						lastDeltaLog = nowDelta;
+					}
+
+					// Apply X/Y delta to position offsets
 					settings.VRMenuOffsetX = overlayDragState.initialHMDOffset.x + localDelta.x;
 					settings.VRMenuOffsetY = overlayDragState.initialHMDOffset.y + localDelta.y;
+
+					// Z delta controls actual depth (VRMenuOffsetZ)
+					// Moving controller forward (-Z) should push menu away (more negative Z)
+					// Use + localDelta.z because forward movement is negative Z, which makes offset more negative (further away)
 					settings.VRMenuOffsetZ = overlayDragState.initialHMDOffset.z + localDelta.z;
-					UpdateVROverlayPosition();
+
+					// Scale remains constant during drag (can be adjusted in settings if needed)
+					settings.VRMenuScale = overlayDragState.initialHMDScale;
+
+					static std::chrono::steady_clock::time_point lastLog = std::chrono::steady_clock::now();
+					auto now = std::chrono::steady_clock::now();
+					if (std::chrono::duration_cast<std::chrono::milliseconds>(now - lastLog).count() > 500) {
+						logger::debug("VR Dragging (3D Mode): Offset ({:.2f}, {:.2f}, {:.2f}), Scale {:.2f}",
+							settings.VRMenuOffsetX, settings.VRMenuOffsetY, settings.VRMenuOffsetZ, settings.VRMenuScale);
+						lastLog = now;
+					}
 				}
 				break;
+			}
+		}
+	}
+
+	// Joystick depth control during grip: thumbstick Y on gripping controller adjusts depth
+	if (overlayDragState.dragging) {
+		// Determine which controller state to read based on which hand is gripping
+		// isPrimary/isSecondary refer to left/right hand, map to primary/secondary controller state
+		RE::VRControllerState* gripController = nullptr;
+		size_t thumbIdx = 0;
+		if (overlayDragState.isPrimary) {
+			// Left hand is gripping
+			if (lastKnownLeftHandedMode) {
+				gripController = &primaryControllerState;
+				thumbIdx = static_cast<size_t>(RE::ControllerRole::Primary);
+			} else {
+				gripController = &secondaryControllerState;
+				thumbIdx = static_cast<size_t>(RE::ControllerRole::Secondary);
+			}
+		} else if (overlayDragState.isSecondary) {
+			// Right hand is gripping
+			if (lastKnownLeftHandedMode) {
+				gripController = &secondaryControllerState;
+				thumbIdx = static_cast<size_t>(RE::ControllerRole::Secondary);
+			} else {
+				gripController = &primaryControllerState;
+				thumbIdx = static_cast<size_t>(RE::ControllerRole::Primary);
+			}
+		}
+
+		if (gripController) {
+			float thumbY = gripController->thumbsticks[thumbIdx].y;
+			const float deadzone = settings.mouseDeadzone;
+			const float depthSpeed = 0.02f;
+			if (std::abs(thumbY) > deadzone) {
+				// Negative thumbY (stick forward/up) = move away (+Z depth)
+				// Positive thumbY (stick back/down) = bring closer (-Z depth)
+				float depthDelta = -thumbY * depthSpeed;
+				if (overlayDragState.mode == OverlayDragState::DragMode::HMD) {
+					// Accumulate into the initial offset so the drag code doesn't overwrite it
+					overlayDragState.initialHMDOffset.z += depthDelta;
+				} else if (overlayDragState.mode == OverlayDragState::DragMode::Controller) {
+					overlayDragState.initialControllerOffset.z += depthDelta;
+				}
 			}
 		}
 	}
@@ -2387,6 +2473,7 @@ void VR::TryStartNewDrag()
 				overlayDragState.initialHMDOffset.x = settings.VRMenuOffsetX;
 				overlayDragState.initialHMDOffset.y = settings.VRMenuOffsetY;
 				overlayDragState.initialHMDOffset.z = settings.VRMenuOffsetZ;
+				overlayDragState.initialHMDScale = settings.VRMenuScale;
 				overlayDragState.initialControllerMatrix = overlayDragState.startControllerMatrix;
 			} });
 	}
@@ -2449,136 +2536,171 @@ void VR::SetFixedOverlayToCurrentHMD()
 	fixedWorldOverlayPosition.m = Util::HmdMatrix34ToMatrix(transform);
 }
 
+void VR::UpdateFixedWorldPositioning()
+{
+	if (settings.VRMenuPositioningMethod != 1)
+		return;
+
+	// Initialize fixed world position on first use (identity matrix means uninitialized)
+	bool isUninitialized = (fixedWorldOverlayPosition.m._41 == 0.0f &&
+							fixedWorldOverlayPosition.m._42 == 0.0f &&
+							fixedWorldOverlayPosition.m._43 == 0.0f &&
+							fixedWorldOverlayPosition.m._11 == 1.0f);
+
+	if (isUninitialized) {
+		SetFixedOverlayToCurrentHMD();
+		auto player = RE::PlayerCharacter::GetSingleton();
+		if (player) {
+			savedPlayerWorldPos = player->GetPosition();
+		}
+		return;
+	}
+
+	// Auto-reset: only if player has moved beyond threshold from where overlay was last placed
+	if (settings.VRMenuAutoResetDistance > 0.0f) {
+		auto player = RE::PlayerCharacter::GetSingleton();
+		if (player) {
+			RE::NiPoint3 playerPos = player->GetPosition();
+			float sqDist = playerPos.GetSquaredDistance(savedPlayerWorldPos);
+			float thresholdSq = settings.VRMenuAutoResetDistance * settings.VRMenuAutoResetDistance;
+			if (sqDist > thresholdSq) {
+				SetFixedOverlayToCurrentHMD();
+				savedPlayerWorldPos = playerPos;
+			}
+		}
+	}
+}
+
 //=============================================================================
 // OPENVR VERSION DETECTION AND COMPATIBILITY
 //=============================================================================
 
 void VR::DetectOpenVRInfo()
 {
-	// Reset info
 	openVRInfo = {};
 
-	// Find the OpenVR DLL module
-	HMODULE hModule = GetModuleHandleA("openvr_api.dll");
-	if (!hModule) {
-		openVRInfo.isAvailable = false;
-		return;
-	}
+	auto result = VRDetection::Detect();
 
-	openVRInfo.isAvailable = true;
-
-	// Get the full path to the DLL
-	char dllPath[MAX_PATH];
-	if (GetModuleFileNameA(hModule, dllPath, MAX_PATH) == 0) {
-		openVRInfo.isCompatible = false;
-		return;
-	}
-
-	openVRInfo.dllPath = dllPath;
-
-	// Get file version information
-	DWORD dwSize = GetFileVersionInfoSizeA(dllPath, nullptr);
-	if (dwSize > 0) {
-		std::vector<BYTE> buffer(dwSize);
-		if (GetFileVersionInfoA(dllPath, 0, dwSize, buffer.data())) {
-			VS_FIXEDFILEINFO* pFileInfo = nullptr;
-			UINT len = 0;
-			if (VerQueryValueA(buffer.data(), "\\", (LPVOID*)&pFileInfo, &len)) {
-				DWORD major = HIWORD(pFileInfo->dwFileVersionMS);
-				DWORD minor = LOWORD(pFileInfo->dwFileVersionMS);
-				DWORD build = HIWORD(pFileInfo->dwFileVersionLS);
-				DWORD revision = LOWORD(pFileInfo->dwFileVersionLS);
-				openVRInfo.version = std::format("{}.{}.{}.{}", major, minor, build, revision);
-			}
-		}
-	}
-
-	if (openVRInfo.version.empty()) {
-		openVRInfo.version = "Unknown";
-	}
-
-	// Get file size and timestamp
-	WIN32_FIND_DATAA findData;
-	HANDLE hFind = FindFirstFileA(dllPath, &findData);
-	if (hFind != INVALID_HANDLE_VALUE) {
-		FindClose(hFind);
-		ULARGE_INTEGER fileSize;
-		fileSize.LowPart = findData.nFileSizeLow;
-		fileSize.HighPart = findData.nFileSizeHigh;
-		openVRInfo.fileSize = fileSize.QuadPart;
-
-		// Convert file time to readable format
-		SYSTEMTIME st;
-		FileTimeToSystemTime(&findData.ftLastWriteTime, &st);
-		openVRInfo.modificationTime = std::format("{:04d}-{:02d}-{:02d} {:02d}:{:02d}:{:02d}",
-			st.wYear, st.wMonth, st.wDay, st.wHour, st.wMinute, st.wSecond);
-	}
-
-	// Check compatibility
-	openVRInfo.isCompatible = IsOpenVRCompatible();
+	openVRInfo.isAvailable = result.isAvailable;
+	openVRInfo.isCompatible = result.isCompatible;
+	openVRInfo.dllPath = result.dllPath;
+	openVRInfo.version = result.version;
+	openVRInfo.fileSize = result.fileSize;
+	openVRInfo.modificationTime = result.modificationTime;
+	openVRInfo.hasOverlayInterface = result.hasOverlayInterface;
+	openVRInfo.hasSystemInterface = result.hasSystemInterface;
+	openVRInfo.hasCompositorInterface = result.hasCompositorInterface;
+	openVRInfo.runtimeType = result.runtimeType;
+	openVRInfo.probingSucceeded = result.probingSucceeded;
 }
 
 bool VR::IsOpenVRCompatible() const
 {
-	if (!openVRInfo.isAvailable) {
-		return false;
-	}
+	return openVRInfo.isCompatible;
+}
 
-	// Whitelist: Only allow explicitly known compatible versions
-	struct WhitelistedVersion
-	{
-		std::string version;
-		uint64_t fileSize;
-		std::string modificationTime;
-	};
-
-	static const std::vector<WhitelistedVersion> whitelist = {
-		{ "1.0.10.0", 598816, "2022-04-18 00:47:59" },
-		// Add more known compatible versions here
-	};
-
-	for (const auto& entry : whitelist) {
-		if (openVRInfo.version == entry.version) {
-			return true;
-		}
-	}
-
-	return false;  // Not compatible unless explicitly whitelisted
+bool VR::IsEffectivelyCompatible() const
+{
+	return openVRInfo.isCompatible || globals::state->IsDeveloperMode();
 }
 
 //=============================================================================
 // WAND POINTING IMPLEMENTATION
 //=============================================================================
 
-bool VR::ComputeWandIntersection(vr::VROverlayHandle_t overlayHandle, vr::TrackedDeviceIndex_t controllerIndex, ImVec2& outUV)
+bool VR::ComputeManualWandIntersection(OverlayType type, vr::TrackedDeviceIndex_t controllerIndex, ImVec2& outUV)
 {
-	Util::OpenVRContext ctx;
-	if (!ctx.HasOverlay())
+	float controllerM[3][4];
+	if (!Util::GetControllerWorldMatrix(controllerIndex, controllerM)) {
+		return false;
+	}
+	// Convert to SimpleMath Matrix
+	Matrix controllerWorld = Util::HmdMatrix34ToMatrix(Util::Float3x4ToHmdMatrix34(controllerM));
+	Vector3 rayOrigin = controllerWorld.Translation();
+	Vector3 rayDir = controllerWorld.Forward();
+
+	// 2. Get Overlay World Matrix
+	Matrix overlayWorld;
+	if (type == OverlayType::HMD) {
+		if (settings.VRMenuPositioningMethod == 1) {  // Fixed
+			overlayWorld = fixedWorldOverlayPosition.m;
+		} else {  // HMD Relative
+			// Need HMD Pose
+			vr::TrackedDevicePose_t hmdPose;
+			if (!Util::GetDeviceToAbsoluteTrackingPoseCompatible(vr::TrackingUniverseStanding, 0, &hmdPose, 1))
+				return false;
+			if (!hmdPose.bPoseIsValid)
+				return false;
+			Matrix hmdWorld = Util::HmdMatrix34ToMatrix(hmdPose.mDeviceToAbsoluteTracking);
+			Matrix offset = Matrix::CreateTranslation(settings.VRMenuOffsetX, settings.VRMenuOffsetY, settings.VRMenuOffsetZ);
+			overlayWorld = offset * hmdWorld;
+		}
+	} else {  // Controller Relative
+		// Attach controller index
+		vr::TrackedDeviceIndex_t attachIndex = Util::GetControllerIndexForDevice(settings.VRMenuAttachController, lastKnownLeftHandedMode);
+		if (attachIndex == vr::k_unTrackedDeviceIndexInvalid)
+			return false;
+
+		float attachM[3][4];
+		if (!Util::GetControllerWorldMatrix(attachIndex, attachM))
+			return false;
+		Matrix attachWorld = Util::HmdMatrix34ToMatrix(Util::Float3x4ToHmdMatrix34(attachM));
+
+		Matrix offset = Matrix::CreateTranslation(settings.VRMenuControllerOffsetX, settings.VRMenuControllerOffsetY, settings.VRMenuControllerOffsetZ);
+		overlayWorld = offset * attachWorld;
+	}
+
+	// Apply Scale
+	overlayWorld = Matrix::CreateScale(settings.VRMenuScale) * overlayWorld;
+
+	// 3. Transform Ray to Local Space
+	Matrix worldToOverlay = overlayWorld.Invert();
+	Vector3 localOrigin = Vector3::Transform(rayOrigin, worldToOverlay);
+	Vector3 localDir = Vector3::TransformNormal(rayDir, worldToOverlay);
+
+	// 4. Intersect with Plane Z=0
+	if (abs(localDir.z) < 1e-6f)
+		return false;  // Parallel
+
+	float t = -localOrigin.z / localDir.z;
+	if (t < 0.0f)
+		return false;  // Behind ray
+
+	// Intersection Point
+	Vector3 hit = localOrigin + t * localDir;
+
+	// 5. Check Bounds (-0.5 to 0.5)
+	if (hit.x < -0.5f || hit.x > 0.5f || hit.y < -0.5f || hit.y > 0.5f)
 		return false;
 
-	// Use utility function for core intersection logic
-	bool intersected = Util::ComputeWandIntersection(ctx.overlay, overlayHandle, controllerIndex, outUV);
+	// 6. Compute UV
+	// Quad spans [-0.5, 0.5]. UV (0,0) is top-left of texture (standard D3D).
+	// +Y on quad = top = UV V=0, so V = 0.5 - hit.y
+	outUV.x = hit.x + 0.5f;
+	outUV.y = 0.5f - hit.y;
+
+	return true;
+}
+
+bool VR::ComputeWandIntersection(vr::VROverlayHandle_t, vr::TrackedDeviceIndex_t controllerIndex, ImVec2& outUV)
+{
+	// Use manual ray-quad intersection (works with in-scene rendering, no overlay API needed)
+	bool intersected = false;
+	if (settings.attachMode == AttachMode::HMDOnly || settings.attachMode == AttachMode::Both) {
+		if (ComputeManualWandIntersection(OverlayType::HMD, controllerIndex, outUV)) {
+			intersected = true;
+		}
+	}
+	if (!intersected && (settings.attachMode == AttachMode::ControllerOnly || settings.attachMode == AttachMode::Both)) {
+		if (ComputeManualWandIntersection(OverlayType::Controller, controllerIndex, outUV)) {
+			intersected = true;
+		}
+	}
 
 	if (intersected) {
-		// Update wand state for debugging and visualization
 		wandState.isIntersecting = true;
 		wandState.uvCoordinates = outUV;
 		wandState.controllerIndex = controllerIndex;
-
-		// Get controller pose for ray geometry (for debugging/laser visualization)
-		vr::TrackedDevicePose_t poses[vr::k_unMaxTrackedDeviceCount];
-		if (Util::GetDeviceToAbsoluteTrackingPoseCompatible(vr::TrackingUniverseStanding, 0, poses, vr::k_unMaxTrackedDeviceCount)) {
-			if (poses[controllerIndex].bPoseIsValid) {
-				wandState.rayOrigin = Vector3(
-					poses[controllerIndex].mDeviceToAbsoluteTracking.m[0][3],
-					poses[controllerIndex].mDeviceToAbsoluteTracking.m[1][3],
-					poses[controllerIndex].mDeviceToAbsoluteTracking.m[2][3]);
-				wandState.rayDirection = Vector3(
-					-poses[controllerIndex].mDeviceToAbsoluteTracking.m[0][2],
-					-poses[controllerIndex].mDeviceToAbsoluteTracking.m[1][2],
-					-poses[controllerIndex].mDeviceToAbsoluteTracking.m[2][2]);
-			}
-		}
 	} else {
 		wandState.isIntersecting = false;
 	}
@@ -2635,9 +2757,9 @@ void VR::UpdateCursorFromWandPointing()
 	// Update cursor position from intersection
 	if (intersected) {
 		// Convert UV (0-1) to screen pixel coordinates
-		// Invert Y to match laser visualization (OpenVR UV has 0 at bottom)
+		// UV already in screen convention: (0,0) = top-left, (1,1) = bottom-right
 		float screenX = uv.x * io.DisplaySize.x;
-		float screenY = (1.0f - uv.y) * io.DisplaySize.y;
+		float screenY = uv.y * io.DisplaySize.y;
 
 		// Clamp to screen bounds (allow full display size, consistent with thumbstick cursor)
 		screenX = std::clamp(screenX, 0.0f, io.DisplaySize.x);

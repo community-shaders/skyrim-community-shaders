@@ -188,11 +188,14 @@ namespace Util
 	 */
 	inline Matrix HmdMatrix34ToMatrix(const vr::HmdMatrix34_t& m)
 	{
+		// OpenVR matrices are row-major but designed for column-vector math (M * v).
+		// DirectX SimpleMath uses row-vector math (v * M).
+		// We need to transpose the rotation and move translation to the bottom row.
 		return Matrix(
-			m.m[0][0], m.m[0][1], m.m[0][2], m.m[0][3],
-			m.m[1][0], m.m[1][1], m.m[1][2], m.m[1][3],
-			m.m[2][0], m.m[2][1], m.m[2][2], m.m[2][3],
-			0, 0, 0, 1);
+			m.m[0][0], m.m[1][0], m.m[2][0], 0.0f,
+			m.m[0][1], m.m[1][1], m.m[2][1], 0.0f,
+			m.m[0][2], m.m[1][2], m.m[2][2], 0.0f,
+			m.m[0][3], m.m[1][3], m.m[2][3], 1.0f);
 	}
 
 	/**

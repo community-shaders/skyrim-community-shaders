@@ -33,7 +33,7 @@ void OverlayRenderer::RenderOverlay(
 	HandleVRSetup();
 	processInputEventQueue();
 
-	if (globals::features::vr.IsOpenVRCompatible()) {
+	if (globals::features::vr.IsEffectivelyCompatible()) {
 		globals::features::vr.ProcessControllerInputForImGui();
 	}
 
@@ -71,7 +71,7 @@ void OverlayRenderer::RenderOverlay(
 
 void OverlayRenderer::HandleVRSetup()
 {
-	if (globals::features::vr.IsOpenVRCompatible()) {
+	if (globals::features::vr.IsEffectivelyCompatible()) {
 		globals::features::vr.RecreateOverlayTexturesIfNeeded();
 	}
 }
@@ -233,7 +233,7 @@ void OverlayRenderer::FinalizeImGuiFrame()
 
 	ImGui_ImplDX11_RenderDrawData(ImGui::GetDrawData());
 
-	if (globals::features::vr.IsOpenVRCompatible()) {
+	if (globals::features::vr.IsEffectivelyCompatible()) {
 		globals::features::vr.SubmitOverlayFrame();
 	}
 }
