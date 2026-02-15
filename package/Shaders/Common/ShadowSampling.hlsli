@@ -26,7 +26,7 @@ namespace ShadowSampling
 {
 	float GetWorldShadow(float3 positionWS, float3 offset, uint eyeIndex)
 	{
-		if (SharedData::InInterior || SharedData::HideSky)
+		if (SharedData::InInterior || SharedData::HideSky || SharedData::InMapMenu)
 			return 1.0;
 
 		float worldShadow = 1.0;
@@ -35,7 +35,6 @@ namespace ShadowSampling
 #endif
 
 #if defined(CLOUD_SHADOWS)
-		if (!SharedData::InMapMenu)
 			worldShadow *= CloudShadows::GetCloudShadowMult(positionWS, LinearSampler);
 #endif
 
