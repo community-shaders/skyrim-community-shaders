@@ -101,7 +101,12 @@ public:
 
 	// --- Scene Application ---
 
-	/// Called by MenuOpenCloseEventHandler when a cell transition is detected.
+	/// Called each frame from State::Draw() to process deferred cell transitions.
+	/// Cell data is not yet available when the LoadingMenu close event fires,
+	/// so we defer the actual transition check to the next rendered frame.
+	void Update();
+
+	/// Called by Update() when a deferred cell transition is pending.
 	void OnCellTransition();
 
 	/// Check if a specific feature+setting is currently being overridden by any active scene setting
@@ -131,9 +136,6 @@ public:
 
 	// --- Feature Metadata ---
 
-	/// Get all loaded features' short names (for dropdown)
-	static std::vector<std::string> GetLoadedFeatureNames();
-
 	/// Get loaded feature short names filtered to only interior-relevant features
 	static std::vector<std::string> GetInteriorRelevantFeatureNames();
 
@@ -154,9 +156,6 @@ public:
 	};
 	static SettingType DetectSettingType(const json& value);
 
-	/// Find a Feature* by short name
-	static Feature* FindFeatureByShortName(const std::string& shortName);
-
 private:
 	SceneSettingsManager() = default;
 	~SceneSettingsManager() = default;
@@ -169,8 +168,8 @@ private:
 	std::map<SceneType, bool> allUserPausedMap;
 
 	// --- Interior state tracking ---
-	bool wasInterior = false;
 	bool isCurrentlyApplied = false;
+	bool queuedCellTransition = false;
 
 	// Stored exterior settings per-feature (only the overridden keys)
 	std::map<std::string, json> savedExteriorSettings;
@@ -185,7 +184,6 @@ private:
 	bool IsEntryActive(const SettingEntry& entry) const;
 
 	void ReapplyIfActive();
-	static bool IsInterior();
 	void ApplySettings(SceneType type);
 	void RevertToExteriorSettings();
 	void SaveExteriorSettings(SceneType type);

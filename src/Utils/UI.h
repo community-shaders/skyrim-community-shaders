@@ -121,6 +121,10 @@ namespace Util
 		bool showDontAskAgain = false;
 		bool* dontAskAgainPersist = nullptr;  // Optional external bool to persist preference
 
+		ConfirmationPopup() = default;
+		ConfirmationPopup(std::string title, std::string message, std::string confirmLabel = "Confirm", std::string cancelLabel = "Cancel") :
+			title(std::move(title)), message(std::move(message)), confirmLabel(std::move(confirmLabel)), cancelLabel(std::move(cancelLabel)) {}
+
 		void Request();
 		bool Draw();  // Returns true on confirm frame
 

@@ -2,6 +2,7 @@
 
 #include "../Globals.h"
 #include "../Menu.h"
+#include "../Menu/ThemeManager.h"
 #include "../SceneSettingsManager.h"
 #include "EditorWindow.h"
 
@@ -11,50 +12,34 @@ namespace InteriorOnlyPanel
 	using EntrySource = SceneSettingsManager::EntrySource;
 	static constexpr auto kSceneType = SceneType::InteriorOnly;
 
-	// Layout constants
-	constexpr float FEATURE_DROPDOWN_WIDTH_RATIO = 0.45f;
-	constexpr float SETTING_DROPDOWN_WIDTH_RATIO = 0.6f;
-	constexpr float VALUE_LABEL_OFFSET_RATIO = 0.5f;
-	constexpr float VALUE_INPUT_WIDTH = 240.0f;
-	constexpr float ADD_BUTTON_WIDTH = 60.0f;
-	constexpr float DELETE_BUTTON_WIDTH = 40.0f;
+	// Layout constants from centralized theme
+	using C = ThemeManager::Constants;
 
 	// Persistent state for the "Add Setting" workflow
 	static int selectedFeatureIdx = -1;
 	static int selectedSettingIdx = -1;
 	static std::vector<std::string> cachedFeatureNames;
 	static std::vector<std::string> cachedSettingKeys;
-	static bool showAddUI = false;  // unused, kept for ABI compatibility
 
-	// Confirmation popup for deleting all overwrites
-	static Util::ConfirmationPopup deleteAllOverwritesPopup = []() {
-		Util::ConfirmationPopup p;
-		p.title = "Delete All Overwrites?";
-		p.message = "Are you sure you want to delete all interior-only overwrite files?\nThis cannot be undone.";
-		p.confirmLabel = "Delete All";
-		p.cancelLabel = "Cancel";
-		return p;
-	}();
+	// Confirmation popups
+	static Util::ConfirmationPopup deleteAllOverwritesPopup{
+		"Delete All Overwrites?",
+		"Are you sure you want to delete all interior-only overwrite files?\nThis cannot be undone.",
+		"Delete All"
+	};
 
-	// Confirmation popup for deleting a single overwrite
-	static Util::ConfirmationPopup deleteSingleOverwritePopup = []() {
-		Util::ConfirmationPopup p;
-		p.title = "Delete Overwrite File?";
-		p.confirmLabel = "Delete";
-		p.cancelLabel = "Cancel";
-		return p;
-	}();
+	static Util::ConfirmationPopup deleteSingleOverwritePopup{
+		"Delete Overwrite File?",
+		"",
+		"Delete"
+	};
 	static size_t pendingDeleteIndex = SIZE_MAX;
 
-	// Confirmation popup for deleting all user settings
-	static Util::ConfirmationPopup deleteAllUserPopup = []() {
-		Util::ConfirmationPopup p;
-		p.title = "Delete All User Settings?";
-		p.message = "Are you sure you want to remove all user-added interior-only settings?";
-		p.confirmLabel = "Delete All";
-		p.cancelLabel = "Cancel";
-		return p;
-	}();
+	static Util::ConfirmationPopup deleteAllUserPopup{
+		"Delete All User Settings?",
+		"Are you sure you want to remove all user-added interior-only settings?",
+		"Delete All"
+	};
 
 	void DrawAddSettingUI()
 	{
@@ -68,7 +53,7 @@ namespace InteriorOnlyPanel
 
 		const char* featurePreview = (selectedFeatureIdx >= 0 && selectedFeatureIdx < static_cast<int>(cachedFeatureNames.size())) ? cachedFeatureNames[selectedFeatureIdx].c_str() : "Select Feature...";
 
-		ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x * FEATURE_DROPDOWN_WIDTH_RATIO);
+		ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x * C::SCENE_FEATURE_DROPDOWN_RATIO);
 		if (ImGui::BeginCombo("##FeatureSelect", featurePreview)) {
 			for (int i = 0; i < static_cast<int>(cachedFeatureNames.size()); ++i) {
 				bool selected = (i == selectedFeatureIdx);
@@ -91,7 +76,7 @@ namespace InteriorOnlyPanel
 
 			const char* settingPreview = (selectedSettingIdx >= 0 && selectedSettingIdx < static_cast<int>(cachedSettingKeys.size())) ? cachedSettingKeys[selectedSettingIdx].c_str() : "Select Setting...";
 
-			ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x * SETTING_DROPDOWN_WIDTH_RATIO);
+			ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x * C::SCENE_SETTING_DROPDOWN_RATIO);
 			if (ImGui::BeginCombo("##SettingSelect", settingPreview)) {
 				for (int i = 0; i < static_cast<int>(cachedSettingKeys.size()); ++i) {
 					bool selected = (i == selectedSettingIdx);
@@ -147,7 +132,7 @@ namespace InteriorOnlyPanel
 		ImGui::Text("%s.%s", entry.featureShortName.c_str(), entry.settingKey.c_str());
 
 		// Value display/editor on same line (right-aligned)
-		ImGui::SameLine(availWidth * VALUE_LABEL_OFFSET_RATIO);
+		ImGui::SameLine(availWidth * C::SCENE_VALUE_LABEL_OFFSET_RATIO);
 
 		bool isOverwrite = entry.source == EntrySource::Overwrite;
 		auto type = SceneSettingsManager::DetectSettingType(entry.value);
@@ -175,7 +160,7 @@ namespace InteriorOnlyPanel
 		case SceneSettingsManager::SettingType::Float:
 			{
 				float val = entry.value.get<float>();
-				ImGui::SetNextItemWidth(VALUE_INPUT_WIDTH);
+				ImGui::SetNextItemWidth(C::SCENE_VALUE_INPUT_WIDTH);
 				if (ImGui::InputFloat("##val", &val, 0.01f, 0.1f, "%.3f"))
 					manager->UpdateEntryValue(kSceneType, index, val, true);
 				if (ImGui::IsItemDeactivatedAfterEdit())
@@ -185,7 +170,7 @@ namespace InteriorOnlyPanel
 		case SceneSettingsManager::SettingType::Integer:
 			{
 				int val = entry.value.get<int>();
-				ImGui::SetNextItemWidth(VALUE_INPUT_WIDTH);
+				ImGui::SetNextItemWidth(C::SCENE_VALUE_INPUT_WIDTH);
 				if (ImGui::InputInt("##val", &val))
 					manager->UpdateEntryValue(kSceneType, index, val, true);
 				if (ImGui::IsItemDeactivatedAfterEdit())
@@ -212,7 +197,7 @@ namespace InteriorOnlyPanel
 		ImGui::SameLine();
 		{
 			auto styledButton = Util::ErrorButtonStyle();
-			if (ImGui::Button("X", ImVec2(DELETE_BUTTON_WIDTH, 0))) {
+			if (ImGui::Button("X", ImVec2(C::SCENE_DELETE_BUTTON_WIDTH, 0))) {
 				if (entry.source == EntrySource::Overwrite) {
 					pendingDeleteIndex = index;
 					deleteSingleOverwritePopup.message = std::format(

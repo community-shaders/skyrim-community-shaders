@@ -3,6 +3,7 @@
 #include "Feature.h"
 #include "Globals.h"
 #include "Utils/FileSystem.h"
+#include "Utils/Game.h"
 
 #include <filesystem>
 #include <fstream>
@@ -32,16 +33,6 @@ std::filesystem::path SceneSettingsManager::GetOverwritesPath(SceneType type)
 
 // --- Feature Metadata (static helpers, zero coupling) ---
 
-Feature* SceneSettingsManager::FindFeatureByShortName(const std::string& shortName)
-{
-	return Feature::FindFeatureByShortName(shortName);
-}
-
-std::vector<std::string> SceneSettingsManager::GetLoadedFeatureNames()
-{
-	return Feature::GetLoadedFeatureNames();
-}
-
 std::vector<std::string> SceneSettingsManager::GetInteriorRelevantFeatureNames()
 {
 	// Features that are relevant for interior-only setting overrides.
@@ -70,7 +61,7 @@ std::vector<std::string> SceneSettingsManager::GetInteriorRelevantFeatureNames()
 std::vector<std::string> SceneSettingsManager::GetFeatureSettingKeys(const std::string& featureShortName)
 {
 	std::vector<std::string> keys;
-	auto* feature = FindFeatureByShortName(featureShortName);
+	auto* feature = Feature::FindFeatureByShortName(featureShortName);
 	if (!feature)
 		return keys;
 
@@ -88,7 +79,7 @@ std::vector<std::string> SceneSettingsManager::GetFeatureSettingKeys(const std::
 
 json SceneSettingsManager::GetFeatureSettingValue(const std::string& featureShortName, const std::string& settingKey)
 {
-	auto* feature = FindFeatureByShortName(featureShortName);
+	auto* feature = Feature::FindFeatureByShortName(featureShortName);
 	if (!feature)
 		return {};
 
@@ -165,31 +156,7 @@ void SceneSettingsManager::AddSetting(SceneType type, const std::string& feature
 	entry.source = EntrySource::User;
 	vec.push_back(std::move(entry));
 	SaveUserSettings(type);
-
-	// Targeted apply: save exterior value for this key and apply only if no overwrite takes priority
-	if (isCurrentlyApplied) {
-		auto& added = vec.back();
-		if (!added.paused && !IsFeaturePaused(added.featureShortName)) {
-			json& partial = savedExteriorSettings[added.featureShortName];
-			if (!partial.is_object())
-				partial = json::object();
-
-			// Capture the feature's current value as the exterior baseline before applying the override
-			if (!partial.contains(added.settingKey)) {
-				auto* feature = FindFeatureByShortName(added.featureShortName);
-				if (feature) {
-					json currentSettings;
-					feature->SaveSettings(currentSettings);
-					if (currentSettings.contains(added.settingKey))
-						partial[added.settingKey] = currentSettings[added.settingKey];
-				}
-			}
-
-			// Only apply if no active overwrite exists for this key (overwrites take priority)
-			if (!HasActiveOverwrite(type, added.featureShortName, added.settingKey))
-				ApplySettingToFeature(added);
-		}
-	}
+	ReapplyIfActive();
 }
 
 void SceneSettingsManager::RemoveSetting(SceneType type, size_t index)
@@ -320,41 +287,50 @@ RE::BSEventNotifyControl SceneSettingsManager::MenuOpenCloseEventHandler::Proces
 	const RE::MenuOpenCloseEvent* a_event,
 	RE::BSTEventSource<RE::MenuOpenCloseEvent>*)
 {
-	if (a_event && a_event->menuName == RE::LoadingMenu::MENU_NAME && !a_event->opening)
-		GetSingleton()->OnCellTransition();
+	if (a_event && a_event->menuName == RE::LoadingMenu::MENU_NAME && !a_event->opening) {
+		// Defer cell transition to next frame — cell data isn't available yet
+		// when this event fires. Same pattern as Skylighting::queuedResetSkylighting.
+		GetSingleton()->queuedCellTransition = true;
+	}
 
 	return RE::BSEventNotifyControl::kContinue;
 }
 
 // --- Scene Application ---
 
-bool SceneSettingsManager::IsInterior()
+void SceneSettingsManager::Update()
 {
-	if (auto sky = globals::game::sky)
-		return sky->mode.get() != RE::Sky::Mode::kFull;
-	return true;  // Default to interior (safe — avoids applying exterior-only logic without sky)
-}
-
-void SceneSettingsManager::OnCellTransition()
-{
-	// Sky must be initialized for reliable interior/exterior detection
-	if (!globals::game::sky)
-		return;
-
-	bool interior = IsInterior();
-
-	if (interior && !wasInterior) {
-		SaveExteriorSettings(SceneType::InteriorOnly);
-		ApplySettings(SceneType::InteriorOnly);
-		isCurrentlyApplied = true;
-	} else if (!interior && wasInterior) {
-		if (isCurrentlyApplied) {
+	// Revert interior overrides on main/loading menu (same check as LinearLighting)
+	if (isCurrentlyApplied) {
+		bool isMainOrLoading = globals::game::ui &&
+			(globals::game::ui->IsMenuOpen(RE::MainMenu::MENU_NAME) || globals::game::ui->IsMenuOpen(RE::LoadingMenu::MENU_NAME));
+		if (isMainOrLoading) {
 			RevertToExteriorSettings();
 			isCurrentlyApplied = false;
 		}
 	}
 
-	wasInterior = interior;
+	if (queuedCellTransition) {
+		queuedCellTransition = false;
+		OnCellTransition();
+	}
+}
+
+void SceneSettingsManager::OnCellTransition()
+{
+	// Match Skylighting's interior detection: sky mode != kFull
+	bool interior = true;
+	if (auto sky = globals::game::sky)
+		interior = sky->mode.get() != RE::Sky::Mode::kFull;
+
+	if (interior && !isCurrentlyApplied) {
+		SaveExteriorSettings(SceneType::InteriorOnly);
+		ApplySettings(SceneType::InteriorOnly);
+		isCurrentlyApplied = true;
+	} else if (!interior && isCurrentlyApplied) {
+		RevertToExteriorSettings();
+		isCurrentlyApplied = false;
+	}
 }
 
 void SceneSettingsManager::ReapplyIfActive()
@@ -426,7 +402,7 @@ void SceneSettingsManager::SaveExteriorSettings(SceneType type)
 
 	// Save only the specific keys we'll override, not the entire settings blob
 	for (const auto& [shortName, keys] : keysToSave) {
-		auto* feature = FindFeatureByShortName(shortName);
+		auto* feature = Feature::FindFeatureByShortName(shortName);
 		if (!feature)
 			continue;
 
@@ -463,7 +439,7 @@ void SceneSettingsManager::ApplySettings(SceneType type)
 void SceneSettingsManager::RevertToExteriorSettings()
 {
 	for (const auto& [shortName, savedKeys] : savedExteriorSettings) {
-		auto* feature = FindFeatureByShortName(shortName);
+		auto* feature = Feature::FindFeatureByShortName(shortName);
 		if (!feature)
 			continue;
 
@@ -480,7 +456,7 @@ void SceneSettingsManager::RevertToExteriorSettings()
 
 void SceneSettingsManager::ApplySettingToFeature(const SettingEntry& entry)
 {
-	auto* feature = FindFeatureByShortName(entry.featureShortName);
+	auto* feature = Feature::FindFeatureByShortName(entry.featureShortName);
 	if (!feature)
 		return;
 
@@ -574,7 +550,7 @@ void SceneSettingsManager::LoadUserSettings(SceneType type)
 			entry.paused = item.value("paused", false);
 			entry.source = EntrySource::User;
 
-			if (!FindFeatureByShortName(entry.featureShortName))
+			if (!Feature::FindFeatureByShortName(entry.featureShortName))
 				continue;
 
 			if (!HasEntryFromSource(type, entry.featureShortName, entry.settingKey, EntrySource::User))
@@ -635,7 +611,7 @@ void SceneSettingsManager::DiscoverOverwrites(SceneType type)
 				auto lastUnderscore = stem.rfind('_');
 				if (lastUnderscore != std::string::npos) {
 					auto candidate = stem.substr(lastUnderscore + 1);
-					if (FindFeatureByShortName(candidate)) {
+					if (Feature::FindFeatureByShortName(candidate)) {
 						featureShortName = candidate;
 						logger::info("[SceneSettings] Inferred feature '{}' from filename '{}'", featureShortName, filename);
 					}
@@ -647,7 +623,7 @@ void SceneSettingsManager::DiscoverOverwrites(SceneType type)
 				continue;
 			}
 
-			if (!FindFeatureByShortName(featureShortName)) {
+			if (!Feature::FindFeatureByShortName(featureShortName)) {
 				logger::warn("[SceneSettings] Skipping overwrite '{}': feature '{}' not found", filename, featureShortName);
 				continue;
 			}
@@ -683,8 +659,7 @@ void SceneSettingsManager::DiscoverOverwrites(SceneType type)
 			entry.source = EntrySource::Overwrite;
 			entry.sourceFilename = filename;
 
-			// Insert overwrites at the beginning so they appear first
-			vec.insert(vec.begin(), std::move(entry));
+			vec.push_back(std::move(entry));
 
 			overwritesLoaded++;
 			logger::info("[SceneSettings] Loaded {} overwrite: {} -> {}.{}", typeName, filename, featureShortName, settingKey);

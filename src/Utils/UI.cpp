@@ -377,8 +377,8 @@ namespace Util
 		constexpr float kHoverBrighten = 0.2f;
 		constexpr float kActiveBrighten = 0.3f;
 		auto color = Menu::GetSingleton()->GetTheme().StatusPalette.Error;
-		auto hover = ImVec4(std::min(color.x + kHoverBrighten, 1.0f), color.y, color.z, color.w);
-		auto active = ImVec4(std::min(color.x + kActiveBrighten, 1.0f), color.y, color.z, color.w);
+		auto hover = ImVec4(std::min(color.x + kHoverBrighten, 1.0f), std::min(color.y + kHoverBrighten, 1.0f), std::min(color.z + kHoverBrighten, 1.0f), color.w);
+		auto active = ImVec4(std::min(color.x + kActiveBrighten, 1.0f), std::min(color.y + kActiveBrighten, 1.0f), std::min(color.z + kActiveBrighten, 1.0f), color.w);
 		return StyledButtonWrapper(color, hover, active);
 	}
 

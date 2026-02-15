@@ -35,6 +35,9 @@ void State::Draw()
 	auto context = globals::d3d::context;
 
 	if (shaderCache->IsEnabled()) {
+		// Process deferred cell transitions (interior detection)
+		SceneSettingsManager::GetSingleton()->Update();
+
 		if (weatherEditor.loaded) {
 			ZoneScopedN("WeatherManager::UpdateFeatures");
 			WeatherManager::GetSingleton()->UpdateFeatures();
