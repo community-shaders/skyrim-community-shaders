@@ -7,7 +7,7 @@ namespace WaterEffects
 	// http://www.diva-portal.org/smash/get/diva2:831762/FULLTEXT01.pdf
 	// https://bartwronski.files.wordpress.com/2014/03/ac4_gdc.pdf
 
-	float GetMipLevel(float2 coords, Texture2D<float4> tex)
+	float GetMipLevel(float2 coords, Texture2D<float4> tex, float screenNoise)
 	{
 		// Compute the current gradients:
 		float2 textureDims;
@@ -33,6 +33,9 @@ namespace WaterEffects
 		// Compute the current mip level  (* 0.5 is effectively computing a square root before )
 		float mipLevel = max(0.5 * log2(minTexCoordDelta), 0);
 
+		// Stochastic mip selection: use screen noise to select between adjacent mip levels
+		mipLevel = floor(mipLevel) + (screenNoise < frac(mipLevel) ? 1.0 : 0.0);
+
 		return mipLevel;
 	}
 
@@ -54,10 +57,12 @@ namespace WaterEffects
 		// Parallax scale is also multiplied by normalScalesRcp
 		parallaxOffsetTS *= 20.0;
 
+		float screenNoise = Random::InterleavedGradientNoise(input.HPosition.xy, SharedData::FrameCount);
+
 		float3 mipLevels;
-		mipLevels.x = GetMipLevel(input.TexCoord1.xy, Normals01Tex);
-		mipLevels.y = GetMipLevel(input.TexCoord1.zw, Normals02Tex);
-		mipLevels.z = GetMipLevel(input.TexCoord2.xy, Normals03Tex);
+		mipLevels.x = GetMipLevel(input.TexCoord1.xy, Normals01Tex, screenNoise);
+		mipLevels.y = GetMipLevel(input.TexCoord1.zw, Normals02Tex, screenNoise);
+		mipLevels.z = GetMipLevel(input.TexCoord2.xy, Normals03Tex, screenNoise);
 
 #if defined(VR)
 		mipLevels = mipLevels + 4;
