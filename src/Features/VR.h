@@ -250,9 +250,6 @@ public:
 	// VR-SPECIFIC PUBLIC API
 	//=============================================================================
 
-	void UpdateVROverlayPosition();
-	void UpdateVROverlayControllerPosition();
-
 	void ProcessVREvents(std::vector<Menu::KeyEvent>& vrEvents);
 
 	// Wand pointing methods
@@ -261,8 +258,8 @@ public:
 		HMD,
 		Controller
 	};
-	bool ComputeWandIntersection(vr::VROverlayHandle_t overlayHandle, vr::TrackedDeviceIndex_t controllerIndex, ImVec2& outUV);
-	bool ComputeManualWandIntersection(OverlayType type, vr::TrackedDeviceIndex_t controllerIndex, ImVec2& outUV);
+	bool ComputeWandIntersection(vr::TrackedDeviceIndex_t controllerIndex, ImVec2& outUV);
+	bool ComputeWandIntersectionForOverlayType(OverlayType type, vr::TrackedDeviceIndex_t controllerIndex, ImVec2& outUV);
 	void UpdateCursorFromWandPointing();
 	void UpdateOverlayMenuStateFromInput();
 	void ProcessVRButtonEvent(const Menu::KeyEvent& event);
@@ -270,8 +267,6 @@ public:
 	void ProcessThumbstickScroll(RE::VRControllerState& controllerState, size_t thumbstickIndex, float deadzone, ImGuiIO& io);
 	void ProcessControllerInputForImGui();
 
-	void EnsureOverlayInitialized();
-	void DestroyOverlay();
 	void RecreateOverlayTexturesIfNeeded();
 	void SubmitOverlayFrame();
 
