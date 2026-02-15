@@ -330,9 +330,6 @@ void VR::RenderInSceneOverlay(vr::EVREye eye, ID3D11Texture2D* targetTexture, co
 		vpWorldSpace = eyeToWorld.Invert() * proj;
 	}
 
-	// Use standard 3D rendering path
-	bool force2D = false;
-
 	// Create RTV for the target texture
 	winrt::com_ptr<ID3D11RenderTargetView> rtv;
 	D3D11_TEXTURE2D_DESC texDesc;
@@ -481,119 +478,17 @@ void VR::RenderInSceneOverlay(vr::EVREye eye, ID3D11Texture2D* targetTexture, co
 	if ((settings.attachMode == AttachMode::HMDOnly || settings.attachMode == AttachMode::Both) && menuTexture) {
 		InSceneCB cbData;
 
-		if (force2D) {
-			// Screen-space overlay with stereo convergence
-
-			float scale = settings.VRMenuScale * 0.5f;
-			float aspect = 16.0f / 9.0f;
-
-			// Get actual IPD from HMD for proper convergence
-			static float cachedIPD = -1.0f;
-			static bool ipdLogged = false;
-			if (cachedIPD < 0.0f) {
-				cachedIPD = Util::GetIPDFromHMD();
-
-				// Log IPD information once
-				if (!ipdLogged) {
-					// Get eye transform data for logging
-					vr::HmdMatrix34_t leftEye = openvr->vrSystem->GetEyeToHeadTransform(vr::Eye_Left);
-					vr::HmdMatrix34_t rightEye = openvr->vrSystem->GetEyeToHeadTransform(vr::Eye_Right);
-
-					logger::debug("VR IPD Detection:");
-					logger::debug("  Detected IPD: {:.4f} meters ({:.2f} mm)", cachedIPD, cachedIPD * 1000.0f);
-					logger::debug("  Left Eye Transform X: {:.4f}, Y: {:.4f}, Z: {:.4f}",
-						leftEye.m[0][3], leftEye.m[1][3], leftEye.m[2][3]);
-					logger::debug("  Right Eye Transform X: {:.4f}, Y: {:.4f}, Z: {:.4f}",
-						rightEye.m[0][3], rightEye.m[1][3], rightEye.m[2][3]);
-					logger::debug("  Eye Separation (calc): {:.4f} meters",
-						std::abs(leftEye.m[0][3] - rightEye.m[0][3]));
-
-					ipdLogged = true;
-				}
-			}
-
-			// Convergence formula for screen-space SBS rendering:
-			//
-			// We render a quad into clip space [-1,+1] which the viewport maps
-			// to one eye's half of an SBS texture (8688x4615, each eye 4344 wide).
-			// There is NO projection matrix -- WVP is just affine (scale + translate).
-			//
-			// To make the overlay appear at virtual depth `d` meters, we shift
-			// each eye's image in clip space by:
-			//
-			//   stereoShift = (IPD / 2) / (d * tan(hFOV/2))
-			//
-			// where tan(hFOV/2) comes from the HMD's projection matrix.
-			//
-			// This shift is CONSTANT for a given depth, regardless of quad scale.
-			// Scale changes the apparent size. Depth changes convergence.
-			// They are independent.
-			//
-			// VRMenuScale controls apparent size (how much of the view the menu fills).
-			// VRMenuOffsetZ controls depth (negative = in front, determines convergence).
-			// VRMenuOffsetX/Y control horizontal/vertical positioning.
-
-			// Get projection parameters (Lens center offset and FOV)
-			static float cachedTanHalfFOV = 0.0f;
-			static float cachedLensOffsetX = 0.0f;
-			if (cachedTanHalfFOV == 0.0f) {
-				vr::HmdMatrix44_t projMatrix = openvr->vrSystem->GetProjectionMatrix(vr::Eye_Left, 0.1f, 1000.0f);
-				cachedTanHalfFOV = 1.0f / projMatrix.m[0][0];
-				cachedLensOffsetX = projMatrix.m[0][2];  // Horizontal offset of lens center in clip space
-				logger::debug("VR Projection: projMatrix[0][0]={:.4f} (tanFOV={:.4f}), projMatrix[0][2]={:.4f} (Lens Center)",
-					projMatrix.m[0][0], cachedTanHalfFOV, cachedLensOffsetX);
-			}
-
-			// Virtual depth in meters (positive = in front of viewer)
-			// Depth is fixed at 1.0m to provide a stable convergence point regardless of scale
-			const float virtualDepth = 1.0f;
-
-			// Stereo shift in clip-space units -- independent of scale
-			float stereoShift = (cachedIPD / 2.0f) / (virtualDepth * cachedTanHalfFOV);
-
-			// Log convergence parameters periodically (debug only, every 60 frames, left eye only)
-			static int frameCount = 0;
-			if (eye == vr::Eye_Left && (frameCount++ % 60 == 0)) {
-				logger::debug("VR Convergence Parameters:");
-				logger::debug("  Scale: {:.2f}, Depth: {:.2f} m (Fixed)", settings.VRMenuScale, virtualDepth);
-				logger::debug("  IPD: {:.4f} m, tan(hFOV/2): {:.4f}", cachedIPD, cachedTanHalfFOV);
-				logger::debug("  Lens Center Offset: {:.4f} (Base)", cachedLensOffsetX);
-				logger::debug("  Stereo Shift: {:.6f} (Convergence)", stereoShift);
-				logger::debug("  Total Offset Left: {:.4f}", cachedLensOffsetX + stereoShift);
-				logger::debug("  Viewport: X={:.0f}, W={:.0f}", vpDesc.TopLeftX, vpDesc.Width);
-				logger::debug("  Offset: ({:.2f}, {:.2f}, {:.2f}), Scale: {:.2f}",
-					settings.VRMenuOffsetX, settings.VRMenuOffsetY, settings.VRMenuOffsetZ, settings.VRMenuScale);
-				logger::debug("  Formula: shift = (IPD/2) / (depth * tan(hFOV/2)) = {:.4f} / ({:.2f} * {:.4f})",
-					cachedIPD / 2.0f, virtualDepth, cachedTanHalfFOV);
-			}
-
-			// Apply stereo offset: left eye gets positive, right eye gets negative
-			// Account for lens center offset (proj[0][2]) to ensure "Infinity" is actually parallel
-			// Left Eye (Lens < 0): Move Right (+) to converge from lens center
-			// Right Eye (Lens > 0): Move Left (-) to converge from lens center
-			float lensOffset = (eye == vr::Eye_Left) ? cachedLensOffsetX : -cachedLensOffsetX;
-			float convergenceOffset = (eye == vr::Eye_Left) ? stereoShift : -stereoShift;
-
-			float eyeOffsetX = lensOffset + convergenceOffset;
-
-			// Position offset for X/Y only (Z is used for depth/convergence above)
-			Matrix screenSpace = Matrix::CreateScale(scale, scale / aspect, 1.0f) *
-			                     Matrix::CreateTranslation(settings.VRMenuOffsetX + eyeOffsetX, settings.VRMenuOffsetY, 0.5f);
-
-			cbData.wvp = screenSpace.Transpose();
-		} else {
-			Matrix modelMatrix;
-			Matrix vp;
-			if (settings.VRMenuPositioningMethod == 1) {  // Fixed World Position
-				modelMatrix = CreateOverlayScaleMatrix(settings.VRMenuScale) * fixedWorldOverlayPosition.m;
-				vp = vpWorldSpace;
-			} else {  // HMD Relative
-				Matrix offset = Matrix::CreateTranslation(settings.VRMenuOffsetX, settings.VRMenuOffsetY, settings.VRMenuOffsetZ);
-				modelMatrix = CreateOverlayScaleMatrix(settings.VRMenuScale) * offset;
-				vp = vpHeadSpace;
-			}
-			cbData.wvp = (modelMatrix * vp).Transpose();
+		Matrix modelMatrix;
+		Matrix vp;
+		if (settings.VRMenuPositioningMethod == 1) {  // Fixed World Position
+			modelMatrix = CreateOverlayScaleMatrix(settings.VRMenuScale) * fixedWorldOverlayPosition.m;
+			vp = vpWorldSpace;
+		} else {  // HMD Relative
+			Matrix offset = Matrix::CreateTranslation(settings.VRMenuOffsetX, settings.VRMenuOffsetY, settings.VRMenuOffsetZ);
+			modelMatrix = CreateOverlayScaleMatrix(settings.VRMenuScale) * offset;
+			vp = vpHeadSpace;
 		}
+		cbData.wvp = (modelMatrix * vp).Transpose();
 
 		drawOverlayQuad(context, cbData);
 	}

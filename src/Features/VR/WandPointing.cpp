@@ -24,7 +24,7 @@ bool VR::ComputeWandIntersectionForOverlayType(OverlayType type, vr::TrackedDevi
 	wandState.rayDirection = rayDir;
 	Matrix overlayWorld;
 	if (type == OverlayType::HMD) {
-		if (settings.VRMenuPositioningMethod == 1) {  // Fixed
+		if (settings.VRMenuPositioningMethod == 1) {  // Fixed World
 			overlayWorld = fixedWorldOverlayPosition.m;
 		} else {  // HMD Relative
 			vr::TrackedDevicePose_t hmdPose;
@@ -50,6 +50,8 @@ bool VR::ComputeWandIntersectionForOverlayType(OverlayType type, vr::TrackedDevi
 		overlayWorld = offset * attachWorld;
 	}
 
+	if (settings.VRMenuScale < 1e-4f)
+		return false;
 	overlayWorld = Matrix::CreateScale(settings.VRMenuScale) * overlayWorld;
 
 	Matrix worldToOverlay = overlayWorld.Invert();
