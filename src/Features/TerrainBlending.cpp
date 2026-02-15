@@ -95,6 +95,13 @@ namespace
 		return globals::state && globals::state->IsDeveloperMode();
 	}
 
+// Caller identity must come from _ReturnAddress() at each hook callsite.
+// Normalize to module-relative RVA so values are stable across process ASLR.
+uint32_t ToModuleRva(const void* a_returnAddress)
+{
+	return static_cast<uint32_t>(reinterpret_cast<std::uintptr_t>(a_returnAddress) - REL::Module::get().base());
+}
+
 	bool ShouldUseBlendedDepthSRV()
 	{
 		auto& vr = globals::features::vr;
@@ -837,14 +844,14 @@ void TerrainBlending::Hooks::BSBatchRenderer__RenderPassImmediately::thunk(RE::B
 
 void TerrainBlending::Hooks::BSUtilityShader_SetupGeometry::thunk(RE::BSShader* a_shader, RE::BSRenderPass* a_pass, uint32_t a_renderFlags)
 {
-	const auto callerRva = static_cast<uint32_t>(reinterpret_cast<std::uintptr_t>(_ReturnAddress()) - REL::Module::get().base());
+	const auto callerRva = ToModuleRva(_ReturnAddress());
 	func(a_shader, a_pass, a_renderFlags);
 	globals::features::terrainBlending.OnUtilitySetupGeometry(a_shader, a_pass, a_renderFlags, callerRva);
 }
 
 bool TerrainBlending::Hooks::BSShaderProperty_SetupGeometry::thunk(RE::BSShaderProperty* a_shaderProperty, RE::BSGeometry* a_geometry)
 {
-	const auto callerRva = static_cast<uint32_t>(reinterpret_cast<std::uintptr_t>(_ReturnAddress()) - REL::Module::get().base());
+	const auto callerRva = ToModuleRva(_ReturnAddress());
 	const bool result = func(a_shaderProperty, a_geometry);
 	globals::features::terrainBlending.OnShaderPropertySetupGeometry(a_shaderProperty, a_geometry, result, callerRva);
 	return result;
