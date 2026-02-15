@@ -1462,9 +1462,30 @@ void WeatherWidget::SaveFeatureSettings()
 {
 	auto* weatherManager = WeatherManager::GetSingleton();
 
+	// Track which features need to be saved
+	std::set<std::string> allFeatureNames;
+	
+	// Collect features from current settings
 	for (const auto& [featureName, featureJson] : settings.featureSettings) {
-		// Always call save so that empty objects are persisted as removals.
-		weatherManager->SaveSettingsToWeather(weather, featureName, featureJson);
+		allFeatureNames.insert(featureName);
+	}
+	
+	// Collect features from original settings (to detect deletions)
+	for (const auto& [featureName, featureJson] : originalSettings.featureSettings) {
+		allFeatureNames.insert(featureName);
+	}
+	
+	// Save or clear each feature
+	for (const auto& featureName : allFeatureNames) {
+		auto currentIt = settings.featureSettings.find(featureName);
+		
+		if (currentIt != settings.featureSettings.end()) {
+			// Feature exists in current settings - save it
+			weatherManager->SaveSettingsToWeather(weather, featureName, currentIt->second);
+		} else {
+			// Feature was removed from settings - clear it by saving empty object
+			weatherManager->SaveSettingsToWeather(weather, featureName, json::object());
+		}
 	}
 }
 
