@@ -630,7 +630,7 @@ void EditorWindow::ShowViewportWindow()
 	ImGui::Begin("Viewport");
 
 	// Top bar
-	auto calendar = RE::Calendar::GetSingleton();
+	auto calendar = globals::game::calendar;
 	if (calendar && calendar->gameHour) {
 		ImGui::SliderFloat("##ViewportSlider", &calendar->gameHour->value, 0.0f, 23.99f, "Time: %.2f");
 		ImGui::SameLine();
@@ -1489,7 +1489,7 @@ void EditorWindow::PauseTime()
 	if (timePaused)
 		return;
 
-	auto calendar = RE::Calendar::GetSingleton();
+	auto calendar = globals::game::calendar;
 	if (calendar && calendar->timeScale) {
 		savedTimeScale = calendar->timeScale->value;
 		calendar->timeScale->value = 0.0f;
@@ -1503,7 +1503,7 @@ void EditorWindow::ResumeTime()
 	if (!timePaused)
 		return;
 
-	auto calendar = RE::Calendar::GetSingleton();
+	auto calendar = globals::game::calendar;
 	if (calendar && calendar->timeScale) {
 		calendar->timeScale->value = savedTimeScale;
 		timePaused = false;

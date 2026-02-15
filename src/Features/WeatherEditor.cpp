@@ -94,8 +94,8 @@ void WeatherEditor::Prepass()
 	}
 
 	// Handle sleep/wait menu to prevent freezing when time is paused
-	auto ui = RE::UI::GetSingleton();
-	auto calendar = RE::Calendar::GetSingleton();
+	auto ui = globals::game::ui;
+	auto calendar = globals::game::calendar;
 	if (ui && calendar && calendar->timeScale) {
 		bool sleepWaitMenuOpen = ui->IsMenuOpen(RE::SleepWaitMenu::MENU_NAME);
 		static bool s_wasRestoredForWait = false;
@@ -238,14 +238,14 @@ void WeatherEditor::DrawTimeControls()
 	Util::DrawSectionHeader("Time Controls");
 	ImGui::Spacing();
 
-	auto calendar = RE::Calendar::GetSingleton();
+	auto calendar = globals::game::calendar;
 	if (calendar && calendar->gameHour && calendar->timeScale) {
 		static constexpr float s_vanillaTimeScale = 20.0f;
 		auto editorWindow = EditorWindow::GetSingleton();
 		bool isTimePaused = editorWindow->IsTimePaused();
 
 		// Check if sleep/wait menu is open - don't sync pause state during wait
-		auto ui = RE::UI::GetSingleton();
+		auto ui = globals::game::ui;
 		bool sleepWaitMenuOpen = ui && ui->IsMenuOpen(RE::SleepWaitMenu::MENU_NAME);
 
 		// Check if time is actually paused (timeScale is 0), but ignore during sleep/wait
