@@ -184,7 +184,7 @@ void WeatherWidget::DrawWidget()
 		if (ImGui::BeginTabItem("Basic", nullptr, basicFlags)) {
 			DrawProperties("Sun", { { "Sun Damage", INT8_SLIDER } });
 			DrawProperties("Wind", { { "Wind Speed", UINT8_SLIDER }, { "Wind Direction", INT8_SLIDER }, { "Wind Direction Range", INT8_SLIDER } });
-			DrawProperties("Precipitation", { { "Precipitation Begin Fade In", INT8_SLIDER }, { "Precipitation Begin Fade Out", INT8_SLIDER } });
+			DrawProperties("Precipitation", { { "Precipitation Begin Fade In", INT8_SLIDER }, { "Precipitation End Fade Out", INT8_SLIDER } });
 			DrawProperties("Lightning", { { "Thunder Lightning Begin Fade In", INT8_SLIDER }, { "Thunder Lightning End Fade Out", INT8_SLIDER },
 											{ "Thunder Lightning Frequency", INT8_SLIDER }, { "Lightning Color", COLOR3_PICKER } });
 			DrawProperties("Visual Effects", { { "Visual Effect Begin", INT8_SLIDER }, { "Visual Effect End", INT8_SLIDER } });
@@ -437,7 +437,7 @@ void WeatherWidget::LoadSettings()
 
 			if (hadErrors) {
 				// Fallback to vanilla/game values
-				LoadWeatherValues();
+				settings = vanillaSettings;
 				EditorWindow::GetSingleton()->ShowNotification(
 					std::format("Some values failed to load for {}", GetEditorID()),
 					ImVec4(1.0f, 0.0f, 0.0f, 1.0f),
@@ -453,7 +453,7 @@ void WeatherWidget::LoadSettings()
 		} catch (const nlohmann::json::exception& e) {
 			logger::error("Weather {}: Failed to deserialize settings from JSON: {}", GetEditorID(), e.what());
 			// Fallback to vanilla/game values on exception
-			LoadWeatherValues();
+			settings = vanillaSettings;
 			EditorWindow::GetSingleton()->ShowNotification(
 				std::format("Some values failed to load for {}", GetEditorID()),
 				ImVec4(1.0f, 0.0f, 0.0f, 1.0f),
@@ -463,7 +463,10 @@ void WeatherWidget::LoadSettings()
 	} else {
 		settings = vanillaSettings;
 	}
+	InitializeInheritFlags();
 	LoadFeatureSettings();
+	originalSettings = settings;
+	ApplyChanges();
 }
 
 void WeatherWidget::SaveSettings()
@@ -481,6 +484,8 @@ void WeatherWidget::SaveSettings()
 			logger::error("Weather {}: Serialized JSON missing atmosphereColors field!", GetEditorID());
 		} else if (!js.contains("clouds")) {
 			logger::error("Weather {}: Serialized JSON missing clouds field!", GetEditorID());
+		} else {
+			originalSettings = settings;
 		}
 
 	} catch (const nlohmann::json::exception& e) {
@@ -625,6 +630,61 @@ void WeatherWidget::SetWeatherValues()
 				globalRegistry->UpdateFeatureFromWeathers(featureName, emptyWeather, filteredSettings, 1.0f);
 			}
 		}
+	}
+}
+
+void WeatherWidget::InitializeInheritFlags()
+{
+	auto& flags = settings.inheritFlags;
+	auto ensureFlag = [&](const std::string& key) {
+		flags.try_emplace(key, false);
+	};
+
+	static const char* kFixedKeys[] = {
+		"Precipitation",
+		"ReferenceEffect",
+		"DALC_Specular",
+		"DALC_Fresnel",
+		"DALC_DirXMax",
+		"DALC_DirXMin",
+		"DALC_DirYMax",
+		"DALC_DirYMin",
+		"DALC_DirZMax",
+		"DALC_DirZMin",
+		"Fog_Near",
+		"Fog_Far",
+		"Fog_Power",
+		"Fog_Max",
+		"Sun Damage",
+		"Wind Speed",
+		"Wind Direction",
+		"Wind Direction Range",
+		"Precipitation Begin Fade In",
+		"Precipitation End Fade Out",
+		"Thunder Lightning Begin Fade In",
+		"Thunder Lightning End Fade Out",
+		"Thunder Lightning Frequency",
+		"Lightning Color",
+		"Visual Effect Begin",
+		"Visual Effect End",
+		"Trans Delta",
+	};
+	for (const char* key : kFixedKeys) {
+		ensureFlag(key);
+	}
+
+	for (int i = 0; i < ColorTimes::kTotal; i++) {
+		ensureFlag(std::format("ImageSpace_{}", i));
+		ensureFlag(std::format("VolumetricLighting_{}", i));
+	}
+
+	for (int i = 0; i < ColorTypes::kTotal; i++) {
+		ensureFlag(std::format("Atmosphere_{}", ColorTypeLabel(i)));
+	}
+
+	for (int i = 0; i < TESWeather::kTotalLayers; i++) {
+		ensureFlag(std::format("Cloud{}_Color", i));
+		ensureFlag(std::format("Cloud{}_Alpha", i));
 	}
 }
 
@@ -1500,7 +1560,27 @@ void WeatherWidget::ApplyChanges()
 
 void WeatherWidget::RevertChanges()
 {
-	LoadWeatherValues();
+	settings = vanillaSettings;
+	ApplyChanges();
+}
+
+bool WeatherWidget::Settings::operator==(const Settings& o) const
+{
+	return parent == o.parent &&
+	       inheritFlags == o.inheritFlags &&
+	       weatherProperties == o.weatherProperties &&
+	       weatherColors == o.weatherColors &&
+	       fogProperties == o.fogProperties &&
+	       std::equal(std::begin(atmosphereColors), std::end(atmosphereColors), std::begin(o.atmosphereColors)) &&
+	       std::equal(std::begin(dalc), std::end(dalc), std::begin(o.dalc)) &&
+	       std::equal(std::begin(clouds), std::end(clouds), std::begin(o.clouds)) &&
+	       std::equal(std::begin(imageSpaces), std::end(imageSpaces), std::begin(o.imageSpaces)) &&
+	       featureSettings == o.featureSettings;
+}
+
+bool WeatherWidget::HasUnsavedChanges() const
+{
+	return !(settings == originalSettings);
 }
 
 void WeatherWidget::DrawFeatureSettings()
@@ -1526,12 +1606,11 @@ void WeatherWidget::DrawFeatureSettings()
 		}
 
 		std::string displayName = feature->GetName();
-
-		// Get or initialize feature settings for this weather
-		if (settings.featureSettings.find(featureName) == settings.featureSettings.end()) {
-			settings.featureSettings[featureName] = json::object();
-		}
-		auto& featureJson = settings.featureSettings[featureName];
+		auto featureIt = settings.featureSettings.find(featureName);
+		const json* featureJsonView = (featureIt != settings.featureSettings.end()) ? &featureIt->second : nullptr;
+		auto getFeatureJson = [&]() -> json& {
+			return settings.featureSettings.try_emplace(featureName, json::object()).first->second;
+		};
 
 		// Handle pending navigation - auto-expand this feature if it matches
 		bool shouldAutoExpand = (pendingFeatureNavigation == featureName);
@@ -1541,7 +1620,7 @@ void WeatherWidget::DrawFeatureSettings()
 
 		if (ImGui::TreeNode(displayName.c_str())) {
 			// Check if weather-specific overrides are enabled (using special key)
-			bool overridesEnabled = featureJson.value("__enabled", false);
+			bool overridesEnabled = featureJsonView ? featureJsonView->value("__enabled", false) : false;
 
 			// Weather-specific override toggle
 			ImGui::PushStyleColor(ImGuiCol_Button, overridesEnabled ? ImVec4(0.2f, 0.7f, 0.2f, 1.0f) : ImVec4(0.5f, 0.5f, 0.5f, 1.0f));
@@ -1564,6 +1643,7 @@ void WeatherWidget::DrawFeatureSettings()
 			}
 
 			if (toggleClicked) {
+				auto& featureJson = getFeatureJson();
 				if (overridesEnabled) {
 					// Disable overrides - mark as disabled but keep the settings
 					featureJson["__enabled"] = false;
@@ -1602,6 +1682,7 @@ void WeatherWidget::DrawFeatureSettings()
 
 			// Only show controls if weather-specific overrides are enabled
 			if (overridesEnabled) {
+				auto& featureJson = getFeatureJson();
 				// Draw UI for each registered variable
 				const auto& variables = featureRegistry->GetVariables();
 				bool modified = false;
@@ -1616,19 +1697,19 @@ void WeatherWidget::DrawFeatureSettings()
 					// Check if this variable has a weather-specific value
 					bool hasOverride = featureJson.contains(varName);
 
-					// Get the current value
-					// If we have an override, use it; otherwise get from feature's live value
-					if (!hasOverride) {
-						// Initialize from feature's current value
+					json currentValue;
+					if (hasOverride) {
+						currentValue = featureJson.at(varName);
+					} else {
 						json tempJson;
 						var->SaveToJson(tempJson);
-						if (tempJson.contains(varName)) {
-							featureJson[varName] = tempJson[varName];
-							hasOverride = true;  // Now we have a value to work with
+						auto it = tempJson.find(varName);
+						if (it == tempJson.end()) {
+							ImGui::PopID();
+							continue;
 						}
+						currentValue = *it;
 					}
-
-					json currentValue = featureJson[varName];
 
 					// Try to detect variable type and render appropriate control
 					// Check if it's a bool variable first
@@ -1779,7 +1860,7 @@ void WeatherWidget::UpdateSearchResults()
 	std::vector<std::pair<std::string, std::map<std::string, int>>> basicCategories = {
 		{ "Sun", { { "Sun Damage", 0 } } },
 		{ "Wind", { { "Wind Speed", 0 }, { "Wind Direction", 0 }, { "Wind Direction Range", 0 } } },
-		{ "Precipitation", { { "Precipitation Begin Fade In", 0 }, { "Precipitation Begin Fade Out", 0 } } },
+		{ "Precipitation", { { "Precipitation Begin Fade In", 0 }, { "Precipitation End Fade Out", 0 } } },
 		{ "Lightning", { { "Thunder Lightning Begin Fade In", 0 }, { "Thunder Lightning End Fade Out", 0 },
 						   { "Thunder Lightning Frequency", 0 }, { "Lightning Color", 1 } } },
 		{ "Visual Effects", { { "Visual Effect Begin", 0 }, { "Visual Effect End", 0 } } },
