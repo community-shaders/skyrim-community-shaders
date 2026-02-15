@@ -106,7 +106,7 @@ namespace globals
 		RE::BSUtilityShader* utilityShader = nullptr;
 		RE::Sky* sky = nullptr;
 		RE::UI* ui = nullptr;
-		RE::Main* main = nullptr;
+		bool quitGame = false;
 
 		RE::BSGraphics::PixelShader** currentPixelShader = nullptr;
 		RE::BSGraphics::VertexShader** currentVertexShader = nullptr;
@@ -198,7 +198,6 @@ namespace globals
 	void OnDataLoaded()
 	{
 		using namespace game;
-		main = RE::Main::GetSingleton();
 		sky = RE::Sky::GetSingleton();
 		utilityShader = RE::BSUtilityShader::GetSingleton();
 
@@ -210,9 +209,9 @@ namespace globals
 
 	void OnGameWindowClose()
 	{
-		if (shaderCache) {
+		game::quitGame = true;
+		if (shaderCache)
 			shaderCache->StopCompilation();
-		}
 	}
 
 	/**
