@@ -252,7 +252,7 @@ void VolumetricShadows::CopyShadowData()
 					csUavs[0] = shadowCopyMip1UAV;
 					context->CSSetUnorderedAccessViews(0, 1, csUavs, nullptr);
 					context->CSSetShader(downsampleShadowMip1CS, nullptr, 0);
-					context->Dispatch(dispatchSize, dispatchSize, 1);
+					context->Dispatch(dispatchSize / 2, dispatchSize / 2, 1);
 
 					// Unbind SRVs before blur passes
 					csSrvs[0] = nullptr;
