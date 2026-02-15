@@ -16,15 +16,10 @@ using namespace DirectX::SimpleMath;
 
 using AttachMode = VR::Settings::OverlayAttachMode;
 
-// Overlay texture dimensions (must match VR.cpp)
-constexpr int kOverlayWidth = 1920;
-constexpr int kOverlayHeight = 1080;
-constexpr float kOverlayAspect = static_cast<float>(kOverlayHeight) / static_cast<float>(kOverlayWidth);
-
 // Helper to create aspect-corrected scale matrix for overlay
 inline Matrix CreateOverlayScaleMatrix(float scale)
 {
-	return Matrix::CreateScale(scale, scale * kOverlayAspect, scale);
+	return Matrix::CreateScale(scale, scale * VR::Config::kOverlayAspect, scale);
 }
 
 //=============================================================================
@@ -38,7 +33,8 @@ namespace
 		static vr::EVRCompositorError thunk(vr::IVRCompositor* _this, vr::EVREye eEye, const vr::Texture_t* pTexture, const vr::VRTextureBounds_t* pBounds, vr::EVRSubmitFlags nSubmitFlags)
 		{
 			auto& vr = globals::features::vr;
-			if (pTexture && pTexture->handle) {
+			// Only process DirectX textures - skip OpenGL/Vulkan to avoid undefined behavior
+			if (pTexture && pTexture->handle && pTexture->eType == vr::TextureType_DirectX) {
 				vr.RenderInSceneOverlay(eEye, (ID3D11Texture2D*)pTexture->handle, pBounds);
 			}
 			return func(_this, eEye, pTexture, pBounds, nSubmitFlags);
@@ -54,29 +50,62 @@ void VR::InitInSceneResources()
 
 	auto device = globals::d3d::device;
 
-	// 1. Compile shaders using utility function
-	auto vs = reinterpret_cast<ID3D11VertexShader*>(Util::CompileShader(L"Data\\Shaders\\VR\\InSceneOverlay.vs.hlsl", {}, "vs_5_0"));
-	auto ps = reinterpret_cast<ID3D11PixelShader*>(Util::CompileShader(L"Data\\Shaders\\VR\\InSceneOverlay.ps.hlsl", {}, "ps_5_0"));
+	// 1. Compile shaders - compile VS to get bytecode for input layout, PS separately
+	ID3DBlob* vsBlob = nullptr;
+	ID3DBlob* psBlob = nullptr;
+	ID3DBlob* errorBlob = nullptr;
 
-	if (!vs || !ps) {
-		logger::error("VR: Failed to compile in-scene overlay shaders");
+	// Compile vertex shader
+	if (FAILED(D3DCompileFromFile(L"Data\\Shaders\\VR\\InSceneOverlay.vs.hlsl", nullptr, D3D_COMPILE_STANDARD_FILE_INCLUDE,
+			"main", "vs_5_0", D3DCOMPILE_ENABLE_STRICTNESS | D3DCOMPILE_OPTIMIZATION_LEVEL3, 0, &vsBlob, &errorBlob))) {
+		if (errorBlob) {
+			logger::error("VR InScene VS compile error: {}", (char*)errorBlob->GetBufferPointer());
+			errorBlob->Release();
+		}
+		return;
+	}
+	if (errorBlob) {
+		errorBlob->Release();
+		errorBlob = nullptr;
+	}
+
+	// Compile pixel shader
+	if (FAILED(D3DCompileFromFile(L"Data\\Shaders\\VR\\InSceneOverlay.ps.hlsl", nullptr, D3D_COMPILE_STANDARD_FILE_INCLUDE,
+			"main", "ps_5_0", D3DCOMPILE_ENABLE_STRICTNESS | D3DCOMPILE_OPTIMIZATION_LEVEL3, 0, &psBlob, &errorBlob))) {
+		if (errorBlob) {
+			logger::error("VR InScene PS compile error: {}", (char*)errorBlob->GetBufferPointer());
+			errorBlob->Release();
+		}
+		if (vsBlob)
+			vsBlob->Release();
+		return;
+	}
+	if (errorBlob) {
+		errorBlob->Release();
+		errorBlob = nullptr;
+	}
+
+	// Create shader objects from bytecode
+	ID3D11VertexShader* vs = nullptr;
+	ID3D11PixelShader* ps = nullptr;
+	if (FAILED(device->CreateVertexShader(vsBlob->GetBufferPointer(), vsBlob->GetBufferSize(), nullptr, &vs)) ||
+		FAILED(device->CreatePixelShader(psBlob->GetBufferPointer(), psBlob->GetBufferSize(), nullptr, &ps))) {
+		logger::error("VR: Failed to create shader objects");
+		if (vs)
+			vs->Release();
+		if (ps)
+			ps->Release();
+		if (vsBlob)
+			vsBlob->Release();
+		if (psBlob)
+			psBlob->Release();
 		return;
 	}
 
 	inSceneResources.vs.attach(vs);
 	inSceneResources.ps.attach(ps);
-
-	// Get vertex shader bytecode for input layout
-	ID3DBlob* vsBlob = nullptr;
-	ID3DBlob* errorBlob = nullptr;
-	if (FAILED(D3DCompileFromFile(L"Data\\Shaders\\VR\\InSceneOverlay.vs.hlsl", nullptr, D3D_COMPILE_STANDARD_FILE_INCLUDE,
-			"main", "vs_5_0", D3DCOMPILE_ENABLE_STRICTNESS, 0, &vsBlob, &errorBlob))) {
-		if (errorBlob) {
-			logger::error("VR InScene VS bytecode error: {}", (char*)errorBlob->GetBufferPointer());
-			errorBlob->Release();
-		}
-		return;
-	}
+	if (psBlob)
+		psBlob->Release();  // Don't need PS blob anymore
 
 	// 2. Input Layout
 	D3D11_INPUT_ELEMENT_DESC polygonLayout[2];
@@ -96,7 +125,11 @@ void VR::InitInSceneResources()
 	polygonLayout[1].InputSlotClass = D3D11_INPUT_PER_VERTEX_DATA;
 	polygonLayout[1].InstanceDataStepRate = 0;
 
-	device->CreateInputLayout(polygonLayout, 2, vsBlob->GetBufferPointer(), vsBlob->GetBufferSize(), inSceneResources.inputLayout.put());
+	if (FAILED(device->CreateInputLayout(polygonLayout, 2, vsBlob->GetBufferPointer(), vsBlob->GetBufferSize(), inSceneResources.inputLayout.put()))) {
+		logger::error("VR: Failed to create input layout");
+		vsBlob->Release();
+		return;
+	}
 
 	vsBlob->Release();
 
@@ -120,7 +153,10 @@ void VR::InitInSceneResources()
 	vertexBufferDesc.BindFlags = D3D11_BIND_VERTEX_BUFFER;
 	D3D11_SUBRESOURCE_DATA vertexData = {};
 	vertexData.pSysMem = vertices;
-	device->CreateBuffer(&vertexBufferDesc, &vertexData, inSceneResources.vb.put());
+	if (FAILED(device->CreateBuffer(&vertexBufferDesc, &vertexData, inSceneResources.vb.put()))) {
+		logger::error("VR: Failed to create vertex buffer");
+		return;
+	}
 
 	unsigned long indices[6] = { 0, 1, 2, 0, 2, 3 };
 	D3D11_BUFFER_DESC indexBufferDesc = {};
@@ -129,14 +165,20 @@ void VR::InitInSceneResources()
 	indexBufferDesc.BindFlags = D3D11_BIND_INDEX_BUFFER;
 	D3D11_SUBRESOURCE_DATA indexData = {};
 	indexData.pSysMem = indices;
-	device->CreateBuffer(&indexBufferDesc, &indexData, inSceneResources.ib.put());
+	if (FAILED(device->CreateBuffer(&indexBufferDesc, &indexData, inSceneResources.ib.put()))) {
+		logger::error("VR: Failed to create index buffer");
+		return;
+	}
 
 	D3D11_BUFFER_DESC matrixBufferDesc = {};
 	matrixBufferDesc.Usage = D3D11_USAGE_DYNAMIC;
 	matrixBufferDesc.ByteWidth = sizeof(InSceneCB);
 	matrixBufferDesc.BindFlags = D3D11_BIND_CONSTANT_BUFFER;
 	matrixBufferDesc.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
-	device->CreateBuffer(&matrixBufferDesc, nullptr, inSceneResources.cb.put());
+	if (FAILED(device->CreateBuffer(&matrixBufferDesc, nullptr, inSceneResources.cb.put()))) {
+		logger::error("VR: Failed to create constant buffer");
+		return;
+	}
 
 	// 4. States
 	D3D11_BLEND_DESC blendDesc = {};
@@ -148,20 +190,29 @@ void VR::InitInSceneResources()
 	blendDesc.RenderTarget[0].DestBlendAlpha = D3D11_BLEND_ZERO;
 	blendDesc.RenderTarget[0].BlendOpAlpha = D3D11_BLEND_OP_ADD;
 	blendDesc.RenderTarget[0].RenderTargetWriteMask = 0x0F;
-	device->CreateBlendState(&blendDesc, inSceneResources.blendState.put());
+	if (FAILED(device->CreateBlendState(&blendDesc, inSceneResources.blendState.put()))) {
+		logger::error("VR: Failed to create blend state");
+		return;
+	}
 
 	D3D11_DEPTH_STENCIL_DESC depthDesc = {};
 	depthDesc.DepthEnable = FALSE;  // Always on top
 	depthDesc.DepthWriteMask = D3D11_DEPTH_WRITE_MASK_ZERO;
 	depthDesc.DepthFunc = D3D11_COMPARISON_ALWAYS;
-	device->CreateDepthStencilState(&depthDesc, inSceneResources.depthState.put());
+	if (FAILED(device->CreateDepthStencilState(&depthDesc, inSceneResources.depthState.put()))) {
+		logger::error("VR: Failed to create depth stencil state");
+		return;
+	}
 
 	D3D11_RASTERIZER_DESC rasterDesc = {};
 	rasterDesc.FillMode = D3D11_FILL_SOLID;
 	rasterDesc.CullMode = D3D11_CULL_NONE;
 	rasterDesc.FrontCounterClockwise = FALSE;
 	rasterDesc.DepthClipEnable = TRUE;
-	device->CreateRasterizerState(&rasterDesc, inSceneResources.rasterizerState.put());
+	if (FAILED(device->CreateRasterizerState(&rasterDesc, inSceneResources.rasterizerState.put()))) {
+		logger::error("VR: Failed to create rasterizer state");
+		return;
+	}
 
 	D3D11_SAMPLER_DESC samplerDesc = {};
 	samplerDesc.Filter = D3D11_FILTER_MIN_MAG_MIP_LINEAR;
@@ -171,44 +222,13 @@ void VR::InitInSceneResources()
 	samplerDesc.ComparisonFunc = D3D11_COMPARISON_NEVER;
 	samplerDesc.MinLOD = 0;
 	samplerDesc.MaxLOD = D3D11_FLOAT32_MAX;
-	device->CreateSamplerState(&samplerDesc, inSceneResources.sampler.put());
+	if (FAILED(device->CreateSamplerState(&samplerDesc, inSceneResources.sampler.put()))) {
+		logger::error("VR: Failed to create sampler state");
+		return;
+	}
 
 	inSceneResources.initialized = true;
 	logger::debug("VR: In-Scene Overlay resources initialized.");
-}
-
-// Helper function to get IPD from HMD
-static float GetIPDFromHMD()
-{
-	RE::BSOpenVR* openvr = RE::BSOpenVR::GetSingleton();
-	if (!openvr || !openvr->vrSystem)
-		return 0.064f;  // Default fallback IPD in meters
-
-	// Method 1: Query IPD property directly
-	vr::ETrackedPropertyError error;
-	float ipd = openvr->vrSystem->GetFloatTrackedDeviceProperty(
-		vr::k_unTrackedDeviceIndex_Hmd,
-		vr::Prop_UserIpdMeters_Float,
-		&error);
-
-	if (error == vr::TrackedProp_Success && ipd > 0.0f && ipd < 0.1f) {
-		return ipd;
-	}
-
-	// Method 2: Calculate from eye-to-head transforms
-	vr::HmdMatrix34_t leftEye = openvr->vrSystem->GetEyeToHeadTransform(vr::Eye_Left);
-	vr::HmdMatrix34_t rightEye = openvr->vrSystem->GetEyeToHeadTransform(vr::Eye_Right);
-
-	// Eye separation is in the X translation component (m[0][3])
-	float eyeSeparation = std::abs(leftEye.m[0][3] - rightEye.m[0][3]);
-
-	// Sanity check: typical IPD is 0.058-0.072 meters
-	if (eyeSeparation > 0.05f && eyeSeparation < 0.08f) {
-		return eyeSeparation;
-	}
-
-	// Fallback to average human IPD
-	return 0.064f;
 }
 
 void VR::RenderInSceneOverlay(vr::EVREye eye, ID3D11Texture2D* targetTexture, const vr::VRTextureBounds_t* bounds)
@@ -436,9 +456,16 @@ void VR::RenderInSceneOverlay(vr::EVREye eye, ID3D11Texture2D* targetTexture, co
 		ctx->OMSetDepthStencilState(inSceneResources.depthState.get(), 0);
 		ctx->RSSetState(inSceneResources.rasterizerState.get());
 
-		winrt::com_ptr<ID3D11ShaderResourceView> tempSRV;
-		globals::d3d::device->CreateShaderResourceView(menuTexture.get(), nullptr, tempSRV.put());
-		ID3D11ShaderResourceView* srvPtr = tempSRV.get();
+		// Cache SRV to avoid creating every frame
+		if (menuTexture.get() != inSceneResources.cachedMenuTexture) {
+			inSceneResources.menuSRV = nullptr;
+			if (FAILED(globals::d3d::device->CreateShaderResourceView(menuTexture.get(), nullptr, inSceneResources.menuSRV.put()))) {
+				logger::error("VR: Failed to create menu texture SRV");
+				return;
+			}
+			inSceneResources.cachedMenuTexture = menuTexture.get();
+		}
+		ID3D11ShaderResourceView* srvPtr = inSceneResources.menuSRV.get();
 		ctx->PSSetShaderResources(0, 1, &srvPtr);
 
 		ID3D11SamplerState* sampler = inSceneResources.sampler.get();
@@ -461,7 +488,7 @@ void VR::RenderInSceneOverlay(vr::EVREye eye, ID3D11Texture2D* targetTexture, co
 			static float cachedIPD = -1.0f;
 			static bool ipdLogged = false;
 			if (cachedIPD < 0.0f) {
-				cachedIPD = GetIPDFromHMD();
+				cachedIPD = Util::GetIPDFromHMD();
 
 				// Log IPD information once
 				if (!ipdLogged) {
@@ -631,7 +658,7 @@ void VR::InstallSubmitHook()
 		logger::debug("=== VR System Configuration ===");
 
 		// Get and log IPD
-		float ipd = GetIPDFromHMD();
+		float ipd = Util::GetIPDFromHMD();
 		logger::debug("IPD: {:.4f} meters ({:.2f} mm)", ipd, ipd * 1000.0f);
 
 		// Get and log eye transforms

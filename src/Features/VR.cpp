@@ -35,10 +35,6 @@ namespace
 	}
 }
 
-constexpr int kOverlayWidth = 1920;
-constexpr int kOverlayHeight = 1080;
-constexpr float kOverlayAspect = static_cast<float>(kOverlayHeight) / static_cast<float>(kOverlayWidth);
-
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	VR::Settings,
 	EnableDepthBufferCullingInterior,
@@ -1327,7 +1323,7 @@ void VR::UpdateVROverlayPosition()
 	// Texture size
 	float baseWidth = 1.0f;
 	float overlayWidth = baseWidth * settings.VRMenuScale;
-	float overlayHeight = overlayWidth * kOverlayAspect;
+	float overlayHeight = overlayWidth * Config::kOverlayAspect;
 	float offsetX = settings.VRMenuOffsetX;
 	float offsetY = settings.VRMenuOffsetY;
 	float offsetZ = settings.VRMenuOffsetZ;
@@ -1484,7 +1480,7 @@ void VR::UpdateVROverlayControllerPosition()
 	}
 
 	// Texture size based on preset
-	float aspect = static_cast<float>(kOverlayHeight) / kOverlayWidth;
+	float aspect = Config::kOverlayAspect;
 	float baseWidth = 1.0f;
 	float overlayWidth = baseWidth * settings.VRMenuScale;
 	float overlayHeight = overlayWidth * aspect;
@@ -1546,7 +1542,7 @@ void VR::EnsureOverlayInitialized()
 		logger::error("IVROverlay is nullptr after GetIVROverlay");
 		return;
 	}
-	Util::CreateOverlayTextureAndRTV(globals::d3d::device, kOverlayWidth, kOverlayHeight, menuTexture.put(), menuRTV.put());
+	Util::CreateOverlayTextureAndRTV(globals::d3d::device, Config::kOverlayWidth, Config::kOverlayHeight, menuTexture.put(), menuRTV.put());
 	std::string key = "communityshaders.menu";
 	std::string name = "Community Shaders Menu";
 	vr::EVROverlayError err = overlay->CreateOverlay(key.c_str(), name.c_str(), &menuOverlayHandle);
@@ -1564,7 +1560,7 @@ void VR::EnsureOverlayInitialized()
 	err = overlay->CreateOverlay(controllerKey.c_str(), controllerName.c_str(), &menuControllerOverlayHandle);
 	if (err == vr::VROverlayError_None) {
 		logger::debug("CreateOverlay succeeded for menuControllerOverlayHandle: 0x{:X}", menuControllerOverlayHandle);
-		Util::CreateOverlayTextureAndRTV(globals::d3d::device, kOverlayWidth, kOverlayHeight, menuControllerTexture.put(), menuControllerRTV.put());
+		Util::CreateOverlayTextureAndRTV(globals::d3d::device, Config::kOverlayWidth, Config::kOverlayHeight, menuControllerTexture.put(), menuControllerRTV.put());
 		Util::SetOverlayInputFlags(overlay, menuControllerOverlayHandle);
 		overlay->SetOverlayWidthInMeters(menuControllerOverlayHandle, 1.0f);
 	} else {
@@ -1596,8 +1592,8 @@ void VR::DestroyOverlay()
 
 void VR::RecreateOverlayTexturesIfNeeded()
 {
-	Util::CreateOverlayTextureAndRTV(globals::d3d::device, kOverlayWidth, kOverlayHeight, menuTexture.put(), menuRTV.put());
-	Util::CreateOverlayTextureAndRTV(globals::d3d::device, kOverlayWidth, kOverlayHeight, menuControllerTexture.put(), menuControllerRTV.put());
+	Util::CreateOverlayTextureAndRTV(globals::d3d::device, Config::kOverlayWidth, Config::kOverlayHeight, menuTexture.put(), menuRTV.put());
+	Util::CreateOverlayTextureAndRTV(globals::d3d::device, Config::kOverlayWidth, Config::kOverlayHeight, menuControllerTexture.put(), menuControllerRTV.put());
 }
 
 // Wraps IVROverlay calls that may trigger OpenComposite's abort (int3) inside SEH.

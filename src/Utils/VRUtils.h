@@ -242,6 +242,48 @@ namespace Util
 		return mat;
 	}
 
+	/**
+	 * @brief Gets the Inter-Pupillary Distance (IPD) from the HMD
+	 * @return IPD in meters, or 0.064 (average human IPD) as fallback
+	 *
+	 * Tries multiple methods to determine IPD:
+	 * 1. Query Prop_UserIpdMeters_Float property directly
+	 * 2. Calculate from eye-to-head transforms
+	 * 3. Fallback to average human IPD (64mm)
+	 */
+	inline float GetIPDFromHMD()
+	{
+		RE::BSOpenVR* openvr = RE::BSOpenVR::GetSingleton();
+		if (!openvr || !openvr->vrSystem)
+			return 0.064f;  // Default fallback IPD in meters
+
+		// Method 1: Query IPD property directly
+		vr::ETrackedPropertyError error;
+		float ipd = openvr->vrSystem->GetFloatTrackedDeviceProperty(
+			vr::k_unTrackedDeviceIndex_Hmd,
+			vr::Prop_UserIpdMeters_Float,
+			&error);
+
+		if (error == vr::TrackedProp_Success && ipd > 0.0f && ipd < 0.1f) {
+			return ipd;
+		}
+
+		// Method 2: Calculate from eye-to-head transforms
+		vr::HmdMatrix34_t leftEye = openvr->vrSystem->GetEyeToHeadTransform(vr::Eye_Left);
+		vr::HmdMatrix34_t rightEye = openvr->vrSystem->GetEyeToHeadTransform(vr::Eye_Right);
+
+		// Eye separation is in the X translation component (m[0][3])
+		float eyeSeparation = std::abs(leftEye.m[0][3] - rightEye.m[0][3]);
+
+		// Sanity check: typical IPD is 0.058-0.072 meters
+		if (eyeSeparation > 0.05f && eyeSeparation < 0.08f) {
+			return eyeSeparation;
+		}
+
+		// Fallback to average human IPD
+		return 0.064f;
+	}
+
 	//=============================================================================
 	// WAND POINTING UTILITIES
 	//=============================================================================

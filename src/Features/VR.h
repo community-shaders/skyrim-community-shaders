@@ -61,6 +61,11 @@ public:
 	 */
 	struct Config
 	{
+		// Overlay texture dimensions
+		static constexpr int kOverlayWidth = 1920;                                                                       ///< Overlay texture width in pixels
+		static constexpr int kOverlayHeight = 1080;                                                                      ///< Overlay texture height in pixels
+		static constexpr float kOverlayAspect = static_cast<float>(kOverlayHeight) / static_cast<float>(kOverlayWidth);  ///< Aspect ratio (height/width)
+
 		static constexpr float kDefaultMenuScale = 1.0f;      ///< Default overlay scale factor
 		static constexpr float kMinMenuScale = 0.1f;          ///< Minimum allowed overlay scale
 		static constexpr float kMaxMenuScale = 5.0f;          ///< Maximum allowed overlay scale
@@ -460,6 +465,11 @@ public:
 		winrt::com_ptr<ID3D11DepthStencilState> depthState;
 		winrt::com_ptr<ID3D11SamplerState> sampler;
 		winrt::com_ptr<ID3D11RasterizerState> rasterizerState;
+
+		// Cached SRV to avoid creating every frame
+		winrt::com_ptr<ID3D11ShaderResourceView> menuSRV;
+		ID3D11Texture2D* cachedMenuTexture = nullptr;
+
 		bool initialized = false;
 	} inSceneResources;
 
