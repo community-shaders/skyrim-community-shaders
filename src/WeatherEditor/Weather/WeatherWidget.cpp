@@ -1461,21 +1461,21 @@ void WeatherWidget::SaveFeatureSettings()
 
 	// Track which features need to be saved
 	std::set<std::string> allFeatureNames;
-	
+
 	// Collect features from current settings
 	for (const auto& [featureName, featureJson] : settings.featureSettings) {
 		allFeatureNames.insert(featureName);
 	}
-	
+
 	// Collect features from original settings (to detect deletions)
 	for (const auto& [featureName, featureJson] : originalSettings.featureSettings) {
 		allFeatureNames.insert(featureName);
 	}
-	
+
 	// Save or clear each feature
 	for (const auto& featureName : allFeatureNames) {
 		auto currentIt = settings.featureSettings.find(featureName);
-		
+
 		if (currentIt != settings.featureSettings.end()) {
 			// Feature exists in current settings - save it
 			weatherManager->SaveSettingsToWeather(weather, featureName, currentIt->second);
@@ -1586,14 +1586,14 @@ void WeatherWidget::RevertChanges()
 	// back to user default settings before clearing them
 	if (isCurrentWeather) {
 		auto* globalRegistry = WeatherVariables::GlobalWeatherRegistry::GetSingleton();
-		
+
 		// Collect features that were enabled and need to be reset
 		for (const auto& [featureName, featureSettings] : settings.featureSettings) {
 			bool enabled = featureSettings.value("__enabled", false);
 			if (enabled && globalRegistry->HasWeatherSupport(featureName)) {
 				// End any active transition for this feature
 				globalRegistry->EndFeatureTransition(featureName);
-				
+
 				// Reset all variables in this feature to user defaults
 				auto* featureRegistry = globalRegistry->GetFeatureRegistry(featureName);
 				if (featureRegistry) {
