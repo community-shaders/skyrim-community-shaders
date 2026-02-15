@@ -303,7 +303,7 @@ void SceneSettingsManager::Update()
 	// Revert interior overrides on main/loading menu (same check as LinearLighting)
 	if (isCurrentlyApplied) {
 		bool isMainOrLoading = globals::game::ui &&
-			(globals::game::ui->IsMenuOpen(RE::MainMenu::MENU_NAME) || globals::game::ui->IsMenuOpen(RE::LoadingMenu::MENU_NAME));
+		                       (globals::game::ui->IsMenuOpen(RE::MainMenu::MENU_NAME) || globals::game::ui->IsMenuOpen(RE::LoadingMenu::MENU_NAME));
 		if (isMainOrLoading) {
 			RevertToExteriorSettings();
 			isCurrentlyApplied = false;
