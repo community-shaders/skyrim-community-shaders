@@ -933,7 +933,7 @@ void VR::DrawSettings()
 
 			ImGui::Spacing();
 
-			double remainingTime = this->comboTimeout - (Util::GetNowSecs() - this->comboStartTime);
+			double remainingTime = settings.comboTimeout - (Util::GetNowSecs() - this->comboStartTime);
 			ImVec4 timerColor = remainingTime > 2.0 ? Util::Colors::GetTimerGood() :
 			                    remainingTime > 1.0 ? Util::Colors::GetTimerWarning() :
 			                                          Util::Colors::GetTimerCritical();

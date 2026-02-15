@@ -4,6 +4,7 @@
 #include "Utils/VRUtils.h"
 
 #include <SimpleMath.h>
+#include <algorithm>
 #include <chrono>
 #include <cmath>
 #include <openvr.h>
@@ -202,8 +203,10 @@ void VR::UpdateActiveDrag()
 				float depthDelta = -thumbY * depthSpeed;
 				if (overlayDragState.mode == OverlayDragState::DragMode::HMD) {
 					overlayDragState.initialHMDOffset.z += depthDelta;
+					overlayDragState.initialHMDOffset.z = std::clamp(overlayDragState.initialHMDOffset.z, -10.0f, 10.0f);
 				} else if (overlayDragState.mode == OverlayDragState::DragMode::Controller) {
 					overlayDragState.initialControllerOffset.z += depthDelta;
+					overlayDragState.initialControllerOffset.z = std::clamp(overlayDragState.initialControllerOffset.z, -10.0f, 10.0f);
 				}
 			}
 		}

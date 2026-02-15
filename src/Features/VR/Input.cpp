@@ -150,7 +150,7 @@ void VR::ProcessVREvents(std::vector<Menu::KeyEvent>& vrEvents)
 			{ "B/Y", RE::BSOpenVRControllerDevice::IsBButton, RE::BSOpenVRControllerDevice::Keys::kBY },
 		};
 		for (const auto& desc : kVRButtons) {
-			if (desc.isButton(event.keyCode)) {
+			if (event.keyCode == desc.keyCode) {
 				RE::ButtonState* state = isPrimary ? &primaryControllerState[desc.keyCode] : isSecondary ? &secondaryControllerState[desc.keyCode] :
 				                                                                                           nullptr;
 				if (state) {
