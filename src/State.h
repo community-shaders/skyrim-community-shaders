@@ -4,6 +4,7 @@
 #include <Tracy/TracyD3D11.hpp>
 
 #include <Buffer.h>
+#include <mutex>
 #include <nlohmann/json.hpp>
 
 using json = nlohmann::json;
@@ -23,6 +24,7 @@ public:
 		for (auto& v : drawCalls) v = 0;
 		for (auto& v : frameTimePerType) v = 0.0f;
 		for (auto& v : smoothFrameTimePerType) v = 0.0f;
+		for (auto& v : enabledClasses) v = true;
 
 		// Initialize QueryPerformanceCounter frequency
 		frameTimingFrequency.QuadPart = 0;
@@ -80,6 +82,10 @@ public:
 
 	void Load(ConfigMode a_configMode = ConfigMode::USER, bool a_allowReload = true);
 	void Save(ConfigMode a_configMode = ConfigMode::USER);
+
+	// In-memory serialization for A/B testing (avoids disk I/O during swaps)
+	void SaveToJson(nlohmann::json& o_json);
+	void LoadFromJson(nlohmann::json& i_json);
 
 	void LoadTheme();
 	void SaveTheme();
@@ -287,6 +293,7 @@ public:
 		{ "TruePBR", false }
 	};
 	std::unordered_map<std::string, bool> disabledFeatures;
+	std::mutex m_mutex;
 
 	inline ~State()
 	{

@@ -8,6 +8,7 @@ struct GrassLighting;
 struct HairSpecular;
 struct IBL;
 struct LightLimitFix;
+struct LinearLighting;
 struct LODBlending;
 struct InteriorSun;
 struct InverseSquareLighting;
@@ -20,14 +21,16 @@ struct SubsurfaceScattering;
 struct TerrainBlending;
 struct TerrainHelper;
 struct TerrainShadows;
+struct UnifiedWater;
 struct VolumetricLighting;
 struct VR;
 struct WaterEffects;
-struct WeatherPicker;
 struct PerformanceOverlay;
 struct WetnessEffects;
 struct ExtendedTranslucency;
 struct Upscaling;
+struct WeatherEditor;
+struct ExponentialHeightFog;
 
 class State;
 class Deferred;
@@ -38,6 +41,7 @@ class Menu;
 namespace SIE
 {
 	class ShaderCache;
+	class ShaderFileDependencyTracker;
 }
 
 namespace globals
@@ -59,6 +63,7 @@ namespace globals
 		extern HairSpecular hairSpecular;
 		extern IBL ibl;
 		extern LightLimitFix lightLimitFix;
+		extern LinearLighting linearLighting;
 		extern LODBlending lodBlending;
 		extern InteriorSun interiorSun;
 		extern InverseSquareLighting inverseSquareLighting;
@@ -71,15 +76,17 @@ namespace globals
 		extern TerrainBlending terrainBlending;
 		extern TerrainHelper terrainHelper;
 		extern TerrainShadows terrainShadows;
+		extern UnifiedWater unifiedWater;
 		extern VolumetricLighting volumetricLighting;
 		extern VR vr;
 		extern WaterEffects waterEffects;
-		extern WeatherPicker weatherPicker;
 		extern PerformanceOverlay performanceOverlay;
 		extern WetnessEffects wetnessEffects;
 		extern ExtendedTranslucency extendedTranslucency;
 		extern Upscaling upscaling;
 		extern RenderDoc renderDoc;
+		extern WeatherEditor weatherEditor;
+		extern ExponentialHeightFog exponentialHeightFog;
 
 		namespace llf
 		{
@@ -199,10 +206,13 @@ namespace globals
 		extern RE::BSGraphics::State* graphicsState;
 		extern RE::BSGraphics::Renderer* renderer;
 		extern RE::BSShaderManager::State* smState;
+		extern RE::TES* tes;
 		extern bool isVR;
+		extern RE::MemoryManager* memoryManager;
 		extern RE::INISettingCollection* iniSettingCollection;
 		extern RE::INIPrefSettingCollection* iniPrefSettingCollection;
 		extern RE::GameSettingCollection* gameSettingCollection;
+		extern RE::TES* tes;
 		extern float* cameraNear;
 		extern float* cameraFar;
 		extern float* deltaTime;
@@ -229,9 +239,11 @@ namespace globals
 		extern REL::Relocation<const RE::NiRTTI*> NiIntegerExtraDataRTTI;
 		extern REL::Relocation<const RE::NiRTTI*> BSLightingShaderPropertyRTTI;
 		extern REL::Relocation<const RE::NiRTTI*> BSEffectShaderPropertyRTTI;
+		extern REL::Relocation<const RE::NiRTTI*> BSWaterShaderPropertyRTTI;
 		extern REL::Relocation<const RE::NiRTTI*> NiParticleSystemRTTI;
 		extern REL::Relocation<const RE::NiRTTI*> NiBillboardNodeRTTI;
 		extern REL::Relocation<const RE::NiRTTI*> NiAlphaPropertyRTTI;
+		extern REL::Relocation<const RE::NiRTTI*> NiSourceTextureRTTI;
 	}
 
 	extern State* state;

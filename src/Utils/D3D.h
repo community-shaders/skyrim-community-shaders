@@ -1,6 +1,7 @@
 #pragma once
 #include <array>
 #include <d3d11.h>
+#include <winrt/base.h>
 
 namespace Util
 {
@@ -26,4 +27,7 @@ namespace Util
 	{
 		return REL::Module::IsVR() ? RE::RENDER_TARGETS_DEPTHSTENCIL::kVRTOTAL : RE::RENDER_TARGETS_DEPTHSTENCIL::kTOTAL;
 	}
+
+	HRESULT SaveTextureToFile(ID3D11Device* device, ID3D11DeviceContext* context, const std::filesystem::path& path, ID3D11Texture2D* tex);
+	HRESULT LoadTextureFromFile(ID3D11Device* device, const std::filesystem::path& path, ID3D11Texture2D** outTex, ID3D11ShaderResourceView** outSRV);
 }  // namespace Util

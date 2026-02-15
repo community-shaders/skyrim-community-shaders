@@ -530,6 +530,11 @@ cbuffer PerGeometry : register(b2)
 #		include "IBL/IBL.hlsli"
 #	endif
 
+#	if defined(EXP_HEIGHT_FOG)
+#		define SampColorSampler SampBaseSampler
+#		include "ExponentialHeightFog/ExponentialHeightFog.hlsli"
+#	endif
+
 #	include "Common/ShadowSampling.hlsli"
 
 float ComputeShadowVariance(float shadow)
@@ -547,10 +552,18 @@ float3 GetLightingColor(float3 msPosition, float3 worldPosition, float4 screenPo
 	float4 lightDistanceSquared = (PLightPositionX[eyeIndex] - msPosition.xxxx) * (PLightPositionX[eyeIndex] - msPosition.xxxx) + (PLightPositionY[eyeIndex] - msPosition.yyyy) * (PLightPositionY[eyeIndex] - msPosition.yyyy) + (PLightPositionZ[eyeIndex] - msPosition.zzzz) * (PLightPositionZ[eyeIndex] - msPosition.zzzz);
 	float4 lightFadeMul = 1.0.xxxx - saturate(PLightingRadiusInverseSquared * lightDistanceSquared);
 
-	float3 color = DLightColor.xyz;
+	float3 color = DLightColor.xyz * Color::EffectLightingMult();
 
 	if ((Permutation::ExtraShaderDescriptor & Permutation::ExtraFlags::EffectShadows)) {
-		float3 dirLightColor = SharedData::DirLightColor.xyz * 0.5;
+		float llDirLightMult = (SharedData::linearLightingSettings.enableLinearLighting && !SharedData::linearLightingSettings.isDirLightLinear) ? SharedData::linearLightingSettings.dirLightMult : 1.0f;
+		float3 dirLightColor = Color::DirectionalLight(SharedData::DirLightColor.xyz / max(llDirLightMult, 1e-5), SharedData::linearLightingSettings.isDirLightLinear) * llDirLightMult * 0.5 * Color::EffectLightingMult();
+
+#		if defined(EXP_HEIGHT_FOG)
+	if (SharedData::exponentialHeightFogSettings.enabled) {
+		dirLightColor *= ExponentialHeightFog::GetSunlightFogAttenuation(worldPosition.xyz, FrameBuffer::CameraPosAdjust[eyeIndex].xyz);
+	}
+#		endif
+
 		float3 ambientColor = max(0, mul(SharedData::DirectionalAmbient, float4(0, 0, 1, 1)));
 
 #		if defined(IBL)
@@ -574,9 +587,9 @@ float3 GetLightingColor(float3 msPosition, float3 worldPosition, float4 screenPo
 		skylightingDiffuse = lerp(1.0, skylightingDiffuse, Skylighting::getFadeOutFactor(worldPosition));
 		skylightingDiffuse = Skylighting::mixDiffuse(SharedData::skylightingSettings, skylightingDiffuse);
 
-		color = Color::GammaToLinear(color);
+		color = Color::IrradianceToLinear(color);
 		color *= skylightingDiffuse;
-		color = Color::LinearToGamma(color);
+		color = Color::IrradianceToGamma(color);
 #		endif
 
 #		if defined(IBL)
@@ -589,7 +602,7 @@ float3 GetLightingColor(float3 msPosition, float3 worldPosition, float4 screenPo
 #			else
 				iblColor += Color::Saturation(ImageBasedLighting::GetIBLColor(float3(0, 0, -1)), SharedData::iblSettings.IBLSaturation) * SharedData::iblSettings.DiffuseIBLScale;
 #			endif
-				color += Color::LinearToGamma(iblColor);
+				color += Color::IrradianceToGamma(iblColor);
 			}
 		}
 #		endif
@@ -620,9 +633,9 @@ float3 GetLightingColor(float3 msPosition, float3 worldPosition, float4 screenPo
 			skylightingDiffuse = lerp(1.0, skylightingDiffuse, Skylighting::getFadeOutFactor(worldPosition));
 			skylightingDiffuse = Skylighting::mixDiffuse(SharedData::skylightingSettings, skylightingDiffuse);
 
-			color = Color::GammaToLinear(color);
+			color = Color::IrradianceToLinear(color);
 			color *= skylightingDiffuse;
-			color = Color::LinearToGamma(color);
+			color = Color::IrradianceToGamma(color);
 		}
 #		endif
 	}
@@ -631,9 +644,9 @@ float3 GetLightingColor(float3 msPosition, float3 worldPosition, float4 screenPo
 	if (!(Permutation::ExtraShaderDescriptor & Permutation::ExtraFlags::InWorld))
 #		endif
 	{
-		color.x += dot(PLightColorR * lightFadeMul, 1.0.xxxx);
-		color.y += dot(PLightColorG * lightFadeMul, 1.0.xxxx);
-		color.z += dot(PLightColorB * lightFadeMul, 1.0.xxxx);
+		color.x += dot(Color::PointLight(PLightColorR.xxx).x * lightFadeMul * Color::EffectLightingMult(), 1.0.xxxx);
+        color.y += dot(Color::PointLight(PLightColorG.xxx).x * lightFadeMul * Color::EffectLightingMult(), 1.0.xxxx);
+        color.z += dot(Color::PointLight(PLightColorB.xxx).x * lightFadeMul * Color::EffectLightingMult(), 1.0.xxxx);
 	}
 
 	return color;
@@ -694,7 +707,7 @@ PS_OUTPUT main(PS_INPUT input)
 #	endif
 
 	float lightingInfluence = LightingInfluence.x;
-	float3 propertyColor = PropertyColor.xyz;
+	float3 propertyColor = Color::Effect(PropertyColor.xyz);
 	float shadowVariance = 1.0;
 
 #	if defined(LIGHTING)
@@ -728,7 +741,8 @@ PS_OUTPUT main(PS_INPUT input)
 				float intensityMultiplier = 1 - intensityFactor * intensityFactor;
 #			endif
 
-				float3 lightColor = light.color.xyz * intensityMultiplier * 0.5;
+				const bool isPointLightLinear = light.lightFlags & LightLimitFix::LightFlags::Linear;
+				float3 lightColor = Color::PointLight(light.color.xyz, isPointLightLinear) * intensityMultiplier * 0.5 * light.fade * Color::EffectLightingMult();
 				propertyColor += lightColor;
 			}
 		}
@@ -746,6 +760,7 @@ PS_OUTPUT main(PS_INPUT input)
 #	endif
 	{
 		baseTexColor = TexBaseSampler.Sample(SampBaseSampler, input.TexCoord0.xy);
+		baseTexColor.xyz = Color::Effect(baseTexColor.xyz);
 		baseColor *= baseTexColor;
 		if (Permutation::PixelShaderDescriptor & Permutation::EffectFlags::IgnoreTexAlpha || Permutation::PixelShaderDescriptor & Permutation::EffectFlags::GrayscaleToAlpha) {
 			baseColor.w = 1;
@@ -756,8 +771,9 @@ PS_OUTPUT main(PS_INPUT input)
 	float4 baseColorMul = float4(1, 1, 1, 1);
 #	else
 	float4 baseColorMul = BaseColor;
+	baseColorMul.xyz = Color::Effect(baseColorMul.xyz);
 #		if defined(VC) && !defined(PROJECTED_UV)
-	baseColorMul *= input.Color;
+	baseColorMul *= float4(Color::Effect(input.Color.xyz), input.Color.w);
 #		endif
 #	endif
 
@@ -810,7 +826,7 @@ PS_OUTPUT main(PS_INPUT input)
 #	if defined(MEMBRANE)
 		grayscaleToColorUv.y = PropertyColor.x;
 #	endif
-		baseColor.xyz = baseColorScale * TexGrayscaleSampler.Sample(SampGrayscaleSampler, grayscaleToColorUv).xyz;
+		baseColor.xyz = Color::Effect(baseColorScale * TexGrayscaleSampler.Sample(SampGrayscaleSampler, grayscaleToColorUv).xyz);
 	}
 
 	float3 lightColor = lerp(baseColor.xyz, propertyColor * baseColor.xyz, lightingInfluence.xxx);
@@ -821,23 +837,40 @@ PS_OUTPUT main(PS_INPUT input)
 	}
 #	endif
 
+	lightColor = Color::EffectMult(lightColor);
+
 #	if !defined(MOTIONVECTORS_NORMALS)
-#		if defined(ADDBLEND)
-	float3 blendedColor = lightColor * (1 - input.FogParam.www);
-#		elif defined(MULTBLEND) || defined(MULTBLEND_DECAL)
-	float3 blendedColor = lerp(lightColor, 1.0.xxx, saturate(1.5 * input.FogParam.w).xxx);
-#		else
-	float3 fogColor = input.FogParam.xyz;
-#			if defined(IBL)
+	float fogFactor = Color::FogAlpha(input.FogParam.w);
+	float3 fogColor = Color::Fog(input.FogParam.xyz);
+#		if defined(IBL)
 	if (SharedData::iblSettings.EnableDiffuseIBL && !SharedData::InInterior) {
 		fogColor = ImageBasedLighting::GetFogIBLColor(fogColor);
 	}
+#		endif
+#		if defined(EXP_HEIGHT_FOG)
+	if (SharedData::exponentialHeightFogSettings.enabled) {
+		float4 exponentialHeightFog = ExponentialHeightFog::GetExponentialHeightFog(input.WorldPosition.xyz, FrameBuffer::CameraPosAdjust[eyeIndex].xyz, fogColor);
+#			if defined(ADDBLEND) || defined(MULTBLEND) || defined(MULTBLEND_DECAL)
+		fogColor = exponentialHeightFog.xyz;
+		fogFactor = exponentialHeightFog.w;
+#			else
+		fogColor = lightColor;
+		alpha *= 1 - exponentialHeightFog.w;
 #			endif
-	float3 blendedColor = lerp(lightColor, fogColor, input.FogParam.www);
+	}
+#		endif
+#		if defined(ADDBLEND)
+	float3 blendedColor = lightColor * (1 - fogFactor);
+#		elif defined(MULTBLEND) || defined(MULTBLEND_DECAL)
+	float3 blendedColor = lerp(lightColor, 1.0.xxx, saturate(1.5 * fogFactor).xxx);
+#		else
+	float3 blendedColor = lerp(lightColor, fogColor, fogFactor.xxx);
 #		endif
 #	else
 	float3 blendedColor = lightColor.xyz;
 #	endif
+
+	alpha = Color::EffectAlpha(alpha);
 
 	float4 finalColor = float4(blendedColor, alpha);
 #	if defined(MULTBLEND_DECAL)
@@ -902,6 +935,9 @@ PS_OUTPUT main(PS_INPUT input)
 	psout.Color2 = finalColor;
 #	endif
 
+	if (!(Permutation::ExtraShaderDescriptor & Permutation::ExtraFlags::InWorld) && SharedData::linearLightingSettings.enableLinearLighting) {
+		psout.Diffuse.xyz = Color::TrueLinearToGamma(psout.Diffuse.xyz);
+	}
 	return psout;
 }
 #endif

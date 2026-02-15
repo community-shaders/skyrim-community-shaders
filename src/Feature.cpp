@@ -4,6 +4,7 @@
 #include "FeatureVersions.h"
 #include "Features/CloudShadows.h"
 #include "Features/DynamicCubemaps.h"
+#include "Features/ExponentialHeightFog.h"
 #include "Features/ExtendedMaterials.h"
 #include "Features/ExtendedTranslucency.h"
 #include "Features/GrassCollision.h"
@@ -14,6 +15,7 @@
 #include "Features/InverseSquareLighting.h"
 #include "Features/LODBlending.h"
 #include "Features/LightLimitFix.h"
+#include "Features/LinearLighting.h"
 #include "Features/PerformanceOverlay.h"
 #include "Features/RenderDoc.h"
 #include "Features/ScreenSpaceGI.h"
@@ -25,15 +27,18 @@
 #include "Features/TerrainHelper.h"
 #include "Features/TerrainShadows.h"
 #include "Features/TerrainVariation.h"
+#include "Features/UnifiedWater.h"
 #include "Features/Upscaling.h"
 #include "Features/VR.h"
 #include "Features/VolumetricLighting.h"
 #include "Features/WaterEffects.h"
-#include "Features/WeatherPicker.h"
+#include "Features/WeatherEditor.h"
 #include "Features/WetnessEffects.h"
 #include "Menu.h"
 #include "SettingsOverrideManager.h"
 #include "Utils/Format.h"
+#include "WeatherManager.h"
+#include "WeatherVariableRegistry.h"
 
 #include "State.h"
 
@@ -209,7 +214,6 @@ const std::vector<Feature*>& Feature::GetFeatureList()
 		&globals::features::dynamicCubemaps,
 		&globals::features::cloudShadows,
 		&globals::features::waterEffects,
-		&globals::features::weatherPicker,
 		&globals::features::performanceOverlay,
 		&globals::features::subsurfaceScattering,
 		&globals::features::terrainShadows,
@@ -227,7 +231,11 @@ const std::vector<Feature*>& Feature::GetFeatureList()
 		&globals::features::ibl,
 		&globals::features::extendedTranslucency,
 		&globals::features::upscaling,
-		&globals::features::renderDoc
+		&globals::features::renderDoc,
+		&globals::features::weatherEditor,
+		&globals::features::linearLighting,
+		&globals::features::unifiedWater,
+		&globals::features::exponentialHeightFog,
 	};
 
 	if (REL::Module::IsVR()) {
@@ -273,19 +281,24 @@ bool Feature::ToggleAtBootSetting()
 bool Feature::ReapplyOverrideSettings()
 {
 	auto overrideManager = SettingsOverrideManager::GetSingleton();
-	if (!overrideManager || !overrideManager->HasFeatureOverrides(GetShortName())) {
+	std::string featureName = GetShortName();
+
+	if (!overrideManager || !overrideManager->HasFeatureOverrides(featureName)) {
 		return false;
 	}
 
-	// Get current settings as JSON
+	// Delete user override file to restore original override behavior
+	overrideManager->DeleteUserOverride(featureName);
+
+	// Get base settings and apply overrides fresh
 	json featureJson;
 	SaveSettings(featureJson);
 
-	// Apply overrides to the current settings
-	size_t appliedCount = overrideManager->ReapplyFeatureOverrides(GetShortName(), featureJson);
+	// Apply overrides to the settings (without user customizations)
+	size_t appliedCount = overrideManager->ReapplyFeatureOverrides(featureName, featureJson);
 
 	if (appliedCount > 0) {
-		// Load the modified settings back into the feature
+		// Load the override settings back into the feature
 		LoadSettings(featureJson);
 		return true;
 	}

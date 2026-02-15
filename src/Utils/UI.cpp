@@ -1,21 +1,32 @@
 #include "UI.h"
 
+#include "../WeatherEditor/EditorWindow.h"
 #include "FileSystem.h"
 #include "Menu.h"
+#include "Menu/Fonts.h"
 #include "Menu/IconLoader.h"
+#include "Menu/ThemeManager.h"
+#include "PerfUtils.h"
+#include "ShaderCache.h"
+#include "WeatherManager.h"
+#include "WeatherVariableRegistry.h"
 
 #ifndef DIRECTINPUT_VERSION
 #	define DIRECTINPUT_VERSION 0x0800
 #endif
+#include <DirectXTex.h>
 #include <d3d11.h>
 #include <dinput.h>
 #include <imgui.h>
 #include <imgui_internal.h>
+#include <wrl/client.h>
 
 #include "../Feature.h"
+#include "../Features/VR.h"
 #include "../Globals.h"
 #include "../Menu.h"
 #include "FileSystem.h"
+#include "VRUtils.h"
 
 #define STB_IMAGE_IMPLEMENTATION
 #include <algorithm>
@@ -34,18 +45,29 @@
 
 namespace Util
 {
-	HoverTooltipWrapper::HoverTooltipWrapper()
+	HoverTooltipWrapper::HoverTooltipWrapper() :
+		previousFont(nullptr)
 	{
 		hovered = ImGui::IsItemHovered(ImGuiHoveredFlags_DelayNormal | ImGuiHoveredFlags_AllowWhenDisabled);
 		if (hovered) {
 			ImGui::BeginTooltip();
 			ImGui::PushTextWrapPos(ImGui::GetFontSize() * 35.0f);
+			// Apply Subtext font for consistent tooltip styling
+			if (auto* menu = globals::menu) {
+				if (auto* subtextFont = menu->GetFont(Menu::FontRole::Subtext)) {
+					previousFont = ImGui::GetFont();
+					ImGui::PushFont(subtextFont);
+				}
+			}
 		}
 	}
 
 	HoverTooltipWrapper::~HoverTooltipWrapper()
 	{
 		if (hovered) {
+			if (previousFont) {
+				ImGui::PopFont();
+			}
 			ImGui::PopTextWrapPos();
 			ImGui::EndTooltip();
 		}
@@ -61,6 +83,99 @@ namespace Util
 	{
 		if (disable)
 			ImGui::EndDisabled();
+	}
+
+	// Static state for clear shader cache confirmation popup
+	static bool showClearCacheConfirmation = false;
+	static bool dontAskAgainCheckbox = false;
+
+	// Helper function to perform the actual cache clearing
+	static void PerformClearShaderCache()
+	{
+		auto* shaderCache = globals::shaderCache;
+		if (shaderCache) {
+			shaderCache->Clear();
+			if (shaderCache->IsDiskCache()) {
+				shaderCache->DeleteDiskCache();
+			}
+		}
+	}
+
+	void RequestClearShaderCacheConfirmation()
+	{
+		auto* menu = globals::menu;
+		if (!menu)
+			return;
+
+		// If user has opted to skip confirmation, clear immediately
+		if (menu->GetSettings().SkipClearCacheConfirmation) {
+			PerformClearShaderCache();
+			return;
+		}
+
+		// Show confirmation popup
+		showClearCacheConfirmation = true;
+		dontAskAgainCheckbox = false;
+	}
+
+	void DrawClearShaderCacheConfirmation()
+	{
+		if (!showClearCacheConfirmation)
+			return;
+
+		ImGui::OpenPopup("Clear Shader Cache?");
+
+		// Center the popup
+		ImVec2 center = ImGui::GetMainViewport()->GetCenter();
+		ImGui::SetNextWindowPos(center, ImGuiCond_Always, ImVec2(0.5f, 0.5f));
+
+		if (ImGui::BeginPopupModal("Clear Shader Cache?", &showClearCacheConfirmation, ImGuiWindowFlags_AlwaysAutoResize)) {
+			ImGui::Text("Are you sure you want to clear the shader cache?");
+			ImGui::Spacing();
+			ImGui::Spacing();
+			ImGui::TextWrapped(
+				"This will clear all compiled shaders from memory and disk cache (if enabled). "
+				"Shaders will be recompiled when the game next encounters them.");
+			ImGui::Spacing();
+			ImGui::Spacing();
+			ImGui::Separator();
+			ImGui::Spacing();
+
+			ImGui::Checkbox("Don't ask me again", &dontAskAgainCheckbox);
+
+			ImGui::Spacing();
+
+			// Center buttons
+			constexpr float buttonWidth = ThemeManager::Constants::POPUP_BUTTON_WIDTH;
+			const float spacing = ImGui::GetStyle().ItemSpacing.x;
+			const float totalWidth = buttonWidth * 2 + spacing;
+			const float windowWidth = ImGui::GetWindowWidth();
+			const float offset = (windowWidth - totalWidth) * 0.5f;
+			if (offset > 0)
+				ImGui::SetCursorPosX(offset);
+
+			if (ImGui::Button("Clear Cache", ImVec2(buttonWidth, 0))) {
+				// Save preference if checkbox is checked
+				if (dontAskAgainCheckbox) {
+					if (auto* menu = globals::menu) {
+						menu->GetSettings().SkipClearCacheConfirmation = true;
+					}
+				}
+
+				PerformClearShaderCache();
+				showClearCacheConfirmation = false;
+				ImGui::CloseCurrentPopup();
+			}
+
+			ImGui::SameLine();
+
+			if (ImGui::Button("Cancel", ImVec2(buttonWidth, 0))) {
+				showClearCacheConfirmation = false;
+				ImGui::CloseCurrentPopup();
+			}
+
+			ImGui::EndPopup();
+		}
 	}
 
 	bool PercentageSlider(const char* label, float* data, float lb, float ub, const char* format)
@@ -246,7 +361,7 @@ namespace Util
 			categoryIcon = menu.landscape.texture;
 		} else if (strcmp(categoryName, "Water") == 0) {
 			categoryIcon = menu.water.texture;
-		} else if (strcmp(categoryName, "Debug") == 0) {
+		} else if (strcmp(categoryName, "Utility") == 0) {
 			categoryIcon = menu.debug.texture;
 		} else if (strcmp(categoryName, "Materials") == 0) {
 			categoryIcon = menu.materials.texture;
@@ -629,6 +744,35 @@ namespace Util
 		std::transform(lowerQuery.begin(), lowerQuery.end(), lowerQuery.begin(), ::tolower);
 
 		return lowerText.find(lowerQuery) != std::string::npos;
+	}
+
+	void DrawModalBackground(uint8_t alpha)
+	{
+		auto& io = ImGui::GetIO();
+		ImGui::GetBackgroundDrawList()->AddRectFilled(
+			ImVec2(0, 0),
+			io.DisplaySize,
+			IM_COL32(0, 0, 0, alpha));
+	}
+
+	void DrawBreathingText(const char* text, float speed, float minAlpha, float maxAlpha)
+	{
+		float alphaRange = maxAlpha - minAlpha;
+		float breathe = minAlpha + alphaRange * 0.5f * (1.0f + sinf((float)ImGui::GetTime() * speed));
+		auto& theme = globals::menu->GetTheme().Palette;
+		ImVec4 color = ImVec4(theme.Text.x, theme.Text.y, theme.Text.z, breathe);
+		ImGui::TextColored(color, "%s", text);
+	}
+
+	ImVec4 GetPulsingColor(const ImVec4& baseColor, float speed, float minBrightness, float maxBrightness)
+	{
+		float brightnessRange = maxBrightness - minBrightness;
+		float pulse = minBrightness + brightnessRange * 0.5f * (1.0f + sinf((float)ImGui::GetTime() * speed));
+		return ImVec4(
+			baseColor.x * pulse,
+			baseColor.y * pulse,
+			baseColor.z * pulse,
+			baseColor.w);
 	}
 
 	void DrawSearchIcon(const ImVec2& position, float size, float alpha)
@@ -1114,6 +1258,32 @@ namespace Util
 
 			return keyboard_keys_international[key];
 		}
+
+		std::string KeyIdToString(const std::vector<InputCombo>& combo)
+		{
+			if (combo.empty())
+				return "None";
+
+			bool hasVRInput = false;
+			for (const auto& input : combo) {
+				if (input.GetDevice() != InputDeviceType::Keyboard && input.GetDevice() != InputDeviceType::Mouse) {
+					hasVRInput = true;
+					break;
+				}
+			}
+
+			if (hasVRInput && REL::Module::IsVR()) {
+				return InputCombo::GetVRString(combo);
+			}
+
+			std::string result;
+			for (size_t i = 0; i < combo.size(); ++i) {
+				if (i > 0)
+					result += " + ";
+				result += KeyIdToString(combo[i].GetKey());
+			}
+			return result;
+		}
 	}  // namespace Input
 
 	bool ButtonWithFlash(const char* label, const ImVec2& size, int flashDurationMs)
@@ -1172,6 +1342,85 @@ namespace Util
 		}
 
 		return clicked;
+	}
+
+	bool LoadDDSTextureFromFile(ID3D11Device* device,
+		const char* filename,
+		ID3D11ShaderResourceView** out_srv,
+		ImVec2& out_size)
+	{
+		if (!device || !out_srv) {
+			logger::warn("LoadDDSTextureFromFile: Invalid parameters");
+			return false;
+		}
+
+		*out_srv = nullptr;
+
+		// Try to load from BSA using Skyrim's resource system
+		RE::BSResourceNiBinaryStream bsaStream(filename);
+		if (!bsaStream.good()) {
+			logger::warn("LoadDDSTextureFromFile: Failed to open resource: {}", filename);
+			return false;
+		}
+
+		// Read entire DDS file into memory
+		std::vector<uint8_t> ddsData;
+		auto size = bsaStream.stream->totalSize;
+		if (size == 0) {
+			logger::warn("LoadDDSTextureFromFile: Resource has zero size: {}", filename);
+			return false;
+		}
+
+		ddsData.resize(size);
+		bsaStream.read(reinterpret_cast<char*>(ddsData.data()), size);
+
+		// Load DDS from memory
+		DirectX::ScratchImage image;
+		try {
+			DX::ThrowIfFailed(DirectX::LoadFromDDSMemory(
+				ddsData.data(),
+				ddsData.size(),
+				DirectX::DDS_FLAGS_NONE,
+				nullptr,
+				image));
+		} catch (const DX::com_exception& e) {
+			logger::warn("LoadDDSTextureFromFile: Failed to load DDS data from {}: {}", filename, e.what());
+			return false;
+		}
+
+		ID3D11Resource* pResource = nullptr;
+		try {
+			DX::ThrowIfFailed(DirectX::CreateTexture(device,
+				image.GetImages(), image.GetImageCount(),
+				image.GetMetadata(), &pResource));
+		} catch (const DX::com_exception& e) {
+			logger::warn("LoadDDSTextureFromFile: Failed to create texture: {}", e.what());
+			return false;
+		}
+
+		ID3D11Texture2D* pTexture = reinterpret_cast<ID3D11Texture2D*>(pResource);
+		D3D11_TEXTURE2D_DESC desc;
+		pTexture->GetDesc(&desc);
+
+		D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc = {
+			.Format = desc.Format,
+			.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2D,
+			.Texture2D = {
+				.MostDetailedMip = 0,
+				.MipLevels = desc.MipLevels }
+		};
+
+		HRESULT hr = device->CreateShaderResourceView(pTexture, &srvDesc, out_srv);
+		pTexture->Release();
+
+		if (FAILED(hr) || !*out_srv) {
+			logger::warn("LoadDDSTextureFromFile: Failed to create SRV, HRESULT: 0x{:08X}", static_cast<uint32_t>(hr));
+			return false;
+		}
+
+		out_size = ImVec2((float)desc.Width, (float)desc.Height);
+		logger::debug("LoadDDSTextureFromFile: Successfully loaded {} ({}x{})", filename, desc.Width, desc.Height);
+		return true;
 	}
 
 	bool FeatureToggle(const char* label, bool* enabled, const ImVec2& size)
@@ -1248,4 +1497,470 @@ namespace Util
 		return clicked;
 	}
 
+	namespace WeatherUI
+	{
+		bool IsWeatherControlled(Feature* feature, const char* settingName)
+		{
+			if (!feature || !settingName) {
+				return false;
+			}
+
+			auto* globalRegistry = WeatherVariables::GlobalWeatherRegistry::GetSingleton();
+			auto* weatherManager = WeatherManager::GetSingleton();
+
+			// Check if this feature has registered weather variables
+			std::string featureName = feature->GetShortName();
+			if (!globalRegistry->HasWeatherSupport(featureName)) {
+				return false;
+			}
+
+			// Still controlled if variable is mid-transition (e.g., transitioning to a weather without an override)
+			if (globalRegistry->IsFeatureVariableInTransition(featureName, settingName)) {
+				return true;
+			}
+
+			// Check if current weather exists
+			auto currentWeathers = weatherManager->GetCurrentWeathers();
+			if (!currentWeathers.currentWeather) {
+				return false;
+			}
+
+			// Load weather settings for this feature
+			json weatherSettings;
+			if (!weatherManager->LoadSettingsFromWeather(currentWeathers.currentWeather, featureName, weatherSettings)) {
+				return false;
+			}
+
+			// Check if this specific setting has an override
+			return weatherSettings.contains(settingName) && !weatherSettings[settingName].is_null();
+		}
+
+		bool SliderFloat(const char* label, Feature* feature, const char* settingName, float* value, float min, float max, const char* format)
+		{
+			bool isControlled = IsWeatherControlled(feature, settingName);
+
+			if (isControlled) {
+				auto* weatherManager = WeatherManager::GetSingleton();
+				auto currentWeathers = weatherManager->GetCurrentWeathers();
+
+				// Make it look like a clickable button when weather-controlled
+				ImGui::PushStyleColor(ImGuiCol_FrameBg, ImVec4(0.3f, 0.3f, 0.4f, 0.8f));
+				ImGui::PushStyleColor(ImGuiCol_FrameBgHovered, ImVec4(0.4f, 0.4f, 0.5f, 0.9f));
+				ImGui::PushStyleColor(ImGuiCol_FrameBgActive, ImVec4(0.5f, 0.5f, 0.6f, 1.0f));
+				ImGui::PushStyleVar(ImGuiStyleVar_Alpha, ImGui::GetStyle().Alpha * 0.7f);
+			}
+
+			ImGuiSliderFlags flags = isControlled ? (static_cast<ImGuiSliderFlags>(ImGuiSliderFlags_NoInput) | static_cast<ImGuiSliderFlags>(ImGuiSliderFlags_ReadOnly)) : ImGuiSliderFlags_None;
+			bool changed = ImGui::SliderFloat(label, value, min, max, format, flags);
+
+			if (isControlled) {
+				ImGui::PopStyleVar();
+				ImGui::PopStyleColor(3);
+
+				// Check if clicked
+				if (ImGui::IsItemClicked()) {
+					auto* weatherManager = WeatherManager::GetSingleton();
+					auto* editorWindow = EditorWindow::GetSingleton();
+					auto currentWeathers = weatherManager->GetCurrentWeathers();
+
+					if (currentWeathers.currentWeather && editorWindow) {
+						editorWindow->OpenWeatherFeatureSetting(
+							currentWeathers.currentWeather,
+							feature->GetShortName(),
+							settingName);
+					}
+				}
+
+				if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
+					ImGui::BeginTooltip();
+					auto* weatherManager = WeatherManager::GetSingleton();
+					auto currentWeathers = weatherManager->GetCurrentWeathers();
+					ImGui::PushTextWrapPos(ImGui::GetFontSize() * 35.0f);
+					ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.2f, 1.0f), "Weather Override Active");
+					ImGui::TextWrapped("This setting is controlled by the current weather (%s).",
+						currentWeathers.currentWeather ? currentWeathers.currentWeather->GetFormEditorID() : "Unknown");
+					ImGui::Separator();
+					ImGui::TextColored(ImVec4(0.6f, 0.9f, 0.6f, 1.0f), "Click to open Weather Editor");
+					ImGui::PopTextWrapPos();
+					ImGui::EndTooltip();
+				}
+
+				return false;  // Prevent changes when weather-controlled
+			}
+
+			return changed;
+		}
+
+		bool Checkbox(const char* label, Feature* feature, const char* settingName, bool* value)
+		{
+			bool isControlled = IsWeatherControlled(feature, settingName);
+
+			if (isControlled) {
+				auto* weatherManager = WeatherManager::GetSingleton();
+				auto currentWeathers = weatherManager->GetCurrentWeathers();
+
+				ImGui::PushStyleColor(ImGuiCol_FrameBg, ImVec4(0.3f, 0.3f, 0.4f, 0.8f));
+				ImGui::PushStyleColor(ImGuiCol_FrameBgHovered, ImVec4(0.4f, 0.4f, 0.5f, 0.9f));
+				ImGui::PushStyleVar(ImGuiStyleVar_Alpha, ImGui::GetStyle().Alpha * 0.7f);
+				ImGui::PushItemFlag(ImGuiItemFlags_Disabled, true);
+			}
+
+			bool changed = ImGui::Checkbox(label, value);
+
+			if (isControlled) {
+				ImGui::PopItemFlag();
+				ImGui::PopStyleVar();
+				ImGui::PopStyleColor(2);
+
+				if (ImGui::IsItemClicked()) {
+					auto* weatherManager = WeatherManager::GetSingleton();
+					auto* editorWindow = EditorWindow::GetSingleton();
+					auto currentWeathers = weatherManager->GetCurrentWeathers();
+
+					if (currentWeathers.currentWeather && editorWindow) {
+						editorWindow->OpenWeatherFeatureSetting(
+							currentWeathers.currentWeather,
+							feature->GetShortName(),
+							settingName);
+					}
+				}
+
+				if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
+					ImGui::BeginTooltip();
+					auto* weatherManager = WeatherManager::GetSingleton();
+					auto currentWeathers = weatherManager->GetCurrentWeathers();
+					ImGui::PushTextWrapPos(ImGui::GetFontSize() * 35.0f);
+					ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.2f, 1.0f), "Weather Override Active");
+					ImGui::TextWrapped("This setting is controlled by the current weather (%s).",
+						currentWeathers.currentWeather ? currentWeathers.currentWeather->GetFormEditorID() : "Unknown");
+					ImGui::Separator();
+					ImGui::TextColored(ImVec4(0.6f, 0.9f, 0.6f, 1.0f), "Click to open Weather Editor");
+					ImGui::PopTextWrapPos();
+					ImGui::EndTooltip();
+				}
+
+				return false;
+			}
+
+			return changed;
+		}
+
+		bool ColorEdit3(const char* label, Feature* feature, const char* settingName, float col[3])
+		{
+			bool isControlled = IsWeatherControlled(feature, settingName);
+
+			if (isControlled) {
+				auto* weatherManager = WeatherManager::GetSingleton();
+				auto currentWeathers = weatherManager->GetCurrentWeathers();
+
+				ImGui::PushStyleVar(ImGuiStyleVar_Alpha, ImGui::GetStyle().Alpha * 0.7f);
+				ImGui::PushItemFlag(ImGuiItemFlags_Disabled, true);
+			}
+
+			bool changed = ImGui::ColorEdit3(label, col);
+
+			if (isControlled) {
+				ImGui::PopItemFlag();
+				ImGui::PopStyleVar();
+
+				if (ImGui::IsItemClicked()) {
+					auto* weatherManager = WeatherManager::GetSingleton();
+					auto* editorWindow = EditorWindow::GetSingleton();
+					auto currentWeathers = weatherManager->GetCurrentWeathers();
+
+					if (currentWeathers.currentWeather && editorWindow) {
+						editorWindow->OpenWeatherFeatureSetting(
+							currentWeathers.currentWeather,
+							feature->GetShortName(),
+							settingName);
+					}
+				}
+
+				if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
+					ImGui::BeginTooltip();
+					auto* weatherManager = WeatherManager::GetSingleton();
+					auto currentWeathers = weatherManager->GetCurrentWeathers();
+					ImGui::PushTextWrapPos(ImGui::GetFontSize() * 35.0f);
+					ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.2f, 1.0f), "Weather Override Active");
+					ImGui::TextWrapped("This setting is controlled by the current weather (%s).",
+						currentWeathers.currentWeather ? currentWeathers.currentWeather->GetFormEditorID() : "Unknown");
+					ImGui::Separator();
+					ImGui::TextColored(ImVec4(0.6f, 0.9f, 0.6f, 1.0f), "Click to open Weather Editor");
+					ImGui::PopTextWrapPos();
+					ImGui::EndTooltip();
+				}
+
+				return false;
+			}
+
+			return changed;
+		}
+
+		bool ColorEdit4(const char* label, Feature* feature, const char* settingName, float col[4])
+		{
+			bool isControlled = IsWeatherControlled(feature, settingName);
+
+			if (isControlled) {
+				auto* weatherManager = WeatherManager::GetSingleton();
+				auto currentWeathers = weatherManager->GetCurrentWeathers();
+
+				ImGui::PushStyleVar(ImGuiStyleVar_Alpha, ImGui::GetStyle().Alpha * 0.7f);
+				ImGui::PushItemFlag(ImGuiItemFlags_Disabled, true);
+			}
+
+			bool changed = ImGui::ColorEdit4(label, col);
+
+			if (isControlled) {
+				ImGui::PopItemFlag();
+				ImGui::PopStyleVar();
+
+				if (ImGui::IsItemClicked()) {
+					auto* weatherManager = WeatherManager::GetSingleton();
+					auto* editorWindow = EditorWindow::GetSingleton();
+					auto currentWeathers = weatherManager->GetCurrentWeathers();
+
+					if (currentWeathers.currentWeather && editorWindow) {
+						editorWindow->OpenWeatherFeatureSetting(
+							currentWeathers.currentWeather,
+							feature->GetShortName(),
+							settingName);
+					}
+				}
+
+				if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
+					ImGui::BeginTooltip();
+					auto* weatherManager = WeatherManager::GetSingleton();
+					auto currentWeathers = weatherManager->GetCurrentWeathers();
+					ImGui::PushTextWrapPos(ImGui::GetFontSize() * 35.0f);
+					ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.2f, 1.0f), "Weather Override Active");
+					ImGui::TextWrapped("This setting is controlled by the current weather (%s).",
+						currentWeathers.currentWeather ? currentWeathers.currentWeather->GetFormEditorID() : "Unknown");
+					ImGui::Separator();
+					ImGui::TextColored(ImVec4(0.6f, 0.9f, 0.6f, 1.0f), "Click to open Weather Editor");
+					ImGui::PopTextWrapPos();
+					ImGui::EndTooltip();
+				}
+
+				return false;
+			}
+
+			return changed;
+		}
+	}
+
+	bool InputComboWidget(
+		const char* label,
+		std::vector<InputCombo>& combo,
+		bool& isRecording,
+		const char* recordingLabel)
+	{
+		bool changed = false;
+		ImGui::Text("%s", label);
+		ImGui::SameLine();
+
+		// Use theme colors for consistent styling
+		auto& theme = globals::menu->GetTheme().StatusPalette;
+
+		if (isRecording) {
+			// Recording state visual
+			ImGui::PushStyleColor(ImGuiCol_Button, theme.CurrentHotkey);
+			ImGui::PushStyleColor(ImGuiCol_ButtonHovered, theme.CurrentHotkey);
+			ImGui::PushStyleColor(ImGuiCol_ButtonActive, theme.CurrentHotkey);
+			ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0, 0, 0, 1));  // Black text on recording color
+
+			// Show current pending combo if available, otherwise prompt
+			std::string buttonText;
+			if (!combo.empty()) {
+				buttonText = Util::Input::KeyIdToString(combo) + "...";  // Indicate it's still capturing
+			} else {
+				buttonText = "Recording... (Esc to cancel)";
+			}
+
+			if (ImGui::Button(buttonText.c_str(), ImVec2(240, 0))) {
+				isRecording = false;
+			}
+
+			ImGui::PopStyleColor(4);
+
+			// Add tooltip explaining how to record
+			if (ImGui::IsItemHovered()) {
+				ImGui::SetTooltip("Press any key combination.\nModifiers (Ctrl, Shift, Alt) are supported.\nPress Escape to cancel.");
+			}
+		} else {
+			// Display current binding with unique button ID
+			std::string keyString = Util::Input::KeyIdToString(combo);
+			std::string btnLabel = keyString + "##" + recordingLabel;
+			if (ImGui::Button(btnLabel.c_str(), ImVec2(240, 0))) {
+				isRecording = true;
+			}
+
+			// Context menu for clearing
+			if (ImGui::BeginPopupContextItem()) {
+				if (ImGui::Selectable("Clear Binding")) {
+					combo.clear();
+					changed = true;
+				}
+				ImGui::EndPopup();
+			}
+
+			// First run / empty state hint
+			if (combo.empty()) {
+				ImGui::SameLine();
+				ImGui::TextDisabled("(Click to bind)");
+			}
+		}
+
+		// Draw VR-specific color coding if applicable
+		if (REL::Module::IsVR() && !combo.empty()) {
+			ImGui::SameLine();
+
+			// Check if we have mixed devices
+			bool hasPrimary = false;
+			bool hasSecondary = false;
+			bool hasBoth = false;
+
+			for (const auto& input : combo) {
+				switch (input.GetDevice()) {
+				case InputDeviceType::Primary:
+					hasPrimary = true;
+					break;
+				case InputDeviceType::Secondary:
+					hasSecondary = true;
+					break;
+				case InputDeviceType::Both:
+					hasBoth = true;
+					break;
+				default:
+					break;
+				}
+			}
+
+			ImVec4 indicatorColor = GetControllerDefaultColor();
+			const char* indicatorText = "";
+
+			if (hasBoth || (hasPrimary && hasSecondary)) {
+				indicatorColor = GetControllerBothColor();
+				indicatorText = hasBoth ? "(Both)" : "(Mixed)";
+			} else if (hasPrimary) {
+				indicatorColor = GetControllerPrimaryColor();
+				indicatorText = "(Primary)";
+			} else if (hasSecondary) {
+				indicatorColor = GetControllerSecondaryColor();
+				indicatorText = "(Secondary)";
+			}
+
+			if (indicatorText[0] != '\0') {
+				ImGui::TextColored(indicatorColor, "%s", indicatorText);
+			}
+		}
+
+		return changed;
+	}
+
+	namespace ConstrainedUI
+	{
+		namespace
+		{
+			// Helper to render constraint tooltip
+			void RenderConstraintTooltip(const FeatureConstraints::ConstraintResult& constraint)
+			{
+				if (!ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+					return;
+
+				ImGui::BeginTooltip();
+				ImGui::PushTextWrapPos(ImGui::GetFontSize() * 35.0f);
+				ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.2f, 1.0f), "Setting Constrained");
+				ImGui::Text("This setting is constrained by:");
+				ImGui::Spacing();
+				for (const auto& src : constraint.sources) {
+					ImGui::BulletText("%s", src.featureName.c_str());
+					ImGui::Indent();
+					ImGui::TextWrapped("%s", src.reason.c_str());
+					if (src.recommendDisableAtBoot) {
+						ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.5f, 1.0f),
+							"Consider disabling this feature at boot for best compatibility.");
+					}
+					ImGui::Unindent();
+				}
+				ImGui::Separator();
+				ImGui::Text("Forced value: %s", FeatureConstraints::FormatConstraintValue(constraint.forcedValue).c_str());
+				ImGui::PopTextWrapPos();
+				ImGui::EndTooltip();
+			}
+		}
+
+		bool Checkbox(const char* label, bool* value, const FeatureConstraints::SettingId& settingId)
+		{
+			auto constraint = FeatureConstraints::GetConstraints(settingId);
+
+			if (constraint.isConstrained) {
+				// Display the forced value instead of the stored value
+				if (auto* forcedBool = std::get_if<bool>(&constraint.forcedValue)) {
+					bool displayValue = *forcedBool;
+					ImGui::BeginDisabled();
+					ImGui::Checkbox(label, &displayValue);
+					ImGui::EndDisabled();
+				} else {
+					// Fallback: wrong type, show disabled with stored value
+					ImGui::BeginDisabled();
+					ImGui::Checkbox(label, value);
+					ImGui::EndDisabled();
+				}
+				RenderConstraintTooltip(constraint);
+				return false;
+			}
+
+			return ImGui::Checkbox(label, value);
+		}
+
+		bool SliderFloat(const char* label, float* value, float min, float max,
+			const FeatureConstraints::SettingId& settingId, const char* format)
+		{
+			auto constraint = FeatureConstraints::GetConstraints(settingId);
+
+			if (constraint.isConstrained) {
+				// Display the forced value instead of the stored value
+				if (auto* forcedFloat = std::get_if<float>(&constraint.forcedValue)) {
+					float displayValue = *forcedFloat;
+					ImGui::BeginDisabled();
+					ImGui::SliderFloat(label, &displayValue, min, max, format);
+					ImGui::EndDisabled();
+				} else {
+					// Fallback: wrong type, show disabled with stored value
+					ImGui::BeginDisabled();
+					ImGui::SliderFloat(label, value, min, max, format);
+					ImGui::EndDisabled();
+				}
+				RenderConstraintTooltip(constraint);
+				return false;
+			}
+
+			return ImGui::SliderFloat(label, value, min, max, format);
+		}
+
+		bool SliderInt(const char* label, int* value, int min, int max,
+			const FeatureConstraints::SettingId& settingId, const char* format)
+		{
+			auto constraint = FeatureConstraints::GetConstraints(settingId);
+
+			if (constraint.isConstrained) {
+				// Display the forced value instead of the stored value
+				if (auto* forcedInt = std::get_if<int>(&constraint.forcedValue)) {
+					int displayValue = *forcedInt;
+					ImGui::BeginDisabled();
+					ImGui::SliderInt(label, &displayValue, min, max, format);
+					ImGui::EndDisabled();
+				} else {
+					// Fallback: wrong type, show disabled with stored value
+					ImGui::BeginDisabled();
+					ImGui::SliderInt(label, value, min, max, format);
+					ImGui::EndDisabled();
+				}
+				RenderConstraintTooltip(constraint);
+				return false;
+			}
+
+			return ImGui::SliderInt(label, value, min, max, format);
+		}
+	}
 }  // namespace Util

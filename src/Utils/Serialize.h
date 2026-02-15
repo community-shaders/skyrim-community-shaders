@@ -15,4 +15,7 @@ namespace nlohmann
 
 	void to_json(json&, const RE::NiColor&);
 	void from_json(const json&, RE::NiColor&);
+
+	void to_json(json& j, const RE::TESWeather::FogData& fog);
+	void from_json(const json& j, RE::TESWeather::FogData& fog);
 };

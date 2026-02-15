@@ -31,13 +31,20 @@
                 "Style": "Light",
                 "File": "Inter/Inter-Light.ttf",
                 "SizeScale": 1.0
+            },
+            {
+                "Family": "Inter",
+                "Style": "Light",
+                "File": "Inter/Inter-Light.ttf",
+                "SizeScale": 0.9
             }
         ],
         "UseSimplePalette": false,
         "ShowActionIcons": true,
         "UseMonochromeIcons": false,
+        "CenterHeader": true,
         "TooltipHoverDelay": 0.5,
-        "BackgroundBlurEnabled": false,
+        "BackgroundBlurEnabled": true,
         "Palette": {
             "Background": [0.0, 0.0, 0.0, 0.95],
             "Text": [1.0, 1.0, 1.0, 1.0],

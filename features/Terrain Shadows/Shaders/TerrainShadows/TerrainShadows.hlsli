@@ -19,13 +19,9 @@ namespace TerrainShadows
 
 	float GetTerrainShadow(const float3 worldPos, SamplerState samp)
 	{
-		if (SharedData::terraOccSettings.EnableTerrainShadow) {
-			float2 terraOccUV = GetTerrainShadowUV(worldPos.xy);
-			float2 shadowHeight = GetTerrainZ(ShadowHeightTexture.SampleLevel(samp, terraOccUV, 0));
-			float shadowFraction = saturate((worldPos.z - shadowHeight.y) / (shadowHeight.x - shadowHeight.y));
-			return shadowFraction;
-		}
-
-		return 1.0;
+		if (!SharedData::terraOccSettings.EnableTerrainShadow)
+			return 1.0;
+		float2 shadowHeight = GetTerrainZ(ShadowHeightTexture.SampleLevel(samp, GetTerrainShadowUV(worldPos.xy), 0));
+		return saturate((worldPos.z - shadowHeight.y) / (shadowHeight.x - shadowHeight.y));;
 	}
 }

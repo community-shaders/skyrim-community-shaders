@@ -49,7 +49,7 @@ public:
 	// Feature overrides
 	std::string GetName() override { return "RenderDoc"; }
 	std::string GetShortName() override { return "RenderDoc"; }
-	std::string_view GetCategory() const override { return "Debug"; }
+	std::string_view GetCategory() const override { return "Utility"; }
 	bool IsCore() const override { return true; }
 	bool IsInMenu() const override { return true; }
 	std::pair<std::string, std::vector<std::string>> GetFeatureSummary() override

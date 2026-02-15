@@ -1,5 +1,7 @@
+#include "Common/Color.hlsli"
 #include "Common/FrameBuffer.hlsli"
 #include "Common/VR.hlsli"
+#include "Common/SharedData.hlsli"
 
 struct VS_INPUT
 {
@@ -110,7 +112,6 @@ VS_OUTPUT main(VS_INPUT input)
 #		endif
 	vsout.Position.xy = positionOffset + finalViewPosition.xy;
 	vsout.Position.zw = finalViewPosition.zw;
-
 	vsout.Color.xyz = 1.0.xxx;
 	vsout.Color.w = fVars1.w;
 
@@ -213,6 +214,15 @@ struct PS_OUTPUT
 };
 
 #ifdef PSHADER
+
+#	if defined(LIGHT_LIMIT_FIX)
+#		include "LightLimitFix/LightLimitFix.hlsli"
+#	endif
+
+#	if defined(ISL) && defined(LIGHT_LIMIT_FIX)
+#		include "InverseSquareLighting/InverseSquareLighting.hlsli"
+#	endif
+
 SamplerState SampSourceTexture : register(s0);
 #	if defined(GRAYSCALE_TO_COLOR) || defined(GRAYSCALE_TO_ALPHA)
 SamplerState SampGrayscaleTexture : register(s1);
@@ -236,6 +246,17 @@ cbuffer PerGeometry : register(b2)
 	float ColorScale : packoffset(c0);
 	float3 TextureSize : packoffset(c1);
 };
+
+#	if defined(TERRAIN_SHADOWS)
+#		include "TerrainShadows/TerrainShadows.hlsli"
+#	endif
+
+#	if defined(CLOUD_SHADOWS)
+#		include "CloudShadows/CloudShadows.hlsli"
+#	endif
+
+#	define LinearSampler SampSourceTexture
+#	include "Common/ShadowSampling.hlsli"
 
 PS_OUTPUT main(PS_INPUT input)
 {
@@ -262,6 +283,7 @@ PS_OUTPUT main(PS_INPUT input)
 
 	float4 sourceColor = TexSourceTexture.Sample(SampSourceTexture, input.TexCoord0);
 	float4 baseColor = input.Color * sourceColor;
+	baseColor.xyz = Color::Diffuse(baseColor.xyz);
 #	if defined(GRAYSCALE_TO_COLOR)
 	float3 grayScaleColor =
 		TexGrayscaleTexture.Sample(SampGrayscaleTexture, float2(sourceColor.y, input.Color.x)).xyz;
@@ -273,7 +295,55 @@ PS_OUTPUT main(PS_INPUT input)
 	baseColor.w = grayScaleAlpha;
 #	endif
 
-	psout.Color.xyz = ColorScale * baseColor.xyz;
+	float3 propertyColor = 0.0;
+
+	float2 uv = Stereo::ConvertFromStereoUV(input.Position.xy * SharedData::BufferDim.zw, eyeIndex);
+
+	float4 positionWS = float4(2 * float2(uv.x, -uv.y + 1) - 1, input.Position.z, 1);
+	positionWS = mul(FrameBuffer::CameraViewProjInverse[eyeIndex], positionWS);
+	positionWS.xyz = positionWS.xyz / positionWS.w;
+
+	float3 dirLightColor = SharedData::DirLightColor.xyz * ShadowSampling::GetWorldShadow(positionWS.xyz, FrameBuffer::CameraPosAdjust[eyeIndex].xyz, eyeIndex);
+	float3 ambientColor = max(0, mul(SharedData::DirectionalAmbient, float4(0, 0, 1, 1)).xyz);
+
+	propertyColor += dirLightColor;
+	propertyColor += ambientColor;
+
+#	if defined(LIGHT_LIMIT_FIX)
+	uint lightCount = 0;
+	{
+		float3 viewPosition = FrameBuffer::WorldToView(positionWS.xyz, true, eyeIndex);
+		float2 screenUV = FrameBuffer::ViewToUV(viewPosition, true, eyeIndex);
+
+		uint clusterIndex = 0;
+		if (LightLimitFix::GetClusterIndex(screenUV, viewPosition.z, clusterIndex)) {
+			lightCount = LightLimitFix::lightGrid[clusterIndex].lightCount;
+			uint lightOffset = LightLimitFix::lightGrid[clusterIndex].offset;
+			[loop] for (uint i = 0; i < lightCount; i++)
+			{
+				uint clusteredLightIndex = LightLimitFix::lightList[lightOffset + i];
+				LightLimitFix::Light light = LightLimitFix::lights[clusteredLightIndex];
+				if (LightLimitFix::IsLightIgnored(light) || light.lightFlags & LightLimitFix::LightFlags::Shadow) {
+					continue;
+				}
+				float3 lightDirection = light.positionWS[eyeIndex].xyz - positionWS.xyz;
+				float lightDist = length(lightDirection);
+
+#			if defined(ISL)
+				float intensityMultiplier = InverseSquareLighting::GetAttenuation(lightDist, light);
+#			else
+				float intensityFactor = saturate(lightDist / light.radius);
+				float intensityMultiplier = 1 - intensityFactor * intensityFactor;
+#			endif
+
+				float3 lightColor = light.color.xyz * intensityMultiplier;
+				propertyColor += lightColor;
+			}
+		}
+	}
+#	endif
+
+	psout.Color.xyz = propertyColor * baseColor.xyz;
 	psout.Color.w = baseColor.w;
 	psout.Normal.w = baseColor.w;
 	psout.Normal.xyz = float3(0, 1, 0);

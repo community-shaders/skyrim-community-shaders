@@ -19,6 +19,21 @@ public:
 		};
 	}
 	virtual inline bool HasShaderDefine(RE::BSShader::Type) override { return true; }
+	virtual bool SupportsVR() override { return true; }
+	virtual std::vector<FeatureConstraints::Constraint> GetActiveConstraints() const override;
+
+	struct Settings
+	{
+		uint32_t Enabled = true;
+		uint32_t pad[3];
+	};
+	STATIC_ASSERT_ALIGNAS_16(Settings);
+
+	Settings settings;
+
+	virtual void DrawSettings() override;
+	virtual void LoadSettings(json& o_json) override;
+	virtual void SaveSettings(json& o_json) override;
 
 	virtual void SetupResources() override;
 
@@ -97,5 +112,4 @@ public:
 			logger::info("[Terrain Blending] Installed hooks");
 		}
 	};
-	virtual bool SupportsVR() override { return false; };
 };

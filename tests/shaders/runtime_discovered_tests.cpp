@@ -34,7 +34,7 @@ TEST_CASE("Auto-discovered HLSL tests", "[autodiscovery]")
 				FAIL("Test failed: " << errorMsg);
 			}
 
-			INFO("✓ " << test.displayName);
+			INFO("[PASS] " << test.displayName);
 		}
 	}
 }
