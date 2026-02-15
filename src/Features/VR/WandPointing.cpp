@@ -19,6 +19,9 @@ bool VR::ComputeWandIntersectionForOverlayType(OverlayType type, vr::TrackedDevi
 	Vector3 rayOrigin = controllerWorld.Translation();
 	Vector3 rayDir = controllerWorld.Forward();
 
+	// Update debug state
+	wandState.rayOrigin = rayOrigin;
+	wandState.rayDirection = rayDir;
 	Matrix overlayWorld;
 	if (type == OverlayType::HMD) {
 		if (settings.VRMenuPositioningMethod == 1) {  // Fixed
@@ -73,14 +76,6 @@ bool VR::ComputeWandIntersectionForOverlayType(OverlayType type, vr::TrackedDevi
 
 bool VR::ComputeWandIntersection(vr::TrackedDeviceIndex_t controllerIndex, ImVec2& outUV)
 {
-	// float controllerM[3][4];
-	// if (!Util::GetControllerWorldMatrix(controllerIndex, controllerM)) {
-	// 	return false;
-	// }
-	// Matrix controllerWorld = Util::HmdMatrix34ToMatrix(Util::Float3x4ToHmdMatrix34(controllerM));
-	// wandState.rayOrigin = controllerWorld.Translation();
-	// wandState.rayDirection = controllerWorld.Forward();
-
 	bool intersected = false;
 	if (settings.attachMode == AttachMode::HMDOnly || settings.attachMode == AttachMode::Both) {
 		if (ComputeWandIntersectionForOverlayType(OverlayType::HMD, controllerIndex, outUV)) {
