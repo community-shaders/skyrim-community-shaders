@@ -477,6 +477,14 @@ public:
 	void RenderInSceneOverlay(vr::EVREye eye, ID3D11Texture2D* targetTexture, const vr::VRTextureBounds_t* bounds);
 	void InstallSubmitHook();
 
+	//=============================================================================
+	// PRIVATE HELPERS
+	//=============================================================================
+
+	bool GetGripPressed(bool isLeft, bool isRight) const;
+	void ResetComboRecording();
+	void ApplyRecordedCombo();
+
 public:
 	//=============================================================================
 	// PRIVATE IMPLEMENTATION
