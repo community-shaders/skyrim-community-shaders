@@ -317,6 +317,20 @@ void HDR::DrawSettings()
 		}
 	}
 
+	{
+		std::lock_guard<std::mutex> lock(settingsMutex);
+		if (settings.enableHDR && globals::features::upscaling.loaded) {
+			auto& upscaling = globals::features::upscaling;
+			uint rawMethod = upscaling.streamline.featureDLSS ? upscaling.settings.upscaleMethod : upscaling.settings.upscaleMethodNoDLSS;
+			if (rawMethod == (uint)Upscaling::UpscaleMethod::kTAA) {
+				ImGui::Spacing();
+				ImGui::PushStyleColor(ImGuiCol_Text, Util::Colors::GetWarning());
+				ImGui::TextWrapped("TAA is not compatible with HDR. Use FSR, DLSS, or None.");
+				ImGui::PopStyleColor();
+			}
+		}
+	}
+
 	if (ImGui::BeginPopupModal("HDR Warning##HDRDisplay", &showHDRWarningPopup, ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoMove)) {
 		// Center popup on screen
 		ImVec2 center = ImGui::GetMainViewport()->GetCenter();

@@ -188,6 +188,18 @@ void Upscaling::DrawSettings()
 
 	*currentUpscaleMode = std::min(availableModes, *currentUpscaleMode);
 
+	// TAA is incompatible with HDR — force to None if HDR is active
+	if (globals::features::hdrDisplay.loaded) {
+		auto hdr = HDR::GetSingleton();
+		if (hdr && hdr->settings.enableHDR) {
+			if (*currentUpscaleMode == (uint)UpscaleMethod::kTAA)
+				*currentUpscaleMode = (uint)UpscaleMethod::kNONE;
+			ImGui::PushStyleColor(ImGuiCol_Text, Util::Colors::GetWarning());
+			ImGui::Text("TAA is not compatible with HDR. Select FSR, DLSS, or None.");
+			ImGui::PopStyleColor();
+		}
+	}
+
 	// Check the current upscale method
 	auto upscaleMethod = GetUpscaleMethod();
 
@@ -527,9 +539,18 @@ void Upscaling::PostPostLoad()
 
 Upscaling::UpscaleMethod Upscaling::GetUpscaleMethod() const
 {
+	UpscaleMethod method;
 	if (streamline.featureDLSS)
-		return (UpscaleMethod)settings.upscaleMethod;
-	return (UpscaleMethod)settings.upscaleMethodNoDLSS;
+		method = (UpscaleMethod)settings.upscaleMethod;
+	else
+		method = (UpscaleMethod)settings.upscaleMethodNoDLSS;
+
+	if (method == UpscaleMethod::kTAA && globals::features::hdrDisplay.loaded) {
+		auto hdr = HDR::GetSingleton();
+		if (hdr && hdr->settings.enableHDR)
+			return UpscaleMethod::kNONE;
+	}
+	return method;
 }
 
 void Upscaling::CreateUpscalingTextureResources(UpscaleMethod a_upscalemethod)
