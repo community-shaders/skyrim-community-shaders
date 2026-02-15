@@ -1,5 +1,7 @@
 #pragma once
 
+#include <atomic>
+
 struct CloudShadows;
 struct DynamicCubemaps;
 struct ExtendedMaterials;
@@ -219,7 +221,7 @@ namespace globals
 		extern RE::BSUtilityShader* utilityShader;
 		extern RE::Sky* sky;
 		extern RE::UI* ui;
-		extern bool quitGame;
+		extern std::atomic<bool> quitGame;
 
 		extern RE::BSGraphics::PixelShader** currentPixelShader;
 		extern RE::BSGraphics::VertexShader** currentVertexShader;
