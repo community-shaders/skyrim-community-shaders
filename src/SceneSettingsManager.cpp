@@ -47,7 +47,6 @@ std::vector<std::string> SceneSettingsManager::GetInteriorRelevantFeatureNames()
 	// Features that are relevant for interior-only setting overrides.
 	// Excludes exterior-only features: terrain, grass, LOD, sky, cloud shadows.
 	static const std::unordered_set<std::string> interiorRelevantFeatures = {
-		"VolumetricLighting",
 		"ScreenSpaceGI",
 		"ScreenSpaceShadows",
 		"LinearLighting",
