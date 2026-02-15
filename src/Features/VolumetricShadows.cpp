@@ -69,11 +69,26 @@ void VolumetricShadows::SetupResources()
 
 void VolumetricShadows::ClearShaderCache()
 {
-	if (copyShadowCS) { copyShadowCS->Release(); copyShadowCS = nullptr; }
-	if (downsampleShadowMip0CS) { downsampleShadowMip0CS->Release(); downsampleShadowMip0CS = nullptr; }
-	if (downsampleShadowMip1CS) { downsampleShadowMip1CS->Release(); downsampleShadowMip1CS = nullptr; }
-	if (blurShadowHorizontalCS) { blurShadowHorizontalCS->Release(); blurShadowHorizontalCS = nullptr; }
-	if (blurShadowVerticalCS) { blurShadowVerticalCS->Release(); blurShadowVerticalCS = nullptr; }
+	if (copyShadowCS) {
+		copyShadowCS->Release();
+		copyShadowCS = nullptr;
+	}
+	if (downsampleShadowMip0CS) {
+		downsampleShadowMip0CS->Release();
+		downsampleShadowMip0CS = nullptr;
+	}
+	if (downsampleShadowMip1CS) {
+		downsampleShadowMip1CS->Release();
+		downsampleShadowMip1CS = nullptr;
+	}
+	if (blurShadowHorizontalCS) {
+		blurShadowHorizontalCS->Release();
+		blurShadowHorizontalCS = nullptr;
+	}
+	if (blurShadowVerticalCS) {
+		blurShadowVerticalCS->Release();
+		blurShadowVerticalCS = nullptr;
+	}
 
 	// Re-compile compute shaders (same as in SetupResources)
 	copyShadowCS = static_cast<ID3D11ComputeShader*>(Util::CompileShader(L"Data\\Shaders\\VolumetricShadows\\CopyShadowDataCS.hlsl", {}, "cs_5_0"));
