@@ -69,6 +69,43 @@ void VolumetricShadows::SetupResources()
 
 void VolumetricShadows::ClearShaderCache()
 {
+	if (copyShadowCS) {
+		copyShadowCS->Release();
+		copyShadowCS = nullptr;
+	}
+	if (downsampleShadowMip0CS) {
+		downsampleShadowMip0CS->Release();
+		downsampleShadowMip0CS = nullptr;
+	}
+	if (downsampleShadowMip1CS) {
+		downsampleShadowMip1CS->Release();
+		downsampleShadowMip1CS = nullptr;
+	}
+	if (blurShadowHorizontalCS) {
+		blurShadowHorizontalCS->Release();
+		blurShadowHorizontalCS = nullptr;
+	}
+	if (blurShadowVerticalCS) {
+		blurShadowVerticalCS->Release();
+		blurShadowVerticalCS = nullptr;
+	}
+
+	// Re-compile compute shaders (same as in SetupResources)
+	copyShadowCS = static_cast<ID3D11ComputeShader*>(Util::CompileShader(L"Data\\Shaders\\VolumetricShadows\\CopyShadowDataCS.hlsl", {}, "cs_5_0"));
+
+	std::vector<std::pair<const char*, const char*>> defines;
+	defines.push_back({ "DOWNSAMPLE_SHADOW_MIP0", nullptr });
+	downsampleShadowMip0CS = static_cast<ID3D11ComputeShader*>(Util::CompileShader(L"Data\\Shaders\\VolumetricShadows\\DownsampleShadowCS.hlsl", defines, "cs_5_0"));
+	defines.clear();
+	defines.push_back({ "DOWNSAMPLE_SHADOW_MIP1", nullptr });
+	downsampleShadowMip1CS = static_cast<ID3D11ComputeShader*>(Util::CompileShader(L"Data\\Shaders\\VolumetricShadows\\DownsampleShadowCS.hlsl", defines, "cs_5_0"));
+
+	defines.clear();
+	defines.push_back({ "BLUR_HORIZONTAL", nullptr });
+	blurShadowHorizontalCS = static_cast<ID3D11ComputeShader*>(Util::CompileShader(L"Data\\Shaders\\VolumetricShadows\\BlurShadowCS.hlsl", defines, "cs_5_0"));
+	defines.clear();
+	defines.push_back({ "BLUR_VERTICAL", nullptr });
+	blurShadowVerticalCS = static_cast<ID3D11ComputeShader*>(Util::CompileShader(L"Data\\Shaders\\VolumetricShadows\\BlurShadowCS.hlsl", defines, "cs_5_0"));
 }
 
 void VolumetricShadows::CopyShadowData()

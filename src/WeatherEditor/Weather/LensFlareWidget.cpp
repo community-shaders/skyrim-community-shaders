@@ -6,7 +6,7 @@ void LensFlareWidget::DrawWidget()
 {
 	ImGui::SetNextWindowSizeConstraints(ImVec2(600, 0), ImVec2(FLT_MAX, FLT_MAX));
 	if (ImGui::Begin(GetEditorID().c_str(), &open, ImGuiWindowFlags_NoSavedSettings)) {
-		DrawWidgetHeader("##LensFlareSearch", false, true);
+		DrawWidgetHeader("##LensFlareSearch", true, true);
 
 		bool changed = false;
 
@@ -31,6 +31,7 @@ void LensFlareWidget::LoadSettings()
 		return;
 
 	if (!js.empty()) {
+		settings = vanillaSettings;
 		try {
 			if (js.contains("fadeDistRadiusScale"))
 				settings.fadeDistRadiusScale = js["fadeDistRadiusScale"];
@@ -38,18 +39,28 @@ void LensFlareWidget::LoadSettings()
 				settings.colorInfluence = js["colorInfluence"];
 		} catch (const std::exception& e) {
 			logger::error("LensFlare {}: Failed to load from JSON: {}", GetEditorID(), e.what());
+			settings = vanillaSettings;
 		}
 	} else {
-		settings.fadeDistRadiusScale = lensFlare->fadeDistRadiusScale;
-		settings.colorInfluence = lensFlare->colorInfluence;
+		settings = vanillaSettings;
 	}
 	originalSettings = settings;
+	ApplyChanges();
+}
+
+void LensFlareWidget::LoadFromGameSettings()
+{
+	if (!lensFlare)
+		return;
+	settings.fadeDistRadiusScale = lensFlare->fadeDistRadiusScale;
+	settings.colorInfluence = lensFlare->colorInfluence;
 }
 
 void LensFlareWidget::SaveSettings()
 {
 	js["fadeDistRadiusScale"] = settings.fadeDistRadiusScale;
 	js["colorInfluence"] = settings.colorInfluence;
+	originalSettings = settings;
 }
 
 void LensFlareWidget::ApplyChanges()
@@ -59,17 +70,15 @@ void LensFlareWidget::ApplyChanges()
 
 	lensFlare->fadeDistRadiusScale = settings.fadeDistRadiusScale;
 	lensFlare->colorInfluence = settings.colorInfluence;
-
-	originalSettings = settings;
 }
 
 void LensFlareWidget::RevertChanges()
 {
-	settings = originalSettings;
+	settings = vanillaSettings;
+	ApplyChanges();
 }
 
 bool LensFlareWidget::HasUnsavedChanges() const
 {
-	return settings.fadeDistRadiusScale != originalSettings.fadeDistRadiusScale ||
-	       settings.colorInfluence != originalSettings.colorInfluence;
+	return !(settings == originalSettings);
 }

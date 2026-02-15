@@ -7,7 +7,7 @@ void PrecipitationWidget::DrawWidget()
 	WeatherUtils::SetCurrentWidget(this);
 	ImGui::SetNextWindowSizeConstraints(ImVec2(600, 0), ImVec2(FLT_MAX, FLT_MAX));
 	if (ImGui::Begin(GetEditorID().c_str(), &open, ImGuiWindowFlags_NoSavedSettings)) {
-		DrawWidgetHeader("##PrecipitationSearch", false, true);
+		DrawWidgetHeader("##PrecipitationSearch", true, true);
 
 		bool changed = false;
 
@@ -94,6 +94,7 @@ void PrecipitationWidget::LoadSettings()
 		return;
 
 	if (!js.empty()) {
+		settings = vanillaSettings;
 		try {
 			if (js.contains("gravityVelocity"))
 				settings.gravityVelocity = js["gravityVelocity"];
@@ -123,26 +124,36 @@ void PrecipitationWidget::LoadSettings()
 				settings.particleTexture = js["particleTexture"].get<std::string>();
 		} catch (const std::exception& e) {
 			logger::error("Precipitation {}: Failed to load from JSON: {}", GetEditorID(), e.what());
+			settings = vanillaSettings;
 		}
 	} else {
-		auto& runtime = precipitation->GetRuntimeData();
-
-		settings.gravityVelocity = precipitation->GetSettingValue(RE::BGSShaderParticleGeometryData::DataID::kGravityVelocity).f;
-		settings.rotationVelocity = precipitation->GetSettingValue(RE::BGSShaderParticleGeometryData::DataID::kRotationVelocity).f;
-		settings.particleSizeX = precipitation->GetSettingValue(RE::BGSShaderParticleGeometryData::DataID::kParticleSizeX).f;
-		settings.particleSizeY = precipitation->GetSettingValue(RE::BGSShaderParticleGeometryData::DataID::kParticleSizeY).f;
-		settings.centerOffsetMin = precipitation->GetSettingValue(RE::BGSShaderParticleGeometryData::DataID::kCenterOffsetMin).f;
-		settings.centerOffsetMax = precipitation->GetSettingValue(RE::BGSShaderParticleGeometryData::DataID::kCenterOffsetMax).f;
-		settings.startRotationRange = precipitation->GetSettingValue(RE::BGSShaderParticleGeometryData::DataID::kStartRotationRange).f;
-		settings.numSubtexturesX = precipitation->GetSettingValue(RE::BGSShaderParticleGeometryData::DataID::kNumSubtexturesX).i;
-		settings.numSubtexturesY = precipitation->GetSettingValue(RE::BGSShaderParticleGeometryData::DataID::kNumSubtexturesY).i;
-		settings.particleType = precipitation->GetSettingValue(RE::BGSShaderParticleGeometryData::DataID::kParticleType).i;
-		settings.boxSize = precipitation->GetSettingValue(RE::BGSShaderParticleGeometryData::DataID::kBoxSize).f;
-		settings.particleDensity = precipitation->GetSettingValue(RE::BGSShaderParticleGeometryData::DataID::kParticleDensity).f;
-		settings.particleTexture = runtime.particleTexture.textureName.c_str();
+		settings = vanillaSettings;
 	}
 
 	originalSettings = settings;
+	ApplyChanges();
+}
+
+void PrecipitationWidget::LoadFromGameSettings()
+{
+	if (!precipitation)
+		return;
+
+	auto& runtime = precipitation->GetRuntimeData();
+
+	settings.gravityVelocity = precipitation->GetSettingValue(RE::BGSShaderParticleGeometryData::DataID::kGravityVelocity).f;
+	settings.rotationVelocity = precipitation->GetSettingValue(RE::BGSShaderParticleGeometryData::DataID::kRotationVelocity).f;
+	settings.particleSizeX = precipitation->GetSettingValue(RE::BGSShaderParticleGeometryData::DataID::kParticleSizeX).f;
+	settings.particleSizeY = precipitation->GetSettingValue(RE::BGSShaderParticleGeometryData::DataID::kParticleSizeY).f;
+	settings.centerOffsetMin = precipitation->GetSettingValue(RE::BGSShaderParticleGeometryData::DataID::kCenterOffsetMin).f;
+	settings.centerOffsetMax = precipitation->GetSettingValue(RE::BGSShaderParticleGeometryData::DataID::kCenterOffsetMax).f;
+	settings.startRotationRange = precipitation->GetSettingValue(RE::BGSShaderParticleGeometryData::DataID::kStartRotationRange).f;
+	settings.numSubtexturesX = precipitation->GetSettingValue(RE::BGSShaderParticleGeometryData::DataID::kNumSubtexturesX).i;
+	settings.numSubtexturesY = precipitation->GetSettingValue(RE::BGSShaderParticleGeometryData::DataID::kNumSubtexturesY).i;
+	settings.particleType = precipitation->GetSettingValue(RE::BGSShaderParticleGeometryData::DataID::kParticleType).i;
+	settings.boxSize = precipitation->GetSettingValue(RE::BGSShaderParticleGeometryData::DataID::kBoxSize).f;
+	settings.particleDensity = precipitation->GetSettingValue(RE::BGSShaderParticleGeometryData::DataID::kParticleDensity).f;
+	settings.particleTexture = runtime.particleTexture.textureName.c_str();
 }
 
 void PrecipitationWidget::SaveSettings()
@@ -160,6 +171,7 @@ void PrecipitationWidget::SaveSettings()
 	js["boxSize"] = settings.boxSize;
 	js["particleDensity"] = settings.particleDensity;
 	js["particleTexture"] = settings.particleTexture;
+	originalSettings = settings;
 }
 
 void PrecipitationWidget::ApplyChanges()
@@ -182,28 +194,15 @@ void PrecipitationWidget::ApplyChanges()
 	runtime.data[(uint32_t)RE::BGSShaderParticleGeometryData::DataID::kBoxSize].f = settings.boxSize;
 	runtime.data[(uint32_t)RE::BGSShaderParticleGeometryData::DataID::kParticleDensity].f = settings.particleDensity;
 	runtime.particleTexture.textureName = settings.particleTexture.c_str();
-
-	originalSettings = settings;
 }
 
 void PrecipitationWidget::RevertChanges()
 {
-	settings = originalSettings;
+	settings = vanillaSettings;
+	ApplyChanges();
 }
 
 bool PrecipitationWidget::HasUnsavedChanges() const
 {
-	return settings.gravityVelocity != originalSettings.gravityVelocity ||
-	       settings.rotationVelocity != originalSettings.rotationVelocity ||
-	       settings.particleSizeX != originalSettings.particleSizeX ||
-	       settings.particleSizeY != originalSettings.particleSizeY ||
-	       settings.centerOffsetMin != originalSettings.centerOffsetMin ||
-	       settings.centerOffsetMax != originalSettings.centerOffsetMax ||
-	       settings.startRotationRange != originalSettings.startRotationRange ||
-	       settings.numSubtexturesX != originalSettings.numSubtexturesX ||
-	       settings.numSubtexturesY != originalSettings.numSubtexturesY ||
-	       settings.particleType != originalSettings.particleType ||
-	       settings.boxSize != originalSettings.boxSize ||
-	       settings.particleDensity != originalSettings.particleDensity ||
-	       settings.particleTexture != originalSettings.particleTexture;
+	return !(settings == originalSettings);
 }
