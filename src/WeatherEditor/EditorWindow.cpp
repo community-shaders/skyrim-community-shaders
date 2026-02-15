@@ -4,6 +4,7 @@
 #include "Menu.h"
 #include "PaletteWindow.h"
 #include "State.h"
+#include "TimeControl.h"
 #include "Utils/UI.h"
 #include "Weather/LightingTemplateWidget.h"
 #include "WeatherUtils.h"
@@ -630,9 +631,7 @@ void EditorWindow::ShowViewportWindow()
 	ImGui::Begin("Viewport");
 
 	// Top bar
-	auto calendar = globals::game::calendar;
-	if (calendar && calendar->gameHour) {
-		ImGui::SliderFloat("##ViewportSlider", &calendar->gameHour->value, 0.0f, 23.99f, "Time: %.2f");
+	if (TimeControl::GetSingleton()->DrawGameHourSlider("##ViewportSlider", "Time: %.2f")) {
 		ImGui::SameLine();
 		int activePeriod = TOD::GetActivePeriod();
 		ImGui::Text("(%s)", TOD::GetPeriodName(activePeriod));
@@ -915,7 +914,8 @@ void EditorWindow::RenderUI()
 		// Pause Time button
 		auto menu = globals::menu;
 		if (menu && menu->uiIcons.pauseTime.texture) {
-			bool isPaused = IsTimePaused();
+			auto tc = TimeControl::GetSingleton();
+			bool isPaused = tc->IsPaused();
 
 			ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 0.0f);
 			if (isPaused) {
@@ -937,20 +937,14 @@ void EditorWindow::RenderUI()
 			const float buttonDim = menuBarHeight * 0.85f;  // 85% of menu bar height
 			const ImVec2 buttonSize(buttonDim, buttonDim);
 
-			if (ImGui::ImageButton("##GlobalPauseTime", menu->uiIcons.pauseTime.texture, buttonSize)) {
-				if (isPaused) {
-					ResumeTime();
-				} else {
-					PauseTime();
-				}
-			}
+			if (ImGui::ImageButton("##GlobalPauseTime", menu->uiIcons.pauseTime.texture, buttonSize))
+				tc->TogglePause();
 
 			ImGui::PopStyleColor(2);
 			ImGui::PopStyleVar();
 
-			if (ImGui::IsItemHovered()) {
+			if (ImGui::IsItemHovered())
 				ImGui::SetTooltip(isPaused ? "Resume Time" : "Pause Time");
-			}
 		}
 
 		// Undo button
@@ -1004,7 +998,7 @@ void EditorWindow::RenderUI()
 		}
 
 		// Time pause indicator
-		if (timePaused) {
+		if (TimeControl::GetSingleton()->IsPaused()) {
 			ImGui::SameLine();
 			ImGui::PushStyleColor(ImGuiCol_Text, Menu::GetSingleton()->GetSettings().Theme.StatusPalette.CurrentHotkey);
 			ImGui::Text(" [TIME PAUSED]");
@@ -1482,33 +1476,6 @@ void EditorWindow::UnlockWeather()
 
 	lockedWeather = nullptr;
 	weatherLockActive = false;
-}
-
-void EditorWindow::PauseTime()
-{
-	if (timePaused)
-		return;
-
-	auto calendar = globals::game::calendar;
-	if (calendar && calendar->timeScale) {
-		savedTimeScale = calendar->timeScale->value;
-		calendar->timeScale->value = 0.0f;
-		timePaused = true;
-		logger::info("Time paused (saved timescale: {})", savedTimeScale);
-	}
-}
-
-void EditorWindow::ResumeTime()
-{
-	if (!timePaused)
-		return;
-
-	auto calendar = globals::game::calendar;
-	if (calendar && calendar->timeScale) {
-		calendar->timeScale->value = savedTimeScale;
-		timePaused = false;
-		logger::info("Time resumed (timescale: {})", savedTimeScale);
-	}
 }
 
 void EditorWindow::DisableVanityCamera()

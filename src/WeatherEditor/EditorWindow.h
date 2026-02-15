@@ -46,10 +46,6 @@ public:
 	RE::TESWeather* lockedWeather = nullptr;
 	bool weatherLockActive = false;
 
-	// Time pause for editing
-	bool timePaused = false;
-	float savedTimeScale = 1.0f;
-
 	// Vanity camera control
 	bool vanityCameraDisabled = false;
 	float savedVanityCameraDelay = 180.0f;
@@ -70,10 +66,6 @@ public:
 	void UnlockWeather();
 	bool IsWeatherLocked() const { return weatherLockActive; }
 	RE::TESWeather* GetLockedWeather() const { return lockedWeather; }
-
-	void PauseTime();
-	void ResumeTime();
-	bool IsTimePaused() const { return timePaused; }
 
 	void DisableVanityCamera();
 	void RestoreVanityCamera();
