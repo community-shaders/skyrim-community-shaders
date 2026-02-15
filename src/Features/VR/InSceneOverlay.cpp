@@ -234,9 +234,9 @@ void VR::RenderInSceneOverlay(vr::EVREye eye, ID3D11Texture2D* targetTexture, co
 	winrt::com_ptr<ID3DUserDefinedAnnotation> perf;
 	context->QueryInterface(__uuidof(ID3DUserDefinedAnnotation), perf.put_void());
 
-	std::wstring eventName = L"VR In-Scene Overlay (Eye " + std::to_wstring((int)eye) + L")";
+	static const wchar_t* eventNames[] = { L"VR In-Scene Overlay (Eye 0)", L"VR In-Scene Overlay (Eye 1)" };
 	if (perf)
-		perf->BeginEvent(eventName.c_str());
+		perf->BeginEvent(eventNames[(int)eye]);
 
 	if (!inSceneResources.initialized)
 		InitInSceneResources();
@@ -380,6 +380,15 @@ void VR::RenderInSceneOverlay(vr::EVREye eye, ID3D11Texture2D* targetTexture, co
 	ID3D11RasterizerState* oldRS = nullptr;
 	context->RSGetState(&oldRS);
 
+	ID3D11BlendState* oldBlend = nullptr;
+	FLOAT oldBlendFactor[4];
+	UINT oldSampleMask;
+	context->OMGetBlendState(&oldBlend, oldBlendFactor, &oldSampleMask);
+
+	ID3D11DepthStencilState* oldDepth = nullptr;
+	UINT oldStencilRef;
+	context->OMGetDepthStencilState(&oldDepth, &oldStencilRef);
+
 	// Setup Render
 	ID3D11RenderTargetView* rtvPtr = rtv.get();
 	context->OMSetRenderTargets(1, &rtvPtr, nullptr);  // No DSV
@@ -401,15 +410,15 @@ void VR::RenderInSceneOverlay(vr::EVREye eye, ID3D11Texture2D* targetTexture, co
 	vpDesc.MaxDepth = 1.0f;
 	context->RSSetViewports(1, &vpDesc);
 
-	// Log texture and viewport details once per session
-	static bool textureInfoLogged = false;
-	if (!textureInfoLogged) {
-		logger::debug("VR Submit Texture Info:");
+	// Log texture and viewport details once per eye per session
+	static bool textureInfoLogged[2] = { false, false };
+	if (!textureInfoLogged[eyeIdx]) {
+		logger::debug("VR Submit Texture Info (Eye {}):", eyeIdx);
 		logger::debug("  Texture Size: {}x{}, Format: {}, ArraySize: {}, SampleCount: {}",
 			texDesc.Width, texDesc.Height, (uint32_t)texDesc.Format, texDesc.ArraySize, texDesc.SampleDesc.Count);
 		if (bounds) {
-			logger::debug("  Bounds for Eye {}: uMin={:.3f}, vMin={:.3f}, uMax={:.3f}, vMax={:.3f}",
-				(int)eye, bounds->uMin, bounds->vMin, bounds->uMax, bounds->vMax);
+			logger::debug("  Bounds: uMin={:.3f}, vMin={:.3f}, uMax={:.3f}, vMax={:.3f}",
+				bounds->uMin, bounds->vMin, bounds->uMax, bounds->vMax);
 			logger::debug("  Viewport: X={:.0f}, Y={:.0f}, W={:.0f}, H={:.0f}",
 				vpDesc.TopLeftX, vpDesc.TopLeftY, vpDesc.Width, vpDesc.Height);
 		} else {
@@ -422,9 +431,7 @@ void VR::RenderInSceneOverlay(vr::EVREye eye, ID3D11Texture2D* targetTexture, co
 			(texDesc.ArraySize > 1)                                 ? "Texture2DArray (per-eye slice)" :
 			(texDesc.SampleDesc.Count > 1)                          ? "Texture2DMS" :
 																	  "Texture2D (single)");
-		// Log again for the other eye
-		if (eye == vr::Eye_Right)
-			textureInfoLogged = true;
+		textureInfoLogged[eyeIdx] = true;
 	}
 
 	// Helper to draw the overlay quad with a given WVP matrix
@@ -529,10 +536,16 @@ void VR::RenderInSceneOverlay(vr::EVREye eye, ID3D11Texture2D* targetTexture, co
 	// Restore State
 	context->OMSetRenderTargets(D3D11_SIMULTANEOUS_RENDER_TARGET_COUNT, oldRTVs, oldDSV);
 	context->RSSetViewports(numViewports, oldViewports);
+	context->OMSetBlendState(oldBlend, oldBlendFactor, oldSampleMask);
+	context->OMSetDepthStencilState(oldDepth, oldStencilRef);
 	if (oldRS) {
 		context->RSSetState(oldRS);
 		oldRS->Release();
 	}
+	if (oldBlend)
+		oldBlend->Release();
+	if (oldDepth)
+		oldDepth->Release();
 	for (int i = 0; i < D3D11_SIMULTANEOUS_RENDER_TARGET_COUNT; ++i)
 		if (oldRTVs[i])
 			oldRTVs[i]->Release();

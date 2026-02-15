@@ -140,5 +140,7 @@ void VR::UpdateCursorFromWandPointing()
 		io.WantSetMousePos = true;
 	} else {
 		wandState.isIntersecting = false;
+		io.MouseDrawCursor = false;
+		io.WantSetMousePos = false;
 	}
 }
