@@ -209,18 +209,19 @@ namespace Util
 	inline vr::HmdMatrix34_t MatrixToHmdMatrix34(const Matrix& mat)
 	{
 		vr::HmdMatrix34_t m{};
+		// Transpose rotation back (row-vector → column-vector) and extract translation from row 4
 		m.m[0][0] = mat._11;
-		m.m[0][1] = mat._12;
-		m.m[0][2] = mat._13;
-		m.m[0][3] = mat._14;
-		m.m[1][0] = mat._21;
+		m.m[0][1] = mat._21;
+		m.m[0][2] = mat._31;
+		m.m[0][3] = mat._41;
+		m.m[1][0] = mat._12;
 		m.m[1][1] = mat._22;
-		m.m[1][2] = mat._23;
-		m.m[1][3] = mat._24;
-		m.m[2][0] = mat._31;
-		m.m[2][1] = mat._32;
+		m.m[1][2] = mat._32;
+		m.m[1][3] = mat._42;
+		m.m[2][0] = mat._13;
+		m.m[2][1] = mat._23;
 		m.m[2][2] = mat._33;
-		m.m[2][3] = mat._34;
+		m.m[2][3] = mat._43;
 		return m;
 	}
 
