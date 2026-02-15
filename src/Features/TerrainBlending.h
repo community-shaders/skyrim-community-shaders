@@ -22,24 +22,10 @@ public:
 	virtual bool SupportsVR() override { return true; }
 	virtual std::vector<FeatureConstraints::Constraint> GetActiveConstraints() const override;
 
-	enum class DepthOverridePath : uint32_t
-	{
-		GlobalDraw = 0,
-		EngineHook = 1
-	};
-
-	enum class Slot2GuardMode : uint32_t
-	{
-		Production = 0,
-		Diagnostic = 1
-	};
-
 	struct Settings
 	{
 		uint32_t Enabled = true;
-		uint32_t OverridePath = static_cast<uint32_t>(DepthOverridePath::EngineHook);
-		uint32_t Slot2GuardModeValue = static_cast<uint32_t>(Slot2GuardMode::Production);
-		uint32_t pad[1];
+		uint32_t pad[3];
 	};
 	STATIC_ASSERT_ALIGNAS_16(Settings);
 
