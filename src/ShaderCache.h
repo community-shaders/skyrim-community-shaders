@@ -332,7 +332,6 @@ namespace SIE
 		void SetAsync(bool value);
 		bool IsDump() const;
 		void SetDump(bool value);
-		void StopCompilation();
 
 		bool IsDiskCache() const;
 		void SetDiskCache(bool value);

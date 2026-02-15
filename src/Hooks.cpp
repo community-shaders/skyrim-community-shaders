@@ -465,9 +465,6 @@ namespace Hooks
 			if ((a_msg == WM_KILLFOCUS || a_msg == WM_SETFOCUS) && menu->initialized) {
 				menu->focusChanged = true;
 			}
-			if (a_msg == WM_CLOSE) {
-				globals::OnGameWindowClose();
-			}
 			return func(a_hwnd, a_msg, a_wParam, a_lParam);
 		}
 		static inline REL::Relocation<decltype(thunk)> func;
