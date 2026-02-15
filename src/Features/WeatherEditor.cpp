@@ -10,7 +10,6 @@
 #include "WeatherManager.h"
 
 #include "WeatherEditor/EditorWindow.h"
-#include "WeatherEditor/TimeControl.h"
 #include <nlohmann/json.hpp>
 
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
@@ -95,7 +94,7 @@ void WeatherEditor::Prepass()
 	}
 
 	// Update time controls (handles sleep/wait and external state sync)
-	TimeControl::GetSingleton()->Update();
+	editorWindow->UpdateTimeState();
 }
 
 void WeatherEditor::DrawWeatherPickerSection()
@@ -204,7 +203,7 @@ void WeatherEditor::DrawTimeControls()
 	ImGui::Spacing();
 	Util::DrawSectionHeader("Time Controls");
 	ImGui::Spacing();
-	TimeControl::GetSingleton()->DrawFullControls();
+	EditorWindow::GetSingleton()->DrawTimeControls();
 	ImGui::Spacing();
 }
 

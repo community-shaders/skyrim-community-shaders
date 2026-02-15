@@ -46,6 +46,12 @@ public:
 	RE::TESWeather* lockedWeather = nullptr;
 	bool weatherLockActive = false;
 
+	// Time control constants
+	static constexpr float kVanillaTimeScale = 20.0f;
+	static constexpr float kGameHourMax = 23.99f;
+	static constexpr float kTimeScaleMin = 0.1f;
+	static constexpr float kTimeScaleMax = 4000.0f;
+
 	// Vanity camera control
 	bool vanityCameraDisabled = false;
 	float savedVanityCameraDelay = 180.0f;
@@ -66,6 +72,22 @@ public:
 	void UnlockWeather();
 	bool IsWeatherLocked() const { return weatherLockActive; }
 	RE::TESWeather* GetLockedWeather() const { return lockedWeather; }
+
+	// Time controls
+	void PauseTime();
+	void ResumeTime();
+	inline void TogglePause() { timePaused ? ResumeTime() : PauseTime(); }
+	void ResetTimeScale();
+	bool IsTimePaused() const { return timePaused; }
+
+	/// Call once per frame — handles sleep/wait menu and external state sync.
+	void UpdateTimeState();
+
+	/// Draw a game-hour slider. Returns true if calendar is valid.
+	bool DrawGameHourSlider(const char* label = "Game Time", const char* format = "%.2f");
+
+	/// Draw the full time controls panel (pause, game time, timescale).
+	void DrawTimeControls();
 
 	void DisableVanityCamera();
 	void RestoreVanityCamera();
@@ -168,6 +190,13 @@ private:
 
 	// Widget focus tracking for Ctrl+W
 	Widget* lastFocusedWidget = nullptr;
+
+	// Time control state
+	bool timePaused = false;
+	float savedTimeScale = kVanillaTimeScale;
+	float timeScaleSlider = kVanillaTimeScale;
+	bool wasRestoredForWait = false;
+	bool wasPausedBeforeWait = false;
 
 	// Sorting state
 	enum class SortColumn
