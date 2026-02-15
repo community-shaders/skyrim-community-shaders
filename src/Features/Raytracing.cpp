@@ -1229,7 +1229,7 @@ void Raytracing::SetupResources()
 		texDesc.Height = RTConstants::SKY_HEMI_SIZE;
 		texDesc.MipLevels = 1;
 		texDesc.ArraySize = 1;
-		texDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+		texDesc.Format = DXGI_FORMAT_R16G16B16A16_FLOAT;
 		texDesc.SampleDesc.Count = 1;
 		texDesc.SampleDesc.Quality = 0;
 		texDesc.BindFlags = D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_UNORDERED_ACCESS;
