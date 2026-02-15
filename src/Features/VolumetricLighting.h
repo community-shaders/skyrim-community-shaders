@@ -12,9 +12,12 @@ public:
 
 	struct Settings
 	{
-		bool Enabled = true;
-		int32_t Quality = 2;
-		TextureSize CustomSize;
+		bool ExteriorEnabled = true;
+		int32_t ExteriorQuality = 2;
+		TextureSize ExteriorCustomSize;
+		bool InteriorEnabled = true;
+		int32_t InteriorQuality = 2;
+		TextureSize InteriorCustomSize;
 	};
 
 	Settings settings;
@@ -29,9 +32,10 @@ public:
 	{
 		return {
 			"Volumetric Lighting creates realistic light scattering effects through fog, dust, and atmospheric particles.\n"
-			"This adds dramatic god rays and atmospheric depth to environments.",
+			"This adds dramatic god rays and atmospheric depth to both interior and exterior environments.",
 			{ "Realistic light scattering",
 				"God rays and atmospheric effects",
+				"Separate interior/exterior settings",
 				"Configurable quality levels",
 				"Enhanced atmospheric immersion" }
 		};
@@ -98,8 +102,8 @@ private:
 	static void SetVLQuality(VolumetricLightingDescriptor& descriptor, std::uint32_t quality);
 	static void RenderVolumetricLighting(VolumetricLightingDescriptor* descriptor, RE::NiCamera* camera, bool flag);
 
-	void DrawVolumetricLightingSettings(int32_t& quality, TextureSize& customSize);
-	TextureSize& FetchCurrentSizeInUnits();
+	void DrawVolumetricLightingSettings(int32_t& quality, TextureSize& customSize, bool isInterior, bool inLocationType);
+	TextureSize& FetchCurrentSizeInUnits(bool interior);
 	void SetupVL();
 
 	enum class Quality : uint8_t
@@ -113,7 +117,8 @@ private:
 
 	const char* QualityNames[static_cast<uint8_t>(Quality::Count)] = { "Low", "Medium", "High", "Custom" };
 
-	TextureSize sizeInUnits;
+	TextureSize exteriorSizeInUnits;
+	TextureSize interiorSizeInUnits;
 	TextureSize defaultSizeHigh;
 
 	bool* bEnableVolumetricLighting = nullptr;

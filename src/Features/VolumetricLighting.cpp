@@ -12,44 +12,57 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	VolumetricLighting::Settings,
-	Enabled,
-	Quality,
-	CustomSize);
+	ExteriorEnabled,
+	ExteriorQuality,
+	ExteriorCustomSize,
+	InteriorEnabled,
+	InteriorQuality,
+	InteriorCustomSize);
 
 void VolumetricLighting::DrawSettings()
 {
-	if (ImGui::Checkbox("Enable Volumetric Lighting", &settings.Enabled))
+	if (ImGui::Checkbox("Enable Volumetric Lighting in Exteriors", &settings.ExteriorEnabled))
 		SetupVL();
 
-	if (settings.Enabled)
-		DrawVolumetricLightingSettings(settings.Quality, settings.CustomSize);
+	if (settings.ExteriorEnabled)
+		DrawVolumetricLightingSettings(settings.ExteriorQuality, settings.ExteriorCustomSize, false, !inInterior);
+
+	if (ImGui::Checkbox("Enable Volumetric Lighting in Interiors", &settings.InteriorEnabled))
+		SetupVL();
+
+	if (settings.InteriorEnabled)
+		DrawVolumetricLightingSettings(settings.InteriorQuality, settings.InteriorCustomSize, true, inInterior);
 }
 
-void VolumetricLighting::DrawVolumetricLightingSettings(int32_t& quality, TextureSize& customSize)
+void VolumetricLighting::DrawVolumetricLightingSettings(int32_t& quality, TextureSize& customSize, const bool isInterior, const bool inLocationType)
 {
-	auto& [Width, Height, Depth] = FetchCurrentSizeInUnits();
+	auto& [Width, Height, Depth] = FetchCurrentSizeInUnits(isInterior);
 
-	if (ImGui::SliderInt("Quality", &quality, 0, static_cast<uint8_t>(Quality::Count) - 1, QualityNames[quality])) {
-		SetupVL();
+	if (ImGui::SliderInt(isInterior ? "Interior Quality" : "Exterior Quality", &quality, 0, static_cast<uint8_t>(Quality::Count) - 1, QualityNames[quality])) {
+		if (inLocationType)
+			SetupVL();
 	}
 
 	const bool isCustomQuality = static_cast<Quality>(quality) == Quality::Custom;
 	if (!isCustomQuality)
 		ImGui::BeginDisabled();
 
-	if (ImGui::SliderInt("Width", &Width, 1, 20, FromUnits(Width, 32), ImGuiSliderFlags_AlwaysClamp | ImGuiSliderFlags_NoInput)) {
+	if (ImGui::SliderInt(isInterior ? "Interior Width" : "Exterior Width", &Width, 1, 20, FromUnits(Width, 32), ImGuiSliderFlags_AlwaysClamp | ImGuiSliderFlags_NoInput)) {
 		customSize.Width = Width * 32;
-		SetupVL();
+		if (inLocationType)
+			SetupVL();
 	}
 
-	if (ImGui::SliderInt("Height", &Height, 1, 20, FromUnits(Height, 32), ImGuiSliderFlags_AlwaysClamp | ImGuiSliderFlags_NoInput)) {
+	if (ImGui::SliderInt(isInterior ? "Interior Height" : "Exterior Height", &Height, 1, 20, FromUnits(Height, 32), ImGuiSliderFlags_AlwaysClamp | ImGuiSliderFlags_NoInput)) {
 		customSize.Height = Height * 32;
-		SetupVL();
+		if (inLocationType)
+			SetupVL();
 	}
 
-	if (ImGui::SliderInt("Depth", &Depth, 1, 64, FromUnits(Depth, 10), ImGuiSliderFlags_AlwaysClamp | ImGuiSliderFlags_NoInput)) {
+	if (ImGui::SliderInt(isInterior ? "Interior Depth" : "Exterior Depth", &Depth, 1, 64, FromUnits(Depth, 10), ImGuiSliderFlags_AlwaysClamp | ImGuiSliderFlags_NoInput)) {
 		customSize.Depth = Depth * 10;
-		SetupVL();
+		if (inLocationType)
+			SetupVL();
 	}
 
 	if (!isCustomQuality)
@@ -63,36 +76,57 @@ inline const char* VolumetricLighting::FromUnits(const int32_t value, const int3
 	return s.c_str();
 }
 
-VolumetricLighting::TextureSize& VolumetricLighting::FetchCurrentSizeInUnits()
+VolumetricLighting::TextureSize& VolumetricLighting::FetchCurrentSizeInUnits(const bool interior)
 {
-	switch (static_cast<Quality>(settings.Quality)) {
-	case Quality::Low:
-		sizeInUnits = *gVolumetricLightingSizeLow;
-		break;
-	case Quality::Medium:
-		sizeInUnits = *gVolumetricLightingSizeMedium;
-		break;
-	case Quality::High:
-		sizeInUnits = defaultSizeHigh;
-		break;
-	case Quality::Custom:
-		sizeInUnits = settings.CustomSize;
-		break;
-	default:
-		break;
+	auto& size = interior ? interiorSizeInUnits : exteriorSizeInUnits;
+	if (interior) {
+		switch (static_cast<Quality>(settings.InteriorQuality)) {
+		case Quality::Low:
+			size = *gVolumetricLightingSizeLow;
+			break;
+		case Quality::Medium:
+			size = *gVolumetricLightingSizeMedium;
+			break;
+		case Quality::High:
+			size = defaultSizeHigh;
+			break;
+		case Quality::Custom:
+			size = settings.InteriorCustomSize;
+			break;
+		default:
+			break;
+		}
+	} else {
+		switch (static_cast<Quality>(settings.ExteriorQuality)) {
+		case Quality::Low:
+			size = *gVolumetricLightingSizeLow;
+			break;
+		case Quality::Medium:
+			size = *gVolumetricLightingSizeMedium;
+			break;
+		case Quality::High:
+			size = defaultSizeHigh;
+			break;
+		case Quality::Custom:
+			size = settings.ExteriorCustomSize;
+			break;
+		default:
+			break;
+		}
 	}
 
-	sizeInUnits.Height /= 32;
-	sizeInUnits.Width /= 32;
-	sizeInUnits.Depth /= 10;
+	size.Height /= 32;
+	size.Width /= 32;
+	size.Depth /= 10;
 
-	return sizeInUnits;
+	return size;
 }
 
 void VolumetricLighting::LoadSettings(json& o_json)
 {
 	settings = o_json;
-	settings.Quality = std::clamp(settings.Quality, 0, static_cast<int32_t>(Quality::Count) - 1);
+	settings.ExteriorQuality = std::clamp(settings.ExteriorQuality, 0, static_cast<int32_t>(Quality::Count) - 1);
+	settings.InteriorQuality = std::clamp(settings.InteriorQuality, 0, static_cast<int32_t>(Quality::Count) - 1);
 }
 
 void VolumetricLighting::SaveSettings(json& o_json)
@@ -123,7 +157,7 @@ void VolumetricLighting::DataLoaded()
 void VolumetricLighting::PostPostLoad()
 {
 	if (REL::Module::IsVR()) {
-		if (settings.Enabled)
+		if (settings.ExteriorEnabled || settings.InteriorEnabled)
 			EnableBooleanSettings(hiddenVRSettings, GetName());
 		auto address = REL::RelocationID(100475, 0).address() + 0x45b;  // AE not needed, VR only hook
 		logger::info("[{}] Hooking CopyResource at {:x}", GetName(), address);
@@ -187,16 +221,21 @@ void VolumetricLighting::EarlyPrepass()
 
 void VolumetricLighting::SetupVL()
 {
-	bool enableVL = settings.Enabled;
-	if (inInterior)
-		enableVL = enableVL && inInteriorWithSun;
-
-	if (globals::game::isVR)
-		SetBooleanSettings(hiddenVRSettings, GetName(), enableVL);
-	else
-		*bEnableVolumetricLighting = enableVL;
-	*gVolumetricLightingSizeHigh = static_cast<Quality>(settings.Quality) == Quality::Custom ? settings.CustomSize : defaultSizeHigh;
-	SetVLQuality(GetVLDescriptor(), settings.Quality);
+	if (inInterior) {
+		if (globals::game::isVR)
+			SetBooleanSettings(hiddenVRSettings, GetName(), settings.InteriorEnabled && inInteriorWithSun);
+		else
+			*bEnableVolumetricLighting = settings.InteriorEnabled && inInteriorWithSun;
+		*gVolumetricLightingSizeHigh = static_cast<Quality>(settings.InteriorQuality) == Quality::Custom ? settings.InteriorCustomSize : defaultSizeHigh;
+		SetVLQuality(GetVLDescriptor(), settings.InteriorQuality);
+	} else {
+		if (globals::game::isVR)
+			SetBooleanSettings(hiddenVRSettings, GetName(), settings.ExteriorEnabled);
+		else
+			*bEnableVolumetricLighting = settings.ExteriorEnabled;
+		*gVolumetricLightingSizeHigh = static_cast<Quality>(settings.ExteriorQuality) == Quality::Custom ? settings.ExteriorCustomSize : defaultSizeHigh;
+		SetVLQuality(GetVLDescriptor(), settings.ExteriorQuality);
+	}
 }
 
 VolumetricLighting::VolumetricLightingDescriptor& VolumetricLighting::GetVLDescriptor()

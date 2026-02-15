@@ -52,6 +52,10 @@ std::vector<std::string> SceneSettingsManager::GetInteriorRelevantFeatureNames()
 		"ScreenSpaceShadows",
 		"LinearLighting",
 		"ImageBasedLighting",
+		"PostProcessing",
+		"ScreenSpacePointLightShadows",
+		"ScreenSpaceRayTracing",
+		"VanillaFresnel",
 	};
 
 	auto allNames = Feature::GetLoadedFeatureNames();
