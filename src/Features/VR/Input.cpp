@@ -197,6 +197,12 @@ void VR::ProcessVRButtonEvent(const Menu::KeyEvent& event)
 
 		static bool prevPrimaryStates[kNumMappings] = {};
 		static bool prevSecondaryStates[kNumMappings] = {};
+		static bool lastHandedness = false;
+		if (lastHandedness != lastKnownLeftHandedMode) {
+			memset(prevPrimaryStates, 0, sizeof(prevPrimaryStates));
+			memset(prevSecondaryStates, 0, sizeof(prevSecondaryStates));
+			lastHandedness = lastKnownLeftHandedMode;
+		}
 		bool* prevStates = isPrimary ? prevPrimaryStates : prevSecondaryStates;
 
 		RE::InputDeviceState& controllerState = isPrimary ? primaryControllerState : secondaryControllerState;

@@ -96,11 +96,11 @@ void VR::UpdateActiveDrag()
 				vr::TrackedDeviceIndex_t attachedControllerIndex = Util::GetControllerIndexForDevice(settings.VRMenuAttachController, lastKnownLeftHandedMode);
 
 				if (attachedControllerIndex != vr::k_unTrackedDeviceIndexInvalid) {
-					vr::TrackedDevicePose_t controllerPose;
-					if (!Util::GetDeviceToAbsoluteTrackingPoseCompatible(vr::TrackingUniverseStanding, 0, &controllerPose, 1))
+					float attachedM[3][4];
+					if (!Util::GetControllerWorldMatrix(attachedControllerIndex, attachedM))
 						break;
-					if (controllerPose.bPoseIsValid) {
-						Matrix attachedControllerMatrix = Util::HmdMatrix34ToMatrix(controllerPose.mDeviceToAbsoluteTracking);
+					{
+						Matrix attachedControllerMatrix = Util::HmdMatrix34ToMatrix(Util::Float3x4ToHmdMatrix34(attachedM));
 
 						Vector3 worldDelta(
 							controllerMatrix._41 - overlayDragState.initialControllerMatrix._41,

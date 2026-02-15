@@ -16,12 +16,6 @@ using namespace DirectX::SimpleMath;
 
 using AttachMode = VR::Settings::OverlayAttachMode;
 
-// Helper to create aspect-corrected scale matrix for overlay
-inline Matrix CreateOverlayScaleMatrix(float scale)
-{
-	return Matrix::CreateScale(scale, scale * VR::Config::kOverlayAspect, scale);
-}
-
 //=============================================================================
 // IN-SCENE OVERLAY RENDERING VIA SUBMIT HOOK
 //=============================================================================
@@ -330,41 +324,49 @@ void VR::RenderInSceneOverlay(vr::EVREye eye, ID3D11Texture2D* targetTexture, co
 		vpWorldSpace = eyeToWorld.Invert() * proj;
 	}
 
-	// Create RTV for the target texture
-	winrt::com_ptr<ID3D11RenderTargetView> rtv;
+	// Get or create cached RTV for the target texture
 	D3D11_TEXTURE2D_DESC texDesc;
 	targetTexture->GetDesc(&texDesc);
 
-	D3D11_RENDER_TARGET_VIEW_DESC rtvDesc = {};
-	rtvDesc.Format = texDesc.Format;
+	int eyeIdx = (int)eye;
+	auto& cachedRTV = inSceneResources.cachedEyeRTVs[eyeIdx];
+	if (cachedRTV.texture != targetTexture) {
+		cachedRTV.rtv = nullptr;
+		cachedRTV.texture = nullptr;
 
-	if (texDesc.ArraySize > 1) {
-		if (texDesc.SampleDesc.Count > 1) {
-			rtvDesc.ViewDimension = D3D11_RTV_DIMENSION_TEXTURE2DMSARRAY;
-			rtvDesc.Texture2DMSArray.FirstArraySlice = (UINT)eye;
-			rtvDesc.Texture2DMSArray.ArraySize = 1;
+		D3D11_RENDER_TARGET_VIEW_DESC rtvDesc = {};
+		rtvDesc.Format = texDesc.Format;
+
+		if (texDesc.ArraySize > 1) {
+			if (texDesc.SampleDesc.Count > 1) {
+				rtvDesc.ViewDimension = D3D11_RTV_DIMENSION_TEXTURE2DMSARRAY;
+				rtvDesc.Texture2DMSArray.FirstArraySlice = (UINT)eye;
+				rtvDesc.Texture2DMSArray.ArraySize = 1;
+			} else {
+				rtvDesc.ViewDimension = D3D11_RTV_DIMENSION_TEXTURE2DARRAY;
+				rtvDesc.Texture2DArray.FirstArraySlice = (UINT)eye;
+				rtvDesc.Texture2DArray.ArraySize = 1;
+				rtvDesc.Texture2DArray.MipSlice = 0;
+			}
+		} else if (texDesc.SampleDesc.Count > 1) {
+			rtvDesc.ViewDimension = D3D11_RTV_DIMENSION_TEXTURE2DMS;
 		} else {
-			rtvDesc.ViewDimension = D3D11_RTV_DIMENSION_TEXTURE2DARRAY;
-			rtvDesc.Texture2DArray.FirstArraySlice = (UINT)eye;
-			rtvDesc.Texture2DArray.ArraySize = 1;
-			rtvDesc.Texture2DArray.MipSlice = 0;
+			rtvDesc.ViewDimension = D3D11_RTV_DIMENSION_TEXTURE2D;
+			rtvDesc.Texture2D.MipSlice = 0;
 		}
-	} else if (texDesc.SampleDesc.Count > 1) {
-		rtvDesc.ViewDimension = D3D11_RTV_DIMENSION_TEXTURE2DMS;
-	} else {
-		rtvDesc.ViewDimension = D3D11_RTV_DIMENSION_TEXTURE2D;
-		rtvDesc.Texture2D.MipSlice = 0;
+
+		HRESULT hr = globals::d3d::device->CreateRenderTargetView(targetTexture, &rtvDesc, cachedRTV.rtv.put());
+		if (FAILED(hr)) {
+			logger::error("VR: Failed to create RTV for eye texture (Format: {}, Samples: {}). HRESULT: {:x}",
+				(uint32_t)texDesc.Format, texDesc.SampleDesc.Count, (uint32_t)hr);
+			if (perf)
+				perf->EndEvent();
+			return;
+		}
+		cachedRTV.texture = targetTexture;
 	}
 
-	HRESULT hr = globals::d3d::device->CreateRenderTargetView(targetTexture, &rtvDesc, rtv.put());
-
-	if (FAILED(hr)) {
-		logger::error("VR: Failed to create RTV for eye texture (Format: {}, Samples: {}). HRESULT: {:x}",
-			(uint32_t)texDesc.Format, texDesc.SampleDesc.Count, (uint32_t)hr);
-		if (perf)
-			perf->EndEvent();
-		return;
-	}
+	auto& rtv = cachedRTV.rtv;
 
 	// Save State
 	ID3D11RenderTargetView* oldRTVs[D3D11_SIMULTANEOUS_RENDER_TARGET_COUNT];
@@ -416,11 +418,10 @@ void VR::RenderInSceneOverlay(vr::EVREye eye, ID3D11Texture2D* targetTexture, co
 				vpDesc.TopLeftX, vpDesc.TopLeftY, vpDesc.Width, vpDesc.Height);
 		}
 		logger::debug("  RTV Dimension: {}",
-			rtvDesc.ViewDimension == D3D11_RTV_DIMENSION_TEXTURE2DARRAY   ? "Texture2DArray (per-eye slice)" :
-			rtvDesc.ViewDimension == D3D11_RTV_DIMENSION_TEXTURE2D        ? "Texture2D (single)" :
-			rtvDesc.ViewDimension == D3D11_RTV_DIMENSION_TEXTURE2DMS      ? "Texture2DMS" :
-			rtvDesc.ViewDimension == D3D11_RTV_DIMENSION_TEXTURE2DMSARRAY ? "Texture2DMSArray" :
-																			"Unknown");
+			(texDesc.ArraySize > 1 && texDesc.SampleDesc.Count > 1) ? "Texture2DMSArray" :
+			(texDesc.ArraySize > 1)                                 ? "Texture2DArray (per-eye slice)" :
+			(texDesc.SampleDesc.Count > 1)                          ? "Texture2DMS" :
+																	  "Texture2D (single)");
 		// Log again for the other eye
 		if (eye == vr::Eye_Right)
 			textureInfoLogged = true;
@@ -481,11 +482,11 @@ void VR::RenderInSceneOverlay(vr::EVREye eye, ID3D11Texture2D* targetTexture, co
 		Matrix modelMatrix;
 		Matrix vp;
 		if (settings.VRMenuPositioningMethod == 1) {  // Fixed World Position
-			modelMatrix = CreateOverlayScaleMatrix(settings.VRMenuScale) * fixedWorldOverlayPosition.m;
+			modelMatrix = VR::Config::CreateOverlayScaleMatrix(settings.VRMenuScale) * fixedWorldOverlayPosition.m;
 			vp = vpWorldSpace;
 		} else {  // HMD Relative
 			Matrix offset = Matrix::CreateTranslation(settings.VRMenuOffsetX, settings.VRMenuOffsetY, settings.VRMenuOffsetZ);
-			modelMatrix = CreateOverlayScaleMatrix(settings.VRMenuScale) * offset;
+			modelMatrix = VR::Config::CreateOverlayScaleMatrix(settings.VRMenuScale) * offset;
 			vp = vpHeadSpace;
 		}
 		cbData.wvp = (modelMatrix * vp).Transpose();
@@ -501,7 +502,7 @@ void VR::RenderInSceneOverlay(vr::EVREye eye, ID3D11Texture2D* targetTexture, co
 			if (controllerPose.bPoseIsValid) {
 				Matrix controllerWorld = Util::HmdMatrix34ToMatrix(controllerPose.mDeviceToAbsoluteTracking);
 				Matrix offset = Matrix::CreateTranslation(settings.VRMenuControllerOffsetX, settings.VRMenuControllerOffsetY, settings.VRMenuControllerOffsetZ);
-				Matrix modelMatrix = CreateOverlayScaleMatrix(settings.VRMenuScale) * offset * controllerWorld;
+				Matrix modelMatrix = VR::Config::CreateOverlayScaleMatrix(settings.VRMenuScale) * offset * controllerWorld;
 
 				// Backface culling: hide overlay when viewed from behind
 				// Use the unscaled controller+offset transform for correct normal direction

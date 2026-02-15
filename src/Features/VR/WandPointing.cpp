@@ -52,7 +52,7 @@ bool VR::ComputeWandIntersectionForOverlayType(OverlayType type, vr::TrackedDevi
 
 	if (settings.VRMenuScale < 1e-4f)
 		return false;
-	overlayWorld = Matrix::CreateScale(settings.VRMenuScale) * overlayWorld;
+	overlayWorld = Config::CreateOverlayScaleMatrix(settings.VRMenuScale) * overlayWorld;
 
 	Matrix worldToOverlay = overlayWorld.Invert();
 	Vector3 localOrigin = Vector3::Transform(rayOrigin, worldToOverlay);
