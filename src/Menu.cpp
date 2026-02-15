@@ -232,8 +232,6 @@ Menu::~Menu()
 	ImGui_ImplWin32_Shutdown();
 	ImGui::DestroyContext();
 	dxgiAdapter3 = nullptr;
-
-	globals::features::vr.DestroyOverlay();
 }
 
 void Menu::Load(json& o_json)
@@ -650,10 +648,6 @@ void Menu::Init()
 	}
 
 	BuildCategoryCounts();
-
-	if (globals::features::vr.IsOpenVRCompatible()) {
-		globals::features::vr.EnsureOverlayInitialized();
-	}
 
 	initialized = true;
 }
@@ -1158,7 +1152,8 @@ void Menu::ProcessInputEvents(RE::InputEvent* const* a_events)
 
 bool Menu::ShouldSwallowInput()
 {
-	return IsEnabled || HomePageRenderer::ShouldShowFirstTimeSetup();
+	auto editorWindow = EditorWindow::GetSingleton();
+	return IsEnabled || HomePageRenderer::ShouldShowFirstTimeSetup() || (editorWindow && editorWindow->open);
 }
 
 void Menu::SelectFeatureMenu(const std::string& featureName)
