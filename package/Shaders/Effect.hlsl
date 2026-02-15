@@ -633,17 +633,10 @@ float3 GetLightingShadow(float3 color, float3 worldPosition, float2 screenPositi
 	if (inWorld && !SharedData::InInterior){
 		shadow = 0.0;
 		for(uint i = 0; i < sampleCount; i++){
-			uint noisyIndex = uint((float(i) + sampleCount * noise) % sampleCount);
-			float t = (float(sampleCount) - float(noisyIndex + 1)) * rcpSampleCount;
-			float tSample = t + noiseTransform * rcpSampleCount;
-
-			float3 samplePositionWS = lerp(startPosition, endPosition, tSample);
-			samplePositionWS.xy += mul(Random::SpiralSampleOffsets8[i], rotationMatrix) * 4096.0;
-			samplePositionWS.z += length(Random::SpiralSampleOffsets8[i]);
-
+			float t = (float(i) + noise) * rcpSampleCount;
+			float3 samplePositionWS = lerp(startPosition, endPosition, t);
 			shadow += ShadowSampling::GetWorldShadow(samplePositionWS, FrameBuffer::CameraPosAdjust[eyeIndex].xyz, eyeIndex);
 		}
-
 		shadow *= rcpSampleCount;
 	}
 
