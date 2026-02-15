@@ -430,6 +430,10 @@ float CalculateDepthMultFromUV(float2 uv, float depth, uint eyeIndex = 0)
 #			include "Skylighting/Skylighting.hlsli"
 #		endif
 
+#		if defined(EXP_HEIGHT_FOG)
+#			include "ExponentialHeightFog/ExponentialHeightFog.hlsli"
+#		endif
+
 #		include "Common/ShadowSampling.hlsli"
 
 #		if defined(SIMPLE) || defined(UNDERWATER) || defined(LOD) || defined(SPECULAR)
