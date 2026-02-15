@@ -35,6 +35,7 @@ struct HDRDisplay : public Feature
 	virtual void SaveSettings(json& o_json) override;
 	virtual void DrawSettings() override;
 
+	virtual void DataLoaded() override;
 	virtual void SetupResources() override;
 	virtual void ClearShaderCache() override;
 

@@ -31,6 +31,18 @@ void HDRDisplay::DrawSettings()
 		hdrSingleton->DrawSettings();
 }
 
+void HDRDisplay::DataLoaded()
+{
+	// Use Skyrim's built-in ini setting to upgrade all HDR render targets to 16-bit float format.
+	auto setting = RE::GetINISetting("bUse64bitsHDRRenderTarget:Display");
+	if (setting) {
+		setting->data.b = true;
+		logger::info("[HDR Display] Enabled bUse64bitsHDRRenderTarget - all required render targets will use R16G16B16A16_FLOAT");
+	} else {
+		logger::warn("[HDR Display] bUse64bitsHDRRenderTarget ini setting not found");
+	}
+}
+
 void HDRDisplay::SetupResources()
 {
 	auto* hdrSingleton = HDR::GetSingleton();
