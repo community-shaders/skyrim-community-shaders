@@ -158,7 +158,7 @@ void EditorWindow::ShowObjectsWindow()
 		ImGui::Spacing();
 
 		// List of categories
-		const char* categories[] = { "Weather", "ImageSpace", "WorldSpace", "Lighting Template", "Cell Lighting", "Volumetric Lighting", "Shader Particle Geometry", "Lens Flare", "Visual Effect", "Interior Only" };
+		const char* categories[] = { "Weather", "ImageSpace", "Lighting Template", "Cell Lighting", "Volumetric Lighting", "Shader Particle Geometry", "Lens Flare", "Visual Effect", "Interior Only" };
 		for (int i = 0; i < IM_ARRAYSIZE(categories); ++i) {
 			// Highlight the selected category
 			if (ImGui::Selectable(categories[i], selectedCategory == categories[i])) {
@@ -244,7 +244,6 @@ void EditorWindow::ShowObjectsWindow()
 				if (ImGui::SmallButton(recentIt->second[i].c_str())) {
 					// Find and open widget in current category's collection
 					auto& widgets = selectedCategory == "Weather"                  ? weatherWidgets :
-					                selectedCategory == "WorldSpace"               ? worldSpaceWidgets :
 					                selectedCategory == "Lighting Template"        ? lightingTemplateWidgets :
 					                selectedCategory == "ImageSpace"               ? imageSpaceWidgets :
 					                selectedCategory == "Volumetric Lighting"      ? volumetricLightingWidgets :
@@ -290,7 +289,6 @@ void EditorWindow::ShowObjectsWindow()
 			// Display objects based on the selected category
 			std::vector<std::unique_ptr<Widget>> emptyWidgets;
 			const auto& widgets = selectedCategory == "Weather"                  ? weatherWidgets :
-			                      selectedCategory == "WorldSpace"               ? worldSpaceWidgets :
 			                      selectedCategory == "Cell Lighting"            ? emptyWidgets :
 			                      selectedCategory == "ImageSpace"               ? imageSpaceWidgets :
 			                      selectedCategory == "Volumetric Lighting"      ? volumetricLightingWidgets :
@@ -684,7 +682,6 @@ void EditorWindow::ShowWidgetWindow()
 
 	// Draw all open widgets using WidgetFactory template
 	WidgetFactory::DrawOpenWidgets(weatherWidgets, lastFocusedWidget);
-	WidgetFactory::DrawOpenWidgets(worldSpaceWidgets, lastFocusedWidget);
 	WidgetFactory::DrawOpenWidgets(lightingTemplateWidgets, lastFocusedWidget);
 	WidgetFactory::DrawOpenWidgets(imageSpaceWidgets, lastFocusedWidget);
 	WidgetFactory::DrawOpenWidgets(volumetricLightingWidgets, lastFocusedWidget);
@@ -748,16 +745,6 @@ void EditorWindow::RenderUI()
 					}
 				}
 
-				// WorldSpace widgets
-				for (auto& widget : worldSpaceWidgets) {
-					if (widget->IsOpen()) {
-						hasOpenWidgets = true;
-						if (ImGui::MenuItem(std::format("Save {}", widget->GetEditorID()).c_str())) {
-							widget->Save();
-						}
-					}
-				}
-
 				// Lighting Template widgets
 				for (auto& widget : lightingTemplateWidgets) {
 					if (widget->IsOpen()) {
@@ -788,9 +775,6 @@ void EditorWindow::RenderUI()
 			ImGui::Separator();
 			if (ImGui::MenuItem("Close All Weather Widgets")) {
 				for (auto& widget : weatherWidgets) widget->SetOpen(false);
-			}
-			if (ImGui::MenuItem("Close All WorldSpace Widgets")) {
-				for (auto& widget : worldSpaceWidgets) widget->SetOpen(false);
 			}
 			if (ImGui::MenuItem("Close All Lighting Widgets")) {
 				for (auto& widget : lightingTemplateWidgets) widget->SetOpen(false);
@@ -879,14 +863,6 @@ void EditorWindow::RenderUI()
 					}
 				}
 			}
-			for (auto& widget : worldSpaceWidgets) {
-				if (widget->IsOpen()) {
-					openCount++;
-					if (ImGui::MenuItem(std::format("WorldSpace: {}", widget->GetEditorID()).c_str())) {
-						// Focus window
-					}
-				}
-			}
 			for (auto& widget : lightingTemplateWidgets) {
 				if (widget->IsOpen()) {
 					openCount++;
@@ -931,7 +907,6 @@ void EditorWindow::RenderUI()
 			ImGui::Separator();
 			ImGui::Text("Total Objects:");
 			ImGui::BulletText("Weathers: %d", (int)weatherWidgets.size());
-			ImGui::BulletText("WorldSpaces: %d", (int)worldSpaceWidgets.size());
 			ImGui::BulletText("Lighting: %d", (int)lightingTemplateWidgets.size());
 			ImGui::BulletText("ImageSpaces: %d", (int)imageSpaceWidgets.size());
 			ImGui::Separator();
@@ -1137,7 +1112,6 @@ EditorWindow::~EditorWindow()
 {
 	delete tempTexture;
 	weatherWidgets.clear();
-	worldSpaceWidgets.clear();
 	lightingTemplateWidgets.clear();
 	imageSpaceWidgets.clear();
 	volumetricLightingWidgets.clear();
@@ -1155,7 +1129,6 @@ void EditorWindow::SetupResources()
 
 	// Populate all widget collections using WidgetFactory templates
 	WidgetFactory::PopulateWidgets<WeatherWidget, RE::TESWeather>(weatherWidgets);
-	WidgetFactory::PopulateWidgets<WorldSpaceWidget, RE::TESWorldSpace>(worldSpaceWidgets);
 	WidgetFactory::PopulateWidgets<LightingTemplateWidget, RE::BGSLightingTemplate>(lightingTemplateWidgets);
 	WidgetFactory::PopulateWidgets<ImageSpaceWidget, RE::TESImageSpace>(imageSpaceWidgets);
 	WidgetFactory::PopulateWidgets<VolumetricLightingWidget, RE::BGSVolumetricLighting>(volumetricLightingWidgets);
@@ -1226,11 +1199,6 @@ void EditorWindow::SaveAll()
 	for (auto& weather : weatherWidgets) {
 		if (weather->IsOpen())
 			weather->Save();
-	}
-
-	for (auto& worldspace : worldSpaceWidgets) {
-		if (worldspace->IsOpen())
-			worldspace->Save();
 	}
 
 	for (auto& lightingTemplate : lightingTemplateWidgets) {
@@ -1642,6 +1610,12 @@ void EditorWindow::PerformUndo()
 
 void EditorWindow::ShowNotification(const std::string& message, const ImVec4& color, float duration)
 {
+	// Guard against calls before ImGui is initialized
+	if (!ImGui::GetCurrentContext()) {
+		logger::warn("ShowNotification called before ImGui initialization: {}", message);
+		return;
+	}
+
 	Notification notif;
 	notif.message = message;
 	notif.color = color;
@@ -1652,6 +1626,11 @@ void EditorWindow::ShowNotification(const std::string& message, const ImVec4& co
 
 void EditorWindow::RenderNotifications()
 {
+	// Guard against calls before ImGui is initialized
+	if (!ImGui::GetCurrentContext()) {
+		return;
+	}
+
 	float currentTime = static_cast<float>(ImGui::GetTime());
 	float yOffset = 10.0f;
 
@@ -1743,11 +1722,6 @@ void EditorWindow::SaveSessionWidgets()
 			settings.lastOpenWidgets.push_back(widget->GetEditorID());
 		}
 	}
-	for (auto& widget : worldSpaceWidgets) {
-		if (widget->IsOpen()) {
-			settings.lastOpenWidgets.push_back(widget->GetEditorID());
-		}
-	}
 	for (auto& widget : lightingTemplateWidgets) {
 		if (widget->IsOpen()) {
 			settings.lastOpenWidgets.push_back(widget->GetEditorID());
@@ -1767,12 +1741,6 @@ void EditorWindow::RestoreSessionWidgets()
 	for (const auto& widgetId : settings.lastOpenWidgets) {
 		// Search in all widget collections
 		for (auto& widget : weatherWidgets) {
-			if (widget->GetEditorID() == widgetId) {
-				widget->SetOpen(true);
-				break;
-			}
-		}
-		for (auto& widget : worldSpaceWidgets) {
 			if (widget->GetEditorID() == widgetId) {
 				widget->SetOpen(true);
 				break;
