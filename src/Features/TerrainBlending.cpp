@@ -258,6 +258,9 @@ namespace
 		}
 	}
 
+	// Selects the depth SRV used by engine-hook slot overrides.
+	// Prefer blended depth outputs from Terrain Blending; fall back to MAIN_COPY depth
+	// when blended targets are unavailable so hook paths remain robust during init/teardown.
 	ID3D11ShaderResourceView* ResolveEngineOverrideSrv(const bool a_prefer16Bit)
 	{
 		auto& terrainBlending = globals::features::terrainBlending;
@@ -286,6 +289,9 @@ namespace
 		return depthCopy.depthSRV;
 	}
 
+	// Restores PS slots 17 and 2 to the SRVs that were bound before this shadowmask
+	// technique override was applied. This keeps override scope limited to the
+	// targeted pass and avoids leaking TB depth bindings into unrelated draws.
 	void ReleaseEngineHookTechniqueOverride()
 	{
 		if (!engineHookTechniqueState.active) {
