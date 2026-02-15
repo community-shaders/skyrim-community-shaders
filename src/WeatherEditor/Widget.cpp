@@ -245,8 +245,6 @@ std::string Widget::GetFolderName()
 		return "Weathers";
 	case RE::FormType::LightingMaster:
 		return "Lighting Templates";
-	case RE::FormType::WorldSpace:
-		return "WorldSpaces";
 	case RE::FormType::ImageSpace:
 		return "ImageSpaces";
 	case RE::FormType::VolumetricLighting:
