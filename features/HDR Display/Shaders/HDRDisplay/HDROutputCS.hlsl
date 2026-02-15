@@ -23,8 +23,12 @@ RWTexture2D<float4> HDROutput : register(u0);
 
 cbuffer PerFrame : register(b0)
 {
-	float4 parameters0 : packoffset(c0);  ///< .x=enableHDR, .y=paperWhite nits, .z=peakNits, .w=skipUIComposite
-	float4 parameters1 : packoffset(c1);  ///< .x=uiBrightness multiplier, .y=isSceneLinear
+	float enableHDR : packoffset(c0.x);         ///< 1.0 = HDR output with PQ, 0.0 = SDR output with gamma
+	float paperWhite : packoffset(c0.y);        ///< Reference white brightness in nits for HDR
+	float peakNits : packoffset(c0.z);          ///< Maximum display brightness in nits for HDR
+	float skipUIComposite : packoffset(c0.w);   ///< 1.0 = FG handles UI, skip our compositing
+	float uiBrightness : packoffset(c1.x);      ///< UI brightness multiplier
+	float isSceneLinear : packoffset(c1.y);     ///< 1.0 = Linear Lighting active, scene already linear
 }
 
 static const float UI_REFERENCE_NITS = 80.0;
@@ -40,20 +44,19 @@ static const float UI_REFERENCE_NITS = 80.0;
 	float4 scene = SceneTex[dispatchID.xy];
 	float4 ui = UITex[dispatchID.xy];
 
-	bool enableHDR = parameters0.x > 0.5;
-	bool skipUIComposite = parameters0.w > 0.5;
-	float uiBrightness = parameters1.x;
+	bool hdrEnabled = enableHDR > 0.5;
+	bool skipUI = skipUIComposite > 0.5;
 
 	float3 finalColor;
 
-	if (enableHDR) {
+	if (hdrEnabled) {
 		// === HDR Pipeline ===
 		// Input: Scene is PQ-encoded in BT.2020 from ISHDR (bloom, tone, grading applied)
 		// Output: PQ-encoded BT.2020 ready for display or swap chain
 
 		float3 scenePQ = scene.rgb;
 
-		if (skipUIComposite) {
+		if (skipUI) {
 			// Direct passthrough when UI compositing is disabled
 			finalColor = scenePQ;
 		} else {
@@ -88,7 +91,7 @@ static const float UI_REFERENCE_NITS = 80.0;
 
 		float3 sceneGamma = scene.rgb;
 
-		if (skipUIComposite) {
+		if (skipUI) {
 			// Direct passthrough when UI compositing is disabled
 			finalColor = sceneGamma;
 		} else {

@@ -66,14 +66,14 @@ public:
 	XM_ALIGNED_STRUCT(16)
 	HDRDataCB
 	{
-		// parameters0.x = enableHDR (1.0 = HDR output with PQ, 0.0 = SDR output with gamma)
-		// parameters0.y = paperWhite (reference white brightness in nits for HDR)
-		// parameters0.z = peakNits (maximum display brightness in nits for HDR)
-		// parameters0.w = skipUIComposite (1.0 = FG handles UI, skip our compositing)
-		DirectX::XMVECTOR parameters0;
-		// parameters1.x = uiBrightness (UI brightness multiplier)
-		// parameters1.y = isSceneLinear (1.0 = Linear Lighting active, scene already linear)
-		DirectX::XMVECTOR parameters1;
+		float enableHDR;         ///< 1.0 = HDR output with PQ, 0.0 = SDR output with gamma
+		float paperWhite;        ///< Reference white brightness in nits for HDR
+		float peakNits;          ///< Maximum display brightness in nits for HDR
+		float skipUIComposite;   ///< 1.0 = FG handles UI, skip our compositing
+		float uiBrightness;      ///< UI brightness multiplier
+		float isSceneLinear;     ///< 1.0 = Linear Lighting active, scene already linear
+		float pad0;              ///< Padding
+		float pad1;              ///< Padding
 	};
 
 	static_assert((sizeof(HDRDataCB) % 16) == 0, "CB size not padded correctly");

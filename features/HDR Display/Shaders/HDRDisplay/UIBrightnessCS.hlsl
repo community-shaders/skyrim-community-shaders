@@ -18,8 +18,12 @@ RWTexture2D<float4> UITex : register(u0);
 
 cbuffer PerFrame : register(b0)
 {
-	float4 parameters0 : packoffset(c0);  // .x = enableHDR, .y = paperWhite nits, .z = reserved (peakNits), .w = unused
-	float4 parameters1 : packoffset(c1);  // .x = uiBrightness multiplier, .y = unused
+	float enableHDR : packoffset(c0.x);         ///< 1.0 = HDR output with PQ, 0.0 = SDR output with gamma
+	float paperWhite : packoffset(c0.y);        ///< Reference white brightness in nits for HDR (unused here)
+	float peakNits : packoffset(c0.z);          ///< Maximum display brightness in nits for HDR (unused here)
+	float skipUIComposite : packoffset(c0.w);   ///< Unused in this shader
+	float uiBrightness : packoffset(c1.x);      ///< UI brightness multiplier
+	float isSceneLinear : packoffset(c1.y);     ///< Unused in this shader
 }
 
 // UI reference brightness in nits — matches typical SDR monitor brightness.
@@ -36,11 +40,9 @@ static const float UI_REFERENCE_NITS = 80.0;
 
 	float4 ui = UITex[dispatchID.xy];
 
-	bool enableHDR = parameters0.x > 0.5;
-	float paperWhite = parameters0.y;
-	float uiBrightness = parameters1.x;
+	bool hdrEnabled = enableHDR > 0.5;
 
-	if (enableHDR) {
+	if (hdrEnabled) {
 		// === HDR Pipeline ===
 		// Input: Vanilla gamma UI (sRGB, BT.709) with premultiplied alpha
 		// Output: PQ-encoded UI in BT.2020 colorspace, premultiplied alpha

@@ -1030,18 +1030,14 @@ void HDR::UpdateHDRData() const
 	float effectivePeakNits = static_cast<float>(settings.hdrPeakNits);
 
 	HDRDataCB data;
-
-	data.parameters0 = DirectX::XMVectorSet(
-		settings.enableHDR ? 1.f : 0.f,
-		static_cast<float>(settings.hdrPaperWhite),
-		effectivePeakNits,
-		skipUIComposite ? 1.f : 0.f);
-	// UI brightness only used when HDR is enabled
-	float uiBrightness = settings.hdrUIBrightness;
-	data.parameters1 = DirectX::XMVectorSet(
-		uiBrightness,
-		isSceneLinear ? 1.f : 0.f,
-		0.f, 0.f);
+	data.enableHDR = settings.enableHDR ? 1.f : 0.f;
+	data.paperWhite = static_cast<float>(settings.hdrPaperWhite);
+	data.peakNits = effectivePeakNits;
+	data.skipUIComposite = skipUIComposite ? 1.f : 0.f;
+	data.uiBrightness = settings.hdrUIBrightness;
+	data.isSceneLinear = isSceneLinear ? 1.f : 0.f;
+	data.pad0 = 0.f;
+	data.pad1 = 0.f;
 	hdrDataCB->Update(data);
 }
 
