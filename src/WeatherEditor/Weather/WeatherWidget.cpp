@@ -464,7 +464,9 @@ void WeatherWidget::LoadSettings()
 		settings = vanillaSettings;
 	}
 	InitializeInheritFlags();
-	LoadFeatureSettings();
+	if (!js.empty()) {
+		LoadFeatureSettings();
+	}
 	originalSettings = settings;
 	ApplyChanges();
 }
@@ -603,13 +605,8 @@ void WeatherWidget::SetWeatherValues()
 	}
 	weather->cloudLayerDisabledBits = disabledBits;
 
-	// Save feature settings
+	// If this weather is currently active, immediately apply feature settings to game memory
 	auto* weatherManager = WeatherManager::GetSingleton();
-	for (const auto& [featureName, featureSettings] : settings.featureSettings) {
-		weatherManager->SaveSettingsToWeather(weather, featureName, featureSettings);
-	}
-
-	// If this weather is currently active, immediately apply feature settings
 	auto currentWeathers = weatherManager->GetCurrentWeathers();
 	if (currentWeathers.currentWeather == weather) {
 		auto* globalRegistry = WeatherVariables::GlobalWeatherRegistry::GetSingleton();
@@ -1581,8 +1578,51 @@ void WeatherWidget::ApplyChanges()
 
 void WeatherWidget::RevertChanges()
 {
+	auto* weatherManager = WeatherManager::GetSingleton();
+	auto currentWeathers = weatherManager->GetCurrentWeathers();
+	bool isCurrentWeather = (weather == currentWeathers.currentWeather);
+
+	// If this weather is currently active, reset any enabled feature overrides
+	// back to user default settings before clearing them
+	if (isCurrentWeather) {
+		auto* globalRegistry = WeatherVariables::GlobalWeatherRegistry::GetSingleton();
+		
+		// Collect features that were enabled and need to be reset
+		for (const auto& [featureName, featureSettings] : settings.featureSettings) {
+			bool enabled = featureSettings.value("__enabled", false);
+			if (enabled && globalRegistry->HasWeatherSupport(featureName)) {
+				// End any active transition for this feature
+				globalRegistry->EndFeatureTransition(featureName);
+				
+				// Reset all variables in this feature to user defaults
+				auto* featureRegistry = globalRegistry->GetFeatureRegistry(featureName);
+				if (featureRegistry) {
+					for (const auto& var : featureRegistry->GetVariables()) {
+						var->SetToUserSettings();
+					}
+				}
+			}
+		}
+	}
+
+	// Clear any cached feature overrides for this weather
+	weatherManager->ClearAllFeatureSettingsForWeather(weather);
+
 	settings = vanillaSettings;
 	ApplyChanges();
+}
+
+void WeatherWidget::Delete()
+{
+	// Clear the WeatherManager cache for this weather so that
+	// Widget::Delete() -> LoadSettings() won't reload stale data
+	auto* weatherManager = WeatherManager::GetSingleton();
+	weatherManager->ClearAllFeatureSettingsForWeather(weather);
+
+	// Clear local feature settings so they don't persist in memory
+	settings.featureSettings.clear();
+
+	Widget::Delete();
 }
 
 bool WeatherWidget::Settings::operator==(const Settings& o) const
