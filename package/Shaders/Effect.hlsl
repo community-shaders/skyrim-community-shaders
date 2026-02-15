@@ -571,6 +571,12 @@ float3 GetLightingColor(float3 msPosition, float3 worldPosition, float2 screenPo
 
 	dirColor *= dirShadow;
 
+#		if defined(EXP_HEIGHT_FOG)
+	if (SharedData::exponentialHeightFogSettings.enabled) {
+		dirColor *= ExponentialHeightFog::GetSunlightFogAttenuation(worldPosition.xyz, FrameBuffer::CameraPosAdjust[eyeIndex].xyz);
+	}
+#		endif
+
 #		if defined(SKYLIGHTING)
 	ambientColor = Color::IrradianceToLinear(ambientColor);
 	ambientColor *= skylightingDiffuse;
@@ -644,6 +650,12 @@ float3 GetLightingShadow(float3 color, float3 worldPosition, float2 screenPositi
 	shadowVariance = 1.0 - sqrt(saturate(fwidth(shadow)));
 
 	dirColor *= shadow;
+
+#		if defined(EXP_HEIGHT_FOG)
+	if (SharedData::exponentialHeightFogSettings.enabled) {
+		dirColor *= ExponentialHeightFog::GetSunlightFogAttenuation(worldPosition.xyz, FrameBuffer::CameraPosAdjust[eyeIndex].xyz);
+	}
+#		endif
 
 	return dirColor + ambientColor;
 }
