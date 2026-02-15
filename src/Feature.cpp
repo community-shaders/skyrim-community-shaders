@@ -96,7 +96,9 @@ void Feature::Load(json& o_json)
 
 					std::string minimalVersionString = Util::GetFormattedVersion(minimalFeatureVersion);
 
-					if (majorVersionMismatch) {
+					if (IsCore()) {
+						failedLoadedMessage = std::format("This feature is already included as part of the core Community Shaders installation. Uninstall this feature with your mod manager.");
+					} else if (majorVersionMismatch) {
 						failedLoadedMessage = std::format("{} {} is too old, major version incompatibility detected. Required: {}", GetShortName(), value, minimalVersionString);
 					} else {
 						failedLoadedMessage = std::format("{} {} is an old feature version, required: {}", GetShortName(), value, minimalVersionString);
