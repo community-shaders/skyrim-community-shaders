@@ -5,6 +5,7 @@
 #include "../../State.h"
 #include "../../Utils/FileSystem.h"
 #include "../HDR.h"
+#include "../HDRDisplay.h"
 #include "../Upscaling.h"
 #include "DX12SwapChain.h"
 

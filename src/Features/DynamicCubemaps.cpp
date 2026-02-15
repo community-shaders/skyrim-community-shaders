@@ -611,7 +611,7 @@ void DynamicCubemaps::SetupResources()
 		envCapturePositionReflectionsTexture->CreateSRV(srvDesc);
 		envCapturePositionReflectionsTexture->CreateUAV(uavDesc);
 
-		texDesc.Format = DXGI_FORMAT_R9G9B9E5_SHAREDEXP;
+		texDesc.Format = DXGI_FORMAT_R11G11B10_FLOAT;
 		srvDesc.Format = texDesc.Format;
 		uavDesc.Format = texDesc.Format;
 

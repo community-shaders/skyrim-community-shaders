@@ -262,7 +262,20 @@ struct HDR_Main_PostProcessing
 		if (hdr)
 			hdr->RedirectFramebuffer();
 
+		// ISTemporalAA_UI runs post-tonemapping on kFRAMEBUFFER and clamps to SDR range.
+		// When HDR is active, skip this pass to preserve HDR values >1.0.
+		auto imageSpaceManager = RE::ImageSpaceManager::GetSingleton();
+		GET_INSTANCE_MEMBER(BSImagespaceShaderISTemporalAA, imageSpaceManager);
+		RE::BSImagespaceShader* savedUITAA = nullptr;
+		if (hdr && BSImagespaceShaderISTemporalAA->taaEnabled) {
+			savedUITAA = BSImagespaceShaderISTemporalAA->BSImagespaceShaderISTemporalAA_UI;
+			BSImagespaceShaderISTemporalAA->BSImagespaceShaderISTemporalAA_UI = nullptr;
+		}
+
 		func(a_this, a3, a_target, a_4, a_5);
+
+		if (savedUITAA)
+			BSImagespaceShaderISTemporalAA->BSImagespaceShaderISTemporalAA_UI = savedUITAA;
 
 		if (hdr)
 			hdr->RestoreFramebuffer();
@@ -401,18 +414,14 @@ HRESULT WINAPI hk_D3D11CreateDeviceAndSwapChain(
 
 	const D3D_FEATURE_LEVEL featureLevel = D3D_FEATURE_LEVEL_11_1;
 
-	// Upgrade swap chain to HDR10 format (R10G10B10A2_UNORM)
 	DXGI_SWAP_CHAIN_DESC modifiedDesc = *pSwapChainDesc;
-	modifiedDesc.BufferDesc.Format = DXGI_FORMAT_R10G10B10A2_UNORM;
-	logger::info("[HDR] Upgrading D3D11 swap chain format from {} to R10G10B10A2_UNORM (24)", static_cast<int>(pSwapChainDesc->BufferDesc.Format));
 
-	// FLIP_DISCARD is required for SetColorSpace1 (HDR10 PQ output)
-	// Without it, the swap chain stays in sRGB mode and PQ-encoded data looks black
 	if (globals::features::hdrDisplay.loaded) {
+		modifiedDesc.BufferDesc.Format = DXGI_FORMAT_R10G10B10A2_UNORM;
 		modifiedDesc.SwapEffect = DXGI_SWAP_EFFECT_FLIP_DISCARD;
 		if (modifiedDesc.BufferCount < 2)
 			modifiedDesc.BufferCount = 2;
-		logger::info("[HDR] Set swap chain to FLIP_DISCARD for HDR color space support");
+		logger::info("[HDR] Upgraded swap chain: R10G10B10A2_UNORM + FLIP_DISCARD");
 	}
 
 	auto ret = ptrD3D11CreateDeviceAndSwapChain(pAdapter,
@@ -600,6 +609,16 @@ namespace Hooks
 			a_wndClass->lpfnWndProc = &WndProcHandler_Hook::thunk;
 
 			return func(a_wndClass);
+		}
+		static inline REL::Relocation<decltype(thunk)> func;
+	};
+
+	struct CreateRenderTarget_Main
+	{
+		static void thunk(RE::BSGraphics::Renderer* This, RE::RENDER_TARGETS::RENDER_TARGET a_target, RE::BSGraphics::RenderTargetProperties* a_properties)
+		{
+			globals::state->ModifyRenderTarget(a_target, a_properties);
+			func(This, a_target, a_properties);
 		}
 		static inline REL::Relocation<decltype(thunk)> func;
 	};
@@ -988,6 +1007,7 @@ namespace Hooks
 		stl::detour_thunk<BSShaderRenderTargets_Create>(REL::RelocationID(100458, 107175));
 
 		logger::info("Hooking BSShaderRenderTargets::Create::CreateRenderTarget(s)");
+		stl::write_thunk_call<CreateRenderTarget_Main>(REL::RelocationID(100458, 107175).address() + REL::Relocate(0x3F0, 0x3F3, 0x548));
 		stl::write_thunk_call<CreateRenderTarget_Normals>(REL::RelocationID(100458, 107175).address() + REL::Relocate(0x458, 0x45B, 0x5B0));
 		stl::write_thunk_call<CreateRenderTarget_NormalsSwap>(REL::RelocationID(100458, 107175).address() + REL::Relocate(0x46B, 0x46E, 0x5C3));
 		stl::write_thunk_call<CreateRenderTarget_MotionVectors>(REL::RelocationID(100458, 107175).address() + REL::Relocate(0x4F0, 0x4EF, 0x64E));

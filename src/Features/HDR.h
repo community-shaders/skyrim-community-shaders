@@ -107,6 +107,19 @@ public:
 	ID3D11ShaderResourceView* savedFramebufferSRV = nullptr;
 	bool framebufferRedirected = false;
 
+	// Upgraded LDR render targets (post-tonemapping targets need float16 for HDR values)
+	void UpgradeLDRRenderTargets();
+	void RestoreLDRRenderTargets();
+
+	struct SavedRenderTarget
+	{
+		ID3D11Texture2D* texture = nullptr;
+		ID3D11RenderTargetView* RTV = nullptr;
+		ID3D11ShaderResourceView* SRV = nullptr;
+	};
+
+	std::vector<std::pair<RE::RENDER_TARGETS::RENDER_TARGET, SavedRenderTarget>> savedLDRTargets;
+
 private:
 	bool showHDRWarningPopup = false;
 	bool pendingHDREnable = false;

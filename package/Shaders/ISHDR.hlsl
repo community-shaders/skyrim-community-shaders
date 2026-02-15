@@ -11,12 +11,12 @@
  *   1. Scene renders to kMAIN with linear HDR values (can exceed 1.0)
  *   2. This shader (ISHDR BLEND) reads from BlendTex, applies bloom and color grading
  *      - SDR mode: Applies tonemapping to compress to 0-1 range, outputs gamma-encoded
- *      - HDR mode: Skips tonemapping to preserve >1.0 values.
- *        Bloom is Reinhard-compressed to SDR range to prevent excessive intensity.
- *        Gamma-encodes output unless Linear Lighting is active.
- *   3. Output goes to kFRAMEBUFFER, then HDROutputCS reads it for final processing:
+ *      - HDR mode: DICE tonemapping preserves dynamic range above 1.0.
+ *        Outputs gamma-encoded BT.709 values (can exceed 1.0) to float16 kFRAMEBUFFER.
+ *   3. Post-tonemapping effects (TAA, ISDownsample, DOF) run on gamma-encoded output.
+ *   4. HDROutputCS reads kFRAMEBUFFER for final processing:
  *      - SDR: Passthrough + UI composite
- *      - HDR: BT.2020 conversion, nit scaling, PQ encoding + UI composite
+ *      - HDR: Gamma decode, BT.2020 conversion, nit scaling, PQ encoding + UI composite
  *
  * @see HDROutputCS.hlsl for final format conversion and UI compositing
  * @see HDR.cpp for the C++ HDR feature implementation
@@ -161,7 +161,7 @@ PS_OUTPUT main(PS_INPUT input)
 	if (isHDR) {
 		// === HDR Pipeline (Float16 RT) ===
 		// Input: HDR values (can exceed 1.0) - gamma-encoded (vanilla) OR linear (Linear Lighting)
-		// Output: PQ-encoded BT.2020 for HDROutputCS → display
+		// Output: Gamma-encoded BT.709 (values can exceed 1.0) for HDROutputCS to convert
 
 		float paperWhiteNits = SharedData::HDRData.y;
 		float peakNits = SharedData::HDRData.z;
@@ -174,52 +174,36 @@ PS_OUTPUT main(PS_INPUT input)
 		// Vanilla order: Saturation → Tint → Brightness → Contrast
 		// Physical accuracy: Saturation in linear; Tint & Contrast in gamma for artistic control.
 
-		// Saturation adjustment in linear (can generate negative RGB for highly saturated colors)
 		hdrLinear = Color::Saturation(hdrLinear, Cinematic.x);
 
-		// Tint and Contrast in gamma space (perceptual control matching SDR behavior)
 		float3 hdrGamma = Color::LinearToGamma(hdrLinear);
 
-		// Color tint in gamma (blend to monochrome tint if nonzero)
 		float hdrLuminanceGamma = Color::RGBToLuminance(hdrGamma);
 		hdrGamma = lerp(hdrGamma, hdrLuminanceGamma * Tint.xyz, Tint.w);
 
-		// Convert back to linear for brightness (uniform intensity scaling)
 		hdrLinear = Color::GammaToLinear(hdrGamma);
 		hdrLinear *= Cinematic.w;
 
-		// Contrast adjustment in gamma space (pivot around scene average)
 		hdrGamma = Color::LinearToGamma(hdrLinear);
 		hdrGamma = lerp(avgValue.x, hdrGamma, Cinematic.z);
 		hdrLinear = Color::GammaToLinear(hdrGamma);
 
 #		if defined(FADE)
-		// Screen fade effect in linear (loading screens, death, etc.)
 		hdrLinear = lerp(hdrLinear, Fade.xyz, Fade.w);
 #		endif
 
-		// === Bloom Compositing (Linear Space) ===
-		// High-pass filtered bloom adds glow to bright areas.
-		// Bloom is added in linear space to prevent excessive intensity at bright values.
 		hdrLinear += saturate(Param.x - hdrLinear) * bloomColor;
 
-		// === DICE Tonemapping ===
-		// INPUT: Linear BT.709 color in 80-nit reference (1.0 = 80 nits)
-		// Multiply paper-white scalar into color, as per Luma Framework design.
-		// DICE then compresses highlights from paper-white to peak, preserving mid-tone detail.
-		// OUTPUT: Still in 80-nit reference (1.0 = 80 nits), just with tonemapped values.
+		// DICE tonemapping: compresses highlights from paper-white to peak brightness.
+		// Output remains in linear BT.709, values can exceed 1.0 up to peak/80.
 		float pw = paperWhiteNits / sRGB_WhiteLevelNits;
 		float peak = peakNits / sRGB_WhiteLevelNits;
-		hdrLinear *= pw;  // Paper-white multiplied in (e.g., 2.5 for 200 nits)
+		hdrLinear *= pw;
 		hdrLinear = DisplayMapping::DICETonemap(hdrLinear, peak, 0.5, CS_BT709, CS_BT709);
 
-		// === Color Space Conversion and PQ Encoding ===
-		// Expand from BT.709 (SDR) to BT.2020 (HDR) for wider color gamut.
-		float3 bt2020 = Color::BT709ToBT2020(hdrLinear);
-		// Clamp to non-negative values to prevent NaN in pq::Encode pow operations
-		bt2020 = max(bt2020, 0.0);
-		// Encode to PQ curve: color remains in 80-nit reference (1.0 = 80 nits)
-		outputColor = Color::pq::Encode(bt2020, sRGB_WhiteLevelNits);
+		// Output gamma-encoded BT.709 to kFRAMEBUFFER (float16).
+		// BT.2020 conversion and PQ encoding happen in HDROutputCS after all post-processing.
+		outputColor = Color::LinearToGamma(max(0.0, hdrLinear));
 	} else {
 		// === SDR Pipeline (LDR RT) ===
 		// Input: Linear HDR values (can exceed 1.0)
