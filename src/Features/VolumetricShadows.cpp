@@ -402,16 +402,17 @@ struct CreateDepthStencil_VolumetricLighting
 {
 	static void thunk(RE::BSGraphics::Renderer* This, uint32_t a_target, RE::BSGraphics::DepthStencilTargetProperties* a_properties)
 	{
+		RE::BSGraphics::DepthStencilTargetProperties properties = *a_properties;
 		a_properties->height = 1024;
 		a_properties->width = 1024;
-		func(This, a_target, a_properties);
+		func(This, a_target, &properties);
 	}
 	static inline REL::Relocation<decltype(thunk)> func;
 };
 
 void VolumetricShadows::PostPostLoad()
 {
-	stl::write_thunk_call<CreateDepthStencil_VolumetricLighting>(REL::RelocationID(100458, 107175).address() + REL::Relocate(0x9DC, 0x9DC, 0x00));
+	stl::write_thunk_call<CreateDepthStencil_VolumetricLighting>(REL::RelocationID(100458, 107175).address() + REL::Relocate(0x9DC, 0x9DC, 0xC60));
 }
 
 bool VolumetricShadows::HasShaderDefine(RE::BSShader::Type)

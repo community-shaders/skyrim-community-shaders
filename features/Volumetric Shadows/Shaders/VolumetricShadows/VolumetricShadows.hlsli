@@ -28,6 +28,7 @@ namespace VolumetricShadows
 	StructuredBuffer<ShadowData> SharedShadowData : register(t19);
 
 	static const float VSM_MIN_VARIANCE = 0.00001;
+	static const float VSM_BLEEDING_REDUCTION = 0.2;
 
 	float GetShadowDepth(float3 positionWS, uint eyeIndex)
 	{
@@ -43,6 +44,12 @@ namespace VolumetricShadows
 		float d = depth - moments.x;
 		float pMax = variance / (variance + d * d);
 		return (depth <= moments.x) ? 1.0 : pMax;
+	}
+
+	// Reduces light bleeding by remapping shadow values below a threshold to zero
+	float ReduceBleeding(float shadow, float amount)
+	{
+		return saturate((shadow - amount) / (1.0 - amount));
 	}
 
 	// Sample a single cascade for VSM shadow
@@ -144,7 +151,7 @@ namespace VolumetricShadows
 		return ComputeVSM(moments, positionLS.z);
 	}
 
-	float GetVSMShadow2D(float3 position, uint eyeIndex)
+	float GetVSMShadow2D(float3 position, uint eyeIndex, out float detailedShadow)
 	{
 		ShadowData sD = SharedShadowData[0];
 
@@ -152,6 +159,7 @@ namespace VolumetricShadows
 
 		// Early out beyond cascade range
 		if (shadowMapDepth >= sD.EndSplitDistances.w) {
+			detailedShadow = 1.0;
 			return 1.0;
 		}
 
@@ -189,6 +197,7 @@ namespace VolumetricShadows
 
 		// Apply distance fade
 		float fadeFactor = 1.0 - pow(fade, 8);
+		detailedShadow = lerp(1.0, ReduceBleeding(shadow, VSM_BLEEDING_REDUCTION), fadeFactor);
 		return lerp(1.0, shadow, fadeFactor);
 	}
 }

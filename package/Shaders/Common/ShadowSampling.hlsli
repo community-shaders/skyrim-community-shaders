@@ -90,12 +90,13 @@ namespace ShadowSampling
 #endif
 	}
 
-	float GetLightingShadow(float3 worldPosition, uint eyeIndex)
+	float GetLightingShadow(float3 worldPosition, uint eyeIndex, out float detailedShadow)
 	{
 #if defined(VOLUMETRIC_SHADOWS)
-		float shadow = VolumetricShadows::GetVSMShadow2D(worldPosition, eyeIndex);
+		float shadow = VolumetricShadows::GetVSMShadow2D(worldPosition, eyeIndex, detailedShadow);
 		return shadow;
 #else
+		detailedShadow = 1.0;
 		return 1.0;
 #endif
 	}
