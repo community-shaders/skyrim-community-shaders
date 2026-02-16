@@ -71,6 +71,9 @@ void WeatherEditor::DrawSettings()
 	}
 	ImGui::EndDisabled();
 
+	// Time controls
+	DrawTimeControls();
+
 	// Basic weather editor info
 	DrawWeatherStatusPanel();
 
@@ -89,6 +92,9 @@ void WeatherEditor::Prepass()
 			sky->ForceWeather(lockedWeather, false);
 		}
 	}
+
+	// Update time controls (handles sleep/wait and external state sync)
+	editorWindow->UpdateTimeState();
 }
 
 void WeatherEditor::DrawWeatherPickerSection()
@@ -190,6 +196,15 @@ void WeatherEditor::LerpWeather(RE::TESWeather* oldWeather, RE::TESWeather* newW
 		newWeather->cloudLayerSpeedY[i] = LerpInt8_t(oldWeather->cloudLayerSpeedY[i], newWeather->cloudLayerSpeedY[i], currentWeatherPct);
 		newWeather->cloudLayerSpeedX[i] = LerpInt8_t(oldWeather->cloudLayerSpeedX[i], newWeather->cloudLayerSpeedX[i], currentWeatherPct);
 	}
+}
+
+void WeatherEditor::DrawTimeControls()
+{
+	ImGui::Spacing();
+	Util::DrawSectionHeader("Time Controls");
+	ImGui::Spacing();
+	EditorWindow::GetSingleton()->DrawTimeControls();
+	ImGui::Spacing();
 }
 
 void WeatherEditor::DrawWeatherStatusPanel()

@@ -268,6 +268,26 @@ const std::vector<Feature*>& Feature::GetFeatureList()
 	}
 }
 
+Feature* Feature::FindFeatureByShortName(const std::string& shortName)
+{
+	for (auto* feature : GetFeatureList()) {
+		if (feature->loaded && feature->GetShortName() == shortName)
+			return feature;
+	}
+	return nullptr;
+}
+
+std::vector<std::string> Feature::GetLoadedFeatureNames()
+{
+	std::vector<std::string> names;
+	for (auto* feature : GetFeatureList()) {
+		if (feature->loaded && feature->IsInMenu())
+			names.push_back(feature->GetShortName());
+	}
+	std::sort(names.begin(), names.end());
+	return names;
+}
+
 bool Feature::ToggleAtBootSetting()
 {
 	auto state = globals::state;

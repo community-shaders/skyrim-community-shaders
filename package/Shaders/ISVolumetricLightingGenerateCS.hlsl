@@ -79,7 +79,7 @@ cbuffer PerTechnique : register(b0)
 		{ 0.001, 0.001, 0.001 }
 	};
 
-	float3 normalizedCoordinates = dispatchID.xyz * rcp(TextureDimensions.xyz);
+	float3 normalizedCoordinates = float3(dispatchID.xy + 0.5, dispatchID.z - 1.0) * rcp(TextureDimensions.xyz);
 	float2 uv = normalizedCoordinates.xy;
 	uint eyeIndex = Stereo::GetEyeIndexFromTexCoord(uv);
 	float3 depthUv = Stereo::ConvertFromStereoUV(normalizedCoordinates, eyeIndex) + StepCoefficients[IterationIndex];
@@ -94,7 +94,7 @@ cbuffer PerTechnique : register(b0)
 
 	float shadowMapDepth = positionCSShifted.z;
 
-	bool noShadow = true;
+	bool noShadow = !SharedData::InInterior;
 	if (EndSplitDistances.z >= shadowMapDepth) {
 		uint cascadeIndex = ShadowMapCount >= 3.0f && shadowMapDepth > EndSplitDistances.y ? 2 : shadowMapDepth > EndSplitDistances.x ? 1 : 0;
 		float shadowMapThreshold = cascadeIndex == 0 ? 0.01f : 0.0f;

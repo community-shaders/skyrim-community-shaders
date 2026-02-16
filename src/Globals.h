@@ -221,6 +221,7 @@ namespace globals
 		extern RE::BSUtilityShader* utilityShader;
 		extern RE::Sky* sky;
 		extern RE::UI* ui;
+		extern RE::Calendar* calendar;
 		extern std::atomic<bool> quitGame;
 
 		extern RE::BSGraphics::PixelShader** currentPixelShader;
