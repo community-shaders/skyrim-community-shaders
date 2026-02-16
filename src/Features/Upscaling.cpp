@@ -747,6 +747,17 @@ ID3D11PixelShader* Upscaling::GetUnderwaterMaskUpscalePS()
 	return underwaterMaskUpscalePS.get();
 }
 
+ID3D11PixelShader* Upscaling::GetDepthUpscalePS()
+{
+	if (!depthUpscalePS) {
+		logger::debug("Compiling DepthUpscalePS.hlsl");
+		std::vector<std::pair<const char*, const char*>> defines = { { "PSHADER", "" } };
+		depthUpscalePS.attach((ID3D11PixelShader*)Util::CompileShader(L"Data/Shaders/Upscaling/DepthUpscalePS.hlsl", defines, "ps_5_0"));
+	}
+
+	return depthUpscalePS.get();
+}
+
 ID3D11VertexShader* Upscaling::GetUpscaleVS()
 {
 	if (!upscaleVS) {
@@ -1087,24 +1098,6 @@ void Upscaling::ConfigureUpscaling(RE::BSGraphics::State* a_viewport)
 	// Disable dynamic resolution unless the game explicitly enables it
 	if (!globals::game::isVR)
 		runtimeData.dynamicResolutionLock = 1;
-
-	// If running in VR and an external upscaler is active, force-disable
-	// the engine's depth-buffer culling immediately. This ensures that
-	// enabling upscaling at runtime (after game load) does not leave the
-	// VR depth-buffer culling enabled which can cause incorrect occlusion.
-	if (globals::game::isVR) {
-		auto& vr = globals::features::vr;
-		if (IsUpscalingActive()) {
-			if (vr.gDepthBufferCulling) {
-				if (*vr.gDepthBufferCulling) {
-					*vr.gDepthBufferCulling = false;
-					logger::info("[Upscaling] VR detected - forcing depth buffer culling OFF due to active downscaling upscaler (scale={})", resolutionScale.x);
-				}
-			} else {
-				logger::warn("[Upscaling] VR depth buffer culling pointer is null, cannot force disable");
-			}
-		}
-	}
 }
 
 void Upscaling::SetupResources()
@@ -1149,6 +1142,9 @@ void Upscaling::SetupResources()
 		depthStencilDesc.BackFace.StencilDepthFailOp = depthStencilDesc.FrontFace.StencilDepthFailOp;
 		depthStencilDesc.BackFace.StencilPassOp = depthStencilDesc.FrontFace.StencilPassOp;
 		depthStencilDesc.BackFace.StencilFunc = depthStencilDesc.FrontFace.StencilFunc;
+
+		// Create depth upscale constant buffer for VR depth culling support
+		depthUpscaleCB = new ConstantBuffer(ConstantBufferDesc<DepthUpscaleCB>());
 	} else {
 		depthStencilDesc.StencilEnable = false;  // Disable stencil testing
 	}
@@ -1202,6 +1198,7 @@ void Upscaling::ClearShaderCache()
 	depthRefractionUpscalePS = nullptr;  // com_ptr automatically releases
 	underwaterMaskUpscalePS = nullptr;   // com_ptr automatically releases
 	upscaleVS = nullptr;                 // com_ptr automatically releases
+	depthUpscalePS = nullptr;            // com_ptr automatically releases
 }
 
 void Upscaling::CopySharedD3D12Resources()
@@ -1413,31 +1410,6 @@ bool Upscaling::IsUpscalingActive() const
 	return resolutionScale.x < .99f;
 }
 
-std::vector<FeatureConstraints::Constraint> Upscaling::GetActiveConstraints() const
-{
-	std::vector<FeatureConstraints::Constraint> constraints;
-
-	if (!IsUpscalingActive()) {
-		return constraints;
-	}
-
-	// When upscaling is active in VR, depth buffer culling must be disabled
-	// because upscalers modify the depth buffer, causing incorrect occlusion
-	if (globals::game::isVR) {
-		constraints.push_back({ { "VR", "EnableDepthBufferCullingExterior" },
-			false,
-			"Upscaling modifies the depth buffer, causing incorrect VR occlusion tests in exteriors.",
-			false });
-
-		constraints.push_back({ { "VR", "EnableDepthBufferCullingInterior" },
-			false,
-			"Upscaling modifies the depth buffer, causing incorrect VR occlusion tests in interiors.",
-			false });
-	}
-
-	return constraints;
-}
-
 /**
  * @brief Retrieves the current frame time for frame generation.
  *
@@ -1636,6 +1608,69 @@ void Upscaling::PerformUpscaling()
 
 void Upscaling::UpscaleDepth()
 {
+	// VR-specific: Conservative depth buffer upscale for OBBOcclusionTesting compatibility.
+	// Runs a dedicated depth-only pass that writes conservative (min-depth) values to the
+	// main depth buffer at display resolution, allowing VR depth-based culling to work
+	// correctly when an upscaler is active.
+	// Based on approach by vrnord (https://github.com/vrnord/skyrim-community-shaders-VR-DLSS)
+	if (globals::game::isVR && enableVRDepthUpscale && resolutionScale.x != 1.0f) {
+		globals::state->BeginPerfEvent("VR Depth Buffer Upscale");
+
+		auto renderer = globals::game::renderer;
+		auto context = globals::d3d::context;
+
+		auto& depth = renderer->GetDepthStencilData().depthStencils[RE::RENDER_TARGETS_DEPTHSTENCIL::kMAIN];
+		auto& depthCopy = renderer->GetDepthStencilData().depthStencils[RE::RENDER_TARGETS_DEPTHSTENCIL::kMAIN_COPY];
+
+		auto screenSize = globals::state->screenSize;
+		float2 renderSize = screenSize * resolutionScale;
+
+		DepthUpscaleCB cbData;
+		cbData.SourceResolution = renderSize;
+		cbData.TargetResolution = screenSize;
+		cbData.ResolutionScale = renderSize / screenSize;
+		cbData.TexelSize = float2(1.0f / renderSize.x, 1.0f / renderSize.y);
+
+		depthUpscaleCB->Update(cbData);
+		auto bufferArray = depthUpscaleCB->CB();
+		context->PSSetConstantBuffers(0, 1, &bufferArray);
+
+		context->IASetInputLayout(nullptr);
+		context->IASetVertexBuffers(0, 0, nullptr, nullptr, nullptr);
+		context->IASetIndexBuffer(nullptr, DXGI_FORMAT_UNKNOWN, 0);
+		context->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+
+		context->VSSetShader(GetUpscaleVS(), nullptr, 0);
+
+		D3D11_VIEWPORT viewport = {};
+		viewport.Width = screenSize.x;
+		viewport.Height = screenSize.y;
+		viewport.MaxDepth = 1.0f;
+		context->RSSetViewports(1, &viewport);
+
+		context->RSSetState(upscaleRasterizerState.get());
+		context->OMSetDepthStencilState(upscaleDepthStencilState.get(), 0);
+
+		context->CopyResource(depthCopy.texture, depth.texture);
+
+		auto deferred = globals::deferred;
+		ID3D11SamplerState* samplers[] = { deferred->linearSampler };
+		context->PSSetSamplers(0, ARRAYSIZE(samplers), samplers);
+
+		ID3D11ShaderResourceView* srvs[] = { depthCopy.depthSRV };
+		context->PSSetShaderResources(0, ARRAYSIZE(srvs), srvs);
+
+		context->OMSetRenderTargets(0, nullptr, depth.views[0]);
+
+		context->PSSetShader(GetDepthUpscalePS(), nullptr, 0);
+		context->Draw(3, 0);
+
+		ID3D11ShaderResourceView* nullSRVs[1] = { nullptr };
+		context->PSSetShaderResources(0, 1, nullSRVs);
+
+		globals::state->EndPerfEvent();
+	}
+
 	if (resolutionScale.x != 1.0f) {
 		globals::state->BeginPerfEvent("Render Target Upscaling");
 

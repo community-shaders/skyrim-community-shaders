@@ -36,8 +36,6 @@ public:
 		};
 	}
 
-	virtual std::vector<FeatureConstraints::Constraint> GetActiveConstraints() const override;
-
 	float2 jitter = { 0, 0 };
 
 	enum class UpscaleMethod
@@ -110,6 +108,22 @@ public:
 	virtual void Load() override;
 	virtual void PostPostLoad() override;
 	virtual void SetupResources() override;
+
+	// VR Depth Buffer Upscaling for depth-based culling compatibility
+	// Based on approach by vrnord (https://github.com/vrnord/skyrim-community-shaders-VR-DLSS)
+	winrt::com_ptr<ID3D11PixelShader> depthUpscalePS;
+	ID3D11PixelShader* GetDepthUpscalePS();
+
+	struct DepthUpscaleCB
+	{
+		float2 SourceResolution;
+		float2 TargetResolution;
+		float2 ResolutionScale;
+		float2 TexelSize;
+	};
+
+	ConstantBuffer* depthUpscaleCB = nullptr;
+	bool enableVRDepthUpscale = true;
 
 	UpscaleMethod GetUpscaleMethod() const;
 
