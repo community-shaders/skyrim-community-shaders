@@ -17,22 +17,22 @@
  * - Minimum depth from 2x2 neighborhood for conservative culling
  * - Configurable blending between the two approaches
 
-* - Depth upscaling approach by vrnord
-* - https://github.com/vrnord/skyrim-community-shaders-VR-DLSS
+ * - Depth upscaling approach by vrnord
+ * - https://github.com/vrnord/skyrim-community-shaders-VR-DLSS
 
  */
 
 #include "Upscaling/UpscaleVS.hlsl"
 
 #if defined(PSHADER)
-#include "Common/FrameBuffer.hlsli"
-#include "Common/SharedData.hlsli"
+#	include "Common/FrameBuffer.hlsli"
+#	include "Common/SharedData.hlsli"
 
 typedef VS_OUTPUT PS_INPUT;
 
 struct PS_OUTPUT
 {
-    float Depth : SV_Depth;
+	float Depth : SV_Depth;
 };
 
 // Low-resolution depth buffer (copy of main depth at render resolution)
@@ -43,10 +43,10 @@ SamplerState LinearSampler : register(s0);
 
 cbuffer DepthUpscaleCB : register(b0)
 {
-    float2 SourceResolution;    // Low-res depth buffer dimensions
-    float2 TargetResolution;    // Full-res target dimensions
-    float2 ResolutionScale;     // SourceResolution / TargetResolution
-    float2 TexelSize;           // 1.0 / SourceResolution
+	float2 SourceResolution;  // Low-res depth buffer dimensions
+	float2 TargetResolution;  // Full-res target dimensions
+	float2 ResolutionScale;   // SourceResolution / TargetResolution
+	float2 TexelSize;         // 1.0 / SourceResolution
 };
 
 /**
@@ -61,9 +61,9 @@ cbuffer DepthUpscaleCB : register(b0)
  */
 float SampleMinDepth2x2(float2 uv)
 {
-    // GatherRed returns: (0,1), (1,1), (1,0), (0,0) relative to sample point
-    float4 depthQuad = DepthLowRes.GatherRed(LinearSampler, uv);
-    return min(min(depthQuad.x, depthQuad.y), min(depthQuad.z, depthQuad.w));
+	// GatherRed returns: (0,1), (1,1), (1,0), (0,0) relative to sample point
+	float4 depthQuad = DepthLowRes.GatherRed(LinearSampler, uv);
+	return min(min(depthQuad.x, depthQuad.y), min(depthQuad.z, depthQuad.w));
 }
 
 /**
@@ -77,25 +77,23 @@ float SampleMinDepth2x2(float2 uv)
  */
 float SampleMinDepth3x3(float2 uv)
 {
-    float2 texelPos = uv * SourceResolution;
-    int2 centerCoord = int2(floor(texelPos));
+	float2 texelPos = uv * SourceResolution;
+	int2 centerCoord = int2(floor(texelPos));
 
-    float minDepth = 1.0;  // Far plane in reversed-Z
+	float minDepth = 1.0;  // Far plane in reversed-Z
 
-    [unroll]
-    for (int y = -1; y <= 1; y++)
-    {
-        [unroll]
-        for (int x = -1; x <= 1; x++)
-        {
-            int2 sampleCoord = centerCoord + int2(x, y);
-            sampleCoord = clamp(sampleCoord, int2(0, 0), int2(SourceResolution) - 1);
-            float sampleDepth = DepthLowRes.Load(int3(sampleCoord, 0));
-            minDepth = min(minDepth, sampleDepth);
-        }
-    }
+	[unroll] for (int y = -1; y <= 1; y++)
+	{
+		[unroll] for (int x = -1; x <= 1; x++)
+		{
+			int2 sampleCoord = centerCoord + int2(x, y);
+			sampleCoord = clamp(sampleCoord, int2(0, 0), int2(SourceResolution) - 1);
+			float sampleDepth = DepthLowRes.Load(int3(sampleCoord, 0));
+			minDepth = min(minDepth, sampleDepth);
+		}
+	}
 
-    return minDepth;
+	return minDepth;
 }
 
 /**
@@ -106,41 +104,38 @@ float SampleMinDepth3x3(float2 uv)
  */
 PS_OUTPUT main(PS_INPUT input)
 {
-    PS_OUTPUT psout;
+	PS_OUTPUT psout;
 
-    // Transform UV from full-res to low-res space
-    float2 fullResUV = input.TexCoord;
-    float2 lowResUV = fullResUV * ResolutionScale;
-    lowResUV = saturate(lowResUV);
+	// Transform UV from full-res to low-res space
+	float2 fullResUV = input.TexCoord;
+	float2 lowResUV = fullResUV * ResolutionScale;
+	lowResUV = saturate(lowResUV);
 
-    // Calculate upscale ratio to determine filter size
-    float upscaleRatio = TargetResolution.x / SourceResolution.x;
+	// Calculate upscale ratio to determine filter size
+	float upscaleRatio = TargetResolution.x / SourceResolution.x;
 
-    // Bilinear interpolation for smooth base depth
-    float bilinearDepth = DepthLowRes.SampleLevel(LinearSampler, lowResUV, 0);
+	// Bilinear interpolation for smooth base depth
+	float bilinearDepth = DepthLowRes.SampleLevel(LinearSampler, lowResUV, 0);
 
-    // Conservative minimum depth
-    float minDepth;
-    if (upscaleRatio > 1.5)
-    {
-        // Use 3x3 for aggressive upscaling (Performance/Ultra Performance modes)
-        minDepth = SampleMinDepth3x3(lowResUV);
-    }
-    else
-    {
-        // Use 2x2 for moderate upscaling (Quality/Balanced modes)
-        minDepth = SampleMinDepth2x2(lowResUV);
-    }
+	// Conservative minimum depth
+	float minDepth;
+	if (upscaleRatio > 1.5) {
+		// Use 3x3 for aggressive upscaling (Performance/Ultra Performance modes)
+		minDepth = SampleMinDepth3x3(lowResUV);
+	} else {
+		// Use 2x2 for moderate upscaling (Quality/Balanced modes)
+		minDepth = SampleMinDepth2x2(lowResUV);
+	}
 
-    // Blend between smooth and conservative
-    // Higher bias = more conservative (safer culling, potential popping)
-    // Lower bias = smoother (better visual, potential incorrect culling)
-    // 0.35 provides good balance for typical VR scenarios
-    const float conservativeBias = 0.35;
+	// Blend between smooth and conservative
+	// Higher bias = more conservative (safer culling, potential popping)
+	// Lower bias = smoother (better visual, potential incorrect culling)
+	// 0.35 provides good balance for typical VR scenarios
+	const float conservativeBias = 0.35;
 
-    psout.Depth = lerp(bilinearDepth, minDepth, conservativeBias);
+	psout.Depth = lerp(bilinearDepth, minDepth, conservativeBias);
 
-    return psout;
+	return psout;
 }
 
 #endif
