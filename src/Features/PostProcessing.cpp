@@ -488,9 +488,28 @@ void PostProcessing::PreProcess()
 
 	bool inMainLoadingMenu = globals::game::ui && (globals::game::ui->IsMenuOpen(RE::MainMenu::MENU_NAME) || globals::game::ui->IsMenuOpen(RE::LoadingMenu::MENU_NAME));
 
-	auto gameTexMain = isrefraction ? renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMAIN_COPY] : renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMAIN];
+	auto& gameTexMainRT = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMAIN];
+	auto& gameTexMainCopyRT = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMAIN_COPY];
+
+	bool useMainCopy = isrefraction;
+	ID3D11RenderTargetView* currentRTV = nullptr;
+	ID3D11DepthStencilView* currentDSV = nullptr;
+	context->OMGetRenderTargets(1, &currentRTV, &currentDSV);
+	if (currentRTV) {
+		if (currentRTV == gameTexMainCopyRT.RTV) {
+			useMainCopy = true;
+		} else if (currentRTV == gameTexMainRT.RTV) {
+			useMainCopy = false;
+		}
+	}
+	if (currentRTV)
+		currentRTV->Release();
+	if (currentDSV)
+		currentDSV->Release();
+
+	auto gameTexMain = useMainCopy ? gameTexMainCopyRT : gameTexMainRT;
 	PostProcessFeature::TextureInfo lastTexColor = { gameTexMain.texture, gameTexMain.SRV };
-	auto gameTexMainAlt = isrefraction ? renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMAIN] : renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMAIN_COPY];
+	auto gameTexMainAlt = useMainCopy ? gameTexMainRT : gameTexMainCopyRT;
 
 	// go through each fx
 	for (auto& pipe : pipeline) {
