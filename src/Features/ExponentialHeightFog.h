@@ -33,7 +33,7 @@ struct ExponentialHeightFog : Feature
 
 	struct alignas(16) Settings
 	{
-		uint enabled = 1;
+		uint enabled = 0;
 		uint useDynamicCubemaps = 0;
 		float startDistance = 0.0f;
 		float fogHeight = 0.0f;
