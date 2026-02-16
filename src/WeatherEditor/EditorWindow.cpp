@@ -630,9 +630,7 @@ void EditorWindow::ShowViewportWindow()
 	ImGui::Begin("Viewport");
 
 	// Top bar
-	auto calendar = RE::Calendar::GetSingleton();
-	if (calendar && calendar->gameHour) {
-		ImGui::SliderFloat("##ViewportSlider", &calendar->gameHour->value, 0.0f, 23.99f, "Time: %.2f");
+	if (DrawGameHourSlider("##ViewportSlider", "Time: %.2f")) {
 		ImGui::SameLine();
 		int activePeriod = TOD::GetActivePeriod();
 		ImGui::Text("(%s)", TOD::GetPeriodName(activePeriod));
@@ -934,23 +932,17 @@ void EditorWindow::RenderUI()
 			}
 
 			const float menuBarHeight = ImGui::GetFrameHeight();
-			const float buttonDim = menuBarHeight * 0.85f;  // 85% of menu bar height
+			const float buttonDim = menuBarHeight * 0.85f;
 			const ImVec2 buttonSize(buttonDim, buttonDim);
 
-			if (ImGui::ImageButton("##GlobalPauseTime", menu->uiIcons.pauseTime.texture, buttonSize)) {
-				if (isPaused) {
-					ResumeTime();
-				} else {
-					PauseTime();
-				}
-			}
+			if (ImGui::ImageButton("##GlobalPauseTime", menu->uiIcons.pauseTime.texture, buttonSize))
+				TogglePause();
 
 			ImGui::PopStyleColor(2);
 			ImGui::PopStyleVar();
 
-			if (ImGui::IsItemHovered()) {
+			if (ImGui::IsItemHovered())
 				ImGui::SetTooltip(isPaused ? "Resume Time" : "Pause Time");
-			}
 		}
 
 		// Undo button
@@ -1004,7 +996,7 @@ void EditorWindow::RenderUI()
 		}
 
 		// Time pause indicator
-		if (timePaused) {
+		if (IsTimePaused()) {
 			ImGui::SameLine();
 			ImGui::PushStyleColor(ImGuiCol_Text, Menu::GetSingleton()->GetSettings().Theme.StatusPalette.CurrentHotkey);
 			ImGui::Text(" [TIME PAUSED]");
@@ -1488,8 +1480,7 @@ void EditorWindow::PauseTime()
 {
 	if (timePaused)
 		return;
-
-	auto calendar = RE::Calendar::GetSingleton();
+	auto calendar = globals::game::calendar ? globals::game::calendar : RE::Calendar::GetSingleton();
 	if (calendar && calendar->timeScale) {
 		savedTimeScale = calendar->timeScale->value;
 		calendar->timeScale->value = 0.0f;
@@ -1502,13 +1493,109 @@ void EditorWindow::ResumeTime()
 {
 	if (!timePaused)
 		return;
-
-	auto calendar = RE::Calendar::GetSingleton();
+	auto calendar = globals::game::calendar ? globals::game::calendar : RE::Calendar::GetSingleton();
 	if (calendar && calendar->timeScale) {
 		calendar->timeScale->value = savedTimeScale;
 		timePaused = false;
 		logger::info("Time resumed (timescale: {})", savedTimeScale);
 	}
+}
+
+void EditorWindow::ResetTimeScale()
+{
+	auto calendar = globals::game::calendar ? globals::game::calendar : RE::Calendar::GetSingleton();
+	if (!calendar || !calendar->timeScale)
+		return;
+	if (timePaused)
+		savedTimeScale = kVanillaTimeScale;
+	else
+		calendar->timeScale->value = kVanillaTimeScale;
+	timeScaleSlider = kVanillaTimeScale;
+}
+
+void EditorWindow::UpdateTimeState()
+{
+	auto calendar = globals::game::calendar ? globals::game::calendar : RE::Calendar::GetSingleton();
+	auto ui = globals::game::ui ? globals::game::ui : RE::UI::GetSingleton();
+	if (!calendar || !calendar->timeScale)
+		return;
+
+	bool sleepWaitOpen = ui && ui->IsMenuOpen(RE::SleepWaitMenu::MENU_NAME);
+
+	// External state sync (skip during sleep/wait)
+	if (!sleepWaitOpen) {
+		if (calendar->timeScale->value == 0.0f && !timePaused)
+			savedTimeScale = kVanillaTimeScale;
+		else if (calendar->timeScale->value > 0.0f && timePaused)
+			timePaused = false;
+	}
+
+	// Sleep/wait handling — temporarily restore time so the wait can proceed
+	if (sleepWaitOpen && calendar->timeScale->value == 0.0f) {
+		if (!wasRestoredForWait) {
+			wasPausedBeforeWait = true;
+			if (timePaused)
+				ResumeTime();
+			else
+				calendar->timeScale->value = std::max(savedTimeScale, kVanillaTimeScale);
+			wasRestoredForWait = true;
+		}
+	} else if (!sleepWaitOpen && wasRestoredForWait) {
+		if (wasPausedBeforeWait && !timePaused)
+			PauseTime();
+		wasRestoredForWait = false;
+		wasPausedBeforeWait = false;
+	}
+}
+
+bool EditorWindow::DrawGameHourSlider(const char* label, const char* format)
+{
+	auto calendar = globals::game::calendar ? globals::game::calendar : RE::Calendar::GetSingleton();
+	if (!calendar || !calendar->gameHour)
+		return false;
+	ImGui::SliderFloat(label, &calendar->gameHour->value, 0.0f, kGameHourMax, format);
+	return true;
+}
+
+void EditorWindow::DrawTimeControls()
+{
+	auto calendar = globals::game::calendar ? globals::game::calendar : RE::Calendar::GetSingleton();
+	if (!calendar || !calendar->gameHour || !calendar->timeScale)
+		return;
+
+	// Row 1: Pause/Resume + Game Time
+	if (ImGui::Button(timePaused ? "Resume Time" : "Pause Time", ImVec2(120, 0)))
+		TogglePause();
+	if (auto _tt = Util::HoverTooltipWrapper())
+		ImGui::Text("Pause or resume game time progression");
+	ImGui::SameLine();
+	DrawGameHourSlider();
+	if (auto _tt = Util::HoverTooltipWrapper())
+		ImGui::Text("Adjust the current game time");
+
+	// Sync slider with actual value
+	if (timePaused)
+		timeScaleSlider = std::max(savedTimeScale, kTimeScaleMin);
+	else if (std::abs(calendar->timeScale->value - timeScaleSlider) > 0.01f)
+		timeScaleSlider = calendar->timeScale->value;
+
+	// Row 2: Reset Speed + TimeScale slider + speed label
+	if (ImGui::Button("Reset Speed", ImVec2(120, 0)))
+		ResetTimeScale();
+	if (auto _tt = Util::HoverTooltipWrapper())
+		ImGui::Text("Reset time speed to vanilla (%.1fx)", kVanillaTimeScale);
+
+	ImGui::SameLine();
+	ImGui::BeginDisabled(timePaused);
+	if (ImGui::SliderFloat("##TimeScale", &timeScaleSlider, kTimeScaleMin, kTimeScaleMax,
+			timeScaleSlider == kVanillaTimeScale ? "Vanilla Speed" : "", ImGuiSliderFlags_Logarithmic))
+		calendar->timeScale->value = timeScaleSlider;
+	ImGui::EndDisabled();
+
+	ImGui::SameLine();
+	ImGui::Text("%.1fx", calendar->timeScale->value);
+	if (auto _tt = Util::HoverTooltipWrapper())
+		ImGui::Text("Adjust how fast time passes (vanilla: %.1fx)", kVanillaTimeScale);
 }
 
 void EditorWindow::DisableVanityCamera()
