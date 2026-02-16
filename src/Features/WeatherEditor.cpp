@@ -697,13 +697,24 @@ void WeatherEditor::RenderWeatherControls(RE::Sky* sky)
 		ImGui::Separator();
 
 		for (int i = 0; i < static_cast<int>(s_filteredWeathers.size()); ++i) {
-			if (s_weatherSearchBuffer[0] != '\0' &&
-				std::search(weatherLabels[i].begin(), weatherLabels[i].end(), s_weatherSearchBuffer, s_weatherSearchBuffer + strlen(s_weatherSearchBuffer),
-					[](char a, char b) { return std::tolower(a) == std::tolower(b); }) == weatherLabels[i].end())
-				continue;
-
 			const bool isSelected = (s_selectedWeatherIdx == i);
 			auto weather = s_filteredWeathers[i];
+
+			// Filter by EditorID, Name, and FormID only (not classification tags)
+			if (s_weatherSearchBuffer[0] != '\0') {
+				auto editorId = weather->GetFormEditorID() ? std::string(weather->GetFormEditorID()) : "";
+				auto name = weather->GetName() ? std::string(weather->GetName()) : "";
+				char formIdStr[16];
+				snprintf(formIdStr, sizeof(formIdStr), "%08X", weather->GetFormID());
+
+				auto matchesSearch = [&](const std::string& text) {
+					return !text.empty() && std::search(text.begin(), text.end(), s_weatherSearchBuffer, s_weatherSearchBuffer + strlen(s_weatherSearchBuffer),
+						[](char a, char b) { return std::tolower(a) == std::tolower(b); }) != text.end();
+				};
+
+				if (!matchesSearch(editorId) && !matchesSearch(name) && !matchesSearch(formIdStr))
+					continue;
+			}
 
 			ImGui::PushStyleColor(ImGuiCol_Text, GetWeatherTypeColor(weather));
 			if (ImGui::Selectable(weatherLabels[i].c_str(), isSelected)) {
