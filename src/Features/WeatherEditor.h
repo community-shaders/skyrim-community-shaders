@@ -138,6 +138,7 @@ private:
 	static inline uint32_t s_weatherFlagFilter = ALL_WEATHER_FLAGS;  // Start with all filters enabled by default (bits 0-6)
 	static inline uint32_t s_lastWeatherFlagFilter = UNCLASSIFIED_FLAG;
 	static inline bool s_accelerateWeatherChange = true;
+	static inline char s_weatherSearchBuffer[256] = {};
 	static inline float s_accelerationRate = 5.0f;
 	static inline RE::TESWeather* s_cachedLastWeather = nullptr;
 	static inline bool s_isAcceleratingWeatherChange = false;

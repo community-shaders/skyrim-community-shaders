@@ -690,29 +690,36 @@ void WeatherEditor::RenderWeatherControls(RE::Sky* sky)
 	                               "Select Weather";
 
 	if (ImGui::BeginCombo("Weather", comboPreview)) {
+		ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(24.0f, ImGui::GetStyle().FramePadding.y));
+		ImGui::InputText("##weather_search", s_weatherSearchBuffer, IM_ARRAYSIZE(s_weatherSearchBuffer));
+		ImGui::PopStyleVar();
+		Util::DrawSearchIcon(ImVec2(ImGui::GetItemRectMin().x + 5.0f, ImGui::GetItemRectMin().y + (ImGui::GetItemRectSize().y - 16.0f) * 0.5f), 16.0f, 0.5f);
+		ImGui::Separator();
+
 		for (int i = 0; i < static_cast<int>(s_filteredWeathers.size()); ++i) {
+			if (s_weatherSearchBuffer[0] != '\0' &&
+				std::search(weatherLabels[i].begin(), weatherLabels[i].end(), s_weatherSearchBuffer, s_weatherSearchBuffer + strlen(s_weatherSearchBuffer),
+					[](char a, char b) { return std::tolower(a) == std::tolower(b); }) == weatherLabels[i].end())
+				continue;
+
 			const bool isSelected = (s_selectedWeatherIdx == i);
 			auto weather = s_filteredWeathers[i];
-			ImVec4 textColor = GetWeatherTypeColor(weather);
 
-			ImGui::PushStyleColor(ImGuiCol_Text, textColor);
+			ImGui::PushStyleColor(ImGuiCol_Text, GetWeatherTypeColor(weather));
 			if (ImGui::Selectable(weatherLabels[i].c_str(), isSelected)) {
 				s_selectedWeatherIdx = i;
-				// Weather changed, apply it
-				auto selectedWeather = s_filteredWeathers[s_selectedWeatherIdx];
+				auto selectedWeather = s_filteredWeathers[i];
 
-				if (s_accelerateWeatherChange) {
-					// Instant transition - force the weather
+				if (s_accelerateWeatherChange)
 					sky->ForceWeather(selectedWeather, false);
-				} else {
-					// Normal transition
+				else
 					sky->SetWeather(selectedWeather, true, false);
-				}
 
+				s_weatherSearchBuffer[0] = '\0';
 				logger::info("[WeatherEditor] Changed weather to: {}", Util::FormatWeather(selectedWeather));
 			}
 			ImGui::PopStyleColor();
-			// Add hover tooltip to show full weather information
+
 			if (ImGui::IsItemHovered()) {
 				ImGui::BeginTooltip();
 				ImGui::Text("Weather: %s", weather->GetName() ? weather->GetName() : "Unnamed");
@@ -721,12 +728,12 @@ void WeatherEditor::RenderWeatherControls(RE::Sky* sky)
 				ImGui::EndTooltip();
 			}
 
-			// Set the initial focus when opening the combo (scrolls to it)
-			if (isSelected) {
+			if (isSelected)
 				ImGui::SetItemDefaultFocus();
-			}
 		}
 		ImGui::EndCombo();
+	} else {
+		s_weatherSearchBuffer[0] = '\0';
 	}
 }
 
