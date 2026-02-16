@@ -48,4 +48,12 @@ struct ShadowmapRasterizerFix : EngineFix
 		static void thunk(RE::BSShadowDirectionalLight* light, void* arg1, void* arg2, uint32_t flags);
 		static inline REL::Relocation<decltype(thunk)> func;
 	};
+
+	std::map<std::string, Util::GameSetting> Settings{
+		{ "iNumSplits:Display", { "Number of Shadow Map Cascades (INI) ",
+									"Controls the number of shadow map cascades used for directional lighting. "
+									"Higher values provide better shadow quality but use more GPU resources. "
+									"Maximum of 3 cascades supported. ",
+									REL::Relocate<uintptr_t>(0, 0, 0x1ed6350), 2, 1, 4 } },
+	};
 };

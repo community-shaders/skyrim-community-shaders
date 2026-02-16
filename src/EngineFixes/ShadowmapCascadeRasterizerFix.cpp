@@ -3,9 +3,11 @@
 void ShadowmapRasterizerFix::Install()
 {
 	// This function is called once per cascade to begin the updating and rendering process
-	stl::write_thunk_call<BSShadowDirectionalLight_RenderShadowmaps_RenderCascade>(REL::RelocationID(101495, 108489).address() + REL::Relocate(0xC6, 0xC6));
+	stl::write_thunk_call<BSShadowDirectionalLight_RenderShadowmaps_RenderCascade>(REL::RelocationID(101495, 108489).address() + REL::Relocate(0xC6, 0xC6, 0xF6));
 
 	gRasterStates = reinterpret_cast<RasterStateArray*>(REL::RelocationID(524748, 411363).address());
+
+	numCascades = static_cast<uint>(Util::GetGameSettingValue<std::int32_t>("iNumSplits:Display", Settings.at("iNumSplits:Display")));
 }
 
 void ShadowmapRasterizerFix::BSShadowDirectionalLight_RenderShadowmaps_RenderCascade::thunk(RE::BSShadowDirectionalLight* light, void* arg1, void* arg2, uint32_t flags)
@@ -17,7 +19,7 @@ void ShadowmapRasterizerFix::BSShadowDirectionalLight_RenderShadowmaps_RenderCas
 		//Backup
 		if (cascade == 0) {
 			std::memcpy(backupGameRasterStates, *gRasterStates, sizeof(RasterStateArray));
-			numCascades = std::min(RE::GetINISetting("iNumSplits:Display")->data.u, maxCascades);
+			numCascades = std::min(numCascades, maxCascades);
 		}
 
 		//Clone
