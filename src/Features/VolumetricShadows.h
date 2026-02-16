@@ -10,7 +10,7 @@ public:
 	virtual inline std::string_view GetShaderDefineName() override { return "VOLUMETRIC_SHADOWS"; }
 	virtual std::string_view GetCategory() const override { return "Lighting"; }
 	virtual bool IsCore() const override { return true; }
-	virtual bool IsInMenu() const override { return false; }
+	virtual bool IsInMenu() const override { return true; }
 
 	virtual std::pair<std::string, std::vector<std::string>> GetFeatureSummary() override
 	{
@@ -75,6 +75,7 @@ public:
 	// Samplers
 	ID3D11SamplerState* linearSampler = nullptr;
 
+	virtual void DrawSettings() override;
 	virtual void SetupResources() override;
 	virtual void ClearShaderCache() override;
 

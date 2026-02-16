@@ -150,9 +150,9 @@ void VolumetricShadows::CopyShadowData()
 	{
 		context->PSGetShaderResources(4, 1, &shadowView);
 
-		// Downsample shadow texture array to fixed 1024x1024 (mip1: 512x512)
+		// Downsample shadow texture array to fixed 512x512 (mip1: 256x256)
 		if (shadowView) {
-			constexpr uint32_t SHADOW_COPY_SIZE = 1024;
+			constexpr uint32_t SHADOW_COPY_SIZE = 512;
 
 			// Lazily create fixed-size output textures
 			if (!shadowCopyTexture) {
@@ -252,7 +252,7 @@ void VolumetricShadows::CopyShadowData()
 					csUavs[0] = shadowCopyMip1UAV;
 					context->CSSetUnorderedAccessViews(0, 1, csUavs, nullptr);
 					context->CSSetShader(downsampleShadowMip1CS, nullptr, 0);
-					context->Dispatch(dispatchSize / 2, dispatchSize / 2, 1);
+					context->Dispatch(dispatchSize, dispatchSize, 1);
 
 					// Unbind SRVs before blur passes
 					csSrvs[0] = nullptr;
@@ -352,6 +352,34 @@ void VolumetricShadows::CopyShadowData()
 		if (shadowView)
 			shadowView->Release();
 		shadowView = nullptr;
+	}
+}
+
+void VolumetricShadows::DrawSettings()
+{
+	ImGui::SeparatorText("Debug");
+
+	if (ImGui::TreeNode("Buffer Viewer")) {
+		static float debugRescale = .3f;
+		ImGui::SliderFloat("View Resize", &debugRescale, 0.f, 1.f);
+
+		auto DisplayRT = [&](const char* label, ID3D11Texture2D* tex, ID3D11ShaderResourceView* srv) {
+			if (srv && tex) {
+				D3D11_TEXTURE2D_DESC desc;
+				tex->GetDesc(&desc);
+				char buf[128];
+				snprintf(buf, sizeof(buf), "%s (%ux%u)", label, desc.Width, desc.Height);
+				if (ImGui::TreeNode(buf)) {
+					ImGui::Image(srv, { desc.Width * debugRescale, desc.Height * debugRescale });
+					ImGui::TreePop();
+				}
+			}
+		};
+
+		DisplayRT("VSM Cascade 0", shadowCopyTexture, shadowCopyMip0SRV);
+		DisplayRT("VSM Cascade 1", shadowCopyTexture, shadowCopyMip1SRV);
+
+		ImGui::TreePop();
 	}
 }
 
