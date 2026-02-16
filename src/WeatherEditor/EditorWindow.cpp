@@ -711,11 +711,6 @@ void EditorWindow::RenderUI()
 	// Increase background opacity for all editor windows
 	ImGui::PushStyleVar(ImGuiStyleVar_Alpha, 1.0f);
 
-	// Check for Escape key to close editor (but not if a popup is open)
-	if (ImGui::IsKeyPressed(ImGuiKey_Escape, false) && !ImGui::IsPopupOpen("", ImGuiPopupFlags_AnyPopupId | ImGuiPopupFlags_AnyPopupLevel)) {
-		open = false;
-	}
-
 	// Check for Ctrl+Z to undo
 	if ((ImGui::IsKeyDown(ImGuiKey_LeftCtrl) || ImGui::IsKeyDown(ImGuiKey_RightCtrl)) && ImGui::IsKeyPressed(ImGuiKey_Z, false)) {
 		if (CanUndo()) {
@@ -1632,6 +1627,11 @@ void EditorWindow::RestoreVanityCamera()
 		vanityCameraDisabled = false;
 		logger::info("Vanity camera restored (delay: {})", savedVanityCameraDelay);
 	}
+}
+
+bool EditorWindow::ShouldHandleEscapeKey() const
+{
+	return !ImGui::IsPopupOpen("", ImGuiPopupFlags_AnyPopupId | ImGuiPopupFlags_AnyPopupLevel);
 }
 
 void EditorWindow::PushUndoState(Widget* widget)
