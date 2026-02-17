@@ -118,6 +118,14 @@ public:
 			static inline REL::Relocation<decltype(thunk)> func;
 		};
 
+		// VR only: chains on the DownscaleDepthBuffer call site inside Main_RenderDepth
+		// to inject BlendPrepassDepths before the 4x downscale and OBB occlusion testing.
+		struct VR_PreDownscaleDepthBuffer
+		{
+			static void thunk(RE::BSSceneGraph* a1);
+			static inline REL::Relocation<decltype(thunk)> func;
+		};
+
 		static void Install()
 		{
 			// To know when we are rendering z-prepass depth vs shadows depth
@@ -131,6 +139,12 @@ public:
 
 			// Engine path: even later material/property setup hook for final slot correction.
 			stl::write_vfunc<0x27, BSShaderProperty_SetupGeometry>(RE::VTABLE_BSShaderProperty[0]);
+
+			// VR: blend terrain depth before the engine's 4x downscale so OBB occlusion reads blended depth.
+			// Chains on top of FrameAnnotations' hook at the same call site.
+			if (REL::Module::IsVR()) {
+				stl::write_thunk_call<VR_PreDownscaleDepthBuffer>(REL::RelocationID(100421, 107139).address() + REL::Relocate(0x37f, 0));
+			}
 
 			logger::info("[Terrain Blending] Installed hooks");
 		}

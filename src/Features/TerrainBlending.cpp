@@ -784,18 +784,38 @@ void TerrainBlending::Hooks::Main_RenderDepth::thunk(bool a1, bool a2)
 
 		singleton.renderDepth = false;
 
-		if (singleton.renderTerrainDepth) {
-			singleton.renderTerrainDepth = false;
-			singleton.ResetTerrainDepth();
+		// In VR, both ResetTerrainDepth and BlendPrepassDepths are called earlier
+		// via VR_PreDownscaleDepthBuffer (before the 4x downscale) so that OBB
+		// occlusion testing reads blended depth.
+		if (!globals::game::isVR) {
+			if (singleton.renderTerrainDepth) {
+				singleton.renderTerrainDepth = false;
+				singleton.ResetTerrainDepth();
+			}
+			singleton.BlendPrepassDepths();
 		}
-
-		singleton.BlendPrepassDepths();
 	} else {
 		mainDepth.depthSRV = singleton.depthSRVBackup;
 		zPrepassCopy.depthSRV = singleton.prepassSRVBackup;
 
 		func(a1, a2);
 	}
+}
+
+void TerrainBlending::Hooks::VR_PreDownscaleDepthBuffer::thunk(RE::BSSceneGraph* a1)
+{
+	auto& singleton = globals::features::terrainBlending;
+	auto shaderCache = globals::shaderCache;
+
+	if (shaderCache->IsEnabled() && singleton.settings.Enabled && singleton.renderDepth) {
+		if (singleton.renderTerrainDepth) {
+			singleton.renderTerrainDepth = false;
+			singleton.ResetTerrainDepth();
+		}
+		singleton.BlendPrepassDepths();
+	}
+
+	func(a1);
 }
 
 void TerrainBlending::Hooks::BSBatchRenderer__RenderPassImmediately::thunk(RE::BSRenderPass* a_pass, uint32_t a_technique, bool a_alphaTest, uint32_t a_renderFlags)
