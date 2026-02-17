@@ -232,14 +232,45 @@ namespace Stereo
 		float4 clipPosOtherEye = mul(FrameBuffer::CameraViewProj[1 - eyeIndex], worldPos);
 		clipPosOtherEye /= clipPosOtherEye.w;
 
-		// Convert Clip Space to UV
-		float3 monoUVOtherEye = float3((clipPosOtherEye.xy * 0.5f) + 0.5f, clipPosOtherEye.z);
+		// Convert Clip Space to UV (Y is flipped: clip +1 = top, UV 0 = top)
+		float3 monoUVOtherEye = float3(clipPosOtherEye.xy * float2(0.5f, -0.5f) + 0.5f, clipPosOtherEye.z);
 
 		// Convert back to dynamic res space if necessary
 		if (dynamicres)
 			monoUVOtherEye.xy *= FrameBuffer::DynamicResolutionParams1.xy;
 
 		return monoUVOtherEye;
+	}
+
+	/**
+	* @brief Resolves a mono UV to the eye that can see it, crossing to the other eye if needed.
+	*
+	* When a screen-space ray or sample position leaves the current eye's screen bounds,
+	* this function tries to find the corresponding location in the other eye via
+	* ConvertMonoUVToOtherEye.  On flat (non-VR) this is a no-op: sampleUV and
+	* sampleEyeIndex are set to the input values unchanged.
+	*
+	* Based on concepts from https://cuteloong.github.io/publications/scssr24/
+	* Wu, X., Xu, Y., & Wang, L. (2024). Stereo-consistent Screen Space Reflection. Computer Graphics Forum, 43(4).
+	*
+	* @param[in]    monoUV          Mono UV coordinates with depth in Z, [0-1]. Must not be dynamic resolution adjusted.
+	* @param[in]    eyeIndex        Index of the originating eye (0 or 1).
+	* @param[out]   sampleUV        Mono UV that should be used for sampling (may be in the other eye).
+	* @param[out]   sampleEyeIndex  Eye index that owns sampleUV.
+	*/
+	void ResolveMonoUVForEye(float3 monoUV, uint eyeIndex, out float2 sampleUV, out uint sampleEyeIndex)
+	{
+		sampleUV = monoUV.xy;
+		sampleEyeIndex = eyeIndex;
+#		ifdef VR
+		if (FrameBuffer::IsOutsideFrame(monoUV.xy, false)) {
+			float3 otherEyeUV = ConvertMonoUVToOtherEye(monoUV, eyeIndex);
+			if (!FrameBuffer::IsOutsideFrame(otherEyeUV.xy, false)) {
+				sampleUV = otherEyeUV.xy;
+				sampleEyeIndex = 1 - eyeIndex;
+			}
+		}
+#		endif
 	}
 
 	/**
@@ -260,28 +291,15 @@ namespace Stereo
 	* @param[in] eyeIndex Index of the current eye (0 or 1).
 	* @param[out] fromOtherEye Boolean indicating if the result UV coordinates are from the other eye.
 	*
-	* @return Adjusted UV coordinates for stereo rendering, [0-1]. Must be dynamic resolution adjusted later.
+	* @return Adjusted stereo UV coordinates for rendering, [0-1]. Must be dynamic resolution adjusted later.
 	*/
 	float3 ConvertStereoRayMarchUV(float3 monoUV, uint eyeIndex, out bool fromOtherEye)
 	{
-		fromOtherEye = false;
-		float3 resultUV = monoUV;
-#		ifdef VR
-		// Check if the UV coordinates are outside the frame
-		if (FrameBuffer::IsOutsideFrame(resultUV.xy, false)) {
-			// Transition to the other eye
-			float3 otherEyeUV = ConvertMonoUVToOtherEye(resultUV, eyeIndex);
-
-			// Check if the other eye's UV coordinates are within the frame
-			if (!FrameBuffer::IsOutsideFrame(otherEyeUV.xy, false)) {
-				resultUV = ConvertToStereoUV(otherEyeUV, 1 - eyeIndex);
-				fromOtherEye = true;  // Indicate that the result is from the other eye
-			}
-		} else {
-			resultUV = ConvertToStereoUV(resultUV, eyeIndex);
-		}
-#		endif
-		return resultUV;
+		float2 resolvedUV;
+		uint resolvedEye;
+		ResolveMonoUVForEye(monoUV, eyeIndex, resolvedUV, resolvedEye);
+		fromOtherEye = (resolvedEye != eyeIndex);
+		return ConvertToStereoUV(float3(resolvedUV, monoUV.z), resolvedEye);
 	}
 
 	/**
@@ -302,11 +320,9 @@ namespace Stereo
 		if (dynamicres)
 			stereoUV.xy *= FrameBuffer::DynamicResolutionParams2.xy;
 
-		stereoUV.xy = ConvertFromStereoUV(stereoUV.xy, eyeIndex, true);  // for some reason, the uv.y needs to be inverted before conversion?
-		// Swap eyes
+		stereoUV.xy = ConvertFromStereoUV(stereoUV.xy, eyeIndex);
 		stereoUV.xyz = ConvertMonoUVToOtherEye(stereoUV.xyz, eyeIndex);
-
-		stereoUV.xy = ConvertToStereoUV(stereoUV.xy, 1 - eyeIndex, false);
+		stereoUV.xy = ConvertToStereoUV(stereoUV.xy, 1 - eyeIndex);
 
 		// Convert back to dynamic res space if necessary
 		if (dynamicres)
