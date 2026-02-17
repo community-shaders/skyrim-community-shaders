@@ -117,8 +117,14 @@ void MessageHandler(SKSE::MessagingInterface::Message* message)
 
 				auto shaderCache = globals::shaderCache;
 				shaderCache->menuLoaded = true;
-				while (shaderCache->IsCompiling() && !shaderCache->backgroundCompilation) {
+
+				while (shaderCache->IsCompiling() && !shaderCache->backgroundCompilation && !globals::game::quitGame) {
 					std::this_thread::sleep_for(100ms);
+				}
+
+				if (globals::game::quitGame) {
+					logger::info("Game was closed, skipping feature DataLoaded methods");
+					break;
 				}
 
 				if (shaderCache->IsDiskCache()) {
