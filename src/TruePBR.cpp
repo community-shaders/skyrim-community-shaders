@@ -559,13 +559,18 @@ struct BSLightingShaderProperty_LoadBinary
 		{
 			RE::BSLightingShaderMaterialBase* material = nullptr;
 			if (property->flags.any(kMenuScreen)) {
+				// Note: Same bug as below, should be using Thread ScrapHeap with align=8 instead of RE::malloc with align=0
 				auto* pbrMaterial = BSLightingShaderMaterialPBR::Make();
 				pbrMaterial->inputFilePath = stream.inputFilePath;
 				pbrMaterial->loadedWithFeature = feature;
 				material = pbrMaterial;
 				isPbr = true;
 			} else {
-				material = RE::BSLightingShaderMaterialBase::CreateMaterial(feature);
+				// Skyrim allocates from Thread ScrapHeap with align=8; RE::BSLightingShaderMaterialBase::CreateMaterial uses RE::malloc with align=0
+				using CreateOnScrapHeap_t = RE::BSLightingShaderMaterialBase* (*)(RE::BSShaderMaterial::Feature);
+				// Claimed to be BSLightingShaderMaterialBase::CreateMaterial in CommonLibSSE-NG
+				static REL::Relocation<CreateOnScrapHeap_t> CreateOnScrapHeap{ RELOCATION_ID(100016, 106723) };
+				material = CreateOnScrapHeap(feature);
 			}
 			property->LinkMaterial(nullptr, false);
 			property->material = material;
