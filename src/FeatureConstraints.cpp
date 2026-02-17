@@ -1,5 +1,7 @@
 #include "FeatureConstraints.h"
 #include "Feature.h"
+#include "Globals.h"
+#include "State.h"
 
 #include <unordered_set>
 
@@ -7,6 +9,8 @@ namespace FeatureConstraints
 {
 	ConstraintResult GetConstraints(const SettingId& setting)
 	{
+		if (globals::state && globals::state->IsDeveloperMode())
+			return {};
 		ConstraintResult result;
 
 		for (auto* feature : Feature::GetFeatureList()) {
@@ -40,6 +44,8 @@ namespace FeatureConstraints
 
 	std::vector<std::pair<SettingId, ConstraintResult>> GetAllActiveConstraints()
 	{
+		if (globals::state && globals::state->IsDeveloperMode())
+			return {};
 		std::vector<std::pair<SettingId, ConstraintResult>> allConstraints;
 		std::unordered_set<std::string> processedKeys;  // featureShortName|settingPath for O(1) lookup
 
