@@ -715,7 +715,7 @@ void WeatherEditor::RenderWeatherControls(RE::Sky* sky)
 
 				auto matchesSearch = [&](const std::string& text) {
 					return !text.empty() && std::search(text.begin(), text.end(), s_weatherSearchBuffer, s_weatherSearchBuffer + strlen(s_weatherSearchBuffer),
-								[](char a, char b) { return std::tolower(static_cast<unsigned char>(a)) == std::tolower(static_cast<unsigned char>(b)); }) != text.end();
+												[](char a, char b) { return std::tolower(static_cast<unsigned char>(a)) == std::tolower(static_cast<unsigned char>(b)); }) != text.end();
 				};
 
 				if (!matchesSearch(editorId) && !matchesSearch(name) && !matchesSearch(formIdStr))
