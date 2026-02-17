@@ -689,8 +689,9 @@ void WeatherEditor::RenderWeatherControls(RE::Sky* sky)
 	                               weatherLabels[s_selectedWeatherIdx].c_str() :
 	                               "Select Weather";
 
+	static bool s_comboJustOpened = true;
+
 	if (ImGui::BeginCombo("Weather", comboPreview)) {
-		static bool s_comboJustOpened = true;
 		if (s_comboJustOpened) {
 			ImGui::SetKeyboardFocusHere();
 			s_comboJustOpened = false;
