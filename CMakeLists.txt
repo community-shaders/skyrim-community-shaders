@@ -503,6 +503,7 @@ if(AUTO_PLUGIN_DEPLOYMENT OR AIO_ZIP_TO_DIST)
                 LIST_DIRECTORIES FALSE
                 "${_fpath}/Shaders/*"
             )
+            list(FILTER _feat_shaders EXCLUDE REGEX "/Tests/")
             get_filename_component(_feat_name "${_fpath}" NAME)
             foreach(_src IN LISTS _feat_shaders)
                 file(RELATIVE_PATH _rel "${_fpath}/Shaders" "${_src}")
@@ -708,7 +709,6 @@ if(ZIP_TO_DIST)
         COMMAND
             ${CMAKE_COMMAND} -E copy_directory ${CMAKE_SOURCE_DIR}/package
             "${ZIP_DIR}"
-        COMMAND ${CMAKE_COMMAND} -E remove_directory "${ZIP_DIR}/Shaders/Tests"
         COMMAND
             ${CMAKE_COMMAND} -E copy $<TARGET_FILE:${PROJECT_NAME}>
             "${ZIP_DIR}/SKSE/Plugins/"
@@ -731,6 +731,7 @@ if(ZIP_TO_DIST)
         TARGET ${PROJECT_NAME}
         POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E remove "${ZIP_DIR}/CORE"
+        COMMAND ${CMAKE_COMMAND} -E remove_directory "${ZIP_DIR}/Shaders/Tests"
     )
 
     set(TARGET_ZIP "${PROJECT_NAME}-${UTC_NOW}.7z")
