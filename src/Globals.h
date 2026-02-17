@@ -1,5 +1,7 @@
 #pragma once
 
+#include <atomic>
+
 struct CloudShadows;
 struct DynamicCubemaps;
 struct ExtendedMaterials;
@@ -25,12 +27,12 @@ struct UnifiedWater;
 struct VolumetricLighting;
 struct VR;
 struct WaterEffects;
-struct WeatherPicker;
 struct PerformanceOverlay;
 struct WetnessEffects;
 struct ExtendedTranslucency;
 struct Upscaling;
 struct WeatherEditor;
+struct ExponentialHeightFog;
 
 class State;
 class Deferred;
@@ -80,13 +82,13 @@ namespace globals
 		extern VolumetricLighting volumetricLighting;
 		extern VR vr;
 		extern WaterEffects waterEffects;
-		extern WeatherPicker weatherPicker;
 		extern PerformanceOverlay performanceOverlay;
 		extern WetnessEffects wetnessEffects;
 		extern ExtendedTranslucency extendedTranslucency;
 		extern Upscaling upscaling;
 		extern RenderDoc renderDoc;
 		extern WeatherEditor weatherEditor;
+		extern ExponentialHeightFog exponentialHeightFog;
 
 		namespace llf
 		{
@@ -219,6 +221,8 @@ namespace globals
 		extern RE::BSUtilityShader* utilityShader;
 		extern RE::Sky* sky;
 		extern RE::UI* ui;
+		extern RE::Calendar* calendar;
+		extern std::atomic<bool> quitGame;
 
 		extern RE::BSGraphics::PixelShader** currentPixelShader;
 		extern RE::BSGraphics::VertexShader** currentVertexShader;
@@ -255,5 +259,6 @@ namespace globals
 	void OnInit();
 	void ReInit();
 	void OnDataLoaded();
+	void OnGameWindowClose();
 	void InstallD3DHooks(ID3D11DeviceContext* a_context);
 }

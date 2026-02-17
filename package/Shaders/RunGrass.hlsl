@@ -454,6 +454,10 @@ cbuffer AlphaTestRefCB : register(b11)
 #		include "IBL/IBL.hlsli"
 #	endif
 
+#	if defined(EXP_HEIGHT_FOG)
+#		include "ExponentialHeightFog/ExponentialHeightFog.hlsli"
+#	endif
+
 #	define LinearSampler SampBaseSampler
 
 #	include "Common/ShadowSampling.hlsli"
@@ -585,6 +589,12 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	float llDirLightMult = (SharedData::linearLightingSettings.enableLinearLighting && !SharedData::linearLightingSettings.isDirLightLinear) ? SharedData::linearLightingSettings.dirLightMult : 1.0f;
 	float3 dirLightColor = Color::DirectionalLight(SharedData::DirLightColor.xyz / max(llDirLightMult, 1e-5), SharedData::linearLightingSettings.isDirLightLinear) * llDirLightMult;
 	float3 dirLightColorMultiplier = 1;
+
+#			if defined(EXP_HEIGHT_FOG)
+	if (SharedData::exponentialHeightFogSettings.enabled) {
+		dirLightColor *= ExponentialHeightFog::GetSunlightFogAttenuation(input.WorldPosition.xyz, FrameBuffer::CameraPosAdjust[eyeIndex].xyz);
+	}
+#			endif
 
 	float dirLightAngle = dot(normal, SharedData::DirLightDirection.xyz);
 
@@ -867,8 +877,6 @@ PS_OUTPUT main(PS_INPUT input)
 	psout.PS.xyz = input.Depth.xxx / input.Depth.yyy;
 	psout.PS.w = diffuseAlpha;
 #		else
-
-	baseColor.xyz /= 2.8; // Match brightness of ISSkyrimClearDAY;
 
 	uint eyeIndex = Stereo::GetEyeIndexPS(input.HPosition, VPOSOffset);
 

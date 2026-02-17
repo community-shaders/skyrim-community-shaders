@@ -1,6 +1,7 @@
 #include "EditorWindow.h"
 
 #include "Features/WeatherEditor.h"
+#include "InteriorOnlyPanel.h"
 #include "Menu.h"
 #include "PaletteWindow.h"
 #include "State.h"
@@ -9,7 +10,7 @@
 #include "WeatherUtils.h"
 #include "imgui_internal.h"
 
-NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(EditorWindow::Settings, recordMarkers, markedRecords, autoApplyChanges, suppressDeleteWarning, useTextButtons, enableInheritFromParent, editorUIScale, favoriteWidgets, recentWidgets, maxRecentWidgets, rememberOpenWidgets, lastOpenWidgets)
+NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(EditorWindow::Settings, recordMarkers, markedRecords, autoApplyChanges, useTextButtons, enableInheritFromParent, editorUIScale, favoriteWidgets, recentWidgets, maxRecentWidgets, rememberOpenWidgets, lastOpenWidgets)
 
 void TextUnformattedDisabled(const char* a_text, const char* a_textEnd = nullptr)
 {
@@ -157,7 +158,7 @@ void EditorWindow::ShowObjectsWindow()
 		ImGui::Spacing();
 
 		// List of categories
-		const char* categories[] = { "Weather", "ImageSpace", "WorldSpace", "Lighting Template", "Cell Lighting", "Volumetric Lighting", "Shader Particle Geometry", "Lens Flare", "Visual Effect" };
+		const char* categories[] = { "Weather", "ImageSpace", "Lighting Template", "Cell Lighting", "Volumetric Lighting", "Shader Particle Geometry", "Lens Flare", "Visual Effect", "Interior Only" };
 		for (int i = 0; i < IM_ARRAYSIZE(categories); ++i) {
 			// Highlight the selected category
 			if (ImGui::Selectable(categories[i], selectedCategory == categories[i])) {
@@ -165,6 +166,14 @@ void EditorWindow::ShowObjectsWindow()
 			}
 		}  // Right column: Objects
 		ImGui::TableSetColumnIndex(1);
+
+		// Interior Only category has its own panel
+		if (selectedCategory == "Interior Only") {
+			InteriorOnlyPanel::Draw();
+			ImGui::EndTable();
+			ImGui::End();
+			return;
+		}
 
 		// Display current active weather
 		auto sky = globals::game::sky;
@@ -235,7 +244,6 @@ void EditorWindow::ShowObjectsWindow()
 				if (ImGui::SmallButton(recentIt->second[i].c_str())) {
 					// Find and open widget in current category's collection
 					auto& widgets = selectedCategory == "Weather"                  ? weatherWidgets :
-					                selectedCategory == "WorldSpace"               ? worldSpaceWidgets :
 					                selectedCategory == "Lighting Template"        ? lightingTemplateWidgets :
 					                selectedCategory == "ImageSpace"               ? imageSpaceWidgets :
 					                selectedCategory == "Volumetric Lighting"      ? volumetricLightingWidgets :
@@ -281,7 +289,6 @@ void EditorWindow::ShowObjectsWindow()
 			// Display objects based on the selected category
 			std::vector<std::unique_ptr<Widget>> emptyWidgets;
 			const auto& widgets = selectedCategory == "Weather"                  ? weatherWidgets :
-			                      selectedCategory == "WorldSpace"               ? worldSpaceWidgets :
 			                      selectedCategory == "Cell Lighting"            ? emptyWidgets :
 			                      selectedCategory == "ImageSpace"               ? imageSpaceWidgets :
 			                      selectedCategory == "Volumetric Lighting"      ? volumetricLightingWidgets :
@@ -632,9 +639,7 @@ void EditorWindow::ShowViewportWindow()
 	ImGui::Begin("Viewport");
 
 	// Top bar
-	auto calendar = RE::Calendar::GetSingleton();
-	if (calendar && calendar->gameHour) {
-		ImGui::SliderFloat("##ViewportSlider", &calendar->gameHour->value, 0.0f, 23.99f, "Time: %.2f");
+	if (DrawGameHourSlider("##ViewportSlider", "Time: %.2f")) {
 		ImGui::SameLine();
 		int activePeriod = TOD::GetActivePeriod();
 		ImGui::Text("(%s)", TOD::GetPeriodName(activePeriod));
@@ -675,7 +680,6 @@ void EditorWindow::ShowWidgetWindow()
 
 	// Draw all open widgets using WidgetFactory template
 	WidgetFactory::DrawOpenWidgets(weatherWidgets, lastFocusedWidget);
-	WidgetFactory::DrawOpenWidgets(worldSpaceWidgets, lastFocusedWidget);
 	WidgetFactory::DrawOpenWidgets(lightingTemplateWidgets, lastFocusedWidget);
 	WidgetFactory::DrawOpenWidgets(imageSpaceWidgets, lastFocusedWidget);
 	WidgetFactory::DrawOpenWidgets(volumetricLightingWidgets, lastFocusedWidget);
@@ -739,16 +743,6 @@ void EditorWindow::RenderUI()
 					}
 				}
 
-				// WorldSpace widgets
-				for (auto& widget : worldSpaceWidgets) {
-					if (widget->IsOpen()) {
-						hasOpenWidgets = true;
-						if (ImGui::MenuItem(std::format("Save {}", widget->GetEditorID()).c_str())) {
-							widget->Save();
-						}
-					}
-				}
-
 				// Lighting Template widgets
 				for (auto& widget : lightingTemplateWidgets) {
 					if (widget->IsOpen()) {
@@ -779,9 +773,6 @@ void EditorWindow::RenderUI()
 			ImGui::Separator();
 			if (ImGui::MenuItem("Close All Weather Widgets")) {
 				for (auto& widget : weatherWidgets) widget->SetOpen(false);
-			}
-			if (ImGui::MenuItem("Close All WorldSpace Widgets")) {
-				for (auto& widget : worldSpaceWidgets) widget->SetOpen(false);
 			}
 			if (ImGui::MenuItem("Close All Lighting Widgets")) {
 				for (auto& widget : lightingTemplateWidgets) widget->SetOpen(false);
@@ -870,14 +861,6 @@ void EditorWindow::RenderUI()
 					}
 				}
 			}
-			for (auto& widget : worldSpaceWidgets) {
-				if (widget->IsOpen()) {
-					openCount++;
-					if (ImGui::MenuItem(std::format("WorldSpace: {}", widget->GetEditorID()).c_str())) {
-						// Focus window
-					}
-				}
-			}
 			for (auto& widget : lightingTemplateWidgets) {
 				if (widget->IsOpen()) {
 					openCount++;
@@ -922,7 +905,6 @@ void EditorWindow::RenderUI()
 			ImGui::Separator();
 			ImGui::Text("Total Objects:");
 			ImGui::BulletText("Weathers: %d", (int)weatherWidgets.size());
-			ImGui::BulletText("WorldSpaces: %d", (int)worldSpaceWidgets.size());
 			ImGui::BulletText("Lighting: %d", (int)lightingTemplateWidgets.size());
 			ImGui::BulletText("ImageSpaces: %d", (int)imageSpaceWidgets.size());
 			ImGui::Separator();
@@ -959,23 +941,17 @@ void EditorWindow::RenderUI()
 			}
 
 			const float menuBarHeight = ImGui::GetFrameHeight();
-			const float buttonDim = menuBarHeight * 0.85f;  // 85% of menu bar height
+			const float buttonDim = menuBarHeight * 0.85f;
 			const ImVec2 buttonSize(buttonDim, buttonDim);
 
-			if (ImGui::ImageButton("##GlobalPauseTime", menu->uiIcons.pauseTime.texture, buttonSize)) {
-				if (isPaused) {
-					ResumeTime();
-				} else {
-					PauseTime();
-				}
-			}
+			if (ImGui::ImageButton("##GlobalPauseTime", menu->uiIcons.pauseTime.texture, buttonSize))
+				TogglePause();
 
 			ImGui::PopStyleColor(2);
 			ImGui::PopStyleVar();
 
-			if (ImGui::IsItemHovered()) {
+			if (ImGui::IsItemHovered())
 				ImGui::SetTooltip(isPaused ? "Resume Time" : "Pause Time");
-			}
 		}
 
 		// Undo button
@@ -1029,7 +1005,7 @@ void EditorWindow::RenderUI()
 		}
 
 		// Time pause indicator
-		if (timePaused) {
+		if (IsTimePaused()) {
 			ImGui::SameLine();
 			ImGui::PushStyleColor(ImGuiCol_Text, Menu::GetSingleton()->GetSettings().Theme.StatusPalette.CurrentHotkey);
 			ImGui::Text(" [TIME PAUSED]");
@@ -1128,7 +1104,6 @@ EditorWindow::~EditorWindow()
 {
 	delete tempTexture;
 	weatherWidgets.clear();
-	worldSpaceWidgets.clear();
 	lightingTemplateWidgets.clear();
 	imageSpaceWidgets.clear();
 	volumetricLightingWidgets.clear();
@@ -1146,7 +1121,6 @@ void EditorWindow::SetupResources()
 
 	// Populate all widget collections using WidgetFactory templates
 	WidgetFactory::PopulateWidgets<WeatherWidget, RE::TESWeather>(weatherWidgets);
-	WidgetFactory::PopulateWidgets<WorldSpaceWidget, RE::TESWorldSpace>(worldSpaceWidgets);
 	WidgetFactory::PopulateWidgets<LightingTemplateWidget, RE::BGSLightingTemplate>(lightingTemplateWidgets);
 	WidgetFactory::PopulateWidgets<ImageSpaceWidget, RE::TESImageSpace>(imageSpaceWidgets);
 	WidgetFactory::PopulateWidgets<VolumetricLightingWidget, RE::BGSVolumetricLighting>(volumetricLightingWidgets);
@@ -1219,11 +1193,6 @@ void EditorWindow::SaveAll()
 			weather->Save();
 	}
 
-	for (auto& worldspace : worldSpaceWidgets) {
-		if (worldspace->IsOpen())
-			worldspace->Save();
-	}
-
 	for (auto& lightingTemplate : lightingTemplateWidgets) {
 		if (lightingTemplate->IsOpen())
 			lightingTemplate->Save();
@@ -1271,9 +1240,6 @@ void EditorWindow::ShowSettingsWindow()
 		if (settingsSelectedCategory == "General") {
 			ImGui::Checkbox("Auto-apply changes", &settings.autoApplyChanges);
 			AddTooltip("Automatically apply changes to weather/lighting when editing");
-
-			ImGui::Checkbox("Suppress delete warnings", &settings.suppressDeleteWarning);
-			AddTooltip("Don't show confirmation dialog when deleting saved files");
 
 			ImGui::Checkbox("Use text buttons instead of icons", &settings.useTextButtons);
 			AddTooltip("Display action buttons as text labels instead of icons");
@@ -1523,8 +1489,7 @@ void EditorWindow::PauseTime()
 {
 	if (timePaused)
 		return;
-
-	auto calendar = RE::Calendar::GetSingleton();
+	auto calendar = globals::game::calendar ? globals::game::calendar : RE::Calendar::GetSingleton();
 	if (calendar && calendar->timeScale) {
 		savedTimeScale = calendar->timeScale->value;
 		calendar->timeScale->value = 0.0f;
@@ -1537,13 +1502,109 @@ void EditorWindow::ResumeTime()
 {
 	if (!timePaused)
 		return;
-
-	auto calendar = RE::Calendar::GetSingleton();
+	auto calendar = globals::game::calendar ? globals::game::calendar : RE::Calendar::GetSingleton();
 	if (calendar && calendar->timeScale) {
 		calendar->timeScale->value = savedTimeScale;
 		timePaused = false;
 		logger::info("Time resumed (timescale: {})", savedTimeScale);
 	}
+}
+
+void EditorWindow::ResetTimeScale()
+{
+	auto calendar = globals::game::calendar ? globals::game::calendar : RE::Calendar::GetSingleton();
+	if (!calendar || !calendar->timeScale)
+		return;
+	if (timePaused)
+		savedTimeScale = kVanillaTimeScale;
+	else
+		calendar->timeScale->value = kVanillaTimeScale;
+	timeScaleSlider = kVanillaTimeScale;
+}
+
+void EditorWindow::UpdateTimeState()
+{
+	auto calendar = globals::game::calendar ? globals::game::calendar : RE::Calendar::GetSingleton();
+	auto ui = globals::game::ui ? globals::game::ui : RE::UI::GetSingleton();
+	if (!calendar || !calendar->timeScale)
+		return;
+
+	bool sleepWaitOpen = ui && ui->IsMenuOpen(RE::SleepWaitMenu::MENU_NAME);
+
+	// External state sync (skip during sleep/wait)
+	if (!sleepWaitOpen) {
+		if (calendar->timeScale->value == 0.0f && !timePaused)
+			savedTimeScale = kVanillaTimeScale;
+		else if (calendar->timeScale->value > 0.0f && timePaused)
+			timePaused = false;
+	}
+
+	// Sleep/wait handling — temporarily restore time so the wait can proceed
+	if (sleepWaitOpen && calendar->timeScale->value == 0.0f) {
+		if (!wasRestoredForWait) {
+			wasPausedBeforeWait = true;
+			if (timePaused)
+				ResumeTime();
+			else
+				calendar->timeScale->value = std::max(savedTimeScale, kVanillaTimeScale);
+			wasRestoredForWait = true;
+		}
+	} else if (!sleepWaitOpen && wasRestoredForWait) {
+		if (wasPausedBeforeWait && !timePaused)
+			PauseTime();
+		wasRestoredForWait = false;
+		wasPausedBeforeWait = false;
+	}
+}
+
+bool EditorWindow::DrawGameHourSlider(const char* label, const char* format)
+{
+	auto calendar = globals::game::calendar ? globals::game::calendar : RE::Calendar::GetSingleton();
+	if (!calendar || !calendar->gameHour)
+		return false;
+	ImGui::SliderFloat(label, &calendar->gameHour->value, 0.0f, kGameHourMax, format);
+	return true;
+}
+
+void EditorWindow::DrawTimeControls()
+{
+	auto calendar = globals::game::calendar ? globals::game::calendar : RE::Calendar::GetSingleton();
+	if (!calendar || !calendar->gameHour || !calendar->timeScale)
+		return;
+
+	// Row 1: Pause/Resume + Game Time
+	if (ImGui::Button(timePaused ? "Resume Time" : "Pause Time", ImVec2(120, 0)))
+		TogglePause();
+	if (auto _tt = Util::HoverTooltipWrapper())
+		ImGui::Text("Pause or resume game time progression");
+	ImGui::SameLine();
+	DrawGameHourSlider();
+	if (auto _tt = Util::HoverTooltipWrapper())
+		ImGui::Text("Adjust the current game time");
+
+	// Sync slider with actual value
+	if (timePaused)
+		timeScaleSlider = std::max(savedTimeScale, kTimeScaleMin);
+	else if (std::abs(calendar->timeScale->value - timeScaleSlider) > 0.01f)
+		timeScaleSlider = calendar->timeScale->value;
+
+	// Row 2: Reset Speed + TimeScale slider + speed label
+	if (ImGui::Button("Reset Speed", ImVec2(120, 0)))
+		ResetTimeScale();
+	if (auto _tt = Util::HoverTooltipWrapper())
+		ImGui::Text("Reset time speed to vanilla (%.1fx)", kVanillaTimeScale);
+
+	ImGui::SameLine();
+	ImGui::BeginDisabled(timePaused);
+	if (ImGui::SliderFloat("##TimeScale", &timeScaleSlider, kTimeScaleMin, kTimeScaleMax,
+			timeScaleSlider == kVanillaTimeScale ? "Vanilla Speed" : "", ImGuiSliderFlags_Logarithmic))
+		calendar->timeScale->value = timeScaleSlider;
+	ImGui::EndDisabled();
+
+	ImGui::SameLine();
+	ImGui::Text("%.1fx", calendar->timeScale->value);
+	if (auto _tt = Util::HoverTooltipWrapper())
+		ImGui::Text("Adjust how fast time passes (vanilla: %.1fx)", kVanillaTimeScale);
 }
 
 void EditorWindow::DisableVanityCamera()
@@ -1636,6 +1697,12 @@ void EditorWindow::PerformUndo()
 
 void EditorWindow::ShowNotification(const std::string& message, const ImVec4& color, float duration)
 {
+	// Guard against calls before ImGui is initialized
+	if (!ImGui::GetCurrentContext()) {
+		logger::warn("ShowNotification called before ImGui initialization: {}", message);
+		return;
+	}
+
 	Notification notif;
 	notif.message = message;
 	notif.color = color;
@@ -1646,6 +1713,11 @@ void EditorWindow::ShowNotification(const std::string& message, const ImVec4& co
 
 void EditorWindow::RenderNotifications()
 {
+	// Guard against calls before ImGui is initialized
+	if (!ImGui::GetCurrentContext()) {
+		return;
+	}
+
 	float currentTime = static_cast<float>(ImGui::GetTime());
 	float yOffset = 10.0f;
 
@@ -1737,11 +1809,6 @@ void EditorWindow::SaveSessionWidgets()
 			settings.lastOpenWidgets.push_back(widget->GetEditorID());
 		}
 	}
-	for (auto& widget : worldSpaceWidgets) {
-		if (widget->IsOpen()) {
-			settings.lastOpenWidgets.push_back(widget->GetEditorID());
-		}
-	}
 	for (auto& widget : lightingTemplateWidgets) {
 		if (widget->IsOpen()) {
 			settings.lastOpenWidgets.push_back(widget->GetEditorID());
@@ -1761,12 +1828,6 @@ void EditorWindow::RestoreSessionWidgets()
 	for (const auto& widgetId : settings.lastOpenWidgets) {
 		// Search in all widget collections
 		for (auto& widget : weatherWidgets) {
-			if (widget->GetEditorID() == widgetId) {
-				widget->SetOpen(true);
-				break;
-			}
-		}
-		for (auto& widget : worldSpaceWidgets) {
 			if (widget->GetEditorID() == widgetId) {
 				widget->SetOpen(true);
 				break;

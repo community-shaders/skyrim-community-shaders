@@ -438,6 +438,10 @@ float CalculateDepthMultFromUV(float2 uv, float depth, uint eyeIndex = 0)
 #			include "CloudShadows/CloudShadows.hlsli"
 #		endif
 
+#		if defined(EXP_HEIGHT_FOG)
+#			include "ExponentialHeightFog/ExponentialHeightFog.hlsli"
+#		endif
+
 #		include "Common/ShadowSampling.hlsli"
 
 #		if defined(SIMPLE) || defined(UNDERWATER) || defined(LOD) || defined(SPECULAR)
@@ -811,7 +815,7 @@ WaterNormalData GetWaterNormal(PS_INPUT input, float distanceFactor, float norma
 
 	float4 raindropInfo = float4(0, 0, 1, 0);
 	float maxRainDropDistance = SharedData::wetnessEffectsSettings.RaindropFxRange * SharedData::wetnessEffectsSettings.RaindropFxRange * 3;
-	float rainDropDistance = dot(input.WPosition, input.WPosition);
+	float rainDropDistance = dot(input.WPosition.xyz, input.WPosition.xyz);
 	float distanceFadeout = saturate((1 - saturate(rainDropDistance / maxRainDropDistance)) * 3);
 	if (finalNormal.z > 0 && SharedData::wetnessEffectsSettings.Raining > 0.0f && SharedData::wetnessEffectsSettings.EnableRaindropFx &&
 		(rainDropDistance < maxRainDropDistance) && wetnessOcclusion > 0.05) {
@@ -1084,7 +1088,7 @@ DiffuseOutput GetWaterDiffuseColor(PS_INPUT input, float3 normal, float3 viewDir
 #			endif
 }
 
-float3 GetSunColor(float3 normal, float3 viewDirection)
+float3 GetSunColor(float3 normal, float3 viewDirection, float3 worldPosition, uint eyeIndex)
 {
 #			if defined(UNDERWATER)
 	return 0.0.xxx;
@@ -1096,7 +1100,13 @@ float3 GetSunColor(float3 normal, float3 viewDirection)
 	float reflectionMul = exp2(VarAmounts.x * log2(saturate(dot(reflectionDirection, SunDir.xyz))));
 
 	float llDirLightMult = (SharedData::linearLightingSettings.enableLinearLighting && !SharedData::linearLightingSettings.isDirLightLinear) ? SharedData::linearLightingSettings.dirLightMult : 1.0f;
-	return reflectionMul * Color::DirectionalLight((SunColor.xyz * SunDir.w) / max(llDirLightMult, 1e-5), SharedData::linearLightingSettings.isDirLightLinear) * (1.0 - exp(-DeepColor.w))* llDirLightMult;
+	float3 sunColor = Color::DirectionalLight((SunColor.xyz * SunDir.w) / max(llDirLightMult, 1e-5), SharedData::linearLightingSettings.isDirLightLinear) * (1.0 - exp(-DeepColor.w))* llDirLightMult;
+#			if defined(EXP_HEIGHT_FOG)
+	if (SharedData::exponentialHeightFogSettings.enabled) {
+		sunColor *= ExponentialHeightFog::GetSunlightFogAttenuation(worldPosition.xyz, FrameBuffer::CameraPosAdjust[eyeIndex].xyz);
+	}
+#			endif
+	return reflectionMul * sunColor;
 #			endif
 }
 #		endif
@@ -1123,7 +1133,7 @@ PS_OUTPUT main(PS_INPUT input)
 #		if defined(SIMPLE) || defined(UNDERWATER) || defined(LOD) || defined(SPECULAR)
 	float3 viewDirection = normalize(input.WPosition.xyz);
 
-	float distanceFactor = saturate(lerp(FrameBuffer::FrameParams.w, 1, (input.WPosition.w - 8192) / (WaterParams.x - 8192)));
+	float distanceFactor = saturate(lerp(FrameBuffer::FrameParams.w, 1, (length(input.WPosition.xyz) - 8192) / (WaterParams.x - 8192)));
 	float4 distanceMul = saturate(lerp(VarAmounts.z, 1, -(distanceFactor - 1))).xxxx;
 	float distanceBlendFactor = distanceFactor;
 #			if defined(UNIFIED_WATER)
@@ -1265,7 +1275,7 @@ PS_OUTPUT main(PS_INPUT input)
 	}
 #					endif
 #				else
-	float3 sunColor = GetSunColor(normal, viewDirection);
+	float3 sunColor = GetSunColor(normal, viewDirection, input.WPosition.xyz, eyeIndex);
 
 	if (!(Permutation::PixelShaderDescriptor & Permutation::WaterFlags::Interior) && any(sunColor > 0.0)) {
 		sunColor *= ShadowSampling::GetWaterShadow(screenNoise, input.WPosition.xyz, eyeIndex);
@@ -1283,13 +1293,25 @@ PS_OUTPUT main(PS_INPUT input)
 	float3 fogColor = Color::Fog(lerp(FogNearColor.xyz, FogFarColor.xyz, fogDistanceFactor));
 #						endif
 
-#						if defined(IBL)
-	if (SharedData::iblSettings.EnableDiffuseIBL && !SharedData::InInterior) {
-		fogColor = ImageBasedLighting::GetFogIBLColor(fogColor);
-	}
-#						endif
+	fogDistanceFactor = Color::FogAlpha(fogDistanceFactor);
 
-float3 finalColor = lerp(finalColorPreFog, fogColor * PosAdjust[eyeIndex].w, Color::FogAlpha(fogDistanceFactor));
+#						if defined(IBL)
+		if (SharedData::iblSettings.EnableDiffuseIBL && !SharedData::InInterior) {
+			fogColor = ImageBasedLighting::GetFogIBLColor(fogColor);
+		}
+#						endif
+#						if defined(EXP_HEIGHT_FOG)
+		if (SharedData::exponentialHeightFogSettings.enabled)
+		{
+			float4 exponentialHeightFog = ExponentialHeightFog::GetExponentialHeightFog(input.WPosition.xyz, FrameBuffer::CameraPosAdjust[eyeIndex].xyz, fogColor);
+			fogColor = exponentialHeightFog.xyz;
+			fogDistanceFactor = exponentialHeightFog.w;
+		}
+		else
+#						endif
+	fogColor *= PosAdjust[eyeIndex].w;
+
+	float3 finalColor = lerp(finalColorPreFog, fogColor, fogDistanceFactor);
 
 #						if defined(WETNESS_EFFECTS) && defined(DEBUG_WETNESS_EFFECTS)
 	// DEBUG MODE: Override water color with debug visualization
@@ -1311,18 +1333,35 @@ float3 finalColor = lerp(finalColorPreFog, fogColor * PosAdjust[eyeIndex].w, Col
     float3 preFogColor = Color::Fog(lerp(FogNearColor.xyz, FogFarColor.xyz, fogDistanceFactor));
 #						endif
 
+	fogDistanceFactor = Color::FogAlpha(fogDistanceFactor);
+
 #						if defined(IBL)
 	if (SharedData::iblSettings.EnableDiffuseIBL && !SharedData::InInterior) {
 		preFogColor = ImageBasedLighting::GetFogIBLColor(preFogColor);
 	}
 #						endif
+#						if defined(EXP_HEIGHT_FOG)
+	if (SharedData::exponentialHeightFogSettings.enabled)
+	{
+		float4 exponentialHeightFog = ExponentialHeightFog::GetExponentialHeightFog(input.WPosition.xyz, FrameBuffer::CameraPosAdjust[eyeIndex].xyz, preFogColor);
+		preFogColor = exponentialHeightFog.xyz;
+		fogDistanceFactor = exponentialHeightFog.w;
+	}
+	else
+#						endif
+	preFogColor *= PosAdjust[eyeIndex].w;
 
-finalColorPreFog = lerp(finalColorPreFog, preFogColor * PosAdjust[eyeIndex].w, Color::FogAlpha(fogDistanceFactor));
+	finalColorPreFog = lerp(finalColorPreFog, preFogColor, fogDistanceFactor);
 
 	float3 refractionColor = diffuseOutput.refractionColor;
 
 	float fogFactor = min(FogParam.w, pow(saturate(-diffuseOutput.depth * FogParam.y - FogParam.x), FogParam.z));
 	float3 fogColor = Color::Fog(lerp(FogNearColor.xyz, FogFarColor.xyz, fogFactor));
+#						if defined(EXP_HEIGHT_FOG)
+	if (SharedData::exponentialHeightFogSettings.enabled) {
+		fogFactor = 0;
+	}
+#						endif
 #						if defined(IBL)
 	if (SharedData::iblSettings.EnableDiffuseIBL && !SharedData::InInterior) {
 		fogColor = ImageBasedLighting::GetFogIBLColor(fogColor);

@@ -10,7 +10,6 @@
 #include "Weather/ReferenceEffectWidget.h"
 #include "Weather/VolumetricLightingWidget.h"
 #include "Weather/WeatherWidget.h"
-#include "Weather/WorldSpaceWidget.h"
 #include "WeatherUtils.h"
 #include "Widget.h"
 
@@ -31,7 +30,6 @@ public:
 
 	// Widget collections owned by EditorWindow, created in SetupResources(), released in destructor
 	std::vector<std::unique_ptr<Widget>> weatherWidgets;
-	std::vector<std::unique_ptr<Widget>> worldSpaceWidgets;
 	std::vector<std::unique_ptr<Widget>> lightingTemplateWidgets;
 	std::vector<std::unique_ptr<Widget>> imageSpaceWidgets;
 	std::vector<std::unique_ptr<Widget>> volumetricLightingWidgets;
@@ -48,9 +46,11 @@ public:
 	RE::TESWeather* lockedWeather = nullptr;
 	bool weatherLockActive = false;
 
-	// Time pause for editing
-	bool timePaused = false;
-	float savedTimeScale = 1.0f;
+	// Time control constants
+	static constexpr float kVanillaTimeScale = 20.0f;
+	static constexpr float kGameHourMax = 23.99f;
+	static constexpr float kTimeScaleMin = 0.1f;
+	static constexpr float kTimeScaleMax = 4000.0f;
 
 	// Vanity camera control
 	bool vanityCameraDisabled = false;
@@ -73,9 +73,21 @@ public:
 	bool IsWeatherLocked() const { return weatherLockActive; }
 	RE::TESWeather* GetLockedWeather() const { return lockedWeather; }
 
+	// Time controls
 	void PauseTime();
 	void ResumeTime();
+	inline void TogglePause() { timePaused ? ResumeTime() : PauseTime(); }
+	void ResetTimeScale();
 	bool IsTimePaused() const { return timePaused; }
+
+	/// Call once per frame — handles sleep/wait menu and external state sync.
+	void UpdateTimeState();
+
+	/// Draw a game-hour slider. Returns true if calendar is valid.
+	bool DrawGameHourSlider(const char* label = "Game Time", const char* format = "%.2f");
+
+	/// Draw the full time controls panel (pause, game time, timescale).
+	void DrawTimeControls();
 
 	void DisableVanityCamera();
 	void RestoreVanityCamera();
@@ -116,7 +128,6 @@ public:
 		};
 		std::map<std::string, std::string> markedRecords;
 		bool autoApplyChanges = true;
-		bool suppressDeleteWarning = false;
 		bool useTextButtons = false;
 		bool enableInheritFromParent = false;
 		float editorUIScale = 1.0f;
@@ -179,6 +190,13 @@ private:
 
 	// Widget focus tracking for Ctrl+W
 	Widget* lastFocusedWidget = nullptr;
+
+	// Time control state
+	bool timePaused = false;
+	float savedTimeScale = kVanillaTimeScale;
+	float timeScaleSlider = kVanillaTimeScale;
+	bool wasRestoredForWait = false;
+	bool wasPausedBeforeWait = false;
 
 	// Sorting state
 	enum class SortColumn

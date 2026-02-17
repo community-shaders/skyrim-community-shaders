@@ -7,7 +7,7 @@ void VolumetricLightingWidget::DrawWidget()
 	WeatherUtils::SetCurrentWidget(this);
 	ImGui::SetNextWindowSizeConstraints(ImVec2(600, 0), ImVec2(FLT_MAX, FLT_MAX));
 	if (ImGui::Begin(GetEditorID().c_str(), &open, ImGuiWindowFlags_NoSavedSettings)) {
-		DrawWidgetHeader("##VolumetricLightingSearch", false, true);
+		DrawWidgetHeader("##VolumetricLightingSearch", true, true);
 
 		bool changed = false;
 
@@ -77,6 +77,7 @@ void VolumetricLightingWidget::LoadSettings()
 		return;
 
 	if (!js.empty()) {
+		settings = vanillaSettings;
 		try {
 			if (js.contains("intensity"))
 				settings.intensity = js["intensity"];
@@ -104,23 +105,32 @@ void VolumetricLightingWidget::LoadSettings()
 				settings.samplingRangeFactor = js["samplingRangeFactor"];
 		} catch (const std::exception& e) {
 			logger::error("VolumetricLighting {}: Failed to load from JSON: {}", GetEditorID(), e.what());
+			settings = vanillaSettings;
 		}
 	} else {
-		settings.intensity = volumetricLighting->intensity;
-		settings.customColorContribution = volumetricLighting->customColor.contribution;
-		settings.red = volumetricLighting->red;
-		settings.green = volumetricLighting->green;
-		settings.blue = volumetricLighting->blue;
-		settings.densityContribution = volumetricLighting->density.contribution;
-		settings.densitySize = volumetricLighting->density.size;
-		settings.densityWindSpeed = volumetricLighting->density.windSpeed;
-		settings.densityFallingSpeed = volumetricLighting->density.fallingSpeed;
-		settings.phaseFunctionContribution = volumetricLighting->phaseFunction.contribution;
-		settings.phaseFunctionScattering = volumetricLighting->phaseFunction.scattering;
-		settings.samplingRangeFactor = volumetricLighting->samplingRepartition.rangeFactor;
+		settings = vanillaSettings;
 	}
 
 	originalSettings = settings;
+	ApplyChanges();
+}
+
+void VolumetricLightingWidget::LoadFromGameSettings()
+{
+	if (!volumetricLighting)
+		return;
+	settings.intensity = volumetricLighting->intensity;
+	settings.customColorContribution = volumetricLighting->customColor.contribution;
+	settings.red = volumetricLighting->red;
+	settings.green = volumetricLighting->green;
+	settings.blue = volumetricLighting->blue;
+	settings.densityContribution = volumetricLighting->density.contribution;
+	settings.densitySize = volumetricLighting->density.size;
+	settings.densityWindSpeed = volumetricLighting->density.windSpeed;
+	settings.densityFallingSpeed = volumetricLighting->density.fallingSpeed;
+	settings.phaseFunctionContribution = volumetricLighting->phaseFunction.contribution;
+	settings.phaseFunctionScattering = volumetricLighting->phaseFunction.scattering;
+	settings.samplingRangeFactor = volumetricLighting->samplingRepartition.rangeFactor;
 }
 
 void VolumetricLightingWidget::SaveSettings()
@@ -137,6 +147,7 @@ void VolumetricLightingWidget::SaveSettings()
 	js["phaseFunctionContribution"] = settings.phaseFunctionContribution;
 	js["phaseFunctionScattering"] = settings.phaseFunctionScattering;
 	js["samplingRangeFactor"] = settings.samplingRangeFactor;
+	originalSettings = settings;
 }
 
 void VolumetricLightingWidget::ApplyChanges()
@@ -156,27 +167,15 @@ void VolumetricLightingWidget::ApplyChanges()
 	volumetricLighting->phaseFunction.contribution = settings.phaseFunctionContribution;
 	volumetricLighting->phaseFunction.scattering = settings.phaseFunctionScattering;
 	volumetricLighting->samplingRepartition.rangeFactor = settings.samplingRangeFactor;
-
-	originalSettings = settings;
 }
 
 void VolumetricLightingWidget::RevertChanges()
 {
-	settings = originalSettings;
+	settings = vanillaSettings;
+	ApplyChanges();
 }
 
 bool VolumetricLightingWidget::HasUnsavedChanges() const
 {
-	return settings.intensity != originalSettings.intensity ||
-	       settings.customColorContribution != originalSettings.customColorContribution ||
-	       settings.red != originalSettings.red ||
-	       settings.green != originalSettings.green ||
-	       settings.blue != originalSettings.blue ||
-	       settings.densityContribution != originalSettings.densityContribution ||
-	       settings.densitySize != originalSettings.densitySize ||
-	       settings.densityWindSpeed != originalSettings.densityWindSpeed ||
-	       settings.densityFallingSpeed != originalSettings.densityFallingSpeed ||
-	       settings.phaseFunctionContribution != originalSettings.phaseFunctionContribution ||
-	       settings.phaseFunctionScattering != originalSettings.phaseFunctionScattering ||
-	       settings.samplingRangeFactor != originalSettings.samplingRangeFactor;
+	return !(settings == originalSettings);
 }

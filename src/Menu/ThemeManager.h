@@ -189,6 +189,13 @@ public:
 		static constexpr float AUTOHIDE_ACTIVATION_ZONE_WIDTH = 50.0f;  // Width of hover zone at left edge (px)
 		static constexpr float AUTOHIDE_EXPAND_DELAY = 0.25f;           // Delay before expanding panel (seconds)
 		static constexpr float AUTOHIDE_PANEL_WIDTH_RATIO = 0.2f;       // Ratio of window width for panel (2/10)
+
+		// Scene settings panel constants
+		static constexpr float SCENE_VALUE_INPUT_WIDTH = 240.0f;       // Width for float/int value inputs
+		static constexpr float SCENE_DELETE_BUTTON_WIDTH = 40.0f;      // Width for delete (X) buttons
+		static constexpr float SCENE_FEATURE_DROPDOWN_RATIO = 0.45f;   // Feature dropdown width ratio
+		static constexpr float SCENE_SETTING_DROPDOWN_RATIO = 0.6f;    // Setting dropdown width ratio
+		static constexpr float SCENE_VALUE_LABEL_OFFSET_RATIO = 0.5f;  // Value label right-alignment ratio
 	};
 
 	static ThemeManager* GetSingleton()

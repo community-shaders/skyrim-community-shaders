@@ -137,8 +137,9 @@ public:
 	bool settingSkipCompilationKey = false;
 	bool settingsEffectsToggle = false;
 	bool settingOverlayToggleKey = false;
-	bool settingShaderBlockPrevKey = false;  // Debug: capture shader block prev key
-	bool settingShaderBlockNextKey = false;  // Debug: capture shader block next key
+	bool settingShaderBlockPrevKey = false;      // Debug: capture shader block prev key
+	bool settingShaderBlockNextKey = false;      // Debug: capture shader block next key
+	bool settingWeatherEditorToggleKey = false;  // Weather Editor toggle key
 
 	// Font caching (made public for ThemeManager and OverlayRenderer access)
 	// Marked mutable because they're cache fields that may be updated from const methods
@@ -378,15 +379,16 @@ public:
 	{
 		std::vector<InputCombo> ToggleKey = { InputCombo::Keyboard(VK_END) };
 		std::vector<InputCombo> SkipCompilationKey = { InputCombo::Keyboard(VK_ESCAPE) };
-		std::vector<InputCombo> EffectToggleKey = { InputCombo::Keyboard(VK_MULTIPLY) };  // toggle all effects
-		std::vector<InputCombo> OverlayToggleKey = { InputCombo::Keyboard(VK_F10) };      // Global overlay toggle key for all overlays
-		std::vector<InputCombo> ShaderBlockPrevKey = { InputCombo::Keyboard(VK_PRIOR) };  // Debug: cycle backward through shaders (PageUp)
-		std::vector<InputCombo> ShaderBlockNextKey = { InputCombo::Keyboard(VK_NEXT) };   // Debug: cycle forward through shaders (PageDown)
-		bool EnableShaderBlocking = false;                                                // Enable shader blocking hotkeys for debugging
-		bool FirstTimeSetupCompleted = false;                                             // Track if first-time setup has been completed
-		bool SkipClearCacheConfirmation = false;                                          // Skip confirmation dialog when clearing shader cache
-		bool AutoHideFeatureList = false;                                                 // Auto-hide left feature list panel, show on hover
-		bool SkipConstraintWarning = false;                                               // Skip popup when a setting change creates new constraints
+		std::vector<InputCombo> EffectToggleKey = { InputCombo::Keyboard(VK_MULTIPLY) };    // toggle all effects
+		std::vector<InputCombo> OverlayToggleKey = { InputCombo::Keyboard(VK_F10) };        // Global overlay toggle key for all overlays
+		std::vector<InputCombo> ShaderBlockPrevKey = { InputCombo::Keyboard(VK_PRIOR) };    // Debug: cycle backward through shaders (PageUp)
+		std::vector<InputCombo> ShaderBlockNextKey = { InputCombo::Keyboard(VK_NEXT) };     // Debug: cycle forward through shaders (PageDown)
+		std::vector<InputCombo> WeatherEditorToggleKey = { InputCombo::Keyboard(VK_F11) };  // Weather Editor toggle key
+		bool EnableShaderBlocking = false;                                                  // Enable shader blocking hotkeys for debugging
+		bool FirstTimeSetupCompleted = false;                                               // Track if first-time setup has been completed
+		bool SkipClearCacheConfirmation = false;                                            // Skip confirmation dialog when clearing shader cache
+		bool AutoHideFeatureList = false;                                                   // Auto-hide left feature list panel, show on hover
+		bool SkipConstraintWarning = false;                                                 // Skip popup when a setting change creates new constraints
 		ThemeSettings Theme;
 		std::string SelectedThemePreset = "";  // Currently selected theme preset (empty = custom/user theme)
 	};

@@ -109,6 +109,34 @@ namespace Util
 	void DrawClearShaderCacheConfirmation();
 
 	/**
+	 * Reusable confirmation popup. Call RequestConfirmation() to trigger, DrawConfirmationPopup() each frame.
+	 * Returns true on the frame the user confirms. Supports optional "Don't ask again" checkbox.
+	 */
+	struct ConfirmationPopup
+	{
+		std::string title;
+		std::string message;
+		std::string confirmLabel = "Confirm";
+		std::string cancelLabel = "Cancel";
+		bool showDontAskAgain = false;
+		bool* dontAskAgainPersist = nullptr;  // Optional external bool to persist preference
+
+		ConfirmationPopup() = default;
+		ConfirmationPopup(std::string title, std::string message, std::string confirmLabel = "Confirm", std::string cancelLabel = "Cancel") :
+			title(std::move(title)), message(std::move(message)), confirmLabel(std::move(confirmLabel)), cancelLabel(std::move(cancelLabel)) {}
+
+		void Request();
+		bool Draw();  // Returns true on confirm frame
+
+		bool IsOpen() const { return show; }
+
+	private:
+		bool show = false;
+		bool confirmed = false;
+		bool dontAskCheckbox = false;
+	};
+
+	/**
 	 * RAII wrapper for styled ImGui buttons that automatically applies and restores styling.
 	 * Use this to ensure consistent button styling without forgetting to pop styles.
 	 */
@@ -137,6 +165,11 @@ namespace Util
 	private:
 		int m_pushedStyles;
 	};
+
+	/**
+	 * Creates a StyledButtonWrapper using the theme's error color with auto-derived hover/active variants.
+	 */
+	StyledButtonWrapper ErrorButtonStyle();
 
 	/**
 	 * Button with simple flash feedback (matches action icon hover effect style)

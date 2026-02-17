@@ -5,6 +5,7 @@
 #include "Hooks.h"
 #include "Menu.h"
 #include "Menu/ThemeManager.h"
+#include "SceneSettingsManager.h"
 #include "ShaderCache.h"
 #include "State.h"
 #include "TruePBR.h"
@@ -90,6 +91,9 @@ void MessageHandler(SKSE::MessagingInterface::Message* message)
 				// Run feature PostPostLoad() first so features can disable themselves if needed
 				Feature::ForEachLoadedFeature("PostPostLoad", [](Feature* feature) { feature->PostPostLoad(); });
 
+				// Register scene settings event handler (Interior Only transitions)
+				SceneSettingsManager::MenuOpenCloseEventHandler::Register();
+
 				// Now validate disk cache after features have had a chance to modify their state
 				shaderCache->ValidateDiskCache();
 
@@ -113,8 +117,14 @@ void MessageHandler(SKSE::MessagingInterface::Message* message)
 
 				auto shaderCache = globals::shaderCache;
 				shaderCache->menuLoaded = true;
-				while (shaderCache->IsCompiling() && !shaderCache->backgroundCompilation) {
+
+				while (shaderCache->IsCompiling() && !shaderCache->backgroundCompilation && !globals::game::quitGame) {
 					std::this_thread::sleep_for(100ms);
+				}
+
+				if (globals::game::quitGame) {
+					logger::info("Game was closed, skipping feature DataLoaded methods");
+					break;
 				}
 
 				if (shaderCache->IsDiskCache()) {
@@ -138,7 +148,7 @@ bool Load()
 	}
 
 	if (REL::Module::IsVR()) {
-		REL::IDDatabase::get().IsVRAddressLibraryAtLeastVersion("0.193.0", true);
+		REL::IDDatabase::get().IsVRAddressLibraryAtLeastVersion("0.200.0", true);
 	}
 
 	auto privateProfileRedirectorVersion = Util::GetDllVersion(L"Data/SKSE/Plugins/PrivateProfileRedirector.dll");
