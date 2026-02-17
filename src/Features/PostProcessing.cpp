@@ -346,10 +346,15 @@ void PostProcessing::SetupResources()
 {
 	{
 		auto renderer = globals::game::renderer;
+		auto gameTexMain = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMAIN];
 		auto gameTexMainCopy = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMAIN_COPY];
 
 		D3D11_TEXTURE2D_DESC texDesc;
-		gameTexMainCopy.texture->GetDesc(&texDesc);
+		D3D11_TEXTURE2D_DESC texMainDesc;
+		D3D11_TEXTURE2D_DESC texMainCopyDesc;
+		gameTexMain.texture->GetDesc(&texMainDesc);
+		gameTexMainCopy.texture->GetDesc(&texMainCopyDesc);
+		texDesc = texMainDesc;
 
 		D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc = {
 			.Format = texDesc.Format,
@@ -367,8 +372,22 @@ void PostProcessing::SetupResources()
 		texDesc.BindFlags = D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_UNORDERED_ACCESS;
 		texDesc.MiscFlags = 0;
 
-		texCopy = eastl::make_unique<Texture2D>(texDesc);
-		texCopy->CreateUAV(uavDesc);
+		texCopyMain = eastl::make_unique<Texture2D>(texDesc);
+		texCopyMain->CreateUAV(uavDesc);
+
+		if (texMainCopyDesc.Format != texMainDesc.Format) {
+			texDesc = texMainCopyDesc;
+			srvDesc.Format = texDesc.Format;
+			uavDesc.Format = texDesc.Format;
+			texDesc.MipLevels = srvDesc.Texture2D.MipLevels = 1;
+			texDesc.BindFlags = D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_UNORDERED_ACCESS;
+			texDesc.MiscFlags = 0;
+
+			texCopyMainCopy = eastl::make_unique<Texture2D>(texDesc);
+			texCopyMainCopy->CreateUAV(uavDesc);
+		} else {
+			texCopyMainCopy = nullptr;
+		}
 
 		texDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
 		srvDesc.Format = texDesc.Format;
@@ -452,16 +471,25 @@ void PostProcessing::DrawBeforeUpscaling()
 
 	D3D11_TEXTURE2D_DESC desc;
 	lastTexColor.tex->GetDesc(&desc);
-	if (desc.Format == texCopy->desc.Format) {
-		context->CopySubresourceRegion(gameTexMain.texture, 0, 0, 0, 0, lastTexColor.tex, 0, nullptr);
-	} else {
+	auto copyToTarget = [&](auto& targetRT, Texture2D* convertTex) {
+		D3D11_TEXTURE2D_DESC targetDesc;
+		targetRT.texture->GetDesc(&targetDesc);
+
+		if (desc.Format == targetDesc.Format) {
+			context->CopySubresourceRegion(targetRT.texture, 0, 0, 0, 0, lastTexColor.tex, 0, nullptr);
+			return;
+		}
+
+		if (!copyCS || !convertTex || !convertTex->uav || !convertTex->resource)
+			return;
+
 		ID3D11ShaderResourceView* srv = lastTexColor.srv;
-		ID3D11UnorderedAccessView* uav = texCopy->uav.get();
+		ID3D11UnorderedAccessView* uav = convertTex->uav.get();
 
 		context->CSSetUnorderedAccessViews(0, 1, &uav, nullptr);
 		context->CSSetShaderResources(0, 1, &srv);
 		context->CSSetShader(copyCS.get(), nullptr, 0);
-		context->Dispatch((texCopy->desc.Width + 7) >> 3, (texCopy->desc.Height + 7) >> 3, 1);
+		context->Dispatch((convertTex->desc.Width + 7) >> 3, (convertTex->desc.Height + 7) >> 3, 1);
 
 		srv = nullptr;
 		uav = nullptr;
@@ -470,8 +498,10 @@ void PostProcessing::DrawBeforeUpscaling()
 		context->CSSetShaderResources(0, 1, &srv);
 		context->CSSetShader(nullptr, nullptr, 0);
 
-		context->CopySubresourceRegion(gameTexMain.texture, 0, 0, 0, 0, texCopy->resource.get(), 0, nullptr);
-	}
+		context->CopySubresourceRegion(targetRT.texture, 0, 0, 0, 0, convertTex->resource.get(), 0, nullptr);
+	};
+
+	copyToTarget(gameTexMain, texCopyMain.get());
 
 	state->EndPerfEvent();
 }
@@ -526,19 +556,25 @@ void PostProcessing::PreProcess()
 
 	D3D11_TEXTURE2D_DESC desc;
 	lastTexColor.tex->GetDesc(&desc);
-	if (desc.Format == texCopy->desc.Format) {
-		// either MAIN_COPY or MAIN is used as input for HDR pass
-		// so we copy to both so whatever the game wants we're not failing it
-		context->CopySubresourceRegion(gameTexMain.texture, 0, 0, 0, 0, lastTexColor.tex, 0, nullptr);
-		context->CopySubresourceRegion(gameTexMainAlt.texture, 0, 0, 0, 0, lastTexColor.tex, 0, nullptr);
-	} else {
+	auto copyToTarget = [&](auto& targetRT, Texture2D* convertTex) {
+		D3D11_TEXTURE2D_DESC targetDesc;
+		targetRT.texture->GetDesc(&targetDesc);
+
+		if (desc.Format == targetDesc.Format) {
+			context->CopySubresourceRegion(targetRT.texture, 0, 0, 0, 0, lastTexColor.tex, 0, nullptr);
+			return;
+		}
+
+		if (!copyCS || !convertTex || !convertTex->uav || !convertTex->resource)
+			return;
+
 		ID3D11ShaderResourceView* srv = lastTexColor.srv;
-		ID3D11UnorderedAccessView* uav = texCopy->uav.get();
+		ID3D11UnorderedAccessView* uav = convertTex->uav.get();
 
 		context->CSSetUnorderedAccessViews(0, 1, &uav, nullptr);
 		context->CSSetShaderResources(0, 1, &srv);
 		context->CSSetShader(copyCS.get(), nullptr, 0);
-		context->Dispatch((texCopy->desc.Width + 7) >> 3, (texCopy->desc.Height + 7) >> 3, 1);
+		context->Dispatch((convertTex->desc.Width + 7) >> 3, (convertTex->desc.Height + 7) >> 3, 1);
 
 		srv = nullptr;
 		uav = nullptr;
@@ -547,9 +583,14 @@ void PostProcessing::PreProcess()
 		context->CSSetShaderResources(0, 1, &srv);
 		context->CSSetShader(nullptr, nullptr, 0);
 
-		context->CopySubresourceRegion(gameTexMain.texture, 0, 0, 0, 0, texCopy->resource.get(), 0, nullptr);
-		context->CopySubresourceRegion(gameTexMainAlt.texture, 0, 0, 0, 0, texCopy->resource.get(), 0, nullptr);
-	}
+		context->CopySubresourceRegion(targetRT.texture, 0, 0, 0, 0, convertTex->resource.get(), 0, nullptr);
+	};
+
+	Texture2D* mainConvertTex = texCopyMain.get();
+	Texture2D* mainCopyConvertTex = texCopyMainCopy ? texCopyMainCopy.get() : texCopyMain.get();
+
+	copyToTarget(gameTexMain, useMainCopy ? mainCopyConvertTex : mainConvertTex);
+	copyToTarget(gameTexMainAlt, useMainCopy ? mainConvertTex : mainCopyConvertTex);
 
 	isrefraction = false;
 }
