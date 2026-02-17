@@ -689,36 +689,25 @@ void WeatherEditor::RenderWeatherControls(RE::Sky* sky)
 	                               weatherLabels[s_selectedWeatherIdx].c_str() :
 	                               "Select Weather";
 
-	static bool s_comboJustOpened = true;
+	static constexpr const char* kWeatherSearchId = "WeatherPicker";
 
 	if (ImGui::BeginCombo("Weather", comboPreview)) {
-		if (s_comboJustOpened) {
-			ImGui::SetKeyboardFocusHere();
-			s_comboJustOpened = false;
-		}
-		ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(24.0f, ImGui::GetStyle().FramePadding.y));
-		ImGui::InputText("##weather_search", s_weatherSearchBuffer, IM_ARRAYSIZE(s_weatherSearchBuffer));
-		ImGui::PopStyleVar();
-		Util::DrawSearchIcon(ImVec2(ImGui::GetItemRectMin().x + 5.0f, ImGui::GetItemRectMin().y + (ImGui::GetItemRectSize().y - 16.0f) * 0.5f), 16.0f, 0.5f);
-		ImGui::Separator();
+		auto searchText = Util::DrawComboSearchInput(kWeatherSearchId);
 
 		for (int i = 0; i < static_cast<int>(s_filteredWeathers.size()); ++i) {
 			const bool isSelected = (s_selectedWeatherIdx == i);
 			auto weather = s_filteredWeathers[i];
 
 			// Filter by EditorID, Name, and FormID only (not classification tags)
-			if (s_weatherSearchBuffer[0] != '\0') {
+			if (!searchText.empty()) {
+				std::string searchStr(searchText);
 				auto editorId = weather->GetFormEditorID() ? std::string(weather->GetFormEditorID()) : "";
 				auto name = weather->GetName() ? std::string(weather->GetName()) : "";
-				char formIdStr[16];
-				snprintf(formIdStr, sizeof(formIdStr), "%08X", weather->GetFormID());
+				auto formId = std::format("{:08X}", weather->GetFormID());
 
-				auto matchesSearch = [&](const std::string& text) {
-					return !text.empty() && std::search(text.begin(), text.end(), s_weatherSearchBuffer, s_weatherSearchBuffer + strlen(s_weatherSearchBuffer),
-												[](char a, char b) { return std::tolower(static_cast<unsigned char>(a)) == std::tolower(static_cast<unsigned char>(b)); }) != text.end();
-				};
-
-				if (!matchesSearch(editorId) && !matchesSearch(name) && !matchesSearch(formIdStr))
+				if (!Util::StringMatchesSearch(editorId, searchStr) &&
+					!Util::StringMatchesSearch(name, searchStr) &&
+					!Util::StringMatchesSearch(formId, searchStr))
 					continue;
 			}
 
@@ -732,7 +721,7 @@ void WeatherEditor::RenderWeatherControls(RE::Sky* sky)
 				else
 					sky->SetWeather(selectedWeather, true, false);
 
-				s_weatherSearchBuffer[0] = '\0';
+				Util::ClearComboSearch(kWeatherSearchId);
 				logger::info("[WeatherEditor] Changed weather to: {}", Util::FormatWeather(selectedWeather));
 			}
 			ImGui::PopStyleColor();
@@ -750,8 +739,7 @@ void WeatherEditor::RenderWeatherControls(RE::Sky* sky)
 		}
 		ImGui::EndCombo();
 	} else {
-		s_comboJustOpened = true;
-		s_weatherSearchBuffer[0] = '\0';
+		Util::ClearComboSearch(kWeatherSearchId);
 	}
 }
 

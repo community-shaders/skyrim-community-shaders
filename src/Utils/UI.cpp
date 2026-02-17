@@ -870,6 +870,56 @@ namespace Util
 		drawList->AddLine(handleStart, handleEnd, placeholderColor, 2.1f);
 	}
 
+	namespace detail
+	{
+		struct ComboSearchState
+		{
+			char buffer[256] = {};
+			bool needsFocus = true;
+		};
+
+		static std::unordered_map<std::string, ComboSearchState>& GetComboSearchStates()
+		{
+			static std::unordered_map<std::string, ComboSearchState> states;
+			return states;
+		}
+	}
+
+	std::string_view DrawComboSearchInput(const char* id)
+	{
+		auto& state = detail::GetComboSearchStates()[id];
+
+		if (state.needsFocus) {
+			ImGui::SetKeyboardFocusHere();
+			state.needsFocus = false;
+		}
+
+		constexpr float iconSize = ThemeManager::Constants::COMBO_SEARCH_ICON_SIZE;
+		constexpr float iconAlpha = ThemeManager::Constants::COMBO_SEARCH_ICON_ALPHA;
+		constexpr float iconOffsetX = ThemeManager::Constants::COMBO_SEARCH_ICON_OFFSET_X;
+		constexpr float paddingLeft = ThemeManager::Constants::COMBO_SEARCH_PADDING_LEFT;
+
+		ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(paddingLeft, ImGui::GetStyle().FramePadding.y));
+		ImGui::InputText(std::format("##{}_search", id).c_str(), state.buffer, IM_ARRAYSIZE(state.buffer));
+		ImGui::PopStyleVar();
+
+		ImVec2 iconPos = ImVec2(
+			ImGui::GetItemRectMin().x + iconOffsetX,
+			ImGui::GetItemRectMin().y + (ImGui::GetItemRectSize().y - iconSize) * 0.5f);
+		DrawSearchIcon(iconPos, iconSize, iconAlpha);
+
+		ImGui::Separator();
+
+		return state.buffer[0] != '\0' ? std::string_view(state.buffer) : std::string_view{};
+	}
+
+	void ClearComboSearch(const char* id)
+	{
+		auto& state = detail::GetComboSearchStates()[id];
+		state.buffer[0] = '\0';
+		state.needsFocus = true;
+	}
+
 	void DrawFeatureSearchBar(std::string& searchString, float availableWidth)
 	{
 		ImGui::PushID("FeatureSearchBar");
