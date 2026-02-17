@@ -9,6 +9,7 @@ namespace FeatureIssues
 {
 	// Forward declarations
 	static void DrawFeatureIssue(const FeatureIssueInfo& issue, const ImVec4& color);
+	static bool IsVersionMismatchForCoreFeature(const FeatureIssueInfo& issue);
 
 	// Static storage for feature issues
 	static std::vector<FeatureIssueInfo> s_featureIssues;
@@ -401,7 +402,7 @@ namespace FeatureIssues
 		}
 		// Version Mismatch Section
 		if (auto section = Util::SectionWrapper("Wrong Version Features",
-				"The following features have version compatibility issues and were disabled automatically. Updating them may resolve the issues.",
+				"The following features have version compatibility issues and were disabled automatically. Please check for any updates or if the feature is considered obsolete.",
 				theme.StatusPalette.Warning, !versionIssues.empty())) {
 			for (const auto* issue : versionIssues) {
 				DrawFeatureIssue(*issue, theme.StatusPalette.Warning);
@@ -574,7 +575,13 @@ namespace FeatureIssues
 		}
 
 		// Handle download action for version mismatch features
-		if (issue.IsVersionMismatch()) {
+		if (IsVersionMismatchForCoreFeature(issue)) {
+			ImGui::SameLine();
+			ImGui::Text("Core feature already installed");
+			if (auto _tt = Util::HoverTooltipWrapper()) {
+				ImGui::TextWrapped("This feature is already included as part of the core Community Shaders installation. Uninstall this feature with your mod manager.");
+			}
+		} else if (issue.IsVersionMismatch()) {
 			ImGui::SameLine();
 
 			if (!issue.replacementFeatureModLink.empty()) {
@@ -625,7 +632,7 @@ namespace FeatureIssues
 		// Show delete button for:
 		// 1. Features that don't modify shader directories (safe to delete)
 		// 2. Obsolete features with replacements (user can install replacement after deletion)
-		bool canSafelyDelete = !issue.ModifiedShaderDirectory() || (issue.IsObsolete() && !issue.replacementFeature.empty());
+		bool canSafelyDelete = (!issue.ModifiedShaderDirectory() || (issue.IsObsolete() && !issue.replacementFeature.empty())) && !IsVersionMismatchForCoreFeature(issue);
 		if (canSafelyDelete) {
 			ImGui::SameLine();
 			std::string deleteButtonId = "Delete##" + issue.shortName;
@@ -697,6 +704,14 @@ namespace FeatureIssues
 			}
 		}
 		ImGui::PopID();
+	}
+
+	static bool IsVersionMismatchForCoreFeature(const FeatureIssueInfo& issue)
+	{
+		if (!issue.IsVersionMismatch())
+			return false;
+		Feature* f = s_featureLookupCache.FindFeature(issue.shortName);
+		return f && f->IsCore();
 	}
 
 	bool IsReplacementFeatureInstalled(const std::string& featureName)
