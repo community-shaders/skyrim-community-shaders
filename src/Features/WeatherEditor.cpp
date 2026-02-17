@@ -690,6 +690,11 @@ void WeatherEditor::RenderWeatherControls(RE::Sky* sky)
 	                               "Select Weather";
 
 	if (ImGui::BeginCombo("Weather", comboPreview)) {
+		static bool s_comboJustOpened = true;
+		if (s_comboJustOpened) {
+			ImGui::SetKeyboardFocusHere();
+			s_comboJustOpened = false;
+		}
 		ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(24.0f, ImGui::GetStyle().FramePadding.y));
 		ImGui::InputText("##weather_search", s_weatherSearchBuffer, IM_ARRAYSIZE(s_weatherSearchBuffer));
 		ImGui::PopStyleVar();
@@ -709,7 +714,7 @@ void WeatherEditor::RenderWeatherControls(RE::Sky* sky)
 
 				auto matchesSearch = [&](const std::string& text) {
 					return !text.empty() && std::search(text.begin(), text.end(), s_weatherSearchBuffer, s_weatherSearchBuffer + strlen(s_weatherSearchBuffer),
-												[](char a, char b) { return std::tolower(a) == std::tolower(b); }) != text.end();
+								[](char a, char b) { return std::tolower(static_cast<unsigned char>(a)) == std::tolower(static_cast<unsigned char>(b)); }) != text.end();
 				};
 
 				if (!matchesSearch(editorId) && !matchesSearch(name) && !matchesSearch(formIdStr))
@@ -744,6 +749,7 @@ void WeatherEditor::RenderWeatherControls(RE::Sky* sky)
 		}
 		ImGui::EndCombo();
 	} else {
+		s_comboJustOpened = true;
 		s_weatherSearchBuffer[0] = '\0';
 	}
 }
