@@ -242,12 +242,8 @@ void GetLightIrradianceMIS(in Instance instance, in Surface surface, out float3 
     GetPointLightIrradiance(instance.LightData, surface, pointIrradiance, pointLr, pointDist, randomSeed);
 
     float3 dirVisibility = TraceRayShadow(Scene, surface, dirLr, randomSeed);
-    directionalIrradiance *= dirVisibility;
 
-    float3 pointVisibility = TraceRayShadowFinite(Scene, surface, pointLr, pointDist, randomSeed);
-    pointIrradiance *= pointVisibility;
-
-    float pDirLight = Luminance(directionalIrradiance);
+    float pDirLight = Luminance(directionalIrradiance * dirVisibility);
     float pPointLight = Luminance(pointIrradiance);
 
     float total = pDirLight + pPointLight;
