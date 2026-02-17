@@ -154,26 +154,37 @@ void EditorWindow::ShowObjectsWindow()
 		// Left column: Categories
 		ImGui::TableSetColumnIndex(0);
 
-		ImGui::Text("Categories");
-		ImGui::Spacing();
+		ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 0.0f);
+		ImGui::PushStyleColor(ImGuiCol_FrameBg, ImVec4());
+		if (ImGui::BeginListBox("##CategoriesList", { -FLT_MIN, -FLT_MIN })) {
+			ImGui::Text("Categories");
+			ImGui::Spacing();
 
-		// List of categories
-		const char* categories[] = { "Weather", "ImageSpace", "Lighting Template", "Cell Lighting", "Volumetric Lighting", "Shader Particle Geometry", "Lens Flare", "Visual Effect", "Interior Only" };
-		for (int i = 0; i < IM_ARRAYSIZE(categories); ++i) {
-			// Highlight the selected category
-			if (ImGui::Selectable(categories[i], selectedCategory == categories[i])) {
-				selectedCategory = categories[i];  // Update selected category
+			// List of categories
+			const char* categories[] = { "Weather", "ImageSpace", "Lighting Template", "Cell Lighting", "Volumetric Lighting", "Shader Particle Geometry", "Lens Flare", "Visual Effect", "Interior Only" };
+			for (int i = 0; i < IM_ARRAYSIZE(categories); ++i) {
+				// Highlight the selected category
+				if (ImGui::Selectable(categories[i], selectedCategory == categories[i])) {
+					selectedCategory = categories[i];  // Update selected category
+				}
 			}
-		}  // Right column: Objects
+			ImGui::EndListBox();
+		}
+		ImGui::PopStyleVar();
+		ImGui::PopStyleColor();
+
+		// Right column: Objects
 		ImGui::TableSetColumnIndex(1);
 
-		// Interior Only category has its own panel
-		if (selectedCategory == "Interior Only") {
-			InteriorOnlyPanel::Draw();
-			ImGui::EndTable();
-			ImGui::End();
-			return;
-		}
+		if (ImGui::BeginChild("##ObjectsContent", { 0, 0 }, true)) {
+			// Interior Only category has its own panel
+			if (selectedCategory == "Interior Only") {
+				InteriorOnlyPanel::Draw();
+				ImGui::EndChild();
+				ImGui::EndTable();
+				ImGui::End();
+				return;
+			}
 
 		// Display current active weather
 		auto sky = globals::game::sky;
@@ -626,6 +637,9 @@ void EditorWindow::ShowObjectsWindow()
 
 			ImGui::EndTable();  // End DetailsTable
 		}  // End if BeginTable("DetailsTable")
+
+		}  // End if BeginChild("##ObjectsContent")
+		ImGui::EndChild();  // End ObjectsContent child
 
 		ImGui::EndTable();  // End ObjectTable
 	}  // End if BeginTable("ObjectTable")
