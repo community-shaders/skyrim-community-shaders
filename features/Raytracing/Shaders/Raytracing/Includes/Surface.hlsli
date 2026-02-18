@@ -552,6 +552,11 @@ struct Surface
         surface.FaceNormal = SafeNormalize(mul(objectToWorld3x3, objectSpaceFlatNormal));
 
         surface.MipLevel = rayCone.computeLOD(coneTexLODValue, rayDir, normalWS, true) + Frame.TexLODBias;
+
+        Texture2D baseTextureForLod = Textures[NonUniformResourceIndex(material.BaseTexture())];
+        uint baseTexWidth, baseTexHeight;
+        baseTextureForLod.GetDimensions(baseTexWidth, baseTexHeight);
+        surface.MipLevel += 0.5f * SafeLog2(max(1.0f, (float)baseTexWidth * (float)baseTexHeight));
         surface.GeomNormal = normalWS;
         surface.GeomTangent = tangentWS;
 
