@@ -362,7 +362,7 @@ void SkySync::ShadowFader::Update(const RE::Sun* sun, RE::NiPoint3 dirs[3], floa
 	if (const auto calendar = globals::game::calendar) {
 		const float currentHoursPassed = calendar->GetHoursPassed();
 		timeScale = calendar->GetTimescale();
-		const float hoursPassedDiff = abs(currentHoursPassed - previousHoursPassed);
+		const float hoursPassedDiff = std::abs(currentHoursPassed - previousHoursPassed);
 		previousHoursPassed = currentHoursPassed;
 		if (timeScale <= 0.0f || hoursPassedDiff >= 0.01f) {
 			fadePhase = Phase::None;
