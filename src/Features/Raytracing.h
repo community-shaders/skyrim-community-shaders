@@ -1,10 +1,57 @@
 #pragma once
 
+#include <directx/d3d12.h>
 #include <d3d11_4.h>
+
+struct CreationEngineRaytracing
+{
+	HMODULE handle = nullptr;
+
+	using InitializeFn = void (*)(ID3D12Device5*, ID3D12CommandQueue*);
+	using SetupResourcesFn = void (*)();
+	using UpdateFrameBufferFn = void (*)(float4x4 viewInverse, float4x4 projInverse, float4 cameraData, float4 NDCToView, float3 position);
+	using AttachModelFn = void (*)(RE::TESForm*);
+
+	InitializeFn Initialize = nullptr;
+	SetupResourcesFn SetupResources = nullptr;
+	UpdateFrameBufferFn UpdateFrameBuffer = nullptr;
+	AttachModelFn AttachModel = nullptr;
+
+	CreationEngineRaytracing()
+	{
+		handle = LoadLibraryA("Data\\CreationEngineRaytracing.dll");
+
+		if (!handle) {
+			logger::error("[Raytracing] LoadLibrary failed for 'CreationEngineRaytracing.dll'");
+			return;
+		}
+
+		logger::info("[Raytracing] 'CreationEngineRaytracing.dll' loaded");
+
+		Initialize = reinterpret_cast<InitializeFn>(GetProcAddress(handle, "Initialize"));
+
+		if (!Initialize)
+			logger::error("[Raytracing] 'CreationEngineRaytracing.dll' Initialize is nullptr");
+
+		SetupResources = reinterpret_cast<SetupResourcesFn>(GetProcAddress(handle, "SetupResources"));
+
+		if (!SetupResources)
+			logger::error("[Raytracing] 'CreationEngineRaytracing.dll' SetupResources is nullptr");
+
+		UpdateFrameBuffer = reinterpret_cast<UpdateFrameBufferFn>(GetProcAddress(handle, "UpdateFrameBuffer"));
+
+		if (!UpdateFrameBuffer)
+			logger::error("[Raytracing] 'CreationEngineRaytracing.dll' UpdateFrameBuffer is nullptr");
+
+		AttachModel = reinterpret_cast<AttachModelFn>(GetProcAddress(handle, "AttachModel"));
+
+		if (!AttachModel)
+			logger::error("[Raytracing] 'CreationEngineRaytracing.dll' AttachModel is nullptr");
+	}
+};
 
 struct Raytracing : public Feature
 {
-	////////////////////////////////////////////////// Boilerplate
 	// Metadata
 	virtual inline std::string GetName() override { return "Raytracing"; }
 	virtual inline std::string GetShortName() override { return "Raytracing"; }
@@ -38,8 +85,12 @@ struct Raytracing : public Feature
 	virtual void ClearShaderCache() override;
 	void CompileShaders();
 
+	void Load() override;
+	void PostPostLoad() override;
+
 	void CreateD3D12Device(ID3D11Device* device, ID3D11DeviceContext* immediateContext, IDXGIAdapter* adapter);
-	void InitializeCERaytracing(ID3D12Device5* device, ID3D12CommandQueue* commandQueue);
+	void InitializeCERaytracing(ID3D12Device5* device, ID3D12CommandQueue* commandQueue) const;
+	void UpdateFrameBuffer() const;
 
 	////////////////////////////////////////////////// Feature Specific Data
 	struct Settings
@@ -63,6 +114,8 @@ struct Raytracing : public Feature
 	winrt::com_ptr<ID3D11SamplerState> cheeseSampler = nullptr;
 	winrt::com_ptr<ID3D11ComputeShader> cheeseCs = nullptr;
 
+	eastl::unique_ptr<CreationEngineRaytracing> creationEngineRaytracing = nullptr;
+
 	// D3D11
 	winrt::com_ptr<ID3D11Device5> d3d11Device = nullptr;
 	winrt::com_ptr<ID3D11DeviceContext4> d3d11Context = nullptr;
@@ -84,19 +137,35 @@ struct Raytracing : public Feature
 			static void thunk(RE::TES* a1, RE::TESObjectREFR* refr, RE::TESObjectCELL* cell, void* queuedTree, char a5, RE::NiNode* a6)
 			{
 				func(a1, refr, cell, queuedTree, a5, a6);
+
+				globals::features::raytracing.creationEngineRaytracing->AttachModel(refr);
 			}
+			static inline REL::Relocation<decltype(thunk)> func;
+		};
+
+		struct Main_RenderPlayerView
+		{
+			static void thunk(void* a1, bool a2, bool a3)
+			{
+				globals::features::raytracing.UpdateFrameBuffer();
+
+				func(a1, a2, a3);
+			};
 			static inline REL::Relocation<decltype(thunk)> func;
 		};
 
 		static void Install()
 		{
 			stl::detour_thunk<TES_AttachModel>(REL::RelocationID(13209, 13355));
+
+			stl::detour_thunk<Main_RenderPlayerView>(REL::RelocationID(35560, 36559));
+
 			logger::info("[Raytracing] Installed hooks");
 		}
 
 		static void InstallD3D11Hooks(ID3D11Device* device) 
 		{
-			logger::info("[RT] Installed D3D11 hooks - {}", reinterpret_cast<uintptr_t>(device));
+			logger::info("[Raytracing] Installed D3D11 hooks - [0x{:08X}]", reinterpret_cast<uintptr_t>(device));
 		}
 	};
 };

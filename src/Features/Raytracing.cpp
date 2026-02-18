@@ -3,8 +3,6 @@
 #include "Globals.h"
 #include "State.h"
 
-#include <CreationEngineRaytracing.h>
-
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	Raytracing::Settings,
 	Enabled)
@@ -48,9 +46,9 @@ void Raytracing::CreateD3D12Device(ID3D11Device* device, ID3D11DeviceContext* im
 	D3D12_FEATURE_DATA_D3D12_OPTIONS5 options5 = {};
 	if (SUCCEEDED(d3d12Device->CheckFeatureSupport(D3D12_FEATURE_D3D12_OPTIONS5, &options5, sizeof(options5)))) {
 		if (options5.RaytracingTier != D3D12_RAYTRACING_TIER_NOT_SUPPORTED)
-			logger::info("[RT] Hardware ray tracing supported! Tier: {}", magic_enum::enum_name(options5.RaytracingTier));
+			logger::info("[Raytracing] Hardware ray tracing supported! Tier: {}", magic_enum::enum_name(options5.RaytracingTier));
 		else
-			logger::warn("[RT] Hardware ray tracing not supported.");
+			logger::warn("[Raytracing] Hardware ray tracing not supported.");
 	}
 
 	// Command Queue
@@ -82,13 +80,44 @@ void Raytracing::CreateD3D12Device(ID3D11Device* device, ID3D11DeviceContext* im
 	InitializeCERaytracing(d3d12Device.get(), commandQueue.get());
 }
 
-void Raytracing::InitializeCERaytracing(ID3D12Device5* device2, ID3D12CommandQueue* commandQueue2)
+void Raytracing::Load()
 {
-	Initialize(device2, commandQueue2);
+	creationEngineRaytracing = eastl::make_unique<CreationEngineRaytracing>();
+}
+
+void Raytracing::PostPostLoad()
+{
+	Hooks::Install();
+
+	RE::GetINISetting("bReflectLODLand:Water")->data.b = false;
+	RE::GetINISetting("bReflectLODObjects:Water")->data.b = false;
+	RE::GetINISetting("bReflectLODTrees:Water")->data.b = false;
+	RE::GetINISetting("bReflectSky:Water")->data.b = true;
+}
+
+void Raytracing::InitializeCERaytracing(ID3D12Device5* device2, ID3D12CommandQueue* commandQueue2) const
+{
+	creationEngineRaytracing->Initialize(device2, commandQueue2);
+}
+
+void Raytracing::UpdateFrameBuffer() const
+{
+	auto eye = Util::GetCameraData(0);
+	float2 ndcToViewMult = float2(2.0f / eye.projMat(0, 0), -2.0f / eye.projMat(1, 1));
+	float2 ndcToViewAdd = float2(-1.0f / eye.projMat(0, 0), 1.0f / eye.projMat(1, 1));
+
+	creationEngineRaytracing->UpdateFrameBuffer(
+		globals::game::frameBufferCached.GetCameraViewInverse().Transpose(),
+		globals::game::frameBufferCached.GetCameraProjInverse().Transpose(),
+		Util::GetCameraData(),
+		float4(ndcToViewMult.x, ndcToViewMult.y, ndcToViewAdd.x, ndcToViewAdd.y), 
+		float3(globals::game::frameBufferCached.GetCameraPosAdjust()));
 }
 
 void Raytracing::SetupResources()
 {
+	creationEngineRaytracing->SetupResources();
+
 	auto renderer = globals::game::renderer;
 	auto device = globals::d3d::device;
 
