@@ -87,7 +87,7 @@ struct Material
 	half Scalar0;
 	half Scalar1;
 	half Scalar2;
-	half Scalar3; // For padding
+	half Scalar3;
 	
 	uint16_t AlphaFlags;
 
@@ -244,6 +244,11 @@ struct Material
 	half4 SubsurfaceScatteringColor()
 	{
 		return Color2;
+	}
+
+	half AlphaThreshold()
+	{
+		return Scalar3;
 	}
 
 #ifndef __cplusplus

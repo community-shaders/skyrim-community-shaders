@@ -353,8 +353,9 @@ void Shape::BuildMaterial(const RE::BSGeometry::GEOMETRY_RUNTIME_DATA& geometryR
 		float4(1.0f, 1.0f, 1.0f, 1.0f)
 	};
 
-	eastl::array<half, 3> scalars;
+	eastl::array<half, 4> scalars;
 	scalars.fill(0.0f);
+	scalars[3] = 0.5f;
 
 	eastl::array<half4, 2> texCoordOffsetScales = {
 		float4(0.0f, 0.0f, 1.0f, 1.0f),
@@ -393,13 +394,12 @@ void Shape::BuildMaterial(const RE::BSGeometry::GEOMETRY_RUNTIME_DATA& geometryR
 
 					if (alphaProperty && alphaProperty->GetAlphaBlending()) {
 						flags |= Flags::AlphaBlending;
-						alphaFlags = Material::AlphaFlags::kAlphaBlend;
-					} else if (alphaProperty && alphaProperty->GetAlphaTesting()) {
+						alphaFlags |= Material::AlphaFlags::kAlphaBlend;
+					}
+					if (alphaProperty && alphaProperty->GetAlphaTesting()) {
 						flags |= Flags::AlphaTesting;
-						alphaFlags = Material::AlphaFlags::kAlphaTest;
-
-						float alphaScale = (alphaProperty->alphaThreshold / 255.0f) / 0.5f;
-						colors[0].w /= alphaScale;
+						alphaFlags |= Material::AlphaFlags::kAlphaTest;
+						scalars[3] = alphaProperty->alphaThreshold / 255.0f;
 					}
 				}
 

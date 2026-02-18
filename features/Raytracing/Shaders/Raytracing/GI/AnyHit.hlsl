@@ -30,14 +30,14 @@ void main(inout Payload payload, in BuiltInTriangleIntersectionAttributes attrib
     }   
     
     [branch]
-    if (material.AlphaFlags == AlphaFlags::kAlphaTest)
+    if (material.AlphaFlags & AlphaFlags::kAlphaTest)
     {
-        if (alpha < 0.5f)
+        if (alpha < material.AlphaThreshold())
         {
             IgnoreHit();
         }
     }
-    else if (material.AlphaFlags == AlphaFlags::kAlphaBlend)
+    if ((material.AlphaFlags & AlphaFlags::kAlphaBlend) && (material.Feature == Feature::kHairTint || material.Feature == Feature::kFaceGen || material.Feature == Feature::kFaceGenRGBTint || material.Feature == Feature::kEye || material.ShaderFlags & ShaderFlags::kTwoSided))
     {
         float rnd = Random(payload.randomSeed);
         if (rnd > alpha)

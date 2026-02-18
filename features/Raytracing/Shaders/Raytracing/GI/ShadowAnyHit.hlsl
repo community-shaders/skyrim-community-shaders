@@ -30,28 +30,26 @@ void main(inout ShadowPayload payload, in BuiltInTriangleIntersectionAttributes 
     }      
     
     [branch]
-    if (material.AlphaFlags == AlphaFlags::kAlphaTest)
+    if (material.AlphaFlags & AlphaFlags::kAlphaTest)
     {
-        if (alpha < 0.5f)
+        if (alpha < material.AlphaThreshold())
         {
             IgnoreHit();
         }
-        else
-        {
-            AcceptHitAndEndSearch();
-        }
     }
-    else if (material.AlphaFlags == AlphaFlags::kAlphaBlend)
+
+    if (material.AlphaFlags & AlphaFlags::kAlphaBlend)
     {
         float rnd = Random(payload.randomSeed);
         if (rnd > alpha)
         {
             IgnoreHit();
         }
-        else
-        {
-            AcceptHitAndEndSearch();
-        }
+    }
+
+    if (material.AlphaFlags & (AlphaFlags::kAlphaTest | AlphaFlags::kAlphaBlend))
+    {
+        AcceptHitAndEndSearch();
     }
     else if ((material.Feature == Feature::kGlowMap || material.PBRFlags & PBR::Flags::HasEmissive) && material.ShaderFlags & ShaderFlags::kAssumeShadowmask) // only window for now
     {
