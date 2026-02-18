@@ -89,6 +89,9 @@ public:
 	/// Draw the full time controls panel (pause, game time, timescale).
 	void DrawTimeControls();
 
+	// Check if ESC key should close the editor (no popups open)
+	bool ShouldHandleEscapeKey() const;
+
 	void DisableVanityCamera();
 	void RestoreVanityCamera();
 
