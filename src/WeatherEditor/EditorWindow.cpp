@@ -176,7 +176,7 @@ void EditorWindow::ShowObjectsWindow()
 		// Right column: Objects
 		ImGui::TableSetColumnIndex(1);
 
-		if (ImGui::BeginChild("##ObjectsContent", { 0, 0 }, true)) {
+		if (ImGui::BeginChild("##ObjectsContent", { 0, 0 }, ImGuiChildFlags_Border)) {
 			// Interior Only category has its own panel
 			if (selectedCategory == "Interior Only") {
 				InteriorOnlyPanel::Draw();
