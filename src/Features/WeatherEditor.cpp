@@ -711,7 +711,10 @@ void WeatherEditor::RenderWeatherControls(RE::Sky* sky)
 			}
 
 			ImGui::PushStyleColor(ImGuiCol_Text, GetWeatherTypeColor(weather));
-			if (ImGui::Selectable(weatherLabels[i].c_str(), isSelected)) {
+			bool didSelect = ImGui::Selectable(weatherLabels[i].c_str(), isSelected);
+			ImGui::PopStyleColor();
+
+			if (didSelect) {
 				s_selectedWeatherIdx = i;
 				auto selectedWeather = s_filteredWeathers[i];
 
@@ -724,7 +727,6 @@ void WeatherEditor::RenderWeatherControls(RE::Sky* sky)
 				logger::info("[WeatherEditor] Changed weather to: {}", Util::FormatWeather(selectedWeather));
 				break;
 			}
-			ImGui::PopStyleColor();
 
 			if (ImGui::IsItemHovered()) {
 				ImGui::BeginTooltip();
