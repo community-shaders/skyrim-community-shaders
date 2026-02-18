@@ -2,10 +2,10 @@
 
 #include "Features/WeatherEditor.h"
 #include "InteriorOnlyPanel.h"
-#include "TimeOfDayPanel.h"
 #include "Menu.h"
 #include "PaletteWindow.h"
 #include "State.h"
+#include "TimeOfDayPanel.h"
 #include "Utils/UI.h"
 #include "Weather/LightingTemplateWidget.h"
 #include "WeatherUtils.h"

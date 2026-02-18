@@ -74,9 +74,9 @@ namespace TimeOfDayPanel
 			state.cachedFeatureNames = SceneSettingsManager::GetExteriorRelevantFeatureNames();
 
 		const char* featurePreview = (state.selectedFeatureIdx >= 0 &&
-		                                 state.selectedFeatureIdx < static_cast<int>(state.cachedFeatureNames.size()))
-		                                 ? state.cachedFeatureNames[state.selectedFeatureIdx].c_str()
-		                                 : "Select Feature...";
+										 state.selectedFeatureIdx < static_cast<int>(state.cachedFeatureNames.size())) ?
+		                                 state.cachedFeatureNames[state.selectedFeatureIdx].c_str() :
+		                                 "Select Feature...";
 
 		ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x * C::SCENE_FEATURE_DROPDOWN_RATIO);
 		if (ImGui::BeginCombo("##FeatureSelect", featurePreview)) {
@@ -100,9 +100,9 @@ namespace TimeOfDayPanel
 			auto _ = Util::DisableGuard(state.selectedFeatureIdx < 0);
 
 			const char* settingPreview = (state.selectedSettingIdx >= 0 &&
-			                                 state.selectedSettingIdx < static_cast<int>(state.cachedSettingKeys.size()))
-			                                 ? state.cachedSettingKeys[state.selectedSettingIdx].c_str()
-			                                 : "Select Setting...";
+											 state.selectedSettingIdx < static_cast<int>(state.cachedSettingKeys.size())) ?
+			                                 state.cachedSettingKeys[state.selectedSettingIdx].c_str() :
+			                                 "Select Setting...";
 
 			ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x * C::SCENE_SETTING_DROPDOWN_RATIO);
 			if (ImGui::BeginCombo("##SettingSelect", settingPreview)) {

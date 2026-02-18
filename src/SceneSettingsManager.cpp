@@ -294,9 +294,7 @@ void SceneSettingsManager::RemoveSetting(SceneType type, size_t index)
 	if (entry.source == EntrySource::Overwrite && !entry.sourceFilename.empty()) {
 		// For TimeOfDay overwrites, files are in period subfolders
 		auto basePath = GetOverwritesPath(type);
-		auto filepath = (type == SceneType::TimeOfDay && entry.period != TimeOfDayPeriod::Count)
-		                    ? basePath / GetPeriodName(entry.period) / entry.sourceFilename
-		                    : basePath / entry.sourceFilename;
+		auto filepath = (type == SceneType::TimeOfDay && entry.period != TimeOfDayPeriod::Count) ? basePath / GetPeriodName(entry.period) / entry.sourceFilename : basePath / entry.sourceFilename;
 		std::error_code ec;
 		if (std::filesystem::remove(filepath, ec))
 			logger::info("[SceneSettings] Deleted overwrite file: {}", filepath.string());
