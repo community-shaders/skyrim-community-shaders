@@ -5,7 +5,6 @@
 #include <functional>
 #include <imgui.h>
 #include <string>
-#include <string_view>
 #include <vector>
 #include <windows.h>  // For WPARAM and virtual key constants
 
@@ -713,12 +712,15 @@ namespace Util
 	 * Reusable helper for any combo that needs search/filter functionality.
 	 * Draws a text input with a search icon overlay and separator, and
 	 * auto-focuses the input when the combo first opens.
-	 * Returns a string_view into the internal buffer for filtering.
+	 * Returns an owned copy of the current search text for safe use after
+	 * ClearComboSearch may mutate the underlying buffer.
 	 *
-	 * @param id Unique ID for this search input (used for buffer and focus state)
-	 * @return Current search text (empty string_view when no filter is active)
+	 * @param id Stable string literal identifying this search input. Must be a
+	 *           finite, static set of IDs — one persistent map entry is created
+	 *           per unique id and never removed.
+	 * @return Current search text (empty string when no filter is active)
 	 */
-	std::string_view DrawComboSearchInput(const char* id);
+	std::string DrawComboSearchInput(const char* id);
 
 	/**
 	 * @brief Clears the search buffer for a given combo search ID.
@@ -940,11 +942,12 @@ namespace Util
 			auto searchText = DrawComboSearchInput(label);
 
 			for (auto& [itemName, item] : itemMap) {
-				if (searchText.empty() || StringMatchesSearch(itemName, std::string(searchText))) {
+				if (searchText.empty() || StringMatchesSearch(itemName, searchText)) {
 					if (ImGui::Selectable(itemName.c_str(), itemName == selectedName)) {
 						selectedName = itemName;
 						valueChanged = true;
 						ClearComboSearch(label);
+						break;
 					}
 				}
 			}

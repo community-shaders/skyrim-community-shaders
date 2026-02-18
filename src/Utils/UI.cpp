@@ -885,7 +885,7 @@ namespace Util
 		}
 	}
 
-	std::string_view DrawComboSearchInput(const char* id)
+	std::string DrawComboSearchInput(const char* id)
 	{
 		auto& state = detail::GetComboSearchStates()[id];
 
@@ -899,8 +899,11 @@ namespace Util
 		constexpr float iconOffsetX = ThemeManager::Constants::COMBO_SEARCH_ICON_OFFSET_X;
 		constexpr float paddingLeft = ThemeManager::Constants::COMBO_SEARCH_PADDING_LEFT;
 
+		char widgetId[128];
+		snprintf(widgetId, sizeof(widgetId), "##%s_search", id);
+
 		ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(paddingLeft, ImGui::GetStyle().FramePadding.y));
-		ImGui::InputText(std::format("##{}_search", id).c_str(), state.buffer, IM_ARRAYSIZE(state.buffer));
+		ImGui::InputTextWithHint(widgetId, "Search...", state.buffer, IM_ARRAYSIZE(state.buffer));
 		ImGui::PopStyleVar();
 
 		ImVec2 iconPos = ImVec2(
@@ -910,7 +913,7 @@ namespace Util
 
 		ImGui::Separator();
 
-		return state.buffer[0] != '\0' ? std::string_view(state.buffer) : std::string_view{};
+		return state.buffer;
 	}
 
 	void ClearComboSearch(const char* id)

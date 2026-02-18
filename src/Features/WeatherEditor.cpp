@@ -700,14 +700,13 @@ void WeatherEditor::RenderWeatherControls(RE::Sky* sky)
 
 			// Filter by EditorID, Name, and FormID only (not classification tags)
 			if (!searchText.empty()) {
-				std::string searchStr(searchText);
 				auto editorId = weather->GetFormEditorID() ? std::string(weather->GetFormEditorID()) : "";
 				auto name = weather->GetName() ? std::string(weather->GetName()) : "";
 				auto formId = std::format("{:08X}", weather->GetFormID());
 
-				if (!Util::StringMatchesSearch(editorId, searchStr) &&
-					!Util::StringMatchesSearch(name, searchStr) &&
-					!Util::StringMatchesSearch(formId, searchStr))
+				if (!Util::StringMatchesSearch(editorId, searchText) &&
+					!Util::StringMatchesSearch(name, searchText) &&
+					!Util::StringMatchesSearch(formId, searchText))
 					continue;
 			}
 
@@ -723,6 +722,7 @@ void WeatherEditor::RenderWeatherControls(RE::Sky* sky)
 
 				Util::ClearComboSearch(kWeatherSearchId);
 				logger::info("[WeatherEditor] Changed weather to: {}", Util::FormatWeather(selectedWeather));
+				break;
 			}
 			ImGui::PopStyleColor();
 
