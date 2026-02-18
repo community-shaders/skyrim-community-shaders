@@ -2,6 +2,7 @@
 
 #include "Features/WeatherEditor.h"
 #include "InteriorOnlyPanel.h"
+#include "TimeOfDayPanel.h"
 #include "Menu.h"
 #include "PaletteWindow.h"
 #include "State.h"
@@ -180,7 +181,7 @@ void EditorWindow::ShowObjectsWindow()
 			ImGui::Spacing();
 
 			// List of categories
-			const char* categories[] = { "Weather", "ImageSpace", "Lighting Template", "Cell Lighting", "Volumetric Lighting", "Shader Particle Geometry", "Lens Flare", "Visual Effect", "Interior Only" };
+			const char* categories[] = { "Weather", "ImageSpace", "Lighting Template", "Cell Lighting", "Volumetric Lighting", "Shader Particle Geometry", "Lens Flare", "Visual Effect", "Interior Only", "Time of Day" };
 			for (int i = 0; i < IM_ARRAYSIZE(categories); ++i) {
 				// Highlight the selected category
 				if (ImGui::Selectable(categories[i], selectedCategory == categories[i])) {
@@ -196,9 +197,16 @@ void EditorWindow::ShowObjectsWindow()
 		ImGui::TableSetColumnIndex(1);
 
 		if (ImGui::BeginChild("##ObjectsContent", { 0, 0 }, ImGuiChildFlags_Border)) {
-			// Interior Only category has its own panel
+			// Interior Only / Time of Day categories have their own panels
 			if (selectedCategory == "Interior Only") {
 				InteriorOnlyPanel::Draw();
+				ImGui::EndChild();
+				ImGui::EndTable();
+				ImGui::End();
+				return;
+			}
+			if (selectedCategory == "Time of Day") {
+				TimeOfDayPanel::Draw();
 				ImGui::EndChild();
 				ImGui::EndTable();
 				ImGui::End();
