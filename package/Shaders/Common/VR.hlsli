@@ -214,6 +214,7 @@ namespace Stereo
 	*/
 	float3 ConvertMonoUVToOtherEye(float3 monoUV, uint eyeIndex, bool dynamicres = false)
 	{
+	{
 		// Convert from dynamic res to true UV space if necessary
 		if (dynamicres)
 			monoUV.xy *= FrameBuffer::DynamicResolutionParams2.xy;
@@ -241,6 +242,7 @@ namespace Stereo
 
 		return monoUVOtherEye;
 	}
+#	endif  // VR
 
 	/**
 	* @brief Resolves a mono UV to the eye that can see it, crossing to the other eye if needed.
@@ -273,6 +275,7 @@ namespace Stereo
 #		endif
 	}
 
+#	ifdef VR
 	/**
 	* @brief Adjusts UV coordinates for VR stereo rendering when transitioning between eyes or handling boundary conditions.
 	*
