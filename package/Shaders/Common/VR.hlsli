@@ -214,7 +214,6 @@ namespace Stereo
 	*/
 	float3 ConvertMonoUVToOtherEye(float3 monoUV, uint eyeIndex, bool dynamicres = false)
 	{
-	{
 		// Convert from dynamic res to true UV space if necessary
 		if (dynamicres)
 			monoUV.xy *= FrameBuffer::DynamicResolutionParams2.xy;
