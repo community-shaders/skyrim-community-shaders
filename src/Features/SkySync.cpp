@@ -358,7 +358,7 @@ void SkySync::ShadowFader::Update(const RE::Sun* sun, RE::NiPoint3 dirs[3], floa
 			fadePhase = Phase::FadeOut;
 	}
 
-	float timeScale = 1.0f;
+	float timeScale = 20.0f;
 	if (const auto calendar = globals::game::calendar) {
 		const float currentHoursPassed = calendar->GetHoursPassed();
 		timeScale = calendar->GetTimescale();
