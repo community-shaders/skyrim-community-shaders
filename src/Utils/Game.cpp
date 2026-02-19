@@ -138,15 +138,14 @@ namespace Util
 		return (!REL::Module::IsVR() ? imageSpaceManager->GetRuntimeData().BSImagespaceShaderISTemporalAA->taaEnabled : imageSpaceManager->GetVRRuntimeData().BSImagespaceShaderISTemporalAA->taaEnabled);
 	}
 
-	// https://github.com/PureDark/Skyrim-Upscaler/blob/fa057bb088cf399e1112c1eaba714590c881e462/src/SkyrimUpscaler.cpp#L88
 	float GetVerticalFOVRad()
 	{
-		static float& fac = (*(float*)(REL::RelocationID(513786, 388785).address()));
-		const auto base = fac;
-		const auto x = base / 1.30322540f;
-		auto state = globals::state;
-		const auto vFOV = 2 * atan(x / (state->screenSize.x / state->screenSize.y));
-		return vFOV;
+		static float& cameraFOVDeg = (*(float*)(REL::RelocationID(513786, 388785).address()));  // FOV degrees
+		float hFOVRad = cameraFOVDeg * (3.14159265359f / 180.0f);
+		float unitHalfWidth = tan(hFOVRad / 2);                                                                // This is same as camera frustum RL
+		float unitHalfHeight = unitHalfWidth / (globals::state->screenSize.x / globals::state->screenSize.y);  // frustum TB
+		float vFOVRad = 2.0f * atan(unitHalfHeight);
+		return vFOVRad;
 	}
 
 	float2 ConvertToDynamic(float2 a_size, bool a_ignoreLock)
