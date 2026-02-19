@@ -241,6 +241,7 @@ namespace Stereo
 
 		return monoUVOtherEye;
 	}
+#	endif  // VR
 
 	/**
 	* @brief Resolves a mono UV to the eye that can see it, crossing to the other eye if needed.
@@ -273,6 +274,7 @@ namespace Stereo
 #		endif
 	}
 
+#	ifdef VR
 	/**
 	* @brief Adjusts UV coordinates for VR stereo rendering when transitioning between eyes or handling boundary conditions.
 	*
