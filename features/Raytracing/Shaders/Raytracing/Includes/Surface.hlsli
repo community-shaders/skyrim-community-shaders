@@ -235,7 +235,7 @@ struct Surface
             }
             else
             {
-                Emissive = EmitColorToLinear(material.EffectColor().rgb) * material.EffectColor().a * Frame.Emissive * EmitColorMult();
+                Emissive = Albedo * EmitColorToLinear(material.EffectColor().rgb) * material.EffectColor().a * Frame.Emissive * EmitColorMult();
             }
 
             [branch]
