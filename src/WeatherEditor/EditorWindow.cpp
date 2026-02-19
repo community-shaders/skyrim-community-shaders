@@ -280,7 +280,7 @@ void EditorWindow::ShowObjectsWindow()
 				ImGui::TableSetupColumn("Form ID", ImGuiTableColumnFlags_WidthFixed, 90.0f);                             // Fixed - 8 hex chars
 				ImGui::TableSetupColumn("File", ImGuiTableColumnFlags_WidthStretch, 2.0f);                               // Medium - plugin names
 				ImGui::TableSetupColumn("Status", ImGuiTableColumnFlags_WidthStretch, 1.5f);                             // Smaller - status text
-				ImGui::TableSetupColumn("json", ImGuiTableColumnFlags_WidthFixed, 55.0f);                               // JSON file / delete
+				ImGui::TableSetupColumn("json", ImGuiTableColumnFlags_WidthFixed, 55.0f);                                // JSON file / delete
 
 				ImGui::TableHeadersRow();
 
