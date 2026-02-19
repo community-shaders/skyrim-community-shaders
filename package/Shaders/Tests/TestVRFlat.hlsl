@@ -65,6 +65,12 @@ void TestFlatStereoUVOverloadsAreIdentity()
 	ASSERT(IsTrue, abs(result4.y - uv4.y) < kEps);
 	ASSERT(IsTrue, abs(result4.z - uv4.z) < kEps);
 	ASSERT(IsTrue, abs(result4.w - uv4.w) < kEps);
+
+	float4 result4_from = Stereo::ConvertFromStereoUV(uv4, 1);
+	ASSERT(IsTrue, abs(result4_from.x - uv4.x) < kEps);
+	ASSERT(IsTrue, abs(result4_from.y - uv4.y) < kEps);
+	ASSERT(IsTrue, abs(result4_from.z - uv4.z) < kEps);
+	ASSERT(IsTrue, abs(result4_from.w - uv4.w) < kEps);
 }
 
 /// @tags vr, flat, uv
