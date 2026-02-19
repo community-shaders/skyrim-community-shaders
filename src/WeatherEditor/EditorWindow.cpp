@@ -40,7 +40,7 @@ inline void HelpMarker(const char* a_desc)
 	AddTooltip(a_desc, ImGuiHoveredFlags_DelayShort);
 }
 
-void DrawIconStar(ImVec2 center, float radius, ImU32 color, bool /*filled*/)
+void DrawIconStar(ImVec2 center, float radius, ImU32 color, bool filled)
 {
 	auto* drawList = ImGui::GetWindowDrawList();
 	const int numPoints = 5;
@@ -53,8 +53,28 @@ void DrawIconStar(ImVec2 center, float radius, ImU32 color, bool /*filled*/)
 		points[i] = ImVec2(center.x + cosf(angle) * r, center.y + sinf(angle) * r);
 	}
 
-	for (int i = 0; i < 10; i++) {
-		drawList->AddLine(points[i], points[(i + 1) % 10], color, 1.5f);
+	if (filled) {
+		// Fill without AA to prevent fringe seams between adjacent pieces
+		ImDrawListFlags oldFlags = drawList->Flags;
+		drawList->Flags &= ~ImDrawListFlags_AntiAliasedFill;
+
+		ImVec2 innerPentagon[5];
+		for (int i = 0; i < 5; i++) {
+			innerPentagon[i] = points[i * 2 + 1];  // inner points
+		}
+		drawList->AddConvexPolyFilled(innerPentagon, 5, color);
+		for (int i = 0; i < 5; i++) {
+			drawList->AddTriangleFilled(points[i * 2], points[i * 2 + 1], points[(i * 2 + 9) % 10], color);
+		}
+
+		drawList->Flags = oldFlags;
+
+		// Draw an AA outline over the outer perimeter to restore smooth edges
+		drawList->AddPolyline(points, 10, color, ImDrawFlags_Closed, 1.0f);
+	} else {
+		for (int i = 0; i < 10; i++) {
+			drawList->AddLine(points[i], points[(i + 1) % 10], color, 1.5f);
+		}
 	}
 }
 
