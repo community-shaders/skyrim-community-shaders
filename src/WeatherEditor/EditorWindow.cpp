@@ -1,6 +1,7 @@
 #include "EditorWindow.h"
 
 #include "Features/WeatherEditor.h"
+#include "InteriorOnlyPanel.h"
 #include "Menu.h"
 #include "PaletteWindow.h"
 #include "State.h"
@@ -157,7 +158,7 @@ void EditorWindow::ShowObjectsWindow()
 		ImGui::Spacing();
 
 		// List of categories
-		const char* categories[] = { "Weather", "ImageSpace", "Lighting Template", "Cell Lighting", "Volumetric Lighting", "Shader Particle Geometry", "Lens Flare", "Visual Effect" };
+		const char* categories[] = { "Weather", "ImageSpace", "Lighting Template", "Cell Lighting", "Volumetric Lighting", "Shader Particle Geometry", "Lens Flare", "Visual Effect", "Interior Only" };
 		for (int i = 0; i < IM_ARRAYSIZE(categories); ++i) {
 			// Highlight the selected category
 			if (ImGui::Selectable(categories[i], selectedCategory == categories[i])) {
@@ -165,6 +166,14 @@ void EditorWindow::ShowObjectsWindow()
 			}
 		}  // Right column: Objects
 		ImGui::TableSetColumnIndex(1);
+
+		// Interior Only category has its own panel
+		if (selectedCategory == "Interior Only") {
+			InteriorOnlyPanel::Draw();
+			ImGui::EndTable();
+			ImGui::End();
+			return;
+		}
 
 		// Display current active weather
 		auto sky = globals::game::sky;
@@ -630,9 +639,7 @@ void EditorWindow::ShowViewportWindow()
 	ImGui::Begin("Viewport");
 
 	// Top bar
-	auto calendar = RE::Calendar::GetSingleton();
-	if (calendar && calendar->gameHour) {
-		ImGui::SliderFloat("##ViewportSlider", &calendar->gameHour->value, 0.0f, 23.99f, "Time: %.2f");
+	if (DrawGameHourSlider("##ViewportSlider", "Time: %.2f")) {
 		ImGui::SameLine();
 		int activePeriod = TOD::GetActivePeriod();
 		ImGui::Text("(%s)", TOD::GetPeriodName(activePeriod));
@@ -703,11 +710,6 @@ void EditorWindow::RenderUI()
 
 	// Increase background opacity for all editor windows
 	ImGui::PushStyleVar(ImGuiStyleVar_Alpha, 1.0f);
-
-	// Check for Escape key to close editor (but not if a popup is open)
-	if (ImGui::IsKeyPressed(ImGuiKey_Escape, false) && !ImGui::IsPopupOpen("", ImGuiPopupFlags_AnyPopupId | ImGuiPopupFlags_AnyPopupLevel)) {
-		open = false;
-	}
 
 	// Check for Ctrl+Z to undo
 	if ((ImGui::IsKeyDown(ImGuiKey_LeftCtrl) || ImGui::IsKeyDown(ImGuiKey_RightCtrl)) && ImGui::IsKeyPressed(ImGuiKey_Z, false)) {
@@ -934,23 +936,17 @@ void EditorWindow::RenderUI()
 			}
 
 			const float menuBarHeight = ImGui::GetFrameHeight();
-			const float buttonDim = menuBarHeight * 0.85f;  // 85% of menu bar height
+			const float buttonDim = menuBarHeight * 0.85f;
 			const ImVec2 buttonSize(buttonDim, buttonDim);
 
-			if (ImGui::ImageButton("##GlobalPauseTime", menu->uiIcons.pauseTime.texture, buttonSize)) {
-				if (isPaused) {
-					ResumeTime();
-				} else {
-					PauseTime();
-				}
-			}
+			if (ImGui::ImageButton("##GlobalPauseTime", menu->uiIcons.pauseTime.texture, buttonSize))
+				TogglePause();
 
 			ImGui::PopStyleColor(2);
 			ImGui::PopStyleVar();
 
-			if (ImGui::IsItemHovered()) {
+			if (ImGui::IsItemHovered())
 				ImGui::SetTooltip(isPaused ? "Resume Time" : "Pause Time");
-			}
 		}
 
 		// Undo button
@@ -1004,7 +1000,7 @@ void EditorWindow::RenderUI()
 		}
 
 		// Time pause indicator
-		if (timePaused) {
+		if (IsTimePaused()) {
 			ImGui::SameLine();
 			ImGui::PushStyleColor(ImGuiCol_Text, Menu::GetSingleton()->GetSettings().Theme.StatusPalette.CurrentHotkey);
 			ImGui::Text(" [TIME PAUSED]");
@@ -1488,8 +1484,7 @@ void EditorWindow::PauseTime()
 {
 	if (timePaused)
 		return;
-
-	auto calendar = RE::Calendar::GetSingleton();
+	auto calendar = globals::game::calendar ? globals::game::calendar : RE::Calendar::GetSingleton();
 	if (calendar && calendar->timeScale) {
 		savedTimeScale = calendar->timeScale->value;
 		calendar->timeScale->value = 0.0f;
@@ -1502,13 +1497,109 @@ void EditorWindow::ResumeTime()
 {
 	if (!timePaused)
 		return;
-
-	auto calendar = RE::Calendar::GetSingleton();
+	auto calendar = globals::game::calendar ? globals::game::calendar : RE::Calendar::GetSingleton();
 	if (calendar && calendar->timeScale) {
 		calendar->timeScale->value = savedTimeScale;
 		timePaused = false;
 		logger::info("Time resumed (timescale: {})", savedTimeScale);
 	}
+}
+
+void EditorWindow::ResetTimeScale()
+{
+	auto calendar = globals::game::calendar ? globals::game::calendar : RE::Calendar::GetSingleton();
+	if (!calendar || !calendar->timeScale)
+		return;
+	if (timePaused)
+		savedTimeScale = kVanillaTimeScale;
+	else
+		calendar->timeScale->value = kVanillaTimeScale;
+	timeScaleSlider = kVanillaTimeScale;
+}
+
+void EditorWindow::UpdateTimeState()
+{
+	auto calendar = globals::game::calendar ? globals::game::calendar : RE::Calendar::GetSingleton();
+	auto ui = globals::game::ui ? globals::game::ui : RE::UI::GetSingleton();
+	if (!calendar || !calendar->timeScale)
+		return;
+
+	bool sleepWaitOpen = ui && ui->IsMenuOpen(RE::SleepWaitMenu::MENU_NAME);
+
+	// External state sync (skip during sleep/wait)
+	if (!sleepWaitOpen) {
+		if (calendar->timeScale->value == 0.0f && !timePaused)
+			savedTimeScale = kVanillaTimeScale;
+		else if (calendar->timeScale->value > 0.0f && timePaused)
+			timePaused = false;
+	}
+
+	// Sleep/wait handling — temporarily restore time so the wait can proceed
+	if (sleepWaitOpen && calendar->timeScale->value == 0.0f) {
+		if (!wasRestoredForWait) {
+			wasPausedBeforeWait = true;
+			if (timePaused)
+				ResumeTime();
+			else
+				calendar->timeScale->value = std::max(savedTimeScale, kVanillaTimeScale);
+			wasRestoredForWait = true;
+		}
+	} else if (!sleepWaitOpen && wasRestoredForWait) {
+		if (wasPausedBeforeWait && !timePaused)
+			PauseTime();
+		wasRestoredForWait = false;
+		wasPausedBeforeWait = false;
+	}
+}
+
+bool EditorWindow::DrawGameHourSlider(const char* label, const char* format)
+{
+	auto calendar = globals::game::calendar ? globals::game::calendar : RE::Calendar::GetSingleton();
+	if (!calendar || !calendar->gameHour)
+		return false;
+	ImGui::SliderFloat(label, &calendar->gameHour->value, 0.0f, kGameHourMax, format);
+	return true;
+}
+
+void EditorWindow::DrawTimeControls()
+{
+	auto calendar = globals::game::calendar ? globals::game::calendar : RE::Calendar::GetSingleton();
+	if (!calendar || !calendar->gameHour || !calendar->timeScale)
+		return;
+
+	// Row 1: Pause/Resume + Game Time
+	if (ImGui::Button(timePaused ? "Resume Time" : "Pause Time", ImVec2(120, 0)))
+		TogglePause();
+	if (auto _tt = Util::HoverTooltipWrapper())
+		ImGui::Text("Pause or resume game time progression");
+	ImGui::SameLine();
+	DrawGameHourSlider();
+	if (auto _tt = Util::HoverTooltipWrapper())
+		ImGui::Text("Adjust the current game time");
+
+	// Sync slider with actual value
+	if (timePaused)
+		timeScaleSlider = std::max(savedTimeScale, kTimeScaleMin);
+	else if (std::abs(calendar->timeScale->value - timeScaleSlider) > 0.01f)
+		timeScaleSlider = calendar->timeScale->value;
+
+	// Row 2: Reset Speed + TimeScale slider + speed label
+	if (ImGui::Button("Reset Speed", ImVec2(120, 0)))
+		ResetTimeScale();
+	if (auto _tt = Util::HoverTooltipWrapper())
+		ImGui::Text("Reset time speed to vanilla (%.1fx)", kVanillaTimeScale);
+
+	ImGui::SameLine();
+	ImGui::BeginDisabled(timePaused);
+	if (ImGui::SliderFloat("##TimeScale", &timeScaleSlider, kTimeScaleMin, kTimeScaleMax,
+			timeScaleSlider == kVanillaTimeScale ? "Vanilla Speed" : "", ImGuiSliderFlags_Logarithmic))
+		calendar->timeScale->value = timeScaleSlider;
+	ImGui::EndDisabled();
+
+	ImGui::SameLine();
+	ImGui::Text("%.1fx", calendar->timeScale->value);
+	if (auto _tt = Util::HoverTooltipWrapper())
+		ImGui::Text("Adjust how fast time passes (vanilla: %.1fx)", kVanillaTimeScale);
 }
 
 void EditorWindow::DisableVanityCamera()
@@ -1536,6 +1627,11 @@ void EditorWindow::RestoreVanityCamera()
 		vanityCameraDisabled = false;
 		logger::info("Vanity camera restored (delay: {})", savedVanityCameraDelay);
 	}
+}
+
+bool EditorWindow::ShouldHandleEscapeKey() const
+{
+	return !ImGui::IsPopupOpen("", ImGuiPopupFlags_AnyPopupId | ImGuiPopupFlags_AnyPopupLevel);
 }
 
 void EditorWindow::PushUndoState(Widget* widget)

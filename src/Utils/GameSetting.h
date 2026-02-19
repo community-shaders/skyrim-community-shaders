@@ -104,6 +104,51 @@ namespace Util
 	void RenderImGuiElement(const std::string& settingName, const GameSetting& settingData, RE::Setting* setting, const std::string& collectionName = "");
 
 	/**
+	 * @brief Gets the value of a game setting, transparently handling INI-based and offset-based settings.
+	 *
+	 * For INI-based settings (offset == 0), tries INISettingCollection, INIPrefSettingCollection,
+	 * then GameSettingCollection. For offset-based settings (e.g., VR where INI entries don't exist),
+	 * reads directly from the memory address.
+	 *
+	 * @tparam T The expected value type (bool, float, std::int32_t, or std::uint32_t).
+	 * @param settingName The setting name (e.g., "iNumSplits:Display").
+	 * @param settingData The GameSetting metadata containing the offset and default value.
+	 * @return The current value of the setting, or the default value if not found.
+	 */
+	template <typename T>
+	T GetGameSettingValue(const std::string& settingName, const GameSetting& settingData)
+	{
+		if (settingData.offset == 0) {
+			auto* setting = RE::GetINISetting(settingName.c_str());
+			if (!setting) {
+				if (auto* collection = globals::game::gameSettingCollection)
+					setting = collection->GetSetting(settingName.data());
+			}
+			if (setting) {
+				T value{};
+				if constexpr (std::is_same_v<T, bool>)
+					value = setting->data.b;
+				else if constexpr (std::is_same_v<T, float>)
+					value = setting->data.f;
+				else if constexpr (std::is_same_v<T, std::int32_t>)
+					value = setting->data.i;
+				else if constexpr (std::is_same_v<T, std::uint32_t>)
+					value = setting->data.u;
+				logger::debug("GetGameSettingValue: '{}' = {} (from INI)", settingName, value);
+				return value;
+			}
+			auto defaultValue = std::get<T>(settingData.defaultValue);
+			logger::warn("GetGameSettingValue: '{}' not found in INI or GameSettingCollection, using default: {}", settingName, defaultValue);
+			return defaultValue;
+		} else {
+			auto address = REL::Offset{ settingData.offset }.address();
+			T value = *reinterpret_cast<T*>(address);
+			logger::debug("GetGameSettingValue: '{}' = {} (from offset 0x{:X})", settingName, value, settingData.offset);
+			return value;
+		}
+	}
+
+	/**
 	 * @brief Saves the provided game settings to the INI file.
 	 *
 	 * This function iterates through the settings map and saves settings that are managed via

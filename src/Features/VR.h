@@ -3,6 +3,7 @@
 #include "Menu.h"
 #include "OverlayFeature.h"
 #include "Utils/Input.h"
+#include "VR/OpenVRDetection.h"  // In Features/VR/
 #include <algorithm>
 #include <d3d11.h>
 #include <imgui_impl_dx11.h>
@@ -60,9 +61,19 @@ public:
 	 */
 	struct Config
 	{
+		// Overlay texture dimensions
+		static constexpr int kOverlayWidth = 1920;                                                                       ///< Overlay texture width in pixels
+		static constexpr int kOverlayHeight = 1080;                                                                      ///< Overlay texture height in pixels
+		static constexpr float kOverlayAspect = static_cast<float>(kOverlayHeight) / static_cast<float>(kOverlayWidth);  ///< Aspect ratio (height/width)
+
+		static inline Matrix CreateOverlayScaleMatrix(float scale)
+		{
+			return Matrix::CreateScale(scale, scale * kOverlayAspect, scale);
+		}
+
 		static constexpr float kDefaultMenuScale = 1.0f;      ///< Default overlay scale factor
-		static constexpr float kMinMenuScale = 0.5f;          ///< Minimum allowed overlay scale
-		static constexpr float kMaxMenuScale = 2.0f;          ///< Maximum allowed overlay scale
+		static constexpr float kMinMenuScale = 0.1f;          ///< Minimum allowed overlay scale
+		static constexpr float kMaxMenuScale = 5.0f;          ///< Maximum allowed overlay scale
 		static constexpr float kDefaultComboTimeout = 3.0f;   ///< Default timeout for button combos (seconds)
 		static constexpr float kDefaultMouseDeadzone = 0.1f;  ///< Default thumbstick deadzone for mouse input
 		static constexpr float kDefaultMouseSpeed = 10.0f;    ///< Default mouse speed multiplier
@@ -70,14 +81,14 @@ public:
 		static constexpr int kMaxAutoHideSeconds = 300;       ///< Maximum auto-hide timeout (5 minutes)
 
 		// Default HMD overlay offset values (in meters, relative to HMD)
-		static constexpr float kDefaultHMDOffsetX = 0.26f;   ///< Default horizontal offset from HMD
-		static constexpr float kDefaultHMDOffsetY = -0.04f;  ///< Default vertical offset from HMD
-		static constexpr float kDefaultHMDOffsetZ = -0.41f;  ///< Default depth offset from HMD
+		static constexpr float kDefaultHMDOffsetX = 0.195f;   ///< Default horizontal offset from HMD
+		static constexpr float kDefaultHMDOffsetY = -0.375f;  ///< Default vertical offset from HMD
+		static constexpr float kDefaultHMDOffsetZ = -1.355f;  ///< Default depth offset from HMD
 
 		// Default controller overlay offset values (in meters, relative to controller)
-		static constexpr float kDefaultControllerOffsetX = 0.22f;  ///< Default horizontal offset from controller
-		static constexpr float kDefaultControllerOffsetY = 0.15f;  ///< Default vertical offset from controller
-		static constexpr float kDefaultControllerOffsetZ = 0.20f;  ///< Default depth offset from controller
+		static constexpr float kDefaultControllerOffsetX = 0.295f;  ///< Default horizontal offset from controller
+		static constexpr float kDefaultControllerOffsetY = 0.211f;  ///< Default vertical offset from controller
+		static constexpr float kDefaultControllerOffsetZ = 0.063f;  ///< Default depth offset from controller
 	};
 
 	//=============================================================================
@@ -91,10 +102,11 @@ public:
 		return {
 			"Provides VR-specific optimizations and enhancements for Community Shaders, improving performance and visual quality in virtual reality environments.",
 			{ "Depth buffer culling optimization for VR performance",
+				"In-scene overlay menu with HMD/Controller/Fixed World attach modes",
+				"VR controller input with customizable button mappings",
+				"Grip-to-drag overlay positioning with depth control",
 				"Configurable occlusion culling parameters",
-				"VR-specific rendering pipeline improvements",
-				"Performance optimizations for dual-eye rendering",
-				"Enhanced VR compatibility across all shader features" }
+				"Enhanced VR compatibility with SteamVR and OpenComposite" }
 		};
 	}
 
@@ -121,7 +133,7 @@ public:
 	//=============================================================================
 
 	virtual void DrawOverlay() override;
-	virtual bool IsOverlayVisible() const override { return openVRInfo.isCompatible && settings.kAutoHideSeconds > 0 && !globals::menu->IsEnabled; }
+	virtual bool IsOverlayVisible() const override { return IsOpenVRCompatible() && settings.kAutoHideSeconds > 0 && globals::menu && !globals::menu->IsEnabled; }
 
 	//=============================================================================
 	// SETTINGS STRUCTURE
@@ -153,7 +165,8 @@ public:
 		{
 			HMDOnly = 0,         ///< Overlay attached to HMD only
 			ControllerOnly = 1,  ///< Overlay attached to controller only
-			Both = 2             ///< Overlay can be attached to both HMD and controller
+			Both = 2,            ///< Overlay can be attached to both HMD and controller
+			None = 3             ///< Overlay display disabled
 		};
 		OverlayAttachMode attachMode = OverlayAttachMode::HMDOnly;              ///< Current overlay attachment mode
 		ControllerDevice VRMenuAttachController = ControllerDevice::Secondary;  ///< Which controller to attach overlay to
@@ -216,7 +229,7 @@ public:
 		 */
 		bool IsAttachModeValid() const
 		{
-			return attachMode >= OverlayAttachMode::HMDOnly && attachMode <= OverlayAttachMode::Both;
+			return attachMode >= OverlayAttachMode::HMDOnly && attachMode <= OverlayAttachMode::None;
 		}
 
 		/**
@@ -242,13 +255,16 @@ public:
 	// VR-SPECIFIC PUBLIC API
 	//=============================================================================
 
-	void UpdateVROverlayPosition();
-	void UpdateVROverlayControllerPosition();
-
 	void ProcessVREvents(std::vector<Menu::KeyEvent>& vrEvents);
 
 	// Wand pointing methods
-	bool ComputeWandIntersection(vr::VROverlayHandle_t overlayHandle, vr::TrackedDeviceIndex_t controllerIndex, ImVec2& outUV);
+	enum class OverlayType
+	{
+		HMD,
+		Controller
+	};
+	bool ComputeWandIntersection(vr::TrackedDeviceIndex_t controllerIndex, ImVec2& outUV);
+	bool ComputeWandIntersectionForOverlayType(OverlayType type, vr::TrackedDeviceIndex_t controllerIndex, ImVec2& outUV);
 	void UpdateCursorFromWandPointing();
 	void UpdateOverlayMenuStateFromInput();
 	void ProcessVRButtonEvent(const Menu::KeyEvent& event);
@@ -256,8 +272,6 @@ public:
 	void ProcessThumbstickScroll(RE::VRControllerState& controllerState, size_t thumbstickIndex, float deadzone, ImGuiIO& io);
 	void ProcessControllerInputForImGui();
 
-	void EnsureOverlayInitialized();
-	void DestroyOverlay();
 	void RecreateOverlayTexturesIfNeeded();
 	void SubmitOverlayFrame();
 
@@ -309,6 +323,7 @@ public:
 	void UpdateActiveDrag();
 	void TryStartNewDrag();
 	void SetFixedOverlayToCurrentHMD();
+	void UpdateFixedWorldPositioning();
 	bool ShouldHighlightOverlayWindow() const { return overlayDragState.dragging; }
 
 	//=============================================================================
@@ -349,6 +364,7 @@ public:
 	struct OverlayWorldPosition
 	{
 		Matrix m = Matrix::Identity;
+		bool initialized = false;
 	} fixedWorldOverlayPosition;
 
 	struct OverlayDragState
@@ -372,6 +388,7 @@ public:
 
 		Vector3 initialHMDOffset = Vector3::Zero;
 		Vector3 initialControllerOffset = Vector3::Zero;
+		float initialHMDScale = 1.0f;
 		Matrix startControllerMatrix = Matrix::Identity;
 	} overlayDragState;
 
@@ -408,11 +425,20 @@ public:
 	struct OpenVRInfo
 	{
 		bool isAvailable = false;
-		bool isCompatible = true;
+		bool isCompatible = false;
 		std::string dllPath;
 		std::string version;
 		uint64_t fileSize = 0;
 		std::string modificationTime;
+
+		// Interface probing results
+		bool hasOverlayInterface = false;
+		bool hasSystemInterface = false;
+		bool hasCompositorInterface = false;
+
+		// Detection metadata
+		VRDetection::RuntimeType runtimeType = VRDetection::RuntimeType::Unknown;
+		bool probingSucceeded = false;
 	} openVRInfo;
 
 	RE::NiPoint3 savedPlayerWorldPos = RE::NiPoint3();  // Used for auto-reset distance check
@@ -427,11 +453,52 @@ public:
 		Vector3 rayDirection = Vector3::Zero;
 	} wandState;
 
-public:
-	//=============================================================================
-	// PRIVATE IMPLEMENTATION
-	//=============================================================================
+	// In-Scene Overlay Rendering Resources (Fallback for incompatible runtimes)
+	struct InSceneResources
+	{
+		winrt::com_ptr<ID3D11VertexShader> vs;
+		winrt::com_ptr<ID3D11PixelShader> ps;
+		winrt::com_ptr<ID3D11Buffer> vb;
+		winrt::com_ptr<ID3D11Buffer> ib;
+		winrt::com_ptr<ID3D11Buffer> cb;
+		winrt::com_ptr<ID3D11InputLayout> inputLayout;
+		winrt::com_ptr<ID3D11BlendState> blendState;
+		winrt::com_ptr<ID3D11DepthStencilState> depthState;
+		winrt::com_ptr<ID3D11SamplerState> sampler;
+		winrt::com_ptr<ID3D11RasterizerState> rasterizerState;
 
+		// Cached SRV to avoid creating every frame
+		winrt::com_ptr<ID3D11ShaderResourceView> menuSRV;
+		ID3D11Texture2D* cachedMenuTexture = nullptr;
+
+		// Cached RTVs per eye to avoid creating every frame
+		struct CachedRTV
+		{
+			winrt::com_ptr<ID3D11RenderTargetView> rtv;
+			ID3D11Texture2D* texture = nullptr;
+		};
+		CachedRTV cachedEyeRTVs[2];
+
+		bool initialized = false;
+	} inSceneResources;
+
+	struct InSceneCB
+	{
+		Matrix wvp;
+	};
+
+	void InitInSceneResources();
+	void RenderInSceneOverlay(vr::EVREye eye, ID3D11Texture2D* targetTexture, const vr::VRTextureBounds_t* bounds);
+	void InstallSubmitHook();
 	void DetectOpenVRInfo();
 	bool IsOpenVRCompatible() const;
+
+private:
+	//=============================================================================
+	// PRIVATE HELPERS
+	//=============================================================================
+
+	bool GetGripPressed(bool isLeft, bool isRight) const;
+	void ResetComboRecording();
+	void ApplyRecordedCombo();
 };

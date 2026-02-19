@@ -123,9 +123,9 @@ public:
 
 	void Save();
 	void Load();
-	void Delete();
 	bool HasSavedFile() const;
 
+	virtual void Delete();
 	virtual void LoadSettings() = 0;
 	virtual void SaveSettings() = 0;
 	virtual void ApplyChanges() = 0;

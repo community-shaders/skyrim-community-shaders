@@ -178,6 +178,69 @@ namespace Util
 		}
 	}
 
+	// --- Reusable ConfirmationPopup ---
+
+	void ConfirmationPopup::Request()
+	{
+		if (dontAskAgainPersist && *dontAskAgainPersist) {
+			confirmed = true;
+			return;
+		}
+		show = true;
+		confirmed = false;
+		dontAskCheckbox = false;
+	}
+
+	bool ConfirmationPopup::Draw()
+	{
+		if (confirmed) {
+			confirmed = false;
+			return true;
+		}
+		if (!show)
+			return false;
+
+		ImGui::OpenPopup(title.c_str());
+		ImVec2 center = ImGui::GetMainViewport()->GetCenter();
+		ImGui::SetNextWindowPos(center, ImGuiCond_Always, ImVec2(0.5f, 0.5f));
+
+		bool result = false;
+		if (ImGui::BeginPopupModal(title.c_str(), &show, ImGuiWindowFlags_AlwaysAutoResize)) {
+			ImGui::TextWrapped("%s", message.c_str());
+			ImGui::Spacing();
+			ImGui::Separator();
+			ImGui::Spacing();
+
+			if (showDontAskAgain)
+				ImGui::Checkbox("Don't ask me again", &dontAskCheckbox);
+
+			constexpr float buttonWidth = ThemeManager::Constants::POPUP_BUTTON_WIDTH;
+			const float spacing = ImGui::GetStyle().ItemSpacing.x;
+			const float totalWidth = buttonWidth * 2 + spacing;
+			const float offset = (ImGui::GetWindowWidth() - totalWidth) * 0.5f;
+			if (offset > 0)
+				ImGui::SetCursorPosX(offset);
+
+			if (ImGui::Button(confirmLabel.c_str(), ImVec2(buttonWidth, 0))) {
+				if (showDontAskAgain && dontAskCheckbox && dontAskAgainPersist)
+					*dontAskAgainPersist = true;
+				result = true;
+				show = false;
+				ImGui::CloseCurrentPopup();
+			}
+
+			ImGui::SameLine();
+
+			if (ImGui::Button(cancelLabel.c_str(), ImVec2(buttonWidth, 0))) {
+				show = false;
+				ImGui::CloseCurrentPopup();
+			}
+
+			ImGui::EndPopup();
+		}
+		return result;
+	}
+
 	bool PercentageSlider(const char* label, float* data, float lb, float ub, const char* format)
 	{
 		float percentageData = (*data) * 1e2f;
@@ -307,6 +370,16 @@ namespace Util
 		if (m_pushedStyles > 0) {
 			ImGui::PopStyleColor(m_pushedStyles);
 		}
+	}
+
+	StyledButtonWrapper ErrorButtonStyle()
+	{
+		constexpr float kHoverBrighten = 0.2f;
+		constexpr float kActiveBrighten = 0.3f;
+		auto color = Menu::GetSingleton()->GetTheme().StatusPalette.Error;
+		auto hover = ImVec4(std::min(color.x + kHoverBrighten, 1.0f), std::min(color.y + kHoverBrighten, 1.0f), std::min(color.z + kHoverBrighten, 1.0f), color.w);
+		auto active = ImVec4(std::min(color.x + kActiveBrighten, 1.0f), std::min(color.y + kActiveBrighten, 1.0f), std::min(color.z + kActiveBrighten, 1.0f), color.w);
+		return StyledButtonWrapper(color, hover, active);
 	}
 
 	// SectionWrapper implementation

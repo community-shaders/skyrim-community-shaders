@@ -108,6 +108,8 @@ namespace globals
 		RE::BSUtilityShader* utilityShader = nullptr;
 		RE::Sky* sky = nullptr;
 		RE::UI* ui = nullptr;
+		RE::Calendar* calendar = nullptr;
+		std::atomic<bool> quitGame{ false };
 
 		RE::BSGraphics::PixelShader** currentPixelShader = nullptr;
 		RE::BSGraphics::VertexShader** currentVertexShader = nullptr;
@@ -174,6 +176,7 @@ namespace globals
 			stateUpdateFlags = GET_INSTANCE_MEMBER_PTR(stateUpdateFlags, shadowState);
 
 			ui = RE::UI::GetSingleton();
+			calendar = RE::Calendar::GetSingleton();
 			perFrame = { REL::RelocationID(524768, 411384) };
 
 			currentAccumulator = { REL::RelocationID(527650, 414600) };
@@ -206,6 +209,13 @@ namespace globals
 
 		bShadowsOnGrass = RE::GetINISetting("bShadowsOnGrass:Display");
 		shadowMaskQuarter = RE::GetINISetting("iShadowMaskQuarter:Display");
+	}
+
+	void OnGameWindowClose()
+	{
+		game::quitGame = true;
+		if (shaderCache)
+			shaderCache->StopCompilation();
 	}
 
 	/**

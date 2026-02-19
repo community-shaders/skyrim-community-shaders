@@ -338,6 +338,7 @@ void ScreenSpaceGI::DrawSettings()
 void ScreenSpaceGI::LoadSettings(json& o_json)
 {
 	settings = o_json;
+	settings.ResolutionMode = std::clamp(settings.ResolutionMode, 0, 2);
 
 	recompileFlag = true;
 }
