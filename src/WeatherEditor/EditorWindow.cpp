@@ -43,18 +43,19 @@ inline void HelpMarker(const char* a_desc)
 void DrawIconStar(ImVec2 center, float radius, ImU32 color, bool filled)
 {
 	auto* drawList = ImGui::GetWindowDrawList();
-	const int numPoints = 5;
-	const float angleStep = 3.14159f / numPoints;
+	constexpr int numPoints = 5;
+	const float angleStep = IM_PI / numPoints;
 	ImVec2 points[10];
 
 	for (int i = 0; i < numPoints * 2; i++) {
-		float angle = -1.57079f + i * angleStep;
+		float angle = -IM_PI * 0.5f + i * angleStep;
 		float r = (i % 2 == 0) ? radius : radius * 0.38f;
 		points[i] = ImVec2(center.x + cosf(angle) * r, center.y + sinf(angle) * r);
 	}
 
 	if (filled) {
-		// Fill without AA to prevent fringe seams between adjacent pieces
+		// Disable AA fill temporarily — ImGui adds a 1px fringe around each filled shape
+		// that creates visible seams at the pentagon/triangle boundaries.
 		ImDrawListFlags oldFlags = drawList->Flags;
 		drawList->Flags &= ~ImDrawListFlags_AntiAliasedFill;
 
@@ -69,12 +70,10 @@ void DrawIconStar(ImVec2 center, float radius, ImU32 color, bool filled)
 
 		drawList->Flags = oldFlags;
 
-		// Draw an AA outline over the outer perimeter to restore smooth edges
-		drawList->AddPolyline(points, 10, color, ImDrawFlags_Closed, 1.0f);
+		// Draw an AA polyline over the outer perimeter to restore smooth edges
+		drawList->AddPolyline(points, 10, color, ImDrawFlags_Closed, 1.5f);
 	} else {
-		for (int i = 0; i < 10; i++) {
-			drawList->AddLine(points[i], points[(i + 1) % 10], color, 1.5f);
-		}
+		drawList->AddPolyline(points, 10, color, ImDrawFlags_Closed, 1.5f);
 	}
 }
 
