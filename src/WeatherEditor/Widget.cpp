@@ -16,6 +16,7 @@ bool Widget::MatchesSearch(const std::string& text) const
 
 void Widget::Save()
 {
+	EditorWindow::GetSingleton()->OnWidgetJsonAttachmentChanged(this);
 	SaveSettings();
 	const std::string filePath = std::format("{}\\{}", Util::PathHelpers::GetCommunityShaderPath().string(), GetFolderName());
 	const std::string file = std::format("{}\\{}.json", filePath, GetEditorID());
@@ -71,6 +72,7 @@ void Widget::Save()
 
 void Widget::Load()
 {
+	EditorWindow::GetSingleton()->OnWidgetJsonAttachmentChanged(this);
 	std::string filePath = std::format("{}\\{}\\{}.json", Util::PathHelpers::GetCommunityShaderPath().string(), GetFolderName(), GetEditorID());
 
 	if (!std::filesystem::exists(filePath)) {
@@ -145,6 +147,7 @@ void Widget::Load()
 
 void Widget::Delete()
 {
+	EditorWindow::GetSingleton()->OnWidgetJsonAttachmentChanged(this);
 	std::string filePath = std::format("{}\\{}\\{}.json", Util::PathHelpers::GetCommunityShaderPath().string(), GetFolderName(), GetEditorID());
 
 	if (!std::filesystem::exists(filePath)) {
@@ -202,14 +205,14 @@ void Widget::DrawMenu()
 	DrawDeleteConfirmationModal();
 }
 
-void Widget::DrawDeleteConfirmationModal()
+void Widget::DrawDeleteConfirmationModal(const char* popupId)
 {
-	if (!ImGui::IsPopupOpen("DeleteConfirmation"))
+	if (!ImGui::IsPopupOpen(popupId))
 		return;
 	if (deleteConfirmationFrame == ImGui::GetFrameCount())
 		return;
 
-	if (ImGui::BeginPopupModal("DeleteConfirmation", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
+	if (ImGui::BeginPopupModal(popupId, nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
 		deleteConfirmationFrame = ImGui::GetFrameCount();
 		ImGui::Text("Are you sure you want to delete the saved settings file?");
 		ImGui::Spacing();
@@ -345,12 +348,11 @@ void Widget::DrawWidgetHeader(const char* searchId, bool showApply, bool showSav
 
 			if (HasSavedFile() && menu->uiIcons.deleteSettings.texture) {
 				ImGui::SameLine();
-				ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.7f, 0.3f, 0.2f, 1.0f));
-				ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.9f, 0.4f, 0.3f, 1.0f));
-				if (ImGui::ImageButton((std::string(searchId) + "_Delete").c_str(), menu->uiIcons.deleteSettings.texture, buttonSize)) {
-					ImGui::OpenPopup("DeleteConfirmation");
+				{
+					auto _style = Util::ErrorButtonStyle();
+					if (ImGui::ImageButton((std::string(searchId) + "_Delete").c_str(), menu->uiIcons.deleteSettings.texture, buttonSize))
+						ImGui::OpenPopup("DeleteConfirmation");
 				}
-				ImGui::PopStyleColor(2);
 				if (ImGui::IsItemHovered())
 					ImGui::SetTooltip("Delete saved file");
 			}
