@@ -7,14 +7,20 @@ struct CreationEngineRaytracing
 {
 	HMODULE handle = nullptr;
 
-	using InitializeFn = void (*)(ID3D12Device5*, ID3D12CommandQueue*);
+	using InitializeFn = bool (*)(ID3D12Device5*, ID3D12CommandQueue*);
+	using SetScreenSizeFn = bool (*)(uint32_t, uint32_t);
 	using SetupResourcesFn = void (*)();
 	using UpdateFrameBufferFn = void (*)(float4x4 viewInverse, float4x4 projInverse, float4 cameraData, float4 NDCToView, float3 position);
+	using ExecuteFn = void (*)();
+	using WaitExecutionFn = void (*)();
 	using AttachModelFn = void (*)(RE::TESForm*);
 
 	InitializeFn Initialize = nullptr;
+	SetScreenSizeFn SetScreenSize = nullptr;
 	SetupResourcesFn SetupResources = nullptr;
 	UpdateFrameBufferFn UpdateFrameBuffer = nullptr;
+	ExecuteFn Execute = nullptr;
+	WaitExecutionFn WaitExecution = nullptr;
 	AttachModelFn AttachModel = nullptr;
 
 	CreationEngineRaytracing()
@@ -33,6 +39,11 @@ struct CreationEngineRaytracing
 		if (!Initialize)
 			logger::error("[Raytracing] 'CreationEngineRaytracing.dll' Initialize is nullptr");
 
+		SetScreenSize = reinterpret_cast<SetScreenSizeFn>(GetProcAddress(handle, "SetScreenSize"));
+
+		if (!SetScreenSize)
+			logger::error("[Raytracing] 'CreationEngineRaytracing.dll' SetScreenSize is nullptr");
+
 		SetupResources = reinterpret_cast<SetupResourcesFn>(GetProcAddress(handle, "SetupResources"));
 
 		if (!SetupResources)
@@ -42,6 +53,16 @@ struct CreationEngineRaytracing
 
 		if (!UpdateFrameBuffer)
 			logger::error("[Raytracing] 'CreationEngineRaytracing.dll' UpdateFrameBuffer is nullptr");
+
+		Execute = reinterpret_cast<ExecuteFn>(GetProcAddress(handle, "Execute"));
+
+		if (!Execute)
+			logger::error("[Raytracing] 'CreationEngineRaytracing.dll' Execute is nullptr");
+
+		WaitExecution = reinterpret_cast<WaitExecutionFn>(GetProcAddress(handle, "WaitExecution"));
+
+		if (!WaitExecution)
+			logger::error("[Raytracing] 'CreationEngineRaytracing.dll' WaitExecution is nullptr");
 
 		AttachModel = reinterpret_cast<AttachModelFn>(GetProcAddress(handle, "AttachModel"));
 
@@ -89,14 +110,18 @@ struct Raytracing : public Feature
 	void PostPostLoad() override;
 
 	void CreateD3D12Device(ID3D11Device* device, ID3D11DeviceContext* immediateContext, IDXGIAdapter* adapter);
-	void InitializeCERaytracing(ID3D12Device5* device, ID3D12CommandQueue* commandQueue) const;
-	void UpdateFrameBuffer() const;
+	void InitializeCERaytracing(ID3D12Device5* device, ID3D12CommandQueue* commandQueue);
+	void Main_RenderPlayerView_Before() const;
+	void DeferredPasses() const;
 
 	////////////////////////////////////////////////// Feature Specific Data
 	struct Settings
 	{
 		bool Enabled = true;
 	} settings;
+
+	bool initialized = false;
+	bool forcedDisabled = false;
 
 	struct CbData
 	{
@@ -147,7 +172,7 @@ struct Raytracing : public Feature
 		{
 			static void thunk(void* a1, bool a2, bool a3)
 			{
-				globals::features::raytracing.UpdateFrameBuffer();
+				globals::features::raytracing.Main_RenderPlayerView_Before();
 
 				func(a1, a2, a3);
 			};

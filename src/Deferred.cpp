@@ -14,6 +14,7 @@
 #include "Features/TerrainBlending.h"
 #include "Features/Upscaling.h"
 #include "Features/WeatherEditor.h"
+#include "Features/Raytracing.h"
 
 #include "Hooks.h"
 
@@ -409,6 +410,10 @@ void Deferred::DeferredPasses()
 
 	auto& terrainBlending = globals::features::terrainBlending;
 	auto& ibl = globals::features::ibl;
+
+	if (auto& rt = globals::features::raytracing; rt.loaded) {
+		rt.DeferredPasses();
+	}
 
 	// Deferred Composite
 	{

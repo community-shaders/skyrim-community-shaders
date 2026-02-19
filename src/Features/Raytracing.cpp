@@ -95,13 +95,31 @@ void Raytracing::PostPostLoad()
 	RE::GetINISetting("bReflectSky:Water")->data.b = true;
 }
 
-void Raytracing::InitializeCERaytracing(ID3D12Device5* device2, ID3D12CommandQueue* commandQueue2) const
+void Raytracing::InitializeCERaytracing(ID3D12Device5* device, ID3D12CommandQueue* commandQueue2)
 {
-	creationEngineRaytracing->Initialize(device2, commandQueue2);
+	if (initialized)
+		return;
+
+	bool result = creationEngineRaytracing->Initialize(device, commandQueue2);
+
+	if (!result) {
+		settings.Enabled = false;
+		forcedDisabled = true;
+
+		logger::error("[Raytracing] Failed to initialize Creation Engine ray tracing.");
+	} else {
+		initialized = true;
+		logger::info("[Raytracing] Successfully initialized Creation Engine ray tracing.");
+	}	
 }
 
-void Raytracing::UpdateFrameBuffer() const
+void Raytracing::Main_RenderPlayerView_Before() const
 {
+	if (!settings.Enabled)
+		return;
+
+	creationEngineRaytracing->SetScreenSize(static_cast<uint32_t>(globals::state->screenSize.x), static_cast<uint32_t>(globals::state->screenSize.y));
+
 	auto eye = Util::GetCameraData(0);
 	float2 ndcToViewMult = float2(2.0f / eye.projMat(0, 0), -2.0f / eye.projMat(1, 1));
 	float2 ndcToViewAdd = float2(-1.0f / eye.projMat(0, 0), 1.0f / eye.projMat(1, 1));
@@ -110,8 +128,18 @@ void Raytracing::UpdateFrameBuffer() const
 		globals::game::frameBufferCached.GetCameraViewInverse().Transpose(),
 		globals::game::frameBufferCached.GetCameraProjInverse().Transpose(),
 		Util::GetCameraData(),
-		float4(ndcToViewMult.x, ndcToViewMult.y, ndcToViewAdd.x, ndcToViewAdd.y), 
+		float4(ndcToViewMult.x, ndcToViewMult.y, ndcToViewAdd.x, ndcToViewAdd.y),
 		float3(globals::game::frameBufferCached.GetCameraPosAdjust()));
+
+	creationEngineRaytracing->Execute();
+}
+
+void Raytracing::DeferredPasses() const
+{
+	if (!settings.Enabled)
+		return;
+
+	creationEngineRaytracing->WaitExecution();
 }
 
 void Raytracing::SetupResources()
