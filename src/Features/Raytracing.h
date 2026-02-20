@@ -3,73 +3,61 @@
 #include <directx/d3d12.h>
 #include <d3d11_4.h>
 
+#include "Features/Upscaling/DX12SwapChain.h"
+
+#include "Util.h"
+
 struct CreationEngineRaytracing
 {
 	HMODULE handle = nullptr;
 
-	using InitializeFn = bool (*)(ID3D12Device5*, ID3D12CommandQueue*);
-	using SetScreenSizeFn = bool (*)(uint32_t, uint32_t);
-	using SetupResourcesFn = void (*)();
-	using UpdateFrameBufferFn = void (*)(float4x4 viewInverse, float4x4 projInverse, float4 cameraData, float4 NDCToView, float3 position);
-	using ExecuteFn = void (*)();
+	using InitializeFn = bool (*)(ID3D12Device5*, ID3D12CommandQueue*, ID3D12CommandQueue*, ID3D12CommandQueue*);
 	using WaitExecutionFn = void (*)();
-	using AttachModelFn = void (*)(RE::TESForm*);
+	using GetResolutionFn = void (*)(uint32_t&, uint32_t&);
+	using SetResolutionFn = void (*)(uint32_t, uint32_t);
 
 	InitializeFn Initialize = nullptr;
-	SetScreenSizeFn SetScreenSize = nullptr;
-	SetupResourcesFn SetupResources = nullptr;
-	UpdateFrameBufferFn UpdateFrameBuffer = nullptr;
-	ExecuteFn Execute = nullptr;
 	WaitExecutionFn WaitExecution = nullptr;
-	AttachModelFn AttachModel = nullptr;
+	SetResolutionFn SetResolution = nullptr;
 
 	CreationEngineRaytracing()
 	{
-		handle = LoadLibraryA("Data\\CreationEngineRaytracing.dll");
+		GetModuleHandleEx(
+			GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+			L"CreationEngineRaytracing.dll",
+			&handle);
 
 		if (!handle) {
-			logger::error("[Raytracing] LoadLibrary failed for 'CreationEngineRaytracing.dll'");
+			logger::critical("[Raytracing] 'CreationEngineRaytracing.dll' not found, make sure Creation Engine Raytracing is enabled in your mod manager.");
 			return;
 		}
-
-		logger::info("[Raytracing] 'CreationEngineRaytracing.dll' loaded");
 
 		Initialize = reinterpret_cast<InitializeFn>(GetProcAddress(handle, "Initialize"));
 
 		if (!Initialize)
 			logger::error("[Raytracing] 'CreationEngineRaytracing.dll' Initialize is nullptr");
 
-		SetScreenSize = reinterpret_cast<SetScreenSizeFn>(GetProcAddress(handle, "SetScreenSize"));
-
-		if (!SetScreenSize)
-			logger::error("[Raytracing] 'CreationEngineRaytracing.dll' SetScreenSize is nullptr");
-
-		SetupResources = reinterpret_cast<SetupResourcesFn>(GetProcAddress(handle, "SetupResources"));
-
-		if (!SetupResources)
-			logger::error("[Raytracing] 'CreationEngineRaytracing.dll' SetupResources is nullptr");
-
-		UpdateFrameBuffer = reinterpret_cast<UpdateFrameBufferFn>(GetProcAddress(handle, "UpdateFrameBuffer"));
-
-		if (!UpdateFrameBuffer)
-			logger::error("[Raytracing] 'CreationEngineRaytracing.dll' UpdateFrameBuffer is nullptr");
-
-		Execute = reinterpret_cast<ExecuteFn>(GetProcAddress(handle, "Execute"));
-
-		if (!Execute)
-			logger::error("[Raytracing] 'CreationEngineRaytracing.dll' Execute is nullptr");
-
 		WaitExecution = reinterpret_cast<WaitExecutionFn>(GetProcAddress(handle, "WaitExecution"));
 
 		if (!WaitExecution)
 			logger::error("[Raytracing] 'CreationEngineRaytracing.dll' WaitExecution is nullptr");
 
-		AttachModel = reinterpret_cast<AttachModelFn>(GetProcAddress(handle, "AttachModel"));
+		SetResolution = reinterpret_cast<SetResolutionFn>(GetProcAddress(handle, "SetResolution"));
 
-		if (!AttachModel)
-			logger::error("[Raytracing] 'CreationEngineRaytracing.dll' AttachModel is nullptr");
+		if (!SetResolution)
+			logger::error("[Raytracing] 'CreationEngineRaytracing.dll' SetResolution is nullptr");
 	}
 };
+
+struct uint2
+{
+	uint x;
+	uint y;
+
+	bool operator==(const uint2&) const = default;
+	bool operator!=(const uint2&) const = default;
+};
+static_assert(sizeof(uint2) == 8);
 
 struct Raytracing : public Feature
 {
@@ -110,9 +98,8 @@ struct Raytracing : public Feature
 	void PostPostLoad() override;
 
 	void CreateD3D12Device(ID3D11Device* device, ID3D11DeviceContext* immediateContext, IDXGIAdapter* adapter);
-	void InitializeCERaytracing(ID3D12Device5* device, ID3D12CommandQueue* commandQueue);
-	void Main_RenderPlayerView_Before() const;
-	void DeferredPasses() const;
+	void InitializeCERaytracing(ID3D12Device5* device, ID3D12CommandQueue* commandQueue, ID3D12CommandQueue* computeCommandQueue, ID3D12CommandQueue* copyCommandQueue);
+	void DeferredPasses();
 
 	////////////////////////////////////////////////// Feature Specific Data
 	struct Settings
@@ -122,6 +109,17 @@ struct Raytracing : public Feature
 
 	bool initialized = false;
 	bool forcedDisabled = false;
+
+	uint2 m_Resolution;
+
+	enum DisableReason
+	{
+		None,
+		UnsupportedGPU,
+		OutdatedDrivers,
+		MissingPlugin,
+		InitFailed,
+	} disableReason = DisableReason::None;
 
 	struct CbData
 	{
@@ -139,17 +137,23 @@ struct Raytracing : public Feature
 	winrt::com_ptr<ID3D11SamplerState> cheeseSampler = nullptr;
 	winrt::com_ptr<ID3D11ComputeShader> cheeseCs = nullptr;
 
+	eastl::unique_ptr<WrappedResource> mainTexture = nullptr; 
+
 	eastl::unique_ptr<CreationEngineRaytracing> creationEngineRaytracing = nullptr;
 
 	// D3D11
-	winrt::com_ptr<ID3D11Device5> d3d11Device = nullptr;
-	winrt::com_ptr<ID3D11DeviceContext4> d3d11Context = nullptr;
+	winrt::com_ptr<ID3D11Device5> m_D3D11Device = nullptr;
+	winrt::com_ptr<ID3D11DeviceContext4> m_D3D11Context = nullptr;
 
 	// D3D12
-	winrt::com_ptr<ID3D12Device5> d3d12Device = nullptr;
-	winrt::com_ptr<ID3D12CommandQueue> commandQueue = nullptr;
-	winrt::com_ptr<ID3D12CommandAllocator> commandAllocator = nullptr;
-	winrt::com_ptr<ID3D12GraphicsCommandList4> commandList = nullptr;
+	winrt::com_ptr<ID3D12Device5> m_D3D12Device = nullptr;
+
+	winrt::com_ptr<ID3D12CommandQueue> m_CommandQueue = nullptr;
+	winrt::com_ptr<ID3D12CommandQueue> m_ComputeCommandQueue = nullptr;
+	winrt::com_ptr<ID3D12CommandQueue> m_CopyCommandQueue = nullptr;
+
+	//winrt::com_ptr<ID3D12CommandAllocator> commandAllocator = nullptr;
+	//winrt::com_ptr<ID3D12GraphicsCommandList4> commandList = nullptr;
 
 	winrt::com_ptr<ID3D11Fence> d3d11Fence = nullptr;
 	winrt::com_ptr<ID3D12Fence> d3d12Fence = nullptr;
@@ -157,37 +161,6 @@ struct Raytracing : public Feature
 
 	struct Hooks
 	{
-		struct TES_AttachModel
-		{
-			static void thunk(RE::TES* a1, RE::TESObjectREFR* refr, RE::TESObjectCELL* cell, void* queuedTree, char a5, RE::NiNode* a6)
-			{
-				func(a1, refr, cell, queuedTree, a5, a6);
-
-				globals::features::raytracing.creationEngineRaytracing->AttachModel(refr);
-			}
-			static inline REL::Relocation<decltype(thunk)> func;
-		};
-
-		struct Main_RenderPlayerView
-		{
-			static void thunk(void* a1, bool a2, bool a3)
-			{
-				globals::features::raytracing.Main_RenderPlayerView_Before();
-
-				func(a1, a2, a3);
-			};
-			static inline REL::Relocation<decltype(thunk)> func;
-		};
-
-		static void Install()
-		{
-			stl::detour_thunk<TES_AttachModel>(REL::RelocationID(13209, 13355));
-
-			stl::detour_thunk<Main_RenderPlayerView>(REL::RelocationID(35560, 36559));
-
-			logger::info("[Raytracing] Installed hooks");
-		}
-
 		static void InstallD3D11Hooks(ID3D11Device* device) 
 		{
 			logger::info("[Raytracing] Installed D3D11 hooks - [0x{:08X}]", reinterpret_cast<uintptr_t>(device));
