@@ -1022,7 +1022,7 @@ void WeatherWidget::DrawCloudSettings()
 			const float headerHeight = ImGui::GetFrameHeight();
 			const ImVec2 badgePos = {
 				ImGui::GetWindowPos().x + ImGui::GetWindowWidth() - badgeSize.x -
-				    ImGui::GetStyle().ScrollbarSize - ImGui::GetStyle().WindowPadding.x,
+					ImGui::GetStyle().ScrollbarSize - ImGui::GetStyle().WindowPadding.x,
 				headerScreenY + (headerHeight - badgeSize.y) * 0.5f
 			};
 			ImGui::GetWindowDrawList()->AddText(badgePos, ImGui::GetColorU32(ImGuiCol_CheckMark), kEnabledBadge);
