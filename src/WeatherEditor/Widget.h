@@ -142,13 +142,14 @@ public:
 
 	bool MatchesSearch(const std::string& text) const;
 
+	void DrawDeleteConfirmationModal(const char* popupId = "DeleteConfirmation");
+
 	json js = json();
 
 protected:
 	std::string cachedEditorID;
 	virtual void DrawMenu();
 	std::string GetFolderName();
-	void DrawDeleteConfirmationModal();
 };
 
 // Simple widget for caching form data without full widget functionality

@@ -13,6 +13,8 @@
 #include "WeatherUtils.h"
 #include "Widget.h"
 
+#include <unordered_map>
+
 class EditorWindow
 {
 public:
@@ -181,6 +183,8 @@ public:
 	~EditorWindow();
 
 private:
+	friend class Widget;
+
 	void SaveAll();
 	void SaveSettings();
 	void LoadSettings();
@@ -208,8 +212,18 @@ private:
 		EditorID,
 		FormID,
 		File,
-		Status
+		Status,
+		JsonAttachment
 	};
 	SortColumn currentSortColumn = SortColumn::None;
 	bool sortAscending = true;
+
+	Widget* pendingDeleteWidget = nullptr;
+	bool pendingDeletePopupRequested = false;
+
+	void OnWidgetJsonAttachmentChanged(Widget* widget);
+	std::unordered_map<Widget*, bool> jsonAttachmentCache;
+	void RefreshJsonAttachmentCache(const std::vector<Widget*>& widgets);
+	bool HasCachedJsonAttachment(Widget* widget) const;
+	void InvalidateJsonAttachmentCache(Widget* widget = nullptr);
 };
