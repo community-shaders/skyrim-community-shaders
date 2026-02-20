@@ -12,8 +12,6 @@
 
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(EditorWindow::Settings, recordMarkers, markedRecords, autoApplyChanges, useTextButtons, enableInheritFromParent, editorUIScale, favoriteWidgets, recentWidgets, maxRecentWidgets, rememberOpenWidgets, lastOpenWidgets)
 
-void SetTooltipPositionNearMouse(float estimatedHeight);
-
 void TextUnformattedDisabled(const char* a_text, const char* a_textEnd = nullptr)
 {
 	ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetStyleColorVec4(ImGuiCol_TextDisabled));
@@ -21,14 +19,40 @@ void TextUnformattedDisabled(const char* a_text, const char* a_textEnd = nullptr
 	ImGui::PopStyleColor();
 }
 
+void SetTooltipPositionNearMouse(float estimatedHeight, float estimatedWidth = 0.0f)
+{
+	const ImVec2 mousePos = ImGui::GetMousePos();
+	const ImGuiViewport* viewport = ImGui::GetMainViewport();
+	constexpr float kTooltipOffsetX = 16.0f;
+	constexpr float kTooltipOffsetY = 12.0f;
+
+	const float viewportBottom = viewport->WorkPos.y + viewport->WorkSize.y;
+	const float viewportRight = viewport->WorkPos.x + viewport->WorkSize.x;
+
+	const bool placeAboveCursor = (mousePos.y + kTooltipOffsetY + estimatedHeight) > viewportBottom;
+	const bool placeLeftOfCursor = estimatedWidth > 0.0f && (mousePos.x + kTooltipOffsetX + estimatedWidth) > viewportRight;
+
+	const float pivotX = placeLeftOfCursor ? 1.0f : 0.0f;
+	const float pivotY = placeAboveCursor ? 1.0f : 0.0f;
+	const ImVec2 tooltipPivot(pivotX, pivotY);
+
+	const float posX = placeLeftOfCursor ? (mousePos.x - kTooltipOffsetX) : (mousePos.x + kTooltipOffsetX);
+	const float posY = placeAboveCursor ? (mousePos.y - kTooltipOffsetY) : (mousePos.y + kTooltipOffsetY);
+	const ImVec2 tooltipPos(posX, posY);
+
+	ImGui::SetNextWindowPos(tooltipPos, ImGuiCond_Always, tooltipPivot);
+}
+
 void AddTooltip(const char* a_desc, ImGuiHoveredFlags a_flags = ImGuiHoveredFlags_DelayNormal)
 {
 	if (ImGui::IsItemHovered(a_flags)) {
 		const float wrapWidth = ImGui::GetFontSize() * 50.0f;
+		const float windowPaddingX = 8.0f;
 		const float windowPaddingY = 8.0f;
 		const ImVec2 wrappedTextSize = ImGui::CalcTextSize(a_desc, nullptr, false, wrapWidth);
 		const float estimatedTooltipHeight = wrappedTextSize.y + windowPaddingY * 2.0f;
-		SetTooltipPositionNearMouse(estimatedTooltipHeight);
+		const float estimatedTooltipWidth = wrappedTextSize.x + windowPaddingX * 2.0f;
+		SetTooltipPositionNearMouse(estimatedTooltipHeight, estimatedTooltipWidth);
 
 		ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, { 8, 8 });
 		if (ImGui::BeginTooltip()) {
@@ -39,22 +63,6 @@ void AddTooltip(const char* a_desc, ImGuiHoveredFlags a_flags = ImGuiHoveredFlag
 		}
 		ImGui::PopStyleVar();
 	}
-}
-
-void SetTooltipPositionNearMouse(float estimatedHeight)
-{
-	const ImVec2 mousePos = ImGui::GetMousePos();
-	const ImGuiViewport* viewport = ImGui::GetMainViewport();
-	constexpr float kTooltipOffsetX = 16.0f;
-	constexpr float kTooltipOffsetY = 12.0f;
-
-	const float viewportBottom = viewport->WorkPos.y + viewport->WorkSize.y;
-	const bool placeAboveCursor = (mousePos.y + kTooltipOffsetY + estimatedHeight) > viewportBottom;
-	const ImVec2 tooltipPivot = placeAboveCursor ? ImVec2(0.0f, 1.0f) : ImVec2(0.0f, 0.0f);
-	const ImVec2 tooltipPos = placeAboveCursor ?
-	                              ImVec2(mousePos.x + kTooltipOffsetX, mousePos.y - kTooltipOffsetY) :
-	                              ImVec2(mousePos.x + kTooltipOffsetX, mousePos.y + kTooltipOffsetY);
-	ImGui::SetNextWindowPos(tooltipPos, ImGuiCond_Always, tooltipPivot);
 }
 
 inline void HelpMarker(const char* a_desc)
@@ -461,10 +469,10 @@ void EditorWindow::ShowObjectsWindow()
 					bool active = ImGui::IsItemActive();
 					ImGui::PopStyleColor(3);
 
-					if (active || hovered || selected) {
-						const ImGuiCol highlightCol = active  ? ImGuiCol_HeaderActive :
-						                              hovered ? ImGuiCol_HeaderHovered :
-						                                        ImGuiCol_Header;
+					// Only apply highlight for hover/active — skip plain "selected" to
+					// preserve custom row background colors (marked records, current-cell tint).
+					if (active || hovered) {
+						const ImGuiCol highlightCol = active ? ImGuiCol_HeaderActive : ImGuiCol_HeaderHovered;
 						const ImU32 rowColor = ImGui::GetColorU32(highlightCol);
 						ImGui::TableSetBgColor(ImGuiTableBgTarget_RowBg0, rowColor);
 						ImGui::TableSetBgColor(ImGuiTableBgTarget_RowBg1, rowColor);
@@ -704,8 +712,11 @@ void EditorWindow::ShowObjectsWindow()
 						if (weatherWidget && weatherWidget->weather) {
 							const float lineHeight = ImGui::GetTextLineHeightWithSpacing();
 							const float windowPaddingY = ImGui::GetStyle().WindowPadding.y;
-							constexpr float kTooltipLineCount = 10.0f;  // 2 section headers + 8 TOD value lines
-							const float estimatedTooltipHeight = kTooltipLineCount * lineHeight + windowPaddingY * 2.0f;
+							const float spacingHeight = ImGui::GetStyle().ItemSpacing.y;
+							constexpr int kSectionHeaders = 2;   // "ImageSpace:" + "Volumetric Lighting:"
+							constexpr int kTodValuesPerSection = 4;
+							constexpr int kSpacingSeparators = 1;  // Spacing between sections
+							const float estimatedTooltipHeight = (kSectionHeaders + kTodValuesPerSection * 2) * lineHeight + kSpacingSeparators * spacingHeight + windowPaddingY * 2.0f;
 							SetTooltipPositionNearMouse(estimatedTooltipHeight);
 							ImGui::BeginTooltip();
 
