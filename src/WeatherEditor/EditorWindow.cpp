@@ -290,12 +290,24 @@ void EditorWindow::ShowObjectsWindow()
 						if (sortSpecs->SpecsCount > 0) {
 							const ImGuiTableColumnSortSpecs& spec = sortSpecs->Specs[0];
 							switch (spec.ColumnIndex) {
-							case 1: currentSortColumn = SortColumn::EditorID; break;
-							case 2: currentSortColumn = SortColumn::FormID; break;
-							case 3: currentSortColumn = SortColumn::File; break;
-							case 4: currentSortColumn = SortColumn::Status; break;
-							case 5: currentSortColumn = SortColumn::JsonAttachment; break;
-							default: currentSortColumn = SortColumn::None; break;
+							case 1:
+								currentSortColumn = SortColumn::EditorID;
+								break;
+							case 2:
+								currentSortColumn = SortColumn::FormID;
+								break;
+							case 3:
+								currentSortColumn = SortColumn::File;
+								break;
+							case 4:
+								currentSortColumn = SortColumn::Status;
+								break;
+							case 5:
+								currentSortColumn = SortColumn::JsonAttachment;
+								break;
+							default:
+								currentSortColumn = SortColumn::None;
+								break;
 							}
 							sortAscending = (spec.SortDirection == ImGuiSortDirection_Ascending);
 						} else {
