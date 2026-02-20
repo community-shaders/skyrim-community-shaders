@@ -1021,8 +1021,7 @@ void WeatherWidget::DrawCloudSettings()
 			const ImVec2 badgeSize = ImGui::CalcTextSize(kEnabledBadge);
 			const float headerHeight = ImGui::GetFrameHeight();
 			const ImVec2 badgePos = {
-				ImGui::GetWindowPos().x + ImGui::GetWindowWidth() - badgeSize.x -
-				    ImGui::GetStyle().ScrollbarSize - ImGui::GetStyle().WindowPadding.x,
+				ImGui::GetWindowPos().x + ImGui::GetContentRegionMax().x - badgeSize.x,
 				headerScreenY + (headerHeight - badgeSize.y) * 0.5f
 			};
 			ImGui::GetWindowDrawList()->AddText(badgePos, ImGui::GetColorU32(ImGuiCol_CheckMark), kEnabledBadge);
@@ -1038,7 +1037,7 @@ void WeatherWidget::DrawCloudSettings()
 			if (ImGui::Checkbox(std::format("Enable##{}", layer).c_str(), &layerEnabled)) {
 				settings.clouds[i].enabled = layerEnabled;
 				// Always apply cloud enable/disable immediately for instant feedback
-				EditorWindow::GetSingleton()->PushUndoState(this);
+				editorWindow->PushUndoState(this);
 				ApplyChanges();
 
 				// Force weather re-application if locked to make cloud changes visible immediately
@@ -1073,20 +1072,11 @@ void WeatherWidget::DrawCloudSettings()
 					ImGui::BeginGroup();
 					float textureSize = 128.0f;
 					ImGui::Image((void*)texture, ImVec2(textureSize, textureSize));
-					// Small grey subtext below image
-					ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.5f, 0.5f, 0.5f, 1.0f));
-					ImGui::PushFont(ImGui::GetFont());
-					ImGui::SetWindowFontScale(0.8f);
-					float textWidth = ImGui::CalcTextSize(settings.clouds[i].texturePath.c_str()).x;
-					if (textWidth > textureSize) {
-						ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + textureSize);
-						ImGui::TextWrapped("%s", settings.clouds[i].texturePath.c_str());
-						ImGui::PopTextWrapPos();
-					} else {
-						ImGui::Text("%s", settings.clouds[i].texturePath.c_str());
-					}
-					ImGui::SetWindowFontScale(1.0f);
-					ImGui::PopFont();
+					// Small grey subtext below image, clamped to texture width
+					ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetStyleColorVec4(ImGuiCol_TextDisabled));
+					ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + textureSize);
+					ImGui::TextWrapped("%s", settings.clouds[i].texturePath.c_str());
+					ImGui::PopTextWrapPos();
 					ImGui::PopStyleColor();
 					ImGui::EndGroup();
 				}
