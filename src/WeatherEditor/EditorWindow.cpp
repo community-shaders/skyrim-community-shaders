@@ -274,16 +274,24 @@ void EditorWindow::ShowObjectsWindow()
 			}
 
 			// Stable user IDs for sortable columns — used instead of ColumnIndex so reordering/insertion won't break sorting.
-			enum ColumnID : ImGuiID { ColFav = 0, ColEditorID, ColFormID, ColFile, ColStatus, ColJson };
+			enum ColumnID : ImGuiID
+			{
+				ColFav = 0,
+				ColEditorID,
+				ColFormID,
+				ColFile,
+				ColStatus,
+				ColJson
+			};
 
 			// Create a table for the right column with "Name" and "ID" headers. Different weights to prevent truncation.
 			if (ImGui::BeginTable("DetailsTable", 6, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingStretchProp | ImGuiTableFlags_Sortable)) {
-				ImGui::TableSetupColumn("Fav", ImGuiTableColumnFlags_WidthFixed | ImGuiTableColumnFlags_NoSort, 38.0f, ColFav);     // Favorite indicator
-				ImGui::TableSetupColumn("Editor ID", ImGuiTableColumnFlags_WidthStretch, 3.5f, ColEditorID);                        // Largest - weather/template names
-				ImGui::TableSetupColumn("Form ID", ImGuiTableColumnFlags_WidthFixed, 90.0f, ColFormID);                              // Fixed - 8 hex chars
-				ImGui::TableSetupColumn("File", ImGuiTableColumnFlags_WidthStretch, 2.0f, ColFile);                                  // Medium - plugin names
-				ImGui::TableSetupColumn("Status", ImGuiTableColumnFlags_WidthStretch, 1.5f, ColStatus);                              // Smaller - status text
-				ImGui::TableSetupColumn("json", ImGuiTableColumnFlags_WidthFixed, 55.0f, ColJson);                                   // JSON file / delete
+				ImGui::TableSetupColumn("Fav", ImGuiTableColumnFlags_WidthFixed | ImGuiTableColumnFlags_NoSort, 38.0f, ColFav);  // Favorite indicator
+				ImGui::TableSetupColumn("Editor ID", ImGuiTableColumnFlags_WidthStretch, 3.5f, ColEditorID);                     // Largest - weather/template names
+				ImGui::TableSetupColumn("Form ID", ImGuiTableColumnFlags_WidthFixed, 90.0f, ColFormID);                          // Fixed - 8 hex chars
+				ImGui::TableSetupColumn("File", ImGuiTableColumnFlags_WidthStretch, 2.0f, ColFile);                              // Medium - plugin names
+				ImGui::TableSetupColumn("Status", ImGuiTableColumnFlags_WidthStretch, 1.5f, ColStatus);                          // Smaller - status text
+				ImGui::TableSetupColumn("json", ImGuiTableColumnFlags_WidthFixed, 55.0f, ColJson);                               // JSON file / delete
 
 				ImGui::TableHeadersRow();
 
