@@ -19,6 +19,29 @@ void TextUnformattedDisabled(const char* a_text, const char* a_textEnd = nullptr
 	ImGui::PopStyleColor();
 }
 
+/// Full-row hover/selection highlight using table row background.
+static bool TableRowSelectable(const char* label, bool selected, ImGuiSelectableFlags flags)
+{
+	const ImVec4 kTransparent(0.0f, 0.0f, 0.0f, 0.0f);
+	ImGui::PushStyleColor(ImGuiCol_Header, kTransparent);
+	ImGui::PushStyleColor(ImGuiCol_HeaderHovered, kTransparent);
+	ImGui::PushStyleColor(ImGuiCol_HeaderActive, kTransparent);
+
+	bool pressed = ImGui::Selectable(label, selected, flags, ImVec2(0, ImGui::GetFrameHeight()));
+	bool hovered = ImGui::IsItemHovered();
+	bool active = ImGui::IsItemActive();
+	ImGui::PopStyleColor(3);
+
+	if (active || hovered) {
+		const ImGuiCol highlightCol = active ? ImGuiCol_HeaderActive : ImGuiCol_HeaderHovered;
+		const ImU32 rowColor = ImGui::GetColorU32(highlightCol);
+		ImGui::TableSetBgColor(ImGuiTableBgTarget_RowBg0, rowColor);
+		ImGui::TableSetBgColor(ImGuiTableBgTarget_RowBg1, rowColor);
+	}
+
+	return pressed;
+}
+
 void SetTooltipPositionNearMouse(float estimatedHeight, float estimatedWidth = 0.0f)
 {
 	const ImVec2 mousePos = ImGui::GetMousePos();
@@ -26,21 +49,23 @@ void SetTooltipPositionNearMouse(float estimatedHeight, float estimatedWidth = 0
 	constexpr float kTooltipOffsetX = 16.0f;
 	constexpr float kTooltipOffsetY = 12.0f;
 
-	const float viewportBottom = viewport->WorkPos.y + viewport->WorkSize.y;
+	const float viewportLeft = viewport->WorkPos.x;
 	const float viewportRight = viewport->WorkPos.x + viewport->WorkSize.x;
+	const float viewportBottom = viewport->WorkPos.y + viewport->WorkSize.y;
 
+	// Vertical: flip above cursor when it would overflow the bottom.
 	const bool placeAboveCursor = (mousePos.y + kTooltipOffsetY + estimatedHeight) > viewportBottom;
-	const bool placeLeftOfCursor = estimatedWidth > 0.0f && (mousePos.x + kTooltipOffsetX + estimatedWidth) > viewportRight;
-
-	const float pivotX = placeLeftOfCursor ? 1.0f : 0.0f;
-	const float pivotY = placeAboveCursor ? 1.0f : 0.0f;
-	const ImVec2 tooltipPivot(pivotX, pivotY);
-
-	const float posX = placeLeftOfCursor ? (mousePos.x - kTooltipOffsetX) : (mousePos.x + kTooltipOffsetX);
 	const float posY = placeAboveCursor ? (mousePos.y - kTooltipOffsetY) : (mousePos.y + kTooltipOffsetY);
-	const ImVec2 tooltipPos(posX, posY);
+	const float pivotY = placeAboveCursor ? 1.0f : 0.0f;
 
-	ImGui::SetNextWindowPos(tooltipPos, ImGuiCond_Always, tooltipPivot);
+	// Horizontal: clamp so the tooltip stays within viewport bounds.
+	float posX = mousePos.x + kTooltipOffsetX;
+	if (estimatedWidth > 0.0f) {
+		const float maxX = viewportRight - estimatedWidth;
+		posX = ImMax(viewportLeft, ImMin(posX, maxX));
+	}
+
+	ImGui::SetNextWindowPos(ImVec2(posX, posY), ImGuiCond_Always, ImVec2(0.0f, pivotY));
 }
 
 void AddTooltip(const char* a_desc, ImGuiHoveredFlags a_flags = ImGuiHoveredFlags_DelayNormal)
@@ -456,31 +481,6 @@ void EditorWindow::ShowObjectsWindow()
 					}
 				};
 
-				// Full-row hover/selection highlight using table row background.
-				// This avoids Selectable bbox/padding drift and keeps the highlight exactly aligned to row bounds.
-				auto tableRowSelectable = [](const char* label, bool selected, ImGuiSelectableFlags flags) -> bool {
-					const ImVec4 kTransparent(0.0f, 0.0f, 0.0f, 0.0f);
-					ImGui::PushStyleColor(ImGuiCol_Header, kTransparent);
-					ImGui::PushStyleColor(ImGuiCol_HeaderHovered, kTransparent);
-					ImGui::PushStyleColor(ImGuiCol_HeaderActive, kTransparent);
-
-					bool pressed = ImGui::Selectable(label, selected, flags, ImVec2(0, ImGui::GetFrameHeight()));
-					bool hovered = ImGui::IsItemHovered();
-					bool active = ImGui::IsItemActive();
-					ImGui::PopStyleColor(3);
-
-					// Only apply highlight for hover/active — skip plain "selected" to
-					// preserve custom row background colors (marked records, current-cell tint).
-					if (active || hovered) {
-						const ImGuiCol highlightCol = active ? ImGuiCol_HeaderActive : ImGuiCol_HeaderHovered;
-						const ImU32 rowColor = ImGui::GetColorU32(highlightCol);
-						ImGui::TableSetBgColor(ImGuiTableBgTarget_RowBg0, rowColor);
-						ImGui::TableSetBgColor(ImGuiTableBgTarget_RowBg1, rowColor);
-					}
-
-					return pressed;
-				};
-
 				// Special handling for Cell Lighting category
 				if (selectedCategory == "Cell Lighting") {
 					auto player = RE::PlayerCharacter::GetSingleton();
@@ -501,8 +501,14 @@ void EditorWindow::ShowObjectsWindow()
 							std::string displayName = cellName && cellName[0] ? cellName : "[Unnamed Cell]";
 							std::string label = std::format("[CURRENT CELL] {}", displayName);
 
+							// Highlight current cell (before TableRowSelectable so hover/active can override)
+							auto highlightColor = Menu::GetSingleton()->GetTheme().StatusPalette.InfoColor;
+							highlightColor.w = 0.3f;
+							ImGui::TableSetBgColor(ImGuiTableBgTarget_RowBg0, ImGui::ColorConvertFloat4ToU32(highlightColor));
+							ImGui::TableSetBgColor(ImGuiTableBgTarget_RowBg1, ImGui::ColorConvertFloat4ToU32(highlightColor));
+
 							bool isOpen = currentCellLightingWidget && currentCellLightingWidget->IsOpen();
-							if (tableRowSelectable(label.c_str(), isOpen, ImGuiSelectableFlags_SpanAllColumns | ImGuiSelectableFlags_AllowDoubleClick)) {
+							if (TableRowSelectable(label.c_str(), isOpen, ImGuiSelectableFlags_SpanAllColumns | ImGuiSelectableFlags_AllowDoubleClick)) {
 								if (ImGui::IsMouseDoubleClicked(0)) {
 									// Open or reuse the cell lighting widget
 									if (currentCellLightingWidget && currentCellLightingWidget->cell == cell) {
@@ -515,12 +521,6 @@ void EditorWindow::ShowObjectsWindow()
 									}
 								}
 							}
-
-							// Highlight current cell
-							auto highlightColor = Menu::GetSingleton()->GetTheme().StatusPalette.InfoColor;
-							highlightColor.w = 0.3f;
-							ImGui::TableSetBgColor(ImGuiTableBgTarget_RowBg0, ImGui::ColorConvertFloat4ToU32(highlightColor));
-							ImGui::TableSetBgColor(ImGuiTableBgTarget_RowBg1, ImGui::ColorConvertFloat4ToU32(highlightColor));
 
 							// Enter key to open
 							if (isOpen && ImGui::IsKeyPressed(ImGuiKey_Enter)) {
@@ -608,7 +608,7 @@ void EditorWindow::ShowObjectsWindow()
 
 						// Editor ID column with [CURRENT] prefix
 						bool isSelected = sortedWidgets[i]->IsOpen();
-						if (tableRowSelectable(editorLabel.c_str(), isSelected, ImGuiSelectableFlags_SpanAllColumns | ImGuiSelectableFlags_AllowDoubleClick | ImGuiSelectableFlags_AllowOverlap)) {
+						if (TableRowSelectable(editorLabel.c_str(), isSelected, ImGuiSelectableFlags_SpanAllColumns | ImGuiSelectableFlags_AllowDoubleClick | ImGuiSelectableFlags_AllowOverlap)) {
 							if (ImGui::IsMouseDoubleClicked(0)) {
 								sortedWidgets[i]->SetOpen(true);
 								AddToRecent(sortedWidgets[i]->GetEditorID(), selectedCategory);
@@ -699,7 +699,7 @@ void EditorWindow::ShowObjectsWindow()
 
 					// Editor ID column
 					bool isSelected = sortedWidgets[i]->IsOpen();
-					if (tableRowSelectable(editorLabel.c_str(), isSelected, ImGuiSelectableFlags_SpanAllColumns | ImGuiSelectableFlags_AllowDoubleClick | ImGuiSelectableFlags_AllowOverlap)) {
+					if (TableRowSelectable(editorLabel.c_str(), isSelected, ImGuiSelectableFlags_SpanAllColumns | ImGuiSelectableFlags_AllowDoubleClick | ImGuiSelectableFlags_AllowOverlap)) {
 						if (ImGui::IsMouseDoubleClicked(0)) {
 							sortedWidgets[i]->SetOpen(true);
 							AddToRecent(sortedWidgets[i]->GetEditorID(), selectedCategory);
@@ -718,29 +718,29 @@ void EditorWindow::ShowObjectsWindow()
 							constexpr int kSpacingSeparators = 1;  // Spacing between sections
 							const float estimatedTooltipHeight = (kSectionHeaders + kTodValuesPerSection * 2) * lineHeight + kSpacingSeparators * spacingHeight + windowPaddingY * 2.0f;
 							SetTooltipPositionNearMouse(estimatedTooltipHeight);
-							ImGui::BeginTooltip();
+							if (ImGui::BeginTooltip()) {
+								// ImageSpace info
+								ImGui::TextColored(Menu::GetSingleton()->GetTheme().StatusPalette.InfoColor, "ImageSpace:");
+								for (int tod = 0; tod < 4; tod++) {
+									auto imgSpace = weatherWidget->weather->imageSpaces[tod];
+									ImGui::Text("  %s: %s",
+										TOD::GetPeriodName(tod),
+										imgSpace ? imgSpace->GetFormEditorID() : "None");
+								}
 
-							// ImageSpace info
-							ImGui::TextColored(Menu::GetSingleton()->GetTheme().StatusPalette.InfoColor, "ImageSpace:");
-							for (int tod = 0; tod < 4; tod++) {
-								auto imgSpace = weatherWidget->weather->imageSpaces[tod];
-								ImGui::Text("  %s: %s",
-									TOD::GetPeriodName(tod),
-									imgSpace ? imgSpace->GetFormEditorID() : "None");
+								ImGui::Spacing();
+
+								// VolumetricLighting info
+								ImGui::TextColored(Menu::GetSingleton()->GetTheme().StatusPalette.InfoColor, "Volumetric Lighting:");
+								for (int tod = 0; tod < 4; tod++) {
+									auto volLight = weatherWidget->weather->volumetricLighting[tod];
+									ImGui::Text("  %s: %s",
+										TOD::GetPeriodName(tod),
+										volLight ? volLight->GetFormEditorID() : "None");
+								}
+
+								ImGui::EndTooltip();
 							}
-
-							ImGui::Spacing();
-
-							// VolumetricLighting info
-							ImGui::TextColored(Menu::GetSingleton()->GetTheme().StatusPalette.InfoColor, "Volumetric Lighting:");
-							for (int tod = 0; tod < 4; tod++) {
-								auto volLight = weatherWidget->weather->volumetricLighting[tod];
-								ImGui::Text("  %s: %s",
-									TOD::GetPeriodName(tod),
-									volLight ? volLight->GetFormEditorID() : "None");
-							}
-
-							ImGui::EndTooltip();
 							weatherTooltipShownThisFrame = true;
 						}
 					}
