@@ -178,7 +178,10 @@ PS_OUTPUT main(PS_INPUT input)
 		// Vanilla order: Saturation → Tint → Brightness → Contrast
 		// Physical accuracy: Saturation in linear; Tint & Contrast in gamma for artistic control.
 
-		hdrLinear = Color::Saturation(hdrLinear, (Cinematic.x * 0.5 + 0.5));
+		// Boost saturation and contrast in HDR exteriors to compensate for the wider dynamic range.
+		float exteriorBoost = SharedData::InInterior ? 0.0 : 1.0;
+
+		hdrLinear = Color::Saturation(hdrLinear, (Cinematic.x * 0.5 + 0.5) + 0.25 * exteriorBoost);
 
 		float3 hdrGamma = Color::LinearToGamma(hdrLinear);
 
@@ -189,7 +192,7 @@ PS_OUTPUT main(PS_INPUT input)
 		hdrLinear *= Cinematic.w;
 
 		hdrGamma = Color::LinearToGamma(hdrLinear);
-		hdrGamma = lerp(avgValue.x, hdrGamma, (Cinematic.z * 0.5 + 0.5)); // Contrast adjustment around scene average. prevents crushing blacks in HDR.
+		hdrGamma = lerp(avgValue.x, hdrGamma, (Cinematic.z * 0.5 + 0.5) + 0.25 * exteriorBoost); // Contrast adjustment around scene average. prevents crushing blacks in HDR.
 		hdrLinear = Color::GammaToLinear(hdrGamma);
 
 #		if defined(FADE)
