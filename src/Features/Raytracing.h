@@ -15,10 +15,12 @@ struct CreationEngineRaytracing
 	using WaitExecutionFn = void (*)();
 	using GetResolutionFn = void (*)(uint32_t&, uint32_t&);
 	using SetResolutionFn = void (*)(uint32_t, uint32_t);
+	using SetCopyTargetFn = void (*)(ID3D12Resource*);
 
 	InitializeFn Initialize = nullptr;
 	WaitExecutionFn WaitExecution = nullptr;
 	SetResolutionFn SetResolution = nullptr;
+	SetCopyTargetFn SetCopyTarget = nullptr;
 
 	CreationEngineRaytracing()
 	{
@@ -46,6 +48,11 @@ struct CreationEngineRaytracing
 
 		if (!SetResolution)
 			logger::error("[Raytracing] 'CreationEngineRaytracing.dll' SetResolution is nullptr");
+
+		SetCopyTarget = reinterpret_cast<SetCopyTargetFn>(GetProcAddress(handle, "SetCopyTarget"));
+
+		if (!SetCopyTarget)
+			logger::error("[Raytracing] 'CreationEngineRaytracing.dll' SetCopyTarget is nullptr");
 	}
 };
 

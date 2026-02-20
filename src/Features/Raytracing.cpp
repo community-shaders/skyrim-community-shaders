@@ -54,7 +54,7 @@ void Raytracing::DrawSettings()
 	}
 
 	if (mainTexture)
-		ImGui::Image(mainTexture->resource11, { 1280, 720 });
+		ImGui::Image(mainTexture->srv, { 1280, 720 });
 }
 
 void Raytracing::CreateD3D12Device(ID3D11Device* d3d11Device, ID3D11DeviceContext* immediateContext, IDXGIAdapter* adapter)
@@ -177,9 +177,11 @@ void Raytracing::DeferredPasses()
 		desc.Format = DXGI_FORMAT_R16G16B16A16_FLOAT;
 		desc.SampleDesc.Count = 1;
 		desc.SampleDesc.Quality = 0;
-		desc.BindFlags = D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_UNORDERED_ACCESS;
+		desc.BindFlags = D3D11_BIND_SHADER_RESOURCE;
 
 		mainTexture = eastl::make_unique<WrappedResource>(desc, m_D3D11Device.get(), m_D3D12Device.get());
+
+		creationEngineRaytracing->SetCopyTarget(mainTexture->resource.get());
 	}
 
 	creationEngineRaytracing->WaitExecution();
