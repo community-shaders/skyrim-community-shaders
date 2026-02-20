@@ -996,10 +996,13 @@ void WeatherWidget::DrawCloudSettings()
 	WeatherWidget* parentWidget = hasParent ? GetParent() : nullptr;
 
 	bool changed = false;
+	bool enableChanged = false;
 	for (int i = 0; i < TESWeather::kTotalLayers; i++) {
 		std::string layer = std::format("Layer {}", i);
 		bool layerEnabled = settings.clouds[i].enabled;
 
+		// OpenOnArrow|OpenOnDoubleClick prevents accidental collapse when clicking
+		// the [Enabled] badge area that overlaps the right side of the header.
 		ImGuiTreeNodeFlags flags = ImGuiTreeNodeFlags_OpenOnArrow | ImGuiTreeNodeFlags_OpenOnDoubleClick;
 
 		if (!layerEnabled) {
@@ -1036,17 +1039,7 @@ void WeatherWidget::DrawCloudSettings()
 
 			if (ImGui::Checkbox(std::format("Enable##{}", layer).c_str(), &layerEnabled)) {
 				settings.clouds[i].enabled = layerEnabled;
-				// Always apply cloud enable/disable immediately for instant feedback
-				editorWindow->PushUndoState(this);
-				ApplyChanges();
-
-				// Force weather re-application if locked to make cloud changes visible immediately
-				if (editorWindow->IsWeatherLocked() && editorWindow->GetLockedWeather() == weather) {
-					if (auto sky = RE::Sky::GetSingleton()) {
-						sky->ForceWeather(weather, false);
-					}
-				}
-
+				enableChanged = true;
 				changed = true;
 			}
 
@@ -1123,8 +1116,17 @@ void WeatherWidget::DrawCloudSettings()
 			ImGui::Unindent(10.0f);
 		}
 	}
-	if (changed && EditorWindow::GetSingleton()->settings.autoApplyChanges) {
-		EditorWindow::GetSingleton()->PushUndoState(this);
+	if (enableChanged) {
+		// Apply enable/disable immediately for instant feedback, regardless of autoApplyChanges.
+		editorWindow->PushUndoState(this);
+		ApplyChanges();
+		if (editorWindow->IsWeatherLocked() && editorWindow->GetLockedWeather() == weather) {
+			if (auto sky = RE::Sky::GetSingleton()) {
+				sky->ForceWeather(weather, false);
+			}
+		}
+	} else if (changed && editorWindow->settings.autoApplyChanges) {
+		editorWindow->PushUndoState(this);
 		ApplyChanges();
 	}
 }
