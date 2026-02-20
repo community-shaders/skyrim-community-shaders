@@ -713,7 +713,7 @@ void EditorWindow::ShowObjectsWindow()
 							const float lineHeight = ImGui::GetTextLineHeightWithSpacing();
 							const float windowPaddingY = ImGui::GetStyle().WindowPadding.y;
 							const float spacingHeight = ImGui::GetStyle().ItemSpacing.y;
-							constexpr int kSectionHeaders = 2;   // "ImageSpace:" + "Volumetric Lighting:"
+							constexpr int kSectionHeaders = 2;  // "ImageSpace:" + "Volumetric Lighting:"
 							constexpr int kTodValuesPerSection = 4;
 							constexpr int kSpacingSeparators = 1;  // Spacing between sections
 							const float estimatedTooltipHeight = (kSectionHeaders + kTodValuesPerSection * 2) * lineHeight + kSpacingSeparators * spacingHeight + windowPaddingY * 2.0f;
