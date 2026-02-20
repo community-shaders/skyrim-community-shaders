@@ -71,15 +71,14 @@ void SetTooltipPositionNearMouse(float estimatedHeight, float estimatedWidth = 0
 void AddTooltip(const char* a_desc, ImGuiHoveredFlags a_flags = ImGuiHoveredFlags_DelayNormal)
 {
 	if (ImGui::IsItemHovered(a_flags)) {
+		ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, { 8, 8 });
+		const ImVec2 pad = ImGui::GetStyle().WindowPadding;
 		const float wrapWidth = ImGui::GetFontSize() * 50.0f;
-		const float windowPaddingX = 8.0f;
-		const float windowPaddingY = 8.0f;
 		const ImVec2 wrappedTextSize = ImGui::CalcTextSize(a_desc, nullptr, false, wrapWidth);
-		const float estimatedTooltipHeight = wrappedTextSize.y + windowPaddingY * 2.0f;
-		const float estimatedTooltipWidth = wrappedTextSize.x + windowPaddingX * 2.0f;
+		const float estimatedTooltipHeight = wrappedTextSize.y + pad.y * 2.0f;
+		const float estimatedTooltipWidth = wrappedTextSize.x + pad.x * 2.0f;
 		SetTooltipPositionNearMouse(estimatedTooltipHeight, estimatedTooltipWidth);
 
-		ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, { 8, 8 });
 		if (ImGui::BeginTooltip()) {
 			ImGui::PushTextWrapPos(wrapWidth);
 			ImGui::TextUnformatted(a_desc);
@@ -711,13 +710,15 @@ void EditorWindow::ShowObjectsWindow()
 						auto* weatherWidget = dynamic_cast<WeatherWidget*>(sortedWidgets[i]);
 						if (weatherWidget && weatherWidget->weather) {
 							const float lineHeight = ImGui::GetTextLineHeightWithSpacing();
-							const float windowPaddingY = ImGui::GetStyle().WindowPadding.y;
+							const ImVec2 pad = ImGui::GetStyle().WindowPadding;
 							const float spacingHeight = ImGui::GetStyle().ItemSpacing.y;
 							constexpr int kSectionHeaders = 2;  // "ImageSpace:" + "Volumetric Lighting:"
 							constexpr int kTodValuesPerSection = 4;
 							constexpr int kSpacingSeparators = 1;  // Spacing between sections
-							const float estimatedTooltipHeight = (kSectionHeaders + kTodValuesPerSection * 2) * lineHeight + kSpacingSeparators * spacingHeight + windowPaddingY * 2.0f;
-							SetTooltipPositionNearMouse(estimatedTooltipHeight);
+							const float estimatedTooltipHeight = (kSectionHeaders + kTodValuesPerSection * 2) * lineHeight + kSpacingSeparators * spacingHeight + pad.y * 2.0f;
+							// Estimate width from the longest expected line (e.g. "  Sunset: <EditorID>").
+							const float estimatedTooltipWidth = ImGui::CalcTextSize("  Sunset: VolumetricLightingPlaceholder").x + pad.x * 2.0f;
+							SetTooltipPositionNearMouse(estimatedTooltipHeight, estimatedTooltipWidth);
 							if (ImGui::BeginTooltip()) {
 								// ImageSpace info
 								ImGui::TextColored(Menu::GetSingleton()->GetTheme().StatusPalette.InfoColor, "ImageSpace:");
