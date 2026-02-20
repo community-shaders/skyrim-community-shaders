@@ -997,13 +997,15 @@ void WeatherWidget::DrawCloudSettings()
 
 	bool changed = false;
 	bool enableChanged = false;
+
+	// OpenOnArrow|OpenOnDoubleClick prevents accidental collapse when clicking
+	// the [Enabled] badge area that overlaps the right side of the header.
+	constexpr ImGuiTreeNodeFlags flags = ImGuiTreeNodeFlags_OpenOnArrow | ImGuiTreeNodeFlags_OpenOnDoubleClick;
+	constexpr char kEnabledBadge[] = "[Enabled]";
+
 	for (int i = 0; i < TESWeather::kTotalLayers; i++) {
 		std::string layer = std::format("Layer {}", i);
 		bool layerEnabled = settings.clouds[i].enabled;
-
-		// OpenOnArrow|OpenOnDoubleClick prevents accidental collapse when clicking
-		// the [Enabled] badge area that overlaps the right side of the header.
-		ImGuiTreeNodeFlags flags = ImGuiTreeNodeFlags_OpenOnArrow | ImGuiTreeNodeFlags_OpenOnDoubleClick;
 
 		if (!layerEnabled) {
 			ImGui::PushStyleColor(ImGuiCol_Header, ImGui::GetStyleColorVec4(ImGuiCol_FrameBg));
@@ -1020,7 +1022,6 @@ void WeatherWidget::DrawCloudSettings()
 			ImGui::PopStyleColor(3);
 
 		if (layerEnabled) {
-			constexpr char kEnabledBadge[] = "[Enabled]";
 			const ImVec2 badgeSize = ImGui::CalcTextSize(kEnabledBadge);
 			const float headerHeight = ImGui::GetFrameHeight();
 			const ImVec2 badgePos = {
