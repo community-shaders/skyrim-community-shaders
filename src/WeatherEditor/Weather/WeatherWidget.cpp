@@ -998,17 +998,39 @@ void WeatherWidget::DrawCloudSettings()
 	bool changed = false;
 	for (int i = 0; i < TESWeather::kTotalLayers; i++) {
 		std::string layer = std::format("Layer {}", i);
+		bool layerEnabled = settings.clouds[i].enabled;
 
 		ImGuiTreeNodeFlags flags = ImGuiTreeNodeFlags_OpenOnArrow | ImGuiTreeNodeFlags_OpenOnDoubleClick;
-		if (settings.clouds[i].enabled && !settings.clouds[i].texturePath.empty()) {
-			flags |= ImGuiTreeNodeFlags_DefaultOpen;
+
+		if (!layerEnabled) {
+			ImGui::PushStyleColor(ImGuiCol_Header, ImGui::GetStyleColorVec4(ImGuiCol_FrameBg));
+			ImGui::PushStyleColor(ImGuiCol_HeaderHovered, ImGui::GetStyleColorVec4(ImGuiCol_FrameBgHovered));
+			ImGui::PushStyleColor(ImGuiCol_HeaderActive, ImGui::GetStyleColorVec4(ImGuiCol_FrameBgActive));
 		}
 
-		if (ImGui::CollapsingHeader(layer.c_str(), flags)) {
+		// Label is constant so the storage ID never changes — open/closed state always persists.
+		// [Enabled] badge is overlaid on the header via the draw list instead of altering the label.
+		float headerScreenY = ImGui::GetCursorScreenPos().y;
+		bool layerOpen = ImGui::CollapsingHeader(layer.c_str(), flags);
+
+		if (!layerEnabled)
+			ImGui::PopStyleColor(3);
+
+		if (layerEnabled) {
+			constexpr char kEnabledBadge[] = "[Enabled]";
+			const ImVec2 badgeSize = ImGui::CalcTextSize(kEnabledBadge);
+			const float headerHeight = ImGui::GetFrameHeight();
+			const ImVec2 badgePos = {
+				ImGui::GetWindowPos().x + ImGui::GetWindowWidth() - badgeSize.x -
+				    ImGui::GetStyle().ScrollbarSize - ImGui::GetStyle().WindowPadding.x,
+				headerScreenY + (headerHeight - badgeSize.y) * 0.5f
+			};
+			ImGui::GetWindowDrawList()->AddText(badgePos, ImGui::GetColorU32(ImGuiCol_CheckMark), kEnabledBadge);
+		}
+
+		if (layerOpen) {
 			ImGui::Indent(10.0f);
 			ImGui::Spacing();
-
-			bool layerEnabled = settings.clouds[i].enabled;
 
 			// Begin horizontal layout for enable checkbox and sliders on left, texture on right
 			ImGui::BeginGroup();
