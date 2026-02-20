@@ -1126,7 +1126,6 @@ void WeatherWidget::DrawCloudSettings()
 			}
 		}
 	} else if (changed && editorWindow->settings.autoApplyChanges) {
-		editorWindow->PushUndoState(this);
 		ApplyChanges();
 	}
 }
