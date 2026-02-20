@@ -178,6 +178,8 @@ void EditorWindow::ShowObjectsWindow()
 		if (ImGui::BeginListBox("##CategoriesList", { -FLT_MIN, -FLT_MIN })) {
 			ImGui::Text("Categories");
 			ImGui::Spacing();
+			ImGui::Separator();
+			ImGui::Spacing();
 
 			// List of categories
 			const char* categories[] = { "Weather", "ImageSpace", "Lighting Template", "Cell Lighting", "Volumetric Lighting", "Shader Particle Geometry", "Lens Flare", "Visual Effect", "Interior Only" };
@@ -433,9 +435,7 @@ void EditorWindow::ShowObjectsWindow()
 							ImGui::TableSetColumnIndex(0);
 
 							// No favorite star for cell lighting (it's always the current cell)
-							ImGui::Dummy(ImVec2(24, 24));
-
-							ImGui::TableNextColumn();
+								ImGui::Dummy(ImVec2(ImGui::GetFrameHeight(), ImGui::GetFrameHeight()));
 
 							// Display current cell name
 							const char* cellName = cell->GetName();
@@ -443,7 +443,7 @@ void EditorWindow::ShowObjectsWindow()
 							std::string label = std::format("[CURRENT CELL] {}", displayName);
 
 							bool isOpen = currentCellLightingWidget && currentCellLightingWidget->IsOpen();
-							if (ImGui::Selectable(label.c_str(), isOpen, ImGuiSelectableFlags_SpanAllColumns | ImGuiSelectableFlags_AllowDoubleClick)) {
+							if (ImGui::Selectable(label.c_str(), isOpen, ImGuiSelectableFlags_SpanAllColumns | ImGuiSelectableFlags_AllowDoubleClick, ImVec2(0, ImGui::GetFrameHeight()))) {
 								if (ImGui::IsMouseDoubleClicked(0)) {
 									// Open or reuse the cell lighting widget
 									if (currentCellLightingWidget && currentCellLightingWidget->cell == cell) {
@@ -549,7 +549,7 @@ void EditorWindow::ShowObjectsWindow()
 
 						// Editor ID column with [CURRENT] prefix
 						bool isSelected = sortedWidgets[i]->IsOpen();
-						if (ImGui::Selectable(editorLabel.c_str(), isSelected, ImGuiSelectableFlags_SpanAllColumns | ImGuiSelectableFlags_AllowDoubleClick | ImGuiSelectableFlags_AllowOverlap)) {
+						if (ImGui::Selectable(editorLabel.c_str(), isSelected, ImGuiSelectableFlags_SpanAllColumns | ImGuiSelectableFlags_AllowDoubleClick | ImGuiSelectableFlags_AllowOverlap, ImVec2(0, ImGui::GetFrameHeight()))) {
 							if (ImGui::IsMouseDoubleClicked(0)) {
 								sortedWidgets[i]->SetOpen(true);
 								AddToRecent(sortedWidgets[i]->GetEditorID(), selectedCategory);
@@ -640,7 +640,7 @@ void EditorWindow::ShowObjectsWindow()
 
 					// Editor ID column
 					bool isSelected = sortedWidgets[i]->IsOpen();
-					if (ImGui::Selectable(editorLabel.c_str(), isSelected, ImGuiSelectableFlags_SpanAllColumns | ImGuiSelectableFlags_AllowDoubleClick | ImGuiSelectableFlags_AllowOverlap)) {
+					if (ImGui::Selectable(editorLabel.c_str(), isSelected, ImGuiSelectableFlags_SpanAllColumns | ImGuiSelectableFlags_AllowDoubleClick | ImGuiSelectableFlags_AllowOverlap, ImVec2(0, ImGui::GetFrameHeight()))) {
 						if (ImGui::IsMouseDoubleClicked(0)) {
 							sortedWidgets[i]->SetOpen(true);
 							AddToRecent(sortedWidgets[i]->GetEditorID(), selectedCategory);
