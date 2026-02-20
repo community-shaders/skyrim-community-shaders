@@ -273,14 +273,17 @@ void EditorWindow::ShowObjectsWindow()
 				}
 			}
 
+			// Stable user IDs for sortable columns — used instead of ColumnIndex so reordering/insertion won't break sorting.
+			enum ColumnID : ImGuiID { ColFav = 0, ColEditorID, ColFormID, ColFile, ColStatus, ColJson };
+
 			// Create a table for the right column with "Name" and "ID" headers. Different weights to prevent truncation.
 			if (ImGui::BeginTable("DetailsTable", 6, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingStretchProp | ImGuiTableFlags_Sortable)) {
-				ImGui::TableSetupColumn("Fav", ImGuiTableColumnFlags_WidthFixed | ImGuiTableColumnFlags_NoSort, 38.0f);  // Favorite indicator
-				ImGui::TableSetupColumn("Editor ID", ImGuiTableColumnFlags_WidthStretch, 3.5f);                          // Largest - weather/template names
-				ImGui::TableSetupColumn("Form ID", ImGuiTableColumnFlags_WidthFixed, 90.0f);                             // Fixed - 8 hex chars
-				ImGui::TableSetupColumn("File", ImGuiTableColumnFlags_WidthStretch, 2.0f);                               // Medium - plugin names
-				ImGui::TableSetupColumn("Status", ImGuiTableColumnFlags_WidthStretch, 1.5f);                             // Smaller - status text
-				ImGui::TableSetupColumn("json", ImGuiTableColumnFlags_WidthFixed, 55.0f);                                // JSON file / delete
+				ImGui::TableSetupColumn("Fav", ImGuiTableColumnFlags_WidthFixed | ImGuiTableColumnFlags_NoSort, 38.0f, ColFav);     // Favorite indicator
+				ImGui::TableSetupColumn("Editor ID", ImGuiTableColumnFlags_WidthStretch, 3.5f, ColEditorID);                        // Largest - weather/template names
+				ImGui::TableSetupColumn("Form ID", ImGuiTableColumnFlags_WidthFixed, 90.0f, ColFormID);                              // Fixed - 8 hex chars
+				ImGui::TableSetupColumn("File", ImGuiTableColumnFlags_WidthStretch, 2.0f, ColFile);                                  // Medium - plugin names
+				ImGui::TableSetupColumn("Status", ImGuiTableColumnFlags_WidthStretch, 1.5f, ColStatus);                              // Smaller - status text
+				ImGui::TableSetupColumn("json", ImGuiTableColumnFlags_WidthFixed, 55.0f, ColJson);                                   // JSON file / delete
 
 				ImGui::TableHeadersRow();
 
@@ -289,20 +292,20 @@ void EditorWindow::ShowObjectsWindow()
 					if (sortSpecs->SpecsDirty) {
 						if (sortSpecs->SpecsCount > 0) {
 							const ImGuiTableColumnSortSpecs& spec = sortSpecs->Specs[0];
-							switch (spec.ColumnIndex) {
-							case 1:
+							switch (spec.ColumnUserID) {
+							case ColEditorID:
 								currentSortColumn = SortColumn::EditorID;
 								break;
-							case 2:
+							case ColFormID:
 								currentSortColumn = SortColumn::FormID;
 								break;
-							case 3:
+							case ColFile:
 								currentSortColumn = SortColumn::File;
 								break;
-							case 4:
+							case ColStatus:
 								currentSortColumn = SortColumn::Status;
 								break;
-							case 5:
+							case ColJson:
 								currentSortColumn = SortColumn::JsonAttachment;
 								break;
 							default:
@@ -379,7 +382,9 @@ void EditorWindow::ShowObjectsWindow()
 							const float iconSize = ImGui::GetFrameHeight() * 0.85f;
 							auto _style = Util::ErrorButtonStyle();
 							ImGui::SetNextItemAllowOverlap();
-							if (ImGui::ImageButton(std::format("##jsondel_{}", widget->GetFormID()).c_str(), menu->uiIcons.deleteSettings.texture, { iconSize, iconSize })) {
+							char idBuf[32];
+							snprintf(idBuf, sizeof(idBuf), "##jsondel_%s", widget->GetFormID().c_str());
+							if (ImGui::ImageButton(idBuf, menu->uiIcons.deleteSettings.texture, { iconSize, iconSize })) {
 								pendingDeleteWidget = widget;
 								pendingDeletePopupRequested = true;
 							}
