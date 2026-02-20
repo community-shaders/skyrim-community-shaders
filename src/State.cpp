@@ -847,7 +847,7 @@ void State::UpdateSharedData([[maybe_unused]] bool a_inWorld, [[maybe_unused]] b
 		auto* hdr = HDR::GetSingleton();
 		bool isMainOrLoading = globals::game::ui &&
 		                       (globals::game::ui->IsMenuOpen(RE::MainMenu::MENU_NAME) ||
-		                           globals::game::ui->IsMenuOpen(RE::LoadingMenu::MENU_NAME));
+								   globals::game::ui->IsMenuOpen(RE::LoadingMenu::MENU_NAME));
 		data.HDRData = {
 			hdr->settings.enableHDR ? 1.0f : 0.0f,
 			static_cast<float>(hdr->settings.hdrPaperWhite),
