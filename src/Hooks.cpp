@@ -840,7 +840,9 @@ namespace Hooks
 						break;
 					default:  // Lighting, DistantTree, BloodSplatter
 						hiz.stats.otherCallsTotal++;
-						if (HiZOcclusion::IsGeometryOccluded(pass->geometry)) {
+						if (!hiz.settings.cullLODObjects && HiZOcclusion::IsLODGeometry(pass->geometry)) {
+							// LOD culling disabled, skip
+						} else if (HiZOcclusion::IsGeometryOccluded(pass->geometry)) {
 							hiz.stats.otherCallsCulled++;
 							return;
 						}
