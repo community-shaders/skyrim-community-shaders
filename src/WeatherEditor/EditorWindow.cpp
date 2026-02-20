@@ -289,7 +289,14 @@ void EditorWindow::ShowObjectsWindow()
 					if (sortSpecs->SpecsDirty) {
 						if (sortSpecs->SpecsCount > 0) {
 							const ImGuiTableColumnSortSpecs& spec = sortSpecs->Specs[0];
-							currentSortColumn = static_cast<SortColumn>(spec.ColumnIndex);
+							switch (spec.ColumnIndex) {
+							case 1: currentSortColumn = SortColumn::EditorID; break;
+							case 2: currentSortColumn = SortColumn::FormID; break;
+							case 3: currentSortColumn = SortColumn::File; break;
+							case 4: currentSortColumn = SortColumn::Status; break;
+							case 5: currentSortColumn = SortColumn::JsonAttachment; break;
+							default: currentSortColumn = SortColumn::None; break;
+							}
 							sortAscending = (spec.SortDirection == ImGuiSortDirection_Ascending);
 						} else {
 							currentSortColumn = SortColumn::None;
@@ -341,7 +348,7 @@ void EditorWindow::ShowObjectsWindow()
 							{
 								bool aHasJson = HasCachedJsonAttachment(a);
 								bool bHasJson = HasCachedJsonAttachment(b);
-								comparison = static_cast<int>(bHasJson) - static_cast<int>(aHasJson);
+								comparison = static_cast<int>(aHasJson) - static_cast<int>(bHasJson);
 								break;
 							}
 						default:
@@ -350,6 +357,25 @@ void EditorWindow::ShowObjectsWindow()
 						return sortAscending ? (comparison < 0) : (comparison > 0);
 					});
 				}
+
+				// Helper lambda: renders the JSON delete button column for a widget
+				auto drawJsonDeleteButton = [&](Widget* widget) {
+					ImGui::TableNextColumn();
+					if (HasCachedJsonAttachment(widget)) {
+						auto* menu = globals::menu;
+						if (menu && menu->uiIcons.deleteSettings.texture) {
+							const float iconSize = ImGui::GetFrameHeight() * 0.85f;
+							auto _style = Util::ErrorButtonStyle();
+							ImGui::SetNextItemAllowOverlap();
+							if (ImGui::ImageButton(std::format("##jsondel_{}", widget->GetFormID()).c_str(), menu->uiIcons.deleteSettings.texture, { iconSize, iconSize })) {
+								pendingDeleteWidget = widget;
+								pendingDeletePopupRequested = true;
+							}
+							if (ImGui::IsItemHovered())
+								ImGui::SetTooltip("Delete JSON file");
+						}
+					}
+				};
 
 				// Special handling for Cell Lighting category
 				if (selectedCategory == "Cell Lighting") {
@@ -526,21 +552,7 @@ void EditorWindow::ShowObjectsWindow()
 						}
 
 						// json / delete column
-						ImGui::TableNextColumn();
-						if (HasCachedJsonAttachment(sortedWidgets[i])) {
-							auto* menu = globals::menu;
-							if (menu && menu->uiIcons.deleteSettings.texture) {
-								const float iconSize = ImGui::GetFrameHeight() * 0.85f;
-								{
-									auto _style = Util::ErrorButtonStyle();
-									ImGui::SetNextItemAllowOverlap();
-									if (ImGui::ImageButton(std::format("##jsondel_cur_{}", sortedWidgets[i]->GetFormID()).c_str(), menu->uiIcons.deleteSettings.texture, { iconSize, iconSize }))
-										pendingDeleteWidget = sortedWidgets[i];
-								}
-								if (ImGui::IsItemHovered())
-									ImGui::SetTooltip("Delete json file");
-							}
-						}
+						drawJsonDeleteButton(sortedWidgets[i]);
 					}
 				}
 
@@ -664,21 +676,7 @@ void EditorWindow::ShowObjectsWindow()
 					}
 
 					// json / delete column
-					ImGui::TableNextColumn();
-					if (HasCachedJsonAttachment(sortedWidgets[i])) {
-						auto* menu = globals::menu;
-						if (menu && menu->uiIcons.deleteSettings.texture) {
-							const float iconSize = ImGui::GetFrameHeight() * 0.85f;
-							{
-								auto _style = Util::ErrorButtonStyle();
-								ImGui::SetNextItemAllowOverlap();
-								if (ImGui::ImageButton(std::format("##jsondel_{}", sortedWidgets[i]->GetFormID()).c_str(), menu->uiIcons.deleteSettings.texture, { iconSize, iconSize }))
-									pendingDeleteWidget = sortedWidgets[i];
-							}
-							if (ImGui::IsItemHovered())
-								ImGui::SetTooltip("Delete json file");
-						}
-					}
+					drawJsonDeleteButton(sortedWidgets[i]);
 				}
 
 				ImGui::EndTable();  // End DetailsTable
@@ -693,10 +691,12 @@ void EditorWindow::ShowObjectsWindow()
 	// Confirmation modal for json deletion - must be outside BeginChild so the modal can block the root window
 	if (pendingDeleteWidget) {
 		auto* pendingWidget = pendingDeleteWidget;
-		ImGui::OpenPopup("ListDeleteConfirmation");
+		if (pendingDeletePopupRequested) {
+			ImGui::OpenPopup("ListDeleteConfirmation");
+			pendingDeletePopupRequested = false;
+		}
 		pendingDeleteWidget->DrawDeleteConfirmationModal("ListDeleteConfirmation");
 		if (!ImGui::IsPopupOpen("ListDeleteConfirmation")) {
-			InvalidateJsonAttachmentCache(pendingWidget);
 			pendingDeleteWidget = nullptr;
 		}
 	}

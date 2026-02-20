@@ -174,7 +174,6 @@ public:
 	void AddToRecent(const std::string& widgetId, const std::string& category);
 	void ToggleFavorite(const std::string& widgetId);
 	bool IsFavorite(const std::string& widgetId) const;
-	void OnWidgetJsonAttachmentChanged(Widget* widget);
 	void SaveSessionWidgets();
 	void RestoreSessionWidgets();
 
@@ -184,6 +183,8 @@ public:
 	~EditorWindow();
 
 private:
+	friend class Widget;
+
 	void SaveAll();
 	void SaveSettings();
 	void LoadSettings();
@@ -218,7 +219,9 @@ private:
 	bool sortAscending = true;
 
 	Widget* pendingDeleteWidget = nullptr;
+	bool pendingDeletePopupRequested = false;
 
+	void OnWidgetJsonAttachmentChanged(Widget* widget);
 	std::unordered_map<Widget*, bool> jsonAttachmentCache;
 	void RefreshJsonAttachmentCache(const std::vector<Widget*>& widgets);
 	bool HasCachedJsonAttachment(Widget* widget) const;

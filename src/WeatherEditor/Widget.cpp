@@ -16,7 +16,6 @@ bool Widget::MatchesSearch(const std::string& text) const
 
 void Widget::Save()
 {
-	EditorWindow::GetSingleton()->OnWidgetJsonAttachmentChanged(this);
 	SaveSettings();
 	const std::string filePath = std::format("{}\\{}", Util::PathHelpers::GetCommunityShaderPath().string(), GetFolderName());
 	const std::string file = std::format("{}\\{}.json", filePath, GetEditorID());
@@ -60,6 +59,7 @@ void Widget::Save()
 		}
 
 		settingsFile.close();
+		EditorWindow::GetSingleton()->OnWidgetJsonAttachmentChanged(this);
 
 	} catch (const nlohmann::json::exception& e) {
 		logger::error("{}: JSON error while saving settings: {}", GetEditorID(), e.what());
@@ -72,7 +72,6 @@ void Widget::Save()
 
 void Widget::Load()
 {
-	EditorWindow::GetSingleton()->OnWidgetJsonAttachmentChanged(this);
 	std::string filePath = std::format("{}\\{}\\{}.json", Util::PathHelpers::GetCommunityShaderPath().string(), GetFolderName(), GetEditorID());
 
 	if (!std::filesystem::exists(filePath)) {
@@ -147,7 +146,6 @@ void Widget::Load()
 
 void Widget::Delete()
 {
-	EditorWindow::GetSingleton()->OnWidgetJsonAttachmentChanged(this);
 	std::string filePath = std::format("{}\\{}\\{}.json", Util::PathHelpers::GetCommunityShaderPath().string(), GetFolderName(), GetEditorID());
 
 	if (!std::filesystem::exists(filePath)) {
@@ -164,6 +162,8 @@ void Widget::Delete()
 
 		// Apply the vanilla values to the game
 		ApplyChanges();
+
+		EditorWindow::GetSingleton()->OnWidgetJsonAttachmentChanged(this);
 
 		EditorWindow::GetSingleton()->ShowNotification(
 			std::format("Deleted {} - reverted to vanilla values", GetEditorID()),
