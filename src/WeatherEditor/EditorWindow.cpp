@@ -12,6 +12,8 @@
 
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(EditorWindow::Settings, recordMarkers, markedRecords, autoApplyChanges, useTextButtons, enableInheritFromParent, editorUIScale, favoriteWidgets, recentWidgets, maxRecentWidgets, rememberOpenWidgets, lastOpenWidgets)
 
+void SetTooltipPositionNearMouse(float estimatedHeight);
+
 void TextUnformattedDisabled(const char* a_text, const char* a_textEnd = nullptr)
 {
 	ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetStyleColorVec4(ImGuiCol_TextDisabled));
@@ -22,15 +24,37 @@ void TextUnformattedDisabled(const char* a_text, const char* a_textEnd = nullptr
 void AddTooltip(const char* a_desc, ImGuiHoveredFlags a_flags = ImGuiHoveredFlags_DelayNormal)
 {
 	if (ImGui::IsItemHovered(a_flags)) {
+		const float wrapWidth = ImGui::GetFontSize() * 50.0f;
+		const float windowPaddingY = 8.0f;
+		const ImVec2 wrappedTextSize = ImGui::CalcTextSize(a_desc, nullptr, false, wrapWidth);
+		const float estimatedTooltipHeight = wrappedTextSize.y + windowPaddingY * 2.0f;
+		SetTooltipPositionNearMouse(estimatedTooltipHeight);
+
 		ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, { 8, 8 });
 		if (ImGui::BeginTooltip()) {
-			ImGui::PushTextWrapPos(ImGui::GetFontSize() * 50.0f);
+			ImGui::PushTextWrapPos(wrapWidth);
 			ImGui::TextUnformatted(a_desc);
 			ImGui::PopTextWrapPos();
 			ImGui::EndTooltip();
 		}
 		ImGui::PopStyleVar();
 	}
+}
+
+void SetTooltipPositionNearMouse(float estimatedHeight)
+{
+	const ImVec2 mousePos = ImGui::GetMousePos();
+	const ImGuiViewport* viewport = ImGui::GetMainViewport();
+	constexpr float kTooltipOffsetX = 16.0f;
+	constexpr float kTooltipOffsetY = 12.0f;
+
+	const float viewportBottom = viewport->WorkPos.y + viewport->WorkSize.y;
+	const bool placeAboveCursor = (mousePos.y + kTooltipOffsetY + estimatedHeight) > viewportBottom;
+	const ImVec2 tooltipPivot = placeAboveCursor ? ImVec2(0.0f, 1.0f) : ImVec2(0.0f, 0.0f);
+	const ImVec2 tooltipPos = placeAboveCursor ?
+		ImVec2(mousePos.x + kTooltipOffsetX, mousePos.y - kTooltipOffsetY) :
+		ImVec2(mousePos.x + kTooltipOffsetX, mousePos.y + kTooltipOffsetY);
+	ImGui::SetNextWindowPos(tooltipPos, ImGuiCond_Always, tooltipPivot);
 }
 
 inline void HelpMarker(const char* a_desc)
@@ -366,6 +390,7 @@ void EditorWindow::ShowObjectsWindow()
 					sortedWidgets.push_back(w.get());
 				}
 				RefreshJsonAttachmentCache(sortedWidgets);
+				bool weatherTooltipShownThisFrame = false;
 				if (currentSortColumn != SortColumn::None) {
 					std::sort(sortedWidgets.begin(), sortedWidgets.end(), [this](Widget* a, Widget* b) {
 						int comparison = 0;
@@ -423,6 +448,31 @@ void EditorWindow::ShowObjectsWindow()
 					}
 				};
 
+				// Full-row hover/selection highlight using table row background.
+				// This avoids Selectable bbox/padding drift and keeps the highlight exactly aligned to row bounds.
+				auto tableRowSelectable = [](const char* label, bool selected, ImGuiSelectableFlags flags) -> bool {
+					const ImVec4 kTransparent(0.0f, 0.0f, 0.0f, 0.0f);
+					ImGui::PushStyleColor(ImGuiCol_Header, kTransparent);
+					ImGui::PushStyleColor(ImGuiCol_HeaderHovered, kTransparent);
+					ImGui::PushStyleColor(ImGuiCol_HeaderActive, kTransparent);
+
+					bool pressed = ImGui::Selectable(label, selected, flags, ImVec2(0, ImGui::GetFrameHeight()));
+					bool hovered = ImGui::IsItemHovered();
+					bool active = ImGui::IsItemActive();
+					ImGui::PopStyleColor(3);
+
+					if (active || hovered || selected) {
+						const ImGuiCol highlightCol = active  ? ImGuiCol_HeaderActive :
+						                             hovered ? ImGuiCol_HeaderHovered :
+						                                       ImGuiCol_Header;
+						const ImU32 rowColor = ImGui::GetColorU32(highlightCol);
+						ImGui::TableSetBgColor(ImGuiTableBgTarget_RowBg0, rowColor);
+						ImGui::TableSetBgColor(ImGuiTableBgTarget_RowBg1, rowColor);
+					}
+
+					return pressed;
+				};
+
 				// Special handling for Cell Lighting category
 				if (selectedCategory == "Cell Lighting") {
 					auto player = RE::PlayerCharacter::GetSingleton();
@@ -435,7 +485,8 @@ void EditorWindow::ShowObjectsWindow()
 							ImGui::TableSetColumnIndex(0);
 
 							// No favorite star for cell lighting (it's always the current cell)
-								ImGui::Dummy(ImVec2(ImGui::GetFrameHeight(), ImGui::GetFrameHeight()));
+							ImGui::Dummy(ImVec2(ImGui::GetFrameHeight(), ImGui::GetFrameHeight()));
+							ImGui::TableNextColumn();
 
 							// Display current cell name
 							const char* cellName = cell->GetName();
@@ -443,7 +494,7 @@ void EditorWindow::ShowObjectsWindow()
 							std::string label = std::format("[CURRENT CELL] {}", displayName);
 
 							bool isOpen = currentCellLightingWidget && currentCellLightingWidget->IsOpen();
-							if (ImGui::Selectable(label.c_str(), isOpen, ImGuiSelectableFlags_SpanAllColumns | ImGuiSelectableFlags_AllowDoubleClick, ImVec2(0, ImGui::GetFrameHeight()))) {
+							if (tableRowSelectable(label.c_str(), isOpen, ImGuiSelectableFlags_SpanAllColumns | ImGuiSelectableFlags_AllowDoubleClick)) {
 								if (ImGui::IsMouseDoubleClicked(0)) {
 									// Open or reuse the cell lighting widget
 									if (currentCellLightingWidget && currentCellLightingWidget->cell == cell) {
@@ -549,7 +600,7 @@ void EditorWindow::ShowObjectsWindow()
 
 						// Editor ID column with [CURRENT] prefix
 						bool isSelected = sortedWidgets[i]->IsOpen();
-						if (ImGui::Selectable(editorLabel.c_str(), isSelected, ImGuiSelectableFlags_SpanAllColumns | ImGuiSelectableFlags_AllowDoubleClick | ImGuiSelectableFlags_AllowOverlap, ImVec2(0, ImGui::GetFrameHeight()))) {
+						if (tableRowSelectable(editorLabel.c_str(), isSelected, ImGuiSelectableFlags_SpanAllColumns | ImGuiSelectableFlags_AllowDoubleClick | ImGuiSelectableFlags_AllowOverlap)) {
 							if (ImGui::IsMouseDoubleClicked(0)) {
 								sortedWidgets[i]->SetOpen(true);
 								AddToRecent(sortedWidgets[i]->GetEditorID(), selectedCategory);
@@ -640,7 +691,7 @@ void EditorWindow::ShowObjectsWindow()
 
 					// Editor ID column
 					bool isSelected = sortedWidgets[i]->IsOpen();
-					if (ImGui::Selectable(editorLabel.c_str(), isSelected, ImGuiSelectableFlags_SpanAllColumns | ImGuiSelectableFlags_AllowDoubleClick | ImGuiSelectableFlags_AllowOverlap, ImVec2(0, ImGui::GetFrameHeight()))) {
+					if (tableRowSelectable(editorLabel.c_str(), isSelected, ImGuiSelectableFlags_SpanAllColumns | ImGuiSelectableFlags_AllowDoubleClick | ImGuiSelectableFlags_AllowOverlap)) {
 						if (ImGui::IsMouseDoubleClicked(0)) {
 							sortedWidgets[i]->SetOpen(true);
 							AddToRecent(sortedWidgets[i]->GetEditorID(), selectedCategory);
@@ -648,9 +699,14 @@ void EditorWindow::ShowObjectsWindow()
 					}
 
 					// Show ImageSpace and VolumetricLighting info for weather widgets
-					if (selectedCategory == "Weather" && ImGui::IsItemHovered()) {
+					if (!weatherTooltipShownThisFrame && selectedCategory == "Weather" && ImGui::IsItemHovered()) {
 						auto* weatherWidget = dynamic_cast<WeatherWidget*>(sortedWidgets[i]);
 						if (weatherWidget && weatherWidget->weather) {
+							const float lineHeight = ImGui::GetTextLineHeightWithSpacing();
+							const float windowPaddingY = ImGui::GetStyle().WindowPadding.y;
+							constexpr float kTooltipLineCount = 10.0f;  // 2 section headers + 8 TOD value lines
+							const float estimatedTooltipHeight = kTooltipLineCount * lineHeight + windowPaddingY * 2.0f;
+							SetTooltipPositionNearMouse(estimatedTooltipHeight);
 							ImGui::BeginTooltip();
 
 							// ImageSpace info
@@ -674,6 +730,7 @@ void EditorWindow::ShowObjectsWindow()
 							}
 
 							ImGui::EndTooltip();
+							weatherTooltipShownThisFrame = true;
 						}
 					}
 
