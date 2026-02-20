@@ -690,7 +690,6 @@ void EditorWindow::ShowObjectsWindow()
 
 	// Confirmation modal for json deletion - must be outside BeginChild so the modal can block the root window
 	if (pendingDeleteWidget) {
-		auto* pendingWidget = pendingDeleteWidget;
 		if (pendingDeletePopupRequested) {
 			ImGui::OpenPopup("ListDeleteConfirmation");
 			pendingDeletePopupRequested = false;
