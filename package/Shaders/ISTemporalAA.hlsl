@@ -204,7 +204,7 @@ void main(
 	r16.yzw = r16.yyy ? r15.yzx : float3(1.00100005, 1.00100005, 1.00100005);
 	r16.yzw = r16.xxx ? float3(1.00100005, 1.00100005, 1.00100005) : r16.yzw;
 
-	
+
 	r17.x = cmp(r13.w < r16.w);
 	r17.xyz = r17.xxx ? r13.yzw : r16.yzw;
 	r16.yzw = r14.xxx ? r16.yzw : r17.xyz;
