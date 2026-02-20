@@ -149,6 +149,10 @@ PS_OUTPUT main(PS_INPUT input)
 
 	bool isHDR = SharedData::HDRData.x > 0.5;
 
+	// Force SDR tonemapping during loading screens and main menu
+	if (SharedData::HDRData.w > 0.5)
+		isHDR = false;
+
 	float3 outputColor = 0.0;
 
 	// === Auto-Exposure Adjustment ===
@@ -174,7 +178,7 @@ PS_OUTPUT main(PS_INPUT input)
 		// Vanilla order: Saturation → Tint → Brightness → Contrast
 		// Physical accuracy: Saturation in linear; Tint & Contrast in gamma for artistic control.
 
-		hdrLinear = Color::Saturation(hdrLinear, Cinematic.x);
+		hdrLinear = Color::Saturation(hdrLinear, (Cinematic.x * 0.5 + 0.5));
 
 		float3 hdrGamma = Color::LinearToGamma(hdrLinear);
 
@@ -185,7 +189,7 @@ PS_OUTPUT main(PS_INPUT input)
 		hdrLinear *= Cinematic.w;
 
 		hdrGamma = Color::LinearToGamma(hdrLinear);
-		hdrGamma = lerp(avgValue.x, hdrGamma, Cinematic.z);
+		hdrGamma = lerp(avgValue.x, hdrGamma, (Cinematic.z * 0.5 + 0.5)); // Contrast adjustment around scene average. prevents crushing blacks in HDR.
 		hdrLinear = Color::GammaToLinear(hdrGamma);
 
 #		if defined(FADE)

@@ -845,11 +845,14 @@ void State::UpdateSharedData([[maybe_unused]] bool a_inWorld, [[maybe_unused]] b
 		// Populate HDR data only when HDR Display feature is loaded
 		// When not loaded, ISHDR.hlsl uses the SDR branch (HDRData.x = 0)
 		auto* hdr = HDR::GetSingleton();
+		bool isMainOrLoading = globals::game::ui &&
+		                       (globals::game::ui->IsMenuOpen(RE::MainMenu::MENU_NAME) ||
+		                           globals::game::ui->IsMenuOpen(RE::LoadingMenu::MENU_NAME));
 		data.HDRData = {
 			hdr->settings.enableHDR ? 1.0f : 0.0f,
 			static_cast<float>(hdr->settings.hdrPaperWhite),
 			static_cast<float>(hdr->settings.hdrPeakNits),
-			0.0f
+			isMainOrLoading ? 1.0f : 0.0f
 		};
 
 		sharedDataCB->Update(data);
