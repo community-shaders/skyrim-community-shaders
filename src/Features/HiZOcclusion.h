@@ -2,6 +2,8 @@
 
 #include "OverlayFeature.h"
 
+#include <array>
+#include <atomic>
 #include <unordered_set>
 
 #include <RE/N/NiSmartPointer.h>
@@ -38,7 +40,7 @@ struct HiZOcclusion : OverlayFeature
     virtual inline std::string GetName() override { return "HiZ Occlusion Culling"; }
     virtual inline std::string GetShortName() override { return "HiZOcclusion"; }
     virtual inline std::string_view GetShaderDefineName() override { return "HIZ_OCCLUSION"; }
-    virtual std::string_view GetCategory() const override { return "Performance"; }
+    virtual std::string_view GetCategory() const override { return "Utility"; }
     virtual std::pair<std::string, std::vector<std::string>> GetFeatureSummary() override
     {
         return {
@@ -96,6 +98,7 @@ struct HiZOcclusion : OverlayFeature
     bool builtThisFrame = false;   // true if EarlyPrepass() successfully built the pyramid this frame
     bool preserveResourcesForUI = true;  // prevent Reset() from destroying resources needed for debug viewer
     uint32_t resourceCreationFrame = 0;  // frame when resources were last created
+    bool vectorsReserved = false;  // true after initial vector capacity reservation
     bool skipValidationThisFrame = false; // skip resource validation to prevent crashes during compilation
     bool overlayUpdatedThisFrame = false; // tracks whether bounds overlay was refreshed this frame
 
@@ -316,15 +319,20 @@ struct HiZOcclusion : OverlayFeature
     // Geometry batch for GPU culling
     std::vector<RE::NiPointer<RE::BSGeometry>> pendingGeometry;
     std::unordered_set<RE::BSGeometry*> pendingGeometrySet;  // For fast lookup
-    mutable std::mutex pendingGeometryMutex;  // Protects pendingGeometry and pendingGeometrySet from concurrent access
+    mutable std::mutex pendingGeometryMutex;  // Protects pendingGeometry and pendingGeometrySet (only used in early culling hooks)
+    // NiPointer needed for unCullNextFrame as it persists across frames
     std::vector<RE::NiPointer<RE::BSGeometry>> unCullNextFrame;
     std::vector<DirectX::XMFLOAT4> geometryBounds;  // xyz=center, w=radius
     
-    // Fast O(1) lookup for occluded geometry during render pass
+    // Occlusion flag bit - uses unused bit 20 in NiAVObject::flags for O(1) lookup
+    // This avoids hash set lookups in hot paths (early culling hooks)
+    static constexpr uint32_t kOccludedFlag = 1u << 20;
+    
+    // Set for iterating occluded geometry (needed for ClearOcclusionState and unCullNextFrame)
     std::unordered_set<RE::BSGeometry*> occludedGeometry;
     
-    // Occlusion state management methods
-    [[nodiscard]] bool IsGeometryOccluded(RE::BSGeometry* geometry) const;
+    // Occlusion state management - uses flag bit for O(1) checks, set for iteration
+    [[nodiscard]] static bool IsGeometryOccluded(RE::BSGeometry* geometry);
     void MarkGeometryOccluded(RE::BSGeometry* geometry);
     void MarkGeometryVisible(RE::BSGeometry* geometry);
     void ClearOcclusionState();

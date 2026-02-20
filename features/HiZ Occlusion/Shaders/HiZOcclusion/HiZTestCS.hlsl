@@ -432,21 +432,21 @@ void main(uint3 dispatchThreadID : SV_DispatchThreadID)
     // Test multiple points on the bounding sphere surface against the Hi-Z depth.
     // If ANY point passes the depth test, the object is considered visible.
     // 
-    // Points are tested in hierarchical order (center first, then sphere surface)
-    // to maximize early-out opportunities for visible objects.
-    // 
-    // The 26 offset directions sample a cube's corners, edges, and face centers,
-    // providing good coverage of the sphere surface.
-    static const float3 offsets[26] = {
-        float3(-1, -1, -1), float3(-1, -1,  0), float3(-1, -1,  1),
-        float3(-1,  0, -1), float3(-1,  0,  0), float3(-1,  0,  1),
-        float3(-1,  1, -1), float3(-1,  1,  0), float3(-1,  1,  1),
-        float3( 0, -1, -1), float3( 0, -1,  0), float3( 0, -1,  1),
-        float3( 0,  0, -1), float3( 0,  0,  1),
-        float3( 0,  1, -1), float3( 0,  1,  0), float3( 0,  1,  1),
-        float3( 1, -1, -1), float3( 1, -1,  0), float3( 1, -1,  1),
-        float3( 1,  0, -1), float3( 1,  0,  0), float3( 1,  0,  1),
-        float3( 1,  1, -1), float3( 1,  1,  0), float3( 1,  1,  1)
+    // Points are tested in priority order to maximize early-out for visible objects:
+    // 1. Center point + nearest sphere point (2 points)
+    // 2. 6 axis-aligned directions (cardinal directions)
+    // 3. 8 corner directions (diagonals)
+    // Total: 16 strategic points instead of 78 (26 × 3 scales)
+    static const float3 offsets[14] = {
+        // 6 axis-aligned (face centers of cube)
+        float3( 1,  0,  0), float3(-1,  0,  0),
+        float3( 0,  1,  0), float3( 0, -1,  0),
+        float3( 0,  0,  1), float3( 0,  0, -1),
+        // 8 corners (diagonals)
+        float3( 1,  1,  1), float3( 1,  1, -1),
+        float3( 1, -1,  1), float3( 1, -1, -1),
+        float3(-1,  1,  1), float3(-1,  1, -1),
+        float3(-1, -1,  1), float3(-1, -1, -1)
     };
 
     bool anyPointOnScreen = false;
@@ -485,43 +485,32 @@ void main(uint3 dispatchThreadID : SV_DispatchThreadID)
     }
 
     // -------------------------------------------------------------------------
-    // Test 2: Hierarchical sphere surface sampling
+    // Test 2: Sphere surface sampling (14 strategic points)
     // -------------------------------------------------------------------------
-    // Test 26 points on the sphere surface at 3 different radius scales.
-    // Starting with larger radius (1.5x) provides conservative culling that
-    // helps reduce pop-in for objects that are just barely hidden.
-    // 
-    // The unrolled loop tests all 78 points (26 * 3) with early-out on first
-    // passing depth test - visible objects exit quickly.
-    static const float radiusScales[3] = { 1.5, 1.0, 0.5 };
-    
+    // Test axis-aligned and corner directions at full radius.
+    // Visible objects typically exit on first few tests due to early-out.
     [unroll]
-    for (int scaleIdx = 0; scaleIdx < 3; ++scaleIdx) {
-        float testRadius = radius * radiusScales[scaleIdx];
+    for (int i = 0; i < 14; ++i) {
+        float3 dir3 = offsets[i];
+        float lenSq = dot(dir3, dir3);
+        float3 unitDir = dir3 * rsqrt(max(lenSq, 1e-12));
+        float3 pointVS = centerVS + unitDir * radius;
+
+        if (pointVS.z <= 0.0) {
+            continue;
+        }
+
+        anyPointOnScreen = true;
         
-        // Test 26 cube corner points at this radius scale
-        for (int i = 0; i < 26; ++i) {
-            float3 dir3 = offsets[i];
-            float lenSq = dot(dir3, dir3);
-            float3 unitDir = dir3 * rsqrt(max(lenSq, 1e-12));
-            float3 pointVS = centerVS + unitDir * testRadius;
+        float4 pointClip = mul(FrameBuffer::CameraProj[0], float4(pointVS, 1));
+        float pointDepth = pointClip.z / pointClip.w;
+        float2 pointUV = clamp(ViewToHiZUV(pointVS), float2(0.0, 0.0), float2(1.0, 1.0));
 
-            if (pointVS.z <= 0.0) {
-                continue;
-            }
-
-            anyPointOnScreen = true;
-            
-            float4 pointClip = mul(FrameBuffer::CameraProj[0], float4(pointVS, 1));
-            float pointDepth = pointClip.z / pointClip.w;
-            float2 pointUV = clamp(ViewToHiZUV(pointVS), float2(0.0, 0.0), float2(1.0, 1.0));
-
-            float hiZDepth = HiZBuffer.SampleLevel(HiZSampler, pointUV, mipLevel).r;
-            if (pointDepth <= hiZDepth + conservativeBias) {
-                VisibilityResults[geometryIndex] = -3;  // Visible: depth test passed
-                ReportVisibleGeometry(geometryIndex, centerVS, radius);
-                return;
-            }
+        float hiZDepth = HiZBuffer.SampleLevel(HiZSampler, pointUV, mipLevel).r;
+        if (pointDepth <= hiZDepth + conservativeBias) {
+            VisibilityResults[geometryIndex] = -3;  // Visible: depth test passed
+            ReportVisibleGeometry(geometryIndex, centerVS, radius);
+            return;
         }
     }
 

@@ -723,24 +723,22 @@ namespace Hooks
 	{
 		static void thunk(RE::BSCullingProcess* cullingProcess, RE::BSGeometry& geometry, uint32_t a_arg2)
 		{
-			auto& hiz = globals::features::hiZOcclusion;
-			
-			if (hiz.loaded && 
-			    hiz.settings.enableHiZCulling &&
-			    !globals::state->renderingShadowmaps &&
-			    !globals::state->activeReflections) {
-				
-				if (hiz.IsGeometryOccluded(&geometry)) {
-					// Skip LOD objects if cullLODObjects is disabled
+
+			if (globals::state->inWorld) {
+				auto& hiz = globals::features::hiZOcclusion;
+				if (hiz.loaded &&
+				    hiz.settings.enableHiZCulling &&
+				    !globals::state->renderingShadowmaps &&
+				    !globals::state->activeReflections) {
 					if (!hiz.settings.cullLODObjects && HiZOcclusion::IsLODGeometry(&geometry)) {
 						hiz.stats.lodSkippedCount++;
-					} else {
+					} else if (HiZOcclusion::IsGeometryOccluded(&geometry)) {
 						hiz.stats.earlyCulledCount++;
-						return;  // Skip adding to visible set entirely
+						return;
 					}
 				}
 			}
-			
+
 			func(cullingProcess, geometry, a_arg2);
 		}
 		static inline REL::Relocation<decltype(thunk)> func;
@@ -752,23 +750,22 @@ namespace Hooks
 	{
 		static void thunk(RE::BSFadeNodeCuller* culler, RE::BSGeometry& geometry, uint32_t a_arg2)
 		{
-			auto& hiz = globals::features::hiZOcclusion;
-			
-			if (hiz.loaded && 
-			    hiz.settings.enableHiZCulling &&
-			    !globals::state->renderingShadowmaps &&
-			    !globals::state->activeReflections) {
-				
-				if (hiz.IsGeometryOccluded(&geometry)) {
+			// Fast early-out: check inWorld first (single bool) before touching any feature data
+			if (globals::state->inWorld) {
+				auto& hiz = globals::features::hiZOcclusion;
+				if (hiz.loaded &&
+				    hiz.settings.enableHiZCulling &&
+				    !globals::state->renderingShadowmaps &&
+				    !globals::state->activeReflections) {
 					if (!hiz.settings.cullLODObjects && HiZOcclusion::IsLODGeometry(&geometry)) {
 						hiz.stats.lodSkippedCount++;
-					} else {
+					} else if (HiZOcclusion::IsGeometryOccluded(&geometry)) {
 						hiz.stats.earlyCulledCount++;
 						return;
 					}
 				}
 			}
-			
+
 			func(culler, geometry, a_arg2);
 		}
 		static inline REL::Relocation<decltype(thunk)> func;
@@ -779,29 +776,28 @@ namespace Hooks
 	{
 		static void thunk(RE::NiCullingProcess* cullingProcess, RE::BSGeometry& geometry, uint32_t a_arg2)
 		{
-			auto& hiz = globals::features::hiZOcclusion;
-			
-			if (hiz.loaded && 
-			    hiz.settings.enableHiZCulling &&
-			    !globals::state->renderingShadowmaps &&
-			    !globals::state->activeReflections) {
-				
-				if (hiz.IsGeometryOccluded(&geometry)) {
+			// Fast early-out: check inWorld first (single bool) before touching any feature data
+			if (globals::state->inWorld) {
+				auto& hiz = globals::features::hiZOcclusion;
+				if (hiz.loaded &&
+				    hiz.settings.enableHiZCulling &&
+				    !globals::state->renderingShadowmaps &&
+				    !globals::state->activeReflections) {
 					if (!hiz.settings.cullLODObjects && HiZOcclusion::IsLODGeometry(&geometry)) {
 						hiz.stats.lodSkippedCount++;
-					} else {
+					} else if (HiZOcclusion::IsGeometryOccluded(&geometry)) {
 						hiz.stats.earlyCulledCount++;
 						return;
 					}
 				}
 			}
-			
+
 			func(cullingProcess, geometry, a_arg2);
 		}
 		static inline REL::Relocation<decltype(thunk)> func;
 	};
 
-struct BSBatchRenderer_RenderPassImmediately
+	struct BSBatchRenderer_RenderPassImmediately
 	{
 		static void thunk(RE::BSRenderPass* pass, uint32_t technique, bool alphaTest, uint32_t renderFlags)
 		{
@@ -844,7 +840,7 @@ struct BSBatchRenderer_RenderPassImmediately
 						break;
 					default:  // Lighting, DistantTree, BloodSplatter
 						hiz.stats.otherCallsTotal++;
-						if (hiz.IsGeometryOccluded(pass->geometry)) {
+						if (HiZOcclusion::IsGeometryOccluded(pass->geometry)) {
 							hiz.stats.otherCallsCulled++;
 							return;
 						}

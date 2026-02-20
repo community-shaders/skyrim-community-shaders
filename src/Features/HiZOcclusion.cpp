@@ -1,6 +1,7 @@
 #include "HiZOcclusion.h"
 
 #include "Features/Upscaling.h"
+#include "Menu/Fonts.h"
 #include "ShaderCache.h"
 #include "State.h"
 #include "Utils/Game.h"
@@ -136,212 +137,206 @@ void HiZOcclusion::ClearBoundsOverlay() {
 
 void HiZOcclusion::DrawSettings()
 {
-    if (ImGui::TreeNodeEx("Hi-Z Viewer", ImGuiTreeNodeFlags_DefaultOpen)) {
-        ImGui::Checkbox("Show viewer window", &settings.enableHiZViewer);
-        if (auto _tt = Util::HoverTooltipWrapper()) {
-            Util::DrawMultiLineTooltip({
-                "Displays the selected Hi-Z mip level in a separate window.",
-                "Useful to verify pyramid contents and downsampling correctness."
-            });
-        }
+	// Main toggle at the top - always visible
+	ImGui::Checkbox("Enable Occlusion Culling", &settings.enableHiZCulling);
+	if (auto _tt = Util::HoverTooltipWrapper()) {
+		ImGui::SetTooltip("Skip rendering objects hidden behind other geometry.\nImproves performance by reducing unnecessary draw calls.");
+	}
 
-        // Clamp mip selection to available range when resources exist
-        uint32_t maxMip = hiZMipCount > 0 ? (hiZMipCount - 1) : 0;
-        if (settings.hizViewerMip > maxMip) settings.hizViewerMip = maxMip;
+	if (!settings.enableHiZCulling) {
+		ImGui::TextDisabled("Enable occlusion culling to access settings.");
+		return;
+	}
 
-        ImGui::SliderInt("Mip", reinterpret_cast<int*>(&settings.hizViewerMip), 0, static_cast<int>(maxMip));
-        if (auto _tt = Util::HoverTooltipWrapper()) {
-            Util::DrawMultiLineTooltip({
-                "Mip 0 is full resolution. Higher mips are progressively smaller.",
-                "Range is based on the currently built Hi-Z mip count."
-            });
-        }
-        ImGui::SliderFloat("Scale", &settings.hizViewerScale, 0.1f, 4.0f, "%.2fx");
-        if (auto _tt = Util::HoverTooltipWrapper()) {
-            Util::DrawMultiLineTooltip({
-                "Visual scale applied to the displayed texture.",
-                "Use to enlarge small mip levels."
-            });
-        }
+	ImGui::Separator();
 
-        if (ImGui::TreeNodeEx("Bounds Overlay", ImGuiTreeNodeFlags_DefaultOpen)) {
-            ImGui::Checkbox("Enable Bounds Overlay", &settings.enableBoundsViewer);
-            if (auto _tt = Util::HoverTooltipWrapper()) {
-                Util::DrawMultiLineTooltip({
-                    "Shows colored outlines around tested geometry based on their culling status.",
-                    "Enable individual colors below to filter what is displayed."
-                });
-            }
-            
-            ImGui::SliderInt("Max Objects", reinterpret_cast<int*>(&settings.boundsMaxObjects), 8, 2048);
-            if (auto _tt = Util::HoverTooltipWrapper()) {
-                Util::DrawMultiLineTooltip({
-                    "Maximum number of objects to draw outlines for per frame.",
-                    "Higher values may impact performance."
-                });
-            }
-            
-            if (settings.enableBoundsViewer) {
-                ImGui::Separator();
-                ImGui::Text("Color Filters:");
-                
-                ImGui::Checkbox("Green (Visible: Test Passed)", &settings.showVisTestPassed);
-                ImGui::SameLine();
-                ImGui::TextColored(ImVec4(0.f, 1.f, 0.f, 1.f), ": %u", stats.visTestPassed);
-                if (auto _tt = Util::HoverTooltipWrapper()) {
-                    ImGui::SetTooltip("Geometry that passed a valid depth test");
-                }
-                
-                ImGui::Checkbox("Teal (Visible: Camera Inside Bounds)", &settings.showVisInsideBounds);
-                ImGui::SameLine();
-                ImGui::TextColored(ImVec4(0.f, 1.f, 0.5f, 1.f), ": %u", stats.visInsideBounds);
-                if (auto _tt = Util::HoverTooltipWrapper()) {
-                    ImGui::SetTooltip("Geometry whose bounds clip the camera");
-                }
-                
-                ImGui::Checkbox("Cyan (Visible: Invalid Radius)", &settings.showVisInvalidRadius);
-                ImGui::SameLine();
-                ImGui::TextColored(ImVec4(0.f, 1.f, 1.f, 1.f), ": %u", stats.visInvalidRadius);
-                if (auto _tt = Util::HoverTooltipWrapper()) {
-                    ImGui::SetTooltip("Geometry with a radius of 0 or less");
-                }
-                
-                ImGui::Checkbox("Magenta (Culled: Frustum)", &settings.showCulledFrustum);
-                ImGui::SameLine();
-                ImGui::TextColored(ImVec4(1.f, 0.f, 1.f, 1.f), ": %u", stats.culledFrustum);
-                if (auto _tt = Util::HoverTooltipWrapper()) {
-                    ImGui::SetTooltip("Geometry with no valid boundary points on screen");
-                }
-                
-                ImGui::Checkbox("Red (Culled: No Early Out)", &settings.showCulledNoEarlyOut);
-                ImGui::SameLine();
-                ImGui::TextColored(ImVec4(1.f, 0.f, 0.f, 1.f), ": %u", stats.culledNoEarlyOut);
-                if (auto _tt = Util::HoverTooltipWrapper()) {
-                    ImGui::SetTooltip("Geometry that failed all tests and were culled");
-                }
-            }
-            ImGui::TreePop();
-        }
+	if (ImGui::BeginTabBar("##HiZTabs", ImGuiTabBarFlags_None)) {
+		// General Settings Tab
+		if (MenuFonts::BeginTabItemWithFont("Settings", Menu::FontRole::Subheading)) {
+			if (ImGui::BeginChild("##HiZSettingsFrame", { 0, 0 }, true)) {
+				// Culling Options
+				ImGui::TextColored(ImVec4(0.8f, 0.8f, 0.2f, 1.0f), "Culling Options");
+				ImGui::Separator();
 
-        // Status line
-        ImGui::Separator();
-        ImGui::Text("Frame: %u", globals::state ? globals::state->frameCount : 0);
-		ImGui::Text("Status: %s", HiZStatusToString(status));
-		if (!statusMessage.empty()) {
-			ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.0f, 1.0f), "  > %s", statusMessage.c_str());
+				ImGui::SliderFloat("Conservative Bias", &settings.conservativeBias, 0.0f, 1.0f, "%.3f");
+				if (auto _tt = Util::HoverTooltipWrapper()) {
+					Util::DrawMultiLineTooltip({
+						"How aggressively objects are culled.",
+						"Lower = more culling, better performance, but may cause pop-in.",
+						"Higher = safer, fewer artifacts, but less performance gain.",
+						"Default: 0.02 is a good balance."
+					});
+				}
+
+				ImGui::Checkbox("Cull Distant LOD Objects", &settings.cullLODObjects);
+				if (auto _tt = Util::HoverTooltipWrapper()) {
+					Util::DrawMultiLineTooltip({
+						"Apply culling to terrain and object LODs.",
+						"Disable if you see flickering on distant mountains or trees."
+					});
+				}
+
+				// Performance Statistics
+				ImGui::Spacing();
+				ImGui::Spacing();
+				ImGui::TextColored(ImVec4(0.8f, 0.8f, 0.2f, 1.0f), "Performance");
+				ImGui::Separator();
+
+				// Early culling (best savings - prevents all CPU work)
+				if (displayStats.earlyCulledCount > 0) {
+					ImGui::TextColored(ImVec4(0.2f, 1.0f, 0.4f, 1.0f), "Objects culled early: %u", displayStats.earlyCulledCount);
+					if (auto _tt = Util::HoverTooltipWrapper()) {
+						ImGui::SetTooltip("Culled during scene traversal - maximum CPU savings.");
+					}
+				}
+
+				// Late-stage draw call culling
+				uint32_t totalLateCulled = displayStats.utilityCallsCulled + displayStats.particleCallsCulled + displayStats.otherCallsCulled;
+				uint32_t totalLateCalls = displayStats.utilityCallsTotal + displayStats.particleCallsTotal + displayStats.otherCallsTotal;
+				if (totalLateCalls > 0) {
+					ImGui::Text("Draw calls culled: %u / %u", totalLateCulled, totalLateCalls);
+					if (auto _tt = Util::HoverTooltipWrapper()) {
+						ImGui::SetTooltip("Additional draw calls skipped at render time.");
+					}
+				}
+
+				if (displayStats.lodSkippedCount > 0) {
+					ImGui::TextColored(ImVec4(0.5f, 0.5f, 1.0f, 1.0f), "LOD objects skipped: %u", displayStats.lodSkippedCount);
+					if (auto _tt = Util::HoverTooltipWrapper()) {
+						ImGui::SetTooltip("LOD geometry not culled because 'Cull Distant LOD Objects' is disabled.");
+					}
+				}
+
+				// Status
+				ImGui::Spacing();
+				ImGui::Text("Status: %s", HiZStatusToString(status));
+				if (!statusMessage.empty()) {
+					ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.0f, 1.0f), "  %s", statusMessage.c_str());
+				}
+			}
+			ImGui::EndChild();
+			ImGui::EndTabItem();
 		}
-        ImGui::Text("Geometry from frame %u: %u", globals::state->frameCount - 1, stats.geometryListSize);
-        ImGui::Text("Total tested: %u", stats.totalTested);
-        ImGui::Text("Culled: %u", stats.culledFrustum + stats.culledNoEarlyOut);
-        ImGui::Text("Visible: %u", stats.visTestPassed + stats.visInsideBounds + stats.visInvalidRadius);
-        ImGui::Text("Unknown/Default: %u", stats.defaultValue);
-        
-        // Async readback status
-        ImGui::Text("Occluded set size: %zu", occludedGeometry.size());
-        if (stats.staleFrameCount > 0) {
-            ImGui::TextColored(ImVec4(1.0f, 1.0f, 0.0f, 1.0f), "Stale results: %u frames (from frame %u)", 
-                              stats.staleFrameCount, stats.lastResultFrame);
-        } else {
-            ImGui::Text("Results: Fresh (frame %u)", stats.lastResultFrame);
-        }
-        
-        // Display profiling durations in micro seconds
-        ImGui::Text("GPU time: %.2f us", stats.gpuCullingTimeMs * 1000);
-        ImGui::Text("Copy results time: %.2f us", stats.copyTimeMs * 1000);
-        ImGui::Text("Map time: %.2f us", stats.mapTimeMs * 1000);
-        ImGui::Text("Copy data time: %.2f us", stats.copyDataTimeMs * 1000);
-        ImGui::Text("Unmap time: %.2f us", stats.unmapTimeMs * 1000);
-        ImGui::Text("CPU Readback time: %.2f us", stats.readbackTimeMs * 1000);
 
-        ImGui::TreePop();
-    }
-    
-    // Hi-Z Culling Settings
-    if (ImGui::TreeNodeEx("Hi-Z Culling", ImGuiTreeNodeFlags_DefaultOpen)) {
-        ImGui::Checkbox("Enable Hi-Z Culling", &settings.enableHiZCulling);
-        ImGui::SameLine();
-        if (auto _tt = Util::HoverTooltipWrapper()) {
-            ImGui::SetTooltip("Enable Hi-Z Culling system");
-        }
-        ImGui::SliderFloat("Conservative Bias", &settings.conservativeBias, 0.0f, 1.0f, "%.4f");
-        ImGui::SameLine();
-        if (auto _tt = Util::HoverTooltipWrapper()) {
-            ImGui::SetTooltip("Conservative bias for Hi-Z Culling. \nHigher values are more conservative, lower values are more aggressive.");
-        }
-        
-        ImGui::Checkbox("Cull LOD Objects", &settings.cullLODObjects);
-        if (auto _tt = Util::HoverTooltipWrapper()) {
-            ImGui::SetTooltip("Enable culling for LOD objects (terrain LOD, object LOD).\nDisable if you see flickering on distant objects at low bias values.");
-        }
-        
-        // Show early culling stat (geometry culled during scene traversal - prevents ALL downstream work)
-        if (displayStats.earlyCulledCount > 0 || displayStats.lodSkippedCount > 0) {
-            ImGui::Separator();
-            if (displayStats.earlyCulledCount > 0) {
-                ImGui::TextColored(ImVec4(0.0f, 1.0f, 0.5f, 1.0f), "Early Culled (at traversal): %u", displayStats.earlyCulledCount);
-                if (auto _tt = Util::HoverTooltipWrapper()) {
-                    ImGui::SetTooltip("Geometry culled during scene traversal before batching.\nThis prevents ALL downstream CPU work (batching, shader setup, state changes).");
-                }
-            }
-            if (displayStats.lodSkippedCount > 0) {
-                ImGui::TextColored(ImVec4(0.5f, 0.5f, 1.0f, 1.0f), "LOD Objects Skipped: %u", displayStats.lodSkippedCount);
-                if (auto _tt = Util::HoverTooltipWrapper()) {
-                    ImGui::SetTooltip("LOD geometry that was not culled because 'Cull LOD Objects' is disabled.");
-                }
-            }
-        }
-        
-        // Show combined culling stats
-        uint32_t totalCulled = displayStats.utilityCallsCulled + displayStats.particleCallsCulled + displayStats.otherCallsCulled;
-        uint32_t totalCalls = displayStats.utilityCallsTotal + displayStats.particleCallsTotal + displayStats.otherCallsTotal;
-        if (totalCalls > 0) {
-            ImGui::Separator();
-            ImGui::TextColored(ImVec4(0.5f, 1.0f, 0.5f, 1.0f), "Additional draw calls culled: %u / %u", totalCulled, totalCalls);
-            ImGui::Text("  Shadow/Depth/Mask: %u / %u", displayStats.utilityCallsCulled, displayStats.utilityCallsTotal);
-            ImGui::Text("  Particle/Effect: %u / %u", displayStats.particleCallsCulled, displayStats.particleCallsTotal);
-            ImGui::Text("  Lighting/Tree/Blood: %u / %u", displayStats.otherCallsCulled, displayStats.otherCallsTotal);
-        }
-        
-        ImGui::TreePop();
-    }
+		// Developer/Debug Tab
+		if (MenuFonts::BeginTabItemWithFont("Developer", Menu::FontRole::Subheading)) {
+			if (ImGui::BeginChild("##HiZDevFrame", { 0, 0 }, true)) {
+				// Debug Visualization
+				ImGui::TextColored(ImVec4(0.8f, 0.8f, 0.2f, 1.0f), "Visualization");
+				ImGui::Separator();
 
-    // Separate viewer window (persists while settings are open)
-    if (settings.enableHiZViewer) {
-        if (ImGui::Begin("Hi-Z Pyramid Viewer", &settings.enableHiZViewer)) {
-            if (hiZTexture) {
-                // Compute selected mip dimensions
-                uint32_t mip = settings.hizViewerMip;
-                uint32_t w = std::max(1u, hiZWidth  >> mip);
-                uint32_t h = std::max(1u, hiZHeight >> mip);
-                ImVec2 size = ImVec2(w * settings.hizViewerScale, h * settings.hizViewerScale);
+				ImGui::Checkbox("Show Depth Pyramid Viewer", &settings.enableHiZViewer);
+				if (auto _tt = Util::HoverTooltipWrapper()) {
+					ImGui::SetTooltip("Opens a window showing the hierarchical depth buffer.");
+				}
 
-                // Draw the texture
-                ImGui::Text("Mip %u  (%ux%u)", mip, w, h);
-                if (mip < hiZSRVsPerMip.size() && hiZSRVsPerMip[mip]) {
-                    ImGui::Image(reinterpret_cast<ImTextureID>(hiZSRVsPerMip[mip]), size);
-                    
-                    // Debug info
-                    if (ImGui::IsItemHovered()) {
-                        ImGui::BeginTooltip();
-                        ImGui::Text("SRV: %p", hiZSRVsPerMip[mip]);
-                        ImGui::Text("Scale: %.2fx", settings.hizViewerScale);
-                        ImGui::Text("Display size: %.0fx%.0f", size.x, size.y);
-                        ImGui::EndTooltip();
-                    }
-                } else {
-                    ImGui::Text("SRV not available (mip=%u, size=%zu)", mip, hiZSRVsPerMip.size());
-                    if (mip < hiZSRVsPerMip.size()) {
-                        ImGui::Text("SRV pointer for mip %u: %p", mip, hiZSRVsPerMip[mip]);
-                    }
-                    ImGui::Text("Texture: %p, Main SRV: %p", hiZTexture, hiZSRV);
-                }
-            }
-            else {
-                ImGui::Text("Hi-Z pyramid unavailable.");
-            }
-        }
-        ImGui::End();
-    }
+				if (settings.enableHiZViewer) {
+					ImGui::Indent();
+					uint32_t maxMip = hiZMipCount > 0 ? (hiZMipCount - 1) : 0;
+					if (settings.hizViewerMip > maxMip)
+						settings.hizViewerMip = maxMip;
+					ImGui::SliderInt("Mip Level", reinterpret_cast<int*>(&settings.hizViewerMip), 0, static_cast<int>(maxMip));
+					ImGui::SliderFloat("Display Scale", &settings.hizViewerScale, 0.1f, 4.0f, "%.1fx");
+					ImGui::Unindent();
+				}
+
+				ImGui::Spacing();
+				ImGui::Checkbox("Show Bounds Overlay", &settings.enableBoundsViewer);
+				if (auto _tt = Util::HoverTooltipWrapper()) {
+					ImGui::SetTooltip("Draw colored outlines around objects showing their culling status.");
+				}
+
+				if (settings.enableBoundsViewer) {
+					ImGui::Indent();
+					ImGui::SliderInt("Max Objects", reinterpret_cast<int*>(&settings.boundsMaxObjects), 8, 2048);
+
+					ImGui::Text("Show:");
+					ImGui::Checkbox("Visible (green)", &settings.showVisTestPassed);
+					ImGui::SameLine();
+					ImGui::Text(": %u", stats.visTestPassed);
+
+					ImGui::Checkbox("Camera inside (teal)", &settings.showVisInsideBounds);
+					ImGui::SameLine();
+					ImGui::Text(": %u", stats.visInsideBounds);
+
+					ImGui::Checkbox("Invalid bounds (cyan)", &settings.showVisInvalidRadius);
+					ImGui::SameLine();
+					ImGui::Text(": %u", stats.visInvalidRadius);
+
+					ImGui::Checkbox("Frustum culled (magenta)", &settings.showCulledFrustum);
+					ImGui::SameLine();
+					ImGui::Text(": %u", stats.culledFrustum);
+
+					ImGui::Checkbox("Occluded (red)", &settings.showCulledNoEarlyOut);
+					ImGui::SameLine();
+					ImGui::Text(": %u", stats.culledNoEarlyOut);
+					ImGui::Unindent();
+				}
+
+				// Detailed Statistics
+				ImGui::Spacing();
+				ImGui::Spacing();
+				ImGui::TextColored(ImVec4(0.8f, 0.8f, 0.2f, 1.0f), "Statistics");
+				ImGui::Separator();
+
+				ImGui::Text("Frame: %u", globals::state ? globals::state->frameCount : 0);
+				ImGui::Text("Geometry tested: %u", stats.geometryListSize);
+				ImGui::Text("Total tests: %u", stats.totalTested);
+				ImGui::Text("Occluded set size: %zu", occludedGeometry.size());
+
+				if (stats.staleFrameCount > 0) {
+					ImGui::TextColored(ImVec4(1.0f, 1.0f, 0.0f, 1.0f), "Results stale: %u frames", stats.staleFrameCount);
+				} else {
+					ImGui::Text("Results: Fresh");
+				}
+
+				// Detailed draw call breakdown
+				ImGui::Spacing();
+				ImGui::Text("Draw Call Breakdown:");
+				ImGui::Text("  Shadow/Depth: %u / %u culled", displayStats.utilityCallsCulled, displayStats.utilityCallsTotal);
+				ImGui::Text("  Particles/FX: %u / %u culled", displayStats.particleCallsCulled, displayStats.particleCallsTotal);
+				ImGui::Text("  Other: %u / %u culled", displayStats.otherCallsCulled, displayStats.otherCallsTotal);
+
+				// Timing
+				ImGui::Spacing();
+				ImGui::Spacing();
+				ImGui::TextColored(ImVec4(0.8f, 0.8f, 0.2f, 1.0f), "Timing (microseconds)");
+				ImGui::Separator();
+				ImGui::Text("GPU culling: %.1f", stats.gpuCullingTimeMs * 1000.0f);
+				ImGui::Text("Copy results: %.1f", stats.copyTimeMs * 1000.0f);
+				ImGui::Text("Map buffer: %.1f", stats.mapTimeMs * 1000.0f);
+				ImGui::Text("Copy data: %.1f", stats.copyDataTimeMs * 1000.0f);
+				ImGui::Text("Unmap: %.1f", stats.unmapTimeMs * 1000.0f);
+				ImGui::Text("Total readback: %.1f", stats.readbackTimeMs * 1000.0f);
+			}
+			ImGui::EndChild();
+			ImGui::EndTabItem();
+		}
+
+		ImGui::EndTabBar();
+	}
+
+	// Separate viewer window
+	if (settings.enableHiZViewer) {
+		if (ImGui::Begin("Hi-Z Depth Pyramid", &settings.enableHiZViewer)) {
+			if (hiZTexture) {
+				uint32_t mip = settings.hizViewerMip;
+				uint32_t w = std::max(1u, hiZWidth >> mip);
+				uint32_t h = std::max(1u, hiZHeight >> mip);
+				ImVec2 size = ImVec2(w * settings.hizViewerScale, h * settings.hizViewerScale);
+
+				ImGui::Text("Mip %u (%ux%u)", mip, w, h);
+				if (mip < hiZSRVsPerMip.size() && hiZSRVsPerMip[mip]) {
+					ImGui::Image(reinterpret_cast<ImTextureID>(hiZSRVsPerMip[mip]), size);
+				} else {
+					ImGui::TextDisabled("Mip level not available");
+				}
+			} else {
+				ImGui::TextDisabled("Depth pyramid not ready");
+			}
+		}
+		ImGui::End();
+	}
 }
 
 void HiZOcclusion::DrawOverlay()
@@ -494,7 +489,7 @@ void HiZOcclusion::Reset()
                 }
                 unCullNextFrame.clear();
             }
-            // Empty pending geometry list (with mutex protection)
+            // Empty pending geometry list (with mutex protection for early culling hooks)
             {
                 std::lock_guard<std::mutex> lock(pendingGeometryMutex);
                 if (!pendingGeometry.empty()) {
@@ -593,27 +588,19 @@ void HiZOcclusion::Prepass()
     statusMessage.clear();
 
     if (!InitHiZResources()) {
-        logger::error("HiZOcclusion::EarlyPrepass - failed to initialize Hi-Z resources");
-        status = HiZStatus::Error;
-        statusMessage = "Resource initialization failed";
+        // InitHiZResources sets appropriate status - don't spam logs
         return;
     }
     
     // Setup GPU culling resources if not already done
     if (!geometryBoundsBuffer || !hiZTestParamsBuffer || !hiZSampler || !visibilityResultsBuffer) {
         if (!SetupGPUCullingResources()) {
-            logger::error("HiZOcclusion::EarlyPrepass - failed to setup GPU culling resources");
-            status = HiZStatus::Error;
-            statusMessage = "GPU culling resource setup failed";
+            // SetupGPUCullingResources sets appropriate status
             return;
         }
     }
 
-    // Lock mutex to safely access pendingGeometry and pendingGeometrySet
-    // This prevents race conditions with BSBatchRenderer_RenderPassImmediately hook
-    std::lock_guard<std::mutex> lock(pendingGeometryMutex);
-
-    // Update geometry list size stat now that we have the lock
+    // Update geometry list size stat
     stats.geometryListSize = static_cast<uint32_t>(pendingGeometry.size());
 
     // Reserve vector capacity
@@ -1296,7 +1283,7 @@ void HiZOcclusion::ExecuteVisibilityTests()
             }
             
             geometryBounds.emplace_back(worldBound.center.x, worldBound.center.y, worldBound.center.z, worldBound.radius);
-            pendingGeometrySnapshot.push_back(geometry);
+            pendingGeometrySnapshot.emplace_back(geometry);
             ++processed;
         }
         
@@ -1583,12 +1570,13 @@ void HiZOcclusion::ProcessVisibilityResults(uint32_t bufferIndex) {
     }
 }
 
-bool HiZOcclusion::IsGeometryOccluded(RE::BSGeometry* geometry) const
+bool HiZOcclusion::IsGeometryOccluded(RE::BSGeometry* geometry)
 {
     if (!geometry) {
         return false;
     }
-    return occludedGeometry.find(geometry) != occludedGeometry.end();
+    // O(1) flag check instead of hash set lookup
+    return (geometry->GetFlags().underlying() & kOccludedFlag) != 0;
 }
 
 bool HiZOcclusion::IsLODGeometry(RE::BSGeometry* geometry)
@@ -1611,6 +1599,10 @@ void HiZOcclusion::MarkGeometryOccluded(RE::BSGeometry* geometry)
     if (!geometry) {
         return;
     }
+    // Set flag bit for O(1) lookup
+    auto& flags = geometry->GetFlags();
+    flags.set(static_cast<RE::NiAVObject::Flag>(kOccludedFlag));
+    // Also add to set for iteration in ClearOcclusionState
     occludedGeometry.insert(geometry);
 }
 
@@ -1619,11 +1611,24 @@ void HiZOcclusion::MarkGeometryVisible(RE::BSGeometry* geometry)
     if (!geometry) {
         return;
     }
+    // Clear flag bit
+    auto& flags = geometry->GetFlags();
+    auto newFlags = static_cast<RE::NiAVObject::Flag>(flags.underlying() & ~kOccludedFlag);
+    flags = stl::enumeration<RE::NiAVObject::Flag, uint32_t>(newFlags);
+    // Remove from set
     occludedGeometry.erase(geometry);
 }
 
 void HiZOcclusion::ClearOcclusionState()
 {
+    // Clear flag on all occluded geometry
+    for (auto* geo : occludedGeometry) {
+        if (geo) {
+            auto& flags = geo->GetFlags();
+            auto newFlags = static_cast<RE::NiAVObject::Flag>(flags.underlying() & ~kOccludedFlag);
+            flags = stl::enumeration<RE::NiAVObject::Flag, uint32_t>(newFlags);
+        }
+    }
     occludedGeometry.clear();
 }
 
