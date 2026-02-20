@@ -52,8 +52,8 @@ void SetTooltipPositionNearMouse(float estimatedHeight)
 	const bool placeAboveCursor = (mousePos.y + kTooltipOffsetY + estimatedHeight) > viewportBottom;
 	const ImVec2 tooltipPivot = placeAboveCursor ? ImVec2(0.0f, 1.0f) : ImVec2(0.0f, 0.0f);
 	const ImVec2 tooltipPos = placeAboveCursor ?
-		ImVec2(mousePos.x + kTooltipOffsetX, mousePos.y - kTooltipOffsetY) :
-		ImVec2(mousePos.x + kTooltipOffsetX, mousePos.y + kTooltipOffsetY);
+	                              ImVec2(mousePos.x + kTooltipOffsetX, mousePos.y - kTooltipOffsetY) :
+	                              ImVec2(mousePos.x + kTooltipOffsetX, mousePos.y + kTooltipOffsetY);
 	ImGui::SetNextWindowPos(tooltipPos, ImGuiCond_Always, tooltipPivot);
 }
 
@@ -463,8 +463,8 @@ void EditorWindow::ShowObjectsWindow()
 
 					if (active || hovered || selected) {
 						const ImGuiCol highlightCol = active  ? ImGuiCol_HeaderActive :
-						                             hovered ? ImGuiCol_HeaderHovered :
-						                                       ImGuiCol_Header;
+						                              hovered ? ImGuiCol_HeaderHovered :
+						                                        ImGuiCol_Header;
 						const ImU32 rowColor = ImGui::GetColorU32(highlightCol);
 						ImGui::TableSetBgColor(ImGuiTableBgTarget_RowBg0, rowColor);
 						ImGui::TableSetBgColor(ImGuiTableBgTarget_RowBg1, rowColor);
