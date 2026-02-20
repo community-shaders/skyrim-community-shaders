@@ -262,20 +262,7 @@ struct HDR_Main_PostProcessing
 		if (hdr)
 			hdr->RedirectFramebuffer();
 
-		// ISTemporalAA_UI runs post-tonemapping on kFRAMEBUFFER and clamps to SDR range.
-		// When HDR is active, skip this pass to preserve HDR values >1.0.
-		auto imageSpaceManager = RE::ImageSpaceManager::GetSingleton();
-		GET_INSTANCE_MEMBER(BSImagespaceShaderISTemporalAA, imageSpaceManager);
-		RE::BSImagespaceShader* savedUITAA = nullptr;
-		if (hdr && BSImagespaceShaderISTemporalAA->taaEnabled) {
-			savedUITAA = BSImagespaceShaderISTemporalAA->BSImagespaceShaderISTemporalAA_UI;
-			BSImagespaceShaderISTemporalAA->BSImagespaceShaderISTemporalAA_UI = nullptr;
-		}
-
 		func(a_this, a3, a_target, a_4, a_5);
-
-		if (savedUITAA)
-			BSImagespaceShaderISTemporalAA->BSImagespaceShaderISTemporalAA_UI = savedUITAA;
 
 		if (hdr)
 			hdr->RestoreFramebuffer();

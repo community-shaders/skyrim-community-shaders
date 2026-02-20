@@ -229,7 +229,7 @@ namespace DisplayMapping
 		return XYZToRGB(col);
 	}
 
-#ifdef PSHADER
+#if defined(PSHADER) && defined(BLEND)
 	float3 HuePreservingHejlBurgessDawson(float3 col, float3 bloomCol)
 	{
 		float3 ictcp = RGBToICtCp(col);

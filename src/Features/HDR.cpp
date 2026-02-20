@@ -317,20 +317,6 @@ void HDR::DrawSettings()
 		}
 	}
 
-	{
-		std::lock_guard<std::mutex> lock(settingsMutex);
-		if (settings.enableHDR && globals::features::upscaling.loaded) {
-			auto& upscaling = globals::features::upscaling;
-			uint rawMethod = upscaling.streamline.featureDLSS ? upscaling.settings.upscaleMethod : upscaling.settings.upscaleMethodNoDLSS;
-			if (rawMethod == (uint)Upscaling::UpscaleMethod::kTAA) {
-				ImGui::Spacing();
-				ImGui::PushStyleColor(ImGuiCol_Text, Util::Colors::GetWarning());
-				ImGui::TextWrapped("TAA is not compatible with HDR. Use FSR, DLSS, or None.");
-				ImGui::PopStyleColor();
-			}
-		}
-	}
-
 	if (ImGui::BeginPopupModal("HDR Warning##HDRDisplay", &showHDRWarningPopup, ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoMove)) {
 		// Center popup on screen
 		ImVec2 center = ImGui::GetMainViewport()->GetCenter();
@@ -534,11 +520,6 @@ void HDR::SetupResources()
 
 	auto renderer = globals::game::renderer;
 	auto& main = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMAIN];
-
-	if (!main.texture || !main.SRV || !main.UAV) {
-		logger::error("[HDR] kMAIN render target not fully initialized - cannot setup HDR resources");
-		return;
-	}
 
 	D3D11_TEXTURE2D_DESC texDesc{};
 	D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
@@ -946,6 +927,8 @@ void HDR::UpgradeLDRRenderTargets()
 		RE::RENDER_TARGETS::kLDR_BLURSWAP,
 		RE::RENDER_TARGETS::kIMAGESPACE_TEMP_COPY,
 		RE::RENDER_TARGETS::kIMAGESPACE_TEMP_COPY2,
+		RE::RENDER_TARGETS::kTEMPORAL_AA_UI_ACCUMULATION_1,
+		RE::RENDER_TARGETS::kTEMPORAL_AA_UI_ACCUMULATION_2,
 	};
 
 	for (auto targetId : ldrTargets) {
