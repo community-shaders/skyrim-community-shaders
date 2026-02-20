@@ -1123,7 +1123,7 @@ void WeatherWidget::DrawCloudSettings()
 		ApplyChanges();
 		if (editorWindow->IsWeatherLocked() && editorWindow->GetLockedWeather() == weather) {
 			if (auto sky = RE::Sky::GetSingleton()) {
-				sky->ForceWeather(weather, false);
+				sky->ForceWeather(weather, true);  // override=true for immediate application; matches "instant feedback" intent above
 			}
 		}
 	} else if (changed && editorWindow->settings.autoApplyChanges) {
