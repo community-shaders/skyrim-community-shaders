@@ -93,6 +93,11 @@ public:
 	virtual void ClearShaderCache() override;
 
 	void RenderTerrainBlendingPasses();
+	void OnBeginTechnique(RE::BSShader* a_shader, uint32_t a_pixelDescriptor, uint32_t a_callerRva = 0);
+	void OnShadowmaskPhaseEnd();
+	void OnUtilitySetupGeometry(RE::BSShader* a_shader, RE::BSRenderPass* a_pass, uint32_t a_renderFlags, uint32_t a_callerRva = 0);
+	void OnShaderPropertySetupGeometry(RE::BSShaderProperty* a_shaderProperty, RE::BSGeometry* a_geometry, bool a_result, uint32_t a_callerRva = 0);
+	void OnSetDirtyStates(bool a_isCompute, uint32_t a_callerRva = 0);
 
 	struct Hooks
 	{
@@ -108,11 +113,15 @@ public:
 			static inline REL::Relocation<decltype(thunk)> func;
 		};
 
-		// VR only: chains on the DownscaleDepthBuffer call site inside Main_RenderDepth
-		// to inject BlendPrepassDepths before the 4x downscale and OBB occlusion testing.
-		struct VR_PreDownscaleDepthBuffer
+		struct BSUtilityShader_SetupGeometry
 		{
-			static void thunk(RE::BSSceneGraph* a1);
+			static void thunk(RE::BSShader* a_shader, RE::BSRenderPass* a_pass, uint32_t a_renderFlags);
+			static inline REL::Relocation<decltype(thunk)> func;
+		};
+
+		struct BSShaderProperty_SetupGeometry
+		{
+			static bool thunk(RE::BSShaderProperty* a_shaderProperty, RE::BSGeometry* a_geometry);
 			static inline REL::Relocation<decltype(thunk)> func;
 		};
 
@@ -124,11 +133,11 @@ public:
 			// To manipulate the depth buffer write, depth testing, alpha blending
 			stl::write_thunk_call<BSBatchRenderer__RenderPassImmediately>(REL::RelocationID(100852, 107642).address() + REL::Relocate(0x29E, 0x28F));
 
-			// VR: blend terrain depth before the engine's 4x downscale so OBB occlusion reads blended depth.
-			// Chains on top of FrameAnnotations' hook at the same call site.
-			if (REL::Module::IsVR()) {
-				stl::write_thunk_call<VR_PreDownscaleDepthBuffer>(REL::RelocationID(100421, 107139).address() + REL::Relocate(0x37f, 0));
-			}
+			// Engine path: late Utility setup hook so slot rebinding survives to draw.
+			stl::write_vfunc<0x6, BSUtilityShader_SetupGeometry>(RE::VTABLE_BSUtilityShader[0]);
+
+			// Engine path: even later material/property setup hook for final slot correction.
+			stl::write_vfunc<0x27, BSShaderProperty_SetupGeometry>(RE::VTABLE_BSShaderProperty[0]);
 
 			logger::info("[Terrain Blending] Installed hooks");
 		}

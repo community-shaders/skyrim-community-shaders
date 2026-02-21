@@ -1,10 +1,17 @@
 #include "TerrainBlending.h"
 
 #include "Deferred.h"
+#include "FrameAnnotations.h"
 #include "Globals.h"
 #include "ShaderCache.h"
 #include "State.h"
 #include "VR.h"
+
+#include <array>
+#include <cstdint>
+#include <intrin.h>
+#include <sstream>
+#include <unordered_set>
 
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	TerrainBlending::Settings,
@@ -26,16 +33,304 @@ namespace
 
 	TbHookDiagnostics tbHookDiagnostics{};
 
+	struct EngineHookDiagnostics
+	{
+		uint64_t beginTechniqueCalls = 0;
+		uint64_t gateSatisfiedCalls = 0;
+		uint64_t inShadowmaskPhaseCalls = 0;
+		uint64_t utilityCalls = 0;
+		uint64_t whitelistedCalls = 0;
+		uint64_t shouldApplyCalls = 0;
+		uint64_t obbApplied = 0;
+		uint64_t obbAlreadyBound = 0;
+		uint64_t obbMissingSrv = 0;
+		uint64_t shadowmaskApplied = 0;
+		uint64_t shadowmaskAlreadyBound = 0;
+		uint64_t shadowmaskMissingSrv = 0;
+		uint64_t slot2CallerRejected = 0;
+		uint64_t slot2FallbackApplied = 0;
+	};
+
+	struct EngineHookTechniqueOverrideState
+	{
+		bool active = false;
+		ID3D11ShaderResourceView* previousObbSrv = nullptr;
+		ID3D11ShaderResourceView* previousShadowmaskSrv = nullptr;
+	};
+
+	EngineHookDiagnostics engineHookDiagnostics{};
+	EngineHookTechniqueOverrideState engineHookTechniqueState{};
+
+	constexpr uint32_t kShadowmaskDepthDescriptor0 = 0x262002u;
+	constexpr uint32_t kShadowmaskDepthDescriptor1 = 0x1062002u;
+
+	// Slot2 allowlist is only evaluated in VR (gated by IsEngineHookFeatureGateSatisfied).
+	// Keep variant mapping explicit to match existing codebase conventions.
+	// SE/AE offsets are intentionally 0 because this caller is VR-only.
+	const std::array<uint32_t, 1> kSlot2CallerAllowlistRvas = {
+		static_cast<uint32_t>(REL::Relocate(0u, 0u, 0xDC35DBu))
+	};
+	constexpr bool kEnableAutoBroadSlot2Fallback = true;
+	constexpr uint64_t kSlot2AutoFallbackRejectThreshold = 5;
+
+	bool slot2BroadFallbackActive = false;
+	uint64_t slot2RejectTotal = 0;
+	std::unordered_set<uint32_t> slot2BlockedCallerRvas{};
+	bool hookActiveLogged = false;
+	bool fallbackActivatedLogged = false;
+	uint32_t fallbackTriggerRva = 0;
+	bool slot2GateActivePrevious = false;
+
+	void ResetSlot2FallbackState()
+	{
+		slot2BroadFallbackActive = false;
+		slot2RejectTotal = 0;
+		slot2BlockedCallerRvas.clear();
+		fallbackActivatedLogged = false;
+		fallbackTriggerRva = 0;
+	}
+
+	bool IsDiagnosticSlot2GuardMode()
+	{
+		return globals::state && globals::state->IsDeveloperMode();
+	}
+
+	// Caller identity must come from _ReturnAddress() at each hook callsite.
+	// Normalize to module-relative RVA so values are stable across process ASLR.
+	uint32_t ToModuleRva(const void* a_returnAddress)
+	{
+		return static_cast<uint32_t>(reinterpret_cast<std::uintptr_t>(a_returnAddress) - REL::Module::get().base());
+	}
+
 	bool ShouldUseBlendedDepthSRV()
 	{
 		auto& vr = globals::features::vr;
 		return !globals::game::isVR || !vr.gDepthBufferCulling || !*vr.gDepthBufferCulling;
 	}
+
+	bool IsShadowmaskDepthDescriptorWhitelisted(const uint32_t a_descriptor)
+	{
+		return a_descriptor == kShadowmaskDepthDescriptor0 || a_descriptor == kShadowmaskDepthDescriptor1;
+	}
+
+	bool IsTbVrDepthCullingActive(const TerrainBlending& a_tb)
+	{
+		return globals::game::isVR && a_tb.loaded && a_tb.settings.Enabled && !ShouldUseBlendedDepthSRV();
+	}
+
+	bool IsSlot2CallerAllowlisted(const uint32_t a_callerRva)
+	{
+		for (const auto rva : kSlot2CallerAllowlistRvas) {
+			if (rva == a_callerRva) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	bool ShouldApplySlot2Rewrite(const uint32_t a_callerRva)
+	{
+		if (slot2BroadFallbackActive) {
+			engineHookDiagnostics.slot2FallbackApplied++;
+			return true;
+		}
+
+		if (IsSlot2CallerAllowlisted(a_callerRva)) {
+			return true;
+		}
+
+		engineHookDiagnostics.slot2CallerRejected++;
+		slot2RejectTotal++;
+		slot2BlockedCallerRvas.insert(a_callerRva);
+
+		if (kEnableAutoBroadSlot2Fallback && slot2RejectTotal >= kSlot2AutoFallbackRejectThreshold) {
+			slot2BroadFallbackActive = true;
+			engineHookDiagnostics.slot2FallbackApplied++;
+			fallbackTriggerRva = a_callerRva;
+			if (!fallbackActivatedLogged && IsDiagnosticSlot2GuardMode()) {
+				logger::debug(
+					"[TB Override] slot2 fallback activated triggerRva=0x{:X} blockedEvents={} blockedUniqueRvas={}",
+					fallbackTriggerRva,
+					slot2RejectTotal,
+					slot2BlockedCallerRvas.size());
+				fallbackActivatedLogged = true;
+			}
+			return true;
+		}
+
+		return false;
+	}
+
+	bool IsEngineHookFeatureGateSatisfied(const TerrainBlending& a_singleton)
+	{
+		if (!globals::game::isVR || !a_singleton.loaded || !a_singleton.settings.Enabled) {
+			return false;
+		}
+
+		return !ShouldUseBlendedDepthSRV();
+	}
+
+	struct EngineHookPassGateState
+	{
+		bool gateSatisfied = false;
+		bool inShadowmaskPhase = false;
+		bool isUtility = false;
+		bool isWhitelistedDescriptor = false;
+		bool shouldApply = false;
+	};
+
+	EngineHookPassGateState EvaluateEngineHookPassGate(const TerrainBlending& a_singleton, RE::BSShader* a_shader, uint32_t a_descriptor)
+	{
+		EngineHookPassGateState state{};
+		state.gateSatisfied = IsEngineHookFeatureGateSatisfied(a_singleton);
+		state.inShadowmaskPhase = FrameAnnotations::IsInRenderShadowmasksPhase();
+		state.isUtility = a_shader && a_shader->shaderType.get() == RE::BSShader::Type::Utility;
+		state.isWhitelistedDescriptor = IsShadowmaskDepthDescriptorWhitelisted(a_descriptor);
+		state.shouldApply = state.gateSatisfied && state.inShadowmaskPhase && state.isUtility && state.isWhitelistedDescriptor;
+		return state;
+	}
+
+	struct SlotOverrideResult
+	{
+		bool hasSrv = false;
+		bool applied = false;
+		bool alreadyBound = false;
+	};
+
+	using SlotRewriteGate = bool (*)(uint32_t);
+
+	SlotOverrideResult ApplyPixelShaderSlotOverride(
+		ID3D11DeviceContext* a_context,
+		const uint32_t a_slot,
+		ID3D11ShaderResourceView* a_overrideSrv,
+		uint64_t& a_appliedCounter,
+		uint64_t& a_alreadyBoundCounter,
+		uint64_t& a_missingCounter,
+		SlotRewriteGate a_rewriteGate,
+		const uint32_t a_callerRva)
+	{
+		SlotOverrideResult result{};
+		result.hasSrv = a_overrideSrv != nullptr;
+		if (!result.hasSrv) {
+			a_missingCounter++;
+			return result;
+		}
+
+		ID3D11ShaderResourceView* currentSrv = nullptr;
+		a_context->PSGetShaderResources(a_slot, 1, &currentSrv);
+		result.alreadyBound = currentSrv == a_overrideSrv;
+		if (result.alreadyBound) {
+			a_alreadyBoundCounter++;
+		} else {
+			const bool canRewrite = a_rewriteGate ? a_rewriteGate(a_callerRva) : true;
+			if (canRewrite) {
+				a_context->PSSetShaderResources(a_slot, 1, &a_overrideSrv);
+				result.applied = true;
+				a_appliedCounter++;
+			}
+		}
+
+		if (currentSrv) {
+			currentSrv->Release();
+		}
+
+		return result;
+	}
+
+	void MaybeLogHookActiveOnce()
+	{
+		if (!hookActiveLogged && IsDiagnosticSlot2GuardMode()) {
+			std::ostringstream allowlist;
+			for (size_t i = 0; i < kSlot2CallerAllowlistRvas.size(); i++) {
+				if (i != 0) {
+					allowlist << ", ";
+				}
+				allowlist << "0x" << std::uppercase << std::hex << kSlot2CallerAllowlistRvas[i];
+			}
+			logger::debug(
+				"[TB Override] pass-specific hook active slot2AllowlistCount={} slot2AllowlistRvas=[{}] fallbackThreshold={}",
+				kSlot2CallerAllowlistRvas.size(),
+				allowlist.str(),
+				kSlot2AutoFallbackRejectThreshold);
+			hookActiveLogged = true;
+		}
+	}
+
+	// Selects the depth SRV used by engine-hook slot overrides.
+	// Prefer blended depth outputs from Terrain Blending; fall back to MAIN_COPY depth
+	// when blended targets are unavailable so hook paths remain robust during init/teardown.
+	ID3D11ShaderResourceView* ResolveEngineOverrideSrv(const bool a_prefer16Bit)
+	{
+		auto& terrainBlending = globals::features::terrainBlending;
+		if (a_prefer16Bit) {
+			if (terrainBlending.blendedDepthTexture16 && terrainBlending.blendedDepthTexture16->srv) {
+				return terrainBlending.blendedDepthTexture16->srv.get();
+			}
+			if (terrainBlending.blendedDepthTexture && terrainBlending.blendedDepthTexture->srv) {
+				return terrainBlending.blendedDepthTexture->srv.get();
+			}
+		} else {
+			if (terrainBlending.blendedDepthTexture && terrainBlending.blendedDepthTexture->srv) {
+				return terrainBlending.blendedDepthTexture->srv.get();
+			}
+			if (terrainBlending.blendedDepthTexture16 && terrainBlending.blendedDepthTexture16->srv) {
+				return terrainBlending.blendedDepthTexture16->srv.get();
+			}
+		}
+
+		auto* renderer = globals::game::renderer;
+		if (!renderer) {
+			return nullptr;
+		}
+
+		auto& depthCopy = renderer->GetDepthStencilData().depthStencils[RE::RENDER_TARGETS_DEPTHSTENCIL::kMAIN_COPY];
+		return depthCopy.depthSRV;
+	}
+
+	// Restores PS slots 17 and 2 to the SRVs that were bound before this shadowmask
+	// technique override was applied. This keeps override scope limited to the
+	// targeted pass and avoids leaking TB depth bindings into unrelated draws.
+	void ReleaseEngineHookTechniqueOverride()
+	{
+		if (!engineHookTechniqueState.active) {
+			return;
+		}
+
+		auto* context = globals::d3d::context;
+		if (context) {
+			context->PSSetShaderResources(17, 1, &engineHookTechniqueState.previousObbSrv);
+			context->PSSetShaderResources(2, 1, &engineHookTechniqueState.previousShadowmaskSrv);
+		}
+
+		if (engineHookTechniqueState.previousObbSrv) {
+			engineHookTechniqueState.previousObbSrv->Release();
+			engineHookTechniqueState.previousObbSrv = nullptr;
+		}
+		if (engineHookTechniqueState.previousShadowmaskSrv) {
+			engineHookTechniqueState.previousShadowmaskSrv->Release();
+			engineHookTechniqueState.previousShadowmaskSrv = nullptr;
+		}
+
+		engineHookTechniqueState.active = false;
+	}
 }
 
 std::vector<FeatureConstraints::Constraint> TerrainBlending::GetActiveConstraints() const
 {
-	return {};
+	std::vector<FeatureConstraints::Constraint> constraints;
+
+	// Only constrain when all requested conditions are active:
+	// VR + Terrain Blending enabled + runtime depth buffer culling enabled.
+	if (!IsTbVrDepthCullingActive(*this)) {
+		return constraints;
+	}
+
+	constraints.push_back({ { "ScreenSpaceShadows", "Enable" },
+		false,
+		"Screen Space Shadows is disabled in VR when Terrain Blending and Depth Buffer Culling are both active.",
+		false });
+
+	return constraints;
 }
 
 void TerrainBlending::DrawSettings()
@@ -58,6 +353,195 @@ void TerrainBlending::LoadSettings(json& o_json)
 void TerrainBlending::SaveSettings(json& o_json)
 {
 	o_json = settings;
+}
+
+void TerrainBlending::OnBeginTechnique(RE::BSShader* a_shader, uint32_t a_pixelDescriptor, uint32_t a_callerRva)
+{
+	engineHookDiagnostics.beginTechniqueCalls++;
+
+	const auto gateState = EvaluateEngineHookPassGate(*this, a_shader, a_pixelDescriptor);
+	if (!slot2GateActivePrevious && gateState.gateSatisfied) {
+		ResetSlot2FallbackState();
+		if (IsDiagnosticSlot2GuardMode()) {
+			logger::debug("[TB Override] slot2 fallback reset on TB/depth-culling off->on");
+		}
+	}
+	slot2GateActivePrevious = gateState.gateSatisfied;
+
+	if (gateState.gateSatisfied) {
+		engineHookDiagnostics.gateSatisfiedCalls++;
+	}
+	if (gateState.inShadowmaskPhase) {
+		engineHookDiagnostics.inShadowmaskPhaseCalls++;
+	}
+	if (gateState.isUtility) {
+		engineHookDiagnostics.utilityCalls++;
+	}
+	if (gateState.isWhitelistedDescriptor) {
+		engineHookDiagnostics.whitelistedCalls++;
+	}
+	if (gateState.shouldApply) {
+		engineHookDiagnostics.shouldApplyCalls++;
+		MaybeLogHookActiveOnce();
+	}
+
+	if (!gateState.shouldApply) {
+		ReleaseEngineHookTechniqueOverride();
+		return;
+	}
+
+	auto* context = globals::d3d::context;
+	if (!context) {
+		return;
+	}
+
+	if (!engineHookTechniqueState.active) {
+		context->PSGetShaderResources(17, 1, &engineHookTechniqueState.previousObbSrv);
+		context->PSGetShaderResources(2, 1, &engineHookTechniqueState.previousShadowmaskSrv);
+		engineHookTechniqueState.active = true;
+	}
+
+	auto* obbOverrideSrv = ResolveEngineOverrideSrv(false);
+	auto* shadowmaskOverrideSrv = ResolveEngineOverrideSrv(true);
+	const auto obbResult = ApplyPixelShaderSlotOverride(
+		context,
+		17u,
+		obbOverrideSrv,
+		engineHookDiagnostics.obbApplied,
+		engineHookDiagnostics.obbAlreadyBound,
+		engineHookDiagnostics.obbMissingSrv,
+		nullptr,
+		0u);
+	const auto shadowmaskResult = ApplyPixelShaderSlotOverride(
+		context,
+		2u,
+		shadowmaskOverrideSrv,
+		engineHookDiagnostics.shadowmaskApplied,
+		engineHookDiagnostics.shadowmaskAlreadyBound,
+		engineHookDiagnostics.shadowmaskMissingSrv,
+		&ShouldApplySlot2Rewrite,
+		a_callerRva);
+}
+
+void TerrainBlending::OnShadowmaskPhaseEnd()
+{
+	ReleaseEngineHookTechniqueOverride();
+}
+
+void TerrainBlending::OnUtilitySetupGeometry(RE::BSShader* a_shader, RE::BSRenderPass* a_pass, uint32_t a_renderFlags, uint32_t a_callerRva)
+{
+	(void)a_pass;
+	(void)a_renderFlags;
+
+	auto* state = globals::state;
+	const uint32_t descriptor = state ? state->currentPixelDescriptor : 0u;
+
+	const auto gateState = EvaluateEngineHookPassGate(*this, a_shader, descriptor);
+	if (!gateState.shouldApply) {
+		return;
+	}
+
+	auto* context = globals::d3d::context;
+	if (!context) {
+		return;
+	}
+
+	auto* obbOverrideSrv = ResolveEngineOverrideSrv(false);
+	auto* shadowmaskOverrideSrv = ResolveEngineOverrideSrv(true);
+	const auto obbResult = ApplyPixelShaderSlotOverride(
+		context,
+		17u,
+		obbOverrideSrv,
+		engineHookDiagnostics.obbApplied,
+		engineHookDiagnostics.obbAlreadyBound,
+		engineHookDiagnostics.obbMissingSrv,
+		nullptr,
+		0u);
+	const auto shadowmaskResult = ApplyPixelShaderSlotOverride(
+		context,
+		2u,
+		shadowmaskOverrideSrv,
+		engineHookDiagnostics.shadowmaskApplied,
+		engineHookDiagnostics.shadowmaskAlreadyBound,
+		engineHookDiagnostics.shadowmaskMissingSrv,
+		&ShouldApplySlot2Rewrite,
+		a_callerRva);
+}
+
+void TerrainBlending::OnShaderPropertySetupGeometry(RE::BSShaderProperty* a_shaderProperty, RE::BSGeometry* a_geometry, bool a_result, uint32_t a_callerRva)
+{
+	(void)a_shaderProperty;
+	(void)a_geometry;
+	(void)a_result;
+
+	auto* state = globals::state;
+	RE::BSShader* shader = state ? state->currentShader : nullptr;
+	const uint32_t descriptor = state ? state->currentPixelDescriptor : 0u;
+
+	const auto gateState = EvaluateEngineHookPassGate(*this, shader, descriptor);
+	if (!gateState.shouldApply) {
+		return;
+	}
+
+	auto* context = globals::d3d::context;
+	if (!context) {
+		return;
+	}
+
+	auto* shadowmaskOverrideSrv = ResolveEngineOverrideSrv(true);
+	const auto shadowmaskResult = ApplyPixelShaderSlotOverride(
+		context,
+		2u,
+		shadowmaskOverrideSrv,
+		engineHookDiagnostics.shadowmaskApplied,
+		engineHookDiagnostics.shadowmaskAlreadyBound,
+		engineHookDiagnostics.shadowmaskMissingSrv,
+		&ShouldApplySlot2Rewrite,
+		a_callerRva);
+}
+
+void TerrainBlending::OnSetDirtyStates(bool a_isCompute, uint32_t a_callerRva)
+{
+	// Slot2 clobber was traced to BSGraphics::SetDirtyStates.
+	// Re-assert depth SRVs here under strict pass gates instead of global D3D interception.
+	if (a_isCompute) {
+		return;
+	}
+
+	auto* state = globals::state;
+	RE::BSShader* shader = state ? state->currentShader : nullptr;
+	const uint32_t descriptor = state ? state->currentPixelDescriptor : 0u;
+
+	const auto gateState = EvaluateEngineHookPassGate(*this, shader, descriptor);
+	if (!gateState.shouldApply) {
+		return;
+	}
+
+	auto* context = globals::d3d::context;
+	if (!context) {
+		return;
+	}
+
+	auto* obbOverrideSrv = ResolveEngineOverrideSrv(false);
+	auto* shadowmaskOverrideSrv = ResolveEngineOverrideSrv(true);
+	const auto obbResult = ApplyPixelShaderSlotOverride(
+		context,
+		17u,
+		obbOverrideSrv,
+		engineHookDiagnostics.obbApplied,
+		engineHookDiagnostics.obbAlreadyBound,
+		engineHookDiagnostics.obbMissingSrv,
+		nullptr,
+		0u);
+	const auto shadowmaskResult = ApplyPixelShaderSlotOverride(
+		context,
+		2u,
+		shadowmaskOverrideSrv,
+		engineHookDiagnostics.shadowmaskApplied,
+		engineHookDiagnostics.shadowmaskAlreadyBound,
+		engineHookDiagnostics.shadowmaskMissingSrv,
+		&ShouldApplySlot2Rewrite,
+		a_callerRva);
 }
 
 ID3D11VertexShader* TerrainBlending::GetTerrainVertexShader()
@@ -300,38 +784,18 @@ void TerrainBlending::Hooks::Main_RenderDepth::thunk(bool a1, bool a2)
 
 		singleton.renderDepth = false;
 
-		// In VR, both ResetTerrainDepth and BlendPrepassDepths are called earlier
-		// via VR_PreDownscaleDepthBuffer (before the 4x downscale) so that OBB
-		// occlusion testing reads blended depth.
-		if (!globals::game::isVR) {
-			if (singleton.renderTerrainDepth) {
-				singleton.renderTerrainDepth = false;
-				singleton.ResetTerrainDepth();
-			}
-			singleton.BlendPrepassDepths();
+		if (singleton.renderTerrainDepth) {
+			singleton.renderTerrainDepth = false;
+			singleton.ResetTerrainDepth();
 		}
+
+		singleton.BlendPrepassDepths();
 	} else {
 		mainDepth.depthSRV = singleton.depthSRVBackup;
 		zPrepassCopy.depthSRV = singleton.prepassSRVBackup;
 
 		func(a1, a2);
 	}
-}
-
-void TerrainBlending::Hooks::VR_PreDownscaleDepthBuffer::thunk(RE::BSSceneGraph* a1)
-{
-	auto& singleton = globals::features::terrainBlending;
-	auto shaderCache = globals::shaderCache;
-
-	if (shaderCache->IsEnabled() && singleton.settings.Enabled && singleton.renderDepth) {
-		if (singleton.renderTerrainDepth) {
-			singleton.renderTerrainDepth = false;
-			singleton.ResetTerrainDepth();
-		}
-		singleton.BlendPrepassDepths();
-	}
-
-	func(a1);
 }
 
 void TerrainBlending::Hooks::BSBatchRenderer__RenderPassImmediately::thunk(RE::BSRenderPass* a_pass, uint32_t a_technique, bool a_alphaTest, uint32_t a_renderFlags)
@@ -382,6 +846,21 @@ void TerrainBlending::Hooks::BSBatchRenderer__RenderPassImmediately::thunk(RE::B
 		}
 	}
 	func(a_pass, a_technique, a_alphaTest, a_renderFlags);
+}
+
+void TerrainBlending::Hooks::BSUtilityShader_SetupGeometry::thunk(RE::BSShader* a_shader, RE::BSRenderPass* a_pass, uint32_t a_renderFlags)
+{
+	const auto callerRva = ToModuleRva(_ReturnAddress());
+	func(a_shader, a_pass, a_renderFlags);
+	globals::features::terrainBlending.OnUtilitySetupGeometry(a_shader, a_pass, a_renderFlags, callerRva);
+}
+
+bool TerrainBlending::Hooks::BSShaderProperty_SetupGeometry::thunk(RE::BSShaderProperty* a_shaderProperty, RE::BSGeometry* a_geometry)
+{
+	const auto callerRva = ToModuleRva(_ReturnAddress());
+	const bool result = func(a_shaderProperty, a_geometry);
+	globals::features::terrainBlending.OnShaderPropertySetupGeometry(a_shaderProperty, a_geometry, result, callerRva);
+	return result;
 }
 
 void TerrainBlending::RenderTerrainBlendingPasses()
