@@ -707,6 +707,29 @@ namespace Util
 	void DrawSearchIcon(const ImVec2& position, float size = 20.0f, float alpha = 0.7f);
 
 	/**
+	 * @brief Draws a search input field with icon inside a combo dropdown.
+	 *
+	 * Reusable helper for any combo that needs search/filter functionality.
+	 * Draws a text input with a search icon overlay and separator, and
+	 * auto-focuses the input when the combo first opens.
+	 * Returns an owned copy of the current search text for safe use after
+	 * ClearComboSearch may mutate the underlying buffer.
+	 *
+	 * @param id Stable string literal identifying this search input. Must be a
+	 *           finite, static set of IDs — one persistent map entry is created
+	 *           per unique id and never removed.
+	 * @return Current search text (empty string when no filter is active)
+	 */
+	std::string DrawComboSearchInput(const char* id);
+
+	/**
+	 * @brief Clears the search buffer for a given combo search ID.
+	 * Call when selecting an item or when the combo closes.
+	 * @param id The same ID passed to DrawComboSearchInput
+	 */
+	void ClearComboSearch(const char* id);
+
+	/**
 	 * @brief Draws a semi-transparent dark overlay behind modal dialogs for depth.
 	 * @param alpha The alpha value for the overlay (0-255, default: 160)
 	 */
@@ -897,7 +920,7 @@ namespace Util
 	 * @param itemMap The map of items to display (key = item name, value = item data)
 	 * @return true if a new item was selected, false otherwise
 	 *
-	 * @note Uses a static search buffer, so only one SearchableCombo should be open at a time
+	 * @note Each combo is identified by its label for independent search state
 	 *
 	 * @example
 	 * @code
@@ -914,38 +937,24 @@ namespace Util
 	bool SearchableCombo(const char* label, std::string& selectedName, std::unordered_map<std::string, T>& itemMap)
 	{
 		bool valueChanged = false;
-		static std::unordered_map<std::string, char[256]> searchBuffers;
-
-		std::string comboId = std::string(label);
-		auto& searchBuffer = searchBuffers[comboId];
 
 		if (ImGui::BeginCombo(label, selectedName.c_str())) {
-			ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(24.0f, ImGui::GetStyle().FramePadding.y));
-			ImGui::InputText("##search", searchBuffer, IM_ARRAYSIZE(searchBuffer));
-			ImGui::PopStyleVar();
-			ImVec2 iconPos = ImVec2(ImGui::GetItemRectMin().x + 5.0f, ImGui::GetItemRectMin().y + (ImGui::GetItemRectSize().y - 16.0f) * 0.5f);
-			DrawSearchIcon(iconPos, 16.0f, 0.5f);
+			auto searchText = DrawComboSearchInput(label);
 
-			ImGui::Separator();
-
-			// Filter and display items
 			for (auto& [itemName, item] : itemMap) {
-				// Simple case-insensitive search
-				if (searchBuffer[0] == '\0' ||
-					std::search(itemName.begin(), itemName.end(), searchBuffer, searchBuffer + strlen(searchBuffer),
-						[](char a, char b) { return std::tolower(a) == std::tolower(b); }) != itemName.end()) {
+				if (searchText.empty() || StringMatchesSearch(itemName, searchText)) {
 					if (ImGui::Selectable(itemName.c_str(), itemName == selectedName)) {
 						selectedName = itemName;
 						valueChanged = true;
-						searchBuffer[0] = '\0';  // Clear search on selection
+						ClearComboSearch(label);
+						break;
 					}
 				}
 			}
 
 			ImGui::EndCombo();
 		} else {
-			// Reset search when combo is closed
-			searchBuffer[0] = '\0';
+			ClearComboSearch(label);
 		}
 
 		return valueChanged;
