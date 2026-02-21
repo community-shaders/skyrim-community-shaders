@@ -37,6 +37,10 @@ static bool TableRowSelectable(const char* label, bool selected, ImGuiSelectable
 		const ImU32 rowColor = ImGui::GetColorU32(highlightCol);
 		ImGui::TableSetBgColor(ImGuiTableBgTarget_RowBg0, rowColor);
 		ImGui::TableSetBgColor(ImGuiTableBgTarget_RowBg1, rowColor);
+	} else if (selected) {
+		const ImU32 rowColor = ImGui::GetColorU32(ImGuiCol_Header);
+		ImGui::TableSetBgColor(ImGuiTableBgTarget_RowBg0, rowColor);
+		ImGui::TableSetBgColor(ImGuiTableBgTarget_RowBg1, rowColor);
 	}
 
 	return pressed;
@@ -51,12 +55,21 @@ void SetTooltipPositionNearMouse(float estimatedHeight, float estimatedWidth = 0
 
 	const float viewportLeft = viewport->WorkPos.x;
 	const float viewportRight = viewport->WorkPos.x + viewport->WorkSize.x;
+	const float viewportTop = viewport->WorkPos.y;
 	const float viewportBottom = viewport->WorkPos.y + viewport->WorkSize.y;
 
 	// Vertical: flip above cursor when it would overflow the bottom.
 	const bool placeAboveCursor = (mousePos.y + kTooltipOffsetY + estimatedHeight) > viewportBottom;
-	const float posY = placeAboveCursor ? (mousePos.y - kTooltipOffsetY) : (mousePos.y + kTooltipOffsetY);
-	const float pivotY = placeAboveCursor ? 1.0f : 0.0f;
+	float posY;
+	float pivotY;
+	if (placeAboveCursor) {
+		const float tentativeTopY = mousePos.y - kTooltipOffsetY - estimatedHeight;
+		posY = (tentativeTopY < viewportTop) ? (viewportTop + estimatedHeight) : (mousePos.y - kTooltipOffsetY);
+		pivotY = 1.0f;
+	} else {
+		posY = mousePos.y + kTooltipOffsetY;
+		pivotY = 0.0f;
+	}
 
 	// Horizontal: clamp so the tooltip stays within viewport bounds.
 	float posX = mousePos.x + kTooltipOffsetX;
@@ -716,9 +729,7 @@ void EditorWindow::ShowObjectsWindow()
 							constexpr int kTodValuesPerSection = 4;
 							constexpr int kSpacingSeparators = 1;  // Spacing between sections
 							const float estimatedTooltipHeight = (kSectionHeaders + kTodValuesPerSection * 2) * lineHeight + kSpacingSeparators * spacingHeight + pad.y * 2.0f;
-							// Estimate width from the longest expected line (e.g. "  Sunset: <EditorID>").
-							const float estimatedTooltipWidth = ImGui::CalcTextSize("  Sunset: VolumetricLightingPlaceholder").x + pad.x * 2.0f;
-							SetTooltipPositionNearMouse(estimatedTooltipHeight, estimatedTooltipWidth);
+							SetTooltipPositionNearMouse(estimatedTooltipHeight);
 							if (ImGui::BeginTooltip()) {
 								// ImageSpace info
 								ImGui::TextColored(Menu::GetSingleton()->GetTheme().StatusPalette.InfoColor, "ImageSpace:");
