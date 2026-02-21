@@ -5,7 +5,6 @@
 #include "Deferred.h"
 #include "State.h"
 #include "Util.h"
-#include "Utils/D3D.h"
 
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	ScreenSpaceGI::Settings,

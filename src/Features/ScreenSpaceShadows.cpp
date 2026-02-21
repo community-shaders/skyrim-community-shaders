@@ -2,8 +2,6 @@
 
 #include "FeatureConstraints.h"
 #include "State.h"
-#include "Util.h"
-#include "Utils/D3D.h"
 
 #pragma warning(push)
 #pragma warning(disable: 4838 4244)

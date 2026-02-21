@@ -19,8 +19,6 @@
 
 #include "ShaderTools/BSShaderHooks.h"
 
-#include <intrin.h>
-
 std::unordered_map<void*, std::pair<std::unique_ptr<uint8_t[]>, size_t>> ShaderBytecodeMap;
 
 void RegisterShaderBytecode(void* Shader, const void* Bytecode, size_t BytecodeLength)
