@@ -107,6 +107,12 @@ public:
 			static inline REL::Relocation<decltype(thunk)> func;
 		};
 
+		struct Main_RenderShadowmasks
+		{
+			static void thunk(bool a1);
+			static inline REL::Relocation<decltype(thunk)> func;
+		};
+
 		struct BSBatchRenderer__RenderPassImmediately
 		{
 			static void thunk(RE::BSRenderPass* a_pass, uint32_t a_technique, bool a_alphaTest, uint32_t a_renderFlags);
@@ -125,10 +131,25 @@ public:
 			static inline REL::Relocation<decltype(thunk)> func;
 		};
 
+		struct BSShader_BeginTechnique
+		{
+			static bool thunk(RE::BSShader* shader, uint32_t vertexDescriptor, uint32_t pixelDescriptor, bool skipPixelShader);
+			static inline REL::Relocation<decltype(thunk)> func;
+		};
+
+		struct BSGraphics_SetDirtyStates
+		{
+			static void thunk(bool isCompute);
+			static inline REL::Relocation<decltype(thunk)> func;
+		};
+
 		static void Install()
 		{
 			// To know when we are rendering z-prepass depth vs shadows depth
 			stl::write_thunk_call<Main_RenderDepth>(REL::RelocationID(35560, 36559).address() + REL::Relocate(0x395, 0x395, 0x2EE));
+
+			// To know when shadowmask phase ends (for releasing engine hook overrides)
+			stl::detour_thunk<Main_RenderShadowmasks>(REL::RelocationID(100422, 107140));
 
 			// To manipulate the depth buffer write, depth testing, alpha blending
 			stl::write_thunk_call<BSBatchRenderer__RenderPassImmediately>(REL::RelocationID(100852, 107642).address() + REL::Relocate(0x29E, 0x28F));
@@ -138,6 +159,11 @@ public:
 
 			// Engine path: even later material/property setup hook for final slot correction.
 			stl::write_vfunc<0x27, BSShaderProperty_SetupGeometry>(RE::VTABLE_BSShaderProperty[0]);
+
+			// Chained on top of Hooks.cpp's detours to intercept BeginTechnique/SetDirtyStates
+			// for engine SRV slot override during the shadowmask phase.
+			stl::detour_thunk<BSShader_BeginTechnique>(REL::RelocationID(101341, 108328));
+			stl::detour_thunk<BSGraphics_SetDirtyStates>(REL::RelocationID(75580, 77386));
 
 			logger::info("[Terrain Blending] Installed hooks");
 		}

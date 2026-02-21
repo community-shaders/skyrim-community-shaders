@@ -1,13 +1,13 @@
 #include "TerrainBlending.h"
 
 #include "Deferred.h"
-#include "FrameAnnotations.h"
 #include "Globals.h"
 #include "ShaderCache.h"
 #include "State.h"
 #include "VR.h"
 
 #include <array>
+#include <atomic>
 #include <cstdint>
 #include <intrin.h>
 #include <sstream>
@@ -19,6 +19,13 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 
 namespace
 {
+	std::atomic_uint32_t renderShadowmasksPhaseDepth{ 0 };
+
+	bool IsInRenderShadowmasksPhase()
+	{
+		return renderShadowmasksPhaseDepth.load(std::memory_order_relaxed) != 0;
+	}
+
 	struct TbHookDiagnostics
 	{
 		uint64_t renderDepthCalls = 0;
@@ -183,7 +190,7 @@ namespace
 	{
 		EngineHookPassGateState state{};
 		state.gateSatisfied = IsEngineHookFeatureGateSatisfied(a_singleton);
-		state.inShadowmaskPhase = FrameAnnotations::IsInRenderShadowmasksPhase();
+		state.inShadowmaskPhase = IsInRenderShadowmasksPhase();
 		state.isUtility = a_shader && a_shader->shaderType.get() == RE::BSShader::Type::Utility;
 		state.isWhitelistedDescriptor = IsShadowmaskDepthDescriptorWhitelisted(a_descriptor);
 		state.shouldApply = state.gateSatisfied && state.inShadowmaskPhase && state.isUtility && state.isWhitelistedDescriptor;
@@ -861,6 +868,29 @@ bool TerrainBlending::Hooks::BSShaderProperty_SetupGeometry::thunk(RE::BSShaderP
 	const bool result = func(a_shaderProperty, a_geometry);
 	globals::features::terrainBlending.OnShaderPropertySetupGeometry(a_shaderProperty, a_geometry, result, callerRva);
 	return result;
+}
+
+void TerrainBlending::Hooks::Main_RenderShadowmasks::thunk(bool a1)
+{
+	renderShadowmasksPhaseDepth.fetch_add(1, std::memory_order_relaxed);
+	func(a1);
+	renderShadowmasksPhaseDepth.fetch_sub(1, std::memory_order_relaxed);
+	globals::features::terrainBlending.OnShadowmaskPhaseEnd();
+}
+
+bool TerrainBlending::Hooks::BSShader_BeginTechnique::thunk(RE::BSShader* shader, uint32_t vertexDescriptor, uint32_t pixelDescriptor, bool skipPixelShader)
+{
+	const auto callerRva = static_cast<uint32_t>(reinterpret_cast<std::uintptr_t>(_ReturnAddress()) - REL::Module::get().base());
+	bool result = func(shader, vertexDescriptor, pixelDescriptor, skipPixelShader);
+	globals::features::terrainBlending.OnBeginTechnique(shader, pixelDescriptor, callerRva);
+	return result;
+}
+
+void TerrainBlending::Hooks::BSGraphics_SetDirtyStates::thunk(bool isCompute)
+{
+	const auto callerRva = static_cast<uint32_t>(reinterpret_cast<std::uintptr_t>(_ReturnAddress()) - REL::Module::get().base());
+	func(isCompute);
+	globals::features::terrainBlending.OnSetDirtyStates(isCompute, callerRva);
 }
 
 void TerrainBlending::RenderTerrainBlendingPasses()

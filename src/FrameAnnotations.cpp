@@ -1,8 +1,5 @@
 #include "FrameAnnotations.h"
 
-#include <atomic>
-
-#include "Features/TerrainBlending.h"
 #include "State.h"
 
 #pragma comment(lib, "dxguid.lib")
@@ -11,8 +8,6 @@ namespace FrameAnnotations
 {
 	namespace
 	{
-		std::atomic_uint32_t renderShadowmasksPhaseDepth{ 0 };
-
 		static std::string BuildEventName(RE::ImageSpaceManager::ImageSpaceEffectEnum EffectType)
 		{
 			auto enumName = RE::ImageSpaceManager::GetImageSpaceEffectName(EffectType);
@@ -214,20 +209,11 @@ namespace FrameAnnotations
 	{
 		static void thunk(bool a1)
 		{
-			renderShadowmasksPhaseDepth.fetch_add(1, std::memory_order_relaxed);
-
-			if (globals::state->frameAnnotations)
-				globals::state->BeginPerfEvent("Shadowmasks");
+			globals::state->BeginPerfEvent("Shadowmasks");
 
 			func(a1);
 
-			if (globals::state->frameAnnotations)
-				globals::state->EndPerfEvent();
-
-			const uint32_t remaining = renderShadowmasksPhaseDepth.fetch_sub(1, std::memory_order_relaxed) - 1;
-			if (remaining == 0) {
-				globals::features::terrainBlending.OnShadowmaskPhaseEnd();
-			}
+			globals::state->EndPerfEvent();
 		};
 		static inline REL::Relocation<decltype(thunk)> func;
 	};
@@ -264,11 +250,6 @@ namespace FrameAnnotations
 		};
 		static inline REL::Relocation<decltype(thunk)> func;
 	};
-
-	bool IsInRenderShadowmasksPhase()
-	{
-		return renderShadowmasksPhaseDepth.load(std::memory_order_relaxed) != 0;
-	}
 
 	struct Main_RenderWorld
 	{
@@ -387,11 +368,10 @@ namespace FrameAnnotations
 
 	void OnPostPostLoad()
 	{
-		// Always install shadowmask phase tracking (required by Terrain Blending regardless of annotations).
-		stl::detour_thunk<Main_RenderShadowmasks>(REL::RelocationID(100422, 107140));
-
 		if (!globals::state->frameAnnotations)
 			return;
+
+		stl::detour_thunk<Main_RenderShadowmasks>(REL::RelocationID(100422, 107140));
 
 		stl::write_vfunc<0x6, BSShader_SetupGeometry<RE::BSShader::Type::Lighting>>(
 			RE::VTABLE_BSLightingShader[0]);
