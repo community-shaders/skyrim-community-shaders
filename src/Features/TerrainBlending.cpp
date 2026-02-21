@@ -26,38 +26,6 @@ namespace
 		return renderShadowmasksPhaseDepth.load(std::memory_order_relaxed) != 0;
 	}
 
-	struct TbHookDiagnostics
-	{
-		uint64_t renderDepthCalls = 0;
-		uint64_t queueTerrainCalls = 0;
-		uint64_t queueNoBlendCalls = 0;
-		uint64_t terrainDepthDoubleDrawCalls = 0;
-		uint64_t renderPassInvocationCalls = 0;
-		uint64_t renderPassExecutedCalls = 0;
-		uint64_t renderPassTerrainCount = 0;
-		uint64_t renderPassNoBlendCount = 0;
-	};
-
-	TbHookDiagnostics tbHookDiagnostics{};
-
-	struct EngineHookDiagnostics
-	{
-		uint64_t beginTechniqueCalls = 0;
-		uint64_t gateSatisfiedCalls = 0;
-		uint64_t inShadowmaskPhaseCalls = 0;
-		uint64_t utilityCalls = 0;
-		uint64_t whitelistedCalls = 0;
-		uint64_t shouldApplyCalls = 0;
-		uint64_t obbApplied = 0;
-		uint64_t obbAlreadyBound = 0;
-		uint64_t obbMissingSrv = 0;
-		uint64_t shadowmaskApplied = 0;
-		uint64_t shadowmaskAlreadyBound = 0;
-		uint64_t shadowmaskMissingSrv = 0;
-		uint64_t slot2CallerRejected = 0;
-		uint64_t slot2FallbackApplied = 0;
-	};
-
 	struct EngineHookTechniqueOverrideState
 	{
 		bool active = false;
@@ -65,7 +33,6 @@ namespace
 		ID3D11ShaderResourceView* previousShadowmaskSrv = nullptr;
 	};
 
-	EngineHookDiagnostics engineHookDiagnostics{};
 	EngineHookTechniqueOverrideState engineHookTechniqueState{};
 
 	constexpr uint32_t kShadowmaskDepthDescriptor0 = 0x262002u;
@@ -138,7 +105,6 @@ namespace
 	bool ShouldApplySlot2Rewrite(const uint32_t a_callerRva)
 	{
 		if (slot2BroadFallbackActive) {
-			engineHookDiagnostics.slot2FallbackApplied++;
 			return true;
 		}
 
@@ -146,13 +112,11 @@ namespace
 			return true;
 		}
 
-		engineHookDiagnostics.slot2CallerRejected++;
 		slot2RejectTotal++;
 		slot2BlockedCallerRvas.insert(a_callerRva);
 
 		if (kEnableAutoBroadSlot2Fallback && slot2RejectTotal >= kSlot2AutoFallbackRejectThreshold) {
 			slot2BroadFallbackActive = true;
-			engineHookDiagnostics.slot2FallbackApplied++;
 			fallbackTriggerRva = a_callerRva;
 			if (!fallbackActivatedLogged && IsDiagnosticSlot2GuardMode()) {
 				logger::debug(
@@ -210,30 +174,23 @@ namespace
 		ID3D11DeviceContext* a_context,
 		const uint32_t a_slot,
 		ID3D11ShaderResourceView* a_overrideSrv,
-		uint64_t& a_appliedCounter,
-		uint64_t& a_alreadyBoundCounter,
-		uint64_t& a_missingCounter,
 		SlotRewriteGate a_rewriteGate,
 		const uint32_t a_callerRva)
 	{
 		SlotOverrideResult result{};
 		result.hasSrv = a_overrideSrv != nullptr;
 		if (!result.hasSrv) {
-			a_missingCounter++;
 			return result;
 		}
 
 		ID3D11ShaderResourceView* currentSrv = nullptr;
 		a_context->PSGetShaderResources(a_slot, 1, &currentSrv);
 		result.alreadyBound = currentSrv == a_overrideSrv;
-		if (result.alreadyBound) {
-			a_alreadyBoundCounter++;
-		} else {
+		if (!result.alreadyBound) {
 			const bool canRewrite = a_rewriteGate ? a_rewriteGate(a_callerRva) : true;
 			if (canRewrite) {
 				a_context->PSSetShaderResources(a_slot, 1, &a_overrideSrv);
 				result.applied = true;
-				a_appliedCounter++;
 			}
 		}
 
@@ -364,8 +321,6 @@ void TerrainBlending::SaveSettings(json& o_json)
 
 void TerrainBlending::OnBeginTechnique(RE::BSShader* a_shader, uint32_t a_pixelDescriptor, uint32_t a_callerRva)
 {
-	engineHookDiagnostics.beginTechniqueCalls++;
-
 	const auto gateState = EvaluateEngineHookPassGate(*this, a_shader, a_pixelDescriptor);
 	if (!slot2GateActivePrevious && gateState.gateSatisfied) {
 		ResetSlot2FallbackState();
@@ -375,20 +330,7 @@ void TerrainBlending::OnBeginTechnique(RE::BSShader* a_shader, uint32_t a_pixelD
 	}
 	slot2GateActivePrevious = gateState.gateSatisfied;
 
-	if (gateState.gateSatisfied) {
-		engineHookDiagnostics.gateSatisfiedCalls++;
-	}
-	if (gateState.inShadowmaskPhase) {
-		engineHookDiagnostics.inShadowmaskPhaseCalls++;
-	}
-	if (gateState.isUtility) {
-		engineHookDiagnostics.utilityCalls++;
-	}
-	if (gateState.isWhitelistedDescriptor) {
-		engineHookDiagnostics.whitelistedCalls++;
-	}
 	if (gateState.shouldApply) {
-		engineHookDiagnostics.shouldApplyCalls++;
 		MaybeLogHookActiveOnce();
 	}
 
@@ -410,24 +352,8 @@ void TerrainBlending::OnBeginTechnique(RE::BSShader* a_shader, uint32_t a_pixelD
 
 	auto* obbOverrideSrv = ResolveEngineOverrideSrv(false);
 	auto* shadowmaskOverrideSrv = ResolveEngineOverrideSrv(true);
-	const auto obbResult = ApplyPixelShaderSlotOverride(
-		context,
-		17u,
-		obbOverrideSrv,
-		engineHookDiagnostics.obbApplied,
-		engineHookDiagnostics.obbAlreadyBound,
-		engineHookDiagnostics.obbMissingSrv,
-		nullptr,
-		0u);
-	const auto shadowmaskResult = ApplyPixelShaderSlotOverride(
-		context,
-		2u,
-		shadowmaskOverrideSrv,
-		engineHookDiagnostics.shadowmaskApplied,
-		engineHookDiagnostics.shadowmaskAlreadyBound,
-		engineHookDiagnostics.shadowmaskMissingSrv,
-		&ShouldApplySlot2Rewrite,
-		a_callerRva);
+	ApplyPixelShaderSlotOverride(context, 17u, obbOverrideSrv, nullptr, 0u);
+	ApplyPixelShaderSlotOverride(context, 2u, shadowmaskOverrideSrv, &ShouldApplySlot2Rewrite, a_callerRva);
 }
 
 void TerrainBlending::OnShadowmaskPhaseEnd()
@@ -455,24 +381,8 @@ void TerrainBlending::OnUtilitySetupGeometry(RE::BSShader* a_shader, RE::BSRende
 
 	auto* obbOverrideSrv = ResolveEngineOverrideSrv(false);
 	auto* shadowmaskOverrideSrv = ResolveEngineOverrideSrv(true);
-	const auto obbResult = ApplyPixelShaderSlotOverride(
-		context,
-		17u,
-		obbOverrideSrv,
-		engineHookDiagnostics.obbApplied,
-		engineHookDiagnostics.obbAlreadyBound,
-		engineHookDiagnostics.obbMissingSrv,
-		nullptr,
-		0u);
-	const auto shadowmaskResult = ApplyPixelShaderSlotOverride(
-		context,
-		2u,
-		shadowmaskOverrideSrv,
-		engineHookDiagnostics.shadowmaskApplied,
-		engineHookDiagnostics.shadowmaskAlreadyBound,
-		engineHookDiagnostics.shadowmaskMissingSrv,
-		&ShouldApplySlot2Rewrite,
-		a_callerRva);
+	ApplyPixelShaderSlotOverride(context, 17u, obbOverrideSrv, nullptr, 0u);
+	ApplyPixelShaderSlotOverride(context, 2u, shadowmaskOverrideSrv, &ShouldApplySlot2Rewrite, a_callerRva);
 }
 
 void TerrainBlending::OnShaderPropertySetupGeometry(RE::BSShaderProperty* a_shaderProperty, RE::BSGeometry* a_geometry, bool a_result, uint32_t a_callerRva)
@@ -496,15 +406,7 @@ void TerrainBlending::OnShaderPropertySetupGeometry(RE::BSShaderProperty* a_shad
 	}
 
 	auto* shadowmaskOverrideSrv = ResolveEngineOverrideSrv(true);
-	const auto shadowmaskResult = ApplyPixelShaderSlotOverride(
-		context,
-		2u,
-		shadowmaskOverrideSrv,
-		engineHookDiagnostics.shadowmaskApplied,
-		engineHookDiagnostics.shadowmaskAlreadyBound,
-		engineHookDiagnostics.shadowmaskMissingSrv,
-		&ShouldApplySlot2Rewrite,
-		a_callerRva);
+	ApplyPixelShaderSlotOverride(context, 2u, shadowmaskOverrideSrv, &ShouldApplySlot2Rewrite, a_callerRva);
 }
 
 void TerrainBlending::OnSetDirtyStates(bool a_isCompute, uint32_t a_callerRva)
@@ -531,24 +433,8 @@ void TerrainBlending::OnSetDirtyStates(bool a_isCompute, uint32_t a_callerRva)
 
 	auto* obbOverrideSrv = ResolveEngineOverrideSrv(false);
 	auto* shadowmaskOverrideSrv = ResolveEngineOverrideSrv(true);
-	const auto obbResult = ApplyPixelShaderSlotOverride(
-		context,
-		17u,
-		obbOverrideSrv,
-		engineHookDiagnostics.obbApplied,
-		engineHookDiagnostics.obbAlreadyBound,
-		engineHookDiagnostics.obbMissingSrv,
-		nullptr,
-		0u);
-	const auto shadowmaskResult = ApplyPixelShaderSlotOverride(
-		context,
-		2u,
-		shadowmaskOverrideSrv,
-		engineHookDiagnostics.shadowmaskApplied,
-		engineHookDiagnostics.shadowmaskAlreadyBound,
-		engineHookDiagnostics.shadowmaskMissingSrv,
-		&ShouldApplySlot2Rewrite,
-		a_callerRva);
+	ApplyPixelShaderSlotOverride(context, 17u, obbOverrideSrv, nullptr, 0u);
+	ApplyPixelShaderSlotOverride(context, 2u, shadowmaskOverrideSrv, &ShouldApplySlot2Rewrite, a_callerRva);
 }
 
 ID3D11VertexShader* TerrainBlending::GetTerrainVertexShader()
@@ -773,7 +659,6 @@ void TerrainBlending::Hooks::Main_RenderDepth::thunk(bool a1, bool a2)
 
 	const bool tbActive = shaderCache->IsEnabled() && singleton.settings.Enabled;
 	const bool useBlendedDepthSRV = tbActive && ShouldUseBlendedDepthSRV();
-	tbHookDiagnostics.renderDepthCalls++;
 
 	if (tbActive) {
 		if (useBlendedDepthSRV) {
@@ -828,7 +713,6 @@ void TerrainBlending::Hooks::BSBatchRenderer__RenderPassImmediately::thunk(RE::B
 			}
 
 			if (inTerrain) {
-				tbHookDiagnostics.terrainDepthDoubleDrawCalls++;
 				func(a_pass, a_technique, a_alphaTest, a_renderFlags);  // Run terrain twice
 			}
 		} else if (globals::state->inWorld) {
@@ -837,7 +721,6 @@ void TerrainBlending::Hooks::BSBatchRenderer__RenderPassImmediately::thunk(RE::B
 					if (shaderProperty->flags.all(RE::BSShaderProperty::EShaderPropertyFlag::kMultiTextureLandscape)) {
 						RenderPass call{ a_pass, a_technique, a_alphaTest, a_renderFlags };
 						singleton.terrainRenderPasses.push_back(call);
-						tbHookDiagnostics.queueTerrainCalls++;
 						return;
 					}
 
@@ -845,7 +728,6 @@ void TerrainBlending::Hooks::BSBatchRenderer__RenderPassImmediately::thunk(RE::B
 					if (shaderProperty->flags.any(RE::BSShaderProperty::EShaderPropertyFlag::kNoTransparencyMultiSample)) {
 						RenderPass call{ a_pass, a_technique, a_alphaTest, a_renderFlags };
 						singleton.renderPasses.push_back(call);
-						tbHookDiagnostics.queueNoBlendCalls++;
 						return;
 					}
 				}
@@ -896,7 +778,6 @@ void TerrainBlending::Hooks::BSGraphics_SetDirtyStates::thunk(bool isCompute)
 void TerrainBlending::RenderTerrainBlendingPasses()
 {
 	ZoneScoped;
-	tbHookDiagnostics.renderPassInvocationCalls++;
 
 	if (!settings.Enabled) {
 		renderDepth = false;
@@ -922,11 +803,8 @@ void TerrainBlending::RenderTerrainBlendingPasses()
 
 	const uint64_t terrainPassCount = static_cast<uint64_t>(terrainRenderPasses.size());
 	const uint64_t noBlendPassCount = static_cast<uint64_t>(renderPasses.size());
-	tbHookDiagnostics.renderPassTerrainCount += terrainPassCount;
-	tbHookDiagnostics.renderPassNoBlendCount += noBlendPassCount;
 
 	if (terrainPassCount != 0 || noBlendPassCount != 0) {
-		tbHookDiagnostics.renderPassExecutedCalls++;
 		TracyD3D11Zone(globals::state->tracyCtx, "Terrain Blending - Render Passes");
 		if (globals::state->frameAnnotations)
 			globals::state->BeginPerfEvent("Terrain Blending - Render Passes");
