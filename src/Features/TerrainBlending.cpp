@@ -569,6 +569,10 @@ void TerrainBlending::ResetDepth()
 
 void TerrainBlending::ResetTerrainDepth()
 {
+	TracyD3D11Zone(globals::state->tracyCtx, "Terrain Blending - Reset Terrain Depth");
+	if (globals::state->frameAnnotations)
+		globals::state->BeginPerfEvent("Terrain Blending - Reset Terrain Depth");
+
 	auto context = globals::d3d::context;
 
 	auto stateUpdateFlags = globals::game::stateUpdateFlags;
@@ -576,6 +580,9 @@ void TerrainBlending::ResetTerrainDepth()
 
 	auto currentVertexShader = *globals::game::currentVertexShader;
 	context->VSSetShader((ID3D11VertexShader*)currentVertexShader->shader, NULL, NULL);
+
+	if (globals::state->frameAnnotations)
+		globals::state->EndPerfEvent();
 }
 
 void TerrainBlending::BlendPrepassDepths()
