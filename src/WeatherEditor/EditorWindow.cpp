@@ -150,6 +150,17 @@ bool IconButton(const char* label, bool filled, const char* iconType)
 	return result;
 }
 
+// Filter column options for the Objects window search bar.
+enum class FilterColumn : int
+{
+	All = 0,
+	EditorID,
+	FormID,
+	File,
+	Status
+};
+constexpr const char* kFilterColumnNames[] = { "All", "Editor ID", "Form ID", "File", "Status" };
+
 void EditorWindow::ShowObjectsWindow()
 {
 	ImGui::Begin("Weather and Lighting Browser");
@@ -163,16 +174,18 @@ void EditorWindow::ShowObjectsWindow()
 	static bool showOnlyFavorites = false;
 
 	// Filter column selection
-	enum class FilterColumn : int
-	{
-		All = 0,
-		EditorID,
-		FormID,
-		File,
-		Status
-	};
-	static constexpr const char* kFilterColumnNames[] = { "All", "Editor ID", "Form ID", "File", "Status" };
 	static FilterColumn currentFilterColumn = FilterColumn::All;
+
+	// Reset filter state when the user switches categories so stale column
+	// selections (e.g. Status) don't hide all items in the new category.
+	static std::string previousSelectedCategory = selectedCategory;
+	if (selectedCategory != previousSelectedCategory) {
+		currentFilterColumn = FilterColumn::All;
+		filterBuffer[0] = '\0';
+		showOnlyFlagged = false;
+		showOnlyFavorites = false;
+		previousSelectedCategory = selectedCategory;
+	}
 
 	// Filter helper: matches widget against current filter column and search text
 	auto matchesFilter = [&](Widget* w) -> bool {
@@ -290,9 +303,10 @@ void EditorWindow::ShowObjectsWindow()
 			const float comboW = ImGui::CalcTextSize("Editor ID").x + style.FramePadding.x * 2.0f + ImGui::GetFrameHeight();
 			const float helpW = ImGui::CalcTextSize("(?)").x;
 			const float iconW = ImGui::GetFrameHeight();
-			// numGaps must equal the number of SameLine() calls on this row;
-			// update both the layout and this constant when adding/removing items.
-			constexpr int numGaps = 8;  // input→combo, combo→help, help→dummy, dummy→fav, fav→"Favorites", "Favorites"→dummy, dummy→flag, flag→"Flagged"
+			// Each fixed-width item on the row is preceded by one SameLine().
+			// Update numFixedItems when adding or removing items from the row.
+			constexpr int numFixedItems = 8;  // combo, help, spacer, fav icon, "Favorites", spacer, flag icon, "Flagged"
+			constexpr int numGaps = numFixedItems;
 			const float fixedW = style.ItemSpacing.x * numGaps + comboW + helpW + 10.0f + iconW +
 			                     ImGui::CalcTextSize("Favorites").x + 10.0f + iconW + ImGui::CalcTextSize("Flagged").x;
 			ImGui::SetNextItemWidth(std::max(50.0f, ImGui::GetContentRegionAvail().x - fixedW));
