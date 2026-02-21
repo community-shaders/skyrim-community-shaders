@@ -6,14 +6,15 @@ void VolumetricLightingWidget::DrawWidget()
 {
 	WeatherUtils::SetCurrentWidget(this);
 	ImGui::SetNextWindowSizeConstraints(ImVec2(600, 0), ImVec2(FLT_MAX, FLT_MAX));
-	if (ImGui::Begin(GetEditorID().c_str(), &open, ImGuiWindowFlags_NoSavedSettings)) {
+	if (ImGui::Begin(GetEditorID().c_str(), &open, ImGuiWindowFlags_NoSavedSettings | kStickyHeaderFlags)) {
 		DrawWidgetHeader("##VolumetricLightingSearch", true, true);
+	}
+	bool changed = false;
 
-		bool changed = false;
-
-		if (ImGui::BeginTabBar("VolumetricLightingTabs")) {
-			if (ImGui::BeginTabItem("Basic")) {
-				ImGui::SeparatorText("Intensity");
+	if (ImGui::BeginTabBar("VolumetricLightingTabs")) {
+		if (ImGui::BeginTabItem("Basic")) {
+			BeginScrollableContent("##BasicScroll");
+			ImGui::SeparatorText("Intensity");
 				if (WeatherUtils::DrawSliderFloat("Intensity", settings.intensity, 0.0f, 50.0f))
 					changed = true;
 
@@ -30,11 +31,13 @@ void VolumetricLightingWidget::DrawWidget()
 					changed = true;
 				}
 
-				ImGui::EndTabItem();
-			}
+			EndScrollableContent();
+			ImGui::EndTabItem();
+		}
 
-			if (ImGui::BeginTabItem("Density")) {
-				ImGui::SeparatorText("Density Settings");
+		if (ImGui::BeginTabItem("Density")) {
+			BeginScrollableContent("##DensityScroll");
+			ImGui::SeparatorText("Density Settings");
 				if (WeatherUtils::DrawSliderFloat("Contribution", settings.densityContribution, 0.0f, 1.0f))
 					changed = true;
 				if (WeatherUtils::DrawSliderFloat("Size", settings.densitySize, 0.1f, 10000.0f))
@@ -44,11 +47,13 @@ void VolumetricLightingWidget::DrawWidget()
 				if (WeatherUtils::DrawSliderFloat("Falling Speed", settings.densityFallingSpeed, 0.0f, 100.0f))
 					changed = true;
 
-				ImGui::EndTabItem();
-			}
+			EndScrollableContent();
+			ImGui::EndTabItem();
+		}
 
-			if (ImGui::BeginTabItem("Advanced")) {
-				ImGui::SeparatorText("Phase Function");
+		if (ImGui::BeginTabItem("Advanced")) {
+			BeginScrollableContent("##AdvancedScroll");
+			ImGui::SeparatorText("Phase Function");
 				if (WeatherUtils::DrawSliderFloat("Contribution", settings.phaseFunctionContribution, 0.0f, 1.0f))
 					changed = true;
 				if (WeatherUtils::DrawSliderFloat("Scattering", settings.phaseFunctionScattering, 0.0f, 1.0f))
@@ -58,15 +63,15 @@ void VolumetricLightingWidget::DrawWidget()
 				if (WeatherUtils::DrawSliderFloat("Range Factor", settings.samplingRangeFactor, 0.0f, 160.0f))
 					changed = true;
 
-				ImGui::EndTabItem();
-			}
-
-			ImGui::EndTabBar();
+			EndScrollableContent();
+			ImGui::EndTabItem();
 		}
 
-		if (changed && EditorWindow::GetSingleton()->settings.autoApplyChanges) {
-			ApplyChanges();
-		}
+		ImGui::EndTabBar();
+	}
+
+	if (changed && EditorWindow::GetSingleton()->settings.autoApplyChanges) {
+		ApplyChanges();
 	}
 	ImGui::End();
 }

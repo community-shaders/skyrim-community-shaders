@@ -6,14 +6,15 @@ void PrecipitationWidget::DrawWidget()
 {
 	WeatherUtils::SetCurrentWidget(this);
 	ImGui::SetNextWindowSizeConstraints(ImVec2(600, 0), ImVec2(FLT_MAX, FLT_MAX));
-	if (ImGui::Begin(GetEditorID().c_str(), &open, ImGuiWindowFlags_NoSavedSettings)) {
+	if (ImGui::Begin(GetEditorID().c_str(), &open, ImGuiWindowFlags_NoSavedSettings | kStickyHeaderFlags)) {
 		DrawWidgetHeader("##PrecipitationSearch", true, true);
+	}
+	bool changed = false;
 
-		bool changed = false;
-
-		if (ImGui::BeginTabBar("PrecipitationTabs")) {
-			if (ImGui::BeginTabItem("Particle")) {
-				ImGui::SeparatorText("Particle Type");
+	if (ImGui::BeginTabBar("PrecipitationTabs")) {
+		if (ImGui::BeginTabItem("Particle")) {
+			BeginScrollableContent("##ParticleScroll");
+			ImGui::SeparatorText("Particle Type");
 				const char* types[] = { "Rain", "Snow" };
 				int currentType = static_cast<int>(settings.particleType);
 				if (ImGui::Combo("Type", &currentType, types, IM_ARRAYSIZE(types))) {
@@ -33,11 +34,13 @@ void PrecipitationWidget::DrawWidget()
 				if (WeatherUtils::DrawSliderFloat("Rotation Velocity", settings.rotationVelocity, -360.0f, 360.0f))
 					changed = true;
 
-				ImGui::EndTabItem();
-			}
+			EndScrollableContent();
+			ImGui::EndTabItem();
+		}
 
-			if (ImGui::BeginTabItem("Position")) {
-				ImGui::SeparatorText("Offset");
+		if (ImGui::BeginTabItem("Position")) {
+			BeginScrollableContent("##PositionScroll");
+			ImGui::SeparatorText("Offset");
 				if (WeatherUtils::DrawSliderFloat("Center Offset Min", settings.centerOffsetMin, -1000.0f, 1000.0f))
 					changed = true;
 				if (WeatherUtils::DrawSliderFloat("Center Offset Max", settings.centerOffsetMax, -1000.0f, 1000.0f))
@@ -51,11 +54,13 @@ void PrecipitationWidget::DrawWidget()
 				if (WeatherUtils::DrawSliderFloat("Particle Density", settings.particleDensity, 0.0f, 10.0f))
 					changed = true;
 
-				ImGui::EndTabItem();
-			}
+			EndScrollableContent();
+			ImGui::EndTabItem();
+		}
 
-			if (ImGui::BeginTabItem("Texture")) {
-				ImGui::SeparatorText("Subtextures");
+		if (ImGui::BeginTabItem("Texture")) {
+			BeginScrollableContent("##TextureScroll");
+			ImGui::SeparatorText("Subtextures");
 				int numX = static_cast<int>(settings.numSubtexturesX);
 				int numY = static_cast<int>(settings.numSubtexturesY);
 				if (ImGui::InputInt("Num Subtextures X", &numX)) {
@@ -75,15 +80,15 @@ void PrecipitationWidget::DrawWidget()
 					changed = true;
 				}
 
-				ImGui::EndTabItem();
-			}
-
-			ImGui::EndTabBar();
+			EndScrollableContent();
+			ImGui::EndTabItem();
 		}
 
-		if (changed && EditorWindow::GetSingleton()->settings.autoApplyChanges) {
-			ApplyChanges();
-		}
+		ImGui::EndTabBar();
+	}
+
+	if (changed && EditorWindow::GetSingleton()->settings.autoApplyChanges) {
+		ApplyChanges();
 	}
 	ImGui::End();
 }

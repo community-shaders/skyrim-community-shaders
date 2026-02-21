@@ -195,7 +195,7 @@ void EditorWindow::ShowObjectsWindow()
 		// Right column: Objects
 		ImGui::TableSetColumnIndex(1);
 
-		if (ImGui::BeginChild("##ObjectsContent", { 0, 0 }, ImGuiChildFlags_Border)) {
+		if (ImGui::BeginChild("##ObjectsContent", { 0, 0 }, ImGuiChildFlags_Border, kStickyHeaderFlags)) {
 			// Interior Only category has its own panel
 			if (selectedCategory == "Interior Only") {
 				InteriorOnlyPanel::Draw();
@@ -291,6 +291,9 @@ void EditorWindow::ShowObjectsWindow()
 					}
 				}
 			}
+
+			// Scrollable area for the object table
+			BeginScrollableContent("##ObjectsScrollable");
 
 			// Stable user IDs for sortable columns — used instead of ColumnIndex so reordering/insertion won't break sorting.
 			enum ColumnID : ImGuiID
@@ -725,6 +728,8 @@ void EditorWindow::ShowObjectsWindow()
 
 				ImGui::EndTable();  // End DetailsTable
 			}  // End if BeginTable("DetailsTable")
+
+			EndScrollableContent();  // End ObjectsScrollable
 
 		}  // End if BeginChild("##ObjectsContent")
 		ImGui::EndChild();  // End ObjectsContent child

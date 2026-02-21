@@ -30,28 +30,33 @@ void LightingTemplateWidget::DrawWidget()
 {
 	WeatherUtils::SetCurrentWidget(this);
 	ImGui::SetNextWindowSizeConstraints(ImVec2(600, 0), ImVec2(FLT_MAX, FLT_MAX));
-	if (ImGui::Begin(GetEditorID().c_str(), &open, ImGuiWindowFlags_NoSavedSettings)) {
+	if (ImGui::Begin(GetEditorID().c_str(), &open, ImGuiWindowFlags_NoSavedSettings | kStickyHeaderFlags)) {
 		// Draw header with search and Save/Load/Delete buttons
 		DrawWidgetHeader("##LightingTemplateSearch", false, true);
-
-		if (ImGui::BeginTabBar("LightingTemplateSettingsTabs", ImGuiTabBarFlags_None)) {
-			if (ImGui::BeginTabItem("Basic")) {
-				DrawBasicSettings();
-				ImGui::EndTabItem();
-			}
-
-			if (ImGui::BeginTabItem("Fog")) {
-				DrawFogSettings();
-				ImGui::EndTabItem();
-			}
-
-			if (ImGui::BeginTabItem("DALC")) {
-				DrawDALCSettings();
-				ImGui::EndTabItem();
-			}
-
-			ImGui::EndTabBar();
+	}
+	if (ImGui::BeginTabBar("LightingTemplateSettingsTabs", ImGuiTabBarFlags_None)) {
+		if (ImGui::BeginTabItem("Basic")) {
+			BeginScrollableContent("##BasicScroll");
+			DrawBasicSettings();
+			EndScrollableContent();
+			ImGui::EndTabItem();
 		}
+
+		if (ImGui::BeginTabItem("Fog")) {
+			BeginScrollableContent("##FogScroll");
+			DrawFogSettings();
+			EndScrollableContent();
+			ImGui::EndTabItem();
+		}
+
+		if (ImGui::BeginTabItem("DALC")) {
+			BeginScrollableContent("##DALCScroll");
+			DrawDALCSettings();
+			EndScrollableContent();
+			ImGui::EndTabItem();
+		}
+
+		ImGui::EndTabBar();
 	}
 	ImGui::End();
 }
