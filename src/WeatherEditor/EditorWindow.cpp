@@ -286,11 +286,11 @@ void EditorWindow::ShowObjectsWindow()
 			// Reserve space for all fixed-width elements to the right, let the search bar fill the rest
 			{
 				const auto& s = ImGui::GetStyle();
-				const float comboW  = ImGui::CalcTextSize("Editor ID").x + s.FramePadding.x * 4.0f;
-				const float helpW   = ImGui::CalcTextSize("(?)").x;
-				const float iconW   = ImGui::GetFrameHeight();
-				const float fixedW  = s.ItemSpacing.x * 8.0f + comboW + helpW + 10.0f + iconW +
-				                      ImGui::CalcTextSize("Favorites").x + 10.0f + iconW + ImGui::CalcTextSize("Flagged").x;
+				const float comboW = ImGui::CalcTextSize("Editor ID").x + s.FramePadding.x * 4.0f;
+				const float helpW = ImGui::CalcTextSize("(?)").x;
+				const float iconW = ImGui::GetFrameHeight();
+				const float fixedW = s.ItemSpacing.x * 8.0f + comboW + helpW + 10.0f + iconW +
+				                     ImGui::CalcTextSize("Favorites").x + 10.0f + iconW + ImGui::CalcTextSize("Flagged").x;
 				ImGui::SetNextItemWidth(std::max(50.0f, ImGui::GetContentRegionAvail().x - fixedW));
 			}
 			ImGui::InputTextWithHint("##ObjectFilter", "Filter... (Ctrl+F)", filterBuffer, sizeof(filterBuffer));
