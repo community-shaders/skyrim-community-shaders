@@ -1145,7 +1145,7 @@ void EditorWindow::RenderUI()
 		ImGui::EndMainMenuBar();
 	}
 
-	// Establish a viewport-wide DockSpace so all editor windows
+	// Establish a viewport-wide DockSpace so all editor windows are snappable and dockable
 	ImGui::DockSpaceOverViewport(nullptr, ImGuiDockNodeFlags_PassthruCentralNode);
 
 	auto width = ImGui::GetIO().DisplaySize.x;
