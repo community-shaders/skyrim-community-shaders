@@ -1654,7 +1654,7 @@ void WeatherWidget::DrawFeatureSettings()
 			ImGui::SetNextItemOpen(true);
 		}
 
-		if (ImGui::TreeNode(displayName.c_str())) {
+		if (ImGui::TreeNodeEx(displayName.c_str(), ImGuiTreeNodeFlags_SpanAvailWidth)) {
 			// Check if weather-specific overrides are enabled (using special key)
 			bool overridesEnabled = featureJsonView ? featureJsonView->value("__enabled", false) : false;
 
