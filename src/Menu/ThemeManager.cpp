@@ -28,6 +28,7 @@
 #include "../Util.h"
 #include "../Utils/FileSystem.h"
 #include "../Utils/UI.h"
+#include "Features/VR.h"
 
 using namespace SKSE;
 
@@ -795,10 +796,15 @@ float ThemeManager::ResolveFontSize(const Menu& menu)
 
 	// Otherwise, compute dynamic default based on current screen resolution
 	float dynamicSize = Constants::DEFAULT_FONT_SIZE;
-	if (globals::state && globals::state->screenSize.y > 0) {
-		dynamicSize = globals::state->screenSize.y * Constants::DEFAULT_FONT_RATIO;
+	// Use VR overlay height if in VR, otherwise use screen height
+	float baseHeight = Constants::DEFAULT_SCREEN_HEIGHT;
+	if (globals::game::isVR) {
+		baseHeight = VR::Config::kOverlayHeight;
+	} else if (globals::state && globals::state->screenSize.y > 0) {
+		baseHeight = globals::state->screenSize.y;
 	} else {
 		logger::warn("ThemeManager::ResolveFontSize() - Falling back to DEFAULT_FONT_SIZE due to missing screen height.");
 	}
+	dynamicSize = baseHeight * Constants::DEFAULT_FONT_RATIO;
 	return std::clamp(dynamicSize, Constants::MIN_FONT_SIZE, Constants::MAX_FONT_SIZE);
 }
