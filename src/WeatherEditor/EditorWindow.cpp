@@ -192,18 +192,19 @@ void EditorWindow::ShowObjectsWindow()
 			}
 		case FilterColumn::All:
 		default:
-			if (ContainsStringIgnoreCase(w->GetEditorID(), filterBuffer))
-				return true;
-			if (ContainsStringIgnoreCase(w->GetFormID(), filterBuffer))
-				return true;
-			if (ContainsStringIgnoreCase(w->GetFilename(), filterBuffer))
-				return true;
 			{
-				auto it = settings.markedRecords.find(w->GetEditorID());
+				const auto editorId = w->GetEditorID();
+				if (ContainsStringIgnoreCase(editorId, filterBuffer))
+					return true;
+				if (ContainsStringIgnoreCase(w->GetFormID(), filterBuffer))
+					return true;
+				if (ContainsStringIgnoreCase(w->GetFilename(), filterBuffer))
+					return true;
+				auto it = settings.markedRecords.find(editorId);
 				if (it != settings.markedRecords.end() && ContainsStringIgnoreCase(it->second, filterBuffer))
 					return true;
+				return false;
 			}
-			return false;
 		}
 	};
 
@@ -285,10 +286,14 @@ void EditorWindow::ShowObjectsWindow()
 			}
 			// Compute fixed widths once; reuse for both the search bar and the following combo.
 			const auto& style = ImGui::GetStyle();
-			const float comboW = ImGui::CalcTextSize("Editor ID").x + style.FramePadding.x * 4.0f;
+			// comboW = preview text + left/right padding + arrow button
+			const float comboW = ImGui::CalcTextSize("Editor ID").x + style.FramePadding.x * 2.0f + ImGui::GetFrameHeight();
 			const float helpW = ImGui::CalcTextSize("(?)").x;
 			const float iconW = ImGui::GetFrameHeight();
-			const float fixedW = style.ItemSpacing.x * 8.0f + comboW + helpW + 10.0f + iconW +
+			// numGaps must equal the number of SameLine() calls on this row;
+			// update both the layout and this constant when adding/removing items.
+			constexpr int numGaps = 8;  // input→combo, combo→help, help→dummy, dummy→fav, fav→"Favorites", "Favorites"→dummy, dummy→flag, flag→"Flagged"
+			const float fixedW = style.ItemSpacing.x * numGaps + comboW + helpW + 10.0f + iconW +
 			                     ImGui::CalcTextSize("Favorites").x + 10.0f + iconW + ImGui::CalcTextSize("Flagged").x;
 			ImGui::SetNextItemWidth(std::max(50.0f, ImGui::GetContentRegionAvail().x - fixedW));
 			ImGui::InputTextWithHint("##ObjectFilter", "Filter... (Ctrl+F)", filterBuffer, sizeof(filterBuffer));
