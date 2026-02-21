@@ -162,6 +162,51 @@ void EditorWindow::ShowObjectsWindow()
 	static bool showOnlyFlagged = false;
 	static bool showOnlyFavorites = false;
 
+	// Filter column selection
+	enum class FilterColumn : int
+	{
+		All = 0,
+		EditorID,
+		FormID,
+		File,
+		Status
+	};
+	static constexpr const char* kFilterColumnNames[] = { "All", "Editor ID", "Form ID", "File", "Status" };
+	static FilterColumn currentFilterColumn = FilterColumn::All;
+
+	// Filter helper: matches widget against current filter column and search text
+	auto matchesFilter = [&](Widget* w) -> bool {
+		if (filterBuffer[0] == '\0')
+			return true;
+		switch (currentFilterColumn) {
+		case FilterColumn::EditorID:
+			return ContainsStringIgnoreCase(w->GetEditorID(), filterBuffer);
+		case FilterColumn::FormID:
+			return ContainsStringIgnoreCase(w->GetFormID(), filterBuffer);
+		case FilterColumn::File:
+			return ContainsStringIgnoreCase(w->GetFilename(), filterBuffer);
+		case FilterColumn::Status:
+			{
+				auto it = settings.markedRecords.find(w->GetEditorID());
+				return it != settings.markedRecords.end() && ContainsStringIgnoreCase(it->second, filterBuffer);
+			}
+		case FilterColumn::All:
+		default:
+			if (ContainsStringIgnoreCase(w->GetEditorID(), filterBuffer))
+				return true;
+			if (ContainsStringIgnoreCase(w->GetFormID(), filterBuffer))
+				return true;
+			if (ContainsStringIgnoreCase(w->GetFilename(), filterBuffer))
+				return true;
+			{
+				auto it = settings.markedRecords.find(w->GetEditorID());
+				if (it != settings.markedRecords.end() && ContainsStringIgnoreCase(it->second, filterBuffer))
+					return true;
+			}
+			return false;
+		}
+	};
+
 	// Create a table with two columns
 	if (ImGui::BeginTable("ObjectTable", 2, ImGuiTableFlags_Resizable | ImGuiTableFlags_BordersInner | ImGuiTableFlags_NoHostExtendX)) {
 		// Set up column widths
@@ -238,10 +283,28 @@ void EditorWindow::ShowObjectsWindow()
 					ImGui::SetKeyboardFocusHere();
 				}
 			}
+			// Reserve space for all fixed-width elements to the right, let the search bar fill the rest
+			{
+				const auto& s = ImGui::GetStyle();
+				const float comboW  = ImGui::CalcTextSize("Editor ID").x + s.FramePadding.x * 4.0f;
+				const float helpW   = ImGui::CalcTextSize("(?)").x;
+				const float iconW   = ImGui::GetFrameHeight();
+				const float fixedW  = s.ItemSpacing.x * 8.0f + comboW + helpW + 10.0f + iconW +
+				                      ImGui::CalcTextSize("Favorites").x + 10.0f + iconW + ImGui::CalcTextSize("Flagged").x;
+				ImGui::SetNextItemWidth(std::max(50.0f, ImGui::GetContentRegionAvail().x - fixedW));
+			}
 			ImGui::InputTextWithHint("##ObjectFilter", "Filter... (Ctrl+F)", filterBuffer, sizeof(filterBuffer));
 
 			ImGui::SameLine();
-			HelpMarker("Type a part of an object name to filter the list.\nCtrl+F: Focus search\nEnter: Open selected");
+			ImGui::SetNextItemWidth(ImGui::CalcTextSize("Editor ID").x + ImGui::GetStyle().FramePadding.x * 4.0f);
+			{
+				int col = static_cast<int>(currentFilterColumn);
+				if (ImGui::Combo("##FilterBy", &col, kFilterColumnNames, IM_ARRAYSIZE(kFilterColumnNames)))
+					currentFilterColumn = static_cast<FilterColumn>(col);
+			}
+
+			ImGui::SameLine();
+			HelpMarker("Filter the object list by the selected column.\nAll: searches Editor ID, Form ID, File, and Status.\nCtrl+F: Focus search\nEnter: Open selected");
 
 			// Quick filter buttons on same row
 			ImGui::SameLine();
@@ -519,7 +582,7 @@ void EditorWindow::ShowObjectsWindow()
 						if (!ltWidget || ltWidget->lightingTemplate != currentCellLightingTemplate)
 							continue;
 
-						if (!ContainsStringIgnoreCase(sortedWidgets[i]->GetEditorID(), filterBuffer))
+						if (!matchesFilter(sortedWidgets[i]))
 							continue;
 
 						// Apply quick filters
@@ -609,7 +672,7 @@ void EditorWindow::ShowObjectsWindow()
 							continue;
 					}
 
-					if (!ContainsStringIgnoreCase(sortedWidgets[i]->GetEditorID(), filterBuffer))
+					if (!matchesFilter(sortedWidgets[i]))
 						continue;
 
 					// Apply quick filters
