@@ -38,6 +38,7 @@ void ReferenceEffectWidget::DrawWidget()
 				changed = true;
 
 			if (changed && editorWindow->settings.autoApplyChanges) {
+				editorWindow->PushUndoState(this);
 				ApplyChanges();
 			}
 		}
