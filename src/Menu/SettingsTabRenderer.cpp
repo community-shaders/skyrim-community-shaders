@@ -606,7 +606,7 @@ void SettingsTabRenderer::RenderThemesTab()
 			ImGui::Separator();
 
 			auto safeNewThemeName = themeManager->SanitizeThemeFileName(newThemeName);
-			bool isThemeNameEmpty = strlen(safeNewThemeName) == 0;
+			bool isThemeNameEmpty = safeNewThemeName.empty();
 			bool isDuplicateName = false;
 			bool isDuplicateDisplayName = false;
 
