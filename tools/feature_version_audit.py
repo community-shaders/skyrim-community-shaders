@@ -150,7 +150,7 @@ def apply_version_bump(ini_path, proposed_ver_str):
             content = f.read()
 
         # Replace Version = X-X-X with Version = proposed_ver_str
-        new_content = RE_VERSION.sub(f"Version = {proposed_ver_str}", content)
+        new_content = RE_VERSION.sub(f"Version = {proposed_ver_str}", content, count=1)
 
         if new_content != content:
             with open(ini_path, "w", encoding="utf-8") as f:
@@ -288,7 +288,6 @@ def analyze_features(FEATURES_DIR, feature_meta_map, base_ref, only_changed=Fals
     bump_suggestions = []
     new_features = []
     actionable = False
-    author_stats = {}
     feature_actions = {}
     feature_analysis = []
     # If only_changed, build a set of changed feature names
@@ -385,7 +384,7 @@ def analyze_features(FEATURES_DIR, feature_meta_map, base_ref, only_changed=Fals
                     bump_author = get_commit_author(bump_commit)
 
         proposed_ver = propose_new_version(prior_ver, all_commits) if ini_path else None
-        needs_bump = (proposed_ver is not None and new_ver is not None and (prior_ver is None or proposed_ver > new_ver))
+        needs_bump = (proposed_ver is not None and new_ver is not None and proposed_ver > new_ver)
         proposed_ver_str = "-".join(map(str, proposed_ver)) if proposed_ver else "-"
         prior_ver_str = "-".join(map(str, prior_ver)) if prior_ver else "-"
         new_ver_str = "-".join(map(str, new_ver)) if new_ver else "-"
@@ -418,15 +417,6 @@ def analyze_features(FEATURES_DIR, feature_meta_map, base_ref, only_changed=Fals
         if is_attention:
             actionable = True
 
-        # Track author stats for actionable items
-        if is_attention and bump_author:
-            if bump_author not in author_stats:
-                author_stats[bump_author] = {'new': 0, 'bump': 0, 'meta': 0}
-            if (changes and all(s == "A" for s, _ in changes) and ini_path) or (ini_path and prior_ver is None and new_ver is not None):
-                author_stats[bump_author]['new'] += 1
-            elif needs_bump:
-                author_stats[bump_author]['bump'] += 1
-
         commit_link = ""
         if bump_commit:
             author_str = f" ({bump_author})" if bump_author else ""
@@ -455,7 +445,7 @@ def analyze_features(FEATURES_DIR, feature_meta_map, base_ref, only_changed=Fals
             if needs_bump:
                 feat_act["actions"].append(f"Needs version bump to {proposed_ver_str}")
 
-    return feature_analysis, bump_suggestions, new_features, actionable, author_stats, feature_actions
+    return feature_analysis, bump_suggestions, new_features, actionable, feature_actions
 
 def print_actionable_suggestions(feature_actions):
     if feature_actions:
@@ -661,7 +651,7 @@ def main():
     def normalize_name(name): return ''.join(name.lower().split())
     feature_meta_map = {normalize_name(f['name']): f for f in feature_metadata}
 
-    feature_analysis, bump_suggestions, new_features, actionable, author_stats, feature_actions = analyze_features(
+    feature_analysis, bump_suggestions, new_features, actionable, feature_actions = analyze_features(
         FEATURES_DIR, feature_meta_map, base_ref, only_changed=args.pr_check)
 
     now = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
@@ -686,6 +676,17 @@ def main():
             info["actions"] = [a for a in info["actions"] if not a.startswith("Needs version bump")]
             if not info["actions"]:
                 del feature_actions[fname]
+
+        # Filter bump_suggestions for the full-report path
+        bumped_ini_names = {
+            os.path.basename(fa['ini_path'])
+            for fa in feature_analysis
+            if not fa['needs_bump'] and fa.get('ini_path')
+        }
+        bump_suggestions = [
+            s for s in bump_suggestions
+            if not any(name in s for name in bumped_ini_names)
+        ]
 
         # Recompute actionable after applying bumps
         actionable = any(fa.get('needs_bump') or "missing" in fa.get('note', '').lower() for fa in feature_analysis)
