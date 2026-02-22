@@ -40,6 +40,7 @@ RE_COMMIT_FIX = re.compile(r"^fix(\(|:|\s)", re.IGNORECASE)
 RE_COMMIT_REFACTOR = re.compile(r"^refactor(\(|:|\s)", re.IGNORECASE)
 RE_COMMIT_PERF = re.compile(r"^perf(\(|:|\s)", re.IGNORECASE)
 RE_COMMIT_BREAKING = re.compile(r"!\s*:|BREAKING CHANGE:", re.IGNORECASE)
+RE_COMMIT_NONFUNCTIONAL = re.compile(r"^(chore|docs|style|ci|test|build)(\(|:|\s)", re.IGNORECASE)
 
 # =====================
 # End Configuration
@@ -267,19 +268,20 @@ def propose_new_version(prior_version, commits):
     if not prior_version:
         return None
     major, minor, patch = prior_version
-    # Any change in functional files should result in at least a patch bump
     if not commits:
         return (major, minor, patch + 1)
 
     is_minor = any(RE_COMMIT_FEAT.match(c) or RE_COMMIT_BREAKING.search(c) for c in commits)
     is_patch = any(RE_COMMIT_FIX.match(c) or RE_COMMIT_REFACTOR.match(c) or RE_COMMIT_PERF.match(c) for c in commits)
+    is_nonfunctional_only = all(RE_COMMIT_NONFUNCTIONAL.match(c) for c in commits)
 
     if is_minor:
         return (major, minor + 1, 0)
     elif is_patch:
         return (major, minor, patch + 1)
+    elif is_nonfunctional_only:
+        return None
     else:
-        # Fallback to patch bump for any non-chore/docs changes that reached here
         return (major, minor, patch + 1)
 
 def analyze_features(FEATURES_DIR, feature_meta_map, base_ref, only_changed=False):
@@ -624,9 +626,9 @@ def generate_audit_report(
 def main():
     parser = argparse.ArgumentParser(description="Feature version audit for Skyrim Community Shaders.")
     parser.add_argument('--output', type=str, help='Output markdown filename')
-    parser.add_argument('--ci', action='store_true', help='Exit 1 if actionable items found')
+    parser.add_argument('--ci', action='store_true', help='Exit 1 if actionable items found (alias for --fail-on-actionable)')
     parser.add_argument('--base', type=str, default=None, help='Base tag/branch/commit to compare against')
-    parser.add_argument('--fail-on-actionable', action='store_true', help='Fail if any actionable tasks present')
+    parser.add_argument('--fail-on-actionable', action='store_true', help='Exit 1 if actionable items found (alias for --ci)')
     parser.add_argument('--pr-check', action='store_true', help='Only show actionable items for changes since base')
     parser.add_argument('--apply-bumps', action='store_true', help='Automatically apply suggested version bumps')
     args = parser.parse_args()
@@ -674,11 +676,16 @@ def main():
                     print(f"Applied bump to {fa['name']}: {fa['prior_ver_str']} -> {fa['proposed_ver_str']}", file=sys.stderr)
                     applied_count += 1
 
-                    # Update the in-memory state so the report correctly reflects the bumped version
-                    fa['prior_ver_str'] = fa['proposed_ver_str']
                     fa['needs_bump'] = False
 
         print(f"\nSuccessfully applied {applied_count} version bumps." if applied_count > 0 else "\nNo version bumps applied.", file=sys.stderr)
+
+        # Remove stale bump actions from feature_actions
+        for fname in list(feature_actions.keys()):
+            info = feature_actions[fname]
+            info["actions"] = [a for a in info["actions"] if not a.startswith("Needs version bump")]
+            if not info["actions"]:
+                del feature_actions[fname]
 
         # Recompute actionable after applying bumps
         actionable = any(fa.get('needs_bump') or "missing" in fa.get('note', '').lower() for fa in feature_analysis)
