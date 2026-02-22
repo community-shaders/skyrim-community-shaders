@@ -996,36 +996,51 @@ void WeatherWidget::DrawCloudSettings()
 	WeatherWidget* parentWidget = hasParent ? GetParent() : nullptr;
 
 	bool changed = false;
+	bool enableChanged = false;
+
+	// OpenOnArrow|OpenOnDoubleClick prevents accidental collapse when clicking
+	// the [Enabled] badge area that overlaps the right side of the header.
+	constexpr ImGuiTreeNodeFlags flags = ImGuiTreeNodeFlags_OpenOnArrow | ImGuiTreeNodeFlags_OpenOnDoubleClick;
+	constexpr char kEnabledBadge[] = "[Enabled]";
+
 	for (int i = 0; i < TESWeather::kTotalLayers; i++) {
 		std::string layer = std::format("Layer {}", i);
+		bool layerEnabled = settings.clouds[i].enabled;
 
-		ImGuiTreeNodeFlags flags = ImGuiTreeNodeFlags_OpenOnArrow | ImGuiTreeNodeFlags_OpenOnDoubleClick;
-		if (settings.clouds[i].enabled && !settings.clouds[i].texturePath.empty()) {
-			flags |= ImGuiTreeNodeFlags_DefaultOpen;
+		if (!layerEnabled) {
+			ImGui::PushStyleColor(ImGuiCol_Header, ImGui::GetStyleColorVec4(ImGuiCol_FrameBg));
+			ImGui::PushStyleColor(ImGuiCol_HeaderHovered, ImGui::GetStyleColorVec4(ImGuiCol_FrameBgHovered));
+			ImGui::PushStyleColor(ImGuiCol_HeaderActive, ImGui::GetStyleColorVec4(ImGuiCol_FrameBgActive));
 		}
 
-		if (ImGui::CollapsingHeader(layer.c_str(), flags)) {
+		// Label is constant so the storage ID never changes — open/closed state always persists.
+		// [Enabled] badge is overlaid on the header via the draw list instead of altering the label.
+		float headerScreenY = ImGui::GetCursorScreenPos().y;
+		bool layerOpen = ImGui::CollapsingHeader(layer.c_str(), flags);
+
+		if (!layerEnabled)
+			ImGui::PopStyleColor(3);
+
+		if (layerEnabled) {
+			const ImVec2 badgeSize = ImGui::CalcTextSize(kEnabledBadge);
+			const float headerHeight = ImGui::GetFrameHeight();
+			const ImVec2 badgePos = {
+				ImGui::GetWindowPos().x + ImGui::GetContentRegionMax().x - badgeSize.x,
+				headerScreenY + (headerHeight - badgeSize.y) * 0.5f
+			};
+			ImGui::GetWindowDrawList()->AddText(badgePos, ImGui::GetColorU32(ImGuiCol_CheckMark), kEnabledBadge);
+		}
+
+		if (layerOpen) {
 			ImGui::Indent(10.0f);
 			ImGui::Spacing();
-
-			bool layerEnabled = settings.clouds[i].enabled;
 
 			// Begin horizontal layout for enable checkbox and sliders on left, texture on right
 			ImGui::BeginGroup();
 
 			if (ImGui::Checkbox(std::format("Enable##{}", layer).c_str(), &layerEnabled)) {
 				settings.clouds[i].enabled = layerEnabled;
-				// Always apply cloud enable/disable immediately for instant feedback
-				EditorWindow::GetSingleton()->PushUndoState(this);
-				ApplyChanges();
-
-				// Force weather re-application if locked to make cloud changes visible immediately
-				if (editorWindow->IsWeatherLocked() && editorWindow->GetLockedWeather() == weather) {
-					if (auto sky = RE::Sky::GetSingleton()) {
-						sky->ForceWeather(weather, false);
-					}
-				}
-
+				enableChanged = true;
 				changed = true;
 			}
 
@@ -1051,20 +1066,11 @@ void WeatherWidget::DrawCloudSettings()
 					ImGui::BeginGroup();
 					float textureSize = 128.0f;
 					ImGui::Image((void*)texture, ImVec2(textureSize, textureSize));
-					// Small grey subtext below image
-					ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.5f, 0.5f, 0.5f, 1.0f));
-					ImGui::PushFont(ImGui::GetFont());
-					ImGui::SetWindowFontScale(0.8f);
-					float textWidth = ImGui::CalcTextSize(settings.clouds[i].texturePath.c_str()).x;
-					if (textWidth > textureSize) {
-						ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + textureSize);
-						ImGui::TextWrapped("%s", settings.clouds[i].texturePath.c_str());
-						ImGui::PopTextWrapPos();
-					} else {
-						ImGui::Text("%s", settings.clouds[i].texturePath.c_str());
-					}
-					ImGui::SetWindowFontScale(1.0f);
-					ImGui::PopFont();
+					// Small grey subtext below image, clamped to texture width
+					ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetStyleColorVec4(ImGuiCol_TextDisabled));
+					ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + textureSize);
+					ImGui::TextWrapped("%s", settings.clouds[i].texturePath.c_str());
+					ImGui::PopTextWrapPos();
 					ImGui::PopStyleColor();
 					ImGui::EndGroup();
 				}
@@ -1111,8 +1117,16 @@ void WeatherWidget::DrawCloudSettings()
 			ImGui::Unindent(10.0f);
 		}
 	}
-	if (changed && EditorWindow::GetSingleton()->settings.autoApplyChanges) {
-		EditorWindow::GetSingleton()->PushUndoState(this);
+	if (enableChanged) {
+		// Apply enable/disable immediately for instant feedback, regardless of autoApplyChanges.
+		editorWindow->PushUndoState(this);
+		ApplyChanges();
+		if (editorWindow->IsWeatherLocked() && editorWindow->GetLockedWeather() == weather) {
+			if (auto sky = RE::Sky::GetSingleton()) {
+				sky->ForceWeather(weather, true);  // override=true for immediate application; matches "instant feedback" intent above
+			}
+		}
+	} else if (changed && editorWindow->settings.autoApplyChanges) {
 		ApplyChanges();
 	}
 }
