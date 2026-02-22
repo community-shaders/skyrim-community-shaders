@@ -228,7 +228,14 @@ private:
 	void InvalidateJsonAttachmentCache(Widget* widget = nullptr);
 
 	// Objects window filter state
-	enum class FilterColumn : int { All = 0, EditorID, FormID, File, Status };
+	enum class FilterColumn : int
+	{
+		All = 0,
+		EditorID,
+		FormID,
+		File,
+		Status
+	};
 	std::string m_selectedCategory = "Weather";
 	std::string m_previousSelectedCategory = "Weather";
 	char m_filterBuffer[256] = {};
