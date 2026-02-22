@@ -269,7 +269,7 @@ def propose_new_version(prior_version, commits):
         return None
     major, minor, patch = prior_version
     if not commits:
-        return (major, minor, patch + 1)
+        return None
 
     is_minor = any(RE_COMMIT_FEAT.match(c) or RE_COMMIT_BREAKING.search(c) for c in commits)
     is_patch = any(RE_COMMIT_FIX.match(c) or RE_COMMIT_REFACTOR.match(c) or RE_COMMIT_PERF.match(c) for c in commits)
@@ -298,7 +298,7 @@ def analyze_features(FEATURES_DIR, feature_meta_map, base_ref, only_changed=Fals
         cmd = ["git", "diff", "--name-status", f"{base_ref}...HEAD", "--"] + target_dirs
         try:
             all_changes = subprocess.check_output(cmd, stderr=subprocess.DEVNULL).decode("utf-8").splitlines()
-        except subprocess.CalledProcessError as e:
+        except Exception as e:
             print(f"Error running git diff: {e}", file=sys.stderr)
             all_changes = []
 
@@ -685,7 +685,7 @@ def main():
         }
         bump_suggestions = [
             s for s in bump_suggestions
-            if not any(name in s for name in bumped_ini_names)
+            if not any(f"**{name}**" in s for name in bumped_ini_names)
         ]
 
         # Recompute actionable after applying bumps
