@@ -85,6 +85,102 @@ namespace Util
 			ImGui::EndDisabled();
 	}
 
+	void TextUnformattedDisabled(const char* a_text, const char* a_textEnd)
+	{
+		ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetStyleColorVec4(ImGuiCol_TextDisabled));
+		ImGui::TextUnformatted(a_text, a_textEnd);
+		ImGui::PopStyleColor();
+	}
+
+	bool TableRowSelectable(const char* label, bool selected, ImGuiSelectableFlags flags)
+	{
+		const ImVec4 kTransparent(0.0f, 0.0f, 0.0f, 0.0f);
+		ImGui::PushStyleColor(ImGuiCol_Header, kTransparent);
+		ImGui::PushStyleColor(ImGuiCol_HeaderHovered, kTransparent);
+		ImGui::PushStyleColor(ImGuiCol_HeaderActive, kTransparent);
+
+		bool pressed = ImGui::Selectable(label, selected, flags, ImVec2(0, ImGui::GetFrameHeight()));
+		bool hovered = ImGui::IsItemHovered();
+		bool active = ImGui::IsItemActive();
+		ImGui::PopStyleColor(3);
+
+		if (active || hovered) {
+			const ImGuiCol highlightCol = active ? ImGuiCol_HeaderActive : ImGuiCol_HeaderHovered;
+			const ImU32 rowColor = ImGui::GetColorU32(highlightCol);
+			ImGui::TableSetBgColor(ImGuiTableBgTarget_RowBg0, rowColor);
+			ImGui::TableSetBgColor(ImGuiTableBgTarget_RowBg1, rowColor);
+		} else if (selected) {
+			const ImU32 rowColor = ImGui::GetColorU32(ImGuiCol_Header);
+			ImGui::TableSetBgColor(ImGuiTableBgTarget_RowBg0, rowColor);
+			ImGui::TableSetBgColor(ImGuiTableBgTarget_RowBg1, rowColor);
+		}
+
+		return pressed;
+	}
+
+	void SetTooltipPositionNearMouse(float estimatedHeight, float estimatedWidth)
+	{
+		const ImVec2 mousePos = ImGui::GetMousePos();
+		const ImGuiViewport* viewport = ImGui::GetMainViewport();
+		constexpr float kTooltipOffsetX = 16.0f;
+		constexpr float kTooltipOffsetY = 12.0f;
+
+		const float viewportLeft = viewport->WorkPos.x;
+		const float viewportRight = viewport->WorkPos.x + viewport->WorkSize.x;
+		const float viewportTop = viewport->WorkPos.y;
+		const float viewportBottom = viewport->WorkPos.y + viewport->WorkSize.y;
+
+		// Vertical: flip above cursor when it would overflow the bottom.
+		const bool placeAboveCursor = (mousePos.y + kTooltipOffsetY + estimatedHeight) > viewportBottom;
+		float posY;
+		float pivotY;
+		if (placeAboveCursor) {
+			const float tentativeTopY = mousePos.y - kTooltipOffsetY - estimatedHeight;
+			posY = (tentativeTopY < viewportTop) ? (viewportTop + estimatedHeight) : (mousePos.y - kTooltipOffsetY);
+			pivotY = 1.0f;
+		} else {
+			posY = mousePos.y + kTooltipOffsetY;
+			pivotY = 0.0f;
+		}
+
+		// Horizontal: clamp so the tooltip stays within viewport bounds.
+		float posX = mousePos.x + kTooltipOffsetX;
+		if (estimatedWidth > 0.0f) {
+			const float maxX = viewportRight - estimatedWidth;
+			posX = ImMax(viewportLeft, ImMin(posX, maxX));
+		}
+
+		ImGui::SetNextWindowPos(ImVec2(posX, posY), ImGuiCond_Always, ImVec2(0.0f, pivotY));
+	}
+
+	void AddTooltip(const char* a_desc, ImGuiHoveredFlags a_flags)
+	{
+		if (ImGui::IsItemHovered(a_flags)) {
+			ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, { 8, 8 });
+			const ImVec2 pad = ImGui::GetStyle().WindowPadding;
+			const float wrapWidth = ImGui::GetFontSize() * 50.0f;
+			const ImVec2 wrappedTextSize = ImGui::CalcTextSize(a_desc, nullptr, false, wrapWidth);
+			const float estimatedTooltipHeight = wrappedTextSize.y + pad.y * 2.0f;
+			const float estimatedTooltipWidth = wrappedTextSize.x + pad.x * 2.0f;
+			SetTooltipPositionNearMouse(estimatedTooltipHeight, estimatedTooltipWidth);
+
+			if (ImGui::BeginTooltip()) {
+				ImGui::PushTextWrapPos(wrapWidth);
+				ImGui::TextUnformatted(a_desc);
+				ImGui::PopTextWrapPos();
+				ImGui::EndTooltip();
+			}
+			ImGui::PopStyleVar();
+		}
+	}
+
+	void HelpMarker(const char* a_desc)
+	{
+		ImGui::AlignTextToFramePadding();
+		TextUnformattedDisabled("(?)");
+		AddTooltip(a_desc, ImGuiHoveredFlags_DelayShort);
+	}
+
 	// Static state for clear shader cache confirmation popup
 	static bool showClearCacheConfirmation = false;
 	static bool dontAskAgainCheckbox = false;

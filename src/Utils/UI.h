@@ -100,6 +100,46 @@ namespace Util
 	};
 
 	/**
+	 * Renders text using the disabled text color.
+	 * @param a_text Start of the text
+	 * @param a_textEnd Optional end pointer (nullptr for null-terminated strings)
+	 */
+	void TextUnformattedDisabled(const char* a_text, const char* a_textEnd = nullptr);
+
+	/**
+	 * Full-row hover/selection highlight for ImGui tables.
+	 * Makes the entire table row highlight on hover/active/selected instead of just the selectable cell.
+	 * @param label The selectable label text
+	 * @param selected Whether the row is currently selected
+	 * @param flags ImGuiSelectableFlags to pass through
+	 * @return True if the row was pressed
+	 */
+	bool TableRowSelectable(const char* label, bool selected, ImGuiSelectableFlags flags);
+
+	/**
+	 * Positions the next tooltip window near the mouse cursor, clamped to viewport bounds.
+	 * Automatically flips above the cursor when it would overflow the bottom.
+	 * Call this before BeginTooltip().
+	 * @param estimatedHeight Estimated tooltip height in pixels
+	 * @param estimatedWidth Estimated tooltip width in pixels (0 to skip horizontal clamping)
+	 */
+	void SetTooltipPositionNearMouse(float estimatedHeight, float estimatedWidth = 0.0f);
+
+	/**
+	 * Shows a positioned tooltip with wrapped text when the previous item is hovered.
+	 * Uses SetTooltipPositionNearMouse for viewport-aware placement.
+	 * @param a_desc Tooltip text
+	 * @param a_flags Hover flags (default: ImGuiHoveredFlags_DelayNormal)
+	 */
+	void AddTooltip(const char* a_desc, ImGuiHoveredFlags a_flags = ImGuiHoveredFlags_DelayNormal);
+
+	/**
+	 * Draws a "(?)" help marker with a tooltip on hover.
+	 * @param a_desc Tooltip text to show
+	 */
+	void HelpMarker(const char* a_desc);
+
+	/**
 	 * Confirmation popup for clearing shader cache.
 	 * Call RequestClearShaderCacheConfirmation() when the clear button is clicked.
 	 * Call DrawClearShaderCacheConfirmation() every frame to render the popup.
