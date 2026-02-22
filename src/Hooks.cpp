@@ -332,10 +332,13 @@ struct BSShaderRenderTargets_Create
 	 *
 	 * Invokes the original function, then reinitializes global state and performs necessary setup for rendering targets.
 	 */
+	static inline Util::GameSetting iNumFocusShadow{ "Number of Focus Shadows (INI)",
+		"Controls the number of focus shadows.",
+		REL::Relocate<uintptr_t>(0, 0, 0x1ed6368), 4, 0, 4 };
+
 	static void thunk()
 	{
-		auto iniPrefSettingCollection = RE::INIPrefSettingCollection::GetSingleton();
-		iniPrefSettingCollection->GetSetting("iNumFocusShadow:Display")->data.i = 0;
+		Util::SetGameSettingValue<std::int32_t>("iNumFocusShadow:Display", iNumFocusShadow, 0);
 		func();
 		globals::ReInit();
 		globals::state->Setup();
