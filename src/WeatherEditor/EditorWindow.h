@@ -226,4 +226,15 @@ private:
 	void RefreshJsonAttachmentCache(const std::vector<Widget*>& widgets);
 	bool HasCachedJsonAttachment(Widget* widget) const;
 	void InvalidateJsonAttachmentCache(Widget* widget = nullptr);
+
+	// Objects window filter state
+	enum class FilterColumn : int { All = 0, EditorID, FormID, File, Status };
+	std::string m_selectedCategory = "Weather";
+	std::string m_previousSelectedCategory = "Weather";
+	char m_filterBuffer[256] = {};
+	bool m_showOnlyFlagged = false;
+	bool m_showOnlyFavorites = false;
+	FilterColumn m_currentFilterColumn = FilterColumn::All;
+	void ResetObjectsFilter();
+	bool MatchesObjectFilter(Widget* w) const;
 };
