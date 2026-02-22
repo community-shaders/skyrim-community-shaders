@@ -8,7 +8,7 @@ private:
 	static constexpr std::string_view MOD_ID = "130375";
 
 public:
-	bool inline SupportsVR() override { return false; }
+	bool inline SupportsVR() override { return true; }
 
 	virtual inline std::string GetName() override { return "Screen Space GI"; }
 	virtual inline std::string GetShortName() override { return "ScreenSpaceGI"; }

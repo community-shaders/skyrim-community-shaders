@@ -359,7 +359,7 @@ public:
 	winrt::com_ptr<ID3D11ComputeShader> stereoBlendDebugBackCheckCS;
 	winrt::com_ptr<ID3D11ComputeShader> stereoBlendDebugBlendWeightCS;
 	eastl::unique_ptr<Texture2D> stereoBlendCopyTex;
-	ConstantBuffer* stereoBlendCB = nullptr;
+	eastl::unique_ptr<ConstantBuffer> stereoBlendCB;
 
 	struct alignas(16) StereoBlendCB
 	{

@@ -60,6 +60,12 @@ static const float kBackCheckThreshold = 8.0;
 	}
 
 	float otherLinearDepth = srcDepth.SampleLevel(samplerPointClamp, r.otherStereoUV * frameScale, RES_MIP);
+	if (otherLinearDepth < FP_Z) {
+		outAo[dtid] = srcAo[dtid];
+		outIlY[dtid] = srcIlY[dtid];
+		outIlCoCg[dtid] = srcIlCoCg[dtid];
+		return;
+	}
 	float otherRawDepth = (SharedData::CameraData.x - SharedData::CameraData.w / otherLinearDepth) / SharedData::CameraData.z;
 
 	// Use raw depth for back-check reprojection (required) and bilateral weight (consistent with StereoBlendCS)

@@ -97,7 +97,7 @@ void VR::SetupResources()
 		.Texture2D = { .MostDetailedMip = 0, .MipLevels = 1 }
 	};
 	stereoBlendCopyTex->CreateSRV(srvDesc);
-	stereoBlendCB = new ConstantBuffer(ConstantBufferDesc<StereoBlendCB>());
+	stereoBlendCB = eastl::make_unique<ConstantBuffer>(ConstantBufferDesc<StereoBlendCB>());
 
 	DetectOpenVRInfo();
 
