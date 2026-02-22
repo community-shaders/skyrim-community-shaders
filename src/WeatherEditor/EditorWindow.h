@@ -234,7 +234,8 @@ private:
 		EditorID,
 		FormID,
 		File,
-		Status
+		Status,
+		Count_  // Sentinel – must equal IM_ARRAYSIZE(kFilterColumnNames)
 	};
 	std::string m_selectedCategory = "Weather";
 	std::string m_previousSelectedCategory = "Weather";

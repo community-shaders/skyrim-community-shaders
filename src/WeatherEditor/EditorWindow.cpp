@@ -165,6 +165,8 @@ void EditorWindow::ResetObjectsFilter()
 
 bool EditorWindow::MatchesObjectFilter(Widget* w) const
 {
+	static_assert(static_cast<int>(FilterColumn::Count_) == IM_ARRAYSIZE(kFilterColumnNames),
+		"kFilterColumnNames must have one entry per FilterColumn value");
 	if (!w)
 		return false;
 	if (m_filterBuffer[0] == '\0')
@@ -292,11 +294,18 @@ void EditorWindow::ShowObjectsWindow()
 			const float comboW = ImGui::CalcTextSize("Editor ID").x + style.FramePadding.x * 2.0f + ImGui::GetFrameHeight();
 			const float helpW = ImGui::CalcTextSize("(?)").x;
 			const float iconW = ImGui::GetFrameHeight();
-			// Each fixed-width item on the row is preceded by one SameLine().
-			// Update numItemsAfterSearchBar when adding or removing items from the row.
-			constexpr int numItemsAfterSearchBar = 8;  // combo, help, spacer, fav icon, "Favorites", spacer, flag icon, "Flagged"
-			const float fixedW = style.ItemSpacing.x * numItemsAfterSearchBar + comboW + helpW + 10.0f + iconW +
-			                     ImGui::CalcTextSize("Favorites").x + 10.0f + iconW + ImGui::CalcTextSize("Flagged").x;
+			// Fixed width is the sum of every item that follows the search bar on the same row.
+			// Each SameLine() contributes style.ItemSpacing.x; widths are listed explicitly
+			// so adding or removing a widget only requires updating its own expression.
+			const float fixedW =
+			    style.ItemSpacing.x + comboW +                                // combo
+			    style.ItemSpacing.x + helpW +                                 // help marker
+			    style.ItemSpacing.x + 10.0f +                                 // spacer before favorites
+			    style.ItemSpacing.x + iconW +                                 // fav icon
+			    style.ItemSpacing.x + ImGui::CalcTextSize("Favorites").x +   // "Favorites" label
+			    style.ItemSpacing.x + 10.0f +                                 // spacer before flagged
+			    style.ItemSpacing.x + iconW +                                 // flag icon
+			    style.ItemSpacing.x + ImGui::CalcTextSize("Flagged").x;      // "Flagged" label
 			ImGui::SetNextItemWidth(std::max(50.0f, ImGui::GetContentRegionAvail().x - fixedW));
 			ImGui::InputTextWithHint("##ObjectFilter", "Filter... (Ctrl+F)", m_filterBuffer, sizeof(m_filterBuffer));
 
@@ -328,6 +337,20 @@ void EditorWindow::ShowObjectsWindow()
 			ImGui::SameLine();
 			ImGui::Text("Flagged");
 
+			// Returns the widget collection for a given category; Cell Lighting and unknown
+			// categories return an empty collection since they have no standalone widget list.
+			auto getWidgetsForCategory = [&](const std::string& cat) -> const std::vector<std::unique_ptr<Widget>>& {
+				static const std::vector<std::unique_ptr<Widget>> emptyWidgets;
+				if (cat == "Weather") return weatherWidgets;
+				if (cat == "Lighting Template") return lightingTemplateWidgets;
+				if (cat == "ImageSpace") return imageSpaceWidgets;
+				if (cat == "Volumetric Lighting") return volumetricLightingWidgets;
+				if (cat == "Shader Particle Geometry") return precipitationWidgets;
+				if (cat == "Lens Flare") return lensFlareWidgets;
+				if (cat == "Visual Effect") return referenceEffectWidgets;
+				return emptyWidgets;
+			};
+
 			// Show recent widgets section for current category
 			auto recentIt = settings.recentWidgets.find(m_selectedCategory);
 			if (recentIt != settings.recentWidgets.end() && !recentIt->second.empty()) {
@@ -339,15 +362,7 @@ void EditorWindow::ShowObjectsWindow()
 						ImGui::SameLine();
 					if (ImGui::SmallButton(recentIt->second[i].c_str())) {
 						// Find and open widget in current category's collection
-						auto& widgets = m_selectedCategory == "Weather"                  ? weatherWidgets :
-						                m_selectedCategory == "Lighting Template"        ? lightingTemplateWidgets :
-						                m_selectedCategory == "ImageSpace"               ? imageSpaceWidgets :
-						                m_selectedCategory == "Volumetric Lighting"      ? volumetricLightingWidgets :
-						                m_selectedCategory == "Shader Particle Geometry" ? precipitationWidgets :
-						                m_selectedCategory == "Lens Flare"               ? lensFlareWidgets :
-						                m_selectedCategory == "Visual Effect"            ? referenceEffectWidgets :
-						                                                                   weatherWidgets;
-
+						const auto& widgets = getWidgetsForCategory(m_selectedCategory);
 						for (auto& widget : widgets) {
 							if (widget->GetEditorID() == recentIt->second[i]) {
 								widget->SetOpen(true);
@@ -414,15 +429,7 @@ void EditorWindow::ShowObjectsWindow()
 				}
 
 				// Display objects based on the selected category
-				std::vector<std::unique_ptr<Widget>> emptyWidgets;
-				const auto& widgets = m_selectedCategory == "Weather"                  ? weatherWidgets :
-				                      m_selectedCategory == "Cell Lighting"            ? emptyWidgets :
-				                      m_selectedCategory == "ImageSpace"               ? imageSpaceWidgets :
-				                      m_selectedCategory == "Volumetric Lighting"      ? volumetricLightingWidgets :
-				                      m_selectedCategory == "Shader Particle Geometry" ? precipitationWidgets :
-				                      m_selectedCategory == "Lens Flare"               ? lensFlareWidgets :
-				                      m_selectedCategory == "Visual Effect"            ? referenceEffectWidgets :
-				                                                                         lightingTemplateWidgets;
+				const auto& widgets = getWidgetsForCategory(m_selectedCategory);
 				// Sort widgets based on current sort column
 				std::vector<Widget*> sortedWidgets;
 				sortedWidgets.reserve(widgets.size());
@@ -578,6 +585,17 @@ void EditorWindow::ShowObjectsWindow()
 					}
 				}
 
+				// Centralized filter check used by both display loops below.
+				auto shouldShowWidget = [&](Widget* w) {
+					if (!MatchesObjectFilter(w))
+						return false;
+					if (m_showOnlyFavorites && !IsFavorite(w->GetEditorID()))
+						return false;
+					if (m_showOnlyFlagged && settings.markedRecords.find(w->GetEditorID()) == settings.markedRecords.end())
+						return false;
+					return true;
+				};
+
 				// Filtered display of widgets - show current cell's lighting template first
 				if (currentCellLightingTemplate && m_selectedCategory == "Lighting Template") {
 					for (int i = 0; i < sortedWidgets.size(); ++i) {
@@ -585,13 +603,7 @@ void EditorWindow::ShowObjectsWindow()
 						if (!ltWidget || ltWidget->lightingTemplate != currentCellLightingTemplate)
 							continue;
 
-						if (!MatchesObjectFilter(sortedWidgets[i]))
-							continue;
-
-						// Apply quick filters
-						if (m_showOnlyFavorites && !IsFavorite(sortedWidgets[i]->GetEditorID()))
-							continue;
-						if (m_showOnlyFlagged && settings.markedRecords.find(sortedWidgets[i]->GetEditorID()) == settings.markedRecords.end())
+						if (!shouldShowWidget(sortedWidgets[i]))
 							continue;
 
 						auto editorLabel = std::format("[CURRENT] {}", sortedWidgets[i]->GetEditorID());
@@ -675,13 +687,7 @@ void EditorWindow::ShowObjectsWindow()
 							continue;
 					}
 
-					if (!MatchesObjectFilter(sortedWidgets[i]))
-						continue;
-
-					// Apply quick filters
-					if (m_showOnlyFavorites && !IsFavorite(sortedWidgets[i]->GetEditorID()))
-						continue;
-					if (m_showOnlyFlagged && settings.markedRecords.find(sortedWidgets[i]->GetEditorID()) == settings.markedRecords.end())
+					if (!shouldShowWidget(sortedWidgets[i]))
 						continue;
 
 					auto editorLabel = sortedWidgets[i]->GetEditorID();
