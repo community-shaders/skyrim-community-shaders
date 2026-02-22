@@ -22,6 +22,8 @@
 #include "Features/PerformanceOverlay/ABTesting/ABTesting.h"
 #include "Features/VR.h"
 
+ImVec2 OverlayRenderer::screenScaleRatio{ 1.0f, 1.0f };
+
 void OverlayRenderer::RenderOverlay(
 	Menu& menu,
 	const std::function<void()>& processInputEventQueue,
