@@ -454,10 +454,17 @@ void SettingsTabRenderer::RenderThemesTab()
 		if (ImGui::Button("Refresh")) {
 			themeManager->RefreshThemes();
 			// Ensure a valid theme is still selected
-			const auto* themeInfo = themeManager->GetThemeInfo(globals::menu->GetSettings().SelectedThemePreset);
-			if (!themeInfo || (currentItem > 0 && currentItem < static_cast<int>(themes.size()) && themes[currentItem].name != currentThemePreset)) {
+			const auto* themeInfo = themeManager->GetThemeInfo(currentThemePreset);
+			if (!themeInfo) {
 				globals::menu->GetSettings().SelectedThemePreset = "Default";
-				currentItem = 0;
+				currentThemePreset = "Default";
+			}
+
+			for (size_t i = 0; i < themes.size(); ++i) {
+				if (themes[i].name == currentThemePreset) {
+					currentItem = static_cast<int>(i);
+					break;
+				}
 			}
 		}
 

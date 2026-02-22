@@ -1,5 +1,6 @@
 #include "ThemeManager.h"
 #include "../Menu.h"
+#include "ThemePresets.h"
 
 #include "BackgroundBlur.h"
 #include "Fonts.h"
@@ -674,10 +675,7 @@ std::filesystem::path ThemeManager::GetThemesDirectory() const
 
 bool ThemeManager::IsPresetTheme(const std::string& themeName) const
 {
-	static const std::array<const char*, 6> presetNames = {
-		"Default", "Light", "NordicFrost", "DragonBlood", "DwemerBronze", "HighContrast"
-	};
-	for (const char* preset : presetNames) {
+	for (const char* preset : ThemePresets::names) {
 		if (themeName == preset)
 			return true;
 	}
