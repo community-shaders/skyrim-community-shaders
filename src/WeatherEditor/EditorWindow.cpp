@@ -150,8 +150,9 @@ bool IconButton(const char* label, bool filled, const char* iconType)
 	return result;
 }
 
-namespace {
-constexpr const char* kFilterColumnNames[] = { "All", "Editor ID", "Form ID", "File", "Status" };
+namespace
+{
+	constexpr const char* kFilterColumnNames[] = { "All", "Editor ID", "Form ID", "File", "Status" };
 }  // namespace
 
 void EditorWindow::ResetObjectsFilter()
