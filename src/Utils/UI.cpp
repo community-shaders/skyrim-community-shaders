@@ -52,43 +52,38 @@ namespace Util
 	static int g_lastWindowWidth = 0;
 	static int g_lastWindowHeight = 0;
 
-	void RefreshScreenScale(HWND hwnd)
+	void RefreshScreenScale(HWND hwnd, float bufferWidth, float bufferHeight)
 	{
 		RECT rect{};
-		if (GetClientRect(hwnd, &rect) && rect.right > 0 && rect.bottom > 0) {
-			if (rect.right == g_lastWindowWidth && rect.bottom == g_lastWindowHeight) {
-				return;
-			}
+		if (!GetClientRect(hwnd, &rect) || rect.right <= 0 || rect.bottom <= 0)
+			return;
 
-			DXGI_SWAP_CHAIN_DESC sd{};
-			if (globals::d3d::swapChain && SUCCEEDED(globals::d3d::swapChain->GetDesc(&sd))) {
-				g_displaySize.x = static_cast<float>(sd.BufferDesc.Width);
-				g_displaySize.y = static_cast<float>(sd.BufferDesc.Height);
+		if (rect.right == g_lastWindowWidth && rect.bottom == g_lastWindowHeight)
+			return;
 
-				g_screenScaleRatio.x = g_displaySize.x / static_cast<float>(rect.right);
-				g_screenScaleRatio.y = g_displaySize.y / static_cast<float>(rect.bottom);
+		g_displaySize.x = bufferWidth;
+		g_displaySize.y = bufferHeight;
 
-				g_lastWindowWidth = rect.right;
-				g_lastWindowHeight = rect.bottom;
-			}
-		}
+		g_screenScaleRatio.x = bufferWidth / static_cast<float>(rect.right);
+		g_screenScaleRatio.y = bufferHeight / static_cast<float>(rect.bottom);
+
+		g_lastWindowWidth = rect.right;
+		g_lastWindowHeight = rect.bottom;
 	}
 
-	void UpdateImGuiInput(HWND hwnd)
+	void UpdateImGuiInput(HWND hwnd, float bufferWidth, float bufferHeight)
 	{
-		RefreshScreenScale(hwnd);
+		RefreshScreenScale(hwnd, bufferWidth, bufferHeight);
 
 		auto& io = ImGui::GetIO();
+		io.DisplaySize = g_displaySize;
 
-		if (g_lastWindowWidth > 0) {
-			io.DisplaySize = g_displaySize;
-
-			POINT cursorPos{};
-			if (GetCursorPos(&cursorPos) && ScreenToClient(hwnd, &cursorPos)) {
-				io.AddMousePosEvent(
-					static_cast<float>(cursorPos.x) * g_screenScaleRatio.x,
-					static_cast<float>(cursorPos.y) * g_screenScaleRatio.y);
-			}
+		POINT cursorPos{};
+		if (GetCursorPos(&cursorPos) &&
+			ScreenToClient(hwnd, &cursorPos)) {
+			io.AddMousePosEvent(
+				static_cast<float>(cursorPos.x) * g_screenScaleRatio.x,
+				static_cast<float>(cursorPos.y) * g_screenScaleRatio.y);
 		}
 	}
 

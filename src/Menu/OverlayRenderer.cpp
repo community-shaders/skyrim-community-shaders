@@ -119,13 +119,13 @@ void OverlayRenderer::InitializeImGuiFrame(Menu& menu)
 	ImGui_ImplDX11_NewFrame();
 	ImGui_ImplWin32_NewFrame();
 
-	if (globals::d3d::swapChain) {
-		DXGI_SWAP_CHAIN_DESC desc{};
-		if (SUCCEEDED(globals::d3d::swapChain->GetDesc(&desc))) {
-			HWND hwnd = desc.OutputWindow;
-			Util::UpdateImGuiInput(hwnd);
-		}
-	}
+	DXGI_SWAP_CHAIN_DESC desc{};
+	globals::d3d::swapChain->GetDesc(&desc);
+
+	Util::UpdateImGuiInput(
+		desc.OutputWindow,
+		static_cast<float>(desc.BufferDesc.Width),
+		static_cast<float>(desc.BufferDesc.Height));
 
 	ImGui::NewFrame();
 	ThemeManager::SetupImGuiStyle(menu);
