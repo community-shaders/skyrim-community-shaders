@@ -485,13 +485,15 @@ void SettingsTabRenderer::RenderThemesTab()
 		// Selected theme section: name + description
 		ImGui::Spacing();
 		ImGui::Separator();
-		ImGui::Spacing();
-		const auto& selectedTheme = themes[currentItem];
-		ImGui::Text("Selected Theme: ");
-		ImGui::SameLine();
-		ImGui::TextColored(themeSettings.StatusPalette.InfoColor, "%s", selectedTheme.displayName.c_str());
-		if (!selectedTheme.description.empty()) {
-			ImGui::TextWrapped("%s", selectedTheme.description.c_str());
+		if (currentItem >= 0 && currentItem < static_cast<int>(themes.size())) {
+			ImGui::Spacing();
+			const auto& selectedTheme = themes[currentItem];
+			ImGui::Text("Selected Theme: ");
+			ImGui::SameLine();
+			ImGui::TextColored(themeSettings.StatusPalette.InfoColor, "%s", selectedTheme.displayName.c_str());
+			if (!selectedTheme.description.empty()) {
+				ImGui::TextWrapped("%s", selectedTheme.description.c_str());
+			}
 		}
 		ImGui::Spacing();
 
