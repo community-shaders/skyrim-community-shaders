@@ -13,6 +13,7 @@
 #include "Features/SubsurfaceScattering.h"
 #include "Features/TerrainBlending.h"
 #include "Features/Upscaling.h"
+#include "Features/VR.h"
 #include "Features/WeatherEditor.h"
 
 #include "Hooks.h"
@@ -445,6 +446,12 @@ void Deferred::DeferredPasses()
 
 		context->Dispatch(dispatchCount.x, dispatchCount.y, 1);
 	}
+
+	// VR stereo consistency blend - depth-aware bilateral blend at the eye seam
+	// Runs after composite as a general safety net for all screen-space effects.
+	// Must run before clearing b12/b13 -- needs FrameBuffer matrices for reprojection.
+	if (globals::game::isVR)
+		globals::features::vr.DrawStereoBlend();
 
 	// Clear
 	{
