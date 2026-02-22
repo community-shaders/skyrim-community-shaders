@@ -298,14 +298,14 @@ void EditorWindow::ShowObjectsWindow()
 			// Each SameLine() contributes style.ItemSpacing.x; widths are listed explicitly
 			// so adding or removing a widget only requires updating its own expression.
 			const float fixedW =
-			    style.ItemSpacing.x + comboW +                                // combo
-			    style.ItemSpacing.x + helpW +                                 // help marker
-			    style.ItemSpacing.x + 10.0f +                                 // spacer before favorites
-			    style.ItemSpacing.x + iconW +                                 // fav icon
-			    style.ItemSpacing.x + ImGui::CalcTextSize("Favorites").x +   // "Favorites" label
-			    style.ItemSpacing.x + 10.0f +                                 // spacer before flagged
-			    style.ItemSpacing.x + iconW +                                 // flag icon
-			    style.ItemSpacing.x + ImGui::CalcTextSize("Flagged").x;      // "Flagged" label
+				style.ItemSpacing.x + comboW +                              // combo
+				style.ItemSpacing.x + helpW +                               // help marker
+				style.ItemSpacing.x + 10.0f +                               // spacer before favorites
+				style.ItemSpacing.x + iconW +                               // fav icon
+				style.ItemSpacing.x + ImGui::CalcTextSize("Favorites").x +  // "Favorites" label
+				style.ItemSpacing.x + 10.0f +                               // spacer before flagged
+				style.ItemSpacing.x + iconW +                               // flag icon
+				style.ItemSpacing.x + ImGui::CalcTextSize("Flagged").x;     // "Flagged" label
 			ImGui::SetNextItemWidth(std::max(50.0f, ImGui::GetContentRegionAvail().x - fixedW));
 			ImGui::InputTextWithHint("##ObjectFilter", "Filter... (Ctrl+F)", m_filterBuffer, sizeof(m_filterBuffer));
 
@@ -341,13 +341,20 @@ void EditorWindow::ShowObjectsWindow()
 			// categories return an empty collection since they have no standalone widget list.
 			auto getWidgetsForCategory = [&](const std::string& cat) -> const std::vector<std::unique_ptr<Widget>>& {
 				static const std::vector<std::unique_ptr<Widget>> emptyWidgets;
-				if (cat == "Weather") return weatherWidgets;
-				if (cat == "Lighting Template") return lightingTemplateWidgets;
-				if (cat == "ImageSpace") return imageSpaceWidgets;
-				if (cat == "Volumetric Lighting") return volumetricLightingWidgets;
-				if (cat == "Shader Particle Geometry") return precipitationWidgets;
-				if (cat == "Lens Flare") return lensFlareWidgets;
-				if (cat == "Visual Effect") return referenceEffectWidgets;
+				if (cat == "Weather")
+					return weatherWidgets;
+				if (cat == "Lighting Template")
+					return lightingTemplateWidgets;
+				if (cat == "ImageSpace")
+					return imageSpaceWidgets;
+				if (cat == "Volumetric Lighting")
+					return volumetricLightingWidgets;
+				if (cat == "Shader Particle Geometry")
+					return precipitationWidgets;
+				if (cat == "Lens Flare")
+					return lensFlareWidgets;
+				if (cat == "Visual Effect")
+					return referenceEffectWidgets;
 				return emptyWidgets;
 			};
 
