@@ -381,7 +381,7 @@ void SettingsTabRenderer::RenderThemesTab()
 		static char newThemeDisplayName[128] = "";
 		static char newThemeDescription[256] = "";
 		static bool showValidationError = false;
-	
+
 		// Update feedback tracking
 		static bool showUpdateFeedback = false;
 		struct ChangedSetting
@@ -426,7 +426,7 @@ void SettingsTabRenderer::RenderThemesTab()
 		// Find current selection index - default to "Default" if no theme selected
 		int currentItem = 0;  // Default to first theme (Default Dark)
 		std::string currentThemePreset = globals::menu->GetSettings().SelectedThemePreset;
-		
+
 		// If no theme is selected, default to "Default"
 		if (currentThemePreset.empty()) {
 			currentThemePreset = "Default";
@@ -602,9 +602,12 @@ void SettingsTabRenderer::RenderThemesTab()
 			bool isDuplicateDisplayName = false;
 
 			for (const auto& t : themes) {
-				if (iequals(t.name, safeNewThemeName)) isDuplicateName = true;
-				if (strlen(newThemeDisplayName) > 0 && iequals(t.displayName, newThemeDisplayName)) isDuplicateDisplayName = true;
-				if (isDuplicateName && isDuplicateDisplayName) break;
+				if (iequals(t.name, safeNewThemeName))
+					isDuplicateName = true;
+				if (strlen(newThemeDisplayName) > 0 && iequals(t.displayName, newThemeDisplayName))
+					isDuplicateDisplayName = true;
+				if (isDuplicateName && isDuplicateDisplayName)
+					break;
 			}
 			bool isThemeNameError = isThemeNameEmpty || isDuplicateName;
 

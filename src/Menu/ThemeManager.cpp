@@ -554,8 +554,7 @@ std::vector<std::string> ThemeManager::GetThemeNames() const
 
 std::string ThemeManager::SanitizeThemeFileName(std::string themeName)
 {
-	std::replace_if(themeName.begin(), themeName.end(),
-		[](char c) { return c == '\\' || c == '/' || c == ':' || c == '*' || c == '?' || c == '"' || c == '<' || c == '>' || c == '|'; }, '_');
+	std::replace_if(themeName.begin(), themeName.end(), [](char c) { return c == '\\' || c == '/' || c == ':' || c == '*' || c == '?' || c == '"' || c == '<' || c == '>' || c == '|'; }, '_');
 	return themeName;
 }
 
@@ -679,7 +678,8 @@ bool ThemeManager::IsPresetTheme(const std::string& themeName) const
 		"Default", "Light", "NordicFrost", "DragonBlood", "DwemerBronze", "HighContrast"
 	};
 	for (const char* preset : presetNames) {
-		if (themeName == preset) return true;
+		if (themeName == preset)
+			return true;
 	}
 	return false;
 }
