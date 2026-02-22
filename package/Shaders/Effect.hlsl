@@ -882,11 +882,11 @@ PS_OUTPUT main(PS_INPUT input)
 #	if defined(LIGHTING) && defined(LIGHT_LIMIT_FIX) && defined(LLFDEBUG)
 	if (SharedData::lightLimitFixSettings.EnableLightsVisualisation) {
 		if (SharedData::lightLimitFixSettings.LightsVisualisationMode == 0) {
-			psout.Diffuse.xyz = LightLimitFix::TurboColormap(0.0);
+			psout.Diffuse.xyz = Color::TurboColormap(0.0);
 		} else if (SharedData::lightLimitFixSettings.LightsVisualisationMode == 1) {
-			psout.Diffuse.xyz = LightLimitFix::TurboColormap(0.0);
+			psout.Diffuse.xyz = Color::TurboColormap(0.0);
 		} else {
-			psout.Diffuse.xyz = LightLimitFix::TurboColormap((float)lightCount / MAX_CLUSTER_LIGHTS);
+			psout.Diffuse.xyz = Color::TurboColormap((float)lightCount / MAX_CLUSTER_LIGHTS);
 		}
 	}
 #	endif
