@@ -828,11 +828,11 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #			if defined(LIGHT_LIMIT_FIX) && defined(LLFDEBUG)
 	if (SharedData::lightLimitFixSettings.EnableLightsVisualisation) {
 		if (SharedData::lightLimitFixSettings.LightsVisualisationMode == 0) {
-			diffuseColor.xyz = LightLimitFix::TurboColormap(0);
+			diffuseColor.xyz = Color::TurboColormap(0);
 		} else if (SharedData::lightLimitFixSettings.LightsVisualisationMode == 1) {
-			diffuseColor.xyz = LightLimitFix::TurboColormap(0);
+			diffuseColor.xyz = Color::TurboColormap(0);
 		} else {
-			diffuseColor.xyz = LightLimitFix::TurboColormap((float)lightCount / MAX_CLUSTER_LIGHTS);
+			diffuseColor.xyz = Color::TurboColormap((float)lightCount / MAX_CLUSTER_LIGHTS);
 		}
 	} else {
 		psout.Diffuse = float4(diffuseColor, 1);
