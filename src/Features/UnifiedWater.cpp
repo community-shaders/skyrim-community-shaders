@@ -457,6 +457,25 @@ void UnifiedWater::BGSTerrainBlock_Detach::thunk(RE::BGSTerrainBlock* block)
 void UnifiedWater::BSWaterShader_SetupGeometry::thunk(RE::BSShader* waterShader, RE::BSRenderPass* pass)
 {
 	const auto& singleton = globals::features::unifiedWater;
+	// Fix BSWaterShaderProperty.plane after interior->exterior transitions.
+	// The plane feeds ReflectPlane in the PerGeometry cbuffer. When corrupted (e.g., plane.constant = 0
+	// or garbage), the shader's refractionPlaneMul calculation produces extreme values causing flickering.
+	// This primarily affects flowmapped water because it uses more complex refraction depth calculations.
+	if (const auto prop = pass->geometry->GetGeometryRuntimeData().properties[1].get(); prop && prop->GetRTTI() == globals::rtti::BSWaterShaderPropertyRTTI.get()) {
+		const auto waterShaderProp = static_cast<RE::BSWaterShaderProperty*>(prop);
+		const float waterHeight = pass->geometry->world.translate.z;
+
+		// Validate and fix the plane if it's corrupted.
+		// A valid water plane has normal pointing up (0,0,1) and constant = water height.
+		// After interior->exterior transitions, plane.constant can be 0 or stale values.
+		const bool planeNormalBad = std::abs(waterShaderProp->plane.normal.z - 1.0f) > 0.01f;
+		const bool planeConstantBad = std::abs(waterShaderProp->plane.constant - waterHeight) > 1.0f;
+		if (planeNormalBad || planeConstantBad) {
+			waterShaderProp->plane.normal = { 0.0f, 0.0f, 1.0f };
+			waterShaderProp->plane.constant = waterHeight;
+		}
+	}
+
 	if (singleton.flowmap) {
 		// ObjectUV.xyz below, xy contains width and height, z contains mesh scale
 		// Previously flowmap size was in x, yz contained flowmap offset for water displacement mesh
