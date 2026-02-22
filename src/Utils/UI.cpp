@@ -17,6 +17,7 @@
 #include <DirectXTex.h>
 #include <d3d11.h>
 #include <dinput.h>
+#include <dxgi.h>
 #include <imgui.h>
 #include <imgui_internal.h>
 #include <wrl/client.h>
@@ -45,6 +46,47 @@
 
 namespace Util
 {
+	static ImVec2 g_screenScaleRatio = { 1.0f, 1.0f };
+	static ImVec2 g_displaySize = { 0.0f, 0.0f };
+
+	static int g_lastWindowWidth = 0;
+	static int g_lastWindowHeight = 0;
+
+	void RefreshScreenScale(HWND hwnd, float bufferWidth, float bufferHeight)
+	{
+		RECT rect{};
+		if (!GetClientRect(hwnd, &rect) || rect.right <= 0 || rect.bottom <= 0)
+			return;
+
+		if (rect.right == g_lastWindowWidth && rect.bottom == g_lastWindowHeight)
+			return;
+
+		g_displaySize.x = bufferWidth;
+		g_displaySize.y = bufferHeight;
+
+		g_screenScaleRatio.x = bufferWidth / static_cast<float>(rect.right);
+		g_screenScaleRatio.y = bufferHeight / static_cast<float>(rect.bottom);
+
+		g_lastWindowWidth = rect.right;
+		g_lastWindowHeight = rect.bottom;
+	}
+
+	void UpdateImGuiInput(HWND hwnd, float bufferWidth, float bufferHeight)
+	{
+		RefreshScreenScale(hwnd, bufferWidth, bufferHeight);
+
+		auto& io = ImGui::GetIO();
+		io.DisplaySize = g_displaySize;
+
+		POINT cursorPos{};
+		if (GetCursorPos(&cursorPos) &&
+			ScreenToClient(hwnd, &cursorPos)) {
+			io.AddMousePosEvent(
+				static_cast<float>(cursorPos.x) * g_screenScaleRatio.x,
+				static_cast<float>(cursorPos.y) * g_screenScaleRatio.y);
+		}
+	}
+
 	HoverTooltipWrapper::HoverTooltipWrapper() :
 		previousFont(nullptr)
 	{

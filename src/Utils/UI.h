@@ -49,6 +49,7 @@ class Feature;
 
 namespace Util
 {
+	void UpdateImGuiInput(HWND hwnd, float bufferWidth, float bufferHeight);
 	/**
 	 * Represents a single line and its color for any colored text rendering (tooltips, legends, etc.).
 	 */

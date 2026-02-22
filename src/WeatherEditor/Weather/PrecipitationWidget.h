@@ -13,6 +13,7 @@ public:
 			LoadFromGameSettings();
 			vanillaSettings = settings;
 			originalSettings = settings;
+			strncpy_s(textureBuffer, sizeof(textureBuffer), settings.particleTexture.c_str(), _TRUNCATE);
 		}
 	}
 
@@ -51,4 +52,5 @@ private:
 	Settings settings;
 	Settings vanillaSettings;
 	Settings originalSettings;
+	char textureBuffer[256] = {};
 };

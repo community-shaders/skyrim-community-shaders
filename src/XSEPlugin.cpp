@@ -181,7 +181,8 @@ bool Load()
 		L"Data/SKSE/Plugins/EVLaS.dll",
 		L"Data/SKSE/Plugins/AELAS.dll",
 		L"Data/SKSE/Plugins/SSEReShadeHelper.dll",
-		L"Data/SKSE/Plugins/trainwreck.dll"
+		L"Data/SKSE/Plugins/trainwreck.dll",
+		L"Data/SKSE/Plugins/TAASharpen.dll"
 	};
 
 	for (const auto dll : incompatibleDLLs) {

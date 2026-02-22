@@ -122,17 +122,67 @@ bool IconButton(const char* label, bool filled, const char* iconType)
 	return result;
 }
 
+namespace
+{
+	constexpr const char* kFilterColumnNames[] = { "All", "Editor ID", "Form ID", "File", "Status" };
+}  // namespace
+
+void EditorWindow::ResetObjectsFilter()
+{
+	m_currentFilterColumn = FilterColumn::All;
+	m_filterBuffer[0] = '\0';
+	m_showOnlyFlagged = false;
+	m_showOnlyFavorites = false;
+}
+
+bool EditorWindow::MatchesObjectFilter(Widget* w) const
+{
+	static_assert(static_cast<int>(FilterColumn::Count_) == IM_ARRAYSIZE(kFilterColumnNames),
+		"kFilterColumnNames must have one entry per FilterColumn value");
+	if (!w)
+		return false;
+	if (m_filterBuffer[0] == '\0')
+		return true;
+	switch (m_currentFilterColumn) {
+	case FilterColumn::EditorID:
+		return ContainsStringIgnoreCase(w->GetEditorID(), m_filterBuffer);
+	case FilterColumn::FormID:
+		return ContainsStringIgnoreCase(w->GetFormID(), m_filterBuffer);
+	case FilterColumn::File:
+		return ContainsStringIgnoreCase(w->GetFilename(), m_filterBuffer);
+	case FilterColumn::Status:
+		{
+			auto it = settings.markedRecords.find(w->GetEditorID());
+			return it != settings.markedRecords.end() && ContainsStringIgnoreCase(it->second, m_filterBuffer);
+		}
+	case FilterColumn::All:
+	default:
+		{
+			const auto editorId = w->GetEditorID();
+			if (ContainsStringIgnoreCase(editorId, m_filterBuffer))
+				return true;
+			if (ContainsStringIgnoreCase(w->GetFormID(), m_filterBuffer))
+				return true;
+			if (ContainsStringIgnoreCase(w->GetFilename(), m_filterBuffer))
+				return true;
+			auto it = settings.markedRecords.find(editorId);
+			if (it != settings.markedRecords.end() && ContainsStringIgnoreCase(it->second, m_filterBuffer))
+				return true;
+			return false;
+		}
+	}
+}
+
 void EditorWindow::ShowObjectsWindow()
 {
 	ImGui::Begin("Weather and Lighting Browser");
 
-	// Static variable to track the selected category
-	static std::string selectedCategory = "Weather";
-
-	// Static variable for filtering objects
-	static char filterBuffer[256] = "";
-	static bool showOnlyFlagged = false;
-	static bool showOnlyFavorites = false;
+	// Reset filter state when the user switches categories so stale column
+	// selections (e.g. Status) don't hide all items in the new category.
+	if (m_selectedCategory != m_previousSelectedCategory) {
+		ResetObjectsFilter();
+		m_previousSelectedCategory = m_selectedCategory;
+	}
 
 	// Create a table with two columns
 	if (ImGui::BeginTable("ObjectTable", 2, ImGuiTableFlags_Resizable | ImGuiTableFlags_BordersInner | ImGuiTableFlags_NoHostExtendX)) {
@@ -157,8 +207,8 @@ void EditorWindow::ShowObjectsWindow()
 			const char* categories[] = { "Weather", "ImageSpace", "Lighting Template", "Cell Lighting", "Volumetric Lighting", "Shader Particle Geometry", "Lens Flare", "Visual Effect", "Interior Only" };
 			for (int i = 0; i < IM_ARRAYSIZE(categories); ++i) {
 				// Highlight the selected category
-				if (ImGui::Selectable(categories[i], selectedCategory == categories[i])) {
-					selectedCategory = categories[i];  // Update selected category
+				if (ImGui::Selectable(categories[i], m_selectedCategory == categories[i])) {
+					m_selectedCategory = categories[i];  // Update selected category
 				}
 			}
 			ImGui::EndListBox();
@@ -169,9 +219,9 @@ void EditorWindow::ShowObjectsWindow()
 		// Right column: Objects
 		ImGui::TableSetColumnIndex(1);
 
-		if (ImGui::BeginChild("##ObjectsContent", { 0, 0 }, ImGuiChildFlags_Border)) {
+		if (ImGui::BeginChild("##ObjectsContent", { 0, 0 }, ImGuiChildFlags_Border, kStickyHeaderFlags)) {
 			// Interior Only category has its own panel
-			if (selectedCategory == "Interior Only") {
+			if (m_selectedCategory == "Interior Only") {
 				InteriorOnlyPanel::Draw();
 				ImGui::EndChild();
 				ImGui::EndTable();
@@ -212,17 +262,42 @@ void EditorWindow::ShowObjectsWindow()
 					ImGui::SetKeyboardFocusHere();
 				}
 			}
-			ImGui::InputTextWithHint("##ObjectFilter", "Filter... (Ctrl+F)", filterBuffer, sizeof(filterBuffer));
+			// Compute fixed widths once; reuse for both the search bar and the following combo.
+			const auto& style = ImGui::GetStyle();
+			// comboW = preview text + left/right padding + arrow button
+			const float comboW = ImGui::CalcTextSize("Editor ID").x + style.FramePadding.x * 2.0f + ImGui::GetFrameHeight();
+			const float helpW = ImGui::CalcTextSize("(?)").x;
+			const float iconW = ImGui::GetFrameHeight();
+			// Fixed width is the sum of every item that follows the search bar on the same row.
+			// Each SameLine() contributes style.ItemSpacing.x; widths are listed explicitly
+			// so adding or removing a widget only requires updating its own expression.
+			const float fixedW =
+				style.ItemSpacing.x + comboW +                              // combo
+				style.ItemSpacing.x + helpW +                               // help marker
+				style.ItemSpacing.x + 10.0f +                               // spacer before favorites
+				style.ItemSpacing.x + iconW +                               // fav icon
+				style.ItemSpacing.x + ImGui::CalcTextSize("Favorites").x +  // "Favorites" label
+				style.ItemSpacing.x + 10.0f +                               // spacer before flagged
+				style.ItemSpacing.x + iconW +                               // flag icon
+				style.ItemSpacing.x + ImGui::CalcTextSize("Flagged").x;     // "Flagged" label
+			ImGui::SetNextItemWidth(std::max(50.0f, ImGui::GetContentRegionAvail().x - fixedW));
+			ImGui::InputTextWithHint("##ObjectFilter", "Filter... (Ctrl+F)", m_filterBuffer, sizeof(m_filterBuffer));
 
 			ImGui::SameLine();
-			Util::HelpMarker("Type a part of an object name to filter the list.\nCtrl+F: Focus search\nEnter: Open selected");
+			ImGui::SetNextItemWidth(comboW);
+			int col = static_cast<int>(m_currentFilterColumn);
+			if (ImGui::Combo("##FilterBy", &col, kFilterColumnNames, IM_ARRAYSIZE(kFilterColumnNames)))
+				m_currentFilterColumn = static_cast<FilterColumn>(col);
+
+			ImGui::SameLine();
+			Util::HelpMarker("Filter the object list by the selected column.\nAll: searches Editor ID, Form ID, File, and Status.\nStatus: hides items with no status marker when the search box is non-empty.\nCtrl+F: Focus search\nEnter: Open selected");
 
 			// Quick filter buttons on same row
 			ImGui::SameLine();
 			ImGui::Dummy(ImVec2(10.0f, 0.0f));  // Spacer
 			ImGui::SameLine();
-			if (IconButton("##filterFavorites", showOnlyFavorites, "star")) {
-				showOnlyFavorites = !showOnlyFavorites;
+			if (IconButton("##filterFavorites", m_showOnlyFavorites, "star")) {
+				m_showOnlyFavorites = !m_showOnlyFavorites;
 			}
 			ImGui::SameLine();
 			ImGui::Text("Favorites");
@@ -230,14 +305,35 @@ void EditorWindow::ShowObjectsWindow()
 			ImGui::SameLine();
 			ImGui::Dummy(ImVec2(10.0f, 0.0f));  // Spacer
 			ImGui::SameLine();
-			if (IconButton("##filterFlagged", showOnlyFlagged, "circle")) {
-				showOnlyFlagged = !showOnlyFlagged;
+			if (IconButton("##filterFlagged", m_showOnlyFlagged, "circle")) {
+				m_showOnlyFlagged = !m_showOnlyFlagged;
 			}
 			ImGui::SameLine();
 			ImGui::Text("Flagged");
 
+			// Returns the widget collection for a given category; Cell Lighting and unknown
+			// categories return an empty collection since they have no standalone widget list.
+			auto getWidgetsForCategory = [&](const std::string& cat) -> const std::vector<std::unique_ptr<Widget>>& {
+				static const std::vector<std::unique_ptr<Widget>> emptyWidgets;
+				if (cat == "Weather")
+					return weatherWidgets;
+				if (cat == "Lighting Template")
+					return lightingTemplateWidgets;
+				if (cat == "ImageSpace")
+					return imageSpaceWidgets;
+				if (cat == "Volumetric Lighting")
+					return volumetricLightingWidgets;
+				if (cat == "Shader Particle Geometry")
+					return precipitationWidgets;
+				if (cat == "Lens Flare")
+					return lensFlareWidgets;
+				if (cat == "Visual Effect")
+					return referenceEffectWidgets;
+				return emptyWidgets;
+			};
+
 			// Show recent widgets section for current category
-			auto recentIt = settings.recentWidgets.find(selectedCategory);
+			auto recentIt = settings.recentWidgets.find(m_selectedCategory);
 			if (recentIt != settings.recentWidgets.end() && !recentIt->second.empty()) {
 				ImGui::Spacing();
 				ImGui::TextColored(Menu::GetSingleton()->GetTheme().StatusPalette.InfoColor, "Recent:");
@@ -247,15 +343,7 @@ void EditorWindow::ShowObjectsWindow()
 						ImGui::SameLine();
 					if (ImGui::SmallButton(recentIt->second[i].c_str())) {
 						// Find and open widget in current category's collection
-						auto& widgets = selectedCategory == "Weather"                  ? weatherWidgets :
-						                selectedCategory == "Lighting Template"        ? lightingTemplateWidgets :
-						                selectedCategory == "ImageSpace"               ? imageSpaceWidgets :
-						                selectedCategory == "Volumetric Lighting"      ? volumetricLightingWidgets :
-						                selectedCategory == "Shader Particle Geometry" ? precipitationWidgets :
-						                selectedCategory == "Lens Flare"               ? lensFlareWidgets :
-						                selectedCategory == "Visual Effect"            ? referenceEffectWidgets :
-						                                                                 weatherWidgets;
-
+						const auto& widgets = getWidgetsForCategory(m_selectedCategory);
 						for (auto& widget : widgets) {
 							if (widget->GetEditorID() == recentIt->second[i]) {
 								widget->SetOpen(true);
@@ -265,6 +353,9 @@ void EditorWindow::ShowObjectsWindow()
 					}
 				}
 			}
+
+			// Scrollable area for the object table
+			BeginScrollableContent("##ObjectsScrollable");
 
 			// Stable user IDs for sortable columns — used instead of ColumnIndex so reordering/insertion won't break sorting.
 			enum ColumnID : ImGuiID
@@ -322,15 +413,7 @@ void EditorWindow::ShowObjectsWindow()
 				}
 
 				// Display objects based on the selected category
-				std::vector<std::unique_ptr<Widget>> emptyWidgets;
-				const auto& widgets = selectedCategory == "Weather"                  ? weatherWidgets :
-				                      selectedCategory == "Cell Lighting"            ? emptyWidgets :
-				                      selectedCategory == "ImageSpace"               ? imageSpaceWidgets :
-				                      selectedCategory == "Volumetric Lighting"      ? volumetricLightingWidgets :
-				                      selectedCategory == "Shader Particle Geometry" ? precipitationWidgets :
-				                      selectedCategory == "Lens Flare"               ? lensFlareWidgets :
-				                      selectedCategory == "Visual Effect"            ? referenceEffectWidgets :
-				                                                                       lightingTemplateWidgets;
+				const auto& widgets = getWidgetsForCategory(m_selectedCategory);
 				// Sort widgets based on current sort column
 				std::vector<Widget*> sortedWidgets;
 				sortedWidgets.reserve(widgets.size());
@@ -397,7 +480,7 @@ void EditorWindow::ShowObjectsWindow()
 				};
 
 				// Special handling for Cell Lighting category
-				if (selectedCategory == "Cell Lighting") {
+				if (m_selectedCategory == "Cell Lighting") {
 					auto player = RE::PlayerCharacter::GetSingleton();
 					if (player && player->parentCell) {
 						auto cell = player->parentCell;
@@ -478,7 +561,7 @@ void EditorWindow::ShowObjectsWindow()
 
 				// Get current cell's lighting template for prioritization
 				RE::BGSLightingTemplate* currentCellLightingTemplate = nullptr;
-				if (selectedCategory == "Lighting Template") {
+				if (m_selectedCategory == "Lighting Template") {
 					auto player = RE::PlayerCharacter::GetSingleton();
 					if (player && player->parentCell) {
 						auto& cellData = player->parentCell->GetRuntimeData();
@@ -486,20 +569,25 @@ void EditorWindow::ShowObjectsWindow()
 					}
 				}
 
+				// Centralized filter check used by both display loops below.
+				auto shouldShowWidget = [&](Widget* w) {
+					if (!MatchesObjectFilter(w))
+						return false;
+					if (m_showOnlyFavorites && !IsFavorite(w->GetEditorID()))
+						return false;
+					if (m_showOnlyFlagged && settings.markedRecords.find(w->GetEditorID()) == settings.markedRecords.end())
+						return false;
+					return true;
+				};
+
 				// Filtered display of widgets - show current cell's lighting template first
-				if (currentCellLightingTemplate && selectedCategory == "Lighting Template") {
+				if (currentCellLightingTemplate && m_selectedCategory == "Lighting Template") {
 					for (int i = 0; i < sortedWidgets.size(); ++i) {
 						auto* ltWidget = dynamic_cast<LightingTemplateWidget*>(sortedWidgets[i]);
 						if (!ltWidget || ltWidget->lightingTemplate != currentCellLightingTemplate)
 							continue;
 
-						if (!ContainsStringIgnoreCase(sortedWidgets[i]->GetEditorID(), filterBuffer))
-							continue;
-
-						// Apply quick filters
-						if (showOnlyFavorites && !IsFavorite(sortedWidgets[i]->GetEditorID()))
-							continue;
-						if (showOnlyFlagged && settings.markedRecords.find(sortedWidgets[i]->GetEditorID()) == settings.markedRecords.end())
+						if (!shouldShowWidget(sortedWidgets[i]))
 							continue;
 
 						auto editorLabel = std::format("[CURRENT] {}", sortedWidgets[i]->GetEditorID());
@@ -526,14 +614,14 @@ void EditorWindow::ShowObjectsWindow()
 						if (Util::TableRowSelectable(editorLabel.c_str(), isSelected, ImGuiSelectableFlags_SpanAllColumns | ImGuiSelectableFlags_AllowDoubleClick | ImGuiSelectableFlags_AllowOverlap)) {
 							if (ImGui::IsMouseDoubleClicked(0)) {
 								sortedWidgets[i]->SetOpen(true);
-								AddToRecent(sortedWidgets[i]->GetEditorID(), selectedCategory);
+								AddToRecent(sortedWidgets[i]->GetEditorID(), m_selectedCategory);
 							}
 						}
 
 						// Enter key to open
 						if (isSelected && ImGui::IsKeyPressed(ImGuiKey_Enter)) {
 							sortedWidgets[i]->SetOpen(true);
-							AddToRecent(sortedWidgets[i]->GetEditorID(), selectedCategory);
+							AddToRecent(sortedWidgets[i]->GetEditorID(), m_selectedCategory);
 						}
 
 						// Context menu
@@ -577,19 +665,13 @@ void EditorWindow::ShowObjectsWindow()
 				// Filtered display of widgets - regular list
 				for (int i = 0; i < sortedWidgets.size(); ++i) {
 					// Skip current cell's lighting template if already shown
-					if (currentCellLightingTemplate && selectedCategory == "Lighting Template") {
+					if (currentCellLightingTemplate && m_selectedCategory == "Lighting Template") {
 						auto* ltWidget = dynamic_cast<LightingTemplateWidget*>(sortedWidgets[i]);
 						if (ltWidget && ltWidget->lightingTemplate == currentCellLightingTemplate)
 							continue;
 					}
 
-					if (!ContainsStringIgnoreCase(sortedWidgets[i]->GetEditorID(), filterBuffer))
-						continue;
-
-					// Apply quick filters
-					if (showOnlyFavorites && !IsFavorite(sortedWidgets[i]->GetEditorID()))
-						continue;
-					if (showOnlyFlagged && settings.markedRecords.find(sortedWidgets[i]->GetEditorID()) == settings.markedRecords.end())
+					if (!shouldShowWidget(sortedWidgets[i]))
 						continue;
 
 					auto editorLabel = sortedWidgets[i]->GetEditorID();
@@ -617,12 +699,12 @@ void EditorWindow::ShowObjectsWindow()
 					if (Util::TableRowSelectable(editorLabel.c_str(), isSelected, ImGuiSelectableFlags_SpanAllColumns | ImGuiSelectableFlags_AllowDoubleClick | ImGuiSelectableFlags_AllowOverlap)) {
 						if (ImGui::IsMouseDoubleClicked(0)) {
 							sortedWidgets[i]->SetOpen(true);
-							AddToRecent(sortedWidgets[i]->GetEditorID(), selectedCategory);
+							AddToRecent(sortedWidgets[i]->GetEditorID(), m_selectedCategory);
 						}
 					}
 
 					// Show ImageSpace and VolumetricLighting info for weather widgets
-					if (!weatherTooltipShownThisFrame && selectedCategory == "Weather" && ImGui::IsItemHovered()) {
+					if (!weatherTooltipShownThisFrame && m_selectedCategory == "Weather" && ImGui::IsItemHovered()) {
 						auto* weatherWidget = dynamic_cast<WeatherWidget*>(sortedWidgets[i]);
 						if (weatherWidget && weatherWidget->weather) {
 							const float lineHeight = ImGui::GetTextLineHeightWithSpacing();
@@ -663,7 +745,7 @@ void EditorWindow::ShowObjectsWindow()
 					// Enter key to open
 					if (isSelected && ImGui::IsKeyPressed(ImGuiKey_Enter)) {
 						sortedWidgets[i]->SetOpen(true);
-						AddToRecent(sortedWidgets[i]->GetEditorID(), selectedCategory);
+						AddToRecent(sortedWidgets[i]->GetEditorID(), m_selectedCategory);
 					}
 
 					// Opens a context menu on right click to mark records by color
@@ -708,6 +790,8 @@ void EditorWindow::ShowObjectsWindow()
 
 				ImGui::EndTable();  // End DetailsTable
 			}  // End if BeginTable("DetailsTable")
+
+			EndScrollableContent();  // End ObjectsScrollable
 
 		}  // End if BeginChild("##ObjectsContent")
 		ImGui::EndChild();  // End ObjectsContent child
