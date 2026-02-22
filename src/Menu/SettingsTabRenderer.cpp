@@ -456,8 +456,8 @@ void SettingsTabRenderer::RenderThemesTab()
 			// Ensure a valid theme is still selected
 			const auto* themeInfo = themeManager->GetThemeInfo(currentThemePreset);
 			if (!themeInfo) {
-				globals::menu->GetSettings().SelectedThemePreset = "Default";
 				currentThemePreset = "Default";
+				globals::menu->GetSettings().SelectedThemePreset = "Default";
 			}
 
 			for (size_t i = 0; i < themes.size(); ++i) {
@@ -606,7 +606,7 @@ void SettingsTabRenderer::RenderThemesTab()
 			ImGui::Separator();
 
 			auto safeNewThemeName = themeManager->SanitizeThemeFileName(newThemeName);
-			bool isThemeNameEmpty = strlen(newThemeName) == 0;
+			bool isThemeNameEmpty = strlen(safeNewThemeName) == 0;
 			bool isDuplicateName = false;
 			bool isDuplicateDisplayName = false;
 
