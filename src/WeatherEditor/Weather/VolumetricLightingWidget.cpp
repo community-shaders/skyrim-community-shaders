@@ -15,21 +15,21 @@ void VolumetricLightingWidget::DrawWidget()
 		if (ImGui::BeginTabItem("Basic")) {
 			BeginScrollableContent("##BasicScroll");
 			ImGui::SeparatorText("Intensity");
-				if (WeatherUtils::DrawSliderFloat("Intensity", settings.intensity, 0.0f, 50.0f))
-					changed = true;
+			if (WeatherUtils::DrawSliderFloat("Intensity", settings.intensity, 0.0f, 50.0f))
+				changed = true;
 
-				ImGui::SeparatorText("Custom Color");
-				if (WeatherUtils::DrawSliderFloat("Contribution", settings.customColorContribution, 0.0f, 1.0f))
-					changed = true;
+			ImGui::SeparatorText("Custom Color");
+			if (WeatherUtils::DrawSliderFloat("Contribution", settings.customColorContribution, 0.0f, 1.0f))
+				changed = true;
 
-				ImGui::SeparatorText("RGB Color");
-				float3 rgbColor{ settings.red, settings.green, settings.blue };
-				if (WeatherUtils::DrawColorEdit("Color", rgbColor)) {
-					settings.red = rgbColor.x;
-					settings.green = rgbColor.y;
-					settings.blue = rgbColor.z;
-					changed = true;
-				}
+			ImGui::SeparatorText("RGB Color");
+			float3 rgbColor{ settings.red, settings.green, settings.blue };
+			if (WeatherUtils::DrawColorEdit("Color", rgbColor)) {
+				settings.red = rgbColor.x;
+				settings.green = rgbColor.y;
+				settings.blue = rgbColor.z;
+				changed = true;
+			}
 
 			EndScrollableContent();
 			ImGui::EndTabItem();
@@ -38,14 +38,14 @@ void VolumetricLightingWidget::DrawWidget()
 		if (ImGui::BeginTabItem("Density")) {
 			BeginScrollableContent("##DensityScroll");
 			ImGui::SeparatorText("Density Settings");
-				if (WeatherUtils::DrawSliderFloat("Contribution", settings.densityContribution, 0.0f, 1.0f))
-					changed = true;
-				if (WeatherUtils::DrawSliderFloat("Size", settings.densitySize, 0.1f, 10000.0f))
-					changed = true;
-				if (WeatherUtils::DrawSliderFloat("Wind Speed", settings.densityWindSpeed, 0.0f, 100.0f))
-					changed = true;
-				if (WeatherUtils::DrawSliderFloat("Falling Speed", settings.densityFallingSpeed, 0.0f, 100.0f))
-					changed = true;
+			if (WeatherUtils::DrawSliderFloat("Contribution", settings.densityContribution, 0.0f, 1.0f))
+				changed = true;
+			if (WeatherUtils::DrawSliderFloat("Size", settings.densitySize, 0.1f, 10000.0f))
+				changed = true;
+			if (WeatherUtils::DrawSliderFloat("Wind Speed", settings.densityWindSpeed, 0.0f, 100.0f))
+				changed = true;
+			if (WeatherUtils::DrawSliderFloat("Falling Speed", settings.densityFallingSpeed, 0.0f, 100.0f))
+				changed = true;
 
 			EndScrollableContent();
 			ImGui::EndTabItem();
@@ -54,14 +54,14 @@ void VolumetricLightingWidget::DrawWidget()
 		if (ImGui::BeginTabItem("Advanced")) {
 			BeginScrollableContent("##AdvancedScroll");
 			ImGui::SeparatorText("Phase Function");
-				if (WeatherUtils::DrawSliderFloat("Contribution", settings.phaseFunctionContribution, 0.0f, 1.0f))
-					changed = true;
-				if (WeatherUtils::DrawSliderFloat("Scattering", settings.phaseFunctionScattering, 0.0f, 1.0f))
-					changed = true;
+			if (WeatherUtils::DrawSliderFloat("Contribution", settings.phaseFunctionContribution, 0.0f, 1.0f))
+				changed = true;
+			if (WeatherUtils::DrawSliderFloat("Scattering", settings.phaseFunctionScattering, 0.0f, 1.0f))
+				changed = true;
 
-				ImGui::SeparatorText("Sampling");
-				if (WeatherUtils::DrawSliderFloat("Range Factor", settings.samplingRangeFactor, 0.0f, 160.0f))
-					changed = true;
+			ImGui::SeparatorText("Sampling");
+			if (WeatherUtils::DrawSliderFloat("Range Factor", settings.samplingRangeFactor, 0.0f, 160.0f))
+				changed = true;
 
 			EndScrollableContent();
 			ImGui::EndTabItem();

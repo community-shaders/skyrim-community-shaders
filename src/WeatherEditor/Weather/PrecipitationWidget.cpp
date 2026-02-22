@@ -15,24 +15,24 @@ void PrecipitationWidget::DrawWidget()
 		if (ImGui::BeginTabItem("Particle")) {
 			BeginScrollableContent("##ParticleScroll");
 			ImGui::SeparatorText("Particle Type");
-				const char* types[] = { "Rain", "Snow" };
-				int currentType = static_cast<int>(settings.particleType);
-				if (ImGui::Combo("Type", &currentType, types, IM_ARRAYSIZE(types))) {
-					settings.particleType = static_cast<uint32_t>(currentType);
-					changed = true;
-				}
+			const char* types[] = { "Rain", "Snow" };
+			int currentType = static_cast<int>(settings.particleType);
+			if (ImGui::Combo("Type", &currentType, types, IM_ARRAYSIZE(types))) {
+				settings.particleType = static_cast<uint32_t>(currentType);
+				changed = true;
+			}
 
-				ImGui::SeparatorText("Particle Size");
-				if (WeatherUtils::DrawSliderFloat("Size X", settings.particleSizeX, 0.0f, 10.0f))
-					changed = true;
-				if (WeatherUtils::DrawSliderFloat("Size Y", settings.particleSizeY, 0.0f, 10.0f))
-					changed = true;
+			ImGui::SeparatorText("Particle Size");
+			if (WeatherUtils::DrawSliderFloat("Size X", settings.particleSizeX, 0.0f, 10.0f))
+				changed = true;
+			if (WeatherUtils::DrawSliderFloat("Size Y", settings.particleSizeY, 0.0f, 10.0f))
+				changed = true;
 
-				ImGui::SeparatorText("Velocity");
-				if (WeatherUtils::DrawSliderFloat("Gravity Velocity", settings.gravityVelocity, -100.0f, 100.0f))
-					changed = true;
-				if (WeatherUtils::DrawSliderFloat("Rotation Velocity", settings.rotationVelocity, -360.0f, 360.0f))
-					changed = true;
+			ImGui::SeparatorText("Velocity");
+			if (WeatherUtils::DrawSliderFloat("Gravity Velocity", settings.gravityVelocity, -100.0f, 100.0f))
+				changed = true;
+			if (WeatherUtils::DrawSliderFloat("Rotation Velocity", settings.rotationVelocity, -360.0f, 360.0f))
+				changed = true;
 
 			EndScrollableContent();
 			ImGui::EndTabItem();
@@ -41,18 +41,18 @@ void PrecipitationWidget::DrawWidget()
 		if (ImGui::BeginTabItem("Position")) {
 			BeginScrollableContent("##PositionScroll");
 			ImGui::SeparatorText("Offset");
-				if (WeatherUtils::DrawSliderFloat("Center Offset Min", settings.centerOffsetMin, -1000.0f, 1000.0f))
-					changed = true;
-				if (WeatherUtils::DrawSliderFloat("Center Offset Max", settings.centerOffsetMax, -1000.0f, 1000.0f))
-					changed = true;
-				if (WeatherUtils::DrawSliderFloat("Start Rotation Range", settings.startRotationRange, 0.0f, 360.0f))
-					changed = true;
+			if (WeatherUtils::DrawSliderFloat("Center Offset Min", settings.centerOffsetMin, -1000.0f, 1000.0f))
+				changed = true;
+			if (WeatherUtils::DrawSliderFloat("Center Offset Max", settings.centerOffsetMax, -1000.0f, 1000.0f))
+				changed = true;
+			if (WeatherUtils::DrawSliderFloat("Start Rotation Range", settings.startRotationRange, 0.0f, 360.0f))
+				changed = true;
 
-				ImGui::SeparatorText("Volume");
-				if (WeatherUtils::DrawSliderFloat("Box Size", settings.boxSize, 0.0f, 10000.0f))
-					changed = true;
-				if (WeatherUtils::DrawSliderFloat("Particle Density", settings.particleDensity, 0.0f, 10.0f))
-					changed = true;
+			ImGui::SeparatorText("Volume");
+			if (WeatherUtils::DrawSliderFloat("Box Size", settings.boxSize, 0.0f, 10000.0f))
+				changed = true;
+			if (WeatherUtils::DrawSliderFloat("Particle Density", settings.particleDensity, 0.0f, 10.0f))
+				changed = true;
 
 			EndScrollableContent();
 			ImGui::EndTabItem();
@@ -61,24 +61,24 @@ void PrecipitationWidget::DrawWidget()
 		if (ImGui::BeginTabItem("Texture")) {
 			BeginScrollableContent("##TextureScroll");
 			ImGui::SeparatorText("Subtextures");
-				int numX = static_cast<int>(settings.numSubtexturesX);
-				int numY = static_cast<int>(settings.numSubtexturesY);
-				if (ImGui::InputInt("Num Subtextures X", &numX)) {
-					settings.numSubtexturesX = std::max(1, numX);
-					changed = true;
-				}
-				if (ImGui::InputInt("Num Subtextures Y", &numY)) {
-					settings.numSubtexturesY = std::max(1, numY);
-					changed = true;
-				}
+			int numX = static_cast<int>(settings.numSubtexturesX);
+			int numY = static_cast<int>(settings.numSubtexturesY);
+			if (ImGui::InputInt("Num Subtextures X", &numX)) {
+				settings.numSubtexturesX = std::max(1, numX);
+				changed = true;
+			}
+			if (ImGui::InputInt("Num Subtextures Y", &numY)) {
+				settings.numSubtexturesY = std::max(1, numY);
+				changed = true;
+			}
 
-				ImGui::SeparatorText("Texture Path");
-				char textureBuffer[256];
-				strncpy_s(textureBuffer, settings.particleTexture.c_str(), sizeof(textureBuffer) - 1);
-				if (ImGui::InputText("Particle Texture", textureBuffer, sizeof(textureBuffer))) {
-					settings.particleTexture = textureBuffer;
-					changed = true;
-				}
+			ImGui::SeparatorText("Texture Path");
+			char textureBuffer[256];
+			strncpy_s(textureBuffer, settings.particleTexture.c_str(), sizeof(textureBuffer) - 1);
+			if (ImGui::InputText("Particle Texture", textureBuffer, sizeof(textureBuffer))) {
+				settings.particleTexture = textureBuffer;
+				changed = true;
+			}
 
 			EndScrollableContent();
 			ImGui::EndTabItem();
