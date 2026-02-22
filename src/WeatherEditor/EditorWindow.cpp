@@ -150,7 +150,9 @@ bool IconButton(const char* label, bool filled, const char* iconType)
 	return result;
 }
 
+namespace {
 constexpr const char* kFilterColumnNames[] = { "All", "Editor ID", "Form ID", "File", "Status" };
+}  // namespace
 
 void EditorWindow::ResetObjectsFilter()
 {
@@ -162,6 +164,8 @@ void EditorWindow::ResetObjectsFilter()
 
 bool EditorWindow::MatchesObjectFilter(Widget* w) const
 {
+	if (!w)
+		return false;
 	if (m_filterBuffer[0] == '\0')
 		return true;
 	switch (m_currentFilterColumn) {
@@ -288,10 +292,9 @@ void EditorWindow::ShowObjectsWindow()
 			const float helpW = ImGui::CalcTextSize("(?)").x;
 			const float iconW = ImGui::GetFrameHeight();
 			// Each fixed-width item on the row is preceded by one SameLine().
-			// Update numFixedItems when adding or removing items from the row.
-			constexpr int numFixedItems = 8;  // combo, help, spacer, fav icon, "Favorites", spacer, flag icon, "Flagged"
-			constexpr int numGaps = numFixedItems;
-			const float fixedW = style.ItemSpacing.x * numGaps + comboW + helpW + 10.0f + iconW +
+			// Update numItemsAfterSearchBar when adding or removing items from the row.
+			constexpr int numItemsAfterSearchBar = 8;  // combo, help, spacer, fav icon, "Favorites", spacer, flag icon, "Flagged"
+			const float fixedW = style.ItemSpacing.x * numItemsAfterSearchBar + comboW + helpW + 10.0f + iconW +
 			                     ImGui::CalcTextSize("Favorites").x + 10.0f + iconW + ImGui::CalcTextSize("Flagged").x;
 			ImGui::SetNextItemWidth(std::max(50.0f, ImGui::GetContentRegionAvail().x - fixedW));
 			ImGui::InputTextWithHint("##ObjectFilter", "Filter... (Ctrl+F)", m_filterBuffer, sizeof(m_filterBuffer));
@@ -303,7 +306,7 @@ void EditorWindow::ShowObjectsWindow()
 				m_currentFilterColumn = static_cast<FilterColumn>(col);
 
 			ImGui::SameLine();
-			HelpMarker("Filter the object list by the selected column.\nAll: searches Editor ID, Form ID, File, and Status.\nCtrl+F: Focus search\nEnter: Open selected");
+			HelpMarker("Filter the object list by the selected column.\nAll: searches Editor ID, Form ID, File, and Status.\nStatus: hides items with no status marker when the search box is non-empty.\nCtrl+F: Focus search\nEnter: Open selected");
 
 			// Quick filter buttons on same row
 			ImGui::SameLine();
