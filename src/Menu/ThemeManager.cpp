@@ -5,6 +5,7 @@
 #include "Fonts.h"
 
 #include <algorithm>
+#include <array>
 #include <atomic>
 #include <chrono>
 #include <cmath>
@@ -551,6 +552,13 @@ std::vector<std::string> ThemeManager::GetThemeNames() const
 	return names;
 }
 
+std::string ThemeManager::SanitizeThemeFileName(std::string themeName)
+{
+	std::replace_if(themeName.begin(), themeName.end(),
+		[](char c) { return c == '\\' || c == '/' || c == ':' || c == '*' || c == '?' || c == '"' || c == '<' || c == '>' || c == '|'; }, '_');
+	return themeName;
+}
+
 bool ThemeManager::LoadTheme(const std::string& themeName, json& themeSettings)
 {
 	if (!discovered) {
@@ -562,8 +570,9 @@ bool ThemeManager::LoadTheme(const std::string& themeName, json& themeSettings)
 		return true;
 	}
 
+	std::string safeFileName = SanitizeThemeFileName(themeName);
 	auto it = std::find_if(themes.begin(), themes.end(),
-		[&themeName](const ThemeInfo& theme) { return theme.name == themeName; });
+		[&safeFileName](const ThemeInfo& theme) { return theme.name == safeFileName; });
 
 	if (it == themes.end()) {
 		logger::warn("Theme not found: {}", themeName);
@@ -597,6 +606,10 @@ bool ThemeManager::SaveTheme(const std::string& themeName, const json& themeSett
 		logger::warn("Cannot save theme with empty name");
 		return false;
 	}
+	if (IsPresetTheme(themeName)) {
+		logger::warn("Cannot overwrite preset theme: {}", themeName);
+		return false;
+	}
 
 	// Create the full theme JSON structure
 	json fullTheme = {
@@ -607,10 +620,7 @@ bool ThemeManager::SaveTheme(const std::string& themeName, const json& themeSett
 		{ "Theme", themeSettings }
 	};
 
-	// Generate safe filename (remove invalid characters)
-	std::string safeFileName = themeName;
-	std::replace_if(safeFileName.begin(), safeFileName.end(), [](char c) { return c == '\\' || c == '/' || c == ':' || c == '*' || c == '?' || c == '"' || c == '<' || c == '>' || c == '|'; }, '_');
-
+	std::string safeFileName = SanitizeThemeFileName(themeName);
 	auto themesDir = GetThemesDirectory();
 	auto filePath = themesDir / (safeFileName + ".json");
 
@@ -661,6 +671,17 @@ void ThemeManager::RefreshThemes()
 std::filesystem::path ThemeManager::GetThemesDirectory() const
 {
 	return Util::PathHelpers::GetThemesPath();
+}
+
+bool ThemeManager::IsPresetTheme(const std::string& themeName) const
+{
+	static const std::array<const char*, 6> presetNames = {
+		"Default", "Light", "NordicFrost", "DragonBlood", "DwemerBronze", "HighContrast"
+	};
+	for (const char* preset : presetNames) {
+		if (themeName == preset) return true;
+	}
+	return false;
 }
 
 void ThemeManager::CreateDefaultThemeFiles()
