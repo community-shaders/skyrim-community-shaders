@@ -1145,6 +1145,9 @@ void EditorWindow::RenderUI()
 		ImGui::EndMainMenuBar();
 	}
 
+	// Establish a viewport-wide DockSpace so all editor windows are snappable and dockable
+	ImGui::DockSpaceOverViewport(nullptr, ImGuiDockNodeFlags_PassthruCentralNode);
+
 	auto width = ImGui::GetIO().DisplaySize.x;
 	auto height = ImGui::GetIO().DisplaySize.y;
 	auto viewportWidth = width * 0.5f;                // Make the viewport take up 50% of the width
@@ -1862,7 +1865,7 @@ void EditorWindow::RenderNotifications()
 
 		if (ImGui::Begin(std::format("##Notification{}", (void*)&notif).c_str(),
 				nullptr,
-				ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoNav)) {
+				ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoNav | ImGuiWindowFlags_NoDocking)) {
 			ImVec4 colorWithAlpha = notif.color;
 			colorWithAlpha.w *= alpha;
 			ImGui::PushStyleColor(ImGuiCol_Text, colorWithAlpha);
