@@ -451,7 +451,7 @@ jobs:
 
             - name: Run feature version audit
               run: |
-                  python tools/feature_version_audit.py > feature-version-audit-latest.md
+                  python tools/feature_version_audit.py --output feature-version-audit-latest.md
                   cat feature-version-audit-latest.md
 
             - name: Upload feature audit markdown
@@ -479,9 +479,15 @@ jobs:
             - name: Run feature version audit (PR check)
               id: audit
               run: |
+                  set +e
                   python tools/feature_version_audit.py --pr-check --ci --base ${{ github.event.pull_request.base.sha }} > pr-feature-audit.md
+                  EXIT_CODE=$?
+                  set -e
                   cat pr-feature-audit.md
+                  exit $EXIT_CODE
+
             - name: Upload feature audit markdown (PR)
+              if: always()
               uses: actions/upload-artifact@v4
               with:
                   name: pr-feature-audit
@@ -496,6 +502,7 @@ jobs:
             pull-requests: write
         steps:
             - name: Download feature audit markdown (PR)
+              continue-on-error: true
               uses: actions/download-artifact@v4
               with:
                   name: pr-feature-audit

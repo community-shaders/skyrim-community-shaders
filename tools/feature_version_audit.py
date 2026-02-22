@@ -39,7 +39,7 @@ RE_COMMIT_FEAT = re.compile(r"^feat(\(|:|\s)", re.IGNORECASE)
 RE_COMMIT_FIX = re.compile(r"^fix(\(|:|\s)", re.IGNORECASE)
 RE_COMMIT_REFACTOR = re.compile(r"^refactor(\(|:|\s)", re.IGNORECASE)
 RE_COMMIT_PERF = re.compile(r"^perf(\(|:|\s)", re.IGNORECASE)
-RE_COMMIT_BREAKING = re.compile(r"![:\(]|BREAKING CHANGE:", re.IGNORECASE)
+RE_COMMIT_BREAKING = re.compile(r"!\s*:|BREAKING CHANGE:", re.IGNORECASE)
 
 # =====================
 # End Configuration
@@ -127,7 +127,7 @@ def get_bump_commit(file_path, base_ref):
             if len(parts) < 2:
                 continue
             commit_hash, msg = parts
-            if RE_COMMIT_FEAT.match(msg) or RE_COMMIT_FIX.match(msg) or RE_COMMIT_REFACTOR.match(msg) or RE_COMMIT_PERF.match(msg):
+            if RE_COMMIT_FEAT.match(msg) or RE_COMMIT_FIX.match(msg) or RE_COMMIT_REFACTOR.match(msg) or RE_COMMIT_PERF.match(msg) or RE_COMMIT_BREAKING.search(msg):
                 return commit_hash
     except Exception:
         pass
@@ -295,7 +295,11 @@ def analyze_features(FEATURES_DIR, feature_meta_map, base_ref, only_changed=Fals
         # Gather all changed files from the diff in both features regions
         target_dirs = [str(FEATURES_DIR), str(DEFAULT_FEATURE_HEADERS_DIR)]
         cmd = ["git", "diff", "--name-status", f"{base_ref}...HEAD", "--"] + target_dirs
-        all_changes = subprocess.check_output(cmd, stderr=subprocess.DEVNULL).decode("utf-8").splitlines()
+        try:
+            all_changes = subprocess.check_output(cmd, stderr=subprocess.DEVNULL).decode("utf-8").splitlines()
+        except subprocess.CalledProcessError as e:
+            print(f"Error running git diff: {e}", file=sys.stderr)
+            all_changes = []
 
         for line in all_changes:
             parts = line.split(maxsplit=1)
@@ -342,7 +346,8 @@ def analyze_features(FEATURES_DIR, feature_meta_map, base_ref, only_changed=Fals
         feature_key = get_feature_key(feature_dir, feature_meta_map)
 
         # membership check
-        if only_changed and feature_dir.name not in changed_features:
+        normalized_name = ''.join(feature_dir.name.lower().split())
+        if only_changed and feature_dir.name not in changed_features and feature_key not in changed_features and normalized_name not in changed_features:
             continue
 
         meta = feature_meta_map.get(feature_key)
@@ -629,9 +634,9 @@ def main():
     if args.base:
         base_ref = args.base
     else:
-        detected = get_latest_release_tag()
-        if detected:
-            base_ref = detected
+        detected_base = detect_pr_base() if args.pr_check else get_latest_release_tag()
+        if detected_base:
+            base_ref = detected_base
         else:
             print("No valid base ref found.", file=sys.stderr)
             sys.exit(1)
@@ -661,6 +666,25 @@ def main():
     date_tag = datetime.datetime.now().strftime('%Y-%m-%d')
     output_file = args.output if args.output else (None if args.pr_check else f"feature-version-audit-{date_tag}.md")
 
+    if args.apply_bumps:
+        applied_count = 0
+        for fa in feature_analysis:
+            if fa['needs_bump'] and fa['ini_path']:
+                if apply_version_bump(fa['ini_path'], fa['proposed_ver_str']):
+                    print(f"Applied bump to {fa['name']}: {fa['prior_ver_str']} -> {fa['proposed_ver_str']}", file=sys.stderr)
+                    applied_count += 1
+
+                    # Update the in-memory state so the report correctly reflects the bumped version
+                    fa['prior_ver_str'] = fa['proposed_ver_str']
+                    fa['needs_bump'] = False
+
+        print(f"\nSuccessfully applied {applied_count} version bumps." if applied_count > 0 else "\nNo version bumps applied.", file=sys.stderr)
+
+        # Recompute actionable after applying bumps
+        actionable = any(fa.get('needs_bump') or "missing" in fa.get('note', '').lower() for fa in feature_analysis)
+        if new_features:
+            actionable = True
+
     if args.pr_check:
         print_actionable_suggestions(feature_actions)
     else:
@@ -671,15 +695,6 @@ def main():
             with open(output_file, "w", encoding="utf-8") as f: f.write(output)
         else:
             print(output)
-
-    if args.apply_bumps:
-        applied_count = 0
-        for fa in feature_analysis:
-            if fa['needs_bump'] and fa['ini_path']:
-                if apply_version_bump(fa['ini_path'], fa['proposed_ver_str']):
-                    print(f"Applied bump to {fa['name']}: {fa['prior_ver_str']} -> {fa['proposed_ver_str']}", file=sys.stderr)
-                    applied_count += 1
-        print(f"\nSuccessfully applied {applied_count} version bumps." if applied_count > 0 else "\nNo version bumps applied.", file=sys.stderr)
 
     if actionable and (args.ci or args.fail_on_actionable):
         sys.exit(1)
