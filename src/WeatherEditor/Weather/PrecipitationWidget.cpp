@@ -73,8 +73,6 @@ void PrecipitationWidget::DrawWidget()
 			}
 
 			ImGui::SeparatorText("Texture Path");
-			char textureBuffer[256];
-			strncpy_s(textureBuffer, settings.particleTexture.c_str(), sizeof(textureBuffer) - 1);
 			if (ImGui::InputText("Particle Texture", textureBuffer, sizeof(textureBuffer))) {
 				settings.particleTexture = textureBuffer;
 				changed = true;
@@ -136,6 +134,7 @@ void PrecipitationWidget::LoadSettings()
 	}
 
 	originalSettings = settings;
+	strncpy_s(textureBuffer, settings.particleTexture.c_str(), sizeof(textureBuffer) - 1);
 	ApplyChanges();
 }
 
