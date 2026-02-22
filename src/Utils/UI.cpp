@@ -65,9 +65,9 @@ namespace Util
 			if (GetClientRect(hwnd, &rect) && rect.right > 0 && rect.bottom > 0) {
 				g_screenScaleRatio.x = g_displaySize.x / static_cast<float>(rect.right);
 				g_screenScaleRatio.y = g_displaySize.y / static_cast<float>(rect.bottom);
+				g_scaleInitialized = true;
 			}
 		}
-		g_scaleInitialized = true;
 	}
 
 	void UpdateImGuiInput(HWND hwnd)
