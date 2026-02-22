@@ -37,7 +37,7 @@ void ReferenceEffectWidget::DrawWidget()
 			if (ImGui::Checkbox("Inherit Rotation", &settings.inheritRotation))
 				changed = true;
 
-			if (changed && EditorWindow::GetSingleton()->settings.autoApplyChanges) {
+			if (changed && editorWindow->settings.autoApplyChanges) {
 				ApplyChanges();
 			}
 		}
