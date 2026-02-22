@@ -3,6 +3,7 @@
 #include "HomePageRenderer.h"
 #include "ThemeManager.h"
 
+#include <dxgi.h>
 #include <imgui.h>
 #include <imgui_impl_dx11.h>
 #include <imgui_impl_win32.h>
@@ -114,55 +115,19 @@ void OverlayRenderer::HandleFontReload(Menu& menu, float& cachedFontSize, float 
 	}
 }
 
-void OverlayRenderer::UpdateDisplayMetrics()
-{
-	auto& io = ImGui::GetIO();
-
-	DXGI_SWAP_CHAIN_DESC desc{};
-	globals::d3d::swapChain->GetDesc(&desc);
-
-	io.DisplaySize = ImVec2(
-		static_cast<float>(desc.BufferDesc.Width),
-		static_cast<float>(desc.BufferDesc.Height));
-
-	RECT rect{};
-	if (GetClientRect(desc.OutputWindow, &rect)) {
-		float windowWidth = static_cast<float>(rect.right - rect.left);
-		float windowHeight = static_cast<float>(rect.bottom - rect.top);
-
-		if (windowWidth > 0.0f && windowHeight > 0.0f) {
-			screenScaleRatio = ImVec2(
-				io.DisplaySize.x / windowWidth,
-				io.DisplaySize.y / windowHeight);
-		} else {
-			screenScaleRatio = ImVec2(1.0f, 1.0f);
-		}
-	}
-}
-
-void OverlayRenderer::UpdateMousePosition()
-{
-	auto& io = ImGui::GetIO();
-
-	DXGI_SWAP_CHAIN_DESC desc{};
-	globals::d3d::swapChain->GetDesc(&desc);
-
-	POINT pt{};
-	if (GetCursorPos(&pt) && ScreenToClient(desc.OutputWindow, &pt)) {
-		io.AddMousePosEvent(
-			pt.x * screenScaleRatio.x,
-			pt.y * screenScaleRatio.y);
-	}
-}
-
 void OverlayRenderer::InitializeImGuiFrame(Menu& menu)
 {
 	// Start the Dear ImGui frame
 	ImGui_ImplDX11_NewFrame();
 	ImGui_ImplWin32_NewFrame();
 
-	UpdateDisplayMetrics();
-	UpdateMousePosition();
+	if (globals::d3d::swapChain) {
+		DXGI_SWAP_CHAIN_DESC desc{};
+		if (SUCCEEDED(globals::d3d::swapChain->GetDesc(&desc))) {
+			HWND hwnd = desc.OutputWindow;
+			Util::UpdateImGuiInput(hwnd);
+		}
+	}
 
 	ImGui::NewFrame();
 	ThemeManager::SetupImGuiStyle(menu);

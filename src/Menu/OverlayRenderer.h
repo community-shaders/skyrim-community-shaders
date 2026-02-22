@@ -56,5 +56,4 @@ private:
 	static void RenderFeatureOverlays();
 	static void HandleABTesting();
 	static void FinalizeImGuiFrame();
-	static ImVec2 screenScaleRatio;
 };
