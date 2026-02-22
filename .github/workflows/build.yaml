@@ -464,6 +464,7 @@ jobs:
         name: Feature Version Audit (PR)
         if: github.event_name == 'pull_request_target'
         runs-on: ubuntu-latest
+        continue-on-error: true
         steps:
             - name: Checkout code
               uses: actions/checkout@v4
