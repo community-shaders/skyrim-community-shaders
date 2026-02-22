@@ -410,6 +410,110 @@ namespace Stereo
 	{
 		return BlendEyeColors(float3(uv1, 0), color1, float3(uv2, 0), color2, dynamicres);
 	}
+
+	/**
+	* @brief Result of a stereo bilateral reprojection: other-eye pixel coords and blend weight.
+	*/
+	struct StereoBilateralResult
+	{
+		float2 otherStereoUV;  ///< Stereo UV in the other eye
+		int2 otherPx;          ///< Pixel coordinate in the other eye
+		float blendWeight;     ///< [0, maxBlend] bilateral blend weight
+		bool valid;            ///< True if reprojection succeeded
+		bool backCheckPassed;  ///< True if round-trip reprojection validated
+	};
+
+	/**
+	* @brief Reprojects a pixel to the other eye and computes pixel coordinates.
+	*
+	* First stage of the stereo bilateral filter from Shi, Billeter, Eisemann 2022.
+	* Returns the other-eye pixel location; the caller must sample depth at that
+	* location and call FinalizeStereoBlend to complete the bilateral weight.
+	*
+	* @param[in] stereoUV     Stereo UV of the source pixel [0,1]
+	* @param[in] depth        Depth at the source pixel
+	* @param[in] eyeIndex     Eye index of the source pixel (0 or 1)
+	* @param[in] frameDim     Dimensions of the buffer (for pixel coord conversion)
+	* @return StereoBilateralResult with valid=false if reprojection is out of bounds.
+	*/
+	StereoBilateralResult ReprojectToOtherEye(
+		float2 stereoUV,
+		float depth,
+		uint eyeIndex,
+		float2 frameDim)
+	{
+		StereoBilateralResult result;
+		result.otherStereoUV = 0;
+		result.otherPx = int2(0, 0);
+		result.blendWeight = 0;
+		result.valid = false;
+		result.backCheckPassed = false;
+
+		uint otherEyeIndex = 1 - eyeIndex;
+
+		float2 monoUV = ConvertFromStereoUV(stereoUV, eyeIndex);
+		float3 otherEyeUV = ConvertMonoUVToOtherEye(float3(monoUV, depth), eyeIndex);
+
+		if (FrameBuffer::IsOutsideFrame(otherEyeUV.xy, false))
+			return result;
+
+		result.otherStereoUV = ConvertToStereoUV(otherEyeUV.xy, otherEyeIndex);
+		result.otherPx = clamp(int2(result.otherStereoUV * frameDim), int2(0, 0), int2(frameDim) - 1);
+		result.valid = true;
+		return result;
+	}
+
+	/**
+	* @brief Computes bilateral blend weight with depth comparison and back-check.
+	*
+	* Second stage of the stereo bilateral filter from Shi, Billeter, Eisemann 2022.
+	* Compares the sampled depth at the other eye's pixel against the expected depth,
+	* and performs the back-check (round-trip reprojection validation).
+	*
+	* @param[in,out] result   Result from ReprojectToOtherEye; blendWeight and backCheckPassed are filled in.
+	* @param[in] stereoUV     Stereo UV of the source pixel (same as passed to ReprojectToOtherEye)
+	* @param[in] depth        Depth at the source pixel
+	* @param[in] otherEyeDepth  Actual depth sampled at the other eye's pixel
+	* @param[in] eyeIndex     Eye index of the source pixel
+	* @param[in] frameDim     Dimensions of the buffer
+	* @param[in] depthSigma   Gaussian sigma for bilateral depth weight
+	* @param[in] maxBlend     Maximum blend factor
+	* @param[in] backCheckThreshold  Max pixel distance for back-check (0 to disable). Default 8.0.
+	*/
+	void FinalizeStereoBlend(
+		inout StereoBilateralResult result,
+		float2 stereoUV,
+		float depth,
+		float otherEyeDepth,
+		uint eyeIndex,
+		float2 frameDim,
+		float depthSigma,
+		float maxBlend,
+		float backCheckThreshold = 8.0)
+	{
+		// Bilateral weight: compare sampled depth at other eye against source depth
+		float depthDiff = abs(depth - otherEyeDepth);
+		float depthWeight = exp(-depthDiff * depthDiff / (depthSigma * depthSigma + 1e-8));
+
+		// Back-check: reproject Q (in eye B) back to eye A and verify round-trip.
+		// Two VP matrix multiplications accumulate float32 error (~3-5px at medium range),
+		// so the threshold must be generous enough to pass valid surfaces while catching
+		// true occlusion discontinuities (which produce errors of tens to hundreds of pixels).
+		uint otherEyeIndex = 1 - eyeIndex;
+		result.backCheckPassed = true;
+		if (backCheckThreshold > 0) {
+			float2 otherMonoUV = ConvertFromStereoUV(result.otherStereoUV, otherEyeIndex);
+			float3 roundTripUV = ConvertMonoUVToOtherEye(float3(otherMonoUV, otherEyeDepth), otherEyeIndex);
+			float2 roundTripStereoUV = ConvertToStereoUV(roundTripUV.xy, eyeIndex);
+			float2 pixelDist = abs(roundTripStereoUV * frameDim - (stereoUV * frameDim));
+			// Use max component so a large error in either axis triggers the check
+			result.backCheckPassed = max(pixelDist.x, pixelDist.y) < backCheckThreshold;
+			if (!result.backCheckPassed)
+				depthWeight *= 0.1;  // Heavily penalize but don't fully reject
+		}
+
+		result.blendWeight = depthWeight * maxBlend;
+	}
 #	endif  // VR
 #endif      // PSHADER
 
