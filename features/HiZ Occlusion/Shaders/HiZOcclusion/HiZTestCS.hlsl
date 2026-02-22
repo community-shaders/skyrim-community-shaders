@@ -449,6 +449,7 @@ void main(uint3 dispatchThreadID : SV_DispatchThreadID)
         float3(-1, -1,  1), float3(-1, -1, -1)
     };
 
+    bool anyPointBehindCamera = false;
     bool anyPointOnScreen = false;
 
     // -------------------------------------------------------------------------
@@ -482,6 +483,8 @@ void main(uint3 dispatchThreadID : SV_DispatchThreadID)
                 return;
             }
         }
+    } else {
+        anyPointBehindCamera = true;
     }
 
     // -------------------------------------------------------------------------
@@ -497,14 +500,21 @@ void main(uint3 dispatchThreadID : SV_DispatchThreadID)
         float3 pointVS = centerVS + unitDir * radius;
 
         if (pointVS.z <= 0.0) {
+            anyPointBehindCamera = true;
             continue;
         }
-
-        anyPointOnScreen = true;
         
         float4 pointClip = mul(FrameBuffer::CameraProj[0], float4(pointVS, 1));
         float pointDepth = pointClip.z / pointClip.w;
-        float2 pointUV = clamp(ViewToHiZUV(pointVS), float2(0.0, 0.0), float2(1.0, 1.0));
+        
+        float2 rawUV = ViewToHiZUV(pointVS);
+
+        if (rawUV.x >= 0.0 && rawUV.x <= 1.0 &&
+            rawUV.y >= 0.0 && rawUV.y <= 1.0) {
+            anyPointOnScreen = true;
+        }
+        
+        float2 pointUV = clamp(rawUV, float2(0.0, 0.0), float2(1.0, 1.0));
 
         float hiZDepth = HiZBuffer.SampleLevel(HiZSampler, pointUV, mipLevel).r;
         if (pointDepth <= hiZDepth + conservativeBias) {
@@ -517,10 +527,18 @@ void main(uint3 dispatchThreadID : SV_DispatchThreadID)
     // =========================================================================
     // FRUSTUM CULLING: No points in front of camera
     // =========================================================================
-    // If ALL tested points were behind the camera (z <= 0), the object is
+    // If ALL tested points were off-screen, the object is
     // completely outside the view frustum and can be culled.
+    // If any point was in front of camera, and at least on point was behind camera,
+    // the object should not be culled.
     if (!anyPointOnScreen) {
         VisibilityResults[geometryIndex] = 1;  // Culled: frustum (behind camera)
+        if (overlaySettings.x != 0 && geometryIndex < (uint)overlaySettings.y) {
+            DrawBounds(geometryIndex, centerVS, radius);
+        }
+        return;
+    } else if (anyPointBehindCamera) {
+        VisibilityResults[geometryIndex] = -2;  // Visible: camera inside bounds
         if (overlaySettings.x != 0 && geometryIndex < (uint)overlaySettings.y) {
             DrawBounds(geometryIndex, centerVS, radius);
         }
