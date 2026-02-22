@@ -31,7 +31,10 @@ namespace Util
 	HRESULT SaveTextureToFile(ID3D11Device* device, ID3D11DeviceContext* context, const std::filesystem::path& path, ID3D11Texture2D* tex);
 	HRESULT LoadTextureFromFile(ID3D11Device* device, const std::filesystem::path& path, ID3D11Texture2D** outTex, ID3D11ShaderResourceView** outSRV);
 
-	// Returns the current scene depth SRV, preferring terrain blended depth if available.
+	// Returns the current scene depth SRV, preferring terrain-blended depth when active.
 	// The caller does NOT own the returned pointer.
-	ID3D11ShaderResourceView* GetCurrentSceneDepthSRV();
+	//
+	// prefer16bit = false (default): R32_FLOAT  -- for compute shaders doing arithmetic on depth
+	// prefer16bit = true:            R16_UNORM  -- for pixel shaders via slot 17 / SharedData::GetDepth
+	ID3D11ShaderResourceView* GetCurrentSceneDepthSRV(bool prefer16bit = false);
 }  // namespace Util
