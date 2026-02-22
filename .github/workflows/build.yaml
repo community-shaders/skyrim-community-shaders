@@ -451,7 +451,8 @@ jobs:
 
             - name: Run feature version audit
               run: |
-                  python tools/feature_version_audit.py --output feature-version-audit-latest.md 2>&1 | tee feature-version-audit-latest.md
+                  python tools/feature_version_audit.py > feature-version-audit-latest.md
+                  cat feature-version-audit-latest.md
 
             - name: Upload feature audit markdown
               uses: actions/upload-artifact@v4
@@ -477,9 +478,9 @@ jobs:
 
             - name: Run feature version audit (PR check)
               id: audit
-              continue-on-error: true
               run: |
-                  python tools/feature_version_audit.py --pr-check --base ${{ github.event.pull_request.base.sha }} 2>&1 | tee pr-feature-audit.md
+                  python tools/feature_version_audit.py --pr-check --ci --base ${{ github.event.pull_request.base.sha }} > pr-feature-audit.md
+                  cat pr-feature-audit.md
             - name: Upload feature audit markdown (PR)
               uses: actions/upload-artifact@v4
               with:
@@ -488,7 +489,7 @@ jobs:
 
     feature-audit-pr-comment:
         name: Comment on PR with audit results
-        if: github.event_name == 'pull_request_target'
+        if: always() && github.event_name == 'pull_request_target' && (needs.feature-audit-pr.result == 'success' || needs.feature-audit-pr.result == 'failure')
         needs: feature-audit-pr
         runs-on: ubuntu-latest
         permissions:
