@@ -8,6 +8,7 @@
 #include "Features/GrassLighting.h"
 #include "Features/HairSpecular.h"
 #include "Features/IBL.h"
+#include "Features/InteriorSun.h"
 #include "Features/LODBlending.h"
 #include "Features/LightLimitFix.h"
 #include "Features/LinearLighting.h"
@@ -15,7 +16,6 @@
 #include "Features/TerrainBlending.h"
 #include "Features/TerrainShadows.h"
 #include "Features/TerrainVariation.h"
-#include "Features/InteriorSun.h"
 #include "Features/WetnessEffects.h"
 
 #include "TruePBR.h"
