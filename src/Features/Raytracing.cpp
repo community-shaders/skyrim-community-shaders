@@ -175,6 +175,13 @@ void Raytracing::CreateD3D12Device(ID3D11Device* d3d11Device, ID3D11DeviceContex
 	InitializeCERaytracing(m_D3D11Device.get(), m_D3D12Device.get(), m_CommandQueue.get(), m_ComputeCommandQueue.get(), m_CopyCommandQueue.get());
 }
 
+void Raytracing::SetDevices(ID3D11Device* d3d11Device, ID3D12Device5* d3d12Device, ID3D11DeviceContext* immediateContext)
+{
+	DX::ThrowIfFailed(d3d11Device->QueryInterface(IID_PPV_ARGS(&m_D3D11Device)));
+	DX::ThrowIfFailed(immediateContext->QueryInterface(IID_PPV_ARGS(&m_D3D11Context)));
+	DX::ThrowIfFailed(d3d12Device->QueryInterface(IID_PPV_ARGS(&m_D3D12Device)));
+}
+
 void Raytracing::Load()
 {
 

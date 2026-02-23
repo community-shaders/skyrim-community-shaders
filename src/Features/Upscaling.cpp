@@ -111,7 +111,8 @@ HRESULT WINAPI hk_D3D11CreateDeviceAndSwapChainUpscaling(
 
 			auto& rt = globals::features::raytracing;
 			if (rt.loaded) {
-				rt.InitializeCERaytracing(Upscaling::dx12SwapChain.d3d11Device.get() , Upscaling::dx12SwapChain.d3d12Device.get(), Upscaling::dx12SwapChain.commandQueue.get(), nullptr, nullptr);
+				rt.SetDevices(Upscaling::dx12SwapChain.d3d11Device.get(), Upscaling::dx12SwapChain.d3d12Device.get(), Upscaling::dx12SwapChain.d3d11Context.get());
+				rt.InitializeCERaytracing(Upscaling::dx12SwapChain.d3d11Device.get(), Upscaling::dx12SwapChain.d3d12Device.get(), Upscaling::dx12SwapChain.commandQueue.get(), nullptr, nullptr);
 			}
 
 			*ppSwapChain = upscaling.GetProxySwapChain();

@@ -108,7 +108,9 @@ struct Raytracing : public Feature
 	void Load() override;
 	void PostPostLoad() override;
 
-	void CreateD3D12Device(ID3D11Device* device, ID3D11DeviceContext* immediateContext, IDXGIAdapter* adapter);
+	void CreateD3D12Device(ID3D11Device* d3d11Device, ID3D11DeviceContext* immediateContext, IDXGIAdapter* adapter);
+	void SetDevices(ID3D11Device* d3d11Device, ID3D12Device5* d3d12Device, ID3D11DeviceContext* immediateContext);
+
 	void InitializeCERaytracing(ID3D11Device5* d3d11Device, ID3D12Device5* d3d12Device, ID3D12CommandQueue* commandQueue, ID3D12CommandQueue* computeCommandQueue, ID3D12CommandQueue* copyCommandQueue);
 	bool UpdateResolution();
 	void DeferredPasses();
@@ -169,9 +171,6 @@ struct Raytracing : public Feature
 	winrt::com_ptr<ID3D12CommandQueue> m_CommandQueue = nullptr;
 	winrt::com_ptr<ID3D12CommandQueue> m_ComputeCommandQueue = nullptr;
 	winrt::com_ptr<ID3D12CommandQueue> m_CopyCommandQueue = nullptr;
-
-	//winrt::com_ptr<ID3D12CommandAllocator> commandAllocator = nullptr;
-	//winrt::com_ptr<ID3D12GraphicsCommandList4> commandList = nullptr;
 
 	winrt::com_ptr<ID3D11Fence> d3d11Fence = nullptr;
 	winrt::com_ptr<ID3D12Fence> d3d12Fence = nullptr;
