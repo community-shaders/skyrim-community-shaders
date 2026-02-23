@@ -227,7 +227,7 @@ bool InteriorSun::IsInSunDirectionAndWithinShadowDistance(const RE::NiPointer<RE
 InteriorSun::ShaderSettings InteriorSun::GetShaderSettings() const
 {
 	ShaderSettings data;
-	data.EffectMeshSunInfluence = settings.EffectMeshSunInfluence * 0.01f;
+	data.EffectMeshSunInfluence = std::clamp(settings.EffectMeshSunInfluence, 0.0f, 100.0f) * 0.01f;
 	data.IsInteriorWithSun = isInteriorWithSun ? 1u : 0u;
 	return data;
 }
