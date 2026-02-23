@@ -37,9 +37,19 @@ public:
 	{
 		bool ForceDoubleSidedRendering = true;
 		float InteriorShadowDistance = 5000;
+		float EffectMeshSunInfluence = 100.0f;
 	};
 
 	Settings settings;
+
+	struct alignas(16) ShaderSettings
+	{
+		float EffectMeshSunInfluence = 1.0f;
+		uint32_t IsInteriorWithSun = 0;
+		float pad[2] = {};
+	};
+
+	ShaderSettings GetShaderSettings() const;
 
 	std::atomic<bool> isInteriorWithSun = false;
 

@@ -253,6 +253,13 @@ namespace SharedData
 		float3 pad;
 	};
 
+	struct InteriorSunSettings
+	{
+		float EffectMeshSunInfluence;
+		uint IsInteriorWithSun;
+		float2 pad0;
+	};
+
 	cbuffer FeatureData : register(b6)
 	{
 		GrassLightingSettings grassLightingSettings;
@@ -271,6 +278,7 @@ namespace SharedData
 		LinearLightingSettings linearLightingSettings;
 		TerrainBlendingSettings terrainBlendingSettings;
 		ExponentialHeightFogSettings exponentialHeightFogSettings;
+		InteriorSunSettings interiorSunSettings;
 	};
 
 	Texture2D<float4> DepthTexture : register(t17);

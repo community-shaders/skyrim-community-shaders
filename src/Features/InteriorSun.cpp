@@ -6,7 +6,8 @@
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	InteriorSun::Settings,
 	ForceDoubleSidedRendering,
-	InteriorShadowDistance)
+	InteriorShadowDistance,
+	EffectMeshSunInfluence)
 
 void InteriorSun::DrawSettings()
 {
@@ -25,6 +26,13 @@ void InteriorSun::DrawSettings()
 		ImGui::Text(
 			"Sets the distance shadows are rendered at in interiors. "
 			"Lower values provide higher quality shadows and improved performance but may cause distant interior spaces to light up incorrectly. ");
+	}
+	ImGui::SliderFloat("Effect Mesh Sun Influence", &settings.EffectMeshSunInfluence, 0.0f, 100.0f, "%.0f%%", ImGuiSliderFlags_AlwaysClamp);
+	if (auto _tt = Util::HoverTooltipWrapper()) {
+		ImGui::Text(
+			"Controls how much sunlight and shadows affect effect meshes (particles, fires, etc.) in interiors. "
+			"At 100%%, effect meshes receive full sun shadow darkening. "
+			"At 0%%, effect meshes ignore sunlight entirely, matching vanilla interior behavior. ");
 	}
 }
 
@@ -214,6 +222,14 @@ bool InteriorSun::IsInSunDirectionAndWithinShadowDistance(const RE::NiPointer<RE
 	const float distance = diff.Length();
 	const float projection = lightDir.Dot(diff);
 	return projection >= -radius && (distance - radius) <= *gShadowDistance;
+}
+
+InteriorSun::ShaderSettings InteriorSun::GetShaderSettings() const
+{
+	ShaderSettings data;
+	data.EffectMeshSunInfluence = settings.EffectMeshSunInfluence * 0.01f;
+	data.IsInteriorWithSun = isInteriorWithSun ? 1u : 0u;
+	return data;
 }
 
 void InteriorSun::SetShadowDistance(bool inInterior)

@@ -563,13 +563,15 @@ float3 GetLightingColor(float3 msPosition, float3 worldPosition, float2 screenPo
 	float dirShadow = 1.0;
 
 	const bool inWorld = (Permutation::ExtraShaderDescriptor & Permutation::ExtraFlags::InWorld);
+	const bool isInteriorSun = SharedData::interiorSunSettings.IsInteriorWithSun;
 
-	if (inWorld && !SharedData::InInterior)
+	if (inWorld && (!SharedData::InInterior || isInteriorSun))
 		dirShadow = ShadowSampling::Get3DFilteredShadow(worldPosition.xyz, viewDirection, screenPosition, eyeIndex, unusedSurfaceShadow);
 
 	shadowVariance = 1.0 - sqrt(saturate(fwidth(dirShadow)));
 
-	dirColor *= dirShadow;
+	if (!isInteriorSun)
+		dirColor *= dirShadow;
 
 #		if defined(EXP_HEIGHT_FOG)
 	if (SharedData::exponentialHeightFogSettings.enabled) {
@@ -584,6 +586,11 @@ float3 GetLightingColor(float3 msPosition, float3 worldPosition, float2 screenPo
 #		endif
 
 	color = dirColor + ambientColor;
+
+	if (isInteriorSun) {
+		float influence = SharedData::interiorSunSettings.EffectMeshSunInfluence;
+		color *= lerp(1.0, dirShadow, influence);
+	}
 
 #		if defined(LIGHT_LIMIT_FIX)
 	if (!(Permutation::ExtraShaderDescriptor & Permutation::ExtraFlags::InWorld))
@@ -629,6 +636,7 @@ float3 GetLightingShadow(float3 color, float3 worldPosition, float2 screenPositi
 	float shadow = 1.0;
 
 	const bool inWorld = (Permutation::ExtraShaderDescriptor & Permutation::ExtraFlags::InWorld);
+	const bool isInteriorSun = SharedData::interiorSunSettings.IsInteriorWithSun;
 
 	if (inWorld && !SharedData::InInterior){
 		shadow = 0.0;
@@ -638,11 +646,15 @@ float3 GetLightingShadow(float3 color, float3 worldPosition, float2 screenPositi
 			shadow += ShadowSampling::GetWorldShadow(samplePositionWS, FrameBuffer::CameraPosAdjust[eyeIndex].xyz, eyeIndex);
 		}
 		shadow *= rcpSampleCount;
+	} else if (inWorld && isInteriorSun) {
+		float unusedSurfaceShadow;
+		shadow = ShadowSampling::Get3DFilteredShadow(worldPosition, viewDirection, screenPosition, eyeIndex, unusedSurfaceShadow);
 	}
 
 	shadowVariance = 1.0 - sqrt(saturate(fwidth(shadow)));
 
-	dirColor *= shadow;
+	if (!isInteriorSun)
+		dirColor *= shadow;
 
 #		if defined(EXP_HEIGHT_FOG)
 	if (SharedData::exponentialHeightFogSettings.enabled) {
@@ -650,7 +662,14 @@ float3 GetLightingShadow(float3 color, float3 worldPosition, float2 screenPositi
 	}
 #		endif
 
-	return dirColor + ambientColor;
+	color = dirColor + ambientColor;
+
+	if (isInteriorSun) {
+		float influence = SharedData::interiorSunSettings.EffectMeshSunInfluence;
+		color *= lerp(1.0, shadow, influence);
+	}
+
+	return color;
 }
 #endif
 

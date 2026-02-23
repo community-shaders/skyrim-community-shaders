@@ -589,15 +589,13 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	float4 shadowColor = TexShadowMaskSampler.Load(int3(input.HPosition.xy, 0));
 
 	// Apply world shadow (terrain shadows, cloud shadows) directly to light color
-	if (!SharedData::InInterior)
-		dirLightColor *= ShadowSampling::GetWorldShadow(input.WorldPosition.xyz, FrameBuffer::CameraPosAdjust[eyeIndex].xyz, eyeIndex);
+	dirLightColor *= ShadowSampling::GetWorldShadow(input.WorldPosition.xyz, FrameBuffer::CameraPosAdjust[eyeIndex].xyz, eyeIndex);
 
 	float dirSoftShadow = 1.0;
 	float dirVSMDetailedShadow = 1.0;
 
 #			if defined(VOLUMETRIC_SHADOWS)
-	if (!SharedData::InInterior)
-		dirSoftShadow = ShadowSampling::GetLightingShadow(input.WorldPosition.xyz, eyeIndex, dirVSMDetailedShadow);
+	dirSoftShadow = ShadowSampling::GetLightingShadow(input.WorldPosition.xyz, eyeIndex, dirVSMDetailedShadow);
 #			endif
 
 	float dirDetailedShadow = 1.0;
@@ -888,8 +886,7 @@ PS_OUTPUT main(PS_INPUT input)
 	float3 dirLightColor = Color::DirectionalLight(SharedData::DirLightColor.xyz / max(llDirLightMult, 1e-5), SharedData::linearLightingSettings.isDirLightLinear) * llDirLightMult;
 
 	// Apply world shadow (terrain shadows, cloud shadows) directly to light color
-	if (!SharedData::InInterior)
-		dirLightColor *= ShadowSampling::GetWorldShadow(input.WorldPosition.xyz, FrameBuffer::CameraPosAdjust[eyeIndex].xyz, eyeIndex);
+	dirLightColor *= ShadowSampling::GetWorldShadow(input.WorldPosition.xyz, FrameBuffer::CameraPosAdjust[eyeIndex].xyz, eyeIndex);
 
 	float dirDetailedShadow = 1.0;
 
