@@ -48,6 +48,7 @@ public:
 		uint32_t IsInteriorWithSun = 0;
 		float pad[2] = {};
 	};
+	STATIC_ASSERT_ALIGNAS_16(ShaderSettings);
 
 	ShaderSettings GetShaderSettings() const;
 
