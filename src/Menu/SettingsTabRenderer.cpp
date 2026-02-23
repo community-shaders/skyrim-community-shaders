@@ -433,8 +433,6 @@ void SettingsTabRenderer::RenderThemesTab()
 			globals::menu->GetSettings().SelectedThemePreset = "Default";
 		}
 
-		const bool isPreset = IsPresetThemeSelected();
-
 		for (size_t i = 0; i < themes.size(); ++i) {
 			if (themes[i].name == currentThemePreset) {
 				currentItem = static_cast<int>(i);
@@ -445,9 +443,10 @@ void SettingsTabRenderer::RenderThemesTab()
 		// Theme preset dropdown
 		if (ComboWithFont("##ThemePreset", &currentItem, items.data(), static_cast<int>(items.size()), Menu::FontRole::Body)) {
 			std::string selectedTheme = themes[currentItem].name;
-			if (globals::menu->LoadThemePreset(selectedTheme)) {
+			if (selectedTheme != currentThemePreset && globals::menu->LoadThemePreset(selectedTheme)) {
 				// Theme loaded successfully, update UI
-				themeSettings = globals::menu->GetSettings().Theme;
+				currentThemePreset = selectedTheme;
+				showUpdateFeedback = false;
 			}
 		}
 
@@ -496,6 +495,8 @@ void SettingsTabRenderer::RenderThemesTab()
 			}
 		}
 		ImGui::Spacing();
+
+		const bool isPreset = IsPresetThemeSelected();
 
 		if (!isPreset) {
 			if (Util::ButtonWithFlash("Save")) {
@@ -684,7 +685,7 @@ void SettingsTabRenderer::RenderThemesTab()
 					std::string displayName = strlen(newThemeDisplayName) > 0 ? std::string(newThemeDisplayName) : std::string(newThemeName);
 					std::string description = strlen(newThemeDescription) > 0 ? std::string(newThemeDescription) : "";
 
-					logger::info("Attempting to save new theme: '{}' with display name: '{}'", newThemeName, displayName);
+					logger::info("Attempting to save new theme: '{}' with display name: '{}'", safeNewThemeName, displayName);
 
 					if (themeManager->SaveTheme(std::string(newThemeName), currentThemeJson["Theme"], displayName, description)) {
 						logger::info("Theme saved successfully. Loading theme preset: '{}'", safeNewThemeName);
@@ -692,6 +693,7 @@ void SettingsTabRenderer::RenderThemesTab()
 						globals::menu->LoadThemePreset(safeNewThemeName);
 						showValidationError = false;
 						showCreateThemePopup = false;
+						ImGui::CloseCurrentPopup();
 						logger::info("Theme creation complete. Total themes: {}", themeManager->GetThemes().size());
 					} else {
 						logger::error("Failed to save theme: '{}'", newThemeName);
@@ -705,6 +707,7 @@ void SettingsTabRenderer::RenderThemesTab()
 			ImGui::SameLine();
 			if (ImGui::Button("Cancel")) {
 				showCreateThemePopup = false;
+				ImGui::CloseCurrentPopup();
 			}
 
 			ImGui::EndPopup();
