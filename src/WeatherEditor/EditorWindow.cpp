@@ -12,34 +12,6 @@
 
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(EditorWindow::Settings, recordMarkers, markedRecords, autoApplyChanges, useTextButtons, enableInheritFromParent, editorUIScale, favoriteWidgets, recentWidgets, maxRecentWidgets, rememberOpenWidgets, lastOpenWidgets)
 
-void TextUnformattedDisabled(const char* a_text, const char* a_textEnd = nullptr)
-{
-	ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetStyleColorVec4(ImGuiCol_TextDisabled));
-	ImGui::TextUnformatted(a_text, a_textEnd);
-	ImGui::PopStyleColor();
-}
-
-void AddTooltip(const char* a_desc, ImGuiHoveredFlags a_flags = ImGuiHoveredFlags_DelayNormal)
-{
-	if (ImGui::IsItemHovered(a_flags)) {
-		ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, { 8, 8 });
-		if (ImGui::BeginTooltip()) {
-			ImGui::PushTextWrapPos(ImGui::GetFontSize() * 50.0f);
-			ImGui::TextUnformatted(a_desc);
-			ImGui::PopTextWrapPos();
-			ImGui::EndTooltip();
-		}
-		ImGui::PopStyleVar();
-	}
-}
-
-inline void HelpMarker(const char* a_desc)
-{
-	ImGui::AlignTextToFramePadding();
-	TextUnformattedDisabled("(?)");
-	AddTooltip(a_desc, ImGuiHoveredFlags_DelayShort);
-}
-
 void DrawIconStar(ImVec2 center, float radius, ImU32 color, bool filled)
 {
 	auto* drawList = ImGui::GetWindowDrawList();
@@ -228,6 +200,8 @@ void EditorWindow::ShowObjectsWindow()
 		if (ImGui::BeginListBox("##CategoriesList", { -FLT_MIN, -FLT_MIN })) {
 			ImGui::Text("Categories");
 			ImGui::Spacing();
+			ImGui::Separator();
+			ImGui::Spacing();
 
 			// List of categories
 			const char* categories[] = { "Weather", "ImageSpace", "Lighting Template", "Cell Lighting", "Volumetric Lighting", "Shader Particle Geometry", "Lens Flare", "Visual Effect", "Interior Only" };
@@ -316,7 +290,7 @@ void EditorWindow::ShowObjectsWindow()
 				m_currentFilterColumn = static_cast<FilterColumn>(col);
 
 			ImGui::SameLine();
-			HelpMarker("Filter the object list by the selected column.\nAll: searches Editor ID, Form ID, File, and Status.\nStatus: hides items with no status marker when the search box is non-empty.\nCtrl+F: Focus search\nEnter: Open selected");
+			Util::HelpMarker("Filter the object list by the selected column.\nAll: searches Editor ID, Form ID, File, and Status.\nStatus: hides items with no status marker when the search box is non-empty.\nCtrl+F: Focus search\nEnter: Open selected");
 
 			// Quick filter buttons on same row
 			ImGui::SameLine();
@@ -447,6 +421,7 @@ void EditorWindow::ShowObjectsWindow()
 					sortedWidgets.push_back(w.get());
 				}
 				RefreshJsonAttachmentCache(sortedWidgets);
+				bool weatherTooltipShownThisFrame = false;
 				if (currentSortColumn != SortColumn::None) {
 					std::sort(sortedWidgets.begin(), sortedWidgets.end(), [this](Widget* a, Widget* b) {
 						int comparison = 0;
@@ -516,8 +491,7 @@ void EditorWindow::ShowObjectsWindow()
 							ImGui::TableSetColumnIndex(0);
 
 							// No favorite star for cell lighting (it's always the current cell)
-							ImGui::Dummy(ImVec2(24, 24));
-
+							ImGui::Dummy(ImVec2(ImGui::GetFrameHeight(), ImGui::GetFrameHeight()));
 							ImGui::TableNextColumn();
 
 							// Display current cell name
@@ -525,8 +499,14 @@ void EditorWindow::ShowObjectsWindow()
 							std::string displayName = cellName && cellName[0] ? cellName : "[Unnamed Cell]";
 							std::string label = std::format("[CURRENT CELL] {}", displayName);
 
+							// Highlight current cell (before TableRowSelectable so hover/active can override)
+							auto highlightColor = Menu::GetSingleton()->GetTheme().StatusPalette.InfoColor;
+							highlightColor.w = 0.3f;
+							ImGui::TableSetBgColor(ImGuiTableBgTarget_RowBg0, ImGui::ColorConvertFloat4ToU32(highlightColor));
+							ImGui::TableSetBgColor(ImGuiTableBgTarget_RowBg1, ImGui::ColorConvertFloat4ToU32(highlightColor));
+
 							bool isOpen = currentCellLightingWidget && currentCellLightingWidget->IsOpen();
-							if (ImGui::Selectable(label.c_str(), isOpen, ImGuiSelectableFlags_SpanAllColumns | ImGuiSelectableFlags_AllowDoubleClick)) {
+							if (Util::TableRowSelectable(label.c_str(), isOpen, ImGuiSelectableFlags_SpanAllColumns | ImGuiSelectableFlags_AllowDoubleClick)) {
 								if (ImGui::IsMouseDoubleClicked(0)) {
 									// Open or reuse the cell lighting widget
 									if (currentCellLightingWidget && currentCellLightingWidget->cell == cell) {
@@ -539,12 +519,6 @@ void EditorWindow::ShowObjectsWindow()
 									}
 								}
 							}
-
-							// Highlight current cell
-							auto highlightColor = Menu::GetSingleton()->GetTheme().StatusPalette.InfoColor;
-							highlightColor.w = 0.3f;
-							ImGui::TableSetBgColor(ImGuiTableBgTarget_RowBg0, ImGui::ColorConvertFloat4ToU32(highlightColor));
-							ImGui::TableSetBgColor(ImGuiTableBgTarget_RowBg1, ImGui::ColorConvertFloat4ToU32(highlightColor));
 
 							// Enter key to open
 							if (isOpen && ImGui::IsKeyPressed(ImGuiKey_Enter)) {
@@ -637,7 +611,7 @@ void EditorWindow::ShowObjectsWindow()
 
 						// Editor ID column with [CURRENT] prefix
 						bool isSelected = sortedWidgets[i]->IsOpen();
-						if (ImGui::Selectable(editorLabel.c_str(), isSelected, ImGuiSelectableFlags_SpanAllColumns | ImGuiSelectableFlags_AllowDoubleClick | ImGuiSelectableFlags_AllowOverlap)) {
+						if (Util::TableRowSelectable(editorLabel.c_str(), isSelected, ImGuiSelectableFlags_SpanAllColumns | ImGuiSelectableFlags_AllowDoubleClick | ImGuiSelectableFlags_AllowOverlap)) {
 							if (ImGui::IsMouseDoubleClicked(0)) {
 								sortedWidgets[i]->SetOpen(true);
 								AddToRecent(sortedWidgets[i]->GetEditorID(), m_selectedCategory);
@@ -722,7 +696,7 @@ void EditorWindow::ShowObjectsWindow()
 
 					// Editor ID column
 					bool isSelected = sortedWidgets[i]->IsOpen();
-					if (ImGui::Selectable(editorLabel.c_str(), isSelected, ImGuiSelectableFlags_SpanAllColumns | ImGuiSelectableFlags_AllowDoubleClick | ImGuiSelectableFlags_AllowOverlap)) {
+					if (Util::TableRowSelectable(editorLabel.c_str(), isSelected, ImGuiSelectableFlags_SpanAllColumns | ImGuiSelectableFlags_AllowDoubleClick | ImGuiSelectableFlags_AllowOverlap)) {
 						if (ImGui::IsMouseDoubleClicked(0)) {
 							sortedWidgets[i]->SetOpen(true);
 							AddToRecent(sortedWidgets[i]->GetEditorID(), m_selectedCategory);
@@ -730,32 +704,41 @@ void EditorWindow::ShowObjectsWindow()
 					}
 
 					// Show ImageSpace and VolumetricLighting info for weather widgets
-					if (m_selectedCategory == "Weather" && ImGui::IsItemHovered()) {
+					if (!weatherTooltipShownThisFrame && m_selectedCategory == "Weather" && ImGui::IsItemHovered()) {
 						auto* weatherWidget = dynamic_cast<WeatherWidget*>(sortedWidgets[i]);
 						if (weatherWidget && weatherWidget->weather) {
-							ImGui::BeginTooltip();
+							const float lineHeight = ImGui::GetTextLineHeightWithSpacing();
+							const ImVec2 pad = ImGui::GetStyle().WindowPadding;
+							const float spacingHeight = ImGui::GetStyle().ItemSpacing.y;
+							constexpr int kSectionHeaders = 2;  // "ImageSpace:" + "Volumetric Lighting:"
+							constexpr int kTodValuesPerSection = 4;
+							constexpr int kSpacingSeparators = 1;  // Spacing between sections
+							const float estimatedTooltipHeight = (kSectionHeaders + kTodValuesPerSection * 2) * lineHeight + kSpacingSeparators * spacingHeight + pad.y * 2.0f;
+							Util::SetTooltipPositionNearMouse(estimatedTooltipHeight);
+							if (ImGui::BeginTooltip()) {
+								// ImageSpace info
+								ImGui::TextColored(Menu::GetSingleton()->GetTheme().StatusPalette.InfoColor, "ImageSpace:");
+								for (int tod = 0; tod < 4; tod++) {
+									auto imgSpace = weatherWidget->weather->imageSpaces[tod];
+									ImGui::Text("  %s: %s",
+										TOD::GetPeriodName(tod),
+										imgSpace ? imgSpace->GetFormEditorID() : "None");
+								}
 
-							// ImageSpace info
-							ImGui::TextColored(Menu::GetSingleton()->GetTheme().StatusPalette.InfoColor, "ImageSpace:");
-							for (int tod = 0; tod < 4; tod++) {
-								auto imgSpace = weatherWidget->weather->imageSpaces[tod];
-								ImGui::Text("  %s: %s",
-									TOD::GetPeriodName(tod),
-									imgSpace ? imgSpace->GetFormEditorID() : "None");
+								ImGui::Spacing();
+
+								// VolumetricLighting info
+								ImGui::TextColored(Menu::GetSingleton()->GetTheme().StatusPalette.InfoColor, "Volumetric Lighting:");
+								for (int tod = 0; tod < 4; tod++) {
+									auto volLight = weatherWidget->weather->volumetricLighting[tod];
+									ImGui::Text("  %s: %s",
+										TOD::GetPeriodName(tod),
+										volLight ? volLight->GetFormEditorID() : "None");
+								}
+
+								ImGui::EndTooltip();
 							}
-
-							ImGui::Spacing();
-
-							// VolumetricLighting info
-							ImGui::TextColored(Menu::GetSingleton()->GetTheme().StatusPalette.InfoColor, "Volumetric Lighting:");
-							for (int tod = 0; tod < 4; tod++) {
-								auto volLight = weatherWidget->weather->volumetricLighting[tod];
-								ImGui::Text("  %s: %s",
-									TOD::GetPeriodName(tod),
-									volLight ? volLight->GetFormEditorID() : "None");
-							}
-
-							ImGui::EndTooltip();
+							weatherTooltipShownThisFrame = true;
 						}
 					}
 
@@ -1436,13 +1419,13 @@ void EditorWindow::ShowSettingsWindow()
 
 		if (settingsSelectedCategory == "General") {
 			ImGui::Checkbox("Auto-apply changes", &settings.autoApplyChanges);
-			AddTooltip("Automatically apply changes to weather/lighting when editing");
+			Util::AddTooltip("Automatically apply changes to weather/lighting when editing");
 
 			ImGui::Checkbox("Use text buttons instead of icons", &settings.useTextButtons);
-			AddTooltip("Display action buttons as text labels instead of icons");
+			Util::AddTooltip("Display action buttons as text labels instead of icons");
 
 			ImGui::Checkbox("Enable 'Inherit From Parent' feature", &settings.enableInheritFromParent);
-			AddTooltip("Show checkboxes to copy settings from parent weather (editor-only feature)");
+			Util::AddTooltip("Show checkboxes to copy settings from parent weather (editor-only feature)");
 
 			ImGui::Separator();
 			ImGui::TextUnformatted("UI Scale");
@@ -1451,24 +1434,24 @@ void EditorWindow::ShowSettingsWindow()
 			if (ImGui::SliderFloat("Editor UI Scale", &settings.editorUIScale, 0.5f, 2.0f, "%.2f")) {
 				Save();
 			}
-			AddTooltip("Scale the size of all editor UI elements (0.5 = 50%, 2.0 = 200%)");
+			Util::AddTooltip("Scale the size of all editor UI elements (0.5 = 50%, 2.0 = 200%)");
 
 			if (Util::ButtonWithFlash("Reset to 1.0")) {
 				settings.editorUIScale = 1.0f;
 				Save();
 			}
 			ImGui::SameLine();
-			AddTooltip("Reset UI scale to default (100%)");
+			Util::AddTooltip("Reset UI scale to default (100%)");
 
 			ImGui::Separator();
 			ImGui::TextUnformatted("Session & History");
 			ImGui::Spacing();
 
 			ImGui::Checkbox("Remember open widgets", &settings.rememberOpenWidgets);
-			AddTooltip("Automatically reopen widgets that were open when you last closed the editor");
+			Util::AddTooltip("Automatically reopen widgets that were open when you last closed the editor");
 
 			ImGui::SliderInt("Max recent widgets", &settings.maxRecentWidgets, 5, 20);
-			AddTooltip("Maximum number of recent widgets to remember");
+			Util::AddTooltip("Maximum number of recent widgets to remember");
 
 			if (Util::ButtonWithFlash("Clear Recent History")) {
 				settings.recentWidgets.clear();
