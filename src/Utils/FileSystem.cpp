@@ -209,6 +209,29 @@ namespace Util
 				logger::warn("Failed to create directory '{}': {}", path.string(), ec.message());
 			}
 		}
+
+		std::string SanitizeFileName(std::string name)
+		{
+			// Replace invalid characters
+			std::replace_if(name.begin(), name.end(), [](char c) {
+				auto u = static_cast<unsigned char>(c);
+				return c == '\\' || c == '/' || c == ':' || c == '*' || c == '?' || c == '"' || c == '<' || c == '>' || c == '|' || u < 32u || u == 127u; }, '_');
+
+			// Windows reserved device names
+			static constexpr const char* reserved[] = {
+				"CON", "PRN", "AUX", "NUL",
+				"COM1", "COM2", "COM3", "COM4", "COM5", "COM6", "COM7", "COM8", "COM9",
+				"LPT1", "LPT2", "LPT3", "LPT4", "LPT5", "LPT6", "LPT7", "LPT8", "LPT9"
+			};
+
+			for (const char* r : reserved) {
+				if (Util::IEquals(name, r)) {
+					name += '_';
+					break;
+				}
+			}
+			return name;
+		}
 	}
 }
 

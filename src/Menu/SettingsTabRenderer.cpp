@@ -1,7 +1,5 @@
 #include "SettingsTabRenderer.h"
 
-#include <algorithm>
-#include <cctype>
 #include <set>
 #include <string>
 #include <windows.h>
@@ -21,16 +19,6 @@ using json = nlohmann::json;
 namespace
 {
 	using FontRoleGuard = MenuFonts::FontRoleGuard;  // Convenience alias
-
-	// Portable case-insensitive string comparison
-	bool iequals(const std::string& a, const std::string& b)
-	{
-		return std::equal(a.begin(), a.end(), b.begin(), b.end(),
-			[](char ca, char cb) {
-				return std::tolower(static_cast<unsigned char>(ca)) ==
-			           std::tolower(static_cast<unsigned char>(cb));
-			});
-	}
 
 	// Convert ImGui internal color names to user-friendly display names
 	const char* GetFriendlyColorName(int colorIndex)
@@ -606,15 +594,15 @@ void SettingsTabRenderer::RenderThemesTab()
 			ImGui::Text("Create a new theme with your current settings:");
 			ImGui::Separator();
 
-			auto safeNewThemeName = themeManager->SanitizeThemeFileName(newThemeName);
+			auto safeNewThemeName = Util::FileHelpers::SanitizeFileName(newThemeName);
 			bool isThemeNameEmpty = safeNewThemeName.empty();
 			bool isDuplicateName = false;
 			bool isDuplicateDisplayName = false;
 
 			for (const auto& t : themes) {
-				if (iequals(t.name, safeNewThemeName))
+				if (Util::IEquals(t.name, safeNewThemeName))
 					isDuplicateName = true;
-				if (strlen(newThemeDisplayName) > 0 && iequals(t.displayName, newThemeDisplayName))
+				if (strlen(newThemeDisplayName) > 0 && Util::IEquals(t.displayName, newThemeDisplayName))
 					isDuplicateDisplayName = true;
 				if (isDuplicateName && isDuplicateDisplayName)
 					break;
@@ -781,7 +769,7 @@ void SettingsTabRenderer::RenderFontsTab()
 			int familyIndex = 0;
 			if (!fontCatalog.families.empty()) {
 				for (size_t i = 0; i < fontCatalog.families.size(); ++i) {
-					if (iequals(fontCatalog.families[i].name, roleSettings.Family)) {
+					if (Util::IEquals(fontCatalog.families[i].name, roleSettings.Family)) {
 						familyIndex = static_cast<int>(i);
 						break;
 					}
@@ -835,7 +823,7 @@ void SettingsTabRenderer::RenderFontsTab()
 			} else if (selectedFamily) {
 				int styleIndex = 0;
 				for (size_t s = 0; s < selectedFamily->styles.size(); ++s) {
-					if (iequals(selectedFamily->styles[s].style, roleSettings.Style)) {
+					if (Util::IEquals(selectedFamily->styles[s].style, roleSettings.Style)) {
 						styleIndex = static_cast<int>(s);
 						break;
 					}

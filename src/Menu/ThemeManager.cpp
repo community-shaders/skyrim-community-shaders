@@ -553,12 +553,6 @@ std::vector<std::string> ThemeManager::GetThemeNames() const
 	return names;
 }
 
-std::string ThemeManager::SanitizeThemeFileName(std::string themeName)
-{
-	std::replace_if(themeName.begin(), themeName.end(), [](char c) { return c == '\\' || c == '/' || c == ':' || c == '*' || c == '?' || c == '"' || c == '<' || c == '>' || c == '|'; }, '_');
-	return themeName;
-}
-
 bool ThemeManager::LoadTheme(const std::string& themeName, json& themeSettings)
 {
 	if (!discovered) {
@@ -570,7 +564,7 @@ bool ThemeManager::LoadTheme(const std::string& themeName, json& themeSettings)
 		return true;
 	}
 
-	std::string safeFileName = SanitizeThemeFileName(themeName);
+	std::string safeFileName = Util::FileHelpers::SanitizeFileName(themeName);
 	auto it = std::find_if(themes.begin(), themes.end(),
 		[&safeFileName](const ThemeInfo& theme) { return theme.name == safeFileName; });
 
@@ -620,7 +614,7 @@ bool ThemeManager::SaveTheme(const std::string& themeName, const json& themeSett
 		{ "Theme", themeSettings }
 	};
 
-	std::string safeFileName = SanitizeThemeFileName(themeName);
+	std::string safeFileName = Util::FileHelpers::SanitizeFileName(themeName);
 	auto themesDir = GetThemesDirectory();
 	auto filePath = themesDir / (safeFileName + ".json");
 

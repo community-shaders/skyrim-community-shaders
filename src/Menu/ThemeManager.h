@@ -272,11 +272,6 @@ public:
 	bool IsPresetTheme(const std::string& themeName) const;
 
 	/**
-	 * @brief Generates safe filename (remove invalid characters)
-	 */
-	static std::string SanitizeThemeFileName(std::string themeName);
-
-	/**
 	 * @brief Gets the themes directory path
 	 */
 	std::filesystem::path GetThemesDirectory() const;
