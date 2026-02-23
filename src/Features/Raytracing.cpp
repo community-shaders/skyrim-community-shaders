@@ -3,9 +3,15 @@
 #include "Globals.h"
 #include "State.h"
 
+// Microsoft Pix
+#include <filesystem>
+#include <shlobj.h>
+#include <windows.h>
+
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	Raytracing::Settings,
-	Enabled)
+	Enabled,
+	EnablePIXCapture)
 
 ////////////////////////////////////////////////////////////////////////////////////
 
@@ -53,8 +59,43 @@ void Raytracing::DrawSettings()
 		}());
 	}
 
+	ImGui::Checkbox("Enable PIX Capture", &settings.EnablePIXCapture);
+
+	if (settings.EnablePIXCapture) {
+		if (ImGui::Button("Capture")) {
+			pixCapture = true;
+			pixCaptureStarted = false;
+		}
+
+	}
+
 	if (mainTexture)
 		ImGui::Image(mainTexture->srv, { 1280, 720 });
+}
+
+static std::wstring GetLatestWinPixGpuCapturerPath()
+{
+	LPWSTR programFilesPath = nullptr;
+	SHGetKnownFolderPath(FOLDERID_ProgramFiles, KF_FLAG_DEFAULT, NULL, &programFilesPath);
+
+	std::filesystem::path pixInstallationPath = programFilesPath;
+	pixInstallationPath /= "Microsoft PIX";
+
+	std::wstring newestVersionFound;
+
+	for (auto const& directory_entry : std::filesystem::directory_iterator(pixInstallationPath)) {
+		if (directory_entry.is_directory()) {
+			if (newestVersionFound.empty() || newestVersionFound < directory_entry.path().filename().c_str()) {
+				newestVersionFound = directory_entry.path().filename().c_str();
+			}
+		}
+	}
+
+	if (newestVersionFound.empty()) {
+		// TODO: Error, no PIX installation found
+	}
+
+	return pixInstallationPath / newestVersionFound / L"WinPixGpuCapturer.dll";
 }
 
 void Raytracing::CreateD3D12Device(ID3D11Device* d3d11Device, ID3D11DeviceContext* immediateContext, IDXGIAdapter* adapter)
@@ -64,11 +105,29 @@ void Raytracing::CreateD3D12Device(ID3D11Device* d3d11Device, ID3D11DeviceContex
 
 	Hooks::InstallD3D11Hooks(d3d11Device);
 
+	if (settings.EnablePIXCapture) {
+		// Check to see if a copy of WinPixGpuCapturer.dll has already been injected into the application.
+		// This may happen if the application is launched through the PIX UI.
+		if (GetModuleHandle(L"WinPixGpuCapturer.dll") == 0) {
+			auto pixGPUCapturerPath = GetLatestWinPixGpuCapturerPath();
+
+			if (pixGPUCapturerPath.empty()) {
+				logger::warn("[RT] PIX capture is enabled but binaries where not found.");
+			} else {
+				LoadLibrary(pixGPUCapturerPath.c_str());
+			}
+		}
+	}
+
 	// Set Device
 	DX::ThrowIfFailed(d3d11Device->QueryInterface(IID_PPV_ARGS(&m_D3D11Device)));
 
 	// Set Context Device
 	DX::ThrowIfFailed(immediateContext->QueryInterface(IID_PPV_ARGS(&m_D3D11Context)));
+
+	if (settings.EnablePIXCapture) {
+		DX::ThrowIfFailed(DXGIGetDebugInterface1(0, IID_PPV_ARGS(&ga)));
+	}
 
 	// Create device
 	DX::ThrowIfFailed(D3D12CreateDevice(adapter, D3D_FEATURE_LEVEL_12_1, IID_PPV_ARGS(&m_D3D12Device)));
@@ -113,7 +172,7 @@ void Raytracing::CreateD3D12Device(ID3D11Device* d3d11Device, ID3D11DeviceContex
 	DX::ThrowIfFailed(m_D3D11Device->OpenSharedFence(sharedFenceHandle, IID_PPV_ARGS(&d3d11Fence)));
 	CloseHandle(sharedFenceHandle);
 
-	InitializeCERaytracing(m_D3D12Device.get(), m_CommandQueue.get(), m_ComputeCommandQueue.get(), m_CopyCommandQueue.get());
+	InitializeCERaytracing(m_D3D11Device.get(), m_D3D12Device.get(), m_CommandQueue.get(), m_ComputeCommandQueue.get(), m_CopyCommandQueue.get());
 }
 
 void Raytracing::Load()
@@ -138,12 +197,12 @@ void Raytracing::PostPostLoad()
 	RE::GetINISetting("bReflectSky:Water")->data.b = true;
 }
 
-void Raytracing::InitializeCERaytracing(ID3D12Device5* device, ID3D12CommandQueue* commandQueue, ID3D12CommandQueue* computeCommandQueue, ID3D12CommandQueue* copyCommandQueue)
+void Raytracing::InitializeCERaytracing(ID3D11Device5* d3d11Device, ID3D12Device5* d3d12Device, ID3D12CommandQueue* commandQueue, ID3D12CommandQueue* computeCommandQueue, ID3D12CommandQueue* copyCommandQueue)
 {
 	if (initialized)
 		return;
 
-	bool result = creationEngineRaytracing->Initialize(device, commandQueue, computeCommandQueue, copyCommandQueue);
+	bool result = creationEngineRaytracing->Initialize(d3d11Device, d3d12Device, commandQueue, computeCommandQueue, copyCommandQueue);
 
 	if (!result) {
 		settings.Enabled = false;
@@ -151,10 +210,28 @@ void Raytracing::InitializeCERaytracing(ID3D12Device5* device, ID3D12CommandQueu
 		disableReason = DisableReason::InitFailed;
 
 		logger::error("[Raytracing] Failed to initialize Creation Engine ray tracing.");
-	} else {
-		initialized = true;
-		logger::info("[Raytracing] Successfully initialized Creation Engine ray tracing.");
-	}	
+		return;
+	}
+
+	initialized = true;
+
+	UpdateResolution();
+
+	logger::info("[Raytracing] Successfully initialized Creation Engine ray tracing.");
+}
+
+bool Raytracing::UpdateResolution()
+{
+	uint2 resolution = { static_cast<uint32_t>(globals::state->screenSize.x), static_cast<uint32_t>(globals::state->screenSize.y) };
+
+	if (resolution == m_Resolution)
+		return false;
+
+	m_Resolution = resolution;
+
+	creationEngineRaytracing->SetResolution(m_Resolution.x, m_Resolution.y);
+
+	return true;
 }
 
 void Raytracing::DeferredPasses()
@@ -162,13 +239,9 @@ void Raytracing::DeferredPasses()
 	if (!settings.Enabled)
 		return;
 
-	uint2 resolution = { static_cast<uint32_t>(globals::state->screenSize.x), static_cast<uint32_t>(globals::state->screenSize.y) };
-	
-	if (!mainTexture || resolution != m_Resolution) {
-		m_Resolution = resolution;
+	bool resolutionChanged = UpdateResolution();
 
-		creationEngineRaytracing->SetResolution(m_Resolution.x, m_Resolution.y);
-
+	if (!mainTexture || resolutionChanged) {
 		D3D11_TEXTURE2D_DESC desc{};
 		desc.Width = m_Resolution.x;
 		desc.Height = m_Resolution.y;
@@ -185,71 +258,31 @@ void Raytracing::DeferredPasses()
 	}
 
 	creationEngineRaytracing->WaitExecution();
+
+	if (pixCapture && pixCaptureStarted) {
+		ga->EndCapture();
+
+		pixCapture = false;
+		pixCaptureStarted = false;
+	}
+
+	if (pixCapture && !pixCaptureStarted) {
+		pixCaptureStarted = true;
+
+		ga->BeginCapture();
+	}
 }
 
 void Raytracing::SetupResources()
 {
 	auto renderer = globals::game::renderer;
-	auto device = globals::d3d::device;
 
-	logger::debug("Creating buffers...");
-	{
-		cheeseCb = eastl::make_unique<ConstantBuffer>(ConstantBufferDesc<CbData>());
-	}
+	D3D11_TEXTURE2D_DESC mainDesc;
+	auto mainTex = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMAIN];
+	mainTex.texture->GetDesc(&mainDesc);
 
-	logger::debug("Creating textures...");
-	{
-		D3D11_TEXTURE2D_DESC texDesc = {
-			.Width = 64,
-			.Height = 64,
-			.MipLevels = 1,
-			.ArraySize = 1,
-			.Format = DXGI_FORMAT_R32_UINT,
-			.SampleDesc = { 1, 0 },
-			.Usage = D3D11_USAGE_DEFAULT,
-			.BindFlags = D3D11_BIND_SHADER_RESOURCE |
-			             D3D11_BIND_UNORDERED_ACCESS |
-			             D3D11_BIND_RENDER_TARGET,
-			.CPUAccessFlags = 0,
-			.MiscFlags = 0
-		};
-		D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc = {
-			.Format = texDesc.Format,
-			.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2D,
-			.Texture2D = {
-				.MostDetailedMip = 0,
-				.MipLevels = texDesc.MipLevels }
-		};
-		D3D11_UNORDERED_ACCESS_VIEW_DESC uavDesc = {
-			.Format = texDesc.Format,
-			.ViewDimension = D3D11_UAV_DIMENSION_TEXTURE2D,
-			.Texture2D = { .MipSlice = 0 }
-		};
-
-		// When you want to align with the main texture format
-		auto mainTex = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMAIN];
-		mainTex.texture->GetDesc(&texDesc);
-		srvDesc.Format = uavDesc.Format = texDesc.Format;
-
-		{
-			cheeseTex = eastl::make_unique<Texture2D>(texDesc);
-			cheeseTex->CreateSRV(srvDesc);
-			cheeseTex->CreateUAV(uavDesc);
-		}
-	}
-
-	logger::debug("Creating samplers...");
-	{
-		D3D11_SAMPLER_DESC samplerDesc = {
-			.Filter = D3D11_FILTER_MIN_MAG_MIP_LINEAR,
-			.AddressU = D3D11_TEXTURE_ADDRESS_CLAMP,
-			.AddressV = D3D11_TEXTURE_ADDRESS_CLAMP,
-			.AddressW = D3D11_TEXTURE_ADDRESS_CLAMP,
-			.MaxAnisotropy = 1,
-			.MinLOD = 0,
-			.MaxLOD = D3D11_FLOAT32_MAX
-		};
-		DX::ThrowIfFailed(device->CreateSamplerState(&samplerDesc, cheeseSampler.put()));
+	if (initialized) {
+		creationEngineRaytracing->SetResolution(mainDesc.Width, mainDesc.Height);
 	}
 
 	CompileShaders();

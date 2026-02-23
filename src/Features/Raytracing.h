@@ -7,11 +7,15 @@
 
 #include "Util.h"
 
+#define NTDDI_VERSION NTDDI_WINBLUE
+
+#include <DXProgrammableCapture.h>
+
 struct CreationEngineRaytracing
 {
 	HMODULE handle = nullptr;
 
-	using InitializeFn = bool (*)(ID3D12Device5*, ID3D12CommandQueue*, ID3D12CommandQueue*, ID3D12CommandQueue*);
+	using InitializeFn = bool (*)(ID3D11Device5*, ID3D12Device5*, ID3D12CommandQueue*, ID3D12CommandQueue*, ID3D12CommandQueue*);
 	using WaitExecutionFn = void (*)();
 	using GetResolutionFn = void (*)(uint32_t&, uint32_t&);
 	using SetResolutionFn = void (*)(uint32_t, uint32_t);
@@ -105,17 +109,24 @@ struct Raytracing : public Feature
 	void PostPostLoad() override;
 
 	void CreateD3D12Device(ID3D11Device* device, ID3D11DeviceContext* immediateContext, IDXGIAdapter* adapter);
-	void InitializeCERaytracing(ID3D12Device5* device, ID3D12CommandQueue* commandQueue, ID3D12CommandQueue* computeCommandQueue, ID3D12CommandQueue* copyCommandQueue);
+	void InitializeCERaytracing(ID3D11Device5* d3d11Device, ID3D12Device5* d3d12Device, ID3D12CommandQueue* commandQueue, ID3D12CommandQueue* computeCommandQueue, ID3D12CommandQueue* copyCommandQueue);
+	bool UpdateResolution();
 	void DeferredPasses();
 
 	////////////////////////////////////////////////// Feature Specific Data
 	struct Settings
 	{
 		bool Enabled = true;
+		bool EnablePIXCapture = false;
 	} settings;
 
 	bool initialized = false;
 	bool forcedDisabled = false;
+
+	winrt::com_ptr<IDXGraphicsAnalysis> ga = nullptr;
+
+	bool pixCapture = false;
+	bool pixCaptureStarted = false;
 
 	uint2 m_Resolution;
 
