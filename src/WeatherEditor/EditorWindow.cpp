@@ -13,34 +13,6 @@
 
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(EditorWindow::Settings, recordMarkers, markedRecords, autoApplyChanges, useTextButtons, enableInheritFromParent, editorUIScale, favoriteWidgets, recentWidgets, maxRecentWidgets, rememberOpenWidgets, lastOpenWidgets)
 
-void TextUnformattedDisabled(const char* a_text, const char* a_textEnd = nullptr)
-{
-	ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetStyleColorVec4(ImGuiCol_TextDisabled));
-	ImGui::TextUnformatted(a_text, a_textEnd);
-	ImGui::PopStyleColor();
-}
-
-void AddTooltip(const char* a_desc, ImGuiHoveredFlags a_flags = ImGuiHoveredFlags_DelayNormal)
-{
-	if (ImGui::IsItemHovered(a_flags)) {
-		ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, { 8, 8 });
-		if (ImGui::BeginTooltip()) {
-			ImGui::PushTextWrapPos(ImGui::GetFontSize() * 50.0f);
-			ImGui::TextUnformatted(a_desc);
-			ImGui::PopTextWrapPos();
-			ImGui::EndTooltip();
-		}
-		ImGui::PopStyleVar();
-	}
-}
-
-inline void HelpMarker(const char* a_desc)
-{
-	ImGui::AlignTextToFramePadding();
-	TextUnformattedDisabled("(?)");
-	AddTooltip(a_desc, ImGuiHoveredFlags_DelayShort);
-}
-
 void DrawIconStar(ImVec2 center, float radius, ImU32 color, bool filled)
 {
 	auto* drawList = ImGui::GetWindowDrawList();
@@ -151,17 +123,67 @@ bool IconButton(const char* label, bool filled, const char* iconType)
 	return result;
 }
 
+namespace
+{
+	constexpr const char* kFilterColumnNames[] = { "All", "Editor ID", "Form ID", "File", "Status" };
+}  // namespace
+
+void EditorWindow::ResetObjectsFilter()
+{
+	m_currentFilterColumn = FilterColumn::All;
+	m_filterBuffer[0] = '\0';
+	m_showOnlyFlagged = false;
+	m_showOnlyFavorites = false;
+}
+
+bool EditorWindow::MatchesObjectFilter(Widget* w) const
+{
+	static_assert(static_cast<int>(FilterColumn::Count_) == IM_ARRAYSIZE(kFilterColumnNames),
+		"kFilterColumnNames must have one entry per FilterColumn value");
+	if (!w)
+		return false;
+	if (m_filterBuffer[0] == '\0')
+		return true;
+	switch (m_currentFilterColumn) {
+	case FilterColumn::EditorID:
+		return ContainsStringIgnoreCase(w->GetEditorID(), m_filterBuffer);
+	case FilterColumn::FormID:
+		return ContainsStringIgnoreCase(w->GetFormID(), m_filterBuffer);
+	case FilterColumn::File:
+		return ContainsStringIgnoreCase(w->GetFilename(), m_filterBuffer);
+	case FilterColumn::Status:
+		{
+			auto it = settings.markedRecords.find(w->GetEditorID());
+			return it != settings.markedRecords.end() && ContainsStringIgnoreCase(it->second, m_filterBuffer);
+		}
+	case FilterColumn::All:
+	default:
+		{
+			const auto editorId = w->GetEditorID();
+			if (ContainsStringIgnoreCase(editorId, m_filterBuffer))
+				return true;
+			if (ContainsStringIgnoreCase(w->GetFormID(), m_filterBuffer))
+				return true;
+			if (ContainsStringIgnoreCase(w->GetFilename(), m_filterBuffer))
+				return true;
+			auto it = settings.markedRecords.find(editorId);
+			if (it != settings.markedRecords.end() && ContainsStringIgnoreCase(it->second, m_filterBuffer))
+				return true;
+			return false;
+		}
+	}
+}
+
 void EditorWindow::ShowObjectsWindow()
 {
 	ImGui::Begin("Weather and Lighting Browser");
 
-	// Static variable to track the selected category
-	static std::string selectedCategory = "Weather";
-
-	// Static variable for filtering objects
-	static char filterBuffer[256] = "";
-	static bool showOnlyFlagged = false;
-	static bool showOnlyFavorites = false;
+	// Reset filter state when the user switches categories so stale column
+	// selections (e.g. Status) don't hide all items in the new category.
+	if (m_selectedCategory != m_previousSelectedCategory) {
+		ResetObjectsFilter();
+		m_previousSelectedCategory = m_selectedCategory;
+	}
 
 	// Create a table with two columns
 	if (ImGui::BeginTable("ObjectTable", 2, ImGuiTableFlags_Resizable | ImGuiTableFlags_BordersInner | ImGuiTableFlags_NoHostExtendX)) {
@@ -179,13 +201,15 @@ void EditorWindow::ShowObjectsWindow()
 		if (ImGui::BeginListBox("##CategoriesList", { -FLT_MIN, -FLT_MIN })) {
 			ImGui::Text("Categories");
 			ImGui::Spacing();
+			ImGui::Separator();
+			ImGui::Spacing();
 
 			// List of categories
 			const char* categories[] = { "Weather", "ImageSpace", "Lighting Template", "Cell Lighting", "Volumetric Lighting", "Shader Particle Geometry", "Lens Flare", "Visual Effect", "Interior Only", "Time of Day" };
 			for (int i = 0; i < IM_ARRAYSIZE(categories); ++i) {
 				// Highlight the selected category
-				if (ImGui::Selectable(categories[i], selectedCategory == categories[i])) {
-					selectedCategory = categories[i];  // Update selected category
+				if (ImGui::Selectable(categories[i], m_selectedCategory == categories[i])) {
+					m_selectedCategory = categories[i];  // Update selected category
 				}
 			}
 			ImGui::EndListBox();
@@ -199,6 +223,9 @@ void EditorWindow::ShowObjectsWindow()
 		if (ImGui::BeginChild("##ObjectsContent", { 0, 0 }, ImGuiChildFlags_Border)) {
 			// Interior Only / Time of Day categories have their own panels
 			if (selectedCategory == "Interior Only") {
+		if (ImGui::BeginChild("##ObjectsContent", { 0, 0 }, ImGuiChildFlags_Border, kStickyHeaderFlags)) {
+			// Interior Only category has its own panel
+			if (m_selectedCategory == "Interior Only") {
 				InteriorOnlyPanel::Draw();
 				ImGui::EndChild();
 				ImGui::EndTable();
@@ -246,17 +273,42 @@ void EditorWindow::ShowObjectsWindow()
 					ImGui::SetKeyboardFocusHere();
 				}
 			}
-			ImGui::InputTextWithHint("##ObjectFilter", "Filter... (Ctrl+F)", filterBuffer, sizeof(filterBuffer));
+			// Compute fixed widths once; reuse for both the search bar and the following combo.
+			const auto& style = ImGui::GetStyle();
+			// comboW = preview text + left/right padding + arrow button
+			const float comboW = ImGui::CalcTextSize("Editor ID").x + style.FramePadding.x * 2.0f + ImGui::GetFrameHeight();
+			const float helpW = ImGui::CalcTextSize("(?)").x;
+			const float iconW = ImGui::GetFrameHeight();
+			// Fixed width is the sum of every item that follows the search bar on the same row.
+			// Each SameLine() contributes style.ItemSpacing.x; widths are listed explicitly
+			// so adding or removing a widget only requires updating its own expression.
+			const float fixedW =
+				style.ItemSpacing.x + comboW +                              // combo
+				style.ItemSpacing.x + helpW +                               // help marker
+				style.ItemSpacing.x + 10.0f +                               // spacer before favorites
+				style.ItemSpacing.x + iconW +                               // fav icon
+				style.ItemSpacing.x + ImGui::CalcTextSize("Favorites").x +  // "Favorites" label
+				style.ItemSpacing.x + 10.0f +                               // spacer before flagged
+				style.ItemSpacing.x + iconW +                               // flag icon
+				style.ItemSpacing.x + ImGui::CalcTextSize("Flagged").x;     // "Flagged" label
+			ImGui::SetNextItemWidth(std::max(50.0f, ImGui::GetContentRegionAvail().x - fixedW));
+			ImGui::InputTextWithHint("##ObjectFilter", "Filter... (Ctrl+F)", m_filterBuffer, sizeof(m_filterBuffer));
 
 			ImGui::SameLine();
-			HelpMarker("Type a part of an object name to filter the list.\nCtrl+F: Focus search\nEnter: Open selected");
+			ImGui::SetNextItemWidth(comboW);
+			int col = static_cast<int>(m_currentFilterColumn);
+			if (ImGui::Combo("##FilterBy", &col, kFilterColumnNames, IM_ARRAYSIZE(kFilterColumnNames)))
+				m_currentFilterColumn = static_cast<FilterColumn>(col);
+
+			ImGui::SameLine();
+			Util::HelpMarker("Filter the object list by the selected column.\nAll: searches Editor ID, Form ID, File, and Status.\nStatus: hides items with no status marker when the search box is non-empty.\nCtrl+F: Focus search\nEnter: Open selected");
 
 			// Quick filter buttons on same row
 			ImGui::SameLine();
 			ImGui::Dummy(ImVec2(10.0f, 0.0f));  // Spacer
 			ImGui::SameLine();
-			if (IconButton("##filterFavorites", showOnlyFavorites, "star")) {
-				showOnlyFavorites = !showOnlyFavorites;
+			if (IconButton("##filterFavorites", m_showOnlyFavorites, "star")) {
+				m_showOnlyFavorites = !m_showOnlyFavorites;
 			}
 			ImGui::SameLine();
 			ImGui::Text("Favorites");
@@ -264,14 +316,35 @@ void EditorWindow::ShowObjectsWindow()
 			ImGui::SameLine();
 			ImGui::Dummy(ImVec2(10.0f, 0.0f));  // Spacer
 			ImGui::SameLine();
-			if (IconButton("##filterFlagged", showOnlyFlagged, "circle")) {
-				showOnlyFlagged = !showOnlyFlagged;
+			if (IconButton("##filterFlagged", m_showOnlyFlagged, "circle")) {
+				m_showOnlyFlagged = !m_showOnlyFlagged;
 			}
 			ImGui::SameLine();
 			ImGui::Text("Flagged");
 
+			// Returns the widget collection for a given category; Cell Lighting and unknown
+			// categories return an empty collection since they have no standalone widget list.
+			auto getWidgetsForCategory = [&](const std::string& cat) -> const std::vector<std::unique_ptr<Widget>>& {
+				static const std::vector<std::unique_ptr<Widget>> emptyWidgets;
+				if (cat == "Weather")
+					return weatherWidgets;
+				if (cat == "Lighting Template")
+					return lightingTemplateWidgets;
+				if (cat == "ImageSpace")
+					return imageSpaceWidgets;
+				if (cat == "Volumetric Lighting")
+					return volumetricLightingWidgets;
+				if (cat == "Shader Particle Geometry")
+					return precipitationWidgets;
+				if (cat == "Lens Flare")
+					return lensFlareWidgets;
+				if (cat == "Visual Effect")
+					return referenceEffectWidgets;
+				return emptyWidgets;
+			};
+
 			// Show recent widgets section for current category
-			auto recentIt = settings.recentWidgets.find(selectedCategory);
+			auto recentIt = settings.recentWidgets.find(m_selectedCategory);
 			if (recentIt != settings.recentWidgets.end() && !recentIt->second.empty()) {
 				ImGui::Spacing();
 				ImGui::TextColored(Menu::GetSingleton()->GetTheme().StatusPalette.InfoColor, "Recent:");
@@ -281,15 +354,7 @@ void EditorWindow::ShowObjectsWindow()
 						ImGui::SameLine();
 					if (ImGui::SmallButton(recentIt->second[i].c_str())) {
 						// Find and open widget in current category's collection
-						auto& widgets = selectedCategory == "Weather"                  ? weatherWidgets :
-						                selectedCategory == "Lighting Template"        ? lightingTemplateWidgets :
-						                selectedCategory == "ImageSpace"               ? imageSpaceWidgets :
-						                selectedCategory == "Volumetric Lighting"      ? volumetricLightingWidgets :
-						                selectedCategory == "Shader Particle Geometry" ? precipitationWidgets :
-						                selectedCategory == "Lens Flare"               ? lensFlareWidgets :
-						                selectedCategory == "Visual Effect"            ? referenceEffectWidgets :
-						                                                                 weatherWidgets;
-
+						const auto& widgets = getWidgetsForCategory(m_selectedCategory);
 						for (auto& widget : widgets) {
 							if (widget->GetEditorID() == recentIt->second[i]) {
 								widget->SetOpen(true);
@@ -299,6 +364,9 @@ void EditorWindow::ShowObjectsWindow()
 					}
 				}
 			}
+
+			// Scrollable area for the object table
+			BeginScrollableContent("##ObjectsScrollable");
 
 			// Stable user IDs for sortable columns — used instead of ColumnIndex so reordering/insertion won't break sorting.
 			enum ColumnID : ImGuiID
@@ -356,15 +424,7 @@ void EditorWindow::ShowObjectsWindow()
 				}
 
 				// Display objects based on the selected category
-				std::vector<std::unique_ptr<Widget>> emptyWidgets;
-				const auto& widgets = selectedCategory == "Weather"                  ? weatherWidgets :
-				                      selectedCategory == "Cell Lighting"            ? emptyWidgets :
-				                      selectedCategory == "ImageSpace"               ? imageSpaceWidgets :
-				                      selectedCategory == "Volumetric Lighting"      ? volumetricLightingWidgets :
-				                      selectedCategory == "Shader Particle Geometry" ? precipitationWidgets :
-				                      selectedCategory == "Lens Flare"               ? lensFlareWidgets :
-				                      selectedCategory == "Visual Effect"            ? referenceEffectWidgets :
-				                                                                       lightingTemplateWidgets;
+				const auto& widgets = getWidgetsForCategory(m_selectedCategory);
 				// Sort widgets based on current sort column
 				std::vector<Widget*> sortedWidgets;
 				sortedWidgets.reserve(widgets.size());
@@ -372,6 +432,7 @@ void EditorWindow::ShowObjectsWindow()
 					sortedWidgets.push_back(w.get());
 				}
 				RefreshJsonAttachmentCache(sortedWidgets);
+				bool weatherTooltipShownThisFrame = false;
 				if (currentSortColumn != SortColumn::None) {
 					std::sort(sortedWidgets.begin(), sortedWidgets.end(), [this](Widget* a, Widget* b) {
 						int comparison = 0;
@@ -430,7 +491,7 @@ void EditorWindow::ShowObjectsWindow()
 				};
 
 				// Special handling for Cell Lighting category
-				if (selectedCategory == "Cell Lighting") {
+				if (m_selectedCategory == "Cell Lighting") {
 					auto player = RE::PlayerCharacter::GetSingleton();
 					if (player && player->parentCell) {
 						auto cell = player->parentCell;
@@ -441,8 +502,7 @@ void EditorWindow::ShowObjectsWindow()
 							ImGui::TableSetColumnIndex(0);
 
 							// No favorite star for cell lighting (it's always the current cell)
-							ImGui::Dummy(ImVec2(24, 24));
-
+							ImGui::Dummy(ImVec2(ImGui::GetFrameHeight(), ImGui::GetFrameHeight()));
 							ImGui::TableNextColumn();
 
 							// Display current cell name
@@ -450,8 +510,14 @@ void EditorWindow::ShowObjectsWindow()
 							std::string displayName = cellName && cellName[0] ? cellName : "[Unnamed Cell]";
 							std::string label = std::format("[CURRENT CELL] {}", displayName);
 
+							// Highlight current cell (before TableRowSelectable so hover/active can override)
+							auto highlightColor = Menu::GetSingleton()->GetTheme().StatusPalette.InfoColor;
+							highlightColor.w = 0.3f;
+							ImGui::TableSetBgColor(ImGuiTableBgTarget_RowBg0, ImGui::ColorConvertFloat4ToU32(highlightColor));
+							ImGui::TableSetBgColor(ImGuiTableBgTarget_RowBg1, ImGui::ColorConvertFloat4ToU32(highlightColor));
+
 							bool isOpen = currentCellLightingWidget && currentCellLightingWidget->IsOpen();
-							if (ImGui::Selectable(label.c_str(), isOpen, ImGuiSelectableFlags_SpanAllColumns | ImGuiSelectableFlags_AllowDoubleClick)) {
+							if (Util::TableRowSelectable(label.c_str(), isOpen, ImGuiSelectableFlags_SpanAllColumns | ImGuiSelectableFlags_AllowDoubleClick)) {
 								if (ImGui::IsMouseDoubleClicked(0)) {
 									// Open or reuse the cell lighting widget
 									if (currentCellLightingWidget && currentCellLightingWidget->cell == cell) {
@@ -464,12 +530,6 @@ void EditorWindow::ShowObjectsWindow()
 									}
 								}
 							}
-
-							// Highlight current cell
-							auto highlightColor = Menu::GetSingleton()->GetTheme().StatusPalette.InfoColor;
-							highlightColor.w = 0.3f;
-							ImGui::TableSetBgColor(ImGuiTableBgTarget_RowBg0, ImGui::ColorConvertFloat4ToU32(highlightColor));
-							ImGui::TableSetBgColor(ImGuiTableBgTarget_RowBg1, ImGui::ColorConvertFloat4ToU32(highlightColor));
 
 							// Enter key to open
 							if (isOpen && ImGui::IsKeyPressed(ImGuiKey_Enter)) {
@@ -512,7 +572,7 @@ void EditorWindow::ShowObjectsWindow()
 
 				// Get current cell's lighting template for prioritization
 				RE::BGSLightingTemplate* currentCellLightingTemplate = nullptr;
-				if (selectedCategory == "Lighting Template") {
+				if (m_selectedCategory == "Lighting Template") {
 					auto player = RE::PlayerCharacter::GetSingleton();
 					if (player && player->parentCell) {
 						auto& cellData = player->parentCell->GetRuntimeData();
@@ -520,20 +580,25 @@ void EditorWindow::ShowObjectsWindow()
 					}
 				}
 
+				// Centralized filter check used by both display loops below.
+				auto shouldShowWidget = [&](Widget* w) {
+					if (!MatchesObjectFilter(w))
+						return false;
+					if (m_showOnlyFavorites && !IsFavorite(w->GetEditorID()))
+						return false;
+					if (m_showOnlyFlagged && settings.markedRecords.find(w->GetEditorID()) == settings.markedRecords.end())
+						return false;
+					return true;
+				};
+
 				// Filtered display of widgets - show current cell's lighting template first
-				if (currentCellLightingTemplate && selectedCategory == "Lighting Template") {
+				if (currentCellLightingTemplate && m_selectedCategory == "Lighting Template") {
 					for (int i = 0; i < sortedWidgets.size(); ++i) {
 						auto* ltWidget = dynamic_cast<LightingTemplateWidget*>(sortedWidgets[i]);
 						if (!ltWidget || ltWidget->lightingTemplate != currentCellLightingTemplate)
 							continue;
 
-						if (!ContainsStringIgnoreCase(sortedWidgets[i]->GetEditorID(), filterBuffer))
-							continue;
-
-						// Apply quick filters
-						if (showOnlyFavorites && !IsFavorite(sortedWidgets[i]->GetEditorID()))
-							continue;
-						if (showOnlyFlagged && settings.markedRecords.find(sortedWidgets[i]->GetEditorID()) == settings.markedRecords.end())
+						if (!shouldShowWidget(sortedWidgets[i]))
 							continue;
 
 						auto editorLabel = std::format("[CURRENT] {}", sortedWidgets[i]->GetEditorID());
@@ -557,17 +622,17 @@ void EditorWindow::ShowObjectsWindow()
 
 						// Editor ID column with [CURRENT] prefix
 						bool isSelected = sortedWidgets[i]->IsOpen();
-						if (ImGui::Selectable(editorLabel.c_str(), isSelected, ImGuiSelectableFlags_SpanAllColumns | ImGuiSelectableFlags_AllowDoubleClick | ImGuiSelectableFlags_AllowOverlap)) {
+						if (Util::TableRowSelectable(editorLabel.c_str(), isSelected, ImGuiSelectableFlags_SpanAllColumns | ImGuiSelectableFlags_AllowDoubleClick | ImGuiSelectableFlags_AllowOverlap)) {
 							if (ImGui::IsMouseDoubleClicked(0)) {
 								sortedWidgets[i]->SetOpen(true);
-								AddToRecent(sortedWidgets[i]->GetEditorID(), selectedCategory);
+								AddToRecent(sortedWidgets[i]->GetEditorID(), m_selectedCategory);
 							}
 						}
 
 						// Enter key to open
 						if (isSelected && ImGui::IsKeyPressed(ImGuiKey_Enter)) {
 							sortedWidgets[i]->SetOpen(true);
-							AddToRecent(sortedWidgets[i]->GetEditorID(), selectedCategory);
+							AddToRecent(sortedWidgets[i]->GetEditorID(), m_selectedCategory);
 						}
 
 						// Context menu
@@ -611,19 +676,13 @@ void EditorWindow::ShowObjectsWindow()
 				// Filtered display of widgets - regular list
 				for (int i = 0; i < sortedWidgets.size(); ++i) {
 					// Skip current cell's lighting template if already shown
-					if (currentCellLightingTemplate && selectedCategory == "Lighting Template") {
+					if (currentCellLightingTemplate && m_selectedCategory == "Lighting Template") {
 						auto* ltWidget = dynamic_cast<LightingTemplateWidget*>(sortedWidgets[i]);
 						if (ltWidget && ltWidget->lightingTemplate == currentCellLightingTemplate)
 							continue;
 					}
 
-					if (!ContainsStringIgnoreCase(sortedWidgets[i]->GetEditorID(), filterBuffer))
-						continue;
-
-					// Apply quick filters
-					if (showOnlyFavorites && !IsFavorite(sortedWidgets[i]->GetEditorID()))
-						continue;
-					if (showOnlyFlagged && settings.markedRecords.find(sortedWidgets[i]->GetEditorID()) == settings.markedRecords.end())
+					if (!shouldShowWidget(sortedWidgets[i]))
 						continue;
 
 					auto editorLabel = sortedWidgets[i]->GetEditorID();
@@ -648,47 +707,56 @@ void EditorWindow::ShowObjectsWindow()
 
 					// Editor ID column
 					bool isSelected = sortedWidgets[i]->IsOpen();
-					if (ImGui::Selectable(editorLabel.c_str(), isSelected, ImGuiSelectableFlags_SpanAllColumns | ImGuiSelectableFlags_AllowDoubleClick | ImGuiSelectableFlags_AllowOverlap)) {
+					if (Util::TableRowSelectable(editorLabel.c_str(), isSelected, ImGuiSelectableFlags_SpanAllColumns | ImGuiSelectableFlags_AllowDoubleClick | ImGuiSelectableFlags_AllowOverlap)) {
 						if (ImGui::IsMouseDoubleClicked(0)) {
 							sortedWidgets[i]->SetOpen(true);
-							AddToRecent(sortedWidgets[i]->GetEditorID(), selectedCategory);
+							AddToRecent(sortedWidgets[i]->GetEditorID(), m_selectedCategory);
 						}
 					}
 
 					// Show ImageSpace and VolumetricLighting info for weather widgets
-					if (selectedCategory == "Weather" && ImGui::IsItemHovered()) {
+					if (!weatherTooltipShownThisFrame && m_selectedCategory == "Weather" && ImGui::IsItemHovered()) {
 						auto* weatherWidget = dynamic_cast<WeatherWidget*>(sortedWidgets[i]);
 						if (weatherWidget && weatherWidget->weather) {
-							ImGui::BeginTooltip();
+							const float lineHeight = ImGui::GetTextLineHeightWithSpacing();
+							const ImVec2 pad = ImGui::GetStyle().WindowPadding;
+							const float spacingHeight = ImGui::GetStyle().ItemSpacing.y;
+							constexpr int kSectionHeaders = 2;  // "ImageSpace:" + "Volumetric Lighting:"
+							constexpr int kTodValuesPerSection = 4;
+							constexpr int kSpacingSeparators = 1;  // Spacing between sections
+							const float estimatedTooltipHeight = (kSectionHeaders + kTodValuesPerSection * 2) * lineHeight + kSpacingSeparators * spacingHeight + pad.y * 2.0f;
+							Util::SetTooltipPositionNearMouse(estimatedTooltipHeight);
+							if (ImGui::BeginTooltip()) {
+								// ImageSpace info
+								ImGui::TextColored(Menu::GetSingleton()->GetTheme().StatusPalette.InfoColor, "ImageSpace:");
+								for (int tod = 0; tod < 4; tod++) {
+									auto imgSpace = weatherWidget->weather->imageSpaces[tod];
+									ImGui::Text("  %s: %s",
+										TOD::GetPeriodName(tod),
+										imgSpace ? imgSpace->GetFormEditorID() : "None");
+								}
 
-							// ImageSpace info
-							ImGui::TextColored(Menu::GetSingleton()->GetTheme().StatusPalette.InfoColor, "ImageSpace:");
-							for (int tod = 0; tod < 4; tod++) {
-								auto imgSpace = weatherWidget->weather->imageSpaces[tod];
-								ImGui::Text("  %s: %s",
-									TOD::GetPeriodName(tod),
-									imgSpace ? imgSpace->GetFormEditorID() : "None");
+								ImGui::Spacing();
+
+								// VolumetricLighting info
+								ImGui::TextColored(Menu::GetSingleton()->GetTheme().StatusPalette.InfoColor, "Volumetric Lighting:");
+								for (int tod = 0; tod < 4; tod++) {
+									auto volLight = weatherWidget->weather->volumetricLighting[tod];
+									ImGui::Text("  %s: %s",
+										TOD::GetPeriodName(tod),
+										volLight ? volLight->GetFormEditorID() : "None");
+								}
+
+								ImGui::EndTooltip();
 							}
-
-							ImGui::Spacing();
-
-							// VolumetricLighting info
-							ImGui::TextColored(Menu::GetSingleton()->GetTheme().StatusPalette.InfoColor, "Volumetric Lighting:");
-							for (int tod = 0; tod < 4; tod++) {
-								auto volLight = weatherWidget->weather->volumetricLighting[tod];
-								ImGui::Text("  %s: %s",
-									TOD::GetPeriodName(tod),
-									volLight ? volLight->GetFormEditorID() : "None");
-							}
-
-							ImGui::EndTooltip();
+							weatherTooltipShownThisFrame = true;
 						}
 					}
 
 					// Enter key to open
 					if (isSelected && ImGui::IsKeyPressed(ImGuiKey_Enter)) {
 						sortedWidgets[i]->SetOpen(true);
-						AddToRecent(sortedWidgets[i]->GetEditorID(), selectedCategory);
+						AddToRecent(sortedWidgets[i]->GetEditorID(), m_selectedCategory);
 					}
 
 					// Opens a context menu on right click to mark records by color
@@ -733,6 +801,8 @@ void EditorWindow::ShowObjectsWindow()
 
 				ImGui::EndTable();  // End DetailsTable
 			}  // End if BeginTable("DetailsTable")
+
+			EndScrollableContent();  // End ObjectsScrollable
 
 		}  // End if BeginChild("##ObjectsContent")
 		ImGui::EndChild();  // End ObjectsContent child
@@ -1153,6 +1223,9 @@ void EditorWindow::RenderUI()
 		ImGui::EndMainMenuBar();
 	}
 
+	// Establish a viewport-wide DockSpace so all editor windows are snappable and dockable
+	ImGui::DockSpaceOverViewport(nullptr, ImGuiDockNodeFlags_PassthruCentralNode);
+
 	auto width = ImGui::GetIO().DisplaySize.x;
 	auto height = ImGui::GetIO().DisplaySize.y;
 	auto viewportWidth = width * 0.5f;                // Make the viewport take up 50% of the width
@@ -1357,13 +1430,13 @@ void EditorWindow::ShowSettingsWindow()
 
 		if (settingsSelectedCategory == "General") {
 			ImGui::Checkbox("Auto-apply changes", &settings.autoApplyChanges);
-			AddTooltip("Automatically apply changes to weather/lighting when editing");
+			Util::AddTooltip("Automatically apply changes to weather/lighting when editing");
 
 			ImGui::Checkbox("Use text buttons instead of icons", &settings.useTextButtons);
-			AddTooltip("Display action buttons as text labels instead of icons");
+			Util::AddTooltip("Display action buttons as text labels instead of icons");
 
 			ImGui::Checkbox("Enable 'Inherit From Parent' feature", &settings.enableInheritFromParent);
-			AddTooltip("Show checkboxes to copy settings from parent weather (editor-only feature)");
+			Util::AddTooltip("Show checkboxes to copy settings from parent weather (editor-only feature)");
 
 			ImGui::Separator();
 			ImGui::TextUnformatted("UI Scale");
@@ -1372,24 +1445,24 @@ void EditorWindow::ShowSettingsWindow()
 			if (ImGui::SliderFloat("Editor UI Scale", &settings.editorUIScale, 0.5f, 2.0f, "%.2f")) {
 				Save();
 			}
-			AddTooltip("Scale the size of all editor UI elements (0.5 = 50%, 2.0 = 200%)");
+			Util::AddTooltip("Scale the size of all editor UI elements (0.5 = 50%, 2.0 = 200%)");
 
 			if (Util::ButtonWithFlash("Reset to 1.0")) {
 				settings.editorUIScale = 1.0f;
 				Save();
 			}
 			ImGui::SameLine();
-			AddTooltip("Reset UI scale to default (100%)");
+			Util::AddTooltip("Reset UI scale to default (100%)");
 
 			ImGui::Separator();
 			ImGui::TextUnformatted("Session & History");
 			ImGui::Spacing();
 
 			ImGui::Checkbox("Remember open widgets", &settings.rememberOpenWidgets);
-			AddTooltip("Automatically reopen widgets that were open when you last closed the editor");
+			Util::AddTooltip("Automatically reopen widgets that were open when you last closed the editor");
 
 			ImGui::SliderInt("Max recent widgets", &settings.maxRecentWidgets, 5, 20);
-			AddTooltip("Maximum number of recent widgets to remember");
+			Util::AddTooltip("Maximum number of recent widgets to remember");
 
 			if (Util::ButtonWithFlash("Clear Recent History")) {
 				settings.recentWidgets.clear();
@@ -1870,7 +1943,7 @@ void EditorWindow::RenderNotifications()
 
 		if (ImGui::Begin(std::format("##Notification{}", (void*)&notif).c_str(),
 				nullptr,
-				ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoNav)) {
+				ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoNav | ImGuiWindowFlags_NoDocking)) {
 			ImVec4 colorWithAlpha = notif.color;
 			colorWithAlpha.w *= alpha;
 			ImGui::PushStyleColor(ImGuiCol_Text, colorWithAlpha);
