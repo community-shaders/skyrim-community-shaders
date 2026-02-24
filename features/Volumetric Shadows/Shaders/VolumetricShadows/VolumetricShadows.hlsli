@@ -6,36 +6,8 @@
 
 namespace VolumetricShadows
 {
-	Texture2D<float2> SharedShadowMap : register(t18);
-
-	// Directional (sun) shadow data: cascade split distances, projection matrices,
-	// and a dispatch table that maps game shadow-light slots (0-3) to typed buffers.
-	// Layout must match Deferred::DirectionalShadowData in Deferred.h exactly.
-	struct DirectionalShadowData
-	{
-		float2   EndSplitDistances;    // cascade end distances: x = cascade 0, y = cascade 1
-		float2   StartSplitDistances;  // cascade start distances: x = cascade 0, y = cascade 1
-		float4x4 ShadowMapProj[2];     // world-to-shadow projection for each directional cascade
-
-		// Dispatch table: maps game shadow-light slot (0..TotalCount-1) to typed buffer index.
-		uint4 LightIsParaboloid;  // per game slot: 0 = frustum/spot, 1 = paraboloid
-		uint4 TypedIndex;         // per game slot: index within FrustumShadows or ParaboloidShadows
-		uint  TotalCount;         // total active shadow lights (0..4)
-		uint  FrustumCount;       // elements written to FrustumShadows buffer
-		uint  ParaboloidCount;    // elements written to ParaboloidShadows buffer
-		float _pad;
-	};
-
-	StructuredBuffer<DirectionalShadowData> SharedShadowData : register(t19);
-
 	static const float VSM_MIN_VARIANCE = 0.00001;
 	static const float VSM_BLEEDING_REDUCTION = 0.2;
-
-	float GetShadowDepth(float3 positionWS, uint eyeIndex)
-	{
-		float4 positionCS = mul(FrameBuffer::CameraViewProj[eyeIndex], float4(positionWS, 1));
-		return positionCS.z / positionCS.w;
-	}
 
 	// Chebyshev upper bound on P(X >= t)
 	// moments.x = mean(z), moments.y = mean(z^2)
@@ -83,10 +55,8 @@ namespace VolumetricShadows
 		return shadow * rcpSampleCount;
 	}
 
-	float GetVSMShadow3D(float3 startPosition, float3 endPosition, float noise, uint baseSampleCount, uint eyeIndex, out float surfaceShadow)
+	float GetVSMShadow3D(DirectionalShadowData sD, float3 startPosition, float3 endPosition, float noise, uint baseSampleCount, uint eyeIndex, out float surfaceShadow)
 	{
-		DirectionalShadowData sD = SharedShadowData[0];
-
 		startPosition += FrameBuffer::CameraPosAdjust[0].xyz;
 		endPosition += FrameBuffer::CameraPosAdjust[0].xyz;
 
@@ -154,10 +124,8 @@ namespace VolumetricShadows
 		return ComputeVSM(moments, positionLS.z);
 	}
 
-	float GetVSMShadow2D(float3 position, uint eyeIndex, out float detailedShadow)
+	float GetVSMShadow2D(DirectionalShadowData sD, float3 position, uint eyeIndex, out float detailedShadow)
 	{
-		DirectionalShadowData sD = SharedShadowData[0];
-
 		float shadowMapDepth = GetShadowDepth(position, eyeIndex);
 
 		// Early out beyond cascade range
