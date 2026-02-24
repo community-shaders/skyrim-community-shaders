@@ -1,5 +1,7 @@
 #include "TimeOfDayPanel.h"
 
+#include <cmath>
+
 #include "../Globals.h"
 #include "../Menu.h"
 #include "../Menu/ThemeManager.h"
@@ -185,8 +187,10 @@ namespace TimeOfDayPanel
 			{
 				float val = entry.value.get<float>();
 				ImGui::SetNextItemWidth(C::SCENE_VALUE_INPUT_WIDTH);
-				if (ImGui::InputFloat("##val", &val, 0.01f, 0.1f, "%.3f"))
-					manager->UpdateEntryValue(kSceneType, index, val, true);
+				if (ImGui::InputFloat("##val", &val, 0.01f, 0.1f, "%.3f")) {
+					if (std::isfinite(val))
+						manager->UpdateEntryValue(kSceneType, index, val, true);
+				}
 				if (ImGui::IsItemDeactivatedAfterEdit())
 					manager->SaveUserSettings(kSceneType);
 			}

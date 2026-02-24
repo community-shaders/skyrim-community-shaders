@@ -5,6 +5,7 @@
 #include "Utils/FileSystem.h"
 #include "Utils/Game.h"
 
+#include <cmath>
 #include <filesystem>
 #include <fstream>
 #include <numeric>
@@ -778,23 +779,31 @@ void SceneSettingsManager::ApplyTimeOfDayBlended()
 
 			if (type == SettingType::Float) {
 				float baseVal = baseline->get<float>();
+				if (!std::isfinite(baseVal))
+					baseVal = 0.0f;
 				float result = 0.0f;
 				float coveredFactor = 0.0f;
 
 				for (auto& pr : periodRefs) {
 					float f = factors[pr.periodIdx];
 					if (f > 0.0f) {
-						result += f * pr.value->get<float>();
+						float periodVal = pr.value->get<float>();
+						if (!std::isfinite(periodVal))
+							periodVal = 0.0f;
+						result += f * periodVal;
 						coveredFactor += f;
 					}
 				}
 				result += (1.0f - coveredFactor) * baseVal;
 
-				// Epsilon comparison — skip if the float barely changed
-				auto& cachedFloat = lastAppliedTODFloats[shortName][key];
-				if (std::abs(cachedFloat - result) < kBlendEpsilon)
+				// Epsilon comparison — skip if the float barely changed.
+				// Use find() first to avoid default-inserting 0.0f, which would
+				// cause the first apply to be skipped when result ≈ 0.
+				auto& featureFloats = lastAppliedTODFloats[shortName];
+				auto floatIt = featureFloats.find(key);
+				if (floatIt != featureFloats.end() && std::abs(floatIt->second - result) < kBlendEpsilon)
 					continue;
-				cachedFloat = result;
+				featureFloats[key] = result;
 				dirtyKeys.emplace_back(key, result);
 			} else {
 				// Non-float: snap to dominant period's value, or baseline if none
@@ -903,10 +912,18 @@ void SceneSettingsManager::LoadUserSettings(SceneType type)
 			entry.source = EntrySource::User;
 
 			// Parse period for TimeOfDay entries
-			if (type == SceneType::TimeOfDay && item.contains("period")) {
+			if (type == SceneType::TimeOfDay) {
+				if (!item.contains("period")) {
+					logger::warn("SceneSettingsManager: TimeOfDay entry for feature '{}' key '{}' is missing 'period' — skipping to avoid ghost entry",
+						entry.featureShortName, entry.settingKey);
+					continue;
+				}
 				entry.period = GetPeriodFromName(item["period"].get<std::string>());
-				if (entry.period == TimeOfDayPeriod::Count)
+				if (entry.period == TimeOfDayPeriod::Count) {
+					logger::warn("SceneSettingsManager: TimeOfDay entry for feature '{}' key '{}' has invalid period '{}' — skipping",
+						entry.featureShortName, entry.settingKey, item["period"].get<std::string>());
 					continue;  // Invalid period name
+				}
 			}
 
 			if (!Feature::FindFeatureByShortName(entry.featureShortName))
