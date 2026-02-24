@@ -9,7 +9,13 @@ BSLightingShaderMaterialPBR::~BSLightingShaderMaterialPBR()
 
 BSLightingShaderMaterialPBR* BSLightingShaderMaterialPBR::Make()
 {
-	return new BSLightingShaderMaterialPBR;
+	auto* scrapHeap = globals::game::memoryManager->GetThreadScrapHeap();
+	auto* material = static_cast<BSLightingShaderMaterialPBR*>(scrapHeap->Allocate(sizeof(BSLightingShaderMaterialPBR), 8));
+	if (material) {
+		std::memset(material, 0, sizeof(BSLightingShaderMaterialPBR));
+		std::construct_at(material);
+	}
+	return material;
 }
 
 RE::BSShaderMaterial* BSLightingShaderMaterialPBR::Create()

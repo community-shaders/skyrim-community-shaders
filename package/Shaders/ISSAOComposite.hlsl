@@ -130,6 +130,11 @@ float SimplexNoise(float3 v)
 #		include "IBL/IBL.hlsli"
 #	endif
 
+#	if defined(EXP_HEIGHT_FOG) && defined(APPLY_FOG)
+SamplerState SampColorSampler : register(s9);
+#		include "ExponentialHeightFog/ExponentialHeightFog.hlsli"
+#	endif
+
 PS_OUTPUT main(PS_INPUT input)
 {
 	PS_OUTPUT psout;
@@ -180,9 +185,24 @@ PS_OUTPUT main(PS_INPUT input)
 		fogColor = ImageBasedLighting::GetFogIBLColor(fogColor);
 	}
 #		endif
+#		if defined(EXP_HEIGHT_FOG)
+	uint eyeIndex = Stereo::GetEyeIndexFromTexCoord(input.TexCoord.xy);
+	float4 positionWS = float4(2 * float2(input.TexCoord.x, -input.TexCoord.y + 1) - 1, depth, 1);
+	positionWS = mul(FrameBuffer::CameraViewProjInverse[eyeIndex], positionWS);
+	positionWS.xyz = positionWS.xyz / positionWS.w;
+	if (SharedData::exponentialHeightFogSettings.enabled) {
+		float4 exponentialHeightFog = ExponentialHeightFog::GetExponentialHeightFog(positionWS.xyz, FrameBuffer::CameraPosAdjust[eyeIndex].xyz, fogColor);
+		fogColor = exponentialHeightFog.xyz;
+		fogFactor = exponentialHeightFog.w;
+	}
+	if (depth < 0.999999 || SharedData::exponentialHeightFogSettings.enabled) {
+		composedColor.xyz = (SharedData::exponentialHeightFogSettings.enabled ? 1.0 : FogNearColor.w) * lerp(composedColor.xyz, fogColor, fogFactor);
+	}
+#		else
 	if (depth < 0.999999) {
 		composedColor.xyz = FogNearColor.w * lerp(composedColor.xyz, fogColor, Color::FogAlpha(fogFactor));
 	}
+#		endif
 #	endif
 
 #	if !defined(VR)

@@ -97,6 +97,11 @@ namespace Util
 			return GetCommunityShaderPath() / "AppliedOverrides.json";
 		}
 
+		std::filesystem::path GetSceneSettingsPath()
+		{
+			return GetCommunityShaderPath() / "SceneSettings";
+		}
+
 		std::filesystem::path GetShadersPath()
 		{
 			return GetDataPath() / "Shaders";

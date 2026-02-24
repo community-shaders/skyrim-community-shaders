@@ -17,6 +17,7 @@
 #include "Menu.h"
 #include "Menu/HomePageRenderer.h"
 #include "Menu/ThemeManager.h"
+#include "SceneSettingsManager.h"
 #include "SettingsOverrideManager.h"
 #include "State.h"
 #include "Util.h"
@@ -568,11 +569,15 @@ void FeatureListRenderer::DrawMenuVisitor::operator()(Feature* feat)
 	bool hasFailedMessage = !feat->failedLoadedMessage.empty();
 
 	if (ImGui::BeginChild("##FeatureConfigFrame", { 0, 0 }, true)) {
+		// Compute scene-controlled state once for both header and settings
+		auto* sceneManager = SceneSettingsManager::GetSingleton();
+		bool sceneControlled = sceneManager->HasActiveSettingsForFeature(featureName) && !sceneManager->IsFeaturePaused(featureName);
+
 		// Render feature header with integrated action buttons
-		RenderFeatureHeader(feat, isDisabled, isLoaded);
+		RenderFeatureHeader(feat, isDisabled, isLoaded, sceneControlled);
 
 		// Render feature settings content
-		RenderFeatureSettings(feat, isDisabled, isLoaded, hasFailedMessage);
+		RenderFeatureSettings(feat, isDisabled, isLoaded, hasFailedMessage, sceneControlled);
 
 		// Render restore defaults button (floating in bottom-right)
 		RenderRestoreDefaultsButton(feat, isDisabled, isLoaded);
@@ -589,7 +594,7 @@ bool FeatureListRenderer::DrawMenuVisitor::IsFeatureInstalled(const std::string&
 	return std::filesystem::exists(path, ec);
 }
 
-void FeatureListRenderer::DrawMenuVisitor::RenderFeatureHeader(Feature* feat, bool isDisabled, bool isLoaded)
+void FeatureListRenderer::DrawMenuVisitor::RenderFeatureHeader(Feature* feat, bool isDisabled, bool isLoaded, bool sceneControlled)
 {
 	auto& themeSettings = globals::menu->GetSettings().Theme;
 	const auto featureName = feat->GetShortName();
@@ -665,6 +670,8 @@ void FeatureListRenderer::DrawMenuVisitor::RenderFeatureHeader(Feature* feat, bo
 	// Apply Override button (when feature has available overrides)
 	if (!isDisabled && isLoaded && hasOverrides) {
 		ImGui::SameLine();
+		if (sceneControlled)
+			ImGui::BeginDisabled();
 		if (ImGui::Button(overrideButtonText, { overrideButtonWidth, 0 })) {
 			if (feat->ReapplyOverrideSettings()) {
 				logger::info("Successfully reapplied override settings for {}", featureName);
@@ -672,12 +679,20 @@ void FeatureListRenderer::DrawMenuVisitor::RenderFeatureHeader(Feature* feat, bo
 				logger::warn("Failed to reapply override settings for {}", featureName);
 			}
 		}
+		if (sceneControlled)
+			ImGui::EndDisabled();
 
 		if (auto _tt = Util::HoverTooltipWrapper()) {
-			ImGui::Text(
-				"Restores original override settings from mod files.\n"
-				"This will discard your customizations and revert to\n"
-				"the mod author's recommended settings.");
+			if (sceneControlled) {
+				ImGui::Text(
+					"Cannot apply overrides while scene-specific settings are active.\n"
+					"Pause scene settings for this feature first.");
+			} else {
+				ImGui::Text(
+					"Restores original override settings from mod files.\n"
+					"This will discard your customizations and revert to\n"
+					"the mod author's recommended settings.");
+			}
 		}
 	}
 
@@ -685,7 +700,7 @@ void FeatureListRenderer::DrawMenuVisitor::RenderFeatureHeader(Feature* feat, bo
 	ImGui::SetCursorScreenPos(cursorPosAfterHeader);
 }
 
-void FeatureListRenderer::DrawMenuVisitor::RenderFeatureSettings(Feature* feat, bool isDisabled, bool isLoaded, bool hasFailedMessage)
+void FeatureListRenderer::DrawMenuVisitor::RenderFeatureSettings(Feature* feat, bool isDisabled, bool isLoaded, bool hasFailedMessage, bool sceneControlled)
 {
 	auto& themeSettings = globals::menu->GetSettings().Theme;
 
@@ -709,9 +724,35 @@ void FeatureListRenderer::DrawMenuVisitor::RenderFeatureSettings(Feature* feat, 
 				ImGui::Separator();
 			}
 
+			// Scene-specific settings toggle (Interior Only / TimeOfDay / Weather-Specific)
+			// Show toggle whenever scene entries exist for this feature, even if feature-paused
+			{
+				const auto& featureShortName = feat->GetShortName();
+				auto* sceneMgr = SceneSettingsManager::GetSingleton();
+				bool scenePaused = sceneMgr->IsFeaturePaused(featureShortName);
+				if (sceneControlled || scenePaused) {
+					bool active = !scenePaused;
+					if (Util::FeatureToggle("##PauseSceneSettings", &active))
+						sceneMgr->SetFeaturePaused(featureShortName, !active);
+					ImGui::SameLine();
+					ImGui::Text("Scene Specific Settings");
+					if (auto _tt = Util::HoverTooltipWrapper()) {
+						ImGui::Text(scenePaused ? "Paused - click to resume" : "Active - click to pause");
+					}
+					ImGui::Separator();
+				}
+			}
+
+			// Disable feature settings while scene overrides are actively applied (not paused)
+			if (sceneControlled)
+				ImGui::BeginDisabled();
+
 			ImVec2 cursorPosBefore = ImGui::GetCursorPos();
 			feat->DrawSettings();
 			ImVec2 cursorPosAfter = ImGui::GetCursorPos();
+
+			if (sceneControlled)
+				ImGui::EndDisabled();
 
 			// --- Reactive constraint detection ---
 			// Compare the current full constraint set against g_knownConstraintKeys.

@@ -22,14 +22,16 @@ public:
 		form = a_weather;
 		weather = a_weather;
 		LoadWeatherValues();
-		// Cache the original vanilla values for restoration
+		InitializeInheritFlags();
 		vanillaSettings = settings;
+		originalSettings = settings;
 	}
 
 	struct DirectionalColor
 	{
 		float3 min;
 		float3 max;
+		bool operator==(const DirectionalColor&) const = default;
 	};
 
 	struct DALC
@@ -37,11 +39,13 @@ public:
 		DirectionalColor directional[3];
 		float3 specular;
 		float fresnelPower;
+		bool operator==(const DALC& o) const { return std::equal(std::begin(directional), std::end(directional), std::begin(o.directional)) && specular == o.specular && fresnelPower == o.fresnelPower; }
 	};
 
 	struct Atmosphere
 	{
 		float3 colorTimes[ColorTimes::kTotal];
+		bool operator==(const Atmosphere& o) const { return std::equal(std::begin(colorTimes), std::end(colorTimes), std::begin(o.colorTimes)); }
 	};
 
 	struct Cloud
@@ -52,6 +56,15 @@ public:
 		float cloudAlpha[ColorTimes::kTotal];
 		bool enabled = true;
 		std::string texturePath;
+		bool operator==(const Cloud& o) const
+		{
+			return cloudLayerSpeedY == o.cloudLayerSpeedY &&
+			       cloudLayerSpeedX == o.cloudLayerSpeedX &&
+			       std::equal(std::begin(color), std::end(color), std::begin(o.color)) &&
+			       std::equal(std::begin(cloudAlpha), std::end(cloudAlpha), std::begin(o.cloudAlpha)) &&
+			       enabled == o.enabled &&
+			       texturePath == o.texturePath;
+		}
 	};
 
 	struct ImageSpaceSettings
@@ -77,6 +90,8 @@ public:
 		float dofStrength = 0.0f;
 		float dofDistance = 0.0f;
 		float dofRange = 0.0f;
+
+		bool operator==(const ImageSpaceSettings&) const = default;
 	};
 
 	struct Settings
@@ -97,10 +112,12 @@ public:
 
 		// Per-feature settings storage
 		std::map<std::string, json> featureSettings;
+
+		bool operator==(const Settings& o) const;
 	};
 
 	Settings settings;
-	// Cached original vanilla values for restoration
+	Settings originalSettings;
 	Settings vanillaSettings;
 
 	// Cloud texture cache (layer index -> SRV)
@@ -116,8 +133,10 @@ public:
 	bool HasParent() const;
 	void SetWeatherValues();
 	void LoadWeatherValues();
-	void ApplyChanges();
-	void RevertChanges();
+	void ApplyChanges() override;
+	void RevertChanges() override;
+	void Delete() override;
+	bool HasUnsavedChanges() const override;
 
 	// New methods for per-feature settings
 	void SaveFeatureSettings();
@@ -129,6 +148,7 @@ public:
 	void NavigateToFeatureSetting(const std::string& featureName, const std::string& settingName);
 
 private:
+	void InitializeInheritFlags();
 	void DrawDALCSettings();
 	void DrawWeatherColorSettings();
 	void DrawCloudSettings();

@@ -5,40 +5,44 @@
 void ReferenceEffectWidget::DrawWidget()
 {
 	ImGui::SetNextWindowSizeConstraints(ImVec2(600, 0), ImVec2(FLT_MAX, FLT_MAX));
-	if (ImGui::Begin(GetEditorID().c_str(), &open, ImGuiWindowFlags_NoSavedSettings)) {
-		DrawWidgetHeader("##ReferenceEffectSearch", false, true);
+	if (ImGui::Begin(GetEditorID().c_str(), &open, ImGuiWindowFlags_NoSavedSettings | kStickyHeaderFlags)) {
+		DrawWidgetHeader("##ReferenceEffectSearch", true, true);
+		BeginScrollableContent("##REScroll");
+		{
+			bool changed = false;
 
-		bool changed = false;
+			auto editorWindow = EditorWindow::GetSingleton();
 
-		auto editorWindow = EditorWindow::GetSingleton();
+			ImGui::SeparatorText("Art Object");
+			if (editorWindow->artObjectWidgets.empty()) {
+				ImGui::TextDisabled("No Art Objects available");
+			} else {
+				if (WeatherUtils::DrawFormPickerCached("Art Object", settings.artObject, editorWindow->artObjectWidgets, false, true))
+					changed = true;
+			}
 
-		ImGui::SeparatorText("Art Object");
-		if (editorWindow->artObjectWidgets.empty()) {
-			ImGui::TextDisabled("No Art Objects available");
-		} else {
-			if (WeatherUtils::DrawFormPickerCached("Art Object", settings.artObject, editorWindow->artObjectWidgets, false, true))
+			ImGui::SeparatorText("Effect Shader");
+			if (editorWindow->effectShaderWidgets.empty()) {
+				ImGui::TextDisabled("No Effect Shaders available");
+			} else {
+				if (WeatherUtils::DrawFormPickerCached("Effect Shader", settings.effectShader, editorWindow->effectShaderWidgets, false, true))
+					changed = true;
+			}
+
+			ImGui::SeparatorText("Flags");
+			if (ImGui::Checkbox("Face Target", &settings.faceTarget))
 				changed = true;
-		}
-
-		ImGui::SeparatorText("Effect Shader");
-		if (editorWindow->effectShaderWidgets.empty()) {
-			ImGui::TextDisabled("No Effect Shaders available");
-		} else {
-			if (WeatherUtils::DrawFormPickerCached("Effect Shader", settings.effectShader, editorWindow->effectShaderWidgets, false, true))
+			if (ImGui::Checkbox("Attach To Camera", &settings.attachToCamera))
 				changed = true;
-		}
+			if (ImGui::Checkbox("Inherit Rotation", &settings.inheritRotation))
+				changed = true;
 
-		ImGui::SeparatorText("Flags");
-		if (ImGui::Checkbox("Face Target", &settings.faceTarget))
-			changed = true;
-		if (ImGui::Checkbox("Attach To Camera", &settings.attachToCamera))
-			changed = true;
-		if (ImGui::Checkbox("Inherit Rotation", &settings.inheritRotation))
-			changed = true;
-
-		if (changed && EditorWindow::GetSingleton()->settings.autoApplyChanges) {
-			ApplyChanges();
+			if (changed && editorWindow->settings.autoApplyChanges) {
+				editorWindow->PushUndoState(this);
+				ApplyChanges();
+			}
 		}
+		EndScrollableContent();
 	}
 	ImGui::End();
 }
@@ -49,6 +53,7 @@ void ReferenceEffectWidget::LoadSettings()
 		return;
 
 	if (!js.empty()) {
+		settings = vanillaSettings;
 		try {
 			if (js.contains("artObject")) {
 				std::string formIDStr = js["artObject"].get<std::string>();
@@ -76,16 +81,25 @@ void ReferenceEffectWidget::LoadSettings()
 				settings.inheritRotation = js["inheritRotation"];
 		} catch (const std::exception& e) {
 			logger::error("ReferenceEffect {}: Failed to load from JSON: {}", GetEditorID(), e.what());
+			settings = vanillaSettings;
 		}
 	} else {
-		settings.artObject = referenceEffect->data.artObject;
-		settings.effectShader = referenceEffect->data.effectShader;
-		settings.faceTarget = referenceEffect->data.flags.any(RE::BGSReferenceEffect::Flag::kFaceTarget);
-		settings.attachToCamera = referenceEffect->data.flags.any(RE::BGSReferenceEffect::Flag::kAttachToCamera);
-		settings.inheritRotation = referenceEffect->data.flags.any(RE::BGSReferenceEffect::Flag::kInheritRotation);
+		settings = vanillaSettings;
 	}
 
 	originalSettings = settings;
+	ApplyChanges();
+}
+
+void ReferenceEffectWidget::LoadFromGameSettings()
+{
+	if (!referenceEffect)
+		return;
+	settings.artObject = referenceEffect->data.artObject;
+	settings.effectShader = referenceEffect->data.effectShader;
+	settings.faceTarget = referenceEffect->data.flags.any(RE::BGSReferenceEffect::Flag::kFaceTarget);
+	settings.attachToCamera = referenceEffect->data.flags.any(RE::BGSReferenceEffect::Flag::kAttachToCamera);
+	settings.inheritRotation = referenceEffect->data.flags.any(RE::BGSReferenceEffect::Flag::kInheritRotation);
 }
 
 void ReferenceEffectWidget::SaveSettings()
@@ -95,6 +109,7 @@ void ReferenceEffectWidget::SaveSettings()
 	js["faceTarget"] = settings.faceTarget;
 	js["attachToCamera"] = settings.attachToCamera;
 	js["inheritRotation"] = settings.inheritRotation;
+	originalSettings = settings;
 }
 
 void ReferenceEffectWidget::ApplyChanges()
@@ -112,20 +127,15 @@ void ReferenceEffectWidget::ApplyChanges()
 		referenceEffect->data.flags.set(RE::BGSReferenceEffect::Flag::kAttachToCamera);
 	if (settings.inheritRotation)
 		referenceEffect->data.flags.set(RE::BGSReferenceEffect::Flag::kInheritRotation);
-
-	originalSettings = settings;
 }
 
 void ReferenceEffectWidget::RevertChanges()
 {
-	settings = originalSettings;
+	settings = vanillaSettings;
+	ApplyChanges();
 }
 
 bool ReferenceEffectWidget::HasUnsavedChanges() const
 {
-	return settings.artObject != originalSettings.artObject ||
-	       settings.effectShader != originalSettings.effectShader ||
-	       settings.faceTarget != originalSettings.faceTarget ||
-	       settings.attachToCamera != originalSettings.attachToCamera ||
-	       settings.inheritRotation != originalSettings.inheritRotation;
+	return !(settings == originalSettings);
 }

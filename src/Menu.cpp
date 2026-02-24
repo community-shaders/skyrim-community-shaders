@@ -43,7 +43,7 @@
 #include "Features/PerformanceOverlay/ABTesting/ABTestAggregator.h"
 #include "Features/PerformanceOverlay/ABTesting/ABTesting.h"
 #include "Features/VR.h"
-#include "Features/WeatherPicker.h"
+#include "Features/WeatherEditor.h"
 #include "WeatherEditor/EditorWindow.h"
 
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
@@ -152,6 +152,7 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	OverlayToggleKey,
 	ShaderBlockPrevKey,
 	ShaderBlockNextKey,
+	WeatherEditorToggleKey,
 	EnableShaderBlocking,
 	FirstTimeSetupCompleted,
 	SkipClearCacheConfirmation,
@@ -231,8 +232,6 @@ Menu::~Menu()
 	ImGui_ImplWin32_Shutdown();
 	ImGui::DestroyContext();
 	dxgiAdapter3 = nullptr;
-
-	globals::features::vr.DestroyOverlay();
 }
 
 void Menu::Load(json& o_json)
@@ -262,6 +261,7 @@ void Menu::Load(json& o_json)
 	migrateKey(o_json, "OverlayToggleKey", settings.OverlayToggleKey);
 	migrateKey(o_json, "ShaderBlockPrevKey", settings.ShaderBlockPrevKey);
 	migrateKey(o_json, "ShaderBlockNextKey", settings.ShaderBlockNextKey);
+	migrateKey(o_json, "WeatherEditorToggleKey", settings.WeatherEditorToggleKey);
 
 	// Helper for new smart serialization with error handling
 	auto loadComboList = [](const json& j, const char* keyName, std::vector<InputCombo>& target) {
@@ -281,6 +281,7 @@ void Menu::Load(json& o_json)
 	loadComboList(o_json, "OverlayToggleKey", settings.OverlayToggleKey);
 	loadComboList(o_json, "ShaderBlockPrevKey", settings.ShaderBlockPrevKey);
 	loadComboList(o_json, "ShaderBlockNextKey", settings.ShaderBlockNextKey);
+	loadComboList(o_json, "WeatherEditorToggleKey", settings.WeatherEditorToggleKey);
 
 	// Legacy support: If old config has Theme data and no SelectedThemePreset, load it
 	if (o_json.contains("Theme") && o_json["Theme"].is_object() && settings.SelectedThemePreset.empty()) {
@@ -343,6 +344,7 @@ void Menu::Save(json& o_json)
 	InputCombo::ComboList::to_json(o_json["OverlayToggleKey"], settings.OverlayToggleKey);
 	InputCombo::ComboList::to_json(o_json["ShaderBlockPrevKey"], settings.ShaderBlockPrevKey);
 	InputCombo::ComboList::to_json(o_json["ShaderBlockNextKey"], settings.ShaderBlockNextKey);
+	InputCombo::ComboList::to_json(o_json["WeatherEditorToggleKey"], settings.WeatherEditorToggleKey);
 }
 
 void Menu::LoadTheme(json& o_json)
@@ -647,10 +649,6 @@ void Menu::Init()
 
 	BuildCategoryCounts();
 
-	if (globals::features::vr.IsOpenVRCompatible()) {
-		globals::features::vr.EnsureOverlayInitialized();
-	}
-
 	initialized = true;
 }
 
@@ -682,11 +680,6 @@ void Menu::DrawSettings()
 	ImGui::SetNextWindowPos(Util::GetNativeViewportSizeScaled(0.5f), ImGuiCond_FirstUseEver, ImVec2(0.5f, 0.5f));
 	ImGui::SetNextWindowSize(Util::GetNativeViewportSizeScaled(0.8f), ImGuiCond_FirstUseEver);
 	auto title = std::format("Community Shaders {}", Util::GetFormattedVersion(Plugin::VERSION));
-
-	if (EditorWindow::GetSingleton()->open) {
-		EditorWindow::GetSingleton()->Draw();
-		return;
-	}
 
 	// Determine window flags based on docking state
 	ImGuiWindowFlags windowFlags = ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoScrollbar;
@@ -773,7 +766,8 @@ void Menu::DrawGeneralSettings()
 		.settingSkipCompilationKey = settingSkipCompilationKey,
 		.settingOverlayToggleKey = settingOverlayToggleKey,
 		.settingShaderBlockPrevKey = settingShaderBlockPrevKey,
-		.settingShaderBlockNextKey = settingShaderBlockNextKey
+		.settingShaderBlockNextKey = settingShaderBlockNextKey,
+		.settingWeatherEditorToggleKey = settingWeatherEditorToggleKey
 	};
 
 	// Render settings using extracted component
@@ -988,6 +982,7 @@ void Menu::ProcessInputEventQueue()
 					{ &settings.OverlayToggleKey, &settingOverlayToggleKey, [this](std::vector<InputCombo> keys) { settings.OverlayToggleKey = keys; settingOverlayToggleKey = false; } },
 					{ &settings.ShaderBlockPrevKey, &settingShaderBlockPrevKey, [this](std::vector<InputCombo> keys) { settings.ShaderBlockPrevKey = keys; settingShaderBlockPrevKey = false; } },
 					{ &settings.ShaderBlockNextKey, &settingShaderBlockNextKey, [this](std::vector<InputCombo> keys) { settings.ShaderBlockNextKey = keys; settingShaderBlockNextKey = false; } },
+					{ &settings.WeatherEditorToggleKey, &settingWeatherEditorToggleKey, [this](std::vector<InputCombo> keys) { settings.WeatherEditorToggleKey = keys; settingWeatherEditorToggleKey = false; } },
 				};
 				bool handled = false;
 				for (auto& h : hotkeyActions) {
@@ -1045,9 +1040,8 @@ void Menu::ProcessInputEventQueue()
 						{ settings.EffectToggleKey, [shaderCache]() { shaderCache->SetEnabled(!shaderCache->IsEnabled()); } },
 						{ settings.ShaderBlockPrevKey, [this, shaderCache]() { if (settings.EnableShaderBlocking) shaderCache->IterateShaderBlock(); } },
 						{ settings.ShaderBlockNextKey, [this, shaderCache]() { if (settings.EnableShaderBlocking) shaderCache->IterateShaderBlock(false); } },
-						{ settings.OverlayToggleKey, []() {
-							 Menu::GetSingleton()->overlayVisible = !Menu::GetSingleton()->overlayVisible;
-						 } },
+						{ settings.OverlayToggleKey, []() { Menu::GetSingleton()->overlayVisible = !Menu::GetSingleton()->overlayVisible; } },
+						{ settings.WeatherEditorToggleKey, []() { auto p = RE::PlayerCharacter::GetSingleton(); if (p && p->parentCell) EditorWindow::GetSingleton()->open = !EditorWindow::GetSingleton()->open; } },
 					};
 					for (const auto& ka : keyActions) {
 						// Check if key matches last key in combo and all modifiers are held (exact match)
@@ -1084,10 +1078,14 @@ void Menu::ProcessInputEventQueue()
 					}
 				}
 
-				// Close menu with ESC if no editor window is open
+				// Handle ESC key for menu and editor window
 				auto* editorWindow = EditorWindow::GetSingleton();
-				if (key == VK_ESCAPE && IsEnabled && editorWindow && !editorWindow->open) {
-					IsEnabled = false;
+				if (key == VK_ESCAPE) {
+					if (editorWindow && editorWindow->open && editorWindow->ShouldHandleEscapeKey()) {
+						editorWindow->open = false;
+					} else if (IsEnabled && (!editorWindow || !editorWindow->open)) {
+						IsEnabled = false;
+					}
 				}
 			}
 
@@ -1158,7 +1156,8 @@ void Menu::ProcessInputEvents(RE::InputEvent* const* a_events)
 
 bool Menu::ShouldSwallowInput()
 {
-	return IsEnabled || HomePageRenderer::ShouldShowFirstTimeSetup();
+	auto editorWindow = EditorWindow::GetSingleton();
+	return IsEnabled || HomePageRenderer::ShouldShowFirstTimeSetup() || (editorWindow && editorWindow->open);
 }
 
 void Menu::SelectFeatureMenu(const std::string& featureName)
@@ -1170,19 +1169,22 @@ void Menu::SelectFeatureMenu(const std::string& featureName)
 /**
  * @brief Renders the standalone weather details window when enabled
  *
- * Delegates to the WeatherPicker feature for rendering the weather details window
+ * Delegates to the WeatherEditor feature for rendering the weather details window
  * that can remain open even when the main menu is closed. This provides a simple
- * coordination layer between the Menu system and the WeatherPicker feature.
+ * coordination layer between the Menu system and the WeatherEditor feature.
  */
 void Menu::DrawWeatherDetailsWindow()
 {
-	if (!globals::features::weatherPicker.WeatherDetailsWindow.Enabled) {
+	if (!globals::features::weatherEditor.WeatherDetailsWindow.Enabled) {
+		return;
+	}
+	if (!globals::features::weatherEditor.loaded) {
 		return;
 	}
 
 	// Use Weather core feature for all window management and rendering
-	auto& weather = globals::features::weatherPicker;
-	bool* p_open = &globals::features::weatherPicker.WeatherDetailsWindow.Enabled;
+	auto& weather = globals::features::weatherEditor;
+	bool* p_open = &globals::features::weatherEditor.WeatherDetailsWindow.Enabled;
 	weather.RenderWeatherDetailsWindow(p_open);
 }
 

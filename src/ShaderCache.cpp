@@ -2206,6 +2206,15 @@ namespace SIE
 		return compilationSet.totalTasks && compilationSet.completedTasks + compilationSet.failedTasks < compilationSet.totalTasks;
 	}
 
+	void ShaderCache::StopCompilation()
+	{
+		if (IsCompiling()) {
+			logger::info("Stopping {} remaining shader compilation tasks", compilationSet.totalTasks - compilationSet.completedTasks - compilationSet.failedTasks);
+		}
+		ssource.request_stop();
+		compilationSet.Clear();
+	}
+
 	bool ShaderCache::IsEnabled() const
 	{
 		return isEnabled;
