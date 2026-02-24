@@ -298,18 +298,12 @@ namespace TimeOfDayPanel
 		manager->GetTimeOfDayFactors(factors);
 
 		if (!overwriteGroup.order.empty()) {
-			SceneSettingsUI::DrawSectionHeader("Overwrite Files", theme.StatusPalette.InfoColor, "##ow",
-				manager->AreAllOverwritesPaused(kSceneType),
-				[&] { manager->SetAllOverwritesPaused(kSceneType, !manager->AreAllOverwritesPaused(kSceneType)); },
-				[&] { popups.deleteAllOverwrites.Request(); });
+			SceneSettingsUI::DrawSectionHeader("Overwrite Files", theme.StatusPalette.InfoColor, "##ow", manager->AreAllOverwritesPaused(kSceneType), [&] { manager->SetAllOverwritesPaused(kSceneType, !manager->AreAllOverwritesPaused(kSceneType)); }, [&] { popups.deleteAllOverwrites.Request(); });
 			DrawSourceTable(overwriteGroup, factors, "##TODOverwriteTable");
 		}
 
 		if (!userGroup.order.empty()) {
-			SceneSettingsUI::DrawSectionHeader("User Settings", theme.FeatureHeading.ColorDefault, "##usr",
-				manager->AreAllUserPaused(kSceneType),
-				[&] { manager->SetAllUserPaused(kSceneType, !manager->AreAllUserPaused(kSceneType)); },
-				[&] { popups.deleteAllUser.Request(); });
+			SceneSettingsUI::DrawSectionHeader("User Settings", theme.FeatureHeading.ColorDefault, "##usr", manager->AreAllUserPaused(kSceneType), [&] { manager->SetAllUserPaused(kSceneType, !manager->AreAllUserPaused(kSceneType)); }, [&] { popups.deleteAllUser.Request(); });
 			DrawSourceTable(userGroup, factors, "##TODUserTable");
 		}
 	}

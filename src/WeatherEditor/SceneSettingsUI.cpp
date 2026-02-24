@@ -46,9 +46,9 @@ namespace SceneSettingsUI
 			state.cachedFeatureNames = GetFeatureNamesForType(type);
 
 		auto displayName = (state.selectedFeatureIdx >= 0 &&
-		                       state.selectedFeatureIdx < static_cast<int>(state.cachedFeatureNames.size()))
-		                     ? SceneSettingsManager::GetFeatureDisplayName(state.cachedFeatureNames[state.selectedFeatureIdx])
-		                     : std::string("Select Feature...");
+							   state.selectedFeatureIdx < static_cast<int>(state.cachedFeatureNames.size())) ?
+		                       SceneSettingsManager::GetFeatureDisplayName(state.cachedFeatureNames[state.selectedFeatureIdx]) :
+		                       std::string("Select Feature...");
 		const char* featurePreview = displayName.c_str();
 
 		ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x * C::SCENE_FEATURE_DROPDOWN_RATIO);
@@ -245,7 +245,7 @@ namespace SceneSettingsUI
 		ImGui::Spacing();
 		ImGui::TextColored(color, "%s", label);
 		ImGui::SameLine();
-		auto pauseLabel = std::format("{}{}" , allPaused ? "Unpause All" : "Pause All", idSuffix);
+		auto pauseLabel = std::format("{}{}", allPaused ? "Unpause All" : "Pause All", idSuffix);
 		if (ImGui::SmallButton(pauseLabel.c_str()))
 			onTogglePause();
 		ImGui::SameLine();
@@ -267,18 +267,12 @@ namespace SceneSettingsUI
 			(entries[i].source == EntrySource::Overwrite ? overwriteIndices : userIndices).push_back(i);
 
 		if (!overwriteIndices.empty()) {
-			DrawSectionHeader("Overwrite Files", theme.StatusPalette.InfoColor, "##ow",
-				manager->AreAllOverwritesPaused(type),
-				[&] { manager->SetAllOverwritesPaused(type, !manager->AreAllOverwritesPaused(type)); },
-				[&] { popups.deleteAllOverwrites.Request(); });
+			DrawSectionHeader("Overwrite Files", theme.StatusPalette.InfoColor, "##ow", manager->AreAllOverwritesPaused(type), [&] { manager->SetAllOverwritesPaused(type, !manager->AreAllOverwritesPaused(type)); }, [&] { popups.deleteAllOverwrites.Request(); });
 			DrawGroupedEntries(type, popups, overwriteIndices);
 		}
 
 		if (!userIndices.empty()) {
-			DrawSectionHeader("User Settings", theme.FeatureHeading.ColorDefault, "##usr",
-				manager->AreAllUserPaused(type),
-				[&] { manager->SetAllUserPaused(type, !manager->AreAllUserPaused(type)); },
-				[&] { popups.deleteAllUser.Request(); });
+			DrawSectionHeader("User Settings", theme.FeatureHeading.ColorDefault, "##usr", manager->AreAllUserPaused(type), [&] { manager->SetAllUserPaused(type, !manager->AreAllUserPaused(type)); }, [&] { popups.deleteAllUser.Request(); });
 			DrawGroupedEntries(type, popups, userIndices);
 		}
 	}
