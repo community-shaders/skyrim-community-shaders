@@ -18,7 +18,7 @@
 #	include "IBL/IBL.hlsli"
 #endif
 
-Texture2D<float2> SharedShadowMap : register(t18);
+Texture2D<float2> SharedShadowMap : register(t80);
 
 // Directional (sun) shadow data: cascade split distances, projection matrices,
 struct DirectionalShadowData
@@ -28,19 +28,19 @@ struct DirectionalShadowData
 	float4x4 ShadowMapProj[2];     // world-to-shadow projection for each directional cascade
 };
 
-StructuredBuffer<DirectionalShadowData> DirectionalShadows : register(t19);
+StructuredBuffer<DirectionalShadowData> DirectionalShadows : register(t81);
 
-Texture2DArray<float> DirectionalShadowCascades : register(t20);
+Texture2DArray<float> DirectionalShadowCascades : register(t82);
 
-struct ShadowData 
-{ 
-	float4x4 ShadowProj; 
+struct ShadowData
+{
+	float4x4 ShadowProj;
 	uint ShadowType;
 	uint3 ShadowLightParam;
 };
 
-StructuredBuffer<ShadowData> Shadows    : register(t22);
-Texture2DArray<float>        ShadowMaps : register(t23);
+StructuredBuffer<ShadowData> Shadows    : register(t83);
+Texture2DArray<float>        ShadowMaps : register(t84);
 
 // Comparison sampler for PCF shadow filtering (less-equal depth test).
 SamplerComparisonState ShadowSamplerCmp : register(s14);

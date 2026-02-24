@@ -54,10 +54,10 @@ public:
 	void ClearShaderCache();
 
 	// Reads shadow parameters from game structs and uploads to structured buffers and texture arrays.
-	//   t19 — DirectionalShadowData  (cascade splits + world-to-shadow projections)
-	//   t20 — DirectionalShadowCascades  (Texture2DArray, game's kSHADOWMAPS_ESRAM depth SRV)
-	//   t22 — ShadowData (unified shadow light data, up to 4 elements)
-	//   t23 — ShadowMaps (Texture2DArray, game's kSHADOWMAPS depth SRV, bound directly)
+	//   t81 — DirectionalShadowData  (cascade splits + world-to-shadow projections)
+	//   t82 — DirectionalShadowCascades  (Texture2DArray, game's kSHADOWMAPS_ESRAM depth SRV)
+	//   t83 — ShadowData (unified shadow light data, up to 4 elements)
+	//   t84 — ShadowMaps (Texture2DArray, game's kSHADOWMAPS depth SRV, bound directly)
 	// Called during EarlyPrepasses immediately after shadow maps have been rendered.
 	void CopyShadowData();
 
@@ -72,9 +72,9 @@ public:
 	ID3D11ComputeShader* mainCompositeCS = nullptr;
 	ID3D11ComputeShader* mainCompositeInteriorCS = nullptr;
 
-	// Directional shadow structured buffer (t19): cascade splits and projections.
+	// Directional shadow structured buffer (t81): cascade splits and projections.
 	Buffer* perDirectionalShadow = nullptr;
-	// Unified shadow light structured buffer (t22): projection + type for each active light.
+	// Unified shadow light structured buffer (t83): projection + type for each active light.
 	Buffer* perShadows = nullptr;
 
 	bool deferredPass = false;

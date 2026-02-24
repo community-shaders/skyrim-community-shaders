@@ -594,13 +594,10 @@ void Deferred::CopyShadowData()
 	auto renderer = globals::game::renderer;
 	auto context  = globals::d3d::context;
 
-	// Cascade split distances.
 	auto& dirData          = sunShadowLight->GetShadowDirectionalLightRuntimeData();
 	dd.EndSplitDistances   = { dirData.endSplitDistances[0], dirData.endSplitDistances[1] };
 	dd.StartSplitDistances = { dirData.startSplitDistances[0], dirData.startSplitDistances[1] };
 
-	// Directional cascade projection matrices.
-	// The game renders both cascades as array slices of a single Texture2DArray — bind its SRV directly.
 	ID3D11ShaderResourceView* cascadeSRV = nullptr;
 	{
 		auto fillCascades = [&](auto& lightData) {
@@ -617,9 +614,6 @@ void Deferred::CopyShadowData()
 			fillCascades(sunShadowLight->GetRuntimeData());
 	}
 
-	// Shadow lights: fill ShadowData and capture kSHADOWMAPS SRV (t23).
-	// kSHADOWMAPS is already a Texture2DArray — bind it directly (no copy needed).
-	// ShadowType: 0 = paraboloid, 1 = frustum — matches HLSL GetShadowLightShadow dispatch.
 	auto&    sceneRTData  = shadowSceneNode->GetRuntimeData();
 	uint32_t shadowCount  = 0;
 	ID3D11ShaderResourceView* shadowMapsSRV = nullptr;
@@ -657,29 +651,26 @@ void Deferred::CopyShadowData()
 		++shadowCount;
 	}
 
-	// Bind cascade SRV (t20), shadow maps SRV (t23), and PCF comparison sampler (s14).
-	context->PSSetShaderResources(20, 1, &cascadeSRV);
-	context->PSSetShaderResources(23, 1, &shadowMapsSRV);
+	context->PSSetShaderResources(82, 1, &cascadeSRV);
+	context->PSSetShaderResources(84, 1, &shadowMapsSRV);
 	context->PSSetSamplers(14, 1, &shadowCmpSampler);
 
-	// Upload DirectionalShadowData → t19.
 	{
 		D3D11_MAPPED_SUBRESOURCE mapped{};
 		DX::ThrowIfFailed(context->Map(perDirectionalShadow->resource.get(), 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped));
 		memcpy(mapped.pData, &dd, sizeof(DirectionalShadowData));
 		context->Unmap(perDirectionalShadow->resource.get(), 0);
 		ID3D11ShaderResourceView* srv = perDirectionalShadow->srv.get();
-		context->PSSetShaderResources(19, 1, &srv);
+		context->PSSetShaderResources(81, 1, &srv);
 	}
 
-	// Upload ShadowData → t22.
 	{
 		D3D11_MAPPED_SUBRESOURCE mapped{};
 		DX::ThrowIfFailed(context->Map(perShadows->resource.get(), 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped));
 		memcpy(mapped.pData, sd, 4 * sizeof(ShadowData));
 		context->Unmap(perShadows->resource.get(), 0);
 		ID3D11ShaderResourceView* srv = perShadows->srv.get();
-		context->PSSetShaderResources(22, 1, &srv);
+		context->PSSetShaderResources(83, 1, &srv);
 	}
 }
 
