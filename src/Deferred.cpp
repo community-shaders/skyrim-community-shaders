@@ -169,45 +169,6 @@ void Deferred::SetupResources()
 		};
 	}
 
-	// Shadow light depth array (t23): 4 slices sized and formatted to match kSHADOWMAPS.
-	{
-		auto& shadowDS = renderer->GetDepthStencilData().depthStencils[RE::RENDER_TARGETS_DEPTHSTENCIL::kSHADOWMAPS];
-		D3D11_TEXTURE2D_DESC srcDesc{};
-		shadowDS.texture->GetDesc(&srcDesc);
-
-		DXGI_FORMAT texFmt, srvFmt;
-		if (srcDesc.Format == DXGI_FORMAT_R24G8_TYPELESS || srcDesc.Format == DXGI_FORMAT_D24_UNORM_S8_UINT) {
-			texFmt = DXGI_FORMAT_R24G8_TYPELESS;
-			srvFmt = DXGI_FORMAT_R24_UNORM_X8_TYPELESS;
-		} else {
-			texFmt = DXGI_FORMAT_R32_TYPELESS;
-			srvFmt = DXGI_FORMAT_R32_FLOAT;
-		}
-
-		D3D11_TEXTURE2D_DESC texDesc{};
-		texDesc.Width      = srcDesc.Width;
-		texDesc.Height     = srcDesc.Height;
-		texDesc.MipLevels  = 1;
-		texDesc.ArraySize  = 4;
-		texDesc.Format     = texFmt;
-		texDesc.SampleDesc = { 1, 0 };
-		texDesc.Usage      = D3D11_USAGE_DEFAULT;
-		texDesc.BindFlags  = D3D11_BIND_SHADER_RESOURCE;
-		DX::ThrowIfFailed(globals::d3d::device->CreateTexture2D(&texDesc, nullptr, &shadowMapArrayTex));
-
-		D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc{};
-		srvDesc.Format                         = srvFmt;
-		srvDesc.ViewDimension                  = D3D11_SRV_DIMENSION_TEXTURE2DARRAY;
-		srvDesc.Texture2DArray.MostDetailedMip = 0;
-		srvDesc.Texture2DArray.MipLevels       = 1;
-		srvDesc.Texture2DArray.FirstArraySlice = 0;
-		srvDesc.Texture2DArray.ArraySize       = 4;
-		DX::ThrowIfFailed(globals::d3d::device->CreateShaderResourceView(shadowMapArrayTex, &srvDesc, &shadowMapArraySRV));
-
-		shadowMapArrayW = srcDesc.Width;
-		shadowMapArrayH = srcDesc.Height;
-	}
-
 	// Directional shadow data (t19): cascade splits and projections.
 	{
 		D3D11_BUFFER_DESC sbDesc{};
@@ -694,10 +655,12 @@ void Deferred::CopyShadowData()
 			fillCascades(sunShadowLight->GetRuntimeData());
 	}
 
-	// Shadow lights: fill ShadowData and copy depth into shadowMapArrayTex (t23).
+	// Shadow lights: fill ShadowData and capture kSHADOWMAPS SRV (t23).
+	// kSHADOWMAPS is already a Texture2DArray — bind it directly (no copy needed).
 	// ShadowType: 0 = paraboloid, 1 = frustum — matches HLSL GetShadowLightShadow dispatch.
 	auto&    sceneRTData  = shadowSceneNode->GetRuntimeData();
 	uint32_t shadowCount  = 0;
+	ID3D11ShaderResourceView* shadowMapsSRV = nullptr;
 
 	for (auto& lightPtr : sceneRTData.activeShadowLights) {
 		if (!lightPtr || shadowCount >= 4u)
@@ -717,19 +680,12 @@ void Deferred::CopyShadowData()
 			if (desc.camera)
 				sd[shadowCount].ShadowLightParam[0] = static_cast<uint32_t>(desc.camera->GetRuntimeData2().viewFrustum.fFar);
 
-			auto& ds = renderer->GetDepthStencilData().depthStencils[desc.renderTarget];
-			if (!ds.depthSRV)
-				return;
+			// Store the game's authoritative array slice index for HLSL sampling.
+			sd[shadowCount].ShadowLightParam[1] = desc.shadowmapIndex;
 
-			ID3D11Resource* res = nullptr;
-			ds.depthSRV->GetResource(&res);
-			if (auto* srcTex = static_cast<ID3D11Texture2D*>(res)) {
-				D3D11_TEXTURE2D_DESC srcDesc{};
-				srcTex->GetDesc(&srcDesc);
-				if (srcDesc.Width == shadowMapArrayW && srcDesc.Height == shadowMapArrayH)
-					context->CopySubresourceRegion(shadowMapArrayTex, shadowCount, 0, 0, 0, srcTex, 0, nullptr);
-			}
-			res->Release();
+			// All shadow lights share the same kSHADOWMAPS Texture2DArray — capture SRV once.
+			if (!shadowMapsSRV)
+				shadowMapsSRV = renderer->GetDepthStencilData().depthStencils[desc.renderTarget].depthSRV;
 		};
 		if (REL::Module::IsVR())
 			fillLight(light->GetVRRuntimeData());
@@ -739,9 +695,9 @@ void Deferred::CopyShadowData()
 		++shadowCount;
 	}
 
-	// Bind cascade SRV (original game texture), shadow map array, and PCF comparison sampler (s14).
+	// Bind cascade SRV (t20), shadow maps SRV (t23), and PCF comparison sampler (s14).
 	context->PSSetShaderResources(20, 1, &cascadeSRV);
-	context->PSSetShaderResources(23, 1, &shadowMapArraySRV);
+	context->PSSetShaderResources(23, 1, &shadowMapsSRV);
 	context->PSSetSamplers(14, 1, &shadowCmpSampler);
 
 	// Upload DirectionalShadowData → t19.
