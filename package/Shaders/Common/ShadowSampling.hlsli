@@ -132,6 +132,8 @@ namespace ShadowSampling
 			return 1.0;
 		}
 
+		worldPosition.xyz += FrameBuffer::CameraPosAdjust[0].xyz;
+
 		float fade = saturate(shadowMapDepth / shadow.EndSplitDistances.y);
 		float cascadeBlend = saturate((shadowMapDepth - shadow.StartSplitDistances.y) / (shadow.EndSplitDistances.x - shadow.StartSplitDistances.y));
 		uint cascade = (cascadeBlend >= 0.5) ? 1u : 0u;
@@ -144,7 +146,7 @@ namespace ShadowSampling
 		float visibility = 0;
 		for (uint i = 0; i < sampleCount; i++) {
 			float2 sampleOffset = mul(Random::PoissonSampleOffsets16[i], rotationMatrix);
-			float2 sampleUV = positionLS.xy + sampleOffset * PCFKernelDirectional;
+			float2 sampleUV = positionLS.xy;
 			visibility += DirectionalShadowCascades.SampleCmpLevelZero(ShadowSamplerCmp, float3(sampleUV, float(cascade)), positionLS.z);
 		}
 
