@@ -1,6 +1,5 @@
 #include "FileSystem.h"
 #include <Windows.h>
-#include <cctype>
 #include <cmath>
 #include <filesystem>
 #include <fstream>

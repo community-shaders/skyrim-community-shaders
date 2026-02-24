@@ -6,16 +6,12 @@
 #include "Fonts.h"
 
 #include <algorithm>
-#include <array>
 #include <atomic>
 #include <chrono>
-#include <cmath>
 #include <ctime>
 #include <filesystem>
 #include <format>
 #include <fstream>
-#include <iomanip>
-#include <numeric>
 #include <thread>
 #include <unordered_map>
 #include <vector>
