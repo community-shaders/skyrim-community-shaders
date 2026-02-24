@@ -350,8 +350,14 @@ void SceneSettingsManager::DeleteAllOverwrites(SceneType type)
 
 	auto& vec = GetEntriesMut(type);
 	for (const auto& entry : vec) {
-		if (entry.source == EntrySource::Overwrite && !entry.sourceFilename.empty())
-			std::filesystem::remove(overwritesPath / entry.sourceFilename, ec);
+		if (entry.source == EntrySource::Overwrite && !entry.sourceFilename.empty()) {
+			// TOD overwrites live in per-period subfolders; use the same path
+			// construction as SaveOverwritesToDisk to ensure we hit the right file.
+			auto filepath = (type == SceneType::TimeOfDay && entry.period != TimeOfDayPeriod::Count)
+			                    ? overwritesPath / GetPeriodName(entry.period) / entry.sourceFilename
+			                    : overwritesPath / entry.sourceFilename;
+			std::filesystem::remove(filepath, ec);
+		}
 	}
 
 	std::erase_if(vec, [](const SettingEntry& e) {
@@ -781,6 +787,10 @@ void SceneSettingsManager::ApplyTimeOfDayBlended()
 			auto type = DetectSettingType(*baseline);
 
 			if (type == SettingType::Float) {
+				if (!baseline->is_number()) {
+					logger::warn("SceneSettingsManager: TOD baseline for '{}' key '{}' is not numeric — skipping", shortName, key);
+					continue;
+				}
 				float baseVal = baseline->get<float>();
 				if (!std::isfinite(baseVal))
 					baseVal = 0.0f;
@@ -790,6 +800,11 @@ void SceneSettingsManager::ApplyTimeOfDayBlended()
 				for (auto& pr : periodRefs) {
 					float f = factors[pr.periodIdx];
 					if (f > 0.0f) {
+						if (!pr.value->is_number()) {
+							logger::warn("SceneSettingsManager: TOD period value for '{}' key '{}' is not numeric — treating as 0", shortName, key);
+							coveredFactor += f;
+							continue;
+						}
 						float periodVal = pr.value->get<float>();
 						if (!std::isfinite(periodVal))
 							periodVal = 0.0f;
@@ -919,6 +934,11 @@ void SceneSettingsManager::LoadUserSettings(SceneType type)
 				if (!item.contains("period")) {
 					logger::warn("SceneSettingsManager: TimeOfDay entry for feature '{}' key '{}' is missing 'period' — skipping to avoid ghost entry",
 						entry.featureShortName, entry.settingKey);
+					continue;
+				}
+				if (!item["period"].is_string()) {
+					logger::warn("SceneSettingsManager: TimeOfDay entry for feature '{}' key '{}' has non-string 'period' (type: {}) — skipping",
+						entry.featureShortName, entry.settingKey, item["period"].type_name());
 					continue;
 				}
 				entry.period = GetPeriodFromName(item["period"].get<std::string>());
