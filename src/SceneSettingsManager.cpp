@@ -822,11 +822,20 @@ void SceneSettingsManager::ApplyTimeOfDayBlended()
 				featureFloats[key] = result;
 				dirtyKeys.emplace_back(key, result);
 			} else {
-				// Non-float: snap to dominant period's value, or baseline if none
+				// Non-float: snap to dominant period's value, or baseline if none.
+				// Validate that the period value type matches the baseline to avoid
+				// passing a mismatched type into feature->LoadSettings().
 				json blendedValue = *baseline;
-				for (auto& pr : periodRefs)
-					if (static_cast<TimeOfDayPeriod>(pr.periodIdx) == dominant)
-						blendedValue = *pr.value;
+				for (auto& pr : periodRefs) {
+					if (static_cast<TimeOfDayPeriod>(pr.periodIdx) == dominant) {
+						if (pr.value->type() == baseline->type()) {
+							blendedValue = *pr.value;
+						} else {
+							logger::warn("SceneSettingsManager: TOD period value for '{}' key '{}' has type '{}' but baseline expects '{}' — using baseline",
+								shortName, key, pr.value->type_name(), baseline->type_name());
+						}
+					}
+				}
 
 				// Exact comparison for non-float (bools, ints snap — rarely change)
 				auto& cachedOther = lastAppliedTODOther[shortName][key];
