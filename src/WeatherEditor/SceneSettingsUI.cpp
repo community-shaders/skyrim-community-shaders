@@ -15,9 +15,7 @@ namespace SceneSettingsUI
 
 	static std::vector<std::string> GetFeatureNamesForType(SceneType type)
 	{
-		return (type == SceneType::InteriorOnly)
-		           ? SceneSettingsManager::GetInteriorRelevantFeatureNames()
-		           : SceneSettingsManager::GetExteriorRelevantFeatureNames();
+		return (type == SceneType::InteriorOnly) ? SceneSettingsManager::GetInteriorRelevantFeatureNames() : SceneSettingsManager::GetExteriorRelevantFeatureNames();
 	}
 
 	// --- Duplicate checking by scene type ---
@@ -25,9 +23,7 @@ namespace SceneSettingsUI
 	static bool IsAlreadyAdded(SceneType type, const std::string& feature, const std::string& key, Period period)
 	{
 		auto* manager = SceneSettingsManager::GetSingleton();
-		return (type == SceneType::TimeOfDay)
-		           ? manager->HasEntryForPeriod(feature, key, period, EntrySource::User)
-		           : manager->HasEntryFromSource(type, feature, key, EntrySource::User);
+		return (type == SceneType::TimeOfDay) ? manager->HasEntryForPeriod(feature, key, period, EntrySource::User) : manager->HasEntryFromSource(type, feature, key, EntrySource::User);
 	}
 
 	// --- Shared Drawing ---
@@ -43,9 +39,9 @@ namespace SceneSettingsUI
 			state.cachedFeatureNames = GetFeatureNamesForType(type);
 
 		const char* featurePreview = (state.selectedFeatureIdx >= 0 &&
-										 state.selectedFeatureIdx < static_cast<int>(state.cachedFeatureNames.size()))
-		                                 ? state.cachedFeatureNames[state.selectedFeatureIdx].c_str()
-		                                 : "Select Feature...";
+										 state.selectedFeatureIdx < static_cast<int>(state.cachedFeatureNames.size())) ?
+		                                 state.cachedFeatureNames[state.selectedFeatureIdx].c_str() :
+		                                 "Select Feature...";
 
 		ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x * C::SCENE_FEATURE_DROPDOWN_RATIO);
 		if (ImGui::BeginCombo("##FeatureSelect", featurePreview)) {
@@ -69,9 +65,9 @@ namespace SceneSettingsUI
 			auto _ = Util::DisableGuard(state.selectedFeatureIdx < 0);
 
 			const char* settingPreview = (state.selectedSettingIdx >= 0 &&
-											 state.selectedSettingIdx < static_cast<int>(state.cachedSettingKeys.size()))
-			                                 ? state.cachedSettingKeys[state.selectedSettingIdx].c_str()
-			                                 : "Select Setting...";
+											 state.selectedSettingIdx < static_cast<int>(state.cachedSettingKeys.size())) ?
+			                                 state.cachedSettingKeys[state.selectedSettingIdx].c_str() :
+			                                 "Select Setting...";
 
 			ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x * C::SCENE_SETTING_DROPDOWN_RATIO);
 			if (ImGui::BeginCombo("##SettingSelect", settingPreview)) {
