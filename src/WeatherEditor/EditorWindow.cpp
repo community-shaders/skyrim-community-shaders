@@ -220,9 +220,7 @@ void EditorWindow::ShowObjectsWindow()
 		// Right column: Objects
 		ImGui::TableSetColumnIndex(1);
 
-		if (ImGui::BeginChild("##ObjectsContent", { 0, 0 }, ImGuiChildFlags_Border)) {
-			// Interior Only / Time of Day categories have their own panels
-			if (selectedCategory == "Interior Only") {
+		// Interior Only / Time of Day categories have their own panels
 				if (ImGui::BeginChild("##ObjectsContent", { 0, 0 }, ImGuiChildFlags_Border, kStickyHeaderFlags)) {
 					// Interior Only category has its own panel
 					if (m_selectedCategory == "Interior Only") {
@@ -232,7 +230,7 @@ void EditorWindow::ShowObjectsWindow()
 						ImGui::End();
 						return;
 					}
-					if (selectedCategory == "Time of Day") {
+					if (m_selectedCategory == "Time of Day") {
 						TimeOfDayPanel::Draw();
 						ImGui::EndChild();
 						ImGui::EndTable();
