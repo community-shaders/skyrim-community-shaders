@@ -18,15 +18,33 @@
 #	include "IBL/IBL.hlsli"
 #endif
 
-// Always include: provides ShadowData struct, SharedShadowData (t19), and VSM functions.
+// Always include: provides DirectionalShadowData struct, SharedShadowData (t19), and VSM functions.
 // VSM texture (t18) and sampling functions are only compiled when VOLUMETRIC_SHADOWS is defined.
 #include "VolumetricShadows/VolumetricShadows.hlsli"
 
 // Directional cascade raw depth maps (t20, t21) — used for PCF when VSM is not active.
 Texture2D<float> DirectionalShadowCascade[2] : register(t20);
 
-// Shadow light depth maps (t22-t25): one slot per active shadow light (max 4).
-Texture2D<float> ShadowLightMap[4] : register(t22);
+// Frustum (spot) shadow lights.
+// t22: projection data (one element per active frustum light, max 4).
+// t23-t26: depth maps indexed by per-type slot.
+struct FrustumShadowData { float4x4 Proj; };
+StructuredBuffer<FrustumShadowData> FrustumShadows    : register(t22);
+Texture2D<float>                    FrustumShadowMap[4] : register(t23);
+
+// Paraboloid (point) shadow lights: dual-hemisphere depth maps.
+// t27: projection data (one element per active paraboloid light, max 4).
+// t28-t31: front hemisphere depth maps, t32-t35: back hemisphere depth maps.
+struct ParaboloidShadowData
+{
+	float4x4 FrontProj;  // world-to-shadow for front hemisphere
+	float4x4 BackProj;   // world-to-shadow for back hemisphere
+	uint     HasBack;    // 1 if back hemisphere map is bound
+	float3   _pad;
+};
+StructuredBuffer<ParaboloidShadowData> ParaboloidShadows      : register(t27);
+Texture2D<float>                       ParaboloidFrontMap[4]  : register(t28);
+Texture2D<float>                       ParaboloidBackMap[4]   : register(t32);
 
 namespace ShadowSampling
 {
@@ -103,7 +121,7 @@ namespace ShadowSampling
 		return VolumetricShadows::GetVSMShadow2D(worldPosition, eyeIndex, detailedShadow);
 #else
 		// PCF fallback using directional cascade depth maps bound to t20/t21.
-		VolumetricShadows::ShadowData sD = VolumetricShadows::SharedShadowData[0];
+		VolumetricShadows::DirectionalShadowData sD = VolumetricShadows::SharedShadowData[0];
 
 		float shadowMapDepth = VolumetricShadows::GetShadowDepth(worldPosition, eyeIndex);
 		if (shadowMapDepth >= sD.EndSplitDistances.y) {
@@ -130,30 +148,76 @@ namespace ShadowSampling
 #endif
 	}
 
-	// Sample a shadow light's depth map directly.
-	// lightIndex: index into ShadowData.ShadowLightProj[] / t22-t25 (0..ShadowLightCount-1).
-	// worldPosition: camera-relative world position of the surface point.
-	// Returns 1.0 (lit) or 0.0 (shadowed); returns 1.0 for out-of-range or out-of-frustum.
-	float GetShadowLightShadow(uint lightIndex, float3 worldPosition)
+	// Sample a frustum (spot) shadow light's depth map.
+	// frustumIdx: typed slot index within FrustumShadows / FrustumShadowMap.
+	// Returns 1.0 (lit) or 0.0 (shadowed); 1.0 for out-of-frustum samples.
+	float GetFrustumShadow(uint frustumIdx, float3 worldPosition)
 	{
-		VolumetricShadows::ShadowData sD = VolumetricShadows::SharedShadowData[0];
-		if (lightIndex >= sD.ShadowLightCount)
-			return 1.0;
+		FrustumShadowData light = FrustumShadows[frustumIdx];
 
-		float4x4 proj  = sD.ShadowLightProj[lightIndex];
-		// Transpose for DirectX row-major convention (same as GetLightingShadow PCF path).
-		float4   posLS4 = mul(transpose(proj), float4(worldPosition, 1));
-		// Perspective divide — safe for orthographic (w == 1) and perspective (w != 1).
+		// Row-major convention: transpose for column-vector multiply.
+		float4 posLS4 = mul(transpose(light.Proj), float4(worldPosition, 1));
+		// Perspective divide — safe for spot (w != 1) and orthographic (w == 1).
 		float3 posLS = posLS4.xyz / posLS4.w;
 
-		// Reject samples outside the shadow frustum.
 		[branch]
 		if (any(posLS.xy < 0.0) || any(posLS.xy > 1.0) || posLS.z < 0.0 || posLS.z > 1.0)
 			return 1.0;
 
-		float shadowDepth = ShadowLightMap[lightIndex].SampleLevel(LinearSampler, posLS.xy, 0);
-		// Small bias to reduce self-shadowing artefacts.
+		float shadowDepth = FrustumShadowMap[frustumIdx].SampleLevel(LinearSampler, posLS.xy, 0);
 		return (posLS.z <= shadowDepth + 0.002) ? 1.0 : 0.0;
+	}
+
+	// Sample a paraboloid (point) shadow light's dual-hemisphere depth maps.
+	// paraboloidIdx: typed slot index within ParaboloidShadows / ParaboloidFrontMap / ParaboloidBackMap.
+	// Returns 1.0 (lit) or 0.0 (shadowed); 1.0 if outside both hemispheres.
+	float GetParaboloidShadow(uint paraboloidIdx, float3 worldPosition)
+	{
+		ParaboloidShadowData light = ParaboloidShadows[paraboloidIdx];
+
+		// Try front hemisphere.
+		float4 posLS4 = mul(transpose(light.FrontProj), float4(worldPosition, 1));
+		float3 posLS  = posLS4.xyz / posLS4.w;
+
+		[branch]
+		if (all(posLS.xy >= 0.0) && all(posLS.xy <= 1.0) && posLS.z >= 0.0 && posLS.z <= 1.0) {
+			float shadowDepth = ParaboloidFrontMap[paraboloidIdx].SampleLevel(LinearSampler, posLS.xy, 0);
+			return (posLS.z <= shadowDepth + 0.002) ? 1.0 : 0.0;
+		}
+
+		// Try back hemisphere if bound.
+		[branch]
+		if (light.HasBack) {
+			posLS4 = mul(transpose(light.BackProj), float4(worldPosition, 1));
+			posLS  = posLS4.xyz / posLS4.w;
+
+			[branch]
+			if (all(posLS.xy >= 0.0) && all(posLS.xy <= 1.0) && posLS.z >= 0.0 && posLS.z <= 1.0) {
+				float shadowDepth = ParaboloidBackMap[paraboloidIdx].SampleLevel(LinearSampler, posLS.xy, 0);
+				return (posLS.z <= shadowDepth + 0.002) ? 1.0 : 0.0;
+			}
+		}
+
+		return 1.0;
+	}
+
+	// Dispatch to GetFrustumShadow or GetParaboloidShadow based on game slot type.
+	// gameSlot: the game's shadow-light index (0-3, from activeShadowLights order).
+	// worldPosition: camera-relative world position of the surface point.
+	// Returns 1.0 (lit) or 0.0 (shadowed); 1.0 if the slot is inactive.
+	float GetShadowLightShadow(uint gameSlot, float3 worldPosition)
+	{
+		VolumetricShadows::DirectionalShadowData sD = VolumetricShadows::SharedShadowData[0];
+		if (gameSlot >= sD.TotalCount)
+			return 1.0;
+
+		uint typedIdx = sD.TypedIndex[gameSlot];
+
+		[branch]
+		if (sD.LightIsParaboloid[gameSlot])
+			return GetParaboloidShadow(typedIdx, worldPosition);
+		else
+			return GetFrustumShadow(typedIdx, worldPosition);
 	}
 
 #if defined(SKYLIGHTING) && !defined(INTERIOR)
