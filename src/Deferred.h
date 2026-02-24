@@ -77,13 +77,8 @@ public:
 	// Unified shadow light structured buffer (t22): projection + type for each active light.
 	Buffer* perShadows = nullptr;
 
-	// Texture2DArray for directional cascade depth maps (t20): 2 slices, lazily created/resized.
-	ID3D11Texture2D*          cascadeArrayTex = nullptr;
-	ID3D11ShaderResourceView* cascadeArraySRV = nullptr;
-	uint32_t cascadeArrayW = 0;
-	uint32_t cascadeArrayH = 0;
-
-	// Texture2DArray for shadow light depth maps (t23): up to 4 slices, lazily created/resized.
+	// Texture2DArray for shadow light depth maps (t23): 4 slices, created in SetupResources
+	// from kSHADOWMAPS dimensions. W/H cached for copy-guard in CopyShadowData.
 	ID3D11Texture2D*          shadowMapArrayTex = nullptr;
 	ID3D11ShaderResourceView* shadowMapArraySRV = nullptr;
 	uint32_t shadowMapArrayW = 0;
