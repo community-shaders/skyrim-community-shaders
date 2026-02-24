@@ -54,8 +54,8 @@ public:
 
 	void ClearShaderCache();
 
-	// Copies directional shadow parameters from Skyrim's constant buffers into perShadow (t19).
-	// Runs unconditionally each frame during the shadow mask pass.
+	// Reads directional shadow parameters from BSShadowDirectionalLight game structs and uploads
+	// to perShadow (t19). Called during EarlyPrepasses after shadow maps have been rendered.
 	void CopyShadowData();
 
 	ID3D11ComputeShader* GetComputeMainComposite();
@@ -68,7 +68,6 @@ public:
 
 	ID3D11ComputeShader* mainCompositeCS = nullptr;
 	ID3D11ComputeShader* mainCompositeInteriorCS = nullptr;
-	ID3D11ComputeShader* copyShadowCS = nullptr;
 
 	// Structured buffer holding shadow data for all shadow types (t19 in pixel/compute shaders)
 	Buffer* perShadow = nullptr;
