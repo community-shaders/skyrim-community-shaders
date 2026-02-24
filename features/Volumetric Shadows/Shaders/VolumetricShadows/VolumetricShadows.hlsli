@@ -14,6 +14,12 @@ namespace VolumetricShadows
 		float2 StartSplitDistances;  // cascade start distances: x = cascade 0, y = cascade 1
 		// float4x4 supports directional (affine, expanded) and spot/paraboloid (perspective)
 		float4x4 ShadowMapProj[2];
+
+		// Non-directional shadow casters (spot / paraboloid), up to 4
+		float4x4 ShadowLightProj[4];  // world-to-shadow projection (UV scale/bias baked in)
+		uint4    ShadowLightTypes;    // per-light: 0 = frustum/spot, 1 = paraboloid
+		uint     ShadowLightCount;   // number of active shadow lights (0..4)
+		float3   _pad;
 	};
 
 	StructuredBuffer<ShadowData> SharedShadowData : register(t19);

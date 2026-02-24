@@ -20,15 +20,19 @@ public:
 		return &singleton;
 	}
 
-	// Shadow data for directional (cascaded) shadows, with room for spot/paraboloid in ShadowMapProj.
-	// ShadowMapProj uses float4x4 to accommodate both affine (directional) and perspective
-	// (spot / paraboloid) projection matrices. Currently only directional (index 0) is populated.
+	// Shadow data uploaded every frame to the structured buffer at t19.
+	// Layout must match VolumetricShadows::ShadowData in VolumetricShadows.hlsli exactly.
 	struct alignas(16) ShadowData
 	{
-		DirectX::XMFLOAT2 EndSplitDistances;    // cascade end depths: x = cascade 0, y = cascade 1
+		DirectX::XMFLOAT2 EndSplitDistances;    // cascade end depths:   x = cascade 0, y = cascade 1
 		DirectX::XMFLOAT2 StartSplitDistances;  // cascade start depths: x = cascade 0, y = cascade 1
-		// XMFLOAT4X4 supports directional (affine) and spot/paraboloid (perspective)
-		DirectX::XMFLOAT4X4 ShadowMapProj[2];
+		DirectX::XMFLOAT4X4 ShadowMapProj[2];   // directional cascade world-to-shadow projections
+
+		// Non-directional shadow casters (spot / paraboloid), up to 4
+		DirectX::XMFLOAT4X4 ShadowLightProj[4];  // world-to-shadow projections (UV scale/bias baked in)
+		uint32_t ShadowLightTypes[4];             // per-light: 0 = frustum/spot, 1 = paraboloid
+		uint32_t ShadowLightCount;                // number of active shadow lights (0..4)
+		float    _pad[3];
 	};
 	STATIC_ASSERT_ALIGNAS_16(ShadowData);
 
@@ -45,8 +49,9 @@ public:
 
 	void ClearShaderCache();
 
-	// Reads directional shadow parameters from BSShadowDirectionalLight game structs and uploads
-	// to perShadow (t19). Called during EarlyPrepasses after shadow maps have been rendered.
+	// Reads shadow parameters from game structs and uploads to perShadow (t19).
+	// Also binds directional cascade depth SRVs (t20/t21) and shadow-light depth SRVs (t22-t25).
+	// Called during EarlyPrepasses immediately after shadow maps have been rendered.
 	void CopyShadowData();
 
 	ID3D11ComputeShader* GetComputeMainComposite();
