@@ -18,9 +18,15 @@
 #	include "IBL/IBL.hlsli"
 #endif
 
-#if defined(VOLUMETRIC_SHADOWS)
-#	include "VolumetricShadows/VolumetricShadows.hlsli"
-#endif
+// Always include: provides ShadowData struct, SharedShadowData (t19), and VSM functions.
+// VSM texture (t18) and sampling functions are only compiled when VOLUMETRIC_SHADOWS is defined.
+#include "VolumetricShadows/VolumetricShadows.hlsli"
+
+// Directional cascade raw depth maps (t20, t21) — used for PCF when VSM is not active.
+Texture2D<float> DirectionalShadowCascade[2] : register(t20);
+
+// Shadow light depth maps (t22-t25): one slot per active shadow light (max 4).
+Texture2D<float> ShadowLightMap[4] : register(t22);
 
 namespace ShadowSampling
 {
@@ -93,12 +99,61 @@ namespace ShadowSampling
 	float GetLightingShadow(float3 worldPosition, uint eyeIndex, out float detailedShadow)
 	{
 #if defined(VOLUMETRIC_SHADOWS)
-		float shadow = VolumetricShadows::GetVSMShadow2D(worldPosition, eyeIndex, detailedShadow);
-		return shadow;
+		// High-quality variance shadow map path (requires VolumetricShadows feature).
+		return VolumetricShadows::GetVSMShadow2D(worldPosition, eyeIndex, detailedShadow);
 #else
-		detailedShadow = 1.0;
-		return 1.0;
+		// PCF fallback using directional cascade depth maps bound to t20/t21.
+		VolumetricShadows::ShadowData sD = VolumetricShadows::SharedShadowData[0];
+
+		float shadowMapDepth = VolumetricShadows::GetShadowDepth(worldPosition, eyeIndex);
+		if (shadowMapDepth >= sD.EndSplitDistances.y) {
+			detailedShadow = 1.0;
+			return 1.0;
+		}
+
+		float fade = saturate(shadowMapDepth / sD.EndSplitDistances.y);
+		float cascadeSelect = saturate((shadowMapDepth - sD.StartSplitDistances.y) /
+		                               (sD.EndSplitDistances.x - sD.StartSplitDistances.y));
+		uint primaryCascade = uint(cascadeSelect);
+
+		// ShadowMapProj is in DirectX row-major convention; transpose for column-vector mul.
+		float4x4 shadowProj = sD.ShadowMapProj[primaryCascade];
+		float3   posLS      = mul(transpose(shadowProj), float4(worldPosition, 1)).xyz;
+		posLS.xy            = saturate(posLS.xy);
+
+		float shadowDepth = DirectionalShadowCascade[primaryCascade].SampleLevel(LinearSampler, posLS.xy, 0);
+		float shadow      = (posLS.z <= shadowDepth + 0.0002) ? 1.0 : 0.0;
+
+		float fadeFactor  = 1.0 - pow(fade, 8);
+		detailedShadow    = lerp(1.0, shadow, fadeFactor);
+		return lerp(1.0, shadow, fadeFactor);
 #endif
+	}
+
+	// Sample a shadow light's depth map directly.
+	// lightIndex: index into ShadowData.ShadowLightProj[] / t22-t25 (0..ShadowLightCount-1).
+	// worldPosition: camera-relative world position of the surface point.
+	// Returns 1.0 (lit) or 0.0 (shadowed); returns 1.0 for out-of-range or out-of-frustum.
+	float GetShadowLightShadow(uint lightIndex, float3 worldPosition)
+	{
+		VolumetricShadows::ShadowData sD = VolumetricShadows::SharedShadowData[0];
+		if (lightIndex >= sD.ShadowLightCount)
+			return 1.0;
+
+		float4x4 proj  = sD.ShadowLightProj[lightIndex];
+		// Transpose for DirectX row-major convention (same as GetLightingShadow PCF path).
+		float4   posLS4 = mul(transpose(proj), float4(worldPosition, 1));
+		// Perspective divide — safe for orthographic (w == 1) and perspective (w != 1).
+		float3 posLS = posLS4.xyz / posLS4.w;
+
+		// Reject samples outside the shadow frustum.
+		[branch]
+		if (any(posLS.xy < 0.0) || any(posLS.xy > 1.0) || posLS.z < 0.0 || posLS.z > 1.0)
+			return 1.0;
+
+		float shadowDepth = ShadowLightMap[lightIndex].SampleLevel(LinearSampler, posLS.xy, 0);
+		// Small bias to reduce self-shadowing artefacts.
+		return (posLS.z <= shadowDepth + 0.002) ? 1.0 : 0.0;
 	}
 
 #if defined(SKYLIGHTING) && !defined(INTERIOR)

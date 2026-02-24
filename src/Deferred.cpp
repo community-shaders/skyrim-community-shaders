@@ -18,6 +18,9 @@
 
 #include "Hooks.h"
 
+#include "RE/B/BSShadowDirectionalLight.h"
+#include "RE/B/BSShadowLight.h"
+
 struct DepthStates
 {
 	ID3D11DepthStencilState* a[6][40];
@@ -595,28 +598,80 @@ void Deferred::CopyShadowData()
 	ShadowData sd{};
 
 	// Cascade split distances (cascade 0 in x, cascade 1 in y)
-	auto& dirData = sunShadowLight->GetShadowDirectionalLightRuntimeData();
-	sd.EndSplitDistances   = { dirData.endSplitDistances[0],   dirData.endSplitDistances[1] };
+	auto& dirData          = sunShadowLight->GetShadowDirectionalLightRuntimeData();
+	sd.EndSplitDistances   = { dirData.endSplitDistances[0], dirData.endSplitDistances[1] };
 	sd.StartSplitDistances = { dirData.startSplitDistances[0], dirData.startSplitDistances[1] };
 
-	// Shadow map projection matrices — branch on runtime to use correctly-typed descriptors.
+	auto  renderer = globals::game::renderer;
+	auto  context  = globals::d3d::context;
+
+	// Directional cascade projection matrices + bind raw depth SRVs to t20/t21 for PCF fallback.
 	// Both ShadowmapDescriptor (SE/AE) and ShadowmapDescriptorVR have lightTransform at offset 0x00.
+	uint32_t dirCascadeCount = 0;
 	if (REL::Module::IsVR()) {
-		auto& lightData = sunShadowLight->GetVRRuntimeData();
-		uint32_t cascadeCount = std::min((uint32_t)lightData.shadowmapDescriptors.size(), 2u);
-		for (uint32_t i = 0; i < cascadeCount; ++i)
-			memcpy(&sd.ShadowMapProj[i], &lightData.shadowmapDescriptors[i].lightTransform,
-				sizeof(DirectX::XMFLOAT4X4));
+		auto& lightData  = sunShadowLight->GetVRRuntimeData();
+		dirCascadeCount  = std::min((uint32_t)lightData.shadowmapDescriptors.size(), 2u);
+		for (uint32_t i = 0; i < dirCascadeCount; ++i) {
+			auto& desc = lightData.shadowmapDescriptors[i];
+			memcpy(&sd.ShadowMapProj[i], &desc.lightTransform, sizeof(DirectX::XMFLOAT4X4));
+			auto& ds = renderer->GetDepthStencilData().depthStencils[desc.renderTarget];
+			context->PSSetShaderResources(20 + i, 1, &ds.depthSRV);
+		}
 	} else {
-		auto& lightData = sunShadowLight->GetRuntimeData();
-		uint32_t cascadeCount = std::min((uint32_t)lightData.shadowmapDescriptors.size(), 2u);
-		for (uint32_t i = 0; i < cascadeCount; ++i)
-			memcpy(&sd.ShadowMapProj[i], &lightData.shadowmapDescriptors[i].lightTransform,
-				sizeof(DirectX::XMFLOAT4X4));
+		auto& lightData  = sunShadowLight->GetRuntimeData();
+		dirCascadeCount  = std::min((uint32_t)lightData.shadowmapDescriptors.size(), 2u);
+		for (uint32_t i = 0; i < dirCascadeCount; ++i) {
+			auto& desc = lightData.shadowmapDescriptors[i];
+			memcpy(&sd.ShadowMapProj[i], &desc.lightTransform, sizeof(DirectX::XMFLOAT4X4));
+			auto& ds = renderer->GetDepthStencilData().depthStencils[desc.renderTarget];
+			context->PSSetShaderResources(20 + i, 1, &ds.depthSRV);
+		}
+	}
+	// Null out any unused cascade slots
+	for (uint32_t i = dirCascadeCount; i < 2u; ++i) {
+		ID3D11ShaderResourceView* nullSRV = nullptr;
+		context->PSSetShaderResources(20 + i, 1, &nullSRV);
 	}
 
-	// Upload to GPU and bind to PS slot 19
-	auto context = globals::d3d::context;
+	// Non-directional shadow lights from activeShadowLights (spot/frustum or paraboloid).
+	auto& sceneRTData = shadowSceneNode->GetRuntimeData();
+	for (auto& lightPtr : sceneRTData.activeShadowLights) {
+		if (!lightPtr)
+			continue;
+		auto*    light = lightPtr.get();
+		uint32_t idx   = sd.ShadowLightCount;
+		if (idx >= 4u)
+			break;
+
+		sd.ShadowLightTypes[idx] = light->GetIsParabolicLight() ? 1u : 0u;
+
+		if (REL::Module::IsVR()) {
+			auto& lightData = light->GetVRRuntimeData();
+			if (!lightData.shadowmapDescriptors.empty()) {
+				auto& desc = lightData.shadowmapDescriptors[0];
+				memcpy(&sd.ShadowLightProj[idx], &desc.lightTransform, sizeof(DirectX::XMFLOAT4X4));
+				auto& ds = renderer->GetDepthStencilData().depthStencils[desc.renderTarget];
+				context->PSSetShaderResources(22 + idx, 1, &ds.depthSRV);
+			}
+		} else {
+			auto& lightData = light->GetRuntimeData();
+			if (!lightData.shadowmapDescriptors.empty()) {
+				auto& desc = lightData.shadowmapDescriptors[0];
+				memcpy(&sd.ShadowLightProj[idx], &desc.lightTransform, sizeof(DirectX::XMFLOAT4X4));
+				auto& ds = renderer->GetDepthStencilData().depthStencils[desc.renderTarget];
+				context->PSSetShaderResources(22 + idx, 1, &ds.depthSRV);
+			}
+		}
+
+		++sd.ShadowLightCount;
+	}
+	// Null out unused shadow light slots so stale SRVs from previous frames don't persist
+	for (uint32_t i = sd.ShadowLightCount; i < 4u; ++i) {
+		ID3D11ShaderResourceView* nullSRV = nullptr;
+		context->PSSetShaderResources(22 + i, 1, &nullSRV);
+	}
+
+	// Upload to GPU and bind structured buffer to PS slot t19
 	D3D11_MAPPED_SUBRESOURCE mapped{};
 	DX::ThrowIfFailed(context->Map(perShadow->resource.get(), 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped));
 	memcpy(mapped.pData, &sd, sizeof(ShadowData));

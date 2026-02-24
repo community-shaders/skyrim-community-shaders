@@ -441,7 +441,7 @@ SamplerState SampLandLodBlend2Sampler : register(s15);
 SamplerState SampLandLodNoiseSampler : register(s15);
 #	endif
 
-SamplerState SampShadowMaskSampler : register(s14);
+// SampShadowMaskSampler (s14) removed — shadows are now sampled directly from depth maps.
 
 #	if defined(LANDSCAPE)
 
@@ -542,7 +542,7 @@ Texture2D<float4> TexLandLodBlend2Sampler : register(t15);
 Texture2D<float4> TexLandLodNoiseSampler : register(t15);
 #	endif
 
-Texture2D<float4> TexShadowMaskSampler : register(t14);
+// TexShadowMaskSampler (t14) removed — shadows are now sampled directly from depth maps.
 
 cbuffer PerTechnique : register(b0)
 {
@@ -1982,14 +1982,8 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #		endif  // SPARKLE
 #	endif      // defined (MODELSPACENORMALS) && !defined (SKINNED)
 
-	float2 baseShadowUV = 1.0.xx;
-	float4 shadowColor = 1.0;
-	if ((Permutation::PixelShaderDescriptor & Permutation::LightingFlags::DefShadow) && ((Permutation::PixelShaderDescriptor & Permutation::LightingFlags::ShadowDir) || inWorld) || numShadowLights > 0) {
-		baseShadowUV = input.Position.xy * FrameBuffer::DynamicResolutionParams2.xy;
-		float2 adjustedShadowUV = baseShadowUV * VPOSOffset.xy + VPOSOffset.zw;
-		float2 shadowUV = FrameBuffer::GetDynamicResolutionAdjustedScreenPosition(adjustedShadowUV);
-		shadowColor = TexShadowMaskSampler.Sample(SampShadowMaskSampler, shadowUV);
-	}
+	// Shadow mask texture (t14) removed; all shadows are sampled from depth maps directly
+	// via ShadowSampling::GetLightingShadow() and ShadowSampling::GetShadowLightShadow().
 
 	float projectedMaterialWeight = 0;
 
@@ -2437,25 +2431,12 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	}
 #	endif
 
-	float dirSoftShadow = 1.0;
-	float dirVSMDetailedShadow = 1.0;
-
-#	if defined(VOLUMETRIC_SHADOWS)
-	if (inWorld && !inReflection && !SharedData::InInterior)
-		dirSoftShadow = ShadowSampling::GetLightingShadow(input.WorldPosition.xyz, eyeIndex, dirVSMDetailedShadow);
-#	endif
-
+	float dirSoftShadow    = 1.0;
 	float dirDetailedShadow = 1.0;
 
-	if ((Permutation::PixelShaderDescriptor & Permutation::LightingFlags::DefShadow) && (Permutation::PixelShaderDescriptor & Permutation::LightingFlags::ShadowDir)) {
-		dirDetailedShadow *= shadowColor.x;
-
-#	if !defined(VOLUMETRIC_SHADOWS)
-		dirSoftShadow = dirDetailedShadow;
-#	endif
-	} else {
-		dirDetailedShadow = dirVSMDetailedShadow;
-	}
+	// Sample directional shadow directly (VSM when VolumetricShadows loaded, PCF otherwise).
+	if (inWorld && !inReflection && !SharedData::InInterior)
+		dirSoftShadow = ShadowSampling::GetLightingShadow(input.WorldPosition.xyz, eyeIndex, dirDetailedShadow);
 
 #	if defined(SCREEN_SPACE_SHADOWS) && defined(DEFERRED)
 	if (!SharedData::InInterior)
@@ -2561,7 +2542,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 		float lightShadow = 1.f;
 		if (Permutation::PixelShaderDescriptor & Permutation::LightingFlags::DefShadow) {
 			if (lightIndex < numShadowLights) {
-				lightShadow *= shadowColor[ShadowLightMaskSelect[lightIndex]];
+				lightShadow *= ShadowSampling::GetShadowLightShadow(lightIndex, input.WorldPosition.xyz);
 			}
 		}
 
@@ -2649,7 +2630,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 		float shadowComponent = 1.0;
 		if (Permutation::PixelShaderDescriptor & Permutation::LightingFlags::DefShadow) {
 			if (light.lightFlags & LightLimitFix::LightFlags::Shadow) {
-				shadowComponent = shadowColor[light.shadowLightIndex];
+				shadowComponent = ShadowSampling::GetShadowLightShadow(light.shadowLightIndex, input.WorldPosition.xyz);
 				lightShadow *= shadowComponent;
 			}
 		}
@@ -3166,7 +3147,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 		} else if (SharedData::lightLimitFixSettings.LightsVisualisationMode == 2) {
 			psout.Diffuse.xyz = Color::TurboColormap((float)numClusteredLights / MAX_CLUSTER_LIGHTS);
 		} else {
-			psout.Diffuse.xyz = shadowColor.xyz;
+			psout.Diffuse.xyz = float3(dirSoftShadow, dirDetailedShadow, 0.0);
 		}
 		baseColor.xyz = 0.0;
 	} else {
