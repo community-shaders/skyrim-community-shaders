@@ -20,24 +20,15 @@ public:
 		return &singleton;
 	}
 
-	// Shadow data for all shadow types: directional (cascaded), spot, and paraboloid (point).
+	// Shadow data for directional (cascaded) shadows, with room for spot/paraboloid in ShadowMapProj.
 	// ShadowMapProj uses float4x4 to accommodate both affine (directional) and perspective
 	// (spot / paraboloid) projection matrices. Currently only directional (index 0) is populated.
 	struct alignas(16) ShadowData
 	{
-		float4 VPOSOffset;
-		float4 ShadowSampleParam;          // fPoissonRadiusScale / iShadowMapResolution in z and w
-		float4 EndSplitDistances;          // cascade end distances in xyz, cascade count in w
-		float4 StartSplitDistances;        // cascade start distances in xyz, 4 in w
-		float4 FocusShadowFadeParam;
-		float4 DebugColor;
-		float4 PropertyColor;
-		float4 AlphaTestRef;
-		float4 ShadowLightParam;           // Falloff in x, ShadowDistance squared in z
-		DirectX::XMFLOAT4X3 FocusShadowMapProj[4];  // Focus (near) shadow projections — always affine
-		// XMFLOAT4X4 supports directional (affine, expanded from XMFLOAT4X3) and spot/paraboloid (perspective)
-		DirectX::XMFLOAT4X4 ShadowMapProj[2][3];
-		DirectX::XMFLOAT4X4 CameraViewProjInverse[2];
+		DirectX::XMFLOAT2 EndSplitDistances;    // cascade end depths: x = cascade 0, y = cascade 1
+		DirectX::XMFLOAT2 StartSplitDistances;  // cascade start depths: x = cascade 0, y = cascade 1
+		// XMFLOAT4X4 supports directional (affine) and spot/paraboloid (perspective)
+		DirectX::XMFLOAT4X4 ShadowMapProj[2];
 	};
 	STATIC_ASSERT_ALIGNAS_16(ShadowData);
 
