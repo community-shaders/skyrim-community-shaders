@@ -475,7 +475,7 @@ void DynamicCubemaps::UpdateCubemap()
 	TracyD3D11Zone(globals::state->tracyCtx, "Cubemap Update");
 
 	// Reset capture when game time jumps (wait menu, timescale changes, console commands)
-	if (auto calendar = RE::Calendar::GetSingleton()) {
+	if (auto calendar = globals::game::calendar) {
 		float currentHoursPassed = calendar->GetHoursPassed();
 		float hoursPassedDiff = std::abs(currentHoursPassed - previousHoursPassed);
 		previousHoursPassed = currentHoursPassed;

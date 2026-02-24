@@ -293,6 +293,16 @@ bool WeatherManager::HasWeatherSettings(RE::TESWeather* weather) const
 	return perWeatherSettingsCache.find(weatherKey) != perWeatherSettingsCache.end();
 }
 
+void WeatherManager::ClearAllFeatureSettingsForWeather(RE::TESWeather* weather)
+{
+	if (!weather) {
+		return;
+	}
+
+	std::string weatherKey = GetWeatherKey(weather);
+	perWeatherSettingsCache.erase(weatherKey);
+}
+
 void WeatherManager::ClearCache()
 {
 	perWeatherSettingsCache.clear();

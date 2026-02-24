@@ -3,6 +3,7 @@
 #include "HomePageRenderer.h"
 #include "ThemeManager.h"
 
+#include <dxgi.h>
 #include <imgui.h>
 #include <imgui_impl_dx11.h>
 #include <imgui_impl_win32.h>
@@ -16,6 +17,7 @@
 #include "ShaderCache.h"
 #include "State.h"
 #include "Util.h"
+#include "WeatherEditor/EditorWindow.h"
 
 #include "Features/PerformanceOverlay.h"
 #include "Features/PerformanceOverlay/ABTesting/ABTesting.h"
@@ -50,7 +52,17 @@ void OverlayRenderer::RenderOverlay(
 	RenderShaderBlockingStatus();
 	RenderFirstTimeSetupOverlay();
 
-	if (menu.IsEnabled || HomePageRenderer::ShouldShowFirstTimeSetup()) {
+	// Draw weather editor independently of main menu state
+	// Auto-close editor if player leaves valid game space (e.g., loading screen)
+	auto* editorWindow = EditorWindow::GetSingleton();
+	auto player = RE::PlayerCharacter::GetSingleton();
+	if (editorWindow->open && !(player && player->parentCell)) {
+		editorWindow->open = false;
+	}
+	if (editorWindow->open) {
+		ImGui::GetIO().MouseDrawCursor = true;
+		editorWindow->Draw();
+	} else if (menu.IsEnabled || HomePageRenderer::ShouldShowFirstTimeSetup()) {
 		ImGui::GetIO().MouseDrawCursor = true;
 		if (menu.IsEnabled) {
 			drawSettings();
@@ -81,6 +93,7 @@ bool OverlayRenderer::ShouldSkipRendering()
 
 	return !(shaderCache->IsCompiling() ||
 			 Menu::GetSingleton()->IsEnabled ||
+			 EditorWindow::GetSingleton()->open ||
 			 abTestingManager->IsEnabled() ||
 			 (failed && !hide) ||
 			 globals::features::performanceOverlay.settings.ShowInOverlay ||
@@ -105,8 +118,16 @@ void OverlayRenderer::InitializeImGuiFrame(Menu& menu)
 	// Start the Dear ImGui frame
 	ImGui_ImplDX11_NewFrame();
 	ImGui_ImplWin32_NewFrame();
-	ImGui::NewFrame();
 
+	DXGI_SWAP_CHAIN_DESC desc{};
+	globals::d3d::swapChain->GetDesc(&desc);
+
+	Util::UpdateImGuiInput(
+		desc.OutputWindow,
+		static_cast<float>(desc.BufferDesc.Width),
+		static_cast<float>(desc.BufferDesc.Height));
+
+	ImGui::NewFrame();
 	ThemeManager::SetupImGuiStyle(menu);
 }
 
