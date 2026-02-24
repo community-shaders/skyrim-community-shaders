@@ -198,7 +198,7 @@ public:
 		static constexpr float SCENE_TOD_PARAM_COL_EM = 6.0f;          // Parameter column width (TOD table)
 		static constexpr float SCENE_TOD_PERIOD_COL_EM = 4.3f;         // Per-period column width (TOD table)
 		static constexpr float SCENE_TOD_INACTIVE_ALPHA = 0.5f;        // Alpha for inactive TOD periods
-		static constexpr float SCENE_TOD_ACTIVE_THRESHOLD = 0.01f;      // Factor threshold to consider a period active
+		static constexpr float SCENE_TOD_ACTIVE_THRESHOLD = 0.01f;     // Factor threshold to consider a period active
 		static constexpr float SCENE_ENTRY_INDENT_EM = 0.4f;           // Indent for setting entries under feature headers
 		static constexpr float SCENE_TOD_FEATURE_TEXT_SCALE = 0.85f;   // Smaller text scale for feature names in TOD table
 		static constexpr float SCENE_TOD_LABEL_EM = 2.6f;              // Fixed width for period labels in add-setting rows
