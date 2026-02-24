@@ -169,10 +169,11 @@ namespace ShadowSampling
 
 	float GetFrustumShadow(ShadowData shadow, uint shadowIndex, float3 worldPosition, float2x2 rotationMatrix)
 	{
-		float3 positionLS = mul(shadow.ShadowProj, float4(worldPosition, 1)).xyz;
+		float4 positionLS = mul(shadow.ShadowProj, float4(worldPosition, 1));
+		positionLS.xyz /= positionLS.w;
 
-		float2 sampleUV = positionLS.xy;
-		float visibility = ShadowMaps.SampleCmpLevelZero(ShadowSamplerCmp, float3(sampleUV, float(shadowIndex)), positionLS.z);
+		float2 sampleUV = positionLS.xy * 0.5 + 0.5;
+		float visibility = ShadowMaps.SampleCmpLevelZero(ShadowSamplerCmp, float3(sampleUV, shadowIndex), positionLS.z);
 	
 		return visibility;
 	}
@@ -191,7 +192,7 @@ namespace ShadowSampling
 		float2 sampleUV = lightDirection.xy / lightDirection.z * 0.5 + 0.5;
 		sampleUV.y = lowerHalf ? 1.0 - 0.5 * sampleUV.y : 0.5 * sampleUV.y;
 
-		float visibility = ShadowMaps.SampleCmpLevelZero(ShadowSamplerCmp, float3(sampleUV, float(shadowIndex)), compareValue);
+		float visibility = ShadowMaps.SampleCmpLevelZero(ShadowSamplerCmp, float3(sampleUV, shadowIndex), compareValue);
 	
 		return visibility;
 	}
