@@ -353,9 +353,7 @@ void SceneSettingsManager::DeleteAllOverwrites(SceneType type)
 		if (entry.source == EntrySource::Overwrite && !entry.sourceFilename.empty()) {
 			// TOD overwrites live in per-period subfolders; use the same path
 			// construction as SaveOverwritesToDisk to ensure we hit the right file.
-			auto filepath = (type == SceneType::TimeOfDay && entry.period != TimeOfDayPeriod::Count)
-			                    ? overwritesPath / GetPeriodName(entry.period) / entry.sourceFilename
-			                    : overwritesPath / entry.sourceFilename;
+			auto filepath = (type == SceneType::TimeOfDay && entry.period != TimeOfDayPeriod::Count) ? overwritesPath / GetPeriodName(entry.period) / entry.sourceFilename : overwritesPath / entry.sourceFilename;
 			std::filesystem::remove(filepath, ec);
 		}
 	}
