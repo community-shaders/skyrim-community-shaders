@@ -131,9 +131,9 @@ namespace ShadowSampling
 
 		float visibility = 0;
 		for (uint i = 0; i < sampleCount; i++) {
-			float2 sampleOffset = mul(Random::PoissonSampleOffsets16[sampleIndex], rotationMatrix);
+			float2 sampleOffset = mul(Random::PoissonSampleOffsets16[i], rotationMatrix);
 			float2 sampleUV = positionLS.xy + sampleOffset * shadow.ShadowSampleParam.z;
-			visibility += DirectionalShadowCascades.SampleCmpLevelZero(samp, float3(sampleUV, primaryCascade), positionLS.z).x;
+			visibility += DirectionalShadowCascades.SampleCmpLevelZero(samp, float3(sampleUV, primaryCascade), positionLS.z);
 		}
 
 		float fadeFactor = 1.0 - pow(fade, 8);
@@ -150,9 +150,9 @@ namespace ShadowSampling
 
 		float visibility = 0;
 		for (uint i = 0; i < sampleCount; i++) {
-			float2 sampleOffset = mul(Random::PoissonSampleOffsets16[sampleIndex], rotationMatrix);
+			float2 sampleOffset = mul(Random::PoissonSampleOffsets16[i], rotationMatrix);
 			float2 sampleUV = positionLS.xy + sampleOffset * shadow.ShadowSampleParam.z;
-			visibility += ShadowMaps.SampleCmpLevelZero(samp, float3(sampleUV, shadowIndex), positionLS.z).x;
+			visibility += ShadowMaps.SampleCmpLevelZero(samp, float3(sampleUV, shadowIndex), positionLS.z);
 		}
 
 		return visibility * rcpSampleCount;
@@ -166,7 +166,7 @@ namespace ShadowSampling
 		float visibility = 0;
 		for (uint i = 0; i < sampleCount; i++) {
 			// Optimized random generation using simplified hash
-			float3 sampleOffset = (Random::R3Modified(sampleIndex + SharedData::FrameCount * sampleCount, seed / 4294967295) * 2.0 - 1.0) * shadow.ShadowSampleParam.z * 2048;
+			float3 sampleOffset = (Random::R3Modified(i + SharedData::FrameCount * sampleCount, seed / 4294967295) * 2.0 - 1.0) * shadow.ShadowSampleParam.z * 2048;
 
 			float3 positionLS = mul(shadow.ShadowMapProj, float4(worldPosition + sampleOffset, 1)).xyz;
 
@@ -177,10 +177,10 @@ namespace ShadowSampling
 
 			float3 positionOffset = lowerHalf ? float3(0, 0, -1) : float3(0, 0, 1);
 			float3 lightDirection = normalize(normalizedPositionLS + positionOffset);
-			float2 shadowMapUV = lightDirection.xy / lightDirection.z * 0.5 + 0.5;
-			shadowMapUV.y = lowerHalf ? 1.0 - 0.5 * shadowMapUV.y : 0.5 * shadowMapUV.y;
+			float2 sampleUV = lightDirection.xy / lightDirection.z * 0.5 + 0.5;
+			sampleUV.y = lowerHalf ? 1.0 - 0.5 * sampleUV.y : 0.5 * sampleUV.y;
 
-			visibility += ShadowMaps.SampleCmpLevelZero(samp, float3(shadowMapUV, shadowIndex), compareValue).x;
+			visibility += ShadowMaps.SampleCmpLevelZero(samp, float3(sampleUV, shadowIndex), compareValue);
 		}
 
 		return visibility * rcpSampleCount;
