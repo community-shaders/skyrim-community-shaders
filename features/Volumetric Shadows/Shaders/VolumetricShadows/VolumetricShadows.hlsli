@@ -12,16 +12,16 @@ namespace VolumetricShadows
 	{
 		float4 VPOSOffset;
 		float4 ShadowSampleParam;    // fPoissonRadiusScale / iShadowMapResolution in z and w
-		float4 EndSplitDistances;    // cascade end distances int xyz, cascade count int z
-		float4 StartSplitDistances;  // cascade start distances int xyz, 4 int z
+		float4 EndSplitDistances;    // cascade end distances in xyz, cascade count in w
+		float4 StartSplitDistances;  // cascade start distances in xyz, 4 in w
 		float4 FocusShadowFadeParam;
 		float4 DebugColor;
 		float4 PropertyColor;
 		float4 AlphaTestRef;
-		float4 ShadowLightParam;  // Falloff in x, ShadowDistance squared in z
-		float4x3 FocusShadowMapProj[4];
-		// Since ShadowData is passed between c++ and hlsl, can't have different defines due to strong typing
-		float4x3 ShadowMapProj[2][3];
+		float4 ShadowLightParam;         // Falloff in x, ShadowDistance squared in z
+		float4x3 FocusShadowMapProj[4];  // Focus (near) shadow projections — always affine
+		// float4x4 supports directional (affine, expanded) and spot/paraboloid (perspective)
+		float4x4 ShadowMapProj[2][3];
 		float4x4 CameraViewProjInverse[2];
 	};
 
@@ -110,9 +110,9 @@ namespace VolumetricShadows
 		bool needsBlending = (cascadeSelect > 0.0) && (cascadeSelect < 1.0);
 
 		// Transform ray to light space for primary cascade
-		float4x3 shadowProj = sD.ShadowMapProj[eyeIndex][primaryCascade];
-		float3 startLS = mul(transpose(shadowProj), float4(startPosition, 1));
-		float3 endLS = mul(transpose(shadowProj), float4(endPosition, 1));
+		float4x4 shadowProj = sD.ShadowMapProj[eyeIndex][primaryCascade];
+		float3 startLS = mul(transpose(shadowProj), float4(startPosition, 1)).xyz;
+		float3 endLS = mul(transpose(shadowProj), float4(endPosition, 1)).xyz;
 		startLS.xy = saturate(startLS.xy);
 		endLS.xy = saturate(endLS.xy);
 
@@ -127,8 +127,8 @@ namespace VolumetricShadows
 			uint secondaryCascade = 1 - primaryCascade;
 
 			shadowProj = sD.ShadowMapProj[eyeIndex][secondaryCascade];
-			startLS = mul(transpose(shadowProj), float4(startPosition, 1));
-			endLS = mul(transpose(shadowProj), float4(endPosition, 1));
+			startLS = mul(transpose(shadowProj), float4(startPosition, 1)).xyz;
+			endLS = mul(transpose(shadowProj), float4(endPosition, 1)).xyz;
 			startLS.xy = saturate(startLS.xy);
 			endLS.xy = saturate(endLS.xy);
 
@@ -175,8 +175,8 @@ namespace VolumetricShadows
 		bool needsBlending = (cascadeSelect > 0.0) && (cascadeSelect < 1.0);
 
 		// Transform ray to light space for primary cascade
-		float4x3 shadowProj = sD.ShadowMapProj[eyeIndex][primaryCascade];
-		float3 positionLS = mul(transpose(shadowProj), float4(position, 1));
+		float4x4 shadowProj = sD.ShadowMapProj[eyeIndex][primaryCascade];
+		float3 positionLS = mul(transpose(shadowProj), float4(position, 1)).xyz;
 		positionLS.xy = saturate(positionLS.xy);
 
 		// Sample primary cascade
@@ -188,7 +188,7 @@ namespace VolumetricShadows
 			uint secondaryCascade = 1 - primaryCascade;
 
 			shadowProj = sD.ShadowMapProj[eyeIndex][secondaryCascade];
-			positionLS = mul(transpose(shadowProj), float4(position, 1));
+			positionLS = mul(transpose(shadowProj), float4(position, 1)).xyz;
 			positionLS.xy = saturate(positionLS.xy);
 
 			float shadowBlend = SampleVSMCascade2D(secondaryCascade, positionLS);
