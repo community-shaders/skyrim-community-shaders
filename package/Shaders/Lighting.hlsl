@@ -2410,9 +2410,13 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	float dirSoftShadow    = 1.0;
 	float dirDetailedShadow = 1.0;
 
+	float2 rotation;
+	sincos(Math::TAU * screenNoise, rotation.y, rotation.x);
+	float2x2 rotationMatrix = float2x2(rotation.x, rotation.y, -rotation.y, rotation.x);
+	
 	// Sample directional shadow directly (VSM when VolumetricShadows loaded, PCF otherwise).
 	if (inWorld && !inReflection && !SharedData::InInterior)
-		dirSoftShadow = ShadowSampling::GetLightingShadow(input.WorldPosition.xyz, eyeIndex, dirDetailedShadow);
+		dirSoftShadow = ShadowSampling::GetLightingShadow(input.WorldPosition.xyz, eyeIndex, rotationMatrix, dirDetailedShadow);
 
 #	if defined(SCREEN_SPACE_SHADOWS) && defined(DEFERRED)
 	if (!SharedData::InInterior)
@@ -2518,7 +2522,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 		float lightShadow = 1.f;
 		if (Permutation::PixelShaderDescriptor & Permutation::LightingFlags::DefShadow) {
 			if (lightIndex < numShadowLights) {
-				lightShadow *= ShadowSampling::GetShadowLightShadow(lightIndex, input.WorldPosition.xyz);
+				//lightShadow *= ShadowSampling::GetShadowLightShadow(lightIndex, input.WorldPosition.xyz);
 			}
 		}
 
@@ -2606,7 +2610,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 		float shadowComponent = 1.0;
 		if (Permutation::PixelShaderDescriptor & Permutation::LightingFlags::DefShadow) {
 			if (light.lightFlags & LightLimitFix::LightFlags::Shadow) {
-				shadowComponent = ShadowSampling::GetShadowLightShadow(light.shadowLightIndex, input.WorldPosition.xyz);
+				//shadowComponent = ShadowSampling::GetShadowLightShadow(light.shadowLightIndex, input.WorldPosition.xyz);
 				lightShadow *= shadowComponent;
 			}
 		}
@@ -2693,7 +2697,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #	if !defined(LANDSCAPE)
 	if (Permutation::PixelShaderDescriptor & Permutation::LightingFlags::CharacterLight) {
 		float charLightMul = saturate(dot(viewDirection, worldNormal.xyz)) * CharacterLightParams.x + CharacterLightParams.y * saturate(dot(float2(0.164398998, -0.986393988), worldNormal.yz));
-		float charLightColor = min(CharacterLightParams.w, max(0, CharacterLightParams.z * TexCharacterLightProjNoiseSampler.Sample(SampCharacterLightProjNoiseSampler, baseShadowUV).x));
+		float charLightColor = min(CharacterLightParams.w, max(0, CharacterLightParams.z * TexCharacterLightProjNoiseSampler.Sample(SampCharacterLightProjNoiseSampler, screenUV).x));
 		diffuseColor += (charLightMul * charLightColor).xxx;
 	}
 #	endif
