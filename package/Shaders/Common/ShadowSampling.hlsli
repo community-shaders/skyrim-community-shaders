@@ -134,26 +134,36 @@ namespace ShadowSampling
 
 		worldPosition.xyz += FrameBuffer::CameraPosAdjust[0].xyz;
 
+		// Reduce over distance
 		float fade = saturate(shadowMapDepth / shadow.EndSplitDistances.y);
-		float cascadeBlend = saturate((shadowMapDepth - shadow.StartSplitDistances.y) / (shadow.EndSplitDistances.x - shadow.StartSplitDistances.y));
-		uint cascade = (cascadeBlend >= 0.5) ? 1u : 0u;
 
-		const uint  sampleCount    = 16;
-		const float rcpSampleCount = 1.0 / float(sampleCount);
+		// Compute cascade blend factor with smoothstep
+		float cascadeSelect = saturate((shadowMapDepth - shadow.StartSplitDistances.y) / (shadow.EndSplitDistances.x - shadow.StartSplitDistances.y));
 
-		float3 positionLS = mul(shadow.ShadowMapProj[cascade], float4(worldPosition, 1)).xyz;
+		// Determine which cascade(s) to sample
+		uint primaryCascade = uint(cascadeSelect);
+		bool needsBlending = (cascadeSelect > 0.0) && (cascadeSelect < 1.0);
 
-		float visibility = 0;
-		for (uint i = 0; i < sampleCount; i++) {
-			float2 sampleOffset = mul(Random::PoissonSampleOffsets16[i], rotationMatrix);
-			float2 sampleUV = positionLS.xy;
-			visibility += DirectionalShadowCascades.SampleCmpLevelZero(ShadowSamplerCmp, float3(sampleUV, float(cascade)), positionLS.z);
+		// Transform ray to light space for primary cascade
+		float3 positionLS = mul(shadow.ShadowMapProj[primaryCascade], float4(worldPosition, 1)).xyz;
+
+		// Sample primary cascade
+		float visibility = DirectionalShadowCascades.SampleCmpLevelZero(ShadowSamplerCmp, float3(positionLS.xy, primaryCascade), positionLS.z);
+
+		// Blend with secondary cascade if needed
+		[branch]
+		if (needsBlending) {
+			uint secondaryCascade = 1 - primaryCascade;
+
+			positionLS = mul(shadow.ShadowMapProj[secondaryCascade], float4(worldPosition, 1)).xyz;
+
+			float visibilityBlend = DirectionalShadowCascades.SampleCmpLevelZero(ShadowSamplerCmp, float3(positionLS.xy, secondaryCascade), positionLS.z);
+			visibility = lerp(visibility, visibilityBlend, cascadeSelect);
 		}
 
-		float shadowValue = visibility * rcpSampleCount;
 		float fadeFactor = 1.0 - pow(fade, 8);
-		detailedShadow = lerp(1.0, shadowValue, fadeFactor);
-		return lerp(1.0, shadowValue, fadeFactor);
+		detailedShadow = lerp(1.0, visibility, fadeFactor);
+		return lerp(1.0, visibility, fadeFactor);
 	}
 
 	float GetFrustumShadow(ShadowData shadow, uint shadowIndex, float3 worldPosition, float2x2 rotationMatrix)
