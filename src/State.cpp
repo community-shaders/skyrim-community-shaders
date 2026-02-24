@@ -72,6 +72,10 @@ void State::Draw()
 		if (currentShader && updateShader) {
 			if (currentShader->shaderType.get() == RE::BSShader::Type::Utility) {
 				if (currentPixelDescriptor & static_cast<uint32_t>(SIE::ShaderCache::UtilityShaderFlags::RenderShadowmask)) {
+					// Always copy directional shadow data into the structured buffer (t19)
+					globals::deferred->CopyShadowData();
+
+					// VolumetricShadows additionally downsamples the shadow texture into a VSM (t18)
 					if (volumetricShadows.loaded)
 						volumetricShadows.CopyShadowData();
 				}

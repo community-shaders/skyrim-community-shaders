@@ -149,6 +149,36 @@ void Deferred::SetupResources()
 			.Texture2D = { .MipSlice = 0 }
 		};
 	}
+
+	// Shadow data structured buffer (t19): one element (directional) for now
+	{
+		D3D11_BUFFER_DESC sbDesc{};
+		sbDesc.Usage = D3D11_USAGE_DEFAULT;
+		sbDesc.CPUAccessFlags = 0;
+		sbDesc.BindFlags = D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_UNORDERED_ACCESS;
+		sbDesc.MiscFlags = D3D11_RESOURCE_MISC_BUFFER_STRUCTURED;
+		sbDesc.StructureByteStride = sizeof(ShadowData);
+		sbDesc.ByteWidth = sizeof(ShadowData);
+
+		D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc{};
+		srvDesc.Format = DXGI_FORMAT_UNKNOWN;
+		srvDesc.ViewDimension = D3D11_SRV_DIMENSION_BUFFER;
+		srvDesc.Buffer.FirstElement = 0;
+		srvDesc.Buffer.NumElements = 1;
+
+		D3D11_UNORDERED_ACCESS_VIEW_DESC uavDesc{};
+		uavDesc.Format = DXGI_FORMAT_UNKNOWN;
+		uavDesc.ViewDimension = D3D11_UAV_DIMENSION_BUFFER;
+		uavDesc.Buffer.FirstElement = 0;
+		uavDesc.Buffer.NumElements = 1;
+		uavDesc.Buffer.Flags = 0;
+
+		perShadow = new Buffer(sbDesc);
+		perShadow->CreateSRV(srvDesc);
+		perShadow->CreateUAV(uavDesc);
+	}
+
+	copyShadowCS = static_cast<ID3D11ComputeShader*>(Util::CompileShader(L"Data\\Shaders\\CopyShadowDataCS.hlsl", {}, "cs_5_0"));
 }
 
 void Deferred::ReflectionsPrepasses()
@@ -517,6 +547,46 @@ void Deferred::ResetBlendStates()
 	globals::game::stateUpdateFlags->set(RE::BSGraphics::ShaderFlags::DIRTY_ALPHA_BLEND);
 }
 
+void Deferred::CopyShadowData()
+{
+	ZoneScoped;
+	TracyD3D11Zone(globals::state->tracyCtx, "CopyShadowData");
+
+	auto context = globals::d3d::context;
+
+	ID3D11UnorderedAccessView* uavs[1]{ perShadow->uav.get() };
+	context->CSSetUnorderedAccessViews(0, 1, uavs, nullptr);
+
+	ID3D11Buffer* buffers[3];
+	context->PSGetConstantBuffers(0, 3, buffers);
+
+	// Release the buffer at slot 1 before overwriting with b12 (PerFrame2 camera data)
+	if (buffers[1])
+		buffers[1]->Release();
+
+	context->PSGetConstantBuffers(12, 1, buffers + 1);
+
+	context->CSSetConstantBuffers(0, 3, buffers);
+	context->CSSetShader(copyShadowCS, nullptr, 0);
+	context->Dispatch(1, 1, 1);
+
+	uavs[0] = nullptr;
+	context->CSSetUnorderedAccessViews(0, 1, uavs, nullptr);
+
+	// Release all COM references acquired from PSGetConstantBuffers
+	for (auto& buf : buffers) {
+		if (buf)
+			buf->Release();
+		buf = nullptr;
+	}
+	context->CSSetConstantBuffers(0, 3, buffers);
+	context->CSSetShader(nullptr, nullptr, 0);
+
+	// Bind the shadow data structured buffer to PS slot 19 for all shaders that consume it
+	ID3D11ShaderResourceView* srv = perShadow->srv.get();
+	context->PSSetShaderResources(19, 1, &srv);
+}
+
 void Deferred::ClearShaderCache()
 {
 	if (mainCompositeCS) {
@@ -527,6 +597,11 @@ void Deferred::ClearShaderCache()
 		mainCompositeInteriorCS->Release();
 		mainCompositeInteriorCS = nullptr;
 	}
+	if (copyShadowCS) {
+		copyShadowCS->Release();
+		copyShadowCS = nullptr;
+	}
+	copyShadowCS = static_cast<ID3D11ComputeShader*>(Util::CompileShader(L"Data\\Shaders\\CopyShadowDataCS.hlsl", {}, "cs_5_0"));
 }
 
 ID3D11ComputeShader* Deferred::GetComputeMainComposite()
