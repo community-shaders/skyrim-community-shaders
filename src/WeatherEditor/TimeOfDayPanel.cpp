@@ -185,7 +185,9 @@ namespace TimeOfDayPanel
 			break;
 		case SceneSettingsManager::SettingType::Float:
 			{
-				float val = entry.value.get<float>();
+				float val = entry.value.is_number() ? entry.value.get<float>() : 0.0f;
+				if (!std::isfinite(val))
+					val = 0.0f;
 				ImGui::SetNextItemWidth(C::SCENE_VALUE_INPUT_WIDTH);
 				if (ImGui::InputFloat("##val", &val, 0.01f, 0.1f, "%.3f")) {
 					if (std::isfinite(val))
