@@ -26,8 +26,10 @@ namespace SceneSettingsUI
 	{
 		Util::ConfirmationPopup deleteAllOverwrites;
 		Util::ConfirmationPopup deleteSingleOverwrite{ "Delete Overwrite File?", "", "Delete" };
+		Util::ConfirmationPopup deleteRowOverwrite{ "Delete Overwrite Row?", "", "Delete" };
 		Util::ConfirmationPopup deleteAllUser;
 		size_t pendingDeleteIndex = SIZE_MAX;
+		std::vector<size_t> pendingDeleteRow;
 
 		PopupState(const char* overwriteMsg, const char* userMsg) :
 			deleteAllOverwrites("Delete All Overwrites?", overwriteMsg, "Delete All"),
@@ -35,12 +37,20 @@ namespace SceneSettingsUI
 	};
 
 	/// Draw the feature tree selector.  Selecting a setting auto-adds it.
-	/// @param type         Scene type being edited.
-	/// @param state        Persistent dropdown state (selection indices, caches).
-	/// @param period       For TimeOfDay entries, which period to add to. Count = none.
-	/// @param labelPrefix  Optional label drawn before the dropdowns (e.g. period name).
+	/// @param type            Scene type being edited.
+	/// @param state           Persistent dropdown state (selection indices, caches).
+	/// @param period          For TimeOfDay entries, which period to add to. Count = none.
+	/// @param labelPrefix     Optional label drawn before the dropdowns (e.g. period name).
+	/// @param addToAllPeriods When true, adds the setting to every period at once.
 	void DrawAddSettingUI(SceneType type, AddSettingState& state,
-		Period period = Period::Count, const char* labelPrefix = nullptr);
+		Period period = Period::Count, const char* labelPrefix = nullptr,
+		bool addToAllPeriods = false);
+
+	/// Draw the value editor widget (checkbox/float input/int input) for a setting entry.
+	/// @param type         Scene type being edited.
+	/// @param index        Index into the entries vector.
+	/// @param inputWidth   Width for float/int input widgets.
+	void DrawValueEditor(SceneType type, size_t index, float inputWidth);
 
 	/// Draw a single setting entry row (label, value editor, pause toggle, delete).
 	/// @param type         Scene type being edited.

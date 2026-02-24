@@ -1,8 +1,10 @@
 #include "TimeOfDayPanel.h"
 
+#include <algorithm>
 #include <array>
 #include <cmath>
 #include <map>
+#include <set>
 
 #include "../Globals.h"
 #include "../Menu.h"
@@ -21,6 +23,8 @@ namespace TimeOfDayPanel
 
 	// Per-period add-setting state
 	static SceneSettingsUI::AddSettingState periodAddState[kPeriodCount];
+	static SceneSettingsUI::AddSettingState allPeriodsAddState;
+	static bool addToAllPeriods = false;
 
 	// Shared popups
 	static SceneSettingsUI::PopupState popups{
@@ -52,7 +56,6 @@ namespace TimeOfDayPanel
 
 		const auto& entry = entries[entryIndex];
 		bool isOverwrite = entry.source == EntrySource::Overwrite;
-		auto settingType = SceneSettingsManager::DetectSettingType(entry.value);
 
 		ImGui::PushID(static_cast<int>(entryIndex));
 
@@ -60,43 +63,7 @@ namespace TimeOfDayPanel
 		if (readOnly)
 			ImGui::BeginDisabled();
 
-		float colWidth = ImGui::GetContentRegionAvail().x;
-
-		switch (settingType) {
-		case SceneSettingsManager::SettingType::Boolean:
-			{
-				bool val = entry.value.is_boolean() ? entry.value.get<bool>() : (entry.value.get<int>() != 0);
-				if (ImGui::Checkbox("##val", &val))
-					manager->UpdateEntryValue(kSceneType, entryIndex, entry.value.is_boolean() ? json(val) : json(val ? 1 : 0));
-			}
-			break;
-		case SceneSettingsManager::SettingType::Float:
-			{
-				float val = entry.value.is_number() ? entry.value.get<float>() : 0.0f;
-				if (!std::isfinite(val))
-					val = 0.0f;
-				ImGui::SetNextItemWidth(colWidth);
-				if (ImGui::InputFloat("##val", &val, 0.0f, 0.0f, "%.3f"))
-					if (std::isfinite(val))
-						manager->UpdateEntryValue(kSceneType, entryIndex, val, true);
-				if (ImGui::IsItemDeactivatedAfterEdit())
-					manager->SaveUserSettings(kSceneType);
-			}
-			break;
-		case SceneSettingsManager::SettingType::Integer:
-			{
-				int val = entry.value.get<int>();
-				ImGui::SetNextItemWidth(colWidth);
-				if (ImGui::InputInt("##val", &val, 0, 0))
-					manager->UpdateEntryValue(kSceneType, entryIndex, val, true);
-				if (ImGui::IsItemDeactivatedAfterEdit())
-					manager->SaveUserSettings(kSceneType);
-			}
-			break;
-		default:
-			ImGui::TextDisabled("(?)");
-			break;
-		}
+		SceneSettingsUI::DrawValueEditor(kSceneType, entryIndex, ImGui::GetContentRegionAvail().x);
 
 		if (readOnly)
 			ImGui::EndDisabled();
@@ -161,10 +128,13 @@ namespace TimeOfDayPanel
 	}
 
 	/// Draw TOD table rows for a set of entries grouped by feature.
-	static void DrawSourceRows(const SourceGroup& group, const float* factors)
+	static void DrawSourceRows(const SourceGroup& group, const float* factors, EntrySource source)
 	{
+		auto* manager = SceneSettingsManager::GetSingleton();
 		auto& theme = globals::menu->GetSettings().Theme;
+		bool isOverwrite = source == EntrySource::Overwrite;
 		std::string lastFeature;
+
 		for (const auto& sid : group.order) {
 			if (sid.feature != lastFeature) {
 				lastFeature = sid.feature;
@@ -187,18 +157,76 @@ namespace TimeOfDayPanel
 				continue;
 			const auto& perKey = keyIt->second;
 
+			// Collect valid indices for this row
+			std::vector<size_t> rowIndices;
+			for (int p = 0; p < kPeriodCount; ++p)
+				if (perKey[p] != SIZE_MAX)
+					rowIndices.push_back(perKey[p]);
+
 			ImGui::TableNextRow();
 			ImGui::TableSetColumnIndex(0);
+			ImGui::PushID(sid.key.c_str());
+			ImGui::PushID(sid.feature.c_str());
+
 			ImGui::Indent(C::Em(C::SCENE_ENTRY_INDENT_EM));
 			ImGui::SetWindowFontScale(C::SCENE_TOD_FEATURE_TEXT_SCALE);
 			ImGui::Text("%s", sid.key.c_str());
 			ImGui::SetWindowFontScale(1.0f);
+
+			// Row-level toggle + delete
+			{
+				const auto& entries = manager->GetEntries(kSceneType);
+				bool allPaused = std::all_of(rowIndices.begin(), rowIndices.end(),
+					[&](size_t i) { return i < entries.size() && entries[i].paused; });
+				bool active = !allPaused;
+				if (Util::FeatureToggle("##rowActive", &active))
+					for (auto idx : rowIndices)
+						if (idx < entries.size() && entries[idx].paused == active)
+							manager->TogglePauseEntry(kSceneType, idx);
+				if (auto _tt = Util::HoverTooltipWrapper())
+					ImGui::Text(allPaused ? "Unpause all periods" : "Pause all periods");
+
+				ImGui::SameLine();
+				{
+					auto styledButton = Util::ErrorButtonStyle();
+					if (ImGui::Button("X", ImVec2(C::Em(C::SCENE_DELETE_BUTTON_EM), 0))) {
+						if (isOverwrite) {
+							// Collect unique filenames for the confirmation message
+							std::set<std::string> filenames;
+							for (auto idx : rowIndices)
+								if (idx < entries.size())
+									filenames.insert(entries[idx].sourceFilename);
+							std::string fileList;
+							for (const auto& f : filenames) {
+								if (!fileList.empty())
+									fileList += ", ";
+								fileList += "'" + f + "'";
+							}
+							popups.pendingDeleteRow = rowIndices;
+							popups.deleteRowOverwrite.message = std::format(
+								"Delete overwrite entries from {}?\nThis will permanently remove the file(s) from disk.",
+								fileList);
+							popups.deleteRowOverwrite.Request();
+						} else {
+							// Delete user entries in reverse order so indices stay valid
+							std::sort(rowIndices.begin(), rowIndices.end(), std::greater<>());
+							for (auto idx : rowIndices)
+								manager->RemoveSetting(kSceneType, idx);
+						}
+					}
+				}
+				if (auto _tt = Util::HoverTooltipWrapper())
+					ImGui::Text(isOverwrite ? "Delete row from disk" : "Remove all periods");
+			}
+
 			ImGui::Unindent(C::Em(C::SCENE_ENTRY_INDENT_EM));
+			ImGui::PopID();
+			ImGui::PopID();
 
 			for (int p = 0; p < kPeriodCount; ++p) {
 				ImGui::TableSetColumnIndex(1 + p);
 
-				bool isActive = factors[p] > 0.0f;
+				bool isActive = factors[p] > C::SCENE_TOD_ACTIVE_THRESHOLD;
 				if (!isActive)
 					ImGui::PushStyleVar(ImGuiStyleVar_Alpha, C::SCENE_TOD_INACTIVE_ALPHA);
 
@@ -211,7 +239,7 @@ namespace TimeOfDayPanel
 	}
 
 	/// Draw a TOD table for a single source group.
-	static void DrawSourceTable(const SourceGroup& group, const float* factors, const char* tableId)
+	static void DrawSourceTable(const SourceGroup& group, const float* factors, const char* tableId, EntrySource source)
 	{
 		constexpr int kTotalCols = 1 + kPeriodCount;
 
@@ -232,7 +260,7 @@ namespace TimeOfDayPanel
 			ImGui::TableHeader("Setting");
 			for (int i = 0; i < kPeriodCount; ++i) {
 				ImGui::TableSetColumnIndex(1 + i);
-				bool isActive = factors[i] > 0.01f;
+				bool isActive = factors[i] > C::SCENE_TOD_ACTIVE_THRESHOLD;
 				if (!isActive)
 					ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetStyleColorVec4(ImGuiCol_TextDisabled));
 				ImGui::TableHeader(SceneSettingsManager::kPeriodNames[i]);
@@ -240,7 +268,7 @@ namespace TimeOfDayPanel
 					ImGui::PopStyleColor();
 			}
 
-			DrawSourceRows(group, factors);
+			DrawSourceRows(group, factors, source);
 			ImGui::EndTable();
 		}
 	}
@@ -269,12 +297,18 @@ namespace TimeOfDayPanel
 
 		// Per-period add-setting dropdowns — period name inline with dropdowns
 		if (ImGui::CollapsingHeader("Add Settings", ImGuiTreeNodeFlags_DefaultOpen)) {
-			for (int i = 0; i < kPeriodCount; ++i) {
-				auto periodLabel = std::format("{}:", SceneSettingsManager::GetPeriodName(static_cast<Period>(i)));
-				ImGui::PushID(i);
-				SceneSettingsUI::DrawAddSettingUI(kSceneType, periodAddState[i],
-					static_cast<Period>(i), periodLabel.c_str());
-				ImGui::PopID();
+			ImGui::Checkbox("Add to all times of day", &addToAllPeriods);
+			if (addToAllPeriods) {
+				SceneSettingsUI::DrawAddSettingUI(kSceneType, allPeriodsAddState,
+					Period::Count, nullptr, true);
+			} else {
+				for (int i = 0; i < kPeriodCount; ++i) {
+					auto periodLabel = std::format("{}:", SceneSettingsManager::GetPeriodName(static_cast<Period>(i)));
+					ImGui::PushID(i);
+					SceneSettingsUI::DrawAddSettingUI(kSceneType, periodAddState[i],
+						static_cast<Period>(i), periodLabel.c_str());
+					ImGui::PopID();
+				}
 			}
 		}
 
@@ -299,12 +333,12 @@ namespace TimeOfDayPanel
 
 		if (!overwriteGroup.order.empty()) {
 			SceneSettingsUI::DrawSectionHeader("Overwrite Files", theme.StatusPalette.InfoColor, "##ow", manager->AreAllOverwritesPaused(kSceneType), [&] { manager->SetAllOverwritesPaused(kSceneType, !manager->AreAllOverwritesPaused(kSceneType)); }, [&] { popups.deleteAllOverwrites.Request(); });
-			DrawSourceTable(overwriteGroup, factors, "##TODOverwriteTable");
+			DrawSourceTable(overwriteGroup, factors, "##TODOverwriteTable", EntrySource::Overwrite);
 		}
 
 		if (!userGroup.order.empty()) {
 			SceneSettingsUI::DrawSectionHeader("User Settings", theme.FeatureHeading.ColorDefault, "##usr", manager->AreAllUserPaused(kSceneType), [&] { manager->SetAllUserPaused(kSceneType, !manager->AreAllUserPaused(kSceneType)); }, [&] { popups.deleteAllUser.Request(); });
-			DrawSourceTable(userGroup, factors, "##TODUserTable");
+			DrawSourceTable(userGroup, factors, "##TODUserTable", EntrySource::User);
 		}
 	}
 }

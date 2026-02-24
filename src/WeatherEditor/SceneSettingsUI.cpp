@@ -29,9 +29,10 @@ namespace SceneSettingsUI
 
 	// --- Shared Drawing ---
 
-	void DrawAddSettingUI(SceneType type, AddSettingState& state, Period period, const char* labelPrefix)
+	void DrawAddSettingUI(SceneType type, AddSettingState& state, Period period, const char* labelPrefix, bool addToAllPeriods)
 	{
 		auto* manager = SceneSettingsManager::GetSingleton();
+		constexpr int kPeriodCount = SceneSettingsManager::kPeriodCount;
 
 		ImGui::Spacing();
 
@@ -73,21 +74,81 @@ namespace SceneSettingsUI
 			ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x);
 			if (ImGui::BeginCombo("##SettingSelect", "Select Setting...")) {
 				for (int i = 0; i < static_cast<int>(state.cachedSettingKeys.size()); ++i) {
-					bool alreadyAdded = state.selectedFeatureIdx >= 0 &&
-					                    IsAlreadyAdded(type, state.cachedFeatureNames[state.selectedFeatureIdx],
-											state.cachedSettingKeys[i], period);
+					auto& featureName = state.cachedFeatureNames[state.selectedFeatureIdx];
+					auto& key = state.cachedSettingKeys[i];
+
+					// Check if already added (for all-periods mode, disabled only when present in every period)
+					bool alreadyAdded = false;
+					if (state.selectedFeatureIdx >= 0) {
+						if (addToAllPeriods) {
+							alreadyAdded = true;
+							for (int p = 0; p < kPeriodCount && alreadyAdded; ++p)
+								alreadyAdded = IsAlreadyAdded(type, featureName, key, static_cast<Period>(p));
+						} else {
+							alreadyAdded = IsAlreadyAdded(type, featureName, key, period);
+						}
+					}
+
 					if (alreadyAdded) {
 						ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetStyle().Colors[ImGuiCol_TextDisabled]);
-						ImGui::Selectable(state.cachedSettingKeys[i].c_str(), false, ImGuiSelectableFlags_Disabled);
+						ImGui::Selectable(key.c_str(), false, ImGuiSelectableFlags_Disabled);
 						ImGui::PopStyleColor();
-					} else if (ImGui::Selectable(state.cachedSettingKeys[i].c_str(), false)) {
-						auto& featureName = state.cachedFeatureNames[state.selectedFeatureIdx];
-						auto currentValue = SceneSettingsManager::GetFeatureSettingValue(featureName, state.cachedSettingKeys[i]);
-						manager->AddSetting(type, featureName, state.cachedSettingKeys[i], currentValue, period);
+					} else if (ImGui::Selectable(key.c_str(), false)) {
+						auto currentValue = SceneSettingsManager::GetFeatureSettingValue(featureName, key);
+						if (addToAllPeriods) {
+							for (int p = 0; p < kPeriodCount; ++p)
+								if (!IsAlreadyAdded(type, featureName, key, static_cast<Period>(p)))
+									manager->AddSetting(type, featureName, key, currentValue, static_cast<Period>(p));
+						} else {
+							manager->AddSetting(type, featureName, key, currentValue, period);
+						}
 					}
 				}
 				ImGui::EndCombo();
 			}
+		}
+	}
+
+	void DrawValueEditor(SceneType type, size_t index, float inputWidth)
+	{
+		auto* manager = SceneSettingsManager::GetSingleton();
+		const auto& entry = manager->GetEntries(type)[index];
+		auto settingType = SceneSettingsManager::DetectSettingType(entry.value);
+
+		switch (settingType) {
+		case SceneSettingsManager::SettingType::Boolean:
+			{
+				bool val = entry.value.is_boolean() ? entry.value.get<bool>() : (entry.value.get<int>() != 0);
+				if (ImGui::Checkbox("##val", &val))
+					manager->UpdateEntryValue(type, index, entry.value.is_boolean() ? json(val) : json(val ? 1 : 0));
+			}
+			break;
+		case SceneSettingsManager::SettingType::Float:
+			{
+				float val = entry.value.is_number() ? entry.value.get<float>() : 0.0f;
+				if (!std::isfinite(val))
+					val = 0.0f;
+				ImGui::SetNextItemWidth(inputWidth);
+				if (ImGui::InputFloat("##val", &val, 0.0f, 0.0f, "%.3f"))
+					if (std::isfinite(val))
+						manager->UpdateEntryValue(type, index, val, true);
+				if (ImGui::IsItemDeactivatedAfterEdit())
+					manager->SaveUserSettings(type);
+			}
+			break;
+		case SceneSettingsManager::SettingType::Integer:
+			{
+				int val = entry.value.get<int>();
+				ImGui::SetNextItemWidth(inputWidth);
+				if (ImGui::InputInt("##val", &val, 0, 0))
+					manager->UpdateEntryValue(type, index, val, true);
+				if (ImGui::IsItemDeactivatedAfterEdit())
+					manager->SaveUserSettings(type);
+			}
+			break;
+		default:
+			ImGui::TextDisabled("(unsupported type)");
+			break;
 		}
 	}
 
@@ -110,7 +171,6 @@ namespace SceneSettingsUI
 		ImGui::SameLine(availWidth * C::SCENE_VALUE_LABEL_OFFSET_RATIO);
 
 		bool isOverwrite = entry.source == EntrySource::Overwrite;
-		auto settingType = SceneSettingsManager::DetectSettingType(entry.value);
 
 		bool readOnly = isOverwrite ||
 		                (type != SceneType::TimeOfDay &&
@@ -119,41 +179,7 @@ namespace SceneSettingsUI
 		if (readOnly)
 			ImGui::BeginDisabled();
 
-		switch (settingType) {
-		case SceneSettingsManager::SettingType::Boolean:
-			{
-				bool val = entry.value.is_boolean() ? entry.value.get<bool>() : (entry.value.get<int>() != 0);
-				if (ImGui::Checkbox("##val", &val))
-					manager->UpdateEntryValue(type, index, entry.value.is_boolean() ? json(val) : json(val ? 1 : 0));
-			}
-			break;
-		case SceneSettingsManager::SettingType::Float:
-			{
-				float val = entry.value.is_number() ? entry.value.get<float>() : 0.0f;
-				if (!std::isfinite(val))
-					val = 0.0f;
-				ImGui::SetNextItemWidth(C::Em(C::SCENE_VALUE_INPUT_EM));
-				if (ImGui::InputFloat("##val", &val, 0.0f, 0.0f, "%.3f"))
-					if (std::isfinite(val))
-						manager->UpdateEntryValue(type, index, val, true);
-				if (ImGui::IsItemDeactivatedAfterEdit())
-					manager->SaveUserSettings(type);
-			}
-			break;
-		case SceneSettingsManager::SettingType::Integer:
-			{
-				int val = entry.value.get<int>();
-				ImGui::SetNextItemWidth(C::Em(C::SCENE_VALUE_INPUT_EM));
-				if (ImGui::InputInt("##val", &val, 0, 0))
-					manager->UpdateEntryValue(type, index, val, true);
-				if (ImGui::IsItemDeactivatedAfterEdit())
-					manager->SaveUserSettings(type);
-			}
-			break;
-		default:
-			ImGui::TextDisabled("(unsupported type)");
-			break;
-		}
+		DrawValueEditor(type, index, C::Em(C::SCENE_VALUE_INPUT_EM));
 
 		if (readOnly)
 			ImGui::EndDisabled();
@@ -202,6 +228,15 @@ namespace SceneSettingsUI
 			if (popups.pendingDeleteIndex < manager->GetEntries(type).size())
 				manager->RemoveSetting(type, popups.pendingDeleteIndex);
 			popups.pendingDeleteIndex = SIZE_MAX;
+		}
+
+		if (popups.deleteRowOverwrite.Draw()) {
+			// Delete in reverse index order so earlier indices remain valid
+			std::sort(popups.pendingDeleteRow.begin(), popups.pendingDeleteRow.end(), std::greater<>());
+			for (auto idx : popups.pendingDeleteRow)
+				if (idx < manager->GetEntries(type).size())
+					manager->RemoveSetting(type, idx);
+			popups.pendingDeleteRow.clear();
 		}
 
 		if (popups.deleteAllUser.Draw())
