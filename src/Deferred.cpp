@@ -165,6 +165,45 @@ void Deferred::SetupResources()
 		};
 	}
 
+	// Shadow light depth array (t23): 4 slices sized and formatted to match kSHADOWMAPS.
+	{
+		auto& shadowDS = renderer->GetDepthStencilData().depthStencils[RE::RENDER_TARGETS_DEPTHSTENCIL::kSHADOWMAPS];
+		D3D11_TEXTURE2D_DESC srcDesc{};
+		shadowDS.texture->GetDesc(&srcDesc);
+
+		DXGI_FORMAT texFmt, srvFmt;
+		if (srcDesc.Format == DXGI_FORMAT_R24G8_TYPELESS || srcDesc.Format == DXGI_FORMAT_D24_UNORM_S8_UINT) {
+			texFmt = DXGI_FORMAT_R24G8_TYPELESS;
+			srvFmt = DXGI_FORMAT_R24_UNORM_X8_TYPELESS;
+		} else {
+			texFmt = DXGI_FORMAT_R32_TYPELESS;
+			srvFmt = DXGI_FORMAT_R32_FLOAT;
+		}
+
+		D3D11_TEXTURE2D_DESC texDesc{};
+		texDesc.Width      = srcDesc.Width;
+		texDesc.Height     = srcDesc.Height;
+		texDesc.MipLevels  = 1;
+		texDesc.ArraySize  = 4;
+		texDesc.Format     = texFmt;
+		texDesc.SampleDesc = { 1, 0 };
+		texDesc.Usage      = D3D11_USAGE_DEFAULT;
+		texDesc.BindFlags  = D3D11_BIND_SHADER_RESOURCE;
+		DX::ThrowIfFailed(globals::d3d::device->CreateTexture2D(&texDesc, nullptr, &shadowMapArrayTex));
+
+		D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc{};
+		srvDesc.Format                         = srvFmt;
+		srvDesc.ViewDimension                  = D3D11_SRV_DIMENSION_TEXTURE2DARRAY;
+		srvDesc.Texture2DArray.MostDetailedMip = 0;
+		srvDesc.Texture2DArray.MipLevels       = 1;
+		srvDesc.Texture2DArray.FirstArraySlice = 0;
+		srvDesc.Texture2DArray.ArraySize       = 4;
+		DX::ThrowIfFailed(globals::d3d::device->CreateShaderResourceView(shadowMapArrayTex, &srvDesc, &shadowMapArraySRV));
+
+		shadowMapArrayW = srcDesc.Width;
+		shadowMapArrayH = srcDesc.Height;
+	}
+
 	// Directional shadow data (t19): cascade splits and projections.
 	{
 		D3D11_BUFFER_DESC sbDesc{};
@@ -593,82 +632,23 @@ void Deferred::CopyShadowData()
 
 	auto renderer = globals::game::renderer;
 	auto context  = globals::d3d::context;
-	auto device   = globals::d3d::device;
-
-	// Helper: create (or recreate on resize) a Texture2DArray for copying shadow depth slices into.
-	// The destination format is derived from the source so CopySubresourceRegion is always compatible.
-	auto ensureArray = [&](ID3D11Texture2D*& tex, ID3D11ShaderResourceView*& srv,
-	                        uint32_t& cachedW, uint32_t& cachedH,
-	                        uint32_t srcW, uint32_t srcH,
-	                        uint32_t arraySize, DXGI_FORMAT srcFmt) {
-		if (tex && cachedW == srcW && cachedH == srcH)
-			return;
-
-		if (tex) { tex->Release(); tex = nullptr; }
-		if (srv) { srv->Release(); srv = nullptr; }
-
-		DXGI_FORMAT texFmt, srvFmt;
-		if (srcFmt == DXGI_FORMAT_R24G8_TYPELESS || srcFmt == DXGI_FORMAT_D24_UNORM_S8_UINT) {
-			texFmt = DXGI_FORMAT_R24G8_TYPELESS;
-			srvFmt = DXGI_FORMAT_R24_UNORM_X8_TYPELESS;
-		} else {
-			texFmt = DXGI_FORMAT_R32_TYPELESS;
-			srvFmt = DXGI_FORMAT_R32_FLOAT;
-		}
-
-		D3D11_TEXTURE2D_DESC texDesc{};
-		texDesc.Width            = srcW;
-		texDesc.Height           = srcH;
-		texDesc.MipLevels        = 1;
-		texDesc.ArraySize        = arraySize;
-		texDesc.Format           = texFmt;
-		texDesc.SampleDesc       = { 1, 0 };
-		texDesc.Usage            = D3D11_USAGE_DEFAULT;
-		texDesc.BindFlags        = D3D11_BIND_SHADER_RESOURCE;
-		DX::ThrowIfFailed(device->CreateTexture2D(&texDesc, nullptr, &tex));
-
-		D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc{};
-		srvDesc.Format                         = srvFmt;
-		srvDesc.ViewDimension                  = D3D11_SRV_DIMENSION_TEXTURE2DARRAY;
-		srvDesc.Texture2DArray.MostDetailedMip = 0;
-		srvDesc.Texture2DArray.MipLevels       = 1;
-		srvDesc.Texture2DArray.FirstArraySlice = 0;
-		srvDesc.Texture2DArray.ArraySize       = arraySize;
-		DX::ThrowIfFailed(device->CreateShaderResourceView(tex, &srvDesc, &srv));
-
-		cachedW = srcW;
-		cachedH = srcH;
-	};
 
 	// Cascade split distances.
 	auto& dirData          = sunShadowLight->GetShadowDirectionalLightRuntimeData();
 	dd.EndSplitDistances   = { dirData.endSplitDistances[0], dirData.endSplitDistances[1] };
 	dd.StartSplitDistances = { dirData.startSplitDistances[0], dirData.startSplitDistances[1] };
 
-	// Directional cascade projection matrices + copy depth into cascadeArrayTex (t20).
+	// Directional cascade projection matrices.
+	// The game renders both cascades as array slices of a single Texture2DArray — bind its SRV directly.
+	ID3D11ShaderResourceView* cascadeSRV = nullptr;
 	{
 		auto fillCascades = [&](auto& lightData) {
 			uint32_t count = std::min((uint32_t)lightData.shadowmapDescriptors.size(), 2u);
-			for (uint32_t i = 0; i < count; ++i) {
-				auto& desc = lightData.shadowmapDescriptors[i];
-				memcpy(&dd.ShadowMapProj[i], &desc.lightTransform, sizeof(DirectX::XMFLOAT4X4));
+			for (uint32_t i = 0; i < count; i++)
+				memcpy(&dd.ShadowMapProj[i], &lightData.shadowmapDescriptors[i].lightTransform, sizeof(DirectX::XMFLOAT4X4));
 
-				auto& ds = renderer->GetDepthStencilData().depthStencils[desc.renderTarget];
-				if (!ds.depthSRV)
-					continue;
-
-				ID3D11Resource* res = nullptr;
-				ds.depthSRV->GetResource(&res);
-				if (auto* srcTex = static_cast<ID3D11Texture2D*>(res)) {
-					D3D11_TEXTURE2D_DESC srcDesc{};
-					srcTex->GetDesc(&srcDesc);
-					ensureArray(cascadeArrayTex, cascadeArraySRV,
-					            cascadeArrayW, cascadeArrayH,
-					            srcDesc.Width, srcDesc.Height, 2, srcDesc.Format);
-					context->CopySubresourceRegion(cascadeArrayTex, i, 0, 0, 0, srcTex, 0, nullptr);
-				}
-				res->Release();
-			}
+			if (count > 0)
+				cascadeSRV = renderer->GetDepthStencilData().depthStencils[lightData.shadowmapDescriptors[0].renderTarget].depthSRV;
 		};
 		if (REL::Module::IsVR())
 			fillCascades(sunShadowLight->GetVRRuntimeData());
@@ -708,10 +688,8 @@ void Deferred::CopyShadowData()
 			if (auto* srcTex = static_cast<ID3D11Texture2D*>(res)) {
 				D3D11_TEXTURE2D_DESC srcDesc{};
 				srcTex->GetDesc(&srcDesc);
-				ensureArray(shadowMapArrayTex, shadowMapArraySRV,
-				            shadowMapArrayW, shadowMapArrayH,
-				            srcDesc.Width, srcDesc.Height, 4, srcDesc.Format);
-				context->CopySubresourceRegion(shadowMapArrayTex, shadowCount, 0, 0, 0, srcTex, 0, nullptr);
+				if (srcDesc.Width == shadowMapArrayW && srcDesc.Height == shadowMapArrayH)
+					context->CopySubresourceRegion(shadowMapArrayTex, shadowCount, 0, 0, 0, srcTex, 0, nullptr);
 			}
 			res->Release();
 		};
@@ -723,8 +701,8 @@ void Deferred::CopyShadowData()
 		++shadowCount;
 	}
 
-	// Bind texture arrays and PCF comparison sampler (s14).
-	context->PSSetShaderResources(20, 1, &cascadeArraySRV);
+	// Bind cascade SRV (original game texture), shadow map array, and PCF comparison sampler (s14).
+	context->PSSetShaderResources(20, 1, &cascadeSRV);
 	context->PSSetShaderResources(23, 1, &shadowMapArraySRV);
 	context->PSSetSamplers(14, 1, &shadowCmpSampler);
 
