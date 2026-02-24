@@ -1,6 +1,6 @@
-// Implements stochastic noise sampling for terrain textures to reduce tiling artifacts and improve visual quality.
-// Based on paper "Procedural Stochastic Textures by Tiling and Blending" by Thomas Deliot & Eric Heitz.
-// https://eheitzresearch.wordpress.com/722-2/
+// Stochastic noise sampling for terrain textures to reduce tiling artifacts.
+// Based on "Procedural Stochastic Textures by Tiling and Blending" by Deliot & Heitz.
+// Height blend importance sampling per Jason Booth's technique.
 
 #ifndef TERRAIN_VARIATION_HLSLI
 #define TERRAIN_VARIATION_HLSLI
@@ -8,29 +8,18 @@
 #include "Common/Random.hlsli"
 #include "Common/SharedData.hlsli"
 
-// --------------------- CONSTANTS AND STRUCTURES --------------------- //
-// Height blend operator settings - DO NOT CHANGE THESE VALUES.
-static const float HEIGHT_BLEND_CONTRAST = 12.0;  // Controls sharpness of height-based transitions (reduced from 16.0 for performance)
-static const float HEIGHT_INFLUENCE = 0.3;        // How much height affects blending (0=pure stochastic, 1=pure height)
-// Pre-computed constants to avoid runtime calculations
+// --------------------- CONSTANTS --------------------- //
 static const float2x2 SKEW_MATRIX = float2x2(1.0, 0.0, -0.57735027, 1.15470054);
 static const float WORLD_SCALE = 332.54;
-// Blending constants
-static const float3 LUMINANCE_WEIGHTS = float3(0.2126, 0.7152, 0.0722);
-// Hash constants
 static const float2 HASH_MULTIPLIER = float2(1271.5151, 3337.8237);
-// Performance optimization constants
-static const float MIP_LEVEL_INCREASE = 0.5;      // Additional mip level increase for distance optimization
-static const float MIP_BUMP_SCALE = 1.41421356;   // exp2(MIP_LEVEL_INCREASE) = gradient scale for +0.5 mip bump
-static const float DISTANCE_SAMPLE_REDUCTION = 2.0; // Mip level where we reduce to 2 samples
-static const float FAR_DISTANCE_THRESHOLD = 4.0;  // Mip level where we use single sample with higher mip level
-static const float CONTRAST_FACTOR = HEIGHT_BLEND_CONTRAST * (1.0 - HEIGHT_INFLUENCE);  // = 8.4
-static const float MAX_HEIGHT_FACTOR = 1.0 + HEIGHT_INFLUENCE;                           // = 1.3
-// Importance sampling thresholds (height blend operator culling per Jason Booth technique)
-static const float IMPORTANCE_RATIO = 6.0;            // Dominance ratio for importance culling — higher = more conservative
-static const float MEDIUM_IMPORTANCE_THRESHOLD = 0.12; // Raw barycentric threshold for medium-distance 2→1 sample culling
+// Distance-based sample reduction
+static const float MIP_1SAMPLE = 3.0;   // Mip level for single-sample path
+static const float MIP_BUMP = 1.41421356;  // exp2(0.5) gradient scale for +0.5 mip bump
+// Importance sampling thresholds
+static const float HEIGHT_INFLUENCE = 0.3;
+static const float LOW_WEIGHT_THRESHOLD = 0.15;  // Layer blend weight below which 1-sample is used
 
-// Structure to hold stochastic sampling offsets and weights
+// --------------------- STRUCTURES --------------------- //
 struct StochasticOffsets
 {
 	float2 offset1;
@@ -39,12 +28,15 @@ struct StochasticOffsets
 	float3 weights;
 };
 
-// --------------------- COMPUTE FUNCTIONS --------------------- //
+struct StochasticGradients
+{
+	float2 uvDx;
+	float2 uvDy;
+};
 
-// Hash function for stochastic sampling
+// --------------------- HASH FUNCTIONS --------------------- //
 inline float2 hash2D2D(float2 s)
 {
-	// More efficient hash using frac and multiply operations
 	s = frac(s * HASH_MULTIPLIER);
 	s += dot(s, s.yx + 19.19);
 	return frac((s.xx + s.yy) * s.yx);
@@ -56,208 +48,126 @@ inline float2 hashLOD(float2 p)
 	return frac(p.x + p.y * float2(17.0, 23.0));
 }
 
-inline float3 NormalizeWeights(float3 weights)
+// --------------------- COMPUTE FUNCTIONS --------------------- //
+inline StochasticGradients ComputeStochasticGradients(float2 uv)
 {
-	return weights * rcp(max(dot(weights, 1.0), 1e-6));
-}
-
-inline float2 NormalizeWeights2(float2 weights)
-{
-	return weights * rcp(max(weights.x + weights.y, 1e-6));
-}
-
-// Common barycentric coordinate calculation for stochastic sampling
-inline float4x3 ComputeBarycentricVerts(float2 landscapeUV)
-{
-    float2 scaledUV = landscapeUV * (WORLD_SCALE);
-    float2 skewUV = mul(SKEW_MATRIX, scaledUV);
-    float2 vxID = floor(skewUV);
-    float2 frac_uv = frac(skewUV);
-
-    float barry_z = 1.0 - frac_uv.x - frac_uv.y;
-    float3 barry = float3(frac_uv, barry_z);
-
-    return (barry.z > 0) ?
-        float4x3(float3(vxID, 0), float3(vxID + float2(0, 1), 0), float3(vxID + float2(1, 0), 0), barry.zyx) :
-        float4x3(float3(vxID + float2(1, 1), 0), float3(vxID + float2(1, 0), 0), float3(vxID + float2(0, 1), 0), float3(-barry.z, 1.0 - barry.y, 1.0 - barry.x));
+	StochasticGradients g;
+	float biasScale = exp2(SharedData::MipBias);
+	g.uvDx = ddx(uv) * biasScale;
+	g.uvDy = ddy(uv) * biasScale;
+	return g;
 }
 
 inline StochasticOffsets ComputeStochasticOffsets(float2 landscapeUV)
 {
-    float4x3 BW_vx = ComputeBarycentricVerts(landscapeUV);
+	float2 skewUV = mul(SKEW_MATRIX, landscapeUV * WORLD_SCALE);
+	float2 vxID = floor(skewUV);
+	float2 f = frac(skewUV);
+	float bz = 1.0 - f.x - f.y;
 
-    StochasticOffsets offsets;
-    offsets.offset1 = hash2D2D(BW_vx[0].xy);
-    offsets.offset2 = hash2D2D(BW_vx[1].xy);
-    offsets.offset3 = hash2D2D(BW_vx[2].xy);
-    offsets.weights = BW_vx[3];
+	float2 v0, v1, v2;
+	float3 barry;
+	if (bz > 0) {
+		v0 = vxID;
+		v1 = vxID + float2(0, 1);
+		v2 = vxID + float2(1, 0);
+		barry = float3(bz, f.y, f.x);
+	} else {
+		v0 = vxID + 1.0;
+		v1 = vxID + float2(1, 0);
+		v2 = vxID + float2(0, 1);
+		barry = float3(-bz, 1.0 - f.y, 1.0 - f.x);
+	}
 
-    // Sort by descending barycentric weight so the dominant sample is always first.
-    // This enables importance sampling: fetch the strongest sample first, skip weak ones.
-    if (offsets.weights.y > offsets.weights.x) {
-        float2 tO = offsets.offset1; offsets.offset1 = offsets.offset2; offsets.offset2 = tO;
-        float tW = offsets.weights.x; offsets.weights.x = offsets.weights.y; offsets.weights.y = tW;
-    }
-    if (offsets.weights.z > offsets.weights.x) {
-        float2 tO = offsets.offset1; offsets.offset1 = offsets.offset3; offsets.offset3 = tO;
-        float tW = offsets.weights.x; offsets.weights.x = offsets.weights.z; offsets.weights.z = tW;
-    }
-    if (offsets.weights.z > offsets.weights.y) {
-        float2 tO = offsets.offset2; offsets.offset2 = offsets.offset3; offsets.offset3 = tO;
-        float tW = offsets.weights.y; offsets.weights.y = offsets.weights.z; offsets.weights.z = tW;
-    }
+	StochasticOffsets o;
+	o.offset1 = hash2D2D(v0);
+	o.offset2 = hash2D2D(v1);
+	o.offset3 = hash2D2D(v2);
+	o.weights = barry;
 
-    return offsets;
+	// Sort descending by barycentric weight (importance sampling)
+	if (o.weights.y > o.weights.x) {
+		float2 tO = o.offset1; o.offset1 = o.offset2; o.offset2 = tO;
+		float tW = o.weights.x; o.weights.x = o.weights.y; o.weights.y = tW;
+	}
+	if (o.weights.z > o.weights.x) {
+		float2 tO = o.offset1; o.offset1 = o.offset3; o.offset3 = tO;
+		float tW = o.weights.x; o.weights.x = o.weights.z; o.weights.z = tW;
+	}
+	if (o.weights.z > o.weights.y) {
+		float2 tO = o.offset2; o.offset2 = o.offset3; o.offset3 = tO;
+		float tW = o.weights.y; o.weights.y = o.weights.z; o.weights.z = tW;
+	}
+
+	return o;
 }
 
 inline StochasticOffsets ComputeStochasticOffsetsLOD(float2 landscapeUV)
 {
-	// Precomputed scaling: (WORLD_SCALE / 0.010416667) * 8.0 = ~255437
-	static const float LOD_SCALE = 255437.0;
+	float2 cellID = floor(landscapeUV * 255437.0);
+	float2 h1 = hashLOD(cellID);
+	float2 h2 = hashLOD(cellID + 127.0);
 
-	float2 scaledUV = landscapeUV * LOD_SCALE;
-	float2 cellID = floor(scaledUV);
-
-	StochasticOffsets offsetsLOD;
-	// Generate both offsets from single hash to reduce calls
-	float2 hash1 = hashLOD(cellID);
-	float2 hash2 = hashLOD(cellID + 127.0);
-
-	offsetsLOD.offset1 = hash1 * 0.08;
-	offsetsLOD.offset2 = hash2 * 0.08;
-
-	// Simplified weights since we only use 2 samples now
-	offsetsLOD.weights = float3(0.65, 0.35, 0.0);
-
-	return offsetsLOD;
+	StochasticOffsets o;
+	o.offset1 = h1 * 0.08;
+	o.offset2 = h2 * 0.08;
+	o.offset3 = 0;
+	o.weights = float3(0.65, 0.35, 0.0);
+	return o;
 }
 
-// --------------------- HELPER FUNCTIONS --------------------- //
+// --------------------- SAMPLING FUNCTIONS --------------------- //
 
-// Extracts height from a sample for importance weighting.
-// Uses alpha channel when available (displacement data), luminance fallback otherwise.
-inline float GetSampleHeight(float4 s)
-{
-	float lumHeight = dot(s.rgb, LUMINANCE_WEIGHTS);
-	return lerp(lumHeight, s.a, step(0.001, s.a));
-}
-
-// --------------------- STOCHASTIC SAMPLING FUNCTIONS --------------------- //
-
-// Stochastic sampling function for Terrain LOD & LOD Mask.
+// LOD terrain stochastic sampling — 2 SampleBias, fixed blend
 inline float4 StochasticSampleLOD(float rnd, Texture2D tex, SamplerState samp, float2 uv, StochasticOffsets offsetsLOD)
 {
-	float offsetScale = 0.01;
-
-	// Cheap pseudo-rotation using simple transforms
 	float2 dir1 = float2(rnd - 0.5, frac(rnd * 1.618) - 0.5);
-	float2 dir2 = float2(dir1.y, -dir1.x);
-
-	// Apply simple scaled offsets
-	float2 microOffset1 = (offsetsLOD.offset1 + dir1) * offsetScale;
-	float2 microOffset2 = (offsetsLOD.offset2 + dir2) * offsetScale;
-	float4 sample1 = tex.SampleBias(samp, uv + microOffset1, SharedData::MipBias);
-	float4 sample2 = tex.SampleBias(samp, uv + microOffset2, SharedData::MipBias);
-
-	// Simple 2-sample blend weighted toward first sample
-	return lerp(sample2, sample1, 0.65);
+	float4 s1 = tex.SampleBias(samp, uv + (offsetsLOD.offset1 + dir1) * 0.01, SharedData::MipBias);
+	float4 s2 = tex.SampleBias(samp, uv + (offsetsLOD.offset2 + float2(dir1.y, -dir1.x)) * 0.01, SharedData::MipBias);
+	return lerp(s2, s1, 0.65);
 }
 
-// Main stochastic sampling function with importance-sampled height blending.
-// Uses SampleGrad to preserve hardware anisotropic filtering with the original UV gradients.
-// Offsets are pre-sorted by descending barycentric weight so the dominant sample is first.
-// At close range, fetches are culled using the height blend operator: if the primary sample's
-// height-weighted contribution dominates, secondary/tertiary fetches are skipped entirely.
-// This reduces average texture fetches from 3.0 to ~1.5-1.7 per call.
-inline float4 StochasticEffect(Texture2D tex, SamplerState samp, float2 uv, StochasticOffsets offsets, float mipLevel)
+// Stochastic sampling with importance-based sample reduction.
+// Layer blend weight controls quality: low-weight layers get cheap 1-sample path.
+// 2-sample height blend (Jason Booth technique) for close-range high-weight layers.
+// Branchless blend is smooth across simplex boundaries and compile-time friendly.
+inline float4 StochasticEffect(Texture2D tex, SamplerState samp, float2 uv, StochasticOffsets offsets, float mipLevel, StochasticGradients grad, float layerWeight)
 {
-	float2 uvDx = ddx(uv);
-	float2 uvDy = ddy(uv);
-	float biasScale = exp2(SharedData::MipBias);
-	uvDx *= biasScale;
-	uvDy *= biasScale;
+	// Far distance or low-importance layer: single offset with bumped mip for coverage
+	if (mipLevel >= MIP_1SAMPLE || layerWeight < LOW_WEIGHT_THRESHOLD)
+		return tex.SampleGrad(samp, uv + offsets.offset1, grad.uvDx * MIP_BUMP, grad.uvDy * MIP_BUMP);
 
-	// Far distance: single offset sample at a bumped mip level (cheapest)
-	if (mipLevel >= FAR_DISTANCE_THRESHOLD)
-	{
-		return tex.SampleGrad(samp, uv + offsets.offset1, uvDx * MIP_BUMP_SCALE, uvDy * MIP_BUMP_SCALE);
-	}
-
-	// Medium distance: 2-sample blend with importance culling
-	if (mipLevel >= DISTANCE_SAMPLE_REDUCTION)
-	{
-		float4 sample1 = tex.SampleGrad(samp, uv + offsets.offset1, uvDx, uvDy);
-		// Skip second sample when its barycentric weight is negligible
-		if (offsets.weights.y < MEDIUM_IMPORTANCE_THRESHOLD)
-			return sample1;
-		float4 sample2 = tex.SampleGrad(samp, uv + offsets.offset2, uvDx, uvDy);
-		float2 weights = NormalizeWeights2(saturate(offsets.weights.xy));
-		return sample1 * weights.x + sample2 * weights.y;
-	}
-
-	// Close distance: importance-sampled height blend
-	float3 barWeights = pow(saturate(offsets.weights), CONTRAST_FACTOR);
-
-	// Primary sample — always fetched (highest barycentric weight after sorting)
-	float4 sample1 = tex.SampleGrad(samp, uv + offsets.offset1, uvDx, uvDy);
-	float h1 = GetSampleHeight(sample1);
-	float effW1 = barWeights.x * (1.0 + HEIGHT_INFLUENCE * h1);
-
-	// Upper bounds on what remaining samples could contribute assuming max height
-	float maxEffW2 = barWeights.y * MAX_HEIGHT_FACTOR;
-	float maxEffW3 = barWeights.z * MAX_HEIGHT_FACTOR;
-
-	// 1-sample early-out: primary dominates both secondary and tertiary
-	if (effW1 > (maxEffW2 + maxEffW3) * IMPORTANCE_RATIO)
-		return sample1;
-
-	// Secondary sample
-	float4 sample2 = tex.SampleGrad(samp, uv + offsets.offset2, uvDx, uvDy);
-	float h2 = GetSampleHeight(sample2);
-	float effW2 = barWeights.y * (1.0 + HEIGHT_INFLUENCE * h2);
-
-	// 2-sample early-out: primary + secondary dominate tertiary
-	if ((effW1 + effW2) > maxEffW3 * IMPORTANCE_RATIO)
-	{
-		float2 w = NormalizeWeights2(float2(effW1, effW2));
-		return sample1 * w.x + sample2 * w.y;
-	}
-
-	// Full 3-sample blend
-	float4 sample3 = tex.SampleGrad(samp, uv + offsets.offset3, uvDx, uvDy);
-	float h3 = GetSampleHeight(sample3);
-	float effW3 = barWeights.z * (1.0 + HEIGHT_INFLUENCE * h3);
-	float3 weights = NormalizeWeights(float3(effW1, effW2, effW3));
-	return sample1 * weights.x + sample2 * weights.y + sample3 * weights.z;
+	// 2-sample height-blended: barycentric weights squared x height-driven importance
+	float4 s1 = tex.SampleGrad(samp, uv + offsets.offset1, grad.uvDx, grad.uvDy);
+	float4 s2 = tex.SampleGrad(samp, uv + offsets.offset2, grad.uvDx, grad.uvDy);
+	float w1 = offsets.weights.x * offsets.weights.x * (1.0 + HEIGHT_INFLUENCE * dot(s1.rgb, float3(0.2126, 0.7152, 0.0722)));
+	float w2 = offsets.weights.y * offsets.weights.y * (1.0 + HEIGHT_INFLUENCE * dot(s2.rgb, float3(0.2126, 0.7152, 0.0722)));
+	return lerp(s2, s1, w1 * rcp(w1 + w2));
 }
 
-// Stochastic sampling for parallax height queries.
-// Always uses full 3-sample barycentric blend to maintain height field continuity
-// across simplex boundaries — distance-based sample reduction causes discontinuities
-// that show as triangle seams in displaced geometry.
+// Parallax height queries — 2-sample branchless blend for smooth height fields across
+// simplex boundaries. Barycentric weights naturally importance-sample: deep inside a
+// triangle the dominant offset gets t -> 1.0; at edges both contribute equally for
+// artifact-free transitions. Zero compile-time branches in POM inner loop.
 #pragma warning(push)
 #pragma warning(disable : 4000)
 inline float4 StochasticEffectParallax(Texture2D tex, SamplerState samp, float2 uv, float mipLevel, StochasticOffsets offsets)
 {
 	if (!SharedData::terrainVariationSettings.enableTilingFix)
 		return tex.SampleLevel(samp, uv, mipLevel);
-
-	float adjustedMipLevel = mipLevel + MIP_LEVEL_INCREASE * 0.5 * (mipLevel > 1.0);
-
-	float4 sample1 = tex.SampleLevel(samp, uv + offsets.offset1, adjustedMipLevel);
-	float4 sample2 = tex.SampleLevel(samp, uv + offsets.offset2, adjustedMipLevel);
-	float4 sample3 = tex.SampleLevel(samp, uv + offsets.offset3, adjustedMipLevel);
-
-	// Barycentric weights already sum to 1.0, skip normalization
-	return sample1 * offsets.weights.x + sample2 * offsets.weights.y + sample3 * offsets.weights.z;
+	float4 s1 = tex.SampleLevel(samp, uv + offsets.offset1, mipLevel);
+	float4 s2 = tex.SampleLevel(samp, uv + offsets.offset2, mipLevel);
+	return lerp(s2, s1, offsets.weights.x * rcp(offsets.weights.x + offsets.weights.y));
 }
 #pragma warning(pop)
 
-// Unified terrain sampling: stochastic when enabled, standard SampleBias fallback
-inline float4 SampleTerrain(bool enabled, Texture2D tex, SamplerState samp, float2 uv, StochasticOffsets offsets, float mipLevel)
+// Unified terrain sampling with importance-aware stochastic when enabled.
+// layerWeight is the Skyrim landscape blend weight — the natural importance signal
+// for the 6-layer terrain system. Low-weight layers get cheaper 1-sample treatment.
+inline float4 SampleTerrain(bool enabled, Texture2D tex, SamplerState samp, float2 uv, StochasticOffsets offsets, float mipLevel, StochasticGradients grad, float layerWeight)
 {
 	[branch] if (enabled)
-		return StochasticEffect(tex, samp, uv, offsets, mipLevel);
+		return StochasticEffect(tex, samp, uv, offsets, mipLevel, grad, layerWeight);
 	return tex.SampleBias(samp, uv, SharedData::MipBias);
 }
 
