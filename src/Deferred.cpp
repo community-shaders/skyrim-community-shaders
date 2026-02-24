@@ -594,48 +594,26 @@ void Deferred::CopyShadowData()
 
 	ShadowData sd{};
 
-	// Cascade split distances
+	// Cascade split distances (cascade 0 in x, cascade 1 in y)
 	auto& dirData = sunShadowLight->GetShadowDirectionalLightRuntimeData();
-	sd.StartSplitDistances = { dirData.startSplitDistances[0],
-		dirData.startSplitDistances[1],
-		dirData.startSplitDistances[2], 4.0f };
-	sd.EndSplitDistances = { dirData.endSplitDistances[0],
-		dirData.endSplitDistances[1],
-		dirData.endSplitDistances[2], 3.0f };
-
-	// Copy a row-major 4×4 affine matrix into a 4×3 slot (drops the w column).
-	// Focus shadow matrices are orthographic, so the 4th column is always [0,0,0,1].
-	auto copy4x4to4x3 = [](DirectX::XMFLOAT4X3& dst, const DirectX::XMFLOAT4X4& src) {
-		dst._11 = src._11; dst._12 = src._12; dst._13 = src._13;
-		dst._21 = src._21; dst._22 = src._22; dst._23 = src._23;
-		dst._31 = src._31; dst._32 = src._32; dst._33 = src._33;
-		dst._41 = src._41; dst._42 = src._42; dst._43 = src._43;
-	};
+	sd.EndSplitDistances   = { dirData.endSplitDistances[0],   dirData.endSplitDistances[1] };
+	sd.StartSplitDistances = { dirData.startSplitDistances[0], dirData.startSplitDistances[1] };
 
 	// Shadow map projection matrices — branch on runtime to use correctly-typed descriptors.
 	// Both ShadowmapDescriptor (SE/AE) and ShadowmapDescriptorVR have lightTransform at offset 0x00.
 	if (REL::Module::IsVR()) {
 		auto& lightData = sunShadowLight->GetVRRuntimeData();
-		uint32_t cascadeCount = std::min((uint32_t)lightData.shadowmapDescriptors.size(), 3u);
+		uint32_t cascadeCount = std::min((uint32_t)lightData.shadowmapDescriptors.size(), 2u);
 		for (uint32_t i = 0; i < cascadeCount; ++i)
-			memcpy(&sd.ShadowMapProj[0][i], &lightData.shadowmapDescriptors[i].lightTransform,
+			memcpy(&sd.ShadowMapProj[i], &lightData.shadowmapDescriptors[i].lightTransform,
 				sizeof(DirectX::XMFLOAT4X4));
-		for (uint32_t i = 0; i < 4; ++i)
-			copy4x4to4x3(sd.FocusShadowMapProj[i],
-				reinterpret_cast<const DirectX::XMFLOAT4X4&>(lightData.focusShadowmapDescriptors[i].lightTransform));
 	} else {
 		auto& lightData = sunShadowLight->GetRuntimeData();
-		uint32_t cascadeCount = std::min((uint32_t)lightData.shadowmapDescriptors.size(), 3u);
+		uint32_t cascadeCount = std::min((uint32_t)lightData.shadowmapDescriptors.size(), 2u);
 		for (uint32_t i = 0; i < cascadeCount; ++i)
-			memcpy(&sd.ShadowMapProj[0][i], &lightData.shadowmapDescriptors[i].lightTransform,
+			memcpy(&sd.ShadowMapProj[i], &lightData.shadowmapDescriptors[i].lightTransform,
 				sizeof(DirectX::XMFLOAT4X4));
-		for (uint32_t i = 0; i < 4; ++i)
-			copy4x4to4x3(sd.FocusShadowMapProj[i],
-				reinterpret_cast<const DirectX::XMFLOAT4X4&>(lightData.focusShadowmapDescriptors[i].lightTransform));
 	}
-
-	// Skyrim renders shadow maps mono even in VR — copy eye 0 matrices to eye 1.
-	memcpy(sd.ShadowMapProj[1], sd.ShadowMapProj[0], sizeof(sd.ShadowMapProj[0]));
 
 	// Upload to GPU and bind to PS slot 19
 	auto context = globals::d3d::context;
