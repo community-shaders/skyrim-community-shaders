@@ -24,6 +24,7 @@ public:
 		for (auto& v : drawCalls) v = 0;
 		for (auto& v : frameTimePerType) v = 0.0f;
 		for (auto& v : smoothFrameTimePerType) v = 0.0f;
+		for (auto& v : enabledClasses) v = true;
 
 		// Initialize QueryPerformanceCounter frequency
 		frameTimingFrequency.QuadPart = 0;
@@ -153,9 +154,7 @@ public:
 		InWorld = 1 << 0,
 		IsReflections = 1 << 1,
 		IsBeastRace = 1 << 2,
-		EffectShadows = 1 << 3,
-		IsTree = 1 << 4,
-		GrassSphereNormal = 1 << 5
+		GrassSphereNormal = 1 << 3
 	};
 
 	enum class ExtraFeatureDescriptors : uint32_t
@@ -182,11 +181,14 @@ public:
 		uint ExtraShaderDescriptor;
 		uint ExtraFeatureDescriptor;
 
+		float EffectRadius;
+		float3 pad0;
+
 		bool operator==(const PermutationCB& other) const
 		{
 			return PixelShaderDescriptor == other.PixelShaderDescriptor &&
 			       ExtraShaderDescriptor == other.ExtraShaderDescriptor &&
-			       ExtraFeatureDescriptor == other.ExtraFeatureDescriptor;
+			       ExtraFeatureDescriptor == other.ExtraFeatureDescriptor && EffectRadius == other.EffectRadius;
 		}
 	};
 	STATIC_ASSERT_ALIGNAS_16(PermutationCB);

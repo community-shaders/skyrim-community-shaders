@@ -3,8 +3,10 @@
 #include "../WeatherEditor/EditorWindow.h"
 #include "FileSystem.h"
 #include "Menu.h"
+#include "Menu/Fonts.h"
 #include "Menu/IconLoader.h"
 #include "Menu/ThemeManager.h"
+#include "PerfUtils.h"
 #include "ShaderCache.h"
 #include "WeatherManager.h"
 #include "WeatherVariableRegistry.h"
@@ -15,14 +17,17 @@
 #include <DirectXTex.h>
 #include <d3d11.h>
 #include <dinput.h>
+#include <dxgi.h>
 #include <imgui.h>
 #include <imgui_internal.h>
 #include <wrl/client.h>
 
 #include "../Feature.h"
+#include "../Features/VR.h"
 #include "../Globals.h"
 #include "../Menu.h"
 #include "FileSystem.h"
+#include "VRUtils.h"
 
 #define STB_IMAGE_IMPLEMENTATION
 #include <algorithm>
@@ -41,18 +46,70 @@
 
 namespace Util
 {
-	HoverTooltipWrapper::HoverTooltipWrapper()
+	static ImVec2 g_screenScaleRatio = { 1.0f, 1.0f };
+	static ImVec2 g_displaySize = { 0.0f, 0.0f };
+
+	static int g_lastWindowWidth = 0;
+	static int g_lastWindowHeight = 0;
+
+	void RefreshScreenScale(HWND hwnd, float bufferWidth, float bufferHeight)
+	{
+		RECT rect{};
+		if (!GetClientRect(hwnd, &rect) || rect.right <= 0 || rect.bottom <= 0)
+			return;
+
+		if (rect.right == g_lastWindowWidth && rect.bottom == g_lastWindowHeight)
+			return;
+
+		g_displaySize.x = bufferWidth;
+		g_displaySize.y = bufferHeight;
+
+		g_screenScaleRatio.x = bufferWidth / static_cast<float>(rect.right);
+		g_screenScaleRatio.y = bufferHeight / static_cast<float>(rect.bottom);
+
+		g_lastWindowWidth = rect.right;
+		g_lastWindowHeight = rect.bottom;
+	}
+
+	void UpdateImGuiInput(HWND hwnd, float bufferWidth, float bufferHeight)
+	{
+		RefreshScreenScale(hwnd, bufferWidth, bufferHeight);
+
+		auto& io = ImGui::GetIO();
+		io.DisplaySize = g_displaySize;
+
+		POINT cursorPos{};
+		if (GetCursorPos(&cursorPos) &&
+			ScreenToClient(hwnd, &cursorPos)) {
+			io.AddMousePosEvent(
+				static_cast<float>(cursorPos.x) * g_screenScaleRatio.x,
+				static_cast<float>(cursorPos.y) * g_screenScaleRatio.y);
+		}
+	}
+
+	HoverTooltipWrapper::HoverTooltipWrapper() :
+		previousFont(nullptr)
 	{
 		hovered = ImGui::IsItemHovered(ImGuiHoveredFlags_DelayNormal | ImGuiHoveredFlags_AllowWhenDisabled);
 		if (hovered) {
 			ImGui::BeginTooltip();
 			ImGui::PushTextWrapPos(ImGui::GetFontSize() * 35.0f);
+			// Apply Subtext font for consistent tooltip styling
+			if (auto* menu = globals::menu) {
+				if (auto* subtextFont = menu->GetFont(Menu::FontRole::Subtext)) {
+					previousFont = ImGui::GetFont();
+					ImGui::PushFont(subtextFont);
+				}
+			}
 		}
 	}
 
 	HoverTooltipWrapper::~HoverTooltipWrapper()
 	{
 		if (hovered) {
+			if (previousFont) {
+				ImGui::PopFont();
+			}
 			ImGui::PopTextWrapPos();
 			ImGui::EndTooltip();
 		}
@@ -68,6 +125,102 @@ namespace Util
 	{
 		if (disable)
 			ImGui::EndDisabled();
+	}
+
+	void TextUnformattedDisabled(const char* a_text, const char* a_textEnd)
+	{
+		ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetStyleColorVec4(ImGuiCol_TextDisabled));
+		ImGui::TextUnformatted(a_text, a_textEnd);
+		ImGui::PopStyleColor();
+	}
+
+	bool TableRowSelectable(const char* label, bool selected, ImGuiSelectableFlags flags)
+	{
+		const ImVec4 kTransparent(0.0f, 0.0f, 0.0f, 0.0f);
+		ImGui::PushStyleColor(ImGuiCol_Header, kTransparent);
+		ImGui::PushStyleColor(ImGuiCol_HeaderHovered, kTransparent);
+		ImGui::PushStyleColor(ImGuiCol_HeaderActive, kTransparent);
+
+		bool pressed = ImGui::Selectable(label, selected, flags, ImVec2(0, ImGui::GetFrameHeight()));
+		bool hovered = ImGui::IsItemHovered();
+		bool active = ImGui::IsItemActive();
+		ImGui::PopStyleColor(3);
+
+		if (active || hovered) {
+			const ImGuiCol highlightCol = active ? ImGuiCol_HeaderActive : ImGuiCol_HeaderHovered;
+			const ImU32 rowColor = ImGui::GetColorU32(highlightCol);
+			ImGui::TableSetBgColor(ImGuiTableBgTarget_RowBg0, rowColor);
+			ImGui::TableSetBgColor(ImGuiTableBgTarget_RowBg1, rowColor);
+		} else if (selected) {
+			const ImU32 rowColor = ImGui::GetColorU32(ImGuiCol_Header);
+			ImGui::TableSetBgColor(ImGuiTableBgTarget_RowBg0, rowColor);
+			ImGui::TableSetBgColor(ImGuiTableBgTarget_RowBg1, rowColor);
+		}
+
+		return pressed;
+	}
+
+	void SetTooltipPositionNearMouse(float estimatedHeight, float estimatedWidth)
+	{
+		const ImVec2 mousePos = ImGui::GetMousePos();
+		const ImGuiViewport* viewport = ImGui::GetMainViewport();
+		constexpr float kTooltipOffsetX = 16.0f;
+		constexpr float kTooltipOffsetY = 12.0f;
+
+		const float viewportLeft = viewport->WorkPos.x;
+		const float viewportRight = viewport->WorkPos.x + viewport->WorkSize.x;
+		const float viewportTop = viewport->WorkPos.y;
+		const float viewportBottom = viewport->WorkPos.y + viewport->WorkSize.y;
+
+		// Vertical: flip above cursor when it would overflow the bottom.
+		const bool placeAboveCursor = (mousePos.y + kTooltipOffsetY + estimatedHeight) > viewportBottom;
+		float posY;
+		float pivotY;
+		if (placeAboveCursor) {
+			const float tentativeTopY = mousePos.y - kTooltipOffsetY - estimatedHeight;
+			posY = (tentativeTopY < viewportTop) ? (viewportTop + estimatedHeight) : (mousePos.y - kTooltipOffsetY);
+			pivotY = 1.0f;
+		} else {
+			posY = mousePos.y + kTooltipOffsetY;
+			pivotY = 0.0f;
+		}
+
+		// Horizontal: clamp so the tooltip stays within viewport bounds.
+		float posX = mousePos.x + kTooltipOffsetX;
+		if (estimatedWidth > 0.0f) {
+			const float maxX = viewportRight - estimatedWidth;
+			posX = ImMax(viewportLeft, ImMin(posX, maxX));
+		}
+
+		ImGui::SetNextWindowPos(ImVec2(posX, posY), ImGuiCond_Always, ImVec2(0.0f, pivotY));
+	}
+
+	void AddTooltip(const char* a_desc, ImGuiHoveredFlags a_flags)
+	{
+		if (ImGui::IsItemHovered(a_flags)) {
+			ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, { 8, 8 });
+			const ImVec2 pad = ImGui::GetStyle().WindowPadding;
+			const float wrapWidth = ImGui::GetFontSize() * 50.0f;
+			const ImVec2 wrappedTextSize = ImGui::CalcTextSize(a_desc, nullptr, false, wrapWidth);
+			const float estimatedTooltipHeight = wrappedTextSize.y + pad.y * 2.0f;
+			const float estimatedTooltipWidth = wrappedTextSize.x + pad.x * 2.0f;
+			SetTooltipPositionNearMouse(estimatedTooltipHeight, estimatedTooltipWidth);
+
+			if (ImGui::BeginTooltip()) {
+				ImGui::PushTextWrapPos(wrapWidth);
+				ImGui::TextUnformatted(a_desc);
+				ImGui::PopTextWrapPos();
+				ImGui::EndTooltip();
+			}
+			ImGui::PopStyleVar();
+		}
+	}
+
+	void HelpMarker(const char* a_desc)
+	{
+		ImGui::AlignTextToFramePadding();
+		TextUnformattedDisabled("(?)");
+		AddTooltip(a_desc, ImGuiHoveredFlags_DelayShort);
 	}
 
 	// Static state for clear shader cache confirmation popup
@@ -161,6 +314,69 @@ namespace Util
 
 			ImGui::EndPopup();
 		}
+	}
+
+	// --- Reusable ConfirmationPopup ---
+
+	void ConfirmationPopup::Request()
+	{
+		if (dontAskAgainPersist && *dontAskAgainPersist) {
+			confirmed = true;
+			return;
+		}
+		show = true;
+		confirmed = false;
+		dontAskCheckbox = false;
+	}
+
+	bool ConfirmationPopup::Draw()
+	{
+		if (confirmed) {
+			confirmed = false;
+			return true;
+		}
+		if (!show)
+			return false;
+
+		ImGui::OpenPopup(title.c_str());
+		ImVec2 center = ImGui::GetMainViewport()->GetCenter();
+		ImGui::SetNextWindowPos(center, ImGuiCond_Always, ImVec2(0.5f, 0.5f));
+
+		bool result = false;
+		if (ImGui::BeginPopupModal(title.c_str(), &show, ImGuiWindowFlags_AlwaysAutoResize)) {
+			ImGui::TextWrapped("%s", message.c_str());
+			ImGui::Spacing();
+			ImGui::Separator();
+			ImGui::Spacing();
+
+			if (showDontAskAgain)
+				ImGui::Checkbox("Don't ask me again", &dontAskCheckbox);
+
+			constexpr float buttonWidth = ThemeManager::Constants::POPUP_BUTTON_WIDTH;
+			const float spacing = ImGui::GetStyle().ItemSpacing.x;
+			const float totalWidth = buttonWidth * 2 + spacing;
+			const float offset = (ImGui::GetWindowWidth() - totalWidth) * 0.5f;
+			if (offset > 0)
+				ImGui::SetCursorPosX(offset);
+
+			if (ImGui::Button(confirmLabel.c_str(), ImVec2(buttonWidth, 0))) {
+				if (showDontAskAgain && dontAskCheckbox && dontAskAgainPersist)
+					*dontAskAgainPersist = true;
+				result = true;
+				show = false;
+				ImGui::CloseCurrentPopup();
+			}
+
+			ImGui::SameLine();
+
+			if (ImGui::Button(cancelLabel.c_str(), ImVec2(buttonWidth, 0))) {
+				show = false;
+				ImGui::CloseCurrentPopup();
+			}
+
+			ImGui::EndPopup();
+		}
+		return result;
 	}
 
 	bool PercentageSlider(const char* label, float* data, float lb, float ub, const char* format)
@@ -294,6 +510,16 @@ namespace Util
 		}
 	}
 
+	StyledButtonWrapper ErrorButtonStyle()
+	{
+		constexpr float kHoverBrighten = 0.2f;
+		constexpr float kActiveBrighten = 0.3f;
+		auto color = Menu::GetSingleton()->GetTheme().StatusPalette.Error;
+		auto hover = ImVec4(std::min(color.x + kHoverBrighten, 1.0f), std::min(color.y + kHoverBrighten, 1.0f), std::min(color.z + kHoverBrighten, 1.0f), color.w);
+		auto active = ImVec4(std::min(color.x + kActiveBrighten, 1.0f), std::min(color.y + kActiveBrighten, 1.0f), std::min(color.z + kActiveBrighten, 1.0f), color.w);
+		return StyledButtonWrapper(color, hover, active);
+	}
+
 	// SectionWrapper implementation
 	SectionWrapper::SectionWrapper(const char* title, const char* description, const ImVec4& titleColor, bool isVisible) :
 		m_shouldDraw(isVisible),
@@ -346,7 +572,7 @@ namespace Util
 			categoryIcon = menu.landscape.texture;
 		} else if (strcmp(categoryName, "Water") == 0) {
 			categoryIcon = menu.water.texture;
-		} else if (strcmp(categoryName, "Debug") == 0) {
+		} else if (strcmp(categoryName, "Utility") == 0) {
 			categoryIcon = menu.debug.texture;
 		} else if (strcmp(categoryName, "Materials") == 0) {
 			categoryIcon = menu.materials.texture;
@@ -780,6 +1006,59 @@ namespace Util
 		ImVec2 handleStart = ImVec2(center.x + radius * 0.81f, center.y + radius * 0.81f);
 		ImVec2 handleEnd = ImVec2(handleStart.x + size * 0.29f, handleStart.y + size * 0.29f);
 		drawList->AddLine(handleStart, handleEnd, placeholderColor, 2.1f);
+	}
+
+	namespace detail
+	{
+		struct ComboSearchState
+		{
+			char buffer[256] = {};
+			bool needsFocus = true;
+		};
+
+		static std::unordered_map<std::string, ComboSearchState>& GetComboSearchStates()
+		{
+			static std::unordered_map<std::string, ComboSearchState> states;
+			return states;
+		}
+	}
+
+	std::string DrawComboSearchInput(const char* id)
+	{
+		auto& state = detail::GetComboSearchStates()[id];
+
+		if (state.needsFocus) {
+			ImGui::SetKeyboardFocusHere();
+			state.needsFocus = false;
+		}
+
+		constexpr float iconSize = ThemeManager::Constants::COMBO_SEARCH_ICON_SIZE;
+		constexpr float iconAlpha = ThemeManager::Constants::COMBO_SEARCH_ICON_ALPHA;
+		constexpr float iconOffsetX = ThemeManager::Constants::COMBO_SEARCH_ICON_OFFSET_X;
+		constexpr float paddingLeft = ThemeManager::Constants::COMBO_SEARCH_PADDING_LEFT;
+
+		char widgetId[128];
+		snprintf(widgetId, sizeof(widgetId), "##%s_search", id);
+
+		ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(paddingLeft, ImGui::GetStyle().FramePadding.y));
+		ImGui::InputTextWithHint(widgetId, "Search...", state.buffer, IM_ARRAYSIZE(state.buffer));
+		ImGui::PopStyleVar();
+
+		ImVec2 iconPos = ImVec2(
+			ImGui::GetItemRectMin().x + iconOffsetX,
+			ImGui::GetItemRectMin().y + (ImGui::GetItemRectSize().y - iconSize) * 0.5f);
+		DrawSearchIcon(iconPos, iconSize, iconAlpha);
+
+		ImGui::Separator();
+
+		return state.buffer;
+	}
+
+	void ClearComboSearch(const char* id)
+	{
+		auto& state = detail::GetComboSearchStates()[id];
+		state.buffer[0] = '\0';
+		state.needsFocus = true;
 	}
 
 	void DrawFeatureSearchBar(std::string& searchString, float availableWidth)
@@ -1243,6 +1522,32 @@ namespace Util
 
 			return keyboard_keys_international[key];
 		}
+
+		std::string KeyIdToString(const std::vector<InputCombo>& combo)
+		{
+			if (combo.empty())
+				return "None";
+
+			bool hasVRInput = false;
+			for (const auto& input : combo) {
+				if (input.GetDevice() != InputDeviceType::Keyboard && input.GetDevice() != InputDeviceType::Mouse) {
+					hasVRInput = true;
+					break;
+				}
+			}
+
+			if (hasVRInput && REL::Module::IsVR()) {
+				return InputCombo::GetVRString(combo);
+			}
+
+			std::string result;
+			for (size_t i = 0; i < combo.size(); ++i) {
+				if (i > 0)
+					result += " + ";
+				result += KeyIdToString(combo[i].GetKey());
+			}
+			return result;
+		}
 	}  // namespace Input
 
 	bool ButtonWithFlash(const char* label, const ImVec2& size, int flashDurationMs)
@@ -1471,6 +1776,11 @@ namespace Util
 			std::string featureName = feature->GetShortName();
 			if (!globalRegistry->HasWeatherSupport(featureName)) {
 				return false;
+			}
+
+			// Still controlled if variable is mid-transition (e.g., transitioning to a weather without an override)
+			if (globalRegistry->IsFeatureVariableInTransition(featureName, settingName)) {
+				return true;
 			}
 
 			// Check if current weather exists
@@ -1702,4 +2012,219 @@ namespace Util
 		}
 	}
 
+	bool InputComboWidget(
+		const char* label,
+		std::vector<InputCombo>& combo,
+		bool& isRecording,
+		const char* recordingLabel)
+	{
+		bool changed = false;
+		ImGui::Text("%s", label);
+		ImGui::SameLine();
+
+		// Use theme colors for consistent styling
+		auto& theme = globals::menu->GetTheme().StatusPalette;
+
+		if (isRecording) {
+			// Recording state visual
+			ImGui::PushStyleColor(ImGuiCol_Button, theme.CurrentHotkey);
+			ImGui::PushStyleColor(ImGuiCol_ButtonHovered, theme.CurrentHotkey);
+			ImGui::PushStyleColor(ImGuiCol_ButtonActive, theme.CurrentHotkey);
+			ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0, 0, 0, 1));  // Black text on recording color
+
+			// Show current pending combo if available, otherwise prompt
+			std::string buttonText;
+			if (!combo.empty()) {
+				buttonText = Util::Input::KeyIdToString(combo) + "...";  // Indicate it's still capturing
+			} else {
+				buttonText = "Recording... (Esc to cancel)";
+			}
+
+			if (ImGui::Button(buttonText.c_str(), ImVec2(240, 0))) {
+				isRecording = false;
+			}
+
+			ImGui::PopStyleColor(4);
+
+			// Add tooltip explaining how to record
+			if (ImGui::IsItemHovered()) {
+				ImGui::SetTooltip("Press any key combination.\nModifiers (Ctrl, Shift, Alt) are supported.\nPress Escape to cancel.");
+			}
+		} else {
+			// Display current binding with unique button ID
+			std::string keyString = Util::Input::KeyIdToString(combo);
+			std::string btnLabel = keyString + "##" + recordingLabel;
+			if (ImGui::Button(btnLabel.c_str(), ImVec2(240, 0))) {
+				isRecording = true;
+			}
+
+			// Context menu for clearing
+			if (ImGui::BeginPopupContextItem()) {
+				if (ImGui::Selectable("Clear Binding")) {
+					combo.clear();
+					changed = true;
+				}
+				ImGui::EndPopup();
+			}
+
+			// First run / empty state hint
+			if (combo.empty()) {
+				ImGui::SameLine();
+				ImGui::TextDisabled("(Click to bind)");
+			}
+		}
+
+		// Draw VR-specific color coding if applicable
+		if (REL::Module::IsVR() && !combo.empty()) {
+			ImGui::SameLine();
+
+			// Check if we have mixed devices
+			bool hasPrimary = false;
+			bool hasSecondary = false;
+			bool hasBoth = false;
+
+			for (const auto& input : combo) {
+				switch (input.GetDevice()) {
+				case InputDeviceType::Primary:
+					hasPrimary = true;
+					break;
+				case InputDeviceType::Secondary:
+					hasSecondary = true;
+					break;
+				case InputDeviceType::Both:
+					hasBoth = true;
+					break;
+				default:
+					break;
+				}
+			}
+
+			ImVec4 indicatorColor = GetControllerDefaultColor();
+			const char* indicatorText = "";
+
+			if (hasBoth || (hasPrimary && hasSecondary)) {
+				indicatorColor = GetControllerBothColor();
+				indicatorText = hasBoth ? "(Both)" : "(Mixed)";
+			} else if (hasPrimary) {
+				indicatorColor = GetControllerPrimaryColor();
+				indicatorText = "(Primary)";
+			} else if (hasSecondary) {
+				indicatorColor = GetControllerSecondaryColor();
+				indicatorText = "(Secondary)";
+			}
+
+			if (indicatorText[0] != '\0') {
+				ImGui::TextColored(indicatorColor, "%s", indicatorText);
+			}
+		}
+
+		return changed;
+	}
+
+	namespace ConstrainedUI
+	{
+		namespace
+		{
+			// Helper to render constraint tooltip
+			void RenderConstraintTooltip(const FeatureConstraints::ConstraintResult& constraint)
+			{
+				if (!ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+					return;
+
+				ImGui::BeginTooltip();
+				ImGui::PushTextWrapPos(ImGui::GetFontSize() * 35.0f);
+				ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.2f, 1.0f), "Setting Constrained");
+				ImGui::Text("This setting is constrained by:");
+				ImGui::Spacing();
+				for (const auto& src : constraint.sources) {
+					ImGui::BulletText("%s", src.featureName.c_str());
+					ImGui::Indent();
+					ImGui::TextWrapped("%s", src.reason.c_str());
+					if (src.recommendDisableAtBoot) {
+						ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.5f, 1.0f),
+							"Consider disabling this feature at boot for best compatibility.");
+					}
+					ImGui::Unindent();
+				}
+				ImGui::Separator();
+				ImGui::Text("Forced value: %s", FeatureConstraints::FormatConstraintValue(constraint.forcedValue).c_str());
+				ImGui::PopTextWrapPos();
+				ImGui::EndTooltip();
+			}
+		}
+
+		bool Checkbox(const char* label, bool* value, const FeatureConstraints::SettingId& settingId)
+		{
+			auto constraint = FeatureConstraints::GetConstraints(settingId);
+
+			if (constraint.isConstrained) {
+				// Display the forced value instead of the stored value
+				if (auto* forcedBool = std::get_if<bool>(&constraint.forcedValue)) {
+					bool displayValue = *forcedBool;
+					ImGui::BeginDisabled();
+					ImGui::Checkbox(label, &displayValue);
+					ImGui::EndDisabled();
+				} else {
+					// Fallback: wrong type, show disabled with stored value
+					ImGui::BeginDisabled();
+					ImGui::Checkbox(label, value);
+					ImGui::EndDisabled();
+				}
+				RenderConstraintTooltip(constraint);
+				return false;
+			}
+
+			return ImGui::Checkbox(label, value);
+		}
+
+		bool SliderFloat(const char* label, float* value, float min, float max,
+			const FeatureConstraints::SettingId& settingId, const char* format)
+		{
+			auto constraint = FeatureConstraints::GetConstraints(settingId);
+
+			if (constraint.isConstrained) {
+				// Display the forced value instead of the stored value
+				if (auto* forcedFloat = std::get_if<float>(&constraint.forcedValue)) {
+					float displayValue = *forcedFloat;
+					ImGui::BeginDisabled();
+					ImGui::SliderFloat(label, &displayValue, min, max, format);
+					ImGui::EndDisabled();
+				} else {
+					// Fallback: wrong type, show disabled with stored value
+					ImGui::BeginDisabled();
+					ImGui::SliderFloat(label, value, min, max, format);
+					ImGui::EndDisabled();
+				}
+				RenderConstraintTooltip(constraint);
+				return false;
+			}
+
+			return ImGui::SliderFloat(label, value, min, max, format);
+		}
+
+		bool SliderInt(const char* label, int* value, int min, int max,
+			const FeatureConstraints::SettingId& settingId, const char* format)
+		{
+			auto constraint = FeatureConstraints::GetConstraints(settingId);
+
+			if (constraint.isConstrained) {
+				// Display the forced value instead of the stored value
+				if (auto* forcedInt = std::get_if<int>(&constraint.forcedValue)) {
+					int displayValue = *forcedInt;
+					ImGui::BeginDisabled();
+					ImGui::SliderInt(label, &displayValue, min, max, format);
+					ImGui::EndDisabled();
+				} else {
+					// Fallback: wrong type, show disabled with stored value
+					ImGui::BeginDisabled();
+					ImGui::SliderInt(label, value, min, max, format);
+					ImGui::EndDisabled();
+				}
+				RenderConstraintTooltip(constraint);
+				return false;
+			}
+
+			return ImGui::SliderInt(label, value, min, max, format);
+		}
+	}
 }  // namespace Util

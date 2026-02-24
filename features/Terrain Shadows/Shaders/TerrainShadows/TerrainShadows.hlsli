@@ -9,7 +9,7 @@ namespace TerrainShadows
 
 	float GetTerrainZ(float norm_z)
 	{
-		return lerp(SharedData::terraOccSettings.ZRange.x, SharedData::terraOccSettings.ZRange.y, norm_z) - 1024;
+		return lerp(SharedData::terraOccSettings.ZRange.x, SharedData::terraOccSettings.ZRange.y, norm_z) - 256;
 	}
 
 	float2 GetTerrainZ(float2 norm_z)

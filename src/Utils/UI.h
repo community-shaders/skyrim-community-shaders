@@ -1,13 +1,16 @@
 #pragma once
 #include <algorithm>
 #include <cfloat>  // For FLT_MAX
+#include <cstdio>
 #include <functional>
 #include <imgui.h>
 #include <string>
 #include <vector>
 #include <windows.h>  // For WPARAM and virtual key constants
 
+#include "../FeatureConstraints.h"
 #include "../Menu/Fonts.h"
+#include "Utils/Input.h"
 
 // Forward declarations
 struct ID3D11Device;
@@ -16,11 +19,22 @@ struct ImVec2;
 class Menu;
 class Feature;
 
-#define BUFFER_VIEWER_NODE(a_value, a_scale)                                                                 \
-	if (ImGui::TreeNode(#a_value)) {                                                                         \
-		ImGui::Image(a_value->srv.get(), { a_value->desc.Width * a_scale, a_value->desc.Height * a_scale }); \
-		ImGui::TreePop();                                                                                    \
+// Helper macro for displaying texture buffers in ImGui with resolution info
+#define BUFFER_VIEWER_NODE_IMPL(a_value, a_label, a_scale)                                                       \
+	if (a_value && a_value->srv.get()) {                                                                         \
+		char buf[128];                                                                                           \
+		snprintf(buf, sizeof(buf), "%s (%ux%u)", a_label, a_value->desc.Width, a_value->desc.Height);            \
+		if (ImGui::TreeNode(buf)) {                                                                              \
+			ImGui::Image(a_value->srv.get(), { a_value->desc.Width * a_scale, a_value->desc.Height * a_scale }); \
+			ImGui::TreePop();                                                                                    \
+		}                                                                                                        \
 	}
+
+#define BUFFER_VIEWER_NODE(a_value, a_scale) \
+	BUFFER_VIEWER_NODE_IMPL(a_value, #a_value, a_scale)
+
+#define BUFFER_VIEWER_NODE_TITLE(a_value, a_title, a_scale) \
+	BUFFER_VIEWER_NODE_IMPL(a_value, a_title, a_scale)
 
 #define BUFFER_VIEWER_NODE_BULLET(a_value, a_scale) \
 	ImGui::BulletText(#a_value);                    \
@@ -35,6 +49,7 @@ class Feature;
 
 namespace Util
 {
+	void UpdateImGuiInput(HWND hwnd, float bufferWidth, float bufferHeight);
 	/**
 	 * Represents a single line and its color for any colored text rendering (tooltips, legends, etc.).
 	 */
@@ -53,11 +68,14 @@ namespace Util
 	 * if (auto _tt = Util::HoverTooltipWrapper()){
 	 *     ImGui::Text("What the tooltip says.");
 	 * }
+	 *
+	 * Automatically applies the Subtext font role for consistent tooltip styling.
 	*/
 	class HoverTooltipWrapper
 	{
 	private:
 		bool hovered;
+		ImFont* previousFont;
 
 	public:
 		HoverTooltipWrapper();
@@ -83,6 +101,46 @@ namespace Util
 	};
 
 	/**
+	 * Renders text using the disabled text color.
+	 * @param a_text Start of the text
+	 * @param a_textEnd Optional end pointer (nullptr for null-terminated strings)
+	 */
+	void TextUnformattedDisabled(const char* a_text, const char* a_textEnd = nullptr);
+
+	/**
+	 * Full-row hover/selection highlight for ImGui tables.
+	 * Makes the entire table row highlight on hover/active/selected instead of just the selectable cell.
+	 * @param label The selectable label text
+	 * @param selected Whether the row is currently selected
+	 * @param flags ImGuiSelectableFlags to pass through
+	 * @return True if the row was pressed
+	 */
+	bool TableRowSelectable(const char* label, bool selected, ImGuiSelectableFlags flags);
+
+	/**
+	 * Positions the next tooltip window near the mouse cursor, clamped to viewport bounds.
+	 * Automatically flips above the cursor when it would overflow the bottom.
+	 * Call this before BeginTooltip().
+	 * @param estimatedHeight Estimated tooltip height in pixels
+	 * @param estimatedWidth Estimated tooltip width in pixels (0 to skip horizontal clamping)
+	 */
+	void SetTooltipPositionNearMouse(float estimatedHeight, float estimatedWidth = 0.0f);
+
+	/**
+	 * Shows a positioned tooltip with wrapped text when the previous item is hovered.
+	 * Uses SetTooltipPositionNearMouse for viewport-aware placement.
+	 * @param a_desc Tooltip text
+	 * @param a_flags Hover flags (default: ImGuiHoveredFlags_DelayNormal)
+	 */
+	void AddTooltip(const char* a_desc, ImGuiHoveredFlags a_flags = ImGuiHoveredFlags_DelayNormal);
+
+	/**
+	 * Draws a "(?)" help marker with a tooltip on hover.
+	 * @param a_desc Tooltip text to show
+	 */
+	void HelpMarker(const char* a_desc);
+
+	/**
 	 * Confirmation popup for clearing shader cache.
 	 * Call RequestClearShaderCacheConfirmation() when the clear button is clicked.
 	 * Call DrawClearShaderCacheConfirmation() every frame to render the popup.
@@ -90,6 +148,34 @@ namespace Util
 	 */
 	void RequestClearShaderCacheConfirmation();
 	void DrawClearShaderCacheConfirmation();
+
+	/**
+	 * Reusable confirmation popup. Call RequestConfirmation() to trigger, DrawConfirmationPopup() each frame.
+	 * Returns true on the frame the user confirms. Supports optional "Don't ask again" checkbox.
+	 */
+	struct ConfirmationPopup
+	{
+		std::string title;
+		std::string message;
+		std::string confirmLabel = "Confirm";
+		std::string cancelLabel = "Cancel";
+		bool showDontAskAgain = false;
+		bool* dontAskAgainPersist = nullptr;  // Optional external bool to persist preference
+
+		ConfirmationPopup() = default;
+		ConfirmationPopup(std::string title, std::string message, std::string confirmLabel = "Confirm", std::string cancelLabel = "Cancel") :
+			title(std::move(title)), message(std::move(message)), confirmLabel(std::move(confirmLabel)), cancelLabel(std::move(cancelLabel)) {}
+
+		void Request();
+		bool Draw();  // Returns true on confirm frame
+
+		bool IsOpen() const { return show; }
+
+	private:
+		bool show = false;
+		bool confirmed = false;
+		bool dontAskCheckbox = false;
+	};
 
 	/**
 	 * RAII wrapper for styled ImGui buttons that automatically applies and restores styling.
@@ -120,6 +206,11 @@ namespace Util
 	private:
 		int m_pushedStyles;
 	};
+
+	/**
+	 * Creates a StyledButtonWrapper using the theme's error color with auto-derived hover/active variants.
+	 */
+	StyledButtonWrapper ErrorButtonStyle();
 
 	/**
 	 * Button with simple flash feedback (matches action icon hover effect style)
@@ -244,6 +335,49 @@ namespace Util
 		 */
 		bool ColorEdit3(const char* label, Feature* feature, const char* settingName, float col[3]);
 		bool ColorEdit4(const char* label, Feature* feature, const char* settingName, float col[4]);
+	}
+
+	/**
+	 * Constraint-aware UI helpers
+	 * These functions automatically check if a setting is constrained by another feature
+	 * and disable the control with an informative tooltip explaining why
+	 */
+	namespace ConstrainedUI
+	{
+		/**
+		 * Constraint-aware checkbox that greys out when constrained by another feature
+		 * @param label The label for the checkbox
+		 * @param value Pointer to the bool value
+		 * @param settingId The setting identifier for constraint lookup
+		 * @return True if value was changed (only possible when not constrained)
+		 */
+		bool Checkbox(const char* label, bool* value, const FeatureConstraints::SettingId& settingId);
+
+		/**
+		 * Constraint-aware slider float that greys out when constrained by another feature
+		 * @param label The label for the slider
+		 * @param value Pointer to the float value
+		 * @param min Minimum value
+		 * @param max Maximum value
+		 * @param settingId The setting identifier for constraint lookup
+		 * @param format Display format
+		 * @return True if value was changed (only possible when not constrained)
+		 */
+		bool SliderFloat(const char* label, float* value, float min, float max,
+			const FeatureConstraints::SettingId& settingId, const char* format = "%.3f");
+
+		/**
+		 * Constraint-aware slider int that greys out when constrained by another feature
+		 * @param label The label for the slider
+		 * @param value Pointer to the int value
+		 * @param min Minimum value
+		 * @param max Maximum value
+		 * @param settingId The setting identifier for constraint lookup
+		 * @param format Display format
+		 * @return True if value was changed (only possible when not constrained)
+		 */
+		bool SliderInt(const char* label, int* value, int min, int max,
+			const FeatureConstraints::SettingId& settingId, const char* format = "%d");
 	}
 
 	/**
@@ -614,6 +748,29 @@ namespace Util
 	void DrawSearchIcon(const ImVec2& position, float size = 20.0f, float alpha = 0.7f);
 
 	/**
+	 * @brief Draws a search input field with icon inside a combo dropdown.
+	 *
+	 * Reusable helper for any combo that needs search/filter functionality.
+	 * Draws a text input with a search icon overlay and separator, and
+	 * auto-focuses the input when the combo first opens.
+	 * Returns an owned copy of the current search text for safe use after
+	 * ClearComboSearch may mutate the underlying buffer.
+	 *
+	 * @param id Stable string literal identifying this search input. Must be a
+	 *           finite, static set of IDs — one persistent map entry is created
+	 *           per unique id and never removed.
+	 * @return Current search text (empty string when no filter is active)
+	 */
+	std::string DrawComboSearchInput(const char* id);
+
+	/**
+	 * @brief Clears the search buffer for a given combo search ID.
+	 * Call when selecting an item or when the combo closes.
+	 * @param id The same ID passed to DrawComboSearchInput
+	 */
+	void ClearComboSearch(const char* id);
+
+	/**
 	 * @brief Draws a semi-transparent dark overlay behind modal dialogs for depth.
 	 * @param alpha The alpha value for the overlay (0-255, default: 160)
 	 */
@@ -771,6 +928,24 @@ namespace Util
 		 * @endcode
 		 */
 		const char* KeyIdToString(uint32_t key);
+
+		/**
+		 * @brief Converts a key combo (vector of InputCombo) to a human-readable string
+		 *
+		 * For keyboard-only combos, produces strings like "Ctrl + Shift + A".
+		 * For VR inputs, delegates to InputCombo::GetVRString for proper formatting.
+		 *
+		 * @param combo Vector of InputCombo representing the key combination
+		 * @return Human-readable string representation of the combo, or "None" if empty
+		 *
+		 * @example
+		 * @code
+		 * std::vector<InputCombo> combo = { InputCombo::Keyboard(VK_CONTROL), InputCombo::Keyboard('A') };
+		 * std::string comboStr = Util::Input::KeyIdToString(combo);
+		 * // comboStr will be "Control + A"
+		 * @endcode
+		 */
+		std::string KeyIdToString(const std::vector<InputCombo>& combo);
 	}
 
 	/**
@@ -786,7 +961,7 @@ namespace Util
 	 * @param itemMap The map of items to display (key = item name, value = item data)
 	 * @return true if a new item was selected, false otherwise
 	 *
-	 * @note Uses a static search buffer, so only one SearchableCombo should be open at a time
+	 * @note Each combo is identified by its label for independent search state
 	 *
 	 * @example
 	 * @code
@@ -803,38 +978,24 @@ namespace Util
 	bool SearchableCombo(const char* label, std::string& selectedName, std::unordered_map<std::string, T>& itemMap)
 	{
 		bool valueChanged = false;
-		static std::unordered_map<std::string, char[256]> searchBuffers;
-
-		std::string comboId = std::string(label);
-		auto& searchBuffer = searchBuffers[comboId];
 
 		if (ImGui::BeginCombo(label, selectedName.c_str())) {
-			ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(24.0f, ImGui::GetStyle().FramePadding.y));
-			ImGui::InputText("##search", searchBuffer, IM_ARRAYSIZE(searchBuffer));
-			ImGui::PopStyleVar();
-			ImVec2 iconPos = ImVec2(ImGui::GetItemRectMin().x + 5.0f, ImGui::GetItemRectMin().y + (ImGui::GetItemRectSize().y - 16.0f) * 0.5f);
-			DrawSearchIcon(iconPos, 16.0f, 0.5f);
+			auto searchText = DrawComboSearchInput(label);
 
-			ImGui::Separator();
-
-			// Filter and display items
 			for (auto& [itemName, item] : itemMap) {
-				// Simple case-insensitive search
-				if (searchBuffer[0] == '\0' ||
-					std::search(itemName.begin(), itemName.end(), searchBuffer, searchBuffer + strlen(searchBuffer),
-						[](char a, char b) { return std::tolower(a) == std::tolower(b); }) != itemName.end()) {
+				if (searchText.empty() || StringMatchesSearch(itemName, searchText)) {
 					if (ImGui::Selectable(itemName.c_str(), itemName == selectedName)) {
 						selectedName = itemName;
 						valueChanged = true;
-						searchBuffer[0] = '\0';  // Clear search on selection
+						ClearComboSearch(label);
+						break;
 					}
 				}
 			}
 
 			ImGui::EndCombo();
 		} else {
-			// Reset search when combo is closed
-			searchBuffer[0] = '\0';
+			ClearComboSearch(label);
 		}
 
 		return valueChanged;
@@ -1212,4 +1373,23 @@ namespace Util
 		ImGui::PopStyleVar();
 		ImGui::EndChild();
 	}
+
+	/**
+	 * @brief Unified input recording widget for both VR and Desktop
+	 *
+	 * Handles recording of multi-key sequences for keyboard, mouse, and VR controllers.
+	 * Supports modifiers, combo sequences, and device-specific rendering.
+	 *
+	 * @param label The label for the input setting
+	 * @param combo The vector of InputCombo to record into
+	 * @param isRecording Reference to boolean tracking active recording state
+	 * @param recordingLabel Unique label ID for the recording button
+	 *
+	 * @return true if the combo was modified
+	 */
+	bool InputComboWidget(
+		const char* label,
+		std::vector<InputCombo>& combo,
+		bool& isRecording,
+		const char* recordingLabel);
 }  // namespace Util

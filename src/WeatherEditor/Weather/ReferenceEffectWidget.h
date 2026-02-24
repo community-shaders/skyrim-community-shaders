@@ -9,6 +9,11 @@ public:
 		referenceEffect(a_referenceEffect)
 	{
 		form = a_referenceEffect;
+		if (referenceEffect) {
+			LoadFromGameSettings();
+			vanillaSettings = settings;
+			originalSettings = settings;
+		}
 	}
 
 	~ReferenceEffectWidget() override = default;
@@ -23,6 +28,8 @@ public:
 	RE::BGSReferenceEffect* referenceEffect = nullptr;
 
 private:
+	void LoadFromGameSettings();
+
 	struct Settings
 	{
 		RE::BGSArtObject* artObject = nullptr;
@@ -30,9 +37,11 @@ private:
 		bool faceTarget = false;
 		bool attachToCamera = false;
 		bool inheritRotation = false;
+		bool operator==(const Settings&) const = default;
 	};
 
 	Settings settings;
+	Settings vanillaSettings;
 	Settings originalSettings;
 
 	std::vector<RE::BGSArtObject*> artObjectArray;

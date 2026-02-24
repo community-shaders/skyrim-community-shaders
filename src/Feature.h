@@ -1,5 +1,6 @@
 #pragma once
 
+#include "FeatureConstraints.h"
 #include "FeatureVersions.h"
 #ifdef TRACY_ENABLE
 #	include <Tracy/Tracy.hpp>
@@ -138,11 +139,39 @@ public:
 	 */
 	virtual void RegisterWeatherVariables() {}
 
+	/**
+	 * @brief Returns constraints this feature imposes on other features' settings
+	 *
+	 * Features override this to declare runtime incompatibilities with other features.
+	 * The constraint system will automatically:
+	 * - Force the target setting to the specified value
+	 * - Disable the UI control for the constrained setting
+	 * - Show a tooltip explaining which features caused the constraint
+	 *
+	 * @return Vector of constraints this feature currently imposes (empty if none)
+	 */
+	virtual std::vector<FeatureConstraints::Constraint> GetActiveConstraints() const { return {}; }
+
 	virtual bool ValidateCache(CSimpleIniA& a_ini);
 	virtual void WriteDiskCacheInfo(CSimpleIniA& a_ini);
 	virtual void ClearShaderCache() {}
 
 	static const std::vector<Feature*>& GetFeatureList();
+
+	/**
+	 * @brief Finds a loaded feature by its short name.
+	 *
+	 * @param shortName The short name to search for.
+	 * @return Pointer to the feature if found and loaded, nullptr otherwise.
+	 */
+	static Feature* FindFeatureByShortName(const std::string& shortName);
+
+	/**
+	 * @brief Gets sorted short names of all loaded features that appear in the menu.
+	 *
+	 * @return Sorted vector of short name strings.
+	 */
+	static std::vector<std::string> GetLoadedFeatureNames();
 
 	// Feature utility functions
 	/**

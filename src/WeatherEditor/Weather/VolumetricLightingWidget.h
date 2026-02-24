@@ -9,6 +9,11 @@ public:
 		volumetricLighting(a_volumetricLighting)
 	{
 		form = a_volumetricLighting;
+		if (volumetricLighting) {
+			LoadFromGameSettings();
+			vanillaSettings = settings;
+			originalSettings = settings;
+		}
 	}
 
 	~VolumetricLightingWidget() override = default;
@@ -23,6 +28,8 @@ public:
 	RE::BGSVolumetricLighting* volumetricLighting = nullptr;
 
 private:
+	void LoadFromGameSettings();
+
 	struct Settings
 	{
 		float intensity = 1.0f;
@@ -37,8 +44,10 @@ private:
 		float phaseFunctionContribution = 0.0f;
 		float phaseFunctionScattering = 0.0f;
 		float samplingRangeFactor = 1.0f;
+		bool operator==(const Settings&) const = default;
 	};
 
 	Settings settings;
+	Settings vanillaSettings;
 	Settings originalSettings;
 };

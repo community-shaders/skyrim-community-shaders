@@ -288,7 +288,7 @@ All graphics features are globally accessible for cross-feature coordination:
 -   Terrain: `terrainShadows`, `terrainBlending`, `terrainVariation`, `terrainHelper`
 -   Materials: `extendedMaterials`, `hairSpecular`, `subsurfaceScattering`
 -   Effects: `screenSpaceGI`, `screenSpaceShadows`, `waterEffects`, `wetnessEffects`
--   Environment: `cloudShadows`, `dynamicCubemaps`, `weatherPicker`, `skySync`
+-   Environment: `cloudShadows`, `dynamicCubemaps`, `weatherEditor`, `skySync`
 -   VR: `vr` - VR-specific adaptations and coordinate transformations
 
 ### Shared Utilities (`src/Utils/`)

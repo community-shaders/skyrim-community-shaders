@@ -19,13 +19,13 @@ namespace Util
 			}
 			ImVec4 color;
 			switch (combo[i].GetDevice()) {
-			case ControllerDevice::Primary:
+			case InputDeviceType::Primary:
 				color = Util::GetControllerPrimaryColor();
 				break;
-			case ControllerDevice::Secondary:
+			case InputDeviceType::Secondary:
 				color = Util::GetControllerSecondaryColor();
 				break;
-			case ControllerDevice::Both:
+			case InputDeviceType::Both:
 				color = Util::GetControllerBothColor();
 				break;
 			default:
@@ -41,15 +41,15 @@ namespace Util
 				ImVec4 labelColor = Util::GetControllerDefaultColor();
 				const char* label = "";
 				switch (combo[i].GetDevice()) {
-				case ControllerDevice::Primary:
+				case InputDeviceType::Primary:
 					label = "(Primary Controller)";
 					labelColor = Util::GetControllerPrimaryColor();
 					break;
-				case ControllerDevice::Secondary:
+				case InputDeviceType::Secondary:
 					label = "(Secondary Controller)";
 					labelColor = Util::GetControllerSecondaryColor();
 					break;
-				case ControllerDevice::Both:
+				case InputDeviceType::Both:
 					label = "(Both Controllers)";
 					labelColor = Util::GetControllerBothColor();
 					break;
@@ -105,35 +105,6 @@ namespace Util
 		return transform;
 	}
 
-	vr::HmdMatrix34_t CreateControllerOverlayTransform(float offsetX, float offsetY, float offsetZ, float width, float height)
-	{
-		vr::HmdMatrix34_t transform;
-		transform.m[0][0] = width;
-		transform.m[0][1] = 0.0f;
-		transform.m[0][2] = 0.0f;
-		transform.m[0][3] = offsetX;
-		transform.m[1][0] = 0.0f;
-		transform.m[1][1] = height;
-		transform.m[1][2] = 0.0f;
-		transform.m[1][3] = offsetY;
-		transform.m[2][0] = 0.0f;
-		transform.m[2][1] = 0.0f;
-		transform.m[2][2] = 1.0f;
-		transform.m[2][3] = offsetZ;
-		return transform;
-	}
-
-	void SetOverlayInputFlags(vr::IVROverlay* overlay, vr::VROverlayHandle_t handle)
-	{
-		if (!overlay || handle == vr::k_ulOverlayHandleInvalid)
-			return;
-
-		overlay->SetOverlayFlag(handle, vr::VROverlayFlags_SendVRScrollEvents, true);
-		overlay->SetOverlayFlag(handle, vr::VROverlayFlags_SendVRTouchpadEvents, true);
-		overlay->SetOverlayFlag(handle, vr::VROverlayFlags_AcceptsGamepadEvents, true);
-		overlay->SetOverlayFlag(handle, vr::VROverlayFlags_VisibleInDashboard, true);
-	}
-
 	//=============================================================================
 	// NEW ACTIVE FUNCTIONS FROM VR.CPP
 	//=============================================================================
@@ -153,31 +124,7 @@ namespace Util
 		}
 	}
 
-	ImVec4 GetControllerDeviceColor(ControllerDevice device, bool isRecording)
-	{
-		// UI color constants from VR.cpp
-		constexpr ImVec4 Primary = ImVec4(0.0f, 1.0f, 0.0f, 1.0f);     // Green
-		constexpr ImVec4 Secondary = ImVec4(0.0f, 0.6f, 1.0f, 1.0f);   // Blue
-		constexpr ImVec4 Both = ImVec4(0.5f, 0.0f, 0.5f, 1.0f);        // Purple
-		constexpr ImVec4 Recording = ImVec4(1.0f, 0.65f, 0.0f, 1.0f);  // Orange
-		constexpr ImVec4 Default = ImVec4(1.0f, 1.0f, 1.0f, 1.0f);     // White
-
-		if (isRecording && device == ControllerDevice::Both) {
-			return Recording;  // Orange for recording mode
-		}
-		switch (device) {
-		case ControllerDevice::Primary:
-			return Primary;
-		case ControllerDevice::Secondary:
-			return Secondary;
-		case ControllerDevice::Both:
-			return Both;
-		default:
-			return Default;
-		}
-	}
-
-	vr::TrackedDeviceIndex_t GetControllerIndexForDevice(ControllerDevice device, bool isLeftHanded)
+	vr::TrackedDeviceIndex_t GetControllerIndexForDevice(InputDeviceType device, bool isLeftHanded)
 	{
 		OpenVRContext ctx;
 		if (!ctx.IsValid())
@@ -186,7 +133,7 @@ namespace Util
 		// Determine the OpenVR role based on handedness and our device enum
 		vr::ETrackedControllerRole targetRole;
 
-		if (device == ControllerDevice::Primary) {
+		if (device == InputDeviceType::Primary) {
 			// Primary controller = dominant hand
 			targetRole = isLeftHanded ? vr::ETrackedControllerRole::TrackedControllerRole_LeftHand : vr::ETrackedControllerRole::TrackedControllerRole_RightHand;
 		} else {
@@ -291,48 +238,4 @@ namespace Util
 		return false;
 	}
 
-	//=============================================================================
-	// WAND POINTING IMPLEMENTATION
-	//=============================================================================
-
-	bool ComputeWandIntersection(vr::IVROverlay* overlay, vr::VROverlayHandle_t overlayHandle,
-		vr::TrackedDeviceIndex_t controllerIndex, ImVec2& outUV)
-	{
-		if (!overlay || overlayHandle == vr::k_ulOverlayHandleInvalid || controllerIndex == vr::k_unTrackedDeviceIndexInvalid)
-			return false;
-
-		// Bounds check to prevent array out-of-bounds access
-		if (controllerIndex >= vr::k_unMaxTrackedDeviceCount)
-			return false;
-
-		// Get controller pose
-		vr::TrackedDevicePose_t poses[vr::k_unMaxTrackedDeviceCount];
-		if (!GetDeviceToAbsoluteTrackingPoseCompatible(vr::TrackingUniverseStanding, 0, poses, vr::k_unMaxTrackedDeviceCount))
-			return false;
-
-		if (!poses[controllerIndex].bPoseIsValid)
-			return false;
-
-		// Compute intersection using OpenVR's built-in ray-casting
-		vr::VROverlayIntersectionParams_t params;
-		params.eOrigin = vr::TrackingUniverseStanding;
-		params.vSource.v[0] = poses[controllerIndex].mDeviceToAbsoluteTracking.m[0][3];
-		params.vSource.v[1] = poses[controllerIndex].mDeviceToAbsoluteTracking.m[1][3];
-		params.vSource.v[2] = poses[controllerIndex].mDeviceToAbsoluteTracking.m[2][3];
-
-		// Ray direction is the -Z axis of the controller (forward vector)
-		params.vDirection.v[0] = -poses[controllerIndex].mDeviceToAbsoluteTracking.m[0][2];
-		params.vDirection.v[1] = -poses[controllerIndex].mDeviceToAbsoluteTracking.m[1][2];
-		params.vDirection.v[2] = -poses[controllerIndex].mDeviceToAbsoluteTracking.m[2][2];
-
-		vr::VROverlayIntersectionResults_t results;
-		if (overlay->ComputeOverlayIntersection(overlayHandle, &params, &results)) {
-			// Convert UV coordinates (0-1 range) to output
-			outUV.x = results.vUVs.v[0];
-			outUV.y = results.vUVs.v[1];
-			return true;
-		}
-
-		return false;
-	}
 }
