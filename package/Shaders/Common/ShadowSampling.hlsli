@@ -148,7 +148,7 @@ namespace ShadowSampling
 		float3 positionLS = mul(shadow.ShadowMapProj[primaryCascade], float4(worldPosition, 1)).xyz;
 
 		// Sample primary cascade
-		float visibility = DirectionalShadowCascades.SampleCmpLevelZero(ShadowSamplerCmp, float3(positionLS.xy, primaryCascade), positionLS.z);
+		float visibility = dot(DirectionalShadowCascades.GatherCmp(ShadowSamplerCmp, float3(positionLS.xy, primaryCascade), positionLS.z), 0.25);
 
 		// Blend with secondary cascade if needed
 		[branch]
@@ -157,7 +157,7 @@ namespace ShadowSampling
 
 			positionLS = mul(shadow.ShadowMapProj[secondaryCascade], float4(worldPosition, 1)).xyz;
 
-			float visibilityBlend = DirectionalShadowCascades.SampleCmpLevelZero(ShadowSamplerCmp, float3(positionLS.xy, secondaryCascade), positionLS.z);
+			float visibilityBlend = dot(DirectionalShadowCascades.GatherCmp(ShadowSamplerCmp, float3(positionLS.xy, secondaryCascade), positionLS.z), 0.25);
 			visibility = lerp(visibility, visibilityBlend, cascadeSelect);
 		}
 
