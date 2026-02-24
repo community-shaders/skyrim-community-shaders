@@ -42,8 +42,20 @@ struct ShadowData
 StructuredBuffer<ShadowData> Shadows    : register(t22);
 Texture2DArray<float>        ShadowMaps : register(t23);
 
+// Comparison sampler for PCF shadow filtering (less-equal depth test).
+SamplerComparisonState ShadowSamplerCmp : register(s14);
+
+#if defined(VOLUMETRIC_SHADOWS)
+#	include "VolumetricShadows/VolumetricShadows.hlsli"
+#endif
+
 namespace ShadowSampling
 {
+	// PCF filter radii in UV space for Poisson disc samples.
+	static const float PCFKernelDirectional = 1.0 / 2048.0;  // directional cascade maps
+	static const float PCFKernelShadowLight = 1.0 / 1024.0;  // frustum/spot shadow maps
+	static const float PCFParaboloidRadius  = 2.0;            // world-space jitter radius for paraboloid PCF
+
 	float GetWorldShadow(float3 positionWS, float3 offset, uint eyeIndex)
 	{
 		if (SharedData::InInterior || SharedData::HideSky || SharedData::InMapMenu)
@@ -102,7 +114,7 @@ namespace ShadowSampling
 
 #if defined(VOLUMETRIC_SHADOWS)
 		float vsmSurfaceShadow;
-		float shadow = VolumetricShadows::GetVSMShadow3D(SharedShadowData[0], startPosition, endPosition, noise, sampleCount, eyeIndex, vsmSurfaceShadow);
+		float shadow = VolumetricShadows::GetVSMShadow3D(DirectionalShadows[0], startPosition, endPosition, noise, sampleCount, eyeIndex, vsmSurfaceShadow);
 		surfaceShadow *= vsmSurfaceShadow;
 		return worldShadow * shadow;
 #else
@@ -121,37 +133,39 @@ namespace ShadowSampling
 		}
 
 		float fade = saturate(shadowMapDepth / shadow.EndSplitDistances.y);
-		float cascadeSelect = saturate((shadowMapDepth - shadow.StartSplitDistances.y) / (shadow.EndSplitDistances.x - shadow.StartSplitDistances.y));
+		float cascadeBlend = saturate((shadowMapDepth - shadow.StartSplitDistances.y) / (shadow.EndSplitDistances.x - shadow.StartSplitDistances.y));
+		uint cascade = (cascadeBlend >= 0.5) ? 1u : 0u;
 
-		const uint sampleCount = 16;
-		const uint rcpSampleCount = 1.0 / float(sampleCount);
+		const uint  sampleCount    = 16;
+		const float rcpSampleCount = 1.0 / float(sampleCount);
 
-		float3 positionLS = mul(shadow.ShadowProj[cascadeSelect], float4(worldPosition, 1)).xyz;
+		float3 positionLS = mul(shadow.ShadowMapProj[cascade], float4(worldPosition, 1)).xyz;
 
 		float visibility = 0;
 		for (uint i = 0; i < sampleCount; i++) {
 			float2 sampleOffset = mul(Random::PoissonSampleOffsets16[i], rotationMatrix);
-			float2 sampleUV = positionLS.xy + sampleOffset * shadow.ShadowSampleParam.z;
-			visibility += DirectionalShadowCascades.SampleCmpLevelZero(samp, float3(sampleUV, cascadeSelect), positionLS.z);
+			float2 sampleUV = positionLS.xy + sampleOffset * PCFKernelDirectional;
+			visibility += DirectionalShadowCascades.SampleCmpLevelZero(ShadowSamplerCmp, float3(sampleUV, float(cascade)), positionLS.z);
 		}
 
+		float shadowValue = visibility * rcpSampleCount;
 		float fadeFactor = 1.0 - pow(fade, 8);
-		detailedShadow = lerp(1.0, shadow, fadeFactor);
-		return lerp(1.0, shadow, fadeFactor);
+		detailedShadow = lerp(1.0, shadowValue, fadeFactor);
+		return lerp(1.0, shadowValue, fadeFactor);
 	}
 
 	float GetFrustumShadow(ShadowData shadow, uint shadowIndex, float3 worldPosition, float2x2 rotationMatrix)
 	{
-		const uint sampleCount = 16;
-		const uint rcpSampleCount = 1.0 / float(sampleCount);
+		const uint  sampleCount    = 16;
+		const float rcpSampleCount = 1.0 / float(sampleCount);
 
 		float3 positionLS = mul(shadow.ShadowProj, float4(worldPosition, 1)).xyz;
 
 		float visibility = 0;
 		for (uint i = 0; i < sampleCount; i++) {
 			float2 sampleOffset = mul(Random::PoissonSampleOffsets16[i], rotationMatrix);
-			float2 sampleUV = positionLS.xy + sampleOffset * shadow.ShadowSampleParam.z;
-			visibility += ShadowMaps.SampleCmpLevelZero(samp, float3(sampleUV, shadowIndex), positionLS.z);
+			float2 sampleUV = positionLS.xy + sampleOffset * PCFKernelShadowLight;
+			visibility += ShadowMaps.SampleCmpLevelZero(ShadowSamplerCmp, float3(sampleUV, float(shadowIndex)), positionLS.z);
 		}
 
 		return visibility * rcpSampleCount;
@@ -159,27 +173,29 @@ namespace ShadowSampling
 
 	float GetParaboloidShadow(ShadowData shadow, uint shadowIndex, float3 worldPosition)
 	{
-		const uint sampleCount = 16;
-		const uint rcpSampleCount = 1.0 / float(sampleCount);
+		const uint  sampleCount    = 16;
+		const float rcpSampleCount = 1.0 / float(sampleCount);
+
+		// Per-pixel seed for stochastic world-space jitter.
+		float3 seed3 = frac(worldPosition * float3(0.01234, 0.05678, 0.09123));
 
 		float visibility = 0;
 		for (uint i = 0; i < sampleCount; i++) {
-			// Optimized random generation using simplified hash
-			float3 sampleOffset = (Random::R3Modified(i + SharedData::FrameCount * sampleCount, seed / 4294967295) * 2.0 - 1.0) * shadow.ShadowSampleParam.z * 2048;
+			float3 jitter = (Random::R3Modified(float(i + SharedData::FrameCount * sampleCount), seed3) * 2.0 - 1.0) * PCFParaboloidRadius;
 
-			float3 positionLS = mul(shadow.ShadowMapProj, float4(worldPosition + sampleOffset, 1)).xyz;
+			float3 positionLS = mul(shadow.ShadowProj, float4(worldPosition + jitter, 1)).xyz;
 
-			bool lowerHalf = positionLS.z * 0.5 + 0.5 < 0;
+			bool lowerHalf = positionLS.z < 0;
 			float3 normalizedPositionLS = normalize(positionLS);
 
-			float compareValue = saturate(length(positionLS) / shadow.ShadowLightParam.x);
+			float compareValue = saturate(length(positionLS) / float(shadow.ShadowLightParam.x));
 
 			float3 positionOffset = lowerHalf ? float3(0, 0, -1) : float3(0, 0, 1);
 			float3 lightDirection = normalize(normalizedPositionLS + positionOffset);
 			float2 sampleUV = lightDirection.xy / lightDirection.z * 0.5 + 0.5;
 			sampleUV.y = lowerHalf ? 1.0 - 0.5 * sampleUV.y : 0.5 * sampleUV.y;
 
-			visibility += ShadowMaps.SampleCmpLevelZero(samp, float3(sampleUV, shadowIndex), compareValue);
+			visibility += ShadowMaps.SampleCmpLevelZero(ShadowSamplerCmp, float3(sampleUV, float(shadowIndex)), compareValue);
 		}
 
 		return visibility * rcpSampleCount;
