@@ -157,16 +157,15 @@ void Deferred::SetupResources()
 		};
 	}
 
-	// Shadow data structured buffer (t19): CPU-written each frame, read-only on GPU.
-	// One element holds the directional (sun) shadow data uploaded from BSShadowDirectionalLight.
+	// Directional shadow data (t19): cascade splits, projections, and light dispatch table.
 	{
 		D3D11_BUFFER_DESC sbDesc{};
 		sbDesc.Usage = D3D11_USAGE_DYNAMIC;
 		sbDesc.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
 		sbDesc.BindFlags = D3D11_BIND_SHADER_RESOURCE;
 		sbDesc.MiscFlags = D3D11_RESOURCE_MISC_BUFFER_STRUCTURED;
-		sbDesc.StructureByteStride = sizeof(ShadowData);
-		sbDesc.ByteWidth = sizeof(ShadowData);
+		sbDesc.StructureByteStride = sizeof(DirectionalShadowData);
+		sbDesc.ByteWidth = sizeof(DirectionalShadowData);
 
 		D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc{};
 		srvDesc.Format = DXGI_FORMAT_UNKNOWN;
@@ -174,8 +173,48 @@ void Deferred::SetupResources()
 		srvDesc.Buffer.FirstElement = 0;
 		srvDesc.Buffer.NumElements = 1;
 
-		perShadow = new Buffer(sbDesc);
-		perShadow->CreateSRV(srvDesc);
+		perDirectionalShadow = new Buffer(sbDesc);
+		perDirectionalShadow->CreateSRV(srvDesc);
+	}
+
+	// Frustum (spot) shadow light data (t22): per-typed-slot projection matrices, max 4 elements.
+	{
+		D3D11_BUFFER_DESC sbDesc{};
+		sbDesc.Usage = D3D11_USAGE_DYNAMIC;
+		sbDesc.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
+		sbDesc.BindFlags = D3D11_BIND_SHADER_RESOURCE;
+		sbDesc.MiscFlags = D3D11_RESOURCE_MISC_BUFFER_STRUCTURED;
+		sbDesc.StructureByteStride = sizeof(FrustumShadowData);
+		sbDesc.ByteWidth = 4 * sizeof(FrustumShadowData);
+
+		D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc{};
+		srvDesc.Format = DXGI_FORMAT_UNKNOWN;
+		srvDesc.ViewDimension = D3D11_SRV_DIMENSION_BUFFER;
+		srvDesc.Buffer.FirstElement = 0;
+		srvDesc.Buffer.NumElements = 4;
+
+		perFrustumShadows = new Buffer(sbDesc);
+		perFrustumShadows->CreateSRV(srvDesc);
+	}
+
+	// Paraboloid shadow light data (t27): dual-hemisphere projection matrices, max 4 elements.
+	{
+		D3D11_BUFFER_DESC sbDesc{};
+		sbDesc.Usage = D3D11_USAGE_DYNAMIC;
+		sbDesc.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
+		sbDesc.BindFlags = D3D11_BIND_SHADER_RESOURCE;
+		sbDesc.MiscFlags = D3D11_RESOURCE_MISC_BUFFER_STRUCTURED;
+		sbDesc.StructureByteStride = sizeof(ParaboloidShadowData);
+		sbDesc.ByteWidth = 4 * sizeof(ParaboloidShadowData);
+
+		D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc{};
+		srvDesc.Format = DXGI_FORMAT_UNKNOWN;
+		srvDesc.ViewDimension = D3D11_SRV_DIMENSION_BUFFER;
+		srvDesc.Buffer.FirstElement = 0;
+		srvDesc.Buffer.NumElements = 4;
+
+		perParaboloidShadows = new Buffer(sbDesc);
+		perParaboloidShadows->CreateSRV(srvDesc);
 	}
 }
 
@@ -595,90 +634,146 @@ void Deferred::CopyShadowData()
 	if (!sunShadowLight)
 		return;
 
-	ShadowData sd{};
+	DirectionalShadowData dd{};
+	FrustumShadowData     fd[4]{};
+	ParaboloidShadowData  pd[4]{};
 
-	// Cascade split distances (cascade 0 in x, cascade 1 in y)
+	// Cascade split distances (cascade 0 in x, cascade 1 in y).
 	auto& dirData          = sunShadowLight->GetShadowDirectionalLightRuntimeData();
-	sd.EndSplitDistances   = { dirData.endSplitDistances[0], dirData.endSplitDistances[1] };
-	sd.StartSplitDistances = { dirData.startSplitDistances[0], dirData.startSplitDistances[1] };
+	dd.EndSplitDistances   = { dirData.endSplitDistances[0], dirData.endSplitDistances[1] };
+	dd.StartSplitDistances = { dirData.startSplitDistances[0], dirData.startSplitDistances[1] };
 
-	auto  renderer = globals::game::renderer;
-	auto  context  = globals::d3d::context;
+	auto renderer = globals::game::renderer;
+	auto context  = globals::d3d::context;
 
 	// Directional cascade projection matrices + bind raw depth SRVs to t20/t21 for PCF fallback.
-	// Both ShadowmapDescriptor (SE/AE) and ShadowmapDescriptorVR have lightTransform at offset 0x00.
 	uint32_t dirCascadeCount = 0;
-	if (REL::Module::IsVR()) {
-		auto& lightData  = sunShadowLight->GetVRRuntimeData();
-		dirCascadeCount  = std::min((uint32_t)lightData.shadowmapDescriptors.size(), 2u);
-		for (uint32_t i = 0; i < dirCascadeCount; ++i) {
-			auto& desc = lightData.shadowmapDescriptors[i];
-			memcpy(&sd.ShadowMapProj[i], &desc.lightTransform, sizeof(DirectX::XMFLOAT4X4));
-			auto& ds = renderer->GetDepthStencilData().depthStencils[desc.renderTarget];
-			context->PSSetShaderResources(20 + i, 1, &ds.depthSRV);
-		}
-	} else {
-		auto& lightData  = sunShadowLight->GetRuntimeData();
-		dirCascadeCount  = std::min((uint32_t)lightData.shadowmapDescriptors.size(), 2u);
-		for (uint32_t i = 0; i < dirCascadeCount; ++i) {
-			auto& desc = lightData.shadowmapDescriptors[i];
-			memcpy(&sd.ShadowMapProj[i], &desc.lightTransform, sizeof(DirectX::XMFLOAT4X4));
-			auto& ds = renderer->GetDepthStencilData().depthStencils[desc.renderTarget];
-			context->PSSetShaderResources(20 + i, 1, &ds.depthSRV);
-		}
+	{
+		auto fillCascades = [&](auto& lightData) {
+			dirCascadeCount = std::min((uint32_t)lightData.shadowmapDescriptors.size(), 2u);
+			for (uint32_t i = 0; i < dirCascadeCount; ++i) {
+				auto& desc = lightData.shadowmapDescriptors[i];
+				memcpy(&dd.ShadowMapProj[i], &desc.lightTransform, sizeof(DirectX::XMFLOAT4X4));
+				auto& ds = renderer->GetDepthStencilData().depthStencils[desc.renderTarget];
+				context->PSSetShaderResources(20 + i, 1, &ds.depthSRV);
+			}
+		};
+		if (REL::Module::IsVR())
+			fillCascades(sunShadowLight->GetVRRuntimeData());
+		else
+			fillCascades(sunShadowLight->GetRuntimeData());
 	}
-	// Null out any unused cascade slots
 	for (uint32_t i = dirCascadeCount; i < 2u; ++i) {
 		ID3D11ShaderResourceView* nullSRV = nullptr;
 		context->PSSetShaderResources(20 + i, 1, &nullSRV);
 	}
 
-	// Non-directional shadow lights from activeShadowLights (spot/frustum or paraboloid).
-	auto& sceneRTData = shadowSceneNode->GetRuntimeData();
+	// Non-directional shadow lights from activeShadowLights (frustum/spot or paraboloid).
+	// Each light is assigned a sequential game slot (0-3); typed indices are per-type counters.
+	auto&    sceneRTData  = shadowSceneNode->GetRuntimeData();
+	uint32_t gameSlot     = 0;
+	uint32_t frustumIdx   = 0;
+	uint32_t paraboloidIdx = 0;
+
 	for (auto& lightPtr : sceneRTData.activeShadowLights) {
-		if (!lightPtr)
-			continue;
-		auto*    light = lightPtr.get();
-		uint32_t idx   = sd.ShadowLightCount;
-		if (idx >= 4u)
+		if (!lightPtr || gameSlot >= 4u)
 			break;
 
-		sd.ShadowLightTypes[idx] = light->GetIsParabolicLight() ? 1u : 0u;
+		auto* light        = lightPtr.get();
+		bool  isParaboloid = light->GetIsParabolicLight();
 
-		if (REL::Module::IsVR()) {
-			auto& lightData = light->GetVRRuntimeData();
-			if (!lightData.shadowmapDescriptors.empty()) {
-				auto& desc = lightData.shadowmapDescriptors[0];
-				memcpy(&sd.ShadowLightProj[idx], &desc.lightTransform, sizeof(DirectX::XMFLOAT4X4));
-				auto& ds = renderer->GetDepthStencilData().depthStencils[desc.renderTarget];
-				context->PSSetShaderResources(22 + idx, 1, &ds.depthSRV);
-			}
+		if (isParaboloid) {
+			dd.LightIsParaboloid[gameSlot] = 1u;
+			dd.TypedIndex[gameSlot]        = paraboloidIdx;
+
+			auto fillParaboloid = [&](auto& lightData) {
+				auto& descs = lightData.shadowmapDescriptors;
+				if (descs.size() >= 1) {
+					memcpy(&pd[paraboloidIdx].FrontProj, &descs[0].lightTransform, sizeof(DirectX::XMFLOAT4X4));
+					auto& ds = renderer->GetDepthStencilData().depthStencils[descs[0].renderTarget];
+					context->PSSetShaderResources(28 + paraboloidIdx, 1, &ds.depthSRV);
+				}
+				if (descs.size() >= 2) {
+					memcpy(&pd[paraboloidIdx].BackProj, &descs[1].lightTransform, sizeof(DirectX::XMFLOAT4X4));
+					auto& ds = renderer->GetDepthStencilData().depthStencils[descs[1].renderTarget];
+					context->PSSetShaderResources(32 + paraboloidIdx, 1, &ds.depthSRV);
+					pd[paraboloidIdx].HasBack = 1u;
+				}
+			};
+			if (REL::Module::IsVR())
+				fillParaboloid(light->GetVRRuntimeData());
+			else
+				fillParaboloid(light->GetRuntimeData());
+
+			++paraboloidIdx;
 		} else {
-			auto& lightData = light->GetRuntimeData();
-			if (!lightData.shadowmapDescriptors.empty()) {
-				auto& desc = lightData.shadowmapDescriptors[0];
-				memcpy(&sd.ShadowLightProj[idx], &desc.lightTransform, sizeof(DirectX::XMFLOAT4X4));
-				auto& ds = renderer->GetDepthStencilData().depthStencils[desc.renderTarget];
-				context->PSSetShaderResources(22 + idx, 1, &ds.depthSRV);
-			}
+			dd.LightIsParaboloid[gameSlot] = 0u;
+			dd.TypedIndex[gameSlot]        = frustumIdx;
+
+			auto fillFrustum = [&](auto& lightData) {
+				if (!lightData.shadowmapDescriptors.empty()) {
+					auto& desc = lightData.shadowmapDescriptors[0];
+					memcpy(&fd[frustumIdx].Proj, &desc.lightTransform, sizeof(DirectX::XMFLOAT4X4));
+					auto& ds = renderer->GetDepthStencilData().depthStencils[desc.renderTarget];
+					context->PSSetShaderResources(23 + frustumIdx, 1, &ds.depthSRV);
+				}
+			};
+			if (REL::Module::IsVR())
+				fillFrustum(light->GetVRRuntimeData());
+			else
+				fillFrustum(light->GetRuntimeData());
+
+			++frustumIdx;
 		}
 
-		++sd.ShadowLightCount;
+		++gameSlot;
 	}
-	// Null out unused shadow light slots so stale SRVs from previous frames don't persist
-	for (uint32_t i = sd.ShadowLightCount; i < 4u; ++i) {
+
+	dd.TotalCount      = gameSlot;
+	dd.FrustumCount    = frustumIdx;
+	dd.ParaboloidCount = paraboloidIdx;
+
+	// Null out unused frustum depth map slots (t23-t26).
+	for (uint32_t i = frustumIdx; i < 4u; ++i) {
 		ID3D11ShaderResourceView* nullSRV = nullptr;
-		context->PSSetShaderResources(22 + i, 1, &nullSRV);
+		context->PSSetShaderResources(23 + i, 1, &nullSRV);
+	}
+	// Null out unused paraboloid depth map slots (t28-t31 front, t32-t35 back).
+	for (uint32_t i = paraboloidIdx; i < 4u; ++i) {
+		ID3D11ShaderResourceView* nullSRV = nullptr;
+		context->PSSetShaderResources(28 + i, 1, &nullSRV);
+		context->PSSetShaderResources(32 + i, 1, &nullSRV);
 	}
 
-	// Upload to GPU and bind structured buffer to PS slot t19
-	D3D11_MAPPED_SUBRESOURCE mapped{};
-	DX::ThrowIfFailed(context->Map(perShadow->resource.get(), 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped));
-	memcpy(mapped.pData, &sd, sizeof(ShadowData));
-	context->Unmap(perShadow->resource.get(), 0);
+	// Upload directional shadow data → bind structured buffer to t19.
+	{
+		D3D11_MAPPED_SUBRESOURCE mapped{};
+		DX::ThrowIfFailed(context->Map(perDirectionalShadow->resource.get(), 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped));
+		memcpy(mapped.pData, &dd, sizeof(DirectionalShadowData));
+		context->Unmap(perDirectionalShadow->resource.get(), 0);
+		ID3D11ShaderResourceView* srv = perDirectionalShadow->srv.get();
+		context->PSSetShaderResources(19, 1, &srv);
+	}
 
-	ID3D11ShaderResourceView* srv = perShadow->srv.get();
-	context->PSSetShaderResources(19, 1, &srv);
+	// Upload frustum shadow data → bind structured buffer to t22.
+	{
+		D3D11_MAPPED_SUBRESOURCE mapped{};
+		DX::ThrowIfFailed(context->Map(perFrustumShadows->resource.get(), 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped));
+		memcpy(mapped.pData, fd, 4 * sizeof(FrustumShadowData));
+		context->Unmap(perFrustumShadows->resource.get(), 0);
+		ID3D11ShaderResourceView* srv = perFrustumShadows->srv.get();
+		context->PSSetShaderResources(22, 1, &srv);
+	}
+
+	// Upload paraboloid shadow data → bind structured buffer to t27.
+	{
+		D3D11_MAPPED_SUBRESOURCE mapped{};
+		DX::ThrowIfFailed(context->Map(perParaboloidShadows->resource.get(), 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped));
+		memcpy(mapped.pData, pd, 4 * sizeof(ParaboloidShadowData));
+		context->Unmap(perParaboloidShadows->resource.get(), 0);
+		ID3D11ShaderResourceView* srv = perParaboloidShadows->srv.get();
+		context->PSSetShaderResources(27, 1, &srv);
+	}
 }
 
 void Deferred::ClearShaderCache()

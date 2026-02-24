@@ -20,21 +20,42 @@ public:
 		return &singleton;
 	}
 
-	// Shadow data uploaded every frame to the structured buffer at t19.
-	// Layout must match VolumetricShadows::ShadowData in VolumetricShadows.hlsli exactly.
-	struct alignas(16) ShadowData
+	// Directional shadow data — uploaded every frame to t19.
+	// Must match VolumetricShadows::DirectionalShadowData in VolumetricShadows.hlsli exactly.
+	struct alignas(16) DirectionalShadowData
 	{
-		DirectX::XMFLOAT2 EndSplitDistances;    // cascade end depths:   x = cascade 0, y = cascade 1
-		DirectX::XMFLOAT2 StartSplitDistances;  // cascade start depths: x = cascade 0, y = cascade 1
-		DirectX::XMFLOAT4X4 ShadowMapProj[2];   // directional cascade world-to-shadow projections
+		DirectX::XMFLOAT2   EndSplitDistances;    // cascade end depths:   x = cascade 0, y = cascade 1
+		DirectX::XMFLOAT2   StartSplitDistances;  // cascade start depths: x = cascade 0, y = cascade 1
+		DirectX::XMFLOAT4X4 ShadowMapProj[2];     // world-to-shadow projections for each cascade
 
-		// Non-directional shadow casters (spot / paraboloid), up to 4
-		DirectX::XMFLOAT4X4 ShadowLightProj[4];  // world-to-shadow projections (UV scale/bias baked in)
-		uint32_t ShadowLightTypes[4];             // per-light: 0 = frustum/spot, 1 = paraboloid
-		uint32_t ShadowLightCount;                // number of active shadow lights (0..4)
-		float    _pad[3];
+		// Dispatch table: maps game shadow-light slot (0..TotalCount-1) to typed buffer index.
+		uint32_t LightIsParaboloid[4];  // per game slot: 0 = frustum/spot, 1 = paraboloid
+		uint32_t TypedIndex[4];         // per game slot: index within typed buffer
+		uint32_t TotalCount;            // total active shadow lights (0..4)
+		uint32_t FrustumCount;          // elements written to FrustumShadows (t22)
+		uint32_t ParaboloidCount;       // elements written to ParaboloidShadows (t27)
+		float    _pad;
 	};
-	STATIC_ASSERT_ALIGNAS_16(ShadowData);
+	STATIC_ASSERT_ALIGNAS_16(DirectionalShadowData);
+
+	// Frustum (spot) shadow light data — uploaded every frame to t22, one element per active light.
+	// Must match FrustumShadowData in ShadowSampling.hlsli exactly.
+	struct FrustumShadowData
+	{
+		DirectX::XMFLOAT4X4 Proj;  // world-to-shadow projection
+	};
+	STATIC_ASSERT_ALIGNAS_16(FrustumShadowData);
+
+	// Paraboloid (point) shadow light data — uploaded every frame to t27, one element per active light.
+	// Must match ParaboloidShadowData in ShadowSampling.hlsli exactly.
+	struct ParaboloidShadowData
+	{
+		DirectX::XMFLOAT4X4 FrontProj;  // world-to-shadow for front hemisphere
+		DirectX::XMFLOAT4X4 BackProj;   // world-to-shadow for back hemisphere
+		uint32_t             HasBack;    // 1 if back hemisphere depth map is bound
+		float                _pad[3];
+	};
+	STATIC_ASSERT_ALIGNAS_16(ParaboloidShadowData);
 
 	void SetupResources();
 	void ReflectionsPrepasses();
@@ -49,8 +70,14 @@ public:
 
 	void ClearShaderCache();
 
-	// Reads shadow parameters from game structs and uploads to perShadow (t19).
-	// Also binds directional cascade depth SRVs (t20/t21) and shadow-light depth SRVs (t22-t25).
+	// Reads shadow parameters from game structs and uploads to three typed structured buffers.
+	//   t19 — DirectionalShadowData  (cascade splits + projections + dispatch table)
+	//   t20/t21 — directional cascade raw depth maps
+	//   t22 — FrustumShadows (spot light projection matrices, max 4 elements)
+	//   t23-t26 — frustum light depth maps
+	//   t27 — ParaboloidShadows (dual-hemisphere projection matrices, max 4 elements)
+	//   t28-t31 — paraboloid front hemisphere depth maps
+	//   t32-t35 — paraboloid back hemisphere depth maps
 	// Called during EarlyPrepasses immediately after shadow maps have been rendered.
 	void CopyShadowData();
 
@@ -65,8 +92,12 @@ public:
 	ID3D11ComputeShader* mainCompositeCS = nullptr;
 	ID3D11ComputeShader* mainCompositeInteriorCS = nullptr;
 
-	// Structured buffer holding shadow data for all shadow types (t19 in pixel/compute shaders)
-	Buffer* perShadow = nullptr;
+	// Directional shadow structured buffer (t19): cascade data + dispatch table.
+	Buffer* perDirectionalShadow = nullptr;
+	// Frustum (spot) shadow light structured buffer (t22): projection matrices, up to 4 elements.
+	Buffer* perFrustumShadows = nullptr;
+	// Paraboloid shadow light structured buffer (t27): dual-hemisphere projections, up to 4 elements.
+	Buffer* perParaboloidShadows = nullptr;
 
 	bool deferredPass = false;
 
