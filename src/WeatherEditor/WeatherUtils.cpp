@@ -298,10 +298,15 @@ namespace TOD
 
 	float GetCurrentGameTime()
 	{
+		// Prefer calendar (ground truth), which the Weather Editor slider writes to.
+		auto calendar = globals::game::calendar ? globals::game::calendar : RE::Calendar::GetSingleton();
+		if (calendar && calendar->gameHour)
+			return std::clamp(calendar->gameHour->value, 0.0f, 24.0f);
+
 		auto sky = globals::game::sky;
-		if (sky) {
+		if (sky)
 			return std::clamp(sky->currentGameHour, 0.0f, 24.0f);
-		}
+
 		return 12.0f;  // Default to noon
 	}
 

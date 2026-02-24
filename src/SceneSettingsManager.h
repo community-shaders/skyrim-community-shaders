@@ -183,6 +183,9 @@ public:
 	void GetTimeOfDayFactors(float outFactors[static_cast<int>(TimeOfDayPeriod::Count)]);
 	TimeOfDayPeriod GetDominantPeriod();
 
+	/// Returns the period whose hour range contains the current game hour.
+	static TimeOfDayPeriod GetCurrentPeriod();
+
 	// --- Feature Metadata ---
 
 	/// Get loaded feature short names filtered to only interior-relevant features

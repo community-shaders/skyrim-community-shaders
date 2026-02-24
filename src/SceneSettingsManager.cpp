@@ -77,16 +77,10 @@ void SceneSettingsManager::GetTimeOfDayFactors(float outFactors[kPeriodCount])
 		float h = (end > 24.0f && hour < start) ? hour + 24.0f : hour;
 
 		if (h >= start && h < end) {
-			// Inside this period — check if we're in a transition zone
-			float distFromStart = h - start;
+			// Inside this period — check if we're in the blend-out zone near the end.
 			float distFromEnd = end - h;
 
-			if (distFromStart < kTransitionHours) {
-				// Blending in from previous period
-				float t = distFromStart / kTransitionHours;
-				outFactors[i] = t;
-				outFactors[(i + kPeriodCount - 1) % kPeriodCount] = 1.0f - t;
-			} else if (distFromEnd < kTransitionHours) {
+			if (distFromEnd < kTransitionHours) {
 				// Blending out to next period
 				float t = distFromEnd / kTransitionHours;
 				outFactors[i] = t;
@@ -112,6 +106,19 @@ SceneSettingsManager::TimeOfDayPeriod SceneSettingsManager::GetDominantPeriod()
 		if (factors[i] > factors[best])
 			best = i;
 	return static_cast<TimeOfDayPeriod>(best);
+}
+
+SceneSettingsManager::TimeOfDayPeriod SceneSettingsManager::GetCurrentPeriod()
+{
+	float hour = GetCurrentGameHour();
+	for (int i = 0; i < kPeriodCount; ++i) {
+		float start = kPeriodHours[i][0];
+		float end = kPeriodHours[i][1];
+		float h = (end > 24.0f && hour < start) ? hour + 24.0f : hour;
+		if (h >= start && h < end)
+			return static_cast<TimeOfDayPeriod>(i);
+	}
+	return TimeOfDayPeriod::Day;
 }
 
 // --- Feature Metadata (static helpers, zero coupling) ---

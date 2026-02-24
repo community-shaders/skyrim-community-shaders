@@ -74,10 +74,10 @@ namespace TimeOfDayPanel
 		ImGui::TextDisabled("(Exterior Only)");
 
 		// Show current period indicator
-		auto dominant = manager->GetDominantPeriod();
+		auto currentPeriod = SceneSettingsManager::GetCurrentPeriod();
 		ImGui::SameLine();
 		ImGui::TextColored(theme.StatusPalette.InfoColor, "[%s %.1fh]",
-			SceneSettingsManager::GetPeriodName(dominant),
+			SceneSettingsManager::GetPeriodName(currentPeriod),
 			SceneSettingsManager::GetCurrentGameHour());
 
 		ImGui::Separator();
