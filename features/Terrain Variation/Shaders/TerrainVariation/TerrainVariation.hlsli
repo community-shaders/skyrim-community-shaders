@@ -16,7 +16,6 @@ static const float HEIGHT_INFLUENCE = 0.3;        // How much height affects ble
 static const float2x2 SKEW_MATRIX = float2x2(1.0, 0.0, -0.57735027, 1.15470054);
 static const float WORLD_SCALE = 332.54;
 // Blending constants
-static const float3 DEFAULT_WEIGHTS = float3(0.33, 0.33, 0.34);
 static const float3 LUMINANCE_WEIGHTS = float3(0.2126, 0.7152, 0.0722);
 // Hash constants
 static const float2 HASH_MULTIPLIER = float2(1271.5151, 3337.8237);
@@ -25,6 +24,8 @@ static const float MIP_LEVEL_INCREASE = 0.5;      // Additional mip level increa
 static const float MIP_BUMP_SCALE = 1.41421356;   // exp2(MIP_LEVEL_INCREASE) = gradient scale for +0.5 mip bump
 static const float DISTANCE_SAMPLE_REDUCTION = 2.0; // Mip level where we reduce to 2 samples
 static const float FAR_DISTANCE_THRESHOLD = 4.0;  // Mip level where we use single sample with higher mip level
+static const float CONTRAST_FACTOR = HEIGHT_BLEND_CONTRAST * (1.0 - HEIGHT_INFLUENCE);  // = 8.4
+static const float MAX_HEIGHT_FACTOR = 1.0 + HEIGHT_INFLUENCE;                           // = 1.3
 // Importance sampling thresholds (height blend operator culling per Jason Booth technique)
 static const float IMPORTANCE_RATIO = 6.0;            // Dominance ratio for importance culling — higher = more conservative
 static const float MEDIUM_IMPORTANCE_THRESHOLD = 0.12; // Raw barycentric threshold for medium-distance 2→1 sample culling
@@ -37,18 +38,6 @@ struct StochasticOffsets
 	float2 offset3;
 	float3 weights;
 };
-
-// --------------------- FUNCTION DECLARATIONS --------------------- //
-float4 StochasticSampleLOD(float rnd, Texture2D tex, SamplerState samp, float2 uv, StochasticOffsets offsetsLOD);
-float4 StochasticEffect(Texture2D tex, SamplerState samp, float2 uv, StochasticOffsets offsets, float mipLevel);
-float4 StochasticEffectParallax(Texture2D tex, SamplerState samp, float2 uv, float mipLevel, StochasticOffsets offsets);
-// Unified terrain sampling: stochastic when enabled, standard SampleBias fallback
-inline float4 SampleTerrain(bool enabled, Texture2D tex, SamplerState samp, float2 uv, StochasticOffsets offsets, float mipLevel)
-{
-	[branch] if (enabled)
-		return StochasticEffect(tex, samp, uv, offsets, mipLevel);
-	return tex.SampleBias(samp, uv, SharedData::MipBias);
-}
 
 // --------------------- COMPUTE FUNCTIONS --------------------- //
 
@@ -207,8 +196,7 @@ inline float4 StochasticEffect(Texture2D tex, SamplerState samp, float2 uv, Stoc
 	}
 
 	// Close distance: importance-sampled height blend
-	float contrastFactor = HEIGHT_BLEND_CONTRAST * (1.0 - HEIGHT_INFLUENCE);
-	float3 barWeights = pow(saturate(offsets.weights), contrastFactor);
+	float3 barWeights = pow(saturate(offsets.weights), CONTRAST_FACTOR);
 
 	// Primary sample — always fetched (highest barycentric weight after sorting)
 	float4 sample1 = tex.SampleGrad(samp, uv + offsets.offset1, uvDx, uvDy);
@@ -216,8 +204,8 @@ inline float4 StochasticEffect(Texture2D tex, SamplerState samp, float2 uv, Stoc
 	float effW1 = barWeights.x * (1.0 + HEIGHT_INFLUENCE * h1);
 
 	// Upper bounds on what remaining samples could contribute assuming max height
-	float maxEffW2 = barWeights.y * (1.0 + HEIGHT_INFLUENCE);
-	float maxEffW3 = barWeights.z * (1.0 + HEIGHT_INFLUENCE);
+	float maxEffW2 = barWeights.y * MAX_HEIGHT_FACTOR;
+	float maxEffW3 = barWeights.z * MAX_HEIGHT_FACTOR;
 
 	// 1-sample early-out: primary dominates both secondary and tertiary
 	if (effW1 > (maxEffW2 + maxEffW3) * IMPORTANCE_RATIO)
@@ -252,24 +240,25 @@ inline float4 StochasticEffect(Texture2D tex, SamplerState samp, float2 uv, Stoc
 inline float4 StochasticEffectParallax(Texture2D tex, SamplerState samp, float2 uv, float mipLevel, StochasticOffsets offsets)
 {
 	if (!SharedData::terrainVariationSettings.enableTilingFix)
-	{
 		return tex.SampleLevel(samp, uv, mipLevel);
-	}
 
-	float adjustedMipLevel = mipLevel;
-	if (mipLevel > 1.0)
-	{
-		adjustedMipLevel = mipLevel + (MIP_LEVEL_INCREASE * 0.5);
-	}
+	float adjustedMipLevel = mipLevel + MIP_LEVEL_INCREASE * 0.5 * (mipLevel > 1.0);
 
 	float4 sample1 = tex.SampleLevel(samp, uv + offsets.offset1, adjustedMipLevel);
 	float4 sample2 = tex.SampleLevel(samp, uv + offsets.offset2, adjustedMipLevel);
 	float4 sample3 = tex.SampleLevel(samp, uv + offsets.offset3, adjustedMipLevel);
 
-	float3 weights = NormalizeWeights(saturate(offsets.weights));
-	return sample1 * weights.x + sample2 * weights.y + sample3 * weights.z;
+	// Barycentric weights already sum to 1.0, skip normalization
+	return sample1 * offsets.weights.x + sample2 * offsets.weights.y + sample3 * offsets.weights.z;
 }
 #pragma warning(pop)
 
+// Unified terrain sampling: stochastic when enabled, standard SampleBias fallback
+inline float4 SampleTerrain(bool enabled, Texture2D tex, SamplerState samp, float2 uv, StochasticOffsets offsets, float mipLevel)
+{
+	[branch] if (enabled)
+		return StochasticEffect(tex, samp, uv, offsets, mipLevel);
+	return tex.SampleBias(samp, uv, SharedData::MipBias);
+}
 
 #endif  // TERRAIN_VARIATION_HLSLI
