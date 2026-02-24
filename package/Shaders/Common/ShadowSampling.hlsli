@@ -110,7 +110,7 @@ namespace ShadowSampling
 #endif
 	}
 
-	float GetLightingShadow(float3 worldPosition, uint eyeIndex, out float detailedShadow)
+	float GetLightingShadow(float3 worldPosition, uint eyeIndex, float2x2 rotationMatrix, out float detailedShadow)
 	{
 		DirectionalShadowData shadow = DirectionalShadows[0];
 
@@ -122,7 +122,6 @@ namespace ShadowSampling
 
 		float fade = saturate(shadowMapDepth / shadow.EndSplitDistances.y);
 		float cascadeSelect = saturate((shadowMapDepth - shadow.StartSplitDistances.y) / (shadow.EndSplitDistances.x - shadow.StartSplitDistances.y));
-		uint primaryCascade = uint(cascadeSelect);
 
 		const uint sampleCount = 16;
 		const uint rcpSampleCount = 1.0 / float(sampleCount);
@@ -133,7 +132,7 @@ namespace ShadowSampling
 		for (uint i = 0; i < sampleCount; i++) {
 			float2 sampleOffset = mul(Random::PoissonSampleOffsets16[i], rotationMatrix);
 			float2 sampleUV = positionLS.xy + sampleOffset * shadow.ShadowSampleParam.z;
-			visibility += DirectionalShadowCascades.SampleCmpLevelZero(samp, float3(sampleUV, primaryCascade), positionLS.z);
+			visibility += DirectionalShadowCascades.SampleCmpLevelZero(samp, float3(sampleUV, cascadeSelect), positionLS.z);
 		}
 
 		float fadeFactor = 1.0 - pow(fade, 8);
