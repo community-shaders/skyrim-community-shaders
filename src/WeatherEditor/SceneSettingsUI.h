@@ -1,5 +1,7 @@
 #pragma once
 
+#include <functional>
+
 #include "SceneSettingsManager.h"
 #include "Utils/UI.h"
 
@@ -11,11 +13,10 @@ namespace SceneSettingsUI
 	using EntrySource = SceneSettingsManager::EntrySource;
 	using Period = SceneSettingsManager::TimeOfDayPeriod;
 
-	/// Persistent state for a single "Add Setting" dropdown row.
+	/// Persistent state for the feature/setting tree selector.
 	struct AddSettingState
 	{
 		int selectedFeatureIdx = -1;
-		int selectedSettingIdx = -1;
 		std::vector<std::string> cachedFeatureNames;
 		std::vector<std::string> cachedSettingKeys;
 	};
@@ -33,12 +34,13 @@ namespace SceneSettingsUI
 			deleteAllUser("Delete All User Settings?", userMsg, "Delete All") {}
 	};
 
-	/// Draw the feature/setting dropdown + Add button.
+	/// Draw the feature tree selector.  Selecting a setting auto-adds it.
 	/// @param type         Scene type being edited.
 	/// @param state        Persistent dropdown state (selection indices, caches).
 	/// @param period       For TimeOfDay entries, which period to add to. Count = none.
+	/// @param labelPrefix  Optional label drawn before the dropdowns (e.g. period name).
 	void DrawAddSettingUI(SceneType type, AddSettingState& state,
-		Period period = Period::Count);
+		Period period = Period::Count, const char* labelPrefix = nullptr);
 
 	/// Draw a single setting entry row (label, value editor, pause toggle, delete).
 	/// @param type         Scene type being edited.
@@ -50,18 +52,23 @@ namespace SceneSettingsUI
 	/// Process all three delete-confirmation popups relative to the given type.
 	void DrawPopups(SceneType type, PopupState& popups);
 
-	/// Draw overwrite + user entry sections with section headers.
+	/// Draw a section header with Pause All / Delete All inline buttons.
+	/// @param label        Section label (e.g. "Overwrite Files", "User Settings").
+	/// @param color        Header text color.
+	/// @param idSuffix     ImGui ID suffix for button uniqueness (e.g. "##ow").
+	/// @param allPaused    Whether all entries in this section are currently paused.
+	/// @param onTogglePause Callback when Pause/Unpause All is clicked.
+	/// @param onDeleteAll   Callback when Delete All is clicked.
+	void DrawSectionHeader(const char* label, const ImVec4& color, const char* idSuffix,
+		bool allPaused, std::function<void()> onTogglePause, std::function<void()> onDeleteAll);
+
+	/// Draw overwrite + user entry sections with section-header-inline controls,
+	/// each section's entries grouped by feature name.
 	/// @param type         Scene type being edited.
 	/// @param popups       Shared popup state.
-	/// @param overwriteIndices  Entry indices for overwrite entries.
-	/// @param userIndices       Entry indices for user entries.
-	void DrawEntrySections(SceneType type, PopupState& popups,
-		const std::vector<size_t>& overwriteIndices,
-		const std::vector<size_t>& userIndices);
+	void DrawEntrySections(SceneType type, PopupState& popups);
 
 	/// Draw a standalone scene-settings panel that dispatches to this panel's Draw().
-	/// Handles ImGui::EndChild / ImGui::EndTable / ImGui::End early-return pattern
-	/// used by EditorWindow for full-panel categories.
 	/// @param category     Category name to check (e.g. "Interior Only").
 	/// @param selected     Currently selected category string.
 	/// @param drawFn       Drawing function to call if category matches.

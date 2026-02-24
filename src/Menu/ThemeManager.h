@@ -190,12 +190,20 @@ public:
 		static constexpr float AUTOHIDE_EXPAND_DELAY = 0.25f;           // Delay before expanding panel (seconds)
 		static constexpr float AUTOHIDE_PANEL_WIDTH_RATIO = 0.2f;       // Ratio of window width for panel (2/10)
 
-		// Scene settings panel constants
-		static constexpr float SCENE_VALUE_INPUT_WIDTH = 240.0f;       // Width for float/int value inputs
-		static constexpr float SCENE_DELETE_BUTTON_WIDTH = 40.0f;      // Width for delete (X) buttons
-		static constexpr float SCENE_FEATURE_DROPDOWN_RATIO = 0.45f;   // Feature dropdown width ratio
-		static constexpr float SCENE_SETTING_DROPDOWN_RATIO = 0.6f;    // Setting dropdown width ratio
+		// Scene settings panel constants (multipliers of ImGui::GetFontSize())
+		static constexpr float SCENE_VALUE_INPUT_EM = 5.7f;            // Width for float/int value inputs
+		static constexpr float SCENE_DELETE_BUTTON_EM = 1.0f;          // Width for delete (X) buttons
+		static constexpr float SCENE_FEATURE_DROPDOWN_RATIO = 0.5f;    // Feature dropdown width ratio
 		static constexpr float SCENE_VALUE_LABEL_OFFSET_RATIO = 0.5f;  // Value label right-alignment ratio
+		static constexpr float SCENE_TOD_PARAM_COL_EM = 6.0f;          // Parameter column width (TOD table)
+		static constexpr float SCENE_TOD_PERIOD_COL_EM = 4.3f;         // Per-period column width (TOD table)
+		static constexpr float SCENE_TOD_INACTIVE_ALPHA = 0.5f;        // Alpha for inactive TOD periods
+		static constexpr float SCENE_ENTRY_INDENT_EM = 0.4f;           // Indent for setting entries under feature headers
+		static constexpr float SCENE_TOD_FEATURE_TEXT_SCALE = 0.85f;   // Smaller text scale for feature names in TOD table
+		static constexpr float SCENE_TOD_LABEL_EM = 2.6f;              // Fixed width for period labels in add-setting rows
+
+		/// Resolve a font-relative multiplier to pixels using current font size.
+		static float Em(float multiplier) { return multiplier * ImGui::GetFontSize(); }
 
 		// Combo search input constants
 		static constexpr float COMBO_SEARCH_ICON_SIZE = 16.0f;     // Icon size for search inside combos

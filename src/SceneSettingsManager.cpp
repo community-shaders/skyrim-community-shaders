@@ -168,6 +168,12 @@ std::vector<std::string> SceneSettingsManager::GetExteriorRelevantFeatureNames()
 	return FilterFeatureNames(whitelist);
 }
 
+std::string SceneSettingsManager::GetFeatureDisplayName(const std::string& featureShortName)
+{
+	auto* feature = Feature::FindFeatureByShortName(featureShortName);
+	return feature ? feature->GetName() : featureShortName;
+}
+
 std::vector<std::string> SceneSettingsManager::GetFeatureSettingKeys(const std::string& featureShortName)
 {
 	std::vector<std::string> keys;

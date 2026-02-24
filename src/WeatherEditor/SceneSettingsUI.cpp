@@ -1,6 +1,7 @@
 #include "SceneSettingsUI.h"
 
 #include <cmath>
+#include <map>
 
 #include "../Globals.h"
 #include "../Menu.h"
@@ -28,31 +29,37 @@ namespace SceneSettingsUI
 
 	// --- Shared Drawing ---
 
-	void DrawAddSettingUI(SceneType type, AddSettingState& state, Period period)
+	void DrawAddSettingUI(SceneType type, AddSettingState& state, Period period, const char* labelPrefix)
 	{
 		auto* manager = SceneSettingsManager::GetSingleton();
 
 		ImGui::Spacing();
 
+		// Optional inline label (e.g. period name) with fixed width for alignment
+		if (labelPrefix) {
+			ImGui::Text("%s", labelPrefix);
+			ImGui::SameLine(C::Em(C::SCENE_TOD_LABEL_EM));
+		}
+
 		// Feature dropdown
 		if (state.cachedFeatureNames.empty())
 			state.cachedFeatureNames = GetFeatureNamesForType(type);
 
-		const char* featurePreview = (state.selectedFeatureIdx >= 0 &&
-										 state.selectedFeatureIdx < static_cast<int>(state.cachedFeatureNames.size())) ?
-		                                 state.cachedFeatureNames[state.selectedFeatureIdx].c_str() :
-		                                 "Select Feature...";
+		auto displayName = (state.selectedFeatureIdx >= 0 &&
+		                       state.selectedFeatureIdx < static_cast<int>(state.cachedFeatureNames.size()))
+		                     ? SceneSettingsManager::GetFeatureDisplayName(state.cachedFeatureNames[state.selectedFeatureIdx])
+		                     : std::string("Select Feature...");
+		const char* featurePreview = displayName.c_str();
 
 		ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x * C::SCENE_FEATURE_DROPDOWN_RATIO);
 		if (ImGui::BeginCombo("##FeatureSelect", featurePreview)) {
 			for (int i = 0; i < static_cast<int>(state.cachedFeatureNames.size()); ++i) {
-				bool selected = (i == state.selectedFeatureIdx);
-				if (ImGui::Selectable(state.cachedFeatureNames[i].c_str(), selected)) {
+				auto itemLabel = SceneSettingsManager::GetFeatureDisplayName(state.cachedFeatureNames[i]);
+				if (ImGui::Selectable(itemLabel.c_str(), i == state.selectedFeatureIdx)) {
 					state.selectedFeatureIdx = i;
-					state.selectedSettingIdx = -1;
 					state.cachedSettingKeys = SceneSettingsManager::GetFeatureSettingKeys(state.cachedFeatureNames[i]);
 				}
-				if (selected)
+				if (i == state.selectedFeatureIdx)
 					ImGui::SetItemDefaultFocus();
 			}
 			ImGui::EndCombo();
@@ -60,19 +67,12 @@ namespace SceneSettingsUI
 
 		ImGui::SameLine();
 
-		// Setting dropdown
+		// Setting dropdown — selecting an entry auto-adds it
 		{
 			auto _ = Util::DisableGuard(state.selectedFeatureIdx < 0);
-
-			const char* settingPreview = (state.selectedSettingIdx >= 0 &&
-											 state.selectedSettingIdx < static_cast<int>(state.cachedSettingKeys.size())) ?
-			                                 state.cachedSettingKeys[state.selectedSettingIdx].c_str() :
-			                                 "Select Setting...";
-
-			ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x * C::SCENE_SETTING_DROPDOWN_RATIO);
-			if (ImGui::BeginCombo("##SettingSelect", settingPreview)) {
+			ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x);
+			if (ImGui::BeginCombo("##SettingSelect", "Select Setting...")) {
 				for (int i = 0; i < static_cast<int>(state.cachedSettingKeys.size()); ++i) {
-					bool selected = (i == state.selectedSettingIdx);
 					bool alreadyAdded = state.selectedFeatureIdx >= 0 &&
 					                    IsAlreadyAdded(type, state.cachedFeatureNames[state.selectedFeatureIdx],
 											state.cachedSettingKeys[i], period);
@@ -80,30 +80,13 @@ namespace SceneSettingsUI
 						ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetStyle().Colors[ImGuiCol_TextDisabled]);
 						ImGui::Selectable(state.cachedSettingKeys[i].c_str(), false, ImGuiSelectableFlags_Disabled);
 						ImGui::PopStyleColor();
-					} else {
-						if (ImGui::Selectable(state.cachedSettingKeys[i].c_str(), selected))
-							state.selectedSettingIdx = i;
+					} else if (ImGui::Selectable(state.cachedSettingKeys[i].c_str(), false)) {
+						auto& featureName = state.cachedFeatureNames[state.selectedFeatureIdx];
+						auto currentValue = SceneSettingsManager::GetFeatureSettingValue(featureName, state.cachedSettingKeys[i]);
+						manager->AddSetting(type, featureName, state.cachedSettingKeys[i], currentValue, period);
 					}
-					if (selected)
-						ImGui::SetItemDefaultFocus();
 				}
 				ImGui::EndCombo();
-			}
-		}
-
-		ImGui::SameLine();
-
-		// Add button
-		bool canAdd = state.selectedFeatureIdx >= 0 && state.selectedSettingIdx >= 0;
-		{
-			auto _ = Util::DisableGuard(!canAdd);
-			if (ImGui::Button("Add")) {
-				auto& featureName = state.cachedFeatureNames[state.selectedFeatureIdx];
-				auto& settingKey = state.cachedSettingKeys[state.selectedSettingIdx];
-				auto currentValue = SceneSettingsManager::GetFeatureSettingValue(featureName, settingKey);
-				manager->AddSetting(type, featureName, settingKey, currentValue, period);
-				state.selectedSettingIdx = -1;
-				return;
 			}
 		}
 	}
@@ -119,9 +102,9 @@ namespace SceneSettingsUI
 
 		ImGui::PushID(static_cast<int>(index));
 
-		// Feature.Setting label
+		// Setting key label (no feature prefix — grouped by feature already)
 		float availWidth = ImGui::GetContentRegionAvail().x;
-		ImGui::Text("%s.%s", entry.featureShortName.c_str(), entry.settingKey.c_str());
+		ImGui::Text("%s", entry.settingKey.c_str());
 
 		// Value editor (right-aligned)
 		ImGui::SameLine(availWidth * C::SCENE_VALUE_LABEL_OFFSET_RATIO);
@@ -129,8 +112,6 @@ namespace SceneSettingsUI
 		bool isOverwrite = entry.source == EntrySource::Overwrite;
 		auto settingType = SceneSettingsManager::DetectSettingType(entry.value);
 
-		// Overwrites are always read-only; for non-TOD types, user entries overridden
-		// by an active overwrite are also disabled.
 		bool readOnly = isOverwrite ||
 		                (type != SceneType::TimeOfDay &&
 							manager->HasActiveOverwrite(type, entry.featureShortName, entry.settingKey));
@@ -142,12 +123,8 @@ namespace SceneSettingsUI
 		case SceneSettingsManager::SettingType::Boolean:
 			{
 				bool val = entry.value.is_boolean() ? entry.value.get<bool>() : (entry.value.get<int>() != 0);
-				if (ImGui::Checkbox("##val", &val)) {
-					if (entry.value.is_boolean())
-						manager->UpdateEntryValue(type, index, val);
-					else
-						manager->UpdateEntryValue(type, index, val ? 1 : 0);
-				}
+				if (ImGui::Checkbox("##val", &val))
+					manager->UpdateEntryValue(type, index, entry.value.is_boolean() ? json(val) : json(val ? 1 : 0));
 			}
 			break;
 		case SceneSettingsManager::SettingType::Float:
@@ -155,11 +132,10 @@ namespace SceneSettingsUI
 				float val = entry.value.is_number() ? entry.value.get<float>() : 0.0f;
 				if (!std::isfinite(val))
 					val = 0.0f;
-				ImGui::SetNextItemWidth(C::SCENE_VALUE_INPUT_WIDTH);
-				if (ImGui::InputFloat("##val", &val, 0.01f, 0.1f, "%.3f")) {
+				ImGui::SetNextItemWidth(C::Em(C::SCENE_VALUE_INPUT_EM));
+				if (ImGui::InputFloat("##val", &val, 0.0f, 0.0f, "%.3f"))
 					if (std::isfinite(val))
 						manager->UpdateEntryValue(type, index, val, true);
-				}
 				if (ImGui::IsItemDeactivatedAfterEdit())
 					manager->SaveUserSettings(type);
 			}
@@ -167,8 +143,8 @@ namespace SceneSettingsUI
 		case SceneSettingsManager::SettingType::Integer:
 			{
 				int val = entry.value.get<int>();
-				ImGui::SetNextItemWidth(C::SCENE_VALUE_INPUT_WIDTH);
-				if (ImGui::InputInt("##val", &val))
+				ImGui::SetNextItemWidth(C::Em(C::SCENE_VALUE_INPUT_EM));
+				if (ImGui::InputInt("##val", &val, 0, 0))
 					manager->UpdateEntryValue(type, index, val, true);
 				if (ImGui::IsItemDeactivatedAfterEdit())
 					manager->SaveUserSettings(type);
@@ -194,7 +170,7 @@ namespace SceneSettingsUI
 		ImGui::SameLine();
 		{
 			auto styledButton = Util::ErrorButtonStyle();
-			if (ImGui::Button("X", ImVec2(C::SCENE_DELETE_BUTTON_WIDTH, 0))) {
+			if (ImGui::Button("X", ImVec2(C::Em(C::SCENE_DELETE_BUTTON_EM), 0))) {
 				if (isOverwrite) {
 					popups.pendingDeleteIndex = index;
 					popups.deleteSingleOverwrite.message = std::format(
@@ -232,31 +208,78 @@ namespace SceneSettingsUI
 			manager->DeleteAllUserSettings(type);
 	}
 
-	void DrawEntrySections(SceneType type, PopupState& popups,
-		const std::vector<size_t>& overwriteIndices,
-		const std::vector<size_t>& userIndices)
+	/// Draw entries grouped by feature with collapsible tree nodes.
+	static void DrawGroupedEntries(SceneType type, PopupState& popups,
+		const std::vector<size_t>& indices)
 	{
+		auto* manager = SceneSettingsManager::GetSingleton();
+		const auto& entries = manager->GetEntries(type);
+
+		std::map<std::string, std::vector<size_t>> grouped;
+		for (auto i : indices)
+			if (i < entries.size())
+				grouped[entries[i].featureShortName].push_back(i);
+
+		// Sort settings within each feature group alphabetically by key
+		for (auto& [_, featureIndices] : grouped)
+			std::sort(featureIndices.begin(), featureIndices.end(), [&entries](size_t a, size_t b) {
+				return entries[a].settingKey < entries[b].settingKey;
+			});
+
+		for (const auto& [featureName, featureIndices] : grouped) {
+			auto label = SceneSettingsManager::GetFeatureDisplayName(featureName) + ":";
+			if (ImGui::TreeNodeEx(label.c_str(), ImGuiTreeNodeFlags_DefaultOpen)) {
+				ImGui::Indent(C::Em(C::SCENE_ENTRY_INDENT_EM));
+				for (auto i : featureIndices)
+					if (i < entries.size())
+						DrawSettingEntry(type, i, popups);
+				ImGui::Unindent(C::Em(C::SCENE_ENTRY_INDENT_EM));
+				ImGui::TreePop();
+			}
+		}
+	}
+
+	void DrawSectionHeader(const char* label, const ImVec4& color, const char* idSuffix,
+		bool allPaused, std::function<void()> onTogglePause, std::function<void()> onDeleteAll)
+	{
+		ImGui::Spacing();
+		ImGui::TextColored(color, "%s", label);
+		ImGui::SameLine();
+		auto pauseLabel = std::format("{}{}" , allPaused ? "Unpause All" : "Pause All", idSuffix);
+		if (ImGui::SmallButton(pauseLabel.c_str()))
+			onTogglePause();
+		ImGui::SameLine();
+		auto deleteLabel = std::format("Delete All{}", idSuffix);
+		if (ImGui::SmallButton(deleteLabel.c_str()))
+			onDeleteAll();
+		ImGui::Separator();
+	}
+
+	void DrawEntrySections(SceneType type, PopupState& popups)
+	{
+		auto* manager = SceneSettingsManager::GetSingleton();
+		const auto& entries = manager->GetEntries(type);
 		auto& theme = globals::menu->GetSettings().Theme;
 
+		// Split indices by source
+		std::vector<size_t> overwriteIndices, userIndices;
+		for (size_t i = 0; i < entries.size(); ++i)
+			(entries[i].source == EntrySource::Overwrite ? overwriteIndices : userIndices).push_back(i);
+
 		if (!overwriteIndices.empty()) {
-			ImGui::Spacing();
-			ImGui::TextColored(theme.StatusPalette.InfoColor, "Overwrite Files");
-			ImGui::Separator();
-			for (auto i : overwriteIndices)
-				DrawSettingEntry(type, i, popups);
+			DrawSectionHeader("Overwrite Files", theme.StatusPalette.InfoColor, "##ow",
+				manager->AreAllOverwritesPaused(type),
+				[&] { manager->SetAllOverwritesPaused(type, !manager->AreAllOverwritesPaused(type)); },
+				[&] { popups.deleteAllOverwrites.Request(); });
+			DrawGroupedEntries(type, popups, overwriteIndices);
 		}
 
 		if (!userIndices.empty()) {
-			if (!overwriteIndices.empty()) {
-				ImGui::Spacing();
-				ImGui::TextColored(theme.FeatureHeading.ColorDefault, "User Settings");
-				ImGui::Separator();
-			}
-			for (auto i : userIndices) {
-				if (i >= SceneSettingsManager::GetSingleton()->GetEntries(type).size())
-					break;
-				DrawSettingEntry(type, i, popups);
-			}
+			DrawSectionHeader("User Settings", theme.FeatureHeading.ColorDefault, "##usr",
+				manager->AreAllUserPaused(type),
+				[&] { manager->SetAllUserPaused(type, !manager->AreAllUserPaused(type)); },
+				[&] { popups.deleteAllUser.Request(); });
+			DrawGroupedEntries(type, popups, userIndices);
 		}
 	}
 
@@ -264,7 +287,12 @@ namespace SceneSettingsUI
 	{
 		if (selected != category)
 			return false;
-		drawFn();
+		// Wrap in a scrollable child since the parent disables scrolling (kStickyHeaderFlags)
+		if (ImGui::BeginChild("##SceneSettingsScroll", ImVec2(0, 0), ImGuiChildFlags_None)) {
+			drawFn();
+			ImGui::Spacing();  // Ensure bottom table border is visible when scrolled to end
+		}
+		ImGui::EndChild();
 		ImGui::EndChild();
 		ImGui::EndTable();
 		ImGui::End();

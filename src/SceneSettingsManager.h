@@ -194,6 +194,9 @@ public:
 	/// Get loaded feature short names filtered to exterior/TOD-relevant features
 	static std::vector<std::string> GetExteriorRelevantFeatureNames();
 
+	/// Get the display name for a feature (e.g. "Screen Space GI" from "ScreenSpaceGI")
+	static std::string GetFeatureDisplayName(const std::string& featureShortName);
+
 	/// Get setting keys for a feature by JSON round-tripping its current settings
 	static std::vector<std::string> GetFeatureSettingKeys(const std::string& featureShortName);
 
