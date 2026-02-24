@@ -86,18 +86,20 @@ namespace VolumetricShadows
 	{
 		ShadowData sD = SharedShadowData[0];
 
+		startPosition += FrameBuffer::CameraPosAdjust[0].xyz;
+		endPosition += FrameBuffer::CameraPosAdjust[0].xyz;
+
 		float3 midPosition = (startPosition + endPosition) * 0.5;
-		float shadowMapDepth = GetShadowDepth(midPosition, eyeIndex);
+		float shadowMapDepth = length(midPosition - FrameBuffer::CameraPosAdjust[0].xyz);
 
 		// Early out beyond cascade range
-		if (shadowMapDepth >= sD.EndSplitDistances.w) {
+		if (shadowMapDepth >= sD.EndSplitDistances.y) {
 			surfaceShadow = 1.0;
 			return 1.0;
 		}
 
 		// Reduce over distance
-		float distSq = dot(midPosition, midPosition);
-		float fade = saturate(distSq / sD.ShadowLightParam.z);
+		float fade = saturate(shadowMapDepth / sD.EndSplitDistances.y);
 
 		uint sampleCount = max(1, ceil(float(baseSampleCount) * (1.0 - fade)));
 		float rcpSampleCount = rcp(sampleCount);
@@ -111,8 +113,8 @@ namespace VolumetricShadows
 
 		// Transform ray to light space for primary cascade
 		float4x4 shadowProj = sD.ShadowMapProj[eyeIndex][primaryCascade];
-		float3 startLS = mul(transpose(shadowProj), float4(startPosition, 1)).xyz;
-		float3 endLS = mul(transpose(shadowProj), float4(endPosition, 1)).xyz;
+		float3 startLS = mul(shadowProj, float4(startPosition, 1)).xyz;
+		float3 endLS = mul(shadowProj, float4(endPosition, 1)).xyz;
 		startLS.xy = saturate(startLS.xy);
 		endLS.xy = saturate(endLS.xy);
 
@@ -127,8 +129,8 @@ namespace VolumetricShadows
 			uint secondaryCascade = 1 - primaryCascade;
 
 			shadowProj = sD.ShadowMapProj[eyeIndex][secondaryCascade];
-			startLS = mul(transpose(shadowProj), float4(startPosition, 1)).xyz;
-			endLS = mul(transpose(shadowProj), float4(endPosition, 1)).xyz;
+			startLS = mul(shadowProj, float4(startPosition, 1)).xyz;
+			endLS = mul(shadowProj, float4(endPosition, 1)).xyz;
 			startLS.xy = saturate(startLS.xy);
 			endLS.xy = saturate(endLS.xy);
 
@@ -139,7 +141,7 @@ namespace VolumetricShadows
 		}
 
 		// Apply distance fade
-		float fadeFactor = 1.0 - pow(fade, 8);
+		float fadeFactor = 1.0 - pow(fade * fade, 8);
 		surfaceShadow = lerp(1.0, surfaceShadow, fadeFactor);
 		return lerp(1.0, shadow, fadeFactor);
 	}

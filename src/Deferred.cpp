@@ -154,12 +154,13 @@ void Deferred::SetupResources()
 		};
 	}
 
-	// Shadow data structured buffer (t19): one element (directional) for now
+	// Shadow data structured buffer (t19): CPU-written each frame, read-only on GPU.
+	// One element holds the directional (sun) shadow data uploaded from BSShadowDirectionalLight.
 	{
 		D3D11_BUFFER_DESC sbDesc{};
-		sbDesc.Usage = D3D11_USAGE_DEFAULT;
-		sbDesc.CPUAccessFlags = 0;
-		sbDesc.BindFlags = D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_UNORDERED_ACCESS;
+		sbDesc.Usage = D3D11_USAGE_DYNAMIC;
+		sbDesc.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
+		sbDesc.BindFlags = D3D11_BIND_SHADER_RESOURCE;
 		sbDesc.MiscFlags = D3D11_RESOURCE_MISC_BUFFER_STRUCTURED;
 		sbDesc.StructureByteStride = sizeof(ShadowData);
 		sbDesc.ByteWidth = sizeof(ShadowData);
@@ -170,19 +171,9 @@ void Deferred::SetupResources()
 		srvDesc.Buffer.FirstElement = 0;
 		srvDesc.Buffer.NumElements = 1;
 
-		D3D11_UNORDERED_ACCESS_VIEW_DESC uavDesc{};
-		uavDesc.Format = DXGI_FORMAT_UNKNOWN;
-		uavDesc.ViewDimension = D3D11_UAV_DIMENSION_BUFFER;
-		uavDesc.Buffer.FirstElement = 0;
-		uavDesc.Buffer.NumElements = 1;
-		uavDesc.Buffer.Flags = 0;
-
 		perShadow = new Buffer(sbDesc);
 		perShadow->CreateSRV(srvDesc);
-		perShadow->CreateUAV(uavDesc);
 	}
-
-	copyShadowCS = static_cast<ID3D11ComputeShader*>(Util::CompileShader(L"Data\\Shaders\\CopyShadowDataCS.hlsl", {}, "cs_5_0"));
 }
 
 void Deferred::ReflectionsPrepasses()
@@ -226,6 +217,9 @@ void Deferred::EarlyPrepasses()
 	context->OMSetRenderTargets(0, nullptr, nullptr);  // Unbind all bound render targets
 
 	globals::game::stateUpdateFlags->set(RE::BSGraphics::ShaderFlags::DIRTY_RENDERTARGET);  // Run OMSetRenderTargets again
+
+	// Shadow maps have just been rendered — upload BSShadowDirectionalLight data to t19.
+	CopyShadowData();
 
 	Feature::ForEachLoadedFeature("EarlyPrepass", [](Feature* feature) {
 		feature->EarlyPrepass();
@@ -587,37 +581,66 @@ void Deferred::CopyShadowData()
 	ZoneScoped;
 	TracyD3D11Zone(globals::state->tracyCtx, "CopyShadowData");
 
-	auto context = globals::d3d::context;
+	auto* shadowSceneNode = globals::game::smState->shadowSceneNode[0];
+	if (!shadowSceneNode)
+		return;
 
-	ID3D11UnorderedAccessView* uavs[1]{ perShadow->uav.get() };
-	context->CSSetUnorderedAccessViews(0, 1, uavs, nullptr);
+	auto* sunShadowLight = shadowSceneNode->GetRuntimeData().sunShadowDirLight;
+	if (!sunShadowLight)
+		return;
 
-	ID3D11Buffer* buffers[3];
-	context->PSGetConstantBuffers(0, 3, buffers);
+	ShadowData sd{};
 
-	// Release the buffer at slot 1 before overwriting with b12 (PerFrame2 camera data)
-	if (buffers[1])
-		buffers[1]->Release();
+	// Cascade split distances
+	auto& dirData = sunShadowLight->GetShadowDirectionalLightRuntimeData();
+	sd.StartSplitDistances = { dirData.startSplitDistances[0],
+		dirData.startSplitDistances[1],
+		dirData.startSplitDistances[2], 4.0f };
+	sd.EndSplitDistances = { dirData.endSplitDistances[0],
+		dirData.endSplitDistances[1],
+		dirData.endSplitDistances[2], 3.0f };
 
-	context->PSGetConstantBuffers(12, 1, buffers + 1);
+	// Copy a row-major 4×4 affine matrix into a 4×3 slot (drops the w column).
+	// Focus shadow matrices are orthographic, so the 4th column is always [0,0,0,1].
+	auto copy4x4to4x3 = [](DirectX::XMFLOAT4X3& dst, const DirectX::XMFLOAT4X4& src) {
+		dst._11 = src._11; dst._12 = src._12; dst._13 = src._13;
+		dst._21 = src._21; dst._22 = src._22; dst._23 = src._23;
+		dst._31 = src._31; dst._32 = src._32; dst._33 = src._33;
+		dst._41 = src._41; dst._42 = src._42; dst._43 = src._43;
+	};
 
-	context->CSSetConstantBuffers(0, 3, buffers);
-	context->CSSetShader(copyShadowCS, nullptr, 0);
-	context->Dispatch(1, 1, 1);
-
-	uavs[0] = nullptr;
-	context->CSSetUnorderedAccessViews(0, 1, uavs, nullptr);
-
-	// Release all COM references acquired from PSGetConstantBuffers
-	for (auto& buf : buffers) {
-		if (buf)
-			buf->Release();
-		buf = nullptr;
+	// Shadow map projection matrices — branch on runtime to use correctly-typed descriptors.
+	// Both ShadowmapDescriptor (SE/AE) and ShadowmapDescriptorVR have lightTransform at offset 0x00.
+	if (REL::Module::IsVR()) {
+		auto& lightData = sunShadowLight->GetVRRuntimeData();
+		uint32_t cascadeCount = std::min((uint32_t)lightData.shadowmapDescriptors.size(), 3u);
+		for (uint32_t i = 0; i < cascadeCount; ++i)
+			memcpy(&sd.ShadowMapProj[0][i], &lightData.shadowmapDescriptors[i].lightTransform,
+				sizeof(DirectX::XMFLOAT4X4));
+		for (uint32_t i = 0; i < 4; ++i)
+			copy4x4to4x3(sd.FocusShadowMapProj[i],
+				reinterpret_cast<const DirectX::XMFLOAT4X4&>(lightData.focusShadowmapDescriptors[i].lightTransform));
+	} else {
+		auto& lightData = sunShadowLight->GetRuntimeData();
+		uint32_t cascadeCount = std::min((uint32_t)lightData.shadowmapDescriptors.size(), 3u);
+		for (uint32_t i = 0; i < cascadeCount; ++i)
+			memcpy(&sd.ShadowMapProj[0][i], &lightData.shadowmapDescriptors[i].lightTransform,
+				sizeof(DirectX::XMFLOAT4X4));
+		for (uint32_t i = 0; i < 4; ++i)
+			copy4x4to4x3(sd.FocusShadowMapProj[i],
+				reinterpret_cast<const DirectX::XMFLOAT4X4&>(lightData.focusShadowmapDescriptors[i].lightTransform));
 	}
-	context->CSSetConstantBuffers(0, 3, buffers);
-	context->CSSetShader(nullptr, nullptr, 0);
 
-	// Bind the shadow data structured buffer to PS slot 19 for all shaders that consume it
+	// Skyrim renders shadow maps mono even in VR — copy eye 0 matrices to eye 1.
+	memcpy(sd.ShadowMapProj[1], sd.ShadowMapProj[0], sizeof(sd.ShadowMapProj[0]));
+
+	// Upload to GPU and bind to PS slot 19
+	auto context = globals::d3d::context;
+	D3D11_MAPPED_SUBRESOURCE mapped{};
+	DX::ThrowIfFailed(context->Map(perShadow->resource.get(), 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped));
+	memcpy(mapped.pData, &sd, sizeof(ShadowData));
+	context->Unmap(perShadow->resource.get(), 0);
+
 	ID3D11ShaderResourceView* srv = perShadow->srv.get();
 	context->PSSetShaderResources(19, 1, &srv);
 }
@@ -632,11 +655,6 @@ void Deferred::ClearShaderCache()
 		mainCompositeInteriorCS->Release();
 		mainCompositeInteriorCS = nullptr;
 	}
-	if (copyShadowCS) {
-		copyShadowCS->Release();
-		copyShadowCS = nullptr;
-	}
-	copyShadowCS = static_cast<ID3D11ComputeShader*>(Util::CompileShader(L"Data\\Shaders\\CopyShadowDataCS.hlsl", {}, "cs_5_0"));
 }
 
 ID3D11ComputeShader* Deferred::GetComputeMainComposite()
