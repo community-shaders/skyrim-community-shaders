@@ -4,6 +4,7 @@
 #include "InteriorOnlyPanel.h"
 #include "Menu.h"
 #include "PaletteWindow.h"
+#include "SceneSettingsUI.h"
 #include "State.h"
 #include "TimeOfDayPanel.h"
 #include "Utils/UI.h"
@@ -222,21 +223,9 @@ void EditorWindow::ShowObjectsWindow()
 
 		// Interior Only / Time of Day categories have their own panels
 		if (ImGui::BeginChild("##ObjectsContent", { 0, 0 }, ImGuiChildFlags_Border, kStickyHeaderFlags)) {
-			// Interior Only category has its own panel
-			if (m_selectedCategory == "Interior Only") {
-				InteriorOnlyPanel::Draw();
-				ImGui::EndChild();
-				ImGui::EndTable();
-				ImGui::End();
+			if (SceneSettingsUI::DrawCategoryPanel("Interior Only", m_selectedCategory, InteriorOnlyPanel::Draw) ||
+				SceneSettingsUI::DrawCategoryPanel("Time of Day", m_selectedCategory, TimeOfDayPanel::Draw))
 				return;
-			}
-			if (m_selectedCategory == "Time of Day") {
-				TimeOfDayPanel::Draw();
-				ImGui::EndChild();
-				ImGui::EndTable();
-				ImGui::End();
-				return;
-			}
 
 			// Display current active weather
 			auto sky = globals::game::sky;

@@ -1,10 +1,8 @@
 #pragma once
 
-#include "Utils/UI.h"
-
 /// UI panel for managing Time of Day scene settings within the Weather Editor.
-/// Shows 6 period tabs (Dawn, Sunrise, Day, Sunset, Dusk, Night) with
-/// add/pause/delete controls under each.
+/// Shows period tabs (Dawn, Sunrise, Day, Sunset, Dusk, Night) with
+/// add/pause/delete controls under each.  Delegates to shared SceneSettingsUI utilities.
 namespace TimeOfDayPanel
 {
 	/// Draw the full Time of Day settings panel

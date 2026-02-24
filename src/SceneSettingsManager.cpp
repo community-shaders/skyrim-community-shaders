@@ -38,9 +38,8 @@ std::filesystem::path SceneSettingsManager::GetOverwritesPath(SceneType type)
 
 const char* SceneSettingsManager::GetPeriodName(TimeOfDayPeriod period)
 {
-	static const char* names[] = { "Dawn", "Sunrise", "Day", "Sunset", "Dusk", "Night" };
 	int idx = static_cast<int>(period);
-	return (idx >= 0 && idx < kPeriodCount) ? names[idx] : "Unknown";
+	return (idx >= 0 && idx < kPeriodCount) ? kPeriodNames[idx] : "Unknown";
 }
 
 SceneSettingsManager::TimeOfDayPeriod SceneSettingsManager::GetPeriodFromName(const std::string& name)
@@ -756,11 +755,6 @@ void SceneSettingsManager::ApplyTimeOfDayBlended()
 	auto dominant = static_cast<TimeOfDayPeriod>(bestIdx);
 
 	// Group active entries by feature, using pointers to avoid JSON copies
-	struct PeriodRef
-	{
-		int periodIdx;
-		const json* value;
-	};
 	std::map<std::string, std::map<std::string, std::vector<PeriodRef>>> featureSettings;
 	for (const auto& entry : GetEntries(SceneType::TimeOfDay)) {
 		if (!IsEntryActive(entry) || entry.period == TimeOfDayPeriod::Count)
@@ -770,21 +764,14 @@ void SceneSettingsManager::ApplyTimeOfDayBlended()
 	}
 
 	for (auto& [shortName, settingsMap] : featureSettings) {
-		// Compute blended values and check which keys actually changed
 		std::vector<std::pair<std::string, json>> dirtyKeys;
 
 		for (auto& [key, periodRefs] : settingsMap) {
-			// Get baseline value (saved once at activation, never changes)
-			const json* baseline = nullptr;
-			auto baseIt = savedTimeOfDayBaseline.find(shortName);
-			if (baseIt != savedTimeOfDayBaseline.end() && baseIt->second.contains(key))
-				baseline = &baseIt->second[key];
+			const json* baseline = FindTODBaseline(shortName, key);
 			if (!baseline)
 				continue;
 
-			auto type = DetectSettingType(*baseline);
-
-			if (type == SettingType::Float) {
+			if (DetectSettingType(*baseline) == SettingType::Float) {
 				if (!baseline->is_number()) {
 					logger::warn("SceneSettingsManager: TOD baseline for '{}' key '{}' is not numeric — skipping", shortName, key);
 					continue;
@@ -792,25 +779,8 @@ void SceneSettingsManager::ApplyTimeOfDayBlended()
 				float baseVal = baseline->get<float>();
 				if (!std::isfinite(baseVal))
 					baseVal = 0.0f;
-				float result = 0.0f;
-				float coveredFactor = 0.0f;
 
-				for (auto& pr : periodRefs) {
-					float f = factors[pr.periodIdx];
-					if (f > 0.0f) {
-						if (!pr.value->is_number()) {
-							logger::warn("SceneSettingsManager: TOD period value for '{}' key '{}' is not numeric — treating as 0", shortName, key);
-							coveredFactor += f;
-							continue;
-						}
-						float periodVal = pr.value->get<float>();
-						if (!std::isfinite(periodVal))
-							periodVal = 0.0f;
-						result += f * periodVal;
-						coveredFactor += f;
-					}
-				}
-				result += (1.0f - coveredFactor) * baseVal;
+				float result = BlendFloatForPeriods(baseVal, periodRefs, factors, shortName, key);
 
 				// Epsilon comparison — skip if the float barely changed.
 				// Use find() first to avoid default-inserting 0.0f, which would
@@ -822,20 +792,7 @@ void SceneSettingsManager::ApplyTimeOfDayBlended()
 				featureFloats[key] = result;
 				dirtyKeys.emplace_back(key, result);
 			} else {
-				// Non-float: snap to dominant period's value, or baseline if none.
-				// Validate that the period value type matches the baseline to avoid
-				// passing a mismatched type into feature->LoadSettings().
-				json blendedValue = *baseline;
-				for (auto& pr : periodRefs) {
-					if (static_cast<TimeOfDayPeriod>(pr.periodIdx) == dominant) {
-						if (pr.value->type() == baseline->type()) {
-							blendedValue = *pr.value;
-						} else {
-							logger::warn("SceneSettingsManager: TOD period value for '{}' key '{}' has type '{}' but baseline expects '{}' — using baseline",
-								shortName, key, pr.value->type_name(), baseline->type_name());
-						}
-					}
-				}
+				json blendedValue = SnapNonFloatToDominant(*baseline, periodRefs, dominant, shortName, key);
 
 				// Exact comparison for non-float (bools, ints snap — rarely change)
 				auto& cachedOther = lastAppliedTODOther[shortName][key];
@@ -866,6 +823,56 @@ void SceneSettingsManager::ApplyTimeOfDayBlended()
 	}
 
 	lastDominantPeriod = dominant;
+}
+
+const json* SceneSettingsManager::FindTODBaseline(const std::string& shortName, const std::string& key) const
+{
+	auto baseIt = savedTimeOfDayBaseline.find(shortName);
+	if (baseIt != savedTimeOfDayBaseline.end() && baseIt->second.contains(key))
+		return &baseIt->second[key];
+	return nullptr;
+}
+
+float SceneSettingsManager::BlendFloatForPeriods(float baseVal, const std::vector<PeriodRef>& periodRefs,
+	const float* factors, const std::string& shortName, const std::string& key) const
+{
+	float result = 0.0f;
+	float coveredFactor = 0.0f;
+
+	for (auto& pr : periodRefs) {
+		float f = factors[pr.periodIdx];
+		if (f > 0.0f) {
+			if (!pr.value->is_number()) {
+				logger::warn("SceneSettingsManager: TOD period value for '{}' key '{}' is not numeric — treating as 0", shortName, key);
+				coveredFactor += f;
+				continue;
+			}
+			float periodVal = pr.value->get<float>();
+			if (!std::isfinite(periodVal))
+				periodVal = 0.0f;
+			result += f * periodVal;
+			coveredFactor += f;
+		}
+	}
+
+	return result + (1.0f - coveredFactor) * baseVal;
+}
+
+json SceneSettingsManager::SnapNonFloatToDominant(const json& baseline, const std::vector<PeriodRef>& periodRefs,
+	TimeOfDayPeriod dominant, const std::string& shortName, const std::string& key) const
+{
+	json blendedValue = baseline;
+	for (auto& pr : periodRefs) {
+		if (static_cast<TimeOfDayPeriod>(pr.periodIdx) == dominant) {
+			if (pr.value->type() == baseline.type()) {
+				blendedValue = *pr.value;
+			} else {
+				logger::warn("SceneSettingsManager: TOD period value for '{}' key '{}' has type '{}' but baseline expects '{}' — using baseline",
+					shortName, key, pr.value->type_name(), baseline.type_name());
+			}
+		}
+	}
+	return blendedValue;
 }
 
 // --- Persistence ---

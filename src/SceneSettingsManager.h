@@ -1,5 +1,6 @@
 #pragma once
 
+#include <array>
 #include <filesystem>
 #include <map>
 #include <nlohmann/json.hpp>
@@ -47,8 +48,16 @@ public:
 		Count
 	};
 
+	/// Number of time-of-day periods (avoids repeated static_cast).
+	static constexpr int kPeriodCount = static_cast<int>(TimeOfDayPeriod::Count);
+
+	/// Display names for each period — must match TimeOfDayPeriod order.
+	static constexpr std::array<const char*, kPeriodCount> kPeriodNames = {
+		"Dawn", "Sunrise", "Day", "Sunset", "Dusk", "Night"
+	};
+
 	/// Hour boundaries for each period [start, end).  Night wraps around midnight (21–28 i.e. 21–4).
-	static constexpr float kPeriodHours[6][2] = {
+	static constexpr float kPeriodHours[kPeriodCount][2] = {
 		{ 4.0f, 6.0f },    // Dawn
 		{ 6.0f, 8.0f },    // Sunrise
 		{ 8.0f, 17.0f },   // Day
@@ -59,9 +68,6 @@ public:
 
 	/// Transition blend zone in hours at each period boundary.
 	static constexpr float kTransitionHours = 0.5f;
-
-	/// Number of time-of-day periods (avoids repeated static_cast).
-	static constexpr int kPeriodCount = static_cast<int>(TimeOfDayPeriod::Count);
 
 	// --- Event Handler ---
 
@@ -272,6 +278,30 @@ private:
 	void SaveTimeOfDayBaseline();
 	void RevertTimeOfDayBaseline();
 	void ApplyTimeOfDayBlended();
+
+	// --- Time of Day blending helpers ---
+
+	/// Lightweight ref to a TOD period entry, used during blending
+	/// to avoid copying JSON values from the entry storage.
+	struct PeriodRef
+	{
+		int periodIdx;
+		const json* value;
+	};
+
+	/// Look up the saved baseline value for a feature+key pair.
+	/// @return Pointer to the baseline JSON, or nullptr if not found.
+	const json* FindTODBaseline(const std::string& shortName, const std::string& key) const;
+
+	/// Compute a weighted blend of float values across active TOD periods.
+	/// Uncovered periods fall back to @p baseVal so the sum is always complete.
+	float BlendFloatForPeriods(float baseVal, const std::vector<PeriodRef>& periodRefs,
+		const float* factors, const std::string& shortName, const std::string& key) const;
+
+	/// Select the non-float value from the dominant period with type validation.
+	/// Falls back to @p baseline if no matching period or on type mismatch.
+	json SnapNonFloatToDominant(const json& baseline, const std::vector<PeriodRef>& periodRefs,
+		TimeOfDayPeriod dominant, const std::string& shortName, const std::string& key) const;
 
 	// --- Overwrite discovery helper ---
 	void DiscoverOverwritesInDir(SceneType type, const std::filesystem::path& dir,
