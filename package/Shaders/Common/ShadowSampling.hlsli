@@ -127,7 +127,7 @@ namespace ShadowSampling
 		DirectionalShadowData shadow = DirectionalShadows[0];
 
 		float shadowMapDepth = length(worldPosition);
-		
+
 		if (shadowMapDepth >= shadow.EndSplitDistances.y) {
 			detailedShadow = 1.0;
 			return 1.0;
@@ -169,54 +169,38 @@ namespace ShadowSampling
 
 	float GetFrustumShadow(ShadowData shadow, uint shadowIndex, float3 worldPosition, float2x2 rotationMatrix)
 	{
-		const uint  sampleCount    = 16;
-		const float rcpSampleCount = 1.0 / float(sampleCount);
-
 		float3 positionLS = mul(shadow.ShadowProj, float4(worldPosition, 1)).xyz;
 
-		float visibility = 0;
-		for (uint i = 0; i < sampleCount; i++) {
-			float2 sampleOffset = mul(Random::PoissonSampleOffsets16[i], rotationMatrix);
-			float2 sampleUV = positionLS.xy + sampleOffset * PCFKernelShadowLight;
-			visibility += ShadowMaps.SampleCmpLevelZero(ShadowSamplerCmp, float3(sampleUV, float(shadowIndex)), positionLS.z);
-		}
-
-		return visibility * rcpSampleCount;
+		float2 sampleUV = positionLS.xy;
+		float visibility = ShadowMaps.SampleCmpLevelZero(ShadowSamplerCmp, float3(sampleUV, float(shadowIndex)), positionLS.z);
+	
+		return visibility;
 	}
 
 	float GetParaboloidShadow(ShadowData shadow, uint shadowIndex, float3 worldPosition)
 	{
-		const uint  sampleCount    = 16;
-		const float rcpSampleCount = 1.0 / float(sampleCount);
+		float3 positionLS = mul(shadow.ShadowProj, float4(worldPosition, 1)).xyz;
 
-		// Per-pixel seed for stochastic world-space jitter.
-		float3 seed3 = frac(worldPosition * float3(0.01234, 0.05678, 0.09123));
+		bool lowerHalf = positionLS.z < 0;
+		float3 normalizedPositionLS = normalize(positionLS);
 
-		float visibility = 0;
-		for (uint i = 0; i < sampleCount; i++) {
-			float3 jitter = (Random::R3Modified(float(i + SharedData::FrameCount * sampleCount), seed3) * 2.0 - 1.0) * PCFParaboloidRadius;
+		float compareValue = saturate(length(positionLS) / float(shadow.ShadowLightParam.x));
 
-			float3 positionLS = mul(shadow.ShadowProj, float4(worldPosition + jitter, 1)).xyz;
+		float3 positionOffset = lowerHalf ? float3(0, 0, -1) : float3(0, 0, 1);
+		float3 lightDirection = normalize(normalizedPositionLS + positionOffset);
+		float2 sampleUV = lightDirection.xy / lightDirection.z * 0.5 + 0.5;
+		sampleUV.y = lowerHalf ? 1.0 - 0.5 * sampleUV.y : 0.5 * sampleUV.y;
 
-			bool lowerHalf = positionLS.z < 0;
-			float3 normalizedPositionLS = normalize(positionLS);
-
-			float compareValue = saturate(length(positionLS) / float(shadow.ShadowLightParam.x));
-
-			float3 positionOffset = lowerHalf ? float3(0, 0, -1) : float3(0, 0, 1);
-			float3 lightDirection = normalize(normalizedPositionLS + positionOffset);
-			float2 sampleUV = lightDirection.xy / lightDirection.z * 0.5 + 0.5;
-			sampleUV.y = lowerHalf ? 1.0 - 0.5 * sampleUV.y : 0.5 * sampleUV.y;
-
-			visibility += ShadowMaps.SampleCmpLevelZero(ShadowSamplerCmp, float3(sampleUV, float(shadowIndex)), compareValue);
-		}
-
-		return visibility * rcpSampleCount;
+		float visibility = ShadowMaps.SampleCmpLevelZero(ShadowSamplerCmp, float3(sampleUV, float(shadowIndex)), compareValue);
+	
+		return visibility;
 	}
 
 	float GetShadowLightShadow(uint shadowIndex, float3 worldPosition, float2x2 rotationMatrix)
 	{
 		ShadowData shadow = Shadows[shadowIndex];
+
+		worldPosition.xyz += FrameBuffer::CameraPosAdjust[0].xyz;
 
 		[branch]
 		if (shadow.ShadowType == 0)
