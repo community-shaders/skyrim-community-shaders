@@ -65,9 +65,15 @@ void ScreenSpaceGI::DrawSettings()
 			recompileFlag |= ImGui::Checkbox("Indirect Lighting (IL)", &settings.EnableGI);
 		}
 		ImGui::TableNextColumn();
-		ImGui::Checkbox("Vanilla SSAO", &settings.EnableVanillaSSAO);
-		if (auto _tt = Util::HoverTooltipWrapper()) {
-			ImGui::Text("Enable Skyrim's built-in SSAO. Usually disabled when using SSGI to avoid double-darkening.");
+		{
+			auto vanillaSSAOGuard = Util::DisableGuard(globals::game::isVR);
+			ImGui::Checkbox("Vanilla SSAO", &settings.EnableVanillaSSAO);
+			if (auto _tt = Util::HoverTooltipWrapper()) {
+				if (globals::game::isVR)
+					ImGui::Text("Vanilla SSAO is not supported in VR.");
+				else
+					ImGui::Text("Enable Skyrim's built-in SSAO. Usually disabled when using SSGI to avoid double-darkening.");
+			}
 		}
 		ImGui::TableNextColumn();
 		if (showAdvanced) {
@@ -86,16 +92,19 @@ void ScreenSpaceGI::DrawSettings()
 		auto qualityGuard = Util::DisableGuard(!settings.Enabled);
 
 		if (ImGui::BeginTable("Presets", 5)) {
+			auto select = [](auto flatVal, auto vrVal) { return globals::game::isVR ? vrVal : flatVal; };
+
 			ImGui::TableNextColumn();
 			if (ImGui::Button("AO only", { -1, 0 })) {
-				settings.NumSlices = 1;
-				settings.NumSteps = 6;
+				settings.NumSlices = select(1, 3);
+				settings.NumSteps = select(6, 8);
 				settings.EnableBlur = true;
 				settings.EnableGI = false;
 				recompileFlag = true;
 			}
-			if (auto _tt = Util::HoverTooltipWrapper())
-				ImGui::Text("1 Slice, 6 Steps, blur enabled, no GI\n");
+			if (auto _tt = Util::HoverTooltipWrapper()) {
+				ImGui::Text(select("1 Slice, 6 Steps, blur enabled, no GI\n", "3 Slices, 8 Steps, blur enabled, no GI\n"));
+			}
 
 			ImGui::TableNextColumn();
 			if (ImGui::Button("Low", { -1, 0 })) {
@@ -551,7 +560,7 @@ void ScreenSpaceGI::SetupResources()
 void ScreenSpaceGI::ClearShaderCache()
 {
 	static const std::vector<winrt::com_ptr<ID3D11ComputeShader>*> shaderPtrs = {
-		&prefilterDepthsCompute, &prefilterRadianceCompute, &radianceDisoccCompute, &giCompute, &blurCompute, &upsampleCompute
+		&prefilterDepthsCompute, &prefilterRadianceCompute, &radianceDisoccCompute, &giCompute, &blurCompute, &stereoSyncCompute, &upsampleCompute
 	};
 
 	for (auto shader : shaderPtrs)
@@ -576,6 +585,7 @@ void ScreenSpaceGI::CompileComputeShaders()
 			{ &radianceDisoccCompute, "radianceDisocc.cs.hlsl", {} },
 			{ &giCompute, "gi.cs.hlsl", {} },
 			{ &blurCompute, "blur.cs.hlsl", {} },
+			{ &stereoSyncCompute, "stereoSync.cs.hlsl", { { "FRAMEBUFFER", "" } } },
 			{ &upsampleCompute, "upsample.cs.hlsl", {} },
 		};
 	for (auto& info : shaderInfos) {
@@ -727,6 +737,8 @@ void ScreenSpaceGI::DrawSSGI()
 	//////////////////////////////////////////////////////
 
 	context->CSSetConstantBuffers(1, 1, &cb);
+	auto* sharedDataBuf = globals::state->sharedDataCB->CB();
+	context->CSSetConstantBuffers(5, 1, &sharedDataBuf);
 	context->CSSetSamplers(0, (uint)samplers.size(), samplers.data());
 
 	// prefilter depths
@@ -855,6 +867,36 @@ void ScreenSpaceGI::DrawSSGI()
 		inputGITexIdx = !inputGITexIdx;
 		lastFrameGITexIdx = inputGITexIdx;
 		lastFrameAccumTexIdx = !lastFrameAccumTexIdx;
+	}
+
+	// VR stereo sync: bilateral blend of SSGI buffers between eyes
+	// Shi, Billeter, Eisemann 2022, "Stereo-consistent screen-space ambient occlusion"
+	if (REL::Module::IsVR() && stereoSyncCompute) {
+		TracyD3D11Zone(globals::state->tracyCtx, "SSGI - Stereo Sync");
+
+		if (globals::state->frameAnnotations)
+			globals::state->BeginPerfEvent("SSGI - Stereo Sync");
+
+		resetViews();
+		srvs.at(0) = texWorkingDepth->srv.get();
+		srvs.at(1) = texAo[inputAoTexIdx]->srv.get();
+		srvs.at(2) = texIlY[inputGITexIdx]->srv.get();
+		srvs.at(3) = texIlCoCg[inputGITexIdx]->srv.get();
+
+		uavs.at(0) = texAo[!inputAoTexIdx]->uav.get();
+		uavs.at(1) = texIlY[!inputGITexIdx]->uav.get();
+		uavs.at(2) = texIlCoCg[!inputGITexIdx]->uav.get();
+
+		context->CSSetShaderResources(0, (uint)srvs.size(), srvs.data());
+		context->CSSetUnorderedAccessViews(0, (uint)uavs.size(), uavs.data(), nullptr);
+		context->CSSetShader(stereoSyncCompute.get(), nullptr, 0);
+		context->Dispatch((internalRes[0] + 7u) >> 3, (internalRes[1] + 7u) >> 3, 1);
+
+		inputAoTexIdx = !inputAoTexIdx;
+		inputGITexIdx = !inputGITexIdx;
+
+		if (globals::state->frameAnnotations)
+			globals::state->EndPerfEvent();
 	}
 
 	// upsample

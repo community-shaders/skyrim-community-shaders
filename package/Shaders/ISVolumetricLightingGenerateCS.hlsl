@@ -20,14 +20,6 @@ RWTexture3D<float> DensityRW : register(u0);
 #	include "Common/Framebuffer.hlsli"
 #	include "Common/SharedData.hlsli"
 
-#	if defined(TERRAIN_SHADOWS)
-#		include "TerrainShadows/TerrainShadows.hlsli"
-#	endif
-
-#	if defined(CLOUD_SHADOWS)
-#		include "CloudShadows/CloudShadows.hlsli"
-#	endif
-
 #	include "Common/ShadowSampling.hlsli"
 
 cbuffer PerTechnique : register(b0)

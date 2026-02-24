@@ -56,7 +56,7 @@ void WeatherWidget::DrawWidget()
 {
 	WeatherUtils::SetCurrentWidget(this);
 	ImGui::SetNextWindowSizeConstraints(ImVec2(600, 0), ImVec2(FLT_MAX, FLT_MAX));
-	if (ImGui::Begin(GetEditorID().c_str(), &open, ImGuiWindowFlags_NoSavedSettings)) {
+	if (ImGui::Begin(GetEditorID().c_str(), &open, ImGuiWindowFlags_NoSavedSettings | kStickyHeaderFlags)) {
 		// Draw header with search and all buttons
 		DrawWidgetHeader("##WeatherSearch", false, true, true, weather);
 
@@ -167,7 +167,9 @@ void WeatherWidget::DrawWidget()
 				}
 			}
 		}
-	}  // Tab bar for organizing settings
+	}
+
+	// Tab bar for organizing settings
 	if (ImGui::BeginTabBar("WeatherSettingsTabs", ImGuiTabBarFlags_None)) {
 		// Use activeTabOverride to auto-navigate to specific tab
 		ImGuiTabItemFlags basicFlags = (activeTabOverride == "Basic") ? ImGuiTabItemFlags_SetSelected : 0;
@@ -182,6 +184,7 @@ void WeatherWidget::DrawWidget()
 		}
 
 		if (ImGui::BeginTabItem("Basic", nullptr, basicFlags)) {
+			BeginScrollableContent("##BasicScroll");
 			DrawProperties("Sun", { { "Sun Damage", INT8_SLIDER } });
 			DrawProperties("Wind", { { "Wind Speed", UINT8_SLIDER }, { "Wind Direction", INT8_SLIDER }, { "Wind Direction Range", INT8_SLIDER } });
 			DrawProperties("Precipitation", { { "Precipitation Begin Fade In", INT8_SLIDER }, { "Precipitation End Fade Out", INT8_SLIDER } });
@@ -189,34 +192,46 @@ void WeatherWidget::DrawWidget()
 											{ "Thunder Lightning Frequency", INT8_SLIDER }, { "Lightning Color", COLOR3_PICKER } });
 			DrawProperties("Visual Effects", { { "Visual Effect Begin", INT8_SLIDER }, { "Visual Effect End", INT8_SLIDER } });
 			DrawProperties("Weather Transition", { { "Trans Delta", INT8_SLIDER } });
+			EndScrollableContent();
 			ImGui::EndTabItem();
 		}
 		if (ImGui::BeginTabItem("Lighting (DALC)", nullptr, dalcFlags)) {
+			BeginScrollableContent("##DALCScroll");
 			DrawDALCSettings();
+			EndScrollableContent();
 			ImGui::EndTabItem();
 		}
 
 		if (ImGui::BeginTabItem("Atmosphere Colors", nullptr, atmosphereFlags)) {
+			BeginScrollableContent("##AtmosphereScroll");
 			DrawWeatherColorSettings();
+			EndScrollableContent();
 			ImGui::EndTabItem();
 		}
 
 		if (ImGui::BeginTabItem("Clouds", nullptr, cloudsFlags)) {
+			BeginScrollableContent("##CloudsScroll");
 			DrawCloudSettings();
+			EndScrollableContent();
 			ImGui::EndTabItem();
 		}
 
 		if (ImGui::BeginTabItem("Fog", nullptr, fogFlags)) {
+			BeginScrollableContent("##FogScroll");
 			DrawFogSettings();
+			EndScrollableContent();
 			ImGui::EndTabItem();
 		}
 
 		if (ImGui::BeginTabItem("Features", nullptr, featuresFlags)) {
+			BeginScrollableContent("##FeaturesScroll");
 			DrawFeatureSettings();
+			EndScrollableContent();
 			ImGui::EndTabItem();
 		}
 
 		if (ImGui::BeginTabItem("Records", nullptr, recordsFlags)) {
+			BeginScrollableContent("##RecordsScroll");
 			ImGui::Spacing();
 			ImGui::TextWrapped("Form record references used by this weather.");
 			ImGui::Spacing();
@@ -406,6 +421,7 @@ void WeatherWidget::DrawWidget()
 				ApplyChanges();
 			}
 
+			EndScrollableContent();
 			ImGui::EndTabItem();
 		}
 		ImGui::EndTabBar();
@@ -1127,6 +1143,7 @@ void WeatherWidget::DrawCloudSettings()
 			}
 		}
 	} else if (changed && editorWindow->settings.autoApplyChanges) {
+		editorWindow->PushUndoState(this);
 		ApplyChanges();
 	}
 }

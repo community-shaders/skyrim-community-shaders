@@ -6,7 +6,6 @@
 #include "VR/OpenVRDetection.h"
 
 #include "State.h"
-#include "Utils/D3D.h"
 #include "Utils/VRUtils.h"
 
 #include <d3d11.h>
@@ -41,7 +40,11 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	EnableDragToReposition,
 	kAutoHideSeconds,
 	VRMenuAutoResetDistance,
-	EnableWandPointing)
+	EnableWandPointing,
+	EnableStereoBlend,
+	StereoBlendDepthSigma,
+	StereoBlendMaxFactor,
+	StereoBlendColorThreshold)
 
 //=============================================================================
 // FEATURE BASE CLASS OVERRIDES
@@ -65,6 +68,36 @@ void VR::RestoreDefaultSettings()
 
 void VR::SetupResources()
 {
+	// Compile stereo blend compute shader and create copy texture
+	std::vector<std::pair<const char*, const char*>> defines = { { "VR", "" }, { "FRAMEBUFFER", "" } };
+	if (auto rawPtr = reinterpret_cast<ID3D11ComputeShader*>(Util::CompileShader(L"Data\\Shaders\\VR\\StereoBlendCS.hlsl", defines, "cs_5_0")))
+		stereoBlendCS.attach(rawPtr);
+
+	auto backCheckDefines = defines;
+	backCheckDefines.push_back({ "DEBUG_BACKCHECK", "" });
+	if (auto rawPtr = reinterpret_cast<ID3D11ComputeShader*>(Util::CompileShader(L"Data\\Shaders\\VR\\StereoBlendCS.hlsl", backCheckDefines, "cs_5_0")))
+		stereoBlendDebugBackCheckCS.attach(rawPtr);
+
+	auto blendWeightDefines = defines;
+	blendWeightDefines.push_back({ "DEBUG_BLEND_WEIGHT", "" });
+	if (auto rawPtr = reinterpret_cast<ID3D11ComputeShader*>(Util::CompileShader(L"Data\\Shaders\\VR\\StereoBlendCS.hlsl", blendWeightDefines, "cs_5_0")))
+		stereoBlendDebugBlendWeightCS.attach(rawPtr);
+
+	auto renderer = globals::game::renderer;
+	auto mainTex = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMAIN];
+	D3D11_TEXTURE2D_DESC mainDesc;
+	mainTex.texture->GetDesc(&mainDesc);
+	mainDesc.BindFlags = D3D11_BIND_SHADER_RESOURCE;
+	mainDesc.MiscFlags = 0;
+	stereoBlendCopyTex = eastl::make_unique<Texture2D>(mainDesc);
+	D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc = {
+		.Format = mainDesc.Format,
+		.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2D,
+		.Texture2D = { .MostDetailedMip = 0, .MipLevels = 1 }
+	};
+	stereoBlendCopyTex->CreateSRV(srvDesc);
+	stereoBlendCB = eastl::make_unique<ConstantBuffer>(ConstantBufferDesc<StereoBlendCB>());
+
 	DetectOpenVRInfo();
 
 	if (openVRInfo.isAvailable) {

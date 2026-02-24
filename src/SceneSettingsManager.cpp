@@ -40,6 +40,7 @@ std::vector<std::string> SceneSettingsManager::GetInteriorRelevantFeatureNames()
 	static const std::unordered_set<std::string> interiorRelevantFeatures = {
 		"ScreenSpaceGI",
 		"ScreenSpaceShadows",
+		"SubsurfaceScattering",
 		"LinearLighting",
 		"ImageBasedLighting",
 		"PostProcessing",
