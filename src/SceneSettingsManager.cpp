@@ -8,7 +8,6 @@
 #include <cmath>
 #include <filesystem>
 #include <fstream>
-#include <numeric>
 #include <unordered_set>
 
 // --- Path Resolution ---
@@ -403,8 +402,12 @@ void SceneSettingsManager::UpdateEntryValue(SceneType type, size_t index, const 
 
 	// For TimeOfDay, recompute blended values; for others, apply directly
 	if (type == SceneType::TimeOfDay) {
-		if (isTimeOfDayActive)
+		if (isTimeOfDayActive) {
+			// Reset the hour throttle so a user edit (e.g. slider drag) is
+			// applied immediately rather than waiting for the game clock to advance.
+			lastBlendedHour = -1.0f;
 			ApplyTimeOfDayBlended();
+		}
 	} else if (isCurrentlyApplied && !vec[index].paused && !IsFeaturePaused(vec[index].featureShortName)) {
 		if (vec[index].source == EntrySource::Overwrite ||
 			!HasActiveOverwrite(type, vec[index].featureShortName, vec[index].settingKey))
