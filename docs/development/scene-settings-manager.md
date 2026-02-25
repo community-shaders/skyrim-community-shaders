@@ -341,19 +341,19 @@ Clicking it opens the **Add Feature Settings** dialog:
 
 **Elements:**
 
-| Element                     | Description                                                                                                                                                |
-| --------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **[+] button**              | Opens the Add Feature Settings dialog to select a feature and its settings.                                                                                |
-| **Feature dropdown**        | Lists whitelisted features. Selecting one populates the setting checkbox list below.                                                                       |
-| **Select All / Select None**| Bulk-select or clear all checkboxes in the settings list.                                                                                                  |
-| **Settings checkbox list**  | Scrollable list of JSON keys from the feature's `SaveSettings()`. For Time of Day, only float keys are shown (integers, booleans, and strings are excluded). Already-added settings appear checked and disabled. |
-| **Add button**              | Adds all checked settings with their current values. Shows the count of selected settings. Closes the dialog on success.                                   |
-| **Overwrite Files section** | Entries loaded from mod author JSON files. Values are read-only (greyed out) — mod authors set them. You can pause or delete individual entries or all at once. |
-| **User Settings section**   | Entries you added through the UI. Values are editable.                                                                                                     |
-| **Value editor**            | Checkbox for booleans, number input for floats/integers.                                                                                                   |
-| **[●] toggle**              | Pause/resume individual entries. Paused entries are ignored without being deleted.                                                                         |
-| **[X] button**              | Delete the entry. For overwrites, this deletes the file from disk (with confirmation).                                                                     |
-| **Pause All / Delete All**  | Bulk controls per section.                                                                                                                                 |
+| Element                      | Description                                                                                                                                                                                                      |
+| ---------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **[+] button**               | Opens the Add Feature Settings dialog to select a feature and its settings.                                                                                                                                      |
+| **Feature dropdown**         | Lists whitelisted features. Selecting one populates the setting checkbox list below.                                                                                                                             |
+| **Select All / Select None** | Bulk-select or clear all checkboxes in the settings list.                                                                                                                                                        |
+| **Settings checkbox list**   | Scrollable list of JSON keys from the feature's `SaveSettings()`. For Time of Day, only float keys are shown (integers, booleans, and strings are excluded). Already-added settings appear checked and disabled. |
+| **Add button**               | Adds all checked settings with their current values. Shows the count of selected settings. Closes the dialog on success.                                                                                         |
+| **Overwrite Files section**  | Entries loaded from mod author JSON files. Values are read-only (greyed out) — mod authors set them. You can pause or delete individual entries or all at once.                                                  |
+| **User Settings section**    | Entries you added through the UI. Values are editable.                                                                                                                                                           |
+| **Value editor**             | Checkbox for booleans, number input for floats/integers.                                                                                                                                                         |
+| **[●] toggle**               | Pause/resume individual entries. Paused entries are ignored without being deleted.                                                                                                                               |
+| **[X] button**               | Delete the entry. For overwrites, this deletes the file from disk (with confirmation).                                                                                                                           |
+| **Pause All / Delete All**   | Bulk controls per section.                                                                                                                                                                                       |
 
 **Entries are grouped by feature** with collapsible tree nodes, sorted alphabetically. Light separators appear between feature groups for visual clarity.
 
@@ -403,15 +403,15 @@ Clicking a **[+]** button opens the **Add Feature Settings** dialog (see above).
 
 **Elements:**
 
-| Element                  | Description                                                                                                                                                   |
-| ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Header**               | Shows the current period and game hour (e.g., `[Day 12.0h]`). When "All Periods" is checked, a right-aligned [+] button appears on this line.                |
-| **All Periods checkbox** | When checked, the per-period [+] list is hidden and a single right-aligned [+] is shown on the header. When unchecked, per-period [+] buttons are listed vertically. |
-| **Per-period [+] list**  | One [+] button per period (Dawn through Night), each opening a dialog scoped to that specific period. Lets you add a setting to just one or two periods.      |
-| **Header controls**      | Each period column header includes a toggle [●] (pause/unpause all entries in that period) and [X] (delete all entries in that period) below the period name. |
-| **Period columns**       | One column per period. The active period column is highlighted; inactive periods are dimmed. `--` means no override for that period (falls back to baseline). |
-| **Row-level controls**   | Each setting row has a toggle (pause all periods) and delete (remove all periods) button in the Setting column.                                               |
-| **Per-cell controls**    | Each individual period cell has its own value editor, pause toggle, and delete button.                                                                        |
+| Element                  | Description                                                                                                                                                                                                                         |
+| ------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Header**               | Shows the current period and game hour (e.g., `[Day 12.0h]`). When "All Periods" is checked, a right-aligned [+] button appears on this line.                                                                                       |
+| **All Periods checkbox** | When checked, the per-period [+] list is hidden and a single right-aligned [+] is shown on the header. When unchecked, per-period [+] buttons are listed vertically.                                                                |
+| **Per-period [+] list**  | One [+] button per period (Dawn through Night), each opening a dialog scoped to that specific period. Lets you add a setting to just one or two periods.                                                                            |
+| **Header controls**      | Each period column header includes a toggle [●] (pause/unpause all entries in that period) and [X] (delete all entries in that period) below the period name.                                                                       |
+| **Period columns**       | One column per period. The active period column is highlighted; inactive periods are dimmed. `--` means no override for that period (falls back to baseline).                                                                       |
+| **Row-level controls**   | Each setting row has a toggle (pause all periods) and delete (remove all periods) button in the Setting column.                                                                                                                     |
+| **Per-cell controls**    | Each individual period cell has its own value editor, pause toggle, and delete button.                                                                                                                                              |
 | **Setting filter**       | The add dialog only shows float settings. Integers, booleans, and strings are excluded since they cannot be smoothly interpolated between periods. Overwrite files are also validated — non-float TOD entries are rejected at load. |
 
 **"All Periods" mode**: When checked, the per-period [+] list is replaced by a single [+] button right-aligned on the header line (matching the Interior Only layout). Adding settings through that dialog populates all 6 periods at once with the current value:

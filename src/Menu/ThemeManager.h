@@ -202,7 +202,7 @@ public:
 		static constexpr float SCENE_TOD_FEATURE_TEXT_SCALE = 0.85f;   // Smaller text scale for feature names in TOD table
 		static constexpr float SCENE_TOD_LABEL_EM = 2.6f;              // Fixed width for period labels in add-setting rows
 		static constexpr float SCENE_ADD_BUTTON_EM = 1.5f;             // Size for the + add-setting button
-		static constexpr float SCENE_GROUP_SEPARATOR_ALPHA = 0.4f;    // Alpha for light separators between feature groups
+		static constexpr float SCENE_GROUP_SEPARATOR_ALPHA = 0.4f;     // Alpha for light separators between feature groups
 		static constexpr float SCENE_ADD_DIALOG_WIDTH_EM = 22.0f;      // Width of add-setting dialog
 		static constexpr float SCENE_ADD_DIALOG_HEIGHT_EM = 20.0f;     // Max height of add-setting dialog
 		static constexpr float SCENE_ADD_LIST_HEIGHT_EM = 12.0f;       // Height of scrollable setting list in dialog

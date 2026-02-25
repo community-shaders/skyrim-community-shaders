@@ -73,9 +73,9 @@ namespace SceneSettingsUI
 			state.cachedFeatureNames = GetFeatureNamesForType(type);
 
 		auto displayName = (state.selectedFeatureIdx >= 0 &&
-							   state.selectedFeatureIdx < static_cast<int>(state.cachedFeatureNames.size()))
-		                     ? SceneSettingsManager::GetFeatureDisplayName(state.cachedFeatureNames[state.selectedFeatureIdx])
-		                     : std::string("Select Feature...");
+							   state.selectedFeatureIdx < static_cast<int>(state.cachedFeatureNames.size())) ?
+		                       SceneSettingsManager::GetFeatureDisplayName(state.cachedFeatureNames[state.selectedFeatureIdx]) :
+		                       std::string("Select Feature...");
 
 		ImGui::SetNextItemWidth(-FLT_MIN);
 		if (ImGui::BeginCombo("##FeatureSelect", displayName.c_str())) {
@@ -83,9 +83,7 @@ namespace SceneSettingsUI
 				auto itemLabel = SceneSettingsManager::GetFeatureDisplayName(state.cachedFeatureNames[i]);
 				if (ImGui::Selectable(itemLabel.c_str(), i == state.selectedFeatureIdx)) {
 					state.selectedFeatureIdx = i;
-					state.cachedSettingKeys = (type == SceneType::TimeOfDay)
-					                            ? SceneSettingsManager::GetTransitionableSettingKeys(state.cachedFeatureNames[i])
-					                            : SceneSettingsManager::GetFeatureSettingKeys(state.cachedFeatureNames[i]);
+					state.cachedSettingKeys = (type == SceneType::TimeOfDay) ? SceneSettingsManager::GetTransitionableSettingKeys(state.cachedFeatureNames[i]) : SceneSettingsManager::GetFeatureSettingKeys(state.cachedFeatureNames[i]);
 					state.selectedSettings.assign(state.cachedSettingKeys.size(), false);
 				}
 				if (i == state.selectedFeatureIdx)
@@ -114,9 +112,7 @@ namespace SceneSettingsUI
 			if (ImGui::BeginChild("##SettingList", ImVec2(-FLT_MIN, C::Em(C::SCENE_ADD_LIST_HEIGHT_EM)), ImGuiChildFlags_Border)) {
 				for (int i = 0; i < static_cast<int>(state.cachedSettingKeys.size()); ++i) {
 					auto& key = state.cachedSettingKeys[i];
-					bool alreadyAdded = addToAllPeriods
-					                      ? [&] { for (int p = 0; p < kPeriodCount; ++p) if (!IsAlreadyAdded(type, featureName, key, static_cast<Period>(p))) return false; return true; }()
-					                      : IsAlreadyAdded(type, featureName, key, period);
+					bool alreadyAdded = addToAllPeriods ? [&] { for (int p = 0; p < kPeriodCount; ++p) if (!IsAlreadyAdded(type, featureName, key, static_cast<Period>(p))) return false; return true; }() : IsAlreadyAdded(type, featureName, key, period);
 
 					if (alreadyAdded) {
 						auto _ = Util::DisableGuard(true);
