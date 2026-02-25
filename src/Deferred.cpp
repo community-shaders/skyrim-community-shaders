@@ -18,9 +18,6 @@
 
 #include "Hooks.h"
 
-#include "RE/B/BSShadowDirectionalLight.h"
-#include "RE/B/BSShadowLight.h"
-
 struct DepthStates
 {
 	ID3D11DepthStencilState* a[6][40];
@@ -610,6 +607,90 @@ void Deferred::ResetBlendStates()
 	globals::game::stateUpdateFlags->set(RE::BSGraphics::ShaderFlags::DIRTY_ALPHA_BLEND);
 }
 
+void Deferred::SetShadowCascadeParameters(RE::BSShadowLight::RUNTIME_DATA& lightData, const DirectX::XMMATRIX& ,
+    DirectionalShadowData& dd, ID3D11ShaderResourceView*& cascadeSRV)
+{
+	uint32_t count = std::min((uint32_t)lightData.shadowmapDescriptors.size(), 2u);
+	for (uint32_t i = 0; i < count; i++) {
+		auto proj = DirectX::XMLoadFloat4x4(reinterpret_cast<const DirectX::XMFLOAT4X4*>(&lightData.shadowmapDescriptors[i].lightTransform));
+	//	proj = DirectX::XMMatrixMultiply(eyeTrans, proj);
+		proj = DirectX::XMMatrixTranspose(proj);
+		DirectX::XMStoreFloat4x4(&dd.ShadowMapProj[i], proj);
+	}
+	if (count > 0)
+		cascadeSRV = globals::game::renderer->GetDepthStencilData()
+		                 .depthStencils[lightData.shadowmapDescriptors[0].renderTarget]
+		                 .depthSRV;
+}
+
+void Deferred::SetShadowCascadeParameters(RE::BSShadowLight::RUNTIME_DATA_VR& lightData, const DirectX::XMMATRIX& ,
+    DirectionalShadowData& dd, ID3D11ShaderResourceView*& cascadeSRV)
+{
+	uint32_t count = std::min((uint32_t)lightData.shadowmapDescriptors.size(), 2u);
+	for (uint32_t i = 0; i < count; i++) {
+		auto proj = DirectX::XMLoadFloat4x4(reinterpret_cast<const DirectX::XMFLOAT4X4*>(&lightData.shadowmapDescriptors[i].lightTransform));
+	//	proj = DirectX::XMMatrixMultiply(eyeTrans, proj);
+		proj = DirectX::XMMatrixTranspose(proj);
+		DirectX::XMStoreFloat4x4(&dd.ShadowMapProj[i], proj);
+	}
+	if (count > 0)
+		cascadeSRV = globals::game::renderer->GetDepthStencilData()
+		                 .depthStencils[lightData.shadowmapDescriptors[0].renderTarget]
+		                 .depthSRV;
+}
+
+void Deferred::SetShadowParameters(RE::BSShadowLight::RUNTIME_DATA& lightData, const DirectX::XMMATRIX&,
+    ShadowData& sd, ID3D11ShaderResourceView*& shadowMapsSRV)
+{
+	if (lightData.shadowmapDescriptors.empty())
+		return;
+
+	auto& desc = lightData.shadowmapDescriptors[0];
+
+	DirectX::XMMATRIX proj = DirectX::XMLoadFloat4x4(reinterpret_cast<const DirectX::XMFLOAT4X4*>(&desc.lightTransform));
+	proj = DirectX::XMMatrixTranspose(proj);
+	DirectX::XMStoreFloat4x4(&sd.ShadowProj, proj);
+
+	// Store the camera far plane so the paraboloid shader can normalise depth correctly.
+	if (desc.camera)
+		sd.ShadowLightParam[0] = static_cast<uint32_t>(desc.camera->GetRuntimeData2().viewFrustum.fFar);
+
+	// Store the game's authoritative array slice index for HLSL sampling.
+	sd.ShadowLightParam[1] = desc.shadowmapIndex;
+
+	// All shadow lights share the same kSHADOWMAPS Texture2DArray — capture SRV once.
+	if (!shadowMapsSRV)
+		shadowMapsSRV = globals::game::renderer->GetDepthStencilData()
+		                    .depthStencils[desc.renderTarget]
+		                    .depthSRV;
+}
+
+void Deferred::SetShadowParameters(RE::BSShadowLight::RUNTIME_DATA_VR& lightData, const DirectX::XMMATRIX&,
+    ShadowData& sd, ID3D11ShaderResourceView*& shadowMapsSRV)
+{
+	if (lightData.shadowmapDescriptors.empty())
+		return;
+
+	auto& desc = lightData.shadowmapDescriptors[0];
+
+	DirectX::XMMATRIX proj = DirectX::XMLoadFloat4x4(reinterpret_cast<const DirectX::XMFLOAT4X4*>(&desc.lightTransform));
+	proj = DirectX::XMMatrixTranspose(proj);
+	DirectX::XMStoreFloat4x4(&sd.ShadowProj, proj);
+
+	// Store the camera far plane so the paraboloid shader can normalise depth correctly.
+	if (desc.camera)
+		sd.ShadowLightParam[0] = static_cast<uint32_t>(desc.camera->GetRuntimeData2().viewFrustum.fFar);
+
+	// Store the game's authoritative array slice index for HLSL sampling.
+	sd.ShadowLightParam[1] = desc.shadowmapIndex;
+
+	// All shadow lights share the same kSHADOWMAPS Texture2DArray — capture SRV once.
+	if (!shadowMapsSRV)
+		shadowMapsSRV = globals::game::renderer->GetDepthStencilData()
+		                    .depthStencils[desc.renderTarget]
+		                    .depthSRV;
+}
+
 void Deferred::CopyShadowData()
 {
 	ZoneScoped;
@@ -626,28 +707,20 @@ void Deferred::CopyShadowData()
 	DirectionalShadowData dd{};
 	ShadowData            sd[4]{};
 
-	auto renderer = globals::game::renderer;
-	auto context  = globals::d3d::context;
+	auto context = globals::d3d::context;
 
 	auto& dirData          = sunShadowLight->GetShadowDirectionalLightRuntimeData();
 	dd.EndSplitDistances   = { dirData.endSplitDistances[0], dirData.endSplitDistances[1] };
 	dd.StartSplitDistances = { dirData.startSplitDistances[0], dirData.startSplitDistances[1] };
 
-	ID3D11ShaderResourceView* cascadeSRV = nullptr;
-	{
-		auto fillCascades = [&](auto& lightData) {
-			uint32_t count = std::min((uint32_t)lightData.shadowmapDescriptors.size(), 2u);
-			for (uint32_t i = 0; i < count; i++)
-				memcpy(&dd.ShadowMapProj[i], &lightData.shadowmapDescriptors[i].lightTransform, sizeof(DirectX::XMFLOAT4X4));
+	float4 posAdjust = globals::game::frameBufferCached.GetCameraPosAdjust();
+	DirectX::XMMATRIX eyeTrans = DirectX::XMMatrixTranslation(0, 0, 0);
 
-			if (count > 0)
-				cascadeSRV = renderer->GetDepthStencilData().depthStencils[lightData.shadowmapDescriptors[0].renderTarget].depthSRV;
-		};
-		if (REL::Module::IsVR())
-			fillCascades(sunShadowLight->GetVRRuntimeData());
-		else
-			fillCascades(sunShadowLight->GetRuntimeData());
-	}
+	ID3D11ShaderResourceView* cascadeSRV = nullptr;
+	if (REL::Module::IsVR())
+		SetShadowCascadeParameters(sunShadowLight->GetVRRuntimeData(), eyeTrans, dd, cascadeSRV);
+	else
+		SetShadowCascadeParameters(sunShadowLight->GetRuntimeData(), eyeTrans, dd, cascadeSRV);
 
 	auto&    sceneRTData  = shadowSceneNode->GetRuntimeData();
 	uint32_t shadowCount  = 0;
@@ -660,28 +733,10 @@ void Deferred::CopyShadowData()
 		auto* light = lightPtr.get();
 		sd[shadowCount].ShadowType = light->GetIsParabolicLight() ? 0u : 1u;
 
-		auto fillLight = [&](auto& lightData) {
-			if (lightData.shadowmapDescriptors.empty())
-				return;
-
-			auto& desc = lightData.shadowmapDescriptors[0];
-			memcpy(&sd[shadowCount].ShadowProj, &desc.lightTransform, sizeof(DirectX::XMFLOAT4X4));
-
-			// Store the camera far plane so the paraboloid shader can normalise depth correctly.
-			if (desc.camera)
-				sd[shadowCount].ShadowLightParam[0] = static_cast<uint32_t>(desc.camera->GetRuntimeData2().viewFrustum.fFar);
-
-			// Store the game's authoritative array slice index for HLSL sampling.
-			sd[shadowCount].ShadowLightParam[1] = desc.shadowmapIndex;
-
-			// All shadow lights share the same kSHADOWMAPS Texture2DArray — capture SRV once.
-			if (!shadowMapsSRV)
-				shadowMapsSRV = renderer->GetDepthStencilData().depthStencils[desc.renderTarget].depthSRV;
-		};
 		if (REL::Module::IsVR())
-			fillLight(light->GetVRRuntimeData());
+			SetShadowParameters(light->GetVRRuntimeData(), eyeTrans, sd[shadowCount], shadowMapsSRV);
 		else
-			fillLight(light->GetRuntimeData());
+			SetShadowParameters(light->GetRuntimeData(), eyeTrans, sd[shadowCount], shadowMapsSRV);
 
 		++shadowCount;
 	}

@@ -25,7 +25,7 @@ struct DirectionalShadowData
 {
 	float2   EndSplitDistances;    // cascade end distances: x = cascade 0, y = cascade 1
 	float2   StartSplitDistances;  // cascade start distances: x = cascade 0, y = cascade 1
-	float4x4 ShadowMapProj[2];     // world-to-shadow projection for each directional cascade
+	column_major float4x4 ShadowMapProj[2];     // world-to-shadow projection for each directional cascade
 };
 
 StructuredBuffer<DirectionalShadowData> DirectionalShadows : register(t81);
@@ -34,7 +34,7 @@ Texture2DArray<float> DirectionalShadowCascades : register(t82);
 
 struct ShadowData
 {
-	float4x4 ShadowProj;
+	column_major float4x4 ShadowProj;
 	uint ShadowType;
 	uint3 ShadowLightParam;
 };
@@ -128,7 +128,7 @@ namespace ShadowSampling
 
 		float shadowMapDepth = length(worldPosition);
 
-		if (shadowMapDepth >= shadow.EndSplitDistances.y) {
+		if (shadowMapDepth > shadow.EndSplitDistances.y) {
 			detailedShadow = 1.0;
 			return 1.0;
 		}
@@ -138,62 +138,62 @@ namespace ShadowSampling
 		// Reduce over distance
 		float fade = saturate(shadowMapDepth / shadow.EndSplitDistances.y);
 
-		// Compute cascade blend factor with smoothstep
-		float cascadeSelect = saturate((shadowMapDepth - shadow.StartSplitDistances.y) / (shadow.EndSplitDistances.x - shadow.StartSplitDistances.y));
+		// Compute cascade blend factor
+		float cascadeSelect = smoothstep(shadow.StartSplitDistances.y, shadow.EndSplitDistances.x, shadowMapDepth);
 
 		// Determine which cascade(s) to sample
-		uint primaryCascade = uint(cascadeSelect);
+		uint primaryCascade = cascadeSelect;
 		bool needsBlending = (cascadeSelect > 0.0) && (cascadeSelect < 1.0);
 
 		// Transform ray to light space for primary cascade
-		float3 positionLS = mul(shadow.ShadowMapProj[primaryCascade], float4(worldPosition, 1)).xyz;
+		float3 positionLS = mul(transpose(shadow.ShadowMapProj[primaryCascade]), float4(worldPosition, 1)).xyz;
 
 		// Sample primary cascade
-		float visibility = DirectionalShadowCascades.SampleCmpLevelZero(ShadowSamplerCmp, float3(positionLS.xy, primaryCascade), positionLS.z);
+		float visibility = dot(float4(DirectionalShadowCascades.GatherRed(LinearSampler, float3(positionLS.xy, primaryCascade)) > positionLS.z), 0.25);
 
 		// Blend with secondary cascade if needed
 		[branch]
 		if (needsBlending) {
 			uint secondaryCascade = 1 - primaryCascade;
 
-			positionLS = mul(shadow.ShadowMapProj[secondaryCascade], float4(worldPosition, 1)).xyz;
+			positionLS = mul(transpose(shadow.ShadowMapProj[secondaryCascade]), float4(worldPosition, 1)).xyz;
 
-			float visibilityBlend = DirectionalShadowCascades.SampleCmpLevelZero(ShadowSamplerCmp, float3(positionLS.xy, secondaryCascade), positionLS.z);
+			float visibilityBlend = dot(float4(DirectionalShadowCascades.GatherRed(LinearSampler, float3(positionLS.xy, secondaryCascade)) > positionLS.z), 0.25);
 			visibility = lerp(visibility, visibilityBlend, cascadeSelect);
 		}
 
 		float fadeFactor = 1.0 - pow(fade, 8);
-		detailedShadow = lerp(1.0, visibility, fadeFactor);
-		return lerp(1.0, visibility, fadeFactor);
+		detailedShadow = lerp(1.0, visibility, 1);
+		return lerp(1.0, visibility, 1);
 	}
 
 	float GetFrustumShadow(ShadowData shadow, uint shadowIndex, float3 worldPosition, float2x2 rotationMatrix)
 	{
-		float4 positionLS = mul(shadow.ShadowProj, float4(worldPosition, 1));
+		float4 positionLS = mul(transpose(shadow.ShadowProj), float4(worldPosition, 1));
 		positionLS.xyz /= positionLS.w;
 
 		float2 sampleUV = positionLS.xy * 0.5 + 0.5;
-		float visibility = ShadowMaps.SampleCmpLevelZero(ShadowSamplerCmp, float3(sampleUV, shadowIndex), positionLS.z);
-	
+		float visibility = dot(float4(ShadowMaps.GatherRed(LinearSampler, float3(sampleUV.xy, shadowIndex)) > positionLS.z), 0.25);
+
 		return visibility;
 	}
 
 	float GetParaboloidShadow(ShadowData shadow, uint shadowIndex, float3 worldPosition)
 	{
-		float3 positionLS = mul(shadow.ShadowProj, float4(worldPosition, 1)).xyz;
+		float3 positionLS = mul(transpose(shadow.ShadowProj), float4(worldPosition, 1)).xyz;
 
 		bool lowerHalf = positionLS.z < 0;
 		float3 normalizedPositionLS = normalize(positionLS);
 
-		float compareValue = saturate(length(positionLS) / float(shadow.ShadowLightParam.x));
+		positionLS.z = saturate(length(positionLS) / float(shadow.ShadowLightParam.x));
 
 		float3 positionOffset = lowerHalf ? float3(0, 0, -1) : float3(0, 0, 1);
 		float3 lightDirection = normalize(normalizedPositionLS + positionOffset);
 		float2 sampleUV = lightDirection.xy / lightDirection.z * 0.5 + 0.5;
 		sampleUV.y = lowerHalf ? 1.0 - 0.5 * sampleUV.y : 0.5 * sampleUV.y;
 
-		float visibility = ShadowMaps.SampleCmpLevelZero(ShadowSamplerCmp, float3(sampleUV, shadowIndex), compareValue);
-	
+		float visibility = dot(float4(ShadowMaps.GatherRed(LinearSampler, float3(sampleUV.xy, shadowIndex)) > positionLS.z), 0.25);
+
 		return visibility;
 	}
 
