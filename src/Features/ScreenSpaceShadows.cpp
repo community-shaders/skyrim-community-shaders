@@ -1,6 +1,5 @@
 #include "ScreenSpaceShadows.h"
 
-#include "FeatureConstraints.h"
 #include "State.h"
 
 #pragma warning(push)
@@ -18,19 +17,10 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	BilinearThreshold,
 	ShadowContrast)
 
-namespace
-{
-	const FeatureConstraints::SettingId kSssEnableSettingId{ "ScreenSpaceShadows", "Enable" };
-}
-
 void ScreenSpaceShadows::DrawSettings()
 {
 	if (ImGui::TreeNodeEx("General", ImGuiTreeNodeFlags_DefaultOpen)) {
-		bool enabled = bendSettings.Enable != 0;
-		if (Util::ConstrainedUI::Checkbox("Enable", &enabled, kSssEnableSettingId)) {
-			bendSettings.Enable = enabled ? 1u : 0u;
-		}
-
+		ImGui::Checkbox("Enable", (bool*)&bendSettings.Enable);
 		ImGui::SliderInt("Sample Count Multiplier", (int*)&bendSettings.SampleCount, 1, 4);
 		ImGui::SliderFloat("Surface Thickness", &bendSettings.SurfaceThickness, 0.005f, 0.05f);
 		ImGui::SliderFloat("Bilinear Threshold", &bendSettings.BilinearThreshold, 0.02f, 1.0f);
@@ -249,16 +239,8 @@ void ScreenSpaceShadows::Prepass()
 	float white[4] = { 1, 1, 1, 1 };
 	context->ClearUnorderedAccessViewFloat(screenSpaceShadowsTexture->uav.get(), white);
 
-	bool enabled = bendSettings.Enable != 0;
-	auto constraint = FeatureConstraints::GetConstraints(kSssEnableSettingId);
-	if (constraint.isConstrained) {
-		if (auto* forcedBool = std::get_if<bool>(&constraint.forcedValue)) {
-			enabled = *forcedBool;
-		}
-	}
-
 	if (auto sky = globals::game::sky)
-		if (enabled && sky->mode.get() == RE::Sky::Mode::kFull)
+		if (bendSettings.Enable && sky->mode.get() == RE::Sky::Mode::kFull)
 			DrawShadows();
 
 	auto view = screenSpaceShadowsTexture->srv.get();

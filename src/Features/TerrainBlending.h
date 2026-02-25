@@ -20,7 +20,6 @@ public:
 	}
 	virtual inline bool HasShaderDefine(RE::BSShader::Type) override { return true; }
 	virtual bool SupportsVR() override { return true; }
-	virtual std::vector<FeatureConstraints::Constraint> GetActiveConstraints() const override;
 
 	struct Settings
 	{

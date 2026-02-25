@@ -36,8 +36,6 @@ public:
 		};
 	}
 
-	virtual std::vector<FeatureConstraints::Constraint> GetActiveConstraints() const override;
-
 	float2 jitter = { 0, 0 };
 
 	enum class UpscaleMethod

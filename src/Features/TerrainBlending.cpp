@@ -106,11 +106,6 @@ namespace
 		return a_descriptor == kShadowmaskDepthDescriptor0 || a_descriptor == kShadowmaskDepthDescriptor1;
 	}
 
-	bool IsTbVrDepthCullingActive(const TerrainBlending& a_tb)
-	{
-		return globals::game::isVR && a_tb.loaded && a_tb.settings.Enabled && !ShouldUseBlendedDepthSRV();
-	}
-
 	template <size_t N>
 	bool IsCallerAllowlisted(const std::array<uint32_t, N>& a_allowlist, const uint32_t a_callerRva)
 	{
@@ -301,13 +296,17 @@ namespace
 		}
 
 		logger::debug(
-			"[{}] pass-specific hook active {}={} {}=[{}] fallbackThreshold={}",
+			"[{}] pass-specific hook active {}={} {}=[{}] fallbackThreshold={} fallbackActive={} blockedEvents={} blockedUniqueRvas={} triggerRva=0x{:X}",
 			a_logPrefix,
 			a_countLabel,
 			a_allowlist.size(),
 			a_allowlistLabel,
 			allowlist.str(),
-			a_fallbackThreshold);
+			a_fallbackThreshold,
+			a_state.broadFallbackActive,
+			a_state.rejectTotal,
+			a_state.blockedCallerRvas.size(),
+			a_state.fallbackTriggerRva);
 		a_state.hookActiveLogged = true;
 	}
 
@@ -466,30 +465,9 @@ namespace
 	}
 }
 
-std::vector<FeatureConstraints::Constraint> TerrainBlending::GetActiveConstraints() const
-{
-	std::vector<FeatureConstraints::Constraint> constraints;
-
-	// Only constrain when all requested conditions are active:
-	// VR + Terrain Blending enabled + runtime depth buffer culling enabled.
-	if (!IsTbVrDepthCullingActive(*this)) {
-		return constraints;
-	}
-
-	constraints.push_back({ { "ScreenSpaceShadows", "Enable" },
-		false,
-		"Screen Space Shadows is disabled in VR when Terrain Blending and Depth Buffer Culling are both active.",
-		false });
-
-	return constraints;
-}
-
 void TerrainBlending::DrawSettings()
 {
-	bool enabled = settings.Enabled != 0;
-	if (ImGui::Checkbox("Enable Terrain Blending", &enabled)) {
-		settings.Enabled = enabled ? 1u : 0u;
-	}
+	ImGui::Checkbox("Enable Terrain Blending", (bool*)&settings.Enabled);
 
 	if (auto _tt = Util::HoverTooltipWrapper()) {
 		ImGui::Text("Enable seamless blending between terrain and objects.");
