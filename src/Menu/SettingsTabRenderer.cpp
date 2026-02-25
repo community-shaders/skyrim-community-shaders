@@ -564,11 +564,9 @@ void SettingsTabRenderer::RenderThemesTab()
 
 		if (!isPreset && currentThemeInfo && !currentThemeInfo->filePath.empty()) {
 			ImGui::SameLine();
-			{
-				auto _style = Util::ErrorButtonStyle();
-				if (Util::ButtonWithFlash("Delete")) {
-					showDeleteThemePopup = true;
-				}
+			auto _style = Util::ErrorButtonStyle();
+			if (Util::ButtonWithFlash("Delete")) {
+				showDeleteThemePopup = true;
 			}
 			if (auto _tt = Util::HoverTooltipWrapper()) {
 				ImGui::Text("Delete the theme file for '%s'. This cannot be undone.",
@@ -725,7 +723,7 @@ void SettingsTabRenderer::RenderThemesTab()
 			}
 		}
 
-		if (ImGui::BeginPopupModal("Delete Theme", &showDeleteThemePopup, ImGuiWindowFlags_AlwaysAutoResize) && currentThemeInfo && !currentThemeInfo->filePath.empty()) {
+		if (ImGui::BeginPopupModal("Delete Theme", &showDeleteThemePopup, ImGuiWindowFlags_AlwaysAutoResize)) {
 			ImGui::Text("Are you sure you want to delete the theme ");
 			ImGui::SameLine(0, 0);
 			ImGui::TextColored(themeSettings.StatusPalette.InfoColor, "%s",
@@ -744,7 +742,7 @@ void SettingsTabRenderer::RenderThemesTab()
 			ImGui::SameLine();
 
 			auto _style = Util::ErrorButtonStyle();
-			if (ImGui::Button("Delete")) {
+			if (ImGui::Button("Delete") && currentThemeInfo && !currentThemeInfo->filePath.empty()) {
 				auto result = Util::FileHelpers::SafeDelete(currentThemeInfo->filePath, "Theme '" + currentThemePreset + "'");
 				if (result.success) {
 					themeManager->RefreshThemes();
