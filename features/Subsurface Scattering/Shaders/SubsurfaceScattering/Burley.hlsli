@@ -1,8 +1,8 @@
 #include "Common/GBuffer.hlsli"
 #include "Common/Game.hlsli"
-#include "Common/SharedData.hlsli"
-#include "Common/Random.hlsli"
 #include "Common/Math.hlsli"
+#include "Common/Random.hlsli"
+#include "Common/SharedData.hlsli"
 
 // [Per H. Christensen, Brent Burley 2015, "Approximate Reflectance Profiles for Efficient Subsurface Scattering"]
 // https://graphics.pixar.com/library/ApproxBSSRDF/paper.pdf
@@ -14,7 +14,7 @@ float3 GetBurleyCDF(float3 d, float3 r, float rand)
 float GetBurleyPDF(float r, float l, float s)
 {
 	float d = l / s;
-	float pdf = 0.25 / d * (exp(-r / d) + exp(-r / (3 * d))); // cdf dr
+	float pdf = 0.25 / d * (exp(-r / d) + exp(-r / (3 * d)));  // cdf dr
 	return max(pdf, 1e-5f);
 }
 
@@ -53,8 +53,7 @@ float4 BurleyNormalizedSS(uint2 DTid, float2 texCoord, uint eyeIndex, float sssA
 	float centerDepth = SharedData::GetScreenDepth(DepthTexture[DTid].x);
 
 	float4 centerColor = ColorTexture[DTid];
-	if (sssAmount == 0 || centerDepth <= 0)
-	{
+	if (sssAmount == 0 || centerDepth <= 0) {
 		return centerColor;
 	}
 
@@ -87,8 +86,7 @@ float4 BurleyNormalizedSS(uint2 DTid, float2 texCoord, uint eyeIndex, float sssA
 	int3 seed = int3(DTid.xy, 0);
 	int seedStart = Random::pcg3d(int3(seed.xy, SharedData::FrameCount)).x;
 
-	[loop]
-	for (int i = 0; i < (int)BurleySamples; ++i)
+	[loop] for (int i = 0; i < (int)BurleySamples; ++i)
 	{
 		seed.z = seedStart++;
 		float2 rand = float2(Random::pcg3d(seed).xy) / 4294967296.0f;  // to [0, 1)

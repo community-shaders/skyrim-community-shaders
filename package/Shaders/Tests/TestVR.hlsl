@@ -11,9 +11,7 @@ static const float kEps = 0.0001f;
 
 /// @tags vr, stereo, uv
 /// ConvertToStereoUV: left eye maps [0,1] -> [0,0.5]
-[numthreads(1, 1, 1)]
-void TestConvertToStereoUVLeftEye()
-{
+[numthreads(1, 1, 1)] void TestConvertToStereoUVLeftEye() {
 	float2 uv = float2(0.0, 0.5);
 	float2 result = Stereo::ConvertToStereoUV(uv, 0);
 	ASSERT(IsTrue, abs(result.x - 0.0) < kEps);
@@ -30,10 +28,9 @@ void TestConvertToStereoUVLeftEye()
 	ASSERT(IsTrue, abs(result.y - 0.25) < kEps);
 }
 
-/// @tags vr, stereo, uv
-/// ConvertToStereoUV: right eye maps [0,1] -> [0.5,1]
-[numthreads(1, 1, 1)]
-void TestConvertToStereoUVRightEye()
+	/// @tags vr, stereo, uv
+	/// ConvertToStereoUV: right eye maps [0,1] -> [0.5,1]
+	[numthreads(1, 1, 1)] void TestConvertToStereoUVRightEye()
 {
 	float2 uv = float2(0.0, 0.5);
 	float2 result = Stereo::ConvertToStereoUV(uv, 1);
@@ -51,19 +48,16 @@ void TestConvertToStereoUVRightEye()
 
 /// @tags vr, stereo, uv
 /// ConvertToStereoUV with Y inversion
-[numthreads(1, 1, 1)]
-void TestConvertToStereoUVInvertY()
-{
+[numthreads(1, 1, 1)] void TestConvertToStereoUVInvertY() {
 	float2 uv = float2(0.5, 0.25);
 	float2 result = Stereo::ConvertToStereoUV(uv, 0, 1);
 	ASSERT(IsTrue, abs(result.x - 0.25) < kEps);
 	ASSERT(IsTrue, abs(result.y - 0.75) < kEps);
 }
 
-/// @tags vr, stereo, uv
-/// ConvertFromStereoUV: left eye maps [0,0.5] -> [0,1]
-[numthreads(1, 1, 1)]
-void TestConvertFromStereoUVLeftEye()
+	/// @tags vr, stereo, uv
+	/// ConvertFromStereoUV: left eye maps [0,0.5] -> [0,1]
+	[numthreads(1, 1, 1)] void TestConvertFromStereoUVLeftEye()
 {
 	float2 stereoUV = float2(0.0, 0.5);
 	float2 result = Stereo::ConvertFromStereoUV(stereoUV, 0);
@@ -81,9 +75,7 @@ void TestConvertFromStereoUVLeftEye()
 
 /// @tags vr, stereo, uv
 /// ConvertFromStereoUV: right eye maps [0.5,1] -> [0,1]
-[numthreads(1, 1, 1)]
-void TestConvertFromStereoUVRightEye()
-{
+[numthreads(1, 1, 1)] void TestConvertFromStereoUVRightEye() {
 	float2 stereoUV = float2(0.5, 0.5);
 	float2 result = Stereo::ConvertFromStereoUV(stereoUV, 1);
 	ASSERT(IsTrue, abs(result.x - 0.0) < kEps);
@@ -97,10 +89,9 @@ void TestConvertFromStereoUVRightEye()
 	ASSERT(IsTrue, abs(result.x - 0.5) < kEps);
 }
 
-/// @tags vr, stereo, uv
-/// ConvertToStereoUV and ConvertFromStereoUV are inverses of each other
-[numthreads(1, 1, 1)]
-void TestStereoUVRoundTrip()
+	/// @tags vr, stereo, uv
+	/// ConvertToStereoUV and ConvertFromStereoUV are inverses of each other
+	[numthreads(1, 1, 1)] void TestStereoUVRoundTrip()
 {
 	float2 original = float2(0.3, 0.7);
 
@@ -119,9 +110,7 @@ void TestStereoUVRoundTrip()
 
 /// @tags vr, stereo, uv
 /// GetEyeIndexFromTexCoord: left half -> 0, right half -> 1
-[numthreads(1, 1, 1)]
-void TestGetEyeIndexFromTexCoord()
-{
+[numthreads(1, 1, 1)] void TestGetEyeIndexFromTexCoord() {
 	ASSERT(AreEqual, Stereo::GetEyeIndexFromTexCoord(float2(0.0, 0.5)), 0u);
 	ASSERT(AreEqual, Stereo::GetEyeIndexFromTexCoord(float2(0.25, 0.5)), 0u);
 	ASSERT(AreEqual, Stereo::GetEyeIndexFromTexCoord(float2(0.49, 0.5)), 0u);
@@ -130,10 +119,9 @@ void TestGetEyeIndexFromTexCoord()
 	ASSERT(AreEqual, Stereo::GetEyeIndexFromTexCoord(float2(1.0, 0.5)), 1u);
 }
 
-/// @tags vr, stereo, uv
-/// GetEyeIndexFromTexCoord is consistent with ConvertToStereoUV output
-[numthreads(1, 1, 1)]
-void TestEyeIndexConsistentWithStereoUV()
+	/// @tags vr, stereo, uv
+	/// GetEyeIndexFromTexCoord is consistent with ConvertToStereoUV output
+	[numthreads(1, 1, 1)] void TestEyeIndexConsistentWithStereoUV()
 {
 	float2 monoUV = float2(0.6, 0.4);
 
@@ -148,9 +136,7 @@ void TestEyeIndexConsistentWithStereoUV()
 
 /// @tags vr, stereo, uv
 /// ConvertToStereoUV clamps input x to [0,1] via saturate
-[numthreads(1, 1, 1)]
-void TestConvertToStereoUVClamping()
-{
+[numthreads(1, 1, 1)] void TestConvertToStereoUVClamping() {
 	// x > 1 should be clamped to 1 before conversion
 	float2 uv = float2(1.5, 0.5);
 	float2 resultLeft = Stereo::ConvertToStereoUV(uv, 0);
@@ -165,10 +151,9 @@ void TestConvertToStereoUVClamping()
 	ASSERT(IsTrue, abs(resultLeft.x - 0.0) < kEps);  // saturate(-0.5)=0.0, (0+0)/2=0
 }
 
-/// @tags vr, stereo, uv
-/// ConvertUVToNormalizedScreenSpace maps to [-1,1] range
-[numthreads(1, 1, 1)]
-void TestConvertUVToNormalizedScreenSpace()
+	/// @tags vr, stereo, uv
+	/// ConvertUVToNormalizedScreenSpace maps to [-1,1] range
+	[numthreads(1, 1, 1)] void TestConvertUVToNormalizedScreenSpace()
 {
 	// Center of left eye (stereo UV 0.25) -> x should be near 0 (center of that eye)
 	float2 result = Stereo::ConvertUVToNormalizedScreenSpace(float2(0.25, 0.5));

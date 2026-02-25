@@ -547,7 +547,7 @@ float3 GetLightingColor(float3 msPosition, float3 worldPosition, float2 screenPo
 	skylightingDiffuse = saturate(skylightingDiffuse);
 	skylightingDiffuse = lerp(1.0, skylightingDiffuse, Skylighting::getFadeOutFactor(worldPosition));
 	skylightingDiffuse = Skylighting::mixDiffuse(SharedData::skylightingSettings, skylightingDiffuse);
-#	endif
+#		endif
 
 	float3 dirColor;
 	float3 ambientColor;
@@ -592,8 +592,8 @@ float3 GetLightingColor(float3 msPosition, float3 worldPosition, float2 screenPo
 		float4 lightDistanceSquared = (PLightPositionX[eyeIndex] - msPosition.xxxx) * (PLightPositionX[eyeIndex] - msPosition.xxxx) + (PLightPositionY[eyeIndex] - msPosition.yyyy) * (PLightPositionY[eyeIndex] - msPosition.yyyy) + (PLightPositionZ[eyeIndex] - msPosition.zzzz) * (PLightPositionZ[eyeIndex] - msPosition.zzzz);
 		float4 lightFadeMul = 1.0.xxxx - saturate(PLightingRadiusInverseSquared * lightDistanceSquared);
 		color.x += dot(Color::PointLight(PLightColorR.xxx).x * lightFadeMul * Color::EffectLightingMult(), 1.0.xxxx);
-        color.y += dot(Color::PointLight(PLightColorG.xxx).x * lightFadeMul * Color::EffectLightingMult(), 1.0.xxxx);
-        color.z += dot(Color::PointLight(PLightColorB.xxx).x * lightFadeMul * Color::EffectLightingMult(), 1.0.xxxx);
+		color.y += dot(Color::PointLight(PLightColorG.xxx).x * lightFadeMul * Color::EffectLightingMult(), 1.0.xxxx);
+		color.z += dot(Color::PointLight(PLightColorB.xxx).x * lightFadeMul * Color::EffectLightingMult(), 1.0.xxxx);
 	}
 
 	return color;
@@ -630,9 +630,9 @@ float3 GetLightingShadow(float3 color, float3 worldPosition, float2 screenPositi
 
 	const bool inWorld = (Permutation::ExtraShaderDescriptor & Permutation::ExtraFlags::InWorld);
 
-	if (inWorld && !SharedData::InInterior){
+	if (inWorld && !SharedData::InInterior) {
 		shadow = 0.0;
-		for(uint i = 0; i < sampleCount; i++){
+		for (uint i = 0; i < sampleCount; i++) {
 			float t = (float(i) + noise) * rcpSampleCount;
 			float3 samplePositionWS = lerp(startPosition, endPosition, t);
 			shadow += ShadowSampling::GetWorldShadow(samplePositionWS, FrameBuffer::CameraPosAdjust[eyeIndex].xyz, eyeIndex);
@@ -652,7 +652,7 @@ float3 GetLightingShadow(float3 color, float3 worldPosition, float2 screenPositi
 
 	return dirColor + ambientColor;
 }
-#endif
+#	endif
 
 PS_OUTPUT main(PS_INPUT input)
 {
@@ -839,10 +839,10 @@ PS_OUTPUT main(PS_INPUT input)
 	}
 #	endif
 
-#if !defined(LIGHTING) && defined(VC) && defined(TEXCOORD) && defined(NORMALS) && defined(TEXTURE) && defined(FALLOFF) && defined(SOFT)
-	if(Permutation::PixelShaderDescriptor & Permutation::EffectFlags::GrayscaleToAlpha && lightingInfluence == 1.0)
+#	if !defined(LIGHTING) && defined(VC) && defined(TEXCOORD) && defined(NORMALS) && defined(TEXTURE) && defined(FALLOFF) && defined(SOFT)
+	if (Permutation::PixelShaderDescriptor & Permutation::EffectFlags::GrayscaleToAlpha && lightingInfluence == 1.0)
 		lightColor = GetLightingShadow(lightColor, input.WorldPosition.xyz, input.Position.xy, depth, eyeIndex, shadowVariance);
-#endif
+#	endif
 
 	lightColor = Color::EffectMult(lightColor);
 
@@ -911,17 +911,17 @@ PS_OUTPUT main(PS_INPUT input)
 	psout.MotionVectors = float4(screenMotionVector, 0.0, psout.Diffuse.w);
 #		endif
 
-#if defined(MULTBLEND) || defined(MULTBLEND_DECAL)
+#		if defined(MULTBLEND) || defined(MULTBLEND_DECAL)
 	psout.Specular = float4(psout.Diffuse.xyz, finalColor.w);
 	psout.Albedo = float4(psout.Diffuse.xyz, finalColor.w);
 	psout.Reflectance = float4(psout.Diffuse.xyz, finalColor.w);
 	psout.Masks = float4(Color::RGBToLuminance(psout.Diffuse.xyz).xxx, finalColor.w);
-#else
+#		else
 	psout.Albedo = float4(0, 0, 0, finalColor.w);
 	psout.Specular = float4(0, 0, 0, finalColor.w);
 	psout.Reflectance = float4(0, 0, 0, finalColor.w);
 	psout.Masks = float4(0, 0, 0, finalColor.w);
-#endif
+#		endif
 
 #	elif defined(MOTIONVECTORS_NORMALS)
 	float2 screenMotionVector = MotionBlur::GetSSMotionVector(input.WorldPosition, input.PreviousWorldPosition, eyeIndex);

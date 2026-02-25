@@ -10,7 +10,8 @@ struct PS_INPUT
 	float2 uv : TEXCOORD0;
 };
 
-float4 main(PS_INPUT input) : SV_TARGET
+float4 main(PS_INPUT input) :
+	SV_TARGET
 {
 	float4 color = shaderTexture.Sample(sampleType, input.uv);
 	return color;
