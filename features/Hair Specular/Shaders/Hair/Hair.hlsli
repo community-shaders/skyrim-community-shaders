@@ -280,8 +280,8 @@ namespace Hair
 		float shadow = 1.0;
 		int hitCount = 0;
 
-		[unroll(stepCount)]
-		for(int i = 0; i < stepCount; ++i) {
+		[unroll(stepCount)] for (int i = 0; i < stepCount; ++i)
+		{
 			ray += lightDirVS * stepSize;
 			float2 rayUV = FrameBuffer::ViewToUV(ray, true, eyeIndex);
 			if (FrameBuffer::IsOutsideFrame(rayUV))

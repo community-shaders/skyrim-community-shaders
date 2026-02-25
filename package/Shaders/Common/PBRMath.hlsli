@@ -1,8 +1,8 @@
 #ifndef __PBR_MATH_HLSL__
 #define __PBR_MATH_HLSL__
 
-#include "Common/Math.hlsli"
 #include "Common/BRDF.hlsli"
+#include "Common/Math.hlsli"
 
 namespace PBR
 {
