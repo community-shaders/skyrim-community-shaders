@@ -379,7 +379,7 @@ void Deferred::DeferredPasses()
 	bool ssgi_hq_spec = ssgi.settings.EnableExperimentalSpecularGI;
 
 	auto dispatchCount = Util::GetScreenDispatchCount(true);
-
+	  
 	auto& sss = globals::features::subsurfaceScattering;
 	if (sss.loaded)
 		sss.DrawSSS();
@@ -599,8 +599,6 @@ void Deferred::SetShadowParameters(RE::BSShadowLight::RUNTIME_DATA& lightData, S
 
 	DirectX::XMMATRIX proj = DirectX::XMLoadFloat4x4(reinterpret_cast<const DirectX::XMFLOAT4X4*>(&desc.lightTransform));
 	DirectX::XMStoreFloat4x4(&sd.ShadowProj, proj);
-
-	sd.ShadowFar = desc.camera->GetRuntimeData2().viewFrustum.fFar;
 }
 
 void Deferred::SetShadowParameters(RE::BSShadowLight::RUNTIME_DATA_VR& lightData, ShadowData& sd)
@@ -612,8 +610,6 @@ void Deferred::SetShadowParameters(RE::BSShadowLight::RUNTIME_DATA_VR& lightData
 
 	DirectX::XMMATRIX proj = DirectX::XMLoadFloat4x4(reinterpret_cast<const DirectX::XMFLOAT4X4*>(&desc.lightTransform));
 	DirectX::XMStoreFloat4x4(&sd.ShadowProj, proj);
-
-	sd.ShadowFar = desc.camera->GetRuntimeData2().viewFrustum.fFar;
 }
 
 void Deferred::CopyShadowData()
@@ -656,15 +652,17 @@ void Deferred::CopyShadowData()
 		auto* light = lightPtr.get();
 
 		if (light->GetIsParabolicLight())
-			sd[shadowCount].ShadowType = float(light->shadowMapCount == 2 ? 2 : 1);
+			sd[shadowCount].ShadowParam.x = float(light->shadowMapCount == 2 ? 2 : 1);
 		else
-			sd[shadowCount].ShadowType = 0;
+			sd[shadowCount].ShadowParam.x = 0;
 
 		if (globals::game::isVR)
 			SetShadowParameters(light->GetVRRuntimeData(), sd[shadowCount]);
 		else
 			SetShadowParameters(light->GetRuntimeData(), sd[shadowCount]);
 
+		sd[shadowCount].ShadowParam.y = light->light->GetLightRuntimeData().radius.x;
+		
 		shadowCount++;
 	}
 

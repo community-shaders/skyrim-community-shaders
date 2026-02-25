@@ -35,9 +35,7 @@ Texture2DArray<float> DirectionalShadowCascades : register(t82);
 struct ShadowData
 {
 	column_major float4x4 ShadowProj;
-	float ShadowType;
-	float ShadowFar;
-	float2 pad0;
+	float4 ShadowParam;
 };
 
 StructuredBuffer<ShadowData> Shadows    : register(t83);
@@ -182,9 +180,9 @@ namespace ShadowSampling
 	{
 		if (positionLS.z * 0.5 + 0.5 >= 0) {
 			positionLS.xyz /= positionLS.w;
-			float3 lightDirection = normalize(normalize(positionLS) + float3(0, 0, 1));
+			float3 lightDirection = normalize(normalize(positionLS.xyz) + float3(0, 0, 1));
 			float2 sampleUV = lightDirection.xy / lightDirection.z * 0.5 + 0.5;
-			positionLS.z = saturate(length(positionLS) / shadow.ShadowFar);
+			positionLS.z = saturate(length(positionLS.xyz) / shadow.ShadowParam.y);
 			
 			float visibility = dot(float4(ShadowMaps.GatherRed(LinearSampler, float3(sampleUV.xy, shadowIndex)) > positionLS.z), 0.25);
 			return visibility;
@@ -198,7 +196,7 @@ namespace ShadowSampling
 		bool lowerHalf = positionLS.z < 0;
 		float3 normalizedPositionLS = normalize(positionLS);
 
-		positionLS.z = saturate(length(positionLS) / float(shadow.ShadowFar));
+		positionLS.z = saturate(length(positionLS) / shadow.ShadowParam.y);
 
 		float3 positionOffset = lowerHalf ? float3(0, 0, -1) : float3(0, 0, 1);
 		float3 lightDirection = normalize(normalizedPositionLS + positionOffset);
@@ -219,11 +217,11 @@ namespace ShadowSampling
 		float4 positionLS = mul(shadow.ShadowProj, float4(worldPosition, 1));
 
 		[branch]
-		if (shadow.ShadowType == 0)
+		if (shadow.ShadowParam.x == 0)
 			return GetSpotlightShadow(shadow, shadowIndex, positionLS, rotationMatrix);
-		else if (shadow.ShadowType == 1)
+		else if (shadow.ShadowParam.x  == 1)
 			return GetHemisphereShadow(shadow, shadowIndex, positionLS);
-		else if (shadow.ShadowType == 2)
+		else if (shadow.ShadowParam.x  == 2)
 			return GetOmnidirectionalShadow(shadow, shadowIndex, positionLS.xyz);
 
 		return 1.0;
