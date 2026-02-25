@@ -11,6 +11,13 @@
 
 #include <DXProgrammableCapture.h>
 
+#include "Features/CloudShadows.h"
+#include "Features/ExtendedMaterials.h"
+#include "Features/ExtendedTranslucency.h"
+#include "Features/HairSpecular.h"
+#include "Features/LinearLighting.h"
+#include "Features/WetnessEffects.h"
+
 struct CreationEngineRaytracing
 {
 	HMODULE handle = nullptr;
@@ -20,11 +27,13 @@ struct CreationEngineRaytracing
 	using GetResolutionFn = void (*)(uint32_t&, uint32_t&);
 	using SetResolutionFn = void (*)(uint32_t, uint32_t);
 	using SetCopyTargetFn = void (*)(ID3D12Resource*);
+	using UpdateFeatureDataFn = void (*)(void*, uint32_t);
 
 	InitializeFn Initialize = nullptr;
 	WaitExecutionFn WaitExecution = nullptr;
 	SetResolutionFn SetResolution = nullptr;
 	SetCopyTargetFn SetCopyTarget = nullptr;
+	UpdateFeatureDataFn UpdateFeatureData = nullptr;
 
 	CreationEngineRaytracing()
 	{
@@ -57,6 +66,11 @@ struct CreationEngineRaytracing
 
 		if (!SetCopyTarget)
 			logger::error("[Raytracing] 'CreationEngineRaytracing.dll' SetCopyTarget is nullptr");
+
+		UpdateFeatureData = reinterpret_cast<UpdateFeatureDataFn>(GetProcAddress(handle, "UpdateFeatureData"));
+
+		if (!UpdateFeatureData)
+			logger::error("[Raytracing] 'CreationEngineRaytracing.dll' UpdateFeatureData is nullptr");
 	}
 };
 
@@ -102,8 +116,6 @@ struct Raytracing : public Feature
 
 	// Resources
 	virtual void SetupResources() override;
-	virtual void ClearShaderCache() override;
-	void CompileShaders();
 
 	void Load() override;
 	void PostPostLoad() override;
@@ -113,12 +125,14 @@ struct Raytracing : public Feature
 
 	void InitializeCERaytracing(ID3D11Device5* d3d11Device, ID3D12Device5* d3d12Device, ID3D12CommandQueue* commandQueue, ID3D12CommandQueue* computeCommandQueue, ID3D12CommandQueue* copyCommandQueue);
 	bool UpdateResolution();
+	void UpdateFeatureData();
 	void DeferredPasses();
 
 	////////////////////////////////////////////////// Feature Specific Data
 	struct Settings
 	{
 		bool Enabled = true;
+		bool PathTracing = true;
 		bool EnablePIXCapture = false;
 	} settings;
 
@@ -141,6 +155,18 @@ struct Raytracing : public Feature
 		InitFailed,
 	} disableReason = DisableReason::None;
 
+	struct alignas(16) FeatureData
+	{
+		ExtendedMaterials::Settings ExtendedMaterials;
+		WetnessEffects::PerFrame WetnessEffects;
+		CloudShadows::Settings CloudShadows;
+		HairSpecular::Settings HairSpecular;
+		ExtendedTranslucency::PerFrame ExtendedTranslucency;
+		LinearLighting::PerFrameData LinearLighting;
+	};
+
+	eastl::unique_ptr<FeatureData> featureData;
+
 	struct CbData
 	{
 		float3 ColorA;
@@ -151,11 +177,6 @@ struct Raytracing : public Feature
 	static_assert(sizeof(CbData) % 16 == 0,
 		"CbData must be aligned to 16 bytes. "
 		"Check out maraneshi.github.io/HLSL-ConstantBufferLayoutVisualizer/ if you're unsure.");
-
-	eastl::unique_ptr<ConstantBuffer> cheeseCb = nullptr;  // Omit this if you want to put your CB in src/FeatureBuffer.cpp
-	eastl::unique_ptr<Texture2D> cheeseTex = nullptr;
-	winrt::com_ptr<ID3D11SamplerState> cheeseSampler = nullptr;
-	winrt::com_ptr<ID3D11ComputeShader> cheeseCs = nullptr;
 
 	eastl::unique_ptr<WrappedResource> mainTexture = nullptr; 
 
@@ -178,9 +199,20 @@ struct Raytracing : public Feature
 
 	struct Hooks
 	{
-		static void InstallD3D11Hooks(ID3D11Device* device) 
+		struct Main_RenderPlayerView
 		{
-			logger::info("[Raytracing] Installed D3D11 hooks - [0x{:08X}]", reinterpret_cast<uintptr_t>(device));
+			static void thunk(void* a1, bool a2, bool a3)
+			{
+				globals::features::raytracing.UpdateFeatureData();
+
+				func(a1, a2, a3);
+			};
+			static inline REL::Relocation<decltype(thunk)> func;
+		};
+
+		static void Install() 
+		{
+			stl::detour_thunk<Main_RenderPlayerView>(REL::RelocationID(35560, 36559));
 		}
 	};
 };

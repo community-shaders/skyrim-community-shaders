@@ -11,6 +11,7 @@
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	Raytracing::Settings,
 	Enabled,
+	PathTracing,
 	EnablePIXCapture)
 
 ////////////////////////////////////////////////////////////////////////////////////
@@ -38,6 +39,8 @@ void Raytracing::DrawSettings()
 		ImGui::BeginDisabled();
 
 	ImGui::Checkbox("Enabled", &settings.Enabled);
+
+	ImGui::Checkbox("Path Tracing", &settings.PathTracing);
 
 	if (forcedDisabledReason)
 		ImGui::EndDisabled();
@@ -102,8 +105,6 @@ void Raytracing::CreateD3D12Device(ID3D11Device* d3d11Device, ID3D11DeviceContex
 {
 	if (forcedDisabled)
 		return;
-
-	Hooks::InstallD3D11Hooks(d3d11Device);
 
 	if (settings.EnablePIXCapture) {
 		// Check to see if a copy of WinPixGpuCapturer.dll has already been injected into the application.
@@ -184,7 +185,7 @@ void Raytracing::SetDevices(ID3D11Device* d3d11Device, ID3D12Device5* d3d12Devic
 
 void Raytracing::Load()
 {
-
+	Hooks::Install();
 }
 
 void Raytracing::PostPostLoad()
@@ -241,6 +242,43 @@ bool Raytracing::UpdateResolution()
 	return true;
 }
 
+void Raytracing::SetupResources()
+{
+	auto renderer = globals::game::renderer;
+
+	D3D11_TEXTURE2D_DESC mainDesc;
+	auto mainTex = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMAIN];
+	mainTex.texture->GetDesc(&mainDesc);
+
+	if (initialized) {
+		creationEngineRaytracing->SetResolution(mainDesc.Width, mainDesc.Height);
+	}
+
+	featureData = eastl::make_unique<FeatureData>();
+}
+
+void Raytracing::UpdateFeatureData()
+{
+	auto wetnessEffect = globals::features::wetnessEffects.GetCommonBufferData();
+	auto linearLighting = globals::features::linearLighting.GetCommonBufferData();
+
+	std::memcpy(&featureData->ExtendedMaterials, &globals::features::extendedMaterials.settings, sizeof(ExtendedMaterials::Settings));
+	std::memcpy(&featureData->WetnessEffects, &wetnessEffect, sizeof(WetnessEffects::PerFrame));
+	std::memcpy(&featureData->CloudShadows, &globals::features::cloudShadows.settings, sizeof(CloudShadows::Settings));
+	std::memcpy(&featureData->HairSpecular, &globals::features::hairSpecular.settings, sizeof(HairSpecular::Settings));
+	std::memcpy(&featureData->ExtendedTranslucency, &globals::features::extendedTranslucency.GetCommonBufferData(), sizeof(ExtendedTranslucency::PerFrame));
+	std::memcpy(&featureData->LinearLighting, &linearLighting, sizeof(LinearLighting::PerFrameData));
+
+	static_assert(sizeof(FeatureData::ExtendedMaterials) == sizeof(ExtendedMaterials::Settings));
+	static_assert(sizeof(FeatureData::WetnessEffects) == sizeof(WetnessEffects::PerFrame));
+	static_assert(sizeof(FeatureData::CloudShadows) == sizeof(CloudShadows::Settings));
+	static_assert(sizeof(FeatureData::HairSpecular) == sizeof(HairSpecular::Settings));
+	static_assert(sizeof(FeatureData::ExtendedTranslucency) == sizeof(ExtendedTranslucency::PerFrame));
+	static_assert(sizeof(FeatureData::LinearLighting) == sizeof(LinearLighting::PerFrameData));
+
+	creationEngineRaytracing->UpdateFeatureData(featureData.get(), sizeof(FeatureData));
+}
+
 void Raytracing::DeferredPasses()
 {
 	if (!settings.Enabled)
@@ -266,6 +304,17 @@ void Raytracing::DeferredPasses()
 
 	creationEngineRaytracing->WaitExecution();
 
+	auto renderer = globals::game::renderer;
+
+	auto* context = globals::d3d::context;
+
+	context->CopyResource(renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMAIN].texture, mainTexture->resource11);
+
+	if (settings.PathTracing) {
+		float clearColor[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
+		context->ClearRenderTargetView(renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kINDIRECT_DOWNSCALED].RTV, clearColor);
+	}
+
 	if (pixCapture && pixCaptureStarted) {
 		ga->EndCapture();
 
@@ -278,31 +327,4 @@ void Raytracing::DeferredPasses()
 
 		ga->BeginCapture();
 	}
-}
-
-void Raytracing::SetupResources()
-{
-	auto renderer = globals::game::renderer;
-
-	D3D11_TEXTURE2D_DESC mainDesc;
-	auto mainTex = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMAIN];
-	mainTex.texture->GetDesc(&mainDesc);
-
-	if (initialized) {
-		creationEngineRaytracing->SetResolution(mainDesc.Width, mainDesc.Height);
-	}
-
-	CompileShaders();
-}
-
-void Raytracing::ClearShaderCache()
-{
-	cheeseCs = nullptr;  // This is actually optional
-	CompileShaders();
-}
-
-void Raytracing::CompileShaders()
-{
-	if (auto rawPtr = reinterpret_cast<ID3D11ComputeShader*>(Util::CompileShader(L"Data\\Shaders\\Raytracing\\nonexistent.cs.hlsl", { { "SOME_MACRO", "0" } }, "cs_5_0")); rawPtr)
-		cheeseCs.attach(rawPtr);
 }
