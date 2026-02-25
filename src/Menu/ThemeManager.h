@@ -193,7 +193,6 @@ public:
 		// Scene settings panel constants (multipliers of ImGui::GetFontSize())
 		static constexpr float SCENE_VALUE_INPUT_EM = 5.7f;            // Width for float/int value inputs
 		static constexpr float SCENE_DELETE_BUTTON_EM = 1.0f;          // Width for delete (X) buttons
-		static constexpr float SCENE_FEATURE_DROPDOWN_RATIO = 0.5f;    // Feature dropdown width ratio
 		static constexpr float SCENE_VALUE_LABEL_OFFSET_RATIO = 0.5f;  // Value label right-alignment ratio
 		static constexpr float SCENE_TOD_PARAM_COL_EM = 6.0f;          // Parameter column width (TOD table)
 		static constexpr float SCENE_TOD_PERIOD_COL_EM = 4.3f;         // Per-period column width (TOD table)
@@ -202,6 +201,11 @@ public:
 		static constexpr float SCENE_ENTRY_INDENT_EM = 0.4f;           // Indent for setting entries under feature headers
 		static constexpr float SCENE_TOD_FEATURE_TEXT_SCALE = 0.85f;   // Smaller text scale for feature names in TOD table
 		static constexpr float SCENE_TOD_LABEL_EM = 2.6f;              // Fixed width for period labels in add-setting rows
+		static constexpr float SCENE_ADD_BUTTON_EM = 1.5f;             // Size for the + add-setting button
+		static constexpr float SCENE_GROUP_SEPARATOR_ALPHA = 0.4f;    // Alpha for light separators between feature groups
+		static constexpr float SCENE_ADD_DIALOG_WIDTH_EM = 22.0f;      // Width of add-setting dialog
+		static constexpr float SCENE_ADD_DIALOG_HEIGHT_EM = 20.0f;     // Max height of add-setting dialog
+		static constexpr float SCENE_ADD_LIST_HEIGHT_EM = 12.0f;       // Height of scrollable setting list in dialog
 
 		/// Resolve a font-relative multiplier to pixels using current font size.
 		static float Em(float multiplier) { return multiplier * ImGui::GetFontSize(); }

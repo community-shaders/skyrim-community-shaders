@@ -122,7 +122,7 @@ That's it. The feature's own serialization code handles all type conversion, val
 
 -   **No feature code changes needed.** A feature gets Scene Settings Manager support by being added to a whitelist — a single line in a static list. The feature itself is unmodified.
 -   **Forward-compatible.** Features that don't exist yet will work with the Scene Settings Manager the moment they're added to the whitelist. If someone is developing a new feature that hasn't been merged yet, it can still be whitelisted in advance.
--   **Any JSON-serializable setting works.** Floats get smoothly blended between time-of-day periods. Booleans and integers snap at the dominant period boundary. If a feature adds new settings, they're automatically available — no registration step needed.
+-   **Any JSON-serializable setting works.** Floats get smoothly blended between time-of-day periods (integers, booleans, and strings are rejected from TOD — only continuous float sliders can transition). For Interior Only, all setting types are supported. If a feature adds new settings, they're automatically available — no registration step needed.
 -   **Round-trip verification.** After applying an override, the manager reads the value back and logs a warning if the feature clamped it. This catches range violations without requiring the Scene Settings Manager to know anything about valid ranges.
 
 ### Contrast with Tighter Coupling
@@ -221,7 +221,7 @@ User settings for Time of Day are persisted automatically to `SceneSettings/Time
 
 **Float values** are linearly interpolated between periods based on these factors. If a setting isn't defined for a particular period, the saved baseline value is used for that period's weight — so the blend always sums to the correct total.
 
-**Non-float values** (booleans, integers) snap to the dominant period's value. They can't be meaningfully interpolated, so the value switches when the dominant period changes.
+**Only float settings are allowed** in Time of Day. Integers, booleans, and strings cannot be smoothly interpolated between periods and are rejected — both from the UI dialog and from overwrite files. If an overwrite file contains a non-float setting, it is skipped with a log warning.
 
 ### Performance Optimizations
 
@@ -229,7 +229,6 @@ The blending runs every frame, so the system includes several optimizations:
 
 -   **Hour throttle**: The blend only recalculates when the game hour has changed by more than 0.001 (about 0.36 real-time seconds at default timescale). This skips 98%+ of per-frame work.
 -   **Epsilon cache**: For each float value, the last-applied result is cached. If the new result differs by less than 0.001, the `LoadSettings()` call is skipped entirely.
--   **Non-float cache**: Booleans and integers are cached and only pushed when they actually change.
 -   **Batch updates**: All dirty keys for a single feature are collected and applied in a single `LoadSettings()` call, rather than calling it once per key.
 
 ### Example
@@ -293,63 +292,94 @@ Select **Interior Only** or **Time of Day** from the left sidebar to open the co
 ### Interior Only Panel (UI)
 
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│  Interior Only Settings                                         │
-│  ───────────────────────                                        │
-│                                                                 │
-│  ┌────────────────────────────┐ ┌─────────────────────────────┐ │
-│  │ Select Feature...       ▼  │ │ Select Setting...         ▼ │ │
-│  └────────────────────────────┘ └─────────────────────────────┘ │
-│                                                                 │
-│  Overwrite Files              [Pause All] [Delete All]          │
-│  ─────────────────────────────────────────────────────          │
-│  ▼ Screen Space GI:                                             │
-│      EnableGI           [V]                    [●] [X]          │
-│      AmbientIntensity   [0.500___]             [●] [X]          │
-│  ▼ Subsurface Scattering:                                       │
-│      Intensity          [0.200___]             [●] [X]          │
-│                                                                 │
-│  User Settings                [Pause All] [Delete All]          │
-│  ─────────────────────────────────────────────────────          │
-│  ▼ Linear Lighting:                                             │
-│      GammaCorrection    [2.200___]             [●] [X]          │
-│                                                                 │
-└─────────────────────────────────────────────────────────────────┘
+┌───────────────────────────────────────────────────────────────┐
+│  Interior Only Settings                                  [+]  │
+│  ──────────────────────────────────────────────────────────   │
+│                                                               │
+│  Overwrite Files              [Pause All] [Delete All]        │
+│  ─────────────────────────────────────────────────────        │
+│  ▼ Screen Space GI:                                           │
+│      EnableGI           [V]                    [●] [X]        │
+│      AmbientIntensity   [0.500___]             [●] [X]        │
+│  · · · · · · · · · · · · · · · · · · · · · ·                  │
+│  ▼ Subsurface Scattering:                                     │
+│      Intensity          [0.200___]             [●] [X]        │
+│                                                               │
+│  User Settings                [Pause All] [Delete All]        │
+│  ─────────────────────────────────────────────────────        │
+│  ▼ Linear Lighting:                                           │
+│      GammaCorrection    [2.200___]             [●] [X]        │
+│                                                               │
+└───────────────────────────────────────────────────────────────┘
+```
+
+The **[+]** button is **right-aligned** on the header line.
+
+Clicking it opens the **Add Feature Settings** dialog:
+
+```
+┌───────────────────────────────────────┐
+│  Add Feature Settings            [X]  │
+│  ┌──────────────────────────────────┐ │
+│  │ Select Feature...             ▼  │ │
+│  └──────────────────────────────────┘ │
+│  ──────────────────────────────────── │
+│  [Select All] [Select None]           │
+│                                       │
+│  ┌──────────────────────────────────┐ │
+│  │ [✓] EnableGI                     │ │
+│  │ [ ] AmbientIntensity             │ │
+│  │ [ ] IndirectLightingStrength     │ │
+│  │ [ ] MaxDistance                  │ │
+│  │ [ ] NumSteps                     │ │
+│  │ ...  (scrollable)                │ │
+│  └──────────────────────────────────┘ │
+│                                       │
+│  [         Add (1)                 ]  │
+└───────────────────────────────────────┘
 ```
 
 **Elements:**
 
-| Element                     | Description                                                                                                                                                        |
-| --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| **Feature dropdown**        | Lists whitelisted interior features. Selecting one populates the setting dropdown.                                                                                 |
-| **Setting dropdown**        | Lists all JSON keys from the selected feature's `SaveSettings()`. Selecting one immediately adds it with the current value. Already-added settings are greyed out. |
-| **Overwrite Files section** | Entries loaded from mod author JSON files. Values are read-only (greyed out) — mod authors set them. You can pause or delete individual entries or all at once.    |
-| **User Settings section**   | Entries you added through the UI. Values are editable.                                                                                                             |
-| **Value editor**            | Checkbox for booleans, number input for floats/integers.                                                                                                           |
-| **[●] toggle**              | Pause/resume individual entries. Paused entries are ignored without being deleted.                                                                                 |
-| **[X] button**              | Delete the entry. For overwrites, this deletes the file from disk (with confirmation).                                                                             |
-| **Pause All / Delete All**  | Bulk controls per section.                                                                                                                                         |
+| Element                     | Description                                                                                                                                                |
+| --------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **[+] button**              | Opens the Add Feature Settings dialog to select a feature and its settings.                                                                                |
+| **Feature dropdown**        | Lists whitelisted features. Selecting one populates the setting checkbox list below.                                                                       |
+| **Select All / Select None**| Bulk-select or clear all checkboxes in the settings list.                                                                                                  |
+| **Settings checkbox list**  | Scrollable list of JSON keys from the feature's `SaveSettings()`. For Time of Day, only float keys are shown (integers, booleans, and strings are excluded). Already-added settings appear checked and disabled. |
+| **Add button**              | Adds all checked settings with their current values. Shows the count of selected settings. Closes the dialog on success.                                   |
+| **Overwrite Files section** | Entries loaded from mod author JSON files. Values are read-only (greyed out) — mod authors set them. You can pause or delete individual entries or all at once. |
+| **User Settings section**   | Entries you added through the UI. Values are editable.                                                                                                     |
+| **Value editor**            | Checkbox for booleans, number input for floats/integers.                                                                                                   |
+| **[●] toggle**              | Pause/resume individual entries. Paused entries are ignored without being deleted.                                                                         |
+| **[X] button**              | Delete the entry. For overwrites, this deletes the file from disk (with confirmation).                                                                     |
+| **Pause All / Delete All**  | Bulk controls per section.                                                                                                                                 |
 
-**Entries are grouped by feature** with collapsible tree nodes, sorted alphabetically.
+**Entries are grouped by feature** with collapsible tree nodes, sorted alphabetically. Light separators appear between feature groups for visual clarity.
 
 ---
 
 ### Time of Day Panel (UI)
 
+The default view ("All Periods" unchecked) shows a vertical per-period [+] list:
+
 ```
 ┌──────────────────────────────────────────────────────────────────┐
-│  Time of Day Settings  (Exterior Only)    [Day 12.0h]            │
-│  ────────────────────────────────────                            │
-│                                                                  │
-│  ▼ Add Settings                                                  │
-│  [V] Add to all times of day                                     │
-│  ┌────────────────────────────┐ ┌──────────────────────────────┐ │
-│  │ Select Feature...        ▼ │ │ Select Setting...          ▼ │ │
-│  └────────────────────────────┘ └──────────────────────────────┘ │
+│  Time of Day Settings (Exterior Only)  [Day 12.0h]               │
+│  ────────────────────────────────────────────────────            │
+│  [ ] All Periods                                                 │
+│  Dawn:     [+]                                                   │
+│  Sunrise:  [+]                                                   │
+│  Day:      [+]                                                   │
+│  Sunset:   [+]                                                   │
+│  Dusk:     [+]                                                   │
+│  Night:    [+]                                                   │
+│  ────────────────────────────────────────────────────            │
 │                                                                  │
 │  Overwrite Files              [Pause All] [Delete All]           │
 │  ┌─────────┬────────┬────────┬────────┬────────┬──────┬───────┐  │
 │  │Setting  │ Dawn   │Sunrise │  Day   │ Sunset │ Dusk │ Night │  │
+│  │         │ [●][X] │ [●][X] │ [●][X] │ [●][X] │[●][X]│[●][X] │  │
 │  ├─────────┼────────┼────────┼────────┼────────┼──────┼───────┤  │
 │  │CloudShadows:                                               │  │
 │  │ Opacity │ 0.300  │  --    │ 0.800  │ 0.500  │  --  │ 0.100 │  │
@@ -359,37 +389,40 @@ Select **Interior Only** or **Time of Day** from the left sidebar to open the co
 │  User Settings                [Pause All] [Delete All]           │
 │  ┌─────────┬────────┬────────┬────────┬────────┬──────┬───────┐  │
 │  │Setting  │ Dawn   │Sunrise │  Day   │ Sunset │ Dusk │ Night │  │
+│  │         │ [●][X] │ [●][X] │ [●][X] │ [●][X] │[●][X]│[●][X] │  │
 │  ├─────────┼────────┼────────┼────────┼────────┼──────┼───────┤  │
 │  │Skylighting:                                                │  │
 │  │ MixAmt  │ 0.400  │ 0.600  │ 0.800  │ 0.600  │0.400 │ 0.200 │  │
-│  │         │ [●][X] │ [●][X] │ [●][X] │ [●][X] │[●][X]│[●][X]││  │
+│  │         │ [●][X] │ [●][X] │ [●][X] │ [●][X] │[●][X]│[●][X] │  │
 │  └─────────┴────────┴────────┴────────┴────────┴──────┴───────┘  │
 │                                                                  │
 └──────────────────────────────────────────────────────────────────┘
 ```
 
+Clicking a **[+]** button opens the **Add Feature Settings** dialog (see above). **Only float settings appear** in the TOD dialog — integers, booleans, and strings cannot be smoothly transitioned between periods and are excluded. Overwrite files containing non-float TOD settings are also rejected at load time with a log warning.
+
 **Elements:**
 
-| Element                       | Description                                                                                                                                                   |
-| ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Header**                    | Shows the current period and game hour (e.g., `[Day 12.0h]`).                                                                                                 |
-| **"Add to all times of day"** | When checked, selecting a setting adds it to all 6 periods at once with the current value. When unchecked, you get a per-period dropdown row for each period. |
-| **Period columns**            | One column per period. The active period column is highlighted; inactive periods are dimmed. `--` means no override for that period (falls back to baseline). |
-| **Row-level controls**        | Each setting row has a toggle (pause all periods) and delete (remove all periods) button in the Setting column.                                               |
-| **Per-cell controls**         | Each individual period cell has its own value editor, pause toggle, and delete button.                                                                        |
+| Element                  | Description                                                                                                                                                   |
+| ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Header**               | Shows the current period and game hour (e.g., `[Day 12.0h]`). When "All Periods" is checked, a right-aligned [+] button appears on this line.                |
+| **All Periods checkbox** | When checked, the per-period [+] list is hidden and a single right-aligned [+] is shown on the header. When unchecked, per-period [+] buttons are listed vertically. |
+| **Per-period [+] list**  | One [+] button per period (Dawn through Night), each opening a dialog scoped to that specific period. Lets you add a setting to just one or two periods.      |
+| **Header controls**      | Each period column header includes a toggle [●] (pause/unpause all entries in that period) and [X] (delete all entries in that period) below the period name. |
+| **Period columns**       | One column per period. The active period column is highlighted; inactive periods are dimmed. `--` means no override for that period (falls back to baseline). |
+| **Row-level controls**   | Each setting row has a toggle (pause all periods) and delete (remove all periods) button in the Setting column.                                               |
+| **Per-cell controls**    | Each individual period cell has its own value editor, pause toggle, and delete button.                                                                        |
+| **Setting filter**       | The add dialog only shows float settings. Integers, booleans, and strings are excluded since they cannot be smoothly interpolated between periods. Overwrite files are also validated — non-float TOD entries are rejected at load. |
 
-**Note on per-period add mode**: When "Add to all times of day" is unchecked, you see 6 rows of dropdowns, one per period, each with a period name label:
+**"All Periods" mode**: When checked, the per-period [+] list is replaced by a single [+] button right-aligned on the header line (matching the Interior Only layout). Adding settings through that dialog populates all 6 periods at once with the current value:
 
 ```
-  Dawn:     [Select Feature... ▼] [Select Setting... ▼]
-  Sunrise:  [Select Feature... ▼] [Select Setting... ▼]
-  Day:      [Select Feature... ▼] [Select Setting... ▼]
-  Sunset:   [Select Feature... ▼] [Select Setting... ▼]
-  Dusk:     [Select Feature... ▼] [Select Setting... ▼]
-  Night:    [Select Feature... ▼] [Select Setting... ▼]
+  Time of Day Settings (Exterior Only)  [Day 12.0h]          [+]
+  ──────────────────────────────────────────────────────────
+  [✓] All Periods
 ```
 
-This lets you add a setting to just one or two periods (e.g., only Dawn and Night) without filling all six.
+When unchecked, each [+] button opens the Add Feature Settings dialog scoped to that specific period, letting you add a setting to just one or two periods (e.g., only Dawn and Night) without filling all six.
 
 ---
 
@@ -692,7 +725,7 @@ A: Yes. User settings are saved to `SceneSettings/InteriorOnly.json` and `SceneS
 ### Settings & Values
 
 **Q: A setting I want to override doesn't appear in the dropdown. Why?**
-A: The feature may not be on the whitelist, or the setting may have a type that isn't exposed through `SaveSettings()`. Check the whitelist in `SceneSettingsManager.cpp`.
+A: The feature may not be on the whitelist, or the setting may have a type that isn't exposed through `SaveSettings()`. For Time of Day, only float settings appear — integers, booleans, and strings are excluded because they cannot be smoothly transitioned between periods. This applies to both the UI dialog and overwrite files. Check the whitelist in `SceneSettingsManager.cpp`.
 
 **Q: Can I set a value outside the feature's normal range?**
 A: You can enter any value, but the feature will clamp it to its valid range during `LoadSettings()`. The Scene Settings Manager logs a warning when this happens. Check the in-game log if your override seems to have no effect.

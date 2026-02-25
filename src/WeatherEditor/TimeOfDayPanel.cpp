@@ -238,10 +238,27 @@ namespace TimeOfDayPanel
 		}
 	}
 
+	/// Collect all entry indices per period from a source group.
+	static void CollectPerPeriodIndices(const SourceGroup& group, std::array<std::vector<size_t>, kPeriodCount>& out)
+	{
+		for (const auto& [_, featureMap] : group.map)
+			for (const auto& [__, perKey] : featureMap)
+				for (int p = 0; p < kPeriodCount; ++p)
+					if (perKey[p] != SIZE_MAX)
+						out[p].push_back(perKey[p]);
+	}
+
 	/// Draw a TOD table for a single source group.
 	static void DrawSourceTable(const SourceGroup& group, const float* factors, const char* tableId, EntrySource source)
 	{
+		auto* manager = SceneSettingsManager::GetSingleton();
+		const auto& entries = manager->GetEntries(kSceneType);
+		bool isOverwrite = source == EntrySource::Overwrite;
 		constexpr int kTotalCols = 1 + kPeriodCount;
+
+		// Pre-collect per-period indices for header controls
+		std::array<std::vector<size_t>, kPeriodCount> perPeriod{};
+		CollectPerPeriodIndices(group, perPeriod);
 
 		if (ImGui::BeginTable(tableId, kTotalCols,
 				ImGuiTableFlags_Borders |
@@ -254,7 +271,7 @@ namespace TimeOfDayPanel
 
 			ImGui::TableSetupScrollFreeze(0, 1);
 
-			// Header row with period names + active highlighting
+			// Header row with period names + integrated per-column controls
 			ImGui::TableNextRow(ImGuiTableRowFlags_Headers);
 			ImGui::TableSetColumnIndex(0);
 			ImGui::TableHeader("Setting");
@@ -262,10 +279,60 @@ namespace TimeOfDayPanel
 				ImGui::TableSetColumnIndex(1 + i);
 				bool isActive = factors[i] > C::SCENE_TOD_ACTIVE_THRESHOLD;
 				if (!isActive)
-					ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetStyleColorVec4(ImGuiCol_TextDisabled));
-				ImGui::TableHeader(SceneSettingsManager::kPeriodNames[i]);
+					ImGui::PushStyleVar(ImGuiStyleVar_Alpha, C::SCENE_TOD_INACTIVE_ALPHA);
+
+				ImGui::Text("%s", SceneSettingsManager::kPeriodNames[i]);
+
+				const auto& indices = perPeriod[i];
+				if (!indices.empty()) {
+					ImGui::PushID(i);
+
+					bool allPaused = std::all_of(indices.begin(), indices.end(),
+						[&](size_t idx) { return idx < entries.size() && entries[idx].paused; });
+					bool active = !allPaused;
+					if (Util::FeatureToggle("##colActive", &active))
+						for (auto idx : indices)
+							if (idx < entries.size() && entries[idx].paused == active)
+								manager->TogglePauseEntry(kSceneType, idx);
+					if (auto _tt = Util::HoverTooltipWrapper())
+						ImGui::Text(allPaused ? "Unpause all in this period" : "Pause all in this period");
+
+					ImGui::SameLine();
+					{
+						auto styledButton = Util::ErrorButtonStyle();
+						if (ImGui::Button("X", ImVec2(C::Em(C::SCENE_DELETE_BUTTON_EM), 0))) {
+							if (isOverwrite) {
+								std::set<std::string> filenames;
+								for (auto idx : indices)
+									if (idx < entries.size())
+										filenames.insert(entries[idx].sourceFilename);
+								std::string fileList;
+								for (const auto& f : filenames) {
+									if (!fileList.empty())
+										fileList += ", ";
+									fileList += "'" + f + "'";
+								}
+								popups.pendingDeleteRow = indices;
+								popups.deleteRowOverwrite.message = std::format(
+									"Delete all {} overwrite entries?\nThis will permanently remove file(s) {} from disk.",
+									SceneSettingsManager::kPeriodNames[i], fileList);
+								popups.deleteRowOverwrite.Request();
+							} else {
+								auto sorted = indices;
+								std::sort(sorted.begin(), sorted.end(), std::greater<>());
+								for (auto idx : sorted)
+									manager->RemoveSetting(kSceneType, idx);
+							}
+						}
+					}
+					if (auto _tt = Util::HoverTooltipWrapper())
+						ImGui::Text(isOverwrite ? "Delete all in this period" : "Remove all in this period");
+
+					ImGui::PopID();
+				}
+
 				if (!isActive)
-					ImGui::PopStyleColor();
+					ImGui::PopStyleVar();
 			}
 
 			DrawSourceRows(group, factors, source);
@@ -290,34 +357,42 @@ namespace TimeOfDayPanel
 			SceneSettingsManager::GetPeriodName(currentPeriod),
 			SceneSettingsManager::GetCurrentGameHour());
 
+		if (addToAllPeriods) {
+			SceneSettingsUI::RightAlignNextButton();
+			SceneSettingsUI::DrawAddSettingButton(kSceneType, allPeriodsAddState,
+				Period::Count, nullptr, true);
+			SceneSettingsUI::DrawAddSettingDialog(kSceneType, allPeriodsAddState,
+				Period::Count, true);
+		}
+
+		ImGui::Separator();
+
+		// Add buttons: one for all periods, or per-period
+		ImGui::Checkbox("All Periods", &addToAllPeriods);
+
+		if (!addToAllPeriods) {
+			for (int i = 0; i < kPeriodCount; ++i) {
+				auto periodLabel = std::format("{}:", SceneSettingsManager::GetPeriodName(static_cast<Period>(i)));
+				ImGui::PushID(i);
+				SceneSettingsUI::DrawAddSettingButton(kSceneType, periodAddState[i],
+					static_cast<Period>(i), periodLabel.c_str());
+				SceneSettingsUI::DrawAddSettingDialog(kSceneType, periodAddState[i],
+					static_cast<Period>(i));
+				ImGui::PopID();
+			}
+		}
+
 		ImGui::Separator();
 
 		// Popups
 		SceneSettingsUI::DrawPopups(kSceneType, popups);
-
-		// Per-period add-setting dropdowns — period name inline with dropdowns
-		if (ImGui::CollapsingHeader("Add Settings", ImGuiTreeNodeFlags_DefaultOpen)) {
-			ImGui::Checkbox("Add to all times of day", &addToAllPeriods);
-			if (addToAllPeriods) {
-				SceneSettingsUI::DrawAddSettingUI(kSceneType, allPeriodsAddState,
-					Period::Count, nullptr, true);
-			} else {
-				for (int i = 0; i < kPeriodCount; ++i) {
-					auto periodLabel = std::format("{}:", SceneSettingsManager::GetPeriodName(static_cast<Period>(i)));
-					ImGui::PushID(i);
-					SceneSettingsUI::DrawAddSettingUI(kSceneType, periodAddState[i],
-						static_cast<Period>(i), periodLabel.c_str());
-					ImGui::PopID();
-				}
-			}
-		}
 
 		if (entries.empty()) {
 			ImGui::Spacing();
 			ImGui::TextColored(theme.StatusPalette.Disable,
 				"No time-of-day settings configured.");
 			ImGui::TextColored(theme.StatusPalette.Disable,
-				"Select a feature and setting above to add overrides for each period.");
+				"Use the + button above to add overrides for each period.");
 			return;
 		}
 

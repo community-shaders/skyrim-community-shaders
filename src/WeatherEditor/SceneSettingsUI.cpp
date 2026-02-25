@@ -29,17 +29,43 @@ namespace SceneSettingsUI
 
 	// --- Shared Drawing ---
 
-	void DrawAddSettingUI(SceneType type, AddSettingState& state, Period period, const char* labelPrefix, bool addToAllPeriods)
+	void DrawAddSettingButton([[maybe_unused]] SceneType type, AddSettingState& state, [[maybe_unused]] Period period, const char* labelPrefix, [[maybe_unused]] bool addToAllPeriods)
 	{
-		auto* manager = SceneSettingsManager::GetSingleton();
-		constexpr int kPeriodCount = SceneSettingsManager::kPeriodCount;
-
-		ImGui::Spacing();
-
-		// Optional inline label (e.g. period name) with fixed width for alignment
 		if (labelPrefix) {
 			ImGui::Text("%s", labelPrefix);
 			ImGui::SameLine(C::Em(C::SCENE_TOD_LABEL_EM));
+		}
+
+		if (ImGui::Button("+", ImVec2(C::Em(C::SCENE_ADD_BUTTON_EM), C::Em(C::SCENE_ADD_BUTTON_EM)))) {
+			state.Reset();
+			state.dialogOpen = true;
+			state.cachedFeatureNames = GetFeatureNamesForType(type);
+		}
+		if (auto _tt = Util::HoverTooltipWrapper())
+			ImGui::Text("Add feature settings");
+	}
+
+	void RightAlignNextButton()
+	{
+		float btnSize = C::Em(C::SCENE_ADD_BUTTON_EM);
+		ImGui::SameLine(ImGui::GetContentRegionAvail().x - btnSize + ImGui::GetCursorPosX());
+	}
+
+	void DrawAddSettingDialog(SceneType type, AddSettingState& state, Period period, bool addToAllPeriods)
+	{
+		if (!state.dialogOpen)
+			return;
+
+		constexpr int kPeriodCount = SceneSettingsManager::kPeriodCount;
+		auto* manager = SceneSettingsManager::GetSingleton();
+
+		ImVec2 center = ImGui::GetMainViewport()->GetCenter();
+		ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+		ImGui::SetNextWindowSize(ImVec2(C::Em(C::SCENE_ADD_DIALOG_WIDTH_EM), 0));
+
+		if (!ImGui::Begin("Add Feature Settings", &state.dialogOpen, ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoDocking | ImGuiWindowFlags_AlwaysAutoResize)) {
+			ImGui::End();
+			return;
 		}
 
 		// Feature dropdown
@@ -47,18 +73,20 @@ namespace SceneSettingsUI
 			state.cachedFeatureNames = GetFeatureNamesForType(type);
 
 		auto displayName = (state.selectedFeatureIdx >= 0 &&
-							   state.selectedFeatureIdx < static_cast<int>(state.cachedFeatureNames.size())) ?
-		                       SceneSettingsManager::GetFeatureDisplayName(state.cachedFeatureNames[state.selectedFeatureIdx]) :
-		                       std::string("Select Feature...");
-		const char* featurePreview = displayName.c_str();
+							   state.selectedFeatureIdx < static_cast<int>(state.cachedFeatureNames.size()))
+		                     ? SceneSettingsManager::GetFeatureDisplayName(state.cachedFeatureNames[state.selectedFeatureIdx])
+		                     : std::string("Select Feature...");
 
-		ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x * C::SCENE_FEATURE_DROPDOWN_RATIO);
-		if (ImGui::BeginCombo("##FeatureSelect", featurePreview)) {
+		ImGui::SetNextItemWidth(-FLT_MIN);
+		if (ImGui::BeginCombo("##FeatureSelect", displayName.c_str())) {
 			for (int i = 0; i < static_cast<int>(state.cachedFeatureNames.size()); ++i) {
 				auto itemLabel = SceneSettingsManager::GetFeatureDisplayName(state.cachedFeatureNames[i]);
 				if (ImGui::Selectable(itemLabel.c_str(), i == state.selectedFeatureIdx)) {
 					state.selectedFeatureIdx = i;
-					state.cachedSettingKeys = SceneSettingsManager::GetFeatureSettingKeys(state.cachedFeatureNames[i]);
+					state.cachedSettingKeys = (type == SceneType::TimeOfDay)
+					                            ? SceneSettingsManager::GetTransitionableSettingKeys(state.cachedFeatureNames[i])
+					                            : SceneSettingsManager::GetFeatureSettingKeys(state.cachedFeatureNames[i]);
+					state.selectedSettings.assign(state.cachedSettingKeys.size(), false);
 				}
 				if (i == state.selectedFeatureIdx)
 					ImGui::SetItemDefaultFocus();
@@ -66,47 +94,76 @@ namespace SceneSettingsUI
 			ImGui::EndCombo();
 		}
 
-		ImGui::SameLine();
+		bool hasFeature = state.selectedFeatureIdx >= 0 && !state.cachedSettingKeys.empty();
 
-		// Setting dropdown — selecting an entry auto-adds it
-		{
-			auto _ = Util::DisableGuard(state.selectedFeatureIdx < 0);
-			ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x);
-			if (ImGui::BeginCombo("##SettingSelect", "Select Setting...")) {
+		if (hasFeature) {
+			ImGui::Spacing();
+			ImGui::Separator();
+
+			// Select All / Select None
+			if (ImGui::SmallButton("Select All"))
+				std::fill(state.selectedSettings.begin(), state.selectedSettings.end(), true);
+			ImGui::SameLine();
+			if (ImGui::SmallButton("Select None"))
+				std::fill(state.selectedSettings.begin(), state.selectedSettings.end(), false);
+
+			ImGui::Spacing();
+
+			// Scrollable checkbox list
+			auto& featureName = state.cachedFeatureNames[state.selectedFeatureIdx];
+			if (ImGui::BeginChild("##SettingList", ImVec2(-FLT_MIN, C::Em(C::SCENE_ADD_LIST_HEIGHT_EM)), ImGuiChildFlags_Border)) {
 				for (int i = 0; i < static_cast<int>(state.cachedSettingKeys.size()); ++i) {
-					auto& featureName = state.cachedFeatureNames[state.selectedFeatureIdx];
 					auto& key = state.cachedSettingKeys[i];
-
-					// Check if already added (for all-periods mode, disabled only when present in every period)
-					bool alreadyAdded = false;
-					if (state.selectedFeatureIdx >= 0) {
-						if (addToAllPeriods) {
-							alreadyAdded = true;
-							for (int p = 0; p < kPeriodCount && alreadyAdded; ++p)
-								alreadyAdded = IsAlreadyAdded(type, featureName, key, static_cast<Period>(p));
-						} else {
-							alreadyAdded = IsAlreadyAdded(type, featureName, key, period);
-						}
-					}
+					bool alreadyAdded = addToAllPeriods
+					                      ? [&] { for (int p = 0; p < kPeriodCount; ++p) if (!IsAlreadyAdded(type, featureName, key, static_cast<Period>(p))) return false; return true; }()
+					                      : IsAlreadyAdded(type, featureName, key, period);
 
 					if (alreadyAdded) {
-						ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetStyle().Colors[ImGuiCol_TextDisabled]);
-						ImGui::Selectable(key.c_str(), false, ImGuiSelectableFlags_Disabled);
-						ImGui::PopStyleColor();
-					} else if (ImGui::Selectable(key.c_str(), false)) {
+						auto _ = Util::DisableGuard(true);
+						bool checked = true;
+						ImGui::Checkbox(key.c_str(), &checked);
+					} else {
+						bool sel = state.selectedSettings[i];
+						if (ImGui::Checkbox(key.c_str(), &sel))
+							state.selectedSettings[i] = sel;
+					}
+				}
+			}
+			ImGui::EndChild();
+
+			ImGui::Spacing();
+
+			// Count selected
+			int selectedCount = 0;
+			for (size_t i = 0; i < state.selectedSettings.size(); ++i)
+				if (state.selectedSettings[i])
+					++selectedCount;
+
+			// Add button
+			{
+				auto _ = Util::DisableGuard(selectedCount == 0);
+				auto label = std::format("Add ({})", selectedCount);
+				if (ImGui::Button(label.c_str(), ImVec2(-FLT_MIN, 0))) {
+					for (size_t i = 0; i < state.cachedSettingKeys.size(); ++i) {
+						if (!state.selectedSettings[i])
+							continue;
+						auto& key = state.cachedSettingKeys[i];
 						auto currentValue = SceneSettingsManager::GetFeatureSettingValue(featureName, key);
 						if (addToAllPeriods) {
 							for (int p = 0; p < kPeriodCount; ++p)
 								if (!IsAlreadyAdded(type, featureName, key, static_cast<Period>(p)))
 									manager->AddSetting(type, featureName, key, currentValue, static_cast<Period>(p));
 						} else {
-							manager->AddSetting(type, featureName, key, currentValue, period);
+							if (!IsAlreadyAdded(type, featureName, key, period))
+								manager->AddSetting(type, featureName, key, currentValue, period);
 						}
 					}
+					state.dialogOpen = false;
 				}
-				ImGui::EndCombo();
 			}
 		}
+
+		ImGui::End();
 	}
 
 	void DrawValueEditor(SceneType type, size_t index, float inputWidth)
@@ -261,7 +318,17 @@ namespace SceneSettingsUI
 				return entries[a].settingKey < entries[b].settingKey;
 			});
 
+		bool firstGroup = true;
 		for (const auto& [featureName, featureIndices] : grouped) {
+			if (!firstGroup) {
+				auto sepColor = ImGui::GetStyleColorVec4(ImGuiCol_Separator);
+				sepColor.w *= C::SCENE_GROUP_SEPARATOR_ALPHA;
+				ImGui::PushStyleColor(ImGuiCol_Separator, sepColor);
+				ImGui::Separator();
+				ImGui::PopStyleColor();
+			}
+			firstGroup = false;
+
 			auto label = SceneSettingsManager::GetFeatureDisplayName(featureName) + ":";
 			if (ImGui::TreeNodeEx(label.c_str(), ImGuiTreeNodeFlags_DefaultOpen)) {
 				ImGui::Indent(C::Em(C::SCENE_ENTRY_INDENT_EM));

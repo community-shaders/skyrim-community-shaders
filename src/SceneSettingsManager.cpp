@@ -220,6 +220,26 @@ SceneSettingsManager::SettingType SceneSettingsManager::DetectSettingType(const 
 	return SettingType::Unknown;
 }
 
+std::vector<std::string> SceneSettingsManager::GetTransitionableSettingKeys(const std::string& featureShortName)
+{
+	auto* feature = Feature::FindFeatureByShortName(featureShortName);
+	if (!feature)
+		return {};
+
+	json settings;
+	feature->SaveSettings(settings);
+	if (!settings.is_object())
+		return {};
+
+	std::vector<std::string> keys;
+	for (auto& [key, val] : settings.items()) {
+		if (DetectSettingType(val) == SettingType::Float)
+			keys.push_back(key);
+	}
+	std::sort(keys.begin(), keys.end());
+	return keys;
+}
+
 // --- Generic Entry Management ---
 
 std::vector<SceneSettingsManager::SettingEntry>& SceneSettingsManager::GetEntriesMut(SceneType type)
@@ -280,6 +300,12 @@ bool SceneSettingsManager::HasDuplicateEntry(SceneType type, const std::string& 
 void SceneSettingsManager::AddSetting(SceneType type, const std::string& featureShortName, const std::string& settingKey, const json& value,
 	TimeOfDayPeriod period)
 {
+	// TOD only supports float settings (smooth interpolation)
+	if (type == SceneType::TimeOfDay && DetectSettingType(value) != SettingType::Float) {
+		logger::warn("[SceneSettings] Rejecting non-float TOD setting: {}.{}", featureShortName, settingKey);
+		return;
+	}
+
 	if (HasDuplicateEntry(type, featureShortName, settingKey, EntrySource::User, period))
 		return;
 
@@ -1077,6 +1103,12 @@ void SceneSettingsManager::DiscoverOverwritesInDir(SceneType type, const std::fi
 
 			if (settingCount != 1) {
 				logger::warn("[SceneSettings] Skipping overwrite '{}': expected 1 setting, found {}", filename, settingCount);
+				continue;
+			}
+
+			// TOD only supports float settings (smooth interpolation)
+			if (type == SceneType::TimeOfDay && DetectSettingType(settingValue) != SettingType::Float) {
+				logger::warn("[SceneSettings] Skipping overwrite '{}': non-float setting '{}' not allowed in Time of Day", filename, settingKey);
 				continue;
 			}
 

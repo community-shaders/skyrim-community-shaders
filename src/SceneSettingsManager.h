@@ -200,6 +200,9 @@ public:
 	/// Get setting keys for a feature by JSON round-tripping its current settings
 	static std::vector<std::string> GetFeatureSettingKeys(const std::string& featureShortName);
 
+	/// Get only float setting keys that can be smoothly transitioned in Time of Day
+	static std::vector<std::string> GetTransitionableSettingKeys(const std::string& featureShortName);
+
 	/// Get current value of a specific setting from a feature
 	static json GetFeatureSettingValue(const std::string& featureShortName, const std::string& settingKey);
 

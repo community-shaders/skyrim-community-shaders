@@ -13,12 +13,23 @@ namespace SceneSettingsUI
 	using EntrySource = SceneSettingsManager::EntrySource;
 	using Period = SceneSettingsManager::TimeOfDayPeriod;
 
-	/// Persistent state for the feature/setting tree selector.
+	/// Persistent state for the "+" add-setting dialog.
 	struct AddSettingState
 	{
+		bool dialogOpen = false;
 		int selectedFeatureIdx = -1;
 		std::vector<std::string> cachedFeatureNames;
 		std::vector<std::string> cachedSettingKeys;
+		std::vector<bool> selectedSettings;  // Checkbox state per setting key
+
+		void Reset()
+		{
+			dialogOpen = false;
+			selectedFeatureIdx = -1;
+			cachedFeatureNames.clear();
+			cachedSettingKeys.clear();
+			selectedSettings.clear();
+		}
 	};
 
 	/// Shared confirmation popup state for a panel.
@@ -36,15 +47,23 @@ namespace SceneSettingsUI
 			deleteAllUser("Delete All User Settings?", userMsg, "Delete All") {}
 	};
 
-	/// Draw the feature tree selector.  Selecting a setting auto-adds it.
+	/// Draw a "+" button that opens the add-setting dialog.
 	/// @param type            Scene type being edited.
-	/// @param state           Persistent dropdown state (selection indices, caches).
+	/// @param state           Persistent dialog state.
 	/// @param period          For TimeOfDay entries, which period to add to. Count = none.
-	/// @param labelPrefix     Optional label drawn before the dropdowns (e.g. period name).
+	/// @param labelPrefix     Optional label drawn before the button (e.g. period name).
 	/// @param addToAllPeriods When true, adds the setting to every period at once.
-	void DrawAddSettingUI(SceneType type, AddSettingState& state,
+	void DrawAddSettingButton(SceneType type, AddSettingState& state,
 		Period period = Period::Count, const char* labelPrefix = nullptr,
 		bool addToAllPeriods = false);
+
+	/// Position the cursor so the next add-setting button is right-aligned on the current line.
+	void RightAlignNextButton();
+
+	/// Draw the modal dialog opened by DrawAddSettingButton.
+	/// Must be called each frame for each active dialog state.
+	void DrawAddSettingDialog(SceneType type, AddSettingState& state,
+		Period period = Period::Count, bool addToAllPeriods = false);
 
 	/// Draw the value editor widget (checkbox/float input/int input) for a setting entry.
 	/// @param type         Scene type being edited.

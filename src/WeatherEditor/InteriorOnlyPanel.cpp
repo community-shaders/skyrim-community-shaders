@@ -25,10 +25,13 @@ namespace InteriorOnlyPanel
 		auto& theme = globals::menu->GetSettings().Theme;
 
 		ImGui::Text("Interior Only Settings");
+		SceneSettingsUI::RightAlignNextButton();
+		SceneSettingsUI::DrawAddSettingButton(kSceneType, addState);
+
 		ImGui::Separator();
 
 		SceneSettingsUI::DrawPopups(kSceneType, popups);
-		SceneSettingsUI::DrawAddSettingUI(kSceneType, addState);
+		SceneSettingsUI::DrawAddSettingDialog(kSceneType, addState);
 
 		// Empty state
 		if (entries.empty()) {
@@ -36,7 +39,7 @@ namespace InteriorOnlyPanel
 			ImGui::TextColored(theme.StatusPalette.Disable,
 				"No interior-only settings configured.");
 			ImGui::TextColored(theme.StatusPalette.Disable,
-				"Select a feature and setting above to add overrides.");
+				"Use the + button above to add overrides.");
 			ImGui::Spacing();
 			ImGui::TextWrapped(
 				"Settings added here will override feature defaults when you enter an interior cell. "
