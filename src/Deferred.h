@@ -4,6 +4,8 @@
 
 #include "Buffer.h"
 
+#include "RE/B/BSShadowLight.h"
+
 #define ALBEDO RE::RENDER_TARGETS::kINDIRECT
 #define SPECULAR RE::RENDER_TARGETS::kINDIRECT_DOWNSCALED
 #define REFLECTANCE RE::RENDER_TARGETS::kRAWINDIRECT
@@ -26,7 +28,7 @@ public:
 	{
 		DirectX::XMFLOAT2   EndSplitDistances;    // cascade end depths:   x = cascade 0, y = cascade 1
 		DirectX::XMFLOAT2   StartSplitDistances;  // cascade start depths: x = cascade 0, y = cascade 1
-		DirectX::XMFLOAT4X4 ShadowMapProj[2];     // world-to-shadow projections for each cascade
+		DirectX::XMFLOAT4X4 ShadowMapProj[2];     // world-to-shadow projections for each cascade (col3 dropped — ortho)
 	};
 	STATIC_ASSERT_ALIGNAS_16(DirectionalShadowData);
 
@@ -83,6 +85,20 @@ public:
 	ID3D11SamplerState* pointSampler    = nullptr;
 	ID3D11SamplerState* shadowCmpSampler = nullptr;  // PCF comparison sampler (s14)
 
+private:
+	// Called by CopyShadowData to fill DirectionalShadowData projections and capture the cascade SRV.
+	void SetShadowCascadeParameters(RE::BSShadowLight::RUNTIME_DATA& lightData, const DirectX::XMMATRIX& eyeTrans,
+	    DirectionalShadowData& dd, ID3D11ShaderResourceView*& cascadeSRV);
+	void SetShadowCascadeParameters(RE::BSShadowLight::RUNTIME_DATA_VR& lightData, const DirectX::XMMATRIX& eyeTrans,
+	    DirectionalShadowData& dd, ID3D11ShaderResourceView*& cascadeSRV);
+
+	// Called by CopyShadowData to fill ShadowData for one active shadow light and capture its SRV.
+	void SetShadowParameters(RE::BSShadowLight::RUNTIME_DATA& lightData, const DirectX::XMMATRIX& eyeTrans,
+	    ShadowData& sd, ID3D11ShaderResourceView*& shadowMapsSRV);
+	void SetShadowParameters(RE::BSShadowLight::RUNTIME_DATA_VR& lightData, const DirectX::XMMATRIX& eyeTrans,
+	    ShadowData& sd, ID3D11ShaderResourceView*& shadowMapsSRV);
+
+public:
 	struct Hooks
 	{
 		struct Main_RenderShadowMaps
