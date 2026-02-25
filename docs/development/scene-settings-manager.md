@@ -4,17 +4,17 @@
 
 ## Table of Contents
 
-- [What Is the Scene Settings Manager?](#what-is-the-scene-settings-manager)
-- [How Settings Flow (Priority Order)](#how-settings-flow-priority-order)
-- [Design Philosophy: Zero Coupling](#design-philosophy-zero-coupling)
-- [Interior Only Settings](#interior-only-settings)
-- [Time of Day Settings](#time-of-day-settings)
-- [UI Guide](#ui-guide)
-- [For Mod Authors: Overwrite Files](#for-mod-authors-overwrite-files)
-- [For Developers: Adding Features to the Whitelist](#for-developers-adding-features-to-the-whitelist)
-- [The Whitelist and Why Features Don't Opt In](#the-whitelist-and-why-features-dont-opt-in)
-- [Comparison: Scene Settings Manager vs Settings Override Manager](#comparison-scene-settings-manager-vs-settings-override-manager)
-- [FAQ](#faq)
+-   [What Is the Scene Settings Manager?](#what-is-the-scene-settings-manager)
+-   [How Settings Flow (Priority Order)](#how-settings-flow-priority-order)
+-   [Design Philosophy: Zero Coupling](#design-philosophy-zero-coupling)
+-   [Interior Only Settings](#interior-only-settings)
+-   [Time of Day Settings](#time-of-day-settings)
+-   [UI Guide](#ui-guide)
+-   [For Mod Authors: Overwrite Files](#for-mod-authors-overwrite-files)
+-   [For Developers: Adding Features to the Whitelist](#for-developers-adding-features-to-the-whitelist)
+-   [The Whitelist and Why Features Don't Opt In](#the-whitelist-and-why-features-dont-opt-in)
+-   [Comparison: Scene Settings Manager vs Settings Override Manager](#comparison-scene-settings-manager-vs-settings-override-manager)
+-   [FAQ](#faq)
 
 ---
 
@@ -22,8 +22,8 @@
 
 The Scene Settings Manager lets you automatically adjust Community Shaders feature settings based on **where you are** and **what time it is**. It has two modes:
 
-- **Interior Only** — Override settings when you enter an interior cell. Values revert automatically when you leave.
-- **Time of Day** — Smoothly blend settings across six time-of-day periods (Dawn, Sunrise, Day, Sunset, Dusk, Night) while you're in an exterior cell.
+-   **Interior Only** — Override settings when you enter an interior cell. Values revert automatically when you leave.
+-   **Time of Day** — Smoothly blend settings across six time-of-day periods (Dawn, Sunrise, Day, Sunset, Dusk, Night) while you're in an exterior cell.
 
 Both modes work entirely through the existing `SaveSettings`/`LoadSettings` JSON interface that every feature already has. Features don't need to do anything special — the Scene Settings Manager reads their current values, patches in overrides, and writes them back. The feature never knows the difference.
 
@@ -68,12 +68,12 @@ The feature's settings on its settings page act as the **master settings** — t
 
 ### Layer Details
 
-| Layer | When Applied | Persists? | Who Creates It |
-|-------|-------------|-----------|----------------|
-| **Feature Defaults** | At boot, baked into the feature code and loaded from the feature's INI file | Always present | Feature developers |
-| **User Settings** | At runtime, whenever the user changes a setting through the in-game CS menu. Saved to `SettingsUser.json`. | Yes (saved to disk on change) | Users (in-game UI sliders, checkboxes, etc.) |
-| **Settings Override Manager** | At boot, after defaults are loaded. Mod author JSON files in `Overrides/` folder merge on top of defaults. User `.user` files sit on top of those. | Yes (files on disk) | Mod authors and users |
-| **Scene Settings Manager** | At runtime, contextually. Interior Only applies on cell transitions. Time of Day blends continuously in exteriors. | User settings saved to disk. Overwrite files on disk. Values revert when context changes. | Mod authors (overwrite files) and users (in-game UI) |
+| Layer                         | When Applied                                                                                                                                       | Persists?                                                                                 | Who Creates It                                       |
+| ----------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------- | ---------------------------------------------------- |
+| **Feature Defaults**          | At boot, baked into the feature code and loaded from the feature's INI file                                                                        | Always present                                                                            | Feature developers                                   |
+| **User Settings**             | At runtime, whenever the user changes a setting through the in-game CS menu. Saved to `SettingsUser.json`.                                         | Yes (saved to disk on change)                                                             | Users (in-game UI sliders, checkboxes, etc.)         |
+| **Settings Override Manager** | At boot, after defaults are loaded. Mod author JSON files in `Overrides/` folder merge on top of defaults. User `.user` files sit on top of those. | Yes (files on disk)                                                                       | Mod authors and users                                |
+| **Scene Settings Manager**    | At runtime, contextually. Interior Only applies on cell transitions. Time of Day blends continuously in exteriors.                                 | User settings saved to disk. Overwrite files on disk. Values revert when context changes. | Mod authors (overwrite files) and users (in-game UI) |
 
 ### Flow in Practice
 
@@ -120,22 +120,23 @@ That's it. The feature's own serialization code handles all type conversion, val
 
 ### Why This Matters
 
-- **No feature code changes needed.** A feature gets Scene Settings Manager support by being added to a whitelist — a single line in a static list. The feature itself is unmodified.
-- **Forward-compatible.** Features that don't exist yet will work with the Scene Settings Manager the moment they're added to the whitelist. If someone is developing a new feature that hasn't been merged yet, it can still be whitelisted in advance.
-- **Any JSON-serializable setting works.** Floats get smoothly blended between time-of-day periods. Booleans and integers snap at the dominant period boundary. If a feature adds new settings, they're automatically available — no registration step needed.
-- **Round-trip verification.** After applying an override, the manager reads the value back and logs a warning if the feature clamped it. This catches range violations without requiring the Scene Settings Manager to know anything about valid ranges.
+-   **No feature code changes needed.** A feature gets Scene Settings Manager support by being added to a whitelist — a single line in a static list. The feature itself is unmodified.
+-   **Forward-compatible.** Features that don't exist yet will work with the Scene Settings Manager the moment they're added to the whitelist. If someone is developing a new feature that hasn't been merged yet, it can still be whitelisted in advance.
+-   **Any JSON-serializable setting works.** Floats get smoothly blended between time-of-day periods. Booleans and integers snap at the dominant period boundary. If a feature adds new settings, they're automatically available — no registration step needed.
+-   **Round-trip verification.** After applying an override, the manager reads the value back and logs a warning if the feature clamped it. This catches range violations without requiring the Scene Settings Manager to know anything about valid ranges.
 
 ### Contrast with Tighter Coupling
 
 To appreciate the zero-coupling approach, consider what a tightly-coupled system would look like:
 
-- Features would need to **register** each controllable variable with name, type, range, and interpolation function.
-- Adding a new setting to scene control would require **code changes in the feature**.
-- Type-specific interpolation logic would need to be **duplicated or centralized** for every variable type.
+-   Features would need to **register** each controllable variable with name, type, range, and interpolation function.
+-   Adding a new setting to scene control would require **code changes in the feature**.
+-   Type-specific interpolation logic would need to be **duplicated or centralized** for every variable type.
 
 The Scene Settings Manager avoids all of this. It treats features as black boxes with a JSON interface. This means:
-- A mod author can create overwrite files targeting any setting that appears in a feature's JSON — even settings the Scene Settings Manager developers have never heard of.
-- The system scales to any number of features and settings without increasing complexity.
+
+-   A mod author can create overwrite files targeting any setting that appears in a feature's JSON — even settings the Scene Settings Manager developers have never heard of.
+-   The system scales to any number of features and settings without increasing complexity.
 
 ---
 
@@ -179,15 +180,18 @@ User settings (entries you add through the in-game UI) are persisted automatical
 ### Example
 
 Say you have Interior Only overrides for:
-- `ScreenSpaceGI.EnableGI` → `false` (disable GI in interiors)
-- `SubsurfaceScattering.Intensity` → `0.2` (reduce SSS indoors)
+
+-   `ScreenSpaceGI.EnableGI` → `false` (disable GI in interiors)
+-   `SubsurfaceScattering.Intensity` → `0.2` (reduce SSS indoors)
 
 When you enter Dragonsreach:
+
 1. Current values of `EnableGI` and `Intensity` are saved.
 2. `EnableGI` is set to `false`, `Intensity` to `0.2`.
 3. You play through the interior with these settings active.
 
 When you exit to Whiterun:
+
 1. `EnableGI` reverts to its saved value (e.g., `true`).
 2. `Intensity` reverts to its saved value (e.g., `0.5`).
 3. Time of Day reactivates (if you have TOD entries).
@@ -202,14 +206,14 @@ Time of Day (TOD) settings smoothly blend feature values across six periods whil
 
 **Periods and Hour Boundaries**:
 
-| Period   | Hours         | Description                |
-|----------|---------------|----------------------------|
-| Dawn     | 4:00 – 6:00   | Pre-sunrise golden hour    |
-| Sunrise  | 6:00 – 8:00   | Sun coming up              |
-| Day      | 8:00 – 17:00  | Full daylight              |
-| Sunset   | 17:00 – 19:00 | Sun going down             |
-| Dusk     | 19:00 – 21:00 | Post-sunset blue hour      |
-| Night    | 21:00 – 4:00  | Full darkness (wraps around midnight) |
+| Period  | Hours         | Description                           |
+| ------- | ------------- | ------------------------------------- |
+| Dawn    | 4:00 – 6:00   | Pre-sunrise golden hour               |
+| Sunrise | 6:00 – 8:00   | Sun coming up                         |
+| Day     | 8:00 – 17:00  | Full daylight                         |
+| Sunset  | 17:00 – 19:00 | Sun going down                        |
+| Dusk    | 19:00 – 21:00 | Post-sunset blue hour                 |
+| Night   | 21:00 – 4:00  | Full darkness (wraps around midnight) |
 
 **Blending**: At the boundary between two periods, values blend over a 30-minute (0.5 game-hour) transition zone. Outside the transition zone, the current period's value is used at full weight.
 
@@ -223,31 +227,35 @@ User settings for Time of Day are persisted automatically to `SceneSettings/Time
 
 The blending runs every frame, so the system includes several optimizations:
 
-- **Hour throttle**: The blend only recalculates when the game hour has changed by more than 0.001 (about 0.36 real-time seconds at default timescale). This skips 98%+ of per-frame work.
-- **Epsilon cache**: For each float value, the last-applied result is cached. If the new result differs by less than 0.001, the `LoadSettings()` call is skipped entirely.
-- **Non-float cache**: Booleans and integers are cached and only pushed when they actually change.
-- **Batch updates**: All dirty keys for a single feature are collected and applied in a single `LoadSettings()` call, rather than calling it once per key.
+-   **Hour throttle**: The blend only recalculates when the game hour has changed by more than 0.001 (about 0.36 real-time seconds at default timescale). This skips 98%+ of per-frame work.
+-   **Epsilon cache**: For each float value, the last-applied result is cached. If the new result differs by less than 0.001, the `LoadSettings()` call is skipped entirely.
+-   **Non-float cache**: Booleans and integers are cached and only pushed when they actually change.
+-   **Batch updates**: All dirty keys for a single feature are collected and applied in a single `LoadSettings()` call, rather than calling it once per key.
 
 ### Example
 
 Say you set `CloudShadows.Opacity`:
-- Dawn: `0.3`
-- Day: `0.8`
-- Sunset: `0.5`
-- Night: `0.1`
+
+-   Dawn: `0.3`
+-   Day: `0.8`
+-   Sunset: `0.5`
+-   Night: `0.1`
 
 (Sunrise and Dusk are left undefined — they'll fall back to the baseline.)
 
 At 5:30 (mid-Dawn, 30 min before Sunrise transition):
-- Dawn factor = 1.0, result = `0.3`
+
+-   Dawn factor = 1.0, result = `0.3`
 
 At 5:45 (Dawn→Sunrise transition starts, 15 min left):
-- Dawn factor ≈ 0.5, Sunrise factor ≈ 0.5
-- Sunrise has no override → uses baseline (say `0.6`)
-- Result = 0.5 × 0.3 + 0.5 × 0.6 = `0.45`
+
+-   Dawn factor ≈ 0.5, Sunrise factor ≈ 0.5
+-   Sunrise has no override → uses baseline (say `0.6`)
+-   Result = 0.5 × 0.3 + 0.5 × 0.6 = `0.45`
 
 At 12:00 (mid-Day):
-- Day factor = 1.0, result = `0.8`
+
+-   Day factor = 1.0, result = `0.8`
 
 ---
 
@@ -311,16 +319,16 @@ Select **Interior Only** or **Time of Day** from the left sidebar to open the co
 
 **Elements:**
 
-| Element | Description |
-|---------|-------------|
-| **Feature dropdown** | Lists whitelisted interior features. Selecting one populates the setting dropdown. |
-| **Setting dropdown** | Lists all JSON keys from the selected feature's `SaveSettings()`. Selecting one immediately adds it with the current value. Already-added settings are greyed out. |
-| **Overwrite Files section** | Entries loaded from mod author JSON files. Values are read-only (greyed out) — mod authors set them. You can pause or delete individual entries or all at once. |
-| **User Settings section** | Entries you added through the UI. Values are editable. |
-| **Value editor** | Checkbox for booleans, number input for floats/integers. |
-| **[●] toggle** | Pause/resume individual entries. Paused entries are ignored without being deleted. |
-| **[X] button** | Delete the entry. For overwrites, this deletes the file from disk (with confirmation). |
-| **Pause All / Delete All** | Bulk controls per section. |
+| Element                     | Description                                                                                                                                                        |
+| --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **Feature dropdown**        | Lists whitelisted interior features. Selecting one populates the setting dropdown.                                                                                 |
+| **Setting dropdown**        | Lists all JSON keys from the selected feature's `SaveSettings()`. Selecting one immediately adds it with the current value. Already-added settings are greyed out. |
+| **Overwrite Files section** | Entries loaded from mod author JSON files. Values are read-only (greyed out) — mod authors set them. You can pause or delete individual entries or all at once.    |
+| **User Settings section**   | Entries you added through the UI. Values are editable.                                                                                                             |
+| **Value editor**            | Checkbox for booleans, number input for floats/integers.                                                                                                           |
+| **[●] toggle**              | Pause/resume individual entries. Paused entries are ignored without being deleted.                                                                                 |
+| **[X] button**              | Delete the entry. For overwrites, this deletes the file from disk (with confirmation).                                                                             |
+| **Pause All / Delete All**  | Bulk controls per section.                                                                                                                                         |
 
 **Entries are grouped by feature** with collapsible tree nodes, sorted alphabetically.
 
@@ -362,13 +370,13 @@ Select **Interior Only** or **Time of Day** from the left sidebar to open the co
 
 **Elements:**
 
-| Element | Description |
-|---------|-------------|
-| **Header** | Shows the current period and game hour (e.g., `[Day 12.0h]`). |
+| Element                       | Description                                                                                                                                                   |
+| ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Header**                    | Shows the current period and game hour (e.g., `[Day 12.0h]`).                                                                                                 |
 | **"Add to all times of day"** | When checked, selecting a setting adds it to all 6 periods at once with the current value. When unchecked, you get a per-period dropdown row for each period. |
-| **Period columns** | One column per period. The active period column is highlighted; inactive periods are dimmed. `--` means no override for that period (falls back to baseline). |
-| **Row-level controls** | Each setting row has a toggle (pause all periods) and delete (remove all periods) button in the Setting column. |
-| **Per-cell controls** | Each individual period cell has its own value editor, pause toggle, and delete button. |
+| **Period columns**            | One column per period. The active period column is highlighted; inactive periods are dimmed. `--` means no override for that period (falls back to baseline). |
+| **Row-level controls**        | Each setting row has a toggle (pause all periods) and delete (remove all periods) button in the Setting column.                                               |
+| **Per-cell controls**         | Each individual period cell has its own value editor, pause toggle, and delete button.                                                                        |
 
 **Note on per-period add mode**: When "Add to all times of day" is unchecked, you see 6 rows of dropdowns, one per period, each with a period name label:
 
@@ -410,10 +418,10 @@ When scene settings are actively controlling a feature, its settings page in the
 
 **Behaviour:**
 
-- The **Scene Specific Settings** toggle appears only when scene entries exist for this feature (active or paused).
-- When **active** (toggle on, green): All feature settings are **disabled** (greyed out). The Scene Settings Manager is controlling values.
-- When **paused** (toggle off): Scene settings stop applying. Feature settings become editable again. This is per-feature — it doesn't affect other features.
-- The **"Apply Override" button** (from the Settings Override Manager) is also disabled while scene settings are active, to prevent conflicting writes.
+-   The **Scene Specific Settings** toggle appears only when scene entries exist for this feature (active or paused).
+-   When **active** (toggle on, green): All feature settings are **disabled** (greyed out). The Scene Settings Manager is controlling values.
+-   When **paused** (toggle off): Scene settings stop applying. Feature settings become editable again. This is per-feature — it doesn't affect other features.
+-   The **"Apply Override" button** (from the Settings Override Manager) is also disabled while scene settings are active, to prevent conflicting writes.
 
 **Why all settings are greyed out, not just the overridden ones:**
 
@@ -471,9 +479,9 @@ Place JSON files in `CommunityShaders/SceneSettings/InteriorOnly/`.
 
 **Rules:**
 
-- Each file must contain **exactly one setting** (one non-metadata key).
-- The `_feature` field identifies the target feature. If omitted, the system tries to infer it from the filename (the part after the last underscore must match a feature short name).
-- Keys starting with `_` are treated as metadata and ignored when extracting the setting.
+-   Each file must contain **exactly one setting** (one non-metadata key).
+-   The `_feature` field identifies the target feature. If omitted, the system tries to infer it from the filename (the part after the last underscore must match a feature short name).
+-   Keys starting with `_` are treated as metadata and ignored when extracting the setting.
 
 ### Time of Day Overwrites
 
@@ -503,11 +511,11 @@ Periods without a file fall back to the feature's baseline value during blending
 
 ### Overwrite File Format
 
-| Field | Required? | Description |
-|-------|-----------|-------------|
-| `_feature` | Recommended | The feature's short name (e.g., `"ScreenSpaceGI"`, `"CloudShadows"`). If omitted, inferred from filename. |
-| `{settingKey}` | Required (exactly 1) | The JSON key matching the feature's `SaveSettings()` output, with the desired override value. |
-| `_*` (any key starting with `_`) | Optional | Metadata fields, ignored by the system. Use for comments, authorship, etc. |
+| Field                            | Required?            | Description                                                                                               |
+| -------------------------------- | -------------------- | --------------------------------------------------------------------------------------------------------- |
+| `_feature`                       | Recommended          | The feature's short name (e.g., `"ScreenSpaceGI"`, `"CloudShadows"`). If omitted, inferred from filename. |
+| `{settingKey}`                   | Required (exactly 1) | The JSON key matching the feature's `SaveSettings()` output, with the desired override value.             |
+| `_*` (any key starting with `_`) | Optional             | Metadata fields, ignored by the system. Use for comments, authorship, etc.                                |
 
 **Example with metadata:**
 
@@ -562,8 +570,8 @@ Adding Scene Settings Manager support for a feature is trivial — it requires *
 
 1. Open `src/SceneSettingsManager.cpp`.
 2. Find the appropriate whitelist:
-   - `GetInteriorRelevantFeatureNames()` for interior support.
-   - `GetExteriorRelevantFeatureNames()` for time-of-day support.
+    - `GetInteriorRelevantFeatureNames()` for interior support.
+    - `GetExteriorRelevantFeatureNames()` for time-of-day support.
 3. Add the feature's short name to the `unordered_set`:
 
 ```cpp
@@ -600,6 +608,7 @@ That's it. No interface to implement, no registration call to add. The Scene Set
 Not every feature is exposed to the Scene Settings Manager. Features must be present in one of two static whitelists:
 
 **Interior-Relevant Features** — settings that make sense to override in interiors:
+
 ```
 ScreenSpaceGI          SubsurfaceScattering   LinearLighting
 ImageBasedLighting     PostProcessing         ScreenSpacePointLightShadows
@@ -607,6 +616,7 @@ ScreenSpaceRayTracing  VanillaFresnel
 ```
 
 **Exterior/Time-of-Day-Relevant Features** — settings that make sense to vary across the day:
+
 ```
 CloudShadows           ExponentialHeightFog   GrassLighting
 ImageBasedLighting     LinearLighting         Skylighting
@@ -623,15 +633,15 @@ You might wonder: why not have each feature declare `bool SupportsSceneSettings(
 
 3. **Easy to extend.** Adding a new feature to the whitelist is a single-line diff. There's no API to implement, no registration call to add, no interface to satisfy. When a new feature is developed — even one that hasn't been merged yet — it can be added to the whitelist in the same PR or in a follow-up.
 
-4. **Even whitelist changes are less work than a coupled system.** In the unlikely event that the whitelist needs updating (a feature is added, removed, or moved between lists), the change is a single line in one file — `SceneSettingsManager.cpp`. In a coupled system where features opt themselves in, the same change would require editing the feature's own code, which is strictly more work. Any change you'd need to make to the whitelist is a change you'd *also* need to make in a coupled system — except in the coupled version, you'd be editing the feature itself, dealing with its build dependencies, and potentially breaking its tests. The whitelist approach is always equal or less effort.
+4. **Even whitelist changes are less work than a coupled system.** In the unlikely event that the whitelist needs updating (a feature is added, removed, or moved between lists), the change is a single line in one file — `SceneSettingsManager.cpp`. In a coupled system where features opt themselves in, the same change would require editing the feature's own code, which is strictly more work. Any change you'd need to make to the whitelist is a change you'd _also_ need to make in a coupled system — except in the coupled version, you'd be editing the feature itself, dealing with its build dependencies, and potentially breaking its tests. The whitelist approach is always equal or less effort.
 
 ### Features That Aren't Whitelisted (and Why)
 
 Some features are intentionally missing:
 
-- **ScreenSpaceGI** (exterior whitelist): `LoadSettings()` recompiles 6 compute shaders synchronously. Fine for interior transitions (happens once), but not for per-frame TOD blending. It *is* on the interior whitelist since interior overrides only apply once on cell transition.
-- **VolumetricLighting, LightLimitFix**: Heavy GPU features where hot-swapping settings could cause transient artifacts or require buffer reallocation.
-- **TerrainBlending, TerrainVariation**: Terrain features that work at a mesh level and don't benefit from per-frame setting changes.
+-   **ScreenSpaceGI** (exterior whitelist): `LoadSettings()` recompiles 6 compute shaders synchronously. Fine for interior transitions (happens once), but not for per-frame TOD blending. It _is_ on the interior whitelist since interior overrides only apply once on cell transition.
+-   **VolumetricLighting, LightLimitFix**: Heavy GPU features where hot-swapping settings could cause transient artifacts or require buffer reallocation.
+-   **TerrainBlending, TerrainVariation**: Terrain features that work at a mesh level and don't benefit from per-frame setting changes.
 
 As features are improved and their `LoadSettings()` paths become cheaper, they can be promoted to the whitelist with a single-line change. Even in this scenario, the whitelist approach is less work than a coupled system — a coupled system would require the same decision about whether to enable scene settings support, but the change would live inside the feature's own code rather than in a centralized, reviewable list.
 
@@ -641,26 +651,25 @@ As features are improved and their `LoadSettings()` paths become cheaper, they c
 
 Community Shaders has two systems that modify feature settings after boot. They serve different purposes and operate at different layers.
 
-| | Scene Settings Manager | Settings Override Manager |
-|---|---|---|
-| **Purpose** | Context-dependent overrides (interior/exterior, time of day) | Permanent baseline overrides (mod author presets) |
-| **When applied** | At runtime, on cell transitions and per-frame (TOD) | At boot, when features first load settings |
-| **Reverts?** | Yes — automatically when context changes | No — permanent until manually reset |
-| **Feature coupling** | Zero — uses SaveSettings/LoadSettings JSON round-trip | Zero — merges JSON on top of defaults at boot |
-| **Granularity** | Per-setting, per-context (interior, per-period) | Per-setting, per-feature, or global |
-| **User editing** | In-game UI (Weather Editor panels) | "Apply Override" button per feature |
-| **Mod author format** | One setting per JSON file, in SceneSettings/ subfolders | Multi-setting JSON files in Overrides/ folder |
-| **File naming** | `{ModName}_{FeatureName}_{SettingKey}.json` | `{ModName}_{FeatureName}.json` or `{ModName}_Global.json` |
-| **Priority** | Higher — applies on top of everything else | Lower — applies at boot, overwritten by scene settings |
-| **Blending** | Yes — float values smoothly interpolate between TOD periods | No — values are merged, not blended |
-| **Interior/Exterior awareness** | Yes — core feature | No — applies everywhere |
-
+|                                 | Scene Settings Manager                                       | Settings Override Manager                                 |
+| ------------------------------- | ------------------------------------------------------------ | --------------------------------------------------------- |
+| **Purpose**                     | Context-dependent overrides (interior/exterior, time of day) | Permanent baseline overrides (mod author presets)         |
+| **When applied**                | At runtime, on cell transitions and per-frame (TOD)          | At boot, when features first load settings                |
+| **Reverts?**                    | Yes — automatically when context changes                     | No — permanent until manually reset                       |
+| **Feature coupling**            | Zero — uses SaveSettings/LoadSettings JSON round-trip        | Zero — merges JSON on top of defaults at boot             |
+| **Granularity**                 | Per-setting, per-context (interior, per-period)              | Per-setting, per-feature, or global                       |
+| **User editing**                | In-game UI (Weather Editor panels)                           | "Apply Override" button per feature                       |
+| **Mod author format**           | One setting per JSON file, in SceneSettings/ subfolders      | Multi-setting JSON files in Overrides/ folder             |
+| **File naming**                 | `{ModName}_{FeatureName}_{SettingKey}.json`                  | `{ModName}_{FeatureName}.json` or `{ModName}_Global.json` |
+| **Priority**                    | Higher — applies on top of everything else                   | Lower — applies at boot, overwritten by scene settings    |
+| **Blending**                    | Yes — float values smoothly interpolate between TOD periods  | No — values are merged, not blended                       |
+| **Interior/Exterior awareness** | Yes — core feature                                           | No — applies everywhere                                   |
 
 The Settings Override Manager establishes the **baseline** that the Scene Settings Manager saves and modifies. They're complementary:
 
-- A mod author might use the **Override Manager** to set `CloudShadows.Opacity` to `0.6` as their recommended default.
-- They might then use the **Scene Settings Manager** to set `Opacity` to `0.3` at Night and `0.9` at Day.
-- The saved baseline would be `0.6` (from the Override Manager), and TOD would blend between `0.3`, `0.9`, and the baseline for uncovered periods.
+-   A mod author might use the **Override Manager** to set `CloudShadows.Opacity` to `0.6` as their recommended default.
+-   They might then use the **Scene Settings Manager** to set `Opacity` to `0.3` at Night and `0.9` at Day.
+-   The saved baseline would be `0.6` (from the Override Manager), and TOD would blend between `0.3`, `0.9`, and the baseline for uncovered periods.
 
 ---
 
@@ -690,6 +699,7 @@ A: You can enter any value, but the feature will clamp it to its valid range dur
 
 **Q: My overwrite file isn't showing up in the Overwrite Files section.**
 A: Check:
+
 1. The file is in the correct directory (`SceneSettings/InteriorOnly/` or `SceneSettings/TimeOfDay/{Period}/`).
 2. The file has a `.json` extension.
 3. The file contains exactly one non-metadata key.
