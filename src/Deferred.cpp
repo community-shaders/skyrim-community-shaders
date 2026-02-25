@@ -190,13 +190,13 @@ void Deferred::SetupResources()
 		sbDesc.BindFlags = D3D11_BIND_SHADER_RESOURCE;
 		sbDesc.MiscFlags = D3D11_RESOURCE_MISC_BUFFER_STRUCTURED;
 		sbDesc.StructureByteStride = sizeof(ShadowData);
-		sbDesc.ByteWidth = 16 * sizeof(ShadowData);
+		sbDesc.ByteWidth = 8 * sizeof(ShadowData);
 
 		D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc{};
 		srvDesc.Format = DXGI_FORMAT_UNKNOWN;
 		srvDesc.ViewDimension = D3D11_SRV_DIMENSION_BUFFER;
 		srvDesc.Buffer.FirstElement = 0;
-		srvDesc.Buffer.NumElements = 16;
+		srvDesc.Buffer.NumElements = 8;
 
 		perShadows = new Buffer(sbDesc);
 		perShadows->CreateSRV(srvDesc);
@@ -630,7 +630,7 @@ void Deferred::CopyShadowData()
 		return;
 
 	DirectionalShadowData dd{};
-	ShadowData            sd[4]{};
+	ShadowData            sd[16]{};
 
 	auto context = globals::d3d::context;
 
@@ -650,6 +650,9 @@ void Deferred::CopyShadowData()
 	ID3D11ShaderResourceView* shadowMapsSRV = globals::game::renderer->GetDepthStencilData().depthStencils[RE::RENDER_TARGET_DEPTHSTENCIL::kSHADOWMAPS].depthSRV;
 
 	for (auto& lightPtr : sceneRTData.activeShadowLights) {
+		if (!lightPtr || shadowCount >= 8u)
+			break;
+
 		auto* light = lightPtr.get();
 
 		if (light->GetIsParabolicLight())
@@ -664,7 +667,6 @@ void Deferred::CopyShadowData()
 
 		shadowCount++;
 	}
-
 
 	context->PSSetShaderResources(82, 1, &cascadeSRV);
 	context->PSSetShaderResources(84, 1, &shadowMapsSRV);
@@ -682,7 +684,7 @@ void Deferred::CopyShadowData()
 	{
 		D3D11_MAPPED_SUBRESOURCE mapped{};
 		DX::ThrowIfFailed(context->Map(perShadows->resource.get(), 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped));
-		memcpy(mapped.pData, sd, 16 * sizeof(ShadowData));
+		memcpy(mapped.pData, sd, 8 * sizeof(ShadowData));
 		context->Unmap(perShadows->resource.get(), 0);
 		ID3D11ShaderResourceView* srv = perShadows->srv.get();
 		context->PSSetShaderResources(83, 1, &srv);
