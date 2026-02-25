@@ -3,6 +3,7 @@
 	"configurePresets": [
 		{
 			"name": "ALL-WITH-AUTO-DEPLOYMENT",
+			"binaryDir": "${sourceDir}/build/ALL",
 			"cacheVariables": {
 				"AUTO_PLUGIN_DEPLOYMENT": "ON"
 			},
