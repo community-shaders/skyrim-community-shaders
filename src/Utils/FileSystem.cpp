@@ -209,6 +209,52 @@ namespace Util
 				logger::warn("Failed to create directory '{}': {}", path.string(), ec.message());
 			}
 		}
+
+		std::string SanitizeFileName(std::string name)
+		{
+			// Trim
+			constexpr std::string_view trimLeadingChars = " \t\r\n\v\f-";
+			auto first = name.find_first_not_of(trimLeadingChars);
+			if (first == std::string::npos)
+				return "";
+			constexpr std::string_view trimTrailingChars = " \t\r\n\v\f.";
+			auto last = name.find_last_not_of(trimTrailingChars);
+			if (last == std::string::npos)
+				last = first;
+			name = name.substr(first, last - first + 1);
+
+			// Replace invalid characters
+			std::replace_if(name.begin(), name.end(), [](char c) {
+				auto u = static_cast<unsigned char>(c);
+				// Only perform "illegal" checks if it's a standard ASCII character (0-127)
+				if (u < 128u) {
+					return c == '\\' || c == '/' || c == ':' || c == '*' || c == '?' ||
+					       c == '"' || c == '<' || c == '>' || c == '|' ||
+					       u < 32u || u == 127u;
+				}
+				return false; }, '_');
+
+			// Windows reserved device names
+			static constexpr const char* reserved[] = {
+				"CON", "PRN", "AUX", "NUL",
+				"COM1", "COM2", "COM3", "COM4", "COM5", "COM6", "COM7", "COM8", "COM9",
+				"LPT1", "LPT2", "LPT3", "LPT4", "LPT5", "LPT6", "LPT7", "LPT8", "LPT9"
+			};
+
+			for (const char* r : reserved) {
+				if (Util::IEquals(name, r)) {
+					name += '_';
+					break;
+				}
+			}
+
+			// Limit length
+			if (name.length() > 255u) {
+				name = name.substr(0, 255u);
+			}
+
+			return name;
+		}
 	}
 }
 

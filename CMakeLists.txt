@@ -221,6 +221,37 @@ target_sources(
 )
 
 # #######################################################################################################################
+# # Theme presets
+# #######################################################################################################################
+set(THEMES_DIR
+    "${CMAKE_CURRENT_SOURCE_DIR}/package/SKSE/Plugins/CommunityShaders/Themes"
+)
+file(GLOB THEME_JSON_FILES CONFIGURE_DEPENDS "${THEMES_DIR}/*.json")
+set(THEME_PRESET_NAMES_LIST "")
+foreach(f IN LISTS THEME_JSON_FILES)
+    get_filename_component(name "${f}" NAME_WE)
+    list(APPEND THEME_PRESET_NAMES_LIST "${name}")
+endforeach()
+list(SORT THEME_PRESET_NAMES_LIST)
+list(LENGTH THEME_PRESET_NAMES_LIST THEME_PRESET_COUNT)
+set(THEME_PRESET_NAMES "")
+foreach(p IN LISTS THEME_PRESET_NAMES_LIST)
+    set(THEME_PRESET_NAMES "${THEME_PRESET_NAMES}\t\t\"${p}\",\n")
+endforeach()
+string(REGEX REPLACE ",\n$" "" THEME_PRESET_NAMES "${THEME_PRESET_NAMES}")
+
+configure_file(
+    ${CMAKE_CURRENT_SOURCE_DIR}/cmake/ThemePresets.h.in
+    ${CMAKE_CURRENT_BINARY_DIR}/cmake/ThemePresets.h
+    @ONLY
+)
+
+target_sources(
+    "${PROJECT_NAME}"
+    PRIVATE ${CMAKE_CURRENT_BINARY_DIR}/cmake/ThemePresets.h
+)
+
+# #######################################################################################################################
 # # clang-format
 # #######################################################################################################################
 

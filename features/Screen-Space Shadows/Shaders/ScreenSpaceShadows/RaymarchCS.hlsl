@@ -34,10 +34,8 @@ cbuffer PerFrame : register(b1)
 };
 
 [numthreads(WAVE_SIZE, 1, 1)] void main(
-	int3 groupID
-	: SV_GroupID,
-	int groupThreadID
-	: SV_GroupThreadID) {
+	int3 groupID : SV_GroupID,
+	int groupThreadID : SV_GroupThreadID) {
 	DispatchParameters parameters;
 	parameters.SetDefaults();
 

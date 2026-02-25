@@ -11,6 +11,8 @@
 #include "Common/VR.hlsli"
 #include "ScreenSpaceGI/common.hlsli"
 
+#ifdef VR
+
 Texture2D<float> srcDepth : register(t0);
 Texture2D<float> srcAo : register(t1);
 Texture2D<float4> srcIlY : register(t2);
@@ -24,8 +26,7 @@ static const float kDepthSigma = 0.01;
 static const float kMaxBlend = 0.5;
 static const float kBackCheckThreshold = 8.0;
 
-[numthreads(8, 8, 1)] void main(uint2 dtid : SV_DispatchThreadID)
-{
+[numthreads(8, 8, 1)] void main(uint2 dtid : SV_DispatchThreadID) {
 	const float2 outFrameDim = OUT_FRAME_DIM;
 	if (any(dtid >= uint2(outFrameDim)))
 		return;
@@ -75,3 +76,5 @@ static const float kBackCheckThreshold = 8.0;
 	outIlY[dtid] = lerp(srcIlY[dtid], srcIlY[r.otherPx], r.blendWeight);
 	outIlCoCg[dtid] = lerp(srcIlCoCg[dtid], srcIlCoCg[r.otherPx], r.blendWeight);
 }
+
+#endif  // VR

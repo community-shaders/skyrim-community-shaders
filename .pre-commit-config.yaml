@@ -11,9 +11,10 @@ repos:
       hooks:
           - id: clang-format
             args: [--style=file]
+            types_or: [file]
             files: \.(h|hpp|c|cpp|hlsl|hlsli)$
             additional_dependencies: ["clang-format==20.1.5"]
-            exclude: ^(\.\/)?(extern|include)\/
+            exclude: ^(extern|include)/
 
     - repo: https://github.com/pre-commit/mirrors-prettier
       rev: v3.1.0

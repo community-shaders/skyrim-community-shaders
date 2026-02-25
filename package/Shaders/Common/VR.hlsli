@@ -2,12 +2,10 @@
 #define __VR_DEPENDENCY_HLSL__
 #ifdef VR
 
-
 // First person model depth threshold for VR occlusion logic
-#ifndef VR_FP_Z
-#define VR_FP_Z 18.0
-#endif
-
+#	ifndef VR_FP_Z
+#		define VR_FP_Z 18.0
+#	endif
 
 #	if defined(VSHADER)
 #		include "Common/Math.hlsli"
@@ -263,7 +261,7 @@ namespace Stereo
 	{
 		sampleUV = monoUV.xy;
 		sampleEyeIndex = eyeIndex;
-#		ifdef VR
+#	ifdef VR
 		if (FrameBuffer::IsOutsideFrame(monoUV.xy, false)) {
 			float3 otherEyeUV = ConvertMonoUVToOtherEye(monoUV, eyeIndex);
 			if (!FrameBuffer::IsOutsideFrame(otherEyeUV.xy, false)) {
@@ -271,7 +269,7 @@ namespace Stereo
 				sampleEyeIndex = 1 - eyeIndex;
 			}
 		}
-#		endif
+#	endif
 	}
 
 #	ifdef VR
@@ -385,7 +383,7 @@ namespace Stereo
 		float confidence = 1.0 - smoothstep(0.01, 0.05, depthDiff);
 
 		// Soft first person model mask: fade out FP model near threshold
-		float fp_fade1 = 1.0 - smoothstep(VR_FP_Z - 1.0, VR_FP_Z + 1.0, uv1.z); // fades from 1 to 0 as depth crosses VR_FP_Z
+		float fp_fade1 = 1.0 - smoothstep(VR_FP_Z - 1.0, VR_FP_Z + 1.0, uv1.z);  // fades from 1 to 0 as depth crosses VR_FP_Z
 		float fp_fade2 = 1.0 - smoothstep(VR_FP_Z - 1.0, VR_FP_Z + 1.0, uv2.z);
 
 		// If one eye is world and the other is FP, fade out FP smoothly
@@ -393,8 +391,10 @@ namespace Stereo
 		bool eye2_is_fp = uv2.z < VR_FP_Z;
 		bool eyes_disagree = eye1_is_fp != eye2_is_fp;
 		if (eyes_disagree) {
-			if (eye1_is_fp) fade1 *= fp_fade1;
-			if (eye2_is_fp) fade2 *= fp_fade2;
+			if (eye1_is_fp)
+				fade1 *= fp_fade1;
+			if (eye2_is_fp)
+				fade2 *= fp_fade2;
 		}
 
 		fade1 *= confidence * edgeFade;

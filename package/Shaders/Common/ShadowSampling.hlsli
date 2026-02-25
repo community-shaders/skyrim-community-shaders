@@ -1,10 +1,10 @@
 #ifndef __SHADOW_SAMPLING_DEPENDENCY_HLSL__
 #define __SHADOW_SAMPLING_DEPENDENCY_HLSL__
 
+#include "Common/Color.hlsli"
 #include "Common/Math.hlsli"
 #include "Common/Random.hlsli"
 #include "Common/SharedData.hlsli"
-#include "Common/Color.hlsli"
 
 #if defined(TERRAIN_SHADOWS)
 #	include "TerrainShadows/TerrainShadows.hlsli"
@@ -35,7 +35,7 @@ namespace ShadowSampling
 #endif
 
 #if defined(CLOUD_SHADOWS)
-			worldShadow *= CloudShadows::GetCloudShadowMult(positionWS, LinearSampler);
+		worldShadow *= CloudShadows::GetCloudShadowMult(positionWS, LinearSampler);
 #endif
 
 		return worldShadow;
@@ -43,19 +43,19 @@ namespace ShadowSampling
 
 	float Get3DFilteredShadow(float3 positionWS, float3 viewDirection, float2 screenPosition, uint eyeIndex, out float surfaceShadow)
 	{
-	#if defined(EFFECT)
+#if defined(EFFECT)
 		float viewRayLength = min(Permutation::EffectRadius * 0.2, 256);
 		float3 startPosition = positionWS - viewDirection * viewRayLength;
 		float3 endPosition = positionWS + viewDirection * viewRayLength;
-	#elif defined(UNDERWATER)
+#elif defined(UNDERWATER)
 		float viewRayLength = 128.0;
 		float3 startPosition = positionWS;
 		float3 endPosition = positionWS - viewDirection * viewRayLength;
-	#else
+#else
 		float viewRayLength = 128.0;
 		float3 startPosition = positionWS;
 		float3 endPosition = positionWS + viewDirection * viewRayLength;
-	#endif
+#endif
 
 		float totalRayLength = distance(endPosition, startPosition);
 
@@ -67,7 +67,7 @@ namespace ShadowSampling
 		float noise = Random::InterleavedGradientNoise(screenPosition, SharedData::FrameCount);
 
 		float worldShadow = 0.0;
-		for(uint i = 0; i < sampleCount; i++){
+		for (uint i = 0; i < sampleCount; i++) {
 			float t = (float(i) + noise) * rcpSampleCount;
 			float3 sampledPositionWS = lerp(endPosition, startPosition, t);
 			float worldShadowSample = ShadowSampling::GetWorldShadow(sampledPositionWS, FrameBuffer::CameraPosAdjust[eyeIndex].xyz, eyeIndex);
@@ -109,17 +109,17 @@ namespace ShadowSampling
 	{
 		float3 ambientColorAmb = max(0, mul(SharedData::DirectionalAmbient, float4(0, 0, 1, 1)));
 
-#		if defined(IBL)
-	if (SharedData::iblSettings.EnableDiffuseIBL && (!SharedData::InInterior || SharedData::iblSettings.EnableInterior)) {
-		ambientColorAmb *= SharedData::iblSettings.DALCAmount;
-#			if defined(SKYLIGHTING) && !defined(INTERIOR)
-		float3 iblColor = Color::Saturation(ImageBasedLighting::GetIBLColor(float3(0, 0, -1), skylightingDiffuse), SharedData::iblSettings.IBLSaturation) * SharedData::iblSettings.DiffuseIBLScale;
-#			else
-		float3 iblColor = Color::Saturation(ImageBasedLighting::GetIBLColor(float3(0, 0, -1)), SharedData::iblSettings.IBLSaturation) * SharedData::iblSettings.DiffuseIBLScale;
-#			endif
-		ambientColorAmb += Color::IrradianceToGamma(iblColor);
-	}
-#		endif
+#if defined(IBL)
+		if (SharedData::iblSettings.EnableDiffuseIBL && (!SharedData::InInterior || SharedData::iblSettings.EnableInterior)) {
+			ambientColorAmb *= SharedData::iblSettings.DALCAmount;
+#	if defined(SKYLIGHTING) && !defined(INTERIOR)
+			float3 iblColor = Color::Saturation(ImageBasedLighting::GetIBLColor(float3(0, 0, -1), skylightingDiffuse), SharedData::iblSettings.IBLSaturation) * SharedData::iblSettings.DiffuseIBLScale;
+#	else
+			float3 iblColor = Color::Saturation(ImageBasedLighting::GetIBLColor(float3(0, 0, -1)), SharedData::iblSettings.IBLSaturation) * SharedData::iblSettings.DiffuseIBLScale;
+#	endif
+			ambientColorAmb += Color::IrradianceToGamma(iblColor);
+		}
+#endif
 
 		float llDirLightMult = (SharedData::linearLightingSettings.enableLinearLighting && !SharedData::linearLightingSettings.isDirLightLinear) ? SharedData::linearLightingSettings.dirLightMult : 1.0f;
 		float3 dirLightColorDir = Color::DirectionalLight(SharedData::DirLightColor.xyz / max(llDirLightMult, 1e-5), SharedData::linearLightingSettings.isDirLightLinear) * llDirLightMult;

@@ -3,9 +3,9 @@
 #include "Common/GBuffer.hlsli"
 #include "Common/Math.hlsli"
 #include "Common/MotionBlur.hlsli"
+#include "Common/Permutation.hlsli"
 #include "Common/Random.hlsli"
 #include "Common/SharedData.hlsli"
-#include "Common/Permutation.hlsli"
 
 #define DEFERRED
 
@@ -158,19 +158,19 @@ float3 CalculateWindDisplacement(VS_INPUT input, float windTimer)
 	return float3(WindVector.xy, 0) * windPower;
 }
 
-#ifdef GRASS_LIGHTING
+#	ifdef GRASS_LIGHTING
 float4 GetMSPosition(VS_INPUT input, float3x3 world3x3)
-#else
+#	else
 float4 GetMSPosition(VS_INPUT input)
-#endif
+#	endif
 {
 	float3 inputPosition = input.Position.xyz * (input.InstanceData4.yyy * ScaleMask.xyz + float3(1, 1, 1));
 
-#ifdef GRASS_LIGHTING
+#	ifdef GRASS_LIGHTING
 	float3 transformedPosition = mul(world3x3, inputPosition);
 	float4 msPosition;
 	msPosition.xyz = input.InstanceData1.xyz + transformedPosition;
-#else
+#	else
 	float3 instancePosition;
 	instancePosition.z = dot(
 		float3(input.InstanceData4.x, input.InstanceData2.w, input.InstanceData3.w), inputPosition);
@@ -179,7 +179,7 @@ float4 GetMSPosition(VS_INPUT input)
 
 	float4 msPosition;
 	msPosition.xyz = input.InstanceData1.xyz + instancePosition;
-#endif
+#	endif
 	msPosition.w = 1;
 
 	return msPosition;
@@ -637,23 +637,20 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #			else
 	dirLightColor *= dirLightColorMultiplier;
 
-    float wrapAmount = saturate(input.VertexNormal.w * 10.0)* 0.5 * (!complex);
+	float wrapAmount = saturate(input.VertexNormal.w * 10.0) * 0.5 * (!complex);
 
-		if (SharedData::grassLightingSettings.EnableWrappedLighting)
-    {
-        // Old Wrapped Model
-        float wrappedDirLight = saturate(dirLightAngle + wrapAmount) / (1.0 + wrapAmount);
-        lightsDiffuseColor += dirLightColor * dirDetailedShadow * saturate(wrappedDirLight) * Color::VanillaNormalization();
-    }
-			else
-    {
-        // Original Standard Model
-        lightsDiffuseColor += dirLightColor * dirDetailedShadow * saturate(dirLightAngle) * Color::VanillaNormalization();
-    }
+	if (SharedData::grassLightingSettings.EnableWrappedLighting) {
+		// Old Wrapped Model
+		float wrappedDirLight = saturate(dirLightAngle + wrapAmount) / (1.0 + wrapAmount);
+		lightsDiffuseColor += dirLightColor * dirDetailedShadow * saturate(wrappedDirLight) * Color::VanillaNormalization();
+	} else {
+		// Original Standard Model
+		lightsDiffuseColor += dirLightColor * dirDetailedShadow * saturate(dirLightAngle) * Color::VanillaNormalization();
+	}
 
 	float3 vertexColor = input.VertexColor.xyz;
 
-#if defined(SKYLIGHTING)
+#				if defined(SKYLIGHTING)
 	float skylightingFadeOutFactor = 1.0;
 	if (!SharedData::InInterior) {
 		skylightingFadeOutFactor = Skylighting::getFadeOutFactor(input.WorldPosition.xyz);
@@ -726,15 +723,12 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 				float lightNoL = dot(normalizedLightDirection.xyz, viewDirection);
 				float3 lightDiffuseColor;
 
-				if (SharedData::grassLightingSettings.EnableWrappedLighting)
-				{
-                    float wrappedLight = saturate(lightAngle + wrapAmount) / (1.0 + wrapAmount);
+				if (SharedData::grassLightingSettings.EnableWrappedLighting) {
+					float wrappedLight = saturate(lightAngle + wrapAmount) / (1.0 + wrapAmount);
 					lightDiffuseColor = lightColor * wrappedLight;
+				} else {
+					lightDiffuseColor = lightColor * saturate(lightAngle);
 				}
-                else
-                {
-                    lightDiffuseColor = lightColor * saturate(lightAngle);
-                }
 
 				sss += lightColor * saturate(-lightAngle);
 
@@ -742,7 +736,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 
 				if (complex)
 					lightsSpecularColor += GrassLighting::GetLightSpecularInput(normalizedLightDirection, viewDirection, normal, lightColor, SharedData::grassLightingSettings.Glossiness) * Color::VanillaNormalization();
-#endif
+#				endif
 			}
 		}
 	}
@@ -787,8 +781,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #				if defined(IBL)
 	float3 iblColor = 0;
 	if (SharedData::iblSettings.EnableDiffuseIBL) {
-		if (!SharedData::InInterior || SharedData::iblSettings.EnableInterior)
-		{
+		if (!SharedData::InInterior || SharedData::iblSettings.EnableInterior) {
 #					if defined(SKYLIGHTING)
 			iblColor += Color::Saturation(ImageBasedLighting::GetIBLColor(-normal, skylightingDiffuse), SharedData::iblSettings.IBLSaturation) * SharedData::iblSettings.DiffuseIBLScale;
 #					else
@@ -994,13 +987,12 @@ PS_OUTPUT main(PS_INPUT input)
 #			if defined(IBL)
 	float3 iblColor = 0;
 	if (SharedData::iblSettings.EnableDiffuseIBL) {
-		if (!SharedData::InInterior || SharedData::iblSettings.EnableInterior)
-		{
-#					if defined(SKYLIGHTING)
+		if (!SharedData::InInterior || SharedData::iblSettings.EnableInterior) {
+#				if defined(SKYLIGHTING)
 			iblColor += Color::Saturation(ImageBasedLighting::GetIBLColor(-normal, skylightingDiffuse), SharedData::iblSettings.IBLSaturation) * SharedData::iblSettings.DiffuseIBLScale;
-#					else
+#				else
 			iblColor += Color::Saturation(ImageBasedLighting::GetIBLColor(-normal), SharedData::iblSettings.IBLSaturation) * SharedData::iblSettings.DiffuseIBLScale;
-#					endif
+#				endif
 			iblColor = Color::IrradianceToGamma(iblColor);
 			directionalAmbientColor += iblColor;
 		}

@@ -335,8 +335,7 @@ void CalculateGI(
 	o_currGIAOSpecular = float4(radianceSpecular, visibilitySpecular);
 }
 
-[numthreads(8, 8, 1)] void main(const uint2 dtid
-								: SV_DispatchThreadID) {
+[numthreads(8, 8, 1)] void main(const uint2 dtid : SV_DispatchThreadID) {
 	const float2 frameScale = FrameDim * RcpTexDim;
 
 	uint2 pxCoord = dtid;
@@ -377,8 +376,10 @@ void CalculateGI(
 		{
 			float4 nMinY = currY, nMaxY = currY;
 			float2 nMinCoCg = currCoCg, nMaxCoCg = currCoCg;
-			[unroll] for (int dy = -1; dy <= 1; dy++) {
-				[unroll] for (int dx = -1; dx <= 1; dx++) {
+			[unroll] for (int dy = -1; dy <= 1; dy++)
+			{
+				[unroll] for (int dx = -1; dx <= 1; dx++)
+				{
 					if (dx == 0 && dy == 0)
 						continue;
 					int2 np = pxCoord + int2(dx, dy);

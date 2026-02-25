@@ -37,7 +37,7 @@ Automatically deploy shaders when you save `.hlsl` or `.hlsli` files.
                     "match": "\\.(hlsl|hlsli)$",
                     "notMatch": "[\\\\\\/](build|extern|dist|Tests)[\\\\\\/]",
                     "isAsync": true,
-                    "cmd": "cmake --build ${workspaceFolder}/build/ALL-WITH-AUTO-DEPLOYMENT --target COPY_SHADERS",
+                    "cmd": "cmake --build ${workspaceFolder}/build/ALL --target COPY_SHADERS",
                     "runIn": "terminal",
                     "runningStatusMessage": "Deploying shaders...",
                     "finishStatusMessage": "Shaders deployed!"

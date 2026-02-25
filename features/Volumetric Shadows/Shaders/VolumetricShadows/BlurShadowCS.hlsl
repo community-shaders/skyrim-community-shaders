@@ -23,9 +23,7 @@ static const float weights[6] = {
 groupshared float2 g_cache[GROUP_SIZE + 2 * KERNEL_RADIUS];
 
 #if defined(BLUR_HORIZONTAL)
-[numthreads(GROUP_SIZE, 1, 1)]
-void main(uint3 groupID : SV_GroupID, uint3 groupThreadID : SV_GroupThreadID, uint3 dispatchThreadID : SV_DispatchThreadID)
-{
+[numthreads(GROUP_SIZE, 1, 1)] void main(uint3 groupID : SV_GroupID, uint3 groupThreadID : SV_GroupThreadID, uint3 dispatchThreadID : SV_DispatchThreadID) {
 	uint width, height;
 	InputTexture.GetDimensions(width, height);
 
@@ -53,8 +51,8 @@ void main(uint3 groupID : SV_GroupID, uint3 groupThreadID : SV_GroupThreadID, ui
 	// Apply horizontal blur
 	float2 result = g_cache[localIdx + KERNEL_RADIUS] * weights[0];
 
-	[unroll]
-	for (int i = 1; i <= KERNEL_RADIUS; i++) {
+	[unroll] for (int i = 1; i <= KERNEL_RADIUS; i++)
+	{
 		result += g_cache[localIdx + KERNEL_RADIUS - i] * weights[i];
 		result += g_cache[localIdx + KERNEL_RADIUS + i] * weights[i];
 	}
@@ -63,9 +61,7 @@ void main(uint3 groupID : SV_GroupID, uint3 groupThreadID : SV_GroupThreadID, ui
 }
 
 #elif defined(BLUR_VERTICAL)
-[numthreads(1, GROUP_SIZE, 1)]
-void main(uint3 groupID : SV_GroupID, uint3 groupThreadID : SV_GroupThreadID, uint3 dispatchThreadID : SV_DispatchThreadID)
-{
+[numthreads(1, GROUP_SIZE, 1)] void main(uint3 groupID : SV_GroupID, uint3 groupThreadID : SV_GroupThreadID, uint3 dispatchThreadID : SV_DispatchThreadID) {
 	uint width, height;
 	InputTexture.GetDimensions(width, height);
 
@@ -93,8 +89,8 @@ void main(uint3 groupID : SV_GroupID, uint3 groupThreadID : SV_GroupThreadID, ui
 	// Apply vertical blur
 	float2 result = g_cache[localIdx + KERNEL_RADIUS] * weights[0];
 
-	[unroll]
-	for (int i = 1; i <= KERNEL_RADIUS; i++) {
+	[unroll] for (int i = 1; i <= KERNEL_RADIUS; i++)
+	{
 		result += g_cache[localIdx + KERNEL_RADIUS - i] * weights[i];
 		result += g_cache[localIdx + KERNEL_RADIUS + i] * weights[i];
 	}
