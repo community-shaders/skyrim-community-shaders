@@ -186,7 +186,7 @@ void Deferred::SetupResources()
 		perDirectionalShadow->CreateSRV(srvDesc);
 	}
 
-	// Unified shadow light data (t22): projection + type per active shadow light, max 4.
+	// Unified shadow light data (t22) : projection + type per active shadow light, max 4.
 	{
 		D3D11_BUFFER_DESC sbDesc{};
 		sbDesc.Usage = D3D11_USAGE_DYNAMIC;
@@ -194,13 +194,13 @@ void Deferred::SetupResources()
 		sbDesc.BindFlags = D3D11_BIND_SHADER_RESOURCE;
 		sbDesc.MiscFlags = D3D11_RESOURCE_MISC_BUFFER_STRUCTURED;
 		sbDesc.StructureByteStride = sizeof(ShadowData);
-		sbDesc.ByteWidth = 4 * sizeof(ShadowData);
+		sbDesc.ByteWidth = 16 * sizeof(ShadowData);
 
 		D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc{};
 		srvDesc.Format = DXGI_FORMAT_UNKNOWN;
 		srvDesc.ViewDimension = D3D11_SRV_DIMENSION_BUFFER;
 		srvDesc.Buffer.FirstElement = 0;
-		srvDesc.Buffer.NumElements = 4;
+		srvDesc.Buffer.NumElements = 16;
 
 		perShadows = new Buffer(sbDesc);
 		perShadows->CreateSRV(srvDesc);
@@ -607,33 +607,25 @@ void Deferred::ResetBlendStates()
 	globals::game::stateUpdateFlags->set(RE::BSGraphics::ShaderFlags::DIRTY_ALPHA_BLEND);
 }
 
-void Deferred::SetShadowCascadeParameters(RE::BSShadowLight::RUNTIME_DATA& lightData, DirectionalShadowData& dd, ID3D11ShaderResourceView*& cascadeSRV)
+void Deferred::SetShadowCascadeParameters(RE::BSShadowLight::RUNTIME_DATA& lightData, DirectionalShadowData& dd)
 {
 	uint32_t count = std::min((uint32_t)lightData.shadowmapDescriptors.size(), 2u);
 	for (uint32_t i = 0; i < count; i++) {
 		auto proj = DirectX::XMLoadFloat4x4(reinterpret_cast<const DirectX::XMFLOAT4X4*>(&lightData.shadowmapDescriptors[i].lightTransform));
 		DirectX::XMStoreFloat4x4(&dd.ShadowProj[i], proj);
 	}
-	if (count > 0)
-		cascadeSRV = globals::game::renderer->GetDepthStencilData()
-		                 .depthStencils[lightData.shadowmapDescriptors[0].renderTarget]
-		                 .depthSRV;
 }
 
-void Deferred::SetShadowCascadeParameters(RE::BSShadowLight::RUNTIME_DATA_VR& lightData, DirectionalShadowData& dd, ID3D11ShaderResourceView*& cascadeSRV)
+void Deferred::SetShadowCascadeParameters(RE::BSShadowLight::RUNTIME_DATA_VR& lightData, DirectionalShadowData& dd)
 {
 	uint32_t count = std::min((uint32_t)lightData.shadowmapDescriptors.size(), 2u);
 	for (uint32_t i = 0; i < count; i++) {
 		auto proj = DirectX::XMLoadFloat4x4(reinterpret_cast<const DirectX::XMFLOAT4X4*>(&lightData.shadowmapDescriptors[i].lightTransform));
 		DirectX::XMStoreFloat4x4(&dd.ShadowProj[i], proj);
 	}
-	if (count > 0)
-		cascadeSRV = globals::game::renderer->GetDepthStencilData()
-		                 .depthStencils[lightData.shadowmapDescriptors[0].renderTarget]
-		                 .depthSRV;
 }
 
-void Deferred::SetShadowParameters(RE::BSShadowLight::RUNTIME_DATA& lightData, ShadowData& sd, ID3D11ShaderResourceView*& shadowMapsSRV)
+void Deferred::SetShadowParameters(RE::BSShadowLight::RUNTIME_DATA& lightData, ShadowData& sd)
 {
 	if (lightData.shadowmapDescriptors.empty())
 		return;
@@ -644,14 +636,9 @@ void Deferred::SetShadowParameters(RE::BSShadowLight::RUNTIME_DATA& lightData, S
 	DirectX::XMStoreFloat4x4(&sd.ShadowProj, proj);
 
 	sd.ShadowFar = desc.camera->GetRuntimeData2().viewFrustum.fFar;
-
-	if (!shadowMapsSRV)
-		shadowMapsSRV = globals::game::renderer->GetDepthStencilData()
-		                    .depthStencils[desc.renderTarget]
-		                    .depthSRV;
 }
 
-void Deferred::SetShadowParameters(RE::BSShadowLight::RUNTIME_DATA_VR& lightData, ShadowData& sd, ID3D11ShaderResourceView*& shadowMapsSRV)
+void Deferred::SetShadowParameters(RE::BSShadowLight::RUNTIME_DATA_VR& lightData, ShadowData& sd)
 {
 	if (lightData.shadowmapDescriptors.empty())
 		return;
@@ -662,11 +649,6 @@ void Deferred::SetShadowParameters(RE::BSShadowLight::RUNTIME_DATA_VR& lightData
 	DirectX::XMStoreFloat4x4(&sd.ShadowProj, proj);
 
 	sd.ShadowFar = desc.camera->GetRuntimeData2().viewFrustum.fFar;
-
-	if (!shadowMapsSRV)
-		shadowMapsSRV = globals::game::renderer->GetDepthStencilData()
-		                    .depthStencils[desc.renderTarget]
-		                    .depthSRV;
 }
 
 void Deferred::CopyShadowData()
@@ -691,15 +673,16 @@ void Deferred::CopyShadowData()
 	dd.EndSplitDistances   = { dirData.endSplitDistances[0], dirData.endSplitDistances[1] };
 	dd.StartSplitDistances = { dirData.startSplitDistances[0], dirData.startSplitDistances[1] };
 
-	ID3D11ShaderResourceView* cascadeSRV = nullptr;
+	ID3D11ShaderResourceView* cascadeSRV = globals::game::renderer->GetDepthStencilData().depthStencils[RE::RENDER_TARGET_DEPTHSTENCIL::kSHADOWMAPS_ESRAM].depthSRV;
+	
 	if (globals::game::isVR)
-		SetShadowCascadeParameters(sunShadowLight->GetVRRuntimeData(), dd, cascadeSRV);
+		SetShadowCascadeParameters(sunShadowLight->GetVRRuntimeData(), dd);
 	else
-		SetShadowCascadeParameters(sunShadowLight->GetRuntimeData(), dd, cascadeSRV);
+		SetShadowCascadeParameters(sunShadowLight->GetRuntimeData(), dd);
 
 	auto&    sceneRTData  = shadowSceneNode->GetRuntimeData();
 	uint32_t shadowCount  = 0;
-	ID3D11ShaderResourceView* shadowMapsSRV = nullptr;
+	ID3D11ShaderResourceView* shadowMapsSRV = globals::game::renderer->GetDepthStencilData().depthStencils[RE::RENDER_TARGET_DEPTHSTENCIL::kSHADOWMAPS].depthSRV;
 
 	for (auto& lightPtr : sceneRTData.activeShadowLights) {
 		auto* light = lightPtr.get();
@@ -710,12 +693,13 @@ void Deferred::CopyShadowData()
 			sd[shadowCount].ShadowType = 0;
 
 		if (globals::game::isVR)
-			SetShadowParameters(light->GetVRRuntimeData(), sd[shadowCount], shadowMapsSRV);
+			SetShadowParameters(light->GetVRRuntimeData(), sd[shadowCount]);
 		else
-			SetShadowParameters(light->GetRuntimeData(), sd[shadowCount], shadowMapsSRV);
+			SetShadowParameters(light->GetRuntimeData(), sd[shadowCount]);
 
 		shadowCount++;
 	}
+
 
 	context->PSSetShaderResources(82, 1, &cascadeSRV);
 	context->PSSetShaderResources(84, 1, &shadowMapsSRV);
@@ -733,7 +717,7 @@ void Deferred::CopyShadowData()
 	{
 		D3D11_MAPPED_SUBRESOURCE mapped{};
 		DX::ThrowIfFailed(context->Map(perShadows->resource.get(), 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped));
-		memcpy(mapped.pData, sd, 4 * sizeof(ShadowData));
+		memcpy(mapped.pData, sd, 16 * sizeof(ShadowData));
 		context->Unmap(perShadows->resource.get(), 0);
 		ID3D11ShaderResourceView* srv = perShadows->srv.get();
 		context->PSSetShaderResources(83, 1, &srv);

@@ -85,11 +85,11 @@ public:
 	ID3D11SamplerState* shadowCmpSampler = nullptr;  // PCF comparison sampler (s14)
 
 private:
-	void SetShadowCascadeParameters(RE::BSShadowLight::RUNTIME_DATA& lightData, DirectionalShadowData& dd, ID3D11ShaderResourceView*& cascadeSRV);
-	void SetShadowCascadeParameters(RE::BSShadowLight::RUNTIME_DATA_VR& lightData, DirectionalShadowData& dd, ID3D11ShaderResourceView*& cascadeSRV);
+	void SetShadowCascadeParameters(RE::BSShadowLight::RUNTIME_DATA& lightData, DirectionalShadowData& dd);
+	void SetShadowCascadeParameters(RE::BSShadowLight::RUNTIME_DATA_VR& lightData, DirectionalShadowData& dd);
 
-	void SetShadowParameters(RE::BSShadowLight::RUNTIME_DATA& lightData, ShadowData& sd, ID3D11ShaderResourceView*& shadowMapsSRV);
-	void SetShadowParameters(RE::BSShadowLight::RUNTIME_DATA_VR& lightData, ShadowData& sd, ID3D11ShaderResourceView*& shadowMapsSRV);
+	void SetShadowParameters(RE::BSShadowLight::RUNTIME_DATA& lightData, ShadowData& sd);
+	void SetShadowParameters(RE::BSShadowLight::RUNTIME_DATA_VR& lightData, ShadowData& sd);
 
 public:
 	struct Hooks
