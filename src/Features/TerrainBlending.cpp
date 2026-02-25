@@ -28,37 +28,59 @@ namespace
 		bool active = false;
 		ID3D11ShaderResourceView* previousObbSrv = nullptr;
 		ID3D11ShaderResourceView* previousShadowmaskSrv = nullptr;
+		bool depthStateForced = false;
+		ID3D11DepthStencilState* previousDepthStencilState = nullptr;
+		ID3D11DepthStencilState* forcedDepthStencilState = nullptr;
+		UINT previousStencilRef = 0;
 	};
 
 	EngineHookTechniqueOverrideState engineHookTechniqueState{};
 
 	constexpr uint32_t kShadowmaskDepthDescriptor0 = 0x262002u;
+	// Depth override is intentionally limited to this descriptor only.
 	constexpr uint32_t kShadowmaskDepthDescriptor1 = 0x1062002u;
 
 	// Slot2 allowlist is only evaluated in VR (gated by IsEngineHookFeatureGateSatisfied).
 	// Keep variant mapping explicit to match existing codebase conventions.
 	// SE/AE offsets are intentionally 0 because this caller is VR-only.
-	const std::array<uint32_t, 1> kSlot2CallerAllowlistRvas = {
-		static_cast<uint32_t>(REL::Relocate(0u, 0u, 0xDC35DBu))
+	const std::array<uint32_t, 2> kSlot2CallerAllowlistRvas = {
+		static_cast<uint32_t>(REL::Relocate(0u, 0u, 0x1351AD4u)),
+		static_cast<uint32_t>(REL::Relocate(0u, 0u, 0xDBDD68u))
+	};
+	// Caller allowlist for descriptor-scoped depth override path (0x1062002).
+	const std::array<uint32_t, 3> kDepthOverrideCallerAllowlistRvas = {
+		static_cast<uint32_t>(REL::Relocate(0u, 0u, 0xDBDD68u)),
+		static_cast<uint32_t>(REL::Relocate(0u, 0u, 0x1351AD4u)),
+		static_cast<uint32_t>(REL::Relocate(0u, 0u, 0x1349B7Fu))
 	};
 	constexpr bool kEnableAutoBroadSlot2Fallback = true;
 	constexpr uint64_t kSlot2AutoFallbackRejectThreshold = 5;
+	constexpr bool kEnableAutoBroadDepthOverrideFallback = true;
+	constexpr uint64_t kDepthOverrideAutoFallbackRejectThreshold = 5;
 
-	bool slot2BroadFallbackActive = false;
-	uint64_t slot2RejectTotal = 0;
-	std::unordered_set<uint32_t> slot2BlockedCallerRvas{};
-	bool hookActiveLogged = false;
-	bool fallbackActivatedLogged = false;
-	uint32_t fallbackTriggerRva = 0;
-	bool slot2GateActivePrevious = false;
-
-	void ResetSlot2FallbackState()
+	struct CallerFallbackState
 	{
-		slot2BroadFallbackActive = false;
-		slot2RejectTotal = 0;
-		slot2BlockedCallerRvas.clear();
-		fallbackActivatedLogged = false;
-		fallbackTriggerRva = 0;
+		bool broadFallbackActive = false;
+		bool sawAllowlistedHit = false;
+		uint64_t rejectTotal = 0;
+		std::unordered_set<uint32_t> blockedCallerRvas{};
+		bool hookActiveLogged = false;
+		bool fallbackActivatedLogged = false;
+		uint32_t fallbackTriggerRva = 0;
+		bool gateActivePrevious = false;
+	};
+
+	CallerFallbackState slot2FallbackState{};
+	CallerFallbackState depthOverrideFallbackState{};
+
+	void ResetCallerFallbackState(CallerFallbackState& a_state)
+	{
+		a_state.broadFallbackActive = false;
+		a_state.sawAllowlistedHit = false;
+		a_state.rejectTotal = 0;
+		a_state.blockedCallerRvas.clear();
+		a_state.fallbackActivatedLogged = false;
+		a_state.fallbackTriggerRva = 0;
 	}
 
 	bool IsDiagnosticSlot2GuardMode()
@@ -89,9 +111,10 @@ namespace
 		return globals::game::isVR && a_tb.loaded && a_tb.settings.Enabled && !ShouldUseBlendedDepthSRV();
 	}
 
-	bool IsSlot2CallerAllowlisted(const uint32_t a_callerRva)
+	template <size_t N>
+	bool IsCallerAllowlisted(const std::array<uint32_t, N>& a_allowlist, const uint32_t a_callerRva)
 	{
-		for (const auto rva : kSlot2CallerAllowlistRvas) {
+		for (const auto rva : a_allowlist) {
 			if (rva == a_callerRva) {
 				return true;
 			}
@@ -99,34 +122,92 @@ namespace
 		return false;
 	}
 
-	bool ShouldApplySlot2Rewrite(const uint32_t a_callerRva)
+	template <size_t N>
+	bool ShouldAllowCallerWithFallback(
+		CallerFallbackState& a_state,
+		const std::array<uint32_t, N>& a_allowlist,
+		const bool a_enableAutoBroadFallback,
+		const uint64_t a_rejectThreshold,
+		const bool a_requireNoAllowlistedHitForFallback,
+		const char* a_logPrefix,
+		const char* a_fallbackLabel,
+		const uint32_t a_callerRva)
 	{
-		if (slot2BroadFallbackActive) {
+		if (IsCallerAllowlisted(a_allowlist, a_callerRva)) {
+			a_state.sawAllowlistedHit = true;
+			// For sensitive paths (depth override), collapse broad fallback as soon as
+			// a known-good allowlisted caller is observed.
+			if (a_requireNoAllowlistedHitForFallback && a_state.broadFallbackActive) {
+				a_state.broadFallbackActive = false;
+			}
 			return true;
 		}
 
-		if (IsSlot2CallerAllowlisted(a_callerRva)) {
+		if (a_state.broadFallbackActive) {
 			return true;
 		}
 
-		slot2RejectTotal++;
-		slot2BlockedCallerRvas.insert(a_callerRva);
+		a_state.rejectTotal++;
+		a_state.blockedCallerRvas.insert(a_callerRva);
 
-		if (kEnableAutoBroadSlot2Fallback && slot2RejectTotal >= kSlot2AutoFallbackRejectThreshold) {
-			slot2BroadFallbackActive = true;
-			fallbackTriggerRva = a_callerRva;
-			if (!fallbackActivatedLogged && IsDiagnosticSlot2GuardMode()) {
+		const bool fallbackEligible = !a_requireNoAllowlistedHitForFallback || !a_state.sawAllowlistedHit;
+		if (a_enableAutoBroadFallback && fallbackEligible && a_state.rejectTotal >= a_rejectThreshold) {
+			a_state.broadFallbackActive = true;
+			a_state.fallbackTriggerRva = a_callerRva;
+			if (!a_state.fallbackActivatedLogged && IsDiagnosticSlot2GuardMode()) {
 				logger::debug(
-					"[TB Override] slot2 fallback activated triggerRva=0x{:X} blockedEvents={} blockedUniqueRvas={}",
-					fallbackTriggerRva,
-					slot2RejectTotal,
-					slot2BlockedCallerRvas.size());
-				fallbackActivatedLogged = true;
+					"[{}] {} activated triggerRva=0x{:X} blockedEvents={} blockedUniqueRvas={}",
+					a_logPrefix,
+					a_fallbackLabel,
+					a_state.fallbackTriggerRva,
+					a_state.rejectTotal,
+					a_state.blockedCallerRvas.size());
+				a_state.fallbackActivatedLogged = true;
 			}
 			return true;
 		}
 
 		return false;
+	}
+
+	void MaybeResetCallerFallbackOnGateTransition(
+		CallerFallbackState& a_state,
+		const bool a_gateSatisfied,
+		const char* a_resetLogLine)
+	{
+		if (!a_state.gateActivePrevious && a_gateSatisfied) {
+			ResetCallerFallbackState(a_state);
+			if (IsDiagnosticSlot2GuardMode()) {
+				logger::debug("{}", a_resetLogLine);
+			}
+		}
+		a_state.gateActivePrevious = a_gateSatisfied;
+	}
+
+	bool ShouldApplySlot2Rewrite(const uint32_t a_callerRva)
+	{
+		return ShouldAllowCallerWithFallback(
+			slot2FallbackState,
+			kSlot2CallerAllowlistRvas,
+			kEnableAutoBroadSlot2Fallback,
+			kSlot2AutoFallbackRejectThreshold,
+			false,
+			"TB Override",
+			"slot2 fallback",
+			a_callerRva);
+	}
+
+	bool ShouldApplyDepthOverrideForCaller(const uint32_t a_callerRva)
+	{
+		return ShouldAllowCallerWithFallback(
+			depthOverrideFallbackState,
+			kDepthOverrideCallerAllowlistRvas,
+			kEnableAutoBroadDepthOverrideFallback,
+			kDepthOverrideAutoFallbackRejectThreshold,
+			true,
+			"TB DepthOverride",
+			"fallback",
+			a_callerRva);
 	}
 
 	bool IsEngineHookFeatureGateSatisfied(const TerrainBlending& a_singleton)
@@ -198,23 +279,36 @@ namespace
 		return result;
 	}
 
-	void MaybeLogHookActiveOnce()
+	template <size_t N>
+	void MaybeLogAllowlistHookActiveOnce(
+		CallerFallbackState& a_state,
+		const char* a_logPrefix,
+		const char* a_countLabel,
+		const char* a_allowlistLabel,
+		const std::array<uint32_t, N>& a_allowlist,
+		const uint64_t a_fallbackThreshold)
 	{
-		if (!hookActiveLogged && IsDiagnosticSlot2GuardMode()) {
-			std::ostringstream allowlist;
-			for (size_t i = 0; i < kSlot2CallerAllowlistRvas.size(); i++) {
-				if (i != 0) {
-					allowlist << ", ";
-				}
-				allowlist << "0x" << std::uppercase << std::hex << kSlot2CallerAllowlistRvas[i];
-			}
-			logger::debug(
-				"[TB Override] pass-specific hook active slot2AllowlistCount={} slot2AllowlistRvas=[{}] fallbackThreshold={}",
-				kSlot2CallerAllowlistRvas.size(),
-				allowlist.str(),
-				kSlot2AutoFallbackRejectThreshold);
-			hookActiveLogged = true;
+		if (a_state.hookActiveLogged || !IsDiagnosticSlot2GuardMode()) {
+			return;
 		}
+
+		std::ostringstream allowlist;
+		for (size_t i = 0; i < a_allowlist.size(); i++) {
+			if (i != 0) {
+				allowlist << ", ";
+			}
+			allowlist << "0x" << std::uppercase << std::hex << a_allowlist[i];
+		}
+
+		logger::debug(
+			"[{}] pass-specific hook active {}={} {}=[{}] fallbackThreshold={}",
+			a_logPrefix,
+			a_countLabel,
+			a_allowlist.size(),
+			a_allowlistLabel,
+			allowlist.str(),
+			a_fallbackThreshold);
+		a_state.hookActiveLogged = true;
 	}
 
 	// Selects the depth SRV used by engine-hook slot overrides.
@@ -251,8 +345,104 @@ namespace
 	// Restores PS slots 17 and 2 to the SRVs that were bound before this shadowmask
 	// technique override was applied. This keeps override scope limited to the
 	// targeted pass and avoids leaking TB depth bindings into unrelated draws.
+	void ReleaseEngineHookDepthOverride()
+	{
+		if (!engineHookTechniqueState.depthStateForced) {
+			return;
+		}
+
+		auto* context = globals::d3d::context;
+		if (context) {
+			context->OMSetDepthStencilState(engineHookTechniqueState.previousDepthStencilState, engineHookTechniqueState.previousStencilRef);
+		}
+
+		if (engineHookTechniqueState.previousDepthStencilState) {
+			engineHookTechniqueState.previousDepthStencilState->Release();
+			engineHookTechniqueState.previousDepthStencilState = nullptr;
+		}
+		if (engineHookTechniqueState.forcedDepthStencilState) {
+			engineHookTechniqueState.forcedDepthStencilState->Release();
+			engineHookTechniqueState.forcedDepthStencilState = nullptr;
+		}
+
+		engineHookTechniqueState.previousStencilRef = 0;
+		engineHookTechniqueState.depthStateForced = false;
+	}
+
+	void EnsureEngineHookDepthOverride(const uint32_t a_descriptor, const uint32_t a_callerRva)
+	{
+		// Descriptor-scoped safety gate: never apply this override outside 0x1062002.
+		// This keeps the OM depth override local to the known problematic shadowmask path.
+		if (a_descriptor != kShadowmaskDepthDescriptor1) {
+			ReleaseEngineHookDepthOverride();
+			return;
+		}
+
+		const bool allowCaller = ShouldApplyDepthOverrideForCaller(a_callerRva);
+		if (!allowCaller) {
+			ReleaseEngineHookDepthOverride();
+			return;
+		}
+
+		auto* context = globals::d3d::context;
+		auto* device = globals::d3d::device;
+		if (!context || !device) {
+			return;
+		}
+
+		// OM depth state can be clobbered between late engine hooks; re-assert here
+		// so all four TB hook integration points keep consistent depth behavior.
+		if (engineHookTechniqueState.depthStateForced) {
+			if (!engineHookTechniqueState.forcedDepthStencilState) {
+				ReleaseEngineHookDepthOverride();
+			} else {
+				UINT stencilRef = engineHookTechniqueState.previousStencilRef;
+				ID3D11DepthStencilState* currentDepthStencilState = nullptr;
+				context->OMGetDepthStencilState(&currentDepthStencilState, &stencilRef);
+				if (currentDepthStencilState) {
+					currentDepthStencilState->Release();
+				}
+				context->OMSetDepthStencilState(engineHookTechniqueState.forcedDepthStencilState, stencilRef);
+				return;
+			}
+		}
+
+		ID3D11DepthStencilState* currentDepthStencilState = nullptr;
+		UINT currentStencilRef = 0;
+		context->OMGetDepthStencilState(&currentDepthStencilState, &currentStencilRef);
+		if (!currentDepthStencilState) {
+			return;
+		}
+
+		D3D11_DEPTH_STENCIL_DESC depthStencilDesc{};
+		currentDepthStencilState->GetDesc(&depthStencilDesc);
+
+		if (!depthStencilDesc.DepthEnable || depthStencilDesc.DepthFunc == D3D11_COMPARISON_ALWAYS) {
+			currentDepthStencilState->Release();
+			return;
+		}
+
+		depthStencilDesc.DepthFunc = D3D11_COMPARISON_ALWAYS;
+
+		ID3D11DepthStencilState* forcedDepthStencilState = nullptr;
+		const HRESULT hr = device->CreateDepthStencilState(&depthStencilDesc, &forcedDepthStencilState);
+		if (FAILED(hr) || !forcedDepthStencilState) {
+			currentDepthStencilState->Release();
+			return;
+		}
+
+		engineHookTechniqueState.previousDepthStencilState = currentDepthStencilState;
+		engineHookTechniqueState.previousStencilRef = currentStencilRef;
+		engineHookTechniqueState.forcedDepthStencilState = forcedDepthStencilState;
+		engineHookTechniqueState.depthStateForced = true;
+
+		context->OMSetDepthStencilState(forcedDepthStencilState, currentStencilRef);
+	}
+
 	void ReleaseEngineHookTechniqueOverride()
 	{
+		ReleaseEngineHookDepthOverride();
+
 		if (!engineHookTechniqueState.active) {
 			return;
 		}
@@ -319,16 +509,28 @@ void TerrainBlending::SaveSettings(json& o_json)
 void TerrainBlending::OnBeginTechnique(RE::BSShader* a_shader, uint32_t a_pixelDescriptor, uint32_t a_callerRva)
 {
 	const auto gateState = EvaluateEngineHookPassGate(*this, a_shader, a_pixelDescriptor);
-	if (!slot2GateActivePrevious && gateState.gateSatisfied) {
-		ResetSlot2FallbackState();
-		if (IsDiagnosticSlot2GuardMode()) {
-			logger::debug("[TB Override] slot2 fallback reset on TB/depth-culling off->on");
-		}
-	}
-	slot2GateActivePrevious = gateState.gateSatisfied;
+	// Keep fallback state bounded to the same TB gate lifecycle as slot2 rewrite.
+	MaybeResetCallerFallbackOnGateTransition(slot2FallbackState, gateState.gateSatisfied, "[TB Override] slot2 fallback reset on TB/depth-culling off->on");
+	MaybeResetCallerFallbackOnGateTransition(depthOverrideFallbackState, gateState.gateSatisfied, "[TB DepthOverride] fallback reset on TB/depth-culling off->on");
 
 	if (gateState.shouldApply) {
-		MaybeLogHookActiveOnce();
+		MaybeLogAllowlistHookActiveOnce(
+			slot2FallbackState,
+			"TB Override",
+			"slot2AllowlistCount",
+			"slot2AllowlistRvas",
+			kSlot2CallerAllowlistRvas,
+			kSlot2AutoFallbackRejectThreshold);
+		// Depth-override logging is restricted to the descriptor-scoped path.
+		if (a_pixelDescriptor == kShadowmaskDepthDescriptor1) {
+			MaybeLogAllowlistHookActiveOnce(
+				depthOverrideFallbackState,
+				"TB DepthOverride",
+				"allowlistCount",
+				"allowlistRvas",
+				kDepthOverrideCallerAllowlistRvas,
+				kDepthOverrideAutoFallbackRejectThreshold);
+		}
 	}
 
 	if (!gateState.shouldApply) {
@@ -340,6 +542,9 @@ void TerrainBlending::OnBeginTechnique(RE::BSShader* a_shader, uint32_t a_pixelD
 	if (!context) {
 		return;
 	}
+
+	// Integration point 1/4: apply descriptor-scoped depth override at technique start.
+	EnsureEngineHookDepthOverride(a_pixelDescriptor, a_callerRva);
 
 	if (!engineHookTechniqueState.active) {
 		context->PSGetShaderResources(17, 1, &engineHookTechniqueState.previousObbSrv);
@@ -376,6 +581,9 @@ void TerrainBlending::OnUtilitySetupGeometry(RE::BSShader* a_shader, RE::BSRende
 		return;
 	}
 
+	// Integration point 2/4: re-assert after Utility geometry setup mutates OM state.
+	EnsureEngineHookDepthOverride(descriptor, a_callerRva);
+
 	auto* obbOverrideSrv = ResolveEngineOverrideSrv(false);
 	auto* shadowmaskOverrideSrv = ResolveEngineOverrideSrv(true);
 	ApplyPixelShaderSlotOverride(context, 17u, obbOverrideSrv, nullptr, 0u);
@@ -402,6 +610,9 @@ void TerrainBlending::OnShaderPropertySetupGeometry(RE::BSShaderProperty* a_shad
 		return;
 	}
 
+	// Integration point 3/4: re-assert after material/property setup.
+	EnsureEngineHookDepthOverride(descriptor, a_callerRva);
+
 	auto* shadowmaskOverrideSrv = ResolveEngineOverrideSrv(true);
 	ApplyPixelShaderSlotOverride(context, 2u, shadowmaskOverrideSrv, &ShouldApplySlot2Rewrite, a_callerRva);
 }
@@ -409,7 +620,8 @@ void TerrainBlending::OnShaderPropertySetupGeometry(RE::BSShaderProperty* a_shad
 void TerrainBlending::OnSetDirtyStates(bool a_isCompute, uint32_t a_callerRva)
 {
 	// Slot2 clobber was traced to BSGraphics::SetDirtyStates.
-	// Re-assert depth SRVs here under strict pass gates instead of global D3D interception.
+	// Integration point 4/4: re-assert both SRV overrides and descriptor-scoped
+	// depth override here under strict TB pass gates instead of global D3D interception.
 	if (a_isCompute) {
 		return;
 	}
@@ -427,6 +639,8 @@ void TerrainBlending::OnSetDirtyStates(bool a_isCompute, uint32_t a_callerRva)
 	if (!context) {
 		return;
 	}
+
+	EnsureEngineHookDepthOverride(descriptor, a_callerRva);
 
 	auto* obbOverrideSrv = ResolveEngineOverrideSrv(false);
 	auto* shadowmaskOverrideSrv = ResolveEngineOverrideSrv(true);
