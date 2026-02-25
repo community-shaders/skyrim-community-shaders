@@ -22,24 +22,23 @@ public:
 		return &singleton;
 	}
 
-	// Directional shadow data — uploaded every frame to t19.
-	// Must match DirectionalShadowData in ShadowSampling.hlsli exactly.
+
 	struct alignas(16) DirectionalShadowData
 	{
-		DirectX::XMFLOAT2   EndSplitDistances;    // cascade end depths:   x = cascade 0, y = cascade 1
-		DirectX::XMFLOAT2   StartSplitDistances;  // cascade start depths: x = cascade 0, y = cascade 1
-		DirectX::XMFLOAT4X4 ShadowMapProj[2];     // world-to-shadow projections for each cascade (col3 dropped — ortho)
+		DirectX::XMFLOAT4X4 ShadowProj[2];
+		DirectX::XMFLOAT2   EndSplitDistances;
+		DirectX::XMFLOAT2   StartSplitDistances;
 	};
 	STATIC_ASSERT_ALIGNAS_16(DirectionalShadowData);
 
-	// Unified shadow light data — uploaded every frame to t22, one element per active light (max 4).
-	// Must match ShadowData in ShadowSampling.hlsli exactly.
 	struct alignas(16) ShadowData
 	{
-		DirectX::XMFLOAT4X4  ShadowProj;        // world-to-shadow projection
-		uint32_t             ShadowType;        // 0 = paraboloid, 1 = frustum/spot
-		uint32_t             ShadowLightParam[3]; // x = far plane (world units), yz reserved
+		DirectX::XMFLOAT4X4  ShadowProj;
+		float				 ShadowType;
+		float                ShadowFar;
+		float2 pad0;
 	};
+
 	STATIC_ASSERT_ALIGNAS_16(ShadowData);
 
 	void SetupResources();
