@@ -36,7 +36,7 @@ public:
 	// Must match ShadowData in ShadowSampling.hlsli exactly.
 	struct alignas(16) ShadowData
 	{
-		DirectX::XMFLOAT4X4 ShadowProj;        // world-to-shadow projection
+		DirectX::XMFLOAT4X4  ShadowProj;        // world-to-shadow projection
 		uint32_t             ShadowType;        // 0 = paraboloid, 1 = frustum/spot
 		uint32_t             ShadowLightParam[3]; // x = far plane (world units), yz reserved
 	};
@@ -86,17 +86,11 @@ public:
 	ID3D11SamplerState* shadowCmpSampler = nullptr;  // PCF comparison sampler (s14)
 
 private:
-	// Called by CopyShadowData to fill DirectionalShadowData projections and capture the cascade SRV.
-	void SetShadowCascadeParameters(RE::BSShadowLight::RUNTIME_DATA& lightData, const DirectX::XMMATRIX& eyeTrans,
-	    DirectionalShadowData& dd, ID3D11ShaderResourceView*& cascadeSRV);
-	void SetShadowCascadeParameters(RE::BSShadowLight::RUNTIME_DATA_VR& lightData, const DirectX::XMMATRIX& eyeTrans,
-	    DirectionalShadowData& dd, ID3D11ShaderResourceView*& cascadeSRV);
+	void SetShadowCascadeParameters(RE::BSShadowLight::RUNTIME_DATA& lightData, DirectionalShadowData& dd, ID3D11ShaderResourceView*& cascadeSRV);
+	void SetShadowCascadeParameters(RE::BSShadowLight::RUNTIME_DATA_VR& lightData, DirectionalShadowData& dd, ID3D11ShaderResourceView*& cascadeSRV);
 
-	// Called by CopyShadowData to fill ShadowData for one active shadow light and capture its SRV.
-	void SetShadowParameters(RE::BSShadowLight::RUNTIME_DATA& lightData, const DirectX::XMMATRIX& eyeTrans,
-	    ShadowData& sd, ID3D11ShaderResourceView*& shadowMapsSRV);
-	void SetShadowParameters(RE::BSShadowLight::RUNTIME_DATA_VR& lightData, const DirectX::XMMATRIX& eyeTrans,
-	    ShadowData& sd, ID3D11ShaderResourceView*& shadowMapsSRV);
+	void SetShadowParameters(RE::BSShadowLight::RUNTIME_DATA& lightData, ShadowData& sd, ID3D11ShaderResourceView*& shadowMapsSRV);
+	void SetShadowParameters(RE::BSShadowLight::RUNTIME_DATA_VR& lightData, ShadowData& sd, ID3D11ShaderResourceView*& shadowMapsSRV);
 
 public:
 	struct Hooks
