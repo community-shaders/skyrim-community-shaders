@@ -34,9 +34,7 @@ public:
 	struct alignas(16) ShadowData
 	{
 		DirectX::XMFLOAT4X4  ShadowProj;
-		float				 ShadowType;
-		float                ShadowFar;
-		float2 pad0;
+		float4				 ShadowParam;
 	};
 
 	STATIC_ASSERT_ALIGNAS_16(ShadowData);
