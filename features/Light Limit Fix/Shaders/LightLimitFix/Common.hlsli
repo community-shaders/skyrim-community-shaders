@@ -44,7 +44,7 @@ struct Light
 	uint4 roomFlags;
 	uint lightFlags;
 	uint shadowLightIndex;
-	uint pad0;
+	uint shadowMapIndex;
 	uint pad1;
 };
 

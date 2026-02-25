@@ -437,6 +437,10 @@ void LightLimitFix::UpdateLights()
 						auto* shadowLight = static_cast<RE::BSShadowLight*>(bsLight);
 						GET_INSTANCE_MEMBER(maskIndex, shadowLight);
 						light.shadowMaskIndex = maskIndex;
+						if (globals::game::isVR)
+							light.shadowMapIndex = shadowLight->GetVRRuntimeData().shadowmapDescriptors[0].shadowmapIndex;
+						else
+							light.shadowMapIndex = shadowLight->GetRuntimeData().shadowmapDescriptors[0].shadowmapIndex;
 						light.lightFlags.set(LightFlags::Shadow);
 					}
 
