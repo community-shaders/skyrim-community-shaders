@@ -743,21 +743,20 @@ void SettingsTabRenderer::RenderThemesTab()
 
 			ImGui::SameLine();
 
-			{
-				auto _style = Util::ErrorButtonStyle();
-				if (ImGui::Button("Delete")) {
-					auto result = Util::FileHelpers::SafeDelete(currentThemeInfo->filePath, "Theme '" + currentThemePreset + "'");
-					if (result.success) {
-						themeManager->RefreshThemes();
-						globals::menu->LoadThemePreset("Default");
-						currentThemePreset = "Default";
-					} else {
-						logger::warn("Failed to delete theme '{}': {}", currentThemePreset, result.errorMessage);
-					}
-					showDeleteThemePopup = false;
-					ImGui::CloseCurrentPopup();
+			auto _style = Util::ErrorButtonStyle();
+			if (ImGui::Button("Delete")) {
+				auto result = Util::FileHelpers::SafeDelete(currentThemeInfo->filePath, "Theme '" + currentThemePreset + "'");
+				if (result.success) {
+					themeManager->RefreshThemes();
+					globals::menu->LoadThemePreset("Default");
+					currentThemePreset = "Default";
+				} else {
+					logger::warn("Failed to delete theme '{}': {}", currentThemePreset, result.errorMessage);
 				}
+				showDeleteThemePopup = false;
+				ImGui::CloseCurrentPopup();
 			}
+
 			ImGui::EndPopup();
 		}
 
