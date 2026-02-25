@@ -46,10 +46,10 @@ float SampleMinDepth3x3(float2 uv)
 
 	float minDepth = 1.0f;
 
-	[unroll]
-	for (int y = -1; y <= 1; y++) {
-		[unroll]
-		for (int x = -1; x <= 1; x++) {
+	[unroll] for (int y = -1; y <= 1; y++)
+	{
+		[unroll] for (int x = -1; x <= 1; x++)
+		{
 			int2 sampleCoord = centerCoord + int2(x, y);
 			sampleCoord = clamp(sampleCoord, int2(0, 0), int2(width - 1, height - 1));
 			float sampleDepth = DepthTex.Load(int3(sampleCoord, 0));
