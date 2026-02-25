@@ -717,9 +717,6 @@ void Deferred::CopyShadowData()
 	ID3D11ShaderResourceView* shadowMapsSRV = nullptr;
 
 	for (auto& lightPtr : sceneRTData.activeShadowLights) {
-		if (!lightPtr || shadowCount >= 4u)
-			break;
-
 		auto* light = lightPtr.get();
 
 		if (light->GetIsParabolicLight())
