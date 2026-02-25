@@ -146,7 +146,7 @@ namespace ShadowSampling
 		bool needsBlending = (cascadeSelect > 0.0) && (cascadeSelect < 1.0);
 
 		// Transform ray to light space for primary cascade
-		float3 positionLS = mul(transpose(shadow.ShadowMapProj[primaryCascade]), float4(worldPosition, 1)).xyz;
+		float3 positionLS = mul(shadow.ShadowMapProj[primaryCascade], float4(worldPosition, 1)).xyz;
 
 		// Sample primary cascade
 		float visibility = dot(float4(DirectionalShadowCascades.GatherRed(LinearSampler, float3(positionLS.xy, primaryCascade)) > positionLS.z), 0.25);
@@ -156,7 +156,7 @@ namespace ShadowSampling
 		if (needsBlending) {
 			uint secondaryCascade = 1 - primaryCascade;
 
-			positionLS = mul(transpose(shadow.ShadowMapProj[secondaryCascade]), float4(worldPosition, 1)).xyz;
+			positionLS = mul(shadow.ShadowMapProj[secondaryCascade], float4(worldPosition, 1)).xyz;
 
 			float visibilityBlend = dot(float4(DirectionalShadowCascades.GatherRed(LinearSampler, float3(positionLS.xy, secondaryCascade)) > positionLS.z), 0.25);
 			visibility = lerp(visibility, visibilityBlend, cascadeSelect);
@@ -167,9 +167,8 @@ namespace ShadowSampling
 		return lerp(1.0, visibility, 1);
 	}
 
-	float GetFrustumShadow(ShadowData shadow, uint shadowIndex, float3 worldPosition, float2x2 rotationMatrix)
+	float GetSpotlightShadow(ShadowData shadow, uint shadowIndex, float4 positionLS, float2x2 rotationMatrix)
 	{
-		float4 positionLS = mul(transpose(shadow.ShadowProj), float4(worldPosition, 1));
 		positionLS.xyz /= positionLS.w;
 
 		float2 sampleUV = positionLS.xy * 0.5 + 0.5;
@@ -178,10 +177,24 @@ namespace ShadowSampling
 		return visibility;
 	}
 
-	float GetParaboloidShadow(ShadowData shadow, uint shadowIndex, float3 worldPosition)
+	float GetHemisphereShadow(ShadowData shadow, uint shadowIndex, float4 positionLS)
 	{
-		float3 positionLS = mul(transpose(shadow.ShadowProj), float4(worldPosition, 1)).xyz;
+		if (positionLS.z * 0.5 + 0.5 >= 0) {
+			positionLS.xyz /= positionLS.w;
+			float3 lightDirection = normalize(normalize(positionLS) + float3(0, 0, 1));
+			float2 sampleUV = lightDirection.xy / lightDirection.z * 0.5 + 0.5;
+			positionLS.z = saturate(length(positionLS) / shadow.ShadowLightParam.x);
+			
+			float visibility = dot(float4(ShadowMaps.GatherRed(LinearSampler, float3(sampleUV.xy, shadowIndex)) > positionLS.z), 0.25);
+			return visibility;
 
+		}
+
+		return 0.0;
+	}
+
+	float GetOmnidirectionalShadow(ShadowData shadow, uint shadowIndex, float3 positionLS)
+	{
 		bool lowerHalf = positionLS.z < 0;
 		float3 normalizedPositionLS = normalize(positionLS);
 
@@ -203,12 +216,16 @@ namespace ShadowSampling
 
 		worldPosition.xyz += FrameBuffer::CameraPosAdjust[0].xyz;
 
+		float4 positionLS = mul(shadow.ShadowProj, float4(worldPosition, 1));
+
 		[branch]
 		if (shadow.ShadowType == 0)
-			return GetParaboloidShadow(shadow, shadowIndex, worldPosition);
+			return GetSpotlightShadow(shadow, shadowIndex, positionLS, rotationMatrix);
 		else if (shadow.ShadowType == 1)
-			return GetFrustumShadow(shadow, shadowIndex, worldPosition, rotationMatrix);
-		
+			return GetHemisphereShadow(shadow, shadowIndex, positionLS);
+		else if (shadow.ShadowType == 2)
+			return GetOmnidirectionalShadow(shadow, shadowIndex, positionLS.xyz);
+
 		return 1.0;
 	}
 

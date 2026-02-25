@@ -610,14 +610,11 @@ void Deferred::ResetBlendStates()
 	globals::game::stateUpdateFlags->set(RE::BSGraphics::ShaderFlags::DIRTY_ALPHA_BLEND);
 }
 
-void Deferred::SetShadowCascadeParameters(RE::BSShadowLight::RUNTIME_DATA& lightData, const DirectX::XMMATRIX& ,
-    DirectionalShadowData& dd, ID3D11ShaderResourceView*& cascadeSRV)
+void Deferred::SetShadowCascadeParameters(RE::BSShadowLight::RUNTIME_DATA& lightData, DirectionalShadowData& dd, ID3D11ShaderResourceView*& cascadeSRV)
 {
 	uint32_t count = std::min((uint32_t)lightData.shadowmapDescriptors.size(), 2u);
 	for (uint32_t i = 0; i < count; i++) {
 		auto proj = DirectX::XMLoadFloat4x4(reinterpret_cast<const DirectX::XMFLOAT4X4*>(&lightData.shadowmapDescriptors[i].lightTransform));
-	//	proj = DirectX::XMMatrixMultiply(eyeTrans, proj);
-		proj = DirectX::XMMatrixTranspose(proj);
 		DirectX::XMStoreFloat4x4(&dd.ShadowMapProj[i], proj);
 	}
 	if (count > 0)
@@ -626,14 +623,11 @@ void Deferred::SetShadowCascadeParameters(RE::BSShadowLight::RUNTIME_DATA& light
 		                 .depthSRV;
 }
 
-void Deferred::SetShadowCascadeParameters(RE::BSShadowLight::RUNTIME_DATA_VR& lightData, const DirectX::XMMATRIX& ,
-    DirectionalShadowData& dd, ID3D11ShaderResourceView*& cascadeSRV)
+void Deferred::SetShadowCascadeParameters(RE::BSShadowLight::RUNTIME_DATA_VR& lightData, DirectionalShadowData& dd, ID3D11ShaderResourceView*& cascadeSRV)
 {
 	uint32_t count = std::min((uint32_t)lightData.shadowmapDescriptors.size(), 2u);
 	for (uint32_t i = 0; i < count; i++) {
 		auto proj = DirectX::XMLoadFloat4x4(reinterpret_cast<const DirectX::XMFLOAT4X4*>(&lightData.shadowmapDescriptors[i].lightTransform));
-	//	proj = DirectX::XMMatrixMultiply(eyeTrans, proj);
-		proj = DirectX::XMMatrixTranspose(proj);
 		DirectX::XMStoreFloat4x4(&dd.ShadowMapProj[i], proj);
 	}
 	if (count > 0)
@@ -642,8 +636,7 @@ void Deferred::SetShadowCascadeParameters(RE::BSShadowLight::RUNTIME_DATA_VR& li
 		                 .depthSRV;
 }
 
-void Deferred::SetShadowParameters(RE::BSShadowLight::RUNTIME_DATA& lightData, const DirectX::XMMATRIX&,
-    ShadowData& sd, ID3D11ShaderResourceView*& shadowMapsSRV)
+void Deferred::SetShadowParameters(RE::BSShadowLight::RUNTIME_DATA& lightData, ShadowData& sd, ID3D11ShaderResourceView*& shadowMapsSRV)
 {
 	if (lightData.shadowmapDescriptors.empty())
 		return;
@@ -651,7 +644,6 @@ void Deferred::SetShadowParameters(RE::BSShadowLight::RUNTIME_DATA& lightData, c
 	auto& desc = lightData.shadowmapDescriptors[0];
 
 	DirectX::XMMATRIX proj = DirectX::XMLoadFloat4x4(reinterpret_cast<const DirectX::XMFLOAT4X4*>(&desc.lightTransform));
-	proj = DirectX::XMMatrixTranspose(proj);
 	DirectX::XMStoreFloat4x4(&sd.ShadowProj, proj);
 
 	// Store the camera far plane so the paraboloid shader can normalise depth correctly.
@@ -668,8 +660,7 @@ void Deferred::SetShadowParameters(RE::BSShadowLight::RUNTIME_DATA& lightData, c
 		                    .depthSRV;
 }
 
-void Deferred::SetShadowParameters(RE::BSShadowLight::RUNTIME_DATA_VR& lightData, const DirectX::XMMATRIX&,
-    ShadowData& sd, ID3D11ShaderResourceView*& shadowMapsSRV)
+void Deferred::SetShadowParameters(RE::BSShadowLight::RUNTIME_DATA_VR& lightData, ShadowData& sd, ID3D11ShaderResourceView*& shadowMapsSRV)
 {
 	if (lightData.shadowmapDescriptors.empty())
 		return;
@@ -677,7 +668,6 @@ void Deferred::SetShadowParameters(RE::BSShadowLight::RUNTIME_DATA_VR& lightData
 	auto& desc = lightData.shadowmapDescriptors[0];
 
 	DirectX::XMMATRIX proj = DirectX::XMLoadFloat4x4(reinterpret_cast<const DirectX::XMFLOAT4X4*>(&desc.lightTransform));
-	proj = DirectX::XMMatrixTranspose(proj);
 	DirectX::XMStoreFloat4x4(&sd.ShadowProj, proj);
 
 	// Store the camera far plane so the paraboloid shader can normalise depth correctly.
@@ -716,14 +706,11 @@ void Deferred::CopyShadowData()
 	dd.EndSplitDistances   = { dirData.endSplitDistances[0], dirData.endSplitDistances[1] };
 	dd.StartSplitDistances = { dirData.startSplitDistances[0], dirData.startSplitDistances[1] };
 
-	float4 posAdjust = globals::game::frameBufferCached.GetCameraPosAdjust();
-	DirectX::XMMATRIX eyeTrans = DirectX::XMMatrixTranslation(0, 0, 0);
-
 	ID3D11ShaderResourceView* cascadeSRV = nullptr;
-	if (REL::Module::IsVR())
-		SetShadowCascadeParameters(sunShadowLight->GetVRRuntimeData(), eyeTrans, dd, cascadeSRV);
+	if (globals::game::isVR)
+		SetShadowCascadeParameters(sunShadowLight->GetVRRuntimeData(), dd, cascadeSRV);
 	else
-		SetShadowCascadeParameters(sunShadowLight->GetRuntimeData(), eyeTrans, dd, cascadeSRV);
+		SetShadowCascadeParameters(sunShadowLight->GetRuntimeData(), dd, cascadeSRV);
 
 	auto&    sceneRTData  = shadowSceneNode->GetRuntimeData();
 	uint32_t shadowCount  = 0;
@@ -734,14 +721,18 @@ void Deferred::CopyShadowData()
 			break;
 
 		auto* light = lightPtr.get();
-		sd[shadowCount].ShadowType = light->GetIsParabolicLight() ? 0u : 1u;
 
-		if (REL::Module::IsVR())
-			SetShadowParameters(light->GetVRRuntimeData(), eyeTrans, sd[shadowCount], shadowMapsSRV);
+		if (light->GetIsParabolicLight())
+			sd[shadowCount].ShadowType = light->shadowMapCount == 2 ? 2 : 1;
 		else
-			SetShadowParameters(light->GetRuntimeData(), eyeTrans, sd[shadowCount], shadowMapsSRV);
+			sd[shadowCount].ShadowType = 0;
 
-		++shadowCount;
+		if (globals::game::isVR)
+			SetShadowParameters(light->GetVRRuntimeData(), sd[shadowCount], shadowMapsSRV);
+		else
+			SetShadowParameters(light->GetRuntimeData(), sd[shadowCount], shadowMapsSRV);
+
+		shadowCount++;
 	}
 
 	context->PSSetShaderResources(82, 1, &cascadeSRV);
