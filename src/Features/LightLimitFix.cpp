@@ -369,6 +369,53 @@ void LightLimitFix::ClearShaderCache()
 	clusterCullingCS = (ID3D11ComputeShader*)Util::CompileShader(L"Data\\Shaders\\LightLimitFix\\ClusterCullingCS.hlsl", clusterDefines, "cs_5_0");
 }
 
+struct CS_Data
+{
+	int32_t structVer{ 2 };
+	int64_t frameCounter;
+	RE::BSShadowLight** allShadowLights;
+	int32_t allShadowLightsCount;
+	RE::BSShadowLight** activeShadowLights;
+	int32_t activeShadowLightsCount;
+	RE::BSShadowLight** remShadowLights;
+	int32_t remShadowLightsCount;
+	RE::BSShadowLight** addShadowLights;
+	int32_t addShadowLightsCount;
+	RE::NiTransform* stencilBufferCameraTransform;
+	int32_t stencilBufferCameraTransformCount;
+	RE::BSShadowLight::ShadowmapDescriptor** stencilBufferShadowMap;
+	int32_t stencilBufferShadowMapCount;
+	RE::BSShadowLight** stencilBufferLight;
+	int32_t stencilBufferLightCount;
+	int32_t* stencilBufferDrawIndex;
+	int32_t stencilBufferDrawIndexCount;
+	RE::NiRect<float>* stencilBufferUnkFloat;
+	int32_t stencilBufferUnkFloatCount;
+};
+
+CS_Data* GetCSData_ext()
+{
+	static HMODULE _dll = 0;
+	static FARPROC _func = 0;
+
+	typedef void* (*GetCSData_fn)();
+
+	if (_dll == 0) {
+		_dll = GetModuleHandleA("intellightent-ng.dll");
+		if (_dll == 0)
+			return nullptr;
+	}
+
+	if (_func == 0) {
+		_func = GetProcAddress(_dll, "GetCSData");
+		if (_func == 0)
+			return nullptr;
+	}
+
+	auto fn = (GetCSData_fn)_func;
+	return (CS_Data*)fn();
+}
+
 void LightLimitFix::UpdateLights()
 {
 	auto smState = globals::game::smState;
@@ -460,8 +507,58 @@ void LightLimitFix::UpdateLights()
 	for (auto& e : shadowSceneNode->GetRuntimeData().activeLights) {
 		addLight(e);
 	}
-	for (auto& e : shadowSceneNode->GetRuntimeData().activeShadowLights) {
-		addLight(e);
+
+	auto addShadowLight = [&](RE::BSShadowLight* shadowLight) {
+		if (auto niLight = shadowLight->light.get()) {
+			if (IsValidLight(shadowLight)) {
+				auto& runtimeData = niLight->GetLightRuntimeData();
+
+				LightData light{};
+				light.color = { runtimeData.diffuse.red, runtimeData.diffuse.green, runtimeData.diffuse.blue };
+				light.lightFlags = std::bit_cast<LightFlags>(runtimeData.ambient.red);
+
+				if (isl.loaded) {
+					isl.ProcessLight(light, shadowLight, niLight);
+				} else {
+					light.radius = runtimeData.radius.x;
+					// light.color *= runtimeData.fade;
+					light.fade = runtimeData.fade;
+				}
+
+				light.fade *= shadowLight->lodDimmer;
+
+				if (!IsGlobalLight(shadowLight)) {
+					// List of BSMultiBoundRooms affected by a light
+					for (const auto& roomPtr : shadowLight->rooms) {
+						addRoom(roomPtr, light);
+					}
+					// List of BSPortals affected by a light
+					for (const auto& portalPtr : shadowLight->portals) {
+						addRoom(portalPtr->portalSharedNode.get(), light);
+					}
+					light.lightFlags.set(LightFlags::PortalStrict);
+				}
+
+				GET_INSTANCE_MEMBER(maskIndex, shadowLight);
+				light.shadowMaskIndex = maskIndex;
+				if (globals::game::isVR)
+					light.shadowMapIndex = shadowLight->GetVRRuntimeData().shadowmapDescriptors[0].shadowmapIndex;
+				else
+					light.shadowMapIndex = shadowLight->GetRuntimeData().shadowmapDescriptors[0].shadowmapIndex;
+				light.lightFlags.set(LightFlags::Shadow);
+					
+				SetLightPosition(light, niLight->world.translate);
+
+				if ((light.color.x + light.color.y + light.color.z) * light.fade > 1e-4 && light.radius > 1e-4) {
+						lightsData.push_back(light);
+				}		
+			}
+		}
+	};
+
+	auto csData = GetCSData_ext();
+	for (auto i = 0; i < csData->activeShadowLightsCount; i++) {
+		addShadowLight(csData->activeShadowLights[i]);
 	}
 
 	auto context = globals::d3d::context;
