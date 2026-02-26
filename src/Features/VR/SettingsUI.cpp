@@ -2,7 +2,6 @@
 #include "Features/DynamicCubemaps.h"
 #include "Features/ScreenSpaceGI.h"
 #include "Features/ScreenSpaceShadows.h"
-#include "Features/Upscaling.h"
 #include "Features/VR.h"
 #include "Menu.h"
 #include "Menu/Fonts.h"
@@ -346,24 +345,14 @@ namespace
 		auto& vr = globals::features::vr;
 		VR::Settings& settings = vr.settings;
 		if (ImGui::CollapsingHeader("General Settings", ImGuiTreeNodeFlags_DefaultOpen)) {
-			bool upscalingActive = globals::features::upscaling.IsUpscalingActive();
-
 			bool exteriorChanged = ImGui::Checkbox("Enable Depth Buffer Culling in Exteriors", &settings.EnableDepthBufferCullingExterior);
 			if (auto _tt = Util::HoverTooltipWrapper()) {
-				if (upscalingActive) {
-					ImGui::Text("Compatible with upscaling using conservative depth upscaling. Disable if you notice artifacts.");
-				} else {
-					ImGui::Text("Improves performance in exteriors, recommended ON.");
-				}
+				ImGui::Text("Improves performance in exteriors, recommended ON.");
 			}
 
 			bool interiorChanged = ImGui::Checkbox("Enable Depth Buffer Culling in Interiors", &settings.EnableDepthBufferCullingInterior);
 			if (auto _tt = Util::HoverTooltipWrapper()) {
-				if (upscalingActive) {
-					ImGui::Text("Compatible with upscaling using conservative depth upscaling. Disable if you notice artifacts.");
-				} else {
-					ImGui::Text("Improves performance in interiors, recommended OFF due to occasional visual glitches.");
-				}
+				ImGui::Text("Improves performance in interiors, recommended ON.");
 			}
 
 			if (exteriorChanged || interiorChanged) {
