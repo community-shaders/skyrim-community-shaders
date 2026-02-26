@@ -28,8 +28,7 @@ cbuffer StereoBlendCB : register(b1)
 	float pad;
 };
 
-[numthreads(8, 8, 1)] void main(uint2 dtid : SV_DispatchThreadID)
-{
+[numthreads(8, 8, 1)] void main(uint2 dtid : SV_DispatchThreadID) {
 	if (any(dtid >= uint2(FrameDim)))
 		return;
 
@@ -62,7 +61,7 @@ cbuffer StereoBlendCB : register(b1)
 			// inconsistency). Luminance difference below the threshold means both
 			// eyes computed the same result and blending would only destroy parallax.
 			float colorDiff = abs(dot(centerColor.rgb, float3(0.2126, 0.7152, 0.0722)) -
-			                      dot(otherColor.rgb, float3(0.2126, 0.7152, 0.0722)));
+								  dot(otherColor.rgb, float3(0.2126, 0.7152, 0.0722)));
 			float colorGate = smoothstep(ColorDiffThreshold * 0.5, ColorDiffThreshold * 2.0, colorDiff);
 			r.blendWeight *= colorGate;
 

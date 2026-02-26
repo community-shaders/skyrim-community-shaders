@@ -65,8 +65,8 @@ namespace VolumetricShadows
 		float shadow = 0.0;
 		firstSample = 1.0;
 
-		[loop]
-		for (uint k = 0; k < sampleCount; k++) {
+		[loop] for (uint k = 0; k < sampleCount; k++)
+		{
 			float t = (float(k) + noise) * rcpSampleCount;
 			float3 samplePosLS = lerp(endPositionLS, startPositionLS, t);
 
@@ -122,8 +122,8 @@ namespace VolumetricShadows
 		surfaceShadow = primaryFirstSample;
 
 		// Blend with secondary cascade if needed
-		[branch]
-		if (needsBlending) {
+		[branch] if (needsBlending)
+		{
 			uint secondaryCascade = 1 - primaryCascade;
 
 			shadowProj = sD.ShadowMapProj[eyeIndex][secondaryCascade];
@@ -183,8 +183,8 @@ namespace VolumetricShadows
 		float shadow = SampleVSMCascade2D(primaryCascade, positionLS);
 
 		// Blend with secondary cascade if needed
-		[branch]
-		if (needsBlending) {
+		[branch] if (needsBlending)
+		{
 			uint secondaryCascade = 1 - primaryCascade;
 
 			shadowProj = sD.ShadowMapProj[eyeIndex][secondaryCascade];

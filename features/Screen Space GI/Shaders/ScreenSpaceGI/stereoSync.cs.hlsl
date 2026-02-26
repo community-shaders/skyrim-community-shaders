@@ -26,8 +26,7 @@ static const float kDepthSigma = 0.01;
 static const float kMaxBlend = 0.5;
 static const float kBackCheckThreshold = 8.0;
 
-[numthreads(8, 8, 1)] void main(uint2 dtid : SV_DispatchThreadID)
-{
+[numthreads(8, 8, 1)] void main(uint2 dtid : SV_DispatchThreadID) {
 	const float2 outFrameDim = OUT_FRAME_DIM;
 	if (any(dtid >= uint2(outFrameDim)))
 		return;

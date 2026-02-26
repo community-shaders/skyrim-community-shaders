@@ -1,11 +1,11 @@
 struct VS_INPUT
 {
-	float4 Position : POSITION0;
+	float4 Position: POSITION0;
 };
 
 struct VS_OUTPUT
 {
-	float4 Position : SV_POSITION0;
+	float4 Position: SV_POSITION0;
 };
 
 #ifdef VSHADER

@@ -27,7 +27,7 @@
 // It can compile to DX11, but requires some modifications (e.g., early-out's use of wave intrinsics is not supported in DX11).
 // Note; you can customize the 'EarlyOutPixel' function to perform custom early-out logic to optimize this shader.
 
-#define WAVE_SIZE 64           // Wavefront size of the compute shader running this code.                                                                                                                      \
+#define WAVE_SIZE 64  // Wavefront size of the compute shader running this code.                                                                                                                      \
 
 //#if defined(__HLSL_VERSION) || defined(__hlsl_dx_compiler)
 
@@ -185,7 +185,7 @@ static void ComputeWavefrontExtents(DispatchParameters inParameters, int3 inGrou
 }
 
 // Number of bilinear sample reads performed per-thread
-#	define READ_COUNT (SAMPLE_COUNT / WAVE_SIZE + 2)
+#define READ_COUNT (SAMPLE_COUNT / WAVE_SIZE + 2)
 
 // Common shared data
 groupshared half DepthData[READ_COUNT * WAVE_SIZE];
@@ -217,9 +217,9 @@ void WriteScreenSpaceShadow(DispatchParameters inParameters, int3 inGroupID, int
 	bool is_edge = false;
 	bool skip_pixel = false;
 
-#	if defined(RIGHT)
+#if defined(RIGHT)
 	pixel_xy.x += 1.0 / inParameters.InvDepthTextureSize.x;
-#	endif
+#endif
 
 	half2 write_xy = floor(pixel_xy);
 
@@ -234,9 +234,9 @@ void WriteScreenSpaceShadow(DispatchParameters inParameters, int3 inGroupID, int
 
 		read_xy *= inParameters.DynamicRes;
 
-#	if defined(VR)
+#if defined(VR)
 		read_xy *= half2(0.5, 1.0);
-#	endif
+#endif
 
 		half minor_axis = x_axis_major ? pixel_xy.y : pixel_xy.x;
 
@@ -246,9 +246,9 @@ void WriteScreenSpaceShadow(DispatchParameters inParameters, int3 inGroupID, int
 		half2 depths;
 		half bilinear = frac(minor_axis) - 0.5;
 
-#	if USE_HALF_PIXEL_OFFSET
+#if USE_HALF_PIXEL_OFFSET
 		read_xy += 0.5;
-#	endif
+#endif
 
 		half bias = bilinear > 0 ? 1 : -1;
 		half2 offset_xy = half2(x_axis_major ? 0 : bias, x_axis_major ? bias : 0);
@@ -258,26 +258,26 @@ void WriteScreenSpaceShadow(DispatchParameters inParameters, int3 inGroupID, int
 		half2 coord = read_xy * inParameters.InvDepthTextureSize;
 		half2 coord_with_offset = (read_xy + offset_xy) * inParameters.InvDepthTextureSize;
 
-#	if defined(VR)
-#		if defined(RIGHT)
+#if defined(VR)
+#	if defined(RIGHT)
 		// Right eye: valid UV range is [0.5, 1.0]
 		bool coord_out_of_eye = coord.x < 0.5 * inParameters.DynamicRes.x;
 		bool coord_offset_out_of_eye = coord_with_offset.x < 0.5 * inParameters.DynamicRes.x;
-#		else
+#	else
 		// Left eye: valid UV range is [0.0, 0.5)
 		bool coord_out_of_eye = coord.x >= 0.5 * inParameters.DynamicRes.x;
 		bool coord_offset_out_of_eye = coord_with_offset.x >= 0.5 * inParameters.DynamicRes.x;
-#		endif
+#	endif
 
 		depths.x = coord_out_of_eye ? 1.0 : inParameters.DepthTexture.SampleLevel(inParameters.PointBorderSampler, coord, 0);
 		depths.y = coord_offset_out_of_eye ? 1.0 : inParameters.DepthTexture.SampleLevel(inParameters.PointBorderSampler, coord_with_offset, 0);
 
 		depths.x = lerp(depths.x, 1.0, (float)(depths.x == 0));  // Stencil area
 		depths.y = lerp(depths.y, 1.0, (float)(depths.y == 0));  // Stencil area
-#	else
+#else
 		depths.x = inParameters.DepthTexture.SampleLevel(inParameters.PointBorderSampler, coord, 0);
 		depths.y = inParameters.DepthTexture.SampleLevel(inParameters.PointBorderSampler, coord_with_offset, 0);
-#	endif
+#endif
 
 		// Depth thresholds (bilinear/shadow thickness) are based on a fractional ratio of the difference between sampled depth and the far clip depth
 		depth_thickness_scale[i] = abs(inParameters.FarDepthValue - depths.x);
@@ -330,18 +330,18 @@ void WriteScreenSpaceShadow(DispatchParameters inParameters, int3 inGroupID, int
 	// Sync wavefronts now groupshared DepthData is written
 	GroupMemoryBarrierWithGroupSync();
 
-#	if defined(VR)
+#if defined(VR)
 	// Check if the pixel we're writing to is on the correct eye side
 	half writeX = write_xy.x * inParameters.InvDepthTextureSize.x;
 
-#		if defined(RIGHT)
+#	if defined(RIGHT)
 	if (writeX < 0.0)
 		return;
-#		else
+#	else
 	if (writeX > 1.0)
 		return;
-#		endif
 #	endif
+#endif
 
 	half start_depth = sampling_depth[0];
 
@@ -370,8 +370,7 @@ void WriteScreenSpaceShadow(DispatchParameters inParameters, int3 inGroupID, int
 
 	start_depth = start_depth * depth_scale - z_sign;
 
-	for (i = 0; i < SAMPLE_COUNT; i++)
-	{
+	for (i = 0; i < SAMPLE_COUNT; i++) {
 		if (i == inParameters.DynamicSampleCount)
 			break;
 

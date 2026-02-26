@@ -119,8 +119,7 @@ float3 tangentToWorld(const float3 v, const float3 N, const float3 S, const floa
 	return S * v.x + T * v.y + N * v.z;
 }
 
-[numthreads(8, 8, 1)] void main(uint3 ThreadID
-								: SV_DispatchThreadID) {
+[numthreads(8, 8, 1)] void main(uint3 ThreadID : SV_DispatchThreadID) {
 	// Make sure we won't write past output when computing higher mipmap levels.
 	uint outputWidth, outputHeight, outputDepth;
 	outputTexture.GetDimensions(outputWidth, outputHeight, outputDepth);

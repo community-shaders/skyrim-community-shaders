@@ -133,20 +133,25 @@ namespace HLSLTestDiscovery
 
 			// Look for [numthreads(1,1,1)] attribute
 			if (std::regex_search(line, numthreadsPattern)) {
-				std::string nextLine;
-				if (std::getline(file, nextLine)) {
-					std::smatch match;
-					if (std::regex_search(nextLine, match, functionPattern)) {
-						TestFunction test;
-						test.name = match[1].str();
-						test.filePath = "/Shaders/Tests/" + filePath.filename().string();
-						test.displayName = generateDisplayName(test.name, moduleName);
-
-						// Parse tags from doxygen comments
-						test.tags = parseDoxygenTags(precedingComments);
-
-						tests.push_back(test);
+				// Check if function name is on the same line (e.g., after clang-format)
+				// or on the next line
+				std::smatch match;
+				std::string funcLine = line;
+				if (!std::regex_search(funcLine, match, functionPattern)) {
+					if (std::getline(file, funcLine)) {
+						std::regex_search(funcLine, match, functionPattern);
 					}
+				}
+				if (match.ready() && !match.empty()) {
+					TestFunction test;
+					test.name = match[1].str();
+					test.filePath = "/Shaders/Tests/" + filePath.filename().string();
+					test.displayName = generateDisplayName(test.name, moduleName);
+
+					// Parse tags from doxygen comments
+					test.tags = parseDoxygenTags(precedingComments);
+
+					tests.push_back(test);
 				}
 				precedingComments.clear();
 			} else if (!line.empty() && line.find_first_not_of(" \t\r\n") != std::string::npos) {
