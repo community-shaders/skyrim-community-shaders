@@ -57,16 +57,21 @@ namespace Color
 		return saturate(pow(abs(NdotV + ao), exp2(-16.0 * roughness - 1.0)) - 1.0 + ao);
 	}
 
+	// Rec. 709 & sRGB standard
+	// When color in linear space: returns true luminance.
+	// When color in gamma space: returns luma.
 	float RGBToLuminance(float3 color)
 	{
 		return dot(color, float3(0.2125, 0.7154, 0.0721));
 	}
 
+	// Rec. 601 standard - approximation
 	float RGBToLuminanceAlternative(float3 color)
 	{
 		return dot(color, float3(0.3, 0.59, 0.11));
 	}
 
+	// Rec. 601 standard
 	float RGBToLuminance2(float3 color)
 	{
 		return dot(color, float3(0.299, 0.587, 0.114));
@@ -100,31 +105,39 @@ namespace Color
 		return color;
 	}
 
+	// Skyrim's custom gamma curve (1.6)
+	// Single channel
 	float GammaToLinear(float color)
 	{
 		return pow(abs(color), 1.6);
 	}
 
+	// Single channel
 	float LinearToGamma(float color)
 	{
 		return pow(abs(color), 1.0 / 1.6);
 	}
 
+	// RGB
 	float3 GammaToLinear(float3 color)
 	{
 		return pow(abs(color), 1.6);
 	}
 
+	// RGB
 	float3 LinearToGamma(float3 color)
 	{
 		return pow(abs(color), 1.0 / 1.6);
 	}
 
+	// Industry standard gamma 2.2 curve (sRGB approximation)
+	// RGB
 	float3 GammaToTrueLinear(float3 color)
 	{
 		return pow(abs(color), 2.2);
 	}
 
+	// RGB
 	float3 TrueLinearToGamma(float3 color)
 	{
 		return pow(abs(color), 1.0 / 2.2);
