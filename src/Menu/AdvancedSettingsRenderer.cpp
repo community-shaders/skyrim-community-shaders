@@ -5,7 +5,6 @@
 #include <imgui.h>
 #include <imgui_stdlib.h>
 #include <thread>
-#include <windows.h>
 
 #include "FeatureIssues.h"
 #include "Features/PerformanceOverlay/ABTesting/ABTesting.h"
