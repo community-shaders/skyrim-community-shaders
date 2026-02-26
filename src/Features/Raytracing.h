@@ -22,6 +22,74 @@
 
 struct CreationEngineRaytracing
 {
+	struct RaytracingSettings
+	{
+		int Bounces = 2;
+		int SamplesPerPixel = 1;
+		bool RussianRoulette = true;
+		float TexLODBias = -1.0f;
+
+		bool operator==(const struct RaytracingSettings&) const = default;
+
+		NLOHMANN_DEFINE_TYPE_INTRUSIVE_WITH_DEFAULT(RaytracingSettings, Bounces, SamplesPerPixel, RussianRoulette, TexLODBias)
+	};
+
+	struct MaterialSettings
+	{
+		float2 Roughness = { 0.0f, 1.0f };
+		float2 Metalness = { 0.0f, 1.0f };
+
+		bool operator==(const MaterialSettings&) const = default;
+
+		NLOHMANN_DEFINE_TYPE_INTRUSIVE_WITH_DEFAULT(MaterialSettings, Roughness, Metalness)
+	};
+
+	struct LightSettings
+	{
+		float Directional = 1.0f;
+		float Point = 1.0f;
+		bool LodDimmer = false;
+
+		bool operator==(const LightSettings&) const = default;
+
+		NLOHMANN_DEFINE_TYPE_INTRUSIVE_WITH_DEFAULT(LightSettings, Directional, Point, LodDimmer)
+	};
+
+	struct LightingSettings
+	{
+		float Emissive = 1.0f;
+		float Effect = 1.0f;
+		float Sky = 1.0f;
+
+		bool operator==(const LightingSettings&) const = default;
+
+		NLOHMANN_DEFINE_TYPE_INTRUSIVE_WITH_DEFAULT(LightingSettings, Emissive, Effect, Sky)
+	};
+
+	struct DebugSettings
+	{
+		bool PathTracingCull = false;
+
+		bool operator==(const DebugSettings&) const = default;
+
+		NLOHMANN_DEFINE_TYPE_INTRUSIVE_WITH_DEFAULT(DebugSettings, PathTracingCull)
+	};
+
+	struct Settings
+	{
+		bool Enabled = true;
+		bool PathTracing = true;
+		LightSettings LightSettings;
+		LightingSettings LightingSettings;
+		RaytracingSettings RaytracingSettings;
+		MaterialSettings MaterialSettings;
+		DebugSettings DebugSettings;
+
+		bool operator==(const Settings&) const = default;
+
+		NLOHMANN_DEFINE_TYPE_INTRUSIVE_WITH_DEFAULT(Settings, Enabled, PathTracing, LightSettings, LightingSettings, RaytracingSettings, MaterialSettings, DebugSettings)
+	};
+
 	HMODULE handle = nullptr;
 
 	using InitializeFn = bool (*)(ID3D11Device5*, ID3D12Device5*, ID3D12CommandQueue*, ID3D12CommandQueue*, ID3D12CommandQueue*);
@@ -32,6 +100,7 @@ struct CreationEngineRaytracing
 	using UpdateFeatureDataFn = void (*)(void*, uint32_t);
 	using SetSkyHemisphereFn = void (*)(ID3D12Resource*);
 	using GetFrameTimeFn = float* (*)();
+	using UpdateSettingsFn = void (*)(Settings);
 
 	InitializeFn Initialize = nullptr;
 	WaitExecutionFn WaitExecution = nullptr;
@@ -40,6 +109,7 @@ struct CreationEngineRaytracing
 	UpdateFeatureDataFn UpdateFeatureData = nullptr;
 	SetSkyHemisphereFn SetSkyHemisphere = nullptr;
 	GetFrameTimeFn GetFrameTime = nullptr;
+	UpdateSettingsFn UpdateSettings = nullptr;
 
 	CreationEngineRaytracing()
 	{
@@ -87,6 +157,11 @@ struct CreationEngineRaytracing
 
 		if (!GetFrameTime)
 			logger::error("[Raytracing] 'CreationEngineRaytracing.dll' GetFrameTime is nullptr");
+
+		UpdateSettings = reinterpret_cast<UpdateSettingsFn>(GetProcAddress(handle, "UpdateSettings"));
+
+		if (!UpdateSettings)
+			logger::error("[Raytracing] 'CreationEngineRaytracing.dll' UpdateSettings is nullptr");
 	}
 };
 
@@ -146,6 +221,9 @@ struct Raytracing : public OverlayFeature
 	void PostPostLoad() override;
 	void DataLoaded() override;
 
+	void DrawGeneralSettings();
+	void DrawDebugSettings();
+
 	void CompileShaders();
 
 	void CreateD3D12Device(ID3D11Device* d3d11Device, ID3D11DeviceContext* immediateContext, IDXGIAdapter* adapter);
@@ -160,10 +238,9 @@ struct Raytracing : public OverlayFeature
 	////////////////////////////////////////////////// Feature Specific Data
 	struct Settings
 	{
-		bool Enabled = true;
-		bool PathTracing = true;
 		bool PerfOverlay = true;
 		bool EnablePIXCapture = false;
+		CreationEngineRaytracing::Settings CreationEngineRaytracingSettings;
 	} settings;
 
 	ImVec2 Position = ImVec2(10.f, 10.f);

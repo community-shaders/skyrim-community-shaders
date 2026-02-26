@@ -10,10 +10,9 @@
 
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	Raytracing::Settings,
-	Enabled,
-	PathTracing,
 	PerfOverlay,
-	EnablePIXCapture)
+	EnablePIXCapture,
+	CreationEngineRaytracingSettings)
 
 ////////////////////////////////////////////////////////////////////////////////////
 
@@ -25,6 +24,9 @@ void Raytracing::RestoreDefaultSettings()
 void Raytracing::LoadSettings(json& o_json)
 {
 	settings = o_json;
+
+	if (initialized)
+		creationEngineRaytracing->UpdateSettings(settings.CreationEngineRaytracingSettings);
 }
 
 void Raytracing::SaveSettings(json& o_json)
@@ -39,9 +41,11 @@ void Raytracing::DrawSettings()
 	if (forcedDisabledReason)
 		ImGui::BeginDisabled();
 
-	ImGui::Checkbox("Enabled", &settings.Enabled);
+	auto ceRTSettingsBefore = settings.CreationEngineRaytracingSettings;
 
-	ImGui::Checkbox("Path Tracing", &settings.PathTracing);
+	ImGui::Checkbox("Enabled", &settings.CreationEngineRaytracingSettings.Enabled);
+
+	ImGui::Checkbox("Path Tracing", &settings.CreationEngineRaytracingSettings.PathTracing);
 
 	if (forcedDisabledReason)
 		ImGui::EndDisabled();
@@ -63,6 +67,92 @@ void Raytracing::DrawSettings()
 		}());
 	}
 
+	if (ImGui::BeginTabBar("Settings")) {
+		DrawGeneralSettings();
+		DrawDebugSettings();
+
+		ImGui::EndTabBar();
+	}
+
+	if (ceRTSettingsBefore != settings.CreationEngineRaytracingSettings)
+		creationEngineRaytracing->UpdateSettings(settings.CreationEngineRaytracingSettings);
+}
+
+static void DrawFloat2(const char* label, float2& v, float min = 0.0f, float max = 1.0f)
+{
+	float floats[2] = { v.x, v.y };
+	if (ImGui::SliderFloat2(label, floats, min, max)) {
+		v = { floats[0], floats[1] };
+		v.Clamp({ min, min }, { max, max });
+	}
+}
+
+void Raytracing::DrawGeneralSettings()
+{
+	if (!ImGui::BeginTabItem("General"))
+		return;
+
+	ImGui::PushID("GeneralSettings");
+
+	auto& ceRTSettings = settings.CreationEngineRaytracingSettings;
+
+	// RT
+	{
+		auto& rtSettings = ceRTSettings.RaytracingSettings;
+
+		// Bounces
+		if (ImGui::SliderInt("Bounces", &rtSettings.Bounces, 1, 32))
+			rtSettings.Bounces = std::clamp(rtSettings.Bounces, 1, 32);
+
+		// Samples Per Pixel
+		if (ImGui::SliderInt("Samples Per Pixel", &rtSettings.SamplesPerPixel, 1, 32))
+			rtSettings.SamplesPerPixel = std::clamp(rtSettings.SamplesPerPixel, 1, 32);
+	}
+
+	// Material
+	DrawFloat2("Roughness", ceRTSettings.MaterialSettings.Roughness);
+	DrawFloat2("Metalness", ceRTSettings.MaterialSettings.Metalness);
+
+	if (ImGui::CollapsingHeader("Light")) {
+		auto& lightSettings = ceRTSettings.LightSettings;
+
+		if (ImGui::DragFloat("Directional Strength", &lightSettings.Directional, 0.001f))
+			lightSettings.Directional = std::max(0.0f, lightSettings.Directional);
+
+		if (ImGui::DragFloat("Point Strength", &lightSettings.Point, 0.001f))
+			lightSettings.Point = std::max(0.0f, lightSettings.Point);
+
+		ImGui::Checkbox("Lod Dimmer", &lightSettings.LodDimmer);
+
+	}
+
+	if (ImGui::CollapsingHeader("Lighting")) {
+		auto& lightingSettings = ceRTSettings.LightingSettings;
+
+		if (ImGui::DragFloat("Emissive Strength", &lightingSettings.Emissive, 0.001f))
+			lightingSettings.Emissive = std::max(0.0f, lightingSettings.Emissive);
+
+		if (ImGui::DragFloat("Effect Strength", &lightingSettings.Effect, 0.001f))
+			lightingSettings.Effect = std::max(0.0f, lightingSettings.Effect);
+
+		if (ImGui::DragFloat("Sky Strength", &lightingSettings.Sky, 0.001f))
+			lightingSettings.Sky = std::max(0.0f, lightingSettings.Sky);
+	}
+
+	ImGui::PopID();
+
+	ImGui::EndTabItem();
+}
+
+void Raytracing::DrawDebugSettings()
+{
+	if (!ImGui::BeginTabItem("Debug"))
+		return;
+
+	ImGui::PushID("DebugSettings");
+
+	ImGui::Checkbox("Path Tracing Cull", &settings.CreationEngineRaytracingSettings.DebugSettings.PathTracingCull);
+
 	ImGui::Checkbox("Performance Overlay", &settings.PerfOverlay);
 
 	ImGui::Checkbox("Enable PIX Capture", &settings.EnablePIXCapture);
@@ -72,11 +162,11 @@ void Raytracing::DrawSettings()
 			pixCapture = true;
 			pixCaptureStarted = false;
 		}
-
 	}
 
-	if (mainTexture)
-		ImGui::Image(mainTexture->srv, { 1280, 720 });
+	ImGui::PopID();
+
+	ImGui::EndTabItem();
 }
 
 void Raytracing::DrawOverlay()
@@ -255,7 +345,7 @@ void Raytracing::PostPostLoad()
 	creationEngineRaytracing = eastl::make_unique<CreationEngineRaytracing>();
 
 	if (!creationEngineRaytracing->handle) {
-		settings.Enabled = false;
+		settings.CreationEngineRaytracingSettings.Enabled = false;
 		forcedDisabled = true;
 		disableReason = DisableReason::MissingPlugin;
 		return;
@@ -287,7 +377,7 @@ void Raytracing::InitializeCERaytracing(ID3D11Device5* d3d11Device, ID3D12Device
 	bool result = creationEngineRaytracing->Initialize(d3d11Device, d3d12Device, commandQueue, computeCommandQueue, copyCommandQueue);
 
 	if (!result) {
-		settings.Enabled = false;
+		settings.CreationEngineRaytracingSettings.Enabled = false;
 		forcedDisabled = true;
 		disableReason = DisableReason::InitFailed;
 
@@ -296,6 +386,8 @@ void Raytracing::InitializeCERaytracing(ID3D11Device5* d3d11Device, ID3D12Device
 	}
 
 	initialized = true;
+
+	creationEngineRaytracing->UpdateSettings(settings.CreationEngineRaytracingSettings);
 
 	UpdateResolution();
 
@@ -428,7 +520,7 @@ void Raytracing::SkyCubeToHemi() const
 
 void Raytracing::DeferredPasses()
 {
-	if (!settings.Enabled)
+	if (!settings.CreationEngineRaytracingSettings.Enabled)
 		return;
 
 	bool resolutionChanged = UpdateResolution();
@@ -457,7 +549,7 @@ void Raytracing::DeferredPasses()
 
 	context->CopyResource(renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMAIN].texture, mainTexture->resource11);
 
-	if (settings.PathTracing) {
+	if (settings.CreationEngineRaytracingSettings.PathTracing) {
 		float clearColor[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
 		context->ClearRenderTargetView(renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kINDIRECT_DOWNSCALED].RTV, clearColor);
 	}
