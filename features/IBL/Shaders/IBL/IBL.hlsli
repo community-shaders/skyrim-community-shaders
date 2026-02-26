@@ -40,11 +40,23 @@ namespace ImageBasedLighting
 		return float3(colorR, colorG, colorB) / Math::PI;
 	}
 
-#if defined(SKYLIGHTING) && !defined(INTERIOR)
+#if defined(SKYLIGHTING)
 	float3 GetIBLColor(float3 rayDir, float skylighting)
-#else
-	float3 GetIBLColor(float3 rayDir)
+	{
+		float3 color = 0;
+		if (SharedData::InInterior)
+		{
+			color = GetDiffuseIBL(rayDir);
+		}
+		else
+		{
+			color = lerp(GetDiffuseIBL(rayDir), GetSkyDiffuseIBL(rayDir), skylighting);
+		}
+		return color;
+	}
 #endif
+
+	float3 GetIBLColor(float3 rayDir)
 	{
 		float3 color = 0;
 		if (SharedData::InInterior)
@@ -54,7 +66,7 @@ namespace ImageBasedLighting
 		else
 #if defined(SKYLIGHTING)
 		{
-			color = lerp(GetDiffuseIBL(rayDir), GetSkyDiffuseIBL(rayDir), skylighting);
+			color = GetIBLColor(rayDir, 1.0); // Default to full skylighting if not provided
 		}
 #else
 		{
