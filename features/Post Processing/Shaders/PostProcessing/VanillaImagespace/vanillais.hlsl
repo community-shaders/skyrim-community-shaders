@@ -13,8 +13,7 @@ cbuffer VanillaISCB : register(b1)
 	float4 Tint;
 };
 
-[numthreads(8, 8, 1)] void main(uint3 DTid
-								: SV_DispatchThreadID) {
+[numthreads(8, 8, 1)] void main(uint3 DTid : SV_DispatchThreadID) {
 	float4 color = TexColor[DTid.xy];
 
 	if (Cinematic.y + Cinematic.z == 0) {

@@ -1,6 +1,6 @@
 /**
  * Motion Blur - Horizontal Reduction Pass (Pass 1a of 3)
- * 
+ *
  * Performs horizontal reduction from [width x height] to [grid x height]
  * Each thread processes a horizontal strip of input pixels
  * First stage of the separable approach for maximum velocity calculation
@@ -22,8 +22,7 @@ cbuffer MotionBlurCB : register(b0)
 static const uint GRID_SIZE = 20;  // Fixed grid size
 
 // Process horizontal strips
-[numthreads(8, 8, 1)] void main(uint3 DTid
-								: SV_DispatchThreadID) {
+[numthreads(8, 8, 1)] void main(uint3 DTid : SV_DispatchThreadID) {
 	// Get dimensions and check bounds
 	uint2 dimensions;
 	TexVelocity.GetDimensions(dimensions.x, dimensions.y);

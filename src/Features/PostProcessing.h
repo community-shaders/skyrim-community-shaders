@@ -4,13 +4,13 @@
 
 #include "PostProcessing/Border.h"
 #include "PostProcessing/CODBloom.h"
+#include "PostProcessing/ColorGrading.h"
 #include "PostProcessing/ColourTransforms.h"
 #include "PostProcessing/DoF.h"
 #include "PostProcessing/HistogramAutoExposure.h"
 #include "PostProcessing/LUT.h"
 #include "PostProcessing/LensFlare.h"
 #include "PostProcessing/MotionBlur.h"
-#include "PostProcessing/ColorGrading.h"
 #include "PostProcessing/VanillaImagespace.h"
 #include "PostProcessing/Vignette.h"
 #include "PostProcessing/pCamera.h"
@@ -43,12 +43,10 @@ struct PostProcessing : Feature
 	{
 		return {
 			"Post Processing provides advanced image effects and enhancements to improve the visual quality of the game.",
-			{
-				"Customizable post-processing effects",
+			{ "Customizable post-processing effects",
 				"Supports various presets for different visual styles",
 				"Improves overall image quality and immersion",
-				"Includes features like bloom, depth of field, and color grading"
-			}
+				"Includes features like bloom, depth of field, and color grading" }
 		};
 	}
 

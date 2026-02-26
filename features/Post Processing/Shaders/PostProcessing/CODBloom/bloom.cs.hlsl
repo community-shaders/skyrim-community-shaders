@@ -52,8 +52,7 @@ float4 UpsampleCOD(Texture2D tex, float2 uv, float2 radius)
 	return retval;
 }
 
-[numthreads(32, 32, 1)] void CS_Threshold(uint2 tid
-										  : SV_DispatchThreadID) {
+[numthreads(32, 32, 1)] void CS_Threshold(uint2 tid : SV_DispatchThreadID) {
 	float3 col_input = TexColor[tid].rgb;
 
 	float3 col = col_input;
@@ -62,8 +61,7 @@ float4 UpsampleCOD(Texture2D tex, float2 uv, float2 radius)
 	RWTexBloomOut[tid] = float4(col, 1);
 };
 
-[numthreads(32, 32, 1)] void CS_Downsample(uint2 tid
-										   : SV_DispatchThreadID) {
+[numthreads(32, 32, 1)] void CS_Downsample(uint2 tid : SV_DispatchThreadID) {
 	uint2 dims;
 	RWTexBloomOut.GetDimensions(dims.x, dims.y);
 
@@ -78,8 +76,7 @@ float4 UpsampleCOD(Texture2D tex, float2 uv, float2 radius)
 	RWTexBloomOut[tid] = float4(col, 1);
 };
 
-[numthreads(32, 32, 1)] void CS_Upsample(uint2 tid
-										 : SV_DispatchThreadID) {
+[numthreads(32, 32, 1)] void CS_Upsample(uint2 tid : SV_DispatchThreadID) {
 	uint2 dims;
 	RWTexBloomOut.GetDimensions(dims.x, dims.y);
 
@@ -90,8 +87,7 @@ float4 UpsampleCOD(Texture2D tex, float2 uv, float2 radius)
 	RWTexBloomOut[tid] = float4(col, 1);
 };
 
-[numthreads(32, 32, 1)] void CS_Composite(uint2 tid
-										  : SV_DispatchThreadID) {
+[numthreads(32, 32, 1)] void CS_Composite(uint2 tid : SV_DispatchThreadID) {
 	uint2 dims;
 	RWTexBloomOut.GetDimensions(dims.x, dims.y);
 

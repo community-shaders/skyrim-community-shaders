@@ -1,6 +1,6 @@
 /**
  * Motion Blur - Blur Pass (Pass 3 of 3)
- * 
+ *
  * Final pass that applies motion blur using neighborhood velocities
  * Uses depth-aware sampling to prevent foreground/background bleeding
  */
@@ -82,8 +82,7 @@ float GetDitheredOffset(uint2 position, float sampleIndex)
 }
 
 // Main function
-[numthreads(8, 8, 1)] void main(uint3 DTid
-								: SV_DispatchThreadID) {
+[numthreads(8, 8, 1)] void main(uint3 DTid : SV_DispatchThreadID) {
 	// Get dimensions and check bounds
 	uint2 dimensions;
 	TexColor.GetDimensions(dimensions.x, dimensions.y);

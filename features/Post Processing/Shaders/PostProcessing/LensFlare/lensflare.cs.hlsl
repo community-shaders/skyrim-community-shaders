@@ -76,8 +76,7 @@ float3 HighPassFilter(float3 color, float curve)
 	return color;
 }
 
-[numthreads(8, 8, 1)] void CSLensflare(uint3 DTid
-									   : SV_DispatchThreadID) {
+[numthreads(8, 8, 1)] void CSLensflare(uint3 DTid : SV_DispatchThreadID) {
 	if (DTid.x >= (uint)ScreenWidth || DTid.y >= (uint)ScreenHeight || LFStrength < EPSILON)
 		return;
 	float2 texcoord = (DTid.xy + 0.5f) / float2(ScreenWidth, ScreenHeight);
@@ -137,23 +136,20 @@ float3 HighPassFilter(float3 color, float curve)
 	OutputTexture[DTid.xy] = float4(color, 1.0f);
 }
 
-	[numthreads(8, 8, 1)] void CSFlareDown(uint3 DTid
-										   : SV_DispatchThreadID)
+	[numthreads(8, 8, 1)] void CSFlareDown(uint3 DTid : SV_DispatchThreadID)
 {
 	if (LFStrength < EPSILON)
 		return;
 	OutputTexture[DTid.xy] = KawaseBlurDownSample(FlareTexture, ResizeSampler, DTid.xy, DownsizeScale, ScreenWidth, ScreenHeight);
 }
 
-[numthreads(8, 8, 1)] void CSFlareUp(uint3 DTid
-									 : SV_DispatchThreadID) {
+[numthreads(8, 8, 1)] void CSFlareUp(uint3 DTid : SV_DispatchThreadID) {
 	if (LFStrength < EPSILON)
 		return;
 	OutputTexture[DTid.xy] = KawaseBlurUpSample(FlareTexture, ResizeSampler, DTid.xy, DownsizeScale, ScreenWidth, ScreenHeight);
 }
 
-	[numthreads(8, 8, 1)] void CSComposite(uint3 DTid
-										   : SV_DispatchThreadID)
+	[numthreads(8, 8, 1)] void CSComposite(uint3 DTid : SV_DispatchThreadID)
 {
 	float2 texcoord = (DTid.xy + 0.5) / float2(ScreenWidth, ScreenHeight);
 	float4 flarecolor = FlareTexture.SampleLevel(ColorSampler, texcoord, 0);

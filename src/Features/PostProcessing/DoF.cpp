@@ -427,7 +427,7 @@ void DoF::Draw(TextureInfo& inout_tex)
 		if (targetFocusEnabled) {
 			nearBlur = settings.NearPlaneMaxBlur;
 			focusLen = settings.targetFocusFocalLength;
-			manualFocus = Util::Units::GameUnitsToMeters(targetFocusDistanceGame) * 0.001f; // in KM
+			manualFocus = Util::Units::GameUnitsToMeters(targetFocusDistanceGame) * 0.001f;  // in KM
 		} else {
 			return;
 		}

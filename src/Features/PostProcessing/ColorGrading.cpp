@@ -12,30 +12,29 @@
 #include "IconsFontAwesome5.h"
 
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
-    ColorGrading::ColorProfile,
-    params)
+	ColorGrading::ColorProfile,
+	params)
 
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
-    ColorGrading::Settings,
-    skipLDR,
-    skipLUT,
-    profile,
-    currentTonemapper,
-    tonemapParams,
-    gameCinematicBlend,
-    gameFadeBlend,
-    gameTintBlend,
-    useLog,
-    logType,
-    invertLog,
-    enableTonemap,
-    enableColorSpaceTransform,
-    inputColorSpace,
-    processColorSpace,
-    outputColorSpace,
+	ColorGrading::Settings,
+	skipLDR,
+	skipLUT,
+	profile,
+	currentTonemapper,
+	tonemapParams,
+	gameCinematicBlend,
+	gameFadeBlend,
+	gameTintBlend,
+	useLog,
+	logType,
+	invertLog,
+	enableTonemap,
+	enableColorSpaceTransform,
+	inputColorSpace,
+	processColorSpace,
+	outputColorSpace,
 	colorSpaceTransform,
-	invColorSpaceTransform
-)
+	invColorSpaceTransform)
 
 template <int num = 3>
 bool shiftSlider(const char* label, float* v, float v_min, float v_max, const char* format = "%.3f", ImGuiSliderFlags flags = 0)
@@ -94,12 +93,12 @@ struct TonemapperInfo
 
 	CTP cached_settings;
 
-    static auto& GetTonemappers()
+	static auto& GetTonemappers()
 	{
 		using f4 = float4;
 		constexpr auto shiftHint = []() { ImGui::TextWrapped("Press Shift to control all channels at the same time."); };
 
-        static std::vector<TonemapperInfo> tonemappers = {
+		static std::vector<TonemapperInfo> tonemappers = {
 			{ "Reinhard"sv, "Reinhard"sv,
 				"Mapping proposed in \"Photographic Tone Reproduction for Digital Images\" by Reinhard et al. 2002."sv,
 				[](CTP& params) { exposureSlider(&params[0].x); },
@@ -210,11 +209,11 @@ struct TonemapperInfo
 			{ "GT7"sv, "GT7ToneMapping"sv,
 				"Tonemapper designed for Gran Turismo 7."sv,
 				[](CTP& params) {
-                    exposureSlider(&params[0].x);
-                    ImGui::Checkbox("HDR Output (not working for now)", (bool*)&params[0].y);
-                    if (params[0].y)
-                        ImGui::InputFloat("HDR Max Brightness", &params[0].z, 0.f, 0.f, "%1.f nits");
-                },
+					exposureSlider(&params[0].x);
+					ImGui::Checkbox("HDR Output (not working for now)", (bool*)&params[0].y);
+					if (params[0].y)
+						ImGui::InputFloat("HDR Max Brightness", &params[0].z, 0.f, 0.f, "%1.f nits");
+				},
 				{ f4{ 1.f, 0.f, 400.f, 0.f } } }
 		};
 
@@ -228,7 +227,7 @@ struct TonemapperInfo
 		return tonemappers;
 	}
 
-    static void GetDefaultParams(int& tonemapperType, CTP& params)
+	static void GetDefaultParams(int& tonemapperType, CTP& params)
 	{
 		auto& tonemappers = GetTonemappers();
 		if (auto it = std::ranges::find_if(tonemappers, [&](TonemapperInfo& x) { return "GT7"sv == x.name; });
@@ -242,25 +241,25 @@ struct TonemapperInfo
 
 void ColorGrading::DrawSettings()
 {
-    ImGui::Checkbox("Skip LDR Color Grading", &settings.skipLDR);
-    if (auto _tt = Util::HoverTooltipWrapper())
+	ImGui::Checkbox("Skip LDR Color Grading", &settings.skipLDR);
+	if (auto _tt = Util::HoverTooltipWrapper())
 		ImGui::Text("Skip color grading after tonemapping. This includes Lift Gamma Gain and Oklch adjustments.");
 
-    ImGui::Checkbox("Skip LUT (Direct Color Grading)", &settings.skipLUT);
-    if (auto _tt = Util::HoverTooltipWrapper())
+	ImGui::Checkbox("Skip LUT (Direct Color Grading)", &settings.skipLUT);
+	if (auto _tt = Util::HoverTooltipWrapper())
 		ImGui::Text("Skip baking color grading into a LUT and apply it directly per-pixel. More accurate but slower.");
 
-    ImGui::Checkbox("Convert Linear to Log Before HDR Color Grading", &settings.useLog);
-    if (settings.useLog) {
-        ImGui::Checkbox("Convert Log to Linear After HDR Color Grading", &settings.invertLog);
-        ImGui::Combo("Log Type", (int*)&settings.logType, "ACEScct\0ARRILogC4\0SonySLog3\0");
-    }
+	ImGui::Checkbox("Convert Linear to Log Before HDR Color Grading", &settings.useLog);
+	if (settings.useLog) {
+		ImGui::Checkbox("Convert Log to Linear After HDR Color Grading", &settings.invertLog);
+		ImGui::Combo("Log Type", (int*)&settings.logType, "ACEScct\0ARRILogC4\0SonySLog3\0");
+	}
 
 	auto& profile = settings.profile;
-    ImGui::SeparatorText("Color Grading");
-    {
-        ImGui::SliderFloat("Input Gamma", &profile.params[6].z, 0.f, 3.f, "%.3f");
-        ImGui::SliderFloat("Output Gamma", &profile.params[6].w, 0.f, 3.f, "%.3f");
+	ImGui::SeparatorText("Color Grading");
+	{
+		ImGui::SliderFloat("Input Gamma", &profile.params[6].z, 0.f, 3.f, "%.3f");
+		ImGui::SliderFloat("Output Gamma", &profile.params[6].w, 0.f, 3.f, "%.3f");
 
 		ImGui::Text("Pre-Tonemapping Settings");
 		if (ImGui::TreeNode("Exposure/Temperature/Tint")) {
@@ -270,27 +269,27 @@ void ColorGrading::DrawSettings()
 			ImGui::TreePop();
 		}
 
-        if (ImGui::TreeNode("ASC CDL")) {
-            shiftSlider("Slope", &profile.params[0].x, 0.f, 2.f, "%.2f");
-            shiftSlider("Power", &profile.params[1].x, 0.f, 2.f, "%.2f");
-            shiftSlider("Offset", &profile.params[2].x, -1.f, 1.f, "%.2f");
-            ImGui::TreePop();
-        }
+		if (ImGui::TreeNode("ASC CDL")) {
+			shiftSlider("Slope", &profile.params[0].x, 0.f, 2.f, "%.2f");
+			shiftSlider("Power", &profile.params[1].x, 0.f, 2.f, "%.2f");
+			shiftSlider("Offset", &profile.params[2].x, -1.f, 1.f, "%.2f");
+			ImGui::TreePop();
+		}
 
 		if (ImGui::TreeNode("Saturation/Hue")) {
-            ImGui::SliderFloat("Saturation", &profile.params[6].x, 0.f, 3.f, "%.3f");
-            ImGui::SliderFloat("Hue Shift", &profile.params[6].y, -1.f, 1.f, "%.3f");
-            ImGui::TreePop();
-        }
+			ImGui::SliderFloat("Saturation", &profile.params[6].x, 0.f, 3.f, "%.3f");
+			ImGui::SliderFloat("Hue Shift", &profile.params[6].y, -1.f, 1.f, "%.3f");
+			ImGui::TreePop();
+		}
 
 		if (ImGui::TreeNode("Shadows/Midtones/Highlights")) {
-            shiftSlider("Shadows", &profile.params[18].x, 0.f, 2.f, "%.3f");
-            shiftSlider("Midtones", &profile.params[19].x, 0.f, 2.f, "%.3f");
-            shiftSlider("Highlights", &profile.params[20].x, 0.f, 2.f, "%.3f");
-            ImGui::InputFloat2("Shadows Start/End", &profile.params[21].x, "%.3f");
-            ImGui::InputFloat2("Highlights Start/End", &profile.params[21].z, "%.3f");
-            ImGui::TreePop();
-        }
+			shiftSlider("Shadows", &profile.params[18].x, 0.f, 2.f, "%.3f");
+			shiftSlider("Midtones", &profile.params[19].x, 0.f, 2.f, "%.3f");
+			shiftSlider("Highlights", &profile.params[20].x, 0.f, 2.f, "%.3f");
+			ImGui::InputFloat2("Shadows Start/End", &profile.params[21].x, "%.3f");
+			ImGui::InputFloat2("Highlights Start/End", &profile.params[21].z, "%.3f");
+			ImGui::TreePop();
+		}
 
 		if (ImGui::TreeNode("Contrast")) {
 			shiftSlider("Contrast", &profile.params[15].x, 0.f, 2.f, "%.3f");
@@ -299,111 +298,111 @@ void ColorGrading::DrawSettings()
 		}
 
 		ImGui::Text("Post-Tonemapping Settings");
-        if (ImGui::TreeNode("Lift Gamma Gain")) {
-            ImGui::DragFloat4("Lift", &profile.params[3].x, 1e-3f, -1.f, 1.f, "%.3f");
-            ImGui::DragFloat4("Gamma", &profile.params[4].x, 1e-3f, -1.5f, 1.5f, "%.3f");
-            ImGui::DragFloat4("Gain", &profile.params[5].x, 1e-3f, 0.f, 2.f, "%.3f");
-            ImGui::TreePop();
-        }
+		if (ImGui::TreeNode("Lift Gamma Gain")) {
+			ImGui::DragFloat4("Lift", &profile.params[3].x, 1e-3f, -1.f, 1.f, "%.3f");
+			ImGui::DragFloat4("Gamma", &profile.params[4].x, 1e-3f, -1.5f, 1.5f, "%.3f");
+			ImGui::DragFloat4("Gain", &profile.params[5].x, 1e-3f, 0.f, 2.f, "%.3f");
+			ImGui::TreePop();
+		}
 
-        if (ImGui::TreeNode("OKLCH Saturation")) {
-            ImGui::SliderFloat("Saturation", &profile.params[7].x, 0.f, 2.f, "%.3f");
-            ImGui::SliderFloat("Vibrance", &profile.params[7].y, 0.f, 3.f, "%.3f");
-            ImGui::SliderFloat("Hue Shift", &profile.params[7].z, -1.f, 1.f, "%.3f");
-            ImGui::TreePop();
-        }
+		if (ImGui::TreeNode("OKLCH Saturation")) {
+			ImGui::SliderFloat("Saturation", &profile.params[7].x, 0.f, 2.f, "%.3f");
+			ImGui::SliderFloat("Vibrance", &profile.params[7].y, 0.f, 3.f, "%.3f");
+			ImGui::SliderFloat("Hue Shift", &profile.params[7].z, -1.f, 1.f, "%.3f");
+			ImGui::TreePop();
+		}
 
-        if (ImGui::TreeNode("OKLCH Color Mixer")) {
-            ImGui::Text("Adjust brightness, vibrance and hue shift of specific hues in the perceptually uniform OKLCH space.");
-            constexpr std::array<ImColor, 7> hues = { {
-                { 255, 0, 0 },
-                { 182, 124, 1 },
-                { 87, 159, 0 },
-                { 0, 161, 145 },
-                { 0, 149, 217 },
-                { 133, 100, 255 },
-                { 255, 35, 189 },
-            } };
-            static int hueId = 0;
-            if (ImGui::BeginTable("##HueTable", 7)) {
-                for (int i = 0; i < 7; i++) {
-                    ImGui::TableNextColumn();
+		if (ImGui::TreeNode("OKLCH Color Mixer")) {
+			ImGui::Text("Adjust brightness, vibrance and hue shift of specific hues in the perceptually uniform OKLCH space.");
+			constexpr std::array<ImColor, 7> hues = { {
+				{ 255, 0, 0 },
+				{ 182, 124, 1 },
+				{ 87, 159, 0 },
+				{ 0, 161, 145 },
+				{ 0, 149, 217 },
+				{ 133, 100, 255 },
+				{ 255, 35, 189 },
+			} };
+			static int hueId = 0;
+			if (ImGui::BeginTable("##HueTable", 7)) {
+				for (int i = 0; i < 7; i++) {
+					ImGui::TableNextColumn();
 
-                    ImGui::PushID(i);
-                    ImGui::PushStyleColor(ImGuiCol_Text, hues[i].Value);
-                    ImGui::RadioButton(ICON_FA_SQUARE, &hueId, i);
-                    ImGui::PopStyleColor();
-                    ImGui::PopID();
-                }
-                ImGui::EndTable();
-            }
-            ImGui::SliderFloat("Hue Shift", &profile.params[8 + hueId].x, -1.f, 1.f, "%.3f");
-            ImGui::SliderFloat("Vibrance", &profile.params[8 + hueId].y, 0.f, 3.f, "%.3f");
-            ImGui::SliderFloat("Brightness", &profile.params[8 + hueId].z, -1.f, 1.f, "%.3f");
-            ImGui::TreePop();
-        }
-    }
+					ImGui::PushID(i);
+					ImGui::PushStyleColor(ImGuiCol_Text, hues[i].Value);
+					ImGui::RadioButton(ICON_FA_SQUARE, &hueId, i);
+					ImGui::PopStyleColor();
+					ImGui::PopID();
+				}
+				ImGui::EndTable();
+			}
+			ImGui::SliderFloat("Hue Shift", &profile.params[8 + hueId].x, -1.f, 1.f, "%.3f");
+			ImGui::SliderFloat("Vibrance", &profile.params[8 + hueId].y, 0.f, 3.f, "%.3f");
+			ImGui::SliderFloat("Brightness", &profile.params[8 + hueId].z, -1.f, 1.f, "%.3f");
+			ImGui::TreePop();
+		}
+	}
 
-    ImGui::SeparatorText("Tonemapping");
-    ImGui::Checkbox("Enable Tonemapping", &settings.enableTonemap);
-    if (settings.enableTonemap) {
-        auto& tonemappers = TonemapperInfo::GetTonemappers();
+	ImGui::SeparatorText("Tonemapping");
+	ImGui::Checkbox("Enable Tonemapping", &settings.enableTonemap);
+	if (settings.enableTonemap) {
+		auto& tonemappers = TonemapperInfo::GetTonemappers();
 
-        if (ImGui::BeginCombo("Tonemapper", tonemappers[tonemapperType].name.data(), ImGuiComboFlags_HeightLargest)) {
-            for (int i = 0; i < tonemappers.size(); ++i) {
-                if (ImGui::Selectable(tonemappers[i].name.data(), i == tonemapperType)) {
-                    tonemappers[tonemapperType].cached_settings = settings.tonemapParams;
-                    settings.tonemapParams = tonemappers[i].cached_settings;
-                    tonemapperType = i;
-                    recompileFlag = true;
-                }
+		if (ImGui::BeginCombo("Tonemapper", tonemappers[tonemapperType].name.data(), ImGuiComboFlags_HeightLargest)) {
+			for (int i = 0; i < tonemappers.size(); ++i) {
+				if (ImGui::Selectable(tonemappers[i].name.data(), i == tonemapperType)) {
+					tonemappers[tonemapperType].cached_settings = settings.tonemapParams;
+					settings.tonemapParams = tonemappers[i].cached_settings;
+					tonemapperType = i;
+					recompileFlag = true;
+				}
 
-                if (auto _tt = Util::HoverTooltipWrapper())
-                    ImGui::Text(tonemappers[i].desc.data());
-            }
-            ImGui::EndCombo();
-        }
-        ImGui::Spacing();
-        ImGui::TextWrapped(tonemappers[tonemapperType].desc.data());
-        ImGui::Spacing();
-        if (ImGui::Button("Reset", { -1, 0 }))
-            settings.tonemapParams = tonemappers[tonemapperType].default_settings;
-        ImGui::Spacing();
+				if (auto _tt = Util::HoverTooltipWrapper())
+					ImGui::Text(tonemappers[i].desc.data());
+			}
+			ImGui::EndCombo();
+		}
+		ImGui::Spacing();
+		ImGui::TextWrapped(tonemappers[tonemapperType].desc.data());
+		ImGui::Spacing();
+		if (ImGui::Button("Reset", { -1, 0 }))
+			settings.tonemapParams = tonemappers[tonemapperType].default_settings;
+		ImGui::Spacing();
 
-        ImGui::PushID(tonemapperType);
-        tonemappers[tonemapperType].draw_settings_func(settings.tonemapParams);
-        ImGui::PopID();
-    }
+		ImGui::PushID(tonemapperType);
+		tonemappers[tonemapperType].draw_settings_func(settings.tonemapParams);
+		ImGui::PopID();
+	}
 
-    ImGui::SeparatorText("Game Color Grading");
-    ImGui::SliderFloat3("Cinematic Blend", &settings.gameCinematicBlend.x, 0.f, 1.f, "%.3f");
-    if (auto _tt = Util::HoverTooltipWrapper())
-        ImGui::Text("Saturation, Brightness and Contrast.");
-    ImGui::SliderFloat("Fade Blend", &settings.gameFadeBlend, 0.f, 1.f, "%.3f");
-    ImGui::SliderFloat("Tint Blend", &settings.gameTintBlend, 0.f, 1.f, "%.3f");
-    ImGui::SeparatorText("Color Space Transform");
-    ImGui::Checkbox("Enable Color Space Transform", &settings.enableColorSpaceTransform);
-    if (settings.enableColorSpaceTransform) {
-        auto& spaces = getAvailableColourSpaces();
-        ImGui::Combo("Input Color Space", &settings.inputColorSpace, spaces.data(), (int)spaces.size());
-        ImGui::Combo("Process Color Space", &settings.processColorSpace, spaces.data(), (int)spaces.size());
-        ImGui::Combo("Output Color Space", &settings.outputColorSpace, spaces.data(), (int)spaces.size());
+	ImGui::SeparatorText("Game Color Grading");
+	ImGui::SliderFloat3("Cinematic Blend", &settings.gameCinematicBlend.x, 0.f, 1.f, "%.3f");
+	if (auto _tt = Util::HoverTooltipWrapper())
+		ImGui::Text("Saturation, Brightness and Contrast.");
+	ImGui::SliderFloat("Fade Blend", &settings.gameFadeBlend, 0.f, 1.f, "%.3f");
+	ImGui::SliderFloat("Tint Blend", &settings.gameTintBlend, 0.f, 1.f, "%.3f");
+	ImGui::SeparatorText("Color Space Transform");
+	ImGui::Checkbox("Enable Color Space Transform", &settings.enableColorSpaceTransform);
+	if (settings.enableColorSpaceTransform) {
+		auto& spaces = getAvailableColourSpaces();
+		ImGui::Combo("Input Color Space", &settings.inputColorSpace, spaces.data(), (int)spaces.size());
+		ImGui::Combo("Process Color Space", &settings.processColorSpace, spaces.data(), (int)spaces.size());
+		ImGui::Combo("Output Color Space", &settings.outputColorSpace, spaces.data(), (int)spaces.size());
 
-        auto colorSpaceTransformMatrix = getRGBMatrix(spaces[settings.inputColorSpace], spaces[settings.processColorSpace]);
-        auto invColorSpaceTransformMatrix = getRGBMatrix(spaces[settings.processColorSpace], spaces[settings.outputColorSpace]);
+		auto colorSpaceTransformMatrix = getRGBMatrix(spaces[settings.inputColorSpace], spaces[settings.processColorSpace]);
+		auto invColorSpaceTransformMatrix = getRGBMatrix(spaces[settings.processColorSpace], spaces[settings.outputColorSpace]);
 
-        settings.colorSpaceTransform = {
-            float3{ colorSpaceTransformMatrix(0, 0), colorSpaceTransformMatrix(0, 1), colorSpaceTransformMatrix(0, 2) },
-            float3{ colorSpaceTransformMatrix(1, 0), colorSpaceTransformMatrix(1, 1), colorSpaceTransformMatrix(1, 2) },
-            float3{ colorSpaceTransformMatrix(2, 0), colorSpaceTransformMatrix(2, 1), colorSpaceTransformMatrix(2, 2) }
-        };
+		settings.colorSpaceTransform = {
+			float3{ colorSpaceTransformMatrix(0, 0), colorSpaceTransformMatrix(0, 1), colorSpaceTransformMatrix(0, 2) },
+			float3{ colorSpaceTransformMatrix(1, 0), colorSpaceTransformMatrix(1, 1), colorSpaceTransformMatrix(1, 2) },
+			float3{ colorSpaceTransformMatrix(2, 0), colorSpaceTransformMatrix(2, 1), colorSpaceTransformMatrix(2, 2) }
+		};
 
 		settings.invColorSpaceTransform = {
 			float3{ invColorSpaceTransformMatrix(0, 0), invColorSpaceTransformMatrix(0, 1), invColorSpaceTransformMatrix(0, 2) },
 			float3{ invColorSpaceTransformMatrix(1, 0), invColorSpaceTransformMatrix(1, 1), invColorSpaceTransformMatrix(1, 2) },
 			float3{ invColorSpaceTransformMatrix(2, 0), invColorSpaceTransformMatrix(2, 1), invColorSpaceTransformMatrix(2, 2) }
 		};
-    }
+	}
 
 	if (ImGui::Button("Save LUT and Output Image")) {
 		saveImagesFlag = true;
@@ -416,7 +415,7 @@ void ColorGrading::DrawSettings()
 
 void ColorGrading::RestoreDefaultSettings()
 {
-    settings = {};
+	settings = {};
 	TonemapperInfo::GetDefaultParams(tonemapperType, settings.tonemapParams);
 	recompileFlag = true;
 }
@@ -425,7 +424,7 @@ void ColorGrading::LoadSettings(json& o_json)
 {
 	try {
 		settings = o_json;
-    
+
 		auto& tonemappers = TonemapperInfo::GetTonemappers();
 		if (auto it = std::ranges::find_if(tonemappers, [&](TonemapperInfo& x) { return settings.currentTonemapper == x.name; });
 			it != tonemappers.end()) {
@@ -438,14 +437,14 @@ void ColorGrading::LoadSettings(json& o_json)
 		RestoreDefaultSettings();
 	}
 
-    recompileFlag = true;
+	recompileFlag = true;
 }
 
 void ColorGrading::SaveSettings(json& o_json)
 {
-    auto& tonemappers = TonemapperInfo::GetTonemappers();
-    settings.currentTonemapper = tonemappers[tonemapperType].name.data();
-    o_json = settings;
+	auto& tonemappers = TonemapperInfo::GetTonemappers();
+	settings.currentTonemapper = tonemappers[tonemapperType].name.data();
+	o_json = settings;
 }
 
 void ColorGrading::SetupResources()
@@ -586,34 +585,21 @@ void ColorGrading::Draw(TextureInfo& inout_tex)
 
 	state->BeginPerfEvent("Color Grading and Tonemapping");
 
-    auto& pp = globals::features::postProcessing;
+	auto& pp = globals::features::postProcessing;
 
-    RE::ImageSpaceData imageSpaceData = pp.imageSpaceManager->gameISData;
+	RE::ImageSpaceData imageSpaceData = pp.imageSpaceManager->gameISData;
 
-    auto profile = settings.profile;
+	auto profile = settings.profile;
 
-    ColorCB colorCBData = {
-        .asccdl = {
-            profile.params[0],
-            profile.params[1],
-            profile.params[2]
-        },
-        .liftgammagain = {
-            profile.params[3],
-            profile.params[4],
-            profile.params[5]
-        },
-        .saturationHueInOutGamma = profile.params[6],
-        .oklchSaturation = profile.params[7],
-        .oklchColorMixer = {
-            profile.params[8],
-            profile.params[9],
-            profile.params[10],
-            profile.params[11],
-            profile.params[12],
-            profile.params[13],
-            profile.params[14]
-        },
+	ColorCB colorCBData = {
+		.asccdl = {
+			profile.params[0],
+			profile.params[1],
+			profile.params[2] },
+		.liftgammagain = { profile.params[3], profile.params[4], profile.params[5] },
+		.saturationHueInOutGamma = profile.params[6],
+		.oklchSaturation = profile.params[7],
+		.oklchColorMixer = { profile.params[8], profile.params[9], profile.params[10], profile.params[11], profile.params[12], profile.params[13], profile.params[14] },
 		.contrast = profile.params[15],
 		.pivot = profile.params[16],
 		.exposureTemperatureTint = profile.params[17],
@@ -621,38 +607,12 @@ void ColorGrading::Draw(TextureInfo& inout_tex)
 		.midtones = profile.params[19],
 		.highlights = profile.params[20],
 		.shadowsHighlightsRange = profile.params[21],
-        .tonemapParams = {
-            settings.tonemapParams[0],
-            settings.tonemapParams[1]
-        },
-        .colorSpaceTransform = {
-            float4{ settings.colorSpaceTransform[0].x, settings.colorSpaceTransform[0].y, settings.colorSpaceTransform[0].z, 0.f },
-            float4{ settings.colorSpaceTransform[1].x, settings.colorSpaceTransform[1].y, settings.colorSpaceTransform[1].z, 0.f },
-            float4{ settings.colorSpaceTransform[2].x, settings.colorSpaceTransform[2].y, settings.colorSpaceTransform[2].z, 0.f }
-        },
-        .invColorSpaceTransform = {
-            float4{ settings.invColorSpaceTransform[0].x, settings.invColorSpaceTransform[0].y, settings.invColorSpaceTransform[0].z, 0.f },
-            float4{ settings.invColorSpaceTransform[1].x, settings.invColorSpaceTransform[1].y, settings.invColorSpaceTransform[1].z, 0.f },
-            float4{ settings.invColorSpaceTransform[2].x, settings.invColorSpaceTransform[2].y, settings.invColorSpaceTransform[2].z, 0.f }
-        },
-        .cinematic = float4{
-            std::lerp(1.f, imageSpaceData.baseData.cinematic.saturation, settings.gameCinematicBlend.x),
-            std::lerp(1.f, imageSpaceData.baseData.cinematic.brightness, settings.gameCinematicBlend.y),
-            std::lerp(1.f, imageSpaceData.baseData.cinematic.contrast, settings.gameCinematicBlend.z),
-            imageSpaceData.baseAmount
-        },
-		.fade = float4{
-			imageSpaceData.modData.data[RE::ImageSpaceModData::kFadeR],
-			imageSpaceData.modData.data[RE::ImageSpaceModData::kFadeG],
-			imageSpaceData.modData.data[RE::ImageSpaceModData::kFadeB],
-			imageSpaceData.modData.data[RE::ImageSpaceModData::kFadeAmount] * settings.gameFadeBlend
-		},
-		.tint = float4{
-			imageSpaceData.baseData.tint.color.red,
-			imageSpaceData.baseData.tint.color.green,
-			imageSpaceData.baseData.tint.color.blue,
-			imageSpaceData.baseData.tint.amount * settings.gameTintBlend
-		},
+		.tonemapParams = { settings.tonemapParams[0], settings.tonemapParams[1] },
+		.colorSpaceTransform = { float4{ settings.colorSpaceTransform[0].x, settings.colorSpaceTransform[0].y, settings.colorSpaceTransform[0].z, 0.f }, float4{ settings.colorSpaceTransform[1].x, settings.colorSpaceTransform[1].y, settings.colorSpaceTransform[1].z, 0.f }, float4{ settings.colorSpaceTransform[2].x, settings.colorSpaceTransform[2].y, settings.colorSpaceTransform[2].z, 0.f } },
+		.invColorSpaceTransform = { float4{ settings.invColorSpaceTransform[0].x, settings.invColorSpaceTransform[0].y, settings.invColorSpaceTransform[0].z, 0.f }, float4{ settings.invColorSpaceTransform[1].x, settings.invColorSpaceTransform[1].y, settings.invColorSpaceTransform[1].z, 0.f }, float4{ settings.invColorSpaceTransform[2].x, settings.invColorSpaceTransform[2].y, settings.invColorSpaceTransform[2].z, 0.f } },
+		.cinematic = float4{ std::lerp(1.f, imageSpaceData.baseData.cinematic.saturation, settings.gameCinematicBlend.x), std::lerp(1.f, imageSpaceData.baseData.cinematic.brightness, settings.gameCinematicBlend.y), std::lerp(1.f, imageSpaceData.baseData.cinematic.contrast, settings.gameCinematicBlend.z), imageSpaceData.baseAmount },
+		.fade = float4{ imageSpaceData.modData.data[RE::ImageSpaceModData::kFadeR], imageSpaceData.modData.data[RE::ImageSpaceModData::kFadeG], imageSpaceData.modData.data[RE::ImageSpaceModData::kFadeB], imageSpaceData.modData.data[RE::ImageSpaceModData::kFadeAmount] * settings.gameFadeBlend },
+		.tint = float4{ imageSpaceData.baseData.tint.color.red, imageSpaceData.baseData.tint.color.green, imageSpaceData.baseData.tint.color.blue, imageSpaceData.baseData.tint.amount * settings.gameTintBlend },
 		.logType = settings.useLog ? ((1u << settings.logType) | (settings.invertLog ? (1u << 3u) : 0u)) : 0u,
 		.skipLDR = settings.skipLDR,
 		.skipLUT = settings.skipLUT,
@@ -665,7 +625,7 @@ void ColorGrading::Draw(TextureInfo& inout_tex)
 	context->CSSetConstantBuffers(1, 1, &cb);
 
 	std::array<ID3D11SamplerState*, 1> samplers = { linearSampler.get() };
-    context->CSSetSamplers(0, 1, samplers.data());
+	context->CSSetSamplers(0, 1, samplers.data());
 	ID3D11UnorderedAccessView* uav = nullptr;
 
 	if (!settings.skipLUT) {
@@ -716,13 +676,11 @@ void ColorGrading::OutputTextures()
 	DirectX::ScratchImage lutImage;
 	DirectX::ScratchImage colorImage;
 
-	if (texLUT->resource)
-	{
+	if (texLUT->resource) {
 		DirectX::CaptureTexture(device, context, texLUT->resource.get(), lutImage);
 	}
 
-	if (texColor->resource)
-	{
+	if (texColor->resource) {
 		DirectX::CaptureTexture(device, context, texColor->resource.get(), colorImage);
 	}
 

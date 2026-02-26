@@ -535,9 +535,9 @@ float3 MelonTonemap(float3 color)
 	return clamp(color, float3(0.0, 0.0, 0.0), float3(1.0, 1.0, 1.0));
 }
 
-/* 
+/*
     EmbarkStudios/kajiya
-        url:    https://github.com/EmbarkStudios/kajiya	
+        url:    https://github.com/EmbarkStudios/kajiya
         license:
 			Copyright (c) 2019 Embark Studios
 
@@ -598,9 +598,9 @@ float3 KajiyaTonemap(float3 col)
 
 float3 GT7ToneMapping(float3 color)
 {
-    color *= Params[0].r;
+	color *= Params[0].r;
 	color = GT7ToneMappingSDR(color);
-    return color;
+	return color;
 }
 
 #endif  // COLOR_TRANSFORMS_COMMON_HLSLI

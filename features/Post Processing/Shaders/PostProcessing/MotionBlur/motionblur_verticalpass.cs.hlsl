@@ -1,6 +1,6 @@
 /**
  * Motion Blur - Vertical Reduction Pass (Pass 1b of 3)
- * 
+ *
  * Performs vertical reduction from [grid × height] to [grid × grid]
  * Each column of threads processes a vertical strip of the input texture
  * Preserves the maximum velocity vectors for each grid cell
@@ -41,10 +41,7 @@ float2 ExtractVelocity(float4 colorSample)
 }
 
 // Vertical reduction pass
-[numthreads(8, 8, 1)] void main(uint3 DTid
-								: SV_DispatchThreadID, uint3 GTid
-								: SV_GroupThreadID, uint3 Gid
-								: SV_GroupID) {
+[numthreads(8, 8, 1)] void main(uint3 DTid : SV_DispatchThreadID, uint3 GTid : SV_GroupThreadID, uint3 Gid : SV_GroupID) {
 	// Get dimensions and check bounds
 	uint2 horizontalDimensions;
 	TexHorizontal.GetDimensions(horizontalDimensions.x, horizontalDimensions.y);

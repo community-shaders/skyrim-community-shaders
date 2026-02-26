@@ -9,7 +9,7 @@ struct VanillaImagespace : public PostProcessFeature
 	virtual inline std::string GetDesc() const override { return "Simple node to apply vanilla imagespace settings."; }
 
 	virtual bool SupportsVR() { return true; }
-	
+
 	struct Settings
 	{
 		float3 blendFactor = float3(1.0f, 1.0f, 1.0f);

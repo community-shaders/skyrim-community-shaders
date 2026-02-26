@@ -9,22 +9,22 @@ struct Border : public PostProcessFeature
 	virtual inline std::string GetDesc() const override { return "Add colored border, optionally with depth threshold"; }
 	virtual inline bool DrawAfterColorGrading() const override { return true; }
 	virtual inline bool DisableInMainLoadingMenu() const override { return true; }
-	
+
 	struct Settings
 	{
 		float3 BorderColor;
-        float DepthThreshold;
-        float4 Scale;
+		float DepthThreshold;
+		float4 Scale;
 	} settings;
 
 	struct alignas(16) BorderCB
 	{
 		float4 BorderColor;
-        float4 Scale;
+		float4 Scale;
 	};
 	eastl::unique_ptr<ConstantBuffer> borderCB = nullptr;
 
-    eastl::unique_ptr<Texture2D> texOutput = nullptr;
+	eastl::unique_ptr<Texture2D> texOutput = nullptr;
 
 	winrt::com_ptr<ID3D11ComputeShader> borderCS = nullptr;
 	virtual void SetupResources() override;

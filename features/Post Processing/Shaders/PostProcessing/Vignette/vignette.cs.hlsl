@@ -8,8 +8,7 @@ cbuffer VignetteCB : register(b1)
 	float4 RcpDynRes;
 };
 
-[numthreads(8, 8, 1)] void main(uint2 tid
-								: SV_DispatchThreadID) {
+[numthreads(8, 8, 1)] void main(uint2 tid : SV_DispatchThreadID) {
 	float3 color = TexColor[tid].rgb;
 
 	float2 uv = (tid + .5) * RcpDynRes.xy;

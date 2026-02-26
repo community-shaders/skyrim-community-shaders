@@ -5,39 +5,39 @@
 #include "Util.h"
 
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
-    Border::Settings,
-    BorderColor,
-    DepthThreshold,
-    Scale)
+	Border::Settings,
+	BorderColor,
+	DepthThreshold,
+	Scale)
 
 void Border::DrawSettings()
 {
-    ImGui::ColorEdit3("Border Color", reinterpret_cast<float*>(&settings.BorderColor));
-    if (auto _tt = Util::HoverTooltipWrapper())
-        ImGui::Text("The color of the border.");
+	ImGui::ColorEdit3("Border Color", reinterpret_cast<float*>(&settings.BorderColor));
+	if (auto _tt = Util::HoverTooltipWrapper())
+		ImGui::Text("The color of the border.");
 
-    ImGui::SliderFloat("Depth Threshold", &settings.DepthThreshold, 0.f, 1.f, "%.2f");
-    if (auto _tt = Util::HoverTooltipWrapper())
-        ImGui::Text("The depth threshold for the border effect.");
+	ImGui::SliderFloat("Depth Threshold", &settings.DepthThreshold, 0.f, 1.f, "%.2f");
+	if (auto _tt = Util::HoverTooltipWrapper())
+		ImGui::Text("The depth threshold for the border effect.");
 
-    ImGui::SliderFloat4("Scale (Top, Down, Left, Right)", reinterpret_cast<float*>(&settings.Scale), 0.f, 0.5f, "%.2f");
-    if (auto _tt = Util::HoverTooltipWrapper())
-        ImGui::Text("The scale of the border on each side of the screen.");
+	ImGui::SliderFloat4("Scale (Top, Down, Left, Right)", reinterpret_cast<float*>(&settings.Scale), 0.f, 0.5f, "%.2f");
+	if (auto _tt = Util::HoverTooltipWrapper())
+		ImGui::Text("The scale of the border on each side of the screen.");
 }
 
 void Border::RestoreDefaultSettings()
 {
-    settings = {};
+	settings = {};
 }
 
 void Border::LoadSettings(json& o_json)
 {
-    settings = o_json;
+	settings = o_json;
 }
 
 void Border::SaveSettings(json& o_json)
 {
-    o_json = settings;
+	o_json = settings;
 }
 
 void Border::SetupResources()
@@ -49,7 +49,7 @@ void Border::SetupResources()
 		borderCB = eastl::make_unique<ConstantBuffer>(ConstantBufferDesc<BorderCB>());
 	}
 
-    logger::debug("Creating 2D textures...");
+	logger::debug("Creating 2D textures...");
 	{
 		auto gameTexMainCopy = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMAIN_COPY];
 
@@ -82,69 +82,69 @@ void Border::SetupResources()
 
 void Border::ClearShaderCache()
 {
-    const auto shaderPtrs = std::array{
-        &borderCS
-    };
+	const auto shaderPtrs = std::array{
+		&borderCS
+	};
 
-    for (auto shader : shaderPtrs)
-        if ((*shader)) {
-            (*shader)->Release();
-            shader->detach();
-        }
+	for (auto shader : shaderPtrs)
+		if ((*shader)) {
+			(*shader)->Release();
+			shader->detach();
+		}
 
-    CompileComputeShaders();
+	CompileComputeShaders();
 }
 
 void Border::CompileComputeShaders()
 {
-    struct ShaderCompileInfo
-    {
-        winrt::com_ptr<ID3D11ComputeShader>* programPtr;
-        std::string_view filename;
-        std::vector<std::pair<const char*, const char*>> defines = {};
-        std::string entry = "main";
-    };
+	struct ShaderCompileInfo
+	{
+		winrt::com_ptr<ID3D11ComputeShader>* programPtr;
+		std::string_view filename;
+		std::vector<std::pair<const char*, const char*>> defines = {};
+		std::string entry = "main";
+	};
 
-    std::vector<ShaderCompileInfo>
-        shaderInfos = {
-            { &borderCS, "border.cs.hlsl" },
-        };
+	std::vector<ShaderCompileInfo>
+		shaderInfos = {
+			{ &borderCS, "border.cs.hlsl" },
+		};
 
-    for (auto& info : shaderInfos) {
-        auto path = std::filesystem::path("Data\\Shaders\\PostProcessing\\Border") / info.filename;
-        if (auto rawPtr = reinterpret_cast<ID3D11ComputeShader*>(Util::CompileShader(path.c_str(), info.defines, "cs_5_0", info.entry.c_str())))
-            info.programPtr->attach(rawPtr);
-    }
+	for (auto& info : shaderInfos) {
+		auto path = std::filesystem::path("Data\\Shaders\\PostProcessing\\Border") / info.filename;
+		if (auto rawPtr = reinterpret_cast<ID3D11ComputeShader*>(Util::CompileShader(path.c_str(), info.defines, "cs_5_0", info.entry.c_str())))
+			info.programPtr->attach(rawPtr);
+	}
 }
 
 void Border::Draw(TextureInfo& inout_tex)
 {
-    auto renderer = globals::game::renderer;
-    auto context = globals::d3d::context;
+	auto renderer = globals::game::renderer;
+	auto context = globals::d3d::context;
 
-    float2 res = { (float)texOutput->desc.Width, (float)texOutput->desc.Height };
+	float2 res = { (float)texOutput->desc.Width, (float)texOutput->desc.Height };
 	res = Util::ConvertToDynamic(res);
 
-    BorderCB data = {
+	BorderCB data = {
 		.BorderColor = float4(settings.BorderColor.x, settings.BorderColor.y, settings.BorderColor.z, settings.DepthThreshold),
-        .Scale = settings.Scale
+		.Scale = settings.Scale
 	};
 	borderCB->Update(data);
 
-    auto depth = renderer->GetDepthStencilData().depthStencils[RE::RENDER_TARGETS_DEPTHSTENCIL::kMAIN];
-    auto motion = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMOTION_VECTOR];
-    ID3D11ShaderResourceView* srvs[2] = { inout_tex.srv, depth.depthSRV };
-    context->CSSetShaderResources(0, 2, srvs);
-    ID3D11UnorderedAccessView* uavs[2] = { texOutput->uav.get(), motion.UAV };
-    context->CSSetUnorderedAccessViews(0, 2, uavs, nullptr);
-    ID3D11Buffer* cb = borderCB->CB();
-    context->CSSetConstantBuffers(1, 1, &cb);
-    context->CSSetShader(borderCS.get(), nullptr, 0);   
+	auto depth = renderer->GetDepthStencilData().depthStencils[RE::RENDER_TARGETS_DEPTHSTENCIL::kMAIN];
+	auto motion = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMOTION_VECTOR];
+	ID3D11ShaderResourceView* srvs[2] = { inout_tex.srv, depth.depthSRV };
+	context->CSSetShaderResources(0, 2, srvs);
+	ID3D11UnorderedAccessView* uavs[2] = { texOutput->uav.get(), motion.UAV };
+	context->CSSetUnorderedAccessViews(0, 2, uavs, nullptr);
+	ID3D11Buffer* cb = borderCB->CB();
+	context->CSSetConstantBuffers(1, 1, &cb);
+	context->CSSetShader(borderCS.get(), nullptr, 0);
 
-    context->Dispatch(((uint)res.x + 7) >> 3, ((uint)res.y + 7) >> 3, 1);
+	context->Dispatch(((uint)res.x + 7) >> 3, ((uint)res.y + 7) >> 3, 1);
 
-    srvs[0] = nullptr;
-    srvs[1] = nullptr;
+	srvs[0] = nullptr;
+	srvs[1] = nullptr;
 	uavs[0] = nullptr;
 	uavs[1] = nullptr;
 	cb = nullptr;
@@ -153,5 +153,5 @@ void Border::Draw(TextureInfo& inout_tex)
 	context->CSSetConstantBuffers(0, 1, &cb);
 	context->CSSetShader(nullptr, nullptr, 0);
 
-    inout_tex = { texOutput->resource.get(), texOutput->srv.get() };
+	inout_tex = { texOutput->resource.get(), texOutput->srv.get() };
 }

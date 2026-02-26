@@ -96,23 +96,22 @@ void PostProcessing::DrawSettings()
 			auto& feat = pipeline[pipelineFeatIdx];
 			if (feat) {
 				ImGui::PushID(feat->GetType().c_str());
-				
+
 				ImGui::SeparatorText(feat->GetType().c_str());
 				ImGui::TextWrapped(feat->GetDesc().c_str());
-				
+
 				ImGui::Spacing();
 				ImGui::Separator();
 				ImGui::Spacing();
 				ImGui::Checkbox("Enabled", &feat->enabled);
-				if (feat->enabled)
-				{
+				if (feat->enabled) {
 					ImGui::Indent();
 					feat->DrawSettings();
 					ImGui::Unindent();
 				} else {
 					ImGui::TextDisabled("Enable the feature to see its settings.");
 				}
-				
+
 				ImGui::PopID();
 			} else {
 				ImGui::TextDisabled("Selected feature is not valid.");
@@ -307,7 +306,7 @@ void PostProcessing::SavePresetTo(std::string a_name)
 }
 
 void PostProcessing::RestoreDefaultSettings()
-{	
+{
 	try {
 		LoadPresetFrom("default");
 	} catch (const std::exception& e) {

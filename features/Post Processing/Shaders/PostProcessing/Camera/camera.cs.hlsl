@@ -84,8 +84,7 @@ float3 ClipBlacks(float3 c)
 	return float3(max(c.r, 0.0), max(c.g, 0.0), max(c.b, 0.0));
 }
 
-[numthreads(8, 8, 1)] void CS_Camera(uint3 DTid
-									 : SV_DispatchThreadID) {
+[numthreads(8, 8, 1)] void CS_Camera(uint3 DTid : SV_DispatchThreadID) {
 	static const float INVNORM_FACTOR = 0.57735026918962576450914878050196f;  // 1/√3
 	static const float2 TEXEL_SIZE = float2(1.0f / ScreenSize.x, 1.0f / ScreenSize.y);
 	float2 texcoord = (DTid.xy + 0.5f) * TEXEL_SIZE;

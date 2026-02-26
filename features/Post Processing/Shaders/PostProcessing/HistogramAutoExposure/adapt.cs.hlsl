@@ -78,8 +78,7 @@ float3 PurkinjeShift(float3 c, float nightAdaptation)
 	return LMS2RGB(lmsr.rgb + lms_gain) / logExposure;
 }
 
-[numthreads(32, 32, 1)] void main(uint2 tid
-								  : SV_DispatchThreadID) {
+[numthreads(32, 32, 1)] void main(uint2 tid : SV_DispatchThreadID) {
 	const static float logEV = -3;  // log2(0.125)
 
 	// Early out for out-of-bounds threads

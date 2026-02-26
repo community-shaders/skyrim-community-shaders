@@ -28,8 +28,7 @@ float3 biLerp(in float3 values[8], in float3 lerpFactors)
 	return z;
 }
 
-[numthreads(8, 8, 1)] void main(uint2 tid
-								: SV_DispatchThreadID) {
+[numthreads(8, 8, 1)] void main(uint2 tid : SV_DispatchThreadID) {
 	uint3 dims;
 	[branch] if (LutType == 3)
 		TexLut3D.GetDimensions(dims.x, dims.y, dims.z);

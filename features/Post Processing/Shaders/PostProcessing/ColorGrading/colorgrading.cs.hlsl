@@ -2,8 +2,8 @@
 #include "Common/ColorSpaces.hlsli"
 #include "Common/Math.hlsli"
 
-#include "PostProcessing/common.hlsli"
 #include "PostProcessing/ColourTransforms/GT7ToneMapping.hlsli"
+#include "PostProcessing/common.hlsli"
 
 #define LUT_SIZE 64
 
@@ -14,38 +14,40 @@ Texture3D<float4> TexLUT : register(t1);
 
 SamplerState LinearSampler : register(s0);
 
-cbuffer ColorCB : register(b1) {
-    float4 asccdl[3];
-    float4 liftgammagain[3]; // lift，gamma，gain
-    float4 saturationHueInOutGamma;
-    float4 oklchSaturation;
-    float4 oklchColorMixer[7];
+cbuffer ColorCB : register(b1)
+{
+	float4 asccdl[3];
+	float4 liftgammagain[3];  // lift，gamma，gain
+	float4 saturationHueInOutGamma;
+	float4 oklchSaturation;
+	float4 oklchColorMixer[7];
 	float4 contrast;
 	float4 pivot;
 	float4 exposureTemperatureTint;
 	float4 shadows;
 	float4 midtones;
 	float4 highlights;
-	float4 shadowsHighlightsRange; // shadowBegin, shadowEnd, highlightBegin, highlightEnd
+	float4 shadowsHighlightsRange;  // shadowBegin, shadowEnd, highlightBegin, highlightEnd
 
 	float4 tonemapParams[2];
 	float4 colorSpaceTransform[3];
-    float4 invColorSpaceTransform[3];
+	float4 invColorSpaceTransform[3];
 
-    // game value
-    float4 cinematic; // saturation, brightness, contrast
-    float4 fade; // color
-    float4 tint; // color
+	// game value
+	float4 cinematic;  // saturation, brightness, contrast
+	float4 fade;       // color
+	float4 tint;       // color
 
-    uint logType;
-    uint skipLDR;
-    uint skipLUT;
-    uint enableTonemap;
-    uint enableColorSpaceTransform;
+	uint logType;
+	uint skipLDR;
+	uint skipLUT;
+	uint enableTonemap;
+	uint enableColorSpaceTransform;
 	uint3 pad;
 };
 
-namespace LogType {
+namespace LogType
+{
 	static const uint ACEScct = (1 << 0);
 	static const uint ARRIlogC4 = (1 << 1);
 	static const uint SonySLog3 = (1 << 2);
@@ -130,19 +132,17 @@ float3 OklchColourMixer(float3 val)
 
 float3 ShadowsMidtonesHighlights(float3 color, float3 shadowsColor, float3 midtonesColor, float3 highlightsColor, float shadowBegin, float shadowEnd, float highlightBegin, float highlightEnd)
 {
-    float luma = Color::RGBToLuminance(color);
-    
-    float shadowWeight = 1.0 - smoothstep(shadowBegin, shadowEnd, luma);
-    
-    float highlightWeight = smoothstep(highlightBegin, highlightEnd, luma);
-    
-    float midtoneWeight = 1.0 - shadowWeight - highlightWeight;
+	float luma = Color::RGBToLuminance(color);
 
-    float3 result = color * shadowsColor * shadowWeight
-                  +	color * midtonesColor * midtoneWeight
-                  +	color * highlightsColor * highlightWeight;
+	float shadowWeight = 1.0 - smoothstep(shadowBegin, shadowEnd, luma);
 
-    return result;
+	float highlightWeight = smoothstep(highlightBegin, highlightEnd, luma);
+
+	float midtoneWeight = 1.0 - shadowWeight - highlightWeight;
+
+	float3 result = color * shadowsColor * shadowWeight + color * midtonesColor * midtoneWeight + color * highlightsColor * highlightWeight;
+
+	return result;
 }
 
 float2 IlluminantChromaticity(float temp)
@@ -173,7 +173,7 @@ float2 PlanckianIsothermal(float temp, float tint)
 	float vd = (1.97471536e9f - 705674.0f * temp - 308.607f * temp * temp) / pow(6.19363586e6f - 179.456f * temp + temp * temp, 2);
 	float2 uvd = normalize(float2(u, v));
 	u += -uvd.y * tint * 0.05;
-	v +=  uvd.x * tint * 0.05;
+	v += uvd.x * tint * 0.05;
 	float x = 3 * u / (2 * u - 8 * v + 4);
 	float y = 2 * v / (2 * u - 8 * v + 4);
 	return float2(x, y);
@@ -203,18 +203,18 @@ float3 WhiteBalance(float3 linearColor)
 
 float3 LogToLinear(float3 logColor)
 {
-    const float linearRange = 14.0f;
-    const float linearGrey = 0.18f;
-    const float exposureGrey = 444.0f;
-    return exp2((logColor - exposureGrey / 1023.0) * linearRange) * linearGrey;
+	const float linearRange = 14.0f;
+	const float linearGrey = 0.18f;
+	const float exposureGrey = 444.0f;
+	return exp2((logColor - exposureGrey / 1023.0) * linearRange) * linearGrey;
 }
 
 float3 LinearToLog(float3 linearColor)
 {
-    const float linearRange = 14.0f;
-    const float linearGrey = 0.18f;
-    const float exposureGrey = 444.0f;
-    return saturate(log2(linearColor) / linearRange - log2(linearGrey) / linearRange + exposureGrey / 1023.0f);
+	const float linearRange = 14.0f;
+	const float linearGrey = 0.18f;
+	const float exposureGrey = 444.0f;
+	return saturate(log2(linearColor) / linearRange - log2(linearGrey) / linearRange + exposureGrey / 1023.0f);
 }
 
 /////////////////////////////////////////////////////////////////////////////////
@@ -519,9 +519,9 @@ float3 MelonTonemap(float3 color)
 	return clamp(color, float3(0.0, 0.0, 0.0), float3(1.0, 1.0, 1.0));
 }
 
-/* 
+/*
     EmbarkStudios/kajiya
-        url:    https://github.com/EmbarkStudios/kajiya	
+        url:    https://github.com/EmbarkStudios/kajiya
         license:
 			Copyright (c) 2019 Embark Studios
 
@@ -582,12 +582,12 @@ float3 KajiyaTonemap(float3 col)
 
 float3 GT7ToneMapping(float3 color)
 {
-    color *= tonemapParams[0].x;
+	color *= tonemapParams[0].x;
 	if (tonemapParams[0].y == 0)
 		color = GT7ToneMappingSDR(color);
 	else
 		color = GT7ToneMappingHDR(color, tonemapParams[0].z);
-    return color;
+	return color;
 }
 
 ////////////////////////////////////////////////////////////////////////
@@ -606,14 +606,12 @@ float3 ACEScct(float3 linearColor, bool inverse)
 		cct = float3(
 			linearColor.x > cutoff ? (log2(linearColor.x) + 9.72) / 17.52 : linearColor.x * a + b,
 			linearColor.y > cutoff ? (log2(linearColor.y) + 9.72) / 17.52 : linearColor.y * a + b,
-			linearColor.z > cutoff ? (log2(linearColor.z) + 9.72) / 17.52 : linearColor.z * a + b
-		);
+			linearColor.z > cutoff ? (log2(linearColor.z) + 9.72) / 17.52 : linearColor.z * a + b);
 	} else {
 		cct = float3(
 			linearColor.x >= cutoff2 ? pow(2, linearColor.x * 17.52 - 9.72) : (linearColor.x - b) / a,
 			linearColor.y >= cutoff2 ? pow(2, linearColor.y * 17.52 - 9.72) : (linearColor.y - b) / a,
-			linearColor.z >= cutoff2 ? pow(2, linearColor.z * 17.52 - 9.72) : (linearColor.z - b) / a
-		);
+			linearColor.z >= cutoff2 ? pow(2, linearColor.z * 17.52 - 9.72) : (linearColor.z - b) / a);
 	}
 
 	return cct;
@@ -633,14 +631,12 @@ float3 ARRIlogC4(float3 linearColor, bool inverse)
 		logColor = float3(
 			(linearColor.x > t ? (log2(linearColor.x * a + 64) - 6) / 14 * b + c : (linearColor.x - t) / s),
 			(linearColor.y > t ? (log2(linearColor.y * a + 64) - 6) / 14 * b + c : (linearColor.y - t) / s),
-			(linearColor.z > t ? (log2(linearColor.z * a + 64) - 6) / 14 * b + c : (linearColor.z - t) / s)
-		);
+			(linearColor.z > t ? (log2(linearColor.z * a + 64) - 6) / 14 * b + c : (linearColor.z - t) / s));
 	} else {
 		logColor = float3(
 			(linearColor.x >= 0 ? (pow(2, 14 * (linearColor.x - c) / b + 6) - 64) / a : linearColor.x * s + t),
 			(linearColor.y >= 0 ? (pow(2, 14 * (linearColor.y - c) / b + 6) - 64) / a : linearColor.y * s + t),
-			(linearColor.z >= 0 ? (pow(2, 14 * (linearColor.z - c) / b + 6) - 64) / a : linearColor.z * s + t)
-		);
+			(linearColor.z >= 0 ? (pow(2, 14 * (linearColor.z - c) / b + 6) - 64) / a : linearColor.z * s + t));
 	}
 
 	return logColor;
@@ -654,14 +650,12 @@ float3 SonySLog3(float3 linearColor, bool inverse)
 		logColor = float3(
 			(linearColor.x >= 0.0112500 ? (420.0 + log10((linearColor.x + 0.01) / 0.19) * 261.5) / 1023.0 : (linearColor.x * (171.2102946929 - 95.0) / 0.0112500 + 95.0) / 1023.0),
 			(linearColor.y >= 0.0112500 ? (420.0 + log10((linearColor.y + 0.01) / 0.19) * 261.5) / 1023.0 : (linearColor.y * (171.2102946929 - 95.0) / 0.0112500 + 95.0) / 1023.0),
-			(linearColor.z >= 0.0112500 ? (420.0 + log10((linearColor.z + 0.01) / 0.19) * 261.5) / 1023.0 : (linearColor.z * (171.2102946929 - 95.0) / 0.0112500 + 95.0) / 1023.0)
-		);
+			(linearColor.z >= 0.0112500 ? (420.0 + log10((linearColor.z + 0.01) / 0.19) * 261.5) / 1023.0 : (linearColor.z * (171.2102946929 - 95.0) / 0.0112500 + 95.0) / 1023.0));
 	} else {
 		logColor = float3(
 			(linearColor.x > 0.1712102946929 / 1023.0 ? pow(10, (linearColor.x * 1023.0 - 420.0) / 261.5) * 0.19 - 0.01 : (linearColor.x * 1023.0 - 95.0) * 0.0112500 / (171.2102946929 - 95.0)),
 			(linearColor.y > 0.1712102946929 / 1023.0 ? pow(10, (linearColor.y * 1023.0 - 420.0) / 261.5) * 0.19 - 0.01 : (linearColor.y * 1023.0 - 95.0) * 0.0112500 / (171.2102946929 - 95.0)),
-			(linearColor.z > 0.1712102946929 / 1023.0 ? pow(10, (linearColor.z * 1023.0 - 420.0) / 261.5) * 0.19 - 0.01 : (linearColor.z * 1023.0 - 95.0) * 0.0112500 / (171.2102946929 - 95.0))
-		);
+			(linearColor.z > 0.1712102946929 / 1023.0 ? pow(10, (linearColor.z * 1023.0 - 420.0) / 261.5) * 0.19 - 0.01 : (linearColor.z * 1023.0 - 95.0) * 0.0112500 / (171.2102946929 - 95.0)));
 	}
 
 	return logColor;
@@ -681,14 +675,14 @@ float3 LinearToLogSpace(float3 val, uint logType)
 
 float3 LogToLinearSpace(float3 val, uint logType)
 {
-    float3 linearColor = val;
-    if (logType & LogType::ACEScct)
-        linearColor = ACEScct(val, true);
-    else if (logType & LogType::ARRIlogC4)
-        linearColor = ARRIlogC4(val, true);
-    else if (logType & LogType::SonySLog3)
-        linearColor = SonySLog3(val, true);
-    return linearColor;
+	float3 linearColor = val;
+	if (logType & LogType::ACEScct)
+		linearColor = ACEScct(val, true);
+	else if (logType & LogType::ARRIlogC4)
+		linearColor = ARRIlogC4(val, true);
+	else if (logType & LogType::SonySLog3)
+		linearColor = SonySLog3(val, true);
+	return linearColor;
 }
 
 ////////////////////////////////////////////////////////////////////////
@@ -696,22 +690,22 @@ float3 LogToLinearSpace(float3 val, uint logType)
 float3 ColorGrading(float3 color)
 {
 	// Color space transform (preferably sRGB to ACEScg)
-    if (enableColorSpaceTransform) {
+	if (enableColorSpaceTransform) {
 		const float3x3 colorSpaceTransformMat = float3x3(colorSpaceTransform[0].xyz, colorSpaceTransform[1].xyz, colorSpaceTransform[2].xyz);
-        color = mul(colorSpaceTransformMat, color);
-    }
+		color = mul(colorSpaceTransformMat, color);
+	}
 
 	// HDR
 	// Exposure/White Balance
 	color *= exposureTemperatureTint.x;
 	color = WhiteBalance(color);
 
-    // Log
+	// Log
 	if (logType)
-    	color = LinearToLogSpace(color, logType); // Preferably ACEScct
+		color = LinearToLogSpace(color, logType);  // Preferably ACEScct
 
-    // ASC CDL
-    color = ASC_CDL(color, asccdl[0].xyz, asccdl[1].xyz, asccdl[2].xyz);
+	// ASC CDL
+	color = ASC_CDL(color, asccdl[0].xyz, asccdl[1].xyz, asccdl[2].xyz);
 
 	// Saturation and Hue
 	color = Saturation(color, saturationHueInOutGamma.x);
@@ -723,20 +717,20 @@ float3 ColorGrading(float3 color)
 	// Contrast
 	color = logType ? LogContrast(color, contrast.xyz, pivot.xyz) : LinearContrast(color, contrast.xyz, pivot.xyz);
 
-    if (logType & LogType::Invert) {
-        color = LogToLinearSpace(color, logType);
-    }
+	if (logType & LogType::Invert) {
+		color = LogToLinearSpace(color, logType);
+	}
 
-    // Tonemap
-    if (enableTonemap) {
-        color = TONEMAP_FUNC(color);
-    }
+	// Tonemap
+	if (enableTonemap) {
+		color = TONEMAP_FUNC(color);
+	}
 
 	// Inverse color space transform
-    if (enableColorSpaceTransform) {
+	if (enableColorSpaceTransform) {
 		const float3x3 invColorSpaceTransformMat = float3x3(invColorSpaceTransform[0].xyz, invColorSpaceTransform[1].xyz, invColorSpaceTransform[2].xyz);
-        color = mul(invColorSpaceTransformMat, color);
-    }
+		color = mul(invColorSpaceTransformMat, color);
+	}
 
 	// LDR
 	if (!skipLDR) {
@@ -774,12 +768,12 @@ float3 ApplyLUT(float3 color)
 
 	color = pow(abs(color), saturationHueInOutGamma.w);
 
-    // Game tint
-    float luma = Color::RGBToLuminance(color);
-    color = lerp(color, luma * tint.xyz, tint.w);
+	// Game tint
+	float luma = Color::RGBToLuminance(color);
+	color = lerp(color, luma * tint.xyz, tint.w);
 
-    // Game fade
-    color = lerp(color, fade.xyz, fade.w);
+	// Game fade
+	color = lerp(color, fade.xyz, fade.w);
 
 	RWTexOut[DTid] = float4(color, 1);
 }

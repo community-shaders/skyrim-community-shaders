@@ -1,6 +1,6 @@
 /**
  * Motion Blur - Neighbor Max Pass (Pass 2 of 3)
- * 
+ *
  * Examines 3x3 grid neighborhoods to find maximum velocities
  * Handles diagonal neighbors by checking if velocity points toward current cell
  * Outputs final neighborhood-aware velocity data for blur pass
@@ -41,8 +41,7 @@ float2 ExtractVelocity(float4 colorSample)
 }
 
 // Process one cell in the grid
-[numthreads(8, 8, 1)] void main(uint3 DTid
-								: SV_DispatchThreadID) {
+[numthreads(8, 8, 1)] void main(uint3 DTid : SV_DispatchThreadID) {
 	// Check bounds
 	if (DTid.x >= GRID_SIZE || DTid.y >= GRID_SIZE)
 		return;
