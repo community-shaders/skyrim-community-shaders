@@ -221,7 +221,6 @@ namespace Hair
 		const float3 VN = normalize(tbnTr[2]);
 		const float3 L = normalize(context.lightDir);
 
-		if (SharedData::hairSpecularSettings.HairMode == 0) {
 			if (SharedData::hairSpecularSettings.HairMode == 0) {
 				GetHairDirectLightScheuermann(lightingOutput.diffuse, lightingOutput.specular, lightingOutput.transmission, T, L, V, N, VN, context, material.Shininess, uv, material.BaseColor);
 			} else {
