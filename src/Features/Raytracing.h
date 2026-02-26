@@ -3,6 +3,8 @@
 #include <directx/d3d12.h>
 #include <d3d11_4.h>
 
+#include "OverlayFeature.h"
+
 #include "Features/Upscaling/DX12SwapChain.h"
 
 #include "Util.h"
@@ -28,12 +30,16 @@ struct CreationEngineRaytracing
 	using SetResolutionFn = void (*)(uint32_t, uint32_t);
 	using SetCopyTargetFn = void (*)(ID3D12Resource*);
 	using UpdateFeatureDataFn = void (*)(void*, uint32_t);
+	using SetSkyHemisphereFn = void (*)(ID3D12Resource*);
+	using GetFrameTimeFn = float* (*)();
 
 	InitializeFn Initialize = nullptr;
 	WaitExecutionFn WaitExecution = nullptr;
 	SetResolutionFn SetResolution = nullptr;
 	SetCopyTargetFn SetCopyTarget = nullptr;
 	UpdateFeatureDataFn UpdateFeatureData = nullptr;
+	SetSkyHemisphereFn SetSkyHemisphere = nullptr;
+	GetFrameTimeFn GetFrameTime = nullptr;
 
 	CreationEngineRaytracing()
 	{
@@ -71,6 +77,16 @@ struct CreationEngineRaytracing
 
 		if (!UpdateFeatureData)
 			logger::error("[Raytracing] 'CreationEngineRaytracing.dll' UpdateFeatureData is nullptr");
+
+		SetSkyHemisphere = reinterpret_cast<SetSkyHemisphereFn>(GetProcAddress(handle, "SetSkyHemisphere"));
+
+		if (!SetSkyHemisphere)
+			logger::error("[Raytracing] 'CreationEngineRaytracing.dll' SetSkyHemisphere is nullptr");
+
+		GetFrameTime = reinterpret_cast<GetFrameTimeFn>(GetProcAddress(handle, "GetFrameTime"));
+
+		if (!GetFrameTime)
+			logger::error("[Raytracing] 'CreationEngineRaytracing.dll' GetFrameTime is nullptr");
 	}
 };
 
@@ -84,8 +100,11 @@ struct uint2
 };
 static_assert(sizeof(uint2) == 8);
 
-struct Raytracing : public Feature
+struct Raytracing : public OverlayFeature
 {
+	static constexpr uint SKY_CUBEMAP_SIZE = 256;
+	static constexpr uint SKY_HEMI_SIZE = SKY_CUBEMAP_SIZE * 2;
+
 	// Metadata
 	virtual inline std::string GetName() override { return "Raytracing"; }
 	virtual inline std::string GetShortName() override { return "Raytracing"; }
@@ -114,11 +133,20 @@ struct Raytracing : public Feature
 	virtual void SaveSettings(json& o_json) override;
 	virtual void DrawSettings() override;
 
+	virtual bool IsInMenu() const override { return true; }
+
+	virtual bool IsOverlayVisible() const override { return settings.PerfOverlay; };
+
+	virtual void DrawOverlay() override;
+
 	// Resources
 	virtual void SetupResources() override;
 
 	void Load() override;
 	void PostPostLoad() override;
+	void DataLoaded() override;
+
+	void CompileShaders();
 
 	void CreateD3D12Device(ID3D11Device* d3d11Device, ID3D11DeviceContext* immediateContext, IDXGIAdapter* adapter);
 	void SetDevices(ID3D11Device* d3d11Device, ID3D12Device5* d3d12Device, ID3D11DeviceContext* immediateContext);
@@ -126,6 +154,7 @@ struct Raytracing : public Feature
 	void InitializeCERaytracing(ID3D11Device5* d3d11Device, ID3D12Device5* d3d12Device, ID3D12CommandQueue* commandQueue, ID3D12CommandQueue* computeCommandQueue, ID3D12CommandQueue* copyCommandQueue);
 	bool UpdateResolution();
 	void UpdateFeatureData();
+	void SkyCubeToHemi() const;
 	void DeferredPasses();
 
 	////////////////////////////////////////////////// Feature Specific Data
@@ -133,8 +162,12 @@ struct Raytracing : public Feature
 	{
 		bool Enabled = true;
 		bool PathTracing = true;
+		bool PerfOverlay = true;
 		bool EnablePIXCapture = false;
 	} settings;
+
+	ImVec2 Position = ImVec2(10.f, 10.f);
+	bool PositionSet = false;
 
 	bool initialized = false;
 	bool forcedDisabled = false;
@@ -178,9 +211,18 @@ struct Raytracing : public Feature
 		"CbData must be aligned to 16 bytes. "
 		"Check out maraneshi.github.io/HLSL-ConstantBufferLayoutVisualizer/ if you're unsure.");
 
+	winrt::com_ptr<ID3D11SamplerState> samplerState = nullptr;
+
 	eastl::unique_ptr<WrappedResource> mainTexture = nullptr; 
 
+	eastl::unique_ptr<WrappedResource> skyHemisphere = nullptr;
+	winrt::com_ptr<ID3D11ComputeShader> cubeToHemiCS = nullptr;
+
+	RE::NiPointer<RE::TESWaterReflections> waterReflections = nullptr;
+
 	eastl::unique_ptr<CreationEngineRaytracing> creationEngineRaytracing = nullptr;
+
+	float* frameTime;
 
 	// D3D11
 	winrt::com_ptr<ID3D11Device5> m_D3D11Device = nullptr;
@@ -199,20 +241,59 @@ struct Raytracing : public Feature
 
 	struct Hooks
 	{
-		struct Main_RenderPlayerView
+		struct Main_RenderWorld
 		{
-			static void thunk(void* a1, bool a2, bool a3)
+			static void thunk(bool a1)
 			{
-				globals::features::raytracing.UpdateFeatureData();
+				auto& rt = globals::features::raytracing;
 
-				func(a1, a2, a3);
+				rt.UpdateFeatureData();
+				rt.SkyCubeToHemi();
+
+				func(a1);
+			};
+			static inline REL::Relocation<decltype(thunk)> func;
+		};
+
+		struct Main_RenderWaterEffects
+		{
+			static void thunk()
+			{
+				auto* tes = RE::TES::GetSingleton();
+				if (tes->interiorCell) {
+					if (tes->interiorCell->cellFlags.none(RE::TESObjectCELL::Flag::kHasWater))
+						tes->interiorCell->cellFlags.set(true, RE::TESObjectCELL::Flag::kHasWater);
+
+					globals::features::raytracing.waterReflections->flags.set(true, RE::TESWaterReflections::Flags::kDirty);
+				}
+
+				func();
 			};
 			static inline REL::Relocation<decltype(thunk)> func;
 		};
 
 		static void Install() 
 		{
-			stl::detour_thunk<Main_RenderPlayerView>(REL::RelocationID(35560, 36559));
+			stl::detour_thunk<Main_RenderWorld>(REL::RelocationID(100424, 107142));
+			stl::detour_thunk<Main_RenderWaterEffects>(REL::RelocationID(35561, 36560));
+		}
+	};
+
+	class BGSActorCellEventHandler : public RE::BSTEventSink<RE::BGSActorCellEvent>
+	{
+	public:
+		virtual RE::BSEventNotifyControl ProcessEvent(const RE::BGSActorCellEvent* a_event, RE::BSTEventSource<RE::BGSActorCellEvent>*);
+
+		static bool Register()
+		{
+			static BGSActorCellEventHandler singleton;
+
+			auto* player = RE::PlayerCharacter::GetSingleton();
+			player->AsBGSActorCellEventSource()->AddEventSink(&singleton);
+
+			logger::info("Registered {}", typeid(singleton).name());
+
+			return true;
 		}
 	};
 };

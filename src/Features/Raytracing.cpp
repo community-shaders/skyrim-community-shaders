@@ -12,6 +12,7 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	Raytracing::Settings,
 	Enabled,
 	PathTracing,
+	PerfOverlay,
 	EnablePIXCapture)
 
 ////////////////////////////////////////////////////////////////////////////////////
@@ -62,6 +63,8 @@ void Raytracing::DrawSettings()
 		}());
 	}
 
+	ImGui::Checkbox("Performance Overlay", &settings.PerfOverlay);
+
 	ImGui::Checkbox("Enable PIX Capture", &settings.EnablePIXCapture);
 
 	if (settings.EnablePIXCapture) {
@@ -74,6 +77,65 @@ void Raytracing::DrawSettings()
 
 	if (mainTexture)
 		ImGui::Image(mainTexture->srv, { 1280, 720 });
+}
+
+void Raytracing::DrawOverlay()
+{
+	auto* menu = Menu::GetSingleton();
+
+	if (!globals::state || !menu)
+		return;
+
+	// Set window flags - no decoration and only movable when ShowBorder is true
+	ImGuiWindowFlags windowFlags = ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_AlwaysAutoResize;
+
+	// Only allow mouse interaction when the main menu is open
+	if (!menu->IsEnabled) {
+		windowFlags |= ImGuiWindowFlags_NoInputs;
+	}
+
+	windowFlags |= ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoCollapse;
+
+	if (!PositionSet) {
+		Position = ImVec2(10, 10);
+		ImGui::SetNextWindowPos(Position);	
+		PositionSet = true;
+	} else {
+		ImGui::SetNextWindowPos(Position, ImGuiCond_FirstUseEver);
+	}
+
+	ImGui::Begin("Raytracing Overlay", NULL, windowFlags);
+
+	auto DrawRow = [](const char* label, size_t instances, float cpums, float gpums, [[maybe_unused]] double frameTime = 0.0f) {
+		ImGui::TableNextRow();
+
+		ImGui::TableNextColumn();
+		ImGui::Text(label);
+
+		ImGui::TableNextColumn();
+		ImGui::Text("%zu", instances);
+
+		ImGui::TableNextColumn();
+		ImGui::Text("%g ms", cpums);
+
+		ImGui::TableNextColumn();
+		ImGui::Text("%g ms", gpums);
+	};
+
+	if (ImGui::BeginTable("Effects", 4, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg)) {
+		ImGui::TableSetupColumn("Effect");
+		ImGui::TableSetupColumn("Instances");
+		ImGui::TableSetupColumn("CPU");
+		ImGui::TableSetupColumn("GPU");
+		ImGui::TableHeadersRow();
+
+		// GI/PT
+		DrawRow("Frame Time", 0, 0, *frameTime);
+
+		ImGui::EndTable();
+	}
+
+	ImGui::End();
 }
 
 static std::wstring GetLatestWinPixGpuCapturerPath()
@@ -205,6 +267,18 @@ void Raytracing::PostPostLoad()
 	RE::GetINISetting("bReflectSky:Water")->data.b = true;
 }
 
+void Raytracing::DataLoaded()
+{
+	BGSActorCellEventHandler::Register();
+}
+
+void Raytracing::CompileShaders()
+{
+	const auto skyHemiSize = std::to_string(SKY_HEMI_SIZE);
+	if (auto rawPtr = reinterpret_cast<ID3D11ComputeShader*>(Util::CompileShader(L"Data\\Shaders\\Raytracing\\CubeToHemiCS.hlsl", { { "RESOLUTION", skyHemiSize.c_str() } }, "cs_5_0")); rawPtr)
+		cubeToHemiCS.attach(rawPtr);
+}
+
 void Raytracing::InitializeCERaytracing(ID3D11Device5* d3d11Device, ID3D12Device5* d3d12Device, ID3D12CommandQueue* commandQueue, ID3D12CommandQueue* computeCommandQueue, ID3D12CommandQueue* copyCommandQueue)
 {
 	if (initialized)
@@ -224,6 +298,8 @@ void Raytracing::InitializeCERaytracing(ID3D11Device5* d3d11Device, ID3D12Device
 	initialized = true;
 
 	UpdateResolution();
+
+	frameTime = creationEngineRaytracing->GetFrameTime();
 
 	logger::info("[Raytracing] Successfully initialized Creation Engine ray tracing.");
 }
@@ -255,6 +331,49 @@ void Raytracing::SetupResources()
 	}
 
 	featureData = eastl::make_unique<FeatureData>();
+
+	logger::debug("Creating samplers...");
+	{
+		D3D11_SAMPLER_DESC samplerDesc = {
+			.Filter = D3D11_FILTER_MIN_MAG_MIP_LINEAR,
+			.AddressU = D3D11_TEXTURE_ADDRESS_CLAMP,
+			.AddressV = D3D11_TEXTURE_ADDRESS_CLAMP,
+			.AddressW = D3D11_TEXTURE_ADDRESS_CLAMP,
+			.MaxAnisotropy = 1,
+			.MinLOD = 0,
+			.MaxLOD = D3D11_FLOAT32_MAX
+		};
+		DX::ThrowIfFailed(m_D3D11Device->CreateSamplerState(&samplerDesc, samplerState.put()));
+	}
+
+	// Sky Hemisphere
+	{
+		D3D11_TEXTURE2D_DESC texDesc{};
+		texDesc.Width = SKY_HEMI_SIZE;
+		texDesc.Height = SKY_HEMI_SIZE;
+		texDesc.MipLevels = 1;
+		texDesc.ArraySize = 1;
+		texDesc.Format = DXGI_FORMAT_R16G16B16A16_FLOAT;
+		texDesc.SampleDesc.Count = 1;
+		texDesc.SampleDesc.Quality = 0;
+		texDesc.BindFlags = D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_UNORDERED_ACCESS;
+
+		skyHemisphere = eastl::make_unique<WrappedResource>(texDesc, m_D3D11Device.get(), m_D3D12Device.get());
+		DX::ThrowIfFailed(skyHemisphere->resource->SetName(L"Sky Hemisphere"));
+
+		// Setup TESWaterReflections
+		waterReflections = RE::NiPointer(new RE::TESWaterReflections());
+
+		waterReflections->flags.set(true, RE::TESWaterReflections::Flags::kDirty, RE::TESWaterReflections::Flags::kDynamicCubemap, RE::TESWaterReflections::Flags::kWorldOrigin);
+
+		for (uint i = 0; i < 6; i++) {
+			waterReflections->cubeMapSides[i] = RE::TESWaterReflections::CubeMapSide(i, 0.0f);
+		}
+	
+		creationEngineRaytracing->SetSkyHemisphere(skyHemisphere->resource.get());
+	}
+
+	CompileShaders();
 }
 
 void Raytracing::UpdateFeatureData()
@@ -277,6 +396,34 @@ void Raytracing::UpdateFeatureData()
 	static_assert(sizeof(FeatureData::LinearLighting) == sizeof(LinearLighting::PerFrameData));
 
 	creationEngineRaytracing->UpdateFeatureData(featureData.get(), sizeof(FeatureData));
+}
+
+void Raytracing::SkyCubeToHemi() const
+{
+	auto context = globals::d3d::context;
+
+	context->CSSetShader(cubeToHemiCS.get(), nullptr, 0);
+
+	auto reflections = globals::game::renderer->GetRendererData().cubemapRenderTargets[RE::RENDER_TARGET_CUBEMAP::kREFLECTIONS];
+	auto reflectionOcc = globals::features::cloudShadows.loaded ? globals::features::cloudShadows.texCubemapCloudOccCopy->srv.get() : nullptr;
+
+	eastl::array<ID3D11ShaderResourceView*, 2> srvs = {
+		reflections.SRV,
+		reflectionOcc
+	};
+	context->CSSetShaderResources(0, (UINT)srvs.size(), srvs.data());
+
+	auto sampler = samplerState.get();
+	context->CSSetSamplers(0, 1, &sampler);
+
+	ID3D11UnorderedAccessView* uav = skyHemisphere->uav;
+	context->CSSetUnorderedAccessViews(0, 1, &uav, nullptr);
+
+	uint dispatch = (uint)std::ceil(SKY_HEMI_SIZE / 8.0f);
+	context->Dispatch(dispatch, dispatch, 1);
+
+	uav = nullptr;
+	context->CSSetUnorderedAccessViews(0, 1, &uav, nullptr);
 }
 
 void Raytracing::DeferredPasses()
@@ -327,4 +474,20 @@ void Raytracing::DeferredPasses()
 
 		ga->BeginCapture();
 	}
+}
+
+RE::BSEventNotifyControl Raytracing::BGSActorCellEventHandler::ProcessEvent(const RE::BGSActorCellEvent* a_event, RE::BSTEventSource<RE::BGSActorCellEvent>*)
+{
+	if (a_event->flags.underlying() != static_cast<uint32_t>(RE::BGSActorCellEvent::CellFlag::kEnter))
+		return RE::BSEventNotifyControl::kContinue;
+
+	auto* tesWaterSystem = RE::TESWaterSystem::GetSingleton();
+
+	if (tesWaterSystem->waterReflections.empty()) {
+		tesWaterSystem->waterReflections.push_back(globals::features::raytracing.waterReflections);
+	}
+
+	tesWaterSystem->Enable();
+
+	return RE::BSEventNotifyControl::kContinue;
 }
