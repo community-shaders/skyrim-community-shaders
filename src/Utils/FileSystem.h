@@ -177,6 +177,12 @@ namespace Util
 		 */
 		std::filesystem::path GetFeaturesRealPath();
 
+		/**
+		 * Returns the path to the Community Shaders log file in the default SKSE logging folder.
+		 * @return Documents / "My Games" / "Skyrim..." / "SKSE" / "CommunityShaders.log"
+		 */
+		std::filesystem::path GetLogPath();
+
 	}
 
 	/**

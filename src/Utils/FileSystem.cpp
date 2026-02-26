@@ -169,6 +169,16 @@ namespace Util
 		{
 			return GetFeaturesPath() / featureName;
 		}
+
+		std::filesystem::path GetLogPath()
+		{
+			auto path = logger::log_directory();
+			if (!path) {
+				return {};
+			}
+			*path /= std::format("{}.log", std::string(Plugin::NAME));
+			return *path;
+		}
 	}
 
 	// File system utilities implementation
