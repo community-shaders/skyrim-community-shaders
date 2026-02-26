@@ -8,7 +8,7 @@ typedef VS_OUTPUT PS_INPUT;
 
 struct PS_OUTPUT
 {
-	float UnderwaterMask : SV_TARGET;
+	float UnderwaterMask: SV_TARGET;
 };
 
 SamplerState LinearSampler : register(s0);

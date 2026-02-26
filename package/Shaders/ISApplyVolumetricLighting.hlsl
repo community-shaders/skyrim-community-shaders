@@ -6,7 +6,7 @@ typedef VS_OUTPUT PS_INPUT;
 
 struct PS_OUTPUT
 {
-	float VL : SV_Target0;
+	float VL: SV_Target0;
 };
 
 #if defined(PSHADER)
