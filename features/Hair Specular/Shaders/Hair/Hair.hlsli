@@ -213,14 +213,6 @@ namespace Hair
 		dirTransmission += GetHairDiffuseAttenuationKajiyaKay(T, V, L, context.detailedShadow, baseColor) * lightColor * transmission * SharedData::hairSpecularSettings.DiffuseMult;
 	}
 
-	void GetHairDirectLight(out DirectLightingOutput lightingOutput, DirectContext context, MaterialProperties material, float3x3 tbnTr, float2 uv)
-	{
-		const float3 T = normalize(context.worldNormal);
-		const float3 V = normalize(context.viewDir);
-		const float3 N = normalize(context.vertexNormal);
-		const float3 VN = normalize(tbnTr[2]);
-		const float3 L = normalize(context.lightDir);
-
 		void GetHairDirectLight(out DirectLightingOutput lightingOutput, DirectContext context, MaterialProperties material, float3x3 tbnTr, float2 uv)
 		{
 			const float3 T = normalize(context.worldNormal);
