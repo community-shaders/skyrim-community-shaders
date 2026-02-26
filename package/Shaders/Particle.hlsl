@@ -1,7 +1,7 @@
 #include "Common/Color.hlsli"
 #include "Common/FrameBuffer.hlsli"
-#include "Common/VR.hlsli"
 #include "Common/SharedData.hlsli"
+#include "Common/VR.hlsli"
 
 struct VS_INPUT
 {
@@ -247,14 +247,6 @@ cbuffer PerGeometry : register(b2)
 	float3 TextureSize : packoffset(c1);
 };
 
-#	if defined(TERRAIN_SHADOWS)
-#		include "TerrainShadows/TerrainShadows.hlsli"
-#	endif
-
-#	if defined(CLOUD_SHADOWS)
-#		include "CloudShadows/CloudShadows.hlsli"
-#	endif
-
 #	define LinearSampler SampSourceTexture
 #	include "Common/ShadowSampling.hlsli"
 
@@ -303,7 +295,8 @@ PS_OUTPUT main(PS_INPUT input)
 	positionWS = mul(FrameBuffer::CameraViewProjInverse[eyeIndex], positionWS);
 	positionWS.xyz = positionWS.xyz / positionWS.w;
 
-	float3 dirLightColor = SharedData::DirLightColor.xyz * ShadowSampling::GetWorldShadow(positionWS.xyz, FrameBuffer::CameraPosAdjust[eyeIndex].xyz, eyeIndex);
+	float unusedDetailedShadow;
+	float3 dirLightColor = SharedData::DirLightColor.xyz * ShadowSampling::GetLightingShadow(positionWS.xyz, eyeIndex, unusedDetailedShadow);
 	float3 ambientColor = max(0, mul(SharedData::DirectionalAmbient, float4(0, 0, 1, 1)).xyz);
 
 	propertyColor += dirLightColor;
@@ -329,12 +322,12 @@ PS_OUTPUT main(PS_INPUT input)
 				float3 lightDirection = light.positionWS[eyeIndex].xyz - positionWS.xyz;
 				float lightDist = length(lightDirection);
 
-#			if defined(ISL)
+#		if defined(ISL)
 				float intensityMultiplier = InverseSquareLighting::GetAttenuation(lightDist, light);
-#			else
+#		else
 				float intensityFactor = saturate(lightDist / light.radius);
 				float intensityMultiplier = 1 - intensityFactor * intensityFactor;
-#			endif
+#		endif
 
 				float3 lightColor = light.color.xyz * intensityMultiplier;
 				propertyColor += lightColor;

@@ -367,14 +367,14 @@ cbuffer AlphaTestRefCB : register(b11)
 #	if defined(RENDER_SHADOWMASKDPB)
 float GetPoissonDiskFilteredShadowVisibility(uint3 seed, Texture2DArray<float4> tex, SamplerComparisonState samp, float3 positionMS, float layerIndex, uint eyeIndex)
 {
-	const int sampleCount = 12; // reduced from 16
+	const int sampleCount = 12;  // reduced from 16
 
 	// Pre-compute expensive operations outside the loop
 	float4x4 shadowTransform = transpose(ShadowMapProj[eyeIndex][0]);
 	float rcpShadowLightParam = rcp(ShadowLightParam.x);
 	float alphaTestOffset = -AlphaTestRef.y;
 	float sampleRadius = ShadowSampleParam.z * 2048.0;
-	float seedNormalized = seed.x * (1.0 / 4294967295.0); // Use only x component for efficiency
+	float seedNormalized = seed.x * (1.0 / 4294967295.0);  // Use only x component for efficiency
 	uint frameOffset = SharedData::FrameCount * sampleCount;
 
 	// Pre-compute constants
@@ -385,8 +385,8 @@ float GetPoissonDiskFilteredShadowVisibility(uint3 seed, Texture2DArray<float4> 
 	float visibility = 0;
 
 	// Unroll first few samples for better instruction scheduling
-	[unroll(4)]
-	for (int unrollSampleIndex = 0; unrollSampleIndex < 4; ++unrollSampleIndex) {
+	[unroll(4)] for (int unrollSampleIndex = 0; unrollSampleIndex < 4; ++unrollSampleIndex)
+	{
 		// Optimized random generation using simplified hash
 		uint hashInput = unrollSampleIndex + frameOffset;
 		float3 randomVec = Random::R3Modified(hashInput, seedNormalized);
@@ -402,7 +402,7 @@ float GetPoissonDiskFilteredShadowVisibility(uint3 seed, Texture2DArray<float4> 
 
 		// Optimized hemisphere calculation
 		bool lowerHalf = positionLS.z < 0;
-		float3 normalizedPos = positionLS * rcp(positionLength); // Avoid second normalize
+		float3 normalizedPos = positionLS * rcp(positionLength);  // Avoid second normalize
 
 		float3 positionOffset = lowerHalf ? positionOffsetDown : positionOffsetUp;
 		float3 lightDirection = normalizedPos + positionOffset;
@@ -627,8 +627,8 @@ PS_OUTPUT main(PS_INPUT input)
 	uint3 seed = Random::pcg3d(uint3(input.PositionCS.xy, input.PositionCS.x * Math::PI));
 
 #		if defined(RENDER_SHADOWMASK)
-	if(SharedData::InInterior)
-		shadowColor = float4(0,0,0,0);
+	if (SharedData::InInterior)
+		shadowColor = float4(0, 0, 0, 0);
 
 	if (EndSplitDistances.z >= shadowMapDepth) {
 		float4x3 lightProjectionMatrix = ShadowMapProj[eyeIndex][0];

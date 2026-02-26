@@ -6,27 +6,21 @@ void CellLightingWidget::DrawWidget()
 {
 	WeatherUtils::SetCurrentWidget(this);
 	ImGui::SetNextWindowSizeConstraints(ImVec2(600, 0), ImVec2(FLT_MAX, FLT_MAX));
-	if (ImGui::Begin(GetEditorID().c_str(), &open, ImGuiWindowFlags_NoSavedSettings)) {
+	if (ImGui::Begin(GetEditorID().c_str(), &open, ImGuiWindowFlags_NoSavedSettings | kStickyHeaderFlags)) {
 		DrawWidgetHeader("##CellLightingSearch", true, true);
+	}
 
+	if (!cell || !cell->IsInteriorCell()) {
+		ImGui::TextColored(ImVec4(1.0f, 0.7f, 0.0f, 1.0f), "This cell is not an interior cell.");
+		ImGui::TextWrapped("Cell lighting properties only apply to interior cells.");
+	} else if (!cell->GetLighting()) {
+		ImGui::TextColored(ImVec4(1.0f, 0.0f, 0.0f, 1.0f), "No lighting data available for this cell.");
+	} else {
 		bool changed = false;
-
-		if (!cell || !cell->IsInteriorCell()) {
-			ImGui::TextColored(ImVec4(1.0f, 0.7f, 0.0f, 1.0f), "This cell is not an interior cell.");
-			ImGui::TextWrapped("Cell lighting properties only apply to interior cells.");
-			ImGui::End();
-			return;
-		}
-
-		auto lighting = cell->GetLighting();
-		if (!lighting) {
-			ImGui::TextColored(ImVec4(1.0f, 0.0f, 0.0f, 1.0f), "No lighting data available for this cell.");
-			ImGui::End();
-			return;
-		}
 
 		if (ImGui::BeginTabBar("CellLightingTabs")) {
 			if (ImGui::BeginTabItem("Colors")) {
+				BeginScrollableContent("##ColorsScroll");
 				ImGui::SeparatorText("Ambient & Directional");
 				if (WeatherUtils::DrawColorEdit("Ambient Color", settings.ambient))
 					changed = true;
@@ -41,10 +35,12 @@ void CellLightingWidget::DrawWidget()
 				if (WeatherUtils::DrawColorEdit("Fog Far Color", settings.fogColorFar))
 					changed = true;
 
+				EndScrollableContent();
 				ImGui::EndTabItem();
 			}
 
 			if (ImGui::BeginTabItem("Fog")) {
+				BeginScrollableContent("##FogScroll");
 				ImGui::SeparatorText("Fog Distance");
 				if (WeatherUtils::DrawSliderFloat("Fog Near", settings.fogNear, 0.0f, 10000.0f))
 					changed = true;
@@ -57,10 +53,12 @@ void CellLightingWidget::DrawWidget()
 				if (WeatherUtils::DrawSliderFloat("Fog Clamp (Max)", settings.fogClamp, 0.0f, 1.0f))
 					changed = true;
 
+				EndScrollableContent();
 				ImGui::EndTabItem();
 			}
 
 			if (ImGui::BeginTabItem("Directional Ambient")) {
+				BeginScrollableContent("##DAmbientScroll");
 				ImGui::SeparatorText("Directional Ambient Lighting (DALC)");
 
 				if (WeatherUtils::DrawColorEdit("X+ (Right)", settings.directionalXPlus))
@@ -80,10 +78,12 @@ void CellLightingWidget::DrawWidget()
 				if (WeatherUtils::DrawSliderFloat("Fresnel Power", settings.fresnelPower, 0.0f, 10.0f))
 					changed = true;
 
+				EndScrollableContent();
 				ImGui::EndTabItem();
 			}
 
 			if (ImGui::BeginTabItem("Advanced")) {
+				BeginScrollableContent("##AdvancedScroll");
 				ImGui::SeparatorText("Light Fade Distances");
 				if (WeatherUtils::DrawSliderFloat("Light Fade Start", settings.lightFadeStart, 0.0f, 10000.0f))
 					changed = true;
@@ -104,10 +104,12 @@ void CellLightingWidget::DrawWidget()
 					changed = true;
 				}
 
+				EndScrollableContent();
 				ImGui::EndTabItem();
 			}
 
 			if (ImGui::BeginTabItem("Inheritance")) {
+				BeginScrollableContent("##InheritanceScroll");
 				ImGui::TextWrapped("These flags control which lighting properties are inherited from the cell's lighting template.");
 				ImGui::Separator();
 
@@ -134,6 +136,7 @@ void CellLightingWidget::DrawWidget()
 				if (ImGui::Checkbox("Inherit Light Fade Distances", &settings.inheritLightFadeDistances))
 					changed = true;
 
+				EndScrollableContent();
 				ImGui::EndTabItem();
 			}
 
@@ -143,9 +146,8 @@ void CellLightingWidget::DrawWidget()
 		if (changed && EditorWindow::GetSingleton()->settings.autoApplyChanges) {
 			ApplyChanges();
 		}
-
-		ImGui::End();
 	}
+	ImGui::End();
 }
 
 void CellLightingWidget::LoadSettings()

@@ -21,9 +21,9 @@ static const float3 LUMINANCE_WEIGHTS = float3(0.2126, 0.7152, 0.0722);
 // Hash constants
 static const float2 HASH_MULTIPLIER = float2(1271.5151, 3337.8237);
 // Performance optimization constants
-static const float MIP_LEVEL_INCREASE = 0.5;      // Additional mip level increase for distance optimization
-static const float DISTANCE_SAMPLE_REDUCTION = 2.0; // Mip level where we reduce to 2 samples
-static const float FAR_DISTANCE_THRESHOLD = 4.0;  // Mip level where we use single sample with higher mip level
+static const float MIP_LEVEL_INCREASE = 0.5;         // Additional mip level increase for distance optimization
+static const float DISTANCE_SAMPLE_REDUCTION = 2.0;  // Mip level where we reduce to 2 samples
+static const float FAR_DISTANCE_THRESHOLD = 4.0;     // Mip level where we use single sample with higher mip level
 
 // Structure to hold stochastic sampling offsets and weights
 struct StochasticOffsets
@@ -60,7 +60,8 @@ inline float3 NormalizeWeights(float3 weights)
 {
 	float weightSum = weights.x + weights.y + weights.z;
 	// Skip expensive division if already normalized
-	if (abs(weightSum - 1.0) < 0.01) return weights;
+	if (abs(weightSum - 1.0) < 0.01)
+		return weights;
 	float rcpWeightSum = rcp(max(weightSum, 1e-6));
 	return weights * rcpWeightSum;
 }
@@ -68,30 +69,30 @@ inline float3 NormalizeWeights(float3 weights)
 // Common barycentric coordinate calculation for stochastic sampling
 inline float4x3 ComputeBarycentricVerts(float2 landscapeUV)
 {
-    float2 scaledUV = landscapeUV * (WORLD_SCALE);
-    float2 skewUV = mul(SKEW_MATRIX, scaledUV);
-    float2 vxID = floor(skewUV);
-    float2 frac_uv = frac(skewUV);
+	float2 scaledUV = landscapeUV * (WORLD_SCALE);
+	float2 skewUV = mul(SKEW_MATRIX, scaledUV);
+	float2 vxID = floor(skewUV);
+	float2 frac_uv = frac(skewUV);
 
-    float barry_z = 1.0 - frac_uv.x - frac_uv.y;
-    float3 barry = float3(frac_uv, barry_z);
+	float barry_z = 1.0 - frac_uv.x - frac_uv.y;
+	float3 barry = float3(frac_uv, barry_z);
 
-    return (barry.z > 0) ?
-        float4x3(float3(vxID, 0), float3(vxID + float2(0, 1), 0), float3(vxID + float2(1, 0), 0), barry.zyx) :
-        float4x3(float3(vxID + float2(1, 1), 0), float3(vxID + float2(1, 0), 0), float3(vxID + float2(0, 1), 0), float3(-barry.z, 1.0 - barry.y, 1.0 - barry.x));
+	return (barry.z > 0) ?
+	           float4x3(float3(vxID, 0), float3(vxID + float2(0, 1), 0), float3(vxID + float2(1, 0), 0), barry.zyx) :
+	           float4x3(float3(vxID + float2(1, 1), 0), float3(vxID + float2(1, 0), 0), float3(vxID + float2(0, 1), 0), float3(-barry.z, 1.0 - barry.y, 1.0 - barry.x));
 }
 
 inline StochasticOffsets ComputeStochasticOffsets(float2 landscapeUV)
 {
-    float4x3 BW_vx = ComputeBarycentricVerts(landscapeUV);
+	float4x3 BW_vx = ComputeBarycentricVerts(landscapeUV);
 
-    StochasticOffsets offsets;
-    offsets.offset1 = hash2D2D(BW_vx[0].xy);
-    offsets.offset2 = hash2D2D(BW_vx[1].xy);
-    offsets.offset3 = hash2D2D(BW_vx[2].xy);
-    offsets.weights = BW_vx[3];
+	StochasticOffsets offsets;
+	offsets.offset1 = hash2D2D(BW_vx[0].xy);
+	offsets.offset2 = hash2D2D(BW_vx[1].xy);
+	offsets.offset3 = hash2D2D(BW_vx[2].xy);
+	offsets.weights = BW_vx[3];
 
-    return offsets;
+	return offsets;
 }
 
 inline StochasticOffsets ComputeStochasticOffsetsLOD(float2 landscapeUV)
@@ -157,8 +158,7 @@ inline float4 StochasticEffect(Texture2D tex, SamplerState samp, float2 uv, Stoc
 	float3 luminanceHeights = float3(
 		dot(sample1.rgb, LUMINANCE_WEIGHTS),
 		dot(sample2.rgb, LUMINANCE_WEIGHTS),
-		dot(sample3.rgb, LUMINANCE_WEIGHTS)
-	);
+		dot(sample3.rgb, LUMINANCE_WEIGHTS));
 
 	float3 alphaValues = float3(sample1.a, sample2.a, sample3.a);
 	float3 alphaMask = step(0.001, alphaValues);
@@ -174,19 +174,17 @@ inline float4 StochasticEffect(Texture2D tex, SamplerState samp, float2 uv, Stoc
 // Stochastic sampling function without height blending for better performance
 // Disable X4000 warning: FXC incorrectly reports potentially uninitialized variables due to complex control flow with early returns and conditional sampling
 #pragma warning(push)
-#pragma warning(disable : 4000)
+#pragma warning(disable: 4000)
 inline float4 StochasticEffectParallax(Texture2D tex, SamplerState samp, float2 uv, float mipLevel, StochasticOffsets offsets, float2 dx, float2 dy)
 {
 	// Early exit for disabled terrain variation - avoid all other computations
-	if (!SharedData::terrainVariationSettings.enableTilingFix)
-	{
+	if (!SharedData::terrainVariationSettings.enableTilingFix) {
 		return tex.SampleLevel(samp, uv, mipLevel);
 	}
 
 	// Use progressive mip level increase for better performance in parallax
 	float adjustedMipLevel = mipLevel;
-	if (mipLevel > 1.0)
-	{
+	if (mipLevel > 1.0) {
 		adjustedMipLevel = mipLevel + (MIP_LEVEL_INCREASE * 0.5);
 	}
 
@@ -200,6 +198,5 @@ inline float4 StochasticEffectParallax(Texture2D tex, SamplerState samp, float2 
 	return sample1 * weights.x + sample2 * weights.y + sample3 * weights.z;
 }
 #pragma warning(pop)
-
 
 #endif  // TERRAIN_VARIATION_HLSLI

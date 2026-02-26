@@ -16,8 +16,7 @@ cbuffer ClearHMDMaskCB : register(b0)
 Texture2D<float> DepthIn : register(t0);
 RWTexture2D<float4> ColorInOut : register(u0);
 
-[numthreads(8, 8, 1)] void main(uint3 dispatchID : SV_DispatchThreadID)
-{
+[numthreads(8, 8, 1)] void main(uint3 dispatchID : SV_DispatchThreadID) {
 	// Read from stereo depth, write to potentially stereo color
 	if (DepthIn[dispatchID.xy + uint2(DepthOffsetX, 0)] == 0.0)
 		ColorInOut[dispatchID.xy + uint2(ColorOffsetX, 0)] = float4(0.0, 0.0, 0.0, 0.0);

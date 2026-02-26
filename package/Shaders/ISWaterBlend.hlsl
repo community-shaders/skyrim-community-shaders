@@ -30,18 +30,18 @@ cbuffer PerGeometry : register(b2)
 
 float3 LogToLinear(float3 logColor)
 {
-    const float linearRange = 14.0f;
-    const float linearGrey = 0.18f;
-    const float exposureGrey = 444.0f;
-    return exp2((logColor - exposureGrey / 1023.0) * linearRange) * linearGrey;
+	const float linearRange = 14.0f;
+	const float linearGrey = 0.18f;
+	const float exposureGrey = 444.0f;
+	return exp2((logColor - exposureGrey / 1023.0) * linearRange) * linearGrey;
 }
 
 float3 LinearToLog(float3 linearColor)
 {
-    const float linearRange = 14.0f;
-    const float linearGrey = 0.18f;
-    const float exposureGrey = 444.0f;
-    return saturate(log2(linearColor) / linearRange - log2(linearGrey) / linearRange + exposureGrey / 1023.0f);
+	const float linearRange = 14.0f;
+	const float linearGrey = 0.18f;
+	const float exposureGrey = 444.0f;
+	return saturate(log2(linearColor) / linearRange - log2(linearGrey) / linearRange + exposureGrey / 1023.0f);
 }
 
 PS_OUTPUT main(PS_INPUT input)

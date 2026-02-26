@@ -167,14 +167,6 @@ const static float DepthOffsets[16] = {
 #		include "ScreenSpaceShadows/ScreenSpaceShadows.hlsli"
 #	endif
 
-#	if defined(TERRAIN_SHADOWS)
-#		include "TerrainShadows/TerrainShadows.hlsli"
-#	endif
-
-#	if defined(CLOUD_SHADOWS)
-#		include "CloudShadows/CloudShadows.hlsli"
-#	endif
-
 #	if defined(IBL)
 #		include "IBL/IBL.hlsli"
 #	endif
@@ -257,11 +249,11 @@ PS_OUTPUT main(PS_INPUT input)
 	float3 iblColor = 0;
 	if (SharedData::iblSettings.EnableDiffuseIBL) {
 		directionalAmbientColor *= SharedData::iblSettings.DALCAmount;
-#					if defined(SKYLIGHTING)
+#				if defined(SKYLIGHTING)
 		iblColor += Color::Saturation(ImageBasedLighting::GetIBLColor(-normal, 1.0), SharedData::iblSettings.IBLSaturation) * SharedData::iblSettings.DiffuseIBLScale;
-#					else
+#				else
 		iblColor += Color::Saturation(ImageBasedLighting::GetIBLColor(-normal), SharedData::iblSettings.IBLSaturation) * SharedData::iblSettings.DiffuseIBLScale;
-#					endif
+#				endif
 		directionalAmbientColor += Color::IrradianceToGamma(iblColor);
 	}
 #			endif
@@ -298,11 +290,11 @@ PS_OUTPUT main(PS_INPUT input)
 	float3 iblColor = 0;
 	if (SharedData::iblSettings.EnableDiffuseIBL) {
 		directionalAmbientColor *= SharedData::iblSettings.DALCAmount;
-#					if defined(SKYLIGHTING)
+#				if defined(SKYLIGHTING)
 		iblColor += Color::Saturation(ImageBasedLighting::GetIBLColor(-normal, 1.0), SharedData::iblSettings.IBLSaturation) * SharedData::iblSettings.DiffuseIBLScale;
-#					else
+#				else
 		iblColor += Color::Saturation(ImageBasedLighting::GetIBLColor(-normal), SharedData::iblSettings.IBLSaturation) * SharedData::iblSettings.DiffuseIBLScale;
-#					endif
+#				endif
 		directionalAmbientColor += Color::IrradianceToGamma(iblColor);
 	}
 #			endif

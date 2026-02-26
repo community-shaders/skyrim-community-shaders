@@ -1,8 +1,8 @@
 #include "Upscaling/UpscaleVS.hlsl"
 
 #if defined(PSHADER)
-#include "Common/FrameBuffer.hlsli"
-#include "Common/SharedData.hlsli"
+#	include "Common/FrameBuffer.hlsli"
+#	include "Common/SharedData.hlsli"
 
 typedef VS_OUTPUT PS_INPUT;
 
