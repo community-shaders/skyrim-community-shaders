@@ -221,91 +221,90 @@ namespace Hair
 		const float3 VN = normalize(tbnTr[2]);
 		const float3 L = normalize(context.lightDir);
 
-	void GetHairDirectLight(out DirectLightingOutput lightingOutput, DirectContext context, MaterialProperties material, float3x3 tbnTr, float2 uv)
-	{
-		const float3 T = normalize(context.worldNormal);
-		const float3 V = normalize(context.viewDir);
-		const float3 N = normalize(context.vertexNormal);
-		const float3 VN = normalize(tbnTr[2]);
-		const float3 L = normalize(context.lightDir);
-
-		if (SharedData::hairSpecularSettings.HairMode == 0) {
-
-		if (SharedData::hairSpecularSettings.HairMode == 0) {
-			GetHairDirectLightScheuermann(lightingOutput.diffuse, lightingOutput.specular, lightingOutput.transmission, T, L, V, N, VN, context, material.Shininess, uv, material.BaseColor);
-		} else {
-			GetHairDirectLightMarschner(lightingOutput.diffuse, lightingOutput.specular, lightingOutput.transmission, T, L, V, N, VN, context, material.Shininess, uv, material.BaseColor);
-		}
-	}
-
-	void GetHairIndirectLobeWeights(out IndirectLobeWeights lobeWeights, IndirectContext context, MaterialProperties material, float2 uv)
-	{
-		lobeWeights = (IndirectLobeWeights)0;
-
-		float3 T = normalize(context.worldNormal);
-		const float3 V = normalize(context.viewDir);
-		const float3 N = normalize(context.vertexNormal);
-
-		if (SharedData::hairSpecularSettings.HairMode == 1) {
-			if (SharedData::hairSpecularSettings.EnableTangentShift) {
-				const float shift = TexTangentShift.SampleLevel(SampColorSampler, uv, 0).x - 0.5;
-				T = ShiftTangent(T, N, shift);
-			}
-			float3 L = normalize(V - T * dot(V, T));
-
-			lobeWeights.diffuse = D_Marschner(L, V, T, 1 - saturate(material.Shininess * 0.01), material.BaseColor, 0.2, 0) * Math::PI * SharedData::hairSpecularSettings.SpecularIndirectMult;
-			lobeWeights.diffuse += GetHairDiffuseAttenuationKajiyaKay(T, V, L, 1, material.BaseColor) * Math::PI * SharedData::hairSpecularSettings.DiffuseIndirectMult;
-			return;
-		} else {
-			lobeWeights.diffuse = saturate(material.BaseColor * SharedData::hairSpecularSettings.DiffuseIndirectMult);
-			float2 hairBRDF = BRDF::EnvBRDF(material.Roughness, saturate(dot(N, V)));
-			float3 hairSpecularLobe = material.F0 * hairBRDF.x + hairBRDF.y;
-			lobeWeights.diffuse *= (1 - hairSpecularLobe);
-			lobeWeights.specular = saturate(hairSpecularLobe * SharedData::hairSpecularSettings.SpecularIndirectMult);
-		}
-	}
-
-	float3 Saturation(float3 color, float saturation)
-	{
-		float luminance = Color::RGBToLuminance(color);
-		return saturate(lerp(float3(luminance, luminance, luminance), color, saturation));
-	}
-
-	float HairSelfShadow(float3 positionWS, float3 lightDirWS, float noise, uint eyeIndex)
-	{
-		if (!SharedData::hairSpecularSettings.EnableSelfShadow) {
-			return 1.0;
-		}
-
-		// Simple raymarch
-		const int stepCount = 4;
-
-		float3 positionVS = FrameBuffer::WorldToView(positionWS, true, eyeIndex);
-		float3 lightDirVS = FrameBuffer::WorldToView(lightDirWS, false, eyeIndex);
-		lightDirVS *= max(SharedData::hairSpecularSettings.SelfShadowScale * GAME_UNIT_TO_CM, 0.05);
-		float stepSize = 1.0 / stepCount;
-
-		float3 ray = positionVS + lightDirVS * (noise - 0.5) * 2 * stepSize;
-		float shadow = 1.0;
-		int hitCount = 0;
-
-		[unroll(stepCount)] for (int i = 0; i < stepCount; ++i)
+		void GetHairDirectLight(out DirectLightingOutput lightingOutput, DirectContext context, MaterialProperties material, float3x3 tbnTr, float2 uv)
 		{
-			ray += lightDirVS * stepSize;
-			float2 rayUV = FrameBuffer::ViewToUV(ray, true, eyeIndex);
-			if (FrameBuffer::IsOutsideFrame(rayUV))
-				continue;
-			float rayDepth = ray.z;
-			float sampleDepth = SharedData::GetScreenDepth(rayUV, eyeIndex);
-			if (sampleDepth < rayDepth) {
-				hitCount++;
+			const float3 T = normalize(context.worldNormal);
+			const float3 V = normalize(context.viewDir);
+			const float3 N = normalize(context.vertexNormal);
+			const float3 VN = normalize(tbnTr[2]);
+			const float3 L = normalize(context.lightDir);
+
+			if (SharedData::hairSpecularSettings.HairMode == 0) {
+				if (SharedData::hairSpecularSettings.HairMode == 0) {
+					GetHairDirectLightScheuermann(lightingOutput.diffuse, lightingOutput.specular, lightingOutput.transmission, T, L, V, N, VN, context, material.Shininess, uv, material.BaseColor);
+				} else {
+					GetHairDirectLightMarschner(lightingOutput.diffuse, lightingOutput.specular, lightingOutput.transmission, T, L, V, N, VN, context, material.Shininess, uv, material.BaseColor);
+				}
+			}
+
+			void GetHairIndirectLobeWeights(out IndirectLobeWeights lobeWeights, IndirectContext context, MaterialProperties material, float2 uv)
+			{
+				lobeWeights = (IndirectLobeWeights)0;
+
+				float3 T = normalize(context.worldNormal);
+				const float3 V = normalize(context.viewDir);
+				const float3 N = normalize(context.vertexNormal);
+
+				if (SharedData::hairSpecularSettings.HairMode == 1) {
+					if (SharedData::hairSpecularSettings.EnableTangentShift) {
+						const float shift = TexTangentShift.SampleLevel(SampColorSampler, uv, 0).x - 0.5;
+						T = ShiftTangent(T, N, shift);
+					}
+					float3 L = normalize(V - T * dot(V, T));
+
+					lobeWeights.diffuse = D_Marschner(L, V, T, 1 - saturate(material.Shininess * 0.01), material.BaseColor, 0.2, 0) * Math::PI * SharedData::hairSpecularSettings.SpecularIndirectMult;
+					lobeWeights.diffuse += GetHairDiffuseAttenuationKajiyaKay(T, V, L, 1, material.BaseColor) * Math::PI * SharedData::hairSpecularSettings.DiffuseIndirectMult;
+					return;
+				} else {
+					lobeWeights.diffuse = saturate(material.BaseColor * SharedData::hairSpecularSettings.DiffuseIndirectMult);
+					float2 hairBRDF = BRDF::EnvBRDF(material.Roughness, saturate(dot(N, V)));
+					float3 hairSpecularLobe = material.F0 * hairBRDF.x + hairBRDF.y;
+					lobeWeights.diffuse *= (1 - hairSpecularLobe);
+					lobeWeights.specular = saturate(hairSpecularLobe * SharedData::hairSpecularSettings.SpecularIndirectMult);
+				}
+			}
+
+			float3 Saturation(float3 color, float saturation)
+			{
+				float luminance = Color::RGBToLuminance(color);
+				return saturate(lerp(float3(luminance, luminance, luminance), color, saturation));
+			}
+
+			float HairSelfShadow(float3 positionWS, float3 lightDirWS, float noise, uint eyeIndex)
+			{
+				if (!SharedData::hairSpecularSettings.EnableSelfShadow) {
+					return 1.0;
+				}
+
+				// Simple raymarch
+				const int stepCount = 4;
+
+				float3 positionVS = FrameBuffer::WorldToView(positionWS, true, eyeIndex);
+				float3 lightDirVS = FrameBuffer::WorldToView(lightDirWS, false, eyeIndex);
+				lightDirVS *= max(SharedData::hairSpecularSettings.SelfShadowScale * GAME_UNIT_TO_CM, 0.05);
+				float stepSize = 1.0 / stepCount;
+
+				float3 ray = positionVS + lightDirVS * (noise - 0.5) * 2 * stepSize;
+				float shadow = 1.0;
+				int hitCount = 0;
+
+				[unroll(stepCount)] for (int i = 0; i < stepCount; ++i)
+				{
+					ray += lightDirVS * stepSize;
+					float2 rayUV = FrameBuffer::ViewToUV(ray, true, eyeIndex);
+					if (FrameBuffer::IsOutsideFrame(rayUV))
+						continue;
+					float rayDepth = ray.z;
+					float sampleDepth = SharedData::GetScreenDepth(rayUV, eyeIndex);
+					if (sampleDepth < rayDepth) {
+						hitCount++;
+					}
+				}
+
+				if (hitCount > 0) {
+					shadow -= pow(abs((float)hitCount / (float)stepCount), SharedData::hairSpecularSettings.SelfShadowExponent);
+				}
+				return lerp(1.0, shadow, SharedData::hairSpecularSettings.SelfShadowStrength);
 			}
 		}
-
-		if (hitCount > 0) {
-			shadow -= pow(abs((float)hitCount / (float)stepCount), SharedData::hairSpecularSettings.SelfShadowExponent);
-		}
-		return lerp(1.0, shadow, SharedData::hairSpecularSettings.SelfShadowStrength);
-	}
-}
 #endif  //__HAIR_DEPENDENCY_HLSL__
