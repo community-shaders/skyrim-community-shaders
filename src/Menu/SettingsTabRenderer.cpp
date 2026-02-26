@@ -364,8 +364,8 @@ void SettingsTabRenderer::RenderThemesTab()
 		auto& themeSettings = globals::menu->GetSettings().Theme;
 
 		// Static variables for popup state and new theme creation
+		static Util::ConfirmationPopup deleteThemePopup("Delete Theme", "", "Delete", "Cancel");
 		static bool showCreateThemePopup = false;
-		static bool showDeleteThemePopup = false;
 		static char newThemeName[128] = "";
 		static char newThemeDisplayName[128] = "";
 		static char newThemeDescription[256] = "";
@@ -566,7 +566,11 @@ void SettingsTabRenderer::RenderThemesTab()
 			ImGui::SameLine();
 			auto _style = Util::ErrorButtonStyle();
 			if (Util::ButtonWithFlash("Delete")) {
-				showDeleteThemePopup = true;
+				deleteThemePopup.message =
+					"Are you sure you want to delete the theme '" +
+					(currentThemeInfo->displayName.empty() ? currentThemePreset : currentThemeInfo->displayName) +
+					"'?\n\nThis will permanently remove the theme file. This cannot be undone.";
+				deleteThemePopup.Request();
 			}
 			if (auto _tt = Util::HoverTooltipWrapper()) {
 				ImGui::Text("Delete the theme file for '%s'. This cannot be undone.",
@@ -714,48 +718,15 @@ void SettingsTabRenderer::RenderThemesTab()
 			ImGui::EndPopup();
 		}
 
-		// Delete theme confirmation modal
-		if (showDeleteThemePopup) {
-			if (currentThemeInfo && !currentThemeInfo->filePath.empty()) {
-				ImGui::OpenPopup("Delete Theme");
+		if (deleteThemePopup.Draw() && currentThemeInfo && !currentThemeInfo->filePath.empty()) {
+			auto result = Util::FileHelpers::SafeDelete(currentThemeInfo->filePath, "Theme '" + currentThemePreset + "'");
+			if (result.success) {
+				themeManager->RefreshThemes();
+				globals::menu->LoadThemePreset("Default");
+				currentThemePreset = "Default";
 			} else {
-				showDeleteThemePopup = false;
+				logger::warn("Failed to delete theme '{}': {}", currentThemePreset, result.errorMessage);
 			}
-		}
-
-		if (ImGui::BeginPopupModal("Delete Theme", &showDeleteThemePopup, ImGuiWindowFlags_AlwaysAutoResize)) {
-			ImGui::Text("Are you sure you want to delete the theme ");
-			ImGui::SameLine(0, 0);
-			ImGui::TextColored(themeSettings.StatusPalette.InfoColor, "%s",
-				(currentThemeInfo && !currentThemeInfo->displayName.empty() ? currentThemeInfo->displayName : currentThemePreset).c_str());
-			ImGui::SameLine(0, 0);
-			ImGui::Text("?");
-			ImGui::Text("This will permanently remove the theme file. This cannot be undone.");
-
-			ImGui::Separator();
-
-			if (ImGui::Button("Cancel")) {
-				showDeleteThemePopup = false;
-				ImGui::CloseCurrentPopup();
-			}
-
-			ImGui::SameLine();
-
-			auto _style = Util::ErrorButtonStyle();
-			if (ImGui::Button("Delete") && currentThemeInfo && !currentThemeInfo->filePath.empty()) {
-				auto result = Util::FileHelpers::SafeDelete(currentThemeInfo->filePath, "Theme '" + currentThemePreset + "'");
-				if (result.success) {
-					themeManager->RefreshThemes();
-					globals::menu->LoadThemePreset("Default");
-					currentThemePreset = "Default";
-				} else {
-					logger::warn("Failed to delete theme '{}': {}", currentThemePreset, result.errorMessage);
-				}
-				showDeleteThemePopup = false;
-				ImGui::CloseCurrentPopup();
-			}
-
-			ImGui::EndPopup();
 		}
 
 		ImGui::EndTabItem();
