@@ -4,6 +4,7 @@
 #include "Globals.h"
 #include "ShaderCache.h"
 #include "State.h"
+#include "Utils/D3D.h"
 #include "VR.h"
 
 #include <intrin.h>
@@ -310,37 +311,6 @@ namespace
 		a_state.hookActiveLogged = true;
 	}
 
-	// Selects the depth SRV used by engine-hook slot overrides.
-	// Prefer blended depth outputs from Terrain Blending; fall back to MAIN_COPY depth
-	// when blended targets are unavailable so hook paths remain robust during init/teardown.
-	ID3D11ShaderResourceView* ResolveEngineOverrideSrv(const bool a_prefer16Bit)
-	{
-		auto& terrainBlending = globals::features::terrainBlending;
-		if (a_prefer16Bit) {
-			if (terrainBlending.blendedDepthTexture16 && terrainBlending.blendedDepthTexture16->srv) {
-				return terrainBlending.blendedDepthTexture16->srv.get();
-			}
-			if (terrainBlending.blendedDepthTexture && terrainBlending.blendedDepthTexture->srv) {
-				return terrainBlending.blendedDepthTexture->srv.get();
-			}
-		} else {
-			if (terrainBlending.blendedDepthTexture && terrainBlending.blendedDepthTexture->srv) {
-				return terrainBlending.blendedDepthTexture->srv.get();
-			}
-			if (terrainBlending.blendedDepthTexture16 && terrainBlending.blendedDepthTexture16->srv) {
-				return terrainBlending.blendedDepthTexture16->srv.get();
-			}
-		}
-
-		auto* renderer = globals::game::renderer;
-		if (!renderer) {
-			return nullptr;
-		}
-
-		auto& depthCopy = renderer->GetDepthStencilData().depthStencils[RE::RENDER_TARGETS_DEPTHSTENCIL::kMAIN_COPY];
-		return depthCopy.depthSRV;
-	}
-
 	// Restores PS slots 17 and 2 to the SRVs that were bound before this shadowmask
 	// technique override was applied. This keeps override scope limited to the
 	// targeted pass and avoids leaking TB depth bindings into unrelated draws.
@@ -530,8 +500,8 @@ void TerrainBlending::OnBeginTechnique(RE::BSShader* a_shader, uint32_t a_pixelD
 		engineHookTechniqueState.active = true;
 	}
 
-	auto* obbOverrideSrv = ResolveEngineOverrideSrv(false);
-	auto* shadowmaskOverrideSrv = ResolveEngineOverrideSrv(true);
+	auto* obbOverrideSrv = Util::GetCurrentSceneDepthSRV(false);
+	auto* shadowmaskOverrideSrv = Util::GetCurrentSceneDepthSRV(true);
 	ApplyPixelShaderSlotOverride(context, 17u, obbOverrideSrv, nullptr, 0u);
 	ApplyPixelShaderSlotOverride(context, 2u, shadowmaskOverrideSrv, &ShouldApplySlot2Rewrite, a_callerRva);
 }
@@ -562,8 +532,8 @@ void TerrainBlending::OnUtilitySetupGeometry(RE::BSShader* a_shader, RE::BSRende
 	// Integration point 2/4: re-assert after Utility geometry setup mutates OM state.
 	EnsureEngineHookDepthOverride(descriptor, a_callerRva);
 
-	auto* obbOverrideSrv = ResolveEngineOverrideSrv(false);
-	auto* shadowmaskOverrideSrv = ResolveEngineOverrideSrv(true);
+	auto* obbOverrideSrv = Util::GetCurrentSceneDepthSRV(false);
+	auto* shadowmaskOverrideSrv = Util::GetCurrentSceneDepthSRV(true);
 	ApplyPixelShaderSlotOverride(context, 17u, obbOverrideSrv, nullptr, 0u);
 	ApplyPixelShaderSlotOverride(context, 2u, shadowmaskOverrideSrv, &ShouldApplySlot2Rewrite, a_callerRva);
 }
@@ -591,7 +561,7 @@ void TerrainBlending::OnShaderPropertySetupGeometry(RE::BSShaderProperty* a_shad
 	// Integration point 3/4: re-assert after material/property setup.
 	EnsureEngineHookDepthOverride(descriptor, a_callerRva);
 
-	auto* shadowmaskOverrideSrv = ResolveEngineOverrideSrv(true);
+	auto* shadowmaskOverrideSrv = Util::GetCurrentSceneDepthSRV(true);
 	ApplyPixelShaderSlotOverride(context, 2u, shadowmaskOverrideSrv, &ShouldApplySlot2Rewrite, a_callerRva);
 }
 
@@ -620,8 +590,8 @@ void TerrainBlending::OnSetDirtyStates(bool a_isCompute, uint32_t a_callerRva)
 
 	EnsureEngineHookDepthOverride(descriptor, a_callerRva);
 
-	auto* obbOverrideSrv = ResolveEngineOverrideSrv(false);
-	auto* shadowmaskOverrideSrv = ResolveEngineOverrideSrv(true);
+	auto* obbOverrideSrv = Util::GetCurrentSceneDepthSRV(false);
+	auto* shadowmaskOverrideSrv = Util::GetCurrentSceneDepthSRV(true);
 	ApplyPixelShaderSlotOverride(context, 17u, obbOverrideSrv, nullptr, 0u);
 	ApplyPixelShaderSlotOverride(context, 2u, shadowmaskOverrideSrv, &ShouldApplySlot2Rewrite, a_callerRva);
 }
