@@ -270,8 +270,7 @@ VS_OUTPUT main(VS_INPUT input)
 #	endif
 
 #	if defined(OFFSET_DEPTH)
-	const float bias = 5.0;
-	vsout.PositionCS.z += bias;
+	vsout.PositionCS.z += 5.0;
 #	endif
 
 #	ifdef VR
