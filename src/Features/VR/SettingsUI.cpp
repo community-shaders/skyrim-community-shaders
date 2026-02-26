@@ -356,9 +356,7 @@ namespace
 			}
 
 			if (exteriorChanged || interiorChanged) {
-				const auto* tes = globals::game::tes;
-				const bool inInterior = tes && tes->interiorCell;
-				vr.UpdateDepthBufferCulling(inInterior ? settings.EnableDepthBufferCullingInterior : settings.EnableDepthBufferCullingExterior);
+				vr.UpdateDepthBufferCulling();
 			}
 
 			if (ImGui::SliderFloat("Min Occludee Box Extent", &settings.MinOccludeeBoxExtent, 0.0f, 1000.0f, "%.1f")) {
