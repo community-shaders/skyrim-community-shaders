@@ -33,7 +33,9 @@ namespace SharedData
 		bool OverrideComplexGrassSettings;
 
 		float BasicGrassBrightness;
-		float3 pad0;
+		bool EnableWrappedLighting;
+		float ComplexGrassThreshold;
+		float1 pad0;
 	};
 
 	struct CPMSettings
@@ -98,8 +100,8 @@ namespace SharedData
 
 		bool EnableSplashes;
 		bool EnableRipples;
-        uint EnableVanillaRipples;
-        float RaindropFxRange;
+		uint EnableVanillaRipples;
+		float RaindropFxRange;
 
 		float RaindropGridSizeRcp;
 		float RaindropIntervalRcp;
@@ -198,6 +200,59 @@ namespace SharedData
 		float Strength;      // [0, 1.0] The inverse blend weight of the effect
 	};
 
+	struct LinearLightingSettings
+	{
+		uint enableLinearLighting;
+		uint enableGammaCorrection;
+		uint isDirLightLinear;
+		float dirLightMult;
+		float lightGamma;
+		float colorGamma;
+		float emitColorGamma;
+		float glowmapGamma;
+		float ambientGamma;
+		float fogGamma;
+		float fogAlphaGamma;
+		float effectGamma;
+		float effectAlphaGamma;
+		float skyGamma;
+		float waterGamma;
+		float vlGamma;
+		float vanillaDiffuseColorMult;
+		float directionalLightMult;
+		float pointLightMult;
+		float ambientMult;
+		float emitColorMult;
+		float glowmapMult;
+		float effectLightingMult;
+		float membraneEffectMult;
+		float bloodEffectMult;
+		float projectedEffectMult;
+		float deferredEffectMult;
+		float otherEffectMult;
+	};
+
+	struct TerrainBlendingSettings
+	{
+		uint Enabled;
+		uint3 _padding;
+	};
+
+	struct ExponentialHeightFogSettings
+	{
+		uint enabled;
+		uint useDynamicCubemaps;
+		float startDistance;
+		float fogHeight;
+		float fogHeightFalloff;
+		float fogDensity;
+		float directionalInscatteringMultiplier;
+		float directionalInscatteringExponent;
+		float4 inscatteringTint;
+		float cubemapMipLevel;
+		float3 pad;
+	};
+
 	struct VanillaFresnelSettings
 	{
 		uint Enable;
@@ -227,6 +282,9 @@ namespace SharedData
 		TerrainVariationSettings terrainVariationSettings;
 		IBLSettings iblSettings;
 		ExtendedTranslucencySettings extendedTranslucencySettings;
+		LinearLightingSettings linearLightingSettings;
+		TerrainBlendingSettings terrainBlendingSettings;
+		ExponentialHeightFogSettings exponentialHeightFogSettings;
 		VanillaFresnelSettings vanillaFresnelSettings;
 	};
 

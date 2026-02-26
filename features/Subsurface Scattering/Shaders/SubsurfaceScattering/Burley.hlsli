@@ -1,8 +1,8 @@
 #include "Common/GBuffer.hlsli"
 #include "Common/Game.hlsli"
-#include "Common/SharedData.hlsli"
-#include "Common/Random.hlsli"
 #include "Common/Math.hlsli"
+#include "Common/Random.hlsli"
+#include "Common/SharedData.hlsli"
 
 // [Per H. Christensen, Brent Burley 2015, "Approximate Reflectance Profiles for Efficient Subsurface Scattering"]
 // https://graphics.pixar.com/library/ApproxBSSRDF/paper.pdf
@@ -14,7 +14,7 @@ float3 GetBurleyCDF(float3 d, float3 r, float rand)
 float GetBurleyPDF(float r, float l, float s)
 {
 	float d = l / s;
-	float pdf = 0.25 / d * (exp(-r / d) + exp(-r / (3 * d))); // cdf dr
+	float pdf = 0.25 / d * (exp(-r / d) + exp(-r / (3 * d)));  // cdf dr
 	return max(pdf, 1e-5f);
 }
 
@@ -53,13 +53,12 @@ float4 BurleyNormalizedSS(uint2 DTid, float2 texCoord, uint eyeIndex, float sssA
 	float centerDepth = SharedData::GetScreenDepth(DepthTexture[DTid].x);
 
 	float4 centerColor = ColorTexture[DTid];
-	if (sssAmount == 0 || centerDepth <= 0)
-	{
+	if (sssAmount == 0 || centerDepth <= 0) {
 		return centerColor;
 	}
 
 	float4 surfaceAlbedo = AlbedoTexture[DTid];
-	float3 originalColor = Color::GammaToLinear(centerColor.xyz / max(surfaceAlbedo.xyz, EPSILON_SSS_ALBEDO));
+	float3 originalColor = Color::IrradianceToLinear(centerColor.xyz / max(surfaceAlbedo.xyz, EPSILON_SSS_ALBEDO));
 
 	float4 diffuseMeanFreePath = humanProfile ? MeanFreePathHuman : MeanFreePathBase;
 	diffuseMeanFreePath.xyz = float3(max(diffuseMeanFreePath.x, 1e-5f), max(diffuseMeanFreePath.y, 1e-5f), max(diffuseMeanFreePath.z, 1e-5f));
@@ -87,8 +86,7 @@ float4 BurleyNormalizedSS(uint2 DTid, float2 texCoord, uint eyeIndex, float sssA
 	int3 seed = int3(DTid.xy, 0);
 	int seedStart = Random::pcg3d(int3(seed.xy, SharedData::FrameCount)).x;
 
-	[loop]
-	for (int i = 0; i < BurleySamples; ++i)
+	[loop] for (int i = 0; i < (int)BurleySamples; ++i)
 	{
 		seed.z = seedStart++;
 		float2 rand = float2(Random::pcg3d(seed).xy) / 4294967296.0f;  // to [0, 1)
@@ -114,7 +112,7 @@ float4 BurleyNormalizedSS(uint2 DTid, float2 texCoord, uint eyeIndex, float sssA
 		if (!mask)
 			continue;
 
-		float3 sampleColor = Color::GammaToLinear(ColorTexture[samplePixcoord].xyz * maskSample / max(AlbedoTexture[samplePixcoord].xyz, EPSILON_SSS_ALBEDO));
+		float3 sampleColor = Color::IrradianceToLinear(ColorTexture[samplePixcoord].xyz * maskSample / max(AlbedoTexture[samplePixcoord].xyz, EPSILON_SSS_ALBEDO));
 		float sampleDepth = SharedData::GetScreenDepth(DepthTexture[samplePixcoord].x);
 		float3 sampleNormalVS = GBuffer::DecodeNormal(NormalTexture[samplePixcoord].xy);
 		float3 sampleNormalWS = normalize(mul(FrameBuffer::CameraViewInverse[eyeIndex], float4(sampleNormalVS, 0)).xyz);
@@ -132,7 +130,7 @@ float4 BurleyNormalizedSS(uint2 DTid, float2 texCoord, uint eyeIndex, float sssA
 
 	colorSum *= any(weightSum == 0.0f) ? 0.0f : (1.0f / weightSum);
 	colorSum = lerp(colorSum, originalColor, saturate(centerWeight));
-	float3 color = Color::LinearToGamma(colorSum) * AlbedoTexture[DTid.xy].xyz;
+	float3 color = Color::IrradianceToGamma(colorSum) * AlbedoTexture[DTid.xy].xyz;
 	color = lerp(centerColor.xyz, color, saturate(sssAmount));
 
 	float4 outColor = float4(color, ColorTexture[DTid.xy].w);

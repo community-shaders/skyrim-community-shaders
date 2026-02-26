@@ -1,7 +1,6 @@
 #include "SubsurfaceScattering.h"
 
 #include "Deferred.h"
-#include "Features/TerrainBlending.h"
 #include "ShaderCache.h"
 #include "State.h"
 
@@ -232,7 +231,6 @@ void SubsurfaceScattering::DrawSSS()
 
 		auto main = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMAIN];
 
-		auto depth = renderer->GetDepthStencilData().depthStencils[RE::RENDER_TARGETS_DEPTHSTENCIL::kPOST_ZPREPASS_COPY];
 		auto mask = renderer->GetRuntimeData().renderTargets[MASKS];
 		auto albedo = renderer->GetRuntimeData().renderTargets[ALBEDO];
 		auto normal = renderer->GetRuntimeData().renderTargets[NORMALROUGHNESS];
@@ -240,11 +238,9 @@ void SubsurfaceScattering::DrawSSS()
 		ID3D11UnorderedAccessView* uav = blurHorizontalTemp->uav.get();
 		context->CSSetUnorderedAccessViews(0, 1, &uav, nullptr);
 
-		auto& terrainBlending = globals::features::terrainBlending;
-
 		ID3D11ShaderResourceView* views[5];
 		views[0] = main.SRV;
-		views[1] = terrainBlending.loaded ? terrainBlending.blendedDepthTexture16->srv.get() : depth.depthSRV;
+		views[1] = Util::GetCurrentSceneDepthSRV(true);
 		views[2] = mask.SRV;
 		views[3] = albedo.SRV;
 		views[4] = normal.SRV;

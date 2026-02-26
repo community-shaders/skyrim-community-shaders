@@ -4,7 +4,7 @@
     "Version": "1.0.0",
     "Author": "Community Shaders Team",
     "Theme": {
-        "FontSize": 27.0,
+        "FontSize": 0.0,
         "FontName": "Jost/Jost-Regular.ttf",
         "GlobalScale": 0.0,
         "FontRoles": [
@@ -31,6 +31,12 @@
                 "Style": "Regular",
                 "File": "Jost/Jost-Regular.ttf",
                 "SizeScale": 1.0
+            },
+            {
+                "Family": "Jost",
+                "Style": "Regular",
+                "File": "Jost/Jost-Regular.ttf",
+                "SizeScale": 0.9
             }
         ],
         "UseSimplePalette": false,
@@ -38,7 +44,7 @@
         "ShowFooter": true,
         "CenterHeader": true,
         "TooltipHoverDelay": 0.5,
-        "BackgroundBlurEnabled": false,
+        "BackgroundBlurEnabled": true,
         "Palette": {
             "Background": [0.03, 0.03, 0.03, 0.39216],
             "Text": [1.0, 1.0, 1.0, 1.0],
@@ -68,7 +74,7 @@
             "ThumbActive": 0.8
         },
         "Style": {
-            "WindowBorderSize": 0.0,
+            "WindowBorderSize": 2.0,
             "ChildBorderSize": 0.0,
             "FrameBorderSize": 0.0,
             "WindowPadding": [8.0, 8.0],

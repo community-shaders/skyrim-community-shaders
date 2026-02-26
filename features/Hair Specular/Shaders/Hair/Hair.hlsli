@@ -6,8 +6,6 @@
 #include "Common/Game.hlsli"
 #include "Common/Math.hlsli"
 
-#define HAIR_LIGHTING_MULTIPLIER Color::PBRLightingCompensation  // Compensating to adapt to vanilla lighting model
-
 namespace Hair
 {
 	Texture2D<float> TexTangentShift : register(t73);
@@ -196,7 +194,7 @@ namespace Hair
 
 	void GetHairDirectLightMarschner(out float3 dirDiffuse, out float3 dirSpecular, out float3 dirTransmission, float3 T, float3 L, float3 V, float3 N, float3 VN, float3 lightColor, float shininess, float selfShadow, float2 uv, float3 baseColor)
 	{
-		lightColor *= HAIR_LIGHTING_MULTIPLIER * selfShadow;
+		lightColor *= Color::PBRLightingCompensation;
 		dirDiffuse = 0;
 		dirSpecular = 0;
 		dirTransmission = 0;
@@ -207,7 +205,7 @@ namespace Hair
 			T = ShiftTangent(T, N, shift);
 		}
 
-		float backlit = SharedData::hairSpecularSettings.Transmission;
+		float backlit = SharedData::hairSpecularSettings.Transmission * selfShadow;
 
 		dirTransmission += D_Marschner(L, V, T, roughness, baseColor, 0, backlit) * lightColor * SharedData::hairSpecularSettings.SpecularMult;
 		dirTransmission += GetHairDiffuseAttenuationKajiyaKay(T, V, L, selfShadow, baseColor) * lightColor * SharedData::hairSpecularSettings.DiffuseMult;
@@ -221,10 +219,13 @@ namespace Hair
 		const float3 VN = normalize(tbnTr[2]);
 		const float3 L = normalize(context.lightDir);
 
+		float3 lightColor = context.lightColor * context.detailedShadow;
+		float selfShadow = context.hairShadow * context.softShadow;
+
 		if (SharedData::hairSpecularSettings.HairMode == 0) {
-			GetHairDirectLightScheuermann(lightingOutput.diffuse, lightingOutput.specular, lightingOutput.transmission, T, L, V, N, VN, context.lightColor, material.Shininess, context.hairShadow, uv, material.BaseColor);
+			GetHairDirectLightScheuermann(lightingOutput.diffuse, lightingOutput.specular, lightingOutput.transmission, T, L, V, N, VN, lightColor, material.Shininess, selfShadow, uv, material.BaseColor);
 		} else {
-			GetHairDirectLightMarschner(lightingOutput.diffuse, lightingOutput.specular, lightingOutput.transmission, T, L, V, N, VN, context.lightColor, material.Shininess, context.hairShadow, uv, material.BaseColor);
+			GetHairDirectLightMarschner(lightingOutput.diffuse, lightingOutput.specular, lightingOutput.transmission, T, L, V, N, VN, lightColor, material.Shininess, selfShadow, uv, material.BaseColor);
 		}
 	}
 
@@ -279,8 +280,8 @@ namespace Hair
 		float shadow = 1.0;
 		int hitCount = 0;
 
-		[unroll(stepCount)]
-		for(int i = 0; i < stepCount; ++i) {
+		[unroll(stepCount)] for (int i = 0; i < stepCount; ++i)
+		{
 			ray += lightDirVS * stepSize;
 			float2 rayUV = FrameBuffer::ViewToUV(ray, true, eyeIndex);
 			if (FrameBuffer::IsOutsideFrame(rayUV))

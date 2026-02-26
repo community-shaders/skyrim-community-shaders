@@ -1,6 +1,7 @@
 #pragma once
 #include <array>
 #include <d3d11.h>
+#include <winrt/base.h>
 
 namespace Util
 {
@@ -26,4 +27,14 @@ namespace Util
 	{
 		return REL::Module::IsVR() ? RE::RENDER_TARGETS_DEPTHSTENCIL::kVRTOTAL : RE::RENDER_TARGETS_DEPTHSTENCIL::kTOTAL;
 	}
+
+	HRESULT SaveTextureToFile(ID3D11Device* device, ID3D11DeviceContext* context, const std::filesystem::path& path, ID3D11Texture2D* tex);
+	HRESULT LoadTextureFromFile(ID3D11Device* device, const std::filesystem::path& path, ID3D11Texture2D** outTex, ID3D11ShaderResourceView** outSRV);
+
+	// Returns the current scene depth SRV, preferring terrain-blended depth when active.
+	// The caller does NOT own the returned pointer.
+	//
+	// prefer16bit = false (default): R32_FLOAT  -- for compute shaders doing arithmetic on depth
+	// prefer16bit = true:            R16_UNORM  -- for pixel shaders via slot 17 / SharedData::GetDepth
+	ID3D11ShaderResourceView* GetCurrentSceneDepthSRV(bool prefer16bit = false);
 }  // namespace Util

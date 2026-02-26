@@ -1,0 +1,10 @@
+#pragma once
+
+#include <array>
+
+namespace ThemePresets
+{
+	inline constexpr std::array<const char*, @THEME_PRESET_COUNT@> names = {
+@THEME_PRESET_NAMES@
+	};
+}

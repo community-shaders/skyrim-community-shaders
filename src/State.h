@@ -4,6 +4,7 @@
 #include <Tracy/TracyD3D11.hpp>
 
 #include <Buffer.h>
+#include <mutex>
 #include <nlohmann/json.hpp>
 
 using json = nlohmann::json;
@@ -23,6 +24,7 @@ public:
 		for (auto& v : drawCalls) v = 0;
 		for (auto& v : frameTimePerType) v = 0.0f;
 		for (auto& v : smoothFrameTimePerType) v = 0.0f;
+		for (auto& v : enabledClasses) v = true;
 
 		// Initialize QueryPerformanceCounter frequency
 		frameTimingFrequency.QuadPart = 0;
@@ -80,6 +82,10 @@ public:
 
 	void Load(ConfigMode a_configMode = ConfigMode::USER, bool a_allowReload = true);
 	void Save(ConfigMode a_configMode = ConfigMode::USER);
+
+	// In-memory serialization for A/B testing (avoids disk I/O during swaps)
+	void SaveToJson(nlohmann::json& o_json);
+	void LoadFromJson(nlohmann::json& i_json);
 
 	void LoadTheme();
 	void SaveTheme();
@@ -148,9 +154,7 @@ public:
 		InWorld = 1 << 0,
 		IsReflections = 1 << 1,
 		IsBeastRace = 1 << 2,
-		EffectShadows = 1 << 3,
-		IsTree = 1 << 4,
-		GrassSphereNormal = 1 << 5
+		GrassSphereNormal = 1 << 3
 	};
 
 	enum class ExtraFeatureDescriptors : uint32_t
@@ -177,11 +181,14 @@ public:
 		uint ExtraShaderDescriptor;
 		uint ExtraFeatureDescriptor;
 
+		float EffectRadius;
+		float3 pad0;
+
 		bool operator==(const PermutationCB& other) const
 		{
 			return PixelShaderDescriptor == other.PixelShaderDescriptor &&
 			       ExtraShaderDescriptor == other.ExtraShaderDescriptor &&
-			       ExtraFeatureDescriptor == other.ExtraFeatureDescriptor;
+			       ExtraFeatureDescriptor == other.ExtraFeatureDescriptor && EffectRadius == other.EffectRadius;
 		}
 	};
 	STATIC_ASSERT_ALIGNAS_16(PermutationCB);
@@ -287,6 +294,7 @@ public:
 		{ "TruePBR", false }
 	};
 	std::unordered_map<std::string, bool> disabledFeatures;
+	std::mutex m_mutex;
 
 	inline ~State()
 	{

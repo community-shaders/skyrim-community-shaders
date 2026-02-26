@@ -81,6 +81,7 @@ void LightEditor::DrawSettings()
 	ImGui::Spacing();
 
 	ImGui::CheckboxFlags("Inverse Square Light", reinterpret_cast<uint32_t*>(&current.data.flags), static_cast<uint32_t>(LightLimitFix::LightFlags::InverseSquare));
+	ImGui::CheckboxFlags("Linear Light", reinterpret_cast<uint32_t*>(&current.data.flags), static_cast<uint32_t>(LightLimitFix::LightFlags::Linear));
 
 	ImGui::Spacing();
 	ImGui::Spacing();
@@ -298,6 +299,11 @@ void LightEditor::UpdateSelectedLight(RE::TESObjectREFR* refr, RE::TESObjectLIGH
 		runtimeData->flags.set(LightLimitFix::LightFlags::InverseSquare);
 	else
 		runtimeData->flags.reset(LightLimitFix::LightFlags::InverseSquare);
+
+	if (current.data.flags.any(LightLimitFix::LightFlags::Linear))
+		runtimeData->flags.set(LightLimitFix::LightFlags::Linear);
+	else
+		runtimeData->flags.reset(LightLimitFix::LightFlags::Linear);
 
 	displayInfo.ownerFormId = refr ? refr->GetFormID() : 0;
 	displayInfo.ownerEditorId = refr ? clib_util::editorID::get_editorID(refr) : "Unknown";

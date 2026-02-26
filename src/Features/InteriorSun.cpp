@@ -131,6 +131,16 @@ void InteriorSun::BSBatchRenderer_RenderPassImmediately::thunk(RE::BSRenderPass*
 	func(a_pass, a_technique, a_alphaTest, a_renderFlags);
 }
 
+RE::BSEventNotifyControl InteriorSun::MenuOpenCloseEventHandler::ProcessEvent(const RE::MenuOpenCloseEvent* a_event, RE::BSTEventSource<RE::MenuOpenCloseEvent>*)
+{
+	if (a_event->menuName == RE::MainMenu::MENU_NAME) {
+		if (a_event->opening)
+			globals::features::interiorSun.isInteriorWithSun = false;
+	}
+
+	return RE::BSEventNotifyControl::kContinue;
+}
+
 void InteriorSun::ClearArrays()
 {
 	currentCellRoomsAndPortals.clear();
@@ -139,12 +149,6 @@ void InteriorSun::ClearArrays()
 		jobArray.clear();
 
 	arraysCleared = true;
-}
-
-namespace RE
-{
-	class BSMultiBoundRoom : public NiNode
-	{};
 }
 
 void InteriorSun::PopulateReplacementJobArrays(RE::TESObjectCELL* cell, const RE::NiPointer<RE::BSPortalGraph>& portalGraph, const RE::BSShadowDirectionalLight* dirLight, RE::BSTArray<RE::BSTArray<RE::NiPointer<RE::NiAVObject>>>& jobArrays)
@@ -175,7 +179,7 @@ void InteriorSun::PopulateReplacementJobArrays(RE::TESObjectCELL* cell, const RE
 	}
 
 	const auto playerPos = RE::PlayerCharacter::GetSingleton()->GetPosition();
-	auto lightDir = -dirLight->GetShadowDirectionalLightRuntimeData().lightDirection;
+	auto lightDir = -dirLight->GetShadowDirectionalLightRuntimeData().sunVector;
 	lightDir.Unitize();
 
 	// Add extra rooms and portals that are in the direction of the sun

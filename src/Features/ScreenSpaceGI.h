@@ -8,7 +8,7 @@ private:
 	static constexpr std::string_view MOD_ID = "130375";
 
 public:
-	bool inline SupportsVR() override { return false; }
+	bool inline SupportsVR() override { return true; }
 
 	virtual inline std::string GetName() override { return "Screen Space GI"; }
 	virtual inline std::string GetShortName() override { return "ScreenSpaceGI"; }
@@ -59,13 +59,14 @@ public:
 
 	struct Settings
 	{
-		bool Enabled = REL::Module::IsVR() ? false : true;   // disabled in VR by default
+		bool Enabled = true;
 		bool EnableGI = REL::Module::IsVR() ? false : true;  // AO only for VR by default
 		bool EnableExperimentalSpecularGI = false;
+		bool EnableVanillaSSAO = false;
 		// performance/quality
-		uint NumSlices = REL::Module::IsVR() ? 1u : 4u;  // AO preset for VR
-		uint NumSteps = REL::Module::IsVR() ? 6u : 8u;   // AO preset for VR
-		int ResolutionMode = 1;                          // 0-full, 1-half, 2-quarter - DBF default
+		uint NumSlices = REL::Module::IsVR() ? 3u : 4u;  // AO preset for VR
+		uint NumSteps = REL::Module::IsVR() ? 6u : 8u;
+		int ResolutionMode = 1;  // 0-full, 1-half, 2-quarter - DBF default
 		// visual
 		float MinScreenRadius = 0.01f;
 		float AORadius = 256.f;
@@ -163,5 +164,6 @@ public:
 	winrt::com_ptr<ID3D11ComputeShader> radianceDisoccCompute = nullptr;
 	winrt::com_ptr<ID3D11ComputeShader> giCompute = nullptr;
 	winrt::com_ptr<ID3D11ComputeShader> blurCompute = nullptr;
+	winrt::com_ptr<ID3D11ComputeShader> stereoSyncCompute = nullptr;
 	winrt::com_ptr<ID3D11ComputeShader> upsampleCompute = nullptr;
 };

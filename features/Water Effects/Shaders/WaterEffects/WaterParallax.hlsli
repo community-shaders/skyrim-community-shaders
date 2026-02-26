@@ -7,7 +7,7 @@ namespace WaterEffects
 	// http://www.diva-portal.org/smash/get/diva2:831762/FULLTEXT01.pdf
 	// https://bartwronski.files.wordpress.com/2014/03/ac4_gdc.pdf
 
-	float GetMipLevel(float2 coords, Texture2D<float4> tex)
+	float GetMipLevel(float2 coords, Texture2D<float4> tex, float screenNoise)
 	{
 		// Compute the current gradients:
 		float2 textureDims;
@@ -33,6 +33,9 @@ namespace WaterEffects
 		// Compute the current mip level  (* 0.5 is effectively computing a square root before )
 		float mipLevel = max(0.5 * log2(minTexCoordDelta), 0);
 
+		// Stochastic mip selection: use screen noise to select between adjacent mip levels
+		mipLevel = floor(mipLevel) + (screenNoise < frac(mipLevel) ? 1.0 : 0.0);
+
 		return mipLevel;
 	}
 
@@ -54,10 +57,12 @@ namespace WaterEffects
 		// Parallax scale is also multiplied by normalScalesRcp
 		parallaxOffsetTS *= 20.0;
 
+		float screenNoise = Random::InterleavedGradientNoise(input.HPosition.xy, SharedData::FrameCount);
+
 		float3 mipLevels;
-		mipLevels.x = GetMipLevel(input.TexCoord1.xy, Normals01Tex);
-		mipLevels.y = GetMipLevel(input.TexCoord1.zw, Normals02Tex);
-		mipLevels.z = GetMipLevel(input.TexCoord2.xy, Normals03Tex);
+		mipLevels.x = GetMipLevel(input.TexCoord1.xy, Normals01Tex, screenNoise);
+		mipLevels.y = GetMipLevel(input.TexCoord1.zw, Normals02Tex, screenNoise);
+		mipLevels.z = GetMipLevel(input.TexCoord2.xy, Normals03Tex, screenNoise);
 
 #if defined(VR)
 		mipLevels = mipLevels + 4;
@@ -165,22 +170,22 @@ namespace WaterEffects
 
 		float2 textureDims;
 		Normals01Tex.GetDimensions(textureDims.x, textureDims.y);
-#if defined(VR)
+#	if defined(VR)
 		textureDims /= 16.0;
-#else
+#	else
 		textureDims /= 8.0;
-#endif
+#	endif
 		float2 texCoordsPerSize = input.TexCoord1.xy * textureDims;
 		float2 dxSize = ddx(texCoordsPerSize);
 		float2 dySize = ddy(texCoordsPerSize);
 		float2 dTexCoords = dxSize * dxSize + dySize * dySize;
 		float minTexCoordDelta = max(dTexCoords.x, dTexCoords.y);
 		float mipLevel = max(0.5 * log2(minTexCoordDelta), 0);
-#if defined(VR)
+#	if defined(VR)
 		mipLevel += 4;
-#else
+#	else
 		mipLevel += 3;
-#endif
+#	endif
 
 		float stepSize = rcp(16.0);
 		float currBound = 0.0;

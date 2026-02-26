@@ -4,7 +4,7 @@
     "Version": "1.0.0",
     "Author": "Community Shaders Team",
     "Theme": {
-        "FontSize": 27.0,
+        "FontSize": 0.0,
         "FontName": "Jost/Jost-Regular.ttf",
         "GlobalScale": 0.0,
         "FontRoles": [
@@ -31,13 +31,20 @@
                 "Style": "Light",
                 "File": "CrimsonPro/CrimsonPro-Light.ttf",
                 "SizeScale": 1.0
+            },
+            {
+                "Family": "Crimson Pro",
+                "Style": "Light",
+                "File": "CrimsonPro/CrimsonPro-Light.ttf",
+                "SizeScale": 0.9
             }
         ],
         "UseSimplePalette": false,
         "ShowActionIcons": true,
         "UseMonochromeIcons": true,
+        "CenterHeader": true,
         "TooltipHoverDelay": 0.5,
-        "BackgroundBlurEnabled": false,
+        "BackgroundBlurEnabled": true,
         "Palette": {
             "Background": [0.25, 0.05, 0.05, 0.9],
             "Text": [1.0, 0.85, 0.85, 1.0],

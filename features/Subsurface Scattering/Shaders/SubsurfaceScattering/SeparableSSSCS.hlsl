@@ -30,8 +30,7 @@ cbuffer PerFrameSSS : register(b1)
 #	include "SubsurfaceScattering/SeparableSSS.hlsli"
 #endif
 
-[numthreads(8, 8, 1)] void main(uint3 DTid
-								: SV_DispatchThreadID) {
+[numthreads(8, 8, 1)] void main(uint3 DTid : SV_DispatchThreadID) {
 	// Early exit if dispatch thread is outside screen bounds
 	if (any(DTid.xy >= uint2(SharedData::BufferDim.xy)))
 		return;
@@ -63,7 +62,7 @@ cbuffer PerFrameSSS : register(b1)
 		bool humanProfile = MaskTexture[DTid.xy].y > 0.0;
 
 		float4 color = SSSSBlurCS(DTid.xy, texCoord, float2(0.0, 1.0), sssAmount, humanProfile);
-		color.rgb = Color::LinearToGamma(color.rgb);
+		color.rgb = Color::IrradianceToGamma(color.rgb);
 		SSSRW[DTid.xy] = float4(color.rgb, 1.0);
 	}
 

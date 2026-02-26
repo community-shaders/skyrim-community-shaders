@@ -12,34 +12,34 @@
 
 struct VS_INPUT
 {
-	float3 Position : POSITION0;
-	float2 TexCoord0 : TEXCOORD0;
-	float4 InstanceData1 : TEXCOORD4;
-	float4 InstanceData2 : TEXCOORD5;
-	float4 InstanceData3 : TEXCOORD6;
-	float4 InstanceData4 : TEXCOORD7;
+	float3 Position: POSITION0;
+	float2 TexCoord0: TEXCOORD0;
+	float4 InstanceData1: TEXCOORD4;
+	float4 InstanceData2: TEXCOORD5;
+	float4 InstanceData3: TEXCOORD6;
+	float4 InstanceData4: TEXCOORD7;
 #if defined(VR)
-	uint InstanceID : SV_INSTANCEID;
+	uint InstanceID: SV_INSTANCEID;
 #endif  // VR
 };
 
 struct VS_OUTPUT
 {
-	float4 Position : SV_POSITION0;
-	float3 TexCoord : TEXCOORD0;
+	float4 Position: SV_POSITION0;
+	float3 TexCoord: TEXCOORD0;
 
 #if defined(RENDER_DEPTH)
-	float4 Depth : TEXCOORD3;
+	float4 Depth: TEXCOORD3;
 #else
-	float4 WorldPosition : POSITION1;
-	float4 PreviousWorldPosition : POSITION2;
+	float4 WorldPosition: POSITION1;
+	float4 PreviousWorldPosition: POSITION2;
 #endif  // RENDER_DEPTH
-	float4 ViewPosition : POSITION3;
+	float4 ViewPosition: POSITION3;
 
 #if defined(VR)
-	float ClipDistance : SV_ClipDistance0;  // o11
-	float CullDistance : SV_CullDistance0;  // p11
-	uint EyeIndex : EYEIDX0;
+	float ClipDistance: SV_ClipDistance0;  // o11
+	float CullDistance: SV_CullDistance0;  // p11
+	uint EyeIndex: EYEIDX0;
 #endif  // VR
 };
 
@@ -107,14 +107,14 @@ typedef VS_OUTPUT PS_INPUT;
 
 struct PS_OUTPUT
 {
-	float4 Diffuse : SV_Target0;
+	float4 Diffuse: SV_Target0;
 
 #if !defined(RENDER_DEPTH)
 #	if defined(DEFERRED)
-	float2 MotionVector : SV_Target1;
-	float4 Normal : SV_Target2;
-	float4 Albedo : SV_Target3;
-	float4 Masks : SV_Target6;
+	float2 MotionVector: SV_Target1;
+	float4 Normal: SV_Target2;
+	float4 Albedo: SV_Target3;
+	float4 Masks: SV_Target6;
 #	endif  // DEFERRED
 #endif      // !RENDER_DEPTH
 };
@@ -167,16 +167,13 @@ const static float DepthOffsets[16] = {
 #		include "ScreenSpaceShadows/ScreenSpaceShadows.hlsli"
 #	endif
 
-#	if defined(TERRAIN_SHADOWS)
-#		include "TerrainShadows/TerrainShadows.hlsli"
-#	endif
-
-#	if defined(CLOUD_SHADOWS)
-#		include "CloudShadows/CloudShadows.hlsli"
-#	endif
-
 #	if defined(IBL)
 #		include "IBL/IBL.hlsli"
+#	endif
+
+#	if defined(EXP_HEIGHT_FOG)
+#		define SampColorSampler SampDiffuse
+#		include "ExponentialHeightFog/ExponentialHeightFog.hlsli"
 #	endif
 
 #	define LinearSampler SampDiffuse
@@ -214,6 +211,7 @@ PS_OUTPUT main(PS_INPUT input)
 	psout.Diffuse.w = 0;
 #	else
 	float4 baseColor = TexDiffuse.SampleBias(SampDiffuse, input.TexCoord.xy, SharedData::MipBias);
+	baseColor.xyz = Color::Diffuse(baseColor.xyz);
 
 	if ((baseColor.w - AlphaTestRefRS) < 0) {
 		discard;
@@ -233,23 +231,30 @@ PS_OUTPUT main(PS_INPUT input)
 	if (dirShadow != 0.0)
 		dirShadow *= ShadowSampling::GetWorldShadow(input.WorldPosition.xyz, FrameBuffer::CameraPosAdjust[eyeIndex].xyz, eyeIndex);
 
-	float3 diffuseColor = SharedData::DirLightColor.xyz * dirShadow * 0.5;
+	float llDirLightMult = (SharedData::linearLightingSettings.enableLinearLighting && !SharedData::linearLightingSettings.isDirLightLinear) ? SharedData::linearLightingSettings.dirLightMult : 1.0f;
+	float3 diffuseColor = Color::DirectionalLight(SharedData::DirLightColor.xyz / max(llDirLightMult, 1e-5), SharedData::linearLightingSettings.isDirLightLinear) * dirShadow * 0.5 * llDirLightMult * Color::VanillaNormalization();
+
+#			if defined(EXP_HEIGHT_FOG)
+	if (SharedData::exponentialHeightFogSettings.enabled) {
+		diffuseColor *= ExponentialHeightFog::GetSunlightFogAttenuation(input.WorldPosition.xyz, FrameBuffer::CameraPosAdjust[eyeIndex].xyz);
+	}
+#			endif
 
 	float3 ddx = ddx_coarse(input.WorldPosition.xyz);
 	float3 ddy = ddy_coarse(input.WorldPosition.xyz);
 	float3 normal = -normalize(cross(ddx, ddy));
 
-	float3 directionalAmbientColor = max(0, mul(SharedData::DirectionalAmbient, float4(normal, 1.0)));
+	float3 directionalAmbientColor = max(0, Color::Ambient(mul(SharedData::DirectionalAmbient, float4(normal, 1.0))));
 #			if defined(IBL)
 	float3 iblColor = 0;
 	if (SharedData::iblSettings.EnableDiffuseIBL) {
 		directionalAmbientColor *= SharedData::iblSettings.DALCAmount;
-#					if defined(SKYLIGHTING)
+#				if defined(SKYLIGHTING)
 		iblColor += Color::Saturation(ImageBasedLighting::GetIBLColor(-normal, 1.0), SharedData::iblSettings.IBLSaturation) * SharedData::iblSettings.DiffuseIBLScale;
-#					else
+#				else
 		iblColor += Color::Saturation(ImageBasedLighting::GetIBLColor(-normal), SharedData::iblSettings.IBLSaturation) * SharedData::iblSettings.DiffuseIBLScale;
-#					endif
-		directionalAmbientColor += Color::LinearToGamma(iblColor);
+#				endif
+		directionalAmbientColor += Color::IrradianceToGamma(iblColor);
 	}
 #			endif
 	diffuseColor += directionalAmbientColor;
@@ -267,23 +272,30 @@ PS_OUTPUT main(PS_INPUT input)
 #		else
 	float dirShadow = ShadowSampling::GetWorldShadow(input.WorldPosition.xyz, FrameBuffer::CameraPosAdjust[eyeIndex].xyz, eyeIndex);
 
-	float3 diffuseColor = SharedData::DirLightColor.xyz * dirShadow * 0.5;
+	float llDirLightMult = (SharedData::linearLightingSettings.enableLinearLighting && !SharedData::linearLightingSettings.isDirLightLinear) ? SharedData::linearLightingSettings.dirLightMult : 1.0f;
+	float3 diffuseColor = Color::DirectionalLight(SharedData::DirLightColor.xyz / max(llDirLightMult, 1e-5), SharedData::linearLightingSettings.isDirLightLinear) * dirShadow * 0.5 * llDirLightMult * Color::VanillaNormalization();
+
+#			if defined(EXP_HEIGHT_FOG)
+	if (SharedData::exponentialHeightFogSettings.enabled) {
+		diffuseColor *= ExponentialHeightFog::GetSunlightFogAttenuation(input.WorldPosition.xyz, FrameBuffer::CameraPosAdjust[eyeIndex].xyz);
+	}
+#			endif
 
 	float3 ddx = ddx_coarse(input.WorldPosition.xyz);
 	float3 ddy = ddy_coarse(input.WorldPosition.xyz);
 	float3 normal = normalize(cross(ddx, ddy));
 
-	float3 directionalAmbientColor = mul(SharedData::DirectionalAmbient, float4(normal, 1.0));
+	float3 directionalAmbientColor = Color::Ambient(mul(SharedData::DirectionalAmbient, float4(normal, 1.0)));
 #			if defined(IBL)
 	float3 iblColor = 0;
 	if (SharedData::iblSettings.EnableDiffuseIBL) {
 		directionalAmbientColor *= SharedData::iblSettings.DALCAmount;
-#					if defined(SKYLIGHTING)
+#				if defined(SKYLIGHTING)
 		iblColor += Color::Saturation(ImageBasedLighting::GetIBLColor(-normal, 1.0), SharedData::iblSettings.IBLSaturation) * SharedData::iblSettings.DiffuseIBLScale;
-#					else
+#				else
 		iblColor += Color::Saturation(ImageBasedLighting::GetIBLColor(-normal), SharedData::iblSettings.IBLSaturation) * SharedData::iblSettings.DiffuseIBLScale;
-#					endif
-		directionalAmbientColor += Color::LinearToGamma(iblColor);
+#				endif
+		directionalAmbientColor += Color::IrradianceToGamma(iblColor);
 	}
 #			endif
 	diffuseColor += directionalAmbientColor;

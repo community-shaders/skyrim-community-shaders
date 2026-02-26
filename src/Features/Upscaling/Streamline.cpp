@@ -172,6 +172,14 @@ void Streamline::CheckFeatures(IDXGIAdapter* a_adapter)
 	if (featureDLSS) {
 		logger::info("[Streamline] DLSS feature is loaded");
 		featureDLSS = slIsFeatureSupported(sl::kFeatureDLSS, adapterInfo) == sl::Result::eOk;
+
+		isRTXBelow40series = IsRTXAndBelow40Series(a_adapter);
+
+		if (isRTXBelow40series)
+			logger::info("[Streamline] Older RTX GPU detected, DLSS 4.0 will be used instead of DLSS 4.5");
+		else
+			logger::info("[Streamline] Newer RTX GPU detected, DLSS 4.5 will be used instead of DLSS 4.0");
+
 	} else {
 		logger::info("[Streamline] DLSS feature is not loaded");
 		sl::FeatureRequirements featureRequirements;
@@ -200,58 +208,103 @@ void Streamline::PostDevice()
  *
  * Populates and submits camera parameters, projection matrices, motion vector settings, and other per-frame constants to the Streamline SDK for the current frame. Uses cached framebuffer data and global state to ensure correct configuration for upscaling and frame generation features.
  */
-void Streamline::CheckFrameConstants()
+void Streamline::CheckFrameConstants(sl::ViewportHandle p_viewport, uint32_t eyeIndex)
 {
-	if (frameChecker.IsNewFrame() && globals::features::upscaling.streamline.initialized) {
+	if (!globals::features::upscaling.streamline.initialized)
+		return;
+
+	// Get new frame token once per frame (only on first call)
+	if (frameChecker.IsNewFrame()) {
 		slGetNewFrameToken(frameToken, &globals::state->frameCount);
+	}
 
-		auto state = globals::state;
+	// In VR, we need to set constants for each viewport/eye separately
+	// In non-VR, this is called once per frame
+	auto state = globals::state;
 
-		sl::Constants slConstants = {};
+	sl::Constants slConstants = {};
 
-		if (globals::game::isVR) {
-			slConstants.cameraAspectRatio = (state->screenSize.x * 0.5f) / state->screenSize.y;
-		} else {
-			slConstants.cameraAspectRatio = state->screenSize.x / state->screenSize.y;
-		}
+	// Calculate aspect ratio for the SINGLE EYE
+	float eyeWidth = state->screenSize.x * (globals::game::isVR ? 0.5f : 1.0f);
+	slConstants.cameraAspectRatio = eyeWidth / state->screenSize.y;
 
-		slConstants.cameraFOV = Util::GetVerticalFOVRad();
-		slConstants.cameraNear = *globals::game::cameraNear;
-		slConstants.cameraFar = *globals::game::cameraFar;
+	slConstants.cameraFOV = Util::GetVerticalFOVRad();
+	slConstants.cameraNear = *globals::game::cameraNear;
+	slConstants.cameraFar = *globals::game::cameraFar;
 
-		auto viewMatrix = globals::game::frameBufferCached.GetCameraViewInverse().Transpose();
-		auto cameraViewToClip = globals::game::frameBufferCached.GetCameraProjUnjittered().Transpose();
+	auto viewMatrix = globals::game::frameBufferCached.GetCameraViewInverse(eyeIndex).Transpose();
+	auto cameraViewToClip = globals::game::frameBufferCached.GetCameraProjUnjittered(eyeIndex).Transpose();
 
-		slConstants.cameraMotionIncluded = sl::Boolean::eTrue;
-		slConstants.cameraPinholeOffset = { 0.f, 0.f };
-		slConstants.cameraRight = { viewMatrix._11, viewMatrix._12, viewMatrix._13 };
-		slConstants.cameraUp = { viewMatrix._21, viewMatrix._22, viewMatrix._23 };
-		slConstants.cameraFwd = { viewMatrix._31, viewMatrix._32, viewMatrix._33 };
-		slConstants.cameraPos = *(sl::float3*)&globals::game::frameBufferCached.GetCameraPosAdjust();
-		slConstants.cameraViewToClip = *(sl::float4x4*)&cameraViewToClip;
-		slConstants.depthInverted = sl::Boolean::eFalse;
+	slConstants.cameraMotionIncluded = sl::Boolean::eTrue;
+	slConstants.cameraPinholeOffset = { 0.f, 0.f };
+	slConstants.cameraRight = { viewMatrix._11, viewMatrix._12, viewMatrix._13 };
+	slConstants.cameraUp = { viewMatrix._21, viewMatrix._22, viewMatrix._23 };
+	slConstants.cameraFwd = { viewMatrix._31, viewMatrix._32, viewMatrix._33 };
+	slConstants.cameraPos = *(sl::float3*)&globals::game::frameBufferCached.GetCameraPosAdjust(eyeIndex);
+	slConstants.cameraViewToClip = *(sl::float4x4*)&cameraViewToClip;
+	slConstants.depthInverted = sl::Boolean::eFalse;
 
+	if (globals::game::isVR) {
+		// VR: compute clipToCameraView / clipToPrevClip / prevClipToClip from Skyrim's per-eye matrices.
+		// recalculateCameraMatrices() uses a single static prev-frame slot -- unusable for two viewports.
+		sl::matrixFullInvert(slConstants.clipToCameraView, slConstants.cameraViewToClip);
+
+		auto currViewProj = globals::game::frameBufferCached.GetCameraViewProjUnjittered(eyeIndex).Transpose();
+		auto prevViewProj = globals::game::frameBufferCached.GetCameraPreviousViewProjUnjittered(eyeIndex).Transpose();
+
+		sl::float4x4 currViewProjSL = *(sl::float4x4*)&currViewProj;
+		sl::float4x4 prevViewProjSL = *(sl::float4x4*)&prevViewProj;
+
+		sl::float4x4 invCurrViewProj;
+		sl::matrixFullInvert(invCurrViewProj, currViewProjSL);
+		sl::matrixMul(slConstants.clipToPrevClip, invCurrViewProj, prevViewProjSL);
+		sl::matrixFullInvert(slConstants.prevClipToClip, slConstants.clipToPrevClip);
+	} else {
 		recalculateCameraMatrices(slConstants);
+	}
 
-		auto& upscaling = globals::features::upscaling;
-		auto jitter = upscaling.jitter;
-		slConstants.jitterOffset = { -jitter.x, -jitter.y };
-		slConstants.reset = sl::Boolean::eFalse;
+	auto& upscaling = globals::features::upscaling;
+	auto jitter = upscaling.jitter;
+	slConstants.jitterOffset = { -jitter.x, -jitter.y };
+	slConstants.reset = sl::Boolean::eFalse;
 
-		slConstants.mvecScale = { (globals::game::isVR ? 0.5f : 1.0f), 1 };
-		slConstants.motionVectors3D = sl::Boolean::eFalse;
-		slConstants.motionVectorsInvalidValue = FLT_MIN;
-		slConstants.orthographicProjection = sl::Boolean::eFalse;
-		slConstants.motionVectorsDilated = sl::Boolean::eFalse;
-		slConstants.motionVectorsJittered = sl::Boolean::eFalse;
+	slConstants.mvecScale = { 1.0f, 1.0f };
+	slConstants.motionVectors3D = sl::Boolean::eFalse;
+	slConstants.motionVectorsInvalidValue = FLT_MIN;
+	slConstants.orthographicProjection = sl::Boolean::eFalse;
+	slConstants.motionVectorsDilated = sl::Boolean::eFalse;
+	slConstants.motionVectorsJittered = sl::Boolean::eFalse;
 
-		if (SL_FAILED(res, slSetConstants(slConstants, *frameToken, viewport))) {
-			logger::error("[Streamline] Could not set constants");
-		}
+	if (SL_FAILED(res, slSetConstants(slConstants, *frameToken, p_viewport))) {
+		logger::error("[Streamline] Could not set constants for eye {}", eyeIndex);
 	}
 }
 
-void Streamline::SetDLSSOptions()
+bool Streamline::IsRTXAndBelow40Series(IDXGIAdapter* a_adapter)
+{
+	DXGI_ADAPTER_DESC adapterDesc = {};
+
+	a_adapter->GetDesc(&adapterDesc);
+
+	UINT vendorId = adapterDesc.VendorId;
+	UINT deviceId = adapterDesc.DeviceId;
+
+	// Check if NVIDIA
+	if (vendorId != 0x10DE)
+		return false;
+
+	// RTX 30 series (Ampere) - 0x2200-0x25FF
+	if (deviceId >= 0x2200 && deviceId <= 0x2600)
+		return true;
+
+	// RTX 20 series (Turing with RT cores) - 0x1E00-0x1FFF
+	if (deviceId >= 0x1E00 && deviceId <= 0x1FFF)
+		return true;
+
+	return false;
+}
+
+void Streamline::SetDLSSOptions(sl::ViewportHandle p_viewport, uint32_t width)
 {
 	sl::DLSSOptions dlssOptions{};
 
@@ -277,133 +330,170 @@ void Streamline::SetDLSSOptions()
 
 	auto state = globals::state;
 
-	dlssOptions.outputWidth = (uint)state->screenSize.x;
+	dlssOptions.outputWidth = width;
 	dlssOptions.outputHeight = (uint)state->screenSize.y;
-	dlssOptions.colorBuffersHDR = sl::Boolean::eTrue;
+
+	// Detect HDR from kMAIN format at runtime -- VR kMAIN may be 8-bit while SE is FP16
+	{
+		auto renderer = globals::game::renderer;
+		auto& main = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMAIN];
+		D3D11_TEXTURE2D_DESC mainDesc;
+		static_cast<ID3D11Texture2D*>(main.texture)->GetDesc(&mainDesc);
+		bool isHDR = mainDesc.Format != DXGI_FORMAT_R8G8B8A8_UNORM;
+		dlssOptions.colorBuffersHDR = isHDR ? sl::Boolean::eTrue : sl::Boolean::eFalse;
+	}
 	dlssOptions.useAutoExposure = sl::Boolean::eTrue;
+
+	std::optional<sl::DLSSPreset> customPreset;
+	switch (globals::features::upscaling.settings.presetDLSS) {
+	case 1:
+		customPreset = sl::DLSSPreset::ePresetJ;
+		break;
+	case 2:
+		customPreset = sl::DLSSPreset::ePresetK;
+		break;
+	case 3:
+		customPreset = sl::DLSSPreset::ePresetL;
+		break;
+	case 4:
+		customPreset = sl::DLSSPreset::ePresetM;
+		break;
+	}
+
+	if (customPreset.has_value()) {
+		dlssOptions.dlaaPreset = customPreset.value();
+		dlssOptions.ultraQualityPreset = customPreset.value();
+		dlssOptions.qualityPreset = customPreset.value();
+		dlssOptions.balancedPreset = customPreset.value();
+		dlssOptions.performancePreset = customPreset.value();
+		dlssOptions.ultraPerformancePreset = customPreset.value();
+	} else if (isRTXBelow40series) {
+		dlssOptions.dlaaPreset = sl::DLSSPreset::ePresetJ;
+		dlssOptions.ultraQualityPreset = sl::DLSSPreset::ePresetJ;
+		dlssOptions.qualityPreset = sl::DLSSPreset::ePresetJ;
+		dlssOptions.balancedPreset = sl::DLSSPreset::ePresetJ;
+		dlssOptions.performancePreset = sl::DLSSPreset::ePresetJ;
+		dlssOptions.ultraPerformancePreset = sl::DLSSPreset::ePresetM;
+	} else {
+		dlssOptions.dlaaPreset = sl::DLSSPreset::ePresetJ;
+		dlssOptions.ultraQualityPreset = sl::DLSSPreset::ePresetJ;
+		dlssOptions.qualityPreset = sl::DLSSPreset::ePresetM;
+		dlssOptions.balancedPreset = sl::DLSSPreset::ePresetM;
+		dlssOptions.performancePreset = sl::DLSSPreset::ePresetM;
+		dlssOptions.ultraPerformancePreset = sl::DLSSPreset::ePresetL;
+	}
 
 	dlssOptions.preExposure = 1.0f;
 	dlssOptions.sharpness = 0.0f;
 
-	// Set DLSS preset based on VR mode
-	sl::DLSSPreset preset = sl::DLSSPreset::ePresetK;  // Default
-	switch (globals::features::upscaling.settings.DLSSPreset) {
-	case 0:
-		preset = sl::DLSSPreset::ePresetF;
-		break;
-	case 1:
-		preset = sl::DLSSPreset::ePresetJ;
-		break;
-	case 2:
-	default:
-		preset = sl::DLSSPreset::ePresetK;
-		break;
+	if (SL_FAILED(result, slDLSSSetOptions(p_viewport, dlssOptions))) {
+		logger::critical("[Streamline] Could not enable DLSS");
+	}
+}
+
+void Streamline::EvaluateDLSS(sl::ViewportHandle vp, uint32_t eyeIndex,
+	ID3D11Resource* colorIn, ID3D11Resource* colorOut, ID3D11Resource* depth,
+	ID3D11Resource* mvec, ID3D11Resource* reactiveMask, ID3D11Resource* transparencyMask,
+	const sl::Extent& extentIn, const sl::Extent& extentOut, uint32_t outputWidth)
+{
+	auto context = globals::d3d::context;
+
+	sl::Resource colorInRes = { sl::ResourceType::eTex2d, colorIn, 0 };
+	sl::Resource colorOutRes = { sl::ResourceType::eTex2d, colorOut, 0 };
+	sl::Resource depthRes = { sl::ResourceType::eTex2d, depth, 0 };
+	sl::Resource mvecRes = { sl::ResourceType::eTex2d, mvec, 0 };
+	sl::Resource reactiveMaskRes = { sl::ResourceType::eTex2d, reactiveMask, 0 };
+	sl::Resource transparencyMaskRes = { sl::ResourceType::eTex2d, transparencyMask, 0 };
+
+	CheckFrameConstants(vp, eyeIndex);
+	SetDLSSOptions(vp, outputWidth);
+
+	sl::ResourceTag tags[] = {
+		{ &colorInRes, sl::kBufferTypeScalingInputColor, sl::ResourceLifecycle::eOnlyValidNow, &extentIn },
+		{ &colorOutRes, sl::kBufferTypeScalingOutputColor, sl::ResourceLifecycle::eOnlyValidNow, &extentOut },
+		{ &depthRes, sl::kBufferTypeDepth, sl::ResourceLifecycle::eValidUntilPresent, &extentIn },
+		{ &mvecRes, sl::kBufferTypeMotionVectors, sl::ResourceLifecycle::eValidUntilPresent, &extentIn },
+		{ &reactiveMaskRes, sl::kBufferTypeBiasCurrentColorHint, sl::ResourceLifecycle::eValidUntilPresent, &extentIn },
+		{ &transparencyMaskRes, sl::kBufferTypeTransparencyHint, sl::ResourceLifecycle::eValidUntilPresent, &extentIn }
+	};
+
+	slSetTag(vp, tags, _countof(tags), context);
+
+	sl::ViewportHandle view(vp);
+	const sl::BaseStructure* inputs[] = { &view };
+
+	auto state = globals::state;
+	if (state->frameAnnotations) {
+		if (globals::game::isVR) {
+			char buf[32];
+			snprintf(buf, sizeof(buf), "DLSS Evaluate Eye %u", eyeIndex);
+			state->BeginPerfEvent(buf);
+		} else {
+			state->BeginPerfEvent("DLSS Evaluate");
+		}
 	}
 
-	dlssOptions.dlaaPreset = preset;
-	dlssOptions.qualityPreset = preset;
-	dlssOptions.balancedPreset = preset;
-	dlssOptions.performancePreset = preset;
-	dlssOptions.ultraPerformancePreset = preset;
+	sl::Result evalResult = slEvaluateFeature(sl::kFeatureDLSS, *frameToken, inputs, _countof(inputs), context);
 
-	if (SL_FAILED(result, slDLSSSetOptions(viewport, dlssOptions))) {
-		logger::critical("[Streamline] Could not enable DLSS");
+	if (state->frameAnnotations)
+		state->EndPerfEvent();
+
+	if (evalResult != sl::Result::eOk) {
+		static bool evalErrorLogged[2] = { false, false };
+		uint32_t logIdx = globals::game::isVR ? eyeIndex : 0;
+		if (!evalErrorLogged[logIdx]) {
+			evalErrorLogged[logIdx] = true;
+			logger::error("[Streamline] slEvaluateFeature failed{} result={}", globals::game::isVR ? std::format(" for eye {}", eyeIndex) : "", (int)evalResult);
+		}
 	}
 }
 
 void Streamline::Upscale(ID3D11Resource* a_upscalingTexture, ID3D11Resource* a_reactiveMask, ID3D11Resource* a_transparencyCompositionMask, ID3D11Resource* a_motionVectors)
 {
-	CheckFrameConstants();
-	SetDLSSOptions();
-
 	auto state = globals::state;
 
 	auto renderer = globals::game::renderer;
 	auto& depthTexture = renderer->GetDepthStencilData().depthStencils[RE::RENDER_TARGETS_DEPTHSTENCIL::kMAIN];
 
-	{
-		auto screenSize = state->screenSize;
-		auto renderSize = Util::ConvertToDynamic(screenSize);
+	auto screenSize = state->screenSize;
+	auto renderSize = Util::ConvertToDynamic(screenSize);
 
-		sl::Extent lowResExtent{ 0, 0, (uint)renderSize.x, (uint)renderSize.y };
-		sl::Extent fullExtent{ 0, 0, (uint)screenSize.x, (uint)screenSize.y };
+	// VR: Combined-buffer mode with extent offsets causes temporal ghosting on the right eye
+	// because DLSS's internal history buffers use extent offsets as indices.
+	// Per-eye isolation with extents at {0,0} is required.
+	if (globals::game::isVR) {
+		auto& upscaling = globals::features::upscaling;
+		uint32_t eyeWidthOut = (uint32_t)(screenSize.x / 2);
+		uint32_t eyeHeightOut = (uint32_t)screenSize.y;
+		uint32_t eyeWidthIn = (uint32_t)(renderSize.x / 2);
+		uint32_t eyeHeightIn = (uint32_t)renderSize.y;
 
-		sl::Resource colorIn = { sl::ResourceType::eTex2d, a_upscalingTexture, 0 };
-		sl::Resource colorOut = { sl::ResourceType::eTex2d, a_upscalingTexture, 0 };
-		sl::Resource depth = { sl::ResourceType::eTex2d, depthTexture.texture, 0 };
-		sl::Resource mvec = { sl::ResourceType::eTex2d, a_motionVectors, 0 };
+		upscaling.PreparePerEyeInputs(a_upscalingTexture, depthTexture.texture, a_motionVectors, a_reactiveMask, a_transparencyCompositionMask);
 
-		sl::ResourceTag colorInTag = sl::ResourceTag{ &colorIn, sl::kBufferTypeScalingInputColor, sl::ResourceLifecycle::eOnlyValidNow, &lowResExtent };
-		sl::ResourceTag colorOutTag = sl::ResourceTag{ &colorOut, sl::kBufferTypeScalingOutputColor, sl::ResourceLifecycle::eOnlyValidNow, &fullExtent };
-		sl::ResourceTag depthTag = sl::ResourceTag{ &depth, sl::kBufferTypeDepth, sl::ResourceLifecycle::eValidUntilPresent, &lowResExtent };
-		sl::ResourceTag mvecTag = sl::ResourceTag{ &mvec, sl::kBufferTypeMotionVectors, sl::ResourceLifecycle::eValidUntilPresent, &lowResExtent };
+		for (uint32_t i = 0; i < 2; ++i) {
+			sl::ViewportHandle vp = (i == 1) ? viewportRight : viewport;
+			sl::Extent extentIn{ 0, 0, eyeWidthIn, eyeHeightIn };
+			sl::Extent extentOut{ 0, 0, eyeWidthOut, eyeHeightOut };
 
-		sl::Resource reactiveMask = { sl::ResourceType::eTex2d, a_reactiveMask, 0 };
-		sl::ResourceTag reactiveMaskTag = sl::ResourceTag{ &reactiveMask, sl::kBufferTypeBiasCurrentColorHint, sl::ResourceLifecycle::eValidUntilPresent, &lowResExtent };
+			EvaluateDLSS(vp, i,
+				upscaling.vrIntermediateColorIn[i]->resource.get(), upscaling.vrIntermediateColorOut[i]->resource.get(),
+				upscaling.vrIntermediateDepth[i]->resource.get(), upscaling.vrIntermediateMotionVectors[i]->resource.get(),
+				upscaling.vrIntermediateReactiveMask[i]->resource.get(), upscaling.vrIntermediateTransparencyMask[i]->resource.get(),
+				extentIn, extentOut, eyeWidthOut);
+		}
 
-		sl::Resource transparencyCompositionMask = { sl::ResourceType::eTex2d, a_transparencyCompositionMask, 0 };
-		sl::ResourceTag transparencyCompositionMaskTag = sl::ResourceTag{ &transparencyCompositionMask, sl::kBufferTypeTransparencyHint, sl::ResourceLifecycle::eValidUntilPresent, &lowResExtent };
-
-		sl::ResourceTag resourceTags[] = { colorInTag, colorOutTag, depthTag, mvecTag, reactiveMaskTag, transparencyCompositionMaskTag };
-
-		slSetTag(viewport, resourceTags, _countof(resourceTags), globals::d3d::context);
-	}
-
-	sl::ViewportHandle view(viewport);
-	const sl::BaseStructure* inputs[] = { &view };
-	slEvaluateFeature(sl::kFeatureDLSS, *frameToken, inputs, _countof(inputs), globals::d3d::context);
-}
-
-float2 Streamline::GetInputResolutionScale(uint32_t outputWidth, uint32_t outputHeight, uint32_t qualityMode)
-{
-	sl::DLSSMode dlssMode;
-	switch (qualityMode) {
-	case 1:
-		dlssMode = sl::DLSSMode::eMaxQuality;
-		break;
-	case 2:
-		dlssMode = sl::DLSSMode::eBalanced;
-		break;
-	case 3:
-		dlssMode = sl::DLSSMode::eMaxPerformance;
-		break;
-	case 4:
-		dlssMode = sl::DLSSMode::eUltraPerformance;
-		break;
-	default:
-		dlssMode = sl::DLSSMode::eDLAA;
-		break;
-	}
-
-	sl::DLSSOptions dlssOptions{};
-	dlssOptions.mode = dlssMode;
-	dlssOptions.outputWidth = outputWidth;
-	dlssOptions.outputHeight = outputHeight;
-
-	sl::DLSSOptimalSettings optimalSettings{};
-	sl::Result result = slDLSSGetOptimalSettings(dlssOptions, optimalSettings);
-	if (result != sl::Result::eOk) {
-		logger::critical("[Streamline] Failed to get DLSS optimal settings, error code: {}", (int)result);
-		return { 1.0f, 1.0f };
-	}
-
-	float scaleX;
-	float scaleY;
-
-	if (globals::game::ui->GameIsPaused()) {
-		// Calculate scale as ratio of minimum render resolution to output resolution
-		scaleX = (float)optimalSettings.renderWidthMin / (float)outputWidth;
-		scaleY = (float)optimalSettings.renderHeightMin / (float)outputHeight;
+		upscaling.FinalizePerEyeOutputs(a_upscalingTexture);
 	} else {
-		// Calculate scale as ratio of optimal render resolution to output resolution
-		scaleX = (float)optimalSettings.optimalRenderWidth / (float)outputWidth;
-		scaleY = (float)optimalSettings.optimalRenderHeight / (float)outputHeight;
+		// Non-VR: Simple full-texture upscale
+		sl::Extent extentIn{ 0, 0, (uint)renderSize.x, (uint)renderSize.y };
+		sl::Extent extentOut{ 0, 0, (uint)screenSize.x, (uint)screenSize.y };
+
+		EvaluateDLSS(viewport, 0,
+			a_upscalingTexture, a_upscalingTexture,
+			depthTexture.texture, a_motionVectors, a_reactiveMask, a_transparencyCompositionMask,
+			extentIn, extentOut, (uint)screenSize.x);
 	}
-
-	// Return separate X and Y scales for more precision
-	return { scaleX, scaleY };
 }
-
 /**
  * @brief Releases DLSS resources and disables DLSS for the current viewport.
  *
@@ -413,6 +503,12 @@ void Streamline::DestroyDLSSResources()
 {
 	sl::DLSSOptions dlssOptions{};
 	dlssOptions.mode = sl::DLSSMode::eOff;
+
 	slDLSSSetOptions(viewport, dlssOptions);
 	slFreeResources(sl::kFeatureDLSS, viewport);
+
+	if (globals::game::isVR) {
+		slDLSSSetOptions(viewportRight, dlssOptions);
+		slFreeResources(sl::kFeatureDLSS, viewportRight);
+	}
 }

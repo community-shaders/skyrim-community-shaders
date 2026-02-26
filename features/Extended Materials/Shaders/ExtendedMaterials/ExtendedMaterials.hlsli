@@ -35,42 +35,45 @@ namespace ExtendedMaterials
 		return float4(AdjustDisplacementNormalized(displacement.x, params), AdjustDisplacementNormalized(displacement.y, params), AdjustDisplacementNormalized(displacement.z, params), AdjustDisplacementNormalized(displacement.w, params));
 	}
 
-	float GetMipLevel(float2 coords, Texture2D<float4> tex)
+	float GetMipLevel(float2 coords, Texture2D<float4> tex, float screenNoise)
 	{
 		// Compute the current gradients:
 		float2 textureDims;
 		tex.GetDimensions(textureDims.x, textureDims.y);
 
-		#if !defined(PARALLAX) && !defined(TRUE_PBR)
-				textureDims /= 2.0;
-		#endif
+#if !defined(PARALLAX) && !defined(TRUE_PBR)
+		textureDims /= 2.0;
+#endif
 
-		#if defined(VR)
-				textureDims /= 2.0;
-		#endif
+#if defined(VR)
+		textureDims /= 2.0;
+#endif
 
-			float2 texCoordsPerSize = coords * textureDims;
+		float2 texCoordsPerSize = coords * textureDims;
 
-			float2 dxSize = ddx(texCoordsPerSize);
-			float2 dySize = ddy(texCoordsPerSize);
+		float2 dxSize = ddx(texCoordsPerSize);
+		float2 dySize = ddy(texCoordsPerSize);
 
-			// Find min of change in u and v across quad: compute du and dv magnitude across quad
-			//float2 dTexCoords = dxSize * dxSize + dySize * dySize;
+		// Find min of change in u and v across quad: compute du and dv magnitude across quad
+		//float2 dTexCoords = dxSize * dxSize + dySize * dySize;
 
-			// Standard mipmapping uses max here
-			float minTexCoordDelta = min(dot(dxSize, dxSize), dot(dySize, dySize));
+		// Standard mipmapping uses max here
+		float minTexCoordDelta = min(dot(dxSize, dxSize), dot(dySize, dySize));
 
-			// Compute the current mip level  (* 0.5 is effectively computing a square root before )
-			float mipLevel = max(0.5 * log2(minTexCoordDelta), 0);
+		// Compute the current mip level  (* 0.5 is effectively computing a square root before )
+		float mipLevel = max(0.5 * log2(minTexCoordDelta), 0);
 
-		#if !defined(PARALLAX) && !defined(TRUE_PBR)
-				mipLevel++;
-		#endif
+#if !defined(PARALLAX) && !defined(TRUE_PBR)
+		mipLevel++;
+#endif
 
-		// VR: Apply more conservative mipmap level adjustments to reduce over-blurring and shimmering
-		#if defined(VR)
-				mipLevel++;
-		#endif
+// VR: Apply more conservative mipmap level adjustments to reduce over-blurring and shimmering
+#if defined(VR)
+		mipLevel++;
+#endif
+
+		// Stochastic mip selection: use screen noise to select between adjacent mip levels
+		mipLevel = floor(mipLevel) + (screenNoise < frac(mipLevel) ? 1.0 : 0.0);
 
 		return mipLevel;
 	}
@@ -176,11 +179,13 @@ namespace ExtendedMaterials
 		ProcessTerrainHeightWeights(heightBlend, w1, w2, heights, weights, total);
 #		if defined(TERRAIN_VARIATION)
 		// Boost height by 30% when terrain variation is enabled to enhance depth perception
-		[branch] if (SharedData::terrainVariationSettings.enableTilingFix) {
+		[branch] if (SharedData::terrainVariationSettings.enableTilingFix)
+		{
 			total *= 1.3;
 		}
 #		endif
-		return total;	}
+		return total;
+	}
 #	else
 	float GetTerrainHeight(float screenNoise, PS_INPUT input, float2 coords, float mipLevels[6], DisplacementParams params[6], float blendFactor, float4 w1, float2 w2,
 #		if defined(TERRAIN_VARIATION)
@@ -298,7 +303,8 @@ namespace ExtendedMaterials
 		ProcessTerrainHeightWeights(heightBlend, w1, w2, heights, weights, total);
 #		if defined(TERRAIN_VARIATION)
 		// Boost height by 30% when terrain variation is enabled to enhance depth perception
-		[branch] if (SharedData::terrainVariationSettings.enableTilingFix) {
+		[branch] if (SharedData::terrainVariationSettings.enableTilingFix)
+		{
 			total *= 1.3;
 		}
 #		endif
@@ -349,8 +355,6 @@ namespace ExtendedMaterials
 
 #if defined(LANDSCAPE)
 		if (nearBlendToFar < 1.0) {
-			uint numSteps = uint((max(6, scale * 8) * (1.0 - nearBlendToFar)) + 0.5);
-			numSteps = clamp((numSteps + 3) & ~0x03, 4, max(8, scale * 8));
 #else
 #	if defined(TRUE_PBR)
 		if ((PBRFlags & PBR::Flags::InterlayerParallax) != 0 || nearBlendToFar < 1.0)
@@ -358,12 +362,12 @@ namespace ExtendedMaterials
 		if (nearBlendToFar < 1.0)
 #	endif
 		{
+#endif
 			float maxSteps = SharedData::InInterior ? 8 : 16;
 			uint numSteps = uint((maxSteps * (1.0 - nearBlendToFar)) + 0.5);
-			numSteps = clamp((numSteps + 3) & ~0x03, 4, max(6, scale * maxSteps));
-#endif
+			numSteps = clamp(numSteps, 1, max(6, scale * maxSteps));
+
 			float stepSize = rcp(numSteps);
-			stepSize += (noise * 2.0 - 1.0) * stepSize * stepSize;
 
 			float2 offsetPerStep = viewDirTS.xy * float2(maxHeight, maxHeight) * stepSize.xx;
 			float2 prevOffset = viewDirTS.xy * float2(minHeight, minHeight) + coords.xy;
@@ -565,11 +569,14 @@ namespace ExtendedMaterials
 #		endif
 #		if defined(TERRAIN_VARIATION)
 			// Enhance shadow contrast for terrain variation to maintain visual quality
-			[branch] if (SharedData::terrainVariationSettings.enableTilingFix) {
+			[branch] if (SharedData::terrainVariationSettings.enableTilingFix)
+			{
 				float shadowIntensity = saturate(dot(max(0, sh - sh0), 1.0)) * quality;
-				shadowIntensity = pow(shadowIntensity, 0.8); // Slight contrast boost
+				shadowIntensity = pow(shadowIntensity, 0.8);  // Slight contrast boost
 				return pow(1.0 - shadowIntensity, 2.0);
-			} else {
+			}
+			else
+			{
 				return pow(1.0 - saturate(dot(max(0, sh - sh0), 1.0)) * quality, 2.0);
 			}
 #		else
@@ -595,11 +602,14 @@ namespace ExtendedMaterials
 #		endif
 #		if defined(TERRAIN_VARIATION)
 			// Enhance shadow contrast for terrain variation to maintain visual quality
-			[branch] if (SharedData::terrainVariationSettings.enableTilingFix) {
+			[branch] if (SharedData::terrainVariationSettings.enableTilingFix)
+			{
 				float shadowIntensity = saturate(dot(max(0, sh - sh0), 1.0)) * quality;
-				shadowIntensity = pow(shadowIntensity, 0.8); // Slight contrast boost
+				shadowIntensity = pow(shadowIntensity, 0.8);  // Slight contrast boost
 				return pow(1.0 - shadowIntensity, 2.0);
-			} else {
+			}
+			else
+			{
 				return pow(1.0 - saturate(dot(max(0, sh - sh0), 1.0)) * quality, 2.0);
 			}
 #		else
@@ -611,4 +621,4 @@ namespace ExtendedMaterials
 	}
 
 #endif  // defined(LANDSCAPE) && defined(TERRAIN_VARIATION)
-	}
+}

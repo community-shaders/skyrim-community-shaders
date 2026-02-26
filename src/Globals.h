@@ -1,13 +1,17 @@
 #pragma once
 
+#include <atomic>
+
 struct CloudShadows;
 struct DynamicCubemaps;
+struct VolumetricShadows;
 struct ExtendedMaterials;
 struct GrassCollision;
 struct GrassLighting;
 struct HairSpecular;
 struct IBL;
 struct LightLimitFix;
+struct LinearLighting;
 struct LODBlending;
 struct InteriorSun;
 struct InverseSquareLighting;
@@ -20,15 +24,17 @@ struct SubsurfaceScattering;
 struct TerrainBlending;
 struct TerrainHelper;
 struct TerrainShadows;
+struct UnifiedWater;
 struct VanillaFresnel;
 struct VolumetricLighting;
 struct VR;
 struct WaterEffects;
-struct WeatherPicker;
 struct PerformanceOverlay;
 struct WetnessEffects;
 struct ExtendedTranslucency;
 struct Upscaling;
+struct WeatherEditor;
+struct ExponentialHeightFog;
 
 class State;
 class Deferred;
@@ -39,6 +45,7 @@ class Menu;
 namespace SIE
 {
 	class ShaderCache;
+	class ShaderFileDependencyTracker;
 }
 
 namespace globals
@@ -54,12 +61,14 @@ namespace globals
 	{
 		extern CloudShadows cloudShadows;
 		extern DynamicCubemaps dynamicCubemaps;
+		extern VolumetricShadows volumetricShadows;
 		extern ExtendedMaterials extendedMaterials;
 		extern GrassCollision grassCollision;
 		extern GrassLighting grassLighting;
 		extern HairSpecular hairSpecular;
 		extern IBL ibl;
 		extern LightLimitFix lightLimitFix;
+		extern LinearLighting linearLighting;
 		extern LODBlending lodBlending;
 		extern InteriorSun interiorSun;
 		extern InverseSquareLighting inverseSquareLighting;
@@ -72,16 +81,18 @@ namespace globals
 		extern TerrainBlending terrainBlending;
 		extern TerrainHelper terrainHelper;
 		extern TerrainShadows terrainShadows;
+		extern UnifiedWater unifiedWater;
 		extern VanillaFresnel vanillaFresnel;
 		extern VolumetricLighting volumetricLighting;
 		extern VR vr;
 		extern WaterEffects waterEffects;
-		extern WeatherPicker weatherPicker;
 		extern PerformanceOverlay performanceOverlay;
 		extern WetnessEffects wetnessEffects;
 		extern ExtendedTranslucency extendedTranslucency;
 		extern Upscaling upscaling;
 		extern RenderDoc renderDoc;
+		extern WeatherEditor weatherEditor;
+		extern ExponentialHeightFog exponentialHeightFog;
 
 		namespace llf
 		{
@@ -201,16 +212,21 @@ namespace globals
 		extern RE::BSGraphics::State* graphicsState;
 		extern RE::BSGraphics::Renderer* renderer;
 		extern RE::BSShaderManager::State* smState;
+		extern RE::TES* tes;
 		extern bool isVR;
+		extern RE::MemoryManager* memoryManager;
 		extern RE::INISettingCollection* iniSettingCollection;
 		extern RE::INIPrefSettingCollection* iniPrefSettingCollection;
 		extern RE::GameSettingCollection* gameSettingCollection;
+		extern RE::TES* tes;
 		extern float* cameraNear;
 		extern float* cameraFar;
 		extern float* deltaTime;
 		extern RE::BSUtilityShader* utilityShader;
 		extern RE::Sky* sky;
 		extern RE::UI* ui;
+		extern RE::Calendar* calendar;
+		extern std::atomic<bool> quitGame;
 
 		extern RE::BSGraphics::PixelShader** currentPixelShader;
 		extern RE::BSGraphics::VertexShader** currentVertexShader;
@@ -231,9 +247,11 @@ namespace globals
 		extern REL::Relocation<const RE::NiRTTI*> NiIntegerExtraDataRTTI;
 		extern REL::Relocation<const RE::NiRTTI*> BSLightingShaderPropertyRTTI;
 		extern REL::Relocation<const RE::NiRTTI*> BSEffectShaderPropertyRTTI;
+		extern REL::Relocation<const RE::NiRTTI*> BSWaterShaderPropertyRTTI;
 		extern REL::Relocation<const RE::NiRTTI*> NiParticleSystemRTTI;
 		extern REL::Relocation<const RE::NiRTTI*> NiBillboardNodeRTTI;
 		extern REL::Relocation<const RE::NiRTTI*> NiAlphaPropertyRTTI;
+		extern REL::Relocation<const RE::NiRTTI*> NiSourceTextureRTTI;
 	}
 
 	extern State* state;
@@ -245,5 +263,6 @@ namespace globals
 	void OnInit();
 	void ReInit();
 	void OnDataLoaded();
+	void OnGameWindowClose();
 	void InstallD3DHooks(ID3D11DeviceContext* a_context);
 }

@@ -1,6 +1,8 @@
 #pragma once
 
+#include "Utils/Input.h"
 #include <functional>
+#include <vector>
 
 // Forward declarations
 class Menu;
@@ -15,22 +17,22 @@ public:
 		bool& settingsEffectsToggle;
 		bool& settingSkipCompilationKey;
 		bool& settingOverlayToggleKey;
-		bool& settingShaderBlockPrevKey;  // Debug: shader block previous key
-		bool& settingShaderBlockNextKey;  // Debug: shader block next key
+		bool& settingShaderBlockPrevKey;      // Debug: shader block previous key
+		bool& settingShaderBlockNextKey;      // Debug: shader block next key
+		bool& settingWeatherEditorToggleKey;  // Weather Editor toggle key
 	};
 
 	static void RenderGeneralSettings(
-		SettingsState& state,
-		const std::function<const char*(uint32_t)>& keyIdToString);
+		SettingsState& state);
 
 private:
 	static void RenderShadersTab();
 	static void RenderKeybindingsTab(
-		SettingsState& state,
-		const std::function<const char*(uint32_t)>& keyIdToString);
+		SettingsState& state);
 	static void RenderInterfaceTab();
 
 	// Interface sub-tabs
+	static void RenderBehaviorTab();
 	static void RenderThemesTab();
 	static void RenderFontsTab();
 	static void RenderStylingTab();

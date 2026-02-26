@@ -98,10 +98,22 @@ namespace Util
 		std::filesystem::path GetOverridesPath();
 
 		/**
+		 * Gets the User Overrides directory path (for user modifications to overrides)
+		 * @return CommunityShaderPath / "Overrides" / "User"
+		 */
+		std::filesystem::path GetUserOverridesPath();
+
+		/**
 		 * Gets the AppliedOverrides.json file path
 		 * @return CommunityShaderPath / "AppliedOverrides.json"
 		 */
 		std::filesystem::path GetAppliedOverridesPath();
+
+		/**
+		 * Gets the SceneSettings directory path
+		 * @return CommunityShaderPath / "SceneSettings"
+		 */
+		std::filesystem::path GetSceneSettingsPath();
 
 		/**
 		 * Gets the main Shaders directory path
@@ -195,6 +207,13 @@ namespace Util
 		 * @param path The directory path to ensure exists
 		 */
 		void EnsureDirectoryExists(const std::filesystem::path& path);
+
+		/**
+		 * Replaces Windows-invalid filename characters with underscore.
+		 * @param name Filename or path component to sanitize
+		 * @return Sanitized string safe for use as a filename
+		 */
+		std::string SanitizeFileName(std::string name);
 	}
 
 	/**
@@ -222,6 +241,23 @@ namespace Util
 
 	namespace FileSystem
 	{
-		std::vector<SettingsDiffEntry> LoadJsonDiff(const std::filesystem::path& userPath, const std::filesystem::path& testPath);
+		/**
+		 * Compares two JSON objects and returns a list of differences
+		 * Core diffing logic shared between file-based and in-memory JSON comparisons
+		 * @param userJson First JSON object (USER/baseline variant)
+		 * @param testJson Second JSON object (TEST variant)
+		 * @param epsilon Tolerance for floating-point comparisons (default: 0.0001f filters precision noise while preserving meaningful changes >0.01%)
+		 * @return Vector of differences between the two JSON objects
+		 */
+		std::vector<SettingsDiffEntry> DiffJson(const nlohmann::json& userJson, const nlohmann::json& testJson, float epsilon = 0.0001f);
+
+		/**
+		 * Loads and compares two JSON files, returning a list of differences
+		 * @param userPath Path to the first JSON file (USER variant)
+		 * @param testPath Path to the second JSON file (TEST variant)
+		 * @param epsilon Tolerance for floating-point comparisons (default: 0.0001f)
+		 * @return Vector of differences between the two JSON files
+		 */
+		std::vector<SettingsDiffEntry> LoadJsonDiff(const std::filesystem::path& userPath, const std::filesystem::path& testPath, float epsilon = 0.0001f);
 	}
 }

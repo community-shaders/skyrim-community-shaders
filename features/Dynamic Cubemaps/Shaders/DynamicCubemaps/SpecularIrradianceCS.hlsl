@@ -119,8 +119,7 @@ float3 tangentToWorld(const float3 v, const float3 N, const float3 S, const floa
 	return S * v.x + T * v.y + N * v.z;
 }
 
-[numthreads(8, 8, 1)] void main(uint3 ThreadID
-								: SV_DispatchThreadID) {
+[numthreads(8, 8, 1)] void main(uint3 ThreadID : SV_DispatchThreadID) {
 	// Make sure we won't write past output when computing higher mipmap levels.
 	uint outputWidth, outputHeight, outputDepth;
 	outputTexture.GetDimensions(outputWidth, outputHeight, outputDepth);
@@ -172,11 +171,11 @@ float3 tangentToWorld(const float3 v, const float3 N, const float3 S, const floa
 			// Mip level to sample from.
 			float mipLevel = max(0.5 * log2(ws / wt) + 1.0, 0.0);
 
-			color += Color::GammaToLinear(inputTexture.SampleLevel(linear_wrap_sampler, Li, mipLevel).rgb) * cosLi;
+			color += Color::IrradianceToLinear(inputTexture.SampleLevel(linear_wrap_sampler, Li, mipLevel).rgb) * cosLi;
 			weight += cosLi;
 		}
 	}
 	color /= weight;
 
-	outputTexture[ThreadID] = float4(Color::LinearToGamma(color), 1.0);
+	outputTexture[ThreadID] = float4(Color::IrradianceToGamma(color), 1.0);
 }

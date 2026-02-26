@@ -4,8 +4,8 @@
 
 cbuffer PerFrameCB : register(b0)
 {
-	float2 PosOffset;  // cell origin in camera space
-	uint2 ArrayOrigin; // xy: array origin (clipmap wrapping)
+	float2 PosOffset;   // cell origin in camera space
+	uint2 ArrayOrigin;  // xy: array origin (clipmap wrapping)
 
 	int2 ValidMargin;
 	float TimeDelta;
@@ -32,12 +32,7 @@ RWTexture2D<float4> Collision : register(u0);
 groupshared BoundingBoxPacked SharedBoundingBoxes[64];
 
 [numthreads(8, 8, 1)] void main(
-	uint3 groupId
-	: SV_GroupID, uint3 dispatchThreadId
-	: SV_DispatchThreadID, uint3 groupThreadId
-	: SV_GroupThreadID, uint groupIndex
-	: SV_GroupIndex) {
-
+	uint3 groupId : SV_GroupID, uint3 dispatchThreadId : SV_DispatchThreadID, uint3 groupThreadId : SV_GroupThreadID, uint groupIndex : SV_GroupIndex) {
 	if (groupIndex < BoundingBoxCount)
 		SharedBoundingBoxes[groupIndex] = CollisionBoundingBoxes[groupIndex];
 
@@ -63,7 +58,7 @@ groupshared BoundingBoxPacked SharedBoundingBoxes[64];
 	float2 fadeRate = TimeDelta * 100 * float2(0.01, 1.0);
 
 	if (isValid) {
-		previousCollision = Collision[dispatchThreadId.xy];
+		previousCollision = Collision[dispatchThreadId.xy].xy;
 		previousCollision = lerp(ZRANGE.x, ZRANGE.y, previousCollision);
 
 		// Apply camera height change
@@ -76,13 +71,13 @@ groupshared BoundingBoxPacked SharedBoundingBoxes[64];
 	for (uint i = 0; i < BoundingBoxCount; i++) {
 		BoundingBoxPacked boundingBox = SharedBoundingBoxes[i];
 		// Test high level collision
-		if (all(cellCentreMS >= boundingBox.MinExtent && cellCentreMS <= boundingBox.MaxExtent)){
+		if (all(cellCentreMS >= boundingBox.MinExtent && cellCentreMS <= boundingBox.MaxExtent)) {
 			// Process collision data
 			for (uint j = boundingBox.IndexStart; j < boundingBox.IndexEnd; j++) {
 				float4 collisionInstance = CollisionInstances[j];
 				float radius = collisionInstance.w;
 				// Check if collision can lower the height
-				if (collisionInstance.z - radius < collision.y){
+				if (collisionInstance.z - radius < collision.y) {
 					// Get the lowest point of the sphere at this cell position
 					float dist = distance(collisionInstance.xy, cellCentreMS);
 					// Check if we're within the sphere's radius
