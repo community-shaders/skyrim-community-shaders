@@ -434,20 +434,8 @@ cbuffer AlphaTestRefCB : register(b11)
 #		include "DynamicCubemaps/DynamicCubemaps.hlsli"
 #	endif
 
-#	if defined(TERRAIN_SHADOWS)
-#		include "TerrainShadows/TerrainShadows.hlsli"
-#	endif
-
-#	if defined(CLOUD_SHADOWS)
-#		include "CloudShadows/CloudShadows.hlsli"
-#	endif
-
 #	if defined(SKYLIGHTING)
 #		include "Skylighting/Skylighting.hlsli"
-#	endif
-
-#	if defined(WATER_LIGHTING)
-#		include "WaterLighting/WaterCaustics.hlsli"
 #	endif
 
 #	if defined(IBL)
@@ -600,24 +588,36 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 
 	float4 shadowColor = TexShadowMaskSampler.Load(int3(input.HPosition.xy, 0));
 
-	float dirShadow = !SharedData::InInterior ? shadowColor.x : 1.0;
-	float dirDetailShadow = 1.0;
+	// Apply world shadow (terrain shadows, cloud shadows) directly to light color
+	if (!SharedData::InInterior)
+		dirLightColor *= ShadowSampling::GetWorldShadow(input.WorldPosition.xyz, FrameBuffer::CameraPosAdjust[eyeIndex].xyz, eyeIndex);
 
-	if (dirShadow > 0.0 && !SharedData::InInterior) {
-#			if defined(SCREEN_SPACE_SHADOWS)
-		dirDetailShadow = ScreenSpaceShadows::GetScreenSpaceShadow(input.HPosition.xyz, screenUV, screenNoise, eyeIndex);
-#			endif  // SCREEN_SPACE_SHADOWS
+	float dirSoftShadow = 1.0;
+	float dirVSMDetailedShadow = 1.0;
 
-		if (dirShadow != 0.0)
-			dirShadow *= ShadowSampling::GetWorldShadow(input.WorldPosition.xyz, FrameBuffer::CameraPosAdjust[eyeIndex].xyz, eyeIndex);
-
-#			if defined(WATER_LIGHTING)
-		if (dirShadow > 0.0) {
-			float4 waterData = SharedData::GetWaterData(input.WorldPosition.xyz);
-			dirShadow *= WaterLighting::ComputeCaustics(waterData, input.WorldPosition.xyz, eyeIndex);
-		}
+#			if defined(VOLUMETRIC_SHADOWS)
+	if (!SharedData::InInterior)
+		dirSoftShadow = ShadowSampling::GetLightingShadow(input.WorldPosition.xyz, eyeIndex, dirVSMDetailedShadow);
 #			endif
+
+	float dirDetailedShadow = 1.0;
+
+	if (!SharedData::InInterior) {
+		dirDetailedShadow *= shadowColor.x;
+
+#			if defined(VOLUMETRIC_SHADOWS)
+		dirSoftShadow = max(dirSoftShadow, dirDetailedShadow);
+#			else
+		dirSoftShadow = dirDetailedShadow;
+#			endif
+	} else {
+		dirDetailedShadow = dirVSMDetailedShadow;
 	}
+
+#			if defined(SCREEN_SPACE_SHADOWS)
+	if (!SharedData::InInterior)
+		dirDetailedShadow *= ScreenSpaceShadows::GetScreenSpaceShadow(input.HPosition.xyz, screenUV, screenNoise, eyeIndex);
+#			endif  // SCREEN_SPACE_SHADOWS
 
 	float3 diffuseColor = 0;
 	float3 specularColor = 0;
@@ -627,7 +627,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 
 #			if defined(TRUE_PBR)
 	{
-		PBR::LightProperties lightProperties = PBR::InitLightProperties(SharedData::DirLightColor.xyz, dirLightColorMultiplier * dirShadow, 1);
+		PBR::LightProperties lightProperties = PBR::InitLightProperties(SharedData::DirLightColor.xyz, dirLightColorMultiplier * dirDetailedShadow, 1);
 		float3 dirDiffuseColor, coatDirDiffuseColor, dirTransmissionColor, dirSpecularColor;
 		PBR::GetDirectLightInput(dirDiffuseColor, coatDirDiffuseColor, dirTransmissionColor, dirSpecularColor, normal, normal, viewDirection, viewDirection, DirLightDirection, DirLightDirection, lightProperties, pbrSurfaceProperties, tbn, input.TexCoord.xy);
 		lightsDiffuseColor += dirDiffuseColor;
@@ -636,8 +636,6 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	}
 #			else
 	dirLightColor *= dirLightColorMultiplier;
-	dirLightColor *= dirShadow;
-	dirLightColor *= dirDetailShadow;
 
     float wrapAmount = saturate(input.VertexNormal.w * 10.0)* 0.5 * (!complex);
 
@@ -645,12 +643,12 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
     {
         // Old Wrapped Model
         float wrappedDirLight = saturate(dirLightAngle + wrapAmount) / (1.0 + wrapAmount);
-        lightsDiffuseColor += dirLightColor * saturate(wrappedDirLight) * Color::VanillaNormalization();
+        lightsDiffuseColor += dirLightColor * dirDetailedShadow * saturate(wrappedDirLight) * Color::VanillaNormalization();
     }
 			else
     {
         // Original Standard Model
-        lightsDiffuseColor += dirLightColor * saturate(dirLightAngle) * Color::VanillaNormalization();
+        lightsDiffuseColor += dirLightColor * dirDetailedShadow * saturate(dirLightAngle) * Color::VanillaNormalization();
     }
 
 	float3 vertexColor = input.VertexColor.xyz;
@@ -666,10 +664,10 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	float3 albedo = max(0, baseColor.xyz * Color::ColorToLinear(vertexColor));
 
 	float3 subsurfaceColor = lerp(dot(albedo, 1.0 / 3.0), albedo, 2.0) * saturate(input.VertexNormal.w * 10.0);
-	float3 sss = dirLightColor * saturate(-dirLightAngle) * Color::VanillaNormalization();
+	float3 sss = dirLightColor * dirSoftShadow * saturate(-dirLightAngle) * Color::VanillaNormalization();
 
 	if (complex)
-		lightsSpecularColor += GrassLighting::GetLightSpecularInput(SharedData::DirLightDirection.xyz, viewDirection, normal, dirLightColor, SharedData::grassLightingSettings.Glossiness) * Color::VanillaNormalization();
+		lightsSpecularColor += dirDetailedShadow * GrassLighting::GetLightSpecularInput(SharedData::DirLightDirection.xyz, viewDirection, normal, dirLightColor, SharedData::grassLightingSettings.Glossiness) * Color::VanillaNormalization();
 #			endif
 
 #			if defined(LIGHT_LIMIT_FIX)
@@ -828,11 +826,11 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #			if defined(LIGHT_LIMIT_FIX) && defined(LLFDEBUG)
 	if (SharedData::lightLimitFixSettings.EnableLightsVisualisation) {
 		if (SharedData::lightLimitFixSettings.LightsVisualisationMode == 0) {
-			diffuseColor.xyz = LightLimitFix::TurboColormap(0);
+			diffuseColor.xyz = Color::TurboColormap(0);
 		} else if (SharedData::lightLimitFixSettings.LightsVisualisationMode == 1) {
-			diffuseColor.xyz = LightLimitFix::TurboColormap(0);
+			diffuseColor.xyz = Color::TurboColormap(0);
 		} else {
-			diffuseColor.xyz = LightLimitFix::TurboColormap((float)lightCount / MAX_CLUSTER_LIGHTS);
+			diffuseColor.xyz = Color::TurboColormap((float)lightCount / MAX_CLUSTER_LIGHTS);
 		}
 	} else {
 		psout.Diffuse = float4(diffuseColor, 1);
@@ -878,8 +876,6 @@ PS_OUTPUT main(PS_INPUT input)
 	psout.PS.w = diffuseAlpha;
 #		else
 
-	baseColor.xyz /= 2.8; // Match brightness of ISSkyrimClearDAY;
-
 	uint eyeIndex = Stereo::GetEyeIndexPS(input.HPosition, VPOSOffset);
 
 	float3 viewPosition = mul(FrameBuffer::CameraView[eyeIndex], float4(input.WorldPosition.xyz, 1)).xyz;
@@ -888,27 +884,24 @@ PS_OUTPUT main(PS_INPUT input)
 
 	float4 shadowColor = TexShadowMaskSampler.Load(int3(input.HPosition.xy, 0));
 
-	float dirShadow = !SharedData::InInterior ? shadowColor.x : 1.0;
-	float dirDetailShadow = 1.0;
+	float llDirLightMult = (SharedData::linearLightingSettings.enableLinearLighting && !SharedData::linearLightingSettings.isDirLightLinear) ? SharedData::linearLightingSettings.dirLightMult : 1.0f;
+	float3 dirLightColor = Color::DirectionalLight(SharedData::DirLightColor.xyz / max(llDirLightMult, 1e-5), SharedData::linearLightingSettings.isDirLightLinear) * llDirLightMult;
 
-	if (dirShadow > 0.0 && !SharedData::InInterior) {
+	// Apply world shadow (terrain shadows, cloud shadows) directly to light color
+	if (!SharedData::InInterior)
+		dirLightColor *= ShadowSampling::GetWorldShadow(input.WorldPosition.xyz, FrameBuffer::CameraPosAdjust[eyeIndex].xyz, eyeIndex);
+
+	float dirDetailedShadow = 1.0;
+
+	if (!SharedData::InInterior)
+		dirDetailedShadow = shadowColor.x;
+
 #			if defined(SCREEN_SPACE_SHADOWS)
-		dirDetailShadow = ScreenSpaceShadows::GetScreenSpaceShadow(input.HPosition.xyz, screenUV, screenNoise, eyeIndex);
+	if (!SharedData::InInterior)
+		dirDetailedShadow *= ScreenSpaceShadows::GetScreenSpaceShadow(input.HPosition.xyz, screenUV, screenNoise, eyeIndex);
 #			endif  // SCREEN_SPACE_SHADOWS
 
-		if (dirShadow != 0.0)
-			dirShadow *= ShadowSampling::GetWorldShadow(input.WorldPosition, FrameBuffer::CameraPosAdjust[eyeIndex], eyeIndex);
-
-#			if defined(WATER_LIGHTING)
-		if (dirShadow > 0.0) {
-			float4 waterData = SharedData::GetWaterData(input.WorldPosition.xyz);
-			dirShadow *= WaterLighting::ComputeCaustics(waterData, input.WorldPosition.xyz, eyeIndex);
-		}
-#			endif
-	}
-
-	float llDirLightMult = (SharedData::linearLightingSettings.enableLinearLighting && !SharedData::linearLightingSettings.isDirLightLinear) ? SharedData::linearLightingSettings.dirLightMult : 1.0f;
-	float3 diffuseColor = Color::DirectionalLight(SharedData::DirLightColor.xyz / max(llDirLightMult, 1e-5), SharedData::linearLightingSettings.isDirLightLinear) * dirShadow * dirDetailShadow * llDirLightMult;
+	float3 diffuseColor = dirLightColor * dirDetailedShadow;
 
 #			if defined(LIGHT_LIMIT_FIX)
 	uint clusterIndex = 0;

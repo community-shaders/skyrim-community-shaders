@@ -9,7 +9,7 @@
 
 ### Common Tasks
 
--   **Fast shader deployment:** `cmake --build build/ALL-WITH-AUTO-DEPLOYMENT --target COPY_SHADERS`
+-   **Fast shader deployment:** `cmake --build build/ALL --target COPY_SHADERS`
 -   **Full build with deployment:** `.\BuildRelease.bat ALL-WITH-AUTO-DEPLOYMENT`
 -   **Run tests:** `cmake --build build/ALL --target run_shader_tests`
 

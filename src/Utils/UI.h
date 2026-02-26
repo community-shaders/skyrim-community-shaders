@@ -49,6 +49,7 @@ class Feature;
 
 namespace Util
 {
+	void UpdateImGuiInput(HWND hwnd, float bufferWidth, float bufferHeight);
 	/**
 	 * Represents a single line and its color for any colored text rendering (tooltips, legends, etc.).
 	 */
@@ -100,6 +101,46 @@ namespace Util
 	};
 
 	/**
+	 * Renders text using the disabled text color.
+	 * @param a_text Start of the text
+	 * @param a_textEnd Optional end pointer (nullptr for null-terminated strings)
+	 */
+	void TextUnformattedDisabled(const char* a_text, const char* a_textEnd = nullptr);
+
+	/**
+	 * Full-row hover/selection highlight for ImGui tables.
+	 * Makes the entire table row highlight on hover/active/selected instead of just the selectable cell.
+	 * @param label The selectable label text
+	 * @param selected Whether the row is currently selected
+	 * @param flags ImGuiSelectableFlags to pass through
+	 * @return True if the row was pressed
+	 */
+	bool TableRowSelectable(const char* label, bool selected, ImGuiSelectableFlags flags);
+
+	/**
+	 * Positions the next tooltip window near the mouse cursor, clamped to viewport bounds.
+	 * Automatically flips above the cursor when it would overflow the bottom.
+	 * Call this before BeginTooltip().
+	 * @param estimatedHeight Estimated tooltip height in pixels
+	 * @param estimatedWidth Estimated tooltip width in pixels (0 to skip horizontal clamping)
+	 */
+	void SetTooltipPositionNearMouse(float estimatedHeight, float estimatedWidth = 0.0f);
+
+	/**
+	 * Shows a positioned tooltip with wrapped text when the previous item is hovered.
+	 * Uses SetTooltipPositionNearMouse for viewport-aware placement.
+	 * @param a_desc Tooltip text
+	 * @param a_flags Hover flags (default: ImGuiHoveredFlags_DelayNormal)
+	 */
+	void AddTooltip(const char* a_desc, ImGuiHoveredFlags a_flags = ImGuiHoveredFlags_DelayNormal);
+
+	/**
+	 * Draws a "(?)" help marker with a tooltip on hover.
+	 * @param a_desc Tooltip text to show
+	 */
+	void HelpMarker(const char* a_desc);
+
+	/**
 	 * Confirmation popup for clearing shader cache.
 	 * Call RequestClearShaderCacheConfirmation() when the clear button is clicked.
 	 * Call DrawClearShaderCacheConfirmation() every frame to render the popup.
@@ -107,6 +148,34 @@ namespace Util
 	 */
 	void RequestClearShaderCacheConfirmation();
 	void DrawClearShaderCacheConfirmation();
+
+	/**
+	 * Reusable confirmation popup. Call RequestConfirmation() to trigger, DrawConfirmationPopup() each frame.
+	 * Returns true on the frame the user confirms. Supports optional "Don't ask again" checkbox.
+	 */
+	struct ConfirmationPopup
+	{
+		std::string title;
+		std::string message;
+		std::string confirmLabel = "Confirm";
+		std::string cancelLabel = "Cancel";
+		bool showDontAskAgain = false;
+		bool* dontAskAgainPersist = nullptr;  // Optional external bool to persist preference
+
+		ConfirmationPopup() = default;
+		ConfirmationPopup(std::string title, std::string message, std::string confirmLabel = "Confirm", std::string cancelLabel = "Cancel") :
+			title(std::move(title)), message(std::move(message)), confirmLabel(std::move(confirmLabel)), cancelLabel(std::move(cancelLabel)) {}
+
+		void Request();
+		bool Draw();  // Returns true on confirm frame
+
+		bool IsOpen() const { return show; }
+
+	private:
+		bool show = false;
+		bool confirmed = false;
+		bool dontAskCheckbox = false;
+	};
 
 	/**
 	 * RAII wrapper for styled ImGui buttons that automatically applies and restores styling.
@@ -137,6 +206,11 @@ namespace Util
 	private:
 		int m_pushedStyles;
 	};
+
+	/**
+	 * Creates a StyledButtonWrapper using the theme's error color with auto-derived hover/active variants.
+	 */
+	StyledButtonWrapper ErrorButtonStyle();
 
 	/**
 	 * Button with simple flash feedback (matches action icon hover effect style)
@@ -674,6 +748,29 @@ namespace Util
 	void DrawSearchIcon(const ImVec2& position, float size = 20.0f, float alpha = 0.7f);
 
 	/**
+	 * @brief Draws a search input field with icon inside a combo dropdown.
+	 *
+	 * Reusable helper for any combo that needs search/filter functionality.
+	 * Draws a text input with a search icon overlay and separator, and
+	 * auto-focuses the input when the combo first opens.
+	 * Returns an owned copy of the current search text for safe use after
+	 * ClearComboSearch may mutate the underlying buffer.
+	 *
+	 * @param id Stable string literal identifying this search input. Must be a
+	 *           finite, static set of IDs — one persistent map entry is created
+	 *           per unique id and never removed.
+	 * @return Current search text (empty string when no filter is active)
+	 */
+	std::string DrawComboSearchInput(const char* id);
+
+	/**
+	 * @brief Clears the search buffer for a given combo search ID.
+	 * Call when selecting an item or when the combo closes.
+	 * @param id The same ID passed to DrawComboSearchInput
+	 */
+	void ClearComboSearch(const char* id);
+
+	/**
 	 * @brief Draws a semi-transparent dark overlay behind modal dialogs for depth.
 	 * @param alpha The alpha value for the overlay (0-255, default: 160)
 	 */
@@ -864,7 +961,7 @@ namespace Util
 	 * @param itemMap The map of items to display (key = item name, value = item data)
 	 * @return true if a new item was selected, false otherwise
 	 *
-	 * @note Uses a static search buffer, so only one SearchableCombo should be open at a time
+	 * @note Each combo is identified by its label for independent search state
 	 *
 	 * @example
 	 * @code
@@ -881,38 +978,24 @@ namespace Util
 	bool SearchableCombo(const char* label, std::string& selectedName, std::unordered_map<std::string, T>& itemMap)
 	{
 		bool valueChanged = false;
-		static std::unordered_map<std::string, char[256]> searchBuffers;
-
-		std::string comboId = std::string(label);
-		auto& searchBuffer = searchBuffers[comboId];
 
 		if (ImGui::BeginCombo(label, selectedName.c_str())) {
-			ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(24.0f, ImGui::GetStyle().FramePadding.y));
-			ImGui::InputText("##search", searchBuffer, IM_ARRAYSIZE(searchBuffer));
-			ImGui::PopStyleVar();
-			ImVec2 iconPos = ImVec2(ImGui::GetItemRectMin().x + 5.0f, ImGui::GetItemRectMin().y + (ImGui::GetItemRectSize().y - 16.0f) * 0.5f);
-			DrawSearchIcon(iconPos, 16.0f, 0.5f);
+			auto searchText = DrawComboSearchInput(label);
 
-			ImGui::Separator();
-
-			// Filter and display items
 			for (auto& [itemName, item] : itemMap) {
-				// Simple case-insensitive search
-				if (searchBuffer[0] == '\0' ||
-					std::search(itemName.begin(), itemName.end(), searchBuffer, searchBuffer + strlen(searchBuffer),
-						[](char a, char b) { return std::tolower(a) == std::tolower(b); }) != itemName.end()) {
+				if (searchText.empty() || StringMatchesSearch(itemName, searchText)) {
 					if (ImGui::Selectable(itemName.c_str(), itemName == selectedName)) {
 						selectedName = itemName;
 						valueChanged = true;
-						searchBuffer[0] = '\0';  // Clear search on selection
+						ClearComboSearch(label);
+						break;
 					}
 				}
 			}
 
 			ImGui::EndCombo();
 		} else {
-			// Reset search when combo is closed
-			searchBuffer[0] = '\0';
+			ClearComboSearch(label);
 		}
 
 		return valueChanged;

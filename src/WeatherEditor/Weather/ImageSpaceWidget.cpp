@@ -34,10 +34,12 @@ void ImageSpaceWidget::DrawWidget()
 	auto editorWindow = EditorWindow::GetSingleton();
 
 	ImGui::SetNextWindowSizeConstraints(ImVec2(600, 0), ImVec2(FLT_MAX, FLT_MAX));
-	if (ImGui::Begin(GetEditorID().c_str(), &open, ImGuiWindowFlags_NoSavedSettings)) {
+	if (ImGui::Begin(GetEditorID().c_str(), &open, ImGuiWindowFlags_NoSavedSettings | kStickyHeaderFlags)) {
 		// Draw header with search and Save/Load/Delete buttons
 		DrawWidgetHeader("##ImageSpaceSearch", false, true);
-
+	}
+	BeginScrollableContent("##ISScroll");
+	{
 		// Draw all settings in a unified table
 		if (PropertyDrawer::BeginTable("ImageSpaceSettings", 200.0f)) {
 			bool changed = false;
@@ -83,6 +85,7 @@ void ImageSpaceWidget::DrawWidget()
 			}
 		}
 	}
+	EndScrollableContent();
 	ImGui::End();
 }
 

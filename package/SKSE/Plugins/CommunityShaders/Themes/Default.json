@@ -4,7 +4,7 @@
     "Version": "1.0.0",
     "Author": "Community Shaders Team",
     "Theme": {
-        "FontSize": 27.0,
+        "FontSize": 0.0,
         "FontName": "Jost/Jost-Regular.ttf",
         "GlobalScale": 0.0,
         "FontRoles": [

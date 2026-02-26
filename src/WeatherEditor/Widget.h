@@ -123,9 +123,9 @@ public:
 
 	void Save();
 	void Load();
-	void Delete();
 	bool HasSavedFile() const;
 
+	virtual void Delete();
 	virtual void LoadSettings() = 0;
 	virtual void SaveSettings() = 0;
 	virtual void ApplyChanges() = 0;
@@ -142,13 +142,14 @@ public:
 
 	bool MatchesSearch(const std::string& text) const;
 
+	void DrawDeleteConfirmationModal(const char* popupId = "DeleteConfirmation");
+
 	json js = json();
 
 protected:
 	std::string cachedEditorID;
 	virtual void DrawMenu();
 	std::string GetFolderName();
-	void DrawDeleteConfirmationModal();
 };
 
 // Simple widget for caching form data without full widget functionality
