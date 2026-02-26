@@ -241,7 +241,7 @@ void VR::UpdateDepthBufferCulling()
 		logger::info("VR depth buffer culling set to {}", desired);
 	}
 	if (*gDepthBufferCulling != desired) {
-		logger::warn("VR depth buffer culling write did not stick (wanted {}, got {})", desired, *gDepthBufferCulling);
+		logger::warn("VR depth buffer culling write mismatch (desired {}, actual {})", desired, *gDepthBufferCulling);
 	}
 }
 
