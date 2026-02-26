@@ -57,9 +57,8 @@ namespace Hair
 
 	// [Scheuermann 2004, "Hair Rendering and Shading"]
 	// https://web.engr.oregonstate.edu/~mjb/cs557/Projects/Papers/HairRendering.pdf
-	void GetHairDirectLightScheuermann(out float3 dirDiffuse, out float3 dirSpecular, out float3 dirTransmission, float3 T, float3 L, float3 V, float3 N, float3 VN, float3 lightColor, float shininess, float selfShadow, float2 uv, float3 baseColor)
+	void GetHairDirectLightScheuermann(out float3 dirDiffuse, out float3 dirSpecular, out float3 dirTransmission, float3 T, float3 L, float3 V, float3 N, float3 VN, DirectContext context, float shininess, float2 uv, float3 baseColor)
 	{
-		lightColor *= selfShadow;
 		const float3 H = normalize(L + V);
 		const float oNdotL = dot(N, L);
 		const float NdotL = saturate(oNdotL);
@@ -70,6 +69,9 @@ namespace Hair
 		const float HdotV = saturate(dot(H, V));
 		const float HdotL = saturate(dot(H, L));
 		const float wrapped = 0.5;
+
+		float3 lightColor = context.lightColor * context.detailedShadow;
+		float3 softColor = context.lightColor * context.softShadow * context.hairShadow;
 
 		// [Yibing Jiang 2016, "The Process of Creating Volumetric-based Materials in Uncharted 4"]
 		// https://advances.realtimerendering.com/s2016
@@ -97,7 +99,7 @@ namespace Hair
 		float scatterFresnel2 = saturate(pow(abs(1 - VNdotV), 20));
 		float3 specT = (scatterFresnel1 + scatterFresnel2 * scatterColor) * SharedData::hairSpecularSettings.Transmission;
 		dirSpecular = specR * lightColor * SharedData::hairSpecularSettings.SpecularMult;
-		dirTransmission = specT * lightColor * SharedData::hairSpecularSettings.SpecularMult;
+		dirTransmission = specT * softColor * SharedData::hairSpecularSettings.SpecularMult;
 	}
 
 	float Hair_g(float B, float Theta)
@@ -192,9 +194,9 @@ namespace Hair
 		return max(S, 0);
 	}
 
-	void GetHairDirectLightMarschner(out float3 dirDiffuse, out float3 dirSpecular, out float3 dirTransmission, float3 T, float3 L, float3 V, float3 N, float3 VN, float3 lightColor, float shininess, float selfShadow, float2 uv, float3 baseColor)
+	void GetHairDirectLightMarschner(out float3 dirDiffuse, out float3 dirSpecular, out float3 dirTransmission, float3 T, float3 L, float3 V, float3 N, float3 VN, DirectContext context, float shininess, float2 uv, float3 baseColor)
 	{
-		lightColor *= Color::PBRLightingCompensation;
+		float3 lightColor = context.lightColor * Color::PBRLightingCompensation;
 		dirDiffuse = 0;
 		dirSpecular = 0;
 		dirTransmission = 0;
@@ -205,10 +207,10 @@ namespace Hair
 			T = ShiftTangent(T, N, shift);
 		}
 
-		float backlit = SharedData::hairSpecularSettings.Transmission * selfShadow;
+		float transmission = SharedData::hairSpecularSettings.Transmission * context.hairShadow * context.detailedShadow;
 
-		dirTransmission += D_Marschner(L, V, T, roughness, baseColor, 0, backlit) * lightColor * SharedData::hairSpecularSettings.SpecularMult;
-		dirTransmission += GetHairDiffuseAttenuationKajiyaKay(T, V, L, selfShadow, baseColor) * lightColor * SharedData::hairSpecularSettings.DiffuseMult;
+		dirTransmission += D_Marschner(L, V, T, roughness, baseColor, 0, 1) * lightColor * transmission * SharedData::hairSpecularSettings.SpecularMult;
+		dirTransmission += GetHairDiffuseAttenuationKajiyaKay(T, V, L, context.detailedShadow, baseColor) * lightColor * transmission * SharedData::hairSpecularSettings.DiffuseMult;
 	}
 
 	void GetHairDirectLight(out DirectLightingOutput lightingOutput, DirectContext context, MaterialProperties material, float3x3 tbnTr, float2 uv)
@@ -219,13 +221,13 @@ namespace Hair
 		const float3 VN = normalize(tbnTr[2]);
 		const float3 L = normalize(context.lightDir);
 
-		float3 lightColor = context.lightColor * context.detailedShadow;
+		float3 lightColor = context.lightColor;
 		float selfShadow = context.hairShadow * context.softShadow;
 
 		if (SharedData::hairSpecularSettings.HairMode == 0) {
-			GetHairDirectLightScheuermann(lightingOutput.diffuse, lightingOutput.specular, lightingOutput.transmission, T, L, V, N, VN, lightColor, material.Shininess, selfShadow, uv, material.BaseColor);
+			GetHairDirectLightScheuermann(lightingOutput.diffuse, lightingOutput.specular, lightingOutput.transmission, T, L, V, N, VN, context, material.Shininess, uv, material.BaseColor);
 		} else {
-			GetHairDirectLightMarschner(lightingOutput.diffuse, lightingOutput.specular, lightingOutput.transmission, T, L, V, N, VN, lightColor, material.Shininess, selfShadow, uv, material.BaseColor);
+			GetHairDirectLightMarschner(lightingOutput.diffuse, lightingOutput.specular, lightingOutput.transmission, T, L, V, N, VN, context, material.Shininess, uv, material.BaseColor);
 		}
 	}
 
