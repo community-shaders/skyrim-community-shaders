@@ -17,8 +17,8 @@ static const float CLIP_EPSILON = 0.001f;
 
 struct VS_OUTPUT
 {
-	float4 Position : SV_POSITION;
-	float2 TexCoord : TEXCOORD0;
+	float4 Position: SV_POSITION;
+	float2 TexCoord: TEXCOORD0;
 };
 
 VS_OUTPUT VS_Main(uint vertexID : SV_VertexID)

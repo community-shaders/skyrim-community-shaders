@@ -12,8 +12,8 @@ Texture2D InputTexture : register(t0);
 
 struct VS_OUTPUT
 {
-	float4 Position : SV_POSITION;
-	float2 TexCoord : TEXCOORD0;
+	float4 Position: SV_POSITION;
+	float2 TexCoord: TEXCOORD0;
 };
 
 VS_OUTPUT VS_Main(uint vertexID : SV_VertexID)

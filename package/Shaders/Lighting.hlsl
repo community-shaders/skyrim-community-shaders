@@ -29,71 +29,71 @@
 
 struct VS_INPUT
 {
-	float4 Position : POSITION0;
-	float2 TexCoord0 : TEXCOORD0;
+	float4 Position: POSITION0;
+	float2 TexCoord0: TEXCOORD0;
 #if !defined(MODELSPACENORMALS)
-	float4 Normal : NORMAL0;
-	float4 Bitangent : BINORMAL0;
+	float4 Normal: NORMAL0;
+	float4 Bitangent: BINORMAL0;
 #endif  // !MODELSPACENORMALS
 
 #if defined(VC)
-	float4 Color : COLOR0;
+	float4 Color: COLOR0;
 #	if defined(LANDSCAPE)
-	float4 LandBlendWeights1 : TEXCOORD2;
-	float4 LandBlendWeights2 : TEXCOORD3;
+	float4 LandBlendWeights1: TEXCOORD2;
+	float4 LandBlendWeights2: TEXCOORD3;
 #	endif  // LANDSCAPE
 #endif      // VC
 #if defined(SKINNED)
-	float4 BoneWeights : BLENDWEIGHT0;
-	float4 BoneIndices : BLENDINDICES0;
+	float4 BoneWeights: BLENDWEIGHT0;
+	float4 BoneIndices: BLENDINDICES0;
 #endif  // SKINNED
 #if defined(EYE)
-	float EyeParameter : TEXCOORD2;
+	float EyeParameter: TEXCOORD2;
 #endif  // EYE
 #if defined(VR)
-	uint InstanceID : SV_INSTANCEID;
+	uint InstanceID: SV_INSTANCEID;
 #endif  // VR
 };
 
 struct VS_OUTPUT
 {
-	float4 Position : SV_POSITION0;
+	float4 Position: SV_POSITION0;
 #if (defined(PROJECTED_UV) && !defined(SKINNED)) || defined(LANDSCAPE)
 	float4
 #else
 	float2
 #endif  // (defined (PROJECTED_UV) && !defined(SKINNED)) || defined(LANDSCAPE)
-		TexCoord0 : TEXCOORD0;
+		TexCoord0: TEXCOORD0;
 
 #if defined(WORLD_MAP)
-	float3 InputPosition : TEXCOORD4;
+	float3 InputPosition: TEXCOORD4;
 #endif
 
 #if defined(SKINNED) || !defined(MODELSPACENORMALS)
-	float3 TBN0 : TEXCOORD1;
-	float3 TBN1 : TEXCOORD2;
-	float3 TBN2 : TEXCOORD3;
+	float3 TBN0: TEXCOORD1;
+	float3 TBN1: TEXCOORD2;
+	float3 TBN2: TEXCOORD3;
 #endif  // defined(SKINNED) || !defined(MODELSPACENORMALS)
 #if defined(EYE)
-	float3 EyeNormal : TEXCOORD6;
+	float3 EyeNormal: TEXCOORD6;
 #elif defined(LANDSCAPE)
-	float4 LandBlendWeights1 : TEXCOORD6;
-	float4 LandBlendWeights2 : TEXCOORD7;
+	float4 LandBlendWeights1: TEXCOORD6;
+	float4 LandBlendWeights2: TEXCOORD7;
 #elif defined(PROJECTED_UV) && !defined(SKINNED)
-	float3 TexProj : TEXCOORD7;
+	float3 TexProj: TEXCOORD7;
 #endif  // EYE
 
-	float4 WorldPosition : POSITION1;
-	float4 PreviousWorldPosition : POSITION2;
-	float4 Color : COLOR0;
-	float4 FogParam : COLOR1;
+	float4 WorldPosition: POSITION1;
+	float4 PreviousWorldPosition: POSITION2;
+	float4 Color: COLOR0;
+	float4 FogParam: COLOR1;
 
 #if defined(VR)
-	float ClipDistance : SV_ClipDistance0;  // o11
-	float CullDistance : SV_CullDistance0;  // p11
+	float ClipDistance: SV_ClipDistance0;  // o11
+	float CullDistance: SV_CullDistance0;  // p11
 #endif
 
-	float3 ModelPosition : TEXCOORD12;
+	float3 ModelPosition: TEXCOORD12;
 };
 #ifdef VSHADER
 
@@ -335,22 +335,22 @@ typedef VS_OUTPUT PS_INPUT;
 #if defined(DEFERRED)
 struct PS_OUTPUT
 {
-	float4 Diffuse : SV_Target0;
-	float4 MotionVectors : SV_Target1;
-	float4 NormalGlossiness : SV_Target2;
-	float4 Albedo : SV_Target3;
-	float4 Specular : SV_Target4;
-	float4 Reflectance : SV_Target5;
-	float4 Masks : SV_Target6;
+	float4 Diffuse: SV_Target0;
+	float4 MotionVectors: SV_Target1;
+	float4 NormalGlossiness: SV_Target2;
+	float4 Albedo: SV_Target3;
+	float4 Specular: SV_Target4;
+	float4 Reflectance: SV_Target5;
+	float4 Masks: SV_Target6;
 #	if defined(SNOW)
-	float4 Parameters : SV_Target7;
+	float4 Parameters: SV_Target7;
 #	endif
 };
 #else
 struct PS_OUTPUT
 {
-	float4 Diffuse : SV_Target0;
-	float4 MotionVectors : SV_Target1;
+	float4 Diffuse: SV_Target0;
+	float4 MotionVectors: SV_Target1;
 };
 #endif
 
