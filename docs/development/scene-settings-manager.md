@@ -397,15 +397,15 @@ Clicking an **Add** button opens the **Add Feature Settings** dialog (see above)
 
 **Elements:**
 
-| Element                  | Description                                                                                                                                                                                                                         |
-| ------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Header**               | Shows the current period and game hour (e.g., `[Day 12.0h]`).                                                                                                                                                                       |
-| **Add buttons**          | An inline row of small buttons — one per period ("Add Dawn" through "Add Night") plus "Add All". Each opens a dialog scoped to that period; "Add All" populates all 6 periods at once.                                             |
-| **Header controls**      | Each period column header includes a toggle [●] (pause/unpause all entries in that period) and [X] (delete all entries in that period) below the period name.                                                                       |
-| **Period columns**       | One column per period. The active period column is highlighted; inactive periods are dimmed. `--` means no override for that period (falls back to baseline).                                                                       |
-| **Row-level controls**   | Each setting row has a toggle (pause all periods) and delete (remove all periods) button in the Setting column.                                                                                                                     |
-| **Per-cell controls**    | Each individual period cell has its own value editor, pause toggle, and delete button.                                                                                                                                              |
-| **Setting filter**       | The add dialog only shows float settings. Integers, booleans, and strings are excluded since they cannot be smoothly interpolated between periods. Overwrite files are also validated — non-float TOD entries are rejected at load. |
+| Element                | Description                                                                                                                                                                                                                         |
+| ---------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Header**             | Shows the current period and game hour (e.g., `[Day 12.0h]`).                                                                                                                                                                       |
+| **Add buttons**        | An inline row of small buttons — one per period ("Add Dawn" through "Add Night") plus "Add All". Each opens a dialog scoped to that period; "Add All" populates all 6 periods at once.                                              |
+| **Header controls**    | Each period column header includes a toggle [●] (pause/unpause all entries in that period) and [X] (delete all entries in that period) below the period name.                                                                       |
+| **Period columns**     | One column per period. The active period column is highlighted; inactive periods are dimmed. `--` means no override for that period (falls back to baseline).                                                                       |
+| **Row-level controls** | Each setting row has a toggle (pause all periods) and delete (remove all periods) button in the Setting column.                                                                                                                     |
+| **Per-cell controls**  | Each individual period cell has its own value editor, pause toggle, and delete button.                                                                                                                                              |
+| **Setting filter**     | The add dialog only shows float settings. Integers, booleans, and strings are excluded since they cannot be smoothly interpolated between periods. Overwrite files are also validated — non-float TOD entries are rejected at load. |
 
 ---
 
