@@ -5,8 +5,6 @@
 // Stub samplers
 SamplerState SampColorSampler : register(s0);
 
-// Stub for BRDF.hlsli dependencies - stub F0/EnvBRDF usage
-#include "/Shaders/Common/Color.hlsli"
 #include "/Shaders/Common/Math.hlsli"
 
 // Stub SharedData hairSpecularSettings
