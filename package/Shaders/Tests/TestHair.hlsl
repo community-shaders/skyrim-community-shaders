@@ -6,8 +6,8 @@
 SamplerState SampColorSampler : register(s0);
 
 // Stub for BRDF.hlsli dependencies - stub F0/EnvBRDF usage
-#include "/Shaders/Common/Math.hlsli"
 #include "/Shaders/Common/Color.hlsli"
+#include "/Shaders/Common/Math.hlsli"
 
 // Stub SharedData hairSpecularSettings
 namespace SharedData
@@ -236,8 +236,7 @@ namespace TestConstants
 // ============================================================================
 
 /// @tags hair, tangent
-[numthreads(1, 1, 1)] void TestReorientTangent()
-{
+[numthreads(1, 1, 1)] void TestReorientTangent() {
 	// Test: Tangent perpendicular to normal should remain unchanged
 	float3 N = float3(0, 0, 1);
 	float3 T = float3(1, 0, 0);  // Already perpendicular to N
@@ -255,8 +254,8 @@ namespace TestConstants
 	ASSERT(IsTrue, abs(length(T_tilted_reoriented) - 1.0f) < TestConstants::EXACT_TOLERANCE);
 }
 
-/// @tags hair, tangent
-[numthreads(1, 1, 1)] void TestShiftTangent()
+	/// @tags hair, tangent
+	[numthreads(1, 1, 1)] void TestShiftTangent()
 {
 	float3 T = float3(1, 0, 0);
 	float3 N = float3(0, 0, 1);
@@ -281,8 +280,7 @@ namespace TestConstants
 // ============================================================================
 
 /// @tags hair, specular, kajiya-kay
-[numthreads(1, 1, 1)] void TestKajiyaKayBasic()
-{
+[numthreads(1, 1, 1)] void TestKajiyaKayBasic() {
 	float3 T = float3(1, 0, 0);  // Tangent along X
 	float3 H = float3(0, 1, 0);  // Half vector along Y (perpendicular to T)
 	float shininess = 50.0f;
@@ -298,8 +296,8 @@ namespace TestConstants
 	ASSERT(IsTrue, abs(spec.y - spec.z) < TestConstants::EXACT_TOLERANCE);
 }
 
-/// @tags hair, specular, kajiya-kay
-[numthreads(1, 1, 1)] void TestKajiyaKayShininessEffect()
+	/// @tags hair, specular, kajiya-kay
+	[numthreads(1, 1, 1)] void TestKajiyaKayShininessEffect()
 {
 	float3 T = float3(1, 0, 0);
 	float3 H = normalize(float3(0, 1, 0.5));
@@ -318,8 +316,7 @@ namespace TestConstants
 }
 
 /// @tags hair, specular, kajiya-kay
-[numthreads(1, 1, 1)] void TestKajiyaKayDirectionalAttenuation()
-{
+[numthreads(1, 1, 1)] void TestKajiyaKayDirectionalAttenuation() {
 	float3 T = float3(1, 0, 0);
 	float shininess = 50.0f;
 
@@ -334,12 +331,12 @@ namespace TestConstants
 	ASSERT(IsTrue, spec_anti.x < TestConstants::EXACT_TOLERANCE);
 }
 
-// ============================================================================
-// HAIR F0 TESTS
-// ============================================================================
+	// ============================================================================
+	// HAIR F0 TESTS
+	// ============================================================================
 
-/// @tags hair, fresnel
-[numthreads(1, 1, 1)] void TestHairF0()
+	/// @tags hair, fresnel
+	[numthreads(1, 1, 1)] void TestHairF0()
 {
 	float3 F0 = HairTest::HairF0();
 
@@ -359,8 +356,7 @@ namespace TestConstants
 // ============================================================================
 
 /// @tags hair, marschner, gaussian
-[numthreads(1, 1, 1)] void TestHairGaussian()
-{
+[numthreads(1, 1, 1)] void TestHairGaussian() {
 	float B = 0.3f;  // Beta (roughness)
 
 	// At theta = 0, should be maximum
@@ -384,12 +380,12 @@ namespace TestConstants
 	ASSERT(IsTrue, g_smooth > g_rough);
 }
 
-// ============================================================================
-// DIFFUSE ATTENUATION TESTS
-// ============================================================================
+	// ============================================================================
+	// DIFFUSE ATTENUATION TESTS
+	// ============================================================================
 
-/// @tags hair, diffuse, kajiya-kay
-[numthreads(1, 1, 1)] void TestHairDiffuseAttenuation()
+	/// @tags hair, diffuse, kajiya-kay
+	[numthreads(1, 1, 1)] void TestHairDiffuseAttenuation()
 {
 	float3 N = float3(0, 0, 1);
 	float3 V = normalize(float3(0, 0.5, 1));
@@ -411,8 +407,7 @@ namespace TestConstants
 }
 
 /// @tags hair, diffuse, kajiya-kay
-[numthreads(1, 1, 1)] void TestHairDiffuseBaseColorEffect()
-{
+[numthreads(1, 1, 1)] void TestHairDiffuseBaseColorEffect() {
 	float3 N = float3(0, 0, 1);
 	float3 V = normalize(float3(0, 0.5, 1));
 	float3 L = normalize(float3(0, 0.5, 1));
@@ -427,12 +422,12 @@ namespace TestConstants
 	ASSERT(IsTrue, diffuse_light.x > diffuse_dark.x);
 }
 
-// ============================================================================
-// SATURATION TESTS
-// ============================================================================
+	// ============================================================================
+	// SATURATION TESTS
+	// ============================================================================
 
-/// @tags hair, saturation, color
-[numthreads(1, 1, 1)] void TestHairSaturation()
+	/// @tags hair, saturation, color
+	[numthreads(1, 1, 1)] void TestHairSaturation()
 {
 	float3 color = float3(0.8, 0.4, 0.2);
 
@@ -456,8 +451,7 @@ namespace TestConstants
 }
 
 /// @tags hair, saturation, color
-[numthreads(1, 1, 1)] void TestHairSaturationGrayscale()
-{
+[numthreads(1, 1, 1)] void TestHairSaturationGrayscale() {
 	// Grayscale input should be unaffected by saturation changes
 	float3 gray = float3(0.5, 0.5, 0.5);
 
@@ -470,12 +464,12 @@ namespace TestConstants
 	// Note: result_2 may be clamped by saturate()
 }
 
-// ============================================================================
-// SHIFT NORMAL TESTS
-// ============================================================================
+	// ============================================================================
+	// SHIFT NORMAL TESTS
+	// ============================================================================
 
-/// @tags hair, normal, shift
-[numthreads(1, 1, 1)] void TestShiftNormal()
+	/// @tags hair, normal, shift
+	[numthreads(1, 1, 1)] void TestShiftNormal()
 {
 	float3 T = float3(1, 0, 0);
 	float3 N = float3(0, 0, 1);
@@ -499,8 +493,7 @@ namespace TestConstants
 // ============================================================================
 
 /// @tags hair, edge-cases, robustness
-[numthreads(1, 1, 1)] void TestKajiyaKayEdgeCases()
-{
+[numthreads(1, 1, 1)] void TestKajiyaKayEdgeCases() {
 	float3 T = float3(1, 0, 0);
 
 	// Very high shininess
@@ -519,8 +512,8 @@ namespace TestConstants
 	ASSERT(IsTrue, !isnan(spec_para.x));
 }
 
-/// @tags hair, edge-cases, robustness
-[numthreads(1, 1, 1)] void TestGaussianEdgeCases()
+	/// @tags hair, edge-cases, robustness
+	[numthreads(1, 1, 1)] void TestGaussianEdgeCases()
 {
 	// Very small B (very smooth hair)
 	float g_smooth = HairTest::Hair_g(0.01f, 0.0f);
@@ -535,8 +528,7 @@ namespace TestConstants
 }
 
 /// @tags hair, edge-cases, robustness
-[numthreads(1, 1, 1)] void TestDiffuseAttenuationEdgeCases()
-{
+[numthreads(1, 1, 1)] void TestDiffuseAttenuationEdgeCases() {
 	float3 baseColor = float3(0.5, 0.3, 0.2);
 
 	// Colinear V and N
@@ -554,8 +546,8 @@ namespace TestConstants
 	ASSERT(IsTrue, all(!isinf(diffuse_dark)));
 }
 
-/// @tags hair, saturation, edge-cases
-[numthreads(1, 1, 1)] void TestSaturationEdgeCases()
+	/// @tags hair, saturation, edge-cases
+	[numthreads(1, 1, 1)] void TestSaturationEdgeCases()
 {
 	// Very saturated color
 	float3 saturatedColor = float3(1.0, 0.0, 0.0);
@@ -575,8 +567,7 @@ namespace TestConstants
 // ============================================================================
 
 /// @tags hair, fresnel, physical
-[numthreads(1, 1, 1)] void TestHairFresnelBehavior()
-{
+[numthreads(1, 1, 1)] void TestHairFresnelBehavior() {
 	float3 F0 = HairTest::HairF0();
 
 	// At normal incidence, Fresnel should equal F0
@@ -594,8 +585,8 @@ namespace TestConstants
 	ASSERT(IsTrue, F_30.x > F_normal.x);
 }
 
-/// @tags hair, specular, energy-conservation
-[numthreads(1, 1, 1)] void TestKajiyaKayEnergyConservation()
+	/// @tags hair, specular, energy-conservation
+	[numthreads(1, 1, 1)] void TestKajiyaKayEnergyConservation()
 {
 	float3 T = float3(1, 0, 0);
 	float shininess = 50.0f;
