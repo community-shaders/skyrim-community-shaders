@@ -94,10 +94,8 @@ namespace TestConstants
 
 /// @tags hair, tangent, orthogonalization
 /// Test that ReorientTangent produces a tangent orthogonal to the normal
-[numthreads(1, 1, 1)]
-void TestReorientTangentOrthogonality()
-{
-	float3 N = float3(0, 0, 1);  // Normal pointing up
+[numthreads(1, 1, 1)] void TestReorientTangentOrthogonality() {
+	float3 N = float3(0, 0, 1);    // Normal pointing up
 	float3 T = float3(1, 0, 0.2);  // Tangent with slight z component
 
 	float3 T_reoriented = HairTest::ReorientTangent(T, N);
@@ -111,10 +109,9 @@ void TestReorientTangentOrthogonality()
 	ASSERT(IsTrue, abs(length - 1.0f) < TestConstants::EXACT_TOLERANCE);
 }
 
-/// @tags hair, tangent, edge-cases
-/// Test ReorientTangent with perpendicular tangent (should remain unchanged)
-[numthreads(1, 1, 1)]
-void TestReorientTangentPerpendicular()
+	/// @tags hair, tangent, edge-cases
+	/// Test ReorientTangent with perpendicular tangent (should remain unchanged)
+	[numthreads(1, 1, 1)] void TestReorientTangentPerpendicular()
 {
 	float3 N = float3(0, 0, 1);
 	float3 T = float3(1, 0, 0);  // Already perpendicular
@@ -129,9 +126,7 @@ void TestReorientTangentPerpendicular()
 
 /// @tags hair, tangent, edge-cases
 /// Test ReorientTangent with parallel tangent
-[numthreads(1, 1, 1)]
-void TestReorientTangentParallel()
-{
+[numthreads(1, 1, 1)] void TestReorientTangentParallel() {
 	float3 N = float3(0, 0, 1);
 	float3 T = float3(0, 0, 1);  // Parallel to normal
 
@@ -142,10 +137,9 @@ void TestReorientTangentParallel()
 	ASSERT(IsTrue, abs(length - 1.0f) < 0.1f || isnan(length));  // May produce NaN in degenerate case
 }
 
-/// @tags hair, fresnel, constants
-/// Test HairF0 returns correct Fresnel reflectance for hair IOR
-[numthreads(1, 1, 1)]
-void TestHairF0Value()
+	/// @tags hair, fresnel, constants
+	/// Test HairF0 returns correct Fresnel reflectance for hair IOR
+	[numthreads(1, 1, 1)] void TestHairF0Value()
 {
 	float3 F0 = HairTest::HairF0();
 
@@ -162,9 +156,7 @@ void TestHairF0Value()
 
 /// @tags hair, fresnel, consistency
 /// Test HairF0 is deterministic
-[numthreads(1, 1, 1)]
-void TestHairF0Deterministic()
-{
+[numthreads(1, 1, 1)] void TestHairF0Deterministic() {
 	float3 F0_1 = HairTest::HairF0();
 	float3 F0_2 = HairTest::HairF0();
 
@@ -173,10 +165,9 @@ void TestHairF0Deterministic()
 	ASSERT(AreEqual, F0_1.z, F0_2.z);
 }
 
-/// @tags hair, tangent, shifting
-/// Test ShiftTangent with zero shift
-[numthreads(1, 1, 1)]
-void TestShiftTangentZeroShift()
+	/// @tags hair, tangent, shifting
+	/// Test ShiftTangent with zero shift
+	[numthreads(1, 1, 1)] void TestShiftTangentZeroShift()
 {
 	float3 T = normalize(float3(1, 0, 0));
 	float3 N = normalize(float3(0, 0, 1));
@@ -192,9 +183,7 @@ void TestShiftTangentZeroShift()
 
 /// @tags hair, tangent, shifting
 /// Test ShiftTangent with positive shift
-[numthreads(1, 1, 1)]
-void TestShiftTangentPositiveShift()
-{
+[numthreads(1, 1, 1)] void TestShiftTangentPositiveShift() {
 	float3 T = normalize(float3(1, 0, 0));
 	float3 N = normalize(float3(0, 0, 1));
 	float shift = 0.5f;
@@ -209,10 +198,9 @@ void TestShiftTangentPositiveShift()
 	ASSERT(IsTrue, T_shifted.z > T.z);
 }
 
-/// @tags hair, tangent, shifting
-/// Test ShiftTangent with negative shift
-[numthreads(1, 1, 1)]
-void TestShiftTangentNegativeShift()
+	/// @tags hair, tangent, shifting
+	/// Test ShiftTangent with negative shift
+	[numthreads(1, 1, 1)] void TestShiftTangentNegativeShift()
 {
 	float3 T = normalize(float3(1, 0, 0));
 	float3 N = normalize(float3(0, 0, 1));
@@ -230,9 +218,7 @@ void TestShiftTangentNegativeShift()
 
 /// @tags hair, normal, shifting
 /// Test ShiftNormal produces normalized result
-[numthreads(1, 1, 1)]
-void TestShiftNormalNormalized()
-{
+[numthreads(1, 1, 1)] void TestShiftNormalNormalized() {
 	float3 T = normalize(float3(1, 0, 0));
 	float3 N = normalize(float3(0, 0, 1));
 	float shift = 0.3f;
@@ -244,10 +230,9 @@ void TestShiftNormalNormalized()
 	ASSERT(IsTrue, abs(length - 1.0f) < TestConstants::EXACT_TOLERANCE);
 }
 
-/// @tags hair, normal, shifting
-/// Test ShiftNormal with zero shift
-[numthreads(1, 1, 1)]
-void TestShiftNormalZeroShift()
+	/// @tags hair, normal, shifting
+	/// Test ShiftNormal with zero shift
+	[numthreads(1, 1, 1)] void TestShiftNormalZeroShift()
 {
 	float3 T = normalize(float3(1, 0, 0));
 	float3 N = normalize(float3(0, 0, 1));
@@ -262,9 +247,7 @@ void TestShiftNormalZeroShift()
 
 /// @tags hair, kajiya-kay, specular
 /// Test D_KajiyaKay returns positive values
-[numthreads(1, 1, 1)]
-void TestDKajiyaKayPositive()
-{
+[numthreads(1, 1, 1)] void TestDKajiyaKayPositive() {
 	float3 T = normalize(float3(1, 0, 0));
 	float3 H = normalize(float3(0.5, 0.5, 0.707));
 	float n = 20.0f;
@@ -276,10 +259,9 @@ void TestDKajiyaKayPositive()
 	ASSERT(IsTrue, result.z >= 0.0f);
 }
 
-/// @tags hair, kajiya-kay, specular
-/// Test D_KajiyaKay with perpendicular vectors
-[numthreads(1, 1, 1)]
-void TestDKajiyaKayPerpendicular()
+	/// @tags hair, kajiya-kay, specular
+	/// Test D_KajiyaKay with perpendicular vectors
+	[numthreads(1, 1, 1)] void TestDKajiyaKayPerpendicular()
 {
 	float3 T = normalize(float3(1, 0, 0));
 	float3 H = normalize(float3(0, 1, 0));  // Perpendicular to T
@@ -294,9 +276,7 @@ void TestDKajiyaKayPerpendicular()
 
 /// @tags hair, kajiya-kay, specular
 /// Test D_KajiyaKay with parallel vectors
-[numthreads(1, 1, 1)]
-void TestDKajiyaKayParallel()
-{
+[numthreads(1, 1, 1)] void TestDKajiyaKayParallel() {
 	float3 T = normalize(float3(1, 0, 0));
 	float3 H = normalize(float3(1, 0, 0));  // Parallel to T
 	float n = 20.0f;
@@ -309,10 +289,9 @@ void TestDKajiyaKayParallel()
 	ASSERT(IsTrue, result.x < 0.1f);
 }
 
-/// @tags hair, kajiya-kay, shininess
-/// Test D_KajiyaKay shininess behavior
-[numthreads(1, 1, 1)]
-void TestDKajiyaKayShininess()
+	/// @tags hair, kajiya-kay, shininess
+	/// Test D_KajiyaKay shininess behavior
+	[numthreads(1, 1, 1)] void TestDKajiyaKayShininess()
 {
 	float3 T = normalize(float3(1, 0, 0));
 	float3 H = normalize(float3(0, 1, 0));
@@ -331,9 +310,7 @@ void TestDKajiyaKayShininess()
 
 /// @tags hair, gaussian, distribution
 /// Test Hair_g (Gaussian distribution) is symmetric
-[numthreads(1, 1, 1)]
-void TestHairGaussianSymmetry()
-{
+[numthreads(1, 1, 1)] void TestHairGaussianSymmetry() {
 	float B = 0.3f;
 
 	// Gaussian should be symmetric around 0
@@ -343,10 +320,9 @@ void TestHairGaussianSymmetry()
 	ASSERT(IsTrue, abs(result_pos - result_neg) < TestConstants::EXACT_TOLERANCE);
 }
 
-/// @tags hair, gaussian, distribution
-/// Test Hair_g maximum at zero
-[numthreads(1, 1, 1)]
-void TestHairGaussianMaximum()
+	/// @tags hair, gaussian, distribution
+	/// Test Hair_g maximum at zero
+	[numthreads(1, 1, 1)] void TestHairGaussianMaximum()
 {
 	float B = 0.3f;
 
@@ -360,9 +336,7 @@ void TestHairGaussianMaximum()
 
 /// @tags hair, gaussian, distribution, robustness
 /// Test Hair_g with various beta values
-[numthreads(1, 1, 1)]
-void TestHairGaussianBetaVariation()
-{
+[numthreads(1, 1, 1)] void TestHairGaussianBetaVariation() {
 	float theta = 0.2f;
 
 	// Smaller beta = narrower distribution
@@ -375,10 +349,9 @@ void TestHairGaussianBetaVariation()
 	ASSERT(IsTrue, !isnan(result_wide) && !isinf(result_wide));
 }
 
-/// @tags hair, gaussian, edge-cases
-/// Test Hair_g numerical stability
-[numthreads(1, 1, 1)]
-void TestHairGaussianStability()
+	/// @tags hair, gaussian, edge-cases
+	/// Test Hair_g numerical stability
+	[numthreads(1, 1, 1)] void TestHairGaussianStability()
 {
 	float B = 0.3f;
 
@@ -395,9 +368,7 @@ void TestHairGaussianStability()
 
 /// @tags hair, color, saturation
 /// Test Saturation with grayscale input
-[numthreads(1, 1, 1)]
-void TestSaturationGrayscale()
-{
+[numthreads(1, 1, 1)] void TestSaturationGrayscale() {
 	float3 gray = float3(0.5, 0.5, 0.5);
 	float saturation = 0.5f;
 
@@ -408,10 +379,9 @@ void TestSaturationGrayscale()
 	ASSERT(IsTrue, abs(result.y - result.z) < TestConstants::EXACT_TOLERANCE);
 }
 
-/// @tags hair, color, saturation
-/// Test Saturation with zero saturation
-[numthreads(1, 1, 1)]
-void TestSaturationZero()
+	/// @tags hair, color, saturation
+	/// Test Saturation with zero saturation
+	[numthreads(1, 1, 1)] void TestSaturationZero()
 {
 	float3 color = float3(1.0, 0.0, 0.0);  // Red
 	float saturation = 0.0f;
@@ -425,9 +395,7 @@ void TestSaturationZero()
 
 /// @tags hair, color, saturation
 /// Test Saturation with full saturation
-[numthreads(1, 1, 1)]
-void TestSaturationFull()
-{
+[numthreads(1, 1, 1)] void TestSaturationFull() {
 	float3 color = float3(1.0, 0.5, 0.0);
 	float saturation = 1.0f;
 
@@ -439,10 +407,9 @@ void TestSaturationFull()
 	ASSERT(IsTrue, abs(result.z - color.z) < TestConstants::APPROX_TOLERANCE);
 }
 
-/// @tags hair, color, saturation, edge-cases
-/// Test Saturation bounds
-[numthreads(1, 1, 1)]
-void TestSaturationBounds()
+	/// @tags hair, color, saturation, edge-cases
+	/// Test Saturation bounds
+	[numthreads(1, 1, 1)] void TestSaturationBounds()
 {
 	float3 color = float3(0.8, 0.3, 0.2);
 
@@ -459,9 +426,7 @@ void TestSaturationBounds()
 
 /// @tags hair, diffuse, kajiya-kay
 /// Test GetHairDiffuseAttenuationKajiyaKay returns positive values
-[numthreads(1, 1, 1)]
-void TestHairDiffuseAttenuationPositive()
-{
+[numthreads(1, 1, 1)] void TestHairDiffuseAttenuationPositive() {
 	float3 N = normalize(float3(0, 0, 1));
 	float3 V = normalize(float3(1, 0, 1));
 	float3 L = normalize(float3(0, 1, 1));
@@ -475,10 +440,9 @@ void TestHairDiffuseAttenuationPositive()
 	ASSERT(IsTrue, result.z >= 0.0f);
 }
 
-/// @tags hair, diffuse, kajiya-kay
-/// Test GetHairDiffuseAttenuationKajiyaKay with full shadow
-[numthreads(1, 1, 1)]
-void TestHairDiffuseAttenuationShadow()
+	/// @tags hair, diffuse, kajiya-kay
+	/// Test GetHairDiffuseAttenuationKajiyaKay with full shadow
+	[numthreads(1, 1, 1)] void TestHairDiffuseAttenuationShadow()
 {
 	float3 N = normalize(float3(0, 0, 1));
 	float3 V = normalize(float3(1, 0, 1));
@@ -498,9 +462,7 @@ void TestHairDiffuseAttenuationShadow()
 
 /// @tags hair, diffuse, kajiya-kay, edge-cases
 /// Test GetHairDiffuseAttenuationKajiyaKay with black base color
-[numthreads(1, 1, 1)]
-void TestHairDiffuseAttenuationBlackColor()
-{
+[numthreads(1, 1, 1)] void TestHairDiffuseAttenuationBlackColor() {
 	float3 N = normalize(float3(0, 0, 1));
 	float3 V = normalize(float3(1, 0, 1));
 	float3 L = normalize(float3(0, 1, 1));
@@ -514,10 +476,9 @@ void TestHairDiffuseAttenuationBlackColor()
 	ASSERT(IsTrue, result.x >= 0.0f);
 }
 
-/// @tags hair, diffuse, kajiya-kay
-/// Test GetHairDiffuseAttenuationKajiyaKay with white base color
-[numthreads(1, 1, 1)]
-void TestHairDiffuseAttenuationWhiteColor()
+	/// @tags hair, diffuse, kajiya-kay
+	/// Test GetHairDiffuseAttenuationKajiyaKay with white base color
+	[numthreads(1, 1, 1)] void TestHairDiffuseAttenuationWhiteColor()
 {
 	float3 N = normalize(float3(0, 0, 1));
 	float3 V = normalize(float3(1, 0, 1));
@@ -537,10 +498,8 @@ void TestHairDiffuseAttenuationWhiteColor()
 
 /// @tags hair, tangent, robustness, edge-cases
 /// Test ReorientTangent with non-normalized inputs
-[numthreads(1, 1, 1)]
-void TestReorientTangentNonNormalized()
-{
-	float3 N = float3(0, 0, 2);  // Not normalized
+[numthreads(1, 1, 1)] void TestReorientTangentNonNormalized() {
+	float3 N = float3(0, 0, 2);    // Not normalized
 	float3 T = float3(3, 0, 0.5);  // Not normalized
 
 	float3 T_reoriented = HairTest::ReorientTangent(T, N);
@@ -550,10 +509,9 @@ void TestReorientTangentNonNormalized()
 	ASSERT(IsTrue, abs(length - 1.0f) < 0.1f || isnan(length));
 }
 
-/// @tags hair, tangent, robustness, edge-cases
-/// Test ShiftTangent with extreme shift values
-[numthreads(1, 1, 1)]
-void TestShiftTangentExtremeShift()
+	/// @tags hair, tangent, robustness, edge-cases
+	/// Test ShiftTangent with extreme shift values
+	[numthreads(1, 1, 1)] void TestShiftTangentExtremeShift()
 {
 	float3 T = normalize(float3(1, 0, 0));
 	float3 N = normalize(float3(0, 0, 1));
@@ -571,9 +529,7 @@ void TestShiftTangentExtremeShift()
 
 /// @tags hair, kajiya-kay, robustness, edge-cases
 /// Test D_KajiyaKay with zero shininess
-[numthreads(1, 1, 1)]
-void TestDKajiyaKayZeroShininess()
-{
+[numthreads(1, 1, 1)] void TestDKajiyaKayZeroShininess() {
 	float3 T = normalize(float3(1, 0, 0));
 	float3 H = normalize(float3(0.5, 0.5, 0.707));
 
@@ -584,10 +540,9 @@ void TestDKajiyaKayZeroShininess()
 	ASSERT(IsTrue, result.x >= 0.0f);
 }
 
-/// @tags hair, kajiya-kay, robustness, edge-cases
-/// Test D_KajiyaKay with very high shininess
-[numthreads(1, 1, 1)]
-void TestDKajiyaKayHighShininess()
+	/// @tags hair, kajiya-kay, robustness, edge-cases
+	/// Test D_KajiyaKay with very high shininess
+	[numthreads(1, 1, 1)] void TestDKajiyaKayHighShininess()
 {
 	float3 T = normalize(float3(1, 0, 0));
 	float3 H = normalize(float3(0, 1, 0));
@@ -601,9 +556,7 @@ void TestDKajiyaKayHighShininess()
 
 /// @tags hair, gaussian, robustness, edge-cases
 /// Test Hair_g with near-zero beta
-[numthreads(1, 1, 1)]
-void TestHairGaussianNearZeroBeta()
-{
+[numthreads(1, 1, 1)] void TestHairGaussianNearZeroBeta() {
 	// Very small beta can cause division issues
 	float result = HairTest::Hair_g(0.0001f, 0.1f);
 
@@ -611,10 +564,9 @@ void TestHairGaussianNearZeroBeta()
 	ASSERT(IsTrue, result >= 0.0f);
 }
 
-/// @tags hair, diffuse, robustness, edge-cases
-/// Test GetHairDiffuseAttenuationKajiyaKay with perpendicular vectors
-[numthreads(1, 1, 1)]
-void TestHairDiffuseAttenuationPerpendicularVectors()
+	/// @tags hair, diffuse, robustness, edge-cases
+	/// Test GetHairDiffuseAttenuationKajiyaKay with perpendicular vectors
+	[numthreads(1, 1, 1)] void TestHairDiffuseAttenuationPerpendicularVectors()
 {
 	float3 N = normalize(float3(0, 0, 1));
 	float3 V = normalize(float3(1, 0, 0));  // Perpendicular to N
@@ -634,9 +586,7 @@ void TestHairDiffuseAttenuationPerpendicularVectors()
 
 /// @tags hair, tangent, properties
 /// Test that multiple ShiftTangent calls with opposite shifts are inverses
-[numthreads(1, 1, 1)]
-void TestShiftTangentInverseProperty()
-{
+[numthreads(1, 1, 1)] void TestShiftTangentInverseProperty() {
 	float3 T = normalize(float3(1, 0, 0));
 	float3 N = normalize(float3(0, 0, 1));
 	float shift = 0.3f;
@@ -654,10 +604,9 @@ void TestShiftTangentInverseProperty()
 	ASSERT(IsTrue, abs(len_back - 1.0f) < TestConstants::EXACT_TOLERANCE);
 }
 
-/// @tags hair, kajiya-kay, properties, monotonicity
-/// Test D_KajiyaKay monotonicity with shininess
-[numthreads(1, 1, 1)]
-void TestDKajiyaKayShininessMonotonicity()
+	/// @tags hair, kajiya-kay, properties, monotonicity
+	/// Test D_KajiyaKay monotonicity with shininess
+	[numthreads(1, 1, 1)] void TestDKajiyaKayShininessMonotonicity()
 {
 	float3 T = normalize(float3(1, 0, 0));
 	float3 H = normalize(float3(0, 1, 0));
@@ -678,9 +627,7 @@ void TestDKajiyaKayShininessMonotonicity()
 
 /// @tags hair, gaussian, properties, normalization
 /// Test Hair_g approximate normalization
-[numthreads(1, 1, 1)]
-void TestHairGaussianNormalization()
-{
+[numthreads(1, 1, 1)] void TestHairGaussianNormalization() {
 	float B = 0.3f;
 
 	// Sample multiple points and verify they're consistent with Gaussian shape
@@ -694,10 +641,9 @@ void TestHairGaussianNormalization()
 	ASSERT(IsTrue, tail > 0.0f);
 }
 
-/// @tags hair, color, properties
-/// Test Saturation preserves luminance relationship
-[numthreads(1, 1, 1)]
-void TestSaturationLuminanceRelationship()
+	/// @tags hair, color, properties
+	/// Test Saturation preserves luminance relationship
+	[numthreads(1, 1, 1)] void TestSaturationLuminanceRelationship()
 {
 	float3 color = float3(0.8, 0.3, 0.2);
 	float luma_original = Color::RGBToLuminance(color);
@@ -712,9 +658,7 @@ void TestSaturationLuminanceRelationship()
 
 /// @tags hair, diffuse, properties
 /// Test GetHairDiffuseAttenuationKajiyaKay energy conservation
-[numthreads(1, 1, 1)]
-void TestHairDiffuseAttenuationEnergyConservation()
-{
+[numthreads(1, 1, 1)] void TestHairDiffuseAttenuationEnergyConservation() {
 	float3 N = normalize(float3(0, 0, 1));
 	float3 V = normalize(float3(0, 0, 1));
 	float3 L = normalize(float3(0, 0, 1));
@@ -729,10 +673,9 @@ void TestHairDiffuseAttenuationEnergyConservation()
 	ASSERT(IsTrue, result.z < 5.0f);
 }
 
-/// @tags hair, kajiya-kay, regression
-/// Regression test: verify specific known case
-[numthreads(1, 1, 1)]
-void TestDKajiyaKayRegressionCase()
+	/// @tags hair, kajiya-kay, regression
+	/// Regression test: verify specific known case
+	[numthreads(1, 1, 1)] void TestDKajiyaKayRegressionCase()
 {
 	float3 T = normalize(float3(1, 0, 0));
 	float3 H = normalize(float3(0, 1, 0));
