@@ -291,9 +291,9 @@ namespace TestConstants
 	// Saturation = 0 should return grayscale (luminance)
 	float3 result_0 = Hair::Saturation(color, 0.0f);
 	float luma = Color::RGBToLuminance(color);
-ASSERT(IsTrue, abs(result_0.x - luma) < TestConstants::EXACT_TOLERANCE);
-ASSERT(IsTrue, abs(result_0.y - luma) < TestConstants::EXACT_TOLERANCE);
-ASSERT(IsTrue, abs(result_0.z - luma) < TestConstants::EXACT_TOLERANCE);
+	ASSERT(IsTrue, abs(result_0.x - luma) < TestConstants::EXACT_TOLERANCE);
+	ASSERT(IsTrue, abs(result_0.y - luma) < TestConstants::EXACT_TOLERANCE);
+	ASSERT(IsTrue, abs(result_0.z - luma) < TestConstants::EXACT_TOLERANCE);
 
 	// Saturation = 0.5 should be halfway
 	float3 result_half = Hair::Saturation(color, 0.5f);
