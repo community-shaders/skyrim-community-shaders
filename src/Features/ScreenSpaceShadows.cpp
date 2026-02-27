@@ -26,6 +26,9 @@ void ScreenSpaceShadows::DrawSettings()
 		ImGui::SliderFloat("Bilinear Threshold", &bendSettings.BilinearThreshold, 0.02f, 1.0f);
 		ImGui::SliderFloat("Shadow Contrast", &bendSettings.ShadowContrast, 0.0f, 4.0f);
 
+		if (REL::Module::IsVR())
+			ImGui::Checkbox("VR Stereo Sync", &enableStereoSync);
+
 		ImGui::Spacing();
 		ImGui::Spacing();
 		ImGui::TreePop();
@@ -42,17 +45,17 @@ void ScreenSpaceShadows::ClearShaderCache()
 		raymarchRightCS->Release();
 		raymarchRightCS = nullptr;
 	}
+	if (stereoSyncCS) {
+		stereoSyncCS->Release();
+		stereoSyncCS = nullptr;
+	}
 }
 
-uint ScreenSpaceShadows::GetScaledSampleCount(bool a_dynamic)
+uint ScreenSpaceShadows::GetScaledSampleCount()
 {
 	auto screenSize = globals::state->screenSize;
 
-	if (a_dynamic)
-		screenSize = Util::ConvertToDynamic(globals::state->screenSize);
-
 	// Scale sample count based on both dimensions relative to 1920x1080 reference
-
 	float2 referenceRes = { 1920.0f, 1080.0f };
 	float referenceArea = referenceRes.x * referenceRes.y;
 	float currentArea = screenSize.x * screenSize.y;
@@ -75,7 +78,7 @@ ID3D11ComputeShader* ScreenSpaceShadows::GetComputeRaymarch()
 	}
 
 	if (!raymarchCS) {
-		uint scaledSampleCount = GetScaledSampleCount(false);
+		uint scaledSampleCount = GetScaledSampleCount();
 		raymarchCS = (ID3D11ComputeShader*)Util::CompileShader(L"Data\\Shaders\\ScreenSpaceShadows\\RaymarchCS.hlsl", { { "SAMPLE_COUNT", std::format("{}", scaledSampleCount).c_str() } }, "cs_5_0");
 	}
 	return raymarchCS;
@@ -94,7 +97,7 @@ ID3D11ComputeShader* ScreenSpaceShadows::GetComputeRaymarchRight()
 	}
 
 	if (!raymarchRightCS) {
-		uint scaledSampleCount = GetScaledSampleCount(false);
+		uint scaledSampleCount = GetScaledSampleCount();
 		raymarchRightCS = (ID3D11ComputeShader*)Util::CompileShader(L"Data\\Shaders\\ScreenSpaceShadows\\RaymarchCS.hlsl", { { "SAMPLE_COUNT", std::format("{}", scaledSampleCount).c_str() }, { "RIGHT", "" } }, "cs_5_0");
 	}
 	return raymarchRightCS;
@@ -151,9 +154,6 @@ void ScreenSpaceShadows::DrawShadows()
 
 	float2 dynamicRes = { viewport->GetRuntimeData().dynamicResolutionWidthRatio, viewport->GetRuntimeData().dynamicResolutionHeightRatio };
 
-	uint dynamicSampleCount = GetScaledSampleCount(true);
-	uint dynamicReadCount = (dynamicSampleCount / 64 + 2);
-
 	// Shared dispatch logic for both VR and non-VR
 	auto DispatchEye = [&](const char* eyeName, ID3D11ComputeShader* shader, const float* lightProj,
 						   float invTexSizeX, float invTexSizeY) {
@@ -186,9 +186,6 @@ void ScreenSpaceShadows::DrawShadows()
 			data.NearDepthValue = 0.0f;
 
 			data.DynamicRes = dynamicRes;
-
-			data.DynamicSampleCount = dynamicSampleCount;
-			data.DynamicReadCount = dynamicReadCount;
 
 			data.InvDepthTextureSize[0] = invTexSizeX;
 			data.InvDepthTextureSize[1] = invTexSizeY;
@@ -233,6 +230,59 @@ void ScreenSpaceShadows::DrawShadows()
 	context->CSSetConstantBuffers(1, 1, &buffer);
 }
 
+void ScreenSpaceShadows::DrawStereoSync()
+{
+	if (!globals::game::isVR || !enableStereoSync || !stereoSyncCS || !stereoSyncCopyTex || !stereoSyncCB)
+		return;
+
+	ZoneScoped;
+	TracyD3D11Zone(globals::state->tracyCtx, "SSS - Stereo Sync");
+
+	if (globals::state->frameAnnotations)
+		globals::state->BeginPerfEvent("SSS - Stereo Sync");
+
+	auto context = globals::d3d::context;
+
+	context->CopyResource(stereoSyncCopyTex->resource.get(), screenSpaceShadowsTexture->resource.get());
+
+	float2 resolution = Util::ConvertToDynamic(globals::state->screenSize);
+
+	StereoSyncCB cbData{};
+	cbData.FrameDim[0] = resolution.x;
+	cbData.FrameDim[1] = resolution.y;
+	cbData.RcpFrameDim[0] = 1.0f / resolution.x;
+	cbData.RcpFrameDim[1] = 1.0f / resolution.y;
+
+	stereoSyncCB->Update(cbData);
+	auto cbPtr = stereoSyncCB->CB();
+
+	auto* depthSRV = Util::GetCurrentSceneDepthSRV();
+	ID3D11ShaderResourceView* srvs[2]{ depthSRV, stereoSyncCopyTex->srv.get() };
+	ID3D11UnorderedAccessView* uavs[1]{ screenSpaceShadowsTexture->uav.get() };
+
+	context->CSSetConstantBuffers(1, 1, &cbPtr);
+	auto* sharedDataBuf = globals::state->sharedDataCB->CB();
+	context->CSSetConstantBuffers(5, 1, &sharedDataBuf);
+	context->CSSetShaderResources(0, 2, srvs);
+	context->CSSetUnorderedAccessViews(0, 1, uavs, nullptr);
+	context->CSSetShader(stereoSyncCS, nullptr, 0);
+
+	auto dispatchCount = Util::GetScreenDispatchCount(true);
+	context->Dispatch(dispatchCount.x, dispatchCount.y, 1);
+
+	srvs[0] = nullptr;
+	srvs[1] = nullptr;
+	uavs[0] = nullptr;
+	cbPtr = nullptr;
+	context->CSSetShaderResources(0, 2, srvs);
+	context->CSSetUnorderedAccessViews(0, 1, uavs, nullptr);
+	context->CSSetConstantBuffers(1, 1, &cbPtr);
+	context->CSSetShader(nullptr, nullptr, 0);
+
+	if (globals::state->frameAnnotations)
+		globals::state->EndPerfEvent();
+}
+
 void ScreenSpaceShadows::Prepass()
 {
 	auto context = globals::d3d::context;
@@ -241,8 +291,10 @@ void ScreenSpaceShadows::Prepass()
 	context->ClearUnorderedAccessViewFloat(screenSpaceShadowsTexture->uav.get(), white);
 
 	if (auto sky = globals::game::sky)
-		if (bendSettings.Enable && sky->mode.get() == RE::Sky::Mode::kFull)
+		if (bendSettings.Enable && sky->mode.get() == RE::Sky::Mode::kFull) {
 			DrawShadows();
+			DrawStereoSync();
+		}
 
 	auto view = screenSpaceShadowsTexture->srv.get();
 	context->PSSetShaderResources(45, 1, &view);
@@ -271,6 +323,11 @@ bool ScreenSpaceShadows::HasShaderDefine(RE::BSShader::Type)
 void ScreenSpaceShadows::SetupResources()
 {
 	raymarchCB = new ConstantBuffer(ConstantBufferDesc<RaymarchCB>());
+
+	if (REL::Module::IsVR()) {
+		stereoSyncCB = new ConstantBuffer(ConstantBufferDesc<StereoSyncCB>());
+		stereoSyncCS = reinterpret_cast<ID3D11ComputeShader*>(Util::CompileShader(L"Data\\Shaders\\ScreenSpaceShadows\\StereoSyncCS.hlsl", { { "VR", "" }, { "FRAMEBUFFER", "" } }, "cs_5_0"));
+	}
 
 	{
 		auto device = globals::d3d::device;
@@ -313,5 +370,10 @@ void ScreenSpaceShadows::SetupResources()
 		screenSpaceShadowsTexture = new Texture2D(texDesc);
 		screenSpaceShadowsTexture->CreateSRV(srvDesc);
 		screenSpaceShadowsTexture->CreateUAV(uavDesc);
+
+		if (REL::Module::IsVR()) {
+			stereoSyncCopyTex = new Texture2D(texDesc);
+			stereoSyncCopyTex->CreateSRV(srvDesc);
+		}
 	}
 }
