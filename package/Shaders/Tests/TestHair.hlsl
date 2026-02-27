@@ -5,6 +5,7 @@
 // 2. Including the real Hair.hlsli file
 // 3. Testing Hair namespace functions directly
 #define CS_HAIR
+#define HAIR
 
 // ============================================================================
 // STUBS FOR EXTERNAL DEPENDENCIES (must be defined BEFORE including Hair.hlsli)
