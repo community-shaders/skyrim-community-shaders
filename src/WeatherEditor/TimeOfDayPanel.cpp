@@ -24,7 +24,13 @@ namespace TimeOfDayPanel
 	// Per-period add-setting state
 	static SceneSettingsUI::AddSettingState periodAddState[kPeriodCount];
 	static SceneSettingsUI::AddSettingState allPeriodsAddState;
-	static bool addToAllPeriods = false;
+
+	/// Reset and open the add-setting dialog for a given state.
+	static void OpenAddDialog(SceneSettingsUI::AddSettingState& state)
+	{
+		state.Reset();
+		state.dialogOpen = true;
+	}
 
 	// Shared popups
 	static SceneSettingsUI::PopupState popups{
@@ -357,30 +363,26 @@ namespace TimeOfDayPanel
 			SceneSettingsManager::GetPeriodName(currentPeriod),
 			SceneSettingsManager::GetCurrentGameHour());
 
-		if (addToAllPeriods) {
-			SceneSettingsUI::RightAlignNextButton();
-			SceneSettingsUI::DrawAddSettingButton(kSceneType, allPeriodsAddState,
-				Period::Count, nullptr, true);
-			SceneSettingsUI::DrawAddSettingDialog(kSceneType, allPeriodsAddState,
-				Period::Count, true);
-		}
-
 		ImGui::Separator();
 
-		// Add buttons: one for all periods, or per-period
-		ImGui::Checkbox("All Periods", &addToAllPeriods);
-
-		if (!addToAllPeriods) {
-			for (int i = 0; i < kPeriodCount; ++i) {
-				auto periodLabel = std::format("{}:", SceneSettingsManager::GetPeriodName(static_cast<Period>(i)));
-				ImGui::PushID(i);
-				SceneSettingsUI::DrawAddSettingButton(kSceneType, periodAddState[i],
-					static_cast<Period>(i), periodLabel.c_str());
-				SceneSettingsUI::DrawAddSettingDialog(kSceneType, periodAddState[i],
-					static_cast<Period>(i));
-				ImGui::PopID();
-			}
+		// Add buttons: inline row of named buttons matching section header style
+		for (int i = 0; i < kPeriodCount; ++i) {
+			if (i > 0)
+				ImGui::SameLine();
+			ImGui::PushID(i);
+			auto label = std::format("Add {}", SceneSettingsManager::kPeriodNames[i]);
+			if (ImGui::SmallButton(label.c_str()))
+				OpenAddDialog(periodAddState[i]);
+			ImGui::PopID();
 		}
+		ImGui::SameLine();
+		if (ImGui::SmallButton("Add All"))
+			OpenAddDialog(allPeriodsAddState);
+
+		// Draw all add-setting dialogs (no-op when not open)
+		for (int i = 0; i < kPeriodCount; ++i)
+			SceneSettingsUI::DrawAddSettingDialog(kSceneType, periodAddState[i], static_cast<Period>(i));
+		SceneSettingsUI::DrawAddSettingDialog(kSceneType, allPeriodsAddState, Period::Count, true);
 
 		ImGui::Separator();
 
@@ -392,7 +394,7 @@ namespace TimeOfDayPanel
 			ImGui::TextColored(theme.StatusPalette.Disable,
 				"No time-of-day settings configured.");
 			ImGui::TextColored(theme.StatusPalette.Disable,
-				"Use the + button above to add overrides for each period.");
+				"Use the Add buttons above to add overrides for each period.");
 			return;
 		}
 

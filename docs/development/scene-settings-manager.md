@@ -361,68 +361,51 @@ Clicking it opens the **Add Feature Settings** dialog:
 
 ### Time of Day Panel (UI)
 
-The default view ("All Periods" unchecked) shows a vertical per-period [+] list:
+A row of named add buttons sits below the header, one per period plus an "Add All" shortcut:
 
 ```
-┌──────────────────────────────────────────────────────────────────┐
-│  Time of Day Settings (Exterior Only)  [Day 12.0h]               │
-│  ────────────────────────────────────────────────────            │
-│  [ ] All Periods                                                 │
-│  Dawn:     [+]                                                   │
-│  Sunrise:  [+]                                                   │
-│  Day:      [+]                                                   │
-│  Sunset:   [+]                                                   │
-│  Dusk:     [+]                                                   │
-│  Night:    [+]                                                   │
-│  ────────────────────────────────────────────────────            │
-│                                                                  │
-│  Overwrite Files              [Pause All] [Delete All]           │
-│  ┌─────────┬────────┬────────┬────────┬────────┬──────┬───────┐  │
-│  │Setting  │ Dawn   │Sunrise │  Day   │ Sunset │ Dusk │ Night │  │
-│  │         │ [●][X] │ [●][X] │ [●][X] │ [●][X] │[●][X]│[●][X] │  │
-│  ├─────────┼────────┼────────┼────────┼────────┼──────┼───────┤  │
-│  │CloudShadows:                                               │  │
-│  │ Opacity │ 0.300  │  --    │ 0.800  │ 0.500  │  --  │ 0.100 │  │
-│  │         │ [●][X] │        │ [●][X] │ [●][X] │      │[●][X] │  │
-│  └─────────┴────────┴────────┴────────┴────────┴──────┴───────┘  │
-│                                                                  │
-│  User Settings                [Pause All] [Delete All]           │
-│  ┌─────────┬────────┬────────┬────────┬────────┬──────┬───────┐  │
-│  │Setting  │ Dawn   │Sunrise │  Day   │ Sunset │ Dusk │ Night │  │
-│  │         │ [●][X] │ [●][X] │ [●][X] │ [●][X] │[●][X]│[●][X] │  │
-│  ├─────────┼────────┼────────┼────────┼────────┼──────┼───────┤  │
-│  │Skylighting:                                                │  │
-│  │ MixAmt  │ 0.400  │ 0.600  │ 0.800  │ 0.600  │0.400 │ 0.200 │  │
-│  │         │ [●][X] │ [●][X] │ [●][X] │ [●][X] │[●][X]│[●][X] │  │
-│  └─────────┴────────┴────────┴────────┴────────┴──────┴───────┘  │
-│                                                                  │
-└──────────────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────────────────┐
+│  Time of Day Settings (Exterior Only)  [Day 12.0h]                          │
+│  ────────────────────────────────────────────────────────────────────────── │
+│  [Add Dawn][Add Sunrise][Add Day][Add Sunset][Add Dusk][Add Night][Add All] │
+│  ────────────────────────────────────────────────────────────────────────── │
+│                                                                             │
+│  Overwrite Files              [Pause All] [Delete All]                      │
+│  ┌─────────┬────────┬────────┬────────┬────────┬──────┬───────┐             │
+│  │Setting  │ Dawn   │Sunrise │  Day   │ Sunset │ Dusk │ Night │             │
+│  │         │ [●][X] │ [●][X] │ [●][X] │ [●][X] │[●][X]│[●][X] │             │
+│  ├─────────┼────────┼────────┼────────┼────────┼──────┼───────┤             │
+│  │CloudShadows:                                               │             │
+│  │ Opacity │ 0.300  │  --    │ 0.800  │ 0.500  │  --  │ 0.100 │             │
+│  │         │ [●][X] │        │ [●][X] │ [●][X] │      │[●][X] │             │
+│  └─────────┴────────┴────────┴────────┴────────┴──────┴───────┘             │
+│                                                                             │
+│  User Settings                [Pause All] [Delete All]                      │
+│  ┌─────────┬────────┬────────┬────────┬────────┬──────┬───────┐             │
+│  │Setting  │ Dawn   │Sunrise │  Day   │ Sunset │ Dusk │ Night │             │
+│  │         │ [●][X] │ [●][X] │ [●][X] │ [●][X] │[●][X]│[●][X] │             │
+│  ├─────────┼────────┼────────┼────────┼────────┼──────┼───────┤             │
+│  │Skylighting:                                                │             │
+│  │ MixAmt  │ 0.400  │ 0.600  │ 0.800  │ 0.600  │0.400 │ 0.200 │             │
+│  │         │ [●][X] │ [●][X] │ [●][X] │ [●][X] │[●][X]│[●][X] │             │
+│  └─────────┴────────┴────────┴────────┴────────┴──────┴───────┘             │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
 ```
 
-Clicking a **[+]** button opens the **Add Feature Settings** dialog (see above). **Only float settings appear** in the TOD dialog — integers, booleans, and strings cannot be smoothly transitioned between periods and are excluded. Overwrite files containing non-float TOD settings are also rejected at load time with a log warning.
+Clicking an **Add** button opens the **Add Feature Settings** dialog (see above). **Only float settings appear** in the TOD dialog — integers, booleans, and strings cannot be smoothly transitioned between periods and are excluded. Overwrite files containing non-float TOD settings are also rejected at load time with a log warning.
 
 **Elements:**
 
 | Element                  | Description                                                                                                                                                                                                                         |
 | ------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Header**               | Shows the current period and game hour (e.g., `[Day 12.0h]`). When "All Periods" is checked, a right-aligned [+] button appears on this line.                                                                                       |
-| **All Periods checkbox** | When checked, the per-period [+] list is hidden and a single right-aligned [+] is shown on the header. When unchecked, per-period [+] buttons are listed vertically.                                                                |
-| **Per-period [+] list**  | One [+] button per period (Dawn through Night), each opening a dialog scoped to that specific period. Lets you add a setting to just one or two periods.                                                                            |
+| **Header**               | Shows the current period and game hour (e.g., `[Day 12.0h]`).                                                                                                                                                                       |
+| **Add buttons**          | An inline row of small buttons — one per period ("Add Dawn" through "Add Night") plus "Add All". Each opens a dialog scoped to that period; "Add All" populates all 6 periods at once.                                             |
 | **Header controls**      | Each period column header includes a toggle [●] (pause/unpause all entries in that period) and [X] (delete all entries in that period) below the period name.                                                                       |
 | **Period columns**       | One column per period. The active period column is highlighted; inactive periods are dimmed. `--` means no override for that period (falls back to baseline).                                                                       |
 | **Row-level controls**   | Each setting row has a toggle (pause all periods) and delete (remove all periods) button in the Setting column.                                                                                                                     |
 | **Per-cell controls**    | Each individual period cell has its own value editor, pause toggle, and delete button.                                                                                                                                              |
 | **Setting filter**       | The add dialog only shows float settings. Integers, booleans, and strings are excluded since they cannot be smoothly interpolated between periods. Overwrite files are also validated — non-float TOD entries are rejected at load. |
-
-**"All Periods" mode**: When checked, the per-period [+] list is replaced by a single [+] button right-aligned on the header line (matching the Interior Only layout). Adding settings through that dialog populates all 6 periods at once with the current value:
-
-```
-  Time of Day Settings (Exterior Only)  [Day 12.0h]          [+]
-  ──────────────────────────────────────────────────────────
-  [✓] All Periods
-```
-
-When unchecked, each [+] button opens the Add Feature Settings dialog scoped to that specific period, letting you add a setting to just one or two periods (e.g., only Dawn and Night) without filling all six.
 
 ---
 
