@@ -12,34 +12,34 @@
 
 struct VS_INPUT
 {
-	float3 Position : POSITION0;
-	float2 TexCoord0 : TEXCOORD0;
-	float4 InstanceData1 : TEXCOORD4;
-	float4 InstanceData2 : TEXCOORD5;
-	float4 InstanceData3 : TEXCOORD6;
-	float4 InstanceData4 : TEXCOORD7;
+	float3 Position: POSITION0;
+	float2 TexCoord0: TEXCOORD0;
+	float4 InstanceData1: TEXCOORD4;
+	float4 InstanceData2: TEXCOORD5;
+	float4 InstanceData3: TEXCOORD6;
+	float4 InstanceData4: TEXCOORD7;
 #if defined(VR)
-	uint InstanceID : SV_INSTANCEID;
+	uint InstanceID: SV_INSTANCEID;
 #endif  // VR
 };
 
 struct VS_OUTPUT
 {
-	float4 Position : SV_POSITION0;
-	float3 TexCoord : TEXCOORD0;
+	float4 Position: SV_POSITION0;
+	float3 TexCoord: TEXCOORD0;
 
 #if defined(RENDER_DEPTH)
-	float4 Depth : TEXCOORD3;
+	float4 Depth: TEXCOORD3;
 #else
-	float4 WorldPosition : POSITION1;
-	float4 PreviousWorldPosition : POSITION2;
+	float4 WorldPosition: POSITION1;
+	float4 PreviousWorldPosition: POSITION2;
 #endif  // RENDER_DEPTH
-	float4 ViewPosition : POSITION3;
+	float4 ViewPosition: POSITION3;
 
 #if defined(VR)
-	float ClipDistance : SV_ClipDistance0;  // o11
-	float CullDistance : SV_CullDistance0;  // p11
-	uint EyeIndex : EYEIDX0;
+	float ClipDistance: SV_ClipDistance0;  // o11
+	float CullDistance: SV_CullDistance0;  // p11
+	uint EyeIndex: EYEIDX0;
 #endif  // VR
 };
 
@@ -107,14 +107,14 @@ typedef VS_OUTPUT PS_INPUT;
 
 struct PS_OUTPUT
 {
-	float4 Diffuse : SV_Target0;
+	float4 Diffuse: SV_Target0;
 
 #if !defined(RENDER_DEPTH)
 #	if defined(DEFERRED)
-	float2 MotionVector : SV_Target1;
-	float4 Normal : SV_Target2;
-	float4 Albedo : SV_Target3;
-	float4 Masks : SV_Target6;
+	float2 MotionVector: SV_Target1;
+	float4 Normal: SV_Target2;
+	float4 Albedo: SV_Target3;
+	float4 Masks: SV_Target6;
 #	endif  // DEFERRED
 #endif      // !RENDER_DEPTH
 };

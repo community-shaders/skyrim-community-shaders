@@ -8,9 +8,9 @@ typedef VS_OUTPUT PS_INPUT;
 
 struct PS_OUTPUT
 {
-	float4 RefractionNormals : SV_TARGET0;
-	float SAOCameraZ : SV_TARGET1;
-	float Depth : SV_Depth;
+	float4 RefractionNormals: SV_TARGET0;
+	float SAOCameraZ: SV_TARGET1;
+	float Depth: SV_Depth;
 };
 
 SamplerState LinearSampler : register(s0);
