@@ -60,7 +60,7 @@ namespace SharedData
 		uint3(0, 0, 0)
 	};
 
-    float GetScreenDepth(float2 uv, uint index = 0) { return 1.0f; }  // Stub function for screen depth, if needed by Hair.hlsli
+	float GetScreenDepth(float2 uv, uint index = 0) { return 1.0f; }  // Stub function for screen depth, if needed by Hair.hlsli
 }
 
 // ============================================================================
