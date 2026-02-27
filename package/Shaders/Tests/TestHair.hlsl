@@ -4,6 +4,7 @@
 // 1. Defining necessary stubs for external dependencies (SharedData, textures, etc.)
 // 2. Including the real Hair.hlsli file
 // 3. Testing Hair namespace functions directly
+#define CS_HAIR
 
 // ============================================================================
 // STUBS FOR EXTERNAL DEPENDENCIES (must be defined BEFORE including Hair.hlsli)
