@@ -6,36 +6,14 @@
 // 3. Testing Hair namespace functions directly
 
 // ============================================================================
-// STUBS FOR EXTERNAL DEPENDENCIES
+// STUBS FOR EXTERNAL DEPENDENCIES (must be defined BEFORE including Hair.hlsli)
 // ============================================================================
 
 // Stub sampler required by Hair.hlsli
 SamplerState SampColorSampler : register(s0);
 
-// Include common dependencies that Hair.hlsli needs
-#include "/Shaders/Common/Color.hlsli"
-#include "/Shaders/Common/LightingCommon.hlsli"
-#include "/Shaders/Common/Math.hlsli"
-
-// Stub BRDF functions used by Hair.hlsli
-namespace BRDF
-{
-	float3 F_Schlick(float3 F0, float VdotH)
-	{
-		float Fc = pow(1 - VdotH, 5);
-		return F0 + (1 - F0) * Fc;
-	}
-
-	float2 EnvBRDF(float roughness, float NdotV)
-	{
-		float a = roughness * roughness;
-		float x = 1 - NdotV;
-		float x2 = x * x;
-		return float2(saturate(1 - a + a * x2), saturate(x2 * 0.5));
-	}
-}
-
 // Stub SharedData namespace with hairSpecularSettings
+// This must be defined before Hair.hlsli is included since it uses SharedData::hairSpecularSettings
 namespace SharedData
 {
 	struct HairSpecularSettings
@@ -84,9 +62,14 @@ namespace SharedData
 }
 
 // ============================================================================
-// INCLUDE THE REAL HAIR.HLSLI
+// INCLUDE THE REAL HAIR.HLSLI AND ITS DEPENDENCIES
 // ============================================================================
+// Hair.hlsli includes: Common/BRDF.hlsli, Common/Color.hlsli, Common/Game.hlsli, Common/Math.hlsli
+// These are all real files from the codebase that will be included automatically
 #include "/Shaders/Hair/Hair.hlsli"
+
+// Include common dependencies needed for tests (LightingCommon provides struct definitions)
+#include "/Shaders/Common/LightingCommon.hlsli"
 
 #include "/Test/STF/ShaderTestFramework.hlsli"
 
@@ -308,9 +291,9 @@ namespace TestConstants
 	// Saturation = 0 should return grayscale (luminance)
 	float3 result_0 = Hair::Saturation(color, 0.0f);
 	float luma = Color::RGBToLuminance(color);
-	ASSERT(IsTrue, abs(result_0.x - luma) < TestConstants::EXACT_TOLERANCE);
-	ASSERT(IsTrue, abs(result_0.y - luma) < TestConstants::EXACT_TOLERANCE);
-	ASSERT(IsTrue, abs(result_0.z - luma) < TestConstants::EXACT_TOLERANCE);
+ASSERT(IsTrue, abs(result_0.x - luma) < TestConstants::EXACT_TOLERANCE);
+ASSERT(IsTrue, abs(result_0.y - luma) < TestConstants::EXACT_TOLERANCE);
+ASSERT(IsTrue, abs(result_0.z - luma) < TestConstants::EXACT_TOLERANCE);
 
 	// Saturation = 0.5 should be halfway
 	float3 result_half = Hair::Saturation(color, 0.5f);
