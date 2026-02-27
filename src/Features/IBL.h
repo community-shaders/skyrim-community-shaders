@@ -45,11 +45,15 @@ public:
 		uint EnableDiffuseIBL = 0;
 		uint PreserveFogLuminance = 0;
 		uint UseStaticIBL = 1;
-		uint EnableInterior = 0;
-		float DiffuseIBLScale = 1.0f;
 		float DALCAmount = 1.0f;
-		float IBLSaturation = 1.0f;
+		float EnvIBLScale = 1.0f;
+		float SkyIBLScale = 1.0f;
+		float EnvIBLSaturation = 1.0f;
+		float SkyIBLSaturation = 1.0f;
 		float FogAmount = 0.0f;
+		uint DALCMode = 0;  // 0: Luminance Ratio, 1: Color Ratio, 2: DALC + Sky
+		float pad0 = 0.0f;
+		float pad1 = 0.0f;
 	} settings;
 
 	eastl::unique_ptr<Texture2D> staticDiffuseIBLTexture = nullptr;

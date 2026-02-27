@@ -246,15 +246,15 @@ PS_OUTPUT main(PS_INPUT input)
 
 	float3 directionalAmbientColor = max(0, Color::Ambient(SharedData::GetAmbient(normal)));
 #			if defined(IBL)
-	float3 iblColor = 0;
 	if (SharedData::iblSettings.EnableDiffuseIBL) {
-		directionalAmbientColor *= SharedData::iblSettings.DALCAmount;
-#				if defined(SKYLIGHTING)
-		iblColor += Color::Saturation(ImageBasedLighting::GetIBLColor(-normal, 1.0), SharedData::iblSettings.IBLSaturation) * SharedData::iblSettings.DiffuseIBLScale;
-#				else
-		iblColor += Color::Saturation(ImageBasedLighting::GetIBLColor(-normal), SharedData::iblSettings.IBLSaturation) * SharedData::iblSettings.DiffuseIBLScale;
-#				endif
-		directionalAmbientColor += Color::IrradianceToGamma(iblColor);
+		if (SharedData::iblSettings.DALCMode == 2) {
+			// Mode 2: keep vanilla DALC, add sky IBL overlay
+			directionalAmbientColor += Color::IrradianceToGamma(ImageBasedLighting::GetSkyIBLColor(-normal));
+		} else {
+			float3 envIBLColor = Color::IrradianceToGamma(ImageBasedLighting::GetEnvIBLColor(-normal));
+			float3 skyIBLColor = Color::IrradianceToGamma(ImageBasedLighting::GetSkyIBLColor(-normal));
+			directionalAmbientColor = envIBLColor + skyIBLColor;
+		}
 	}
 #			endif
 	diffuseColor += directionalAmbientColor;
@@ -287,15 +287,15 @@ PS_OUTPUT main(PS_INPUT input)
 
 	float3 directionalAmbientColor = Color::Ambient(SharedData::GetAmbient(normal));
 #			if defined(IBL)
-	float3 iblColor = 0;
 	if (SharedData::iblSettings.EnableDiffuseIBL) {
-		directionalAmbientColor *= SharedData::iblSettings.DALCAmount;
-#				if defined(SKYLIGHTING)
-		iblColor += Color::Saturation(ImageBasedLighting::GetIBLColor(-normal, 1.0), SharedData::iblSettings.IBLSaturation) * SharedData::iblSettings.DiffuseIBLScale;
-#				else
-		iblColor += Color::Saturation(ImageBasedLighting::GetIBLColor(-normal), SharedData::iblSettings.IBLSaturation) * SharedData::iblSettings.DiffuseIBLScale;
-#				endif
-		directionalAmbientColor += Color::IrradianceToGamma(iblColor);
+		if (SharedData::iblSettings.DALCMode == 2) {
+			// Mode 2: keep vanilla DALC, add sky IBL overlay
+			directionalAmbientColor += Color::IrradianceToGamma(ImageBasedLighting::GetSkyIBLColor(-normal));
+		} else {
+			float3 envIBLColor = Color::IrradianceToGamma(ImageBasedLighting::GetEnvIBLColor(-normal));
+			float3 skyIBLColor = Color::IrradianceToGamma(ImageBasedLighting::GetSkyIBLColor(-normal));
+			directionalAmbientColor = envIBLColor + skyIBLColor;
+		}
 	}
 #			endif
 	diffuseColor += directionalAmbientColor;

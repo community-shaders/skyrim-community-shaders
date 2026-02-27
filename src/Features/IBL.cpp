@@ -14,19 +14,38 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	EnableDiffuseIBL,
 	PreserveFogLuminance,
 	UseStaticIBL,
-	EnableInterior,
-	DiffuseIBLScale,
 	DALCAmount,
-	IBLSaturation,
-	FogAmount)
+	EnvIBLScale,
+	SkyIBLScale,
+	EnvIBLSaturation,
+	SkyIBLSaturation,
+	FogAmount,
+	DALCMode)
 
 void IBL::DrawSettings()
 {
 	Util::WeatherUI::Checkbox("Enable Diffuse IBL", this, "EnableDiffuseIBL", (bool*)&settings.EnableDiffuseIBL);
-	Util::WeatherUI::SliderFloat("Diffuse IBL Scale", this, "DiffuseIBLScale", &settings.DiffuseIBLScale, 0.0f, 10.0f, "%.2f");
-	Util::WeatherUI::SliderFloat("Diffuse IBL Saturation", this, "IBLSaturation", &settings.IBLSaturation, 0.0f, 2.0f, "%.2f");
+	Util::WeatherUI::SliderFloat("Env IBL Scale", this, "EnvIBLScale", &settings.EnvIBLScale, 0.0f, 10.0f, "%.2f");
+	Util::WeatherUI::SliderFloat("Sky IBL Scale", this, "SkyIBLScale", &settings.SkyIBLScale, 0.0f, 10.0f, "%.2f");
+	Util::WeatherUI::SliderFloat("Env IBL Saturation", this, "EnvIBLSaturation", &settings.EnvIBLSaturation, 0.0f, 2.0f, "%.2f");
+	Util::WeatherUI::SliderFloat("Sky IBL Saturation", this, "SkyIBLSaturation", &settings.SkyIBLSaturation, 0.0f, 2.0f, "%.2f");
 	Util::WeatherUI::SliderFloat("DALC Amount", this, "DALCAmount", &settings.DALCAmount, 0.0f, 1.0f, "%.2f");
-	ImGui::Checkbox("Enable Interior", (bool*)&settings.EnableInterior);
+	if (auto _tt = Util::HoverTooltipWrapper()) {
+		ImGui::Text("Controls how much the IBL brightness is matched to the game's ambient light level.");
+	}
+	{
+		static const char* dalcModeNames[] = { "Luminance Ratio", "Color Ratio", "DALC + Sky" };
+		int dalcMode = static_cast<int>(settings.DALCMode);
+		if (ImGui::Combo("DALC Mode", &dalcMode, dalcModeNames, IM_ARRAYSIZE(dalcModeNames))) {
+			settings.DALCMode = static_cast<uint>(dalcMode);
+		}
+		if (auto _tt = Util::HoverTooltipWrapper()) {
+			ImGui::Text(
+				"Luminance Ratio: Scalar brightness ratio (loses DALC color tint).\n"
+				"Color Ratio: Per-channel ratio (preserves DALC color tint).\n"
+				"DALC + Sky: Use vanilla DALC as base, overlay sky IBL on top.");
+		}
+	}
 	ImGui::Checkbox("Use Static IBL For Out-of-World Objects", (bool*)&settings.UseStaticIBL);
 	if (auto _tt = Util::HoverTooltipWrapper()) {
 		ImGui::Text("Enables the use of static IBL textures for objects that are not in the world (e.g. inventory items).");
@@ -65,31 +84,49 @@ void IBL::RegisterWeatherVariables()
 			return factor > 0.5f ? to : from;  // Switch at transition midpoint
 		}));
 
-	// Register diffuse IBL scale - controls the overall intensity of diffuse IBL
+	// Register env IBL scale - controls the intensity of environment IBL
 	registry->RegisterVariable(std::make_shared<WeatherVariables::FloatVariable>(
-		"DiffuseIBLScale",
-		"Diffuse IBL Scale",
-		"Controls the overall intensity of diffuse IBL lighting",
-		&settings.DiffuseIBLScale,
+		"EnvIBLScale",
+		"Env IBL Scale",
+		"Controls the intensity of environment IBL lighting",
+		&settings.EnvIBLScale,
 		1.0f,
 		0.0f, 10.0f));
 
-	// Register IBL saturation - controls color saturation of IBL
+	// Register sky IBL scale - controls the intensity of sky IBL
 	registry->RegisterVariable(std::make_shared<WeatherVariables::FloatVariable>(
-		"IBLSaturation",
-		"IBL Saturation",
-		"Controls the color saturation of IBL lighting",
-		&settings.IBLSaturation,
+		"SkyIBLScale",
+		"Sky IBL Scale",
+		"Controls the intensity of sky IBL lighting",
+		&settings.SkyIBLScale,
+		1.0f,
+		0.0f, 10.0f));
+
+	// Register env IBL saturation - controls color saturation of env IBL
+	registry->RegisterVariable(std::make_shared<WeatherVariables::FloatVariable>(
+		"EnvIBLSaturation",
+		"Env IBL Saturation",
+		"Controls the color saturation of environment IBL lighting",
+		&settings.EnvIBLSaturation,
 		1.0f,
 		0.0f, 2.0f));
 
-	// Register DALC amount - controls mixing with Directional Ambient Light Color
+	// Register sky IBL saturation - controls color saturation of sky IBL
+	registry->RegisterVariable(std::make_shared<WeatherVariables::FloatVariable>(
+		"SkyIBLSaturation",
+		"Sky IBL Saturation",
+		"Controls the color saturation of sky IBL lighting",
+		&settings.SkyIBLSaturation,
+		1.0f,
+		0.0f, 2.0f));
+
+	// Register DALC amount - controls how much IBL brightness matches game ambient
 	registry->RegisterVariable(std::make_shared<WeatherVariables::FloatVariable>(
 		"DALCAmount",
 		"DALC Amount",
-		"Amount of DALC (Directional Ambient Light Color) mixing",
+		"Controls how much IBL brightness is matched to game ambient light level",
 		&settings.DALCAmount,
-		0.33f,
+		1.0f,
 		0.0f, 1.0f));
 
 	// Register fog amount - controls fog mixing
