@@ -64,6 +64,8 @@ namespace SharedData
 // ============================================================================
 // INCLUDE THE REAL HAIR.HLSLI AND ITS DEPENDENCIES
 // ============================================================================
+// Include common dependencies needed for tests (LightingCommon provides struct definitions)
+#include "/Shaders/Common/LightingCommon.hlsli"
 // Hair.hlsli includes: Common/BRDF.hlsli, Common/Color.hlsli, Common/Game.hlsli, Common/Math.hlsli
 // These are all real files from the codebase that will be included automatically
 #include "/Shaders/Hair/Hair.hlsli"
