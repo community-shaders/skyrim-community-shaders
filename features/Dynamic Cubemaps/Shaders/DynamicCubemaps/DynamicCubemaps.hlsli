@@ -48,7 +48,7 @@ namespace DynamicCubemaps
 #		if defined(IBL) && defined(LIGHTING)
 		const bool inWorld = (Permutation::ExtraShaderDescriptor & Permutation::ExtraFlags::InWorld);
 		const bool inReflection = (Permutation::ExtraShaderDescriptor & Permutation::ExtraFlags::InReflection);
-		if (SharedData::iblSettings.EnableDiffuseIBL && SharedData::iblSettings.UseStaticIBL && !inWorld && !inReflection) {
+		if (SharedData::iblSettings.EnableIBL && SharedData::iblSettings.UseStaticIBL && !inWorld && !inReflection) {
 			float3 specularIrradiance = ImageBasedLighting::StaticSpecularIBLTexture.SampleLevel(SampColorSampler, R.xzy, level).xyz;
 			finalIrradiance = specularIrradiance;
 			return finalIrradiance;
@@ -68,7 +68,7 @@ namespace DynamicCubemaps
 #		endif
 
 #		if defined(IBL)
-		if (SharedData::iblSettings.EnableDiffuseIBL) {
+		if (SharedData::iblSettings.EnableIBL) {
 			float3 envSample = EnvTexture.SampleLevel(SampColorSampler, R, level);
 			float3 fullSample = EnvReflectionsTexture.SampleLevel(SampColorSampler, R, level);
 			float3 envSpecular, skySpecular;
@@ -160,7 +160,7 @@ namespace DynamicCubemaps
 #		if defined(IBL) && defined(LIGHTING)
 		const bool inWorld = (Permutation::ExtraShaderDescriptor & Permutation::ExtraFlags::InWorld);
 		const bool inReflection = (Permutation::ExtraShaderDescriptor & Permutation::ExtraFlags::InReflection);
-		if (SharedData::iblSettings.EnableDiffuseIBL && SharedData::iblSettings.UseStaticIBL && !inWorld && !inReflection) {
+		if (SharedData::iblSettings.EnableIBL && SharedData::iblSettings.UseStaticIBL && !inWorld && !inReflection) {
 			float3 specularIrradiance = ImageBasedLighting::StaticSpecularIBLTexture.SampleLevel(SampColorSampler, R.xzy, level).xyz;
 			finalIrradiance += specularIrradiance;
 			return horizon * (F0 * specularBRDF.x + specularBRDF.y) * finalIrradiance;
@@ -180,7 +180,7 @@ namespace DynamicCubemaps
 #		endif
 
 #		if defined(IBL)
-		if (SharedData::iblSettings.EnableDiffuseIBL) {
+		if (SharedData::iblSettings.EnableIBL) {
 			float3 envSample = EnvTexture.SampleLevel(SampColorSampler, R, level);
 			float3 fullSample = EnvReflectionsTexture.SampleLevel(SampColorSampler, R, level);
 			float3 envSpecular, skySpecular;

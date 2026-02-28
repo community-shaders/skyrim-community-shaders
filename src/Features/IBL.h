@@ -14,18 +14,19 @@ public:
 	virtual std::pair<std::string, std::vector<std::string>> GetFeatureSummary() override
 	{
 		return {
-			"Image Based Lighting provides realistic diffuse ambient lighting for exteriors.",
-			{ "Realistic diffuse ambient lighting from environment maps",
-				"Spherical harmonics-based ambient light calculation",
-				"Enhanced exterior ambient lighting quality",
-				"Configurable intensity and saturation, mixing with DALC" }
+			"Replaces the game's ambient lighting with physically-based IBL derived from cubemap spherical harmonics.",
+			{ "Projects environment and sky cubemaps into spherical harmonics (SH) for irradiance",
+				"Dual IBL sources: environment cubemap (Dynamic Cubemaps) and Skyrim's native sky reflections cubemap",
+				"DALC brightness matching to keep IBL consistent with the game's ambient light levels",
+				"Configurable per-source intensity, saturation, fog mixing, and per-weather overrides",
+				"Static IBL fallback textures for out-of-world objects (e.g. inventory items)" }
 		};
 	}
 
 	bool HasShaderDefine(RE::BSShader::Type) override { return true; };
 
-	Texture2D* diffuseIBLTexture = nullptr;
-	Texture2D* diffuseSkyIBLTexture = nullptr;
+	Texture2D* envIBLTexture = nullptr;
+	Texture2D* skyIBLTexture = nullptr;
 	ID3D11ComputeShader* diffuseIBLCS = nullptr;
 
 	virtual void RestoreDefaultSettings() override;
@@ -42,7 +43,7 @@ public:
 
 	struct Settings
 	{
-		uint EnableDiffuseIBL = 0;
+		uint EnableIBL = 0;
 		uint PreserveFogLuminance = 0;
 		uint UseStaticIBL = 1;
 		float DALCAmount = 1.0f;

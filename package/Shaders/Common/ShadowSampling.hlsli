@@ -110,7 +110,7 @@ namespace ShadowSampling
 		float3 ambientColorAmb = max(0, SharedData::GetAmbient(float3(0, 0, 1)));
 
 #if defined(IBL)
-		if (SharedData::iblSettings.EnableDiffuseIBL) {
+		if (SharedData::iblSettings.EnableIBL) {
 			if (SharedData::iblSettings.DALCMode == 2) {
 				// Mode 2: keep vanilla DALC, add sky IBL overlay
 				ambientColorAmb += Color::IrradianceToGamma(ImageBasedLighting::GetSkyIBLColor(float3(0, 0, -1)));

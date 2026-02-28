@@ -187,7 +187,7 @@ namespace SharedData
 
 	struct IBLSettings
 	{
-		uint EnableDiffuseIBL;
+		uint EnableIBL;
 		uint PreserveFogLuminance;
 		uint UseStaticIBL;
 		float DALCAmount;

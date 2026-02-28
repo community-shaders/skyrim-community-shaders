@@ -10,11 +10,11 @@
 namespace ImageBasedLighting
 {
 #if defined(IBL_DEFERRED)
-	Texture2D<sh2> DiffuseIBLTexture : register(t14);
-	Texture2D<sh2> DiffuseSkyIBLTexture : register(t15);
+	Texture2D<sh2> EnvIBLTexture : register(t14);
+	Texture2D<sh2> SkyIBLTexture : register(t15);
 #else
-	Texture2D<sh2> DiffuseIBLTexture : register(t76);
-	Texture2D<sh2> DiffuseSkyIBLTexture : register(t77);
+	Texture2D<sh2> EnvIBLTexture : register(t76);
+	Texture2D<sh2> SkyIBLTexture : register(t77);
 	TextureCube<float4> StaticDiffuseIBLTexture : register(t78);
 	TextureCube<float4> StaticSpecularIBLTexture : register(t79);
 #endif
@@ -22,9 +22,9 @@ namespace ImageBasedLighting
 	/// Get Env IBL color from environment cubemap SH (without sky)
 	float3 GetEnvIBL(float3 rayDir)
 	{
-		sh2 shR = DiffuseIBLTexture.Load(int3(0, 0, 0));
-		sh2 shG = DiffuseIBLTexture.Load(int3(1, 0, 0));
-		sh2 shB = DiffuseIBLTexture.Load(int3(2, 0, 0));
+		sh2 shR = EnvIBLTexture.Load(int3(0, 0, 0));
+		sh2 shG = EnvIBLTexture.Load(int3(1, 0, 0));
+		sh2 shB = EnvIBLTexture.Load(int3(2, 0, 0));
 		float colorR = SphericalHarmonics::SHHallucinateZH3Irradiance(shR, rayDir);
 		float colorG = SphericalHarmonics::SHHallucinateZH3Irradiance(shG, rayDir);
 		float colorB = SphericalHarmonics::SHHallucinateZH3Irradiance(shB, rayDir);
@@ -34,9 +34,9 @@ namespace ImageBasedLighting
 	/// Get Sky-only IBL color from game's native reflections cubemap SH
 	float3 GetSkyIBL(float3 rayDir)
 	{
-		sh2 shR = DiffuseSkyIBLTexture.Load(int3(0, 0, 0));
-		sh2 shG = DiffuseSkyIBLTexture.Load(int3(1, 0, 0));
-		sh2 shB = DiffuseSkyIBLTexture.Load(int3(2, 0, 0));
+		sh2 shR = SkyIBLTexture.Load(int3(0, 0, 0));
+		sh2 shG = SkyIBLTexture.Load(int3(1, 0, 0));
+		sh2 shB = SkyIBLTexture.Load(int3(2, 0, 0));
 		float colorR = SphericalHarmonics::SHHallucinateZH3Irradiance(shR, rayDir);
 		float colorG = SphericalHarmonics::SHHallucinateZH3Irradiance(shG, rayDir);
 		float colorB = SphericalHarmonics::SHHallucinateZH3Irradiance(shB, rayDir);
@@ -53,9 +53,9 @@ namespace ImageBasedLighting
 		float3 dalc0 = Color::Ambient(SharedData::GetAmbient(0.f));
 
 		// 0th order IBL SH (DC term from env cubemap)
-		sh2 iblSHR = DiffuseIBLTexture.Load(int3(0, 0, 0));
-		sh2 iblSHG = DiffuseIBLTexture.Load(int3(1, 0, 0));
-		sh2 iblSHB = DiffuseIBLTexture.Load(int3(2, 0, 0));
+		sh2 iblSHR = EnvIBLTexture.Load(int3(0, 0, 0));
+		sh2 iblSHG = EnvIBLTexture.Load(int3(1, 0, 0));
+		sh2 iblSHB = EnvIBLTexture.Load(int3(2, 0, 0));
 
 		float colorR = SphericalHarmonics::SHHallucinateZH3Irradiance(iblSHR, float3(0, 0, 0));
 		float colorG = SphericalHarmonics::SHHallucinateZH3Irradiance(iblSHG, float3(0, 0, 0));
