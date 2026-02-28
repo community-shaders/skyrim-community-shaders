@@ -80,12 +80,20 @@ uint ScreenSpaceShadows::GetScaledSampleCount()
 {
 	float2 renderSize = Util::ConvertToDynamic(globals::state->screenSize);
 
+	// In VR, renderSize covers both eyes side-by-side; raymarch dispatches per-eye
+	if (globals::game::isVR)
+		renderSize.x /= 2.0f;
+
 	// Scale sample count based on both dimensions relative to 1920x1080 reference
 	float2 referenceRes = { 1920.0f, 1080.0f };
 	float referenceArea = referenceRes.x * referenceRes.y;
 	float currentArea = renderSize.x * renderSize.y;
 	float areaScale = std::sqrt(currentArea / referenceArea);
 	uint scaledSampleCount = static_cast<uint>(std::round(bendSettings.SampleCount * 60 * areaScale));
+
+	// Quantize to steps of 8 to prevent frequent recompilation from small DRS oscillations
+	scaledSampleCount = ((scaledSampleCount + 7u) / 8u) * 8u;
+	scaledSampleCount = std::max(scaledSampleCount, 8u);
 
 	return scaledSampleCount;
 }
@@ -243,7 +251,12 @@ void ScreenSpaceShadows::DrawShadows()
 
 void ScreenSpaceShadows::DrawStereoSync()
 {
-	if (!globals::game::isVR || !enableStereoSync || !stereoSyncCS || !stereoSyncCopyTex || !stereoSyncCB)
+	if (!globals::game::isVR || !enableStereoSync || !stereoSyncCopyTex || !stereoSyncCB)
+		return;
+
+	if (!stereoSyncCS)
+		stereoSyncCS = reinterpret_cast<ID3D11ComputeShader*>(Util::CompileShader(L"Data\\Shaders\\ScreenSpaceShadows\\StereoSyncCS.hlsl", { { "VR", "" }, { "FRAMEBUFFER", "" } }, "cs_5_0"));
+	if (!stereoSyncCS)
 		return;
 
 	ZoneScoped;
@@ -335,7 +348,7 @@ void ScreenSpaceShadows::SetupResources()
 {
 	raymarchCB = new ConstantBuffer(ConstantBufferDesc<RaymarchCB>());
 
-	if (REL::Module::IsVR()) {
+	if (globals::game::isVR) {
 		stereoSyncCB = new ConstantBuffer(ConstantBufferDesc<StereoSyncCB>());
 		stereoSyncCS = reinterpret_cast<ID3D11ComputeShader*>(Util::CompileShader(L"Data\\Shaders\\ScreenSpaceShadows\\StereoSyncCS.hlsl", { { "VR", "" }, { "FRAMEBUFFER", "" } }, "cs_5_0"));
 	}
@@ -382,7 +395,7 @@ void ScreenSpaceShadows::SetupResources()
 		screenSpaceShadowsTexture->CreateSRV(srvDesc);
 		screenSpaceShadowsTexture->CreateUAV(uavDesc);
 
-		if (REL::Module::IsVR()) {
+		if (globals::game::isVR) {
 			stereoSyncCopyTex = new Texture2D(texDesc);
 			stereoSyncCopyTex->CreateSRV(srvDesc);
 		}

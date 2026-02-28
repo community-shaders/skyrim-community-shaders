@@ -7,11 +7,12 @@
 // ambient occlusion" https://eprints.whiterose.ac.uk/id/eprint/187713/
 
 #include "Common/FrameBuffer.hlsli"
+#include "Common/SharedData.hlsli"
 #include "Common/VR.hlsli"
 
 #ifdef VR
 
-Texture2D<float> DepthTexture : register(t0);
+Texture2D<float> SrcDepthTexture : register(t0);
 Texture2D<unorm half> SrcShadowTexture : register(t1);
 
 RWTexture2D<unorm half> OutShadowTexture : register(u0);
@@ -24,7 +25,7 @@ cbuffer StereoSyncCB : register(b1)
 
 static const float kDepthSigma = 0.01;
 static const float kMaxBlend = 1.0;
-static const float kBackCheckThreshold = 8.0;
+static const float kEdgeDepthThreshold = 0.05;
 
 // Depth-weighted 4-sample blur using a rotated Poisson disk.
 // Uses dtid hash for per-pixel rotation to break structured patterns.
@@ -53,7 +54,7 @@ float BlurShadow(int2 dtid, float centerDepth)
 		int2 samplePx = dtid + int2(offset * 2.5);
 		samplePx = clamp(samplePx, int2(0, 0), int2(FrameDim) - 1);
 
-		float sampleDepth = DepthTexture[samplePx];
+		float sampleDepth = SrcDepthTexture[samplePx];
 
 		if (sampleDepth < 1e-5)
 			continue;
@@ -77,7 +78,7 @@ float BlurShadow(int2 dtid, float centerDepth)
 
 	uint eyeIndex = Stereo::GetEyeIndexFromTexCoord(uv);
 
-	float depth = DepthTexture[dtid];
+	float depth = SrcDepthTexture[dtid];
 
 	// depth == 0: VR HMD mask; depth == 1: sky/far plane
 	if (depth < 1e-5 || depth >= 1.0) {
@@ -85,7 +86,32 @@ float BlurShadow(int2 dtid, float centerDepth)
 		return;
 	}
 
-	// Depth-weighted blur on this eye's shadow data
+	// Skip stereo sync for first-person geometry interior (hands/weapons).
+	// Placed before the blur: arm shadow is uniform so the bilateral blur
+	// would return SrcShadowTexture[dtid] unchanged anyway.
+	float linearDepth = SharedData::GetScreenDepth(depth);
+	if (linearDepth < VR_FP_Z) {
+		OutShadowTexture[dtid] = SrcShadowTexture[dtid];
+		return;
+	}
+
+	// Skip stereo sync at depth discontinuities (arm/world silhouettes, object edges).
+	// Placed before the blur: the bilateral depth weighting zeroes out cross-edge
+	// samples, so the blur collapses to SrcShadowTexture[dtid] at these pixels anyway.
+	float4 edgeDepths = float4(
+		SrcDepthTexture[dtid + int2(1, 0)],
+		SrcDepthTexture[dtid + int2(-1, 0)],
+		SrcDepthTexture[dtid + int2(0, 1)],
+		SrcDepthTexture[dtid + int2(0, -1)]);
+	float maxEdgeDiff = max(max(abs(depth - edgeDepths.x), abs(depth - edgeDepths.y)),
+		max(abs(depth - edgeDepths.z), abs(depth - edgeDepths.w)));
+	if (maxEdgeDiff > kEdgeDepthThreshold) {
+		OutShadowTexture[dtid] = SrcShadowTexture[dtid];
+		return;
+	}
+
+	// Depth-weighted blur on this eye's shadow data.
+	// Only reached by world pixels that will attempt stereo sync.
 	float myShadow = BlurShadow(dtid, depth);
 
 	Stereo::StereoBilateralResult r = Stereo::ReprojectToOtherEye(uv, depth, eyeIndex, FrameDim);
@@ -95,15 +121,20 @@ float BlurShadow(int2 dtid, float centerDepth)
 		return;
 	}
 
-	float otherDepth = DepthTexture[r.otherPx];
+	float otherDepth = SrcDepthTexture[r.otherPx];
 
-	// Skip if other eye sees mask or sky
-	if (otherDepth < 1e-5 || otherDepth >= 1.0) {
+	// Skip if other eye sees mask, sky, or first-person geometry
+	if (otherDepth < 1e-5 || otherDepth >= 1.0 || SharedData::GetScreenDepth(otherDepth) < VR_FP_Z) {
 		OutShadowTexture[dtid] = myShadow;
 		return;
 	}
 
-	// Reject if reprojected pixel is near the HMD mask boundary
+	// Reject if reprojected pixel is near the HMD mask boundary, or if it sits
+	// at a depth discontinuity in the other eye. The source-side edge check above
+	// only fires when *this* eye sees the boundary; due to VR parallax the arm
+	// silhouette appears at a different screen position in each eye, so the
+	// reprojection can cross a boundary invisible from this eye's perspective.
+	// Reusing the same four neighbor reads covers both purposes at no extra cost.
 	static const int kEdgeMargin = 2;
 	static const int2 kNeighborOffsets[4] = {
 		int2(-kEdgeMargin, 0), int2(kEdgeMargin, 0),
@@ -111,13 +142,15 @@ float BlurShadow(int2 dtid, float centerDepth)
 	};
 	[unroll] for (int n = 0; n < 4; n++)
 	{
-		if (DepthTexture[r.otherPx + kNeighborOffsets[n]] < 1e-5) {
+		float neighborDepth = SrcDepthTexture[r.otherPx + kNeighborOffsets[n]];
+		if (neighborDepth < 1e-5 || abs(otherDepth - neighborDepth) > kEdgeDepthThreshold) {
 			OutShadowTexture[dtid] = myShadow;
 			return;
 		}
 	}
 
-	Stereo::FinalizeStereoBlend(r, uv, depth, otherDepth, eyeIndex, FrameDim, kDepthSigma, kMaxBlend, kBackCheckThreshold);
+	// Source + destination edge detection
+	Stereo::FinalizeStereoBlend(r, uv, depth, otherDepth, eyeIndex, FrameDim, kDepthSigma, kMaxBlend, 0.0);
 
 	float otherShadow = SrcShadowTexture[r.otherPx];
 
