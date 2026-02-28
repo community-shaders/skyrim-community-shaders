@@ -54,9 +54,9 @@ namespace
 	// Ownership:
 	// - Shared slot2 + depth-override callers: 0x1351AD4, 0xDBDD68
 	// - Depth-override-only caller: 0x1349B7F
-	constexpr uint32_t kCallerRvaSlot2AndDepthOverrideA = static_cast<uint32_t>(REL::Relocate(0u, 0u, 0x1351AD4u));
-	constexpr uint32_t kCallerRvaSlot2AndDepthOverrideB = static_cast<uint32_t>(REL::Relocate(0u, 0u, 0xDBDD68u));
-	constexpr uint32_t kCallerRvaDepthOverrideOnly = static_cast<uint32_t>(REL::Relocate(0u, 0u, 0x1349B7Fu));
+	const uint32_t kCallerRvaSlot2AndDepthOverrideA = static_cast<uint32_t>(REL::Relocate(0u, 0u, 0x1351AD4u));
+	const uint32_t kCallerRvaSlot2AndDepthOverrideB = static_cast<uint32_t>(REL::Relocate(0u, 0u, 0xDBDD68u));
+	const uint32_t kCallerRvaDepthOverrideOnly = static_cast<uint32_t>(REL::Relocate(0u, 0u, 0x1349B7Fu));
 
 	// Slot2 rewrite allowlist (PS slot 2 = shadowmask depth SRV override path).
 	// Includes only callsites validated for shadowmask slot2 rebinding.
