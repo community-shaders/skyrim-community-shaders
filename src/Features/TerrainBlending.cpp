@@ -37,22 +37,39 @@ namespace
 
 	EngineHookTechniqueOverrideState engineHookTechniqueState{};
 
+	// Engine-hook override map for Utility shadowmask passes:
+	// 1) PS slot 17 override: bind TB-selected depth SRV for OBB depth reads; prevents occlusion instability / mesh popping.
+	// 2) PS slot 2 override: bind TB-selected depth SRV for shadowmask reads; prevents unstable/moving ground shadow imprint, and dark overlay style artifacts. 
+	// 3) OM depth override: force DepthFunc=ALWAYS only on descriptor 0x1062002; mitigate shadowmask ground artifacts caused by failed depth testing in 0x1062002.
+		// All override paths below are gated by IsEngineHookFeatureGateSatisfied and all are VR-specific at runtime (isVR, gateSatisfied).
+		// Developer Mode only: logs one hook snapshot per gate-on cycle ([TB Override]/[TB DepthOverride]) and explicit fallback activate/reset events.
+	// Fallbacks: caller fallback is in ShouldAllowCallerWithFallback(...) (2 and 3 widen after 5 rejects and collapse on first allowlisted hit), SRV-source fallback is in Util::GetCurrentSceneDepthSRV(...).
+	// Pixel descriptors:
+	// - 0x262002 -> apply (1) + (2)
+	// - 0x1062002 -> apply (1) + (2) + (3)
 	constexpr uint32_t kShadowmaskDepthDescriptor0 = 0x262002u;
-	// Depth override is intentionally limited to this descriptor only.
 	constexpr uint32_t kShadowmaskDepthDescriptor1 = 0x1062002u;
 
-	// Slot2 allowlist is only evaluated in VR (gated by IsEngineHookFeatureGateSatisfied).
-	// Keep variant mapping explicit to match existing codebase conventions.
-	// SE/AE offsets are intentionally 0 because this caller is VR-only.
+	// Module RVAs from _ReturnAddress() at hooked engine callsites.
+	// Ownership:
+	// - Shared slot2 + depth-override callers: 0x1351AD4, 0xDBDD68
+	// - Depth-override-only caller: 0x1349B7F
+	constexpr uint32_t kCallerRvaSlot2AndDepthOverrideA = static_cast<uint32_t>(REL::Relocate(0u, 0u, 0x1351AD4u));
+	constexpr uint32_t kCallerRvaSlot2AndDepthOverrideB = static_cast<uint32_t>(REL::Relocate(0u, 0u, 0xDBDD68u));
+	constexpr uint32_t kCallerRvaDepthOverrideOnly = static_cast<uint32_t>(REL::Relocate(0u, 0u, 0x1349B7Fu));
+
+	// Slot2 rewrite allowlist (PS slot 2 = shadowmask depth SRV override path).
+	// Includes only callsites validated for shadowmask slot2 rebinding.
 	const std::array<uint32_t, 2> kSlot2CallerAllowlistRvas = {
-		static_cast<uint32_t>(REL::Relocate(0u, 0u, 0x1351AD4u)),
-		static_cast<uint32_t>(REL::Relocate(0u, 0u, 0xDBDD68u))
+		kCallerRvaSlot2AndDepthOverrideA,
+		kCallerRvaSlot2AndDepthOverrideB
 	};
-	// Caller allowlist for descriptor-scoped depth override path (0x1062002).
+	// Descriptor-scoped OM depth override allowlist (0x1062002 only).
+	// Contains the two shared callers above plus one depth-override-only caller.
 	const std::array<uint32_t, 3> kDepthOverrideCallerAllowlistRvas = {
-		static_cast<uint32_t>(REL::Relocate(0u, 0u, 0xDBDD68u)),
-		static_cast<uint32_t>(REL::Relocate(0u, 0u, 0x1351AD4u)),
-		static_cast<uint32_t>(REL::Relocate(0u, 0u, 0x1349B7Fu))
+		kCallerRvaSlot2AndDepthOverrideB,
+		kCallerRvaSlot2AndDepthOverrideA,
+		kCallerRvaDepthOverrideOnly
 	};
 	constexpr bool kEnableAutoBroadSlot2Fallback = true;
 	constexpr uint64_t kSlot2AutoFallbackRejectThreshold = 5;
@@ -182,12 +199,13 @@ namespace
 
 	bool ShouldApplySlot2Rewrite(const uint32_t a_callerRva)
 	{
+		// Selector for override map item (2): PS slot 2 rewrite path.
 		return ShouldAllowCallerWithFallback(
 			slot2FallbackState,
 			kSlot2CallerAllowlistRvas,
 			kEnableAutoBroadSlot2Fallback,
 			kSlot2AutoFallbackRejectThreshold,
-			false,
+			true,
 			"TB Override",
 			"slot2 fallback",
 			a_callerRva);
@@ -195,6 +213,7 @@ namespace
 
 	bool ShouldApplyDepthOverrideForCaller(const uint32_t a_callerRva)
 	{
+		// Selector for override map item (3): descriptor-scoped OM depth override.
 		return ShouldAllowCallerWithFallback(
 			depthOverrideFallbackState,
 			kDepthOverrideCallerAllowlistRvas,
@@ -312,8 +331,7 @@ namespace
 	}
 
 	// Restores PS slots 17 and 2 to the SRVs that were bound before this shadowmask
-	// technique override was applied. This keeps override scope limited to the
-	// targeted pass and avoids leaking TB depth bindings into unrelated draws.
+	// This keeps override scope limited to the targeted pass and avoids leaking TB depth bindings into unrelated draws.
 	void ReleaseEngineHookDepthOverride()
 	{
 		if (!engineHookTechniqueState.depthStateForced) {
@@ -491,7 +509,7 @@ void TerrainBlending::OnBeginTechnique(RE::BSShader* a_shader, uint32_t a_pixelD
 		return;
 	}
 
-	// Integration point 1/4: apply descriptor-scoped depth override at technique start.
+	// Integration point 1/4 for override-map item (3): apply descriptor-scoped OM depth override.
 	EnsureEngineHookDepthOverride(a_pixelDescriptor, a_callerRva);
 
 	if (!engineHookTechniqueState.active) {
@@ -502,6 +520,7 @@ void TerrainBlending::OnBeginTechnique(RE::BSShader* a_shader, uint32_t a_pixelD
 
 	auto* obbOverrideSrv = Util::GetCurrentSceneDepthSRV(false);
 	auto* shadowmaskOverrideSrv = Util::GetCurrentSceneDepthSRV(true);
+	// Override map items (1) and (2).
 	ApplyPixelShaderSlotOverride(context, 17u, obbOverrideSrv, nullptr, 0u);
 	ApplyPixelShaderSlotOverride(context, 2u, shadowmaskOverrideSrv, &ShouldApplySlot2Rewrite, a_callerRva);
 }
@@ -529,7 +548,7 @@ void TerrainBlending::OnUtilitySetupGeometry(RE::BSShader* a_shader, RE::BSRende
 		return;
 	}
 
-	// Integration point 2/4: re-assert after Utility geometry setup mutates OM state.
+	// Integration point 2/4 for override-map item (3): re-assert after Utility geometry setup mutates OM state.
 	EnsureEngineHookDepthOverride(descriptor, a_callerRva);
 
 	auto* obbOverrideSrv = Util::GetCurrentSceneDepthSRV(false);
@@ -558,7 +577,7 @@ void TerrainBlending::OnShaderPropertySetupGeometry(RE::BSShaderProperty* a_shad
 		return;
 	}
 
-	// Integration point 3/4: re-assert after material/property setup.
+	// Integration point 3/4 for override-map item (3): re-assert after material/property setup.
 	EnsureEngineHookDepthOverride(descriptor, a_callerRva);
 
 	auto* shadowmaskOverrideSrv = Util::GetCurrentSceneDepthSRV(true);
@@ -568,8 +587,8 @@ void TerrainBlending::OnShaderPropertySetupGeometry(RE::BSShaderProperty* a_shad
 void TerrainBlending::OnSetDirtyStates(bool a_isCompute, uint32_t a_callerRva)
 {
 	// Slot2 clobber was traced to BSGraphics::SetDirtyStates.
-	// Integration point 4/4: re-assert both SRV overrides and descriptor-scoped
-	// depth override here under strict TB pass gates instead of global D3D interception.
+	// Integration point 4/4: re-assert override-map item (3), plus SRV overrides
+	// for map items (1) and (2), under strict TB pass gates instead of global D3D interception.
 	if (a_isCompute) {
 		return;
 	}
