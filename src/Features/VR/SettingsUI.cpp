@@ -268,8 +268,8 @@ namespace
 		auto& vr = globals::features::vr;
 		VR::Settings& settings = vr.settings;
 
-			bool hasEffects = VR::AnyScreenSpaceEffectLoaded();
-			bool isDev = globals::state && globals::state->IsDeveloperMode();
+		bool hasEffects = VR::AnyScreenSpaceEffectLoaded();
+		bool isDev = globals::state && globals::state->IsDeveloperMode();
 
 		if (!hasEffects && !isDev) {
 			ImGui::TextColored(ImVec4(1.0f, 0.7f, 0.3f, 1.0f), "No screen-space effects active (SSGI, SSR, SS Shadows).");
