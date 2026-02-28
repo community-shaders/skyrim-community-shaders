@@ -947,7 +947,7 @@ void TerrainBlending::Hooks::Main_RenderShadowmasks::thunk(bool a1)
 
 bool TerrainBlending::Hooks::BSShader_BeginTechnique::thunk(RE::BSShader* shader, uint32_t vertexDescriptor, uint32_t pixelDescriptor, bool skipPixelShader)
 {
-	const auto callerRva = static_cast<uint32_t>(reinterpret_cast<std::uintptr_t>(_ReturnAddress()) - REL::Module::get().base());
+	const auto callerRva = ToModuleRva(_ReturnAddress());
 	bool result = func(shader, vertexDescriptor, pixelDescriptor, skipPixelShader);
 	globals::features::terrainBlending.OnBeginTechnique(shader, pixelDescriptor, callerRva);
 	return result;
@@ -955,7 +955,7 @@ bool TerrainBlending::Hooks::BSShader_BeginTechnique::thunk(RE::BSShader* shader
 
 void TerrainBlending::Hooks::BSGraphics_SetDirtyStates::thunk(bool isCompute)
 {
-	const auto callerRva = static_cast<uint32_t>(reinterpret_cast<std::uintptr_t>(_ReturnAddress()) - REL::Module::get().base());
+	const auto callerRva = ToModuleRva(_ReturnAddress());
 	func(isCompute);
 	globals::features::terrainBlending.OnSetDirtyStates(isCompute, callerRva);
 }
