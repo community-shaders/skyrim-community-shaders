@@ -42,7 +42,7 @@ namespace
 	// 2) PS slot 2 override: bind TB-selected depth SRV for shadowmask reads; prevents unstable/moving ground shadow imprint, and dark overlay style artifacts.
 	// 3) OM depth override: force DepthFunc=ALWAYS only on descriptor 0x1062002; mitigate shadowmask ground artifacts caused by failed depth testing in 0x1062002.
 	// All override paths below are gated by IsEngineHookFeatureGateSatisfied and all are VR-specific at runtime (isVR, gateSatisfied).
-	// Developer Mode only: logs one hook snapshot per gate-on cycle ([TB Override]/[TB DepthOverride]) and explicit fallback activate/reset events.
+	// Developer Mode only: logs one hook snapshot per session ([TB Override]/[TB DepthOverride]) and explicit fallback activate/reset events.
 	// Fallbacks: caller fallback is in ShouldAllowCallerWithFallback(...) (2 and 3 widen after 5 rejects and collapse on first allowlisted hit), SRV-source fallback is in Util::GetCurrentSceneDepthSRV(...).
 	// Pixel descriptors:
 	// - 0x262002 -> apply (1) + (2)
@@ -506,6 +506,7 @@ void TerrainBlending::OnBeginTechnique(RE::BSShader* a_shader, uint32_t a_pixelD
 
 	auto* context = globals::d3d::context;
 	if (!context) {
+		ReleaseEngineHookTechniqueOverride();
 		return;
 	}
 
@@ -941,8 +942,9 @@ void TerrainBlending::Hooks::Main_RenderShadowmasks::thunk(bool a1)
 {
 	renderShadowmasksPhaseDepth.fetch_add(1, std::memory_order_relaxed);
 	func(a1);
-	renderShadowmasksPhaseDepth.fetch_sub(1, std::memory_order_relaxed);
-	globals::features::terrainBlending.OnShadowmaskPhaseEnd();
+	if (renderShadowmasksPhaseDepth.fetch_sub(1, std::memory_order_relaxed) == 1) {
+		globals::features::terrainBlending.OnShadowmaskPhaseEnd();
+	}
 }
 
 bool TerrainBlending::Hooks::BSShader_BeginTechnique::thunk(RE::BSShader* shader, uint32_t vertexDescriptor, uint32_t pixelDescriptor, bool skipPixelShader)
