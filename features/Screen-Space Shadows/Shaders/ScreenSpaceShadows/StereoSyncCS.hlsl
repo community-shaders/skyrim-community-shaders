@@ -26,12 +26,7 @@ cbuffer StereoSyncCB : register(b1)
 static const float kDepthSigma = 0.01;          // Bilateral depth tolerance (NDC): surfaces within this range are considered the same and blended
 static const float kMaxBlend = 1.0;             // Maximum stereo blend weight; reduce below 1.0 to soften the cross-eye contribution
 static const float kEdgeDepthThreshold = 0.05;  // NDC depth difference above which a pixel is considered a depth discontinuity and excluded from stereo sync
-
-float MaxDepthDiff(float center, float4 neighbors)
-{
-	return max(max(abs(center - neighbors.x), abs(center - neighbors.y)),
-		max(abs(center - neighbors.z), abs(center - neighbors.w)));
-}
+static const int kEdgeMargin = 2;               // Neighbor offset (pixels) for destination edge + mask boundary check
 
 // Depth-weighted 4-sample blur using a rotated Poisson disk.
 // Uses dtid hash for per-pixel rotation to break structured patterns.
@@ -76,6 +71,16 @@ float BlurShadow(int2 dtid, float centerDepth)
 	return weight > 0.0 ? shadow / weight : SrcShadowTexture[dtid];
 }
 
+// Samples four depth neighbors in a cross pattern (±offset pixels) around center.
+float4 SampleCrossDepths(int2 center, int offset)
+{
+	return float4(
+		SrcDepthTexture[center + int2(offset, 0)],
+		SrcDepthTexture[center + int2(-offset, 0)],
+		SrcDepthTexture[center + int2(0, offset)],
+		SrcDepthTexture[center + int2(0, -offset)]);
+}
+
 [numthreads(8, 8, 1)] void main(uint2 dtid : SV_DispatchThreadID) {
 	if (any(dtid >= uint2(FrameDim)))
 		return;
@@ -104,12 +109,8 @@ float BlurShadow(int2 dtid, float centerDepth)
 	// Skip stereo sync at depth discontinuities (arm/world silhouettes, object edges).
 	// Placed before the blur: the bilateral depth weighting zeroes out cross-edge
 	// samples, so the blur collapses to SrcShadowTexture[dtid] at these pixels anyway.
-	float4 edgeDepths = float4(
-		SrcDepthTexture[dtid + int2(1, 0)],
-		SrcDepthTexture[dtid + int2(-1, 0)],
-		SrcDepthTexture[dtid + int2(0, 1)],
-		SrcDepthTexture[dtid + int2(0, -1)]);
-	if (MaxDepthDiff(depth, edgeDepths) > kEdgeDepthThreshold) {
+	float4 edgeDepths = SampleCrossDepths(dtid, 1);
+	if (Stereo::MaxDepthDiff(depth, edgeDepths) > kEdgeDepthThreshold) {
 		OutShadowTexture[dtid] = SrcShadowTexture[dtid];
 		return;
 	}
@@ -139,13 +140,8 @@ float BlurShadow(int2 dtid, float centerDepth)
 	// silhouette appears at a different screen position in each eye, so the
 	// reprojection can cross a boundary invisible from this eye's perspective.
 	// Reusing the same four neighbor reads covers both purposes at no extra cost.
-	static const int kEdgeMargin = 2;
-	float4 otherNeighbors = float4(
-		SrcDepthTexture[r.otherPx + int2(-kEdgeMargin, 0)],
-		SrcDepthTexture[r.otherPx + int2(kEdgeMargin, 0)],
-		SrcDepthTexture[r.otherPx + int2(0, -kEdgeMargin)],
-		SrcDepthTexture[r.otherPx + int2(0, kEdgeMargin)]);
-	if (any(otherNeighbors < 1e-5) || MaxDepthDiff(otherDepth, otherNeighbors) > kEdgeDepthThreshold) {
+	float4 otherNeighbors = SampleCrossDepths(r.otherPx, kEdgeMargin);
+	if (any(otherNeighbors < 1e-5) || Stereo::MaxDepthDiff(otherDepth, otherNeighbors) > kEdgeDepthThreshold) {
 		OutShadowTexture[dtid] = myShadow;
 		return;
 	}

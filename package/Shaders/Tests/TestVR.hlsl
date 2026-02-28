@@ -134,6 +134,57 @@ static const float kEps = 0.0001f;
 	ASSERT(AreEqual, Stereo::GetEyeIndexFromTexCoord(stereoRight), 1u);
 }
 
+/// @tags vr, stereo, depth, edge-detection
+/// MaxDepthDiff: identical neighbors -> 0
+[numthreads(1, 1, 1)] void TestMaxDepthDiffAllSame() {
+	float result = Stereo::MaxDepthDiff(0.5, float4(0.5, 0.5, 0.5, 0.5));
+	ASSERT(IsTrue, abs(result) < kEps);
+}
+
+	/// @tags vr, stereo, depth, edge-detection
+	/// MaxDepthDiff: returns |center - neighbor| when one neighbor differs
+	[numthreads(1, 1, 1)] void TestMaxDepthDiffOneDiffers()
+{
+	// Only .z differs
+	float result = Stereo::MaxDepthDiff(0.5, float4(0.5, 0.5, 0.8, 0.5));
+	ASSERT(IsTrue, abs(result - 0.3) < kEps);
+}
+
+/// @tags vr, stereo, depth, edge-detection
+/// MaxDepthDiff: returns the largest difference across all four neighbors
+[numthreads(1, 1, 1)] void TestMaxDepthDiffPicksLargest() {
+	float result = Stereo::MaxDepthDiff(0.5, float4(0.55, 0.45, 0.9, 0.48));
+	ASSERT(IsTrue, abs(result - 0.4) < kEps);  // abs(0.5 - 0.9) = 0.4
+}
+
+	/// @tags vr, stereo, depth, edge-detection
+	/// MaxDepthDiff: works with NDC arm/world case (arm ~0.75, world ~1.0 -> diff 0.25 > 0.05 threshold)
+	[numthreads(1, 1, 1)] void TestMaxDepthDiffArmWorldCase()
+{
+	float armDepth = 0.75;
+	float worldDepth = 1.0;
+	float result = Stereo::MaxDepthDiff(armDepth, float4(worldDepth, armDepth, armDepth, armDepth));
+	ASSERT(IsTrue, result > 0.05);  // exceeds kEdgeDepthThreshold used in SSS
+	ASSERT(IsTrue, result < 0.5);   // not a false positive at some larger threshold
+}
+
+/// @tags vr, stereo, depth, edge-detection
+/// MaxDepthDiff: symmetric - diff(a,b) == diff(b,a)
+[numthreads(1, 1, 1)] void TestMaxDepthDiffSymmetry() {
+	float a = 0.3, b = 0.7;
+	float fwd = Stereo::MaxDepthDiff(a, float4(b, a, a, a));
+	float rev = Stereo::MaxDepthDiff(b, float4(a, b, b, b));
+	ASSERT(IsTrue, abs(fwd - rev) < kEps);
+}
+
+	/// @tags vr, stereo, depth, edge-detection
+	/// MaxDepthDiff: center == 0 (mask pixel) against world neighbor
+	[numthreads(1, 1, 1)] void TestMaxDepthDiffMaskCenter()
+{
+	float result = Stereo::MaxDepthDiff(0.0, float4(0.8, 0.0, 0.0, 0.0));
+	ASSERT(IsTrue, abs(result - 0.8) < kEps);
+}
+
 /// @tags vr, stereo, uv
 /// ConvertToStereoUV clamps input x to [0,1] via saturate
 [numthreads(1, 1, 1)] void TestConvertToStereoUVClamping() {

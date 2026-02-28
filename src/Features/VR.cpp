@@ -84,6 +84,11 @@ void VR::SetupResources()
 	if (auto rawPtr = reinterpret_cast<ID3D11ComputeShader*>(Util::CompileShader(L"Data\\Shaders\\VR\\StereoBlendCS.hlsl", blendWeightDefines, "cs_5_0")))
 		stereoBlendDebugBlendWeightCS.attach(rawPtr);
 
+	auto edgeDetectionDefines = defines;
+	edgeDetectionDefines.push_back({ "DEBUG_EDGE_DETECTION", "" });
+	if (auto rawPtr = reinterpret_cast<ID3D11ComputeShader*>(Util::CompileShader(L"Data\\Shaders\\VR\\StereoBlendCS.hlsl", edgeDetectionDefines, "cs_5_0")))
+		stereoBlendDebugEdgeDetectionCS.attach(rawPtr);
+
 	auto renderer = globals::game::renderer;
 	auto mainTex = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMAIN];
 	D3D11_TEXTURE2D_DESC mainDesc;

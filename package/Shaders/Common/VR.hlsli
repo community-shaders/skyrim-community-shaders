@@ -155,6 +155,23 @@ namespace Stereo
 		return normalizedCoord;
 	}
 
+	/**
+	* @brief Returns the maximum absolute depth difference between a center depth and four neighbors.
+	*
+	* Used for depth-discontinuity edge detection in stereo sync passes.
+	* Works with both NDC depths (fixed absolute threshold) and linear view-space depths
+	* (relative threshold: divide result by max(center, 1.0)).
+	*
+	* @param[in] center    Depth at the pixel being tested.
+	* @param[in] neighbors Depths at four neighboring pixels (e.g. ±1 or ±2 cross pattern).
+	* @return Maximum of |center - neighbor| across all four samples.
+	*/
+	float MaxDepthDiff(float center, float4 neighbors)
+	{
+		return max(max(abs(center - neighbors.x), abs(center - neighbors.y)),
+			max(abs(center - neighbors.z), abs(center - neighbors.w)));
+	}
+
 #if defined(PSHADER) || defined(FRAMEBUFFER)
 	// These functions require the framebuffer which is typically provided with the PSHADER
 	/**
