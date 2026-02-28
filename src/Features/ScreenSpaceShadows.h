@@ -89,7 +89,9 @@ public:
 	virtual void DrawSettings() override;
 
 	virtual void ClearShaderCache() override;
+	void InvalidateRaymarchShaders();
 	uint GetScaledSampleCount();
+	uint lastCompiledSampleCount = 0;
 	ID3D11ComputeShader* GetComputeRaymarch();
 	ID3D11ComputeShader* GetComputeRaymarchRight();
 
