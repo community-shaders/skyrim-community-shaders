@@ -165,7 +165,6 @@ void IBL::Prepass()
 	auto& dynamicCubemaps = globals::features::dynamicCubemaps;
 
 	auto& envTexture = dynamicCubemaps.envTexture;
-	auto& envReflectionsTexture = dynamicCubemaps.envReflectionsTexture;
 
 	// Unset PS shader resource
 	{
@@ -189,9 +188,11 @@ void IBL::Prepass()
 		context->Dispatch(1, 1, 1);
 	}
 
-	// IBL with sky
+	// IBL with sky (use game's native reflections cubemap directly)
 	{
-		srvs.at(0) = (dynamicCubemaps.loaded && envReflectionsTexture) ? envReflectionsTexture->srv.get() : nullptr;
+		auto renderer = globals::game::renderer;
+		auto& reflections = renderer->GetRendererData().cubemapRenderTargets[RE::RENDER_TARGETS_CUBEMAP::kREFLECTIONS];
+		srvs.at(0) = reflections.SRV;
 		uavs.at(0) = diffuseSkyIBLTexture->uav.get();
 
 		context->CSSetShaderResources(0, (uint)srvs.size(), srvs.data());

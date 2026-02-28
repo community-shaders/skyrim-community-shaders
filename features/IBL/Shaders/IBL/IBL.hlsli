@@ -31,27 +31,15 @@ namespace ImageBasedLighting
 		return float3(colorR, colorG, colorB) / Math::PI;
 	}
 
-	/// Get Sky-only IBL color: (full env+sky SH) - (env-only SH)
+	/// Get Sky-only IBL color from game's native reflections cubemap SH
 	float3 GetSkyIBL(float3 rayDir)
 	{
-		// Full SH (env + sky)
-		sh2 fullR = DiffuseSkyIBLTexture.Load(int3(0, 0, 0));
-		sh2 fullG = DiffuseSkyIBLTexture.Load(int3(1, 0, 0));
-		sh2 fullB = DiffuseSkyIBLTexture.Load(int3(2, 0, 0));
-
-		// Env-only SH
-		sh2 envR = DiffuseIBLTexture.Load(int3(0, 0, 0));
-		sh2 envG = DiffuseIBLTexture.Load(int3(1, 0, 0));
-		sh2 envB = DiffuseIBLTexture.Load(int3(2, 0, 0));
-
-		// Sky-only SH = full - env
-		sh2 skyR = fullR - envR;
-		sh2 skyG = fullG - envG;
-		sh2 skyB = fullB - envB;
-
-		float colorR = SphericalHarmonics::SHHallucinateZH3Irradiance(skyR, rayDir);
-		float colorG = SphericalHarmonics::SHHallucinateZH3Irradiance(skyG, rayDir);
-		float colorB = SphericalHarmonics::SHHallucinateZH3Irradiance(skyB, rayDir);
+		sh2 shR = DiffuseSkyIBLTexture.Load(int3(0, 0, 0));
+		sh2 shG = DiffuseSkyIBLTexture.Load(int3(1, 0, 0));
+		sh2 shB = DiffuseSkyIBLTexture.Load(int3(2, 0, 0));
+		float colorR = SphericalHarmonics::SHHallucinateZH3Irradiance(shR, rayDir);
+		float colorG = SphericalHarmonics::SHHallucinateZH3Irradiance(shG, rayDir);
+		float colorB = SphericalHarmonics::SHHallucinateZH3Irradiance(shB, rayDir);
 		return max(0, float3(colorR, colorG, colorB) / Math::PI);
 	}
 
