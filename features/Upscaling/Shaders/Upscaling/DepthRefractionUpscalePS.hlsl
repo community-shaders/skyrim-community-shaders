@@ -35,38 +35,19 @@ float SampleMinDepth2x2(float2 uv)
 	return min(min(depthQuad.x, depthQuad.y), min(depthQuad.z, depthQuad.w));
 }
 
-float SampleDepthClamped(int2 coord, int2 maxCoord)
+float Min4(float4 v)
 {
-	int2 c = clamp(coord, int2(0, 0), maxCoord);
-	return DepthTex.Load(int3(c, 0));
+	return min(min(v.x, v.y), min(v.z, v.w));
 }
 
-float SampleMinDepth3x3(float2 uv)
+float SampleMinDepthWideGather(float2 uv)
 {
-	// Use cached frame buffer dimensions to avoid per-pixel texture-dimension queries.
-	int2 texSize = int2(SharedData::BufferDim.xy);
-	int2 maxCoord = texSize - 1;
-	int2 centerCoord = int2(uv * SharedData::BufferDim.xy);
-
-	float row0 = min(
-		SampleDepthClamped(centerCoord + int2(-1, -1), maxCoord),
-		min(
-			SampleDepthClamped(centerCoord + int2(0, -1), maxCoord),
-			SampleDepthClamped(centerCoord + int2(1, -1), maxCoord)));
-
-	float row1 = min(
-		SampleDepthClamped(centerCoord + int2(-1, 0), maxCoord),
-		min(
-			SampleDepthClamped(centerCoord + int2(0, 0), maxCoord),
-			SampleDepthClamped(centerCoord + int2(1, 0), maxCoord)));
-
-	float row2 = min(
-		SampleDepthClamped(centerCoord + int2(-1, 1), maxCoord),
-		min(
-			SampleDepthClamped(centerCoord + int2(0, 1), maxCoord),
-			SampleDepthClamped(centerCoord + int2(1, 1), maxCoord)));
-
-	return min(row0, min(row1, row2));
+	// Gather-only wide footprint (4 offset 2x2 GatherRed calls) to save performance.
+	float d0 = Min4(DepthTex.GatherRed(LinearSampler, uv, int2(-1, -1)));
+	float d1 = Min4(DepthTex.GatherRed(LinearSampler, uv, int2(1, -1)));
+	float d2 = Min4(DepthTex.GatherRed(LinearSampler, uv, int2(-1, 1)));
+	float d3 = Min4(DepthTex.GatherRed(LinearSampler, uv, int2(1, 1)));
+	return min(min(d0, d1), min(d2, d3));
 }
 
 PS_OUTPUT main(PS_INPUT input)
@@ -98,7 +79,7 @@ PS_OUTPUT main(PS_INPUT input)
 
 #	if defined(VR)
 	float bilinearDepth = psout.Depth;
-	psout.Depth = (useWideKernel > 0.5f) ? SampleMinDepth3x3(uv) : SampleMinDepth2x2(uv);
+	psout.Depth = (useWideKernel > 0.5f) ? SampleMinDepthWideGather(uv) : SampleMinDepth2x2(uv);
 	// Keep SAO camera Z smooth to avoid over-occlusion; depth culling uses SV_Depth.
 	psout.SAOCameraZ = bilinearDepth;
 #	else
