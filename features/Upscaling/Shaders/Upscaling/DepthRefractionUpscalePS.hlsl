@@ -26,7 +26,7 @@ cbuffer JitterCB : register(b0)
 {
 	float2 jitter;
 	float useWideKernel;
-	float pad0;
+	float useGatherWideKernel;
 };
 
 float SampleMinDepth2x2(float2 uv)
@@ -38,6 +38,39 @@ float SampleMinDepth2x2(float2 uv)
 float Min4(float4 v)
 {
 	return min(min(v.x, v.y), min(v.z, v.w));
+}
+
+float SampleDepthClamped(int2 coord, int2 maxCoord)
+{
+	int2 c = clamp(coord, int2(0, 0), maxCoord);
+	return DepthTex.Load(int3(c, 0));
+}
+
+float SampleMinDepth3x3Legacy(float2 uv)
+{
+	int2 texSize = int2(SharedData::BufferDim.xy);
+	int2 maxCoord = texSize - 1;
+	int2 centerCoord = int2(uv * SharedData::BufferDim.xy);
+
+	float row0 = min(
+		SampleDepthClamped(centerCoord + int2(-1, -1), maxCoord),
+		min(
+			SampleDepthClamped(centerCoord + int2(0, -1), maxCoord),
+			SampleDepthClamped(centerCoord + int2(1, -1), maxCoord)));
+
+	float row1 = min(
+		SampleDepthClamped(centerCoord + int2(-1, 0), maxCoord),
+		min(
+			SampleDepthClamped(centerCoord + int2(0, 0), maxCoord),
+			SampleDepthClamped(centerCoord + int2(1, 0), maxCoord)));
+
+	float row2 = min(
+		SampleDepthClamped(centerCoord + int2(-1, 1), maxCoord),
+		min(
+			SampleDepthClamped(centerCoord + int2(0, 1), maxCoord),
+			SampleDepthClamped(centerCoord + int2(1, 1), maxCoord)));
+
+	return min(row0, min(row1, row2));
 }
 
 float SampleMinDepthWideGather(float2 uv)
@@ -79,7 +112,11 @@ PS_OUTPUT main(PS_INPUT input)
 
 #	if defined(VR)
 	float bilinearDepth = psout.Depth;
-	psout.Depth = (useWideKernel > 0.5f) ? SampleMinDepthWideGather(uv) : SampleMinDepth2x2(uv);
+	if (useWideKernel > 0.5f) {
+		psout.Depth = (useGatherWideKernel > 0.5f) ? SampleMinDepthWideGather(uv) : SampleMinDepth3x3Legacy(uv);
+	} else {
+		psout.Depth = SampleMinDepth2x2(uv);
+	}
 	// Keep SAO camera Z smooth to avoid over-occlusion; depth culling uses SV_Depth.
 	psout.SAOCameraZ = bilinearDepth;
 #	else

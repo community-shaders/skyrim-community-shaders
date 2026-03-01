@@ -58,6 +58,7 @@ public:
 		float sharpnessFSR = 0.0f;
 		float sharpnessDLSS = 0.0f;
 		uint presetDLSS = 0;  // 0=Default, 1=J, 2=K, 3=L, 4=M
+		uint useGatherWideKernel = 1;  // 0=Legacy 3x3, 1=Gather wide-kernel
 	};
 
 	Settings settings;
@@ -66,7 +67,7 @@ public:
 	{
 		float2 jitter;
 		float useWideKernel;
-		float pad0;
+		float useGatherWideKernel;
 	};
 
 	struct UpscalingDataCB
