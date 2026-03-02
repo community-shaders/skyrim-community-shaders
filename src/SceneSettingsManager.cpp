@@ -342,10 +342,15 @@ void SceneSettingsManager::RemoveSetting(SceneType type, size_t index)
 		auto basePath = GetOverwritesPath(type);
 		auto filepath = (type == SceneType::TimeOfDay && entry.period != TimeOfDayPeriod::Count) ? basePath / GetPeriodName(entry.period) / entry.sourceFilename : basePath / entry.sourceFilename;
 		std::error_code ec;
-		if (std::filesystem::remove(filepath, ec))
+		bool removed = std::filesystem::remove(filepath, ec);
+		if (removed) {
 			logger::info("[SceneSettings] Deleted overwrite file: {}", filepath.string());
-		else
-			logger::error("[SceneSettings] Failed to delete overwrite file: {} ({})", filepath.string(), ec.message());
+		} else if (ec && ec.value() != 0) {
+			// Real I/O error — keep in-memory entry so the overwrite stays active
+			logger::error("[SceneSettings] Failed to delete overwrite file: {} ({}) — keeping entry", filepath.string(), ec.message());
+			return;
+		}
+		// ec.value()==0 && !removed means file didn't exist — safe to drop entry
 	}
 
 	logger::info("[SceneSettings] Removed {} entry: {}.{} (source={})", GetSceneTypeName(type),
@@ -1011,6 +1016,7 @@ void SceneSettingsManager::LoadUserSettings(SceneType type)
 			return;
 
 		auto& vec = GetEntriesMut(type);
+		int loadedCount = 0;
 		for (const auto& item : data) {
 			if (!item.contains("feature") || !item.contains("setting") || !item.contains("value"))
 				continue;
@@ -1061,9 +1067,10 @@ void SceneSettingsManager::LoadUserSettings(SceneType type)
 			if (HasDuplicateEntry(type, entry.featureShortName, entry.settingKey, EntrySource::User, entry.period))
 				continue;
 			vec.push_back(std::move(entry));
+			loadedCount++;
 		}
 
-		logger::info("[SceneSettings] Loaded {} {} user settings", data.size(), typeName);
+		logger::info("[SceneSettings] Loaded {} {} user settings", loadedCount, typeName);
 	} catch (const std::exception& e) {
 		logger::error("[SceneSettings] Failed to load {} settings: {}", typeName, e.what());
 	}
