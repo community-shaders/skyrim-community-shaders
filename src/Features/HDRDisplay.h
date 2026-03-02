@@ -55,6 +55,7 @@ struct HDRDisplay : public Feature
 	virtual void ClearShaderCache() override;
 	virtual void PostPostLoad() override;
 
+	float4 GetSharedDataHDR() const;
 	void UpdateHDRData() const;
 	void UpdateSwapChainColorSpace() const;
 

@@ -1158,6 +1158,22 @@ float HDRDisplay::GetDisplayMaxLuminance() const
 	return maxLuminance;
 }
 
+float4 HDRDisplay::GetSharedDataHDR() const
+{
+	if (!loaded)
+		return { 0.0f, 0.0f, 0.0f, 0.0f };
+
+	bool isMainOrLoading = globals::game::ui &&
+	                       (globals::game::ui->IsMenuOpen(RE::MainMenu::MENU_NAME) ||
+							   globals::game::ui->IsMenuOpen(RE::LoadingMenu::MENU_NAME));
+	return {
+		settings.enableHDR ? 1.0f : 0.0f,
+		static_cast<float>(settings.hdrPaperWhite),
+		static_cast<float>(settings.hdrPeakNits),
+		isMainOrLoading ? 1.0f : 0.0f
+	};
+}
+
 void HDRDisplay::UpdateHDRData() const
 {
 	if (!hdrDataCB)
