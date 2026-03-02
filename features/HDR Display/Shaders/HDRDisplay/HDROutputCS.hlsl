@@ -70,15 +70,26 @@ cbuffer PerFrame : register(b0)
 			// Scene: encode to PQ at 80 nits (ISHDR pre-scaled by pw/80, so ref white = pw nits)
 			float3 scenePQ = Color::pq::Encode(sceneBT2020, sRGB_WhiteLevelNits);
 
-			// UI: mirror UIBrightnessCS exactly - GammaToTrueLinear (pow 2.2) for vanilla sRGB UI
-			float3 uiStraight = (ui.a > 0.001) ? ui.rgb / ui.a : float3(0, 0, 0);
-			float3 uiLinear = Color::GammaToTrueLinear(max(0.0, uiStraight));
-			float3 uiBT2020 = Color::BT709ToBT2020(uiLinear);
-			float3 uiNits = uiBT2020 * sRGB_WhiteLevelNits * uiBrightness;
-			float3 uiPQ = Color::pq::Encode(uiNits / 10000.0, 10000.0);
+			// Convert UI to premultiplied PQ, mirroring UIBrightnessCS.
+			// When alpha > 0: unpremultiply, convert to nits, re-premultiply in PQ space.
+			// When alpha == 0 but rgb != 0 (third-party/Scaleform UI that doesn't write dest alpha),
+			// apply the color transform on premultiplied values directly and composite additively.
+			float3 uiPremultPQ;
+			if (ui.a > 0.001) {
+				float3 uiStraight = ui.rgb / ui.a;
+				float3 uiLinear = Color::GammaToTrueLinear(max(0.0, uiStraight));
+				float3 uiBT2020 = Color::BT709ToBT2020(uiLinear);
+				float3 uiNits = uiBT2020 * sRGB_WhiteLevelNits * uiBrightness;
+				uiPremultPQ = Color::pq::Encode(uiNits / 10000.0, 10000.0) * ui.a;
+			} else {
+				float3 uiLinear = Color::GammaToTrueLinear(max(0.0, ui.rgb));
+				float3 uiBT2020 = Color::BT709ToBT2020(uiLinear);
+				float3 uiNits = uiBT2020 * sRGB_WhiteLevelNits * uiBrightness;
+				uiPremultPQ = Color::pq::Encode(uiNits / 10000.0, 10000.0);
+			}
 
-			// Premultiplied alpha blend in PQ space
-			finalColor = uiPQ * ui.a + scenePQ * (1.0 - ui.a);
+			// Premultiplied alpha blend in PQ space (additive when alpha = 0)
+			finalColor = uiPremultPQ + scenePQ * (1.0 - ui.a);
 		}
 	} else {
 		float3 sceneGamma = scene.rgb;
