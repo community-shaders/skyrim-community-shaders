@@ -793,13 +793,35 @@ void SceneSettingsManager::ApplyTimeOfDayBlended()
 			bestIdx = i;
 	auto dominant = static_cast<TimeOfDayPeriod>(bestIdx);
 
-	// Group active entries by feature, using pointers to avoid JSON copies
-	std::map<std::string, std::map<std::string, std::vector<PeriodRef>>> featureSettings;
+	// Group active entries by feature, using pointers to avoid JSON copies.
+	struct PeriodSlot
+	{
+		const json* value = nullptr;
+		EntrySource source = EntrySource::User;
+	};
+	// featureShortName -> settingKey -> periodIdx -> resolved slot
+	std::map<std::string, std::map<std::string, std::map<int, PeriodSlot>>> collapsedSettings;
 	for (const auto& entry : GetEntries(SceneType::TimeOfDay)) {
 		if (!IsEntryActive(entry) || entry.period == TimeOfDayPeriod::Count)
 			continue;
-		featureSettings[entry.featureShortName][entry.settingKey].push_back(
-			{ static_cast<int>(entry.period), &entry.value });
+		int pIdx = static_cast<int>(entry.period);
+		auto& slot = collapsedSettings[entry.featureShortName][entry.settingKey][pIdx];
+		// First write always wins; Overwrite always supersedes User.
+		if (!slot.value || (entry.source == EntrySource::Overwrite && slot.source != EntrySource::Overwrite)) {
+			slot.value = &entry.value;
+			slot.source = entry.source;
+		}
+	}
+
+	// Build the final PeriodRef vectors from the collapsed map
+	std::map<std::string, std::map<std::string, std::vector<PeriodRef>>> featureSettings;
+	for (auto& [shortName, keyMap] : collapsedSettings) {
+		for (auto& [key, periodMap] : keyMap) {
+			auto& refs = featureSettings[shortName][key];
+			refs.reserve(periodMap.size());
+			for (auto& [pIdx, slot] : periodMap)
+				refs.push_back({ pIdx, slot.value });
+		}
 	}
 
 	for (auto& [shortName, settingsMap] : featureSettings) {
