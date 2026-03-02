@@ -397,21 +397,38 @@ bool SceneSettingsManager::AreAllOverwritesPaused(SceneType type) const
 void SceneSettingsManager::DeleteAllOverwrites(SceneType type)
 {
 	auto overwritesPath = GetOverwritesPath(type);
-	std::error_code ec;
 
 	auto& vec = GetEntriesMut(type);
-	for (const auto& entry : vec) {
-		if (entry.source == EntrySource::Overwrite && !entry.sourceFilename.empty()) {
-			// TOD overwrites live in per-period subfolders; use the same path
-			// construction as SaveOverwritesToDisk to ensure we hit the right file.
-			auto filepath = (type == SceneType::TimeOfDay && entry.period != TimeOfDayPeriod::Count) ? overwritesPath / GetPeriodName(entry.period) / entry.sourceFilename : overwritesPath / entry.sourceFilename;
-			std::filesystem::remove(filepath, ec);
+
+	// Track which overwrite entries had their files successfully removed (or already absent).
+	// Entries whose disk delete fails are kept in memory so they stay visible for retry.
+	std::vector<bool> shouldErase(vec.size(), false);
+	for (size_t i = 0; i < vec.size(); ++i) {
+		const auto& entry = vec[i];
+		if (entry.source != EntrySource::Overwrite)
+			continue;
+		if (entry.sourceFilename.empty()) {
+			// No backing file — safe to drop
+			shouldErase[i] = true;
+			continue;
+		}
+		auto filepath = (type == SceneType::TimeOfDay && entry.period != TimeOfDayPeriod::Count) ? overwritesPath / GetPeriodName(entry.period) / entry.sourceFilename : overwritesPath / entry.sourceFilename;
+		std::error_code ec;
+		bool removed = std::filesystem::remove(filepath, ec);
+		if (removed || (!ec || ec.value() == 0)) {
+			// File deleted or already absent — mark for in-memory removal
+			shouldErase[i] = true;
+		} else {
+			logger::error("[SceneSettings] Failed to delete overwrite file: {} ({}) — keeping entry", filepath.string(), ec.message());
 		}
 	}
 
-	std::erase_if(vec, [](const SettingEntry& e) {
-		return e.source == EntrySource::Overwrite;
-	});
+	// Erase only entries whose backing files were successfully cleaned up
+	// (iterate in reverse to preserve index validity)
+	for (size_t i = vec.size(); i-- > 0;) {
+		if (shouldErase[i])
+			vec.erase(vec.begin() + static_cast<ptrdiff_t>(i));
+	}
 
 	allOverwritesPausedMap[type] = false;
 	ReapplyIfActive();
