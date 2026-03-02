@@ -312,6 +312,12 @@ void SceneSettingsManager::AddSetting(SceneType type, const std::string& feature
 			logger::warn("[SceneSettings] Rejecting non-float TOD setting: {}.{}", featureShortName, settingKey);
 			return;
 		}
+
+		// Reject non-finite values (NaN/Inf) to prevent unstable blending
+		if (!std::isfinite(value.get<float>())) {
+			logger::warn("[SceneSettings] Rejecting non-finite TOD value for {}.{}", featureShortName, settingKey);
+			return;
+		}
 	}
 
 	if (HasDuplicateEntry(type, featureShortName, settingKey, EntrySource::User, period))
