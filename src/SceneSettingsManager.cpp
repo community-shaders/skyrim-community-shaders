@@ -1025,7 +1025,7 @@ void SceneSettingsManager::LoadUserSettings(SceneType type)
 			entry.featureShortName = item["feature"].get<std::string>();
 			entry.settingKey = item["setting"].get<std::string>();
 			entry.value = item["value"];
-			entry.paused = item.value("paused", false);
+			entry.paused = (item.contains("paused") && item["paused"].is_boolean()) ? item["paused"].get<bool>() : false;
 			entry.source = EntrySource::User;
 
 			// Parse period for TimeOfDay entries
