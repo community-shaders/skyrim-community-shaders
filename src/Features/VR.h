@@ -1,5 +1,4 @@
 #pragma once
-#include "FeatureConstraints.h"
 #include "Menu.h"
 #include "OverlayFeature.h"
 #include "Utils/Input.h"
@@ -119,7 +118,7 @@ public:
 	virtual void DataLoaded() override;
 	virtual void EarlyPrepass() override;
 
-	void UpdateDepthBufferCulling(bool desired, const FeatureConstraints::SettingId& settingId);
+	void UpdateDepthBufferCulling();
 
 	// Stereo bilateral blend pass - called from Deferred::DeferredPasses after composite
 	void DrawStereoBlend();
@@ -156,7 +155,7 @@ public:
 	{
 		// Performance optimization settings
 		bool EnableDepthBufferCullingExterior = true;  ///< Enable depth buffer culling for VR performance
-		bool EnableDepthBufferCullingInterior = false;
+		bool EnableDepthBufferCullingInterior = true;
 		float MinOccludeeBoxExtent = 10.0f;  ///< Minimum bounding box size for occlusion culling
 
 		// Stereo consistency blend pass (post-composite safety net)
