@@ -135,6 +135,7 @@ public:
 	void LoadWeatherValues();
 	void ApplyChanges() override;
 	void RevertChanges() override;
+	void Delete() override;
 	bool HasUnsavedChanges() const override;
 
 	// New methods for per-feature settings

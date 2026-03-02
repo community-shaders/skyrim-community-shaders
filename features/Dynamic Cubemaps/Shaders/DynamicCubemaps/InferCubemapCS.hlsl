@@ -47,8 +47,7 @@ float3 GetSamplingVector(uint3 ThreadID, in RWTexture2DArray<float4> OutputTextu
 	return normalize(result);
 }
 
-[numthreads(8, 8, 1)] void main(uint3 ThreadID
-								: SV_DispatchThreadID) {
+[numthreads(8, 8, 1)] void main(uint3 ThreadID : SV_DispatchThreadID) {
 	float3 uv = GetSamplingVector(ThreadID, EnvInferredTexture);
 	float4 color = EnvCaptureTexture.SampleLevel(LinearSampler, uv, 0);
 

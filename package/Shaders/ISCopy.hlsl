@@ -6,9 +6,9 @@ typedef VS_OUTPUT PS_INPUT;
 struct PS_OUTPUT
 {
 #if defined(DEPTHBUFFER_COPY)
-	float Depth : SV_Depth;
+	float Depth: SV_Depth;
 #else
-	float4 Color : SV_Target0;
+	float4 Color: SV_Target0;
 #endif
 };
 

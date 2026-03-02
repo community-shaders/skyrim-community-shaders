@@ -71,6 +71,9 @@ void WeatherEditor::DrawSettings()
 	}
 	ImGui::EndDisabled();
 
+	// Time controls
+	DrawTimeControls();
+
 	// Basic weather editor info
 	DrawWeatherStatusPanel();
 
@@ -89,6 +92,9 @@ void WeatherEditor::Prepass()
 			sky->ForceWeather(lockedWeather, false);
 		}
 	}
+
+	// Update time controls (handles sleep/wait and external state sync)
+	editorWindow->UpdateTimeState();
 }
 
 void WeatherEditor::DrawWeatherPickerSection()
@@ -190,6 +196,15 @@ void WeatherEditor::LerpWeather(RE::TESWeather* oldWeather, RE::TESWeather* newW
 		newWeather->cloudLayerSpeedY[i] = LerpInt8_t(oldWeather->cloudLayerSpeedY[i], newWeather->cloudLayerSpeedY[i], currentWeatherPct);
 		newWeather->cloudLayerSpeedX[i] = LerpInt8_t(oldWeather->cloudLayerSpeedX[i], newWeather->cloudLayerSpeedX[i], currentWeatherPct);
 	}
+}
+
+void WeatherEditor::DrawTimeControls()
+{
+	ImGui::Spacing();
+	Util::DrawSectionHeader("Time Controls");
+	ImGui::Spacing();
+	EditorWindow::GetSingleton()->DrawTimeControls();
+	ImGui::Spacing();
 }
 
 void WeatherEditor::DrawWeatherStatusPanel()
@@ -674,30 +689,45 @@ void WeatherEditor::RenderWeatherControls(RE::Sky* sky)
 	                               weatherLabels[s_selectedWeatherIdx].c_str() :
 	                               "Select Weather";
 
+	static constexpr const char* kWeatherSearchId = "WeatherPicker";
+
 	if (ImGui::BeginCombo("Weather", comboPreview)) {
+		auto searchText = Util::DrawComboSearchInput(kWeatherSearchId);
+
 		for (int i = 0; i < static_cast<int>(s_filteredWeathers.size()); ++i) {
 			const bool isSelected = (s_selectedWeatherIdx == i);
 			auto weather = s_filteredWeathers[i];
-			ImVec4 textColor = GetWeatherTypeColor(weather);
 
-			ImGui::PushStyleColor(ImGuiCol_Text, textColor);
-			if (ImGui::Selectable(weatherLabels[i].c_str(), isSelected)) {
-				s_selectedWeatherIdx = i;
-				// Weather changed, apply it
-				auto selectedWeather = s_filteredWeathers[s_selectedWeatherIdx];
+			// Filter by EditorID, Name, and FormID only (not classification tags)
+			if (!searchText.empty()) {
+				auto editorId = weather->GetFormEditorID() ? std::string(weather->GetFormEditorID()) : "";
+				auto name = weather->GetName() ? std::string(weather->GetName()) : "";
+				auto formId = std::format("{:08X}", weather->GetFormID());
 
-				if (s_accelerateWeatherChange) {
-					// Instant transition - force the weather
-					sky->ForceWeather(selectedWeather, false);
-				} else {
-					// Normal transition
-					sky->SetWeather(selectedWeather, true, false);
-				}
-
-				logger::info("[WeatherEditor] Changed weather to: {}", Util::FormatWeather(selectedWeather));
+				if (!Util::StringMatchesSearch(editorId, searchText) &&
+					!Util::StringMatchesSearch(name, searchText) &&
+					!Util::StringMatchesSearch(formId, searchText))
+					continue;
 			}
+
+			ImGui::PushStyleColor(ImGuiCol_Text, GetWeatherTypeColor(weather));
+			bool didSelect = ImGui::Selectable(weatherLabels[i].c_str(), isSelected);
 			ImGui::PopStyleColor();
-			// Add hover tooltip to show full weather information
+
+			if (didSelect) {
+				s_selectedWeatherIdx = i;
+				auto selectedWeather = s_filteredWeathers[i];
+
+				if (s_accelerateWeatherChange)
+					sky->ForceWeather(selectedWeather, false);
+				else
+					sky->SetWeather(selectedWeather, true, false);
+
+				Util::ClearComboSearch(kWeatherSearchId);
+				logger::info("[WeatherEditor] Changed weather to: {}", Util::FormatWeather(selectedWeather));
+				break;
+			}
+
 			if (ImGui::IsItemHovered()) {
 				ImGui::BeginTooltip();
 				ImGui::Text("Weather: %s", weather->GetName() ? weather->GetName() : "Unnamed");
@@ -706,12 +736,12 @@ void WeatherEditor::RenderWeatherControls(RE::Sky* sky)
 				ImGui::EndTooltip();
 			}
 
-			// Set the initial focus when opening the combo (scrolls to it)
-			if (isSelected) {
+			if (isSelected)
 				ImGui::SetItemDefaultFocus();
-			}
 		}
 		ImGui::EndCombo();
+	} else {
+		Util::ClearComboSearch(kWeatherSearchId);
 	}
 }
 

@@ -36,8 +36,6 @@ public:
 		};
 	}
 
-	virtual std::vector<FeatureConstraints::Constraint> GetActiveConstraints() const override;
-
 	float2 jitter = { 0, 0 };
 
 	enum class UpscaleMethod
@@ -59,7 +57,8 @@ public:
 		uint streamlineLogLevel = 0;  // 0=Off, 1=Default, 2=Verbose
 		float sharpnessFSR = 0.0f;
 		float sharpnessDLSS = 0.0f;
-		uint presetDLSS = 0;  // 0=Default, 1=J, 2=K, 3=L, 4=M
+		uint presetDLSS = 0;           // 0=Default, 1=J, 2=K, 3=L, 4=M
+		uint useGatherWideKernel = 1;  // 0=Legacy 3x3, 1=Gather wide-kernel
 	};
 
 	Settings settings;
@@ -67,7 +66,8 @@ public:
 	struct JitterCB
 	{
 		float2 jitter;
-		float2 pad0;
+		float useWideKernel;
+		float useGatherWideKernel;
 	};
 
 	struct UpscalingDataCB
@@ -189,6 +189,7 @@ public:
 	float dynamicResolutionHeightRatio = 1.0f;
 
 	bool previousUpscalingWasActive = false;
+	bool depthUpscaleUseWideKernel = false;
 
 	void CopySharedD3D12Resources();
 	void PostDisplay();

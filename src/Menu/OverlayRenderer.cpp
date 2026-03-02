@@ -3,6 +3,7 @@
 #include "HomePageRenderer.h"
 #include "ThemeManager.h"
 
+#include <dxgi.h>
 #include <imgui.h>
 #include <imgui_impl_dx11.h>
 #include <imgui_impl_win32.h>
@@ -117,8 +118,16 @@ void OverlayRenderer::InitializeImGuiFrame(Menu& menu)
 	// Start the Dear ImGui frame
 	ImGui_ImplDX11_NewFrame();
 	ImGui_ImplWin32_NewFrame();
-	ImGui::NewFrame();
 
+	DXGI_SWAP_CHAIN_DESC desc{};
+	globals::d3d::swapChain->GetDesc(&desc);
+
+	Util::UpdateImGuiInput(
+		desc.OutputWindow,
+		static_cast<float>(desc.BufferDesc.Width),
+		static_cast<float>(desc.BufferDesc.Height));
+
+	ImGui::NewFrame();
 	ThemeManager::SetupImGuiStyle(menu);
 }
 

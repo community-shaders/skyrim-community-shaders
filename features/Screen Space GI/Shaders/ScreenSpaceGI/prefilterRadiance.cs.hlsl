@@ -30,9 +30,7 @@ float3 RadianceMIPFilter(float3 radiance0, float3 radiance1, float3 radiance2, f
 }
 
 groupshared float3 g_scratchRadiance[8][8];
-[numthreads(8, 8, 1)] void main(uint2 dispatchThreadID
-								: SV_DispatchThreadID, uint2 groupThreadID
-								: SV_GroupThreadID) {
+[numthreads(8, 8, 1)] void main(uint2 dispatchThreadID : SV_DispatchThreadID, uint2 groupThreadID : SV_GroupThreadID) {
 	const float2 frameScale = FrameDim * RcpTexDim;
 
 	// MIP 0

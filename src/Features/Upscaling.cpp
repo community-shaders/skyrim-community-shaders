@@ -8,9 +8,9 @@
 #include "Upscaling/FidelityFX.h"
 #include "Upscaling/Streamline.h"
 #include "Utils/UI.h"
-#include "VR.h"
 #include <Windows.h>
 #include <algorithm>
+#include <cfloat>
 #include <directx/d3dx12.h>
 #include <format>
 
@@ -25,7 +25,8 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	streamlineLogLevel,
 	sharpnessFSR,
 	sharpnessDLSS,
-	presetDLSS);
+	presetDLSS,
+	useGatherWideKernel);
 
 decltype(&D3D11CreateDeviceAndSwapChain) ptrD3D11CreateDeviceAndSwapChainUpscaling;
 
@@ -244,6 +245,15 @@ void Upscaling::DrawSettings()
 				ImGui::Text("Changing this setting requires a restart to take effect.");
 			}
 		}
+
+		if (globals::game::isVR) {
+			settings.useGatherWideKernel = std::min(settings.useGatherWideKernel, 1u);
+			const char* wideKernelModes[] = { "Legacy 3x3", "Gather Wide" };
+			ImGui::SliderInt("Wide Kernel Mode", (int*)&settings.useGatherWideKernel, 0, 1, wideKernelModes[settings.useGatherWideKernel]);
+			if (auto _tt = Util::HoverTooltipWrapper()) {
+				ImGui::Text("Switches wide-kernel depth sampling mode for VR depth upscaling.");
+			}
+		}
 	}
 
 	if (!globals::game::isVR) {
@@ -451,6 +461,10 @@ void Upscaling::LoadSettings(json& o_json)
 	if (settings.presetDLSS > 4) {
 		logger::warn("[Upscaling] Loaded presetDLSS {} out of range, resetting to 0 (Default)", settings.presetDLSS);
 		settings.presetDLSS = 0;
+	}
+	if (settings.useGatherWideKernel > 1) {
+		logger::warn("[Upscaling] Loaded useGatherWideKernel {} out of range, clamping to 1", settings.useGatherWideKernel);
+		settings.useGatherWideKernel = 1;
 	}
 	auto iniSettingCollection = globals::game::iniPrefSettingCollection;
 	if (iniSettingCollection) {
@@ -1093,24 +1107,6 @@ void Upscaling::ConfigureUpscaling(RE::BSGraphics::State* a_viewport)
 	// Disable dynamic resolution unless the game explicitly enables it
 	if (!globals::game::isVR)
 		runtimeData.dynamicResolutionLock = 1;
-
-	// If running in VR and an external upscaler is active, force-disable
-	// the engine's depth-buffer culling immediately. This ensures that
-	// enabling upscaling at runtime (after game load) does not leave the
-	// VR depth-buffer culling enabled which can cause incorrect occlusion.
-	if (globals::game::isVR) {
-		auto& vr = globals::features::vr;
-		if (IsUpscalingActive()) {
-			if (vr.gDepthBufferCulling) {
-				if (*vr.gDepthBufferCulling) {
-					*vr.gDepthBufferCulling = false;
-					logger::info("[Upscaling] VR detected - forcing depth buffer culling OFF due to active downscaling upscaler (scale={})", resolutionScale.x);
-				}
-			} else {
-				logger::warn("[Upscaling] VR depth buffer culling pointer is null, cannot force disable");
-			}
-		}
-	}
 }
 
 void Upscaling::SetupResources()
@@ -1416,39 +1412,13 @@ bool Upscaling::IsUpscalingActive() const
 
 	// Only consider vendor upscalers (FSR/DLSS) as "active" when the
 	// selected method actually produces a downscale. If the renderer is
-	// currently running at 1:1 (no downscale) then depth-buffer culling and
-	// other VR-sensitive behavior can remain enabled.
+	// currently running at 1:1 (no downscale), treat upscaling as inactive.
 	if (!(method == UpscaleMethod::kFSR || method == UpscaleMethod::kDLSS)) {
 		return false;
 	}
 
 	// resolutionScale.x represents renderWidth / displayWidth.
 	return resolutionScale.x < .99f;
-}
-
-std::vector<FeatureConstraints::Constraint> Upscaling::GetActiveConstraints() const
-{
-	std::vector<FeatureConstraints::Constraint> constraints;
-
-	if (!IsUpscalingActive()) {
-		return constraints;
-	}
-
-	// When upscaling is active in VR, depth buffer culling must be disabled
-	// because upscalers modify the depth buffer, causing incorrect occlusion
-	if (globals::game::isVR) {
-		constraints.push_back({ { "VR", "EnableDepthBufferCullingExterior" },
-			false,
-			"Upscaling modifies the depth buffer, causing incorrect VR occlusion tests in exteriors.",
-			false });
-
-		constraints.push_back({ { "VR", "EnableDepthBufferCullingInterior" },
-			false,
-			"Upscaling modifies the depth buffer, causing incorrect VR occlusion tests in interiors.",
-			false });
-	}
-
-	return constraints;
 }
 
 /**
@@ -1644,113 +1614,167 @@ void Upscaling::PerformUpscaling()
 
 void Upscaling::UpscaleDepth()
 {
-	if (resolutionScale.x != 1.0f) {
-		globals::state->BeginPerfEvent("Render Target Upscaling");
+	// Optimization overview:
+	// 1) Early validation exits before issuing GPU work.
+	// 2) Wide-kernel depth mode uses hysteresis to avoid frequent toggles.
+	// 3) Resource copies are skipped for aliased src/dst to reduce copy churn.
 
-		auto& renderer = globals::game::renderer;
-		auto context = globals::d3d::context;
+	// (1) Early validation exits
+	if (!IsUpscalingActive()) {
+		return;
+	}
 
-		// Set up Input Assembler for fullscreen triangle (no vertex/index buffers needed)
-		context->IASetInputLayout(nullptr);
-		context->IASetVertexBuffers(0, 0, nullptr, nullptr, nullptr);
-		context->IASetIndexBuffer(nullptr, DXGI_FORMAT_UNKNOWN, 0);
-		context->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+	auto state = globals::state;
+	auto renderer = globals::game::renderer;
+	auto context = globals::d3d::context;
+	auto deferred = globals::deferred;
+	if (!state || !renderer || !context || !deferred || !deferred->linearSampler || !jitterCB || !upscaleRasterizerState || !upscaleBlendState || !upscaleDepthStencilState) {
+		return;
+	}
 
-		// Set up vertex shader that generates fullscreen triangle using SV_VertexID
-		context->VSSetShader(GetUpscaleVS(), nullptr, 0);
+	auto screenSize = state->screenSize;
+	if (screenSize.x <= 0.0f || screenSize.y <= 0.0f) {
+		return;
+	}
 
-		// Set up viewport for fullscreen rendering
-		auto screenSize = globals::state->screenSize;
+	auto& depth = renderer->GetDepthStencilData().depthStencils[RE::RENDER_TARGETS_DEPTHSTENCIL::kMAIN];
+	auto& depthCopy = renderer->GetDepthStencilData().depthStencils[RE::RENDER_TARGETS_DEPTHSTENCIL::kMAIN_COPY];
+	auto& refractionNormals = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGET::kREFRACTION_NORMALS];
+	auto& saoCameraZ = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGET::kSAO_CAMERAZ];
+	auto& underwaterMask = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGET::kUNDERWATER_MASK];
 
-		D3D11_VIEWPORT viewport = {};
-		viewport.TopLeftX = 0.0f;
-		viewport.TopLeftY = 0.0f;
-		viewport.Width = screenSize.x;
-		viewport.Height = screenSize.y;
-		viewport.MinDepth = 0.0f;
-		viewport.MaxDepth = 1.0f;
+	if (!depth.texture || !depth.views[0] || !depthCopy.texture || !depthCopy.depthSRV ||
+		!refractionNormals.texture || !refractionNormals.textureCopy || !refractionNormals.SRVCopy || !refractionNormals.RTV || !saoCameraZ.RTV ||
+		!underwaterMask.texture || !underwaterMask.textureCopy || !underwaterMask.SRVCopy || !underwaterMask.RTV) {
+		return;
+	}
+	if (globals::game::isVR && (!depthCopy.views[0] || !depthCopy.stencilSRV)) {
+		return;
+	}
+
+	auto* fullscreenVS = GetUpscaleVS();
+	auto* depthUpscalePS = GetDepthRefractionUpscalePS();
+	auto* underwaterMaskPS = GetUnderwaterMaskUpscalePS();
+	if (!fullscreenVS || !depthUpscalePS || !underwaterMaskPS) {
+		return;
+	}
+
+	state->BeginPerfEvent("Render Target Upscaling");
+
+	// Set up Input Assembler for fullscreen triangle (no vertex/index buffers needed)
+	context->IASetInputLayout(nullptr);
+	context->IASetVertexBuffers(0, 0, nullptr, nullptr, nullptr);
+	context->IASetIndexBuffer(nullptr, DXGI_FORMAT_UNKNOWN, 0);
+	context->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+
+	// Set up vertex shader that generates fullscreen triangle using SV_VertexID
+	context->VSSetShader(fullscreenVS, nullptr, 0);
+
+	// Set up viewport for fullscreen rendering
+	D3D11_VIEWPORT viewport = {};
+	viewport.TopLeftX = 0.0f;
+	viewport.TopLeftY = 0.0f;
+	viewport.Width = screenSize.x;
+	viewport.Height = screenSize.y;
+	viewport.MinDepth = 0.0f;
+	viewport.MaxDepth = 1.0f;
+	context->RSSetViewports(1, &viewport);
+
+	// Set rasterizer and blend state
+	context->RSSetState(upscaleRasterizerState.get());
+	context->OMSetBlendState(upscaleBlendState.get(), nullptr, 0xffffffff);
+
+	ID3D11SamplerState* samplers[] = { deferred->linearSampler };
+	context->PSSetSamplers(0, ARRAYSIZE(samplers), samplers);
+
+	// Set up jitter/depth-kernel constant buffer for upscaling
+	JitterCB jitterData;
+	jitterData.jitter = jitter;
+	// (2) Wide-kernel hysteresis
+	{
+		constexpr float kEnterWideKernelRatio = 1.55f;
+		constexpr float kExitWideKernelRatio = 1.45f;
+		const float minScale = std::max(std::min(resolutionScale.x, resolutionScale.y), FLT_EPSILON);
+		const float upscaleRatio = 1.0f / minScale;
+
+		if (depthUpscaleUseWideKernel) {
+			if (upscaleRatio < kExitWideKernelRatio) {
+				depthUpscaleUseWideKernel = false;
+			}
+		} else {
+			if (upscaleRatio > kEnterWideKernelRatio) {
+				depthUpscaleUseWideKernel = true;
+			}
+		}
+
+		jitterData.useWideKernel = depthUpscaleUseWideKernel ? 1.0f : 0.0f;
+		jitterData.useGatherWideKernel = settings.useGatherWideKernel ? 1.0f : 0.0f;
+	}
+
+	jitterCB->Update(jitterData);
+	auto bufferArray = jitterCB->CB();
+	context->PSSetConstantBuffers(0, 1, &bufferArray);
+
+	// (3) Skip aliased copies
+	const auto copyIfNonAliased = [&](ID3D11Resource* dst, ID3D11Resource* src) {
+		if (dst && src && dst != src) {
+			context->CopyResource(dst, src);
+		}
+	};
+
+	{
+		// Sometimes this is not already copied e.g. map menu.
+		// Skip alias copies to reduce unnecessary copy churn.
+		copyIfNonAliased(depthCopy.texture, depth.texture);
+
+		// Clear stencil to be 0xFF
+		if (globals::game::isVR) {
+			context->ClearDepthStencilView(depthCopy.views[0], D3D11_CLEAR_STENCIL, 1.0f, 0xFF);
+		}
+
+		// Set depth stencil state to write 0x00
+		context->OMSetDepthStencilState(upscaleDepthStencilState.get(), 0x00);
+
+		copyIfNonAliased(refractionNormals.textureCopy, refractionNormals.texture);
+
+		ID3D11ShaderResourceView* srvs[] = { refractionNormals.SRVCopy, depthCopy.depthSRV, depthCopy.stencilSRV };
+		context->PSSetShaderResources(0, ARRAYSIZE(srvs), srvs);
+
+		ID3D11RenderTargetView* rtvs[] = { refractionNormals.RTV, saoCameraZ.RTV };
+		context->OMSetRenderTargets(ARRAYSIZE(rtvs), rtvs, depth.views[0]);
+
+		context->PSSetShader(depthUpscalePS, nullptr, 0);
+		context->Draw(3, 0);
+
+		// Depth copy is also used on VR.
+		if (globals::game::isVR) {
+			copyIfNonAliased(depthCopy.texture, depth.texture);
+		}
+	}
+
+	{
+		viewport.Width = screenSize.x * 0.5f;
+		viewport.Height = screenSize.y * 0.5f;
 		context->RSSetViewports(1, &viewport);
 
-		// Set rasterizer state
-		context->RSSetState(upscaleRasterizerState.get());
+		copyIfNonAliased(underwaterMask.textureCopy, underwaterMask.texture);
 
-		// Set blend state
-		context->OMSetBlendState(upscaleBlendState.get(), nullptr, 0xffffffff);
+		context->OMSetDepthStencilState(nullptr, 0x00);
 
-		// Set up pixel shader resources
-		auto deferred = globals::deferred;
+		ID3D11ShaderResourceView* srvs[] = { underwaterMask.SRVCopy };
+		context->PSSetShaderResources(0, ARRAYSIZE(srvs), srvs);
 
-		ID3D11SamplerState* samplers[] = { deferred->linearSampler };
-		context->PSSetSamplers(0, ARRAYSIZE(samplers), samplers);
+		ID3D11RenderTargetView* rtvs[] = { underwaterMask.RTV };
+		context->OMSetRenderTargets(ARRAYSIZE(rtvs), rtvs, nullptr);
 
-		// Set up jitter constant buffer for upscaling
-		JitterCB jitterData;
-		jitterData.jitter = jitter;
-
-		jitterCB->Update(jitterData);
-		auto bufferArray = jitterCB->CB();
-		context->PSSetConstantBuffers(0, 1, &bufferArray);
-
-		auto& depth = renderer->GetDepthStencilData().depthStencils[RE::RENDER_TARGETS_DEPTHSTENCIL::kMAIN];
-
-		{
-			auto& refractionNormals = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGET::kREFRACTION_NORMALS];
-			auto& saoCameraZ = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGET::kSAO_CAMERAZ];
-
-			auto& depthCopy = renderer->GetDepthStencilData().depthStencils[RE::RENDER_TARGETS_DEPTHSTENCIL::kMAIN_COPY];
-
-			// Sometimes this is not already copied e.g. map menu
-			context->CopyResource(depthCopy.texture, depth.texture);
-
-			// Clear stencil to be 0xFF
-			if (globals::game::isVR)
-				context->ClearDepthStencilView(depthCopy.views[0], D3D11_CLEAR_STENCIL, 1.0f, 0xFF);
-
-			// Set depth stencil state to write 0x00
-			context->OMSetDepthStencilState(upscaleDepthStencilState.get(), 0x00);
-
-			context->CopyResource(refractionNormals.textureCopy, refractionNormals.texture);
-
-			ID3D11ShaderResourceView* srvs[] = { refractionNormals.SRVCopy, depthCopy.depthSRV, depthCopy.stencilSRV };
-			context->PSSetShaderResources(0, ARRAYSIZE(srvs), srvs);
-
-			ID3D11RenderTargetView* rtvs[] = { refractionNormals.RTV, saoCameraZ.RTV };
-			context->OMSetRenderTargets(ARRAYSIZE(rtvs), rtvs, depth.views[0]);
-
-			context->PSSetShader(GetDepthRefractionUpscalePS(), nullptr, 0);
-			context->Draw(3, 0);
-
-			// Depth copy is also used on VR
-			if (globals::game::isVR)
-				context->CopyResource(depthCopy.texture, depth.texture);
-		}
-
-		{
-			viewport.Width = screenSize.x * 0.5f;
-			viewport.Height = screenSize.y * 0.5f;
-			context->RSSetViewports(1, &viewport);
-
-			auto& underwaterMask = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGET::kUNDERWATER_MASK];
-
-			context->CopyResource(underwaterMask.textureCopy, underwaterMask.texture);
-
-			context->OMSetDepthStencilState(nullptr, 0x00);
-
-			ID3D11ShaderResourceView* srvs[] = { underwaterMask.SRVCopy };
-			context->PSSetShaderResources(0, ARRAYSIZE(srvs), srvs);
-
-			ID3D11RenderTargetView* rtvs[] = { underwaterMask.RTV };
-			context->OMSetRenderTargets(ARRAYSIZE(rtvs), rtvs, nullptr);
-
-			context->PSSetShader(GetUnderwaterMaskUpscalePS(), nullptr, 0);
-			context->Draw(3, 0);
-		}
-
-		ID3D11ShaderResourceView* nullPSResources[3] = { nullptr, nullptr, nullptr };
-		context->PSSetShaderResources(0, ARRAYSIZE(nullPSResources), nullPSResources);
-
-		globals::state->EndPerfEvent();
+		context->PSSetShader(underwaterMaskPS, nullptr, 0);
+		context->Draw(3, 0);
 	}
+
+	ID3D11ShaderResourceView* nullPSResources[3] = { nullptr, nullptr, nullptr };
+	context->PSSetShaderResources(0, ARRAYSIZE(nullPSResources), nullPSResources);
+
+	state->EndPerfEvent();
 }
 
 void Upscaling::ApplySharpening()

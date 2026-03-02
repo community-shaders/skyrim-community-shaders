@@ -56,7 +56,7 @@ void WeatherWidget::DrawWidget()
 {
 	WeatherUtils::SetCurrentWidget(this);
 	ImGui::SetNextWindowSizeConstraints(ImVec2(600, 0), ImVec2(FLT_MAX, FLT_MAX));
-	if (ImGui::Begin(GetEditorID().c_str(), &open, ImGuiWindowFlags_NoSavedSettings)) {
+	if (ImGui::Begin(GetEditorID().c_str(), &open, ImGuiWindowFlags_NoSavedSettings | kStickyHeaderFlags)) {
 		// Draw header with search and all buttons
 		DrawWidgetHeader("##WeatherSearch", false, true, true, weather);
 
@@ -167,7 +167,9 @@ void WeatherWidget::DrawWidget()
 				}
 			}
 		}
-	}  // Tab bar for organizing settings
+	}
+
+	// Tab bar for organizing settings
 	if (ImGui::BeginTabBar("WeatherSettingsTabs", ImGuiTabBarFlags_None)) {
 		// Use activeTabOverride to auto-navigate to specific tab
 		ImGuiTabItemFlags basicFlags = (activeTabOverride == "Basic") ? ImGuiTabItemFlags_SetSelected : 0;
@@ -182,6 +184,7 @@ void WeatherWidget::DrawWidget()
 		}
 
 		if (ImGui::BeginTabItem("Basic", nullptr, basicFlags)) {
+			BeginScrollableContent("##BasicScroll");
 			DrawProperties("Sun", { { "Sun Damage", INT8_SLIDER } });
 			DrawProperties("Wind", { { "Wind Speed", UINT8_SLIDER }, { "Wind Direction", INT8_SLIDER }, { "Wind Direction Range", INT8_SLIDER } });
 			DrawProperties("Precipitation", { { "Precipitation Begin Fade In", INT8_SLIDER }, { "Precipitation End Fade Out", INT8_SLIDER } });
@@ -189,34 +192,46 @@ void WeatherWidget::DrawWidget()
 											{ "Thunder Lightning Frequency", INT8_SLIDER }, { "Lightning Color", COLOR3_PICKER } });
 			DrawProperties("Visual Effects", { { "Visual Effect Begin", INT8_SLIDER }, { "Visual Effect End", INT8_SLIDER } });
 			DrawProperties("Weather Transition", { { "Trans Delta", INT8_SLIDER } });
+			EndScrollableContent();
 			ImGui::EndTabItem();
 		}
 		if (ImGui::BeginTabItem("Lighting (DALC)", nullptr, dalcFlags)) {
+			BeginScrollableContent("##DALCScroll");
 			DrawDALCSettings();
+			EndScrollableContent();
 			ImGui::EndTabItem();
 		}
 
 		if (ImGui::BeginTabItem("Atmosphere Colors", nullptr, atmosphereFlags)) {
+			BeginScrollableContent("##AtmosphereScroll");
 			DrawWeatherColorSettings();
+			EndScrollableContent();
 			ImGui::EndTabItem();
 		}
 
 		if (ImGui::BeginTabItem("Clouds", nullptr, cloudsFlags)) {
+			BeginScrollableContent("##CloudsScroll");
 			DrawCloudSettings();
+			EndScrollableContent();
 			ImGui::EndTabItem();
 		}
 
 		if (ImGui::BeginTabItem("Fog", nullptr, fogFlags)) {
+			BeginScrollableContent("##FogScroll");
 			DrawFogSettings();
+			EndScrollableContent();
 			ImGui::EndTabItem();
 		}
 
 		if (ImGui::BeginTabItem("Features", nullptr, featuresFlags)) {
+			BeginScrollableContent("##FeaturesScroll");
 			DrawFeatureSettings();
+			EndScrollableContent();
 			ImGui::EndTabItem();
 		}
 
 		if (ImGui::BeginTabItem("Records", nullptr, recordsFlags)) {
+			BeginScrollableContent("##RecordsScroll");
 			ImGui::Spacing();
 			ImGui::TextWrapped("Form record references used by this weather.");
 			ImGui::Spacing();
@@ -406,6 +421,7 @@ void WeatherWidget::DrawWidget()
 				ApplyChanges();
 			}
 
+			EndScrollableContent();
 			ImGui::EndTabItem();
 		}
 		ImGui::EndTabBar();
@@ -464,7 +480,9 @@ void WeatherWidget::LoadSettings()
 		settings = vanillaSettings;
 	}
 	InitializeInheritFlags();
-	LoadFeatureSettings();
+	if (!js.empty()) {
+		LoadFeatureSettings();
+	}
 	originalSettings = settings;
 	ApplyChanges();
 }
@@ -603,32 +621,21 @@ void WeatherWidget::SetWeatherValues()
 	}
 	weather->cloudLayerDisabledBits = disabledBits;
 
-	// Save feature settings
+	// If this weather is currently active, immediately apply feature settings to game memory
 	auto* weatherManager = WeatherManager::GetSingleton();
-	for (const auto& [featureName, featureSettings] : settings.featureSettings) {
-		weatherManager->SaveSettingsToWeather(weather, featureName, featureSettings);
-	}
-
-	// If this weather is currently active, immediately apply feature settings
-	auto currentWeathers = weatherManager->GetCurrentWeathers();
-	if (currentWeathers.currentWeather == weather) {
+	if (weatherManager->GetCurrentWeathers().currentWeather == weather) {
 		auto* globalRegistry = WeatherVariables::GlobalWeatherRegistry::GetSingleton();
-		for (const auto& [featureName, featureSettings] : settings.featureSettings) {
-			// Check if overrides are enabled for this feature
-			bool enabled = featureSettings.value("__enabled", false);
-			if (enabled && globalRegistry->HasWeatherSupport(featureName)) {
-				// Filter out the __enabled flag before applying
-				json filteredSettings = json::object();
-				for (auto it = featureSettings.begin(); it != featureSettings.end(); ++it) {
-					if (it.key() != "__enabled") {
-						filteredSettings[it.key()] = it.value();
-					}
-				}
+		json emptyWeather;
 
-				// Apply the weather-specific settings immediately
-				json emptyWeather;  // No previous weather during instant update
-				globalRegistry->UpdateFeatureFromWeathers(featureName, emptyWeather, filteredSettings, 1.0f);
+		for (const auto& [featureName, featureSettings] : settings.featureSettings) {
+			if (!featureSettings.value("__enabled", false) || !globalRegistry->HasWeatherSupport(featureName)) {
+				continue;
 			}
+
+			// Filter out __enabled flag and apply settings
+			json filteredSettings = featureSettings;
+			filteredSettings.erase("__enabled");
+			globalRegistry->UpdateFeatureFromWeathers(featureName, emptyWeather, filteredSettings, 1.0f);
 		}
 	}
 }
@@ -1005,36 +1012,51 @@ void WeatherWidget::DrawCloudSettings()
 	WeatherWidget* parentWidget = hasParent ? GetParent() : nullptr;
 
 	bool changed = false;
+	bool enableChanged = false;
+
+	// OpenOnArrow|OpenOnDoubleClick prevents accidental collapse when clicking
+	// the [Enabled] badge area that overlaps the right side of the header.
+	constexpr ImGuiTreeNodeFlags flags = ImGuiTreeNodeFlags_OpenOnArrow | ImGuiTreeNodeFlags_OpenOnDoubleClick;
+	constexpr char kEnabledBadge[] = "[Enabled]";
+
 	for (int i = 0; i < TESWeather::kTotalLayers; i++) {
 		std::string layer = std::format("Layer {}", i);
+		bool layerEnabled = settings.clouds[i].enabled;
 
-		ImGuiTreeNodeFlags flags = ImGuiTreeNodeFlags_OpenOnArrow | ImGuiTreeNodeFlags_OpenOnDoubleClick;
-		if (settings.clouds[i].enabled && !settings.clouds[i].texturePath.empty()) {
-			flags |= ImGuiTreeNodeFlags_DefaultOpen;
+		if (!layerEnabled) {
+			ImGui::PushStyleColor(ImGuiCol_Header, ImGui::GetStyleColorVec4(ImGuiCol_FrameBg));
+			ImGui::PushStyleColor(ImGuiCol_HeaderHovered, ImGui::GetStyleColorVec4(ImGuiCol_FrameBgHovered));
+			ImGui::PushStyleColor(ImGuiCol_HeaderActive, ImGui::GetStyleColorVec4(ImGuiCol_FrameBgActive));
 		}
 
-		if (ImGui::CollapsingHeader(layer.c_str(), flags)) {
+		// Label is constant so the storage ID never changes — open/closed state always persists.
+		// [Enabled] badge is overlaid on the header via the draw list instead of altering the label.
+		float headerScreenY = ImGui::GetCursorScreenPos().y;
+		bool layerOpen = ImGui::CollapsingHeader(layer.c_str(), flags);
+
+		if (!layerEnabled)
+			ImGui::PopStyleColor(3);
+
+		if (layerEnabled) {
+			const ImVec2 badgeSize = ImGui::CalcTextSize(kEnabledBadge);
+			const float headerHeight = ImGui::GetFrameHeight();
+			const ImVec2 badgePos = {
+				ImGui::GetWindowPos().x + ImGui::GetContentRegionMax().x - badgeSize.x,
+				headerScreenY + (headerHeight - badgeSize.y) * 0.5f
+			};
+			ImGui::GetWindowDrawList()->AddText(badgePos, ImGui::GetColorU32(ImGuiCol_CheckMark), kEnabledBadge);
+		}
+
+		if (layerOpen) {
 			ImGui::Indent(10.0f);
 			ImGui::Spacing();
-
-			bool layerEnabled = settings.clouds[i].enabled;
 
 			// Begin horizontal layout for enable checkbox and sliders on left, texture on right
 			ImGui::BeginGroup();
 
 			if (ImGui::Checkbox(std::format("Enable##{}", layer).c_str(), &layerEnabled)) {
 				settings.clouds[i].enabled = layerEnabled;
-				// Always apply cloud enable/disable immediately for instant feedback
-				EditorWindow::GetSingleton()->PushUndoState(this);
-				ApplyChanges();
-
-				// Force weather re-application if locked to make cloud changes visible immediately
-				if (editorWindow->IsWeatherLocked() && editorWindow->GetLockedWeather() == weather) {
-					if (auto sky = RE::Sky::GetSingleton()) {
-						sky->ForceWeather(weather, false);
-					}
-				}
-
+				enableChanged = true;
 				changed = true;
 			}
 
@@ -1060,20 +1082,11 @@ void WeatherWidget::DrawCloudSettings()
 					ImGui::BeginGroup();
 					float textureSize = 128.0f;
 					ImGui::Image((void*)texture, ImVec2(textureSize, textureSize));
-					// Small grey subtext below image
-					ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.5f, 0.5f, 0.5f, 1.0f));
-					ImGui::PushFont(ImGui::GetFont());
-					ImGui::SetWindowFontScale(0.8f);
-					float textWidth = ImGui::CalcTextSize(settings.clouds[i].texturePath.c_str()).x;
-					if (textWidth > textureSize) {
-						ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + textureSize);
-						ImGui::TextWrapped("%s", settings.clouds[i].texturePath.c_str());
-						ImGui::PopTextWrapPos();
-					} else {
-						ImGui::Text("%s", settings.clouds[i].texturePath.c_str());
-					}
-					ImGui::SetWindowFontScale(1.0f);
-					ImGui::PopFont();
+					// Small grey subtext below image, clamped to texture width
+					ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetStyleColorVec4(ImGuiCol_TextDisabled));
+					ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + textureSize);
+					ImGui::TextWrapped("%s", settings.clouds[i].texturePath.c_str());
+					ImGui::PopTextWrapPos();
 					ImGui::PopStyleColor();
 					ImGui::EndGroup();
 				}
@@ -1120,8 +1133,17 @@ void WeatherWidget::DrawCloudSettings()
 			ImGui::Unindent(10.0f);
 		}
 	}
-	if (changed && EditorWindow::GetSingleton()->settings.autoApplyChanges) {
-		EditorWindow::GetSingleton()->PushUndoState(this);
+	if (enableChanged) {
+		// Apply enable/disable immediately for instant feedback, regardless of autoApplyChanges.
+		editorWindow->PushUndoState(this);
+		ApplyChanges();
+		if (editorWindow->IsWeatherLocked() && editorWindow->GetLockedWeather() == weather) {
+			if (auto sky = RE::Sky::GetSingleton()) {
+				sky->ForceWeather(weather, true);  // override=true for immediate application; matches "instant feedback" intent above
+			}
+		}
+	} else if (changed && editorWindow->settings.autoApplyChanges) {
+		editorWindow->PushUndoState(this);
 		ApplyChanges();
 	}
 }
@@ -1462,9 +1484,22 @@ void WeatherWidget::SaveFeatureSettings()
 {
 	auto* weatherManager = WeatherManager::GetSingleton();
 
-	for (const auto& [featureName, featureJson] : settings.featureSettings) {
-		// Always call save so that empty objects are persisted as removals.
-		weatherManager->SaveSettingsToWeather(weather, featureName, featureJson);
+	// Collect all feature names from both current and original settings to detect deletions
+	std::set<std::string> allFeatureNames;
+	for (const auto& [featureName, _] : settings.featureSettings) {
+		allFeatureNames.insert(featureName);
+	}
+	for (const auto& [featureName, _] : originalSettings.featureSettings) {
+		allFeatureNames.insert(featureName);
+	}
+
+	// Save current settings or clear deleted features
+	for (const auto& featureName : allFeatureNames) {
+		auto it = settings.featureSettings.find(featureName);
+		weatherManager->SaveSettingsToWeather(
+			weather,
+			featureName,
+			it != settings.featureSettings.end() ? it->second : json::object());
 	}
 }
 
@@ -1560,8 +1595,40 @@ void WeatherWidget::ApplyChanges()
 
 void WeatherWidget::RevertChanges()
 {
+	auto* weatherManager = WeatherManager::GetSingleton();
+
+	// If this weather is currently active, reset enabled feature overrides to user defaults
+	if (weather == weatherManager->GetCurrentWeathers().currentWeather) {
+		auto* globalRegistry = WeatherVariables::GlobalWeatherRegistry::GetSingleton();
+
+		for (const auto& [featureName, featureSettings] : settings.featureSettings) {
+			if (!featureSettings.value("__enabled", false) || !globalRegistry->HasWeatherSupport(featureName)) {
+				continue;
+			}
+
+			globalRegistry->EndFeatureTransition(featureName);
+
+			if (auto* featureRegistry = globalRegistry->GetFeatureRegistry(featureName)) {
+				for (const auto& var : featureRegistry->GetVariables()) {
+					var->SetToUserSettings();
+				}
+			}
+		}
+	}
+
+	weatherManager->ClearAllFeatureSettingsForWeather(weather);
 	settings = vanillaSettings;
 	ApplyChanges();
+}
+
+void WeatherWidget::Delete()
+{
+	// Clear cache and local settings before base Delete() to prevent reloading stale data
+	auto* weatherManager = WeatherManager::GetSingleton();
+	weatherManager->ClearAllFeatureSettingsForWeather(weather);
+	settings.featureSettings.clear();
+
+	Widget::Delete();
 }
 
 bool WeatherWidget::Settings::operator==(const Settings& o) const
@@ -1618,7 +1685,7 @@ void WeatherWidget::DrawFeatureSettings()
 			ImGui::SetNextItemOpen(true);
 		}
 
-		if (ImGui::TreeNode(displayName.c_str())) {
+		if (ImGui::TreeNodeEx(displayName.c_str(), ImGuiTreeNodeFlags_SpanAvailWidth)) {
 			// Check if weather-specific overrides are enabled (using special key)
 			bool overridesEnabled = featureJsonView ? featureJsonView->value("__enabled", false) : false;
 
