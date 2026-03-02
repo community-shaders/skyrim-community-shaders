@@ -300,10 +300,18 @@ bool SceneSettingsManager::HasDuplicateEntry(SceneType type, const std::string& 
 void SceneSettingsManager::AddSetting(SceneType type, const std::string& featureShortName, const std::string& settingKey, const json& value,
 	TimeOfDayPeriod period)
 {
-	// TOD only supports float settings (smooth interpolation)
-	if (type == SceneType::TimeOfDay && DetectSettingType(value) != SettingType::Float) {
-		logger::warn("[SceneSettings] Rejecting non-float TOD setting: {}.{}", featureShortName, settingKey);
-		return;
+	if (type == SceneType::TimeOfDay) {
+		// Reject invalid period values (Count is the sentinel, not a real period)
+		if (period == TimeOfDayPeriod::Count || static_cast<int>(period) < 0 || static_cast<int>(period) >= kPeriodCount) {
+			logger::warn("[SceneSettings] Rejecting TOD setting with invalid period: {}.{}", featureShortName, settingKey);
+			return;
+		}
+
+		// TOD only supports float settings (smooth interpolation)
+		if (DetectSettingType(value) != SettingType::Float) {
+			logger::warn("[SceneSettings] Rejecting non-float TOD setting: {}.{}", featureShortName, settingKey);
+			return;
+		}
 	}
 
 	if (HasDuplicateEntry(type, featureShortName, settingKey, EntrySource::User, period))
@@ -1021,6 +1029,13 @@ void SceneSettingsManager::LoadUserSettings(SceneType type)
 					logger::warn("SceneSettingsManager: TimeOfDay entry for feature '{}' key '{}' has invalid period '{}' — skipping",
 						entry.featureShortName, entry.settingKey, item["period"].get<std::string>());
 					continue;  // Invalid period name
+				}
+
+				// TOD only supports float settings — reject non-numeric values (mirrors AddSetting)
+				if (!entry.value.is_number()) {
+					logger::warn("SceneSettingsManager: TimeOfDay entry for feature '{}' key '{}' has non-numeric value (type: {}) — skipping",
+						entry.featureShortName, entry.settingKey, entry.value.type_name());
+					continue;
 				}
 			}
 
