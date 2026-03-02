@@ -62,6 +62,7 @@ public:
 	{
 		if (!form) {
 			cachedEditorID = "Invalid";
+			isFallbackEditorID = false;
 			return;
 		}
 
@@ -69,6 +70,7 @@ public:
 		const char* editorID = form->GetFormEditorID();
 		if (editorID && editorID[0] != '\0') {
 			cachedEditorID = editorID;
+			isFallbackEditorID = false;
 			return;
 		}
 
@@ -79,6 +81,7 @@ public:
 			for (const auto& [name, f] : *map) {
 				if (f == form) {
 					cachedEditorID = std::string(name.c_str());
+					isFallbackEditorID = false;
 					return;
 				}
 			}
