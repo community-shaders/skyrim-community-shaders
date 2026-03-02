@@ -128,7 +128,6 @@ void ScreenSpaceShadows::DrawShadows()
 	auto state = globals::state;
 	TracyD3D11Zone(state->tracyCtx, "Screen Space Shadows");
 
-	auto renderer = globals::game::renderer;
 	auto context = globals::d3d::context;
 
 	auto accumulator = *globals::game::currentAccumulator.get();
@@ -158,8 +157,8 @@ void ScreenSpaceShadows::DrawShadows()
 	int maxRenderBounds[2] = { viewportSize[0], viewportSize[1] };
 
 	// Setup common render state
-	auto depth = renderer->GetDepthStencilData().depthStencils[RE::RENDER_TARGETS_DEPTHSTENCIL::kPOST_ZPREPASS_COPY];
-	context->CSSetShaderResources(0, 1, &depth.depthSRV);
+	auto* depthSRV = Util::GetCurrentSceneDepthSRV();
+	context->CSSetShaderResources(0, 1, &depthSRV);
 
 	auto uav = screenSpaceShadowsTexture->uav.get();
 	context->CSSetUnorderedAccessViews(0, 1, &uav, nullptr);

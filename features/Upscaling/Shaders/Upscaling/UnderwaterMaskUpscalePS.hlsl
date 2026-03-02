@@ -18,6 +18,8 @@ Texture2D<float> UnderwaterMask : register(t0);
 cbuffer JitterCB : register(b0)
 {
 	float2 jitter;
+	float useWideKernel;
+	float pad0;
 };
 
 PS_OUTPUT main(PS_INPUT input)

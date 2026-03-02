@@ -155,6 +155,59 @@ namespace Stereo
 		return normalizedCoord;
 	}
 
+	/**
+	* @brief Returns the maximum absolute depth difference between a center depth and four neighbors.
+	*
+	* Used for depth-discontinuity edge detection in stereo sync passes.
+	* Works with both NDC depths (fixed absolute threshold) and linear view-space depths
+	* (relative threshold: divide result by max(center, 1.0)).
+	*
+	* @param[in] center    Depth at the pixel being tested.
+	* @param[in] neighbors Depths at four neighboring pixels (e.g. ±1 or ±2 cross pattern).
+	* @return Maximum of |center - neighbor| across all four samples.
+	*/
+	float MaxDepthDiff(float center, float4 neighbors)
+	{
+		return max(max(abs(center - neighbors.x), abs(center - neighbors.y)),
+			max(abs(center - neighbors.z), abs(center - neighbors.w)));
+	}
+
+	/**
+	* @brief Clamps a stereo UV coordinate to the eye-local X range of the packed stereo buffer.
+	*
+	* Prevents cross-neighbor UV samples from crossing the x=0.5 seam into the other eye's
+	* region of the side-by-side stereo texture. Y is not clamped; sampler address modes
+	* handle vertical out-of-bounds.
+	*
+	* @param[in] uv        Stereo UV coordinate to clamp.
+	* @param[in] eyeIndex  Eye index (0 = left [0, 0.5], 1 = right [0.5, 1]).
+	* @return UV with x restricted to eyeIndex's half of the stereo buffer.
+	*/
+	float2 ClampToEyeUV(float2 uv, uint eyeIndex)
+	{
+		uv.x = clamp(uv.x, eyeIndex == 0 ? 0.0f : 0.5f, eyeIndex == 0 ? 0.5f : 1.0f);
+		return uv;
+	}
+
+	/**
+	* @brief Clamps a pixel coordinate to the eye-local X bounds of the packed stereo buffer.
+	*
+	* Prevents cross-neighbor pixel reads from crossing the half-width seam into the
+	* other eye's region of the side-by-side stereo texture.
+	*
+	* @param[in] px        Pixel coordinate to clamp.
+	* @param[in] eyeIndex  Eye index (0 = left, 1 = right).
+	* @param[in] frameDim  Full stereo buffer dimensions (width covers both eyes).
+	* @return Clamped pixel coordinate, restricted to eyeIndex's half of the buffer.
+	*/
+	int2 ClampToEyeBounds(int2 px, uint eyeIndex, float2 frameDim)
+	{
+		int halfWidth = (int)frameDim.x / 2;
+		px.x = clamp(px.x, eyeIndex == 0 ? 0 : halfWidth, eyeIndex == 0 ? (halfWidth - 1) : ((int)frameDim.x - 1));
+		px.y = clamp(px.y, 0, (int)frameDim.y - 1);
+		return px;
+	}
+
 #if defined(PSHADER) || defined(FRAMEBUFFER)
 	// These functions require the framebuffer which is typically provided with the PSHADER
 	/**
