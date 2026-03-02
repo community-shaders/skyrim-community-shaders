@@ -18,20 +18,19 @@ RWTexture2D<float4> UITex : register(u0);
 
 cbuffer PerFrame : register(b0)
 {
-	float enableHDR : packoffset(c0.x);         ///< 1.0 = HDR output with PQ, 0.0 = SDR output with gamma
-	float paperWhite : packoffset(c0.y);        ///< Reference white brightness in nits for HDR (unused here)
-	float peakNits : packoffset(c0.z);          ///< Maximum display brightness in nits for HDR (unused here)
-	float skipUIComposite : packoffset(c0.w);   ///< Unused in this shader
-	float uiBrightness : packoffset(c1.x);      ///< UI brightness multiplier
-	float isSceneLinear : packoffset(c1.y);     ///< Unused in this shader
+	float enableHDR : packoffset(c0.x);        ///< 1.0 = HDR output with PQ, 0.0 = SDR output with gamma
+	float paperWhite : packoffset(c0.y);       ///< Reference white brightness in nits for HDR (unused here)
+	float peakNits : packoffset(c0.z);         ///< Maximum display brightness in nits for HDR (unused here)
+	float skipUIComposite : packoffset(c0.w);  ///< Unused in this shader
+	float uiBrightness : packoffset(c1.x);     ///< UI brightness multiplier
+	float isSceneLinear : packoffset(c1.y);    ///< Unused in this shader
 }
 
 // UI reference brightness in nits — matches typical SDR monitor brightness.
 // Ensures UI appears consistently bright in both SDR and HDR without being washed out or blown out.
 static const float UI_REFERENCE_NITS = 80.0;
 
-[numthreads(8, 8, 1)] void main(uint3 dispatchID : SV_DispatchThreadID)
-{
+[numthreads(8, 8, 1)] void main(uint3 dispatchID : SV_DispatchThreadID) {
 	// Bounds check to prevent UAV out-of-bounds reads/writes
 	uint width, height;
 	UITex.GetDimensions(width, height);

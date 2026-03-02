@@ -31,8 +31,7 @@ cbuffer PerFrame : register(b0)
 	float isSceneLinear : packoffset(c1.y);
 }
 
-[numthreads(8, 8, 1)] void main(uint3 dispatchID : SV_DispatchThreadID)
-{
+[numthreads(8, 8, 1)] void main(uint3 dispatchID : SV_DispatchThreadID) {
 	uint width, height;
 	HDROutput.GetDimensions(width, height);
 	if (dispatchID.x >= width || dispatchID.y >= height)

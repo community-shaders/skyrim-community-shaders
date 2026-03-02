@@ -1022,7 +1022,6 @@ namespace Hooks
 		}
 
 		stl::write_thunk_call<BSLightingShader_SetupGeometry_GeometrySetupConstantPointLights>(REL::RelocationID(100565, 107300).address() + REL::Relocate(0x523, 0xB0E, 0x5FE));
-
 	}
 
 	void InstallEarlyHooks()

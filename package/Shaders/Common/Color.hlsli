@@ -15,8 +15,8 @@ cbuffer LLPerGeometry : register(b8)
 #endif
 
 // Float limits
-#define FLT_MIN asfloat(0x00800000) // 1.175494351e-38f
-#define FLT_MAX asfloat(0x7F7FFFFF) // 3.402823466e+38f
+#define FLT_MIN asfloat(0x00800000)  // 1.175494351e-38f
+#define FLT_MAX asfloat(0x7F7FFFFF)  // 3.402823466e+38f
 
 namespace Color
 {
@@ -158,7 +158,7 @@ namespace Color
 		return ENABLE_LL ? LinearToGamma(color) : color;
 	}
 
-float3 GammaToLinearSafe(float3 color)
+	float3 GammaToLinearSafe(float3 color)
 	{
 		return sign(color) * pow(abs(color), 2.2);
 	}
@@ -556,8 +556,7 @@ float3 safeDivision(float3 a, float3 b, float3 fallback = 0)
 	return float3(
 		(b.x == 0) ? fallback.x : (a.x / b.x),
 		(b.y == 0) ? fallback.y : (a.y / b.y),
-		(b.z == 0) ? fallback.z : (a.z / b.z)
-	);
+		(b.z == 0) ? fallback.z : (a.z / b.z));
 }
 float Sign_Fast(float x) { return (x >= 0) ? 1.0 : -1.0; }
 float3 Sign_Fast(float3 x) { return float3(Sign_Fast(x.x), Sign_Fast(x.y), Sign_Fast(x.z)); }
@@ -579,9 +578,12 @@ float3 FromColorSpaceToColorSpace(float3 color, uint colorSpaceIn, uint colorSpa
 float3 Linear_to_PQ(float3 c, int clampType = GCT_DEFAULT)
 {
 	float3 s = Sign_Fast(c);
-	if (clampType == GCT_POSITIVE) c = max(c, 0.0);
-	else if (clampType == GCT_SATURATE) c = saturate(c);
-	else if (clampType == GCT_MIRROR) c = abs(c);
+	if (clampType == GCT_POSITIVE)
+		c = max(c, 0.0);
+	else if (clampType == GCT_SATURATE)
+		c = saturate(c);
+	else if (clampType == GCT_MIRROR)
+		c = abs(c);
 	float3 p = pow(c, DICE_PQ_M1);
 	float3 pqResult = pow((DICE_PQ_C1 + DICE_PQ_C2 * p) / (1.0 + DICE_PQ_C3 * p), DICE_PQ_M2);
 	return (clampType == GCT_MIRROR) ? pqResult * s : pqResult;
@@ -590,9 +592,12 @@ float3 Linear_to_PQ(float3 c, int clampType = GCT_DEFAULT)
 float3 PQ_to_Linear(float3 c, int clampType = GCT_DEFAULT)
 {
 	float3 s = Sign_Fast(c);
-	if (clampType == GCT_POSITIVE) c = max(c, 0.0);
-	else if (clampType == GCT_SATURATE) c = saturate(c);
-	else if (clampType == GCT_MIRROR) c = abs(c);
+	if (clampType == GCT_POSITIVE)
+		c = max(c, 0.0);
+	else if (clampType == GCT_SATURATE)
+		c = saturate(c);
+	else if (clampType == GCT_MIRROR)
+		c = abs(c);
 	float3 p = pow(c, 1.0 / DICE_PQ_M2);
 	float3 lin = pow(max(p - DICE_PQ_C1, 0.0) / (DICE_PQ_C2 - DICE_PQ_C3 * p), 1.0 / DICE_PQ_M1);
 	return (clampType == GCT_MIRROR) ? lin * s : lin;
@@ -643,8 +648,7 @@ float3 CorrectOutOfRangeColor(
 	uint ColorSpace = CS_DEFAULT)
 {
 	// Handle negative color components (out of gamut on the low end)
-	if (FixNegatives && any(Color < 0.0))
-	{
+	if (FixNegatives && any(Color < 0.0)) {
 		float colorLuminance = GetLuminance(Color, ColorSpace);
 
 		float3 positiveColor = max(Color, 0.0);
@@ -653,16 +657,14 @@ float3 CorrectOutOfRangeColor(
 		float negativeLuminance = GetLuminance(negativeColor, ColorSpace);
 
 		// Desaturate until no channel is below 0
-		if (colorLuminance > FLT_MIN)
-		{
+		if (colorLuminance > FLT_MIN) {
 			float minChannel = min3(Color);
 			// Both division elements are negative, so the ratio resolves to positive
 			float desaturateAlpha = safeDivision(minChannel, minChannel - colorLuminance, 0);
 			Color = lerp(Color, colorLuminance, desaturateAlpha);
 		}
 		// Snap to 0 if overall luminance was zero or negative
-		else
-		{
+		else {
 			Color = 0.0;
 		}
 	}
@@ -672,8 +674,7 @@ float3 CorrectOutOfRangeColor(
 	float startRange = MaxRange * (1.0 - PositivesSmoothingRatio);
 	float smoothedRange = (PositivesSmoothingRatio > 0.0) ? clamp(colorPeak, startRange, MaxRange) : MaxRange;
 
-	if (FixPositives && colorPeak > startRange)
-	{
+	if (FixPositives && colorPeak > startRange) {
 		float colorLuminance = GetLuminance(Color, ColorSpace);
 		float targetLuminance = min(colorLuminance, smoothedRange);
 		float colorLuminanceInExcess = targetLuminance - smoothedRange;
@@ -694,12 +695,9 @@ float3 CorrectOutOfRangeColor(
 		newColor *= darkeningInvAlpha;
 
 		// Apply smoothing if requested
-		if (PositivesSmoothingRatio <= 0.0)
-		{
+		if (PositivesSmoothingRatio <= 0.0) {
 			Color = newColor;
-		}
-		else
-		{
+		} else {
 			float smoothingProgress = saturate((colorPeak - startRange) / (MaxRange - startRange));
 			Color = lerp(Color, newColor, smoothingProgress);
 		}

@@ -7,7 +7,7 @@ Texture2D<float4> t4 : register(t4);
 Texture2D<float4> t3 : register(t3);
 Texture2D<float4> t2 : register(t2);
 Texture2D<float4> t1 : register(t1);
-Texture2D<float4> t0 : register(t0);	// Main Render
+Texture2D<float4> t0 : register(t0);  // Main Render
 
 SamplerState s5_s : register(s5);
 SamplerState s4_s : register(s4);
@@ -28,7 +28,7 @@ cbuffer cb12 : register(b12)
 
 #	define cmp -
 
-#ifdef HDR_OUTPUT
+#	ifdef HDR_OUTPUT
 float3 convertRenderInput(float3 gammaColor)
 {
 	float3 linearColor = Color::GammaToLinearSafe(gammaColor);
@@ -42,18 +42,13 @@ float3 convertRenderOutput(float3 pqColor)
 	linearColor = Color::BT2020ToBT709(linearColor);
 	return Color::LinearToGammaSafe(linearColor);
 }
-#endif
-
+#	endif
 
 void main(
-	float4 v0
-	: SV_POSITION0,
-	float2 v1
-	: TEXCOORD0,
-	out float4 o0
-	: SV_Target0,
-	out float4 o1
-	: SV_Target1)
+	float4 v0 : SV_POSITION0,
+	float2 v1 : TEXCOORD0,
+	out float4 o0 : SV_Target0,
+	out float4 o1 : SV_Target1)
 {
 	float4 r0, r1, r2, r3, r4, r5, r6, r7, r8, r9, r10, r11, r12, r13, r14, r15, r16, r17, r18, r19;
 	uint4 bitmask, uiDest;
@@ -68,13 +63,13 @@ void main(
 	r1.xy = min(r2.xy, r1.xy);
 	r1.z = t3.Sample(s3_s, r1.xy).x;
 	r3.xyz = t0.Sample(s0_s, r1.xy).yxz;
-#ifdef HDR_OUTPUT
+#	ifdef HDR_OUTPUT
 	r3.yxz = convertRenderInput(r3.yxz);
-#endif
+#	endif
 
 	r4.xyzw = cb2[3].xyxy * float4(1, -1, 1, 0) + v1.xyxy;
 	r5.xyzw = cb12[43].xyxy * r4.xyzw;
-	r5.xyzw = max(float4(0,0,0,0), r5.xyzw);
+	r5.xyzw = max(float4(0, 0, 0, 0), r5.xyzw);
 	r5.xyzw = min(r5.xyzw, r2.xyxy);
 	r1.x = t3.Sample(s3_s, r5.xy).x;
 	r1.y = min(r1.x, r1.z);
@@ -137,65 +132,64 @@ void main(
 	r3.w = dot(r3.xzy, float3(0.5, 0.25, 0.25));
 	r0.y = cmp(r3.w < r2.x);
 	r4.xyz = t0.Sample(s0_s, r1.zw).yxz;
-#ifdef HDR_OUTPUT
+#	ifdef HDR_OUTPUT
 	r4.yxz = convertRenderInput(r4.yxz);
-#endif
+#	endif
 
-    r1.z = t5.Sample(s5_s, r1.zw).z;
+	r1.z = t5.Sample(s5_s, r1.zw).z;
 	r1.z = cmp(0 < r1.z);
 	r4.w = dot(r4.xzy, float3(0.5, 0.25, 0.25));
 	r1.w = cmp(r4.w < r2.x);
 	r6.xyz = t0.Sample(s0_s, r5.xy).yxz;
-#ifdef HDR_OUTPUT
+#	ifdef HDR_OUTPUT
 	r6.yxz = convertRenderInput(r6.yxz);
-#endif
+#	endif
 
-    r6.w = dot(r6.xzy, float3(0.5, 0.25, 0.25));
+	r6.w = dot(r6.xzy, float3(0.5, 0.25, 0.25));
 	r3.x = cmp(r6.w < r2.x);
 	r9.xyz = t0.Sample(s0_s, r5.zw).yxz;
-#ifdef HDR_OUTPUT
+#	ifdef HDR_OUTPUT
 	r9.yxz = convertRenderInput(r9.yxz);
-#endif
+#	endif
 
 	r9.w = dot(r9.xzy, float3(0.5, 0.25, 0.25));
 	r4.x = cmp(r9.w < r2.x);
 	r10.xyz = t0.Sample(s0_s, r7.xy).yxz;
-#ifdef HDR_OUTPUT
+#	ifdef HDR_OUTPUT
 	r10.yxz = convertRenderInput(r10.yxz);
-#endif
+#	endif
 
 	r10.w = dot(r10.xzy, float3(0.5, 0.25, 0.25));
 	r6.x = cmp(r10.w < r2.x);
 	r11.xyz = t0.Sample(s0_s, r7.zw).yxz;
-#ifdef HDR_OUTPUT
+#	ifdef HDR_OUTPUT
 	r11.yxz = convertRenderInput(r11.yxz);
-#endif
+#	endif
 
-    r11.w = dot(r11.xzy, float3(0.5, 0.25, 0.25));
+	r11.w = dot(r11.xzy, float3(0.5, 0.25, 0.25));
 	r9.x = cmp(r11.w < r2.x);
 	r12.xyz = t0.Sample(s0_s, r8.xy).yxz;
-#ifdef HDR_OUTPUT
+#	ifdef HDR_OUTPUT
 	r12.yxz = convertRenderInput(r12.yxz);
-#endif
+#	endif
 
-    r12.w = dot(r12.xzy, float3(0.5, 0.25, 0.25));
+	r12.w = dot(r12.xzy, float3(0.5, 0.25, 0.25));
 	r10.x = cmp(r12.w < r2.x);
 	r13.xyz = t0.Sample(s0_s, r8.zw).yxz;
-#ifdef HDR_OUTPUT
+#	ifdef HDR_OUTPUT
 	r13.yxz = convertRenderInput(r13.yxz);
-#endif
+#	endif
 
-    r13.w = dot(r13.xzy, float3(0.5, 0.25, 0.25));
+	r13.w = dot(r13.xzy, float3(0.5, 0.25, 0.25));
 	r14.x = cmp(r13.w < r2.x);
 	r14.yzw = t0.Sample(s0_s, r1.xy).xyz;
-#ifdef HDR_OUTPUT
+#	ifdef HDR_OUTPUT
 	r14.yzw = convertRenderInput(r14.yzw);
-#endif
+#	endif
 
-    r15.x = dot(r14.zwy, float3(0.5, 0.25, 0.25));
+	r15.x = dot(r14.zwy, float3(0.5, 0.25, 0.25));
 	r16.x = cmp(r15.x < r2.x);
 	r15.yz = r14.yw;
-
 
 	// removing this causes flickering on high contrast edges
 	// flickering is even stronger when removing it in PQ
@@ -203,7 +197,6 @@ void main(
 	r16.y = cmp(r15.x < 1.00100005);
 	r16.yzw = r16.yyy ? r15.yzx : float3(1.00100005, 1.00100005, 1.00100005);
 	r16.yzw = r16.xxx ? float3(1.00100005, 1.00100005, 1.00100005) : r16.yzw;
-
 
 	r17.x = cmp(r13.w < r16.w);
 	r17.xyz = r17.xxx ? r13.yzw : r16.yzw;
@@ -355,25 +348,25 @@ void main(
 	r0.y = 0.99000001 + -r0.x;
 	r0.x = r6.y * r0.y + r0.x;
 	o1.yz = r6.yz;
-#ifdef HDR_OUTPUT
+#	ifdef HDR_OUTPUT
 	r1.xyw = (r0.xxx * r1.xyw + r4.yzw);
-#else
+#	else
 	r1.xyw = saturate(r0.xxx * r1.xyw + r4.yzw);
-#endif
+#	endif
 
 	r6.xyz = r1.xyw + -r3.xyz;
-#ifdef HDR_OUTPUT
+#	ifdef HDR_OUTPUT
 	r1.xyw = (r6.xyz * cb2[4].zzz + r1.xyw);
-#else
+#	else
 	r1.xyw = saturate(r6.xyz * cb2[4].zzz + r1.xyw);
-#endif
+#	endif
 
 	r3.xyz = r3.xyz + -r1.xyw;
-#ifdef HDR_OUTPUT
+#	ifdef HDR_OUTPUT
 	r3.yzw = (cb2[4].www * r3.xyz + r1.xyw);
-#else
+#	else
 	r3.yzw = saturate(cb2[4].www * r3.xyz + r1.xyw);
-#endif
+#	endif
 
 	r0.y = r0.x * r0.z + r15.x;
 	r0.x = r0.x * r0.z;
@@ -401,18 +394,18 @@ void main(
 	r0.x = r0.y ? r0.x : 0;
 	r1.xyzw = r0.xxxx ? r4.xyzw : r3.xyzw;
 	o0.xyz = r1.yzw;
-#ifdef HDR_OUTPUT
+#	ifdef HDR_OUTPUT
 	o1.x = (r1.x * r0.z);
-#else
+#	else
 	o1.x = saturate(r1.x * r0.z);
-#endif
+#	endif
 	o0.w = 1;
 	o1.w = 1;
 
-#ifdef HDR_OUTPUT
+#	ifdef HDR_OUTPUT
 	o1.x = max(0, o1.x);
 	o0.xyz = convertRenderOutput(o0.xyz);
-#endif
+#	endif
 	return;
 }
 #else
