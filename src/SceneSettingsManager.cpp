@@ -445,7 +445,18 @@ void SceneSettingsManager::UpdateEntryValue(SceneType type, size_t index, const 
 	if (index >= vec.size())
 		return;
 
-	vec[index].value = newValue;
+	// Enforce float-only invariant for TimeOfDay entries
+	if (type == SceneType::TimeOfDay) {
+		if (!newValue.is_number()) {
+			logger::warn("[SceneSettings] UpdateEntryValue: rejecting non-numeric TOD value for {}.{}",
+				vec[index].featureShortName, vec[index].settingKey);
+			return;
+		}
+		// Normalize to float so DetectSettingType sees Float, not Integer
+		vec[index].value = newValue.get<float>();
+	} else {
+		vec[index].value = newValue;
+	}
 
 	if (!deferSave && vec[index].source == EntrySource::User)
 		SaveUserSettings(type);
@@ -1003,6 +1014,12 @@ void SceneSettingsManager::LoadUserSettings(SceneType type)
 		for (const auto& item : data) {
 			if (!item.contains("feature") || !item.contains("setting") || !item.contains("value"))
 				continue;
+
+			// Validate field types before extracting — get<std::string>() throws on wrong type
+			if (!item["feature"].is_string() || !item["setting"].is_string()) {
+				logger::warn("SceneSettingsManager: Skipping {} entry with non-string feature/setting field", typeName);
+				continue;
+			}
 
 			SettingEntry entry;
 			entry.featureShortName = item["feature"].get<std::string>();
