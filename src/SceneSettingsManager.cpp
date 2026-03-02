@@ -912,9 +912,8 @@ float SceneSettingsManager::BlendFloatForPeriods(float baseVal, const std::vecto
 		float f = factors[pr.periodIdx];
 		if (f > 0.0f) {
 			if (!pr.value->is_number()) {
-				logger::warn("SceneSettingsManager: TOD period value for '{}' key '{}' is not numeric — treating as 0", shortName, key);
-				coveredFactor += f;
-				continue;
+				logger::warn("SceneSettingsManager: TOD period value for '{}' key '{}' is not numeric — falling back to baseline for this period", shortName, key);
+				continue;  // Don't add to coveredFactor — baseline fills in via (1 - coveredFactor) * baseVal
 			}
 			float periodVal = pr.value->get<float>();
 			if (!std::isfinite(periodVal))
@@ -1031,9 +1030,9 @@ void SceneSettingsManager::LoadUserSettings(SceneType type)
 					continue;  // Invalid period name
 				}
 
-				// TOD only supports float settings — reject non-numeric values (mirrors AddSetting)
-				if (!entry.value.is_number()) {
-					logger::warn("SceneSettingsManager: TimeOfDay entry for feature '{}' key '{}' has non-numeric value (type: {}) — skipping",
+				// TOD only supports float settings — use DetectSettingType to match AddSetting/DiscoverOverwrites
+				if (DetectSettingType(entry.value) != SettingType::Float) {
+					logger::warn("SceneSettingsManager: TimeOfDay entry for feature '{}' key '{}' has non-float value (type: {}) — skipping",
 						entry.featureShortName, entry.settingKey, entry.value.type_name());
 					continue;
 				}
