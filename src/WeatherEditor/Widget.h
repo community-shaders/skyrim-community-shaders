@@ -86,9 +86,7 @@ public:
 
 		// Fallback: use SPID-format filename (0xLocalFormID~PluginName) for load-order independence
 		const auto* file = form->GetFile();
-		const auto spidID = file
-		                        ? std::format("0x{:X}~{}", form->GetLocalFormID(), file->GetFilename())
-		                        : std::format("0x{:X}", form->GetLocalFormID());
+		const auto spidID = file ? std::format("0x{:X}~{}", form->GetLocalFormID(), file->GetFilename()) : std::format("0x{:X}", form->GetLocalFormID());
 		auto formType = form->GetFormType();
 		switch (formType) {
 		case RE::FormType::ImageSpace:
