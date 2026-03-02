@@ -179,9 +179,9 @@ PS_OUTPUT main(PS_INPUT input)
 		// Physical accuracy: Saturation in linear; Tint & Contrast in gamma for artistic control.
 
 		// Boost saturation and contrast in HDR exteriors to compensate for the wider dynamic range.
-		float exteriorBoost = SharedData::InInterior ? 0.0 : 1.0;
+		float hdrBoost = SharedData::InInterior ? 1.1 : 1.2; // Interiors and exteriors require different boosts to look correct. Artistic adjustments based on testing.
 
-		hdrLinear = Color::Saturation(hdrLinear, (Cinematic.x * 0.5 + 0.5) + 0.25 * exteriorBoost);
+		hdrLinear = Color::Saturation(hdrLinear, (Cinematic.x * 0.5 + 0.5) + hdrBoost);
 
 		float3 hdrGamma = Color::LinearToGamma(hdrLinear);
 
@@ -189,10 +189,21 @@ PS_OUTPUT main(PS_INPUT input)
 		hdrGamma = lerp(hdrGamma, hdrLuminanceGamma * Tint.xyz, Tint.w);
 
 		hdrLinear = Color::GammaToLinear(hdrGamma);
-		hdrLinear *= Cinematic.w;
+		hdrLinear *= (Cinematic.w + hdrBoost);
 
 		hdrGamma = Color::LinearToGamma(hdrLinear);
-		hdrGamma = lerp(avgValue.x, hdrGamma, (Cinematic.z * 0.5 + 0.5) + 0.25 * exteriorBoost); // Contrast adjustment around scene average. prevents crushing blacks in HDR.
+		
+		// Vanilla contrast with shadow lift to prevent black crush
+		float contrastAmount = (Cinematic.z * 0.5 + 0.5) + hdrBoost;
+		hdrGamma = lerp(avgValue.x, hdrGamma, contrastAmount);
+		
+		// Shadow lift: Gently raise blacks to prevent crushing while maintaining contrast
+		// This adds a subtle S-curve that protects shadows
+		float shadowLift = 0.03; // Subtle lift amount
+		float shadowRange = 0.2; // Affects values below this threshold
+		float3 shadowMask = saturate((shadowRange - hdrGamma) / shadowRange);
+		hdrGamma += shadowMask * shadowLift * shadowMask; // Quadratic falloff for natural look
+		
 		hdrLinear = Color::GammaToLinear(hdrGamma);
 
 #		if defined(FADE)

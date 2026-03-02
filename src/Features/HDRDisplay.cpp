@@ -479,8 +479,8 @@ void HDRDisplay::DrawSettings()
 				UpdateHDRData();
 			}
 			if (auto _tt = Util::HoverTooltipWrapper()) {
-				ImGui::Text("Adjusts UI brightness in HDR mode. UI renders at 100 nits baseline,");
-				ImGui::Text("independent of Paper White setting. 1.0x = 100 nits.");
+				ImGui::Text("Adjusts UI brightness in HDR mode. UI renders at 80 nits baseline,");
+				ImGui::Text("independent of Paper White setting. 1.0x = 80 nits.");
 			}
 		}
 	}
