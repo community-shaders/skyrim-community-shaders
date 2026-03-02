@@ -178,10 +178,7 @@ PS_OUTPUT main(PS_INPUT input)
 		// Vanilla order: Saturation → Tint → Brightness → Contrast
 		// Physical accuracy: Saturation in linear; Tint & Contrast in gamma for artistic control.
 
-		// Boost saturation and contrast in HDR exteriors to compensate for the wider dynamic range.
-		float hdrBoost = SharedData::InInterior ? 1.1 : 1.2;  // Interiors and exteriors require different boosts to look correct. Artistic adjustments based on testing.
-
-		hdrLinear = Color::Saturation(hdrLinear, (Cinematic.x * 0.5 + 0.5) + hdrBoost);
+		hdrLinear = Color::Saturation(hdrLinear, Cinematic.x);
 
 		float3 hdrGamma = Color::LinearToGamma(hdrLinear);
 
@@ -189,12 +186,12 @@ PS_OUTPUT main(PS_INPUT input)
 		hdrGamma = lerp(hdrGamma, hdrLuminanceGamma * Tint.xyz, Tint.w);
 
 		hdrLinear = Color::GammaToLinear(hdrGamma);
-		hdrLinear *= (Cinematic.w + hdrBoost);
+		hdrLinear *= (Cinematic.w);
 
 		hdrGamma = Color::LinearToGamma(hdrLinear);
 
 		// Vanilla contrast with shadow lift to prevent black crush
-		float contrastAmount = (Cinematic.z * 0.5 + 0.5) + hdrBoost;
+		float contrastAmount = (Cinematic.z * 0.5 + 0.5);
 		hdrGamma = lerp(avgValue.x, hdrGamma, contrastAmount);
 
 		// Shadow lift: Gently raise blacks to prevent crushing while maintaining contrast
