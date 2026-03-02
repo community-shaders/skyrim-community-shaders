@@ -34,8 +34,8 @@ public:
 		if (isFallbackEditorID && form) {
 			const char* editorID = form->GetFormEditorID();
 			if (editorID && editorID[0] != '\0') {
-				const_cast<Widget*>(this)->cachedEditorID = editorID;
-				const_cast<Widget*>(this)->isFallbackEditorID = false;
+				cachedEditorID = editorID;
+				isFallbackEditorID = false;
 				return editorID;
 			}
 		}
@@ -153,8 +153,8 @@ public:
 	json js = json();
 
 protected:
-	std::string cachedEditorID;
-	bool isFallbackEditorID = false;
+	mutable std::string cachedEditorID;
+	mutable bool isFallbackEditorID = false;
 	virtual void DrawMenu();
 	std::string GetFolderName();
 };
