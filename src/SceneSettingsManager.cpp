@@ -475,7 +475,13 @@ void SceneSettingsManager::UpdateEntryValue(SceneType type, size_t index, const 
 			return;
 		}
 		// Normalize to float so DetectSettingType sees Float, not Integer
-		vec[index].value = newValue.get<float>();
+		float floatVal = newValue.get<float>();
+		if (!std::isfinite(floatVal)) {
+			logger::warn("[SceneSettings] UpdateEntryValue: rejecting non-finite TOD value ({}) for {}.{}",
+				floatVal, vec[index].featureShortName, vec[index].settingKey);
+			return;
+		}
+		vec[index].value = floatVal;
 	} else {
 		vec[index].value = newValue;
 	}
