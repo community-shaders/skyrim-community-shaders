@@ -1,7 +1,6 @@
 #include "Upscaling.h"
 
 #include "Deferred.h"
-#include "HDR.h"
 #include "HDRDisplay.h"
 #include "Hooks.h"
 #include "State.h"
@@ -1201,9 +1200,7 @@ void Upscaling::SetupResources()
 
 	// Setup HDR resources only when the HDR Display feature is loaded
 	if (globals::features::hdrDisplay.loaded) {
-		auto hdr = HDR::GetSingleton();
-		if (hdr)
-			hdr->SetupResources();
+		globals::features::hdrDisplay.SetupResources();
 	}
 }
 
@@ -1306,9 +1303,8 @@ void Upscaling::PostDisplay()
 	UpdateCameraData();
 
 	if (d3d12SwapChainActive) {
-		auto hdr = HDR::GetSingleton();
-		if (hdr)
-			hdr->SetUIBuffer();
+		if (globals::features::hdrDisplay.loaded)
+			globals::features::hdrDisplay.SetUIBuffer();
 	}
 
 	globals::state->UpdateSharedData(false, false);
@@ -1804,9 +1800,7 @@ void Upscaling::MenuManagerDrawInterfaceStartHook::thunk(int64_t a1)
 	// When HDR Display is not loaded, skip entirely so vanilla UI renders to kFRAMEBUFFER
 	auto& upscaling = globals::features::upscaling;
 	if (!upscaling.d3d12SwapChainActive && globals::features::hdrDisplay.loaded) {
-		auto hdr = HDR::GetSingleton();
-		if (hdr)
-			hdr->SetUIBuffer();
+		globals::features::hdrDisplay.SetUIBuffer();
 	}
 
 	func(a1);
@@ -1834,15 +1828,14 @@ void Upscaling::Main_PostProcessing::thunk(RE::ImageSpaceManager* a_this, uint32
 	// Redirect kFRAMEBUFFER to float texture before ISHDR runs so HDR values >1.0 survive
 	// When HDR Display is not loaded, ISHDR writes to vanilla kFRAMEBUFFER (SDR path)
 	bool hdrLoaded = globals::features::hdrDisplay.loaded;
-	auto hdr = hdrLoaded ? HDR::GetSingleton() : nullptr;
-	if (hdr)
-		hdr->RedirectFramebuffer();
+	if (hdrLoaded)
+		globals::features::hdrDisplay.RedirectFramebuffer();
 
 	func(a_this, a3, a_target, a_4, a_5);
 
 	// Restore kFRAMEBUFFER after ISHDR — hdrTexture now has the HDR scene
-	if (hdr)
-		hdr->RestoreFramebuffer();
+	if (hdrLoaded)
+		globals::features::hdrDisplay.RestoreFramebuffer();
 
 	BSImagespaceShaderISTemporalAA->taaEnabled = false;
 }

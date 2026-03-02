@@ -4,7 +4,6 @@
 
 #include "../../State.h"
 #include "../../Utils/FileSystem.h"
-#include "../HDR.h"
 #include "../HDRDisplay.h"
 #include "../Upscaling.h"
 #include "DX12SwapChain.h"
@@ -75,8 +74,8 @@ void FidelityFX::Present(bool a_useFrameGeneration, bool a_isHDR)
 	auto& upscaling = globals::features::upscaling;
 	auto& swapChain = globals::features::upscaling.dx12SwapChain;
 
-	// Cache peak nits first since we need HDR singleton access
-	auto hdr = HDR::GetSingleton();
+	// Cache peak nits first since we need HDR feature access
+	auto* hdr = globals::features::hdrDisplay.loaded ? &globals::features::hdrDisplay : nullptr;
 	float peakNits = hdr ? static_cast<float>(hdr->settings.hdrPeakNits) : 1000.0f;
 
 	// Clamp peak nits to safe range [1.0f, 10000.0f] to prevent invalid values

@@ -3,7 +3,6 @@
 #include <FidelityFX/api/include/dx12/ffx_api_dx12.hpp>
 #include <dxgi1_6.h>
 
-#include "../HDR.h"
 #include "../HDRDisplay.h"
 #include "../Upscaling.h"
 #include "FidelityFX.h"
@@ -94,8 +93,8 @@ void DX12SwapChain::CreateSwapChain(IDXGIAdapter* adapter, DXGI_SWAP_CHAIN_DESC 
 	frameIndex = swapChain->GetCurrentBackBufferIndex();
 
 	// Set color space based on HDR Display feature state and negotiated format
-	auto hdr = HDR::GetSingleton();
-	bool enableHDR = hdr && globals::features::hdrDisplay.loaded && hdr->settings.enableHDR;
+	auto* hdr = globals::features::hdrDisplay.loaded ? &globals::features::hdrDisplay : nullptr;
+	bool enableHDR = hdr && hdr->settings.enableHDR;
 	// Only set HDR color space if not falling back to SDR format
 	SetColorSpace(enableHDR && !fallbackUsed);
 
@@ -159,11 +158,11 @@ HRESULT DX12SwapChain::Present(UINT SyncInterval, UINT Flags)
 	// uiBufferWrapped on D3D12 before the PQ encoding completes on D3D11,
 	// causing intermittent UI brightness flickering.
 	// Only runs when HDR Display feature is loaded (UIBrightnessCS may not exist otherwise)
-	auto hdr = HDR::GetSingleton();
-	if (hdr && globals::features::hdrDisplay.loaded)
+	auto* hdr = globals::features::hdrDisplay.loaded ? &globals::features::hdrDisplay : nullptr;
+	if (hdr)
 		hdr->ScaleUIBrightnessForFG();
 
-	bool isHDR = hdr && globals::features::hdrDisplay.loaded && hdr->settings.enableHDR;
+	bool isHDR = hdr && hdr->settings.enableHDR;
 
 	// Wait for D3D11 to finish (includes ApplyHDR scene encoding AND UIBrightnessCS)
 	DX::ThrowIfFailed(d3d11Context->Signal(d3d11Fence.get(), fenceValue));

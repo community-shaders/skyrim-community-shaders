@@ -3,7 +3,6 @@
 // License: MIT License
 
 #include "BackgroundBlur.h"
-#include "../Features/HDR.h"
 #include "../Features/HDRDisplay.h"
 #include "../Features/Upscaling.h"
 #include "../Globals.h"
@@ -508,8 +507,8 @@ namespace BackgroundBlur
 		auto& upscaling = globals::features::upscaling;
 		bool useUpscalingBackbuffer = upscaling.d3d12SwapChainActive;
 
-		auto hdr = HDR::GetSingleton();
-		bool hdrActive = globals::features::hdrDisplay.loaded && hdr &&
+		auto* hdr = globals::features::hdrDisplay.loaded ? &globals::features::hdrDisplay : nullptr;
+		bool hdrActive = hdr &&
 		                 hdr->settings.enableHDR && hdr->hdrDataCB && hdr->outputTexture &&
 		                 hdr->hdrTexture && hdr->hdrTexture->resource && hdr->hdrTexture->srv && hdr->hdrTexture->rtv;
 

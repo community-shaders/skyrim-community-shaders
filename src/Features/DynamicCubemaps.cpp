@@ -3,7 +3,6 @@
 #include <DDSTextureLoader.h>
 #include <DirectXTex.h>
 
-#include "HDR.h"
 #include "ShaderCache.h"
 #include "State.h"
 
