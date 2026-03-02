@@ -10,6 +10,7 @@
 #include "Features/LODBlending.h"
 #include "Features/LightLimitFix.h"
 #include "Features/LinearLighting.h"
+#include "Features/Raytracing.h"
 #include "Features/Skylighting.h"
 #include "Features/TerrainBlending.h"
 #include "Features/TerrainShadows.h"
@@ -51,5 +52,6 @@ std::pair<unsigned char*, size_t> GetFeatureBufferData(bool a_inWorld)
 		globals::features::ibl.settings,
 		globals::features::extendedTranslucency.GetCommonBufferData(),
 		globals::features::linearLighting.GetCommonBufferData(),
-		globals::features::terrainBlending.settings);
+		globals::features::terrainBlending.settings,
+		globals::features::raytracing.GetCommonBufferData());
 }

@@ -109,6 +109,8 @@ void Raytracing::DrawGeneralSettings()
 			rtSettings.SamplesPerPixel = std::clamp(rtSettings.SamplesPerPixel, 1, 32);
 	}
 
+	DrawSHaRCSettings();
+
 	// Material
 	DrawFloat2("Roughness", ceRTSettings.MaterialSettings.Roughness);
 	DrawFloat2("Metalness", ceRTSettings.MaterialSettings.Metalness);
@@ -142,6 +144,24 @@ void Raytracing::DrawGeneralSettings()
 	ImGui::PopID();
 
 	ImGui::EndTabItem();
+}
+
+void Raytracing::DrawSHaRCSettings()
+{
+	if (ImGui::CollapsingHeader("SHaRC")) {
+		auto& sharcSettings = settings.CreationEngineRaytracingSettings.SHaRCSettings;
+
+		ImGui::DragFloat("Scale", &sharcSettings.SceneScale, 0.001f, 0.1f, 10.0f);
+		sharcSettings.SceneScale = std::clamp(sharcSettings.SceneScale, 0.1f, 10.0f);
+
+		ImGui::InputInt("Accumulation Frames", &sharcSettings.AccumFrameNum);
+		sharcSettings.AccumFrameNum = std::clamp(sharcSettings.AccumFrameNum, 5, 100);
+
+		ImGui::InputInt("Stale Frames", &sharcSettings.StaleFrameNum);
+		sharcSettings.StaleFrameNum = std::clamp(sharcSettings.StaleFrameNum, 8, 128);
+
+		ImGui::Checkbox("Antifirefly Filter", &sharcSettings.AntifireflyFilter);
+	}
 }
 
 void Raytracing::DrawDebugSettings()
@@ -466,6 +486,16 @@ void Raytracing::SetupResources()
 	}
 
 	CompileShaders();
+}
+
+Raytracing::SharedData Raytracing::GetCommonBufferData() const
+{
+	return {
+		.InteriorDirectional = settings.CreationEngineRaytracingSettings.Enabled ? 0.0f : 1.0f,
+		.Ambient = settings.CreationEngineRaytracingSettings.Enabled ? 0.0f : 1.0f,
+		.EnvMap = settings.CreationEngineRaytracingSettings.Enabled ? 0.0f : 1.0f,
+		.Albedo = settings.CreationEngineRaytracingSettings.Enabled
+	};
 }
 
 void Raytracing::UpdateFeatureData()

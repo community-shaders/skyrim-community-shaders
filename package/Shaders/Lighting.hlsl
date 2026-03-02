@@ -11,6 +11,8 @@
 #include "Common/SharedData.hlsli"
 #include "Common/Skinned.hlsli"
 
+#include "Raytracing/Includes/VanillaToPBR.hlsli"
+
 #if defined(FACEGEN) || defined(FACEGEN_RGB_TINT)
 #	define SKIN
 #endif
@@ -344,6 +346,8 @@ struct PS_OUTPUT
 	float4 Masks : SV_Target6;
 #	if defined(SNOW)
 	float4 Parameters : SV_Target7;
+#	elif defined(RAYTRACING)
+	float4 GeomNormalMetalnessAO : SV_Target7;
 #	endif
 };
 #else
@@ -2115,6 +2119,10 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	Glints::PrecomputeGlints(glintNoise, uvOriginal, ddx(uvOriginal), ddy(uvOriginal), material.GlintScreenSpaceScale, material.GlintCache);
 #		endif
 
+#	if defined(RAYTRACING)
+	float3 trueBaseColor = baseColor.xyz;
+#	endif
+
 	baseColor.xyz *= 1 - material.Metallic;
 
 	material.BaseColor = baseColor.xyz;
@@ -2171,12 +2179,16 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 		material.FuzzWeight = lerp(material.FuzzWeight, 0, projectedMaterialWeight);
 	}
 #		endif
-#	else
+#	else	// TRUE_PBR
 	material.BaseColor = baseColor.xyz;
-#		if defined(SPECULAR)
+#		if defined(SPECULAR) || defined(LANDSCAPE)
 	material.Shininess = shininess;
 	material.Glossiness = glossiness;
+#			if defined(LANDSCAPE)
+	material.SpecularColor = 1;
+#			else
 	material.SpecularColor = SpecularColor.xyz;
+#			endif // LANDSCAPE
 #		else
 	material.Shininess = 0;
 	material.Glossiness = 0;
@@ -2188,7 +2200,7 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #		if defined(BACK_LIGHTING)
 	material.backLightColor = backLightColor.xyz;
 #		endif
-#	endif  // TRUE_PBR
+#	endif	// TRUE_PBR
 
 #	if defined(CS_HAIR) && defined(HAIR)
 	if (SharedData::hairSpecularSettings.Enabled) {
@@ -2206,6 +2218,10 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 
 #	if defined(ENVMAP) || defined(MULTI_LAYER_PARALLAX) || defined(EYE)
 	float envMask = EnvmapData.x * MaterialData.x;
+
+#	if defined(RAYTRACING)
+	envMask *= SharedData::raytracingSettings.Reflection;
+#	endif
 
 	float viewNormalAngle = dot(worldNormal.xyz, viewDirection);
 	float3 envSamplingPoint = (viewNormalAngle * 2) * worldNormal.xyz - viewDirection;
@@ -2280,7 +2296,6 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 			envColor = envColorBase.xyz * envMask;
 		}
 	}
-
 #	endif  // defined (ENVMAP) || defined (MULTI_LAYER_PARALLAX) || defined(EYE)
 
 	float porosity = 1.0;
@@ -2390,7 +2405,12 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 
 	float llDirLightMult = SharedData::linearLightingSettings.enableLinearLighting && !SharedData::linearLightingSettings.isDirLightLinear && (inWorld || inReflection) && !SharedData::InInterior ? SharedData::linearLightingSettings.dirLightMult : 1.0f;
 	float3 dirLightColor = Color::DirectionalLight(DirLightColor.xyz / max(llDirLightMult, 1e-5), SharedData::linearLightingSettings.isDirLightLinear) * llDirLightMult;
+
+#	if defined(RAYTRACING)
+	float3 dirLightColorMultiplier = SharedData::InInterior ? SharedData::raytracingSettings.InteriorDirectional : 1;
+# 	else
 	float3 dirLightColorMultiplier = 1;
+#	endif
 
 #	if defined(WATER_EFFECTS)
 	dirLightColorMultiplier *= WaterEffects::ComputeCaustics(waterData, input.WorldPosition.xyz, eyeIndex);
@@ -2759,6 +2779,10 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 			directionalAmbientColor *= SharedData::iblSettings.DALCAmount;
 		}
 	}
+#	endif
+
+#	if defined(RAYTRACING)
+	directionalAmbientColor *= SharedData::raytracingSettings.Ambient;
 #	endif
 
 #	if defined(SKYLIGHTING)
@@ -3172,7 +3196,12 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 
 	psout.MotionVectors.zw = float2(0.0, psout.Diffuse.w);
 	psout.Specular = float4(specularColor, psout.Diffuse.w);
+
+#		if defined(TRUE_PBR) && defined(RAYTRACING)
+	psout.Albedo = float4(SharedData::raytracingSettings.Albedo ? trueBaseColor * vertexColor : outputAlbedo, psout.Diffuse.w);
+#		else
 	psout.Albedo = float4(outputAlbedo, psout.Diffuse.w);
+#		endif
 
 #		if defined(WETNESS_EFFECTS)
 	indirectLobeWeights.specular += wetnessReflectance;
@@ -3183,7 +3212,18 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #		endif
 
 	psout.Reflectance = float4(indirectLobeWeights.specular, psout.Diffuse.w);
-	psout.NormalGlossiness = float4(GBuffer::EncodeNormal(screenSpaceNormal), saturate(1.0 - material.Roughness), psout.Diffuse.w);
+
+#	if defined(TRUE_PBR)
+	const float roughness = material.Roughness;
+	const float metallic = material.Metallic;
+#	else
+	const float specularity = CalcSpecularity(material.SpecularColor, glossiness);
+	const float roughnessFromShininess = ShininessToRoughness(material.Shininess);
+	const float roughness = CalcRoughness(roughnessFromShininess, specularity);
+	const float metallic = CalcMetallic(outputAlbedo, specularity, roughnessFromShininess);
+#	endif
+
+	psout.NormalGlossiness = float4(GBuffer::EncodeNormal(screenSpaceNormal), saturate(1.0 - roughness), psout.Diffuse.w);
 
 #		if defined(SNOW)
 #			if defined(TRUE_PBR)
@@ -3203,7 +3243,27 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 
 	float stochasticBlend = (screenNoise * screenNoise) < psout.Diffuse.w ? 1.0 : 0.0;
 	psout.NormalGlossiness.w = stochasticBlend;
-#	endif
+
+#		if defined(RAYTRACING)
+#			if !defined(SNOW)
+
+	float3 worldGeomNormal;
+
+#				if defined(MODELSPACENORMALS)
+    float3 dd_x = ddx(input.WorldPosition.xyz);
+    float3 dd_y = ddy(input.WorldPosition.xyz);
+
+    worldGeomNormal = -normalize(cross(dd_x, dd_y));
+#				else
+	worldGeomNormal = vertexNormal;
+#				endif
+
+	float3 screenGeomNormal = normalize(FrameBuffer::WorldToView(worldGeomNormal, false, eyeIndex));
+
+	psout.GeomNormalMetalnessAO = float4(GBuffer::EncodeNormal(screenGeomNormal), metallic, psout.Diffuse.w);
+#			endif // !defined(SNOW)
+#		endif // !defined(RAYTRACING)
+#	endif // DEFERRED
 
 	if ((!inWorld && !inReflection) && SharedData::linearLightingSettings.enableLinearLighting && !(Permutation::PixelShaderDescriptor & Permutation::LightingFlags::DefShadow)) {
 		psout.Diffuse.xyz = Color::TrueLinearToGamma(psout.Diffuse.xyz);

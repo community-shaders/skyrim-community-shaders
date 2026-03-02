@@ -66,6 +66,20 @@ struct CreationEngineRaytracing
 		NLOHMANN_DEFINE_TYPE_INTRUSIVE_WITH_DEFAULT(LightingSettings, Emissive, Effect, Sky)
 	};
 
+	struct SHaRCSettings
+	{
+		float SceneScale = 1.0f;
+		int AccumFrameNum = 10;
+		int StaleFrameNum = 64;
+		float RadianceScale = 1e3f;
+		bool AntifireflyFilter = true;
+
+		bool operator==(const SHaRCSettings&) const = default;
+
+		NLOHMANN_DEFINE_TYPE_INTRUSIVE_WITH_DEFAULT(SHaRCSettings, SceneScale, AccumFrameNum, StaleFrameNum, AntifireflyFilter)
+	};
+
+
 	struct DebugSettings
 	{
 		bool PathTracingCull = false;
@@ -83,11 +97,12 @@ struct CreationEngineRaytracing
 		LightingSettings LightingSettings;
 		RaytracingSettings RaytracingSettings;
 		MaterialSettings MaterialSettings;
+		SHaRCSettings SHaRCSettings;
 		DebugSettings DebugSettings;
 
 		bool operator==(const Settings&) const = default;
 
-		NLOHMANN_DEFINE_TYPE_INTRUSIVE_WITH_DEFAULT(Settings, Enabled, PathTracing, LightSettings, LightingSettings, RaytracingSettings, MaterialSettings, DebugSettings)
+		NLOHMANN_DEFINE_TYPE_INTRUSIVE_WITH_DEFAULT(Settings, Enabled, PathTracing, LightSettings, LightingSettings, RaytracingSettings, MaterialSettings, SHaRCSettings, DebugSettings)
 	};
 
 	HMODULE handle = nullptr;
@@ -222,6 +237,7 @@ struct Raytracing : public OverlayFeature
 	void DataLoaded() override;
 
 	void DrawGeneralSettings();
+	void DrawSHaRCSettings();
 	void DrawDebugSettings();
 
 	void CompileShaders();
@@ -277,16 +293,16 @@ struct Raytracing : public OverlayFeature
 
 	eastl::unique_ptr<FeatureData> featureData;
 
-	struct CbData
+	struct alignas(16) SharedData
 	{
-		float3 ColorA;
-		float _pad0;  // Padding to align to 16 bytes
-		DirectX::XMUINT2 IdA;
-		float2 UvA;
+		float InteriorDirectional;
+		float Ambient;
+		float EnvMap;
+		uint Albedo;
 	};
-	static_assert(sizeof(CbData) % 16 == 0,
-		"CbData must be aligned to 16 bytes. "
-		"Check out maraneshi.github.io/HLSL-ConstantBufferLayoutVisualizer/ if you're unsure.");
+	static_assert(sizeof(SharedData) % 16 == 0);
+
+	SharedData GetCommonBufferData() const;
 
 	winrt::com_ptr<ID3D11SamplerState> samplerState = nullptr;
 

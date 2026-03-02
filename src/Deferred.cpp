@@ -622,6 +622,10 @@ ID3D11ComputeShader* Deferred::GetComputeMainComposite()
 		if (globals::features::ibl.loaded)
 			defines.push_back({ "IBL", nullptr });
 
+		auto& rt = globals::features::raytracing;
+		if (rt.loaded)
+			defines.push_back({ rt.GetShaderDefineName().data(), nullptr });
+		
 		if (REL::Module::IsVR())
 			defines.push_back({ "FRAMEBUFFER", nullptr });
 

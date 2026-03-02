@@ -238,6 +238,14 @@ namespace SharedData
 		uint3 _padding;
 	};
 
+	struct RaytracingSettings
+    {
+        float InteriorDirectional;
+        float Ambient;
+        float Reflection;
+        uint Albedo;
+    };
+	
 	cbuffer FeatureData : register(b6)
 	{
 		GrassLightingSettings grassLightingSettings;
@@ -255,6 +263,7 @@ namespace SharedData
 		ExtendedTranslucencySettings extendedTranslucencySettings;
 		LinearLightingSettings linearLightingSettings;
 		TerrainBlendingSettings terrainBlendingSettings;
+		RaytracingSettings raytracingSettings;
 	};
 
 	Texture2D<float4> DepthTexture : register(t17);
