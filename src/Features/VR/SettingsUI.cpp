@@ -2,12 +2,12 @@
 #include "Features/DynamicCubemaps.h"
 #include "Features/ScreenSpaceGI.h"
 #include "Features/ScreenSpaceShadows.h"
-#include "Features/Upscaling.h"
 #include "Features/VR.h"
 #include "Menu.h"
 #include "Menu/Fonts.h"
 #include "RE/B/BSOpenVR.h"
 #include "RE/P/PlayerCharacter.h"
+#include "State.h"
 #include "Utils/PerfUtils.h"
 #include "Utils/UI.h"
 #include "Utils/VRUtils.h"
@@ -269,7 +269,7 @@ namespace
 		VR::Settings& settings = vr.settings;
 
 		bool hasEffects = VR::AnyScreenSpaceEffectLoaded();
-		bool isDev = globals::state->IsDeveloperMode();
+		bool isDev = globals::state && globals::state->IsDeveloperMode();
 
 		if (!hasEffects && !isDev) {
 			ImGui::TextColored(ImVec4(1.0f, 0.7f, 0.3f, 1.0f), "No screen-space effects active (SSGI, SSR, SS Shadows).");
@@ -323,19 +323,25 @@ namespace
 
 		ImGui::Separator();
 
-		const char* debugModes[] = { "Off", "Back-Check", "Blend Weight" };
+		const char* debugModes[] = { "Off", "Back-Check", "Blend Weight", "Edge Detection" };
 		ImGui::Combo("Debug View", &settings.StereoBlendDebugMode, debugModes, IM_ARRAYSIZE(debugModes));
 		if (auto _tt = Util::HoverTooltipWrapper()) {
 			ImGui::Text(
 				"Off: Normal rendering.\n\n"
-				"Back-Check: Visualize reprojection validation.\n"
-				"  Blue  = sky or HMD mask (skipped).\n"
-				"  Grey  = other eye can't see this point (out of bounds).\n"
-				"  Green = back-check passed (surfaces match in both eyes).\n"
-				"  Red   = back-check failed (occlusion edge).\n\n"
-				"Blend Weight: Grayscale intensity of the stereo blend.\n"
-				"  Black = no blending, White = maximum blending.\n"
-				"  Shows where the two eyes disagree and correction is applied.");
+				"Back-Check: Visualize reprojection outcomes.\n"
+				"  Blue   = sky or HMD mask (skipped).\n"
+				"  Yellow = source edge rejected (depth discontinuity at this pixel).\n"
+				"  Orange = destination edge rejected (discontinuity at reprojected pixel).\n"
+				"  Grey   = other eye can't see this point (out of bounds).\n"
+				"  Green  = back-check passed (surfaces match in both eyes).\n"
+				"  Red    = back-check failed (occlusion edge, blend penalized).\n\n"
+				"Blend Weight: Heatmap of stereo blend strength.\n"
+				"  Cool/black = no blending. Hot/white = maximum blending.\n"
+				"  Shows where the two eyes disagree and correction is applied.\n\n"
+				"Edge Detection: Highlights pixels excluded by depth discontinuity checks.\n"
+				"  Yellow = source edge (discontinuity at this pixel).\n"
+				"  Orange = destination edge (discontinuity at reprojected pixel).\n"
+				"  Scene  = all other pixels shown with normal blending.");
 		}
 
 		ImGui::EndDisabled();
@@ -346,28 +352,25 @@ namespace
 		auto& vr = globals::features::vr;
 		VR::Settings& settings = vr.settings;
 		if (ImGui::CollapsingHeader("General Settings", ImGuiTreeNodeFlags_DefaultOpen)) {
-			Util::ConstrainedUI::Checkbox("Enable Depth Buffer Culling in Exteriors",
-				&settings.EnableDepthBufferCullingExterior,
-				{ "VR", "EnableDepthBufferCullingExterior" });
-			auto exteriorConstraint = FeatureConstraints::GetConstraints({ "VR", "EnableDepthBufferCullingExterior" });
-			if (!exteriorConstraint.isConstrained) {
-				if (auto _tt = Util::HoverTooltipWrapper()) {
-					ImGui::Text("Improves performance in exteriors, recommended ON.");
-				}
+			bool exteriorChanged = ImGui::Checkbox("Enable Depth Buffer Culling in Exteriors", &settings.EnableDepthBufferCullingExterior);
+			if (auto _tt = Util::HoverTooltipWrapper()) {
+				ImGui::Text("Improves performance in exteriors, recommended ON.");
 			}
 
-			Util::ConstrainedUI::Checkbox("Enable Depth Buffer Culling in Interiors",
-				&settings.EnableDepthBufferCullingInterior,
-				{ "VR", "EnableDepthBufferCullingInterior" });
-			auto interiorConstraint = FeatureConstraints::GetConstraints({ "VR", "EnableDepthBufferCullingInterior" });
-			if (!interiorConstraint.isConstrained) {
-				if (auto _tt = Util::HoverTooltipWrapper()) {
-					ImGui::Text("Improves performance in interiors, recommended OFF due to occasional visual glitches.");
-				}
+			bool interiorChanged = ImGui::Checkbox("Enable Depth Buffer Culling in Interiors", &settings.EnableDepthBufferCullingInterior);
+			if (auto _tt = Util::HoverTooltipWrapper()) {
+				ImGui::Text("Improves performance in interiors, recommended ON.");
 			}
 
-			if (ImGui::SliderFloat("Min Occludee Box Extent", &settings.MinOccludeeBoxExtent, 0.0f, 1000.0f, "%.1f"))
-				*vr.gMinOccludeeBoxExtent = settings.MinOccludeeBoxExtent;
+			if (exteriorChanged || interiorChanged) {
+				vr.UpdateDepthBufferCulling();
+			}
+
+			if (ImGui::SliderFloat("Min Occludee Box Extent", &settings.MinOccludeeBoxExtent, 0.0f, 1000.0f, "%.1f")) {
+				if (vr.gMinOccludeeBoxExtent) {
+					*vr.gMinOccludeeBoxExtent = settings.MinOccludeeBoxExtent;
+				}
+			}
 			if (auto _tt = Util::HoverTooltipWrapper()) {
 				ImGui::Text("Minimum bounding box dimensions for object occlusion culling. Lower values improve performance but may result in visual artifacts.");
 			}

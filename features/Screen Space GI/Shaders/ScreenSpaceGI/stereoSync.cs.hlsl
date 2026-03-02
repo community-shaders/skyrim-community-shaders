@@ -1,8 +1,7 @@
 // Stereo Sync - Bilateral blend of SSGI buffers between eyes
 //
 // Reprojects each pixel to the other eye and blends AO/IL based on depth
-// agreement with back-check validation. Runs after the SSGI blur to reduce
-// per-eye GI disparities.
+// agreement. Runs after the SSGI blur to reduce per-eye GI disparities.
 //
 // Based on: Shi, Billeter, Eisemann 2022, "Stereo-consistent screen-space
 // ambient occlusion" https://eprints.whiterose.ac.uk/id/eprint/187713/
@@ -22,9 +21,33 @@ RWTexture2D<float> outAo : register(u0);
 RWTexture2D<float4> outIlY : register(u1);
 RWTexture2D<float2> outIlCoCg : register(u2);
 
-static const float kDepthSigma = 0.01;
-static const float kMaxBlend = 0.5;
-static const float kBackCheckThreshold = 8.0;
+static const float kDepthSigma = 0.01;       // Bilateral depth tolerance (NDC): surfaces within this range are considered the same and blended
+static const float kMaxBlend = 0.5;          // Maximum stereo blend weight; 0.5 gives equal weighting between eyes
+static const float kEdgeRelThreshold = 0.5;  // Relative linear-depth difference above which a pixel is a depth discontinuity (50% change)
+static const float kMaskDepth = 0.01;        // Linear depth sentinel: values below this are outside the HMD lens area
+static const int kEdgeMargin = 2;            // Neighbor offset (pixels) for destination edge + mask boundary check
+
+// Writes all output channels from the source buffers (passthrough / no-blend path).
+void Passthrough(uint2 dtid)
+{
+	outAo[dtid] = srcAo[dtid];
+	outIlY[dtid] = srcIlY[dtid];
+	outIlCoCg[dtid] = srcIlCoCg[dtid];
+}
+
+// Samples four depth neighbors in a cross pattern (±step.x, ±step.y) around centerUV,
+// scaled by texScale to map from output UV space to texture sample coords.
+// centerUV is clamped to eyeIndex's half of the stereo buffer before offsetting
+// to prevent neighbor reads from crossing the x=0.5 seam into the other eye.
+float4 SampleCrossDepths(float2 centerUV, float2 step, float2 texScale, uint eyeIndex)
+{
+	float2 uv = Stereo::ClampToEyeUV(centerUV, eyeIndex);
+	return float4(
+		srcDepth.SampleLevel(samplerPointClamp, (uv + float2(step.x, 0)) * texScale, RES_MIP),
+		srcDepth.SampleLevel(samplerPointClamp, (uv + float2(-step.x, 0)) * texScale, RES_MIP),
+		srcDepth.SampleLevel(samplerPointClamp, (uv + float2(0, step.y)) * texScale, RES_MIP),
+		srcDepth.SampleLevel(samplerPointClamp, (uv + float2(0, -step.y)) * texScale, RES_MIP));
+}
 
 [numthreads(8, 8, 1)] void main(uint2 dtid : SV_DispatchThreadID) {
 	const float2 outFrameDim = OUT_FRAME_DIM;
@@ -40,9 +63,18 @@ static const float kBackCheckThreshold = 8.0;
 	// 0.0 = mask (outside lens area). FP_Z = first-person hands threshold (~18.0).
 	float depth = srcDepth.SampleLevel(samplerPointClamp, uv * frameScale, RES_MIP);
 	if (depth < FP_Z) {
-		outAo[dtid] = srcAo[dtid];
-		outIlY[dtid] = srcIlY[dtid];
-		outIlCoCg[dtid] = srcIlCoCg[dtid];
+		Passthrough(dtid);
+		return;
+	}
+
+	// Source edge detection: skip stereo sync at depth discontinuities.
+	// Uses a relative threshold since depth is linear view-space (not NDC).
+	// Placed before rawDepth conversion and reprojection to save VP matrix work
+	// for edge pixels.
+	float2 pixelStep = 1.0 / outFrameDim;
+	float4 srcNeighborDepths = SampleCrossDepths(uv, pixelStep, frameScale, eyeIndex);
+	if (Stereo::MaxDepthDiff(depth, srcNeighborDepths) / max(depth, 1.0) > kEdgeRelThreshold) {
+		Passthrough(dtid);
 		return;
 	}
 
@@ -54,23 +86,33 @@ static const float kBackCheckThreshold = 8.0;
 	Stereo::StereoBilateralResult r = Stereo::ReprojectToOtherEye(uv, rawDepth, eyeIndex, outFrameDim);
 
 	if (!r.valid) {
-		outAo[dtid] = srcAo[dtid];
-		outIlY[dtid] = srcIlY[dtid];
-		outIlCoCg[dtid] = srcIlCoCg[dtid];
+		Passthrough(dtid);
 		return;
 	}
 
 	float otherLinearDepth = srcDepth.SampleLevel(samplerPointClamp, r.otherStereoUV * frameScale, RES_MIP);
 	if (otherLinearDepth < FP_Z) {
-		outAo[dtid] = srcAo[dtid];
-		outIlY[dtid] = srcIlY[dtid];
-		outIlCoCg[dtid] = srcIlCoCg[dtid];
+		Passthrough(dtid);
 		return;
 	}
+
+	// Destination edge detection: skip if the reprojected pixel is near the HMD mask
+	// boundary or at a depth discontinuity in the other eye. Due to VR parallax the
+	// arm silhouette appears at a different screen position per eye, so the reprojection
+	// can cross a boundary invisible from this eye's perspective.
+	float2 marginStep = float(kEdgeMargin) / outFrameDim;
+	float4 otherNeighborDepths = SampleCrossDepths(r.otherStereoUV, marginStep, frameScale, 1 - eyeIndex);
+	if (any(otherNeighborDepths < kMaskDepth) ||
+		Stereo::MaxDepthDiff(otherLinearDepth, otherNeighborDepths) / max(otherLinearDepth, 1.0) > kEdgeRelThreshold) {
+		Passthrough(dtid);
+		return;
+	}
+
 	float otherRawDepth = (SharedData::CameraData.x - SharedData::CameraData.w / otherLinearDepth) / SharedData::CameraData.z;
 
-	// Use raw depth for back-check reprojection (required) and bilateral weight (consistent with StereoBlendCS)
-	Stereo::FinalizeStereoBlend(r, uv, rawDepth, otherRawDepth, eyeIndex, outFrameDim, kDepthSigma, kMaxBlend, kBackCheckThreshold);
+	// Back-check disabled: source + destination edge detection covers the occlusion
+	// boundary cases it was guarding, saving 2 VP matrix multiplies per blended pixel.
+	Stereo::FinalizeStereoBlend(r, uv, rawDepth, otherRawDepth, eyeIndex, outFrameDim, kDepthSigma, kMaxBlend, 0.0);
 
 	outAo[dtid] = lerp(srcAo[dtid], srcAo[r.otherPx], r.blendWeight);
 	outIlY[dtid] = lerp(srcIlY[dtid], srcIlY[r.otherPx], r.blendWeight);

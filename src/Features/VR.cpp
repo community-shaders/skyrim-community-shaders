@@ -1,5 +1,4 @@
 ﻿#include "VR.h"
-#include "FeatureConstraints.h"
 #include "Menu.h"
 #include "RE/B/BSOpenVR.h"
 #include "RE/P/PlayerCharacter.h"
@@ -84,6 +83,11 @@ void VR::SetupResources()
 	if (auto rawPtr = reinterpret_cast<ID3D11ComputeShader*>(Util::CompileShader(L"Data\\Shaders\\VR\\StereoBlendCS.hlsl", blendWeightDefines, "cs_5_0")))
 		stereoBlendDebugBlendWeightCS.attach(rawPtr);
 
+	auto edgeDetectionDefines = defines;
+	edgeDetectionDefines.push_back({ "DEBUG_EDGE_DETECTION", "" });
+	if (auto rawPtr = reinterpret_cast<ID3D11ComputeShader*>(Util::CompileShader(L"Data\\Shaders\\VR\\StereoBlendCS.hlsl", edgeDetectionDefines, "cs_5_0")))
+		stereoBlendDebugEdgeDetectionCS.attach(rawPtr);
+
 	auto renderer = globals::game::renderer;
 	auto mainTex = renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGETS::kMAIN];
 	D3D11_TEXTURE2D_DESC mainDesc;
@@ -165,8 +169,8 @@ void VR::PostPostLoad()
 
 void VR::DataLoaded()
 {
-	bool desired = settings.EnableDepthBufferCullingExterior;
-	UpdateDepthBufferCulling(desired, { "VR", "EnableDepthBufferCullingExterior" });
+	// Initialize occlusion culling based on user settings and current interior/exterior state.
+	UpdateDepthBufferCulling();
 
 	if (gMinOccludeeBoxExtent) {
 		*gMinOccludeeBoxExtent = settings.MinOccludeeBoxExtent;
@@ -177,10 +181,8 @@ void VR::DataLoaded()
 
 void VR::EarlyPrepass()
 {
-	bool isInterior = RE::TES::GetSingleton()->interiorCell != nullptr;
-	auto settingId = isInterior ? FeatureConstraints::SettingId{ "VR", "EnableDepthBufferCullingInterior" } : FeatureConstraints::SettingId{ "VR", "EnableDepthBufferCullingExterior" };
-	bool desired = isInterior ? settings.EnableDepthBufferCullingInterior : settings.EnableDepthBufferCullingExterior;
-	UpdateDepthBufferCulling(desired, settingId);
+	// Apply culling setting each prepass based on current interior/exterior state.
+	UpdateDepthBufferCulling();
 }
 
 //=============================================================================
@@ -226,30 +228,22 @@ void VR::SubmitOverlayFrame()
 	}
 }
 
-void VR::UpdateDepthBufferCulling(bool desired, const FeatureConstraints::SettingId& settingId)
+// Helper to centralize VR depth buffer culling logic, reducing duplication between DataLoaded, EarlyPrepass, and Settings UI.
+void VR::UpdateDepthBufferCulling()
 {
-	auto constraint = FeatureConstraints::GetConstraints(settingId);
+	if (!gDepthBufferCulling) {
+		return;
+	}
 
-	if (constraint.isConstrained) {
-		if (auto* forcedValuePtr = std::get_if<bool>(&constraint.forcedValue)) {
-			bool forcedValue = *forcedValuePtr;
-			if (gDepthBufferCulling && *gDepthBufferCulling != forcedValue) {
-				*gDepthBufferCulling = forcedValue;
-				for (const auto& src : constraint.sources) {
-					logger::info("{} forcing depth buffer culling {}: {}",
-						src.featureName,
-						forcedValue ? "ON" : "OFF",
-						src.reason);
-				}
-			}
-		} else {
-			logger::warn("VR::UpdateDepthBufferCulling: Constraint on {} has non-bool forced value, ignoring", settingId.settingPath);
-		}
-	} else {
-		if (gDepthBufferCulling && *gDepthBufferCulling != desired) {
-			*gDepthBufferCulling = desired;
-			logger::info("VR depth buffer culling set to {}", desired);
-		}
+	const auto* tes = globals::game::tes;
+	const bool inInterior = tes && tes->interiorCell != nullptr;
+	const bool desired = inInterior ? settings.EnableDepthBufferCullingInterior : settings.EnableDepthBufferCullingExterior;
+
+	const bool previous = *gDepthBufferCulling;
+	*gDepthBufferCulling = desired;
+
+	if (previous != desired) {
+		logger::info("VR depth buffer culling set to {}", desired);
 	}
 }
 

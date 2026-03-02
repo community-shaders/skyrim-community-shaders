@@ -1,5 +1,4 @@
 #pragma once
-#include "FeatureConstraints.h"
 #include "Menu.h"
 #include "OverlayFeature.h"
 #include "Utils/Input.h"
@@ -119,7 +118,7 @@ public:
 	virtual void DataLoaded() override;
 	virtual void EarlyPrepass() override;
 
-	void UpdateDepthBufferCulling(bool desired, const FeatureConstraints::SettingId& settingId);
+	void UpdateDepthBufferCulling();
 
 	// Stereo bilateral blend pass - called from Deferred::DeferredPasses after composite
 	void DrawStereoBlend();
@@ -156,7 +155,7 @@ public:
 	{
 		// Performance optimization settings
 		bool EnableDepthBufferCullingExterior = true;  ///< Enable depth buffer culling for VR performance
-		bool EnableDepthBufferCullingInterior = false;
+		bool EnableDepthBufferCullingInterior = true;
 		float MinOccludeeBoxExtent = 10.0f;  ///< Minimum bounding box size for occlusion culling
 
 		// Stereo consistency blend pass (post-composite safety net)
@@ -164,7 +163,7 @@ public:
 		float StereoBlendDepthSigma = 0.01f;      ///< Depth sensitivity for bilateral weight (lower = stricter)
 		float StereoBlendMaxFactor = 0.1f;        ///< Maximum blend factor; keep low to preserve stereo parallax
 		float StereoBlendColorThreshold = 0.02f;  ///< Minimum color difference to trigger blending (luminance)
-		int StereoBlendDebugMode = 0;             ///< 0=off, 1=back-check, 2=blend weight
+		int StereoBlendDebugMode = 0;             ///< 0=off, 1=back-check, 2=blend weight, 3=edge detection
 
 		// VR Menu Overlay positioning settings
 		float VRMenuScale = Config::kDefaultMenuScale;  ///< Scale factor for overlay UI (0.5-2.0)
@@ -261,7 +260,7 @@ public:
 			StereoBlendDepthSigma = std::clamp(StereoBlendDepthSigma, 0.001f, 0.1f);
 			StereoBlendMaxFactor = std::clamp(StereoBlendMaxFactor, 0.0f, 0.5f);
 			StereoBlendColorThreshold = std::clamp(StereoBlendColorThreshold, 0.0f, 0.2f);
-			StereoBlendDebugMode = std::clamp(StereoBlendDebugMode, 0, 2);
+			StereoBlendDebugMode = std::clamp(StereoBlendDebugMode, 0, 3);
 		}
 	};
 
@@ -358,6 +357,7 @@ public:
 	winrt::com_ptr<ID3D11ComputeShader> stereoBlendCS;
 	winrt::com_ptr<ID3D11ComputeShader> stereoBlendDebugBackCheckCS;
 	winrt::com_ptr<ID3D11ComputeShader> stereoBlendDebugBlendWeightCS;
+	winrt::com_ptr<ID3D11ComputeShader> stereoBlendDebugEdgeDetectionCS;
 	eastl::unique_ptr<Texture2D> stereoBlendCopyTex;
 	eastl::unique_ptr<ConstantBuffer> stereoBlendCB;
 
