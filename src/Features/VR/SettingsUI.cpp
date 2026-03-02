@@ -323,19 +323,25 @@ namespace
 
 		ImGui::Separator();
 
-		const char* debugModes[] = { "Off", "Back-Check", "Blend Weight" };
+		const char* debugModes[] = { "Off", "Back-Check", "Blend Weight", "Edge Detection" };
 		ImGui::Combo("Debug View", &settings.StereoBlendDebugMode, debugModes, IM_ARRAYSIZE(debugModes));
 		if (auto _tt = Util::HoverTooltipWrapper()) {
 			ImGui::Text(
 				"Off: Normal rendering.\n\n"
-				"Back-Check: Visualize reprojection validation.\n"
-				"  Blue  = sky or HMD mask (skipped).\n"
-				"  Grey  = other eye can't see this point (out of bounds).\n"
-				"  Green = back-check passed (surfaces match in both eyes).\n"
-				"  Red   = back-check failed (occlusion edge).\n\n"
-				"Blend Weight: Grayscale intensity of the stereo blend.\n"
-				"  Black = no blending, White = maximum blending.\n"
-				"  Shows where the two eyes disagree and correction is applied.");
+				"Back-Check: Visualize reprojection outcomes.\n"
+				"  Blue   = sky or HMD mask (skipped).\n"
+				"  Yellow = source edge rejected (depth discontinuity at this pixel).\n"
+				"  Orange = destination edge rejected (discontinuity at reprojected pixel).\n"
+				"  Grey   = other eye can't see this point (out of bounds).\n"
+				"  Green  = back-check passed (surfaces match in both eyes).\n"
+				"  Red    = back-check failed (occlusion edge, blend penalized).\n\n"
+				"Blend Weight: Heatmap of stereo blend strength.\n"
+				"  Cool/black = no blending. Hot/white = maximum blending.\n"
+				"  Shows where the two eyes disagree and correction is applied.\n\n"
+				"Edge Detection: Highlights pixels excluded by depth discontinuity checks.\n"
+				"  Yellow = source edge (discontinuity at this pixel).\n"
+				"  Orange = destination edge (discontinuity at reprojected pixel).\n"
+				"  Scene  = all other pixels shown with normal blending.");
 		}
 
 		ImGui::EndDisabled();
