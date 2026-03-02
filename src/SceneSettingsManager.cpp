@@ -1060,6 +1060,10 @@ void SceneSettingsManager::LoadUserSettings(SceneType type)
 			entry.featureShortName = item["feature"].get<std::string>();
 			entry.settingKey = item["setting"].get<std::string>();
 			entry.value = item["value"];
+			if (item.contains("paused") && !item["paused"].is_boolean()) {
+				logger::warn("SceneSettingsManager: '{}' entry {}.{} has non-boolean 'paused' (type: {}) — defaulting to false",
+					typeName, entry.featureShortName, entry.settingKey, item["paused"].type_name());
+			}
 			entry.paused = (item.contains("paused") && item["paused"].is_boolean()) ? item["paused"].get<bool>() : false;
 			entry.source = EntrySource::User;
 
