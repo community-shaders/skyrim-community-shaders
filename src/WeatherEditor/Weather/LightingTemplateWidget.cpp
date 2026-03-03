@@ -152,14 +152,17 @@ bool LightingTemplateWidget::DrawDALCSettings()
 		minColors[TOD::Night] = settings.dalc.directional[2].min;
 
 		if (TOD::DrawTODColorRow("Positive Direction (+)", maxColors)) {
-			settings.dalc.directional[0].max = maxColors[TOD::Sunrise];
+			// Sunrise and Day both map to directional[0] - detect which column was actually edited
+			bool sunriseEdited = !(maxColors[TOD::Sunrise] == settings.dalc.directional[0].max);
+			settings.dalc.directional[0].max = sunriseEdited ? maxColors[TOD::Sunrise] : maxColors[TOD::Day];
 			settings.dalc.directional[1].max = maxColors[TOD::Sunset];
 			settings.dalc.directional[2].max = maxColors[TOD::Night];
 			changed = true;
 		}
 
 		if (TOD::DrawTODColorRow("Negative Direction (-)", minColors)) {
-			settings.dalc.directional[0].min = minColors[TOD::Sunrise];
+			bool sunriseEdited = !(minColors[TOD::Sunrise] == settings.dalc.directional[0].min);
+			settings.dalc.directional[0].min = sunriseEdited ? minColors[TOD::Sunrise] : minColors[TOD::Day];
 			settings.dalc.directional[1].min = minColors[TOD::Sunset];
 			settings.dalc.directional[2].min = minColors[TOD::Night];
 			changed = true;
@@ -186,8 +189,8 @@ void LightingTemplateWidget::ApplyChanges()
 
 	data.fogNear = settings.fogNear;
 	data.fogFar = settings.fogFar;
-	data.directionalXY = static_cast<std::uint32_t>(settings.directionalXY);
-	data.directionalZ = static_cast<std::uint32_t>(settings.directionalZ);
+	data.directionalXY = static_cast<std::uint32_t>(std::max(0.0f, std::round(settings.directionalXY)));
+	data.directionalZ = static_cast<std::uint32_t>(std::max(0.0f, std::round(settings.directionalZ)));
 	data.directionalFade = settings.directionalFade;
 	data.clipDist = settings.clipDist;
 	data.fogPower = settings.fogPower;

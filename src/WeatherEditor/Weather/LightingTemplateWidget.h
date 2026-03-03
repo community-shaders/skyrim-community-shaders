@@ -10,6 +10,9 @@ public:
 	{
 		if (!a_lightingTemplate) {
 			logger::error("LightingTemplateWidget created with null pointer");
+			settings = {};
+			vanillaSettings = {};
+			originalSettings = {};
 			return;
 		}
 		form = a_lightingTemplate;
