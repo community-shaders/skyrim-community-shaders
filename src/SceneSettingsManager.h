@@ -269,6 +269,7 @@ private:
 	// --- Helpers ---
 	std::vector<SettingEntry>& GetEntriesMut(SceneType type);
 	bool IsEntryActive(const SettingEntry& entry) const;
+	bool HasActiveEntries(SceneType type) const;
 	bool HasDuplicateEntry(SceneType type, const std::string& featureShortName, const std::string& settingKey,
 		EntrySource source, TimeOfDayPeriod period = TimeOfDayPeriod::Count) const;
 

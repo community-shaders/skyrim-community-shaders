@@ -265,6 +265,15 @@ bool SceneSettingsManager::IsEntryActive(const SettingEntry& entry) const
 	return !entry.paused && !IsFeaturePaused(entry.featureShortName);
 }
 
+bool SceneSettingsManager::HasActiveEntries(SceneType type) const
+{
+	for (const auto& entry : GetEntries(type)) {
+		if (IsEntryActive(entry))
+			return true;
+	}
+	return false;
+}
+
 bool SceneSettingsManager::HasEntryFromSource(SceneType type, const std::string& featureShortName, const std::string& settingKey, EntrySource source) const
 {
 	for (const auto& entry : GetEntries(type)) {
@@ -599,10 +608,10 @@ void SceneSettingsManager::ReapplyIfActive()
 	if (auto sky = globals::game::sky)
 		isExterior = sky->mode.get() == RE::Sky::Mode::kFull;
 
-	bool hasEntries = !GetEntries(SceneType::TimeOfDay).empty();
+	bool hasActiveEntries = HasActiveEntries(SceneType::TimeOfDay);
 
 	if (isTimeOfDayActive) {
-		if (hasEntries) {
+		if (hasActiveEntries) {
 			// Re-blend with updated entries
 			RevertTimeOfDayBaseline();
 			SaveTimeOfDayBaseline();
@@ -611,7 +620,7 @@ void SceneSettingsManager::ReapplyIfActive()
 			// All entries removed — deactivate
 			DeactivateTimeOfDay();
 		}
-	} else if (isExterior && hasEntries && !isCurrentlyApplied) {
+	} else if (isExterior && hasActiveEntries && !isCurrentlyApplied) {
 		// User added first TOD entry while already in an exterior — activate now
 		ActivateTimeOfDay();
 	}
@@ -777,7 +786,7 @@ void SceneSettingsManager::ApplySettingToFeature(const SettingEntry& entry)
 
 void SceneSettingsManager::ActivateTimeOfDay()
 {
-	if (isTimeOfDayActive || GetEntries(SceneType::TimeOfDay).empty())
+	if (isTimeOfDayActive || !HasActiveEntries(SceneType::TimeOfDay))
 		return;
 	// TOD and InteriorOnly are mutually exclusive — don't activate TOD while
 	// interior overrides are applied, as they write to the same feature values.
@@ -1098,6 +1107,11 @@ void SceneSettingsManager::LoadUserSettings(SceneType type)
 						entry.featureShortName, entry.settingKey, entry.value.type_name());
 					continue;
 				}
+				if (!std::isfinite(entry.value.get<float>())) {
+					logger::warn("SceneSettingsManager: TimeOfDay entry for feature '{}' key '{}' has non-finite value — skipping",
+						entry.featureShortName, entry.settingKey);
+					continue;
+				}
 			}
 
 			if (!Feature::FindFeatureByShortName(entry.featureShortName))
@@ -1208,6 +1222,10 @@ void SceneSettingsManager::DiscoverOverwritesInDir(SceneType type, const std::fi
 			// TOD only supports float settings (smooth interpolation)
 			if (type == SceneType::TimeOfDay && DetectSettingType(settingValue) != SettingType::Float) {
 				logger::warn("[SceneSettings] Skipping overwrite '{}': non-float setting '{}' not allowed in Time of Day", filename, settingKey);
+				continue;
+			}
+			if (type == SceneType::TimeOfDay && !std::isfinite(settingValue.get<float>())) {
+				logger::warn("[SceneSettings] Skipping overwrite '{}': non-finite value for setting '{}'", filename, settingKey);
 				continue;
 			}
 
