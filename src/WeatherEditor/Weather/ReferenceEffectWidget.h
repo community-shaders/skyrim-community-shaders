@@ -43,7 +43,4 @@ private:
 	Settings settings;
 	Settings vanillaSettings;
 	Settings originalSettings;
-
-	std::vector<RE::BGSArtObject*> artObjectArray;
-	std::vector<RE::TESEffectShader*> effectShaderArray;
 };

@@ -5,21 +5,31 @@
 class LightingTemplateWidget : public Widget
 {
 public:
-	RE::BGSLightingTemplate* lightingTemplate = nullptr;
-
-	LightingTemplateWidget(RE::BGSLightingTemplate* a_lightingTemplate)
+	LightingTemplateWidget(RE::BGSLightingTemplate* a_lightingTemplate) :
+		lightingTemplate(a_lightingTemplate)
 	{
 		if (!a_lightingTemplate) {
 			logger::error("LightingTemplateWidget created with null pointer");
 			return;
 		}
 		form = a_lightingTemplate;
-		lightingTemplate = a_lightingTemplate;
 		LoadFromGameSettings();
 		vanillaSettings = settings;
 		originalSettings = settings;
 	}
 
+	~LightingTemplateWidget() override = default;
+
+	void DrawWidget() override;
+	void LoadSettings() override;
+	void SaveSettings() override;
+	void ApplyChanges() override;
+	void RevertChanges() override;
+	bool HasUnsavedChanges() const override;
+
+	RE::BGSLightingTemplate* GetLightingTemplate() const { return lightingTemplate; }
+
+	// Public types required by NLOHMANN macros
 	struct DirectionalColor
 	{
 		float3 min;
@@ -55,25 +65,15 @@ public:
 		bool operator==(const Settings&) const = default;
 	};
 
+private:
+	void LoadFromGameSettings();
+	bool DrawBasicSettings();
+	bool DrawFogSettings();
+	bool DrawDALCSettings();
+
+	RE::BGSLightingTemplate* lightingTemplate = nullptr;
+
 	Settings settings;
 	Settings vanillaSettings;
 	Settings originalSettings;
-
-	~LightingTemplateWidget();
-
-	virtual void DrawWidget() override;
-	virtual void LoadSettings() override;
-	virtual void SaveSettings() override;
-	virtual bool HasUnsavedChanges() const override;
-
-	void SetLightingTemplateValues();
-	void LoadLightingTemplateValues();
-	void LoadFromGameSettings();
-	void ApplyChanges() override;
-	void RevertChanges() override;
-
-private:
-	void DrawDALCSettings();
-	void DrawBasicSettings();
-	void DrawFogSettings();
 };

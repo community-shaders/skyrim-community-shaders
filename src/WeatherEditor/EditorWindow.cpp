@@ -584,7 +584,7 @@ void EditorWindow::ShowObjectsWindow()
 				if (currentCellLightingTemplate && m_selectedCategory == "Lighting Template") {
 					for (int i = 0; i < sortedWidgets.size(); ++i) {
 						auto* ltWidget = dynamic_cast<LightingTemplateWidget*>(sortedWidgets[i]);
-						if (!ltWidget || ltWidget->lightingTemplate != currentCellLightingTemplate)
+						if (!ltWidget || ltWidget->GetLightingTemplate() != currentCellLightingTemplate)
 							continue;
 
 						if (!shouldShowWidget(sortedWidgets[i]))
@@ -667,7 +667,7 @@ void EditorWindow::ShowObjectsWindow()
 					// Skip current cell's lighting template if already shown
 					if (currentCellLightingTemplate && m_selectedCategory == "Lighting Template") {
 						auto* ltWidget = dynamic_cast<LightingTemplateWidget*>(sortedWidgets[i]);
-						if (ltWidget && ltWidget->lightingTemplate == currentCellLightingTemplate)
+						if (ltWidget && ltWidget->GetLightingTemplate() == currentCellLightingTemplate)
 							continue;
 					}
 

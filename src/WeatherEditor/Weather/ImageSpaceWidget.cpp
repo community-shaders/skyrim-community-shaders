@@ -2,9 +2,6 @@
 
 #include "../EditorWindow.h"
 #include "../WeatherUtils.h"
-#include "Util.h"
-
-#include <filesystem>
 
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	ImageSpaceWidget::Settings,
@@ -23,10 +20,6 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
 	dofStrength,
 	dofDistance,
 	dofRange)
-
-ImageSpaceWidget::~ImageSpaceWidget()
-{
-}
 
 void ImageSpaceWidget::DrawWidget()
 {
@@ -91,6 +84,9 @@ void ImageSpaceWidget::DrawWidget()
 
 void ImageSpaceWidget::LoadSettings()
 {
+	if (!imageSpace)
+		return;
+
 	try {
 		if (!js.empty() && js.contains("Settings") && js["Settings"].is_object()) {
 			settings = js["Settings"];
@@ -111,40 +107,7 @@ void ImageSpaceWidget::SaveSettings()
 	originalSettings = settings;
 }
 
-void ImageSpaceWidget::SetImageSpaceValues()
-{
-	if (!imageSpace)
-		return;
-
-	auto& data = imageSpace->data;
-
-	// HDR
-	data.hdr.eyeAdaptSpeed = settings.hdrEyeAdaptSpeed;
-	data.hdr.bloomBlurRadius = settings.hdrBloomBlurRadius;
-	data.hdr.bloomThreshold = settings.hdrBloomThreshold;
-	data.hdr.bloomScale = settings.hdrBloomScale;
-	data.hdr.white = settings.hdrWhite;
-	data.hdr.sunlightScale = settings.hdrSunlightScale;
-	data.hdr.skyScale = settings.hdrSkyScale;
-
-	// Cinematic
-	data.cinematic.saturation = settings.cinematicSaturation;
-	data.cinematic.brightness = settings.cinematicBrightness;
-	data.cinematic.contrast = settings.cinematicContrast;
-
-	// Tint
-	data.tint.color.red = settings.tintColor.x;
-	data.tint.color.green = settings.tintColor.y;
-	data.tint.color.blue = settings.tintColor.z;
-	data.tint.amount = settings.tintAmount;
-
-	// Depth of Field
-	data.depthOfField.strength = settings.dofStrength;
-	data.depthOfField.distance = settings.dofDistance;
-	data.depthOfField.range = settings.dofRange;
-}
-
-void ImageSpaceWidget::LoadImageSpaceValues()
+void ImageSpaceWidget::LoadFromGameSettings()
 {
 	if (!imageSpace)
 		return;
@@ -177,14 +140,37 @@ void ImageSpaceWidget::LoadImageSpaceValues()
 	settings.dofRange = data.depthOfField.range;
 }
 
-void ImageSpaceWidget::LoadFromGameSettings()
-{
-	LoadImageSpaceValues();
-}
-
 void ImageSpaceWidget::ApplyChanges()
 {
-	SetImageSpaceValues();
+	if (!imageSpace)
+		return;
+
+	auto& data = imageSpace->data;
+
+	// HDR
+	data.hdr.eyeAdaptSpeed = settings.hdrEyeAdaptSpeed;
+	data.hdr.bloomBlurRadius = settings.hdrBloomBlurRadius;
+	data.hdr.bloomThreshold = settings.hdrBloomThreshold;
+	data.hdr.bloomScale = settings.hdrBloomScale;
+	data.hdr.white = settings.hdrWhite;
+	data.hdr.sunlightScale = settings.hdrSunlightScale;
+	data.hdr.skyScale = settings.hdrSkyScale;
+
+	// Cinematic
+	data.cinematic.saturation = settings.cinematicSaturation;
+	data.cinematic.brightness = settings.cinematicBrightness;
+	data.cinematic.contrast = settings.cinematicContrast;
+
+	// Tint
+	data.tint.color.red = settings.tintColor.x;
+	data.tint.color.green = settings.tintColor.y;
+	data.tint.color.blue = settings.tintColor.z;
+	data.tint.amount = settings.tintAmount;
+
+	// Depth of Field
+	data.depthOfField.strength = settings.dofStrength;
+	data.depthOfField.distance = settings.dofDistance;
+	data.depthOfField.range = settings.dofRange;
 }
 
 void ImageSpaceWidget::RevertChanges()

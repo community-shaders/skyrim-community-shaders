@@ -5,21 +5,29 @@
 class ImageSpaceWidget : public Widget
 {
 public:
-	RE::TESImageSpace* imageSpace = nullptr;
-
-	ImageSpaceWidget(RE::TESImageSpace* a_imageSpace)
+	ImageSpaceWidget(RE::TESImageSpace* a_imageSpace) :
+		imageSpace(a_imageSpace)
 	{
 		if (!a_imageSpace) {
 			logger::error("ImageSpaceWidget created with null pointer");
 			return;
 		}
 		form = a_imageSpace;
-		imageSpace = a_imageSpace;
 		LoadFromGameSettings();
 		vanillaSettings = settings;
 		originalSettings = settings;
 	}
 
+	~ImageSpaceWidget() override = default;
+
+	void DrawWidget() override;
+	void LoadSettings() override;
+	void SaveSettings() override;
+	void ApplyChanges() override;
+	void RevertChanges() override;
+	bool HasUnsavedChanges() const override;
+
+	// Public type required by NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT macro
 	struct Settings
 	{
 		// HDR Settings
@@ -47,20 +55,12 @@ public:
 		bool operator==(const Settings&) const = default;
 	};
 
+private:
+	void LoadFromGameSettings();
+
+	RE::TESImageSpace* imageSpace = nullptr;
+
 	Settings settings;
 	Settings vanillaSettings;
 	Settings originalSettings;
-
-	~ImageSpaceWidget();
-
-	virtual void DrawWidget() override;
-	virtual void LoadSettings() override;
-	virtual void SaveSettings() override;
-	virtual bool HasUnsavedChanges() const override;
-
-	void SetImageSpaceValues();
-	void LoadImageSpaceValues();
-	void LoadFromGameSettings();
-	void ApplyChanges() override;
-	void RevertChanges() override;
 };
