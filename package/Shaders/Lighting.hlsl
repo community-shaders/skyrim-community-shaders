@@ -2104,15 +2104,11 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 	material.Metallic = saturate(rawRMAOS.y);
 	material.AO = rawRMAOS.z;
 
-	// Reduce fresnel as vanilla does not have it on non-metal surfaces
-	rawRMAOS.w = lerp(0.0, 1.0, smoothstep(0.04, 1.0, rawRMAOS.w));
-
 	if (!SharedData::linearLightingSettings.enableLinearLighting) {
 		material.F0 = lerp(rawRMAOS.w, Color::GammaToTrueLinear(baseColor.xyz), material.Metallic);
 	} else {
 		material.F0 = lerp(rawRMAOS.w, baseColor.xyz, material.Metallic);
 	}
-
 
 	material.GlintScreenSpaceScale = max(1, glintParameters.x);
 	material.GlintLogMicrofacetDensity = clamp(PBR::Constants::MaxGlintDensity - glintParameters.y, PBR::Constants::MinGlintDensity, PBR::Constants::MaxGlintDensity);
@@ -3000,8 +2996,6 @@ PS_OUTPUT main(PS_INPUT input, bool frontFace : SV_IsFrontFace)
 #	if !defined(DEFERRED)
 	color.xyz = Color::IrradianceToLinear(color.xyz);
 	color.xyz += specularColor;
-
-	indirectLobeWeights.specular += BRDF::EnvBRDFApproxLazarov(saturate(dot(worldNormal, viewDirection)), Color::ReflectionFresnelRoughness).y;
 
 	if (any(indirectLobeWeights.specular > 0)
 #		if defined(WETNESS_EFFECTS)
