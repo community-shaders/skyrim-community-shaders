@@ -56,9 +56,12 @@ void WeatherWidget::DrawWidget()
 {
 	WeatherUtils::SetCurrentWidget(this);
 	ImGui::SetNextWindowSizeConstraints(ImVec2(600, 0), ImVec2(FLT_MAX, FLT_MAX));
-	if (ImGui::Begin(GetEditorID().c_str(), &open, ImGuiWindowFlags_NoSavedSettings | kStickyHeaderFlags)) {
-		// Draw header with search and all buttons
-		DrawWidgetHeader("##WeatherSearch", false, true, true, weather);
+	if (!ImGui::Begin(GetEditorID().c_str(), &open, ImGuiWindowFlags_NoSavedSettings | kStickyHeaderFlags)) {
+		ImGui::End();
+		return;
+	}
+	// Draw header with search and all buttons
+	DrawWidgetHeader("##WeatherSearch", false, true, true, weather);
 
 		// Update search results when search buffer changes
 		if (searchActive) {
@@ -425,7 +428,6 @@ void WeatherWidget::DrawWidget()
 			ImGui::EndTabItem();
 		}
 		ImGui::EndTabBar();
-	}
 	ImGui::End();
 }
 

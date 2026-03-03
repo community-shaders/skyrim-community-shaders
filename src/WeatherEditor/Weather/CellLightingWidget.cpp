@@ -48,9 +48,11 @@ void CellLightingWidget::DrawWidget()
 {
 	WeatherUtils::SetCurrentWidget(this);
 	ImGui::SetNextWindowSizeConstraints(ImVec2(600, 0), ImVec2(FLT_MAX, FLT_MAX));
-	if (ImGui::Begin(GetEditorID().c_str(), &open, ImGuiWindowFlags_NoSavedSettings | kStickyHeaderFlags)) {
-		DrawWidgetHeader("##CellLightingSearch", true, true);
+	if (!ImGui::Begin(GetEditorID().c_str(), &open, ImGuiWindowFlags_NoSavedSettings | kStickyHeaderFlags)) {
+		ImGui::End();
+		return;
 	}
+	DrawWidgetHeader("##CellLightingSearch", true, true);
 
 	if (!cell || !cell->IsInteriorCell()) {
 		auto& palette = Menu::GetSingleton()->GetTheme().StatusPalette;
@@ -189,7 +191,7 @@ void CellLightingWidget::DrawWidget()
 		if (changed && EditorWindow::GetSingleton()->settings.autoApplyChanges) {
 			ApplyChanges();
 		}
-	}
+	}  // end interior cell else-branch
 	ImGui::End();
 }
 

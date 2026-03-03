@@ -21,12 +21,15 @@ void VolumetricLightingWidget::DrawWidget()
 {
 	WeatherUtils::SetCurrentWidget(this);
 	ImGui::SetNextWindowSizeConstraints(ImVec2(600, 0), ImVec2(FLT_MAX, FLT_MAX));
-	if (ImGui::Begin(GetEditorID().c_str(), &open, ImGuiWindowFlags_NoSavedSettings | kStickyHeaderFlags)) {
-		DrawWidgetHeader("##VolumetricLightingSearch", true, true);
+	if (!ImGui::Begin(GetEditorID().c_str(), &open, ImGuiWindowFlags_NoSavedSettings | kStickyHeaderFlags)) {
+		ImGui::End();
+		return;
 	}
-	bool changed = false;
+	DrawWidgetHeader("##VolumetricLightingSearch", true, true);
 
-	if (ImGui::BeginTabBar("VolumetricLightingTabs")) {
+		bool changed = false;
+
+		if (ImGui::BeginTabBar("VolumetricLightingTabs")) {
 		if (ImGui::BeginTabItem("Basic")) {
 			BeginScrollableContent("##BasicScroll");
 			ImGui::SeparatorText("Intensity");
@@ -82,12 +85,12 @@ void VolumetricLightingWidget::DrawWidget()
 			ImGui::EndTabItem();
 		}
 
-		ImGui::EndTabBar();
-	}
+			ImGui::EndTabBar();
+		}
 
-	if (changed && EditorWindow::GetSingleton()->settings.autoApplyChanges) {
-		ApplyChanges();
-	}
+		if (changed && EditorWindow::GetSingleton()->settings.autoApplyChanges) {
+			ApplyChanges();
+		}
 	ImGui::End();
 }
 

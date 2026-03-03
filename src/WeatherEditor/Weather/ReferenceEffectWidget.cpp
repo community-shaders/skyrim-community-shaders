@@ -6,43 +6,46 @@ void ReferenceEffectWidget::DrawWidget()
 {
 	WeatherUtils::SetCurrentWidget(this);
 	ImGui::SetNextWindowSizeConstraints(ImVec2(600, 0), ImVec2(FLT_MAX, FLT_MAX));
-	if (ImGui::Begin(GetEditorID().c_str(), &open, ImGuiWindowFlags_NoSavedSettings | kStickyHeaderFlags)) {
-		DrawWidgetHeader("##ReferenceEffectSearch", true, true);
+	if (!ImGui::Begin(GetEditorID().c_str(), &open, ImGuiWindowFlags_NoSavedSettings | kStickyHeaderFlags)) {
+		ImGui::End();
+		return;
 	}
-	BeginScrollableContent("##REScroll");
-	bool changed = false;
+	DrawWidgetHeader("##ReferenceEffectSearch", true, true);
 
-	auto editorWindow = EditorWindow::GetSingleton();
+		BeginScrollableContent("##REScroll");
+		bool changed = false;
 
-	ImGui::SeparatorText("Art Object");
-	if (editorWindow->artObjectWidgets.empty()) {
-		ImGui::TextDisabled("No Art Objects available");
-	} else {
-		if (WeatherUtils::DrawFormPickerCached("Art Object", settings.artObject, editorWindow->artObjectWidgets, false, true))
+		auto editorWindow = EditorWindow::GetSingleton();
+
+		ImGui::SeparatorText("Art Object");
+		if (editorWindow->artObjectWidgets.empty()) {
+			ImGui::TextDisabled("No Art Objects available");
+		} else {
+			if (WeatherUtils::DrawFormPickerCached("Art Object", settings.artObject, editorWindow->artObjectWidgets, false, true))
+				changed = true;
+		}
+
+		ImGui::SeparatorText("Effect Shader");
+		if (editorWindow->effectShaderWidgets.empty()) {
+			ImGui::TextDisabled("No Effect Shaders available");
+		} else {
+			if (WeatherUtils::DrawFormPickerCached("Effect Shader", settings.effectShader, editorWindow->effectShaderWidgets, false, true))
+				changed = true;
+		}
+
+		ImGui::SeparatorText("Flags");
+		if (ImGui::Checkbox("Face Target", &settings.faceTarget))
 			changed = true;
-	}
-
-	ImGui::SeparatorText("Effect Shader");
-	if (editorWindow->effectShaderWidgets.empty()) {
-		ImGui::TextDisabled("No Effect Shaders available");
-	} else {
-		if (WeatherUtils::DrawFormPickerCached("Effect Shader", settings.effectShader, editorWindow->effectShaderWidgets, false, true))
+		if (ImGui::Checkbox("Attach To Camera", &settings.attachToCamera))
 			changed = true;
-	}
+		if (ImGui::Checkbox("Inherit Rotation", &settings.inheritRotation))
+			changed = true;
 
-	ImGui::SeparatorText("Flags");
-	if (ImGui::Checkbox("Face Target", &settings.faceTarget))
-		changed = true;
-	if (ImGui::Checkbox("Attach To Camera", &settings.attachToCamera))
-		changed = true;
-	if (ImGui::Checkbox("Inherit Rotation", &settings.inheritRotation))
-		changed = true;
-
-	if (changed && editorWindow->settings.autoApplyChanges) {
-		editorWindow->PushUndoState(this);
-		ApplyChanges();
-	}
-	EndScrollableContent();
+		if (changed && editorWindow->settings.autoApplyChanges) {
+			editorWindow->PushUndoState(this);
+			ApplyChanges();
+		}
+		EndScrollableContent();
 	ImGui::End();
 }
 

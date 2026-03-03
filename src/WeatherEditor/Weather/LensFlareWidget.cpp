@@ -11,24 +11,27 @@ void LensFlareWidget::DrawWidget()
 {
 	WeatherUtils::SetCurrentWidget(this);
 	ImGui::SetNextWindowSizeConstraints(ImVec2(600, 0), ImVec2(FLT_MAX, FLT_MAX));
-	if (ImGui::Begin(GetEditorID().c_str(), &open, ImGuiWindowFlags_NoSavedSettings | kStickyHeaderFlags)) {
-		DrawWidgetHeader("##LensFlareSearch", true, true);
+	if (!ImGui::Begin(GetEditorID().c_str(), &open, ImGuiWindowFlags_NoSavedSettings | kStickyHeaderFlags)) {
+		ImGui::End();
+		return;
 	}
-	BeginScrollableContent("##LFScroll");
-	bool changed = false;
+	DrawWidgetHeader("##LensFlareSearch", true, true);
 
-	ImGui::SeparatorText("Fade Distance");
-	if (WeatherUtils::DrawSliderFloat("Fade Dist Radius Scale", settings.fadeDistRadiusScale, 0.0f, 10.0f))
-		changed = true;
+		BeginScrollableContent("##LFScroll");
+		bool changed = false;
 
-	ImGui::SeparatorText("Color");
-	if (WeatherUtils::DrawSliderFloat("Color Influence", settings.colorInfluence, 0.0f, 1.0f))
-		changed = true;
+		ImGui::SeparatorText("Fade Distance");
+		if (WeatherUtils::DrawSliderFloat("Fade Dist Radius Scale", settings.fadeDistRadiusScale, 0.0f, 10.0f))
+			changed = true;
 
-	if (changed && EditorWindow::GetSingleton()->settings.autoApplyChanges) {
-		ApplyChanges();
-	}
-	EndScrollableContent();
+		ImGui::SeparatorText("Color");
+		if (WeatherUtils::DrawSliderFloat("Color Influence", settings.colorInfluence, 0.0f, 1.0f))
+			changed = true;
+
+		if (changed && EditorWindow::GetSingleton()->settings.autoApplyChanges) {
+			ApplyChanges();
+		}
+		EndScrollableContent();
 	ImGui::End();
 }
 

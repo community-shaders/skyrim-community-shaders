@@ -26,12 +26,15 @@ void LightingTemplateWidget::DrawWidget()
 {
 	WeatherUtils::SetCurrentWidget(this);
 	ImGui::SetNextWindowSizeConstraints(ImVec2(600, 0), ImVec2(FLT_MAX, FLT_MAX));
-	if (ImGui::Begin(GetEditorID().c_str(), &open, ImGuiWindowFlags_NoSavedSettings | kStickyHeaderFlags)) {
-		DrawWidgetHeader("##LightingTemplateSearch", false, true);
+	if (!ImGui::Begin(GetEditorID().c_str(), &open, ImGuiWindowFlags_NoSavedSettings | kStickyHeaderFlags)) {
+		ImGui::End();
+		return;
 	}
-	bool changed = false;
+	DrawWidgetHeader("##LightingTemplateSearch", false, true);
 
-	if (ImGui::BeginTabBar("LightingTemplateSettingsTabs")) {
+		bool changed = false;
+
+		if (ImGui::BeginTabBar("LightingTemplateSettingsTabs")) {
 		if (ImGui::BeginTabItem("Basic")) {
 			BeginScrollableContent("##BasicScroll");
 			changed |= DrawBasicSettings();
@@ -53,12 +56,12 @@ void LightingTemplateWidget::DrawWidget()
 			ImGui::EndTabItem();
 		}
 
-		ImGui::EndTabBar();
-	}
+			ImGui::EndTabBar();
+		}
 
-	if (changed && EditorWindow::GetSingleton()->settings.autoApplyChanges) {
-		ApplyChanges();
-	}
+		if (changed && EditorWindow::GetSingleton()->settings.autoApplyChanges) {
+			ApplyChanges();
+		}
 	ImGui::End();
 }
 
@@ -189,8 +192,8 @@ void LightingTemplateWidget::ApplyChanges()
 
 	data.fogNear = settings.fogNear;
 	data.fogFar = settings.fogFar;
-	data.directionalXY = static_cast<std::uint32_t>(std::max(0.0f, std::round(settings.directionalXY)));
-	data.directionalZ = static_cast<std::uint32_t>(std::max(0.0f, std::round(settings.directionalZ)));
+	data.directionalXY = static_cast<std::uint32_t>(std::clamp(std::round(settings.directionalXY), 0.0f, static_cast<float>(std::numeric_limits<std::uint32_t>::max())));
+	data.directionalZ = static_cast<std::uint32_t>(std::clamp(std::round(settings.directionalZ), 0.0f, static_cast<float>(std::numeric_limits<std::uint32_t>::max())));
 	data.directionalFade = settings.directionalFade;
 	data.clipDist = settings.clipDist;
 	data.fogPower = settings.fogPower;
@@ -211,7 +214,7 @@ void LightingTemplateWidget::ApplyChanges()
 
 void LightingTemplateWidget::RevertChanges()
 {
-	settings = vanillaSettings;
+	settings = originalSettings;
 	ApplyChanges();
 }
 
