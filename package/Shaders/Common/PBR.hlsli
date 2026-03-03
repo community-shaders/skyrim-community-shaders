@@ -235,8 +235,8 @@ namespace PBR
 				lobeWeights.diffuse += material.FuzzColor * material.FuzzWeight;
 			}
 #endif
-			lobeWeights.specular = material.F0;
-
+			float2 specularBRDF = BRDF::EnvBRDF(material.Roughness, NdotV);
+			lobeWeights.specular = material.F0 * specularBRDF.x + specularBRDF.y;
 			lobeWeights.diffuse *= (1 - lobeWeights.specular);
 
 #if !defined(LANDSCAPE) && !defined(LODLANDSCAPE)
