@@ -56,11 +56,17 @@ float SceneSettingsManager::GetCurrentGameHour()
 	// Prefer calendar (ground truth), which the Weather Editor slider writes to.
 	// sky->currentGameHour may lag when timeScale is 0 (time paused).
 	auto calendar = globals::game::calendar ? globals::game::calendar : RE::Calendar::GetSingleton();
+	float hour = 12.0f;
 	if (calendar && calendar->gameHour)
-		return std::clamp(calendar->gameHour->value, 0.0f, 24.0f);
+		hour = calendar->gameHour->value;
+	else if (auto sky = globals::game::sky)
+		hour = sky->currentGameHour;
 
-	auto sky = globals::game::sky;
-	return sky ? std::clamp(sky->currentGameHour, 0.0f, 24.0f) : 12.0f;
+	// Normalize into [0, 24) so midnight is 0 and never 24.
+	hour = std::clamp(hour, 0.0f, 24.0f);
+	if (hour >= 24.0f)
+		hour = 0.0f;
+	return hour;
 }
 
 void SceneSettingsManager::GetTimeOfDayFactors(float outFactors[kPeriodCount])
