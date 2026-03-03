@@ -3,6 +3,47 @@
 #include "../WeatherUtils.h"
 #include "Menu.h"
 
+NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
+	CellLightingWidget::DALC,
+	xPlus, xMinus,
+	yPlus, yMinus,
+	zPlus, zMinus,
+	specular,
+	fresnelPower)
+
+NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
+	CellLightingWidget::Inherit,
+	ambientColor,
+	directionalColor,
+	fogColor,
+	fogNear,
+	fogFar,
+	directionalRotation,
+	directionalFade,
+	clipDistance,
+	fogPower,
+	fogMax,
+	lightFadeDistances)
+
+NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
+	CellLightingWidget::Settings,
+	ambient,
+	directional,
+	fogColorNear,
+	fogColorFar,
+	fogNear,
+	fogFar,
+	fogPower,
+	fogClamp,
+	directionalFade,
+	clipDist,
+	lightFadeStart,
+	lightFadeEnd,
+	directionalXY,
+	directionalZ,
+	dalc,
+	inherit)
+
 void CellLightingWidget::DrawWidget()
 {
 	WeatherUtils::SetCurrentWidget(this);
@@ -63,21 +104,21 @@ void CellLightingWidget::DrawWidget()
 				BeginScrollableContent("##DAmbientScroll");
 				ImGui::SeparatorText("Directional Ambient Lighting (DALC)");
 
-				if (WeatherUtils::DrawColorEdit("X+ (Right)", settings.directionalXPlus))
+				if (WeatherUtils::DrawColorEdit("X+ (Right)", settings.dalc.xPlus))
 					changed = true;
-				if (WeatherUtils::DrawColorEdit("X- (Left)", settings.directionalXMinus))
+				if (WeatherUtils::DrawColorEdit("X- (Left)", settings.dalc.xMinus))
 					changed = true;
-				if (WeatherUtils::DrawColorEdit("Y+ (Front)", settings.directionalYPlus))
+				if (WeatherUtils::DrawColorEdit("Y+ (Front)", settings.dalc.yPlus))
 					changed = true;
-				if (WeatherUtils::DrawColorEdit("Y- (Back)", settings.directionalYMinus))
+				if (WeatherUtils::DrawColorEdit("Y- (Back)", settings.dalc.yMinus))
 					changed = true;
-				if (WeatherUtils::DrawColorEdit("Z+ (Up)", settings.directionalZPlus))
+				if (WeatherUtils::DrawColorEdit("Z+ (Up)", settings.dalc.zPlus))
 					changed = true;
-				if (WeatherUtils::DrawColorEdit("Z- (Down)", settings.directionalZMinus))
+				if (WeatherUtils::DrawColorEdit("Z- (Down)", settings.dalc.zMinus))
 					changed = true;
-				if (WeatherUtils::DrawColorEdit("Specular", settings.directionalSpecular))
+				if (WeatherUtils::DrawColorEdit("Specular", settings.dalc.specular))
 					changed = true;
-				if (WeatherUtils::DrawSliderFloat("Fresnel Power", settings.fresnelPower, 0.0f, 10.0f))
+				if (WeatherUtils::DrawSliderFloat("Fresnel Power", settings.dalc.fresnelPower, 0.0f, 10.0f))
 					changed = true;
 
 				EndScrollableContent();
@@ -115,27 +156,27 @@ void CellLightingWidget::DrawWidget()
 				ImGui::TextWrapped("These flags control which lighting properties are inherited from the cell's lighting template.");
 				ImGui::Separator();
 
-				if (ImGui::Checkbox("Inherit Ambient Color", &settings.inheritAmbientColor))
+				if (ImGui::Checkbox("Inherit Ambient Color", &settings.inherit.ambientColor))
 					changed = true;
-				if (ImGui::Checkbox("Inherit Directional Color", &settings.inheritDirectionalColor))
+				if (ImGui::Checkbox("Inherit Directional Color", &settings.inherit.directionalColor))
 					changed = true;
-				if (ImGui::Checkbox("Inherit Fog Color", &settings.inheritFogColor))
+				if (ImGui::Checkbox("Inherit Fog Color", &settings.inherit.fogColor))
 					changed = true;
-				if (ImGui::Checkbox("Inherit Fog Near", &settings.inheritFogNear))
+				if (ImGui::Checkbox("Inherit Fog Near", &settings.inherit.fogNear))
 					changed = true;
-				if (ImGui::Checkbox("Inherit Fog Far", &settings.inheritFogFar))
+				if (ImGui::Checkbox("Inherit Fog Far", &settings.inherit.fogFar))
 					changed = true;
-				if (ImGui::Checkbox("Inherit Directional Rotation", &settings.inheritDirectionalRotation))
+				if (ImGui::Checkbox("Inherit Directional Rotation", &settings.inherit.directionalRotation))
 					changed = true;
-				if (ImGui::Checkbox("Inherit Directional Fade", &settings.inheritDirectionalFade))
+				if (ImGui::Checkbox("Inherit Directional Fade", &settings.inherit.directionalFade))
 					changed = true;
-				if (ImGui::Checkbox("Inherit Clip Distance", &settings.inheritClipDistance))
+				if (ImGui::Checkbox("Inherit Clip Distance", &settings.inherit.clipDistance))
 					changed = true;
-				if (ImGui::Checkbox("Inherit Fog Power", &settings.inheritFogPower))
+				if (ImGui::Checkbox("Inherit Fog Power", &settings.inherit.fogPower))
 					changed = true;
-				if (ImGui::Checkbox("Inherit Fog Max (Clamp)", &settings.inheritFogMax))
+				if (ImGui::Checkbox("Inherit Fog Max (Clamp)", &settings.inherit.fogMax))
 					changed = true;
-				if (ImGui::Checkbox("Inherit Light Fade Distances", &settings.inheritLightFadeDistances))
+				if (ImGui::Checkbox("Inherit Light Fade Distances", &settings.inherit.lightFadeDistances))
 					changed = true;
 
 				EndScrollableContent();
@@ -161,113 +202,14 @@ void CellLightingWidget::LoadSettings()
 	if (!lighting)
 		return;
 
-	// Try to load from JSON first
-	if (!js.empty()) {
-		settings = vanillaSettings;
-		try {
-			if (js.contains("ambient")) {
-				auto arr = js["ambient"];
-				if (arr.is_array() && arr.size() == 3) {
-					settings.ambient = { arr[0], arr[1], arr[2] };
-				}
-			}
-			if (js.contains("directional")) {
-				auto arr = js["directional"];
-				if (arr.is_array() && arr.size() == 3) {
-					settings.directional = { arr[0], arr[1], arr[2] };
-				}
-			}
-			if (js.contains("fogColorNear")) {
-				auto arr = js["fogColorNear"];
-				if (arr.is_array() && arr.size() == 3) {
-					settings.fogColorNear = { arr[0], arr[1], arr[2] };
-				}
-			}
-			if (js.contains("fogColorFar")) {
-				auto arr = js["fogColorFar"];
-				if (arr.is_array() && arr.size() == 3) {
-					settings.fogColorFar = { arr[0], arr[1], arr[2] };
-				}
-			}
-			if (js.contains("fogNear"))
-				settings.fogNear = js["fogNear"];
-			if (js.contains("fogFar"))
-				settings.fogFar = js["fogFar"];
-			if (js.contains("fogPower"))
-				settings.fogPower = js["fogPower"];
-			if (js.contains("fogClamp"))
-				settings.fogClamp = js["fogClamp"];
-			if (js.contains("directionalFade"))
-				settings.directionalFade = js["directionalFade"];
-			if (js.contains("clipDist"))
-				settings.clipDist = js["clipDist"];
-			if (js.contains("lightFadeStart"))
-				settings.lightFadeStart = js["lightFadeStart"];
-			if (js.contains("lightFadeEnd"))
-				settings.lightFadeEnd = js["lightFadeEnd"];
-			if (js.contains("directionalXY"))
-				settings.directionalXY = js["directionalXY"];
-			if (js.contains("directionalZ"))
-				settings.directionalZ = js["directionalZ"];
-
-			if (js.contains("dalc")) {
-				auto& dalc = js["dalc"];
-				if (dalc.contains("xPlus") && dalc["xPlus"].is_array() && dalc["xPlus"].size() == 3) {
-					settings.directionalXPlus = { dalc["xPlus"][0], dalc["xPlus"][1], dalc["xPlus"][2] };
-				}
-				if (dalc.contains("xMinus") && dalc["xMinus"].is_array() && dalc["xMinus"].size() == 3) {
-					settings.directionalXMinus = { dalc["xMinus"][0], dalc["xMinus"][1], dalc["xMinus"][2] };
-				}
-				if (dalc.contains("yPlus") && dalc["yPlus"].is_array() && dalc["yPlus"].size() == 3) {
-					settings.directionalYPlus = { dalc["yPlus"][0], dalc["yPlus"][1], dalc["yPlus"][2] };
-				}
-				if (dalc.contains("yMinus") && dalc["yMinus"].is_array() && dalc["yMinus"].size() == 3) {
-					settings.directionalYMinus = { dalc["yMinus"][0], dalc["yMinus"][1], dalc["yMinus"][2] };
-				}
-				if (dalc.contains("zPlus") && dalc["zPlus"].is_array() && dalc["zPlus"].size() == 3) {
-					settings.directionalZPlus = { dalc["zPlus"][0], dalc["zPlus"][1], dalc["zPlus"][2] };
-				}
-				if (dalc.contains("zMinus") && dalc["zMinus"].is_array() && dalc["zMinus"].size() == 3) {
-					settings.directionalZMinus = { dalc["zMinus"][0], dalc["zMinus"][1], dalc["zMinus"][2] };
-				}
-				if (dalc.contains("specular") && dalc["specular"].is_array() && dalc["specular"].size() == 3) {
-					settings.directionalSpecular = { dalc["specular"][0], dalc["specular"][1], dalc["specular"][2] };
-				}
-				if (dalc.contains("fresnelPower"))
-					settings.fresnelPower = dalc["fresnelPower"];
-			}
-
-			if (js.contains("inherit")) {
-				auto& inherit = js["inherit"];
-				if (inherit.contains("ambientColor"))
-					settings.inheritAmbientColor = inherit["ambientColor"];
-				if (inherit.contains("directionalColor"))
-					settings.inheritDirectionalColor = inherit["directionalColor"];
-				if (inherit.contains("fogColor"))
-					settings.inheritFogColor = inherit["fogColor"];
-				if (inherit.contains("fogNear"))
-					settings.inheritFogNear = inherit["fogNear"];
-				if (inherit.contains("fogFar"))
-					settings.inheritFogFar = inherit["fogFar"];
-				if (inherit.contains("directionalRotation"))
-					settings.inheritDirectionalRotation = inherit["directionalRotation"];
-				if (inherit.contains("directionalFade"))
-					settings.inheritDirectionalFade = inherit["directionalFade"];
-				if (inherit.contains("clipDistance"))
-					settings.inheritClipDistance = inherit["clipDistance"];
-				if (inherit.contains("fogPower"))
-					settings.inheritFogPower = inherit["fogPower"];
-				if (inherit.contains("fogMax"))
-					settings.inheritFogMax = inherit["fogMax"];
-				if (inherit.contains("lightFadeDistances"))
-					settings.inheritLightFadeDistances = inherit["lightFadeDistances"];
-			}
-
-		} catch (const std::exception& e) {
-			logger::error("CellLighting {}: Failed to load from JSON: {}", GetEditorID(), e.what());
+	try {
+		if (!js.empty()) {
+			settings = js;
+		} else {
 			settings = vanillaSettings;
 		}
-	} else {
+	} catch (const std::exception& e) {
+		logger::error("CellLighting {}: Failed to load from JSON: {}", GetEditorID(), e.what());
 		settings = vanillaSettings;
 	}
 
@@ -302,66 +244,32 @@ void CellLightingWidget::LoadFromGameSettings()
 	settings.directionalZ = lighting->directionalZ;
 
 	auto& dalc = lighting->directionalAmbientLightingColors;
-	ColorToFloat3(dalc.directional.x.max, settings.directionalXPlus);
-	ColorToFloat3(dalc.directional.x.min, settings.directionalXMinus);
-	ColorToFloat3(dalc.directional.y.max, settings.directionalYPlus);
-	ColorToFloat3(dalc.directional.y.min, settings.directionalYMinus);
-	ColorToFloat3(dalc.directional.z.max, settings.directionalZPlus);
-	ColorToFloat3(dalc.directional.z.min, settings.directionalZMinus);
-	ColorToFloat3(dalc.specular, settings.directionalSpecular);
-	settings.fresnelPower = dalc.fresnelPower;
+	ColorToFloat3(dalc.directional.x.max, settings.dalc.xPlus);
+	ColorToFloat3(dalc.directional.x.min, settings.dalc.xMinus);
+	ColorToFloat3(dalc.directional.y.max, settings.dalc.yPlus);
+	ColorToFloat3(dalc.directional.y.min, settings.dalc.yMinus);
+	ColorToFloat3(dalc.directional.z.max, settings.dalc.zPlus);
+	ColorToFloat3(dalc.directional.z.min, settings.dalc.zMinus);
+	ColorToFloat3(dalc.specular, settings.dalc.specular);
+	settings.dalc.fresnelPower = dalc.fresnelPower;
 
 	auto flags = lighting->lightingTemplateInheritanceFlags;
-	settings.inheritAmbientColor = flags.any(RE::INTERIOR_DATA::Inherit::kAmbientColor);
-	settings.inheritDirectionalColor = flags.any(RE::INTERIOR_DATA::Inherit::kDirectionalColor);
-	settings.inheritFogColor = flags.any(RE::INTERIOR_DATA::Inherit::kFogColor);
-	settings.inheritFogNear = flags.any(RE::INTERIOR_DATA::Inherit::kFogNear);
-	settings.inheritFogFar = flags.any(RE::INTERIOR_DATA::Inherit::kFogFar);
-	settings.inheritDirectionalRotation = flags.any(RE::INTERIOR_DATA::Inherit::kDirectionalRotation);
-	settings.inheritDirectionalFade = flags.any(RE::INTERIOR_DATA::Inherit::kDirectionalFade);
-	settings.inheritClipDistance = flags.any(RE::INTERIOR_DATA::Inherit::kClipDistance);
-	settings.inheritFogPower = flags.any(RE::INTERIOR_DATA::Inherit::kFogPower);
-	settings.inheritFogMax = flags.any(RE::INTERIOR_DATA::Inherit::kFogMax);
-	settings.inheritLightFadeDistances = flags.any(RE::INTERIOR_DATA::Inherit::kLightFadeDistances);
+	settings.inherit.ambientColor = flags.any(RE::INTERIOR_DATA::Inherit::kAmbientColor);
+	settings.inherit.directionalColor = flags.any(RE::INTERIOR_DATA::Inherit::kDirectionalColor);
+	settings.inherit.fogColor = flags.any(RE::INTERIOR_DATA::Inherit::kFogColor);
+	settings.inherit.fogNear = flags.any(RE::INTERIOR_DATA::Inherit::kFogNear);
+	settings.inherit.fogFar = flags.any(RE::INTERIOR_DATA::Inherit::kFogFar);
+	settings.inherit.directionalRotation = flags.any(RE::INTERIOR_DATA::Inherit::kDirectionalRotation);
+	settings.inherit.directionalFade = flags.any(RE::INTERIOR_DATA::Inherit::kDirectionalFade);
+	settings.inherit.clipDistance = flags.any(RE::INTERIOR_DATA::Inherit::kClipDistance);
+	settings.inherit.fogPower = flags.any(RE::INTERIOR_DATA::Inherit::kFogPower);
+	settings.inherit.fogMax = flags.any(RE::INTERIOR_DATA::Inherit::kFogMax);
+	settings.inherit.lightFadeDistances = flags.any(RE::INTERIOR_DATA::Inherit::kLightFadeDistances);
 }
 
 void CellLightingWidget::SaveSettings()
 {
-	js["ambient"] = { settings.ambient.x, settings.ambient.y, settings.ambient.z };
-	js["directional"] = { settings.directional.x, settings.directional.y, settings.directional.z };
-	js["fogColorNear"] = { settings.fogColorNear.x, settings.fogColorNear.y, settings.fogColorNear.z };
-	js["fogColorFar"] = { settings.fogColorFar.x, settings.fogColorFar.y, settings.fogColorFar.z };
-	js["fogNear"] = settings.fogNear;
-	js["fogFar"] = settings.fogFar;
-	js["fogPower"] = settings.fogPower;
-	js["fogClamp"] = settings.fogClamp;
-	js["directionalFade"] = settings.directionalFade;
-	js["clipDist"] = settings.clipDist;
-	js["lightFadeStart"] = settings.lightFadeStart;
-	js["lightFadeEnd"] = settings.lightFadeEnd;
-	js["directionalXY"] = settings.directionalXY;
-	js["directionalZ"] = settings.directionalZ;
-
-	js["dalc"]["xPlus"] = { settings.directionalXPlus.x, settings.directionalXPlus.y, settings.directionalXPlus.z };
-	js["dalc"]["xMinus"] = { settings.directionalXMinus.x, settings.directionalXMinus.y, settings.directionalXMinus.z };
-	js["dalc"]["yPlus"] = { settings.directionalYPlus.x, settings.directionalYPlus.y, settings.directionalYPlus.z };
-	js["dalc"]["yMinus"] = { settings.directionalYMinus.x, settings.directionalYMinus.y, settings.directionalYMinus.z };
-	js["dalc"]["zPlus"] = { settings.directionalZPlus.x, settings.directionalZPlus.y, settings.directionalZPlus.z };
-	js["dalc"]["zMinus"] = { settings.directionalZMinus.x, settings.directionalZMinus.y, settings.directionalZMinus.z };
-	js["dalc"]["specular"] = { settings.directionalSpecular.x, settings.directionalSpecular.y, settings.directionalSpecular.z };
-	js["dalc"]["fresnelPower"] = settings.fresnelPower;
-
-	js["inherit"]["ambientColor"] = settings.inheritAmbientColor;
-	js["inherit"]["directionalColor"] = settings.inheritDirectionalColor;
-	js["inherit"]["fogColor"] = settings.inheritFogColor;
-	js["inherit"]["fogNear"] = settings.inheritFogNear;
-	js["inherit"]["fogFar"] = settings.inheritFogFar;
-	js["inherit"]["directionalRotation"] = settings.inheritDirectionalRotation;
-	js["inherit"]["directionalFade"] = settings.inheritDirectionalFade;
-	js["inherit"]["clipDistance"] = settings.inheritClipDistance;
-	js["inherit"]["fogPower"] = settings.inheritFogPower;
-	js["inherit"]["fogMax"] = settings.inheritFogMax;
-	js["inherit"]["lightFadeDistances"] = settings.inheritLightFadeDistances;
+	js = settings;
 	originalSettings = settings;
 }
 
@@ -396,38 +304,38 @@ void CellLightingWidget::ApplyChanges()
 
 	// Apply directional ambient lighting colors
 	auto& dalc = lighting->directionalAmbientLightingColors;
-	Float3ToColor(settings.directionalXPlus, dalc.directional.x.max);
-	Float3ToColor(settings.directionalXMinus, dalc.directional.x.min);
-	Float3ToColor(settings.directionalYPlus, dalc.directional.y.max);
-	Float3ToColor(settings.directionalYMinus, dalc.directional.y.min);
-	Float3ToColor(settings.directionalZPlus, dalc.directional.z.max);
-	Float3ToColor(settings.directionalZMinus, dalc.directional.z.min);
-	Float3ToColor(settings.directionalSpecular, dalc.specular);
-	dalc.fresnelPower = settings.fresnelPower;
+	Float3ToColor(settings.dalc.xPlus, dalc.directional.x.max);
+	Float3ToColor(settings.dalc.xMinus, dalc.directional.x.min);
+	Float3ToColor(settings.dalc.yPlus, dalc.directional.y.max);
+	Float3ToColor(settings.dalc.yMinus, dalc.directional.y.min);
+	Float3ToColor(settings.dalc.zPlus, dalc.directional.z.max);
+	Float3ToColor(settings.dalc.zMinus, dalc.directional.z.min);
+	Float3ToColor(settings.dalc.specular, dalc.specular);
+	dalc.fresnelPower = settings.dalc.fresnelPower;
 
 	// Apply inheritance flags
 	lighting->lightingTemplateInheritanceFlags.reset();
-	if (settings.inheritAmbientColor)
+	if (settings.inherit.ambientColor)
 		lighting->lightingTemplateInheritanceFlags.set(RE::INTERIOR_DATA::Inherit::kAmbientColor);
-	if (settings.inheritDirectionalColor)
+	if (settings.inherit.directionalColor)
 		lighting->lightingTemplateInheritanceFlags.set(RE::INTERIOR_DATA::Inherit::kDirectionalColor);
-	if (settings.inheritFogColor)
+	if (settings.inherit.fogColor)
 		lighting->lightingTemplateInheritanceFlags.set(RE::INTERIOR_DATA::Inherit::kFogColor);
-	if (settings.inheritFogNear)
+	if (settings.inherit.fogNear)
 		lighting->lightingTemplateInheritanceFlags.set(RE::INTERIOR_DATA::Inherit::kFogNear);
-	if (settings.inheritFogFar)
+	if (settings.inherit.fogFar)
 		lighting->lightingTemplateInheritanceFlags.set(RE::INTERIOR_DATA::Inherit::kFogFar);
-	if (settings.inheritDirectionalRotation)
+	if (settings.inherit.directionalRotation)
 		lighting->lightingTemplateInheritanceFlags.set(RE::INTERIOR_DATA::Inherit::kDirectionalRotation);
-	if (settings.inheritDirectionalFade)
+	if (settings.inherit.directionalFade)
 		lighting->lightingTemplateInheritanceFlags.set(RE::INTERIOR_DATA::Inherit::kDirectionalFade);
-	if (settings.inheritClipDistance)
+	if (settings.inherit.clipDistance)
 		lighting->lightingTemplateInheritanceFlags.set(RE::INTERIOR_DATA::Inherit::kClipDistance);
-	if (settings.inheritFogPower)
+	if (settings.inherit.fogPower)
 		lighting->lightingTemplateInheritanceFlags.set(RE::INTERIOR_DATA::Inherit::kFogPower);
-	if (settings.inheritFogMax)
+	if (settings.inherit.fogMax)
 		lighting->lightingTemplateInheritanceFlags.set(RE::INTERIOR_DATA::Inherit::kFogMax);
-	if (settings.inheritLightFadeDistances)
+	if (settings.inherit.lightFadeDistances)
 		lighting->lightingTemplateInheritanceFlags.set(RE::INTERIOR_DATA::Inherit::kLightFadeDistances);
 }
 

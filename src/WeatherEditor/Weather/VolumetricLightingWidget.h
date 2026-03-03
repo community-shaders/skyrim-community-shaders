@@ -25,11 +25,7 @@ public:
 	void RevertChanges() override;
 	bool HasUnsavedChanges() const override;
 
-	RE::BGSVolumetricLighting* volumetricLighting = nullptr;
-
-private:
-	void LoadFromGameSettings();
-
+	// Public type required by NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT macro
 	struct Settings
 	{
 		float intensity = 1.0f;
@@ -46,6 +42,11 @@ private:
 		float samplingRangeFactor = 1.0f;
 		bool operator==(const Settings&) const = default;
 	};
+
+private:
+	void LoadFromGameSettings();
+
+	RE::BGSVolumetricLighting* volumetricLighting = nullptr;
 
 	Settings settings;
 	Settings vanillaSettings;

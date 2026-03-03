@@ -25,14 +25,38 @@ public:
 	void RevertChanges() override;
 	bool HasUnsavedChanges() const override;
 
-	RE::TESObjectCELL* cell = nullptr;
+	// Public types required by NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT macro
+	struct DALC
+	{
+		float3 xPlus = { 1.0f, 1.0f, 1.0f };
+		float3 xMinus = { 1.0f, 1.0f, 1.0f };
+		float3 yPlus = { 1.0f, 1.0f, 1.0f };
+		float3 yMinus = { 1.0f, 1.0f, 1.0f };
+		float3 zPlus = { 1.0f, 1.0f, 1.0f };
+		float3 zMinus = { 1.0f, 1.0f, 1.0f };
+		float3 specular = { 1.0f, 1.0f, 1.0f };
+		float fresnelPower = 1.0f;
+		bool operator==(const DALC&) const = default;
+	};
 
-private:
-	void LoadFromGameSettings();
+	struct Inherit
+	{
+		bool ambientColor = false;
+		bool directionalColor = false;
+		bool fogColor = false;
+		bool fogNear = false;
+		bool fogFar = false;
+		bool directionalRotation = false;
+		bool directionalFade = false;
+		bool clipDistance = false;
+		bool fogPower = false;
+		bool fogMax = false;
+		bool lightFadeDistances = false;
+		bool operator==(const Inherit&) const = default;
+	};
 
 	struct Settings
 	{
-		// INTERIOR_DATA properties
 		float3 ambient = { 1.0f, 1.0f, 1.0f };
 		float3 directional = { 1.0f, 1.0f, 1.0f };
 		float3 fogColorNear = { 1.0f, 1.0f, 1.0f };
@@ -47,31 +71,15 @@ private:
 		float lightFadeEnd = 5000.0f;
 		uint32_t directionalXY = 0;
 		uint32_t directionalZ = 0;
-
-		// Directional ambient lighting colors (DALC equivalent)
-		float3 directionalXPlus = { 1.0f, 1.0f, 1.0f };
-		float3 directionalXMinus = { 1.0f, 1.0f, 1.0f };
-		float3 directionalYPlus = { 1.0f, 1.0f, 1.0f };
-		float3 directionalYMinus = { 1.0f, 1.0f, 1.0f };
-		float3 directionalZPlus = { 1.0f, 1.0f, 1.0f };
-		float3 directionalZMinus = { 1.0f, 1.0f, 1.0f };
-		float3 directionalSpecular = { 1.0f, 1.0f, 1.0f };
-		float fresnelPower = 1.0f;
-
-		// Inheritance flags
-		bool inheritAmbientColor = false;
-		bool inheritDirectionalColor = false;
-		bool inheritFogColor = false;
-		bool inheritFogNear = false;
-		bool inheritFogFar = false;
-		bool inheritDirectionalRotation = false;
-		bool inheritDirectionalFade = false;
-		bool inheritClipDistance = false;
-		bool inheritFogPower = false;
-		bool inheritFogMax = false;
-		bool inheritLightFadeDistances = false;
+		DALC dalc;
+		Inherit inherit;
 		bool operator==(const Settings&) const = default;
 	};
+
+private:
+	void LoadFromGameSettings();
+
+	RE::TESObjectCELL* cell = nullptr;
 
 	Settings settings;
 	Settings vanillaSettings;

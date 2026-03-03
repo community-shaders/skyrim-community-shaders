@@ -2,6 +2,22 @@
 #include "../EditorWindow.h"
 #include "../WeatherUtils.h"
 
+NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
+	PrecipitationWidget::Settings,
+	gravityVelocity,
+	rotationVelocity,
+	particleSizeX,
+	particleSizeY,
+	centerOffsetMin,
+	centerOffsetMax,
+	startRotationRange,
+	numSubtexturesX,
+	numSubtexturesY,
+	particleType,
+	boxSize,
+	particleDensity,
+	particleTexture)
+
 void PrecipitationWidget::DrawWidget()
 {
 	WeatherUtils::SetCurrentWidget(this);
@@ -96,40 +112,14 @@ void PrecipitationWidget::LoadSettings()
 	if (!precipitation)
 		return;
 
-	if (!js.empty()) {
-		settings = vanillaSettings;
-		try {
-			if (js.contains("gravityVelocity"))
-				settings.gravityVelocity = js["gravityVelocity"];
-			if (js.contains("rotationVelocity"))
-				settings.rotationVelocity = js["rotationVelocity"];
-			if (js.contains("particleSizeX"))
-				settings.particleSizeX = js["particleSizeX"];
-			if (js.contains("particleSizeY"))
-				settings.particleSizeY = js["particleSizeY"];
-			if (js.contains("centerOffsetMin"))
-				settings.centerOffsetMin = js["centerOffsetMin"];
-			if (js.contains("centerOffsetMax"))
-				settings.centerOffsetMax = js["centerOffsetMax"];
-			if (js.contains("startRotationRange"))
-				settings.startRotationRange = js["startRotationRange"];
-			if (js.contains("numSubtexturesX"))
-				settings.numSubtexturesX = js["numSubtexturesX"];
-			if (js.contains("numSubtexturesY"))
-				settings.numSubtexturesY = js["numSubtexturesY"];
-			if (js.contains("particleType"))
-				settings.particleType = js["particleType"];
-			if (js.contains("boxSize"))
-				settings.boxSize = js["boxSize"];
-			if (js.contains("particleDensity"))
-				settings.particleDensity = js["particleDensity"];
-			if (js.contains("particleTexture"))
-				settings.particleTexture = js["particleTexture"].get<std::string>();
-		} catch (const std::exception& e) {
-			logger::error("Precipitation {}: Failed to load from JSON: {}", GetEditorID(), e.what());
+	try {
+		if (!js.empty()) {
+			settings = js;
+		} else {
 			settings = vanillaSettings;
 		}
-	} else {
+	} catch (const std::exception& e) {
+		logger::error("Precipitation {}: Failed to load from JSON: {}", GetEditorID(), e.what());
 		settings = vanillaSettings;
 	}
 
@@ -143,38 +133,27 @@ void PrecipitationWidget::LoadFromGameSettings()
 	if (!precipitation)
 		return;
 
+	using DataID = RE::BGSShaderParticleGeometryData::DataID;
 	auto& runtime = precipitation->GetRuntimeData();
 
-	settings.gravityVelocity = precipitation->GetSettingValue(RE::BGSShaderParticleGeometryData::DataID::kGravityVelocity).f;
-	settings.rotationVelocity = precipitation->GetSettingValue(RE::BGSShaderParticleGeometryData::DataID::kRotationVelocity).f;
-	settings.particleSizeX = precipitation->GetSettingValue(RE::BGSShaderParticleGeometryData::DataID::kParticleSizeX).f;
-	settings.particleSizeY = precipitation->GetSettingValue(RE::BGSShaderParticleGeometryData::DataID::kParticleSizeY).f;
-	settings.centerOffsetMin = precipitation->GetSettingValue(RE::BGSShaderParticleGeometryData::DataID::kCenterOffsetMin).f;
-	settings.centerOffsetMax = precipitation->GetSettingValue(RE::BGSShaderParticleGeometryData::DataID::kCenterOffsetMax).f;
-	settings.startRotationRange = precipitation->GetSettingValue(RE::BGSShaderParticleGeometryData::DataID::kStartRotationRange).f;
-	settings.numSubtexturesX = precipitation->GetSettingValue(RE::BGSShaderParticleGeometryData::DataID::kNumSubtexturesX).i;
-	settings.numSubtexturesY = precipitation->GetSettingValue(RE::BGSShaderParticleGeometryData::DataID::kNumSubtexturesY).i;
-	settings.particleType = precipitation->GetSettingValue(RE::BGSShaderParticleGeometryData::DataID::kParticleType).i;
-	settings.boxSize = precipitation->GetSettingValue(RE::BGSShaderParticleGeometryData::DataID::kBoxSize).f;
-	settings.particleDensity = precipitation->GetSettingValue(RE::BGSShaderParticleGeometryData::DataID::kParticleDensity).f;
+	settings.gravityVelocity = precipitation->GetSettingValue(DataID::kGravityVelocity).f;
+	settings.rotationVelocity = precipitation->GetSettingValue(DataID::kRotationVelocity).f;
+	settings.particleSizeX = precipitation->GetSettingValue(DataID::kParticleSizeX).f;
+	settings.particleSizeY = precipitation->GetSettingValue(DataID::kParticleSizeY).f;
+	settings.centerOffsetMin = precipitation->GetSettingValue(DataID::kCenterOffsetMin).f;
+	settings.centerOffsetMax = precipitation->GetSettingValue(DataID::kCenterOffsetMax).f;
+	settings.startRotationRange = precipitation->GetSettingValue(DataID::kStartRotationRange).f;
+	settings.numSubtexturesX = precipitation->GetSettingValue(DataID::kNumSubtexturesX).i;
+	settings.numSubtexturesY = precipitation->GetSettingValue(DataID::kNumSubtexturesY).i;
+	settings.particleType = precipitation->GetSettingValue(DataID::kParticleType).i;
+	settings.boxSize = precipitation->GetSettingValue(DataID::kBoxSize).f;
+	settings.particleDensity = precipitation->GetSettingValue(DataID::kParticleDensity).f;
 	settings.particleTexture = runtime.particleTexture.textureName.c_str();
 }
 
 void PrecipitationWidget::SaveSettings()
 {
-	js["gravityVelocity"] = settings.gravityVelocity;
-	js["rotationVelocity"] = settings.rotationVelocity;
-	js["particleSizeX"] = settings.particleSizeX;
-	js["particleSizeY"] = settings.particleSizeY;
-	js["centerOffsetMin"] = settings.centerOffsetMin;
-	js["centerOffsetMax"] = settings.centerOffsetMax;
-	js["startRotationRange"] = settings.startRotationRange;
-	js["numSubtexturesX"] = settings.numSubtexturesX;
-	js["numSubtexturesY"] = settings.numSubtexturesY;
-	js["particleType"] = settings.particleType;
-	js["boxSize"] = settings.boxSize;
-	js["particleDensity"] = settings.particleDensity;
-	js["particleTexture"] = settings.particleTexture;
+	js = settings;
 	originalSettings = settings;
 }
 
@@ -183,20 +162,21 @@ void PrecipitationWidget::ApplyChanges()
 	if (!precipitation)
 		return;
 
+	using DataID = RE::BGSShaderParticleGeometryData::DataID;
 	auto& runtime = precipitation->GetRuntimeData();
 
-	runtime.data[(uint32_t)RE::BGSShaderParticleGeometryData::DataID::kGravityVelocity].f = settings.gravityVelocity;
-	runtime.data[(uint32_t)RE::BGSShaderParticleGeometryData::DataID::kRotationVelocity].f = settings.rotationVelocity;
-	runtime.data[(uint32_t)RE::BGSShaderParticleGeometryData::DataID::kParticleSizeX].f = settings.particleSizeX;
-	runtime.data[(uint32_t)RE::BGSShaderParticleGeometryData::DataID::kParticleSizeY].f = settings.particleSizeY;
-	runtime.data[(uint32_t)RE::BGSShaderParticleGeometryData::DataID::kCenterOffsetMin].f = settings.centerOffsetMin;
-	runtime.data[(uint32_t)RE::BGSShaderParticleGeometryData::DataID::kCenterOffsetMax].f = settings.centerOffsetMax;
-	runtime.data[(uint32_t)RE::BGSShaderParticleGeometryData::DataID::kStartRotationRange].f = settings.startRotationRange;
-	runtime.data[(uint32_t)RE::BGSShaderParticleGeometryData::DataID::kNumSubtexturesX].i = settings.numSubtexturesX;
-	runtime.data[(uint32_t)RE::BGSShaderParticleGeometryData::DataID::kNumSubtexturesY].i = settings.numSubtexturesY;
-	runtime.data[(uint32_t)RE::BGSShaderParticleGeometryData::DataID::kParticleType].i = settings.particleType;
-	runtime.data[(uint32_t)RE::BGSShaderParticleGeometryData::DataID::kBoxSize].f = settings.boxSize;
-	runtime.data[(uint32_t)RE::BGSShaderParticleGeometryData::DataID::kParticleDensity].f = settings.particleDensity;
+	runtime.data[static_cast<uint32_t>(DataID::kGravityVelocity)].f = settings.gravityVelocity;
+	runtime.data[static_cast<uint32_t>(DataID::kRotationVelocity)].f = settings.rotationVelocity;
+	runtime.data[static_cast<uint32_t>(DataID::kParticleSizeX)].f = settings.particleSizeX;
+	runtime.data[static_cast<uint32_t>(DataID::kParticleSizeY)].f = settings.particleSizeY;
+	runtime.data[static_cast<uint32_t>(DataID::kCenterOffsetMin)].f = settings.centerOffsetMin;
+	runtime.data[static_cast<uint32_t>(DataID::kCenterOffsetMax)].f = settings.centerOffsetMax;
+	runtime.data[static_cast<uint32_t>(DataID::kStartRotationRange)].f = settings.startRotationRange;
+	runtime.data[static_cast<uint32_t>(DataID::kNumSubtexturesX)].i = settings.numSubtexturesX;
+	runtime.data[static_cast<uint32_t>(DataID::kNumSubtexturesY)].i = settings.numSubtexturesY;
+	runtime.data[static_cast<uint32_t>(DataID::kParticleType)].i = settings.particleType;
+	runtime.data[static_cast<uint32_t>(DataID::kBoxSize)].f = settings.boxSize;
+	runtime.data[static_cast<uint32_t>(DataID::kParticleDensity)].f = settings.particleDensity;
 	runtime.particleTexture.textureName = settings.particleTexture.c_str();
 }
 

@@ -26,11 +26,7 @@ public:
 	void RevertChanges() override;
 	bool HasUnsavedChanges() const override;
 
-	RE::BGSShaderParticleGeometryData* precipitation = nullptr;
-
-private:
-	void LoadFromGameSettings();
-
+	// Public type required by NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT macro
 	struct Settings
 	{
 		float gravityVelocity = 0.0f;
@@ -48,6 +44,11 @@ private:
 		std::string particleTexture = "";
 		bool operator==(const Settings&) const = default;
 	};
+
+private:
+	void LoadFromGameSettings();
+
+	RE::BGSShaderParticleGeometryData* precipitation = nullptr;
 
 	Settings settings;
 	Settings vanillaSettings;

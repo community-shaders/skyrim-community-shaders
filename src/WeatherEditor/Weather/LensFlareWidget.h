@@ -25,17 +25,18 @@ public:
 	void RevertChanges() override;
 	bool HasUnsavedChanges() const override;
 
-	RE::BGSLensFlare* lensFlare = nullptr;
-
-private:
-	void LoadFromGameSettings();
-
+	// Public type required by NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT macro
 	struct Settings
 	{
 		float fadeDistRadiusScale = 1.0f;
 		float colorInfluence = 0.2f;
 		bool operator==(const Settings&) const = default;
 	};
+
+private:
+	void LoadFromGameSettings();
+
+	RE::BGSLensFlare* lensFlare = nullptr;
 
 	Settings settings;
 	Settings vanillaSettings;

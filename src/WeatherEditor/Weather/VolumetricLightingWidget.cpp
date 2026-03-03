@@ -2,6 +2,21 @@
 #include "../EditorWindow.h"
 #include "../WeatherUtils.h"
 
+NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(
+	VolumetricLightingWidget::Settings,
+	intensity,
+	customColorContribution,
+	red,
+	green,
+	blue,
+	densityContribution,
+	densitySize,
+	densityWindSpeed,
+	densityFallingSpeed,
+	phaseFunctionContribution,
+	phaseFunctionScattering,
+	samplingRangeFactor)
+
 void VolumetricLightingWidget::DrawWidget()
 {
 	WeatherUtils::SetCurrentWidget(this);
@@ -81,38 +96,14 @@ void VolumetricLightingWidget::LoadSettings()
 	if (!volumetricLighting)
 		return;
 
-	if (!js.empty()) {
-		settings = vanillaSettings;
-		try {
-			if (js.contains("intensity"))
-				settings.intensity = js["intensity"];
-			if (js.contains("customColorContribution"))
-				settings.customColorContribution = js["customColorContribution"];
-			if (js.contains("red"))
-				settings.red = js["red"];
-			if (js.contains("green"))
-				settings.green = js["green"];
-			if (js.contains("blue"))
-				settings.blue = js["blue"];
-			if (js.contains("densityContribution"))
-				settings.densityContribution = js["densityContribution"];
-			if (js.contains("densitySize"))
-				settings.densitySize = js["densitySize"];
-			if (js.contains("densityWindSpeed"))
-				settings.densityWindSpeed = js["densityWindSpeed"];
-			if (js.contains("densityFallingSpeed"))
-				settings.densityFallingSpeed = js["densityFallingSpeed"];
-			if (js.contains("phaseFunctionContribution"))
-				settings.phaseFunctionContribution = js["phaseFunctionContribution"];
-			if (js.contains("phaseFunctionScattering"))
-				settings.phaseFunctionScattering = js["phaseFunctionScattering"];
-			if (js.contains("samplingRangeFactor"))
-				settings.samplingRangeFactor = js["samplingRangeFactor"];
-		} catch (const std::exception& e) {
-			logger::error("VolumetricLighting {}: Failed to load from JSON: {}", GetEditorID(), e.what());
+	try {
+		if (!js.empty()) {
+			settings = js;
+		} else {
 			settings = vanillaSettings;
 		}
-	} else {
+	} catch (const std::exception& e) {
+		logger::error("VolumetricLighting {}: Failed to load from JSON: {}", GetEditorID(), e.what());
 		settings = vanillaSettings;
 	}
 
@@ -140,18 +131,7 @@ void VolumetricLightingWidget::LoadFromGameSettings()
 
 void VolumetricLightingWidget::SaveSettings()
 {
-	js["intensity"] = settings.intensity;
-	js["customColorContribution"] = settings.customColorContribution;
-	js["red"] = settings.red;
-	js["green"] = settings.green;
-	js["blue"] = settings.blue;
-	js["densityContribution"] = settings.densityContribution;
-	js["densitySize"] = settings.densitySize;
-	js["densityWindSpeed"] = settings.densityWindSpeed;
-	js["densityFallingSpeed"] = settings.densityFallingSpeed;
-	js["phaseFunctionContribution"] = settings.phaseFunctionContribution;
-	js["phaseFunctionScattering"] = settings.phaseFunctionScattering;
-	js["samplingRangeFactor"] = settings.samplingRangeFactor;
+	js = settings;
 	originalSettings = settings;
 }
 
