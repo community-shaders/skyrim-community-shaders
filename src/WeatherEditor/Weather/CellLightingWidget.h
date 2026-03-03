@@ -25,6 +25,8 @@ public:
 	void RevertChanges() override;
 	bool HasUnsavedChanges() const override;
 
+	[[nodiscard]] RE::TESObjectCELL* GetCell() const { return cell; }
+
 	// Public types required by NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT macro
 	struct DALC
 	{

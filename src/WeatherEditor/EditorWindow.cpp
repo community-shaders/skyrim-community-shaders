@@ -509,7 +509,7 @@ void EditorWindow::ShowObjectsWindow()
 							if (Util::TableRowSelectable(label.c_str(), isOpen, ImGuiSelectableFlags_SpanAllColumns | ImGuiSelectableFlags_AllowDoubleClick)) {
 								if (ImGui::IsMouseDoubleClicked(0)) {
 									// Open or reuse the cell lighting widget
-									if (currentCellLightingWidget && currentCellLightingWidget->cell == cell) {
+									if (currentCellLightingWidget && currentCellLightingWidget->GetCell() == cell) {
 										currentCellLightingWidget->SetOpen(true);
 									} else {
 										currentCellLightingWidget = std::make_unique<CellLightingWidget>(cell);
@@ -522,7 +522,7 @@ void EditorWindow::ShowObjectsWindow()
 
 							// Enter key to open
 							if (isOpen && ImGui::IsKeyPressed(ImGuiKey_Enter)) {
-								if (currentCellLightingWidget && currentCellLightingWidget->cell == cell) {
+								if (currentCellLightingWidget && currentCellLightingWidget->GetCell() == cell) {
 									currentCellLightingWidget->SetOpen(true);
 								}
 							}
@@ -975,7 +975,7 @@ void EditorWindow::RenderUI()
 				if (ImGui::MenuItem("Edit Current Cell Lighting")) {
 					// Check if widget already exists
 					bool found = false;
-					if (currentCellLightingWidget && currentCellLightingWidget->cell == player->parentCell) {
+					if (currentCellLightingWidget && currentCellLightingWidget->GetCell() == player->parentCell) {
 						currentCellLightingWidget->SetOpen(true);
 						found = true;
 					}
