@@ -32,9 +32,9 @@ void LightingTemplateWidget::DrawWidget()
 	}
 	DrawWidgetHeader("##LightingTemplateSearch", false, true);
 
-		bool changed = false;
+	bool changed = false;
 
-		if (ImGui::BeginTabBar("LightingTemplateSettingsTabs")) {
+	if (ImGui::BeginTabBar("LightingTemplateSettingsTabs")) {
 		if (ImGui::BeginTabItem("Basic")) {
 			BeginScrollableContent("##BasicScroll");
 			changed |= DrawBasicSettings();
@@ -56,12 +56,12 @@ void LightingTemplateWidget::DrawWidget()
 			ImGui::EndTabItem();
 		}
 
-			ImGui::EndTabBar();
-		}
+		ImGui::EndTabBar();
+	}
 
-		if (changed && EditorWindow::GetSingleton()->settings.autoApplyChanges) {
-			ApplyChanges();
-		}
+	if (changed && EditorWindow::GetSingleton()->settings.autoApplyChanges) {
+		ApplyChanges();
+	}
 	ImGui::End();
 }
 

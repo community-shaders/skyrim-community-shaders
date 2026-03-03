@@ -34,8 +34,8 @@ void ImageSpaceWidget::DrawWidget()
 	// Draw header with search and Save/Load/Delete buttons
 	DrawWidgetHeader("##ImageSpaceSearch", false, true);
 
-		BeginScrollableContent("##ISScroll");
-		{
+	BeginScrollableContent("##ISScroll");
+	{
 		// Draw all settings in a unified table
 		if (PropertyDrawer::BeginTable("ImageSpaceSettings", 200.0f)) {
 			bool changed = false;
@@ -80,8 +80,8 @@ void ImageSpaceWidget::DrawWidget()
 				ApplyChanges();
 			}
 		}
-		}
-		EndScrollableContent();
+	}
+	EndScrollableContent();
 	ImGui::End();
 }
 

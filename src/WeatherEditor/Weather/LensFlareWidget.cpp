@@ -17,21 +17,21 @@ void LensFlareWidget::DrawWidget()
 	}
 	DrawWidgetHeader("##LensFlareSearch", true, true);
 
-		BeginScrollableContent("##LFScroll");
-		bool changed = false;
+	BeginScrollableContent("##LFScroll");
+	bool changed = false;
 
-		ImGui::SeparatorText("Fade Distance");
-		if (WeatherUtils::DrawSliderFloat("Fade Dist Radius Scale", settings.fadeDistRadiusScale, 0.0f, 10.0f))
-			changed = true;
+	ImGui::SeparatorText("Fade Distance");
+	if (WeatherUtils::DrawSliderFloat("Fade Dist Radius Scale", settings.fadeDistRadiusScale, 0.0f, 10.0f))
+		changed = true;
 
-		ImGui::SeparatorText("Color");
-		if (WeatherUtils::DrawSliderFloat("Color Influence", settings.colorInfluence, 0.0f, 1.0f))
-			changed = true;
+	ImGui::SeparatorText("Color");
+	if (WeatherUtils::DrawSliderFloat("Color Influence", settings.colorInfluence, 0.0f, 1.0f))
+		changed = true;
 
-		if (changed && EditorWindow::GetSingleton()->settings.autoApplyChanges) {
-			ApplyChanges();
-		}
-		EndScrollableContent();
+	if (changed && EditorWindow::GetSingleton()->settings.autoApplyChanges) {
+		ApplyChanges();
+	}
+	EndScrollableContent();
 	ImGui::End();
 }
 

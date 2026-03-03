@@ -27,9 +27,9 @@ void VolumetricLightingWidget::DrawWidget()
 	}
 	DrawWidgetHeader("##VolumetricLightingSearch", true, true);
 
-		bool changed = false;
+	bool changed = false;
 
-		if (ImGui::BeginTabBar("VolumetricLightingTabs")) {
+	if (ImGui::BeginTabBar("VolumetricLightingTabs")) {
 		if (ImGui::BeginTabItem("Basic")) {
 			BeginScrollableContent("##BasicScroll");
 			ImGui::SeparatorText("Intensity");
@@ -85,12 +85,12 @@ void VolumetricLightingWidget::DrawWidget()
 			ImGui::EndTabItem();
 		}
 
-			ImGui::EndTabBar();
-		}
+		ImGui::EndTabBar();
+	}
 
-		if (changed && EditorWindow::GetSingleton()->settings.autoApplyChanges) {
-			ApplyChanges();
-		}
+	if (changed && EditorWindow::GetSingleton()->settings.autoApplyChanges) {
+		ApplyChanges();
+	}
 	ImGui::End();
 }
 
