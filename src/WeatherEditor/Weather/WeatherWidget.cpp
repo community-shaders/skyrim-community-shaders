@@ -170,9 +170,8 @@ void WeatherWidget::DrawWidget()
 			}
 		}
 	}
-}
 
-// Tab bar for organizing settings
+	// Tab bar for organizing settings
 if (ImGui::BeginTabBar("WeatherSettingsTabs", ImGuiTabBarFlags_None)) {
 	// Use activeTabOverride to auto-navigate to specific tab
 	ImGuiTabItemFlags basicFlags = (activeTabOverride == "Basic") ? ImGuiTabItemFlags_SetSelected : 0;
