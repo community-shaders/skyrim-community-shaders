@@ -237,7 +237,9 @@ namespace PBR
 #endif
 			float2 specularBRDF = BRDF::EnvBRDF(material.Roughness, NdotV);
 			lobeWeights.specular = material.F0 * specularBRDF.x + specularBRDF.y;
-			lobeWeights.diffuse *= (1 - lobeWeights.specular);
+
+			float3 F = BRDF::F_Schlick(material.F0, NdotV);
+			lobeWeights.diffuse *= 1 - F;
 
 #if !defined(LANDSCAPE) && !defined(LODLANDSCAPE)
 			[branch] if ((PBRFlags & Flags::TwoLayer) != 0)
