@@ -253,6 +253,34 @@ void LightingTemplateWidget::LoadFromGameSettings()
 	ColorToFloat3(dalc.directional.z.min, settings.dalc.directional[2].min);
 }
 
+static void ValidateSettings(LightingTemplateWidget::Settings& s, const LightingTemplateWidget::Settings& vanilla)
+{
+	auto safeF = [](float v, float fallback) { return std::isfinite(v) ? v : fallback; };
+	auto safeF3 = [](float3 v, float3 fallback) {
+		return (std::isfinite(v.x) && std::isfinite(v.y) && std::isfinite(v.z)) ? v : fallback;
+	};
+	s.ambient         = safeF3(s.ambient,         vanilla.ambient);
+	s.directional     = safeF3(s.directional,     vanilla.directional);
+	s.fogColorNear    = safeF3(s.fogColorNear,    vanilla.fogColorNear);
+	s.fogColorFar     = safeF3(s.fogColorFar,     vanilla.fogColorFar);
+	s.fogNear         = safeF(s.fogNear,           vanilla.fogNear);
+	s.fogFar          = safeF(s.fogFar,            vanilla.fogFar);
+	s.directionalXY   = safeF(s.directionalXY,     vanilla.directionalXY);
+	s.directionalZ    = safeF(s.directionalZ,      vanilla.directionalZ);
+	s.directionalFade = safeF(s.directionalFade,   vanilla.directionalFade);
+	s.clipDist        = safeF(s.clipDist,           vanilla.clipDist);
+	s.fogPower        = safeF(s.fogPower,           vanilla.fogPower);
+	s.fogClamp        = safeF(s.fogClamp,           vanilla.fogClamp);
+	s.lightFadeStart  = safeF(s.lightFadeStart,     vanilla.lightFadeStart);
+	s.lightFadeEnd    = safeF(s.lightFadeEnd,       vanilla.lightFadeEnd);
+	s.dalc.fresnelPower = safeF(s.dalc.fresnelPower, vanilla.dalc.fresnelPower);
+	s.dalc.specular     = safeF3(s.dalc.specular,    vanilla.dalc.specular);
+	for (int i = 0; i < 3; i++) {
+		s.dalc.directional[i].max = safeF3(s.dalc.directional[i].max, vanilla.dalc.directional[i].max);
+		s.dalc.directional[i].min = safeF3(s.dalc.directional[i].min, vanilla.dalc.directional[i].min);
+	}
+}
+
 void LightingTemplateWidget::LoadSettings()
 {
 	settings = vanillaSettings;
@@ -261,6 +289,7 @@ void LightingTemplateWidget::LoadSettings()
 			nlohmann::json merged = vanillaSettings;
 			merged.merge_patch(js);
 			settings = merged.get<Settings>();
+			ValidateSettings(settings, vanillaSettings);
 		} catch (const nlohmann::json::exception& e) {
 			logger::error("LightingTemplate {}: Failed to load from JSON: {}", GetEditorID(), e.what());
 			settings = vanillaSettings;

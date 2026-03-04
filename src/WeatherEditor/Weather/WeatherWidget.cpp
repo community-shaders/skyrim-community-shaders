@@ -124,8 +124,7 @@ void WeatherWidget::DrawWidget()
 				settings.parent = "None";
 			}
 
-			for (int i = 0; i < widgets.size(); i++) {
-				auto& widget = widgets[i];
+			for (auto& widget : widgets) {
 
 				// Skip self-selection
 				if (widget.get() == this)
@@ -942,6 +941,7 @@ void WeatherWidget::DrawDALCSettings()
 		TOD::EndTODTable();
 	}
 	if (changed && EditorWindow::GetSingleton()->settings.autoApplyChanges) {
+		EditorWindow::GetSingleton()->PushUndoState(this);
 		ApplyChanges();
 	}
 }
@@ -1003,6 +1003,7 @@ void WeatherWidget::DrawWeatherColorSettings()
 	}
 
 	if (changed && EditorWindow::GetSingleton()->settings.autoApplyChanges) {
+		EditorWindow::GetSingleton()->PushUndoState(this);
 		ApplyChanges();
 	}
 }
@@ -1291,6 +1292,7 @@ void WeatherWidget::DrawFogSettings()
 	}
 
 	if (changed && EditorWindow::GetSingleton()->settings.autoApplyChanges) {
+		EditorWindow::GetSingleton()->PushUndoState(this);
 		ApplyChanges();
 	}
 }
@@ -1377,6 +1379,7 @@ void WeatherWidget::DrawProperties(std::string category, std::map<std::string, i
 	}
 
 	if (changed && EditorWindow::GetSingleton()->settings.autoApplyChanges) {
+		EditorWindow::GetSingleton()->PushUndoState(this);
 		ApplyChanges();
 	}
 
@@ -1473,6 +1476,7 @@ void WeatherWidget::InheritAllFromParent()
 
 	// Apply the changes
 	if (EditorWindow::GetSingleton()->settings.autoApplyChanges) {
+		EditorWindow::GetSingleton()->PushUndoState(this);
 		ApplyChanges();
 	}
 
@@ -2017,8 +2021,14 @@ ID3D11ShaderResourceView* WeatherWidget::GetCloudTexture(int layerIndex)
 	// Note: Skyrim texture paths don't include .dds extension, so we add it
 	std::string resourcePath = std::string("Textures\\") + texturePath;
 
-	// Add .dds extension if not present
-	if (resourcePath.size() < 4 || resourcePath.substr(resourcePath.size() - 4) != ".dds") {
+	// Add .dds extension if not present (case-insensitive check)
+	if (resourcePath.size() >= 4) {
+		std::string ext = resourcePath.substr(resourcePath.size() - 4);
+		std::transform(ext.begin(), ext.end(), ext.begin(), [](unsigned char c) { return std::tolower(c); });
+		if (ext != ".dds") {
+			resourcePath += ".dds";
+		}
+	} else {
 		resourcePath += ".dds";
 	}
 

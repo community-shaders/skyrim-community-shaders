@@ -127,6 +127,15 @@ void PrecipitationWidget::LoadSettings()
 		}
 	}
 
+	// Normalize settings so originalSettings matches the clamped values applied in ApplyChanges
+	settings.numSubtexturesX = std::max(1u, settings.numSubtexturesX);
+	settings.numSubtexturesY = std::max(1u, settings.numSubtexturesY);
+	settings.particleDensity = std::max(0.0f, settings.particleDensity);
+	settings.particleType    = std::min(settings.particleType, 1u);
+	settings.boxSize         = std::max(0.0f, settings.boxSize);
+	settings.particleSizeX   = std::clamp(settings.particleSizeX, 0.0f, 10.0f);
+	settings.particleSizeY   = std::clamp(settings.particleSizeY, 0.0f, 10.0f);
+
 	originalSettings = settings;
 	strncpy_s(textureBuffer, sizeof(textureBuffer), settings.particleTexture.c_str(), _TRUNCATE);
 	ApplyChanges();
