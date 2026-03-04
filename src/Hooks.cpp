@@ -291,11 +291,18 @@ struct IDXGISwapChain_Present
 			hdr->ApplyHDR();
 		}
 
-		HRESULT retval = func(This, SyncInterval, Flags);
+		// Restore the backbuffer as the active render target before calling into the next
+		// Present hook in the chain. Mods like SmoothCam hook Present and immediately call
+		// OMGetRenderTargets to find a target to render overlays into. Without this, they
+		// get nullptr (we unbound everything for the ApplyHDR resource hazard) and their
+		// UI elements are invisible.
+		if (hdrReady && !frameGenActive) {
+			hdr->ClearUIBuffer();  // restores kFRAMEBUFFER.RTV to original backbuffer RTV
+			auto& data = globals::game::renderer->GetRuntimeData().renderTargets[RE::RENDER_TARGET::kFRAMEBUFFER];
+			globals::d3d::context->OMSetRenderTargets(1, &data.RTV, nullptr);
+		}
 
-		// Clear UI buffer for next frame (only when FG is NOT active)
-		if (!frameGenActive && hdrReady)
-			hdr->ClearUIBuffer();
+		HRESULT retval = func(This, SyncInterval, Flags);
 
 		TracyD3D11Collect(state->tracyCtx);
 
