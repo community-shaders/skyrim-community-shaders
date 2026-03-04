@@ -265,7 +265,7 @@ namespace PBR
 
 		// Apply ambient occlusion
 		lobeWeights.diffuse *= material.AO;
-		lobeWeights.specular *=  Color::SpecularAOLagarde(NdotV, material.AO, material.Roughness);
+		lobeWeights.specular *= Color::SpecularAOLagarde(NdotV, material.AO, material.Roughness);
 	}
 }
 
