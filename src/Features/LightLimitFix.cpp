@@ -332,7 +332,7 @@ void LightLimitFix::Prepass()
 
 bool LightLimitFix::IsValidLight(RE::BSLight* a_light)
 {
-	return a_light && !a_light->light->GetFlags().any(RE::NiAVObject::Flag::kHidden);
+	return a_light && a_light->light && a_light->light.get() && !a_light->light->GetFlags().any(RE::NiAVObject::Flag::kHidden);
 }
 
 bool LightLimitFix::IsGlobalLight(RE::BSLight* a_light)
@@ -508,9 +508,9 @@ void LightLimitFix::UpdateLights()
 		addLight(e);
 	}
 
-	auto addShadowLight = [&](RE::BSShadowLight* shadowLight) {
-		if (auto niLight = shadowLight->light.get()) {
-			if (IsValidLight(shadowLight)) {
+	auto addShadowLight = [&](RE::BSShadowLight* shadowLight, int) {
+		if (IsValidLight(shadowLight)) {
+			if (auto niLight = shadowLight->light.get()) {
 				auto& runtimeData = niLight->GetLightRuntimeData();
 
 				LightData light{};
@@ -525,19 +525,19 @@ void LightLimitFix::UpdateLights()
 					light.fade = runtimeData.fade;
 				}
 
-				light.fade *= shadowLight->lodDimmer;
+				//light.fade *= shadowLight->lodDimmer;
 
-				if (!IsGlobalLight(shadowLight)) {
-					// List of BSMultiBoundRooms affected by a light
-					for (const auto& roomPtr : shadowLight->rooms) {
-						addRoom(roomPtr, light);
-					}
-					// List of BSPortals affected by a light
-					for (const auto& portalPtr : shadowLight->portals) {
-						addRoom(portalPtr->portalSharedNode.get(), light);
-					}
-					light.lightFlags.set(LightFlags::PortalStrict);
-				}
+				//if (!IsGlobalLight(shadowLight)) {
+				//	// List of BSMultiBoundRooms affected by a light
+				//	for (const auto& roomPtr : shadowLight->rooms) {
+				//		addRoom(roomPtr, light);
+				//	}
+				//	// List of BSPortals affected by a light
+				//	for (const auto& portalPtr : shadowLight->portals) {
+				//		addRoom(portalPtr->portalSharedNode.get(), light);
+				//	}
+				//	light.lightFlags.set(LightFlags::PortalStrict);
+				//}
 
 				GET_INSTANCE_MEMBER(maskIndex, shadowLight);
 				light.shadowMaskIndex = maskIndex;
@@ -556,9 +556,20 @@ void LightLimitFix::UpdateLights()
 		}
 	};
 
-	auto csData = GetCSData_ext();
-	for (auto i = 0; i < csData->activeShadowLightsCount; i++) {
-		addShadowLight(csData->activeShadowLights[i]);
+	{
+		int bufferIndex = 0;
+		int mapIndex = 0;
+		while (true) {
+			if (!shadowSceneNode->GetRuntimeData().activeShadowLights[bufferIndex] || !shadowSceneNode->GetRuntimeData().activeShadowLights[bufferIndex].get())
+				break;
+
+			RE::BSShadowLight* light = shadowSceneNode->GetRuntimeData().activeShadowLights[bufferIndex].get();
+
+			addShadowLight(light, mapIndex);
+
+			mapIndex += light->shadowMapCount;
+			bufferIndex++;
+		}
 	}
 
 	auto context = globals::d3d::context;
