@@ -508,7 +508,7 @@ void LightLimitFix::UpdateLights()
 		addLight(e);
 	}
 
-	auto addShadowLight = [&](RE::BSShadowLight* shadowLight, int) {
+	auto addShadowLight = [&](RE::BSShadowLight* shadowLight, int mapIndex) {
 		if (IsValidLight(shadowLight)) {
 			if (auto niLight = shadowLight->light.get()) {
 				auto& runtimeData = niLight->GetLightRuntimeData();
@@ -560,12 +560,11 @@ void LightLimitFix::UpdateLights()
 		int bufferIndex = 0;
 		int mapIndex = 0;
 		while (true) {
-			if (!shadowSceneNode->GetRuntimeData().activeShadowLights[bufferIndex] || !shadowSceneNode->GetRuntimeData().activeShadowLights[bufferIndex].get())
+			RE::BSShadowLight* light = shadowSceneNode->GetRuntimeData().shadowLightsAccum[mapIndex];
+			if (!light)
 				break;
 
-			RE::BSShadowLight* light = shadowSceneNode->GetRuntimeData().activeShadowLights[bufferIndex].get();
-
-			addShadowLight(light, mapIndex);
+			addShadowLight(shadowSceneNode->GetRuntimeData().activeShadowLights[bufferIndex].get(), mapIndex);
 
 			mapIndex += light->shadowMapCount;
 			bufferIndex++;
