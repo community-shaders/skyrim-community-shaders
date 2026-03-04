@@ -245,7 +245,7 @@ namespace PBR
 			[branch] if ((PBRFlags & Flags::TwoLayer) != 0)
 			{
 				float2 coatSpecularBRDF = BRDF::EnvBRDF(material.CoatRoughness, NdotV);
-				float3 coatSpecularLobeWeight = material.CoatF0 * coatSpecularBRDF.x;
+				float3 coatSpecularLobeWeight = material.CoatF0 * coatSpecularBRDF.x + coatSpecularBRDF.y;
 
 				float3 coatF = BRDF::F_Schlick(material.CoatF0, NdotV);
 
