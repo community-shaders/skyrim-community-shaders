@@ -120,29 +120,29 @@ void ImageSpaceWidget::LoadFromGameSettings()
 	auto& data = imageSpace->data;
 
 	// HDR
-	settings.hdrEyeAdaptSpeed  = data.hdr.eyeAdaptSpeed;
+	settings.hdrEyeAdaptSpeed = data.hdr.eyeAdaptSpeed;
 	settings.hdrBloomBlurRadius = data.hdr.bloomBlurRadius;
 	settings.hdrBloomThreshold = data.hdr.bloomThreshold;
-	settings.hdrBloomScale     = data.hdr.bloomScale;
-	settings.hdrWhite          = data.hdr.white;
-	settings.hdrSunlightScale  = data.hdr.sunlightScale;
-	settings.hdrSkyScale       = data.hdr.skyScale;
+	settings.hdrBloomScale = data.hdr.bloomScale;
+	settings.hdrWhite = data.hdr.white;
+	settings.hdrSunlightScale = data.hdr.sunlightScale;
+	settings.hdrSkyScale = data.hdr.skyScale;
 
 	// Cinematic
 	settings.cinematicSaturation = data.cinematic.saturation;
 	settings.cinematicBrightness = data.cinematic.brightness;
-	settings.cinematicContrast   = data.cinematic.contrast;
+	settings.cinematicContrast = data.cinematic.contrast;
 
 	// Tint
 	settings.tintColor.x = data.tint.color.red;
 	settings.tintColor.y = data.tint.color.green;
 	settings.tintColor.z = data.tint.color.blue;
-	settings.tintAmount  = data.tint.amount;
+	settings.tintAmount = data.tint.amount;
 
 	// Depth of Field
 	settings.dofStrength = data.depthOfField.strength;
 	settings.dofDistance = data.depthOfField.distance;
-	settings.dofRange    = data.depthOfField.range;
+	settings.dofRange = data.depthOfField.range;
 }
 
 void ImageSpaceWidget::ApplyChanges()
@@ -158,29 +158,29 @@ void ImageSpaceWidget::ApplyChanges()
 	};
 
 	// HDR
-	data.hdr.eyeAdaptSpeed    = safeClamp(settings.hdrEyeAdaptSpeed,    0.0f,     10.0f);
-	data.hdr.bloomBlurRadius  = safeClamp(settings.hdrBloomBlurRadius,  0.0f,     10.0f);
-	data.hdr.bloomThreshold   = safeClamp(settings.hdrBloomThreshold,   0.0f,     10.0f);
-	data.hdr.bloomScale       = safeClamp(settings.hdrBloomScale,       0.0f,     10.0f);
-	data.hdr.white            = safeClamp(settings.hdrWhite,            0.0f,     10.0f);
-	data.hdr.sunlightScale    = safeClamp(settings.hdrSunlightScale,    0.0f,     50.0f);
-	data.hdr.skyScale         = safeClamp(settings.hdrSkyScale,         0.0f,     10.0f);
+	data.hdr.eyeAdaptSpeed = safeClamp(settings.hdrEyeAdaptSpeed, 0.0f, 10.0f);
+	data.hdr.bloomBlurRadius = safeClamp(settings.hdrBloomBlurRadius, 0.0f, 10.0f);
+	data.hdr.bloomThreshold = safeClamp(settings.hdrBloomThreshold, 0.0f, 10.0f);
+	data.hdr.bloomScale = safeClamp(settings.hdrBloomScale, 0.0f, 10.0f);
+	data.hdr.white = safeClamp(settings.hdrWhite, 0.0f, 10.0f);
+	data.hdr.sunlightScale = safeClamp(settings.hdrSunlightScale, 0.0f, 50.0f);
+	data.hdr.skyScale = safeClamp(settings.hdrSkyScale, 0.0f, 10.0f);
 
 	// Cinematic
-	data.cinematic.saturation = safeClamp(settings.cinematicSaturation, 0.0f,      2.0f);
-	data.cinematic.brightness = safeClamp(settings.cinematicBrightness, 0.0f,      2.0f);
-	data.cinematic.contrast   = safeClamp(settings.cinematicContrast,   0.0f,      2.0f);
+	data.cinematic.saturation = safeClamp(settings.cinematicSaturation, 0.0f, 2.0f);
+	data.cinematic.brightness = safeClamp(settings.cinematicBrightness, 0.0f, 2.0f);
+	data.cinematic.contrast = safeClamp(settings.cinematicContrast, 0.0f, 2.0f);
 
 	// Tint
-	data.tint.color.red   = safeClamp(settings.tintColor.x, 0.0f, 1.0f);
+	data.tint.color.red = safeClamp(settings.tintColor.x, 0.0f, 1.0f);
 	data.tint.color.green = safeClamp(settings.tintColor.y, 0.0f, 1.0f);
-	data.tint.color.blue  = safeClamp(settings.tintColor.z, 0.0f, 1.0f);
-	data.tint.amount      = safeClamp(settings.tintAmount,  0.0f, 1.0f);
+	data.tint.color.blue = safeClamp(settings.tintColor.z, 0.0f, 1.0f);
+	data.tint.amount = safeClamp(settings.tintAmount, 0.0f, 1.0f);
 
 	// Depth of Field
-	data.depthOfField.strength = safeClamp(settings.dofStrength, 0.0f,     10.0f);
+	data.depthOfField.strength = safeClamp(settings.dofStrength, 0.0f, 10.0f);
 	data.depthOfField.distance = safeClamp(settings.dofDistance, 0.0f, 10000.0f);
-	data.depthOfField.range    = safeClamp(settings.dofRange,    0.0f, 10000.0f);
+	data.depthOfField.range = safeClamp(settings.dofRange, 0.0f, 10000.0f);
 }
 
 void ImageSpaceWidget::RevertChanges()

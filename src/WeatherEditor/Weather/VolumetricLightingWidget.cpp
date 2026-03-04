@@ -110,18 +110,18 @@ void VolumetricLightingWidget::LoadSettings()
 			auto safeClamp = [](float v, float lo, float hi, float fallback) {
 				return std::isfinite(v) ? std::clamp(v, lo, hi) : fallback;
 			};
-			settings.intensity                 = safeClamp(settings.intensity,                  0.0f,     50.0f, vanillaSettings.intensity);
-			settings.customColorContribution   = safeClamp(settings.customColorContribution,    0.0f,      1.0f, vanillaSettings.customColorContribution);
-			settings.red                       = safeClamp(settings.red,                        0.0f,      1.0f, vanillaSettings.red);
-			settings.green                     = safeClamp(settings.green,                      0.0f,      1.0f, vanillaSettings.green);
-			settings.blue                      = safeClamp(settings.blue,                       0.0f,      1.0f, vanillaSettings.blue);
-			settings.densityContribution       = safeClamp(settings.densityContribution,        0.0f,      1.0f, vanillaSettings.densityContribution);
-			settings.densitySize               = safeClamp(settings.densitySize,                0.1f,  10000.0f, vanillaSettings.densitySize);
-			settings.densityWindSpeed          = safeClamp(settings.densityWindSpeed,           0.0f,    100.0f, vanillaSettings.densityWindSpeed);
-			settings.densityFallingSpeed       = safeClamp(settings.densityFallingSpeed,        0.0f,    100.0f, vanillaSettings.densityFallingSpeed);
-			settings.phaseFunctionContribution = safeClamp(settings.phaseFunctionContribution,  0.0f,      1.0f, vanillaSettings.phaseFunctionContribution);
-			settings.phaseFunctionScattering   = safeClamp(settings.phaseFunctionScattering,    0.0f,      1.0f, vanillaSettings.phaseFunctionScattering);
-			settings.samplingRangeFactor       = safeClamp(settings.samplingRangeFactor,        0.0f,    160.0f, vanillaSettings.samplingRangeFactor);
+			settings.intensity = safeClamp(settings.intensity, 0.0f, 50.0f, vanillaSettings.intensity);
+			settings.customColorContribution = safeClamp(settings.customColorContribution, 0.0f, 1.0f, vanillaSettings.customColorContribution);
+			settings.red = safeClamp(settings.red, 0.0f, 1.0f, vanillaSettings.red);
+			settings.green = safeClamp(settings.green, 0.0f, 1.0f, vanillaSettings.green);
+			settings.blue = safeClamp(settings.blue, 0.0f, 1.0f, vanillaSettings.blue);
+			settings.densityContribution = safeClamp(settings.densityContribution, 0.0f, 1.0f, vanillaSettings.densityContribution);
+			settings.densitySize = safeClamp(settings.densitySize, 0.1f, 10000.0f, vanillaSettings.densitySize);
+			settings.densityWindSpeed = safeClamp(settings.densityWindSpeed, 0.0f, 100.0f, vanillaSettings.densityWindSpeed);
+			settings.densityFallingSpeed = safeClamp(settings.densityFallingSpeed, 0.0f, 100.0f, vanillaSettings.densityFallingSpeed);
+			settings.phaseFunctionContribution = safeClamp(settings.phaseFunctionContribution, 0.0f, 1.0f, vanillaSettings.phaseFunctionContribution);
+			settings.phaseFunctionScattering = safeClamp(settings.phaseFunctionScattering, 0.0f, 1.0f, vanillaSettings.phaseFunctionScattering);
+			settings.samplingRangeFactor = safeClamp(settings.samplingRangeFactor, 0.0f, 160.0f, vanillaSettings.samplingRangeFactor);
 		} catch (const std::exception& e) {
 			logger::error("VolumetricLighting {}: Failed to load from JSON: {}", GetEditorID(), e.what());
 			settings = vanillaSettings;

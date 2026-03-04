@@ -125,7 +125,6 @@ void WeatherWidget::DrawWidget()
 			}
 
 			for (auto& widget : widgets) {
-
 				// Skip self-selection
 				if (widget.get() == this)
 					continue;
