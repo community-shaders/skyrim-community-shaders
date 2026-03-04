@@ -181,20 +181,19 @@ PS_OUTPUT main(PS_INPUT input)
 		hdrLinear = Color::Saturation(hdrLinear, Cinematic.x);
 
 		float3 hdrGamma = Color::LinearToGamma(hdrLinear);
-		hdrGamma = lerp(hdrGamma, Color::RGBToLuminance(hdrGamma) * Tint.xyz, Tint.w);
-		hdrGamma = Color::LinearToGamma(Color::GammaToLinear(hdrGamma) * Cinematic.w);
 
-		// Vanilla contrast with shadow lift to prevent black crush
-		hdrGamma = lerp(avgValue.x, hdrGamma, Cinematic.z * 0.5 + 0.5);
-
-		// Shadow lift: Gently raise blacks to prevent crushing while maintaining contrast
-		// This adds a subtle S-curve that protects shadows
-		float shadowLift = 0.03;  // Subtle lift amount
-		float shadowRange = 0.2;  // Affects values below this threshold
-		float3 shadowMask = saturate((shadowRange - hdrGamma) / shadowRange);
-		hdrGamma += shadowMask * shadowLift * shadowMask;  // Quadratic falloff for natural look
+		float hdrLuminanceGamma = Color::RGBToLuminance(hdrGamma);
+		hdrGamma = lerp(hdrGamma, hdrLuminanceGamma * Tint.xyz, Tint.w);
 
 		hdrLinear = Color::GammaToLinear(hdrGamma);
+		hdrLinear *= (Cinematic.w);
+
+		// Power-curve contrast pivoted around photographic midgrey (0.18 linear).
+		// Cinematic.z maps from [-1, 1] to a [0.5, 1.5] exponent: 1.0 = neutral,
+		// >1.0 deepens blacks and lifts highlights without crushing toward a variable grey pivot.
+		hdrLinear = Color::GammaToLinear(hdrGamma);
+		float contrastExp = Cinematic.z * 0.5 + 1.0;
+		hdrLinear = 0.18 * pow(max(0, hdrLinear / 0.18), contrastExp);
 
 #		if defined(FADE)
 		hdrLinear = lerp(hdrLinear, Fade.xyz, Fade.w);
