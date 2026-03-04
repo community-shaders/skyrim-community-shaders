@@ -4,10 +4,10 @@
 
 ```bash
 # Fast shader-only deployment (recommended for dev iteration)
-cmake --build build/ALL-WITH-AUTO-DEPLOYMENT --target COPY_SHADERS
+cmake --build build/ALL --target COPY_SHADERS
 
 # Full deployment (DLL + tests + shaders)
-cmake --build build/ALL-WITH-AUTO-DEPLOYMENT --target DEPLOY_ALL
+cmake --build build/ALL --target DEPLOY_ALL
 ```
 
 ## Overview
@@ -28,12 +28,12 @@ Two deployment targets for different workflows:
 
 ```bash
 # Fast iteration: Only copy changed shaders to game directory
-cmake --build build/ALL-WITH-AUTO-DEPLOYMENT --target COPY_SHADERS
+cmake --build build/ALL --target COPY_SHADERS
 
 # Or in Visual Studio: Right-click "COPY_SHADERS" target -> Build
 
 # Full deployment (same as running cmake --build with no target):
-cmake --build build/ALL-WITH-AUTO-DEPLOYMENT --target DEPLOY_ALL
+cmake --build build/ALL --target DEPLOY_ALL
 ```
 
 #### Automatic (VSCode)

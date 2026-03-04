@@ -19,8 +19,7 @@ groupshared sh2 sharedG[TOTAL_SAMPLES];
 groupshared sh2 sharedB[TOTAL_SAMPLES];
 
 // Parallelize computation: 16x16 = 256 threads, one per sample
-[numthreads(AXIS_SAMPLE_COUNT, AXIS_SAMPLE_COUNT, 1)]
-void main(uint3 dispatchID : SV_DispatchThreadID, uint groupIndex : SV_GroupIndex) {
+[numthreads(AXIS_SAMPLE_COUNT, AXIS_SAMPLE_COUNT, 1)] void main(uint3 dispatchID : SV_DispatchThreadID, uint groupIndex : SV_GroupIndex) {
 	// Each thread computes one sample of the spherical integral
 	// Note: No bounds check needed since we dispatch exactly AXIS_SAMPLE_COUNT x AXIS_SAMPLE_COUNT threads
 	uint az = dispatchID.x;
@@ -54,7 +53,8 @@ void main(uint3 dispatchID : SV_DispatchThreadID, uint groupIndex : SV_GroupInde
 
 	// Parallel reduction using tree-based approach (compatible with DirectX 11)
 	// Reduce 256 values down to 1 using logarithmic steps
-	[unroll] for (uint stride = TOTAL_SAMPLES / 2; stride > 0; stride >>= 1) {
+	[unroll] for (uint stride = TOTAL_SAMPLES / 2; stride > 0; stride >>= 1)
+	{
 		if (groupIndex < stride) {
 			sharedR[groupIndex] = SphericalHarmonics::Add(sharedR[groupIndex], sharedR[groupIndex + stride]);
 			sharedG[groupIndex] = SphericalHarmonics::Add(sharedG[groupIndex], sharedG[groupIndex + stride]);

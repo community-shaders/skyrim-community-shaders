@@ -5,8 +5,8 @@
 #include "Common/BRDF.hlsli"
 #include "Common/Color.hlsli"
 #include "Common/Math.hlsli"
-#include "Common/SharedData.hlsli"
 #include "Common/PBRMath.hlsli"
+#include "Common/SharedData.hlsli"
 
 namespace PBR
 {
@@ -118,6 +118,8 @@ namespace PBR
 	void GetDirectLightInput(out DirectLightingOutput lightingOutput, DirectContext context, MaterialProperties material, float3x3 tbnTr, float2 uv)
 	{
 		lightingOutput = (DirectLightingOutput)0;
+		const float3 detailedLightColor = context.lightColor * context.detailedShadow;
+		const float3 softLightColor = context.lightColor * context.softShadow;
 
 		const float3 N = context.worldNormal;
 		const float3 V = context.viewDir;
@@ -144,20 +146,20 @@ namespace PBR
 #if !defined(LANDSCAPE) && !defined(LODLANDSCAPE)
 		[branch] if ((PBRFlags & Flags::HairMarschner) != 0)
 		{
-			lightingOutput.transmission += context.lightColor * GetHairColorMarschner(N, V, L, NdotL, NdotV, VdotL, 0, 1, 0, material);
+			lightingOutput.transmission += softLightColor * GetHairColorMarschner(N, V, L, NdotL, NdotV, VdotL, 0, 1, 0, material);
 		}
 		else
 #endif
 		{
-			lightingOutput.diffuse += context.lightColor * satNdotL * BRDF::Diffuse_Lambert();
+			lightingOutput.diffuse += detailedLightColor * satNdotL * BRDF::Diffuse_Lambert();
 
 			float3 F;
 #if defined(GLINT)
 			lightingOutput.specular += GetSpecularDirectLightMultiplierMicrofacetWithGlint(material.Noise, material.Roughness, material.F0, satNdotL, satNdotV, satNdotH, satVdotH, mul(tbnTr, H).x,
-							material.GlintLogMicrofacetDensity, material.GlintMicrofacetRoughness, material.GlintDensityRandomization, material.GlintCache, F) *
-			            context.lightColor * satNdotL;
+										   material.GlintLogMicrofacetDensity, material.GlintMicrofacetRoughness, material.GlintDensityRandomization, material.GlintCache, F) *
+			                           detailedLightColor * satNdotL;
 #else
-			lightingOutput.specular += GetSpecularDirectLightMultiplierMicrofacet(material.Roughness, material.F0, satNdotL, satNdotV, satNdotH, satVdotH, F) * context.lightColor * satNdotL;
+			lightingOutput.specular += GetSpecularDirectLightMultiplierMicrofacet(material.Roughness, material.F0, satNdotL, satNdotV, satNdotH, satVdotH, F) * detailedLightColor * satNdotL;
 #endif
 
 #if !defined(LANDSCAPE) && !defined(LODLANDSCAPE)
@@ -173,7 +175,7 @@ namespace PBR
 				float forwardScatter = exp2(saturate(-VdotL) * subsurfacePower - subsurfacePower);
 				float backScatter = saturate(satNdotL * material.Thickness + (1.0 - material.Thickness)) * 0.5;
 				float subsurface = lerp(backScatter, 1, forwardScatter) * (1.0 - material.Thickness);
-				lightingOutput.transmission += material.SubsurfaceColor * subsurface * context.lightColor * BRDF::Diffuse_Lambert();
+				lightingOutput.transmission += material.SubsurfaceColor * subsurface * softLightColor * BRDF::Diffuse_Lambert();
 			}
 			else if ((PBRFlags & Flags::TwoLayer) != 0)
 			{

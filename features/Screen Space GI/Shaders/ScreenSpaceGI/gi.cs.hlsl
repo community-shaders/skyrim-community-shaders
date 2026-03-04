@@ -109,7 +109,10 @@ void CalculateGI(
 
 	//////////////////////////////////////////////////////////////////
 
-	const float2 localNoise = SpatioTemporalNoise(dtid, FrameIndex);
+	// Use mono screen-space position for noise indexing so both eyes
+	// sample the same noise for corresponding world positions.
+	uint2 noiseCoord = uint2(normalizedScreenPos * OUT_FRAME_DIM);
+	const float2 localNoise = SpatioTemporalNoise(noiseCoord, FrameIndex);
 	const float noiseSlice = localNoise.x;
 	const float noiseStep = localNoise.y;
 
@@ -179,8 +182,13 @@ void CalculateGI(
 
 				float2 samplePxCoord = dtid + .5 + sampleOffset * sideSign;
 				float2 sampleUV = samplePxCoord * RCP_OUT_FRAME_DIM;
-				float2 sampleScreenPos = Stereo::ConvertFromStereoUV(sampleUV, eyeIndex);
-				[branch] if (any(sampleScreenPos > 1.0) || any(sampleScreenPos < 0.0)) break;
+
+				// Resolve which eye owns this sample. In VR, radial steps can cross the
+				// eye boundary in the side-by-side buffer; re-decode with the correct eye.
+				// Shi, Billeter, Eisemann 2022, "Stereo-consistent screen-space ambient occlusion"
+				uint sampleEyeIndex = Stereo::GetEyeIndexFromTexCoord(sampleUV);
+				float2 sampleScreenPos = Stereo::ConvertFromStereoUV(sampleUV, sampleEyeIndex);
+				[branch] if (any(sampleScreenPos > 1.0) || any(sampleScreenPos < 0.0)) continue;
 
 				float sampleOffsetLength = length(sampleOffset);
 				float mipLevel = clamp(log2(sampleOffsetLength) - 3.3, 0, 5);
@@ -197,7 +205,15 @@ void CalculateGI(
 
 				float SZ = srcWorkingDepth.SampleLevel(samplerPointClamp, sampleUV * frameScale, mipLevel);
 
-				float3 samplePos = ScreenToViewPosition(sampleScreenPos, SZ, eyeIndex);
+				// Reconstruct sample in current eye's viewspace for correct horizon angles.
+				// For cross-eye samples, reject if the depth differs too much from the
+				// center pixel -- the other eye may see a different surface due to occlusion.
+				float3 samplePos = ScreenToViewPosition(sampleScreenPos, SZ, sampleEyeIndex);
+				if (sampleEyeIndex != eyeIndex) {
+					if (abs(SZ - viewspaceZ) > viewspaceZ * 0.1)
+						continue;
+					samplePos = FrameBuffer::WorldToView(FrameBuffer::ViewToWorld(samplePos, true, sampleEyeIndex), true, eyeIndex);
+				}
 				float3 sampleDelta = samplePos - pixCenterPos;
 				float3 sampleHorizonVec = normalize(sampleDelta);
 
@@ -319,8 +335,7 @@ void CalculateGI(
 	o_currGIAOSpecular = float4(radianceSpecular, visibilitySpecular);
 }
 
-[numthreads(8, 8, 1)] void main(const uint2 dtid
-								: SV_DispatchThreadID) {
+[numthreads(8, 8, 1)] void main(const uint2 dtid : SV_DispatchThreadID) {
 	const float2 frameScale = FrameDim * RcpTexDim;
 
 	uint2 pxCoord = dtid;
@@ -353,8 +368,35 @@ void CalculateGI(
 #ifdef TEMPORAL_DENOISER
 		float lerpFactor = rcp(srcAccumFrames[pxCoord] * 255);
 
-		currY = lerp(srcPrevY[pxCoord], currY, lerpFactor);
-		currCoCg = lerp(srcPrevCoCg[pxCoord], currCoCg, lerpFactor);
+		// Clamp history to the local color neighborhood to prevent ghosting
+		// and reduce the magnitude of pops when disocclusion finally fires.
+		// Standard technique from SVGF (Schied et al. 2017).
+		float4 prevY = srcPrevY[pxCoord];
+		float2 prevCoCg = srcPrevCoCg[pxCoord];
+		{
+			float4 nMinY = currY, nMaxY = currY;
+			float2 nMinCoCg = currCoCg, nMaxCoCg = currCoCg;
+			[unroll] for (int dy = -1; dy <= 1; dy++)
+			{
+				[unroll] for (int dx = -1; dx <= 1; dx++)
+				{
+					if (dx == 0 && dy == 0)
+						continue;
+					int2 np = pxCoord + int2(dx, dy);
+					float4 nY = srcPrevY[np];
+					float2 nCC = srcPrevCoCg[np];
+					nMinY = min(nMinY, nY);
+					nMaxY = max(nMaxY, nY);
+					nMinCoCg = min(nMinCoCg, nCC);
+					nMaxCoCg = max(nMaxCoCg, nCC);
+				}
+			}
+			prevY = clamp(prevY, nMinY, nMaxY);
+			prevCoCg = clamp(prevCoCg, nMinCoCg, nMaxCoCg);
+		}
+
+		currY = lerp(prevY, currY, lerpFactor);
+		currCoCg = lerp(prevCoCg, currCoCg, lerpFactor);
 #	ifdef GI_SPECULAR
 		currGIAOSpecular = lerp(srcPrevGISpecular[pxCoord], currGIAOSpecular, lerpFactor);
 #	endif

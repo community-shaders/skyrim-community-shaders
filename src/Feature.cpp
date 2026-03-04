@@ -31,6 +31,7 @@
 #include "Features/Upscaling.h"
 #include "Features/VR.h"
 #include "Features/VolumetricLighting.h"
+#include "Features/VolumetricShadows.h"
 #include "Features/WaterEffects.h"
 #include "Features/WeatherEditor.h"
 #include "Features/WetnessEffects.h"
@@ -96,7 +97,9 @@ void Feature::Load(json& o_json)
 
 					std::string minimalVersionString = Util::GetFormattedVersion(minimalFeatureVersion);
 
-					if (majorVersionMismatch) {
+					if (IsCore()) {
+						failedLoadedMessage = std::format("This feature is already included as part of the core Community Shaders installation. Uninstall this feature with your mod manager.");
+					} else if (majorVersionMismatch) {
 						failedLoadedMessage = std::format("{} {} is too old, major version incompatibility detected. Required: {}", GetShortName(), value, minimalVersionString);
 					} else {
 						failedLoadedMessage = std::format("{} {} is an old feature version, required: {}", GetShortName(), value, minimalVersionString);
@@ -205,6 +208,7 @@ void Feature::WriteDiskCacheInfo(CSimpleIniA& a_ini)
 const std::vector<Feature*>& Feature::GetFeatureList()
 {
 	static std::vector<Feature*> features = {
+		&globals::features::volumetricShadows,
 		&globals::features::grassLighting,
 		&globals::features::grassCollision,
 		&globals::features::screenSpaceShadows,
@@ -266,6 +270,26 @@ const std::vector<Feature*>& Feature::GetFeatureList()
 	} else {
 		return features;
 	}
+}
+
+Feature* Feature::FindFeatureByShortName(const std::string& shortName)
+{
+	for (auto* feature : GetFeatureList()) {
+		if (feature->loaded && feature->GetShortName() == shortName)
+			return feature;
+	}
+	return nullptr;
+}
+
+std::vector<std::string> Feature::GetLoadedFeatureNames()
+{
+	std::vector<std::string> names;
+	for (auto* feature : GetFeatureList()) {
+		if (feature->loaded && feature->IsInMenu())
+			names.push_back(feature->GetShortName());
+	}
+	std::sort(names.begin(), names.end());
+	return names;
 }
 
 bool Feature::ToggleAtBootSetting()

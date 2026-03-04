@@ -137,10 +137,22 @@ void AdvancedSettingsRenderer::RenderLoggingSection()
 			"The more threads the faster compilation will finish but may make the system unresponsive. ");
 	}
 
+	ImGui::Columns(2, nullptr, false);
+
 	// Dump Ini Settings button
 	if (ImGui::Button("Dump Ini Settings", { -1, 0 })) {
 		Util::DumpSettingsOptions();
 	}
+
+	ImGui::NextColumn();
+
+	// Open Logs button
+	std::filesystem::path logPath = Util::PathHelpers::GetLogPath();
+	if (!logPath.empty() && ImGui::Button("Open Logs", { -1, 0 })) {
+		ShellExecuteA(NULL, "open", logPath.string().c_str(), NULL, NULL, SW_SHOWNORMAL);
+	}
+
+	ImGui::Columns(1);
 }
 
 void AdvancedSettingsRenderer::RenderShaderDebugSection()
