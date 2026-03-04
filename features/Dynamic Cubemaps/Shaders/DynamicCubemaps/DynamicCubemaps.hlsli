@@ -31,7 +31,7 @@ namespace DynamicCubemaps
 		float NoV = saturate(dot(N, V));
 
 		float level = roughness * 7.0;
-		
+
 		float3 finalIrradiance = 0;
 
 		float directionalAmbientColorSpecular = Color::RGBToLuminance(Color::Ambient(
@@ -150,7 +150,7 @@ namespace DynamicCubemaps
 		float NoV = saturate(dot(N, V));
 
 		float level = roughness * 7.0;
-		
+
 		float2 specularBRDF = BRDF::EnvBRDF(roughness, NoV);
 
 		float3 finalIrradiance = 0;
@@ -250,7 +250,7 @@ namespace DynamicCubemaps
 		finalIrradiance = specularIrradiance;
 #		endif
 		return (F0 * specularBRDF.x + specularBRDF.y) * finalIrradiance;
-	#	endif
+#	endif
 	}
 #endif  // !WATER
 }

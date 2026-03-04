@@ -457,92 +457,90 @@
 	/// @tags pbr, wetness, indirect-lighting
 	[numthreads(1, 1, 1)] void TestWetnessIndirectLight()
 {
-    float3 N = float3(0, 0, 1);
-    float3 V = float3(0.577, 0.577, 0.577);
-    float roughness = 0.5f;
+	float3 N = float3(0, 0, 1);
+	float3 V = float3(0.577, 0.577, 0.577);
+	float roughness = 0.5f;
 
-    // Basic calculation
-    float3 lobeWeight = PBR::GetWetnessIndirectSpecularLobeWeight(N, V, roughness);
-    ASSERT(IsTrue, all(!isnan(lobeWeight)));
-    ASSERT(IsTrue, all(!isinf(lobeWeight)));
-    ASSERT(IsTrue, all(lobeWeight >= 0.0f));
-    ASSERT(IsTrue, all(lobeWeight <= 2.0f));
+	// Basic calculation
+	float3 lobeWeight = PBR::GetWetnessIndirectSpecularLobeWeight(N, V, roughness);
+	ASSERT(IsTrue, all(!isnan(lobeWeight)));
+	ASSERT(IsTrue, all(!isinf(lobeWeight)));
+	ASSERT(IsTrue, all(lobeWeight >= 0.0f));
+	ASSERT(IsTrue, all(lobeWeight <= 2.0f));
 
-    // Different roughness values
-    float3 lobe_smooth = PBR::GetWetnessIndirectSpecularLobeWeight(N, V, 0.1f);
-    float3 lobe_rough = PBR::GetWetnessIndirectSpecularLobeWeight(N, V, 0.9f);
-    ASSERT(IsTrue, all(lobe_smooth >= 0.0f));
-    ASSERT(IsTrue, all(lobe_rough >= 0.0f));
+	// Different roughness values
+	float3 lobe_smooth = PBR::GetWetnessIndirectSpecularLobeWeight(N, V, 0.1f);
+	float3 lobe_rough = PBR::GetWetnessIndirectSpecularLobeWeight(N, V, 0.9f);
+	ASSERT(IsTrue, all(lobe_smooth >= 0.0f));
+	ASSERT(IsTrue, all(lobe_rough >= 0.0f));
 
-    // Horizon occlusion
-    float3 lobe_bent = PBR::GetWetnessIndirectSpecularLobeWeight(N, V, roughness);
-    ASSERT(IsTrue, all(lobe_bent >= 0.0f));
-    ASSERT(IsTrue, lobe_bent.x <= lobeWeight.x + 0.001f);
+	// Horizon occlusion
+	float3 lobe_bent = PBR::GetWetnessIndirectSpecularLobeWeight(N, V, roughness);
+	ASSERT(IsTrue, all(lobe_bent >= 0.0f));
+	ASSERT(IsTrue, lobe_bent.x <= lobeWeight.x + 0.001f);
 
-    // Grazing angle increases Fresnel
-    float3 V_grazing = float3(0.9999, 0, 0.01);
-    float3 lobe_grazing = PBR::GetWetnessIndirectSpecularLobeWeight(N, V_grazing, roughness);
-    ASSERT(IsTrue, all(lobe_grazing >= 0.0f));
-    ASSERT(IsTrue, lobe_grazing.x >= lobeWeight.x);
+	// Grazing angle increases Fresnel
+	float3 V_grazing = float3(0.9999, 0, 0.01);
+	float3 lobe_grazing = PBR::GetWetnessIndirectSpecularLobeWeight(N, V_grazing, roughness);
+	ASSERT(IsTrue, all(lobe_grazing >= 0.0f));
+	ASSERT(IsTrue, lobe_grazing.x >= lobeWeight.x);
 }
 
 /// @tags pbr, wetness, edge-cases
-[numthreads(1, 1, 1)]
-void TestWetnessEdgeCases()
-{
-    float3 N = float3(0, 0, 1);
-    float3 V = float3(0.577, 0.577, 0.577);
-    float3 L = float3(-0.707, 0, 0.707);
-    float3 lightColor = float3(1.0, 1.0, 1.0);
+[numthreads(1, 1, 1)] void TestWetnessEdgeCases() {
+	float3 N = float3(0, 0, 1);
+	float3 V = float3(0.577, 0.577, 0.577);
+	float3 L = float3(-0.707, 0, 0.707);
+	float3 lightColor = float3(1.0, 1.0, 1.0);
 
-    // Very smooth roughness
-    float3 result_min = PBR::GetWetnessDirectLightSpecularInput(N, V, L, lightColor, 0.04f);
-    ASSERT(IsTrue, all(!isnan(result_min)));
-    ASSERT(IsTrue, all(result_min >= 0.0f));
+	// Very smooth roughness
+	float3 result_min = PBR::GetWetnessDirectLightSpecularInput(N, V, L, lightColor, 0.04f);
+	ASSERT(IsTrue, all(!isnan(result_min)));
+	ASSERT(IsTrue, all(result_min >= 0.0f));
 
-    // Maximum roughness
-    float3 result_max = PBR::GetWetnessDirectLightSpecularInput(N, V, L, lightColor, 1.0f);
-    ASSERT(IsTrue, all(!isnan(result_max)));
-    ASSERT(IsTrue, all(result_max >= 0.0f));
+	// Maximum roughness
+	float3 result_max = PBR::GetWetnessDirectLightSpecularInput(N, V, L, lightColor, 1.0f);
+	ASSERT(IsTrue, all(!isnan(result_max)));
+	ASSERT(IsTrue, all(result_max >= 0.0f));
 
-    // HDR light values
-    float3 hdr_light = float3(10.0, 5.0, 2.0);
-    float3 result_hdr = PBR::GetWetnessDirectLightSpecularInput(N, V, L, hdr_light, 0.5f);
-    ASSERT(IsTrue, all(!isnan(result_hdr)));
-    ASSERT(IsTrue, all(result_hdr >= 0.0f));
+	// HDR light values
+	float3 hdr_light = float3(10.0, 5.0, 2.0);
+	float3 result_hdr = PBR::GetWetnessDirectLightSpecularInput(N, V, L, hdr_light, 0.5f);
+	ASSERT(IsTrue, all(!isnan(result_hdr)));
+	ASSERT(IsTrue, all(result_hdr >= 0.0f));
 
-    // Indirect with extreme roughness
-    float3 lobe_min = PBR::GetWetnessIndirectSpecularLobeWeight(N, V, 0.04f);
-    float3 lobe_max = PBR::GetWetnessIndirectSpecularLobeWeight(N, V, 1.0f);
-    ASSERT(IsTrue, all(!isnan(lobe_min)));
-    ASSERT(IsTrue, all(!isinf(lobe_min)));
-    ASSERT(IsTrue, all(!isnan(lobe_max)));
-    ASSERT(IsTrue, all(!isinf(lobe_max)));
+	// Indirect with extreme roughness
+	float3 lobe_min = PBR::GetWetnessIndirectSpecularLobeWeight(N, V, 0.04f);
+	float3 lobe_max = PBR::GetWetnessIndirectSpecularLobeWeight(N, V, 1.0f);
+	ASSERT(IsTrue, all(!isnan(lobe_min)));
+	ASSERT(IsTrue, all(!isinf(lobe_min)));
+	ASSERT(IsTrue, all(!isnan(lobe_max)));
+	ASSERT(IsTrue, all(!isinf(lobe_max)));
 }
 
 	/// @tags pbr, wetness, properties
 	[numthreads(1, 1, 1)] void TestWetnessProperties()
 {
-    float3 N = float3(0, 0, 1);
-    float3 V = float3(0.577, 0.577, 0.577);
-    float3 L = float3(-0.707, 0, 0.707);
+	float3 N = float3(0, 0, 1);
+	float3 V = float3(0.577, 0.577, 0.577);
+	float3 L = float3(-0.707, 0, 0.707);
 
-    // Wetness should be relatively subtle
-    float3 wetness_rough = PBR::GetWetnessDirectLightSpecularInput(N, V, L, float3(1, 1, 1), 0.8f);
-    ASSERT(IsTrue, all(wetness_rough < 1.0f));
+	// Wetness should be relatively subtle
+	float3 wetness_rough = PBR::GetWetnessDirectLightSpecularInput(N, V, L, float3(1, 1, 1), 0.8f);
+	ASSERT(IsTrue, all(wetness_rough < 1.0f));
 
-    // Smooth surfaces have valid results
-    float3 wetness_smooth = PBR::GetWetnessDirectLightSpecularInput(N, V, L, float3(1, 1, 1), 0.1f);
-    ASSERT(IsTrue, all(wetness_smooth >= 0.0f));
+	// Smooth surfaces have valid results
+	float3 wetness_smooth = PBR::GetWetnessDirectLightSpecularInput(N, V, L, float3(1, 1, 1), 0.1f);
+	ASSERT(IsTrue, all(wetness_smooth >= 0.0f));
 
-    // Horizon occlusion reduces specular
-    float3 lobe_aligned = PBR::GetWetnessIndirectSpecularLobeWeight(N, V, 0.5f);
-    float3 lobe_bent = PBR::GetWetnessIndirectSpecularLobeWeight(N, V, 0.5f);
-    ASSERT(IsTrue, lobe_bent.x <= lobe_aligned.x + 0.01f);
+	// Horizon occlusion reduces specular
+	float3 lobe_aligned = PBR::GetWetnessIndirectSpecularLobeWeight(N, V, 0.5f);
+	float3 lobe_bent = PBR::GetWetnessIndirectSpecularLobeWeight(N, V, 0.5f);
+	ASSERT(IsTrue, lobe_bent.x <= lobe_aligned.x + 0.01f);
 
-    // Color preservation
-    float3 blue_light = float3(0.0, 0.0, 1.0);
-    float3 wetness_blue = PBR::GetWetnessDirectLightSpecularInput(N, V, L, blue_light, 0.5f);
-    ASSERT(IsTrue, wetness_blue.b >= wetness_blue.r);
-    ASSERT(IsTrue, wetness_blue.b >= wetness_blue.g);
+	// Color preservation
+	float3 blue_light = float3(0.0, 0.0, 1.0);
+	float3 wetness_blue = PBR::GetWetnessDirectLightSpecularInput(N, V, L, blue_light, 0.5f);
+	ASSERT(IsTrue, wetness_blue.b >= wetness_blue.r);
+	ASSERT(IsTrue, wetness_blue.b >= wetness_blue.g);
 }
