@@ -530,8 +530,7 @@ void LightLimitFix::UpdateLights()
 					light.lightFlags.set(LightFlags::PortalStrict);
 				}
 
-				GET_INSTANCE_MEMBER(maskIndex, shadowLight);
-				light.shadowMaskIndex = maskIndex;
+				light.shadowMaskIndex = 0;
 				if (globals::game::isVR)
 					light.shadowMapIndex = shadowLight->GetVRRuntimeData().shadowmapDescriptors[0].shadowmapIndex;
 				else
@@ -541,7 +540,7 @@ void LightLimitFix::UpdateLights()
 				SetLightPosition(light, niLight->world.translate);
 
 				if ((light.color.x + light.color.y + light.color.z) * light.fade > 1e-4 && light.radius > 1e-4) {
-						lightsData.push_back(light);
+					lightsData.push_back(light);
 				}		
 			}
 		}

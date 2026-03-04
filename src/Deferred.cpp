@@ -162,7 +162,6 @@ void Deferred::SetupResources()
 		};
 	}
 
-	// Directional shadow data (t19): cascade splits and projections.
 	{
 		D3D11_BUFFER_DESC sbDesc{};
 		sbDesc.Usage = D3D11_USAGE_DYNAMIC;
@@ -182,7 +181,6 @@ void Deferred::SetupResources()
 		perDirectionalShadow->CreateSRV(srvDesc);
 	}
 
-	// Unified shadow light data (t22) : projection + type per active shadow light, max 4.
 	{
 		D3D11_BUFFER_DESC sbDesc{};
 		sbDesc.Usage = D3D11_USAGE_DYNAMIC;
@@ -190,16 +188,67 @@ void Deferred::SetupResources()
 		sbDesc.BindFlags = D3D11_BIND_SHADER_RESOURCE;
 		sbDesc.MiscFlags = D3D11_RESOURCE_MISC_BUFFER_STRUCTURED;
 		sbDesc.StructureByteStride = sizeof(ShadowData);
-		sbDesc.ByteWidth = 8 * sizeof(ShadowData);
+		sbDesc.ByteWidth = 16 * sizeof(ShadowData);
 
 		D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc{};
 		srvDesc.Format = DXGI_FORMAT_UNKNOWN;
 		srvDesc.ViewDimension = D3D11_SRV_DIMENSION_BUFFER;
 		srvDesc.Buffer.FirstElement = 0;
-		srvDesc.Buffer.NumElements = 8;
+		srvDesc.Buffer.NumElements = 16;
 
 		perShadows = new Buffer(sbDesc);
 		perShadows->CreateSRV(srvDesc);
+	}
+
+	// Recreate shadow array to support 16 shadows
+	{
+		auto& shadowMaps = renderer->GetDepthStencilData().depthStencils[RE::RENDER_TARGET_DEPTHSTENCIL::kSHADOWMAPS];
+
+		if (shadowMaps.stencilSRV) {
+			shadowMaps.stencilSRV->Release();
+			shadowMaps.stencilSRV = nullptr;
+		}
+
+		D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc{};
+		shadowMaps.depthSRV->GetDesc(&srvDesc);
+		shadowMaps.depthSRV->Release();
+		shadowMaps.depthSRV = nullptr;
+		
+		D3D11_DEPTH_STENCIL_VIEW_DESC dsvDesc{};
+		shadowMaps.views[0]->GetDesc(&dsvDesc);
+
+		for (int i = 0; i < 8; i++) {
+			if (shadowMaps.views[i]) {
+				shadowMaps.views[i]->Release();
+				shadowMaps.views[i] = nullptr;
+			}
+			if (shadowMaps.readOnlyViews[i]) {
+				shadowMaps.readOnlyViews[i]->Release();
+				shadowMaps.readOnlyViews[i] = nullptr;
+			}
+		}
+
+		D3D11_TEXTURE2D_DESC texDesc{};
+		shadowMaps.texture->GetDesc(&texDesc);
+		shadowMaps.texture->Release();
+		shadowMaps.texture = nullptr;
+
+		texDesc.ArraySize = 16;
+
+		auto device = globals::d3d::device;
+		DX::ThrowIfFailed(device->CreateTexture2D(&texDesc, nullptr, &shadowMaps.texture));
+
+		for (uint i = 0; i < 16; i++) {
+			dsvDesc.Texture2DArray.FirstArraySlice = i;
+			if (i < 8) {
+				DX::ThrowIfFailed(device->CreateDepthStencilView(shadowMaps.texture, &dsvDesc, &shadowMaps.views[i]));
+			} else {
+				DX::ThrowIfFailed(device->CreateDepthStencilView(shadowMaps.texture, &dsvDesc, &shadowMaps.readOnlyViews[i - 8]));
+			}
+		}
+
+		srvDesc.Texture2DArray.ArraySize = 16;
+		DX::ThrowIfFailed(device->CreateShaderResourceView(shadowMaps.texture, &srvDesc, &shadowMaps.depthSRV));
 	}
 }
 
@@ -678,7 +727,7 @@ void Deferred::CopyShadowData()
 	{
 		D3D11_MAPPED_SUBRESOURCE mapped{};
 		DX::ThrowIfFailed(context->Map(perShadows->resource.get(), 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped));
-		memcpy(mapped.pData, sd, 8 * sizeof(ShadowData));
+		memcpy(mapped.pData, sd, 16 * sizeof(ShadowData));
 		context->Unmap(perShadows->resource.get(), 0);
 		ID3D11ShaderResourceView* srv = perShadows->srv.get();
 		context->PSSetShaderResources(83, 1, &srv);
