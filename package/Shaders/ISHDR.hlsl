@@ -181,18 +181,11 @@ PS_OUTPUT main(PS_INPUT input)
 		hdrLinear = Color::Saturation(hdrLinear, Cinematic.x);
 
 		float3 hdrGamma = Color::LinearToGamma(hdrLinear);
-
-		float hdrLuminanceGamma = Color::RGBToLuminance(hdrGamma);
-		hdrGamma = lerp(hdrGamma, hdrLuminanceGamma * Tint.xyz, Tint.w);
-
-		hdrLinear = Color::GammaToLinear(hdrGamma);
-		hdrLinear *= (Cinematic.w);
-
-		hdrGamma = Color::LinearToGamma(hdrLinear);
+		hdrGamma = lerp(hdrGamma, Color::RGBToLuminance(hdrGamma) * Tint.xyz, Tint.w);
+		hdrGamma = Color::LinearToGamma(Color::GammaToLinear(hdrGamma) * Cinematic.w);
 
 		// Vanilla contrast with shadow lift to prevent black crush
-		float contrastAmount = (Cinematic.z * 0.5 + 0.5);
-		hdrGamma = lerp(avgValue.x, hdrGamma, contrastAmount);
+		hdrGamma = lerp(avgValue.x, hdrGamma, Cinematic.z * 0.5 + 0.5);
 
 		// Shadow lift: Gently raise blacks to prevent crushing while maintaining contrast
 		// This adds a subtle S-curve that protects shadows
