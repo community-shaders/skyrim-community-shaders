@@ -508,7 +508,7 @@ void LightLimitFix::UpdateLights()
 		addLight(e);
 	}
 
-	auto addShadowLight = [&](RE::BSShadowLight* shadowLight, int mapIndex) {
+	auto addShadowLight = [&](RE::BSShadowLight* shadowLight, int ) {
 		if (IsValidLight(shadowLight)) {
 			if (auto niLight = shadowLight->light.get()) {
 				auto& runtimeData = niLight->GetLightRuntimeData();
