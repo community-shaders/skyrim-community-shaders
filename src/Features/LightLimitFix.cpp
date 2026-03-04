@@ -516,19 +516,19 @@ void LightLimitFix::UpdateLights()
 					light.fade = runtimeData.fade;
 				}
 
-				//light.fade *= shadowLight->lodDimmer;
+				light.fade *= shadowLight->lodDimmer;
 
-				//if (!IsGlobalLight(shadowLight)) {
-				//	// List of BSMultiBoundRooms affected by a light
-				//	for (const auto& roomPtr : shadowLight->rooms) {
-				//		addRoom(roomPtr, light);
-				//	}
-				//	// List of BSPortals affected by a light
-				//	for (const auto& portalPtr : shadowLight->portals) {
-				//		addRoom(portalPtr->portalSharedNode.get(), light);
-				//	}
-				//	light.lightFlags.set(LightFlags::PortalStrict);
-				//}
+				if (!IsGlobalLight(shadowLight)) {
+					// List of BSMultiBoundRooms affected by a light
+					for (const auto& roomPtr : shadowLight->rooms) {
+						addRoom(roomPtr, light);
+					}
+					// List of BSPortals affected by a light
+					for (const auto& portalPtr : shadowLight->portals) {
+						addRoom(portalPtr->portalSharedNode.get(), light);
+					}
+					light.lightFlags.set(LightFlags::PortalStrict);
+				}
 
 				GET_INSTANCE_MEMBER(maskIndex, shadowLight);
 				light.shadowMaskIndex = maskIndex;
@@ -555,7 +555,7 @@ void LightLimitFix::UpdateLights()
 			if (!light)
 				break;
 
-			addShadowLight(shadowSceneNode->GetRuntimeData().activeShadowLights[bufferIndex].get(), mapIndex);
+			addShadowLight(light, bufferIndex);
 
 			mapIndex += light->shadowMapCount;
 			bufferIndex++;
