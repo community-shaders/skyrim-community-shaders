@@ -631,29 +631,35 @@ void Deferred::CopyShadowData()
 	else
 		SetShadowCascadeParameters(sunShadowLight->GetRuntimeData(), dd);
 
-	auto&    sceneRTData  = shadowSceneNode->GetRuntimeData();
 	uint32_t shadowCount  = 0;
 	ID3D11ShaderResourceView* shadowMapsSRV = globals::game::renderer->GetDepthStencilData().depthStencils[RE::RENDER_TARGET_DEPTHSTENCIL::kSHADOWMAPS].depthSRV;
 
-	for (auto& lightPtr : sceneRTData.activeShadowLights) {
-		if (!lightPtr || shadowCount >= 8u)
-			break;
 
-		auto* light = lightPtr.get();
+	{
+		int bufferIndex = 0;
+		int mapIndex = 0;
+		while (true) {
+			RE::BSShadowLight* light = shadowSceneNode->GetRuntimeData().shadowLightsAccum[mapIndex];
+			if (!light)
+				break;
 
-		if (light->GetIsParabolicLight())
-			sd[shadowCount].ShadowParam.x = float(light->shadowMapCount == 2 ? 2 : 1);
-		else
-			sd[shadowCount].ShadowParam.x = 0;
+			if (light->GetIsParabolicLight())
+				sd[shadowCount].ShadowParam.x = float(light->shadowMapCount == 2 ? 2 : 1);
+			else
+				sd[shadowCount].ShadowParam.x = 0;
 
-		if (globals::game::isVR)
-			SetShadowParameters(light->GetVRRuntimeData(), sd[shadowCount]);
-		else
-			SetShadowParameters(light->GetRuntimeData(), sd[shadowCount]);
+			if (globals::game::isVR)
+				SetShadowParameters(light->GetVRRuntimeData(), sd[shadowCount]);
+			else
+				SetShadowParameters(light->GetRuntimeData(), sd[shadowCount]);
 
-		sd[shadowCount].ShadowParam.y = light->light->GetLightRuntimeData().radius.x;
-		
-		shadowCount++;
+			sd[shadowCount].ShadowParam.y = light->light->GetLightRuntimeData().radius.x;
+
+			shadowCount++;
+
+			mapIndex += light->shadowMapCount;
+			bufferIndex++;
+		}
 	}
 
 	context->PSSetShaderResources(82, 1, &cascadeSRV);
